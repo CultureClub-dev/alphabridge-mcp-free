@@ -167,7 +167,7 @@ final class AB_MCP_Sync_Decision {
 	 * @return array entries (numbered), counts, blocked, pairs.
 	 */
 	public static function report( array $staging, array $live, array $pairs, callable $complete, array $b9 = array() ) {
-		$ctx   = self::context( $complete, $b9, $pairs, $staging, $live );
+		$ctx   = self::context( $complete, $b9, $pairs );
 		$by    = array(
 			's' => self::index( $staging ),
 			'l' => self::index( $live ),
@@ -237,25 +237,19 @@ final class AB_MCP_Sync_Decision {
 	 * @param callable $complete See report().
 	 * @param array    $b9       See report().
 	 * @param array[]  $pairs    See report().
-	 * @param array[]  $staging  See report().
-	 * @param array[]  $live     See report().
 	 * @return array complete, b9, kinds (the pair kinds this site's inventory
 	 *               reads: an object of another one missing here is not
-	 *               deleted, it was never read), paired (by side and ID space,
-	 *               the id of the pair of each object a pair names) and named
-	 *               (by side, the identities of the terms and menus), for
-	 *               refs_agree().
+	 *               deleted, it was never read) and paired (by side and ID
+	 *               space, the id of the pair of each object a pair names,
+	 *               for refs_agree(); the pairs tell it, no line of a target
+	 *               is needed).
 	 */
-	public static function context( callable $complete, array $b9 = array(), array $pairs = array(), array $staging = array(), array $live = array() ) {
+	public static function context( callable $complete, array $b9 = array(), array $pairs = array() ) {
 		return array(
 			'complete' => $complete,
 			'b9'       => $b9,
 			'kinds'    => AB_MCP_Sync_Proposal::db_kinds(),
 			'paired'   => AB_MCP_Sync_Proposal::paired( $pairs ),
-			'named'    => array(
-				's' => AB_MCP_Sync_Proposal::named( $staging ),
-				'l' => AB_MCP_Sync_Proposal::named( $live ),
-			),
 		);
 	}
 
@@ -349,11 +343,11 @@ final class AB_MCP_Sync_Decision {
 	/**
 	 * Whether the references of the two lines of a pair name the same
 	 * objects where a pair names their targets (Codex round 1 of part 2, A;
-	 * round 2, B): AB_MCP_Sync_Proposal::refs_agree(), the rule the proposal
-	 * applies to «equal» as well, of the places of both lines by the pairs
-	 * and the identities of the terms of their sides. In a set of the
-	 * canonical form the targets of pairs compare by their pairs, those
-	 * without a pair by their identities.
+	 * round 2, B; round 3, B): AB_MCP_Sync_Proposal::refs_agree(), the rule
+	 * the proposal applies to «equal» as well, of the places of both lines
+	 * by the pairs of their sides. A target of a pair is compared by its
+	 * pair, a target without one by the identity the mapped form names it by
+	 * (mapped_same(), beside this); no line of a target is needed.
 	 *
 	 * @param array $s   The staging line.
 	 * @param array $l   This site's line.
@@ -362,8 +356,8 @@ final class AB_MCP_Sync_Decision {
 	 */
 	public static function refs_agree( array $s, array $l, array $ctx ) {
 		return AB_MCP_Sync_Proposal::refs_agree(
-			AB_MCP_Sync_Proposal::places( $s, $ctx['paired']['s'], $ctx['named']['s'] ),
-			AB_MCP_Sync_Proposal::places( $l, $ctx['paired']['l'], $ctx['named']['l'] )
+			AB_MCP_Sync_Proposal::places( $s, $ctx['paired']['s'] ),
+			AB_MCP_Sync_Proposal::places( $l, $ctx['paired']['l'] )
 		);
 	}
 

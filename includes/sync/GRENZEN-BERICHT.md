@@ -76,22 +76,43 @@ Weg.
   Login). Dieselben Objekte mit anderen IDs auf beiden Sites sind so «gleich».
   Die Ausgangsstände eines Paars bleiben die Hashes je Seite im eigenen
   ID-Raum.
-- **Verweise auf Objekte eines Paars** (Codex Runde 2 von Teil 2, b): «Gleich»
-  verlangt zudem, dass jeder Verweis auf ein Objekt eines Paars auf der
-  anderen Seite das andere Objekt desselben Paars nennt
-  (`AB_MCP_Sync_Proposal::refs_agree()`, dieselbe Regel wie Zeile 6 des
-  Berichts). Grund: die abgebildete Form nennt ein Ziel über seine Identität,
-  und ein umbenanntes Objekt eines Paars, dessen Slug ein anderes Objekt
-  übernimmt, hätte sonst dieselbe Form wie das andere. Widerspricht ein
-  Verweis, der das Objekt benennt (der Elternteil eines Posts; Ziel,
-  Eltern-Eintrag oder Menü eines Menüeintrags), heisst es «unsicher» (eine
-  Person wählt, die Bestätigung über `categories` nimmt es nicht); ein anderer
-  Verweis (Terme, Beitragsbild, Blöcke) heisst «anderer Inhalt» und wird als
-  *ungeklärt* bestätigt. Geprüft wird je Objekt der eigene Verweis: eine
-  Seite unter einer neuen Elternseite, deren eigener Elternteil widerspricht,
-  bleibt gegen diese Elternseite «gleich»; die Elternseite selbst heisst
-  «unsicher» und wird nur durch eine Wahl gepaart (selten: Umbenennung mit
-  Slug-Übernahme und darunter neue Seiten auf beiden Sites).
+- **Verweise auf Objekte eines Paars** (Codex Runde 2 von Teil 2, b; Runde 3
+  von Teil 2, B): «Gleich» verlangt zudem, dass jeder Verweis auf ein Objekt
+  eines Paars auf der anderen Seite an derselben Stelle das andere Objekt
+  desselben Paars nennt (`AB_MCP_Sync_Proposal::refs_agree()`, dieselbe Regel
+  wie Zeile 6 des Berichts). Zwei Regeln, je nach Ziel: ein Ziel **ohne Paar**
+  vergleicht allein die abgebildete Form, die es über seine Identität nennt
+  (Entscheid 10; der Mapper seiner Site hat die Identität jedes Ziels
+  hineingerechnet, ob das Paket die Zeile des Ziels hält oder nicht); ein Ziel
+  **eines Paars** vergleicht die Kennung seines Paars, die die Paartabelle über
+  die ID des Verweises nennt, ohne Zeile des Ziels (`places()`). Grund: die
+  abgebildete Form nennt ein Ziel über seine Identität, und ein umbenanntes
+  Objekt eines Paars, dessen Slug ein anderes Objekt übernimmt, hätte sonst
+  dieselbe Form wie das andere. Darum vergleicht ein Teilpaket, das die
+  Beiträge ganz, aber noch keine Terme, Seiten oder Menüs trägt, gleich wie
+  ein vollständiges (Codex Runde 3 von Teil 2, B: eine Zwischenfassung las die
+  Identität eines Ziels ohne Paar aus dessen Zeile und nannte ein Ziel ohne
+  Zeile ungleich). Widerspricht ein Verweis, der das Objekt benennt (der
+  Elternteil eines Posts; Ziel, Eltern-Eintrag oder Menü eines Menüeintrags),
+  heisst es «unsicher» (eine Person wählt, die Bestätigung über `categories`
+  nimmt es nicht); ein anderer Verweis (Terme, Beitragsbild, Blöcke) heisst
+  «anderer Inhalt» und wird als *ungeklärt* bestätigt. Geprüft wird je Objekt
+  der eigene Verweis: eine Seite unter einer neuen Elternseite, deren eigener
+  Elternteil widerspricht, bleibt gegen diese Elternseite «gleich»; die
+  Elternseite selbst heisst «unsicher» und wird nur durch eine Wahl gepaart
+  (selten: Umbenennung mit Slug-Übernahme und darunter neue Seiten auf beiden
+  Sites). Grenze (konstruiert): In einer Menge der kanonischen Form (Terme
+  einer Taxonomie, Menüs eines Menüeintrags) trägt die abgebildete Form die
+  Identitäten als Menge, ohne zu sagen, welche davon zu einem Paar gehört
+  (`AB_MCP_Sync_Identity::map()` setzt je Verweis die Identität ein,
+  `mapped_hash()` hasht die ganze Form). Tauschen auf einer Site ein Term
+  eines Paars und ein Term ohne Paar derselben Taxonomie ihre Slugs (der
+  gepaarte wird «sport», ein neuer «news» tritt an seine Stelle) und steht ein
+  Beitrag auf beiden Sites genau in diesen zwei Termen, nennen beide Seiten
+  dasselbe Paar und dieselbe Menge von Identitäten: «gleich», wie in 7111bc4,
+  obwohl der ungepaarte Term ein anderer ist. Der gepaarte Term selbst
+  erscheint in demselben Vorschlag oder Bericht als geändert; ein Paar für
+  den zweiten Term hebt die Grenze auf.
 - **Ein Ziel je Identität** (Codex Runde 2, A-1; Runde 3, 1): Die Identität
   ist eine Funktion der ganzen Site. `AB_MCP_Sync_Identity` liest in einem
   ersten Durchgang, was jedes Objekt nennt (Typ, Slug, Datei, Ziel, Verweis
@@ -413,17 +434,19 @@ Weg.
   dessen Slug ein anderes Objekt übernimmt, hätte sonst dieselbe Form wie
   das andere. Sonst heisst es Konflikt (Zeile 5, eine Person wählt). In einer
   Menge der kanonischen Form (Terme einer Taxonomie, Menüs eines
-  Menüeintrags) zählt die Reihenfolge nicht: die Ziele mit Paar vergleicht
-  der Bericht als Menge der Paare (jede Seite nennt die Objekte derselben
-  Paare), die ohne Paar als Menge ihrer Identitäten (Taxonomie, Slug,
-  Sprache aus den Zeilen ihrer Seite); gleich nur, wo beides gleich ist
-  (Codex Runde 2 von Teil 2, B: ein Beitrag in «news» eines Paars und in
-  «events» ohne Paar auf beiden Seiten bleibt Zeile 6). Nennt eine Seite ein
-  Ziel eines Paars und die andere an seiner Stelle ein Objekt ohne Paar, auch
-  eines derselben Identität, ist es nicht gleich; ebenso, wo die Zeile eines
-  Terms ohne Paar fehlt (etwa zurückgehalten), die sichere Seite. Eine Liste
-  vergleicht weiter je Stelle; eine Stelle ohne Ziel eines Paars entscheidet
-  die abgebildete Form.
+  Menüeintrags) zählt die Reihenfolge nicht: der Bericht vergleicht die
+  Kennungen der Paare der Stelle in einer Ordnung, mit so vielen leeren
+  Einträgen wie Ziele ohne Paar; die Ziele ohne Paar vergleicht allein die
+  abgebildete Form (Codex Runde 2 von Teil 2, B: ein Beitrag in «news» eines
+  Paars und in «events» ohne Paar auf beiden Seiten bleibt Zeile 6; Runde 3,
+  B: auch aus einem Teilpaket ohne die Zeile von «events», weil weder die
+  Form noch die Paartabelle eine Zeile des Ziels braucht). Nennt eine Seite
+  ein Ziel eines Paars und die andere an seiner Stelle ein Objekt ohne Paar,
+  auch eines derselben Identität, ist es nicht gleich. Eine Liste vergleicht
+  weiter je Stelle; eine Stelle ohne Ziel eines Paars entscheidet die
+  abgebildete Form. Grenze (konstruiert) wie in Teil 1 («Verweise auf Objekte
+  eines Paars»): der Slug-Tausch zwischen einem Term eines Paars und einem
+  ohne Paar in derselben Menge bleibt Zeile 6.
 - Vorrang 1 (*ungeklärt*): Hält eine Zugangsangabe eine Seite (eine
   zurückgehaltene Zeile, oder der Name gilt hier seit der Paarung als
   Zugangsangabe), heisst der Eintrag «nicht verglichen» mit Grund und bietet

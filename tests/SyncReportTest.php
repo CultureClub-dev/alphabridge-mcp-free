@@ -10,9 +10,11 @@
  *   deleted in its three cases, a live object in the trash still deleted, 3
  *   active, 4 no pair); row 10 removed on both, in the trash on both or on
  *   one; changed alike only where both sides name the objects of one pair
- *   (Codex's case with the real index of identities, a set, a list; a set
- *   mixing targets with and without a pair by the pairs and the identities
- *   of the others), and new on both sides under the object of a pair here
+ *   (Codex's case with the real index of identities; the matrix of every
+ *   place a reference stands, a target of a pair by its pair, one without
+ *   by the mapped form, with and without the lines of the targets in the
+ *   staging package: rounds 1 to 3 of part 2), and new on both sides under
+ *   the object of a pair here
  *   and another there uncertain; an unclear pair a credential holds a side
  *   of not compared, without a choice; incomplete never deleted, the trash a deletion, an auto-draft no
  *   content, a name holding a credential here not deleted and neither side
@@ -323,6 +325,20 @@ final class SyncReportTest extends TestCase {
 		);
 		$entry = self::of( $r, 'post', '50' );
 		self::assertSame( array( 'changed_alike', 6, 'none' ), array( $entry['result'], $entry['row'], $entry['action'] ) );
+		// The same two cases from a staging package without the line of the
+		// parent S34 (nothing complete): the pair of the parent tells it.
+		$l13 = self::mapped_under( array( 12 => array( 'team-alt', 0 ), 13 => array( 'team', 0 ), 20 => array( 'kontakt', 13 ) ), 13 );
+		foreach ( array( 13 => array( $l13, 'conflict', 5 ), 12 => array( $l, 'changed_alike', 6 ) ) as $under => list( $form, $result, $row ) ) {
+			$here  = 13 === $under ? array( self::page( '12', 'team-alt', 'l1' ), self::page( '13', 'team', 'n' ) ) : array( self::page( '12', 'team', 'l0' ), self::page( '13', 'team-neu', 'n' ) );
+			$r     = self::report(
+				array( self::page( '50', 'kontakt', 's1', array( 'mapped' => $s, 'refs' => array( self::ref( 'post', 34 ) ) ) ) ),
+				array_merge( $here, array( self::page( '20', 'kontakt', 'l1', array( 'mapped' => $form, 'refs' => array( self::ref( 'post', $under ) ) ) ) ) ),
+				$pairs,
+				static fn(): bool => false
+			);
+			$entry = self::of( $r, 'post', '50' );
+			self::assertSame( array( $result, $row ), array( $entry['result'], $entry['row'] ), "Under L$under, without the line of S34." );
+		}
 	}
 
 	/**
@@ -359,55 +375,206 @@ final class SyncReportTest extends TestCase {
 		return self::line( 'term', $ref, array( 'slug' => $slug, 'taxonomy' => $taxonomy ), self::h( 't' . $ref ), array( 'meta' => 0 ) );
 	}
 
-	public function testAReferenceToAPairedTargetIsAlikeOnlyWhereTheOtherSideNamesItsPartner(): void {
-		// The terms of both sides by their slugs: 5 and 15 news, 6 and 16
-		// sport (each two of a pair), 8 and 18 misc, 9 and 19 events
-		// (without a pair); here 17 news as well, without a pair (the
-		// identity of 15 once more); staging 7 and here 27 without a line, 4
-		// and 24 not read (no identity), the page 9 of staging no term.
-		$unread = static fn( string $ref ): array => self::line( 'term', $ref, array(), self::h( 't' . $ref ), array( 'meta' => 0 ) );
-		$alike  = static fn( array $s_refs, array $l_refs, array $pairs ): array => self::of(
-			self::report(
-				array( self::page( '50', 'kontakt', 's1', array( 'mapped' => self::h( 'same' ), 'refs' => $s_refs ) ), self::term( '5', 'news' ), self::term( '6', 'sport' ), self::term( '8', 'misc' ), self::term( '9', 'events' ), $unread( '4' ), self::page( '9', 'events', 'p9' ) ),
-				array( self::page( '20', 'kontakt', 'l1', array( 'mapped' => self::h( 'same' ), 'refs' => $l_refs ) ), self::term( '15', 'news' ), self::term( '16', 'sport' ), self::term( '17', 'news' ), self::term( '18', 'misc' ), self::term( '19', 'events' ), $unread( '24' ) ),
-				array_merge( array( self::pair( 2, 'post', '20', '50' ) ), $pairs )
-			),
-			'post',
-			'50'
+	/**
+	 * The identities of the objects of the two sites of the matrix of
+	 * references (mapped_by(), lines()), by ID space and id: staging (s), this
+	 * site (l), and this site after renames with a slug taken over (taken:
+	 * the page L12 of the pair with S34 renamed «team-alt» and L13 taking
+	 * «team», the term L15 of the pair with S5 renamed «news-alt» and L17
+	 * taking «news», the menu L103 of the pair with S3 renamed «main-alt» and
+	 * L104 taking «main», the parent item L160 of the pair with S60 renamed
+	 * and L161 taking its name; Codex round 1 of part 2, A, and round 2, b).
+	 * An identity is type/slug (posts; a child by its path), taxonomy/slug
+	 * (terms and menus), item/name (menu items); null for an object without
+	 * one (a term not read). No attachment is in an inventory before branch
+	 * 10, so the featured images 99 and 98 have identities and no lines.
+	 */
+	private static function sites(): array {
+		$s = array(
+			'post' => array( 34 => 'page/team', 35 => 'page/shop', 36 => 'page/about', 40 => 'page/team/a', 60 => 'item/parent', 61 => 'item/other', 99 => 'attachment/bild.jpg' ),
+			'term' => array( 2 => 'nav_menu/footer', 3 => 'nav_menu/main', 4 => null, 5 => 'category/news', 6 => 'category/sport', 7 => 'category/extra', 8 => 'category/misc', 9 => 'category/events', 10 => 'post_tag/misc', 11 => 'post_tag/events' ),
 		);
-		$terms = array( self::pair( 3, 'term', '15', '5' ), self::pair( 4, 'term', '16', '6' ) );
+		$l = array(
+			'post' => array( 12 => 'page/team', 13 => 'page/shop', 14 => 'page/about', 41 => 'page/team/a', 160 => 'item/parent', 161 => 'item/other', 98 => 'attachment/bild.jpg' ),
+			'term' => array( 102 => 'nav_menu/footer', 103 => 'nav_menu/main', 15 => 'category/news', 16 => 'category/sport', 17 => 'category/extra', 18 => 'category/misc', 19 => 'category/events', 110 => 'post_tag/misc', 111 => 'post_tag/events' ),
+		);
+		$taken = $l;
+		$taken['post'][12]  = 'page/team-alt';
+		$taken['post'][13]  = 'page/team';
+		$taken['post'][160] = 'item/parent-alt';
+		$taken['post'][161] = 'item/parent';
+		$taken['term'][15]  = 'category/news-alt';
+		$taken['term'][17]  = 'category/news';
+		$taken['term'][103] = 'nav_menu/main-alt';
+		$taken['term'][104] = 'nav_menu/main';
+		return array( 's' => $s, 'l' => $l, 'taken' => $taken );
+	}
+
+	/**
+	 * The mapped form of a line as the mapper of its site computes it
+	 * (AB_MCP_Sync_Identity::mapped_hash(): each reference by the identity of
+	 * its target on its site, a set of the canonical form in one order, none
+	 * where a target has no identity), from the identities of that site
+	 * (sites()). Of the site, not of the package: the form carries the
+	 * identity of a target whether the package holds the line of the target
+	 * or not.
+	 */
+	private static function mapped_by( string $text, array $refs, array $site ): ?string {
+		$places = array();
+		foreach ( $refs as $ref ) {
+			$as = $site[ $ref['space'] ][ $ref['id'] ] ?? null;
+			if ( null === $as ) {
+				return null;
+			}
+			$places[ $ref['at'] ][] = $as;
+		}
+		foreach ( array_keys( $places ) as $at ) {
+			if ( 'menu' === $at || str_starts_with( $at, 'term:' ) ) {
+				sort( $places[ $at ], SORT_STRING );
+			}
+		}
+		ksort( $places, SORT_STRING );
+		return self::h( $text . json_encode( $places ) );
+	}
+
+	/** The lines of the objects of a site of sites(), as its inventory writes them (none for an attachment, an empty identity for a term not read). */
+	private static function lines( array $site ): array {
+		$out = array();
+		foreach ( $site['post'] as $id => $as ) {
+			list( $type, $slug ) = explode( '/', $as, 2 );
+			if ( 'page' === $type ) {
+				$out[] = self::page( (string) $id, basename( $slug ), 'n' . $id );
+			} elseif ( 'item' === $type ) {
+				$out[] = self::item( (string) $id, 0, $slug, 'n' . $id );
+			}
+		}
+		foreach ( $site['term'] as $id => $as ) {
+			if ( null === $as ) {
+				$out[] = self::line( 'term', (string) $id, array(), self::h( 't' . $id ), array( 'meta' => 0 ) );
+				continue;
+			}
+			list( $taxonomy, $slug ) = explode( '/', $as, 2 );
+			$out[] = 'nav_menu' === $taxonomy ? self::menu( (string) $id, $slug, 'n' . $id ) : self::term( (string) $id, $slug, $taxonomy );
+		}
+		return $out;
+	}
+
+	/** An object of a pair under test, changed on its side (its hash of $state), with these references and this mapped form. */
+	private static function object( string $kind, string $ref, array $refs, ?string $mapped, string $state ): array {
+		$over = array( 'mapped' => $mapped, 'refs' => $refs );
+		if ( 'term' === $kind ) {
+			return array_merge( self::term( $ref, 'kontakt' ), $over );
+		}
+		if ( 'menu_item' === $kind ) {
+			return array_merge( self::item( $ref, 0, 'team', $state ), $over );
+		}
+		return self::page( $ref, 'kontakt', $state, $over );
+	}
+
+	/**
+	 * The rule of the references of a paired object changed on both sides, in
+	 * every place a reference stands (Codex rounds 1 to 3 of part 2): a
+	 * target of a pair by its pair, a target without one by the identity the
+	 * mapped form of the object names it by; once with the lines of the
+	 * targets in the staging package, once without any of them (a package
+	 * that holds the posts whole but no terms, pages or menus yet: nothing
+	 * complete), with the same row each time. Row 6 wherever no reference
+	 * contradicts a pair and the mapped forms are the same (as in 7111bc4);
+	 * row 5 where a side names the object of a pair and the other, in its
+	 * place, another object (also one of the same identity, which the forms
+	 * alone would call the same), or where the mapped forms differ.
+	 */
+	public function testReferencesArePairedTargetsByTheirPairsAndOthersByTheMappedFormAlsoWithoutTheirLines(): void {
+		$sites   = self::sites();
+		$pairs   = array( self::pair( 1, 'post', '12', '34' ), self::pair( 3, 'term', '15', '5' ), self::pair( 4, 'term', '16', '6' ), self::pair( 5, 'post', '13', '35' ), self::pair( 6, 'menu', '103', '3' ), self::pair( 7, 'menu_item', '160', '60' ), self::pair( 8, 'term', '110', '10' ) );
+		$cat     = static fn( int $id ): array => self::ref( 'term', $id, 'term:category' );
+		$tag     = static fn( int $id ): array => self::ref( 'term', $id, 'term:post_tag' );
+		$parent  = static fn( int $id ): array => self::ref( 'post', $id );
+		$thumb   = static fn( int $id ): array => self::ref( 'post', $id, 'meta:_thumbnail_id' );
+		$tparent = static fn( int $id ): array => self::ref( 'term', $id, 'parent' );
+		$target  = static fn( int $id ): array => self::ref( 'post', $id, 'meta:_menu_item_object_id' );
+		$above   = static fn( int $id ): array => self::ref( 'post', $id, 'meta:_menu_item_menu_item_parent' );
+		$menu    = static fn( int $id ): array => self::ref( 'term', $id, 'menu' );
+		$ids     = static fn( int $id ): array => self::ref( 'term', $id, 'meta:ids' );
+		$cases   = array(
+			// Alike: no reference contradicts a pair, the same mapped form.
+			'categories, all of pairs'                                   => array( 'post', array( $cat( 5 ), $cat( 6 ) ), array( $cat( 15 ), $cat( 16 ) ), 6 ),
+			'categories, none of a pair'                                 => array( 'post', array( $cat( 8 ), $cat( 9 ) ), array( $cat( 18 ), $cat( 19 ) ), 6 ),
+			'categories mixed, in another order'                         => array( 'post', array( $cat( 9 ), $cat( 6 ), $cat( 8 ), $cat( 5 ) ), array( $cat( 15 ), $cat( 18 ), $cat( 16 ), $cat( 19 ) ), 6 ),
+			'categories and tags, some of pairs'                         => array( 'post', array( $cat( 5 ), $cat( 9 ), $tag( 10 ), $tag( 11 ) ), array( $cat( 15 ), $cat( 19 ), $tag( 110 ), $tag( 111 ) ), 6 ),
+			'a featured image without a pair'                            => array( 'post', array( $thumb( 99 ), $cat( 5 ) ), array( $thumb( 98 ), $cat( 15 ) ), 6 ),
+			'under the page of a pair'                                   => array( 'post', array( $parent( 34 ) ), array( $parent( 12 ) ), 6 ),
+			'under a page without a pair'                                => array( 'post', array( $parent( 36 ) ), array( $parent( 14 ) ), 6 ),
+			'a grandchild under a page without a pair under the pair'    => array( 'post', array( $parent( 40 ) ), array( $parent( 41 ) ), 6 ),
+			'a term under the term of a pair'                            => array( 'term', array( $tparent( 5 ) ), array( $tparent( 15 ) ), 6 ),
+			'a term under a term without a pair'                         => array( 'term', array( $tparent( 8 ) ), array( $tparent( 18 ) ), 6 ),
+			'a menu item: target, parent item and menu of pairs'         => array( 'menu_item', array( $target( 34 ), $above( 60 ), $menu( 3 ) ), array( $target( 12 ), $above( 160 ), $menu( 103 ) ), 6 ),
+			'a menu item: target without a pair, menu of a pair'         => array( 'menu_item', array( $target( 36 ), $menu( 3 ) ), array( $target( 14 ), $menu( 103 ) ), 6 ),
+			'a menu item: parent item and menu without a pair'           => array( 'menu_item', array( $target( 34 ), $above( 61 ), $menu( 2 ) ), array( $target( 12 ), $above( 161 ), $menu( 102 ) ), 6 ),
+			'a menu item in two menus, one of a pair'                    => array( 'menu_item', array( $target( 36 ), $menu( 2 ), $menu( 3 ) ), array( $target( 14 ), $menu( 103 ), $menu( 102 ) ), 6 ),
+			'a list of ids in its places'                                => array( 'post', array( $ids( 5 ), $ids( 9 ) ), array( $ids( 15 ), $ids( 19 ) ), 6 ),
+			// Not alike: a reference contradicts a pair, the same mapped form on both (Codex round 1 of part 2, A; round 2, b).
+			'under the page of a pair there, here the page that took its slug'       => array( 'post', array( $parent( 34 ) ), array( $parent( 13 ) ), 5, 'taken' ),
+			'in the category of a pair there, here the term that took its slug'      => array( 'post', array( $cat( 5 ), $cat( 9 ) ), array( $cat( 17 ), $cat( 19 ) ), 5, 'taken' ),
+			'in a list, the term of a pair there, here the term that took its slug'  => array( 'post', array( $ids( 5 ) ), array( $ids( 17 ) ), 5, 'taken' ),
+			'a menu item: its target of a pair there, here the page that took it'    => array( 'menu_item', array( $target( 34 ), $menu( 2 ) ), array( $target( 13 ), $menu( 102 ) ), 5, 'taken' ),
+			'a menu item: its menu of a pair there, here the menu that took it'      => array( 'menu_item', array( $target( 36 ), $menu( 3 ) ), array( $target( 14 ), $menu( 104 ) ), 5, 'taken' ),
+			'a menu item: its parent item of a pair there, here the item that took it' => array( 'menu_item', array( $target( 36 ), $above( 60 ), $menu( 2 ) ), array( $target( 14 ), $above( 161 ), $menu( 102 ) ), 5, 'taken' ),
+			'a term under the term of a pair there, here the term that took its slug' => array( 'term', array( $tparent( 5 ) ), array( $tparent( 17 ) ), 5, 'taken' ),
+			// Not alike by the mapped forms (as in 7111bc4): other targets, a target without identity, a reference on one side only.
+			'other categories without a pair'                            => array( 'post', array( $cat( 5 ), $cat( 9 ) ), array( $cat( 15 ), $cat( 18 ) ), 5 ),
+			'a category of a pair more on one side'                      => array( 'post', array( $cat( 5 ), $cat( 6 ), $cat( 9 ) ), array( $cat( 15 ), $cat( 19 ) ), 5 ),
+			'a target without an identity on its site'                   => array( 'post', array( $cat( 4 ), $cat( 5 ) ), array( $cat( 15 ), $cat( 19 ) ), 5 ),
+			'a list in another order'                                    => array( 'post', array( $ids( 5 ), $ids( 6 ) ), array( $ids( 16 ), $ids( 15 ) ), 5 ),
+			'a featured image on staging only'                           => array( 'post', array( $thumb( 34 ) ), array(), 5 ),
+		);
+		foreach ( array( 'the lines of the targets in the package' => true, 'no line of a target of staging in the package' => false ) as $package => $whole ) {
+			foreach ( $cases as $case => $c ) {
+				list( $kind, $s_refs, $l_refs, $row ) = $c;
+				$live  = $sites[ $c[4] ?? 'l' ];
+				$forms = array( self::mapped_by( 'changed', $s_refs, $sites['s'] ), self::mapped_by( 'changed', $l_refs, $live ) );
+				if ( isset( $c[4] ) ) {
+					self::assertSame( $forms[0], $forms[1], "$case: the same mapped form on both, the case of the finding." );
+				}
+				$s     = self::object( $kind, '50', $s_refs, $forms[0], 's1' );
+				$l     = self::object( $kind, '20', $l_refs, $forms[1], 'l1' );
+				$r     = self::report(
+					array_merge( $whole ? self::lines( $sites['s'] ) : array(), array( $s ) ),
+					array_merge( self::lines( $live ), array( $l ) ),
+					array_merge( array( self::pair( 2, $kind, '20', '50' ) ), $pairs ),
+					$whole ? null : static fn(): bool => false
+				);
+				$entry = self::of( $r, $kind, '50' );
+				self::assertSame( array( $row, 'changed', 'changed' ), array( $entry['row'], $entry['sides']['staging'], $entry['sides']['live'] ), "$case ($package)" );
+			}
+		}
+	}
+
+	/**
+	 * Codex round 3 of part 2, B: a package of the staging site holds its
+	 * posts whole, but no term lines yet. A paired post changed alike on both
+	 * sides, in «news» of a pair (S5 → L15) and in «events» without a pair on
+	 * both sides (S9, L19), has the same mapped form on both (the export of
+	 * its site named each term by its identity): row 6, as in 7111bc4. A
+	 * target without a pair is compared by the mapped form of the object that
+	 * names it, never by a line of its own.
+	 */
+	public function testATargetWithoutAPairIsComparedByTheMappedFormAlsoWhereItsLineIsNotAtHand(): void {
 		$cat   = static fn( int $id ): array => self::ref( 'term', $id, 'term:category' );
-		$tag   = static fn( int $id ): array => self::ref( 'term', $id, 'term:post_tag' );
+		$pairs = array( self::pair( 2, 'post', '20', '50' ), self::pair( 3, 'term', '15', '5' ) );
 		$cases = array(
-			'an unpaired target here, a paired one there'      => array( array( self::ref( 'post', 99 ) ), array( self::ref( 'post', 12 ) ), array( self::pair( 1, 'post', '12', '34' ) ), 5 ),
-			'targets of two other pairs'                       => array( array( self::ref( 'post', 34 ) ), array( self::ref( 'post', 13 ) ), array( self::pair( 1, 'post', '12', '34' ), self::pair( 5, 'post', '13', '35' ) ), 5 ),
-			'no target paired: the mapped forms decide'        => array( array( self::ref( 'post', 99 ) ), array( self::ref( 'post', 98 ) ), array(), 6 ),
-			'a set without a pair, in another order'          => array( array( $cat( 9 ), $cat( 8 ) ), array( $cat( 18 ), $cat( 19 ) ), $terms, 6 ),
-			'the terms of a set in another order, all paired'  => array( array( $cat( 5 ), $cat( 6 ) ), array( $cat( 16 ), $cat( 15 ) ), $terms, 6 ),
-			// Codex round 2 of part 2, B: news of a pair, events without one on both sides.
-			'a set with a target without a pair of one identity on both sides' => array( array( $cat( 5 ), $cat( 9 ) ), array( $cat( 15 ), $cat( 19 ) ), $terms, 6 ),
-			'a mixed set in another order'                    => array( array( $cat( 9 ), $cat( 6 ), $cat( 8 ), $cat( 5 ) ), array( $cat( 15 ), $cat( 18 ), $cat( 16 ), $cat( 19 ) ), $terms, 6 ),
-			'categories and tags, some of them paired'        => array( array( $cat( 5 ), $cat( 9 ), $tag( 8 ) ), array( $cat( 15 ), $cat( 19 ), $tag( 18 ) ), $terms, 6 ),
-			'the menus of an item, one of a pair, one without' => array( array( self::ref( 'term', 8, 'menu' ), self::ref( 'term', 5, 'menu' ) ), array( self::ref( 'term', 15, 'menu' ), self::ref( 'term', 18, 'menu' ) ), array( self::pair( 3, 'menu', '15', '5' ) ), 6 ),
-			'the target of an item, of a pair on both sides'  => array( array( self::ref( 'post', 34, 'meta:_menu_item_object_id' ), self::ref( 'term', 5, 'menu' ) ), array( self::ref( 'post', 12, 'meta:_menu_item_object_id' ), self::ref( 'term', 15, 'menu' ) ), array( self::pair( 1, 'post', '12', '34' ), self::pair( 3, 'menu', '15', '5' ) ), 6 ),
-			'the target of an item without a pair, its menu of one' => array( array( self::ref( 'post', 99, 'meta:_menu_item_object_id' ), self::ref( 'term', 5, 'menu' ) ), array( self::ref( 'post', 98, 'meta:_menu_item_object_id' ), self::ref( 'term', 15, 'menu' ) ), array( self::pair( 3, 'menu', '15', '5' ) ), 6 ),
-			'a target of a pair there, here another object of its identity' => array( array( $cat( 5 ), $cat( 9 ) ), array( $cat( 17 ), $cat( 19 ) ), array( self::pair( 3, 'term', '15', '5' ) ), 5 ),
-			'a target of a pair there, here one without a pair in its place' => array( array( $cat( 5 ), $cat( 9 ) ), array( $cat( 18 ), $cat( 19 ) ), $terms, 5 ),
-			'the targets without a pair are others'           => array( array( $cat( 5 ), $cat( 9 ) ), array( $cat( 15 ), $cat( 18 ) ), $terms, 5 ),
-			'a target without a pair whose line is not at hand' => array( array( $cat( 5 ), $cat( 7 ) ), array( $cat( 15 ), $cat( 19 ) ), $terms, 5 ),
-			'targets without a pair, their lines not at hand on both sides' => array( array( $cat( 5 ), $cat( 7 ) ), array( $cat( 15 ), $cat( 27 ) ), $terms, 5 ),
-			'targets without a pair not read on both sides'   => array( array( $cat( 5 ), $cat( 4 ) ), array( $cat( 15 ), $cat( 24 ) ), $terms, 5 ),
-			'a set without a pair, a line not at hand: the mapped forms decide' => array( array( $cat( 7 ), $cat( 9 ) ), array( $cat( 19 ), $cat( 18 ) ), $terms, 6 ),
-			'a reference without a pair on one side only: the mapped forms decide' => array( array( self::ref( 'post', 99, 'post_content' ) ), array(), array(), 6 ),
-			'a target of a pair more on one side'             => array( array( $cat( 5 ), $cat( 6 ), $cat( 9 ) ), array( $cat( 15 ), $cat( 19 ) ), $terms, 5 ),
-			'a list keeps its places'                         => array( array( self::ref( 'term', 5, 'meta:ids' ), self::ref( 'term', 6, 'meta:ids' ) ), array( self::ref( 'term', 16, 'meta:ids' ), self::ref( 'term', 15, 'meta:ids' ) ), $terms, 5 ),
-			'a list in its places'                            => array( array( self::ref( 'term', 5, 'meta:ids' ), self::ref( 'term', 9, 'meta:ids' ) ), array( self::ref( 'term', 15, 'meta:ids' ), self::ref( 'term', 19, 'meta:ids' ) ), $terms, 6 ),
-			'the menus of an item in another order, all paired' => array( array( self::ref( 'term', 5, 'menu' ), self::ref( 'term', 6, 'menu' ) ), array( self::ref( 'term', 16, 'menu' ), self::ref( 'term', 15, 'menu' ) ), array( self::pair( 3, 'menu', '15', '5' ), self::pair( 4, 'menu', '16', '6' ) ), 6 ),
-			'a reference to a pair on staging only'           => array( array( self::ref( 'post', 34, 'meta:_thumbnail_id' ) ), array(), array( self::pair( 1, 'post', '12', '34' ) ), 5 ),
-			'a reference to a pair here only'                 => array( array(), array( self::ref( 'post', 12, 'meta:_thumbnail_id' ) ), array( self::pair( 1, 'post', '12', '34' ) ), 5 ),
+			'no term lines of staging in the package' => array(),
+			'the lines of its terms as well'           => array( self::term( '5', 'news' ), self::term( '9', 'events' ) ),
 		);
-		foreach ( $cases as $case => list( $s_refs, $l_refs, $pairs, $row ) ) {
-			self::assertSame( $row, $alike( $s_refs, $l_refs, $pairs )['row'], $case );
+		foreach ( $cases as $case => $terms ) {
+			$r     = self::report(
+				array_merge( $terms, array( self::page( '50', 'kontakt', 's1', array( 'mapped' => self::h( 'same' ), 'refs' => array( $cat( 5 ), $cat( 9 ) ) ) ) ) ),
+				array( self::page( '20', 'kontakt', 'l1', array( 'mapped' => self::h( 'same' ), 'refs' => array( $cat( 15 ), $cat( 19 ) ) ) ), self::term( '15', 'news' ), self::term( '19', 'events' ) ),
+				$pairs,
+				static fn( string $kind ): bool => 'term' !== $kind || array() !== $terms
+			);
+			$entry = self::of( $r, 'post', '50' );
+			self::assertSame( array( 'changed_alike', 6, 'none' ), array( $entry['result'], $entry['row'], $entry['action'] ), $case );
 		}
 	}
 

@@ -42,9 +42,11 @@
  * objects with other ids on the two sites are equal; a reference to the
  * object of a pair is the same only where the other side names the other
  * object of that pair (refs_agree(), the rule of the report as well; Codex
- * round 2 of part 2, b): else other content (differs), or, where the
- * reference names the object (the parent of a post, the target, parent item
- * or menus of a menu item, NAMED_BY), uncertain. No pair by exclusion:
+ * round 2 of part 2, b; a target without a pair stays with the mapped form,
+ * whether its line is at hand or not, round 3 of part 2): else other content
+ * (differs), or, where the reference names the object (the parent of a post,
+ * the target, parent item or menus of a menu item, NAMED_BY), uncertain. No
+ * pair by exclusion:
  * one object a side of the same identity and path is a pair. An identity
  * that is there more than once on a site (its line says twin with how many
  * its site has, or a side holds it twice on a path: Codex round 4) pairs on
@@ -1150,8 +1152,8 @@ final class AB_MCP_Sync_Proposal {
 	public static function match( array $staging, array $live, array $pairs, callable $complete ) {
 		$paired = self::paired( $pairs );
 		$sides  = array(
-			's' => self::items( $staging, 's', $paired['s'], self::named( $staging ) ),
-			'l' => self::items( $live, 'l', $paired['l'], self::named( $live ) ),
+			's' => self::items( $staging, 's', $paired['s'] ),
+			'l' => self::items( $live, 'l', $paired['l'] ),
 		);
 		$by    = array(
 			's' => array(),
@@ -1270,10 +1272,9 @@ final class AB_MCP_Sync_Proposal {
 	 * @param array[] $lines  Lines.
 	 * @param string  $side   s or l.
 	 * @param array   $paired paired() of the side.
-	 * @param array   $named  named() of the side.
 	 * @return array[]
 	 */
-	private static function items( array $lines, $side, array $paired = array(), array $named = array() ) {
+	private static function items( array $lines, $side, array $paired = array() ) {
 		$posts = array();
 		$menus = array();
 		foreach ( $lines as $line ) {
@@ -1357,7 +1358,7 @@ final class AB_MCP_Sync_Proposal {
 				// a confirmation keeps those of both sides with the bases.
 				'instances'       => isset( $line['instances'] ) && is_array( $line['instances'] ) ? $line['instances'] : null,
 				// Its references to the objects of pairs (Codex round 2 of part 2, b).
-				'places'          => self::places( $line, $paired, $named ),
+				'places'          => self::places( $line, $paired ),
 			);
 		}
 		return $out;
@@ -1768,49 +1769,25 @@ final class AB_MCP_Sync_Proposal {
 	}
 
 	/**
-	 * The identities of the terms and menus of the lines of one side, by
-	 * ref (identity_key()): in a set, a target without a pair is compared by
-	 * its identity (places()). A held line names none.
-	 *
-	 * @param array[] $lines Lines of one side.
-	 * @return array<string,string>
-	 */
-	public static function named( array $lines ) {
-		$out = array();
-		foreach ( $lines as $line ) {
-			if ( isset( $line['held'] ) || ! in_array( (string) ( $line['kind'] ?? '' ), self::SPACES['term'], true ) || ! isset( $line['identity'] ) || ! is_array( $line['identity'] ) || array() === $line['identity'] ) {
-				continue;
-			}
-			$out[ (string) $line['ref'] ] = (string) self::identity_key( (string) $line['kind'], $line['identity'] );
-		}
-		return $out;
-	}
-
-	/**
 	 * The references of a line by their place (ID space NUL at), where a
 	 * target of the place is the object of a pair on its side: each target
-	 * of the place in its order as the id of its pair, '' for none (pairs),
-	 * and the identity of each term without a pair, null where its line is
-	 * not at hand (named). A place without a target of a pair is left out:
-	 * the mapped forms compare it.
+	 * of the place in its order as the id of its pair, '' for none (pairs).
+	 * Whether a target is the object of a pair, the pairs of its side say by
+	 * its id alone (paired()): no line of the target is needed, so a package
+	 * that holds the object but not its targets yet compares as one that
+	 * holds both (Codex round 3 of part 2, B). A place without a target of a
+	 * pair is left out: the mapped forms compare it.
 	 *
 	 * @param array $line   Line.
 	 * @param array $paired paired() of its side.
-	 * @param array $named  named() of its side.
 	 * @return array
 	 */
-	public static function places( array $line, array $paired, array $named ) {
+	public static function places( array $line, array $paired ) {
 		$out = array();
 		foreach ( isset( $line['refs'] ) && is_array( $line['refs'] ) ? $line['refs'] : array() as $ref ) {
 			$space = (string) ( $ref['space'] ?? '' );
-			$id    = (string) ( $ref['id'] ?? '' );
 			$key   = $space . "\0" . (string) ( $ref['at'] ?? '' );
-			$pair  = $paired[ $space ][ $id ] ?? '';
-			$out[ $key ]['pairs'][] = $pair;
-			if ( '' === $pair ) {
-				// Read in a set only (terms and menus, refs_agree()).
-				$out[ $key ]['named'][] = $named[ $id ] ?? null;
-			}
+			$out[ $key ]['pairs'][] = $paired[ $space ][ (string) ( $ref['id'] ?? '' ) ] ?? '';
 		}
 		foreach ( $out as $key => $place ) {
 			if ( array() === array_diff( $place['pairs'], array( '' ) ) ) {
@@ -1823,22 +1800,28 @@ final class AB_MCP_Sync_Proposal {
 	/**
 	 * Whether the references of two objects name the same objects where a
 	 * pair names their targets (Codex round 1 of part 2, A; round 2, B and
-	 * b), from their places(): the mapped forms compare a reference by the
-	 * identity of its target, and an object of a pair renamed on one side,
-	 * whose slug another object there takes, has the identity of that other
-	 * one. A reference to the object of a pair, on either side, is the same
-	 * only where the other side names the other object of that pair:
+	 * b; round 3, B), from their places(). Two rules, one for each kind of
+	 * target: a target without a pair is compared by the identity the mapped
+	 * form of the object names it by (mapped_same(), decision 10: the mapper
+	 * of its site put the identity of every target into the form, so the
+	 * form carries it whether the line of the target is at hand or not); a
+	 * target of a pair is compared by its pair, because an object of a pair
+	 * renamed on one side, whose slug another object there takes, has the
+	 * identity of that other one, and the forms alone would call the other
+	 * one the same. So a reference to the object of a pair, on either side,
+	 * is the same only where the other side names the other object of that
+	 * pair in its place:
 	 *  - by the place of each reference (its ID space and where it stands,
-	 *    at), in its order, each target by the id of its pair or none;
+	 *    at), in its order, each target by the id of its pair or none ('');
 	 *  - a place no target of which has a pair on either side is left to the
 	 *    mapped forms (both name objects without a pair, by identity);
 	 *  - in a set of the canonical form (AB_MCP_Sync_Canon::set(): the terms
 	 *    of a taxonomy, at term:<taxonomy>, and the menus of a menu item, at
-	 *    menu) the order does not count: the targets of pairs are compared
-	 *    as the ids of their pairs, those without a pair as their identities
-	 *    (a term whose line is not at hand: not alike); alike only where both
-	 *    are, so a target of a pair on one side against an object without a
-	 *    pair in its place on the other (also of the same identity) is not;
+	 *    menu) the order does not count: the ids of the pairs of the place
+	 *    are compared in one order, with as many '' as targets without a
+	 *    pair, so a target of a pair on one side against an object without a
+	 *    pair in its place on the other (also of the same identity) is not
+	 *    alike;
 	 *  - a place on one side only, with a target of a pair: not alike.
 	 *
 	 * @param array $s places() of the staging object.
@@ -1851,20 +1834,8 @@ final class AB_MCP_Sync_Proposal {
 			$here  = $l[ $key ]['pairs'] ?? array();
 			$at    = explode( "\0", (string) $key, 2 )[1] ?? '';
 			if ( 'menu' === $at || 0 === strpos( $at, 'term:' ) ) {
-				// The targets without a pair by their identities: as many
-				// as the ids '' of the place, so the ids in one order then
-				// compare the pairs.
-				$named = array( $s[ $key ]['named'] ?? array(), $l[ $key ]['named'] ?? array() );
-				if ( in_array( null, array_merge( $named[0], $named[1] ), true ) ) {
-					return false;
-				}
 				sort( $there, SORT_STRING );
 				sort( $here, SORT_STRING );
-				sort( $named[0], SORT_STRING );
-				sort( $named[1], SORT_STRING );
-				if ( $named[0] !== $named[1] ) {
-					return false;
-				}
 			}
 			if ( $there !== $here ) {
 				return false;

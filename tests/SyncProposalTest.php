@@ -23,8 +23,12 @@
  *   numbered in the order of the categories. A reference to the object of a
  *   pair is equal only where the other side names its other object
  *   (refs_agree()): else differs, or uncertain where it names the object
- *   (the parent of a post, the target or menu of a menu item); a chosen
- *   pair is active only so (alike(), also as the store keeps the sides).
+ *   (the parent of a post, the target or menu of a menu item); a target
+ *   without a pair stays with the mapped form, whether its line is in the
+ *   package or not (the matrix of every place a reference stands, with and
+ *   without the lines of the targets; Codex rounds 1 to 3 of part 2); a
+ *   chosen pair is active only so (alike(), also as the store keeps the
+ *   sides).
  * - identity_key(): what names an object apart from its id, by kind; a menu
  *   item by the slug of its menu, its target and parent, never its position.
  * - compose(): packages of one series as one inventory: an object twice or a
@@ -412,34 +416,294 @@ final class SyncProposalTest extends TestCase {
 		self::assertFalse( AB_MCP_Sync_Proposal::alike( $old['staging'], $old['live'] ), 'A side kept without its places (a proposal before them): not alike.' );
 	}
 
-	public function testAReferenceToTheObjectOfAPairIsEqualOnlyWhereTheOtherSideNamesItsPartner(): void {
-		// 5 and 15 news (a pair), 9 and 19 events (none); here 16 news as
-		// well, without a pair (it took the slug where 15 was renamed).
-		$terms = array( self::term( '5', 'news' ), self::term( '9', 'events' ) );
-		$here  = array( self::term( '15', 'news' ), self::term( '16', 'news' ), self::term( '19', 'events' ) );
+	/**
+	 * The identities of the objects of the two sites of the matrix of
+	 * references (mapped_by(), lines()), by ID space and id: staging (s), this
+	 * site (l), and this site after renames with a slug taken over (taken:
+	 * the page L12 of the pair with S34 renamed «team-alt» and L13 taking
+	 * «team», the term L15 of the pair with S5 renamed «news-alt» and L17
+	 * taking «news», the menu L103 of the pair with S3 renamed «main-alt» and
+	 * L104 taking «main», the parent item L160 of the pair with S60 renamed
+	 * and L161 taking its name; Codex round 1 of part 2, A, and round 2, b).
+	 * An identity is type/slug (posts; a child by its path), taxonomy/slug
+	 * (terms and menus), item/name (menu items); null for an object without
+	 * one (a term not read). No attachment is in an inventory before branch
+	 * 10, so the featured images 99 and 98 have identities and no lines.
+	 */
+	private static function sites(): array {
+		$s = array(
+			'post' => array( 34 => 'page/team', 35 => 'page/shop', 36 => 'page/about', 40 => 'page/team/a', 60 => 'item/parent', 61 => 'item/other', 99 => 'attachment/bild.jpg' ),
+			'term' => array( 2 => 'nav_menu/footer', 3 => 'nav_menu/main', 4 => null, 5 => 'category/news', 6 => 'category/sport', 7 => 'category/extra', 8 => 'category/misc', 9 => 'category/events', 10 => 'post_tag/misc', 11 => 'post_tag/events' ),
+		);
+		$l = array(
+			'post' => array( 12 => 'page/team', 13 => 'page/shop', 14 => 'page/about', 41 => 'page/team/a', 160 => 'item/parent', 161 => 'item/other', 98 => 'attachment/bild.jpg' ),
+			'term' => array( 102 => 'nav_menu/footer', 103 => 'nav_menu/main', 15 => 'category/news', 16 => 'category/sport', 17 => 'category/extra', 18 => 'category/misc', 19 => 'category/events', 110 => 'post_tag/misc', 111 => 'post_tag/events' ),
+		);
+		$taken = $l;
+		$taken['post'][12]  = 'page/team-alt';
+		$taken['post'][13]  = 'page/team';
+		$taken['post'][160] = 'item/parent-alt';
+		$taken['post'][161] = 'item/parent';
+		$taken['term'][15]  = 'category/news-alt';
+		$taken['term'][17]  = 'category/news';
+		$taken['term'][103] = 'nav_menu/main-alt';
+		$taken['term'][104] = 'nav_menu/main';
+		return array( 's' => $s, 'l' => $l, 'taken' => $taken );
+	}
+
+	/**
+	 * The mapped form of a line as the mapper of its site computes it
+	 * (AB_MCP_Sync_Identity::mapped_hash(): each reference by the identity of
+	 * its target on its site, a set of the canonical form in one order, none
+	 * where a target has no identity), from the identities of that site
+	 * (sites()). Of the site, not of the package: the form carries the
+	 * identity of a target whether the package holds the line of the target
+	 * or not.
+	 */
+	private static function mapped_by( string $text, array $refs, array $site ): ?string {
+		$places = array();
+		foreach ( $refs as $ref ) {
+			$as = $site[ $ref['space'] ][ $ref['id'] ] ?? null;
+			if ( null === $as ) {
+				return null;
+			}
+			$places[ $ref['at'] ][] = $as;
+		}
+		foreach ( array_keys( $places ) as $at ) {
+			if ( 'menu' === $at || str_starts_with( $at, 'term:' ) ) {
+				sort( $places[ $at ], SORT_STRING );
+			}
+		}
+		ksort( $places, SORT_STRING );
+		return self::h( $text . json_encode( $places ) );
+	}
+
+	/**
+	 * The lines of the objects of a site of sites(), as its inventory writes
+	 * them (none for an attachment, an empty identity for a term not read, a
+	 * child page under the page of the path before its slug); with $only,
+	 * those of these kinds alone (a package that holds the menus but no
+	 * terms or pages yet).
+	 */
+	private static function lines( array $site, ?array $only = null ): array {
+		$out = array();
+		$ids = array_flip( array_filter( $site['post'], 'is_string' ) );
+		foreach ( $site['post'] as $id => $as ) {
+			list( $type, $slug ) = explode( '/', $as, 2 );
+			if ( 'page' === $type && ( null === $only || in_array( 'post', $only, true ) ) ) {
+				$up    = dirname( $slug );
+				$out[] = self::page( (string) $id, basename( $slug ), self::h( 'n' . $id ), '.' === $up ? null : (string) $ids[ 'page/' . $up ] );
+			} elseif ( 'item' === $type && ( null === $only || in_array( 'menu_item', $only, true ) ) ) {
+				$out[] = self::item( (string) $id, 0, $slug, 1, 'n' . $id );
+			}
+		}
+		foreach ( $site['term'] as $id => $as ) {
+			if ( null === $as ) {
+				if ( null === $only || in_array( 'term', $only, true ) ) {
+					$out[] = self::line( 'term', (string) $id, array(), self::h( 't' . $id ) );
+				}
+				continue;
+			}
+			list( $taxonomy, $slug ) = explode( '/', $as, 2 );
+			if ( 'nav_menu' === $taxonomy ) {
+				if ( null === $only || in_array( 'menu', $only, true ) ) {
+					$out[] = self::menu( (string) $id, $slug );
+				}
+			} elseif ( null === $only || in_array( 'term', $only, true ) ) {
+				$out[] = self::term( (string) $id, $slug, $taxonomy );
+			}
+		}
+		return $out;
+	}
+
+	/** An object new on its side, of the same identity on both (the menu item in the menu its refs name), with these references and this mapped form. */
+	private static function object( string $kind, string $ref, array $refs, ?string $mapped ): array {
+		$over = array( 'mapped' => $mapped, 'refs' => $refs );
+		if ( 'term' === $kind ) {
+			return array_merge( self::term( $ref, 'neu' ), $over );
+		}
+		if ( 'menu_item' === $kind ) {
+			$menus = array_column( array_filter( $refs, static fn( array $r ): bool => 'menu' === $r['at'] ), 'id' );
+			return array_merge( self::item( $ref, (int) ( $menus[0] ?? 0 ), 'team', 1, 'i' . $ref ), $over );
+		}
+		return self::page( $ref, 'neu', self::h( 'p' . $ref ), null, $over, 'post' );
+	}
+
+	/**
+	 * The rule of the references of an object new on both sides, in every
+	 * place a reference stands (Codex rounds 1 to 3 of part 2): a target of a
+	 * pair by its pair, a target without one by the identity the mapped form
+	 * of the object names it by; once with the lines of the targets in the
+	 * staging package, once without the terms and pages of staging (a package
+	 * that holds the posts and menus whole but no terms or pages yet: nothing
+	 * else complete), with the same category each time. A page under a parent
+	 * is left out of the second round: without the line of its parent its
+	 * path is not known whole, which is uncertain by its own rule. Equal
+	 * wherever no reference contradicts a pair and the mapped forms are the
+	 * same (as in 7111bc4); where a side names the object of a pair and the
+	 * other, in its place, another object (also one of the same identity,
+	 * which the forms alone would call the same): uncertain where the
+	 * reference names the object (the parent of a post; the target, parent
+	 * item or menu of a menu item), else differs; differs where the mapped
+	 * forms differ.
+	 */
+	public function testReferencesArePairedTargetsByTheirPairsAndOthersByTheMappedFormAlsoWithoutTheirLines(): void {
+		$sites   = self::sites();
+		$pairs   = array( self::pair( 1, 'post', '12', '34', 'active' ), self::pair( 3, 'term', '15', '5', 'active' ), self::pair( 4, 'term', '16', '6', 'active' ), self::pair( 5, 'post', '13', '35', 'active' ), self::pair( 6, 'menu', '103', '3', 'active' ), self::pair( 7, 'menu_item', '160', '60', 'active' ), self::pair( 8, 'term', '110', '10', 'active' ) );
+		$cat     = static fn( int $id ): array => self::to( 'term', $id, 'term:category' );
+		$tag     = static fn( int $id ): array => self::to( 'term', $id, 'term:post_tag' );
+		$parent  = static fn( int $id ): array => self::to( 'post', $id, 'post_parent' );
+		$thumb   = static fn( int $id ): array => self::to( 'post', $id, 'meta:_thumbnail_id' );
+		$tparent = static fn( int $id ): array => self::to( 'term', $id, 'parent' );
+		$target  = static fn( int $id ): array => self::to( 'post', $id, 'meta:_menu_item_object_id' );
+		$above   = static fn( int $id ): array => self::to( 'post', $id, 'meta:_menu_item_menu_item_parent' );
+		$menu    = static fn( int $id ): array => self::to( 'term', $id, 'menu' );
+		$ids     = static fn( int $id ): array => self::to( 'term', $id, 'meta:ids' );
+		$cases   = array(
+			// Equal: no reference contradicts a pair, the same mapped form.
+			'categories, all of pairs'                                   => array( 'post', array( $cat( 5 ), $cat( 6 ) ), array( $cat( 15 ), $cat( 16 ) ), 'equal' ),
+			'categories, none of a pair'                                 => array( 'post', array( $cat( 8 ), $cat( 9 ) ), array( $cat( 18 ), $cat( 19 ) ), 'equal' ),
+			'categories mixed, in another order'                         => array( 'post', array( $cat( 9 ), $cat( 6 ), $cat( 8 ), $cat( 5 ) ), array( $cat( 15 ), $cat( 18 ), $cat( 16 ), $cat( 19 ) ), 'equal' ),
+			'categories and tags, some of pairs'                         => array( 'post', array( $cat( 5 ), $cat( 9 ), $tag( 10 ), $tag( 11 ) ), array( $cat( 15 ), $cat( 19 ), $tag( 110 ), $tag( 111 ) ), 'equal' ),
+			'a featured image without a pair'                            => array( 'post', array( $thumb( 99 ), $cat( 5 ) ), array( $thumb( 98 ), $cat( 15 ) ), 'equal' ),
+			'under the page of a pair'                                   => array( 'post', array( $parent( 34 ) ), array( $parent( 12 ) ), 'equal' ),
+			'under a page without a pair'                                => array( 'post', array( $parent( 36 ) ), array( $parent( 14 ) ), 'equal' ),
+			'a grandchild under a page without a pair under the pair'    => array( 'post', array( $parent( 40 ) ), array( $parent( 41 ) ), 'equal' ),
+			'a term under the term of a pair'                            => array( 'term', array( $tparent( 5 ) ), array( $tparent( 15 ) ), 'equal' ),
+			'a term under a term without a pair'                         => array( 'term', array( $tparent( 8 ) ), array( $tparent( 18 ) ), 'equal' ),
+			'a menu item: target, parent item and menu of pairs'         => array( 'menu_item', array( $target( 34 ), $above( 60 ), $menu( 3 ) ), array( $target( 12 ), $above( 160 ), $menu( 103 ) ), 'equal' ),
+			'a menu item: target without a pair, menu of a pair'         => array( 'menu_item', array( $target( 36 ), $menu( 3 ) ), array( $target( 14 ), $menu( 103 ) ), 'equal' ),
+			'a menu item: parent item and menu without a pair'           => array( 'menu_item', array( $target( 34 ), $above( 61 ), $menu( 2 ) ), array( $target( 12 ), $above( 161 ), $menu( 102 ) ), 'equal' ),
+			'a list of ids in its places'                                => array( 'post', array( $ids( 5 ), $ids( 9 ) ), array( $ids( 15 ), $ids( 19 ) ), 'equal' ),
+			// Uncertain: what names the object is of a pair there and another object here, the same mapped form (Codex round 2 of part 2, b).
+			'under the page of a pair there, here the page that took its slug'       => array( 'post', array( $parent( 34 ) ), array( $parent( 13 ) ), 'uncertain', 'taken' ),
+			'a menu item: its target of a pair there, here the page that took it'    => array( 'menu_item', array( $target( 34 ), $menu( 2 ) ), array( $target( 13 ), $menu( 102 ) ), 'uncertain', 'taken' ),
+			'a menu item: its menu of a pair there, here the menu that took it'      => array( 'menu_item', array( $target( 36 ), $menu( 3 ) ), array( $target( 14 ), $menu( 104 ) ), 'uncertain', 'taken' ),
+			'a menu item: its parent item of a pair there, here the item that took it' => array( 'menu_item', array( $target( 36 ), $above( 60 ), $menu( 2 ) ), array( $target( 14 ), $above( 161 ), $menu( 102 ) ), 'uncertain', 'taken' ),
+			// Differs: another reference contradicts a pair, the same mapped form.
+			'in the category of a pair there, here the term that took its slug'      => array( 'post', array( $cat( 5 ), $cat( 9 ) ), array( $cat( 17 ), $cat( 19 ) ), 'differs', 'taken' ),
+			'in a list, the term of a pair there, here the term that took its slug'  => array( 'post', array( $ids( 5 ) ), array( $ids( 17 ) ), 'differs', 'taken' ),
+			'a term under the term of a pair there, here the term that took its slug' => array( 'term', array( $tparent( 5 ) ), array( $tparent( 17 ) ), 'differs', 'taken' ),
+			// Differs by the mapped forms (as in 7111bc4): other targets, a target without identity, a reference on one side only.
+			'other categories without a pair'                            => array( 'post', array( $cat( 5 ), $cat( 9 ) ), array( $cat( 15 ), $cat( 18 ) ), 'differs' ),
+			'a category of a pair more on one side'                      => array( 'post', array( $cat( 5 ), $cat( 6 ), $cat( 9 ) ), array( $cat( 15 ), $cat( 19 ) ), 'differs' ),
+			'a target without an identity on its site'                   => array( 'post', array( $cat( 4 ), $cat( 5 ) ), array( $cat( 15 ), $cat( 19 ) ), 'differs' ),
+			'a list in another order'                                    => array( 'post', array( $ids( 5 ), $ids( 6 ) ), array( $ids( 16 ), $ids( 15 ) ), 'differs' ),
+			'a featured image on staging only'                           => array( 'post', array( $thumb( 34 ) ), array(), 'differs' ),
+		);
+		$found   = static function ( array $r, string $ref ): array {
+			foreach ( $r['entries'] as $e ) {
+				if ( $ref === ( $e['staging']['ref'] ?? null ) || array( $ref ) === array_column( $e['candidates']['staging'] ?? array(), 'ref' ) ) {
+					return array( $e['category'], $e['confirm'] ?? null, $e['live']['ref'] ?? ( array_column( $e['candidates']['live'] ?? array(), 'ref' )[0] ?? null ) );
+				}
+			}
+			return array( null, null, null );
+		};
+		foreach ( array( 'the lines of the targets in the package' => null, 'no term or page of staging in the package' => array( 'menu', 'menu_item' ) ) as $package => $only ) {
+			foreach ( $cases as $case => $c ) {
+				list( $kind, $s_refs, $l_refs, $category ) = $c;
+				if ( null !== $only && array( 'post_parent' ) === array_column( $s_refs, 'at' ) ) {
+					continue;
+				}
+				$live = $sites[ $c[4] ?? 'l' ];
+				$s    = self::mapped_by( 'same', $s_refs, $sites['s'] );
+				$l    = self::mapped_by( 'same', $l_refs, $live );
+				if ( isset( $c[4] ) ) {
+					self::assertSame( $s, $l, "$case: the same mapped form on both, the case of the finding." );
+				}
+				$r = self::match(
+					array_merge( self::lines( $sites['s'], $only ), array( self::object( $kind, '50', $s_refs, $s ) ) ),
+					array_merge( self::lines( $live ), array( self::object( $kind, '20', $l_refs, $l ) ) ),
+					$pairs,
+					null === $only ? null : static fn( string $kind ): bool => in_array( $kind, $only, true )
+				);
+				self::assertSame( array( $category, 'equal' === $category ? 'active' : ( 'differs' === $category ? 'unclear' : 'choice' ), '20' ), $found( $r, '50' ), "$case ($package): " . json_encode( $r['entries'] ) );
+			}
+		}
+	}
+
+	/**
+	 * A post in a term a credential holds on the staging site (its line
+	 * reduced, Codex B9): compared by its mapped form like any other, which
+	 * the mapper of its site computed before the line was held; the name of
+	 * the term reaches neither the entry nor what the comparison keeps.
+	 */
+	public function testAPostInATermACredentialHoldsIsComparedByItsFormAndShowsNoName(): void {
+		$sites = self::sites();
+		$cat   = static fn( int $id ): array => self::to( 'term', $id, 'term:category' );
+		$sites['s']['term'][9] = 'category/secret-events';
+		$sites['l']['term'][29] = 'category/secret-events';
+		$held  = array( 'held' => 'credential_name' ) + self::term( '9', 'secret-events' );
+		$r     = self::match(
+			array( self::term( '5', 'news' ), $held, self::object( 'post', '60', array( $cat( 5 ), $cat( 9 ) ), self::mapped_by( 'same', array( $cat( 5 ), $cat( 9 ) ), $sites['s'] ) ) ),
+			array( self::term( '15', 'news' ), self::term( '29', 'secret-events' ), self::object( 'post', '70', array( $cat( 15 ), $cat( 29 ) ), self::mapped_by( 'same', array( $cat( 15 ), $cat( 29 ) ), $sites['l'] ) ) ),
+			array( self::pair( 3, 'term', '15', '5', 'active' ) )
+		);
+		$e     = array_values( array_filter( $r['entries'], static fn( $e ) => '60' === ( $e['staging']['ref'] ?? null ) ) );
+		self::assertSame( array( 'equal', 'active' ), array( $e[0]['category'] ?? null, $e[0]['confirm'] ?? null ), (string) json_encode( $r['entries'] ) );
+		self::assertStringNotContainsString( 'secret-events', (string) json_encode( $e[0] ) );
+	}
+
+	/**
+	 * What the comparison keeps of the references of a line (places(), as the
+	 * store keeps a side for a choice) and when two of them agree
+	 * (refs_agree()): by place, each target as the id of its pair or '', from
+	 * the pairs of its side alone (no line of a target); a place without a
+	 * target of a pair is not kept (the mapped forms compare it); a set in any
+	 * order, a list in its places; a place with a pair on either side only is
+	 * not alike.
+	 */
+	public function testThePlacesOfALineAndWhereTheyAgree(): void {
+		$paired = AB_MCP_Sync_Proposal::paired( array( self::pair( 1, 'post', '12', '34', 'active' ), self::pair( 3, 'term', '15', '5', 'active' ), self::pair( 6, 'menu', '103', '3', 'active' ) ) );
+		$line   = array( 'refs' => array( self::to( 'term', 9, 'term:category' ), self::to( 'term', 5, 'term:category' ), self::to( 'post', 99, 'meta:_thumbnail_id' ), self::to( 'post', 34, 'post_parent' ), self::to( 'post', 36, 'post_content' ), self::to( 'term', 3, 'menu' ) ) );
+		self::assertSame(
+			array( "term\0term:category" => array( 'pairs' => array( '', '3' ) ), "post\0post_parent" => array( 'pairs' => array( '1' ) ), "term\0menu" => array( 'pairs' => array( '6' ) ) ),
+			AB_MCP_Sync_Proposal::places( $line, $paired['s'] ),
+			'No line of a target, the pairs tell; the image and the content without a pair are not kept.'
+		);
+		self::assertSame( array( "post\0post_parent" => array( 'pairs' => array( '1' ) ) ), AB_MCP_Sync_Proposal::places( array( 'refs' => array( self::to( 'post', 12, 'post_parent' ) ) ), $paired['l'] ), 'By the objects of this site.' );
+		self::assertSame( array(), AB_MCP_Sync_Proposal::places( array( 'refs' => array( self::to( 'post', 12, 'post_parent' ) ) ), $paired['s'] ), 'An id of the other side is no pair here.' );
+		$set  = static fn( string $at, array $pairs ): array => array( "term\0" . $at => array( 'pairs' => $pairs ) );
+		$agree = array( AB_MCP_Sync_Proposal::class, 'refs_agree' );
+		self::assertTrue( $agree( $set( 'term:category', array( '3', '' ) ), $set( 'term:category', array( '', '3' ) ) ), 'A set in any order.' );
+		self::assertTrue( $agree( $set( 'menu', array( '6', '' ) ), $set( 'menu', array( '', '6' ) ) ), 'The menus of an item, a set.' );
+		self::assertFalse( $agree( $set( 'meta:ids', array( '3', '' ) ), $set( 'meta:ids', array( '', '3' ) ) ), 'A list keeps its places.' );
+		self::assertTrue( $agree( $set( 'meta:ids', array( '3', '' ) ), $set( 'meta:ids', array( '3', '' ) ) ) );
+		self::assertFalse( $agree( $set( 'term:category', array( '3', '' ) ), $set( 'term:category', array( '', '' ) ) ), 'A target of a pair against one without.' );
+		self::assertFalse( $agree( $set( 'term:category', array( '3' ) ), array() ), 'A place with a pair on staging only.' );
+		self::assertFalse( $agree( array(), $set( 'term:category', array( '3' ) ) ), 'A place with a pair on this site only.' );
+		self::assertTrue( $agree( array(), array() ) );
+	}
+
+	/**
+	 * Codex round 3 of part 2, B: a package of the staging site holds its
+	 * posts whole, but no term lines yet. A post in «news» of a pair (S5 → L15)
+	 * and in «events» without a pair on both sides (S9, L19) has the same
+	 * mapped form on both (the export of its site named each term by its
+	 * identity): equal, as in 7111bc4. A target without a pair is compared by
+	 * the mapped form of the object that names it, never by a line of its own;
+	 * only a target of a pair is compared by its pair, which the table of
+	 * pairs tells without a line.
+	 */
+	public function testATargetWithoutAPairIsComparedByTheMappedFormAlsoWhereItsLineIsNotAtHand(): void {
 		$cat   = static fn( int $id ): array => self::to( 'term', $id, 'term:category' );
 		$post  = static fn( string $ref, array $refs ): array => self::page( $ref, 'neu', self::h( 'p' . $ref ), null, array( 'mapped' => self::h( 'same' ), 'refs' => $refs ), 'post' );
 		$pairs = array( self::pair( 3, 'term', '15', '5', 'active' ) );
+		$here  = array( self::term( '15', 'news' ), self::term( '19', 'events' ) );
 		$cases = array(
-			'a category of a pair there, here another of its identity' => array( array( $cat( 5 ) ), array( $cat( 16 ) ), 'differs' ),
-			'and one without a pair beside it'                       => array( array( $cat( 5 ), $cat( 9 ) ), array( $cat( 16 ), $cat( 19 ) ), 'differs' ),
-			'the categories of the pair'                             => array( array( $cat( 5 ) ), array( $cat( 15 ) ), 'equal' ),
-			'categories without a pair'                              => array( array( $cat( 9 ) ), array( $cat( 19 ) ), 'equal' ),
-			'a category of the pair and one without'                 => array( array( $cat( 9 ), $cat( 5 ) ), array( $cat( 15 ), $cat( 19 ) ), 'equal' ),
-			'and a tag without a pair'                               => array( array( $cat( 5 ), self::to( 'term', 9, 'term:post_tag' ) ), array( $cat( 15 ), self::to( 'term', 19, 'term:post_tag' ) ), 'equal' ),
+			'no term lines of staging in the package' => array(),
+			'the lines of its terms as well'           => array( self::term( '5', 'news' ), self::term( '9', 'events' ) ),
 		);
-		foreach ( $cases as $case => list( $s_refs, $l_refs, $category ) ) {
-			$r = self::match( array_merge( $terms, array( $post( '60', $s_refs ) ) ), array_merge( $here, array( $post( '70', $l_refs ) ) ), $pairs );
+		foreach ( $cases as $case => $terms ) {
+			$r = self::match(
+				array_merge( $terms, array( $post( '60', array( $cat( 5 ), $cat( 9 ) ) ) ) ),
+				array_merge( $here, array( $post( '70', array( $cat( 15 ), $cat( 19 ) ) ) ) ),
+				$pairs,
+				static fn( string $kind ): bool => 'term' !== $kind || array() !== $terms
+			);
 			$e = array_values( array_filter( $r['entries'], static fn( $e ) => '60' === ( $e['staging']['ref'] ?? null ) ) );
-			self::assertSame( array( $category, 'equal' === $category ? 'active' : 'unclear' ), array( $e[0]['category'] ?? null, $e[0]['confirm'] ?? null ), $case );
+			self::assertSame( array( 'equal', 'active', '70' ), array( $e[0]['category'] ?? null, $e[0]['confirm'] ?? null, $e[0]['live']['ref'] ?? null ), $case . ': ' . json_encode( $r['entries'] ) );
 		}
-		// A term a credential holds names nothing, also not in what the
-		// comparison keeps (the store holds the entries): not alike.
-		$held = array( 'held' => 'credential_name' ) + self::term( '9', 'secret-events' );
-		$r    = self::match( array( self::term( '5', 'news' ), $held, $post( '60', array( $cat( 5 ), $cat( 9 ) ) ) ), array_merge( $here, array( self::term( '29', 'secret-events' ), $post( '70', array( $cat( 15 ), $cat( 29 ) ) ) ) ), $pairs );
-		$e    = array_values( array_filter( $r['entries'], static fn( $e ) => '60' === ( $e['staging']['ref'] ?? null ) ) );
-		self::assertSame( 'differs', $e[0]['category'] ?? null );
-		self::assertStringNotContainsString( 'secret-events', (string) json_encode( $e[0]['staging'] ) );
 	}
 
 	public function testAMenuItemOfATargetOrMenuOfAPairOnOneSideAndAnotherOnTheOtherIsUncertain(): void {

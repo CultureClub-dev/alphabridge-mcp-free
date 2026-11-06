@@ -195,9 +195,13 @@ SA = "\t\treturn ! empty( $s['complete'] ) && ! empty( $l['complete'] ) && self:
 e('alike-staging-whole', 'alike(): only read whole on the staging site', P, SA, SA.replace("! empty( $s['complete'] ) && ", ''), 'prop', 'testAnObjectNotReadWholeIsNeverEqual')
 e('alike-live-whole', 'alike(): only read whole on this site', P, SA, SA.replace("! empty( $l['complete'] ) && ", ''), 'prop', 'testAnObjectNotReadWholeIsNeverEqual')
 e('alike-mapped', 'alike(): the same mapped form, not the same hash', P, SA, "\t\treturn ! empty( $s['complete'] ) && ! empty( $l['complete'] ) && hash_equals( (string) $s['hash'], (string) $l['hash'] )\n", 'prop', 'testOtherIdsOfTheSameTargetsAreEqualOnceMapped')
-PA_REF = 'testAReferenceToTheObjectOfAPairIsEqualOnlyWhereTheOtherSideNamesItsPartner'
+# The matrix of every place a reference stands (a target of a pair by its pair, one without by the mapped
+# form, with and without the lines of the targets), a method of SyncProposalTest and of SyncReportTest.
+MATRIX = 'testReferencesArePairedTargetsByTheirPairsAndOthersByTheMappedFormAlsoWithoutTheirLines'
+PA_REF = MATRIX
 PA_PARENT = 'testAPageUnderTheObjectOfAPairOnOneSideAndAnotherOnTheOtherIsUncertain'
 PA_MENU = 'testAMenuItemOfATargetOrMenuOfAPairOnOneSideAndAnotherOnTheOtherIsUncertain'
+PLACES = 'testThePlacesOfALineAndWhereTheyAgree'
 e('alike-places', 'alike(): a side kept without its places (a proposal before them) is not alike', P,
   "\t\t\t&& isset( $s['places'], $l['places'] ) && is_array( $s['places'] ) && is_array( $l['places'] )\n", "\t\t\t&& true\n", 'prop', PA_PARENT)
 e('alike-refs', 'alike(): the references to the objects of pairs agree', P,
@@ -215,11 +219,9 @@ e('named-by-target', 'NAMED_BY: the target of a menu item names it', P, NB, NB.r
 e('named-by-parent', 'NAMED_BY: the parent item of a menu item names it', P, NB, NB.replace("'meta:_menu_item_menu_item_parent', ", ''), 'prop', PA_MENU)
 e('named-by-menu', 'NAMED_BY: the menus of a menu item name it', P, NB, NB.replace(", 'menu'", ''), 'prop', PA_MENU)
 e('match-paired', 'match(): the objects of the pairs on each side', P,
-  "\t\t\t's' => self::items( $staging, 's', $paired['s'], self::named( $staging ) ),", "\t\t\t's' => self::items( $staging, 's', array(), self::named( $staging ) ),", 'prop', PA_PARENT)
-e('match-named-staging', 'match(): the identities of the terms of staging', P,
-  "\t\t\t's' => self::items( $staging, 's', $paired['s'], self::named( $staging ) ),", "\t\t\t's' => self::items( $staging, 's', $paired['s'], array() ),", 'prop', PA_REF)
-e('match-named-live', 'match(): the identities of the terms of this site', P,
-  "\t\t\t'l' => self::items( $live, 'l', $paired['l'], self::named( $live ) ),", "\t\t\t'l' => self::items( $live, 'l', $paired['l'], array() ),", 'prop', PA_REF)
+  "\t\t\t's' => self::items( $staging, 's', $paired['s'] ),", "\t\t\t's' => self::items( $staging, 's', array() ),", 'prop', PA_PARENT)
+e('match-paired-live', 'match(): the objects of the pairs of this site', P,
+  "\t\t\t'l' => self::items( $live, 'l', $paired['l'] ),", "\t\t\t'l' => self::items( $live, 'l', array() ),", 'prop', PA_REF)
 e('side-places', 'side(): the places of the references are kept for a choice', P,
   "\t\t\t'places'          => $item['places'],\n", "", 'prop', PA_PARENT)
 MS = "\t\t\tif ( isset( $s[ $key ], $l[ $key ] ) && is_string( $s[ $key ] ) && is_string( $l[ $key ] ) && hash_equals( $s[ $key ], $l[ $key ] ) ) {"
@@ -775,7 +777,7 @@ R0T = 'testRuleZeroARestInTheTrashIsStillARest'
 R2T = 'testRuleTwoALiveObjectInTheTrashIsStillDeleted'
 ROW10 = 'testRowTenEndsThePairOnlyWhereBothObjectsAreRemoved'
 CODEX = 'testChangedAlikeOnlyWhereBothSidesNameTheObjectsOfOnePair'
-PARTNER = 'testAReferenceToAPairedTargetIsAlikeOnlyWhereTheOtherSideNamesItsPartner'
+PARTNER = MATRIX
 
 # ---------------------------------------------------- the order (rules 0-3)
 e('r0-residual', 'rule 0: a residual pair is a rest, no row applies', D,
@@ -808,48 +810,31 @@ e('r3-other-forms', 'rule 3: changed differently is a conflict (row 5, not 6)', 
 e('r3-refs', 'rule 3: changed alike only where the references to objects of pairs agree', D,
   " && self::refs_agree( $s, $l, $ctx )", "", 'rep', CODEX)
 e('report-context-pairs', 'report(): the decision knows the pairs', D,
-  "\t\t$ctx   = self::context( $complete, $b9, $pairs, $staging, $live );", "\t\t$ctx   = self::context( $complete, $b9, array(), $staging, $live );", 'rep', CODEX)
-e('report-context-staging', 'report(): the decision knows the terms of staging', D,
-  "\t\t$ctx   = self::context( $complete, $b9, $pairs, $staging, $live );", "\t\t$ctx   = self::context( $complete, $b9, $pairs, array(), $live );", 'rep', PARTNER)
-e('report-context-live', 'report(): the decision knows the terms of this site', D,
-  "\t\t$ctx   = self::context( $complete, $b9, $pairs, $staging, $live );", "\t\t$ctx   = self::context( $complete, $b9, $pairs, $staging );", 'rep', PARTNER)
-e('context-named-staging', 'context(): the identities of the terms of staging', D,
-  "\t\t\t\t's' => AB_MCP_Sync_Proposal::named( $staging ),", "\t\t\t\t's' => array(),", 'rep', PARTNER)
-e('context-named-live', 'context(): the identities of the terms of this site', D,
-  "\t\t\t\t'l' => AB_MCP_Sync_Proposal::named( $live ),", "\t\t\t\t'l' => array(),", 'rep', PARTNER)
-e('refs-places-staging', 'refs_agree(): the staging line by its pairs and the terms of its side', D,
-  "\t\t\tAB_MCP_Sync_Proposal::places( $s, $ctx['paired']['s'], $ctx['named']['s'] ),", "\t\t\tAB_MCP_Sync_Proposal::places( $s, array(), $ctx['named']['s'] ),", 'rep', CODEX)
-e('refs-places-live', 'refs_agree(): the line of this site by its pairs and the terms of its side', D,
-  "\t\t\tAB_MCP_Sync_Proposal::places( $l, $ctx['paired']['l'], $ctx['named']['l'] )", "\t\t\tAB_MCP_Sync_Proposal::places( $l, array(), $ctx['named']['l'] )", 'rep', CODEX)
+  "\t\t$ctx   = self::context( $complete, $b9, $pairs );", "\t\t$ctx   = self::context( $complete, $b9, array() );", 'rep', CODEX)
+e('refs-places-staging', 'refs_agree(): the staging line by the pairs of its side', D,
+  "\t\t\tAB_MCP_Sync_Proposal::places( $s, $ctx['paired']['s'] ),", "\t\t\tAB_MCP_Sync_Proposal::places( $s, array() ),", 'rep', CODEX)
+e('refs-places-live', 'refs_agree(): the line of this site by the pairs of its side', D,
+  "\t\t\tAB_MCP_Sync_Proposal::places( $l, $ctx['paired']['l'] )", "\t\t\tAB_MCP_Sync_Proposal::places( $l, array() )", 'rep', CODEX)
 # The rule itself, shared by the proposal and the report (AB_MCP_Sync_Proposal).
 e('context-paired-staging', 'paired(): the pairs by their staging objects', P,
   "\t\t\t\t\t$out['s'][ $space ][ (string) $pair['staging_ref'] ] = (string) $pair['id'];\n", "", 'rep', CODEX)
 e('context-paired-live', 'paired(): the pairs by their objects here', P,
   "\t\t\t\t\t$out['l'][ $space ][ (string) $pair['live_ref'] ]    = (string) $pair['id'];\n", "", 'rep', CODEX)
-NM = "\t\t\tif ( isset( $line['held'] ) || ! in_array( (string) ( $line['kind'] ?? '' ), self::SPACES['term'], true ) || ! isset( $line['identity'] ) || ! is_array( $line['identity'] ) || array() === $line['identity'] ) {"
-e('named-held', 'named(): a held line names nothing (not in what the store keeps)', P, NM, NM.replace("isset( $line['held'] ) || ", ''), 'prop', PA_REF)
-e('named-kinds', 'named(): the identities of terms and menus only (a post of the same id is none)', P, NM, NM.replace("! in_array( (string) ( $line['kind'] ?? '' ), self::SPACES['term'], true ) || ", ''), 'rep', PARTNER)
-e('named-unread', 'named(): a term not read has no identity', P, NM, NM.replace(" || array() === $line['identity']", ''), 'rep', PARTNER)
-e('refs-pair', 'places(): a target by the id of its pair', P,
-  "\t\t\t$pair  = $paired[ $space ][ $id ] ?? '';", "\t\t\t$pair  = '';", 'rep', CODEX)
-e('places-named', 'places(): a target without a pair by its identity', P,
-  "\t\t\t\t$out[ $key ]['named'][] = $named[ $id ] ?? null;", "\t\t\t\t$out[ $key ]['named'][] = null;", 'rep', PARTNER)
-e('refs-unpaired-place', 'places(): a place without a target of a pair is left to the mapped forms', P,
-  "\t\t\tif ( array() === array_diff( $place['pairs'], array( '' ) ) ) {", "\t\t\tif ( false ) {", 'rep', PARTNER)
-e('refs-places-both', 'refs_agree(): the places of both sides', P,
-  "\t\tforeach ( array_unique( array_merge( array_keys( $s ), array_keys( $l ) ) ) as $key ) {", "\t\tforeach ( array_keys( $s ) as $key ) {", 'rep', PARTNER)
+e('refs-pair', 'places(): a target by the id of its pair, which the pairs of its side tell without its line', P,
+  "\t\t\t$out[ $key ]['pairs'][] = $paired[ $space ][ (string) ( $ref['id'] ?? '' ) ] ?? '';", "\t\t\t$out[ $key ]['pairs'][] = '';", 'rep', CODEX)
+e('refs-pair-places', 'places(): a target by the id of its pair (the places as the store keeps them)', P,
+  "\t\t\t$out[ $key ]['pairs'][] = $paired[ $space ][ (string) ( $ref['id'] ?? '' ) ] ?? '';", "\t\t\t$out[ $key ]['pairs'][] = '';", 'prop', PLACES)
+e('refs-unpaired-place', 'places(): a place without a target of a pair is left to the mapped forms (not kept)', P,
+  "\t\t\tif ( array() === array_diff( $place['pairs'], array( '' ) ) ) {", "\t\t\tif ( false ) {", 'prop', PLACES)
+e('refs-places-both', 'refs_agree(): the places of both sides (a place with a pair on this site only is not alike)', P,
+  "\t\tforeach ( array_unique( array_merge( array_keys( $s ), array_keys( $l ) ) ) as $key ) {", "\t\tforeach ( array_keys( $s ) as $key ) {", 'prop', PLACES)
 RS = "\t\t\tif ( 'menu' === $at || 0 === strpos( $at, 'term:' ) ) {"
 e('refs-set', 'refs_agree(): in a set of the canonical form the order does not count', P, RS, "\t\t\tif ( false ) {", 'rep', PARTNER)
 e('refs-set-menu', 'refs_agree(): the menus of a menu item are a set', P, RS, RS.replace("'menu' === $at || ", ''), 'rep', PARTNER)
 e('refs-set-terms', 'refs_agree(): the terms of a taxonomy are a set', P, RS, RS.replace(" || 0 === strpos( $at, 'term:' )", ''), 'rep', PARTNER)
-e('refs-set-unknown', 'refs_agree(): in a set, a target without a pair whose identity is not known is not alike', P,
-  "\t\t\t\tif ( in_array( null, array_merge( $named[0], $named[1] ), true ) ) {", "\t\t\t\tif ( false ) {", 'rep', PARTNER)
-e('refs-set-named', 'refs_agree(): in a set, the targets without a pair by their identities (Codex round 2 of part 2, B)', P,
-  "\t\t\t\tif ( $named[0] !== $named[1] ) {\n\t\t\t\t\treturn false;", "\t\t\t\tif ( false ) {\n\t\t\t\t\treturn false;", 'rep', PARTNER)
 e('refs-set-sort', 'refs_agree(): a set compared in one order, by its pairs', P,
   "\t\t\t\tsort( $there, SORT_STRING );\n\t\t\t\tsort( $here, SORT_STRING );\n", "", 'rep', PARTNER)
-e('refs-set-sort-named', 'refs_agree(): a set compared in one order, by the identities of the others', P,
-  "\t\t\t\tsort( $named[0], SORT_STRING );\n\t\t\t\tsort( $named[1], SORT_STRING );\n", "", 'rep', PARTNER)
+e('refs-set-list', 'refs_agree(): a list is no set, it keeps its places', P, RS, "\t\t\tif ( true ) {", 'prop', PLACES)
 e('refs-place', 'refs_agree(): each place in its order, by the ids of the pairs', P,
   "\t\t\tif ( $there !== $here ) {\n\t\t\t\treturn false;", "\t\t\tif ( false ) {\n\t\t\t\treturn false;", 'rep', PARTNER)
 # Rule 1 (Codex round 2 of part 2, a).
@@ -1214,11 +1199,13 @@ out.append('''<?php
  * as a whole), the graph of the necessary references (edges, waits, mutual
  * references, passed on), the store with its report_hash and cursor, and
  * what the lines, the manifest and the confirmation carry for it. Codex
- * round 2 of part 2: the references to the objects of pairs, one rule for
- * the proposal and the report (AB_MCP_Sync_Proposal::refs_agree(): a set by
- * its pairs and the identities of the others; equal, differs or uncertain
- * by where a reference stands; a chosen pair active only so), and an unclear
- * pair a credential holds a side of not compared, without a choice.
+ * rounds 2 and 3 of part 2: the references to the objects of pairs, one
+ * rule for the proposal and the report (AB_MCP_Sync_Proposal::refs_agree():
+ * a target of a pair by its pair, which the pairs tell without its line, a
+ * target without one by the mapped form; a set in one order; equal, differs
+ * or uncertain by where a reference stands; a chosen pair active only so),
+ * and an unclear pair a credential holds a side of not compared, without a
+ * choice.
  *
  * Written by tests/mutation/gen/bericht.py from the source; change the
  * entries there and run it again.

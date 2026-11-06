@@ -7,7 +7,10 @@
  *
  * - The inventory B packed is compared with A's own: the same page is equal,
  *   another content differs, a page on one side only is staging_only or
- *   live_only. Over MCP: confirm answers with a preview and a token, the
+ *   live_only; the same objects with other ids are equal once mapped, also
+ *   from packages that hold the posts but no term yet (a term of a pair by
+ *   its pair, one without by the mapped form; Codex round 3 of part 2).
+ *   Over MCP: confirm answers with a preview and a token, the
  *   same call with the token makes the pairs (active, unclear), list shows
  *   them, the token repeated after it ran is refused, a fresh preview says
  *   nothing is left, and discard ends a pair with its token.
@@ -1113,6 +1116,67 @@ final class SyncProposalTest extends TestCase {
 		$answer = self::proposal( self::staged() );
 		self::assertSame( 'differs', self::entry_by_live( $answer['all'], 'post', $ids['a']['meldung'] )['category'], 'In another category on staging.' );
 		self::assertSame( 'equal', self::entry_by_live( $answer['all'], 'post', $ids['a']['kind'] )['category'] );
+	}
+
+	/**
+	 * Codex round 3 of part 2, B: a proposal from the packages of the staging
+	 * site that hold its posts but no term yet (the inventory in packages of
+	 * four objects, every package with a term left out). «meldung» is in
+	 * «news» of a confirmed pair and in «events» without a pair on both
+	 * sites, with other ids: equal and active, as from the whole inventory,
+	 * because a target without a pair is compared by the mapped form its
+	 * site computed and a target of a pair by its pair, never by a line of
+	 * the target. The terms themselves are not compared from such packages.
+	 */
+	public function testAPostInATermOfAPairAndOneWithoutIsEqualAlsoFromPackagesWithoutTheTerms(): void {
+		self::pair();
+		self::shift_ids_on_a();
+		$ids    = self::structure();
+		$events = (int) wp_insert_term( 'Events', 'category', array( 'slug' => 'events' ) )['term_id'];
+		wp_set_object_terms( (int) $ids['a']['meldung'], array( (int) $ids['a']['news'], $events ), 'category' );
+		self::b(
+			array(
+				array( 'op' => 'insert_term', 'name' => 'Events', 'taxonomy' => 'category', 'args' => array( 'slug' => 'events' ), 'as' => 'events' ),
+				array( 'op' => 'set_terms', 'post' => $ids['b']['meldung'], 'terms' => array( $ids['b']['news'], '$events' ), 'taxonomy' => 'category' ),
+			)
+		);
+		$pair = AB_MCP_Sync_Pairs::create(
+			array(
+				'source_id'    => AB_MCP_Sync_Anchor::active()['source_id'],
+				'kind'         => 'term',
+				'live_ref'     => $ids['a']['news'],
+				'staging_ref'  => $ids['b']['news'],
+				'canon'        => 'canon/1',
+				'base_live'    => hash( 'sha256', 'l' ),
+				'base_staging' => hash( 'sha256', 's' ),
+				'base_origin'  => 'proposal',
+				'state'        => 'active',
+			)
+		);
+		self::assertIsArray( $pair, is_wp_error( $pair ) ? $pair->get_error_message() : '' );
+		$without = array();
+		$holds   = null;
+		foreach ( self::export_b( 4 ) as $package ) {
+			self::assertTrue( self::import( $package )['complete'] );
+			$lines = AB_MCP_Sync_Proposal::staging( array( $package['package_id'] ) );
+			self::assertIsArray( $lines, is_wp_error( $lines ) ? $lines->get_error_message() : '' );
+			$kinds = array_column( $lines['lines'], 'kind' );
+			if ( in_array( 'term', $kinds, true ) || in_array( 'menu', $kinds, true ) ) {
+				continue;
+			}
+			$without[] = $package['package_id'];
+			foreach ( $lines['lines'] as $line ) {
+				if ( 'post' === $line['kind'] && $ids['b']['meldung'] === (string) $line['ref'] ) {
+					$holds = $package['package_id'];
+				}
+			}
+		}
+		self::assertNotNull( $holds, 'The package of «meldung» holds a term as well: choose another count of objects per package (the posts of B are eight, four to a package).' );
+		$answer = self::proposal( $without );
+		$entry  = self::entry_by_live( $answer['all'], 'post', $ids['a']['meldung'] );
+		self::assertSame( array( 'equal', 'active', $ids['b']['meldung'] ), array( $entry['category'], $entry['confirm'], (string) $entry['staging']['ref'] ), (string) json_encode( $entry ) );
+		self::assertSame( 'not_compared', self::entry_by_live( $answer['all'], 'term', (string) $events )['category'], 'No term in these packages: the kind is not complete, so «events» here is not called only live.' );
+		self::assertSame( array( 'equal', 'active' ), array_values( array_intersect_key( self::entry_by_live( self::proposal( self::staged() )['all'], 'post', $ids['a']['meldung'] ), array( 'category' => 1, 'confirm' => 1 ) ) ), 'From the whole inventory as well.' );
 	}
 
 	public function testATargetWithoutIdentityNamesNothingAlsoWhereBothSidesAreAlike(): void {
