@@ -85,6 +85,7 @@ final class SyncEnvTest extends TestCase {
 		AB_MCP_Protected_Store::forget();
 		AB_MCP_Sync_Report::$env_lines = null;
 		AB_MCP_Sync_Env::$clock        = null;
+		remove_all_filters( 'ab_mcp_redact_keys' );
 		self::unwrite();
 	}
 
@@ -214,8 +215,8 @@ final class SyncEnvTest extends TestCase {
 		self::assertIsArray( AB_MCP_Sync_Anchor::confirm( $prepared['fingerprint'], self::admin() ) );
 	}
 
-	/** B packs one purpose (a series) and A takes it over: the package ids. */
-	private static function staged( string $purpose, ?int $objects = null ): array {
+	/** B packs one purpose (a series) and A takes it over: the package ids; $answers gets the answers of both sites. */
+	private static function staged( string $purpose, ?int $objects = null, array &$answers = array() ): array {
 		$ids    = array();
 		$cursor = null;
 		do {
@@ -230,8 +231,9 @@ final class SyncEnvTest extends TestCase {
 			if ( null !== $objects ) {
 				$step['objects'] = $objects;
 			}
-			$package = self::b( array( $step ) )['package'];
-			$cursor  = $package['cursor'];
+			$package   = self::b( array( $step ) )['package'];
+			$cursor    = $package['cursor'];
+			$answers[] = $package;
 			self::assertSame( $purpose, $package['purpose'] );
 			$state = AB_MCP_Sync_Import::call(
 				array(
@@ -260,6 +262,7 @@ final class SyncEnvTest extends TestCase {
 					)
 				);
 				self::assertIsArray( $state, is_wp_error( $state ) ? $state->get_error_message() : '' );
+				$answers[] = $state;
 			}
 			self::assertTrue( $state['complete'] );
 			$ids[] = $package['package_id'];
@@ -351,13 +354,13 @@ final class SyncEnvTest extends TestCase {
 		self::assertFalse( $env['plugin:ab-it-env-same/ab-it-env-same.php']['live']['active'] );
 		self::assertSame( array( 'counted', 'locked', 'Z8b' ), self::said( $env['theme:twentytwentyfive'] ) );
 		self::assertSame( array( 'counted', 'locked', 'Z8b' ), self::said( $env['core:wordpress'] ) );
-		self::assertSame( array( 'equal', 'none', null ), self::said( $env['core:locale'] ) );
+		self::assertSame( array( 'same_value', 'none', null ), self::said( $env['core:locale'] ), 'The language shown, never equal.' );
 
 		self::assertSame( array( 'equal', 'none', null ), self::said( $env['mu_plugin:ab-it-env-same.php'] ), 'Read by its SHA-256: equal.' );
 		self::assertSame( array( 'differs', 'locked', 'Z8b' ), self::said( $env['mu_plugin:ab-it-env-differs.php'] ) );
 		self::assertSame( array( 'contents' ), $env['mu_plugin:ab-it-env-differs.php']['differs'] );
 		self::assertSame( array( 'differs', 'host', null ), self::said( $env['dropin:db-error.php'] ), 'A drop-in with another hash: changed at the host.' );
-		self::assertSame( array( 'equal', 'none', null ), self::said( $env['dropin:php-error.php'] ) );
+		self::assertSame( array( 'equal', 'host', null ), self::said( $env['dropin:php-error.php'] ), 'Equal by its SHA-256, changed at the host.' );
 		self::assertArrayNotHasKey( 'dropin:object-cache.php', $env, 'A drop-in on neither side.' );
 
 		self::assertSame( array( 'counted', 'locked', 'Z8b' ), self::said( $env['files:languages'] ) );
@@ -377,14 +380,15 @@ final class SyncEnvTest extends TestCase {
 			self::assertNotContains( substr( $key, 6 ), array( 'posts', 'options', 'users', 'usermeta', 'comments', 'links' ), 'A table of the core is none either.' );
 		}
 
-		self::assertSame( array( 'equal', 'none', null ), self::said( $env['host:php'] ) );
-		self::assertSame( array( 'equal', 'none', null ), self::said( $env['host:database'] ) );
-		self::assertSame( array( 'equal', 'none', null ), self::said( $env['host:constant:WP_DEBUG'] ) );
+		self::assertSame( array( 'same_value', 'host', null ), self::said( $env['host:php'] ), 'Group U: shown, never equal, changed at the host.' );
+		self::assertSame( array( PHP_VERSION, PHP_VERSION ), array( $env['host:php']['staging']['value'], $env['host:php']['live']['value'] ) );
+		self::assertSame( array( 'same_value', 'host', null ), self::said( $env['host:database'] ) );
+		self::assertSame( array( 'same_value', 'host', null ), self::said( $env['host:constant:WP_DEBUG'] ) );
 		self::assertSame( array( 'differs', 'host', null ), self::said( $env['host:constant:WP_DEBUG_LOG'] ), 'A path of each site, compared by its hash.' );
 		self::assertSame( array( 'differs', 'host', null ), self::said( $env['host:mu_loader'] ) );
 		self::assertSame( array( 'present', 'absent' ), array( $env['host:mu_loader']['staging']['value'], $env['host:mu_loader']['live']['value'] ) );
 		self::assertArrayNotHasKey( 'mu_plugin:' . AB_MCP_Sync_Env::LOADER, $env, 'The loader is group U.' );
-		self::assertSame( array( 'equal', 'none', null ), self::said( $env['host:htaccess'] ), 'No .htaccess on either site.' );
+		self::assertSame( array( 'same_value', 'host', null ), self::said( $env['host:htaccess'] ), 'No .htaccess on either site.' );
 		self::assertSame( 'absent', $env['host:htaccess']['live']['value'] );
 		self::assertSame( 'not shown', $env['host:constant:WP_DEBUG_LOG']['live']['value'] );
 
@@ -392,6 +396,13 @@ final class SyncEnvTest extends TestCase {
 			if ( in_array( $entry['subtype'], array( 'plugin', 'theme', 'table', 'files' ), true ) || 'core:wordpress' === $key ) {
 				self::assertNotSame( 'equal', $entry['result'], $key . ': counted or summed is never equal.' );
 			}
+			if ( in_array( $entry['subtype'], array( 'host', 'core' ), true ) ) {
+				self::assertNotSame( 'equal', $entry['result'], $key . ': a value is shown, never equal.' );
+			}
+			if ( in_array( $entry['subtype'], array( 'host', 'dropin' ), true ) ) {
+				self::assertSame( 'host', $entry['action'], $key . ': group U is changed at the host.' );
+			}
+			self::assertArrayNotHasKey( 'held', $entry, $key . ': an ordinary name, shown as it is.' );
 		}
 		self::assertSame( count( $env ), $answer['environment']['counts']['entries'] );
 		self::assertSame( 2, count( array_filter( $answer['blocked'], static fn( $b ) => in_array( $b['key'], array( 'env:plugin', 'env:table' ), true ) ) ), 'The locks of the environment with the others.' );
@@ -445,6 +456,186 @@ final class SyncEnvTest extends TestCase {
 				self::assertStringNotContainsString( '"constant:' . $name . '"', $t, "$name in $where." );
 			}
 		}
+	}
+
+	/* ------------------------------------------- names a credential holds */
+
+	/** Every file of the protected store of both sites, unpacked where it is a gzip. */
+	private static function store_texts(): array {
+		$root  = (string) AB_MCP_IT_Sites::state()['root'] . '/ab-mcp-store';
+		$texts = array();
+		$files = new \RecursiveIteratorIterator( new \RecursiveDirectoryIterator( $root, \FilesystemIterator::SKIP_DOTS ) );
+		foreach ( $files as $file ) {
+			$bytes                   = (string) file_get_contents( (string) $file );
+			$plain                   = "\x1f\x8b" === substr( $bytes, 0, 2 ) ? gzdecode( $bytes ) : $bytes;
+			$texts[ (string) $file ] = false === $plain ? $bytes : $plain;
+		}
+		return $texts;
+	}
+
+	public function testANameWithACredentialIsInNoAnswerPackageCursorOrFileOfTheStore(): void {
+		self::pair();
+		$secret = 'EXAMPLE_SECRET';
+		foreach ( array( 'a', 'b' ) as $site ) {
+			self::write( $site, 'mu-plugins/password=' . $secret . '.php', "<?php\n// The same on both.\n" );
+			self::write( $site, 'plugins/ab-it-env-same/ab-it-env-same.php', self::plugin( 'Env same', '1.0' ) );
+			// A table before and after the one whose name holds it, so that a
+			// part of a table ends at it.
+			self::sql( $site, 'CREATE TABLE `{p}abenv_a` ( id INT )' );
+			self::sql( $site, 'CREATE TABLE `{p}abenv_token=' . $secret . '` ( id INT )' );
+			self::sql( $site, 'CREATE TABLE `{p}abenv_zz` ( id INT )' );
+		}
+		wp_cache_delete( 'plugins', 'plugins' );
+		$answers = array();
+		$ids     = self::staged( 'env', 2, $answers );
+		self::assertGreaterThan( 3, count( $ids ), 'A table a package: a cursor at each table.' );
+		$cursors = array_column( array_filter( $answers, static fn( $a ) => isset( $a['cursor'] ) ), 'cursor' );
+		self::assertNotEmpty( array_filter( $cursors, static fn( $c ) => array( array( 'sha256' => hash( 'sha256', 'abenv_token=' . $secret ) ) ) === $c['inner']['after'] ), 'A cursor at that table, by its SHA-256.' );
+		self::assertNotEmpty( array_filter( $cursors, static fn( $c ) => array( 'abenv_a' ) === $c['inner']['after'] ), 'An ordinary table by its name.' );
+		$exported = array_values( array_filter( $answers, static fn( $a ) => isset( $a['credentials'] ) ) );
+		self::assertSame( 1, $exported[0]['credentials']['held'], 'The first package: the must-use plugin held.' );
+
+		AB_MCP_Sync_Report::$env_lines = 2;
+		$answer                        = self::report(
+			array(
+				'packages'    => self::staged( 'inventory' ),
+				'environment' => $ids,
+			)
+		);
+		$env  = self::env( $answer['all'] );
+		$file = 'mu_plugin:' . AB_MCP_Sync_Env::hashed( 'password=' . $secret . '.php' );
+		self::assertSame( array( 'equal', 'none', null ), self::said( $env[ $file ] ), 'Held on both sites, compared by the SHA-256 of its file still.' );
+		self::assertSame( 'credential_field', $env[ $file ]['held'] );
+		$table = 'table:' . AB_MCP_Sync_Env::hashed( 'abenv_token=' . $secret );
+		self::assertSame( array( 'counted', 'locked', 'Z8d' ), self::said( $env[ $table ] ) );
+		self::assertSame( 'credential_field', $env[ $table ]['held'] );
+		self::assertArrayHasKey( 'plugin:ab-it-env-same/ab-it-env-same.php', $env, 'An ordinary name as it is.' );
+		self::assertArrayHasKey( 'table:abenv_zz', $env );
+		self::assertArrayNotHasKey( 'held', $env['table:abenv_zz'] );
+
+		// The files of this site, in parts that end in a folder whose name holds it.
+		for ( $i = 0; $i < 150; $i++ ) {
+			self::write( 'a', sprintf( 'uploads/api_key=%s/%03d.txt', $secret, $i ), 'x' );
+		}
+		$whole = AB_MCP_Sync_Env::read( null, 60 );
+		self::assertIsArray( $whole );
+		$now                    = 0.0;
+		AB_MCP_Sync_Env::$clock = static function () use ( &$now ) {
+			return ++$now;
+		};
+		$state  = null;
+		$states = array();
+		$lines  = array();
+		do {
+			$read = AB_MCP_Sync_Env::read( $state, 2 );
+			self::assertIsArray( $read, is_wp_error( $read ) ? $read->get_error_message() : '' );
+			$lines    = array_merge( $lines, $read['lines'] );
+			$state    = null === $read['state'] ? null : json_decode( \AB_MCP_Sync_Canon::encode( $read['state'] ), true );
+			$states[] = $state;
+		} while ( null !== $state && count( $states ) < 200 );
+		self::assertNull( $state );
+		$inside = array_filter( $states, static fn( $s ) => is_array( $s ) && 'uploads' === AB_MCP_Sync_Env::STEPS[ $s['step'] ] && is_array( $s['after'] ) && array( 'sha256' => hash( 'sha256', 'api_key=' . $secret ) ) === $s['after'][0] );
+		self::assertNotEmpty( $inside, 'Parts that stopped in that folder, kept by its SHA-256.' );
+		$uploads = static fn( array $all ) => array_values( array_filter( $all, static fn( $l ) => 'files' === $l['env'] && 'uploads' === $l['ref'] ) );
+		self::assertSame( $uploads( $whole['lines'] ), $uploads( $lines ), 'Each file counted once, over parts.' );
+		self::assertSame( 150, $uploads( $lines )[0]['files'] );
+
+		$texts = array( 'the report' => (string) json_encode( $answer ), 'the answers' => (string) json_encode( $answers ), 'the states' => (string) json_encode( $states ), 'the lines' => (string) json_encode( $lines ) ) + self::store_texts();
+		self::assertGreaterThan( 10, count( $texts ) );
+		self::assertNotEmpty( array_filter( $texts, static fn( $t ) => false !== strpos( $t, AB_MCP_Sync_Env::hashed( 'password=' . $secret . '.php' ) ) ), 'The name is in the store, by its SHA-256.' );
+		foreach ( $texts as $where => $text ) {
+			self::assertStringNotContainsString( $secret, $text, "The name in $where." );
+		}
+	}
+
+	public function testANameOnlyTheRulesOfThisSiteHoldIsHeldByTheImport(): void {
+		self::pair();
+		$name = 'vault=EXAMPLE_VAULT.php';
+		foreach ( array( 'a', 'b' ) as $site ) {
+			self::write( $site, 'mu-plugins/' . $name, "<?php\n// The same on both.\n" );
+		}
+		self::write( 'b', 'mu-plugins/vault=EXAMPLE_ONLY.php', "<?php\n" );
+		// The rules of this site only: the staging site packs both names as they are.
+		add_filter( 'ab_mcp_redact_keys', static fn( array $keys ): array => array_merge( $keys, array( 'vault' ) ) );
+		$answers = array();
+		$ids     = self::staged( 'env', null, $answers );
+		self::assertSame( 2, end( $answers )['held'], 'The import holds both by the rules of this site.' );
+		$answer = self::report(
+			array(
+				'packages'    => self::staged( 'inventory' ),
+				'environment' => $ids,
+			)
+		);
+		$env = self::env( $answer['all'] );
+		$key = 'mu_plugin:' . AB_MCP_Sync_Env::hashed( $name );
+		self::assertSame( array( 'equal', 'none', null, 'credential_field' ), array_merge( self::said( $env[ $key ] ), array( $env[ $key ]['held'] ) ), 'One entry: this site holds its own as well.' );
+		$only = 'mu_plugin:' . AB_MCP_Sync_Env::hashed( 'vault=EXAMPLE_ONLY.php' );
+		self::assertSame( array( 'only_staging', 'credential_field' ), array( $env[ $only ]['result'], $env[ $only ]['held'] ) );
+		self::assertStringNotContainsString( 'EXAMPLE_', (string) json_encode( $answer ) );
+		// The package itself holds the names as the staging site wrote and
+		// signed them (out there, in here): the report and the parts of this
+		// site do not.
+		$reports = array_filter( self::store_texts(), static fn( $where ) => false !== strpos( $where, '/reports/' ), ARRAY_FILTER_USE_KEY );
+		self::assertNotEmpty( $reports );
+		foreach ( $reports as $where => $text ) {
+			self::assertStringNotContainsString( 'EXAMPLE_', $text, "A name in $where." );
+		}
+		foreach ( array( 'R&D notes.pdf', 'reset-password/reset-password.php', 'woocommerce_api_keys', '&amp;' ) as $plain ) {
+			self::assertTrue( AB_MCP_Sync_Env::plain( $plain ), $plain . ': an ordinary name, as it is.' );
+		}
+	}
+
+	public function testAPlaceKeptByItsSha256ThatIsGoneLeavesItsRootNotCountedToItsEnd(): void {
+		self::write( 'a', 'uploads/token=gone/a.txt', 'x' );
+		$state = array(
+			'after'    => AB_MCP_Sync_Env::place( 'token=gone/a.txt' ),
+			'attached' => 0,
+			'bytes'    => 1,
+			'files'    => 1,
+			'seq'      => 2,
+			'skipped'  => 0,
+			'step'     => array_search( 'uploads', AB_MCP_Sync_Env::STEPS, true ),
+			'walk'     => str_repeat( 'ab', 16 ),
+		);
+		$read  = AB_MCP_Sync_Env::read( $state, 60 );
+		self::assertIsArray( $read );
+		self::assertSame( array( 'complete' => true, 'files' => 1 ), array_intersect_key( $read['lines'][1], array( 'complete' => 0, 'files' => 0 ) ), 'It is there: the count goes on after it.' );
+		rename( self::content( 'a' ) . '/uploads/token=gone', self::content( 'a' ) . '/uploads/token=moved' );
+		$read = AB_MCP_Sync_Env::read( $state, 60 );
+		self::assertIsArray( $read );
+		self::assertSame( array( false, 'moved' ), array( $read['lines'][1]['complete'], $read['lines'][1]['why'] ), 'Gone since: not counted to its end (fail closed).' );
+		$tables = array( 'after' => array( array( 'sha256' => hash( 'sha256', 'token=gone' ) ) ), 'step' => 1 ) + $state;
+		$read   = AB_MCP_Sync_Env::read( $tables, 60, 2 );
+		self::assertIsArray( $read );
+		self::assertSame( array( 'complete' => false, 'count' => 0, 'env' => 'tables', 'ref' => 'tables' ), $read['lines'][1], 'A table kept by its SHA-256 that is gone: the list not read whole.' );
+	}
+
+	public function testALaterCallOfAnImportNamesNoOtherPurpose(): void {
+		self::pair();
+		$package = self::b( array( array( 'op' => 'export', 'purpose' => 'env', 'as' => 'p' ) ) )['p'];
+		$begin   = array(
+			'package_id' => $package['package_id'],
+			'manifest'   => $package['manifest'],
+			'purpose'    => 'env',
+		);
+		self::assertIsArray( AB_MCP_Sync_Import::call( $begin ) );
+		$other = 'ab_mcp_sync_import_purpose_other';
+		self::assertStringContainsString( 'purpose=env', self::refused( AB_MCP_Sync_Import::call( array( 'purpose' => 'inventory' ) + $begin ), $other ) );
+		self::refused( AB_MCP_Sync_Import::call( array( 'package_id' => $package['package_id'], 'purpose' => 'inventory' ) ), $other );
+		$data = self::b( array( array( 'op' => 'export_chunk', 'package_id' => $package['package_id'], 'chunk' => 0, 'as' => 'c' ) ) )['c']['data'];
+		self::refused( AB_MCP_Sync_Import::call( array( 'package_id' => $package['package_id'], 'chunk' => 0, 'data' => $data, 'purpose' => 'inventory' ) ), $other );
+		$state = AB_MCP_Sync_Import::call( array( 'package_id' => $package['package_id'] ) );
+		self::assertIsArray( $state );
+		self::assertSame( range( 0, $package['chunks'] - 1 ), $state['missing'], 'Nothing taken under another purpose.' );
+		self::assertSame( 'env', $state['purpose'] );
+		foreach ( range( 0, $package['chunks'] - 1 ) as $i ) {
+			$data  = self::b( array( array( 'op' => 'export_chunk', 'package_id' => $package['package_id'], 'chunk' => $i, 'as' => 'c' ) ) )['c']['data'];
+			$state = AB_MCP_Sync_Import::call( array( 'package_id' => $package['package_id'], 'chunk' => $i, 'data' => $data, 'purpose' => 'env' ) );
+			self::assertIsArray( $state, is_wp_error( $state ) ? $state->get_error_message() : '' );
+		}
+		self::assertTrue( $state['complete'], 'The purpose it was begun for goes on.' );
+		self::assertIsArray( AB_MCP_Sync_Import::taken( $package['package_id'], 'env' ) );
+		self::refused( AB_MCP_Sync_Import::taken( $package['package_id'] ), 'ab_mcp_sync_import_purpose_held' );
 	}
 
 	/* ------------------------------------------------------------ packages */

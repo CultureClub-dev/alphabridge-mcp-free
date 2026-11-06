@@ -222,7 +222,10 @@ final class SyncReportTest extends TestCase {
 	}
 
 	/** B packs its inventory and A takes it over: the package ids. */
-	private static function staged( array $before = array() ): array {
+	private static function staged( array $before = array(), bool $mcp = false ): array {
+		// A package belongs to the connection that took it over: over MCP
+		// for a report over MCP, in this process for one in this process.
+		$import = static fn( array $args ) => $mcp ? self::tool( 'wp_site_import_chunk', $args ) : AB_MCP_Sync_Import::call( $args );
 		$ids    = array();
 		$cursor = null;
 		do {
@@ -236,14 +239,14 @@ final class SyncReportTest extends TestCase {
 			}
 			$package = self::b( array_merge( $before, array( $step ) ) )['package'];
 			$cursor  = $package['cursor'];
-			$state   = AB_MCP_Sync_Import::call(
+			$state   = $import(
 				array(
 					'package_id' => $package['package_id'],
 					'manifest'   => $package['manifest'],
 					'purpose'    => 'inventory',
 				)
 			);
-			self::assertIsArray( $state, is_wp_error( $state ) ? $state->get_error_message() : '' );
+			self::assertIsArray( $state, is_wp_error( $state ) ? $state->get_error_message() : ( is_string( $state ) ? $state : '' ) );
 			$steps = array();
 			foreach ( range( 0, $package['chunks'] - 1 ) as $i ) {
 				$steps[] = array(
@@ -255,14 +258,14 @@ final class SyncReportTest extends TestCase {
 			}
 			$data = self::b( $steps );
 			foreach ( range( 0, $package['chunks'] - 1 ) as $i ) {
-				$state = AB_MCP_Sync_Import::call(
+				$state = $import(
 					array(
 						'package_id' => $package['package_id'],
 						'chunk'      => $i,
 						'data'       => $data[ 'c' . $i ]['data'],
 					)
 				);
-				self::assertIsArray( $state, is_wp_error( $state ) ? $state->get_error_message() : '' );
+				self::assertIsArray( $state, is_wp_error( $state ) ? $state->get_error_message() : ( is_string( $state ) ? $state : '' ) );
 			}
 			self::assertTrue( $state['complete'] );
 			$ids[] = $package['package_id'];
@@ -431,7 +434,7 @@ final class SyncReportTest extends TestCase {
 		);
 		wp_update_post( wp_slash( self::page( 'team', 'Our new team.', array( 'ID' => (int) $a['team'] ) ) ) );
 		wp_update_post( wp_slash( self::page( 'prices', 'Prices of this site.', array( 'ID' => (int) $a['prices'] ) ) ) );
-		$ids    = self::staged();
+		$ids    = self::staged( array(), true );
 		$before = self::rows_of_a();
 
 		$answer = self::tool( 'wp_site_diff', array( 'packages' => $ids ) );
@@ -469,9 +472,11 @@ final class SyncReportTest extends TestCase {
 		self::assertIsArray( $again );
 		self::assertSame( array( $answer['report_hash'], $answer['entries'] ), array( $again['report_hash'], $again['entries'] ), 'Paged from the store, the same report.' );
 
-		// Paged by its cursor.
+		// Paged by its cursor; in this process from packages taken over in
+		// this process (a package belongs to its connection).
 		AB_MCP_Sync_Report::$page = 3;
-		$here                     = self::report( $ids );
+		self::assertStringContainsString( 'this connection', self::refused( AB_MCP_Sync_Report::call( array( 'packages' => $ids ) ), 'ab_mcp_sync_import_unknown' ) );
+		$here                     = self::report( self::staged() );
 		self::assertSame( $answer['total'], count( $here['all'] ) );
 		self::assertSame( range( 1, $answer['total'] ), array_column( $here['all'], 'n' ) );
 		self::assertSame( 3, $here['cursor'] );

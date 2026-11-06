@@ -212,7 +212,9 @@ final class AB_MCP_Sync_Export {
 	 * (AB_MCP_Sync_Inventory::BUDGET, OBJECTS lines), each package beginning with
 	 * its page; the cursor goes on where it ended, in the same series.
 	 * Nothing of an object is in it, and no value of a credential
-	 * (AB_MCP_Sync_Env: group U shows no constant that holds a secret).
+	 * (AB_MCP_Sync_Env: group U shows no constant that holds a secret); a
+	 * name of the site a credential holds only by its SHA-256, in the lines
+	 * and in the cursor (AB_MCP_Sync_Env::held(), ::place()).
 	 *
 	 * @param mixed $cursor The cursor of the answer before, or null.
 	 * @param int   $lines  Lines one package holds at most.
@@ -246,8 +248,10 @@ final class AB_MCP_Sync_Export {
 				'count'   => 0,
 				'objects' => array(),
 			),
+			// A name of the site a credential holds is in the package by its
+			// SHA-256 only (AB_MCP_Sync_Env::held()): held counts those lines.
 			'credentials' => array(
-				'held'  => 0,
+				'held'  => count( array_filter( $read['lines'], static fn( $line ) => isset( $line['held'] ) ) ),
 				'names' => 0,
 				'units' => 0,
 			),

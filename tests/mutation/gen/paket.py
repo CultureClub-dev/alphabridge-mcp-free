@@ -1084,6 +1084,16 @@ e('paket/it-begin-cleanup', 'begin(): a record that could not be written leaves 
   "\t\t\tAB_MCP_Protected_Store::remove( 'in', $gid );\n\t\t\treturn $put;", "\t\t\treturn $put;", 'itpkg', PKG_IT['import_write'])
 e('paket/it-import-account', 'find(): the package of this account only (two sites)', IM,
   " || (int) $group['user_id'] !== (int) get_current_user_id()", "", 'itpkg', PKG_IT['account'])
+# Codex, round 1 of branch 7, A2: a package belongs to the connection that began it.
+CONN = 'testAnImportBelongsToTheConnectionThatBeganIt'
+e('paket/z7-import-connection-find', 'find(): the package of this connection only (two sites)', IM,
+  "\t\t\tif ( null !== $found && self::connected( $found ) ) {", "\t\t\tif ( null !== $found ) {", 'itpkg', CONN)
+e('paket/z7-import-connection-kept', 'begin(): the connection kept with the record (two sites)', IM,
+  "\t\t\t\t'connection' => self::connection(),\n\t\t\t\t'expect'     => $expect,", "\t\t\t\t'connection' => hash( 'sha256', 'none' ),\n\t\t\t\t'expect'     => $expect,", 'itpkg', CONN)
+e('paket/z7-import-connection-id', 'connection(): the token, not its kind only (two sites)', IM,
+  "\t\treturn hash( 'sha256', 'ab-sync-import|' . $conn['kind'] . ':' . $conn['id'] );", "\t\treturn hash( 'sha256', 'ab-sync-import|' . $conn['kind'] );", 'itpkg', CONN)
+e('paket/z7-import-connection-none', 'connected(): a record without a connection is of none (two sites)', IM,
+  "\t\treturn null !== $found['connection'] && hash_equals( $found['connection'], self::connection() );", "\t\treturn null === $found['connection'] || hash_equals( $found['connection'], self::connection() );", 'itpkg', CONN)
 e('paket/it-fetch-timeout', 'fetched(): the timeout within what is left of the budget (two sites)', IM,
   "'timeout'             => min( (float) self::TIMEOUT, $left ),", "'timeout'             => (float) self::TIMEOUT,", 'itpkg', PKG_IT['budget'])
 e('paket/it-fetch-min', 'fetched(): no fetch with less than MIN_FETCH left (two sites)', IM,
@@ -1191,7 +1201,7 @@ e('paket/r5-uninstall-retired', 'uninstall.php: the retired key ids go (point 3)
 
 # Point 3: the print at the import; B-3: the purpose of a continuation.
 e('paket/r5-import-print-kept', 'begin(): the print of the pair kept with the record (point 3)', IM,
-  "\t\t\t\t'print'     => $print,\n", "\t\t\t\t'print'     => null,\n", 'itpkg', R5['print_it'])
+  "\t\t\t\t'print'      => $print,\n", "\t\t\t\t'print'      => null,\n", 'itpkg', R5['print_it'])
 PRN = "\t\tif ( ! self::bound( $found, AB_MCP_Sync_Anchor::pair_print() ) ) {"
 e('paket/r5-import-print-check', 'held(): a continuation ends where the print changed (point 3)', IM, PRN, "\t\tif ( false ) {", 'itpkg', R5['print_it'])
 e('paket/r5-import-print-none', 'bound(): a group without the print of its beginning is none of now (point 3)', IM,

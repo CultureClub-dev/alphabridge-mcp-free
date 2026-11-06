@@ -540,23 +540,30 @@ Was sie liest, steht in der Klasse; hier, was sie nicht leistet und warum.
 ### Was verglichen heisst
 
 - «equal» oder «differs» nach Inhalt gibt es nur für Must-Use-Plugins und
-  Drop-ins (SHA-256 der Datei) und für die Werte von Gruppe U (Versionen,
-  Objekt-Cache, `.htaccess`-Block und Must-Use-Lader als SHA-256,
-  Konstanten). Plugins, Themes und WordPress mit gleicher Version, Tabellen
+  Drop-ins (SHA-256 der Datei). Die Werte von Gruppe U (Versionen von PHP
+  und Datenbank, Objekt-Cache, `.htaccess`-Block und Must-Use-Lader als
+  SHA-256, Konstanten) und die Sprache zeigen beide Seiten: «same_value»,
+  wo der Wert auf beiden gleich ist, sonst «differs» (Codex-Runde 1, B4).
+  Grund: gleiche PHP-Version heisst nicht gleiches PHP (Erweiterungen,
+  Einstellungen des Hosters); der Bericht behauptet nur, was er gelesen hat,
+  den Wert. «same_value» steht neben «counted» (gezählt, Inhalt nicht
+  verglichen) und hat keine Etappe: diese Werte übernimmt keine Etappe,
+  sie ändert der Hoster. Plugins, Themes und WordPress mit gleicher Version, Tabellen
   mit gleichen Zeilen und gleichem Schema, Wurzeln mit gleicher Zahl und
   Grösse heissen «counted», mit `contents: not compared` und der Etappe des
   Inhaltsvergleichs (Z8b für Dateien und Code, Z8d für Tabellen). Grund:
   gleiche Version oder Zahl sagt nichts über veränderte Dateien oder Zeilen
   (Befund R2-18). Eine abweichende Zahl oder Version heisst «differs»: sie
   belegt einen Unterschied.
-- Die Sprache (`WPLANG`) wird nur gezeigt (Aktion `none`): sie ist eine
-  Option und gehört nach der Zuständigkeitsregel der Options-Art; ihre
-  Dateien zählt die Wurzel `languages`.
+- Die Sprache (`WPLANG`) wird nur gezeigt (Aktion `none`, «same_value» oder
+  «differs»): sie ist eine Option und gehört nach der Zuständigkeitsregel
+  der Options-Art; ihre Dateien zählt die Wurzel `languages`.
 - Nichts davon ist übernehmbar. Code, Dateien und Tabellen tragen eine
   Sperre mit Grund und Etappe (`env:plugin`, `env:theme`, `env:wordpress`,
   `env:mu_plugin`, `env:mu_files`, `env:languages`, `env:fonts`,
-  `env:uploads`, `env:table`); Drop-ins und Gruppe U heissen «change at the
-  host». Die Sperren stehen in `AB_MCP_Sync_Env::LOCKS`, nicht in
+  `env:uploads`, `env:table`); Drop-ins und Gruppe U tragen immer die
+  Aktion `host` («change at the host»), auch ein gleiches Drop-in und ein
+  gleicher Wert: was dort zu ändern ist, ändert der Hoster. Die Sperren stehen in `AB_MCP_Sync_Env::LOCKS`, nicht in
   `AB_MCP_Sync_Kinds`: keine Art des Datenbank-Vertrags beansprucht sie, und
   die Schlüssel mit `env:` stossen mit keinem dort zusammen.
 - Die Plugin-Version kommt aus dem Kopf der Datei (`get_plugins()`), die
@@ -658,19 +665,72 @@ Was sie liest, steht in der Klasse; hier, was sie nicht leistet und warum.
   bleiben, liest sie im nächsten Aufruf. Ohne `environment` liest er sie
   nicht und nennt die Umgebung als einen Eintrag «not compared» mit dem Weg.
 - Die Zeilen eines Pakets der Umgebung prüft der Import auf ihre Struktur
-  (`AB_MCP_Sync_Env::shaped()`); eine Prüfung auf Zugangsdaten in Namen wie
-  beim Inventar (`held`) gibt es dafür nicht, weil die Namen Dateien,
-  Plugins und Tabellen nennen, keine gespeicherten Werte; Werte von
-  Konstanten kommen nur aus der festen Liste.
+  (`AB_MCP_Sync_Env::shaped()`) und ihre Namen auf Zugangsdaten nach den
+  Regeln dieser Site (siehe «Namen»); was er hält, steht in seiner Liste
+  `held` wie beim Inventar. Werte von Konstanten kommen nur aus der festen
+  Liste.
+- Ein Paket gehört dem Konto und der Verbindung (dem Token von MCP), die
+  den Import begannen (`GRENZEN-PAKET.md`); ein Bericht aus Paketen eines
+  anderen Tokens desselben Kontos lehnt mit `ab_mcp_sync_import_unknown` ab.
+- Ein Folgeaufruf eines Imports, der einen anderen Zweck nennt als den des
+  Beginns, wird abgelehnt (`ab_mcp_sync_import_purpose_other`, mit Weg);
+  das Paket bleibt, wie es war (Codex-Runde 1, A3).
+
+### Namen
+
+- Namen der Site in der Umgebung (Plugins, Themes, Must-Use-Plugins,
+  Tabellen) gehen durch dieselbe Prüfung, die der Import über die Namen
+  einer Zeile des Inventars legt (`AB_MCP_Sync_Env::held()`: die
+  Inhaltsprüfung von `AB_MCP_Sync_Credentials` und das Netz über den rohen
+  Namen, mit `ab_mcp_redact_keys`). Ein Name mit einem eingeschriebenen
+  Feld einer Zugangsangabe (`password=…`, auch kodiert, etwa in base64) oder
+  einer, der sich nicht zu Ende lesen lässt, steht in Paket, Bericht,
+  Ablage und Antwort nur als SHA-256 (`sha256:…`) mit `held`
+  (`credential_field`, `unreadable_name`); beide Sites bilden denselben
+  SHA-256, so bleibt der Vergleich (ein gleiches Must-Use-Plugin heisst
+  weiter «equal»). Codex-Runde 1, A1.
+- Nicht angewandt wird die Regel für Schlüssel (`names_credential()`, B9 der
+  Optionen): ein Name der Umgebung nennt eine Datei, einen Ordner oder eine
+  Tabelle, wie ein Slug einen Beitrag, keinen gespeicherten Wert. Grund:
+  sie hielte gewöhnliche Namen fest (`reset-password`, `wp-oauth-server`,
+  WooCommerces Tabelle `woocommerce_api_keys`), deren Inhalt die
+  Bestandsaufnahme ohnehin nicht liest; der Bericht nennte dann Plugins nur
+  noch als SHA-256.
+- Was eine Zeile nicht als Text hält (kein UTF-8, ein Steuerzeichen, länger
+  als 1024 Bytes), steht ebenfalls als SHA-256, ohne `held`; ebenso eine
+  zu lange Versionsangabe, die der Bericht «not shown» nennt (Codex-Runde 1,
+  C6). So bleibt jede Zeile in der Form, die der Import annimmt.
+- Der Fortsetzungspunkt eines Teils (`after` im Zustand: im Cursor von
+  `wp_site_export` und in den Teilen eines Berichts) hält die Teile seines
+  Pfads auf dieselbe Weise (`AB_MCP_Sync_Env::place()`): gewöhnliche Namen
+  als Text, ein gehaltener oder einer ohne UTF-8 als SHA-256 allein
+  (Codex-Runde 1, A1 und C5). Der nächste Teil sucht ihn unter den Namen
+  seines Ordners wieder. Ist er inzwischen weg, gilt die Wurzel als nicht zu
+  Ende gezählt («not compared», `moved`), die Tabellen als nicht ganz
+  gelesen. Grund: ohne den Namen lässt sich die Reihenfolge danach nicht
+  bestimmen, und eine Zählung von vorn zählte doppelt.
+- Kennt nur die Live-Site eine Regel (`ab_mcp_redact_keys` dort), hält erst
+  ihr Import den Namen: im empfangenen Paket (Ablage `in` der Live-Site,
+  `out` der Staging-Site) steht er, wie die Staging-Site ihn schrieb und
+  signierte, wie bei den Paketen des Inventars; Bericht, Teile dieser Site
+  und Antwort zeigen ihn nur als SHA-256. Hält umgekehrt nur die
+  Staging-Site einen Namen, zeigt der Bericht auch die Zeile dieser Site
+  unter dem SHA-256 (ein Eintrag, kein «nur hier» und «nur Staging»).
 
 ### Prüfung
 
 - Unit (`tests/SyncEnvTest.php`) hält die Klauseln ohne WordPress (Lauf der
   Wurzeln, Kopf einer Datei, Plugins und Themes in Ordnern, `.htaccess`,
-  Schema, Konstanten, Struktur der Zeilen, Vergleich); Integration
-  (`tests/integration/SyncEnvTest.php`) den Bericht über zwei Sites, die
-  Reihe der Pakete, die Teile dieser Site und dass keine geheime Konstante in
-  Antwort oder Ablage steht. Mutationen: `tests/mutation/lists/inventar.php`
+  Schema, Konstanten, Struktur der Zeilen, Namen und Fortsetzungspunkte,
+  Vergleich); Integration (`tests/integration/SyncEnvTest.php`) den Bericht
+  über zwei Sites, die Reihe der Pakete, die Teile dieser Site, dass keine
+  geheime Konstante in Antwort oder Ablage steht und kein gehaltener Name
+  (`password=EXAMPLE_SECRET`) in Antwort, Cursor, Paket oder einer Datei
+  der Ablage, sowie den Zweck eines Folgeaufrufs. Die Bindung an die
+  Verbindung hält `tests/integration/SyncPackageTest.php`.
+- Ein Dateiname ohne UTF-8 lässt sich auf APFS (macOS) nicht anlegen; die
+  Integration prüft den Fortsetzungspunkt darum mit gehaltenen Namen, die
+  Unit-Suite die Form ohne UTF-8 über die kanonische Form hin und zurück. Mutationen: `tests/mutation/lists/inventar.php`
   (aus `tests/mutation/gen/inventar.py`).
 - Nicht als Mutation geführt: `is_file()` vor `hash_file()` in
   `file_hash()` (ohne diese Prüfung blockierte eine FIFO an der Stelle eines
@@ -679,4 +739,11 @@ Was sie liest, steht in der Klasse; hier, was sie nicht leistet und warum.
   (sie entstehen Sekunden nach denen des Inventars) und die Fehlerwege der
   Leser, die eine Test-Site nicht auslöst (`SHOW TABLES`, `COUNT`, `SHOW
   CREATE TABLE`, unlesbare Zeilen `WPLANG`, `stylesheet`, `template`,
-  `active_plugins`).
+  `active_plugins`). Ebenso fünf Wächter, deren Wegfall nichts ändert, was
+  ein Test sehen kann (Codex-Runde 1): die Art in `held_line()` (eine Ref
+  einer festen Liste hält nie etwas), der SHA-256 dort (ein SHA-256 hält
+  nichts), `isset( held )` in `held_here()` (eine gehaltene Zeile bleibt
+  beim Kürzen dieselbe), der Platz in `held_alike()` (eine Seite hat einen
+  Namen nicht zugleich als Text und als SHA-256) und die Art einer
+  gehaltenen Zeile in `shaped()` (die Arten ausserhalb von `NAMED` haben
+  Refs fester Listen, die nie die Form eines SHA-256 haben).

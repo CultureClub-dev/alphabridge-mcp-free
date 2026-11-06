@@ -183,11 +183,15 @@ e('typed-hex32', 'typed(): 32 hex', EN,
   "\t\t\t\treturn is_string( $value ) && 1 === preg_match( '/^[0-9a-f]{32}\\z/', $value );", "\t\t\t\treturn is_string( $value );", 'env', SHAPE)
 e('typed-scalar', 'typed(): a value of the host is no float', EN,
   "\t\t\t\treturn is_bool( $value ) || is_int( $value ) || ( is_string( $value ) && self::name( $value ) === $value );", "\t\t\t\treturn is_scalar( $value );", 'env', SHAPE)
-NAME = 'testANameThatIsNoPlainTextIsHeldByItsBytes'
-NM = "\t\treturn 1 === preg_match( '//u', $name ) && 1 !== preg_match( '/[\\x00-\\x1F\\x7F]/', $name ) && strlen( $name ) <= self::MAX_TEXT ? $name : 'bytes:' . bin2hex( substr( $name, 0, 512 ) );"
+NAME = 'testANameThatIsNoPlainTextIsShownByItsSha256'
+NM = "\t\treturn 1 === preg_match( '//u', $name ) && 1 !== preg_match( '/[\\x00-\\x1F\\x7F]/', $name ) && strlen( $name ) <= self::MAX_TEXT ? $name : self::hashed( $name );"
 e('name-utf8', 'name(): text in UTF-8 only', EN, NM, NM.replace("1 === preg_match( '//u', $name ) && ", ''), 'env', NAME)
 e('name-control', 'name(): no control character', EN, NM, NM.replace(" && 1 !== preg_match( '/[\\x00-\\x1F\\x7F]/', $name )", ''), 'env', NAME)
 e('name-length', 'name(): no longer than a line holds', EN, NM, NM.replace(' && strlen( $name ) <= self::MAX_TEXT', ''), 'env', NAME)
+# Codex, round 1 of branch 7, C6: the form for a text a line does not hold is one it holds.
+e('r1-name-fixed', 'name(): what is no plain text by its SHA-256, a text a line holds (C6)', EN, NM, NM.replace('self::hashed( $name )', "'bytes:' . bin2hex( substr( $name, 0, 512 ) )"), 'env', 'testAVersionLongerThanALineHoldsIsKeptByItsSha256AndNotShown')
+e('r1-show-version', 'show(): a value by its SHA-256 not shown, a version too (C6)', EN,
+  "\t\t\tif ( is_string( $value ) && 0 === strpos( $value, 'sha256:' ) ) {", "\t\t\tif ( false ) {", 'env', 'testAVersionLongerThanALineHoldsIsKeptByItsSha256AndNotShown')
 STATE = 'testAStateIsOnlyOneReadWrites'
 e('state-shaped', 'read(): a state only one read() writes', EN,
   "\t\t} elseif ( ! self::state_shaped( $state ) ) {", "\t\t} elseif ( false ) {", 'env', STATE)
@@ -195,12 +199,79 @@ e('state-keys', 'state_shaped(): exactly its fields', EN,
   "\t\tif ( array( 'after', 'attached', 'bytes', 'files', 'seq', 'skipped', 'step', 'walk' ) !== $keys ) {", "\t\tif ( false ) {", 'env', STATE)
 e('state-counts', 'state_shaped(): its counts whole numbers from 0', EN,
   "\t\t\tif ( ! is_int( $state[ $count ] ) || $state[ $count ] < 0 ) {", "\t\t\tif ( false ) {", 'env', STATE)
-ST = "\t\treturn is_int( $state['seq'] ) && $state['seq'] >= 1\n\t\t\t&& is_int( $state['step'] ) && $state['step'] >= 0 && $state['step'] < count( self::STEPS )\n\t\t\t&& is_string( $state['walk'] ) && 1 === preg_match( '/^[0-9a-f]{32}\\z/', $state['walk'] )\n\t\t\t&& ( null === $state['after'] || ( is_string( $state['after'] ) && '' !== $state['after'] ) );"
+ST = "\t\treturn is_int( $state['seq'] ) && $state['seq'] >= 1\n\t\t\t&& is_int( $state['step'] ) && $state['step'] >= 0 && $state['step'] < count( self::STEPS )\n\t\t\t&& is_string( $state['walk'] ) && 1 === preg_match( '/^[0-9a-f]{32}\\z/', $state['walk'] )\n\t\t\t&& ( null === $state['after'] || self::place_shaped( $state['after'] ) );"
 e('state-seq', 'state_shaped(): a part from 1', EN, ST, ST.replace(" && $state['seq'] >= 1", ''), 'env', STATE)
 e('state-step', 'state_shaped(): a step of STEPS', EN, ST, ST.replace(" && $state['step'] < count( self::STEPS )", ''), 'env', STATE)
 e('state-step-low', 'state_shaped(): no step below 0', EN, ST, ST.replace(" && $state['step'] >= 0", ''), 'env', STATE)
 e('state-walk', 'state_shaped(): a walk of 32 hex', EN, ST, ST.replace(" && 1 === preg_match( '/^[0-9a-f]{32}\\z/', $state['walk'] )", ''), 'env', STATE)
-e('state-after', 'state_shaped(): after a text that is not empty, or none', EN, ST, ST.replace(" && '' !== $state['after']", ''), 'env', STATE)
+e('state-after', 'state_shaped(): after a place as place() writes it, or none', EN, ST, ST.replace(" || self::place_shaped( $state['after'] )", ' || true'), 'env', STATE)
+# Codex, round 1 of branch 7, A1 and C5: the place of a part by its parts, a held one by its SHA-256.
+PL = "\t\tif ( ! is_array( $place ) || array() === $place || ! array_is_list( $place ) ) {"
+e('r1-place-list', 'place_shaped(): a list (A1, C5)', EN, PL, PL.replace(' || ! array_is_list( $place )', ''), 'env', STATE)
+e('r1-place-empty', 'place_shaped(): not empty (A1, C5)', EN, PL, PL.replace(' || array() === $place', ''), 'env', STATE)
+PT = "\t\t\t$text = is_string( $part ) && '' !== $part && false === strpos( $part, '/' ) && self::name( $part ) === $part && 1 !== preg_match( self::HASHED, $part );"
+e('r1-place-part-empty', 'place_shaped(): no empty part (A1, C5)', EN, PT, PT.replace(" && '' !== $part", ''), 'env', STATE)
+e('r1-place-part-slash', 'place_shaped(): a part without «/» (A1, C5)', EN, PT, PT.replace(" && false === strpos( $part, '/' )", ''), 'env', STATE)
+e('r1-place-part-text', 'place_shaped(): a part a line holds as it is (A1, C5)', EN, PT, PT.replace(' && self::name( $part ) === $part', ''), 'env', STATE)
+e('r1-place-part-hashed', 'place_shaped(): no part of the form of a hash (A1, C5)', EN, PT, PT.replace(' && 1 !== preg_match( self::HASHED, $part )', ''), 'env', STATE)
+PH = "\t\t\t$hash = is_array( $part ) && array( 'sha256' ) === array_keys( $part ) && is_string( $part['sha256'] ) && 1 === preg_match( '/^[0-9a-f]{64}\\z/', $part['sha256'] );"
+e('r1-place-hash-keys', 'place_shaped(): a SHA-256 alone (A1, C5)', EN, PH, PH.replace(" && array( 'sha256' ) === array_keys( $part )", " && isset( $part['sha256'] )"), 'env', STATE)
+e('r1-place-hash-hex', 'place_shaped(): 64 hex (A1, C5)', EN, PH, PH.replace(" && 1 === preg_match( '/^[0-9a-f]{64}\\z/', $part['sha256'] )", ''), 'env', STATE)
+PLACE = 'testAPlaceKeepsAHeldOrOddPartByItsSha256AndIsFoundAgain'
+e('r1-place-plain', 'place(): a part as it is only where it is plain (A1)', EN,
+  "\t\t\t$out[] = self::plain( $part ) && false === strpos( $part, '/' ) ? $part : array( 'sha256' => hash( 'sha256', $part ) );", "\t\t\t$out[] = $part;", 'env', PLACE)
+e('r1-place-table', 'place(): the name of a table one part, a «/» in it by its SHA-256 (A1)', EN,
+  "\t\t\t$out[] = self::plain( $part ) && false === strpos( $part, '/' ) ? $part : array( 'sha256' => hash( 'sha256', $part ) );", "\t\t\t$out[] = self::plain( $part ) ? $part : array( 'sha256' => hash( 'sha256', $part ) );", 'env', PLACE)
+e('r1-place-split', 'place(): a path by its parts (A1)', EN,
+  "\t\tforeach ( $split ? explode( '/', (string) $path ) : array( (string) $path ) as $part ) {", "\t\tforeach ( array( (string) $path ) as $part ) {", 'env', PLACE)
+e('r1-found-gone', 'found(): a part held by its SHA-256 that is gone: none (A1)', EN,
+  "\t\t\t\tif ( null === $hit ) {\n\t\t\t\t\treturn null;", "\t\t\t\tif ( false ) {\n\t\t\t\t\treturn null;", 'env', PLACE)
+e('r1-found-name', 'found(): the name found takes the place of the hash (A1)', EN,
+  "\t\t\t\t$part = $hit;", '', 'env', PLACE)
+# held()
+HELD_T = 'testANameWithACredentialWrittenIntoItIsHeld'
+e('r1-held-field', 'held(): a field of a credential in a name (A1)', EN,
+  "\t\tif ( 'mixed' === $check['state'] ) {", "\t\tif ( false ) {", 'env', HELD_T)
+e('r1-held-unreadable', 'held(): a name the check does not read to its end (A1)', EN,
+  "\t\tif ( 'unreadable' === $check['state'] ) {", "\t\tif ( false ) {", 'env', HELD_T)
+e('r1-held-net', 'held(): the net over the raw name (A1)', EN,
+  "\t\tif ( 'credential' === $net ) {", "\t\tif ( false ) {", 'env', HELD_T)
+e('r1-held-net-unreadable', 'held(): a name the net does not read to its end (A1)', EN,
+  "\t\treturn 'unreadable' === $net ? 'unreadable_name' : null;", "\t\treturn null;", 'env', HELD_T)
+e('r1-held-extra', 'held(): the names of ab_mcp_redact_keys (A1)', EN,
+  "\t\t$extra = is_array( $extra ) ? $extra : AB_MCP_Redactor::extra_keys();\n\t\t$check", "\t\t$extra = is_array( $extra ) ? $extra : array();\n\t\t$check", 'env', HELD_T)
+PN = "\t\treturn '' !== $name && self::name( $name ) === $name && 1 !== preg_match( self::HASHED, $name ) && null === self::held( $name );"
+e('r1-plain-empty', 'plain(): no empty name (A1)', EN, PN, PN.replace("'' !== $name && ", ''), 'env', HELD_T)
+e('r1-plain-text', 'plain(): a name a line holds as it is (A1, C5)', EN, PN, PN.replace(' && self::name( $name ) === $name', ''), 'env', HELD_T)
+e('r1-plain-hashed', 'plain(): no name of the form of a hash (A1)', EN, PN, PN.replace(' && 1 !== preg_match( self::HASHED, $name )', ''), 'env', HELD_T)
+e('r1-plain-held', 'plain(): no name a credential holds (A1)', EN, PN, PN.replace(' && null === self::held( $name )', ''), 'env', HELD_T)
+SHAPE_HELD = "\t\tif ( $held && ( ! in_array( $line['env'], self::NAMED, true ) || ! in_array( $line['held'], self::HELD, true ) || 1 !== preg_match( self::HASHED, $line['ref'] ) ) ) {"
+LH = 'testALineOfAHeldNameCarriesItsSha256AndWhyOnly'
+e('r1-shape-held-code', 'shaped(): held with a code of HELD (A1)', EN, SHAPE_HELD, SHAPE_HELD.replace(" || ! in_array( $line['held'], self::HELD, true )", ''), 'env', LH)
+e('r1-shape-held-ref', 'shaped(): a held name by its SHA-256 only (A1)', EN, SHAPE_HELD, SHAPE_HELD.replace(" || 1 !== preg_match( self::HASHED, $line['ref'] )", ''), 'env', LH)
+e('r1-shape-held-field', 'shaped(): held a field of the line (A1)', EN,
+  "$held ? array( 'held' ) : array()", "array()", 'env', LH)
+IH = 'testALineTheImportHeldIsShownByItsSha256'
+e('r1-reduced-ref', 'reduced(): the ref by its SHA-256 (A1)', EN,
+  "\t\tif ( 1 !== preg_match( self::HASHED, (string) $line['ref'] ) ) {", "\t\tif ( false ) {", 'env', IH)
+e('r1-held-line-staging', 'held_line(): a name the staging site held says why (A1)', EN,
+  "\t\tif ( isset( $line['held'] ) ) {\n\t\t\treturn (string) $line['held'];", "\t\tif ( false ) {\n\t\t\treturn (string) $line['held'];", 'env', IH)
+e('r1-held-line-rules', 'held_line(): a name by the rules of this site (A1)', EN,
+  "\t\treturn 1 === preg_match( self::HASHED, $line['ref'] ) ? null : self::held( $line['ref'], $extra );", "\t\treturn null;", 'env', IH)
+HH = "\t\t\t$out[] = null !== $key && ! isset( $line['held'] ) && isset( $codes[ $key ] ) && in_array( $line['env'], self::NAMED, true ) ? self::reduced( $line, $codes[ $key ] ) : $line;"
+e('r1-held-here-listed', 'held_here(): a line the list names only (A1)', EN, HH, HH.replace(' && isset( $codes[ $key ] )', ' && array() !== $codes'), 'env', IH)
+e('r1-held-here-named', 'held_here(): a name of the site only (A1)', EN, HH, HH.replace(" && in_array( $line['env'], self::NAMED, true )", ''), 'env', IH)
+HA = 'testAHeldNameIsOneEntryByItsSha256OnBothSidesAndShownNowhere'
+e('r1-alike-live', 'compare(): a name the staging site holds, this site by its SHA-256 as well (A1)', EN,
+  "\t\t$l     = self::held_alike( $s, $l );", '', 'env', HA)
+e('r1-alike-staging', 'compare(): a name this site holds, the staging site by its SHA-256 as well (A1)', EN,
+  "\t\t$s     = self::held_alike( $l, $s );", '', 'env', HA)
+e('r1-alike-match', 'held_alike(): the line of the same name only (A1)', EN,
+  "\t\t\t\tif ( ! isset( $line['held'] ) && isset( $codes[ $hashed ] ) && ! isset( $b[ $env ][ $hashed ] ) ) {", "\t\t\t\tif ( ! isset( $line['held'] ) && ! isset( $b[ $env ][ $hashed ] ) ) {", 'env', HA)
+e('r1-entry-held', 'entry(): a held name says why (A1)', EN,
+  "\t\tif ( null !== $held ) {\n\t\t\t$entry['held'] = $held;", "\t\tif ( false ) {\n\t\t\t$entry['held'] = $held;", 'env', HA)
+e('r1-entry-held-words', 'entry(): the words of a held name (A1)', EN,
+  "\t\tif ( null !== $held ) {\n\t\t\t$words .= sprintf(", "\t\tif ( false ) {\n\t\t\t$words .= sprintf(", 'env', HA)
 
 # ---------------------------------------------------------- compare
 e('cmp-list-entry', 'compare(): the list of tables not read whole is an entry of its own', EN,
@@ -214,16 +285,20 @@ e('cmp-list-live', 'compare(): the list of this site as well', EN,
 e('cmp-one-side', 'entry(): a line on one side only', EN,
   "\t\t\t$result = null === $s ? 'only_live' : 'only_staging';", "\t\t\t$result = 'only_staging';", 'env', 'testAPluginOnOneSideOnlyIsLocked')
 e('cmp-wordpress', 'judged(): WordPress of the same version is counted', EN,
-  "\t\t\t\t$same   = 'wordpress' === $ref ? 'counted' : 'equal';", "\t\t\t\t$same   = 'equal';", 'env', 'testWordPressOfTheSameVersionIsCountedAndTheLanguageShownOnly')
-e('cmp-locale', 'judged(): the language equal by its value', EN,
-  "\t\t\t\t$same   = 'wordpress' === $ref ? 'counted' : 'equal';", "\t\t\t\t$same   = 'counted';", 'env', 'testWordPressOfTheSameVersionIsCountedAndTheLanguageShownOnly')
+  "\t\t\t\t$same   = 'wordpress' === $ref ? 'counted' : 'same_value';", "\t\t\t\t$same   = 'same_value';", 'env', 'testWordPressOfTheSameVersionIsCountedAndTheLanguageShownOnly')
+e('cmp-locale', 'judged(): the language the same value, never equal (B4)', EN,
+  "\t\t\t\t$same   = 'wordpress' === $ref ? 'counted' : 'same_value';", "\t\t\t\t$same   = 'wordpress' === $ref ? 'counted' : 'equal';", 'env', 'testWordPressOfTheSameVersionIsCountedAndTheLanguageShownOnly')
 CODE = "\t\t\t\t$fields = array( 'version', 'active' );\n\t\t\t\t$same   = 'counted';"
 e('cmp-code', 'judged(): a plugin or theme of the same version is counted, never equal', EN, CODE, CODE.replace("'counted'", "'equal'"), 'env', 'testAPluginOfTheSameVersionIsCountedNeverEqual')
 e('cmp-code-active', 'judged(): whether it runs is compared', EN, CODE, CODE.replace("array( 'version', 'active' )", "array( 'version' )"), 'env', 'testAPluginOfAnotherVersionOrStateDiffers')
 e('cmp-host-defined', 'judged(): a constant defined on one side differs', EN,
-  "\t\t\t\tif ( $s['defined'] !== $l['defined'] ) {", "\t\t\t\tif ( false ) {", 'env', 'testTheValuesOfTheHostAreEqualOrDifferAndChangedAtTheHost')
-e('cmp-host-undefined', 'judged(): not defined on both sides is equal', EN,
-  "\t\t\t\tif ( ! $s['defined'] ) {\n\t\t\t\t\treturn array( 'equal', array(), null );", "\t\t\t\tif ( false ) {\n\t\t\t\t\treturn array( 'equal', array(), null );", 'env', 'testTheValuesOfTheHostAreEqualOrDifferAndChangedAtTheHost')
+  "\t\t\t\tif ( $s['defined'] !== $l['defined'] ) {", "\t\t\t\tif ( false ) {", 'env', 'testTheValuesOfTheHostAreShownNeverEqualAndChangedAtTheHost')
+e('cmp-host-undefined', 'judged(): not defined on both sides is the same value', EN,
+  "\t\t\t\tif ( ! $s['defined'] ) {\n\t\t\t\t\treturn array( 'same_value', array(), null );", "\t\t\t\tif ( false ) {\n\t\t\t\t\treturn array( 'same_value', array(), null );", 'env', 'testTheValuesOfTheHostAreShownNeverEqualAndChangedAtTheHost')
+e('r1-cmp-host-undefined-value', 'judged(): not defined on both sides is never equal (B4)', EN,
+  "\t\t\t\t\treturn array( 'same_value', array(), null );", "\t\t\t\t\treturn array( 'equal', array(), null );", 'env', 'testTheValuesOfTheHostAreShownNeverEqualAndChangedAtTheHost')
+e('r1-cmp-host-value', 'judged(): the same value of the host is never equal (B4)', EN,
+  "\t\t\t\t$fields = array( 'value' );\n\t\t\t\t$same   = 'same_value';\n\t\t\t\tbreak;\n\t\t\tcase 'table':", "\t\t\t\t$fields = array( 'value' );\n\t\t\t\t$same   = 'equal';\n\t\t\t\tbreak;\n\t\t\tcase 'table':", 'env', 'testTheValuesOfTheHostAreShownNeverEqualAndChangedAtTheHost')
 TABLE = "\t\t\t\t$fields = array( 'rows', 'schema' );\n\t\t\t\t$same   = 'counted';"
 e('cmp-table', 'judged(): a table of the same rows and schema is counted, never equal', EN, TABLE, TABLE.replace("'counted'", "'equal'"), 'env', 'testATableWithTheSameRowsAndSchemaIsCountedNeverEqual')
 e('cmp-table-schema', 'judged(): the schema of a table is compared', EN, TABLE, TABLE.replace("array( 'rows', 'schema' )", "array( 'rows' )"), 'env', 'testATableWithTheSameRowsAndSchemaIsCountedNeverEqual')
@@ -241,9 +316,9 @@ e('cmp-hash', 'judged(): a must-use plugin by its hash', EN,
 e('entry-locale', 'entry(): the language is shown only', EN,
   "\t\tif ( 'core' === $env && 'locale' === $ref ) {", "\t\tif ( false ) {", 'env', 'testWordPressOfTheSameVersionIsCountedAndTheLanguageShownOnly')
 e('entry-host', 'entry(): the drop-ins and the host are changed at the host', EN,
-  "\t\t} elseif ( 'equal' !== $result && in_array( $env, array( 'dropin', 'host' ), true ) ) {", "\t\t} elseif ( false ) {", 'env', 'testADropInIsEqualOrDiffersAndIsChangedAtTheHost')
-e('entry-host-equal', 'entry(): what is equal at the host asks nothing', EN,
-  "\t\t} elseif ( 'equal' !== $result && in_array( $env, array( 'dropin', 'host' ), true ) ) {", "\t\t} elseif ( in_array( $env, array( 'dropin', 'host' ), true ) ) {", 'env', 'testTheValuesOfTheHostAreEqualOrDifferAndChangedAtTheHost')
+  "\t\t} elseif ( in_array( $env, array( 'dropin', 'host' ), true ) ) {", "\t\t} elseif ( false ) {", 'env', 'testADropInIsEqualOrDiffersAndIsChangedAtTheHost')
+e('r1-entry-host-always', 'entry(): group U is changed at the host, whatever the result (B4)', EN,
+  "\t\t} elseif ( in_array( $env, array( 'dropin', 'host' ), true ) ) {", "\t\t} elseif ( 'equal' !== $result && 'same_value' !== $result && in_array( $env, array( 'dropin', 'host' ), true ) ) {", 'env', 'testTheValuesOfTheHostAreShownNeverEqualAndChangedAtTheHost')
 e('entry-lock', 'entry(): code, files and tables are locked with their reason and stage', EN,
   "\t\t} elseif ( 'equal' !== $result && isset( self::LOCKS[ $key ] ) ) {", "\t\t} elseif ( false ) {", 'env', 'testEachLockHasItsKeyArtStageAndReason')
 e('entry-lock-equal', 'entry(): what is equal is not locked', EN,
@@ -252,12 +327,13 @@ e('entry-lock-root', 'entry(): each root by its own lock', EN,
   "\t\t$key   = 'files' === $env ? 'files:' . $ref : $env;", "\t\t$key   = 'files' === $env ? 'files:uploads' : $env;", 'env', 'testEachLockHasItsKeyArtStageAndReason')
 e('entry-counted', 'entry(): counted says its contents are not compared, and from when', EN,
   "\t\t\tif ( 'counted' === $result ) {\n\t\t\t\t$entry['contents'] = 'not compared';", "\t\t\tif ( false ) {\n\t\t\t\t$entry['contents'] = 'not compared';", 'env', 'testAPluginOfTheSameVersionIsCountedNeverEqual')
-e('show-hash', 'show(): no hash in an entry', EN,
-  "\t\tunset( $line['env'], $line['ref'], $line['sha256'], $line['schema'] );", "\t\tunset( $line['env'], $line['ref'] );", 'env', 'testNothingCountedIsEverEqualAndNothingEqualIsLocked')
+SH = "\t\tunset( $line['env'], $line['ref'], $line['sha256'], $line['schema'], $line['held'] );"
+e('show-hash', 'show(): no hash in an entry', EN, SH, "\t\tunset( $line['env'], $line['ref'], $line['held'] );", 'env', 'testNothingCountedIsEverEqualAndNothingEqualIsLocked')
+e('r1-show-held', 'show(): no held in a side (A1)', EN, SH, "\t\tunset( $line['env'], $line['ref'], $line['sha256'], $line['schema'] );", 'env', HA)
 e('show-present', 'show(): a hash of the host as present', EN,
-  "\t\t\tif ( 1 === preg_match( '/^[0-9a-f]{64}\\z/', $line['value'] ) ) {", "\t\t\tif ( false ) {", 'env', 'testAValueHeldByItsHashIsNotShown')
+  "\t\tif ( 'host' === $env && is_string( $line['value'] ) && 1 === preg_match( '/^[0-9a-f]{64}\\z/', $line['value'] ) ) {", "\t\tif ( false ) {", 'env', 'testAValueHeldByItsHashIsNotShown')
 e('show-not-shown', 'show(): a value held by its SHA-256 not shown', EN,
-  "\t\t\t} elseif ( 0 === strpos( $line['value'], 'sha256:' ) ) {", "\t\t\t} elseif ( false ) {", 'env', 'testAValueHeldByItsHashIsNotShown')
+  "\t\t\tif ( is_string( $value ) && 0 === strpos( $value, 'sha256:' ) ) {", "\t\t\tif ( false ) {", 'env', 'testAValueHeldByItsHashIsNotShown')
 e('counted-blocked', 'counted(): each lock with how many entries', EN,
   "\t\t\t\t++$blocked[ $lock['key'] ]['entries'];", '', 'env', 'testEachLockHasItsKeyArtStageAndReason')
 
@@ -338,6 +414,28 @@ e('without', 'finish(): without packages of the environment one entry, not compa
   "\t\t$environment = array() === $ids ? AB_MCP_Sync_Env::without() : AB_MCP_Sync_Env::compare( $env_side['lines'], $env );", "\t\t$environment = AB_MCP_Sync_Env::compare( $env_side['lines'], $env );", 'it', 'testWithoutEnvironmentTheReportSaysItIsNotComparedWithTheWay')
 e('numbered', 'finish(): the environment numbered on after the objects', RE,
   "\t\t\t$report['entries'][] = array( 'n' => ++$n ) + $entry;", "\t\t\t$report['entries'][] = array( 'n' => $n ) + $entry;", 'it', MAIN)
+# Codex, round 1 of branch 7: on two sites.
+SECRET = 'testANameWithACredentialIsInNoAnswerPackageCursorOrFileOfTheStore'
+RULES = 'testANameOnlyTheRulesOfThisSiteHoldIsHeldByTheImport'
+GONE = 'testAPlaceKeptByItsSha256ThatIsGoneLeavesItsRootNotCountedToItsEnd'
+e('r1-named-held', 'named(): a held name by its SHA-256 and why (A1, two sites)', EN,
+  "\t\tif ( null !== $held ) {\n\t\t\treturn self::reduced( self::line( $env, self::hashed( $name ), $fields ), $held );", "\t\tif ( false ) {\n\t\t\treturn self::reduced( self::line( $env, self::hashed( $name ), $fields ), $held );", 'it', SECRET)
+e('r1-tables-place', 'table_lines(): the cursor at a table by its place (A1, two sites)', EN,
+  "\t\t\t\t\t'after' => self::place( $last, false ),", "\t\t\t\t\t'after' => array( $last ),", 'it', SECRET)
+e('r1-root-place', 'root(): the state at a path by its place (A1, C5, two sites)', EN,
+  "\t\t\t$state['after'] = self::place( $state['after'] );", '', 'it', SECRET)
+e('r1-root-moved', 'root(): a place held by its SHA-256 that is gone: not counted to its end (A1)', EN,
+  "\t\tif ( null !== $state['after'] && null === $after ) {", "\t\tif ( false ) {", 'it', GONE)
+e('r1-tables-gone', 'table_lines(): a table held by its SHA-256 that is gone: the list not whole (A1)', EN,
+  "\t\tif ( null === $names || ( null !== $place && null === $after ) ) {", "\t\tif ( null === $names ) {", 'it', GONE)
+e('r1-export-held', 'make_env(): the lines held counted (A1, two sites)', EX,
+  "\t\t\t\t'held'  => count( array_filter( $read['lines'], static fn( $line ) => isset( $line['held'] ) ) ),", "\t\t\t\t'held'  => 0,", 'it', SECRET)
+e('r1-import-held', 'unpacked(): a name of the environment held by the rules of this site listed (A1, two sites)', IM,
+  "\t\t\t\t\tif ( null !== $code ) {\n\t\t\t\t\t\t$out[] = array( $object['env'],", "\t\t\t\t\tif ( false ) {\n\t\t\t\t\t\t$out[] = array( $object['env'],", 'it', RULES)
+e('r1-report-held', 'environment(): the lines the import held by the SHA-256 of their name (A1, two sites)', RE,
+  "\t\t\tforeach ( AB_MCP_Sync_Env::held_here( array_slice( $part['lines'], 1 ), $part['held'] ) as $line ) {", "\t\t\tforeach ( array_slice( $part['lines'], 1 ) as $line ) {", 'it', RULES)
+e('r1-import-purpose', 'held(): a later call names the purpose it was begun for (A3)', IM,
+  "\t\tif ( array_key_exists( 'purpose', $a ) && $expect['purpose'] !== $a['purpose'] ) {", "\t\tif ( false ) {", 'it', 'testALaterCallOfAnImportNamesNoOtherPurpose')
 e('blocked', 'finish(): the locks of the environment with the others', RE,
   "\t\tforeach ( $environment['blocked'] as $lock ) {\n\t\t\t$blocked[] = $lock;", "\t\tforeach ( array() as $lock ) {\n\t\t\t$blocked[] = $lock;", 'it', MAIN)
 
@@ -391,9 +489,10 @@ out.append('''<?php
  * what a root skips, a folder that cannot be read, the same counts over
  * parts), the block of the .htaccess, the schema of a table, the constants
  * (none that holds a secret, the rules of the site), the structure of a line
- * of a package, the comparison (counted never equal, equal only by a hash or
- * a value, not compared with why, each lock with its stage, the host changed
- * there, no hash shown), reading in parts on a WordPress site (the pages,
+ * of a package, the comparison (counted never equal, equal only by a hash,
+ * a value of the host the same value, not compared with why, each lock with its stage, the host changed
+ * there, no hash shown; a name a credential holds by its SHA-256 only, the
+ * place of a part by its parts), reading in parts on a WordPress site (the pages,
  * the tables, the uploads against the file lists of attachments), the
  * packages of the environment in wp_site_export and wp_site_import_chunk,
  * and the environment in wp_site_diff (the argument, one whole series, the
@@ -414,7 +513,10 @@ out.append('''<?php
  * the inventory, so no test tells the two apart), and the readers whose
  * failure WordPress gives no way to cause on a test site (SHOW TABLES,
  * COUNT, SHOW CREATE TABLE failing; the rows of WPLANG, stylesheet,
- * template and active_plugins unreadable); GRENZEN-BERICHT.md, Zweig 7.
+ * template and active_plugins unreadable), and five guards whose loss no
+ * test can see (the kind and the SHA-256 in held_line(), isset( held ) in
+ * held_here(), the place in held_alike(), the kind of a held line in
+ * shaped()); GRENZEN-BERICHT.md, Zweig 7.
  *
  * @package AlphaBridge_MCP
  */

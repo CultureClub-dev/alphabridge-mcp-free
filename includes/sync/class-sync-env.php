@@ -44,17 +44,31 @@
  * for all parts of one reading, seq, last), by which the production site
  * holds the packages of the staging site to one whole series.
  *
+ * NAMES. A name of the site (a plugin, a theme, a must-use plugin, a
+ * table: NAMED) goes through the check the import runs over the names of a
+ * line of the inventory (held(): a field of a credential written into it,
+ * also encoded, by the rules of the site with ab_mcp_redact_keys); one it
+ * holds is in a line by its SHA-256 only, with why (held), and so is a name
+ * that is no text a line holds (no UTF-8, a control character, longer than
+ * MAX_TEXT). The place a part ends at (the state: the cursor of
+ * wp_site_export, a part of a report) keeps each part of its path the same
+ * way (place()), and the next part finds it again among the names where it
+ * lies (found()); one gone since leaves its root not counted to its end.
+ *
  * WHAT IT SAYS (compare()): an entry per line of either side. Only a
- * must-use plugin, a drop-in and the values of group U are equal or
- * differ by what was read; what is only counted or summed (plugins and
+ * must-use plugin and a drop-in are equal or differ by what was read (the
+ * SHA-256 of the file); a value of group U and the language show both
+ * values, same_value where they are the same (what lies behind a value is
+ * not compared), else differs; what is only counted or summed (plugins and
  * themes of the same version, WordPress of the same version, tables with
  * the same rows and schema, the roots with the same count and size) is
  * «counted, contents not compared», with the stage of the comparison of
  * their contents (Z8b for files and code, Z8d for tables), never equal.
  * Nothing of it is taken over: code, files and tables are locked with their
- * reason and stage (LOCKS), group U and the drop-ins are changed at the host.
- * What could not be read is not compared, with why (fail closed). No hash
- * and no value of a file in an entry.
+ * reason and stage (LOCKS), group U and the drop-ins are changed at the host
+ * (action host, whatever the result). What could not be read is not
+ * compared, with why (fail closed). No hash and no value of a file in an
+ * entry; a held name by its SHA-256 with held.
  *
  * Messages are English without gettext, as the other classes of the
  * takeover.
@@ -69,6 +83,8 @@ require_once __DIR__ . '/class-sync-canon.php';
 require_once __DIR__ . '/class-sync-media.php';
 require_once __DIR__ . '/class-sync-schema.php';
 require_once __DIR__ . '/class-sync-manifest.php';
+require_once __DIR__ . '/class-sync-credentials.php';
+require_once __DIR__ . '/class-sync-net.php';
 require_once dirname( __DIR__ ) . '/class-redactor.php';
 
 /**
@@ -135,6 +151,22 @@ final class AB_MCP_Sync_Env {
 
 	/** The refs of core. */
 	const CORE = array( 'wordpress', 'locale' );
+
+	/**
+	 * The kinds of lines whose ref is a name of the site (a file, a folder,
+	 * a table): checked for a credential (held()), held by its SHA-256 then.
+	 */
+	const NAMED = array( 'plugin', 'theme', 'mu_plugin', 'table' );
+
+	/**
+	 * Why a name is held (held(); the codes of AB_MCP_Sync_Import for a name
+	 * of a line): a field of a credential is written into it, or it does not
+	 * read to its end, so nothing says what it holds.
+	 */
+	const HELD = array( 'credential_field', 'unreadable_name' );
+
+	/** The form of a name held or too long for a line: its SHA-256. */
+	const HASHED = '/^sha256:[0-9a-f]{64}\z/';
 
 	/** The refs of group U besides the constants. */
 	const HOST = array( 'php', 'database', 'object_cache', 'htaccess', 'mu_loader' );
@@ -241,7 +273,8 @@ final class AB_MCP_Sync_Env {
 
 	/** What each result says. */
 	const WORDS = array(
-		'equal'        => 'Equal on both sides, by what was read of it.',
+		'equal'        => 'Equal on both sides, by the SHA-256 of the file.',
+		'same_value'   => 'The same value on both sides, shown only: what lies behind it (how the host builds and sets up PHP, the database or the server) is not compared.',
 		'differs'      => 'Differs between the sides.',
 		'counted'      => 'Counted, contents not compared: the same version, rows or count on both sides says nothing about the contents.',
 		'only_staging' => 'Only on staging.',
@@ -387,7 +420,81 @@ final class AB_MCP_Sync_Env {
 		return is_int( $state['seq'] ) && $state['seq'] >= 1
 			&& is_int( $state['step'] ) && $state['step'] >= 0 && $state['step'] < count( self::STEPS )
 			&& is_string( $state['walk'] ) && 1 === preg_match( '/^[0-9a-f]{32}\z/', $state['walk'] )
-			&& ( null === $state['after'] || ( is_string( $state['after'] ) && '' !== $state['after'] ) );
+			&& ( null === $state['after'] || self::place_shaped( $state['after'] ) );
+	}
+
+	/**
+	 * Whether a place is one place() writes: a list of parts, each a text
+	 * a line holds as it is (no «/» in it) or a SHA-256 alone.
+	 *
+	 * @param mixed $place Place.
+	 * @return bool
+	 */
+	private static function place_shaped( $place ) {
+		if ( ! is_array( $place ) || array() === $place || ! array_is_list( $place ) ) {
+			return false;
+		}
+		foreach ( $place as $part ) {
+			$text = is_string( $part ) && '' !== $part && false === strpos( $part, '/' ) && self::name( $part ) === $part && 1 !== preg_match( self::HASHED, $part );
+			$hash = is_array( $part ) && array( 'sha256' ) === array_keys( $part ) && is_string( $part['sha256'] ) && 1 === preg_match( '/^[0-9a-f]{64}\z/', $part['sha256'] );
+			if ( ! $text && ! $hash ) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * The place a part ended at, as a state keeps it (after): the parts of
+	 * its path, each as it is where a line would show it as it is (plain()),
+	 * else by its SHA-256 alone, so that no state (the cursor of
+	 * wp_site_export, a part of a report) carries a name a credential holds,
+	 * or one that is no text (Codex, round 1 of branch 7, A1 and C5).
+	 *
+	 * @param string|null $path  A path of a root, or the name of a table.
+	 * @param bool        $split Whether it is a path (by its parts), not the
+	 *                           name of a table (one part, «/» in it too).
+	 * @return array|null
+	 */
+	public static function place( $path, $split = true ) {
+		if ( null === $path ) {
+			return null;
+		}
+		$out = array();
+		foreach ( $split ? explode( '/', (string) $path ) : array( (string) $path ) as $part ) {
+			$out[] = self::plain( $part ) && false === strpos( $part, '/' ) ? $part : array( 'sha256' => hash( 'sha256', $part ) );
+		}
+		return $out;
+	}
+
+	/**
+	 * The path a place names, each part held by its SHA-256 found again among
+	 * the names where it lies; null where such a part is no longer there.
+	 *
+	 * @param array    $place place().
+	 * @param callable $names function( string $path ): string[]|null, the
+	 *                        names in the folder of a path ('' the root).
+	 * @return string|null
+	 */
+	public static function found( array $place, callable $names ) {
+		$path = '';
+		foreach ( $place as $part ) {
+			if ( is_array( $part ) ) {
+				$hit = null;
+				foreach ( (array) $names( $path ) as $name ) {
+					if ( hash_equals( $part['sha256'], hash( 'sha256', (string) $name ) ) ) {
+						$hit = (string) $name;
+						break;
+					}
+				}
+				if ( null === $hit ) {
+					return null;
+				}
+				$part = $hit;
+			}
+			$path = '' === $path ? $part : $path . '/' . $part;
+		}
+		return $path;
 	}
 
 	/* ------------------------------------------------------ the lines of the site */
@@ -411,7 +518,7 @@ final class AB_MCP_Sync_Env {
 		}
 		$mu = defined( 'WPMU_PLUGIN_DIR' ) ? (string) WPMU_PLUGIN_DIR : '';
 		foreach ( self::mu_files( $mu ) as $name ) {
-			$lines[] = self::line( 'mu_plugin', self::name( $name ), self::file_hash( $mu . '/' . $name ) );
+			$lines[] = self::named( 'mu_plugin', $name, self::file_hash( $mu . '/' . $name ) );
 		}
 		$content = defined( 'WP_CONTENT_DIR' ) ? (string) WP_CONTENT_DIR : '';
 		foreach ( self::DROPINS as $name ) {
@@ -464,9 +571,9 @@ final class AB_MCP_Sync_Env {
 		$active = self::stored_list( 'active_plugins' );
 		$lines  = array();
 		foreach ( self::plugin_files( defined( 'WP_PLUGIN_DIR' ) ? (string) WP_PLUGIN_DIR : '' ) as $file => $version ) {
-			$lines[] = self::line(
+			$lines[] = self::named(
 				'plugin',
-				self::name( (string) $file ),
+				(string) $file,
 				array(
 					'active'  => null === $active ? null : in_array( (string) $file, $active, true ),
 					'version' => $version,
@@ -531,9 +638,9 @@ final class AB_MCP_Sync_Env {
 		$roots = isset( $GLOBALS['wp_theme_directories'] ) && is_array( $GLOBALS['wp_theme_directories'] ) && array() !== $GLOBALS['wp_theme_directories'] ? $GLOBALS['wp_theme_directories'] : ( defined( 'WP_CONTENT_DIR' ) ? array( WP_CONTENT_DIR . '/themes' ) : array() );
 		$lines = array();
 		foreach ( self::theme_dirs( array_map( 'strval', $roots ) ) as $stylesheet => $version ) {
-			$lines[] = self::line(
+			$lines[] = self::named(
 				'theme',
-				self::name( (string) $stylesheet ),
+				(string) $stylesheet,
 				array(
 					'active'  => null === $names ? null : in_array( (string) $stylesheet, $names, true ),
 					'version' => $version,
@@ -822,14 +929,18 @@ final class AB_MCP_Sync_Env {
 	 * reach; the line tables once the list is read to its end (or could not
 	 * be read).
 	 *
-	 * @param string|null $after    The table (without the prefix) the part before ended with.
-	 * @param float       $deadline Until when.
-	 * @param int         $room     Lines at most.
-	 * @return array{lines:array[],done:bool,after:string|null}
+	 * @param array|null $place    Where the part before ended: the table
+	 *                            (without the prefix) as place() keeps it.
+	 * @param float      $deadline Until when.
+	 * @param int        $room     Lines at most.
+	 * @return array{lines:array[],done:bool,after:array|null} after as place() keeps it.
 	 */
-	public static function table_lines( $after, $deadline, $room ) {
+	public static function table_lines( $place, $deadline, $room ) {
 		$names = self::tables();
-		if ( null === $names ) {
+		// A table held by its SHA-256 that is gone since: the list is not read
+		// whole (fail closed), as where SHOW TABLES fails.
+		$after = null === $names || null === $place ? null : self::found( $place, static fn() => $names );
+		if ( null === $names || ( null !== $place && null === $after ) ) {
 			return array(
 				'lines' => array(
 					self::line(
@@ -857,7 +968,7 @@ final class AB_MCP_Sync_Env {
 				return array(
 					'lines' => $lines,
 					'done'  => false,
-					'after' => $last,
+					'after' => self::place( $last, false ),
 				);
 			}
 			$table   = $wpdb->prefix . $short;
@@ -866,9 +977,9 @@ final class AB_MCP_Sync_Env {
 			$rows    = '' === (string) $wpdb->last_error && is_numeric( $rows ) ? (int) $rows : null;
 			$create  = $wpdb->get_row( 'SHOW CREATE TABLE ' . $quoted, ARRAY_N ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery -- the same.
 			$schema  = '' === (string) $wpdb->last_error && is_array( $create ) && isset( $create[1] ) && is_string( $create[1] ) ? self::schema( $create[1], $wpdb->prefix ) : null;
-			$lines[] = self::line(
+			$lines[] = self::named(
 				'table',
-				self::name( $short ),
+				$short,
 				array(
 					'rows'   => $rows,
 					'schema' => $schema,
@@ -974,8 +1085,25 @@ final class AB_MCP_Sync_Env {
 				'line' => self::files_line( $root, $state, ! file_exists( $place['dir'] ), file_exists( $place['dir'] ) ? 'not_a_folder' : null ),
 			);
 		}
-		$walked = self::walk( $place['dir'], $state['after'], $state, $deadline, self::skip_of( $root ), $known );
+		// The place of the part before, a part held by its SHA-256 found
+		// again; one gone since leaves the root not counted to its end.
+		$dir   = $place['dir'];
+		$after = null === $state['after'] ? null : self::found(
+			$state['after'],
+			static function ( $rel ) use ( $dir ) {
+				return self::names( '' === $rel ? $dir : $dir . '/' . $rel );
+			}
+		);
+		if ( null !== $state['after'] && null === $after ) {
+			return array(
+				'done' => true,
+				'line' => self::files_line( $root, $state, false, 'moved' ),
+			);
+		}
+		$state['after'] = $after;
+		$walked         = self::walk( $dir, $after, $state, $deadline, self::skip_of( $root ), $known );
 		if ( 'stopped' === $walked ) {
+			$state['after'] = self::place( $state['after'] );
 			return array(
 				'done'  => false,
 				'state' => $state,
@@ -1268,15 +1396,150 @@ final class AB_MCP_Sync_Env {
 	}
 
 	/**
-	 * A name as a line holds it: as it is where it is text without a control
-	 * character, else bytes: and its hex (the same on both sides).
+	 * A text as a line holds it: as it is where it is UTF-8 without a
+	 * control character and no longer than MAX_TEXT, else by its SHA-256
+	 * (hashed(): the same on both sides, and itself such a text, so that a
+	 * line with it keeps its structure; Codex, round 1 of branch 7, C6).
 	 *
-	 * @param string $name Name.
+	 * @param string $name Name or value.
 	 * @return string
 	 */
 	public static function name( $name ) {
 		$name = (string) $name;
-		return 1 === preg_match( '//u', $name ) && 1 !== preg_match( '/[\x00-\x1F\x7F]/', $name ) && strlen( $name ) <= self::MAX_TEXT ? $name : 'bytes:' . bin2hex( substr( $name, 0, 512 ) );
+		return 1 === preg_match( '//u', $name ) && 1 !== preg_match( '/[\x00-\x1F\x7F]/', $name ) && strlen( $name ) <= self::MAX_TEXT ? $name : self::hashed( $name );
+	}
+
+	/**
+	 * A name or a value by its SHA-256: sha256: and the hex.
+	 *
+	 * @param string $name Name.
+	 * @return string
+	 */
+	public static function hashed( $name ) {
+		return 'sha256:' . hash( 'sha256', (string) $name );
+	}
+
+	/**
+	 * Why a name of the site is held by the rules of this site, or null:
+	 * the check the import runs over each name of a line of the inventory
+	 * (AB_MCP_Sync_Import::held_code(): the content check of the credential
+	 * check and the net over the raw name, with the names of the filter
+	 * ab_mcp_redact_keys): a field of a credential written into it
+	 * (password=…, also encoded), or a name that does not read to its end
+	 * (deeper than the check or the net reads). A name is the name of a file, a
+	 * folder or a table, as a slug is that of a post: «reset-password» or
+	 * «woocommerce_api_keys» holds nothing (Codex, round 1 of branch 7, A1).
+	 *
+	 * @param string        $name  Name.
+	 * @param string[]|null $extra AB_MCP_Redactor::extra_keys() (read when null).
+	 * @return string|null A code of HELD.
+	 */
+	public static function held( $name, $extra = null ) {
+		$extra = is_array( $extra ) ? $extra : AB_MCP_Redactor::extra_keys();
+		$check = AB_MCP_Sync_Credentials::unit( '', (string) $name, $extra );
+		if ( 'mixed' === $check['state'] ) {
+			return 'credential_field';
+		}
+		if ( 'unreadable' === $check['state'] ) {
+			return 'unreadable_name';
+		}
+		$net = AB_MCP_Sync_Net::over_name( (string) $name, $extra );
+		if ( 'credential' === $net ) {
+			return 'credential_field';
+		}
+		return 'unreadable' === $net ? 'unreadable_name' : null;
+	}
+
+	/**
+	 * Whether a name is shown as it is: a text a line holds as it is
+	 * (name()), not of the form of a hash, and held by nothing (held()).
+	 *
+	 * @param string $name Name.
+	 * @return bool
+	 */
+	public static function plain( $name ) {
+		$name = (string) $name;
+		return '' !== $name && self::name( $name ) === $name && 1 !== preg_match( self::HASHED, $name ) && null === self::held( $name );
+	}
+
+	/**
+	 * The line of a name of the site (NAMED): its ref the name where it is
+	 * shown as it is (plain()), else its SHA-256 (hashed()), with held, why,
+	 * where a credential holds it.
+	 *
+	 * @param string $env    Kind.
+	 * @param string $name   Name.
+	 * @param array  $fields Fields.
+	 * @return array
+	 */
+	private static function named( $env, $name, array $fields ) {
+		$name = (string) $name;
+		$held = self::held( $name );
+		if ( null !== $held ) {
+			return self::reduced( self::line( $env, self::hashed( $name ), $fields ), $held );
+		}
+		return self::line( $env, '' !== $name && self::name( $name ) === $name && 1 !== preg_match( self::HASHED, $name ) ? $name : self::hashed( $name ), $fields );
+	}
+
+	/**
+	 * A line whose name is held, by the SHA-256 of its name and why.
+	 *
+	 * @param array  $line Line, its ref the name.
+	 * @param string $code A code of HELD.
+	 * @return array
+	 */
+	private static function reduced( array $line, $code ) {
+		if ( 1 !== preg_match( self::HASHED, (string) $line['ref'] ) ) {
+			$line['ref'] = self::hashed( $line['ref'] );
+		}
+		$line['held'] = (string) $code;
+		ksort( $line );
+		return $line;
+	}
+
+	/**
+	 * Why a line of a package of the environment is held on this site, or
+	 * null: a line of a name the staging site held already says why; another
+	 * one by its name (held()), by the rules of this site. For the import
+	 * (AB_MCP_Sync_Import, its list of held objects).
+	 *
+	 * @param array    $line  Line (shaped()).
+	 * @param string[] $extra AB_MCP_Redactor::extra_keys().
+	 * @return string|null
+	 */
+	public static function held_line( array $line, array $extra ) {
+		if ( ! in_array( $line['env'], self::NAMED, true ) ) {
+			return null;
+		}
+		if ( isset( $line['held'] ) ) {
+			return (string) $line['held'];
+		}
+		return 1 === preg_match( self::HASHED, $line['ref'] ) ? null : self::held( $line['ref'], $extra );
+	}
+
+	/**
+	 * The lines of a package of the environment as this site shows them:
+	 * a line the import listed as held here (kind, SHA-256 of its ref in the
+	 * spelling of AB_MCP_Sync_Canon::encode(), code) by the SHA-256 of its
+	 * name, with why (the report, AB_MCP_Sync_Report::environment()).
+	 *
+	 * @param array[] $lines Lines.
+	 * @param array[] $held  The list of held objects of the import.
+	 * @return array[]
+	 */
+	public static function held_here( array $lines, array $held ) {
+		$codes = array();
+		foreach ( $held as $one ) {
+			if ( is_array( $one ) && isset( $one[0], $one[1], $one[2] ) ) {
+				$codes[ $one[0] . "\0" . $one[1] ] = (string) $one[2];
+			}
+		}
+		$out = array();
+		foreach ( $lines as $line ) {
+			$key   = is_array( $line ) && isset( $line['env'], $line['ref'] ) ? $line['env'] . "\0" . hash( 'sha256', AB_MCP_Sync_Canon::encode( $line['ref'] ) ) : null;
+			$out[] = null !== $key && ! isset( $line['held'] ) && isset( $codes[ $key ] ) && in_array( $line['env'], self::NAMED, true ) ? self::reduced( $line, $codes[ $key ] ) : $line;
+		}
+		return $out;
 	}
 
 	/**
@@ -1307,7 +1570,12 @@ final class AB_MCP_Sync_Env {
 		$fields = self::LINES[ $line['env'] ];
 		$keys   = array_keys( $line );
 		sort( $keys );
-		$want = array_merge( array_keys( $fields ), array( 'env', 'ref' ) );
+		// A name held (NAMED): by its SHA-256, with why.
+		$held = array_key_exists( 'held', $line );
+		if ( $held && ( ! in_array( $line['env'], self::NAMED, true ) || ! in_array( $line['held'], self::HELD, true ) || 1 !== preg_match( self::HASHED, $line['ref'] ) ) ) {
+			return false;
+		}
+		$want = array_merge( array_keys( $fields ), array( 'env', 'ref' ), $held ? array( 'held' ) : array() );
 		sort( $want );
 		if ( $keys !== $want ) {
 			return false;
@@ -1377,8 +1645,12 @@ final class AB_MCP_Sync_Env {
 	 * @return array{entries:array[],counts:array,blocked:array[]}
 	 */
 	public static function compare( array $staging, array $live ) {
-		$s     = self::by_ref( $staging );
-		$l     = self::by_ref( $live );
+		$s = self::by_ref( $staging );
+		$l = self::by_ref( $live );
+		// A name one site holds by its rules and the other not: by its
+		// SHA-256 on both sides, so it is one entry and no side shows it.
+		$l     = self::held_alike( $s, $l );
+		$s     = self::held_alike( $l, $s );
 		$whole = array(
 			's' => isset( $s['tables']['tables'] ) && true === $s['tables']['tables']['complete'],
 			'l' => isset( $l['tables']['tables'] ) && true === $l['tables']['tables']['complete'],
@@ -1480,6 +1752,37 @@ final class AB_MCP_Sync_Env {
 	}
 
 	/**
+	 * The lines of side b with a name side a holds (NAMED: a line with held,
+	 * its ref the SHA-256 of the name) by that SHA-256 as well, held for the
+	 * same reason.
+	 *
+	 * @param array<string,array<string,array>> $a Lines by kind and ref (by_ref()).
+	 * @param array<string,array<string,array>> $b The same of the other side.
+	 * @return array<string,array<string,array>> $b.
+	 */
+	private static function held_alike( array $a, array $b ) {
+		foreach ( self::NAMED as $env ) {
+			$codes = array();
+			foreach ( $a[ $env ] ?? array() as $ref => $line ) {
+				if ( isset( $line['held'] ) ) {
+					$codes[ (string) $ref ] = (string) $line['held'];
+				}
+			}
+			if ( array() === $codes ) {
+				continue;
+			}
+			foreach ( $b[ $env ] ?? array() as $ref => $line ) {
+				$hashed = self::hashed( (string) $ref );
+				if ( ! isset( $line['held'] ) && isset( $codes[ $hashed ] ) && ! isset( $b[ $env ][ $hashed ] ) ) {
+					unset( $b[ $env ][ $ref ] );
+					$b[ $env ][ $hashed ] = self::reduced( $line, $codes[ $hashed ] );
+				}
+			}
+		}
+		return $b;
+	}
+
+	/**
 	 * The entry of one ref.
 	 *
 	 * @param string     $env   Kind.
@@ -1516,10 +1819,16 @@ final class AB_MCP_Sync_Env {
 		if ( null !== $why ) {
 			$entry['why'] = $why;
 		}
+		$held = $s['held'] ?? ( $l['held'] ?? null );
+		if ( null !== $held ) {
+			$entry['held'] = $held;
+		}
 		$words = self::WORDS[ $result ];
 		if ( 'core' === $env && 'locale' === $ref ) {
 			$words .= ' Shown only: the language is the option WPLANG, compared with the options; its files are counted under languages.';
-		} elseif ( 'equal' !== $result && in_array( $env, array( 'dropin', 'host' ), true ) ) {
+		} elseif ( in_array( $env, array( 'dropin', 'host' ), true ) ) {
+			// Group U (the drop-ins with it): changed at the host, whatever
+			// the result.
 			$entry['action'] = 'host';
 			$words          .= ' ' . self::HOST_WORDS;
 		} elseif ( 'equal' !== $result && isset( self::LOCKS[ $key ] ) ) {
@@ -1538,15 +1847,20 @@ final class AB_MCP_Sync_Env {
 				$words            .= sprintf( ' Their contents are compared from %s.', $lock['stage'] );
 			}
 		}
+		if ( null !== $held ) {
+			$words .= sprintf( ' Its name holds a credential by the rules of a site (held: %s), so it is shown by its SHA-256 only.', $held );
+		}
 		$entry['words'] = $words;
 		return $entry;
 	}
 
 	/**
 	 * What both lines of a ref say: the result, what differs, why not
-	 * compared. Equal only where the contents were read (a hash) or the
-	 * value is all there is (group U, the language); what is only counted
-	 * is counted, never equal.
+	 * compared. Equal only where the contents of a file were read (a
+	 * must-use plugin, a drop-in: its SHA-256); a value of group U and the
+	 * language the same on both sides are same_value, shown only (decision
+	 * 14: group U is changed at the host; Codex, round 1 of branch 7, B4);
+	 * what is only counted is counted; none of them equal.
 	 *
 	 * @param string $env Kind.
 	 * @param string $ref Ref.
@@ -1575,7 +1889,7 @@ final class AB_MCP_Sync_Env {
 		switch ( $env ) {
 			case 'core':
 				$fields = array( 'value' );
-				$same   = 'wordpress' === $ref ? 'counted' : 'equal';
+				$same   = 'wordpress' === $ref ? 'counted' : 'same_value';
 				break;
 			case 'plugin':
 			case 'theme':
@@ -1592,10 +1906,10 @@ final class AB_MCP_Sync_Env {
 					return array( 'differs', array( 'defined' ), null );
 				}
 				if ( ! $s['defined'] ) {
-					return array( 'equal', array(), null );
+					return array( 'same_value', array(), null );
 				}
 				$fields = array( 'value' );
-				$same   = 'equal';
+				$same   = 'same_value';
 				break;
 			case 'table':
 				$fields = array( 'rows', 'schema' );
@@ -1634,6 +1948,7 @@ final class AB_MCP_Sync_Env {
 			'not_a_folder'           => 'its place is no folder',
 			'attachments_unreadable' => 'the file list of an attachment could not be read whole',
 			'attachments_too_many'   => 'the file lists of the attachments are too many to hold within one call',
+			'moved'                  => 'the file or folder the call before stopped at, kept by its SHA-256 because its name holds a credential or is no text, is gone since',
 		);
 		return $say[ $why ] ?? 'not known why';
 	}
@@ -1647,12 +1962,15 @@ final class AB_MCP_Sync_Env {
 	 * @return array
 	 */
 	private static function show( $env, array $line ) {
-		unset( $line['env'], $line['ref'], $line['sha256'], $line['schema'] );
-		if ( 'host' === $env && is_string( $line['value'] ) ) {
-			if ( 1 === preg_match( '/^[0-9a-f]{64}\z/', $line['value'] ) ) {
-				$line['value'] = 'present';
-			} elseif ( 0 === strpos( $line['value'], 'sha256:' ) ) {
-				$line['value'] = 'not shown';
+		unset( $line['env'], $line['ref'], $line['sha256'], $line['schema'], $line['held'] );
+		if ( 'host' === $env && is_string( $line['value'] ) && 1 === preg_match( '/^[0-9a-f]{64}\z/', $line['value'] ) ) {
+			$line['value'] = 'present';
+		}
+		// A value held by its SHA-256 (a constant that is no plain word, a
+		// version longer than a line holds): not shown.
+		foreach ( $line as $field => $value ) {
+			if ( is_string( $value ) && 0 === strpos( $value, 'sha256:' ) ) {
+				$line[ $field ] = 'not shown';
 			}
 		}
 		if ( 'files' === $env && null === $line['why'] ) {

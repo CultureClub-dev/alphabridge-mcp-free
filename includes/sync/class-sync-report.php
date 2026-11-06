@@ -289,7 +289,9 @@ final class AB_MCP_Sync_Report {
 	 * as one whole series in order: the page of each the first line, one
 	 * walk, the parts 1 to n without a gap, the last one last. The lines of
 	 * a package are signed with it (each chunk by its SHA-256 in the signed
-	 * manifest), so a series cannot be put together from two readings.
+	 * manifest), so a series cannot be put together from two readings. A
+	 * line whose name the import held by the rules of this site is shown by
+	 * the SHA-256 of its name (AB_MCP_Sync_Env::held_here()).
 	 *
 	 * @param string[] $ids Package ids, in the order of their series; none: no environment.
 	 * @return array{lines:array[],expires:int,packages:int}|WP_Error
@@ -314,7 +316,9 @@ final class AB_MCP_Sync_Report {
 			}
 			$walk    = $page['walk'];
 			$expires = min( $expires, (int) $part['manifest']['expires'] );
-			foreach ( array_slice( $part['lines'], 1 ) as $line ) {
+			// A name a credential holds by the rules of this site (the list of
+			// the import): by its SHA-256 only (Codex, round 1 of branch 7, A1).
+			foreach ( AB_MCP_Sync_Env::held_here( array_slice( $part['lines'], 1 ), $part['held'] ) as $line ) {
 				$lines[] = $line;
 			}
 		}
@@ -745,7 +749,7 @@ final class AB_MCP_Sync_Report {
 			'total'       => $index['total'],
 			'entries'     => $entries,
 			'cursor'      => $more ? $last : null,
-			'next'        => 'Show the report to the person: nothing was written on either site. Each entry says what differs (result, sides) and what a takeover would do (action): take_over and create are written by a run, choose waits for the choice of a person, waits and locked are held back (waits_for and locks name why, each lock with the stage that brings it), pair asks for wp_site_pairs first, keep and none leave the object as it is. The entries of kind environment come after the objects: plugins, themes, must-use plugins, drop-ins, tables, files and the host; equal or differs only for what was read by its SHA-256 or value (must-use plugins, drop-ins, the host), counted for what was only counted or summed (contents not compared; stage says from when they are), host for what is changed at the host; nothing of the environment is taken over.' . ( $more ? ' More entries: call wp_site_diff again with this report_id and cursor=' . $last . '.' : '' ),
+			'next'        => 'Show the report to the person: nothing was written on either site. Each entry says what differs (result, sides) and what a takeover would do (action): take_over and create are written by a run, choose waits for the choice of a person, waits and locked are held back (waits_for and locks name why, each lock with the stage that brings it), pair asks for wp_site_pairs first, keep and none leave the object as it is. The entries of kind environment come after the objects: plugins, themes, must-use plugins, drop-ins, tables, files and the host; equal or differs only for what was read by its SHA-256 (must-use plugins, drop-ins), same_value or differs for the values of the host and the language (shown only, what lies behind a value not compared), counted for what was only counted or summed (contents not compared; stage says from when they are), host for what is changed at the host (the drop-ins and the host, whatever the result); a name held (held) is shown by its SHA-256 only; nothing of the environment is taken over.' . ( $more ? ' More entries: call wp_site_diff again with this report_id and cursor=' . $last . '.' : '' ),
 		);
 	}
 

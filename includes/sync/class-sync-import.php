@@ -10,7 +10,9 @@
  * have a structure of their own, AB_MCP_Sync_Env::shaped()). The first call brings the
  * manifest; this site keeps it in a group of the area in of the protected
  * store, of the account that brought it, and checks it again on every call
- * after, so a new key, another pair or the end of its day stops the package
+ * after (and over the connection that brought it, the token of MCP: a
+ * group of another connection of the same account is none), so a new key,
+ * another pair or the end of its day stops the package
  * where it is; with it the print of the pair it was begun with
  * (AB_MCP_Sync_Anchor::pair_print()), and a call after the role, the pair or
  * the anchor changed ends the group before its manifest is checked again
@@ -39,7 +41,8 @@
  * (AB_MCP_Sync_Manifest::whole()), unpacked within the limits of decision 8
  * with each line checked again (decision 9, unpacked(); a package whose
  * structure does not hold is removed), the objects a credential holds by
- * the rules of this site, or one written into a name of a line, listed
+ * the rules of this site, or one written into a name of a line (of the
+ * environment too: a name of a file, a plugin, a table), listed
  * (held, each with the code of why), closed (it counts as an open package no more,
  * AB_MCP_Store_Budget) and marked complete. What is in it is read
  * only by the takeover, which checks the manifest again for its purpose
@@ -63,6 +66,7 @@ require_once __DIR__ . '/class-sync-fetcher.php';
 require_once __DIR__ . '/class-sync-credentials.php';
 require_once __DIR__ . '/class-sync-net.php';
 require_once __DIR__ . '/class-sync-option-schema.php';
+require_once dirname( __DIR__ ) . '/class-staging-gate.php';
 
 /**
  * Class AB_MCP_Sync_Import
@@ -350,7 +354,7 @@ final class AB_MCP_Sync_Import {
 			return $found;
 		}
 		if ( null === $found ) {
-			return new WP_Error( 'ab_mcp_sync_import_unknown', sprintf( 'This site holds no package %s taken over by this account (packages are kept a day, and each belongs to the account that began it). Take it over first: call wp_site_export on the staging site, then wp_site_import_chunk here with the package_id, manifest and purpose it gives, until complete is true.', $package_id ) );
+			return new WP_Error( 'ab_mcp_sync_import_unknown', sprintf( 'This site holds no package %s taken over by this account over this connection (packages are kept a day, and each belongs to the account and connection that began it). Take it over first: call wp_site_export on the staging site, then wp_site_import_chunk here with the package_id, manifest and purpose it gives, until complete is true.', $package_id ) );
 		}
 		$expect = $found['expect'];
 		if ( ! is_array( $expect ) || ! isset( $expect['purpose'] ) || $purpose !== $expect['purpose'] ) {
@@ -453,7 +457,7 @@ final class AB_MCP_Sync_Import {
 		}
 		if ( null === $found ) {
 			if ( null === $expect ) {
-				return new WP_Error( 'ab_mcp_sync_import_unknown', 'This site holds no package of that id begun by this account yet: the first call brings its manifest. Pass manifest and purpose as wp_site_export gave them on the staging site.' );
+				return new WP_Error( 'ab_mcp_sync_import_unknown', 'This site holds no package of that id begun by this account over this connection yet: the first call brings its manifest. Pass manifest and purpose as wp_site_export gave them on the staging site.' );
 			}
 			$checked = AB_MCP_Sync_Manifest::verify( $a['manifest'], $expect );
 			if ( is_wp_error( $checked ) ) {
@@ -468,6 +472,11 @@ final class AB_MCP_Sync_Import {
 		if ( ! is_array( $expect ) || ! isset( $expect['purpose'] ) || ! in_array( $expect['purpose'], AB_MCP_Sync_Export::PURPOSES, true ) ) {
 			AB_MCP_Protected_Store::remove( 'in', $found['gid'] );
 			return new WP_Error( 'ab_mcp_sync_import_purpose_held', 'This site held the package for a purpose this version does not take (it takes purpose=inventory and purpose=env), so what arrived of it was removed. Call again with the manifest and purpose as wp_site_export gave them on the staging site.' );
+		}
+		// A purpose a later call names is the one it was begun for (Codex,
+		// round 1 of branch 7, A3): the kept one is not put in its place.
+		if ( array_key_exists( 'purpose', $a ) && $expect['purpose'] !== $a['purpose'] ) {
+			return new WP_Error( 'ab_mcp_sync_import_purpose_other', sprintf( 'This site holds the package for purpose=%1$s, as its first call began it, and this call names another purpose, so nothing of it was taken. Pass purpose=%1$s, as wp_site_export gave it with the manifest, or leave purpose out to go on with the package.', $expect['purpose'] ) );
 		}
 		// The pair it was begun with (decision 15): a new confirmation of the
 		// role, another pair or another anchor ends it, before its manifest
@@ -532,11 +541,12 @@ final class AB_MCP_Sync_Import {
 		}
 		$record = AB_MCP_Sync_Canon::encode(
 			array(
-				'expect'    => $expect,
-				'format'    => self::RECORD,
-				'manifest'  => $signed['manifest'],
-				'print'     => $print,
-				'signature' => $signed['signature'],
+				'connection' => self::connection(),
+				'expect'     => $expect,
+				'format'     => self::RECORD,
+				'manifest'   => $signed['manifest'],
+				'print'      => $print,
+				'signature'  => $signed['signature'],
 			)
 		);
 		$put    = AB_MCP_Protected_Store::put( 'in', $gid, hash( 'sha256', $record ), $record );
@@ -545,23 +555,27 @@ final class AB_MCP_Sync_Import {
 			return $put;
 		}
 		return array(
-			'gid'      => $gid,
-			'manifest' => $manifest,
-			'signed'   => array(
+			'gid'        => $gid,
+			'manifest'   => $manifest,
+			'signed'     => array(
 				'manifest'  => $signed['manifest'],
 				'signature' => $signed['signature'],
 			),
-			'expect'   => $expect,
-			'print'    => $print,
+			'expect'     => $expect,
+			'print'      => $print,
+			'connection' => self::connection(),
 		);
 	}
 
 	/**
-	 * The group of a package this account began, the oldest of its label,
-	 * with its record.
+	 * The group of a package this account began over this connection, the
+	 * oldest of its label, with its record. A group of another connection of
+	 * the same account is none (Codex, round 1 of branch 7, A2): the reports
+	 * and proposals made from a package are bound to their connection
+	 * (decision 15), and so is the package they are made from.
 	 *
 	 * @param string $package_id Package.
-	 * @return array|WP_Error|null held(), null where this account holds none.
+	 * @return array|WP_Error|null held(), null where this account holds none over this connection.
 	 */
 	private static function find( $package_id ) {
 		$groups = AB_MCP_Protected_Store::groups( 'in' );
@@ -573,11 +587,39 @@ final class AB_MCP_Sync_Import {
 				continue;
 			}
 			$found = self::record( $group );
-			if ( null !== $found ) {
+			if ( is_wp_error( $found ) ) {
+				return $found;
+			}
+			if ( null !== $found && self::connected( $found ) ) {
 				return $found;
 			}
 		}
 		return null;
+	}
+
+	/**
+	 * Whether a package was begun over the connection of this call: the
+	 * connection its record keeps is this one (a record without one, of a
+	 * version before, is of none).
+	 *
+	 * @param array $found record().
+	 * @return bool
+	 */
+	private static function connected( array $found ) {
+		return null !== $found['connection'] && hash_equals( $found['connection'], self::connection() );
+	}
+
+	/**
+	 * The connection of the call, as a package is bound to it (the record
+	 * keeps it): a hash of AB_MCP_Staging_Gate::connection() (the token of
+	 * MCP, else the account), as the reports and proposals have it
+	 * (AB_MCP_Sync_Proposal::connection()).
+	 *
+	 * @return string
+	 */
+	public static function connection() {
+		$conn = AB_MCP_Staging_Gate::connection();
+		return hash( 'sha256', 'ab-sync-import|' . $conn['kind'] . ':' . $conn['id'] );
 	}
 
 	/**
@@ -602,14 +644,15 @@ final class AB_MCP_Sync_Import {
 		}
 		$record = json_decode( $text, true, 64 );
 		return array(
-			'gid'      => $group['gid'],
-			'manifest' => json_decode( $record['manifest'], true, 8 ),
-			'signed'   => array(
+			'gid'        => $group['gid'],
+			'manifest'   => json_decode( $record['manifest'], true, 8 ),
+			'signed'     => array(
 				'manifest'  => $record['manifest'],
 				'signature' => $record['signature'],
 			),
-			'expect'   => $record['expect'],
-			'print'    => isset( $record['print'] ) && is_string( $record['print'] ) && 1 === preg_match( '/^[0-9a-f]{64}\z/', $record['print'] ) ? $record['print'] : null,
+			'expect'     => $record['expect'],
+			'print'      => isset( $record['print'] ) && is_string( $record['print'] ) && 1 === preg_match( '/^[0-9a-f]{64}\z/', $record['print'] ) ? $record['print'] : null,
+			'connection' => isset( $record['connection'] ) && is_string( $record['connection'] ) && 1 === preg_match( '/^[0-9a-f]{64}\z/', $record['connection'] ) ? $record['connection'] : null,
 		);
 	}
 
@@ -888,6 +931,14 @@ final class AB_MCP_Sync_Import {
 				if ( $env ) {
 					if ( ! AB_MCP_Sync_Env::shaped( $object ) ) {
 						return self::unpack_refusal( 'A line is not one of the environment as the staging site writes it: a kind of line or a field it has no place for, or a field of another type.' );
+					}
+					// A name of the site (a file, a plugin, a table) a credential
+					// holds by the rules of this site, or the staging site held:
+					// listed, as an object of the inventory (Codex, round 1 of
+					// branch 7, A1).
+					$code = AB_MCP_Sync_Env::held_line( $object, $extra );
+					if ( null !== $code ) {
+						$out[] = array( $object['env'], hash( 'sha256', AB_MCP_Sync_Canon::encode( $object['ref'] ) ), $code );
 					}
 					continue;
 				}

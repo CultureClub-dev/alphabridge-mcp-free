@@ -186,6 +186,11 @@ final class SyncSafeCallsTest extends TestCase {
 			'AB_MCP_Staging::record' => array( 3, 'refusal(), make() and binding(): the pair, whose production site a package is for, and the confirmations a package is bound to.' ),
 			'home_url'               => array( 3, 'make(), binding() and relay_refusal(): the own address, for the inventory, the binding and whether it is public.' ),
 		),
+		// The import (Z8, branch 5; Codex, round 1 of branch 7, A2): the
+		// connection a package is bound to, as a proposal and a report.
+		'class-sync-import.php'   => array(
+			'AB_MCP_Staging_Gate::connection' => array( 1, 'connection(): the connection of the call (the hash of its token, or its account), which a package is bound to as the reports and proposals made from it; no value the takeover compares.' ),
+		),
 		'class-sync-manifest.php' => array(
 			'AB_MCP_Staging::record' => array( 1, 'sign(): the pair, whose production site a package is for.' ),
 			'AB_MCP_Staging::role'   => array( 1, 'sign(): only the confirmed staging site signs.' ),
