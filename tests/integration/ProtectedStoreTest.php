@@ -1197,6 +1197,56 @@ final class ProtectedStoreTest extends TestCase {
 		self::assertSame( array(), $present( 'backups' ) );
 	}
 
+	/**
+	 * A backup of a run with a row follows the contract as the row holds it;
+	 * a backup of a run without a row (never made, or its row gone with a
+	 * database put back from an older copy) is not removed at once but kept
+	 * by its age, as a close that does not qualify: seven days in Free, the
+	 * days of the filter in Pro.
+	 */
+	public function testABackupOfARunWithoutARowIsKeptByItsAgeNotRemovedAtOnce(): void {
+		global $wpdb;
+		self::assertTrue( AB_MCP_Sync_Schema::available() );
+		$now = time();
+		// A run that closed without qualifying, its period reached a day ago.
+		$wpdb->insert( AB_MCP_Sync_Schema::table( 'runs' ), array( 'run_id' => 8, 'type' => 'push', 'state' => 'closed_aborted', 'closed' => $now - 8 * DAY_IN_SECONDS, 'keep_until' => $now - DAY_IN_SECONDS ) );
+		self::assertSame( array( 8 => false ), AB_MCP_Sync_Schema::backup_rows( $now ), 'The row is named, and its backups go.' );
+		self::assertSame( array(), AB_MCP_Sync_Schema::backup_runs( $now ) );
+		$no_row  = AB_MCP_Protected_Store::open( 'backups', array( 'run_id' => 3 ) );
+		$ended   = AB_MCP_Protected_Store::open( 'backups', array( 'run_id' => 8 ) );
+		$present = static function (): array {
+			$gids = array_column( AB_MCP_Protected_Store::groups( 'backups' ), 'gid' );
+			sort( $gids );
+			return $gids;
+		};
+		$both    = array( $no_row, $ended );
+		sort( $both );
+		self::assertSame( $both, $present(), 'Opening the second swept once: the group without a row, young, stayed.' );
+
+		// Right away: the backup of the run whose row says its period is
+		// reached goes, however young; the one of the run without a row stays.
+		$swept = AB_MCP_Protected_Store::cleanup( $now );
+		self::assertSame( array( $no_row ), $present() );
+		self::assertSame( array( 'removed' => 1, 'kept' => 0 ), $swept );
+
+		// Within the seven days of a close that does not qualify it stays,
+		// past them it goes; with the days of the filter (Pro: 30) it stays
+		// as long as those.
+		AB_MCP_Protected_Store::cleanup( $now + 7 * DAY_IN_SECONDS - 60 );
+		self::assertSame( array( $no_row ), $present(), 'Within seven days.' );
+		$thirty = static fn() => 30;
+		$this->filter( AB_MCP_Protected_Store::BACKUP_DAYS_FILTER, $thirty );
+		AB_MCP_Protected_Store::cleanup( $now + 7 * DAY_IN_SECONDS + 60 );
+		self::assertSame( array( $no_row ), $present(), 'Past seven days, within the thirty of the filter.' );
+		AB_MCP_Protected_Store::cleanup( $now + 30 * DAY_IN_SECONDS + 60 );
+		self::assertSame( array(), $present(), 'Past the days of the filter.' );
+		remove_filter( AB_MCP_Protected_Store::BACKUP_DAYS_FILTER, $thirty );
+		$again = AB_MCP_Protected_Store::open( 'backups', array( 'run_id' => 3 ) );
+		AB_MCP_Protected_Store::cleanup( $now + 7 * DAY_IN_SECONDS + 60 );
+		self::assertSame( array(), $present(), 'Without the filter, past seven days it goes.' );
+		self::assertIsString( $again );
+	}
+
 	/* ------------------------------------------------------------ booking */
 
 	public function testABookingChecksTheFreeSpaceAndMakesATestWrite(): void {

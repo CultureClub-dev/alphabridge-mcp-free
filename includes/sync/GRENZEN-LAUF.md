@@ -299,10 +299,18 @@ Ablehnung entsteht, nennt sie den Weg.
   vom Typ `revert` mit `reverts` im Plan, oder der eigene Lauf in `reverting`),
   bleibt, solange dieser nicht geschlossen ist.
 - Sicherungen eines Laufs ohne Zeile in `runs` (eine Gruppe, deren Lauf nie
-  angelegt wurde) räumt die Bereinigung sofort; der Lauf legt darum seine
-  Zeile vor der ersten Sicherung an.
+  angelegt wurde, oder deren Zeile mit einer aus einer älteren Kopie
+  zurückgespielten Datenbank verschwand) folgen der Altersregel ihres
+  Bereichs wie eine Sicherung ohne Lauf: sie bleiben so lange wie die eines
+  nicht qualifizierten Abschlusses (7 Tage Free, 30 Tage Pro;
+  `AB_MCP_Protected_Store::keep()`), dann gehen sie. Sofortiges Löschen
+  wäre nicht fail closed: der Lauf ist nicht lesbar, nicht beendet. Der Lauf
+  legt seine Zeile vor der ersten Sicherung an, im Normalfall gibt es solche
+  Gruppen also nicht. Sicherungen eines Laufs mit Zeile folgen allein dem
+  Vertrag, wie die Zeile ihn hält (`AB_MCP_Sync_Schema::backup_rows()`:
+  `true` bleibt, `false` geht, wie jung die Gruppe auch ist).
 - Kann die Tabelle der Läufe nicht gelesen werden, bleibt jede Laufsicherung
-  (`backup_runs()` gibt `null`), nie umgekehrt.
+  (`backup_rows()` gibt `null`), nie umgekehrt.
 - Jeder Abschluss speichert die beim Abschluss geltende Frist in
   `runs.keep_until` (Schema Version 3; `AB_MCP_Sync_Schema::keep_until()`):
   qualifiziert so viele Tage, wie der Filter `ab_mcp_staging_backup_days`

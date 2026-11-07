@@ -1104,6 +1104,62 @@ final class SyncRunTest extends TestCase {
 		self::assertNull( AB_MCP_Sync_Schema::backup_runs( $now ) );
 	}
 
+	public function testTheRetentionNamesEveryRowSoARunWithoutOneIsToldFromOneWhoseBackupsGo(): void {
+		$db              = new SyncRunRowsWpdb();
+		$GLOBALS['wpdb'] = $db;
+		update_option( AB_MCP_Sync_Schema::OPTION, (string) AB_MCP_Sync_Schema::VERSION );
+		AB_MCP_Sync_Schema::forget();
+		$now      = 1700000000;
+		$day      = 86400;
+		$db->rows = array(
+			array( 'run_id' => 1, 'type' => 'push', 'state' => 'closed_done', 'closed' => $now - 40 * $day, 'forward_closed_at' => $now - 40 * $day, 'keep_until' => $now - 40 * $day, 'plan' => null ),
+			array( 'run_id' => 2, 'type' => 'push', 'state' => 'closed_done', 'closed' => $now - 20 * $day, 'forward_closed_at' => $now - 20 * $day, 'keep_until' => $now - 20 * $day, 'plan' => null ),
+			array( 'run_id' => 3, 'type' => 'push', 'state' => 'closed_done', 'closed' => $now - 3 * $day, 'forward_closed_at' => $now - 3 * $day, 'keep_until' => $now - 3 * $day, 'plan' => null ),
+			array( 'run_id' => 4, 'type' => 'push', 'state' => 'closed_done', 'closed' => $now - 2 * $day, 'forward_closed_at' => $now - 2 * $day, 'keep_until' => $now - 2 * $day, 'plan' => null ),
+			array( 'run_id' => 5, 'type' => 'push', 'state' => 'closed_aborted', 'closed' => $now - 8 * $day, 'forward_closed_at' => 0, 'keep_until' => $now - 1 * $day, 'plan' => null ),
+			array( 'run_id' => 6, 'type' => 'revert', 'state' => 'open', 'closed' => 0, 'forward_closed_at' => 0, 'keep_until' => 0, 'plan' => '{"reverts":[5,11]}' ),
+		);
+		// Every row is named: true where the contract keeps its backups (the
+		// last three qualified closes, the open way back and what it needs,
+		// among them run 11 without a row), false where they go (the fourth
+		// qualified close, 1); so the clean-up tells a run whose row says
+		// its backups go from a run without a row (none for 12), which it
+		// keeps by its age instead of removing it at once.
+		$rows = AB_MCP_Sync_Schema::backup_rows( $now );
+		ksort( $rows );
+		self::assertSame(
+			array(
+				1  => false,
+				2  => true,
+				3  => true,
+				4  => true,
+				5  => true,
+				6  => true,
+				11 => true,
+			),
+			$rows
+		);
+		self::assertArrayNotHasKey( 12, $rows );
+		// backup_runs(): the runs named true, none named false.
+		$kept = AB_MCP_Sync_Schema::backup_runs( $now );
+		ksort( $kept );
+		self::assertSame( array( 2, 3, 4, 5, 6, 11 ), array_keys( $kept ) );
+		self::assertSame( array( true ), array_values( array_unique( $kept ) ) );
+		// Once the way back closed with its period reached, run 5 is named
+		// false too (its own period is reached): a row of this kind goes.
+		$db->rows[5]['state']      = 'closed_reverted';
+		$db->rows[5]['closed']     = $now - 8 * $day;
+		$db->rows[5]['keep_until'] = $now - 1;
+		$rows                      = AB_MCP_Sync_Schema::backup_rows( $now );
+		self::assertFalse( $rows[5] );
+		self::assertFalse( $rows[6] );
+		self::assertArrayNotHasKey( 11, $rows );
+		// The table unreadable: null for both.
+		$db->last_error = 'gone';
+		self::assertNull( AB_MCP_Sync_Schema::backup_rows( $now ) );
+		self::assertNull( AB_MCP_Sync_Schema::backup_runs( $now ) );
+	}
+
 	public function testARunLeavesRoomForItsOwnWayBack(): void {
 		// A plan has at most MAX_STEPS steps (the entries a tool call takes):
 		// the objects and the frame of the run (check, caches, check of the

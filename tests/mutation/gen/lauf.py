@@ -226,6 +226,11 @@ e('schema-reverts', 'backup_runs(): the runs a way back that is not closed needs
   "\t\t\t\t\t$keep[ (int) $needed ] = true;", '', 'unit', KEEP)
 e('schema-qualified-only', 'backup_runs(): only a qualified close counts among the last three', SC,
   "\t\t\tif ( (int) $row['forward_closed_at'] > 0 ) {", "\t\t\tif ( true ) {", 'unit', KEEP)
+ROWS = 'testTheRetentionNamesEveryRowSoARunWithoutOneIsToldFromOneWhoseBackupsGo'
+e('schema-rows-named', 'backup_rows(): every row is named, false where its backups go, so the clean-up tells it from a run without a row', SC,
+  "\t\t\tif ( ! array_key_exists( $id, $keep ) ) {\n\t\t\t\t$keep[ $id ] = false;\n\t\t\t}\n", '', 'unit', ROWS)
+e('schema-runs-kept-only', 'backup_runs(): the runs backup_rows() names true, none it names false', SC,
+  "\t\treturn null === $rows ? null : array_filter( $rows );", "\t\treturn $rows;", 'unit', ROWS)
 
 # -------------------------------------------------------------- the plan
 VERDICT = 'testWhichEntryOfAReportIsAStepLockedOrNothing'

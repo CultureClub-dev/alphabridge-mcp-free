@@ -398,6 +398,27 @@ final class AB_MCP_Sync_Schema {
 	 * @return array<int,true>|null
 	 */
 	public static function backup_runs( $now = null ) {
+		$rows = self::backup_rows( $now );
+		return null === $rows ? null : array_filter( $rows );
+	}
+
+	/**
+	 * Every run of this site by run_id, with what the retention contract
+	 * says of its backups right now: true where the clean-up keeps them
+	 * (backup_runs()), false where their period is reached and the run is
+	 * not among the last KEEP_LAST qualified closes. The clean-up tells a run
+	 * whose row says its backups go from a run without a row by this (a
+	 * group of a run that was never made, or whose row is gone with a
+	 * database put back from an older copy), which it keeps by its age
+	 * instead, never removes at once (AB_MCP_Protected_Store::kept()). A
+	 * run a way back that is not closed needs is named true also where it
+	 * has no row. Null when the table cannot be read, so the caller keeps
+	 * everything.
+	 *
+	 * @param int|null $now Time; now when null.
+	 * @return array<int,bool>|null
+	 */
+	public static function backup_rows( $now = null ) {
 		global $wpdb;
 		if ( ! self::available() ) {
 			return null;
@@ -412,6 +433,11 @@ final class AB_MCP_Sync_Schema {
 		$qualified = array();
 		foreach ( $rows as $row ) {
 			$id = (int) $row['run_id'];
+			// Every row is named: false until a rule keeps it (a way back
+			// read before may have named it already).
+			if ( ! array_key_exists( $id, $keep ) ) {
+				$keep[ $id ] = false;
+			}
 			if ( ! in_array( (string) $row['state'], self::CLOSED, true ) ) {
 				$keep[ $id ] = true;
 				// The runs a way back that is not closed needs (rule 4).
