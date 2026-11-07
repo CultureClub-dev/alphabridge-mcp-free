@@ -253,6 +253,38 @@ final class AB_MCP_Sync_Push {
 		if ( ! is_array( $packages ) || ! array_is_list( $packages ) || array() === $packages || count( $packages ) > AB_MCP_Sync_Proposal::MAX_PACKAGES || array() !== array_filter( $packages, static fn( $id ) => ! is_string( $id ) || 1 !== preg_match( AB_MCP_Sync_Key::ID, $id ) ) ) {
 			return new WP_Error( 'ab_mcp_sync_push_packages', 'A run writes from packages of objects of the staging site: pass packages, the package_ids (32 hex each) this site took over with wp_site_import_chunk (purpose=objects, with this report_hash), made on the staging site with wp_site_export (purpose=objects, report_hash and the refs of the entries).' );
 		}
+		// The selection in its one spelling, and the plan_hash it gives with
+		// the report (the key of the replay of decision 15).
+		sort( $select );
+		sort( $drafts );
+		ksort( $choices );
+		$selection = array(
+			'all'      => $all,
+			'as_draft' => $drafts,
+			'choices'  => $choices,
+			'packages' => array_values( array_unique( $packages ) ),
+			'select'   => $select,
+		);
+		sort( $selection['packages'] );
+		$plan_hash = hash( 'sha256', AB_MCP_Sync_Canon::encode( array( 'report_hash' => $report_hash ) + $selection ) );
+		// A run that is not closed, asked before the objects are read: the
+		// same plan of this account and connection is given back (the replay
+		// of decision 15: a repeated confirmed call after the first steps wrote
+		// meets a changed state, gets a new preview, and its confirmation meets
+		// the open run), so a plan whose run exists is not held against the
+		// report below; any other run that is not closed refuses with the way.
+		$existing = null;
+		$open     = AB_MCP_Sync_Run::open_run();
+		if ( is_wp_error( $open ) ) {
+			return $open;
+		}
+		if ( null !== $open ) {
+			if ( 'open' === $open['state'] && hash_equals( (string) $open['plan_hash'], $plan_hash ) && null === AB_MCP_Sync_Run::owner_refusal( $open ) ) {
+				$existing = (int) $open['run_id'];
+			} else {
+				return self::another_open( $open );
+			}
+		}
 		// The entries.
 		$numbers = array_values( array_unique( array_merge( $select, array_keys( $choices ), $drafts ) ) );
 		if ( $all ) {
@@ -367,14 +399,40 @@ final class AB_MCP_Sync_Push {
 		if ( is_wp_error( $live ) ) {
 			return $live;
 		}
+		// The objects of this site as the report compared them (the lines of
+		// this site's inventory the report holds): what the report says of an
+		// entry (take_over, or the choice of a conflict) holds for that state
+		// only. A target that changed since the report is not written over: a
+		// change of this site since the report would be lost without a choice
+		// (GitHub Codex round 1 of branch 8). So the hash the plan binds is
+		// the one the report compared; the check before the first write and
+		// the boundary read it again (decisions 15 and 16). A plan whose run
+		// is open already (the replay, above) is not held against the report:
+		// its run wrote by the hashes the report compared, and is given back.
+		$compared = array();
+		if ( array() !== $asked && null === $existing ) {
+			$read = AB_MCP_Sync_Proposal::live( $found, AB_MCP_Sync_Report::concurrent() );
+			if ( is_wp_error( $read ) ) {
+				return $read;
+			}
+			foreach ( $read['lines'] as $line ) {
+				if ( is_array( $line ) && isset( $line['kind'], $line['ref'], $line['hash'] ) && is_string( $line['hash'] ) ) {
+					$compared[ (string) $line['kind'] . "\0" . AB_MCP_Sync_Post_Writer::bytes( $line['ref'] ) ] = $line['hash'];
+				}
+			}
+		}
 		$pairs = array();
 		foreach ( $items as $n => $item ) {
 			if ( 'update' !== $item['op'] ) {
 				continue;
 			}
-			$hash = $live[ $item['kind'] . "\0" . $item['live_ref'] ];
+			$key  = $item['kind'] . "\0" . $item['live_ref'];
+			$hash = $live[ $key ];
 			if ( 'gone' === $hash ) {
 				return new WP_Error( 'ab_mcp_sync_push_gone', sprintf( 'The %1$s %2$s of this site (entry %3$d) is gone since the report. Make a new report (wp_site_diff) and plan again.', $item['kind'], $item['live_ref'], $n ) );
+			}
+			if ( null === $existing && ( ! isset( $compared[ $key ] ) || ! hash_equals( $compared[ $key ], $hash ) ) ) {
+				return new WP_Error( 'ab_mcp_sync_push_changed', sprintf( 'The %1$s %2$s of this site (entry %3$d) changed since the report (or the report did not read it whole), so what the report says of it no longer holds and it is not written over. Make a new report (wp_site_diff), which compares it as it is now, and plan again.', $item['kind'], $item['live_ref'], $n ) );
 			}
 			$items[ $n ]['live_hash'] = $hash;
 			$pair                     = AB_MCP_Sync_Pairs::get( (int) $item['pair_id'] );
@@ -433,18 +491,6 @@ final class AB_MCP_Sync_Push {
 		if ( AB_MCP_Sync_Resources::INSUFFICIENT === $resources['level'] ) {
 			return AB_MCP_Sync_Resources::refusal( $resources );
 		}
-		sort( $select );
-		sort( $drafts );
-		ksort( $choices );
-		$selection = array(
-			'all'      => $all,
-			'as_draft' => $drafts,
-			'choices'  => $choices,
-			'packages' => array_values( array_unique( $packages ) ),
-			'select'   => $select,
-		);
-		sort( $selection['packages'] );
-		$plan_hash = hash( 'sha256', AB_MCP_Sync_Canon::encode( array( 'report_hash' => $report_hash ) + $selection ) );
 		ksort( $live );
 		ksort( $pairs );
 		$state = hash(
@@ -477,18 +523,8 @@ final class AB_MCP_Sync_Push {
 			'plan_hash'   => $plan_hash,
 			'state'       => $state,
 		);
-		// A run that is not closed: the same plan of this account and
-		// connection is given back (the replay of decision 15); another refuses.
-		$open = AB_MCP_Sync_Run::open_run();
-		if ( is_wp_error( $open ) ) {
-			return $open;
-		}
-		if ( null !== $open ) {
-			if ( 'open' === $open['state'] && hash_equals( (string) $open['plan_hash'], $plan_hash ) && null === AB_MCP_Sync_Run::owner_refusal( $open ) ) {
-				$plan['existing_run'] = (int) $open['run_id'];
-			} else {
-				return self::another_open( $open );
-			}
+		if ( null !== $existing ) {
+			$plan['existing_run'] = $existing;
 		}
 		return $plan;
 	}
