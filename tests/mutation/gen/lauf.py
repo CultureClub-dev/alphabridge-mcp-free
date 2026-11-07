@@ -596,7 +596,7 @@ e('writer-term-order-lock', 'precheck(): a relationship of the post here with a 
 e('writer-term-entries-order', 'term_entries(): an order other than 0 is part of the entry, so the hash differs from the keys alone', PW,
   "\t\t\t$out[] = 0 !== $order ? $key . '#' . $order : $key;", "\t\t\t$out[] = $key;", 'unit', ORDER_UNIT)
 e('writer-restore-terms-entries', 'restore_terms(): read back as the backup by the entries, the order included; otherwise unclear', PW,
-  "\t\tif ( ! is_array( $after ) || self::terms_hash( self::term_entries( $after, $taxonomy ) ) !== $before ) {", "\t\tif ( ! is_array( $after ) ) {", 'it', 'testAPartAHookChangedAfterItWasPutBackIsUnclearNotRestored')
+  "\t\tif ( ! is_array( $after ) || self::terms_hash( self::term_entries( $after, $taxonomy ) ) !== $before ) {", "\t\tif ( ! is_array( $after ) ) {", 'unit', ORDER_UNIT)
 e('engine-post-budget', 'run_post(): the caches in parts within the work of the call, the cursor kept (P2)', EN,
   "\t\t\tif ( $i > (int) $result['cursor'] && self::now() - $started > self::$work ) {", "\t\t\tif ( false ) {", 'it', CACHES)
 e('engine-post-cursor', 'run_post(): the next call goes on at the cursor, each object emptied once', EN,

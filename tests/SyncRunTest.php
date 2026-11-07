@@ -1370,6 +1370,31 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( 'post:term_order', self::lock_of( $locked ) );
 		self::assertStringContainsString( 'The term news of category on the post of this site carries the term_order 3', $locked->get_error_message() );
 		self::assertStringContainsString( 'from Z9', $locked->get_error_message() );
+		// The second check of the kind on the way back (restore_terms()): the
+		// terms read back as the backup by their entries, the order included.
+		// The post here holds News (3) with the order 3; the backup held News
+		// with the order 0: the keys are the same, the order is not. Writing
+		// back (wp_set_object_terms(), here a stand-in that changes nothing)
+		// leaves the order, so the part is unclear, with the order as the reason.
+		$now = AB_MCP_Sync_Post_Writer::current( 12 );
+		self::assertIsArray( $now );
+		self::assertSame( array( '3#3' ), AB_MCP_Sync_Post_Writer::term_entries( $now, 'category' ) );
+		$backup = $now;
+		$backup['terms'][0]['term_order'] = 0;
+		$written = AB_MCP_Sync_Post_Writer::part_hash( $now, 'terms:category' );
+		$put     = AB_MCP_Sync_Post_Writer::restore_terms( 12, 'category', $backup, $written );
+		self::assertSame( 'unclear', $put['state'] );
+		self::assertStringContainsString( 'are back, but not their order (term_order)', $put['note'] );
+		// A backup with another term: written back, read other than the backup (the stand-in writes nothing): unclear.
+		$backup['terms'][0]['term_id'] = 4;
+		$backup['terms'][0]['slug']    = 'other';
+		$put                           = AB_MCP_Sync_Post_Writer::restore_terms( 12, 'category', $backup, $written );
+		self::assertSame( 'unclear', $put['state'] );
+		self::assertStringContainsString( 'do not read as the backup', $put['note'] );
+		// As the backup already: unchanged, nothing written.
+		$GLOBALS['ab_test_term_writes'] = array();
+		self::assertSame( array( 'state' => 'unchanged' ), AB_MCP_Sync_Post_Writer::restore_terms( 12, 'category', $now, $written ) );
+		self::assertSame( array(), $GLOBALS['ab_test_term_writes'] );
 	}
 
 	/** A post of a few rows in the fake $wpdb, with one category. */

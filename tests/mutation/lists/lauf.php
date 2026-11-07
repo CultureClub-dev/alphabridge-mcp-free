@@ -1958,8 +1958,8 @@ return array(
 		'file'    => $pw,
 		'search'  => "\t\tif ( ! is_array( \$after ) || self::terms_hash( self::term_entries( \$after, \$taxonomy ) ) !== \$before ) {",
 		'replace' => "\t\tif ( ! is_array( \$after ) ) {",
-		'run'     => $it( 'SyncRunTest', 'testAPartAHookChangedAfterItWasPutBackIsUnclearNotRestored' ),
-		'expect'  => '/testAPartAHookChangedAfterItWasPutBackIsUnclearNotRestored/',
+		'run'     => $unit( 'SyncRunTest', 'testARelationshipWithATermOrderLocksThePostAndIsPartOfTheHashOfItsTerms' ),
+		'expect'  => '/testARelationshipWithATermOrderLocksThePostAndIsPartOfTheHashOfItsTerms/',
 	),
 	array(
 		'id'      => 'lauf/engine-post-budget',
