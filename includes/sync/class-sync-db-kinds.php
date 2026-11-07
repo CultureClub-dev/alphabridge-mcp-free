@@ -700,6 +700,74 @@ class AB_MCP_Sync_Kind_Term extends AB_MCP_Sync_Db_Kind {
 	}
 
 	/**
+	 * The objects of a package of objects (branch 9, AB_MCP_Sync_Export::
+	 * make_objects()): each term read as the inventory reads it (form(),
+	 * identity, canonical form, hash, refs, locks, credentials) with its
+	 * content as the rows hold it, from the same reading: the columns the
+	 * engine writes (name, slug, description, parent, term_group, taxonomy;
+	 * the counter is WordPress's own), its meta rows without the rows whose
+	 * key is the name of a credential (B9: as the form leaves them out, they
+	 * are never packed), and no terms. A term that is not there is left out;
+	 * the export names it as gone. Only the kind term: the menus (a kind of
+	 * terms) are written from branch 11 on.
+	 *
+	 * @param array[] $refs Each: kind, ref, source (AB_MCP_Sync_Inventory::source()).
+	 * @return array[]|WP_Error
+	 */
+	public function export( array $refs ) {
+		if ( 'term' !== $this->kind() ) {
+			return $this->not_here( 'export' );
+		}
+		$out   = array();
+		$extra = AB_MCP_Redactor::extra_keys();
+		foreach ( $refs as $one ) {
+			if ( ! is_array( $one ) || ! isset( $one['ref'], $one['source'] ) || ! is_array( $one['source'] ) ) {
+				return new WP_Error( 'ab_mcp_sync_object_invalid', 'export() takes a list of array( \'kind\' => …, \'ref\' => …, \'source\' => AB_MCP_Sync_Inventory::source() ). Use that form.' );
+			}
+			$row = self::term_row( (int) $one['ref'] );
+			if ( false === $row ) {
+				continue;
+			}
+			if ( null === $row ) {
+				$result = $this->read( (string) $one['ref'], $one['source'], 'term' );
+				if ( is_wp_error( $result ) ) {
+					return $result;
+				}
+				$result['content'] = array();
+				$out[]             = $result;
+				continue;
+			}
+			$meta   = AB_MCP_Sync_Rows::meta( 'term', (int) $row['term_id'] );
+			$result = $this->form( $row, $one['source'], $meta );
+			if ( is_wp_error( $result ) ) {
+				return $result;
+			}
+			$content = array();
+			if ( null !== $meta ) {
+				$columns = array();
+				foreach ( array( 'name', 'slug', 'term_group', 'taxonomy', 'description', 'parent' ) as $column ) {
+					$columns[ $column ] = (string) $row[ $column ];
+				}
+				$rows = array();
+				foreach ( $meta as $m ) {
+					if ( AB_MCP_Sync_Credentials::names_credential( (string) $m['key'], $extra ) ) {
+						continue;
+					}
+					$rows[] = array( (string) $m['key'], (string) $m['value'] );
+				}
+				$content = array(
+					'meta'  => $rows,
+					'row'   => $columns,
+					'terms' => array(),
+				);
+			}
+			$result['content'] = $content;
+			$out[]             = $result;
+		}
+		return $out;
+	}
+
+	/**
 	 * The one row of a term id; null when unreadable or shared by two
 	 * taxonomies (a term the core did not split, which no ref names alone).
 	 *
@@ -723,14 +791,17 @@ class AB_MCP_Sync_Kind_Term extends AB_MCP_Sync_Db_Kind {
 	/**
 	 * The canonical form of a term row.
 	 *
-	 * @param array  $row    Row (AB_MCP_Sync_Rows::TERM_COLUMNS).
-	 * @param array  $source Source.
+	 * @param array      $row    Row (AB_MCP_Sync_Rows::TERM_COLUMNS).
+	 * @param array      $source Source.
+	 * @param array|null $meta   Its meta rows as read already (export(): the
+	 *                           form and the content from one reading); false
+	 *                           to read them here.
 	 * @return array
 	 */
-	protected function form( array $row, array $source ) {
+	protected function form( array $row, array $source, $meta = false ) {
 		$acc  = AB_MCP_Sync_Canon::acc();
 		$ctx  = $source['ctx'];
-		$meta = AB_MCP_Sync_Rows::meta( 'term', (int) $row['term_id'] );
+		$meta = false === $meta ? AB_MCP_Sync_Rows::meta( 'term', (int) $row['term_id'] ) : $meta;
 		if ( null === $meta ) {
 			$acc['unread'][] = 'termmeta';
 			$meta            = array();

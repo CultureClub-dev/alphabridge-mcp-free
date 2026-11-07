@@ -303,36 +303,40 @@ final class AB_MCP_Sync_Kinds {
 			'stage'  => 'Z8d',
 			'reason' => 'The stored value of a core option does not keep the rule of its schema.',
 		),
-		// What the engine of the kind post does not carry to its end in this
-		// version (branch 8; AB_MCP_Sync_Post_Writer), and the engines that
-		// follow for the other kinds.
+		// What the engines of the kinds post and term do not carry to their
+		// end (branches 8 and 9; AB_MCP_Sync_Post_Writer, AB_MCP_Sync_Term_Writer),
+		// and the engines that follow for the other kinds.
 		'post:engine_type'             => array(
-			'stage'  => 'Z9',
-			'reason' => 'In this version the engine of the kind post writes posts and pages; templates, template parts, global styles, navigations and reusable blocks follow with their field schema.',
+			'stage'  => 'Z8d',
+			'reason' => 'The engine of the kind post writes posts and pages in a status it can store (not the trash, no auto-draft); the other core types (templates, template parts, global styles, navigations, reusable blocks) wait for their field schema, and a package without the content of the object is not written.',
 		),
 		'post:meta_rule'               => array(
-			'stage'  => 'Z9',
-			'reason' => 'A meta key outside the rule of this version (_wp_page_template, and plain keys the account may edit on a post that is there) waits for the field schema and the rights per key.',
+			'stage'  => 'Z8d',
+			'reason' => 'A meta value the metadata API cannot store byte for byte (a serialized value that is no array, or one serialize() would not give back as it is) waits for its field rule.',
 		),
 		'post:taxonomy_rule'           => array(
-			'stage'  => 'Z9',
-			'reason' => 'A term of a taxonomy other than category, post_tag and post_format waits for the engine of the terms.',
+			'stage'  => 'Z8d',
+			'reason' => 'A term of a taxonomy of a plugin or theme on the post waits for the classification of that taxonomy; the engine of the kind post sets category, post_tag and post_format.',
 		),
 		'post:meta_spelling'           => array(
-			'stage'  => 'Z9',
-			'reason' => 'Two meta keys of the post that the database compares alike (Foo and foo under the collation of postmeta) wait for the field schema: update_metadata() and delete_metadata() write by the key and would change both.',
+			'stage'  => 'Z8d',
+			'reason' => 'Two meta keys of the post that the database compares alike (Foo and foo under the collation of postmeta) wait for their field rule: update_metadata() and delete_metadata() write by the key and would change both.',
 		),
 		'post:term_order'              => array(
-			'stage'  => 'Z9',
-			'reason' => 'A relationship with a term_order other than 0 (a plugin that sorts the terms), on the staging post or on the post of this site, waits for the engine of the terms: wp_set_object_terms() makes every relationship anew with the order 0, so a step could not write the order of the staging site, and the way back could not give the order of this site back.',
+			'stage'  => 'Z8d',
+			'reason' => 'A relationship with a term_order other than 0 (a plugin that sorts the terms), on the staging post or on the post of this site, waits for its field rule: wp_set_object_terms() makes every relationship anew with the order 0, so a step could not write the order of the staging site, and the way back could not give the order of this site back.',
 		),
 		'post:slug_collision'          => array(
-			'stage'  => 'Z9',
-			'reason' => 'A new post whose slug another post of its type and parent has here would be renamed by WordPress, and the written post would not be the target.',
+			'stage'  => 'Z8',
+			'reason' => 'WordPress would store another slug than the staging object has (another post of its type and parent holds it, a post in the trash holds it and would be renamed, a pending post of an account that may not publish it loses it, a published one without a slug gets one from its title): change the slug on the staging site, or pair the two objects first (wp_site_pairs).',
 		),
 		'post:sanitizer'               => array(
-			'stage'  => 'Z9',
-			'reason' => 'A field of the post differs after the sanitizing WordPress runs on a save (kses without unfiltered_html): the written post would not be the target.',
+			'stage'  => 'Z8',
+			'reason' => 'A field or meta value of the object changes in the sanitizing WordPress runs on a save (kses without unfiltered_html, sanitize_title(), sanitize_meta()), so the written object would not be the target: take it over with an account that may store unfiltered HTML, or by hand.',
+		),
+		'post:thumbnail'               => array(
+			'stage'  => 'Z8',
+			'reason' => 'The featured image names an attachment of this site that WordPress shows as no image, and set_post_thumbnail() would remove the featured image instead of setting it: check the attachment in the media library of this site.',
 		),
 		'post:menu_automatic'          => array(
 			'stage'  => 'Z8',
@@ -354,9 +358,37 @@ final class AB_MCP_Sync_Kinds {
 			'stage'  => 'Z8',
 			'reason' => 'The template of the staging object (_wp_page_template) is not one the theme of this site offers for its type, so WordPress would store default instead: add the template to the theme of this site, or take the object over by hand.',
 		),
-		'term:engine'                  => array(
-			'stage'  => 'Z9',
-			'reason' => 'The engine that writes terms follows with branch 9.',
+		'term:taxonomy_rule'           => array(
+			'stage'  => 'Z8d',
+			'reason' => 'The engine of the kind term writes the terms of category, post_tag and wp_pattern_category, registered on this site, from a package with their content; a term of another taxonomy waits for its classification.',
+		),
+		'term:term_group'              => array(
+			'stage'  => 'Z8d',
+			'reason' => 'A term in a group of aliases (term_group other than 0) waits for its field rule: the group is an id of the site\'s own, which no pair maps.',
+		),
+		'term:parent'                  => array(
+			'stage'  => 'Z8d',
+			'reason' => 'The parent would close a loop of parents on this site (wp_update_term() would break it by changing the parent of other terms), or the taxonomy has no parents here: set the parents by hand in wp-admin.',
+		),
+		'term:slug_collision'          => array(
+			'stage'  => 'Z8',
+			'reason' => 'Another term of the taxonomy holds the slug on this site, or WordPress would store another one: change the slug on the staging site, or pair the two terms first (wp_site_pairs).',
+		),
+		'term:sanitizer'               => array(
+			'stage'  => 'Z8',
+			'reason' => 'A field or meta value of the term changes in the sanitizing WordPress runs on a save (the filters of term names and descriptions, kses without unfiltered_html, sanitize_meta()), or the slug is empty: take it over with an account that may store unfiltered HTML, or by hand.',
+		),
+		'term:reference_unmapped'      => array(
+			'stage'  => 'Z8',
+			'reason' => 'A reference of the term (its parent, an address in its name, description or meta) has no counterpart on this site: pair or create the target first.',
+		),
+		'term:meta_rule'               => array(
+			'stage'  => 'Z8d',
+			'reason' => 'A meta value of the term the metadata API cannot store byte for byte (a serialized value that is no array, or one serialize() would not give back as it is) waits for its field rule.',
+		),
+		'term:meta_spelling'           => array(
+			'stage'  => 'Z8d',
+			'reason' => 'Two meta keys of the term that the database compares alike (Foo and foo under the collation of termmeta) wait for their field rule: update_metadata() and delete_metadata() write by the key and would change both.',
 		),
 		'attachment:engine'            => array(
 			'stage'  => 'Z10',

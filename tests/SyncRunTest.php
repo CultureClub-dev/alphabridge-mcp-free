@@ -263,6 +263,9 @@ final class SyncRunPostWpdb {
 				}
 				$rows[] = $row;
 			}
+		} elseif ( preg_match( '/^SELECT post_type FROM wp_posts WHERE ID = (\d+)$/', (string) $sql, $m ) ) {
+			// The type of a post (AB_MCP_Sync_Rows::post_type_of(); the featured image, branch 9).
+			$rows = isset( $this->rows[ (int) $m[1] ] ) ? array( array( 'post_type' => $this->rows[ (int) $m[1] ]['post_type'] ) ) : array();
 		} elseif ( preg_match( '/FROM wp_postmeta WHERE post_id = (\d+) ORDER BY meta_id ASC$/', (string) $sql, $m ) ) {
 			$rows = $this->meta[ (int) $m[1] ] ?? array();
 			} elseif ( preg_match( "/FROM wp_postmeta WHERE post_id = (\\d+) AND meta_key = '([^']*)' ORDER BY meta_id ASC$/", (string) $sql, $m ) ) {
@@ -564,7 +567,7 @@ final class SyncRunTest extends TestCase {
 		self::assertTrue( AB_MCP_Sync_Guard::begin( 7, 2, array( 5 => 'page' ), array( 'category' ), array( 'blogname' ) ) );
 		self::assertTrue( AB_MCP_Sync_Guard::$owner );
 		$record = get_option( AB_MCP_Sync_Guard::OPTION );
-		self::assertSame( array( 'run_id' => 7, 'seq' => 2, 'posts' => array( '5' => 'page' ), 'taxonomies' => array( 'category' ), 'options' => array( 'blogname' ), 'until' => 1000 + AB_MCP_Change_Lock::TIMEOUT, 'user_id' => 3 ), $record );
+		self::assertSame( array( 'run_id' => 7, 'seq' => 2, 'posts' => array( '5' => 'page' ), 'taxonomies' => array( 'category' ), 'options' => array( 'blogname' ), 'terms' => array(), 'until' => 1000 + AB_MCP_Change_Lock::TIMEOUT, 'user_id' => 3 ), $record );
 		self::assertTrue( $GLOBALS['ab_test_autoload'][ AB_MCP_Sync_Guard::OPTION ], 'Autoloaded: no query on the requests that are not held.' );
 		self::assertSame( array( '1000:3' ), get_post_meta( 5, '_edit_lock' ), 'The edit lock of wp-admin.' );
 		// The owner: arm() does nothing, every write passes.
@@ -762,16 +765,36 @@ final class SyncRunTest extends TestCase {
 	/* ------------------------------------------------- the kind post */
 
 	public function testTheRuleOfThisVersionForMetaKeys(): void {
-		self::assertTrue( AB_MCP_Sync_Post_Writer::meta_allowed( '_wp_page_template' ), 'The core key with an API of its own.' );
-		self::assertTrue( AB_MCP_Sync_Post_Writer::meta_allowed( 'note' ) );
-		self::assertTrue( AB_MCP_Sync_Post_Writer::meta_allowed( 'subtitle' ) );
-		self::assertFalse( AB_MCP_Sync_Post_Writer::meta_allowed( '_thumbnail_id' ), 'A protected key.' );
-		self::assertFalse( AB_MCP_Sync_Post_Writer::meta_allowed( '_my_plugin' ) );
-		self::assertFalse( AB_MCP_Sync_Post_Writer::meta_allowed( '' ) );
-		self::assertFalse( AB_MCP_Sync_Post_Writer::meta_allowed( 'api_key' ), 'The name of a credential.' );
-		self::assertFalse( AB_MCP_Sync_Post_Writer::meta_allowed( 'panels_data' ), 'The markup of a page builder.' );
+		// Decision 28 (branch 9): which keys a new post takes before it exists
+		// (the right follows the right at the post: not protected, no
+		// authorization filter of its own; the core keys with an API of their
+		// own), and which keys of a post here a step writes at all (those whose
+		// values differ; never an excluded key or the name of a credential).
+		self::assertTrue( AB_MCP_Sync_Post_Writer::new_meta_allowed( '_wp_page_template', 'page' ), 'The core key with an API of its own.' );
+		self::assertTrue( AB_MCP_Sync_Post_Writer::new_meta_allowed( '_thumbnail_id', 'post' ), 'The featured image through set_post_thumbnail().' );
+		self::assertTrue( AB_MCP_Sync_Post_Writer::new_meta_allowed( 'note', 'page' ) );
+		self::assertFalse( AB_MCP_Sync_Post_Writer::new_meta_allowed( '_my_plugin', 'page' ), 'A protected key: map_meta_cap refuses it without a rule of its owner.' );
+		add_filter( 'auth_post_meta_rating', '__return_true' );
+		self::assertFalse( AB_MCP_Sync_Post_Writer::new_meta_allowed( 'rating', 'page' ), 'A key with a rule of its own answers at the object only.' );
+		remove_filter( 'auth_post_meta_rating', '__return_true' );
+		add_filter( 'auth_post_meta_rating_for_page', '__return_true' );
+		self::assertFalse( AB_MCP_Sync_Post_Writer::new_meta_allowed( 'rating', 'page' ), 'Also by the subtype (register_post_meta() with an auth_callback).' );
+		self::assertTrue( AB_MCP_Sync_Post_Writer::new_meta_allowed( 'rating', 'post' ) );
+		remove_filter( 'auth_post_meta_rating_for_page', '__return_true' );
+		$prepared = array( 'meta' => array( 'same' => array( 'a' ), 'changed' => array( 'b' ), 'new' => array( 'c' ), 'api_key' => array( 'x' ), '_edit_last' => array( '1' ) ) );
+		$current  = array(
+			'meta' => array(
+				array( 'meta_id' => 1, 'key' => 'same', 'value' => 'a' ),
+				array( 'meta_id' => 2, 'key' => 'changed', 'value' => 'B' ),
+				array( 'meta_id' => 3, 'key' => 'gone', 'value' => 'g' ),
+				array( 'meta_id' => 4, 'key' => 'api_key', 'value' => 'y' ),
+				array( 'meta_id' => 5, 'key' => '_edit_last', 'value' => '2' ),
+			),
+		);
+		self::assertSame( array( 'changed', 'gone', 'new' ), AB_MCP_Sync_Post_Writer::differing( $prepared, $current ), 'A key equal on both sides stays untouched; a credential and an excluded key are never written.' );
 		self::assertSame( array( 'post', 'page' ), AB_MCP_Sync_Post_Writer::TYPES );
 		self::assertSame( array( 'category', 'post_tag', 'post_format' ), AB_MCP_Sync_Post_Writer::TAXONOMIES );
+		self::assertSame( array( '_wp_page_template', '_thumbnail_id' ), AB_MCP_Sync_Post_Writer::CORE_META );
 	}
 
 	/** A line of a package of objects for a page, as the staging site writes it. */
@@ -893,19 +916,31 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( 'post:reference_unmapped', self::lock_of( AB_MCP_Sync_Post_Writer::target_of( self::line( array( 'post_parent' => '8' ) ), self::item( 'create' ), $ctx + array( 'pending' => array( 'post' => array( 9 => true ), 'term' => array() ) ) ) ), 'Another object pending does not help.' );
 		self::assertSame( 'post:author_unknown', self::lock_of( AB_MCP_Sync_Post_Writer::target_of( self::line( array( 'post_author' => '2' ), array(), array(), array( 'refs' => array( array( 'space' => 'user', 'id' => 2, 'login' => 'nobody', 'at' => 'post_author', 'strength' => 'strong' ) ) ) ), self::item(), $ctx ) ) );
 		self::assertSame( 'post:author_unknown', self::lock_of( AB_MCP_Sync_Post_Writer::target_of( self::line( array( 'post_author' => '2' ) ), self::item(), $ctx ) ), 'An author without a login in the refs.' );
-		self::assertSame( 'post:meta_rule', self::lock_of( AB_MCP_Sync_Post_Writer::target_of( self::line( array(), array( array( '_thumbnail_id', '5' ) ) ), self::item(), $ctx ) ) );
+		// The featured image by the pair of its attachment (decision 28; branch 9).
+		self::assertSame( 'post:reference_unmapped', self::lock_of( AB_MCP_Sync_Post_Writer::target_of( self::line( array(), array( array( '_thumbnail_id', '5' ) ) ), self::item(), $ctx ) ), 'An attachment without a pair.' );
+		$image = AB_MCP_Sync_Post_Writer::target_of( self::line( array(), array( array( '_thumbnail_id', '7' ) ) ), self::item(), $ctx );
+		self::assertSame( array( '_thumbnail_id' => array( '70' ) ), $image['meta'], 'The id of the attachment here.' );
 		self::assertSame( 'post:meta_rule', self::lock_of( AB_MCP_Sync_Post_Writer::target_of( self::line( array(), array( array( 'note', 'b:1;' ) ) ), self::item(), $ctx ) ), 'A serialized scalar is not written through the API as it is.' );
-		self::assertSame( 'post:create_with_object_meta', self::lock_of( AB_MCP_Sync_Post_Writer::target_of( self::line( array(), array( array( 'note', 'abc' ) ) ), self::item( 'create' ), $ctx ) ), 'A new post with plain meta (decision 28).' );
+		self::assertSame( 'post:meta_rule', self::lock_of( AB_MCP_Sync_Post_Writer::target_of( self::line( array(), array( array( 'note', 'a:1:{i:0;d:0.10000000000000001;}' ) ) ), self::item(), $ctx ) ), 'A serialized value serialize() would not give back byte for byte.' );
+		self::assertIsArray( AB_MCP_Sync_Post_Writer::target_of( self::line( array(), array( array( 'note', 'a:1:{i:0;s:1:"x";}' ) ) ), self::item(), $ctx ), 'A serialized array that serializes back to its bytes.' );
+		self::assertSame( 'post:create_with_object_meta', self::lock_of( AB_MCP_Sync_Post_Writer::target_of( self::line( array(), array( array( '_my_plugin', 'abc' ) ) ), self::item( 'create' ), $ctx ) ), 'A new post with a protected key (decision 28).' );
+		self::assertIsArray( AB_MCP_Sync_Post_Writer::target_of( self::line( array(), array( array( 'note', 'abc' ) ) ), self::item( 'create' ), $ctx ), 'A new post with a plain key: the right follows the right at the post (decision 28; branch 9).' );
 		self::assertIsArray( AB_MCP_Sync_Post_Writer::target_of( self::line( array(), array( array( '_wp_page_template', 'full.php' ) ) ), self::item( 'create' ), $ctx ), 'The core key goes with a new post.' );
+		self::assertSame( array(), AB_MCP_Sync_Post_Writer::target_of( self::line( array(), array( array( '_edit_lock', '1:1' ), array( 'api_key', 'x' ) ) ), self::item(), $ctx )['meta'], 'What the comparison leaves out is never a part of the target.' );
 		self::assertSame( 'post:taxonomy_rule', self::lock_of( AB_MCP_Sync_Post_Writer::target_of( self::line( array(), array(), array( array( 'name' => 'X', 'slug' => 'x', 'taxonomy' => 'product_cat', 'term_id' => 3, 'term_order' => 0 ) ) ), self::item(), $ctx ) ) );
 		self::assertSame( 'post:reference_unmapped', self::lock_of( AB_MCP_Sync_Post_Writer::target_of( self::line( array(), array(), array( array( 'name' => 'X', 'slug' => 'x', 'taxonomy' => 'post_tag', 'term_id' => 99, 'term_order' => 0 ) ) ), self::item(), $ctx ) ), 'A term without a pair.' );
+		// A term the same run creates first is pending (branch 9): the check
+		// asks the right of its taxonomy, the boundary maps it by its pair.
+		$filed = AB_MCP_Sync_Post_Writer::target_of( self::line( array(), array(), array( array( 'name' => 'X', 'slug' => 'x', 'taxonomy' => 'post_tag', 'term_id' => 99, 'term_order' => 0 ) ) ), self::item( 'create' ), $ctx + array( 'pending' => array( 'post' => array(), 'term' => array( 99 => true ) ) ) );
+		self::assertIsArray( $filed, is_wp_error( $filed ) ? $filed->get_error_message() : '' );
+		self::assertSame( array( 'post_tag' => array() ), $filed['terms'], 'The taxonomy stays for its right; the term follows with its pair.' );
 		// A lock names its stage and the way.
 		$locked = AB_MCP_Sync_Post_Writer::locked( 'post:slug_collision', 'slug hello' );
 		self::assertSame( 'ab_mcp_sync_locked', $locked->get_error_code() );
-		self::assertSame( array( 'key' => 'post:slug_collision', 'stage' => 'Z9', 'at' => 'slug hello' ), array_intersect_key( $locked->get_error_data()['lock'], array_flip( array( 'key', 'stage', 'at' ) ) ) );
-		self::assertStringContainsString( 'Not written (post:slug_collision, from Z9)', $locked->get_error_message() );
+		self::assertSame( array( 'key' => 'post:slug_collision', 'stage' => 'Z8', 'at' => 'slug hello' ), array_intersect_key( $locked->get_error_data()['lock'], array_flip( array( 'key', 'stage', 'at' ) ) ) );
+		self::assertStringContainsString( 'Not written (post:slug_collision, from Z8)', $locked->get_error_message() );
 		self::assertStringContainsString( 'wp-admin', $locked->get_error_message() );
-		foreach ( array( 'engine_type', 'meta_rule', 'taxonomy_rule', 'slug_collision', 'sanitizer', 'menu_automatic', 'author_unknown', 'status_date', 'reference_unmapped', 'page_template' ) as $op ) {
+		foreach ( array( 'engine_type', 'meta_rule', 'taxonomy_rule', 'slug_collision', 'sanitizer', 'menu_automatic', 'author_unknown', 'status_date', 'reference_unmapped', 'page_template', 'thumbnail' ) as $op ) {
 			self::assertIsArray( AB_MCP_Sync_Kinds::lock( 'post', $op ), $op . ' is a lock of the table.' );
 		}
 	}
@@ -943,7 +978,7 @@ final class SyncRunTest extends TestCase {
 		// ways; the reads from the rows, the rights and the way back take it
 		// as it is. The stubs unslash the key as core does.
 		$key = 'note\\path';
-		self::assertTrue( AB_MCP_Sync_Post_Writer::meta_allowed( $key ) );
+		self::assertTrue( AB_MCP_Sync_Post_Writer::new_meta_allowed( $key, 'post' ) );
 		// Added where there was none.
 		self::assertTrue( AB_MCP_Sync_Post_Writer::write_meta( 5, $key, array( 'v1' ), array() ) );
 		self::assertSame( array( 'v1' ), $GLOBALS['ab_test_meta'][5][ $key ] ?? null, 'Stored under its own name.' );
@@ -987,12 +1022,15 @@ final class SyncRunTest extends TestCase {
 		$denied  = array( 'delete_post_meta:color' );
 		$refused = AB_MCP_Sync_Post_Writer::precheck( $prepared, 12, $ctx['now'] );
 		self::assertInstanceOf( WP_Error::class, $refused, 'The right to remove the key only this site has is asked before anything is written.' );
-		self::assertSame( 'ab_mcp_sync_rights', $refused->get_error_code() );
-		self::assertStringContainsString( 'remove the meta key color of the post (delete_post_meta)', $refused->get_error_message() );
-		// A key the target carries asks edit_post_meta, as before; a key
-		// neither side has, and the key the target carries, ask no removal.
+		self::assertSame( '*:meta_without_rule', self::lock_of( $refused ), 'A key the map refuses locks the post: its field rule follows with Z8d (decision 28; branch 9).' );
+		self::assertStringContainsString( 'Meta key color of the post on this site: delete_post_meta refused', $refused->get_error_message() );
+		// A key equal on both sides is no part of the step (decision 28;
+		// branch 9): its right is not asked, it stays untouched.
 		$denied = array( 'edit_post_meta:note' );
-		self::assertSame( 'ab_mcp_sync_rights', AB_MCP_Sync_Post_Writer::precheck( $prepared, 12, $ctx['now'] )->get_error_code() );
+		self::assertTrue( AB_MCP_Sync_Post_Writer::precheck( $prepared, 12, $ctx['now'] ), 'note is abc on both sides.' );
+		self::assertSame( array( 'color' ), AB_MCP_Sync_Post_Writer::differing( $prepared, AB_MCP_Sync_Post_Writer::current( 12 ) ) );
+		$changed = AB_MCP_Sync_Post_Writer::target_of( self::line( array( 'post_type' => 'post' ), array( array( 'note', 'xyz' ) ), array(), array( 'identity' => array( 'post_type' => 'post', 'post_name' => 'hello', 'theme' => '' ) ) ), self::item(), $ctx );
+		self::assertSame( '*:meta_without_rule', self::lock_of( AB_MCP_Sync_Post_Writer::precheck( $changed, 12, $ctx['now'] ) ), 'A key that differs asks edit_post_meta.' );
 		$denied = array( 'delete_post_meta:note', 'delete_post_meta:other' );
 		self::assertTrue( AB_MCP_Sync_Post_Writer::precheck( $prepared, 12, $ctx['now'] ), 'The right to remove is asked for a key only this site has.' );
 	}
@@ -1411,7 +1449,7 @@ final class SyncRunTest extends TestCase {
 		self::assertNotSame( AB_MCP_Sync_Post_Writer::terms_hash( array( 5 ) ), AB_MCP_Sync_Post_Writer::part_hash( $current, 'terms:post_tag' ), 'With an order the hash differs from the keys alone, which wp_set_object_terms() would make.' );
 		self::assertSame( AB_MCP_Sync_Post_Writer::part_hash( $current, 'terms:post_tag' ), AB_MCP_Sync_Post_Writer::hashes( $current, array(), array() )['terms:post_tag'] );
 		self::assertIsArray( AB_MCP_Sync_Kinds::lock( 'post', 'term_order' ), 'A lock of the table, with its stage.' );
-		self::assertSame( 'Z9', AB_MCP_Sync_Kinds::lock( 'post', 'term_order' )['stage'] );
+		self::assertSame( 'Z8d', AB_MCP_Sync_Kinds::lock( 'post', 'term_order' )['stage'] );
 		// The check before the first write: the post of this site with an
 		// order other than 0 is locked, with the term and its order; with 0 it
 		// passes as before.
@@ -1426,7 +1464,7 @@ final class SyncRunTest extends TestCase {
 		$locked                             = AB_MCP_Sync_Post_Writer::precheck( $prepared, 12, $ctx['now'] );
 		self::assertSame( 'post:term_order', self::lock_of( $locked ) );
 		self::assertStringContainsString( 'The term news of category on the post of this site carries the term_order 3', $locked->get_error_message() );
-		self::assertStringContainsString( 'from Z9', $locked->get_error_message() );
+		self::assertStringContainsString( 'from Z8d', $locked->get_error_message() );
 		// The second check of the kind on the way back (restore_terms()): the
 		// terms read back as the backup by their entries, the order included.
 		// The post here holds News (3) with the order 3; the backup held News
@@ -1471,11 +1509,12 @@ final class SyncRunTest extends TestCase {
 		self::assertIsArray( $prepared, is_wp_error( $prepared ) ? $prepared->get_error_message() : '' );
 		self::assertTrue( AB_MCP_Sync_Post_Writer::precheck( $prepared, 12, $ctx['now'] ), 'One spelling: as before.' );
 		self::assertIsArray( AB_MCP_Sync_Kinds::lock( 'post', 'meta_spelling' ), 'A lock of the table, with its stage.' );
-		// The post holds note and Note: the database matches both for a write of note.
+		// The post holds note and Note: the database matches both for a
+		// removal of Note (a key only this site has, which the step removes).
 		$db->meta[12][] = array( 'meta_id' => 2, 'meta_key' => 'Note', 'meta_value' => 'other' );
 		$locked         = AB_MCP_Sync_Post_Writer::precheck( $prepared, 12, $ctx['now'] );
 		self::assertSame( 'post:meta_spelling', self::lock_of( $locked ) );
-		self::assertStringContainsString( 'The keys note and Note of the post on this site are one key to the database', $locked->get_error_message() );
+		self::assertStringContainsString( 'The keys Note and note of the post on this site are one key to the database', $locked->get_error_message() );
 		// A key only this site has, which the step removes, is asked the same.
 		$db->meta[12] = array( array( 'meta_id' => 1, 'meta_key' => 'note', 'meta_value' => 'abc' ), array( 'meta_id' => 2, 'meta_key' => 'Color', 'meta_value' => 'red' ), array( 'meta_id' => 3, 'meta_key' => 'color', 'meta_value' => 'blue' ) );
 		$locked       = AB_MCP_Sync_Post_Writer::precheck( $prepared, 12, $ctx['now'] );
@@ -1882,7 +1921,7 @@ final class SyncRunTest extends TestCase {
 			'own'    => false,
 		);
 		$seen = new ReflectionMethod( AB_MCP_Sync_Engine::class, 'seen_after' );
-		$after = $seen->invoke( null, $part, null, (string) $part['target'], false );
+		$after = $seen->invoke( null, $part, null, (string) $part['target'], false, AB_MCP_Sync_Post_Writer::class );
 		self::assertNull( $after['post'] );
 		self::assertTrue( $after['unread'] );
 		self::assertFalse( $after['own'], 'A target of no value is no read back of it.' );
@@ -2343,11 +2382,16 @@ final class SyncRunTest extends TestCase {
 			self::assertNull( self::verdict( self::entry( array( 'action' => $action ) ), null, false, true ), $action );
 			self::assertStringContainsString( "says $action", self::verdict( self::entry( array( 'action' => $action ) ) )['locked']['reason'] );
 		}
-		// Other kinds and types: locked with the stage that brings them.
-		foreach ( array( 'term' => 'Z9', 'attachment' => 'Z10', 'menu' => 'Z11', 'option' => 'Z11' ) as $kind => $stage ) {
+		// Other kinds and types: locked with the stage that brings them; a
+		// term of a taxonomy the term engine writes is an item of its kind
+		// (branch 9), one of another taxonomy waits for its classification.
+		foreach ( array( 'term' => 'Z8d', 'attachment' => 'Z10', 'menu' => 'Z11', 'option' => 'Z11' ) as $kind => $stage ) {
 			self::assertSame( $stage, self::verdict( self::entry( array( 'kind' => $kind, 'subtype' => '' ) ) )['locked']['stage'], $kind );
 		}
-		self::assertSame( 'Z9', self::verdict( self::entry( array( 'subtype' => 'wp_block' ) ) )['locked']['stage'] );
+		$term = self::verdict( self::entry( array( 'kind' => 'term', 'subtype' => 'category' ) ) );
+		self::assertSame( array( 'term', 'category', 'update' ), array( $term['item']['kind'], $term['item']['subtype'], $term['item']['op'] ) );
+		self::assertSame( 'Z8d', self::verdict( self::entry( array( 'kind' => 'term', 'subtype' => 'genre' ) ) )['locked']['stage'] );
+		self::assertSame( 'Z8d', self::verdict( self::entry( array( 'subtype' => 'product' ) ) )['locked']['stage'] );
 		self::assertStringContainsString( 'held by a credential', self::verdict( self::entry( array( 'staging' => array( 'held' => 'credential_name' ) ) ) )['locked']['reason'] );
 		self::assertStringContainsString( 'no pair', self::verdict( self::entry( array( 'pair' => null ) ) )['locked']['reason'] );
 	}
@@ -2390,5 +2434,161 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( 'ab_mcp_sync_objects_missing', AB_MCP_Sync_Engine::line_of( array( 'staging_ref' => '99' ) + $item, $lines )->get_error_code() );
 		self::assertSame( 'ab_mcp_sync_objects_held', AB_MCP_Sync_Engine::line_of( array( 'staging_ref' => '13' ) + $item, $lines )->get_error_code(), 'Held by the rules of this site, although its hash is the one of the report.' );
 		self::assertSame( 'ab_mcp_sync_objects_held', AB_MCP_Sync_Engine::line_of( array( 'staging_ref' => '14' ) + $item, $lines )->get_error_code(), 'Held by the staging site: no hash in its line.' );
+	}
+
+	/* ----------------------------------------- the kind post, branch 9 */
+
+	public function testATypeTheTableLocksAndWhatTheCanonicalFormLocksAreRefusedWithTheirOwnLock(): void {
+		$ctx = self::ctx();
+		// A changeset (decision 30): its own lock of the table, with its stage.
+		$changeset = AB_MCP_Sync_Post_Writer::target_of( self::line( array( 'post_type' => 'customize_changeset' ), array(), array(), array( 'identity' => array( 'post_type' => 'customize_changeset', 'post_name' => 'c', 'theme' => '' ) ) ), self::item(), $ctx );
+		self::assertSame( 'post_type:customize_changeset', self::lock_of( $changeset ) );
+		self::assertStringContainsString( 'from Z8d', $changeset->get_error_message() );
+		self::assertSame( 'post_type:*', self::lock_of( AB_MCP_Sync_Post_Writer::target_of( self::line( array( 'post_type' => 'product' ), array(), array(), array( 'identity' => array( 'post_type' => 'product', 'post_name' => 'p', 'theme' => '' ) ) ), self::item(), $ctx ) ), 'A type of a plugin.' );
+		// A page builder that is not released (decision 31), as the canonical form of the staging object found it.
+		$builder = self::line( array(), array(), array(), array( 'locks' => array( array( 'key' => 'post:builder', 'stage' => 'Z8c', 'reason' => 'A document of a page builder.', 'at' => 'builder:wpbakery' ) ) ) );
+		$locked  = AB_MCP_Sync_Post_Writer::target_of( $builder, self::item(), $ctx );
+		self::assertSame( 'post:builder', self::lock_of( $locked ) );
+		self::assertStringContainsString( 'from Z8c', $locked->get_error_message() );
+		self::assertSame( 'post:engine_type', self::lock_of( AB_MCP_Sync_Post_Writer::target_of( self::line( array(), array(), array(), array( 'locks' => array( 'x' ) ) ), self::item(), $ctx ) ), 'A lock this version does not read: fail closed.' );
+		// The same on the side of this site (live_rule()): the canonical form of the post here.
+		$db                          = self::post_rows( 'News' );
+		$db->rows[12]['post_content'] = '[vc_row][vc_column]Hi[/vc_column][/vc_row]';
+		$GLOBALS['wpdb']             = $db;
+		$source                      = \AB_MCP_Sync_Inventory::source( array( 'https://www.example.com' ), 50 );
+		self::assertSame( 'post:builder', self::lock_of( AB_MCP_Sync_Post_Writer::live_rule( 12, $source ) ) );
+		$db->rows[12]['post_content'] = 'Hello.';
+		self::assertTrue( AB_MCP_Sync_Post_Writer::live_rule( 12, $source ) );
+	}
+
+	public function testTheFieldRuleAsksEveryOperationOfAKeyThatDiffersAndAPageBuilderKeyNeedsUnfilteredHtml(): void {
+		$db              = self::post_rows( 'News' );
+		$GLOBALS['wpdb'] = $db;
+		$ctx             = self::ctx( array( 'term' => array( 3 => 3 ) ) );
+		$ctx['now']      = 1800000000;
+		$terms           = array( array( 'name' => 'News', 'slug' => 'news', 'taxonomy' => 'category', 'term_id' => 3, 'term_order' => 0 ) );
+		$line            = static fn( array $meta ) => self::line( array( 'post_type' => 'post' ), $meta, $terms, array( 'identity' => array( 'post_type' => 'post', 'post_name' => 'hello', 'theme' => '' ) ) );
+		$denied          = array();
+		$GLOBALS['ab_test_can'] = static function ( string $cap, array $args ) use ( &$denied ): bool {
+			return ! in_array( $cap . ':' . (string) ( $args[1] ?? '' ), $denied, true ) && ! in_array( $cap, $denied, true );
+		};
+		// A key new on the target asks add_post_meta.
+		$added  = AB_MCP_Sync_Post_Writer::target_of( $line( array( array( 'note', 'abc' ), array( 'color', 'red' ) ) ), self::item(), $ctx );
+		$denied = array( 'add_post_meta:color' );
+		self::assertSame( '*:meta_without_rule', self::lock_of( AB_MCP_Sync_Post_Writer::precheck( $added, 12, $ctx['now'] ) ) );
+		$denied = array();
+		self::assertTrue( AB_MCP_Sync_Post_Writer::precheck( $added, 12, $ctx['now'] ) );
+		// A key of a page builder: the right to store unfiltered HTML besides.
+		$builder = AB_MCP_Sync_Post_Writer::target_of( $line( array( array( 'note', 'abc' ), array( 'panels_data', 'a:1:{i:0;s:1:"x";}' ) ) ), self::item(), $ctx );
+		self::assertIsArray( $builder, is_wp_error( $builder ) ? $builder->get_error_message() : '' );
+		$denied  = array( 'unfiltered_html' );
+		$refused = AB_MCP_Sync_Post_Writer::precheck( $builder, 12, $ctx['now'] );
+		self::assertSame( 'ab_mcp_sync_rights', $refused->get_error_code() );
+		self::assertStringContainsString( 'page-builder meta key panels_data (unfiltered_html)', $refused->get_error_message() );
+		$denied = array();
+		self::assertTrue( AB_MCP_Sync_Post_Writer::precheck( $builder, 12, $ctx['now'] ) );
+		// Every written value through sanitize_meta() (decision 17).
+		$upper = static fn( $v ) => strtoupper( (string) $v );
+		add_filter( 'sanitize_post_meta_color', $upper );
+		self::assertSame( 'post:sanitizer', self::lock_of( AB_MCP_Sync_Post_Writer::precheck( $added, 12, $ctx['now'] ) ) );
+		remove_filter( 'sanitize_post_meta_color', $upper );
+		// A field of the row through sanitize_post(), beyond the texts.
+		$closed = static fn( $v ) => 'open';
+		add_filter( 'pre_comment_status', $closed );
+		self::assertSame( 'post:sanitizer', self::lock_of( AB_MCP_Sync_Post_Writer::precheck( $added, 12, $ctx['now'] ) ) );
+		remove_filter( 'pre_comment_status', $closed );
+		// The template the row writes is asked for other spellings as well, equal or not.
+		$db->meta[12] = array( array( 'meta_id' => 1, 'meta_key' => 'note', 'meta_value' => 'abc' ), array( 'meta_id' => 2, 'meta_key' => '_wp_page_template', 'meta_value' => 'full.php' ), array( 'meta_id' => 3, 'meta_key' => '_WP_page_template', 'meta_value' => 'x' ) );
+		$GLOBALS['ab_test_page_templates'] = array( 'post' => array( 'full.php' => 'Full' ) );
+		$template = AB_MCP_Sync_Post_Writer::target_of( $line( array( array( 'note', 'abc' ), array( '_wp_page_template', 'full.php' ), array( '_WP_page_template', 'x' ) ) ), self::item(), $ctx );
+		self::assertSame( 'post:meta_spelling', self::lock_of( AB_MCP_Sync_Post_Writer::precheck( $template, 12, $ctx['now'] ) ) );
+		unset( $GLOBALS['ab_test_page_templates'] );
+	}
+
+	public function testTheFeaturedImageGoesThroughItsOwnApiToAnAttachmentWordPressShowsAsAnImage(): void {
+		$db               = self::post_rows( 'News' );
+		$db->rows[70]     = array( 'ID' => 70, 'post_type' => 'attachment' ) + $db->rows[12];
+		$db->rows[71]     = array( 'ID' => 71, 'post_type' => 'page' ) + $db->rows[12];
+		$GLOBALS['wpdb']  = $db;
+		$ctx              = self::ctx( array( 'term' => array( 3 => 3 ), 'post' => array( 7 => 70, 8 => 71 ) ) );
+		$ctx['now']       = 1800000000;
+		$GLOBALS['ab_test_can'] = static fn( string $cap, array $args ): bool => true;
+		$terms            = array( array( 'name' => 'News', 'slug' => 'news', 'taxonomy' => 'category', 'term_id' => 3, 'term_order' => 0 ) );
+		$line             = static fn( string $image ) => self::line( array( 'post_type' => 'post' ), array( array( 'note', 'abc' ), array( '_thumbnail_id', $image ) ), $terms, array( 'identity' => array( 'post_type' => 'post', 'post_name' => 'hello', 'theme' => '' ) ) );
+		$prepared         = AB_MCP_Sync_Post_Writer::target_of( $line( '7' ), self::item(), $ctx );
+		self::assertSame( array( '70' ), $prepared['meta']['_thumbnail_id'] );
+		self::assertSame( 'post:thumbnail', self::lock_of( AB_MCP_Sync_Post_Writer::precheck( $prepared, 12, $ctx['now'] ) ), 'An attachment WordPress shows as no image: set_post_thumbnail() would remove the featured image.' );
+		$GLOBALS['ab_test_images'] = array( 70, 71 );
+		self::assertTrue( AB_MCP_Sync_Post_Writer::precheck( $prepared, 12, $ctx['now'] ) );
+		self::assertSame( 'post:thumbnail', self::lock_of( AB_MCP_Sync_Post_Writer::precheck( AB_MCP_Sync_Post_Writer::target_of( $line( '8' ), self::item(), $ctx ), 12, $ctx['now'] ) ), 'No attachment.' );
+		// Written through set_post_thumbnail(), removed through delete_post_thumbnail().
+		$GLOBALS['ab_test_meta'][12]['_thumbnail_id'] = array();
+		self::assertTrue( AB_MCP_Sync_Post_Writer::write_part( 12, 'meta:_thumbnail_id', $prepared, null ) );
+		self::assertSame( array( 70 ), $GLOBALS['ab_test_meta'][12]['_thumbnail_id'] ?? null, 'set_post_thumbnail() of the stubs stores the id.' );
+		self::assertSame( array( array( 'set', 12, 70 ) ), $GLOBALS['ab_test_thumbnails'], 'Through the core\'s own API.' );
+		unset( $GLOBALS['ab_test_images'], $GLOBALS['ab_test_thumbnails'] );
+	}
+
+	public function testTheSlugIsWhatWordPressWouldStoreOrTheStepIsLocked(): void {
+		$GLOBALS['wpdb'] = new SyncRunOptionWpdb();
+		$ctx             = self::ctx();
+		$ctx['now']      = 1800000000;
+		$GLOBALS['ab_test_can'] = static fn( string $cap, array $args ): bool => true;
+		$new             = static fn( array $over ) => AB_MCP_Sync_Post_Writer::target_of( self::line( $over ), self::item( 'create' ), $ctx );
+		self::assertTrue( AB_MCP_Sync_Post_Writer::precheck( $new( array() ), null, $ctx['now'] ), 'A free slug.' );
+		// Another post holds it: wp_unique_post_slug() would rename it.
+		$GLOBALS['ab_test_unique_slugs'] = array( 'hello' => 'hello-2' );
+		$taken = AB_MCP_Sync_Post_Writer::precheck( $new( array() ), null, $ctx['now'] );
+		self::assertSame( 'post:slug_collision', self::lock_of( $taken ) );
+		self::assertStringContainsString( 'WordPress would store the slug hello-2 for hello', $taken->get_error_message() );
+		self::assertTrue( AB_MCP_Sync_Post_Writer::precheck( $new( array( 'post_status' => 'draft', 'post_date_gmt' => '0000-00-00 00:00:00' ) ), null, $ctx['now'] ), 'WordPress keeps the slug of a draft as it is.' );
+		unset( $GLOBALS['ab_test_unique_slugs'] );
+		// A slug the sanitizing would change.
+		$spaced = AB_MCP_Sync_Post_Writer::precheck( $new( array( 'post_name' => 'Hello World' ) ), null, $ctx['now'] );
+		self::assertSame( 'post:sanitizer', self::lock_of( $spaced ) );
+		self::assertStringContainsString( 'WordPress would store hello-world', $spaced->get_error_message() );
+		// A published post without a slug gets one from its title; a draft keeps none.
+		self::assertSame( 'post:slug_collision', self::lock_of( AB_MCP_Sync_Post_Writer::precheck( $new( array( 'post_name' => '' ) ), null, $ctx['now'] ) ) );
+		self::assertTrue( AB_MCP_Sync_Post_Writer::precheck( $new( array( 'post_name' => '', 'post_status' => 'draft', 'post_date_gmt' => '0000-00-00 00:00:00' ) ), null, $ctx['now'] ) );
+		// A pending post of an account that may not publish it loses its slug.
+		$GLOBALS['ab_test_can'] = static fn( string $cap, array $args ): bool => 'publish_posts' !== $cap;
+		$pending = AB_MCP_Sync_Post_Writer::precheck( $new( array( 'post_status' => 'pending', 'post_date_gmt' => '0000-00-00 00:00:00' ) ), null, $ctx['now'] );
+		self::assertSame( 'post:slug_collision', self::lock_of( $pending ) );
+		self::assertStringContainsString( 'WordPress drops the slug hello of a pending post', $pending->get_error_message() );
+	}
+
+	public function testTheEngineKnowsWhatItCreatesInBothSpacesAndNoStepWritesAKindWithoutAWriter(): void {
+		$pending = new ReflectionMethod( AB_MCP_Sync_Engine::class, 'pending' );
+		self::assertSame(
+			array(
+				'post' => array( 12 => true ),
+				'term' => array( 5 => true ),
+			),
+			$pending->invoke(
+				null,
+				array(
+					array( 'op' => 'create', 'kind' => 'post', 'staging_ref' => '12' ),
+					array( 'op' => 'create', 'kind' => 'term', 'staging_ref' => '5' ),
+					array( 'op' => 'update', 'kind' => 'term', 'staging_ref' => '6' ),
+					array( 'op' => 'create', 'kind' => 'menu', 'staging_ref' => '7' ),
+				)
+			),
+			'A new post and a new term are pending for the check of what refers to them (B1; branch 9).'
+		);
+		$check   = new ReflectionMethod( AB_MCP_Sync_Engine::class, 'check_item' );
+		$finding = $check->invoke( null, array( 'seq' => 2, 'kind' => 'menu', 'staging_ref' => '7', 'op' => 'create' ), array( 'lines' => array(), 'held' => array() ), self::ctx() );
+		self::assertStringContainsString( 'No step of this version writes the kind menu', $finding['message'] );
+	}
+
+	public function testTheOrderOfTheGraphPutsANewTermBeforeThePostThatIsFiledUnderIt(): void {
+		$m     = new ReflectionMethod( AB_MCP_Sync_Push::class, 'order' );
+		$items = array(
+			1 => array( 'kind' => 'post', 'subtype' => 'post', 'op' => 'create', 'staging_ref' => '5', 'action' => 'create', 'refs' => array( array( 'term', '5' ) ) ),
+			2 => array( 'kind' => 'term', 'subtype' => 'category', 'op' => 'create', 'staging_ref' => '5', 'action' => 'create', 'refs' => array() ),
+		);
+		$got   = $m->invoke( null, $items );
+		self::assertSame( array( 2, 1 ), array_keys( $got['items'] ), 'The term 5 first: a post 5 and a term 5 are two objects (two spaces of ids).' );
+		self::assertSame( array( 2 ), $got['items'][1]['depends_on'] );
+		self::assertSame( array(), $got['locked'] );
 	}
 }

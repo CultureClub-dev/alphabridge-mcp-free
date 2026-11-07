@@ -62,9 +62,10 @@ final class SyncDbKindsTest extends TestCase {
 
 	public function testWhatWritesIsNotInThisBranch(): void {
 		foreach ( AB_MCP_Sync_Db_Kinds::all() as $kind ) {
-			// The post kind writes since branch 8 (SyncPostWriterTest); every other kind not yet.
-			if ( 'post' === $kind->kind() ) {
-				self::assertSame( array(), $kind->export( array() ), 'The post kind exports its objects (branch 8).' );
+			// The post kind writes since branch 8, the term kind since branch 9
+			// (AB_MCP_Sync_Term_Writer); every other kind not yet.
+			if ( in_array( $kind->kind(), array( 'post', 'term' ), true ) ) {
+				self::assertSame( array(), $kind->export( array() ), 'The kind exports its objects (branches 8 and 9): ' . $kind->kind() );
 				self::assertSame( 'ab_mcp_sync_object_invalid', $kind->export( array( 'x' ) )->get_error_code() );
 				continue;
 			}

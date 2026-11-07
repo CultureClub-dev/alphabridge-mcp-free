@@ -24,9 +24,11 @@
  * steps, journal and rests; abort closes an open run (what it wrote stays;
  * the way back is wp_site_revert).
  *
- * WHAT A PLAN HOLDS (this version): entries of the kind post that are posts
- * or pages (AB_MCP_Sync_Post_Writer); every other entry chosen is named as
- * locked with its reason and stage and is no step. The steps: the check
+ * WHAT A PLAN HOLDS (this version): entries of the kind post of the types
+ * the post engine writes (AB_MCP_Sync_Post_Writer::TYPES) and of the kind
+ * term of its taxonomies (AB_MCP_Sync_Term_Writer::TAXONOMIES; branch 9);
+ * every other entry chosen is named as locked with its reason and stage
+ * and is no step. The steps: the check
  * before the first write (decision 16; the means of 15.11), one write step
  * per object in the order of the graph of their references (an object
  * created in the same run before the one that refers to it), the caches,
@@ -424,7 +426,7 @@ final class AB_MCP_Sync_Push {
 			return $refused;
 		}
 		if ( array() === $items ) {
-			return new WP_Error( 'ab_mcp_sync_push_nothing', sprintf( 'Nothing of the selection is written in this version: %s Choose entries the report marks take_over or create (posts and pages).', array() === $locked ? 'no entry a takeover writes was chosen.' : implode( ' ', array_map( static fn( $l ) => sprintf( 'Entry %1$d (%2$s %3$s): %4$s', $l['n'], $l['kind'], $l['subtype'], $l['reason'] ), array_slice( $locked, 0, 5 ) ) ) ), array( 'locked' => $locked ) );
+			return new WP_Error( 'ab_mcp_sync_push_nothing', sprintf( 'Nothing of the selection is written in this version: %s Choose entries the report marks take_over or create (posts, pages and the other types the engine writes, and terms).', array() === $locked ? 'no entry a takeover writes was chosen.' : implode( ' ', array_map( static fn( $l ) => sprintf( 'Entry %1$d (%2$s %3$s): %4$s', $l['n'], $l['kind'], $l['subtype'], $l['reason'] ), array_slice( $locked, 0, 5 ) ) ) ), array( 'locked' => $locked ) );
 		}
 		// The objects of this site as they are now, and the pairs.
 		$asked = array();
@@ -514,11 +516,15 @@ final class AB_MCP_Sync_Push {
 			// store counts them (AB_MCP_Sync_Backup::size_of(); GitHub Codex
 			// round 6 on free#137, P2). A new object leaves a small mark.
 			$live_id = 'update' === $item['op'] && isset( $item['live_ref'] ) ? (int) $item['live_ref'] : 0;
-			$current = $live_id > 0 ? AB_MCP_Sync_Post_Writer::current( $live_id ) : null;
+			$w       = AB_MCP_Sync_Engine::writer( $item['kind'] );
+			$current = $live_id > 0 && null !== $w ? $w::current( $live_id ) : null;
 			if ( is_wp_error( $current ) ) {
 				return $current;
 			}
-			$bytes += AB_MCP_Sync_Backup::size_of( is_array( $current ) ? $current : array( 'absent' => true, 'identity' => array( 'post_type' => (string) ( $item['subtype'] ?? '' ), 'post_name' => (string) $item['staging_ref'], 'theme' => '' ) ) );
+			$absent = 'term' === $item['kind']
+				? array( 'taxonomy' => (string) ( $item['subtype'] ?? '' ), 'slug' => (string) $item['staging_ref'] )
+				: array( 'post_type' => (string) ( $item['subtype'] ?? '' ), 'post_name' => (string) $item['staging_ref'], 'theme' => '' );
+			$bytes += AB_MCP_Sync_Backup::size_of( is_array( $current ) ? $current : array( 'absent' => true, 'identity' => $absent ) );
 		}
 		foreach ( $items as $n => $item ) {
 			$depends = array( 1 );
@@ -639,11 +645,14 @@ final class AB_MCP_Sync_Push {
 			}
 			return $lock( sprintf( 'The report says %s for this entry: a takeover writes nothing for it.', $action ) );
 		}
-		if ( 'post' !== $entry['kind'] ) {
-			return $lock( sprintf( 'The kind %s is written from a later branch of Z8 (terms: Z9; media: Z10; menus, widget areas, the additional CSS and options: Z11).', (string) $entry['kind'] ), 'term' === $entry['kind'] ? 'Z9' : ( 'attachment' === $entry['kind'] ? 'Z10' : 'Z11' ) );
-		}
-		if ( ! in_array( (string) ( $entry['subtype'] ?? '' ), AB_MCP_Sync_Post_Writer::TYPES, true ) ) {
-			return $lock( sprintf( 'In this version the engine of the kind post writes posts and pages; the type %s follows with Z9.', (string) ( $entry['subtype'] ?? '' ) ), 'Z9' );
+		if ( 'term' === $entry['kind'] ) {
+			if ( ! in_array( (string) ( $entry['subtype'] ?? '' ), AB_MCP_Sync_Term_Writer::TAXONOMIES, true ) ) {
+				return $lock( sprintf( 'The engine of the kind term writes the terms of %1$s; the taxonomy %2$s waits for its classification.', implode( ', ', AB_MCP_Sync_Term_Writer::TAXONOMIES ), (string) ( $entry['subtype'] ?? '' ) ), 'Z8d' );
+			}
+		} elseif ( 'post' !== $entry['kind'] ) {
+			return $lock( sprintf( 'The kind %s is written from a later branch of Z8 (media: Z10; menus, widget areas, the additional CSS and options: Z11).', (string) $entry['kind'] ), 'attachment' === $entry['kind'] ? 'Z10' : 'Z11' );
+		} elseif ( ! in_array( (string) ( $entry['subtype'] ?? '' ), AB_MCP_Sync_Post_Writer::TYPES, true ) ) {
+			return $lock( sprintf( 'The engine of the kind post writes the types %1$s; the type %2$s waits for its field schema.', implode( ', ', AB_MCP_Sync_Post_Writer::TYPES ), (string) ( $entry['subtype'] ?? '' ) ), 'Z8d' );
 		}
 		$staging = isset( $entry['staging']['ref'] ) ? (string) $entry['staging']['ref'] : '';
 		if ( '' === $staging ) {
@@ -656,7 +665,7 @@ final class AB_MCP_Sync_Push {
 		return array(
 			'item' => array(
 				'n'           => $n,
-				'kind'        => 'post',
+				'kind'        => (string) $entry['kind'],
 				'subtype'     => (string) $entry['subtype'],
 				'op'          => $op,
 				'staging_ref' => $staging,
@@ -679,10 +688,13 @@ final class AB_MCP_Sync_Push {
 	 * @return array{items:array,locked:array}|WP_Error
 	 */
 	private static function order( array $items ) {
+		// The objects the run creates, by the space of their ids: a post in
+		// the space of posts, a term in the space of terms (a new post in a
+		// new category, a new term under a new parent: branch 9).
 		$at = array();
 		foreach ( $items as $n => $item ) {
 			if ( 'create' === $item['op'] ) {
-				$at[ 'post' . "\0" . $item['staging_ref'] ] = $n;
+				$at[ ( 'term' === $item['kind'] ? 'term' : 'post' ) . "\0" . $item['staging_ref'] ] = $n;
 			}
 		}
 		$edges = array();
@@ -1041,7 +1053,7 @@ final class AB_MCP_Sync_Push {
 	 * @return WP_Error
 	 */
 	private static function selection( $what ) {
-		return new WP_Error( 'ab_mcp_sync_push_selection', sprintf( 'The selection is not one a run takes: %s Pass select (entry numbers of the report of kind post with action take_over or create), choices (entry and choice for a conflict), as_draft (entry numbers taken over with the status draft) or all=true, and packages (the package_ids of the objects).', $what ) );
+		return new WP_Error( 'ab_mcp_sync_push_selection', sprintf( 'The selection is not one a run takes: %s Pass select (entry numbers of the report of kind post or term with action take_over or create), choices (entry and choice for a conflict), as_draft (entry numbers taken over with the status draft) or all=true, and packages (the package_ids of the objects).', $what ) );
 	}
 
 	/**

@@ -91,6 +91,7 @@ require_once __DIR__ . '/class-sync-backup.php';
 require_once __DIR__ . '/class-sync-guard.php';
 require_once __DIR__ . '/class-sync-resources.php';
 require_once __DIR__ . '/class-sync-post-writer.php';
+require_once __DIR__ . '/class-sync-term-writer.php';
 require_once __DIR__ . '/class-sync-import.php';
 require_once __DIR__ . '/class-sync-anchor.php';
 require_once __DIR__ . '/class-sync-urls.php';
@@ -131,6 +132,41 @@ final class AB_MCP_Sync_Engine {
 
 	/** A probe of a published object: callable( string $url ): array{status:int|null,body:string}|int|null, null for wp_remote_get(). Set by tests only. */
 	public static $probe = null;
+
+	/**
+	 * The write side of each kind a run writes (contract A; branch 9): the
+	 * class whose static methods prepare, check, write, read back and put
+	 * back one object of the kind, with the same names for every kind
+	 * (target_of(), precheck(), current(), journal_parts(), write_row(),
+	 * write_part(), restore_part(), …). A kind without one is written by no
+	 * step (writer() null: the step fails before anything is written).
+	 */
+	const WRITERS = array(
+		'post' => 'AB_MCP_Sync_Post_Writer',
+		'term' => 'AB_MCP_Sync_Term_Writer',
+	);
+
+	/**
+	 * The write side of a kind, or null where no step writes the kind.
+	 *
+	 * @param string $kind Kind of the plan (post, term).
+	 * @return string|null The class name.
+	 */
+	public static function writer( $kind ) {
+		$kind = (string) $kind;
+		return isset( self::WRITERS[ $kind ] ) ? self::WRITERS[ $kind ] : null;
+	}
+
+	/**
+	 * The write side of the object of a journal (its kind), the post's for a
+	 * journal of branch 8 that names no other.
+	 *
+	 * @param array $journal Journal.
+	 * @return string|null The class name.
+	 */
+	private static function writer_of( array $journal ) {
+		return self::writer( isset( $journal['object']['kind'] ) ? (string) $journal['object']['kind'] : 'post' );
+	}
 
 	/* --------------------------------------------------------------- next */
 
@@ -592,15 +628,7 @@ final class AB_MCP_Sync_Engine {
 		}
 		// The objects the run creates: a reference to one of them is pending,
 		// not missing (B1); the boundary maps it by the pair its step made.
-		$ctx['pending'] = array(
-			'post' => array(),
-			'term' => array(),
-		);
-		foreach ( $items as $one ) {
-			if ( isset( $one['op'], $one['kind'], $one['staging_ref'] ) && 'create' === $one['op'] && 'post' === $one['kind'] ) {
-				$ctx['pending']['post'][ (int) $one['staging_ref'] ] = true;
-			}
-		}
+		$ctx['pending'] = self::pending( $items );
 		// The findings of the calls before, kept with the cursor (B3).
 		$findings = isset( $result['findings'] ) && is_array( $result['findings'] ) ? $result['findings'] : array();
 		$count    = count( $items );
@@ -640,6 +668,10 @@ final class AB_MCP_Sync_Engine {
 	 */
 	private static function check_item( array $item, array $lines, array $ctx ) {
 		$name = sprintf( '%1$s %2$s of the staging site', $item['kind'], $item['staging_ref'] );
+		$w    = self::writer( $item['kind'] );
+		if ( null === $w ) {
+			return self::finding( $item, sprintf( 'No step of this version writes the kind %s.', $item['kind'] ) );
+		}
 		$line = self::line_of( $item, $lines );
 		if ( is_wp_error( $line ) ) {
 			return self::finding( $item, $line->get_error_message() );
@@ -647,7 +679,7 @@ final class AB_MCP_Sync_Engine {
 		$live_id = null;
 		if ( 'update' === $item['op'] ) {
 			$live_id = (int) $item['live_ref'];
-			$hash    = AB_MCP_Sync_Post_Writer::live_hash( $live_id, $ctx['source'] );
+			$hash    = $w::live_hash( $live_id, $ctx['source'] );
 			if ( null === $hash || ! hash_equals( (string) $item['live_hash'], $hash ) ) {
 				return self::finding( $item, sprintf( 'The %1$s %2$d of this site changed since the plan (or cannot be read whole), so the %3$s is not written over it.', $item['kind'], $live_id, $name ) );
 			}
@@ -661,16 +693,16 @@ final class AB_MCP_Sync_Engine {
 				return self::finding( $item, sprintf( 'The %1$s has a pair here since the plan (pair %2$d), so it is not created anew.', $name, (int) $pair['id'] ) );
 			}
 		}
-		$prepared = AB_MCP_Sync_Post_Writer::target_of( $line, $item, $ctx );
+		$prepared = $w::target_of( $line, $item, $ctx );
 		if ( is_wp_error( $prepared ) ) {
 			return self::finding( $item, $prepared->get_error_message() );
 		}
-		$ok = AB_MCP_Sync_Post_Writer::precheck( $prepared, $live_id, (int) $ctx['now'] );
+		$ok = $w::precheck( $prepared, $live_id, (int) $ctx['now'] );
 		if ( is_wp_error( $ok ) ) {
 			return self::finding( $item, $ok->get_error_message() );
 		}
 		if ( null !== $live_id ) {
-			$ok = self::live_meta_rule( $live_id );
+			$ok = $w::live_rule( $live_id, $ctx['source'] );
 			if ( is_wp_error( $ok ) ) {
 				return self::finding( $item, $ok->get_error_message() );
 			}
@@ -679,29 +711,26 @@ final class AB_MCP_Sync_Engine {
 	}
 
 	/**
-	 * Whether every meta key of the post here is one this version writes
-	 * (a key outside the rule would stay and make the written object differ
-	 * from the target: fail closed).
+	 * The objects a run creates, by the space of their ids: a reference to
+	 * one of them is pending in the check before the first write, not
+	 * missing (B1); the boundary maps it by the pair its step made. Posts in
+	 * the space of posts, terms in the space of terms (branch 9: a new post
+	 * in a new category, a new term under a new parent).
 	 *
-	 * @param int $live_id Post.
-	 * @return true|WP_Error
+	 * @param array[] $items The objects of the plan.
+	 * @return array{post:array<int,true>,term:array<int,true>}
 	 */
-	private static function live_meta_rule( $live_id ) {
-		$current = AB_MCP_Sync_Post_Writer::current( $live_id );
-		if ( is_wp_error( $current ) || null === $current ) {
-			return is_wp_error( $current ) ? $current : true;
-		}
-		foreach ( $current['meta'] as $row ) {
-			if ( ! AB_MCP_Sync_Post_Writer::meta_allowed( $row['key'] ) ) {
-				return AB_MCP_Sync_Post_Writer::locked( 'post:meta_rule', sprintf( 'meta key %s of the post on this site', $row['key'] ) );
+	private static function pending( array $items ) {
+		$pending = array(
+			'post' => array(),
+			'term' => array(),
+		);
+		foreach ( $items as $one ) {
+			if ( isset( $one['op'], $one['kind'], $one['staging_ref'] ) && 'create' === $one['op'] && isset( $pending[ (string) $one['kind'] ] ) ) {
+				$pending[ (string) $one['kind'] ][ (int) $one['staging_ref'] ] = true;
 			}
 		}
-		foreach ( $current['terms'] as $term ) {
-			if ( ! in_array( $term['taxonomy'], AB_MCP_Sync_Post_Writer::TAXONOMIES, true ) ) {
-				return AB_MCP_Sync_Post_Writer::locked( 'post:taxonomy_rule', sprintf( 'taxonomy %s of the post on this site', $term['taxonomy'] ) );
-			}
-		}
-		return true;
+		return $pending;
 	}
 
 	/**
@@ -746,6 +775,10 @@ final class AB_MCP_Sync_Engine {
 		$seq     = (int) $step['seq'];
 		$live_id = 'update' === $item['op'] ? (int) $item['live_ref'] : null;
 		$before  = null;
+		$w       = self::writer( $item['kind'] );
+		if ( null === $w ) {
+			return self::fail_step( $run_id, $seq, 'planned', sprintf( 'no step of this version writes the kind %s', $item['kind'] ) );
+		}
 		if ( null !== $live_id ) {
 			$before = AB_MCP_Sync_Pairs::snapshot( (int) $item['pair_id'] );
 			if ( is_wp_error( $before ) ) {
@@ -787,8 +820,9 @@ final class AB_MCP_Sync_Engine {
 			return $begun;
 		}
 		AB_MCP_Sync_Run::touch( $run_id );
-		// (3) The takeover lock of the object.
-		$guard = AB_MCP_Sync_Guard::begin( $run_id, $seq, null === $live_id ? array() : array( $live_id => $item['subtype'] ) );
+		// (3) The takeover lock of the object (its kind names what it covers).
+		$covers = $w::guard_of( $live_id, (string) $item['subtype'] );
+		$guard  = AB_MCP_Sync_Guard::begin( $run_id, $seq, $covers['posts'], $covers['taxonomies'], array(), $covers['terms'] );
 		if ( is_wp_error( $guard ) ) {
 			return self::fail_step( $run_id, $seq, 'begun', $guard->get_error_message(), $journal );
 		}
@@ -801,27 +835,27 @@ final class AB_MCP_Sync_Engine {
 		if ( is_wp_error( $line ) ) {
 			return self::fail_step( $run_id, $seq, 'begun', $line->get_error_message(), $journal );
 		}
-		$prepared = AB_MCP_Sync_Post_Writer::target_of( $line, $item, $ctx );
+		$prepared = $w::target_of( $line, $item, $ctx );
 		if ( is_wp_error( $prepared ) ) {
 			return self::fail_step( $run_id, $seq, 'begun', $prepared->get_error_message(), $journal );
 		}
-		$ok = AB_MCP_Sync_Post_Writer::precheck( $prepared, $live_id, (int) $ctx['now'] );
+		$ok = $w::precheck( $prepared, $live_id, (int) $ctx['now'] );
 		if ( is_wp_error( $ok ) ) {
 			return self::fail_step( $run_id, $seq, 'begun', $ok->get_error_message(), $journal );
 		}
-		$current = null === $live_id ? null : AB_MCP_Sync_Post_Writer::current( $live_id );
+		$current = null === $live_id ? null : $w::current( $live_id );
 		if ( is_wp_error( $current ) ) {
 			return self::fail_step( $run_id, $seq, 'begun', $current->get_error_message(), $journal );
 		}
 		if ( null !== $live_id ) {
 			if ( null === $current ) {
-				return self::fail_step( $run_id, $seq, 'begun', sprintf( 'The post %d of this site is no longer there; nothing was written.', $live_id ), $journal );
+				return self::fail_step( $run_id, $seq, 'begun', sprintf( 'The %1$s %2$d of this site is no longer there; nothing was written.', $item['kind'], $live_id ), $journal );
 			}
-			$hash = AB_MCP_Sync_Post_Writer::live_hash( $live_id, $ctx['source'] );
+			$hash = $w::live_hash( $live_id, $ctx['source'] );
 			if ( null === $hash || ! hash_equals( (string) $item['live_hash'], $hash ) ) {
-				return self::fail_step( $run_id, $seq, 'begun', sprintf( 'The post %d of this site changed since the plan (or cannot be read whole); nothing was written. Make a new report and plan again.', $live_id ), $journal );
+				return self::fail_step( $run_id, $seq, 'begun', sprintf( 'The %1$s %2$d of this site changed since the plan (or cannot be read whole); nothing was written. Make a new report and plan again.', $item['kind'], $live_id ), $journal );
 			}
-			$ok = self::live_meta_rule( $live_id );
+			$ok = $w::live_rule( $live_id, $ctx['source'] );
 			if ( is_wp_error( $ok ) ) {
 				return self::fail_step( $run_id, $seq, 'begun', $ok->get_error_message(), $journal );
 			}
@@ -854,66 +888,18 @@ final class AB_MCP_Sync_Engine {
 		// ownership write_parts() sets: pre and post, the hashes read right
 		// before and right after a call of the step's own; own, own_after and
 		// own_target where that call changed the part (the ownership rule).
-		$keys  = array_keys( $prepared['meta'] );
-		$taxes = array_keys( $prepared['terms'] );
-		if ( is_array( $current ) ) {
-			foreach ( $current['meta'] as $row ) {
-				$keys[] = $row['key'];
-			}
-			foreach ( $current['terms'] as $term ) {
-				$taxes[] = $term['taxonomy'];
-			}
-		}
-		$keys   = array_values( array_unique( $keys ) );
-		$taxes  = array_values( array_unique( $taxes ) );
-		$hashes = AB_MCP_Sync_Post_Writer::hashes( $current, $keys, $taxes );
-		$parts  = array(
-			array(
-				'part'   => 'row',
-				'way'    => AB_MCP_Sync_Post_Writer::WAY_ROW,
-				'before' => $hashes['row'],
-				'target' => AB_MCP_Sync_Post_Writer::row_hash( $prepared['columns'] ),
-				'state'  => 'planned',
-				'after'  => null,
-				'pre'    => null,
-				'post'   => null,
-				'own'    => false,
-				'own_after'  => null,
-				'own_target' => null,
-			),
-		);
-		foreach ( $keys as $key ) {
-			$values  = isset( $prepared['meta'][ $key ] ) ? $prepared['meta'][ $key ] : array();
-			$stored  = array();
-			foreach ( $values as $value ) {
-				$stored[] = is_array( $value ) ? serialize( $value ) : (string) $value; // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize -- as maybe_serialize() stores an array.
-			}
+		$parts = array();
+		foreach ( $w::journal_parts( $prepared, $current ) as $one ) {
 			$parts[] = array(
-				'part'   => 'meta:' . $key,
-				'way'    => AB_MCP_Sync_Post_Writer::WAY_META,
-				'before' => $hashes[ 'meta:' . $key ],
-				'target' => AB_MCP_Sync_Post_Writer::meta_hash( $stored ),
-				'state'  => 'planned',
-				'after'  => null,
-				'pre'    => null,
-				'post'   => null,
-				'own'    => false,
-				'own_after'  => null,
-				'own_target' => null,
-			);
-		}
-		foreach ( $taxes as $taxonomy ) {
-			$keys    = isset( $prepared['terms'][ $taxonomy ] ) ? AB_MCP_Sync_Post_Writer::target_term_keys( $taxonomy, $prepared['terms'][ $taxonomy ] ) : array();
-			$parts[] = array(
-				'part'   => 'terms:' . $taxonomy,
-				'way'    => AB_MCP_Sync_Post_Writer::WAY_TERMS,
-				'before' => $hashes[ 'terms:' . $taxonomy ],
-				'target' => AB_MCP_Sync_Post_Writer::terms_hash( $keys ),
-				'state'  => 'planned',
-				'after'  => null,
-				'pre'    => null,
-				'post'   => null,
-				'own'    => false,
+				'part'       => (string) $one['part'],
+				'way'        => (string) $one['way'],
+				'before'     => $one['before'],
+				'target'     => (string) $one['target'],
+				'state'      => 'planned',
+				'after'      => null,
+				'pre'        => null,
+				'post'       => null,
+				'own'        => false,
 				'own_after'  => null,
 				'own_target' => null,
 			);
@@ -926,7 +912,7 @@ final class AB_MCP_Sync_Engine {
 			return self::fail_step( $run_id, $seq, 'begun', sprintf( 'the journal of the step could not be written ahead of its first part (%s), so nothing of the object was written', $ahead->get_error_message() ) );
 		}
 		// The writes, part by part, each read back under the lock.
-		$outcome = self::write_parts( $run_id, $seq, $journal, $prepared, $current, $live_id );
+		$outcome = self::write_parts( $run_id, $seq, $journal, $prepared, $current, $live_id, $w );
 		$journal = self::settled( $outcome['journal'] );
 		$live_id = $outcome['live_id'];
 		AB_MCP_Change_Lock::touch();
@@ -960,7 +946,7 @@ final class AB_MCP_Sync_Engine {
 		}
 		// (7) The object as a whole against the target: a deviation like any
 		// other (deviated()), the parts left with their values before.
-		$hash = AB_MCP_Sync_Post_Writer::live_hash( $live_id, $ctx['source'] );
+		$hash = $w::live_hash( $live_id, $ctx['source'] );
 		if ( null === $hash || ! hash_equals( $prepared['target_hash'], $hash ) ) {
 			$outcome = self::deviated( $journal, 0, 'every part read back as written, but the object as a whole does not hash to its target (a filter of this site changed what the rows hold, or the object cannot be read whole)', $live_id, $current );
 			$journal = $outcome['journal'];
@@ -1028,7 +1014,7 @@ final class AB_MCP_Sync_Engine {
 			'created'  => 'create' === $item['op'],
 			'pair_id'  => $pair_id,
 			'status'   => $prepared['status'],
-			'title'    => (string) $prepared['postarr']['post_title'],
+			'title'    => $w::title_of( $prepared ),
 		);
 		$ended = self::end_step( $run_id, $seq, array( 'state' => 'done', 'parts' => $journal, 'result' => $result, 'pair_id' => $pair_id ) );
 		return is_wp_error( $ended ) ? $ended : array( 'next' => $result['message'] . ' Call action=next for the next step.' );
@@ -1097,9 +1083,10 @@ final class AB_MCP_Sync_Engine {
 	 * @param array      $prepared target_of().
 	 * @param array|null $current  current() before (the backup); null for a new object.
 	 * @param int|null   $live_id  Post here, null for a new one.
+	 * @param string     $w        The write side of the kind (writer()).
 	 * @return array{state:string,message:string,journal:array,live_id:int|null}
 	 */
-	private static function write_parts( $run_id, $seq, array $journal, array $prepared, $current, $live_id ) {
+	private static function write_parts( $run_id, $seq, array $journal, array $prepared, $current, $live_id, $w ) {
 		// A checkpoint of the journal; its result is checked at every use:
 		// where it cannot be saved, the boundary stops before any further
 		// mutation (unsaved(); GitHub Codex round 9 on free#137, P2: before,
@@ -1120,15 +1107,15 @@ final class AB_MCP_Sync_Engine {
 				// Every part right before the row call: the row call writes
 				// besides the row (with_row()), so every part is read before it
 				// and read back after it.
-				$pre_all = null === $live_id ? null : AB_MCP_Sync_Post_Writer::current( $live_id );
+				$pre_all = null === $live_id ? null : $w::current( $live_id );
 				if ( is_wp_error( $pre_all ) ) {
 					return self::unread( $journal, $i, $pre_all, $live_id, $backup );
 				}
-				$named = AB_MCP_Sync_Post_Writer::with_row( $prepared, $live_id, $pre_all );
+				$named = $w::with_row( $prepared, $live_id, $pre_all );
 				foreach ( $journal['parts'] as $k => $other ) {
-					$journal['parts'][ $k ] = self::seen_before( $other, $pre_all, $backup );
+					$journal['parts'][ $k ] = self::seen_before( $other, $pre_all, $backup, $w );
 				}
-				$id = AB_MCP_Sync_Post_Writer::write_row( $prepared, $live_id );
+				$id = $w::write_row( $prepared, $live_id );
 				if ( is_wp_error( $id ) ) {
 					$error = $id;
 				} else {
@@ -1139,62 +1126,42 @@ final class AB_MCP_Sync_Engine {
 				// was written is a written row all the same. Every other part
 				// with it: the step's own where the row call was to write it
 				// (with_row()) and it reads so, another hand's otherwise.
-				$post_all = null === $live_id ? null : AB_MCP_Sync_Post_Writer::current( $live_id );
+				$post_all = null === $live_id ? null : $w::current( $live_id );
 				$post_all = is_array( $post_all ) ? $post_all : null;
 				foreach ( $journal['parts'] as $k => $other ) {
 					$expected               = $k === $i ? (string) $other['target'] : ( isset( $named[ $other['part'] ] ) ? (string) $named[ $other['part'] ] : null );
-					$journal['parts'][ $k ] = self::seen_after( $other, $post_all, $expected, $k !== $i );
+					$journal['parts'][ $k ] = self::seen_after( $other, $post_all, $expected, $k !== $i, $w );
 				}
-			} elseif ( 0 === strpos( $name, 'meta:' ) ) {
-				$key  = substr( $name, 5 );
-				$core = isset( $prepared['meta'][ $key ] ) && array() !== $prepared['meta'][ $key ] && in_array( $key, AB_MCP_Sync_Post_Writer::CORE_META, true );
-				if ( $core ) {
-					// A core key with an API of its own (_wp_page_template) was
-					// written with the row, through page_template (decision 17,
-					// B7), and read back with it: no call of its own, so what the
-					// row call made of it is judged here, never written over. Its
-					// removal goes through the meta API.
-					$through_row = true;
-				} else {
-					$values  = isset( $prepared['meta'][ $key ] ) ? $prepared['meta'][ $key ] : array();
-					$pre_all = AB_MCP_Sync_Post_Writer::current( $live_id );
-					if ( is_wp_error( $pre_all ) ) {
-						return self::unread( $journal, $i, $pre_all, $live_id, $backup );
-					}
-					$journal['parts'][ $i ] = self::seen_before( $journal['parts'][ $i ], $pre_all, $backup );
-					$pre_call               = $pre_all;
-					// Written ahead of the call (decision 18; Codex round 7, F1):
-					// a request that ends inside it leaves the part without a read
-					// back, never with the read back of the row before. For the
-					// display of the state reached only: a part never read back
-					// is never put back (decide()).
-					$saved = $save( $journal );
-					if ( true !== $saved ) {
-						return self::unsaved( $journal, $i, $saved, 'before', $live_id, $backup );
-					}
-					$done                   = AB_MCP_Sync_Post_Writer::write_meta( $live_id, $key, $values, is_array( $pre_all ) ? AB_MCP_Sync_Post_Writer::meta_values( $pre_all, $key ) : array() );
-					$error                  = is_wp_error( $done ) ? $done : null;
-					$post_all               = AB_MCP_Sync_Post_Writer::current( $live_id );
-					$journal['parts'][ $i ] = self::seen_after( $journal['parts'][ $i ], is_array( $post_all ) ? $post_all : null, $target, false );
-				}
+			} elseif ( $w::through_row( $prepared, $name ) ) {
+				// A core key with an API of its own (_wp_page_template) was
+				// written with the row, through page_template (decision 17,
+				// B7), and read back with it: no call of its own, so what the
+				// row call made of it is judged here, never written over. Its
+				// removal goes through the meta API.
+				$through_row = true;
 			} else {
-				$taxonomy = substr( $name, 6 );
-				$terms    = isset( $prepared['terms'][ $taxonomy ] ) ? $prepared['terms'][ $taxonomy ] : array();
-				$pre_all  = AB_MCP_Sync_Post_Writer::current( $live_id );
+				// A part with a call of its own: a meta key, the terms of a
+				// taxonomy (the kind writes it, write_part(); the rights at the
+				// object asked right before the call).
+				$pre_all = $w::current( $live_id );
 				if ( is_wp_error( $pre_all ) ) {
 					return self::unread( $journal, $i, $pre_all, $live_id, $backup );
 				}
-				$journal['parts'][ $i ] = self::seen_before( $journal['parts'][ $i ], $pre_all, $backup );
+				$journal['parts'][ $i ] = self::seen_before( $journal['parts'][ $i ], $pre_all, $backup, $w );
 				$pre_call               = $pre_all;
-				// Written ahead of the call, as for the meta (F1).
+				// Written ahead of the call (decision 18; Codex round 7, F1):
+				// a request that ends inside it leaves the part without a read
+				// back, never with the read back of the row before. For the
+				// display of the state reached only: a part never read back
+				// is never put back (decide()).
 				$saved = $save( $journal );
 				if ( true !== $saved ) {
 					return self::unsaved( $journal, $i, $saved, 'before', $live_id, $backup );
 				}
-				$done                   = AB_MCP_Sync_Post_Writer::write_terms( $live_id, $taxonomy, $terms );
+				$done                   = $w::write_part( $live_id, $name, $prepared, is_array( $pre_all ) ? $pre_all : null );
 				$error                  = is_wp_error( $done ) ? $done : null;
-				$post_all               = AB_MCP_Sync_Post_Writer::current( $live_id );
-				$journal['parts'][ $i ] = self::seen_after( $journal['parts'][ $i ], is_array( $post_all ) ? $post_all : null, $target, false );
+				$post_all               = $w::current( $live_id );
+				$journal['parts'][ $i ] = self::seen_after( $journal['parts'][ $i ], is_array( $post_all ) ? $post_all : null, $target, false, $w );
 			}
 			// Whatever this call changed besides its own part (a hook of this
 			// site reacting to the call): a part the step wrote before or has
@@ -1205,7 +1172,7 @@ final class AB_MCP_Sync_Engine {
 			// call reads every part with the row already (with_row()).
 			if ( 'row' !== $name && is_array( $pre_call ) && is_array( $post_all ) ) {
 				foreach ( self::part_names( $pre_call, $post_all ) as $other_name ) {
-					if ( $other_name === $name || ! self::changed( AB_MCP_Sync_Post_Writer::part_hash( $pre_call, $other_name ), AB_MCP_Sync_Post_Writer::part_hash( $post_all, $other_name ) ) ) {
+					if ( $other_name === $name || ! self::changed( $w::part_hash( $pre_call, $other_name ), $w::part_hash( $post_all, $other_name ) ) ) {
 						continue;
 					}
 					foreach ( $journal['parts'] as $k => $other ) {
@@ -1242,7 +1209,7 @@ final class AB_MCP_Sync_Engine {
 				if ( ! empty( $other['foreign'] ) ) {
 					$journal['parts'][ $k ]['note'] = self::noted( $other, 'Not provably the step\'s own.' );
 					$as_target = isset( $other['post'] ) && null !== $other['post'] && hash_equals( (string) $other['target'], (string) $other['post'] );
-					return self::deviated( $journal, $k, sprintf( 'another hand changed the part %1$s within the step (a hook of this site%2$s)%3$s', (string) $other['part'], AB_MCP_Sync_Post_Writer::WAY_TERMS === $other['way'] ? ', or a writer on a way the lock does not refuse' : '', $as_target ? ', though the part reads as its target now' : '' ), $live_id, $backup );
+					return self::deviated( $journal, $k, sprintf( 'another hand changed the part %1$s within the step (a hook of this site%2$s)%3$s', (string) $other['part'], 'not_refusable' === $other['way'] ? ', or a writer on a way the lock does not refuse' : '', $as_target ? ', though the part reads as its target now' : '' ), $live_id, $backup );
 				}
 			}
 			if ( null !== $post && hash_equals( $target, $post ) ) {
@@ -1304,7 +1271,8 @@ final class AB_MCP_Sync_Engine {
 	 */
 	private static function deviated( array $journal, $i, $why, $live_id, $backup ) {
 		$name  = (string) $journal['parts'][ $i ]['part'];
-		$state = null === $live_id ? null : AB_MCP_Sync_Post_Writer::current( $live_id );
+		$w     = self::writer_of( $journal );
+		$state = null === $live_id ? null : $w::current( $live_id );
 		$state = is_array( $state ) ? $state : null;
 		$journal['object']['deviated'] = array(
 			'part' => $name,
@@ -1313,14 +1281,14 @@ final class AB_MCP_Sync_Engine {
 		$left = 0;
 		foreach ( $journal['parts'] as $k => $part ) {
 			$journal['parts'][ $k ]['deviated'] = true;
-			$now = null === $state ? null : AB_MCP_Sync_Post_Writer::part_hash( $state, (string) $part['part'] );
-			$was = AB_MCP_Sync_Post_Writer::part_hash( is_array( $backup ) ? $backup : null, (string) $part['part'] );
+			$now = null === $state ? null : $w::part_hash( $state, (string) $part['part'] );
+			$was = $w::part_hash( is_array( $backup ) ? $backup : null, (string) $part['part'] );
 			if ( ( null === $now && null === $was ) || ( null !== $now && null !== $was && hash_equals( $was, $now ) ) ) {
 				continue;
 			}
 			$journal['parts'][ $k ]['state']        = 'left';
-			$journal['parts'][ $k ]['value_before'] = AB_MCP_Sync_Post_Writer::before_value( (string) $part['part'], $backup, $state, $live_id );
-			$journal['parts'][ $k ]['value_rules']  = AB_MCP_Sync_Post_Writer::VALUE_RULES;
+			$journal['parts'][ $k ]['value_before'] = $w::before_value( (string) $part['part'], $backup, $state, $live_id );
+			$journal['parts'][ $k ]['value_rules']  = $w::VALUE_RULES;
 			$journal['parts'][ $k ]['note']         = self::noted( $journal['parts'][ $k ], 'Left as it is: the object deviated within the step, so nothing of it is put back by itself; check it by hand, its value before stands in value_before.' );
 			++$left;
 		}
@@ -1348,12 +1316,13 @@ final class AB_MCP_Sync_Engine {
 	 * @param array      $part   Part of the journal.
 	 * @param array|null $state  current() right before the call; null for no post.
 	 * @param array|null $backup current() of the backup; null for a new object.
+	 * @param string     $w      The write side of the kind (writer()).
 	 * @return array The part.
 	 */
-	private static function seen_before( array $part, $state, $backup ) {
+	private static function seen_before( array $part, $state, $backup, $w ) {
 		$name         = (string) $part['part'];
-		$pre          = AB_MCP_Sync_Post_Writer::part_hash( is_array( $state ) ? $state : null, $name );
-		$was          = AB_MCP_Sync_Post_Writer::part_hash( $backup, $name );
+		$pre          = $w::part_hash( is_array( $state ) ? $state : null, $name );
+		$was          = $w::part_hash( $backup, $name );
 		$part['pre']  = $pre;
 		$part['post'] = null;
 		$holds_own    = ! empty( $part['own'] ) && isset( $part['own_after'] ) && null !== $part['own_after'] && null !== $pre && hash_equals( (string) $part['own_after'], $pre );
@@ -1377,9 +1346,10 @@ final class AB_MCP_Sync_Engine {
 	 * @param array|null  $state    current() read back after the call; null where there is no post or it could not be read.
 	 * @param string|null $expected What the call was to write for this part: the target for the part's own call, what with_row() names for the row call, null where the row call was not to write it.
 	 * @param bool        $by_row   Whether the call was the row call and this part another one.
+	 * @param string      $w        The write side of the kind (writer()).
 	 * @return array The part.
 	 */
-	private static function seen_after( array $part, $state, $expected, $by_row ) {
+	private static function seen_after( array $part, $state, $expected, $by_row, $w ) {
 		$name = (string) $part['part'];
 		if ( ! is_array( $state ) ) {
 			// Not read back (the read failed, or the post is gone): never the
@@ -1390,7 +1360,7 @@ final class AB_MCP_Sync_Engine {
 			$part['unread'] = true;
 			return $part;
 		}
-		$post          = AB_MCP_Sync_Post_Writer::part_hash( $state, $name );
+		$post          = $w::part_hash( $state, $name );
 		$part['post']  = $post;
 		$part['after'] = $post;
 		if ( ! self::changed( isset( $part['pre'] ) ? $part['pre'] : null, $post ) ) {
@@ -1639,13 +1609,14 @@ final class AB_MCP_Sync_Engine {
 				);
 			}
 		}
-		$seen    = AB_MCP_Sync_Post_Writer::current( $live_id );
+		$w       = self::writer_of( $journal );
+		$seen    = $w::current( $live_id );
 		$seen    = is_array( $seen ) ? $seen : null;
 		$stopped = null;
 		foreach ( $order as $i ) {
 			$name    = (string) $parts[ $i ]['part'];
-			$now     = null === $seen ? null : AB_MCP_Sync_Post_Writer::part_hash( $seen, $name );
-			$decided = self::decide( $parts[ $i ], $now, (string) AB_MCP_Sync_Post_Writer::part_hash( $backup, $name ) );
+			$now     = null === $seen ? null : $w::part_hash( $seen, $name );
+			$decided = self::decide( $parts[ $i ], $now, (string) $w::part_hash( $backup, $name ) );
 			if ( null !== $stopped ) {
 				// Putting a part back changed something besides it (a side
 				// effect of the core, a hook of this site): the object deviated
@@ -1667,7 +1638,7 @@ final class AB_MCP_Sync_Engine {
 				// owner of the run may have lost the right to this post, key or
 				// taxonomy since the run wrote. Without it the part is left with
 				// its value before, fail closed; the run goes on.
-				$may = AB_MCP_Sync_Post_Writer::restore_right( $name, $live_id, $backup, $seen );
+				$may = $w::restore_right( $name, $live_id, $backup, is_array( $seen ) ? $seen : array() );
 				if ( true !== $may ) {
 					$decided = array(
 						'state' => 'left',
@@ -1681,9 +1652,9 @@ final class AB_MCP_Sync_Engine {
 					'note'  => $decided['why'],
 				);
 			} else {
-				$one = self::restore_part( $parts[ $i ], $live_id, $backup, $decided['hash'] );
+				$one = self::restore_part( $parts[ $i ], $live_id, $backup, $decided['hash'], $w );
 				AB_MCP_Change_Lock::touch();
-				$again = AB_MCP_Sync_Post_Writer::current( $live_id );
+				$again = $w::current( $live_id );
 				$again = is_array( $again ) ? $again : null;
 				// Whatever putting this part back changed besides it, a part of
 				// the plan or not (a side effect of the core such as the default
@@ -1697,7 +1668,7 @@ final class AB_MCP_Sync_Engine {
 				// and is gone; GitHub Codex round 2 of branch 8, CI.)
 				if ( null === $stopped && is_array( $seen ) && is_array( $again ) ) {
 					foreach ( self::part_names( $seen, $again ) as $other_name ) {
-						if ( $other_name !== $name && self::changed( AB_MCP_Sync_Post_Writer::part_hash( $seen, $other_name ), AB_MCP_Sync_Post_Writer::part_hash( $again, $other_name ) ) ) {
+						if ( $other_name !== $name && self::changed( $w::part_hash( $seen, $other_name ), $w::part_hash( $again, $other_name ) ) ) {
 							$stopped = sprintf( 'putting the part %1$s back changed the part %2$s besides it (a side effect of the core or a hook of this site)', $name, $other_name );
 							break;
 						}
@@ -1706,19 +1677,19 @@ final class AB_MCP_Sync_Engine {
 				$seen = $again;
 			}
 			if ( 'left' === $one['state'] ) {
-				$one['value_before'] = AB_MCP_Sync_Post_Writer::before_value( $name, $backup, $seen, $live_id );
-				$one['value_rules']  = AB_MCP_Sync_Post_Writer::VALUE_RULES;
+				$one['value_before'] = $w::before_value( $name, $backup, $seen, $live_id );
+				$one['value_rules']  = $w::VALUE_RULES;
 			}
 			$out[ $i ] = $one;
 		}
 		// The check after: every part counted as back reads as the backup now.
-		$again    = AB_MCP_Sync_Post_Writer::current( $live_id );
+		$again    = $w::current( $live_id );
 		$all_back = true;
 		foreach ( $parts as $i => $part ) {
 			$name = is_string( $part['part'] ) ? $part['part'] : '';
 			if ( in_array( $out[ $i ]['state'], array( 'restored', 'unchanged' ), true ) ) {
-				$now = is_array( $again ) ? AB_MCP_Sync_Post_Writer::part_hash( $again, $name ) : null;
-				if ( null === $now || ! hash_equals( (string) AB_MCP_Sync_Post_Writer::part_hash( $backup, $name ), $now ) ) {
+				$now = is_array( $again ) ? $w::part_hash( $again, $name ) : null;
+				if ( null === $now || ! hash_equals( (string) $w::part_hash( $backup, $name ), $now ) ) {
 					$out[ $i ] = array(
 						'state' => 'unclear',
 						'note'  => sprintf( 'The part %1$s reads other than the backup after the parts went back%2$s: a side effect of the core or a hook of this site changed it after it was %3$s. Check the object in wp-admin.', $name, null === $now ? ' (it could not be read)' : '', 'restored' === $out[ $i ]['state'] ? 'put back' : 'read as the backup' ),
@@ -1750,19 +1721,11 @@ final class AB_MCP_Sync_Engine {
 	 * @param int    $live_id Post.
 	 * @param array  $backup  The backed-up state (current() before the step).
 	 * @param string $hash    The hash the part has to hold as it is put back (decide()).
+	 * @param string $w       The write side of the kind (writer()).
 	 * @return array{state:string,note?:string}
 	 */
-	private static function restore_part( array $part, $live_id, array $backup, $hash ) {
-		$name = (string) $part['part'];
-		if ( 'row' === $name ) {
-			$put = AB_MCP_Sync_Post_Writer::restore_row( $live_id, $backup['row'], AB_MCP_Sync_Post_Writer::row_hash( $backup['row'] ), (string) $hash, AB_MCP_Sync_Run::now() );
-		} elseif ( 0 === strpos( $name, 'meta:' ) ) {
-			$key = substr( $name, 5 );
-			$put = AB_MCP_Sync_Post_Writer::restore_meta( $live_id, $key, AB_MCP_Sync_Post_Writer::meta_values( $backup, $key ), (string) $hash );
-		} else {
-			$taxonomy = substr( $name, 6 );
-			$put      = AB_MCP_Sync_Post_Writer::restore_terms( $live_id, $taxonomy, $backup, (string) $hash );
-		}
+	private static function restore_part( array $part, $live_id, array $backup, $hash, $w ) {
+		$put = $w::restore_part( (string) $part['part'], $live_id, $backup, (string) $hash, AB_MCP_Sync_Run::now() );
 		if ( is_wp_error( $put ) ) {
 			return array(
 				'state' => 'unclear',
@@ -1789,10 +1752,13 @@ final class AB_MCP_Sync_Engine {
 		if ( is_wp_error( $steps ) ) {
 			return $steps;
 		}
+		// The written objects with their kind: a post by its id, a term by
+		// term:<id> (two id spaces; branch 9).
 		$ids = array();
 		foreach ( $steps as $one ) {
 			if ( 'write' === $one['op'] && 'done' === $one['state'] && is_array( $one['result'] ) && isset( $one['result']['live_ref'] ) ) {
-				$ids[] = (int) $one['result']['live_ref'];
+				$kind  = is_array( $one['parts'] ) && isset( $one['parts']['object']['kind'] ) ? (string) $one['parts']['object']['kind'] : 'post';
+				$ids[] = array( null === self::writer( $kind ) ? 'post' : $kind, (int) $one['result']['live_ref'] );
 			}
 		}
 		// In parts, within the work of the call, the cursor kept in the result
@@ -1815,9 +1781,11 @@ final class AB_MCP_Sync_Engine {
 				AB_MCP_Sync_Run::touch( (int) $run['run_id'] );
 				return array( 'next' => sprintf( 'The caches of %1$d of %2$d written object(s) were emptied within the work of this call; call action=next again to go on with them.', $i, $count ) );
 			}
-			$result['objects'][ (string) $ids[ $i ] ] = AB_MCP_Sync_Post_Writer::post_write( $ids[ $i ] );
+			list( $kind, $id ) = $ids[ $i ];
+			$w                 = self::writer( $kind );
+			$result['objects'][ 'post' === $kind ? (string) $id : $kind . ':' . $id ] = $w::post_write( $id );
 		}
-		foreach ( AB_MCP_Sync_Post_Writer::TAXONOMIES as $taxonomy ) {
+		foreach ( array_unique( array_merge( AB_MCP_Sync_Post_Writer::TAXONOMIES, AB_MCP_Sync_Term_Writer::TAXONOMIES ) ) as $taxonomy ) {
 			clean_term_cache( array(), $taxonomy, true );
 		}
 		unset( $result['cursor'] );
@@ -1895,7 +1863,8 @@ final class AB_MCP_Sync_Engine {
 				++$result['written'];
 				$live_id = isset( $one['result']['live_ref'] ) ? (int) $one['result']['live_ref'] : 0;
 				$target  = isset( $one['parts']['object']['target'] ) ? (string) $one['parts']['object']['target'] : '';
-				$hash    = $live_id > 0 ? AB_MCP_Sync_Post_Writer::live_hash( $live_id, $ctx['source'] ) : null;
+				$w       = self::writer( isset( $one['parts']['object']['kind'] ) ? (string) $one['parts']['object']['kind'] : 'post' );
+				$hash    = $live_id > 0 && null !== $w ? $w::live_hash( $live_id, $ctx['source'] ) : null;
 				if ( null === $hash || ! hash_equals( $target, $hash ) ) {
 					$result['findings'][] = array(
 						'seq'     => (int) $one['seq'],
@@ -2137,7 +2106,12 @@ final class AB_MCP_Sync_Engine {
 		if ( $live_id < 1 ) {
 			return self::fail_step( $run_id, $seq, 'begun', 'The journal names no object on this site; nothing is put back.' );
 		}
-		$guard = AB_MCP_Sync_Guard::begin( $run_id, $seq, array( $live_id => isset( $object['identity']['post_type'] ) ? (string) $object['identity']['post_type'] : 'post' ) );
+		$w = self::writer_of( $journal );
+		if ( null === $w ) {
+			return self::fail_step( $run_id, $seq, 'begun', sprintf( 'No step of this version writes the kind %s; nothing is put back.', (string) $object['kind'] ) );
+		}
+		$covers = $w::guard_of( $live_id, $w::subtype_of( $object ) );
+		$guard  = AB_MCP_Sync_Guard::begin( $run_id, $seq, $covers['posts'], $covers['taxonomies'], array(), $covers['terms'] );
 		if ( is_wp_error( $guard ) ) {
 			return self::fail_step( $run_id, $seq, 'begun', $guard->get_error_message() );
 		}
@@ -2171,7 +2145,7 @@ final class AB_MCP_Sync_Engine {
 			$outcomes[] = array( 'part' => $part['part'] ) + $put['parts'][ $i ];
 		}
 		$all_back = $put['all_back'];
-		AB_MCP_Sync_Post_Writer::post_write( $live_id );
+		$w::post_write( $live_id );
 		// The pair: back to its snapshot where everything went back; unclear otherwise.
 		$pair_note = '';
 		if ( null !== $pair_id ) {
@@ -2284,7 +2258,8 @@ final class AB_MCP_Sync_Engine {
 	 * @return array|WP_Error
 	 */
 	private static function pair_for_new( array $run, array $item, $live_id, array $prepared, $state ) {
-		$hash = AB_MCP_Sync_Post_Writer::live_hash( $live_id, self::context( $run )['source'] );
+		$w    = self::writer( $item['kind'] );
+		$hash = null === $w ? null : $w::live_hash( $live_id, self::context( $run )['source'] );
 		$made = AB_MCP_Sync_Pairs::create(
 			array(
 				'source_id'    => (string) $run['source_id'],
