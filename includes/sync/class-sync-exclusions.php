@@ -35,9 +35,11 @@ final class AB_MCP_Sync_Exclusions {
 	 * files, the uninstall hooks of plugins, the database version, whether
 	 * the site is fresh, the end of the term splitting, the next check of
 	 * the administrator's address, the mails about failed updates, the
-	 * plugins the core deactivated).
+	 * plugins the core deactivated, the cache of the hierarchy of the
+	 * categories, which _get_term_hierarchy() writes and clean_term_cache()
+	 * deletes as a term changes; branch 9).
 	 */
-	const OPTIONS = array( 'siteurl', 'home', 'blog_public', 'admin_email', 'cron', 'rewrite_rules', 'recently_activated', 'recently_edited', 'uninstall_plugins', 'db_version', 'initial_db_version', 'fresh_site', 'upload_path', 'upload_url_path', 'finished_splitting_shared_terms', 'admin_email_lifespan', 'auto_plugin_theme_update_emails', 'wp_force_deactivated_plugins' );
+	const OPTIONS = array( 'siteurl', 'home', 'blog_public', 'admin_email', 'cron', 'rewrite_rules', 'recently_activated', 'recently_edited', 'uninstall_plugins', 'db_version', 'initial_db_version', 'fresh_site', 'upload_path', 'upload_url_path', 'finished_splitting_shared_terms', 'admin_email_lifespan', 'auto_plugin_theme_update_emails', 'wp_force_deactivated_plugins', 'category_children' );
 
 	/**
 	 * Option names that begin so: transients (B5) and the options of this

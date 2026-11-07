@@ -327,6 +327,7 @@ final class SyncKindsTest extends TestCase {
 			'option:admin_email_lifespan'      => array( 'option', 'admin_email_lifespan' ),
 			'option:auto_plugin_theme_update_emails' => array( 'option', 'auto_plugin_theme_update_emails' ),
 			'option:wp_force_deactivated_plugins' => array( 'option', 'wp_force_deactivated_plugins' ),
+			'option:category_children'         => array( 'option', 'category_children' ),
 			'option_prefix:_transient_'        => array( 'option', '_transient_timeout_feed_x' ),
 			'option_prefix:_site_transient_'   => array( 'option', '_site_transient_update_plugins' ),
 			'option_prefix:ab_mcp_'            => array( 'option', 'ab_mcp_staging_db_version' ),

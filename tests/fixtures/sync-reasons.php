@@ -573,6 +573,11 @@ return array(
 			'core' => array( array( 'wp-admin/includes/schema.php', 559, "'wp_force_deactivated_plugins'" ), array( 'wp-admin/includes/update-core.php', 2174, "update_option( 'wp_force_deactivated_plugins', \$deactivated_plugins, false );" ) ),
 			'plan' => 'Entscheid 27',
 		),
+		'option:category_children'               => array(
+			'why'  => 'The hierarchy of the categories as a cache of the core: _get_term_hierarchy() writes it when it is asked and finds none, clean_term_cache() deletes it as a category changes (also when a run writes one, branch 9); never content of the site.',
+			'core' => array( array( 'wp-includes/taxonomy.php', 3990, 'update_option( "{$taxonomy}_children", $children );' ), array( 'wp-includes/taxonomy.php', 3782, 'delete_option( "{$taxonomy}_children" );' ) ),
+			'plan' => 'Entscheid 21 (Caches erlaubt und aus dem Vergleich ausgenommen); Entscheid 11',
+		),
 		'option_prefix:_transient_'              => array(
 			'why'  => 'Transients are caches (B5).',
 			'core' => array( array( 'wp-includes/option.php', 1545, "'_transient_' . \$transient;" ) ),
