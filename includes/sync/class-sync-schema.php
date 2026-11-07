@@ -456,8 +456,17 @@ final class AB_MCP_Sync_Schema {
 				$qualified[ $id ] = (int) $row['forward_closed_at'];
 			}
 		}
-		// The last KEEP_LAST qualified closes, by the time they closed.
-		arsort( $qualified, SORT_NUMERIC );
+		// The last KEEP_LAST qualified closes, by the time they closed, the
+		// younger run first where two closed in the same second (the rows come
+		// by run_id ascending, and arsort() kept the older one first; GitHub
+		// Codex round 3 on free#137, P2).
+		uksort(
+			$qualified,
+			static function ( $a, $b ) use ( $qualified ) {
+				$by_time = $qualified[ $b ] <=> $qualified[ $a ];
+				return 0 !== $by_time ? $by_time : $b <=> $a;
+			}
+		);
 		$n = 0;
 		foreach ( $qualified as $id => $at ) {
 			++$n;

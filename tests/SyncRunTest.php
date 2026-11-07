@@ -287,6 +287,7 @@ final class SyncRunTest extends TestCase {
 		AB_MCP_Sync_Guard::disarm();
 		AB_MCP_Sync_Guard::$now       = null;
 		AB_MCP_Sync_Resources::$probe = null;
+		AB_MCP_Sync_Resources::$time  = null;
 		AB_MCP_Sync_Run::$clock       = null;
 		$GLOBALS['ab_test_multisite'] = false;
 	}
@@ -1134,6 +1135,78 @@ final class SyncRunTest extends TestCase {
 			self::assertSame( 'boom', $e->getMessage() );
 		}
 		self::assertSame( array( 'START TRANSACTION', 'ROLLBACK' ), $marks( $db->queries ) );
+	}
+
+	public function testTheTimeOfACallIsRaisedWhereItTakesAndTheWorkIsDerivedFromTheLimitItHas(): void {
+		// GitHub Codex round 3 on free#137 (P2): measure() asked set_time_limit()
+		// for the limit it had, and no call raised it, while the check and the
+		// verification worked 50 s and saved their cursor after that: on a host
+		// with 30 s a call died before the cursor, and a write could end halfway.
+		// Now every executing call asks for WANTED_TIME and reads the limit it
+		// has after that (time_for_call()); the work of the call is half the
+		// limit, never more than WORK_MAX (50 s), at least 1 s (budget()); a
+		// limit under MIN_TIME (30 s) carries no write step (carries_write()).
+		self::assertSame( AB_MCP_Sync_Resources::WORK_MAX + AB_MCP_Sync_Resources::WORK_RESERVE, AB_MCP_Sync_Engine::BUDGET, 'One source of the numbers.' );
+		self::assertSame( AB_MCP_Sync_Resources::WORK_RESERVE, AB_MCP_Sync_Engine::RESERVE );
+		self::assertSame( 120, AB_MCP_Sync_Resources::WANTED_TIME );
+		// No limit: the whole work, writes.
+		self::assertSame( array( 'limit' => 0, 'before' => 0, 'raised' => false, 'budget' => 50, 'writes' => true ), AB_MCP_Sync_Resources::derived( 0, 0 ) );
+		// 30 s, raised to 120: the whole work, writes.
+		self::assertSame( array( 'limit' => 120, 'before' => 30, 'raised' => true, 'budget' => 50, 'writes' => true ), AB_MCP_Sync_Resources::derived( 30, 120 ) );
+		// 30 s, not raised: half the limit as work, a write still carried (MIN_TIME).
+		self::assertSame( array( 'limit' => 30, 'before' => 30, 'raised' => false, 'budget' => 15, 'writes' => true ), AB_MCP_Sync_Resources::derived( 30, 30 ) );
+		// Too short: reads go on with a small work, no write.
+		self::assertSame( array( 'limit' => 20, 'before' => 20, 'raised' => false, 'budget' => 10, 'writes' => false ), AB_MCP_Sync_Resources::derived( 20, 20 ) );
+		self::assertSame( 1, AB_MCP_Sync_Resources::derived( 1, 1 )['budget'], 'At least one second: a call does at least one unit.' );
+		self::assertSame( 50, AB_MCP_Sync_Resources::budget( 0 ) );
+		self::assertSame( 49, AB_MCP_Sync_Resources::budget( 99 ), 'Half the limit.' );
+		self::assertSame( 50, AB_MCP_Sync_Resources::budget( 100 ) );
+		self::assertSame( 50, AB_MCP_Sync_Resources::budget( 1000 ), 'Never more than WORK_MAX.' );
+		self::assertFalse( AB_MCP_Sync_Resources::carries_write( 29 ) );
+		self::assertTrue( AB_MCP_Sync_Resources::carries_write( 30 ) );
+		self::assertTrue( AB_MCP_Sync_Resources::carries_write( 0 ) );
+		// The raise itself, on this PHP: a limit of 30 s goes to WANTED_TIME; none stays none.
+		$saved = (string) ini_get( 'max_execution_time' );
+		try {
+			ini_set( 'max_execution_time', '30' );
+			$pair = AB_MCP_Sync_Resources::raise();
+			self::assertSame( array( 'before' => 30, 'after' => 120 ), $pair );
+			self::assertSame( 120, (int) ini_get( 'max_execution_time' ), 'The request has the raised limit.' );
+			AB_MCP_Sync_Resources::$time = null;
+			self::assertSame( array( 'limit' => 120, 'before' => 120, 'raised' => false, 'budget' => 50, 'writes' => true ), AB_MCP_Sync_Resources::time_for_call(), 'Raised already: nothing to raise.' );
+			set_time_limit( 0 );
+			ini_set( 'max_execution_time', '0' );
+			self::assertSame( array( 'before' => 0, 'after' => 0 ), AB_MCP_Sync_Resources::raise() );
+		} finally {
+			set_time_limit( (int) $saved );
+			ini_set( 'max_execution_time', $saved );
+		}
+		// What a test injects stands in for the request.
+		AB_MCP_Sync_Resources::$time = static fn(): array => array( 'before' => 20, 'after' => 20 );
+		self::assertFalse( AB_MCP_Sync_Resources::time_for_call()['writes'] );
+		AB_MCP_Sync_Resources::$time = null;
+	}
+
+	public function testTheRetentionBreaksATieOfTheSameCloseByTheYoungerRun(): void {
+		// GitHub Codex round 3 on free#137 (P2): two qualified closes in the same
+		// second tie on forward_closed_at; the rows come by run_id ascending and
+		// arsort() kept the older one first, so the last three were 1, 3, 4 and
+		// the backups of run 2 went. The younger run comes first on a tie.
+		$db              = new SyncRunRowsWpdb();
+		$GLOBALS['wpdb'] = $db;
+		update_option( AB_MCP_Sync_Schema::OPTION, (string) AB_MCP_Sync_Schema::VERSION );
+		AB_MCP_Sync_Schema::forget();
+		$db->rows = array();
+		foreach ( array( 1 => 100, 2 => 100, 3 => 200, 4 => 300 ) as $id => $closed ) {
+			// Free: the period of a qualified close is the close itself, reached.
+			$db->rows[] = array( 'run_id' => $id, 'type' => 'push', 'state' => 'closed_done', 'closed' => $closed, 'forward_closed_at' => $closed, 'keep_until' => $closed, 'plan' => null );
+		}
+		$kept = AB_MCP_Sync_Schema::backup_runs( 1000 );
+		self::assertIsArray( $kept );
+		ksort( $kept );
+		self::assertSame( array( 2, 3, 4 ), array_keys( $kept ), 'The last three: on the tie of 100, run 2 before run 1.' );
+		$rows = AB_MCP_Sync_Schema::backup_rows( 1000 );
+		self::assertSame( array( 1 => false, 2 => true, 3 => true, 4 => true ), $rows );
 	}
 
 	/** A post of a few rows in the fake $wpdb, with one category. */

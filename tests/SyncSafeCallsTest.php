@@ -287,6 +287,8 @@ final class SyncSafeCallsTest extends TestCase {
 			'AB_MCP_Protected_Store::bind' => array( 1, 'bind_package(): the packages of objects bound to the run, kept while it is not closed.' ),
 		),
 		'class-sync-revert.php' => array(
+			'AB_MCP_Change_Lock::release'       => array( 1, 'begin(): the lock of the boundary given back after the way back of the same run began, or was refused (decision 18; GitHub Codex round 3 on free#137).' ),
+			'AB_MCP_Change_Lock::take'          => array( 1, 'begin(): the lock of the boundary taken before the way back of the same run begins, so no write step runs beside it (decision 18; GitHub Codex round 3 on free#137).' ),
 			'AB_MCP_Protected_Store::under_lock' => array( 1, 'begin(): a way back for a closed run is made under the lock of the store, against the clean-up (decision 20, rule 4; A6).' ),
 		),
 	);

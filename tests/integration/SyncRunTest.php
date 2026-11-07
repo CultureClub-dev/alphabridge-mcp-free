@@ -124,7 +124,9 @@ final class SyncRunTest extends TestCase {
 		AB_MCP_Sync_Engine::$clock    = null;
 		AB_MCP_Sync_Engine::$probe    = null;
 		AB_MCP_Sync_Resources::$probe = null;
+		AB_MCP_Sync_Resources::$time  = null;
 		AB_MCP_Sync_Report::$page     = null;
+		delete_option( \AB_MCP_Change_Lock::OPTION );
 		remove_all_filters( 'wp_insert_post_data' );
 		remove_all_filters( 'sanitize_post_meta_note' );
 		remove_all_filters( 'auth_post_meta_note' );
@@ -905,6 +907,150 @@ final class SyncRunTest extends TestCase {
 		self::assertCount( 2, $begun['steps'] );
 		self::assertSame( 'closed_reverted', self::revert_all( (int) $begun['run_id'] )['state'] );
 		self::assertSame( 'Write to us.', self::row_a( (int) $a['contact'] )['post_content'] );
+	}
+
+	public function testTheWayBackOfARunDoesNotBeginBesideAStepBeingWrittenNorOnAPlanTheRunHasLeftBehind(): void {
+		// GitHub Codex round 3 on free#137 (P1): between plan() and the
+		// transaction of begin() a concurrent next could begin a write step; the
+		// run still open, the transition succeeded, the step was marked unclear
+		// though the plan did not take it back, and the writer's journal
+		// updates failed. Now begin() takes the lock of the write boundary
+		// first (a step being written holds it: refused, call again), finds a
+		// step begun under the lock (its request did not answer: refused, a
+		// status call settles the run), and checks the plan confirmed against
+		// the run as it is under the lock (a step wrote in between: refused,
+		// plan again). In each case the run is as it was.
+		self::pair();
+		$a = self::pages_on_a( array( 'contact' => 'Write to us.', 'about' => 'About us.' ) );
+		$b = self::pages_on_b( array( 'contact' => 'Write to us.', 'about' => 'About us.' ) );
+		self::paired( self::staged() );
+		self::change_on_b( $b['contact'], 'contact', 'Write to us on staging.' );
+		self::change_on_b( $b['about'], 'about', 'About us, on staging.' );
+		$planned = self::planned( array( 'contact', 'about' ) );
+		$run     = self::begun( $planned['args'] );
+		$run_id  = (int) $run['run_id'];
+		self::assertSame( 'done', self::next( $run_id )['step']['state'], 'The check.' );
+		self::assertSame( 'done', self::next( $run_id )['step']['state'], 'The first page.' );
+		$third = null;
+		foreach ( AB_MCP_Sync_Run::steps( $run_id ) as $step ) {
+			if ( 'write' === $step['op'] && 'planned' === $step['state'] ) {
+				$third = (int) $step['seq'];
+			}
+		}
+		self::assertNotNull( $third, 'The second page is still planned.' );
+		$args  = array( 'action' => 'plan', 'run_id' => $run_id );
+		$begin = new \ReflectionMethod( \AB_MCP_Sync_Revert::class, 'begin' );
+		$unchanged = static function ( string $when ) use ( $run_id, $third ): void {
+			$run = AB_MCP_Sync_Run::get( $run_id );
+			self::assertSame( 'open', $run['state'], $when );
+			foreach ( AB_MCP_Sync_Run::steps( $run_id ) as $step ) {
+				self::assertNotSame( 'revert', $step['op'], $when . ': no step of the way back.' );
+				self::assertNotSame( 'unclear', $step['state'], $when . ': nothing marked unclear.' );
+				self::assertNotSame( 'skipped', $step['state'], $when . ': nothing skipped.' );
+			}
+		};
+		// 1. The plan made; then another request begins the write step and
+		// holds the lock of the boundary: refused as busy.
+		$plan = \AB_MCP_Sync_Revert::plan( $args );
+		self::assertIsArray( $plan, is_wp_error( $plan ) ? $plan->get_error_message() : '' );
+		self::assertCount( 1, $plan['items'] );
+		self::assertTrue( AB_MCP_Sync_Run::update_step( $run_id, $third, array( 'state' => 'begun' ), 'planned' ) );
+		update_option( \AB_MCP_Change_Lock::OPTION, time() );
+		self::assertTrue( AB_MCP_Sync_Run::lock_fresh() );
+		$refused = $begin->invoke( null, $plan, $args );
+		self::assertStringContainsString( 'the lock of the write boundary is held', self::refused( $refused, 'ab_mcp_sync_run_busy' ) );
+		self::assertSame( 'begun', AB_MCP_Sync_Run::step( $run_id, $third )['state'], 'The step being written is left to its writer.' );
+		$unchanged( 'busy' );
+		// 2. The lock given back, the step still begun (its request did not
+		// answer): refused; a status call settles the run, no way back is
+		// taken for the plan of an open run.
+		delete_option( \AB_MCP_Change_Lock::OPTION );
+		$refused = $begin->invoke( null, $plan, $args );
+		self::assertStringContainsString( 'which settles it', self::refused( $refused, 'ab_mcp_sync_run_begun' ) );
+		self::assertSame( 'begun', AB_MCP_Sync_Run::step( $run_id, $third )['state'] );
+		$unchanged( 'begun' );
+		self::assertTrue( AB_MCP_Sync_Run::update_step( $run_id, $third, array( 'state' => 'planned' ), 'begun' ) );
+		// 3. The plan made; then the write step runs to its end: the plan
+		// confirmed is not the run as it is, refused; planned anew, the way
+		// back takes both steps back.
+		$plan = \AB_MCP_Sync_Revert::plan( $args );
+		self::assertIsArray( $plan );
+		self::assertSame( 'done', self::next( $run_id )['step']['state'], 'The second page, written in between.' );
+		self::assertSame( 'About us, on staging.', self::row_a( (int) $a['about'] )['post_content'] );
+		$refused = $begin->invoke( null, $plan, $args );
+		self::assertStringContainsString( 'the run changed while it was planned', self::refused( $refused, 'ab_mcp_sync_revert_changed' ) );
+		$unchanged( 'changed' );
+		self::assertFalse( \AB_MCP_Change_Lock::held(), 'The lock given back in every way.' );
+		$begun = self::revert( $run_id );
+		self::assertSame( 'reverting', $begun['state'] );
+		self::assertCount( 2, array_filter( $begun['steps'], static fn( array $s ): bool => 'revert' === $s['op'] ) );
+		self::assertSame( 'closed_reverted', self::revert_all( $run_id )['state'] );
+		self::assertSame( 'Write to us.', self::row_a( (int) $a['contact'] )['post_content'] );
+		self::assertSame( 'About us.', self::row_a( (int) $a['about'] )['post_content'] );
+	}
+
+	public function testAWriteStepIsNotRunUnderATimeLimitThatDoesNotCarryItWhileTheCheckGoesOnWithASmallerWork(): void {
+		// GitHub Codex round 3 on free#137 (P2): on a host with a short PHP
+		// time limit the loops of the check worked 50 s before they saved
+		// their cursor, and a write step could end halfway. Now every call
+		// derives its work from the limit it has after the raise
+		// (AB_MCP_Sync_Resources::time_for_call()): the check goes on with the
+		// smaller work and saves its cursor in time; a write step, and a step
+		// of the way back, is not run under a limit below MIN_TIME, with the
+		// way, and stays planned.
+		self::pair();
+		$a = self::pages_on_a( array( 'about' => 'About us.', 'contact' => 'Write to us.' ) );
+		$b = self::pages_on_b( array( 'about' => 'About us.', 'contact' => 'Write to us.' ) );
+		self::paired( self::staged() );
+		self::change_on_b( $b['about'], 'about', 'About us, on staging.' );
+		self::change_on_b( $b['contact'], 'contact', 'Write to us on staging.' );
+		$planned = self::planned( array( 'about', 'contact' ) );
+		$run     = self::begun( $planned['args'] );
+		$run_id  = (int) $run['run_id'];
+		// A limit of 30 s that set_time_limit() does not raise: the work of
+		// a call is 15 s; with 20 s passing per object the check saves its
+		// cursor after the first one (before, it worked 50 s).
+		AB_MCP_Sync_Resources::$time = static fn(): array => array( 'before' => 30, 'after' => 30 );
+		AB_MCP_Sync_Engine::$clock   = static function (): float {
+			static $t = 1000.0;
+			$t += 20;
+			return $t;
+		};
+		$one = self::next( $run_id );
+		self::assertIsArray( $one, is_wp_error( $one ) ? $one->get_error_message() : '' );
+		self::assertSame( 'planned', $one['step']['state'] );
+		self::assertSame( 1, $one['step']['result']['cursor'], 'One object within the work of 15 s.' );
+		self::assertLessThanOrEqual( 25, $one['remaining']['seconds'], 'The work and the reserve of this call, not 60 s.' );
+		AB_MCP_Sync_Engine::$clock = null;
+		self::assertSame( 'done', self::next( $run_id )['step']['state'], 'The check goes on and passes.' );
+		// A limit of 20 s, not raised: a write step is not run, with the way;
+		// it stays planned, nothing is written.
+		AB_MCP_Sync_Resources::$time = static fn(): array => array( 'before' => 20, 'after' => 20 );
+		$refused                     = self::next( $run_id );
+		$message                     = self::refused( $refused, 'ab_mcp_sync_run_time' );
+		self::assertStringContainsString( 'the PHP time limit of this request is 20 s', $message );
+		self::assertStringContainsString( 'max_execution_time to at least 30 s', $message, 'The way.' );
+		self::assertSame( 'About us.', self::row_a( (int) $a['about'] )['post_content'], 'Nothing written.' );
+		self::assertSame( 'open', AB_MCP_Sync_Run::get( $run_id )['state'] );
+		self::assertSame( 1, AB_MCP_Sync_Run::shown( AB_MCP_Sync_Run::get( $run_id ) )['counts']['done'], 'The check only; the write step stays planned.' );
+		// Raised to 120 s: the write runs; 30 s not raised carries a write as well.
+		AB_MCP_Sync_Resources::$time = static fn(): array => array( 'before' => 20, 'after' => 120 );
+		self::assertSame( 'done', self::next( $run_id )['step']['state'] );
+		self::assertSame( 'About us, on staging.', self::row_a( (int) $a['about'] )['post_content'] );
+		AB_MCP_Sync_Resources::$time = static fn(): array => array( 'before' => 30, 'after' => 30 );
+		self::assertSame( 'done', self::next( $run_id )['step']['state'] );
+		AB_MCP_Sync_Resources::$time = null;
+		self::probe_ok();
+		self::assertSame( 'closed_done', self::finish( $run_id )['state'] );
+		// A step of the way back is a write as well (the way back of the closed
+		// run is a run of its own).
+		$begun = self::revert( $run_id );
+		AB_MCP_Sync_Resources::$time = static fn(): array => array( 'before' => 20, 'after' => 20 );
+		self::refused( self::gated( 'wp_site_revert', array( 'action' => 'next', 'run_id' => (int) $begun['run_id'] ) ), 'ab_mcp_sync_run_time' );
+		self::assertSame( 'About us, on staging.', self::row_a( (int) $a['about'] )['post_content'], 'Nothing put back.' );
+		AB_MCP_Sync_Resources::$time = null;
+		self::assertSame( 'closed_reverted', self::revert_all( (int) $begun['run_id'] )['state'] );
+		self::assertSame( 'About us.', self::row_a( (int) $a['about'] )['post_content'] );
 	}
 
 	public function testTheWayBackIsByteForByteAndLeavesWhatChangedSince(): void {

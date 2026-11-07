@@ -58,7 +58,11 @@
  * hand on a part the way back changed is gone (the halt decides). Codex
  * round 18: edit_post first for every part on the way back, the terms too;
  * the second read of the kind as it writes catches a hook of the rights
- * check that changes the part.
+ * check that changes the part. GitHub Codex round 3: the way back of the
+ * same run begins under the lock of the boundary and against the run as it
+ * is under it; the time of a call raised where set_time_limit() takes and
+ * the work derived from the limit, no write under one that does not carry
+ * it; the retention breaks a tie of the close by the younger run.
  *
  * Written by tests/mutation/gen/lauf.py from the source; change the entries
  * there and run it again.
@@ -1690,5 +1694,95 @@ return array(
 		'replace' => "\t\t\tif ( false ) {\n\t\t\t\t// encode() writes a float as {\"~f\"}; a bare float is not its text.",
 		'run'     => $unit( 'SyncCanonFormTest', 'testABackupReadsBackBytesThatAreNoUtf8AsBytesNotAsTheMarker' ),
 		'expect'  => '/testABackupReadsBackBytesThatAreNoUtf8AsBytesNotAsTheMarker/',
+	),
+	array(
+		'id'      => 'lauf/revert-begin-lock',
+		'clause'  => 'begin(): the lock of the write boundary first; a step being written holds it, the way back does not begin beside it (P1)',
+		'file'    => $rv,
+		'search'  => "\t\t\t\$lock = AB_MCP_Change_Lock::take();",
+		'replace' => "\t\t\t\$lock = true;",
+		'run'     => $it( 'SyncRunTest', 'testTheWayBackOfARunDoesNotBeginBesideAStepBeingWrittenNorOnAPlanTheRunHasLeftBehind' ),
+		'expect'  => '/testTheWayBackOfARunDoesNotBeginBesideAStepBeingWrittenNorOnAPlanTheRunHasLeftBehind/',
+	),
+	array(
+		'id'      => 'lauf/revert-begin-begun',
+		'clause'  => 'begin_same_run(): a step begun under the lock is refused, not taken as interrupted (P1)',
+		'file'    => $rv,
+		'search'  => "\t\t\tif ( 'begun' === \$step['state'] ) {\n\t\t\t\treturn new WP_Error( 'ab_mcp_sync_run_begun'",
+		'replace' => "\t\t\tif ( false ) {\n\t\t\t\treturn new WP_Error( 'ab_mcp_sync_run_begun'",
+		'run'     => $it( 'SyncRunTest', 'testTheWayBackOfARunDoesNotBeginBesideAStepBeingWrittenNorOnAPlanTheRunHasLeftBehind' ),
+		'expect'  => '/testTheWayBackOfARunDoesNotBeginBesideAStepBeingWrittenNorOnAPlanTheRunHasLeftBehind/',
+	),
+	array(
+		'id'      => 'lauf/revert-begin-restate',
+		'clause'  => 'begin_same_run(): the plan confirmed against the run as it is under the lock; a step that wrote in between refuses it (P1)',
+		'file'    => $rv,
+		'search'  => "\t\tif ( ! hash_equals( (string) \$plan['state'], (string) \$again['state'] ) ) {",
+		'replace' => "\t\tif ( false ) {",
+		'run'     => $it( 'SyncRunTest', 'testTheWayBackOfARunDoesNotBeginBesideAStepBeingWrittenNorOnAPlanTheRunHasLeftBehind' ),
+		'expect'  => '/testTheWayBackOfARunDoesNotBeginBesideAStepBeingWrittenNorOnAPlanTheRunHasLeftBehind/',
+	),
+	array(
+		'id'      => 'lauf/means-time-raise',
+		'clause'  => 'raise(): a limit under WANTED_TIME is asked to go up where set_time_limit() takes (P2)',
+		'file'    => $rs,
+		'search'  => "\t\tif ( \$before > 0 && \$before < self::WANTED_TIME && function_exists( 'set_time_limit' ) ) {",
+		'replace' => "\t\tif ( false ) {",
+		'run'     => $unit( 'SyncRunTest', 'testTheTimeOfACallIsRaisedWhereItTakesAndTheWorkIsDerivedFromTheLimitItHas' ),
+		'expect'  => '/testTheTimeOfACallIsRaisedWhereItTakesAndTheWorkIsDerivedFromTheLimitItHas/',
+	),
+	array(
+		'id'      => 'lauf/means-time-budget-half',
+		'clause'  => 'budget(): half the limit as the work of a call',
+		'file'    => $rs,
+		'search'  => "\t\treturn max( 1, min( self::WORK_MAX, intdiv( \$limit, 2 ) ) );",
+		'replace' => "\t\treturn max( 1, min( self::WORK_MAX, \$limit ) );",
+		'run'     => $unit( 'SyncRunTest', 'testTheTimeOfACallIsRaisedWhereItTakesAndTheWorkIsDerivedFromTheLimitItHas' ),
+		'expect'  => '/testTheTimeOfACallIsRaisedWhereItTakesAndTheWorkIsDerivedFromTheLimitItHas/',
+	),
+	array(
+		'id'      => 'lauf/means-time-budget-max',
+		'clause'  => 'budget(): never more than WORK_MAX',
+		'file'    => $rs,
+		'search'  => "\t\treturn max( 1, min( self::WORK_MAX, intdiv( \$limit, 2 ) ) );",
+		'replace' => "\t\treturn max( 1, intdiv( \$limit, 2 ) );",
+		'run'     => $unit( 'SyncRunTest', 'testTheTimeOfACallIsRaisedWhereItTakesAndTheWorkIsDerivedFromTheLimitItHas' ),
+		'expect'  => '/testTheTimeOfACallIsRaisedWhereItTakesAndTheWorkIsDerivedFromTheLimitItHas/',
+	),
+	array(
+		'id'      => 'lauf/means-time-writes',
+		'clause'  => 'carries_write(): a limit under MIN_TIME carries no write step',
+		'file'    => $rs,
+		'search'  => "\t\treturn (int) \$limit <= 0 || (int) \$limit >= self::MIN_TIME;",
+		'replace' => "\t\treturn true;",
+		'run'     => $unit( 'SyncRunTest', 'testTheTimeOfACallIsRaisedWhereItTakesAndTheWorkIsDerivedFromTheLimitItHas' ),
+		'expect'  => '/testTheTimeOfACallIsRaisedWhereItTakesAndTheWorkIsDerivedFromTheLimitItHas/',
+	),
+	array(
+		'id'      => 'lauf/engine-time-writes',
+		'clause'  => 'next(): a write step and a step of the way back are not run under a limit that does not carry them, with the way (P2)',
+		'file'    => $en,
+		'search'  => "\t\tif ( in_array( \$picked['op'], array( 'write', 'revert' ), true ) && ! \$time['writes'] ) {",
+		'replace' => "\t\tif ( false ) {",
+		'run'     => $it( 'SyncRunTest', 'testAWriteStepIsNotRunUnderATimeLimitThatDoesNotCarryItWhileTheCheckGoesOnWithASmallerWork' ),
+		'expect'  => '/testAWriteStepIsNotRunUnderATimeLimitThatDoesNotCarryItWhileTheCheckGoesOnWithASmallerWork/',
+	),
+	array(
+		'id'      => 'lauf/engine-time-work',
+		'clause'  => 'next(): the work of the call is derived from the limit it has, not the whole WORK_MAX',
+		'file'    => $en,
+		'search'  => "\t\tself::\$work = (int) \$time['budget'];",
+		'replace' => "\t\tself::\$work = AB_MCP_Sync_Resources::WORK_MAX;",
+		'run'     => $it( 'SyncRunTest', 'testAWriteStepIsNotRunUnderATimeLimitThatDoesNotCarryItWhileTheCheckGoesOnWithASmallerWork' ),
+		'expect'  => '/testAWriteStepIsNotRunUnderATimeLimitThatDoesNotCarryItWhileTheCheckGoesOnWithASmallerWork/',
+	),
+	array(
+		'id'      => 'lauf/schema-keep-tie',
+		'clause'  => 'backup_rows(): on a tie of the close the younger run comes first (P2)',
+		'file'    => $sc,
+		'search'  => "\t\t\t\treturn 0 !== \$by_time ? \$by_time : \$b <=> \$a;",
+		'replace' => "\t\t\t\treturn 0 !== \$by_time ? \$by_time : \$a <=> \$b;",
+		'run'     => $unit( 'SyncRunTest', 'testTheRetentionBreaksATieOfTheSameCloseByTheYoungerRun' ),
+		'expect'  => '/testTheRetentionBreaksATieOfTheSameCloseByTheYoungerRun/',
 	),
 );

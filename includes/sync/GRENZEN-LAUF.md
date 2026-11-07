@@ -286,11 +286,42 @@ Ablehnung entsteht, nennt sie den Weg.
   Zweig 8 nur genannt (Einstellung «Staging zuerst» aus, oder
   `staging_acknowledged`); die Wahl mit dem Grund «Voraussetzungen fehlen»
   und die Anzeige in der Karte sind Z9a und Zweig 12.
-- Die Zeitgrenze misst `max_execution_time` und ob `set_time_limit()` einen
-  Wert nimmt; vorgeschaltete Grenzen (FPM, Proxy) misst Z8 nicht, weil ein
-  Messrequest an die eigene Adresse bei Hosts ohne Loopback nichts beweist.
-  Jeder Schritt endet innerhalb von 60 s (`AB_MCP_Sync_Engine::BUDGET`), die
-  Gesamtvorprüfung und die Prüfung des Laufs setzen über Aufrufe fort.
+- Die Zeitgrenze (GitHub-Codex 3, P2): Jeder ausführende Aufruf (`next`,
+  `step` von `wp_site_push` und `wp_site_revert`) versucht zuerst
+  `set_time_limit( WANTED_TIME = 120 )`, wo `max_execution_time` darunter
+  liegt, und liest die Grenze danach (`AB_MCP_Sync_Resources::time_for_call()`,
+  `raise()`); `measure()` misst dieselbe angehobene Grenze, so dass die
+  Vorprüfung mit dem rechnet, was die Aufrufe haben werden. Die Arbeit eines
+  Aufrufs (`budget()`): ohne Grenze (0) `WORK_MAX` = 50 s, sonst die Hälfte
+  der Grenze, nie über 50 s, mindestens 1 s; die Gesamtvorprüfung und die
+  Prüfung des Laufs halten danach an, sichern den Cursor und setzen im
+  nächsten Aufruf fort (je Aufruf mindestens eine Einheit). Warum die
+  Hälfte: `max_execution_time` zählt auf Linux die Rechenzeit des Skripts;
+  die Schleifen prüfen in PHP (Hashes), die andere Hälfte bleibt für den
+  Schritt, den der Aufruf nach der Arbeit schreibt, für die Journale und die
+  Antwort; 50 s, weil die anderen langen Werkzeuge 60 s mit 10 s Reserve
+  nehmen (`AB_MCP_Sync_Engine::BUDGET`, `RESERVE`, aus denselben Zahlen).
+  Warum 120 s gewünscht: das Doppelte von Arbeit und Reserve, damit ein
+  Host, dessen Grenze greift, Luft lässt. Eine Grenze unter `MIN_TIME` =
+  30 s trägt keinen Schreibschritt (`carries_write()`): ein Schreibschritt
+  und ein Rückweg-Schritt werden darunter nicht ausgeführt
+  (`ab_mcp_sync_run_time`, der Schritt bleibt `planned`, nichts geschrieben,
+  der Weg: `max_execution_time` beim Hoster auf 30 s, oder `set_time_limit()`
+  zulassen); Lesen und Prüfen laufen mit der kleineren Arbeit weiter. Warum
+  30 s: eine Grenze mit Sicherung, Journal, Kern-Aufrufen und Rücklesen je
+  Teil braucht in der Praxis Sekunden Rechenzeit, nicht Dutzende; 30 s ist
+  die untere Grenze der verbreiteten Host-Vorgaben und schon der Bedarf
+  eines Schritts in der Vorprüfung (`MIN_TIME`). Vorher rief `measure()`
+  `set_time_limit()` nur mit der bestehenden Grenze auf, kein Aufruf hob sie
+  an, und die Schleifen arbeiteten 50 s, bevor sie den Cursor sicherten: auf
+  einem Host mit 30 s starb der Aufruf vor dem Cursor, ein Schreibschritt
+  konnte mitten in der Mutation enden. Vorgeschaltete Grenzen (FPM, Proxy)
+  misst Z8 nicht, weil ein Messrequest an die eigene Adresse bei Hosts ohne
+  Loopback nichts beweist (Prüffälle
+  `testTheTimeOfACallIsRaisedWhereItTakesAndTheWorkIsDerivedFromTheLimitItHas`,
+  `testAWriteStepIsNotRunUnderATimeLimitThatDoesNotCarryItWhileTheCheckGoesOnWithASmallerWork`).
+  Nicht als Mutation geführt: der Aufruf von `raise()` in `measure()` (die
+  Unit-Tests injizieren die Messung; der Aufruf je Schritt ist geführt).
 
 ## Post-Art in Zweig 8 (Zweig 9 bringt den Rest)
 
@@ -582,6 +613,33 @@ Ablehnung entsteht, nennt sie den Weg.
   zu schützenden Läufe und löscht unter derselben Sperre, sieht den neuen
   Lauf also oder war vorher fertig (Entscheid 20 (4); A6). Ohne Ablage gibt es
   nichts zu schützen, der Lauf entsteht ohne Sperre.
+- Der Rückweg desselben Laufs beginnt unter der Sperre der Schreibgrenze
+  (GitHub-Codex 3, P1): `begin()` nimmt zuerst `AB_MCP_Change_Lock::take()`,
+  dieselbe Sperre wie jeder Schreibschritt (Entscheid 18); hält sie ein
+  Schritt, der gerade schreibt, wird abgelehnt (`ab_mcp_sync_run_busy`, Weg:
+  erneut aufrufen). Unter der Sperre liest `begin_same_run()` die Schritte
+  neu: ein Schritt `begun` ist dann einer, dessen Request nicht geantwortet
+  hat, während der Rückweg geplant wurde (Sperre beim Shutdown
+  zurückgegeben oder nach `TIMEOUT` übernommen); er wird abgelehnt
+  (`ab_mcp_sync_run_begun`), nicht als unterbrochen gewertet; `status`
+  settelt den Lauf, dann wird der Rückweg neu geplant. Dann der Plan neu
+  gerechnet (`plan()`) und sein Zustand mit dem bestätigten verglichen:
+  weicht er ab (ein Schritt hat dazwischen geschrieben, ein Objekt sich
+  geändert, der Lauf den Zustand gewechselt), Ablehnung
+  `ab_mcp_sync_revert_changed`, Weg: neu planen, der neue Plan nimmt auch
+  diesen Schritt zurück. Erst dann die Transaktion; die Sperre wird in jedem
+  Weg freigegeben (`finally`). Vorher konnte ein gleichzeitiges `next`
+  zwischen `plan()` und der Transaktion einen Schreibschritt beginnen: der
+  Lauf blieb `open`, der Wechsel gelang, der Schritt wurde `unclear`
+  markiert, obwohl der Plan ihn nicht zurücknahm, seine Journal-Updates
+  (`WHERE state = 'begun'`) scheiterten, und der Rückweg schloss ohne diese
+  Änderung (Prüffall
+  `testTheWayBackOfARunDoesNotBeginBesideAStepBeingWrittenNorOnAPlanTheRunHasLeftBehind`,
+  der `begin()` direkt nach dem Plan aufruft, mit einem Schritt `begun` unter
+  fremder Sperre, ohne Sperre, und nach einem dazwischen geschriebenen
+  Schritt). Grenze: die Sperre deckt den Rückweglauf eines geschlossenen
+  Laufs nicht (dort schreibt kein Schritt mehr; ein zweiter offener Lauf
+  scheitert am Eindeutigkeitsschlüssel `open_one`).
 - Der Rückweg beginnt mit allen seinen Schritten oder gar nicht (GitHub-Codex
   2, P1): `AB_MCP_Sync_Revert::begin()` führt den Lauf nach `reverting`, setzt
   die Vorwärtsschritte auf `unclear`/`skipped` und legt alle Rückweg-Schritte
@@ -702,6 +760,13 @@ Ablehnung entsteht, nennt sie den Weg.
   `true` bleibt, `false` geht, wie jung die Gruppe auch ist).
 - Kann die Tabelle der Läufe nicht gelesen werden, bleibt jede Laufsicherung
   (`backup_rows()` gibt `null`), nie umgekehrt.
+- Schliessen zwei qualifizierte Läufe in derselben Sekunde (`forward_closed_at`
+  gleich), zählt der jüngere Lauf (höhere `run_id`) zuerst zu den letzten
+  drei (GitHub-Codex 3, P2): vorher kamen die Zeilen nach `run_id`
+  aufsteigend und `arsort()` liess bei Gleichstand den älteren vorn, so dass
+  bei Abschlüssen 100, 100, 200, 300 die Läufe 1, 3, 4 blieben und die
+  Sicherung von Lauf 2 ging (Prüffall
+  `testTheRetentionBreaksATieOfTheSameCloseByTheYoungerRun`).
 - Jeder Abschluss speichert die beim Abschluss geltende Frist in
   `runs.keep_until` (Schema Version 3; `AB_MCP_Sync_Schema::keep_until()`):
   qualifiziert so viele Tage, wie der Filter `ab_mcp_staging_backup_days`

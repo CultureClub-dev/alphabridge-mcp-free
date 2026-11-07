@@ -557,6 +557,35 @@ e('canon-decode-key', 'decode(): a key marker, which no such form carries, is re
 e('canon-decode-bare-float', 'decode(): a bare float is not the text of encode()', CN,
   "\t\t\tif ( is_float( $value ) ) {\n\t\t\t\t// encode() writes a float as {\"~f\"}; a bare float is not its text.", "\t\t\tif ( false ) {\n\t\t\t\t// encode() writes a float as {\"~f\"}; a bare float is not its text.", 'canon', BYTES_UNIT)
 
+# ------------------------------- GitHub Codex round 3 on free#137 (one P1, two P2)
+# The way back of the same run begins under the lock of the boundary, after
+# the run is read again under it; the time of a call raised and the work
+# derived from the limit, a write not run under one that does not carry it;
+# the retention breaks a tie of the close by the younger run.
+RACE = 'testTheWayBackOfARunDoesNotBeginBesideAStepBeingWrittenNorOnAPlanTheRunHasLeftBehind'
+e('revert-begin-lock', 'begin(): the lock of the write boundary first; a step being written holds it, the way back does not begin beside it (P1)', RV,
+  "\t\t\t$lock = AB_MCP_Change_Lock::take();", "\t\t\t$lock = true;", 'it', RACE)
+e('revert-begin-begun', 'begin_same_run(): a step begun under the lock is refused, not taken as interrupted (P1)', RV,
+  "\t\t\tif ( 'begun' === $step['state'] ) {\n\t\t\t\treturn new WP_Error( 'ab_mcp_sync_run_begun'", "\t\t\tif ( false ) {\n\t\t\t\treturn new WP_Error( 'ab_mcp_sync_run_begun'", 'it', RACE)
+e('revert-begin-restate', 'begin_same_run(): the plan confirmed against the run as it is under the lock; a step that wrote in between refuses it (P1)', RV,
+  "\t\tif ( ! hash_equals( (string) $plan['state'], (string) $again['state'] ) ) {", "\t\tif ( false ) {", 'it', RACE)
+TIME_UNIT = 'testTheTimeOfACallIsRaisedWhereItTakesAndTheWorkIsDerivedFromTheLimitItHas'
+TIME_IT = 'testAWriteStepIsNotRunUnderATimeLimitThatDoesNotCarryItWhileTheCheckGoesOnWithASmallerWork'
+e('means-time-raise', 'raise(): a limit under WANTED_TIME is asked to go up where set_time_limit() takes (P2)', RS,
+  "\t\tif ( $before > 0 && $before < self::WANTED_TIME && function_exists( 'set_time_limit' ) ) {", "\t\tif ( false ) {", 'unit', TIME_UNIT)
+e('means-time-budget-half', 'budget(): half the limit as the work of a call', RS,
+  "\t\treturn max( 1, min( self::WORK_MAX, intdiv( $limit, 2 ) ) );", "\t\treturn max( 1, min( self::WORK_MAX, $limit ) );", 'unit', TIME_UNIT)
+e('means-time-budget-max', 'budget(): never more than WORK_MAX', RS,
+  "\t\treturn max( 1, min( self::WORK_MAX, intdiv( $limit, 2 ) ) );", "\t\treturn max( 1, intdiv( $limit, 2 ) );", 'unit', TIME_UNIT)
+e('means-time-writes', 'carries_write(): a limit under MIN_TIME carries no write step', RS,
+  "\t\treturn (int) $limit <= 0 || (int) $limit >= self::MIN_TIME;", "\t\treturn true;", 'unit', TIME_UNIT)
+e('engine-time-writes', 'next(): a write step and a step of the way back are not run under a limit that does not carry them, with the way (P2)', EN,
+  "\t\tif ( in_array( $picked['op'], array( 'write', 'revert' ), true ) && ! $time['writes'] ) {", "\t\tif ( false ) {", 'it', TIME_IT)
+e('engine-time-work', 'next(): the work of the call is derived from the limit it has, not the whole WORK_MAX', EN,
+  "\t\tself::$work = (int) $time['budget'];", "\t\tself::$work = AB_MCP_Sync_Resources::WORK_MAX;", 'it', TIME_IT)
+e('schema-keep-tie', 'backup_rows(): on a tie of the close the younger run comes first (P2)', SC,
+  "\t\t\t\treturn 0 !== $by_time ? $by_time : $b <=> $a;", "\t\t\t\treturn 0 !== $by_time ? $by_time : $a <=> $b;", 'unit', 'testTheRetentionBreaksATieOfTheSameCloseByTheYoungerRun')
+
 
 out = []
 out.append('''<?php
@@ -619,7 +648,11 @@ out.append('''<?php
  * hand on a part the way back changed is gone (the halt decides). Codex
  * round 18: edit_post first for every part on the way back, the terms too;
  * the second read of the kind as it writes catches a hook of the rights
- * check that changes the part.
+ * check that changes the part. GitHub Codex round 3: the way back of the
+ * same run begins under the lock of the boundary and against the run as it
+ * is under it; the time of a call raised where set_time_limit() takes and
+ * the work derived from the limit, no write under one that does not carry
+ * it; the retention breaks a tie of the close by the younger run.
  *
  * Written by tests/mutation/gen/lauf.py from the source; change the entries
  * there and run it again.

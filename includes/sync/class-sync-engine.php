@@ -96,11 +96,22 @@ require_once dirname( __DIR__ ) . '/lifecycle/class-change-lock.php';
  */
 final class AB_MCP_Sync_Engine {
 
-	/** Seconds one call may work (the budget of the other long tools). */
-	const BUDGET = 60;
+	/** Seconds one call takes at most where the request has no time limit: the work (AB_MCP_Sync_Resources::WORK_MAX) and the reserve. */
+	const BUDGET = AB_MCP_Sync_Resources::WORK_MAX + AB_MCP_Sync_Resources::WORK_RESERVE;
 
 	/** Seconds the check and the verification keep for one more object; with less left, the next call goes on. */
-	const RESERVE = 10;
+	const RESERVE = AB_MCP_Sync_Resources::WORK_RESERVE;
+
+	/**
+	 * Seconds of work the call running now does at most: WORK_MAX with no
+	 * time limit of the request, half the limit otherwise
+	 * (AB_MCP_Sync_Resources::time_for_call(), set by next(); GitHub Codex
+	 * round 3 on free#137). The check and the verification stop here and go
+	 * on in the next call.
+	 *
+	 * @var int
+	 */
+	private static $work = AB_MCP_Sync_Resources::WORK_MAX;
 
 	/** The clock: a callable returning seconds (float), null for microtime(). Set by tests only. */
 	public static $clock = null;
@@ -122,7 +133,12 @@ final class AB_MCP_Sync_Engine {
 	 */
 	public static function next( array $run, $named = null ) {
 		$started = self::now();
-		$steps   = AB_MCP_Sync_Run::steps( (int) $run['run_id'] );
+		// The time of this request: raised where set_time_limit() takes, the
+		// work of the call derived from the limit it has (GitHub Codex round 3
+		// on free#137, P2: before, the loops worked 50 s under a limit of 30).
+		$time       = AB_MCP_Sync_Resources::time_for_call();
+		self::$work = (int) $time['budget'];
+		$steps      = AB_MCP_Sync_Run::steps( (int) $run['run_id'] );
 		if ( is_wp_error( $steps ) ) {
 			return $steps;
 		}
@@ -144,6 +160,18 @@ final class AB_MCP_Sync_Engine {
 				return self::answer( $closed, null, $started, 'Every step of the way back ran; the run is closed. The rests it left are named in rests.' );
 			}
 			return self::answer( $run, null, $started, 'No step is left to run: the run is closed, or every remaining step waits on one that was skipped or failed (see the steps in status).' );
+		}
+		// A write step and a step of the way back mutate under the lock, with
+		// their backup and journal: a request whose time limit does not carry
+		// one (under AB_MCP_Sync_Resources::MIN_TIME, not raised) does not run
+		// it, with the way; the step stays planned, nothing is written. The
+		// check and the verification read and go on with the smaller work.
+		if ( in_array( $picked['op'], array( 'write', 'revert' ), true ) && ! $time['writes'] ) {
+			return new WP_Error(
+				'ab_mcp_sync_run_time',
+				sprintf( 'Step %1$d is not run: the PHP time limit of this request is %2$d s (set_time_limit() did not raise it), and one step that writes needs up to %3$d s; a step ended by the limit halfway would leave the object in between. Nothing was written; the step stays planned. Raise max_execution_time to at least %3$d s at the host (at Infomaniak under Advanced → PHP | Apache), or let set_time_limit() take, then call again.', (int) $picked['seq'], (int) $time['limit'], AB_MCP_Sync_Resources::MIN_TIME ),
+				array( 'time' => $time )
+			);
 		}
 		switch ( $picked['op'] ) {
 			case 'check':
@@ -493,7 +521,7 @@ final class AB_MCP_Sync_Engine {
 		$findings = isset( $result['findings'] ) && is_array( $result['findings'] ) ? $result['findings'] : array();
 		$count    = count( $items );
 		for ( $i = $at; $i < $count; $i++ ) {
-			if ( $i > $at && self::now() - $started > self::BUDGET - self::RESERVE ) {
+			if ( $i > $at && self::now() - $started > self::$work ) {
 				$result['cursor']   = $i;
 				$result['findings'] = $findings;
 				AB_MCP_Sync_Run::update_step( (int) $run['run_id'], (int) $step['seq'], array( 'result' => $result ), 'planned' );
@@ -1649,7 +1677,7 @@ final class AB_MCP_Sync_Engine {
 		}
 		$worked = false;
 		$left   = static function () use ( $started ) {
-			return self::BUDGET - self::RESERVE - ( self::now() - $started );
+			return self::$work - ( self::now() - $started );
 		};
 		$save   = static function ( array $result, $message ) use ( $run, $step ) {
 			AB_MCP_Sync_Run::update_step( (int) $run['run_id'], (int) $step['seq'], array( 'result' => $result ), 'planned' );
@@ -2187,7 +2215,7 @@ final class AB_MCP_Sync_Engine {
 			'busy'      => (bool) $busy,
 			'remaining' => array(
 				'planned' => $shown['counts']['planned'],
-				'seconds' => max( 0, (int) ( self::BUDGET - ( self::now() - $started ) ) ),
+				'seconds' => max( 0, (int) ( self::$work + self::RESERVE - ( self::now() - $started ) ) ),
 			),
 			'counts'    => $shown['counts'],
 			'rests'     => $shown['rests'],

@@ -15,9 +15,13 @@
  *  - space: free space on the disk of the protected store against the
  *    bytes the run books (its backups with a reserve of 20 %, decision 8),
  *    and the test write of a megabyte AB_MCP_Store_Budget::book() makes;
- *  - time: max_execution_time, where it is a limit (0 is none), against
- *    MIN_TIME seconds a step needs at most, and whether set_time_limit()
- *    takes a value (a probe with the current limit);
+ *  - time: max_execution_time after the raise every executing call makes
+ *    (raise(): set_time_limit() to WANTED_TIME where the limit is below
+ *    and the host lets it take), where it is a limit (0 is none), against
+ *    MIN_TIME seconds a step needs at most; the work of a call is derived
+ *    from the limit it has (time_for_call(), budget()), and a limit under
+ *    MIN_TIME runs no write step (carries_write(); GitHub Codex round 3 on
+ *    free#137);
  *  - memory: memory_limit (-1 is none) against MIN_MEMORY;
  *  - tempo: the seconds a write and read of TEMPO_BYTES in the folder of
  *    the store takes, and a read of one page of post ids, projected onto the
@@ -42,8 +46,22 @@ require_once __DIR__ . '/class-sync-rows.php';
  */
 final class AB_MCP_Sync_Resources {
 
-	/** Seconds a step of a run needs at most: a request limit below it is insufficient. */
+	/** Seconds a step of a run needs at most: a request limit below it is insufficient, and a write step is not run under it (carries_write()). */
 	const MIN_TIME = 30;
+
+	/**
+	 * Seconds set_time_limit() is asked for at the start of every executing
+	 * call (time_for_call()): twice the work of a call and its reserve, so a
+	 * host whose limit takes the request keeps room for the writes of
+	 * WordPress the call ends with.
+	 */
+	const WANTED_TIME = 120;
+
+	/** Seconds of work one call does at most, with no limit or one well above (the loops of the check and the verification stop here). */
+	const WORK_MAX = 50;
+
+	/** Seconds a call keeps for the step it writes after its work, and for its answer. */
+	const WORK_RESERVE = 10;
 
 	/** Bytes of memory a run needs: 128 MiB. */
 	const MIN_MEMORY = 134217728;
@@ -72,6 +90,103 @@ final class AB_MCP_Sync_Resources {
 	 * @var callable|null
 	 */
 	public static $probe = null;
+
+	/**
+	 * The time limit of a call, set by tests only: a callable returning
+	 * array{before:int,after:int} as raise() measures them, or null for the
+	 * real limit of the request.
+	 *
+	 * @var callable|null
+	 */
+	public static $time = null;
+
+	/**
+	 * The time of this request for one executing call (next, step of
+	 * wp_site_push and wp_site_revert), GitHub Codex round 3 on free#137
+	 * (P2): the limit raised to WANTED_TIME where set_time_limit() takes
+	 * (raise()), then read as it is, and the work of the call derived from
+	 * it (derived()): with no limit (0) or one above, WORK_MAX seconds; with
+	 * a limit under that, half of it, never more than WORK_MAX, at least 1
+	 * (the check and the verification do at least one unit per call and go
+	 * on in the next). A limit under MIN_TIME carries no write step (writes
+	 * false): the engine does not run a write or a step of the way back
+	 * under it, with the way (the host, or set_time_limit() let take); the
+	 * check and the verification read and go on with the smaller work.
+	 * Before, measure() asked set_time_limit() for the limit it had, and no
+	 * call raised it: on a host with 30 s the loops worked 50 s and the
+	 * cursor was never saved.
+	 *
+	 * @return array{limit:int,before:int,raised:bool,budget:int,writes:bool}
+	 */
+	public static function time_for_call() {
+		$pair = null !== self::$time ? (array) call_user_func( self::$time ) : self::raise();
+		return self::derived( (int) ( $pair['before'] ?? 0 ), (int) ( $pair['after'] ?? 0 ) );
+	}
+
+	/**
+	 * Try to raise the time limit of this request to WANTED_TIME where it
+	 * has one below (set_time_limit() restarts the clock of the request as
+	 * well); the limit before and after.
+	 *
+	 * @return array{before:int,after:int}
+	 */
+	public static function raise() {
+		$before = (int) ini_get( 'max_execution_time' );
+		if ( $before > 0 && $before < self::WANTED_TIME && function_exists( 'set_time_limit' ) ) {
+			@set_time_limit( self::WANTED_TIME ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- a host that forbids it answers false; the limit is read afterwards.
+		}
+		return array(
+			'before' => $before,
+			'after'  => (int) ini_get( 'max_execution_time' ),
+		);
+	}
+
+	/**
+	 * The time of a call from the limit before and after the raise (the
+	 * calculation of time_for_call(), pure).
+	 *
+	 * @param int $before The limit before the raise (0 none).
+	 * @param int $after  The limit after it (0 none).
+	 * @return array{limit:int,before:int,raised:bool,budget:int,writes:bool}
+	 */
+	public static function derived( $before, $after ) {
+		$after = max( 0, (int) $after );
+		return array(
+			'limit'  => $after,
+			'before' => max( 0, (int) $before ),
+			'raised' => $after !== max( 0, (int) $before ),
+			'budget' => self::budget( $after ),
+			'writes' => self::carries_write( $after ),
+		);
+	}
+
+	/**
+	 * Seconds of work one call does within a time limit: WORK_MAX with no
+	 * limit (0); else half the limit (the other half stays for the writes of
+	 * WordPress the call ends with, and for its answer), never more than
+	 * WORK_MAX, at least 1.
+	 *
+	 * @param int $limit The limit of the request in seconds, 0 for none.
+	 * @return int
+	 */
+	public static function budget( $limit ) {
+		$limit = (int) $limit;
+		if ( $limit <= 0 ) {
+			return self::WORK_MAX;
+		}
+		return max( 1, min( self::WORK_MAX, intdiv( $limit, 2 ) ) );
+	}
+
+	/**
+	 * Whether a time limit carries one write step (a boundary, or a step of
+	 * the way back): none, or at least MIN_TIME seconds.
+	 *
+	 * @param int $limit The limit of the request in seconds, 0 for none.
+	 * @return bool
+	 */
+	public static function carries_write( $limit ) {
+		return (int) $limit <= 0 || (int) $limit >= self::MIN_TIME;
+	}
 
 	/**
 	 * Check the means for a run that needs $bytes in the store.
@@ -198,11 +313,12 @@ final class AB_MCP_Sync_Resources {
 			}
 			@unlink( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink
 		}
-		// Whether the limit can be raised: set to what it is now (a no-op
-		// where it takes, false under safe limits of the host).
-		if ( $out['time_limit'] > 0 && function_exists( 'set_time_limit' ) ) {
-			$out['time_limit_settable'] = false !== @set_time_limit( $out['time_limit'] ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
-		}
+		// The limit raised where set_time_limit() takes (raise(), as every
+		// executing call does; GitHub Codex round 3 on free#137): what is
+		// measured is the limit the calls of the run will have.
+		$pair                       = self::raise();
+		$out['time_limit']          = (int) $pair['after'];
+		$out['time_limit_settable'] = (int) $pair['after'] !== (int) $pair['before'];
 		$start = microtime( true );
 		AB_MCP_Sync_Rows::post_ids( null, 0, AB_MCP_Sync_Rows::MAX_PAGE );
 		$out['rows_seconds'] = microtime( true ) - $start;
