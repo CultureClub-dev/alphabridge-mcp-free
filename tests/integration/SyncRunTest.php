@@ -634,8 +634,10 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( array( 2, 'write', 'done' ), array( $write['step']['seq'], $write['step']['op'], $write['step']['state'] ) );
 		self::assertSame( (string) $a['contact'], $write['step']['result']['live_ref'] );
 		self::assertSame( 'Write to us on staging.', self::row_a( (int) $a['contact'] )['post_content'] );
-		self::assertSame( array( 'row', 'meta:note' ), array_column( $write['step']['parts']['parts'], 'part' ) );
-		self::assertSame( array( 'read', 'read' ), array_column( $write['step']['parts']['parts'], 'state' ) );
+		// The field rule of decision 28 (branch 9): a key equal on both sides
+		// (note) is no part of the step and stays untouched.
+		self::assertSame( array( 'row' ), array_column( $write['step']['parts']['parts'], 'part' ) );
+		self::assertSame( array( 'read' ), array_column( $write['step']['parts']['parts'], 'state' ) );
 		self::assertMatchesRegularExpression( '/^step-0002$/', $write['step']['parts']['backup']['name'] );
 		// Step 3: the new page.
 		$create = self::next( $run_id );
@@ -928,6 +930,10 @@ final class SyncRunTest extends TestCase {
 		self::b( array( array( 'op' => 'add_meta', 'post' => (int) $b['contact'], 'key' => 'Foo', 'value' => 'a' ), array( 'op' => 'add_meta', 'post' => (int) $b['contact'], 'key' => 'foo', 'value' => 'b' ) ) );
 		self::paired( self::staged() );
 		self::change_on_b( $b['contact'], 'contact', 'Write to us on staging.' );
+		// The step writes foo (it differs on staging; branch 9: a key equal on
+		// both sides would be no part, decision 28), and the database matches Foo with it.
+		global $wpdb;
+		self::assertSame( 1, (int) $wpdb->query( $wpdb->prepare( 'UPDATE `' . AB_MCP_IT_Sites::table( 'b', 'postmeta' ) . '` SET meta_value = %s WHERE post_id = %d AND CAST( meta_key AS BINARY ) = CAST( %s AS BINARY )', 'c', (int) $b['contact'], 'foo' ) ) );
 		self::change_on_b( $b['about'], 'about', 'About us, on staging.' );
 		$planned = self::planned( array( 'contact' ) );
 		$run     = self::begun( $planned['args'] );
@@ -2444,7 +2450,7 @@ final class SyncRunTest extends TestCase {
 
 	public function testADeviatingMetaPartLeavesTheObjectWholeWithTheOldValuesInTheAnswer(): void {
 		// The one boundary (the decision of 07.11.2026, «A mit altem Wert»): a
-		// meta sanitizer of this site changes a value as it is written, so the
+		// hook of this site changes a value as it is written, so the
 		// part reads back other than its target: the object deviated. Nothing
 		// of it is put back: the row written before stays with the staging
 		// content, the meta with what the sanitizer made of it, each left with
@@ -2461,9 +2467,22 @@ final class SyncRunTest extends TestCase {
 		$planned = self::planned( array( 'contact' ) );
 		$run     = self::begun( $planned['args'] );
 		self::assertSame( 'done', self::next( (int) $run['run_id'] )['step']['state'] );
-		add_filter( 'sanitize_post_meta_note', static fn() => 'X' );
+		// A hook of this site that changes the value right after it is written
+		// (not a sanitizer the check ahead knows: since branch 9, a
+		// sanitize_post_meta_note filter refuses the step before its first
+		// part, decision 17).
+		$hook = static function ( $meta_id, $object_id, $meta_key ) use ( $a ) {
+			global $wpdb;
+			if ( 'note' === $meta_key && (int) $a['contact'] === (int) $object_id ) {
+				$wpdb->update( $wpdb->postmeta, array( 'meta_value' => 'X' ), array( 'meta_id' => (int) $meta_id ) );
+				wp_cache_delete( (int) $object_id, 'post_meta' );
+			}
+		};
+		add_action( 'updated_post_meta', $hook, 10, 3 );
+		add_action( 'added_post_meta', $hook, 10, 3 );
 		$write = self::next( (int) $run['run_id'] );
-		remove_all_filters( 'sanitize_post_meta_note' );
+		remove_action( 'updated_post_meta', $hook, 10 );
+		remove_action( 'added_post_meta', $hook, 10 );
 		self::assertIsArray( $write, is_wp_error( $write ) ? $write->get_error_message() : '' );
 		self::assertSame( 'unclear', $write['step']['state'], json_encode( $write['step'] ) );
 		$parts = array_column( $write['step']['parts']['parts'], null, 'part' );
@@ -2478,7 +2497,7 @@ final class SyncRunTest extends TestCase {
 		self::assertStringContainsString( 'deviated within the step', $write['step']['result']['message'] );
 		self::assertStringContainsString( 'Nothing of it is put back', $write['step']['result']['message'] );
 		self::assertSame( 'Write to us on staging.', self::row_a( (int) $a['contact'] )['post_content'], 'Left as written.' );
-		self::assertSame( array( 'X' ), self::meta_a( (int) $a['contact'], 'note' ), 'Left as the sanitizer made it.' );
+		self::assertSame( array( 'X' ), self::meta_a( (int) $a['contact'], 'note' ), 'Left as the hook made it.' );
 		$pair = AB_MCP_Sync_Pairs::find_live( AB_MCP_Sync_Anchor::active()['source_id'], 'post', (string) $a['contact'] );
 		self::assertSame( 'unclear', $pair['state'] );
 		self::assertSame( 'proposal', $pair['base_origin'], 'The pair keeps its bases of before: nothing was taken over.' );

@@ -23,7 +23,8 @@
  * relay), export_again (package_id, now), export_chunk
  * (package_id, chunk, now), grants (package_id, count, now), store_cleanup
  * (now), store_hold_lock (seconds), store_remove (area, gid), add_admin (login), as_user (user), for the report delete_post
- * (post, for good), trash_post (post), add_term_meta (term, key, value), push (args of wp_site_push,
+ * (post, for good), trash_post (post), add_term_meta and update_term_meta (term, key, value), update_term
+ * (term, taxonomy, args of wp_update_term()), push (args of wp_site_push,
  * exit_at: a hook at which the process exits inside a boundary, exit_key: only for this meta key), revert (args of
  * wp_site_revert, exit_at and exit_key as for push), raw_post (post, set: columns written
  * by SQL), term_order (post, term, taxonomy, order: the order of that relationship by SQL) and wp_version (version: the
@@ -370,6 +371,14 @@ foreach ( $ab_it_steps as $ab_it_i => $ab_it_step ) {
 			break;
 		case 'add_term_meta':
 			$ab_it_out = add_term_meta( (int) $ab_it_step['term'], $ab_it_step['key'], wp_slash( $ab_it_step['value'] ) );
+			break;
+		case 'update_term':
+			// As wp-admin saves a term (Z8 branch 9): name, slug, description, parent.
+			$ab_it_out = wp_update_term( (int) $ab_it_step['term'], $ab_it_step['taxonomy'], wp_slash( $ab_it_step['args'] ) );
+			$ab_it_out = is_array( $ab_it_out ) ? (int) $ab_it_out['term_id'] : $ab_it_out;
+			break;
+		case 'update_term_meta':
+			$ab_it_out = update_term_meta( (int) $ab_it_step['term'], $ab_it_step['key'], wp_slash( $ab_it_step['value'] ) );
 			break;
 		case 'wp_version':
 			// The version of WordPress the steps after it see, as version.php would set it.
