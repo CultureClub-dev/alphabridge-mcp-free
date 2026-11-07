@@ -1296,6 +1296,71 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( $before, self::row_a( $story_a ) );
 	}
 
+	public function testAPartTheStepNeverReachedIsNotTakenBackOnTheWayBack(): void {
+		// Codex round 4: a post in News with a note, planned to Other and a new
+		// note. While the row is written, another hand sets the category to
+		// Other (the target) on the way the lock does not refuse; the row reads
+		// back as written, then the meta write is refused and the step ends
+		// unclear before it reaches the terms. The terms were never written by
+		// the step (not_reached, settled()): the way back of the closed run
+		// leaves the category as the other hand set it.
+		self::pair();
+		$news_a  = wp_insert_term( 'News', 'category' );
+		$other_a = wp_insert_term( 'Other', 'category' );
+		self::assertIsArray( $news_a, is_wp_error( $news_a ) ? $news_a->get_error_message() : '' );
+		self::assertIsArray( $other_a, is_wp_error( $other_a ) ? $other_a->get_error_message() : '' );
+		$news_b  = (int) self::b( array( array( 'op' => 'insert_term', 'name' => 'News', 'taxonomy' => 'category', 'as' => 'term' ) ) )['term'];
+		$other_b = (int) self::b( array( array( 'op' => 'insert_term', 'name' => 'Other', 'taxonomy' => 'category', 'as' => 'term' ) ) )['term'];
+		$story_a = wp_insert_post( wp_slash( self::page( 'story', 'A story.', array( 'post_type' => 'post', 'post_category' => array( (int) $news_a['term_id'] ) ) ) ), true );
+		self::assertIsInt( $story_a );
+		add_post_meta( $story_a, 'note', 'abc' );
+		$story_b = (int) self::b( array( array( 'op' => 'insert_post', 'args' => self::page( 'story', 'A story.', array( 'post_type' => 'post', 'post_category' => array( $news_b ) ) ), 'as' => 'post' ) ) )['post'];
+		self::b( array( array( 'op' => 'add_meta', 'post' => $story_b, 'key' => 'note', 'value' => 'abc' ) ) );
+		self::paired( self::staged() );
+		self::change_on_b( (string) $story_b, 'story', 'A story, on staging.', array( 'post_type' => 'post', 'post_category' => array( $other_b ) ) );
+		self::b( array( array( 'op' => 'update_meta', 'post' => $story_b, 'key' => 'note', 'value' => 'def' ) ) );
+		$planned = self::planned( array( 'story' ) );
+		$run     = self::begun( $planned['args'] );
+		$before  = self::row_a( $story_a );
+		self::assertSame( 'done', self::next( (int) $run['run_id'] )['step']['state'] );
+		$slugs    = static fn(): array => array_values( array_map( static fn( $t ) => $t->slug, wp_get_object_terms( $story_a, 'category' ) ) );
+		$other_id = (int) $other_a['term_id'];
+		$hand     = static function ( $object_id, $terms, $tt_ids, $taxonomy ) use ( $story_a, $other_id, &$hand ) {
+			if ( 'category' === $taxonomy && (int) $object_id === $story_a ) {
+				remove_action( 'set_object_terms', $hand, 10 );
+				wp_set_object_terms( $story_a, array( $other_id ), 'category', false );
+			}
+		};
+		add_action( 'set_object_terms', $hand, 10, 4 );
+		$refuse = static fn( $check, $object_id, $meta_key ) => ( (int) $object_id === $story_a && 'note' === $meta_key ) ? false : $check;
+		add_filter( 'update_post_metadata', $refuse, 10, 3 );
+		add_filter( 'add_post_metadata', $refuse, 10, 3 );
+		add_filter( 'delete_post_metadata', $refuse, 10, 3 );
+		$write = self::next( (int) $run['run_id'] );
+		remove_all_actions( 'set_object_terms' );
+		remove_filter( 'update_post_metadata', $refuse, 10 );
+		remove_filter( 'add_post_metadata', $refuse, 10 );
+		remove_filter( 'delete_post_metadata', $refuse, 10 );
+		self::assertIsArray( $write, is_wp_error( $write ) ? $write->get_error_message() : '' );
+		self::assertSame( 'unclear', $write['step']['state'], json_encode( $write['step'] ) );
+		$parts = array_column( $write['step']['parts']['parts'], 'state', 'part' );
+		self::assertSame( 'failed', $parts['meta:note'] );
+		self::assertSame( 'not_reached', $parts['terms:category'], 'The step ended before it reached the terms.' );
+		self::assertSame( array( 'other' ), $slugs(), 'The other hand set the category.' );
+		self::assertSame( array( 'abc' ), self::meta_a( $story_a, 'note' ) );
+		self::probe_ok();
+		self::finish( (int) $run['run_id'] );
+		// The way back of the closed run: the row (the step's own) goes back,
+		// the category (never written by the step) is left.
+		$begun = self::revert( (int) $run['run_id'] );
+		$back  = self::revert_all( (int) $begun['run_id'] );
+		$outcome = array_column( self::step( $back, 1 )['result']['parts'], 'state', 'part' );
+		self::assertSame( 'left', $outcome['terms:category'], 'Never written by the step, so not the run\'s own.' );
+		self::assertSame( 'restored', $outcome['row'] );
+		self::assertSame( array( 'other' ), $slugs(), 'The way back leaves the other hand\'s category.' );
+		self::assertSame( $before, self::row_a( $story_a ), 'The row is as before.' );
+	}
+
 	public function testTheDefaultCategoryOfANewPostIsWrittenWithTheRowAndTheJournalSaysSo(): void {
 		// wp_insert_post() gives a new post the default category with the row
 		// (with_row()): the step's own, written with the row, and written as

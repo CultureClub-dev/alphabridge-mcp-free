@@ -298,7 +298,13 @@ e('engine-own-with-row', 'write_parts(): a part changed with the row is the step
 e('engine-foreign-left-at-turn', 'write_parts(): a part the step did not write that changed since the backup is left when the step turns, and the object is unclear', EN,
   "\t\t\t\t\tif ( null === $hash || ! hash_equals( $was, $hash ) ) {", "\t\t\t\t\tif ( false ) {", 'it', OWN)
 e('engine-revert-left', 'revert_boundary(): a part left at the turn is never put back by the way back of the closed run', EN,
-  "\t\t\tif ( 'left' === $part['state'] ) {", "\t\t\tif ( false ) {", 'it', OWN)
+  "\t\t\t$never = 'left' === $part['state'] || 'not_reached' === $part['state'] || ( 'planned' === $part['state'] && ! empty( $part['foreign'] ) );",
+  "\t\t\t$never = 'not_reached' === $part['state'] || ( 'planned' === $part['state'] && ! empty( $part['foreign'] ) );", 'it', OWN)
+e('engine-revert-not-reached', 'revert_boundary(): a part the step never reached (not_reached) is never put back by the way back (Codex round 4)', EN,
+  "\t\t\t$never = 'left' === $part['state'] || 'not_reached' === $part['state'] || ( 'planned' === $part['state'] && ! empty( $part['foreign'] ) );",
+  "\t\t\t$never = 'left' === $part['state'] || ( 'planned' === $part['state'] && ! empty( $part['foreign'] ) );", 'it', 'testAPartTheStepNeverReachedIsNotTakenBackOnTheWayBack')
+e('engine-settled', 'settled(): a part still planned when the request ended the step is not_reached, never the run\'s own (Codex round 4)', EN,
+  "\t\t\tif ( 'planned' === $part['state'] ) {\n\t\t\t\t$journal['parts'][ $k ]['state'] = 'not_reached';", "\t\t\tif ( false ) {\n\t\t\t\t$journal['parts'][ $k ]['state'] = 'not_reached';", 'it', 'testAPartTheStepNeverReachedIsNotTakenBackOnTheWayBack')
 e('engine-deviating-terms-left', 'restore_part(): a deviating part on a way the lock does not refuse is never put back (A2)', EN,
   "\t\tif ( null !== $part['after'] && ! hash_equals( (string) $part['target'], (string) $part['after'] ) && AB_MCP_Sync_Post_Writer::WAY_TERMS === $part['way'] ) {", "\t\tif ( false ) {", 'it', 'testADeviatingTermPartIsNeverTakenBack')
 e('engine-sample-expected', 'sample_finding(): the title of the written object has to be in the body (decision 33; B4)', EN,

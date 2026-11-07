@@ -177,6 +177,20 @@ Ablehnung entsteht, nennt sie den Weg.
   nichts geht zurück. Vorher (N2) galt jeder nach der Zeile veränderte Teil
   als «mit der Zeile geschrieben» – auch eine fremde Termänderung auf den
   Sollwert, die der Rückbau dann zurücksetzte und `restored` meldete.
+- Dieselbe Regel gilt für den Rückweg (Codex-Runde 4): Endet ein Schritt in
+  seinem Request selbst (`done`, abweichend, gescheitert), heissen die Teile,
+  die er nicht mehr erreicht hat, im Journal `not_reached`
+  (`AB_MCP_Sync_Engine::settled()`); er hat sie nie geschrieben, der Rückweg
+  nimmt sie nie zurück (`unchanged`, wo sie der Sicherung gleichen, sonst
+  `left`). Ebenso ein noch geplanter Teil, den das Journal als fremd geändert
+  vermerkt (`foreign`). Nur ein Schritt, dessen Request vor dem Ende abbrach
+  (`interrupted`), behält Teile als `planned` ohne Vermerk; sie fragt der
+  Rückweg nach ihrem Sollwert ab (Entscheid 18, Grenze oben). Vorher galt ein
+  noch geplanter Teil eines regulär beendeten Schritts über seinen Sollwert
+  als eigen: Setzte eine andere Hand ihn auf den Sollwert, nachdem der
+  Schritt vor ihm gescheitert war, nahm der Rückweg die fremde Änderung
+  zurück. Nicht als Mutation geführt: der Zweig «planned mit Vermerk» (nur
+  bei einem Abbruch nach dem Vermerk erreichbar).
 - Verweise auf Objekte, die derselbe Lauf vorher anlegt (Elternteil, Verweis
   im Inhalt), gelten in der Gesamtvorprüfung als ausstehend (`pending`), nicht
   als fehlend; der Schreibschritt mappt sie über das Paar, das der Schritt
@@ -380,7 +394,7 @@ Ablehnung entsteht, nennt sie den Weg.
   Phasenreihenfolge, Stichprobe mit Titel, Aufbewahrung aus den Zeilen mit
   `keep_until` (auch Zeilen ohne Frist), Paket aus einer Lesung mit
   geprüften Termnamen, Plan (`verdict`, `order`, `line_of`). Integration
-  (`tests/integration/SyncRunTest.php`, einundzwanzig Fälle): Ende zu Ende mit
+  (`tests/integration/SyncRunTest.php`, zweiundzwanzig Fälle): Ende zu Ende mit
   Rückweg und `step` auf eine spätere Phase (Merkmal der Sperre beim
   Anlegen), ein Bericht in zwei Läufen geplant, Abweichung in der
   Gesamtvorprüfung, Unterbrechung in eigenem Prozess, bytegenau, Sperrmatrix
@@ -390,6 +404,7 @@ Ablehnung entsteht, nennt sie den Weg.
   Cursor, Vorlage über den Kernweg, abweichender Meta-Teil nimmt die Zeile
   mit, mit der Zeile geschriebene Vorlage geht mit der Zeile zurück, fremde
   Kategorie auf dem Sollwert ist nicht eigen und bleibt (Eigentumsregel),
+  ein nie erreichter Teil geht auf dem Rückweg nicht zurück (`not_reached`),
   Vorgabe-Kategorie eines neuen Beitrags ist mit der Zeile eigen,
   gescheiterter Schritt ohne Rest, abweichende Terme bleiben, kein
   Wiederveröffentlichen bei Menü-Automatik, Rückweglauf unter der

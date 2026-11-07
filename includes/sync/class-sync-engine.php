@@ -769,7 +769,7 @@ final class AB_MCP_Sync_Engine {
 		}
 		// The writes, part by part, each read back under the lock.
 		$outcome = self::write_parts( $run_id, $seq, $journal, $prepared, $current, $live_id );
-		$journal = $outcome['journal'];
+		$journal = self::settled( $outcome['journal'] );
 		$live_id = $outcome['live_id'];
 		AB_MCP_Change_Lock::touch();
 		if ( 'done' !== $outcome['state'] ) {
@@ -944,7 +944,8 @@ final class AB_MCP_Sync_Engine {
 							$journal['parts'][ $k ]['note']  = 'Written with the row by the core (wp_insert_post()).';
 							continue;
 						}
-						$journal['parts'][ $k ]['note'] = isset( $own[ $other['part'] ] )
+						$journal['parts'][ $k ]['foreign'] = true;
+						$journal['parts'][ $k ]['note']    = isset( $own[ $other['part'] ] )
 							? 'Written with the row by the core, but read back other than what the row was to write: not provably the step\'s own, not put back.'
 							: 'Changed since the backup of the step by another hand (a hook of this site reacting to the row, or a writer on a way the lock does not refuse), not by the step: not the step\'s own, not put back.';
 					}
@@ -1440,15 +1441,23 @@ final class AB_MCP_Sync_Engine {
 				continue;
 			}
 			// A part the step left when it turned (changed by another hand, or
-			// not provably the step's own; the ownership rule): never the run's
-			// own, never put back; unchanged only where it is the backup now.
-			if ( 'left' === $part['state'] ) {
+			// not provably the step's own; the ownership rule), a part the step
+			// never reached in a request that ended (not_reached, settled()),
+			// and a part still planned that the journal names as changed by
+			// another hand: never the run's own, never put back; unchanged only
+			// where it is the backup now. Only a part still planned without
+			// such a mark (the request of the step ended before it, the state
+			// interrupted) is asked by its target below.
+			$never = 'left' === $part['state'] || 'not_reached' === $part['state'] || ( 'planned' === $part['state'] && ! empty( $part['foreign'] ) );
+			if ( $never ) {
 				$seen       = AB_MCP_Sync_Post_Writer::current( $live_id );
 				$same       = is_array( $seen ) && hash_equals( (string) AB_MCP_Sync_Post_Writer::part_hash( $backup, (string) $part['part'] ), (string) AB_MCP_Sync_Post_Writer::part_hash( $seen, (string) $part['part'] ) );
+				$why        = 'not_reached' === $part['state'] ? 'the step ended before it reached this part, so it never wrote it' : ( 'left' === $part['state'] ? 'left when the step turned' : 'changed by another hand before the step reached it' );
+				$why       .= isset( $part['note'] ) ? ': ' . (string) $part['note'] : '';
 				$outcomes[] = array(
 					'part'  => $part['part'],
 					'state' => $same ? 'unchanged' : 'left',
-					'note'  => $same ? 'As before the run.' : 'Not the run\'s own (left when the step turned: ' . ( isset( $part['note'] ) ? (string) $part['note'] : 'changed by another hand' ) . '), so it is left as it is.',
+					'note'  => $same ? 'As before the run.' : 'Not the run\'s own (' . $why . '), so it is left as it is.',
 				);
 				if ( ! $same ) {
 					$all_back = false;
@@ -1631,6 +1640,26 @@ final class AB_MCP_Sync_Engine {
 		}
 		AB_MCP_Sync_Run::touch( $run_id );
 		return array( 'next' => 'Not written: ' . $message . ' The run goes on with the next step (action=next); the steps that depend on this object are skipped.' );
+	}
+
+	/**
+	 * The journal of a step whose request ended the step itself (done,
+	 * deviating, failed; not interrupted): a part still planned was never
+	 * reached, so the step did not write it; it stands as not_reached and
+	 * is never the run's own (Codex round 4). Only the journal of a step
+	 * whose request ended before (interrupted) keeps parts planned, which
+	 * the way back asks by their target (decision 18).
+	 *
+	 * @param array $journal Journal.
+	 * @return array
+	 */
+	private static function settled( array $journal ) {
+		foreach ( $journal['parts'] as $k => $part ) {
+			if ( 'planned' === $part['state'] ) {
+				$journal['parts'][ $k ]['state'] = 'not_reached';
+			}
+		}
+		return $journal;
 	}
 
 	/**
