@@ -322,6 +322,17 @@ final class AB_MCP_Sync_Revert {
 			if ( is_wp_error( $moved ) ) {
 				return $moved;
 			}
+			// The step the interruption left begun is unclear from now on: its
+			// journal says which parts were reached; the way back reads it.
+			// The forward steps still planned are skipped: the run goes back.
+			$steps_now = AB_MCP_Sync_Run::steps( (int) $run['run_id'] );
+			foreach ( is_array( $steps_now ) ? $steps_now : array() as $step ) {
+				if ( 'begun' === $step['state'] ) {
+					AB_MCP_Sync_Run::update_step( (int) $run['run_id'], (int) $step['seq'], array( 'state' => 'unclear', 'result' => array( 'message' => 'Interrupted: the request that wrote this step ended before it finished; the way back reads its journal.' ) ), 'begun' );
+				} elseif ( 'planned' === $step['state'] ) {
+					AB_MCP_Sync_Run::update_step( (int) $run['run_id'], (int) $step['seq'], array( 'state' => 'skipped', 'result' => array( 'message' => 'Skipped: the run went to its way back before this step ran.' ) ), 'planned' );
+				}
+			}
 			$first = AB_MCP_Sync_Run::append_steps( (int) $run['run_id'], $steps );
 			if ( is_wp_error( $first ) ) {
 				return $first;

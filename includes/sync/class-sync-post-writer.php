@@ -715,10 +715,10 @@ final class AB_MCP_Sync_Post_Writer {
 	 * @param int      $live_id Post.
 	 * @param string   $key     Key.
 	 * @param string[] $backup  The values before the step, in order.
-	 * @param string[] $written The values the step wrote, in order.
+	 * @param string   $written The hash of the values the step read back (the journal).
 	 * @return array{state:string,note?:string}|WP_Error state restored, unchanged or left.
 	 */
-	public static function restore_meta( $live_id, $key, array $backup, array $written ) {
+	public static function restore_meta( $live_id, $key, array $backup, $written ) {
 		$id  = (int) $live_id;
 		$now = self::meta_values_now( $id, $key );
 		if ( null === $now ) {
@@ -727,7 +727,7 @@ final class AB_MCP_Sync_Post_Writer {
 		if ( self::meta_hash( $now ) === self::meta_hash( $backup ) ) {
 			return array( 'state' => 'unchanged' );
 		}
-		if ( self::meta_hash( $now ) !== self::meta_hash( $written ) ) {
+		if ( ! hash_equals( (string) $written, self::meta_hash( $now ) ) ) {
 			return array(
 				'state' => 'left',
 				'note'  => sprintf( 'The meta %s was changed since the step wrote it, so it is left as it is.', $key ),
@@ -781,10 +781,10 @@ final class AB_MCP_Sync_Post_Writer {
 	 * @param int    $live_id  Post.
 	 * @param string $taxonomy Taxonomy.
 	 * @param int[]  $backup   Term ids before the step.
-	 * @param int[]  $written  Term ids the step wrote.
+	 * @param string $written  The hash of the term ids the step read back (the journal).
 	 * @return array{state:string,note?:string}|WP_Error
 	 */
-	public static function restore_terms( $live_id, $taxonomy, array $backup, array $written ) {
+	public static function restore_terms( $live_id, $taxonomy, array $backup, $written ) {
 		$current = self::current( (int) $live_id );
 		if ( is_wp_error( $current ) || null === $current ) {
 			return is_wp_error( $current ) ? $current : array(
@@ -796,7 +796,7 @@ final class AB_MCP_Sync_Post_Writer {
 		if ( $now === self::terms_hash( $backup ) ) {
 			return array( 'state' => 'unchanged' );
 		}
-		if ( $now !== self::terms_hash( $written ) ) {
+		if ( ! hash_equals( (string) $written, $now ) ) {
 			return array(
 				'state' => 'left',
 				'note'  => sprintf( 'The terms of %s were changed since the step wrote them, so they are left as they are.', $taxonomy ),

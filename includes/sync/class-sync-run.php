@@ -377,7 +377,8 @@ final class AB_MCP_Sync_Run {
 			return self::db_error();
 		}
 		if ( 1 !== (int) $done ) {
-			return new WP_Error( 'ab_mcp_sync_run_changed', 'The run is no longer in the state this call read it in: another call moved it in between. Ask for its status (wp_site_push action=status) and go on from there.' );
+			$now_run = self::get( (int) $run_id );
+			return new WP_Error( 'ab_mcp_sync_run_changed', sprintf( 'The run %1$d is no longer in the state this call read it in (%2$s; it is %3$s now): another call moved it in between. Ask for its status (wp_site_push action=status) and go on from there.', (int) $run_id, implode( ' or ', $states ), is_array( $now_run ) ? $now_run['state'] : 'gone' ) );
 		}
 		return true;
 	}
@@ -475,7 +476,8 @@ final class AB_MCP_Sync_Run {
 			return self::db_error();
 		}
 		if ( null !== $from && 1 !== (int) $done ) {
-			return new WP_Error( 'ab_mcp_sync_run_changed', 'The step is no longer in the state this call read it in: another call moved it in between. Ask for the status of the run and go on from there.' );
+			$now_step = self::step( (int) $run_id, (int) $seq );
+			return new WP_Error( 'ab_mcp_sync_run_changed', sprintf( 'Step %1$d of run %2$d is no longer in the state this call read it in (%3$s; it is %4$s now): another call moved it in between. Ask for the status of the run (wp_site_push action=status) and go on from there.', (int) $seq, (int) $run_id, (string) $from, is_array( $now_step ) ? $now_step['state'] : 'gone' ) );
 		}
 		return true;
 	}
@@ -721,6 +723,7 @@ final class AB_MCP_Sync_Run {
 		}
 		return array(
 			'object' => isset( $parts['object'] ) ? $parts['object'] : null,
+			'backup' => isset( $parts['backup'] ) && is_array( $parts['backup'] ) ? array_intersect_key( $parts['backup'], array_flip( array( 'name', 'sha256', 'bytes', 'absent' ) ) ) : null,
 			'parts'  => $out,
 		);
 	}

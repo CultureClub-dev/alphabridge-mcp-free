@@ -330,8 +330,10 @@ final class AB_MCP_Sync_Engine {
 			}
 			return $step;
 		}
+		// A run on its way back runs its steps of the way back only.
+		$reverting = 'reverting' === $run['state'] || 'revert' === $run['type'];
 		foreach ( $steps as $step ) {
-			if ( 'planned' !== $step['state'] ) {
+			if ( 'planned' !== $step['state'] || ( $reverting && 'revert' !== $step['op'] ) || ( ! $reverting && 'revert' === $step['op'] ) ) {
 				continue;
 			}
 			$waits = null;
@@ -922,15 +924,17 @@ final class AB_MCP_Sync_Engine {
 	private static function restore_part( $run_id, array $journal, $i, $live_id, array $backup ) {
 		$part    = $journal['parts'][ $i ];
 		$name    = (string) $part['part'];
-		$written = (string) $part['after'];
+		// What the step wrote: the hash read back, or, for a part never read
+		// back (the request ended), its target.
+		$written = null !== $part['after'] ? (string) $part['after'] : (string) $part['target'];
 		if ( 'row' === $name ) {
 			$put = AB_MCP_Sync_Post_Writer::restore_row( $live_id, $backup['row'], (string) $part['before'], $written, AB_MCP_Sync_Run::now() );
 		} elseif ( 0 === strpos( $name, 'meta:' ) ) {
 			$key = substr( $name, 5 );
-			$put = AB_MCP_Sync_Post_Writer::restore_meta( $live_id, $key, AB_MCP_Sync_Post_Writer::meta_values( $backup, $key ), self::written_values( $journal, $key ) );
+			$put = AB_MCP_Sync_Post_Writer::restore_meta( $live_id, $key, AB_MCP_Sync_Post_Writer::meta_values( $backup, $key ), $written );
 		} else {
 			$taxonomy = substr( $name, 6 );
-			$put      = AB_MCP_Sync_Post_Writer::restore_terms( $live_id, $taxonomy, AB_MCP_Sync_Post_Writer::term_ids( $backup, $taxonomy ), self::written_terms( $live_id, $taxonomy, $written ) );
+			$put      = AB_MCP_Sync_Post_Writer::restore_terms( $live_id, $taxonomy, AB_MCP_Sync_Post_Writer::term_ids( $backup, $taxonomy ), $written );
 		}
 		if ( is_wp_error( $put ) ) {
 			return array(
@@ -939,39 +943,6 @@ final class AB_MCP_Sync_Engine {
 			);
 		}
 		return $put;
-	}
-
-	/**
-	 * The values a step wrote for a meta key, from the rows now where they
-	 * still hash to what the step read back (the journal keeps hashes, not
-	 * values).
-	 *
-	 * @param array  $journal Journal.
-	 * @param string $key     Key.
-	 * @return string[]
-	 */
-	private static function written_values( array $journal, $key ) {
-		$live_id = isset( $journal['object']['live_ref'] ) ? (int) $journal['object']['live_ref'] : 0;
-		$now     = $live_id > 0 ? AB_MCP_Sync_Post_Writer::current( $live_id ) : null;
-		return is_array( $now ) ? AB_MCP_Sync_Post_Writer::meta_values( $now, $key ) : array();
-	}
-
-	/**
-	 * The term ids a step wrote, from the rows now where they still hash to
-	 * what the step read back.
-	 *
-	 * @param int    $live_id  Post.
-	 * @param string $taxonomy Taxonomy.
-	 * @param string $written  The hash the step read back.
-	 * @return int[]
-	 */
-	private static function written_terms( $live_id, $taxonomy, $written ) {
-		$now = AB_MCP_Sync_Post_Writer::current( $live_id );
-		if ( ! is_array( $now ) ) {
-			return array();
-		}
-		$ids = AB_MCP_Sync_Post_Writer::term_ids( $now, $taxonomy );
-		return AB_MCP_Sync_Post_Writer::terms_hash( $ids ) === $written ? $ids : array();
 	}
 
 	/**
@@ -1185,7 +1156,12 @@ final class AB_MCP_Sync_Engine {
 		$all_back = true;
 		$parts    = array_reverse( $journal['parts'], true );
 		foreach ( $parts as $i => $part ) {
-			if ( ! in_array( $part['state'], array( 'read', 'written', 'restored' ), true ) || null === $part['after'] ) {
+			// A part the step never reached (its request ended before: the
+			// state planned without a hash read back) is asked all the same:
+			// where it hashes to the target now, the step wrote it before the
+			// read back, and it goes back; where it is the hash before,
+			// nothing happened (decision 18: the journal written ahead).
+			if ( ! isset( $part['target'] ) || null === $part['target'] || 'failed' === $part['state'] ) {
 				$outcomes[] = array(
 					'part'  => $part['part'],
 					'state' => 'unchanged',
