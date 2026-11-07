@@ -85,7 +85,10 @@ Ablehnung entsteht, nennt sie den Weg.
   `delete_all`; solange eine Grenze irgendeinen Post deckt, ist der Aufruf
   als Ganzes gesperrt (er träfe auch den gedeckten Post), höchstens 600 s.
   Ein Plugin, das in diesem Fenster einen Schlüssel siteweit entfernt, bekommt
-  `false` und muss es wiederholen (A1).
+  nur `false` und muss es wiederholen (A1): der Kurzschlussfilter
+  `delete_post_metadata` kennt keinen Antworttext, WordPress gibt dem
+  Aufrufer kein `WP_Error` weiter; Grund und Fenster stehen hier und in den
+  Werkzeugtexten, nicht in der Antwort an das Plugin.
 - `pre_update_option` (generisch, für jeden Optionsnamen des Datensatzes)
   hält einen Wert «still» (der alte Wert kommt zurück, `update_option()`
   schreibt nichts); der schreibende Request erfährt nichts davon. Entscheid 19
@@ -200,6 +203,15 @@ Ablehnung entsteht, nennt sie den Weg.
   abweisbaren Weg (Terme) geht nie zurück, auch wenn der heutige Hash dem
   Ist-Hash gleicht: was zurückgelesen wurde, ist nicht nachweislich eigen.
   Er heisst `left`, das Paar wird `unclear` (Entscheide 17, 23; A2).
+- Term-Hashes werden über die Schlüssel als Zeichenketten gebildet
+  (`terms_hash()`, seit B6: Formate nach Slug, Kategorien und Schlagwörter
+  nach Paar-ID). Ein Journal aus einem Zwischenstand von Zweig 8, dessen
+  Term-Hashes noch über Ganzzahlen entstanden, trifft beim Rückweg einen
+  anderen Hash: der Teil bleibt als `left` («changed since the step wrote
+  them») stehen, das Paar wird `unclear`, die Zuordnung wird in wp-admin von
+  Hand zurückgesetzt (Codex-Runde 2, N5). Fail closed, nichts wird
+  überschrieben; solche Journale gibt es nur auf Sites eines
+  Zwischenstands, kein Tag enthält die Sync-Tabellen.
 - Weicht ein Teil innerhalb der Grenze ab, gehen alle vom Schritt
   geschriebenen Teile mit zurück: die davor als Soll geschriebenen (B8) und
   die, die der Kern mit der Zeile schrieb (N2), jeder unter derselben Sperre
@@ -294,12 +306,20 @@ Ablehnung entsteht, nennt sie den Weg.
 - Jeder Abschluss speichert die beim Abschluss geltende Frist in
   `runs.keep_until` (Schema Version 3; `AB_MCP_Sync_Schema::keep_until()`):
   qualifiziert so viele Tage, wie der Filter `ab_mcp_staging_backup_days`
-  sagt (Free 0: nur die letzten drei; Pro 30, Zweig 15), nicht qualifiziert
-  (`closed_aborted`, `closed_checked`, `closed_reverted`, `revert`-Läufe)
-  7 Tage Free bzw. 30 Tage Pro (Entscheid 20 (5)). Die Bereinigung liest nur
-  die gespeicherte Frist: Pro → Free behält jede Frist, Free → Pro verlängert
-  keine (Entscheid 20 (6); A7). Zeilen der Version 2 ohne `keep_until` gelten
-  nicht qualifiziert 7 Tage ab Abschluss.
+  sagt (Free 0: die Frist endet mit dem Abschluss, es bleiben die letzten
+  drei; Pro 30, Zweig 15), nicht qualifiziert (`closed_aborted`,
+  `closed_checked`, `closed_reverted`, `revert`-Läufe) 7 Tage Free bzw. 30
+  Tage Pro (Entscheid 20 (5)); nie 0. Die Bereinigung liest nur die
+  gespeicherte Frist: Pro → Free behält jede Frist, Free → Pro verlängert
+  keine (Entscheid 20 (6); A7).
+- Zeilen ohne gespeicherte Frist (`keep_until = 0`: Abschlüsse der Schema
+  Version 2, vor der Frist) löscht die Bereinigung nie, qualifiziert oder
+  nicht, wie alt auch immer: keine gespeicherte Frist sagt, was ihrem
+  Abschluss versprochen war (ein unter Pro qualifizierter Abschluss hätte 30
+  Tage), also fail closed; ihre Sicherungen bleiben, bis ein späterer Zweig
+  die Fristen nachträgt (Codex-Runde 2, N1). Solche Zeilen gibt es nur auf
+  Sites eines Zwischenstands von Zweig 8: main hat Version 1 ohne
+  schreibenden Lauf, kein Tag enthält die Sync-Tabellen.
 
 ## Prüfung des Laufs (Entscheid 33)
 
@@ -326,22 +346,27 @@ Ablehnung entsteht, nennt sie den Weg.
 ## Prüfung
 
 - Unit (`tests/SyncRunTest.php`): Registrierung und `when`, Mittel, Sperre
-  (auch Request vor der Grenze, `delete_all`), Post-Engine (Sollwert, Sperren,
-  Hashes, Formate nach Slug, Vorlage über den Kernweg, ausstehender
-  Elternteil), Lauf (Form, Verbindung, frische Sperre, Platz für den Rückweg),
+  (auch Request vor der Grenze, `delete_all`; Filter nur auf Sites mit Lauf,
+  Merkmal abgeleitet, fail closed), Post-Engine (Sollwert, Sperren, Hashes
+  je Teil, Formate nach Slug, Vorlage über den Kernweg, ausstehender
+  Elternteil), Lauf (Form, Verbindung, frische Sperre, Platz für den Rückweg
+  mit `MAX_RUN_STEPS`, Ablehnung über `MAX_OBJECTS` mit dem Weg in Teilen),
   Phasenreihenfolge, Stichprobe mit Titel, Aufbewahrung aus den Zeilen mit
-  `keep_until`, Paket aus einer Lesung mit geprüften Termnamen, Plan
-  (`verdict`, `order`, `line_of`). Integration
-  (`tests/integration/SyncRunTest.php`, siebzehn Fälle): Ende zu Ende mit
-  Rückweg und `step` auf eine spätere Phase, Abweichung in der
+  `keep_until` (auch Zeilen ohne Frist), Paket aus einer Lesung mit
+  geprüften Termnamen, Plan (`verdict`, `order`, `line_of`). Integration
+  (`tests/integration/SyncRunTest.php`, neunzehn Fälle): Ende zu Ende mit
+  Rückweg und `step` auf eine spätere Phase (Merkmal der Sperre beim
+  Anlegen), ein Bericht in zwei Läufen geplant, Abweichung in der
   Gesamtvorprüfung, Unterbrechung in eigenem Prozess, bytegenau, Sperrmatrix
   über REST (Request vor der Grenze), Sollwert «als Entwurf übernehmen»,
-  zeitabhängiger Status, Aufbewahrung mit Fristen, neue Eltern- und
-  Unterseite, Befunde über Aufrufe, Prüfung mit Titel und Cursor, Vorlage über
-  den Kernweg, abweichender Meta-Teil nimmt die Zeile mit, gescheiterter
-  Schritt ohne Rest, abweichende Terme bleiben, kein Wiederveröffentlichen
-  bei Menü-Automatik, Rückweglauf unter der Ablagesperre. Mutationen:
-  `tests/mutation/lists/lauf.php` (aus `tests/mutation/gen/lauf.py`).
+  zeitabhängiger Status, Aufbewahrung mit Fristen (auch Zeilen ohne Frist),
+  neue Eltern- und Unterseite, Befunde über Aufrufe, Prüfung mit Titel und
+  Cursor, Vorlage über den Kernweg, abweichender Meta-Teil nimmt die Zeile
+  mit, mit der Zeile geschriebene Vorlage geht mit der Zeile zurück,
+  gescheiterter Schritt ohne Rest, abweichende Terme bleiben, kein
+  Wiederveröffentlichen bei Menü-Automatik, Rückweglauf unter der
+  Ablagesperre. Mutationen: `tests/mutation/lists/lauf.php` (aus
+  `tests/mutation/gen/lauf.py`).
 - Nicht als Mutation geführt: die Wächter gegen eine Datenbank, die ein Lesen
   oder Schreiben verweigert (keine Test-Site verweigert), das Budget der
   Gesamtvorprüfung über Aufrufe mit Tausenden Objekten (die Fortsetzung selbst

@@ -358,20 +358,23 @@ final class AB_MCP_Sync_Schema {
 	 * retention contract (decision 20) as it holds at the close: a qualified
 	 * close for $days days (rule 3: Pro's 30 through the filter; 0 in Free,
 	 * where the last KEEP_LAST qualified closes are kept without an age,
-	 * rule 2); a close that does not qualify for UNQUALIFIED_DAYS, or $days
-	 * where that is more (rule 5: 7 days in Free, 30 in Pro). The period
-	 * stays with the run when the edition changes (rule 6: Pro → Free keeps
-	 * every backup with its Pro period; Free → Pro extends none).
+	 * rule 2, so the period ends at the close itself); a close that does not
+	 * qualify for UNQUALIFIED_DAYS, or $days where that is more (rule 5: 7
+	 * days in Free, 30 in Pro). The period stays with the run when the
+	 * edition changes (rule 6: Pro → Free keeps every backup with its Pro
+	 * period; Free → Pro extends none). Never 0: a stored 0 means a row that
+	 * closed before the period was stored (version 2), which the clean-up
+	 * keeps (backup_runs(); Codex round 2 of branch 8, N1).
 	 *
 	 * @param int  $now       The time of the close.
 	 * @param bool $qualified Whether the close qualifies (forward_closed_at).
 	 * @param int  $days      Days a qualified close is kept (AB_MCP_Protected_Store::backup_days()).
-	 * @return int Seconds; 0 for no period (a qualified close in Free).
+	 * @return int Seconds, at least $now.
 	 */
 	public static function keep_until( $now, $qualified, $days ) {
 		$days = max( 0, (int) $days );
 		if ( $qualified ) {
-			return $days > 0 ? (int) $now + $days * 86400 : 0;
+			return (int) $now + $days * 86400;
 		}
 		return (int) $now + max( self::UNQUALIFIED_DAYS, $days ) * 86400;
 	}
@@ -384,10 +387,12 @@ final class AB_MCP_Sync_Schema {
 	 * runs it takes back in its plan); the last KEEP_LAST qualified closes
 	 * (forward_closed_at set, rule 2, without an age); every closed run
 	 * whose keep_until is not reached (rules 3 and 5 as they held at its
-	 * close, rule 6); and a run that closed without qualifying and without
-	 * a keep_until (a row of version 2) for UNQUALIFIED_DAYS after it
-	 * closed. Null when the table cannot be read, so the caller keeps
-	 * everything.
+	 * close, rule 6); and every run that closed without a keep_until (0: a
+	 * row of version 2, closed before the period was stored), kept as long
+	 * as it is there, fail closed, since no stored period says how long it
+	 * was promised (Codex round 2 of branch 8, N1; such rows exist on sites
+	 * of an intermediate state of branch 8 only). Null when the table cannot
+	 * be read, so the caller keeps everything.
 	 *
 	 * @param int|null $now Time; now when null.
 	 * @return array<int,true>|null
@@ -416,16 +421,13 @@ final class AB_MCP_Sync_Schema {
 				}
 				continue;
 			}
-			// The period the close got (rules 3, 5, 6).
-			if ( (int) $row['keep_until'] > $now ) {
+			// The period the close got (rules 3, 5, 6); a row without one is
+			// kept (N1).
+			if ( 0 === (int) $row['keep_until'] || (int) $row['keep_until'] > $now ) {
 				$keep[ $id ] = true;
 			}
 			if ( (int) $row['forward_closed_at'] > 0 ) {
 				$qualified[ $id ] = (int) $row['forward_closed_at'];
-				continue;
-			}
-			if ( 0 === (int) $row['keep_until'] && $now - (int) $row['closed'] < self::UNQUALIFIED_DAYS * 86400 ) {
-				$keep[ $id ] = true;
 			}
 		}
 		// The last KEEP_LAST qualified closes, by the time they closed.

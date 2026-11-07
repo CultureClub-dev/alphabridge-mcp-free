@@ -1293,7 +1293,8 @@ final class SyncRunTest extends TestCase {
 		global $wpdb;
 		$runs   = AB_MCP_Sync_Schema::table( 'runs' );
 		$now    = time();
-		$make   = static function ( int $id, string $state, int $forward, string $type = 'push', ?array $plan = null ) use ( $wpdb, $runs, $now ): void {
+		$make   = static function ( int $id, string $state, int $forward, string $type = 'push', ?array $plan = null, ?int $keep_until = null ) use ( $wpdb, $runs, $now ): void {
+			$closed = in_array( $state, AB_MCP_Sync_Schema::CLOSED, true ) ? $now - 10 * $id : 0;
 			$wpdb->insert(
 				$runs,
 				array(
@@ -1303,9 +1304,12 @@ final class SyncRunTest extends TestCase {
 					'state'             => $state,
 					'created'           => $now - 100 * $id,
 					'updated'           => $now,
-					'closed'            => in_array( $state, AB_MCP_Sync_Schema::CLOSED, true ) ? $now - 10 * $id : 0,
-					'open_one'          => in_array( $state, AB_MCP_Sync_Schema::CLOSED, true ) ? null : 1,
+					'closed'            => $closed,
+					'open_one'          => $closed > 0 ? null : 1,
 					'forward_closed_at' => $forward,
+					// The period a close stores (set_state(); Free): the time of
+					// the close for a qualified one, seven days for the rest.
+					'keep_until'        => null !== $keep_until ? $keep_until : ( $closed > 0 ? AB_MCP_Sync_Schema::keep_until( $closed, $forward > 0, 0 ) : 0 ),
 					'plan'              => null === $plan ? null : json_encode( $plan ),
 				)
 			);
@@ -1328,7 +1332,7 @@ final class SyncRunTest extends TestCase {
 		$backup( 3 );
 		// An aborted run of long ago: its backups go (unqualified, 7 days).
 		$make( 4, 'closed_aborted', 0 );
-		$wpdb->update( $runs, array( 'closed' => $now - 8 * DAY_IN_SECONDS ), array( 'run_id' => 4 ) );
+		$wpdb->update( $runs, array( 'closed' => $now - 8 * DAY_IN_SECONDS, 'keep_until' => $now - 1 * DAY_IN_SECONDS ), array( 'run_id' => 4 ) );
 		$backup( 4 );
 		$named = AB_MCP_Sync_Schema::backup_runs( $now, 0 );
 		ksort( $named );
@@ -1391,5 +1395,16 @@ final class SyncRunTest extends TestCase {
 		}
 		AB_MCP_Protected_Store::cleanup();
 		self::assertEqualsCanonicalizing( array( 6 ), $kept(), 'Run 6 within its seven days; 3, 5 and 9 go.' );
+		// A row of version 2 (closed before the period was stored, keep_until
+		// 0) is kept as long as it is there, fail closed (N1): an aborted run
+		// of a year ago and a qualified close past the last three alike.
+		$make( 13, 'closed_aborted', 0, 'push', null, 0 );
+		$wpdb->update( $runs, array( 'closed' => $now - 365 * DAY_IN_SECONDS ), array( 'run_id' => 13 ) );
+		$backup( 13 );
+		$make( 14, 'closed_done', $now - 300 * DAY_IN_SECONDS, 'push', null, 0 );
+		$wpdb->update( $runs, array( 'closed' => $now - 300 * DAY_IN_SECONDS ), array( 'run_id' => 14 ) );
+		$backup( 14 );
+		AB_MCP_Protected_Store::cleanup();
+		self::assertEqualsCanonicalizing( array( 6, 13, 14 ), $kept(), 'Rows without a stored period stay.' );
 	}
 }

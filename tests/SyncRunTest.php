@@ -1032,13 +1032,13 @@ final class SyncRunTest extends TestCase {
 		$now      = 1700000000;
 		$day      = 86400;
 		// Every close stores the period it got (keep_until): in Free a
-		// qualified close none (the last three stay without an age), an
-		// unqualified one seven days.
+		// qualified close the time of the close itself (the last three stay
+		// without an age), an unqualified one seven days.
 		$db->rows = array(
-			array( 'run_id' => 1, 'type' => 'push', 'state' => 'closed_done', 'closed' => $now - 40 * $day, 'forward_closed_at' => $now - 40 * $day, 'keep_until' => 0, 'plan' => null ),
-			array( 'run_id' => 2, 'type' => 'push', 'state' => 'closed_findings', 'closed' => $now - 20 * $day, 'forward_closed_at' => $now - 20 * $day, 'keep_until' => 0, 'plan' => null ),
-			array( 'run_id' => 3, 'type' => 'push', 'state' => 'closed_done', 'closed' => $now - 3 * $day, 'forward_closed_at' => $now - 3 * $day, 'keep_until' => 0, 'plan' => null ),
-			array( 'run_id' => 4, 'type' => 'push', 'state' => 'closed_done', 'closed' => $now - 2 * $day, 'forward_closed_at' => $now - 2 * $day, 'keep_until' => 0, 'plan' => null ),
+			array( 'run_id' => 1, 'type' => 'push', 'state' => 'closed_done', 'closed' => $now - 40 * $day, 'forward_closed_at' => $now - 40 * $day, 'keep_until' => $now - 40 * $day, 'plan' => null ),
+			array( 'run_id' => 2, 'type' => 'push', 'state' => 'closed_findings', 'closed' => $now - 20 * $day, 'forward_closed_at' => $now - 20 * $day, 'keep_until' => $now - 20 * $day, 'plan' => null ),
+			array( 'run_id' => 3, 'type' => 'push', 'state' => 'closed_done', 'closed' => $now - 3 * $day, 'forward_closed_at' => $now - 3 * $day, 'keep_until' => $now - 3 * $day, 'plan' => null ),
+			array( 'run_id' => 4, 'type' => 'push', 'state' => 'closed_done', 'closed' => $now - 2 * $day, 'forward_closed_at' => $now - 2 * $day, 'keep_until' => $now - 2 * $day, 'plan' => null ),
 			array( 'run_id' => 5, 'type' => 'push', 'state' => 'closed_aborted', 'closed' => $now - 6 * $day, 'forward_closed_at' => 0, 'keep_until' => $now + 1 * $day, 'plan' => null ),
 			array( 'run_id' => 6, 'type' => 'push', 'state' => 'closed_checked', 'closed' => $now - 8 * $day, 'forward_closed_at' => 0, 'keep_until' => $now - 1 * $day, 'plan' => null ),
 			array( 'run_id' => 7, 'type' => 'revert', 'state' => 'closed_reverted', 'closed' => $now - 1, 'forward_closed_at' => 0, 'keep_until' => $now + 7 * $day - 1, 'plan' => '{"reverts":[1]}' ),
@@ -1070,18 +1070,35 @@ final class SyncRunTest extends TestCase {
 		self::assertArrayHasKey( 6, $kept, 'An unqualified close of Pro: 30 days, not 7.' );
 		$db->rows[0]['keep_until'] = $now;
 		self::assertArrayNotHasKey( 1, AB_MCP_Sync_Schema::backup_runs( $now ), 'The period reached: the last three only.' );
-		// A row of version 2 (no keep_until) that did not qualify: seven days
-		// from its close.
+		// A row of version 2 (no keep_until stored, 0) is kept as long as it is
+		// there, fail closed (N1): no stored period says what its close was
+		// promised; qualified or not, however old.
 		$db->rows[5]['keep_until'] = 0;
-		self::assertArrayNotHasKey( 6, AB_MCP_Sync_Schema::backup_runs( $now ) );
-		$db->rows[5]['closed'] = $now - 6 * $day;
-		self::assertArrayHasKey( 6, AB_MCP_Sync_Schema::backup_runs( $now ) );
-		// The period a close gets (decision 20, rules 3 and 5).
-		self::assertSame( 0, AB_MCP_Sync_Schema::keep_until( $now, true, 0 ), 'Free, qualified: the last three, no age.' );
+		$db->rows[5]['closed']     = $now - 400 * $day;
+		self::assertArrayHasKey( 6, AB_MCP_Sync_Schema::backup_runs( $now ), 'An unqualified close of version 2: kept.' );
+		$db->rows[]                = array( 'run_id' => 10, 'type' => 'push', 'state' => 'closed_done', 'closed' => $now - 300 * $day, 'forward_closed_at' => $now - 300 * $day, 'keep_until' => 0, 'plan' => null );
+		$kept                      = AB_MCP_Sync_Schema::backup_runs( $now );
+		self::assertArrayHasKey( 10, $kept, 'A qualified close of version 2 past the last three: kept.' );
+		self::assertArrayNotHasKey( 1, $kept, 'A close with its period stored and reached goes as before.' );
+		$db->rows[5]['keep_until'] = $now - 1;
+		self::assertArrayNotHasKey( 6, AB_MCP_Sync_Schema::backup_runs( $now ), 'With a period stored and reached it goes.' );
+		// The period a close gets (decision 20, rules 3 and 5): never 0.
+		self::assertSame( $now, AB_MCP_Sync_Schema::keep_until( $now, true, 0 ), 'Free, qualified: the period ends at the close; the last three stay without an age.' );
 		self::assertSame( $now + 30 * $day, AB_MCP_Sync_Schema::keep_until( $now, true, 30 ), 'Pro, qualified: 30 days.' );
 		self::assertSame( $now + 7 * $day, AB_MCP_Sync_Schema::keep_until( $now, false, 0 ), 'Free, unqualified: 7 days.' );
 		self::assertSame( $now + 30 * $day, AB_MCP_Sync_Schema::keep_until( $now, false, 30 ), 'Pro, unqualified: 30 days.' );
 		self::assertSame( $now + 7 * $day, AB_MCP_Sync_Schema::keep_until( $now, false, 3 ), 'Never less than the seven days of Free.' );
+		// Only a qualified close counts among the last three: with two of them
+		// and an unqualified close whose period is reached, the unqualified
+		// one goes, it does not fill the third place.
+		$db->rows = array(
+			array( 'run_id' => 20, 'type' => 'push', 'state' => 'closed_done', 'closed' => $now - 90 * $day, 'forward_closed_at' => $now - 90 * $day, 'keep_until' => $now - 90 * $day, 'plan' => null ),
+			array( 'run_id' => 21, 'type' => 'push', 'state' => 'closed_done', 'closed' => $now - 80 * $day, 'forward_closed_at' => $now - 80 * $day, 'keep_until' => $now - 80 * $day, 'plan' => null ),
+			array( 'run_id' => 22, 'type' => 'push', 'state' => 'closed_aborted', 'closed' => $now - 70 * $day, 'forward_closed_at' => 0, 'keep_until' => $now - 63 * $day, 'plan' => null ),
+		);
+		$kept = AB_MCP_Sync_Schema::backup_runs( $now );
+		ksort( $kept );
+		self::assertSame( array( 20, 21 ), array_keys( $kept ) );
 		// The table unreadable: null, so the store keeps everything.
 		$db->last_error = 'gone';
 		self::assertNull( AB_MCP_Sync_Schema::backup_runs( $now ) );

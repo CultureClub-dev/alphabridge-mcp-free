@@ -215,15 +215,15 @@ KEEP = 'testTheRetentionNamesTheRunsWhoseBackupsStay'
 e('schema-keep-last', 'backup_runs(): the last KEEP_LAST qualified closes (decision 20, rule 2)', SC,
   "\t\t\tif ( $n <= self::KEEP_LAST ) {", "\t\t\tif ( $n <= self::KEEP_LAST + 1 ) {", 'unit', KEEP)
 e('schema-keep-until', 'backup_runs(): a closed run until the keep_until its close stored (rules 3, 5, 6; A7)', SC,
-  "\t\t\tif ( (int) $row['keep_until'] > $now ) {", "\t\t\tif ( false ) {", 'unit', KEEP)
-e('schema-keep-until-qualified', 'keep_until(): a qualified close for the days of the filter (rule 3)', SC,
-  "\t\t\treturn $days > 0 ? (int) $now + $days * 86400 : 0;", "\t\t\treturn 0;", 'unit', KEEP)
+  "\t\t\tif ( 0 === (int) $row['keep_until'] || (int) $row['keep_until'] > $now ) {", "\t\t\tif ( 0 === (int) $row['keep_until'] ) {", 'unit', KEEP)
+e('schema-v2-kept', 'backup_runs(): a row without a stored period (version 2, keep_until 0) is kept, fail closed (N1)', SC,
+  "\t\t\tif ( 0 === (int) $row['keep_until'] || (int) $row['keep_until'] > $now ) {", "\t\t\tif ( (int) $row['keep_until'] > $now ) {", 'unit', KEEP)
+e('schema-keep-until-qualified', 'keep_until(): a qualified close for the days of the filter, the close itself in Free, never 0 (rule 3; N1)', SC,
+  "\t\t\treturn (int) $now + $days * 86400;", "\t\t\treturn $days > 0 ? (int) $now + $days * 86400 : 0;", 'unit', KEEP)
 e('schema-keep-until-unqualified', 'keep_until(): an unqualified close for UNQUALIFIED_DAYS, or the days of the filter where more (rule 5)', SC,
   "\t\treturn (int) $now + max( self::UNQUALIFIED_DAYS, $days ) * 86400;", "\t\treturn (int) $now + self::UNQUALIFIED_DAYS * 86400;", 'unit', KEEP)
 e('schema-reverts', 'backup_runs(): the runs a way back that is not closed needs (rule 4)', SC,
   "\t\t\t\t\t$keep[ (int) $needed ] = true;", '', 'unit', KEEP)
-e('schema-unqualified', 'backup_runs(): an unqualified close without keep_until (a row of version 2) for UNQUALIFIED_DAYS (rule 5)', SC,
-  "\t\t\tif ( 0 === (int) $row['keep_until'] && $now - (int) $row['closed'] < self::UNQUALIFIED_DAYS * 86400 ) {", "\t\t\tif ( 0 === (int) $row['keep_until'] ) {", 'unit', KEEP)
 e('schema-qualified-only', 'backup_runs(): only a qualified close counts among the last three', SC,
   "\t\t\tif ( (int) $row['forward_closed_at'] > 0 ) {", "\t\t\tif ( true ) {", 'unit', KEEP)
 
