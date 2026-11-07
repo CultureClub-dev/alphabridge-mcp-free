@@ -78,7 +78,9 @@
  * way back not beside a step of it; one way (b) for every interrupted run,
  * of either type, with the ways that go named. GitHub Codex round 7: a
  * term_order other than 0 on the staging post locks it as well; the
- * retention reads the plan of a run that is not closed only.
+ * retention reads the plan of a run that is not closed only. GitHub Codex
+ * round 8: the records of a run read back through the inverse of the
+ * canon, bytes as bytes; a record that does not read back decides nothing.
  *
  * Written by tests/mutation/gen/lauf.py from the source; change the entries
  * there and run it again.
@@ -2205,5 +2207,59 @@ return array(
 		'replace' => "\t\t\t\t\$plan = null;",
 		'run'     => $unit( 'SyncRunTest', 'testTheRetentionReadsThePlanOfARunThatIsNotClosedOnlyAndKeepsWhatItKept' ),
 		'expect'  => '/testTheRetentionReadsThePlanOfARunThatIsNotClosedOnlyAndKeepsWhatItKept/',
+	),
+	array(
+		'id'      => 'lauf/run-records-canon',
+		'clause'  => 'records(): the records of a run read through AB_MCP_Sync_Canon::decode(), bytes as bytes (P2)',
+		'file'    => $ru,
+		'search'  => "\t\t\t\$raw[ \$column ] = null === \$text ? null : AB_MCP_Sync_Canon::decode( \$text, 64 );",
+		'replace' => "\t\t\t\$raw[ \$column ] = null === \$text ? null : json_decode( \$text, true, 64 );",
+		'run'     => $unit( 'SyncRunTest', 'testAJournalWithAMetaKeyThatIsNoUtf8ReadsBackAsItsBytesAndItsPartGoesBack' ),
+		'expect'  => '/testAJournalWithAMetaKeyThatIsNoUtf8ReadsBackAsItsBytesAndItsPartGoesBack/',
+	),
+	array(
+		'id'      => 'lauf/run-records-unread',
+		'clause'  => 'records(): a record whose marker does not read back is named in unread',
+		'file'    => $ru,
+		'search'  => "\t\t\t\t\$raw['unread'][] = \$column;",
+		'replace' => "/* removed */",
+		'run'     => $unit( 'SyncRunTest', 'testARecordOfARunWhoseMarkerDoesNotReadBackIsReadAsAbsentAndNamed' ),
+		'expect'  => '/testARecordOfARunWhoseMarkerDoesNotReadBackIsReadAsAbsentAndNamed/',
+	),
+	array(
+		'id'      => 'lauf/run-shown-unread',
+		'clause'  => 'shown(): the status names a record that does not read back',
+		'file'    => $ru,
+		'search'  => "\t\t\t\t\$shown['unread'] = \$step['unread'];",
+		'replace' => "/* removed */",
+		'run'     => $it( 'SyncRunTest', 'testARecordOfTheRunThatDoesNotReadBackIsDecidedOnByNoCall' ),
+		'expect'  => '/testARecordOfTheRunThatDoesNotReadBackIsDecidedOnByNoCall/',
+	),
+	array(
+		'id'      => 'lauf/engine-put-back-unknown',
+		'clause'  => 'put_back(): a part of a name the engine does not know has its outcome, left',
+		'file'    => $en,
+		'search'  => "\t\t\tif ( ! in_array( \$i, \$order, true ) ) {",
+		'replace' => "\t\t\tif ( false ) {",
+		'run'     => $unit( 'SyncRunTest', 'testAJournalWithAMetaKeyThatIsNoUtf8ReadsBackAsItsBytesAndItsPartGoesBack' ),
+		'expect'  => '/testAJournalWithAMetaKeyThatIsNoUtf8ReadsBackAsItsBytesAndItsPartGoesBack/',
+	),
+	array(
+		'id'      => 'lauf/engine-fresh-unread',
+		'clause'  => 'fresh(): a run whose plan or booking does not read back is not changed',
+		'file'    => $en,
+		'search'  => "\t\tif ( isset( \$now['unread'] ) ) {",
+		'replace' => "\t\tif ( false ) {",
+		'run'     => $it( 'SyncRunTest', 'testARecordOfTheRunThatDoesNotReadBackIsDecidedOnByNoCall' ),
+		'expect'  => '/testARecordOfTheRunThatDoesNotReadBackIsDecidedOnByNoCall/',
+	),
+	array(
+		'id'      => 'lauf/revert-plan-unread',
+		'clause'  => 'way_back(): no way back is planned on a journal that does not read back, with the way',
+		'file'    => $rv,
+		'search'  => "\t\t\tif ( isset( \$step['unread'] ) && in_array( 'parts', \$step['unread'], true ) ) {",
+		'replace' => "\t\t\tif ( false ) {",
+		'run'     => $it( 'SyncRunTest', 'testARecordOfTheRunThatDoesNotReadBackIsDecidedOnByNoCall' ),
+		'expect'  => '/testARecordOfTheRunThatDoesNotReadBackIsDecidedOnByNoCall/',
 	),
 );

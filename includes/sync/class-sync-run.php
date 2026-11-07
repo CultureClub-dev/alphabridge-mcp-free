@@ -1053,7 +1053,7 @@ final class AB_MCP_Sync_Run {
 
 	/**
 	 * A row of runs as the callers read it: numbers as ints, budget and
-	 * plan decoded.
+	 * plan decoded (records()).
 	 *
 	 * @param array $raw Row.
 	 * @return array
@@ -1064,14 +1064,12 @@ final class AB_MCP_Sync_Run {
 				$raw[ $column ] = null === $raw[ $column ] ? null : (int) $raw[ $column ];
 			}
 		}
-		foreach ( array( 'budget', 'plan' ) as $column ) {
-			$raw[ $column ] = isset( $raw[ $column ] ) && is_string( $raw[ $column ] ) ? json_decode( $raw[ $column ], true, 64 ) : null;
-		}
-		return $raw;
+		return self::records( $raw, array( 'budget', 'plan' ) );
 	}
 
 	/**
-	 * A row of steps as the callers read it.
+	 * A row of steps as the callers read it: depends, the journal (parts)
+	 * and the result decoded (records()).
 	 *
 	 * @param array $raw Row.
 	 * @return array
@@ -1081,10 +1079,38 @@ final class AB_MCP_Sync_Run {
 			$raw[ $column ] = (int) $raw[ $column ];
 		}
 		$raw['pair_id'] = null === $raw['pair_id'] ? null : (int) $raw['pair_id'];
-		foreach ( array( 'depends', 'parts', 'result' ) as $column ) {
-			$raw[ $column ] = isset( $raw[ $column ] ) && is_string( $raw[ $column ] ) ? json_decode( $raw[ $column ], true, 64 ) : null;
-		}
+		$raw            = self::records( $raw, array( 'depends', 'parts', 'result' ) );
 		$raw['depends'] = is_array( $raw['depends'] ) ? array_map( 'intval', $raw['depends'] ) : array();
+		return $raw;
+	}
+
+	/**
+	 * The records of a row as encode_json() wrote them, read back through
+	 * AB_MCP_Sync_Canon::decode(), its inverse: bytes that are no UTF-8,
+	 * which AB_MCP_Sync_Canon::encode() writes as {"~b":"<base64>"} (a meta
+	 * key such as note\xE9 in the name of a part, meta:note\xE9, a value of
+	 * the identity of an object), come back as their bytes (GitHub Codex
+	 * round 8 on free#137, P2: json_decode() alone left the marker, an array,
+	 * as the name of the part; put_back() left the part out and
+	 * revert_boundary() ended on a TypeError, the way back interrupted). A
+	 * record whose markers do not read back (no writer of this version
+	 * writes one: a float, a set or a key that is no UTF-8 is in no record
+	 * of a run) is read as absent (null) and named in unread, fail closed:
+	 * nothing is decided on it (AB_MCP_Sync_Engine::fresh(), the plan of the
+	 * way back).
+	 *
+	 * @param array    $raw     Row.
+	 * @param string[] $columns The columns of records.
+	 * @return array The row, with unread where a record did not read back.
+	 */
+	private static function records( array $raw, array $columns ) {
+		foreach ( $columns as $column ) {
+			$text           = isset( $raw[ $column ] ) && is_string( $raw[ $column ] ) ? $raw[ $column ] : null;
+			$raw[ $column ] = null === $text ? null : AB_MCP_Sync_Canon::decode( $text, 64 );
+			if ( null !== $text && null === $raw[ $column ] && 'null' !== trim( $text ) ) {
+				$raw['unread'][] = $column;
+			}
+		}
 		return $raw;
 	}
 
@@ -1135,6 +1161,10 @@ final class AB_MCP_Sync_Run {
 				'result'  => $step['result'],
 				'time'    => (int) $step['time'],
 			);
+			if ( isset( $step['unread'] ) ) {
+				// A record that did not read back as it was written (records()).
+				$shown['unread'] = $step['unread'];
+			}
 			$out['steps'][] = $shown;
 			if ( is_array( $step['result'] ) && isset( $step['result']['rest'] ) ) {
 				$out['rests'][] = $step['result']['rest'];

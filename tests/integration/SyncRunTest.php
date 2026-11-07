@@ -1786,6 +1786,59 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( 'Write to us.', self::row_a( (int) $a['contact'] )['post_content'] );
 	}
 
+	public function testARecordOfTheRunThatDoesNotReadBackIsDecidedOnByNoCall(): void {
+		// GitHub Codex round 8 on free#137 (P2), the side that fails closed:
+		// the records of a run are read through AB_MCP_Sync_Canon::decode()
+		// (AB_MCP_Sync_Run::records()), so bytes come back as bytes; a record
+		// whose marker does not read back (no writer of this version stores
+		// one; here written by SQL) is read as absent and named in unread, and
+		// no call decides on it: the plan of the way back refuses a step whose
+		// journal does not read back, with the way (the other steps); a call
+		// that changes the run refuses a run whose plan does not read back.
+		// Nothing is written.
+		self::pair();
+		$a = self::pages_on_a( array( 'contact' => 'Write to us.', 'about' => 'About us.' ) );
+		$b = self::pages_on_b( array( 'contact' => 'Write to us.', 'about' => 'About us.' ) );
+		self::paired( self::staged() );
+		self::change_on_b( $b['contact'], 'contact', 'Write to us on staging.' );
+		self::change_on_b( $b['about'], 'about', 'About us, on staging.' );
+		$run_id = (int) self::begun( self::planned( array( 'contact', 'about' ) )['args'] )['run_id'];
+		for ( $i = 0; $i < 3; $i++ ) {
+			self::assertSame( 'done', self::next( $run_id )['step']['state'], 'The check and the two pages.' );
+		}
+		$writes = array();
+		foreach ( AB_MCP_Sync_Run::steps( $run_id ) as $step ) {
+			if ( 'write' === $step['op'] ) {
+				$writes[] = (int) $step['seq'];
+			}
+		}
+		list( $w1, $w2 ) = $writes;
+		global $wpdb;
+		$steps = AB_MCP_Sync_Schema::table( 'steps' );
+		$runs  = AB_MCP_Sync_Schema::table( 'runs' );
+		// The journal of the first page: a marker of bytes that are UTF-8 after all.
+		self::assertSame( 1, $wpdb->update( $steps, array( 'parts' => '{"object":{"~b":"YWJj"}}' ), array( 'run_id' => $run_id, 'seq' => $w1 ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		self::assertSame( array( 'parts' ), AB_MCP_Sync_Run::step( $run_id, $w1 )['unread'] );
+		self::assertSame( array( 'parts' ), self::step( self::gated( 'wp_site_push', array( 'action' => 'status', 'run_id' => $run_id ) ), $w1 )['unread'], 'The status names it.' );
+		$text = self::refused( self::gated( 'wp_site_revert', array( 'action' => 'plan', 'run_id' => $run_id ) ), 'ab_mcp_sync_revert_unread' );
+		self::assertStringContainsString( sprintf( 'Pass steps without %d', $w1 ), $text, 'The way.' );
+		$preview = self::gated( 'wp_site_revert', array( 'action' => 'plan', 'run_id' => $run_id, 'steps' => array( $w2 ) ) );
+		self::assertIsArray( $preview, is_wp_error( $preview ) ? $preview->get_error_message() : '' );
+		self::assertSame( array( $w2 ), array_column( $preview['preview']['steps'], 'seq' ), 'The other step that wrote is planned.' );
+		// The plan of the run: a float marker, which no plan carries.
+		$plan = (string) $wpdb->get_var( $wpdb->prepare( "SELECT plan FROM `$runs` WHERE run_id = %d", $run_id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		self::assertSame( 1, $wpdb->update( $runs, array( 'plan' => '{"objects":{"~f":"000000000000f03f"}}' ), array( 'run_id' => $run_id ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$was = self::untouched( $run_id, array( (int) $a['contact'], (int) $a['about'] ) );
+		unset( $was['run'] );
+		$text = self::refused( self::next( $run_id ), 'ab_mcp_sync_run_unread' );
+		self::assertStringContainsString( 'its plan does not read back as it was written', $text );
+		$now = self::untouched( $run_id, array( (int) $a['contact'], (int) $a['about'] ) );
+		unset( $now['run'] );
+		self::assertSame( $was, $now, 'Nothing of the steps, the bookings, the backups or the pages changed.' );
+		self::assertSame( 1, $wpdb->update( $runs, array( 'plan' => $plan ), array( 'run_id' => $run_id ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		self::assertSame( 'done', self::next( $run_id )['step']['state'], 'With its plan read back, the run goes on (the caches).' );
+	}
+
 	public function testUnderTheLockOfItsCallAStepTheCallBeganIsItsOwnAndAStepAnEndedRequestLeftIsInterrupted(): void {
 		// settle() under the lock of the call (the decision of 07.11.2026
 		// evening, Variante A): no other request is in a step there, so a step

@@ -244,6 +244,16 @@ final class SyncRunPostWpdb {
 	public function query( $sql ) {
 		$this->last_result = array();
 		$rows              = array();
+		// The way back of a meta row, byte for byte conditional (restore_meta()).
+		if ( preg_match( "/^UPDATE wp_postmeta SET meta_value = '((?:[^'\\\\]|\\\\.)*)' WHERE meta_id = (\\d+) AND post_id = (\\d+) AND CAST\\( meta_value AS BINARY \\) = CAST\\( '((?:[^'\\\\]|\\\\.)*)' AS BINARY \\)/s", (string) $sql, $m ) ) {
+			foreach ( $this->meta[ (int) $m[3] ] ?? array() as $k => $row ) {
+				if ( (int) $row['meta_id'] === (int) $m[2] && (string) $row['meta_value'] === stripslashes( $m[4] ) ) {
+					$this->meta[ (int) $m[3] ][ $k ]['meta_value'] = stripslashes( $m[1] );
+					return 1;
+				}
+			}
+			return 0;
+		}
 		if ( preg_match( '/FROM wp_posts WHERE ID = (\d+)$/', (string) $sql, $m ) ) {
 			++$this->post_reads;
 			if ( isset( $this->rows[ (int) $m[1] ] ) ) {
@@ -1505,6 +1515,100 @@ final class SyncRunTest extends TestCase {
 		$db->relations[12] = array( array( 'term_taxonomy_id' => 3, 'term_order' => 0, 'term_id' => 3, 'taxonomy' => 'category', 'slug' => 'news' ) );
 		$db->term_rows[3]  = array( 'term_id' => 3, 'name' => $term_name, 'slug' => 'news', 'term_group' => 0, 'term_taxonomy_id' => 3, 'taxonomy' => 'category', 'description' => '', 'parent' => 0, 'count' => 1 );
 		return $db;
+	}
+
+	public function testAJournalWithAMetaKeyThatIsNoUtf8ReadsBackAsItsBytesAndItsPartGoesBack(): void {
+		// GitHub Codex round 8 on free#137 (P2): on a column that takes keys
+		// that are no UTF-8, a plain key such as note\xE9 is a part of the
+		// journal, meta:note\xE9, which AB_MCP_Sync_Canon::encode() writes as
+		// {"~b": …}; decode_step() read it with json_decode() alone, the name
+		// came back as the marker (an array), put_back() left the part out and
+		// revert_boundary() ended on a TypeError. The records of a step are
+		// read through AB_MCP_Sync_Canon::decode(): the name comes back as its
+		// bytes, and the part goes back as any other.
+		$key             = "note\xE9";
+		$name            = 'meta:' . $key;
+		$db              = self::post_rows( 'News' );
+		$db->meta[12]    = array( array( 'meta_id' => 1, 'meta_key' => $key, 'meta_value' => 'ABC' ) );
+		$GLOBALS['wpdb'] = $db;
+		$now             = AB_MCP_Sync_Post_Writer::current( 12 );
+		self::assertIsArray( $now );
+		$backup                     = $now;
+		$backup['meta'][0]['value'] = 'abc';
+		$part    = static fn( string $part, bool $own ): array => array(
+			'part'       => $part,
+			'state'      => 'read',
+			'before'     => AB_MCP_Sync_Post_Writer::part_hash( $backup, $part ),
+			'target'     => AB_MCP_Sync_Post_Writer::part_hash( $now, $part ),
+			'pre'        => AB_MCP_Sync_Post_Writer::part_hash( $backup, $part ),
+			'post'       => AB_MCP_Sync_Post_Writer::part_hash( $now, $part ),
+			'own'        => $own,
+			'own_after'  => $own ? AB_MCP_Sync_Post_Writer::part_hash( $now, $part ) : null,
+			'own_target' => $own ? AB_MCP_Sync_Post_Writer::part_hash( $now, $part ) : null,
+		);
+		$journal = array(
+			'object'  => array( 'kind' => 'post', 'op' => 'update', 'staging_ref' => '4', 'live_ref' => '12', 'pair_id' => 5, 'as_draft' => false, 'target' => str_repeat( 'a', 64 ), 'deviated' => null, 'identity' => array( 'post_type' => 'post', 'post_name' => "hello\xE9" ) ),
+			'backup'  => array( 'name' => 'step-0002', 'sha256' => str_repeat( 'b', 64 ), 'bytes' => 10 ),
+			'parts'   => array( $part( 'row', false ), $part( $name, true ), $part( 'terms:category', false ) ),
+			'settled' => true,
+		);
+		$encode = new ReflectionMethod( AB_MCP_Sync_Run::class, 'encode_json' );
+		$stored = $encode->invoke( null, $journal, AB_MCP_Sync_Run::MAX_PARTS );
+		self::assertIsString( $stored );
+		self::assertStringContainsString( '"~b"', $stored, 'The name is stored as the marker of its bytes.' );
+		$step = AB_MCP_Sync_Run::decode_step( array( 'run_id' => '4', 'seq' => '2', 'pair_id' => '5', 'op' => 'write', 'phase' => '5', 'depends' => '[1]', 'state' => 'done', 'parts' => $stored, 'pair_before' => null, 'result' => null, 'time' => '0' ) );
+		$sorted = static function ( $value ) use ( &$sorted ) {
+			if ( ! is_array( $value ) ) {
+				return $value;
+			}
+			$value = array_map( $sorted, $value );
+			if ( ! array_is_list( $value ) ) {
+				ksort( $value, SORT_STRING );
+			}
+			return $value;
+		};
+		self::assertSame( $sorted( $journal ), $step['parts'], 'The journal reads back as it was written (keys sorted, as encode() writes them), bytes as bytes.' );
+		self::assertSame( $name, $step['parts']['parts'][1]['part'] );
+		self::assertArrayNotHasKey( 'unread', $step );
+		// The way back of the step: every part has its outcome, the meta part
+		// goes back byte for byte.
+		$put  = ( new ReflectionMethod( AB_MCP_Sync_Engine::class, 'put_back' ) )->invoke( null, $step['parts'], 12, $backup );
+		$keys = array_keys( $put['parts'] );
+		sort( $keys );
+		self::assertSame( array( 0, 1, 2 ), $keys );
+		self::assertSame( 'restored', $put['parts'][1]['state'], json_encode( $put['parts'][1], JSON_INVALID_UTF8_SUBSTITUTE ) );
+		self::assertSame( 'unchanged', $put['parts'][0]['state'] );
+		self::assertSame( 'abc', $db->meta[12][0]['meta_value'] );
+		self::assertTrue( $put['all_back'] );
+		// A part of a name the engine does not know has its outcome too: left,
+		// never put back, and the way back of the step goes on.
+		$odd                     = $step['parts'];
+		$odd['parts'][1]['part'] = array( '~b' => 'bm90ZennA==' );
+		$db->meta[12][0]['meta_value'] = 'ABC';
+		$put  = ( new ReflectionMethod( AB_MCP_Sync_Engine::class, 'put_back' ) )->invoke( null, $odd, 12, $backup );
+		$keys = array_keys( $put['parts'] );
+		sort( $keys );
+		self::assertSame( array( 0, 1, 2 ), $keys, 'Every part has its outcome.' );
+		self::assertSame( 'left', $put['parts'][1]['state'] );
+		self::assertSame( 'ABC', $db->meta[12][0]['meta_value'], 'Not put back.' );
+		self::assertFalse( $put['all_back'] );
+	}
+
+	public function testARecordOfARunWhoseMarkerDoesNotReadBackIsReadAsAbsentAndNamed(): void {
+		// The other side of the decoding (AB_MCP_Sync_Run::records(), fail
+		// closed): a marker that does not read back (base64 of bytes that are
+		// UTF-8 after all, a float), which no writer of this version stores, is
+		// read as absent and named in unread; the engine and the plan of the
+		// way back decide nothing on it.
+		$step = AB_MCP_Sync_Run::decode_step( array( 'run_id' => '4', 'seq' => '2', 'pair_id' => null, 'op' => 'write', 'phase' => '5', 'depends' => '[1]', 'state' => 'done', 'parts' => '{"parts":[{"part":{"~b":"bm90ZQ=="}}]}', 'pair_before' => null, 'result' => '{"a":1}', 'time' => '0' ) );
+		self::assertNull( $step['parts'] );
+		self::assertSame( array( 'parts' ), $step['unread'] );
+		self::assertSame( array( 'a' => 1 ), $step['result'] );
+		$run = AB_MCP_Sync_Run::decode( array( 'run_id' => '4', 'budget' => '{"bytes":5}', 'plan' => '{"bytes":{"~f":"000000000000f03f"}}' ) );
+		self::assertNull( $run['plan'] );
+		self::assertSame( array( 'plan' ), $run['unread'] );
+		self::assertSame( array( 'bytes' => 5 ), $run['budget'] );
+		self::assertArrayNotHasKey( 'unread', AB_MCP_Sync_Run::decode( array( 'run_id' => '4', 'budget' => null, 'plan' => '{"objects":[]}' ) ) );
 	}
 
 	public function testThePackageOfObjectsCarriesTheContentOfTheReadingItsHashCameFrom(): void {

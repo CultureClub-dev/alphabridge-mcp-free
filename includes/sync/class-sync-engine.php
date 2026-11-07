@@ -177,6 +177,11 @@ final class AB_MCP_Sync_Engine {
 		if ( ! is_array( $now ) ) {
 			return is_wp_error( $now ) ? $now : AB_MCP_Sync_Run::unknown( (int) $run['run_id'] );
 		}
+		if ( isset( $now['unread'] ) ) {
+			// A record of the run that does not read back as it was written
+			// (AB_MCP_Sync_Run::records()): nothing is decided on it.
+			return new WP_Error( 'ab_mcp_sync_run_unread', sprintf( 'Run %1$d is not changed: its %2$s does not read back as it was written (a marker of its bytes that does not hold), so nothing of the run is decided on it. Ask the host to check the table of the runs; the backups of the run in the protected store hold the objects as they were before its steps.', (int) $run['run_id'], implode( ' and ', $now['unread'] ) ) );
+		}
 		if ( (string) $now['state'] !== (string) $run['state'] ) {
 			return new WP_Error( 'ab_mcp_sync_run_state', sprintf( 'Run %1$d was %2$s when this call read it and is %3$s now (another call moved it in between): nothing was written, its steps stay as they are. Ask for the status of the run (wp_site_push action=status) and go on from there.', (int) $run['run_id'], (string) $run['state'], (string) $now['state'] ) );
 		}
@@ -1548,9 +1553,21 @@ final class AB_MCP_Sync_Engine {
 		$order = array();
 		foreach ( array( 'row', 'meta:', 'terms:' ) as $prefix ) {
 			foreach ( $parts as $i => $part ) {
-				if ( 0 === strpos( (string) $part['part'], $prefix ) ) {
+				if ( is_string( $part['part'] ) && 0 === strpos( $part['part'], $prefix ) ) {
 					$order[] = $i;
 				}
+			}
+		}
+		// A part of no known name gets its outcome as well: left, never put
+		// back (every part of the journal has one; GitHub Codex round 8 on
+		// free#137, P2: a name read as the marker of its bytes was left out,
+		// and the way back of the step ended on a TypeError).
+		foreach ( $parts as $i => $part ) {
+			if ( ! in_array( $i, $order, true ) ) {
+				$out[ $i ] = array(
+					'state' => 'left',
+					'note'  => 'A part of a name this version does not know: left as it is, check the object by hand.',
+				);
 			}
 		}
 		$seen    = AB_MCP_Sync_Post_Writer::current( $live_id );
@@ -1629,7 +1646,7 @@ final class AB_MCP_Sync_Engine {
 		$again    = AB_MCP_Sync_Post_Writer::current( $live_id );
 		$all_back = true;
 		foreach ( $parts as $i => $part ) {
-			$name = (string) $part['part'];
+			$name = is_string( $part['part'] ) ? $part['part'] : '';
 			if ( in_array( $out[ $i ]['state'], array( 'restored', 'unchanged' ), true ) ) {
 				$now = is_array( $again ) ? AB_MCP_Sync_Post_Writer::part_hash( $again, $name ) : null;
 				if ( null === $now || ! hash_equals( (string) AB_MCP_Sync_Post_Writer::part_hash( $backup, $name ), $now ) ) {

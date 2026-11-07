@@ -855,6 +855,39 @@ Ablehnung entsteht, nennt sie den Weg.
   Ablage) und an `decode()`
   (`testABackupGivesBytesThatAreNoUtf8BackAsBytesNotAsTheMarkerOfTheCanon`,
   `testABackupReadsBackBytesThatAreNoUtf8AsBytesNotAsTheMarker`).
+- Ebenso die Datensätze des Laufs: Plan und Reservierung eines Laufs, je
+  Schritt `depends`, Journal und Ergebnis liest `AB_MCP_Sync_Run::records()`
+  über `AB_MCP_Sync_Canon::decode()`, die Umkehr von `encode()`, mit dem
+  `encode_json()` sie schreibt (GitHub-Codex 8, P2). Ein erlaubter einfacher
+  Meta-Schlüssel ausserhalb von UTF-8 (`note\xE9`, nur auf Spalten, die solche
+  Schlüssel zulassen) steht im Journal als Teil `meta:note\xE9` mit der Hülle
+  `{"~b": …}`; `json_decode()` allein liess die Hülle als Array stehen,
+  `put_back()` liess den Teil aus, `revert_boundary()` endete an einem
+  `TypeError`, und der Rückweg blieb unterbrochen. Jetzt kommen Namen und
+  Werte als die ursprünglichen Bytes zurück, und der Teil geht zurück wie
+  jeder andere. Gewählt ist das Entpacken statt einer Sperre solcher
+  Schlüssel: `decode()` ist die genaue Umkehr für Formen aus Text, Bytes,
+  Zahlen, Wahrheitswerten und Textschlüsseln, wie Datensätze des Laufs sie
+  tragen, und gilt für die Sicherungen schon. Andere Leser bleiben, weil
+  keine Hülle in ihnen stehen kann: die Schnappschüsse der Paare schreibt
+  `json_encode()` nur mit gültigem UTF-8, und `backup_rows()` liest aus dem
+  Plan nur die Zahlen in `reverts`. Dazu gibt `put_back()` jedem Teil ein
+  Ergebnis (ein Teil unbekannten Namens: `left`), so dass der Rückweg eines
+  Schritts nie an einem fehlenden Ergebnis scheitert. Grenze C: Ein
+  Datensatz, dessen Hülle nicht zurückliest (kein Schreiber dieses Stands
+  erzeugt einen: kein Datensatz eines Laufs trägt einen Float, eine Menge
+  oder einen Schlüssel ausserhalb von UTF-8; nur ein von aussen veränderter),
+  gilt als nicht vorhanden und steht in `unread` (auch in `status`): kein
+  verändernder Aufruf entscheidet auf einem Lauf mit nicht lesbarem Plan oder
+  nicht lesbarer Reservierung (`ab_mcp_sync_run_unread`, nichts geändert),
+  und der Plan des Rückwegs lehnt einen Schritt mit nicht lesbarem Journal ab
+  (`ab_mcp_sync_revert_unread`, Weg: `steps` ohne ihn, das Objekt von Hand
+  prüfen; die Sicherung hält den Stand davor). Eine Antwort zeigt einen
+  Teilnamen ausserhalb von UTF-8 so, wie `wp_json_encode()` ihn für JSON
+  umwandelt; das Journal hält die Bytes. Prüffälle
+  `testAJournalWithAMetaKeyThatIsNoUtf8ReadsBackAsItsBytesAndItsPartGoesBack`,
+  `testARecordOfARunWhoseMarkerDoesNotReadBackIsReadAsAbsentAndNamed` (Unit),
+  `testARecordOfTheRunThatDoesNotReadBackIsDecidedOnByNoCall` (Integration).
 
 ## Lauf und Plan (Entscheide 15, 16, 32)
 
@@ -1090,7 +1123,7 @@ Ablehnung entsteht, nennt sie den Weg.
   der alte Wert (`before_value()`: Zeile, langer Text mit Revision, Meta,
   Terme, synthetische Geheimnisse, kein UTF-8, Kürzung je Wert und je Teil)
   und die Kappung je Antwort (`cap_values()`).
-  Integration (`tests/integration/SyncRunTest.php`, vierundsechzig Fälle): Ende zu Ende mit
+  Integration (`tests/integration/SyncRunTest.php`, fünfundsechzig Fälle): Ende zu Ende mit
   Rückweg und `step` auf eine spätere Phase (Merkmal der Sperre beim
   Anlegen), ein Bericht in zwei Läufen geplant, Abweichung in der
   Gesamtvorprüfung, Unterbrechung in eigenem Prozess (die Zeile bleibt mit

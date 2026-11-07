@@ -357,6 +357,12 @@ final class AB_MCP_Sync_Revert {
 			if ( null !== $wanted && ! in_array( (int) $step['seq'], $wanted, true ) ) {
 				continue;
 			}
+			// A journal that does not read back as it was written
+			// (AB_MCP_Sync_Run::records()): no way back is planned on it, fail
+			// closed and with the way, rather than leaving the step out unsaid.
+			if ( isset( $step['unread'] ) && in_array( 'parts', $step['unread'], true ) ) {
+				return new WP_Error( 'ab_mcp_sync_revert_unread', sprintf( 'The journal of step %1$d of run %2$d does not read back as it was written (a marker of its bytes that does not hold), so no way back is planned on it and nothing is taken back. Pass steps without %1$d to plan the way back of the other steps that wrote, and check its object by hand in wp-admin; its backup in the protected store holds the object as it was before the step.', (int) $step['seq'], (int) $run['run_id'] ) );
+			}
 			$journal = is_array( $step['parts'] ) && isset( $step['parts']['object'] ) ? $step['parts'] : null;
 			// Only a step with a journal and a backup wrote anything (decision
 			// 17: no mutation without a backup); a step that failed before its

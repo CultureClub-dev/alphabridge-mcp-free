@@ -688,6 +688,26 @@ e('schema-plan-not-listed', 'backup_rows(): the rows of the retention are read w
 e('schema-plan-per-run', 'backup_rows(): the plan of a run that is not closed, read for it alone, keeps the runs its way back needs', SC,
   "\t\t\t\t$plan = is_string( $raw ) ? json_decode( $raw, true, 16 ) : null;", "\t\t\t\t$plan = null;", 'unit', PLANS)
 
+# ------------------------------- GitHub Codex round 8 on free#137 (one P2)
+# The records of a run read through AB_MCP_Sync_Canon::decode(), bytes as
+# bytes; a record whose marker does not read back is absent and named, and
+# no call decides on it; every part of a way back has its outcome.
+BYTES_JOURNAL = 'testAJournalWithAMetaKeyThatIsNoUtf8ReadsBackAsItsBytesAndItsPartGoesBack'
+UNREAD_UNIT = 'testARecordOfARunWhoseMarkerDoesNotReadBackIsReadAsAbsentAndNamed'
+UNREAD_IT = 'testARecordOfTheRunThatDoesNotReadBackIsDecidedOnByNoCall'
+e('run-records-canon', 'records(): the records of a run read through AB_MCP_Sync_Canon::decode(), bytes as bytes (P2)', RU,
+  "\t\t\t$raw[ $column ] = null === $text ? null : AB_MCP_Sync_Canon::decode( $text, 64 );", "\t\t\t$raw[ $column ] = null === $text ? null : json_decode( $text, true, 64 );", 'unit', BYTES_JOURNAL)
+e('run-records-unread', 'records(): a record whose marker does not read back is named in unread', RU,
+  "\t\t\t\t$raw['unread'][] = $column;", '', 'unit', UNREAD_UNIT)
+e('run-shown-unread', 'shown(): the status names a record that does not read back', RU,
+  "\t\t\t\t$shown['unread'] = $step['unread'];", '', 'it', UNREAD_IT)
+e('engine-put-back-unknown', 'put_back(): a part of a name the engine does not know has its outcome, left', EN,
+  "\t\t\tif ( ! in_array( $i, $order, true ) ) {", "\t\t\tif ( false ) {", 'unit', BYTES_JOURNAL)
+e('engine-fresh-unread', 'fresh(): a run whose plan or booking does not read back is not changed', EN,
+  "\t\tif ( isset( $now['unread'] ) ) {", "\t\tif ( false ) {", 'it', UNREAD_IT)
+e('revert-plan-unread', 'way_back(): no way back is planned on a journal that does not read back, with the way', RV,
+  "\t\t\tif ( isset( $step['unread'] ) && in_array( 'parts', $step['unread'], true ) ) {", "\t\t\tif ( false ) {", 'it', UNREAD_IT)
+
 
 def test_of(expect):
     return expect.split(' with data set "', 1)[0]
@@ -814,7 +834,9 @@ out.append('''<?php
  * way back not beside a step of it; one way (b) for every interrupted run,
  * of either type, with the ways that go named. GitHub Codex round 7: a
  * term_order other than 0 on the staging post locks it as well; the
- * retention reads the plan of a run that is not closed only.
+ * retention reads the plan of a run that is not closed only. GitHub Codex
+ * round 8: the records of a run read back through the inverse of the
+ * canon, bytes as bytes; a record that does not read back decides nothing.
  *
  * Written by tests/mutation/gen/lauf.py from the source; change the entries
  * there and run it again.
