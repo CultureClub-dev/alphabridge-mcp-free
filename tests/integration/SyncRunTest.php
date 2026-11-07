@@ -1626,6 +1626,58 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( array( 'new' ), $tags(), 'The tags the hook set stay; not put back to Old.' );
 	}
 
+	public function testAHookThatChangesAWrittenPartAsALaterPartIsWrittenDeviatesTheObject(): void {
+		// Codex round 13: a hook of this site sets the plain meta label from
+		// the category and the tag whenever their terms are set. The step
+		// writes the label first (other/new, its target), then the category:
+		// the hook makes the label other/old, then the tag: other/new again,
+		// as the target. The change of the label in between is another
+		// hand's: the object deviated, and nothing of it goes back by itself.
+		self::pair();
+		$news_a  = wp_insert_term( 'News', 'category' );
+		$other_a = wp_insert_term( 'Other', 'category' );
+		self::assertIsArray( $news_a, is_wp_error( $news_a ) ? $news_a->get_error_message() : '' );
+		self::assertIsArray( $other_a, is_wp_error( $other_a ) ? $other_a->get_error_message() : '' );
+		$news_b  = (int) self::b( array( array( 'op' => 'insert_term', 'name' => 'News', 'taxonomy' => 'category', 'as' => 'term' ) ) )['term'];
+		$other_b = (int) self::b( array( array( 'op' => 'insert_term', 'name' => 'Other', 'taxonomy' => 'category', 'as' => 'term' ) ) )['term'];
+		foreach ( array( 'old', 'new' ) as $tag ) {
+			self::assertIsArray( wp_insert_term( $tag, 'post_tag' ) );
+			self::b( array( array( 'op' => 'insert_term', 'name' => $tag, 'taxonomy' => 'post_tag', 'as' => 'term' ) ) );
+		}
+		$story_a = wp_insert_post( wp_slash( self::page( 'story', 'A story.', array( 'post_type' => 'post', 'post_category' => array( (int) $news_a['term_id'] ), 'tags_input' => array( 'old' ) ) ) ), true );
+		self::assertIsInt( $story_a );
+		add_post_meta( $story_a, 'label', 'news/old' );
+		$story_b = (int) self::b( array( array( 'op' => 'insert_post', 'args' => self::page( 'story', 'A story.', array( 'post_type' => 'post', 'post_category' => array( $news_b ), 'tags_input' => array( 'old' ) ) ), 'as' => 'post' ) ) )['post'];
+		self::b( array( array( 'op' => 'add_meta', 'post' => $story_b, 'key' => 'label', 'value' => 'news/old' ) ) );
+		self::paired( self::staged() );
+		self::change_on_b( (string) $story_b, 'story', 'A story, on staging.', array( 'post_type' => 'post', 'post_category' => array( $other_b ), 'tags_input' => array( 'new' ) ) );
+		self::b( array( array( 'op' => 'update_meta', 'post' => $story_b, 'key' => 'label', 'value' => 'other/new' ) ) );
+		$planned = self::planned( array( 'story' ) );
+		$run     = self::begun( $planned['args'] );
+		self::assertSame( 'done', self::next( (int) $run['run_id'] )['step']['state'] );
+		$label = static function ( $object_id, $terms, $tt_ids, $taxonomy ) use ( $story_a ) {
+			if ( (int) $object_id !== $story_a || ! in_array( $taxonomy, array( 'category', 'post_tag' ), true ) ) {
+				return;
+			}
+			$cat = wp_get_object_terms( $story_a, 'category', array( 'fields' => 'slugs' ) );
+			$tag = wp_get_object_terms( $story_a, 'post_tag', array( 'fields' => 'slugs' ) );
+			update_post_meta( $story_a, 'label', ( $cat[0] ?? '' ) . '/' . ( $tag[0] ?? '' ) );
+		};
+		add_action( 'set_object_terms', $label, 10, 4 );
+		$write = self::next( (int) $run['run_id'] );
+		remove_all_actions( 'set_object_terms' );
+		self::assertIsArray( $write, is_wp_error( $write ) ? $write->get_error_message() : '' );
+		self::assertSame( 'unclear', $write['step']['state'], json_encode( $write['step'] ) );
+		self::assertSame( 'meta:label', $write['step']['parts']['object']['deviated']['part'] );
+		self::probe_ok();
+		self::finish( (int) $run['run_id'] );
+		$begun   = self::revert( (int) $run['run_id'] );
+		$back    = self::revert_all( (int) $begun['run_id'] );
+		$outcome = array_column( self::step( $back, 1 )['result']['parts'], 'state', 'part' );
+		self::assertSame( 'left', $outcome['meta:label'], json_encode( self::step( $back, 1 )['result'] ) );
+		self::assertNotSame( array( 'news/old' ), self::meta_a( $story_a, 'label' ), 'The label the hook wrote is not put back.' );
+	}
+
 	public function testTheDefaultCategoryOfANewPostIsWrittenWithTheRowAndTheJournalSaysSo(): void {
 		// wp_insert_post() gives a new post the default category with the row
 		// (with_row()): the step's own, written with the row, and written as

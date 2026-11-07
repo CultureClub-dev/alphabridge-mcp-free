@@ -969,6 +969,7 @@ final class AB_MCP_Sync_Engine {
 			$target      = (string) $part['target'];
 			$through_row = false;
 			$error       = null;
+			$post_all    = null;
 			if ( 'row' === $name ) {
 				// Every part right before the row call: the row call writes
 				// besides the row (with_row()), so every part is read before it
@@ -1040,6 +1041,21 @@ final class AB_MCP_Sync_Engine {
 				$error                  = is_wp_error( $done ) ? $done : null;
 				$post_all               = AB_MCP_Sync_Post_Writer::current( $live_id );
 				$journal['parts'][ $i ] = self::seen_after( $journal['parts'][ $i ], is_array( $post_all ) ? $post_all : null, $target, false );
+			}
+			// A part the step wrote before that this call changed besides
+			// itself (a hook of this site reacting to the call) is another
+			// hand's: the object deviated (Codex round 13; the mirror of the
+			// way back, put_back()). The row call reads every part already.
+			if ( 'row' !== $name && is_array( $post_all ) ) {
+				foreach ( $journal['parts'] as $k => $other ) {
+					if ( $k === $i || ! in_array( $other['state'], array( 'read', 'written' ), true ) || ! isset( $other['post'] ) || null === $other['post'] ) {
+						continue;
+					}
+					if ( self::changed( (string) $other['post'], AB_MCP_Sync_Post_Writer::part_hash( $post_all, (string) $other['part'] ) ) ) {
+						$journal['parts'][ $k ]['foreign'] = true;
+						$journal['parts'][ $k ]['note']    = self::noted( $other, sprintf( 'Changed as the step wrote the part %s (a hook of this site reacting to the call), after the step had written it: not provably the step\'s own.', $name ) );
+					}
+				}
 			}
 			$one     = $journal['parts'][ $i ];
 			$post    = $one['post'];

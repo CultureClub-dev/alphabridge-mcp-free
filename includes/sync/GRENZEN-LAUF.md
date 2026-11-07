@@ -138,6 +138,12 @@ Ablehnung entsteht, nennt sie den Weg.
   ganz stehen (`seen_after()`, `unread`; Codex-Runde 11). Die Abweichung im
   Schritt selbst ist nicht als Mutation geführt (keine Test-Site verweigert
   das Lesen), `seen_after()` schon.
+- Ändert ein eigener Aufruf im Schritt einen Teil, den der Schritt vorher
+  schon geschrieben hat (ein Hook dieser Site, der etwa aus Kategorie und
+  Schlagwort einen Meta-Wert berechnet), ist das eine Abweichung: das Objekt
+  bleibt ganz stehen, auch wenn der Teil am Ende wieder dem Soll gleicht
+  (`write_parts()` liest nach jedem Meta- und Term-Aufruf alle schon
+  geschriebenen Teile nach; Codex-Runde 13; das Gegenstück zum Rückweg unten).
 - Ändert das Zurücksetzen eines Teils auf dem Rückweg einen anderen Teil
   (eine Nebenwirkung des Kerns wie die Vorgabe-Kategorie, oder ein Hook, der
   etwa beim Zurücksetzen der Kategorie die Schlagwörter setzt), verliert
@@ -640,7 +646,7 @@ Ablehnung entsteht, nennt sie den Weg.
   der alte Wert (`before_value()`: Zeile, langer Text mit Revision, Meta,
   Terme, synthetische Geheimnisse, kein UTF-8, Kürzung je Wert und je Teil)
   und die Kappung je Antwort (`cap_values()`).
-  Integration (`tests/integration/SyncRunTest.php`, vierzig Fälle): Ende zu Ende mit
+  Integration (`tests/integration/SyncRunTest.php`, einundvierzig Fälle): Ende zu Ende mit
   Rückweg und `step` auf eine spätere Phase (Merkmal der Sperre beim
   Anlegen), ein Bericht in zwei Läufen geplant, Abweichung in der
   Gesamtvorprüfung, Unterbrechung in eigenem Prozess (die Zeile bleibt mit

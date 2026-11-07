@@ -1123,6 +1123,15 @@ return array(
 		'expect'  => '/testAPartNotReadBackAfterItsCallIsNeverTheStepsOwn/',
 	),
 	array(
+		'id'      => 'lauf/engine-written-changed-later',
+		'clause'  => 'write_parts(): a part the step wrote that a later call changes besides itself is another hand\'s, the object deviated (Codex round 13)',
+		'file'    => $en,
+		'search'  => "\t\t\t\t\tif ( self::changed( (string) \$other['post'], AB_MCP_Sync_Post_Writer::part_hash( \$post_all, (string) \$other['part'] ) ) ) {",
+		'replace' => "\t\t\t\t\tif ( false ) {",
+		'run'     => $it( 'SyncRunTest', 'testAHookThatChangesAWrittenPartAsALaterPartIsWrittenDeviatesTheObject' ),
+		'expect'  => '/testAHookThatChangesAWrittenPartAsALaterPartIsWrittenDeviatesTheObject/',
+	),
+	array(
 		'id'      => 'lauf/writer-before-password',
 		'clause'  => 'row_before(): post_password is a credential by its name, never shown',
 		'file'    => $pw,
