@@ -1052,6 +1052,12 @@ final class AB_MCP_Sync_Engine {
 				$journal['parts'][ $i ]['note']  = self::noted( $one, sprintf( 'The call failed (%1$s)%2$s.', $error->get_error_message(), $changed ? ' after it changed the part' : ' and changed nothing of the part' ) );
 				return self::deviated( $journal, $i, sprintf( 'the call of the part %1$s failed (%2$s)%3$s', $name, $error->get_error_message(), $changed ? ' after it changed the part' : '' ), $live_id, $backup );
 			}
+			// A part not read back after the call: whether it holds what the
+			// call wrote is unknown, a deviation (Codex round 11).
+			if ( ! empty( $one['unread'] ) ) {
+				$journal['parts'][ $i ]['note'] = self::noted( $one, 'Could not be read back after the call.' );
+				return self::deviated( $journal, $i, sprintf( 'the part %s could not be read back after the call', $name ), $live_id, $backup );
+			}
 			// Another hand changed a part within the step (seen_before(),
 			// seen_after(): with the row, or before the step's call): a
 			// deviation, whichever part, even where the step then wrote it as
@@ -1195,8 +1201,17 @@ final class AB_MCP_Sync_Engine {
 	 * @return array The part.
 	 */
 	private static function seen_after( array $part, $state, $expected, $by_row ) {
-		$name          = (string) $part['part'];
-		$post          = AB_MCP_Sync_Post_Writer::part_hash( is_array( $state ) ? $state : null, $name );
+		$name = (string) $part['part'];
+		if ( ! is_array( $state ) ) {
+			// Not read back (the read failed, or the post is gone): never the
+			// hash of an empty set, never ownership; the step deviates
+			// (write_parts(); Codex round 11).
+			$part['post']   = null;
+			$part['after']  = null;
+			$part['unread'] = true;
+			return $part;
+		}
+		$post          = AB_MCP_Sync_Post_Writer::part_hash( $state, $name );
 		$part['post']  = $post;
 		$part['after'] = $post;
 		if ( ! self::changed( isset( $part['pre'] ) ? $part['pre'] : null, $post ) ) {

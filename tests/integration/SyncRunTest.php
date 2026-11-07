@@ -2080,7 +2080,7 @@ final class SyncRunTest extends TestCase {
 		// The preview of the way back names what will happen: left.
 		$preview = self::gated( 'wp_site_revert', array( 'action' => 'plan', 'run_id' => (int) $run['run_id'] ) );
 		self::assertIsArray( $preview, is_wp_error( $preview ) ? $preview->get_error_message() : '' );
-		self::assertSame( 'left', $preview['preview']['steps'][0]['will'] );
+		self::assertSame( 'stays', $preview['preview']['steps'][0]['will'] );
 		self::assertCount( 4, $preview['preview']['limits'], 'The limits of the way back name the one boundary.' );
 		// The way back: every part of the deviated object is left, the row
 		// though it holds what the step read back.
@@ -2141,10 +2141,11 @@ final class SyncRunTest extends TestCase {
 		self::probe_ok();
 		self::assertSame( 'closed_findings', self::finish( (int) $run['run_id'] )['state'] );
 		// The way back of the closed run: every part is as the backup; the
-		// preview says there is nothing to do (Codex round 8, B).
+		// preview says the object stays (nothing of it goes back by itself),
+		// the way back names every part unchanged (Codex rounds 8, 11).
 		$preview = self::gated( 'wp_site_revert', array( 'action' => 'plan', 'run_id' => (int) $run['run_id'] ) );
 		self::assertIsArray( $preview, is_wp_error( $preview ) ? $preview->get_error_message() : '' );
-		self::assertSame( 'nothing', $preview['preview']['steps'][0]['will'] );
+		self::assertSame( 'stays', $preview['preview']['steps'][0]['will'] );
 		$begun = self::revert( (int) $run['run_id'] );
 		$back  = self::revert_all( (int) $begun['run_id'] );
 		self::assertSame( 'closed_reverted', $back['state'], json_encode( self::step( $back, 1 )['result'] ) );
@@ -2153,10 +2154,10 @@ final class SyncRunTest extends TestCase {
 	}
 
 	public function testThePreviewOfAStepFailedAsTheBackupSaysLeftOnceAnotherHandChangedTheObject(): void {
-		// Codex round 10: the row call refused before it wrote, the step
-		// failed with its object as the backup; then another hand edits the
-		// title. The preview of the way back says left, not nothing, as the
-		// way back leaves the object (it deviated within its step).
+		// Codex rounds 10 and 11: the row call refused before it wrote, the
+		// step failed with its object as the backup; then another hand edits
+		// the title. The preview says the object stays (it claims nothing of
+		// what it holds now), and the way back leaves the edited row.
 		self::pair();
 		$a       = self::pages_on_a( array( 'contact' => 'Write to us.' ) );
 		$b       = self::pages_on_b( array( 'contact' => 'Write to us.' ) );
@@ -2183,7 +2184,7 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( $contact, $edited );
 		$preview = self::gated( 'wp_site_revert', array( 'action' => 'plan', 'run_id' => (int) $run['run_id'] ) );
 		self::assertIsArray( $preview, is_wp_error( $preview ) ? $preview->get_error_message() : '' );
-		self::assertSame( 'left', $preview['preview']['steps'][0]['will'] );
+		self::assertSame( 'stays', $preview['preview']['steps'][0]['will'] );
 		$begun   = self::revert( (int) $run['run_id'] );
 		$back    = self::revert_all( (int) $begun['run_id'] );
 		$outcome = array_column( self::step( $back, 1 )['result']['parts'], 'state', 'part' );
@@ -2227,7 +2228,7 @@ final class SyncRunTest extends TestCase {
 		self::assertNotInstanceOf( WP_Error::class, $set );
 		$preview = self::gated( 'wp_site_revert', array( 'action' => 'plan', 'run_id' => $run_id ) );
 		self::assertIsArray( $preview, is_wp_error( $preview ) ? $preview->get_error_message() : '' );
-		self::assertSame( 'left', $preview['preview']['steps'][0]['will'] );
+		self::assertSame( 'stays', $preview['preview']['steps'][0]['will'] );
 		$begun   = self::revert( $run_id );
 		$back    = self::revert_all( (int) $begun['run_id'] );
 		$outcome = array_column( self::step( $back, 1 )['result']['parts'], 'state', 'part' );

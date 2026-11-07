@@ -1181,6 +1181,29 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( 'left', AB_MCP_Sync_Engine::decide( array( 'part' => 'row', 'way' => AB_MCP_Sync_Post_Writer::WAY_ROW, 'target' => $hash['target'], 'state' => 'written', 'after' => $hash['own_after'] ), $hash['own_after'], $hash['backup'] )['state'], 'after alone, a description, owns nothing.' );
 	}
 
+	public function testAPartNotReadBackAfterItsCallIsNeverTheStepsOwn(): void {
+		// Codex round 11: the read after the step's call failed (or the post
+		// is gone): seen_after() gets no state. The part is no read back
+		// (post null, unread), never the hash of an empty set, never the
+		// step's own; write_parts() deviates the object on the mark.
+		$part = array(
+			'part'   => 'meta:note',
+			'way'    => AB_MCP_Sync_Post_Writer::WAY_META,
+			'state'  => 'planned',
+			'before' => str_repeat( 'b', 64 ),
+			'target' => AB_MCP_Sync_Post_Writer::part_hash( null, 'meta:note' ),
+			'pre'    => str_repeat( 'b', 64 ),
+			'post'   => null,
+			'own'    => false,
+		);
+		$seen = new ReflectionMethod( AB_MCP_Sync_Engine::class, 'seen_after' );
+		$after = $seen->invoke( null, $part, null, (string) $part['target'], false );
+		self::assertNull( $after['post'] );
+		self::assertTrue( $after['unread'] );
+		self::assertFalse( $after['own'], 'A target of no value is no read back of it.' );
+		self::assertSame( 'left', AB_MCP_Sync_Engine::decide( $after, (string) $part['target'], str_repeat( 'b', 64 ) )['state'] );
+	}
+
 	public function testAJournalWithoutTheMarkOfOwnershipIsNeverPutBack(): void {
 		// Codex round 7, F3: a part of a journal from an earlier build of this
 		// branch has no own field; holding its target now, never read back by

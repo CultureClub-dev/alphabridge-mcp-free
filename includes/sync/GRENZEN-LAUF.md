@@ -125,10 +125,19 @@ Ablehnung entsteht, nennt sie den Weg.
   zuvor eigener Teil geht so auch später nie zurück, Codex-Runde 9), und die
   Vorschau des Rückwegs sagt für ihn `nothing`, solange jeder Teil heute wie
   vor dem Schritt liest; hat eine andere Hand das Objekt seither geändert,
-  sagt sie `left` (Codex-Runde 10). Grenze C: Ein Journal aus dem lokalen,
+  sagt sie `left` (Codex-Runde 10). Seit Codex-Runde 11 sagt die Vorschau
+  für jedes abgewichene Objekt einheitlich `stays` (nichts davon geht von
+  selbst zurück) und behauptet nichts über seinen heutigen Stand; der
+  Rückweg nennt jeden Teil `unchanged` (wie die Sicherung) oder `left`. Grenze C: Ein Journal aus dem lokalen,
   nie gepushten Stand `61bb244` konnte die Marke eines solchen Objekts
   gelöscht und ein früheres Eigentum behalten haben; solche Journale gibt es
   nur in lokalen Testdatenbanken dieses Zweigs.
+- Liest der Schritt einen Teil nach seinem eigenen Aufruf nicht zurück (das
+  Lesen scheitert, der Post ist weg), ist das eine Abweichung: kein
+  Rücklesen, nie der Hash einer leeren Menge, nie Eigentum; das Objekt bleibt
+  ganz stehen (`seen_after()`, `unread`; Codex-Runde 11). Die Abweichung im
+  Schritt selbst ist nicht als Mutation geführt (keine Test-Site verweigert
+  das Lesen), `seen_after()` schon.
 - Jeder alte Wert trägt die Marke der Regeln, nach denen dieser Build ihn
   zusammensetzt (`value_rules` = `AB_MCP_Sync_Post_Writer::VALUE_RULES`).
   Beim Ausgeben (`AB_MCP_Sync_Run::cap_values()`) zeigt die Antwort einen
@@ -655,7 +664,7 @@ Ablehnung entsteht, nennt sie den Weg.
   die Terme eines Beitrags, dessen Schritt die Kategorien leerte, stehen,
   fremde Änderung vor einem verweigerten Meta-Aufruf (N1), von einem Hook
   mit der Zeile geänderte Vorlage (N2), abgewichenes Objekt bleibt auch auf
-  dem Rückweg des geschlossenen Laufs ganz stehen (Vorschau `will` = `left`),
+  dem Rückweg des geschlossenen Laufs ganz stehen (Vorschau `will` = `stays`),
   verweigerter Zeilenaufruf ohne Schreiben (`failed`, nichts `left`). Unit
   dazu: Schlüssel mit Backslash, Recht zum Entfernen eines nur live
   vorhandenen Schlüssels. Mutationen: `tests/mutation/lists/lauf.php` (aus

@@ -290,22 +290,11 @@ final class AB_MCP_Sync_Revert {
 			foreach ( isset( $journal['parts'] ) && is_array( $journal['parts'] ) ? $journal['parts'] : array() as $part ) {
 				$foreign = $foreign || ( is_array( $part ) && ! empty( $part['foreign'] ) );
 			}
-			// A step failed with its object as the backup (deviated before it
-			// changed anything) has nothing to take back (Codex round 8, B),
-			// as long as every part reads as before the step now (Codex round
-			// 10: a hand that changed the object since leaves it left).
-			$as_before = 'failed' === $step['state'] && ! empty( $object['deviated'] ) && $live_id > 0;
-			if ( $as_before ) {
-				$now_all = AB_MCP_Sync_Post_Writer::current( $live_id );
-				foreach ( isset( $journal['parts'] ) && is_array( $journal['parts'] ) ? $journal['parts'] : array() as $part ) {
-					$now = is_array( $now_all ) && is_array( $part ) ? AB_MCP_Sync_Post_Writer::part_hash( $now_all, (string) $part['part'] ) : null;
-					if ( null === $now || ! isset( $part['before'] ) || null === $part['before'] || ! hash_equals( (string) $part['before'], $now ) ) {
-						$as_before = false;
-						break;
-					}
-				}
-			}
-			$will      = 'create' === $object['op'] ? 'rest' : ( $as_before ? 'nothing' : ( ! empty( $object['deviated'] ) || ! array_key_exists( 'deviated', $object ) || $foreign ? 'left' : ( 'done' === $step['state'] ? 'back' : 'back where own' ) ) );
+			// An object that deviated within its step: nothing of it goes back
+			// by itself (the decision of 07.11.2026); the preview says so and
+			// claims nothing of what it holds now: the way back names each part
+			// unchanged (as the backup) or left (Codex rounds 8, 10, 11).
+			$will = 'create' === $object['op'] ? 'rest' : ( ! empty( $object['deviated'] ) || ! array_key_exists( 'deviated', $object ) || $foreign ? 'stays' : ( 'done' === $step['state'] ? 'back' : 'back where own' ) );
 			$shown[] = array(
 				'seq'      => (int) $step['seq'],
 				'state'    => $step['state'],
