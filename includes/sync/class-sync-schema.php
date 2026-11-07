@@ -9,8 +9,12 @@
  *
  *  - pairs: one row per object pair (AB_MCP_Sync_Pairs), unique per
  *    (source_id, kind, live_ref) and per (source_id, kind, staging_ref);
- *  - runs:  one row per run of wp_site_push or wp_site_revert (filled from
- *    branch 8 of the plan on);
+ *  - runs:  one row per run of wp_site_push or wp_site_revert (branch 8 of
+ *    the plan; AB_MCP_Sync_Run): open_one is 1 while the run is not closed
+ *    and NULL once it is, so the unique key on it lets one run at a time be
+ *    open on a site (decision 15); forward_closed_at marks a qualified
+ *    close (decision 20); calls counts the calls of the run; plan holds
+ *    what it writes;
  *  - steps: one row per step of a run, the old state of its pair in
  *    pair_before (the plan's steps.before: BEFORE is a reserved word of
  *    MySQL, and dbDelta() takes the columns without backticks).
@@ -41,8 +45,23 @@ final class AB_MCP_Sync_Schema {
 	/** The option that holds the installed version of the tables. */
 	const OPTION = 'ab_mcp_staging_db_version';
 
-	/** The version of the tables this code makes. */
-	const VERSION = 1;
+	/**
+	 * The version of the tables this code makes: 2 since branch 8 of the
+	 * plan (the runs: one open run per site by a unique key, the mark of a
+	 * qualified close, the calls of a run and its plan).
+	 */
+	const VERSION = 2;
+
+	/**
+	 * Seconds the backups of a run that closed without qualifying (aborted,
+	 * closed as checked, reverted, or a run of the way back) are kept after
+	 * it closed (decision 20, rule 5: 7 days in Free; Pro sets 30 through
+	 * AB_MCP_Protected_Store::BACKUP_DAYS_FILTER, which backup_runs() reads).
+	 */
+	const UNQUALIFIED_DAYS = 7;
+
+	/** Qualified closes whose backups Free keeps at least (decision 20, rule 2). */
+	const KEEP_LAST = 3;
 
 	/** Seconds before a failed attempt is made again on plugins_loaded. */
 	const RETRY = 3600;
@@ -98,6 +117,10 @@ final class AB_MCP_Sync_Schema {
 			'heartbeat'   => "bigint(20) unsigned NOT NULL default '0'",
 			'expires'     => "bigint(20) unsigned NOT NULL default '0'",
 			'budget'      => 'longtext NULL',
+			'open_one'    => 'tinyint(3) unsigned NULL',
+			'forward_closed_at' => "bigint(20) unsigned NOT NULL default '0'",
+			'calls'       => "int(10) unsigned NOT NULL default '0'",
+			'plan'        => 'longtext NULL',
 		),
 		'steps' => array(
 			'run_id'      => "bigint(20) unsigned NOT NULL default '0'",
@@ -127,6 +150,7 @@ final class AB_MCP_Sync_Schema {
 		'runs'  => array(
 			'PRIMARY KEY  (run_id)',
 			'KEY state (state)',
+			'UNIQUE KEY open_one (open_one)',
 		),
 		'steps' => array(
 			'PRIMARY KEY  (run_id,seq)',
@@ -139,7 +163,7 @@ final class AB_MCP_Sync_Schema {
 	 */
 	const UNIQUE = array(
 		'pairs' => array( 'PRIMARY', 'live_ref', 'staging_ref' ),
-		'runs'  => array( 'PRIMARY' ),
+		'runs'  => array( 'PRIMARY', 'open_one' ),
 		'steps' => array( 'PRIMARY' ),
 	);
 
@@ -322,6 +346,66 @@ final class AB_MCP_Sync_Schema {
 			return null;
 		}
 		return array_values( array_map( 'intval', $ids ) );
+	}
+
+	/**
+	 * The runs whose backups the clean-up keeps right now (decision 20, the
+	 * retention contract of 03.11.2026), by run_id: every run that is not
+	 * closed (rule 5 and the way back of its own run); every run a way back
+	 * that is not closed needs (rule 4: a run of the type revert names the
+	 * runs it takes back in its plan); the last KEEP_LAST qualified closes
+	 * (forward_closed_at set, rule 2, without an age) and every qualified
+	 * close within $days days (rule 3, Pro's 30; 0 in Free); and a run that
+	 * closed without qualifying for UNQUALIFIED_DAYS after it closed (rule
+	 * 5). Null when the table cannot be read, so the caller keeps everything.
+	 *
+	 * @param int|null $now  Time; now when null.
+	 * @param int      $days Days a qualified close is kept besides the last KEEP_LAST.
+	 * @return array<int,true>|null
+	 */
+	public static function backup_runs( $now = null, $days = 0 ) {
+		global $wpdb;
+		if ( ! self::available() ) {
+			return null;
+		}
+		$now = null === $now ? time() : (int) $now;
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table name is ours.
+		$rows = $wpdb->get_results( 'SELECT run_id, type, state, closed, forward_closed_at, plan FROM `' . self::table( 'runs' ) . '` ORDER BY run_id', ARRAY_A );
+		if ( '' !== (string) $wpdb->last_error || ! is_array( $rows ) ) {
+			return null;
+		}
+		$keep      = array();
+		$qualified = array();
+		foreach ( $rows as $row ) {
+			$id = (int) $row['run_id'];
+			if ( ! in_array( (string) $row['state'], self::CLOSED, true ) ) {
+				$keep[ $id ] = true;
+				// The runs a way back that is not closed needs (rule 4).
+				$plan = is_string( $row['plan'] ) ? json_decode( $row['plan'], true, 16 ) : null;
+				foreach ( is_array( $plan ) && isset( $plan['reverts'] ) && is_array( $plan['reverts'] ) ? $plan['reverts'] : array() as $needed ) {
+					$keep[ (int) $needed ] = true;
+				}
+				continue;
+			}
+			if ( (int) $row['forward_closed_at'] > 0 ) {
+				$qualified[ $id ] = (int) $row['forward_closed_at'];
+				continue;
+			}
+			if ( $now - (int) $row['closed'] < self::UNQUALIFIED_DAYS * 86400 ) {
+				$keep[ $id ] = true;
+			}
+		}
+		// The last KEEP_LAST qualified closes, by the time they closed, and
+		// every one within $days.
+		arsort( $qualified, SORT_NUMERIC );
+		$n = 0;
+		foreach ( $qualified as $id => $at ) {
+			++$n;
+			if ( $n <= self::KEEP_LAST || ( $days > 0 && $now - $at < $days * 86400 ) ) {
+				$keep[ $id ] = true;
+			}
+		}
+		return $keep;
 	}
 
 	/**

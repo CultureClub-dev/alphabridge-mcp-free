@@ -30,8 +30,16 @@
  * make_env(), branch 7) holds the lines of the environment of this site
  * instead (AB_MCP_Sync_Env: versions, hashes of must-use plugins and
  * drop-ins, counts of files and tables, group U), no object; each package
- * of its series begins with its page. Packages of objects and media follow
- * with the takeover.
+ * of its series begins with its page. A package of objects (purpose
+ * objects, make_objects(), branch 8) holds, for the objects a report named
+ * (its report_hash is in the manifest, decision 5), each object as line()
+ * writes it with its canonical form and its content as the rows of this
+ * site hold it (the engine of its kind reads them, AB_MCP_Sync_Kind::
+ * export(): a post with its row, meta and terms); no series, one package
+ * for at most MAX_REFS objects, each within the raw size of one object of
+ * decision 8. An object a credential holds carries no content, as in a
+ * package of the inventory; one the account may not read is withheld.
+ * Packages of media follow with the takeover of attachments (Z8 branch 10).
  *
  * WHO MAKES IT (decision 9): the confirmed staging site paired with a
  * production site, with write access on (the access level Full), for an
@@ -110,7 +118,10 @@ final class AB_MCP_Sync_Export {
 	const WITHHELD_WAY = 'These objects are not in the package, because the account that made it may not read them (needs: the capability it lacks; gone: the object is no longer there), and their kinds and subtypes are not complete in it. To include them: 1. Make the package with an account that has the capability named, or give this account that capability. 2. Call wp_site_export again.';
 
 	/** The purposes this version makes packages for: the inventory, the environment (AB_MCP_Sync_Env). */
-	const PURPOSES = array( 'inventory', 'env' );
+	const PURPOSES = array( 'inventory', 'env', 'objects' );
+
+	/** Objects a package of objects holds at most (the list a tool call takes, AB_MCP_Security). */
+	const MAX_REFS = 2000;
 
 	/**
 	 * The operations of the locks the credential check gives (line()): a
@@ -131,22 +142,29 @@ final class AB_MCP_Sync_Export {
 	 * Make a package on this confirmed staging site, for the production site
 	 * it is paired with.
 	 *
-	 * @param mixed    $purpose What the package is for (PURPOSES).
-	 * @param mixed    $cursor  The cursor of the answer for the package
-	 *                          before, or null for the first of a series.
-	 * @param int|null $objects Objects the package reads at most; OBJECTS.
+	 * @param mixed      $purpose What the package is for (PURPOSES).
+	 * @param mixed      $cursor  The cursor of the answer for the package
+	 *                            before, or null for the first of a series.
+	 * @param int|null   $objects Objects the package reads at most; OBJECTS.
+	 * @param array|null $for     For purpose objects: report_hash (the report
+	 *                            the objects are for) and refs (the objects:
+	 *                            kind and ref on this site, as the report
+	 *                            names the staging side).
 	 * @return array|WP_Error The package (answer()).
 	 */
-	public static function make( $purpose, $cursor = null, $objects = null ) {
+	public static function make( $purpose, $cursor = null, $objects = null, $for = null ) {
 		$refused = self::refusal();
 		if ( null !== $refused ) {
 			return $refused;
 		}
 		if ( ! in_array( $purpose, self::PURPOSES, true ) ) {
-			return new WP_Error( 'ab_mcp_sync_export_purpose', 'This version makes packages of the inventory and of the environment of the staging site; packages of objects and media come with the takeover. Pass purpose=inventory or purpose=env.' );
+			return new WP_Error( 'ab_mcp_sync_export_purpose', 'This version makes packages of the inventory and of the environment of the staging site, and packages of objects for a report; packages of media come with the takeover of attachments. Pass purpose=inventory, purpose=env or purpose=objects.' );
 		}
 		if ( 'env' === $purpose ) {
 			return self::make_env( $cursor, null === $objects ? self::OBJECTS : (int) $objects );
+		}
+		if ( 'objects' === $purpose ) {
+			return self::make_objects( is_array( $for ) ? $for : array() );
 		}
 		$from  = null;
 		$index = null;
@@ -262,6 +280,135 @@ final class AB_MCP_Sync_Export {
 			'inner' => $read['state'],
 		);
 		return self::store( 'env', $packed, array(), $next, $series, $report );
+	}
+
+	/**
+	 * Make a package of objects of this staging site for one report of the
+	 * production site (decision 5; branch 8): the objects the refs name,
+	 * each read by the engine of its kind (AB_MCP_Sync_Kind::export()) as
+	 * the line of the inventory with its canonical form and its content,
+	 * so the production site writes exactly what the report compared (the
+	 * engine checks each hash against the line of the report). What the
+	 * account may not read is withheld and named (decision 9); an object a
+	 * credential holds carries no content (as line() writes it) and is
+	 * counted; an object of a kind whose engine writes nothing in this
+	 * version refuses the package with the stage (fail closed, nothing is
+	 * guessed); a ref that is not on this site is named as gone.
+	 *
+	 * @param array $for report_hash, refs.
+	 * @return array|WP_Error The package (answer()).
+	 */
+	private static function make_objects( array $for ) {
+		$report_hash = isset( $for['report_hash'] ) ? $for['report_hash'] : null;
+		if ( ! is_string( $report_hash ) || 1 !== preg_match( '/^[0-9a-f]{64}\z/', $report_hash ) ) {
+			return new WP_Error( 'ab_mcp_sync_export_report', 'A package of objects is made for one report: pass report_hash, the 64 hex characters wp_site_diff gave on the production site, so the package is read for that report only.' );
+		}
+		$refs = isset( $for['refs'] ) ? $for['refs'] : null;
+		if ( ! is_array( $refs ) || ! array_is_list( $refs ) || array() === $refs || count( $refs ) > self::MAX_REFS ) {
+			return new WP_Error( 'ab_mcp_sync_export_refs', sprintf( 'A package of objects takes refs: a list of 1 to %d objects of this staging site, each with kind and ref as the entries of the report name the staging side (staging.ref). Pass that list.', self::MAX_REFS ) );
+		}
+		$by_kind = array();
+		foreach ( $refs as $i => $one ) {
+			if ( ! is_array( $one ) || ! isset( $one['kind'], $one['ref'] ) || ! is_string( $one['kind'] ) || ! is_scalar( $one['ref'] ) || '' === (string) $one['ref'] ) {
+				return new WP_Error( 'ab_mcp_sync_export_refs', sprintf( 'refs[%d] is not an object of kind and ref. Pass each as the entries of the report name the staging side.', (int) $i ) );
+			}
+			$by_kind[ $one['kind'] ][ (string) $one['ref'] ] = true;
+		}
+		try {
+			$series = bin2hex( random_bytes( 16 ) );
+		} catch ( Throwable $e ) {
+			return new WP_Error( 'ab_mcp_sync_export_random', 'No package was made: PHP has no source of random bytes on this server. Ask the host to check the PHP installation, then call again.' );
+		}
+		$pair   = AB_MCP_Staging::record()['pair'];
+		$source = AB_MCP_Sync_Inventory::source( array( home_url(), $pair['partner_url'] ), AB_MCP_Sync_Inventory::BUDGET, null, null, null );
+		$read   = array();
+		$gone   = array();
+		foreach ( $by_kind as $kind_name => $list ) {
+			$kind = AB_MCP_Sync_Db_Kinds::for_pair( $kind_name );
+			if ( null === $kind ) {
+				return new WP_Error( 'ab_mcp_sync_export_kind', sprintf( 'The takeover knows no kind %s, so no package of objects of it is made. Use the kind as the report names it (post, term, menu, menu_item, widget_area, custom_css, option).', $kind_name ), array( 'kind' => $kind_name ) );
+			}
+			$asked = array();
+			foreach ( array_keys( $list ) as $ref ) {
+				$asked[] = array(
+					'kind'   => $kind_name,
+					'ref'    => (string) $ref,
+					'source' => $source,
+				);
+			}
+			$objects = $kind->export( $asked );
+			if ( is_wp_error( $objects ) ) {
+				return $objects;
+			}
+			$found = array();
+			foreach ( $objects as $object ) {
+				$found[ (string) $object['ref'] ] = true;
+				$read[]                           = $object;
+			}
+			foreach ( array_keys( $list ) as $ref ) {
+				if ( ! isset( $found[ (string) $ref ] ) ) {
+					$gone[] = array(
+						'kind' => $kind_name,
+						'ref'  => (string) $ref,
+					);
+				}
+			}
+		}
+		AB_MCP_Sync_Identity::reset();
+		$sorted = self::sort( $read );
+		foreach ( $gone as $one ) {
+			++$sorted['report']['withheld']['count'];
+			if ( count( $sorted['report']['withheld']['objects'] ) < self::WITHHELD_LIST ) {
+				$sorted['report']['withheld']['objects'][] = array(
+					'kind'    => $one['kind'],
+					'needs'   => 'gone',
+					'ref'     => $one['ref'],
+					'subtype' => '',
+				);
+			}
+		}
+		$kinds = array();
+		foreach ( $sorted['packed'] as $object ) {
+			$subtype = self::subtype( $object );
+			$key     = $object['kind'] . "\0" . $subtype;
+			// A selection, never every object of its kind.
+			$kinds[ $key ] = array(
+				'complete' => false,
+				'kind'     => (string) $object['kind'],
+				'subtype'  => $subtype,
+			);
+		}
+		ksort( $kinds, SORT_STRING );
+		$lines = array_map( array( __CLASS__, 'object_line' ), $sorted['packed'] );
+		unset( $read, $sorted['packed'] );
+		$packed = self::pack( $lines );
+		unset( $lines );
+		if ( is_wp_error( $packed ) ) {
+			return $packed;
+		}
+		return self::store( 'objects', $packed, array_values( $kinds ), null, $series, $sorted['report'], null, null, $report_hash );
+	}
+
+	/**
+	 * The line of an object in a package of objects: the line of the
+	 * inventory (line()) and, where no credential holds the object, its
+	 * canonical form and its content as the engine of its kind read them.
+	 *
+	 * @param array $object An object of AB_MCP_Sync_Kind::export() (the
+	 *                      result of AB_MCP_Sync_Canon::finish() with form
+	 *                      and content).
+	 * @return array
+	 */
+	public static function object_line( array $object ) {
+		$line = self::line( AB_MCP_Sync_Inventory::entry( $object ) );
+		if ( ! isset( $line['hash'] ) ) {
+			// Held: identity, status and locks only (line()).
+			return $line;
+		}
+		return $line + array(
+			'form'    => $object['form'],
+			'content' => isset( $object['content'] ) && is_array( $object['content'] ) ? $object['content'] : array(),
+		);
 	}
 
 	/**
@@ -802,9 +949,10 @@ final class AB_MCP_Sync_Export {
 	 * @param array       $report  What was withheld and the credentials (sort()).
 	 * @param array|null  $index   Where the package before kept the index (gid, parts).
 	 * @param string|null $text    The index as this call left it; null where it stays.
+	 * @param string|null $report_hash The report a package of objects is for (decision 5); null otherwise.
 	 * @return array|WP_Error answer().
 	 */
-	private static function store( $purpose, array $packed, array $kinds, $cursor, $series, array $report, $index = null, $text = null ) {
+	private static function store( $purpose, array $packed, array $kinds, $cursor, $series, array $report, $index = null, $text = null, $report_hash = null ) {
 		self::discard_stale();
 		$bytes = 0;
 		$whole = hash_init( 'sha256' );
@@ -863,7 +1011,7 @@ final class AB_MCP_Sync_Export {
 				'objects'     => $packed['objects'],
 				'package_id'  => $gid,
 				'purpose'     => $purpose,
-				'report_hash' => null,
+				'report_hash' => $report_hash,
 				'sha256'      => hash_final( $whole ),
 				'unpacked'    => $packed['unpacked'],
 			)

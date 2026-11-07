@@ -527,7 +527,7 @@ final class SyncPackageTest extends TestCase {
 		delete_option( AB_MCP_Sync_Key::OPTION_MAC );
 		self::assertNull( AB_MCP_Sync_Key::mac( 'ab-sync-fetch/1', 'x' ), 'No secret, no MAC.' );
 		// The next export makes it: refused for the package, not for the key.
-		self::assertSame( 'ab_mcp_sync_export_purpose', AB_MCP_Sync_Export::make( 'objects' )->get_error_code() );
+		self::assertSame( 'ab_mcp_sync_export_purpose', AB_MCP_Sync_Export::make( 'media' )->get_error_code() );
 		self::assertNotNull( AB_MCP_Sync_Key::mac( 'ab-sync-fetch/1', 'x' ) );
 		self::assertSame( $key, AB_MCP_Sync_Key::current(), 'The key and its confirmation stay.' );
 		self::assertFalse( $GLOBALS['ab_test_autoload'][ AB_MCP_Sync_Key::OPTION_MAC ] );
@@ -576,7 +576,7 @@ final class SyncPackageTest extends TestCase {
 		unset( $opts['staging']['bind'] );
 		update_option( 'ab_mcp_options', $opts );
 		self::assertNull( AB_MCP_Sync_Export::binding() );
-		self::assertSame( 'ab_mcp_sync_export_purpose', AB_MCP_Sync_Export::make( 'objects' )->get_error_code() );
+		self::assertSame( 'ab_mcp_sync_export_purpose', AB_MCP_Sync_Export::make( 'media' )->get_error_code() );
 		self::assertNotNull( AB_MCP_Staging::bind() );
 		self::assertNotSame( $first, AB_MCP_Sync_Export::binding() );
 		// Where it cannot be stored: no package, and the way.
@@ -604,7 +604,7 @@ final class SyncPackageTest extends TestCase {
 			\AB_MCP_Settings::set( \AB_MCP_Site_Mode::KEY, \AB_MCP_Site_Mode::FULL );
 		}
 		// The way: with both, the request goes on to what it asks.
-		self::assertSame( 'ab_mcp_sync_export_purpose', AB_MCP_Sync_Export::make( 'objects' )->get_error_code() );
+		self::assertSame( 'ab_mcp_sync_export_purpose', AB_MCP_Sync_Export::make( 'media' )->get_error_code() );
 		$GLOBALS['ab_test_ssl'] = false;
 		self::assertSame( 'ab_mcp_sync_relay_http', AB_MCP_Sync_Export::chunk( self::ID, 0 )->get_error_code() );
 	}
@@ -674,13 +674,22 @@ final class SyncPackageTest extends TestCase {
 		self::assertSame( 'ab-sync-held/3', AB_MCP_Sync_Import::HELD_FORMAT );
 	}
 
-	public function testThisVersionMakesPackagesOfTheInventoryAndTheEnvironmentOnly(): void {
+	public function testThisVersionMakesPackagesOfTheInventoryTheEnvironmentAndObjectsOnly(): void {
 		$this->paired();
 		$this->on( 'staging' );
-		foreach ( array( 'objects', 'media', 'ENV', null, 'INVENTORY' ) as $purpose ) {
+		foreach ( array( 'media', 'ENV', null, 'INVENTORY', 'Objects' ) as $purpose ) {
 			self::assertSame( 'ab_mcp_sync_export_purpose', AB_MCP_Sync_Export::make( $purpose )->get_error_code(), var_export( $purpose, true ) );
 		}
-		self::assertSame( array( 'inventory', 'env' ), AB_MCP_Sync_Export::PURPOSES );
+		self::assertSame( array( 'inventory', 'env', 'objects' ), AB_MCP_Sync_Export::PURPOSES );
+		// A package of objects is for one report and names its objects (branch 8).
+		self::assertSame( 'ab_mcp_sync_export_report', AB_MCP_Sync_Export::make( 'objects' )->get_error_code() );
+		self::assertSame( 'ab_mcp_sync_export_report', AB_MCP_Sync_Export::make( 'objects', null, null, array( 'report_hash' => 'x' ) )->get_error_code() );
+		foreach ( array( null, array(), array( 'x' ), array( array( 'kind' => 'post' ) ), array_fill( 0, AB_MCP_Sync_Export::MAX_REFS + 1, array( 'kind' => 'post', 'ref' => '1' ) ) ) as $refs ) {
+			self::assertSame( 'ab_mcp_sync_export_refs', AB_MCP_Sync_Export::make( 'objects', null, null, array( 'report_hash' => str_repeat( 'a', 64 ), 'refs' => $refs ) )->get_error_code(), var_export( $refs, true ) );
+		}
+		self::assertSame( 'ab_mcp_sync_export_kind', AB_MCP_Sync_Export::make( 'objects', null, null, array( 'report_hash' => str_repeat( 'a', 64 ), 'refs' => array( array( 'kind' => 'plugin', 'ref' => '1' ) ) ) )->get_error_code() );
+		// A kind whose engine writes nothing yet refuses the package, fail closed.
+		self::assertSame( 'ab_mcp_sync_not_in_branch', AB_MCP_Sync_Export::make( 'objects', null, null, array( 'report_hash' => str_repeat( 'a', 64 ), 'refs' => array( array( 'kind' => 'term', 'ref' => '1' ) ) ) )->get_error_code() );
 	}
 
 	/** @return array<string,array{0:mixed}> */
@@ -779,8 +788,10 @@ final class SyncPackageTest extends TestCase {
 		self::assertTrue( AB_MCP_Tool_Registry::is_open_world( 'wp_site_import_chunk', $r->get( 'wp_site_import_chunk' ) ), 'With fetch it asks the staging site.' );
 		self::assertSame( AB_MCP_Sync_Export::PURPOSES, AB_MCP_Tools_Staging::EXPORT_PURPOSES );
 		self::assertSame( AB_MCP_Tools_Staging::EXPORT_PURPOSES, $r->get( 'wp_site_export' )['inputSchema']['properties']['purpose']['enum'] );
-		self::assertSame( AB_MCP_Tools_Staging::EXPORT_PURPOSES, $r->get( 'wp_site_import_chunk' )['inputSchema']['properties']['purpose']['enum'], 'The import takes the inventory and the environment in this version.' );
-		self::assertArrayNotHasKey( 'report_hash', $r->get( 'wp_site_import_chunk' )['inputSchema']['properties'] );
+		self::assertSame( AB_MCP_Tools_Staging::EXPORT_PURPOSES, $r->get( 'wp_site_import_chunk' )['inputSchema']['properties']['purpose']['enum'], 'The import takes the inventory, the environment and objects in this version.' );
+		self::assertArrayHasKey( 'report_hash', $r->get( 'wp_site_import_chunk' )['inputSchema']['properties'], 'A package of objects is read for its report (branch 8).' );
+		self::assertArrayHasKey( 'report_hash', $r->get( 'wp_site_export' )['inputSchema']['properties'] );
+		self::assertArrayHasKey( 'refs', $r->get( 'wp_site_export' )['inputSchema']['properties'] );
 		foreach ( array( 'wp_site_export' => '10 minutes', 'wp_site_export_chunk' => 'without passing it through the model', 'wp_site_import_chunk' => 'following no redirect' ) as $name => $says ) {
 			self::assertStringContainsString( $says, $r->get( $name )['description'], $name );
 		}
@@ -789,7 +800,9 @@ final class SyncPackageTest extends TestCase {
 	public function testTheToolsHandTheirArgumentsOn(): void {
 		$this->paired();
 		$this->on( 'staging' );
-		self::assertSame( 'ab_mcp_sync_export_purpose', AB_MCP_Tools_Staging::site_export( array( 'purpose' => 'objects' ) )->get_error_code() );
+		self::assertSame( 'ab_mcp_sync_export_purpose', AB_MCP_Tools_Staging::site_export( array( 'purpose' => 'media' ) )->get_error_code() );
+		self::assertSame( 'ab_mcp_sync_export_report', AB_MCP_Tools_Staging::site_export( array( 'purpose' => 'objects' ) )->get_error_code(), 'The report and the refs are handed on.' );
+		self::assertSame( 'ab_mcp_sync_export_refs', AB_MCP_Tools_Staging::site_export( array( 'purpose' => 'objects', 'report_hash' => str_repeat( 'b', 64 ), 'refs' => array() ) )->get_error_code() );
 		self::assertSame( 'ab_mcp_sync_cursor_invalid', AB_MCP_Tools_Staging::site_export( array( 'purpose' => 'inventory', 'cursor' => 'x' ) )->get_error_code() );
 		self::assertSame( 'ab_mcp_sync_export_unknown', AB_MCP_Tools_Staging::site_export( array( 'package_id' => 'x', 'purpose' => 'objects' ) )->get_error_code(), 'With package_id, the package made before.' );
 		self::assertSame( 'ab_mcp_sync_export_unknown', AB_MCP_Tools_Staging::site_export_chunk( array( 'package_id' => 'x', 'chunk' => 0 ) )->get_error_code() );
@@ -957,13 +970,18 @@ final class SyncPackageTest extends TestCase {
 
 	/* --------------------------------------------------- the import, in Teil 2 */
 
-	public function testTheProductionSiteTakesPackagesOfTheInventoryAndTheEnvironmentOnly(): void {
-		foreach ( array( 'objects', 'media', 'Env', null, 'Inventory' ) as $purpose ) {
+	public function testTheProductionSiteTakesPackagesOfTheInventoryTheEnvironmentAndObjectsOnly(): void {
+		foreach ( array( 'media', 'Env', null, 'Inventory', 'OBJECTS' ) as $purpose ) {
 			$refused = AB_MCP_Sync_Import::call( array( 'package_id' => self::ID, 'manifest' => array( 'manifest' => 'x', 'signature' => 'y' ), 'purpose' => $purpose ) );
 			self::assertSame( 'ab_mcp_sync_import_purpose', $refused->get_error_code(), var_export( $purpose, true ) . ': before anything is read.' );
 			self::assertStringContainsString( 'purpose=inventory', $refused->get_error_message() );
 		}
 		$refused = AB_MCP_Sync_Import::call( array( 'package_id' => self::ID, 'manifest' => array(), 'report_hash' => str_repeat( 'c', 64 ) ) );
 		self::assertSame( 'ab_mcp_sync_import_purpose', $refused->get_error_code(), 'No purpose, and a report is no purpose.' );
+		// A package of objects names the report it is read for (branch 8).
+		foreach ( array( null, 'x', str_repeat( 'C', 64 ) ) as $hash ) {
+			$refused = AB_MCP_Sync_Import::call( array( 'package_id' => self::ID, 'manifest' => array( 'manifest' => 'x', 'signature' => 'y' ), 'purpose' => 'objects', 'report_hash' => $hash ) );
+			self::assertSame( 'ab_mcp_sync_import_report', $refused->get_error_code(), var_export( $hash, true ) );
+		}
 	}
 }

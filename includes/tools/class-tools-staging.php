@@ -34,7 +34,7 @@ class AB_MCP_Tools_Staging extends AB_MCP_Tools_Base {
 	 * PURPOSES), named here so that registering the tools loads no class of
 	 * the takeover; a test holds them equal.
 	 */
-	const EXPORT_PURPOSES = array( 'inventory', 'env' );
+	const EXPORT_PURPOSES = array( 'inventory', 'env', 'objects' );
 
 	/**
 	 * Register tools.
@@ -93,7 +93,7 @@ class AB_MCP_Tools_Staging extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_site_export',
 			array(
-				'description' => 'On a confirmed staging site paired with a production site: make a package for that production site, signed with the key of this staging site and kept a day in the protected store of this site. With purpose=inventory the package holds the inventory of this site: each object with its identity, hash, references, size and whether it was read completely, no content. With purpose=env it holds the environment of this site, for wp_site_diff: the version of WordPress and the language; each plugin and theme with its version and whether it runs; each must-use plugin and drop-in with its SHA-256; the language files, the fonts, the files of the must-use folder WordPress does not load and the files under uploads outside the file lists of attachments, each counted and summed, never read; each table with the prefix that neither WordPress nor the takeover covers, with its rows and the SHA-256 of its schema, none of its rows; the host: the versions of PHP and the database, the object cache, the WordPress block of the .htaccess and the must-use loader of AlphaBridge by their SHA-256, and a fixed list of constants that holds no secret (never a key, salt, password or the access to the database). Only what the calling account may read goes in (content with read_post or edit_post, and edit_post where it is not public; terms of a taxonomy that is not public with edit_term; menus, widgets, theme mods and the additional CSS with edit_theme_options; options with manage_options); the rest is counted and named in withheld, and its kinds are not complete. An object whose name is the name of a credential is left out and counted, one with a credential in it carries only its identity, status and locks with their reasons (credentials). One call reads as far as 60 seconds and 4000 objects (or lines of the environment) reach; when the answer carries a cursor, call again with it for the next package of the same purpose (on a large site the first packages of the inventory may hold no object, while this site works out the identities of its objects; a large uploads folder is counted over several packages of the environment). Returns package_id, objects, bytes, chunks, kinds (each kind and subtype, complete true where the package holds every object of it), withheld (count, the objects named with the capability they need, and the way), credentials (names left out, units left out, objects held), expires, manifest (pass it unchanged to wp_site_import_chunk on the production site) and fetch: per chunk a fetch address signed by this site and valid for 10 minutes, with which the production site fetches the chunk itself over https (pass fetch unchanged to wp_site_import_chunk). With package_id instead, it returns that package of this account again, with fresh fetch addresses for chunks still missing. Limit: whoever sees a fetch address within its 10 minutes can read that chunk. Changes nothing on the site but its protected store. Refused on a multisite network. Needs manage_options and the access level Full.',
+				'description' => 'On a confirmed staging site paired with a production site: make a package for that production site, signed with the key of this staging site and kept a day in the protected store of this site. With purpose=inventory the package holds the inventory of this site: each object with its identity, hash, references, size and whether it was read completely, no content. With purpose=objects, report_hash (from wp_site_diff on the production site) and refs (kind and ref of each object as the report names the staging side, at most 2000) it holds those objects with their content for a run of wp_site_push on the production site: for a post its row, meta rows and terms as stored, with its canonical form and hash, so the production site writes exactly what the report compared; the manifest names the report, and the production site reads the package for that report only; in this version the engine of the kind post exports (posts and pages), every other kind refuses with its stage. With purpose=env it holds the environment of this site, for wp_site_diff: the version of WordPress and the language; each plugin and theme with its version and whether it runs; each must-use plugin and drop-in with its SHA-256; the language files, the fonts, the files of the must-use folder WordPress does not load and the files under uploads outside the file lists of attachments, each counted and summed, never read; each table with the prefix that neither WordPress nor the takeover covers, with its rows and the SHA-256 of its schema, none of its rows; the host: the versions of PHP and the database, the object cache, the WordPress block of the .htaccess and the must-use loader of AlphaBridge by their SHA-256, and a fixed list of constants that holds no secret (never a key, salt, password or the access to the database). Only what the calling account may read goes in (content with read_post or edit_post, and edit_post where it is not public; terms of a taxonomy that is not public with edit_term; menus, widgets, theme mods and the additional CSS with edit_theme_options; options with manage_options); the rest is counted and named in withheld, and its kinds are not complete. An object whose name is the name of a credential is left out and counted, one with a credential in it carries only its identity, status and locks with their reasons (credentials). One call reads as far as 60 seconds and 4000 objects (or lines of the environment) reach; when the answer carries a cursor, call again with it for the next package of the same purpose (on a large site the first packages of the inventory may hold no object, while this site works out the identities of its objects; a large uploads folder is counted over several packages of the environment). Returns package_id, objects, bytes, chunks, kinds (each kind and subtype, complete true where the package holds every object of it), withheld (count, the objects named with the capability they need, and the way), credentials (names left out, units left out, objects held), expires, manifest (pass it unchanged to wp_site_import_chunk on the production site) and fetch: per chunk a fetch address signed by this site and valid for 10 minutes, with which the production site fetches the chunk itself over https (pass fetch unchanged to wp_site_import_chunk). With package_id instead, it returns that package of this account again, with fresh fetch addresses for chunks still missing. Limit: whoever sees a fetch address within its 10 minutes can read that chunk. Changes nothing on the site but its protected store. Refused on a multisite network. Needs manage_options and the access level Full.',
 				'capability'  => 'manage_options',
 				'readonly'    => false,
 				'destructive' => false,
@@ -103,11 +103,26 @@ class AB_MCP_Tools_Staging extends AB_MCP_Tools_Base {
 						'purpose'    => array(
 							'type'        => 'string',
 							'enum'        => self::EXPORT_PURPOSES,
-							'description' => 'What the package is for: inventory (the inventory of this staging site) or env (its environment, for wp_site_diff).',
+							'description' => 'What the package is for: inventory (the inventory of this staging site), env (its environment, for wp_site_diff) or objects (the objects of a report with their content, for wp_site_push; with report_hash and refs).',
 						),
 						'cursor'     => array(
 							'type'        => 'object',
 							'description' => 'The cursor of the answer before, unchanged, for the next package of the same purpose; without it, the first package.',
+						),
+						'report_hash' => array(
+							'type'        => 'string',
+							'description' => 'purpose=objects: the report_hash of the report of the production site (wp_site_diff) the objects are for.',
+						),
+						'refs'       => array(
+							'type'        => 'array',
+							'description' => 'purpose=objects: the objects to pack, each with kind and ref as the entries of the report name the staging side (staging.ref); at most 2000.',
+							'items'       => array(
+								'type'       => 'object',
+								'properties' => array(
+									'kind' => array( 'type' => 'string' ),
+									'ref'  => array( 'type' => 'string' ),
+								),
+							),
 						),
 						'package_id' => array(
 							'type'        => 'string',
@@ -148,7 +163,7 @@ class AB_MCP_Tools_Staging extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_site_import_chunk',
 			array(
-				'description' => 'On the production site: take a package of the staging site it is paired with: of its inventory (purpose=inventory) or of its environment (purpose=env, for wp_site_diff). The call that begins a package passes package_id, manifest and purpose as wp_site_export gave them; this site checks the manifest (signed with the key of the staging site a person confirmed on the page AlphaBridge → Staging, for the address of this site exactly, from the stored address of the staging site exactly, made less than a day ago) and keeps it. Each call then either hands over one chunk (chunk and data from wp_site_export_chunk; only over https where this site has a public address) or passes fetch (the fetch addresses from wp_site_export): this site then fetches the chunks itself from the staging site over https, at an address it builds from the stored address of the staging site, following no redirect, for up to 60 seconds a call. Every chunk is checked against its SHA-256 in the manifest before it is kept; once all are there, the package is checked whole and unpacked within limits (8 MiB raw per object, a depth of 64, 5000 objects, 256 MiB a package; a chunk that inflates past what its manifest declares, or is not one whole gzip, is refused), each line checked again for the structure of a line of the inventory or of the environment (its fields, types and fixed lists; names are taken with any characters and length): a package whose structure does not hold is removed with the way. An object whose name is the name of a credential by the rules of this site, or a line with a credential written into one of its names (a slug, a place, a login; also encoded, as in base64), is counted as held with the reason, never with a name (held), as is a name of the environment (a file, a plugin, a theme, a table) with a credential written into it, and the package goes on. A package belongs to the account and the connection (the token) that began it; another one begins its own. Returns chunks, received, missing (call again for those, with fresh fetch addresses after 10 minutes), complete, held once complete, and failed with the reason for each chunk a fetch did not bring. Writes nothing but the protected store of this site, where the package is kept a day; what is in it is taken over only by the takeover. Refused on a multisite network. Needs manage_options and the access level Full.',
+				'description' => 'On the production site: take a package of the staging site it is paired with: of its inventory (purpose=inventory), of its environment (purpose=env, for wp_site_diff) or of objects for a report (purpose=objects with report_hash, for wp_site_push: the package is read for that report only). The call that begins a package passes package_id, manifest and purpose as wp_site_export gave them; this site checks the manifest (signed with the key of the staging site a person confirmed on the page AlphaBridge → Staging, for the address of this site exactly, from the stored address of the staging site exactly, made less than a day ago) and keeps it. Each call then either hands over one chunk (chunk and data from wp_site_export_chunk; only over https where this site has a public address) or passes fetch (the fetch addresses from wp_site_export): this site then fetches the chunks itself from the staging site over https, at an address it builds from the stored address of the staging site, following no redirect, for up to 60 seconds a call. Every chunk is checked against its SHA-256 in the manifest before it is kept; once all are there, the package is checked whole and unpacked within limits (8 MiB raw per object, a depth of 64, 5000 objects, 256 MiB a package; a chunk that inflates past what its manifest declares, or is not one whole gzip, is refused), each line checked again for the structure of a line of the inventory or of the environment (its fields, types and fixed lists; names are taken with any characters and length): a package whose structure does not hold is removed with the way. An object whose name is the name of a credential by the rules of this site, or a line with a credential written into one of its names (a slug, a place, a login; also encoded, as in base64), is counted as held with the reason, never with a name (held), as is a name of the environment (a file, a plugin, a theme, a table) with a credential written into it, and the package goes on. A package belongs to the account and the connection (the token) that began it; another one begins its own. Returns chunks, received, missing (call again for those, with fresh fetch addresses after 10 minutes), complete, held once complete, and failed with the reason for each chunk a fetch did not bring. Writes nothing but the protected store of this site, where the package is kept a day; what is in it is taken over only by the takeover. Refused on a multisite network. Needs manage_options and the access level Full.',
 				'capability'  => 'manage_options',
 				'readonly'    => false,
 				'destructive' => false,
@@ -172,7 +187,11 @@ class AB_MCP_Tools_Staging extends AB_MCP_Tools_Base {
 						'purpose'     => array(
 							'type'        => 'string',
 							'enum'        => self::EXPORT_PURPOSES,
-							'description' => 'What the package is read for, as wp_site_export made it; with the manifest: inventory or env.',
+							'description' => 'What the package is read for, as wp_site_export made it; with the manifest: inventory, env or objects.',
+						),
+						'report_hash' => array(
+							'type'        => 'string',
+							'description' => 'purpose=objects, with the manifest: the report_hash of the report (wp_site_diff) the package is for; the manifest must name the same.',
 						),
 						'chunk'       => array(
 							'type'        => 'integer',
@@ -392,7 +411,7 @@ class AB_MCP_Tools_Staging extends AB_MCP_Tools_Base {
 		if ( array_key_exists( 'package_id', $a ) ) {
 			return AB_MCP_Sync_Export::again( $a['package_id'] );
 		}
-		return AB_MCP_Sync_Export::make( isset( $a['purpose'] ) ? $a['purpose'] : null, isset( $a['cursor'] ) ? $a['cursor'] : null );
+		return AB_MCP_Sync_Export::make( isset( $a['purpose'] ) ? $a['purpose'] : null, isset( $a['cursor'] ) ? $a['cursor'] : null, null, array_intersect_key( $a, array( 'report_hash' => true, 'refs' => true ) ) );
 	}
 
 	/**

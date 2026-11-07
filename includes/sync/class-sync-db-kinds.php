@@ -434,6 +434,87 @@ class AB_MCP_Sync_Kind_Post extends AB_MCP_Sync_Db_Kind {
 	}
 
 	/**
+	 * The objects of a package of objects (branch 8, AB_MCP_Sync_Export::
+	 * make_objects()): each post read as the inventory reads it (read():
+	 * identity, canonical form, hash, refs, locks, credentials) with its
+	 * content as the rows hold it (content()). A post that is not there is
+	 * left out; the export names it as gone.
+	 *
+	 * @param array[] $refs Each: kind, ref, source (AB_MCP_Sync_Inventory::source()).
+	 * @return array[]|WP_Error
+	 */
+	public function export( array $refs ) {
+		$out = array();
+		foreach ( $refs as $one ) {
+			if ( ! is_array( $one ) || ! isset( $one['ref'], $one['source'] ) || ! is_array( $one['source'] ) ) {
+				return new WP_Error( 'ab_mcp_sync_object_invalid', 'export() takes a list of array( \'kind\' => …, \'ref\' => …, \'source\' => AB_MCP_Sync_Inventory::source() ). Use that form.' );
+			}
+			$result = $this->read( (string) $one['ref'], $one['source'], 'post' );
+			if ( null === $result ) {
+				continue;
+			}
+			if ( is_wp_error( $result ) ) {
+				return $result;
+			}
+			$result['content'] = self::content( (int) $one['ref'] );
+			$out[]             = $result;
+		}
+		return $out;
+	}
+
+	/**
+	 * The content of a post as a package of objects carries it and the
+	 * engine writes it (branch 8): the columns of its row the canonical form
+	 * compares (AB_MCP_Sync_Exclusions leaves out what WordPress writes by
+	 * itself), its meta rows without the excluded keys and without the rows
+	 * a credential names (B9: as the form leaves them out, they are never
+	 * packed), each as stored, and its terms by taxonomy, slug, name and
+	 * order. Empty where a row could not be read (the line says so: not
+	 * complete, the table in unread).
+	 *
+	 * @param int $id Post id.
+	 * @return array{row?:array<string,string>,meta?:array[],terms?:array[]}
+	 */
+	public static function content( $id ) {
+		$row  = AB_MCP_Sync_Rows::post( $id );
+		$meta = AB_MCP_Sync_Rows::meta( 'post', $id );
+		$tax  = AB_MCP_Sync_Rows::object_terms( $id );
+		if ( ! is_array( $row ) || null === $meta || null === $tax ) {
+			return array();
+		}
+		$columns = array();
+		foreach ( AB_MCP_Sync_Rows::POST_COLUMNS as $column ) {
+			if ( ! AB_MCP_Sync_Exclusions::column( 'posts', $column ) ) {
+				$columns[ $column ] = (string) $row[ $column ];
+			}
+		}
+		$extra = AB_MCP_Redactor::extra_keys();
+		$rows  = array();
+		foreach ( $meta as $one ) {
+			if ( AB_MCP_Sync_Exclusions::post_meta( $one['key'] ) || AB_MCP_Sync_Credentials::names_credential( $one['key'], $extra ) ) {
+				continue;
+			}
+			$rows[] = array( (string) $one['key'], (string) $one['value'] );
+		}
+		$terms = array();
+		foreach ( $tax as $one ) {
+			$term    = AB_MCP_Sync_Rows::term( $one['term_id'], $one['taxonomy'] );
+			$terms[] = array(
+				'name'       => is_array( $term ) ? (string) $term['name'] : '',
+				'slug'       => (string) $one['slug'],
+				'taxonomy'   => (string) $one['taxonomy'],
+				'term_id'    => (int) $one['term_id'],
+				'term_order' => (int) $one['term_order'],
+			);
+		}
+		return array(
+			'meta'  => $rows,
+			'row'   => $columns,
+			'terms' => $terms,
+		);
+	}
+
+	/**
 	 * The columns of a post row without the excluded ones. Each column of
 	 * the form is a unit of the credential check (decision 9: JSON,
 	 * serialized, blocks and shortcodes in it).
