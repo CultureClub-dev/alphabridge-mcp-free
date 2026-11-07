@@ -662,6 +662,15 @@ final class AB_MCP_Sync_Run {
 		}
 		if ( null !== $from && 1 !== (int) $done ) {
 			$now_step = self::step( (int) $run_id, (int) $seq );
+			// No row changed although the step is in the state read: the
+			// values written were the ones stored (the database counts a row
+			// whose values stay the same as not affected; a checkpoint of the
+			// journal saved twice within one second), not a move by another
+			// call (GitHub Codex round 9 on free#137: now that every
+			// checkpoint is checked, this must not stop a step).
+			if ( 0 === (int) $done && is_array( $now_step ) && (string) $from === (string) $now_step['state'] && ( ! isset( $set['state'] ) || (string) $set['state'] === (string) $from ) ) {
+				return true;
+			}
 			return new WP_Error( 'ab_mcp_sync_run_changed', sprintf( 'Step %1$d of run %2$d is no longer in the state this call read it in (%3$s; it is %4$s now): another call moved it in between. Ask for the status of the run (wp_site_push action=status) and go on from there.', (int) $seq, (int) $run_id, (string) $from, is_array( $now_step ) ? $now_step['state'] : 'gone' ) );
 		}
 		// A step begun under the lock of this request's call is its own

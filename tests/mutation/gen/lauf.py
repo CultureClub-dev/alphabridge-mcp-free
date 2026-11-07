@@ -380,7 +380,7 @@ e('engine-decide-own-back-it', 'decide() on the way back: a part the step owns, 
 OWN = 'testACategoryAnotherHandSetToTheTargetIsNotTheStepsOwnAndIsLeft'
 DEFAULT = 'testTheDefaultCategoryOfANewPostIsWrittenWithTheRowAndTheJournalSaysSo'
 e('engine-save-before-meta-call', 'write_parts(): the journal is written ahead of the meta call, so a request that ends inside it leaves the part without a read back (Codex round 7, F1)', EN,
-  "\t\t\t\t\t$save( $journal );\n\t\t\t\t\t$done                   = AB_MCP_Sync_Post_Writer::write_meta(", "\t\t\t\t\t$done                   = AB_MCP_Sync_Post_Writer::write_meta(", 'it', 'testARequestThatEndsInsideAMetaCallLeavesThePartForTheWayBackOfTheSameRun')
+  "\t\t\t\t\t$saved = $save( $journal );\n\t\t\t\t\tif ( true !== $saved ) {\n\t\t\t\t\t\treturn self::unsaved( $journal, $i, $saved, 'before', $live_id, $backup );\n\t\t\t\t\t}\n\t\t\t\t\t$done                   = AB_MCP_Sync_Post_Writer::write_meta(", "\t\t\t\t\t$done                   = AB_MCP_Sync_Post_Writer::write_meta(", 'it', 'testARequestThatEndsInsideAMetaCallLeavesThePartForTheWayBackOfTheSameRun')
 e('with-row-template', 'with_row(): the template goes with the row through page_template, so it is the step\'s own and an ordinary page does not deviate (B7, N2)', PW,
   "\t\t\t$out['meta:_wp_page_template'] = self::meta_hash( array( (string) $prepared['postarr']['page_template'] ) );\n", '', 'it', NORMAL)
 e('with-row-default-category', 'with_row(): the default category of a new post goes with the row, so it is the step\'s own and never another hand\'s', PW,
@@ -708,6 +708,27 @@ e('engine-fresh-unread', 'fresh(): a run whose plan or booking does not read bac
 e('revert-plan-unread', 'way_back(): no way back is planned on a journal that does not read back, with the way', RV,
   "\t\t\tif ( isset( $step['unread'] ) && in_array( 'parts', $step['unread'], true ) ) {", "\t\t\tif ( false ) {", 'it', UNREAD_IT)
 
+# ------------------------------- GitHub Codex round 9 on free#137 (one P2)
+# Every checkpoint of the journal is checked; the boundary stops before any
+# further mutation where one cannot be saved; the end of every step is
+# saved through end_step(), which says so where it cannot be.
+UNSAVED = 'testAJournalThatCannotBeSavedStopsTheStepBeforeAnyFurtherMutation'
+UNENDED = 'testAStepWhoseEndCannotBeRecordedSaysSoAndLeavesTheRunInterrupted'
+e('engine-save-ahead', 'boundary(): nothing is written without the journal ahead of the first part; the step failed with its reason (P2)', EN,
+  "\t\tif ( is_wp_error( $ahead ) ) {\n\t\t\t// Nothing of the object is written without its journal ahead", "\t\tif ( false ) {\n\t\t\t// Nothing of the object is written without its journal ahead", 'it', UNSAVED)
+e('engine-save-before-meta', 'write_parts(): a checkpoint ahead of a meta call that cannot be saved stops the boundary before the call', EN,
+  "\t\t\t\t\t$saved = $save( $journal );\n\t\t\t\t\tif ( true !== $saved ) {", "\t\t\t\t\t$saved = $save( $journal );\n\t\t\t\t\tif ( false ) {", 'it', UNSAVED)
+e('engine-save-before-terms', 'write_parts(): a checkpoint ahead of a terms call that cannot be saved stops the boundary before the call', EN,
+  "\t\t\t\t$saved = $save( $journal );\n\t\t\t\tif ( true !== $saved ) {\n\t\t\t\t\treturn self::unsaved( $journal, $i, $saved, 'before', $live_id, $backup );", "\t\t\t\t$saved = $save( $journal );\n\t\t\t\tif ( false ) {\n\t\t\t\t\treturn self::unsaved( $journal, $i, $saved, 'before', $live_id, $backup );", 'it', UNSAVED)
+e('engine-save-after', 'write_parts(): a checkpoint after a part read back that cannot be saved stops the boundary', EN,
+  "\t\t\t\tif ( true !== $saved ) {\n\t\t\t\t\treturn self::unsaved( $journal, $i, $saved, 'after', $live_id, $backup );", "\t\t\t\tif ( false ) {\n\t\t\t\t\treturn self::unsaved( $journal, $i, $saved, 'after', $live_id, $backup );", 'it', UNSAVED)
+e('engine-save-returns', 'write_parts(): the checkpoint answers what update_step() answered', EN,
+  "\t\t\treturn AB_MCP_Sync_Run::update_step( $run_id, $seq, array( 'parts' => $journal ), 'begun' );\n\t\t};", "\t\t\tAB_MCP_Sync_Run::update_step( $run_id, $seq, array( 'parts' => $journal ), 'begun' );\n\t\t\treturn true;\n\t\t};", 'it', UNSAVED)
+e('run-update-same-values', 'update_step(): no row changed while the step is in the state read is a save of the same values, not a move by another call', RU,
+  "\t\t\tif ( 0 === (int) $done && is_array( $now_step ) && (string) $from === (string) $now_step['state'] && ( ! isset( $set['state'] ) || (string) $set['state'] === (string) $from ) ) {", "\t\t\tif ( false ) {", 'it', 'testThePageTemplateGoesThroughTheCoreWayAndTheThemeHasToOfferIt')
+e('engine-end-step', 'end_step(): an end of a step that cannot be saved is said, the step stays begun, the run interrupted', EN,
+  "\t\t$done = AB_MCP_Sync_Run::update_step( $run_id, $seq, $set, 'begun' );\n\t\tif ( true !== $done ) {", "\t\t$done = AB_MCP_Sync_Run::update_step( $run_id, $seq, $set, 'begun' );\n\t\tif ( false ) {", 'it', UNENDED)
+
 
 def test_of(expect):
     return expect.split(' with data set "', 1)[0]
@@ -837,6 +858,9 @@ out.append('''<?php
  * retention reads the plan of a run that is not closed only. GitHub Codex
  * round 8: the records of a run read back through the inverse of the
  * canon, bytes as bytes; a record that does not read back decides nothing.
+ * GitHub Codex round 9: every checkpoint of the journal checked, the
+ * boundary stopped before any further mutation where one is not saved,
+ * the end of a step said where it is not saved.
  *
  * Written by tests/mutation/gen/lauf.py from the source; change the entries
  * there and run it again.

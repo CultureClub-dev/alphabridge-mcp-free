@@ -1839,6 +1839,165 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( 'done', self::next( $run_id )['step']['state'], 'With its plan read back, the run goes on (the caches).' );
 	}
 
+	/** The seq of the write step of each page of a run, by the slug of its page here. */
+	private static function write_seqs( int $run_id, array $a ): array {
+		$by_live = array_flip( array_map( 'intval', $a ) );
+		$out     = array();
+		foreach ( AB_MCP_Sync_Run::get( $run_id )['plan']['objects'] as $item ) {
+			if ( isset( $item['live_ref'], $by_live[ (int) $item['live_ref'] ] ) ) {
+				$out[ $by_live[ (int) $item['live_ref'] ] ] = (int) $item['seq'];
+			}
+		}
+		return $out;
+	}
+
+	public function testAJournalThatCannotBeSavedStopsTheStepBeforeAnyFurtherMutation(): void {
+		// GitHub Codex round 9 on free#137 (P2): the checkpoints of the
+		// journal within a write boundary (ahead of every meta and terms call,
+		// after every part read back) dropped what update_step() answered; a
+		// checkpoint that could not be saved (a database error, a journal past
+		// MAX_PARTS) let the step write on with a journal behind it, which a
+		// request ending in the next call left stale for the way back. Now
+		// every checkpoint is checked, and the boundary stops before any
+		// further mutation: nothing of the object is written without its
+		// journal ahead (the step failed), and once the row is written the
+		// object deviated (the decision of 07.11.2026: left whole, unclear).
+		// A trigger of the database refuses one checkpoint of each step.
+		self::pair();
+		$a     = self::pages_on_a( array( 'contact' => 'Write to us.', 'about' => 'About us.', 'team' => 'Our team.' ) );
+		$b     = self::pages_on_b( array( 'contact' => 'Write to us.', 'about' => 'About us.', 'team' => 'Our team.' ) );
+		$steps = array();
+		foreach ( array( 'contact', 'about' ) as $name ) {
+			add_post_meta( (int) $a[ $name ], 'note', 'abc' );
+			$steps[] = array( 'op' => 'add_meta', 'post' => (int) $b[ $name ], 'key' => 'note', 'value' => 'abc' );
+		}
+		self::b( $steps );
+		$news_a  = wp_insert_term( 'News', 'category' );
+		$other_a = wp_insert_term( 'Other', 'category' );
+		self::assertIsArray( $news_a );
+		self::assertIsArray( $other_a );
+		$news_b  = (int) self::b( array( array( 'op' => 'insert_term', 'name' => 'News', 'taxonomy' => 'category', 'as' => 'term' ) ) )['term'];
+		$other_b = (int) self::b( array( array( 'op' => 'insert_term', 'name' => 'Other', 'taxonomy' => 'category', 'as' => 'term' ) ) )['term'];
+		$story_a = wp_insert_post( wp_slash( self::page( 'story', 'A story.', array( 'post_type' => 'post', 'post_category' => array( (int) $news_a['term_id'] ) ) ) ), true );
+		self::assertIsInt( $story_a );
+		$story_b = (int) self::b( array( array( 'op' => 'insert_post', 'args' => self::page( 'story', 'A story.', array( 'post_type' => 'post', 'post_category' => array( $news_b ) ) ), 'as' => 'post' ) ) )['post'];
+		self::paired( self::staged() );
+		foreach ( array( 'contact' => 'Write to us on staging.', 'about' => 'About us, on staging.', 'team' => 'Our team, on staging.' ) as $name => $content ) {
+			self::change_on_b( $b[ $name ], $name, $content );
+		}
+		self::b( array( array( 'op' => 'update_meta', 'post' => (int) $b['contact'], 'key' => 'note', 'value' => 'def' ), array( 'op' => 'update_meta', 'post' => (int) $b['about'], 'key' => 'note', 'value' => 'def' ) ) );
+		self::change_on_b( (string) $story_b, 'story', 'A story, on staging.', array( 'post_type' => 'post', 'post_category' => array( $other_b ) ) );
+		$run_id = (int) self::begun( self::planned( array( 'contact', 'about', 'team', 'story' ) )['args'] )['run_id'];
+		self::assertSame( 'done', self::next( $run_id )['step']['state'], 'The check.' );
+		$seq = self::write_seqs( $run_id, $a + array( 'story' => (string) $story_a ) );
+		self::assertCount( 4, $seq );
+		// The checkpoints refused: of team the journal ahead of its first part
+		// (every part still unread), of contact the one after its row was read
+		// back, of about the one ahead of its meta call, of story the one ahead
+		// of its terms call. Only while the step is begun: its end is saved.
+		global $wpdb;
+		$table = AB_MCP_Sync_Schema::table( 'steps' );
+		$wpdb->query( 'DROP TRIGGER IF EXISTS ab_it_refuse_save' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$wpdb->query( sprintf( "CREATE TRIGGER ab_it_refuse_save BEFORE UPDATE ON `%s` FOR EACH ROW BEGIN IF NEW.run_id = %d AND NEW.state = 'begun' AND ( ( NEW.seq = %d AND NEW.parts LIKE '%%\"part\":\"row\",\"post\":null,\"pre\":null%%' ) OR ( NEW.seq = %d AND NEW.parts LIKE '%%\"part\":\"row\",%%\"state\":\"read\"%%' ) OR ( NEW.seq = %d AND NEW.parts LIKE '%%\"part\":\"meta:note\",\"post\":null,\"pre\":\"%%' ) OR ( NEW.seq = %d AND NEW.parts LIKE '%%\"part\":\"terms:category\",\"post\":null,\"pre\":\"%%' ) ) THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'refused by the test'; END IF; END", $table, $run_id, $seq['team'], $seq['contact'], $seq['about'], $seq['story'] ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		self::assertSame( '', $wpdb->last_error, 'The trigger is there.' );
+		$results = array();
+		try {
+			for ( $i = 0; $i < 4; $i++ ) {
+				$answer = self::next( $run_id );
+				self::assertIsArray( $answer, is_wp_error( $answer ) ? $answer->get_error_message() : '' );
+				$results[ (int) $answer['step']['seq'] ] = $answer['step'];
+			}
+		} finally {
+			$wpdb->query( 'DROP TRIGGER IF EXISTS ab_it_refuse_save' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		}
+		// team: nothing written, the step failed with its reason.
+		self::assertSame( 'failed', $results[ $seq['team'] ]['state'] );
+		self::assertStringContainsString( 'could not be written ahead of its first part', $results[ $seq['team'] ]['result']['message'] );
+		self::assertSame( 'Our team.', self::row_a( (int) $a['team'] )['post_content'], 'Nothing written.' );
+		// contact: the row written and read back; then nothing more.
+		self::assertSame( 'unclear', $results[ $seq['contact'] ]['state'] );
+		self::assertStringContainsString( 'could not be saved after the call of the part row', $results[ $seq['contact'] ]['result']['message'] );
+		self::assertSame( 'Write to us on staging.', self::row_a( (int) $a['contact'] )['post_content'] );
+		self::assertSame( array( 'abc' ), self::meta_a( (int) $a['contact'], 'note' ), 'No meta call after the checkpoint failed.' );
+		// about: the row written; the meta call not made.
+		self::assertSame( 'unclear', $results[ $seq['about'] ]['state'] );
+		self::assertStringContainsString( 'could not be saved before the call of the part meta:note', $results[ $seq['about'] ]['result']['message'] );
+		self::assertSame( array( 'abc' ), self::meta_a( (int) $a['about'], 'note' ), 'The meta call was not made.' );
+		$about = array_column( $results[ $seq['about'] ]['parts']['parts'], null, 'part' );
+		self::assertStringContainsString( 'so the call was not made', $about['meta:note']['note'] );
+		self::assertSame( 'left', $about['row']['state'], 'The row the step wrote stays, with its value before.' );
+		// story: the row written; the terms call not made.
+		self::assertSame( 'unclear', $results[ $seq['story'] ]['state'] );
+		self::assertStringContainsString( 'could not be saved before the call of the part terms:category', $results[ $seq['story'] ]['result']['message'] );
+		self::assertSame( array( 'news' ), array_values( array_map( static fn( $t ) => $t->slug, wp_get_object_terms( $story_a, 'category' ) ) ), 'The terms call was not made.' );
+		$source = AB_MCP_Sync_Anchor::active()['source_id'];
+		foreach ( array( (int) $a['contact'], (int) $a['about'], $story_a ) as $id ) {
+			self::assertSame( 'unclear', AB_MCP_Sync_Pairs::find_live( $source, 'post', (string) $id )['state'] );
+		}
+		self::probe_ok();
+		self::assertSame( 'closed_findings', self::finish( $run_id )['state'] );
+	}
+
+	public function testAStepWhoseEndCannotBeRecordedSaysSoAndLeavesTheRunInterrupted(): void {
+		// GitHub Codex round 9 on free#137 (P2), the end of a step: where its
+		// record cannot be saved, the call says so (ab_mcp_sync_run_journal)
+		// instead of reporting an end it did not record; the step stays begun
+		// and the next call finds the run interrupted, with its two ways. The
+		// same for a step of the way back. Here a trigger of the database
+		// refuses the end of the write step, then of the step of the way back.
+		self::pair();
+		$a = self::pages_on_a( array( 'contact' => 'Write to us.', 'about' => 'About us.' ) );
+		$b = self::pages_on_b( array( 'contact' => 'Write to us.', 'about' => 'About us.' ) );
+		self::paired( self::staged() );
+		self::change_on_b( $b['contact'], 'contact', 'Write to us on staging.' );
+		self::change_on_b( $b['about'], 'about', 'About us, on staging.' );
+		$run_id = (int) self::begun( self::planned( array( 'contact', 'about' ) )['args'] )['run_id'];
+		self::assertSame( 'done', self::next( $run_id )['step']['state'], 'The check.' );
+		$seq   = self::write_seqs( $run_id, $a );
+		$first = min( $seq );
+		global $wpdb;
+		$table  = AB_MCP_Sync_Schema::table( 'steps' );
+		$refuse = static function ( string $when ) use ( $wpdb, $table, $run_id ): void {
+			$wpdb->query( 'DROP TRIGGER IF EXISTS ab_it_refuse_end' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			$wpdb->query( sprintf( "CREATE TRIGGER ab_it_refuse_end BEFORE UPDATE ON `%s` FOR EACH ROW BEGIN IF NEW.run_id = %d AND OLD.state = 'begun' AND NEW.state <> 'begun' AND %s THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'refused by the test'; END IF; END", $table, $run_id, $when ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			self::assertSame( '', $wpdb->last_error, 'The trigger is there.' );
+		};
+		$refuse( sprintf( 'NEW.seq = %d', $first ) );
+		try {
+			$text = self::refused( self::next( $run_id ), 'ab_mcp_sync_run_journal' );
+		} finally {
+			$wpdb->query( 'DROP TRIGGER IF EXISTS ab_it_refuse_end' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		}
+		self::assertStringContainsString( 'its end could not be recorded', $text );
+		self::assertStringContainsString( 'the next call finds the run interrupted', $text );
+		self::assertSame( 'begun', AB_MCP_Sync_Run::step( $run_id, $first )['state'] );
+		$status = self::gated( 'wp_site_push', array( 'action' => 'status', 'run_id' => $run_id ) );
+		self::assertSame( 'interrupted', $status['state'] );
+		self::assertStringContainsString( 'begins its way back', $status['next'] );
+		// Way (b): the way back begins; the parts the step read back as its own
+		// (saved before its end) go back. Its end refused as well.
+		$begun = self::revert( $run_id );
+		self::assertSame( 'reverting', $begun['state'] );
+		$back = (int) self::revert_step( $begun )['seq'];
+		$refuse( sprintf( "NEW.op = 'revert' AND NEW.seq = %d", $back ) );
+		try {
+			$text = self::refused( self::gated( 'wp_site_revert', array( 'action' => 'next', 'run_id' => $run_id ) ), 'ab_mcp_sync_run_journal' );
+		} finally {
+			$wpdb->query( 'DROP TRIGGER IF EXISTS ab_it_refuse_end' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		}
+		self::assertStringContainsString( 'its end could not be recorded', $text );
+		self::assertSame( 'begun', AB_MCP_Sync_Run::step( $run_id, $back )['state'] );
+		self::assertSame( 'Write to us.', self::row_a( (int) $a['contact'] )['post_content'], 'The row went back before the end was refused.' );
+		// The run interrupted on its way back, led on: the step stays unclear, the run closes, the site is free.
+		self::refused( self::gated( 'wp_site_revert', array( 'action' => 'next', 'run_id' => $run_id ) ), 'ab_mcp_sync_run_interrupted' );
+		$led = self::revert( $run_id );
+		self::assertSame( 'reverting', $led['state'] );
+		$closed = self::revert_all( $run_id );
+		self::assertSame( 'closed_findings', $closed['state'] );
+		self::assertSame( 'unclear', AB_MCP_Sync_Run::step( $run_id, $back )['state'] );
+		self::assertNull( AB_MCP_Sync_Run::open_run() );
+	}
+
 	public function testUnderTheLockOfItsCallAStepTheCallBeganIsItsOwnAndAStepAnEndedRequestLeftIsInterrupted(): void {
 		// settle() under the lock of the call (the decision of 07.11.2026
 		// evening, Variante A): no other request is in a step there, so a step

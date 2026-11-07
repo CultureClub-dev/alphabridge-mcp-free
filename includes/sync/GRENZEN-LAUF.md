@@ -583,6 +583,39 @@ Ablehnung entsteht, nennt sie den Weg.
   Term-Aufruf ist dabei nicht als Mutation geführt (derselbe Speicherpunkt
   wie beim Meta-Aufruf; ein Abbruch genau im Term-Aufruf lässt sich ohne
   einen Haken, der schon beim Zeilenaufruf feuert, nicht stellen).
+- Jeder Speicherpunkt des Journals wird geprüft (GitHub-Codex 9, P2): das
+  Journal vor dem ersten Teil, der Stand vor jedem Meta- und Term-Aufruf,
+  der Stand nach jedem zurückgelesenen Teil, und das Ende jedes Schritts,
+  vorwärts wie auf dem Rückweg. Scheitert ein Speichern (Fehler der
+  Datenbank, Journal über `MAX_PARTS`), hält die Grenze vor jeder weiteren
+  Mutation an: ohne Journal vor dem ersten Teil wird nichts geschrieben,
+  der Schritt ist `failed` mit Grund; danach (die Zeile ist immer der erste
+  Aufruf) weicht das Objekt ab (`unsaved()` über `deviated()`, Entscheid A):
+  was der Schritt schon schrieb, bleibt `left` mit altem Wert, der Schritt
+  ist `unclear`, das Paar `unclear`, der nicht gemachte Aufruf steht in der
+  Notiz des Teils («so the call was not made»); `failed`, wo nichts von der
+  Sicherung abweicht. Lässt sich das Ende eines Schritts nicht speichern
+  (`end_step()`), sagt der Aufruf es (`ab_mcp_sync_run_journal`) statt ein
+  Ende zu melden, das nicht gespeichert ist; der Schritt bleibt `begun`, der
+  nächste Aufruf findet den Lauf `interrupted` mit seinen zwei Wegen, und
+  der Rückweg nimmt nur, was das zuletzt gespeicherte Journal als eigen
+  ausweist (ein Rückweg-Schritt bleibt beim Fortsetzen `unclear`). Vorher
+  verwarf `write_parts()` das Ergebnis jedes Speicherns und schrieb weiter;
+  ein Request, der im nächsten Aufruf endete, liess ein veraltetes Journal
+  für den Rückweg zurück. Nicht geprüft und darum ohne Halt: die Cursor der
+  Gesamtvorprüfung, der Caches und der Prüfung des Laufs (ein Speichern, das
+  scheitert, lässt den nächsten Aufruf beim alten Cursor beginnen; Lesen und
+  Cache-Leeren zweimal ändern nichts) und das Überspringen in `pick()`.
+  Dazu wertet `update_step()` eine Änderung, die keine Zeile berührt,
+  während der Schritt im gelesenen Zustand steht, als gespeichert: die
+  Datenbank zählt eine Zeile mit gleichen Werten als nicht berührt (derselbe
+  Speicherpunkt zweimal in einer Sekunde, etwa nach der mit der Zeile
+  geschriebenen Vorlage), das ist keine Bewegung durch einen anderen Aufruf;
+  vorher blieb das unbemerkt, weil das Ergebnis verworfen wurde.
+  Prüffälle `testAJournalThatCannotBeSavedStopsTheStepBeforeAnyFurtherMutation`
+  (ein Trigger der Datenbank verweigert je einen Speicherpunkt: vor dem
+  ersten Teil, nach der Zeile, vor dem Meta-, vor dem Term-Aufruf),
+  `testAStepWhoseEndCannotBeRecordedSaysSoAndLeavesTheRunInterrupted`.
 - Einen einfachen Schlüssel, den nur die Live-Seite trägt, entfernt der
   Schritt (`write_meta()` ohne Wert); die Metadaten-API fragt selbst kein
   Recht. Darum prüfen Gesamtvorprüfung und Grenze je solchem Schlüssel
@@ -1123,7 +1156,7 @@ Ablehnung entsteht, nennt sie den Weg.
   der alte Wert (`before_value()`: Zeile, langer Text mit Revision, Meta,
   Terme, synthetische Geheimnisse, kein UTF-8, Kürzung je Wert und je Teil)
   und die Kappung je Antwort (`cap_values()`).
-  Integration (`tests/integration/SyncRunTest.php`, fünfundsechzig Fälle): Ende zu Ende mit
+  Integration (`tests/integration/SyncRunTest.php`, siebenundsechzig Fälle): Ende zu Ende mit
   Rückweg und `step` auf eine spätere Phase (Merkmal der Sperre beim
   Anlegen), ein Bericht in zwei Läufen geplant, Abweichung in der
   Gesamtvorprüfung, Unterbrechung in eigenem Prozess (die Zeile bleibt mit

@@ -81,6 +81,9 @@
  * retention reads the plan of a run that is not closed only. GitHub Codex
  * round 8: the records of a run read back through the inverse of the
  * canon, bytes as bytes; a record that does not read back decides nothing.
+ * GitHub Codex round 9: every checkpoint of the journal checked, the
+ * boundary stopped before any further mutation where one is not saved,
+ * the end of a step said where it is not saved.
  *
  * Written by tests/mutation/gen/lauf.py from the source; change the entries
  * there and run it again.
@@ -1276,7 +1279,7 @@ return array(
 		'id'      => 'lauf/engine-save-before-meta-call',
 		'clause'  => 'write_parts(): the journal is written ahead of the meta call, so a request that ends inside it leaves the part without a read back (Codex round 7, F1)',
 		'file'    => $en,
-		'search'  => "\t\t\t\t\t\$save( \$journal );\n\t\t\t\t\t\$done                   = AB_MCP_Sync_Post_Writer::write_meta(",
+		'search'  => "\t\t\t\t\t\$saved = \$save( \$journal );\n\t\t\t\t\tif ( true !== \$saved ) {\n\t\t\t\t\t\treturn self::unsaved( \$journal, \$i, \$saved, 'before', \$live_id, \$backup );\n\t\t\t\t\t}\n\t\t\t\t\t\$done                   = AB_MCP_Sync_Post_Writer::write_meta(",
 		'replace' => "\t\t\t\t\t\$done                   = AB_MCP_Sync_Post_Writer::write_meta(",
 		'run'     => $it( 'SyncRunTest', 'testARequestThatEndsInsideAMetaCallLeavesThePartForTheWayBackOfTheSameRun' ),
 		'expect'  => '/testARequestThatEndsInsideAMetaCallLeavesThePartForTheWayBackOfTheSameRun/',
@@ -2261,5 +2264,68 @@ return array(
 		'replace' => "\t\t\tif ( false ) {",
 		'run'     => $it( 'SyncRunTest', 'testARecordOfTheRunThatDoesNotReadBackIsDecidedOnByNoCall' ),
 		'expect'  => '/testARecordOfTheRunThatDoesNotReadBackIsDecidedOnByNoCall/',
+	),
+	array(
+		'id'      => 'lauf/engine-save-ahead',
+		'clause'  => 'boundary(): nothing is written without the journal ahead of the first part; the step failed with its reason (P2)',
+		'file'    => $en,
+		'search'  => "\t\tif ( is_wp_error( \$ahead ) ) {\n\t\t\t// Nothing of the object is written without its journal ahead",
+		'replace' => "\t\tif ( false ) {\n\t\t\t// Nothing of the object is written without its journal ahead",
+		'run'     => $it( 'SyncRunTest', 'testAJournalThatCannotBeSavedStopsTheStepBeforeAnyFurtherMutation' ),
+		'expect'  => '/testAJournalThatCannotBeSavedStopsTheStepBeforeAnyFurtherMutation/',
+	),
+	array(
+		'id'      => 'lauf/engine-save-before-meta',
+		'clause'  => 'write_parts(): a checkpoint ahead of a meta call that cannot be saved stops the boundary before the call',
+		'file'    => $en,
+		'search'  => "\t\t\t\t\t\$saved = \$save( \$journal );\n\t\t\t\t\tif ( true !== \$saved ) {",
+		'replace' => "\t\t\t\t\t\$saved = \$save( \$journal );\n\t\t\t\t\tif ( false ) {",
+		'run'     => $it( 'SyncRunTest', 'testAJournalThatCannotBeSavedStopsTheStepBeforeAnyFurtherMutation' ),
+		'expect'  => '/testAJournalThatCannotBeSavedStopsTheStepBeforeAnyFurtherMutation/',
+	),
+	array(
+		'id'      => 'lauf/engine-save-before-terms',
+		'clause'  => 'write_parts(): a checkpoint ahead of a terms call that cannot be saved stops the boundary before the call',
+		'file'    => $en,
+		'search'  => "\t\t\t\t\$saved = \$save( \$journal );\n\t\t\t\tif ( true !== \$saved ) {\n\t\t\t\t\treturn self::unsaved( \$journal, \$i, \$saved, 'before', \$live_id, \$backup );",
+		'replace' => "\t\t\t\t\$saved = \$save( \$journal );\n\t\t\t\tif ( false ) {\n\t\t\t\t\treturn self::unsaved( \$journal, \$i, \$saved, 'before', \$live_id, \$backup );",
+		'run'     => $it( 'SyncRunTest', 'testAJournalThatCannotBeSavedStopsTheStepBeforeAnyFurtherMutation' ),
+		'expect'  => '/testAJournalThatCannotBeSavedStopsTheStepBeforeAnyFurtherMutation/',
+	),
+	array(
+		'id'      => 'lauf/engine-save-after',
+		'clause'  => 'write_parts(): a checkpoint after a part read back that cannot be saved stops the boundary',
+		'file'    => $en,
+		'search'  => "\t\t\t\tif ( true !== \$saved ) {\n\t\t\t\t\treturn self::unsaved( \$journal, \$i, \$saved, 'after', \$live_id, \$backup );",
+		'replace' => "\t\t\t\tif ( false ) {\n\t\t\t\t\treturn self::unsaved( \$journal, \$i, \$saved, 'after', \$live_id, \$backup );",
+		'run'     => $it( 'SyncRunTest', 'testAJournalThatCannotBeSavedStopsTheStepBeforeAnyFurtherMutation' ),
+		'expect'  => '/testAJournalThatCannotBeSavedStopsTheStepBeforeAnyFurtherMutation/',
+	),
+	array(
+		'id'      => 'lauf/engine-save-returns',
+		'clause'  => 'write_parts(): the checkpoint answers what update_step() answered',
+		'file'    => $en,
+		'search'  => "\t\t\treturn AB_MCP_Sync_Run::update_step( \$run_id, \$seq, array( 'parts' => \$journal ), 'begun' );\n\t\t};",
+		'replace' => "\t\t\tAB_MCP_Sync_Run::update_step( \$run_id, \$seq, array( 'parts' => \$journal ), 'begun' );\n\t\t\treturn true;\n\t\t};",
+		'run'     => $it( 'SyncRunTest', 'testAJournalThatCannotBeSavedStopsTheStepBeforeAnyFurtherMutation' ),
+		'expect'  => '/testAJournalThatCannotBeSavedStopsTheStepBeforeAnyFurtherMutation/',
+	),
+	array(
+		'id'      => 'lauf/run-update-same-values',
+		'clause'  => 'update_step(): no row changed while the step is in the state read is a save of the same values, not a move by another call',
+		'file'    => $ru,
+		'search'  => "\t\t\tif ( 0 === (int) \$done && is_array( \$now_step ) && (string) \$from === (string) \$now_step['state'] && ( ! isset( \$set['state'] ) || (string) \$set['state'] === (string) \$from ) ) {",
+		'replace' => "\t\t\tif ( false ) {",
+		'run'     => $it( 'SyncRunTest', 'testThePageTemplateGoesThroughTheCoreWayAndTheThemeHasToOfferIt' ),
+		'expect'  => '/testThePageTemplateGoesThroughTheCoreWayAndTheThemeHasToOfferIt/',
+	),
+	array(
+		'id'      => 'lauf/engine-end-step',
+		'clause'  => 'end_step(): an end of a step that cannot be saved is said, the step stays begun, the run interrupted',
+		'file'    => $en,
+		'search'  => "\t\t\$done = AB_MCP_Sync_Run::update_step( \$run_id, \$seq, \$set, 'begun' );\n\t\tif ( true !== \$done ) {",
+		'replace' => "\t\t\$done = AB_MCP_Sync_Run::update_step( \$run_id, \$seq, \$set, 'begun' );\n\t\tif ( false ) {",
+		'run'     => $it( 'SyncRunTest', 'testAStepWhoseEndCannotBeRecordedSaysSoAndLeavesTheRunInterrupted' ),
+		'expect'  => '/testAStepWhoseEndCannotBeRecordedSaysSoAndLeavesTheRunInterrupted/',
 	),
 );

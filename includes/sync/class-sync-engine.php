@@ -921,7 +921,9 @@ final class AB_MCP_Sync_Engine {
 		$journal['parts'] = $parts;
 		$ahead            = AB_MCP_Sync_Run::update_step( $run_id, $seq, array( 'parts' => $journal ), 'begun' );
 		if ( is_wp_error( $ahead ) ) {
-			return $ahead;
+			// Nothing of the object is written without its journal ahead
+			// (decision 17; GitHub Codex round 9 on free#137, P2).
+			return self::fail_step( $run_id, $seq, 'begun', sprintf( 'the journal of the step could not be written ahead of its first part (%s), so nothing of the object was written', $ahead->get_error_message() ) );
 		}
 		// The writes, part by part, each read back under the lock.
 		$outcome = self::write_parts( $run_id, $seq, $journal, $prepared, $current, $live_id );
@@ -950,8 +952,10 @@ final class AB_MCP_Sync_Engine {
 			if ( null !== $rest ) {
 				$result['rest'] = $rest;
 			}
-			AB_MCP_Sync_Run::update_step( $run_id, $seq, array( 'state' => $outcome['state'], 'parts' => $journal, 'result' => $result, 'pair_id' => $pair_id ), 'begun' );
-			AB_MCP_Sync_Run::touch( $run_id );
+			$ended = self::end_step( $run_id, $seq, array( 'state' => $outcome['state'], 'parts' => $journal, 'result' => $result, 'pair_id' => $pair_id ) );
+			if ( is_wp_error( $ended ) ) {
+				return $ended;
+			}
 			return array( 'next' => $outcome['message'] . ' The run goes on with the next step (action=next); the steps that depend on this object are skipped.' );
 		}
 		// (7) The object as a whole against the target: a deviation like any
@@ -979,8 +983,8 @@ final class AB_MCP_Sync_Engine {
 			if ( null !== $rest ) {
 				$result['rest'] = $rest;
 			}
-			AB_MCP_Sync_Run::update_step( $run_id, $seq, array( 'state' => 'unclear', 'parts' => $journal, 'result' => $result, 'pair_id' => $pair_id ), 'begun' );
-			return array( 'next' => $message );
+			$ended = self::end_step( $run_id, $seq, array( 'state' => 'unclear', 'parts' => $journal, 'result' => $result, 'pair_id' => $pair_id ) );
+			return is_wp_error( $ended ) ? $ended : array( 'next' => $message );
 		}
 		// (8) Done: the pair with its new bases (or made), the step done.
 		$pair_id = isset( $item['pair_id'] ) ? (int) $item['pair_id'] : null;
@@ -992,8 +996,8 @@ final class AB_MCP_Sync_Engine {
 					'live_ref' => (string) $live_id,
 					'rest'     => self::rest( $item, $live_id ),
 				);
-				AB_MCP_Sync_Run::update_step( $run_id, $seq, array( 'state' => 'unclear', 'parts' => $journal, 'result' => $result ), 'begun' );
-				return array( 'next' => $result['message'] );
+				$ended = self::end_step( $run_id, $seq, array( 'state' => 'unclear', 'parts' => $journal, 'result' => $result ) );
+				return is_wp_error( $ended ) ? $ended : array( 'next' => $result['message'] );
 			}
 			$pair_id = (int) $made['id'];
 		} else {
@@ -1014,8 +1018,8 @@ final class AB_MCP_Sync_Engine {
 					'message'  => 'The object was written as its target, but its pair did not take the new bases: ' . $rebased->get_error_message(),
 					'live_ref' => (string) $live_id,
 				);
-				AB_MCP_Sync_Run::update_step( $run_id, $seq, array( 'state' => 'unclear', 'parts' => $journal, 'result' => $result ), 'begun' );
-				return array( 'next' => $result['message'] );
+				$ended = self::end_step( $run_id, $seq, array( 'state' => 'unclear', 'parts' => $journal, 'result' => $result ) );
+				return is_wp_error( $ended ) ? $ended : array( 'next' => $result['message'] );
 			}
 		}
 		$result = array(
@@ -1026,9 +1030,34 @@ final class AB_MCP_Sync_Engine {
 			'status'   => $prepared['status'],
 			'title'    => (string) $prepared['postarr']['post_title'],
 		);
-		AB_MCP_Sync_Run::update_step( $run_id, $seq, array( 'state' => 'done', 'parts' => $journal, 'result' => $result, 'pair_id' => $pair_id ), 'begun' );
+		$ended = self::end_step( $run_id, $seq, array( 'state' => 'done', 'parts' => $journal, 'result' => $result, 'pair_id' => $pair_id ) );
+		return is_wp_error( $ended ) ? $ended : array( 'next' => $result['message'] . ' Call action=next for the next step.' );
+	}
+
+	/**
+	 * The end of a step recorded, from begun: its state, journal, result
+	 * and pair in one update. Where it cannot be saved (a database error, a
+	 * record past AB_MCP_Sync_Run::MAX_PARTS), nothing more is written by
+	 * the step and the call says so instead of reporting an end it did not
+	 * record: the step stays begun, and the next call finds the run
+	 * interrupted, with its two ways (GitHub Codex round 9 on free#137, P2:
+	 * the end of a step was saved without its result being checked).
+	 *
+	 * @param int   $run_id Run.
+	 * @param int   $seq    Step.
+	 * @param array $set    state, parts, result, pair_id.
+	 * @return true|WP_Error
+	 */
+	private static function end_step( $run_id, $seq, array $set ) {
+		$done = AB_MCP_Sync_Run::update_step( $run_id, $seq, $set, 'begun' );
+		if ( true !== $done ) {
+			return new WP_Error(
+				'ab_mcp_sync_run_journal',
+				sprintf( 'Step %1$d of run %2$d ran, but its end could not be recorded (%3$s): nothing more was written, and the step stays begun, so the next call finds the run interrupted. Ask for the status of the run (wp_site_push action=status) once the database takes writes again: a person closes it as checked on the page AlphaBridge → Staging, or wp_site_revert action=plan with this run_id goes on from there and leaves every part that is not provably the run\'s own as it is.', (int) $seq, (int) $run_id, is_wp_error( $done ) ? $done->get_error_message() : 'no answer' )
+			);
+		}
 		AB_MCP_Sync_Run::touch( $run_id );
-		return array( 'next' => $result['message'] . ' Call action=next for the next step.' );
+		return true;
 	}
 
 	/**
@@ -1071,8 +1100,13 @@ final class AB_MCP_Sync_Engine {
 	 * @return array{state:string,message:string,journal:array,live_id:int|null}
 	 */
 	private static function write_parts( $run_id, $seq, array $journal, array $prepared, $current, $live_id ) {
+		// A checkpoint of the journal; its result is checked at every use:
+		// where it cannot be saved, the boundary stops before any further
+		// mutation (unsaved(); GitHub Codex round 9 on free#137, P2: before,
+		// the result was dropped and the step wrote on with a journal behind
+		// it, which a request ending in the next call left stale).
 		$save = static function ( array $journal ) use ( $run_id, $seq ) {
-			AB_MCP_Sync_Run::update_step( $run_id, $seq, array( 'parts' => $journal ), 'begun' );
+			return AB_MCP_Sync_Run::update_step( $run_id, $seq, array( 'parts' => $journal ), 'begun' );
 		};
 		$backup = is_array( $current ) ? $current : null;
 		foreach ( $journal['parts'] as $i => $part ) {
@@ -1134,7 +1168,10 @@ final class AB_MCP_Sync_Engine {
 					// back, never with the read back of the row before. For the
 					// display of the state reached only: a part never read back
 					// is never put back (decide()).
-					$save( $journal );
+					$saved = $save( $journal );
+					if ( true !== $saved ) {
+						return self::unsaved( $journal, $i, $saved, 'before', $live_id, $backup );
+					}
 					$done                   = AB_MCP_Sync_Post_Writer::write_meta( $live_id, $key, $values, is_array( $pre_all ) ? AB_MCP_Sync_Post_Writer::meta_values( $pre_all, $key ) : array() );
 					$error                  = is_wp_error( $done ) ? $done : null;
 					$post_all               = AB_MCP_Sync_Post_Writer::current( $live_id );
@@ -1150,7 +1187,10 @@ final class AB_MCP_Sync_Engine {
 				$journal['parts'][ $i ] = self::seen_before( $journal['parts'][ $i ], $pre_all, $backup );
 				$pre_call               = $pre_all;
 				// Written ahead of the call, as for the meta (F1).
-				$save( $journal );
+				$saved = $save( $journal );
+				if ( true !== $saved ) {
+					return self::unsaved( $journal, $i, $saved, 'before', $live_id, $backup );
+				}
 				$done                   = AB_MCP_Sync_Post_Writer::write_terms( $live_id, $taxonomy, $terms );
 				$error                  = is_wp_error( $done ) ? $done : null;
 				$post_all               = AB_MCP_Sync_Post_Writer::current( $live_id );
@@ -1212,7 +1252,10 @@ final class AB_MCP_Sync_Engine {
 					// step wrote it as its target: said in the journal.
 					$journal['parts'][ $i ]['note'] = (string) $one['note'] . ' Written as its target by the step after that.';
 				}
-				$save( $journal );
+				$saved = $save( $journal );
+				if ( true !== $saved ) {
+					return self::unsaved( $journal, $i, $saved, 'after', $live_id, $backup );
+				}
 				AB_MCP_Change_Lock::touch();
 				continue;
 			}
@@ -1395,6 +1438,32 @@ final class AB_MCP_Sync_Engine {
 	private static function noted( array $part, $text ) {
 		$before = isset( $part['note'] ) ? trim( (string) $part['note'] ) : '';
 		return '' === $before ? (string) $text : $before . ' ' . (string) $text;
+	}
+
+	/**
+	 * A checkpoint of the journal that could not be saved (a database error,
+	 * a journal past AB_MCP_Sync_Run::MAX_PARTS): the boundary stops before
+	 * any further mutation (GitHub Codex round 9 on free#137, P2), and the
+	 * step ends as deviated (deviated(), the decision of 07.11.2026): the row
+	 * call is always made first, so what the step wrote before stays, left
+	 * with its value before, the step unclear; failed where nothing of the
+	 * object differs from the backup. The end is saved as any other
+	 * (end_step()); where that fails as well, the step stays begun and the
+	 * run is interrupted.
+	 *
+	 * @param array      $journal Journal.
+	 * @param int        $i       Part whose call was next (before) or was made (after).
+	 * @param mixed      $error   What update_step() answered.
+	 * @param string     $when    before or after the call.
+	 * @param int|null   $live_id Post.
+	 * @param array|null $backup  current() of the backup; null for a new object.
+	 * @return array outcome().
+	 */
+	private static function unsaved( array $journal, $i, $error, $when, $live_id, $backup ) {
+		$name   = (string) $journal['parts'][ $i ]['part'];
+		$reason = is_wp_error( $error ) ? $error->get_error_message() : 'no answer';
+		$journal['parts'][ $i ]['note'] = self::noted( $journal['parts'][ $i ], 'before' === $when ? sprintf( 'Not written: the journal of the step could not be saved before its call (%s), so the call was not made.', $reason ) : sprintf( 'The journal of the step could not be saved after its call (%s); the step stopped there.', $reason ) );
+		return self::deviated( $journal, $i, sprintf( 'the journal of the step could not be saved %1$s the call of the part %2$s (%3$s), so the step wrote nothing more: a request that ended in a later call could not be told from the journal', 'before' === $when ? 'before' : 'after', $name, $reason ), $live_id, $backup );
 	}
 
 	/**
@@ -2062,8 +2131,8 @@ final class AB_MCP_Sync_Engine {
 				'rest'     => $rest,
 				'parts'    => array(),
 			);
-			AB_MCP_Sync_Run::update_step( $run_id, $seq, array( 'state' => 'done', 'result' => $result, 'pair_id' => $pair_id ), 'begun' );
-			return array( 'next' => $result['message'] );
+			$ended = self::end_step( $run_id, $seq, array( 'state' => 'done', 'result' => $result, 'pair_id' => $pair_id ) );
+			return is_wp_error( $ended ) ? $ended : array( 'next' => $result['message'] );
 		}
 		if ( $live_id < 1 ) {
 			return self::fail_step( $run_id, $seq, 'begun', 'The journal names no object on this site; nothing is put back.' );
@@ -2124,9 +2193,8 @@ final class AB_MCP_Sync_Engine {
 			'live_ref' => (string) $live_id,
 			'parts'    => $outcomes,
 		);
-		AB_MCP_Sync_Run::update_step( $run_id, $seq, array( 'state' => $all_back ? 'done' : 'unclear', 'result' => $result, 'pair_id' => $pair_id ), 'begun' );
-		AB_MCP_Sync_Run::touch( $run_id );
-		return array( 'next' => $result['message'] );
+		$ended = self::end_step( $run_id, $seq, array( 'state' => $all_back ? 'done' : 'unclear', 'result' => $result, 'pair_id' => $pair_id ) );
+		return is_wp_error( $ended ) ? $ended : array( 'next' => $result['message'] );
 	}
 
 	/**
