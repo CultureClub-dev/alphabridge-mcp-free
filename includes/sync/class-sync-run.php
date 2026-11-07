@@ -57,6 +57,7 @@ require_once __DIR__ . '/class-sync-canon.php';
 require_once dirname( __DIR__ ) . '/class-staging-gate.php';
 require_once dirname( __DIR__ ) . '/class-protected-store.php';
 require_once dirname( __DIR__ ) . '/lifecycle/class-change-lock.php';
+require_once __DIR__ . '/class-sync-guard.php';
 
 /**
  * Class AB_MCP_Sync_Run
@@ -248,6 +249,10 @@ final class AB_MCP_Sync_Run {
 		if ( null !== $open ) {
 			return self::another_open( $open );
 		}
+		// This site has a run from here on: the filters of the takeover lock
+		// are hooked on its requests, before the first boundary can begin
+		// (AB_MCP_Sync_Guard::arm(); N3).
+		AB_MCP_Sync_Guard::mark();
 		global $wpdb;
 		$now = self::now();
 		$row = array(

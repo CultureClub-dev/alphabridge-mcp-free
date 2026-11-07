@@ -14,16 +14,28 @@
  * with end(); a record older than TTL is none (the request that wrote it
  * ended; the run is interrupted, AB_MCP_Sync_Run::settle()).
  *
- * THE FILTERS are hooked on every request (arm(), on plugins_loaded),
- * whether a boundary holds at that moment or not, and each of them reads
- * the record afresh from its row when it is asked (holding(): the row of
- * the option, past the caches of this request). A request that passed
- * plugins_loaded before the boundary began (its alloptions and notoptions
- * caches do not hold the record) meets the record all the same when it
- * writes later (Codex round 1 of branch 8, A1). The price is one read of
- * the row per write through a hooked way; the ways of group B that never
- * carry a covered object (the transients and the other excluded options)
- * are answered without it.
+ * THE FILTERS are hooked on every request of a site that has had a run
+ * (arm(), on plugins_loaded), whether a boundary holds at that moment or
+ * not, and each of them reads the record afresh from its row when it is
+ * asked (holding(): the row of the option, past the caches of this
+ * request). A request that passed plugins_loaded before the boundary began
+ * (its alloptions and notoptions caches do not hold the record) meets the
+ * record all the same when it writes later (Codex round 1 of branch 8, A1).
+ * The price is one read of the row per write through a hooked way; the
+ * ways of group B that never carry a covered object (the transients and
+ * the other excluded options) are answered without it.
+ *
+ * THE MARK (MARK, an option autoloaded with the others of the request, so
+ * it costs no query of its own): '1' on a site that has had a run, set
+ * when a run is made (AB_MCP_Sync_Run::create(), before its first step)
+ * and when a boundary begins; '0' on a site that never had one, which
+ * then hooks nothing and pays nothing for the lock (Codex round 2 of
+ * branch 8, N3). Where no mark is stored (a site from before this version,
+ * or the option removed), guarded() derives it once from the table of the
+ * runs and stores it. Boundaries come from runs only, so the mark is set
+ * before the first boundary of a site can begin; a request that passed
+ * plugins_loaded before the first run of its site was made and writes
+ * after a boundary of that run began is not refused (GRENZEN-LAUF.md).
  *
  * WHAT IS REFUSED for the objects of the record, as the actual writers go
  * (decision 19):
@@ -59,6 +71,7 @@ defined( 'ABSPATH' ) || exit;
 require_once dirname( __DIR__ ) . '/lifecycle/class-change-lock.php';
 require_once __DIR__ . '/class-sync-exclusions.php';
 require_once __DIR__ . '/class-sync-rows.php';
+require_once __DIR__ . '/class-sync-schema.php';
 
 /**
  * Class AB_MCP_Sync_Guard
@@ -67,6 +80,9 @@ final class AB_MCP_Sync_Guard {
 
 	/** The option that holds the boundary. */
 	const OPTION = 'ab_mcp_sync_boundary';
+
+	/** The mark of a site that has had a run ('1') or none ('0'); autoloaded. */
+	const MARK = 'ab_mcp_sync_guard';
 
 	/** Seconds a boundary holds at most: the lock of AB_MCP_Change_Lock. */
 	const TTL = AB_MCP_Change_Lock::TIMEOUT;
@@ -107,6 +123,7 @@ final class AB_MCP_Sync_Guard {
 			$record['posts'][ (string) (int) $id ] = (string) $type;
 		}
 		self::$owner = true;
+		self::mark();
 		update_option( self::OPTION, $record, true );
 		$read = get_option( self::OPTION );
 		if ( ! is_array( $read ) || (int) $read['run_id'] !== (int) $run_id || (int) $read['seq'] !== (int) $seq ) {
@@ -177,10 +194,12 @@ final class AB_MCP_Sync_Guard {
 
 	/**
 	 * On plugins_loaded of every request: the filters that refuse the writes
-	 * of a covered object, each asking holding() when it runs.
+	 * of a covered object, each asking holding() when it runs; on a site
+	 * that has had a run only (guarded(): the mark), so that a site without
+	 * one pays nothing for the lock (N3).
 	 */
 	public static function arm() {
-		if ( self::$owner ) {
+		if ( self::$owner || ! self::guarded() ) {
 			return;
 		}
 		add_action( 'rest_api_init', array( __CLASS__, 'arm_rest' ), 1, 0 );
@@ -204,6 +223,49 @@ final class AB_MCP_Sync_Guard {
 	public static function arm_rest() {
 		foreach ( (array) get_post_types( array(), 'names' ) as $type ) {
 			add_filter( 'rest_pre_insert_' . $type, array( __CLASS__, 'rest_pre_insert' ), 1, 2 );
+		}
+	}
+
+	/**
+	 * Whether this site has had a run, so that its boundaries are to be
+	 * refused: the mark (MARK), read with the autoloaded options of the
+	 * request. Where none is stored, derived once from the table of the
+	 * runs and stored: a site without the tables (a network, a failed
+	 * install) can have no run; a table that cannot be read answers true
+	 * for this request and stores nothing (fail closed, asked again).
+	 *
+	 * @return bool
+	 */
+	public static function guarded() {
+		$mark = get_option( self::MARK, null );
+		if ( '1' === $mark || '0' === $mark ) {
+			return '1' === $mark;
+		}
+		$on = false;
+		if ( AB_MCP_Sync_Schema::available() ) {
+			global $wpdb;
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table name is ours.
+			$row = $wpdb->get_var( 'SELECT run_id FROM `' . AB_MCP_Sync_Schema::table( 'runs' ) . '` LIMIT 1' );
+			if ( '' !== (string) $wpdb->last_error ) {
+				return true;
+			}
+			$on = null !== $row;
+		}
+		self::mark( $on );
+		return $on;
+	}
+
+	/**
+	 * Mark this site as one that has had a run (its boundaries are refused
+	 * from the next request on), or as one that had none; written only
+	 * where the mark changes, autoloaded.
+	 *
+	 * @param bool $on Whether the site has had a run.
+	 */
+	public static function mark( $on = true ) {
+		$value = $on ? '1' : '0';
+		if ( $value !== (string) get_option( self::MARK, '' ) ) {
+			update_option( self::MARK, $value, true );
 		}
 	}
 

@@ -229,10 +229,10 @@ final class SyncSafeCallsTest extends TestCase {
 			'add_action'          => array( 1, 'arm(): rest_api_init, where the REST filters of every registered type are hooked (A1).' ),
 			'delete_option'       => array( 2, 'end() and record(): removes the record of the boundary, an option this class writes itself.' ),
 			'get_metadata_by_mid' => array( 1, 'meta_by_mid(): the post a meta id belongs to, for the lock of the boundary by object; no value compared.' ),
-			'get_option'          => array( 3, 'begin(), end() and record(): the record of the boundary, an option this class writes itself.' ),
+			'get_option'          => array( 5, 'begin(), end() and record(): the record of the boundary, an option this class writes itself; guarded() and mark(): the mark of a site that has had a run, an option this class writes itself (N3).' ),
 			'get_post_types'      => array( 1, 'arm_rest(): the post types registered, for the REST filters (A1); no stored value.' ),
 			'maybe_unserialize'   => array( 1, 'holding(): the record of the boundary read afresh from its row (AB_MCP_Sync_Rows::option()), an option this class writes itself (A1).' ),
-			'update_option'       => array( 1, 'begin(): writes that record.' ),
+			'update_option'       => array( 2, 'begin(): writes that record; mark(): writes that mark, autoloaded (N3).' ),
 			'update_post_meta'    => array( 1, 'begin(): the edit lock _edit_lock of a covered post, so an editor sees it taken (decision 19); excluded from every comparison.' ),
 		),
 		'class-sync-resources.php' => array(

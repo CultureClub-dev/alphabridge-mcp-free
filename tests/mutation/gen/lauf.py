@@ -98,6 +98,17 @@ e('guard-fresh-read', 'holding(): the record read afresh from its row, past the 
 e('guard-armed-always', 'arm(): the filters hooked on every request, a record or none (A1)', GU,
   "\t\tadd_action( 'rest_api_init', array( __CLASS__, 'arm_rest' ), 1, 0 );",
   "\t\tif ( null === self::holding() ) {\n\t\t\treturn;\n\t\t}\n\t\tadd_action( 'rest_api_init', array( __CLASS__, 'arm_rest' ), 1, 0 );", 'unit', LOCK)
+MARKED = 'testTheFiltersOfTheLockAreHookedOnlyOnASiteThatHasHadARun'
+e('guard-mark-gate', 'arm(): the filters are hooked on a site that has had a run only (N3)', GU,
+  "\t\tif ( self::$owner || ! self::guarded() ) {", "\t\tif ( self::$owner ) {", 'unit', MARKED)
+e('guard-mark-derived', 'guarded(): without a mark, a run in the table marks the site as had (N3)', GU,
+  "\t\t\t$on = null !== $row;", "\t\t\t$on = false;", 'unit', MARKED)
+e('guard-mark-unreadable', 'guarded(): a table of the runs that cannot be read hooks the filters, fail closed (N3)', GU,
+  "\t\t\tif ( '' !== (string) $wpdb->last_error ) {\n\t\t\t\treturn true;", "\t\t\tif ( '' !== (string) $wpdb->last_error ) {\n\t\t\t\treturn false;", 'unit', MARKED)
+e('guard-mark-autoload', 'mark(): the mark is autoloaded, read with the options of every request (N3)', GU,
+  "\t\t\tupdate_option( self::MARK, $value, true );", "\t\t\tupdate_option( self::MARK, $value, false );", 'unit', MARKED)
+e('guard-begin-marks', 'begin(): a boundary marks the site (N3)', GU,
+  "\t\tself::$owner = true;\n\t\tself::mark();\n", "\t\tself::$owner = true;\n", 'unit', MARKED)
 e('guard-record-expiry', 'record(): a record past its time is removed', GU,
   "\t\tif ( (int) $read['until'] <= self::now() ) {", "\t\tif ( false ) {", 'unit', LOCK)
 e('guard-rest-423', 'rest_pre_insert(): the status 423 of a locked object', GU,
@@ -185,6 +196,8 @@ e('run-checked-confirmed', 'close_checked(): a person in wp-admin only', RU,
   "\t\tif ( true !== $confirmed ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_run_unconfirmed'", "\t\tif ( false ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_run_unconfirmed'", 'unit', SHAPE)
 e('run-settle-interrupted', 'settle(): a step begun without a fresh lock makes the run interrupted (decision 18)', RU,
   "\t\t$moved = self::set_state( (int) $run['run_id'], $run['state'], 'interrupted' );", "\t\t$moved = true;", 'it', 'testARequestThatExitsInABoundaryLeavesTheRunInterruptedAndTheWayBackLeadsTheSameRun')
+e('run-marks', 'create(): making a run marks the site before its first step, so its requests hook the filters of the lock (N3)', RU,
+  "\t\tAB_MCP_Sync_Guard::mark();\n\t\tglobal $wpdb;\n\t\t$now = self::now();", "\t\tglobal $wpdb;\n\t\t$now = self::now();", 'it', 'testARunWritesAChangedPageAndANewPageAndTheWayBackLeavesTheNewOneAsARest')
 e('run-has-room', 'has_room(): the steps of a run within MAX_STEPS (B5)', RU,
   "\t\treturn (int) $have + (int) $add <= self::MAX_STEPS;", "\t\treturn true;", 'unit', 'testARunLeavesRoomForItsOwnWayBack')
 e('run-keep-until-stored', 'set_state(): every close stores the period its backups are kept (decision 20; A7)', RU,

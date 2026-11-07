@@ -53,17 +53,34 @@ Ablehnung entsteht, nennt sie den Weg.
   WordPress gibt dann einem der beiden `-2`, und das Rücklesen des Schritts
   meldet die Abweichung (Teil «geschrieben, abweichend», Objekt neu → Paar
   `residual`). Konstruiert; Z9 bringt die Slug-Regel.
-- Die Filter der Sperre hängen auf jedem Request bei `plugins_loaded`
-  (Priorität 11), ob gerade eine Grenze läuft oder nicht, und lesen den
-  Datensatz (Option `ab_mcp_sync_boundary`) bei jedem gehakten Schreibweg
-  frisch aus der Zeile (`AB_MCP_Sync_Guard::holding()`, an alloptions- und
-  notoptions-Cache des Requests vorbei): ein Request, der vor `begin()`
-  startete, trifft die Grenze trotzdem (Codex-Runde 1, A1). Der Preis ist
-  eine Primärschlüssel-Abfrage je Schreibweg (Meta-, Lösch-, Term-, REST-,
-  Options-Schreiben) auf der Live-Site; Optionen der Gruppe B (Transients
-  und die übrigen ausgeschlossenen) werden ohne Abfrage durchgelassen. Ein
+- Die Filter der Sperre hängen bei `plugins_loaded` (Priorität 11) auf
+  jedem Request einer Site, die je einen Lauf hatte, ob gerade eine Grenze
+  läuft oder nicht, und lesen den Datensatz (Option `ab_mcp_sync_boundary`)
+  bei jedem gehakten Schreibweg frisch aus der Zeile
+  (`AB_MCP_Sync_Guard::holding()`, an alloptions- und notoptions-Cache des
+  Requests vorbei): ein Request, der vor `begin()` startete, trifft die
+  Grenze trotzdem (Codex-Runde 1, A1). Der Preis ist eine
+  Primärschlüssel-Abfrage je Schreibweg (Meta-, Lösch-, Term-, REST-,
+  Options-Schreiben) auf dieser Site; Optionen der Gruppe B (Transients und
+  die übrigen ausgeschlossenen) werden ohne Abfrage durchgelassen. Ein
   Request, der vor `plugins_loaded` schreibt, trifft die Sperre nicht;
   WordPress bietet davor keine Schreibwege über die API.
+- Ob eine Site je einen Lauf hatte, sagt das Merkmal `ab_mcp_sync_guard`
+  (`AB_MCP_Sync_Guard::MARK`, autoload: mit den Optionen jedes Requests
+  geladen, keine eigene Abfrage): `1` setzt `AB_MCP_Sync_Run::create()`
+  vor dem ersten Schritt und `begin()` jeder Grenze; eine Site ohne Lauf
+  (`0`) hängt nichts ein und zahlt nichts (Codex-Runde 2, N3). Fehlt das
+  Merkmal (Site aus einem Zwischenstand, Option entfernt), leitet
+  `guarded()` es einmal aus der Lauftabelle ab und speichert es; ohne
+  Tabellen gibt es keinen Lauf (`0`), eine nicht lesbare Tabelle hängt die
+  Filter für diesen Request ein und speichert nichts (fail closed). Zurück
+  auf `0` geht es nicht: Laufzeilen werden nie entfernt, und der Rückweg
+  eines geschlossenen Laufs beginnt jederzeit eine Grenze; die
+  Deinstallation entfernt das Merkmal. Grenze (konstruiert, einmal je Site):
+  ein Request, der vor dem allerersten `create()` seiner Site
+  `plugins_loaded` passierte (Merkmal `0`) und nach Beginn einer Grenze
+  dieses ersten Laufs schreibt, wird nicht abgewiesen; die Zielprüfung
+  unmittelbar vor dem Schreiben und das Rücklesen bleiben.
 - `delete_post_meta_by_key()` übergibt dem Kern keine Objekt-ID und
   `delete_all`; solange eine Grenze irgendeinen Post deckt, ist der Aufruf
   als Ganzes gesperrt (er träfe auch den gedeckten Post), höchstens 600 s.

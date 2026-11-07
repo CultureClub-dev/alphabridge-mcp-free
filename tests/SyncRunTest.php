@@ -113,7 +113,9 @@ final class SyncRunRowsWpdb {
 /**
  * A $wpdb that answers the row of an option from $ab_test_options, as the
  * lock of a boundary reads its record afresh (AB_MCP_Sync_Rows::option():
- * query() and last_result); every other question gives no row.
+ * query() and last_result), the three questions of AB_MCP_Sync_Schema::
+ * check() and whether the table of the runs has a row ($runs; N3); every
+ * other question gives no row.
  */
 final class SyncRunOptionWpdb {
 	public $prefix      = 'wp_';
@@ -123,13 +125,34 @@ final class SyncRunOptionWpdb {
 	public $last_result = array();
 	/** @var int Reads of the record. */
 	public $record_reads = 0;
+	/** @var int|null The run_id the table of the runs answers (null: no run). */
+	public $runs = null;
+	/** @var int Reads of the table of the runs. */
+	public $run_reads = 0;
 
 	public function prepare( $query, ...$args ) {
 		return ( new \AbTestSyncWpdb() )->prepare( $query, ...$args );
 	}
 
+	public function esc_like( $text ) {
+		return addcslashes( (string) $text, '_%\\' );
+	}
+
 	public function get_var( $query ) {
+		if ( preg_match( "/^SHOW TABLES LIKE '(.*)'$/", (string) $query, $m ) ) {
+			return str_replace( array( '\\_', '\\%' ), array( '_', '%' ), stripslashes( $m[1] ) );
+		}
+		if ( 'SELECT run_id FROM `wp_ab_mcp_staging_runs` LIMIT 1' === (string) $query ) {
+			++$this->run_reads;
+			return $this->runs;
+		}
 		return null;
+	}
+
+	public function get_col( $query, $x = 0 ) {
+		$db         = new \AbTestSyncWpdb();
+		$db->tables = \AbTestSyncWpdb::all_tables();
+		return $db->get_col( $query, $x );
 	}
 
 	public function query( $sql ) {
@@ -548,6 +571,78 @@ final class SyncRunTest extends TestCase {
 		AB_MCP_Sync_Guard::disarm();
 		AB_MCP_Sync_Guard::arm();
 		self::assertFalse( AB_MCP_Sync_Guard::covers( 5 ), 'Nothing armed without a record.' );
+	}
+
+	public function testTheFiltersOfTheLockAreHookedOnlyOnASiteThatHasHadARun(): void {
+		// A site that never had a run never had a boundary: nothing is hooked
+		// on its requests, and a write reads no record (Codex round 2, N3).
+		// The mark is an autoloaded option; where none is stored, it is
+		// derived once from the table of the runs.
+		$db              = new SyncRunOptionWpdb();
+		$GLOBALS['wpdb'] = $db;
+		ab_test_add_post( 5, array( 'post_type' => 'page' ) );
+		$hooked = static fn(): bool => false !== has_filter( 'update_post_metadata', array( AB_MCP_Sync_Guard::class, 'meta_by_object' ) ) || false !== has_filter( 'pre_trash_post', array( AB_MCP_Sync_Guard::class, 'pre_trash' ) ) || false !== has_filter( 'pre_update_option', array( AB_MCP_Sync_Guard::class, 'pre_update_option' ) );
+		// No mark, no tables (a fresh site): derived as none and stored.
+		AB_MCP_Sync_Guard::arm();
+		self::assertFalse( $hooked(), 'Nothing hooked on a site without a run.' );
+		self::assertSame( '0', get_option( AB_MCP_Sync_Guard::MARK ) );
+		self::assertTrue( $GLOBALS['ab_test_autoload'][ AB_MCP_Sync_Guard::MARK ], 'Autoloaded: read with the options of every request, no query of its own.' );
+		self::assertSame( 0, $db->run_reads, 'Without the tables no run can be there: the table is not asked.' );
+		self::assertTrue( update_metadata( 'post', 5, 'note', 'x' ) );
+		self::assertSame( 0, $db->record_reads, 'A write of this site reads no record.' );
+		// The mark stored as none: nothing hooked, nothing derived.
+		update_option( AB_MCP_Sync_Schema::OPTION, (string) AB_MCP_Sync_Schema::VERSION );
+		AB_MCP_Sync_Schema::forget();
+		$db->runs = 7;
+		AB_MCP_Sync_Guard::arm();
+		self::assertFalse( $hooked() );
+		self::assertSame( 0, $db->run_reads, 'A stored mark is the answer; the table is not asked.' );
+		// No mark, the tables there and a run in them (a site from before the
+		// mark): derived as had, stored, hooked.
+		delete_option( AB_MCP_Sync_Guard::MARK );
+		AB_MCP_Sync_Guard::arm();
+		self::assertTrue( $hooked(), 'Hooked on a site with a run in its table.' );
+		self::assertSame( 1, $db->run_reads );
+		self::assertSame( '1', get_option( AB_MCP_Sync_Guard::MARK ) );
+		self::assertTrue( $GLOBALS['ab_test_autoload'][ AB_MCP_Sync_Guard::MARK ] );
+		$writes = ab_test_writes( AB_MCP_Sync_Guard::MARK );
+		AB_MCP_Sync_Guard::arm();
+		self::assertSame( 1, $db->run_reads, 'Derived once.' );
+		self::assertSame( $writes, ab_test_writes( AB_MCP_Sync_Guard::MARK ), 'Not written again.' );
+		// A write of this site reads the record now (the lock as before, A1).
+		AB_MCP_Sync_Guard::$now = 1000;
+		self::assertTrue( AB_MCP_Sync_Guard::begin( 9, 1, array( 5 => 'page' ) ) );
+		AB_MCP_Sync_Guard::$owner = false;
+		self::assertFalse( update_metadata( 'post', 5, 'note', 'late' ), 'Refused as before.' );
+		self::assertGreaterThan( 0, $db->record_reads );
+		AB_MCP_Sync_Guard::end( 9, 1 );
+		// No mark, the tables there and no run: derived as none.
+		ab_test_reset();
+		$GLOBALS['wpdb'] = $db;
+		$db->runs        = null;
+		$db->run_reads   = 0;
+		update_option( AB_MCP_Sync_Schema::OPTION, (string) AB_MCP_Sync_Schema::VERSION );
+		AB_MCP_Sync_Schema::forget();
+		AB_MCP_Sync_Guard::arm();
+		self::assertFalse( $hooked() );
+		self::assertSame( 1, $db->run_reads );
+		self::assertSame( '0', get_option( AB_MCP_Sync_Guard::MARK ) );
+		// A table that cannot be read: hooked for this request, nothing stored.
+		delete_option( AB_MCP_Sync_Guard::MARK );
+		$db->last_error = 'gone';
+		AB_MCP_Sync_Guard::arm();
+		self::assertTrue( $hooked(), 'Fail closed.' );
+		self::assertFalse( get_option( AB_MCP_Sync_Guard::MARK ), 'Asked again on the next request.' );
+		$db->last_error = '';
+		// Making a run marks the site (AB_MCP_Sync_Run::create(), the
+		// integration suite); a boundary that begins marks it as well.
+		AB_MCP_Sync_Guard::mark( false );
+		self::assertSame( '0', get_option( AB_MCP_Sync_Guard::MARK ) );
+		AB_MCP_Sync_Guard::$now = 1000;
+		self::assertTrue( AB_MCP_Sync_Guard::begin( 9, 2, array( 5 => 'page' ) ) );
+		self::assertSame( '1', get_option( AB_MCP_Sync_Guard::MARK ), 'A boundary marks the site.' );
+		AB_MCP_Sync_Guard::end( 9, 2 );
+		AB_MCP_Sync_Guard::disarm();
 	}
 
 	/* ------------------------------------------------- the kind post */

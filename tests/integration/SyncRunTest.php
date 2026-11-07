@@ -559,11 +559,15 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( 2, $preview['preview']['objects'] );
 		self::assertStringStartsWith( 'not compared', $preview['preview']['environment'], 'The report was made without the environment: said, not held back.' );
 		self::assertSame( array(), $preview['preview']['locked'] );
+		// A site without a run hooks nothing for the lock (N3); making the run
+		// marks it, before its first step.
+		update_option( AB_MCP_Sync_Guard::MARK, '0', true );
 		$run = self::gated( 'wp_site_push', $planned['args'] + array( 'confirm_token' => $preview['confirm_token'] ) );
 		self::assertIsArray( $run, is_wp_error( $run ) ? $run->get_error_message() : '' );
 		self::assertTrue( $run['created_now'] );
 		$run_id = (int) $run['run_id'];
 		self::assertSame( $before, self::row_a( (int) $a['contact'] ), 'Making the run writes nothing.' );
+		self::assertSame( '1', get_option( AB_MCP_Sync_Guard::MARK ), 'The site has a run: its requests hook the filters of the lock from here on.' );
 
 		// The same confirmed call again: the same run (decision 15).
 		$again = self::gated( 'wp_site_push', $planned['args'] + array( 'confirm_token' => $preview['confirm_token'] ) );
@@ -762,6 +766,11 @@ final class SyncRunTest extends TestCase {
 		$id   = (int) $a['contact'];
 		$mid  = add_post_meta( $id, 'note', 'abc' );
 		$slug = get_post( $id )->post_name;
+		// This process passed plugins_loaded long before the boundary began,
+		// as a request of a site that has had a run does (the mark, N3; a
+		// site without one hooks nothing): armed with no record in sight.
+		AB_MCP_Sync_Guard::mark();
+		AB_MCP_Sync_Guard::arm();
 		// A boundary over the page, as a step writes it (the record in the option).
 		self::assertTrue( AB_MCP_Sync_Guard::begin( 77, 2, array( $id => 'page' ) ) );
 		self::assertSame( array( 'run_id' => 77, 'seq' => 2 ), array_intersect_key( get_option( AB_MCP_Sync_Guard::OPTION ), array( 'run_id' => 1, 'seq' => 1 ) ) );

@@ -75,8 +75,10 @@ $ab_mcp_options = array(
 	'ab_mcp_sync_anchor',
 	'ab_mcp_sync_anchor_retired',
 	// The takeover lock of a write boundary of a run (Z8, branch 8;
-	// AB_MCP_Sync_Guard::OPTION), left behind only by a request that died.
+	// AB_MCP_Sync_Guard::OPTION), left behind only by a request that died,
+	// and the mark of a site that has had a run (AB_MCP_Sync_Guard::MARK).
 	'ab_mcp_sync_boundary',
+	'ab_mcp_sync_guard',
 );
 
 // The protected store of the takeover (Z8): the folders of this installation
