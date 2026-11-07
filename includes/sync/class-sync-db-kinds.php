@@ -384,15 +384,49 @@ class AB_MCP_Sync_Kind_Post extends AB_MCP_Sync_Db_Kind {
 
 	/** {@inheritdoc} */
 	protected function read( $ref, array $source, $pair ) {
-		$id  = (int) $ref;
-		$row = AB_MCP_Sync_Rows::post( $id );
+		$id   = (int) $ref;
+		$rows = self::rows( $id );
+		if ( null === $rows ) {
+			return null;
+		}
+		return self::canonical_of( $id, $rows, $source );
+	}
+
+	/**
+	 * The rows of a post, read once: the canonical form and the content of
+	 * a package of objects come from the same reading, so the hash the
+	 * production site checks belongs to the content it writes (Codex round
+	 * 1 of branch 8, A4).
+	 *
+	 * @param int $id Post id.
+	 * @return array{row:array|null,meta:array|null,tax:array|null}|null Null where the post is not there; a null member where its table could not be read.
+	 */
+	private static function rows( $id ) {
+		$row = AB_MCP_Sync_Rows::post( (int) $id );
 		if ( false === $row ) {
 			return null;
 		}
+		return array(
+			'row'  => $row,
+			'meta' => AB_MCP_Sync_Rows::meta( 'post', (int) $id ),
+			'tax'  => AB_MCP_Sync_Rows::object_terms( (int) $id ),
+		);
+	}
+
+	/**
+	 * The canonical form of a post from its rows (read()).
+	 *
+	 * @param int   $id     Post id.
+	 * @param array $rows   rows().
+	 * @param array $source Source.
+	 * @return array|WP_Error
+	 */
+	private static function canonical_of( $id, array $rows, array $source ) {
 		$acc  = AB_MCP_Sync_Canon::acc();
 		$ctx  = $source['ctx'];
-		$meta = AB_MCP_Sync_Rows::meta( 'post', $id );
-		$tax  = AB_MCP_Sync_Rows::object_terms( $id );
+		$row  = $rows['row'];
+		$meta = $rows['meta'];
+		$tax  = $rows['tax'];
 		if ( null === $row || null === $meta || null === $tax ) {
 			$acc['unread'][] = null === $row ? 'posts' : ( null === $meta ? 'postmeta' : 'term_relationships' );
 			return AB_MCP_Sync_Canon::finish( 'post', (string) $id, array(), array(), $acc );
@@ -449,15 +483,33 @@ class AB_MCP_Sync_Kind_Post extends AB_MCP_Sync_Db_Kind {
 			if ( ! is_array( $one ) || ! isset( $one['ref'], $one['source'] ) || ! is_array( $one['source'] ) ) {
 				return new WP_Error( 'ab_mcp_sync_object_invalid', 'export() takes a list of array( \'kind\' => …, \'ref\' => …, \'source\' => AB_MCP_Sync_Inventory::source() ). Use that form.' );
 			}
-			$result = $this->read( (string) $one['ref'], $one['source'], 'post' );
-			if ( null === $result ) {
+			$id   = (int) $one['ref'];
+			$rows = self::rows( $id );
+			if ( null === $rows ) {
 				continue;
 			}
+			// The form and the content from the one reading (A4).
+			$result = self::canonical_of( $id, $rows, $one['source'] );
 			if ( is_wp_error( $result ) ) {
 				return $result;
 			}
-			$result['content'] = self::content( (int) $one['ref'] );
-			$out[]             = $result;
+			$result['content'] = self::content_of( $rows );
+			// What the content carries beyond the form (the names and slugs of
+			// its terms) goes through the credential check as the form does
+			// (decision 9): a credential in one holds the object, and the
+			// line carries no content then (A5).
+			$acc = array(
+				'locks'       => $result['locks'],
+				'credentials' => $result['credentials'],
+			);
+			foreach ( isset( $result['content']['terms'] ) ? $result['content']['terms'] : array() as $term ) {
+				foreach ( array( 'name', 'slug' ) as $field ) {
+					AB_MCP_Sync_Credentials::note( $acc, 'post', 'term:' . $term['taxonomy'] . ':' . $field, AB_MCP_Sync_Credentials::unit( '', (string) $term[ $field ] ) );
+				}
+			}
+			$result['locks']       = $acc['locks'];
+			$result['credentials'] = $acc['credentials'];
+			$out[]                 = $result;
 		}
 		return $out;
 	}
@@ -476,9 +528,21 @@ class AB_MCP_Sync_Kind_Post extends AB_MCP_Sync_Db_Kind {
 	 * @return array{row?:array<string,string>,meta?:array[],terms?:array[]}
 	 */
 	public static function content( $id ) {
-		$row  = AB_MCP_Sync_Rows::post( $id );
-		$meta = AB_MCP_Sync_Rows::meta( 'post', $id );
-		$tax  = AB_MCP_Sync_Rows::object_terms( $id );
+		$rows = self::rows( (int) $id );
+		return null === $rows ? array() : self::content_of( $rows );
+	}
+
+	/**
+	 * The content of a post from its rows (content(); export() hands the
+	 * rows of the one reading, A4).
+	 *
+	 * @param array $rows rows().
+	 * @return array{row?:array<string,string>,meta?:array[],terms?:array[]}
+	 */
+	private static function content_of( array $rows ) {
+		$row  = $rows['row'];
+		$meta = $rows['meta'];
+		$tax  = $rows['tax'];
 		if ( ! is_array( $row ) || null === $meta || null === $tax ) {
 			return array();
 		}

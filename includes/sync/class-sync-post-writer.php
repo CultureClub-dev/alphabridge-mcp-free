@@ -88,6 +88,14 @@ final class AB_MCP_Sync_Post_Writer {
 	/** The core meta keys with an API of their own this version writes. */
 	const CORE_META = array( '_wp_page_template' );
 
+	/**
+	 * The taxonomies whose terms are part of the identity of the post that
+	 * carries them (AB_MCP_Sync_Kinds::OWNERSHIP, kind post): compared and
+	 * written by their slug, not by a term id (the term may not exist here
+	 * yet; wp_set_object_terms() makes it; Codex round 1 of branch 8, B6).
+	 */
+	const IDENTITY_TAXONOMIES = array( 'post_format' );
+
 	/** The statuses a target may have (the trash is a deletion, decision 22; auto-draft no content). */
 	const STATUSES = array( 'publish', 'future', 'draft', 'pending', 'private' );
 
@@ -111,7 +119,12 @@ final class AB_MCP_Sync_Post_Writer {
 	 * @param array $item The item of the plan (op, live_ref, as_draft).
 	 * @param array $ctx  map (space => staging id => live id), addresses
 	 *                    (staging home => live home), routes (this site's),
-	 *                    now (time), users (login => id, cached).
+	 *                    now (time), users (login => id, cached); pending
+	 *                    (space => staging id => true): objects the same run
+	 *                    creates before this one, which the check before the
+	 *                    first write takes as mapped (their live id exists
+	 *                    only once their step ran; the boundary maps them by
+	 *                    the pairs then; B1).
 	 * @return array|WP_Error
 	 */
 	public static function target_of( array $line, array $item, array $ctx ) {
@@ -143,12 +156,19 @@ final class AB_MCP_Sync_Post_Writer {
 		}
 		$plan    = AB_MCP_Sync_Refs::plan( $ctx['map'], $ctx['addresses'], isset( $ctx['routes'] ) ? $ctx['routes'] : null );
 		$changed = false;
-		$missing = array();
+		$pending = isset( $ctx['pending'] ) && is_array( $ctx['pending'] ) ? $ctx['pending'] : array();
 
-		// The parent by its pair.
-		$parent = (int) $row['post_parent'];
+		// The parent by its pair; one the run creates before this object is
+		// pending: mapped once its step ran (the check only).
+		$parent         = (int) $row['post_parent'];
+		$parent_pending = false;
 		if ( $parent > 0 ) {
 			$mapped = AB_MCP_Sync_Refs::mapped_id( $plan, 'post', $parent );
+			if ( null === $mapped && isset( $pending['post'][ $parent ] ) ) {
+				$plan['missing']  = array();
+				$parent_pending   = true;
+				$mapped           = 0;
+			}
 			if ( null === $mapped ) {
 				return self::locked( 'post:reference_unmapped', sprintf( 'post_parent %d of the staging site', $parent ) );
 			}
@@ -167,14 +187,16 @@ final class AB_MCP_Sync_Post_Writer {
 		// The content and the texts, with the references and addresses of
 		// this site.
 		$content = AB_MCP_Sync_Refs::rewrite_content( $row['post_content'], $plan );
-		if ( array() !== $content['missing'] ) {
-			return self::locked( 'post:reference_unmapped', self::missing_text( $content['missing'] ) );
+		$missing = self::unresolved( $content['missing'], $pending );
+		if ( array() !== $missing ) {
+			return self::locked( 'post:reference_unmapped', self::missing_text( $missing ) );
 		}
 		$texts = array();
 		foreach ( array( 'post_title', 'post_excerpt', 'post_content_filtered' ) as $column ) {
 			$texts[ $column ] = AB_MCP_Sync_Refs::rewrite_text( $row[ $column ], $plan, array(), $changed );
-			if ( array() !== $plan['missing'] ) {
-				return self::locked( 'post:reference_unmapped', self::missing_text( $plan['missing'] ) );
+			$missing          = self::unresolved( $plan['missing'], $pending );
+			if ( array() !== $missing ) {
+				return self::locked( 'post:reference_unmapped', self::missing_text( $missing ) );
 			}
 		}
 		// The meta by the rule of this version.
@@ -192,8 +214,9 @@ final class AB_MCP_Sync_Post_Writer {
 			if ( is_wp_error( $written ) ) {
 				return $written;
 			}
-			if ( array() !== $plan['missing'] ) {
-				return self::locked( 'post:reference_unmapped', self::missing_text( $plan['missing'] ) );
+			$missing = self::unresolved( $plan['missing'], $pending );
+			if ( array() !== $missing ) {
+				return self::locked( 'post:reference_unmapped', self::missing_text( $missing ) );
 			}
 			$meta[ $key ][] = $written;
 		}
@@ -237,6 +260,12 @@ final class AB_MCP_Sync_Post_Writer {
 			'post_mime_type'        => $row['post_mime_type'],
 			'edit_date'             => true,
 		);
+		// The template through the core way (decisions 17 and 28): page_template
+		// in the data of wp_insert_post(), which checks it against the theme
+		// and stores _wp_page_template itself (B7).
+		if ( isset( $meta['_wp_page_template'][0] ) && is_string( $meta['_wp_page_template'][0] ) && '' !== $meta['_wp_page_template'][0] ) {
+			$postarr['page_template'] = $meta['_wp_page_template'][0];
+		}
 		// The columns as WordPress stores them: the UTC date derived where
 		// it is missing on a post that is not floating (wp_insert_post()).
 		$columns = array_intersect_key( $postarr, array_flip( self::WRITTEN_COLUMNS ) );
@@ -262,6 +291,7 @@ final class AB_MCP_Sync_Post_Writer {
 			'target_hash' => AB_MCP_Sync_Canon::hash( $target ),
 			'identity'    => $line['identity'],
 			'as_draft'    => ! empty( $item['as_draft'] ),
+			'pending'     => $parent_pending,
 		);
 	}
 
@@ -305,6 +335,15 @@ final class AB_MCP_Sync_Post_Writer {
 				return self::rights( sprintf( 'edit the meta key %s of the post (edit_post_meta)', $key ) );
 			}
 		}
+		// The template the theme of this site offers for the type (B7): as
+		// wp_insert_post() checks page_template (WP_Theme::get_page_templates());
+		// one it does not offer would be stored as default.
+		if ( isset( $prepared['postarr']['page_template'] ) && 'default' !== $prepared['postarr']['page_template'] ) {
+			$templates = wp_get_theme()->get_page_templates( null, $type );
+			if ( ! is_array( $templates ) || ! isset( $templates[ $prepared['postarr']['page_template'] ] ) ) {
+				return self::locked( 'post:page_template', sprintf( 'the template %1$s for a %2$s', $prepared['postarr']['page_template'], $type ) );
+			}
+		}
 		foreach ( $prepared['terms'] as $taxonomy => $list ) {
 			if ( ! taxonomy_exists( $taxonomy ) ) {
 				return self::locked( 'post:taxonomy_rule', sprintf( 'the taxonomy %s is not registered on this site', $taxonomy ) );
@@ -328,12 +367,16 @@ final class AB_MCP_Sync_Post_Writer {
 		}
 		// A page of the top level that would be published or scheduled while
 		// a menu adds pages by itself (decision 21): the choice «as draft».
-		if ( 'page' === $type && 0 === (int) $prepared['postarr']['post_parent'] && in_array( $status, array( 'publish', 'future' ), true ) && self::menu_adds_pages() ) {
+		// A page whose parent the run creates before it is not of the top
+		// level (pending; the boundary checks it with the parent mapped).
+		$top = 0 === (int) $prepared['postarr']['post_parent'] && empty( $prepared['pending'] );
+		if ( 'page' === $type && $top && in_array( $status, array( 'publish', 'future' ), true ) && self::menu_adds_pages() ) {
 			return self::locked( 'post:menu_automatic', sprintf( 'the page would be %s at the top level', $status ) );
 		}
 		// A new post whose slug is taken: WordPress would rename it, and the
 		// written post would not be the target (branch 9 settles the rule).
-		if ( null === $live_id && '' !== $prepared['postarr']['post_name'] && self::slug_taken( $prepared['postarr']['post_name'], $type, (int) $prepared['postarr']['post_parent'] ) ) {
+		// With a pending parent nothing is under it yet.
+		if ( null === $live_id && empty( $prepared['pending'] ) && '' !== $prepared['postarr']['post_name'] && self::slug_taken( $prepared['postarr']['post_name'], $type, (int) $prepared['postarr']['post_parent'] ) ) {
 			return self::locked( 'post:slug_collision', sprintf( 'slug %s', $prepared['postarr']['post_name'] ) );
 		}
 		// The sanitizers ahead (decision 17): the fields through
@@ -433,7 +476,7 @@ final class AB_MCP_Sync_Post_Writer {
 			$taxes[] = $term['taxonomy'];
 		}
 		foreach ( array_unique( $taxes ) as $taxonomy ) {
-			$out[ 'terms:' . $taxonomy ] = self::terms_hash( self::term_ids( $current, $taxonomy ) );
+			$out[ 'terms:' . $taxonomy ] = self::terms_hash( self::term_keys( $current, $taxonomy ) );
 		}
 		return $out;
 	}
@@ -459,13 +502,16 @@ final class AB_MCP_Sync_Post_Writer {
 	}
 
 	/**
-	 * @param int[] $ids Term ids of a taxonomy.
+	 * The hash of the terms of one taxonomy as a set of their keys (term
+	 * ids, or slugs for IDENTITY_TAXONOMIES; term_keys()).
+	 *
+	 * @param array $keys Term keys of a taxonomy.
 	 * @return string
 	 */
-	public static function terms_hash( array $ids ) {
-		$ids = array_values( array_unique( array_map( 'intval', $ids ) ) );
-		sort( $ids );
-		return AB_MCP_Sync_Canon::hash( $ids );
+	public static function terms_hash( array $keys ) {
+		$keys = array_values( array_unique( array_map( 'strval', $keys ) ) );
+		sort( $keys, SORT_STRING );
+		return AB_MCP_Sync_Canon::hash( $keys );
 	}
 
 	/**
@@ -484,37 +530,39 @@ final class AB_MCP_Sync_Post_Writer {
 	}
 
 	/**
+	 * The keys of the terms of one taxonomy a post carries: their ids, or
+	 * their slugs for a taxonomy of IDENTITY_TAXONOMIES (B6: a format term
+	 * this site has not made yet has no id, and the one wp_set_object_terms()
+	 * makes is never the one a target could name).
+	 *
 	 * @param array  $current  current().
 	 * @param string $taxonomy Taxonomy.
-	 * @return int[]
+	 * @return array int[] or string[].
 	 */
-	public static function term_ids( array $current, $taxonomy ) {
-		$out = array();
+	public static function term_keys( array $current, $taxonomy ) {
+		$slugs = in_array( (string) $taxonomy, self::IDENTITY_TAXONOMIES, true );
+		$out   = array();
 		foreach ( $current['terms'] as $term ) {
 			if ( $term['taxonomy'] === (string) $taxonomy ) {
-				$out[] = (int) $term['term_id'];
+				$out[] = $slugs ? (string) $term['slug'] : (int) $term['term_id'];
 			}
 		}
 		return $out;
 	}
 
 	/**
-	 * The term ids a taxonomy of the target resolves to here: ids as they
-	 * are, slugs (post_format) by their term here (0 where none).
+	 * The keys of the terms a taxonomy of the target names: the ids as the
+	 * pairs mapped them, the slugs of an identity taxonomy as they are.
 	 *
 	 * @param string $taxonomy Taxonomy.
-	 * @param array  $list     Ids or slugs.
-	 * @return int[]
+	 * @param array  $list     Ids or slugs (target_of()).
+	 * @return array int[] or string[].
 	 */
-	public static function target_term_ids( $taxonomy, array $list ) {
-		$out = array();
+	public static function target_term_keys( $taxonomy, array $list ) {
+		$slugs = in_array( (string) $taxonomy, self::IDENTITY_TAXONOMIES, true );
+		$out   = array();
 		foreach ( $list as $term ) {
-			if ( is_int( $term ) ) {
-				$out[] = $term;
-				continue;
-			}
-			$found = get_term_by( 'slug', (string) $term, (string) $taxonomy );
-			$out[] = is_object( $found ) && isset( $found->term_id ) ? (int) $found->term_id : 0;
+			$out[] = $slugs ? (string) $term : (int) $term;
 		}
 		return $out;
 	}
@@ -684,6 +732,16 @@ final class AB_MCP_Sync_Post_Writer {
 				'note'  => sprintf( 'Check needed: the backed-up status %1$s dated %2$s UTC would be stored as %3$s now (the scheduled date passed). Set the date anew in wp-admin.', $backup['post_status'], $gmt, $saved ),
 			);
 		}
+		// Putting a page of the top level back to publish or future while a
+		// menu of this site adds pages by itself (decisions 21 and 23): the
+		// automatic would add it (now, or by the cron for future), unplanned
+		// and unjournaled, so the row is left and named (A3).
+		if ( 'page' === $backup['post_type'] && 0 === (int) $backup['post_parent'] && in_array( $backup['post_status'], array( 'publish', 'future' ), true ) && $backup['post_status'] !== $current['row']['post_status'] && self::menu_adds_pages() ) {
+			return array(
+				'state' => 'check_needed',
+				'note'  => sprintf( 'Check needed: putting the page back to %s at the top level would make a menu of this site add it by itself (automatic page addition). Switch the automatic off under Appearance → Menus and plan the way back again, or set the status by hand in wp-admin.', $backup['post_status'] ),
+			);
+		}
 		$postarr = array_intersect_key( $backup, array_flip( self::WRITTEN_COLUMNS ) );
 		$postarr['ID']          = (int) $live_id;
 		$postarr['post_author'] = (int) $postarr['post_author'];
@@ -780,8 +838,8 @@ final class AB_MCP_Sync_Post_Writer {
 	 *
 	 * @param int    $live_id  Post.
 	 * @param string $taxonomy Taxonomy.
-	 * @param int[]  $backup   Term ids before the step.
-	 * @param string $written  The hash of the term ids the step read back (the journal).
+	 * @param array  $backup   Term keys before the step (term_keys()).
+	 * @param string $written  The hash of the term keys the step read back (the journal).
 	 * @return array{state:string,note?:string}|WP_Error
 	 */
 	public static function restore_terms( $live_id, $taxonomy, array $backup, $written ) {
@@ -792,7 +850,7 @@ final class AB_MCP_Sync_Post_Writer {
 				'note'  => 'The post is no longer on this site.',
 			);
 		}
-		$now = self::terms_hash( self::term_ids( $current, $taxonomy ) );
+		$now = self::terms_hash( self::term_keys( $current, $taxonomy ) );
 		if ( $now === self::terms_hash( $backup ) ) {
 			return array( 'state' => 'unchanged' );
 		}
@@ -802,12 +860,12 @@ final class AB_MCP_Sync_Post_Writer {
 				'note'  => sprintf( 'The terms of %s were changed since the step wrote them, so they are left as they are.', $taxonomy ),
 			);
 		}
-		$done = wp_set_object_terms( (int) $live_id, array_map( 'intval', $backup ), (string) $taxonomy, false );
+		$done = wp_set_object_terms( (int) $live_id, self::target_term_keys( $taxonomy, $backup ), (string) $taxonomy, false );
 		if ( is_wp_error( $done ) ) {
 			return $done;
 		}
 		$after = self::current( (int) $live_id );
-		return array( 'state' => is_array( $after ) && self::terms_hash( self::term_ids( $after, $taxonomy ) ) === self::terms_hash( $backup ) ? 'restored' : 'unclear' );
+		return array( 'state' => is_array( $after ) && self::terms_hash( self::term_keys( $after, $taxonomy ) ) === self::terms_hash( $backup ) ? 'restored' : 'unclear' );
 	}
 
 	/* ----------------------------------------------------------- helpers */
@@ -965,6 +1023,23 @@ final class AB_MCP_Sync_Post_Writer {
 			return is_string( $bytes ) ? $bytes : '';
 		}
 		return is_scalar( $value ) ? (string) $value : '';
+	}
+
+	/**
+	 * The references without a counterpart that are not pending (B1).
+	 *
+	 * @param array[] $missing space, id.
+	 * @param array   $pending space => staging id => true.
+	 * @return array[]
+	 */
+	private static function unresolved( array $missing, array $pending ) {
+		$out = array();
+		foreach ( $missing as $m ) {
+			if ( ! isset( $pending[ (string) ( $m['space'] ?? '' ) ][ (int) ( $m['id'] ?? 0 ) ] ) ) {
+				$out[] = $m;
+			}
+		}
+		return $out;
 	}
 
 	/**

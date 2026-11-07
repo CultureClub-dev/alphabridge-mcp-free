@@ -342,6 +342,10 @@ final class AB_MCP_Sync_Kinds {
 			'stage'  => 'Z8',
 			'reason' => 'A reference of the object (its parent, a term, an id in its content) has no counterpart on this site: pair or create the target first.',
 		),
+		'post:page_template'           => array(
+			'stage'  => 'Z8',
+			'reason' => 'The template of the staging object (_wp_page_template) is not one the theme of this site offers for its type, so WordPress would store default instead: add the template to the theme of this site, or take the object over by hand.',
+		),
 		'term:engine'                  => array(
 			'stage'  => 'Z9',
 			'reason' => 'The engine that writes terms follows with branch 9.',

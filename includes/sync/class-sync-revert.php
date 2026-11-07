@@ -39,6 +39,7 @@ defined( 'ABSPATH' ) || exit;
 require_once __DIR__ . '/class-sync-run.php';
 require_once __DIR__ . '/class-sync-engine.php';
 require_once __DIR__ . '/class-sync-push.php';
+require_once dirname( __DIR__ ) . '/class-protected-store.php';
 
 /**
  * Class AB_MCP_Sync_Revert
@@ -231,13 +232,14 @@ final class AB_MCP_Sync_Revert {
 				continue;
 			}
 			$journal = is_array( $step['parts'] ) && isset( $step['parts']['object'] ) ? $step['parts'] : null;
-			if ( null === $journal || in_array( $step['state'], array( 'planned', 'skipped' ), true ) ) {
+			// Only a step with a journal and a backup wrote anything (decision
+			// 17: no mutation without a backup); a step that failed before its
+			// backup, or made no object, has nothing to take back (B9).
+			$wrote = null !== $journal && ! in_array( $step['state'], array( 'planned', 'skipped' ), true ) && is_array( $journal['backup'] ) && ( 'create' !== $journal['object']['op'] || null !== $journal['object']['live_ref'] );
+			if ( ! $wrote ) {
 				if ( null !== $wanted ) {
 					return new WP_Error( 'ab_mcp_sync_revert_steps', sprintf( 'Step %1$d is %2$s and wrote nothing: there is nothing to take back for it. Choose a step that wrote (action=status lists them).', (int) $step['seq'], $step['state'] ) );
 				}
-				continue;
-			}
-			if ( 'failed' === $step['state'] && null === $journal['object']['live_ref'] ) {
 				continue;
 			}
 			if ( isset( $reverted[ (int) $step['seq'] ] ) ) {
@@ -280,7 +282,7 @@ final class AB_MCP_Sync_Revert {
 		// at most AB_MCP_Sync_Push::MAX_OBJECTS objects so that it always has
 		// it; this holds the rule where a run has more steps than that.
 		if ( $same && ! AB_MCP_Sync_Run::has_room( count( $steps ), count( $items ) ) ) {
-			return new WP_Error( 'ab_mcp_sync_revert_steps', sprintf( 'The way back of %1$d step(s) would take run %2$d past its %3$d steps, so it does not begin. Name fewer steps (steps) for this way back and plan the rest once it is closed.', count( $items ), (int) $run['run_id'], AB_MCP_Sync_Run::MAX_STEPS ) );
+			return new WP_Error( 'ab_mcp_sync_revert_steps', sprintf( 'The way back of %1$d step(s) would take run %2$d past its %3$d steps, so it does not begin. Pass fewer steps (steps) for this way back and plan the rest once it is closed.', count( $items ), (int) $run['run_id'], AB_MCP_Sync_Run::MAX_STEPS ) );
 		}
 		ksort( $live );
 		$state = hash(
@@ -346,25 +348,35 @@ final class AB_MCP_Sync_Revert {
 			}
 			$now = AB_MCP_Sync_Run::get( (int) $run['run_id'] );
 		} else {
+			// Made under the lock of the protected store (A6): a clean-up
+			// that reads the runs whose backups it keeps and removes groups
+			// does so under the same lock, so it either sees this run (which
+			// names the run it takes back in reverts) or ran to its end
+			// before; the backups a way back needs are never removed beside
+			// its making (decision 20, rule 4).
 			$anchor = AB_MCP_Sync_Anchor::active();
-			$now    = AB_MCP_Sync_Run::create(
-				array(
-					'type'        => 'revert',
-					'source_id'   => (string) $run['source_id'],
-					'key_id'      => null === $anchor ? (string) $run['key_id'] : (string) $anchor['key_id'],
-					'pair_print'  => (string) $plan['print'],
-					'report_hash' => (string) $run['report_hash'],
-					'plan_hash'   => $plan['state'],
-					'user_id'     => get_current_user_id(),
-					'connection'  => AB_MCP_Sync_Run::connection(),
-					'expires'     => AB_MCP_Sync_Run::now() + AB_MCP_Sync_Push::EXPIRES,
-					'budget'      => array( 'bytes' => 0 ),
-					'plan'        => array(
-						'reverts' => array( (int) $run['run_id'] ),
-						'items'   => $plan['items'],
-					),
-				),
-				$steps
+			$now    = AB_MCP_Protected_Store::under_lock(
+				static function () use ( $run, $plan, $anchor, $steps ) {
+					return AB_MCP_Sync_Run::create(
+						array(
+							'type'        => 'revert',
+							'source_id'   => (string) $run['source_id'],
+							'key_id'      => null === $anchor ? (string) $run['key_id'] : (string) $anchor['key_id'],
+							'pair_print'  => (string) $plan['print'],
+							'report_hash' => (string) $run['report_hash'],
+							'plan_hash'   => $plan['state'],
+							'user_id'     => get_current_user_id(),
+							'connection'  => AB_MCP_Sync_Run::connection(),
+							'expires'     => AB_MCP_Sync_Run::now() + AB_MCP_Sync_Push::EXPIRES,
+							'budget'      => array( 'bytes' => 0 ),
+							'plan'        => array(
+								'reverts' => array( (int) $run['run_id'] ),
+								'items'   => $plan['items'],
+							),
+						),
+						$steps
+					);
+				}
 			);
 			if ( is_wp_error( $now ) ) {
 				return $now;

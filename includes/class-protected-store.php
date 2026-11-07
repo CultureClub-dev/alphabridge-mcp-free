@@ -897,6 +897,26 @@ final class AB_MCP_Protected_Store {
 	}
 
 	/**
+	 * Run $fn under the lock of the store's folder, where there is one: what
+	 * $fn does is then ordered against the clean-up, which reads the runs
+	 * whose backups it keeps under the same lock right before it removes
+	 * groups (sweep()). A way back for a closed run is made here, so no
+	 * sweep that read the runs before it removes the backups it needs
+	 * (decision 20, rule 4; Codex round 1 of branch 8, A6). Without a folder
+	 * there is nothing a sweep could remove, and $fn runs as it is.
+	 *
+	 * @param callable $fn What runs under the lock.
+	 * @return mixed What $fn returns, or WP_Error where the lock could not be taken.
+	 */
+	public static function under_lock( callable $fn ) {
+		$root = self::root();
+		if ( is_wp_error( $root ) ) {
+			return $fn();
+		}
+		return self::locked( $root, $fn );
+	}
+
+	/**
 	 * Take the lock of a folder of the store for $fn, waiting for its holder
 	 * (flock(), the pattern of Pro's upload sessions). Not reentrant: $fn
 	 * takes no lock of the store.

@@ -384,6 +384,10 @@ return array(
 			'why'  => 'A reference is rewritten only by the map of the pairs (decision 12); one without a counterpart would name another object here.',
 			'plan' => 'Entscheid 12 und 16',
 		),
+		'post:page_template'           => array(
+			'why'  => 'The template goes through page_template of wp_insert_post(), which checks it against the theme of this site and stores default for one the theme does not offer: the written post would not be the target (Codex round 1 of branch 8, B7).',
+			'plan' => 'Entscheide 17 und 28 (Vorlage über page_template)',
+		),
 		'term:engine'                  => array(
 			'why'  => 'The engine of the terms is branch 9.',
 			'plan' => 'Zweigtabelle Zeile 540',

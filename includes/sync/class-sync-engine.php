@@ -12,8 +12,9 @@
  * the run as aborted before anything is written); phase 5, one write step
  * per object in the order of the graph (a step whose dependency is not
  * done is skipped, «waits for»); phase 7, the caches (run_post()); phase 8,
- * the check of the run (run_verify(): the hash of each written pair against
- * its target, a sample of a published object answering 200, the PHP probe,
+ * the check of the run (run_verify(), over calls as the check: the hash of
+ * each written pair against its target, a sample of a published object
+ * answering 200 with the title of the object, the PHP probe passing whole,
  * the error log without new lines), which closes the run as done or with
  * findings; a qualified close marks forward_closed_at where every write
  * step was written (decision 20).
@@ -82,7 +83,7 @@ final class AB_MCP_Sync_Engine {
 	/** The clock: a callable returning seconds (float), null for microtime(). Set by tests only. */
 	public static $clock = null;
 
-	/** A probe of a published object: callable( string $url ): int|null (status), null for wp_remote_get(). Set by tests only. */
+	/** A probe of a published object: callable( string $url ): array{status:int|null,body:string}|int|null, null for wp_remote_get(). Set by tests only. */
 	public static $probe = null;
 
 	/* --------------------------------------------------------------- next */
@@ -328,6 +329,10 @@ final class AB_MCP_Sync_Engine {
 					return new WP_Error( 'ab_mcp_sync_step_waits', sprintf( 'Step %1$d waits for step %2$d, which is %3$s: a step runs only once the objects it refers to are written. Use action=next to run the steps in order.', (int) $named, (int) $dep, isset( $by[ $dep ] ) ? $by[ $dep ]['state'] : 'unknown' ) );
 				}
 			}
+			$earlier = self::earlier_phase_open( $by, $step );
+			if ( null !== $earlier ) {
+				return new WP_Error( 'ab_mcp_sync_step_waits', sprintf( 'Step %1$d runs in phase %2$d, after every step of the phases before it (decision 16); step %3$d is %4$s. Use action=next, which runs the steps in order.', (int) $named, (int) $step['phase'], (int) $earlier, $by[ $earlier ]['state'] ) );
+			}
 			return $step;
 		}
 		// A run on its way back runs its steps of the way back only.
@@ -363,10 +368,36 @@ final class AB_MCP_Sync_Engine {
 				}
 				continue;
 			}
-			if ( $open ) {
+			if ( $open || null !== self::earlier_phase_open( $by, $step ) ) {
 				continue;
 			}
 			return $step;
+		}
+		return null;
+	}
+
+	/**
+	 * The phases of a run go in order (decision 16): a step of phase 7
+	 * (post-processing) or 8 (the check of the run) runs only once every
+	 * step of a lower phase has run, whatever became of it (done, failed,
+	 * skipped, unclear); a step of the way back (phase 0) is outside the
+	 * order. The seq of a step of a lower phase that is still planned or
+	 * begun, or null (B2: a named step could close the run before its
+	 * write steps).
+	 *
+	 * @param array[] $by   Steps by seq.
+	 * @param array   $step Step.
+	 * @return int|null
+	 */
+	private static function earlier_phase_open( array $by, array $step ) {
+		$phase = (int) $step['phase'];
+		if ( $phase < 1 ) {
+			return null;
+		}
+		foreach ( $by as $other ) {
+			if ( (int) $other['phase'] > 0 && (int) $other['phase'] < $phase && in_array( $other['state'], array( 'planned', 'begun' ), true ) ) {
+				return (int) $other['seq'];
+			}
 		}
 		return null;
 	}
@@ -419,16 +450,30 @@ final class AB_MCP_Sync_Engine {
 			}
 			$result['error_log_lines'] = self::error_log_lines();
 			$result['checked']         = 0;
+			$result['findings']        = array();
 		}
 		$lines = self::lines( $run );
 		if ( is_wp_error( $lines ) ) {
 			return self::abort_at( $run, $step, $lines->get_error_message(), $result );
 		}
-		$findings = array();
+		// The objects the run creates: a reference to one of them is pending,
+		// not missing (B1); the boundary maps it by the pair its step made.
+		$ctx['pending'] = array(
+			'post' => array(),
+			'term' => array(),
+		);
+		foreach ( $items as $one ) {
+			if ( isset( $one['op'], $one['kind'], $one['staging_ref'] ) && 'create' === $one['op'] && 'post' === $one['kind'] ) {
+				$ctx['pending']['post'][ (int) $one['staging_ref'] ] = true;
+			}
+		}
+		// The findings of the calls before, kept with the cursor (B3).
+		$findings = isset( $result['findings'] ) && is_array( $result['findings'] ) ? $result['findings'] : array();
 		$count    = count( $items );
 		for ( $i = $at; $i < $count; $i++ ) {
 			if ( $i > $at && self::now() - $started > self::BUDGET - self::RESERVE ) {
-				$result['cursor'] = $i;
+				$result['cursor']   = $i;
+				$result['findings'] = $findings;
 				AB_MCP_Sync_Run::update_step( (int) $run['run_id'], (int) $step['seq'], array( 'result' => $result ), 'planned' );
 				AB_MCP_Sync_Run::touch( (int) $run['run_id'] );
 				return array( 'next' => sprintf( 'The check went over %1$d of %2$d objects within the budget of this call; call action=next again to go on with it.', $i, $count ) );
@@ -440,8 +485,8 @@ final class AB_MCP_Sync_Engine {
 			}
 			++$result['checked'];
 		}
+		$result['findings'] = $findings;
 		if ( array() !== $findings ) {
-			$result['findings'] = $findings;
 			return self::abort_at( $run, $step, sprintf( 'The check before the first write found %d deviation(s) from the plan; nothing was written and the run is closed. Make a new report (wp_site_diff) and plan again.', count( $findings ) ), $result );
 		}
 		unset( $result['cursor'] );
@@ -707,12 +752,12 @@ final class AB_MCP_Sync_Engine {
 			);
 		}
 		foreach ( $taxes as $taxonomy ) {
-			$ids     = isset( $prepared['terms'][ $taxonomy ] ) ? AB_MCP_Sync_Post_Writer::target_term_ids( $taxonomy, $prepared['terms'][ $taxonomy ] ) : array();
+			$keys    = isset( $prepared['terms'][ $taxonomy ] ) ? AB_MCP_Sync_Post_Writer::target_term_keys( $taxonomy, $prepared['terms'][ $taxonomy ] ) : array();
 			$parts[] = array(
 				'part'   => 'terms:' . $taxonomy,
 				'way'    => AB_MCP_Sync_Post_Writer::WAY_TERMS,
 				'before' => $hashes[ 'terms:' . $taxonomy ],
-				'target' => AB_MCP_Sync_Post_Writer::terms_hash( $ids ),
+				'target' => AB_MCP_Sync_Post_Writer::terms_hash( $keys ),
 				'state'  => 'planned',
 				'after'  => null,
 			);
@@ -820,6 +865,7 @@ final class AB_MCP_Sync_Engine {
 			'created'  => 'create' === $item['op'],
 			'pair_id'  => $pair_id,
 			'status'   => $prepared['status'],
+			'title'    => (string) $prepared['postarr']['post_title'],
 		);
 		AB_MCP_Sync_Run::update_step( $run_id, $seq, array( 'state' => 'done', 'parts' => $journal, 'result' => $result, 'pair_id' => $pair_id ), 'begun' );
 		AB_MCP_Sync_Run::touch( $run_id );
@@ -861,7 +907,10 @@ final class AB_MCP_Sync_Engine {
 				$key    = substr( $name, 5 );
 				$values = isset( $prepared['meta'][ $key ] ) ? $prepared['meta'][ $key ] : array();
 				$have   = is_array( $current ) ? AB_MCP_Sync_Post_Writer::meta_values( $current, $key ) : array();
-				$done   = AB_MCP_Sync_Post_Writer::write_meta( $live_id, $key, $values, $have );
+				// A core key with an API of its own (_wp_page_template) was
+				// written with the row, through page_template (decision 17, B7);
+				// here it is read back only. Its removal goes through the meta API.
+				$done = array() !== $values && in_array( $key, AB_MCP_Sync_Post_Writer::CORE_META, true ) ? true : AB_MCP_Sync_Post_Writer::write_meta( $live_id, $key, $values, $have );
 				if ( is_wp_error( $done ) ) {
 					$journal['parts'][ $i ]['state'] = 'failed';
 					$journal['parts'][ $i ]['note']  = $done->get_error_message();
@@ -881,7 +930,7 @@ final class AB_MCP_Sync_Engine {
 					return self::outcome( 'unclear', 'A part was not written, the parts before stay: ' . $done->get_error_message(), $journal, $live_id );
 				}
 				$now   = AB_MCP_Sync_Post_Writer::current( $live_id );
-				$after = is_array( $now ) ? AB_MCP_Sync_Post_Writer::terms_hash( AB_MCP_Sync_Post_Writer::term_ids( $now, $taxonomy ) ) : null;
+				$after = is_array( $now ) ? AB_MCP_Sync_Post_Writer::terms_hash( AB_MCP_Sync_Post_Writer::term_keys( $now, $taxonomy ) ) : null;
 			}
 			$journal['parts'][ $i ]['state'] = 'written';
 			$journal['parts'][ $i ]['after'] = $after;
@@ -898,13 +947,27 @@ final class AB_MCP_Sync_Engine {
 				// Not refusable, or a new object: unclear.
 				return self::outcome( 'unclear', sprintf( 'The part %s was written but reads back other than its target; it is on a way the lock does not refuse (or the object is new), so it stays and the object is unclear.', $name ), $journal, $live_id );
 			}
-			$put = self::restore_part( $run_id, $journal, $i, $live_id, $current );
-			$journal['parts'][ $i ]['state'] = $put['state'];
-			if ( isset( $put['note'] ) ) {
-				$journal['parts'][ $i ]['note'] = $put['note'];
+			// The deviating part goes back, and with it the parts written as
+			// their target before it (each read back under this lock: the
+			// step's own, B8), in reverse order; the step is restored only
+			// where every part is back, else unclear and each part says.
+			$all_back = true;
+			for ( $j = $i; $j >= 0; $j-- ) {
+				if ( $j < $i && 'read' !== $journal['parts'][ $j ]['state'] ) {
+					continue;
+				}
+				$put                             = self::restore_part( $run_id, $journal, $j, $live_id, $current );
+				$journal['parts'][ $j ]['state'] = $put['state'];
+				if ( isset( $put['note'] ) ) {
+					$journal['parts'][ $j ]['note'] = $put['note'];
+				}
+				if ( ! in_array( $put['state'], array( 'restored', 'unchanged' ), true ) ) {
+					$all_back = false;
+				}
+				$save( $journal );
+				AB_MCP_Change_Lock::touch();
 			}
-			$save( $journal );
-			return self::outcome( 'restored' === $put['state'] ? 'restored' : 'unclear', sprintf( 'The part %1$s was written but read back other than its target (a filter of this site changed it); it was %2$s.', $name, 'restored' === $put['state'] ? 'put back byte for byte, nothing of the object changed' : 'not put back and is unclear' ), $journal, $live_id );
+			return self::outcome( $all_back ? 'restored' : 'unclear', sprintf( 'The part %1$s was written but read back other than its target (a filter of this site changed it); %2$s', $name, $all_back ? 'it and the parts written before it were put back byte for byte: nothing of the object changed.' : 'a part could not be put back (see the parts of the journal), so the object is unclear.' ), $journal, $live_id );
 		}
 		return self::outcome( 'done', '', $journal, $live_id );
 	}
@@ -927,6 +990,16 @@ final class AB_MCP_Sync_Engine {
 		// What the step wrote: the hash read back, or, for a part never read
 		// back (the request ended), its target.
 		$written = null !== $part['after'] ? (string) $part['after'] : (string) $part['target'];
+		// A part written deviating (read back other than its target) goes
+		// back only where its way is refusable (decisions 17 and 23): on a
+		// way the lock does not refuse, what was read back is not provably
+		// the step's own (A2).
+		if ( null !== $part['after'] && ! hash_equals( (string) $part['target'], (string) $part['after'] ) && AB_MCP_Sync_Post_Writer::WAY_TERMS === $part['way'] ) {
+			return array(
+				'state' => 'left',
+				'note'  => sprintf( 'The part %s was written deviating on a way the lock does not refuse, so what it holds is not provably the run\'s own: left as it is.', $name ),
+			);
+		}
 		if ( 'row' === $name ) {
 			$put = AB_MCP_Sync_Post_Writer::restore_row( $live_id, $backup['row'], (string) $part['before'], $written, AB_MCP_Sync_Run::now() );
 		} elseif ( 0 === strpos( $name, 'meta:' ) ) {
@@ -934,7 +1007,7 @@ final class AB_MCP_Sync_Engine {
 			$put = AB_MCP_Sync_Post_Writer::restore_meta( $live_id, $key, AB_MCP_Sync_Post_Writer::meta_values( $backup, $key ), $written );
 		} else {
 			$taxonomy = substr( $name, 6 );
-			$put      = AB_MCP_Sync_Post_Writer::restore_terms( $live_id, $taxonomy, AB_MCP_Sync_Post_Writer::term_ids( $backup, $taxonomy ), $written );
+			$put      = AB_MCP_Sync_Post_Writer::restore_terms( $live_id, $taxonomy, AB_MCP_Sync_Post_Writer::term_keys( $backup, $taxonomy ), $written );
 		}
 		if ( is_wp_error( $put ) ) {
 			return array(
@@ -975,9 +1048,16 @@ final class AB_MCP_Sync_Engine {
 	}
 
 	/**
-	 * Phase 8: the check of the run (decision 33), which closes it: every
-	 * written pair against its target; a sample of a published object
-	 * answering 200; the PHP probe; the error log without new lines.
+	 * Phase 8: the check of the run (decision 33), which closes it, over as
+	 * many calls as its budget takes (a cursor and a stage in the result of
+	 * the step, as the check before the first write; B4): every written pair
+	 * against its target, one object after the other; a sample of a
+	 * published object answering 200 with the title of the written object
+	 * in its body (an old page from a cache would not); the PHP probe, which
+	 * has to pass whole (partial and unreachable are findings); the error
+	 * log without new lines. Each call does at least one of these, so the
+	 * check always goes on; closed_done only once every part ran and passed,
+	 * else closed_findings.
 	 *
 	 * @param array $run     Run.
 	 * @param array $step    Step.
@@ -986,61 +1066,125 @@ final class AB_MCP_Sync_Engine {
 	 * @return array|WP_Error
 	 */
 	private static function run_verify( array $run, array $step, array $ctx, $started ) {
-		$steps    = AB_MCP_Sync_Run::steps( (int) $run['run_id'] );
+		$steps = AB_MCP_Sync_Run::steps( (int) $run['run_id'] );
 		if ( is_wp_error( $steps ) ) {
 			return $steps;
 		}
-		$plan     = is_array( $run['plan'] ) ? $run['plan'] : array();
-		$findings = array();
-		$written  = 0;
-		$writes   = 0;
-		$sampled  = false;
+		$result = is_array( $step['result'] ) && isset( $step['result']['stage'] ) ? $step['result'] : array(
+			'stage'    => 'hashes',
+			'cursor'   => 0,
+			'findings' => array(),
+			'written'  => 0,
+			'writes'   => 0,
+			'sample'   => null,
+			'probe'    => null,
+		);
+		$writes = array();
 		foreach ( $steps as $one ) {
-			if ( 'write' !== $one['op'] ) {
-				continue;
+			if ( 'write' === $one['op'] ) {
+				$writes[] = $one;
 			}
-			++$writes;
-			if ( 'done' !== $one['state'] ) {
-				$findings[] = array(
-					'seq'     => (int) $one['seq'],
-					'message' => sprintf( 'Step %1$d is %2$s: %3$s', (int) $one['seq'], $one['state'], is_array( $one['result'] ) && isset( $one['result']['message'] ) ? $one['result']['message'] : 'not written.' ),
-				);
-				continue;
-			}
-			++$written;
-			$live_id = isset( $one['result']['live_ref'] ) ? (int) $one['result']['live_ref'] : 0;
-			$target  = isset( $one['parts']['object']['target'] ) ? (string) $one['parts']['object']['target'] : '';
-			$hash    = $live_id > 0 ? AB_MCP_Sync_Post_Writer::live_hash( $live_id, $ctx['source'] ) : null;
-			if ( null === $hash || ! hash_equals( $target, $hash ) ) {
-				$findings[] = array(
-					'seq'     => (int) $one['seq'],
-					'message' => sprintf( 'The %1$s %2$d no longer hashes to the target of step %3$d (changed since it was written, or not readable whole).', $one['parts']['object']['kind'] ?? 'post', $live_id, (int) $one['seq'] ),
-				);
-			}
-			if ( ! $sampled && isset( $one['result']['status'] ) && 'publish' === $one['result']['status'] && $live_id > 0 && self::now() - $started < self::BUDGET - self::RESERVE ) {
-				$sampled = true;
-				$status  = self::probe( get_permalink( $live_id ) );
-				if ( 200 !== $status ) {
-					$findings[] = array(
+		}
+		$worked = false;
+		$left   = static function () use ( $started ) {
+			return self::BUDGET - self::RESERVE - ( self::now() - $started );
+		};
+		$save   = static function ( array $result, $message ) use ( $run, $step ) {
+			AB_MCP_Sync_Run::update_step( (int) $run['run_id'], (int) $step['seq'], array( 'result' => $result ), 'planned' );
+			AB_MCP_Sync_Run::touch( (int) $run['run_id'] );
+			return array( 'next' => $message );
+		};
+		// The hashes of the written objects, one after the other.
+		if ( 'hashes' === $result['stage'] ) {
+			$count = count( $writes );
+			for ( $i = (int) $result['cursor']; $i < $count; $i++ ) {
+				if ( $worked && $left() <= 0 ) {
+					$result['cursor'] = $i;
+					return $save( $result, sprintf( 'The check of the run went over %1$d of %2$d written objects within the budget of this call; call action=next again to go on with it.', $i, $count ) );
+				}
+				$worked = true;
+				$one    = $writes[ $i ];
+				++$result['writes'];
+				if ( 'done' !== $one['state'] ) {
+					$result['findings'][] = array(
 						'seq'     => (int) $one['seq'],
-						'message' => sprintf( 'The published %1$s %2$d did not answer 200 (%3$s).', $one['parts']['object']['kind'] ?? 'post', $live_id, null === $status ? 'no answer' : (string) $status ),
+						'message' => sprintf( 'Step %1$d is %2$s: %3$s', (int) $one['seq'], $one['state'], is_array( $one['result'] ) && isset( $one['result']['message'] ) ? $one['result']['message'] : 'not written.' ),
+					);
+					continue;
+				}
+				++$result['written'];
+				$live_id = isset( $one['result']['live_ref'] ) ? (int) $one['result']['live_ref'] : 0;
+				$target  = isset( $one['parts']['object']['target'] ) ? (string) $one['parts']['object']['target'] : '';
+				$hash    = $live_id > 0 ? AB_MCP_Sync_Post_Writer::live_hash( $live_id, $ctx['source'] ) : null;
+				if ( null === $hash || ! hash_equals( $target, $hash ) ) {
+					$result['findings'][] = array(
+						'seq'     => (int) $one['seq'],
+						'message' => sprintf( 'The %1$s %2$d no longer hashes to the target of step %3$d (changed since it was written, or not readable whole).', $one['parts']['object']['kind'] ?? 'post', $live_id, (int) $one['seq'] ),
+					);
+				}
+				// The first published object is the sample.
+				if ( null === $result['sample'] && isset( $one['result']['status'] ) && 'publish' === $one['result']['status'] && $live_id > 0 ) {
+					$result['sample'] = array(
+						'seq'      => (int) $one['seq'],
+						'live_ref' => $live_id,
+						'title'    => isset( $one['result']['title'] ) ? (string) $one['result']['title'] : '',
+						'status'   => null,
+						'asked'    => false,
 					);
 				}
 			}
+			$result['cursor'] = $count;
+			$result['stage']  = 'sample';
 		}
-		// The PHP probe of the site, where time is left.
-		$probe = null;
-		if ( class_exists( 'AB_MCP_Php_Probe' ) && self::now() - $started < self::BUDGET - 2 * self::RESERVE ) {
-			$probe = AB_MCP_Php_Probe::run( array(), true, array( 'until' => $started + self::BUDGET - self::RESERVE ) );
-			if ( is_array( $probe ) && isset( $probe['result'] ) && 'fatal' === $probe['result'] ) {
-				$findings[] = array(
+		// The sample: a published object answers 200 and shows its title.
+		if ( 'sample' === $result['stage'] ) {
+			if ( $worked && $left() <= 0 ) {
+				return $save( $result, 'The hashes of the written objects were checked within the budget of this call; the sample, the PHP probe and the log follow: call action=next again.' );
+			}
+			$worked = true;
+			if ( is_array( $result['sample'] ) ) {
+				$live_id = (int) $result['sample']['live_ref'];
+				$answer  = self::probe( get_permalink( $live_id ) );
+				$title   = (string) $result['sample']['title'];
+				if ( '' === $title ) {
+					$row   = AB_MCP_Sync_Rows::post( $live_id );
+					$title = is_array( $row ) ? (string) $row['post_title'] : '';
+				}
+				$finding                      = self::sample_finding( $answer['status'], $answer['body'], $title );
+				$result['sample']['status']   = $answer['status'];
+				$result['sample']['asked']    = true;
+				$result['sample']['finding']  = $finding;
+				if ( null !== $finding ) {
+					$result['findings'][] = array(
+						'seq'     => (int) $result['sample']['seq'],
+						'message' => sprintf( 'The published %1$s %2$d %3$s', $result['sample']['kind'] ?? 'post', $live_id, $finding ),
+					);
+				}
+			}
+			$result['stage'] = 'probe';
+		}
+		// The PHP probe of the site: it has to pass whole.
+		if ( 'probe' === $result['stage'] ) {
+			if ( $worked && $left() <= self::RESERVE ) {
+				return $save( $result, 'The hashes and the sample were checked within the budget of this call; the PHP probe and the log follow: call action=next again.' );
+			}
+			$worked = true;
+			if ( class_exists( 'AB_MCP_Php_Probe' ) ) {
+				$probe           = AB_MCP_Php_Probe::run( array(), true, array( 'until' => microtime( true ) + max( 1.0, (float) $left() ) ) );
+				$result['probe'] = is_array( $probe ) && isset( $probe['result'] ) ? (string) $probe['result'] : 'unreachable';
+			} else {
+				$result['probe'] = 'unavailable';
+			}
+			if ( 'passed' !== $result['probe'] ) {
+				$result['findings'][] = array(
 					'seq'     => 0,
-					'message' => 'The PHP probe of the site found a fatal error after the run.',
+					'message' => 'fatal' === $result['probe'] ? 'The PHP probe of the site found a fatal error after the run.' : sprintf( 'The PHP probe of the site did not pass whole after the run (%s): open the site and wp-admin in the browser; wp_site_health shows the probe.', $result['probe'] ),
 				);
 			}
+			$result['stage'] = 'log';
 		}
-		// The error log without new lines, where readable.
-		$check  = null;
+		// The error log without new lines, where readable; then the close.
+		$check = null;
 		foreach ( $steps as $one ) {
 			if ( 'check' === $one['op'] && is_array( $one['result'] ) && isset( $one['result']['error_log_lines'] ) ) {
 				$check = $one['result']['error_log_lines'];
@@ -1048,20 +1192,17 @@ final class AB_MCP_Sync_Engine {
 		}
 		$lines_now = self::error_log_lines();
 		if ( null !== $check && null !== $lines_now && $lines_now > $check ) {
-			$findings[] = array(
+			$result['findings'][] = array(
 				'seq'     => 0,
 				'message' => sprintf( 'The error log of the site has %d new line(s) since the check before the run (wp_get_error_log shows them).', $lines_now - $check ),
 			);
 		}
-		$qualified = $writes > 0 && $written === $writes;
-		$state     = array() === $findings ? 'closed_done' : 'closed_findings';
-		$result    = array(
-			'message'  => array() === $findings ? sprintf( 'Checked: %d written object(s) hash to their targets; the sample, the probe and the log show nothing. The run is closed as done.', $written ) : sprintf( 'Checked with %d finding(s); the run is closed with findings.', count( $findings ) ),
-			'written'  => $written,
-			'writes'   => $writes,
-			'findings' => $findings,
-			'probe'    => is_array( $probe ) && isset( $probe['result'] ) ? $probe['result'] : null,
-		);
+		unset( $result['cursor'], $result['stage'] );
+		$written           = (int) $result['written'];
+		$writes_n          = (int) $result['writes'];
+		$qualified         = $writes_n > 0 && $written === $writes_n;
+		$state             = array() === $result['findings'] ? 'closed_done' : 'closed_findings';
+		$result['message'] = array() === $result['findings'] ? sprintf( 'Checked: %d written object(s) hash to their targets; the sample shows its object, the probe passed and the log has no new line. The run is closed as done.', $written ) : sprintf( 'Checked with %d finding(s); the run is closed with findings.', count( $result['findings'] ) );
 		AB_MCP_Sync_Run::update_step( (int) $run['run_id'], (int) $step['seq'], array( 'state' => 'done', 'result' => $result ), 'planned' );
 		$moved = AB_MCP_Sync_Run::set_state( (int) $run['run_id'], 'open', $state, $qualified );
 		if ( is_wp_error( $moved ) ) {
@@ -1072,6 +1213,34 @@ final class AB_MCP_Sync_Engine {
 		// close pushes the first out.
 		AB_MCP_Protected_Store::cleanup();
 		return array( 'next' => $result['message'] . ' The way back for its pairs is wp_site_revert (action=plan with this run_id).' );
+	}
+
+	/**
+	 * What the sample of a published object found, or null where it passed
+	 * (decision 33: HTTP 200 and the expected string, the title of the
+	 * written object as the page shows it; an old page a cache serves with
+	 * another title does not pass).
+	 *
+	 * @param int|null $status The status answered; null for no answer.
+	 * @param string   $body   The body answered.
+	 * @param string   $title  The title of the written object.
+	 * @return string|null
+	 */
+	public static function sample_finding( $status, $body, $title ) {
+		if ( 200 !== (int) $status ) {
+			return sprintf( 'did not answer 200 (%s).', null === $status ? 'no answer' : (string) (int) $status );
+		}
+		$title   = trim( (string) $title );
+		$needles = array( $title, esc_html( $title ) );
+		if ( function_exists( 'wptexturize' ) ) {
+			$needles[] = wptexturize( esc_html( $title ) );
+		}
+		foreach ( array_unique( $needles ) as $needle ) {
+			if ( '' !== $needle && false !== strpos( (string) $body, $needle ) ) {
+				return null;
+			}
+		}
+		return 'answered 200 but did not show the title of the written object: a page cache may serve an old version (empty it and open the page), or the theme does not show titles.';
 	}
 
 	/**
@@ -1123,8 +1292,17 @@ final class AB_MCP_Sync_Engine {
 		}
 		AB_MCP_Sync_Run::touch( $run_id );
 		$pair_id = isset( $object['pair_id'] ) && null !== $object['pair_id'] ? (int) $object['pair_id'] : ( null !== $forward['pair_id'] ? (int) $forward['pair_id'] : null );
-		// A new object stays as a rest (decision 23, finding R5-4).
-		if ( 'create' === $object['op'] || ! is_array( $journal['backup'] ) || ! empty( $journal['backup']['absent'] ) ) {
+		// A step without a backup wrote nothing (it failed before the backup):
+		// there is nothing to take back; the plan leaves such a step out (B9).
+		if ( ! is_array( $journal['backup'] ) ) {
+			return self::fail_step( $run_id, $seq, 'begun', sprintf( 'Step %d wrote nothing (its journal holds no backup); there is nothing to take back for it.', (int) $forward['seq'] ) );
+		}
+		// A new object stays as a rest (decision 23, finding R5-4): by the
+		// operation of the step, never by the shape of its backup.
+		if ( 'create' === $object['op'] ) {
+			if ( $live_id < 1 ) {
+				return self::fail_step( $run_id, $seq, 'begun', sprintf( 'Step %d made no object (its row was not written); there is nothing to take back for it.', (int) $forward['seq'] ) );
+			}
 			$rest = self::rest( array( 'kind' => $object['kind'], 'staging_ref' => $object['staging_ref'] ), $live_id );
 			if ( null !== $pair_id ) {
 				$pair = AB_MCP_Sync_Pairs::get( $pair_id );
@@ -1426,15 +1604,24 @@ final class AB_MCP_Sync_Engine {
 	}
 
 	/**
-	 * The status a published object's address answers with.
+	 * The answer of a published object's address: its status and body.
 	 *
 	 * @param string $url Address.
-	 * @return int|null
+	 * @return array{status:int|null,body:string}
 	 */
 	private static function probe( $url ) {
 		if ( null !== self::$probe ) {
-			$status = call_user_func( self::$probe, (string) $url );
-			return null === $status ? null : (int) $status;
+			$answer = call_user_func( self::$probe, (string) $url );
+			if ( is_array( $answer ) ) {
+				return array(
+					'status' => isset( $answer['status'] ) && null !== $answer['status'] ? (int) $answer['status'] : null,
+					'body'   => isset( $answer['body'] ) ? (string) $answer['body'] : '',
+				);
+			}
+			return array(
+				'status' => null === $answer ? null : (int) $answer,
+				'body'   => '',
+			);
 		}
 		$answer = wp_remote_get(
 			(string) $url,
@@ -1444,7 +1631,16 @@ final class AB_MCP_Sync_Engine {
 				'sslverify'   => false,
 			)
 		);
-		return is_wp_error( $answer ) ? null : (int) wp_remote_retrieve_response_code( $answer );
+		if ( is_wp_error( $answer ) ) {
+			return array(
+				'status' => null,
+				'body'   => '',
+			);
+		}
+		return array(
+			'status' => (int) wp_remote_retrieve_response_code( $answer ),
+			'body'   => (string) wp_remote_retrieve_body( $answer ),
+		);
 	}
 
 	/**

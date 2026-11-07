@@ -22,7 +22,7 @@
  * bulk_attachments (count: rows of attachments by SQL), import (the arguments of wp_site_import_chunk,
  * relay), export_again (package_id, now), export_chunk
  * (package_id, chunk, now), grants (package_id, count, now), store_cleanup
- * (now), store_remove (area, gid), add_admin (login), as_user (user), for the report delete_post
+ * (now), store_hold_lock (seconds), store_remove (area, gid), add_admin (login), as_user (user), for the report delete_post
  * (post, for good), trash_post (post), add_term_meta (term, key, value), push (args of wp_site_push,
  * exit_at: a hook at which the process exits inside a boundary), raw_post (post, set: columns written
  * by SQL) and wp_version (version: the
@@ -319,6 +319,16 @@ foreach ( $ab_it_steps as $ab_it_i => $ab_it_step ) {
 			break;
 		case 'store_cleanup':
 			$ab_it_out = AB_MCP_Protected_Store::cleanup( (int) $ab_it_step['now'] );
+			break;
+		case 'store_hold_lock':
+			// The lock of the protected store held for a while (seconds), as a
+			// clean-up in another request holds it (A6).
+			$ab_it_out = AB_MCP_Protected_Store::under_lock(
+				static function () use ( $ab_it_step ) {
+					usleep( (int) ( 1000000 * (float) $ab_it_step['seconds'] ) );
+					return true;
+				}
+			);
 			break;
 		case 'add_admin':
 			$ab_it_out = wp_insert_user(

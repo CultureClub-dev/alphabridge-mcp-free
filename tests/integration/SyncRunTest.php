@@ -105,10 +105,29 @@ final class SyncRunTest extends TestCase {
 		AB_MCP_Sync_Backup::forget();
 		AB_MCP_Sync_Guard::disarm();
 		AB_MCP_Sync_Run::$clock       = null;
+		AB_MCP_Sync_Engine::$clock    = null;
 		AB_MCP_Sync_Engine::$probe    = null;
 		AB_MCP_Sync_Resources::$probe = null;
 		AB_MCP_Sync_Report::$page     = null;
 		remove_all_filters( 'wp_insert_post_data' );
+		remove_all_filters( 'sanitize_post_meta_note' );
+		remove_all_actions( 'set_object_terms' );
+		delete_option( 'nav_menu_options' );
+	}
+
+	/**
+	 * The probe of a published object answers as the live page would: 200
+	 * and the title of the object in the body (decision 33; the real request
+	 * is the live probe, GRENZEN-LAUF.md).
+	 */
+	private static function probe_ok(): void {
+		AB_MCP_Sync_Engine::$probe = static function ( string $url ): array {
+			$id = url_to_postid( $url );
+			return array(
+				'status' => 200,
+				'body'   => '<html><head><title>' . esc_html( $id > 0 ? (string) get_post_field( 'post_title', $id, 'raw' ) : '' ) . '</title></head></html>',
+			);
+		};
 	}
 
 	public static function tearDownAfterClass(): void {
@@ -565,6 +584,10 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( array( 1, 'check', 'done' ), array( $check['step']['seq'], $check['step']['op'], $check['step']['state'] ) );
 		self::assertSame( 2, $check['step']['result']['checked'] );
 		self::assertSame( $before, self::row_a( (int) $a['contact'] ), 'The check writes nothing.' );
+		// action=step cannot run the caches (phase 7) before the write steps
+		// (decision 16; B2): the phases go in order.
+		self::assertStringContainsString( 'phase 7', self::refused( self::gated( 'wp_site_push', array( 'action' => 'step', 'seq' => 4, 'run_id' => $run_id ) ), 'ab_mcp_sync_step_waits' ) );
+		self::assertSame( 'planned', self::step( self::gated( 'wp_site_push', array( 'action' => 'status', 'run_id' => $run_id ) ), 4 )['state'] );
 		// Step 2: the changed page.
 		$write = self::next( $run_id );
 		self::assertIsArray( $write, is_wp_error( $write ) ? $write->get_error_message() : '' );
@@ -586,7 +609,7 @@ final class SyncRunTest extends TestCase {
 		self::assertIsArray( $pair );
 		self::assertSame( array( 'active', 'push', $run_id ), array( $pair['state'], $pair['base_origin'], $pair['last_run'] ) );
 		// Steps 4 and 5: the caches and the check, which closes the run.
-		AB_MCP_Sync_Engine::$probe = static fn( string $url ): int => 200;
+		self::probe_ok();
 		$post = self::next( $run_id );
 		self::assertSame( array( 4, 'post', 'done' ), array( $post['step']['seq'], $post['step']['op'], $post['step']['state'] ) );
 		$verify = self::next( $run_id );
@@ -709,7 +732,7 @@ final class SyncRunTest extends TestCase {
 		self::b( array( array( 'op' => 'update_meta', 'post' => (int) $b['contact'], 'key' => 'note', 'value' => 'def' ) ) );
 		$planned = self::planned( array( 'contact' ) );
 		$run     = self::begun( $planned['args'] );
-		AB_MCP_Sync_Engine::$probe = static fn( string $url ): int => 200;
+		self::probe_ok();
 		self::assertSame( 'closed_done', self::finish( (int) $run['run_id'] )['state'] );
 		self::assertSame( array( 'def' ), self::meta_a( (int) $a['contact'], 'note' ) );
 		// Another writer: the meta to ABC (the collation calls it equal, the
@@ -797,7 +820,7 @@ final class SyncRunTest extends TestCase {
 		// With the confirmed choice: written as draft, the pair with the override.
 		$n       = $planned['args']['select'][0];
 		$run     = self::begun( $planned['args'] + array( 'as_draft' => array( $n ) ) );
-		AB_MCP_Sync_Engine::$probe = static fn( string $url ): int => 200;
+		self::probe_ok();
 		$closed  = self::finish( (int) $run['run_id'] );
 		self::assertSame( 'closed_done', $closed['state'], json_encode( $closed ) );
 		$rows = AB_MCP_IT_Sites::rows( 'a', 'posts', array( 'post_name' => 'landing' ) );
@@ -839,7 +862,7 @@ final class SyncRunTest extends TestCase {
 		self::b( array( array( 'op' => 'raw_post', 'post' => (int) $b['launch'], 'set' => array( 'post_date' => $future, 'post_date_gmt' => $future ) ), array( 'op' => 'update_post', 'args' => array( 'ID' => (int) $b['launch'], 'post_status' => 'draft', 'post_date' => $future, 'post_date_gmt' => $future, 'edit_date' => true ) ) ) );
 		$planned = self::planned( array( 'launch' ) );
 		$run     = self::begun( $planned['args'] );
-		AB_MCP_Sync_Engine::$probe = static fn( string $url ): int => 200;
+		self::probe_ok();
 		self::assertSame( 'closed_done', self::finish( (int) $run['run_id'] )['state'] );
 		self::assertSame( 'draft', self::row_a( (int) $a['launch'] )['post_status'] );
 		// The way back after the date passed: not put back, check needed, nothing published.
@@ -851,6 +874,334 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( 'check_needed', $parts['row'] );
 		self::assertSame( 'draft', self::row_a( (int) $a['launch'] )['post_status'], 'Nothing published.' );
 		AB_MCP_Sync_Run::$clock = null;
+	}
+
+	public function testANewParentPageAndItsNewChildPageAreWrittenInOneRun(): void {
+		// The child refers to a parent the same run creates (B1): the check
+		// before the first write takes the parent as pending, the boundary
+		// of the child maps it by the pair the parent's step made.
+		self::pair();
+		$parent = self::b( array( array( 'op' => 'insert_post', 'args' => self::page( 'section', 'A new section.' ), 'as' => 'parent' ) ) )['parent'];
+		self::b( array( array( 'op' => 'insert_post', 'args' => self::page( 'chapter', 'Its chapter.', array( 'post_parent' => (int) $parent ) ) ) ) );
+		// A menu adds pages of the top level by itself: the parent is taken
+		// over as draft (the confirmed choice); the child is no page of the top
+		// level, pending parent or not, so it is published as on staging.
+		update_option( 'nav_menu_options', array( 'auto_add' => array( 5 ) ) );
+		$planned = self::planned( array( 'chapter', 'section' ) );
+		$n       = (int) self::post_entry( $planned['report']['all'], 'section' )['n'];
+		$args    = $planned['args'] + array( 'as_draft' => array( $n ) );
+		$preview = self::gated( 'wp_site_push', $args );
+		self::assertIsArray( $preview, is_wp_error( $preview ) ? $preview->get_error_message() : '' );
+		self::assertSame( array(), $preview['preview']['locked'] );
+		$steps = $preview['preview']['steps'];
+		self::assertSame( (string) $parent, $steps[1]['object']['staging_ref'], 'The parent first (the order of the graph).' );
+		self::assertSame( array( 1, 2 ), $steps[2]['depends'], 'The child depends on the parent.' );
+		$run = self::gated( 'wp_site_push', $args + array( 'confirm_token' => $preview['confirm_token'] ) );
+		self::assertIsArray( $run, is_wp_error( $run ) ? $run->get_error_message() : '' );
+		self::probe_ok();
+		$closed = self::finish( (int) $run['run_id'] );
+		self::assertSame( 'closed_done', $closed['state'], json_encode( $closed ) );
+		$section = AB_MCP_IT_Sites::rows( 'a', 'posts', array( 'post_name' => 'section' ) );
+		$chapter = AB_MCP_IT_Sites::rows( 'a', 'posts', array( 'post_name' => 'chapter' ) );
+		self::assertCount( 1, $section );
+		self::assertCount( 1, $chapter );
+		self::assertSame( 'draft', $section[0]['post_status'] );
+		self::assertSame( 'publish', $chapter[0]['post_status'] );
+		self::assertSame( $section[0]['ID'], $chapter[0]['post_parent'], 'The child under its new parent on this site.' );
+		delete_option( 'nav_menu_options' );
+	}
+
+	public function testTheCheckBeforeTheFirstWriteKeepsItsFindingsAcrossCalls(): void {
+		// A deviation found in one call of the check, then its time runs out:
+		// the next call carries it on and the run is aborted, not passed (B3).
+		self::pair();
+		$a = self::pages_on_a( array( 'about' => 'About us.', 'contact' => 'Write to us.' ) );
+		$b = self::pages_on_b( array( 'about' => 'About us.', 'contact' => 'Write to us.' ) );
+		self::paired( self::staged() );
+		self::change_on_b( $b['about'], 'about', 'About us, on staging.' );
+		self::change_on_b( $b['contact'], 'contact', 'Write to us on staging.' );
+		$planned = self::planned( array( 'about', 'contact' ) );
+		$run     = self::begun( $planned['args'] );
+		// The object the check reaches first (the smaller entry) changes here.
+		$first = min( $planned['args']['select'] ) === (int) self::post_entry( $planned['report']['all'], 'about' )['n'] ? 'about' : 'contact';
+		wp_update_post( wp_slash( self::page( $first, 'Changed here after the plan.', array( 'ID' => (int) $a[ $first ] ) ) ) );
+		// A clock that passes the budget after the first object of each call.
+		AB_MCP_Sync_Engine::$clock = static function (): float {
+			static $t = 1000.0;
+			$t += 60;
+			return $t;
+		};
+		$one = self::next( (int) $run['run_id'] );
+		self::assertIsArray( $one, is_wp_error( $one ) ? $one->get_error_message() : '' );
+		self::assertSame( 'open', $one['state'] );
+		self::assertSame( 'planned', $one['step']['state'] );
+		self::assertSame( 1, $one['step']['result']['cursor'] );
+		self::assertCount( 1, $one['step']['result']['findings'], 'The finding of this call is kept with the cursor.' );
+		$two = self::next( (int) $run['run_id'] );
+		self::assertIsArray( $two, is_wp_error( $two ) ? $two->get_error_message() : '' );
+		self::assertSame( 'closed_aborted', $two['state'], json_encode( $two ) );
+		self::assertSame( 'failed', $two['step']['state'] );
+		self::assertCount( 1, $two['step']['result']['findings'] );
+		self::assertStringContainsString( 'changed since the plan', $two['step']['result']['findings'][0]['message'] );
+		self::assertSame( 2, $two['step']['result']['checked'] );
+		AB_MCP_Sync_Engine::$clock = null;
+	}
+
+	public function testTheCheckOfTheRunNeedsTheTitleBesides200AndGoesOnOverCalls(): void {
+		// Decision 33 (B4): a published object has to answer 200 with its
+		// title (an old page from a cache does not); the hashes of the written
+		// objects are checked over calls where the budget runs out.
+		self::pair();
+		$a = self::pages_on_a( array( 'about' => 'About us.', 'contact' => 'Write to us.' ) );
+		$b = self::pages_on_b( array( 'about' => 'About us.', 'contact' => 'Write to us.' ) );
+		self::paired( self::staged() );
+		self::change_on_b( $b['about'], 'about', 'About us, on staging.' );
+		self::change_on_b( $b['contact'], 'contact', 'Write to us on staging.' );
+		$planned = self::planned( array( 'about', 'contact' ) );
+		$run     = self::begun( $planned['args'] );
+		AB_MCP_Sync_Engine::$probe = static fn( string $url ): array => array( 'status' => 200, 'body' => '<title>An old page from a cache</title>' );
+		$closed = self::finish( (int) $run['run_id'] );
+		self::assertSame( 'closed_findings', $closed['state'], json_encode( $closed ) );
+		$findings = $closed['step']['result']['findings'];
+		self::assertCount( 1, $findings, json_encode( $findings ) );
+		self::assertStringContainsString( 'did not show the title', $findings[0]['message'] );
+		self::assertSame( 'passed', $closed['step']['result']['probe'], 'The PHP probe passed whole.' );
+		self::assertGreaterThan( 0, AB_MCP_Sync_Run::get( (int) $run['run_id'] )['forward_closed_at'], 'Every write step was written: a qualified close all the same.' );
+		// The way back, then the run again with the budget running out after
+		// the first object of the check: the check goes on in the next call.
+		$begun = self::revert( (int) $run['run_id'] );
+		self::assertSame( 'closed_reverted', self::revert_all( (int) $begun['run_id'] )['state'] );
+		$planned = self::planned( array( 'about', 'contact' ) );
+		$run     = self::begun( $planned['args'] );
+		self::probe_ok();
+		foreach ( range( 1, 4 ) as $seq ) {
+			self::assertSame( 'done', self::next( (int) $run['run_id'] )['step']['state'], "step $seq" );
+		}
+		$advance                   = true;
+		AB_MCP_Sync_Engine::$clock = static function () use ( &$advance ): float {
+			static $t = 1000.0;
+			$t += $advance ? 60 : 0;
+			return $t;
+		};
+		$one = self::next( (int) $run['run_id'] );
+		self::assertIsArray( $one, is_wp_error( $one ) ? $one->get_error_message() : '' );
+		self::assertSame( 'open', $one['state'] );
+		self::assertSame( array( 'hashes', 1 ), array( $one['step']['result']['stage'], $one['step']['result']['cursor'] ), 'One object checked, the cursor kept.' );
+		$advance = false;
+		$two     = self::next( (int) $run['run_id'] );
+		self::assertSame( 'closed_done', $two['state'], json_encode( $two ) );
+		self::assertSame( 2, $two['step']['result']['written'] );
+		self::assertTrue( $two['step']['result']['sample']['asked'] );
+		AB_MCP_Sync_Engine::$clock = null;
+	}
+
+	public function testThePageTemplateGoesThroughTheCoreWayAndTheThemeHasToOfferIt(): void {
+		// _wp_page_template through page_template of wp_insert_post() (decisions
+		// 17 and 28; B7): a template the theme of this site offers is written
+		// once; one it does not offer is refused before anything is written.
+		self::pair();
+		self::b( array( array( 'op' => 'insert_post', 'args' => self::page( 'landing', 'A landing page.', array( 'meta_input' => array( '_wp_page_template' => 'landing.php' ) ) ) ) ) );
+		$planned = self::planned( array( 'landing' ) );
+		$run     = self::begun( $planned['args'] );
+		$check   = self::next( (int) $run['run_id'] );
+		self::assertSame( 'closed_aborted', $check['state'], json_encode( $check ) );
+		self::assertStringContainsString( 'post:page_template', $check['step']['result']['findings'][0]['message'] );
+		self::assertSame( array(), AB_MCP_IT_Sites::rows( 'a', 'posts', array( 'post_name' => 'landing' ) ), 'Nothing created.' );
+		// A template the theme offers for pages.
+		$templates = wp_get_theme()->get_page_templates( null, 'page' );
+		self::assertNotEmpty( $templates, 'The theme of the test site offers a template for pages: ' . get_stylesheet() );
+		$template = (string) array_key_first( $templates );
+		self::b( array( array( 'op' => 'insert_post', 'args' => self::page( 'cover', 'A cover page.', array( 'meta_input' => array( '_wp_page_template' => $template ) ) ) ) ) );
+		$planned = self::planned( array( 'cover' ) );
+		$run     = self::begun( $planned['args'] );
+		self::probe_ok();
+		$closed = self::finish( (int) $run['run_id'] );
+		self::assertSame( 'closed_done', $closed['state'], json_encode( $closed ) );
+		$rows = AB_MCP_IT_Sites::rows( 'a', 'posts', array( 'post_name' => 'cover' ) );
+		self::assertCount( 1, $rows );
+		self::assertSame( array( $template ), self::meta_a( (int) $rows[0]['ID'], '_wp_page_template' ), 'One row, written by the core with the row of the post.' );
+		$write = self::step( self::gated( 'wp_site_push', array( 'action' => 'status', 'run_id' => (int) $run['run_id'] ) ), 2 );
+		self::assertSame( array( 'read', 'read' ), array_column( $write['parts']['parts'], 'state' ) );
+	}
+
+	public function testADeviatingMetaPartTakesTheRowBackWithItAndTheStepSaysSo(): void {
+		// A meta sanitizer of this site changes a value as it is written: the
+		// part deviates and goes back, and so does the row written before it
+		// (each the step's own, read back under the lock); the step is
+		// restored only because nothing of the object changed (B8).
+		self::pair();
+		$a = self::pages_on_a( array( 'contact' => 'Write to us.' ) );
+		$b = self::pages_on_b( array( 'contact' => 'Write to us.' ) );
+		add_post_meta( (int) $a['contact'], 'note', 'abc' );
+		self::b( array( array( 'op' => 'add_meta', 'post' => (int) $b['contact'], 'key' => 'note', 'value' => 'abc' ) ) );
+		self::paired( self::staged() );
+		self::change_on_b( $b['contact'], 'contact', 'Write to us on staging.' );
+		self::b( array( array( 'op' => 'update_meta', 'post' => (int) $b['contact'], 'key' => 'note', 'value' => 'def' ) ) );
+		$planned = self::planned( array( 'contact' ) );
+		$run     = self::begun( $planned['args'] );
+		$before  = self::row_a( (int) $a['contact'] );
+		self::assertSame( 'done', self::next( (int) $run['run_id'] )['step']['state'] );
+		add_filter( 'sanitize_post_meta_note', static fn() => 'X' );
+		$write = self::next( (int) $run['run_id'] );
+		remove_all_filters( 'sanitize_post_meta_note' );
+		self::assertIsArray( $write, is_wp_error( $write ) ? $write->get_error_message() : '' );
+		self::assertSame( 'restored', $write['step']['state'], json_encode( $write['step'] ) );
+		$parts = array_column( $write['step']['parts']['parts'], 'state', 'part' );
+		self::assertSame( 'restored', $parts['meta:note'] );
+		self::assertSame( 'restored', $parts['row'], 'The row written before the deviating part went back as well.' );
+		self::assertSame( $before, self::row_a( (int) $a['contact'] ), 'Nothing of the object changed.' );
+		self::assertSame( array( 'abc' ), self::meta_a( (int) $a['contact'], 'note' ) );
+		self::assertStringContainsString( 'nothing of the object changed', $write['step']['result']['message'] );
+		$pair = AB_MCP_Sync_Pairs::find_live( AB_MCP_Sync_Anchor::active()['source_id'], 'post', (string) $a['contact'] );
+		self::assertSame( 'active', $pair['state'] );
+		self::assertSame( 'proposal', $pair['base_origin'], 'The pair keeps its bases of before.' );
+	}
+
+	public function testAStepThatFailedBeforeItsBackupIsNoRestOnTheWayBack(): void {
+		// The target changes between the check and the write step: the step
+		// fails before its backup and mutation. The way back has nothing to
+		// take back for it, and never calls it a new object (B9).
+		self::pair();
+		$a = self::pages_on_a( array( 'contact' => 'Write to us.' ) );
+		$b = self::pages_on_b( array( 'contact' => 'Write to us.' ) );
+		self::paired( self::staged() );
+		self::change_on_b( $b['contact'], 'contact', 'Write to us on staging.' );
+		$planned = self::planned( array( 'contact' ) );
+		$run     = self::begun( $planned['args'] );
+		self::assertSame( 'done', self::next( (int) $run['run_id'] )['step']['state'] );
+		wp_update_post( wp_slash( self::page( 'contact', 'Changed here after the check.', array( 'ID' => (int) $a['contact'] ) ) ) );
+		$write = self::next( (int) $run['run_id'] );
+		self::assertSame( 'failed', $write['step']['state'] );
+		self::assertStringContainsString( 'changed since the plan', $write['step']['result']['message'] );
+		self::assertNull( $write['step']['parts']['backup'], 'Failed before the backup: nothing was written.' );
+		self::probe_ok();
+		self::assertSame( 'closed_findings', self::finish( (int) $run['run_id'] )['state'] );
+		self::assertStringContainsString( 'no written step to take back', self::refused( self::gated( 'wp_site_revert', array( 'action' => 'plan', 'run_id' => (int) $run['run_id'] ) ), 'ab_mcp_sync_revert_nothing' ) );
+		self::assertStringContainsString( 'wrote nothing', self::refused( self::gated( 'wp_site_revert', array( 'action' => 'plan', 'run_id' => (int) $run['run_id'], 'steps' => array( 2 ) ) ), 'ab_mcp_sync_revert_steps' ) );
+		$pair = AB_MCP_Sync_Pairs::find_live( AB_MCP_Sync_Anchor::active()['source_id'], 'post', (string) $a['contact'] );
+		self::assertSame( 'active', $pair['state'], 'No rest, no residual pair.' );
+		self::assertSame( 'Changed here after the check.', self::row_a( (int) $a['contact'] )['post_content'] );
+	}
+
+	public function testADeviatingTermPartIsNeverTakenBack(): void {
+		// Terms are written on a way the lock does not refuse: a part that
+		// read back other than its target is not provably the run's own, so
+		// the way back leaves it (decisions 17 and 23; A2).
+		self::pair();
+		$news_a  = wp_insert_term( 'News', 'category' );
+		self::assertIsArray( $news_a, is_wp_error( $news_a ) ? $news_a->get_error_message() : '' );
+		$news_b  = (int) self::b( array( array( 'op' => 'insert_term', 'name' => 'News', 'taxonomy' => 'category', 'as' => 'term' ) ) )['term'];
+		$story_a = wp_insert_post( wp_slash( self::page( 'story', 'A story.', array( 'post_type' => 'post', 'post_category' => array( (int) $news_a['term_id'] ) ) ) ), true );
+		self::assertIsInt( $story_a );
+		$story_b = (int) self::b( array( array( 'op' => 'insert_post', 'args' => self::page( 'story', 'A story.', array( 'post_type' => 'post', 'post_category' => array( $news_b ) ) ), 'as' => 'post' ) ) )['post'];
+		self::paired( self::staged() );
+		self::change_on_b( (string) $story_b, 'story', 'A story, on staging.', array( 'post_type' => 'post', 'post_category' => array( $news_b ) ) );
+		$planned = self::planned( array( 'story' ) );
+		$run     = self::begun( $planned['args'] );
+		self::assertSame( 'done', self::next( (int) $run['run_id'] )['step']['state'] );
+		// Another writer adds a category by SQL in the moment the terms are set.
+		$foreign = wp_insert_term( 'Foreign', 'category' );
+		$ttid    = (int) $foreign['term_taxonomy_id'];
+		add_action(
+			'set_object_terms',
+			static function ( $object_id, $terms, $tt_ids, $taxonomy ) use ( $story_a, $ttid ) {
+				global $wpdb;
+				if ( 'category' === $taxonomy && (int) $object_id === $story_a ) {
+					$wpdb->insert( $wpdb->term_relationships, array( 'object_id' => $story_a, 'term_taxonomy_id' => $ttid, 'term_order' => 0 ) );
+					clean_object_term_cache( $story_a, 'post' );
+				}
+			},
+			10,
+			4
+		);
+		$write = self::next( (int) $run['run_id'] );
+		remove_all_actions( 'set_object_terms' );
+		self::assertSame( 'unclear', $write['step']['state'], json_encode( $write['step'] ) );
+		$parts = array_column( $write['step']['parts']['parts'], 'state', 'part' );
+		self::assertSame( 'written', $parts['terms:category'], 'Written, deviating.' );
+		self::assertStringContainsString( 'does not refuse', $write['step']['result']['message'] );
+		self::probe_ok();
+		self::assertSame( 'closed_findings', self::finish( (int) $run['run_id'] )['state'] );
+		$slugs = static fn(): array => array_values( array_map( static fn( $t ) => $t->slug, wp_get_object_terms( $story_a, 'category' ) ) );
+		self::assertEqualsCanonicalizing( array( 'news', 'foreign' ), $slugs() );
+		// The way back: the terms are left (not the run's own), the row goes back.
+		$begun = self::revert( (int) $run['run_id'] );
+		$back  = self::revert_all( (int) $begun['run_id'] );
+		self::assertSame( 'closed_findings', $back['state'] );
+		$outcome = array_column( self::step( $back, 1 )['result']['parts'], 'state', 'part' );
+		self::assertSame( 'left', $outcome['terms:category'], 'Not provably the run\'s own.' );
+		self::assertSame( 'restored', $outcome['row'] );
+		self::assertEqualsCanonicalizing( array( 'news', 'foreign' ), $slugs(), 'The foreign category stays.' );
+		self::assertSame( 'A story.', self::row_a( $story_a )['post_content'] );
+		$pair = AB_MCP_Sync_Pairs::find_live( AB_MCP_Sync_Anchor::active()['source_id'], 'post', (string) $story_a );
+		self::assertSame( 'unclear', $pair['state'] );
+	}
+
+	public function testTheWayBackDoesNotRepublishATopLevelPageWhileAMenuAddsPages(): void {
+		// A published page taken over as draft; the way back would publish it
+		// again while a menu adds pages by itself (decisions 21 and 23; A3):
+		// the row is left as «check needed», nothing is published.
+		self::pair();
+		$a = self::pages_on_a( array( 'contact' => 'Write to us.' ) );
+		$b = self::pages_on_b( array( 'contact' => 'Write to us.' ) );
+		self::paired( self::staged() );
+		self::change_on_b( $b['contact'], 'contact', 'Write to us on staging.' );
+		update_option( 'nav_menu_options', array( 'auto_add' => array( 5 ) ) );
+		$planned = self::planned( array( 'contact' ) );
+		$n       = $planned['args']['select'][0];
+		$run     = self::begun( $planned['args'] + array( 'as_draft' => array( $n ) ) );
+		self::probe_ok();
+		self::assertSame( 'closed_done', self::finish( (int) $run['run_id'] )['state'] );
+		self::assertSame( 'draft', self::row_a( (int) $a['contact'] )['post_status'] );
+		$begun = self::revert( (int) $run['run_id'] );
+		$back  = self::revert_all( (int) $begun['run_id'] );
+		self::assertSame( 'closed_findings', $back['state'] );
+		$parts = self::step( $back, 1 )['result']['parts'];
+		$row   = array_values( array_filter( $parts, static fn( $p ) => 'row' === $p['part'] ) )[0];
+		self::assertSame( 'check_needed', $row['state'] );
+		self::assertStringContainsString( 'add it by itself', $row['note'] );
+		self::assertSame( 'draft', self::row_a( (int) $a['contact'] )['post_status'], 'Nothing published.' );
+		self::assertSame( 'Write to us on staging.', self::row_a( (int) $a['contact'] )['post_content'] );
+		// The automatic off: the way back of another run puts it back.
+		delete_option( 'nav_menu_options' );
+	}
+
+	public function testAWayBackForAClosedRunIsMadeUnderTheLockOfTheStore(): void {
+		// The clean-up reads the runs whose backups it keeps and removes
+		// groups under the lock of the store; a way back for a closed run is
+		// made under the same lock, so no sweep removes the backups it needs
+		// beside its making (decision 20, rule 4; A6): while another request
+		// holds the lock, the making waits.
+		self::pair();
+		$a = self::pages_on_a( array( 'contact' => 'Write to us.' ) );
+		$b = self::pages_on_b( array( 'contact' => 'Write to us.' ) );
+		self::paired( self::staged() );
+		self::change_on_b( $b['contact'], 'contact', 'Write to us on staging.' );
+		$run = self::begun( self::planned( array( 'contact' ) )['args'] );
+		self::probe_ok();
+		self::assertSame( 'closed_done', self::finish( (int) $run['run_id'] )['state'] );
+		$args    = array( 'action' => 'plan', 'run_id' => (int) $run['run_id'] );
+		$preview = self::gated( 'wp_site_revert', $args );
+		self::assertIsArray( $preview, is_wp_error( $preview ) ? $preview->get_error_message() : '' );
+		// Another process of site A holds the lock for three seconds.
+		$command = array( PHP_BINARY, dirname( __DIR__ ) . '/integration/bin/sync-site.php', AB_MCP_IT_Sites::state_file(), 'a' );
+		$holder  = proc_open( $command, array( 0 => array( 'pipe', 'r' ), 1 => array( 'pipe', 'w' ), 2 => array( 'pipe', 'w' ) ), $pipes );
+		self::assertIsResource( $holder );
+		fwrite( $pipes[0], (string) json_encode( array( array( 'op' => 'store_hold_lock', 'seconds' => 3, 'as' => 'held' ) ) ) );
+		fclose( $pipes[0] );
+		usleep( 1200000 );
+		$started = microtime( true );
+		$begun   = self::gated( 'wp_site_revert', $args + array( 'confirm_token' => $preview['confirm_token'] ) );
+		$waited  = microtime( true ) - $started;
+		$out     = stream_get_contents( $pipes[1] );
+		$err     = stream_get_contents( $pipes[2] );
+		fclose( $pipes[1] );
+		fclose( $pipes[2] );
+		self::assertSame( 0, proc_close( $holder ), $err . $out );
+		self::assertIsArray( $begun, is_wp_error( $begun ) ? $begun->get_error_message() : '' );
+		self::assertSame( 'revert', $begun['type'] );
+		self::assertGreaterThan( 1.0, $waited, 'The making waited for the lock the other request held.' );
+		self::assertSame( 'closed_reverted', self::revert_all( (int) $begun['run_id'] )['state'] );
 	}
 
 	public function testTheRetentionKeepsTheLastThreeQualifiedClosesAndWhatAWayBackNeeds(): void {

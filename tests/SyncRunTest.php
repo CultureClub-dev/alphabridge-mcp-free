@@ -118,6 +118,7 @@ final class SyncRunRowsWpdb {
 final class SyncRunOptionWpdb {
 	public $prefix      = 'wp_';
 	public $options     = 'wp_options';
+	public $posts       = 'wp_posts';
 	public $last_error  = '';
 	public $last_result = array();
 	/** @var int Reads of the record. */
@@ -125,6 +126,10 @@ final class SyncRunOptionWpdb {
 
 	public function prepare( $query, ...$args ) {
 		return ( new \AbTestSyncWpdb() )->prepare( $query, ...$args );
+	}
+
+	public function get_var( $query ) {
+		return null;
 	}
 
 	public function query( $sql ) {
@@ -141,6 +146,78 @@ final class SyncRunOptionWpdb {
 			}
 		}
 		return 0;
+	}
+}
+
+/**
+ * A $wpdb that answers the rows of one post as the engine of the kind post
+ * reads them (AB_MCP_Sync_Rows::select(): query() and last_result): the
+ * post, its meta, its terms, each term; any other question gives no row.
+ * The post may change after its first reading (edit_after_first: another
+ * writer between two readings, A4).
+ */
+final class SyncRunPostWpdb {
+	public $prefix             = 'wp_';
+	public $posts              = 'wp_posts';
+	public $postmeta           = 'wp_postmeta';
+	public $terms              = 'wp_terms';
+	public $term_taxonomy      = 'wp_term_taxonomy';
+	public $termmeta           = 'wp_termmeta';
+	public $term_relationships = 'wp_term_relationships';
+	public $options            = 'wp_options';
+	public $users              = 'wp_users';
+	public $last_error         = '';
+	public $last_result        = array();
+	/** @var array<int,array> Post rows by id. */
+	public $rows = array();
+	/** @var array<int,array[]> Meta rows by post id. */
+	public $meta = array();
+	/** @var array<int,array[]> Relations by object id: term_taxonomy_id, term_order, term_id, taxonomy, slug. */
+	public $relations = array();
+	/** @var array<int,array> Term rows by term id. */
+	public $term_rows = array();
+	/** @var array<int,string>|null A title the post gets once it was read once. */
+	public $edit_after_first = null;
+	/** @var int Readings of the post row. */
+	public $post_reads = 0;
+
+	public function prepare( $query, ...$args ) {
+		return ( new \AbTestSyncWpdb() )->prepare( $query, ...$args );
+	}
+
+	public function get_var( $query ) {
+		return null;
+	}
+
+	public function get_row( $query, $output = null ) {
+		return null;
+	}
+
+	public function get_results( $query, $output = null ) {
+		return array();
+	}
+
+	public function query( $sql ) {
+		$this->last_result = array();
+		$rows              = array();
+		if ( preg_match( '/FROM wp_posts WHERE ID = (\d+)$/', (string) $sql, $m ) ) {
+			++$this->post_reads;
+			if ( isset( $this->rows[ (int) $m[1] ] ) ) {
+				$row = $this->rows[ (int) $m[1] ];
+				if ( $this->post_reads > 1 && null !== $this->edit_after_first ) {
+					$row['post_title'] = $this->edit_after_first;
+				}
+				$rows[] = $row;
+			}
+		} elseif ( preg_match( '/FROM wp_postmeta WHERE post_id = (\d+) ORDER BY meta_id ASC$/', (string) $sql, $m ) ) {
+			$rows = $this->meta[ (int) $m[1] ] ?? array();
+		} elseif ( preg_match( '/FROM wp_term_relationships AS tr .* WHERE tr\.object_id = (\d+) ORDER BY/', (string) $sql, $m ) ) {
+			$rows = $this->relations[ (int) $m[1] ] ?? array();
+		} elseif ( preg_match( "/FROM wp_terms AS t INNER JOIN wp_term_taxonomy AS tt ON tt\.term_id = t\.term_id WHERE t\.term_id = (\d+) AND tt\.taxonomy = BINARY '([^']*)'/", (string) $sql, $m ) ) {
+			$rows = isset( $this->term_rows[ (int) $m[1] ] ) && $this->term_rows[ (int) $m[1] ]['taxonomy'] === stripslashes( $m[2] ) ? array( $this->term_rows[ (int) $m[1] ] ) : array();
+		}
+		$this->last_result = array_map( static fn( $r ) => (object) $r, $rows );
+		return count( $rows );
 	}
 }
 
@@ -559,6 +636,8 @@ final class SyncRunTest extends TestCase {
 		self::assertTrue( $got['postarr']['edit_date'], 'Both dates and edit_date (decision 17).' );
 		self::assertSame( '2026-10-01 10:00:00', $got['columns']['post_date_gmt'], 'The UTC date WordPress derives for a published post without one.' );
 		self::assertSame( array( '_wp_page_template' => array( 'full.php' ), 'note' => array( 'abc' ) ), $got['meta'] );
+		self::assertSame( 'full.php', $got['postarr']['page_template'], 'The template through the core way of wp_insert_post() (decisions 17 and 28; B7).' );
+		self::assertFalse( $got['pending'] );
 		self::assertSame( array( 'category' => array( 30 ), 'post_format' => array( 'post-format-aside' ) ), $got['terms'], 'Terms by their pair, post_format by its slug.' );
 		self::assertSame( AB_MCP_Sync_Canon::hash( $got['target_form'] ), $got['target_hash'] );
 		self::assertSame( 'publish', $got['target_form']['row']['post_status'] );
@@ -585,6 +664,14 @@ final class SyncRunTest extends TestCase {
 		$parent = AB_MCP_Sync_Post_Writer::target_of( self::line( array( 'post_parent' => '8' ) ), self::item(), $ctx );
 		self::assertSame( 'post:reference_unmapped', self::lock_of( $parent ), 'A parent without a pair.' );
 		self::assertSame( 'post_parent 8 of the staging site', $parent->get_error_data()['lock']['at'], 'Named as the parent, not caught later as a missing reference of the text.' );
+		// A parent the same run creates before this object is pending, not
+		// missing (B1): the check before the first write takes it as mapped;
+		// the boundary maps it by the pair its step made.
+		$pending = AB_MCP_Sync_Post_Writer::target_of( self::line( array( 'post_parent' => '8' ) ), self::item( 'create' ), $ctx + array( 'pending' => array( 'post' => array( 8 => true ), 'term' => array() ) ) );
+		self::assertIsArray( $pending, is_wp_error( $pending ) ? $pending->get_error_message() : '' );
+		self::assertTrue( $pending['pending'] );
+		self::assertSame( 0, $pending['postarr']['post_parent'], 'No id yet.' );
+		self::assertSame( 'post:reference_unmapped', self::lock_of( AB_MCP_Sync_Post_Writer::target_of( self::line( array( 'post_parent' => '8' ) ), self::item( 'create' ), $ctx + array( 'pending' => array( 'post' => array( 9 => true ), 'term' => array() ) ) ) ), 'Another object pending does not help.' );
 		self::assertSame( 'post:author_unknown', self::lock_of( AB_MCP_Sync_Post_Writer::target_of( self::line( array( 'post_author' => '2' ), array(), array(), array( 'refs' => array( array( 'space' => 'user', 'id' => 2, 'login' => 'nobody', 'at' => 'post_author', 'strength' => 'strong' ) ) ) ), self::item(), $ctx ) ) );
 		self::assertSame( 'post:author_unknown', self::lock_of( AB_MCP_Sync_Post_Writer::target_of( self::line( array( 'post_author' => '2' ) ), self::item(), $ctx ) ), 'An author without a login in the refs.' );
 		self::assertSame( 'post:meta_rule', self::lock_of( AB_MCP_Sync_Post_Writer::target_of( self::line( array(), array( array( '_thumbnail_id', '5' ) ) ), self::item(), $ctx ) ) );
@@ -599,9 +686,156 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( array( 'key' => 'post:slug_collision', 'stage' => 'Z9', 'at' => 'slug hello' ), array_intersect_key( $locked->get_error_data()['lock'], array_flip( array( 'key', 'stage', 'at' ) ) ) );
 		self::assertStringContainsString( 'Not written (post:slug_collision, from Z9)', $locked->get_error_message() );
 		self::assertStringContainsString( 'wp-admin', $locked->get_error_message() );
-		foreach ( array( 'engine_type', 'meta_rule', 'taxonomy_rule', 'slug_collision', 'sanitizer', 'menu_automatic', 'author_unknown', 'status_date', 'reference_unmapped' ) as $op ) {
+		foreach ( array( 'engine_type', 'meta_rule', 'taxonomy_rule', 'slug_collision', 'sanitizer', 'menu_automatic', 'author_unknown', 'status_date', 'reference_unmapped', 'page_template' ) as $op ) {
 			self::assertIsArray( AB_MCP_Sync_Kinds::lock( 'post', $op ), $op . ' is a lock of the table.' );
 		}
+	}
+
+	public function testTheTemplateOfAPageGoesThroughTheCoreWayAndTheThemeHasToOfferIt(): void {
+		// The theme of this site offers one template for pages (B7).
+		$GLOBALS['wpdb']               = new SyncRunOptionWpdb();
+		$GLOBALS['ab_test_page_templates'] = array( 'page' => array( 'templates/template-cover.php' => 'Cover' ) );
+		$ctx                           = self::ctx();
+		$ctx['now']                    = 1800000000;
+		$offered = AB_MCP_Sync_Post_Writer::target_of( self::line( array(), array( array( '_wp_page_template', 'templates/template-cover.php' ) ) ), self::item( 'create' ), $ctx );
+		self::assertIsArray( $offered, is_wp_error( $offered ) ? $offered->get_error_message() : '' );
+		self::assertSame( 'templates/template-cover.php', $offered['postarr']['page_template'] );
+		self::assertTrue( AB_MCP_Sync_Post_Writer::precheck( $offered, null, $ctx['now'] ) === true, 'A template the theme offers passes.' );
+		$default = AB_MCP_Sync_Post_Writer::target_of( self::line( array(), array( array( '_wp_page_template', 'default' ) ) ), self::item( 'create' ), $ctx );
+		self::assertTrue( AB_MCP_Sync_Post_Writer::precheck( $default, null, $ctx['now'] ), 'default is always offered.' );
+		$unknown = AB_MCP_Sync_Post_Writer::target_of( self::line( array(), array( array( '_wp_page_template', 'landing.php' ) ) ), self::item( 'create' ), $ctx );
+		self::assertIsArray( $unknown );
+		$locked = AB_MCP_Sync_Post_Writer::precheck( $unknown, null, $ctx['now'] );
+		self::assertSame( 'post:page_template', self::lock_of( $locked ), 'A template the theme does not offer: WordPress would store default.' );
+		self::assertStringContainsString( 'landing.php for a page', $locked->get_error_message() );
+		self::assertStringContainsString( 'add the template to the theme', $locked->get_error_message() );
+		$none = AB_MCP_Sync_Post_Writer::target_of( self::line(), self::item( 'create' ), $ctx );
+		self::assertArrayNotHasKey( 'page_template', $none['postarr'], 'Without the meta nothing is handed to the core.' );
+		self::assertTrue( AB_MCP_Sync_Post_Writer::precheck( $none, null, $ctx['now'] ) );
+		unset( $GLOBALS['ab_test_page_templates'] );
+	}
+
+	/** A post of a few rows in the fake $wpdb, with one category. */
+	private static function post_rows( string $term_name ): SyncRunPostWpdb {
+		$db           = new SyncRunPostWpdb();
+		$db->rows[12] = array(
+			'ID'                    => 12,
+			'post_author'           => '0',
+			'post_date'             => '2026-10-01 10:00:00',
+			'post_date_gmt'         => '2026-10-01 10:00:00',
+			'post_content'          => 'Hello.',
+			'post_title'            => 'Hello',
+			'post_excerpt'          => '',
+			'post_status'           => 'publish',
+			'comment_status'        => 'closed',
+			'ping_status'           => 'closed',
+			'post_password'         => '',
+			'post_name'             => 'hello',
+			'to_ping'               => '',
+			'pinged'                => '',
+			'post_modified'         => '2026-10-01 10:00:00',
+			'post_modified_gmt'     => '2026-10-01 10:00:00',
+			'post_content_filtered' => '',
+			'post_parent'           => '0',
+			'guid'                  => '',
+			'menu_order'            => '0',
+			'post_type'             => 'post',
+			'post_mime_type'        => '',
+			'comment_count'         => '0',
+		);
+		$db->meta[12]      = array( array( 'meta_id' => 1, 'meta_key' => 'note', 'meta_value' => 'abc' ) );
+		$db->relations[12] = array( array( 'term_taxonomy_id' => 3, 'term_order' => 0, 'term_id' => 3, 'taxonomy' => 'category', 'slug' => 'news' ) );
+		$db->term_rows[3]  = array( 'term_id' => 3, 'name' => $term_name, 'slug' => 'news', 'term_group' => 0, 'term_taxonomy_id' => 3, 'taxonomy' => 'category', 'description' => '', 'parent' => 0, 'count' => 1 );
+		return $db;
+	}
+
+	public function testThePackageOfObjectsCarriesTheContentOfTheReadingItsHashCameFrom(): void {
+		// Another writer changes the post between two readings: form and
+		// content come from one reading all the same (A4).
+		$db                   = self::post_rows( 'News' );
+		$db->edit_after_first = 'Edited after canonical read';
+		$GLOBALS['wpdb']      = $db;
+		$kind                 = \AB_MCP_Sync_Db_Kinds::for_pair( 'post' );
+		self::assertNotNull( $kind );
+		$source = \AB_MCP_Sync_Inventory::source( array( 'https://staging.example.com' ), 60 );
+		$out    = $kind->export( array( array( 'kind' => 'post', 'ref' => '12', 'source' => $source ) ) );
+		self::assertIsArray( $out, is_wp_error( $out ) ? $out->get_error_message() : '' );
+		self::assertCount( 1, $out );
+		self::assertSame( 1, $db->post_reads, 'The row is read once for form and content.' );
+		self::assertSame( 'Hello', $out[0]['content']['row']['post_title'] );
+		self::assertStringContainsString( '"post_title":"Hello"', AB_MCP_Sync_Canon::encode( $out[0]['form'] ) );
+		self::assertSame( array( array( 'note', 'abc' ) ), $out[0]['content']['meta'] );
+		self::assertSame( 'News', $out[0]['content']['terms'][0]['name'] );
+		$line = \AB_MCP_Sync_Export::object_line( $out[0] );
+		self::assertArrayHasKey( 'hash', $line );
+		self::assertSame( $out[0]['hash'], $line['hash'] );
+		self::assertSame( 'Hello', $line['content']['row']['post_title'] );
+	}
+
+	public function testATermNameWithACredentialHoldsTheObjectOfThePackage(): void {
+		// The content adds the names and slugs of the terms to what the form
+		// holds; they pass the credential check as the form does (A5).
+		$GLOBALS['wpdb'] = self::post_rows( '{"api_key":"sk-live-0123456789"}' );
+		$kind            = \AB_MCP_Sync_Db_Kinds::for_pair( 'post' );
+		$source          = \AB_MCP_Sync_Inventory::source( array( 'https://staging.example.com' ), 60 );
+		$out             = $kind->export( array( array( 'kind' => 'post', 'ref' => '12', 'source' => $source ) ) );
+		self::assertIsArray( $out, is_wp_error( $out ) ? $out->get_error_message() : '' );
+		$keys = array_column( $out[0]['locks'], 'key' );
+		self::assertContains( '*:credential_field', $keys, (string) json_encode( $out[0]['locks'] ) );
+		self::assertSame( 'term:category:name', $out[0]['locks'][ array_search( '*:credential_field', $keys, true ) ]['at'] );
+		self::assertNotEmpty( $out[0]['credentials']['mixed'] );
+		$line = \AB_MCP_Sync_Export::object_line( $out[0] );
+		self::assertArrayNotHasKey( 'content', $line, 'Held: the package carries no content of it.' );
+		self::assertArrayNotHasKey( 'hash', $line );
+		self::assertStringNotContainsString( 'sk-live', AB_MCP_Sync_Canon::encode( $line ) );
+		// A clean name: the line carries the content.
+		$GLOBALS['wpdb'] = self::post_rows( 'News' );
+		$out             = $kind->export( array( array( 'kind' => 'post', 'ref' => '12', 'source' => $source ) ) );
+		self::assertArrayHasKey( 'content', \AB_MCP_Sync_Export::object_line( $out[0] ) );
+	}
+
+	public function testTheSampleOfAPublishedObjectNeedsTheTitleBesides200(): void {
+		// Decision 33: HTTP 200 and the expected string, the title as the page shows it (B4).
+		self::assertNull( AB_MCP_Sync_Engine::sample_finding( 200, '<html><title>Hello &amp; co</title></html>', 'Hello & co' ), 'The title as esc_html() shows it.' );
+		self::assertNull( AB_MCP_Sync_Engine::sample_finding( 200, '<h1>Hello & co</h1>', 'Hello & co' ), 'The title raw.' );
+		self::assertStringContainsString( 'did not show the title', (string) AB_MCP_Sync_Engine::sample_finding( 200, '<html><title>An old page from a cache</title></html>', 'Hello' ) );
+		self::assertStringContainsString( 'page cache', (string) AB_MCP_Sync_Engine::sample_finding( 200, '', 'Hello' ) );
+		self::assertSame( 'did not answer 200 (404).', AB_MCP_Sync_Engine::sample_finding( 404, 'Hello', 'Hello' ) );
+		self::assertSame( 'did not answer 200 (no answer).', AB_MCP_Sync_Engine::sample_finding( null, '', 'Hello' ) );
+	}
+
+	public function testTheStepsOfAPhaseRunOnlyAfterThePhasesBeforeIt(): void {
+		// Decision 16: the caches (phase 7) and the check of the run (phase 8)
+		// run only once every write step (phase 5) has run, whatever became of
+		// it; action=step could otherwise close the run before its writes (B2).
+		$pick  = new ReflectionMethod( AB_MCP_Sync_Engine::class, 'pick' );
+		$run   = array( 'run_id' => 1, 'state' => 'open', 'type' => 'push' );
+		$step  = static fn( int $seq, string $op, int $phase, array $depends, string $state ): array => array( 'seq' => $seq, 'op' => $op, 'phase' => $phase, 'depends' => $depends, 'state' => $state, 'result' => null, 'parts' => null, 'pair_id' => null );
+		$steps = array(
+			$step( 1, 'check', 1, array(), 'done' ),
+			$step( 2, 'write', 5, array( 1 ), 'planned' ),
+			$step( 3, 'write', 5, array( 1, 2 ), 'planned' ),
+			$step( 4, 'post', 7, array( 1 ), 'planned' ),
+			$step( 5, 'verify', 8, array( 1, 4 ), 'planned' ),
+		);
+		self::assertSame( 2, $pick->invoke( null, $run, $steps, null, true )['seq'], 'next: the first write step.' );
+		$named = $pick->invoke( null, $run, $steps, 4, true );
+		self::assertInstanceOf( WP_Error::class, $named );
+		self::assertSame( 'ab_mcp_sync_step_waits', $named->get_error_code() );
+		self::assertStringContainsString( 'phase 7', $named->get_error_message() );
+		self::assertStringContainsString( 'step 2 is planned', $named->get_error_message() );
+		self::assertSame( 'ab_mcp_sync_step_waits', $pick->invoke( null, $run, $steps, 5, true )->get_error_code(), 'The check of the run waits as well.' );
+		self::assertSame( 2, $pick->invoke( null, $run, $steps, 2, true )['seq'], 'The write step itself runs.' );
+		// Every write step settled, done or not: the caches run.
+		$steps[1]['state'] = 'done';
+		$steps[2]['state'] = 'failed';
+		self::assertSame( 4, $pick->invoke( null, $run, $steps, 4, true )['seq'] );
+		self::assertSame( 4, $pick->invoke( null, $run, $steps, null, true )['seq'] );
+		self::assertSame( 'ab_mcp_sync_step_waits', $pick->invoke( null, $run, $steps, 5, true )->get_error_code(), 'The check waits for the caches (its dependency).' );
+		// A write step begun (running): nothing of a later phase, and next finds nothing.
+		$steps[2]['state'] = 'begun';
+		self::assertNull( $pick->invoke( null, $run, $steps, null, true ) );
+		self::assertSame( 'ab_mcp_sync_step_waits', $pick->invoke( null, $run, $steps, 4, true )->get_error_code() );
 	}
 
 	public function testTheHashesOfThePartsAreStableAndTermsAreASet(): void {
@@ -622,12 +856,24 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( AB_MCP_Sync_Post_Writer::terms_hash( array() ), $hashes['terms:post_tag'] );
 		self::assertSame( array( 'row' => null, 'meta:note' => null ), AB_MCP_Sync_Post_Writer::hashes( null, array( 'note' ), array() ), 'No post: no hash.' );
 		self::assertSame( array( 'a', 'b' ), AB_MCP_Sync_Post_Writer::meta_values( $current, 'note' ) );
-		self::assertSame( array( 3 ), AB_MCP_Sync_Post_Writer::term_ids( $current, 'category' ) );
+		self::assertSame( array( 3 ), AB_MCP_Sync_Post_Writer::term_keys( $current, 'category' ) );
 		self::assertSame( 'x', AB_MCP_Sync_Post_Writer::bytes( 'x' ) );
 		self::assertSame( "\xff\xfe", AB_MCP_Sync_Post_Writer::bytes( array( '~b' => base64_encode( "\xff\xfe" ) ) ), 'The byte form of the canon.' );
 		self::assertSame( '', AB_MCP_Sync_Post_Writer::bytes( array( 'x' => 1 ) ) );
-		$GLOBALS['ab_test_terms_by_slug'] = array( 'post_format' => array( 'post-format-aside' => 9 ) );
-		self::assertSame( array( 30, 9, 0 ), AB_MCP_Sync_Post_Writer::target_term_ids( 'post_format', array( 30, 'post-format-aside', 'post-format-gone' ) ) );
+		// A format term is keyed by its slug (B6): the first use of a format
+		// on this site has no term yet, and the one wp_set_object_terms() makes
+		// has an id no target could name; by the slug, target and read back meet.
+		$formatted = array(
+			'row'   => array( 'post_title' => 'Hello' ),
+			'meta'  => array(),
+			'terms' => array( array( 'taxonomy' => 'post_format', 'term_id' => 9, 'slug' => 'post-format-aside', 'term_order' => 0 ), array( 'taxonomy' => 'category', 'term_id' => 3, 'slug' => 'news', 'term_order' => 0 ) ),
+		);
+		self::assertSame( array( 'post-format-aside' ), AB_MCP_Sync_Post_Writer::term_keys( $formatted, 'post_format' ) );
+		self::assertSame( array( 3 ), AB_MCP_Sync_Post_Writer::term_keys( $formatted, 'category' ) );
+		self::assertSame( array( 'post-format-aside' ), AB_MCP_Sync_Post_Writer::target_term_keys( 'post_format', array( 'post-format-aside' ) ) );
+		self::assertSame( array( 30 ), AB_MCP_Sync_Post_Writer::target_term_keys( 'category', array( 30 ) ) );
+		self::assertSame( AB_MCP_Sync_Post_Writer::terms_hash( AB_MCP_Sync_Post_Writer::target_term_keys( 'post_format', array( 'post-format-aside' ) ) ), AB_MCP_Sync_Post_Writer::hashes( $formatted, array(), array( 'post_format' ) )['terms:post_format'], 'No term of the format on this site, and still the target hashes as the read back will.' );
+		self::assertNotSame( AB_MCP_Sync_Post_Writer::terms_hash( array( 'post-format-aside' ) ), AB_MCP_Sync_Post_Writer::terms_hash( array( 'post-format-quote' ) ) );
 	}
 
 	/* -------------------------------------------------------- the run */

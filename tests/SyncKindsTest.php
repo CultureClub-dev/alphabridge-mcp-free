@@ -259,6 +259,7 @@ final class SyncKindsTest extends TestCase {
 			'post:author_unknown'          => array( array( 'post' ), 'author_unknown', 'Z8' ),
 			'post:status_date'             => array( array( 'post' ), 'status_date', 'Z8' ),
 			'post:reference_unmapped'      => array( array( 'post' ), 'reference_unmapped', 'Z8' ),
+			'post:page_template'           => array( array( 'post' ), 'page_template', 'Z8' ),
 			'term:engine'                  => array( array( 'term' ), 'engine', 'Z9' ),
 			'attachment:engine'            => array( array( 'attachment' ), 'engine', 'Z10' ),
 			'menu:engine'                  => array( array( 'menu' ), 'engine', 'Z11' ),
