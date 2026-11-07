@@ -397,6 +397,35 @@ final class AB_MCP_Sync_Post_Writer {
 				return self::rights( $may );
 			}
 		}
+		// A meta key the step writes or removes whose rows the database holds
+		// under another spelling as well (Foo and foo: the collation of
+		// postmeta compares keys without regard to letter case, and
+		// update_metadata() and delete_metadata() write with WHERE meta_key =
+		// …, so a write of one would change the other; the same holds for
+		// _wp_page_template, which the row writes through update_post_meta()):
+		// locked before anything is written. The rows every spelling comes
+		// back with are those AB_MCP_Undo_Meta::rows() reads, as the undo asks
+		// them for the other meta writers (spelling_refusal(), which refuses
+		// by the rights of the other key; here any other spelling locks, since
+		// the journal and the way back tell keys byte for byte; GitHub Codex
+		// round 6 on free#137, P2).
+		if ( null !== $live_id ) {
+			$keys = array_keys( $prepared['meta'] );
+			foreach ( is_array( $current ) ? $current['meta'] : array() as $row ) {
+				$keys[] = (string) $row['key'];
+			}
+			foreach ( array_unique( $keys ) as $key ) {
+				$rows = AB_MCP_Undo_Meta::rows( 'post', (int) $live_id, (string) $key );
+				if ( null === $rows ) {
+					return new WP_Error( 'ab_mcp_sync_rows_unread', sprintf( 'The meta rows of the key %s of the post could not be read, so nothing is written for it. Try again; if it keeps failing, the database error log names the cause.', $key ) );
+				}
+				foreach ( $rows as $row ) {
+					if ( $row['key'] !== (string) $key ) {
+						return self::locked( 'post:meta_spelling', sprintf( 'the keys %1$s and %2$s of the post on this site are one key to the database (its collation compares them alike), and a write of one would change the other', (string) $key, (string) $row['key'] ) );
+					}
+				}
+			}
+		}
 		// A relationship of the post here with a term_order other than 0 (a
 		// plugin that sorts the terms): wp_set_object_terms() makes every
 		// relationship anew with the order 0, forward and on the way back, so

@@ -318,6 +318,10 @@ final class AB_MCP_Sync_Kinds {
 			'stage'  => 'Z9',
 			'reason' => 'A term of a taxonomy other than category, post_tag and post_format waits for the engine of the terms.',
 		),
+		'post:meta_spelling'           => array(
+			'stage'  => 'Z9',
+			'reason' => 'Two meta keys of the post that the database compares alike (Foo and foo under the collation of postmeta) wait for the field schema: update_metadata() and delete_metadata() write by the key and would change both.',
+		),
 		'post:term_order'              => array(
 			'stage'  => 'Z9',
 			'reason' => 'A relationship with a term_order other than 0 (a plugin that sorts the terms) waits for the engine of the terms: wp_set_object_terms() makes every relationship anew with the order 0, so the way back could not give the order back.',

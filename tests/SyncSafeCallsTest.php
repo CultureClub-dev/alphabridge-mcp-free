@@ -145,6 +145,9 @@ final class SyncSafeCallsTest extends TestCase {
 	 * The calls outside ALLOWED, with the reason: file => call => array( count, reason ).
 	 */
 	private const EXCEPTIONS = array(
+		'class-sync-backup.php' => array(
+			'AB_MCP_Store_Budget::bookings' => array( 1, 'fits(): the booking of the run, which a backup has to fit beside the backups the run holds (GitHub Codex round 6 on free#137).' ),
+		),
 		'class-sync-canon.php'  => array(
 			'unserialize' => array( 1, 'unserialized(): after carries_record() refused every object, enum, reference and record, with allowed_classes => false.' ),
 		),

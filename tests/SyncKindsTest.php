@@ -254,6 +254,7 @@ final class SyncKindsTest extends TestCase {
 			'post:meta_rule'               => array( array( 'post' ), 'meta_rule', 'Z9' ),
 			'post:taxonomy_rule'           => array( array( 'post' ), 'taxonomy_rule', 'Z9' ),
 			'post:term_order'              => array( array( 'post' ), 'term_order', 'Z9' ),
+			'post:meta_spelling'           => array( array( 'post' ), 'meta_spelling', 'Z9' ),
 			'post:slug_collision'          => array( array( 'post' ), 'slug_collision', 'Z9' ),
 			'post:sanitizer'               => array( array( 'post' ), 'sanitizer', 'Z9' ),
 			'post:menu_automatic'          => array( array( 'post' ), 'menu_automatic', 'Z8' ),

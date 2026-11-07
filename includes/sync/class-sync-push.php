@@ -468,6 +468,16 @@ final class AB_MCP_Sync_Push {
 			$items[ $n ]['seq'] = $seq;
 			$by_n[ $n ]         = $seq;
 			$bytes             += 2 * (int) $item['size'] + self::JOURNAL_BYTES;
+			// The backup of an object of this site holds its rows as they are,
+			// not the staging side: reserved from them, uncompressed, as the
+			// store counts them (AB_MCP_Sync_Backup::size_of(); GitHub Codex
+			// round 6 on free#137, P2). A new object leaves a small mark.
+			$live_id = 'update' === $item['op'] && isset( $item['live_ref'] ) ? (int) $item['live_ref'] : 0;
+			$current = $live_id > 0 ? AB_MCP_Sync_Post_Writer::current( $live_id ) : null;
+			if ( is_wp_error( $current ) ) {
+				return $current;
+			}
+			$bytes += AB_MCP_Sync_Backup::size_of( is_array( $current ) ? $current : array( 'absent' => true, 'identity' => array( 'post_type' => (string) ( $item['subtype'] ?? '' ), 'post_name' => (string) $item['staging_ref'], 'theme' => '' ) ) );
 		}
 		foreach ( $items as $n => $item ) {
 			$depends = array( 1 );

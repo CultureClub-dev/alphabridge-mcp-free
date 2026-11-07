@@ -68,6 +68,9 @@
  * the token or closed as checked; the error log counted from its mark in
  * chunks. GitHub Codex round 5: a term_order other than 0 locks the post
  * and is part of the hash of the terms; the caches of phase 7 in parts.
+ * GitHub Codex round 6: two meta keys the database compares alike lock the
+ * post; the reservation counts the backups of this site's rows and the
+ * writer holds the run to its booking.
  *
  * Written by tests/mutation/gen/lauf.py from the source; change the entries
  * there and run it again.
@@ -1978,5 +1981,50 @@ return array(
 		'replace' => "\t\t\$count  = count( \$ids );\n\t\tfor ( \$i = 0; \$i < \$count; \$i++ ) {",
 		'run'     => $it( 'SyncRunTest', 'testTheCachesOfPhaseSevenAreEmptiedInPartsWithinTheWorkOfEachCallEachObjectOnce' ),
 		'expect'  => '/testTheCachesOfPhaseSevenAreEmptiedInPartsWithinTheWorkOfEachCallEachObjectOnce/',
+	),
+	array(
+		'id'      => 'lauf/writer-meta-spelling-lock',
+		'clause'  => 'precheck(): a key the database holds under another spelling as well locks the post before anything is written (P2)',
+		'file'    => $pw,
+		'search'  => "\t\t\t\t\tif ( \$row['key'] !== (string) \$key ) {\n\t\t\t\t\t\treturn self::locked( 'post:meta_spelling'",
+		'replace' => "\t\t\t\t\tif ( false ) {\n\t\t\t\t\t\treturn self::locked( 'post:meta_spelling'",
+		'run'     => $it( 'SyncRunTest', 'testTwoMetaKeysTheDatabaseComparesAlikeLockThePageBeforeTheFirstWriteAndAnOrdinaryPageRuns' ),
+		'expect'  => '/testTwoMetaKeysTheDatabaseComparesAlikeLockThePageBeforeTheFirstWriteAndAnOrdinaryPageRuns/',
+	),
+	array(
+		'id'      => 'lauf/writer-meta-spelling-live-keys',
+		'clause'  => 'precheck(): the keys only this site has, which the step removes, are asked for other spellings as well',
+		'file'    => $pw,
+		'search'  => "\t\t\tforeach ( is_array( \$current ) ? \$current['meta'] : array() as \$row ) {\n\t\t\t\t\$keys[] = (string) \$row['key'];\n\t\t\t}",
+		'replace' => "\t\t\tforeach ( array() as \$row ) {\n\t\t\t\t\$keys[] = (string) \$row['key'];\n\t\t\t}",
+		'run'     => $unit( 'SyncRunTest', 'testTwoMetaKeysTheDatabaseComparesAlikeLockThePostBeforeTheFirstWrite' ),
+		'expect'  => '/testTwoMetaKeysTheDatabaseComparesAlikeLockThePostBeforeTheFirstWrite/',
+	),
+	array(
+		'id'      => 'lauf/push-plan-backup-bytes',
+		'clause'  => 'plan(): the reservation counts the backup of each object of this site as its rows are (P2)',
+		'file'    => $pu,
+		'search'  => "\t\t\t\$bytes += AB_MCP_Sync_Backup::size_of(",
+		'replace' => "\t\t\t\$bytes += 0 * AB_MCP_Sync_Backup::size_of(",
+		'run'     => $it( 'SyncRunTest', 'testTheReservationCountsTheBackupsOfTheObjectsOfThisSiteAndTheWriterHoldsTheRunToIt' ),
+		'expect'  => '/testTheReservationCountsTheBackupsOfTheObjectsOfThisSiteAndTheWriterHoldsTheRunToIt/',
+	),
+	array(
+		'id'      => 'lauf/engine-backup-fits',
+		'clause'  => 'boundary(): a backup that would pass the booking of the run fails the step before any mutation',
+		'file'    => $en,
+		'search'  => "\t\tif ( is_wp_error( \$fits ) ) {\n\t\t\treturn self::fail_step( \$run_id, \$seq, 'begun', \$fits->get_error_message(), \$journal );",
+		'replace' => "\t\tif ( false ) {\n\t\t\treturn self::fail_step( \$run_id, \$seq, 'begun', \$fits->get_error_message(), \$journal );",
+		'run'     => $it( 'SyncRunTest', 'testTheReservationCountsTheBackupsOfTheObjectsOfThisSiteAndTheWriterHoldsTheRunToIt' ),
+		'expect'  => '/testTheReservationCountsTheBackupsOfTheObjectsOfThisSiteAndTheWriterHoldsTheRunToIt/',
+	),
+	array(
+		'id'      => 'lauf/backup-fits-used',
+		'clause'  => 'fits(): the backups the run holds already count against its booking',
+		'file'    => $bk,
+		'search'  => "\t\tif ( \$used + \$bytes > \$booked ) {",
+		'replace' => "\t\tif ( \$bytes > \$booked ) {",
+		'run'     => $it( 'SyncRunTest', 'testTheReservationCountsTheBackupsOfTheObjectsOfThisSiteAndTheWriterHoldsTheRunToIt' ),
+		'expect'  => '/testTheReservationCountsTheBackupsOfTheObjectsOfThisSiteAndTheWriterHoldsTheRunToIt/',
 	),
 );

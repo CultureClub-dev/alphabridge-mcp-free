@@ -602,6 +602,24 @@ e('engine-post-budget', 'run_post(): the caches in parts within the work of the 
 e('engine-post-cursor', 'run_post(): the next call goes on at the cursor, each object emptied once', EN,
   "\t\t$count  = count( $ids );\n\t\tfor ( $i = (int) $result['cursor']; $i < $count; $i++ ) {", "\t\t$count  = count( $ids );\n\t\tfor ( $i = 0; $i < $count; $i++ ) {", 'it', CACHES)
 
+# ------------------------------- GitHub Codex round 6 on free#137 (two P2; the two P1 wait for the steering)
+# Two meta keys the database compares alike lock the post before the first
+# write; the reservation counts the backups of the objects of this site, and
+# the writer holds the run to its booking before each backup.
+SPELL_UNIT = 'testTwoMetaKeysTheDatabaseComparesAlikeLockThePostBeforeTheFirstWrite'
+SPELL_IT = 'testTwoMetaKeysTheDatabaseComparesAlikeLockThePageBeforeTheFirstWriteAndAnOrdinaryPageRuns'
+BOOKING = 'testTheReservationCountsTheBackupsOfTheObjectsOfThisSiteAndTheWriterHoldsTheRunToIt'
+e('writer-meta-spelling-lock', 'precheck(): a key the database holds under another spelling as well locks the post before anything is written (P2)', PW,
+  "\t\t\t\t\tif ( $row['key'] !== (string) $key ) {\n\t\t\t\t\t\treturn self::locked( 'post:meta_spelling'", "\t\t\t\t\tif ( false ) {\n\t\t\t\t\t\treturn self::locked( 'post:meta_spelling'", 'it', SPELL_IT)
+e('writer-meta-spelling-live-keys', 'precheck(): the keys only this site has, which the step removes, are asked for other spellings as well', PW,
+  "\t\t\tforeach ( is_array( $current ) ? $current['meta'] : array() as $row ) {\n\t\t\t\t$keys[] = (string) $row['key'];\n\t\t\t}", "\t\t\tforeach ( array() as $row ) {\n\t\t\t\t$keys[] = (string) $row['key'];\n\t\t\t}", 'unit', SPELL_UNIT)
+e('push-plan-backup-bytes', 'plan(): the reservation counts the backup of each object of this site as its rows are (P2)', PU,
+  "\t\t\t$bytes += AB_MCP_Sync_Backup::size_of(", "\t\t\t$bytes += 0 * AB_MCP_Sync_Backup::size_of(", 'it', BOOKING)
+e('engine-backup-fits', 'boundary(): a backup that would pass the booking of the run fails the step before any mutation', EN,
+  "\t\tif ( is_wp_error( $fits ) ) {\n\t\t\treturn self::fail_step( $run_id, $seq, 'begun', $fits->get_error_message(), $journal );", "\t\tif ( false ) {\n\t\t\treturn self::fail_step( $run_id, $seq, 'begun', $fits->get_error_message(), $journal );", 'it', BOOKING)
+e('backup-fits-used', 'fits(): the backups the run holds already count against its booking', BK,
+  "\t\tif ( $used + $bytes > $booked ) {", "\t\tif ( $bytes > $booked ) {", 'it', BOOKING)
+
 
 def test_of(expect):
     return expect.split(' with data set "', 1)[0]
@@ -718,6 +736,9 @@ out.append('''<?php
  * the token or closed as checked; the error log counted from its mark in
  * chunks. GitHub Codex round 5: a term_order other than 0 locks the post
  * and is part of the hash of the terms; the caches of phase 7 in parts.
+ * GitHub Codex round 6: two meta keys the database compares alike lock the
+ * post; the reservation counts the backups of this site's rows and the
+ * writer holds the run to its booking.
  *
  * Written by tests/mutation/gen/lauf.py from the source; change the entries
  * there and run it again.

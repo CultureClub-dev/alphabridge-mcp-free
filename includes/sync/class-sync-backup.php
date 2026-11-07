@@ -28,6 +28,7 @@
 defined( 'ABSPATH' ) || exit;
 
 require_once dirname( __DIR__ ) . '/class-protected-store.php';
+require_once dirname( __DIR__ ) . '/class-store-budget.php';
 require_once __DIR__ . '/class-sync-canon.php';
 
 /**
@@ -129,6 +130,66 @@ final class AB_MCP_Sync_Backup {
 			return new WP_Error( 'ab_mcp_sync_backup_readback', 'The backup of what the step replaces did not read back from the protected store as it was written, so the step writes nothing. Ask the host to check the disk of the protected store, then call again.' );
 		}
 		return $ref;
+	}
+
+	/**
+	 * The bytes a backup of this data takes in the store, as put() writes
+	 * it (uncompressed, which is what the store counts as used and what a
+	 * run books): the upper bound the plan reserves with (GitHub Codex round
+	 * 6 on free#137, P2: the plan reserved from the canonical size of the
+	 * staging side only, while the backup holds the rows of this site).
+	 *
+	 * @param array $data What is kept (the rows a part replaces, or the absence of the object).
+	 * @return int
+	 */
+	public static function size_of( array $data ) {
+		return strlen(
+			AB_MCP_Sync_Canon::encode(
+				array(
+					'data'   => $data,
+					'format' => self::FORMAT,
+					'run_id' => PHP_INT_MAX,
+				)
+			)
+		);
+	}
+
+	/**
+	 * Whether a backup of this data fits what the run booked, beside the
+	 * backups the run holds already (the used bytes of its group): asked
+	 * right before the backup is written, before the mutation. A run whose
+	 * booking the store does not know fails closed.
+	 *
+	 * @param int   $run_id Run.
+	 * @param array $data   What is to be kept.
+	 * @return true|WP_Error
+	 */
+	public static function fits( $run_id, array $data ) {
+		$run_id   = (int) $run_id;
+		$bytes    = self::size_of( $data );
+		$bookings = AB_MCP_Store_Budget::bookings();
+		if ( is_wp_error( $bookings ) ) {
+			return $bookings;
+		}
+		if ( ! isset( $bookings[ $run_id ] ) ) {
+			return new WP_Error( 'ab_mcp_sync_backup_booking', sprintf( 'The run %d has no booking in the protected store, so no backup is written and nothing of the object. Plan the run again (its check before the first write books what the run needs).', $run_id ) );
+		}
+		$booked = (int) $bookings[ $run_id ]['bytes'];
+		$used   = 0;
+		$gid    = isset( self::$groups[ $run_id ] ) ? self::$groups[ $run_id ] : null;
+		$groups = AB_MCP_Protected_Store::groups( 'backups' );
+		if ( is_wp_error( $groups ) ) {
+			return $groups;
+		}
+		foreach ( $groups as $entry ) {
+			if ( (int) $entry['run_id'] === $run_id && ( null === $gid || (string) $entry['gid'] === (string) $gid ) ) {
+				$used += (int) $entry['used'];
+			}
+		}
+		if ( $used + $bytes > $booked ) {
+			return new WP_Error( 'ab_mcp_sync_backup_budget', sprintf( 'The backup of this object would take %1$d bytes, and the run booked %2$d of which its backups hold %3$d already: it would pass the booking, so nothing is written for the object. Plan the run again (the plan reserves from the objects of this site as they are now), or choose fewer objects for one run.', $bytes, $booked, $used ), array( 'bytes' => $bytes, 'booked' => $booked, 'used' => $used ) );
+		}
+		return true;
 	}
 
 	/**

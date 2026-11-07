@@ -912,6 +912,98 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( 'Write to us.', self::row_a( (int) $a['contact'] )['post_content'] );
 	}
 
+	public function testTwoMetaKeysTheDatabaseComparesAlikeLockThePageBeforeTheFirstWriteAndAnOrdinaryPageRuns(): void {
+		// GitHub Codex round 6 on free#137 (P2): the test database compares
+		// meta_key with utf8mb4_unicode_ci (Foo and foo are one key), and
+		// update_metadata() for Foo changes foo too. A page of this site with
+		// both spellings is locked before the first write (post:meta_spelling),
+		// nothing written; an ordinary page runs.
+		self::pair();
+		$a = self::pages_on_a( array( 'contact' => 'Write to us.', 'about' => 'About us.' ) );
+		$b = self::pages_on_b( array( 'contact' => 'Write to us.', 'about' => 'About us.' ) );
+		$contact = (int) $a['contact'];
+		add_post_meta( $contact, 'Foo', 'a' );
+		add_post_meta( $contact, 'foo', 'b' );
+		self::assertSame( array( 'a', 'b' ), array_column( AB_MCP_IT_Sites::rows( 'a', 'postmeta', array( 'post_id' => (string) $contact ) ), 'meta_value' ), 'Two rows, two spellings.' );
+		self::b( array( array( 'op' => 'add_meta', 'post' => (int) $b['contact'], 'key' => 'Foo', 'value' => 'a' ), array( 'op' => 'add_meta', 'post' => (int) $b['contact'], 'key' => 'foo', 'value' => 'b' ) ) );
+		self::paired( self::staged() );
+		self::change_on_b( $b['contact'], 'contact', 'Write to us on staging.' );
+		self::change_on_b( $b['about'], 'about', 'About us, on staging.' );
+		$planned = self::planned( array( 'contact' ) );
+		$run     = self::begun( $planned['args'] );
+		$check   = self::finish( (int) $run['run_id'] );
+		self::assertSame( 'closed_aborted', $check['state'], json_encode( $check ) );
+		$finding = json_encode( self::step( $check, 1 )['result']['findings'] );
+		self::assertStringContainsString( 'post:meta_spelling', $finding );
+		self::assertStringContainsString( 'are one key to the database', $finding );
+		self::assertSame( 'Write to us.', self::row_a( $contact )['post_content'], 'Nothing written.' );
+		self::assertSame( array( 'a', 'b' ), array_column( AB_MCP_IT_Sites::rows( 'a', 'postmeta', array( 'post_id' => (string) $contact ) ), 'meta_value' ), 'Both rows as they were.' );
+		// An ordinary page runs.
+		$planned = self::planned( array( 'about' ) );
+		$run     = self::begun( $planned['args'] );
+		self::probe_ok();
+		self::assertSame( 'closed_done', self::finish( (int) $run['run_id'] )['state'] );
+		self::assertSame( 'About us, on staging.', self::row_a( (int) $a['about'] )['post_content'] );
+	}
+
+	public function testTheReservationCountsTheBackupsOfTheObjectsOfThisSiteAndTheWriterHoldsTheRunToIt(): void {
+		// GitHub Codex round 6 on free#137 (P2): the plan reserved from the
+		// canonical size of the staging side only, while the backup holds the
+		// rows of this site; large objects here with small replacements passed
+		// the check and could fill the disk past the reserve. Now the plan
+		// reserves from the rows of this site as they are (uncompressed, as the
+		// store counts them), and the writer checks before each backup that it
+		// fits what the run booked.
+		self::pair();
+		$big = str_repeat( 'Lorem ipsum dolor sit amet. ', 11000 );
+		self::assertGreaterThan( 300000, strlen( $big ) );
+		$a = self::pages_on_a( array( 'contact' => $big, 'about' => $big, 'team' => $big ) );
+		$b = self::pages_on_b( array( 'contact' => $big, 'about' => $big, 'team' => $big ) );
+		self::paired( self::staged() );
+		foreach ( array( 'contact', 'about', 'team' ) as $name ) {
+			self::change_on_b( $b[ $name ], $name, 'Short, on staging.' );
+		}
+		$planned = self::planned( array( 'contact', 'about', 'team' ) );
+		// The disk: the reserve of the store, the test write and 400 KiB more.
+		// From the staging side alone (three objects of a few hundred bytes
+		// and the journals) that is enough; the backups of the three pages of
+		// this site hold about 900 KB and do not fit.
+		AB_MCP_Sync_Resources::$probe = static fn(): array => array(
+			'free'                => \AB_MCP_Store_Budget::RESERVE + \AB_MCP_Store_Budget::TEST_WRITE + 400 * 1024,
+			'time_limit'          => 0,
+			'time_limit_settable' => false,
+			'memory_limit'        => -1,
+			'write_seconds'       => 0.01,
+			'read_seconds'        => 0.01,
+			'rows_seconds'        => 0.01,
+		);
+		try {
+			$refused = self::gated( 'wp_site_push', $planned['args'] );
+			$message = self::refused( $refused, 'ab_mcp_sync_run_resources' );
+			self::assertStringContainsString( 'Free at least', $message );
+		} finally {
+			AB_MCP_Sync_Resources::$probe = null;
+		}
+		// With the disk as it is the run begins; its check books what the plan
+		// reserved. A booking cut down afterwards (another run's bookings, say)
+		// holds the writer: the backup of the first page does not fit, the step
+		// fails before any mutation; with the booking back it writes.
+		$run    = self::begun( $planned['args'] );
+		$run_id = (int) $run['run_id'];
+		self::assertSame( 'done', self::next( $run_id )['step']['state'], 'The check books.' );
+		$booked = \AB_MCP_Store_Budget::bookings()[ $run_id ]['bytes'];
+		self::assertGreaterThan( 900000, $booked, 'The booking holds the backups of this site.' );
+		self::assertIsArray( \AB_MCP_Store_Budget::book( $run_id, 1000 ) );
+		$failed = self::next( $run_id );
+		self::assertSame( 'failed', $failed['step']['state'], json_encode( $failed['step'] ) );
+		self::assertStringContainsString( 'would pass the booking, so nothing is written for the object', $failed['step']['result']['message'] );
+		foreach ( $a as $id ) {
+			self::assertSame( $big, self::row_a( (int) $id )['post_content'], 'Nothing written.' );
+		}
+		self::assertIsArray( \AB_MCP_Store_Budget::book( $run_id, $booked ) );
+		self::assertSame( 'done', self::next( $run_id )['step']['state'], 'The next page, within the booking.' );
+	}
+
 	public function testAPostWhoseTermHasAnOrderIsLockedBeforeTheFirstWriteAndOneWithoutGoesOverAndBack(): void {
 		// GitHub Codex round 5 on free#137 (P2): a live relationship with a
 		// term_order other than 0 (a plugin that sorts the terms) would lose

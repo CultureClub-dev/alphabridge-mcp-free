@@ -242,6 +242,10 @@ final class SyncRunPostWpdb {
 			}
 		} elseif ( preg_match( '/FROM wp_postmeta WHERE post_id = (\d+) ORDER BY meta_id ASC$/', (string) $sql, $m ) ) {
 			$rows = $this->meta[ (int) $m[1] ] ?? array();
+			} elseif ( preg_match( "/FROM wp_postmeta WHERE post_id = (\\d+) AND meta_key = '([^']*)' ORDER BY meta_id ASC$/", (string) $sql, $m ) ) {
+				// The rows of one key as the database matches them: with a
+				// collation that compares without regard to letter case.
+				$rows = array_values( array_filter( $this->meta[ (int) $m[1] ] ?? array(), static fn( array $r ): bool => 0 === strcasecmp( (string) $r['meta_key'], stripslashes( $m[2] ) ) ) );
 		} elseif ( preg_match( '/FROM wp_term_relationships AS tr .* WHERE tr\.object_id = (\d+) ORDER BY/', (string) $sql, $m ) ) {
 			$rows = $this->relations[ (int) $m[1] ] ?? array();
 		} elseif ( preg_match( "/FROM wp_terms AS t INNER JOIN wp_term_taxonomy AS tt ON tt\.term_id = t\.term_id WHERE t\.term_id = (\d+) AND tt\.taxonomy = BINARY '([^']*)'/", (string) $sql, $m ) ) {
@@ -1395,6 +1399,35 @@ final class SyncRunTest extends TestCase {
 		$GLOBALS['ab_test_term_writes'] = array();
 		self::assertSame( array( 'state' => 'unchanged' ), AB_MCP_Sync_Post_Writer::restore_terms( 12, 'category', $now, $written ) );
 		self::assertSame( array(), $GLOBALS['ab_test_term_writes'] );
+	}
+
+	public function testTwoMetaKeysTheDatabaseComparesAlikeLockThePostBeforeTheFirstWrite(): void {
+		// GitHub Codex round 6 on free#137 (P2): postmeta compares meta_key
+		// with its collation (Foo and foo are one key), and update_metadata()
+		// and delete_metadata() write by the key, so a write of one changes
+		// the other; the journal tells keys byte for byte and could not
+		// account for it. A post of this site whose rows the database matches
+		// under another spelling for a key the step writes or removes is
+		// locked before anything is written (post:meta_spelling); the rows
+		// every spelling comes back with are AB_MCP_Undo_Meta::rows().
+		$db              = self::post_rows( 'News' );
+		$GLOBALS['wpdb'] = $db;
+		$ctx             = self::ctx( array( 'term' => array( 3 => 3 ) ) );
+		$ctx['now']      = 1800000000;
+		$prepared        = AB_MCP_Sync_Post_Writer::target_of( self::line( array( 'post_type' => 'post' ), array( array( 'note', 'abc' ) ), array( array( 'name' => 'News', 'slug' => 'news', 'taxonomy' => 'category', 'term_id' => 3, 'term_order' => 0 ) ), array( 'identity' => array( 'post_type' => 'post', 'post_name' => 'hello', 'theme' => '' ) ) ), self::item(), $ctx );
+		self::assertIsArray( $prepared, is_wp_error( $prepared ) ? $prepared->get_error_message() : '' );
+		self::assertTrue( AB_MCP_Sync_Post_Writer::precheck( $prepared, 12, $ctx['now'] ), 'One spelling: as before.' );
+		self::assertIsArray( AB_MCP_Sync_Kinds::lock( 'post', 'meta_spelling' ), 'A lock of the table, with its stage.' );
+		// The post holds note and Note: the database matches both for a write of note.
+		$db->meta[12][] = array( 'meta_id' => 2, 'meta_key' => 'Note', 'meta_value' => 'other' );
+		$locked         = AB_MCP_Sync_Post_Writer::precheck( $prepared, 12, $ctx['now'] );
+		self::assertSame( 'post:meta_spelling', self::lock_of( $locked ) );
+		self::assertStringContainsString( 'The keys note and Note of the post on this site are one key to the database', $locked->get_error_message() );
+		// A key only this site has, which the step removes, is asked the same.
+		$db->meta[12] = array( array( 'meta_id' => 1, 'meta_key' => 'note', 'meta_value' => 'abc' ), array( 'meta_id' => 2, 'meta_key' => 'Color', 'meta_value' => 'red' ), array( 'meta_id' => 3, 'meta_key' => 'color', 'meta_value' => 'blue' ) );
+		$locked       = AB_MCP_Sync_Post_Writer::precheck( $prepared, 12, $ctx['now'] );
+		self::assertSame( 'post:meta_spelling', self::lock_of( $locked ) );
+		self::assertStringContainsString( 'Color and color', $locked->get_error_message() );
 	}
 
 	/** A post of a few rows in the fake $wpdb, with one category. */

@@ -812,15 +812,20 @@ final class AB_MCP_Sync_Engine {
 		}
 		$journal['object']['target']   = $prepared['target_hash'];
 		$journal['object']['identity'] = $prepared['identity'];
-		// (5) The backup, checked by its hash; without it no mutation.
-		$backup = AB_MCP_Sync_Backup::put(
-			$run_id,
-			sprintf( 'step-%04d', $seq ),
-			null === $current ? array(
-				'absent'   => true,
-				'identity' => $prepared['identity'],
-			) : $current
-		);
+		// (5) The backup, checked by its hash; without it no mutation. First
+		// whether it fits what the run booked beside the backups it holds
+		// (AB_MCP_Sync_Backup::fits(); GitHub Codex round 6 on free#137, P2:
+		// the plan reserves from the rows of this site, and the writer holds
+		// the run to its booking before each backup).
+		$kept = null === $current ? array(
+			'absent'   => true,
+			'identity' => $prepared['identity'],
+		) : $current;
+		$fits = AB_MCP_Sync_Backup::fits( $run_id, $kept );
+		if ( is_wp_error( $fits ) ) {
+			return self::fail_step( $run_id, $seq, 'begun', $fits->get_error_message(), $journal );
+		}
+		$backup = AB_MCP_Sync_Backup::put( $run_id, sprintf( 'step-%04d', $seq ), $kept );
 		if ( is_wp_error( $backup ) ) {
 			return self::fail_step( $run_id, $seq, 'begun', $backup->get_error_message(), $journal );
 		}

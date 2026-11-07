@@ -282,6 +282,22 @@ Ablehnung entsteht, nennt sie den Weg.
   Die 5 MB und 1'000 Zeilen des Konzepts gehören zur Abbild-Engine (Z9a).
 - Platz in der Datenbank und Datenbankrechte prüft der Lauf nicht: er legt
   keine Tabelle an und schreibt nur Zeilen, die WordPress selbst schreibt.
+- Die Reservierung (GitHub-Codex 6, P2): Der Plan rechnet je Objekt die
+  kanonische Grösse der Staging-Seite doppelt plus `JOURNAL_BYTES` und dazu
+  die Sicherung des Live-Objekts, wie `AB_MCP_Sync_Backup::put()` sie
+  schreibt (`size_of()`: die Zeilen der Live-Site in der Kanon-Schreibweise,
+  unkomprimiert, als obere Schranke; die Ablage komprimiert beim Schreiben,
+  zählt aber die unkomprimierten Bytes als `used`, so dass Reservierung und
+  Verbrauch dieselbe Einheit haben; ein neues Objekt die kleine Marke
+  «absent»). Vorher zählte der Plan nur die Staging-Grösse: grosse
+  Live-Objekte mit kleinen Ersetzungen bestanden die Vorprüfung und konnten
+  die 32 MiB Reserve der Ablage aufbrauchen. Dazu prüft die Grenze vor jeder
+  Sicherung, dass sie in die Buchung des Laufs passt, neben dem, was seine
+  Sicherungen schon halten (`fits()`); sonst scheitert der Schritt vor der
+  Mutation mit dem Weg (neu planen, weniger Objekte). Grenze: der Plan liest
+  dafür die Zeilen jedes ausgewählten Live-Objekts (höchstens 1996), wie er
+  schon ihre Hashes liest (Prüffall
+  `testTheReservationCountsTheBackupsOfTheObjectsOfThisSiteAndTheWriterHoldsTheRunToIt`).
 - Der Weg 2 der Rückfrage («direkt auf der Live-Site arbeiten») wird in
   Zweig 8 nur genannt (Einstellung «Staging zuerst» aus, oder
   `staging_acknowledged`); die Wahl mit dem Grund «Voraussetzungen fehlen»
@@ -496,6 +512,25 @@ Ablehnung entsteht, nennt sie den Weg.
   ist, sperrt `post:taxonomy_rule` (vorher scheiterte erst der Term-Aufruf
   nach dem Zeilenaufruf); `live_meta_rule()` sperrt sie ohnehin, wenn sie
   nicht `category`, `post_tag` oder `post_format` ist.
+- Zwei Meta-Schlüssel, die die Datenbank gleich vergleicht (`Foo` und `foo`
+  unter der Kollation von `postmeta`, etwa `utf8mb4_unicode_ci`): Grenze C
+  (GitHub-Codex 6, P2). `update_metadata()` und `delete_metadata()`
+  schreiben mit `WHERE meta_key = …` und träfen beide Zeilen, auch
+  `_wp_page_template` über `update_post_meta()` mit der Zeile; das Journal
+  unterscheidet Schlüssel byteweise und könnte die zweite Zeile nicht
+  zurechnen (der Vergleich der anderen Teile fände es erst nach der
+  Mutation, Objekt abgewichen). Darum sperrt die Vorprüfung einen Live-Post,
+  bei dem für einen Schlüssel, den der Schritt schreibt oder entfernt, die
+  Datenbank Zeilen unter einer anderen Schreibweise hält (`post:meta_spelling`,
+  Z9, Grund mit beiden Schreibweisen), vor jeder Mutation; die Zeilen je
+  Schreibweise liest `AB_MCP_Undo_Meta::rows()`, dieselbe Maschine, mit der
+  das Undo die anderen Meta-Schreiber fragt (`spelling_refusal()` lehnt dort
+  nach den Rechten am anderen Schlüssel ab; hier sperrt jede andere
+  Schreibweise, weil es um das Journal geht, nicht um Rechte). Eine
+  Tabelle, die sich nicht lesen lässt, sperrt (fail closed). Der Rückweg
+  schreibt Meta roh je `meta_id` und ist nicht betroffen (Prüffälle
+  `testTwoMetaKeysTheDatabaseComparesAlikeLockThePageBeforeTheFirstWriteAndAnOrdinaryPageRuns`,
+  Unit `testTwoMetaKeysTheDatabaseComparesAlikeLockThePostBeforeTheFirstWrite`).
 - Meta-Schlüssel mit Backslash: `update_metadata()`, `add_metadata()` und
   `delete_metadata()` entfernen Backslashes auch aus dem Schlüssel
   (`wp_unslash()` in `wp-includes/meta.php`); `note\path` roh übergeben

@@ -356,6 +356,10 @@ return array(
 			'why'  => 'Terms of other taxonomies need the engine of the terms (branch 9); this version sets category, post_tag and post_format.',
 			'plan' => 'Zweigtabelle Zeile 540',
 		),
+		'post:meta_spelling'           => array(
+			'why'  => 'postmeta compares meta_key with its collation (utf8mb4_unicode_ci and the like: Foo and foo are one key), and update_metadata() and delete_metadata() write with WHERE meta_key = …: a write of one key would change the other, which the journal, which tells keys byte for byte, could not account for (GitHub Codex round 6 on free#137). Locked before the first write; AB_MCP_Undo_Meta::rows() finds every spelling the database matches.',
+			'plan' => 'Entscheid 17 (Journal je Teilmutation), Entscheid 28; GitHub-Codex 6 auf free#137',
+		),
 		'post:term_order'              => array(
 			'why'  => 'A relationship with a term_order other than 0 (a plugin that sorts the terms) would lose its order on the way back: wp_set_object_terms() makes every relationship anew with the order 0, forward and back, and the way back compared the keys of the terms only (GitHub Codex round 5 on free#137). Locked before the first write until the engine of the terms (branch 9) carries the order.',
 			'plan' => 'Entscheid 23 (bytegenauer Rückweg); GitHub-Codex 5 auf free#137',
