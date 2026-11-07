@@ -11,8 +11,11 @@
  * preview and the token; with it, the way back begins: for a run that is
  * open or interrupted, the same run moves to reverting (one atomic change
  * of state on the state read, decision 15) and its steps of the way back
- * are added; for a closed run, a run of the type revert is made (one run
- * per site, decision 15: another run that is not closed refuses it). The
+ * are added, both in one transaction of the database, so the run is
+ * reverting with all of them or stays as it was (GitHub Codex round 2 of
+ * branch 8, P1); for a closed run, a run of the type revert is made, with
+ * all its steps or not at all (one run per site, decision 15: another run
+ * that is not closed refuses it). The
  * state the token is bound to is the SHA-256 over the run, the steps, the
  * print of the pair of sites and the hashes of the objects as they are
  * now. next runs one step of the way back (one pair, under the lock);
@@ -363,27 +366,55 @@ final class AB_MCP_Sync_Revert {
 			);
 		}
 		if ( $plan['same_run'] ) {
-			// The same run, atomically from open or interrupted to reverting.
-			$moved = AB_MCP_Sync_Run::set_state( (int) $run['run_id'], array( 'open', 'interrupted' ), 'reverting' );
-			if ( is_wp_error( $moved ) ) {
-				return $moved;
-			}
-			// The step the interruption left begun is unclear from now on: its
-			// journal says which parts were reached; the way back reads it.
-			// The forward steps still planned are skipped: the run goes back.
-			$steps_now = AB_MCP_Sync_Run::steps( (int) $run['run_id'] );
-			foreach ( is_array( $steps_now ) ? $steps_now : array() as $step ) {
-				if ( 'begun' === $step['state'] ) {
-					AB_MCP_Sync_Run::update_step( (int) $run['run_id'], (int) $step['seq'], array( 'state' => 'unclear', 'result' => array( 'message' => 'Interrupted: the request that wrote this step ended before it finished; the way back reads its journal.' ) ), 'begun' );
-				} elseif ( 'planned' === $step['state'] ) {
-					AB_MCP_Sync_Run::update_step( (int) $run['run_id'], (int) $step['seq'], array( 'state' => 'skipped', 'result' => array( 'message' => 'Skipped: the run went to its way back before this step ran.' ) ), 'planned' );
+			// The same run, from open or interrupted to reverting, with its
+			// forward steps settled and every step of the way back stored, in
+			// one transaction (AB_MCP_Sync_Run::transaction()): the run is
+			// reverting with the whole plan of its way back, or stays as it
+			// was. Before, the state changed first and the steps were inserted
+			// one by one: an insert that failed, or a request that ended
+			// between two inserts, left the run reverting with a part of its
+			// plan, which close_revert() then reported as reverted (GitHub
+			// Codex round 2 of branch 8, P1).
+			$run_id = (int) $run['run_id'];
+			$began  = AB_MCP_Sync_Run::transaction(
+				static function () use ( $run_id, $steps ) {
+					$moved = AB_MCP_Sync_Run::set_state( $run_id, array( 'open', 'interrupted' ), 'reverting' );
+					if ( is_wp_error( $moved ) ) {
+						return $moved;
+					}
+					// The step the interruption left begun is unclear from now
+					// on: its journal says which parts were reached; the way back
+					// reads it. The forward steps still planned are skipped: the
+					// run goes back.
+					$steps_now = AB_MCP_Sync_Run::steps( $run_id );
+					if ( is_wp_error( $steps_now ) ) {
+						return $steps_now;
+					}
+					foreach ( $steps_now as $step ) {
+						$settled = true;
+						if ( 'begun' === $step['state'] ) {
+							$settled = AB_MCP_Sync_Run::update_step( $run_id, (int) $step['seq'], array( 'state' => 'unclear', 'result' => array( 'message' => 'Interrupted: the request that wrote this step ended before it finished; the way back reads its journal.' ) ), 'begun' );
+						} elseif ( 'planned' === $step['state'] ) {
+							$settled = AB_MCP_Sync_Run::update_step( $run_id, (int) $step['seq'], array( 'state' => 'skipped', 'result' => array( 'message' => 'Skipped: the run went to its way back before this step ran.' ) ), 'planned' );
+						}
+						if ( is_wp_error( $settled ) ) {
+							return $settled;
+						}
+					}
+					return AB_MCP_Sync_Run::append_steps( $run_id, $steps );
 				}
+			);
+			if ( is_wp_error( $began ) ) {
+				if ( 'ab_mcp_sync_run_changed' === $began->get_error_code() ) {
+					return $began;
+				}
+				return new WP_Error(
+					$began->get_error_code(),
+					sprintf( '%1$s The run %2$d stays %3$s and nothing of its way back began: its steps are stored all at once or not at all. Plan the way back again (wp_site_revert action=plan with run_id %2$d); if it keeps failing, the database error log names the cause.', $began->get_error_message(), $run_id, $run['state'] ),
+					$began->get_error_data()
+				);
 			}
-			$first = AB_MCP_Sync_Run::append_steps( (int) $run['run_id'], $steps );
-			if ( is_wp_error( $first ) ) {
-				return $first;
-			}
-			$now = AB_MCP_Sync_Run::get( (int) $run['run_id'] );
+			$now = AB_MCP_Sync_Run::get( $run_id );
 		} else {
 			// Made under the lock of the protected store (A6): a clean-up
 			// that reads the runs whose backups it keeps and removes groups

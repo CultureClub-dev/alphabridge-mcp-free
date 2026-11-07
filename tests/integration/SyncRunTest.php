@@ -796,6 +796,83 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( 'ab_mcp_sync_run_unconfirmed', AB_MCP_Sync_Run::close_checked( $run_id, self::admin(), false )->get_error_code() );
 	}
 
+	public function testTheWayBackOfARunThatIsNotClosedBeginsWithAllOfItsStepsOrNotAtAll(): void {
+		// GitHub Codex round 2 on free#137 (P1): the run moved to reverting and
+		// its forward steps were settled before the steps of the way back were
+		// inserted one by one; an insert that failed, or a request that ended
+		// between two inserts, left the run reverting with a part of its plan,
+		// and close_revert() reported it reverted. Now the change of state, the
+		// settling and every insert are one transaction: the run is reverting
+		// with the whole plan of its way back, or stays as it was, and the
+		// refusal names the way. A trigger of the database stands in for the
+		// insert that fails (the second step of the way back).
+		self::pair();
+		$a = self::pages_on_a( array( 'contact' => 'Write to us.', 'about' => 'About us.' ) );
+		$b = self::pages_on_b( array( 'contact' => 'Write to us.', 'about' => 'About us.' ) );
+		self::paired( self::staged() );
+		self::change_on_b( $b['contact'], 'contact', 'Write to us on staging.' );
+		self::change_on_b( $b['about'], 'about', 'About us, on staging.' );
+		$planned = self::planned( array( 'contact', 'about' ) );
+		$run     = self::begun( $planned['args'] );
+		$run_id  = (int) $run['run_id'];
+		self::assertSame( 'done', self::next( $run_id )['step']['state'], 'The check.' );
+		self::assertSame( 'done', self::next( $run_id )['step']['state'], 'The first page.' );
+		self::assertSame( 'done', self::next( $run_id )['step']['state'], 'The second page.' );
+		$steps = AB_MCP_Sync_Run::steps( $run_id );
+		self::assertIsArray( $steps );
+		$count   = count( $steps );
+		$planned = array();
+		foreach ( $steps as $step ) {
+			if ( 'planned' === $step['state'] ) {
+				$planned[] = (int) $step['seq'];
+			}
+		}
+		self::assertNotEmpty( $planned, 'The caches and the check of the run are still planned: the run is open.' );
+		global $wpdb;
+		$table = AB_MCP_Sync_Schema::table( 'steps' );
+		$wpdb->query( "DROP TRIGGER IF EXISTS ab_it_refuse_step" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$wpdb->query( sprintf( "CREATE TRIGGER ab_it_refuse_step BEFORE INSERT ON `%s` FOR EACH ROW BEGIN IF NEW.run_id = %d AND NEW.op = 'revert' AND NEW.seq = %d THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'refused by the test'; END IF; END", $table, $run_id, $count + 2 ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		self::assertSame( '', $wpdb->last_error, 'The trigger is there.' );
+		try {
+			$args    = array( 'action' => 'plan', 'run_id' => $run_id );
+			$preview = self::gated( 'wp_site_revert', $args );
+			self::assertIsArray( $preview, is_wp_error( $preview ) ? $preview->get_error_message() : '' );
+			self::assertCount( 2, $preview['preview']['steps'] );
+			$refused = self::gated( 'wp_site_revert', $args + array( 'confirm_token' => $preview['confirm_token'] ) );
+			$message = self::refused( $refused, 'ab_mcp_sync_run_db' );
+			self::assertStringContainsString( sprintf( 'The run %d stays open and nothing of its way back began', $run_id ), $message );
+			self::assertStringContainsString( 'wp_site_revert action=plan', $message, 'The way.' );
+		} finally {
+			$wpdb->query( "DROP TRIGGER IF EXISTS ab_it_refuse_step" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		}
+		// The run as it was: open, no step of the way back, the forward steps
+		// still planned, nothing skipped.
+		$status = self::gated( 'wp_site_push', array( 'action' => 'status', 'run_id' => $run_id ) );
+		self::assertSame( 'open', $status['state'], json_encode( $status ) );
+		self::assertSame( 0, $status['counts']['skipped'] );
+		self::assertCount( $count, $status['steps'], 'No step of the way back stored.' );
+		foreach ( $status['steps'] as $step ) {
+			self::assertNotSame( 'revert', $step['op'] );
+			if ( in_array( (int) $step['seq'], $planned, true ) ) {
+				self::assertSame( 'planned', $step['state'] );
+			}
+		}
+		self::assertSame( 'Write to us on staging.', self::row_a( (int) $a['contact'] )['post_content'], 'Nothing written.' );
+		// Without the refusal the way back begins whole: reverting, both steps
+		// of the way back stored, the forward steps skipped; then everything
+		// goes back.
+		$begun = self::revert( $run_id );
+		self::assertSame( 'reverting', $begun['state'] );
+		self::assertSame( $run_id, (int) $begun['run_id'] );
+		$reverts = array_filter( $begun['steps'], static fn( array $s ): bool => 'revert' === $s['op'] );
+		self::assertCount( 2, $reverts );
+		self::assertSame( count( $planned ), $begun['counts']['skipped'] );
+		$back = self::revert_all( $run_id );
+		self::assertSame( 'closed_reverted', $back['state'], json_encode( $back ) );
+		self::assertSame( 'Write to us.', self::row_a( (int) $a['contact'] )['post_content'] );
+		self::assertSame( 'About us.', self::row_a( (int) $a['about'] )['post_content'] );
+	}
+
 	public function testTheWayBackIsByteForByteAndLeavesWhatChangedSince(): void {
 		self::pair();
 		$a = self::pages_on_a( array( 'contact' => 'Write to us.' ) );

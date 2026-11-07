@@ -344,28 +344,39 @@ final class AB_MCP_Sync_Run {
 		foreach ( array_keys( $row ) as $column ) {
 			$formats[] = in_array( $column, self::INT_COLUMNS, true ) ? '%d' : '%s';
 		}
-		$suppress = $wpdb->suppress_errors( true );
-		$inserted = $wpdb->insert( AB_MCP_Sync_Schema::table( 'runs' ), $row, $formats );
-		$wpdb->suppress_errors( $suppress );
-		if ( false === $inserted ) {
-			// A run another request made in between: the unique key refused it.
-			$open = self::open_run();
-			if ( is_array( $open ) ) {
-				return self::another_open( $open );
+		// The run and every one of its steps in one transaction: a run is
+		// there with all its steps or not at all (a step that cannot be
+		// stored, a request that ends between two inserts; GitHub Codex round
+		// 2 of branch 8, P1: a run of the way back with a part of its steps
+		// would close as reverted).
+		$run_id = self::transaction(
+			static function () use ( $row, $formats, $steps ) {
+				global $wpdb;
+				$suppress = $wpdb->suppress_errors( true );
+				$inserted = $wpdb->insert( AB_MCP_Sync_Schema::table( 'runs' ), $row, $formats );
+				$wpdb->suppress_errors( $suppress );
+				if ( false === $inserted ) {
+					// A run another request made in between: the unique key refused it.
+					$open = self::open_run();
+					if ( is_array( $open ) ) {
+						return self::another_open( $open );
+					}
+					return self::db_error();
+				}
+				$run_id = (int) $wpdb->insert_id;
+				$seq    = 0;
+				foreach ( $steps as $step ) {
+					++$seq;
+					$made = self::insert_step( $run_id, $seq, $step );
+					if ( is_wp_error( $made ) ) {
+						return $made;
+					}
+				}
+				return $run_id;
 			}
-			return self::db_error();
-		}
-		$run_id = (int) $wpdb->insert_id;
-		$seq    = 0;
-		foreach ( $steps as $step ) {
-			++$seq;
-			$made = self::insert_step( $run_id, $seq, $step );
-			if ( is_wp_error( $made ) ) {
-				// The run cannot be used without its steps: closed as aborted,
-				// with what went wrong, so the site is not held by it.
-				self::set_state( $run_id, 'open', 'closed_aborted' );
-				return $made;
-			}
+		);
+		if ( is_wp_error( $run_id ) ) {
+			return $run_id;
 		}
 		$made = self::get( $run_id );
 		if ( is_array( $made ) ) {
@@ -400,6 +411,68 @@ final class AB_MCP_Sync_Run {
 			}
 		}
 		return $first;
+	}
+
+	/**
+	 * Writes of a run and its steps in one transaction of the database:
+	 * committed when $fn returns anything but a WP_Error, rolled back
+	 * otherwise, on an exception and, by the database itself, when the
+	 * request ends before the commit. A run is made with all its steps or
+	 * not at all (create()), and the way back of a run that is not closed
+	 * moves the run to reverting, settles its forward steps and stores every
+	 * step of the way back, or changes nothing (AB_MCP_Sync_Revert::begin();
+	 * GitHub Codex round 2 of branch 8, P1: before, an insert that failed or
+	 * a request that ended between the inserts left the run reverting with a
+	 * part of its plan of the way back, and close_revert() reported it
+	 * reverted). Only on tables whose engine keeps transactions (InnoDB);
+	 * another one refuses with the way before anything is written, as
+	 * AB_MCP_Sync_Pairs::transaction() does for the pairs.
+	 *
+	 * @param callable $fn function(): mixed|WP_Error.
+	 * @return mixed|WP_Error What $fn returned.
+	 */
+	public static function transaction( callable $fn ) {
+		$ready = self::ready();
+		if ( true !== $ready ) {
+			return $ready;
+		}
+		global $wpdb;
+		$tables  = array( AB_MCP_Sync_Schema::table( 'runs' ), AB_MCP_Sync_Schema::table( 'steps' ) );
+		$engines = $wpdb->get_results( $wpdb->prepare( 'SELECT TABLE_NAME AS name, ENGINE AS engine FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN ( %s, %s )', $tables[0], $tables[1] ), ARRAY_A );
+		if ( '' !== (string) $wpdb->last_error ) {
+			return self::db_error();
+		}
+		$by = array();
+		foreach ( is_array( $engines ) ? $engines : array() as $one ) {
+			$by[ (string) $one['name'] ] = (string) $one['engine'];
+		}
+		foreach ( $tables as $table ) {
+			if ( ! isset( $by[ $table ] ) || 0 !== strcasecmp( $by[ $table ], 'InnoDB' ) ) {
+				return new WP_Error(
+					'ab_mcp_sync_run_engine',
+					sprintf( 'The table %1$s of the runs of the takeover is stored with the engine %2$s, which keeps no transactions, so nothing of the run is changed: a run is made with all its steps or not at all, and a way back begins with all of its steps or not at all. Ask the host to convert the table to InnoDB (ALTER TABLE %1$s ENGINE=InnoDB), then call again.', $table, isset( $by[ $table ] ) ? $by[ $table ] : 'unknown' ),
+					array( 'engine' => isset( $by[ $table ] ) ? $by[ $table ] : null )
+				);
+			}
+		}
+		if ( false === $wpdb->query( 'START TRANSACTION' ) ) {
+			return self::db_error();
+		}
+		try {
+			$result = call_user_func( $fn );
+		} catch ( Throwable $e ) {
+			$wpdb->query( 'ROLLBACK' );
+			throw $e;
+		}
+		if ( is_wp_error( $result ) ) {
+			$wpdb->query( 'ROLLBACK' );
+			return $result;
+		}
+		if ( false === $wpdb->query( 'COMMIT' ) ) {
+			$wpdb->query( 'ROLLBACK' );
+			return self::db_error();
+		}
+		return $result;
 	}
 
 	/**
