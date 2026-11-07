@@ -26,7 +26,8 @@ RU = 'includes/sync/class-sync-run.php'
 SC = 'includes/sync/class-sync-schema.php'
 TS = 'includes/tools/class-tools-staging.php'
 G = 'includes/class-staging-gate.php'
-FILEVAR = {PU: '$pu', RV: '$rv', EN: '$en', PW: '$pw', GU: '$gu', RS: '$rs', RU: '$ru', SC: '$sc', TS: '$ts', G: '$g'}
+DK = 'includes/sync/class-sync-db-kinds.php'
+FILEVAR = {PU: '$pu', RV: '$rv', EN: '$en', PW: '$pw', GU: '$gu', RS: '$rs', RU: '$ru', SC: '$sc', TS: '$ts', G: '$g', DK: '$dk'}
 
 RUNS = {
     'unit': ('unit', 'SyncRunTest'),
@@ -88,24 +89,34 @@ e('means-level-tight', 'level(): under TIGHT times the need is tight', RS,
 
 # ------------------------------------------------------------ the boundary
 LOCK = 'testTheLockOfABoundaryRefusesOtherWritersOfACoveredObjectAndLetsTheOwnerPass'
-COVERS = "\t\treturn ! self::$owner && is_array( self::$armed ) && isset( self::$armed['posts'][ (string) (int) $id ] ) && (int) self::$armed['until'] > self::now();"
-e('guard-owner', 'covers(): the owner of the boundary passes', GU, COVERS, COVERS.replace('! self::$owner && ', ''), 'unit', LOCK)
-e('guard-until', 'covers(): a record past its time covers nothing', GU, COVERS, COVERS.replace(" && (int) self::$armed['until'] > self::now()", ''), 'unit', LOCK)
+HOLDING = "\t\tif ( self::$owner ) {\n\t\t\treturn null;\n\t\t}\n\t\t$row = AB_MCP_Sync_Rows::option( self::OPTION );"
+e('guard-owner', 'holding(): the owner of the boundary passes', GU, HOLDING, "\t\t$row = AB_MCP_Sync_Rows::option( self::OPTION );", 'unit', LOCK)
+e('guard-until', 'holding(): a record past its time holds nothing', GU,
+  "\t\tif ( ! self::shaped( $read ) || (int) $read['until'] <= self::now() ) {", "\t\tif ( ! self::shaped( $read ) ) {", 'unit', LOCK)
+e('guard-fresh-read', 'holding(): the record read afresh from its row, past the caches of the request (A1)', GU,
+  "\t\t$row = AB_MCP_Sync_Rows::option( self::OPTION );", "\t\t$row = get_option( self::OPTION ) ? array( 'value' => serialize( get_option( self::OPTION ) ) ) : false;", 'unit', LOCK)
+e('guard-armed-always', 'arm(): the filters hooked on every request, a record or none (A1)', GU,
+  "\t\tadd_action( 'rest_api_init', array( __CLASS__, 'arm_rest' ), 1, 0 );",
+  "\t\tif ( null === self::holding() ) {\n\t\t\treturn;\n\t\t}\n\t\tadd_action( 'rest_api_init', array( __CLASS__, 'arm_rest' ), 1, 0 );", 'unit', LOCK)
 e('guard-record-expiry', 'record(): a record past its time is removed', GU,
   "\t\tif ( (int) $read['until'] <= self::now() ) {", "\t\tif ( false ) {", 'unit', LOCK)
 e('guard-rest-423', 'rest_pre_insert(): the status 423 of a locked object', GU,
-  "\t\t\treturn new WP_Error( self::CODE, self::message(), array( 'status' => 423 ) );", "\t\t\treturn new WP_Error( self::CODE, self::message(), array( 'status' => 400 ) );", 'unit', LOCK)
+  "\t\t\treturn new WP_Error( self::CODE, self::message( $record ), array( 'status' => 423 ) );", "\t\t\treturn new WP_Error( self::CODE, self::message( $record ), array( 'status' => 400 ) );", 'unit', LOCK)
 e('guard-empty-content', 'empty_content(): the classic way of a covered post meets the core text', GU,
   "\t\treturn $id > 0 && self::covers( $id ) ? true : $maybe_empty;", "\t\treturn $maybe_empty;", 'unit', LOCK)
 e('guard-meta-mid', 'meta_by_mid(): a meta id is refused by its post', GU,
-  "\t\treturn is_object( $meta ) && isset( $meta->post_id ) && self::covers( (int) $meta->post_id ) ? false : $check;", "\t\treturn $check;", 'unit', LOCK)
+  "\t\treturn is_object( $meta ) && isset( $meta->post_id ) && isset( $record['posts'][ (string) (int) $meta->post_id ] ) ? false : $check;", "\t\treturn $check;", 'unit', LOCK)
+e('guard-delete-all', 'meta_delete(): a delete of a key across every post is refused while a boundary covers one (A1)', GU,
+  "\t\tif ( $delete_all ) {\n\t\t\t$record = self::holding();", "\t\tif ( false ) {\n\t\t\t$record = self::holding();", 'unit', LOCK)
 e('guard-edit-lock', 'begin(): the edit lock of wp-admin on a covered post (decision 19)', GU,
   "\t\t\tupdate_post_meta( (int) $id, '_edit_lock', self::now() . ':' . (int) get_current_user_id() );", '', 'unit', LOCK)
 e('guard-option-still', 'pre_update_option(): a covered option keeps its value', GU,
-  "\t\treturn ! self::$owner && is_array( self::$armed ) && (int) self::$armed['until'] > self::now() ? $old_value : $value;", "\t\treturn $value;", 'unit', LOCK)
+  "\t\treturn null !== $record && in_array( (string) $option, (array) $record['options'], true ) ? $old_value : $value;", "\t\treturn $value;", 'unit', LOCK)
+e('guard-option-excluded', 'pre_update_option(): an option of group B is answered without a read of the record', GU,
+  "\t\tif ( self::$owner || AB_MCP_Sync_Exclusions::option( (string) $option ) ) {", "\t\tif ( self::$owner ) {", 'unit', LOCK)
 e('guard-term', 'pre_insert_term(): a new term of a covered taxonomy is refused', GU,
-  "\t\tif ( ! self::$owner && is_array( self::$armed ) && in_array( (string) $taxonomy, (array) self::$armed['taxonomies'], true ) && (int) self::$armed['until'] > self::now() ) {", "\t\tif ( false ) {", 'unit', LOCK)
-e('guard-rest-hook', 'arm(): the REST API of a covered type is hooked (another user sees the message)', GU,
+  "\t\tif ( null !== $record && in_array( (string) $taxonomy, (array) $record['taxonomies'], true ) ) {", "\t\tif ( false ) {", 'unit', LOCK)
+e('guard-rest-hook', 'arm_rest(): the REST API of every registered type is hooked (another user sees the message)', GU,
   "\t\t\tadd_filter( 'rest_pre_insert_' . $type, array( __CLASS__, 'rest_pre_insert' ), 1, 2 );", '', 'it', 'testTheLockOfABoundaryRefusesOtherWritersAndLetsTheOwnerPass')
 
 # ------------------------------------------------------- the kind post
@@ -131,7 +142,7 @@ e('writer-password', 'target_of(): a password-protected post is refused (B9)', P
 e('writer-create-meta', 'target_of(): a new post with plain meta is locked (decision 28)', PW,
   "\t\t\tif ( 'create' === $item['op'] && ! in_array( $key, self::CORE_META, true ) ) {", "\t\t\tif ( false ) {", 'unit', LOCKS)
 e('writer-parent-unmapped', 'target_of(): a parent without a pair is refused', PW,
-  "\t\t\t$mapped = AB_MCP_Sync_Refs::mapped_id( $plan, 'post', $parent );\n\t\t\tif ( null === $mapped ) {", "\t\t\t$mapped = AB_MCP_Sync_Refs::mapped_id( $plan, 'post', $parent );\n\t\t\tif ( false ) {", 'unit', LOCKS)
+  "\t\t\tif ( null === $mapped ) {\n\t\t\t\treturn self::locked( 'post:reference_unmapped', sprintf( 'post_parent %d of the staging site', $parent ) );", "\t\t\tif ( false ) {\n\t\t\t\treturn self::locked( 'post:reference_unmapped', sprintf( 'post_parent %d of the staging site', $parent ) );", 'unit', LOCKS)
 e('writer-type', 'target_of(): only posts and pages in this version', PW,
   "\t\tif ( ! in_array( $type, self::TYPES, true ) ) {", "\t\tif ( false ) {", 'unit', LOCKS)
 e('writer-status', 'target_of(): the trash and an auto-draft are no target', PW,
@@ -139,7 +150,21 @@ e('writer-status', 'target_of(): the trash and an auto-draft are no target', PW,
 e('writer-taxonomy', 'target_of(): a taxonomy outside the rule is locked', PW,
   "\t\t\tif ( ! in_array( $taxonomy, self::TAXONOMIES, true ) ) {", "\t\t\tif ( false ) {", 'unit', LOCKS)
 e('writer-terms-set', 'terms_hash(): a set', PW,
-  "\t\t$ids = array_values( array_unique( array_map( 'intval', $ids ) ) );\n\t\tsort( $ids );", "\t\t$ids = array_values( array_map( 'intval', $ids ) );", 'unit', 'testTheHashesOfThePartsAreStableAndTermsAreASet')
+  "\t\t$keys = array_values( array_unique( array_map( 'strval', $keys ) ) );\n\t\tsort( $keys, SORT_STRING );", "\t\t$keys = array_values( array_map( 'strval', $keys ) );", 'unit', 'testTheHashesOfThePartsAreStableAndTermsAreASet')
+e('writer-format-slug', 'term_keys(): a format term by its slug (B6)', PW,
+  "\t\t\t\t$out[] = $slugs ? (string) $term['slug'] : (int) $term['term_id'];", "\t\t\t\t$out[] = (int) $term['term_id'];", 'unit', 'testTheHashesOfThePartsAreStableAndTermsAreASet')
+e('writer-format-target', 'target_term_keys(): the slug of a format as the target names it (B6)', PW,
+  "\t\t\t$out[] = $slugs ? (string) $term : (int) $term;", "\t\t\t$out[] = (int) $term;", 'unit', 'testTheHashesOfThePartsAreStableAndTermsAreASet')
+e('writer-page-template', 'target_of(): the template through page_template of wp_insert_post() (decisions 17, 28; B7)', PW,
+  "\t\t\t$postarr['page_template'] = $meta['_wp_page_template'][0];", '', 'unit', TARGET)
+e('writer-template-offered', 'precheck(): the theme of this site has to offer the template (B7)', PW,
+  "\t\t\tif ( ! is_array( $templates ) || ! isset( $templates[ $prepared['postarr']['page_template'] ] ) ) {", "\t\t\tif ( false ) {", 'unit', 'testTheTemplateOfAPageGoesThroughTheCoreWayAndTheThemeHasToOfferIt')
+e('writer-pending-parent', 'target_of(): a parent the run creates before the object is pending, not missing (B1)', PW,
+  "\t\t\tif ( null === $mapped && isset( $pending['post'][ $parent ] ) ) {", "\t\t\tif ( false ) {", 'unit', LOCKS)
+e('writer-pending-top', 'precheck(): a page with a pending parent is no page of the top level (B1)', PW,
+  "\t\t$top = 0 === (int) $prepared['postarr']['post_parent'] && empty( $prepared['pending'] );", "\t\t$top = 0 === (int) $prepared['postarr']['post_parent'];", 'it', 'testANewParentPageAndItsNewChildPageAreWrittenInOneRun')
+e('writer-restore-menu', 'restore_row(): a page back to publish at the top level while a menu adds pages is «check needed» (decisions 21, 23; A3)', PW,
+  "\t\tif ( 'page' === $backup['post_type'] && 0 === (int) $backup['post_parent'] && in_array( $backup['post_status'], array( 'publish', 'future' ), true ) && $backup['post_status'] !== $current['row']['post_status'] && self::menu_adds_pages() ) {", "\t\tif ( false ) {", 'it', 'testTheWayBackDoesNotRepublishATopLevelPageWhileAMenuAddsPages')
 e('writer-restore-meta-own', 'restore_meta(): back only where the bytes are what the step read back (decision 23)', PW,
   "\t\tif ( ! hash_equals( (string) $written, self::meta_hash( $now ) ) ) {", "\t\tif ( false ) {", 'it', 'testTheWayBackIsByteForByteAndLeavesWhatChangedSince')
 e('writer-restore-row-own', 'restore_row(): back only where the row is what the step read back', PW,
@@ -147,7 +172,7 @@ e('writer-restore-row-own', 'restore_row(): back only where the row is what the 
 e('writer-restore-future', 'restore_row(): a backed-up future whose date passed is «check needed» (decision 23)', PW,
   "\t\tif ( $saved !== $backup['post_status'] || '' !== AB_MCP_Tools_Content::status_date_refusal( $backup['post_type'], $current['row']['post_status'], $backup['post_status'], $gmt, true, (int) $now ) ) {", "\t\tif ( false ) {", 'it', 'testAScheduledStagingPostWhoseDatePassedIsRefusedAndTheWayBackAfterTheDateNeedsACheck')
 e('writer-menu-automatic', 'precheck(): a page of the top level with the menu automatic (decision 21)', PW,
-  "\t\tif ( 'page' === $type && 0 === (int) $prepared['postarr']['post_parent'] && in_array( $status, array( 'publish', 'future' ), true ) && self::menu_adds_pages() ) {", "\t\tif ( false ) {", 'it', 'testAPageOfTheTopLevelWithTheMenuAutomaticIsLockedAndTakenOverAsDraftWithTheOverride')
+  "\t\tif ( 'page' === $type && $top && in_array( $status, array( 'publish', 'future' ), true ) && self::menu_adds_pages() ) {", "\t\tif ( false ) {", 'it', 'testAPageOfTheTopLevelWithTheMenuAutomaticIsLockedAndTakenOverAsDraftWithTheOverride')
 
 # ----------------------------------------------------------- the run
 SHAPE = 'testTheShapeOfARunAndWhenItsLockIsFresh'
@@ -160,17 +185,27 @@ e('run-checked-confirmed', 'close_checked(): a person in wp-admin only', RU,
   "\t\tif ( true !== $confirmed ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_run_unconfirmed'", "\t\tif ( false ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_run_unconfirmed'", 'unit', SHAPE)
 e('run-settle-interrupted', 'settle(): a step begun without a fresh lock makes the run interrupted (decision 18)', RU,
   "\t\t$moved = self::set_state( (int) $run['run_id'], $run['state'], 'interrupted' );", "\t\t$moved = true;", 'it', 'testARequestThatExitsInABoundaryLeavesTheRunInterruptedAndTheWayBackLeadsTheSameRun')
+e('run-has-room', 'has_room(): the steps of a run within MAX_STEPS (B5)', RU,
+  "\t\treturn (int) $have + (int) $add <= self::MAX_STEPS;", "\t\treturn true;", 'unit', 'testARunLeavesRoomForItsOwnWayBack')
+e('run-keep-until-stored', 'set_state(): every close stores the period its backups are kept (decision 20; A7)', RU,
+  "\t\t\t$set['keep_until'] = AB_MCP_Sync_Schema::keep_until( $now, (bool) $qualified, AB_MCP_Protected_Store::backup_days() );", '', 'it', 'testTheRetentionKeepsTheLastThreeQualifiedClosesAndWhatAWayBackNeeds')
+e('plan-max-objects', 'MAX_OBJECTS: a run leaves room for its own way back (B5)', PU,
+  "\tconst MAX_OBJECTS = 998;", "\tconst MAX_OBJECTS = 1996;", 'unit', 'testARunLeavesRoomForItsOwnWayBack')
 
 # ------------------------------------------------------- the retention
 KEEP = 'testTheRetentionNamesTheRunsWhoseBackupsStay'
 e('schema-keep-last', 'backup_runs(): the last KEEP_LAST qualified closes (decision 20, rule 2)', SC,
-  "\t\t\tif ( $n <= self::KEEP_LAST || ( $days > 0 && $now - $at < $days * 86400 ) ) {", "\t\t\tif ( $n <= self::KEEP_LAST + 1 || ( $days > 0 && $now - $at < $days * 86400 ) ) {", 'unit', KEEP)
-e('schema-days', 'backup_runs(): every qualified close within the days of the filter (rule 3)', SC,
-  "\t\t\tif ( $n <= self::KEEP_LAST || ( $days > 0 && $now - $at < $days * 86400 ) ) {", "\t\t\tif ( $n <= self::KEEP_LAST ) {", 'unit', KEEP)
+  "\t\t\tif ( $n <= self::KEEP_LAST ) {", "\t\t\tif ( $n <= self::KEEP_LAST + 1 ) {", 'unit', KEEP)
+e('schema-keep-until', 'backup_runs(): a closed run until the keep_until its close stored (rules 3, 5, 6; A7)', SC,
+  "\t\t\tif ( (int) $row['keep_until'] > $now ) {", "\t\t\tif ( false ) {", 'unit', KEEP)
+e('schema-keep-until-qualified', 'keep_until(): a qualified close for the days of the filter (rule 3)', SC,
+  "\t\t\treturn $days > 0 ? (int) $now + $days * 86400 : 0;", "\t\t\treturn 0;", 'unit', KEEP)
+e('schema-keep-until-unqualified', 'keep_until(): an unqualified close for UNQUALIFIED_DAYS, or the days of the filter where more (rule 5)', SC,
+  "\t\treturn (int) $now + max( self::UNQUALIFIED_DAYS, $days ) * 86400;", "\t\treturn (int) $now + self::UNQUALIFIED_DAYS * 86400;", 'unit', KEEP)
 e('schema-reverts', 'backup_runs(): the runs a way back that is not closed needs (rule 4)', SC,
   "\t\t\t\t\t$keep[ (int) $needed ] = true;", '', 'unit', KEEP)
-e('schema-unqualified', 'backup_runs(): an unqualified close for UNQUALIFIED_DAYS (rule 5)', SC,
-  "\t\t\tif ( $now - (int) $row['closed'] < self::UNQUALIFIED_DAYS * 86400 ) {", "\t\t\tif ( true ) {", 'unit', KEEP)
+e('schema-unqualified', 'backup_runs(): an unqualified close without keep_until (a row of version 2) for UNQUALIFIED_DAYS (rule 5)', SC,
+  "\t\t\tif ( 0 === (int) $row['keep_until'] && $now - (int) $row['closed'] < self::UNQUALIFIED_DAYS * 86400 ) {", "\t\t\tif ( 0 === (int) $row['keep_until'] ) {", 'unit', KEEP)
 e('schema-qualified-only', 'backup_runs(): only a qualified close counts among the last three', SC,
   "\t\t\tif ( (int) $row['forward_closed_at'] > 0 ) {", "\t\t\tif ( true ) {", 'unit', KEEP)
 
@@ -206,7 +241,37 @@ e('engine-check-target', 'check_item(): a target changed since the plan aborts t
 e('engine-write-ahead', 'boundary(): the journal written ahead of the first part (decision 17)', EN,
   "\t\t$ahead            = AB_MCP_Sync_Run::update_step( $run_id, $seq, array( 'parts' => $journal ), 'begun' );", "\t\t$ahead            = true;", 'it', 'testARequestThatExitsInABoundaryLeavesTheRunInterruptedAndTheWayBackLeadsTheSameRun')
 e('engine-qualified', 'run_verify(): a qualified close only where every write step was written (decision 20)', EN,
-  "\t\t$qualified = $writes > 0 && $written === $writes;", "\t\t$qualified = false;", 'it', E2E)
+  "\t\t$qualified         = $writes_n > 0 && $written === $writes_n;", "\t\t$qualified         = false;", 'it', E2E)
+e('engine-phase-named', 'pick(): a named step of phase 7 or 8 waits for the phases before it (decision 16; B2)', EN,
+  "\t\t\t$earlier = self::earlier_phase_open( $by, $step );", "\t\t\t$earlier = null;", 'unit', 'testTheStepsOfAPhaseRunOnlyAfterThePhasesBeforeIt')
+e('engine-phase-next', 'pick(): next passes no step of a later phase while one of a lower phase is open (B2)', EN,
+  "\t\t\tif ( $open || null !== self::earlier_phase_open( $by, $step ) ) {", "\t\t\tif ( $open ) {", 'unit', 'testTheStepsOfAPhaseRunOnlyAfterThePhasesBeforeIt')
+e('engine-findings-kept', 'run_check(): the findings of a call are kept with the cursor (B3)', EN,
+  "\t\t\t\t$result['findings'] = $findings;\n", '', 'it', 'testTheCheckBeforeTheFirstWriteKeepsItsFindingsAcrossCalls')
+e('engine-pending', 'run_check(): an object the run creates is pending for the check of the others (B1)', EN,
+  "\t\t\t\t$ctx['pending']['post'][ (int) $one['staging_ref'] ] = true;", '', 'it', 'testANewParentPageAndItsNewChildPageAreWrittenInOneRun')
+e('engine-template-with-row', 'write_parts(): the template was written with the row, the meta part is read back only (B7)', EN,
+  "\t\t\t\t$done = array() !== $values && in_array( $key, AB_MCP_Sync_Post_Writer::CORE_META, true ) ? true : AB_MCP_Sync_Post_Writer::write_meta( $live_id, $key, $values, $have );",
+  "\t\t\t\t$done = AB_MCP_Sync_Post_Writer::write_meta( $live_id, $key, $values, $have );", 'it', 'testThePageTemplateGoesThroughTheCoreWayAndTheThemeHasToOfferIt')
+e('engine-rollback-earlier', 'write_parts(): the parts written before a deviating one go back with it (B8)', EN,
+  "\t\t\tfor ( $j = $i; $j >= 0; $j-- ) {", "\t\t\tfor ( $j = $i; $j >= $i; $j-- ) {", 'it', 'testADeviatingMetaPartTakesTheRowBackWithItAndTheStepSaysSo')
+e('engine-deviating-terms-left', 'restore_part(): a deviating part on a way the lock does not refuse is never put back (A2)', EN,
+  "\t\tif ( null !== $part['after'] && ! hash_equals( (string) $part['target'], (string) $part['after'] ) && AB_MCP_Sync_Post_Writer::WAY_TERMS === $part['way'] ) {", "\t\tif ( false ) {", 'it', 'testADeviatingTermPartIsNeverTakenBack')
+e('engine-sample-expected', 'sample_finding(): the title of the written object has to be in the body (decision 33; B4)', EN,
+  "\t\t\tif ( '' !== $needle && false !== strpos( (string) $body, $needle ) ) {", "\t\t\tif ( true ) {", 'unit', 'testTheSampleOfAPublishedObjectNeedsTheTitleBesides200')
+e('engine-sample-200', 'sample_finding(): 200 (decision 33)', EN,
+  "\t\tif ( 200 !== (int) $status ) {", "\t\tif ( false ) {", 'unit', 'testTheSampleOfAPublishedObjectNeedsTheTitleBesides200')
+e('engine-verify-budget', 'run_verify(): the hashes over calls where the budget runs out (B4)', EN,
+  "\t\t\t\tif ( $worked && $left() <= 0 ) {\n\t\t\t\t\t$result['cursor'] = $i;", "\t\t\t\tif ( false ) {\n\t\t\t\t\t$result['cursor'] = $i;", 'it', 'testTheCheckOfTheRunNeedsTheTitleBesides200AndGoesOnOverCalls')
+e('revert-wrote', 'plan(): only a step with a journal and a backup wrote anything (B9)', RV,
+  "\t\t\t$wrote = null !== $journal && ! in_array( $step['state'], array( 'planned', 'skipped' ), true ) && is_array( $journal['backup'] ) && ( 'create' !== $journal['object']['op'] || null !== $journal['object']['live_ref'] );",
+  "\t\t\t$wrote = null !== $journal && ! in_array( $step['state'], array( 'planned', 'skipped' ), true );", 'it', 'testAStepThatFailedBeforeItsBackupIsNoRestOnTheWayBack')
+e('revert-under-lock', 'begin(): a way back for a closed run is made under the lock of the store (decision 20, rule 4; A6)', RV,
+  "\t\t\t$now    = AB_MCP_Protected_Store::under_lock(", "\t\t\t$now    = call_user_func(", 'it', 'testAWayBackForAClosedRunIsMadeUnderTheLockOfTheStore')
+e('export-one-reading', 'export(): form and content from the one reading of the rows (A4)', DK,
+  "\t\t\t$result['content'] = self::content_of( $rows );", "\t\t\t$result['content'] = self::content( $id );", 'unit', 'testThePackageOfObjectsCarriesTheContentOfTheReadingItsHashCameFrom')
+e('export-term-credentials', 'export(): the names and slugs of the terms through the credential check (A5)', DK,
+  "\t\t\t\t\tAB_MCP_Sync_Credentials::note( $acc, 'post', 'term:' . $term['taxonomy'] . ':' . $field, AB_MCP_Sync_Credentials::unit( '', (string) $term[ $field ] ) );", '', 'unit', 'testATermNameWithACredentialHoldsTheObjectOfThePackage')
 e('engine-rest-residual', 'revert_boundary(): a new object stays as a rest, its pair residual (rule 0)', EN,
   "\t\t\t\tif ( is_array( $pair ) && 'residual' !== $pair['state'] ) {\n\t\t\t\t\tAB_MCP_Sync_Pairs::set_state( $pair_id, 'residual', AB_MCP_Sync_Pairs::snapshot_hash( AB_MCP_Sync_Pairs::snapshot( $pair_id ) ) );",
   "\t\t\t\tif ( false ) {\n\t\t\t\t\tAB_MCP_Sync_Pairs::set_state( $pair_id, 'residual', AB_MCP_Sync_Pairs::snapshot_hash( AB_MCP_Sync_Pairs::snapshot( $pair_id ) ) );", 'it', E2E)
@@ -288,7 +353,15 @@ out.append('''<?php
  * lines of the packages against the report and the credential check, a
  * target changed since the plan, the journal written ahead, a qualified
  * close, a rest with its pair residual, the pair back to its snapshot, a run
- * on its way back running its steps of the way back only, the same run).
+ * on its way back running its steps of the way back only, the same run);
+ * and what Codex round 1 found (A1 to A7, B1 to B9): the lock armed on
+ * every request and read afresh, a delete across every post, the period a
+ * close stores, the room for the way back, the phases in order, the
+ * findings of the check kept over calls, a pending parent, the template
+ * through the core way, the parts put back together, a deviating term part
+ * left, the sample with its title and the check over calls, only steps that
+ * wrote on the way back, the way back made under the lock of the store,
+ * the package from one reading with its term names checked.
  *
  * Written by tests/mutation/gen/lauf.py from the source; change the entries
  * there and run it again.
@@ -323,6 +396,7 @@ $ru = 'includes/sync/class-sync-run.php';
 $sc = 'includes/sync/class-sync-schema.php';
 $ts = 'includes/tools/class-tools-staging.php';
 $g  = 'includes/class-staging-gate.php';
+$dk = 'includes/sync/class-sync-db-kinds.php';
 
 return array(''')
 for (id_, clause, file, search, replace, run, expect) in entries:

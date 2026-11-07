@@ -510,7 +510,17 @@ final class SyncRunTest extends TestCase {
 		// then; its write afterwards meets the record all the same.
 		AB_MCP_Sync_Guard::end( 7, 2 );
 		AB_MCP_Sync_Guard::disarm();
+		// Every hook arm() set in this test goes (arm() ran more than once).
+		while ( remove_filter( 'update_post_metadata', array( AB_MCP_Sync_Guard::class, 'meta_by_object' ), 1 ) ) {
+			continue;
+		}
+		while ( remove_filter( 'delete_post_metadata', array( AB_MCP_Sync_Guard::class, 'meta_delete' ), 1 ) ) {
+			continue;
+		}
+		self::assertFalse( has_filter( 'update_post_metadata', array( AB_MCP_Sync_Guard::class, 'meta_by_object' ) ) );
 		AB_MCP_Sync_Guard::arm();
+		self::assertNotFalse( has_filter( 'update_post_metadata', array( AB_MCP_Sync_Guard::class, 'meta_by_object' ) ), 'Hooked with no record in sight.' );
+		self::assertNotFalse( has_filter( 'delete_post_metadata', array( AB_MCP_Sync_Guard::class, 'meta_delete' ) ) );
 		self::assertFalse( AB_MCP_Sync_Guard::covers( 5 ), 'No boundary yet.' );
 		self::assertTrue( AB_MCP_Sync_Guard::begin( 9, 1, array( 5 => 'page' ) ), 'Another process begins a boundary now.' );
 		AB_MCP_Sync_Guard::$owner = false;

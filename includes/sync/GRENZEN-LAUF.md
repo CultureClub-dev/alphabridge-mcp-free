@@ -53,14 +53,26 @@ Ablehnung entsteht, nennt sie den Weg.
   WordPress gibt dann einem der beiden `-2`, und das Rücklesen des Schritts
   meldet die Abweichung (Teil «geschrieben, abweichend», Objekt neu → Paar
   `residual`). Konstruiert; Z9 bringt die Slug-Regel.
-- Der Datensatz der Sperre liegt in der Option `ab_mcp_sync_boundary`
-  (autoload), damit die Prüfung auf jedem Request keine Abfrage kostet. Ein
-  Request, der vor `plugins_loaded` (Priorität 11) schreibt, trifft die Sperre
-  nicht; WordPress bietet davor keine Schreibwege über die API.
-- `pre_update_option_{$option}` hält einen Wert «still» (der alte Wert kommt
-  zurück, `update_option()` schreibt nichts); der schreibende Request erfährt
-  nichts davon. Entscheid 19 nimmt das in Kauf; in Zweig 8 deckt kein Schritt
-  Optionen (Zweig 11).
+- Die Filter der Sperre hängen auf jedem Request bei `plugins_loaded`
+  (Priorität 11), ob gerade eine Grenze läuft oder nicht, und lesen den
+  Datensatz (Option `ab_mcp_sync_boundary`) bei jedem gehakten Schreibweg
+  frisch aus der Zeile (`AB_MCP_Sync_Guard::holding()`, an alloptions- und
+  notoptions-Cache des Requests vorbei): ein Request, der vor `begin()`
+  startete, trifft die Grenze trotzdem (Codex-Runde 1, A1). Der Preis ist
+  eine Primärschlüssel-Abfrage je Schreibweg (Meta-, Lösch-, Term-, REST-,
+  Options-Schreiben) auf der Live-Site; Optionen der Gruppe B (Transients
+  und die übrigen ausgeschlossenen) werden ohne Abfrage durchgelassen. Ein
+  Request, der vor `plugins_loaded` schreibt, trifft die Sperre nicht;
+  WordPress bietet davor keine Schreibwege über die API.
+- `delete_post_meta_by_key()` übergibt dem Kern keine Objekt-ID und
+  `delete_all`; solange eine Grenze irgendeinen Post deckt, ist der Aufruf
+  als Ganzes gesperrt (er träfe auch den gedeckten Post), höchstens 600 s.
+  Ein Plugin, das in diesem Fenster einen Schlüssel siteweit entfernt, bekommt
+  `false` und muss es wiederholen (A1).
+- `pre_update_option` (generisch, für jeden Optionsnamen des Datensatzes)
+  hält einen Wert «still» (der alte Wert kommt zurück, `update_option()`
+  schreibt nichts); der schreibende Request erfährt nichts davon. Entscheid 19
+  nimmt das in Kauf; in Zweig 8 deckt kein Schritt Optionen (Zweig 11).
 
 ## Vorprüfung der Mittel (Konzept 15.11)
 
@@ -106,6 +118,22 @@ Ablehnung entsteht, nennt sie den Weg.
 - `term_order` ungleich 0 (sortierbare Taxonomien) stellt
   `wp_set_object_terms()` nicht her; die Abweichung fällt beim Rücklesen auf.
   Kern-Taxonomien sortieren nicht.
+- Terme von `post_format` sind Teil der Identität des Posts und werden nach
+  Slug verglichen und geschrieben (`IDENTITY_TAXONOMIES`, `term_keys()`): die
+  erste Verwendung eines Formats auf der Live-Site hat noch keinen Term, den
+  legt `wp_set_object_terms()` an (B6). Terme von `category` und `post_tag`
+  nach ihrer Paar-ID.
+- `_wp_page_template` geht über `page_template` von `wp_insert_post()`
+  (Entscheide 17 und 28): die Vorprüfung verlangt, dass das Live-Theme die
+  Vorlage für den Typ anbietet (`WP_Theme::get_page_templates()`), sonst
+  Sperre `post:page_template` (WordPress speicherte `default`); der Meta-Teil
+  wird nur zurückgelesen, Entfernen läuft über `delete_metadata()` (B7).
+- Verweise auf Objekte, die derselbe Lauf vorher anlegt (Elternteil, Verweis
+  im Inhalt), gelten in der Gesamtvorprüfung als ausstehend (`pending`), nicht
+  als fehlend; der Schreibschritt mappt sie über das Paar, das der Schritt
+  des Ziels anlegte, und verweigert mit `post:reference_unmapped`, wenn es
+  fehlt. Eine Seite mit ausstehendem Elternteil ist keine Seite der obersten
+  Ebene (Menü-Automatik, Slug-Kollision werden an der Grenze geprüft) (B1).
 - Der Autor wird über das Login abgebildet (Entscheid 25); fehlt das Konto
   live, sperrt `post:author_unknown`. Ein Autor mit anderem Login auf beiden
   Sites ist ein anderer Autor.
@@ -138,6 +166,31 @@ Ablehnung entsteht, nennt sie den Weg.
   unterscheiden (konstruiert).
 - Der Rückweg eines Schritts kann einmal laufen; ein zweiter Plan für denselben
   Schritt wird abgelehnt (`ab_mcp_sync_revert_steps`).
+- Ein Teil «geschrieben, abweichend» (Rücklesen ungleich Soll) auf einem nicht
+  abweisbaren Weg (Terme) geht nie zurück, auch wenn der heutige Hash dem
+  Ist-Hash gleicht: was zurückgelesen wurde, ist nicht nachweislich eigen.
+  Er heisst `left`, das Paar wird `unclear` (Entscheide 17, 23; A2).
+- Weicht ein späterer Teil innerhalb der Grenze ab, gehen die davor als Soll
+  geschriebenen Teile (unter derselben Sperre zurückgelesen, nachweislich
+  eigen) mit zurück; der Schritt heisst nur `restored`, wenn jeder Teil zurück
+  ist, sonst `unclear` mit dem Zustand je Teil im Journal (B8).
+- In den Rückweg gehen nur Schritte mit Journal und Sicherung (ohne Sicherung
+  keine Mutation, Entscheid 17); ein Schritt, der vor seiner Sicherung
+  scheiterte (Ziel seit dem Plan geändert), ist weder Rest noch neu angelegt.
+  «Neu angelegt» heisst `op = create` im Journal, nicht «Sicherung fehlt» (B9).
+- Stellt der Rückweg für eine Seite der obersten Ebene `publish` oder `future`
+  her, solange ein Menü Seiten automatisch aufnimmt, bleibt die Zeile als
+  `check_needed` stehen (Entscheide 21, 23; A3): die Automatik abschalten und
+  den Rückweg neu planen, oder den Status von Hand setzen.
+- Der Rückweg eines Laufs im selben Lauf braucht je geschriebenem Objekt einen
+  Schritt; darum schreibt ein Lauf höchstens `AB_MCP_Sync_Push::MAX_OBJECTS`
+  = 998 Objekte (4 + 2 × 998 = 2000 = `MAX_STEPS`), und der Plan des Rückwegs
+  prüft den Platz vor dem Wechsel auf `reverting` (B5).
+- Der Rückweglauf für einen geschlossenen Lauf entsteht unter der Sperre der
+  Ablage (`AB_MCP_Protected_Store::under_lock()`): die Bereinigung liest die
+  zu schützenden Läufe und löscht unter derselben Sperre, sieht den neuen
+  Lauf also oder war vorher fertig (Entscheid 20 (4); A6). Ohne Ablage gibt es
+  nichts zu schützen, der Lauf entsteht ohne Sperre.
 
 ## Lauf und Plan (Entscheide 15, 16, 32)
 
@@ -149,6 +202,14 @@ Ablehnung entsteht, nennt sie den Weg.
   (`*:mutual_references`, Z11c) und alles, was auf ein gesperrtes Mitglied
   verweist; der Bericht hat dieselben Einträge schon als `locked` oder
   `waits`.
+- Die Phasen laufen in Reihenfolge (Entscheid 16): ein Schritt der Phase 7
+  (Nachbearbeitung) oder 8 (Prüfung) läuft, auch per `step`, erst, wenn jeder
+  Schritt einer tieferen Phase gelaufen ist, gleich mit welchem Ausgang;
+  `step` auf einen früheren wird mit Weg abgelehnt (B2). `next` hielt die
+  Reihenfolge schon.
+- Die Gesamtvorprüfung trägt ihre Befunde mit dem Cursor über Aufrufe; ein
+  Aufruf, der Befunde fand und an der Zeitgrenze endete, verliert sie nicht,
+  der Lauf schliesst `closed_aborted` (B3).
 - `all=true` nimmt jeden Eintrag mit `take_over` oder `create` der Post-Art;
   was der Lauf nicht schreiben kann, nennt die Vorschau in `not_written`, ohne
   den Plan abzulehnen. Ausgewählte Einträge (`select`) ausserhalb der Regel
@@ -185,35 +246,64 @@ Ablehnung entsteht, nennt sie den Weg.
   Zeile vor der ersten Sicherung an.
 - Kann die Tabelle der Läufe nicht gelesen werden, bleibt jede Laufsicherung
   (`backup_runs()` gibt `null`), nie umgekehrt.
-- Nicht qualifizierte Abschlüsse (`closed_aborted`, `closed_checked`,
-  `closed_reverted`, `revert`-Läufe) halten ihre Sicherungen 7 Tage ab
-  Abschluss (`AB_MCP_Sync_Schema::UNQUALIFIED_DAYS`); Pro setzt die Frist
-  qualifizierter Abschlüsse über `ab_mcp_staging_backup_days` auf 30 (Zweig 15).
+- Jeder Abschluss speichert die beim Abschluss geltende Frist in
+  `runs.keep_until` (Schema Version 3; `AB_MCP_Sync_Schema::keep_until()`):
+  qualifiziert so viele Tage, wie der Filter `ab_mcp_staging_backup_days`
+  sagt (Free 0: nur die letzten drei; Pro 30, Zweig 15), nicht qualifiziert
+  (`closed_aborted`, `closed_checked`, `closed_reverted`, `revert`-Läufe)
+  7 Tage Free bzw. 30 Tage Pro (Entscheid 20 (5)). Die Bereinigung liest nur
+  die gespeicherte Frist: Pro → Free behält jede Frist, Free → Pro verlängert
+  keine (Entscheid 20 (6); A7). Zeilen der Version 2 ohne `keep_until` gelten
+  nicht qualifiziert 7 Tage ab Abschluss.
 
 ## Prüfung des Laufs (Entscheid 33)
 
+- Die Prüfung läuft wie die Gesamtvorprüfung über Aufrufe (Stufen `hashes`
+  mit Cursor, `sample`, `probe`, `log` im Ergebnis des Schritts); jeder Aufruf
+  erledigt mindestens eine Einheit, so dass sie immer vorankommt.
+  `closed_done` nur, wenn jede Stufe lief und bestand (B4).
 - Die Stichprobe fragt eine veröffentlichte Adresse mit `wp_remote_get()`
-  (Loopback); Hosts ohne Loopback antworten nicht → Befund «no answer»,
-  der Lauf schliesst `closed_findings`, nicht `closed_done`. Die
-  Integrationstests ersetzen die Probe (`AB_MCP_Sync_Engine::$probe`), weil
-  `php -S` den Loopback zum Test zwar bedient, aber die Aussage der echten
-  Live-Probe gehört.
+  (Loopback) und verlangt 200 und die erwartete Zeichenkette: den Titel des
+  Sollwerts, wie die Seite ihn zeigt (roh, `esc_html()`, texturiert). Hosts
+  ohne Loopback antworten nicht → Befund «no answer»; ein Theme ohne Titel
+  oder ein Seiten-Cache mit alter Seite → Befund «did not show the title»;
+  der Lauf schliesst `closed_findings`, nicht `closed_done`. Grenze: eine
+  veraltete Cache-Seite mit unverändertem Titel besteht die Probe; Phase 7
+  leert nur bekannte Caches. Die Integrationstests ersetzen die Probe
+  (`AB_MCP_Sync_Engine::$probe`: Status und Body), weil `php -S` den Loopback
+  zum Test zwar bedient, aber die Aussage der echten Live-Probe gehört.
+- Die PHP-Probe (`AB_MCP_Php_Probe::run()`) muss ganz bestehen (`passed`);
+  `fatal`, `partial` und `unreachable` sind Befunde (B4). Für die Probe bleibt
+  die restliche Zeit des Aufrufs, mindestens 1 s.
 - Das Fehlerlog wird über die Zeilenzahl von `debug.log` verglichen; ohne
   `WP_DEBUG_LOG` gibt es keinen Befund.
 
 ## Prüfung
 
-- Unit (`tests/SyncRunTest.php`): Registrierung und `when`, Mittel, Sperre,
-  Post-Engine (Sollwert, Sperren, Hashes), Lauf (Form, Verbindung, frische
-  Sperre), Aufbewahrung aus den Zeilen, Plan (`verdict`, `order`, `line_of`).
-  Integration (`tests/integration/SyncRunTest.php`, acht Fälle): Ende zu Ende
-  mit Rückweg, Abweichung in der Gesamtvorprüfung, Unterbrechung in eigenem
-  Prozess, bytegenau, Sperrmatrix über REST, Sollwert «als Entwurf übernehmen»,
-  zeitabhängiger Status, Aufbewahrung. Mutationen:
+- Unit (`tests/SyncRunTest.php`): Registrierung und `when`, Mittel, Sperre
+  (auch Request vor der Grenze, `delete_all`), Post-Engine (Sollwert, Sperren,
+  Hashes, Formate nach Slug, Vorlage über den Kernweg, ausstehender
+  Elternteil), Lauf (Form, Verbindung, frische Sperre, Platz für den Rückweg),
+  Phasenreihenfolge, Stichprobe mit Titel, Aufbewahrung aus den Zeilen mit
+  `keep_until`, Paket aus einer Lesung mit geprüften Termnamen, Plan
+  (`verdict`, `order`, `line_of`). Integration
+  (`tests/integration/SyncRunTest.php`, siebzehn Fälle): Ende zu Ende mit
+  Rückweg und `step` auf eine spätere Phase, Abweichung in der
+  Gesamtvorprüfung, Unterbrechung in eigenem Prozess, bytegenau, Sperrmatrix
+  über REST (Request vor der Grenze), Sollwert «als Entwurf übernehmen»,
+  zeitabhängiger Status, Aufbewahrung mit Fristen, neue Eltern- und
+  Unterseite, Befunde über Aufrufe, Prüfung mit Titel und Cursor, Vorlage über
+  den Kernweg, abweichender Meta-Teil nimmt die Zeile mit, gescheiterter
+  Schritt ohne Rest, abweichende Terme bleiben, kein Wiederveröffentlichen
+  bei Menü-Automatik, Rückweglauf unter der Ablagesperre. Mutationen:
   `tests/mutation/lists/lauf.php` (aus `tests/mutation/gen/lauf.py`).
 - Nicht als Mutation geführt: die Wächter gegen eine Datenbank, die ein Lesen
   oder Schreiben verweigert (keine Test-Site verweigert), das Budget der
-  Gesamtvorprüfung über Aufrufe (Sites mit Tausenden Objekten), die Stichprobe
-  und die PHP-Probe (ersetzt), die belegte Sperre (`busy`: ein zweiter Request
+  Gesamtvorprüfung über Aufrufe mit Tausenden Objekten (die Fortsetzung selbst
+  hält ein Test mit gestellter Uhr), die PHP-Probe (ersetzt: im Test besteht
+  sie; dass `partial` und `unreachable` Befunde sind, zeigt nur die Live-Probe),
+  die Kapazitätsprüfung des Rückwegs im Plan (mit 998 Objekten je Lauf nicht
+  erreichbar), der Schritt ohne Sicherung in `revert_boundary()` (der Plan
+  lässt ihn nicht hinein), die belegte Sperre (`busy`: ein zweiter Request
   derselben Site im selben Augenblick) und die Texte der Ablehnungen
   (`AnswerWayTest` hält, dass jede einen Weg nennt).
