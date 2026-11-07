@@ -644,12 +644,14 @@ final class AB_MCP_Sync_Push {
 				}
 			}
 		}
-		// Topological order, stable by entry number.
+		// Topological order: each time the smallest entry whose targets are
+		// placed (stable, whatever order the entries came in).
 		$ordered = array();
 		$placed  = array();
 		$left    = $items;
-		$rounds  = 0;
-		while ( array() !== $left && $rounds < 2000 ) {
+		ksort( $left );
+		$rounds = 0;
+		while ( array() !== $left && $rounds < self::MAX_OBJECTS + 1 ) {
 			++$rounds;
 			$progress = false;
 			foreach ( $left as $n => $item ) {
@@ -664,6 +666,7 @@ final class AB_MCP_Sync_Push {
 					$placed[ $n ]  = true;
 					unset( $left[ $n ] );
 					$progress = true;
+					break;
 				}
 			}
 			if ( ! $progress ) {
