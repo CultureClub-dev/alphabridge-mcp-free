@@ -1088,12 +1088,36 @@ final class SyncRunTest extends TestCase {
 	}
 
 	public function testARunLeavesRoomForItsOwnWayBack(): void {
+		// A plan has at most MAX_STEPS steps (the entries a tool call takes):
+		// the objects and the frame of the run (check, caches, check of the
+		// run, one spare), so a plan of 1996 objects goes as before B5 (N4).
+		self::assertSame( 2000, AB_MCP_Sync_Run::MAX_STEPS );
+		self::assertSame( 4, AB_MCP_Sync_Run::FRAME );
+		self::assertSame( 1996, AB_MCP_Sync_Push::MAX_OBJECTS );
+		self::assertLessThanOrEqual( AB_MCP_Sync_Run::MAX_STEPS, AB_MCP_Sync_Run::FRAME + AB_MCP_Sync_Push::MAX_OBJECTS );
 		// Every written object takes one step of the way back in the same run
-		// (decision 15), besides the four steps of the frame (B5).
-		self::assertLessThanOrEqual( AB_MCP_Sync_Run::MAX_STEPS, 4 + 2 * AB_MCP_Sync_Push::MAX_OBJECTS );
-		self::assertTrue( AB_MCP_Sync_Run::has_room( 4 + AB_MCP_Sync_Push::MAX_OBJECTS, AB_MCP_Sync_Push::MAX_OBJECTS ) );
-		self::assertFalse( AB_MCP_Sync_Run::has_room( AB_MCP_Sync_Run::MAX_STEPS, 1 ) );
-		self::assertTrue( AB_MCP_Sync_Run::has_room( AB_MCP_Sync_Run::MAX_STEPS - 1, 1 ) );
+		// (decision 15): the run holds the forward plan and as many steps
+		// again as it has objects (B5), never less.
+		self::assertSame( 3996, AB_MCP_Sync_Run::MAX_RUN_STEPS );
+		self::assertLessThanOrEqual( AB_MCP_Sync_Run::MAX_RUN_STEPS, AB_MCP_Sync_Run::FRAME + 2 * AB_MCP_Sync_Push::MAX_OBJECTS );
+		self::assertTrue( AB_MCP_Sync_Run::has_room( AB_MCP_Sync_Run::FRAME + AB_MCP_Sync_Push::MAX_OBJECTS, AB_MCP_Sync_Push::MAX_OBJECTS ), 'A full run takes its whole way back.' );
+		self::assertTrue( AB_MCP_Sync_Run::has_room( AB_MCP_Sync_Run::MAX_STEPS, AB_MCP_Sync_Push::MAX_OBJECTS ), 'Even with the spare step of the frame used.' );
+		self::assertFalse( AB_MCP_Sync_Run::has_room( AB_MCP_Sync_Run::MAX_RUN_STEPS, 1 ) );
+		self::assertTrue( AB_MCP_Sync_Run::has_room( AB_MCP_Sync_Run::MAX_RUN_STEPS - 1, 1 ) );
+	}
+
+	public function testASelectionPastTheObjectsOfOnePlanIsRefusedWithTheWayInParts(): void {
+		// A plan writes at most MAX_OBJECTS objects; a larger selection is
+		// refused with the way in parts (N4): select instead of all=true, the
+		// run to its close, the next entries from the same report.
+		self::assertNull( AB_MCP_Sync_Push::too_many( AB_MCP_Sync_Push::MAX_OBJECTS ) );
+		self::assertNull( AB_MCP_Sync_Push::too_many( 1 ) );
+		$refused = AB_MCP_Sync_Push::too_many( AB_MCP_Sync_Push::MAX_OBJECTS + 1 );
+		self::assertInstanceOf( WP_Error::class, $refused );
+		self::assertSame( 'ab_mcp_sync_push_selection', $refused->get_error_code() );
+		self::assertStringContainsString( 'at most 1996 objects; this selection has 1997', $refused->get_error_message() );
+		self::assertStringContainsString( 'Plan in parts: pass select with at most 1996 entry numbers', $refused->get_error_message() );
+		self::assertStringContainsString( 'same report_id with the same packages', $refused->get_error_message() );
 	}
 
 	/* ------------------------------------------------------- the plan */

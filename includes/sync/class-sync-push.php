@@ -64,12 +64,16 @@ final class AB_MCP_Sync_Push {
 	const CHOICES = array( 'staging_wins', 'keep_live', 'leave_open' );
 
 	/**
-	 * Objects one run writes at most: the steps of a run (AB_MCP_Sync_Run::
-	 * MAX_STEPS) less the four of the frame, halved, so that the way back of
-	 * the same run (one step per written object, decision 15) always has
-	 * room: 4 + 2 × 998 = 2000 (Codex round 1 of branch 8, B5).
+	 * Objects one plan writes at most: the steps a plan has (AB_MCP_Sync_Run::
+	 * MAX_STEPS, the entries a tool call takes) less the frame of the run
+	 * (AB_MCP_Sync_Run::FRAME): 1996. The way back of the same run (one step
+	 * per written object, decision 15) has its room besides, up to
+	 * AB_MCP_Sync_Run::MAX_RUN_STEPS (Codex round 1 of branch 8, B5; round 2,
+	 * N4: a plan of up to 1996 objects, as before B5). More objects go in
+	 * parts: select with at most this many entries, the run to its close,
+	 * then the next entries from the same report.
 	 */
-	const MAX_OBJECTS = 998;
+	const MAX_OBJECTS = AB_MCP_Sync_Run::MAX_STEPS - AB_MCP_Sync_Run::FRAME;
 
 	/** Steps a preview names at most (all are counted). */
 	const NAMED = 200;
@@ -342,8 +346,9 @@ final class AB_MCP_Sync_Push {
 			}
 			$items[ $n ] = $item;
 		}
-		if ( count( $items ) > self::MAX_OBJECTS ) {
-			return self::selection( sprintf( 'One run writes at most %d objects. Plan in parts.', self::MAX_OBJECTS ) );
+		$refused = self::too_many( count( $items ) );
+		if ( null !== $refused ) {
+			return $refused;
 		}
 		if ( array() === $items ) {
 			return new WP_Error( 'ab_mcp_sync_push_nothing', sprintf( 'Nothing of the selection is written in this version: %s Choose entries the report marks take_over or create (posts and pages).', array() === $locked ? 'no entry a takeover writes was chosen.' : implode( ' ', array_map( static fn( $l ) => sprintf( 'Entry %1$d (%2$s %3$s): %4$s', $l['n'], $l['kind'], $l['subtype'], $l['reason'] ), array_slice( $locked, 0, 5 ) ) ) ), array( 'locked' => $locked ) );
@@ -976,5 +981,19 @@ final class AB_MCP_Sync_Push {
 	 */
 	private static function selection( $what ) {
 		return new WP_Error( 'ab_mcp_sync_push_selection', sprintf( 'The selection is not one a run takes: %s Pass select (entry numbers of the report of kind post with action take_over or create), choices (entry and choice for a conflict), as_draft (entry numbers taken over with the status draft) or all=true, and packages (the package_ids of the objects).', $what ) );
+	}
+
+	/**
+	 * The refusal of a selection with more objects than one plan writes
+	 * (MAX_OBJECTS), with the way in parts (N4); null where it fits.
+	 *
+	 * @param int $count Objects the selection has.
+	 * @return WP_Error|null
+	 */
+	public static function too_many( $count ) {
+		if ( (int) $count <= self::MAX_OBJECTS ) {
+			return null;
+		}
+		return self::selection( sprintf( 'One run writes at most %1$d objects; this selection has %2$d. Plan in parts: pass select with at most %1$d entry numbers of this report (instead of all=true), run that plan to its close (action=next until it is closed), then plan the next entries from the same report_id with the same packages; the entries a run wrote read equal in the next report.', self::MAX_OBJECTS, (int) $count ) );
 	}
 }

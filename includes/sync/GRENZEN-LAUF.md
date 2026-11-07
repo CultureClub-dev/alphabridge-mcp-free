@@ -214,10 +214,23 @@ Ablehnung entsteht, nennt sie den Weg.
   her, solange ein Menü Seiten automatisch aufnimmt, bleibt die Zeile als
   `check_needed` stehen (Entscheide 21, 23; A3): die Automatik abschalten und
   den Rückweg neu planen, oder den Status von Hand setzen.
-- Der Rückweg eines Laufs im selben Lauf braucht je geschriebenem Objekt einen
-  Schritt; darum schreibt ein Lauf höchstens `AB_MCP_Sync_Push::MAX_OBJECTS`
-  = 998 Objekte (4 + 2 × 998 = 2000 = `MAX_STEPS`), und der Plan des Rückwegs
-  prüft den Platz vor dem Wechsel auf `reverting` (B5).
+- Ein Plan hat höchstens `AB_MCP_Sync_Run::MAX_STEPS` = 2000 Schritte (die
+  Einträge eines Aufrufs, `AB_MCP_Security`), also
+  `AB_MCP_Sync_Push::MAX_OBJECTS` = 1996 Objekte neben dem Rahmen
+  (`FRAME` = 4: Gesamtvorprüfung, Caches, Prüfung, ein Reserveschritt). Der
+  Rückweg im selben Lauf braucht je geschriebenem Objekt einen Schritt; der
+  Lauf fasst dafür `MAX_RUN_STEPS` = 3996 Schritte (4 + 2 × 1996), so dass
+  der Rückweg eines vollen Laufs immer Platz hat, und der Plan des Rückwegs
+  prüft den Platz vor dem Wechsel auf `reverting` (B5, N4: Zwischenstand
+  998). Mehr Objekte gehen in Teilen: `select` mit höchstens 1996 Einträgen
+  je Plan statt `all=true`, den Lauf schliessen, dann die nächsten Einträge
+  aus demselben `report_id` mit denselben Paketen planen (Prüffall
+  `testAReportIsPlannedInPartsOneRunAfterTheOther`); die Ablehnung nennt
+  diesen Weg. Was ein voller Lauf kostet, ändert sich mit dem Rückweg
+  wenig: `AB_MCP_Sync_Run::steps()` liest je Aufruf alle Schritte des Laufs
+  mit Journal; die Schritte des Rückwegs tragen nur den Verweis auf den
+  zurückgenommenen Schritt und das Ergebnis je Teil, die Journale der 1996
+  Schreibschritte wogen schon vor B5 so viel.
 - Der Rückweglauf für einen geschlossenen Lauf entsteht unter der Sperre der
   Ablage (`AB_MCP_Protected_Store::under_lock()`): die Bereinigung liest die
   zu schützenden Läufe und löscht unter derselben Sperre, sieht den neuen
@@ -334,8 +347,8 @@ Ablehnung entsteht, nennt sie den Weg.
   Gesamtvorprüfung über Aufrufe mit Tausenden Objekten (die Fortsetzung selbst
   hält ein Test mit gestellter Uhr), die PHP-Probe (ersetzt: im Test besteht
   sie; dass `partial` und `unreachable` Befunde sind, zeigt nur die Live-Probe),
-  die Kapazitätsprüfung des Rückwegs im Plan (mit 998 Objekten je Lauf nicht
-  erreichbar), der Schritt ohne Sicherung in `revert_boundary()` (der Plan
+  die Kapazitätsprüfung des Rückwegs im Plan (mit 1996 Objekten je Lauf und
+  3996 Schritten je Lauf nicht erreichbar), der Schritt ohne Sicherung in `revert_boundary()` (der Plan
   lässt ihn nicht hinein), die belegte Sperre (`busy`: ein zweiter Request
   derselben Site im selben Augenblick) und die Texte der Ablehnungen
   (`AnswerWayTest` hält, dass jede einen Weg nennt).

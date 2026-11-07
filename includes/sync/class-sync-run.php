@@ -82,8 +82,29 @@ final class AB_MCP_Sync_Run {
 	/** Bytes of the journal of a step at most, as stored. */
 	const MAX_PARTS = 8388608;
 
-	/** Steps a run has at most (the entries a tool call takes, AB_MCP_Security). */
+	/**
+	 * Steps a plan has at most, forward or a way back of its own (the
+	 * entries a tool call takes, AB_MCP_Security): what create() takes.
+	 */
 	const MAX_STEPS = 2000;
+
+	/**
+	 * The frame of a forward run besides its objects: the check before the
+	 * first write, the caches, the check of the run, and one spare
+	 * (AB_MCP_Sync_Push::MAX_OBJECTS = MAX_STEPS - FRAME objects).
+	 */
+	const FRAME = 4;
+
+	/**
+	 * Steps a run holds at most once the way back of the same run is added
+	 * (decision 15: one step per written object): the forward plan and as
+	 * many steps again as it has objects, FRAME + 2 × (MAX_STEPS - FRAME),
+	 * so that the way back of a full run always has room (Codex round 1 of
+	 * branch 8, B5; round 2, N4: the forward plan keeps its MAX_STEPS). The
+	 * steps of the way back are small (the step they take back, the outcome
+	 * per part); the journals of the written steps weigh as before.
+	 */
+	const MAX_RUN_STEPS = 2 * self::MAX_STEPS - self::FRAME;
 
 	/** The columns of runs that hold numbers. */
 	const INT_COLUMNS = array( 'run_id', 'user_id', 'created', 'updated', 'closed', 'heartbeat', 'expires', 'open_one', 'forward_closed_at', 'keep_until', 'calls' );
@@ -325,7 +346,7 @@ final class AB_MCP_Sync_Run {
 			return $have;
 		}
 		if ( ! self::has_room( count( $have ), count( $steps ) ) ) {
-			return new WP_Error( 'ab_mcp_sync_run_invalid', sprintf( 'A run has at most %d steps. Choose fewer pairs for one way back.', self::MAX_STEPS ) );
+			return new WP_Error( 'ab_mcp_sync_run_invalid', sprintf( 'A run has at most %d steps with its way back. Choose fewer pairs for one way back.', self::MAX_RUN_STEPS ) );
 		}
 		$seq   = array() === $have ? 0 : (int) end( $have )['seq'];
 		$first = $seq + 1;
@@ -340,17 +361,18 @@ final class AB_MCP_Sync_Run {
 	}
 
 	/**
-	 * Whether a run with $have steps takes $add more within MAX_STEPS. Asked
-	 * before the way back of the same run changes its state (AB_MCP_Sync_
-	 * Revert::plan()), so that it never fails at this limit once the run is
-	 * reverting (Codex round 1 of branch 8, B5).
+	 * Whether a run with $have steps takes $add more within MAX_RUN_STEPS
+	 * (the way back of the same run). Asked before the way back changes the
+	 * state of the run (AB_MCP_Sync_Revert::plan()), so that it never fails
+	 * at this limit once the run is reverting (Codex round 1 of branch 8,
+	 * B5); a run of wp_site_push always has the room (N4).
 	 *
 	 * @param int $have Steps the run has.
 	 * @param int $add  Steps to add.
 	 * @return bool
 	 */
 	public static function has_room( $have, $add ) {
-		return (int) $have + (int) $add <= self::MAX_STEPS;
+		return (int) $have + (int) $add <= self::MAX_RUN_STEPS;
 	}
 
 	/**

@@ -279,10 +279,11 @@ final class AB_MCP_Sync_Revert {
 		}
 		// The room for the steps of the way back in the same run, asked here,
 		// before the run changes its state (B5): a run of wp_site_push writes
-		// at most AB_MCP_Sync_Push::MAX_OBJECTS objects so that it always has
-		// it; this holds the rule where a run has more steps than that.
+		// at most AB_MCP_Sync_Push::MAX_OBJECTS objects and a run holds
+		// AB_MCP_Sync_Run::MAX_RUN_STEPS, so it always has it (N4); this holds
+		// the rule where a run has more steps than that.
 		if ( $same && ! AB_MCP_Sync_Run::has_room( count( $steps ), count( $items ) ) ) {
-			return new WP_Error( 'ab_mcp_sync_revert_steps', sprintf( 'The way back of %1$d step(s) would take run %2$d past its %3$d steps, so it does not begin. Pass fewer steps (steps) for this way back and plan the rest once it is closed.', count( $items ), (int) $run['run_id'], AB_MCP_Sync_Run::MAX_STEPS ) );
+			return new WP_Error( 'ab_mcp_sync_revert_steps', sprintf( 'The way back of %1$d step(s) would take run %2$d past its %3$d steps, so it does not begin. Pass fewer steps (steps) for this way back and plan the rest once it is closed.', count( $items ), (int) $run['run_id'], AB_MCP_Sync_Run::MAX_RUN_STEPS ) );
 		}
 		ksort( $live );
 		$state = hash(

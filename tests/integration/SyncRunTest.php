@@ -657,6 +657,35 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( 'changed_on_staging', self::post_entry( $report['all'], 'contact' )['result'] );
 	}
 
+	public function testAReportIsPlannedInPartsOneRunAfterTheOther(): void {
+		// More objects than one run takes go in parts (AB_MCP_Sync_Push::
+		// MAX_OBJECTS; N4): a selection of this report, the run to its close,
+		// then the next entries of the same report and the same package of
+		// objects, as the refusal of a selection that is too large says.
+		self::pair();
+		$a = self::pages_on_a( array( 'about' => 'About us.', 'contact' => 'Write to us.' ) );
+		$b = self::pages_on_b( array( 'about' => 'About us.', 'contact' => 'Write to us.' ) );
+		self::paired( self::staged() );
+		self::change_on_b( $b['about'], 'about', 'About us, on staging.' );
+		self::change_on_b( $b['contact'], 'contact', 'Write to us on staging.' );
+		$planned = self::planned( array( 'about', 'contact' ) );
+		self::probe_ok();
+		list( $about, $contact ) = $planned['args']['select'];
+		$first = self::begun( array_merge( $planned['args'], array( 'select' => array( $about ) ) ) );
+		self::assertSame( 'closed_done', self::finish( (int) $first['run_id'] )['state'] );
+		self::assertSame( 'About us, on staging.', self::row_a( (int) $a['about'] )['post_content'] );
+		self::assertSame( 'Write to us.', self::row_a( (int) $a['contact'] )['post_content'], 'The rest of the report is not written.' );
+		// The next part: the same report_id and packages, the other entry.
+		$second = self::begun( array_merge( $planned['args'], array( 'select' => array( $contact ) ) ) );
+		self::assertNotSame( (int) $first['run_id'], (int) $second['run_id'] );
+		self::assertSame( 'closed_done', self::finish( (int) $second['run_id'] )['state'] );
+		self::assertSame( 'Write to us on staging.', self::row_a( (int) $a['contact'] )['post_content'] );
+		// The next report shows both equal: nothing of the parts is left.
+		$report = self::report( self::staged() );
+		self::assertSame( 'equal', self::post_entry( $report['all'], 'about' )['result'] );
+		self::assertSame( 'equal', self::post_entry( $report['all'], 'contact' )['result'] );
+	}
+
 	public function testTheCheckBeforeTheFirstWriteAbortsOnADeviationAndWritesNothing(): void {
 		self::pair();
 		$a = self::pages_on_a( array( 'contact' => 'Write to us.' ) );

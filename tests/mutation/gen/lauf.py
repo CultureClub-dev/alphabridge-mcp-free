@@ -198,12 +198,17 @@ e('run-settle-interrupted', 'settle(): a step begun without a fresh lock makes t
   "\t\t$moved = self::set_state( (int) $run['run_id'], $run['state'], 'interrupted' );", "\t\t$moved = true;", 'it', 'testARequestThatExitsInABoundaryLeavesTheRunInterruptedAndTheWayBackLeadsTheSameRun')
 e('run-marks', 'create(): making a run marks the site before its first step, so its requests hook the filters of the lock (N3)', RU,
   "\t\tAB_MCP_Sync_Guard::mark();\n\t\tglobal $wpdb;\n\t\t$now = self::now();", "\t\tglobal $wpdb;\n\t\t$now = self::now();", 'it', 'testARunWritesAChangedPageAndANewPageAndTheWayBackLeavesTheNewOneAsARest')
-e('run-has-room', 'has_room(): the steps of a run within MAX_STEPS (B5)', RU,
-  "\t\treturn (int) $have + (int) $add <= self::MAX_STEPS;", "\t\treturn true;", 'unit', 'testARunLeavesRoomForItsOwnWayBack')
+ROOM = 'testARunLeavesRoomForItsOwnWayBack'
+e('run-has-room', 'has_room(): the steps of a run with its way back within MAX_RUN_STEPS (B5, N4)', RU,
+  "\t\treturn (int) $have + (int) $add <= self::MAX_RUN_STEPS;", "\t\treturn true;", 'unit', ROOM)
+e('run-max-run-steps', 'MAX_RUN_STEPS: the forward plan and one step of the way back per object (N4)', RU,
+  "\tconst MAX_RUN_STEPS = 2 * self::MAX_STEPS - self::FRAME;", "\tconst MAX_RUN_STEPS = self::MAX_STEPS;", 'unit', ROOM)
 e('run-keep-until-stored', 'set_state(): every close stores the period its backups are kept (decision 20; A7)', RU,
   "\t\t\t$set['keep_until'] = AB_MCP_Sync_Schema::keep_until( $now, (bool) $qualified, AB_MCP_Protected_Store::backup_days() );", '', 'it', 'testTheRetentionKeepsTheLastThreeQualifiedClosesAndWhatAWayBackNeeds')
-e('plan-max-objects', 'MAX_OBJECTS: a run leaves room for its own way back (B5)', PU,
-  "\tconst MAX_OBJECTS = 998;", "\tconst MAX_OBJECTS = 1996;", 'unit', 'testARunLeavesRoomForItsOwnWayBack')
+e('plan-max-objects', 'MAX_OBJECTS: the objects of a plan within MAX_STEPS beside the frame (B5, N4)', PU,
+  "\tconst MAX_OBJECTS = AB_MCP_Sync_Run::MAX_STEPS - AB_MCP_Sync_Run::FRAME;", "\tconst MAX_OBJECTS = AB_MCP_Sync_Run::MAX_STEPS;", 'unit', ROOM)
+e('plan-in-parts', 'too_many(): a selection past MAX_OBJECTS is refused with the way in parts (N4)', PU,
+  "\t\tif ( (int) $count <= self::MAX_OBJECTS ) {", "\t\tif ( (int) $count <= self::MAX_OBJECTS + 1 ) {", 'unit', 'testASelectionPastTheObjectsOfOnePlanIsRefusedWithTheWayInParts')
 
 # ------------------------------------------------------- the retention
 KEEP = 'testTheRetentionNamesTheRunsWhoseBackupsStay'
