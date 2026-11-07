@@ -153,6 +153,12 @@ Ablehnung entsteht, nennt sie den Weg.
   etwa beim Zurücksetzen der Kategorie die Schlagwörter setzt), verliert
   dieser andere Teil jedes Eigentum: er bleibt stehen, ausser er gleicht der
   Sicherung (für jeden Teil, nicht nur für die Zeile; Codex-Runde 12).
+  Verändert das Zurücksetzen sonst etwas am Objekt, auch einen Schlüssel oder
+  eine Taxonomie, die der Plan nicht nennt (ein Hook, der beim Zurücksetzen
+  der Kategorie einen Meta-Wert anlegt), hält der Rückweg für dieses Objekt
+  an: kein weiterer Teil geht von selbst zurück, das Objekt gilt nicht als
+  ganz zurück, das Paar wird `unclear` (Vergleich des ganzen Stands vor und
+  nach jedem Zurücksetzen; Codex-Runde 16).
 - Jeder alte Wert trägt die Marke der Regeln, nach denen dieser Build ihn
   zusammensetzt (`value_rules` = `AB_MCP_Sync_Post_Writer::VALUE_RULES`).
   Beim Ausgeben (`AB_MCP_Sync_Run::cap_values()`) zeigt die Antwort einen
@@ -650,7 +656,7 @@ Ablehnung entsteht, nennt sie den Weg.
   der alte Wert (`before_value()`: Zeile, langer Text mit Revision, Meta,
   Terme, synthetische Geheimnisse, kein UTF-8, Kürzung je Wert und je Teil)
   und die Kappung je Antwort (`cap_values()`).
-  Integration (`tests/integration/SyncRunTest.php`, dreiundvierzig Fälle): Ende zu Ende mit
+  Integration (`tests/integration/SyncRunTest.php`, vierundvierzig Fälle): Ende zu Ende mit
   Rückweg und `step` auf eine spätere Phase (Merkmal der Sperre beim
   Anlegen), ein Bericht in zwei Läufen geplant, Abweichung in der
   Gesamtvorprüfung, Unterbrechung in eigenem Prozess (die Zeile bleibt mit

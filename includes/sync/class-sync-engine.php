@@ -1439,12 +1439,23 @@ final class AB_MCP_Sync_Engine {
 				}
 			}
 		}
-		$seen = AB_MCP_Sync_Post_Writer::current( $live_id );
-		$seen = is_array( $seen ) ? $seen : null;
+		$seen    = AB_MCP_Sync_Post_Writer::current( $live_id );
+		$seen    = is_array( $seen ) ? $seen : null;
+		$stopped = null;
 		foreach ( $order as $i ) {
 			$name    = (string) $parts[ $i ]['part'];
 			$now     = null === $seen ? null : AB_MCP_Sync_Post_Writer::part_hash( $seen, $name );
 			$decided = self::decide( $parts[ $i ], $now, (string) AB_MCP_Sync_Post_Writer::part_hash( $backup, $name ) );
+			if ( null !== $stopped && 'put_back' === $decided['state'] ) {
+				// Putting a part back changed something besides it that the
+				// plan does not name (a hook of this site): the object deviated
+				// on the way back, nothing more of it goes back by itself (Codex
+				// round 16).
+				$decided = array(
+					'state' => 'left',
+					'why'   => sprintf( 'The way back stopped for this object: %s; the part %s is left as it is, check it by hand.', $stopped, $name ),
+				);
+			}
 			if ( 'put_back' !== $decided['state'] ) {
 				$one = '' === $decided['why'] ? array( 'state' => $decided['state'] ) : array(
 					'state' => $decided['state'],
@@ -1472,6 +1483,17 @@ final class AB_MCP_Sync_Engine {
 					$parts[ $k ]['foreign'] = true;
 					$parts[ $k ]['note']    = self::noted( $other, sprintf( 'Changed as the part %s went back (a side effect of the core, such as the default category of a post without one, or a hook of this site): the step owns nothing of what the part holds now, so it is left as it is unless it is as the backup; check it by hand.', $name ) );
 				}
+				// Whatever else it changed, named by the plan or not (a key a
+				// hook adds as the part goes back, Codex round 16), stops the
+				// way back for the object.
+				if ( null === $stopped && is_array( $seen ) && is_array( $again ) ) {
+					foreach ( self::part_names( $seen, $again ) as $other_name ) {
+						if ( $other_name !== $name && self::changed( AB_MCP_Sync_Post_Writer::part_hash( $seen, $other_name ), AB_MCP_Sync_Post_Writer::part_hash( $again, $other_name ) ) ) {
+							$stopped = sprintf( 'putting the part %1$s back changed the part %2$s besides it (a side effect of the core or a hook of this site)', $name, $other_name );
+							break;
+						}
+					}
+				}
 				$seen = $again;
 			}
 			if ( 'left' === $one['state'] ) {
@@ -1497,6 +1519,11 @@ final class AB_MCP_Sync_Engine {
 			if ( ! in_array( $out[ $i ]['state'], array( 'restored', 'unchanged' ), true ) ) {
 				$all_back = false;
 			}
+		}
+		// A way back that stopped changed something besides the parts (Codex
+		// round 16): the object is not back as a whole, whatever the parts say.
+		if ( null !== $stopped ) {
+			$all_back = false;
 		}
 		return array(
 			'all_back' => $all_back,

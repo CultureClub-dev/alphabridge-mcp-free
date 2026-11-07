@@ -340,6 +340,10 @@ e('engine-part-names-all', 'part_names(): every meta key of the states, named by
   "\t\t\t\t$names[ 'meta:' . (string) $row['key'] ] = true;", "\t\t\t\tunset( $row );", 'it', 'testAHookThatAddsAndTakesAwayAKeyThePlanDoesNotNameDeviatesTheObject')
 e('engine-pre-call-terms', 'write_parts(): the state right before the terms call is the one the call is judged against (Codex round 13)', EN,
   "\t\t\t\t$pre_call               = $pre_all;\n\t\t\t\t// Written ahead of the call, as for the meta (F1).", "\t\t\t\t// Written ahead of the call, as for the meta (F1).", 'it', 'testAHookThatChangesAWrittenPartAsALaterPartIsWrittenDeviatesTheObject')
+e('engine-revert-stops-besides', 'put_back(): whatever putting a part back changed besides it, named by the plan or not, stops the way back for the object (Codex round 16)', EN,
+  "\t\t\t\t\t\tif ( $other_name !== $name && self::changed( AB_MCP_Sync_Post_Writer::part_hash( $seen, $other_name ), AB_MCP_Sync_Post_Writer::part_hash( $again, $other_name ) ) ) {", "\t\t\t\t\t\tif ( false ) {", 'it', 'testAKeyAHookAddsAsACategoryGoesBackStopsTheWayBackOfTheObject')
+e('engine-revert-stopped-left', 'put_back(): a part after the way back stopped is left, not put back (Codex round 16)', EN,
+  "\t\t\tif ( null !== $stopped && 'put_back' === $decided['state'] ) {", "\t\t\tif ( false ) {", 'it', 'testAKeyAHookAddsAsACategoryGoesBackStopsTheWayBackOfTheObject')
 e('writer-before-password', 'row_before(): post_password is a credential by its name, never shown', PW,
   "\t\t\tif ( 'post_password' === $column || AB_MCP_Sync_Credentials::names_credential( $column, AB_MCP_Redactor::extra_keys() ) ) {", "\t\t\tif ( false ) {", 'unit', 'testTheValueBeforeOfAPartLeftIsShortNeverACredentialAndCapped')
 e('writer-before-long', 'row_before(): a long text by its bytes and the revision that holds it, never whole', PW,

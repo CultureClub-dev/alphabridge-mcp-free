@@ -1768,6 +1768,57 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( array( '1' ), self::meta_a( $stock, 'available' ), 'Nothing of the object that deviated goes back.' );
 	}
 
+	public function testAKeyAHookAddsAsACategoryGoesBackStopsTheWayBackOfTheObject(): void {
+		// Codex round 16: a hook sets review_needed while category News and
+		// tag new are on the post together and takes the key away otherwise.
+		// The step took the post to Other and tag new; on the way back News
+		// goes back first and the hook adds the key: putting a part back
+		// changed a key the plan does not name, so nothing more of the
+		// object goes back by itself (the tag stays new), and the object is
+		// not back as a whole.
+		self::pair();
+		$news_a  = wp_insert_term( 'News', 'category' );
+		$other_a = wp_insert_term( 'Other', 'category' );
+		self::assertIsArray( $news_a, is_wp_error( $news_a ) ? $news_a->get_error_message() : '' );
+		self::assertIsArray( $other_a, is_wp_error( $other_a ) ? $other_a->get_error_message() : '' );
+		$news_b  = (int) self::b( array( array( 'op' => 'insert_term', 'name' => 'News', 'taxonomy' => 'category', 'as' => 'term' ) ) )['term'];
+		$other_b = (int) self::b( array( array( 'op' => 'insert_term', 'name' => 'Other', 'taxonomy' => 'category', 'as' => 'term' ) ) )['term'];
+		foreach ( array( 'old', 'new' ) as $tag ) {
+			self::assertIsArray( wp_insert_term( $tag, 'post_tag' ) );
+			self::b( array( array( 'op' => 'insert_term', 'name' => $tag, 'taxonomy' => 'post_tag', 'as' => 'term' ) ) );
+		}
+		$story_a = wp_insert_post( wp_slash( self::page( 'story', 'A story.', array( 'post_type' => 'post', 'post_category' => array( (int) $news_a['term_id'] ), 'tags_input' => array( 'old' ) ) ) ), true );
+		self::assertIsInt( $story_a );
+		$story_b = (int) self::b( array( array( 'op' => 'insert_post', 'args' => self::page( 'story', 'A story.', array( 'post_type' => 'post', 'post_category' => array( $news_b ), 'tags_input' => array( 'old' ) ) ), 'as' => 'post' ) ) )['post'];
+		self::paired( self::staged() );
+		self::change_on_b( (string) $story_b, 'story', 'A story, on staging.', array( 'post_type' => 'post', 'post_category' => array( $other_b ), 'tags_input' => array( 'new' ) ) );
+		$planned = self::planned( array( 'story' ) );
+		$run     = self::begun( $planned['args'] );
+		$tags    = static fn(): array => array_values( array_map( static fn( $t ) => $t->slug, wp_get_object_terms( $story_a, 'post_tag' ) ) );
+		self::assertSame( 'closed_done', self::finish( (int) $run['run_id'] )['state'] );
+		self::assertSame( array( 'new' ), $tags() );
+		$news_id = (int) $news_a['term_id'];
+		$review  = static function ( $object_id, $terms, $tt_ids, $taxonomy ) use ( $story_a, $news_id ) {
+			if ( (int) $object_id !== $story_a || ! in_array( $taxonomy, array( 'category', 'post_tag' ), true ) ) {
+				return;
+			}
+			$slugs = wp_get_object_terms( $story_a, 'post_tag', array( 'fields' => 'slugs' ) );
+			if ( has_term( $news_id, 'category', $story_a ) && in_array( 'new', $slugs, true ) ) {
+				update_post_meta( $story_a, 'review_needed', 'yes' );
+			} else {
+				delete_post_meta( $story_a, 'review_needed' );
+			}
+		};
+		add_action( 'set_object_terms', $review, 10, 4 );
+		$begun = self::revert( (int) $run['run_id'] );
+		$back  = self::revert_all( (int) $begun['run_id'] );
+		remove_all_actions( 'set_object_terms' );
+		$outcome = array_column( self::step( $back, 1 )['result']['parts'], 'state', 'part' );
+		self::assertSame( 'left', $outcome['terms:post_tag'], json_encode( self::step( $back, 1 )['result'] ) );
+		self::assertSame( array( 'new' ), $tags(), 'Nothing more of the object goes back once a part changed what the plan does not name.' );
+		self::assertNotSame( 'closed_reverted', $back['state'] );
+	}
+
 	public function testTheDefaultCategoryOfANewPostIsWrittenWithTheRowAndTheJournalSaysSo(): void {
 		// wp_insert_post() gives a new post the default category with the row
 		// (with_row()): the step's own, written with the row, and written as
