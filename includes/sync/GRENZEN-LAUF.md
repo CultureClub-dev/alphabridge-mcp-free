@@ -441,6 +441,14 @@ Ablehnung entsteht, nennt sie den Weg.
 
 ## Post-Art in Zweig 8 (Zweig 9 bringt den Rest)
 
+- Stand Zweig 9: Die Feldregel (Entscheid 28), der Slug, die weiteren
+  Sanitizer, das Beitragsbild und die Term-Art stehen in
+  `GRENZEN-INHALTE.md`; was dieser Abschnitt über `post:meta_rule`,
+  `post:create_with_object_meta`, `post:slug_collision` und die einfachen
+  Schlüssel sagt, gilt in der Fassung dort. Die Sperren mit Stufe Z9 sind
+  aufgelöst (Z8 oder Z8d); `live_meta_rule()` heisst jetzt
+  `AB_MCP_Sync_Post_Writer::live_rule()` und prüft die Taxonomien und die
+  Sperren der kanonischen Form des Live-Posts.
 - Geschrieben werden nur `post` und `page` mit Zeile, Meta von
   `_wp_page_template` und auf vorhandenen Posts einfachen Schlüsseln (kein
   Unterstrich, nicht geschützt, keine Zugangsangabe, kein Builder-Markup, die
