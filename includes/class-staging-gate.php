@@ -171,7 +171,8 @@ class AB_MCP_Staging_Gate {
 	 * reason (Thomas, 31.10.2026: the end state is a staging site with a
 	 * complete way back; this list must not stand in its way).
 	 *
-	 * (a) WAYS_BACK: the ways back and the protection of the staging site. A
+	 * (a) WAYS_BACK: the ways back and the protection of the staging site,
+	 * since Z8 the way back of a run of the takeover (wp_site_revert). A
 	 * way back is not held, whatever the filter says.
 	 * (b) OPERATION: what has to go on on the production site, with the
 	 * setting REQUIRE as well, and is not a change of the site a person
@@ -186,7 +187,7 @@ class AB_MCP_Staging_Gate {
 	 * site, wp_site_import_chunk on the production site; so are the object
 	 * pairs it carries over by (wp_site_pairs).
 	 */
-	const WAYS_BACK  = array( 'wp_undo', 'wp_undo_discard', 'wp_set_preview_protection', 'wp_clear_cache' );
+	const WAYS_BACK  = array( 'wp_undo', 'wp_undo_discard', 'wp_set_preview_protection', 'wp_clear_cache', 'wp_site_revert' );
 	const OPERATION  = array( 'wp_moderate_comment', 'wp_reply_comment', 'wp_wc_update_order_status' );
 	const CARRY_OVER = array( 'wp_site_push', 'wp_site_sync', 'wp_site_export', 'wp_site_export_chunk', 'wp_site_import_chunk', 'wp_site_pairs' );
 

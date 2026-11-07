@@ -8,7 +8,7 @@
  *
  * A step is { "op": …, "as": name, … }; a string "$name" anywhere in a step
  * is the result of that earlier step, "{$name}" inside a text the same as
- * text. Ops: insert_post (args), add_meta (post, key, value), insert_term
+ * text. Ops: insert_post (args), update_post (args), add_meta and update_meta (post, key, value), insert_term
  * (name, taxonomy, args), set_terms (post, terms, taxonomy), update_option
  * (name, value), canonical (kind, ref, addresses), inventory (addresses);
  * for the trust of the takeover (Z8 branch 5): staging_save (role,
@@ -22,8 +22,11 @@
  * bulk_attachments (count: rows of attachments by SQL), import (the arguments of wp_site_import_chunk,
  * relay), export_again (package_id, now), export_chunk
  * (package_id, chunk, now), grants (package_id, count, now), store_cleanup
- * (now), store_remove (area, gid), add_admin (login), as_user (user), for the report delete_post
- * (post, for good), trash_post (post), add_term_meta (term, key, value) and wp_version (version: the
+ * (now), store_hold_lock (seconds), store_remove (area, gid), add_admin (login), as_user (user), for the report delete_post
+ * (post, for good), trash_post (post), add_term_meta (term, key, value), push (args of wp_site_push,
+ * exit_at: a hook at which the process exits inside a boundary, exit_key: only for this meta key), revert (args of
+ * wp_site_revert, exit_at and exit_key as for push), raw_post (post, set: columns written
+ * by SQL), term_order (post, term, taxonomy, order: the order of that relationship by SQL) and wp_version (version: the
  * $wp_version the steps after it see), and write_access (the site mode
  * Full, as a person switches it on), staging_raw and staging_raw_set
  * (value: the record of role and pair as stored, past save()); for what the
@@ -99,6 +102,14 @@ foreach ( $ab_it_steps as $ab_it_i => $ab_it_step ) {
 			break;
 		case 'add_meta':
 			$ab_it_out = add_post_meta( (int) $ab_it_step['post'], $ab_it_step['key'], wp_slash( $ab_it_step['value'] ) );
+			break;
+		case 'update_post':
+			// As wp-admin saves a change of some fields (wp_update_post()
+			// keeps the others).
+			$ab_it_out = wp_update_post( wp_slash( $ab_it_step['args'] ), true );
+			break;
+		case 'update_meta':
+			$ab_it_out = update_post_meta( (int) $ab_it_step['post'], $ab_it_step['key'], wp_slash( $ab_it_step['value'] ) );
 			break;
 		case 'insert_term':
 			$ab_it_out = wp_insert_term( $ab_it_step['name'], $ab_it_step['taxonomy'], isset( $ab_it_step['args'] ) ? $ab_it_step['args'] : array() );
@@ -198,7 +209,46 @@ foreach ( $ab_it_steps as $ab_it_i => $ab_it_step ) {
 					return $ab_it_now;
 				};
 			}
-			$ab_it_out = AB_MCP_Sync_Export::make( $ab_it_step['purpose'], isset( $ab_it_step['cursor'] ) ? $ab_it_step['cursor'] : null, isset( $ab_it_step['objects'] ) ? (int) $ab_it_step['objects'] : null );
+			$ab_it_out = AB_MCP_Sync_Export::make( $ab_it_step['purpose'], isset( $ab_it_step['cursor'] ) ? $ab_it_step['cursor'] : null, isset( $ab_it_step['objects'] ) ? (int) $ab_it_step['objects'] : null, array_intersect_key( $ab_it_step, array( 'report_hash' => true, 'refs' => true ) ) );
+			break;
+		case 'push':
+		case 'revert':
+			// wp_site_push or wp_site_revert in a process of its own (Z8
+			// branch 8): a request that ends inside a write boundary or a step
+			// of the way back (exit_at: a hook of WordPress at which the
+			// process exits) leaves the step begun.
+			require_once AB_MCP_DIR . 'includes/sync/class-sync-push.php';
+			require_once AB_MCP_DIR . 'includes/sync/class-sync-revert.php';
+			if ( isset( $ab_it_step['exit_at'] ) ) {
+				// exit_key: only where the third argument of the hook (the meta
+				// key of updated_post_meta, added_post_meta) is this key.
+				$ab_it_key_at = isset( $ab_it_step['exit_key'] ) ? (string) $ab_it_step['exit_key'] : null;
+				add_action(
+					(string) $ab_it_step['exit_at'],
+					static function ( ...$args ) use ( $ab_it_key_at ) {
+						if ( null === $ab_it_key_at || ( isset( $args[2] ) && $ab_it_key_at === (string) $args[2] ) ) {
+							exit( 0 );
+						}
+					},
+					1,
+					4
+				);
+			}
+			$_SERVER['DOCUMENT_ROOT'] = AB_MCP_IT_Sites::docroot( $ab_it_key );
+			$ab_it_out                = 'revert' === $ab_it_step['op'] ? AB_MCP_Sync_Revert::call( $ab_it_step['args'] ) : AB_MCP_Sync_Push::call( $ab_it_step['args'] );
+			break;
+		case 'term_order':
+			// The order of a relationship as a plugin that sorts the terms
+			// writes it, past every hook (GitHub Codex round 7 on free#137).
+			$ab_it_tt  = get_term( (int) $ab_it_step['term'], (string) $ab_it_step['taxonomy'] );
+			$ab_it_out = $ab_it_tt instanceof WP_Term ? $GLOBALS['wpdb']->update( $GLOBALS['wpdb']->term_relationships, array( 'term_order' => (int) $ab_it_step['order'] ), array( 'object_id' => (int) $ab_it_step['post'], 'term_taxonomy_id' => (int) $ab_it_tt->term_taxonomy_id ) ) : false;
+			clean_object_term_cache( (int) $ab_it_step['post'], 'post' );
+			break;
+		case 'raw_post':
+			// Columns of a post written past every hook (the way a plugin
+			// with its own SQL writes), for the tests of the way back.
+			$ab_it_out = $GLOBALS['wpdb']->update( $GLOBALS['wpdb']->posts, $ab_it_step['set'], array( 'ID' => (int) $ab_it_step['post'] ) );
+			clean_post_cache( (int) $ab_it_step['post'] );
 			break;
 		case 'import':
 			require_once AB_MCP_DIR . 'includes/sync/class-sync-import.php';
@@ -286,6 +336,16 @@ foreach ( $ab_it_steps as $ab_it_i => $ab_it_step ) {
 			break;
 		case 'store_cleanup':
 			$ab_it_out = AB_MCP_Protected_Store::cleanup( (int) $ab_it_step['now'] );
+			break;
+		case 'store_hold_lock':
+			// The lock of the protected store held for a while (seconds), as a
+			// clean-up in another request holds it (A6).
+			$ab_it_out = AB_MCP_Protected_Store::under_lock(
+				static function () use ( $ab_it_step ) {
+					usleep( (int) ( 1000000 * (float) $ab_it_step['seconds'] ) );
+					return true;
+				}
+			);
 			break;
 		case 'add_admin':
 			$ab_it_out = wp_insert_user(

@@ -80,11 +80,18 @@
  * reaches outside it. What a package holds is counted from the files that
  * are there as well (held()), so a file left by a request that died before
  * it was counted still counts.
- * Packages and reports are kept a day, backups ab_mcp_staging_backup_days
- * days (BACKUP_DAYS here; Pro sets 30), never pushed out by the undo store;
- * a group bound to a run that is not closed is not cleaned while it is not
- * (AB_MCP_Sync_Schema::open_runs()). The clean-up runs when a group is
- * opened and once a day (CRON).
+ * Packages and reports are kept a day; a group bound to a run that is not
+ * closed is not cleaned while it is not (AB_MCP_Sync_Schema::open_runs()).
+ * The backups of a run follow the retention contract of decision 20
+ * (AB_MCP_Sync_Schema::backup_rows(): the last three qualified closes
+ * without an age, every closed run until the keep_until its close stored
+ * from ab_mcp_staging_backup_days (BACKUP_DAYS, 0 in Free; Pro sets 30:
+ * a qualified close 30 days, one that does not qualify 7 days in Free and
+ * 30 in Pro, the period staying with the run when the edition changes),
+ * every run a way back that is not closed needs), never pushed out by the
+ * undo store; the backups of a run without a row are kept by their age as
+ * a close that does not qualify (kept(), keep()). The clean-up runs when a
+ * group is opened and once a day (CRON).
  *
  * How much (decision 8): AB_MCP_Store_Budget, counted under locked(), a
  * flock() on a file of the folder (the pattern of Pro's upload sessions).
@@ -117,7 +124,7 @@ final class AB_MCP_Protected_Store {
 	const CRON = 'ab_mcp_store_cleanup';
 
 	/** Days the backups of a run are kept, and its filter (Pro sets 30). */
-	const BACKUP_DAYS        = 7;
+	const BACKUP_DAYS        = 0;
 	const BACKUP_DAYS_FILTER = 'ab_mcp_staging_backup_days';
 
 	/** The format of the manifest and of the sidecars. */
@@ -847,39 +854,79 @@ final class AB_MCP_Protected_Store {
 	/**
 	 * Whether the clean-up keeps a group: bound to a run that is not closed
 	 * (or to any run while the runs cannot be read), or younger than its
-	 * area keeps groups.
+	 * area keeps groups. The backups of a run whose row is there follow the
+	 * retention contract as the row holds it (decision 20; AB_MCP_Sync_Schema
+	 * ::backup_rows(): kept, or gone whatever their age; every run while
+	 * the runs cannot be read). The backups of a run without a row (a run
+	 * that was never made, a row gone with a database put back from an
+	 * older copy) are kept by their age, as a close that does not qualify
+	 * (keep()): a backup whose run cannot be read is not removed at once,
+	 * fail closed.
 	 *
-	 * @param array      $entry     Entry of the group.
-	 * @param int        $now       Time.
-	 * @param int[]|null $open_runs AB_MCP_Sync_Schema::open_runs().
+	 * @param array                $entry       Entry of the group.
+	 * @param int                  $now         Time.
+	 * @param int[]|null           $open_runs   AB_MCP_Sync_Schema::open_runs().
+	 * @param array<int,bool>|null $backup_runs AB_MCP_Sync_Schema::backup_rows(); null where not read.
 	 * @return bool
 	 */
-	public static function kept( array $entry, $now, $open_runs ) {
+	public static function kept( array $entry, $now, $open_runs, $backup_runs = null ) {
 		$run = isset( $entry['run_id'] ) ? (int) $entry['run_id'] : 0;
 		if ( $run > 0 && ( null === $open_runs || in_array( $run, $open_runs, true ) ) ) {
 			return true;
+		}
+		if ( 'backups' === (string) $entry['area'] && $run > 0 ) {
+			if ( null === $backup_runs ) {
+				return true;
+			}
+			if ( array_key_exists( $run, $backup_runs ) ) {
+				return (bool) $backup_runs[ $run ];
+			}
 		}
 		return ( (int) $now - (int) $entry['created'] ) < self::keep( (string) $entry['area'] );
 	}
 
 	/**
-	 * Seconds an area keeps a group.
+	 * Seconds an area keeps a group of no run, and a backup whose run has
+	 * no row (kept()): a backup as a close that does not qualify,
+	 * UNQUALIFIED_DAYS or the days of the filter where more (decision 20,
+	 * rule 5, as AB_MCP_Sync_Schema::keep_until() stores them).
 	 *
 	 * @param string $area Area.
 	 * @return int
 	 */
 	public static function keep( $area ) {
-		return 'backups' === $area ? self::backup_days() * 86400 : ( isset( self::KEEP[ $area ] ) ? self::KEEP[ $area ] : 86400 );
+		return 'backups' === $area ? max( AB_MCP_Sync_Schema::UNQUALIFIED_DAYS, self::backup_days() ) * 86400 : ( isset( self::KEEP[ $area ] ) ? self::KEEP[ $area ] : 86400 );
 	}
 
 	/**
-	 * Days the backups of a run are kept: BACKUP_DAYS, or what the filter
-	 * ab_mcp_staging_backup_days says (1 to 3650).
+	 * Days a qualified close keeps its backups besides the last three
+	 * (decision 20, rule 3): BACKUP_DAYS, or what the filter
+	 * ab_mcp_staging_backup_days says (0 to 3650; Pro sets 30).
 	 *
 	 * @return int
 	 */
 	public static function backup_days() {
-		return max( 1, min( 3650, (int) apply_filters( self::BACKUP_DAYS_FILTER, self::BACKUP_DAYS ) ) );
+		return max( 0, min( 3650, (int) apply_filters( self::BACKUP_DAYS_FILTER, self::BACKUP_DAYS ) ) );
+	}
+
+	/**
+	 * Run $fn under the lock of the store's folder, where there is one: what
+	 * $fn does is then ordered against the clean-up, which reads the runs
+	 * whose backups it keeps under the same lock right before it removes
+	 * groups (sweep()). A way back for a closed run is made here, so no
+	 * sweep that read the runs before it removes the backups it needs
+	 * (decision 20, rule 4; Codex round 1 of branch 8, A6). Without a folder
+	 * there is nothing a sweep could remove, and $fn runs as it is.
+	 *
+	 * @param callable $fn What runs under the lock.
+	 * @return mixed What $fn returns, or WP_Error where the lock could not be taken.
+	 */
+	public static function under_lock( callable $fn ) {
+		$root = self::root();
+		if ( is_wp_error( $root ) ) {
+			return $fn();
+		}
+		return self::locked( $root, $fn );
 	}
 
 	/**
@@ -1743,6 +1790,7 @@ final class AB_MCP_Protected_Store {
 	 */
 	private static function sweep( $root, $id, $now ) {
 		$open    = AB_MCP_Sync_Schema::open_runs();
+		$backups = AB_MCP_Sync_Schema::backup_rows( $now );
 		$removed = 0;
 		$kept    = 0;
 		foreach ( self::AREAS as $area ) {
@@ -1762,7 +1810,7 @@ final class AB_MCP_Protected_Store {
 						}
 						continue;
 					}
-					if ( self::kept( $entry, $now, $open ) ) {
+					if ( self::kept( $entry, $now, $open, $backups ) ) {
 						if ( $entry['run_id'] > 0 && ( $now - $entry['created'] ) >= self::keep( $area ) ) {
 							++$kept;
 						}

@@ -145,6 +145,9 @@ final class SyncSafeCallsTest extends TestCase {
 	 * The calls outside ALLOWED, with the reason: file => call => array( count, reason ).
 	 */
 	private const EXCEPTIONS = array(
+		'class-sync-backup.php' => array(
+			'AB_MCP_Store_Budget::bookings' => array( 1, 'fits(): the booking of the run, which a backup has to fit beside the backups the run holds (GitHub Codex round 6 on free#137).' ),
+		),
 		'class-sync-canon.php'  => array(
 			'unserialize' => array( 1, 'unserialized(): after carries_record() refused every object, enum, reference and record, with allowed_classes => false.' ),
 		),
@@ -183,8 +186,8 @@ final class SyncSafeCallsTest extends TestCase {
 			'AB_MCP_Staging::role'   => array( 1, 'refusal(): only the confirmed staging site makes and gives out packages.' ),
 			'AB_MCP_Staging::bind'   => array( 2, 'binding() and refusal(): the random value of the role and pair a package is bound to.' ),
 			'AB_MCP_Staging::new_bind' => array( 1, 'refusal(): that value, made where the record has none.' ),
-			'AB_MCP_Staging::record' => array( 3, 'refusal(), make() and binding(): the pair, whose production site a package is for, and the confirmations a package is bound to.' ),
-			'home_url'               => array( 3, 'make(), binding() and relay_refusal(): the own address, for the inventory, the binding and whether it is public.' ),
+			'AB_MCP_Staging::record' => array( 4, 'refusal(), make(), make_objects() and binding(): the pair, whose production site a package is for, and the confirmations a package is bound to.' ),
+			'home_url'               => array( 4, 'make(), make_objects(), binding() and relay_refusal(): the own address, for the inventory, the binding and whether it is public.' ),
 		),
 		// The import (Z8, branch 5; Codex, round 1 of branch 7, A2): the
 		// connection a package is bound to, as a proposal and a report.
@@ -213,6 +216,81 @@ final class SyncSafeCallsTest extends TestCase {
 			'update_option' => array( 2, 'install(): writes that version (or that it failed).' ),
 			'delete_option' => array( 1, 'uninstall: removes that version.' ),
 			'dbDelta'       => array( 1, 'install(): makes the tables of the takeover.' ),
+		),
+		// The run (Z8, branch 8; decisions 17 to 20, 23 and 33): the engine
+		// writes through the API of WordPress by design, and reads back from
+		// the rows (AB_MCP_Sync_Rows) for every comparison; what it asks of
+		// WordPress besides are the rights of the account, the lock, the store
+		// and the probes of the check.
+		'class-sync-run.php'    => array(
+			'AB_MCP_Change_Lock::held'        => array( 4, 'under_lock(), settle(), update_step() and lock_fresh(): whether this request holds the lock of the write boundary (one lock per call, the decision of 07.11.2026 evening, Variante A).' ),
+			'AB_MCP_Change_Lock::release'     => array( 2, 'under_lock() and settle(): the lock of the write boundary given back at the end of the call, and after the decision of a reading call (decision 18; Variante A).' ),
+			'AB_MCP_Change_Lock::take'        => array( 2, 'under_lock(): the lock of the write boundary for the whole call that can change a run; settle(): for the decision of a reading call where a step is begun (decision 18; Variante A).' ),
+			'AB_MCP_Staging_Gate::connection' => array( 1, 'connection(): the connection of the call, which a run is bound to (decision 15).' ),
+			'get_option'                      => array( 1, 'lock_since(): the row of the lock of AB_MCP_Change_Lock, a time this plugin writes itself (decision 18); no value the takeover compares.' ),
+			'AB_MCP_Protected_Store::backup_days' => array( 1, 'set_state(): the days a close keeps its backups (the filter of Pro), stored as keep_until at the close (decision 20; A7).' ),
+		),
+		'class-sync-guard.php'  => array(
+			'add_action'          => array( 1, 'arm(): rest_api_init, where the REST filters of every registered type are hooked (A1).' ),
+			'delete_option'       => array( 2, 'end() and record(): removes the record of the boundary, an option this class writes itself.' ),
+			'get_metadata_by_mid' => array( 1, 'meta_by_mid(): the post a meta id belongs to, for the lock of the boundary by object; no value compared.' ),
+			'get_option'          => array( 5, 'begin(), end() and record(): the record of the boundary, an option this class writes itself; guarded() and mark(): the mark of a site that has had a run, an option this class writes itself (N3).' ),
+			'get_post_types'      => array( 1, 'arm_rest(): the post types registered, for the REST filters (A1); no stored value.' ),
+			'maybe_unserialize'   => array( 1, 'holding(): the record of the boundary read afresh from its row (AB_MCP_Sync_Rows::option()), an option this class writes itself (A1).' ),
+			'update_option'       => array( 2, 'begin(): writes that record; mark(): writes that mark, autoloaded (N3).' ),
+			'update_post_meta'    => array( 1, 'begin(): the edit lock _edit_lock of a covered post, so an editor sees it taken (decision 19); excluded from every comparison.' ),
+		),
+		'class-sync-resources.php' => array(
+			'AB_MCP_Protected_Store::root' => array( 1, 'measure(): the folder of the store, for the free space and the tempo of a write there (15.11).' ),
+		),
+		'class-sync-post-writer.php' => array(
+			'AB_MCP_Builder_Caches::clear'             => array( 1, 'post_write(): the builder caches of the written post (decision 33).' ),
+			'AB_MCP_Builders::is_markup_meta_key'      => array( 1, 'meta_allowed(): whether a key is the markup of a page builder (the list of the signatures and the filter); no stored value.' ),
+			'AB_MCP_Page_Cache::purge_posts'           => array( 1, 'post_write(): the page cache of the written post (decision 33).' ),
+			'AB_MCP_Tools_Content::saved_status'       => array( 2, 'precheck() and restore_row(): the status WordPress would store for the data handed over (decision 17); a calculation.' ),
+			'AB_MCP_Tools_Content::status_date_refusal' => array( 2, 'precheck() and restore_row(): the refusals of the free writer for a status and date (decision 17); a calculation.' ),
+			'add_metadata'                             => array( 1, 'write_meta(): the way forward of meta (decision 17).' ),
+			'clean_post_cache'                         => array( 1, 'post_write(): the caches of the written post.' ),
+			'current_user_can'                         => array( 15, 'precheck(): the rights of the account for each operation (decision 17, step 4), and delete_post_meta for a plain key only this site has, which the step removes (decision 28; GitHub Codex round 1 on free#137); term_right(): the right of a taxonomy to assign its terms, assign_term for each term, the right to make a term for a slug this site has no term of; restore_right(): the same rights asked again right before a part goes back on the way back, edit_post first for every part (GitHub Codex round 2 on free#137; Codex round 18).' ),
+			'delete_metadata'                          => array( 1, 'write_meta(): the way forward of meta.' ),
+			'get_gmt_from_date'                        => array( 1, 'prepare(): the UTC date WordPress derives where a published post hands none over, for the target of the row.' ),
+			'get_option'                               => array( 1, 'with_row(): the default category wp_insert_post() gives a new post with the row (the ownership rule, Codex round 3); read to know what the row call was to write, not compared to the staging site.' ),
+			'get_post_type_object'                     => array( 2, 'precheck() and restore_right(): the capabilities of the type.' ),
+			'get_taxonomy'                             => array( 1, 'term_right(): the capabilities of the taxonomy (assign_terms, edit_terms), as the rights ask them; no stored value compared (GitHub Codex round 2 on free#137).' ),
+			'get_term_by'                              => array( 1, 'term_right(): the id of the term of this site a slug names (post_format), for assign_term through map_meta_cap; the id is asked of the rights, never compared with the staging site (decision 28; GitHub Codex round 2 on free#137).' ),
+			'get_user_by'                              => array( 1, 'user_by_login(): the account of this site an author is written as (decision 25).' ),
+			'is_protected_meta'                        => array( 1, 'meta_allowed(): whether a key is protected (the rule of this version).' ),
+			'sanitize_post'                            => array( 1, 'precheck(): the sanitizers ahead, as wp_insert_post() runs them (decision 17).' ),
+			'taxonomy_exists'                          => array( 2, 'precheck() and restore_right(): whether a taxonomy is registered here.' ),
+			'update_metadata'                          => array( 1, 'write_meta(): the way forward of meta.' ),
+			'wp_cache_delete'                          => array( 4, 'post_write() and restore_meta(): the caches of the written post and its meta.' ),
+			'wp_get_theme'                             => array( 1, 'precheck(): the theme of this site, for the templates it offers (B7); no stored value compared.' ),
+			'->get_page_templates'                     => array( 1, 'precheck(): whether the theme offers the template page_template names, as wp_insert_post() checks it (decisions 17 and 28; B7).' ),
+			'wp_insert_post'                           => array( 1, 'write_row(): the way forward of a new post (decision 17).' ),
+			'wp_set_object_terms'                      => array( 2, 'write_terms() and restore_terms(): the way forward and back of terms (decisions 17 and 23).' ),
+			'wp_slash'                                 => array( 9, 'precheck(), write_row(), write_meta(), restore_row(): the slashing wp_insert_post() and the metadata API expect; in write_meta() the key as well as the value, since the metadata API unslashes both (GitHub Codex round 1 on free#137).' ),
+			'wp_update_post'                           => array( 2, 'write_row() and restore_row(): the way forward and back of the row (decisions 17 and 23).' ),
+		),
+		'class-sync-engine.php' => array(
+			'AB_MCP_Change_Lock::touch'       => array( 3, 'boundary(), write_parts() (the parts read back as written) and put_back() (each part put back, within the boundary and on the way back; B8): the heartbeat of the lock.' ),
+			'AB_MCP_Php_Probe::run'           => array( 1, 'run_verify(): the PHP probe of the site (decision 33).' ),
+			'AB_MCP_Protected_Store::available' => array( 1, 'run_check(): whether the store is proved (decision 7: no run without it).' ),
+			'AB_MCP_Protected_Store::cleanup' => array( 3, 'abort(), run_verify() and close_revert(): the retention of the backups after a close (decision 20).' ),
+			'AB_MCP_Protected_Store::refusal' => array( 1, 'run_check(): why the store is not proved.' ),
+			'AB_MCP_Store_Budget::book'       => array( 1, 'run_check(): the booking of the run (decision 8).' ),
+			'AB_MCP_Store_Budget::release'    => array( 4, 'abort(), run_verify(), close_revert() and abort_at(): the booking given back.' ),
+			'clean_term_cache'                => array( 1, 'run_post(): the term caches after the run (decision 33).' ),
+			'esc_html'                        => array( 2, 'sample_finding(): the title of the written object as the page shows it, the expected string of decision 33 (B4); the title comes from the journal, no stored value.' ),
+			'get_permalink'                   => array( 1, 'run_verify(): the address of a published object for the sample of decision 33; no value compared.' ),
+			'home_url'                        => array( 1, 'context(): the own address, as the export reads its own.' ),
+			'wp_remote_get'                   => array( 1, 'probe(): the sample of a published object answering 200 with its title (decision 33).' ),
+			'wptexturize'                     => array( 1, 'sample_finding(): the title as a theme shows it texturized (B4); a calculation on the journal\'s title.' ),
+		),
+		'class-sync-push.php'   => array(
+			'AB_MCP_Protected_Store::bind' => array( 1, 'bind_package(): the packages of objects bound to the run, kept while it is not closed.' ),
+		),
+		'class-sync-revert.php' => array(
+			'AB_MCP_Protected_Store::under_lock' => array( 1, 'begin(): a way back for a closed run is made under the lock of the store, against the clean-up (decision 20, rule 4; A6).' ),
 		),
 	);
 
@@ -258,7 +336,9 @@ final class SyncSafeCallsTest extends TestCase {
 						++$at;
 					}
 				}
-				if ( is_array( $token ) && T_FUNCTION === $token[0] ) {
+				if ( is_array( $token ) && T_FUNCTION === $token[0] && '(' !== self::after( $tokens, $i ) ) {
+					// A method or function by its name; a closure (function () use
+					// (…) {) declares none, and the first name inside it is a call.
 					$methods[ self::next_name( $tokens, $i ) ] = true;
 				}
 			}

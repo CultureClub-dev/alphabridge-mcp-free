@@ -5507,6 +5507,14 @@ msgctxt "tool label"
 msgid "Compare with the staging site"
 msgstr "Comparer avec le staging"
 
+msgctxt "tool label"
+msgid "Take objects over from the staging site"
+msgstr "Reprendre des objets depuis le staging"
+
+msgctxt "tool label"
+msgid "Take a takeover back"
+msgstr "Annuler une reprise"
+
 msgid "Off: nothing is asked."
 msgstr "Désactivé : rien n’est demandé."
 

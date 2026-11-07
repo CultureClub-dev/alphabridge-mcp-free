@@ -724,6 +724,73 @@ final class AB_MCP_Sync_Canon {
 	}
 
 	/**
+	 * The form back from the JSON of encode(), for a form whose leaves are
+	 * texts, bytes, integers, booleans or null and whose keys are text: the
+	 * backups of a run (AB_MCP_Sync_Backup: the rows a kind read, under
+	 * column names and indices). Bytes that are no UTF-8, which encode()
+	 * writes as {"~b":"<base64>"}, come back as their bytes (GitHub Codex
+	 * round 2 of branch 8, P2: the way back wrote the marker, an array, into
+	 * the meta row instead of the bytes). A marker that does not read back
+	 * (base64 that is not that of its bytes, bytes that are UTF-8 after all,
+	 * a float, a set or a key marker, which no such form carries) gives null:
+	 * the text is not one encode() wrote of such a form, so nothing is read
+	 * from it (fail closed). Not for the canonical form of an object, whose
+	 * markers (~set, ~php, ~s, ~ref) carry meaning and whose stored keys may
+	 * begin with "~": that form is compared by its hash, never read back.
+	 *
+	 * @param string $json  JSON of encode().
+	 * @param int    $depth How deep json_decode() reads.
+	 * @return mixed|null The form; null where the text is not one of encode().
+	 */
+	public static function decode( $json, $depth = 512 ) {
+		$value = json_decode( (string) $json, true, (int) $depth );
+		if ( JSON_ERROR_NONE !== json_last_error() ) {
+			return null;
+		}
+		$ok   = true;
+		$form = self::revived( $value, $ok );
+		return $ok ? $form : null;
+	}
+
+	/**
+	 * @param mixed $value Decoded JSON.
+	 * @param bool  $ok    Cleared where a marker does not read back.
+	 * @return mixed
+	 */
+	private static function revived( $value, &$ok ) {
+		if ( ! is_array( $value ) ) {
+			if ( is_float( $value ) ) {
+				// encode() writes a float as {"~f"}; a bare float is not its text.
+				$ok = false;
+				return null;
+			}
+			return $value;
+		}
+		$keys = array_keys( $value );
+		if ( array( '~b' ) === $keys ) {
+			$bytes = is_string( $value['~b'] ) ? base64_decode( $value['~b'], true ) : false; // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- the byte form of the canonical form.
+			if ( ! is_string( $bytes ) || base64_encode( $bytes ) !== $value['~b'] || 1 === preg_match( '//u', $bytes ) ) { // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- the round trip.
+				$ok = false;
+				return null;
+			}
+			return $bytes;
+		}
+		if ( array( '~f' ) === $keys || array( '~set' ) === $keys ) {
+			$ok = false;
+			return null;
+		}
+		$out = array();
+		foreach ( $value as $key => $item ) {
+			if ( is_string( $key ) && 0 === strpos( $key, '~k:' ) ) {
+				$ok = false;
+				return null;
+			}
+			$out[ $key ] = self::revived( $item, $ok );
+		}
+		return $out;
+	}
+
+	/**
 	 * A form with the ids of its references put into the ID space of the
 	 * other side (decision 10: «beidseitig geändert» compares the mapped
 	 * forms). A reference without a counterpart stays apart from every id

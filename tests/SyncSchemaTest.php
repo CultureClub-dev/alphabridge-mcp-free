@@ -141,23 +141,23 @@ final class SyncSchemaTest extends TestCase {
 		self::assertCount( 1, $GLOBALS['ab_test_dbdelta'] );
 		self::assertSame( AB_MCP_Sync_Schema::sql(), $GLOBALS['ab_test_dbdelta'][0] );
 		self::assertContains( 'table wp_ab_mcp_staging_pairs missing', $made->get_error_data()['problems'] );
-		self::assertMatchesRegularExpression( '/^failed:1:(\d+)\z/', (string) get_option( AB_MCP_Sync_Schema::OPTION ) );
+		self::assertMatchesRegularExpression( '/^failed:' . AB_MCP_Sync_Schema::VERSION . ':(\d+)\z/', (string) get_option( AB_MCP_Sync_Schema::OPTION ) );
 		self::assertGreaterThanOrEqual( $now, (int) substr( (string) get_option( AB_MCP_Sync_Schema::OPTION ), 9 ) );
 		self::assertSame( array( 'available' => false, 'reason' => 'failed' ), AB_MCP_Sync_Schema::status() );
 
 		// Now dbDelta() makes them: the version is stored, and they count.
 		self::db()->after_dbdelta = AbTestSyncWpdb::all_tables();
 		self::assertSame( array(), AB_MCP_Sync_Schema::install() );
-		self::assertSame( '1', get_option( AB_MCP_Sync_Schema::OPTION ) );
+		self::assertSame( (string) AB_MCP_Sync_Schema::VERSION, get_option( AB_MCP_Sync_Schema::OPTION ) );
 		self::assertSame( array( 'available' => true, 'reason' => null ), AB_MCP_Sync_Schema::status() );
 	}
 
 	public function testAFailedAttemptIsMadeAgainOnPluginsLoadedOnlyAfterTheWait(): void {
-		update_option( AB_MCP_Sync_Schema::OPTION, 'failed:1:' . ( time() - 10 ) );
+		update_option( AB_MCP_Sync_Schema::OPTION, 'failed:' . AB_MCP_Sync_Schema::VERSION . ':' . ( time() - 10 ) );
 		AB_MCP_Sync_Schema::maybe_upgrade();
 		self::assertSame( array(), $GLOBALS['ab_test_dbdelta'], 'Not again within RETRY: dbDelta() is not run on every request of a host that refuses the tables.' );
 
-		update_option( AB_MCP_Sync_Schema::OPTION, 'failed:1:' . ( time() - AB_MCP_Sync_Schema::RETRY - 1 ) );
+		update_option( AB_MCP_Sync_Schema::OPTION, 'failed:' . AB_MCP_Sync_Schema::VERSION . ':' . ( time() - AB_MCP_Sync_Schema::RETRY - 1 ) );
 		AB_MCP_Sync_Schema::maybe_upgrade();
 		self::assertCount( 1, $GLOBALS['ab_test_dbdelta'], 'After RETRY it is tried again.' );
 
@@ -167,14 +167,14 @@ final class SyncSchemaTest extends TestCase {
 		self::assertCount( 2, $GLOBALS['ab_test_dbdelta'] );
 
 		// The activation tries at once.
-		update_option( AB_MCP_Sync_Schema::OPTION, 'failed:1:' . time() );
+		update_option( AB_MCP_Sync_Schema::OPTION, 'failed:' . AB_MCP_Sync_Schema::VERSION . ':' . time() );
 		AB_MCP_Sync_Schema::install();
 		self::assertCount( 3, $GLOBALS['ab_test_dbdelta'] );
 	}
 
 	public function testPluginsLoadedMakesTheTablesWhenTheVersionIsAnotherAndOnlyThen(): void {
 		self::db()->after_dbdelta = AbTestSyncWpdb::all_tables();
-		foreach ( array( '' => 1, '0' => 1, '2' => 1, '1' => 0 ) as $stored => $runs ) {
+		foreach ( array( '' => 1, '0' => 1, '1' => 1, (string) AB_MCP_Sync_Schema::VERSION => 0 ) as $stored => $runs ) {
 			$GLOBALS['ab_test_dbdelta'] = array();
 			if ( '' === (string) $stored ) {
 				delete_option( AB_MCP_Sync_Schema::OPTION );
@@ -183,17 +183,17 @@ final class SyncSchemaTest extends TestCase {
 			}
 			AB_MCP_Sync_Schema::maybe_upgrade();
 			self::assertCount( $runs, $GLOBALS['ab_test_dbdelta'], 'stored version "' . $stored . '"' );
-			self::assertSame( '1', get_option( AB_MCP_Sync_Schema::OPTION ) );
+			self::assertSame( (string) AB_MCP_Sync_Schema::VERSION, get_option( AB_MCP_Sync_Schema::OPTION ) );
 		}
 	}
 
 	public function testStatusNamesWhyTheTablesCannotBeUsed(): void {
 		$cases = array(
 			array( null, false, 'not_installed' ),
-			array( 'failed:1:' . time(), false, 'failed' ),
-			array( '2', true, 'outdated' ),
-			array( '1', false, 'missing' ),
-			array( '1', true, null ),
+			array( 'failed:' . AB_MCP_Sync_Schema::VERSION . ':' . time(), false, 'failed' ),
+			array( '9', true, 'outdated' ),
+			array( (string) AB_MCP_Sync_Schema::VERSION, false, 'missing' ),
+			array( (string) AB_MCP_Sync_Schema::VERSION, true, null ),
 		);
 		foreach ( $cases as list( $stored, $tables, $reason ) ) {
 			AB_MCP_Sync_Schema::forget();

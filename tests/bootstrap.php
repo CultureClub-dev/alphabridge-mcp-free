@@ -1028,8 +1028,29 @@ function delete_user_meta( $user_id, $meta_key, $meta_value = '' ) {
 	return true;
 }
 
-/** Like WordPress with $delete_all: the key goes from every object of the kind. */
+/**
+ * Like WordPress with $delete_all: the key goes from every object of the
+ * kind; the key unslashed first, as core does (wp_unslash() in
+ * delete_metadata(), as in add_metadata() and update_metadata()).
+ */
 function delete_metadata( $meta_type, $object_id, $meta_key, $meta_value = '', $delete_all = false ) {
+	$meta_key = stripslashes( (string) $meta_key );
+	if ( 'post' === $meta_type ) {
+		// Post meta lives in $ab_test_meta (add_post_meta(), update_post_meta());
+		// the short-circuit filter as in core and in the add and update stubs.
+		$check = apply_filters( 'delete_post_metadata', null, $object_id, $meta_key, $meta_value, $delete_all );
+		if ( null !== $check ) {
+			return (bool) $check;
+		}
+		$found = false;
+		foreach ( $GLOBALS['ab_test_meta'] as $id => $keys ) {
+			if ( ( $delete_all || (int) $id === (int) $object_id ) && array_key_exists( $meta_key, $keys ) ) {
+				unset( $GLOBALS['ab_test_meta'][ $id ][ $meta_key ] );
+				$found = true;
+			}
+		}
+		return $found;
+	}
 	$found = false;
 	foreach ( $GLOBALS['ab_test_meta_store'][ (string) $meta_type ] ?? array() as $id => $keys ) {
 		if ( ( $delete_all || (int) $id === (int) $object_id ) && array_key_exists( (string) $meta_key, $keys ) ) {
