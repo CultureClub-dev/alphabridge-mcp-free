@@ -267,6 +267,9 @@ final class SyncTermWriterTest extends TestCase {
 		self::assertSame( 'term:taxonomy_rule', self::lock_of( AB_MCP_Sync_Term_Writer::target_of( self::line( array( 'taxonomy' => 'genre' ) ), self::item(), $ctx ) ), 'A taxonomy of a plugin.' );
 		self::assertSame( 'term:taxonomy_rule', self::lock_of( AB_MCP_Sync_Term_Writer::target_of( self::line( array( 'taxonomy' => 'nav_menu' ) ), self::item(), $ctx ) ), 'The menus are the kind menu.' );
 		self::assertSame( 'term:taxonomy_rule', self::lock_of( AB_MCP_Sync_Term_Writer::target_of( self::line( array(), array(), array( 'content' => array() ) ), self::item(), $ctx ) ), 'No content in the package.' );
+		$carries = self::line();
+		$carries['content']['terms'] = array( array( 'name' => 'X', 'slug' => 'x', 'taxonomy' => 'post_tag', 'term_id' => 3, 'term_order' => 0 ) );
+		self::assertSame( 'term:taxonomy_rule', self::lock_of( AB_MCP_Sync_Term_Writer::target_of( $carries, self::item(), $ctx ) ), 'A term carries no terms: a line that does is no line of a term.' );
 		$other = self::line();
 		$other['content']['row']['taxonomy'] = 'post_tag';
 		self::assertSame( 'term:taxonomy_rule', self::lock_of( AB_MCP_Sync_Term_Writer::target_of( $other, self::item(), $ctx ) ), 'The row and the identity name another taxonomy.' );

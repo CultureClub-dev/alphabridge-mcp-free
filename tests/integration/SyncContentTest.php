@@ -599,12 +599,19 @@ final class SyncContentTest extends TestCase {
 				self::assertSame( 'read', $part['state'], $part['part'] );
 			}
 		}
+		$hint_a = self::term_id_a( 'hint', 'post_tag' );
+		// Phase 7 emptied the caches of each term by the writer of its kind.
+		foreach ( self::run_status( (int) $run['run_id'] )['steps'] as $step ) {
+			if ( 'post' === $step['op'] ) {
+				self::assertSame( array( 'term:' . $news_a, 'term:' . $hint_a ), array_keys( $step['result']['objects'] ) );
+				self::assertSame( array( 'term', 'term_meta' ), $step['result']['objects'][ 'term:' . $news_a ] );
+			}
+		}
 		$after = self::term_row_a( $news_a );
 		self::assertSame( 'News &amp; Views', $after['name'], 'As WordPress stored it on staging.' );
 		self::assertSame( 'Fresh <em>news</em>.', $after['description'] );
 		self::assertSame( (string) $parent_a, $after['parent'], 'The parent by its pair.' );
 		self::assertSame( 'news', $after['slug'] );
-		$hint_a = self::term_id_a( 'hint', 'post_tag' );
 		self::assertSame( 'A hint.', self::term_row_a( $hint_a )['description'] );
 		$source = AB_MCP_Sync_Anchor::active()['source_id'];
 		self::assertSame( 'active', AB_MCP_Sync_Pairs::find_live( $source, 'term', (string) $hint_a )['state'] );
