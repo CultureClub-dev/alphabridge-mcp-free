@@ -148,17 +148,39 @@ Ablehnung entsteht, nennt sie den Weg.
   dem geschriebenen, auch Schlüssel und Taxonomien, die der Plan nicht nennt,
   etwa ein Schlüssel, den ein Hook anlegt und wieder entfernt; Codex-Runden 13
   bis 15; das Gegenstück zum Rückweg unten).
-- Ändert das Zurücksetzen eines Teils auf dem Rückweg einen anderen Teil
-  (eine Nebenwirkung des Kerns wie die Vorgabe-Kategorie, oder ein Hook, der
-  etwa beim Zurücksetzen der Kategorie die Schlagwörter setzt), verliert
-  dieser andere Teil jedes Eigentum: er bleibt stehen, ausser er gleicht der
-  Sicherung (für jeden Teil, nicht nur für die Zeile; Codex-Runde 12).
-  Verändert das Zurücksetzen sonst etwas am Objekt, auch einen Schlüssel oder
-  eine Taxonomie, die der Plan nicht nennt (ein Hook, der beim Zurücksetzen
-  der Kategorie einen Meta-Wert anlegt), hält der Rückweg für dieses Objekt
-  an: kein weiterer Teil geht von selbst zurück, das Objekt gilt nicht als
-  ganz zurück, das Paar wird `unclear` (Vergleich des ganzen Stands vor und
-  nach jedem Zurücksetzen; Codex-Runde 16).
+- Verändert das Zurücksetzen eines Teils auf dem Rückweg irgendetwas anderes
+  am Objekt (eine Nebenwirkung des Kerns wie die Vorgabe-Kategorie; ein Hook,
+  der beim Zurücksetzen der Kategorie die Schlagwörter setzt oder einen
+  Meta-Wert anlegt, auch einen Schlüssel oder eine Taxonomie, die der Plan
+  nicht nennt), hält der Rückweg für dieses Objekt an: kein weiterer Teil
+  geht von selbst zurück, jeder Teil ungleich Sicherung bleibt `left` mit
+  altem Wert, das Objekt gilt nicht als ganz zurück, das Paar wird `unclear`
+  (Vergleich des ganzen Stands vor und nach jedem Zurücksetzen; Codex-Runde
+  16). Die Notiz eines stehen gelassenen Teils nennt den Halt mit dem Teil,
+  dessen Zurücksetzen ihn auslöste, auch wenn `decide()` den Teil schon aus
+  eigenem Grund stehen lässt («changed since the step wrote it»). Die Marke
+  «fremd» auf dem veränderten Teil (Codex-Runde 12) entschied seit dem Halt
+  nichts mehr, was der Halt nicht entscheidet, und ist entfernt (die CI zu
+  GitHub-Codex 2 liess ihre Mutation überleben; Prüffälle
+  `testTagsAHookSetsAsTheCategoryGoesBackAreLeftNotTakenBack`,
+  `testAKeyAHookAddsAsACategoryGoesBackStopsTheWayBackOfTheObject`).
+- Rechte auf dem Rückweg (Entscheid 28; GitHub-Codex 2, P2): Unmittelbar vor
+  dem Zurücksetzen eines Teils fragt `put_back()` dieselben Rechte wie die
+  Vorwärtsgrenze, am Objekt (`AB_MCP_Sync_Post_Writer::restore_right()`):
+  für die Zeile `edit_post`, dazu `publish_posts`, wenn der gesicherte Status
+  `publish`, `future` oder `private` ist und die Zeile heute einen anderen
+  hält, und `edit_others_posts`, wenn der gesicherte Autor ein anderes Konto
+  ist; je Meta-Schlüssel `edit_post_meta` (Zeilen beidseits), `add_post_meta`
+  (die Sicherung hat mehr Zeilen) oder `delete_post_meta` (weniger) über
+  `map_meta_cap`, `_wp_page_template` mit `edit_post`; je Taxonomie die Rechte
+  wie vorwärts (`term_right()` über die gesicherten Schlüssel). Fehlt eines,
+  bleibt der Teil `left` mit Grund und altem Wert, fail closed, der Lauf
+  läuft weiter, der Schritt wird `unclear`, das Paar `unclear`; der Weg: den
+  Teil in wp-admin mit einem Konto setzen, das darf (der Schritt geht nur
+  einmal zurück). Vorher prüfte der Rückweg nur das Eigentum am Lauf;
+  `wp_update_post()`, das rohe SQL von `restore_meta()` und
+  `wp_set_object_terms()` fragen kein Recht (Prüffall
+  `testTheWayBackAsksTheRightsAtTheObjectAndLeavesAPartTheAccountMayNotWrite`).
 - Jeder alte Wert trägt die Marke der Regeln, nach denen dieser Build ihn
   zusammensetzt (`value_rules` = `AB_MCP_Sync_Post_Writer::VALUE_RULES`).
   Beim Ausgeben (`AB_MCP_Sync_Run::cap_values()`) zeigt die Antwort einen
@@ -377,6 +399,25 @@ Ablehnung entsteht, nennt sie den Weg.
   wie `edit_post_meta` für die Schlüssel des Sollwerts; verweigert, sperrt
   `ab_mcp_sync_rights` mit dem Schlüssel. `_wp_page_template` geht mit
   `edit_post` (eigene API, Entscheid 28).
+- Rechte je Taxonomie (Entscheid 28; GitHub-Codex 2, P2): Gesamtvorprüfung
+  und Grenze fragen für jede Taxonomie, die der Schritt berührt, die des
+  Sollwerts und die, die nur der Live-Post trägt und die der Schritt leert
+  (`write_terms()` ohne Term), das Recht der Taxonomie, Terme zuzuordnen (ihr
+  `cap->assign_terms`, auch für das Leeren), je Term `assign_term` über
+  `map_meta_cap` nach ID, bei einem Format nach der ID des Terms, den der
+  Slug auf der Live-Site nennt, und für einen Slug, zu dem die Live-Site noch
+  keinen Term hat, das Recht der Taxonomie, einen anzulegen (ihr
+  `cap->edit_terms`; `wp_set_object_terms()` legt ihn an, B6)
+  (`AB_MCP_Sync_Post_Writer::term_right()`). Fehlt eines, sperrt
+  `ab_mcp_sync_rights` vor dem ersten Schreiben. Vorher wurde `assign_term`
+  nur für Terme mit Ganzzahl-ID gefragt; Formate (Slugs) und nur live
+  vorhandene Taxonomien blieben ungefragt (Prüffälle
+  `testTheRightToSetTheTermsIsAskedForEveryTaxonomyTheStepTouchesByIdBySlugAndForOneOnlyThisSiteHas`,
+  `testAFormatNamedByItsSlugAndATaxonomyOnlyThisSiteHasAskTheRightToAssignBeforeTheFirstWrite`).
+  Eine nur live vorhandene Taxonomie, die auf der Live-Site nicht registriert
+  ist, sperrt `post:taxonomy_rule` (vorher scheiterte erst der Term-Aufruf
+  nach dem Zeilenaufruf); `live_meta_rule()` sperrt sie ohnehin, wenn sie
+  nicht `category`, `post_tag` oder `post_format` ist.
 - Meta-Schlüssel mit Backslash: `update_metadata()`, `add_metadata()` und
   `delete_metadata()` entfernen Backslashes auch aus dem Schlüssel
   (`wp_unslash()` in `wp-includes/meta.php`); `note\path` roh übergeben
@@ -529,6 +570,48 @@ Ablehnung entsteht, nennt sie den Weg.
   zu schützenden Läufe und löscht unter derselben Sperre, sieht den neuen
   Lauf also oder war vorher fertig (Entscheid 20 (4); A6). Ohne Ablage gibt es
   nichts zu schützen, der Lauf entsteht ohne Sperre.
+- Der Rückweg beginnt mit allen seinen Schritten oder gar nicht (GitHub-Codex
+  2, P1): `AB_MCP_Sync_Revert::begin()` führt den Lauf nach `reverting`, setzt
+  die Vorwärtsschritte auf `unclear`/`skipped` und legt alle Rückweg-Schritte
+  in einer Transaktion der Datenbank an (`AB_MCP_Sync_Run::transaction()`,
+  nach dem Muster von `AB_MCP_Sync_Pairs::transaction()`); scheitert etwas,
+  rollt alles zurück, der Lauf bleibt `open` oder `interrupted`, kein Schritt
+  des Rückwegs bleibt stehen, und die Ablehnung nennt den Zustand und den Weg
+  (erneut planen). Dasselbe für `create()`: ein Lauf entsteht mit allen seinen
+  Schritten oder gar nicht, auch der Rückweglauf eines geschlossenen Laufs;
+  die frühere Notlösung «`closed_aborted` nach gescheitertem Insert» entfällt.
+  Vorher stand der Lauf nach einem gescheiterten Insert oder einem Request,
+  der zwischen zwei Inserts endete, `reverting` mit einem Teil seines Plans,
+  und `close_revert()` meldete `closed_reverted`. Voraussetzung: die Tabellen
+  `runs` und `steps` sind InnoDB (dbDelta legt sie mit dem Vorgabe-Engine der
+  Datenbank an, auf MariaDB und MySQL ab 5.5 InnoDB); ein anderer Engine
+  lehnt vor jedem Schreiben ab (`ab_mcp_sync_run_engine`) und nennt
+  `ALTER TABLE … ENGINE=InnoDB` als Weg. Grenze: der Request, der zwischen
+  zwei Inserts endet, ist nicht als Mutation geführt (die Transaktion deckt ihn
+  mit demselben Rollback wie den gescheiterten Insert, den ein Trigger der
+  Datenbank im Prüffall stellt; Prüffälle
+  `testTheWayBackOfARunThatIsNotClosedBeginsWithAllOfItsStepsOrNotAtAll`,
+  `testAWriteOfTheRunAndItsStepsIsOneTransactionAndRefusedWithTheWayWithoutInnoDb`).
+- Die Sicherung liest zurück, was sie hielt, auch Bytes, die kein UTF-8 sind
+  (GitHub-Codex 2, P2): `AB_MCP_Sync_Canon::encode()` schreibt sie als Hülle
+  `{"~b": "<base64>"}`; `AB_MCP_Sync_Backup::get()` las mit `json_decode()`
+  allein, der Wert kam als Array, `meta_hash()` hashte ihn als «Array», und
+  `restore_meta()` hätte die Hülle statt der Bytes geschrieben. Neu liest
+  `get()` über `AB_MCP_Sync_Canon::decode()`, die Umkehr von `encode()` für
+  Formen aus Text, Bytes, Zahlen, Wahrheitswerten und Textschlüsseln (die
+  Sicherungen): die Hülle wird wieder zu den Bytes; eine Hülle, die nicht
+  zurückliest (kein Base64 ihrer Bytes, UTF-8, eine Float-, Set- oder
+  Schlüsselmarke, die keine Sicherung trägt), macht die Sicherung ungültig
+  (`ab_mcp_sync_backup_shape`, fail closed). Für die kanonische Form eines
+  Objekts (Marken `~set`, `~php`, `~s`, `~ref`; gespeicherte Schlüssel mit
+  `~`) gilt `decode()` nicht; sie wird über ihren Hash verglichen, nie
+  zurückgelesen. Grenze: Auf MariaDB mit striktem SQL-Modus nimmt eine
+  `utf8mb4`-Spalte solche Bytes nicht an; der Fall entsteht auf Spalten oder
+  Verbindungen, die UTF-8 nicht prüfen (`binary`, ältere Server). Die
+  Prüffälle stellen ihn an der Sicherung selbst (Rundreise über die echte
+  Ablage) und an `decode()`
+  (`testABackupGivesBytesThatAreNoUtf8BackAsBytesNotAsTheMarkerOfTheCanon`,
+  `testABackupReadsBackBytesThatAreNoUtf8AsBytesNotAsTheMarker`).
 
 ## Lauf und Plan (Entscheide 15, 16, 32)
 
@@ -688,10 +771,24 @@ Ablehnung entsteht, nennt sie den Weg.
   dem Rückweg des geschlossenen Laufs ganz stehen (Vorschau `will` = `stays`),
   verweigerter Zeilenaufruf ohne Schreiben (`failed`, nichts `left`). Unit
   dazu: Schlüssel mit Backslash, Recht zum Entfernen eines nur live
-  vorhandenen Schlüssels. Mutationen: `tests/mutation/lists/lauf.php` (aus
-  `tests/mutation/gen/lauf.py`), je Bedingung von `decide()` und
-  `deviated()`, für die Aufzeichnung von `pre`/`post`/`own`, für den alten
-  Wert und seine Kappung.
+  vorhandenen Schlüssels. GitHub-Codex 2 (07.11.2026), je ohne die Behebung
+  rot: Integration – der Rückweg beginnt mit allen Schritten oder gar nicht
+  (Trigger der Datenbank verweigert den zweiten Rückweg-Schritt, im selben
+  Lauf und im Rückweglauf eines geschlossenen Laufs), Rechte am Objekt auf
+  dem Rückweg (Schlüssel über `auth_post_meta_note`, Seite über `edit_post`,
+  Term über `assign_term` verweigert: drei Teile `left` mit altem Wert), Rechte
+  je Taxonomie vorwärts (Format-Slug ohne Term, mit Term, nur live vorhandene
+  Taxonomie: je `closed_aborted` vor dem ersten Schreiben), die Sicherung mit
+  Bytes, die kein UTF-8 sind; Unit – `term_right()` und `precheck()` über
+  jede Taxonomie, `restore_right()` je Teil, `transaction()` (Engine-Prüfung,
+  Commit, Rollback bei `WP_Error` und Ausnahme), die zweite Prüfung der Art
+  beim Schreiben (`restore_row()`, `restore_meta()` gegen `$written`),
+  `AB_MCP_Sync_Canon::decode()` mit jeder abgelehnten Hülle. Mutationen:
+  `tests/mutation/lists/lauf.php` (aus `tests/mutation/gen/lauf.py`), je
+  Bedingung von `decide()` und `deviated()`, für die Aufzeichnung von
+  `pre`/`post`/`own`, für den alten Wert und seine Kappung, je Recht von
+  `term_right()` und `restore_right()`, für die Transaktion in `begin()` und
+  `create()`, für `decode()` je Hülle.
 - Nicht als Mutation geführt: die Wächter gegen eine Datenbank, die ein Lesen
   oder Schreiben verweigert (keine Test-Site verweigert), das Budget der
   Gesamtvorprüfung über Aufrufe mit Tausenden Objekten (die Fortsetzung selbst
@@ -712,6 +809,10 @@ Ablehnung entsteht, nennt sie den Weg.
   verweigert das Löschen), die Behandlung eines Journals ohne den Schlüssel
   `object.deviated` als abgewichen (kein Lauf dieses Stands schreibt ein
   solches Journal), die frische Lesung je Teil in `put_back()` (`$seen =
-  $again`: die Art liest beim Schreiben ohnehin noch einmal, beide allein
-  halten N3) und die Texte der Ablehnungen (`AnswerWayTest` hält, dass jede
-  einen Weg nennt).
+  $again`: die Art liest beim Schreiben ohnehin noch einmal; deren zweite
+  Prüfung hält seit GitHub-Codex 2 ein Unit-Test, weil zwischen beiden
+  Lesungen kein Hook läuft und keine Site eine Änderung dazwischen stellt),
+  die Fehlerpfade von `update_step()` und `START TRANSACTION`/`COMMIT` in
+  `begin()` und `transaction()` (keine Test-Datenbank verweigert sie; der
+  gescheiterte Insert ist geführt) und die Texte der Ablehnungen
+  (`AnswerWayTest` hält, dass jede einen Weg nennt).

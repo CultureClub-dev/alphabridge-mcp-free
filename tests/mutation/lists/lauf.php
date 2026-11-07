@@ -49,7 +49,13 @@
  * never a credential, capped per answer), decide() leaves every part of a
  * deviated object and every part never read back; the turn within the
  * boundary, A2, the ownership of the default category on the way back and
- * the way back by the target of an interrupted step are gone.
+ * the way back by the target of an interrupted step are gone. GitHub Codex
+ * round 2 on free#137: the way back begins with all of its steps or not at
+ * all (one transaction, also for a run made), the rights at the object asked
+ * again right before a part goes back, the right to set the terms of every
+ * taxonomy the step touches (by id, by slug, one only this site has), the
+ * backup giving bytes that are no UTF-8 back as bytes; the mark of another
+ * hand on a part the way back changed is gone (the halt decides).
  *
  * Written by tests/mutation/gen/lauf.py from the source; change the entries
  * there and run it again.
