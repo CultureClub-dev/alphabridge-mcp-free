@@ -14,7 +14,8 @@
  * order, author, comment and ping status, mime type), its meta of the one
  * core key with an API of its own (_wp_page_template) and, on a post that
  * is there, plain keys (not beginning with _) the account may edit on it
- * (edit_post_meta; never a protected, credential or page builder key), its
+ * (edit_post_meta, and delete_post_meta for a key only this site has, which
+ * the step removes; never a protected, credential or page builder key), its
  * terms of category, post_tag and post_format. A post of another core type
  * (templates, template parts, global styles, navigations, reusable blocks),
  * a meta key outside that rule, a term of another taxonomy, a new post with
@@ -333,6 +334,22 @@ final class AB_MCP_Sync_Post_Writer {
 		foreach ( array_keys( $prepared['meta'] ) as $key ) {
 			if ( null !== $live_id && ! in_array( $key, self::CORE_META, true ) && ! current_user_can( 'edit_post_meta', (int) $live_id, $key ) ) {
 				return self::rights( sprintf( 'edit the meta key %s of the post (edit_post_meta)', $key ) );
+			}
+		}
+		// A plain key only this site has is removed by the step (write_meta()
+		// with no value): the right to remove it, per key, through
+		// map_meta_cap, before anything is written (decision 28; the metadata
+		// API asks no right itself; GitHub Codex round 1 of branch 8). The
+		// core key with an API of its own goes with edit_post.
+		if ( null !== $live_id ) {
+			$current = self::current( (int) $live_id );
+			if ( is_wp_error( $current ) ) {
+				return $current;
+			}
+			foreach ( is_array( $current ) ? $current['meta'] : array() as $row ) {
+				if ( ! isset( $prepared['meta'][ $row['key'] ] ) && ! in_array( $row['key'], self::CORE_META, true ) && ! current_user_can( 'delete_post_meta', (int) $live_id, $row['key'] ) ) {
+					return self::rights( sprintf( 'remove the meta key %s of the post (delete_post_meta)', $row['key'] ) );
+				}
 			}
 		}
 		// The template the theme of this site offers for the type (B7): as
