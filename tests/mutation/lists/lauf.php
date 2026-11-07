@@ -66,7 +66,8 @@
  * Codex round 4: the abort under the lock and the run read again under it
  * before a step is begun; an interrupted run of the way back led on with
  * the token or closed as checked; the error log counted from its mark in
- * chunks.
+ * chunks. GitHub Codex round 5: a term_order other than 0 locks the post
+ * and is part of the hash of the terms; the caches of phase 7 in parts.
  *
  * Written by tests/mutation/gen/lauf.py from the source; change the entries
  * there and run it again.
@@ -1932,5 +1933,50 @@ return array(
 		'replace' => "\t\t\t\$capped = false;",
 		'run'     => $unit( 'SyncRunTest', 'testTheErrorLogIsCountedFromItsMarkInChunksWithACapAndARotationIsSaidSo' ),
 		'expect'  => '/testTheErrorLogIsCountedFromItsMarkInChunksWithACapAndARotationIsSaidSo/',
+	),
+	array(
+		'id'      => 'lauf/writer-term-order-lock',
+		'clause'  => 'precheck(): a relationship of the post here with a term_order other than 0 is locked before anything is written (P2)',
+		'file'    => $pw,
+		'search'  => "\t\t\tif ( 0 !== (int) \$term['term_order'] ) {\n\t\t\t\treturn self::locked( 'post:term_order'",
+		'replace' => "\t\t\tif ( false ) {\n\t\t\t\treturn self::locked( 'post:term_order'",
+		'run'     => $it( 'SyncRunTest', 'testAPostWhoseTermHasAnOrderIsLockedBeforeTheFirstWriteAndOneWithoutGoesOverAndBack' ),
+		'expect'  => '/testAPostWhoseTermHasAnOrderIsLockedBeforeTheFirstWriteAndOneWithoutGoesOverAndBack/',
+	),
+	array(
+		'id'      => 'lauf/writer-term-entries-order',
+		'clause'  => 'term_entries(): an order other than 0 is part of the entry, so the hash differs from the keys alone',
+		'file'    => $pw,
+		'search'  => "\t\t\t\$out[] = 0 !== \$order ? \$key . '#' . \$order : \$key;",
+		'replace' => "\t\t\t\$out[] = \$key;",
+		'run'     => $unit( 'SyncRunTest', 'testARelationshipWithATermOrderLocksThePostAndIsPartOfTheHashOfItsTerms' ),
+		'expect'  => '/testARelationshipWithATermOrderLocksThePostAndIsPartOfTheHashOfItsTerms/',
+	),
+	array(
+		'id'      => 'lauf/writer-restore-terms-entries',
+		'clause'  => 'restore_terms(): read back as the backup by the entries, the order included; otherwise unclear',
+		'file'    => $pw,
+		'search'  => "\t\tif ( ! is_array( \$after ) || self::terms_hash( self::term_entries( \$after, \$taxonomy ) ) !== \$before ) {",
+		'replace' => "\t\tif ( ! is_array( \$after ) ) {",
+		'run'     => $it( 'SyncRunTest', 'testAPartAHookChangedAfterItWasPutBackIsUnclearNotRestored' ),
+		'expect'  => '/testAPartAHookChangedAfterItWasPutBackIsUnclearNotRestored/',
+	),
+	array(
+		'id'      => 'lauf/engine-post-budget',
+		'clause'  => 'run_post(): the caches in parts within the work of the call, the cursor kept (P2)',
+		'file'    => $en,
+		'search'  => "\t\t\tif ( \$i > (int) \$result['cursor'] && self::now() - \$started > self::\$work ) {",
+		'replace' => "\t\t\tif ( false ) {",
+		'run'     => $it( 'SyncRunTest', 'testTheCachesOfPhaseSevenAreEmptiedInPartsWithinTheWorkOfEachCallEachObjectOnce' ),
+		'expect'  => '/testTheCachesOfPhaseSevenAreEmptiedInPartsWithinTheWorkOfEachCallEachObjectOnce/',
+	),
+	array(
+		'id'      => 'lauf/engine-post-cursor',
+		'clause'  => 'run_post(): the next call goes on at the cursor, each object emptied once',
+		'file'    => $en,
+		'search'  => "\t\t\$count  = count( \$ids );\n\t\tfor ( \$i = (int) \$result['cursor']; \$i < \$count; \$i++ ) {",
+		'replace' => "\t\t\$count  = count( \$ids );\n\t\tfor ( \$i = 0; \$i < \$count; \$i++ ) {",
+		'run'     => $it( 'SyncRunTest', 'testTheCachesOfPhaseSevenAreEmptiedInPartsWithinTheWorkOfEachCallEachObjectOnce' ),
+		'expect'  => '/testTheCachesOfPhaseSevenAreEmptiedInPartsWithinTheWorkOfEachCallEachObjectOnce/',
 	),
 );

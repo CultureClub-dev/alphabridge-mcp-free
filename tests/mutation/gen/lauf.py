@@ -584,6 +584,24 @@ e('engine-log-read-failed', 'error_log_lines_since(): a read that fails is no en
 e('engine-log-capped', 'error_log_lines_since(): read up to the cap with more behind it is said so, never «no new line»', EN,
   "\t\t\t$capped = $read >= (int) $max && $from + $read < (int) $size;", "\t\t\t$capped = false;", 'unit', LOG)
 
+# ------------------------------- GitHub Codex round 5 on free#137 (two P2)
+# A relationship with a term_order other than 0 locks the post before the
+# first write, and the order is part of the hash of the terms; the caches of
+# phase 7 in parts within the work of each call, each object once.
+ORDER_UNIT = 'testARelationshipWithATermOrderLocksThePostAndIsPartOfTheHashOfItsTerms'
+ORDER_IT = 'testAPostWhoseTermHasAnOrderIsLockedBeforeTheFirstWriteAndOneWithoutGoesOverAndBack'
+CACHES = 'testTheCachesOfPhaseSevenAreEmptiedInPartsWithinTheWorkOfEachCallEachObjectOnce'
+e('writer-term-order-lock', 'precheck(): a relationship of the post here with a term_order other than 0 is locked before anything is written (P2)', PW,
+  "\t\t\tif ( 0 !== (int) $term['term_order'] ) {\n\t\t\t\treturn self::locked( 'post:term_order'", "\t\t\tif ( false ) {\n\t\t\t\treturn self::locked( 'post:term_order'", 'it', ORDER_IT)
+e('writer-term-entries-order', 'term_entries(): an order other than 0 is part of the entry, so the hash differs from the keys alone', PW,
+  "\t\t\t$out[] = 0 !== $order ? $key . '#' . $order : $key;", "\t\t\t$out[] = $key;", 'unit', ORDER_UNIT)
+e('writer-restore-terms-entries', 'restore_terms(): read back as the backup by the entries, the order included; otherwise unclear', PW,
+  "\t\tif ( ! is_array( $after ) || self::terms_hash( self::term_entries( $after, $taxonomy ) ) !== $before ) {", "\t\tif ( ! is_array( $after ) ) {", 'it', 'testAPartAHookChangedAfterItWasPutBackIsUnclearNotRestored')
+e('engine-post-budget', 'run_post(): the caches in parts within the work of the call, the cursor kept (P2)', EN,
+  "\t\t\tif ( $i > (int) $result['cursor'] && self::now() - $started > self::$work ) {", "\t\t\tif ( false ) {", 'it', CACHES)
+e('engine-post-cursor', 'run_post(): the next call goes on at the cursor, each object emptied once', EN,
+  "\t\t$count  = count( $ids );\n\t\tfor ( $i = (int) $result['cursor']; $i < $count; $i++ ) {", "\t\t$count  = count( $ids );\n\t\tfor ( $i = 0; $i < $count; $i++ ) {", 'it', CACHES)
+
 
 def test_of(expect):
     return expect.split(' with data set "', 1)[0]
@@ -698,7 +716,8 @@ out.append('''<?php
  * Codex round 4: the abort under the lock and the run read again under it
  * before a step is begun; an interrupted run of the way back led on with
  * the token or closed as checked; the error log counted from its mark in
- * chunks.
+ * chunks. GitHub Codex round 5: a term_order other than 0 locks the post
+ * and is part of the hash of the terms; the caches of phase 7 in parts.
  *
  * Written by tests/mutation/gen/lauf.py from the source; change the entries
  * there and run it again.

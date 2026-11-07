@@ -187,7 +187,7 @@ final class AB_MCP_Sync_Engine {
 				$done = self::run_write( $run, $picked, $ctx );
 				break;
 			case 'post':
-				$done = self::run_post( $run, $picked, $ctx );
+				$done = self::run_post( $run, $picked, $ctx, $started );
 				break;
 			case 'verify':
 				$done = self::run_verify( $run, $picked, $ctx, $started );
@@ -1657,7 +1657,7 @@ final class AB_MCP_Sync_Engine {
 			$put = AB_MCP_Sync_Post_Writer::restore_meta( $live_id, $key, AB_MCP_Sync_Post_Writer::meta_values( $backup, $key ), (string) $hash );
 		} else {
 			$taxonomy = substr( $name, 6 );
-			$put      = AB_MCP_Sync_Post_Writer::restore_terms( $live_id, $taxonomy, AB_MCP_Sync_Post_Writer::term_keys( $backup, $taxonomy ), (string) $hash );
+			$put      = AB_MCP_Sync_Post_Writer::restore_terms( $live_id, $taxonomy, $backup, (string) $hash );
 		}
 		if ( is_wp_error( $put ) ) {
 			return array(
@@ -1669,29 +1669,55 @@ final class AB_MCP_Sync_Engine {
 	}
 
 	/**
-	 * Phase 7: the caches of what the run wrote (decision 33).
+	 * Phase 7: the caches of what the run wrote (decision 33), in parts
+	 * within the work of each call, the cursor kept in the result of the
+	 * step (GitHub Codex round 5 on free#137, P2).
 	 *
-	 * @param array $run  Run.
-	 * @param array $step Step.
-	 * @param array $ctx  context().
+	 * @param array $run     Run.
+	 * @param array $step    Step.
+	 * @param array $ctx     context().
+	 * @param float $started When the call began.
 	 * @return array|WP_Error
 	 */
-	private static function run_post( array $run, array $step, array $ctx ) {
+	private static function run_post( array $run, array $step, array $ctx, $started ) {
 		unset( $ctx );
-		$steps  = AB_MCP_Sync_Run::steps( (int) $run['run_id'] );
-		$done   = array();
-		foreach ( is_array( $steps ) ? $steps : array() as $one ) {
+		$steps = AB_MCP_Sync_Run::steps( (int) $run['run_id'] );
+		if ( is_wp_error( $steps ) ) {
+			return $steps;
+		}
+		$ids = array();
+		foreach ( $steps as $one ) {
 			if ( 'write' === $one['op'] && 'done' === $one['state'] && is_array( $one['result'] ) && isset( $one['result']['live_ref'] ) ) {
-				$done[ (string) $one['result']['live_ref'] ] = AB_MCP_Sync_Post_Writer::post_write( (int) $one['result']['live_ref'] );
+				$ids[] = (int) $one['result']['live_ref'];
 			}
+		}
+		// In parts, within the work of the call, the cursor kept in the result
+		// of the step (as the check and the verification; GitHub Codex round 5
+		// on free#137, P2: before, every object in one call without a budget,
+		// and a call that ran out of time left the step planned, the next one
+		// beginning at the first object again). Each object is emptied once:
+		// the cursor stands at the first object not emptied yet; a request
+		// that ends between an emptying and its cursor empties those objects
+		// again, which changes nothing (a cache emptied twice is empty).
+		$result = is_array( $step['result'] ) && isset( $step['result']['cursor'] ) ? $step['result'] : array(
+			'cursor'  => 0,
+			'objects' => array(),
+		);
+		$count  = count( $ids );
+		for ( $i = (int) $result['cursor']; $i < $count; $i++ ) {
+			if ( $i > (int) $result['cursor'] && self::now() - $started > self::$work ) {
+				$result['cursor'] = $i;
+				AB_MCP_Sync_Run::update_step( (int) $run['run_id'], (int) $step['seq'], array( 'result' => $result ), 'planned' );
+				AB_MCP_Sync_Run::touch( (int) $run['run_id'] );
+				return array( 'next' => sprintf( 'The caches of %1$d of %2$d written object(s) were emptied within the work of this call; call action=next again to go on with them.', $i, $count ) );
+			}
+			$result['objects'][ (string) $ids[ $i ] ] = AB_MCP_Sync_Post_Writer::post_write( $ids[ $i ] );
 		}
 		foreach ( AB_MCP_Sync_Post_Writer::TAXONOMIES as $taxonomy ) {
 			clean_term_cache( array(), $taxonomy, true );
 		}
-		$result = array(
-			'message' => sprintf( 'The caches of %d written object(s) were emptied (post, meta and term caches, the builder caches, the page cache where a caching plugin is known).', count( $done ) ),
-			'objects' => $done,
-		);
+		unset( $result['cursor'] );
+		$result['message'] = sprintf( 'The caches of %d written object(s) were emptied (post, meta and term caches, the builder caches, the page cache where a caching plugin is known).', count( $result['objects'] ) );
 		AB_MCP_Sync_Run::update_step( (int) $run['run_id'], (int) $step['seq'], array( 'state' => 'done', 'result' => $result ), 'planned' );
 		AB_MCP_Sync_Run::touch( (int) $run['run_id'] );
 		return array( 'next' => $result['message'] . ' Call action=next for the check of the run, which closes it.' );

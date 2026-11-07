@@ -912,6 +912,132 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( 'Write to us.', self::row_a( (int) $a['contact'] )['post_content'] );
 	}
 
+	public function testAPostWhoseTermHasAnOrderIsLockedBeforeTheFirstWriteAndOneWithoutGoesOverAndBack(): void {
+		// GitHub Codex round 5 on free#137 (P2): a live relationship with a
+		// term_order other than 0 (a plugin that sorts the terms) would lose
+		// its order on the way back (wp_set_object_terms() makes every
+		// relationship anew with 0), and the way back compared the keys only.
+		// Such a post is locked before the first write (post:term_order,
+		// nothing written); a post with the order 0, as the core writes it,
+		// goes over and back as before.
+		self::pair();
+		$news_a  = wp_insert_term( 'News', 'category' );
+		$other_a = wp_insert_term( 'Other', 'category' );
+		self::assertIsArray( $news_a, is_wp_error( $news_a ) ? $news_a->get_error_message() : '' );
+		self::assertIsArray( $other_a, is_wp_error( $other_a ) ? $other_a->get_error_message() : '' );
+		$news_b  = (int) self::b( array( array( 'op' => 'insert_term', 'name' => 'News', 'taxonomy' => 'category', 'as' => 'term' ) ) )['term'];
+		$other_b = (int) self::b( array( array( 'op' => 'insert_term', 'name' => 'Other', 'taxonomy' => 'category', 'as' => 'term' ) ) )['term'];
+		$story_a = wp_insert_post( wp_slash( self::page( 'story', 'A story.', array( 'post_type' => 'post', 'post_category' => array( (int) $news_a['term_id'] ) ) ) ), true );
+		self::assertIsInt( $story_a );
+		$story_b = (int) self::b( array( array( 'op' => 'insert_post', 'args' => self::page( 'story', 'A story.', array( 'post_type' => 'post', 'post_category' => array( $news_b ) ) ), 'as' => 'post' ) ) )['post'];
+		self::paired( self::staged() );
+		self::change_on_b( (string) $story_b, 'story', 'A story, on staging.', array( 'post_type' => 'post', 'post_category' => array( $other_b ) ) );
+		// A sorting plugin gives the relationship of News the order 3, past
+		// every hook; the canonical form of the post carries it.
+		global $wpdb;
+		$ttid = (int) $news_a['term_taxonomy_id'];
+		$wpdb->update( $wpdb->term_relationships, array( 'term_order' => 3 ), array( 'object_id' => $story_a, 'term_taxonomy_id' => $ttid ) );
+		clean_object_term_cache( $story_a, 'post' );
+		$slugs = static fn(): array => array_values( array_map( static fn( $t ) => $t->slug, wp_get_object_terms( $story_a, 'category' ) ) );
+		// The order is part of the canonical form: the post changed on both
+		// sides, a conflict, chosen staging_wins; the check before the first
+		// write locks it all the same.
+		$ids    = self::staged();
+		$report = self::report( $ids );
+		$entry  = self::post_entry( $report['all'], 'story' );
+		self::assertSame( 'choose', $entry['action'], json_encode( $entry ) );
+		$package = self::objects( $report['report_hash'], self::refs_of( array( $entry ) ) );
+		$run     = self::begun( array( 'action' => 'plan', 'report_id' => $report['report_id'], 'choices' => array( array( 'entry' => (int) $entry['n'], 'choice' => 'staging_wins' ) ), 'packages' => array( $package ) ) );
+		$check   = self::finish( (int) $run['run_id'] );
+		self::assertSame( 'closed_aborted', $check['state'], json_encode( $check ) );
+		$finding = json_encode( self::step( $check, 1 )['result']['findings'] );
+		self::assertStringContainsString( 'post:term_order', $finding );
+		self::assertStringContainsString( 'carries the term_order 3', $finding );
+		self::assertSame( 'A story.', self::row_a( $story_a )['post_content'], 'Nothing written.' );
+		self::assertSame( array( 'news' ), $slugs() );
+		self::assertSame( '3', AB_MCP_IT_Sites::rows( 'a', 'term_relationships', array( 'object_id' => (string) $story_a, 'term_taxonomy_id' => (string) $ttid ) )[0]['term_order'], 'The order stands.' );
+		// With the order 0 the post goes over and back as before, every part restored.
+		$wpdb->update( $wpdb->term_relationships, array( 'term_order' => 0 ), array( 'object_id' => $story_a, 'term_taxonomy_id' => $ttid ) );
+		clean_object_term_cache( $story_a, 'post' );
+		$planned = self::planned( array( 'story' ) );
+		$run     = self::begun( $planned['args'] );
+		self::probe_ok();
+		self::assertSame( 'closed_done', self::finish( (int) $run['run_id'] )['state'] );
+		self::assertSame( array( 'other' ), $slugs() );
+		$begun = self::revert( (int) $run['run_id'] );
+		$back  = self::revert_all( (int) $begun['run_id'] );
+		self::assertSame( 'closed_reverted', $back['state'], json_encode( $back ) );
+		self::assertSame( array( 'news' ), $slugs() );
+	}
+
+	public function testTheCachesOfPhaseSevenAreEmptiedInPartsWithinTheWorkOfEachCallEachObjectOnce(): void {
+		// GitHub Codex round 5 on free#137 (P2): phase 7 emptied the caches of
+		// every written object in one call, without a budget and without a
+		// cursor; a call that ran out of time left the step planned, and the
+		// next one began at the first object again. Now the caches are emptied
+		// in parts within the work of each call, the cursor kept in the result
+		// of the step; each object is emptied once; then the check closes the run.
+		self::pair();
+		$a = self::pages_on_a( array( 'contact' => 'Write to us.', 'about' => 'About us.', 'team' => 'Our team.' ) );
+		$b = self::pages_on_b( array( 'contact' => 'Write to us.', 'about' => 'About us.', 'team' => 'Our team.' ) );
+		self::paired( self::staged() );
+		foreach ( array( 'contact' => 'Write to us on staging.', 'about' => 'About us, on staging.', 'team' => 'Our team, on staging.' ) as $name => $content ) {
+			self::change_on_b( $b[ $name ], $name, $content );
+		}
+		$planned = self::planned( array( 'contact', 'about', 'team' ) );
+		$run_id  = (int) self::begun( $planned['args'] )['run_id'];
+		for ( $i = 0; $i < 4; $i++ ) {
+			self::assertSame( 'done', self::next( $run_id )['step']['state'], 'The check and the three pages.' );
+		}
+		// How often each page's cache is emptied (clean_post_cache fires the action).
+		$cleaned = array();
+		add_action(
+			'clean_post_cache',
+			static function ( $post_id ) use ( &$cleaned ) {
+				$cleaned[ (int) $post_id ] = ( $cleaned[ (int) $post_id ] ?? 0 ) + 1;
+			}
+		);
+		// A limit of 30 s, not raised: the work of a call is 15 s; with 20 s
+		// passing per object one object is emptied per call.
+		AB_MCP_Sync_Resources::$time = static fn(): array => array( 'before' => 30, 'after' => 30 );
+		AB_MCP_Sync_Engine::$clock   = static function (): float {
+			static $t = 1000.0;
+			$t += 20;
+			return $t;
+		};
+		try {
+			$one = self::next( $run_id );
+			self::assertIsArray( $one, is_wp_error( $one ) ? $one->get_error_message() : '' );
+			self::assertSame( array( 'post', 'planned' ), array( $one['step']['op'], $one['step']['state'] ) );
+			self::assertSame( 1, $one['step']['result']['cursor'] );
+			self::assertCount( 1, $one['step']['result']['objects'] );
+			self::assertCount( 1, $cleaned, 'One object emptied in the first call.' );
+			$per = (int) max( $cleaned );
+			self::assertGreaterThan( 0, $per, 'How often one emptying fires clean_post_cache.' );
+			self::assertStringContainsString( 'caches of 1 of 3 written object(s) were emptied within the work of this call', $one['next'] );
+			$two = self::next( $run_id );
+			self::assertSame( 'planned', $two['step']['state'] );
+			self::assertSame( 2, $two['step']['result']['cursor'] );
+			self::assertCount( 2, $two['step']['result']['objects'] );
+			$three = self::next( $run_id );
+			self::assertSame( 'done', $three['step']['state'] );
+			self::assertCount( 3, $three['step']['result']['objects'] );
+			self::assertArrayNotHasKey( 'cursor', $three['step']['result'] );
+			self::assertStringContainsString( 'caches of 3 written object(s) were emptied', $three['step']['result']['message'] );
+		} finally {
+			remove_all_actions( 'clean_post_cache' );
+			AB_MCP_Sync_Engine::$clock   = null;
+			AB_MCP_Sync_Resources::$time = null;
+		}
+		$ids = array_map( 'intval', array_values( $a ) );
+		sort( $ids );
+		ksort( $cleaned );
+		self::assertSame( array_fill_keys( $ids, $per ), $cleaned, 'Each written object emptied exactly once over the three calls.' );
+		self::probe_ok();
+		$closed = self::finish( $run_id );
+		self::assertSame( 'closed_done', $closed['state'], json_encode( $closed ) );
+	}
+
 	public function testTheErrorLogIsCountedFromTheMarkOfTheCheckAndALogRotatedSinceIsAFinding(): void {
 		// GitHub Codex round 4 on free#137 (P2): the check marks the error log
 		// of the site (debug.log of wp-content) by its size; the verification

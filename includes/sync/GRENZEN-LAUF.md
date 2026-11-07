@@ -364,9 +364,29 @@ Ablehnung entsteht, nennt sie den Weg.
   sich über die Metadaten-API nicht byteidentisch ablegen
   (`maybe_serialize()` serialisiert ihn ein zweites Mal); solche Werte sperrt
   `post:meta_rule`. Der Rückweg schreibt roh und ist davon nicht betroffen.
-- `term_order` ungleich 0 (sortierbare Taxonomien) stellt
-  `wp_set_object_terms()` nicht her; die Abweichung fällt beim Rücklesen auf.
-  Kern-Taxonomien sortieren nicht.
+- `term_order` ungleich 0 (ein Plugin, das Terme sortiert) stellt
+  `wp_set_object_terms()` nicht her: es legt jede Zuordnung neu mit Reihenfolge
+  0 an, vorwärts wie auf dem Rückweg; eine Zuordnung, die beidseits bleibt,
+  behält ihre Reihenfolge, eine entfernte und zurückgegebene verliert sie.
+  Grenze C (GitHub-Codex 5, P2): Ein Live-Post mit einer Zuordnung mit
+  `term_order` ungleich 0 in einer Taxonomie, die der Schritt berührt (alle
+  Taxonomien des Sollwerts und des Live-Posts, denn der Schritt schreibt oder
+  leert jede), ist vor jeder Mutation gesperrt (`post:term_order`, Z9, Grund
+  mit Term und Reihenfolge; Prüffall
+  `testAPostWhoseTermHasAnOrderIsLockedBeforeTheFirstWriteAndOneWithoutGoesOverAndBack`).
+  Mit Reihenfolge 0, wie der Kern sie schreibt, ändert sich nichts: der
+  Vorwärtsschritt legt neue Zuordnungen mit 0 an und berührt bestehende
+  nicht (`wp_set_object_terms()` löscht nur entfernte und fügt nur neue ein;
+  die Nachsortierung des Kerns gilt nur Taxonomien mit `sort`, keine
+  Kern-Taxonomie). Dazu trägt der Hash der Terme die Reihenfolge, wo sie
+  ungleich 0 ist (`term_entries()`: `3#2`; bei 0 der Schlüssel allein, so
+  dass Journale von vorher gleich lesen): die Prüfung des Rückwegs
+  (`restore_terms()`) und die Schlussprüfung gegen die Sicherung
+  (`put_back()`) sehen einen Unterschied der Reihenfolge, ein solcher Teil
+  heisst nie `restored`, sondern `unclear` mit dem Grund (Prüffall Unit
+  `testARelationshipWithATermOrderLocksThePostAndIsPartOfTheHashOfItsTerms`).
+  Vorher verglich der Rückweg nur Schlüssel und meldete `restored`, obwohl
+  die kanonische Form die Reihenfolge enthält.
 - Terme von `post_format` sind Teil der Identität des Posts und werden nach
   Slug verglichen und geschrieben (`IDENTITY_TAXONOMIES`, `term_keys()`): die
   erste Verwendung eines Formats auf der Live-Site hat noch keinen Term, den
@@ -842,6 +862,18 @@ Ablehnung entsteht, nennt sie den Weg.
   mit Cursor, `sample`, `probe`, `log` im Ergebnis des Schritts); jeder Aufruf
   erledigt mindestens eine Einheit, so dass sie immer vorankommt.
   `closed_done` nur, wenn jede Stufe lief und bestand (B4).
+- Phase 7 (Caches) läuft ebenso in Teilen nach der Arbeit des Aufrufs
+  (`budget()`), der Cursor im Ergebnis des Schritts (GitHub-Codex 5, P2):
+  jeder Aufruf leert mindestens ein Objekt, sichert bei erschöpfter Arbeit
+  den Cursor am ersten noch nicht geleerten Objekt und antwortet «weiter mit
+  next»; nach dem letzten Teil die Term-Caches und `done` wie bisher. Jedes
+  Objekt wird einmal geleert; endet ein Request zwischen einem Leeren und
+  dem Sichern des Cursors, werden die Objekte dieses Aufrufs noch einmal
+  geleert, was nichts ändert (ein geleerter Cache ist leer). Vorher leerte
+  der Schritt alle Objekte in einem Aufruf ohne Budget; bei grossen Auswahlen
+  lief er in die Zeitgrenze, blieb `planned`, und jeder Versuch begann beim
+  ersten Objekt (Prüffall
+  `testTheCachesOfPhaseSevenAreEmptiedInPartsWithinTheWorkOfEachCallEachObjectOnce`).
 - Die Stichprobe fragt eine veröffentlichte Adresse mit `wp_remote_get()`
   (Loopback) und verlangt 200 und die erwartete Zeichenkette: den Titel des
   Sollwerts, wie die Seite ihn zeigt (roh, `esc_html()`, texturiert). Hosts

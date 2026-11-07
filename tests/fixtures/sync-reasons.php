@@ -356,6 +356,10 @@ return array(
 			'why'  => 'Terms of other taxonomies need the engine of the terms (branch 9); this version sets category, post_tag and post_format.',
 			'plan' => 'Zweigtabelle Zeile 540',
 		),
+		'post:term_order'              => array(
+			'why'  => 'A relationship with a term_order other than 0 (a plugin that sorts the terms) would lose its order on the way back: wp_set_object_terms() makes every relationship anew with the order 0, forward and back, and the way back compared the keys of the terms only (GitHub Codex round 5 on free#137). Locked before the first write until the engine of the terms (branch 9) carries the order.',
+			'plan' => 'Entscheid 23 (bytegenauer Rückweg); GitHub-Codex 5 auf free#137',
+		),
 		'post:slug_collision'          => array(
 			'why'  => 'wp_insert_post() renames a slug another post of the type and parent has (wp_unique_post_slug()), so the written post would differ from the target.',
 			'core' => array( array( 'wp-includes/post.php', 4906, '$post_name = wp_unique_post_slug( $post_name, $post_id, $post_status, $post_type, $post_parent );' ) ),

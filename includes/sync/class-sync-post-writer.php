@@ -397,6 +397,17 @@ final class AB_MCP_Sync_Post_Writer {
 				return self::rights( $may );
 			}
 		}
+		// A relationship of the post here with a term_order other than 0 (a
+		// plugin that sorts the terms): wp_set_object_terms() makes every
+		// relationship anew with the order 0, forward and on the way back, so
+		// the way back could not give the order back. Locked before anything
+		// is written (GitHub Codex round 5 on free#137, P2); with every order
+		// 0, as the core writes it, nothing changes.
+		foreach ( is_array( $current ) ? $current['terms'] : array() as $term ) {
+			if ( 0 !== (int) $term['term_order'] ) {
+				return self::locked( 'post:term_order', sprintf( 'the term %1$s of %2$s on the post of this site carries the term_order %3$d', (string) $term['slug'], (string) $term['taxonomy'], (int) $term['term_order'] ) );
+			}
+		}
 		// The status WordPress would store, from the very data handed over
 		// (decision 17; AB_MCP_Tools_Content::saved_status()).
 		$gmt   = $prepared['columns']['post_date_gmt'];
@@ -637,7 +648,7 @@ final class AB_MCP_Sync_Post_Writer {
 			$taxes[] = $term['taxonomy'];
 		}
 		foreach ( array_unique( $taxes ) as $taxonomy ) {
-			$out[ 'terms:' . $taxonomy ] = self::terms_hash( self::term_keys( $current, $taxonomy ) );
+			$out[ 'terms:' . $taxonomy ] = self::terms_hash( self::term_entries( $current, $taxonomy ) );
 		}
 		return $out;
 	}
@@ -666,7 +677,7 @@ final class AB_MCP_Sync_Post_Writer {
 		if ( 0 === strpos( $part, 'meta:' ) ) {
 			return self::meta_hash( self::meta_values( $current, substr( $part, 5 ) ) );
 		}
-		return self::terms_hash( self::term_keys( $current, substr( $part, 6 ) ) );
+		return self::terms_hash( self::term_entries( $current, substr( $part, 6 ) ) );
 	}
 
 	/**
@@ -734,6 +745,36 @@ final class AB_MCP_Sync_Post_Writer {
 			if ( $term['taxonomy'] === (string) $taxonomy ) {
 				$out[] = $slugs ? (string) $term['slug'] : (int) $term['term_id'];
 			}
+		}
+		return $out;
+	}
+
+	/**
+	 * The entries of the terms of one taxonomy a post carries, for its hash:
+	 * the key of each term (term_keys()) and, where the relationship carries
+	 * a term_order other than 0, the order behind «#» (3#2). The canonical
+	 * form carries the order (AB_MCP_Sync_Db_Kinds); a relationship with an
+	 * order is locked before any mutation (precheck(), post:term_order), and
+	 * where one meets the way back all the same (a journal of an earlier
+	 * build), the hash of the backup differs from the one wp_set_object_terms()
+	 * makes (order 0), so the part is never restored by its keys alone
+	 * (GitHub Codex round 5 on free#137, P2). With every order 0 the entries
+	 * are the keys, as before.
+	 *
+	 * @param array  $current  current().
+	 * @param string $taxonomy Taxonomy.
+	 * @return string[]
+	 */
+	public static function term_entries( array $current, $taxonomy ) {
+		$slugs = in_array( (string) $taxonomy, self::IDENTITY_TAXONOMIES, true );
+		$out   = array();
+		foreach ( $current['terms'] as $term ) {
+			if ( $term['taxonomy'] !== (string) $taxonomy ) {
+				continue;
+			}
+			$key   = $slugs ? (string) $term['slug'] : (string) (int) $term['term_id'];
+			$order = isset( $term['term_order'] ) ? (int) $term['term_order'] : 0;
+			$out[] = 0 !== $order ? $key . '#' . $order : $key;
 		}
 		return $out;
 	}
@@ -1079,10 +1120,17 @@ final class AB_MCP_Sync_Post_Writer {
 	 * terms afresh after the row went back (put_back(), N3) and names here
 	 * what they have to hold ($written).
 	 *
+	 * The order of the relationships (term_order) is part of what has to read
+	 * back as the backup (term_entries()): wp_set_object_terms() makes every
+	 * relationship anew with order 0, so a backed-up order other than 0 never
+	 * reads as restored (unclear, with the reason; GitHub Codex round 5 on
+	 * free#137, P2). Such an object is locked before the step writes
+	 * (precheck(), post:term_order); this is the second check.
+	 *
 	 * @param int    $live_id  Post.
 	 * @param string $taxonomy Taxonomy.
-	 * @param array  $backup   Term keys before the step (term_keys()).
-	 * @param string $written  The hash the term keys have to hold now: what the step, or the row put back, wrote (the journal).
+	 * @param array  $backup   current() of the backup.
+	 * @param string $written  The hash the term entries have to hold now: what the step, or the row put back, wrote (the journal).
 	 * @return array{state:string,note?:string}|WP_Error
 	 */
 	public static function restore_terms( $live_id, $taxonomy, array $backup, $written ) {
@@ -1093,8 +1141,9 @@ final class AB_MCP_Sync_Post_Writer {
 				'note'  => 'The post is no longer on this site.',
 			);
 		}
-		$now = self::terms_hash( self::term_keys( $current, $taxonomy ) );
-		if ( $now === self::terms_hash( $backup ) ) {
+		$before = self::terms_hash( self::term_entries( $backup, $taxonomy ) );
+		$now    = self::terms_hash( self::term_entries( $current, $taxonomy ) );
+		if ( $now === $before ) {
 			return array( 'state' => 'unchanged' );
 		}
 		if ( ! hash_equals( (string) $written, $now ) ) {
@@ -1103,12 +1152,21 @@ final class AB_MCP_Sync_Post_Writer {
 				'note'  => sprintf( 'The terms of %s were changed since the step wrote them, so they are left as they are.', $taxonomy ),
 			);
 		}
-		$done = wp_set_object_terms( (int) $live_id, self::target_term_keys( $taxonomy, $backup ), (string) $taxonomy, false );
+		$done = wp_set_object_terms( (int) $live_id, self::target_term_keys( $taxonomy, self::term_keys( $backup, $taxonomy ) ), (string) $taxonomy, false );
 		if ( is_wp_error( $done ) ) {
 			return $done;
 		}
 		$after = self::current( (int) $live_id );
-		return array( 'state' => is_array( $after ) && self::terms_hash( self::term_keys( $after, $taxonomy ) ) === self::terms_hash( $backup ) ? 'restored' : 'unclear' );
+		if ( ! is_array( $after ) || self::terms_hash( self::term_entries( $after, $taxonomy ) ) !== $before ) {
+			$orders = is_array( $after ) && self::terms_hash( self::term_keys( $after, $taxonomy ) ) === self::terms_hash( self::term_keys( $backup, $taxonomy ) );
+			return array(
+				'state' => 'unclear',
+				'note'  => $orders
+					? sprintf( 'The terms of %s are back, but not their order (term_order): wp_set_object_terms() makes every relationship anew with the order 0. Set the order by hand (the plugin that sorts the terms).', $taxonomy )
+					: sprintf( 'The terms of %s were written back but do not read as the backup.', $taxonomy ),
+			);
+		}
+		return array( 'state' => 'restored' );
 	}
 
 	/* ------------------------------------------------- the value before */

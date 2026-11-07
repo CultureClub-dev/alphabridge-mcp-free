@@ -318,6 +318,10 @@ final class AB_MCP_Sync_Kinds {
 			'stage'  => 'Z9',
 			'reason' => 'A term of a taxonomy other than category, post_tag and post_format waits for the engine of the terms.',
 		),
+		'post:term_order'              => array(
+			'stage'  => 'Z9',
+			'reason' => 'A relationship with a term_order other than 0 (a plugin that sorts the terms) waits for the engine of the terms: wp_set_object_terms() makes every relationship anew with the order 0, so the way back could not give the order back.',
+		),
 		'post:slug_collision'          => array(
 			'stage'  => 'Z9',
 			'reason' => 'A new post whose slug another post of its type and parent has here would be renamed by WordPress, and the written post would not be the target.',

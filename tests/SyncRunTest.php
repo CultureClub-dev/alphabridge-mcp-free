@@ -1334,6 +1334,44 @@ final class SyncRunTest extends TestCase {
 		}
 	}
 
+	public function testARelationshipWithATermOrderLocksThePostAndIsPartOfTheHashOfItsTerms(): void {
+		// GitHub Codex round 5 on free#137 (P2): the canonical form carries the
+		// order of a relationship (term_order), wp_set_object_terms() makes
+		// every relationship anew with the order 0, and the way back compared
+		// the keys of the terms only: a backed-up order was lost and the part
+		// reported restored. A post of this site with an order other than 0
+		// in a taxonomy the step touches is locked before anything is written
+		// (post:term_order, Z9); the order is part of the hash of the terms
+		// (term_entries()), so a difference never reads as restored.
+		$current = array(
+			'row'   => array( 'post_title' => 'Hello' ),
+			'meta'  => array(),
+			'terms' => array( array( 'taxonomy' => 'category', 'term_id' => 3, 'slug' => 'news', 'term_order' => 0 ), array( 'taxonomy' => 'post_tag', 'term_id' => 5, 'slug' => 'tip', 'term_order' => 2 ) ),
+		);
+		self::assertSame( array( '3' ), AB_MCP_Sync_Post_Writer::term_entries( $current, 'category' ), 'Order 0: the key alone, as before.' );
+		self::assertSame( array( '5#2' ), AB_MCP_Sync_Post_Writer::term_entries( $current, 'post_tag' ), 'An order other than 0 is part of the entry.' );
+		self::assertSame( AB_MCP_Sync_Post_Writer::terms_hash( array( 3 ) ), AB_MCP_Sync_Post_Writer::part_hash( $current, 'terms:category' ), 'The hash of a taxonomy without orders is the hash of its keys: journals of before read alike.' );
+		self::assertNotSame( AB_MCP_Sync_Post_Writer::terms_hash( array( 5 ) ), AB_MCP_Sync_Post_Writer::part_hash( $current, 'terms:post_tag' ), 'With an order the hash differs from the keys alone, which wp_set_object_terms() would make.' );
+		self::assertSame( AB_MCP_Sync_Post_Writer::part_hash( $current, 'terms:post_tag' ), AB_MCP_Sync_Post_Writer::hashes( $current, array(), array() )['terms:post_tag'] );
+		self::assertIsArray( AB_MCP_Sync_Kinds::lock( 'post', 'term_order' ), 'A lock of the table, with its stage.' );
+		self::assertSame( 'Z9', AB_MCP_Sync_Kinds::lock( 'post', 'term_order' )['stage'] );
+		// The check before the first write: the post of this site with an
+		// order other than 0 is locked, with the term and its order; with 0 it
+		// passes as before.
+		$db              = self::post_rows( 'News' );
+		$GLOBALS['wpdb'] = $db;
+		$ctx             = self::ctx( array( 'term' => array( 3 => 3 ) ) );
+		$ctx['now']      = 1800000000;
+		$prepared        = AB_MCP_Sync_Post_Writer::target_of( self::line( array( 'post_type' => 'post' ), array( array( 'note', 'abc' ) ), array( array( 'name' => 'News', 'slug' => 'news', 'taxonomy' => 'category', 'term_id' => 3, 'term_order' => 0 ) ), array( 'identity' => array( 'post_type' => 'post', 'post_name' => 'hello', 'theme' => '' ) ) ), self::item(), $ctx );
+		self::assertIsArray( $prepared, is_wp_error( $prepared ) ? $prepared->get_error_message() : '' );
+		self::assertTrue( AB_MCP_Sync_Post_Writer::precheck( $prepared, 12, $ctx['now'] ), 'Order 0: as before.' );
+		$db->relations[12][0]['term_order'] = 3;
+		$locked                             = AB_MCP_Sync_Post_Writer::precheck( $prepared, 12, $ctx['now'] );
+		self::assertSame( 'post:term_order', self::lock_of( $locked ) );
+		self::assertStringContainsString( 'The term news of category on the post of this site carries the term_order 3', $locked->get_error_message() );
+		self::assertStringContainsString( 'from Z9', $locked->get_error_message() );
+	}
+
 	/** A post of a few rows in the fake $wpdb, with one category. */
 	private static function post_rows( string $term_name ): SyncRunPostWpdb {
 		$db           = new SyncRunPostWpdb();
