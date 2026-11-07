@@ -374,6 +374,28 @@ final class AB_MCP_Sync_Rows {
 	}
 
 	/**
+	 * The newest revision of a post whose text of one column is, byte for
+	 * byte, the text given (the value a part held before the step, for the
+	 * answer of a part left: AB_MCP_Sync_Post_Writer::before_value()).
+	 *
+	 * @param int    $post_id Post.
+	 * @param string $column  post_content or post_excerpt (the columns WordPress revises).
+	 * @param string $text    The text.
+	 * @return int|false|null The id of the revision; false where none holds it; null where the rows could not be read.
+	 */
+	public static function revision_with( $post_id, $column, $text ) {
+		global $wpdb;
+		if ( ! in_array( (string) $column, array( 'post_content', 'post_excerpt' ), true ) || ! self::has( array( 'posts' ) ) ) {
+			return null;
+		}
+		$rows = self::select( $wpdb->prepare( "SELECT ID FROM {$wpdb->posts} WHERE post_parent = %d AND post_type = 'revision' AND CAST( {$column} AS BINARY ) = CAST( %s AS BINARY ) AND OCTET_LENGTH( {$column} ) = %d ORDER BY ID DESC LIMIT 1", (int) $post_id, (string) $text, strlen( (string) $text ) ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table from $wpdb, the column from a fixed list.
+		if ( null === $rows ) {
+			return null;
+		}
+		return isset( $rows[0]['ID'] ) ? (int) $rows[0]['ID'] : false;
+	}
+
+	/**
 	 * The taxonomies a term id has rows in (one, unless the core has not
 	 * split a shared term).
 	 *

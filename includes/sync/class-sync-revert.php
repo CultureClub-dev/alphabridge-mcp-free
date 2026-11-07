@@ -19,10 +19,14 @@
  * status shows the run.
  *
  * WHAT GOES BACK (decision 23): a part only where its hash now is the hash
- * the step read back (the step's own state); nothing where it is the hash
- * before; otherwise it is left and named, the pair unclear. A new object is
- * never removed: it stays as a rest, its pair residual (rule 0), named in
- * the answer. The row goes back through wp_update_post() with the
+ * the step read back after its own call changed it (the step's own state);
+ * nothing where it is the hash before; otherwise it is left and named with
+ * the value it held before (value_before), the pair unclear. An object that
+ * deviated within its step (a hook changed a part, a call was refused, a
+ * part read back other than written; the decision of 07.11.2026) is left
+ * whole, and so is a part the step never read back (an interrupted step).
+ * A new object is never removed: it stays as a rest, its pair residual
+ * (rule 0), named in the answer. The row goes back through wp_update_post() with the
  * backed-up dates and edit_date after the check of the status WordPress
  * would store now; meta raw and conditional; terms through
  * wp_set_object_terms(). The three limits of the way back (concept section
@@ -52,7 +56,8 @@ final class AB_MCP_Sync_Revert {
 	/** The limits of the way back, named with every preview (concept section 5). */
 	const LIMITS = array(
 		'A new object the run made is not removed: it stays as a rest, its pair residual; remove it by hand in wp-admin where it should go.',
-		'A part changed on this site since the run wrote it is left as it is and named; its pair is unclear until a person confirms a new alignment (wp_site_pairs).',
+		'A part changed on this site since the run wrote it is left as it is and named with its value before; its pair is unclear until a person confirms a new alignment (wp_site_pairs).',
+		'An object that deviated within its step (a hook of this site changed a part, a call was refused, a part read back other than written) is never put back by itself: every part of it is left as it is and named with its value before; check it by hand in wp-admin. The same for a part the step never read back (an interrupted step).',
 		'A backed-up scheduled post whose date has passed is not put back (WordPress would publish it); it is named as «check needed»: set its date anew in wp-admin.',
 	);
 
@@ -281,7 +286,7 @@ final class AB_MCP_Sync_Revert {
 			foreach ( isset( $journal['parts'] ) && is_array( $journal['parts'] ) ? $journal['parts'] : array() as $part ) {
 				$parts[] = array_intersect_key( $part, array_flip( array( 'part', 'state', 'way' ) ) );
 			}
-			$will = 'create' === $object['op'] ? 'rest' : ( 'done' === $step['state'] ? 'back' : 'back where own' );
+			$will = 'create' === $object['op'] ? 'rest' : ( ! empty( $object['deviated'] ) || ! array_key_exists( 'deviated', $object ) ? 'left' : ( 'done' === $step['state'] ? 'back' : 'back where own' ) );
 			$shown[] = array(
 				'seq'      => (int) $step['seq'],
 				'state'    => $step['state'],

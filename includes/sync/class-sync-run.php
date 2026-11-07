@@ -71,7 +71,17 @@ final class AB_MCP_Sync_Run {
 	const OPEN_STATES = array( 'open', 'interrupted', 'reverting' );
 
 	/** The states of a step. */
-	const STEP_STATES = array( 'planned', 'begun', 'done', 'skipped', 'failed', 'restored', 'unclear' );
+	const STEP_STATES = array( 'planned', 'begun', 'done', 'skipped', 'failed', 'unclear' );
+
+	/**
+	 * Bytes of values before (value_before of the parts left; the decision of
+	 * 07.11.2026) one answer carries at most, the newest steps first; past
+	 * it, a value is replaced by VALUE_CUT (cap_values()).
+	 */
+	const ANSWER_VALUE_BYTES = 16384;
+
+	/** What stands for a value before the answer has no room for. */
+	const VALUE_CUT = '(cut: an answer carries at most 16384 bytes of values before; the backup of this step in the protected store holds the object as it was before the step)';
 
 	/** The operations of a step. */
 	const OPS = array( 'check', 'write', 'post', 'verify', 'revert' );
@@ -785,12 +795,15 @@ final class AB_MCP_Sync_Run {
 				$out['unclear'][] = (int) $step['seq'];
 			}
 		}
+		$out['steps'] = self::cap_values( $out['steps'] );
 		return $out;
 	}
 
 	/**
 	 * The journal of a step as shown: each part with its name and states,
-	 * hashes and the name of its backup; never a value.
+	 * hashes and the name of its backup; of values only value_before, the
+	 * value a part left held before the step (from the backup, short, never
+	 * a credential: AB_MCP_Sync_Post_Writer::before_value()).
 	 *
 	 * @param array $parts Journal.
 	 * @return array
@@ -798,13 +811,46 @@ final class AB_MCP_Sync_Run {
 	private static function parts_shown( array $parts ) {
 		$out = array();
 		foreach ( isset( $parts['parts'] ) && is_array( $parts['parts'] ) ? $parts['parts'] : array() as $part ) {
-			$out[] = array_intersect_key( (array) $part, array_flip( array( 'part', 'state', 'before', 'target', 'after', 'own', 'own_after', 'backup', 'way', 'note' ) ) );
+			$out[] = array_intersect_key( (array) $part, array_flip( array( 'part', 'state', 'before', 'target', 'after', 'own', 'own_after', 'deviated', 'value_before', 'backup', 'way', 'note' ) ) );
 		}
 		return array(
 			'object' => isset( $parts['object'] ) ? $parts['object'] : null,
 			'backup' => isset( $parts['backup'] ) && is_array( $parts['backup'] ) ? array_intersect_key( $parts['backup'], array_flip( array( 'name', 'sha256', 'bytes', 'absent' ) ) ) : null,
 			'parts'  => $out,
 		);
+	}
+
+	/**
+	 * The values before one answer carries, capped at ANSWER_VALUE_BYTES in
+	 * all: the newest steps keep theirs first (the step that just ran is
+	 * the last one), the older ones say so (VALUE_CUT) once the budget is
+	 * spent. Read in the parts of the journal (parts.parts) and in the
+	 * outcome of a step of the way back (result.parts).
+	 *
+	 * @param array $steps The steps as shown().
+	 * @return array
+	 */
+	public static function cap_values( array $steps ) {
+		$budget = self::ANSWER_VALUE_BYTES;
+		for ( $s = count( $steps ) - 1; $s >= 0; $s-- ) {
+			foreach ( array( 'parts', 'result' ) as $where ) {
+				if ( ! isset( $steps[ $s ][ $where ]['parts'] ) || ! is_array( $steps[ $s ][ $where ]['parts'] ) ) {
+					continue;
+				}
+				foreach ( $steps[ $s ][ $where ]['parts'] as $p => $part ) {
+					if ( ! is_array( $part ) || ! isset( $part['value_before'] ) || ! is_string( $part['value_before'] ) ) {
+						continue;
+					}
+					$bytes = strlen( $part['value_before'] );
+					if ( $bytes <= $budget ) {
+						$budget -= $bytes;
+						continue;
+					}
+					$steps[ $s ][ $where ]['parts'][ $p ]['value_before'] = self::VALUE_CUT;
+				}
+			}
+		}
+		return $steps;
 	}
 
 	/* ------------------------------------------------------------ private */

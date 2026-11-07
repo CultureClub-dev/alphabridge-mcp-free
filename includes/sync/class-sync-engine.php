@@ -29,29 +29,44 @@
  * through the kind (AB_MCP_Sync_Post_Writer), read right before the call
  * and read back from the rows under the same lock after it (pre, post):
  * the step owns a part only where its own call changed it (own, own_after
- * the hash read back; write_parts()), never by the state of the part; a
- * part that reads back other than its target is «written, deviating»: put
- * back at once where its way is refusable (the row, meta) and the part
- * still holds what the step owns, left unclear otherwise (terms); the
+ * the hash read back; write_parts()), never by the state of the part; the
  * object as a whole read back against the target (the mapped staging form
  * with the confirmed choice); then the pair takes its new bases (or is
- * made, for a new object), the step is done, the guard and the lock go. A
- * request that ends in a boundary leaves the step begun:
+ * made, for a new object), the step is done, the guard and the lock go.
+ *
+ * THE ONE BOUNDARY (the decision of 07.11.2026, «A mit altem Wert»;
+ * boundary C of GRENZEN-LAUF.md; deviated()): where anything of the object
+ * deviates within the step (another hand changed a part: a hook of this
+ * site, a writer on a way the lock does not refuse; a call of the step's
+ * own was refused or failed; a part reads back other than the call was to
+ * write; the object as a whole does not hash to its target), nothing of
+ * the object is put back by itself, neither within the boundary nor by the
+ * way back: every part that is not as the backup is left as it is, with
+ * the value it held before (value_before, from the backup, never a
+ * credential), the object carries the mark (object.deviated, with the part
+ * and why), the step is unclear and so is the pair; a person checks the
+ * object in wp-admin and aligns the pair. The backup stays (decision 20).
+ * Before, the step turned within the boundary and put its own parts back,
+ * and every round of Codex since round 2 found a new way in which that turn
+ * or the way back took a part back that was not provably the step's own.
+ *
+ * A request that ends in a boundary leaves the step begun:
  * AB_MCP_Sync_Run::settle() makes the run interrupted once the lock is no
- * longer held (decision 18).
+ * longer held (decision 18); an interruption is no deviation of the object.
  *
  * THE WAY BACK (decision 23, run_revert()): for one write step of the run
  * (or of a closed run, a run of the type revert), each part of its journal
  * decided right before its turn on the state read then (put_back(), with
- * decide() the one place of the rule, which the turn of a step within its
- * boundary takes as well): put back where its hash now is own_after, the
- * hash the step read back after its own call changed the part, nothing
- * where it is the hash of the backup, left and named otherwise; the row
- * first, then the meta, then the terms, and every part read again against
- * the backup after that; a new object is never removed and stays as a
- * rest, its pair residual (rule 0); the pair of a restored object goes
- * back to its snapshot. A run of the way back closes as reverted, or with
- * findings where rests or unclear parts remain.
+ * decide() the one place of the rule): put back where its hash now is
+ * own_after, the hash the step read back after its own call changed the
+ * part, nothing where it is the hash of the backup, left and named with its
+ * value before otherwise (a part of an object that deviated always, a part
+ * never read back always: a hash equal to the target proves no ownership);
+ * the row first, then the meta, then the terms, and every part read again
+ * against the backup after that; a new object is never removed and stays
+ * as a rest, its pair residual (rule 0); the pair of a restored object
+ * goes back to its snapshot. A run of the way back closes as reverted, or
+ * with findings where rests or parts left remain.
  *
  * ANSWERS (decision 32): the step with its result and journal as fields; a
  * WP_Error only for the refusal of the whole call.
@@ -643,6 +658,10 @@ final class AB_MCP_Sync_Engine {
 				'pair_id'     => isset( $item['pair_id'] ) ? $item['pair_id'] : null,
 				'as_draft'    => ! empty( $item['as_draft'] ),
 				'target'      => null,
+				// Whether the object deviated within the step (deviated(): the
+				// part and why), null where it did not; a journal without the
+				// key is of an earlier build (revert_boundary(): fail closed).
+				'deviated'    => null,
 			),
 			'backup' => null,
 			'parts'  => array(),
@@ -824,9 +843,12 @@ final class AB_MCP_Sync_Engine {
 			AB_MCP_Sync_Run::touch( $run_id );
 			return array( 'next' => $outcome['message'] . ' The run goes on with the next step (action=next); the steps that depend on this object are skipped.' );
 		}
-		// (7) The object as a whole against the target.
+		// (7) The object as a whole against the target: a deviation like any
+		// other (deviated()), the parts left with their values before.
 		$hash = AB_MCP_Sync_Post_Writer::live_hash( $live_id, $ctx['source'] );
 		if ( null === $hash || ! hash_equals( $prepared['target_hash'], $hash ) ) {
+			$outcome = self::deviated( $journal, 0, 'every part read back as written, but the object as a whole does not hash to its target (a filter of this site changed what the rows hold, or the object cannot be read whole)', $live_id, $current );
+			$journal = $outcome['journal'];
 			$pair_id = isset( $item['pair_id'] ) ? (int) $item['pair_id'] : null;
 			$rest    = null;
 			if ( 'create' === $item['op'] ) {
@@ -838,7 +860,7 @@ final class AB_MCP_Sync_Engine {
 			} elseif ( null !== $pair_id ) {
 				AB_MCP_Sync_Pairs::set_state( $pair_id, 'unclear', AB_MCP_Sync_Pairs::snapshot_hash( AB_MCP_Sync_Pairs::snapshot( $pair_id ) ) );
 			}
-			$message = sprintf( 'Every part read back as written, but the object as a whole does not hash to its target (a filter of this site changed what the rows hold); the pair is %s. Check the object in wp-admin.', null === $rest ? 'unclear' : 'a rest' );
+			$message = $outcome['message'] . ( null === $rest ? '' : ' The object is new: it stays as a rest.' );
 			$result  = array(
 				'message'  => $message,
 				'live_ref' => (string) $live_id,
@@ -900,8 +922,12 @@ final class AB_MCP_Sync_Engine {
 
 	/**
 	 * The parts of a boundary written one by one, each read back: the row,
-	 * the meta keys, the taxonomies. A part that deviates is put back where
-	 * its way is refusable and what it holds is the step's own.
+	 * the meta keys, the taxonomies. The first deviation ends the step
+	 * (deviated(): the one boundary, the decision of 07.11.2026): a call
+	 * refused or failed, a part read back other than the call was to write,
+	 * a part another hand changed within the step (foreign). Nothing of the
+	 * object is put back then; every part not as the backup is left with its
+	 * value before, the object is unclear.
 	 *
 	 * OWNERSHIP is a mark of its own in the journal (own, own_after), never
 	 * taken from the state of a part nor from what a call answered (Codex
@@ -915,18 +941,15 @@ final class AB_MCP_Sync_Engine {
 	 * step's own, own_after the hash read back, own_target what the call was
 	 * to write. A part the row call changed is the step's own only where
 	 * with_row() names that very hash; any other change with the row is
-	 * another hand's (a hook of this site reacting to the row). A pre other
-	 * than the backup is a change by another hand before the call: written
-	 * down (foreign, the note), never ownership (N1). post equal to pre: the
-	 * call changed nothing, ownership stays as it was; so a call that
-	 * answered with an error and changed nothing is failed, and one that
-	 * changed the part and then failed leaves it the step's own (P1).
+	 * another hand's (a hook of this site reacting to the row): foreign. A
+	 * pre other than the backup is a change by another hand before the call:
+	 * foreign as well (N1). The way back of a step that ended done puts a
+	 * part back by own and own_after alone (decide()).
 	 *
-	 * The states describe: read (as its target), written (deviating, or
-	 * changed and then failed), failed (the call changed nothing), left (not
-	 * provably the step's own, so it stays), not_reached (settled()), and
-	 * after a turn restored, unchanged, unclear, check_needed. decide()
-	 * reads none of them: a part is put back by own and own_after alone.
+	 * The states describe: read (as its target), failed (the call answered
+	 * with an error; the note says whether it changed the part), left (the
+	 * object deviated and the part is not as the backup), not_reached
+	 * (settled()). decide() reads none of them.
 	 *
 	 * @param int        $run_id   Run.
 	 * @param int        $seq      Step.
@@ -952,7 +975,7 @@ final class AB_MCP_Sync_Engine {
 				// and read back after it.
 				$pre_all = null === $live_id ? null : AB_MCP_Sync_Post_Writer::current( $live_id );
 				if ( is_wp_error( $pre_all ) ) {
-					return self::unread( $journal, $i, $pre_all, $save, $live_id );
+					return self::unread( $journal, $i, $pre_all, $live_id, $backup );
 				}
 				$named = AB_MCP_Sync_Post_Writer::with_row( $prepared, $live_id, $pre_all );
 				foreach ( $journal['parts'] as $k => $other ) {
@@ -989,12 +1012,14 @@ final class AB_MCP_Sync_Engine {
 					$values  = isset( $prepared['meta'][ $key ] ) ? $prepared['meta'][ $key ] : array();
 					$pre_all = AB_MCP_Sync_Post_Writer::current( $live_id );
 					if ( is_wp_error( $pre_all ) ) {
-						return self::unread( $journal, $i, $pre_all, $save, $live_id );
+						return self::unread( $journal, $i, $pre_all, $live_id, $backup );
 					}
 					$journal['parts'][ $i ] = self::seen_before( $journal['parts'][ $i ], $pre_all, $backup );
 					// Written ahead of the call (decision 18; Codex round 7, F1):
 					// a request that ends inside it leaves the part without a read
-					// back, never with the read back of the row before.
+					// back, never with the read back of the row before. For the
+					// display of the state reached only: a part never read back
+					// is never put back (decide()).
 					$save( $journal );
 					$done                   = AB_MCP_Sync_Post_Writer::write_meta( $live_id, $key, $values, is_array( $pre_all ) ? AB_MCP_Sync_Post_Writer::meta_values( $pre_all, $key ) : array() );
 					$error                  = is_wp_error( $done ) ? $done : null;
@@ -1006,7 +1031,7 @@ final class AB_MCP_Sync_Engine {
 				$terms    = isset( $prepared['terms'][ $taxonomy ] ) ? $prepared['terms'][ $taxonomy ] : array();
 				$pre_all  = AB_MCP_Sync_Post_Writer::current( $live_id );
 				if ( is_wp_error( $pre_all ) ) {
-					return self::unread( $journal, $i, $pre_all, $save, $live_id );
+					return self::unread( $journal, $i, $pre_all, $live_id, $backup );
 				}
 				$journal['parts'][ $i ] = self::seen_before( $journal['parts'][ $i ], $pre_all, $backup );
 				// Written ahead of the call, as for the meta (F1).
@@ -1019,95 +1044,104 @@ final class AB_MCP_Sync_Engine {
 			$one     = $journal['parts'][ $i ];
 			$post    = $one['post'];
 			$changed = self::changed( $one['pre'], $post );
-			$own     = ! empty( $one['own'] );
 			if ( null !== $error ) {
-				if ( ! $changed ) {
-					// The call changed nothing of the part (or the part could not
-					// be read back): failed, nothing of it is the step's own by
-					// this call.
-					$journal['parts'][ $i ]['state'] = 'failed';
-					$journal['parts'][ $i ]['note']  = self::noted( $one, $error->get_error_message() );
-					$save( $journal );
-					if ( 'row' === $name ) {
-						return self::outcome( 'failed', 'The row was not written: ' . $error->get_error_message(), $journal, $live_id );
-					}
-					return self::outcome( 'unclear', 'A part was not written, the parts before stay: ' . $error->get_error_message(), $journal, $live_id );
-				}
-				// The call changed the part before it answered with the error:
-				// the step's own change all the same (its own call wrote it),
-				// written down with the hash read back; the step turns below.
-				$journal['parts'][ $i ]['state'] = 'written';
-				$journal['parts'][ $i ]['note']  = 'Not written whole: the call changed the part and then failed (' . $error->get_error_message() . ').';
-				$save( $journal );
-			} else {
-				if ( null !== $post && hash_equals( $target, $post ) ) {
-					$journal['parts'][ $i ]['state'] = 'read';
-					if ( ! $through_row && isset( $one['note'] ) && '' !== (string) $one['note'] ) {
-						// Another hand changed it with the row, or the row call
-						// wrote it (the default category), before the step wrote it
-						// as its target: said in the journal, not hidden.
-						$journal['parts'][ $i ]['note'] = (string) $one['note'] . ' Written as its target by the step after that.';
-					}
-					$save( $journal );
-					AB_MCP_Change_Lock::touch();
-					continue;
-				}
-				if ( ! $own ) {
-					if ( ! empty( $one['foreign'] ) ) {
-						// Another hand changed it (with the row, or on a way the
-						// lock does not refuse), and the step's call changed
-						// nothing of it, or the row call wrote other than it was
-						// to: not provably the step's own, so it stays (N2).
-						$journal['parts'][ $i ]['state'] = 'left';
-						$journal['parts'][ $i ]['note']  = self::noted( $one, 'Not provably the step\'s own, left as it is.' );
-						$save( $journal );
-						return self::outcome( 'unclear', sprintf( 'The part %1$s reads back other than its target, and the step\'s call changed nothing of it: another hand changed it (a hook of this site%2$s), so it is not provably the step\'s own; it stays and the object is unclear.', $name, AB_MCP_Sync_Post_Writer::WAY_TERMS === $part['way'] ? ', or a writer on a way the lock does not refuse' : '' ), $journal, $live_id );
-					}
-					// The call answered well, yet the part holds what it held
-					// before the call, other than its target: nothing was
-					// written, nothing of it is the step's own.
-					$journal['parts'][ $i ]['state'] = 'failed';
-					$journal['parts'][ $i ]['note']  = self::noted( $one, $through_row ? 'The core did not write it with the row: it reads as before the row call, other than its target.' : 'The call changed nothing of it: it reads as before the call, other than its target.' );
-					$save( $journal );
-					return self::outcome( 'unclear', sprintf( 'The part %s was not written (it reads as before the call), the parts before stay.', $name ), $journal, $live_id );
-				}
-				// Written, deviating (decision 17).
-				$journal['parts'][ $i ]['state'] = 'written';
-				$journal['parts'][ $i ]['note']  = 'Written, deviating: read back other than its target.';
-				$save( $journal );
+				// The call answered with an error: a deviation, whether it
+				// changed the part before (a key of several rows: removed, the
+				// new ones refused) or not.
+				$journal['parts'][ $i ]['state'] = 'failed';
+				$journal['parts'][ $i ]['note']  = self::noted( $one, sprintf( 'The call failed (%1$s)%2$s.', $error->get_error_message(), $changed ? ' after it changed the part' : ' and changed nothing of the part' ) );
+				return self::deviated( $journal, $i, sprintf( 'the call of the part %1$s failed (%2$s)%3$s', $name, $error->get_error_message(), $changed ? ' after it changed the part' : '' ), $live_id, $backup );
 			}
-			$what = null !== $error
-				? sprintf( 'The part %s was not written whole (the call changed it and then failed)', $name )
-				: sprintf( 'The part %s was written but reads back other than its target', $name );
-			if ( AB_MCP_Sync_Post_Writer::WAY_TERMS === $part['way'] || null === $post || null === $backup ) {
-				// Not provably the step's own (a way the lock does not refuse; a
-				// part that could not be read back), or a new object, which is
-				// never put back: it stays, unclear.
-				$why = AB_MCP_Sync_Post_Writer::WAY_TERMS === $part['way'] ? 'it is on a way the lock does not refuse' : 'the object is new, or the part could not be read back';
-				return self::outcome( 'unclear', sprintf( '%1$s; %2$s, so it stays and the object is unclear.', $what, $why ), $journal, $live_id );
-			}
-			// The turn: the deviating part goes back, and with it every part
-			// the step owns (B8, N2), each decided on the state read right
-			// before its turn (put_back(), decide(): the one place of the rule).
-			// A part the step does not own that changed since the backup was
-			// changed by another hand: it is left, the journal says so, and the
-			// object is unclear. The step is restored only where every part it
-			// owns is back, nothing else changed, and every part reads as the
-			// backup after that.
-			$put = self::put_back(
-				$journal,
-				$live_id,
-				$backup,
-				false,
-				static function ( array $parts ) use ( &$journal, $save ) {
-					$journal['parts'] = $parts;
-					$save( $journal );
+			// Another hand changed a part within the step (seen_before(),
+			// seen_after(): with the row, or before the step's call): a
+			// deviation, whichever part, even where the step then wrote it as
+			// its target.
+			foreach ( $journal['parts'] as $k => $other ) {
+				if ( ! empty( $other['foreign'] ) ) {
+					$journal['parts'][ $k ]['note'] = self::noted( $other, 'Not provably the step\'s own.' );
+					$as_target = isset( $other['post'] ) && null !== $other['post'] && hash_equals( (string) $other['target'], (string) $other['post'] );
+					return self::deviated( $journal, $k, sprintf( 'another hand changed the part %1$s within the step (a hook of this site%2$s)%3$s', (string) $other['part'], AB_MCP_Sync_Post_Writer::WAY_TERMS === $other['way'] ? ', or a writer on a way the lock does not refuse' : '', $as_target ? ', though the part reads as its target now' : '' ), $live_id, $backup );
 				}
-			);
-			$journal['parts'] = $put['journal'];
-			return self::outcome( $put['all_back'] ? 'restored' : 'unclear', sprintf( '%1$s (a filter of this site changed it, or refused it); %2$s', $what, $put['all_back'] ? 'it and every part the step wrote before it or with the row were put back byte for byte and read as the backup after that: nothing of the object changed.' : 'a part could not be put back, or a part changed since the backup by another hand and is left as it is, or a part reads other than the backup after the parts went back (see the parts of the journal), so the object is unclear.' ), $journal, $live_id );
+			}
+			if ( null !== $post && hash_equals( $target, $post ) ) {
+				$journal['parts'][ $i ]['state'] = 'read';
+				if ( ! $through_row && isset( $one['note'] ) && '' !== (string) $one['note'] ) {
+					// The row call wrote it (the default category) before the
+					// step wrote it as its target: said in the journal.
+					$journal['parts'][ $i ]['note'] = (string) $one['note'] . ' Written as its target by the step after that.';
+				}
+				$save( $journal );
+				AB_MCP_Change_Lock::touch();
+				continue;
+			}
+			if ( empty( $one['own'] ) ) {
+				// The call answered well, yet the part holds what it held before
+				// the call, other than its target: nothing was written.
+				$journal['parts'][ $i ]['state'] = 'failed';
+				$journal['parts'][ $i ]['note']  = self::noted( $one, $through_row ? 'The core did not write it with the row: it reads as before the row call, other than its target.' : 'The call changed nothing of it: it reads as before the call, other than its target.' );
+				return self::deviated( $journal, $i, sprintf( 'the part %s was not written: it reads as before the call, other than its target', $name ), $live_id, $backup );
+			}
+			// Written, deviating (decision 17): read back other than the call
+			// was to write (a filter of this site changed it as it was written).
+			$journal['parts'][ $i ]['note'] = self::noted( $one, 'Written, deviating: read back other than its target.' );
+			return self::deviated( $journal, $i, sprintf( 'the part %s was written but reads back other than its target (a filter of this site changed it as it was written)', $name ), $live_id, $backup );
 		}
 		return self::outcome( 'done', '', $journal, $live_id );
+	}
+
+	/**
+	 * The one answer to a deviation within the boundary (the decision of
+	 * 07.11.2026, «A mit altem Wert»; boundary C of GRENZEN-LAUF.md): nothing
+	 * of the object is put back by itself, now or by the way back. The
+	 * object carries the mark (object.deviated: the part and why), every
+	 * part the mark (deviated, which decide() answers with left), and every
+	 * part that is not as the backup is left as it is, with the value it
+	 * held before (value_before, from the backup: AB_MCP_Sync_Post_Writer::
+	 * before_value(), never a credential). A part as the backup keeps its
+	 * state (planned, which settled() names not_reached; failed; read where
+	 * the target is the backup). The step is unclear where a part is left,
+	 * failed where nothing of the object differs from the backup (the row
+	 * call refused before it wrote). The caller saves the journal.
+	 *
+	 * Why one boundary: every round of Codex since round 2 of this branch
+	 * found a new way in which the turn within the boundary or the way back
+	 * took a part back that was not provably the step's own (which parts a
+	 * step wrote, and whose hand wrote what a part holds now, after a hook, a
+	 * refusal or a deviating read back). A person with the value before in
+	 * the answer decides it; the backup stays (decision 20).
+	 *
+	 * @param array      $journal Journal.
+	 * @param int        $i       The part that deviated.
+	 * @param string     $why     Why, as a clause (no capital, no full stop).
+	 * @param int|null   $live_id Post, null where none was made.
+	 * @param array|null $backup  current() of the backup; null for a new object.
+	 * @return array outcome().
+	 */
+	private static function deviated( array $journal, $i, $why, $live_id, $backup ) {
+		$name  = (string) $journal['parts'][ $i ]['part'];
+		$state = null === $live_id ? null : AB_MCP_Sync_Post_Writer::current( $live_id );
+		$state = is_array( $state ) ? $state : null;
+		$journal['object']['deviated'] = array(
+			'part' => $name,
+			'why'  => (string) $why,
+		);
+		$left = 0;
+		foreach ( $journal['parts'] as $k => $part ) {
+			$journal['parts'][ $k ]['deviated'] = true;
+			$now = null === $state ? null : AB_MCP_Sync_Post_Writer::part_hash( $state, (string) $part['part'] );
+			$was = AB_MCP_Sync_Post_Writer::part_hash( is_array( $backup ) ? $backup : null, (string) $part['part'] );
+			if ( ( null === $now && null === $was ) || ( null !== $now && null !== $was && hash_equals( $was, $now ) ) ) {
+				continue;
+			}
+			$journal['parts'][ $k ]['state']        = 'left';
+			$journal['parts'][ $k ]['value_before'] = AB_MCP_Sync_Post_Writer::before_value( (string) $part['part'], $backup, $state, $live_id );
+			$journal['parts'][ $k ]['note']         = self::noted( $journal['parts'][ $k ], 'Left as it is: the object deviated within the step, so nothing of it is put back by itself; check it by hand, its value before stands in value_before.' );
+			++$left;
+		}
+		if ( 0 === $left ) {
+			return self::outcome( 'failed', sprintf( 'Nothing was written: %s. The object is as before the step.', $why ), $journal, $live_id );
+		}
+		return self::outcome( 'unclear', sprintf( 'The object deviated within the step: %1$s. Nothing of it is put back by itself (the one boundary, GRENZEN-LAUF.md): %2$d part(s) stay as they are (left, each with its value before in the journal), and the object is unclear. Check it in wp-admin and align the pair (wp_site_pairs).', $why, $left ), $journal, $live_id );
 	}
 
 	/**
@@ -1116,11 +1150,10 @@ final class AB_MCP_Sync_Engine {
 	 * backup, where the part does not hold what the step owns, is a change by
 	 * another hand before the call: marked foreign with a note, never
 	 * ownership (N1). For the parts the row call writes besides the row, pre
-	 * is the state right before the row call. The journal is saved with the
-	 * read back after the call (the write-ahead of the parts is boundary()'s,
-	 * before the first call): a request that ends inside a call leaves the
-	 * part planned without pre or post, which the way back of the interrupted
-	 * step asks by its target (decide(), boundary C).
+	 * is the state right before the row call. The journal is saved right
+	 * before the call with post null (write_parts()): a request that ends
+	 * inside a call leaves the part so, and the way back never puts a part
+	 * back that was not read back (decide()).
 	 *
 	 * @param array      $part   Part of the journal.
 	 * @param array|null $state  current() right before the call; null for no post.
@@ -1210,55 +1243,49 @@ final class AB_MCP_Sync_Engine {
 
 	/**
 	 * A part that could not be read right before the step's call: nothing is
-	 * written for it (fail closed), the part is failed and the step ends.
+	 * written for it (fail closed), the part is failed and the step ends as
+	 * deviated (the parts written before it stay, left).
 	 *
-	 * @param array    $journal Journal.
-	 * @param int      $i       Part.
-	 * @param WP_Error $error   The read that failed.
-	 * @param callable $save    Saves the journal.
-	 * @param int|null $live_id Post.
+	 * @param array      $journal Journal.
+	 * @param int        $i       Part.
+	 * @param WP_Error   $error   The read that failed.
+	 * @param int|null   $live_id Post.
+	 * @param array|null $backup  current() of the backup; null for a new object.
 	 * @return array outcome().
 	 */
-	private static function unread( array $journal, $i, WP_Error $error, $save, $live_id ) {
+	private static function unread( array $journal, $i, WP_Error $error, $live_id, $backup ) {
 		$name                            = (string) $journal['parts'][ $i ]['part'];
 		$journal['parts'][ $i ]['state'] = 'failed';
 		$journal['parts'][ $i ]['note']  = 'Not written: the part could not be read before the call (' . $error->get_error_message() . ').';
-		$save( $journal );
-		if ( 'row' === $name ) {
-			return self::outcome( 'failed', 'The row was not written: ' . $error->get_error_message(), $journal, $live_id );
-		}
-		return self::outcome( 'unclear', 'A part was not written, the parts before stay: ' . $error->get_error_message(), $journal, $live_id );
+		return self::deviated( $journal, $i, sprintf( 'the part %1$s could not be read before its call (%2$s)', $name, $error->get_error_message() ), $live_id, $backup );
 	}
 
 	/**
 	 * Whether a part goes back, from the journal and the state read now; the
 	 * one place of the rule (decisions 17, 18 and 23; Codex round 6 of
-	 * branch 8), pure: no call of WordPress, nothing of the state of the
-	 * part. The turn of a step within its boundary and the way back of the
-	 * run both ask it, each part right before its turn, on a hash read then.
+	 * branch 8; the decision of 07.11.2026), pure: no call of WordPress,
+	 * nothing of the state of the part. The way back of the run asks it, each
+	 * part right before its turn, on a hash read then.
 	 *
 	 * 1. $now null (the part could not be read): left.
 	 * 2. $now as the backup: unchanged, nothing to do.
-	 * 3. The step owns the part (own, own_after): on a way the lock does not
-	 *    refuse (terms), where own_after is other than what the call was to
-	 *    write (own_target), left: what was read back is not provably the
-	 *    step's own (A2). Else $now as own_after: put back; otherwise the
-	 *    part was changed since the step wrote it: left.
-	 * 4. The step does not own it: left, except the one boundary of decision
-	 *    18 (C): the step was interrupted (its request ended before the step
-	 *    did), the part was never read back after a call (post null: the
-	 *    request ended between the call and its read back), it carries no
-	 *    mark of a change by another hand (foreign), and $now is its target,
-	 *    so the step wrote it: put back by the target. A writer that set
-	 *    the target in that moment is not told apart (GRENZEN-LAUF.md).
+	 * 3. The object deviated within its step (deviated, the mark deviated()
+	 *    sets on every part; or the journal is of an earlier build that did
+	 *    not record it): left, whatever the part holds. Nothing of such an
+	 *    object goes back by itself (boundary C of GRENZEN-LAUF.md).
+	 * 4. The step owns the part (own, own_after: its own call changed it and
+	 *    read it back): $now as own_after, put back; otherwise the part was
+	 *    changed since the step wrote it: left.
+	 * 5. The step does not own it (no call of its own changed it; a part never
+	 *    read back, which an interrupted step leaves: a hash equal to the
+	 *    target proves no ownership; not_reached): left, with why.
 	 *
-	 * @param array       $part        Part of the journal (part, way, target, own, own_after, own_target, post, foreign).
-	 * @param string|null $now         The hash of the part read now; null where it could not be read.
-	 * @param string      $backup      The hash of the part in the backup.
-	 * @param bool        $interrupted Whether the request of the step ended before the step did (decision 18).
+	 * @param array       $part   Part of the journal (part, own, own_after, deviated, post, foreign, state, note).
+	 * @param string|null $now    The hash of the part read now; null where it could not be read.
+	 * @param string      $backup The hash of the part in the backup.
 	 * @return array{state:string,why:string,hash?:string} state unchanged, put_back (hash: what the part has to hold as it is put back) or left (why).
 	 */
-	public static function decide( array $part, $now, $backup, $interrupted ) {
+	public static function decide( array $part, $now, $backup ) {
 		$name = isset( $part['part'] ) ? (string) $part['part'] : '';
 		$own  = ! empty( $part['own'] ) && isset( $part['own_after'] ) && null !== $part['own_after'];
 		if ( null === $now ) {
@@ -1273,22 +1300,15 @@ final class AB_MCP_Sync_Engine {
 				'why'   => $own ? '' : 'As before the run.',
 			);
 		}
-		if ( ! array_key_exists( 'own', $part ) ) {
-			// A journal of an earlier build of this branch, without the mark
-			// of ownership (Codex round 7, F3; GRENZEN-LAUF.md): fail closed.
+		if ( ! empty( $part['deviated'] ) ) {
 			return array(
 				'state' => 'left',
-				'why'   => sprintf( 'The journal of the part %s holds no mark of ownership (written by an earlier build), so it is left as it is.', $name ),
+				'why'   => 'earlier_build' === $part['deviated']
+					? sprintf( 'The journal of this step is of an earlier build and does not say whether the object deviated within the step, so nothing of it goes back by itself: the part %s is left as it is; check it by hand, its value before stands beside it (value_before).', $name )
+					: sprintf( 'The object deviated within its step, so nothing of it goes back by itself: the part %s is left as it is; check it by hand, its value before stands beside it (value_before).', $name ),
 			);
 		}
 		if ( $own ) {
-			$way = isset( $part['way'] ) ? (string) $part['way'] : AB_MCP_Sync_Post_Writer::WAY_ROW;
-			if ( AB_MCP_Sync_Post_Writer::WAY_TERMS === $way && ! hash_equals( isset( $part['own_target'] ) ? (string) $part['own_target'] : '', (string) $part['own_after'] ) ) {
-				return array(
-					'state' => 'left',
-					'why'   => sprintf( 'The part %s was written deviating on a way the lock does not refuse, so what it holds is not provably the run\'s own: left as it is.', $name ),
-				);
-			}
 			if ( hash_equals( (string) $part['own_after'], (string) $now ) ) {
 				return array(
 					'state' => 'put_back',
@@ -1301,17 +1321,9 @@ final class AB_MCP_Sync_Engine {
 				'why'   => sprintf( 'The part %s was changed since the step wrote it, so it is left as it is.', $name ),
 			);
 		}
-		$never_read_back = ! isset( $part['post'] ) || null === $part['post'];
-		if ( $interrupted && $never_read_back && empty( $part['foreign'] ) && isset( $part['target'] ) && null !== $part['target'] && hash_equals( (string) $part['target'], (string) $now ) ) {
-			return array(
-				'state' => 'put_back',
-				'why'   => '',
-				'hash'  => (string) $part['target'],
-			);
-		}
 		return array(
 			'state' => 'left',
-			'why'   => 'Not the step\'s own (' . self::not_own_why( $part, $interrupted ) . '), so it is left as it is.',
+			'why'   => 'Not the step\'s own (' . self::not_own_why( $part ) . '), so it is left as it is.',
 		);
 	}
 
@@ -1319,77 +1331,58 @@ final class AB_MCP_Sync_Engine {
 	 * Why a part is not the step's own, for the journal and the answer: a
 	 * wording from the marks of the part (its state only names the moment).
 	 *
-	 * @param array $part        Part of the journal.
-	 * @param bool  $interrupted Whether the request of the step ended before the step did.
+	 * @param array $part Part of the journal.
 	 * @return string
 	 */
-	private static function not_own_why( array $part, $interrupted ) {
+	private static function not_own_why( array $part ) {
 		$note  = isset( $part['note'] ) && '' !== (string) $part['note'] ? ': ' . (string) $part['note'] : '';
 		$state = isset( $part['state'] ) ? (string) $part['state'] : '';
 		if ( ! empty( $part['foreign'] ) ) {
 			return 'changed by another hand, not by the step' . $note;
 		}
-		if ( in_array( $state, array( 'restored', 'unchanged' ), true ) ) {
-			return 'put back within the boundary already, so what it holds now is another hand\'s' . $note;
+		if ( 'not_reached' === $state ) {
+			return 'the step ended before it reached this part, so it never wrote it';
 		}
-		if ( 'unclear' === $state ) {
-			return 'put back within the boundary, where it did not read as the backup after, so what it holds now is another hand\'s' . $note;
-		}
-		if ( 'not_reached' === $state || ! isset( $part['post'] ) || null === $part['post'] ) {
-			return $interrupted && 'not_reached' !== $state ? 'the step never read it back and it does not hold the target, so the step did not write it' : 'the step ended before it reached this part, so it never wrote it';
-		}
-		if ( 'failed' === $state ) {
-			return 'the call failed and changed nothing of it, so what it holds now is another hand\'s' . $note;
+		if ( ! isset( $part['post'] ) || null === $part['post'] ) {
+			return 'the step never read it back (its request ended in the call), so whether the step wrote what it holds is unknown';
 		}
 		return 'no call of the step changed it, so what it holds now is another hand\'s' . $note;
 	}
 
 	/**
-	 * The parts of a step put back from its backup: the one place of the way
-	 * back (decisions 17 and 23), within the boundary when the step turns and
-	 * on the way back of the run (GitHub Codex round 1 of branch 8; Codex
-	 * round 6 after N1 to N4).
+	 * The parts of a step put back from its backup on the way back of the
+	 * run: the one place of the way back (decisions 17 and 23; GitHub Codex
+	 * round 1 of branch 8; Codex round 6 after N1 to N4).
 	 *
 	 * 1. The row goes back first, then the meta, then the terms:
 	 *    wp_update_post() has side effects on the terms of a post (the
-	 *    default category of a post without one, with_row()), which the terms
-	 *    put back after it undo.
+	 *    default category of a post without one), which the terms put back
+	 *    after it undo where the terms are still the step's own.
 	 * 2. Every part is decided right before its turn, on the hash read then
 	 *    (decide(): as the backup, unchanged; as own_after, put back; else
 	 *    left), never on a hash read before another part went back (N3).
-	 * 3. What the row put back changed besides the row is the step's own
-	 *    only where with_row() names that hash for this very call (the
-	 *    default category): then own and own_after are those of the put
-	 *    back, and the part is decided afresh on them. Any other change
-	 *    while the row went back is another hand's (a hook of this site):
-	 *    the step owns nothing of what the part holds, so it is left (N3).
+	 * 3. What the row put back changed besides the row is another hand's,
+	 *    whatever it is (a side effect of the core such as the default
+	 *    category, a hook of this site): the step owns nothing of what the
+	 *    part holds then, so it is left unless it is as the backup (N3; the
+	 *    decision of 07.11.2026 after Codex round 7, F2: before, the default
+	 *    category the row gave back became the step's own and took terms
+	 *    back that another hand had changed).
 	 * 4. Then every part counted as back is read once more against the
 	 *    backup: only where every one reads as the backup is the object back;
 	 *    a part that does not is unclear, with the reason.
 	 *
-	 * The parts come back with their marks as the turn left them: a part put
-	 * back or found as the backup is nothing of the step's any more (own
-	 * false); one whose put back failed, or that was left, keeps own and
-	 * own_after, so that a later way back can still take it back where it
-	 * holds what the step wrote (N4).
+	 * A part left carries the value it held before (value_before, from the
+	 * backup; AB_MCP_Sync_Post_Writer::before_value()).
 	 *
-	 * @param array         $journal     Journal of the step that wrote.
-	 * @param int           $live_id     Post.
-	 * @param array         $backup      The backed-up state (current() before the step).
-	 * @param bool          $interrupted Whether the request of the step ended before the step did (decision 18).
-	 * @param callable|null $progress    Called with the parts (their states and marks so far) as each is decided, and again where the check after changes one.
-	 * @return array{all_back:bool,parts:array<int,array{state:string,note?:string}>,journal:array} parts: the outcome by the index of the part; journal: the parts with their states and marks.
+	 * @param array $journal Journal of the step that wrote.
+	 * @param int   $live_id Post.
+	 * @param array $backup  The backed-up state (current() before the step).
+	 * @return array{all_back:bool,parts:array<int,array{state:string,note?:string,value_before?:string}>} parts: the outcome by the index of the part.
 	 */
-	private static function put_back( array $journal, $live_id, array $backup, $interrupted, $progress = null ) {
+	private static function put_back( array $journal, $live_id, array $backup ) {
 		$parts = $journal['parts'];
 		$out   = array();
-		$tell  = static function ( $i, array $one ) use ( &$parts, &$out, $progress ) {
-			$out[ $i ]   = $one;
-			$parts[ $i ] = self::applied( $parts[ $i ], $one );
-			if ( null !== $progress ) {
-				$progress( $parts );
-			}
-		};
 		// The row first, then the meta, then the terms.
 		$order = array();
 		foreach ( array( 'row', 'meta:', 'terms:' ) as $prefix ) {
@@ -1404,51 +1397,40 @@ final class AB_MCP_Sync_Engine {
 		foreach ( $order as $i ) {
 			$name    = (string) $parts[ $i ]['part'];
 			$now     = null === $seen ? null : AB_MCP_Sync_Post_Writer::part_hash( $seen, $name );
-			$decided = self::decide( $parts[ $i ], $now, (string) AB_MCP_Sync_Post_Writer::part_hash( $backup, $name ), $interrupted );
+			$decided = self::decide( $parts[ $i ], $now, (string) AB_MCP_Sync_Post_Writer::part_hash( $backup, $name ) );
 			if ( 'put_back' !== $decided['state'] ) {
-				$tell( $i, '' === $decided['why'] ? array( 'state' => $decided['state'] ) : array( 'state' => $decided['state'], 'note' => $decided['why'] ) );
-				continue;
-			}
-			$one = self::restore_part( $parts[ $i ], $live_id, $backup, $decided['hash'] );
-			AB_MCP_Change_Lock::touch();
-			$again = AB_MCP_Sync_Post_Writer::current( $live_id );
-			$again = is_array( $again ) ? $again : null;
-			if ( 'row' === $name ) {
-				// What the row put back changed besides the row (N3).
-				$named = null === $seen ? array() : AB_MCP_Sync_Post_Writer::with_row( array( 'type' => (string) $backup['row']['post_type'], 'postarr' => array() ), $live_id, $seen );
-				foreach ( $parts as $k => $other ) {
-					if ( $k === $i ) {
-						continue;
+				$one = '' === $decided['why'] ? array( 'state' => $decided['state'] ) : array(
+					'state' => $decided['state'],
+					'note'  => $decided['why'],
+				);
+			} else {
+				$one = self::restore_part( $parts[ $i ], $live_id, $backup, $decided['hash'] );
+				AB_MCP_Change_Lock::touch();
+				$again = AB_MCP_Sync_Post_Writer::current( $live_id );
+				$again = is_array( $again ) ? $again : null;
+				if ( 'row' === $name ) {
+					// What the row put back changed besides the row is another
+					// hand's (N3; F2): the step owns nothing of it.
+					foreach ( $parts as $k => $other ) {
+						if ( $k === $i ) {
+							continue;
+						}
+						$pre_k  = null === $seen ? null : AB_MCP_Sync_Post_Writer::part_hash( $seen, (string) $other['part'] );
+						$post_k = null === $again ? null : AB_MCP_Sync_Post_Writer::part_hash( $again, (string) $other['part'] );
+						if ( ! self::changed( $pre_k, $post_k ) ) {
+							continue;
+						}
+						$parts[ $k ]['own']     = false;
+						$parts[ $k ]['foreign'] = true;
+						$parts[ $k ]['note']    = self::noted( $other, 'Changed as the row went back (a side effect of wp_update_post(), such as the default category of a post without one, or a hook of this site): the step owns nothing of what the part holds now, so it is left as it is unless it is as the backup; check it by hand.' );
 					}
-					$pre_k  = null === $seen ? null : AB_MCP_Sync_Post_Writer::part_hash( $seen, (string) $other['part'] );
-					$post_k = null === $again ? null : AB_MCP_Sync_Post_Writer::part_hash( $again, (string) $other['part'] );
-					if ( ! self::changed( $pre_k, $post_k ) ) {
-						continue;
-					}
-					// Only a part the step would have put back or found as the
-					// backup right before the row went back becomes its own by
-					// what wp_update_post() wrote with the row; a part another
-					// hand had changed stays another hand's (Codex round 7, F2).
-					$before_k = self::decide( $other, $pre_k, (string) AB_MCP_Sync_Post_Writer::part_hash( $backup, (string) $other['part'] ), $interrupted );
-					if ( isset( $named[ $other['part'] ] ) && hash_equals( (string) $named[ $other['part'] ], (string) $post_k ) && in_array( $before_k['state'], array( 'put_back', 'unchanged' ), true ) ) {
-						$parts[ $k ]['own']        = true;
-						$parts[ $k ]['own_after']  = $post_k;
-						$parts[ $k ]['own_target'] = $post_k;
-						$parts[ $k ]['note']       = self::noted( $other, 'Changed as the row went back, as wp_update_post() writes it with the row (the default category): the step\'s own, decided afresh.' );
-						continue;
-					}
-					$parts[ $k ]['own']     = false;
-					$parts[ $k ]['foreign'] = true;
-					$parts[ $k ]['note']    = self::noted(
-						$other,
-						isset( $named[ $other['part'] ] ) && hash_equals( (string) $named[ $other['part'] ], (string) $post_k )
-							? 'Changed as the row went back, as wp_update_post() writes it with the row (the default category), but another hand had changed the part before: not the step\'s own, left as it is; check it by hand.'
-							: 'Changed by another hand (a hook of this site) as the row went back, other than what wp_update_post() writes with the row: the step owns nothing of what it holds now.'
-					);
 				}
+				$seen = $again;
 			}
-			$seen = $again;
-			$tell( $i, $one );
+			if ( 'left' === $one['state'] ) {
+				$one['value_before'] = AB_MCP_Sync_Post_Writer::before_value( $name, $backup, $seen, $live_id );
+			}
+			$out[ $i ] = $one;
 		}
 		// The check after: every part counted as back reads as the backup now.
 		$again    = AB_MCP_Sync_Post_Writer::current( $live_id );
@@ -1458,12 +1440,9 @@ final class AB_MCP_Sync_Engine {
 			if ( in_array( $out[ $i ]['state'], array( 'restored', 'unchanged' ), true ) ) {
 				$now = is_array( $again ) ? AB_MCP_Sync_Post_Writer::part_hash( $again, $name ) : null;
 				if ( null === $now || ! hash_equals( (string) AB_MCP_Sync_Post_Writer::part_hash( $backup, $name ), $now ) ) {
-					$tell(
-						$i,
-						array(
-							'state' => 'unclear',
-							'note'  => sprintf( 'The part %1$s reads other than the backup after the parts went back%2$s: a side effect of the core or a hook of this site changed it after it was %3$s. Check the object in wp-admin.', $name, null === $now ? ' (it could not be read)' : '', 'restored' === $out[ $i ]['state'] ? 'put back' : 'read as the backup' ),
-						)
+					$out[ $i ] = array(
+						'state' => 'unclear',
+						'note'  => sprintf( 'The part %1$s reads other than the backup after the parts went back%2$s: a side effect of the core or a hook of this site changed it after it was %3$s. Check the object in wp-admin.', $name, null === $now ? ' (it could not be read)' : '', 'restored' === $out[ $i ]['state'] ? 'put back' : 'read as the backup' ),
 					);
 				}
 			}
@@ -1474,34 +1453,7 @@ final class AB_MCP_Sync_Engine {
 		return array(
 			'all_back' => $all_back,
 			'parts'    => $out,
-			'journal'  => $parts,
 		);
-	}
-
-	/**
-	 * A part of the journal with the outcome of its turn: the state and the
-	 * note (a description), and the marks: a part put back, or found as the
-	 * backup, is nothing of the step's any more; one whose put back failed
-	 * (unclear), or that was left, keeps own and own_after (N4). A part the
-	 * step never reached and that is as the backup stays as the journal has
-	 * it (planned, which settled() names not_reached).
-	 *
-	 * @param array $part    Part.
-	 * @param array $outcome state, note.
-	 * @return array
-	 */
-	private static function applied( array $part, array $outcome ) {
-		if ( 'unchanged' === $outcome['state'] && empty( $part['own'] ) && 'planned' === $part['state'] ) {
-			return $part;
-		}
-		$part['state'] = (string) $outcome['state'];
-		if ( isset( $outcome['note'] ) ) {
-			$part['note'] = (string) $outcome['note'];
-		}
-		if ( in_array( $part['state'], array( 'restored', 'unchanged' ), true ) ) {
-			$part['own'] = false;
-		}
-		return $part;
 	}
 
 	/**
@@ -1848,13 +1800,20 @@ final class AB_MCP_Sync_Engine {
 		if ( is_wp_error( $backup ) ) {
 			return self::fail_step( $run_id, $seq, 'begun', $backup->get_error_message() );
 		}
+		// A journal of an earlier build of this branch, without the record
+		// whether the object deviated within its step: fail closed, every part
+		// of it that is not as the backup is left (decide()).
+		if ( ! array_key_exists( 'deviated', $object ) ) {
+			foreach ( $journal['parts'] as $k => $part ) {
+				$journal['parts'][ $k ]['deviated'] = 'earlier_build';
+			}
+		}
 		// The parts, each decided right before its turn on the state read then
 		// against the backup and what the run owns (put_back(), decide(): the
 		// one place of the rule; decision 23), the row first, then every part
-		// read again. Only a step whose request ended before the step did
-		// (interrupted: its journal was never settled) has parts the way back
-		// asks by their target (decision 18, boundary C).
-		$put      = self::put_back( $journal, $live_id, $backup, empty( $journal['settled'] ) );
+		// read again. A part of an object that deviated, and a part never read
+		// back (an interrupted step), is left with its value before.
+		$put      = self::put_back( $journal, $live_id, $backup );
 		$outcomes = array();
 		foreach ( $journal['parts'] as $i => $part ) {
 			$outcomes[] = array( 'part' => $part['part'] ) + $put['parts'][ $i ];
@@ -1878,7 +1837,7 @@ final class AB_MCP_Sync_Engine {
 		$result = array(
 			'message'  => $all_back
 				? sprintf( 'The %1$s %2$d went back to its state before the run: every part the run wrote was still its own and was put back, and every part reads as the backup after that; the pair has its bases of before.%3$s', $object['kind'], $live_id, $pair_note )
-				: sprintf( 'The %1$s %2$d went back only in part: a part was changed since the run wrote it, or needs a check, and is left as it is, or reads other than the backup after the parts went back (see parts); the pair is unclear until a person confirms a new alignment (wp_site_pairs).%3$s', $object['kind'], $live_id, $pair_note ),
+				: sprintf( 'The %1$s %2$d went back only in part: the object deviated within its step and is left whole, or a part was changed since the run wrote it, was never read back, or needs a check, and is left as it is, or reads other than the backup after the parts went back (see parts; a part left names its value before); the pair is unclear until a person confirms a new alignment (wp_site_pairs).%3$s', $object['kind'], $live_id, $pair_note ),
 			'live_ref' => (string) $live_id,
 			'parts'    => $outcomes,
 		);
@@ -2033,12 +1992,12 @@ final class AB_MCP_Sync_Engine {
 
 	/**
 	 * The journal of a step whose request ended the step itself (done,
-	 * deviating, failed; not interrupted), marked so (settled): a part still
+	 * deviated, failed; not interrupted), marked so (settled): a part still
 	 * planned was never reached, so the step did not write it; it stands as
 	 * not_reached, a description (Codex round 4). Only the journal of a step
 	 * whose request ended before (interrupted) lacks the mark and keeps
-	 * parts planned, which the way back asks by their target where they were
-	 * never read back (decision 18, boundary C; decide()).
+	 * parts planned: never read back, so never put back (decide()); the
+	 * answer names their value before.
 	 *
 	 * @param array $journal Journal.
 	 * @return array

@@ -199,6 +199,8 @@ final class SyncRunPostWpdb {
 	public $relations = array();
 	/** @var array<int,array> Term rows by term id. */
 	public $term_rows = array();
+	/** @var array<int,array[]> Revisions by post_parent: ID, post_content, post_excerpt. */
+	public $revisions = array();
 	/** @var array<int,string>|null A title the post gets once it was read once. */
 	public $edit_after_first = null;
 	/** @var int Readings of the post row. */
@@ -238,6 +240,13 @@ final class SyncRunPostWpdb {
 			$rows = $this->relations[ (int) $m[1] ] ?? array();
 		} elseif ( preg_match( "/FROM wp_terms AS t INNER JOIN wp_term_taxonomy AS tt ON tt\.term_id = t\.term_id WHERE t\.term_id = (\d+) AND tt\.taxonomy = BINARY '([^']*)'/", (string) $sql, $m ) ) {
 			$rows = isset( $this->term_rows[ (int) $m[1] ] ) && $this->term_rows[ (int) $m[1] ]['taxonomy'] === stripslashes( $m[2] ) ? array( $this->term_rows[ (int) $m[1] ] ) : array();
+		} elseif ( preg_match( "/FROM wp_posts WHERE post_parent = (\d+) AND post_type = 'revision' AND CAST\( (post_content|post_excerpt) AS BINARY \) = CAST\( '(.*)' AS BINARY \) AND OCTET_LENGTH/s", (string) $sql, $m ) ) {
+			foreach ( array_reverse( $this->revisions[ (int) $m[1] ] ?? array() ) as $revision ) {
+				if ( ( $revision[ $m[2] ] ?? null ) === stripslashes( $m[3] ) ) {
+					$rows = array( array( 'ID' => $revision['ID'] ) );
+					break;
+				}
+			}
 		}
 		$this->last_result = array_map( static fn( $r ) => (object) $r, $rows );
 		return count( $rows );
@@ -1053,16 +1062,18 @@ final class SyncRunTest extends TestCase {
 		self::assertNotSame( AB_MCP_Sync_Post_Writer::terms_hash( array( 'post-format-aside' ) ), AB_MCP_Sync_Post_Writer::terms_hash( array( 'post-format-quote' ) ) );
 	}
 
-	public function testDecideOverEveryCombinationOfOwnershipStateWayAndInterruption(): void {
-		// The one place of the ownership rule (Codex round 6 of branch 8; the
-		// table in GRENZEN-LAUF.md): a part goes back by what the journal owns
-		// of it (own, own_after) and the hash read now, never by its state.
-		// Four distinct hashes: the backup, own_after (what the step read back
-		// after its call changed the part, other than the target: deviating),
-		// the target, and another value. Every combination of own, now,
-		// interrupted, the way (terms, which the lock does not refuse) and the
-		// mark of a change by another hand (foreign); the part never read back
-		// (post null), as the boundary C of decision 18 asks.
+	public function testDecideOverEveryCombinationOfOwnershipStateDeviationWayAndForeignMark(): void {
+		// The one place of the rule (Codex round 6 of branch 8; the decision of
+		// 07.11.2026, «A mit altem Wert»; the table in GRENZEN-LAUF.md): a part
+		// goes back by what the journal owns of it (own, own_after) and the
+		// hash read now, never by its state, and never where the object
+		// deviated within its step. Four distinct hashes: the backup, own_after
+		// (what the step read back after its call changed the part), the
+		// target, and another value. Every combination of own, now, deviated,
+		// the way (terms, which the lock does not refuse) and the mark of a
+		// change by another hand (foreign): the way and the mark change
+		// nothing of the outcome since the decision (a deviation of any kind
+		// ends the step, deviated()), and so the table holds them as «any».
 		$hash = array(
 			'backup'    => str_repeat( 'b', 64 ),
 			'own_after' => str_repeat( 'w', 64 ),
@@ -1070,7 +1081,7 @@ final class SyncRunTest extends TestCase {
 			'other'     => str_repeat( 'x', 64 ),
 			'null'      => null,
 		);
-		$part = static function ( bool $own, bool $terms, bool $foreign, $post = null, ?string $own_after = null ) use ( $hash ): array {
+		$part = static function ( bool $own, bool $deviated, bool $terms, bool $foreign, $post = null, ?string $own_after = null ) use ( $hash ): array {
 			return array(
 				'part'       => $terms ? 'terms:category' : 'meta:note',
 				'way'        => $terms ? AB_MCP_Sync_Post_Writer::WAY_TERMS : AB_MCP_Sync_Post_Writer::WAY_META,
@@ -1083,134 +1094,100 @@ final class SyncRunTest extends TestCase {
 				'own'        => $own,
 				'own_after'  => $own ? ( $own_after ?? $hash['own_after'] ) : null,
 				'own_target' => $own ? $hash['target'] : null,
+				'deviated'   => $deviated,
 				'foreign'    => $foreign,
 			);
 		};
-		// own, now, interrupted, terms, foreign => expected.
-		$table = array(
-			array( true , 'backup'   , true , true , true , 'unchanged' ),
-			array( true , 'backup'   , true , true , false, 'unchanged' ),
-			array( true , 'backup'   , true , false, true , 'unchanged' ),
-			array( true , 'backup'   , true , false, false, 'unchanged' ),
-			array( true , 'backup'   , false, true , true , 'unchanged' ),
-			array( true , 'backup'   , false, true , false, 'unchanged' ),
-			array( true , 'backup'   , false, false, true , 'unchanged' ),
-			array( true , 'backup'   , false, false, false, 'unchanged' ),
-			array( true , 'own_after', true , true , true , 'left'      ),
-			array( true , 'own_after', true , true , false, 'left'      ),
-			array( true , 'own_after', true , false, true , 'put_back'  ),
-			array( true , 'own_after', true , false, false, 'put_back'  ),
-			array( true , 'own_after', false, true , true , 'left'      ),
-			array( true , 'own_after', false, true , false, 'left'      ),
-			array( true , 'own_after', false, false, true , 'put_back'  ),
-			array( true , 'own_after', false, false, false, 'put_back'  ),
-			array( true , 'target'   , true , true , true , 'left'      ),
-			array( true , 'target'   , true , true , false, 'left'      ),
-			array( true , 'target'   , true , false, true , 'left'      ),
-			array( true , 'target'   , true , false, false, 'left'      ),
-			array( true , 'target'   , false, true , true , 'left'      ),
-			array( true , 'target'   , false, true , false, 'left'      ),
-			array( true , 'target'   , false, false, true , 'left'      ),
-			array( true , 'target'   , false, false, false, 'left'      ),
-			array( true , 'other'    , true , true , true , 'left'      ),
-			array( true , 'other'    , true , true , false, 'left'      ),
-			array( true , 'other'    , true , false, true , 'left'      ),
-			array( true , 'other'    , true , false, false, 'left'      ),
-			array( true , 'other'    , false, true , true , 'left'      ),
-			array( true , 'other'    , false, true , false, 'left'      ),
-			array( true , 'other'    , false, false, true , 'left'      ),
-			array( true , 'other'    , false, false, false, 'left'      ),
-			array( true , 'null'     , true , true , true , 'left'      ),
-			array( true , 'null'     , true , true , false, 'left'      ),
-			array( true , 'null'     , true , false, true , 'left'      ),
-			array( true , 'null'     , true , false, false, 'left'      ),
-			array( true , 'null'     , false, true , true , 'left'      ),
-			array( true , 'null'     , false, true , false, 'left'      ),
-			array( true , 'null'     , false, false, true , 'left'      ),
-			array( true , 'null'     , false, false, false, 'left'      ),
-			array( false, 'backup'   , true , true , true , 'unchanged' ),
-			array( false, 'backup'   , true , true , false, 'unchanged' ),
-			array( false, 'backup'   , true , false, true , 'unchanged' ),
-			array( false, 'backup'   , true , false, false, 'unchanged' ),
-			array( false, 'backup'   , false, true , true , 'unchanged' ),
-			array( false, 'backup'   , false, true , false, 'unchanged' ),
-			array( false, 'backup'   , false, false, true , 'unchanged' ),
-			array( false, 'backup'   , false, false, false, 'unchanged' ),
-			array( false, 'own_after', true , true , true , 'left'      ),
-			array( false, 'own_after', true , true , false, 'left'      ),
-			array( false, 'own_after', true , false, true , 'left'      ),
-			array( false, 'own_after', true , false, false, 'left'      ),
-			array( false, 'own_after', false, true , true , 'left'      ),
-			array( false, 'own_after', false, true , false, 'left'      ),
-			array( false, 'own_after', false, false, true , 'left'      ),
-			array( false, 'own_after', false, false, false, 'left'      ),
-			array( false, 'target'   , true , true , true , 'left'      ),
-			array( false, 'target'   , true , true , false, 'put_back'  ),
-			array( false, 'target'   , true , false, true , 'left'      ),
-			array( false, 'target'   , true , false, false, 'put_back'  ),
-			array( false, 'target'   , false, true , true , 'left'      ),
-			array( false, 'target'   , false, true , false, 'left'      ),
-			array( false, 'target'   , false, false, true , 'left'      ),
-			array( false, 'target'   , false, false, false, 'left'      ),
-			array( false, 'other'    , true , true , true , 'left'      ),
-			array( false, 'other'    , true , true , false, 'left'      ),
-			array( false, 'other'    , true , false, true , 'left'      ),
-			array( false, 'other'    , true , false, false, 'left'      ),
-			array( false, 'other'    , false, true , true , 'left'      ),
-			array( false, 'other'    , false, true , false, 'left'      ),
-			array( false, 'other'    , false, false, true , 'left'      ),
-			array( false, 'other'    , false, false, false, 'left'      ),
-			array( false, 'null'     , true , true , true , 'left'      ),
-			array( false, 'null'     , true , true , false, 'left'      ),
-			array( false, 'null'     , true , false, true , 'left'      ),
-			array( false, 'null'     , true , false, false, 'left'      ),
-			array( false, 'null'     , false, true , true , 'left'      ),
-			array( false, 'null'     , false, true , false, 'left'      ),
-			array( false, 'null'     , false, false, true , 'left'      ),
-			array( false, 'null'     , false, false, false, 'left'      ),
+		// own, now, deviated => expected; terms and foreign run over both values each.
+		$rule = array(
+			array( true , 'backup'   , false, 'unchanged' ),
+			array( true , 'backup'   , true , 'unchanged' ),
+			array( true , 'own_after', false, 'put_back'  ),
+			array( true , 'own_after', true , 'left'      ),
+			array( true , 'target'   , false, 'left'      ),
+			array( true , 'target'   , true , 'left'      ),
+			array( true , 'other'    , false, 'left'      ),
+			array( true , 'other'    , true , 'left'      ),
+			array( true , 'null'     , false, 'left'      ),
+			array( true , 'null'     , true , 'left'      ),
+			array( false, 'backup'   , false, 'unchanged' ),
+			array( false, 'backup'   , true , 'unchanged' ),
+			array( false, 'own_after', false, 'left'      ),
+			array( false, 'own_after', true , 'left'      ),
+			array( false, 'target'   , false, 'left'      ),
+			array( false, 'target'   , true , 'left'      ),
+			array( false, 'other'    , false, 'left'      ),
+			array( false, 'other'    , true , 'left'      ),
+			array( false, 'null'     , false, 'left'      ),
+			array( false, 'null'     , true , 'left'      ),
 		);
+		$table = array();
+		foreach ( $rule as $row ) {
+			foreach ( array( true, false ) as $terms ) {
+				foreach ( array( true, false ) as $foreign ) {
+					$table[] = array( $row[0], $row[1], $row[2], $terms, $foreign, $row[3] );
+				}
+			}
+		}
 		self::assertCount( 80, $table, 'Every combination of 2 x 5 x 2 x 2 x 2.' );
 		foreach ( $table as $row ) {
-			list( $own, $now, $interrupted, $terms, $foreign, $expected ) = $row;
-			$case = sprintf( 'own=%s now=%s interrupted=%s terms=%s foreign=%s', var_export( $own, true ), $now, var_export( $interrupted, true ), var_export( $terms, true ), var_export( $foreign, true ) );
-			$got  = AB_MCP_Sync_Engine::decide( $part( $own, $terms, $foreign ), $hash[ $now ], $hash['backup'], $interrupted );
+			list( $own, $now, $deviated, $terms, $foreign, $expected ) = $row;
+			$case = sprintf( 'own=%s now=%s deviated=%s terms=%s foreign=%s', var_export( $own, true ), $now, var_export( $deviated, true ), var_export( $terms, true ), var_export( $foreign, true ) );
+			$got  = AB_MCP_Sync_Engine::decide( $part( $own, $deviated, $terms, $foreign ), $hash[ $now ], $hash['backup'] );
 			self::assertSame( $expected, $got['state'], $case );
 			if ( 'put_back' === $expected ) {
-				self::assertSame( $own ? $hash['own_after'] : $hash['target'], $got['hash'], $case . ': what the part has to hold as it is put back is own_after, or the target for the boundary C.' );
+				self::assertSame( $hash['own_after'], $got['hash'], $case . ': what the part has to hold as it is put back is own_after.' );
 			} else {
 				self::assertArrayNotHasKey( 'hash', $got, $case );
 			}
 			if ( 'left' === $expected && null !== $hash[ $now ] ) {
-				self::assertStringContainsString( $own ? ( $terms ? 'not provably' : 'changed since the step wrote it' ) : 'Not the step\'s own', $got['why'], $case );
+				self::assertStringContainsString( $deviated ? 'deviated within its step' : ( $own ? 'changed since the step wrote it' : 'Not the step\'s own' ), $got['why'], $case );
+				if ( $deviated ) {
+					self::assertStringContainsString( 'value_before', $got['why'], $case . ': the answer names where the value before stands.' );
+				}
 			}
 		}
 		// A part the step owns that reads back as its target (read, the usual
-		// case): back where it still holds it, on either way; A2 does not
-		// apply, since what was read back is what the call was to write.
+		// case of a step done): back where it still holds it, on either way.
 		foreach ( array( false, true ) as $terms ) {
-			$read = $part( true, $terms, false, $hash['target'], $hash['target'] );
-			self::assertSame( 'put_back', AB_MCP_Sync_Engine::decide( $read, $hash['target'], $hash['backup'], false )['state'], 'As its target, the step\'s own: back.' );
-			self::assertSame( 'left', AB_MCP_Sync_Engine::decide( $read, $hash['other'], $hash['backup'], false )['state'], 'Changed since: left.' );
-			self::assertSame( 'unchanged', AB_MCP_Sync_Engine::decide( $read, $hash['backup'], $hash['backup'], true )['state'] );
+			$read = $part( true, false, $terms, false, $hash['target'], $hash['target'] );
+			self::assertSame( 'put_back', AB_MCP_Sync_Engine::decide( $read, $hash['target'], $hash['backup'] )['state'], 'As its target, the step\'s own: back.' );
+			self::assertSame( 'left', AB_MCP_Sync_Engine::decide( $read, $hash['other'], $hash['backup'] )['state'], 'Changed since: left.' );
+			self::assertSame( 'unchanged', AB_MCP_Sync_Engine::decide( $read, $hash['backup'], $hash['backup'] )['state'] );
 		}
-		// The boundary C needs a part never read back: one the row call read
-		// back with the row (post set, not the step's own) holds the target by
-		// another hand, interrupted or not.
-		self::assertSame( 'left', AB_MCP_Sync_Engine::decide( $part( false, true, false, $hash['backup'] ), $hash['target'], $hash['backup'], true )['state'], 'Read back once (with the row) and not changed by the step: another hand set the target.' );
-		self::assertSame( 'left', AB_MCP_Sync_Engine::decide( $part( false, false, false, $hash['target'] ), $hash['target'], $hash['backup'], true )['state'] );
+		// A part never read back (post null: the request of the step ended in
+		// the call, decision 18) holding its target: a hash equal to the target
+		// proves no ownership, so it is left, with why (before the decision,
+		// the one boundary C put it back by the target).
+		$never = AB_MCP_Sync_Engine::decide( $part( false, false, false, false ), $hash['target'], $hash['backup'] );
+		self::assertSame( 'left', $never['state'] );
+		self::assertStringContainsString( 'never read it back', $never['why'] );
+		// A part the step never reached (settled()): left, with why.
+		$reached              = $part( false, false, false, false );
+		$reached['state']     = 'not_reached';
+		self::assertStringContainsString( 'never wrote it', AB_MCP_Sync_Engine::decide( $reached, $hash['target'], $hash['backup'] )['why'] );
 		// own without own_after owns nothing (a mark without a hash).
-		$bare              = $part( true, false, false );
+		$bare              = $part( true, false, false, false );
 		$bare['own_after'] = null;
-		self::assertSame( 'left', AB_MCP_Sync_Engine::decide( $bare, $hash['own_after'], $hash['backup'], false )['state'] );
+		self::assertSame( 'left', AB_MCP_Sync_Engine::decide( $bare, $hash['own_after'], $hash['backup'] )['state'] );
+		// The mark of a journal of an earlier build (revert_boundary() sets it
+		// where the object does not say whether it deviated): left, with why.
+		$earlier             = $part( true, false, false, false, $hash['own_after'] );
+		$earlier['deviated'] = 'earlier_build';
+		$old                 = AB_MCP_Sync_Engine::decide( $earlier, $hash['own_after'], $hash['backup'] );
+		self::assertSame( 'left', $old['state'] );
+		self::assertStringContainsString( 'earlier build', $old['why'] );
 		// A journal of an earlier shape without the marks: nothing is owned.
-		self::assertSame( 'left', AB_MCP_Sync_Engine::decide( array( 'part' => 'row', 'way' => AB_MCP_Sync_Post_Writer::WAY_ROW, 'target' => $hash['target'], 'state' => 'written', 'after' => $hash['own_after'] ), $hash['own_after'], $hash['backup'], false )['state'], 'after alone, a description, owns nothing.' );
+		self::assertSame( 'left', AB_MCP_Sync_Engine::decide( array( 'part' => 'row', 'way' => AB_MCP_Sync_Post_Writer::WAY_ROW, 'target' => $hash['target'], 'state' => 'written', 'after' => $hash['own_after'] ), $hash['own_after'], $hash['backup'] )['state'], 'after alone, a description, owns nothing.' );
 	}
 
 	public function testAJournalWithoutTheMarkOfOwnershipIsNeverPutBack(): void {
 		// Codex round 7, F3: a part of a journal from an earlier build of this
-		// branch has no own field; even in an interrupted step, never read
-		// back by that build's lights and holding its target now, it is left
-		// (fail closed), and as the backup it is unchanged.
+		// branch has no own field; holding its target now, never read back by
+		// that build's lights, it is left (fail closed: nothing is owned), and
+		// as the backup it is unchanged. Since the decision of 07.11.2026 no
+		// clause of its own is needed for it: a part without own is not the
+		// step's own, and no part goes back by its target.
 		$old = array(
 			'part'   => 'terms:category',
 			'way'    => AB_MCP_Sync_Post_Writer::WAY_TERMS,
@@ -1219,11 +1196,146 @@ final class SyncRunTest extends TestCase {
 			'target' => str_repeat( 't', 64 ),
 			'after'  => str_repeat( 'c', 64 ),
 		);
-		$left = AB_MCP_Sync_Engine::decide( $old, str_repeat( 't', 64 ), str_repeat( 'b', 64 ), true );
+		$left = AB_MCP_Sync_Engine::decide( $old, str_repeat( 't', 64 ), str_repeat( 'b', 64 ) );
 		self::assertSame( 'left', $left['state'] );
-		self::assertStringContainsString( 'no mark of ownership', $left['why'] );
-		self::assertSame( 'left', AB_MCP_Sync_Engine::decide( $old, str_repeat( 'c', 64 ), str_repeat( 'b', 64 ), false )['state'] );
-		self::assertSame( 'unchanged', AB_MCP_Sync_Engine::decide( $old, str_repeat( 'b', 64 ), str_repeat( 'b', 64 ), true )['state'] );
+		self::assertStringContainsString( 'Not the step\'s own', $left['why'] );
+		self::assertSame( 'left', AB_MCP_Sync_Engine::decide( $old, str_repeat( 'c', 64 ), str_repeat( 'b', 64 ) )['state'] );
+		self::assertSame( 'unchanged', AB_MCP_Sync_Engine::decide( $old, str_repeat( 'b', 64 ), str_repeat( 'b', 64 ) )['state'] );
+	}
+
+	public function testTheValueBeforeOfAPartLeftIsShortNeverACredentialAndCapped(): void {
+		// The decision of 07.11.2026, «mit altem Wert»: a part left names what
+		// it held before the step, from the backup (before_value()): the row by
+		// its columns that differ from now, a long text by its bytes and the
+		// revision that holds it, meta by its values, terms by their names
+		// (their slug where this test has no term table); never a credential,
+		// never binary, cut per value and per part.
+		$backup = array(
+			'row'   => array(
+				'post_author'           => '1',
+				'post_date'             => '2026-10-01 10:00:00',
+				'post_date_gmt'         => '2026-10-01 10:00:00',
+				'post_content'          => str_repeat( 'Write to us. ', 20 ),
+				'post_title'            => 'Contact',
+				'post_excerpt'          => '',
+				'post_status'           => 'publish',
+				'comment_status'        => 'closed',
+				'ping_status'           => 'closed',
+				'post_password'         => 'geheim-synthetic-7f3a',
+				'post_name'             => 'contact',
+				'post_content_filtered' => '',
+				'post_parent'           => '0',
+				'menu_order'            => '0',
+				'post_type'             => 'page',
+				'post_mime_type'        => '',
+			),
+			'meta'  => array(
+				array( 'meta_id' => 1, 'key' => 'note', 'value' => 'abc' ),
+				array( 'meta_id' => 2, 'key' => 'note', 'value' => 'def' ),
+				array( 'meta_id' => 3, 'key' => 'api_token', 'value' => 'sk-synthetic-ABCDEF0123456789' ),
+				array( 'meta_id' => 4, 'key' => 'settings', 'value' => '{"password":"synthetic-pw-9981","mode":"x"}' ),
+				array( 'meta_id' => 5, 'key' => 'blob', 'value' => "\xFF\xFE\x00binary" ),
+				array( 'meta_id' => 6, 'key' => 'long', 'value' => str_repeat( 'y', 500 ) ),
+			),
+			'terms' => array(
+				array( 'taxonomy' => 'category', 'term_id' => 3, 'slug' => 'news', 'term_order' => 0 ),
+				array( 'taxonomy' => 'category', 'term_id' => 4, 'slug' => 'other', 'term_order' => 0 ),
+				array( 'taxonomy' => 'post_tag', 'term_id' => 9, 'slug' => 'api_key=synthetic-77', 'term_order' => 0 ),
+			),
+		);
+		$now = $backup;
+		$now['row']['post_title']    = 'Changed by a filter';
+		$now['row']['post_content']  = 'Write to us on staging.';
+		$now['row']['post_password'] = 'another';
+		// The rows this site holds now: the names of the terms (raw rows, as
+		// the whole of includes/sync/ reads them), and a revision of another
+		// text; nothing else is read.
+		$db                  = new SyncRunPostWpdb();
+		$db->term_rows[3]    = array( 'term_id' => 3, 'name' => 'News', 'slug' => 'news', 'term_group' => 0, 'term_taxonomy_id' => 3, 'taxonomy' => 'category', 'description' => '', 'parent' => 0, 'count' => 1 );
+		$db->revisions[77]   = array( array( 'ID' => 701, 'post_content' => 'something else', 'post_excerpt' => '' ) );
+		$GLOBALS['wpdb']     = $db;
+		// The row: only the columns that differ, the password never, the long
+		// text by its bytes; no revision of this post holds the text.
+		$row = AB_MCP_Sync_Post_Writer::before_value( 'row', $backup, $now, 77 );
+		self::assertStringContainsString( 'post_title: "Contact"', $row );
+		self::assertStringContainsString( 'post_content: 260 bytes (no revision of the post holds it; the backup of the step does)', $row );
+		self::assertStringContainsString( 'post_password: (a credential by its name, not shown)', $row );
+		self::assertStringNotContainsString( 'geheim-synthetic', $row );
+		self::assertStringNotContainsString( 'post_status', $row, 'A column as now is not named.' );
+		// A revision that holds the text byte for byte is named, the newest.
+		$db->revisions[77][] = array( 'ID' => 702, 'post_content' => str_repeat( 'Write to us. ', 20 ), 'post_excerpt' => '' );
+		self::assertStringContainsString( 'revision 702 of the post holds it', AB_MCP_Sync_Post_Writer::before_value( 'row', $backup, $now, 77 ) );
+		// The row gone: the named columns.
+		$gone = AB_MCP_Sync_Post_Writer::before_value( 'row', $backup, null, null );
+		self::assertStringContainsString( 'post_title: "Contact"', $gone );
+		self::assertStringContainsString( 'post_status: "publish"', $gone );
+		self::assertStringContainsString( 'post_name: "contact"', $gone );
+		// Meta: the values in the order of their rows; a key that names a
+		// credential, a value with a credential inside, a binary value: never
+		// in the clear.
+		self::assertSame( '"abc", "def"', AB_MCP_Sync_Post_Writer::before_value( 'meta:note', $backup, $now, 77 ) );
+		$token = AB_MCP_Sync_Post_Writer::before_value( 'meta:api_token', $backup, $now, 77 );
+		self::assertSame( '(a credential by its name, not shown)', $token );
+		self::assertStringNotContainsString( 'sk-synthetic', $token );
+		$mixed = AB_MCP_Sync_Post_Writer::before_value( 'meta:settings', $backup, $now, 77 );
+		self::assertSame( '(holds a credential, not shown)', $mixed );
+		self::assertStringNotContainsString( 'synthetic-pw', $mixed );
+		self::assertSame( '(9 bytes, not UTF-8)', AB_MCP_Sync_Post_Writer::before_value( 'meta:blob', $backup, $now, 77 ) );
+		self::assertSame( 'none (no row of the key)', AB_MCP_Sync_Post_Writer::before_value( 'meta:absent', $backup, $now, 77 ) );
+		// Cut per value (VALUE_CHARS) and per part (PART_CHARS).
+		$long = AB_MCP_Sync_Post_Writer::before_value( 'meta:long', $backup, $now, 77 );
+		self::assertSame( '"' . str_repeat( 'y', AB_MCP_Sync_Post_Writer::VALUE_CHARS ) . '…(cut)"', $long );
+		$wide = $backup;
+		for ( $i = 0; $i < 8; $i++ ) {
+			$wide['meta'][] = array( 'meta_id' => 100 + $i, 'key' => 'many', 'value' => str_repeat( 'z', 70 ) );
+		}
+		$many = AB_MCP_Sync_Post_Writer::before_value( 'meta:many', $wide, $now, 77 );
+		self::assertStringEndsWith( '…(cut)', $many );
+		self::assertLessThanOrEqual( AB_MCP_Sync_Post_Writer::PART_CHARS + mb_strlen( '…(cut)' ), mb_strlen( $many ) );
+		// Terms by their name as this site has it (a raw row), by their slug
+		// where the term is gone; a name with a credential written into it (as
+		// the package checks the names of terms, A5) is not shown.
+		self::assertSame( '"News", "other"', AB_MCP_Sync_Post_Writer::before_value( 'terms:category', $backup, $now, 77 ) );
+		$tag = AB_MCP_Sync_Post_Writer::before_value( 'terms:post_tag', $backup, $now, 77 );
+		self::assertSame( '(holds a credential, not shown)', $tag );
+		self::assertStringNotContainsString( 'synthetic-77', $tag );
+		self::assertSame( 'none (no term of the taxonomy)', AB_MCP_Sync_Post_Writer::before_value( 'terms:post_format', $backup, $now, 77 ) );
+		// A new object has nothing before.
+		self::assertStringContainsString( 'not on this site before', AB_MCP_Sync_Post_Writer::before_value( 'row', null, $now, 77 ) );
+	}
+
+	public function testAnAnswerCarriesAtMostSoManyBytesOfValuesBeforeNewestStepsFirst(): void {
+		// AB_MCP_Sync_Run::cap_values(): the values before of every step shown
+		// (the parts of the journal and the outcome of a step of the way back)
+		// within ANSWER_VALUE_BYTES in all, the newest steps first; what has
+		// no room says so.
+		$value = str_repeat( 'v', 1000 );
+		$steps = array();
+		for ( $seq = 1; $seq <= 20; $seq++ ) {
+			$steps[] = array(
+				'seq'    => $seq,
+				'parts'  => array( 'parts' => array( array( 'part' => 'row', 'state' => 'left', 'value_before' => $value ) ) ),
+				'result' => array( 'parts' => array( array( 'part' => 'meta:note', 'state' => 'left', 'value_before' => $value ), array( 'part' => 'terms:category', 'state' => 'restored' ) ) ),
+			);
+		}
+		$capped = AB_MCP_Sync_Run::cap_values( $steps );
+		$kept   = 0;
+		foreach ( $capped as $step ) {
+			foreach ( array( $step['parts']['parts'][0], $step['result']['parts'][0] ) as $part ) {
+				if ( $value === $part['value_before'] ) {
+					++$kept;
+				} else {
+					self::assertSame( AB_MCP_Sync_Run::VALUE_CUT, $part['value_before'] );
+				}
+			}
+			self::assertArrayNotHasKey( 'value_before', $step['result']['parts'][1], 'A part not left carries no value before.' );
+		}
+		self::assertSame( 16, $kept, '16 values of 1000 bytes fit into 16384.' );
+		self::assertSame( $value, $capped[19]['parts']['parts'][0]['value_before'], 'The newest step keeps its values.' );
+		self::assertSame( $value, $capped[12]['parts']['parts'][0]['value_before'] );
+		self::assertSame( AB_MCP_Sync_Run::VALUE_CUT, $capped[11]['parts']['parts'][0]['value_before'], 'The oldest ones say so.' );
+		self::assertSame( AB_MCP_Sync_Run::VALUE_CUT, $capped[0]['result']['parts'][0]['value_before'] );
+		self::assertSame( array(), AB_MCP_Sync_Run::cap_values( array() ) );
 	}
 
 	/* -------------------------------------------------------- the run */

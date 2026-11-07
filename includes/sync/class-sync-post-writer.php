@@ -108,6 +108,18 @@ final class AB_MCP_Sync_Post_Writer {
 	const WAY_META  = 'refusable';
 	const WAY_TERMS = 'not_refusable';
 
+	/** Characters one value is shown with at most in value_before (before_value()). */
+	const VALUE_CHARS = 80;
+
+	/** Characters the value before of one part is shown with at most. */
+	const PART_CHARS = 320;
+
+	/** Columns of the row shown by their length (and the revision that holds them), never whole. */
+	const LONG_COLUMNS = array( 'post_content', 'post_content_filtered', 'post_excerpt' );
+
+	/** The columns of the row named where the row is no longer there to compare. */
+	const NAMED_COLUMNS = array( 'post_title', 'post_status', 'post_name', 'post_content' );
+
 	/* ------------------------------------------------------------ prepare */
 
 	/**
@@ -965,6 +977,180 @@ final class AB_MCP_Sync_Post_Writer {
 		}
 		$after = self::current( (int) $live_id );
 		return array( 'state' => is_array( $after ) && self::terms_hash( self::term_keys( $after, $taxonomy ) ) === self::terms_hash( $backup ) ? 'restored' : 'unclear' );
+	}
+
+	/* ------------------------------------------------- the value before */
+
+	/**
+	 * What a part held before the step, from the backup, for a part the
+	 * answer names as left (the decision of 07.11.2026, «A mit altem Wert»):
+	 * short and readable, never a credential. The row: the columns that
+	 * differ from the row as it is now (or NAMED_COLUMNS where the row is
+	 * gone), each with its value in quotes, cut at VALUE_CHARS; a long text
+	 * (LONG_COLUMNS) by its bytes, with the id of the revision of the post
+	 * that holds it byte for byte where one does (a raw row,
+	 * AB_MCP_Sync_Rows::revision_with()). Meta: the values of the key in the
+	 * order of their rows. Terms: the names of the terms of the taxonomy as
+	 * this site has them now (a raw row, AB_MCP_Sync_Rows::term(); their
+	 * slug where the term is gone). A value a credential check names (AB_MCP_Sync_Credentials::
+	 * unit() on the key and the value, as the package is checked; the column
+	 * post_password by its name) is shown as a reference only, never in the
+	 * clear; a value that is no UTF-8 by its bytes. The whole is cut at
+	 * PART_CHARS with the mark «(cut)»; AB_MCP_Sync_Run::shown() caps what
+	 * one answer carries of these values.
+	 *
+	 * @param string     $part    Part (row, meta:<key>, terms:<taxonomy>).
+	 * @param array|null $backup  current() of the backup; null for a new object.
+	 * @param array|null $now     current() as read now; null where unknown or gone.
+	 * @param int|null   $live_id Post, for its revisions.
+	 * @return string
+	 */
+	public static function before_value( $part, $backup, $now, $live_id ) {
+		if ( ! is_array( $backup ) ) {
+			return 'none: the object was not on this site before the run.';
+		}
+		$part = (string) $part;
+		if ( 'row' === $part ) {
+			$text = self::row_before( $backup['row'], is_array( $now ) ? $now['row'] : null, $live_id );
+		} elseif ( 0 === strpos( $part, 'meta:' ) ) {
+			$text = self::meta_before( substr( $part, 5 ), self::meta_values( $backup, substr( $part, 5 ) ) );
+		} else {
+			$text = self::terms_before( substr( $part, 6 ), $backup );
+		}
+		return self::cut( $text, self::PART_CHARS );
+	}
+
+	/**
+	 * @param array      $backup  The backed-up columns.
+	 * @param array|null $now     The columns now; null where the row is gone.
+	 * @param int|null   $live_id Post.
+	 * @return string
+	 */
+	private static function row_before( array $backup, $now, $live_id ) {
+		$columns = array();
+		foreach ( self::WRITTEN_COLUMNS as $column ) {
+			$was = isset( $backup[ $column ] ) ? (string) $backup[ $column ] : '';
+			if ( null === $now ? in_array( $column, self::NAMED_COLUMNS, true ) : $was !== ( isset( $now[ $column ] ) ? (string) $now[ $column ] : '' ) ) {
+				$columns[ $column ] = $was;
+			}
+		}
+		if ( array() === $columns ) {
+			foreach ( self::NAMED_COLUMNS as $column ) {
+				$columns[ $column ] = isset( $backup[ $column ] ) ? (string) $backup[ $column ] : '';
+			}
+		}
+		$out = array();
+		foreach ( $columns as $column => $was ) {
+			if ( 'post_password' === $column || AB_MCP_Sync_Credentials::names_credential( $column, AB_MCP_Redactor::extra_keys() ) ) {
+				$out[] = $column . ': ' . ( '' === $was ? '""' : '(a credential by its name, not shown)' );
+			} elseif ( in_array( $column, self::LONG_COLUMNS, true ) ) {
+				$out[] = $column . ': ' . self::long_before( $column, $was, $live_id );
+			} else {
+				$out[] = $column . ': ' . self::shown_value( '', $was );
+			}
+		}
+		return implode( '; ', $out );
+	}
+
+	/**
+	 * A long text by its bytes, with the revision of the post that holds it
+	 * byte for byte where one does (the revisions WordPress keeps of a post:
+	 * post_content, post_excerpt), else the backup of the step.
+	 *
+	 * @param string   $column  Column.
+	 * @param string   $was     The text before.
+	 * @param int|null $live_id Post.
+	 * @return string
+	 */
+	private static function long_before( $column, $was, $live_id ) {
+		$bytes = strlen( $was );
+		if ( 0 === $bytes ) {
+			return '""';
+		}
+		$held = null;
+		if ( in_array( $column, array( 'post_content', 'post_excerpt' ), true ) && null !== $live_id ) {
+			$found = AB_MCP_Sync_Rows::revision_with( (int) $live_id, $column, $was );
+			$held  = is_int( $found ) && $found > 0 ? $found : null;
+		}
+		return sprintf( '%1$d bytes (%2$s)', $bytes, null === $held ? 'no revision of the post holds it; the backup of the step does' : sprintf( 'revision %d of the post holds it, wp-admin → Revisions', $held ) );
+	}
+
+	/**
+	 * @param string   $key    Key.
+	 * @param string[] $values The values before, in the order of their rows.
+	 * @return string
+	 */
+	private static function meta_before( $key, array $values ) {
+		if ( array() === $values ) {
+			return 'none (no row of the key)';
+		}
+		$out = array();
+		foreach ( $values as $value ) {
+			$out[] = self::shown_value( $key, $value );
+		}
+		return implode( ', ', $out );
+	}
+
+	/**
+	 * @param string $taxonomy Taxonomy.
+	 * @param array  $backup   current() of the backup.
+	 * @return string
+	 */
+	private static function terms_before( $taxonomy, array $backup ) {
+		$out = array();
+		foreach ( $backup['terms'] as $term ) {
+			if ( $term['taxonomy'] !== (string) $taxonomy ) {
+				continue;
+			}
+			$name  = (string) $term['slug'];
+			$found = AB_MCP_Sync_Rows::term( (int) $term['term_id'], (string) $taxonomy );
+			if ( is_array( $found ) && isset( $found['name'] ) && '' !== (string) $found['name'] ) {
+				$name = (string) $found['name'];
+			}
+			$out[] = self::shown_value( '', $name );
+		}
+		return array() === $out ? 'none (no term of the taxonomy)' : implode( ', ', $out );
+	}
+
+	/**
+	 * One value as the answer shows it: in quotes, cut at VALUE_CHARS; a
+	 * reference only where the credential check names the key or a field
+	 * inside the value, or cannot read the value to its end (fail closed);
+	 * by its bytes where it is no UTF-8.
+	 *
+	 * @param string $key   The key the value belongs to ('' for none).
+	 * @param string $value The value.
+	 * @return string
+	 */
+	private static function shown_value( $key, $value ) {
+		$value = (string) $value;
+		if ( '' === $value ) {
+			return '""';
+		}
+		$check = AB_MCP_Sync_Credentials::unit( (string) $key, $value );
+		if ( 'clean' !== $check['state'] ) {
+			return 'b9' === $check['state'] ? '(a credential by its name, not shown)' : ( 'mixed' === $check['state'] ? '(holds a credential, not shown)' : '(not readable to its end, not shown)' );
+		}
+		if ( 1 !== preg_match( '//u', $value ) ) {
+			return sprintf( '(%d bytes, not UTF-8)', strlen( $value ) );
+		}
+		return '"' . self::cut( preg_replace( '/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', ' ', $value ), self::VALUE_CHARS ) . '"';
+	}
+
+	/**
+	 * @param string $text UTF-8 text.
+	 * @param int    $max  Characters.
+	 * @return string The text, cut with the mark where longer.
+	 */
+	private static function cut( $text, $max ) {
+		$text = (string) $text;
+		if ( 1 !== preg_match( '//u', $text ) ) {
+			return sprintf( '(%d bytes, not UTF-8)', strlen( $text ) );
+		}
+		if ( mb_strlen( $text, 'UTF-8' ) <= (int) $max ) {
+			return $text;
+		}
+		return mb_substr( $text, 0, (int) $max, 'UTF-8' ) . '…(cut)';
 	}
 
 	/* ----------------------------------------------------------- helpers */
