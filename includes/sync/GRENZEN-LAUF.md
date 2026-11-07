@@ -8,6 +8,89 @@ Ablehnung entsteht, nennt sie den Weg.
 
 ## Sperre und Unterbrechung (Entscheid 18)
 
+- **Eine Sperre je verändernden Aufruf** (Thomas 07.11.2026 abends,
+  Variante A, nach GitHub-Codex 6): Jeder Aufruf von `wp_site_push` und
+  `wp_site_revert`, der einen Lauf verändern kann – `next`, `step`, `abort`,
+  `wp_site_revert action=plan` mit Token (Beginn des Rückwegs desselben
+  Laufs, Fortsetzung eines unterbrochenen Rückwegs, Rückweglauf eines
+  geschlossenen Laufs), `wp_site_revert action=next`, und was dabei
+  schliesst (Gesamtvorprüfung mit `closed_aborted`, Prüfung des Laufs,
+  Schluss des Rückwegs, mit Freigabe der Reservierung und Bereinigung der
+  Ablage) –, läuft unter der Sperre der Schreibgrenze vom ersten Lesen des
+  Laufs bis zur Antwort (`AB_MCP_Sync_Run::under_lock()`, Freigabe im
+  `finally`; `touch()` wie bisher in den langen Schleifen der Grenze und des
+  Rückwegs). Darunter liest er Lauf und Schritte frisch und entscheidet erst
+  dann: die Engine an einer Stelle (`AB_MCP_Sync_Engine::fresh()`: der Lauf
+  im Zustand, in dem der Aufrufer ihn las, sonst `ab_mcp_sync_run_state` und
+  nichts geschrieben; dann `settle()`), der Rückweg in
+  `AB_MCP_Sync_Revert::begin_locked()` (gelesen, gesettelt, der Plan neu
+  gerechnet und mit dem bestätigten verglichen). Auch «als geprüft
+  schliessen» (`close_checked()`, Weg a) läuft so und settelt den Lauf
+  selbst. Die Einzelsperren je Übergang entfallen: `run_check()` (Sperre
+  verfügbar), `run_write()`, `run_revert()`, `abort()` und
+  `AB_MCP_Sync_Revert::begin()` nahmen sie je für sich, und `still()` in
+  beiden Grenzen ist in `fresh()` aufgegangen. Was bleibt, ist die
+  verschachtelte Bestätigung derselben Sperre: die Werkzeuge
+  (`AB_MCP_Sync_Push::call()`, `AB_MCP_Sync_Revert::call()`) nehmen sie vor dem
+  ersten Lesen, die Engine (`next()`, `abort()`) nimmt sie für einen direkten
+  Aufrufer selbst, im selben Request zählt `AB_MCP_Change_Lock` nur die
+  Tiefe (`lifecycle/class-change-lock.php:74`). Grund: GitHub-Codex fand in
+  den Runden 3, 4 und 6 je einen Zustandswechsel eines Laufs ausserhalb der
+  Sperre (Beginn des Rückwegs, `abort`, `close_revert()` neben dem letzten
+  Rückweg-Schritt); statt eines vierten Flickens je Übergang die Behebung an
+  einer Stelle. Vorher buchte zudem die Gesamtvorprüfung eines verzögerten
+  `next` die Reservierung für einen schon abgebrochenen Lauf und meldete sich
+  `done`. Prüffälle
+  `testACallThatChangesARunIsRefusedAsBusyWithoutAnyChangeWhileAnotherRequestHoldsTheLock`,
+  `testADelayedCallWithAnOldReadOfTheRunWritesNothingAfterAnAbortOrAfterTheWayBackClosed`.
+- **Bei fremder Sperre** (ein anderer Request hält sie: ein Schritt eines
+  Laufs, eine Aktivierung, ein Deploy oder ein Update durch AlphaBridge)
+  lehnt der verändernde Aufruf mit `ab_mcp_sync_run_busy` ab, bevor er etwas
+  vom Lauf liest oder schreibt: Lauf (auch Herzschlag und `calls`),
+  Schritte, Reservierung und Sicherungen bleiben unverändert; die Ablehnung
+  nennt den Weg «erneut aufrufen» und die Zeit, ab der eine liegen
+  gebliebene Sperre übernommen wird. Vorher gab ein `next` bei belegter
+  Sperre eine Antwort mit `busy: true` statt einer Ablehnung. Das Feld
+  `busy` bleibt in der Form der Antwort und ist immer `false`.
+- **`settle()` unter der Sperre**: Jeder Schritt wird innerhalb eines
+  Aufrufs unter dessen Sperre begonnen und beendet. Unter der Sperre gehört
+  ein Schritt `begun`, den nicht dieser Request begann, darum einem Request,
+  der vor dem Ende des Schritts endete (Sperre beim Shutdown zurückgegeben
+  oder nach `TIMEOUT` übernommen): der Lauf wird `interrupted`. Ein Schritt,
+  den dieser Request unter der Sperre seines Aufrufs begann
+  (`AB_MCP_Sync_Run::$own`, vermerkt in `update_step()`, vergessen, wenn der
+  äusserste Aufruf die Sperre zurückgibt), ist der eigene, laufende Aufruf
+  und nie unterbrochen. Lesende Aufrufe (`status`, die Übersicht ohne
+  `run_id`, die Vorschau von `plan` beider Werkzeuge) rufen `settle()` ohne
+  Sperre: ohne begonnenen Schritt ändert es nichts; bei einem begonnenen
+  Schritt und frischer Sperrzeile (`lock_fresh()`), oder wenn ein anderer
+  Request die Sperre zuerst nimmt, gilt der Schritt als laufend (`running`,
+  nichts geändert); sonst nimmt es die Sperre nur für die Entscheidung,
+  liest den Lauf darunter neu und gibt sie sofort zurück. Ein fremder, noch
+  laufender Request gilt so nie als unterbrochen, solange er die Sperre
+  hält; ohne Sperre entscheidet `settle()` nie. Vorher entschied es neben der
+  Sperre nach dem Alter der Sperrzeile (ein Lesen der Schritte vor dem Blick
+  auf die Sperre konnte einen Schritt, der dazwischen endete, als
+  unterbrochen werten), und unter der eigenen Sperre galt jeder begonnene
+  Schritt als laufend, auch der eines beendeten Requests (Prüffall
+  `testUnderTheLockOfItsCallAStepTheCallBeganIsItsOwnAndAStepAnEndedRequestLeftIsInterrupted`).
+- Grenze C: Ein lesender Aufruf, der den begonnenen Schritt eines beendeten
+  Requests findet, hält die Sperre für den Augenblick der Entscheidung; ein
+  verändernder Aufruf genau in diesem Augenblick antwortet busy (erneut
+  aufrufen). Nur nach einer Unterbrechung, ohne Änderung.
+- Grenze C: Die Sperre gilt für den ganzen Aufruf, also auch für die
+  Gesamtvorprüfung, die Caches und die Prüfung des Laufs (je höchstens
+  `WORK_MAX` und Reserve, rund 60 s). Solange antwortet eine Aktivierung, ein
+  Deploy oder ein Update durch AlphaBridge `ab_mcp_change_busy`, und ein
+  langer Deploy (ZIP über SFTP, ohne Zeitgrenze) hält umgekehrt jeden
+  verändernden Aufruf eines Laufs busy, bis er fertig ist. Grund: dieselbe
+  Sperre für Code-Änderungen und Übernahme (Entscheid 18); beides läuft
+  ohnehin nicht nebeneinander.
+- `wp_site_push action=plan` mit Token legt einen Lauf an und verändert
+  keinen: es läuft ohne die Sperre; einen zweiten nicht geschlossenen Lauf
+  verhindert der Eindeutigkeitsschlüssel `open_one` (Entscheid 15). `touch()`
+  in `status` (Herzschlag, Zählung der Aufrufe) schreibt ohne Sperre und
+  ändert keinen Zustand.
 - Ein Request, der nach Ablauf der Sperre (600 s, `AB_MCP_Change_Lock::TIMEOUT`)
   noch in einem WordPress-Schreibaufruf steckt, kann noch schreiben: der
   Lauf gilt dann schon als `interrupted`, und ein Rückweg, der danach
@@ -22,11 +105,13 @@ Ablehnung entsteht, nennt sie den Weg.
   Entscheid A vom 07.11.2026, unten; Prüffälle
   `testARequestThatExitsInABoundaryLeavesTheRunInterruptedAndTheWayBackLeadsTheSameRun`,
   `testARequestThatEndsInsideAMetaCallLeavesThePartForTheWayBackOfTheSameRun`).
-- Ob die Sperre gehalten wird, liest `AB_MCP_Sync_Run::lock_fresh()` aus der
-  Sperrzeile `ab_mcp_pro_code_change.lock`: eine frische Zeile heisst
-  «ein Schritt läuft» (`busy`), auch wenn sie eine Aktivierung oder ein
-  Deploy durch AlphaBridge hält und nicht der Lauf. Der Lauf unterscheidet
-  die Halter nicht; `status` nennt den Schritt, `next` antwortet busy. Grund:
+- Ein lesender Aufruf sieht an `AB_MCP_Sync_Run::lock_fresh()` (Sperrzeile
+  `ab_mcp_pro_code_change.lock`, jünger als `TIMEOUT`), ob ein anderer
+  Request die Sperre hält: eine frische Zeile heisst «ein Schritt läuft»
+  (`running`), auch wenn sie eine Aktivierung oder ein Deploy durch
+  AlphaBridge hält und nicht der Lauf; ein verändernder Aufruf entscheidet an
+  `take()` selbst. Der Lauf unterscheidet die Halter nicht; `status` nennt
+  den Schritt, `next` antwortet busy. Grund:
   dieselbe Sperre für Code-Änderungen und Übernahme (Entscheid 18), kein
   eigener Sperrbaustein.
 - Ein Prozess, der in einer Grenze endet (`exit`, Fatal Error), löst die Sperre
@@ -683,33 +768,33 @@ Ablehnung entsteht, nennt sie den Weg.
   zu schützenden Läufe und löscht unter derselben Sperre, sieht den neuen
   Lauf also oder war vorher fertig (Entscheid 20 (4); A6). Ohne Ablage gibt es
   nichts zu schützen, der Lauf entsteht ohne Sperre.
-- Der Rückweg desselben Laufs beginnt unter der Sperre der Schreibgrenze
-  (GitHub-Codex 3, P1): `begin()` nimmt zuerst `AB_MCP_Change_Lock::take()`,
-  dieselbe Sperre wie jeder Schreibschritt (Entscheid 18); hält sie ein
-  Schritt, der gerade schreibt, wird abgelehnt (`ab_mcp_sync_run_busy`, Weg:
-  erneut aufrufen). Unter der Sperre liest `begin_same_run()` die Schritte
-  neu: ein Schritt `begun` ist dann einer, dessen Request nicht geantwortet
-  hat, während der Rückweg geplant wurde (Sperre beim Shutdown
-  zurückgegeben oder nach `TIMEOUT` übernommen); er wird abgelehnt
-  (`ab_mcp_sync_run_begun`), nicht als unterbrochen gewertet; `status`
-  settelt den Lauf, dann wird der Rückweg neu geplant. Dann der Plan neu
-  gerechnet (`plan()`) und sein Zustand mit dem bestätigten verglichen:
-  weicht er ab (ein Schritt hat dazwischen geschrieben, ein Objekt sich
-  geändert, der Lauf den Zustand gewechselt), Ablehnung
-  `ab_mcp_sync_revert_changed`, Weg: neu planen, der neue Plan nimmt auch
-  diesen Schritt zurück. Erst dann die Transaktion; die Sperre wird in jedem
-  Weg freigegeben (`finally`). Vorher konnte ein gleichzeitiges `next`
-  zwischen `plan()` und der Transaktion einen Schreibschritt beginnen: der
-  Lauf blieb `open`, der Wechsel gelang, der Schritt wurde `unclear`
-  markiert, obwohl der Plan ihn nicht zurücknahm, seine Journal-Updates
-  (`WHERE state = 'begun'`) scheiterten, und der Rückweg schloss ohne diese
-  Änderung (Prüffall
+- Der Rückweg beginnt unter der Sperre der Schreibgrenze, die der Aufruf
+  `wp_site_revert action=plan` mit Token vom ersten Lesen an hält (GitHub-Codex
+  3, P1; seit Variante A die Sperre des ganzen Aufrufs, oben): hält sie ein
+  anderer Request, wird abgelehnt (`ab_mcp_sync_run_busy`, Weg: erneut
+  aufrufen), der Lauf bleibt, wie er war. Unter der Sperre liest
+  `begin_locked()` den Lauf neu und settelt ihn: ein Schritt `begun` ist dort
+  einer, dessen Request endete, der Lauf wird `interrupted`, und der für den
+  offenen Lauf bestätigte Plan wird abgelehnt (`ab_mcp_sync_revert_changed`,
+  «was open … and is interrupted now»; neu geplant, beginnt der Rückweg des
+  unterbrochenen Laufs mit dem Schritt `unclear`). Vorher lehnte `begin()`
+  den Schritt als `ab_mcp_sync_run_begun` ab und überliess das Setteln einem
+  `status`. Dann der Plan neu gerechnet (`plan()` mit dem gesettelten Lauf)
+  und sein Zustand mit dem bestätigten verglichen: weicht er ab (ein Schritt
+  hat dazwischen geschrieben, ein Objekt sich geändert, der Lauf den Zustand
+  gewechselt), Ablehnung `ab_mcp_sync_revert_changed`, Weg: neu planen, der
+  neue Plan nimmt auch diesen Schritt zurück. Erst dann die Transaktion bzw.
+  das Anlegen des Rückweglaufs eines geschlossenen Laufs (auch dieses unter
+  der Sperre des Aufrufs und darin unter der Sperre der Ablage). Vorher
+  konnte ein gleichzeitiges `next` zwischen `plan()` und der Transaktion
+  einen Schreibschritt beginnen: der Lauf blieb `open`, der Wechsel gelang,
+  der Schritt wurde `unclear` markiert, obwohl der Plan ihn nicht zurücknahm,
+  seine Journal-Updates (`WHERE state = 'begun'`) scheiterten, und der
+  Rückweg schloss ohne diese Änderung (Prüffall
   `testTheWayBackOfARunDoesNotBeginBesideAStepBeingWrittenNorOnAPlanTheRunHasLeftBehind`,
   der `begin()` direkt nach dem Plan aufruft, mit einem Schritt `begun` unter
   fremder Sperre, ohne Sperre, und nach einem dazwischen geschriebenen
-  Schritt). Grenze: die Sperre deckt den Rückweglauf eines geschlossenen
-  Laufs nicht (dort schreibt kein Schritt mehr; ein zweiter offener Lauf
-  scheitert am Eindeutigkeitsschlüssel `open_one`).
+  Schritt).
 - Der Rückweg beginnt mit allen seinen Schritten oder gar nicht (GitHub-Codex
   2, P1): `AB_MCP_Sync_Revert::begin()` führt den Lauf nach `reverting`, setzt
   die Vorwärtsschritte auf `unclear`/`skipped` und legt alle Rückweg-Schritte
@@ -803,41 +888,58 @@ Ablehnung entsteht, nennt sie den Weg.
 - `abort` schliesst einen offenen Lauf; Geschriebenes bleibt mit neuen
   Ausgangsständen. Der Rückweg ist `wp_site_revert` für den geschlossenen
   Lauf. Ein unterbrochener Lauf wird nicht abgebrochen (nur geprüft oder
-  zurückgenommen). `abort` nimmt die Sperre der Schreibgrenze
-  (`AB_MCP_Change_Lock`, Entscheid 18; GitHub-Codex 4, P2): hält sie ein
-  Schreiber, Ablehnung `ab_mcp_sync_run_busy` (erneut aufrufen); unter der
-  Sperre wird der Lauf neu gelesen (nicht mehr `open` → `ab_mcp_sync_run_changed`,
-  nichts geändert). Und jede Grenze liest den Lauf unter der Sperre neu, bevor
-  sie einen Schritt `begun` setzt (`AB_MCP_Sync_Engine::still()`: die
-  Schreibgrenze verlangt `open`, die Rückweg-Grenze `reverting` bzw. für einen
-  Rückweglauf `open` oder `reverting`); ein Request, der den Lauf vor einem
-  `abort`, einem Schliessen oder einem Settle gelesen hatte, schreibt nichts
-  (`ab_mcp_sync_run_state`, der Schritt bleibt `planned`). Vorher konnte ein
-  verzögertes `next` seinen Schritt nach einem erfolgreichen `abort` noch
-  `begun` setzen und in einen `closed_aborted`-Lauf schreiben, dessen
-  Reservierung schon freigegeben war (Prüffall
-  `testAnAbortTakesTheLockAndADelayedWriteStepFindsTheRunClosedAndWritesNothing`).
-- Ein unterbrochener Rückweglauf (Art `revert`, Rückweg eines geschlossenen
-  Laufs; GitHub-Codex 4, P1) hat die zwei Wege von Entscheid 18 wie ein
-  Vorwärtslauf: (a) eine Person schliesst ihn in wp-admin «als geprüft»
-  (`AB_MCP_Sync_Run::close_checked()`: der Schritt, den die Unterbrechung
-  `begun` liess, wird `unclear`, das Paar des Schritts, den er zurücknahm,
-  `unclear` – ein Rückweg-Schritt trägt sein Paar erst am Ende, darum wird es
-  über den Vorwärtsschritt aufgelöst, `pair_of_revert_step()` –, `open_one`
-  wird frei; der Knopf kommt mit Zweig 12, bis dahin nur interne Fassungen);
-  (b) `wp_site_revert action=plan` mit Token auf den Rückweglauf selbst
-  (nicht auf den Ursprungslauf: dessen Schritte zählen als zurückgenommen,
-  und die Ein-Lauf-Regel sperrt ihn, solange der Rückweglauf offen ist) führt
-  ihn unter der Sperre nach `reverting` (`AB_MCP_Sync_Revert::continuation()`,
-  `begin_same_run()`): der unterbrochene Schritt wird `unclear` und bleibt
-  stehen (kein Rückbau wird wiederholt, kein Teil davon geht von selbst
-  zurück; sein Paar `unclear`), die noch geplanten Rückweg-Schritte bleiben
-  geplant und laufen mit `next` wie gewohnt, jeder entscheidet mit frischer
-  Lesung (nur eigene Teile, Entscheid A); keine neuen Rückweg-Schritte, kein
-  Wiederanlauf; der Lauf schliesst `closed_findings` mit dem stehen
-  gebliebenen Schritt. `steps` wird dabei nicht angenommen. Die Hinweise
-  (`status`, die Ablehnung von `next`) nennen beide Wege, nicht mehr
-  `action=plan` auf einen Weg, der ablehnte (Prüffall
+  zurückgenommen bzw. fortgesetzt; die Ablehnung nennt die Wege). `abort`
+  läuft unter der Sperre des Aufrufs (GitHub-Codex 4, P2; Variante A): hält
+  sie ein anderer Request, Ablehnung `ab_mcp_sync_run_busy` (erneut
+  aufrufen); unter der Sperre wird der Lauf neu gelesen (nicht mehr `open` →
+  `ab_mcp_sync_run_changed`, nichts geändert) und gesettelt (ein Schritt
+  `begun` eines beendeten Requests: `interrupted`, nicht abgebrochen), und das
+  Schliessen, die Freigabe der Reservierung und die Bereinigung der Ablage
+  geschehen darunter. Jeder verändernde Aufruf liest den Lauf unter der
+  Sperre neu, bevor er entscheidet (`AB_MCP_Sync_Engine::fresh()`, die eine
+  Stelle des früheren `still()`): ein Request, der den Lauf vor einem
+  `abort`, einem Schliessen, einem Settle oder einer Fortsetzung gelesen
+  hatte, schreibt nichts (`ab_mcp_sync_run_state`, die Schritte bleiben, wie
+  sie sind), auch nicht die Gesamtvorprüfung, die Caches oder die Prüfung
+  des Laufs. Vorher konnte ein verzögertes `next` seinen Schritt nach einem
+  erfolgreichen `abort` noch `begun` setzen und in einen
+  `closed_aborted`-Lauf schreiben, dessen Reservierung schon freigegeben war
+  (Prüffälle
+  `testAnAbortTakesTheLockAndADelayedWriteStepFindsTheRunClosedAndWritesNothing`,
+  `testADelayedCallWithAnOldReadOfTheRunWritesNothingAfterAnAbortOrAfterTheWayBackClosed`).
+- **Ein Weg (b) für jeden unterbrochenen Lauf**, für beide Laufarten gleich
+  (GitHub-Codex 4 und 6, je P1; Variante A): `wp_site_revert action=plan` mit
+  Token auf einen unterbrochenen Lauf geht in eine Funktion
+  (`AB_MCP_Sync_Revert::interrupted_plan()`). Hat der Rückweg des Laufs
+  begonnen (ein Rückweglauf der Art `revert`, oder ein Lauf der Art `push`
+  mit Rückweg-Schritten: der Rückweg desselben Laufs, Entscheid 15;
+  `AB_MCP_Sync_Run::on_way_back()`), wird genau dieser Rückweg fortgesetzt
+  (`continuation()`, `begin_same_run()`): der Schritt, den die Unterbrechung
+  `begun` liess, wird `unclear` und bleibt stehen (kein Rückbau wird
+  wiederholt, kein Teil davon geht von selbst zurück; sein Paar `unclear`),
+  die noch geplanten Rückweg-Schritte laufen danach mit `next`, jeder mit
+  frischer Lesung (nur eigene Teile, Entscheid A); keine neuen
+  Rückweg-Schritte, kein Wiederanlauf, `steps` wird nicht angenommen; der
+  Lauf schliesst `closed_findings` und nennt den stehen gebliebenen Schritt
+  in der Antwort. Hat er nicht begonnen (ein unterbrochener Vorwärtslauf),
+  beginnt der Rückweg wie für einen offenen Lauf (`way_back()`). Weg (a)
+  bleibt, wie gebaut: eine Person schliesst jeden unterbrochenen Lauf in
+  wp-admin «als geprüft» (`AB_MCP_Sync_Run::close_checked()`: der Schritt,
+  den die Unterbrechung `begun` liess, wird `unclear`, das Paar des Schritts
+  bzw. des Schritts, den er zurücknahm, `unclear` – ein Rückweg-Schritt trägt
+  sein Paar erst am Ende, darum über `pair_of_revert_step()` –, `open_one`
+  wird frei; seit Variante A unter der Sperre des Aufrufs, der Lauf darunter
+  gesettelt; der Knopf kommt mit Zweig 12, bis dahin nur interne Fassungen).
+  Die Hinweise (`status`, die Ablehnungen von `next`, `abort` und eines neuen
+  Plans, `AB_MCP_Sync_Run::way()` und `interrupted_refusal()`) nennen je Lage
+  die Wege, die gehen: auf dem Rückweg «leads it on», sonst «begins its way
+  back». Vorher nahm die Fortsetzung nur Läufe der Art `revert`; ein
+  unterbrochener Rückweg desselben Laufs (Art `push`) wurde als neuer
+  Rückweg geplant, fand jeden Schreibschritt schon von seinen
+  Rückweg-Schritten genannt und lehnte ab (`ab_mcp_sync_revert_nothing`),
+  `next` und `abort` nehmen keinen unterbrochenen Lauf, und der Lauf hielt
+  die Site, bis eine Person ihn schloss (Prüffälle
+  `testAnInterruptedWayBackOfTheSameRunIsLedOnWithTheTokenAndTheSiteIsFreeAfterwards`,
   `testAnInterruptedRunOfTheWayBackIsLedOnWithTheTokenOrClosedAsCheckedAndFreesTheSite`).
   Ein geschlossener Rückweglauf wird nicht zurückgenommen.
 - Die Erfassung je Lauf (Momente M2 und M8): `calls` zählt jeden Aufruf ab
@@ -965,7 +1067,7 @@ Ablehnung entsteht, nennt sie den Weg.
   der alte Wert (`before_value()`: Zeile, langer Text mit Revision, Meta,
   Terme, synthetische Geheimnisse, kein UTF-8, Kürzung je Wert und je Teil)
   und die Kappung je Antwort (`cap_values()`).
-  Integration (`tests/integration/SyncRunTest.php`, vierundvierzig Fälle): Ende zu Ende mit
+  Integration (`tests/integration/SyncRunTest.php`, dreiundsechzig Fälle): Ende zu Ende mit
   Rückweg und `step` auf eine spätere Phase (Merkmal der Sperre beim
   Anlegen), ein Bericht in zwei Läufen geplant, Abweichung in der
   Gesamtvorprüfung, Unterbrechung in eigenem Prozess (die Zeile bleibt mit
@@ -1009,7 +1111,17 @@ Ablehnung entsteht, nennt sie den Weg.
   jede Taxonomie, `restore_right()` je Teil, `transaction()` (Engine-Prüfung,
   Commit, Rollback bei `WP_Error` und Ausnahme), die zweite Prüfung der Art
   beim Schreiben (`restore_row()`, `restore_meta()` gegen `$written`),
-  `AB_MCP_Sync_Canon::decode()` mit jeder abgelehnten Hülle. Codex-Runde 18:
+  `AB_MCP_Sync_Canon::decode()` mit jeder abgelehnten Hülle. Variante A
+  (07.11.2026 abends), je ohne die Behebung rot: Integration – ein
+  unterbrochener Rückweg desselben Laufs (Art `push`, der Rückweg-Schritt in
+  eigenem Prozess beendet) wird mit Plan und Token fortgesetzt, die Site ist
+  danach frei; bei fremder Sperre lehnen `next`, `abort`, Plan mit Token und
+  der Schluss des Rückwegs busy ab, ohne Lauf, Schritte, Reservierung,
+  Sicherungen oder Seiten zu ändern, und gehen nach der Freigabe; ein
+  verzögerter Aufruf mit altem Laufstand schreibt nach `abort` und nach dem
+  Schluss des Rückwegs nichts; unter der Sperre des Aufrufs ist ein eigener
+  begonnener Schritt kein unterbrochener, der eines beendeten Requests schon,
+  und «als geprüft schliessen» läuft unter der Sperre. Codex-Runde 18:
   ohne `edit_post` bleiben Zeile und Kategorie stehen (Integration); ein Hook
   der Rechteprüfung, der Titel oder Meta-Wert beim Rückweg ändert, wird von
   der zweiten Lesung der Art gefangen (Integration, hält
@@ -1026,8 +1138,10 @@ Ablehnung entsteht, nennt sie den Weg.
   sie; dass `partial` und `unreachable` Befunde sind, zeigt nur die Live-Probe),
   die Kapazitätsprüfung des Rückwegs im Plan (mit 1996 Objekten je Lauf und
   3996 Schritten je Lauf nicht erreichbar), der Schritt ohne Sicherung in `revert_boundary()` (der Plan
-  lässt ihn nicht hinein), die belegte Sperre (`busy`: ein zweiter Request
-  derselben Site im selben Augenblick), die Marke `settled` (oben, nur mit
+  lässt ihn nicht hinein), der Blick eines lesenden Aufrufs auf die
+  Sperrzeile vor `take()` in `settle()` (`lock_fresh()`: gleichwertig mit
+  `take()` allein, solange nicht zwei Requests im selben Augenblick laufen),
+  die Marke `settled` (oben, nur mit
   einer Datenbank erreichbar, die unmittelbar nach dem Schreiben nicht liest),
   der Vermerk `foreign` aus `pre ≠ Sicherung` vor dem eigenen Aufruf (eine
   fremde Änderung zwischen Zeilenaufruf und eigenem Aufruf trifft schon der
