@@ -674,6 +674,47 @@ final class SyncPackageTest extends TestCase {
 		self::assertSame( 'ab-sync-held/3', AB_MCP_Sync_Import::HELD_FORMAT );
 	}
 
+	public function testAnObjectWithoutTheStatusOfTheInventoryIsNeverPackedAndOneNamedAsACredentialIsCounted(): void {
+		// Branch 9 (the finding of the lead on class-sync-export.php:437): the
+		// results of AB_MCP_Sync_Kind::export() carry no status of their own,
+		// so the test for B9 in sort() read a key that was not there and never
+		// held. make_objects() gives every result the status of the rule of the
+		// inventory (AB_MCP_Sync_Inventory::status_of()), and sort() leaves an
+		// object without one out, counted as withheld (fail closed); one named
+		// as a credential (b9) is counted, never packed.
+		$sort   = new \ReflectionMethod( AB_MCP_Sync_Export::class, 'sort' );
+		$object = static fn( array $over ) => $over + array(
+			'kind'        => 'option',
+			'ref'         => 'blogname',
+			'identity'    => array( 'name' => 'blogname' ),
+			'locks'       => array(),
+			'credentials' => array(
+				'b9'    => array(),
+				'mixed' => array(),
+			),
+		);
+		$sorted = $sort->invoke( null, array( $object( array() ), $object( array( 'status' => 'b9', 'ref' => 'stripe_secret_key', 'identity' => array( 'name' => 'stripe_secret_key' ) ) ), $object( array( 'status' => 'z8', 'ref' => 'blogdescription', 'identity' => array( 'name' => 'blogdescription' ) ) ) ) );
+		self::assertSame( array( 'blogdescription' ), array_column( $sorted['packed'], 'ref' ), 'Only the object with its status is packed.' );
+		self::assertSame( 1, $sorted['report']['credentials']['names'], 'The object named as a credential is counted.' );
+		self::assertSame( 1, $sorted['report']['withheld']['count'], 'The object without a status is withheld.' );
+		self::assertSame( 'status', $sorted['report']['withheld']['objects'][0]['needs'] );
+		// The status of the rule of the inventory, for results of every kind.
+		self::assertSame( 'z8', \AB_MCP_Sync_Inventory::status_of( array( 'locks' => array() ) ) );
+		self::assertSame( 'locked', \AB_MCP_Sync_Inventory::status_of( array( 'locks' => array( array( 'key' => 'post:builder' ) ) ) ) );
+		self::assertSame( 'b9', \AB_MCP_Sync_Inventory::status_of( array( 'status' => 'b9', 'locks' => array() ) ) );
+		self::assertSame( 'z8', \AB_MCP_Sync_Inventory::status_of( array( 'status' => 'core', 'locks' => array() ) ) );
+		self::assertSame( 'locked', \AB_MCP_Sync_Inventory::status_of( array( 'status' => 'other', 'locks' => array() ) ) );
+		// Given twice (make_objects(), then entry() as the line is written): the same.
+		self::assertSame( 'z8', \AB_MCP_Sync_Inventory::status_of( array( 'status' => 'z8', 'locks' => array() ) ) );
+		self::assertSame( 'locked', \AB_MCP_Sync_Inventory::status_of( array( 'status' => 'z8', 'locks' => array( array( 'key' => 'post:builder' ) ) ) ) );
+		self::assertSame( 'locked', \AB_MCP_Sync_Inventory::status_of( array( 'status' => 'locked', 'locks' => array() ) ) );
+		self::assertSame( 'locked', \AB_MCP_Sync_Inventory::status_of( array() ), 'No locks to read: locked.' );
+		// A line of an object without a status: locked and held (no hash, no content).
+		$line = AB_MCP_Sync_Export::line( $object( array( 'canon' => 1, 'hash' => str_repeat( 'a', 64 ), 'size' => 1, 'complete' => true, 'refs' => array(), 'possible' => array() ) ) );
+		self::assertSame( 'locked', $line['status'] );
+		self::assertArrayNotHasKey( 'hash', $line );
+	}
+
 	public function testThisVersionMakesPackagesOfTheInventoryTheEnvironmentAndObjectsOnly(): void {
 		$this->paired();
 		$this->on( 'staging' );

@@ -342,6 +342,11 @@ final class AB_MCP_Sync_Export {
 			}
 			$found = array();
 			foreach ( $objects as $object ) {
+				// Its status by the rule of the inventory (b9 where the kind named
+				// the object so), before it is sorted: a result of export() names
+				// none of its own (branch 9; before, the test for B9 in sort()
+				// read a key that was not there).
+				$object['status']                 = AB_MCP_Sync_Inventory::status_of( $object );
 				$found[ (string) $object['ref'] ] = true;
 				$read[]                           = $object;
 			}
@@ -434,11 +439,15 @@ final class AB_MCP_Sync_Export {
 			'units' => 0,
 		);
 		foreach ( $objects as $object ) {
-			if ( 'b9' === $object['status'] ) {
+			$status = isset( $object['status'] ) && is_string( $object['status'] ) ? $object['status'] : null;
+			if ( 'b9' === $status ) {
 				++$credentials['names'];
 				continue;
 			}
-			$needs = AB_MCP_Sync_Export_Rights::withheld( $object );
+			// An object without a status is not told from one named as a
+			// credential: never packed, counted as withheld (fail closed;
+			// branch 9). Every caller gives one (entry(), status_of()).
+			$needs = null === $status ? 'status' : AB_MCP_Sync_Export_Rights::withheld( $object );
 			if ( null !== $needs ) {
 				++$count;
 				$subtype = self::subtype( $object );
@@ -552,18 +561,21 @@ final class AB_MCP_Sync_Export {
 	 * @return array
 	 */
 	public static function line( array $object ) {
-		$line = array(
+		// Without a status of the inventory: as locked, and held below (fail
+		// closed; branch 9). entry() always gives one.
+		$status = isset( $object['status'] ) && is_string( $object['status'] ) ? $object['status'] : null;
+		$line   = array(
 			'kind'     => (string) $object['kind'],
 			'ref'      => (string) $object['ref'],
 			'identity' => $object['identity'],
-			'status'   => $object['status'],
+			'status'   => null === $status ? 'locked' : $status,
 			'locks'    => self::fields( $object['locks'], array( 'at', 'key', 'reason', 'stage' ) ),
 		) + array_intersect_key( $object, array_flip( array( 'reason_code', 'target' ) ) );
 		if ( ! empty( $object['twin'] ) ) {
 			$line['twin'] = (int) $object['twin'];
 		}
 		$credentials = $object['credentials'];
-		if ( 'b9' === $object['status'] || array() !== $credentials['mixed'] || self::credential_locked( $object['locks'] ) ) {
+		if ( null === $status || 'b9' === $status || array() !== $credentials['mixed'] || self::credential_locked( $object['locks'] ) ) {
 			return $line;
 		}
 		return $line + array(

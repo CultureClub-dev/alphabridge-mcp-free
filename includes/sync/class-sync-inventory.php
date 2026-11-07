@@ -232,14 +232,32 @@ final class AB_MCP_Sync_Inventory {
 			$result['meta'] = count( $result['form']['meta'] );
 		}
 		unset( $result['form'] );
-		if ( ! isset( $result['status'] ) ) {
-			$result['status'] = array() === $result['locks'] ? 'z8' : 'locked';
-		} elseif ( 'core' === $result['status'] ) {
-			$result['status'] = array() === $result['locks'] ? 'z8' : 'locked';
-		} elseif ( ! in_array( $result['status'], array( 'b9', 'guarded', 'unreachable', 'unreadable' ), true ) ) {
-			$result['status'] = 'locked';
-		}
+		$result['status'] = self::status_of( $result );
 		return $result;
+	}
+
+	/**
+	 * The status of an object of the inventory (entry()), from the result of
+	 * its kind: b9, guarded, unreachable and unreadable as the kind named
+	 * them; z8 without a lock, locked with one, for a result that names none,
+	 * core or z8 (the rule given once already: it holds again, entry() of an
+	 * object make_objects() gave its status); locked for locked and any other
+	 * (fail closed). The one place of the rule,
+	 * for the inventory and for the package of objects alike
+	 * (AB_MCP_Sync_Export::make_objects(): the results of export() go through
+	 * it before they are sorted; branch 9: before, a result there carried no
+	 * status, and the test for B9 in sort() never held).
+	 *
+	 * @param array $result AB_MCP_Sync_Canon::finish(), or a bare entry of a kind.
+	 * @return string
+	 */
+	public static function status_of( array $result ) {
+		$locks  = isset( $result['locks'] ) && is_array( $result['locks'] ) ? $result['locks'] : array( 'unknown' );
+		$status = isset( $result['status'] ) && is_string( $result['status'] ) ? $result['status'] : null;
+		if ( null === $status || 'core' === $status || 'z8' === $status ) {
+			return array() === $locks ? 'z8' : 'locked';
+		}
+		return in_array( $status, array( 'b9', 'guarded', 'unreachable', 'unreadable' ), true ) ? $status : 'locked';
 	}
 
 	/**

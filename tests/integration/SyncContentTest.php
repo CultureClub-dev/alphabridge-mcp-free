@@ -544,11 +544,10 @@ final class SyncContentTest extends TestCase {
 			'delete_option',
 			function ( $option ) {
 				// The bookkeeping of the takeover and of WordPress (group B:
-				// the lock of a boundary, transients) is no option of the site;
-				// nor is the cache of a hierarchy of terms the core empties as a
-				// term changes (clean_term_cache(): {$taxonomy}_children,
-				// decision 21: caches are allowed; GRENZEN-INHALTE.md).
-				if ( ! AB_MCP_Sync_Exclusions::option( (string) $option ) && ! ( is_taxonomy_hierarchical( substr( (string) $option, 0, -9 ) ) && '_children' === substr( (string) $option, -9 ) ) ) {
+				// the lock of a boundary, transients, the cache of the hierarchy
+				// of the categories clean_term_cache() empties as a term
+				// changes) is no option of the site.
+				if ( ! AB_MCP_Sync_Exclusions::option( (string) $option ) ) {
 					$this->deletions[] = array( 'delete_option', (string) $option );
 				}
 			},
@@ -755,6 +754,63 @@ final class SyncContentTest extends TestCase {
 		self::assertSame( array( 'red' ), self::meta_a( 'term', $news_a, 'color' ) );
 		// Once no boundary holds, the other writer passes.
 		self::assertSame( 200, AB_MCP_IT_Sites::request( 'a', 'POST', '/wp/v2/categories/' . $news_a, array(), array( 'description' => 'By hand.' ) )['status'] );
+	}
+
+	public function testAnObjectWithTheNameOfACredentialNeverLandsInAPackageOfObjects(): void {
+		// B9 (decision 9) in the package of objects (the finding of the lead on
+		// class-sync-export.php:437; branch 9). The kinds whose objects can be
+		// named as a credential as a whole (options, theme mods) make no
+		// package of objects in this version: the export refuses them. The
+		// kinds that do (posts, terms) know B9 by their units: a meta row whose
+		// key is the name of a credential is neither in the form nor in the
+		// content of the line, and its value goes nowhere into the package.
+		self::pair();
+		self::paired( self::staged() );
+		$option = self::b(
+			array(
+				array( 'op' => 'update_option', 'name' => 'stripe_secret_key', 'value' => 'sk_live_51option' ),
+				array(
+					'op'          => 'export',
+					'purpose'     => 'objects',
+					'report_hash' => str_repeat( 'a', 64 ),
+					'refs'        => array( array( 'kind' => 'option', 'ref' => 'stripe_secret_key' ) ),
+					'expect'      => 'error',
+					'as'          => 'refused',
+				),
+			)
+		);
+		self::assertSame( 'ab_mcp_sync_not_in_branch', $option['refused']['code'], json_encode( $option['refused'] ) );
+		$post = self::on_b( self::page( 'pay', 'Pay here.', array( 'meta_input' => array( 'api_key' => 'sk_live_51postmeta', 'note' => 'x' ) ) ) );
+		$term = self::term_b( 'Vault', 'category' );
+		self::b( array( array( 'op' => 'add_term_meta', 'term' => $term, 'key' => 'api_key', 'value' => 'sk_live_51termmeta' ) ) );
+		self::clear_b();
+		$package = self::b(
+			array(
+				array(
+					'op'          => 'export',
+					'purpose'     => 'objects',
+					'report_hash' => str_repeat( 'a', 64 ),
+					'refs'        => array(
+						array( 'kind' => 'post', 'ref' => (string) $post ),
+						array( 'kind' => 'term', 'ref' => (string) $term ),
+					),
+					'as'          => 'package',
+				),
+			)
+		)['package'];
+		$taken = AB_MCP_Sync_Import::taken( self::import_package( $package, 'objects', str_repeat( 'a', 64 ) ), 'objects' );
+		self::assertIsArray( $taken, is_wp_error( $taken ) ? $taken->get_error_message() : '' );
+		self::assertCount( 2, $taken['lines'] );
+		foreach ( $taken['lines'] as $line ) {
+			self::assertSame( 'z8', $line['status'], 'With the status of the inventory, as the inventory gives it.' );
+			self::assertArrayHasKey( 'hash', $line, 'Not held: the object goes, without its credential.' );
+			self::assertNotContains( 'api_key', array_column( $line['content']['meta'], 0 ), $line['kind'] );
+			self::assertNotContains( 'api_key', array_column( $line['form']['meta'], 0 ), $line['kind'] );
+		}
+		$all = json_encode( $taken );
+		foreach ( array( 'sk_live_51option', 'sk_live_51postmeta', 'sk_live_51termmeta' ) as $secret ) {
+			self::assertStringNotContainsString( $secret, (string) $all, 'No value of a credential in the package.' );
+		}
 	}
 
 	/* ------------------------------------------------- the field rule */
