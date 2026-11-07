@@ -127,6 +127,8 @@ final class SyncRunTest extends TestCase {
 		AB_MCP_Sync_Report::$page     = null;
 		remove_all_filters( 'wp_insert_post_data' );
 		remove_all_filters( 'sanitize_post_meta_note' );
+		remove_all_filters( 'auth_post_meta_note' );
+		remove_all_filters( 'map_meta_cap' );
 		remove_all_actions( 'set_object_terms' );
 		delete_option( 'nav_menu_options' );
 	}
@@ -2554,6 +2556,184 @@ final class SyncRunTest extends TestCase {
 			$pair = AB_MCP_Sync_Pairs::find_live( AB_MCP_Sync_Anchor::active()['source_id'], 'post', (string) $id );
 			self::assertSame( array( 'active', 'proposal' ), array( $pair['state'], $pair['base_origin'] ), 'The pair went back to its snapshot.' );
 		}
+	}
+
+	public function testTheWayBackAsksTheRightsAtTheObjectAndLeavesAPartTheAccountMayNotWrite(): void {
+		// GitHub Codex round 2 on free#137 (P2): the way back checked the owner
+		// of the run, never the rights at the object, so an account that lost
+		// the right to a post, a key or a term since the run wrote could still
+		// put them back. Now every part asks the rights of the forward write
+		// right before it goes back (decision 28): a key a filter of this site
+		// protects (auth_post_meta_note), a page the account may not edit, a
+		// term it may not assign are left with their values before; the other
+		// parts go back, the run closes with findings.
+		self::pair();
+		$news_a  = wp_insert_term( 'News', 'category' );
+		$other_a = wp_insert_term( 'Other', 'category' );
+		self::assertIsArray( $news_a, is_wp_error( $news_a ) ? $news_a->get_error_message() : '' );
+		self::assertIsArray( $other_a, is_wp_error( $other_a ) ? $other_a->get_error_message() : '' );
+		$news_b  = (int) self::b( array( array( 'op' => 'insert_term', 'name' => 'News', 'taxonomy' => 'category', 'as' => 'term' ) ) )['term'];
+		$other_b = (int) self::b( array( array( 'op' => 'insert_term', 'name' => 'Other', 'taxonomy' => 'category', 'as' => 'term' ) ) )['term'];
+		$story_a = wp_insert_post( wp_slash( self::page( 'story', 'A story.', array( 'post_type' => 'post', 'post_category' => array( (int) $news_a['term_id'] ) ) ) ), true );
+		self::assertIsInt( $story_a );
+		$story_b = (int) self::b( array( array( 'op' => 'insert_post', 'args' => self::page( 'story', 'A story.', array( 'post_type' => 'post', 'post_category' => array( $news_b ) ) ), 'as' => 'post' ) ) )['post'];
+		$a       = self::pages_on_a( array( 'contact' => 'Write to us.', 'about' => 'About us.' ) );
+		$b       = self::pages_on_b( array( 'contact' => 'Write to us.', 'about' => 'About us.' ) );
+		$contact = (int) $a['contact'];
+		$about   = (int) $a['about'];
+		add_post_meta( $contact, 'note', 'abc' );
+		self::b( array( array( 'op' => 'add_meta', 'post' => (int) $b['contact'], 'key' => 'note', 'value' => 'abc' ) ) );
+		self::paired( self::staged() );
+		self::change_on_b( (string) $story_b, 'story', 'A story, on staging.', array( 'post_type' => 'post', 'post_category' => array( $other_b ) ) );
+		self::change_on_b( $b['contact'], 'contact', 'Write to us on staging.' );
+		self::b( array( array( 'op' => 'update_meta', 'post' => (int) $b['contact'], 'key' => 'note', 'value' => 'def' ) ) );
+		self::change_on_b( $b['about'], 'about', 'About us, on staging.' );
+		$planned = self::planned( array( 'story', 'contact', 'about' ) );
+		$run     = self::begun( $planned['args'] );
+		$slugs   = static fn(): array => array_values( array_map( static fn( $t ) => $t->slug, wp_get_object_terms( $story_a, 'category' ) ) );
+		self::probe_ok();
+		self::assertSame( 'closed_done', self::finish( (int) $run['run_id'] )['state'] );
+		self::assertSame( array( 'def' ), self::meta_a( $contact, 'note' ) );
+		self::assertSame( array( 'other' ), $slugs() );
+		self::assertSame( 'About us, on staging.', self::row_a( $about )['post_content'] );
+		// The account loses three rights before the way back: the key note (a
+		// filter of this site, as WordPress protects a key), the page about
+		// (edit_post), the term News (assign_term).
+		add_filter( 'auth_post_meta_note', '__return_false' );
+		$news_id = (int) $news_a['term_id'];
+		add_filter(
+			'map_meta_cap',
+			static function ( $caps, $cap, $user_id, $args ) use ( $about, $news_id ) {
+				if ( 'edit_post' === $cap && isset( $args[0] ) && (int) $args[0] === $about ) {
+					return array( 'do_not_allow' );
+				}
+				if ( 'assign_term' === $cap && isset( $args[0] ) && (int) $args[0] === $news_id ) {
+					return array( 'do_not_allow' );
+				}
+				return $caps;
+			},
+			10,
+			4
+		);
+		self::assertFalse( current_user_can( 'edit_post_meta', $contact, 'note' ) );
+		self::assertFalse( current_user_can( 'edit_post', $about ) );
+		self::assertFalse( current_user_can( 'assign_term', $news_id ) );
+		self::assertTrue( current_user_can( 'edit_post', $contact ) );
+		$begun = self::revert( (int) $run['run_id'] );
+		$back  = self::revert_all( (int) $begun['run_id'] );
+		self::assertSame( 'closed_findings', $back['state'], json_encode( $back ) );
+		$back  = self::gated( 'wp_site_revert', array( 'action' => 'status', 'run_id' => (int) $begun['run_id'] ) );
+		$steps = array();
+		foreach ( $back['steps'] as $step ) {
+			if ( 'revert' === $step['op'] ) {
+				$steps[ (int) $step['result']['live_ref'] ] = $step;
+			}
+		}
+		// contact: the row back, the key left with its value before.
+		$parts = array_column( $steps[ $contact ]['result']['parts'], null, 'part' );
+		self::assertSame( 'restored', $parts['row']['state'], json_encode( $parts ) );
+		self::assertSame( 'left', $parts['meta:note']['state'] );
+		self::assertStringContainsString( 'this account may not edit the meta key note of the post (edit_post_meta)', $parts['meta:note']['note'] );
+		self::assertStringContainsString( 'wp-admin', $parts['meta:note']['note'], 'The way.' );
+		self::assertSame( '"abc"', $parts['meta:note']['value_before'] );
+		self::assertSame( 'unclear', $steps[ $contact ]['state'] );
+		self::assertSame( array( 'def' ), self::meta_a( $contact, 'note' ), 'Not written.' );
+		self::assertSame( 'Write to us.', self::row_a( $contact )['post_content'], 'The row went back.' );
+		// about: the row left.
+		$parts = array_column( $steps[ $about ]['result']['parts'], null, 'part' );
+		self::assertSame( 'left', $parts['row']['state'], json_encode( $parts ) );
+		self::assertStringContainsString( sprintf( 'this account may not edit the post %d (edit_post)', $about ), $parts['row']['note'] );
+		self::assertStringContainsString( 'post_content: 9 bytes', $parts['row']['value_before'] );
+		self::assertSame( 'About us, on staging.', self::row_a( $about )['post_content'], 'Not written.' );
+		// story: the row back, the category left.
+		$parts = array_column( $steps[ $story_a ]['result']['parts'], null, 'part' );
+		self::assertSame( 'restored', $parts['row']['state'], json_encode( $parts ) );
+		self::assertSame( 'left', $parts['terms:category']['state'] );
+		self::assertStringContainsString( sprintf( 'this account may not assign the term %d of category (assign_term)', $news_id ), $parts['terms:category']['note'] );
+		self::assertSame( '"news"', $parts['terms:category']['value_before'] );
+		self::assertSame( array( 'other' ), $slugs(), 'Not written.' );
+		self::assertSame( 'A story.', self::row_a( $story_a )['post_content'] );
+		foreach ( array( $contact, $about, $story_a ) as $id ) {
+			$pair = AB_MCP_Sync_Pairs::find_live( AB_MCP_Sync_Anchor::active()['source_id'], 'post', (string) $id );
+			self::assertSame( 'unclear', $pair['state'], "Pair of $id." );
+		}
+	}
+
+	public function testAFormatNamedByItsSlugAndATaxonomyOnlyThisSiteHasAskTheRightToAssignBeforeTheFirstWrite(): void {
+		// GitHub Codex round 2 on free#137 (P2): a format is written by its
+		// slug (post_format), so the check before the first write never asked
+		// assign_term for it, and a taxonomy only the post of this site carries,
+		// which the step clears, was never asked at all. Now (decision 28): a
+		// slug this site has no term of asks the right of the taxonomy to make
+		// one; a slug it has a term of asks assign_term for that term; a
+		// taxonomy only this site has asks its right to assign. Each refusal
+		// closes the run before the first write, nothing written.
+		self::pair();
+		$news_a = wp_insert_term( 'News', 'category' );
+		self::assertIsArray( $news_a, is_wp_error( $news_a ) ? $news_a->get_error_message() : '' );
+		$news_b  = (int) self::b( array( array( 'op' => 'insert_term', 'name' => 'News', 'taxonomy' => 'category', 'as' => 'term' ) ) )['term'];
+		$story_a = wp_insert_post( wp_slash( self::page( 'story', 'A story.', array( 'post_type' => 'post', 'post_category' => array( (int) $news_a['term_id'] ) ) ) ), true );
+		self::assertIsInt( $story_a );
+		$story_b = (int) self::b( array( array( 'op' => 'insert_post', 'args' => self::page( 'story', 'A story.', array( 'post_type' => 'post', 'post_category' => array( $news_b ) ) ), 'as' => 'post' ) ) )['post'];
+		self::paired( self::staged() );
+		// On staging the story gets the format aside and new content.
+		$aside_b = (int) self::b( array( array( 'op' => 'insert_term', 'name' => 'post-format-aside', 'taxonomy' => 'post_format', 'as' => 'term' ) ) )['term'];
+		self::b( array( array( 'op' => 'set_terms', 'post' => $story_b, 'terms' => array( $aside_b ), 'taxonomy' => 'post_format' ) ) );
+		self::change_on_b( (string) $story_b, 'story', 'A story, on staging.', array( 'post_type' => 'post', 'post_category' => array( $news_b ) ) );
+		$format = static fn(): string|false => get_post_format( $story_a );
+		self::assertFalse( $format() );
+		$deny = null;
+		add_filter(
+			'map_meta_cap',
+			static function ( $caps, $cap, $user_id, $args ) use ( &$deny ) {
+				return null !== $deny && $deny( (string) $cap, (array) $args ) ? array( 'do_not_allow' ) : $caps;
+			},
+			10,
+			4
+		);
+		$aborted = function ( array $args, string $needs ) use ( $story_a ): void {
+			$run = self::begun( $args );
+			$closed = self::finish( (int) $run['run_id'] );
+			self::assertSame( 'closed_aborted', $closed['state'], json_encode( $closed ) );
+			$check = self::step( $closed, 1 );
+			self::assertStringContainsString( 'this account may not ' . $needs, json_encode( $check['result'] ) );
+			self::assertSame( 'A story.', self::row_a( $story_a )['post_content'], 'Nothing written.' );
+		};
+		// 1. This site has no term of the format yet: the right of post_format
+		// to make one (manage_categories), asked before the first write.
+		$planned = self::planned( array( 'story' ) );
+		$deny    = static fn( string $cap, array $args ): bool => 'manage_categories' === $cap;
+		self::assertFalse( current_user_can( 'manage_categories' ) );
+		$aborted( $planned['args'], 'make the term post-format-aside of post_format, which this site has no term of yet (manage_categories)' );
+		// 2. This site has the term: assign_term for it, by the id its slug names.
+		$aside_a = wp_insert_term( 'post-format-aside', 'post_format' );
+		self::assertIsArray( $aside_a, is_wp_error( $aside_a ) ? $aside_a->get_error_message() : '' );
+		$aside_id = (int) $aside_a['term_id'];
+		$deny     = static fn( string $cap, array $args ): bool => 'assign_term' === $cap && isset( $args[0] ) && (int) $args[0] === $aside_id;
+		$aborted( $planned['args'], sprintf( 'assign the term %d of post_format (assign_term)', $aside_id ) );
+		// With the rights the run writes the format.
+		$deny = null;
+		$run  = self::begun( $planned['args'] );
+		self::probe_ok();
+		self::assertSame( 'closed_done', self::finish( (int) $run['run_id'] )['state'] );
+		self::assertSame( 'aside', $format() );
+		self::assertSame( 'A story, on staging.', self::row_a( $story_a )['post_content'] );
+		// 3. Staging takes the format off again: post_format is now a taxonomy
+		// only this site's post carries, which the step clears; the right of
+		// the taxonomy to assign its terms (edit_posts) is asked for it.
+		self::b( array( array( 'op' => 'set_terms', 'post' => $story_b, 'terms' => array(), 'taxonomy' => 'post_format' ) ) );
+		self::change_on_b( (string) $story_b, 'story', 'A story, on staging, again.', array( 'post_type' => 'post', 'post_category' => array( $news_b ) ) );
+		$planned = self::planned( array( 'story' ) );
+		$deny    = static fn( string $cap, array $args ): bool => 'edit_posts' === $cap && array() === $args;
+		$run     = self::begun( $planned['args'] );
+		$closed  = self::finish( (int) $run['run_id'] );
+		self::assertSame( 'closed_aborted', $closed['state'], json_encode( $closed ) );
+		self::assertStringContainsString( 'this account may not assign the terms of post_format (edit_posts)', json_encode( self::step( $closed, 1 )['result'] ) );
+		self::assertSame( 'aside', $format(), 'Nothing written.' );
+		$deny = null;
+		$run  = self::begun( $planned['args'] );
+		self::assertSame( 'closed_done', self::finish( (int) $run['run_id'] )['state'] );
+		self::assertFalse( $format(), 'The format taken off, as on staging.' );
 	}
 
 	public function testATargetThatChangedSinceTheReportIsNotPlannedWhateverTheReportSaid(): void {

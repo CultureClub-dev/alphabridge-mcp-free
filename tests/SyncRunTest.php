@@ -266,10 +266,18 @@ final class SyncRunTest extends TestCase {
 		$GLOBALS['ab_test_meta_ids'] = array();
 		ab_test_add_user( 3 );
 		$GLOBALS['ab_test_current_user'] = 3;
+		// The three taxonomies of this version, registered with the rights
+		// WordPress gives them (get_taxonomy(), taxonomy_exists()).
+		$GLOBALS['ab_test_way']['taxonomies'] = array(
+			'category'    => (object) array( 'name' => 'category', 'cap' => (object) array( 'manage_terms' => 'manage_categories', 'edit_terms' => 'manage_categories', 'delete_terms' => 'manage_categories', 'assign_terms' => 'edit_posts' ) ),
+			'post_tag'    => (object) array( 'name' => 'post_tag', 'cap' => (object) array( 'manage_terms' => 'manage_post_tags', 'edit_terms' => 'edit_post_tags', 'delete_terms' => 'delete_post_tags', 'assign_terms' => 'assign_post_tags' ) ),
+			'post_format' => (object) array( 'name' => 'post_format', 'cap' => (object) array( 'manage_terms' => 'manage_categories', 'edit_terms' => 'manage_categories', 'delete_terms' => 'manage_categories', 'assign_terms' => 'edit_posts' ) ),
+		);
+		$GLOBALS['ab_test_terms_by_slug'] = array();
 	}
 
 	protected function tearDown(): void {
-		unset( $GLOBALS['ab_test_home'], $GLOBALS['wpdb'] );
+		unset( $GLOBALS['ab_test_home'], $GLOBALS['wpdb'], $GLOBALS['ab_test_way'], $GLOBALS['ab_test_terms_by_slug'] );
 		AB_MCP_Sync_Guard::disarm();
 		AB_MCP_Sync_Guard::$now       = null;
 		AB_MCP_Sync_Resources::$probe = null;
@@ -890,6 +898,142 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( 'ab_mcp_sync_rights', AB_MCP_Sync_Post_Writer::precheck( $prepared, 12, $ctx['now'] )->get_error_code() );
 		$denied = array( 'delete_post_meta:note', 'delete_post_meta:other' );
 		self::assertTrue( AB_MCP_Sync_Post_Writer::precheck( $prepared, 12, $ctx['now'] ), 'The right to remove is asked for a key only this site has.' );
+	}
+
+	public function testTheRightToSetTheTermsIsAskedForEveryTaxonomyTheStepTouchesByIdBySlugAndForOneOnlyThisSiteHas(): void {
+		// GitHub Codex round 2 on free#137 (P2): a format is named by its slug
+		// (post_format, IDENTITY_TAXONOMIES), so it never reached assign_term;
+		// a taxonomy only the post of this site carries never entered the loop,
+		// though the step clears it (write_terms() with no term). Now every
+		// taxonomy the step touches is asked (decision 28; term_right()): the
+		// right of the taxonomy to assign its terms for the set, assign_term for
+		// every term by its id or by the id its slug names here, the right to
+		// make a term for a slug this site has no term of yet (B6).
+		$db                = self::post_rows( 'News' );
+		$db->relations[12] = array(
+			array( 'term_taxonomy_id' => 3, 'term_order' => 0, 'term_id' => 3, 'taxonomy' => 'category', 'slug' => 'news' ),
+			array( 'term_taxonomy_id' => 5, 'term_order' => 0, 'term_id' => 5, 'taxonomy' => 'post_tag', 'slug' => 'tip' ),
+		);
+		$GLOBALS['wpdb'] = $db;
+		$ctx             = self::ctx( array( 'term' => array( 3 => 3 ) ) );
+		$ctx['now']      = 1800000000;
+		// The target: in the category News (by its pair), the format aside by
+		// its slug, no tag: the step clears post_tag, which only this site has.
+		$prepared = AB_MCP_Sync_Post_Writer::target_of( self::line( array( 'post_type' => 'post' ), array( array( 'note', 'abc' ) ), array( array( 'name' => 'News', 'slug' => 'news', 'taxonomy' => 'category', 'term_id' => 3, 'term_order' => 0 ), array( 'name' => 'Aside', 'slug' => 'post-format-aside', 'taxonomy' => 'post_format', 'term_id' => 9, 'term_order' => 0 ) ), array( 'identity' => array( 'post_type' => 'post', 'post_name' => 'hello', 'theme' => '' ) ) ), self::item(), $ctx );
+		self::assertIsArray( $prepared, is_wp_error( $prepared ) ? $prepared->get_error_message() : '' );
+		self::assertSame( array( 'category' => array( 3 ), 'post_format' => array( 'post-format-aside' ) ), $prepared['terms'] );
+		$asked  = array();
+		$denied = array();
+		$GLOBALS['ab_test_can'] = static function ( string $cap, array $args ) use ( &$denied, &$asked ): bool {
+			$key     = $cap . ':' . implode( ':', array_map( 'strval', $args ) );
+			$asked[] = $key;
+			return ! in_array( $key, $denied, true );
+		};
+		$refused = static function ( $result ): string {
+			self::assertInstanceOf( WP_Error::class, $result, 'Refused.' );
+			self::assertSame( 'ab_mcp_sync_rights', $result->get_error_code() );
+			return $result->get_error_message();
+		};
+		// Without a term of the format here: the right of the taxonomy to make one.
+		self::assertTrue( AB_MCP_Sync_Post_Writer::precheck( $prepared, 12, $ctx['now'] ), 'With every right the check passes.' );
+		self::assertContains( 'edit_posts:', $asked, 'The right of category and post_format to assign their terms.' );
+		self::assertContains( 'assign_post_tags:', $asked, 'The right of post_tag, which only this site has and the step clears.' );
+		self::assertContains( 'assign_term:3', $asked, 'The category by its id.' );
+		self::assertContains( 'manage_categories:', $asked, 'The right to make the term of the format this site has no term of yet.' );
+		self::assertNotContains( 'assign_term:5', $asked, 'The tag goes away; no term is assigned.' );
+		$denied = array( 'manage_categories:' );
+		self::assertStringContainsString( 'make the term post-format-aside of post_format, which this site has no term of yet (manage_categories)', $refused( AB_MCP_Sync_Post_Writer::precheck( $prepared, 12, $ctx['now'] ) ) );
+		// With a term of the format here: assign_term by its id.
+		$GLOBALS['ab_test_terms_by_slug'] = array( 'post_format' => array( 'post-format-aside' => 21 ) );
+		$asked                            = array();
+		self::assertTrue( AB_MCP_Sync_Post_Writer::precheck( $prepared, 12, $ctx['now'] ) );
+		self::assertContains( 'assign_term:21', $asked, 'The slug resolved to the term of this site.' );
+		self::assertNotContains( 'manage_categories:', $asked );
+		$denied = array( 'assign_term:21' );
+		self::assertStringContainsString( 'assign the term 21 of post_format (assign_term)', $refused( AB_MCP_Sync_Post_Writer::precheck( $prepared, 12, $ctx['now'] ) ) );
+		// A taxonomy only this site has, which the step clears.
+		$denied = array( 'assign_post_tags:' );
+		self::assertStringContainsString( 'assign the terms of post_tag (assign_post_tags)', $refused( AB_MCP_Sync_Post_Writer::precheck( $prepared, 12, $ctx['now'] ) ) );
+		// The right of a taxonomy of the target to assign its terms, and a term by its id.
+		$denied = array( 'edit_posts:' );
+		self::assertStringContainsString( 'assign the terms of category (edit_posts)', $refused( AB_MCP_Sync_Post_Writer::precheck( $prepared, 12, $ctx['now'] ) ) );
+		$denied = array( 'assign_term:3' );
+		self::assertStringContainsString( 'assign the term 3 of category (assign_term)', $refused( AB_MCP_Sync_Post_Writer::precheck( $prepared, 12, $ctx['now'] ) ) );
+		$denied = array();
+		// A taxonomy only this site has that is not registered here: locked.
+		$db->relations[12][] = array( 'term_taxonomy_id' => 8, 'term_order' => 0, 'term_id' => 8, 'taxonomy' => 'product_cat', 'slug' => 'x' );
+		self::assertSame( 'post:taxonomy_rule', self::lock_of( AB_MCP_Sync_Post_Writer::precheck( $prepared, 12, $ctx['now'] ) ) );
+		// term_right() alone: the taxonomy as a whole, a slug and an id; a taxonomy without rights.
+		self::assertTrue( AB_MCP_Sync_Post_Writer::term_right( 'post_format', array( 'post-format-aside', 'post-format-quote' ) ) );
+		$denied = array( 'manage_categories:' );
+		self::assertStringContainsString( 'make the term post-format-quote', (string) AB_MCP_Sync_Post_Writer::term_right( 'post_format', array( 'post-format-aside', 'post-format-quote' ) ) );
+		$denied = array();
+		self::assertTrue( AB_MCP_Sync_Post_Writer::term_right( 'post_tag', array() ), 'Clearing a taxonomy asks the right of the taxonomy only.' );
+		self::assertStringContainsString( 'not registered', (string) AB_MCP_Sync_Post_Writer::term_right( 'product_cat', array( 8 ) ) );
+	}
+
+	public function testTheWayBackAsksTheRightsAtTheObjectAsTheForwardWriteDoesBeforeAPartGoesBack(): void {
+		// GitHub Codex round 2 on free#137 (P2): the way back asked the owner of
+		// the run, never the rights at the object; wp_update_post(), the raw SQL
+		// of restore_meta() and wp_set_object_terms() ask none. restore_right()
+		// asks the rights of the forward write (decision 28) for the part as the
+		// way back would write it; put_back() leaves a part the account may not
+		// write, with its value before.
+		$backup = array(
+			'row'   => array( 'post_type' => 'post', 'post_status' => 'publish', 'post_author' => '3', 'post_title' => 'Before' ),
+			'meta'  => array( array( 'meta_id' => 1, 'key' => 'note', 'value' => 'abc' ), array( 'meta_id' => 2, 'key' => '_wp_page_template', 'value' => 'full.php' ) ),
+			'terms' => array( array( 'taxonomy' => 'category', 'term_id' => 3, 'slug' => 'news', 'term_order' => 0 ) ),
+		);
+		$now    = array(
+			'row'   => array( 'post_type' => 'post', 'post_status' => 'draft', 'post_author' => '3', 'post_title' => 'After' ),
+			'meta'  => array( array( 'meta_id' => 1, 'key' => 'note', 'value' => 'def' ), array( 'meta_id' => 3, 'key' => 'extra', 'value' => 'x' ) ),
+			'terms' => array(),
+		);
+		$denied = array();
+		$GLOBALS['ab_test_can'] = static function ( string $cap, array $args ) use ( &$denied ): bool {
+			return ! in_array( $cap . ':' . implode( ':', array_map( 'strval', $args ) ), $denied, true );
+		};
+		$right = static fn( string $part, array $deny, ?array $backup_over = null, ?array $now_over = null ) => AB_MCP_Sync_Post_Writer::restore_right( $part, 12, null === $backup_over ? $backup : $backup_over, null === $now_over ? $now : $now_over );
+		// The row: edit_post; publish_posts where the backed-up status is
+		// publish and the row holds another now; edit_others_posts for another
+		// author's post.
+		$denied = array();
+		self::assertTrue( $right( 'row', array() ) );
+		$denied = array( 'edit_post:12' );
+		self::assertSame( 'edit the post 12 (edit_post)', $right( 'row', $denied ) );
+		$denied = array( 'publish_posts:' );
+		self::assertSame( 'publish a post (publish_posts)', $right( 'row', $denied ) );
+		$published = $now;
+		$published['row']['post_status'] = 'publish';
+		self::assertTrue( $right( 'row', $denied, null, $published ), 'Published already: no publishing.' );
+		$denied = array( 'edit_others_posts:' );
+		self::assertTrue( $right( 'row', $denied ), 'The account\'s own post.' );
+		$other = $backup;
+		$other['row']['post_author'] = '5';
+		self::assertSame( 'write a post of another author (edit_others_posts)', $right( 'row', $denied, $other ) );
+		// Meta: edit where rows are written over, add where the backup holds
+		// more rows, delete where it holds fewer; the core key with edit_post.
+		$denied = array( 'edit_post_meta:12:note' );
+		self::assertSame( 'edit the meta key note of the post (edit_post_meta)', $right( 'meta:note', $denied ) );
+		$denied = array( 'add_post_meta:12:note' );
+		self::assertTrue( $right( 'meta:note', $denied ), 'Both sides hold a row: written over, not added.' );
+		$gone = $now;
+		$gone['meta'] = array();
+		self::assertSame( 'add the meta key note to the post (add_post_meta)', $right( 'meta:note', $denied, null, $gone ) );
+		$denied = array( 'delete_post_meta:12:extra' );
+		self::assertSame( 'remove the meta key extra of the post (delete_post_meta)', $right( 'meta:extra', $denied ) );
+		$denied = array( 'edit_post_meta:12:_wp_page_template', 'add_post_meta:12:_wp_page_template' );
+		self::assertTrue( $right( 'meta:_wp_page_template', $denied ), 'The core key goes with edit_post.' );
+		$denied = array( 'edit_post:12' );
+		self::assertSame( 'edit the post 12 (edit_post, for the key _wp_page_template)', $right( 'meta:_wp_page_template', $denied ) );
+		// Terms: the taxonomy and each backed-up term; one not registered here.
+		$denied = array( 'assign_term:3' );
+		self::assertSame( 'assign the term 3 of category (assign_term)', $right( 'terms:category', $denied ) );
+		$denied = array( 'edit_posts:' );
+		self::assertSame( 'assign the terms of category (edit_posts)', $right( 'terms:category', $denied ) );
+		$denied = array();
+		self::assertTrue( $right( 'terms:category', $denied ) );
+		self::assertStringContainsString( 'not registered', (string) $right( 'terms:product_cat', $denied ) );
 	}
 
 	/** A post of a few rows in the fake $wpdb, with one category. */

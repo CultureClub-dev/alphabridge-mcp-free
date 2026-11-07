@@ -88,6 +88,13 @@ if ( ! function_exists( 'taxonomy_exists' ) ) {
 	}
 }
 
+if ( ! function_exists( 'get_taxonomy' ) ) {
+	/** A taxonomy the test registered in $ab_test_way['taxonomies'] (the same record tests/answer-way-stubs.php reads, so both definitions answer alike), or false. */
+	function get_taxonomy( $taxonomy ) {
+		return $GLOBALS['ab_test_way']['taxonomies'][ (string) $taxonomy ] ?? false;
+	}
+}
+
 if ( ! function_exists( 'get_term_by' ) ) {
 	/** $ab_test_terms_by_slug holds taxonomy => slug => term_id. */
 	function get_term_by( $field, $value, $taxonomy = '' ) {

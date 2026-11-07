@@ -1418,6 +1418,13 @@ final class AB_MCP_Sync_Engine {
 	 * 4. Then every part counted as back is read once more against the
 	 *    backup: only where every one reads as the backup is the object back;
 	 *    a part that does not is unclear, with the reason.
+	 * 5. Right before a part goes back, the rights at the object as the
+	 *    forward write asks them (AB_MCP_Sync_Post_Writer::restore_right();
+	 *    decision 28): edit_post for the row, edit_, add_ or delete_post_meta
+	 *    for a key, the rights of the taxonomy and assign_term for the terms.
+	 *    A part the account may not write is left with its value before; the
+	 *    run goes on (GitHub Codex round 2 of branch 8, P2: before, the way
+	 *    back asked the owner of the run only).
 	 *
 	 * A part left carries the value it held before (value_before, from the
 	 * backup; AB_MCP_Sync_Post_Writer::before_value()).
@@ -1455,6 +1462,20 @@ final class AB_MCP_Sync_Engine {
 					'state' => 'left',
 					'why'   => sprintf( 'The way back stopped for this object: %s; the part %s is left as it is, check it by hand.', $stopped, $name ),
 				);
+			}
+			if ( 'put_back' === $decided['state'] ) {
+				// The rights at the object, as the forward write asks them
+				// (decision 28; GitHub Codex round 2 of branch 8, P2): the
+				// owner of the run may have lost the right to this post, key or
+				// taxonomy since the run wrote. Without it the part is left with
+				// its value before, fail closed; the run goes on.
+				$may = AB_MCP_Sync_Post_Writer::restore_right( $name, $live_id, $backup, $seen );
+				if ( true !== $may ) {
+					$decided = array(
+						'state' => 'left',
+						'why'   => sprintf( 'Not put back: this account may not %1$s on this site, so the part %2$s is left as it is; its value before stands beside it (value_before). Set it by hand in wp-admin with an account that may.', $may, $name ),
+					);
+				}
 			}
 			if ( 'put_back' !== $decided['state'] ) {
 				$one = '' === $decided['why'] ? array( 'state' => $decided['state'] ) : array(

@@ -351,20 +351,21 @@ final class AB_MCP_Sync_Post_Writer {
 				return self::rights( sprintf( 'edit the meta key %s of the post (edit_post_meta)', $key ) );
 			}
 		}
-		// A plain key only this site has is removed by the step (write_meta()
-		// with no value): the right to remove it, per key, through
-		// map_meta_cap, before anything is written (decision 28; the metadata
-		// API asks no right itself; GitHub Codex round 1 of branch 8). The
-		// core key with an API of its own goes with edit_post.
+		$current = null;
 		if ( null !== $live_id ) {
 			$current = self::current( (int) $live_id );
 			if ( is_wp_error( $current ) ) {
 				return $current;
 			}
-			foreach ( is_array( $current ) ? $current['meta'] : array() as $row ) {
-				if ( ! isset( $prepared['meta'][ $row['key'] ] ) && ! in_array( $row['key'], self::CORE_META, true ) && ! current_user_can( 'delete_post_meta', (int) $live_id, $row['key'] ) ) {
-					return self::rights( sprintf( 'remove the meta key %s of the post (delete_post_meta)', $row['key'] ) );
-				}
+		}
+		// A plain key only this site has is removed by the step (write_meta()
+		// with no value): the right to remove it, per key, through
+		// map_meta_cap, before anything is written (decision 28; the metadata
+		// API asks no right itself; GitHub Codex round 1 of branch 8). The
+		// core key with an API of its own goes with edit_post.
+		foreach ( is_array( $current ) ? $current['meta'] : array() as $row ) {
+			if ( ! isset( $prepared['meta'][ $row['key'] ] ) && ! in_array( $row['key'], self::CORE_META, true ) && ! current_user_can( 'delete_post_meta', (int) $live_id, $row['key'] ) ) {
+				return self::rights( sprintf( 'remove the meta key %s of the post (delete_post_meta)', $row['key'] ) );
 			}
 		}
 		// The template the theme of this site offers for the type (B7): as
@@ -376,14 +377,24 @@ final class AB_MCP_Sync_Post_Writer {
 				return self::locked( 'post:page_template', sprintf( 'the template %1$s for a %2$s', $prepared['postarr']['page_template'], $type ) );
 			}
 		}
-		foreach ( $prepared['terms'] as $taxonomy => $list ) {
+		// The right to set the terms of every taxonomy the step touches
+		// (decision 28; GitHub Codex round 2 of branch 8, P2): the taxonomies
+		// of the target and those only the post of this site carries, which
+		// the step clears (write_terms() with no term); for each the right
+		// of the taxonomy to assign its terms, assign_term for every term by
+		// its id or by the id its slug names here (post_format), and the
+		// right to make a term for a slug this site has no term of (term_right()).
+		$taxonomies = array_keys( $prepared['terms'] );
+		foreach ( is_array( $current ) ? $current['terms'] : array() as $term ) {
+			$taxonomies[] = (string) $term['taxonomy'];
+		}
+		foreach ( array_unique( $taxonomies ) as $taxonomy ) {
 			if ( ! taxonomy_exists( $taxonomy ) ) {
 				return self::locked( 'post:taxonomy_rule', sprintf( 'the taxonomy %s is not registered on this site', $taxonomy ) );
 			}
-			foreach ( $list as $term ) {
-				if ( is_int( $term ) && ! current_user_can( 'assign_term', $term ) ) {
-					return self::rights( sprintf( 'assign the term %1$d of %2$s (assign_term)', $term, $taxonomy ) );
-				}
+			$may = self::term_right( $taxonomy, isset( $prepared['terms'][ $taxonomy ] ) ? $prepared['terms'][ $taxonomy ] : array() );
+			if ( true !== $may ) {
+				return self::rights( $may );
 			}
 		}
 		// The status WordPress would store, from the very data handed over
@@ -422,6 +433,120 @@ final class AB_MCP_Sync_Post_Writer {
 			}
 		}
 		return true;
+	}
+
+	/**
+	 * Whether this account may set the terms of a taxonomy on a post to
+	 * exactly these keys (decision 28; GitHub Codex round 2 of branch 8,
+	 * P2): the right of the taxonomy to assign its terms (its cap
+	 * assign_terms) for the set, also where the set is emptied; for every
+	 * term assign_term through map_meta_cap, by its id, or by the id of the
+	 * term its slug names on this site (post_format, IDENTITY_TAXONOMIES);
+	 * for a slug this site has no term of, the right of the taxonomy to make
+	 * one (its cap edit_terms), as wp_set_object_terms() makes it (B6). True,
+	 * or what the account may not do, for the refusal. The forward check
+	 * (precheck()) and the way back (restore_right()) ask the same.
+	 *
+	 * @param string $taxonomy Taxonomy, registered on this site.
+	 * @param array  $keys     Term ids, or the slugs of an identity taxonomy (target_of(), term_keys()).
+	 * @return true|string
+	 */
+	public static function term_right( $taxonomy, array $keys ) {
+		$taxonomy = (string) $taxonomy;
+		$object   = get_taxonomy( $taxonomy );
+		if ( ! is_object( $object ) || ! isset( $object->cap->assign_terms, $object->cap->edit_terms ) ) {
+			return sprintf( 'assign the terms of %s (the taxonomy is not registered on this site, or names no right to assign its terms)', $taxonomy );
+		}
+		if ( ! current_user_can( (string) $object->cap->assign_terms ) ) {
+			return sprintf( 'assign the terms of %1$s (%2$s)', $taxonomy, (string) $object->cap->assign_terms );
+		}
+		foreach ( self::target_term_keys( $taxonomy, $keys ) as $key ) {
+			if ( is_int( $key ) ) {
+				$id = $key;
+			} else {
+				$found = get_term_by( 'slug', (string) $key, $taxonomy );
+				if ( ! is_object( $found ) || ! isset( $found->term_id ) ) {
+					if ( ! current_user_can( (string) $object->cap->edit_terms ) ) {
+						return sprintf( 'make the term %1$s of %2$s, which this site has no term of yet (%3$s)', (string) $key, $taxonomy, (string) $object->cap->edit_terms );
+					}
+					continue;
+				}
+				$id = (int) $found->term_id;
+			}
+			if ( ! current_user_can( 'assign_term', $id ) ) {
+				return sprintf( 'assign the term %1$d of %2$s (assign_term)', $id, $taxonomy );
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * Whether this account may put a part back as the way back writes it:
+	 * the rights the forward write asks (precheck(); decision 28), asked
+	 * again at the object right before the part goes back (GitHub Codex
+	 * round 2 of branch 8, P2: the way back checked the owner of the run,
+	 * never the rights at the object, and wp_update_post(), the raw SQL of
+	 * restore_meta() and wp_set_object_terms() ask none). The row: edit_post;
+	 * publish_posts where the backed-up status is publish, future or private
+	 * and the row holds another now; edit_others_posts where the backed-up
+	 * author is another account. A meta key: edit_post for the core key the
+	 * row writes (_wp_page_template; CORE_META); else edit_post_meta where
+	 * rows are written over (both sides hold rows), add_post_meta where the
+	 * backup holds more rows than the post now, delete_post_meta where it
+	 * holds fewer, each through map_meta_cap. The terms of a taxonomy:
+	 * term_right() for the backed-up keys. True, or what the account may
+	 * not do.
+	 *
+	 * @param string $part    Part (row, meta:<key>, terms:<taxonomy>).
+	 * @param int    $live_id Post.
+	 * @param array  $backup  current() of the backup.
+	 * @param array  $now     current() as read right before the part's turn.
+	 * @return true|string
+	 */
+	public static function restore_right( $part, $live_id, array $backup, array $now ) {
+		$part = (string) $part;
+		$id   = (int) $live_id;
+		if ( 'row' === $part ) {
+			if ( ! current_user_can( 'edit_post', $id ) ) {
+				return sprintf( 'edit the post %d (edit_post)', $id );
+			}
+			$type = isset( $backup['row']['post_type'] ) ? (string) $backup['row']['post_type'] : '';
+			$pto  = get_post_type_object( $type );
+			if ( ! is_object( $pto ) || ! isset( $pto->cap ) ) {
+				return sprintf( 'write a %s (the post type is not registered on this site)', $type );
+			}
+			$status = isset( $backup['row']['post_status'] ) ? (string) $backup['row']['post_status'] : '';
+			if ( in_array( $status, array( 'publish', 'future', 'private' ), true ) && ( ! isset( $now['row']['post_status'] ) || (string) $now['row']['post_status'] !== $status ) && ! current_user_can( (string) $pto->cap->publish_posts ) ) {
+				return sprintf( 'publish a %1$s (%2$s)', $type, (string) $pto->cap->publish_posts );
+			}
+			if ( isset( $backup['row']['post_author'] ) && (int) $backup['row']['post_author'] !== (int) get_current_user_id() && ! current_user_can( (string) $pto->cap->edit_others_posts ) ) {
+				return sprintf( 'write a %1$s of another author (%2$s)', $type, (string) $pto->cap->edit_others_posts );
+			}
+			return true;
+		}
+		if ( 0 === strpos( $part, 'meta:' ) ) {
+			$key = substr( $part, 5 );
+			if ( in_array( $key, self::CORE_META, true ) ) {
+				return current_user_can( 'edit_post', $id ) ? true : sprintf( 'edit the post %1$d (edit_post, for the key %2$s)', $id, $key );
+			}
+			$was = count( self::meta_values( $backup, $key ) );
+			$has = count( self::meta_values( $now, $key ) );
+			if ( $was > 0 && $has > 0 && ! current_user_can( 'edit_post_meta', $id, $key ) ) {
+				return sprintf( 'edit the meta key %s of the post (edit_post_meta)', $key );
+			}
+			if ( $was > $has && ! current_user_can( 'add_post_meta', $id, $key ) ) {
+				return sprintf( 'add the meta key %s to the post (add_post_meta)', $key );
+			}
+			if ( $has > $was && ! current_user_can( 'delete_post_meta', $id, $key ) ) {
+				return sprintf( 'remove the meta key %s of the post (delete_post_meta)', $key );
+			}
+			return true;
+		}
+		$taxonomy = substr( $part, 6 );
+		if ( ! taxonomy_exists( $taxonomy ) ) {
+			return sprintf( 'assign the terms of %s (the taxonomy is not registered on this site)', $taxonomy );
+		}
+		return self::term_right( $taxonomy, self::term_keys( $backup, $taxonomy ) );
 	}
 
 	/* ---------------------------------------------------------- reading */
