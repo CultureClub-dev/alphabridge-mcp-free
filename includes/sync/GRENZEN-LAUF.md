@@ -322,6 +322,21 @@ Ablehnung entsteht, nennt sie den Weg.
   `testAWriteStepIsNotRunUnderATimeLimitThatDoesNotCarryItWhileTheCheckGoesOnWithASmallerWork`).
   Nicht als Mutation geführt: der Aufruf von `raise()` in `measure()` (die
   Unit-Tests injizieren die Messung; der Aufruf je Schritt ist geführt).
+- Grenze C (neu durch die Zeitregel; Codex-Runde 20): Ein Lauf mit
+  geschriebenen Schritten, dessen Umgebung später auf eine nicht anhebbare
+  Zeitgrenze unter `MIN_TIME` (30 s) wechselt (etwa von der CLI mit 0 auf das
+  Web mit 20 s), kann nach `reverting` wechseln (`wp_site_revert` `plan`
+  schreibt nichts) und steht dann still: `next` verweigert jeden
+  Rückweg-Schritt (`ab_mcp_sync_run_time`), erneutes Planen (der Lauf ist
+  `reverting`) und `abort` (nur für `open`) gehen nicht. Weg: die Zeitgrenze
+  beim Hoster auf mindestens 30 s oder `set_time_limit()` zulassen, oder den
+  Rückweg über die CLI fortsetzen (dort 0); geschrieben wird in diesem
+  Zustand nichts. Bei unverändert 30 s oder 0 entsteht der Fall nicht (die
+  Vorprüfung lehnt unter 30 s vor dem ersten Schreiben ab); ein eigener
+  Rückweglauf eines geschlossenen Laufs bleibt `open` und lässt sich mit
+  `wp_site_push abort` abbrechen. Keine Sperre davor, weil der Wechsel der
+  Umgebung mitten im Lauf sehr selten ist, ohne ausreichende Zeit nichts
+  geschrieben wird und der Weg heraus besteht.
 
 ## Post-Art in Zweig 8 (Zweig 9 bringt den Rest)
 

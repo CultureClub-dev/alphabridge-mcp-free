@@ -451,50 +451,6 @@ e('writer-slash-key-delete', 'write_meta(): the key slashed for delete_metadata(
 e('writer-slash-key-add', 'write_meta(): the key slashed for add_metadata(), which unslashes it', PW,
   "\t\t\tif ( false === add_metadata( 'post', $id, wp_slash( (string) $key ), wp_slash( $value ) ) ) {", "\t\t\tif ( false === add_metadata( 'post', $id, $key, wp_slash( $value ) ) ) {", 'unit', SLASH)
 
-
-def test_of(expect):
-    return expect.split(' with data set "', 1)[0]
-
-
-ids = set()
-problems = []
-for (id_, clause, file, search, replace, run, expect) in entries:
-    if id_ in ids:
-        problems.append('duplicate id ' + id_)
-    ids.add(id_)
-    text = open(os.path.join(ROOT, file)).read()
-    n = text.count(search)
-    if n != 1:
-        problems.append('%s: search occurs %d times in %s:\n%s' % (id_, n, file, search))
-    if search == replace:
-        problems.append(id_ + ': the replacement is the search')
-    if run not in RUNS:
-        problems.append(id_ + ': no run ' + run)
-        continue
-    suite, cls = RUNS[run]
-    path = os.path.join(ROOT, 'tests', 'integration' if 'it' == suite else '', cls + '.php')
-    if not re.search(r'\bfunction\s+' + re.escape(test_of(expect)) + r'\s*\(', open(path).read()):
-        problems.append('%s: %s is no test of %s' % (id_, test_of(expect), path))
-if problems:
-    sys.exit('\n'.join(problems))
-
-
-def php(s):
-    return '"' + s.replace('\\', '\\\\').replace('"', '\\"').replace('$', '\\$').replace('\t', '\\t').replace('\n', '\\n') + '"'
-
-
-def php_single(s):
-    return "'" + s.replace('\\', '\\\\').replace("'", "\\'") + "'"
-
-
-def regex(name):
-    q = lambda t: re.sub(r'([\\/.^$|?*+()\[\]{}#])', r'\\\1', t)
-    if ' with data set "' in name:
-        test, case = name.split(' with data set "', 1)
-        case = case.rstrip('"')
-        return '/' + q(test) + '(?: with data set "|#)' + q(case) + '/'
-    return '/' + q(name) + '/'
-
 # ------------------------------- GitHub Codex round 2 on free#137 (one P1, three P2)
 # The way back begins with all of its steps or not at all (one transaction,
 # also for a run made); the rights at the object asked again on the way back;
@@ -504,7 +460,7 @@ def regex(name):
 ATOMIC = 'testTheWayBackOfARunThatIsNotClosedBeginsWithAllOfItsStepsOrNotAtAll'
 TX = 'testAWriteOfTheRunAndItsStepsIsOneTransactionAndRefusedWithTheWayWithoutInnoDb'
 e('revert-begin-transaction', 'begin(): the state, the forward steps and every step of the way back in one transaction, or nothing (P1)', RV,
-  "\t\t\t$began  = AB_MCP_Sync_Run::transaction(", "\t\t\t$began  = call_user_func(", 'it', ATOMIC)
+  "\t\t$began = AB_MCP_Sync_Run::transaction(", "\t\t$began = call_user_func(", 'it', ATOMIC)
 e('run-create-transaction', 'create(): the run and every one of its steps in one transaction, or nothing (P1)', RU,
   "\t\t$run_id = self::transaction(", "\t\t$run_id = call_user_func(", 'it', ATOMIC)
 e('run-transaction-engine', 'transaction(): a table whose engine keeps no transactions refuses with the way, before anything is written', RU,
@@ -565,8 +521,8 @@ e('canon-decode-bare-float', 'decode(): a bare float is not the text of encode()
 RACE = 'testTheWayBackOfARunDoesNotBeginBesideAStepBeingWrittenNorOnAPlanTheRunHasLeftBehind'
 e('revert-begin-lock', 'begin(): the lock of the write boundary first; a step being written holds it, the way back does not begin beside it (P1)', RV,
   "\t\t\t$lock = AB_MCP_Change_Lock::take();", "\t\t\t$lock = true;", 'it', RACE)
-e('revert-begin-begun', 'begin_same_run(): a step begun under the lock is refused, not taken as interrupted (P1)', RV,
-  "\t\t\tif ( 'begun' === $step['state'] ) {\n\t\t\t\treturn new WP_Error( 'ab_mcp_sync_run_begun'", "\t\t\tif ( false ) {\n\t\t\t\treturn new WP_Error( 'ab_mcp_sync_run_begun'", 'it', RACE)
+e('revert-begin-begun', 'begin_same_run(): a step begun in an open run under the lock is refused, not taken as interrupted (P1)', RV,
+  "\t\t\t\tif ( 'begun' === $step['state'] ) {\n\t\t\t\t\treturn new WP_Error( 'ab_mcp_sync_run_begun'", "\t\t\t\tif ( false ) {\n\t\t\t\t\treturn new WP_Error( 'ab_mcp_sync_run_begun'", 'it', RACE)
 e('revert-begin-restate', 'begin_same_run(): the plan confirmed against the run as it is under the lock; a step that wrote in between refuses it (P1)', RV,
   "\t\tif ( ! hash_equals( (string) $plan['state'], (string) $again['state'] ) ) {", "\t\tif ( false ) {", 'it', RACE)
 TIME_UNIT = 'testTheTimeOfACallIsRaisedWhereItTakesAndTheWorkIsDerivedFromTheLimitItHas'
@@ -585,6 +541,50 @@ e('engine-time-work', 'next(): the work of the call is derived from the limit it
   "\t\tself::$work = (int) $time['budget'];", "\t\tself::$work = AB_MCP_Sync_Resources::WORK_MAX;", 'it', TIME_IT)
 e('schema-keep-tie', 'backup_rows(): on a tie of the close the younger run comes first (P2)', SC,
   "\t\t\t\treturn 0 !== $by_time ? $by_time : $b <=> $a;", "\t\t\t\treturn 0 !== $by_time ? $by_time : $a <=> $b;", 'unit', 'testTheRetentionBreaksATieOfTheSameCloseByTheYoungerRun')
+
+
+def test_of(expect):
+    return expect.split(' with data set "', 1)[0]
+
+
+ids = set()
+problems = []
+for (id_, clause, file, search, replace, run, expect) in entries:
+    if id_ in ids:
+        problems.append('duplicate id ' + id_)
+    ids.add(id_)
+    text = open(os.path.join(ROOT, file)).read()
+    n = text.count(search)
+    if n != 1:
+        problems.append('%s: search occurs %d times in %s:\n%s' % (id_, n, file, search))
+    if search == replace:
+        problems.append(id_ + ': the replacement is the search')
+    if run not in RUNS:
+        problems.append(id_ + ': no run ' + run)
+        continue
+    suite, cls = RUNS[run]
+    path = os.path.join(ROOT, 'tests', 'integration' if 'it' == suite else '', cls + '.php')
+    if not re.search(r'\bfunction\s+' + re.escape(test_of(expect)) + r'\s*\(', open(path).read()):
+        problems.append('%s: %s is no test of %s' % (id_, test_of(expect), path))
+if problems:
+    sys.exit('\n'.join(problems))
+
+
+def php(s):
+    return '"' + s.replace('\\', '\\\\').replace('"', '\\"').replace('$', '\\$').replace('\t', '\\t').replace('\n', '\\n') + '"'
+
+
+def php_single(s):
+    return "'" + s.replace('\\', '\\\\').replace("'", "\\'") + "'"
+
+
+def regex(name):
+    q = lambda t: re.sub(r'([\\/.^$|?*+()\[\]{}#])', r'\\\1', t)
+    if ' with data set "' in name:
+        test, case = name.split(' with data set "', 1)
+        case = case.rstrip('"')
+        return '/' + q(test) + '(?: with data set "|#)' + q(case) + '/'
+    return '/' + q(name) + '/'
 
 
 out = []
