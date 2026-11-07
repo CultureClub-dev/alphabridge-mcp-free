@@ -344,6 +344,82 @@ return array(
 			'core' => array( array( 'wp-includes/formatting.php', 4923, 'function sanitize_option( $option, $value ) {' ) ),
 			'plan' => 'Entscheid 27 (Typ und Regel je Name)',
 		),
+		'post:engine_type'             => array(
+			'why'  => 'Branch 8 writes posts and pages end to end; the other core types wait for the field schema of branch 9 (fail closed).',
+			'plan' => 'Zweigtabelle Zeile 539 und 540 (Zweig 8, Zweig 9)',
+		),
+		'post:meta_rule'               => array(
+			'why'  => 'The rights per meta key and the field schema are branch 9; this version writes _wp_page_template and plain keys the account may edit on a post that is there.',
+			'plan' => 'Entscheid 28; Zweigtabelle Zeile 540',
+		),
+		'post:taxonomy_rule'           => array(
+			'why'  => 'Terms of other taxonomies need the engine of the terms (branch 9); this version sets category, post_tag and post_format.',
+			'plan' => 'Zweigtabelle Zeile 540',
+		),
+		'post:meta_spelling'           => array(
+			'why'  => 'postmeta compares meta_key with its collation (utf8mb4_unicode_ci and the like: Foo and foo are one key), and update_metadata() and delete_metadata() write with WHERE meta_key = …: a write of one key would change the other, which the journal, which tells keys byte for byte, could not account for (GitHub Codex round 6 on free#137). Locked before the first write; AB_MCP_Undo_Meta::rows() finds every spelling the database matches.',
+			'plan' => 'Entscheid 17 (Journal je Teilmutation), Entscheid 28; GitHub-Codex 6 auf free#137',
+		),
+		'post:term_order'              => array(
+			'why'  => 'A relationship with a term_order other than 0 (a plugin that sorts the terms) would lose its order on the way back: wp_set_object_terms() makes every relationship anew with the order 0, forward and back, and the way back compared the keys of the terms only (GitHub Codex round 5 on free#137). Locked before the first write until the engine of the terms (branch 9) carries the order.',
+			'plan' => 'Entscheid 23 (bytegenauer Rückweg); GitHub-Codex 5 auf free#137',
+		),
+		'post:slug_collision'          => array(
+			'why'  => 'wp_insert_post() renames a slug another post of the type and parent has (wp_unique_post_slug()), so the written post would differ from the target.',
+			'core' => array( array( 'wp-includes/post.php', 4906, '$post_name = wp_unique_post_slug( $post_name, $post_id, $post_status, $post_type, $post_parent );' ) ),
+			'plan' => 'Entscheid 16 (Slug-Kollisionen); Zweigtabelle Zeile 540',
+		),
+		'post:sanitizer'               => array(
+			'why'  => 'sanitize_post() with the context db runs kses for an account without unfiltered_html; a field it changes is refused ahead, not written and compared afterwards.',
+			'core' => array( array( 'wp-includes/post.php', 4632, "\$postarr = sanitize_post( \$postarr, 'db' );" ) ),
+			'plan' => 'Entscheid 17 (Sanitizer vorab)',
+		),
+		'post:menu_automatic'          => array(
+			'why'  => '_wp_auto_add_pages_to_menu() adds every page without a parent to a menu with auto_add when it becomes publish; a scheduled page follows through wp_publish_post().',
+			'core' => array( array( 'wp-includes/nav-menu.php', 1137, 'function _wp_auto_add_pages_to_menu( $new_status, $old_status, $post ) {' ) ),
+			'plan' => 'Entscheid 21 (Seite der obersten Ebene)',
+		),
+		'post:author_unknown'          => array(
+			'why'  => 'An author is named by login on both sides (decision 25); without an account of that login here the post has no author to write.',
+			'plan' => 'Entscheid 25 (Autor über Login)',
+		),
+		'post:status_date'             => array(
+			'why'  => 'wp_insert_post() stores publish for a future date that passed and future for a publish date ahead; the status is computed from the very data handed over and refused where it differs.',
+			'core' => array( array( 'wp-includes/post.php', 4800, "if ( 'publish' === \$post_status ) {" ) ),
+			'plan' => 'Entscheid 17 (Status, den WordPress anders speichert)',
+		),
+		'post:reference_unmapped'      => array(
+			'why'  => 'A reference is rewritten only by the map of the pairs (decision 12); one without a counterpart would name another object here.',
+			'plan' => 'Entscheid 12 und 16',
+		),
+		'post:page_template'           => array(
+			'why'  => 'The template goes through page_template of wp_insert_post(), which checks it against the theme of this site and stores default for one the theme does not offer: the written post would not be the target (Codex round 1 of branch 8, B7).',
+			'plan' => 'Entscheide 17 und 28 (Vorlage über page_template)',
+		),
+		'term:engine'                  => array(
+			'why'  => 'The engine of the terms is branch 9.',
+			'plan' => 'Zweigtabelle Zeile 540',
+		),
+		'attachment:engine'            => array(
+			'why'  => 'The engine of the attachments is branch 10.',
+			'plan' => 'Zweigtabelle Zeile 541',
+		),
+		'menu:engine'                  => array(
+			'why'  => 'The engine of the menus is branch 11.',
+			'plan' => 'Zweigtabelle Zeile 542',
+		),
+		'widget_area:engine'           => array(
+			'why'  => 'The engine of the widget areas is branch 11.',
+			'plan' => 'Zweigtabelle Zeile 542',
+		),
+		'custom_css:engine'            => array(
+			'why'  => 'The engine of the additional CSS is branch 11.',
+			'plan' => 'Zweigtabelle Zeile 542',
+		),
+		'option:engine'                => array(
+			'why'  => 'The engine of the core options is branch 11.',
+			'plan' => 'Zweigtabelle Zeile 542',
+		),
 	),
 
 	/* ------------------------------------------------------- exclusions */
@@ -471,7 +547,7 @@ return array(
 		),
 		'option_prefix:ab_mcp_'                  => array(
 			'why'  => 'The options of this plugin: connections, tokens, the undo index, the staging pair, these tables (B6).',
-			'plugin' => array( array( 'includes/class-settings.php', 15, "const OPT_OPTIONS   = 'ab_mcp_options';" ), array( 'includes/sync/class-sync-schema.php', 42, "const OPTION = 'ab_mcp_staging_db_version';" ) ),
+			'plugin' => array( array( 'includes/class-settings.php', 15, "const OPT_OPTIONS   = 'ab_mcp_options';" ), array( 'includes/sync/class-sync-schema.php', 46, "const OPTION = 'ab_mcp_staging_db_version';" ) ),
 			'plan' => 'Konzept 3; Konzept 2 (B6)',
 		),
 		'option_suffix:.lock'                    => array(

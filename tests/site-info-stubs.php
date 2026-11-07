@@ -16,6 +16,11 @@ if ( ! function_exists( 'wp_get_theme' ) ) {
 					'Version' => '1.2',
 				)[ $key ] ?? '';
 			}
+
+			/** The templates the theme offers a post type: $ab_test_page_templates[ type ] = file => name. */
+			public function get_page_templates( $post = null, $post_type = 'page' ) {
+				return $GLOBALS['ab_test_page_templates'][ (string) $post_type ] ?? array();
+			}
 		};
 	}
 }

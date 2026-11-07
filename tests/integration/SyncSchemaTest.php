@@ -94,7 +94,7 @@ final class SyncSchemaTest extends TestCase {
 		}
 		self::assertSame( self::names(), self::tables( 'a' ) );
 		self::assertSame( array(), AB_MCP_Sync_Schema::check() );
-		self::assertSame( '1', AB_MCP_IT_Sites::option_row( 'a', AB_MCP_Sync_Schema::OPTION )['option_value'] );
+		self::assertSame( (string) AB_MCP_Sync_Schema::VERSION, AB_MCP_IT_Sites::option_row( 'a', AB_MCP_Sync_Schema::OPTION )['option_value'] );
 		self::assertTrue( AB_MCP_Sync_Schema::available() );
 
 		global $wpdb;
@@ -130,7 +130,7 @@ final class SyncSchemaTest extends TestCase {
 		self::assertSame( 200, $answer['status'], $answer['raw'] );
 
 		self::assertCount( 3, self::tables( 'b' ) );
-		self::assertSame( '1', AB_MCP_IT_Sites::option_row( 'b', AB_MCP_Sync_Schema::OPTION )['option_value'] );
+		self::assertSame( (string) AB_MCP_Sync_Schema::VERSION, AB_MCP_IT_Sites::option_row( 'b', AB_MCP_Sync_Schema::OPTION )['option_value'] );
 		self::assertSame( array(), self::tables( 'a' ), 'Only the site that answered.' );
 	}
 
@@ -207,7 +207,7 @@ final class SyncSchemaTest extends TestCase {
 		self::assertSame( 'ab_mcp_staging_tables_failed', $made->get_error_code() );
 		self::assertContains( 'unique key ' . $pairs . '.live_ref missing', $made->get_error_data()['problems'] );
 		$stored = (string) AB_MCP_IT_Sites::option_row( 'a', AB_MCP_Sync_Schema::OPTION )['option_value'];
-		self::assertMatchesRegularExpression( '/^failed:1:\d+\z/', $stored );
+		self::assertMatchesRegularExpression( '/^failed:' . AB_MCP_Sync_Schema::VERSION . ':\d+\z/', $stored );
 		self::assertSame( 'failed', AB_MCP_Sync_Schema::status()['reason'] );
 
 		// plugins_loaded within RETRY: not again.
@@ -217,9 +217,9 @@ final class SyncSchemaTest extends TestCase {
 
 		// The cause gone and the wait over: plugins_loaded makes it.
 		$wpdb->query( "DELETE FROM `$pairs` WHERE staging_ref = '2'" );
-		update_option( AB_MCP_Sync_Schema::OPTION, 'failed:1:' . ( time() - AB_MCP_Sync_Schema::RETRY - 1 ) );
+		update_option( AB_MCP_Sync_Schema::OPTION, 'failed:' . AB_MCP_Sync_Schema::VERSION . ':' . ( time() - AB_MCP_Sync_Schema::RETRY - 1 ) );
 		AB_MCP_Sync_Schema::maybe_upgrade();
-		self::assertSame( '1', AB_MCP_IT_Sites::option_row( 'a', AB_MCP_Sync_Schema::OPTION )['option_value'] );
+		self::assertSame( (string) AB_MCP_Sync_Schema::VERSION, AB_MCP_IT_Sites::option_row( 'a', AB_MCP_Sync_Schema::OPTION )['option_value'] );
 		self::assertSame( array(), AB_MCP_Sync_Schema::check() );
 	}
 
@@ -244,6 +244,6 @@ final class SyncSchemaTest extends TestCase {
 		self::assertSame( array(), self::tables( 'a' ) );
 		self::assertNull( AB_MCP_IT_Sites::option_row( 'a', AB_MCP_Sync_Schema::OPTION ) );
 		self::assertCount( 3, self::tables( 'b' ), 'The other site keeps its tables.' );
-		self::assertSame( '1', AB_MCP_IT_Sites::option_row( 'b', AB_MCP_Sync_Schema::OPTION )['option_value'] );
+		self::assertSame( (string) AB_MCP_Sync_Schema::VERSION, AB_MCP_IT_Sites::option_row( 'b', AB_MCP_Sync_Schema::OPTION )['option_value'] );
 	}
 }

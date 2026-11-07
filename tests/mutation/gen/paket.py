@@ -849,8 +849,8 @@ for name, search in (
 ):
     e('paket/export-refuse-' + name, 'refusal(): no package ' + {'network': 'on a network', 'role': 'but on the confirmed staging site', 'pair': 'without a pair', 'key': 'without a key'}[name], EX,
       search, search.replace(search.split('\n')[0], "\t\tif ( false ) {"), 'package', REFUSE)
-e('paket/export-purpose', 'make(): the inventory only, in this version', EX,
-  "\t\tif ( ! in_array( $purpose, self::PURPOSES, true ) ) {", "\t\tif ( false ) {", 'package', 'testThisVersionMakesPackagesOfTheInventoryAndTheEnvironmentOnly')
+e('paket/export-purpose', 'make(): the inventory, the environment and objects only, in this version (media: the takeover of attachments)', EX,
+  "\t\tif ( ! in_array( $purpose, self::PURPOSES, true ) ) {", "\t\tif ( false ) {", 'package', 'testThisVersionMakesPackagesOfTheInventoryTheEnvironmentAndObjectsOnly')
 CUR = "\t\tif ( ! is_array( $cursor ) || array( 'inner', 'kind', 'package' ) !== self::sorted_keys( $cursor ) || ! is_string( $cursor['kind'] ) ) {"
 CURS = 'testACursorIsOneAnAnswerGave with data set "%s"'
 e('paket/export-cursor-array', 'follows(): a cursor is an array', EX, CUR, CUR.replace('! is_array( $cursor ) || ', ''), 'package', CURS % 'text')
@@ -1036,10 +1036,10 @@ for name, line in (
 BN = "\t\tif ( null === $key || null === $record['pair'] || null === $bind ) {"
 e('paket/binding-no-key', 'binding(): none without a key', EX, BN, BN.replace('null === $key || ', ''), 'package', BIND)
 e('paket/binding-no-pair', 'binding(): none without a pair', EX, BN, BN.replace(" || null === $record['pair']", ''), 'package', BIND)
-e('paket/import-purpose-inventory', 'expect(): the inventory only, in this version', IM,
-  "\t\tif ( ! in_array( $purpose, AB_MCP_Sync_Export::PURPOSES, true ) ) {", "\t\tif ( ! in_array( $purpose, AB_MCP_Sync_Manifest::PURPOSES, true ) ) {", 'package', 'testTheProductionSiteTakesPackagesOfTheInventoryAndTheEnvironmentOnly')
+e('paket/import-purpose-inventory', 'expect(): the purposes this version takes (AB_MCP_Sync_Export::PURPOSES), not every purpose a manifest may name (media)', IM,
+  "\t\tif ( ! in_array( $purpose, AB_MCP_Sync_Export::PURPOSES, true ) ) {", "\t\tif ( ! in_array( $purpose, AB_MCP_Sync_Manifest::PURPOSES, true ) ) {", 'package', 'testTheProductionSiteTakesPackagesOfTheInventoryTheEnvironmentAndObjectsOnly')
 e('paket/import-expect-first', 'call(): the purpose checked before anything is read', IM,
-  "\t\tif ( array_key_exists( 'manifest', $a ) ) {\n\t\t\t$expect = self::expect(", "\t\tif ( false ) {\n\t\t\t$expect = self::expect(", 'package', 'testTheProductionSiteTakesPackagesOfTheInventoryAndTheEnvironmentOnly')
+  "\t\tif ( array_key_exists( 'manifest', $a ) ) {\n\t\t\t$expect = self::expect(", "\t\tif ( false ) {\n\t\t\t$expect = self::expect(", 'package', 'testTheProductionSiteTakesPackagesOfTheInventoryTheEnvironmentAndObjectsOnly')
 BU = 'StoreBudget'
 SERIES_T = 'testThePackagesOfASeriesCountAsOneExportAndOnePackage'
 CLOSED_T = 'testAClosedPackageCountsAsOpenNoMoreButItsBytesDo'
@@ -1534,7 +1534,7 @@ e('paket/p3r3-held-target', 'held_code(): the row WordPress reads instead named 
 e('paket/p3r3-named-target', 'named_credential(): the target as well (two sites)', IM,
   "\t\tforeach ( array( 'name', 'theme_mod', 'target' ) as $field ) {", "\t\tforeach ( array( 'name', 'theme_mod' ) as $field ) {", 'itpkg', P3['unpack_it'])
 e('paket/p3r3-held-field', 'held_code(): a field of a credential in a name holds the line (two sites)', IM,
-  "\t\t\tif ( 'mixed' === $check['state'] ) {", "\t\t\tif ( false ) {", 'itpkg', P3['unpack_it'])
+  "\t\t\t$check = AB_MCP_Sync_Credentials::unit( '', $name, $extra );\n\t\t\tif ( 'mixed' === $check['state'] ) {", "\t\t\t$check = AB_MCP_Sync_Credentials::unit( '', $name, $extra );\n\t\t\tif ( false ) {", 'itpkg', P3['unpack_it'])
 e('paket/p3r3-held-unreadable', 'held_code(): a name that does not read to its end holds the line (two sites)', IM,
   "\t\t\tif ( 'unreadable' === $check['state'] ) {", "\t\t\tif ( false ) {", 'itpkg', P3['unpack_it'])
 e('paket/p3r3-names-identity', 'names_of(): each text of the identity (two sites)', IM,

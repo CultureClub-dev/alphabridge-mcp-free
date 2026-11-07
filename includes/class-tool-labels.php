@@ -259,6 +259,8 @@ class AB_MCP_Tool_Labels {
 			'wp_site_import_chunk'           => _x( 'Import a staging package', 'tool label', 'alphabridge-mcp' ),
 			'wp_site_pairs'                  => _x( 'Pair objects with the staging site', 'tool label', 'alphabridge-mcp' ),
 			'wp_site_diff'                   => _x( 'Compare with the staging site', 'tool label', 'alphabridge-mcp' ),
+			'wp_site_push'                   => _x( 'Take objects over from the staging site', 'tool label', 'alphabridge-mcp' ),
+			'wp_site_revert'                 => _x( 'Take a takeover back', 'tool label', 'alphabridge-mcp' ),
 			'wp_dashboard_counts'            => _x( 'Count content', 'tool label', 'alphabridge-mcp' ),
 			'wp_get_post_types'              => _x( 'List post types', 'tool label', 'alphabridge-mcp' ),
 			'wp_get_taxonomies'              => _x( 'List taxonomies', 'tool label', 'alphabridge-mcp' ),

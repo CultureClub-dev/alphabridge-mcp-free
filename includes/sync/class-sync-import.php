@@ -338,9 +338,11 @@ final class AB_MCP_Sync_Import {
 	 * its day.
 	 *
 	 * @param mixed  $package_id Package (32 hex).
-	 * @param string $purpose    What the caller reads it for: inventory, or
-	 *                           env for a package of the environment
-	 *                           (wp_site_diff, branch 7).
+	 * @param string $purpose    What the caller reads it for: inventory, env
+	 *                           for a package of the environment
+	 *                           (wp_site_diff, branch 7), or objects for a
+	 *                           package of objects (the run, branch 8; its
+	 *                           report is in the kept expectation).
 	 * @return array|WP_Error manifest (the array verify() read), lines (the
 	 *                        objects, in order), held (kind, SHA-256 of the
 	 *                        ref, code of each object held here).
@@ -358,7 +360,7 @@ final class AB_MCP_Sync_Import {
 		}
 		$expect = $found['expect'];
 		if ( ! is_array( $expect ) || ! isset( $expect['purpose'] ) || $purpose !== $expect['purpose'] ) {
-			return new WP_Error( 'ab_mcp_sync_import_purpose_held', sprintf( 'This site holds the package %1$s for another purpose than %2$s, so it is not read as one: a package of the inventory goes in packages, a package of the environment in environment. Pass it where it belongs, or fetch a package of %2$s: call wp_site_export on the staging site with purpose=%2$s, then wp_site_import_chunk here with the same purpose.', $package_id, 'env' === $purpose ? 'env' : 'inventory' ) );
+			return new WP_Error( 'ab_mcp_sync_import_purpose_held', sprintf( 'This site holds the package %1$s for another purpose than %2$s, so it is not read as one: a package of the inventory goes in packages, a package of the environment in environment, a package of objects in the objects of a run. Pass it where it belongs, or fetch a package of %2$s: call wp_site_export on the staging site with purpose=%2$s, then wp_site_import_chunk here with the same purpose.', $package_id, in_array( $purpose, AB_MCP_Sync_Export::PURPOSES, true ) ? $purpose : 'inventory' ) );
 		}
 		if ( true !== self::bound( $found, AB_MCP_Sync_Anchor::pair_print() ) ) {
 			return new WP_Error( 'ab_mcp_sync_import_pair_changed', sprintf( 'The role of this site, its pair or the confirmed key of the staging site changed since the package %s was begun, so it is not read. Fetch the package anew: call wp_site_export on the staging site, then wp_site_import_chunk here with the package_id and manifest it gives.', $package_id ) );
@@ -471,7 +473,7 @@ final class AB_MCP_Sync_Import {
 		$expect = $found['expect'];
 		if ( ! is_array( $expect ) || ! isset( $expect['purpose'] ) || ! in_array( $expect['purpose'], AB_MCP_Sync_Export::PURPOSES, true ) ) {
 			AB_MCP_Protected_Store::remove( 'in', $found['gid'] );
-			return new WP_Error( 'ab_mcp_sync_import_purpose_held', 'This site held the package for a purpose this version does not take (it takes purpose=inventory and purpose=env), so what arrived of it was removed. Call again with the manifest and purpose as wp_site_export gave them on the staging site.' );
+			return new WP_Error( 'ab_mcp_sync_import_purpose_held', 'This site held the package for a purpose this version does not take (it takes purpose=inventory, purpose=env and purpose=objects), so what arrived of it was removed. Call again with the manifest and purpose as wp_site_export gave them on the staging site.' );
 		}
 		// A purpose a later call names is the one it was begun for (Codex,
 		// round 1 of branch 7, A3): the kept one is not put in its place.
@@ -507,12 +509,22 @@ final class AB_MCP_Sync_Import {
 	private static function expect( array $a, $package_id ) {
 		$purpose = isset( $a['purpose'] ) ? $a['purpose'] : null;
 		if ( ! in_array( $purpose, AB_MCP_Sync_Export::PURPOSES, true ) ) {
-			return new WP_Error( 'ab_mcp_sync_import_purpose', 'This version takes packages of the inventory and of the environment of the staging site (purpose says what a package is read for); packages of objects and media come with the takeover. Pass purpose=inventory or purpose=env with the manifest, as wp_site_export gave it.' );
+			return new WP_Error( 'ab_mcp_sync_import_purpose', 'This version takes packages of the inventory and of the environment of the staging site and packages of objects for a report (purpose says what a package is read for); packages of media come with the takeover of attachments. Pass purpose=inventory, purpose=env or purpose=objects with the manifest, as wp_site_export gave it.' );
 		}
-		return array(
+		$expect = array(
 			'purpose'    => $purpose,
 			'package_id' => $package_id,
 		);
+		// A package of objects is for one report (decision 5): the report it
+		// is read for is named here, and the manifest must name the same.
+		if ( in_array( $purpose, AB_MCP_Sync_Manifest::FOR_REPORT, true ) ) {
+			$hash = isset( $a['report_hash'] ) ? $a['report_hash'] : null;
+			if ( ! is_string( $hash ) || 1 !== preg_match( '/^[0-9a-f]{64}\z/', $hash ) ) {
+				return new WP_Error( 'ab_mcp_sync_import_report', 'A package of objects is read for one report: pass report_hash with the manifest, the 64 hex characters wp_site_diff gave for the report the objects are for (the same the staging site made the package for).' );
+			}
+			$expect['report_hash'] = $hash;
+		}
+		return $expect;
 	}
 
 	/**
@@ -892,6 +904,8 @@ final class AB_MCP_Sync_Import {
 		$extra    = AB_MCP_Redactor::extra_keys();
 		// A package of the environment holds lines of AB_MCP_Sync_Env, no object.
 		$env      = 'env' === $manifest['purpose'];
+		// A package of objects: a line of the inventory with its form and content.
+		$with_content = 'objects' === $manifest['purpose'];
 		$total = 0;
 		$count = 0;
 		$out   = array();
@@ -942,10 +956,24 @@ final class AB_MCP_Sync_Import {
 					}
 					continue;
 				}
+				$content = null;
+				if ( $with_content ) {
+					$split = self::object_split( $object );
+					if ( null === $split ) {
+						return self::unpack_refusal( 'A line of a package of objects is not one as the staging site writes it: its form or its content (the columns of its row, its meta rows, its terms) has a field it has no place for or of another type, or an object a credential holds carries content.' );
+					}
+					list( $object, $content ) = $split;
+				}
 				if ( ! self::line_shaped( $object ) ) {
 					return self::unpack_refusal( 'A line is not one as the staging site writes it: a field it has no place for or of another type, a status, lock, space, strength or reason code outside its list, bytes not in the byte form, an identity not of its kind or naming another object, an object whose name is the name of a credential, or more than the identity of an object a credential holds.' );
 				}
 				$code = self::held_code( $object, $extra );
+				if ( null === $code && null !== $content ) {
+					// The content by the rules of this site (decision 9: the
+					// check again at the import): a credential in a column, a
+					// meta row or a term holds the object; it is never written.
+					$code = self::content_held( $content, $extra );
+				}
 				if ( null !== $code ) {
 					$out[] = array( $object['kind'], hash( 'sha256', AB_MCP_Sync_Canon::encode( $object['ref'] ) ), $code );
 				}
@@ -996,6 +1024,106 @@ final class AB_MCP_Sync_Import {
 			$out .= $more;
 		}
 		return inflate_get_read_len( $context ) === strlen( $data ) ? $out : false;
+	}
+
+	/**
+	 * A line of a package of objects taken apart: the line of the inventory
+	 * (line_shaped() checks it) and its form and content. Null where the
+	 * form or the content is not as AB_MCP_Sync_Export::object_line() writes
+	 * it: a line with a hash carries form (an array) and content (row: name
+	 * => name, meta: a list of [name, name], terms: a list of records with
+	 * name, slug and taxonomy as names and term_id and term_order as
+	 * integers; a content that could not be read is empty); a held line
+	 * (no hash) carries neither.
+	 *
+	 * @param array $object Line.
+	 * @return array{0:array,1:array}|null The line without them, and the content.
+	 */
+	private static function object_split( array $object ) {
+		$has_form    = array_key_exists( 'form', $object );
+		$has_content = array_key_exists( 'content', $object );
+		if ( ! array_key_exists( 'hash', $object ) ) {
+			return $has_form || $has_content ? null : array( $object, array() );
+		}
+		if ( ! $has_form || ! $has_content || ! is_array( $object['form'] ) || ! is_array( $object['content'] ) ) {
+			return null;
+		}
+		$content = $object['content'];
+		unset( $object['form'], $object['content'] );
+		if ( array() === $content ) {
+			return array( $object, array() );
+		}
+		if ( array( 'meta', 'row', 'terms' ) !== self::sorted_keys( $content ) || ! is_array( $content['row'] ) || ! is_array( $content['meta'] ) || ! is_array( $content['terms'] ) || ! array_is_list( $content['meta'] ) || ! array_is_list( $content['terms'] ) ) {
+			return null;
+		}
+		foreach ( $content['row'] as $column => $value ) {
+			if ( ! is_string( $column ) || ! self::typed( $value, 'name' ) ) {
+				return null;
+			}
+		}
+		foreach ( $content['meta'] as $row ) {
+			if ( ! is_array( $row ) || array( 0, 1 ) !== array_keys( $row ) || ! self::typed( $row[0], 'name' ) || ! self::typed( $row[1], 'name' ) ) {
+				return null;
+			}
+		}
+		foreach ( $content['terms'] as $term ) {
+			if ( ! is_array( $term ) || array( 'name', 'slug', 'taxonomy', 'term_id', 'term_order' ) !== self::sorted_keys( $term ) || ! self::typed( $term['name'], 'name' ) || ! self::typed( $term['slug'], 'name' ) || ! self::typed( $term['taxonomy'], 'name' ) || ! is_int( $term['term_id'] ) || ! is_int( $term['term_order'] ) ) {
+				return null;
+			}
+		}
+		return array( $object, $content );
+	}
+
+	/**
+	 * Why the content of an object is held by the rules of this site, or
+	 * null: a column named like a credential with a value (as the canonical
+	 * form locks it, AB_MCP_Sync_Credentials::column()), a column, a meta
+	 * row or a name of a term with a credential in it (mixed) or one that
+	 * cannot be read to its end, a meta key that is the name of a credential
+	 * here (the staging site packed it under its own rules).
+	 *
+	 * @param array    $content The content (object_split()).
+	 * @param string[] $extra   The names this site redacts on top.
+	 * @return string|null A code of HELD_CODES.
+	 */
+	private static function content_held( array $content, array $extra ) {
+		if ( ! isset( $content['row'] ) ) {
+			return null;
+		}
+		$code = static function ( array $check ) {
+			if ( 'b9' === $check['state'] ) {
+				return 'credential_name';
+			}
+			if ( 'mixed' === $check['state'] ) {
+				return 'credential_field';
+			}
+			return 'unreadable' === $check['state'] ? 'unreadable_name' : null;
+		};
+		foreach ( $content['row'] as $column => $value ) {
+			$bytes = (string) self::bytes( $value );
+			if ( '' !== $bytes && AB_MCP_Sync_Credentials::names_credential( (string) $column, $extra ) ) {
+				return 'credential_field';
+			}
+			$why = $code( AB_MCP_Sync_Credentials::unit( '', $bytes, $extra ) );
+			if ( null !== $why ) {
+				return $why;
+			}
+		}
+		foreach ( $content['meta'] as $row ) {
+			$why = $code( AB_MCP_Sync_Credentials::unit( (string) self::bytes( $row[0] ), (string) self::bytes( $row[1] ), $extra ) );
+			if ( null !== $why ) {
+				return $why;
+			}
+		}
+		foreach ( $content['terms'] as $term ) {
+			foreach ( array( 'name', 'slug', 'taxonomy' ) as $field ) {
+				$why = $code( AB_MCP_Sync_Credentials::unit( '', (string) self::bytes( $term[ $field ] ), $extra ) );
+				if ( null !== $why ) {
+					return $why;
+				}
+			}
+		}
+		return null;
 	}
 
 	/**

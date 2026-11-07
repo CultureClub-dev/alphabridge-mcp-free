@@ -653,7 +653,13 @@ final class SyncPackageTest extends TestCase {
 			'manifest'   => $package['manifest'],
 			'purpose'    => 'inventory',
 		);
-		self::refused( AB_MCP_Sync_Import::call( array( 'purpose' => 'objects' ) + $args ), 'ab_mcp_sync_import_purpose' );
+		// A purpose this version does not take (media); one it takes for a
+		// report (objects, branch 8) without the report, and with a report
+		// for a package that is one of the inventory: refused before anything
+		// is begun, the manifest read against the purpose named.
+		self::refused( AB_MCP_Sync_Import::call( array( 'purpose' => 'media' ) + $args ), 'ab_mcp_sync_import_purpose' );
+		self::refused( AB_MCP_Sync_Import::call( array( 'purpose' => 'objects' ) + $args ), 'ab_mcp_sync_import_report' );
+		self::refused( AB_MCP_Sync_Import::call( array( 'purpose' => 'objects', 'report_hash' => str_repeat( 'c', 64 ) ) + $args ), 'ab_mcp_sync_manifest_purpose' );
 		self::refused( AB_MCP_Sync_Import::call( array( 'package_id' => str_repeat( 'cd', 16 ) ) + $args ), 'ab_mcp_sync_manifest_package' );
 		self::refused( AB_MCP_Sync_Import::call( array( 'package_id' => $package['package_id'] ) ), 'ab_mcp_sync_import_unknown' );
 		self::refused( AB_MCP_Sync_Import::call( array( 'purpose' => 'nothing' ) + $args ), 'ab_mcp_sync_import_purpose' );
@@ -1664,7 +1670,7 @@ final class SyncPackageTest extends TestCase {
 					'as'      => 'signed',
 					'package' => array(
 						'package_id'  => $id,
-						'purpose'     => 'objects',
+						'purpose'     => 'media',
 						'report_hash' => str_repeat( 'c', 64 ),
 						'kinds'       => array(),
 						'objects'     => 0,
@@ -1676,8 +1682,9 @@ final class SyncPackageTest extends TestCase {
 				),
 			)
 		)['signed'];
-		// A group as another version would have begun it: for objects, with
-		// the print of the pair as it is now.
+		// A group as another version would have begun it: for media, a
+		// purpose the manifest knows and this version does not take (objects
+		// it takes since branch 8), with the print of the pair as it is now.
 		$gid = AB_MCP_Protected_Store::open(
 			'in',
 			array(
@@ -1689,7 +1696,7 @@ final class SyncPackageTest extends TestCase {
 		$record = \AB_MCP_Sync_Canon::encode(
 			array(
 				'connection' => AB_MCP_Sync_Import::connection(),
-				'expect'     => array( 'package_id' => $id, 'purpose' => 'objects' ),
+				'expect'     => array( 'package_id' => $id, 'purpose' => 'media', 'report_hash' => str_repeat( 'c', 64 ) ),
 				'format'     => AB_MCP_Sync_Import::RECORD,
 				'manifest'   => $signed['manifest'],
 				'print'      => AB_MCP_Sync_Anchor::pair_print(),

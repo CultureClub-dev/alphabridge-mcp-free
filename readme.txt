@@ -36,7 +36,7 @@ MCP, the Model Context Protocol, is the open standard AI assistants use to work 
 
 You need nothing else for it: no WordPress MCP Adapter, no extra plugin, no service to sign up for. AlphaBridge speaks MCP itself, in plain PHP inside WordPress. It manages widgets and site settings, changes the texts of pages built with blocks or a common page builder, and works in the SEO fields of Yoast SEO and Rank Math.
 
-105 tools. No license key, no registration, no quotas. The free plugin is complete, not a trial.
+107 tools. No license key, no registration, no quotas. The free plugin is complete, not a trial.
 
 = Why AlphaBridge MCP =
 
@@ -316,7 +316,7 @@ AlphaBridge MCP sends no telemetry and calls no outside service on its own. Four
 * **Security: the consent screen names the host the browser really goes to.** An app registering with the site could give a redirect address that PHP and a browser read differently, for example with a percent sign or a letter of another alphabet in the host; the consent screen could then name a host the browser would not go to. Redirect addresses now count only in a strict form (https, or http on this computer; a plain ASCII host or an IPv6 address as browsers write it, port, path and query; no user name, backslash, spaces, control characters or fragment), from a registration and from a metadata document alike. The consent screen reads the host the same way, and an address stored by an earlier version is checked again before it is used. The addresses of Claude, ChatGPT, the connection service and local development tools are not affected.
 
 = 4.6.8 =
-* **Every tool explains itself to AI assistants.** Each description says what the tool is for, when it fits, what it changes along the way and what a repeated call does, and every parameter is described (105 of 105, before 42). The texts state facts and give the assistant no instructions, as the directories of OpenAI and Anthropic ask.
+* **Every tool explains itself to AI assistants.** Each description says what the tool is for, when it fits, what it changes along the way and what a repeated call does, and every parameter is described (107 of 107, before 42). The texts state facts and give the assistant no instructions, as the directories of OpenAI and Anthropic ask.
 * **Readable tool titles.** AI clients show «Change a post or page» instead of «Update Post»: each tool's title is its short English name from the fine-tuning, whatever the language of the site.
 * **A tool of another edition is named without a link.** When an assistant asks for a tool of AlphaBridge MCP Pro or its Agency plan, the answer and the server instructions say which edition has it; they no longer link the page about the editions.
 * **A file from a URL over the size limit is refused.** `wp_upload_media_from_url` could store a file larger than the limit (20 MB by default) cut off at the limit and report it uploaded; such a file is now refused with an error.

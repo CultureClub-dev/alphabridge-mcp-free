@@ -249,6 +249,25 @@ final class SyncKindsTest extends TestCase {
 			'attachment:uploads_by_code'   => array( array( 'attachment' ), 'uploads_by_code', 'Z8b' ),
 			'attachment:unsafe_path'       => array( array( 'attachment' ), 'unsafe_path', 'Z8b' ),
 			'option:off_schema'            => array( array( 'option' ), 'off_schema', 'Z8d' ),
+			// Branch 8: the engine of the kind post, and the engines to come.
+			'post:engine_type'             => array( array( 'post' ), 'engine_type', 'Z9' ),
+			'post:meta_rule'               => array( array( 'post' ), 'meta_rule', 'Z9' ),
+			'post:taxonomy_rule'           => array( array( 'post' ), 'taxonomy_rule', 'Z9' ),
+			'post:term_order'              => array( array( 'post' ), 'term_order', 'Z9' ),
+			'post:meta_spelling'           => array( array( 'post' ), 'meta_spelling', 'Z9' ),
+			'post:slug_collision'          => array( array( 'post' ), 'slug_collision', 'Z9' ),
+			'post:sanitizer'               => array( array( 'post' ), 'sanitizer', 'Z9' ),
+			'post:menu_automatic'          => array( array( 'post' ), 'menu_automatic', 'Z8' ),
+			'post:author_unknown'          => array( array( 'post' ), 'author_unknown', 'Z8' ),
+			'post:status_date'             => array( array( 'post' ), 'status_date', 'Z8' ),
+			'post:reference_unmapped'      => array( array( 'post' ), 'reference_unmapped', 'Z8' ),
+			'post:page_template'           => array( array( 'post' ), 'page_template', 'Z8' ),
+			'term:engine'                  => array( array( 'term' ), 'engine', 'Z9' ),
+			'attachment:engine'            => array( array( 'attachment' ), 'engine', 'Z10' ),
+			'menu:engine'                  => array( array( 'menu' ), 'engine', 'Z11' ),
+			'widget_area:engine'           => array( array( 'widget_area' ), 'engine', 'Z11' ),
+			'custom_css:engine'            => array( array( 'custom_css' ), 'engine', 'Z11' ),
+			'option:engine'                => array( array( 'option' ), 'engine', 'Z11' ),
 		);
 	}
 

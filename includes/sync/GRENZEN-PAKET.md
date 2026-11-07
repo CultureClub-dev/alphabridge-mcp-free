@@ -456,15 +456,18 @@ mit Beispiel und Grund; wo eine Ablehnung entsteht, nennt sie den Weg.
   `pair_print` in `runs` (Zweig 8).
 - Multisite: Export und Import lehnen ab (Entscheid 3), mit Weg
   (`ab_mcp_sync_multisite`).
-- Pakete von Objekten, Medien und Umgebung (`objects`, `media`, `env`):
-  Export und Import lehnen sie weiterhin mit Weg ab. Ein Paket `objects`
-  oder `media` gehört zu einem Bericht (`report_hash`, Zweig 6), und den
-  Inhalt eines Objekts liest erst `export()` der Arten (ab Zweig 8); bis
-  dahin erzeugt der Export keinen solchen Zweck, und die Grenze des Imports
-  aus B-3 bleibt zu. Die Rechte je Objekt, die Zugangsdatenprüfung und die
-  Entpack-Grenzen dieses Zweigs gelten dann für sie ebenso; die Prüfung der
-  Inhalte beim Schreiben (Rechte je Meta-Schlüssel, Entscheid 28) bringt
-  Zweig 8.
+- Pakete von Medien (`media`): Export und Import lehnen sie weiterhin mit
+  Weg ab (`ab_mcp_sync_import_purpose`; eine Gruppe, die eine andere Version
+  für `media` begann, endet nach B-3 mit `ab_mcp_sync_import_purpose_held`).
+  Pakete der Umgebung (`env`) nimmt der Import seit Zweig 7, Pakete von
+  Objekten (`objects`) seit Zweig 8: ein Paket `objects` oder `media` gehört
+  zu einem Bericht (`report_hash`, Zweig 6); der Import verlangt den
+  `report_hash` beim ersten Aufruf (`ab_mcp_sync_import_report`), und das
+  Manifest muss denselben Bericht und Zweck nennen
+  (`ab_mcp_sync_manifest_report`, `ab_mcp_sync_manifest_purpose`). Die
+  Rechte je Objekt, die Zugangsdatenprüfung und die Entpack-Grenzen dieses
+  Zweigs gelten für sie ebenso; die Prüfung der Inhalte beim Schreiben
+  (Rechte je Meta-Schlüssel, Entscheid 28) bringt Zweig 8.
 - Die Liste der Objekte, die eine Zugangsangabe nach den Regeln der
   Live-Site hält (`held-…` in der Gruppe), liest die Übernahme ab Zweig 6
   und findet jede Zeile über den SHA-256 ihrer Kennung; in diesem Zweig

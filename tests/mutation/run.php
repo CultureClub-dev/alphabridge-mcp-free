@@ -46,8 +46,10 @@
  * Ctrl-C, SIGTERM or a fatal error of this runner the file is written back.
  *
  * Exit: 0 every mutation killed and every file back; 1 a mutation survived
- * (a clause no test holds); 2 the list or the baseline is wrong (no verdict);
- * 3 a file did not come back byte for byte. Never commit while it runs.
+ * (a clause no test holds); 2 the list or the baseline is wrong (no verdict;
+ * also a baseline whose filter matched no test, 'No tests executed!', which
+ * PHPUnit answers with 0); 3 a file did not come back byte for byte. Never
+ * commit while it runs.
  *
  * @package AlphaBridge_MCP
  */
@@ -226,6 +228,15 @@ final class AB_Mutation_Run {
 			list( $code, $output, $took ) = $this->exec( $entry['run'], $entry['timeout'] );
 			if ( 0 !== $code ) {
 				fwrite( STDERR, "mutation: the baseline of {$entry['id']} is not green (exit " . var_export( $code, true ) . "); a red run before the mutation proves nothing.\n" . self::tail( $output ) );
+				return 2;
+			}
+			// PHPUnit answers 0 where its filter matches no test ('No tests
+			// executed!'): such a baseline holds nothing, and the mutation would
+			// 'survive' it for the wrong reason (a test renamed, the list not
+			// written anew; GitHub Codex round 1 of branch 8, the three
+			// entries of paket).
+			if ( false !== strpos( $output, 'No tests executed' ) ) {
+				fwrite( STDERR, "mutation: the baseline of {$entry['id']} ran no test (the filter matches none: a test renamed or removed, the list out of date); a run without a test proves nothing.\n" . self::tail( $output ) );
 				return 2;
 			}
 			printf( "baseline  green  %5.1f s  %s\n", $took, implode( ' ', $entry['run'] ) );

@@ -94,6 +94,11 @@ final class DestructiveClassificationTest extends TestCase {
 		// Z8 (branch 6): confirm aligns existing pairs anew, discard ends them;
 		// its definition says destructive => true as well (SyncPairsToolTest).
 		'wp_site_pairs',
+		// Z8 (branch 8): a run writes objects over those of this site, the way
+		// back writes them back; both say destructive => true and dangerous
+		// (SyncPushToolTest).
+		'wp_site_push',
+		'wp_site_revert',
 	);
 
 	/**
