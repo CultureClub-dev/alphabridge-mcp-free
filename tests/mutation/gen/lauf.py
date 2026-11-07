@@ -542,6 +542,46 @@ e('engine-time-work', 'next(): the work of the call is derived from the limit it
 e('schema-keep-tie', 'backup_rows(): on a tie of the close the younger run comes first (P2)', SC,
   "\t\t\t\treturn 0 !== $by_time ? $by_time : $b <=> $a;", "\t\t\t\treturn 0 !== $by_time ? $by_time : $a <=> $b;", 'unit', 'testTheRetentionBreaksATieOfTheSameCloseByTheYoungerRun')
 
+# ------------------------------- GitHub Codex round 4 on free#137 (one P1, two P2)
+# The abort under the lock of the boundary and the run read again under it
+# before a step is begun; an interrupted run of the way back led on with
+# the token (way (b) of decision 18) or closed as checked (way (a)); the
+# error log counted from its mark in chunks, with a cap and a rotation said.
+ABORT = 'testAnAbortTakesTheLockAndADelayedWriteStepFindsTheRunClosedAndWritesNothing'
+LED = 'testAnInterruptedRunOfTheWayBackIsLedOnWithTheTokenOrClosedAsCheckedAndFreesTheSite'
+LOG = 'testTheErrorLogIsCountedFromItsMarkInChunksWithACapAndARotationIsSaidSo'
+e('engine-abort-lock', 'abort(): under the lock of the boundary; a step being written holds it (P2)', EN,
+  "whose booking was given back).\n\t\t$lock = AB_MCP_Change_Lock::take();", "whose booking was given back).\n\t\t$lock = true;", 'it', ABORT)
+e('engine-abort-fresh', 'abort(): the run read again under the lock; moved since, nothing is changed', EN,
+  "\t\t\tif ( 'open' !== $fresh['state'] ) {", "\t\t\tif ( false ) {", 'it', ABORT)
+e('engine-still-open', 'boundary(): the run read again under the lock before a step is begun; not open, nothing is written (P2)', EN,
+  "\t\t$still = self::still( $run, $seq, array( 'open' ) );", "\t\t$still = true;", 'it', ABORT)
+e('engine-still-revert', 'revert_boundary(): the run read again under the lock before a step of the way back is begun', EN,
+  "\t\t$still = self::still( $run, $seq, 'revert' === $run['type'] ? array( 'open', 'reverting' ) : array( 'reverting' ) );", "\t\t$still = true;", 'it', LED)
+e('revert-continue', 'plan(): an interrupted run of the way back is led on (way (b) of decision 18; P1)', RV,
+  "\t\t\tif ( 'interrupted' !== $run['state'] ) {\n\t\t\t\treturn new WP_Error( 'ab_mcp_sync_revert_type'", "\t\t\tif ( true ) {\n\t\t\t\treturn new WP_Error( 'ab_mcp_sync_revert_type'", 'it', LED)
+e('revert-continue-planned-stay', 'begin_same_run(): a step of the way back still planned stays and goes back in its turn; a forward step is skipped', RV,
+  "\t\t\t\t\t} elseif ( 'planned' === $step['state'] && 'revert' !== $step['op'] ) {", "\t\t\t\t\t} elseif ( 'planned' === $step['state'] ) {", 'it', LED)
+e('revert-continue-pair', 'begin_same_run(): the pair of a step of the way back left begun is unclear', RV,
+  "\t\t\t\t\t\t$pair_id = 'revert' === $step['op'] && ! is_wp_error( $settled ) ? AB_MCP_Sync_Run::pair_of_revert_step( $run_id, $step ) : null;", "\t\t\t\t\t\t$pair_id = null;", 'it', LED)
+e('run-close-checked-revert-pair', 'close_checked(): the pair of a step of the way back left begun is the pair of the step it took back', RU,
+  "\t\t\t$pair_id = null !== $step['pair_id'] ? (int) $step['pair_id'] : self::pair_of_revert_step( $run_id, $step );", "\t\t\t$pair_id = null !== $step['pair_id'] ? (int) $step['pair_id'] : null;", 'it', LED)
+e('push-interrupted-revert-way', 'interrupted(): the way for a run of the way back leads it on, not action=plan on a run that refuses (P1)', PU,
+  "\t\t\t? 'wp_site_revert action=plan with this run_id leads it on: the interrupted step stays as it is (unclear, its parts as they are), the steps still planned go back one by one (action=next)'", "\t\t\t? 'wp_site_revert action=plan with this run_id takes its own parts back'", 'it', LED)
+LOG_IT = 'testTheErrorLogIsCountedFromTheMarkOfTheCheckAndALogRotatedSinceIsAFinding'
+e('engine-log-mark-empty', 'error_log_mark(): no log yet is marked at 0, so a log made since is new whole', EN,
+  "\t\tif ( null === $path ) {\n\t\t\treturn array( 'bytes' => 0 );", "\t\tif ( null === $path ) {\n\t\t\treturn null;", 'it', LOG_IT)
+e('engine-verify-log-new', 'run_verify(): lines the log gained since the check are a finding', EN,
+  "\t\t\t\t} elseif ( $since['lines'] > 0 ) {", "\t\t\t\t} elseif ( false ) {", 'it', LOG_IT)
+e('engine-verify-log-rotated', 'run_verify(): a log smaller than at the check is a finding, said so, never «no new line»', EN,
+  "\t\t\t\t} elseif ( $since['rotated'] ) {", "\t\t\t\t} elseif ( false ) {", 'it', LOG_IT)
+e('engine-log-count', 'error_log_lines_since(): the line ends of every chunk counted', EN,
+  "\t\t\t\t$lines += substr_count( $chunk, \"\\n\" );", "\t\t\t\t$lines += 1;", 'unit', LOG)
+e('engine-log-rotated', 'error_log_lines_since(): a log smaller than its mark was rotated or emptied; counted from its start and said so', EN,
+  "\t\tif ( (int) $size < $from ) {", "\t\tif ( false ) {", 'unit', LOG)
+e('engine-log-capped', 'error_log_lines_since(): read up to the cap with more behind it is said so, never «no new line»', EN,
+  "\t\t\t$capped = $read >= (int) $max && $from + $read < (int) $size;", "\t\t\t$capped = false;", 'unit', LOG)
+
 
 def test_of(expect):
     return expect.split(' with data set "', 1)[0]
@@ -652,7 +692,11 @@ out.append('''<?php
  * same run begins under the lock of the boundary and against the run as it
  * is under it; the time of a call raised where set_time_limit() takes and
  * the work derived from the limit, no write under one that does not carry
- * it; the retention breaks a tie of the close by the younger run.
+ * it; the retention breaks a tie of the close by the younger run. GitHub
+ * Codex round 4: the abort under the lock and the run read again under it
+ * before a step is begun; an interrupted run of the way back led on with
+ * the token or closed as checked; the error log counted from its mark in
+ * chunks.
  *
  * Written by tests/mutation/gen/lauf.py from the source; change the entries
  * there and run it again.

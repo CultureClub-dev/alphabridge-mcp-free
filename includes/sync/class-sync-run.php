@@ -735,8 +735,13 @@ final class AB_MCP_Sync_Run {
 			// The step stays what it was: unclear, its parts as the journal
 			// has them (a part written but not read back is unclear).
 			self::update_step( $run_id, (int) $step['seq'], array( 'state' => 'unclear', 'result' => array( 'closed_checked_by' => (int) $user_id ) ), 'begun' );
-			if ( null !== $step['pair_id'] ) {
-				$pair = AB_MCP_Sync_Pairs::get( (int) $step['pair_id'] );
+			// The pair: the step's own, or, for a step of the way back (which
+			// gets its pair_id only as it ends), the pair of the step it was
+			// taking back (a run of the way back closed as checked, GitHub Codex
+			// round 4 on free#137).
+			$pair_id = null !== $step['pair_id'] ? (int) $step['pair_id'] : self::pair_of_revert_step( $run_id, $step );
+			if ( null !== $pair_id ) {
+				$pair = AB_MCP_Sync_Pairs::get( $pair_id );
 				if ( is_array( $pair ) && 'active' === $pair['state'] ) {
 					AB_MCP_Sync_Pairs::set_state( (int) $pair['id'], 'unclear', AB_MCP_Sync_Pairs::snapshot_hash( AB_MCP_Sync_Pairs::snapshot( (int) $pair['id'] ) ) );
 				}
@@ -748,6 +753,29 @@ final class AB_MCP_Sync_Run {
 		}
 		$closed = self::get( $run_id );
 		return is_array( $closed ) ? $closed : self::unknown( $run_id );
+	}
+
+	/**
+	 * The pair of a step of the way back: the pair of the step it takes back
+	 * (its own pair_id is set only as it ends). Null for another step, or
+	 * where the step taken back names none.
+	 *
+	 * @param int   $run_id Run.
+	 * @param array $step   Step (op revert; parts: forward_run, forward_seq).
+	 * @return int|null
+	 */
+	public static function pair_of_revert_step( $run_id, array $step ) {
+		if ( 'revert' !== $step['op'] || ! is_array( $step['parts'] ) || ! isset( $step['parts']['forward_seq'] ) ) {
+			return null;
+		}
+		$forward = self::step( isset( $step['parts']['forward_run'] ) ? (int) $step['parts']['forward_run'] : (int) $run_id, (int) $step['parts']['forward_seq'] );
+		if ( ! is_array( $forward ) ) {
+			return null;
+		}
+		if ( null !== $forward['pair_id'] ) {
+			return (int) $forward['pair_id'];
+		}
+		return is_array( $forward['parts'] ) && isset( $forward['parts']['object']['pair_id'] ) && null !== $forward['parts']['object']['pair_id'] ? (int) $forward['parts']['object']['pair_id'] : null;
 	}
 
 	/* --------------------------------------------------------- ownership */

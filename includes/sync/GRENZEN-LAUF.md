@@ -748,7 +748,43 @@ Ablehnung entsteht, nennt sie den Weg.
 - `abort` schliesst einen offenen Lauf; Geschriebenes bleibt mit neuen
   Ausgangsständen. Der Rückweg ist `wp_site_revert` für den geschlossenen
   Lauf. Ein unterbrochener Lauf wird nicht abgebrochen (nur geprüft oder
-  zurückgenommen).
+  zurückgenommen). `abort` nimmt die Sperre der Schreibgrenze
+  (`AB_MCP_Change_Lock`, Entscheid 18; GitHub-Codex 4, P2): hält sie ein
+  Schreiber, Ablehnung `ab_mcp_sync_run_busy` (erneut aufrufen); unter der
+  Sperre wird der Lauf neu gelesen (nicht mehr `open` → `ab_mcp_sync_run_changed`,
+  nichts geändert). Und jede Grenze liest den Lauf unter der Sperre neu, bevor
+  sie einen Schritt `begun` setzt (`AB_MCP_Sync_Engine::still()`: die
+  Schreibgrenze verlangt `open`, die Rückweg-Grenze `reverting` bzw. für einen
+  Rückweglauf `open` oder `reverting`); ein Request, der den Lauf vor einem
+  `abort`, einem Schliessen oder einem Settle gelesen hatte, schreibt nichts
+  (`ab_mcp_sync_run_state`, der Schritt bleibt `planned`). Vorher konnte ein
+  verzögertes `next` seinen Schritt nach einem erfolgreichen `abort` noch
+  `begun` setzen und in einen `closed_aborted`-Lauf schreiben, dessen
+  Reservierung schon freigegeben war (Prüffall
+  `testAnAbortTakesTheLockAndADelayedWriteStepFindsTheRunClosedAndWritesNothing`).
+- Ein unterbrochener Rückweglauf (Art `revert`, Rückweg eines geschlossenen
+  Laufs; GitHub-Codex 4, P1) hat die zwei Wege von Entscheid 18 wie ein
+  Vorwärtslauf: (a) eine Person schliesst ihn in wp-admin «als geprüft»
+  (`AB_MCP_Sync_Run::close_checked()`: der Schritt, den die Unterbrechung
+  `begun` liess, wird `unclear`, das Paar des Schritts, den er zurücknahm,
+  `unclear` – ein Rückweg-Schritt trägt sein Paar erst am Ende, darum wird es
+  über den Vorwärtsschritt aufgelöst, `pair_of_revert_step()` –, `open_one`
+  wird frei; der Knopf kommt mit Zweig 12, bis dahin nur interne Fassungen);
+  (b) `wp_site_revert action=plan` mit Token auf den Rückweglauf selbst
+  (nicht auf den Ursprungslauf: dessen Schritte zählen als zurückgenommen,
+  und die Ein-Lauf-Regel sperrt ihn, solange der Rückweglauf offen ist) führt
+  ihn unter der Sperre nach `reverting` (`AB_MCP_Sync_Revert::continuation()`,
+  `begin_same_run()`): der unterbrochene Schritt wird `unclear` und bleibt
+  stehen (kein Rückbau wird wiederholt, kein Teil davon geht von selbst
+  zurück; sein Paar `unclear`), die noch geplanten Rückweg-Schritte bleiben
+  geplant und laufen mit `next` wie gewohnt, jeder entscheidet mit frischer
+  Lesung (nur eigene Teile, Entscheid A); keine neuen Rückweg-Schritte, kein
+  Wiederanlauf; der Lauf schliesst `closed_findings` mit dem stehen
+  gebliebenen Schritt. `steps` wird dabei nicht angenommen. Die Hinweise
+  (`status`, die Ablehnung von `next`) nennen beide Wege, nicht mehr
+  `action=plan` auf einen Weg, der ablehnte (Prüffall
+  `testAnInterruptedRunOfTheWayBackIsLedOnWithTheTokenOrClosedAsCheckedAndFreesTheSite`).
+  Ein geschlossener Rückweglauf wird nicht zurückgenommen.
 - Die Erfassung je Lauf (Momente M2 und M8): `calls` zählt jeden Aufruf ab
   der bestätigten Anlage (Anlage, Schritte, Statusabfragen, Wiederholungen),
   `duration` ist `closed − created`. Vorschau-Aufrufe vor der Anlage zählen
@@ -819,8 +855,30 @@ Ablehnung entsteht, nennt sie den Weg.
 - Die PHP-Probe (`AB_MCP_Php_Probe::run()`) muss ganz bestehen (`passed`);
   `fatal`, `partial` und `unreachable` sind Befunde (B4). Für die Probe bleibt
   die restliche Zeit des Aufrufs, mindestens 1 s.
-- Das Fehlerlog wird über die Zeilenzahl von `debug.log` verglichen; ohne
-  `WP_DEBUG_LOG` gibt es keinen Befund.
+- Das Fehlerlog (`wp-content/debug.log`) wird nicht mehr ganz gelesen
+  (GitHub-Codex 4, P2: `file()` lud die ganze Datei, ein Log von 300 MiB
+  beendete Prüfung und Lauf mit einem Fatal Error): die Gesamtvorprüfung
+  merkt sich seine Grösse (`error_log_bytes`; 0, wenn es noch keines gibt),
+  die Prüfung liest ab dieser Stelle in Stücken von 64 KiB
+  (`AB_MCP_Sync_Engine::error_log_lines_since()`, `LOG_CHUNK`) und zählt
+  die Zeilenenden, höchstens `LOG_BYTES` = 16 MiB je Aufruf. Neue Zeilen sind
+  ein Befund; ein Log, das kleiner ist als an der gemerkten Stelle (rotiert
+  oder geleert), wird von vorn gezählt und als solches gemeldet (seine
+  Zeilen sind von neuen nicht zu unterscheiden); ein Log, das um mehr als
+  16 MiB gewachsen ist, wird bis dort gezählt und als «nicht bis zum Ende»
+  gemeldet; ein Log, das es an der Vorprüfung nicht gab und seither entstand,
+  ist ganz neu (Marke 0). Nie «keine neue Zeile», wo nicht gezählt werden
+  konnte. Ein Journal eines Laufs, der vor diesem Stand begann (Marke als
+  Zeilenzahl, `error_log_lines`), gibt den Befund «nicht markiert». Grenze:
+  gelesen wird nur `wp-content/debug.log`; ein Log, das `WP_DEBUG_LOG` an
+  einen anderen Ort schreibt, wird nicht verglichen (kein Befund), wie
+  bisher; ob die Prüfung ihm folgen soll, ist offen (die Test-Sites schreiben
+  so, und WordPress' eigene Update-Warnungen bei gesperrtem externem HTTP
+  stünden dann in jedem Lauf als Befund). Prüffälle
+  `testTheErrorLogIsCountedFromItsMarkInChunksWithACapAndARotationIsSaidSo`
+  (Unit, 20 MB in Stücken, Kappe, Rotation),
+  `testTheErrorLogIsCountedFromTheMarkOfTheCheckAndALogRotatedSinceIsAFinding`
+  (Integration).
 
 ## Prüfung
 

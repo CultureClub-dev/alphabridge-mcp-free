@@ -267,8 +267,8 @@ final class SyncSafeCallsTest extends TestCase {
 			'wp_update_post'                           => array( 2, 'write_row() and restore_row(): the way forward and back of the row (decisions 17 and 23).' ),
 		),
 		'class-sync-engine.php' => array(
-			'AB_MCP_Change_Lock::release'     => array( 3, 'run_check(), run_write() and run_revert(): the lock of the boundary given back (decision 18).' ),
-			'AB_MCP_Change_Lock::take'        => array( 3, 'run_check(), run_write() and run_revert(): the lock of the boundary taken (decision 18).' ),
+			'AB_MCP_Change_Lock::release'     => array( 4, 'run_check(), run_write(), run_revert() and abort(): the lock of the boundary given back (decision 18; abort under the lock, GitHub Codex round 4 on free#137).' ),
+			'AB_MCP_Change_Lock::take'        => array( 4, 'run_check(), run_write(), run_revert() and abort(): the lock of the boundary taken (decision 18; abort under the lock, so no write step runs beside it, GitHub Codex round 4 on free#137).' ),
 			'AB_MCP_Change_Lock::touch'       => array( 3, 'boundary(), write_parts() (the parts read back as written) and put_back() (each part put back, within the boundary and on the way back; B8): the heartbeat of the lock.' ),
 			'AB_MCP_Php_Probe::run'           => array( 1, 'run_verify(): the PHP probe of the site (decision 33).' ),
 			'AB_MCP_Protected_Store::available' => array( 1, 'run_check(): whether the store is proved (decision 7: no run without it).' ),

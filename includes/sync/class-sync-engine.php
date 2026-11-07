@@ -113,6 +113,12 @@ final class AB_MCP_Sync_Engine {
 	 */
 	private static $work = AB_MCP_Sync_Resources::WORK_MAX;
 
+	/** Bytes of the error log one verification reads at most, counting the lines it gained since the check (error_log_lines_since()). */
+	const LOG_BYTES = 16777216;
+
+	/** Bytes of one read of the error log. */
+	const LOG_CHUNK = 65536;
+
 	/** The clock: a callable returning seconds (float), null for microtime(). Set by tests only. */
 	public static $clock = null;
 
@@ -218,23 +224,69 @@ final class AB_MCP_Sync_Engine {
 		if ( 'open' !== $run['state'] ) {
 			return new WP_Error( 'ab_mcp_sync_run_state', sprintf( 'Only an open run is aborted; this run is %s. An interrupted run is closed as checked by a person on the page AlphaBridge → Staging, or taken back with wp_site_revert; a run of the way back runs to its end.', $run['state'] ) );
 		}
-		$steps = AB_MCP_Sync_Run::steps( (int) $run['run_id'] );
-		if ( is_wp_error( $steps ) ) {
-			return $steps;
+		// Under the lock of the write boundary (decision 18): a step being
+		// written holds it, and the run is not aborted beside it; a next that
+		// read the run before the abort finds it closed under the lock
+		// (boundary(), still()) and writes nothing (GitHub Codex round 4 on
+		// free#137, P2: before, the abort took no lock, and a delayed request
+		// could move its planned step to begun and write into a closed run
+		// whose booking was given back).
+		$lock = AB_MCP_Change_Lock::take();
+		if ( is_wp_error( $lock ) ) {
+			return new WP_Error( 'ab_mcp_sync_run_busy', sprintf( 'Run %d is not aborted right now: a step of a run is being written (the lock of the write boundary is held). Call again when the step has answered.', (int) $run['run_id'] ) );
 		}
-		foreach ( $steps as $step ) {
-			if ( 'begun' === $step['state'] ) {
-				return new WP_Error( 'ab_mcp_sync_run_busy', sprintf( 'Step %d of the run is being written right now; call again when it has answered.', (int) $step['seq'] ) );
+		try {
+			$fresh = AB_MCP_Sync_Run::get( (int) $run['run_id'] );
+			if ( ! is_array( $fresh ) ) {
+				return AB_MCP_Sync_Run::unknown( (int) $run['run_id'] );
 			}
-		}
-		$moved = AB_MCP_Sync_Run::set_state( (int) $run['run_id'], 'open', 'closed_aborted' );
-		if ( is_wp_error( $moved ) ) {
-			return $moved;
+			if ( 'open' !== $fresh['state'] ) {
+				return new WP_Error( 'ab_mcp_sync_run_changed', sprintf( 'The run %1$d is %2$s now (another call moved it since this one read it as open): nothing was changed. Ask for its status (wp_site_push action=status) and go on from there.', (int) $run['run_id'], (string) $fresh['state'] ) );
+			}
+			$steps = AB_MCP_Sync_Run::steps( (int) $run['run_id'] );
+			if ( is_wp_error( $steps ) ) {
+				return $steps;
+			}
+			foreach ( $steps as $step ) {
+				if ( 'begun' === $step['state'] ) {
+					return new WP_Error( 'ab_mcp_sync_run_busy', sprintf( 'Step %d of the run is begun and its request did not answer; the run is not aborted. Ask for the status of the run (wp_site_push action=status), which settles it, then go on from there.', (int) $step['seq'] ) );
+				}
+			}
+			$moved = AB_MCP_Sync_Run::set_state( (int) $run['run_id'], 'open', 'closed_aborted' );
+			if ( is_wp_error( $moved ) ) {
+				return $moved;
+			}
+		} finally {
+			AB_MCP_Change_Lock::release();
 		}
 		AB_MCP_Store_Budget::release( (int) $run['run_id'] );
 		AB_MCP_Protected_Store::cleanup();
 		$closed = AB_MCP_Sync_Run::get( (int) $run['run_id'] );
 		return is_array( $closed ) ? $closed : $run;
+	}
+
+	/**
+	 * The run as it is under the lock, right before a step is begun: in one
+	 * of the states the step runs in, or the step is not run and nothing is
+	 * written (GitHub Codex round 4 on free#137, P2: a request that read the
+	 * run before another closed it, aborted or settled it must not write
+	 * into it; the state of the step alone, which update_step() checks, does
+	 * not tell).
+	 *
+	 * @param array    $run    The run as this call read it.
+	 * @param int      $seq    The step about to begin.
+	 * @param string[] $states The states the step runs in.
+	 * @return array|WP_Error The run as it is now.
+	 */
+	private static function still( array $run, $seq, array $states ) {
+		$fresh = AB_MCP_Sync_Run::get( (int) $run['run_id'] );
+		if ( ! is_array( $fresh ) ) {
+			return AB_MCP_Sync_Run::unknown( (int) $run['run_id'] );
+		}
+		if ( ! in_array( (string) $fresh['state'], $states, true ) ) {
+			return new WP_Error( 'ab_mcp_sync_run_state', sprintf( 'Step %1$d is not run: run %2$d was %3$s when this call read it and is %4$s now (another call moved it in between); nothing was written, the step stays as it is. Ask for the status of the run (wp_site_push action=status) and go on from there.', (int) $seq, (int) $run['run_id'], (string) $run['state'], (string) $fresh['state'] ) );
+		}
+		return $fresh;
 	}
 
 	/* ----------------------------------------------------------- context */
@@ -498,7 +550,10 @@ final class AB_MCP_Sync_Engine {
 			if ( empty( $plan['environment'] ) ) {
 				$result['notes'][] = 'The environment of the two sites was not compared in the report (wp_site_diff without environment): the run writes objects only, which this does not hold back.';
 			}
-			$result['error_log_lines'] = self::error_log_lines();
+			// The error log marked by its size: the verification counts the
+			// lines it gained from there (error_log_lines_since()).
+			$mark                      = self::error_log_mark();
+			$result['error_log_bytes'] = null === $mark ? null : (int) $mark['bytes'];
 			$result['checked']         = 0;
 			$result['findings']        = array();
 		}
@@ -666,6 +721,11 @@ final class AB_MCP_Sync_Engine {
 	private static function boundary( array $run, array $step, array $item, array $ctx ) {
 		$run_id  = (int) $run['run_id'];
 		$seq     = (int) $step['seq'];
+		// (1) The run as it is under the lock: open, or the step is not run.
+		$still = self::still( $run, $seq, array( 'open' ) );
+		if ( is_wp_error( $still ) ) {
+			return $still;
+		}
 		$live_id = 'update' === $item['op'] ? (int) $item['live_ref'] : null;
 		$before  = null;
 		if ( null !== $live_id ) {
@@ -1773,19 +1833,55 @@ final class AB_MCP_Sync_Engine {
 			}
 			$result['stage'] = 'log';
 		}
-		// The error log without new lines, where readable; then the close.
-		$check = null;
+		// The error log without new lines since the mark of the check, where
+		// readable; then the close. Read from the marked byte on, in chunks,
+		// at most LOG_BYTES (GitHub Codex round 4 on free#137, P2: file()
+		// loaded the whole log). A log that cannot be told (not marked, read
+		// to its cap, rotated) is a finding, never «no new line».
+		$mark   = null;
+		$marked = false;
 		foreach ( $steps as $one ) {
-			if ( 'check' === $one['op'] && is_array( $one['result'] ) && isset( $one['result']['error_log_lines'] ) ) {
-				$check = $one['result']['error_log_lines'];
+			if ( 'check' !== $one['op'] || ! is_array( $one['result'] ) ) {
+				continue;
+			}
+			if ( array_key_exists( 'error_log_bytes', $one['result'] ) ) {
+				$marked = true;
+				$mark   = $one['result']['error_log_bytes'];
+			} elseif ( array_key_exists( 'error_log_lines', $one['result'] ) ) {
+				$marked = 'lines';
 			}
 		}
-		$lines_now = self::error_log_lines();
-		if ( null !== $check && null !== $lines_now && $lines_now > $check ) {
-			$result['findings'][] = array(
-				'seq'     => 0,
-				'message' => sprintf( 'The error log of the site has %d new line(s) since the check before the run (wp_get_error_log shows them).', $lines_now - $check ),
-			);
+		$path = self::error_log_path();
+		if ( null !== $path ) {
+			if ( 'lines' === $marked || ! $marked || null === $mark ) {
+				$result['findings'][] = array(
+					'seq'     => 0,
+					'message' => 'The error log of the site is readable now but was not marked at the check before the run (a run begun before this build, or the log made since), so new lines since the run began cannot be told: read it by hand (wp_get_error_log).',
+				);
+			} else {
+				$since = self::error_log_lines_since( $path, (int) $mark, self::LOG_BYTES );
+				if ( null === $since ) {
+					$result['findings'][] = array(
+						'seq'     => 0,
+						'message' => 'The error log of the site could not be read after the run, so new lines since the run began cannot be told: read it by hand (wp_get_error_log).',
+					);
+				} elseif ( $since['rotated'] ) {
+					$result['findings'][] = array(
+						'seq'     => 0,
+						'message' => sprintf( 'The error log of the site is smaller than at the check before the run (rotated or emptied in between); it holds %d line(s) now, which cannot be told from lines the run added: read it by hand (wp_get_error_log).', (int) $since['lines'] ),
+					);
+				} elseif ( $since['capped'] ) {
+					$result['findings'][] = array(
+						'seq'     => 0,
+						'message' => sprintf( 'The error log of the site grew by more than %1$d MiB since the check before the run (%2$d line(s) counted up to there, not to its end): read it by hand (wp_get_error_log).', (int) ( self::LOG_BYTES / 1048576 ), (int) $since['lines'] ),
+					);
+				} elseif ( $since['lines'] > 0 ) {
+					$result['findings'][] = array(
+						'seq'     => 0,
+						'message' => sprintf( 'The error log of the site has %d new line(s) since the check before the run (wp_get_error_log shows them).', (int) $since['lines'] ),
+					);
+				}
+			}
 		}
 		unset( $result['cursor'], $result['stage'] );
 		$written           = (int) $result['written'];
@@ -1876,7 +1972,13 @@ final class AB_MCP_Sync_Engine {
 		$journal = $forward['parts'];
 		$object  = $journal['object'];
 		$live_id = isset( $object['live_ref'] ) ? (int) $object['live_ref'] : 0;
-		$begun   = AB_MCP_Sync_Run::update_step( $run_id, $seq, array( 'state' => 'begun' ), 'planned' );
+		// The run as it is under the lock: on its way back (reverting; a run
+		// of the way back open or reverting), or the step is not run.
+		$still = self::still( $run, $seq, 'revert' === $run['type'] ? array( 'open', 'reverting' ) : array( 'reverting' ) );
+		if ( is_wp_error( $still ) ) {
+			return $still;
+		}
+		$begun = AB_MCP_Sync_Run::update_step( $run_id, $seq, array( 'state' => 'begun' ), 'planned' );
 		if ( is_wp_error( $begun ) ) {
 			return $begun;
 		}
@@ -2234,17 +2336,90 @@ final class AB_MCP_Sync_Engine {
 	}
 
 	/**
-	 * The lines of the error log of the site, where readable; null otherwise.
+	 * The error log of the site, debug.log of wp-content (where WP_DEBUG_LOG
+	 * writes it; a log WP_DEBUG_LOG names elsewhere is not read, GRENZEN-
+	 * LAUF.md): its path where it is a readable file, null otherwise.
 	 *
-	 * @return int|null
+	 * @return string|null
 	 */
-	private static function error_log_lines() {
+	private static function error_log_path() {
 		$log = WP_CONTENT_DIR . '/debug.log';
-		if ( ! is_readable( $log ) ) {
+		return is_file( $log ) && is_readable( $log ) ? $log : null;
+	}
+
+	/**
+	 * The mark of the error log at the check before the run: its size in
+	 * bytes, from which the verification counts the lines it gained
+	 * (error_log_lines_since()); 0 where there is no log yet (one made since
+	 * is new whole); null where there is one that cannot be measured.
+	 *
+	 * @return array{bytes:int}|null
+	 */
+	private static function error_log_mark() {
+		$path = self::error_log_path();
+		if ( null === $path ) {
+			return array( 'bytes' => 0 );
+		}
+		$size = @filesize( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- a log that cannot be measured is none.
+		return false === $size ? null : array( 'bytes' => (int) $size );
+	}
+
+	/**
+	 * The lines a log gained since a byte mark: read from the mark on in
+	 * chunks of LOG_CHUNK bytes, the line ends counted, at most $max bytes in
+	 * one call (GitHub Codex round 4 on free#137, P2: file() loaded the whole
+	 * log, and a log of 300 MiB ended the run on a fatal error). A log
+	 * smaller than the mark was rotated or emptied in between: it is counted
+	 * from its start, and said so (rotated), since its lines cannot be told
+	 * from lines the run added. Where the span to read passes $max, the
+	 * count stops there and says so (capped): never «no new line».
+	 *
+	 * @param string $path The log.
+	 * @param int    $from The mark: bytes the log had at the check.
+	 * @param int    $max  Bytes to read at most.
+	 * @return array{lines:int,capped:bool,rotated:bool,bytes:int}|null Null where the log cannot be read.
+	 */
+	public static function error_log_lines_since( $path, $from, $max ) {
+		$size = is_file( $path ) && is_readable( $path ) ? @filesize( $path ) : false; // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		if ( false === $size ) {
 			return null;
 		}
-		$data = file( $log, FILE_IGNORE_NEW_LINES ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file
-		return is_array( $data ) ? count( $data ) : null;
+		$from    = max( 0, (int) $from );
+		$rotated = false;
+		if ( (int) $size < $from ) {
+			$rotated = true;
+			$from    = 0;
+		}
+		$handle = @fopen( $path, 'rb' ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- read in chunks, bounded.
+		if ( false === $handle ) {
+			return null;
+		}
+		$lines  = 0;
+		$read   = 0;
+		$capped = false;
+		try {
+			if ( $from > 0 && 0 !== fseek( $handle, $from ) ) {
+				return null;
+			}
+			while ( $read < (int) $max ) {
+				$chunk = fread( $handle, (int) min( self::LOG_CHUNK, (int) $max - $read ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fread
+				if ( false === $chunk || '' === $chunk ) {
+					break;
+				}
+				$read  += strlen( $chunk );
+				$lines += substr_count( $chunk, "\n" );
+			}
+			// Read up to the cap with more of the log behind it: not counted to its end.
+			$capped = $read >= (int) $max && $from + $read < (int) $size;
+		} finally {
+			fclose( $handle ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
+		}
+		return array(
+			'lines'   => $lines,
+			'capped'  => $capped,
+			'rotated' => $rotated,
+			'bytes'   => (int) $size,
+		);
 	}
 
 	/**

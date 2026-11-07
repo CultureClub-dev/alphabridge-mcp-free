@@ -957,7 +957,9 @@ final class AB_MCP_Sync_Push {
 			case 'open':
 				return 'push' === $run['type'] ? 'Go on with action=next (one step per call), or action=abort.' : 'Go on with wp_site_revert action=next.';
 			case 'interrupted':
-				return 'The run was interrupted: a step began and the request that wrote it ended before it finished (its lock is no longer held). No step runs and no new run begins until a person closes it as checked on the page AlphaBridge → Staging (nothing is written then; pairs with unclear parts become unclear), or wp_site_revert with this run_id takes its own parts back. The journal names each part with its state.';
+				return 'revert' === $run['type']
+					? 'The run of the way back was interrupted: a step began and the request that put it back ended before it finished (its lock is no longer held). No step runs and no new run begins until a person closes it as checked on the page AlphaBridge → Staging (nothing is written then; the pairs of the steps left begun become unclear), or wp_site_revert action=plan with this run_id leads it on: the interrupted step stays as it is (unclear), the steps still planned go back one by one (action=next). The journal names each part with its state.'
+					: 'The run was interrupted: a step began and the request that wrote it ended before it finished (its lock is no longer held). No step runs and no new run begins until a person closes it as checked on the page AlphaBridge → Staging (nothing is written then; pairs with unclear parts become unclear), or wp_site_revert action=plan with this run_id takes its own parts back. The journal names each part with its state.';
 			case 'reverting':
 				return 'The way back of this run is running: go on with wp_site_revert action=next.';
 			default:
@@ -966,13 +968,20 @@ final class AB_MCP_Sync_Push {
 	}
 
 	/**
-	 * The refusal of a step of an interrupted run (decision 18).
+	 * The refusal of a step of an interrupted run (decision 18), with its
+	 * two ways: for a run of the way back, way (b) leads the same run on
+	 * (the interrupted step stays, the steps still planned go back; GitHub
+	 * Codex round 4 on free#137, P1: before, the hint pointed to action=plan,
+	 * which refused a run of the way back).
 	 *
 	 * @param array $run Run.
 	 * @return WP_Error
 	 */
-	private static function interrupted( array $run ) {
-		return new WP_Error( 'ab_mcp_sync_run_interrupted', sprintf( 'Run %d is interrupted and takes no step: a step began and the request that wrote it ended before it finished. Two ways: a person closes it as checked on the page AlphaBridge → Staging after reading its journal (nothing is written), or wp_site_revert action=plan with this run_id takes its own parts back. action=status shows the journal.', (int) $run['run_id'] ), array( 'run_id' => (int) $run['run_id'] ) );
+	public static function interrupted( array $run ) {
+		$way = 'revert' === $run['type']
+			? 'wp_site_revert action=plan with this run_id leads it on: the interrupted step stays as it is (unclear, its parts as they are), the steps still planned go back one by one (action=next)'
+			: 'wp_site_revert action=plan with this run_id takes its own parts back';
+		return new WP_Error( 'ab_mcp_sync_run_interrupted', sprintf( 'Run %1$d%2$s is interrupted and takes no step: a step began and the request that wrote it ended before it finished. Two ways: a person closes it as checked on the page AlphaBridge → Staging after reading its journal (nothing is written), or %3$s. action=status shows the journal.', (int) $run['run_id'], 'revert' === $run['type'] ? ' (a run of the way back)' : '', $way ), array( 'run_id' => (int) $run['run_id'] ) );
 	}
 
 	/**

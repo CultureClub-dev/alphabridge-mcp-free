@@ -147,8 +147,12 @@ final class AB_MCP_Sync_Revert {
 		if ( isset( $run['running'] ) ) {
 			return new WP_Error( 'ab_mcp_sync_run_busy', sprintf( 'Step %d of the run is being written right now (its lock is held); call again when it has answered.', (int) $run['running'] ) );
 		}
+		if ( 'interrupted' === $run['state'] ) {
+			// Both ways of decision 18, for a run of the way back as well.
+			return AB_MCP_Sync_Push::interrupted( $run );
+		}
 		if ( ! ( 'reverting' === $run['state'] || ( 'revert' === $run['type'] && 'open' === $run['state'] ) ) ) {
-			return new WP_Error( 'ab_mcp_sync_run_state', sprintf( 'The run %1$d is %2$s: no way back is running for it. Use action=plan with this run_id to plan one.', (int) $run['run_id'], $run['state'] ) );
+			return new WP_Error( 'ab_mcp_sync_run_state', sprintf( 'The run %1$d is %2$s: no way back is running for it. %3$s', (int) $run['run_id'], $run['state'], 'revert' === $run['type'] ? 'A closed run of the way back is not taken back; wp_site_push action=status lists the runs.' : 'Use action=plan with this run_id to plan one.' ) );
 		}
 		return AB_MCP_Sync_Engine::next( $run, null );
 	}
@@ -206,7 +210,19 @@ final class AB_MCP_Sync_Revert {
 			}
 		}
 		if ( 'revert' === $run['type'] ) {
-			return new WP_Error( 'ab_mcp_sync_revert_type', sprintf( 'Run %d is a run of the way back itself; the way back is planned for the run that wrote (its plan names it in reverts). Use wp_site_push action=status to list the runs.', (int) $run['run_id'] ) );
+			// A run of the way back is not taken back; interrupted, it is led
+			// on (way (b) of decision 18 for a run of the way back as well:
+			// the same run to reverting, the interrupted step stays unclear,
+			// the steps still planned go back; GitHub Codex round 4 on free#137,
+			// P1: before, every run of the type revert was refused here, and an
+			// interrupted one held the site until a person closed it).
+			if ( 'interrupted' !== $run['state'] ) {
+				return new WP_Error( 'ab_mcp_sync_revert_type', sprintf( 'Run %1$d is a run of the way back itself and is %2$s: %3$s', (int) $run['run_id'], $run['state'], 'open' === $run['state'] ? 'go on with action=next.' : 'a run of the way back is not taken back; the way back is planned for a run that wrote (wp_site_push action=status lists the runs).' ) );
+			}
+			if ( isset( $a['steps'] ) ) {
+				return new WP_Error( 'ab_mcp_sync_revert_steps', sprintf( 'Run %d is an interrupted run of the way back: it goes on with the steps it has, so steps is not taken. Leave it out.', (int) $run['run_id'] ) );
+			}
+			return self::continuation( $run, $print, $source );
 		}
 		if ( 'reverting' === $run['state'] ) {
 			return new WP_Error( 'ab_mcp_sync_revert_running', sprintf( 'The way back of run %d is running already: use action=next to go on.', (int) $run['run_id'] ) );
@@ -356,6 +372,73 @@ final class AB_MCP_Sync_Revert {
 	}
 
 	/**
+	 * The plan that leads an interrupted run of the way back on (way (b) of
+	 * decision 18): no step is added; the step the interruption left begun
+	 * stays as it is (unclear, its parts as they are: no put back is
+	 * repeated, nothing of it goes back by itself), the steps still planned
+	 * go back one by one afterwards, each deciding on a fresh read
+	 * (decision A). The state the token binds: the run, its state, the steps
+	 * by their state, and the objects of the steps still to go as they are.
+	 *
+	 * @param array  $run    The interrupted run of the type revert.
+	 * @param string $print  The print of the pair of sites.
+	 * @param string $source Source id.
+	 * @return array|WP_Error As plan() returns it, with same_run true and no items.
+	 */
+	private static function continuation( array $run, $print, $source ) {
+		$steps = AB_MCP_Sync_Run::steps( (int) $run['run_id'] );
+		if ( is_wp_error( $steps ) ) {
+			return $steps;
+		}
+		$shown = array();
+		$live  = array();
+		$state = array();
+		foreach ( $steps as $step ) {
+			if ( 'revert' !== $step['op'] || ! in_array( $step['state'], array( 'planned', 'begun' ), true ) ) {
+				continue;
+			}
+			$what    = is_array( $step['parts'] ) ? $step['parts'] : array();
+			$forward = AB_MCP_Sync_Run::step( isset( $what['forward_run'] ) ? (int) $what['forward_run'] : (int) $run['run_id'], isset( $what['forward_seq'] ) ? (int) $what['forward_seq'] : 0 );
+			$object  = is_array( $forward ) && is_array( $forward['parts'] ) && isset( $forward['parts']['object'] ) ? $forward['parts']['object'] : array();
+			$live_id = isset( $object['live_ref'] ) ? (int) $object['live_ref'] : 0;
+			$shown[] = array(
+				'seq'         => (int) $step['seq'],
+				'state'       => $step['state'],
+				'forward_seq' => isset( $what['forward_seq'] ) ? (int) $what['forward_seq'] : null,
+				'kind'        => isset( $object['kind'] ) ? $object['kind'] : null,
+				'live_ref'    => $live_id > 0 ? (string) $live_id : null,
+				'will'        => 'begun' === $step['state'] ? 'stays' : 'back where own',
+			);
+			$state[] = array( (int) $step['seq'], (string) $step['state'] );
+			if ( 'planned' === $step['state'] && $live_id > 0 ) {
+				$current          = AB_MCP_Sync_Post_Writer::current( $live_id );
+				$live[ $live_id ] = is_array( $current ) ? AB_MCP_Sync_Post_Writer::row_hash( $current['row'] ) : ( null === $current ? 'gone' : 'unread' );
+			}
+		}
+		ksort( $live );
+		return array(
+			'run'      => $run,
+			'same_run' => true,
+			'items'    => array(),
+			'shown'    => $shown,
+			'print'    => $print,
+			'source'   => $source,
+			'state'    => hash(
+				'sha256',
+				AB_MCP_Sync_Canon::encode(
+					array(
+						'continue' => $state,
+						'live'     => $live,
+						'print'    => $print,
+						'run_id'   => (int) $run['run_id'],
+						'state'    => $run['state'],
+					)
+				)
+			),
+		);
+	}
+
+	/**
 	 * Begin the way back of a confirmed plan.
 	 *
 	 * @param array $plan plan().
@@ -441,7 +524,7 @@ final class AB_MCP_Sync_Revert {
 		}
 		$shown['same_run'] = $plan['same_run'];
 		$shown['limits']   = self::LIMITS;
-		$shown['next']     = sprintf( 'The way back has %1$d step(s) and nothing is written yet. Call wp_site_revert action=next with run_id %2$d: each call takes one pair back under the lock, byte for byte where the part is still what the run wrote; the last one closes the run.', count( $steps ), (int) $now['run_id'] );
+		$shown['next']     = sprintf( 'The way back has %1$d step(s) and nothing is written yet. Call wp_site_revert action=next with run_id %2$d: each call takes one pair back under the lock, byte for byte where the part is still what the run wrote; the last one closes the run.', array() === $steps ? $shown['counts']['planned'] : count( $steps ), (int) $now['run_id'] );
 		return $shown;
 	}
 
@@ -518,15 +601,39 @@ final class AB_MCP_Sync_Revert {
 				foreach ( $steps_now as $step ) {
 					$settled = true;
 					if ( 'begun' === $step['state'] ) {
-						$settled = AB_MCP_Sync_Run::update_step( $run_id, (int) $step['seq'], array( 'state' => 'unclear', 'result' => array( 'message' => 'Interrupted: the request that wrote this step ended before it finished; the way back reads its journal.' ) ), 'begun' );
-					} elseif ( 'planned' === $step['state'] ) {
+						$settled = AB_MCP_Sync_Run::update_step(
+							$run_id,
+							(int) $step['seq'],
+							array(
+								'state'  => 'unclear',
+								'result' => array(
+									'message' => 'revert' === $step['op']
+										? 'Interrupted: the request that put this step back ended before it finished; whatever it reached stays as it is, nothing of it is put back again (no put back is repeated). Check the object in wp-admin; the backup of the step that wrote holds its state before the run.'
+										: 'Interrupted: the request that wrote this step ended before it finished; the way back reads its journal.',
+								),
+							),
+							'begun'
+						);
+						// The pair of a step of the way back left begun: unclear, as
+						// a close as checked makes it (its object may be back in part).
+						$pair_id = 'revert' === $step['op'] && ! is_wp_error( $settled ) ? AB_MCP_Sync_Run::pair_of_revert_step( $run_id, $step ) : null;
+						if ( null !== $pair_id ) {
+							$pair = AB_MCP_Sync_Pairs::get( $pair_id );
+							if ( is_array( $pair ) && 'active' === $pair['state'] ) {
+								AB_MCP_Sync_Pairs::set_state( $pair_id, 'unclear', AB_MCP_Sync_Pairs::snapshot_hash( AB_MCP_Sync_Pairs::snapshot( $pair_id ) ) );
+							}
+						}
+					} elseif ( 'planned' === $step['state'] && 'revert' !== $step['op'] ) {
+						// A forward step still planned is skipped: the run goes
+						// back. A step of the way back still planned stays: it goes
+						// back in its turn (an interrupted run of the way back led on).
 						$settled = AB_MCP_Sync_Run::update_step( $run_id, (int) $step['seq'], array( 'state' => 'skipped', 'result' => array( 'message' => 'Skipped: the run went to its way back before this step ran.' ) ), 'planned' );
 					}
 					if ( is_wp_error( $settled ) ) {
 						return $settled;
 					}
 				}
-				return AB_MCP_Sync_Run::append_steps( $run_id, $steps );
+				return array() === $steps ? true : AB_MCP_Sync_Run::append_steps( $run_id, $steps );
 			}
 		);
 		if ( is_wp_error( $began ) ) {

@@ -1209,6 +1209,48 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( array( 1 => false, 2 => true, 3 => true, 4 => true ), $rows );
 	}
 
+	public function testTheErrorLogIsCountedFromItsMarkInChunksWithACapAndARotationIsSaidSo(): void {
+		// GitHub Codex round 4 on free#137 (P2): error_log_lines() loaded the
+		// whole debug.log with file() to count its lines; a log of 300 MiB
+		// ended the check and the verification on a fatal error. The lines
+		// are counted from the byte mark of the check on, in chunks, at most
+		// LOG_BYTES in one call; a cap reached and a log smaller than its mark
+		// (rotated or emptied) are said so, never «no new line».
+		$path = tempnam( sys_get_temp_dir(), 'ab-log' );
+		self::assertIsString( $path );
+		try {
+			$line   = str_repeat( 'e', 99 ) . "\n";
+			$handle = fopen( $path, 'wb' );
+			for ( $i = 0; $i < 200000; $i++ ) {
+				fwrite( $handle, $line );
+			}
+			fclose( $handle );
+			self::assertSame( 20000000, filesize( $path ) );
+			$before = memory_get_peak_usage( true );
+			$all    = AB_MCP_Sync_Engine::error_log_lines_since( $path, 0, 64 * 1048576 );
+			self::assertSame( array( 'lines' => 200000, 'capped' => false, 'rotated' => false, 'bytes' => 20000000 ), $all );
+			self::assertLessThan( 8 * 1048576, memory_get_peak_usage( true ) - $before, 'Read in chunks of LOG_CHUNK, never loaded whole.' );
+			self::assertSame( 65536, AB_MCP_Sync_Engine::LOG_CHUNK );
+			self::assertSame( 16777216, AB_MCP_Sync_Engine::LOG_BYTES );
+			// From the mark: the lines the log gained.
+			$since = AB_MCP_Sync_Engine::error_log_lines_since( $path, 16000000, 64 * 1048576 );
+			self::assertSame( array( 'lines' => 40000, 'capped' => false, 'rotated' => false, 'bytes' => 20000000 ), $since );
+			self::assertSame( 0, AB_MCP_Sync_Engine::error_log_lines_since( $path, 20000000, 64 * 1048576 )['lines'], 'Nothing new.' );
+			// The cap: one MiB of a span of four, counted up to there and said so.
+			$capped = AB_MCP_Sync_Engine::error_log_lines_since( $path, 16000000, 1048576 );
+			self::assertTrue( $capped['capped'] );
+			self::assertSame( 10485, $capped['lines'] );
+			self::assertFalse( AB_MCP_Sync_Engine::error_log_lines_since( $path, 16000000, 4000000 )['capped'], 'The cap at the very end of the log: read to its end.' );
+			// A mark past the size: the log was rotated or emptied; counted from
+			// its start and said so.
+			$rotated = AB_MCP_Sync_Engine::error_log_lines_since( $path, 30000000, 64 * 1048576 );
+			self::assertSame( array( 'lines' => 200000, 'capped' => false, 'rotated' => true, 'bytes' => 20000000 ), $rotated );
+			self::assertNull( AB_MCP_Sync_Engine::error_log_lines_since( $path . '.none', 0, 100 ), 'No log: null.' );
+		} finally {
+			@unlink( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		}
+	}
+
 	/** A post of a few rows in the fake $wpdb, with one category. */
 	private static function post_rows( string $term_name ): SyncRunPostWpdb {
 		$db           = new SyncRunPostWpdb();

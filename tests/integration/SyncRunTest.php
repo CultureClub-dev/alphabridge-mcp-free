@@ -127,6 +127,9 @@ final class SyncRunTest extends TestCase {
 		AB_MCP_Sync_Resources::$time  = null;
 		AB_MCP_Sync_Report::$page     = null;
 		delete_option( \AB_MCP_Change_Lock::OPTION );
+		if ( file_exists( WP_CONTENT_DIR . '/debug.log' ) ) {
+			unlink( WP_CONTENT_DIR . '/debug.log' );
+		}
 		remove_all_filters( 'wp_insert_post_data' );
 		remove_all_filters( 'sanitize_post_meta_note' );
 		remove_all_filters( 'auth_post_meta_note' );
@@ -907,6 +910,231 @@ final class SyncRunTest extends TestCase {
 		self::assertCount( 2, $begun['steps'] );
 		self::assertSame( 'closed_reverted', self::revert_all( (int) $begun['run_id'] )['state'] );
 		self::assertSame( 'Write to us.', self::row_a( (int) $a['contact'] )['post_content'] );
+	}
+
+	public function testTheErrorLogIsCountedFromTheMarkOfTheCheckAndALogRotatedSinceIsAFinding(): void {
+		// GitHub Codex round 4 on free#137 (P2): the check marks the error log
+		// of the site (debug.log of wp-content) by its size; the verification
+		// counts the lines it gained from there, in chunks (never the whole
+		// file). Lines added during the run are a finding; a log smaller than
+		// at the check (rotated or emptied) cannot be told from new lines and
+		// is a finding as well, never «no new line».
+		$log = WP_CONTENT_DIR . '/debug.log';
+		self::pair();
+		$a = self::pages_on_a( array( 'contact' => 'Write to us.', 'about' => 'About us.' ) );
+		$b = self::pages_on_b( array( 'contact' => 'Write to us.', 'about' => 'About us.' ) );
+		self::paired( self::staged() );
+		self::change_on_b( $b['contact'], 'contact', 'Write to us on staging.' );
+		self::change_on_b( $b['about'], 'about', 'About us, on staging.' );
+		try {
+			file_put_contents( $log, "[07-Nov-2026 10:00:00 UTC] PHP Notice: one\n[07-Nov-2026 10:00:01 UTC] PHP Notice: two\n" );
+			// 1. Three lines added during the run: a finding with their count.
+			$planned = self::planned( array( 'contact' ) );
+			$run     = (int) self::begun( $planned['args'] )['run_id'];
+			$check   = self::next( $run );
+			self::assertSame( 'done', $check['step']['state'] );
+			self::assertSame( filesize( $log ), $check['step']['result']['error_log_bytes'], 'The log marked by its size.' );
+			self::assertSame( 'done', self::next( $run )['step']['state'], 'The page.' );
+			file_put_contents( $log, "[07-Nov-2026 10:01:00 UTC] PHP Warning: three\n[07-Nov-2026 10:01:01 UTC] PHP Warning: four\n[07-Nov-2026 10:01:02 UTC] PHP Warning: five\n", FILE_APPEND );
+			self::probe_ok();
+			$closed = self::finish( $run );
+			self::assertSame( 'closed_findings', $closed['state'], json_encode( $closed ) );
+			$messages = array_column( $closed['step']['result']['findings'], 'message' );
+			self::assertCount( 1, $messages, json_encode( $messages ) );
+			self::assertStringContainsString( 'has 3 new line(s) since the check', $messages[0] );
+			// 2. The log rotated (smaller than at the check): a finding, said so.
+			$planned = self::planned( array( 'about' ) );
+			$run     = (int) self::begun( $planned['args'] )['run_id'];
+			self::assertSame( 'done', self::next( $run )['step']['state'] );
+			self::assertSame( 'done', self::next( $run )['step']['state'] );
+			file_put_contents( $log, "[07-Nov-2026 10:02:00 UTC] PHP Notice: after the rotation\n" );
+			$closed = self::finish( $run );
+			self::assertSame( 'closed_findings', $closed['state'], json_encode( $closed ) );
+			$messages = array_column( $closed['step']['result']['findings'], 'message' );
+			self::assertCount( 1, $messages, json_encode( $messages ) );
+			self::assertStringContainsString( 'smaller than at the check before the run (rotated or emptied in between); it holds 1 line(s) now', $messages[0] );
+		} finally {
+			if ( file_exists( $log ) ) {
+				unlink( $log );
+			}
+		}
+		// 3. No log at the check, one made since: its lines are new whole.
+		self::change_on_b( $b['contact'], 'contact', 'Write to us on staging, again.' );
+		$planned = self::planned( array( 'contact' ) );
+		$run     = (int) self::begun( $planned['args'] )['run_id'];
+		$check   = self::next( $run );
+		self::assertSame( 0, $check['step']['result']['error_log_bytes'], 'No log yet: marked at 0.' );
+		self::assertSame( 'done', self::next( $run )['step']['state'] );
+		try {
+			file_put_contents( $log, "[07-Nov-2026 10:03:00 UTC] PHP Warning: made since\n" );
+			$closed = self::finish( $run );
+			self::assertSame( 'closed_findings', $closed['state'] );
+			self::assertStringContainsString( 'has 1 new line(s) since the check', array_column( $closed['step']['result']['findings'], 'message' )[0] );
+		} finally {
+			if ( file_exists( $log ) ) {
+				unlink( $log );
+			}
+		}
+	}
+
+	public function testAnAbortTakesTheLockAndADelayedWriteStepFindsTheRunClosedAndWritesNothing(): void {
+		// GitHub Codex round 4 on free#137 (P2): a next that had read the open
+		// run and chosen a write step could still begin it after another call
+		// aborted the run, and write into a run closed as aborted whose booking
+		// was given back; the abort took no lock, and the boundary never read
+		// the run again under it. Now the abort takes the lock of the boundary
+		// (a step being written: busy, call again) and reads the run under it;
+		// the boundary reads the run under the lock before a step is begun
+		// (still()): not open, nothing is written.
+		self::pair();
+		$a = self::pages_on_a( array( 'contact' => 'Write to us.' ) );
+		$b = self::pages_on_b( array( 'contact' => 'Write to us.' ) );
+		self::paired( self::staged() );
+		self::change_on_b( $b['contact'], 'contact', 'Write to us on staging.' );
+		$planned = self::planned( array( 'contact' ) );
+		$run     = self::begun( $planned['args'] );
+		$run_id  = (int) $run['run_id'];
+		self::assertSame( 'done', self::next( $run_id )['step']['state'], 'The check.' );
+		// The run as a delayed request read it: open, its write step planned.
+		$read = AB_MCP_Sync_Run::get( $run_id );
+		self::assertSame( 'open', $read['state'] );
+		// An abort beside a step being written (another request holds the lock): busy.
+		update_option( \AB_MCP_Change_Lock::OPTION, time() );
+		self::assertStringContainsString( 'lock of the write boundary is held', self::refused( self::gated( 'wp_site_push', array( 'action' => 'abort', 'run_id' => $run_id ) ), 'ab_mcp_sync_run_busy' ) );
+		delete_option( \AB_MCP_Change_Lock::OPTION );
+		self::assertSame( 'open', AB_MCP_Sync_Run::get( $run_id )['state'] );
+		// The abort.
+		$closed = self::gated( 'wp_site_push', array( 'action' => 'abort', 'run_id' => $run_id ) );
+		self::assertIsArray( $closed, is_wp_error( $closed ) ? $closed->get_error_message() : '' );
+		self::assertSame( 'closed_aborted', $closed['state'] );
+		// The delayed request goes on with the run as it read it: the boundary
+		// finds the run closed under the lock and writes nothing.
+		$late = AB_MCP_Sync_Engine::next( $read, null );
+		$text = self::refused( $late, 'ab_mcp_sync_run_state' );
+		self::assertStringContainsString( 'was open when this call read it and is closed_aborted now', $text );
+		self::assertStringContainsString( 'nothing was written', $text );
+		self::assertSame( 'planned', AB_MCP_Sync_Run::step( $run_id, 2 )['state'], 'The step was not begun.' );
+		self::assertSame( 'Write to us.', self::row_a( (int) $a['contact'] )['post_content'], 'Nothing written.' );
+		self::assertSame( 'closed_aborted', AB_MCP_Sync_Run::get( $run_id )['state'] );
+		self::assertFalse( \AB_MCP_Change_Lock::held() );
+		// A delayed abort with the run as it read it: the run is read again under the lock.
+		self::assertStringContainsString( 'is closed_aborted now (another call moved it since this one read it as open): nothing was changed', self::refused( AB_MCP_Sync_Engine::abort( $read ), 'ab_mcp_sync_run_changed' ) );
+	}
+
+	public function testAnInterruptedRunOfTheWayBackIsLedOnWithTheTokenOrClosedAsCheckedAndFreesTheSite(): void {
+		// GitHub Codex round 4 on free#137 (P1): a run of the way back whose
+		// request ended inside a step became interrupted, took no next, and
+		// the hint pointed to action=plan, which refused every run of the type
+		// revert; abort takes open runs only, so the run held the site. Both
+		// ways of decision 18 hold for a run of the way back as well: (b)
+		// wp_site_revert action=plan with the token on this run leads it on
+		// (the interrupted step stays unclear, its pair unclear, the steps
+		// still planned go back one by one), (a) a person closes it as checked
+		// (close_checked(); the button comes with branch 12). A request that
+		// read the run before finds it moved under the lock and writes nothing.
+		self::pair();
+		$a = self::pages_on_a( array( 'contact' => 'Write to us.', 'about' => 'About us.', 'team' => 'Our team.' ) );
+		$b = self::pages_on_b( array( 'contact' => 'Write to us.', 'about' => 'About us.', 'team' => 'Our team.' ) );
+		self::paired( self::staged() );
+		foreach ( array( 'contact' => 'Write to us on staging.', 'about' => 'About us, on staging.', 'team' => 'Our team, on staging.' ) as $name => $content ) {
+			self::change_on_b( $b[ $name ], $name, $content );
+		}
+		$planned = self::planned( array( 'contact', 'about', 'team' ) );
+		$push    = (int) self::begun( $planned['args'] )['run_id'];
+		self::probe_ok();
+		self::assertSame( 'closed_done', self::finish( $push )['state'] );
+		$begun = self::revert( $push );
+		$r     = (int) $begun['run_id'];
+		self::assertSame( 'revert', $begun['type'] );
+		$seqs = array();
+		foreach ( AB_MCP_Sync_Run::steps( $r ) as $step ) {
+			if ( 'revert' === $step['op'] ) {
+				$seqs[ (int) $step['parts']['forward_seq'] ] = (int) $step['seq'];
+			}
+		}
+		ksort( $seqs );
+		self::assertCount( 3, $seqs );
+		list( $s1, $s2, $s3 ) = array_values( $seqs );
+		$objects = array();
+		foreach ( AB_MCP_Sync_Run::steps( $push ) as $step ) {
+			if ( 'write' === $step['op'] ) {
+				$objects[ (int) $step['seq'] ] = (int) $step['parts']['object']['live_ref'];
+			}
+		}
+		$live = static fn( int $seq ) => $objects[ array_search( $seq, $seqs, true ) ];
+		// The pages by their ids: what they held before the run, and on staging.
+		$name_of  = array_flip( array_map( 'intval', $a ) );
+		$before   = array( 'contact' => 'Write to us.', 'about' => 'About us.', 'team' => 'Our team.' );
+		$staging  = array( 'contact' => 'Write to us on staging.', 'about' => 'About us, on staging.', 'team' => 'Our team, on staging.' );
+		$first  = self::gated( 'wp_site_revert', array( 'action' => 'next', 'run_id' => $r ) );
+		self::assertSame( 'done', $first['step']['state'], 'The first object back.' );
+		$back_1 = $live( $s1 );
+		// The run as a request read it before the interruption (open).
+		$read = AB_MCP_Sync_Run::get( $r );
+		self::assertSame( 'open', $read['state'] );
+		// The interruption: the second step begun, its request gone (no lock).
+		self::assertTrue( AB_MCP_Sync_Run::update_step( $r, $s2, array( 'state' => 'begun' ), 'planned' ) );
+		$status = self::gated( 'wp_site_revert', array( 'action' => 'status', 'run_id' => $r ) );
+		self::assertSame( 'interrupted', $status['state'] );
+		self::assertStringContainsString( 'closes it as checked', $status['next'] );
+		self::assertStringContainsString( 'wp_site_revert action=plan with this run_id leads it on', $status['next'], 'Way (b) for a run of the way back.' );
+		$refused = self::refused( self::gated( 'wp_site_revert', array( 'action' => 'next', 'run_id' => $r ) ), 'ab_mcp_sync_run_interrupted' );
+		self::assertStringContainsString( '(a run of the way back)', $refused );
+		self::assertStringContainsString( 'leads it on', $refused );
+		// The request that read the run as open goes on: the boundary finds
+		// the run interrupted under the lock and writes nothing.
+		self::assertStringContainsString( 'is interrupted now', self::refused( AB_MCP_Sync_Engine::next( $read, null ), 'ab_mcp_sync_run_state' ) );
+		self::assertSame( 'planned', AB_MCP_Sync_Run::step( $r, $s3 )['state'] );
+		self::assertSame( $staging[ $name_of[ $live( $s3 ) ] ], self::row_a( $live( $s3 ) )['post_content'], 'Nothing written.' );
+		// Way (b): plan and token on the run of the way back lead it on.
+		$args    = array( 'action' => 'plan', 'run_id' => $r );
+		$preview = self::gated( 'wp_site_revert', $args );
+		self::assertIsArray( $preview, is_wp_error( $preview ) ? $preview->get_error_message() : '' );
+		self::assertTrue( $preview['preview']['same_run'] );
+		self::assertSame( array( 'stays', 'back where own' ), array_column( $preview['preview']['steps'], 'will' ) );
+		$led = self::gated( 'wp_site_revert', $args + array( 'confirm_token' => $preview['confirm_token'] ) );
+		self::assertIsArray( $led, is_wp_error( $led ) ? $led->get_error_message() : '' );
+		self::assertSame( 'reverting', $led['state'] );
+		self::assertSame( 'unclear', AB_MCP_Sync_Run::step( $r, $s2 )['state'], 'The interrupted step stays, unclear.' );
+		self::assertStringContainsString( 'nothing of it is put back again', AB_MCP_Sync_Run::step( $r, $s2 )['result']['message'] );
+		self::assertSame( 'planned', AB_MCP_Sync_Run::step( $r, $s3 )['state'], 'The step still planned goes back in its turn.' );
+		self::assertSame( 1, $led['counts']['planned'] );
+		$pair_2 = AB_MCP_Sync_Pairs::find_live( AB_MCP_Sync_Anchor::active()['source_id'], 'post', (string) $live( $s2 ) );
+		self::assertSame( 'unclear', $pair_2['state'], 'The pair of the interrupted step.' );
+		$third = self::gated( 'wp_site_revert', array( 'action' => 'next', 'run_id' => $r ) );
+		self::assertSame( 'done', $third['step']['state'], 'The third object back.' );
+		self::assertSame( 'closed_findings', $third['state'], json_encode( $third ) );
+		self::assertSame( 1, $third['counts']['unclear'] );
+		self::assertSame( $before[ $name_of[ $back_1 ] ], self::row_a( $back_1 )['post_content'] );
+		self::assertSame( $before[ $name_of[ $live( $s3 ) ] ], self::row_a( $live( $s3 ) )['post_content'] );
+		self::assertSame( $staging[ $name_of[ $live( $s2 ) ] ], self::row_a( $live( $s2 ) )['post_content'], 'The interrupted step: nothing put back again.' );
+		self::assertNull( AB_MCP_Sync_Run::open_run(), 'The site is free.' );
+		// Way (a): another run of the way back (the object of the third step,
+		// back on this site and still changed on staging, pushed again; the
+		// object of the interrupted step has an unclear pair and is not planned
+		// until a person aligns it), interrupted, closed as checked by a person
+		// (close_checked(); the pair of its begun step unclear).
+		$again   = $live( $s3 );
+		$planned = self::planned( array( $name_of[ $again ] ) );
+		$push_2  = (int) self::begun( $planned['args'] )['run_id'];
+		self::assertSame( 'closed_done', self::finish( $push_2 )['state'] );
+		self::assertSame( 'active', AB_MCP_Sync_Pairs::find_live( AB_MCP_Sync_Anchor::active()['source_id'], 'post', (string) $again )['state'] );
+		$r2 = (int) self::revert( $push_2 )['run_id'];
+		$s  = null;
+		foreach ( AB_MCP_Sync_Run::steps( $r2 ) as $step ) {
+			if ( 'revert' === $step['op'] ) {
+				$s = (int) $step['seq'];
+			}
+		}
+		self::assertTrue( AB_MCP_Sync_Run::update_step( $r2, $s, array( 'state' => 'begun' ), 'planned' ) );
+		self::assertSame( 'interrupted', self::gated( 'wp_site_revert', array( 'action' => 'status', 'run_id' => $r2 ) )['state'] );
+		$closed = AB_MCP_Sync_Run::close_checked( $r2, self::admin(), true );
+		self::assertIsArray( $closed, is_wp_error( $closed ) ? $closed->get_error_message() : '' );
+		self::assertSame( 'closed_checked', $closed['state'] );
+		self::assertSame( 'unclear', AB_MCP_Sync_Run::step( $r2, $s )['state'] );
+		self::assertSame( 'unclear', AB_MCP_Sync_Pairs::find_live( AB_MCP_Sync_Anchor::active()['source_id'], 'post', (string) $again )['state'], 'The pair of the step taken back, unclear.' );
+		self::assertNull( AB_MCP_Sync_Run::open_run(), 'open_one is free.' );
+		self::assertSame( 'open', self::begun( self::planned( array( $name_of[ $back_1 ] ) )['args'] )['state'], 'A new run begins (the first object, back here and still changed on staging).' );
 	}
 
 	public function testTheWayBackOfARunDoesNotBeginBesideAStepBeingWrittenNorOnAPlanTheRunHasLeftBehind(): void {

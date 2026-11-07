@@ -62,7 +62,11 @@
  * same run begins under the lock of the boundary and against the run as it
  * is under it; the time of a call raised where set_time_limit() takes and
  * the work derived from the limit, no write under one that does not carry
- * it; the retention breaks a tie of the close by the younger run.
+ * it; the retention breaks a tie of the close by the younger run. GitHub
+ * Codex round 4: the abort under the lock and the run read again under it
+ * before a step is begun; an interrupted run of the way back led on with
+ * the token or closed as checked; the error log counted from its mark in
+ * chunks.
  *
  * Written by tests/mutation/gen/lauf.py from the source; change the entries
  * there and run it again.
@@ -1784,5 +1788,140 @@ return array(
 		'replace' => "\t\t\t\treturn 0 !== \$by_time ? \$by_time : \$a <=> \$b;",
 		'run'     => $unit( 'SyncRunTest', 'testTheRetentionBreaksATieOfTheSameCloseByTheYoungerRun' ),
 		'expect'  => '/testTheRetentionBreaksATieOfTheSameCloseByTheYoungerRun/',
+	),
+	array(
+		'id'      => 'lauf/engine-abort-lock',
+		'clause'  => 'abort(): under the lock of the boundary; a step being written holds it (P2)',
+		'file'    => $en,
+		'search'  => "whose booking was given back).\n\t\t\$lock = AB_MCP_Change_Lock::take();",
+		'replace' => "whose booking was given back).\n\t\t\$lock = true;",
+		'run'     => $it( 'SyncRunTest', 'testAnAbortTakesTheLockAndADelayedWriteStepFindsTheRunClosedAndWritesNothing' ),
+		'expect'  => '/testAnAbortTakesTheLockAndADelayedWriteStepFindsTheRunClosedAndWritesNothing/',
+	),
+	array(
+		'id'      => 'lauf/engine-abort-fresh',
+		'clause'  => 'abort(): the run read again under the lock; moved since, nothing is changed',
+		'file'    => $en,
+		'search'  => "\t\t\tif ( 'open' !== \$fresh['state'] ) {",
+		'replace' => "\t\t\tif ( false ) {",
+		'run'     => $it( 'SyncRunTest', 'testAnAbortTakesTheLockAndADelayedWriteStepFindsTheRunClosedAndWritesNothing' ),
+		'expect'  => '/testAnAbortTakesTheLockAndADelayedWriteStepFindsTheRunClosedAndWritesNothing/',
+	),
+	array(
+		'id'      => 'lauf/engine-still-open',
+		'clause'  => 'boundary(): the run read again under the lock before a step is begun; not open, nothing is written (P2)',
+		'file'    => $en,
+		'search'  => "\t\t\$still = self::still( \$run, \$seq, array( 'open' ) );",
+		'replace' => "\t\t\$still = true;",
+		'run'     => $it( 'SyncRunTest', 'testAnAbortTakesTheLockAndADelayedWriteStepFindsTheRunClosedAndWritesNothing' ),
+		'expect'  => '/testAnAbortTakesTheLockAndADelayedWriteStepFindsTheRunClosedAndWritesNothing/',
+	),
+	array(
+		'id'      => 'lauf/engine-still-revert',
+		'clause'  => 'revert_boundary(): the run read again under the lock before a step of the way back is begun',
+		'file'    => $en,
+		'search'  => "\t\t\$still = self::still( \$run, \$seq, 'revert' === \$run['type'] ? array( 'open', 'reverting' ) : array( 'reverting' ) );",
+		'replace' => "\t\t\$still = true;",
+		'run'     => $it( 'SyncRunTest', 'testAnInterruptedRunOfTheWayBackIsLedOnWithTheTokenOrClosedAsCheckedAndFreesTheSite' ),
+		'expect'  => '/testAnInterruptedRunOfTheWayBackIsLedOnWithTheTokenOrClosedAsCheckedAndFreesTheSite/',
+	),
+	array(
+		'id'      => 'lauf/revert-continue',
+		'clause'  => 'plan(): an interrupted run of the way back is led on (way (b) of decision 18; P1)',
+		'file'    => $rv,
+		'search'  => "\t\t\tif ( 'interrupted' !== \$run['state'] ) {\n\t\t\t\treturn new WP_Error( 'ab_mcp_sync_revert_type'",
+		'replace' => "\t\t\tif ( true ) {\n\t\t\t\treturn new WP_Error( 'ab_mcp_sync_revert_type'",
+		'run'     => $it( 'SyncRunTest', 'testAnInterruptedRunOfTheWayBackIsLedOnWithTheTokenOrClosedAsCheckedAndFreesTheSite' ),
+		'expect'  => '/testAnInterruptedRunOfTheWayBackIsLedOnWithTheTokenOrClosedAsCheckedAndFreesTheSite/',
+	),
+	array(
+		'id'      => 'lauf/revert-continue-planned-stay',
+		'clause'  => 'begin_same_run(): a step of the way back still planned stays and goes back in its turn; a forward step is skipped',
+		'file'    => $rv,
+		'search'  => "\t\t\t\t\t} elseif ( 'planned' === \$step['state'] && 'revert' !== \$step['op'] ) {",
+		'replace' => "\t\t\t\t\t} elseif ( 'planned' === \$step['state'] ) {",
+		'run'     => $it( 'SyncRunTest', 'testAnInterruptedRunOfTheWayBackIsLedOnWithTheTokenOrClosedAsCheckedAndFreesTheSite' ),
+		'expect'  => '/testAnInterruptedRunOfTheWayBackIsLedOnWithTheTokenOrClosedAsCheckedAndFreesTheSite/',
+	),
+	array(
+		'id'      => 'lauf/revert-continue-pair',
+		'clause'  => 'begin_same_run(): the pair of a step of the way back left begun is unclear',
+		'file'    => $rv,
+		'search'  => "\t\t\t\t\t\t\$pair_id = 'revert' === \$step['op'] && ! is_wp_error( \$settled ) ? AB_MCP_Sync_Run::pair_of_revert_step( \$run_id, \$step ) : null;",
+		'replace' => "\t\t\t\t\t\t\$pair_id = null;",
+		'run'     => $it( 'SyncRunTest', 'testAnInterruptedRunOfTheWayBackIsLedOnWithTheTokenOrClosedAsCheckedAndFreesTheSite' ),
+		'expect'  => '/testAnInterruptedRunOfTheWayBackIsLedOnWithTheTokenOrClosedAsCheckedAndFreesTheSite/',
+	),
+	array(
+		'id'      => 'lauf/run-close-checked-revert-pair',
+		'clause'  => 'close_checked(): the pair of a step of the way back left begun is the pair of the step it took back',
+		'file'    => $ru,
+		'search'  => "\t\t\t\$pair_id = null !== \$step['pair_id'] ? (int) \$step['pair_id'] : self::pair_of_revert_step( \$run_id, \$step );",
+		'replace' => "\t\t\t\$pair_id = null !== \$step['pair_id'] ? (int) \$step['pair_id'] : null;",
+		'run'     => $it( 'SyncRunTest', 'testAnInterruptedRunOfTheWayBackIsLedOnWithTheTokenOrClosedAsCheckedAndFreesTheSite' ),
+		'expect'  => '/testAnInterruptedRunOfTheWayBackIsLedOnWithTheTokenOrClosedAsCheckedAndFreesTheSite/',
+	),
+	array(
+		'id'      => 'lauf/push-interrupted-revert-way',
+		'clause'  => 'interrupted(): the way for a run of the way back leads it on, not action=plan on a run that refuses (P1)',
+		'file'    => $pu,
+		'search'  => "\t\t\t? 'wp_site_revert action=plan with this run_id leads it on: the interrupted step stays as it is (unclear, its parts as they are), the steps still planned go back one by one (action=next)'",
+		'replace' => "\t\t\t? 'wp_site_revert action=plan with this run_id takes its own parts back'",
+		'run'     => $it( 'SyncRunTest', 'testAnInterruptedRunOfTheWayBackIsLedOnWithTheTokenOrClosedAsCheckedAndFreesTheSite' ),
+		'expect'  => '/testAnInterruptedRunOfTheWayBackIsLedOnWithTheTokenOrClosedAsCheckedAndFreesTheSite/',
+	),
+	array(
+		'id'      => 'lauf/engine-log-mark-empty',
+		'clause'  => 'error_log_mark(): no log yet is marked at 0, so a log made since is new whole',
+		'file'    => $en,
+		'search'  => "\t\tif ( null === \$path ) {\n\t\t\treturn array( 'bytes' => 0 );",
+		'replace' => "\t\tif ( null === \$path ) {\n\t\t\treturn null;",
+		'run'     => $it( 'SyncRunTest', 'testTheErrorLogIsCountedFromTheMarkOfTheCheckAndALogRotatedSinceIsAFinding' ),
+		'expect'  => '/testTheErrorLogIsCountedFromTheMarkOfTheCheckAndALogRotatedSinceIsAFinding/',
+	),
+	array(
+		'id'      => 'lauf/engine-verify-log-new',
+		'clause'  => 'run_verify(): lines the log gained since the check are a finding',
+		'file'    => $en,
+		'search'  => "\t\t\t\t} elseif ( \$since['lines'] > 0 ) {",
+		'replace' => "\t\t\t\t} elseif ( false ) {",
+		'run'     => $it( 'SyncRunTest', 'testTheErrorLogIsCountedFromTheMarkOfTheCheckAndALogRotatedSinceIsAFinding' ),
+		'expect'  => '/testTheErrorLogIsCountedFromTheMarkOfTheCheckAndALogRotatedSinceIsAFinding/',
+	),
+	array(
+		'id'      => 'lauf/engine-verify-log-rotated',
+		'clause'  => 'run_verify(): a log smaller than at the check is a finding, said so, never «no new line»',
+		'file'    => $en,
+		'search'  => "\t\t\t\t} elseif ( \$since['rotated'] ) {",
+		'replace' => "\t\t\t\t} elseif ( false ) {",
+		'run'     => $it( 'SyncRunTest', 'testTheErrorLogIsCountedFromTheMarkOfTheCheckAndALogRotatedSinceIsAFinding' ),
+		'expect'  => '/testTheErrorLogIsCountedFromTheMarkOfTheCheckAndALogRotatedSinceIsAFinding/',
+	),
+	array(
+		'id'      => 'lauf/engine-log-count',
+		'clause'  => 'error_log_lines_since(): the line ends of every chunk counted',
+		'file'    => $en,
+		'search'  => "\t\t\t\t\$lines += substr_count( \$chunk, \"\\n\" );",
+		'replace' => "\t\t\t\t\$lines += 1;",
+		'run'     => $unit( 'SyncRunTest', 'testTheErrorLogIsCountedFromItsMarkInChunksWithACapAndARotationIsSaidSo' ),
+		'expect'  => '/testTheErrorLogIsCountedFromItsMarkInChunksWithACapAndARotationIsSaidSo/',
+	),
+	array(
+		'id'      => 'lauf/engine-log-rotated',
+		'clause'  => 'error_log_lines_since(): a log smaller than its mark was rotated or emptied; counted from its start and said so',
+		'file'    => $en,
+		'search'  => "\t\tif ( (int) \$size < \$from ) {",
+		'replace' => "\t\tif ( false ) {",
+		'run'     => $unit( 'SyncRunTest', 'testTheErrorLogIsCountedFromItsMarkInChunksWithACapAndARotationIsSaidSo' ),
+		'expect'  => '/testTheErrorLogIsCountedFromItsMarkInChunksWithACapAndARotationIsSaidSo/',
+	),
+	array(
+		'id'      => 'lauf/engine-log-capped',
+		'clause'  => 'error_log_lines_since(): read up to the cap with more behind it is said so, never «no new line»',
+		'file'    => $en,
+		'search'  => "\t\t\t\$capped = \$read >= (int) \$max && \$from + \$read < (int) \$size;",
+		'replace' => "\t\t\t\$capped = false;",
+		'run'     => $unit( 'SyncRunTest', 'testTheErrorLogIsCountedFromItsMarkInChunksWithACapAndARotationIsSaidSo' ),
+		'expect'  => '/testTheErrorLogIsCountedFromItsMarkInChunksWithACapAndARotationIsSaidSo/',
 	),
 );
