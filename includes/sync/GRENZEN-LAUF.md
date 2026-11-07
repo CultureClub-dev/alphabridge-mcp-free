@@ -123,7 +123,12 @@ Ablehnung entsteht, nennt sie den Weg.
   Sicherung ab (etwa ein Zeilenaufruf, der vor dem Schreiben verweigert
   wurde), heisst der Schritt `failed`, das Objekt behält seine Marke (ein
   zuvor eigener Teil geht so auch später nie zurück, Codex-Runde 9), und die
-  Vorschau des Rückwegs sagt für ihn `nothing`.
+  Vorschau des Rückwegs sagt für ihn `nothing`, solange jeder Teil heute wie
+  vor dem Schritt liest; hat eine andere Hand das Objekt seither geändert,
+  sagt sie `left` (Codex-Runde 10). Grenze C: Ein Journal aus dem lokalen,
+  nie gepushten Stand `61bb244` konnte die Marke eines solchen Objekts
+  gelöscht und ein früheres Eigentum behalten haben; solche Journale gibt es
+  nur in lokalen Testdatenbanken dieses Zweigs.
 - Jeder alte Wert trägt die Marke der Regeln, nach denen dieser Build ihn
   zusammensetzt (`value_rules` = `AB_MCP_Sync_Post_Writer::VALUE_RULES`).
   Beim Ausgeben (`AB_MCP_Sync_Run::cap_values()`) zeigt die Antwort einen
@@ -132,7 +137,11 @@ Ablehnung entsteht, nennt sie den Weg.
   mit Marke geht noch einmal durch die Geheimnisprüfung und das Netz
   (`checked_before()`, Codex-Runde 9). Grund: Das Netz erkennt ein
   Zugangsdatum im rohen Wert, im schon zusammengesetzten Text in
-  Anführungszeichen aber nicht in jedem Fall.
+  Anführungszeichen aber nicht in jedem Fall. Grenze C (fail closed): Ein
+  harmloser Wert, dessen zusammengesetzte Darstellung das Netz als nicht zu
+  Ende lesbar wertet (etwa ein serialisiertes Array mit `}` in einem
+  Eintrag), erscheint als `(holds a credential, not shown)`; die Sicherung
+  des Schritts hält ihn (Codex-Runde 10).
 - Im gewöhnlichen Rückweg erreichbar (Lead an die Steuerung): ein Beitrag,
   dessen Schritt alle Kategorien geleert hat (auf Staging ohne Kategorie, nur
   am Editor vorbei möglich), bekommt beim Zeilen-Rückbau von
@@ -617,7 +626,7 @@ Ablehnung entsteht, nennt sie den Weg.
   der alte Wert (`before_value()`: Zeile, langer Text mit Revision, Meta,
   Terme, synthetische Geheimnisse, kein UTF-8, Kürzung je Wert und je Teil)
   und die Kappung je Antwort (`cap_values()`).
-  Integration (`tests/integration/SyncRunTest.php`, achtunddreissig Fälle): Ende zu Ende mit
+  Integration (`tests/integration/SyncRunTest.php`, neununddreissig Fälle): Ende zu Ende mit
   Rückweg und `step` auf eine spätere Phase (Merkmal der Sperre beim
   Anlegen), ein Bericht in zwei Läufen geplant, Abweichung in der
   Gesamtvorprüfung, Unterbrechung in eigenem Prozess (die Zeile bleibt mit

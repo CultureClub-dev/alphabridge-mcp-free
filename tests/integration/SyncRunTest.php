@@ -2152,6 +2152,45 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( $before, self::row_a( $contact ) );
 	}
 
+	public function testThePreviewOfAStepFailedAsTheBackupSaysLeftOnceAnotherHandChangedTheObject(): void {
+		// Codex round 10: the row call refused before it wrote, the step
+		// failed with its object as the backup; then another hand edits the
+		// title. The preview of the way back says left, not nothing, as the
+		// way back leaves the object (it deviated within its step).
+		self::pair();
+		$a       = self::pages_on_a( array( 'contact' => 'Write to us.' ) );
+		$b       = self::pages_on_b( array( 'contact' => 'Write to us.' ) );
+		$contact = (int) $a['contact'];
+		self::paired( self::staged() );
+		self::change_on_b( $b['contact'], 'contact', 'Write to us on staging.' );
+		$planned = self::planned( array( 'contact' ) );
+		$run     = self::begun( $planned['args'] );
+		self::assertSame( 'done', self::next( (int) $run['run_id'] )['step']['state'] );
+		$refuse = static function ( $maybe_empty, $postarr ) use ( $contact, &$refuse ) {
+			if ( isset( $postarr['ID'] ) && (int) $postarr['ID'] === $contact ) {
+				remove_filter( 'wp_insert_post_empty_content', $refuse, 10 );
+				return true;
+			}
+			return $maybe_empty;
+		};
+		add_filter( 'wp_insert_post_empty_content', $refuse, 10, 2 );
+		$write = self::next( (int) $run['run_id'] );
+		remove_filter( 'wp_insert_post_empty_content', $refuse, 10 );
+		self::assertSame( 'failed', $write['step']['state'], json_encode( $write['step'] ) );
+		self::probe_ok();
+		self::finish( (int) $run['run_id'] );
+		$edited = wp_update_post( array( 'ID' => $contact, 'post_title' => 'Edited by hand' ), true );
+		self::assertSame( $contact, $edited );
+		$preview = self::gated( 'wp_site_revert', array( 'action' => 'plan', 'run_id' => (int) $run['run_id'] ) );
+		self::assertIsArray( $preview, is_wp_error( $preview ) ? $preview->get_error_message() : '' );
+		self::assertSame( 'left', $preview['preview']['steps'][0]['will'] );
+		$begun   = self::revert( (int) $run['run_id'] );
+		$back    = self::revert_all( (int) $begun['run_id'] );
+		$outcome = array_column( self::step( $back, 1 )['result']['parts'], 'state', 'part' );
+		self::assertSame( 'left', $outcome['row'] );
+		self::assertSame( 'Edited by hand', self::row_a( $contact )['post_title'] );
+	}
+
 	public function testAJournalThatMarksAPartForeignLeavesTheWholeObjectOnTheWayBack(): void {
 		// Codex round 8: a step whose request ended after a part was marked as
 		// changed by another hand (seen_before(), written ahead of the call)
