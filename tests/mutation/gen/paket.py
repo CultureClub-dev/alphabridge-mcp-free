@@ -999,10 +999,10 @@ PKG_IT.update({
     'whole_write': 'testAPackageThatCannotBeWrittenWholeLeavesNothingHalfMade',
     'import_write': 'testAnImportKeepsWhatArrivedAndEndsWhatAnInterruptionLeft',
 })
-LH = "\t\tif ( 'b9' === $object['status'] || array() !== $credentials['mixed'] || self::credential_locked( $object['locks'] ) ) {"
+LH = "\t\tif ( null === $status || 'b9' === $status || array() !== $credentials['mixed'] || self::credential_locked( $object['locks'] ) ) {"
 HELD = 'testAnObjectACredentialHoldsCarriesItsIdentityAndTheReasonOnly with data set "%s"'
 LINE = 'testALineCarriesWhatTheInventoryNeedsAndNoValueOfTheContent'
-e('paket/line-held-name', 'line(): an object whose name is a credential: identity and reason only', EX, LH, LH.replace("'b9' === $object['status'] || ", ''), 'package', HELD % 'the name of a credential')
+e('paket/line-held-name', 'line(): an object whose name is a credential: identity and reason only', EX, LH, LH.replace("'b9' === $status || ", ''), 'package', HELD % 'the name of a credential')
 e('paket/line-held-field', 'line(): an object with a field of a credential: identity and reason only', EX, LH, LH.replace(" || array() !== $credentials['mixed']", ''), 'package', HELD % 'a field of a credential in it')
 e('paket/line-possible', 'line(): a possible reference by its place, never its value', EX,
   "'possible'        => self::fields( $object['possible'], array( 'at' ) ),", "'possible'        => $object['possible'],", 'package', LINE)
@@ -1304,7 +1304,7 @@ e('paket/t3-deliver-mode', 'deliver(): nothing given out with write access off (
   "\t\t// With write access off, a staging site gives nothing out.\n\t\tif ( ! AB_MCP_Site_Mode::is_full() ) {", "\t\t// With write access off, a staging site gives nothing out.\n\t\tif ( false ) {", 'itpkg', T3['mode_it'])
 # What goes into it.
 e('paket/t3-sort-b9', 'sort(): a name of a credential is not packed, counted (two sites)', EX,
-  "\t\t\tif ( 'b9' === $object['status'] ) {\n\t\t\t\t++$credentials['names'];", "\t\t\tif ( false ) {\n\t\t\t\t++$credentials['names'];", 'itpkg', T3['package_it'])
+  "\t\t\tif ( 'b9' === $status ) {\n\t\t\t\t++$credentials['names'];", "\t\t\tif ( false ) {\n\t\t\t\t++$credentials['names'];", 'itpkg', T3['package_it'])
 e('paket/t3-sort-withheld', 'sort(): what the account may not read is not packed (two sites)', EX,
   "\t\t\tif ( null !== $needs ) {", "\t\t\tif ( false ) {", 'itpkg', T3['package_it'])
 e('paket/t3-sort-incomplete', 'sort(): its kind and subtype not complete (two sites)', EX,

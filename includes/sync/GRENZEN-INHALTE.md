@@ -206,16 +206,46 @@ nennt ihre Meldung den Weg.
   Lauf angelegter Term bleibt als Rest (`residual`).
 - Kern-Folge (Entscheid 21, Caches): `clean_term_cache()` löscht beim
   Schreiben eines Terms einer Taxonomie mit Eltern die Option
-  `<taxonomie>_children` (die Hierarchie im Cache, vom Kern neu gebaut).
-  Das ist kein Löschen eines Objekts; der Test «kein Löschaufruf» nimmt sie
-  ausdrücklich aus. Sie ist keine Option der Gruppe B in
-  `AB_MCP_Sync_Exclusions`; die Options-Art (Zweig 11) ordnet sie ein.
+  `<taxonomie>_children` und baut sie sofort neu (`_get_term_hierarchy()`,
+  `wp-includes/taxonomy.php:3782, :3990`). Für die einzige Kern-Taxonomie
+  mit Eltern steht `category_children` jetzt in der Ausschlussliste der
+  Gruppe B (`AB_MCP_Sync_Exclusions::OPTIONS`, mit Fundstelle in
+  `tests/fixtures/sync-reasons.php` und Test je Eintrag in
+  `SyncKindsTest`): nie verglichen, nie geschrieben; der Bericht führt sie
+  nicht als Abweichung, und der Test «kein Löschaufruf» erkennt sie über
+  die Liste. Grund: sie ist Arbeit des Kerns wie `rewrite_rules`, kein
+  Inhalt. Grenze C: dieselbe Option einer Taxonomie eines Plugins
+  (`product_cat_children`) steht nicht auf der Liste (ein Name mit
+  `_children` am Ende kann auch eine Option eines Plugins mit Inhalt sein);
+  die Options-Art sperrt sie als nicht eingeordnet (Z8d).
 - Phase 7 leert die Caches des Terms (`clean_term_cache()`, Term-Meta);
   den Seiten-Cache von Archivseiten eines geänderten Terms leert sie nicht
   (`AB_MCP_Page_Cache::purge_posts()` kennt nur Posts): ein
   Caching-Plugin kann die Archivseite bis zum Ablauf alt zeigen. Die
   Prüfung des Laufs zieht ihre Stichprobe nur aus veröffentlichten Posts;
   ein Lauf nur mit Termen hat keine Stichprobe (kein Befund).
+
+## Paket der Objekte: Status und B9
+
+- Die Ergebnisse von `AB_MCP_Sync_Kind::export()` trugen keinen Status;
+  die Prüfung auf B9 in `AB_MCP_Sync_Export::sort()` las einen fehlenden
+  Schlüssel (PHP-Warnung `class-sync-export.php:437`, schon auf `a2e4fc3`)
+  und griff nie. Seit Zweig 9 gibt `make_objects()` jedem Ergebnis den
+  Status nach der Regel des Bestands (`AB_MCP_Sync_Inventory::status_of()`,
+  dieselbe Stelle wie `entry()`); `sort()` lässt ein Objekt ohne Status
+  draussen und zählt es als zurückgehalten (`needs: status`), `line()`
+  macht aus einem Objekt ohne Status eine gehaltene Zeile ohne Hash und
+  Inhalt (fail closed). Der Weg des Bestands (`make()` über
+  `AB_MCP_Sync_Inventory::run()`) gab jedem Objekt schon über `entry()`
+  seinen Status; dort war keine Lücke.
+- Ins Paket kam dadurch nie ein Objekt mit dem Namen eines Zugangsdatums:
+  einen Status `b9` tragen nur Optionen und Theme-Mods (die Options-Art,
+  `bare()`), und diese Arten machen kein Paket von Objekten
+  (`ab_mcp_sync_not_in_branch`); Posts und Terme kennen B9 nur je Einheit
+  (eine Meta-Zeile mit dem Namen eines Zugangsdatums fehlt in Form und
+  Inhalt). Prüffälle `testAnObjectWithTheNameOfACredentialNeverLandsInAPackageOfObjects`
+  (Integration), `testAnObjectWithoutTheStatusOfTheInventoryIsNeverPackedAndOneNamedAsACredentialIsCounted`
+  (Unit, ohne die Behebung rot).
 
 ## Nicht als Mutation geführt
 

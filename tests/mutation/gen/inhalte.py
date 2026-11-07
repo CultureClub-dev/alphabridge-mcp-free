@@ -32,6 +32,8 @@ RUNS = {
     'unit': ('unit', 'SyncRunTest'),
     'kinds': ('unit', 'SyncDbKindsTest'),
     'it': ('it', 'SyncContentTest'),
+    'package': ('unit', 'SyncPackageTest'),
+    'kindsx': ('unit', 'SyncKindsTest'),
 }
 
 entries = []
@@ -175,6 +177,25 @@ e('export-term-only', 'Kind_Term::export(): the menus (a kind of terms) write fr
   "\t\tif ( 'term' !== $this->kind() ) {\n\t\t\treturn $this->not_here( 'export' );", "\t\tif ( false ) {\n\t\t\treturn $this->not_here( 'export' );", 'kinds', 'testWhatWritesIsNotInThisBranch')
 e('export-term-b9', 'Kind_Term::export(): a meta row whose key is the name of a credential is never packed (B9)', DK,
   "\t\t\t\t\tif ( AB_MCP_Sync_Credentials::names_credential( (string) $m['key'], $extra ) ) {\n\t\t\t\t\t\tcontinue;", "\t\t\t\t\tif ( false ) {\n\t\t\t\t\t\tcontinue;", 'it', 'testTheMetaOfATermGoesByItsRightAndBackAndANewTermWithMetaIsLocked')
+
+# --------------------------------------------- the package of objects: status and B9
+EX = 'includes/sync/class-sync-export.php'
+IV = 'includes/sync/class-sync-inventory.php'
+EXCL = 'includes/sync/class-sync-exclusions.php'
+FILEVAR.update({EX: '$ex', IV: '$iv', EXCL: '$excl'})
+P_STATUS = 'testAnObjectWithoutTheStatusOfTheInventoryIsNeverPackedAndOneNamedAsACredentialIsCounted'
+e('export-status-given', 'make_objects(): every result of export() gets the status of the rule of the inventory', EX,
+  "\t\t\t\t$object['status']                 = AB_MCP_Sync_Inventory::status_of( $object );\n", '', 'it', 'testAnObjectWithTheNameOfACredentialNeverLandsInAPackageOfObjects')
+e('export-sort-no-status', 'sort(): an object without a status is withheld, never packed (fail closed)', EX,
+  "\t\t\t$needs = null === $status ? 'status' : AB_MCP_Sync_Export_Rights::withheld( $object );", "\t\t\t$needs = AB_MCP_Sync_Export_Rights::withheld( $object );", 'package', P_STATUS)
+e('export-line-no-status', 'line(): an object without a status is a held line, without hash and content', EX,
+  "\t\tif ( null === $status || 'b9' === $status || array() !== $credentials['mixed']", "\t\tif ( 'b9' === $status || array() !== $credentials['mixed']", 'package', P_STATUS)
+e('inventory-status-again', 'status_of(): a status given once (z8) holds again', IV,
+  "\t\tif ( null === $status || 'core' === $status || 'z8' === $status ) {", "\t\tif ( null === $status || 'core' === $status ) {", 'package', P_STATUS)
+e('inventory-status-kept', 'status_of(): b9, guarded, unreachable and unreadable as the kind named them', IV,
+  "\t\treturn in_array( $status, array( 'b9', 'guarded', 'unreachable', 'unreadable' ), true ) ? $status : 'locked';", "\t\treturn 'locked';", 'package', P_STATUS)
+e('exclusion-category-children', 'OPTIONS: the cache of the hierarchy of the categories is group B', EXCL,
+  ", 'wp_force_deactivated_plugins', 'category_children' );", ", 'wp_force_deactivated_plugins' );", 'kindsx', 'testEachExcludedNameIsNeverTakenOver')
 
 # --------------------------------------------- the engine, by the kind
 E_IT1 = 'testAChangedCategoryAndANewTagGoOverAndTheWayBackPutsTheChangedOneBackAndLeavesTheNewOneAsARest'
@@ -352,6 +373,9 @@ $en = 'includes/sync/class-sync-engine.php';
 $pu = 'includes/sync/class-sync-push.php';
 $gu = 'includes/sync/class-sync-guard.php';
 $dk = 'includes/sync/class-sync-db-kinds.php';
+$ex = 'includes/sync/class-sync-export.php';
+$iv = 'includes/sync/class-sync-inventory.php';
+$excl = 'includes/sync/class-sync-exclusions.php';
 
 return array(''')
 for (id_, clause, file, search, replace, run, expect) in entries:

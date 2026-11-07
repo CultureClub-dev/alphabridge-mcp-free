@@ -34,6 +34,9 @@ $en = 'includes/sync/class-sync-engine.php';
 $pu = 'includes/sync/class-sync-push.php';
 $gu = 'includes/sync/class-sync-guard.php';
 $dk = 'includes/sync/class-sync-db-kinds.php';
+$ex = 'includes/sync/class-sync-export.php';
+$iv = 'includes/sync/class-sync-inventory.php';
+$excl = 'includes/sync/class-sync-exclusions.php';
 
 return array(
 	array(
@@ -557,6 +560,60 @@ return array(
 		'replace' => "\t\t\t\t\tif ( false ) {\n\t\t\t\t\t\tcontinue;",
 		'run'     => $it( 'SyncContentTest', 'testTheMetaOfATermGoesByItsRightAndBackAndANewTermWithMetaIsLocked' ),
 		'expect'  => '/testTheMetaOfATermGoesByItsRightAndBackAndANewTermWithMetaIsLocked/',
+	),
+	array(
+		'id'      => 'inhalte/export-status-given',
+		'clause'  => 'make_objects(): every result of export() gets the status of the rule of the inventory',
+		'file'    => $ex,
+		'search'  => "\t\t\t\t\$object['status']                 = AB_MCP_Sync_Inventory::status_of( \$object );\n",
+		'replace' => "/* removed */\n",
+		'run'     => $it( 'SyncContentTest', 'testAnObjectWithTheNameOfACredentialNeverLandsInAPackageOfObjects' ),
+		'expect'  => '/testAnObjectWithTheNameOfACredentialNeverLandsInAPackageOfObjects/',
+	),
+	array(
+		'id'      => 'inhalte/export-sort-no-status',
+		'clause'  => 'sort(): an object without a status is withheld, never packed (fail closed)',
+		'file'    => $ex,
+		'search'  => "\t\t\t\$needs = null === \$status ? 'status' : AB_MCP_Sync_Export_Rights::withheld( \$object );",
+		'replace' => "\t\t\t\$needs = AB_MCP_Sync_Export_Rights::withheld( \$object );",
+		'run'     => $unit( 'SyncPackageTest', 'testAnObjectWithoutTheStatusOfTheInventoryIsNeverPackedAndOneNamedAsACredentialIsCounted' ),
+		'expect'  => '/testAnObjectWithoutTheStatusOfTheInventoryIsNeverPackedAndOneNamedAsACredentialIsCounted/',
+	),
+	array(
+		'id'      => 'inhalte/export-line-no-status',
+		'clause'  => 'line(): an object without a status is a held line, without hash and content',
+		'file'    => $ex,
+		'search'  => "\t\tif ( null === \$status || 'b9' === \$status || array() !== \$credentials['mixed']",
+		'replace' => "\t\tif ( 'b9' === \$status || array() !== \$credentials['mixed']",
+		'run'     => $unit( 'SyncPackageTest', 'testAnObjectWithoutTheStatusOfTheInventoryIsNeverPackedAndOneNamedAsACredentialIsCounted' ),
+		'expect'  => '/testAnObjectWithoutTheStatusOfTheInventoryIsNeverPackedAndOneNamedAsACredentialIsCounted/',
+	),
+	array(
+		'id'      => 'inhalte/inventory-status-again',
+		'clause'  => 'status_of(): a status given once (z8) holds again',
+		'file'    => $iv,
+		'search'  => "\t\tif ( null === \$status || 'core' === \$status || 'z8' === \$status ) {",
+		'replace' => "\t\tif ( null === \$status || 'core' === \$status ) {",
+		'run'     => $unit( 'SyncPackageTest', 'testAnObjectWithoutTheStatusOfTheInventoryIsNeverPackedAndOneNamedAsACredentialIsCounted' ),
+		'expect'  => '/testAnObjectWithoutTheStatusOfTheInventoryIsNeverPackedAndOneNamedAsACredentialIsCounted/',
+	),
+	array(
+		'id'      => 'inhalte/inventory-status-kept',
+		'clause'  => 'status_of(): b9, guarded, unreachable and unreadable as the kind named them',
+		'file'    => $iv,
+		'search'  => "\t\treturn in_array( \$status, array( 'b9', 'guarded', 'unreachable', 'unreadable' ), true ) ? \$status : 'locked';",
+		'replace' => "\t\treturn 'locked';",
+		'run'     => $unit( 'SyncPackageTest', 'testAnObjectWithoutTheStatusOfTheInventoryIsNeverPackedAndOneNamedAsACredentialIsCounted' ),
+		'expect'  => '/testAnObjectWithoutTheStatusOfTheInventoryIsNeverPackedAndOneNamedAsACredentialIsCounted/',
+	),
+	array(
+		'id'      => 'inhalte/exclusion-category-children',
+		'clause'  => 'OPTIONS: the cache of the hierarchy of the categories is group B',
+		'file'    => $excl,
+		'search'  => ", 'wp_force_deactivated_plugins', 'category_children' );",
+		'replace' => ", 'wp_force_deactivated_plugins' );",
+		'run'     => $unit( 'SyncKindsTest', 'testEachExcludedNameIsNeverTakenOver' ),
+		'expect'  => '/testEachExcludedNameIsNeverTakenOver/',
 	),
 	array(
 		'id'      => 'inhalte/engine-pending-terms',
