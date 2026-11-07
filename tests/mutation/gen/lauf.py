@@ -334,6 +334,12 @@ e('engine-applied-keeps-own', 'applied(): a part whose put back failed (unclear)
 # (with_row()), and reads back what that call was to write.
 OWN = 'testACategoryAnotherHandSetToTheTargetIsNotTheStepsOwnAndIsLeft'
 DEFAULT = 'testTheDefaultCategoryOfANewPostIsWrittenWithTheRowAndTheJournalSaysSo'
+e('engine-save-before-meta-call', 'write_parts(): the journal is written ahead of the meta call, so a request that ends inside it leaves the part without a read back (Codex round 7, F1)', EN,
+  "\t\t\t\t\t$save( $journal );\n\t\t\t\t\t$done                   = AB_MCP_Sync_Post_Writer::write_meta(", "\t\t\t\t\t$done                   = AB_MCP_Sync_Post_Writer::write_meta(", 'it', 'testARequestThatEndsInsideAMetaCallLeavesThePartForTheWayBackOfTheSameRun')
+e('engine-default-category-own-only-before', 'put_back(): the default category of the row going back makes a part the step\'s own only where it was put back or the backup before (Codex round 7, F2)', EN,
+  "&& in_array( $before_k['state'], array( 'put_back', 'unchanged' ), true ) ) {", ") {", 'it', 'testTheDefaultCategoryOfTheRowGoingBackDoesNotTakeBackTermsAnotherHandChanged')
+e('engine-decide-no-mark', 'decide(): a journal without the mark of ownership is never put back (Codex round 7, F3)', EN,
+  "\t\tif ( ! array_key_exists( 'own', $part ) ) {", "\t\tif ( false ) {", 'unit', 'testAJournalWithoutTheMarkOfOwnershipIsNeverPutBack')
 e('with-row-template', 'with_row(): the template goes with the row through page_template, so it is the step\'s own (B7, N2)', PW,
   "\t\t\t$out['meta:_wp_page_template'] = self::meta_hash( array( (string) $prepared['postarr']['page_template'] ) );\n", '', 'it', WITH_ROW)
 e('with-row-default-category', 'with_row(): the default category of a new post goes with the row, so it is the step\'s own and never another hand\'s', PW,
@@ -388,7 +394,7 @@ e('engine-put-back-check', 'put_back(): every part counted as back is read again
 e('engine-put-back-row-effects', 'put_back(): what the row put back changed besides the row is read afresh; where with_row() names it (the default category) it is the step\'s own for the put back and decided so (N3)', EN,
   "\t\t\tif ( 'row' === $name ) {\n\t\t\t\t// What the row put back changed besides the row (N3).", "\t\t\tif ( false ) {\n\t\t\t\t// What the row put back changed besides the row (N3).", 'it', 'testTheTermsGoBackByTheStateReadBeforeTheRowWentBack')
 e('engine-put-back-row-named', 'put_back(): a change while the row went back that with_row() does not name is another hand\'s: the step owns nothing of it, it is left (N3)', EN,
-  "\t\t\t\t\tif ( isset( $named[ $other['part'] ] ) && hash_equals( (string) $named[ $other['part'] ], (string) $post_k ) ) {", "\t\t\t\t\tif ( true ) {", 'it', N3)
+  "\t\t\t\t\tif ( isset( $named[ $other['part'] ] ) && hash_equals( (string) $named[ $other['part'] ], (string) $post_k ) && in_array( $before_k['state'], array( 'put_back', 'unchanged' ), true ) ) {", "\t\t\t\t\tif ( true ) {", 'it', N3)
 e('plan-report-live', 'plan(): a target that changed since the report is not written over, whatever the report said of it; the hash the plan binds is the one the report compared (P1)', PU,
   "\t\t\tif ( null === $existing && ( ! isset( $compared[ $key ] ) || ! hash_equals( $compared[ $key ], $hash ) ) ) {", "\t\t\tif ( false ) {", 'it', 'testATargetThatChangedSinceTheReportIsNotPlannedWhateverTheReportSaid')
 e('writer-delete-right', 'precheck(): a plain key only this site has, which the step removes, needs the right to remove it (delete_post_meta; decision 28; P2)', PW,

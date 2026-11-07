@@ -1206,6 +1206,26 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( 'left', AB_MCP_Sync_Engine::decide( array( 'part' => 'row', 'way' => AB_MCP_Sync_Post_Writer::WAY_ROW, 'target' => $hash['target'], 'state' => 'written', 'after' => $hash['own_after'] ), $hash['own_after'], $hash['backup'], false )['state'], 'after alone, a description, owns nothing.' );
 	}
 
+	public function testAJournalWithoutTheMarkOfOwnershipIsNeverPutBack(): void {
+		// Codex round 7, F3: a part of a journal from an earlier build of this
+		// branch has no own field; even in an interrupted step, never read
+		// back by that build's lights and holding its target now, it is left
+		// (fail closed), and as the backup it is unchanged.
+		$old = array(
+			'part'   => 'terms:category',
+			'way'    => AB_MCP_Sync_Post_Writer::WAY_TERMS,
+			'state'  => 'written',
+			'before' => str_repeat( 'b', 64 ),
+			'target' => str_repeat( 't', 64 ),
+			'after'  => str_repeat( 'c', 64 ),
+		);
+		$left = AB_MCP_Sync_Engine::decide( $old, str_repeat( 't', 64 ), str_repeat( 'b', 64 ), true );
+		self::assertSame( 'left', $left['state'] );
+		self::assertStringContainsString( 'no mark of ownership', $left['why'] );
+		self::assertSame( 'left', AB_MCP_Sync_Engine::decide( $old, str_repeat( 'c', 64 ), str_repeat( 'b', 64 ), false )['state'] );
+		self::assertSame( 'unchanged', AB_MCP_Sync_Engine::decide( $old, str_repeat( 'b', 64 ), str_repeat( 'b', 64 ), true )['state'] );
+	}
+
 	/* -------------------------------------------------------- the run */
 
 	public function testTheShapeOfARunAndWhenItsLockIsFresh(): void {

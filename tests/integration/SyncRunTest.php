@@ -1375,6 +1375,80 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( $before, self::row_a( $story_a ), 'The row is as before.' );
 	}
 
+	public function testARequestThatEndsInsideAMetaCallLeavesThePartForTheWayBackOfTheSameRun(): void {
+		// Codex round 7, F1: the row is written and read back, then the meta
+		// call writes the note and the request ends before its read back is
+		// kept. The journal was written ahead of the call, so the part stands
+		// without a read back (not with the row's read back of the old note):
+		// the way back of the interrupted run takes the note back by its
+		// target (decision 18, the bound of GRENZEN-LAUF.md), and the row.
+		self::pair();
+		$a = self::pages_on_a( array( 'contact' => 'Write to us.' ) );
+		$b = self::pages_on_b( array( 'contact' => 'Write to us.' ) );
+		add_post_meta( (int) $a['contact'], 'note', 'abc' );
+		self::b( array( array( 'op' => 'add_meta', 'post' => (int) $b['contact'], 'key' => 'note', 'value' => 'abc' ) ) );
+		self::paired( self::staged() );
+		self::change_on_b( $b['contact'], 'contact', 'Write to us on staging.' );
+		self::b( array( array( 'op' => 'update_meta', 'post' => (int) $b['contact'], 'key' => 'note', 'value' => 'def' ) ) );
+		$planned = self::planned( array( 'contact' ) );
+		$run     = self::begun( $planned['args'] );
+		$run_id  = (int) $run['run_id'];
+		self::assertSame( 'done', self::next( $run_id )['step']['state'] );
+		try {
+			AB_MCP_IT_Sync_Steps::run( 'a', array( array( 'op' => 'push', 'args' => array( 'action' => 'next', 'run_id' => $run_id ), 'exit_at' => 'updated_post_meta', 'exit_key' => 'note' ) ) );
+			self::fail( 'The process exits inside the meta call.' );
+		} catch ( RuntimeException $e ) {
+			self::assertStringContainsString( 'gave no JSON', $e->getMessage() );
+		}
+		AB_MCP_Protected_Store::forget();
+		AB_MCP_Sync_Backup::forget();
+		wp_cache_flush();
+		self::assertSame( array( 'def' ), self::meta_a( (int) $a['contact'], 'note' ), 'The meta call wrote the note before the exit.' );
+		$parts = array_column( AB_MCP_Sync_Run::step( $run_id, 2 )['parts']['parts'], null, 'part' );
+		self::assertNull( $parts['meta:note']['post'], 'Written ahead of the call: no read back of the note.' );
+		self::assertSame( 'interrupted', self::gated( 'wp_site_push', array( 'action' => 'status', 'run_id' => $run_id ) )['state'] );
+		$begun = self::revert( $run_id );
+		self::assertTrue( $begun['same_run'] );
+		$back = self::revert_all( $run_id );
+		self::assertSame( 'closed_reverted', $back['state'], json_encode( $back ) );
+		self::assertSame( array( 'abc' ), self::meta_a( (int) $a['contact'], 'note' ), 'The note went back.' );
+		self::assertSame( 'Write to us.', self::row_a( (int) $a['contact'] )['post_content'] );
+	}
+
+	public function testTheDefaultCategoryOfTheRowGoingBackDoesNotTakeBackTermsAnotherHandChanged(): void {
+		// Codex round 7, F2: a post in News, taken over to Other by the step.
+		// Before the way back another hand takes every category off. Putting
+		// the row back, wp_update_post() gives the post the default category;
+		// that does not make the terms the step's own again: they were another
+		// hand's before the row went back, so they are left (not put back to
+		// News), and the step of the way back is not restored.
+		self::pair();
+		$news_a  = wp_insert_term( 'News', 'category' );
+		$other_a = wp_insert_term( 'Other', 'category' );
+		self::assertIsArray( $news_a, is_wp_error( $news_a ) ? $news_a->get_error_message() : '' );
+		self::assertIsArray( $other_a, is_wp_error( $other_a ) ? $other_a->get_error_message() : '' );
+		$news_b  = (int) self::b( array( array( 'op' => 'insert_term', 'name' => 'News', 'taxonomy' => 'category', 'as' => 'term' ) ) )['term'];
+		$other_b = (int) self::b( array( array( 'op' => 'insert_term', 'name' => 'Other', 'taxonomy' => 'category', 'as' => 'term' ) ) )['term'];
+		$story_a = wp_insert_post( wp_slash( self::page( 'story', 'A story.', array( 'post_type' => 'post', 'post_category' => array( (int) $news_a['term_id'] ) ) ) ), true );
+		self::assertIsInt( $story_a );
+		$story_b = (int) self::b( array( array( 'op' => 'insert_post', 'args' => self::page( 'story', 'A story.', array( 'post_type' => 'post', 'post_category' => array( $news_b ) ) ), 'as' => 'post' ) ) )['post'];
+		self::paired( self::staged() );
+		self::change_on_b( (string) $story_b, 'story', 'A story, on staging.', array( 'post_type' => 'post', 'post_category' => array( $other_b ) ) );
+		$planned = self::planned( array( 'story' ) );
+		$run     = self::begun( $planned['args'] );
+		$slugs   = static fn(): array => array_values( array_map( static fn( $t ) => $t->slug, wp_get_object_terms( $story_a, 'category' ) ) );
+		self::assertSame( 'closed_done', self::finish( (int) $run['run_id'] )['state'] );
+		self::assertSame( array( 'other' ), $slugs() );
+		wp_set_object_terms( $story_a, array(), 'category', false );
+		self::assertSame( array(), $slugs(), 'Another hand took every category off.' );
+		$begun   = self::revert( (int) $run['run_id'] );
+		$back    = self::revert_all( (int) $begun['run_id'] );
+		$outcome = array_column( self::step( $back, 1 )['result']['parts'], 'state', 'part' );
+		self::assertSame( 'left', $outcome['terms:category'], json_encode( self::step( $back, 1 )['result'] ) );
+		self::assertNotContains( 'news', $slugs(), 'The terms another hand changed are not put back to News.' );
+		self::assertNotSame( 'restored', self::step( $back, 1 )['state'] );
+	}
+
 	public function testTheDefaultCategoryOfANewPostIsWrittenWithTheRowAndTheJournalSaysSo(): void {
 		// wp_insert_post() gives a new post the default category with the row
 		// (with_row()): the step's own, written with the row, and written as

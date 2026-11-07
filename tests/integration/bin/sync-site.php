@@ -24,7 +24,7 @@
  * (package_id, chunk, now), grants (package_id, count, now), store_cleanup
  * (now), store_hold_lock (seconds), store_remove (area, gid), add_admin (login), as_user (user), for the report delete_post
  * (post, for good), trash_post (post), add_term_meta (term, key, value), push (args of wp_site_push,
- * exit_at: a hook at which the process exits inside a boundary), raw_post (post, set: columns written
+ * exit_at: a hook at which the process exits inside a boundary, exit_key: only for this meta key), raw_post (post, set: columns written
  * by SQL) and wp_version (version: the
  * $wp_version the steps after it see), and write_access (the site mode
  * Full, as a person switches it on), staging_raw and staging_raw_set
@@ -216,12 +216,18 @@ foreach ( $ab_it_steps as $ab_it_i => $ab_it_step ) {
 			// at which the process exits) leaves the step begun.
 			require_once AB_MCP_DIR . 'includes/sync/class-sync-push.php';
 			if ( isset( $ab_it_step['exit_at'] ) ) {
+				// exit_key: only where the third argument of the hook (the meta
+				// key of updated_post_meta, added_post_meta) is this key.
+				$ab_it_key_at = isset( $ab_it_step['exit_key'] ) ? (string) $ab_it_step['exit_key'] : null;
 				add_action(
 					(string) $ab_it_step['exit_at'],
-					static function () {
-						exit( 0 );
+					static function ( ...$args ) use ( $ab_it_key_at ) {
+						if ( null === $ab_it_key_at || ( isset( $args[2] ) && $ab_it_key_at === (string) $args[2] ) ) {
+							exit( 0 );
+						}
 					},
-					1
+					1,
+					4
 				);
 			}
 			$_SERVER['DOCUMENT_ROOT'] = AB_MCP_IT_Sites::docroot( $ab_it_key );

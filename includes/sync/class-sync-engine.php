@@ -992,6 +992,10 @@ final class AB_MCP_Sync_Engine {
 						return self::unread( $journal, $i, $pre_all, $save, $live_id );
 					}
 					$journal['parts'][ $i ] = self::seen_before( $journal['parts'][ $i ], $pre_all, $backup );
+					// Written ahead of the call (decision 18; Codex round 7, F1):
+					// a request that ends inside it leaves the part without a read
+					// back, never with the read back of the row before.
+					$save( $journal );
 					$done                   = AB_MCP_Sync_Post_Writer::write_meta( $live_id, $key, $values, is_array( $pre_all ) ? AB_MCP_Sync_Post_Writer::meta_values( $pre_all, $key ) : array() );
 					$error                  = is_wp_error( $done ) ? $done : null;
 					$post_all               = AB_MCP_Sync_Post_Writer::current( $live_id );
@@ -1005,6 +1009,8 @@ final class AB_MCP_Sync_Engine {
 					return self::unread( $journal, $i, $pre_all, $save, $live_id );
 				}
 				$journal['parts'][ $i ] = self::seen_before( $journal['parts'][ $i ], $pre_all, $backup );
+				// Written ahead of the call, as for the meta (F1).
+				$save( $journal );
 				$done                   = AB_MCP_Sync_Post_Writer::write_terms( $live_id, $taxonomy, $terms );
 				$error                  = is_wp_error( $done ) ? $done : null;
 				$post_all               = AB_MCP_Sync_Post_Writer::current( $live_id );
@@ -1267,6 +1273,14 @@ final class AB_MCP_Sync_Engine {
 				'why'   => $own ? '' : 'As before the run.',
 			);
 		}
+		if ( ! array_key_exists( 'own', $part ) ) {
+			// A journal of an earlier build of this branch, without the mark
+			// of ownership (Codex round 7, F3; GRENZEN-LAUF.md): fail closed.
+			return array(
+				'state' => 'left',
+				'why'   => sprintf( 'The journal of the part %s holds no mark of ownership (written by an earlier build), so it is left as it is.', $name ),
+			);
+		}
 		if ( $own ) {
 			$way = isset( $part['way'] ) ? (string) $part['way'] : AB_MCP_Sync_Post_Writer::WAY_ROW;
 			if ( AB_MCP_Sync_Post_Writer::WAY_TERMS === $way && ! hash_equals( isset( $part['own_target'] ) ? (string) $part['own_target'] : '', (string) $part['own_after'] ) ) {
@@ -1411,7 +1425,12 @@ final class AB_MCP_Sync_Engine {
 					if ( ! self::changed( $pre_k, $post_k ) ) {
 						continue;
 					}
-					if ( isset( $named[ $other['part'] ] ) && hash_equals( (string) $named[ $other['part'] ], (string) $post_k ) ) {
+					// Only a part the step would have put back or found as the
+					// backup right before the row went back becomes its own by
+					// what wp_update_post() wrote with the row; a part another
+					// hand had changed stays another hand's (Codex round 7, F2).
+					$before_k = self::decide( $other, $pre_k, (string) AB_MCP_Sync_Post_Writer::part_hash( $backup, (string) $other['part'] ), $interrupted );
+					if ( isset( $named[ $other['part'] ] ) && hash_equals( (string) $named[ $other['part'] ], (string) $post_k ) && in_array( $before_k['state'], array( 'put_back', 'unchanged' ), true ) ) {
 						$parts[ $k ]['own']        = true;
 						$parts[ $k ]['own_after']  = $post_k;
 						$parts[ $k ]['own_target'] = $post_k;
@@ -1420,7 +1439,12 @@ final class AB_MCP_Sync_Engine {
 					}
 					$parts[ $k ]['own']     = false;
 					$parts[ $k ]['foreign'] = true;
-					$parts[ $k ]['note']    = self::noted( $other, 'Changed by another hand (a hook of this site) as the row went back, other than what wp_update_post() writes with the row: the step owns nothing of what it holds now.' );
+					$parts[ $k ]['note']    = self::noted(
+						$other,
+						isset( $named[ $other['part'] ] ) && hash_equals( (string) $named[ $other['part'] ], (string) $post_k )
+							? 'Changed as the row went back, as wp_update_post() writes it with the row (the default category), but another hand had changed the part before: not the step\'s own, left as it is; check it by hand.'
+							: 'Changed by another hand (a hook of this site) as the row went back, other than what wp_update_post() writes with the row: the step owns nothing of what it holds now.'
+					);
 				}
 			}
 			$seen = $again;

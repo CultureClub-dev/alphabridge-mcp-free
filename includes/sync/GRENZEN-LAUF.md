@@ -218,8 +218,16 @@ Ablehnung entsteht, nennt sie den Weg.
   Wegen zurück, wenn `$now == T` (A2 greift nicht: zurückgelesen wurde, was
   der Aufruf schreiben sollte); ein nicht eigener Teil, den der Zeilenaufruf
   schon einmal zurücklas (`post` gesetzt), fällt nie unter die Grenze C;
-  `own` ohne `own_after` und ein Journal älterer Form (nur `after`) besitzen
-  nichts.
+  `own` ohne `own_after` besitzt nichts; ein Journal älterer Form ohne das
+  Feld `own` (aus einem Zwischenstand dieses Zweigs) geht nie zurück, auch
+  nicht unter der Grenze C (`decide()`, Codex-Runde 7, F3; fail closed).
+- Vor jedem eigenen Meta- und Term-Aufruf steht das Journal mit dem Teil
+  ohne Rücklesen (`post = null`) in der Datenbank (Codex-Runde 7, F1): Endet
+  der Request im Aufruf, gilt für diesen Teil die Grenze C oben, nie das
+  Rücklesen des Zeilenaufrufs davor. Der Term-Aufruf ist dabei nicht als
+  Mutation geführt (derselbe Speicherpunkt wie beim Meta-Aufruf; ein Abbruch
+  genau im Term-Aufruf lässt sich ohne einen Haken, der schon beim
+  Zeilenaufruf feuert, nicht stellen).
 - Einen einfachen Schlüssel, den nur die Live-Seite trägt, entfernt der
   Schritt (`write_meta()` ohne Wert); die Metadaten-API fragt selbst kein
   Recht. Darum prüfen Gesamtvorprüfung und Grenze je solchem Schlüssel
@@ -311,7 +319,12 @@ Ablehnung entsteht, nennt sie den Weg.
   Er heisst `left`, das Paar wird `unclear` (Entscheide 17, 23; A2; Klausel
   in `decide()`). Die Vorgabe-Kategorie, die der Zeilenaufruf oder der
   Zeilen-Rückbau setzt, ist mit `own_target` gleich `own_after` eigen und
-  fällt nicht darunter.
+  fällt nicht darunter – beim Zeilen-Rückbau nur, wo `decide()` den Teil
+  unmittelbar davor zurückgenommen hätte oder er der Sicherung glich
+  (Codex-Runde 7, F2). Hatte eine andere Hand die Kategorien vorher
+  verändert (etwa alle entfernt), bleibt der Teil `left`, auch mit der
+  Vorgabe-Kategorie, die der Zeilen-Rückbau dazugab; der Schritt heisst
+  nicht `restored`, die Kategorie ist von Hand zu prüfen (fail closed).
 - Term-Hashes werden über die Schlüssel als Zeichenketten gebildet
   (`terms_hash()`, seit B6: Formate nach Slug, Kategorien und Schlagwörter
   nach Paar-ID). Ein Journal aus einem Zwischenstand von Zweig 8, dessen
@@ -528,7 +541,7 @@ Ablehnung entsteht, nennt sie den Weg.
   `keep_until` (auch Zeilen ohne Frist), Paket aus einer Lesung mit
   geprüften Termnamen, Plan (`verdict`, `order`, `line_of`), die
   Entscheidungsfunktion `decide()` über alle 80 Kombinationen (Tabelle oben).
-  Integration (`tests/integration/SyncRunTest.php`, zweiunddreissig Fälle): Ende zu Ende mit
+  Integration (`tests/integration/SyncRunTest.php`, vierunddreissig Fälle): Ende zu Ende mit
   Rückweg und `step` auf eine spätere Phase (Merkmal der Sperre beim
   Anlegen), ein Bericht in zwei Läufen geplant, Abweichung in der
   Gesamtvorprüfung, Unterbrechung in eigenem Prozess, bytegenau, Sperrmatrix
