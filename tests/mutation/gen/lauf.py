@@ -284,6 +284,21 @@ e('engine-with-row', 'write_parts(): what the core wrote with the row is read ba
 e('engine-rollback-written', 'write_parts(): a part written with the row goes back with the row, wherever it stands in the journal (N2)', EN,
   "\t\t\t\tif ( $j !== $i && ! in_array( $journal['parts'][ $j ]['state'], array( 'read', 'written' ), true ) ) {",
   "\t\t\t\tif ( $j !== $i && ( $j > $i || ! in_array( $journal['parts'][ $j ]['state'], array( 'read', 'written' ), true ) ) ) {", 'it', WITH_ROW)
+# The ownership rule (Codex round 3): a part is the step's own only where the
+# step wrote it, through its own call or through a field of the row call
+# (with_row()), and reads back what that call was to write.
+OWN = 'testACategoryAnotherHandSetToTheTargetIsNotTheStepsOwnAndIsLeft'
+DEFAULT = 'testTheDefaultCategoryOfANewPostIsWrittenWithTheRowAndTheJournalSaysSo'
+e('with-row-template', 'with_row(): the template goes with the row through page_template, so it is the step\'s own (B7, N2)', PW,
+  "\t\t\t$out['meta:_wp_page_template'] = self::meta_hash( array( (string) $prepared['postarr']['page_template'] ) );\n", '', 'it', WITH_ROW)
+e('with-row-default-category', 'with_row(): the default category of a new post goes with the row, so it is the step\'s own and never another hand\'s', PW,
+  "\t\t\t$out['terms:category'] = self::terms_hash( array( (int) get_option( 'default_category' ) ) );\n", '', 'it', DEFAULT)
+e('engine-own-with-row', 'write_parts(): a part changed with the row is the step\'s own only where the row call was to write it and it reads back so; every other change is another hand\'s (Codex round 3)', EN,
+  "\t\t\t\t\t\tif ( isset( $own[ $other['part'] ] ) && hash_equals( (string) $own[ $other['part'] ], $hash ) ) {", "\t\t\t\t\t\tif ( true ) {", 'it', OWN)
+e('engine-foreign-left-at-turn', 'write_parts(): a part the step did not write that changed since the backup is left when the step turns, and the object is unclear', EN,
+  "\t\t\t\t\tif ( null === $hash || ! hash_equals( $was, $hash ) ) {", "\t\t\t\t\tif ( false ) {", 'it', OWN)
+e('engine-revert-left', 'revert_boundary(): a part left at the turn is never put back by the way back of the closed run', EN,
+  "\t\t\tif ( 'left' === $part['state'] ) {", "\t\t\tif ( false ) {", 'it', OWN)
 e('engine-deviating-terms-left', 'restore_part(): a deviating part on a way the lock does not refuse is never put back (A2)', EN,
   "\t\tif ( null !== $part['after'] && ! hash_equals( (string) $part['target'], (string) $part['after'] ) && AB_MCP_Sync_Post_Writer::WAY_TERMS === $part['way'] ) {", "\t\tif ( false ) {", 'it', 'testADeviatingTermPartIsNeverTakenBack')
 e('engine-sample-expected', 'sample_finding(): the title of the written object has to be in the body (decision 33; B4)', EN,

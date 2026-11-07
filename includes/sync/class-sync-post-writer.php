@@ -617,6 +617,40 @@ final class AB_MCP_Sync_Post_Writer {
 	/* ----------------------------------------------------------- writing */
 
 	/**
+	 * The parts the row call writes besides the row, from the fields of its
+	 * postarr: part => the hash the core was to write. This is the one place
+	 * that says what a step writes without a call of its own (the ownership
+	 * rule of the engine: a part is the step's own only where the step wrote
+	 * it, through its own call or through the row, and reads back what that
+	 * call was to write; Codex round 3 of branch 8). meta:_wp_page_template
+	 * where postarr carries page_template: wp_insert_post() stores the
+	 * template itself (B7), the hash of the template, which is the target
+	 * of the part. terms:category for a post of the type post that has no
+	 * category yet (a new one, or one here without any): wp_insert_post()
+	 * gives it the default category of this site, the hash of its id (not
+	 * the target, which the step's own terms call writes right after; a new
+	 * post is never put back). Nothing else the core writes with the row is
+	 * a part of a step: revisions, _wp_old_slug and _wp_old_date are no
+	 * parts (AB_MCP_Sync_Exclusions), and an update passes the categories a
+	 * post has back to wp_set_post_categories() unchanged.
+	 *
+	 * @param array      $prepared target_of().
+	 * @param int|null   $live_id  The post here, null for a new one.
+	 * @param array|null $current  current() of the post here before the step; null for a new one.
+	 * @return array<string,string> part => hash.
+	 */
+	public static function with_row( array $prepared, $live_id, $current = null ) {
+		$out = array();
+		if ( isset( $prepared['postarr']['page_template'] ) ) {
+			$out['meta:_wp_page_template'] = self::meta_hash( array( (string) $prepared['postarr']['page_template'] ) );
+		}
+		if ( 'post' === (string) $prepared['type'] && ( null === $live_id || ! is_array( $current ) || array() === self::term_keys( $current, 'category' ) ) ) {
+			$out['terms:category'] = self::terms_hash( array( (int) get_option( 'default_category' ) ) );
+		}
+		return $out;
+	}
+
+	/**
 	 * Write the row: wp_insert_post() for a new post, wp_update_post() for
 	 * one here, slashed, with both date columns and edit_date.
 	 *

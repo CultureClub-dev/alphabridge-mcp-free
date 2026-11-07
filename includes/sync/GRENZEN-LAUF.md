@@ -153,14 +153,30 @@ Ablehnung entsteht, nennt sie den Weg.
   Sperre `post:page_template` (WordPress speicherte `default`); der Weg:
   die Vorlage im Live-Theme ergänzen, oder die Seite von Hand übernehmen und
   aus dem Plan lassen (B7). Entfernen läuft über `delete_metadata()`.
-- Was der Kern mit der Zeile schreibt (`_wp_page_template` über
-  `page_template`; die Vorgabe-Kategorie eines neuen Beitrags), gilt ab dem
-  Zeilenschreiben als geschrieben: die Grenze liest jeden anderen Teil
-  unmittelbar nach der Zeile zurück, führt einen veränderten im Journal als
-  `read` (gleich dem Soll) oder `written` mit dem Vermerk «mit der Zeile
-  geschrieben», und nimmt ihn beim Rückbau der Zeile mit zurück
-  (`AB_MCP_Sync_Post_Writer::part_hash()`; Codex-Runde 2, N2). Vorher blieb
-  der Vorlagenteil `planned`, während der Schritt `restored` meldete.
+- Eigentumsregel (Codex-Runde 3, nach B8 und N2; an einer Stelle:
+  `AB_MCP_Sync_Post_Writer::with_row()` nennt, was der Zeilenaufruf neben der
+  Zeile schreibt, und mit welchem Hash): Ein Teil ist nur dann eigen, wenn
+  der Schritt ihn selbst geschrieben hat – durch den eigenen Teilaufruf oder
+  weil sein Feld im `postarr` des eigenen Zeilenaufrufs steht
+  (`_wp_page_template` über `page_template`; bei einem Beitrag ohne
+  Kategorie – neu, oder hier ohne eine – die Vorgabe-Kategorie, die
+  `wp_insert_post()` setzt, bei Neuanlage ohne Rückbau: ein neues Objekt
+  wird nie zurückgesetzt) – und das Rücklesen zeigt, was dieser
+  Aufruf schreiben sollte. Nur eigene Teile stehen im Journal als `read`
+  (gleich dem Soll) oder `written` und gehen in den Rückbau. Jeder andere
+  Teil, der sich seit der Sicherung geändert hat, ist eine fremde Änderung
+  (ein Hook dieser Site, der auf die Zeile reagiert; ein anderer Schreiber
+  auf einem nicht abweisbaren Weg): nie als geschrieben oder gelesen geführt,
+  nie zurückgenommen; das Journal sagt es (Vermerk), eine Wende des Schritts
+  lässt ihn stehen (`left`) und meldet das Objekt `unclear`, der Rückweg des
+  geschlossenen Laufs lässt ihn ebenso. Schreibt der Schritt einen solchen
+  Teil danach selbst als Soll, bleibt der Vermerk stehen (das Fenster eines
+  nicht abweisbaren Wegs, oben). Ein mit der Zeile geschriebener Teil, der
+  anders zurückliest, als die Zeile schreiben sollte (eine Vorlage, die ein
+  Filter änderte), ist nicht nachweislich eigen: `left`, Schritt `unclear`,
+  nichts geht zurück. Vorher (N2) galt jeder nach der Zeile veränderte Teil
+  als «mit der Zeile geschrieben» – auch eine fremde Termänderung auf den
+  Sollwert, die der Rückbau dann zurücksetzte und `restored` meldete.
 - Verweise auf Objekte, die derselbe Lauf vorher anlegt (Elternteil, Verweis
   im Inhalt), gelten in der Gesamtvorprüfung als ausstehend (`pending`), nicht
   als fehlend; der Schreibschritt mappt sie über das Paar, das der Schritt
@@ -212,12 +228,14 @@ Ablehnung entsteht, nennt sie den Weg.
   Hand zurückgesetzt (Codex-Runde 2, N5). Fail closed, nichts wird
   überschrieben; solche Journale gibt es nur auf Sites eines
   Zwischenstands, kein Tag enthält die Sync-Tabellen.
-- Weicht ein Teil innerhalb der Grenze ab, gehen alle vom Schritt
-  geschriebenen Teile mit zurück: die davor als Soll geschriebenen (B8) und
-  die, die der Kern mit der Zeile schrieb (N2), jeder unter derselben Sperre
-  zurückgelesen, nachweislich eigen, der zuletzt geschriebene zuerst; der
-  Schritt heisst nur `restored`, wenn jeder Teil zurück ist, sonst `unclear`
-  mit dem Zustand je Teil im Journal.
+- Weicht ein Teil innerhalb der Grenze ab, gehen alle eigenen Teile des
+  Schritts mit zurück (Eigentumsregel oben: die davor als Soll geschriebenen,
+  B8, und die, die der Zeilenaufruf laut `with_row()` schrieb, N2), jeder
+  unter derselben Sperre zurückgelesen, der zuletzt geschriebene zuerst; ein
+  nicht eigener Teil, der sich seit der Sicherung geändert hat, bleibt
+  `left`. Der Schritt heisst nur `restored`, wenn jeder eigene Teil zurück
+  ist und sich sonst nichts geändert hat, sonst `unclear` mit dem Zustand je
+  Teil im Journal.
 - In den Rückweg gehen nur Schritte mit Journal und Sicherung (ohne Sicherung
   keine Mutation, Entscheid 17); ein Schritt, der vor seiner Sicherung
   scheiterte (Ziel seit dem Plan geändert), ist weder Rest noch neu angelegt.
@@ -362,7 +380,7 @@ Ablehnung entsteht, nennt sie den Weg.
   Phasenreihenfolge, Stichprobe mit Titel, Aufbewahrung aus den Zeilen mit
   `keep_until` (auch Zeilen ohne Frist), Paket aus einer Lesung mit
   geprüften Termnamen, Plan (`verdict`, `order`, `line_of`). Integration
-  (`tests/integration/SyncRunTest.php`, neunzehn Fälle): Ende zu Ende mit
+  (`tests/integration/SyncRunTest.php`, einundzwanzig Fälle): Ende zu Ende mit
   Rückweg und `step` auf eine spätere Phase (Merkmal der Sperre beim
   Anlegen), ein Bericht in zwei Läufen geplant, Abweichung in der
   Gesamtvorprüfung, Unterbrechung in eigenem Prozess, bytegenau, Sperrmatrix
@@ -370,7 +388,9 @@ Ablehnung entsteht, nennt sie den Weg.
   zeitabhängiger Status, Aufbewahrung mit Fristen (auch Zeilen ohne Frist),
   neue Eltern- und Unterseite, Befunde über Aufrufe, Prüfung mit Titel und
   Cursor, Vorlage über den Kernweg, abweichender Meta-Teil nimmt die Zeile
-  mit, mit der Zeile geschriebene Vorlage geht mit der Zeile zurück,
+  mit, mit der Zeile geschriebene Vorlage geht mit der Zeile zurück, fremde
+  Kategorie auf dem Sollwert ist nicht eigen und bleibt (Eigentumsregel),
+  Vorgabe-Kategorie eines neuen Beitrags ist mit der Zeile eigen,
   gescheiterter Schritt ohne Rest, abweichende Terme bleiben, kein
   Wiederveröffentlichen bei Menü-Automatik, Rückweglauf unter der
   Ablagesperre. Mutationen: `tests/mutation/lists/lauf.php` (aus

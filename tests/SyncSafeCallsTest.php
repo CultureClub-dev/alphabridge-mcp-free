@@ -249,6 +249,7 @@ final class SyncSafeCallsTest extends TestCase {
 			'current_user_can'                         => array( 6, 'precheck(): the rights of the account for each operation (decision 17, step 4).' ),
 			'delete_metadata'                          => array( 1, 'write_meta(): the way forward of meta.' ),
 			'get_gmt_from_date'                        => array( 1, 'prepare(): the UTC date WordPress derives where a published post hands none over, for the target of the row.' ),
+			'get_option'                               => array( 1, 'with_row(): the default category wp_insert_post() gives a new post with the row (the ownership rule, Codex round 3); read to know what the row call was to write, not compared to the staging site.' ),
 			'get_post_type_object'                     => array( 1, 'precheck(): the capabilities of the type.' ),
 			'get_user_by'                              => array( 1, 'user_by_login(): the account of this site an author is written as (decision 25).' ),
 			'is_protected_meta'                        => array( 1, 'meta_allowed(): whether a key is protected (the rule of this version).' ),

@@ -1222,6 +1222,107 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( 'unclear', $pair['state'] );
 	}
 
+	public function testACategoryAnotherHandSetToTheTargetIsNotTheStepsOwnAndIsLeft(): void {
+		// The ownership rule (Codex round 3): a post in News here, planned to
+		// Other. While the row is written, another hand sets the category to
+		// Other on the way the lock does not refuse, and a filter changes the
+		// title, so the row reads back other than its target and the step
+		// turns. The category reads as the target now, yet the step has not
+		// written it (an update passes the categories back unchanged): it is
+		// another hand's, never written down as read, never put back; the
+		// row goes back, the category stays, the step is unclear, not
+		// restored, and the way back of the closed run leaves it as well.
+		self::pair();
+		$news_a  = wp_insert_term( 'News', 'category' );
+		$other_a = wp_insert_term( 'Other', 'category' );
+		self::assertIsArray( $news_a, is_wp_error( $news_a ) ? $news_a->get_error_message() : '' );
+		self::assertIsArray( $other_a, is_wp_error( $other_a ) ? $other_a->get_error_message() : '' );
+		$news_b  = (int) self::b( array( array( 'op' => 'insert_term', 'name' => 'News', 'taxonomy' => 'category', 'as' => 'term' ) ) )['term'];
+		$other_b = (int) self::b( array( array( 'op' => 'insert_term', 'name' => 'Other', 'taxonomy' => 'category', 'as' => 'term' ) ) )['term'];
+		$story_a = wp_insert_post( wp_slash( self::page( 'story', 'A story.', array( 'post_type' => 'post', 'post_category' => array( (int) $news_a['term_id'] ) ) ) ), true );
+		self::assertIsInt( $story_a );
+		$story_b = (int) self::b( array( array( 'op' => 'insert_post', 'args' => self::page( 'story', 'A story.', array( 'post_type' => 'post', 'post_category' => array( $news_b ) ) ), 'as' => 'post' ) ) )['post'];
+		self::paired( self::staged() );
+		self::change_on_b( (string) $story_b, 'story', 'A story, on staging.', array( 'post_type' => 'post', 'post_category' => array( $other_b ) ) );
+		$planned = self::planned( array( 'story' ) );
+		$run     = self::begun( $planned['args'] );
+		$before  = self::row_a( $story_a );
+		self::assertSame( 'done', self::next( (int) $run['run_id'] )['step']['state'] );
+		$slugs = static fn(): array => array_values( array_map( static fn( $t ) => $t->slug, wp_get_object_terms( $story_a, 'category' ) ) );
+		self::assertSame( array( 'news' ), $slugs() );
+		// The filter hits the one write of the step and takes itself out; the
+		// other hand sets the category once, as the core passes the categories
+		// of the post back with the row (set_object_terms fires inside).
+		$once = static function ( array $data ) use ( &$once ): array {
+			remove_filter( 'wp_insert_post_data', $once );
+			$data['post_title'] = 'Changed by a filter';
+			return $data;
+		};
+		add_filter( 'wp_insert_post_data', $once );
+		$other_id = (int) $other_a['term_id'];
+		$hand     = static function ( $object_id, $terms, $tt_ids, $taxonomy ) use ( $story_a, $other_id, &$hand ) {
+			if ( 'category' === $taxonomy && (int) $object_id === $story_a ) {
+				remove_action( 'set_object_terms', $hand, 10 );
+				wp_set_object_terms( $story_a, array( $other_id ), 'category', false );
+			}
+		};
+		add_action( 'set_object_terms', $hand, 10, 4 );
+		$write = self::next( (int) $run['run_id'] );
+		remove_all_filters( 'wp_insert_post_data' );
+		remove_all_actions( 'set_object_terms' );
+		self::assertIsArray( $write, is_wp_error( $write ) ? $write->get_error_message() : '' );
+		self::assertSame( 'unclear', $write['step']['state'], json_encode( $write['step'] ) );
+		$parts = array_column( $write['step']['parts']['parts'], 'state', 'part' );
+		$notes = array_column( $write['step']['parts']['parts'], 'note', 'part' );
+		self::assertSame( 'restored', $parts['row'], 'The row, the step\'s own, went back.' );
+		self::assertSame( 'left', $parts['terms:category'], 'The category another hand set is not the step\'s own.' );
+		self::assertStringContainsString( 'another hand', (string) ( $notes['terms:category'] ?? '' ) );
+		self::assertStringContainsString( 'another hand', $write['step']['result']['message'] );
+		self::assertSame( array( 'other' ), $slugs(), 'The category stays as the other hand set it, not put back to News.' );
+		self::assertSame( $before, self::row_a( $story_a ), 'The row is as before.' );
+		$pair = AB_MCP_Sync_Pairs::find_live( AB_MCP_Sync_Anchor::active()['source_id'], 'post', (string) $story_a );
+		self::assertSame( 'unclear', $pair['state'] );
+		self::probe_ok();
+		self::assertSame( 'closed_findings', self::finish( (int) $run['run_id'] )['state'] );
+		// The way back of the closed run: the row was put back already, the
+		// category is left (not the run's own), the object went back in part.
+		$begun = self::revert( (int) $run['run_id'] );
+		$back  = self::revert_all( (int) $begun['run_id'] );
+		self::assertSame( 'closed_findings', $back['state'] );
+		$outcome = array_column( self::step( $back, 1 )['result']['parts'], 'state', 'part' );
+		self::assertSame( 'left', $outcome['terms:category'], 'Not the run\'s own.' );
+		self::assertSame( 'unchanged', $outcome['row'] );
+		self::assertSame( array( 'other' ), $slugs(), 'The way back leaves the other hand\'s category.' );
+		self::assertSame( $before, self::row_a( $story_a ) );
+	}
+
+	public function testTheDefaultCategoryOfANewPostIsWrittenWithTheRowAndTheJournalSaysSo(): void {
+		// wp_insert_post() gives a new post the default category with the row
+		// (with_row()): the step's own, written with the row, and written as
+		// its target by the step's own terms call right after; the journal
+		// says both, and never calls it another hand's.
+		self::pair();
+		$other_a = wp_insert_term( 'Other', 'category' );
+		self::assertIsArray( $other_a, is_wp_error( $other_a ) ? $other_a->get_error_message() : '' );
+		$other_b = (int) self::b( array( array( 'op' => 'insert_term', 'name' => 'Other', 'taxonomy' => 'category', 'as' => 'term' ) ) )['term'];
+		self::b( array( array( 'op' => 'insert_post', 'args' => self::page( 'fresh', 'A fresh story.', array( 'post_type' => 'post', 'post_category' => array( $other_b ) ) ), 'as' => 'post' ) ) );
+		self::paired( self::staged() );
+		$planned = self::planned( array( 'fresh' ) );
+		$run     = self::begun( $planned['args'] );
+		self::assertSame( 'done', self::next( (int) $run['run_id'] )['step']['state'] );
+		$write = self::next( (int) $run['run_id'] );
+		self::assertIsArray( $write, is_wp_error( $write ) ? $write->get_error_message() : '' );
+		self::assertSame( 'done', $write['step']['state'], json_encode( $write['step'] ) );
+		$parts = array_column( $write['step']['parts']['parts'], 'state', 'part' );
+		$notes = array_column( $write['step']['parts']['parts'], 'note', 'part' );
+		self::assertSame( 'read', $parts['terms:category'] );
+		self::assertStringContainsString( 'Written with the row by the core', (string) ( $notes['terms:category'] ?? '' ), 'The default category: the step\'s own, with the row.' );
+		self::assertStringContainsString( 'Written as its target by the step after that', (string) ( $notes['terms:category'] ?? '' ) );
+		self::assertStringNotContainsString( 'another hand', (string) ( $notes['terms:category'] ?? '' ) );
+		$live = (int) $write['step']['result']['live_ref'];
+		self::assertSame( array( 'other' ), array_values( array_map( static fn( $t ) => $t->slug, wp_get_object_terms( $live, 'category' ) ) ) );
+	}
+
 	public function testTheWayBackDoesNotRepublishATopLevelPageWhileAMenuAddsPages(): void {
 		// A published page taken over as draft; the way back would publish it
 		// again while a menu adds pages by itself (decisions 21 and 23; A3):
