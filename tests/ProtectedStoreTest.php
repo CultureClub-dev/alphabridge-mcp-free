@@ -167,18 +167,26 @@ final class ProtectedStoreTest extends TestCase {
 			self::assertTrue( AB_MCP_Protected_Store::kept( $old( $area, 30 * $day, 7 ), $now, null ), "$area: while the runs cannot be read, a run's group stays." );
 			self::assertFalse( AB_MCP_Protected_Store::kept( $old( $area, 30 * $day ), $now, null ), "$area: one of no run goes by its time." );
 		}
-		// The backups of a run follow the retention contract of its run
-		// (decision 20; branch 8): kept while AB_MCP_Sync_Schema::backup_runs()
-		// names the run, whatever their age, and while the runs cannot be read.
+		// The backups of a run with a row follow the retention contract as the
+		// row holds it (decision 20; branch 8; AB_MCP_Sync_Schema::backup_rows():
+		// true kept, false gone, whatever their age), and stay while the runs
+		// cannot be read. The backups of a run without a row (never made, or
+		// its row gone with a database put back) are kept by their age, as a
+		// close that does not qualify: never removed at once.
 		self::assertSame( 0, AB_MCP_Protected_Store::backup_days(), 'Free keeps no qualified close by its age, the last three only.' );
 		self::assertTrue( AB_MCP_Protected_Store::kept( $old( 'backups', 400 * $day, 7 ), $now, array(), array( 7 => true ) ) );
-		self::assertFalse( AB_MCP_Protected_Store::kept( $old( 'backups', 1, 7 ), $now, array(), array( 3 => true ) ), 'A run the retention does not name: its backups go, whatever their age.' );
+		self::assertFalse( AB_MCP_Protected_Store::kept( $old( 'backups', 1, 7 ), $now, array(), array( 3 => true, 7 => false ) ), 'A run whose row says its backups go: they go, whatever their age.' );
+		self::assertTrue( AB_MCP_Protected_Store::kept( $old( 'backups', 7 * $day - 1, 7 ), $now, array(), array( 3 => true ) ), 'A run without a row: kept by its age, not removed at once.' );
+		self::assertFalse( AB_MCP_Protected_Store::kept( $old( 'backups', 7 * $day, 7 ), $now, array(), array( 3 => true ) ), 'A run without a row: gone after the days of a close that does not qualify.' );
 		self::assertTrue( AB_MCP_Protected_Store::kept( $old( 'backups', 400 * $day, 7 ), $now, array(), null ), 'While the runs cannot be read, every run\'s backups stay.' );
 		self::assertTrue( AB_MCP_Protected_Store::kept( $old( 'backups', 7 * $day - 1 ), $now, array() ), 'Backups of no run: seven days.' );
 		self::assertFalse( AB_MCP_Protected_Store::kept( $old( 'backups', 7 * $day ), $now, array() ), 'Backups of no run: seven days.' );
 
 		add_filter( AB_MCP_Protected_Store::BACKUP_DAYS_FILTER, static fn(): int => 30 );
 		self::assertSame( 30, AB_MCP_Protected_Store::backup_days(), 'Pro sets 30 through the filter.' );
+		self::assertTrue( AB_MCP_Protected_Store::kept( $old( 'backups', 30 * $day - 1, 7 ), $now, array(), array( 3 => true ) ), 'Pro: a run without a row is kept the days of the filter.' );
+		self::assertFalse( AB_MCP_Protected_Store::kept( $old( 'backups', 30 * $day, 7 ), $now, array(), array( 3 => true ) ), 'Pro: and goes after them.' );
+		self::assertFalse( AB_MCP_Protected_Store::kept( $old( 'backups', 1, 7 ), $now, array(), array( 7 => false ) ), 'Pro: a row that says its backups go is not kept by the days of the filter.' );
 		remove_all_filters_for( AB_MCP_Protected_Store::BACKUP_DAYS_FILTER );
 		add_filter( AB_MCP_Protected_Store::BACKUP_DAYS_FILTER, static fn(): int => -5 );
 		self::assertSame( 0, AB_MCP_Protected_Store::backup_days(), 'Never below none.' );
