@@ -867,8 +867,11 @@ Ablehnung entsteht, nennt sie den Weg.
   Zeilen sind von neuen nicht zu unterscheiden); ein Log, das um mehr als
   16 MiB gewachsen ist, wird bis dort gezählt und als «nicht bis zum Ende»
   gemeldet; ein Log, das es an der Vorprüfung nicht gab und seither entstand,
-  ist ganz neu (Marke 0). Nie «keine neue Zeile», wo nicht gezählt werden
-  konnte. Ein Journal eines Laufs, der vor diesem Stand begann (Marke als
+  ist ganz neu (Marke 0); ein Lesefehler vor dem Ende (`fread()` false) gilt
+  nicht als Dateiende, sondern als «nicht bis zum Ende gezählt» und ist ein
+  Befund (Codex-Runde 22); eine Datei, die sich nicht öffnen oder
+  positionieren lässt, ebenso (`null` → Befund «nicht lesbar»). Nie «keine
+  neue Zeile», wo nicht gezählt werden konnte. Ein Journal eines Laufs, der vor diesem Stand begann (Marke als
   Zeilenzahl, `error_log_lines`), gibt den Befund «nicht markiert». Grenze:
   gelesen wird nur `wp-content/debug.log`; ein Log, das `WP_DEBUG_LOG` an
   einen anderen Ort schreibt, wird nicht verglichen (kein Befund), wie

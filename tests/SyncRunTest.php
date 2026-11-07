@@ -259,6 +259,69 @@ final class SyncRunPostWpdb {
 	}
 }
 
+/**
+ * A stream of a log whose read fails after so many bytes (fread() false),
+ * for the reader of the error log: ab-log-fail://<anything>. Content and
+ * the byte the failure comes at are set on the class.
+ */
+final class SyncRunFailingLogStream {
+	/** @var string The content. */
+	public static $content = '';
+	/** @var int The read fails once this many bytes were given. */
+	public static $fail_at = 0;
+	/** @var resource|null */
+	public $context;
+	private $at = 0;
+
+	public function stream_open( $path, $mode, $options, &$opened ) {
+		$this->at = 0;
+		return true;
+	}
+
+	public function stream_read( $count ) {
+		if ( $this->at >= strlen( self::$content ) ) {
+			return ''; // The end of the file, as a real stream answers it.
+		}
+		if ( $this->at >= self::$fail_at ) {
+			return false;
+		}
+		$chunk     = substr( self::$content, $this->at, min( (int) $count, self::$fail_at - $this->at ) );
+		$this->at += strlen( $chunk );
+		return $chunk;
+	}
+
+	public function stream_eof() {
+		return $this->at >= strlen( self::$content );
+	}
+
+	public function stream_seek( $offset, $whence ) {
+		if ( SEEK_SET !== $whence || $offset < 0 || $offset > strlen( self::$content ) ) {
+			return false;
+		}
+		$this->at = (int) $offset;
+		return true;
+	}
+
+	public function stream_tell() {
+		return $this->at;
+	}
+
+	public function stream_stat() {
+		return array( 'size' => strlen( self::$content ), 'mode' => 0100644 );
+	}
+
+	public function url_stat( $path, $flags ) {
+		return array( 'size' => strlen( self::$content ), 'mode' => 0100644 );
+	}
+
+	public function stream_close() {
+	}
+
+	public function stream_set_option( $option, $arg1, $arg2 ) {
+		return false;
+	}
+}
+
 final class SyncRunTest extends TestCase {
 
 	use SyncTrustSites;
@@ -1228,13 +1291,13 @@ final class SyncRunTest extends TestCase {
 			self::assertSame( 20000000, filesize( $path ) );
 			$before = memory_get_peak_usage( true );
 			$all    = AB_MCP_Sync_Engine::error_log_lines_since( $path, 0, 64 * 1048576 );
-			self::assertSame( array( 'lines' => 200000, 'capped' => false, 'rotated' => false, 'bytes' => 20000000 ), $all );
+			self::assertSame( array( 'lines' => 200000, 'capped' => false, 'rotated' => false, 'failed' => false, 'bytes' => 20000000 ), $all );
 			self::assertLessThan( 8 * 1048576, memory_get_peak_usage( true ) - $before, 'Read in chunks of LOG_CHUNK, never loaded whole.' );
 			self::assertSame( 65536, AB_MCP_Sync_Engine::LOG_CHUNK );
 			self::assertSame( 16777216, AB_MCP_Sync_Engine::LOG_BYTES );
 			// From the mark: the lines the log gained.
 			$since = AB_MCP_Sync_Engine::error_log_lines_since( $path, 16000000, 64 * 1048576 );
-			self::assertSame( array( 'lines' => 40000, 'capped' => false, 'rotated' => false, 'bytes' => 20000000 ), $since );
+			self::assertSame( array( 'lines' => 40000, 'capped' => false, 'rotated' => false, 'failed' => false, 'bytes' => 20000000 ), $since );
 			self::assertSame( 0, AB_MCP_Sync_Engine::error_log_lines_since( $path, 20000000, 64 * 1048576 )['lines'], 'Nothing new.' );
 			// The cap: one MiB of a span of four, counted up to there and said so.
 			$capped = AB_MCP_Sync_Engine::error_log_lines_since( $path, 16000000, 1048576 );
@@ -1244,10 +1307,30 @@ final class SyncRunTest extends TestCase {
 			// A mark past the size: the log was rotated or emptied; counted from
 			// its start and said so.
 			$rotated = AB_MCP_Sync_Engine::error_log_lines_since( $path, 30000000, 64 * 1048576 );
-			self::assertSame( array( 'lines' => 200000, 'capped' => false, 'rotated' => true, 'bytes' => 20000000 ), $rotated );
+			self::assertSame( array( 'lines' => 200000, 'capped' => false, 'rotated' => true, 'failed' => false, 'bytes' => 20000000 ), $rotated );
 			self::assertNull( AB_MCP_Sync_Engine::error_log_lines_since( $path . '.none', 0, 100 ), 'No log: null.' );
 		} finally {
 			@unlink( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		}
+		// A read that fails before the end (fread() false) is no end of the
+		// file: counted up to there and said so (failed), never «no new line»
+		// (Codex round 22 of branch 8).
+		self::assertTrue( stream_wrapper_register( 'ab-log-fail', SyncRunFailingLogStream::class ) );
+		try {
+			SyncRunFailingLogStream::$content = str_repeat( "line\n", 1000 );
+			SyncRunFailingLogStream::$fail_at = 2000;
+			$failed                           = AB_MCP_Sync_Engine::error_log_lines_since( 'ab-log-fail://debug.log', 0, 64 * 1048576 );
+			self::assertIsArray( $failed );
+			self::assertTrue( $failed['failed'], 'The read failed before the end.' );
+			self::assertSame( 400, $failed['lines'], 'Counted up to the failure.' );
+			self::assertFalse( $failed['capped'] );
+			SyncRunFailingLogStream::$fail_at = 0;
+			$at_once                          = AB_MCP_Sync_Engine::error_log_lines_since( 'ab-log-fail://debug.log', 0, 64 * 1048576 );
+			self::assertSame( array( 'lines' => 0, 'capped' => false, 'rotated' => false, 'failed' => true, 'bytes' => 5000 ), $at_once, 'A read that fails at once: nothing counted, and said so.' );
+			SyncRunFailingLogStream::$fail_at = 5000;
+			self::assertSame( array( 'lines' => 1000, 'capped' => false, 'rotated' => false, 'failed' => false, 'bytes' => 5000 ), AB_MCP_Sync_Engine::error_log_lines_since( 'ab-log-fail://debug.log', 0, 64 * 1048576 ), 'Read to its end.' );
+		} finally {
+			stream_wrapper_unregister( 'ab-log-fail' );
 		}
 	}
 

@@ -579,6 +579,8 @@ e('engine-log-count', 'error_log_lines_since(): the line ends of every chunk cou
   "\t\t\t\t$lines += substr_count( $chunk, \"\\n\" );", "\t\t\t\t$lines += 1;", 'unit', LOG)
 e('engine-log-rotated', 'error_log_lines_since(): a log smaller than its mark was rotated or emptied; counted from its start and said so', EN,
   "\t\tif ( (int) $size < $from ) {", "\t\tif ( false ) {", 'unit', LOG)
+e('engine-log-read-failed', 'error_log_lines_since(): a read that fails is no end of the file; counted up to there and said so (Codex round 22)', EN,
+  "\t\t\t\tif ( false === $chunk ) {\n\t\t\t\t\t// A read that failed is no end of the file: counted up to\n\t\t\t\t\t// here only, said so (fail closed).\n\t\t\t\t\t$failed = true;\n\t\t\t\t\tbreak;\n\t\t\t\t}", "\t\t\t\tif ( false === $chunk ) {\n\t\t\t\t\tbreak;\n\t\t\t\t}", 'unit', LOG)
 e('engine-log-capped', 'error_log_lines_since(): read up to the cap with more behind it is said so, never «no new line»', EN,
   "\t\t\t$capped = $read >= (int) $max && $from + $read < (int) $size;", "\t\t\t$capped = false;", 'unit', LOG)
 

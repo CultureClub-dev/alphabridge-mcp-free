@@ -152,7 +152,7 @@ final class AB_MCP_Sync_Revert {
 			return AB_MCP_Sync_Push::interrupted( $run );
 		}
 		if ( ! ( 'reverting' === $run['state'] || ( 'revert' === $run['type'] && 'open' === $run['state'] ) ) ) {
-			return new WP_Error( 'ab_mcp_sync_run_state', sprintf( 'The run %1$d is %2$s: no way back is running for it. %3$s', (int) $run['run_id'], $run['state'], 'revert' === $run['type'] ? 'A closed run of the way back is not taken back; wp_site_push action=status lists the runs.' : 'Use action=plan with this run_id to plan one.' ) );
+			return new WP_Error( 'ab_mcp_sync_run_state', sprintf( 'The run %1$d is %2$s: no way back is running for it. Ask for its status (wp_site_push action=status); %3$s', (int) $run['run_id'], $run['state'], 'revert' === $run['type'] ? 'a closed run of the way back is not taken back.' : 'action=plan with this run_id plans one.' ) );
 		}
 		return AB_MCP_Sync_Engine::next( $run, null );
 	}
@@ -217,10 +217,10 @@ final class AB_MCP_Sync_Revert {
 			// P1: before, every run of the type revert was refused here, and an
 			// interrupted one held the site until a person closed it).
 			if ( 'interrupted' !== $run['state'] ) {
-				return new WP_Error( 'ab_mcp_sync_revert_type', sprintf( 'Run %1$d is a run of the way back itself and is %2$s: %3$s', (int) $run['run_id'], $run['state'], 'open' === $run['state'] ? 'go on with action=next.' : 'a run of the way back is not taken back; the way back is planned for a run that wrote (wp_site_push action=status lists the runs).' ) );
+				return new WP_Error( 'ab_mcp_sync_revert_type', sprintf( 'Run %1$d is a run of the way back itself and is %2$s (wp_site_push action=status lists the runs): %3$s', (int) $run['run_id'], $run['state'], 'open' === $run['state'] ? 'go on with action=next.' : 'a run of the way back is not taken back; the way back is planned for a run that wrote.' ) );
 			}
 			if ( isset( $a['steps'] ) ) {
-				return new WP_Error( 'ab_mcp_sync_revert_steps', sprintf( 'Run %d is an interrupted run of the way back: it goes on with the steps it has, so steps is not taken. Leave it out.', (int) $run['run_id'] ) );
+				return new WP_Error( 'ab_mcp_sync_revert_steps', sprintf( 'Run %d is an interrupted run of the way back: it goes on with the steps it has, so steps is not taken. Call again without steps.', (int) $run['run_id'] ) );
 			}
 			return self::continuation( $run, $print, $source );
 		}

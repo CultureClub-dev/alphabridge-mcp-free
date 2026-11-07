@@ -1870,6 +1870,11 @@ final class AB_MCP_Sync_Engine {
 						'seq'     => 0,
 						'message' => sprintf( 'The error log of the site is smaller than at the check before the run (rotated or emptied in between); it holds %d line(s) now, which cannot be told from lines the run added: read it by hand (wp_get_error_log).', (int) $since['lines'] ),
 					);
+				} elseif ( $since['failed'] ) {
+					$result['findings'][] = array(
+						'seq'     => 0,
+						'message' => sprintf( 'The error log of the site could not be read to its end after the run (a read failed; %d line(s) counted up to there): read it by hand (wp_get_error_log).', (int) $since['lines'] ),
+					);
 				} elseif ( $since['capped'] ) {
 					$result['findings'][] = array(
 						'seq'     => 0,
@@ -2372,12 +2377,17 @@ final class AB_MCP_Sync_Engine {
 	 * smaller than the mark was rotated or emptied in between: it is counted
 	 * from its start, and said so (rotated), since its lines cannot be told
 	 * from lines the run added. Where the span to read passes $max, the
-	 * count stops there and says so (capped): never «no new line».
+	 * count stops there and says so (capped): never «no new line». A read
+	 * that fails before the end (fread() false) is said so as well (failed:
+	 * counted up to there, not to the end; Codex round 22 of branch 8:
+	 * before, it passed as the end of the file, and «no new line» could
+	 * follow a read that failed at once); a file that cannot be opened or
+	 * sought gives null.
 	 *
 	 * @param string $path The log.
 	 * @param int    $from The mark: bytes the log had at the check.
 	 * @param int    $max  Bytes to read at most.
-	 * @return array{lines:int,capped:bool,rotated:bool,bytes:int}|null Null where the log cannot be read.
+	 * @return array{lines:int,capped:bool,rotated:bool,failed:bool,bytes:int}|null Null where the log cannot be read.
 	 */
 	public static function error_log_lines_since( $path, $from, $max ) {
 		$size = is_file( $path ) && is_readable( $path ) ? @filesize( $path ) : false; // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
@@ -2397,13 +2407,20 @@ final class AB_MCP_Sync_Engine {
 		$lines  = 0;
 		$read   = 0;
 		$capped = false;
+		$failed = false;
 		try {
 			if ( $from > 0 && 0 !== fseek( $handle, $from ) ) {
 				return null;
 			}
 			while ( $read < (int) $max ) {
 				$chunk = fread( $handle, (int) min( self::LOG_CHUNK, (int) $max - $read ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fread
-				if ( false === $chunk || '' === $chunk ) {
+				if ( false === $chunk ) {
+					// A read that failed is no end of the file: counted up to
+					// here only, said so (fail closed).
+					$failed = true;
+					break;
+				}
+				if ( '' === $chunk ) {
 					break;
 				}
 				$read  += strlen( $chunk );
@@ -2418,6 +2435,7 @@ final class AB_MCP_Sync_Engine {
 			'lines'   => $lines,
 			'capped'  => $capped,
 			'rotated' => $rotated,
+			'failed'  => $failed,
 			'bytes'   => (int) $size,
 		);
 	}

@@ -1916,6 +1916,15 @@ return array(
 		'expect'  => '/testTheErrorLogIsCountedFromItsMarkInChunksWithACapAndARotationIsSaidSo/',
 	),
 	array(
+		'id'      => 'lauf/engine-log-read-failed',
+		'clause'  => 'error_log_lines_since(): a read that fails is no end of the file; counted up to there and said so (Codex round 22)',
+		'file'    => $en,
+		'search'  => "\t\t\t\tif ( false === \$chunk ) {\n\t\t\t\t\t// A read that failed is no end of the file: counted up to\n\t\t\t\t\t// here only, said so (fail closed).\n\t\t\t\t\t\$failed = true;\n\t\t\t\t\tbreak;\n\t\t\t\t}",
+		'replace' => "\t\t\t\tif ( false === \$chunk ) {\n\t\t\t\t\tbreak;\n\t\t\t\t}",
+		'run'     => $unit( 'SyncRunTest', 'testTheErrorLogIsCountedFromItsMarkInChunksWithACapAndARotationIsSaidSo' ),
+		'expect'  => '/testTheErrorLogIsCountedFromItsMarkInChunksWithACapAndARotationIsSaidSo/',
+	),
+	array(
 		'id'      => 'lauf/engine-log-capped',
 		'clause'  => 'error_log_lines_since(): read up to the cap with more behind it is said so, never «no new line»',
 		'file'    => $en,
