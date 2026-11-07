@@ -115,13 +115,13 @@ e('guard-begin-marks', 'begin(): a boundary marks the site (N3)', GU,
 e('guard-record-expiry', 'record(): a record past its time is removed', GU,
   "\t\tif ( (int) $read['until'] <= self::now() ) {", "\t\tif ( false ) {", 'unit', LOCK)
 e('guard-rest-423', 'rest_pre_insert(): the status 423 of a locked object', GU,
-  "\t\t\treturn new WP_Error( self::CODE, self::message( $record ), array( 'status' => 423 ) );", "\t\t\treturn new WP_Error( self::CODE, self::message( $record ), array( 'status' => 400 ) );", 'unit', LOCK)
+  "\t\tif ( null !== $record && isset( $record['posts'][ (string) $id ] ) ) {\n\t\t\treturn new WP_Error( self::CODE, self::message( $record ), array( 'status' => 423 ) );", "\t\tif ( null !== $record && isset( $record['posts'][ (string) $id ] ) ) {\n\t\t\treturn new WP_Error( self::CODE, self::message( $record ), array( 'status' => 400 ) );", 'unit', LOCK)
 e('guard-empty-content', 'empty_content(): the classic way of a covered post meets the core text', GU,
   "\t\treturn $id > 0 && self::covers( $id ) ? true : $maybe_empty;", "\t\treturn $maybe_empty;", 'unit', LOCK)
 e('guard-meta-mid', 'meta_by_mid(): a meta id is refused by its post', GU,
   "\t\treturn is_object( $meta ) && isset( $meta->post_id ) && isset( $record['posts'][ (string) (int) $meta->post_id ] ) ? false : $check;", "\t\treturn $check;", 'unit', LOCK)
 e('guard-delete-all', 'meta_delete(): a delete of a key across every post is refused while a boundary covers one (A1)', GU,
-  "\t\tif ( $delete_all ) {\n\t\t\t$record = self::holding();", "\t\tif ( false ) {\n\t\t\t$record = self::holding();", 'unit', LOCK)
+  "\t\tif ( $delete_all ) {\n\t\t\t$record = self::holding();\n\t\t\treturn null !== $record && array() !== (array) $record['posts']", "\t\tif ( false ) {\n\t\t\t$record = self::holding();\n\t\t\treturn null !== $record && array() !== (array) $record['posts']", 'unit', LOCK)
 e('guard-edit-lock', 'begin(): the edit lock of wp-admin on a covered post (decision 19)', GU,
   "\t\t\tupdate_post_meta( (int) $id, '_edit_lock', self::now() . ':' . (int) get_current_user_id() );", '', 'unit', LOCK)
 e('guard-option-still', 'pre_update_option(): a covered option keeps its value', GU,
@@ -137,10 +137,6 @@ e('guard-rest-hook', 'arm_rest(): the REST API of every registered type is hooke
 META = 'testTheRuleOfThisVersionForMetaKeys'
 TARGET = 'testTheTargetOfALineAndTheConfirmedChoice'
 LOCKS = 'testWhatTheEngineOfThePostDoesNotCarryToItsEndIsRefusedWithItsLock'
-e('writer-meta-credential', 'meta_allowed(): the name of a credential is no key of this version', PW,
-  " || AB_MCP_Sync_Credentials::names_credential( $key, AB_MCP_Redactor::extra_keys() ) ) {", " ) {", 'unit', META)
-e('writer-meta-builder', 'meta_allowed(): the markup of a page builder is no key of this version', PW,
-  "\t\treturn ! AB_MCP_Builders::is_markup_meta_key( $key );", "\t\treturn true;", 'unit', META)
 e('writer-as-draft-status', 'target_of(): the confirmed choice makes the status draft (decision 21)', PW,
   "\t\tif ( ! empty( $item['as_draft'] ) ) {\n\t\t\t$status = 'draft';", "\t\tif ( false ) {\n\t\t\t$status = 'draft';", 'unit', TARGET)
 e('writer-as-draft-target', 'target_of(): the target carries the choice (decision 17, Sollwert)', PW,
@@ -153,8 +149,8 @@ e('writer-terms-map', 'target_of(): the terms by their pairs', PW,
   "\t\t\t$terms[ $taxonomy ][] = (int) $mapped;", "\t\t\t$terms[ $taxonomy ][] = (int) $term['term_id'];", 'unit', TARGET)
 e('writer-password', 'target_of(): a password-protected post is refused (B9)', PW,
   "\t\tif ( '' !== $row['post_password'] ) {", "\t\tif ( false ) {", 'unit', LOCKS)
-e('writer-create-meta', 'target_of(): a new post with plain meta is locked (decision 28)', PW,
-  "\t\t\tif ( 'create' === $item['op'] && ! in_array( $key, self::CORE_META, true ) ) {", "\t\t\tif ( false ) {", 'unit', LOCKS)
+e('writer-create-meta', 'target_of(): a new post with a key whose right only the object answers is locked (decision 28; branch 9)', PW,
+  "\t\t\tif ( 'create' === $item['op'] && ! self::new_meta_allowed( $key, $type ) ) {", "\t\t\tif ( false ) {", 'unit', LOCKS)
 e('writer-parent-unmapped', 'target_of(): a parent without a pair is refused', PW,
   "\t\t\tif ( null === $mapped ) {\n\t\t\t\treturn self::locked( 'post:reference_unmapped', sprintf( 'post_parent %d of the staging site', $parent ) );", "\t\t\tif ( false ) {\n\t\t\t\treturn self::locked( 'post:reference_unmapped', sprintf( 'post_parent %d of the staging site', $parent ) );", 'unit', LOCKS)
 e('writer-type', 'target_of(): only posts and pages in this version', PW,
@@ -249,8 +245,8 @@ VERDICT = 'testWhichEntryOfAReportIsAStepLockedOrNothing'
 ORDER = 'testTheOrderOfTheGraphPutsATargetBeforeWhatRefersToItAndLocksACycle'
 e('plan-unclear', 'verdict(): an unclear pair is written over only after a confirmation', PU,
   "\t\t\tif ( 'unclear' === $entry['result'] ) {", "\t\t\tif ( false ) {", 'unit', VERDICT)
-e('plan-type', 'verdict(): a type the engine does not write is locked with Z9', PU,
-  "\t\tif ( ! in_array( (string) ( $entry['subtype'] ?? '' ), AB_MCP_Sync_Post_Writer::TYPES, true ) ) {", "\t\tif ( false ) {", 'unit', VERDICT)
+e('plan-type', 'verdict(): a type the engine does not write is locked with Z8d', PU,
+  "\t\t} elseif ( ! in_array( (string) ( $entry['subtype'] ?? '' ), AB_MCP_Sync_Post_Writer::TYPES, true ) ) {", "\t\t} elseif ( false ) {", 'unit', VERDICT)
 e('plan-as-draft', 'verdict(): the choice as_draft goes with the item', PU,
   "\t\t\t\t'as_draft'    => (bool) $as_draft,", "\t\t\t\t'as_draft'    => false,", 'unit', VERDICT)
 e('plan-choice-keep', 'verdict(): keep_live and leave_open write nothing', PU,
@@ -284,7 +280,7 @@ e('engine-phase-next', 'pick(): next passes no step of a later phase while one o
 e('engine-findings-kept', 'run_check(): the findings of a call are kept with the cursor (B3)', EN,
   "\t\t\t\t$result['findings'] = $findings;\n", '', 'it', 'testTheCheckBeforeTheFirstWriteKeepsItsFindingsAcrossCalls')
 e('engine-pending', 'run_check(): an object the run creates is pending for the check of the others (B1)', EN,
-  "\t\t\t\t$ctx['pending']['post'][ (int) $one['staging_ref'] ] = true;", '', 'it', 'testANewParentPageAndItsNewChildPageAreWrittenInOneRun')
+  "\t\t\t\t$pending[ (string) $one['kind'] ][ (int) $one['staging_ref'] ] = true;", '', 'it', 'testANewParentPageAndItsNewChildPageAreWrittenInOneRun')
 # Codex round 6 of branch 8: ownership is a mark of its own in the journal
 # (own, own_after, own_target), set where a call of the step's own changed
 # the part (post other than pre), never taken from the state of a part;
@@ -319,7 +315,7 @@ e('engine-deviated-marks-parts', 'deviated(): every part of a deviated object ca
 e('engine-deviated-left-state', 'deviated(): a part not as the backup is left', EN,
   "\t\t\t$journal['parts'][ $k ]['state']        = 'left';\n", '', 'it', B8)
 e('engine-deviated-value-before', 'deviated(): a part left names its value before, from the backup (mit altem Wert)', EN,
-  "\t\t\t$journal['parts'][ $k ]['value_before'] = AB_MCP_Sync_Post_Writer::before_value( (string) $part['part'], $backup, $state, $live_id );\n", '', 'it', B8)
+  "\t\t\t$journal['parts'][ $k ]['value_before'] = $w::before_value( (string) $part['part'], $backup, $state, $live_id );\n", '', 'it', B8)
 e('engine-deviated-nothing-left', 'deviated(): where no part differs from the backup the step is failed, not unclear (the row call refused before it wrote)', EN,
   "\t\tif ( 0 === $left ) {", "\t\tif ( false ) {", 'it', 'testARowCallRefusedBeforeItWroteFailsTheStepAndNothingIsLeft')
 e('engine-decide-deviated', 'decide(): a part of a deviated object is left, whatever it holds (boundary C)', EN,
@@ -347,13 +343,13 @@ e('run-cap-checked', 'cap_values(): every value before is checked once more as i
 e('engine-unread-no-own', 'seen_after(): a state not read is no read back and no ownership (Codex round 11)', EN,
   "\t\tif ( ! is_array( $state ) ) {\n\t\t\t// Not read back", "\t\tif ( false ) {\n\t\t\t// Not read back", 'unit', 'testAPartNotReadBackAfterItsCallIsNeverTheStepsOwn')
 e('engine-call-changed-besides', 'write_parts(): whatever a meta or terms call changed besides its own part deviates the object (Codex rounds 13 to 15)', EN,
-  "\t\t\t\t\tif ( $other_name === $name || ! self::changed( AB_MCP_Sync_Post_Writer::part_hash( $pre_call, $other_name ), AB_MCP_Sync_Post_Writer::part_hash( $post_all, $other_name ) ) ) {", "\t\t\t\t\tif ( true ) {", 'it', 'testAHookThatChangesAPartStillToWriteAndBackAgainDeviatesTheObject')
+  "\t\t\t\t\tif ( $other_name === $name || ! self::changed( $w::part_hash( $pre_call, $other_name ), $w::part_hash( $post_all, $other_name ) ) ) {", "\t\t\t\t\tif ( true ) {", 'it', 'testAHookThatChangesAPartStillToWriteAndBackAgainDeviatesTheObject')
 e('engine-part-names-all', 'part_names(): every meta key of the states, named by the plan or not (Codex round 15)', EN,
   "\t\t\t\t$names[ 'meta:' . (string) $row['key'] ] = true;", "\t\t\t\tunset( $row );", 'it', 'testAHookThatAddsAndTakesAwayAKeyThePlanDoesNotNameDeviatesTheObject')
 e('engine-pre-call-terms', 'write_parts(): the state right before the terms call is the one the call is judged against (Codex round 13)', EN,
-  "\t\t\t\t$pre_call               = $pre_all;\n\t\t\t\t// Written ahead of the call, as for the meta (F1).", "\t\t\t\t// Written ahead of the call, as for the meta (F1).", 'it', 'testAHookThatChangesAWrittenPartAsALaterPartIsWrittenDeviatesTheObject')
+  "\t\t\t\t$pre_call               = $pre_all;\n\t\t\t\t// Written ahead of the call (decision 18; Codex round 7, F1):", "\t\t\t\t// Written ahead of the call (decision 18; Codex round 7, F1):", 'it', 'testAHookThatChangesAWrittenPartAsALaterPartIsWrittenDeviatesTheObject')
 e('engine-revert-stops-besides', 'put_back(): whatever putting a part back changed besides it, named by the plan or not, stops the way back for the object (Codex round 16)', EN,
-  "\t\t\t\t\t\tif ( $other_name !== $name && self::changed( AB_MCP_Sync_Post_Writer::part_hash( $seen, $other_name ), AB_MCP_Sync_Post_Writer::part_hash( $again, $other_name ) ) ) {", "\t\t\t\t\t\tif ( false ) {", 'it', 'testAKeyAHookAddsAsACategoryGoesBackStopsTheWayBackOfTheObject')
+  "\t\t\t\t\t\tif ( $other_name !== $name && self::changed( $w::part_hash( $seen, $other_name ), $w::part_hash( $again, $other_name ) ) ) {", "\t\t\t\t\t\tif ( false ) {", 'it', 'testAKeyAHookAddsAsACategoryGoesBackStopsTheWayBackOfTheObject')
 e('engine-revert-stopped-left', 'put_back(): a part after the way back stopped is left, not put back (Codex round 16)', EN,
   "\t\t\t\tif ( 'put_back' === $decided['state'] ) {\n\t\t\t\t\t$decided = array(\n\t\t\t\t\t\t'state' => 'left',\n\t\t\t\t\t\t'why'   => sprintf( 'The way back stopped for this object: %s; the part %s is left as it is, check it by hand.', $stopped, $name ),",
   "\t\t\t\tif ( false ) {\n\t\t\t\t\t$decided = array(\n\t\t\t\t\t\t'state' => 'left',\n\t\t\t\t\t\t'why'   => sprintf( 'The way back stopped for this object: %s; the part %s is left as it is, check it by hand.', $stopped, $name ),", 'it', 'testAKeyAHookAddsAsACategoryGoesBackStopsTheWayBackOfTheObject')
@@ -380,7 +376,7 @@ e('engine-decide-own-back-it', 'decide() on the way back: a part the step owns, 
 OWN = 'testACategoryAnotherHandSetToTheTargetIsNotTheStepsOwnAndIsLeft'
 DEFAULT = 'testTheDefaultCategoryOfANewPostIsWrittenWithTheRowAndTheJournalSaysSo'
 e('engine-save-before-meta-call', 'write_parts(): the journal is written ahead of the meta call, so a request that ends inside it leaves the part without a read back (Codex round 7, F1)', EN,
-  "\t\t\t\t\t$saved = $save( $journal );\n\t\t\t\t\tif ( true !== $saved ) {\n\t\t\t\t\t\treturn self::unsaved( $journal, $i, $saved, 'before', $live_id, $backup );\n\t\t\t\t\t}\n\t\t\t\t\t$done                   = AB_MCP_Sync_Post_Writer::write_meta(", "\t\t\t\t\t$done                   = AB_MCP_Sync_Post_Writer::write_meta(", 'it', 'testARequestThatEndsInsideAMetaCallLeavesThePartForTheWayBackOfTheSameRun')
+  "\t\t\t\t$saved = $save( $journal );\n\t\t\t\tif ( true !== $saved ) {\n\t\t\t\t\treturn self::unsaved( $journal, $i, $saved, 'before', $live_id, $backup );\n\t\t\t\t}\n\t\t\t\t$done                   = $w::write_part(", "\t\t\t\t$done                   = $w::write_part(", 'it', 'testARequestThatEndsInsideAMetaCallLeavesThePartForTheWayBackOfTheSameRun')
 e('with-row-template', 'with_row(): the template goes with the row through page_template, so it is the step\'s own and an ordinary page does not deviate (B7, N2)', PW,
   "\t\t\t$out['meta:_wp_page_template'] = self::meta_hash( array( (string) $prepared['postarr']['page_template'] ) );\n", '', 'it', NORMAL)
 e('with-row-default-category', 'with_row(): the default category of a new post goes with the row, so it is the step\'s own and never another hand\'s', PW,
@@ -427,7 +423,7 @@ ORDER_T = 'testTheWayBackPutsTheRowBackBeforeTheTermsSoAPostWithoutACategoryStay
 e('engine-put-back-order', 'put_back(): the row goes back first, then the meta, then the terms, which undo the side effects of wp_update_post() on them (the default category; P2)', EN,
   "\t\tforeach ( array( 'row', 'meta:', 'terms:' ) as $prefix ) {", "\t\tforeach ( array( 'terms:', 'meta:', 'row' ) as $prefix ) {", 'it', ORDER_T)
 e('engine-put-back-check', 'put_back(): every part counted as back is read again against the backup; one that reads otherwise is unclear, and so is the object', EN,
-  "\t\t\t\tif ( null === $now || ! hash_equals( (string) AB_MCP_Sync_Post_Writer::part_hash( $backup, $name ), $now ) ) {", "\t\t\t\tif ( false ) {", 'it', 'testAPartAHookChangedAfterItWasPutBackIsUnclearNotRestored')
+  "\t\t\t\tif ( null === $now || ! hash_equals( (string) $w::part_hash( $backup, $name ), $now ) ) {", "\t\t\t\tif ( false ) {", 'it', 'testAPartAHookChangedAfterItWasPutBackIsUnclearNotRestored')
 F2 = 'testTheDefaultCategoryOfTheRowGoingBackDoesNotTakeBackTermsAnotherHandChanged'
 # The mark of another hand on a part that putting another part back changed
 # (Codex round 12; F2) decided nothing the halt of the way back (Codex round
@@ -438,18 +434,18 @@ F2 = 'testTheDefaultCategoryOfTheRowGoingBackDoesNotTakeBackTermsAnotherHandChan
 # holds the halt and its wording.
 e('plan-report-live', 'plan(): a target that changed since the report is not written over, whatever the report said of it; the hash the plan binds is the one the report compared (P1)', PU,
   "\t\t\tif ( null === $existing && ( ! isset( $compared[ $key ] ) || ! hash_equals( $compared[ $key ], $hash ) ) ) {", "\t\t\tif ( false ) {", 'it', 'testATargetThatChangedSinceTheReportIsNotPlannedWhateverTheReportSaid')
-e('writer-delete-right', 'precheck(): a plain key only this site has, which the step removes, needs the right to remove it (delete_post_meta; decision 28; P2)', PW,
-  "\t\t\tif ( ! isset( $prepared['meta'][ $row['key'] ] ) && ! in_array( $row['key'], self::CORE_META, true ) && ! current_user_can( 'delete_post_meta', (int) $live_id, $row['key'] ) ) {", "\t\t\tif ( false ) {", 'unit', 'testRemovingAMetaKeyOnlyThisSiteHasNeedsTheRightToDeleteIt')
+e('writer-delete-right', 'meta_right(): a key only this site has, which the step removes, needs the right to remove it (delete_post_meta; decision 28; P2)', PW,
+  "\t\tif ( count( $to ) < count( $from ) && ! current_user_can( 'delete_post_meta', (int) $live_id, $key ) ) {", "\t\tif ( false ) {", 'unit', 'testRemovingAMetaKeyOnlyThisSiteHasNeedsTheRightToDeleteIt')
 e('revert-once-across-runs', 'plan(): a step goes back at most once, also across the runs of the way back made for the closed run (P2)', RV,
   "\t\tforeach ( $others as $other ) {\n\t\t\t$ways[ (int) $other['run_id'] ] = AB_MCP_Sync_Run::steps( (int) $other['run_id'] );",
   "\t\tforeach ( array() as $other ) {\n\t\t\t$ways[ (int) $other['run_id'] ] = AB_MCP_Sync_Run::steps( (int) $other['run_id'] );", 'it', 'testAStepGoesBackOnceAlsoAcrossRunsOfTheWayBack')
 SLASH = 'testAMetaKeyWithABackslashIsStoredAndRemovedUnderItsOwnName'
 e('writer-slash-key-update', 'write_meta(): the key slashed for update_metadata(), which unslashes it (P2)', PW,
-  "\t\t\t$done = update_metadata( 'post', $id, wp_slash( (string) $key ), wp_slash( $values[0] ) );", "\t\t\t$done = update_metadata( 'post', $id, $key, wp_slash( $values[0] ) );", 'unit', SLASH)
+  "\t\t\t$done = update_metadata( $type, $id, wp_slash( (string) $key ), wp_slash( $values[0] ) );", "\t\t\t$done = update_metadata( $type, $id, $key, wp_slash( $values[0] ) );", 'unit', SLASH)
 e('writer-slash-key-delete', 'write_meta(): the key slashed for delete_metadata(), which unslashes it', PW,
-  "\t\tif ( array() !== $current && false === delete_metadata( 'post', $id, wp_slash( (string) $key ) ) ) {", "\t\tif ( array() !== $current && false === delete_metadata( 'post', $id, $key ) ) {", 'unit', SLASH)
+  "\t\tif ( array() !== $current && false === delete_metadata( $type, $id, wp_slash( (string) $key ) ) ) {", "\t\tif ( array() !== $current && false === delete_metadata( $type, $id, $key ) ) {", 'unit', SLASH)
 e('writer-slash-key-add', 'write_meta(): the key slashed for add_metadata(), which unslashes it', PW,
-  "\t\t\tif ( false === add_metadata( 'post', $id, wp_slash( (string) $key ), wp_slash( $value ) ) ) {", "\t\t\tif ( false === add_metadata( 'post', $id, $key, wp_slash( $value ) ) ) {", 'unit', SLASH)
+  "\t\t\tif ( false === add_metadata( $type, $id, wp_slash( (string) $key ), wp_slash( $value ) ) ) {", "\t\t\tif ( false === add_metadata( $type, $id, $key, wp_slash( $value ) ) ) {", 'unit', SLASH)
 
 # ------------------------------- GitHub Codex round 2 on free#137 (one P1, three P2)
 # The way back begins with all of its steps or not at all (one transaction,
@@ -470,7 +466,7 @@ e('run-transaction-rollback', 'transaction(): a WP_Error rolls back', RU,
 RIGHTS_BACK = 'testTheWayBackAsksTheRightsAtTheObjectAndLeavesAPartTheAccountMayNotWrite'
 RIGHTS_UNIT = 'testTheWayBackAsksTheRightsAtTheObjectAsTheForwardWriteDoesBeforeAPartGoesBack'
 e('engine-put-back-rights', 'put_back(): a part the account may not write as the forward write asks is left with its value before (decision 28; P2)', EN,
-  "\t\t\t\t$may = AB_MCP_Sync_Post_Writer::restore_right( $name, $live_id, $backup, $seen );\n\t\t\t\tif ( true !== $may ) {", "\t\t\t\t$may = AB_MCP_Sync_Post_Writer::restore_right( $name, $live_id, $backup, $seen );\n\t\t\t\tif ( false ) {", 'it', RIGHTS_BACK)
+  "\t\t\t\t$may = $w::restore_right( $name, $live_id, $backup, is_array( $seen ) ? $seen : array() );\n\t\t\t\tif ( true !== $may ) {", "\t\t\t\t$may = $w::restore_right( $name, $live_id, $backup, is_array( $seen ) ? $seen : array() );\n\t\t\t\tif ( false ) {", 'it', RIGHTS_BACK)
 e('writer-restore-right-edit', 'restore_right(): every part asks edit_post first, the terms too (Codex round 18)', PW,
   "\t\tif ( ! current_user_can( 'edit_post', $id ) ) {\n\t\t\treturn sprintf( 'edit the post %1$d (edit_post%2$s)', $id, 'row' === $part ? '' : ', for the part ' . $part );", "\t\tif ( false ) {\n\t\t\treturn sprintf( 'edit the post %1$d (edit_post%2$s)', $id, 'row' === $part ? '' : ', for the part ' . $part );", 'it', 'testWithoutEditPostNothingOfThePostGoesBackNotEvenItsTerms')
 e('writer-restore-right-publish', 'restore_right(): a row put back to publish, future or private asks publish_posts', PW,
@@ -617,8 +613,8 @@ SPELL_IT = 'testTwoMetaKeysTheDatabaseComparesAlikeLockThePageBeforeTheFirstWrit
 BOOKING = 'testTheReservationCountsTheBackupsOfTheObjectsOfThisSiteAndTheWriterHoldsTheRunToIt'
 e('writer-meta-spelling-lock', 'precheck(): a key the database holds under another spelling as well locks the post before anything is written (P2)', PW,
   "\t\t\t\t\tif ( $row['key'] !== (string) $key ) {\n\t\t\t\t\t\treturn self::locked( 'post:meta_spelling'", "\t\t\t\t\tif ( false ) {\n\t\t\t\t\t\treturn self::locked( 'post:meta_spelling'", 'it', SPELL_IT)
-e('writer-meta-spelling-live-keys', 'precheck(): the keys only this site has, which the step removes, are asked for other spellings as well', PW,
-  "\t\t\tforeach ( is_array( $current ) ? $current['meta'] : array() as $row ) {\n\t\t\t\t$keys[] = (string) $row['key'];\n\t\t\t}", "\t\t\tforeach ( array() as $row ) {\n\t\t\t\t$keys[] = (string) $row['key'];\n\t\t\t}", 'unit', SPELL_UNIT)
+e('writer-meta-spelling-live-keys', 'differing(): the keys only this site has, which the step removes, are written keys (and asked for other spellings as well)', PW,
+  "\t\tforeach ( $current['meta'] as $row ) {\n\t\t\t$keys[] = (string) $row['key'];\n\t\t}\n\t\t$out   = array();", "\t\tforeach ( array() as $row ) {\n\t\t\t$keys[] = (string) $row['key'];\n\t\t}\n\t\t$out   = array();", 'unit', SPELL_UNIT)
 e('push-plan-backup-bytes', 'plan(): the reservation counts the backup of each object of this site as its rows are (P2)', PU,
   "\t\t\t$bytes += AB_MCP_Sync_Backup::size_of(", "\t\t\t$bytes += 0 * AB_MCP_Sync_Backup::size_of(", 'it', BOOKING)
 e('engine-backup-fits', 'boundary(): a backup that would pass the booking of the run fails the step before any mutation', EN,
@@ -716,9 +712,7 @@ UNSAVED = 'testAJournalThatCannotBeSavedStopsTheStepBeforeAnyFurtherMutation'
 UNENDED = 'testAStepWhoseEndCannotBeRecordedSaysSoAndLeavesTheRunInterrupted'
 e('engine-save-ahead', 'boundary(): nothing is written without the journal ahead of the first part; the step failed with its reason (P2)', EN,
   "\t\tif ( is_wp_error( $ahead ) ) {\n\t\t\t// Nothing of the object is written without its journal ahead", "\t\tif ( false ) {\n\t\t\t// Nothing of the object is written without its journal ahead", 'it', UNSAVED)
-e('engine-save-before-meta', 'write_parts(): a checkpoint ahead of a meta call that cannot be saved stops the boundary before the call', EN,
-  "\t\t\t\t\t$saved = $save( $journal );\n\t\t\t\t\tif ( true !== $saved ) {", "\t\t\t\t\t$saved = $save( $journal );\n\t\t\t\t\tif ( false ) {", 'it', UNSAVED)
-e('engine-save-before-terms', 'write_parts(): a checkpoint ahead of a terms call that cannot be saved stops the boundary before the call', EN,
+e('engine-save-before-call', 'write_parts(): a checkpoint ahead of a meta or terms call (one branch for both since branch 9) that cannot be saved stops the boundary before the call', EN,
   "\t\t\t\t$saved = $save( $journal );\n\t\t\t\tif ( true !== $saved ) {\n\t\t\t\t\treturn self::unsaved( $journal, $i, $saved, 'before', $live_id, $backup );", "\t\t\t\t$saved = $save( $journal );\n\t\t\t\tif ( false ) {\n\t\t\t\t\treturn self::unsaved( $journal, $i, $saved, 'before', $live_id, $backup );", 'it', UNSAVED)
 e('engine-save-after', 'write_parts(): a checkpoint after a part read back that cannot be saved stops the boundary', EN,
   "\t\t\t\tif ( true !== $saved ) {\n\t\t\t\t\treturn self::unsaved( $journal, $i, $saved, 'after', $live_id, $backup );", "\t\t\t\tif ( false ) {\n\t\t\t\t\treturn self::unsaved( $journal, $i, $saved, 'after', $live_id, $backup );", 'it', UNSAVED)
