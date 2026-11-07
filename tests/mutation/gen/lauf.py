@@ -27,12 +27,15 @@ SC = 'includes/sync/class-sync-schema.php'
 TS = 'includes/tools/class-tools-staging.php'
 G = 'includes/class-staging-gate.php'
 DK = 'includes/sync/class-sync-db-kinds.php'
-FILEVAR = {PU: '$pu', RV: '$rv', EN: '$en', PW: '$pw', GU: '$gu', RS: '$rs', RU: '$ru', SC: '$sc', TS: '$ts', G: '$g', DK: '$dk'}
+BK = 'includes/sync/class-sync-backup.php'
+CN = 'includes/sync/class-sync-canon.php'
+FILEVAR = {PU: '$pu', RV: '$rv', EN: '$en', PW: '$pw', GU: '$gu', RS: '$rs', RU: '$ru', SC: '$sc', TS: '$ts', G: '$g', DK: '$dk', BK: '$bk', CN: '$cn'}
 
 RUNS = {
     'unit': ('unit', 'SyncRunTest'),
     'gate': ('unit', 'StagingGateTest'),
     'it': ('it', 'SyncRunTest'),
+    'canon': ('unit', 'SyncCanonFormTest'),
 }
 
 entries = []
@@ -176,10 +179,16 @@ e('writer-pending-top', 'precheck(): a page with a pending parent is no page of 
   "\t\t$top = 0 === (int) $prepared['postarr']['post_parent'] && empty( $prepared['pending'] );", "\t\t$top = 0 === (int) $prepared['postarr']['post_parent'];", 'it', 'testANewParentPageAndItsNewChildPageAreWrittenInOneRun')
 e('writer-restore-menu', 'restore_row(): a page back to publish at the top level while a menu adds pages is «check needed» (decisions 21, 23; A3)', PW,
   "\t\tif ( 'page' === $backup['post_type'] && 0 === (int) $backup['post_parent'] && in_array( $backup['post_status'], array( 'publish', 'future' ), true ) && $backup['post_status'] !== $current['row']['post_status'] && self::menu_adds_pages() ) {", "\t\tif ( false ) {", 'it', 'testTheWayBackDoesNotRepublishATopLevelPageWhileAMenuAddsPages')
+# The second check of the kind at the moment of writing: put_back() decides on
+# a hash read right before (decide()), the kind reads again as it writes; no
+# hook runs between the two reads, so the unit test calls the kind directly
+# (the CI of GitHub Codex round 2 on free#137 showed the integration test
+# held decide() alone).
+SECOND = 'testTheKindReadsAgainAsItWritesAPartBackAndLeavesOneThatIsNotWhatTheStepRead'
 e('writer-restore-meta-own', 'restore_meta(): back only where the bytes are what the step read back (decision 23)', PW,
-  "\t\tif ( ! hash_equals( (string) $written, self::meta_hash( $now ) ) ) {", "\t\tif ( false ) {", 'it', 'testTheWayBackIsByteForByteAndLeavesWhatChangedSince')
+  "\t\tif ( ! hash_equals( (string) $written, self::meta_hash( $now ) ) ) {", "\t\tif ( false ) {", 'unit', SECOND)
 e('writer-restore-row-own', 'restore_row(): back only where the row is what the step read back', PW,
-  "\t\tif ( ! hash_equals( $written, $hash ) ) {", "\t\tif ( false ) {", 'it', 'testTheWayBackIsByteForByteAndLeavesWhatChangedSince')
+  "\t\tif ( ! hash_equals( $written, $hash ) ) {", "\t\tif ( false ) {", 'unit', SECOND)
 e('writer-restore-future', 'restore_row(): a backed-up future whose date passed is «check needed» (decision 23)', PW,
   "\t\tif ( $saved !== $backup['post_status'] || '' !== AB_MCP_Tools_Content::status_date_refusal( $backup['post_type'], $current['row']['post_status'], $backup['post_status'], $gmt, true, (int) $now ) ) {", "\t\tif ( false ) {", 'it', 'testAScheduledStagingPostWhoseDatePassedIsRefusedAndTheWayBackAfterTheDateNeedsACheck')
 e('writer-menu-automatic', 'precheck(): a page of the top level with the menu automatic (decision 21)', PW,
@@ -343,7 +352,8 @@ e('engine-pre-call-terms', 'write_parts(): the state right before the terms call
 e('engine-revert-stops-besides', 'put_back(): whatever putting a part back changed besides it, named by the plan or not, stops the way back for the object (Codex round 16)', EN,
   "\t\t\t\t\t\tif ( $other_name !== $name && self::changed( AB_MCP_Sync_Post_Writer::part_hash( $seen, $other_name ), AB_MCP_Sync_Post_Writer::part_hash( $again, $other_name ) ) ) {", "\t\t\t\t\t\tif ( false ) {", 'it', 'testAKeyAHookAddsAsACategoryGoesBackStopsTheWayBackOfTheObject')
 e('engine-revert-stopped-left', 'put_back(): a part after the way back stopped is left, not put back (Codex round 16)', EN,
-  "\t\t\tif ( null !== $stopped && 'put_back' === $decided['state'] ) {", "\t\t\tif ( false ) {", 'it', 'testAKeyAHookAddsAsACategoryGoesBackStopsTheWayBackOfTheObject')
+  "\t\t\t\tif ( 'put_back' === $decided['state'] ) {\n\t\t\t\t\t$decided = array(\n\t\t\t\t\t\t'state' => 'left',\n\t\t\t\t\t\t'why'   => sprintf( 'The way back stopped for this object: %s; the part %s is left as it is, check it by hand.', $stopped, $name ),",
+  "\t\t\t\tif ( false ) {\n\t\t\t\t\t$decided = array(\n\t\t\t\t\t\t'state' => 'left',\n\t\t\t\t\t\t'why'   => sprintf( 'The way back stopped for this object: %s; the part %s is left as it is, check it by hand.', $stopped, $name ),", 'it', 'testAKeyAHookAddsAsACategoryGoesBackStopsTheWayBackOfTheObject')
 e('writer-before-password', 'row_before(): post_password is a credential by its name, never shown', PW,
   "\t\t\tif ( 'post_password' === $column || AB_MCP_Sync_Credentials::names_credential( $column, AB_MCP_Redactor::extra_keys() ) ) {", "\t\t\tif ( false ) {", 'unit', 'testTheValueBeforeOfAPartLeftIsShortNeverACredentialAndCapped')
 e('writer-before-long', 'row_before(): a long text by its bytes and the revision that holds it, never whole', PW,
@@ -416,16 +426,17 @@ e('engine-put-back-order', 'put_back(): the row goes back first, then the meta, 
 e('engine-put-back-check', 'put_back(): every part counted as back is read again against the backup; one that reads otherwise is unclear, and so is the object', EN,
   "\t\t\t\tif ( null === $now || ! hash_equals( (string) AB_MCP_Sync_Post_Writer::part_hash( $backup, $name ), $now ) ) {", "\t\t\t\tif ( false ) {", 'it', 'testAPartAHookChangedAfterItWasPutBackIsUnclearNotRestored')
 F2 = 'testTheDefaultCategoryOfTheRowGoingBackDoesNotTakeBackTermsAnotherHandChanged'
-e('engine-put-back-row-effects', 'put_back(): what putting a part back changed besides it is another hand\'s, the default category too, even where it is what the step read back (N3; F2)', EN,
-  "\t\t\t\t\tif ( ! self::changed( $pre_k, $post_k ) ) {\n\t\t\t\t\t\tcontinue;\n\t\t\t\t\t}\n\t\t\t\t\t$parts[ $k ]['own']", "\t\t\t\t\tif ( true ) {\n\t\t\t\t\t\tcontinue;\n\t\t\t\t\t}\n\t\t\t\t\t$parts[ $k ]['own']", 'it', F2)
-e('engine-put-back-any-effects', 'put_back(): the side effects of putting back any part, not the row only, are another hand\'s (Codex round 12)', EN,
-  "\t\t\t\t\tif ( ! self::changed( $pre_k, $post_k ) ) {\n\t\t\t\t\t\tcontinue;\n\t\t\t\t\t}\n\t\t\t\t\t$parts[ $k ]['own']", "\t\t\t\t\tif ( 'row' !== $name || ! self::changed( $pre_k, $post_k ) ) {\n\t\t\t\t\t\tcontinue;\n\t\t\t\t\t}\n\t\t\t\t\t$parts[ $k ]['own']", 'it', 'testTagsAHookSetsAsTheCategoryGoesBackAreLeftNotTakenBack')
-e('engine-put-back-row-foreign', 'put_back(): a part the row put back changed is nothing of the step\'s any more (own false), so decide() leaves it (F2)', EN,
-  "\t\t\t\t\t$parts[ $k ]['own']     = false;\n", '', 'it', F2)
+# The mark of another hand on a part that putting another part back changed
+# (Codex round 12; F2) decided nothing the halt of the way back (Codex round
+# 16, engine-revert-stops-besides, engine-revert-stopped-left) does not
+# decide: the CI of GitHub Codex round 2 on free#137 showed its mutation
+# survived, and the block is gone with its three entries (engine-put-back-
+# row-effects, engine-put-back-any-effects, engine-put-back-row-foreign); F2
+# holds the halt and its wording.
 e('plan-report-live', 'plan(): a target that changed since the report is not written over, whatever the report said of it; the hash the plan binds is the one the report compared (P1)', PU,
   "\t\t\tif ( null === $existing && ( ! isset( $compared[ $key ] ) || ! hash_equals( $compared[ $key ], $hash ) ) ) {", "\t\t\tif ( false ) {", 'it', 'testATargetThatChangedSinceTheReportIsNotPlannedWhateverTheReportSaid')
 e('writer-delete-right', 'precheck(): a plain key only this site has, which the step removes, needs the right to remove it (delete_post_meta; decision 28; P2)', PW,
-  "\t\t\t\tif ( ! isset( $prepared['meta'][ $row['key'] ] ) && ! in_array( $row['key'], self::CORE_META, true ) && ! current_user_can( 'delete_post_meta', (int) $live_id, $row['key'] ) ) {", "\t\t\t\tif ( false ) {", 'unit', 'testRemovingAMetaKeyOnlyThisSiteHasNeedsTheRightToDeleteIt')
+  "\t\t\tif ( ! isset( $prepared['meta'][ $row['key'] ] ) && ! in_array( $row['key'], self::CORE_META, true ) && ! current_user_can( 'delete_post_meta', (int) $live_id, $row['key'] ) ) {", "\t\t\tif ( false ) {", 'unit', 'testRemovingAMetaKeyOnlyThisSiteHasNeedsTheRightToDeleteIt')
 e('revert-once-across-runs', 'plan(): a step goes back at most once, also across the runs of the way back made for the closed run (P2)', RV,
   "\t\tforeach ( $others as $other ) {\n\t\t\t$ways[ (int) $other['run_id'] ] = AB_MCP_Sync_Run::steps( (int) $other['run_id'] );",
   "\t\tforeach ( array() as $other ) {\n\t\t\t$ways[ (int) $other['run_id'] ] = AB_MCP_Sync_Run::steps( (int) $other['run_id'] );", 'it', 'testAStepGoesBackOnceAlsoAcrossRunsOfTheWayBack')
@@ -480,6 +491,70 @@ def regex(name):
         case = case.rstrip('"')
         return '/' + q(test) + '(?: with data set "|#)' + q(case) + '/'
     return '/' + q(name) + '/'
+
+# ------------------------------- GitHub Codex round 2 on free#137 (one P1, three P2)
+# The way back begins with all of its steps or not at all (one transaction,
+# also for a run made); the rights at the object asked again on the way back;
+# the right to set the terms of every taxonomy the step touches, by id, by
+# slug and for one only this site has; the backup gives bytes that are no
+# UTF-8 back as bytes.
+ATOMIC = 'testTheWayBackOfARunThatIsNotClosedBeginsWithAllOfItsStepsOrNotAtAll'
+TX = 'testAWriteOfTheRunAndItsStepsIsOneTransactionAndRefusedWithTheWayWithoutInnoDb'
+e('revert-begin-transaction', 'begin(): the state, the forward steps and every step of the way back in one transaction, or nothing (P1)', RV,
+  "\t\t\t$began  = AB_MCP_Sync_Run::transaction(", "\t\t\t$began  = call_user_func(", 'it', ATOMIC)
+e('run-create-transaction', 'create(): the run and every one of its steps in one transaction, or nothing (P1)', RU,
+  "\t\t$run_id = self::transaction(", "\t\t$run_id = call_user_func(", 'it', ATOMIC)
+e('run-transaction-engine', 'transaction(): a table whose engine keeps no transactions refuses with the way, before anything is written', RU,
+  "\t\t\tif ( ! isset( $by[ $table ] ) || 0 !== strcasecmp( $by[ $table ], 'InnoDB' ) ) {", "\t\t\tif ( false ) {", 'unit', TX)
+e('run-transaction-rollback', 'transaction(): a WP_Error rolls back', RU,
+  "\t\tif ( is_wp_error( $result ) ) {\n\t\t\t$wpdb->query( 'ROLLBACK' );\n\t\t\treturn $result;\n\t\t}", "\t\tif ( is_wp_error( $result ) ) {\n\t\t\t$wpdb->query( 'COMMIT' );\n\t\t\treturn $result;\n\t\t}", 'unit', TX)
+RIGHTS_BACK = 'testTheWayBackAsksTheRightsAtTheObjectAndLeavesAPartTheAccountMayNotWrite'
+RIGHTS_UNIT = 'testTheWayBackAsksTheRightsAtTheObjectAsTheForwardWriteDoesBeforeAPartGoesBack'
+e('engine-put-back-rights', 'put_back(): a part the account may not write as the forward write asks is left with its value before (decision 28; P2)', EN,
+  "\t\t\t\t$may = AB_MCP_Sync_Post_Writer::restore_right( $name, $live_id, $backup, $seen );\n\t\t\t\tif ( true !== $may ) {", "\t\t\t\t$may = AB_MCP_Sync_Post_Writer::restore_right( $name, $live_id, $backup, $seen );\n\t\t\t\tif ( false ) {", 'it', RIGHTS_BACK)
+e('writer-restore-right-edit', 'restore_right(): the row asks edit_post', PW,
+  "\t\t\tif ( ! current_user_can( 'edit_post', $id ) ) {\n\t\t\t\treturn sprintf( 'edit the post %d (edit_post)', $id );", "\t\t\tif ( false ) {\n\t\t\t\treturn sprintf( 'edit the post %d (edit_post)', $id );", 'unit', RIGHTS_UNIT)
+e('writer-restore-right-publish', 'restore_right(): a row put back to publish, future or private asks publish_posts', PW,
+  "\t\t\tif ( in_array( $status, array( 'publish', 'future', 'private' ), true ) && ( ! isset( $now['row']['post_status'] ) || (string) $now['row']['post_status'] !== $status ) && ! current_user_can( (string) $pto->cap->publish_posts ) ) {", "\t\t\tif ( false ) {", 'unit', RIGHTS_UNIT)
+e('writer-restore-right-others', 'restore_right(): a row of another author asks edit_others_posts', PW,
+  "\t\t\tif ( isset( $backup['row']['post_author'] ) && (int) $backup['row']['post_author'] !== (int) get_current_user_id() && ! current_user_can( (string) $pto->cap->edit_others_posts ) ) {", "\t\t\tif ( false ) {", 'unit', RIGHTS_UNIT)
+e('writer-restore-right-core', 'restore_right(): the core key the row writes goes with edit_post', PW,
+  "\t\t\t\treturn current_user_can( 'edit_post', $id ) ? true : sprintf( 'edit the post %1$d (edit_post, for the key %2$s)', $id, $key );", "\t\t\t\treturn true;", 'unit', RIGHTS_UNIT)
+e('writer-restore-right-meta-edit', 'restore_right(): rows of a key written over ask edit_post_meta', PW,
+  "\t\t\tif ( $was > 0 && $has > 0 && ! current_user_can( 'edit_post_meta', $id, $key ) ) {", "\t\t\tif ( false ) {", 'unit', RIGHTS_UNIT)
+e('writer-restore-right-meta-add', 'restore_right(): rows of a key put back that the post lacks ask add_post_meta', PW,
+  "\t\t\tif ( $was > $has && ! current_user_can( 'add_post_meta', $id, $key ) ) {", "\t\t\tif ( false ) {", 'unit', RIGHTS_UNIT)
+e('writer-restore-right-meta-delete', 'restore_right(): rows of a key removed ask delete_post_meta', PW,
+  "\t\t\tif ( $has > $was && ! current_user_can( 'delete_post_meta', $id, $key ) ) {", "\t\t\tif ( false ) {", 'unit', RIGHTS_UNIT)
+e('writer-restore-right-terms', 'restore_right(): the terms of a taxonomy ask term_right() for the backed-up keys', PW,
+  "\t\treturn self::term_right( $taxonomy, self::term_keys( $backup, $taxonomy ) );", "\t\treturn true;", 'unit', RIGHTS_UNIT)
+TERMS_RIGHTS = 'testTheRightToSetTheTermsIsAskedForEveryTaxonomyTheStepTouchesByIdBySlugAndForOneOnlyThisSiteHas'
+e('writer-precheck-live-taxonomies', 'precheck(): a taxonomy only the post of this site carries, which the step clears, is asked as well (P2)', PW,
+  "\t\tforeach ( is_array( $current ) ? $current['terms'] : array() as $term ) {\n\t\t\t$taxonomies[] = (string) $term['taxonomy'];\n\t\t}", "\t\tforeach ( array() as $term ) {\n\t\t\t$taxonomies[] = (string) $term['taxonomy'];\n\t\t}", 'unit', TERMS_RIGHTS)
+e('writer-precheck-term-right', 'precheck(): what term_right() refuses refuses the step', PW,
+  "\t\t\t$may = self::term_right( $taxonomy, isset( $prepared['terms'][ $taxonomy ] ) ? $prepared['terms'][ $taxonomy ] : array() );\n\t\t\tif ( true !== $may ) {", "\t\t\t$may = self::term_right( $taxonomy, isset( $prepared['terms'][ $taxonomy ] ) ? $prepared['terms'][ $taxonomy ] : array() );\n\t\t\tif ( false ) {", 'unit', TERMS_RIGHTS)
+e('writer-term-right-taxonomy', 'term_right(): the right of the taxonomy to assign its terms, for the set', PW,
+  "\t\tif ( ! current_user_can( (string) $object->cap->assign_terms ) ) {", "\t\tif ( false ) {", 'unit', TERMS_RIGHTS)
+e('writer-term-right-slug', 'term_right(): a slug is the term it names on this site, asked by its id (post_format; P2)', PW,
+  "\t\t\t\t$found = get_term_by( 'slug', (string) $key, $taxonomy );\n\t\t\t\tif ( ! is_object( $found ) || ! isset( $found->term_id ) ) {", "\t\t\t\t$found = false;\n\t\t\t\tif ( ! is_object( $found ) || ! isset( $found->term_id ) ) {", 'unit', TERMS_RIGHTS)
+e('writer-term-right-make', 'term_right(): a slug this site has no term of asks the right of the taxonomy to make one (B6)', PW,
+  "\t\t\t\t\tif ( ! current_user_can( (string) $object->cap->edit_terms ) ) {", "\t\t\t\t\tif ( false ) {", 'unit', TERMS_RIGHTS)
+e('writer-term-right-assign', 'term_right(): every term asks assign_term through map_meta_cap', PW,
+  "\t\t\tif ( ! current_user_can( 'assign_term', $id ) ) {", "\t\t\tif ( false ) {", 'unit', TERMS_RIGHTS)
+BYTES_IT = 'testABackupGivesBytesThatAreNoUtf8BackAsBytesNotAsTheMarkerOfTheCanon'
+BYTES_UNIT = 'testABackupReadsBackBytesThatAreNoUtf8AsBytesNotAsTheMarker'
+e('backup-decode', 'get(): the backup reads back through the inverse of the one spelling, bytes as bytes (P2)', BK,
+  "\t\t$data = AB_MCP_Sync_Canon::decode( $text, 64 );", "\t\t$data = json_decode( $text, true, 64 );", 'it', BYTES_IT)
+e('canon-decode-bytes', 'decode(): {"~b"} is its bytes again', CN,
+  "\t\tif ( array( '~b' ) === $keys ) {", "\t\tif ( false ) {", 'canon', BYTES_UNIT)
+e('canon-decode-roundtrip', 'decode(): a byte marker that does not read back (not its base64, UTF-8 after all) is no form of encode()', CN,
+  "\t\t\tif ( ! is_string( $bytes ) || base64_encode( $bytes ) !== $value['~b'] || 1 === preg_match( '//u', $bytes ) ) {", "\t\t\tif ( ! is_string( $bytes ) ) {", 'canon', BYTES_UNIT)
+e('canon-decode-float-set', 'decode(): a float or set marker, which no such form carries, is refused', CN,
+  "\t\tif ( array( '~f' ) === $keys || array( '~set' ) === $keys ) {", "\t\tif ( false ) {", 'canon', BYTES_UNIT)
+e('canon-decode-key', 'decode(): a key marker, which no such form carries, is refused', CN,
+  "\t\t\tif ( is_string( $key ) && 0 === strpos( $key, '~k:' ) ) {", "\t\t\tif ( false ) {", 'canon', BYTES_UNIT)
+e('canon-decode-bare-float', 'decode(): a bare float is not the text of encode()', CN,
+  "\t\t\tif ( is_float( $value ) ) {\n\t\t\t\t// encode() writes a float as {\"~f\"}; a bare float is not its text.", "\t\t\tif ( false ) {\n\t\t\t\t// encode() writes a float as {\"~f\"}; a bare float is not its text.", 'canon', BYTES_UNIT)
 
 
 out = []
@@ -570,6 +645,8 @@ $sc = 'includes/sync/class-sync-schema.php';
 $ts = 'includes/tools/class-tools-staging.php';
 $g  = 'includes/class-staging-gate.php';
 $dk = 'includes/sync/class-sync-db-kinds.php';
+$bk = 'includes/sync/class-sync-backup.php';
+$cn = 'includes/sync/class-sync-canon.php';
 
 return array(''')
 for (id_, clause, file, search, replace, run, expect) in entries:

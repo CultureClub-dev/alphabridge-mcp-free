@@ -871,6 +871,40 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( 'closed_reverted', $back['state'], json_encode( $back ) );
 		self::assertSame( 'Write to us.', self::row_a( (int) $a['contact'] )['post_content'] );
 		self::assertSame( 'About us.', self::row_a( (int) $a['about'] )['post_content'] );
+		// The run of the way back for a closed run is made with all its steps
+		// or not at all as well (AB_MCP_Sync_Run::create()): a second run
+		// writes both pages again and closes; the trigger refuses the second
+		// step of the run of its way back: no run is made (before, one stood
+		// closed as aborted, or open with a part of its steps), the site has no
+		// open run, the pages keep the staging content; without the trigger the
+		// way back runs whole.
+		$planned = self::planned( array( 'contact', 'about' ) );
+		$second  = (int) self::begun( $planned['args'] )['run_id'];
+		self::probe_ok();
+		self::assertSame( 'closed_done', self::finish( $second )['state'] );
+		self::assertSame( 'Write to us on staging.', self::row_a( (int) $a['contact'] )['post_content'] );
+		$runs_table = AB_MCP_Sync_Schema::table( 'runs' );
+		$runs       = (int) $wpdb->get_var( "SELECT COUNT(*) FROM `$runs_table`" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$wpdb->query( sprintf( "CREATE TRIGGER ab_it_refuse_step BEFORE INSERT ON `%s` FOR EACH ROW BEGIN IF NEW.run_id <> %d AND NEW.op = 'revert' AND NEW.seq = 2 THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'refused by the test'; END IF; END", $table, $second ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		self::assertSame( '', $wpdb->last_error, 'The trigger is there.' );
+		try {
+			$args    = array( 'action' => 'plan', 'run_id' => $second );
+			$preview = self::gated( 'wp_site_revert', $args );
+			self::assertIsArray( $preview, is_wp_error( $preview ) ? $preview->get_error_message() : '' );
+			self::assertFalse( $preview['preview']['same_run'] );
+			self::refused( self::gated( 'wp_site_revert', $args + array( 'confirm_token' => $preview['confirm_token'] ) ), 'ab_mcp_sync_run_db' );
+		} finally {
+			$wpdb->query( "DROP TRIGGER IF EXISTS ab_it_refuse_step" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		}
+		self::assertSame( $runs, (int) $wpdb->get_var( "SELECT COUNT(*) FROM `$runs_table`" ), 'No run was made.' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		self::assertNull( AB_MCP_Sync_Run::open_run(), 'No run is open.' );
+		self::assertSame( 'closed_done', self::gated( 'wp_site_push', array( 'action' => 'status', 'run_id' => $second ) )['state'] );
+		self::assertSame( 'Write to us on staging.', self::row_a( (int) $a['contact'] )['post_content'], 'Nothing written.' );
+		$begun = self::revert( $second );
+		self::assertSame( 'revert', $begun['type'] );
+		self::assertCount( 2, $begun['steps'] );
+		self::assertSame( 'closed_reverted', self::revert_all( (int) $begun['run_id'] )['state'] );
+		self::assertSame( 'Write to us.', self::row_a( (int) $a['contact'] )['post_content'] );
 	}
 
 	public function testTheWayBackIsByteForByteAndLeavesWhatChangedSince(): void {
@@ -1654,7 +1688,7 @@ final class SyncRunTest extends TestCase {
 		$outcome = array_column( $step['result']['parts'], null, 'part' );
 		self::assertSame( 'restored', $outcome['row']['state'] );
 		self::assertSame( 'left', $outcome['terms:category']['state'], json_encode( $step['result'] ) );
-		self::assertStringContainsString( 'as the part row went back', (string) $outcome['terms:category']['note'] );
+		self::assertStringContainsString( 'putting the part row back changed the part terms:category besides it', (string) $outcome['terms:category']['note'], 'The halt of the way back for the object (Codex round 16) names the cause.' );
 		self::assertSame( '"news"', $outcome['terms:category']['value_before'] );
 		self::assertSame( array( $default ), $slugs(), 'The default category the row gave stands; News is not written over the other hand\'s removal.' );
 		self::assertSame( 'unclear', $step['state'] );
@@ -2090,7 +2124,7 @@ final class SyncRunTest extends TestCase {
 		$outcome = array_column( $step['result']['parts'], null, 'part' );
 		self::assertSame( 'restored', $outcome['row']['state'] );
 		self::assertSame( 'left', $outcome['terms:category']['state'], 'The default category the row gave back is not the step\'s own: left.' );
-		self::assertStringContainsString( 'as the part row went back', (string) $outcome['terms:category']['note'] );
+		self::assertStringContainsString( 'putting the part row back changed the part terms:category besides it', (string) $outcome['terms:category']['note'], 'The halt names the cause.' );
 		self::assertSame( '"news"', $outcome['terms:category']['value_before'] );
 		self::assertSame( 'unclear', $step['state'] );
 		$default = get_term( (int) get_option( 'default_category' ), 'category' );
@@ -2347,7 +2381,8 @@ final class SyncRunTest extends TestCase {
 		$notes   = array_column( $step['result']['parts'], 'note', 'part' );
 		self::assertSame( 'restored', $outcome['row'] );
 		self::assertSame( 'left', $outcome['terms:category'], 'Decided afresh after the row went back: the hook\'s category, not the step\'s own.' );
-		self::assertStringContainsString( 'another hand', (string) ( $notes['terms:category'] ?? '' ) );
+		self::assertStringContainsString( 'changed since the step wrote it', (string) ( $notes['terms:category'] ?? '' ) );
+		self::assertStringContainsString( 'The way back stopped for this object: putting the part row back changed the part terms:category besides it', (string) ( $notes['terms:category'] ?? '' ), 'The halt names the cause (a hook of this site).' );
 		self::assertSame( 'unclear', $step['state'] );
 		self::assertSame( array( 'third' ), $slugs(), 'The hook\'s category stands; News is not written over it.' );
 		self::assertSame( $before, self::row_a( $story_a ) );

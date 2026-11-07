@@ -108,6 +108,12 @@ final class SyncRunRowsWpdb {
 		$this->queries[] = (string) $query;
 		return $this->rows;
 	}
+
+	/** A write (START TRANSACTION, COMMIT, ROLLBACK): recorded, answered true. */
+	public function query( $sql ) {
+		$this->queries[] = (string) $sql;
+		return true;
+	}
 }
 
 /**
@@ -1034,6 +1040,92 @@ final class SyncRunTest extends TestCase {
 		$denied = array();
 		self::assertTrue( $right( 'terms:category', $denied ) );
 		self::assertStringContainsString( 'not registered', (string) $right( 'terms:product_cat', $denied ) );
+	}
+
+	public function testTheKindReadsAgainAsItWritesAPartBackAndLeavesOneThatIsNotWhatTheStepRead(): void {
+		// The second check at the moment of writing (decision 23; GRENZEN-LAUF.md):
+		// put_back() decides a part on a hash read right before its turn
+		// (decide()), and restore_row() and restore_meta() read the part again
+		// as they write and leave it where it is not what the step read back
+		// ($written). No hook of WordPress runs between the two reads, so no
+		// site stages a change in between: held here directly (the CI of GitHub
+		// Codex round 2 on free#137 showed the integration test held decide()
+		// alone, and the clause of the kind survived its mutation).
+		$db              = self::post_rows( 'News' );
+		$GLOBALS['wpdb'] = $db;
+		$now             = AB_MCP_Sync_Post_Writer::current( 12 );
+		self::assertIsArray( $now );
+		$hash_now = AB_MCP_Sync_Post_Writer::row_hash( $now['row'] );
+		$backup   = $now['row'];
+		$backup['post_title'] = 'Before';
+		$before   = AB_MCP_Sync_Post_Writer::row_hash( $backup );
+		self::assertSame( array( 'state' => 'unchanged' ), AB_MCP_Sync_Post_Writer::restore_row( 12, $now['row'], $hash_now, str_repeat( '0', 64 ), 1800000000 ), 'As the backup: nothing to do.' );
+		$GLOBALS['ab_test_updated'] = array();
+		$left                       = AB_MCP_Sync_Post_Writer::restore_row( 12, $backup, $before, str_repeat( '0', 64 ), 1800000000 );
+		self::assertSame( 'left', $left['state'] );
+		self::assertStringContainsString( 'The row was changed since the step wrote it', $left['note'] );
+		self::assertSame( array(), $GLOBALS['ab_test_updated'], 'wp_update_post() was not called.' );
+		self::assertSame( array( 'state' => 'unchanged' ), AB_MCP_Sync_Post_Writer::restore_meta( 12, 'note', array( 'abc' ), str_repeat( '0', 64 ) ) );
+		$left = AB_MCP_Sync_Post_Writer::restore_meta( 12, 'note', array( 'before' ), str_repeat( '0', 64 ) );
+		self::assertSame( 'left', $left['state'] );
+		self::assertStringContainsString( 'The meta note was changed since the step wrote it', $left['note'] );
+	}
+
+	public function testAWriteOfTheRunAndItsStepsIsOneTransactionAndRefusedWithTheWayWithoutInnoDb(): void {
+		// GitHub Codex round 2 on free#137 (P1): a run is made with all its
+		// steps or not at all, and the way back of a run that is not closed
+		// moves the run and stores every step of the way back in one
+		// transaction (AB_MCP_Sync_Run::transaction()). The engine of both
+		// tables is asked first; one that keeps no transactions refuses with
+		// the way, before anything is written.
+		$db              = new SyncRunRowsWpdb();
+		$GLOBALS['wpdb'] = $db;
+		update_option( AB_MCP_Sync_Schema::OPTION, (string) AB_MCP_Sync_Schema::VERSION );
+		AB_MCP_Sync_Schema::forget();
+		$runs  = AB_MCP_Sync_Schema::table( 'runs' );
+		$steps = AB_MCP_Sync_Schema::table( 'steps' );
+		$marks = static fn( array $queries ): array => array_values( array_filter( $queries, static fn( string $q ): bool => in_array( $q, array( 'START TRANSACTION', 'COMMIT', 'ROLLBACK' ), true ) ) );
+		$db->rows = array( array( 'name' => $runs, 'engine' => 'InnoDB' ), array( 'name' => $steps, 'engine' => 'MyISAM' ) );
+		$ran      = false;
+		$refused  = AB_MCP_Sync_Run::transaction(
+			static function () use ( &$ran ) {
+				$ran = true;
+				return 1;
+			}
+		);
+		self::assertInstanceOf( WP_Error::class, $refused );
+		self::assertSame( 'ab_mcp_sync_run_engine', $refused->get_error_code() );
+		self::assertStringContainsString( "ALTER TABLE $steps ENGINE=InnoDB", $refused->get_error_message(), 'The way.' );
+		self::assertStringContainsString( 'MyISAM', $refused->get_error_message() );
+		self::assertFalse( $ran, 'Nothing begun.' );
+		self::assertSame( array(), $marks( $db->queries ) );
+		$db->rows = array( array( 'name' => $runs, 'engine' => 'InnoDB' ) );
+		$refused  = AB_MCP_Sync_Run::transaction( static fn() => 1 );
+		self::assertSame( 'ab_mcp_sync_run_engine', $refused->get_error_code(), 'A table the database does not name: refused as well.' );
+		self::assertStringContainsString( 'engine unknown', $refused->get_error_message() );
+		// InnoDB: begun, the writes, committed; what the function gives comes back.
+		$db->rows    = array( array( 'name' => $runs, 'engine' => 'InnoDB' ), array( 'name' => $steps, 'engine' => 'InnoDB' ) );
+		$db->queries = array();
+		self::assertSame( 'done', AB_MCP_Sync_Run::transaction( static fn() => 'done' ) );
+		self::assertSame( array( 'START TRANSACTION', 'COMMIT' ), $marks( $db->queries ) );
+		// A WP_Error rolls back and comes back as it is.
+		$db->queries = array();
+		$error       = new WP_Error( 'x', 'y' );
+		self::assertSame( $error, AB_MCP_Sync_Run::transaction( static fn() => $error ) );
+		self::assertSame( array( 'START TRANSACTION', 'ROLLBACK' ), $marks( $db->queries ) );
+		// An exception rolls back and goes on.
+		$db->queries = array();
+		try {
+			AB_MCP_Sync_Run::transaction(
+				static function () {
+					throw new \RuntimeException( 'boom' );
+				}
+			);
+			self::fail( 'Thrown on.' );
+		} catch ( \RuntimeException $e ) {
+			self::assertSame( 'boom', $e->getMessage() );
+		}
+		self::assertSame( array( 'START TRANSACTION', 'ROLLBACK' ), $marks( $db->queries ) );
 	}
 
 	/** A post of a few rows in the fake $wpdb, with one category. */

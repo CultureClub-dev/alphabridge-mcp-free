@@ -1408,13 +1408,14 @@ final class AB_MCP_Sync_Engine {
 	 * 2. Every part is decided right before its turn, on the hash read then
 	 *    (decide(): as the backup, unchanged; as own_after, put back; else
 	 *    left), never on a hash read before another part went back (N3).
-	 * 3. What the row put back changed besides the row is another hand's,
-	 *    whatever it is (a side effect of the core such as the default
-	 *    category, a hook of this site): the step owns nothing of what the
-	 *    part holds then, so it is left unless it is as the backup (N3; the
-	 *    decision of 07.11.2026 after Codex round 7, F2: before, the default
-	 *    category the row gave back became the step's own and took terms
-	 *    back that another hand had changed).
+	 * 3. What putting a part back changed besides it, whatever it is (a side
+	 *    effect of the core such as the default category the row gives a post
+	 *    without one, a hook of this site), stops the way back for the
+	 *    object: no further part goes back by itself, each is left unless it
+	 *    is as the backup (N3; the decision of 07.11.2026 after Codex round 7,
+	 *    F2: before, the default category the row gave back became the step's
+	 *    own and took terms back that another hand had changed; Codex rounds
+	 *    12 and 16).
 	 * 4. Then every part counted as back is read once more against the
 	 *    backup: only where every one reads as the backup is the object back;
 	 *    a part that does not is unclear, with the reason.
@@ -1453,15 +1454,20 @@ final class AB_MCP_Sync_Engine {
 			$name    = (string) $parts[ $i ]['part'];
 			$now     = null === $seen ? null : AB_MCP_Sync_Post_Writer::part_hash( $seen, $name );
 			$decided = self::decide( $parts[ $i ], $now, (string) AB_MCP_Sync_Post_Writer::part_hash( $backup, $name ) );
-			if ( null !== $stopped && 'put_back' === $decided['state'] ) {
-				// Putting a part back changed something besides it that the
-				// plan does not name (a hook of this site): the object deviated
+			if ( null !== $stopped ) {
+				// Putting a part back changed something besides it (a side
+				// effect of the core, a hook of this site): the object deviated
 				// on the way back, nothing more of it goes back by itself (Codex
-				// round 16).
-				$decided = array(
-					'state' => 'left',
-					'why'   => sprintf( 'The way back stopped for this object: %s; the part %s is left as it is, check it by hand.', $stopped, $name ),
-				);
+				// round 16); a part decide() leaves on its own names the halt
+				// besides its reason, so the answer says what changed the object.
+				if ( 'put_back' === $decided['state'] ) {
+					$decided = array(
+						'state' => 'left',
+						'why'   => sprintf( 'The way back stopped for this object: %s; the part %s is left as it is, check it by hand.', $stopped, $name ),
+					);
+				} elseif ( 'left' === $decided['state'] ) {
+					$decided['why'] .= sprintf( ' The way back stopped for this object: %s.', $stopped );
+				}
 			}
 			if ( 'put_back' === $decided['state'] ) {
 				// The rights at the object, as the forward write asks them
@@ -1487,26 +1493,16 @@ final class AB_MCP_Sync_Engine {
 				AB_MCP_Change_Lock::touch();
 				$again = AB_MCP_Sync_Post_Writer::current( $live_id );
 				$again = is_array( $again ) ? $again : null;
-				// What putting this part back changed besides it is another
-				// hand's (N3; F2; for every part, not the row only: a hook that
-				// sets the tags as the category goes back, Codex round 12): the
-				// step owns nothing of it.
-				foreach ( $parts as $k => $other ) {
-					if ( $k === $i ) {
-						continue;
-					}
-					$pre_k  = null === $seen ? null : AB_MCP_Sync_Post_Writer::part_hash( $seen, (string) $other['part'] );
-					$post_k = null === $again ? null : AB_MCP_Sync_Post_Writer::part_hash( $again, (string) $other['part'] );
-					if ( ! self::changed( $pre_k, $post_k ) ) {
-						continue;
-					}
-					$parts[ $k ]['own']     = false;
-					$parts[ $k ]['foreign'] = true;
-					$parts[ $k ]['note']    = self::noted( $other, sprintf( 'Changed as the part %s went back (a side effect of the core, such as the default category of a post without one, or a hook of this site): the step owns nothing of what the part holds now, so it is left as it is unless it is as the backup; check it by hand.', $name ) );
-				}
-				// Whatever else it changed, named by the plan or not (a key a
-				// hook adds as the part goes back, Codex round 16), stops the
-				// way back for the object.
+				// Whatever putting this part back changed besides it, a part of
+				// the plan or not (a side effect of the core such as the default
+				// category of a post without one, N3, F2; a hook that sets the
+				// tags as the category goes back, Codex round 12; a key a hook
+				// adds as the part goes back, Codex round 16), stops the way
+				// back for the object: no further part goes back by itself, a
+				// part not as the backup is left with its value before. (The
+				// mark of another hand on the changed part, Codex round 12,
+				// decided nothing the halt does not decide since Codex round 16
+				// and is gone; GitHub Codex round 2 of branch 8, CI.)
 				if ( null === $stopped && is_array( $seen ) && is_array( $again ) ) {
 					foreach ( self::part_names( $seen, $again ) as $other_name ) {
 						if ( $other_name !== $name && self::changed( AB_MCP_Sync_Post_Writer::part_hash( $seen, $other_name ), AB_MCP_Sync_Post_Writer::part_hash( $again, $other_name ) ) ) {
