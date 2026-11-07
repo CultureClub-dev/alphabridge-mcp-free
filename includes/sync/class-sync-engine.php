@@ -970,6 +970,7 @@ final class AB_MCP_Sync_Engine {
 			$through_row = false;
 			$error       = null;
 			$post_all    = null;
+			$pre_call    = null;
 			if ( 'row' === $name ) {
 				// Every part right before the row call: the row call writes
 				// besides the row (with_row()), so every part is read before it
@@ -1016,6 +1017,7 @@ final class AB_MCP_Sync_Engine {
 						return self::unread( $journal, $i, $pre_all, $live_id, $backup );
 					}
 					$journal['parts'][ $i ] = self::seen_before( $journal['parts'][ $i ], $pre_all, $backup );
+					$pre_call               = $pre_all;
 					// Written ahead of the call (decision 18; Codex round 7, F1):
 					// a request that ends inside it leaves the part without a read
 					// back, never with the read back of the row before. For the
@@ -1035,6 +1037,7 @@ final class AB_MCP_Sync_Engine {
 					return self::unread( $journal, $i, $pre_all, $live_id, $backup );
 				}
 				$journal['parts'][ $i ] = self::seen_before( $journal['parts'][ $i ], $pre_all, $backup );
+				$pre_call               = $pre_all;
 				// Written ahead of the call, as for the meta (F1).
 				$save( $journal );
 				$done                   = AB_MCP_Sync_Post_Writer::write_terms( $live_id, $taxonomy, $terms );
@@ -1042,21 +1045,25 @@ final class AB_MCP_Sync_Engine {
 				$post_all               = AB_MCP_Sync_Post_Writer::current( $live_id );
 				$journal['parts'][ $i ] = self::seen_after( $journal['parts'][ $i ], is_array( $post_all ) ? $post_all : null, $target, false );
 			}
-			// A part this call changed besides itself (a hook of this site
-			// reacting to the call), whether the step wrote it before or has
-			// still to write it, is another hand's: the object deviated, even
-			// where the part reads as before again later (Codex rounds 13 and
-			// 14; the mirror of the way back, put_back()). The row call reads
-			// every part already.
-			if ( 'row' !== $name && is_array( $post_all ) ) {
-				foreach ( $journal['parts'] as $k => $other ) {
-					if ( $k === $i || ! isset( $other['post'] ) || null === $other['post'] ) {
+			// Whatever this call changed besides its own part (a hook of this
+			// site reacting to the call): a part the step wrote before or has
+			// still to write, or one the plan does not name at all (a key a hook
+			// adds and takes away again), is another hand's: the object
+			// deviated, even where it reads as before again later (Codex
+			// rounds 13 to 15; the mirror of the way back, put_back()). The row
+			// call reads every part with the row already (with_row()).
+			if ( 'row' !== $name && is_array( $pre_call ) && is_array( $post_all ) ) {
+				foreach ( self::part_names( $pre_call, $post_all ) as $other_name ) {
+					if ( $other_name === $name || ! self::changed( AB_MCP_Sync_Post_Writer::part_hash( $pre_call, $other_name ), AB_MCP_Sync_Post_Writer::part_hash( $post_all, $other_name ) ) ) {
 						continue;
 					}
-					if ( self::changed( (string) $other['post'], AB_MCP_Sync_Post_Writer::part_hash( $post_all, (string) $other['part'] ) ) ) {
-						$journal['parts'][ $k ]['foreign'] = true;
-						$journal['parts'][ $k ]['note']    = self::noted( $other, sprintf( 'Changed as the step wrote the part %s (a hook of this site reacting to the call): not provably the step\'s own.', $name ) );
+					foreach ( $journal['parts'] as $k => $other ) {
+						if ( (string) $other['part'] === $other_name ) {
+							$journal['parts'][ $k ]['foreign'] = true;
+							$journal['parts'][ $k ]['note']    = self::noted( $other, sprintf( 'Changed as the step wrote the part %s (a hook of this site reacting to the call): not provably the step\'s own.', $name ) );
+						}
 					}
+					return self::deviated( $journal, $i, sprintf( 'the call of the part %1$s changed the part %2$s besides it (a hook of this site reacting to the call)', $name, $other_name ), $live_id, $backup );
 				}
 			}
 			$one     = $journal['parts'][ $i ];
@@ -2036,6 +2043,27 @@ final class AB_MCP_Sync_Engine {
 		}
 		AB_MCP_Sync_Run::touch( $run_id );
 		return array( 'next' => 'Not written: ' . $message . ' The run goes on with the next step (action=next); the steps that depend on this object are skipped.' );
+	}
+
+	/**
+	 * The names of the parts of one or more states as current() reads them:
+	 * the row, meta:<key> for every key, terms:<taxonomy> for every
+	 * taxonomy, whether the plan names them or not (Codex round 15).
+	 *
+	 * @param array ...$states current() of the post.
+	 * @return string[]
+	 */
+	private static function part_names( array ...$states ) {
+		$names = array( 'row' => true );
+		foreach ( $states as $state ) {
+			foreach ( isset( $state['meta'] ) && is_array( $state['meta'] ) ? $state['meta'] : array() as $row ) {
+				$names[ 'meta:' . (string) $row['key'] ] = true;
+			}
+			foreach ( isset( $state['terms'] ) && is_array( $state['terms'] ) ? $state['terms'] : array() as $term ) {
+				$names[ 'terms:' . (string) $term['taxonomy'] ] = true;
+			}
+		}
+		return array_keys( $names );
 	}
 
 	/**

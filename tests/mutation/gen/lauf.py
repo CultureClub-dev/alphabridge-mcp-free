@@ -334,10 +334,12 @@ e('run-cap-checked', 'cap_values(): every value before is checked once more as i
   "\t\t\t\t\t$part['value_before']                                 = AB_MCP_Sync_Post_Writer::checked_before( $part['value_before'], isset( $part['value_rules'] ) ? (int) $part['value_rules'] : null );", "\t\t\t\t\t$part['value_before']                                 = (string) $part['value_before'];", 'unit', 'testAnAnswerCarriesAtMostSoManyBytesOfValuesBeforeNewestStepsFirst')
 e('engine-unread-no-own', 'seen_after(): a state not read is no read back and no ownership (Codex round 11)', EN,
   "\t\tif ( ! is_array( $state ) ) {\n\t\t\t// Not read back", "\t\tif ( false ) {\n\t\t\t// Not read back", 'unit', 'testAPartNotReadBackAfterItsCallIsNeverTheStepsOwn')
-e('engine-written-changed-later', 'write_parts(): a part the step wrote that a later call changes besides itself is another hand\'s, the object deviated (Codex round 13)', EN,
-  "\t\t\t\t\tif ( self::changed( (string) $other['post'], AB_MCP_Sync_Post_Writer::part_hash( $post_all, (string) $other['part'] ) ) ) {", "\t\t\t\t\tif ( false ) {", 'it', 'testAHookThatChangesAWrittenPartAsALaterPartIsWrittenDeviatesTheObject')
-e('engine-planned-changed-between', 'write_parts(): a part still to write that a call changes besides itself is another hand\'s too, even where it reads as before again (Codex round 14)', EN,
-  "\t\t\t\t\tif ( $k === $i || ! isset( $other['post'] ) || null === $other['post'] ) {", "\t\t\t\t\tif ( $k === $i || 'planned' === $other['state'] || ! isset( $other['post'] ) || null === $other['post'] ) {", 'it', 'testAHookThatChangesAPartStillToWriteAndBackAgainDeviatesTheObject')
+e('engine-call-changed-besides', 'write_parts(): whatever a meta or terms call changed besides its own part deviates the object (Codex rounds 13 to 15)', EN,
+  "\t\t\t\t\tif ( $other_name === $name || ! self::changed( AB_MCP_Sync_Post_Writer::part_hash( $pre_call, $other_name ), AB_MCP_Sync_Post_Writer::part_hash( $post_all, $other_name ) ) ) {", "\t\t\t\t\tif ( true ) {", 'it', 'testAHookThatChangesAPartStillToWriteAndBackAgainDeviatesTheObject')
+e('engine-part-names-all', 'part_names(): every meta key of the states, named by the plan or not (Codex round 15)', EN,
+  "\t\t\t\t$names[ 'meta:' . (string) $row['key'] ] = true;", "\t\t\t\tunset( $row );", 'it', 'testAHookThatAddsAndTakesAwayAKeyThePlanDoesNotNameDeviatesTheObject')
+e('engine-pre-call-terms', 'write_parts(): the state right before the terms call is the one the call is judged against (Codex round 13)', EN,
+  "\t\t\t\t$pre_call               = $pre_all;\n\t\t\t\t// Written ahead of the call, as for the meta (F1).", "\t\t\t\t// Written ahead of the call, as for the meta (F1).", 'it', 'testAHookThatChangesAWrittenPartAsALaterPartIsWrittenDeviatesTheObject')
 e('writer-before-password', 'row_before(): post_password is a credential by its name, never shown', PW,
   "\t\t\tif ( 'post_password' === $column || AB_MCP_Sync_Credentials::names_credential( $column, AB_MCP_Redactor::extra_keys() ) ) {", "\t\t\tif ( false ) {", 'unit', 'testTheValueBeforeOfAPartLeftIsShortNeverACredentialAndCapped')
 e('writer-before-long', 'row_before(): a long text by its bytes and the revision that holds it, never whole', PW,

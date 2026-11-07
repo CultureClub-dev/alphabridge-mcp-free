@@ -1668,7 +1668,8 @@ final class SyncRunTest extends TestCase {
 		remove_all_actions( 'set_object_terms' );
 		self::assertIsArray( $write, is_wp_error( $write ) ? $write->get_error_message() : '' );
 		self::assertSame( 'unclear', $write['step']['state'], json_encode( $write['step'] ) );
-		self::assertSame( 'meta:label', $write['step']['parts']['object']['deviated']['part'] );
+		self::assertSame( 'terms:category', $write['step']['parts']['object']['deviated']['part'], 'The call that changed another part.' );
+		self::assertStringContainsString( 'meta:label', $write['step']['parts']['object']['deviated']['why'] );
 		self::probe_ok();
 		self::finish( (int) $run['run_id'] );
 		$begun   = self::revert( (int) $run['run_id'] );
@@ -1710,7 +1711,8 @@ final class SyncRunTest extends TestCase {
 		remove_all_actions( 'updated_post_meta' );
 		self::assertIsArray( $write, is_wp_error( $write ) ? $write->get_error_message() : '' );
 		self::assertSame( 'unclear', $write['step']['state'], json_encode( $write['step'] ) );
-		self::assertSame( 'meta:total', $write['step']['parts']['object']['deviated']['part'] );
+		self::assertSame( 'meta:price', $write['step']['parts']['object']['deviated']['part'], 'The call that changed another part.' );
+		self::assertStringContainsString( 'meta:total', $write['step']['parts']['object']['deviated']['why'] );
 		self::probe_ok();
 		self::finish( (int) $run['run_id'] );
 		$begun   = self::revert( (int) $run['run_id'] );
@@ -1718,6 +1720,52 @@ final class SyncRunTest extends TestCase {
 		$outcome = array_column( self::step( $back, 1 )['result']['parts'], 'state', 'part' );
 		self::assertNotSame( 'restored', $outcome['meta:price'] ?? 'absent', json_encode( self::step( $back, 1 )['result'] ) );
 		self::assertSame( array( '20' ), self::meta_a( $order, 'price' ), 'Nothing of the object that deviated goes back.' );
+	}
+
+	public function testAHookThatAddsAndTakesAwayAKeyThePlanDoesNotNameDeviatesTheObject(): void {
+		// Codex round 15: a hook of this site sets shortage=yes while reserved
+		// exceeds available and takes the key away otherwise. Writing
+		// available=1 adds shortage, writing reserved=0 takes it away again:
+		// the end is the target, yet a call changed a key the plan does not
+		// name. The object deviated; nothing goes back by itself.
+		self::pair();
+		$a = self::pages_on_a( array( 'stock' => 'A stock.' ) );
+		$b = self::pages_on_b( array( 'stock' => 'A stock.' ) );
+		foreach ( array( 'available' => '10', 'reserved' => '2' ) as $key => $value ) {
+			add_post_meta( (int) $a['stock'], $key, $value );
+			self::b( array( array( 'op' => 'add_meta', 'post' => (int) $b['stock'], 'key' => $key, 'value' => $value ) ) );
+		}
+		self::paired( self::staged() );
+		self::change_on_b( $b['stock'], 'stock', 'A stock, on staging.' );
+		self::b( array( array( 'op' => 'update_meta', 'post' => (int) $b['stock'], 'key' => 'available', 'value' => '1' ) ) );
+		self::b( array( array( 'op' => 'update_meta', 'post' => (int) $b['stock'], 'key' => 'reserved', 'value' => '0' ) ) );
+		$planned = self::planned( array( 'stock' ) );
+		$run     = self::begun( $planned['args'] );
+		$stock   = (int) $a['stock'];
+		self::assertSame( 'done', self::next( (int) $run['run_id'] )['step']['state'] );
+		$keep = static function ( $meta_id, $object_id, $meta_key ) use ( $stock ) {
+			if ( (int) $object_id !== $stock || ! in_array( $meta_key, array( 'available', 'reserved' ), true ) ) {
+				return;
+			}
+			if ( (int) get_post_meta( $stock, 'reserved', true ) > (int) get_post_meta( $stock, 'available', true ) ) {
+				update_post_meta( $stock, 'shortage', 'yes' );
+			} else {
+				delete_post_meta( $stock, 'shortage' );
+			}
+		};
+		add_action( 'updated_post_meta', $keep, 10, 3 );
+		$write = self::next( (int) $run['run_id'] );
+		remove_all_actions( 'updated_post_meta' );
+		self::assertIsArray( $write, is_wp_error( $write ) ? $write->get_error_message() : '' );
+		self::assertSame( 'unclear', $write['step']['state'], json_encode( $write['step'] ) );
+		self::assertStringContainsString( 'meta:shortage', $write['step']['parts']['object']['deviated']['why'] );
+		self::probe_ok();
+		self::finish( (int) $run['run_id'] );
+		$begun   = self::revert( (int) $run['run_id'] );
+		$back    = self::revert_all( (int) $begun['run_id'] );
+		$outcome = array_column( self::step( $back, 1 )['result']['parts'], 'state', 'part' );
+		self::assertNotSame( 'restored', $outcome['meta:available'] ?? 'absent', json_encode( self::step( $back, 1 )['result'] ) );
+		self::assertSame( array( '1' ), self::meta_a( $stock, 'available' ), 'Nothing of the object that deviated goes back.' );
 	}
 
 	public function testTheDefaultCategoryOfANewPostIsWrittenWithTheRowAndTheJournalSaysSo(): void {
