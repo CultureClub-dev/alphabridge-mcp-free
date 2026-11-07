@@ -274,16 +274,17 @@ e('engine-findings-kept', 'run_check(): the findings of a call are kept with the
 e('engine-pending', 'run_check(): an object the run creates is pending for the check of the others (B1)', EN,
   "\t\t\t\t$ctx['pending']['post'][ (int) $one['staging_ref'] ] = true;", '', 'it', 'testANewParentPageAndItsNewChildPageAreWrittenInOneRun')
 e('engine-template-with-row', 'write_parts(): the template was written with the row, the meta part is read back only (B7)', EN,
-  "\t\t\t\t$done = $core ? true : AB_MCP_Sync_Post_Writer::write_meta( $live_id, $key, $values, $have );",
-  "\t\t\t\t$done = AB_MCP_Sync_Post_Writer::write_meta( $live_id, $key, $values, $have );", 'it', 'testThePageTemplateGoesThroughTheCoreWayAndTheThemeHasToOfferIt')
-e('engine-rollback-earlier', 'write_parts(): the parts written before a deviating one go back with it (B8)', EN,
-  "\t\t\tfor ( $j = count( $journal['parts'] ) - 1; $j >= 0; $j-- ) {", "\t\t\tfor ( $j = $i; $j >= $i; $j-- ) {", 'it', 'testADeviatingMetaPartTakesTheRowBackWithItAndTheStepSaysSo')
+  "\t\t\t\t$done  = $core ? true : AB_MCP_Sync_Post_Writer::write_meta( $live_id, $key, $values, $have );",
+  "\t\t\t\t$done  = AB_MCP_Sync_Post_Writer::write_meta( $live_id, $key, $values, $have );", 'it', 'testThePageTemplateGoesThroughTheCoreWayAndTheThemeHasToOfferIt')
+e('engine-rollback-earlier', 'own_hash(): a part read as its target is the step\'s own and goes back with a deviating one (B8)', EN,
+  "\t\tif ( in_array( $state, array( 'restored', 'unchanged', 'unclear', 'not_reached', 'failed' ), true ) ) {",
+  "\t\tif ( in_array( $state, array( 'restored', 'unchanged', 'unclear', 'not_reached', 'failed', 'read' ), true ) ) {", 'it', 'testADeviatingMetaPartTakesTheRowBackWithItAndTheStepSaysSo')
 WITH_ROW = 'testATemplateWrittenWithTheRowGoesBackWithTheRow'
 e('engine-with-row', 'write_parts(): what the core wrote with the row is read back then and stands in the journal as written (N2)', EN,
-  "\t\t\t\tif ( is_array( $now ) ) {\n\t\t\t\t\tforeach ( $journal['parts'] as $k => $other ) {", "\t\t\t\tif ( false ) {\n\t\t\t\t\tforeach ( $journal['parts'] as $k => $other ) {", 'it', WITH_ROW)
-e('engine-rollback-written', 'write_parts(): a part written with the row goes back with the row, wherever it stands in the journal (N2)', EN,
-  "\t\t\t\tif ( $j !== $i && ! in_array( $journal['parts'][ $j ]['state'], array( 'read', 'written' ), true ) ) {",
-  "\t\t\t\tif ( $j !== $i && ( $j > $i || ! in_array( $journal['parts'][ $j ]['state'], array( 'read', 'written' ), true ) ) ) {", 'it', WITH_ROW)
+  "\t\t\t\tif ( is_array( $now ) && ( null === $error || ! hash_equals( $was, (string) $after ) ) ) {\n\t\t\t\t\tforeach ( $journal['parts'] as $k => $other ) {",
+  "\t\t\t\tif ( false ) {\n\t\t\t\t\tforeach ( $journal['parts'] as $k => $other ) {", 'it', WITH_ROW)
+e('engine-rollback-written', 'write_parts(): a part the core wrote with the row holds the hash read back, so it is the step\'s own and goes back with the row (N2)', EN,
+  "\t\t\t\t\t\t\t$journal['parts'][ $k ]['after'] = $hash;\n", '', 'it', WITH_ROW)
 # The ownership rule (Codex round 3): a part is the step's own only where the
 # step wrote it, through its own call or through a field of the row call
 # (with_row()), and reads back what that call was to write.
@@ -295,18 +296,16 @@ e('with-row-default-category', 'with_row(): the default category of a new post g
   "\t\t\t$out['terms:category'] = self::terms_hash( array( (int) get_option( 'default_category' ) ) );\n", '', 'it', DEFAULT)
 e('engine-own-with-row', 'write_parts(): a part changed with the row is the step\'s own only where the row call was to write it and it reads back so; every other change is another hand\'s (Codex round 3)', EN,
   "\t\t\t\t\t\tif ( isset( $own[ $other['part'] ] ) && hash_equals( (string) $own[ $other['part'] ], $hash ) ) {", "\t\t\t\t\t\tif ( true ) {", 'it', OWN)
-e('engine-foreign-left-at-turn', 'write_parts(): a part the step did not write that changed since the backup is left when the step turns, and the object is unclear', EN,
-  "\t\t\t\t\tif ( null === $hash || ! hash_equals( $was, $hash ) ) {", "\t\t\t\t\tif ( false ) {", 'it', OWN)
-e('engine-revert-left', 'revert_boundary(): a part left at the turn is never put back by the way back of the closed run', EN,
-  "\t\t\t$never = 'left' === $part['state'] || 'not_reached' === $part['state'] || ( 'planned' === $part['state'] && ! empty( $part['foreign'] ) );",
-  "\t\t\t$never = 'not_reached' === $part['state'] || ( 'planned' === $part['state'] && ! empty( $part['foreign'] ) );", 'it', OWN)
-e('engine-revert-not-reached', 'revert_boundary(): a part the step never reached (not_reached) is never put back by the way back (Codex round 4)', EN,
-  "\t\t\t$never = 'left' === $part['state'] || 'not_reached' === $part['state'] || ( 'planned' === $part['state'] && ! empty( $part['foreign'] ) );",
-  "\t\t\t$never = 'left' === $part['state'] || ( 'planned' === $part['state'] && ! empty( $part['foreign'] ) );", 'it', 'testAPartTheStepNeverReachedIsNotTakenBackOnTheWayBack')
+e('engine-foreign-left-at-turn', 'own_hash(): a part still planned owns nothing at a turn, nor where another hand changed it before the step reached it; its target only for an interrupted step (the ownership rule, Codex rounds 3 and 4; decision 18)', EN,
+  "\t\t\treturn $interrupted && empty( $part['foreign'] ) && isset( $part['target'] ) && null !== $part['target'] ? (string) $part['target'] : null;",
+  "\t\t\treturn isset( $part['target'] ) && null !== $part['target'] ? (string) $part['target'] : null;", 'it', OWN)
+e('engine-revert-left', 'own_hash(): a part the step wrote nothing of (left at the turn, never read back) owns nothing, so the way back of the closed run leaves it', EN,
+  "\t\treturn isset( $part['after'] ) && null !== $part['after'] ? (string) $part['after'] : null;",
+  "\t\treturn isset( $part['after'] ) && null !== $part['after'] ? (string) $part['after'] : ( isset( $part['target'] ) ? (string) $part['target'] : null );", 'it', OWN)
 e('engine-settled', 'settled(): a part still planned when the request ended the step is not_reached, never the run\'s own (Codex round 4)', EN,
   "\t\t\tif ( 'planned' === $part['state'] ) {\n\t\t\t\t$journal['parts'][ $k ]['state'] = 'not_reached';", "\t\t\tif ( false ) {\n\t\t\t\t$journal['parts'][ $k ]['state'] = 'not_reached';", 'it', 'testAPartTheStepNeverReachedIsNotTakenBackOnTheWayBack')
-e('engine-deviating-terms-left', 'restore_part(): a deviating part on a way the lock does not refuse is never put back (A2)', EN,
-  "\t\tif ( null !== $part['after'] && ! hash_equals( (string) $part['target'], (string) $part['after'] ) && AB_MCP_Sync_Post_Writer::WAY_TERMS === $part['way'] ) {", "\t\tif ( false ) {", 'it', 'testADeviatingTermPartIsNeverTakenBack')
+e('engine-deviating-terms-left', 'put_back(): a deviating part on a way the lock does not refuse is never put back (A2)', EN,
+  "\t\t\tif ( AB_MCP_Sync_Post_Writer::WAY_TERMS === $part['way'] && null !== $part['after'] && ! hash_equals( (string) $part['target'], (string) $part['after'] ) ) {", "\t\t\tif ( false ) {", 'it', 'testADeviatingTermPartIsNeverTakenBack')
 e('engine-sample-expected', 'sample_finding(): the title of the written object has to be in the body (decision 33; B4)', EN,
   "\t\t\tif ( '' !== $needle && false !== strpos( (string) $body, $needle ) ) {", "\t\t\tif ( true ) {", 'unit', 'testTheSampleOfAPublishedObjectNeedsTheTitleBesides200')
 e('engine-sample-200', 'sample_finding(): 200 (decision 33)', EN,
@@ -331,6 +330,39 @@ e('engine-reverting-only', 'pick(): a run on its way back runs its steps of the 
   "\t\t$reverting = 'reverting' === $run['state'] || 'revert' === $run['type'];", "\t\t$reverting = false;", 'it', 'testARequestThatExitsInABoundaryLeavesTheRunInterruptedAndTheWayBackLeadsTheSameRun')
 e('revert-same-run', 'plan(): the way back of a run that is not closed leads the same run (decision 15)', RV,
   "\t\t$same = in_array( $run['state'], array( 'open', 'interrupted' ), true );", "\t\t$same = false;", 'it', 'testARequestThatExitsInABoundaryLeavesTheRunInterruptedAndTheWayBackLeadsTheSameRun')
+
+# ------------------------------- GitHub Codex round 1 on free#137 (two P1, four P2)
+# The state of a part from the read back, never from what a call answered;
+# the parts put back at one place, the row first, every part read again
+# after; a target changed since the report; the right to remove a key only
+# this site has; a step back once, also across runs of the way back; the
+# key slashed as the values.
+PARTIAL = 'testAMetaCallThatChangedThePartAndThenFailedIsTheStepsOwnAndGoesBack'
+e('engine-failed-read-back', 'write_parts(): a call that answered with an error but changed the part leaves it written, with the hash read back, and the step turns; only a call that changed nothing is failed (P1)', EN,
+  "\t\t\t\tif ( null === $after || hash_equals( $was, (string) $after ) ) {", "\t\t\t\tif ( true ) {", 'it', PARTIAL)
+e('engine-after-journaled', 'write_parts(): the hash read back after every call of the step\'s own stands in the journal as after, whatever the call answered', EN,
+  "\t\t\t$journal['parts'][ $i ]['after'] = $after;\n", '', 'it', PARTIAL)
+ORDER_T = 'testTheWayBackPutsTheRowBackBeforeTheTermsSoAPostWithoutACategoryStaysWithout'
+e('engine-put-back-order', 'put_back(): the row goes back first, then the meta, then the terms, which undo the side effects of wp_update_post() on them (the default category; P2)', EN,
+  "\t\tforeach ( array( 'row', 'meta:', 'terms:' ) as $prefix ) {", "\t\tforeach ( array( 'terms:', 'meta:', 'row' ) as $prefix ) {", 'it', ORDER_T)
+e('engine-put-back-check', 'put_back(): every part counted as back is read again against the backup; one that reads otherwise is unclear, and so is the object', EN,
+  "\t\t\t\tif ( null === $now || ! hash_equals( (string) AB_MCP_Sync_Post_Writer::part_hash( $backup, $name ), $now ) ) {", "\t\t\t\tif ( false ) {", 'it', 'testAPartAHookChangedAfterItWasPutBackIsUnclearNotRestored')
+e('engine-put-back-terms-seen', 'restore_part(): the terms are decided on the state read before the row went back (its side effects on them)', EN,
+  "AB_MCP_Sync_Post_Writer::term_keys( $backup, $taxonomy ), (string) $own, is_array( $seen ) ? $seen : null );", "AB_MCP_Sync_Post_Writer::term_keys( $backup, $taxonomy ), (string) $own, null );", 'it', 'testTheTermsGoBackByTheStateReadBeforeTheRowWentBack')
+e('plan-report-live', 'plan(): a target that changed since the report is not written over, whatever the report said of it; the hash the plan binds is the one the report compared (P1)', PU,
+  "\t\t\tif ( null === $existing && ( ! isset( $compared[ $key ] ) || ! hash_equals( $compared[ $key ], $hash ) ) ) {", "\t\t\tif ( false ) {", 'it', 'testATargetThatChangedSinceTheReportIsNotPlannedWhateverTheReportSaid')
+e('writer-delete-right', 'precheck(): a plain key only this site has, which the step removes, needs the right to remove it (delete_post_meta; decision 28; P2)', PW,
+  "\t\t\t\tif ( ! isset( $prepared['meta'][ $row['key'] ] ) && ! in_array( $row['key'], self::CORE_META, true ) && ! current_user_can( 'delete_post_meta', (int) $live_id, $row['key'] ) ) {", "\t\t\t\tif ( false ) {", 'unit', 'testRemovingAMetaKeyOnlyThisSiteHasNeedsTheRightToDeleteIt')
+e('revert-once-across-runs', 'plan(): a step goes back at most once, also across the runs of the way back made for the closed run (P2)', RV,
+  "\t\tforeach ( $others as $other ) {\n\t\t\t$ways[ (int) $other['run_id'] ] = AB_MCP_Sync_Run::steps( (int) $other['run_id'] );",
+  "\t\tforeach ( array() as $other ) {\n\t\t\t$ways[ (int) $other['run_id'] ] = AB_MCP_Sync_Run::steps( (int) $other['run_id'] );", 'it', 'testAStepGoesBackOnceAlsoAcrossRunsOfTheWayBack')
+SLASH = 'testAMetaKeyWithABackslashIsStoredAndRemovedUnderItsOwnName'
+e('writer-slash-key-update', 'write_meta(): the key slashed for update_metadata(), which unslashes it (P2)', PW,
+  "\t\t\t$done = update_metadata( 'post', $id, wp_slash( (string) $key ), wp_slash( $values[0] ) );", "\t\t\t$done = update_metadata( 'post', $id, $key, wp_slash( $values[0] ) );", 'unit', SLASH)
+e('writer-slash-key-delete', 'write_meta(): the key slashed for delete_metadata(), which unslashes it', PW,
+  "\t\tif ( array() !== $current && false === delete_metadata( 'post', $id, wp_slash( (string) $key ) ) ) {", "\t\tif ( array() !== $current && false === delete_metadata( 'post', $id, $key ) ) {", 'unit', SLASH)
+e('writer-slash-key-add', 'write_meta(): the key slashed for add_metadata(), which unslashes it', PW,
+  "\t\t\tif ( false === add_metadata( 'post', $id, wp_slash( (string) $key ), wp_slash( $value ) ) ) {", "\t\t\tif ( false === add_metadata( 'post', $id, $key, wp_slash( $value ) ) ) {", 'unit', SLASH)
 
 
 def test_of(expect):
@@ -411,7 +443,12 @@ out.append('''<?php
  * through the core way, the parts put back together, a deviating term part
  * left, the sample with its title and the check over calls, only steps that
  * wrote on the way back, the way back made under the lock of the store,
- * the package from one reading with its term names checked.
+ * the package from one reading with its term names checked. GitHub Codex
+ * round 1 on free#137: the state of a part from the read back, never from
+ * what a call answered; the parts put back at one place (put_back()), the
+ * row first, every part read again after; a target changed since the
+ * report; the right to remove a key only this site has; a step back once,
+ * also across runs of the way back; the key slashed as the values.
  *
  * Written by tests/mutation/gen/lauf.py from the source; change the entries
  * there and run it again.

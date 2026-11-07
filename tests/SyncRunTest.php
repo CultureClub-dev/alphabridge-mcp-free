@@ -820,6 +820,69 @@ final class SyncRunTest extends TestCase {
 		unset( $GLOBALS['ab_test_page_templates'] );
 	}
 
+	public function testAMetaKeyWithABackslashIsStoredAndRemovedUnderItsOwnName(): void {
+		// GitHub Codex round 1 on free#137 (P2): update_metadata(),
+		// add_metadata() and delete_metadata() unslash the key as well as the
+		// value, so a key handed raw lands under another name (note\path as
+		// notepath), and the journal and the way back address a key that was
+		// never written. The key is slashed as the values are, on all three
+		// ways; the reads from the rows, the rights and the way back take it
+		// as it is. The stubs unslash the key as core does.
+		$key = 'note\\path';
+		self::assertTrue( AB_MCP_Sync_Post_Writer::meta_allowed( $key ) );
+		// Added where there was none.
+		self::assertTrue( AB_MCP_Sync_Post_Writer::write_meta( 5, $key, array( 'v1' ), array() ) );
+		self::assertSame( array( 'v1' ), $GLOBALS['ab_test_meta'][5][ $key ] ?? null, 'Stored under its own name.' );
+		self::assertArrayNotHasKey( 'notepath', $GLOBALS['ab_test_meta'][5], 'Not under the unslashed one.' );
+		// One value both sides: update_metadata().
+		self::assertTrue( AB_MCP_Sync_Post_Writer::write_meta( 5, $key, array( 'v2' ), array( 'v1' ) ) );
+		self::assertSame( array( 'v2' ), $GLOBALS['ab_test_meta'][5][ $key ] ?? null );
+		self::assertArrayNotHasKey( 'notepath', $GLOBALS['ab_test_meta'][5] );
+		// Several values: the rows removed (delete_metadata()) and added anew.
+		self::assertTrue( AB_MCP_Sync_Post_Writer::write_meta( 5, $key, array( 'v3', 'v4' ), array( 'v2' ) ) );
+		self::assertSame( array( 'v3', 'v4' ), $GLOBALS['ab_test_meta'][5][ $key ] ?? null );
+		self::assertArrayNotHasKey( 'notepath', $GLOBALS['ab_test_meta'][5] );
+		// No value: the rows removed.
+		self::assertTrue( AB_MCP_Sync_Post_Writer::write_meta( 5, $key, array(), array( 'v3', 'v4' ) ) );
+		self::assertArrayNotHasKey( $key, $GLOBALS['ab_test_meta'][5] );
+	}
+
+	public function testRemovingAMetaKeyOnlyThisSiteHasNeedsTheRightToDeleteIt(): void {
+		// GitHub Codex round 1 on free#137 (P2): a plain key only this site
+		// has is removed by the step (write_meta() with no value); the
+		// metadata API asks no right itself, so the check before the first
+		// write and the boundary ask delete_post_meta for it, per key,
+		// through map_meta_cap (decision 28), as they ask edit_post_meta for
+		// a key the target carries.
+		$db           = self::post_rows( 'News' );
+		$db->meta[12] = array(
+			array( 'meta_id' => 1, 'meta_key' => 'note', 'meta_value' => 'abc' ),
+			array( 'meta_id' => 2, 'meta_key' => 'color', 'meta_value' => 'red' ),
+		);
+		$GLOBALS['wpdb'] = $db;
+		$ctx             = self::ctx();
+		$ctx['now']      = 1800000000;
+		$prepared        = AB_MCP_Sync_Post_Writer::target_of( self::line( array( 'post_type' => 'post' ), array( array( 'note', 'abc' ) ), array(), array( 'identity' => array( 'post_type' => 'post', 'post_name' => 'hello', 'theme' => '' ) ) ), self::item(), $ctx );
+		self::assertIsArray( $prepared, is_wp_error( $prepared ) ? $prepared->get_error_message() : '' );
+		self::assertSame( array( 'note' => array( 'abc' ) ), $prepared['meta'], 'The target carries note only: color is removed by the step.' );
+		$denied                 = array();
+		$GLOBALS['ab_test_can'] = static function ( string $cap, array $args ) use ( &$denied ): bool {
+			return ! in_array( $cap . ':' . (string) ( $args[1] ?? '' ), $denied, true );
+		};
+		self::assertTrue( AB_MCP_Sync_Post_Writer::precheck( $prepared, 12, $ctx['now'] ), 'With every right the check passes.' );
+		$denied  = array( 'delete_post_meta:color' );
+		$refused = AB_MCP_Sync_Post_Writer::precheck( $prepared, 12, $ctx['now'] );
+		self::assertInstanceOf( WP_Error::class, $refused, 'The right to remove the key only this site has is asked before anything is written.' );
+		self::assertSame( 'ab_mcp_sync_rights', $refused->get_error_code() );
+		self::assertStringContainsString( 'remove the meta key color of the post (delete_post_meta)', $refused->get_error_message() );
+		// A key the target carries asks edit_post_meta, as before; a key
+		// neither side has, and the key the target carries, ask no removal.
+		$denied = array( 'edit_post_meta:note' );
+		self::assertSame( 'ab_mcp_sync_rights', AB_MCP_Sync_Post_Writer::precheck( $prepared, 12, $ctx['now'] )->get_error_code() );
+		$denied = array( 'delete_post_meta:note', 'delete_post_meta:other' );
+		self::assertTrue( AB_MCP_Sync_Post_Writer::precheck( $prepared, 12, $ctx['now'] ), 'The right to remove is asked for a key only this site has.' );
+	}
+
 	/** A post of a few rows in the fake $wpdb, with one category. */
 	private static function post_rows( string $term_name ): SyncRunPostWpdb {
 		$db           = new SyncRunPostWpdb();

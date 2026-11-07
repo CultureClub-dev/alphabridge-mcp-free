@@ -705,8 +705,11 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( $before, self::row_a( (int) $a['contact'] ), 'Nothing written.' );
 		self::assertSame( 0, AB_MCP_Sync_Run::get( (int) $run['run_id'] )['forward_closed_at'], 'No qualified close.' );
 		self::assertStringContainsString( 'closed', self::refused( self::next( (int) $run['run_id'] ), 'ab_mcp_sync_run_state' ) );
-		// A new plan can begin now (the token of the old preview no longer fits).
-		self::assertStringContainsString( 'not one this site issued', self::refused( self::gated( 'wp_site_push', $planned['args'] + array( 'confirm_token' => 'x' ) ), 'ab_mcp_confirm_invalid' ) );
+		// No run holds a new plan back now; this report no longer holds for
+		// the page, which changed since it was compared (GitHub Codex round
+		// 1 on free#137): a new report, then a new plan.
+		self::assertNull( AB_MCP_Sync_Run::open_run() );
+		self::assertStringContainsString( 'new report', self::refused( self::gated( 'wp_site_push', $planned['args'] + array( 'confirm_token' => 'x' ) ), 'ab_mcp_sync_push_changed' ) );
 	}
 
 	public function testARequestThatExitsInABoundaryLeavesTheRunInterruptedAndTheWayBackLeadsTheSameRun(): void {
@@ -1415,6 +1418,259 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( 'Write to us on staging.', self::row_a( (int) $a['contact'] )['post_content'] );
 		// The automatic off: the way back of another run puts it back.
 		delete_option( 'nav_menu_options' );
+	}
+
+	/* ----------------------------- GitHub Codex round 1 on free#137 */
+
+	public function testAMetaCallThatChangedThePartAndThenFailedIsTheStepsOwnAndGoesBack(): void {
+		// P1: a key of two rows here, two on staging with another value:
+		// write_meta() removes the rows here, then a filter of this site
+		// refuses the new ones. The call answers with an error, yet the part
+		// changed: the step reads every part back whatever the call answered,
+		// so the part is the step's own, written with its hash, and the step
+		// turns: the rows come back byte for byte, the row written before as
+		// well, every part read as the backup after; the step is restored,
+		// nothing of the object changed. Before, the part was failed without
+		// a hash, the rows were gone, and the way back skipped it as unchanged.
+		self::pair();
+		$a = self::pages_on_a( array( 'contact' => 'Write to us.' ) );
+		$b = self::pages_on_b( array( 'contact' => 'Write to us.' ) );
+		add_post_meta( (int) $a['contact'], 'note', 'abc' );
+		add_post_meta( (int) $a['contact'], 'note', 'def' );
+		self::b(
+			array(
+				array( 'op' => 'add_meta', 'post' => (int) $b['contact'], 'key' => 'note', 'value' => 'abc' ),
+				array( 'op' => 'add_meta', 'post' => (int) $b['contact'], 'key' => 'note', 'value' => 'def' ),
+			)
+		);
+		self::paired( self::staged() );
+		self::change_on_b( $b['contact'], 'contact', 'Write to us on staging.' );
+		// update_post_meta() without a previous value sets every row of the key.
+		self::b( array( array( 'op' => 'update_meta', 'post' => (int) $b['contact'], 'key' => 'note', 'value' => 'xyz' ) ) );
+		$planned = self::planned( array( 'contact' ) );
+		$run     = self::begun( $planned['args'] );
+		$contact = (int) $a['contact'];
+		$before  = self::row_a( $contact );
+		self::assertSame( array( 'abc', 'def' ), self::meta_a( $contact, 'note' ) );
+		self::assertSame( 'done', self::next( (int) $run['run_id'] )['step']['state'] );
+		$refuse = static fn( $check, $object_id, $meta_key ) => ( (int) $object_id === $contact && 'note' === $meta_key ) ? false : $check;
+		add_filter( 'add_post_metadata', $refuse, 10, 3 );
+		$write = self::next( (int) $run['run_id'] );
+		remove_filter( 'add_post_metadata', $refuse, 10 );
+		self::assertIsArray( $write, is_wp_error( $write ) ? $write->get_error_message() : '' );
+		self::assertSame( 'restored', $write['step']['state'], json_encode( $write['step'] ) );
+		$parts = array_column( $write['step']['parts']['parts'], 'state', 'part' );
+		$notes = array_column( $write['step']['parts']['parts'], 'note', 'part' );
+		self::assertSame( 'restored', $parts['meta:note'], 'The rows the failed call removed came back.' );
+		self::assertSame( 'restored', $parts['row'], 'The row written before went back with it.' );
+		self::assertStringContainsString( 'changed the part and then failed', (string) ( $notes['meta:note'] ?? '' ), 'The journal says the call failed after it changed the part.' );
+		self::assertStringContainsString( 'not written whole', $write['step']['result']['message'] );
+		self::assertStringContainsString( 'nothing of the object changed', $write['step']['result']['message'] );
+		self::assertSame( array( 'abc', 'def' ), self::meta_a( $contact, 'note' ), 'The two rows, as before the run.' );
+		self::assertSame( $before, self::row_a( $contact ), 'The row is as before.' );
+		$pair = AB_MCP_Sync_Pairs::find_live( AB_MCP_Sync_Anchor::active()['source_id'], 'post', (string) $contact );
+		self::assertSame( 'active', $pair['state'] );
+		self::assertSame( 'proposal', $pair['base_origin'], 'The pair keeps its bases of before.' );
+	}
+
+	public function testTheWayBackPutsTheRowBackBeforeTheTermsSoAPostWithoutACategoryStaysWithout(): void {
+		// P2: a post without a category here and on staging (set so past the
+		// editor), paired; staging gives it a category. wp_update_post() gives
+		// a post without a category the default one with the row (with_row()),
+		// so the way back puts the row back first and the terms after it,
+		// which undo that side effect; then every part is read again against
+		// the backup. Before, the terms went back first and the row after
+		// them, which gave the post the default category once more while the
+		// way back said restored.
+		self::pair();
+		$other_a = wp_insert_term( 'Other', 'category' );
+		self::assertIsArray( $other_a, is_wp_error( $other_a ) ? $other_a->get_error_message() : '' );
+		$other_b = (int) self::b( array( array( 'op' => 'insert_term', 'name' => 'Other', 'taxonomy' => 'category', 'as' => 'term' ) ) )['term'];
+		$story_a = wp_insert_post( wp_slash( self::page( 'story', 'A story.', array( 'post_type' => 'post' ) ) ), true );
+		self::assertIsInt( $story_a );
+		wp_set_object_terms( $story_a, array(), 'category', false );
+		$story_b = (int) self::b( array( array( 'op' => 'insert_post', 'args' => self::page( 'story', 'A story.', array( 'post_type' => 'post' ) ), 'as' => 'post' ) ) )['post'];
+		self::b( array( array( 'op' => 'set_terms', 'post' => $story_b, 'terms' => array(), 'taxonomy' => 'category' ) ) );
+		$slugs = static fn(): array => array_values( array_map( static fn( $t ) => $t->slug, wp_get_object_terms( $story_a, 'category' ) ) );
+		self::assertSame( array(), $slugs(), 'No category here.' );
+		self::paired( self::staged() );
+		self::change_on_b( (string) $story_b, 'story', 'A story, on staging.', array( 'post_type' => 'post', 'post_category' => array( $other_b ) ) );
+		$planned = self::planned( array( 'story' ) );
+		$run     = self::begun( $planned['args'] );
+		$before  = self::row_a( $story_a );
+		self::assertSame( 'done', self::next( (int) $run['run_id'] )['step']['state'] );
+		$write = self::next( (int) $run['run_id'] );
+		self::assertIsArray( $write, is_wp_error( $write ) ? $write->get_error_message() : '' );
+		self::assertSame( 'done', $write['step']['state'], json_encode( $write['step'] ) );
+		self::assertSame( array( 'other' ), $slugs() );
+		self::probe_ok();
+		self::assertSame( 'closed_done', self::finish( (int) $run['run_id'] )['state'] );
+		$begun = self::revert( (int) $run['run_id'] );
+		$back  = self::revert_all( (int) $begun['run_id'] );
+		self::assertSame( 'closed_reverted', $back['state'], json_encode( self::step( $back, 1 )['result'] ) );
+		$outcome = array_column( self::step( $back, 1 )['result']['parts'], 'state', 'part' );
+		self::assertSame( 'restored', $outcome['row'] );
+		self::assertSame( 'restored', $outcome['terms:category'] );
+		self::assertSame( array(), $slugs(), 'No category, as before the run: the default category wp_update_post() gave the post with the row was undone by the terms put back after it, and read so.' );
+		self::assertSame( $before, self::row_a( $story_a ) );
+		$pair = AB_MCP_Sync_Pairs::find_live( AB_MCP_Sync_Anchor::active()['source_id'], 'post', (string) $story_a );
+		self::assertSame( 'active', $pair['state'] );
+	}
+
+	public function testTheTermsGoBackByTheStateReadBeforeTheRowWentBack(): void {
+		// The mirror case of the one before: a post in News here, paired so;
+		// staging takes its category away (set so past the editor). The step
+		// writes the row (which keeps News with it) and then the terms: none.
+		// On the way back the row goes first: wp_update_post() gives the post,
+		// which has no category then, the default one. The terms are decided
+		// on the state read before that (none, the step's own) and go back to
+		// News all the same, read as the backup after.
+		self::pair();
+		$news_a = wp_insert_term( 'News', 'category' );
+		self::assertIsArray( $news_a, is_wp_error( $news_a ) ? $news_a->get_error_message() : '' );
+		$news_b  = (int) self::b( array( array( 'op' => 'insert_term', 'name' => 'News', 'taxonomy' => 'category', 'as' => 'term' ) ) )['term'];
+		$story_a = wp_insert_post( wp_slash( self::page( 'story', 'A story.', array( 'post_type' => 'post', 'post_category' => array( (int) $news_a['term_id'] ) ) ) ), true );
+		self::assertIsInt( $story_a );
+		$story_b = (int) self::b( array( array( 'op' => 'insert_post', 'args' => self::page( 'story', 'A story.', array( 'post_type' => 'post', 'post_category' => array( $news_b ) ) ), 'as' => 'post' ) ) )['post'];
+		self::paired( self::staged() );
+		// The content first (wp_update_post() would give a post without a
+		// category the default one), then the category taken away.
+		self::change_on_b( (string) $story_b, 'story', 'A story, on staging.', array( 'post_type' => 'post' ) );
+		self::b( array( array( 'op' => 'set_terms', 'post' => $story_b, 'terms' => array(), 'taxonomy' => 'category' ) ) );
+		$slugs   = static fn(): array => array_values( array_map( static fn( $t ) => $t->slug, wp_get_object_terms( $story_a, 'category' ) ) );
+		$planned = self::planned( array( 'story' ) );
+		$run     = self::begun( $planned['args'] );
+		$before  = self::row_a( $story_a );
+		self::probe_ok();
+		self::assertSame( 'closed_done', self::finish( (int) $run['run_id'] )['state'] );
+		self::assertSame( array(), $slugs(), 'The step wrote the target: no category.' );
+		$begun = self::revert( (int) $run['run_id'] );
+		$back  = self::revert_all( (int) $begun['run_id'] );
+		self::assertSame( 'closed_reverted', $back['state'], json_encode( self::step( $back, 1 )['result'] ) );
+		$outcome = array_column( self::step( $back, 1 )['result']['parts'], 'state', 'part' );
+		self::assertSame( 'restored', $outcome['row'] );
+		self::assertSame( 'restored', $outcome['terms:category'], 'Decided on the state before the row went back, not on the default category the row gave the post.' );
+		self::assertSame( array( 'news' ), $slugs() );
+		self::assertSame( $before, self::row_a( $story_a ) );
+	}
+
+	public function testAPartAHookChangedAfterItWasPutBackIsUnclearNotRestored(): void {
+		// The check after the parts went back: a post in News with a note,
+		// changed on staging in content, note and category. The way back puts
+		// the row, the meta and then the terms back; a hook of this site
+		// reacting to the terms (set_object_terms) writes the note once more.
+		// Every part is read again against the backup: the note reads other
+		// than the backup, so it is unclear, the object went back only in
+		// part, the pair is unclear. Before, the way back said restored.
+		self::pair();
+		$news_a  = wp_insert_term( 'News', 'category' );
+		$other_a = wp_insert_term( 'Other', 'category' );
+		self::assertIsArray( $news_a, is_wp_error( $news_a ) ? $news_a->get_error_message() : '' );
+		self::assertIsArray( $other_a, is_wp_error( $other_a ) ? $other_a->get_error_message() : '' );
+		$news_b  = (int) self::b( array( array( 'op' => 'insert_term', 'name' => 'News', 'taxonomy' => 'category', 'as' => 'term' ) ) )['term'];
+		$other_b = (int) self::b( array( array( 'op' => 'insert_term', 'name' => 'Other', 'taxonomy' => 'category', 'as' => 'term' ) ) )['term'];
+		$story_a = wp_insert_post( wp_slash( self::page( 'story', 'A story.', array( 'post_type' => 'post', 'post_category' => array( (int) $news_a['term_id'] ) ) ) ), true );
+		self::assertIsInt( $story_a );
+		add_post_meta( $story_a, 'note', 'abc' );
+		$story_b = (int) self::b( array( array( 'op' => 'insert_post', 'args' => self::page( 'story', 'A story.', array( 'post_type' => 'post', 'post_category' => array( $news_b ) ) ), 'as' => 'post' ) ) )['post'];
+		self::b( array( array( 'op' => 'add_meta', 'post' => $story_b, 'key' => 'note', 'value' => 'abc' ) ) );
+		self::paired( self::staged() );
+		self::change_on_b( (string) $story_b, 'story', 'A story, on staging.', array( 'post_type' => 'post', 'post_category' => array( $other_b ) ) );
+		self::b( array( array( 'op' => 'update_meta', 'post' => $story_b, 'key' => 'note', 'value' => 'def' ) ) );
+		$planned = self::planned( array( 'story' ) );
+		$run     = self::begun( $planned['args'] );
+		$before  = self::row_a( $story_a );
+		self::probe_ok();
+		self::assertSame( 'closed_done', self::finish( (int) $run['run_id'] )['state'] );
+		self::assertSame( array( 'def' ), self::meta_a( $story_a, 'note' ) );
+		// The hook reacts to the terms put back (News again; the row put back
+		// before passes the categories of the moment, Other, through the same
+		// action) and writes the note once more, as a plugin keeping a field
+		// of its own in step with the category would.
+		$news_id = (int) $news_a['term_id'];
+		$hook    = static function ( $object_id, $terms, $tt_ids, $taxonomy ) use ( $story_a, $news_id, &$hook ) {
+			if ( 'category' === $taxonomy && (int) $object_id === $story_a && in_array( $news_id, array_map( 'intval', (array) $terms ), true ) ) {
+				remove_action( 'set_object_terms', $hook, 10 );
+				update_post_meta( $story_a, 'note', 'set by a hook' );
+			}
+		};
+		add_action( 'set_object_terms', $hook, 10, 4 );
+		$begun = self::revert( (int) $run['run_id'] );
+		$back  = self::revert_all( (int) $begun['run_id'] );
+		remove_all_actions( 'set_object_terms' );
+		self::assertSame( 'closed_findings', $back['state'] );
+		$step    = self::step( $back, 1 );
+		$outcome = array_column( $step['result']['parts'], 'state', 'part' );
+		$notes   = array_column( $step['result']['parts'], 'note', 'part' );
+		self::assertSame( 'restored', $outcome['row'] );
+		self::assertSame( 'restored', $outcome['terms:category'] );
+		self::assertSame( 'unclear', $outcome['meta:note'], 'Put back, then changed by the hook: read again, other than the backup.' );
+		self::assertStringContainsString( 'after the parts went back', (string) ( $notes['meta:note'] ?? '' ) );
+		self::assertSame( 'unclear', $step['state'] );
+		self::assertStringContainsString( 'went back only in part', $step['result']['message'] );
+		self::assertSame( array( 'set by a hook' ), self::meta_a( $story_a, 'note' ), 'What the hook wrote stands; the way back writes nothing twice.' );
+		self::assertSame( $before, self::row_a( $story_a ) );
+		self::assertSame( array( 'news' ), array_values( array_map( static fn( $t ) => $t->slug, wp_get_object_terms( $story_a, 'category' ) ) ) );
+		$pair = AB_MCP_Sync_Pairs::find_live( AB_MCP_Sync_Anchor::active()['source_id'], 'post', (string) $story_a );
+		self::assertSame( 'unclear', $pair['state'] );
+	}
+
+	public function testATargetThatChangedSinceTheReportIsNotPlannedWhateverTheReportSaid(): void {
+		// P1: the report says take_over for a page this site had not changed;
+		// then this site changes it, before the plan. The plan read the page
+		// as it is now and bound that hash, so the check and the boundary
+		// passed and the change here was written over without a choice. The
+		// plan compares the page with the state the report compared and
+		// refuses with the way; a new report shows the conflict and asks for
+		// the choice.
+		self::pair();
+		$a = self::pages_on_a( array( 'contact' => 'Write to us.' ) );
+		$b = self::pages_on_b( array( 'contact' => 'Write to us.' ) );
+		self::paired( self::staged() );
+		self::change_on_b( $b['contact'], 'contact', 'Write to us on staging.' );
+		$planned = self::planned( array( 'contact' ) );
+		self::assertSame( 'take_over', self::post_entry( $planned['report']['all'], 'contact' )['action'] );
+		wp_update_post( wp_slash( self::page( 'contact', 'Changed here after the report.', array( 'ID' => (int) $a['contact'] ) ) ) );
+		$before  = self::row_a( (int) $a['contact'] );
+		$message = self::refused( self::gated( 'wp_site_push', $planned['args'] ), 'ab_mcp_sync_push_changed' );
+		self::assertStringContainsString( 'changed since the report', $message );
+		self::assertStringContainsString( 'new report', $message );
+		self::assertSame( $before, self::row_a( (int) $a['contact'] ), 'Nothing written.' );
+		self::assertNull( AB_MCP_Sync_Run::open_run(), 'No run was made.' );
+		// A new report compares the page as it is now: a conflict, which asks
+		// for the choice.
+		$report = self::report( self::staged() );
+		self::assertSame( 'choose', self::post_entry( $report['all'], 'contact' )['action'] );
+	}
+
+	public function testAStepGoesBackOnceAlsoAcrossRunsOfTheWayBack(): void {
+		// P2: the way back of a closed run is a run of its own (decision 15).
+		// A second plan for the same run looked for steps of the way back in
+		// the run that wrote only, found none, and took the step back once
+		// more: after a later takeover of the same object, that undid the
+		// later one. Every run of the way back that names the run counts now:
+		// a step goes back once.
+		self::pair();
+		$a = self::pages_on_a( array( 'contact' => 'Write to us.' ) );
+		$b = self::pages_on_b( array( 'contact' => 'Write to us.' ) );
+		self::paired( self::staged() );
+		self::change_on_b( $b['contact'], 'contact', 'Write to us on staging.' );
+		$planned = self::planned( array( 'contact' ) );
+		$run     = self::begun( $planned['args'] );
+		self::probe_ok();
+		self::assertSame( 'closed_done', self::finish( (int) $run['run_id'] )['state'] );
+		$begun = self::revert( (int) $run['run_id'] );
+		self::assertSame( 'closed_reverted', self::revert_all( (int) $begun['run_id'] )['state'] );
+		self::assertSame( 'Write to us.', self::row_a( (int) $a['contact'] )['post_content'] );
+		// The same run again: nothing is left to take back.
+		$again = self::gated( 'wp_site_revert', array( 'action' => 'plan', 'run_id' => (int) $run['run_id'] ) );
+		self::assertStringContainsString( 'taken back already', self::refused( $again, 'ab_mcp_sync_revert_nothing' ) );
+		// The step named: refused, with the run of the way back that took it.
+		$named   = self::gated( 'wp_site_revert', array( 'action' => 'plan', 'run_id' => (int) $run['run_id'], 'steps' => array( 2 ) ) );
+		$message = self::refused( $named, 'ab_mcp_sync_revert_steps' );
+		self::assertStringContainsString( 'taken back already', $message );
+		self::assertStringContainsString( sprintf( 'run %d', (int) $begun['run_id'] ), $message );
+		self::assertSame( 'Write to us.', self::row_a( (int) $a['contact'] )['post_content'], 'Nothing written.' );
 	}
 
 	public function testAWayBackForAClosedRunIsMadeUnderTheLockOfTheStore(): void {
