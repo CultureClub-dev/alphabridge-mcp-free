@@ -681,6 +681,14 @@ final class AB_MCP_Sync_Post_Writer {
 	 * through update_metadata(), else the rows of the key removed and added
 	 * anew; no value, the rows removed.
 	 *
+	 * The key is slashed as the values are: update_metadata(),
+	 * add_metadata() and delete_metadata() unslash the key as well as the
+	 * value (wp-includes/meta.php), so a key with a backslash handed raw
+	 * would be stored, or removed, under another name (GitHub Codex round 1
+	 * of branch 8). Every other place takes the key as it is: the reads from
+	 * the rows (AB_MCP_Sync_Rows), the rights (map_meta_cap), the protected
+	 * keys (is_protected_meta()) and the way back, which writes raw.
+	 *
 	 * @param int      $live_id Post.
 	 * @param string   $key     Key.
 	 * @param array    $values  The values to store (a text, or an array for a serialized one).
@@ -690,15 +698,15 @@ final class AB_MCP_Sync_Post_Writer {
 	public static function write_meta( $live_id, $key, array $values, array $current ) {
 		$id = (int) $live_id;
 		if ( 1 === count( $values ) && 1 === count( $current ) ) {
-			$done = update_metadata( 'post', $id, $key, wp_slash( $values[0] ) );
+			$done = update_metadata( 'post', $id, wp_slash( (string) $key ), wp_slash( $values[0] ) );
 			// false also where the value is the same already.
 			return false === $done && self::meta_values_now( $id, $key ) !== array( self::stored_form( $values[0] ) ) ? self::meta_refused( $key ) : true;
 		}
-		if ( array() !== $current && false === delete_metadata( 'post', $id, $key ) ) {
+		if ( array() !== $current && false === delete_metadata( 'post', $id, wp_slash( (string) $key ) ) ) {
 			return self::meta_refused( $key );
 		}
 		foreach ( $values as $value ) {
-			if ( false === add_metadata( 'post', $id, $key, wp_slash( $value ) ) ) {
+			if ( false === add_metadata( 'post', $id, wp_slash( (string) $key ), wp_slash( $value ) ) ) {
 				return self::meta_refused( $key );
 			}
 		}
