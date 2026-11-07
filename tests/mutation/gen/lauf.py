@@ -336,6 +336,8 @@ e('engine-unread-no-own', 'seen_after(): a state not read is no read back and no
   "\t\tif ( ! is_array( $state ) ) {\n\t\t\t// Not read back", "\t\tif ( false ) {\n\t\t\t// Not read back", 'unit', 'testAPartNotReadBackAfterItsCallIsNeverTheStepsOwn')
 e('engine-written-changed-later', 'write_parts(): a part the step wrote that a later call changes besides itself is another hand\'s, the object deviated (Codex round 13)', EN,
   "\t\t\t\t\tif ( self::changed( (string) $other['post'], AB_MCP_Sync_Post_Writer::part_hash( $post_all, (string) $other['part'] ) ) ) {", "\t\t\t\t\tif ( false ) {", 'it', 'testAHookThatChangesAWrittenPartAsALaterPartIsWrittenDeviatesTheObject')
+e('engine-planned-changed-between', 'write_parts(): a part still to write that a call changes besides itself is another hand\'s too, even where it reads as before again (Codex round 14)', EN,
+  "\t\t\t\t\tif ( $k === $i || ! isset( $other['post'] ) || null === $other['post'] ) {", "\t\t\t\t\tif ( $k === $i || 'planned' === $other['state'] || ! isset( $other['post'] ) || null === $other['post'] ) {", 'it', 'testAHookThatChangesAPartStillToWriteAndBackAgainDeviatesTheObject')
 e('writer-before-password', 'row_before(): post_password is a credential by its name, never shown', PW,
   "\t\t\tif ( 'post_password' === $column || AB_MCP_Sync_Credentials::names_credential( $column, AB_MCP_Redactor::extra_keys() ) ) {", "\t\t\tif ( false ) {", 'unit', 'testTheValueBeforeOfAPartLeftIsShortNeverACredentialAndCapped')
 e('writer-before-long', 'row_before(): a long text by its bytes and the revision that holds it, never whole', PW,

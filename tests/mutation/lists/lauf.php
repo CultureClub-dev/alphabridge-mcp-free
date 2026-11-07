@@ -1132,6 +1132,15 @@ return array(
 		'expect'  => '/testAHookThatChangesAWrittenPartAsALaterPartIsWrittenDeviatesTheObject/',
 	),
 	array(
+		'id'      => 'lauf/engine-planned-changed-between',
+		'clause'  => 'write_parts(): a part still to write that a call changes besides itself is another hand\'s too, even where it reads as before again (Codex round 14)',
+		'file'    => $en,
+		'search'  => "\t\t\t\t\tif ( \$k === \$i || ! isset( \$other['post'] ) || null === \$other['post'] ) {",
+		'replace' => "\t\t\t\t\tif ( \$k === \$i || 'planned' === \$other['state'] || ! isset( \$other['post'] ) || null === \$other['post'] ) {",
+		'run'     => $it( 'SyncRunTest', 'testAHookThatChangesAPartStillToWriteAndBackAgainDeviatesTheObject' ),
+		'expect'  => '/testAHookThatChangesAPartStillToWriteAndBackAgainDeviatesTheObject/',
+	),
+	array(
 		'id'      => 'lauf/writer-before-password',
 		'clause'  => 'row_before(): post_password is a credential by its name, never shown',
 		'file'    => $pw,

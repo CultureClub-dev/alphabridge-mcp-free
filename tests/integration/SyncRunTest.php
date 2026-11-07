@@ -1678,6 +1678,48 @@ final class SyncRunTest extends TestCase {
 		self::assertNotSame( array( 'news/old' ), self::meta_a( $story_a, 'label' ), 'The label the hook wrote is not put back.' );
 	}
 
+	public function testAHookThatChangesAPartStillToWriteAndBackAgainDeviatesTheObject(): void {
+		// Codex round 14: a hook of this site keeps total = price × quantity.
+		// The step writes price (total becomes 40 by the hook), then quantity
+		// (total 20 again, as the backup and the target), then total. The
+		// change of total in between is another hand's, though it reads as
+		// before by its own call: the object deviated, nothing goes back.
+		self::pair();
+		$a = self::pages_on_a( array( 'order' => 'An order.' ) );
+		$b = self::pages_on_b( array( 'order' => 'An order.' ) );
+		foreach ( array( 'price' => '10', 'quantity' => '2', 'total' => '20' ) as $key => $value ) {
+			add_post_meta( (int) $a['order'], $key, $value );
+			self::b( array( array( 'op' => 'add_meta', 'post' => (int) $b['order'], 'key' => $key, 'value' => $value ) ) );
+		}
+		self::paired( self::staged() );
+		self::change_on_b( $b['order'], 'order', 'An order, on staging.' );
+		self::b( array( array( 'op' => 'update_meta', 'post' => (int) $b['order'], 'key' => 'price', 'value' => '20' ) ) );
+		self::b( array( array( 'op' => 'update_meta', 'post' => (int) $b['order'], 'key' => 'quantity', 'value' => '1' ) ) );
+		$planned = self::planned( array( 'order' ) );
+		$run     = self::begun( $planned['args'] );
+		$order   = (int) $a['order'];
+		self::assertSame( 'done', self::next( (int) $run['run_id'] )['step']['state'] );
+		$keep = static function ( $meta_id, $object_id, $meta_key ) use ( $order ) {
+			if ( (int) $object_id !== $order || ! in_array( $meta_key, array( 'price', 'quantity' ), true ) ) {
+				return;
+			}
+			update_post_meta( $order, 'total', (string) ( (int) get_post_meta( $order, 'price', true ) * (int) get_post_meta( $order, 'quantity', true ) ) );
+		};
+		add_action( 'updated_post_meta', $keep, 10, 3 );
+		$write = self::next( (int) $run['run_id'] );
+		remove_all_actions( 'updated_post_meta' );
+		self::assertIsArray( $write, is_wp_error( $write ) ? $write->get_error_message() : '' );
+		self::assertSame( 'unclear', $write['step']['state'], json_encode( $write['step'] ) );
+		self::assertSame( 'meta:total', $write['step']['parts']['object']['deviated']['part'] );
+		self::probe_ok();
+		self::finish( (int) $run['run_id'] );
+		$begun   = self::revert( (int) $run['run_id'] );
+		$back    = self::revert_all( (int) $begun['run_id'] );
+		$outcome = array_column( self::step( $back, 1 )['result']['parts'], 'state', 'part' );
+		self::assertNotSame( 'restored', $outcome['meta:price'] ?? 'absent', json_encode( self::step( $back, 1 )['result'] ) );
+		self::assertSame( array( '20' ), self::meta_a( $order, 'price' ), 'Nothing of the object that deviated goes back.' );
+	}
+
 	public function testTheDefaultCategoryOfANewPostIsWrittenWithTheRowAndTheJournalSaysSo(): void {
 		// wp_insert_post() gives a new post the default category with the row
 		// (with_row()): the step's own, written with the row, and written as
