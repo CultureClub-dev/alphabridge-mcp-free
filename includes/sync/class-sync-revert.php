@@ -21,6 +21,15 @@
  * now. next runs one step of the way back (one pair, under the lock);
  * status shows the run.
  *
+ * AN INTERRUPTED RUN (decision 18, way (b)), the same for both types of a
+ * run (interrupted_plan()): where its way back had begun (a run of the type
+ * revert, or the way back of the same run, of the type push), exactly that
+ * way back is led on: the step the interruption left begun becomes unclear
+ * and stays (nothing of it is put back again, its pair unclear), the steps
+ * of the way back still planned go back one by one with next, each on a
+ * fresh read (decision A), no step is added; where it had not (a forward
+ * run), its way back begins as for an open run.
+ *
  * ONE LOCK PER CALL: plan with the token (begin(): the way back begun, led
  * on, or a run of the way back made) and next run under the lock of the
  * write boundary from the first read of the run to the answer
@@ -228,27 +237,71 @@ final class AB_MCP_Sync_Revert {
 				return new WP_Error( 'ab_mcp_sync_run_busy', sprintf( 'Step %d of the run is being written right now (its lock is held); wait for its answer, then plan the way back.', (int) $run['running'] ) );
 			}
 		}
+		if ( 'interrupted' === $run['state'] ) {
+			// Way (b) of decision 18: one function for every interrupted run.
+			return self::interrupted_plan( $run, $a, $print, $source );
+		}
 		if ( 'revert' === $run['type'] ) {
-			// A run of the way back is not taken back; interrupted, it is led
-			// on (way (b) of decision 18 for a run of the way back as well:
-			// the same run to reverting, the interrupted step stays unclear,
-			// the steps still planned go back; GitHub Codex round 4 on free#137,
-			// P1: before, every run of the type revert was refused here, and an
-			// interrupted one held the site until a person closed it).
-			if ( 'interrupted' !== $run['state'] ) {
-				return new WP_Error( 'ab_mcp_sync_revert_type', sprintf( 'Run %1$d is a run of the way back itself and is %2$s (wp_site_push action=status lists the runs): %3$s', (int) $run['run_id'], $run['state'], 'open' === $run['state'] ? 'go on with action=next.' : 'a run of the way back is not taken back; the way back is planned for a run that wrote.' ) );
-			}
-			if ( isset( $a['steps'] ) ) {
-				return new WP_Error( 'ab_mcp_sync_revert_steps', sprintf( 'Run %d is an interrupted run of the way back: it goes on with the steps it has, so steps is not taken. Call again without steps.', (int) $run['run_id'] ) );
-			}
-			return self::continuation( $run, $print, $source );
+			return new WP_Error( 'ab_mcp_sync_revert_type', sprintf( 'Run %1$d is a run of the way back itself and is %2$s (wp_site_push action=status lists the runs): %3$s', (int) $run['run_id'], $run['state'], in_array( $run['state'], array( 'open', 'reverting' ), true ) ? 'go on with action=next.' : 'a run of the way back is not taken back; the way back is planned for a run that wrote.' ) );
 		}
 		if ( 'reverting' === $run['state'] ) {
 			return new WP_Error( 'ab_mcp_sync_revert_running', sprintf( 'The way back of run %d is running already: use action=next to go on.', (int) $run['run_id'] ) );
 		}
+		return self::way_back( $run, $a, $print, $source );
+	}
+
+	/**
+	 * Way (b) of decision 18 for an interrupted run, one function for both
+	 * types of a run (the decision of 07.11.2026 evening, Variante A; GitHub
+	 * Codex round 6 on free#137, P1: the continuation took runs of the type
+	 * revert only; the way back of the same run, of the type push,
+	 * interrupted, was planned as a new way back, which found every write
+	 * step taken back already by its steps of the way back and refused, and
+	 * the run held the site): where its way back had begun
+	 * (AB_MCP_Sync_Run::on_way_back()), exactly that way back is led on
+	 * (continuation(); steps is not taken, no step is added); where it had
+	 * not (an interrupted forward run), its way back begins as for an open
+	 * run (way_back()).
+	 *
+	 * @param array  $run    The interrupted run.
+	 * @param array  $a      Arguments.
+	 * @param string $print  The print of the pair of sites.
+	 * @param string $source Source id.
+	 * @return array|WP_Error As plan() returns it.
+	 */
+	private static function interrupted_plan( array $run, array $a, $print, $source ) {
+		$steps = AB_MCP_Sync_Run::steps( (int) $run['run_id'] );
+		if ( is_wp_error( $steps ) ) {
+			return $steps;
+		}
+		if ( ! AB_MCP_Sync_Run::on_way_back( $run, $steps ) ) {
+			return self::way_back( $run, $a, $print, $source );
+		}
+		if ( isset( $a['steps'] ) ) {
+			return new WP_Error( 'ab_mcp_sync_revert_steps', sprintf( 'Run %d is interrupted on its way back: it goes on with the steps of the way back it has, so steps is not taken. Call again without steps.', (int) $run['run_id'] ) );
+		}
+		return self::continuation( $run, $steps, $print, $source );
+	}
+
+	/**
+	 * The plan of the way back of a run that wrote and whose way back has
+	 * not begun: an open or interrupted run (the same run, decision 15), or
+	 * a closed one (a run of the type revert is made).
+	 *
+	 * @param array  $run    The run.
+	 * @param array  $a      Arguments.
+	 * @param string $print  The print of the pair of sites.
+	 * @param string $source Source id.
+	 * @return array|WP_Error As plan() returns it.
+	 */
+	private static function way_back( array $run, array $a, $print, $source ) {
 		$same = in_array( $run['state'], array( 'open', 'interrupted' ), true );
 		if ( ! $same ) {
 			$open = AB_MCP_Sync_Run::open_run();
+			if ( is_array( $open ) ) {
+				// Settled, so the refusal names the ways that go for it.
+				$open = AB_MCP_Sync_Run::settle( $open );
+			}
 			if ( is_wp_error( $open ) ) {
 				return $open;
 			}
@@ -391,24 +444,23 @@ final class AB_MCP_Sync_Revert {
 	}
 
 	/**
-	 * The plan that leads an interrupted run of the way back on (way (b) of
-	 * decision 18): no step is added; the step the interruption left begun
-	 * stays as it is (unclear, its parts as they are: no put back is
-	 * repeated, nothing of it goes back by itself), the steps still planned
-	 * go back one by one afterwards, each deciding on a fresh read
-	 * (decision A). The state the token binds: the run, its state, the steps
-	 * by their state, and the objects of the steps still to go as they are.
+	 * The plan that leads the interrupted way back of a run on (way (b) of
+	 * decision 18, interrupted_plan()), a run of the type revert or the way
+	 * back of the same run alike: no step is added; the step the
+	 * interruption left begun stays as it is (unclear, its parts as they
+	 * are: no put back is repeated, nothing of it goes back by itself), the
+	 * steps still planned go back one by one afterwards, each deciding on a
+	 * fresh read (decision A). The state the token binds: the run, its
+	 * state, the steps by their state, and the objects of the steps still to
+	 * go as they are.
 	 *
-	 * @param array  $run    The interrupted run of the type revert.
-	 * @param string $print  The print of the pair of sites.
-	 * @param string $source Source id.
-	 * @return array|WP_Error As plan() returns it, with same_run true and no items.
+	 * @param array   $run    The interrupted run on its way back.
+	 * @param array[] $steps  Its steps.
+	 * @param string  $print  The print of the pair of sites.
+	 * @param string  $source Source id.
+	 * @return array As plan() returns it, with same_run true and no items.
 	 */
-	private static function continuation( array $run, $print, $source ) {
-		$steps = AB_MCP_Sync_Run::steps( (int) $run['run_id'] );
-		if ( is_wp_error( $steps ) ) {
-			return $steps;
-		}
+	private static function continuation( array $run, array $steps, $print, $source ) {
 		$shown = array();
 		$live  = array();
 		$state = array();

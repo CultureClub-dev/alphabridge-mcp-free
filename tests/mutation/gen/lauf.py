@@ -560,16 +560,14 @@ LOG = 'testTheErrorLogIsCountedFromItsMarkInChunksWithACapAndARotationIsSaidSo'
 # is the lock of the whole call (engine-abort-lock, the same id, on
 # AB_MCP_Sync_Run::under_lock(); held by a direct call of the engine in
 # BUSY); still() of the two boundaries is gone, its one place is fresh() at
-# the start of the call (engine-fresh-state below); the texts of the ways
-# moved from the push to the run (push-interrupted-revert-way is
-# run-interrupted-revert-way below).
+# the start of the call (engine-fresh-state below); revert-continue and
+# push-interrupted-revert-way went with the one way (b) for every
+# interrupted run (revert-interrupted-one-way, run-interrupted-revert-way).
 BUSY = 'testACallThatChangesARunIsRefusedAsBusyWithoutAnyChangeWhileAnotherRequestHoldsTheLock'
 e('engine-abort-lock', 'abort(): the whole call under the lock of the boundary; a step being written holds it (P2; Variante A)', EN,
   "\t\treturn AB_MCP_Sync_Run::under_lock(\n\t\t\tstatic function () use ( $run ) {\n\t\t\t\t$fresh = AB_MCP_Sync_Run::get( (int) $run['run_id'] );", "\t\treturn call_user_func(\n\t\t\tstatic function () use ( $run ) {\n\t\t\t\t$fresh = AB_MCP_Sync_Run::get( (int) $run['run_id'] );", 'it', BUSY)
 e('engine-abort-fresh', 'abort(): the run read again under the lock; moved since, nothing is changed', EN,
   "\t\t\t\tif ( 'open' !== $fresh['state'] ) {", "\t\t\t\tif ( false ) {", 'it', ABORT)
-e('revert-continue', 'plan(): an interrupted run of the way back is led on (way (b) of decision 18; P1)', RV,
-  "\t\t\tif ( 'interrupted' !== $run['state'] ) {\n\t\t\t\treturn new WP_Error( 'ab_mcp_sync_revert_type'", "\t\t\tif ( true ) {\n\t\t\t\treturn new WP_Error( 'ab_mcp_sync_revert_type'", 'it', LED)
 e('revert-continue-planned-stay', 'begin_same_run(): a step of the way back still planned stays and goes back in its turn; a forward step is skipped', RV,
   "\t\t\t\t\t} elseif ( 'planned' === $step['state'] && 'revert' !== $step['op'] ) {", "\t\t\t\t\t} elseif ( 'planned' === $step['state'] ) {", 'it', LED)
 e('revert-continue-pair', 'begin_same_run(): the pair of a step of the way back left begun is unclear', RV,
@@ -631,7 +629,9 @@ e('backup-fits-used', 'fits(): the backups the run holds already count against i
 # ------------------------------- the decision of 07.11.2026 evening, Variante A
 # (after GitHub Codex round 6 on free#137: two P1 of the same two classes as
 # rounds 3 and 4): one lock per call that can change a run, the run read and
-# settled under it before anything is decided.
+# settled under it before anything is decided; one way (b) for every
+# interrupted run, of either type.
+LEDON = 'testAnInterruptedWayBackOfTheSameRunIsLedOnWithTheTokenAndTheSiteIsFreeAfterwards'
 DELAYED = 'testADelayedCallWithAnOldReadOfTheRunWritesNothingAfterAnAbortOrAfterTheWayBackClosed'
 OWN = 'testUnderTheLockOfItsCallAStepTheCallBeganIsItsOwnAndAStepAnEndedRequestLeftIsInterrupted'
 e('run-under-lock-busy', 'under_lock(): another request holding the lock refuses the call as busy before anything is read or changed', RU,
@@ -656,10 +656,22 @@ e('engine-fresh-settle', 'fresh(): the run settled under the lock; a step a requ
   "\t\t$now = AB_MCP_Sync_Run::settle( $now );\n\t\tif ( is_wp_error( $now ) ) {\n\t\t\treturn $now;\n\t\t}\n\t\treturn 'interrupted' === $now['state']", "\t\treturn 'interrupted' === $now['state']", 'it', OWN)
 e('engine-close-revert-open', 'close_revert(): not closed while a step of the way back is planned or begun (P1, engine:162)', EN,
   "\t\t\tif ( in_array( $step['state'], array( 'planned', 'begun' ), true ) ) {\n\t\t\t\treturn new WP_Error( 'ab_mcp_sync_run_state', sprintf( 'The way back of run %1$d is not closed", "\t\t\tif ( false ) {\n\t\t\t\treturn new WP_Error( 'ab_mcp_sync_run_state', sprintf( 'The way back of run %1$d is not closed", 'it', BUSY)
+e('engine-closed-note', 'closed_note(): the close of a way back with findings names the steps that stayed', EN,
+  "\t\t\t\t$stayed[] = sprintf( 'step %1$d of the way back stayed as it is (%2$s)', (int) $step['seq'], (string) $step['state'] );", '', 'it', LEDON)
 e('push-change-lock', 'call(): next, step and abort under the lock of the call from the first read of the run; busy changes nothing, not even the count of calls', PU,
   "\t\treturn AB_MCP_Sync_Run::under_lock(\n\t\t\tstatic function () use ( $a, $action ) {", "\t\treturn call_user_func(\n\t\t\tstatic function () use ( $a, $action ) {", 'it', BUSY)
 e('revert-next-lock', 'call(): next of the way back under the lock of the call from the first read of the run', RV,
   "\t\treturn AB_MCP_Sync_Run::under_lock(\n\t\t\tstatic function () use ( $a ) {", "\t\treturn call_user_func(\n\t\t\tstatic function () use ( $a ) {", 'it', BUSY)
+e('revert-interrupted-one-way', 'plan(): every interrupted run goes to the one way (b), of either type (P1, revert:212)', RV,
+  "\t\tif ( 'interrupted' === $run['state'] ) {\n\t\t\t// Way (b) of decision 18: one function for every interrupted run.", "\t\tif ( false ) {\n\t\t\t// Way (b) of decision 18: one function for every interrupted run.", 'it', LEDON)
+e('revert-on-way-back', 'interrupted_plan(): a run whose way back had begun is led on, not planned anew', RV,
+  "\t\tif ( ! AB_MCP_Sync_Run::on_way_back( $run, $steps ) ) {", "\t\tif ( true ) {", 'it', LEDON)
+e('revert-continue-no-steps', 'interrupted_plan(): steps is not taken where the way back is led on (no step is added)', RV,
+  "\t\tif ( isset( $a['steps'] ) ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_revert_steps', sprintf( 'Run %d is interrupted on its way back", "\t\tif ( false ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_revert_steps', sprintf( 'Run %d is interrupted on its way back", 'it', LEDON)
+e('run-on-way-back-step', 'on_way_back(): a run of the type push with a step of the way back is on its way back', RU,
+  "\t\t\tif ( 'revert' === $step['op'] ) {\n\t\t\t\treturn true;", "\t\t\tif ( false ) {\n\t\t\t\treturn true;", 'it', LEDON)
+e('run-ways-back', 'interrupted_ways(): the ways of a run on its way back by its steps, not by its type', RU,
+  "\t\t$back  = 'revert' === $run['type'] || ( is_array( $steps ) && self::on_way_back( $run, $steps ) );", "\t\t$back  = 'revert' === $run['type'];", 'it', LEDON)
 e('run-interrupted-revert-way', 'interrupted_ways(): the way for a run on its way back leads it on, not a way back planned anew (P1)', RU,
   "\t\t\t? 'wp_site_revert action=plan with this run_id leads it on (confirmed with its token): the interrupted step stays as it is (unclear, nothing of it is put back again), the steps of the way back still planned go back one by one (action=next), and no step is added'", "\t\t\t? 'wp_site_revert action=plan with this run_id begins its way back (confirmed with its token)'", 'it', LED)
 
@@ -786,7 +798,8 @@ out.append('''<?php
  * begin and the continuation of a way back, closing as checked; busy
  * changes nothing), the run read and settled under it once (fresh(), the
  * one place of still()), a step the call began its own, the close of the
- * way back not beside a step of it.
+ * way back not beside a step of it; one way (b) for every interrupted run,
+ * of either type, with the ways that go named.
  *
  * Written by tests/mutation/gen/lauf.py from the source; change the entries
  * there and run it again.

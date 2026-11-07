@@ -1493,6 +1493,117 @@ final class SyncRunTest extends TestCase {
 		);
 	}
 
+	public function testAnInterruptedWayBackOfTheSameRunIsLedOnWithTheTokenAndTheSiteIsFreeAfterwards(): void {
+		// GitHub Codex round 6 on free#137 (P1, revert:212): the way back of a
+		// run that was not closed runs in the same run, of the type push. A
+		// request that ended inside one of its steps left the run interrupted;
+		// wp_site_revert action=plan planned a new way back for it, found every
+		// write step taken back already (the steps of the way back name them)
+		// and refused, and neither next nor abort takes an interrupted run, so
+		// it held the site. Way (b) of decision 18 is one way for every
+		// interrupted run now (the decision of 07.11.2026 evening, Variante A):
+		// where its way back has begun, exactly that way back is led on, of
+		// either type: the step the interruption left begun stays unclear
+		// (nothing of it is put back again), the steps still planned go back
+		// one by one, no step is added; then the run closes with findings and
+		// names the step that stayed, and the site is free.
+		self::pair();
+		$before  = array( 'contact' => 'Write to us.', 'about' => 'About us.', 'team' => 'Our team.' );
+		$staging = array( 'contact' => 'Write to us on staging.', 'about' => 'About us, on staging.', 'team' => 'Our team, on staging.' );
+		$a       = self::pages_on_a( $before );
+		$b       = self::pages_on_b( $before );
+		self::paired( self::staged() );
+		foreach ( $staging as $name => $content ) {
+			self::change_on_b( $b[ $name ], $name, $content );
+		}
+		$planned = self::planned( array( 'contact', 'about', 'team' ) );
+		$run_id  = (int) self::begun( $planned['args'] )['run_id'];
+		for ( $i = 0; $i < 4; $i++ ) {
+			self::assertSame( 'done', self::next( $run_id )['step']['state'], 'The check and the three pages.' );
+		}
+		// The way back of the same run: it is open (the caches and the check
+		// of the run still planned), so it stays a run of the type push.
+		$begun = self::revert( $run_id );
+		self::assertTrue( $begun['same_run'] );
+		self::assertSame( $run_id, (int) $begun['run_id'] );
+		self::assertSame( 'push', $begun['type'] );
+		self::assertSame( 'reverting', $begun['state'] );
+		$seqs    = array();
+		$objects = array();
+		foreach ( AB_MCP_Sync_Run::steps( $run_id ) as $step ) {
+			if ( 'revert' === $step['op'] ) {
+				$seqs[ (int) $step['parts']['forward_seq'] ] = (int) $step['seq'];
+			} elseif ( 'write' === $step['op'] ) {
+				$objects[ (int) $step['seq'] ] = (int) $step['parts']['object']['live_ref'];
+			}
+		}
+		ksort( $seqs );
+		self::assertCount( 3, $seqs );
+		list( $s1, $s2, $s3 ) = array_values( $seqs );
+		$live    = static fn( int $seq ): int => $objects[ array_search( $seq, $seqs, true ) ];
+		$name_of = array_flip( array_map( 'intval', $a ) );
+		self::assertSame( 'done', self::gated( 'wp_site_revert', array( 'action' => 'next', 'run_id' => $run_id ) )['step']['state'], 'The first object back.' );
+		self::assertSame( $before[ $name_of[ $live( $s1 ) ] ], self::row_a( $live( $s1 ) )['post_content'] );
+		// The second step of the way back in a process of its own that exits
+		// once its row went back (wp_update_post() fires wp_insert_post after
+		// its UPDATE): the step stays begun, the shutdown gives the lock back.
+		try {
+			AB_MCP_IT_Sync_Steps::run( 'a', array( array( 'op' => 'revert', 'args' => array( 'action' => 'next', 'run_id' => $run_id ), 'exit_at' => 'wp_insert_post' ) ) );
+			self::fail( 'The process exits inside the step of the way back.' );
+		} catch ( RuntimeException $e ) {
+			self::assertStringContainsString( 'gave no JSON', $e->getMessage() );
+		}
+		AB_MCP_Protected_Store::forget();
+		AB_MCP_Sync_Backup::forget();
+		self::assertSame( 'begun', AB_MCP_Sync_Run::step( $run_id, $s2 )['state'] );
+		self::assertSame( 'reverting', AB_MCP_Sync_Run::get( $run_id )['state'], 'Nothing has settled it yet.' );
+		self::assertFalse( AB_MCP_Sync_Run::lock_fresh(), 'The shutdown of the process gave the lock back.' );
+		$left = self::row_a( $live( $s2 ) )['post_content'];
+		// The first call after it changes the run: under its own lock it finds
+		// the step a request that ended left begun, settles the run as
+		// interrupted (no status call before) and names the way that goes.
+		$refused = self::refused( self::gated( 'wp_site_revert', array( 'action' => 'next', 'run_id' => $run_id ) ), 'ab_mcp_sync_run_interrupted' );
+		self::assertStringContainsString( '(on its way back)', $refused );
+		self::assertStringContainsString( 'wp_site_revert action=plan with this run_id leads it on', $refused );
+		self::assertSame( 'interrupted', AB_MCP_Sync_Run::get( $run_id )['state'] );
+		self::assertSame( 'planned', AB_MCP_Sync_Run::step( $run_id, $s3 )['state'], 'Nothing of the way back ran.' );
+		$status = self::gated( 'wp_site_push', array( 'action' => 'status', 'run_id' => $run_id ) );
+		self::assertSame( 'interrupted', $status['state'] );
+		self::assertStringContainsString( 'closes it as checked', $status['next'] );
+		self::assertStringContainsString( 'wp_site_revert action=plan with this run_id leads it on', $status['next'], 'Way (b) for the way back of the same run.' );
+		self::assertStringContainsString( 'leads it on', self::refused( self::next( $run_id ), 'ab_mcp_sync_run_interrupted' ) );
+		// Way (b): plan and token on the run lead exactly its way back on;
+		// steps is not taken (no step is added).
+		$args    = array( 'action' => 'plan', 'run_id' => $run_id );
+		self::refused( self::gated( 'wp_site_revert', $args + array( 'steps' => array( 2 ) ) ), 'ab_mcp_sync_revert_steps' );
+		$preview = self::gated( 'wp_site_revert', $args );
+		self::assertIsArray( $preview, is_wp_error( $preview ) ? $preview->get_error_message() : '' );
+		self::assertTrue( $preview['preview']['same_run'] );
+		self::assertSame( array( 'stays', 'back where own' ), array_column( $preview['preview']['steps'], 'will' ) );
+		$led = self::gated( 'wp_site_revert', $args + array( 'confirm_token' => $preview['confirm_token'] ) );
+		self::assertIsArray( $led, is_wp_error( $led ) ? $led->get_error_message() : '' );
+		self::assertSame( 'reverting', $led['state'] );
+		self::assertSame( 'push', $led['type'] );
+		self::assertCount( 3, array_filter( $led['steps'], static fn( array $s ): bool => 'revert' === $s['op'] ), 'No step of the way back added.' );
+		self::assertSame( 1, $led['counts']['planned'] );
+		self::assertSame( 'unclear', AB_MCP_Sync_Run::step( $run_id, $s2 )['state'], 'The interrupted step stays, unclear.' );
+		self::assertStringContainsString( 'nothing of it is put back again', AB_MCP_Sync_Run::step( $run_id, $s2 )['result']['message'] );
+		$source = AB_MCP_Sync_Anchor::active()['source_id'];
+		self::assertSame( 'unclear', AB_MCP_Sync_Pairs::find_live( $source, 'post', (string) $live( $s2 ) )['state'], 'The pair of the interrupted step.' );
+		$third = self::gated( 'wp_site_revert', array( 'action' => 'next', 'run_id' => $run_id ) );
+		self::assertIsArray( $third, is_wp_error( $third ) ? $third->get_error_message() : '' );
+		self::assertSame( 'done', $third['step']['state'], 'The third object back.' );
+		self::assertSame( 'closed_findings', $third['state'], json_encode( $third ) );
+		self::assertSame( 1, $third['counts']['unclear'] );
+		self::assertStringContainsString( sprintf( 'step %d of the way back stayed as it is', $s2 ), $third['next'], 'The close names what stayed.' );
+		self::assertSame( $before[ $name_of[ $live( $s1 ) ] ], self::row_a( $live( $s1 ) )['post_content'] );
+		self::assertSame( $before[ $name_of[ $live( $s3 ) ] ], self::row_a( $live( $s3 ) )['post_content'] );
+		self::assertSame( $left, self::row_a( $live( $s2 ) )['post_content'], 'The interrupted step: as its request left it, nothing put back again.' );
+		self::assertSame( 'active', AB_MCP_Sync_Pairs::find_live( $source, 'post', (string) $live( $s3 ) )['state'] );
+		self::assertNull( AB_MCP_Sync_Run::open_run(), 'The site is free.' );
+		self::assertSame( 'open', self::begun( self::planned( array( $name_of[ $live( $s1 ) ] ) )['args'] )['state'], 'A new run begins (the first object, back here and still changed on staging).' );
+	}
+
 	public function testACallThatChangesARunIsRefusedAsBusyWithoutAnyChangeWhileAnotherRequestHoldsTheLock(): void {
 		// GitHub Codex rounds 3, 4 and 6 on free#137 found one change of a run
 		// outside the lock each (the begin of the way back, the abort, the

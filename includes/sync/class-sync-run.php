@@ -835,6 +835,29 @@ final class AB_MCP_Sync_Run {
 	}
 
 	/**
+	 * Whether the way back of a run has begun: a run of the type revert, or
+	 * a run with a step of the way back (the way back of the same run,
+	 * decision 15). Interrupted, such a run is led on by way (b) of decision
+	 * 18, of either type; one that is not begins its way back
+	 * (AB_MCP_Sync_Revert::interrupted_plan()).
+	 *
+	 * @param array   $run   Run.
+	 * @param array[] $steps Its steps (steps()).
+	 * @return bool
+	 */
+	public static function on_way_back( array $run, array $steps ) {
+		if ( 'revert' === $run['type'] ) {
+			return true;
+		}
+		foreach ( $steps as $step ) {
+			if ( 'revert' === $step['op'] ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
 	 * What to do with a run in its state, with the ways that go there.
 	 *
 	 * @param array $run Run.
@@ -869,17 +892,18 @@ final class AB_MCP_Sync_Run {
 	/**
 	 * The two ways of an interrupted run (decision 18), as they go for it:
 	 * (a) a person closes it as checked; (b) wp_site_revert action=plan with
-	 * the token, which leads a run of the way back on (the interrupted step
-	 * stays, no step is added), and begins the way back of a forward run
-	 * (GitHub Codex round 4 on free#137, P1: the hint named a way that
-	 * refused).
+	 * the token, which leads the way back on where it had begun (a step of
+	 * the way back or a run of the type revert; the interrupted step stays,
+	 * no step is added), and begins it otherwise (GitHub Codex rounds 4 and
+	 * 6 on free#137, P1: the hints named a way that refused).
 	 *
 	 * @param array $run    Run.
 	 * @param bool  $status For status (the run described) or for a refusal.
 	 * @return string
 	 */
 	private static function interrupted_ways( array $run, $status ) {
-		$back  = 'revert' === $run['type'];
+		$steps = self::steps( (int) $run['run_id'] );
+		$back  = 'revert' === $run['type'] || ( is_array( $steps ) && self::on_way_back( $run, $steps ) );
 		$what  = $back
 			? sprintf( 'Run %1$d%2$s is interrupted: a step of its way back began and the request that put it back ended before it finished (its lock is no longer held)', (int) $run['run_id'], 'revert' === $run['type'] ? ' (a run of the way back)' : ' (on its way back)' )
 			: sprintf( 'Run %d is interrupted: a step began and the request that wrote it ended before it finished (its lock is no longer held)', (int) $run['run_id'] );

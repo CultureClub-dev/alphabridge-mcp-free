@@ -75,7 +75,8 @@
  * begin and the continuation of a way back, closing as checked; busy
  * changes nothing), the run read and settled under it once (fresh(), the
  * one place of still()), a step the call began its own, the close of the
- * way back not beside a step of it.
+ * way back not beside a step of it; one way (b) for every interrupted run,
+ * of either type, with the ways that go named.
  *
  * Written by tests/mutation/gen/lauf.py from the source; change the entries
  * there and run it again.
@@ -1817,15 +1818,6 @@ return array(
 		'expect'  => '/testAnAbortTakesTheLockAndADelayedWriteStepFindsTheRunClosedAndWritesNothing/',
 	),
 	array(
-		'id'      => 'lauf/revert-continue',
-		'clause'  => 'plan(): an interrupted run of the way back is led on (way (b) of decision 18; P1)',
-		'file'    => $rv,
-		'search'  => "\t\t\tif ( 'interrupted' !== \$run['state'] ) {\n\t\t\t\treturn new WP_Error( 'ab_mcp_sync_revert_type'",
-		'replace' => "\t\t\tif ( true ) {\n\t\t\t\treturn new WP_Error( 'ab_mcp_sync_revert_type'",
-		'run'     => $it( 'SyncRunTest', 'testAnInterruptedRunOfTheWayBackIsLedOnWithTheTokenOrClosedAsCheckedAndFreesTheSite' ),
-		'expect'  => '/testAnInterruptedRunOfTheWayBackIsLedOnWithTheTokenOrClosedAsCheckedAndFreesTheSite/',
-	),
-	array(
 		'id'      => 'lauf/revert-continue-planned-stay',
 		'clause'  => 'begin_same_run(): a step of the way back still planned stays and goes back in its turn; a forward step is skipped',
 		'file'    => $rv,
@@ -2105,6 +2097,15 @@ return array(
 		'expect'  => '/testACallThatChangesARunIsRefusedAsBusyWithoutAnyChangeWhileAnotherRequestHoldsTheLock/',
 	),
 	array(
+		'id'      => 'lauf/engine-closed-note',
+		'clause'  => 'closed_note(): the close of a way back with findings names the steps that stayed',
+		'file'    => $en,
+		'search'  => "\t\t\t\t\$stayed[] = sprintf( 'step %1\$d of the way back stayed as it is (%2\$s)', (int) \$step['seq'], (string) \$step['state'] );",
+		'replace' => "/* removed */",
+		'run'     => $it( 'SyncRunTest', 'testAnInterruptedWayBackOfTheSameRunIsLedOnWithTheTokenAndTheSiteIsFreeAfterwards' ),
+		'expect'  => '/testAnInterruptedWayBackOfTheSameRunIsLedOnWithTheTokenAndTheSiteIsFreeAfterwards/',
+	),
+	array(
 		'id'      => 'lauf/push-change-lock',
 		'clause'  => 'call(): next, step and abort under the lock of the call from the first read of the run; busy changes nothing, not even the count of calls',
 		'file'    => $pu,
@@ -2121,6 +2122,51 @@ return array(
 		'replace' => "\t\treturn call_user_func(\n\t\t\tstatic function () use ( \$a ) {",
 		'run'     => $it( 'SyncRunTest', 'testACallThatChangesARunIsRefusedAsBusyWithoutAnyChangeWhileAnotherRequestHoldsTheLock' ),
 		'expect'  => '/testACallThatChangesARunIsRefusedAsBusyWithoutAnyChangeWhileAnotherRequestHoldsTheLock/',
+	),
+	array(
+		'id'      => 'lauf/revert-interrupted-one-way',
+		'clause'  => 'plan(): every interrupted run goes to the one way (b), of either type (P1, revert:212)',
+		'file'    => $rv,
+		'search'  => "\t\tif ( 'interrupted' === \$run['state'] ) {\n\t\t\t// Way (b) of decision 18: one function for every interrupted run.",
+		'replace' => "\t\tif ( false ) {\n\t\t\t// Way (b) of decision 18: one function for every interrupted run.",
+		'run'     => $it( 'SyncRunTest', 'testAnInterruptedWayBackOfTheSameRunIsLedOnWithTheTokenAndTheSiteIsFreeAfterwards' ),
+		'expect'  => '/testAnInterruptedWayBackOfTheSameRunIsLedOnWithTheTokenAndTheSiteIsFreeAfterwards/',
+	),
+	array(
+		'id'      => 'lauf/revert-on-way-back',
+		'clause'  => 'interrupted_plan(): a run whose way back had begun is led on, not planned anew',
+		'file'    => $rv,
+		'search'  => "\t\tif ( ! AB_MCP_Sync_Run::on_way_back( \$run, \$steps ) ) {",
+		'replace' => "\t\tif ( true ) {",
+		'run'     => $it( 'SyncRunTest', 'testAnInterruptedWayBackOfTheSameRunIsLedOnWithTheTokenAndTheSiteIsFreeAfterwards' ),
+		'expect'  => '/testAnInterruptedWayBackOfTheSameRunIsLedOnWithTheTokenAndTheSiteIsFreeAfterwards/',
+	),
+	array(
+		'id'      => 'lauf/revert-continue-no-steps',
+		'clause'  => 'interrupted_plan(): steps is not taken where the way back is led on (no step is added)',
+		'file'    => $rv,
+		'search'  => "\t\tif ( isset( \$a['steps'] ) ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_revert_steps', sprintf( 'Run %d is interrupted on its way back",
+		'replace' => "\t\tif ( false ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_revert_steps', sprintf( 'Run %d is interrupted on its way back",
+		'run'     => $it( 'SyncRunTest', 'testAnInterruptedWayBackOfTheSameRunIsLedOnWithTheTokenAndTheSiteIsFreeAfterwards' ),
+		'expect'  => '/testAnInterruptedWayBackOfTheSameRunIsLedOnWithTheTokenAndTheSiteIsFreeAfterwards/',
+	),
+	array(
+		'id'      => 'lauf/run-on-way-back-step',
+		'clause'  => 'on_way_back(): a run of the type push with a step of the way back is on its way back',
+		'file'    => $ru,
+		'search'  => "\t\t\tif ( 'revert' === \$step['op'] ) {\n\t\t\t\treturn true;",
+		'replace' => "\t\t\tif ( false ) {\n\t\t\t\treturn true;",
+		'run'     => $it( 'SyncRunTest', 'testAnInterruptedWayBackOfTheSameRunIsLedOnWithTheTokenAndTheSiteIsFreeAfterwards' ),
+		'expect'  => '/testAnInterruptedWayBackOfTheSameRunIsLedOnWithTheTokenAndTheSiteIsFreeAfterwards/',
+	),
+	array(
+		'id'      => 'lauf/run-ways-back',
+		'clause'  => 'interrupted_ways(): the ways of a run on its way back by its steps, not by its type',
+		'file'    => $ru,
+		'search'  => "\t\t\$back  = 'revert' === \$run['type'] || ( is_array( \$steps ) && self::on_way_back( \$run, \$steps ) );",
+		'replace' => "\t\t\$back  = 'revert' === \$run['type'];",
+		'run'     => $it( 'SyncRunTest', 'testAnInterruptedWayBackOfTheSameRunIsLedOnWithTheTokenAndTheSiteIsFreeAfterwards' ),
+		'expect'  => '/testAnInterruptedWayBackOfTheSameRunIsLedOnWithTheTokenAndTheSiteIsFreeAfterwards/',
 	),
 	array(
 		'id'      => 'lauf/run-interrupted-revert-way',

@@ -24,7 +24,8 @@
  * (package_id, chunk, now), grants (package_id, count, now), store_cleanup
  * (now), store_hold_lock (seconds), store_remove (area, gid), add_admin (login), as_user (user), for the report delete_post
  * (post, for good), trash_post (post), add_term_meta (term, key, value), push (args of wp_site_push,
- * exit_at: a hook at which the process exits inside a boundary, exit_key: only for this meta key), raw_post (post, set: columns written
+ * exit_at: a hook at which the process exits inside a boundary, exit_key: only for this meta key), revert (args of
+ * wp_site_revert, exit_at and exit_key as for push), raw_post (post, set: columns written
  * by SQL) and wp_version (version: the
  * $wp_version the steps after it see), and write_access (the site mode
  * Full, as a person switches it on), staging_raw and staging_raw_set
@@ -211,10 +212,13 @@ foreach ( $ab_it_steps as $ab_it_i => $ab_it_step ) {
 			$ab_it_out = AB_MCP_Sync_Export::make( $ab_it_step['purpose'], isset( $ab_it_step['cursor'] ) ? $ab_it_step['cursor'] : null, isset( $ab_it_step['objects'] ) ? (int) $ab_it_step['objects'] : null, array_intersect_key( $ab_it_step, array( 'report_hash' => true, 'refs' => true ) ) );
 			break;
 		case 'push':
-			// wp_site_push in a process of its own (Z8 branch 8): a request
-			// that ends inside a write boundary (exit_at: a hook of WordPress
-			// at which the process exits) leaves the step begun.
+		case 'revert':
+			// wp_site_push or wp_site_revert in a process of its own (Z8
+			// branch 8): a request that ends inside a write boundary or a step
+			// of the way back (exit_at: a hook of WordPress at which the
+			// process exits) leaves the step begun.
 			require_once AB_MCP_DIR . 'includes/sync/class-sync-push.php';
+			require_once AB_MCP_DIR . 'includes/sync/class-sync-revert.php';
 			if ( isset( $ab_it_step['exit_at'] ) ) {
 				// exit_key: only where the third argument of the hook (the meta
 				// key of updated_post_meta, added_post_meta) is this key.
@@ -231,7 +235,7 @@ foreach ( $ab_it_steps as $ab_it_i => $ab_it_step ) {
 				);
 			}
 			$_SERVER['DOCUMENT_ROOT'] = AB_MCP_IT_Sites::docroot( $ab_it_key );
-			$ab_it_out                = AB_MCP_Sync_Push::call( $ab_it_step['args'] );
+			$ab_it_out                = 'revert' === $ab_it_step['op'] ? AB_MCP_Sync_Revert::call( $ab_it_step['args'] ) : AB_MCP_Sync_Push::call( $ab_it_step['args'] );
 			break;
 		case 'raw_post':
 			// Columns of a post written past every hook (the way a plugin
