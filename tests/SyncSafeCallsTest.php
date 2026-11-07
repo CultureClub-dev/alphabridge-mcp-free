@@ -246,15 +246,17 @@ final class SyncSafeCallsTest extends TestCase {
 			'AB_MCP_Tools_Content::status_date_refusal' => array( 2, 'precheck() and restore_row(): the refusals of the free writer for a status and date (decision 17); a calculation.' ),
 			'add_metadata'                             => array( 1, 'write_meta(): the way forward of meta (decision 17).' ),
 			'clean_post_cache'                         => array( 1, 'post_write(): the caches of the written post.' ),
-			'current_user_can'                         => array( 7, 'precheck(): the rights of the account for each operation (decision 17, step 4), and delete_post_meta for a plain key only this site has, which the step removes (decision 28; GitHub Codex round 1 on free#137).' ),
+			'current_user_can'                         => array( 16, 'precheck(): the rights of the account for each operation (decision 17, step 4), and delete_post_meta for a plain key only this site has, which the step removes (decision 28; GitHub Codex round 1 on free#137); term_right(): the right of a taxonomy to assign its terms, assign_term for each term, the right to make a term for a slug this site has no term of; restore_right(): the same rights asked again right before a part goes back on the way back (GitHub Codex round 2 on free#137).' ),
 			'delete_metadata'                          => array( 1, 'write_meta(): the way forward of meta.' ),
 			'get_gmt_from_date'                        => array( 1, 'prepare(): the UTC date WordPress derives where a published post hands none over, for the target of the row.' ),
 			'get_option'                               => array( 1, 'with_row(): the default category wp_insert_post() gives a new post with the row (the ownership rule, Codex round 3); read to know what the row call was to write, not compared to the staging site.' ),
-			'get_post_type_object'                     => array( 1, 'precheck(): the capabilities of the type.' ),
+			'get_post_type_object'                     => array( 2, 'precheck() and restore_right(): the capabilities of the type.' ),
+			'get_taxonomy'                             => array( 1, 'term_right(): the capabilities of the taxonomy (assign_terms, edit_terms), as the rights ask them; no stored value compared (GitHub Codex round 2 on free#137).' ),
+			'get_term_by'                              => array( 1, 'term_right(): the id of the term of this site a slug names (post_format), for assign_term through map_meta_cap; the id is asked of the rights, never compared with the staging site (decision 28; GitHub Codex round 2 on free#137).' ),
 			'get_user_by'                              => array( 1, 'user_by_login(): the account of this site an author is written as (decision 25).' ),
 			'is_protected_meta'                        => array( 1, 'meta_allowed(): whether a key is protected (the rule of this version).' ),
 			'sanitize_post'                            => array( 1, 'precheck(): the sanitizers ahead, as wp_insert_post() runs them (decision 17).' ),
-			'taxonomy_exists'                          => array( 1, 'precheck(): whether a taxonomy is registered here.' ),
+			'taxonomy_exists'                          => array( 2, 'precheck() and restore_right(): whether a taxonomy is registered here.' ),
 			'update_metadata'                          => array( 1, 'write_meta(): the way forward of meta.' ),
 			'wp_cache_delete'                          => array( 4, 'post_write() and restore_meta(): the caches of the written post and its meta.' ),
 			'wp_get_theme'                             => array( 1, 'precheck(): the theme of this site, for the templates it offers (B7); no stored value compared.' ),
@@ -331,7 +333,9 @@ final class SyncSafeCallsTest extends TestCase {
 						++$at;
 					}
 				}
-				if ( is_array( $token ) && T_FUNCTION === $token[0] ) {
+				if ( is_array( $token ) && T_FUNCTION === $token[0] && '(' !== self::after( $tokens, $i ) ) {
+					// A method or function by its name; a closure (function () use
+					// (…) {) declares none, and the first name inside it is a call.
 					$methods[ self::next_name( $tokens, $i ) ] = true;
 				}
 			}
