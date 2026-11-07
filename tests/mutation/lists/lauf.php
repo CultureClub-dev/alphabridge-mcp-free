@@ -55,7 +55,10 @@
  * again right before a part goes back, the right to set the terms of every
  * taxonomy the step touches (by id, by slug, one only this site has), the
  * backup giving bytes that are no UTF-8 back as bytes; the mark of another
- * hand on a part the way back changed is gone (the halt decides).
+ * hand on a part the way back changed is gone (the halt decides). Codex
+ * round 18: edit_post first for every part on the way back, the terms too;
+ * the second read of the kind as it writes catches a hook of the rights
+ * check that changes the part.
  *
  * Written by tests/mutation/gen/lauf.py from the source; change the entries
  * there and run it again.
@@ -578,8 +581,8 @@ return array(
 		'file'    => $pw,
 		'search'  => "\t\tif ( ! hash_equals( (string) \$written, self::meta_hash( \$now ) ) ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $unit( 'SyncRunTest', 'testTheKindReadsAgainAsItWritesAPartBackAndLeavesOneThatIsNotWhatTheStepRead' ),
-		'expect'  => '/testTheKindReadsAgainAsItWritesAPartBackAndLeavesOneThatIsNotWhatTheStepRead/',
+		'run'     => $it( 'SyncRunTest', 'testAHookOfTheRightsCheckThatChangesAPartAsItGoesBackIsCaughtByTheSecondReadOfTheKind' ),
+		'expect'  => '/testAHookOfTheRightsCheckThatChangesAPartAsItGoesBackIsCaughtByTheSecondReadOfTheKind/',
 	),
 	array(
 		'id'      => 'lauf/writer-restore-row-own',
@@ -587,8 +590,8 @@ return array(
 		'file'    => $pw,
 		'search'  => "\t\tif ( ! hash_equals( \$written, \$hash ) ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $unit( 'SyncRunTest', 'testTheKindReadsAgainAsItWritesAPartBackAndLeavesOneThatIsNotWhatTheStepRead' ),
-		'expect'  => '/testTheKindReadsAgainAsItWritesAPartBackAndLeavesOneThatIsNotWhatTheStepRead/',
+		'run'     => $it( 'SyncRunTest', 'testAHookOfTheRightsCheckThatChangesAPartAsItGoesBackIsCaughtByTheSecondReadOfTheKind' ),
+		'expect'  => '/testAHookOfTheRightsCheckThatChangesAPartAsItGoesBackIsCaughtByTheSecondReadOfTheKind/',
 	),
 	array(
 		'id'      => 'lauf/writer-restore-future',
@@ -1519,12 +1522,12 @@ return array(
 	),
 	array(
 		'id'      => 'lauf/writer-restore-right-edit',
-		'clause'  => 'restore_right(): the row asks edit_post',
+		'clause'  => 'restore_right(): every part asks edit_post first, the terms too (Codex round 18)',
 		'file'    => $pw,
-		'search'  => "\t\t\tif ( ! current_user_can( 'edit_post', \$id ) ) {\n\t\t\t\treturn sprintf( 'edit the post %d (edit_post)', \$id );",
-		'replace' => "\t\t\tif ( false ) {\n\t\t\t\treturn sprintf( 'edit the post %d (edit_post)', \$id );",
-		'run'     => $unit( 'SyncRunTest', 'testTheWayBackAsksTheRightsAtTheObjectAsTheForwardWriteDoesBeforeAPartGoesBack' ),
-		'expect'  => '/testTheWayBackAsksTheRightsAtTheObjectAsTheForwardWriteDoesBeforeAPartGoesBack/',
+		'search'  => "\t\tif ( ! current_user_can( 'edit_post', \$id ) ) {\n\t\t\treturn sprintf( 'edit the post %1\$d (edit_post%2\$s)', \$id, 'row' === \$part ? '' : ', for the part ' . \$part );",
+		'replace' => "\t\tif ( false ) {\n\t\t\treturn sprintf( 'edit the post %1\$d (edit_post%2\$s)', \$id, 'row' === \$part ? '' : ', for the part ' . \$part );",
+		'run'     => $it( 'SyncRunTest', 'testWithoutEditPostNothingOfThePostGoesBackNotEvenItsTerms' ),
+		'expect'  => '/testWithoutEditPostNothingOfThePostGoesBackNotEvenItsTerms/',
 	),
 	array(
 		'id'      => 'lauf/writer-restore-right-publish',
@@ -1541,15 +1544,6 @@ return array(
 		'file'    => $pw,
 		'search'  => "\t\t\tif ( isset( \$backup['row']['post_author'] ) && (int) \$backup['row']['post_author'] !== (int) get_current_user_id() && ! current_user_can( (string) \$pto->cap->edit_others_posts ) ) {",
 		'replace' => "\t\t\tif ( false ) {",
-		'run'     => $unit( 'SyncRunTest', 'testTheWayBackAsksTheRightsAtTheObjectAsTheForwardWriteDoesBeforeAPartGoesBack' ),
-		'expect'  => '/testTheWayBackAsksTheRightsAtTheObjectAsTheForwardWriteDoesBeforeAPartGoesBack/',
-	),
-	array(
-		'id'      => 'lauf/writer-restore-right-core',
-		'clause'  => 'restore_right(): the core key the row writes goes with edit_post',
-		'file'    => $pw,
-		'search'  => "\t\t\t\treturn current_user_can( 'edit_post', \$id ) ? true : sprintf( 'edit the post %1\$d (edit_post, for the key %2\$s)', \$id, \$key );",
-		'replace' => "\t\t\t\treturn true;",
 		'run'     => $unit( 'SyncRunTest', 'testTheWayBackAsksTheRightsAtTheObjectAsTheForwardWriteDoesBeforeAPartGoesBack' ),
 		'expect'  => '/testTheWayBackAsksTheRightsAtTheObjectAsTheForwardWriteDoesBeforeAPartGoesBack/',
 	),

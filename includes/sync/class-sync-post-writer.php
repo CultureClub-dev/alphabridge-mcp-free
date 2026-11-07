@@ -486,13 +486,16 @@ final class AB_MCP_Sync_Post_Writer {
 	 * again at the object right before the part goes back (GitHub Codex
 	 * round 2 of branch 8, P2: the way back checked the owner of the run,
 	 * never the rights at the object, and wp_update_post(), the raw SQL of
-	 * restore_meta() and wp_set_object_terms() ask none). The row: edit_post;
+	 * restore_meta() and wp_set_object_terms() ask none). Every part is the
+	 * post's: edit_post first, whatever the part (assign_term and the meta
+	 * rights ask nothing of the post itself; Codex round 18 of branch 8: an
+	 * account without edit_post put the terms back). Then the row:
 	 * publish_posts where the backed-up status is publish, future or private
 	 * and the row holds another now; edit_others_posts where the backed-up
-	 * author is another account. A meta key: edit_post for the core key the
-	 * row writes (_wp_page_template; CORE_META); else edit_post_meta where
-	 * rows are written over (both sides hold rows), add_post_meta where the
-	 * backup holds more rows than the post now, delete_post_meta where it
+	 * author is another account. A meta key: nothing more for the core key
+	 * the row writes (_wp_page_template; CORE_META); else edit_post_meta
+	 * where rows are written over (both sides hold rows), add_post_meta where
+	 * the backup holds more rows than the post now, delete_post_meta where it
 	 * holds fewer, each through map_meta_cap. The terms of a taxonomy:
 	 * term_right() for the backed-up keys. True, or what the account may
 	 * not do.
@@ -506,10 +509,10 @@ final class AB_MCP_Sync_Post_Writer {
 	public static function restore_right( $part, $live_id, array $backup, array $now ) {
 		$part = (string) $part;
 		$id   = (int) $live_id;
+		if ( ! current_user_can( 'edit_post', $id ) ) {
+			return sprintf( 'edit the post %1$d (edit_post%2$s)', $id, 'row' === $part ? '' : ', for the part ' . $part );
+		}
 		if ( 'row' === $part ) {
-			if ( ! current_user_can( 'edit_post', $id ) ) {
-				return sprintf( 'edit the post %d (edit_post)', $id );
-			}
 			$type = isset( $backup['row']['post_type'] ) ? (string) $backup['row']['post_type'] : '';
 			$pto  = get_post_type_object( $type );
 			if ( ! is_object( $pto ) || ! isset( $pto->cap ) ) {
@@ -527,7 +530,8 @@ final class AB_MCP_Sync_Post_Writer {
 		if ( 0 === strpos( $part, 'meta:' ) ) {
 			$key = substr( $part, 5 );
 			if ( in_array( $key, self::CORE_META, true ) ) {
-				return current_user_can( 'edit_post', $id ) ? true : sprintf( 'edit the post %1$d (edit_post, for the key %2$s)', $id, $key );
+				// The core key the row writes goes with edit_post, asked above.
+				return true;
 			}
 			$was = count( self::meta_values( $backup, $key ) );
 			$has = count( self::meta_values( $now, $key ) );

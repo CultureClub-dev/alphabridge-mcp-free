@@ -167,20 +167,32 @@ Ablehnung entsteht, nennt sie den Weg.
 - Rechte auf dem Rückweg (Entscheid 28; GitHub-Codex 2, P2): Unmittelbar vor
   dem Zurücksetzen eines Teils fragt `put_back()` dieselben Rechte wie die
   Vorwärtsgrenze, am Objekt (`AB_MCP_Sync_Post_Writer::restore_right()`):
-  für die Zeile `edit_post`, dazu `publish_posts`, wenn der gesicherte Status
-  `publish`, `future` oder `private` ist und die Zeile heute einen anderen
-  hält, und `edit_others_posts`, wenn der gesicherte Autor ein anderes Konto
-  ist; je Meta-Schlüssel `edit_post_meta` (Zeilen beidseits), `add_post_meta`
-  (die Sicherung hat mehr Zeilen) oder `delete_post_meta` (weniger) über
-  `map_meta_cap`, `_wp_page_template` mit `edit_post`; je Taxonomie die Rechte
-  wie vorwärts (`term_right()` über die gesicherten Schlüssel). Fehlt eines,
+  für jeden Teil zuerst `edit_post` am Live-Post, auch für Meta und Terme
+  (`assign_term` und die Meta-Rechte fragen nichts am Post selbst; ohne
+  `edit_post` blieb der Titel stehen und die Kategorie ging trotzdem zurück,
+  Codex-Runde 18); für die Zeile dazu `publish_posts`, wenn der gesicherte
+  Status `publish`, `future` oder `private` ist und die Zeile heute einen
+  anderen hält, und `edit_others_posts`, wenn der gesicherte Autor ein anderes
+  Konto ist; je Meta-Schlüssel `edit_post_meta` (Zeilen beidseits),
+  `add_post_meta` (die Sicherung hat mehr Zeilen) oder `delete_post_meta`
+  (weniger) über `map_meta_cap`, `_wp_page_template` nur mit `edit_post`; je
+  Taxonomie die Rechte wie vorwärts (`term_right()` über die gesicherten
+  Schlüssel). Fehlt eines,
   bleibt der Teil `left` mit Grund und altem Wert, fail closed, der Lauf
   läuft weiter, der Schritt wird `unclear`, das Paar `unclear`; der Weg: den
   Teil in wp-admin mit einem Konto setzen, das darf (der Schritt geht nur
   einmal zurück). Vorher prüfte der Rückweg nur das Eigentum am Lauf;
   `wp_update_post()`, das rohe SQL von `restore_meta()` und
-  `wp_set_object_terms()` fragen kein Recht (Prüffall
-  `testTheWayBackAsksTheRightsAtTheObjectAndLeavesAPartTheAccountMayNotWrite`).
+  `wp_set_object_terms()` fragen kein Recht (Prüffälle
+  `testTheWayBackAsksTheRightsAtTheObjectAndLeavesAPartTheAccountMayNotWrite`,
+  `testWithoutEditPostNothingOfThePostGoesBackNotEvenItsTerms`). Die
+  Rechteprüfung ruft die Hooks der Rechte auf (`map_meta_cap`,
+  `user_has_cap`), zwischen der Lesung, auf der `decide()` entscheidet, und
+  dem Schreiben der Art; ändert ein solcher Hook den Teil, fängt das die
+  zweite Lesung der Art beim Schreiben (`restore_row()`, `restore_meta()`
+  gegen das, was der Schritt zurücklas): der Teil bleibt `left`, der Wert des
+  Hooks steht (Codex-Runde 18; Prüffall
+  `testAHookOfTheRightsCheckThatChangesAPartAsItGoesBackIsCaughtByTheSecondReadOfTheKind`).
 - Jeder alte Wert trägt die Marke der Regeln, nach denen dieser Build ihn
   zusammensetzt (`value_rules` = `AB_MCP_Sync_Post_Writer::VALUE_RULES`).
   Beim Ausgeben (`AB_MCP_Sync_Run::cap_values()`) zeigt die Antwort einen
@@ -586,7 +598,13 @@ Ablehnung entsteht, nennt sie den Weg.
   `runs` und `steps` sind InnoDB (dbDelta legt sie mit dem Vorgabe-Engine der
   Datenbank an, auf MariaDB und MySQL ab 5.5 InnoDB); ein anderer Engine
   lehnt vor jedem Schreiben ab (`ab_mcp_sync_run_engine`) und nennt
-  `ALTER TABLE … ENGINE=InnoDB` als Weg. Grenze: der Request, der zwischen
+  `ALTER TABLE … ENGINE=InnoDB` als Weg. Grenze C (Codex-Runde 18): Ein Lauf,
+  der schon `interrupted` steht, kommt auf Tabellen ohne InnoDB weder mit
+  `next` (ein unterbrochener Lauf hat kein `next`) noch mit `wp_site_revert`
+  weiter, bis die Tabellen umgestellt sind; die Ablehnung nennt den Weg, und
+  «als geprüft schliessen» (Weg a) bleibt. Möglich nur bei Tabellen, die nach
+  dem Anlegen umgestellt wurden, oder bei Journalen früherer Stände; kein
+  Code. Grenze: der Request, der zwischen
   zwei Inserts endet, ist nicht als Mutation geführt (die Transaktion deckt ihn
   mit demselben Rollback wie den gescheiterten Insert, den ein Trigger der
   Datenbank im Prüffall stellt; Prüffälle
@@ -783,7 +801,11 @@ Ablehnung entsteht, nennt sie den Weg.
   jede Taxonomie, `restore_right()` je Teil, `transaction()` (Engine-Prüfung,
   Commit, Rollback bei `WP_Error` und Ausnahme), die zweite Prüfung der Art
   beim Schreiben (`restore_row()`, `restore_meta()` gegen `$written`),
-  `AB_MCP_Sync_Canon::decode()` mit jeder abgelehnten Hülle. Mutationen:
+  `AB_MCP_Sync_Canon::decode()` mit jeder abgelehnten Hülle. Codex-Runde 18:
+  ohne `edit_post` bleiben Zeile und Kategorie stehen (Integration); ein Hook
+  der Rechteprüfung, der Titel oder Meta-Wert beim Rückweg ändert, wird von
+  der zweiten Lesung der Art gefangen (Integration, hält
+  `writer-restore-row-own` und `writer-restore-meta-own`). Mutationen:
   `tests/mutation/lists/lauf.php` (aus `tests/mutation/gen/lauf.py`), je
   Bedingung von `decide()` und `deviated()`, für die Aufzeichnung von
   `pre`/`post`/`own`, für den alten Wert und seine Kappung, je Recht von
@@ -810,8 +832,8 @@ Ablehnung entsteht, nennt sie den Weg.
   `object.deviated` als abgewichen (kein Lauf dieses Stands schreibt ein
   solches Journal), die frische Lesung je Teil in `put_back()` (`$seen =
   $again`: die Art liest beim Schreiben ohnehin noch einmal; deren zweite
-  Prüfung hält seit GitHub-Codex 2 ein Unit-Test, weil zwischen beiden
-  Lesungen kein Hook läuft und keine Site eine Änderung dazwischen stellt),
+  Prüfung hält ein Integrationstest mit einem Hook der Rechteprüfung, der den
+  Teil zwischen den Lesungen ändert, Codex-Runde 18),
   die Fehlerpfade von `update_step()` und `START TRANSACTION`/`COMMIT` in
   `begin()` und `transaction()` (keine Test-Datenbank verweigert sie; der
   gescheiterte Insert ist geführt) und die Texte der Ablehnungen

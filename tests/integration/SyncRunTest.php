@@ -2771,6 +2771,141 @@ final class SyncRunTest extends TestCase {
 		}
 	}
 
+	public function testWithoutEditPostNothingOfThePostGoesBackNotEvenItsTerms(): void {
+		// Codex round 18 of branch 8 (GitHub Codex round 2, P2, in part): the
+		// owner of the run loses edit_post on the post but keeps the rights of
+		// the taxonomy (assign_term asks nothing of the post itself); before,
+		// the row was left and the category went back all the same
+		// (wp_set_object_terms()). Every part is the post's: edit_post first,
+		// whatever the part; the row and the category stay with their values
+		// before.
+		self::pair();
+		$news_a  = wp_insert_term( 'News', 'category' );
+		$other_a = wp_insert_term( 'Other', 'category' );
+		self::assertIsArray( $news_a, is_wp_error( $news_a ) ? $news_a->get_error_message() : '' );
+		self::assertIsArray( $other_a, is_wp_error( $other_a ) ? $other_a->get_error_message() : '' );
+		$news_b  = (int) self::b( array( array( 'op' => 'insert_term', 'name' => 'News', 'taxonomy' => 'category', 'as' => 'term' ) ) )['term'];
+		$other_b = (int) self::b( array( array( 'op' => 'insert_term', 'name' => 'Other', 'taxonomy' => 'category', 'as' => 'term' ) ) )['term'];
+		$story_a = wp_insert_post( wp_slash( self::page( 'story', 'A story.', array( 'post_type' => 'post', 'post_category' => array( (int) $news_a['term_id'] ) ) ) ), true );
+		self::assertIsInt( $story_a );
+		$story_b = (int) self::b( array( array( 'op' => 'insert_post', 'args' => self::page( 'story', 'A story.', array( 'post_type' => 'post', 'post_category' => array( $news_b ) ) ), 'as' => 'post' ) ) )['post'];
+		self::paired( self::staged() );
+		self::change_on_b( (string) $story_b, 'story', 'A story, on staging.', array( 'post_type' => 'post', 'post_category' => array( $other_b ), 'post_title' => 'Story, on staging' ) );
+		$planned = self::planned( array( 'story' ) );
+		$run     = self::begun( $planned['args'] );
+		$slugs   = static fn(): array => array_values( array_map( static fn( $t ) => $t->slug, wp_get_object_terms( $story_a, 'category' ) ) );
+		self::probe_ok();
+		self::assertSame( 'closed_done', self::finish( (int) $run['run_id'] )['state'] );
+		self::assertSame( array( 'other' ), $slugs() );
+		self::assertSame( 'Story, on staging', self::row_a( $story_a )['post_title'] );
+		add_filter(
+			'map_meta_cap',
+			static function ( $caps, $cap, $user_id, $args ) use ( $story_a ) {
+				return 'edit_post' === $cap && isset( $args[0] ) && (int) $args[0] === $story_a ? array( 'do_not_allow' ) : $caps;
+			},
+			10,
+			4
+		);
+		self::assertFalse( current_user_can( 'edit_post', $story_a ) );
+		self::assertTrue( current_user_can( 'assign_term', (int) $news_a['term_id'] ), 'The rights of the taxonomy stay.' );
+		self::assertTrue( current_user_can( get_taxonomy( 'category' )->cap->assign_terms ) );
+		$begun = self::revert( (int) $run['run_id'] );
+		$back  = self::revert_all( (int) $begun['run_id'] );
+		self::assertSame( 'closed_findings', $back['state'], json_encode( $back ) );
+		$step  = self::revert_step( $back );
+		$parts = array_column( $step['result']['parts'], null, 'part' );
+		self::assertSame( 'left', $parts['row']['state'], json_encode( $parts ) );
+		self::assertStringContainsString( sprintf( 'this account may not edit the post %d (edit_post)', $story_a ), $parts['row']['note'] );
+		self::assertSame( 'left', $parts['terms:category']['state'], 'The terms of a post the account may not edit stay as well.' );
+		self::assertStringContainsString( sprintf( 'this account may not edit the post %d (edit_post, for the part terms:category)', $story_a ), $parts['terms:category']['note'] );
+		self::assertSame( '"news"', $parts['terms:category']['value_before'] );
+		self::assertSame( 'unclear', $step['state'] );
+		self::assertSame( array( 'other' ), $slugs(), 'Not written.' );
+		self::assertSame( 'Story, on staging', self::row_a( $story_a )['post_title'], 'Not written.' );
+		$pair = AB_MCP_Sync_Pairs::find_live( AB_MCP_Sync_Anchor::active()['source_id'], 'post', (string) $story_a );
+		self::assertSame( 'unclear', $pair['state'] );
+	}
+
+	public function testAHookOfTheRightsCheckThatChangesAPartAsItGoesBackIsCaughtByTheSecondReadOfTheKind(): void {
+		// Codex round 18 of branch 8: between the hash put_back() decides a part
+		// on (decide(), read right before its turn) and the write of the kind,
+		// the rights at the object are asked (restore_right()), and a site may
+		// hook them (map_meta_cap, user_has_cap). A hook that changes the part
+		// there is caught by the second read of the kind as it writes
+		// (restore_row(), restore_meta() against what the step read back,
+		// decision 23): the part is left, the hook's value stands, nothing is
+		// written over it. (The entries writer-restore-row-own and
+		// writer-restore-meta-own of the mutation list hold these clauses here.)
+		self::pair();
+		$a = self::pages_on_a( array( 'contact' => 'Write to us.', 'about' => 'About us.' ) );
+		$b = self::pages_on_b( array( 'contact' => 'Write to us.', 'about' => 'About us.' ) );
+		$contact = (int) $a['contact'];
+		$about   = (int) $a['about'];
+		add_post_meta( $contact, 'note', 'abc' );
+		self::b( array( array( 'op' => 'add_meta', 'post' => (int) $b['contact'], 'key' => 'note', 'value' => 'abc' ) ) );
+		self::paired( self::staged() );
+		self::change_on_b( $b['contact'], 'contact', 'Write to us on staging.' );
+		self::b( array( array( 'op' => 'update_meta', 'post' => (int) $b['contact'], 'key' => 'note', 'value' => 'def' ) ) );
+		self::change_on_b( $b['about'], 'about', 'About us, on staging.', array( 'post_title' => 'About, on staging' ) );
+		$planned = self::planned( array( 'contact', 'about' ) );
+		$run     = self::begun( $planned['args'] );
+		self::probe_ok();
+		self::assertSame( 'closed_done', self::finish( (int) $run['run_id'] )['state'] );
+		self::assertSame( array( 'def' ), self::meta_a( $contact, 'note' ) );
+		self::assertSame( 'About, on staging', self::row_a( $about )['post_title'] );
+		// The hook: as the rights of the row of about are asked, the title is
+		// changed once, past every lock (SQL); as the rights of the key note of
+		// contact are asked, the value is changed once.
+		$fired = array();
+		add_filter(
+			'map_meta_cap',
+			static function ( $caps, $cap, $user_id, $args ) use ( $about, $contact, &$fired ) {
+				global $wpdb;
+				if ( 'edit_post' === $cap && isset( $args[0] ) && (int) $args[0] === $about && ! isset( $fired['row'] ) ) {
+					$fired['row'] = true;
+					$wpdb->update( $wpdb->posts, array( 'post_title' => 'Changed by a hook' ), array( 'ID' => $about ) );
+					clean_post_cache( $about );
+				}
+				if ( 'edit_post_meta' === $cap && isset( $args[0], $args[1] ) && (int) $args[0] === $contact && 'note' === $args[1] && ! isset( $fired['meta'] ) ) {
+					$fired['meta'] = true;
+					$wpdb->update( $wpdb->postmeta, array( 'meta_value' => 'xyz' ), array( 'post_id' => $contact, 'meta_key' => 'note' ) );
+					wp_cache_delete( $contact, 'post_meta' );
+				}
+				return $caps;
+			},
+			10,
+			4
+		);
+		$begun = self::revert( (int) $run['run_id'] );
+		$back  = self::revert_all( (int) $begun['run_id'] );
+		self::assertSame( array( 'row' => true, 'meta' => true ), $fired, 'The hook fired as the rights were asked.' );
+		self::assertSame( 'closed_findings', $back['state'], json_encode( $back ) );
+		$back  = self::gated( 'wp_site_revert', array( 'action' => 'status', 'run_id' => (int) $begun['run_id'] ) );
+		$steps = array();
+		foreach ( $back['steps'] as $step ) {
+			if ( 'revert' === $step['op'] ) {
+				$steps[ (int) $step['result']['live_ref'] ] = $step;
+			}
+		}
+		$parts = array_column( $steps[ $about ]['result']['parts'], null, 'part' );
+		self::assertSame( 'left', $parts['row']['state'], json_encode( $parts ) );
+		self::assertStringContainsString( 'The row was changed since the step wrote it', $parts['row']['note'] );
+		self::assertStringContainsString( 'post_title: "About"', $parts['row']['value_before'] );
+		self::assertSame( 'Changed by a hook', self::row_a( $about )['post_title'], 'The hook\'s title stands; the backup was not written over it.' );
+		self::assertSame( 'About us, on staging.', self::row_a( $about )['post_content'] );
+		$parts = array_column( $steps[ $contact ]['result']['parts'], null, 'part' );
+		self::assertSame( 'restored', $parts['row']['state'], json_encode( $parts ) );
+		self::assertSame( 'left', $parts['meta:note']['state'] );
+		self::assertStringContainsString( 'The meta note was changed since the step wrote it', $parts['meta:note']['note'] );
+		self::assertSame( '"abc"', $parts['meta:note']['value_before'] );
+		self::assertSame( array( 'xyz' ), self::meta_a( $contact, 'note' ), 'The hook\'s value stands.' );
+		self::assertSame( 'Write to us.', self::row_a( $contact )['post_content'], 'The row went back.' );
+		foreach ( array( $contact, $about ) as $id ) {
+			$pair = AB_MCP_Sync_Pairs::find_live( AB_MCP_Sync_Anchor::active()['source_id'], 'post', (string) $id );
+			self::assertSame( 'unclear', $pair['state'], "Pair of $id." );
+		}
+	}
+
 	public function testAFormatNamedByItsSlugAndATaxonomyOnlyThisSiteHasAskTheRightToAssignBeforeTheFirstWrite(): void {
 		// GitHub Codex round 2 on free#137 (P2): a format is written by its
 		// slug (post_format), so the check before the first write never asked

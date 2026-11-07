@@ -180,15 +180,18 @@ e('writer-pending-top', 'precheck(): a page with a pending parent is no page of 
 e('writer-restore-menu', 'restore_row(): a page back to publish at the top level while a menu adds pages is «check needed» (decisions 21, 23; A3)', PW,
   "\t\tif ( 'page' === $backup['post_type'] && 0 === (int) $backup['post_parent'] && in_array( $backup['post_status'], array( 'publish', 'future' ), true ) && $backup['post_status'] !== $current['row']['post_status'] && self::menu_adds_pages() ) {", "\t\tif ( false ) {", 'it', 'testTheWayBackDoesNotRepublishATopLevelPageWhileAMenuAddsPages')
 # The second check of the kind at the moment of writing: put_back() decides on
-# a hash read right before (decide()), the kind reads again as it writes; no
-# hook runs between the two reads, so the unit test calls the kind directly
-# (the CI of GitHub Codex round 2 on free#137 showed the integration test
-# held decide() alone).
-SECOND = 'testTheKindReadsAgainAsItWritesAPartBackAndLeavesOneThatIsNotWhatTheStepRead'
+# a hash read right before (decide()), the kind reads again as it writes.
+# Between the two reads the rights at the object are asked (restore_right(),
+# since GitHub Codex round 2 on free#137), whose hooks (map_meta_cap,
+# user_has_cap) a site may use to change the part: the integration test
+# stages that (Codex round 18 of branch 8); the unit test
+# testTheKindReadsAgainAsItWritesAPartBackAndLeavesOneThatIsNotWhatTheStepRead
+# calls the kind directly besides.
+SECOND = 'testAHookOfTheRightsCheckThatChangesAPartAsItGoesBackIsCaughtByTheSecondReadOfTheKind'
 e('writer-restore-meta-own', 'restore_meta(): back only where the bytes are what the step read back (decision 23)', PW,
-  "\t\tif ( ! hash_equals( (string) $written, self::meta_hash( $now ) ) ) {", "\t\tif ( false ) {", 'unit', SECOND)
+  "\t\tif ( ! hash_equals( (string) $written, self::meta_hash( $now ) ) ) {", "\t\tif ( false ) {", 'it', SECOND)
 e('writer-restore-row-own', 'restore_row(): back only where the row is what the step read back', PW,
-  "\t\tif ( ! hash_equals( $written, $hash ) ) {", "\t\tif ( false ) {", 'unit', SECOND)
+  "\t\tif ( ! hash_equals( $written, $hash ) ) {", "\t\tif ( false ) {", 'it', SECOND)
 e('writer-restore-future', 'restore_row(): a backed-up future whose date passed is «check needed» (decision 23)', PW,
   "\t\tif ( $saved !== $backup['post_status'] || '' !== AB_MCP_Tools_Content::status_date_refusal( $backup['post_type'], $current['row']['post_status'], $backup['post_status'], $gmt, true, (int) $now ) ) {", "\t\tif ( false ) {", 'it', 'testAScheduledStagingPostWhoseDatePassedIsRefusedAndTheWayBackAfterTheDateNeedsACheck')
 e('writer-menu-automatic', 'precheck(): a page of the top level with the menu automatic (decision 21)', PW,
@@ -512,14 +515,12 @@ RIGHTS_BACK = 'testTheWayBackAsksTheRightsAtTheObjectAndLeavesAPartTheAccountMay
 RIGHTS_UNIT = 'testTheWayBackAsksTheRightsAtTheObjectAsTheForwardWriteDoesBeforeAPartGoesBack'
 e('engine-put-back-rights', 'put_back(): a part the account may not write as the forward write asks is left with its value before (decision 28; P2)', EN,
   "\t\t\t\t$may = AB_MCP_Sync_Post_Writer::restore_right( $name, $live_id, $backup, $seen );\n\t\t\t\tif ( true !== $may ) {", "\t\t\t\t$may = AB_MCP_Sync_Post_Writer::restore_right( $name, $live_id, $backup, $seen );\n\t\t\t\tif ( false ) {", 'it', RIGHTS_BACK)
-e('writer-restore-right-edit', 'restore_right(): the row asks edit_post', PW,
-  "\t\t\tif ( ! current_user_can( 'edit_post', $id ) ) {\n\t\t\t\treturn sprintf( 'edit the post %d (edit_post)', $id );", "\t\t\tif ( false ) {\n\t\t\t\treturn sprintf( 'edit the post %d (edit_post)', $id );", 'unit', RIGHTS_UNIT)
+e('writer-restore-right-edit', 'restore_right(): every part asks edit_post first, the terms too (Codex round 18)', PW,
+  "\t\tif ( ! current_user_can( 'edit_post', $id ) ) {\n\t\t\treturn sprintf( 'edit the post %1$d (edit_post%2$s)', $id, 'row' === $part ? '' : ', for the part ' . $part );", "\t\tif ( false ) {\n\t\t\treturn sprintf( 'edit the post %1$d (edit_post%2$s)', $id, 'row' === $part ? '' : ', for the part ' . $part );", 'it', 'testWithoutEditPostNothingOfThePostGoesBackNotEvenItsTerms')
 e('writer-restore-right-publish', 'restore_right(): a row put back to publish, future or private asks publish_posts', PW,
   "\t\t\tif ( in_array( $status, array( 'publish', 'future', 'private' ), true ) && ( ! isset( $now['row']['post_status'] ) || (string) $now['row']['post_status'] !== $status ) && ! current_user_can( (string) $pto->cap->publish_posts ) ) {", "\t\t\tif ( false ) {", 'unit', RIGHTS_UNIT)
 e('writer-restore-right-others', 'restore_right(): a row of another author asks edit_others_posts', PW,
   "\t\t\tif ( isset( $backup['row']['post_author'] ) && (int) $backup['row']['post_author'] !== (int) get_current_user_id() && ! current_user_can( (string) $pto->cap->edit_others_posts ) ) {", "\t\t\tif ( false ) {", 'unit', RIGHTS_UNIT)
-e('writer-restore-right-core', 'restore_right(): the core key the row writes goes with edit_post', PW,
-  "\t\t\t\treturn current_user_can( 'edit_post', $id ) ? true : sprintf( 'edit the post %1$d (edit_post, for the key %2$s)', $id, $key );", "\t\t\t\treturn true;", 'unit', RIGHTS_UNIT)
 e('writer-restore-right-meta-edit', 'restore_right(): rows of a key written over ask edit_post_meta', PW,
   "\t\t\tif ( $was > 0 && $has > 0 && ! current_user_can( 'edit_post_meta', $id, $key ) ) {", "\t\t\tif ( false ) {", 'unit', RIGHTS_UNIT)
 e('writer-restore-right-meta-add', 'restore_right(): rows of a key put back that the post lacks ask add_post_meta', PW,
@@ -615,7 +616,10 @@ out.append('''<?php
  * again right before a part goes back, the right to set the terms of every
  * taxonomy the step touches (by id, by slug, one only this site has), the
  * backup giving bytes that are no UTF-8 back as bytes; the mark of another
- * hand on a part the way back changed is gone (the halt decides).
+ * hand on a part the way back changed is gone (the halt decides). Codex
+ * round 18: edit_post first for every part on the way back, the terms too;
+ * the second read of the kind as it writes catches a hook of the rights
+ * check that changes the part.
  *
  * Written by tests/mutation/gen/lauf.py from the source; change the entries
  * there and run it again.

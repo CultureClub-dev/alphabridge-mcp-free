@@ -1030,8 +1030,12 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( 'remove the meta key extra of the post (delete_post_meta)', $right( 'meta:extra', $denied ) );
 		$denied = array( 'edit_post_meta:12:_wp_page_template', 'add_post_meta:12:_wp_page_template' );
 		self::assertTrue( $right( 'meta:_wp_page_template', $denied ), 'The core key goes with edit_post.' );
+		// Every part is the post's: edit_post first, whatever the part (Codex
+		// round 18: assign_term and the meta rights ask nothing of the post).
 		$denied = array( 'edit_post:12' );
-		self::assertSame( 'edit the post 12 (edit_post, for the key _wp_page_template)', $right( 'meta:_wp_page_template', $denied ) );
+		self::assertSame( 'edit the post 12 (edit_post, for the part meta:_wp_page_template)', $right( 'meta:_wp_page_template', $denied ) );
+		self::assertSame( 'edit the post 12 (edit_post, for the part meta:note)', $right( 'meta:note', $denied ) );
+		self::assertSame( 'edit the post 12 (edit_post, for the part terms:category)', $right( 'terms:category', $denied ), 'The terms of a post the account may not edit stay, whatever the rights of the taxonomy.' );
 		// Terms: the taxonomy and each backed-up term; one not registered here.
 		$denied = array( 'assign_term:3' );
 		self::assertSame( 'assign the term 3 of category (assign_term)', $right( 'terms:category', $denied ) );
@@ -1047,10 +1051,12 @@ final class SyncRunTest extends TestCase {
 		// put_back() decides a part on a hash read right before its turn
 		// (decide()), and restore_row() and restore_meta() read the part again
 		// as they write and leave it where it is not what the step read back
-		// ($written). No hook of WordPress runs between the two reads, so no
-		// site stages a change in between: held here directly (the CI of GitHub
-		// Codex round 2 on free#137 showed the integration test held decide()
-		// alone, and the clause of the kind survived its mutation).
+		// ($written). Between the two reads the rights at the object are asked
+		// (restore_right()), whose hooks (map_meta_cap, user_has_cap) a site
+		// may use to change the part: the integration test
+		// testAHookOfTheRightsCheckThatChangesAPartAsItGoesBackIsCaughtByTheSecondReadOfTheKind
+		// stages that (Codex round 18 of branch 8); here the kind is called
+		// directly, for every branch of the answer.
 		$db              = self::post_rows( 'News' );
 		$GLOBALS['wpdb'] = $db;
 		$now             = AB_MCP_Sync_Post_Writer::current( 12 );
