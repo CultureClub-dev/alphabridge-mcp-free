@@ -1383,12 +1383,13 @@ final class SyncRunTest extends TestCase {
 		// transaction of begin() a concurrent next could begin a write step; the
 		// run still open, the transition succeeded, the step was marked unclear
 		// though the plan did not take it back, and the writer's journal
-		// updates failed. Now begin() takes the lock of the write boundary
-		// first (a step being written holds it: refused, call again), finds a
-		// step begun under the lock (its request did not answer: refused, a
-		// status call settles the run), and checks the plan confirmed against
-		// the run as it is under the lock (a step wrote in between: refused,
-		// plan again). In each case the run is as it was.
+		// updates failed. Now begin() runs under the lock of the write boundary
+		// for the whole call (a step being written holds it: refused as busy,
+		// call again, the run as it was), settles the run under it (a step
+		// begun there is one a request that ended left: the run is interrupted,
+		// the plan confirmed for the open run refused, plan again), and checks
+		// the plan confirmed against the run as it is under the lock (a step
+		// wrote in between: refused, plan again, the run as it was).
 		self::pair();
 		$a = self::pages_on_a( array( 'contact' => 'Write to us.', 'about' => 'About us.' ) );
 		$b = self::pages_on_b( array( 'contact' => 'Write to us.', 'about' => 'About us.' ) );
@@ -1431,14 +1432,20 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( 'begun', AB_MCP_Sync_Run::step( $run_id, $third )['state'], 'The step being written is left to its writer.' );
 		$unchanged( 'busy' );
 		// 2. The lock given back, the step still begun (its request did not
-		// answer): refused; a status call settles the run, no way back is
-		// taken for the plan of an open run.
+		// answer): under the lock of the call it is a step a request that
+		// ended left, so the run is settled as interrupted there, and the plan
+		// confirmed for the open run is refused (plan again: the way back of
+		// the interrupted run marks the step unclear). Before, begin() refused
+		// the step as begun and left the settling to a status call.
 		delete_option( \AB_MCP_Change_Lock::OPTION );
 		$refused = $begin->invoke( null, $plan, $args );
-		self::assertStringContainsString( 'which settles it', self::refused( $refused, 'ab_mcp_sync_run_begun' ) );
-		self::assertSame( 'begun', AB_MCP_Sync_Run::step( $run_id, $third )['state'] );
-		$unchanged( 'begun' );
+		self::assertStringContainsString( 'was open when the way back was planned and is interrupted now', self::refused( $refused, 'ab_mcp_sync_revert_changed' ) );
+		self::assertSame( 'interrupted', AB_MCP_Sync_Run::get( $run_id )['state'] );
+		self::assertSame( 'begun', AB_MCP_Sync_Run::step( $run_id, $third )['state'], 'Nothing of the way back began.' );
+		// For the third case the run as before the step began (put back by the test).
+		self::assertTrue( AB_MCP_Sync_Run::set_state( $run_id, 'interrupted', 'open' ) );
 		self::assertTrue( AB_MCP_Sync_Run::update_step( $run_id, $third, array( 'state' => 'planned' ), 'begun' ) );
+		$unchanged( 'begun' );
 		// 3. The plan made; then the write step runs to its end: the plan
 		// confirmed is not the run as it is, refused; planned anew, the way
 		// back takes both steps back.
@@ -1456,6 +1463,231 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( 'closed_reverted', self::revert_all( $run_id )['state'] );
 		self::assertSame( 'Write to us.', self::row_a( (int) $a['contact'] )['post_content'] );
 		self::assertSame( 'About us.', self::row_a( (int) $a['about'] )['post_content'] );
+	}
+
+	/**
+	 * What a call that changes a run may change, read past every cache: the
+	 * run and its steps as rows, the bookings of the store, the groups of the
+	 * backups with their files, and the rows of the pages named.
+	 */
+	private static function untouched( int $run_id, array $pages ): array {
+		global $wpdb;
+		$runs     = AB_MCP_Sync_Schema::table( 'runs' );
+		$steps    = AB_MCP_Sync_Schema::table( 'steps' );
+		$bookings = \AB_MCP_Store_Budget::bookings();
+		$groups   = AB_MCP_Protected_Store::groups( 'backups' );
+		$backups  = array();
+		foreach ( is_array( $groups ) ? $groups : array() as $group ) {
+			$backups[ (string) $group['gid'] ] = array( $group, AB_MCP_Protected_Store::files( 'backups', (string) $group['gid'] ) );
+		}
+		$rows = array();
+		foreach ( $pages as $id ) {
+			$rows[ (int) $id ] = self::row_a( (int) $id );
+		}
+		return array(
+			'run'      => $wpdb->get_row( $wpdb->prepare( "SELECT * FROM `$runs` WHERE run_id = %d", $run_id ), ARRAY_A ), // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			'steps'    => $wpdb->get_results( $wpdb->prepare( "SELECT * FROM `$steps` WHERE run_id = %d ORDER BY seq", $run_id ), ARRAY_A ), // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			'bookings' => is_wp_error( $bookings ) ? $bookings->get_error_code() : $bookings,
+			'backups'  => is_wp_error( $groups ) ? $groups->get_error_code() : $backups,
+			'pages'    => $rows,
+		);
+	}
+
+	public function testACallThatChangesARunIsRefusedAsBusyWithoutAnyChangeWhileAnotherRequestHoldsTheLock(): void {
+		// GitHub Codex rounds 3, 4 and 6 on free#137 found one change of a run
+		// outside the lock each (the begin of the way back, the abort, the
+		// close of the way back beside its last step). Now every call of
+		// wp_site_push and wp_site_revert that can change a run takes the lock
+		// of the write boundary at its start and holds it to its answer (the
+		// decision of 07.11.2026 evening, Variante A): another request holding
+		// it (a row of the lock with another owner) refuses next, abort, plan
+		// with the token and the close of the way back as busy, and nothing of
+		// the run, its steps, the bookings and the backups changes; once it is
+		// free, each goes.
+		self::pair();
+		$a = self::pages_on_a( array( 'contact' => 'Write to us.', 'about' => 'About us.' ) );
+		$b = self::pages_on_b( array( 'contact' => 'Write to us.', 'about' => 'About us.' ) );
+		self::paired( self::staged() );
+		self::change_on_b( $b['contact'], 'contact', 'Write to us on staging.' );
+		self::change_on_b( $b['about'], 'about', 'About us, on staging.' );
+		$planned = self::planned( array( 'contact', 'about' ) );
+		$run_id  = (int) self::begun( $planned['args'] )['run_id'];
+		$pages   = array( (int) $a['contact'], (int) $a['about'] );
+		$revert  = array( 'action' => 'plan', 'run_id' => $run_id );
+		$busy    = function ( string $when, bool $wrote ) use ( $run_id, $pages, $revert ): void {
+			update_option( \AB_MCP_Change_Lock::OPTION, time() );
+			$was = self::untouched( $run_id, $pages );
+			foreach ( array( 'next' => array( 'wp_site_push', array( 'action' => 'next', 'run_id' => $run_id ) ), 'abort' => array( 'wp_site_push', array( 'action' => 'abort', 'run_id' => $run_id ) ) ) as $what => $call ) {
+				$text = self::refused( self::gated( $call[0], $call[1] ), 'ab_mcp_sync_run_busy' );
+				self::assertStringContainsString( 'the lock of the write boundary is held', $text, "$when: $what" );
+				self::assertStringContainsString( 'Call again', $text, "$when: $what" );
+			}
+			// The engine takes the lock itself as well (a request that reached it).
+			self::refused( AB_MCP_Sync_Engine::next( AB_MCP_Sync_Run::get( $run_id ), null ), 'ab_mcp_sync_run_busy' );
+			self::refused( AB_MCP_Sync_Engine::abort( AB_MCP_Sync_Run::get( $run_id ) ), 'ab_mcp_sync_run_busy' );
+			if ( $wrote ) {
+				// The way back of the same run planned (a step wrote), its token refused as busy.
+				$preview = self::gated( 'wp_site_revert', $revert );
+				self::assertIsArray( $preview, is_wp_error( $preview ) ? $preview->get_error_message() : '' );
+				self::refused( self::gated( 'wp_site_revert', $revert + array( 'confirm_token' => $preview['confirm_token'] ) ), 'ab_mcp_sync_run_busy' );
+			}
+			self::assertSame( $was, self::untouched( $run_id, $pages ), "$when: nothing changed." );
+			self::assertFalse( \AB_MCP_Change_Lock::held(), "$when: nothing is held." );
+			delete_option( \AB_MCP_Change_Lock::OPTION );
+		};
+		// The check before the first write planned (before, it booked the
+		// store for the run before it asked the lock), then a write step.
+		$busy( 'the check', false );
+		self::assertSame( 'done', self::next( $run_id )['step']['state'], 'The check, once the lock is free.' );
+		self::assertSame( 'done', self::next( $run_id )['step']['state'], 'The first page.' );
+		$busy( 'a write step', true );
+		self::assertSame( 'done', self::next( $run_id )['step']['state'], 'The second page, once the lock is free.' );
+		self::assertSame( 'About us, on staging.', self::row_a( (int) $a['about'] )['post_content'] );
+		// The way back of the same run begins once the lock is free; its
+		// first step goes back.
+		$begun = self::revert( $run_id );
+		self::assertSame( 'reverting', $begun['state'] );
+		$reverts = array_values( array_filter( $begun['steps'], static fn( array $s ): bool => 'revert' === $s['op'] ) );
+		self::assertCount( 2, $reverts );
+		self::assertSame( 'done', self::gated( 'wp_site_revert', array( 'action' => 'next', 'run_id' => $run_id ) )['step']['state'] );
+		$seq = (int) $reverts[1]['seq'];
+		// Its last step being put back by another request (begun, the lock
+		// held): a request that read the run before (reverting) reaches the
+		// close of the way back. Before, pick() found no step planned and
+		// close_revert() closed the run beside the step, gave its booking back
+		// and cleaned up without the lock (GitHub Codex round 6, P1, engine:162).
+		$read = AB_MCP_Sync_Run::get( $run_id );
+		self::assertSame( 'reverting', $read['state'] );
+		self::assertTrue( AB_MCP_Sync_Run::update_step( $run_id, $seq, array( 'state' => 'begun' ), 'planned' ) );
+		update_option( \AB_MCP_Change_Lock::OPTION, time() );
+		$was = self::untouched( $run_id, $pages );
+		self::assertStringContainsString( 'the lock of the write boundary is held', self::refused( AB_MCP_Sync_Engine::next( $read, null ), 'ab_mcp_sync_run_busy' ) );
+		self::refused( self::gated( 'wp_site_revert', array( 'action' => 'next', 'run_id' => $run_id ) ), 'ab_mcp_sync_run_busy' );
+		self::assertSame( $was, self::untouched( $run_id, $pages ), 'The close of the way back: nothing changed.' );
+		$status = self::gated( 'wp_site_revert', array( 'action' => 'status', 'run_id' => $run_id ) );
+		self::assertSame( 'reverting', $status['state'], 'A step begun under a lock another request holds is not interrupted.' );
+		delete_option( \AB_MCP_Change_Lock::OPTION );
+		// The close itself, reached under a lock with a step of the way back
+		// still begun (its own call, here): refused, nothing closed.
+		$close = new \ReflectionMethod( AB_MCP_Sync_Engine::class, 'close_revert' );
+		$kept  = AB_MCP_Sync_Run::under_lock( static fn() => $close->invoke( null, AB_MCP_Sync_Run::get( $run_id ) ), 'The test' );
+		self::assertStringContainsString( sprintf( 'its step %d is begun', $seq ), self::refused( $kept, 'ab_mcp_sync_run_state' ) );
+		self::assertSame( 'reverting', AB_MCP_Sync_Run::get( $run_id )['state'] );
+		// The other request answered (its step as it was before it began, for
+		// the test) and gave the lock back: the way back goes and closes.
+		self::assertTrue( AB_MCP_Sync_Run::update_step( $run_id, $seq, array( 'state' => 'planned' ), 'begun' ) );
+		$back = self::gated( 'wp_site_revert', array( 'action' => 'next', 'run_id' => $run_id ) );
+		self::assertIsArray( $back, is_wp_error( $back ) ? $back->get_error_message() : '' );
+		self::assertSame( 'closed_reverted', $back['state'], json_encode( $back ) );
+		self::assertSame( 'Write to us.', self::row_a( (int) $a['contact'] )['post_content'] );
+		self::assertSame( 'About us.', self::row_a( (int) $a['about'] )['post_content'] );
+		self::assertNull( AB_MCP_Sync_Run::open_run() );
+	}
+
+	public function testADelayedCallWithAnOldReadOfTheRunWritesNothingAfterAnAbortOrAfterTheWayBackClosed(): void {
+		// The run is read once, under the lock of the call, before anything is
+		// decided (the one place of still(); the decision of 07.11.2026
+		// evening, Variante A): a request that read the run before another
+		// call aborted it, or before its way back closed, finds it moved and
+		// writes nothing. Before, only the boundaries read the run again; the
+		// check before the first write booked the store for an aborted run and
+		// marked itself done.
+		self::pair();
+		$a = self::pages_on_a( array( 'contact' => 'Write to us.' ) );
+		$b = self::pages_on_b( array( 'contact' => 'Write to us.' ) );
+		self::paired( self::staged() );
+		self::change_on_b( $b['contact'], 'contact', 'Write to us on staging.' );
+		$planned = self::planned( array( 'contact' ) );
+		$run_id  = (int) self::begun( $planned['args'] )['run_id'];
+		$pages   = array( (int) $a['contact'] );
+		$read    = AB_MCP_Sync_Run::get( $run_id );
+		self::assertSame( 'open', $read['state'] );
+		self::assertSame( 'closed_aborted', self::gated( 'wp_site_push', array( 'action' => 'abort', 'run_id' => $run_id ) )['state'] );
+		$was  = self::untouched( $run_id, $pages );
+		$text = self::refused( AB_MCP_Sync_Engine::next( $read, null ), 'ab_mcp_sync_run_state' );
+		self::assertStringContainsString( 'was open when this call read it and is closed_aborted now', $text );
+		self::assertStringContainsString( 'nothing was written', $text );
+		self::assertSame( $was, self::untouched( $run_id, $pages ), 'After the abort: the check not run, nothing booked.' );
+		self::assertSame( 'planned', AB_MCP_Sync_Run::step( $run_id, 1 )['state'] );
+		// The way back of a second run, read while it was reverting, closed in
+		// between: the delayed next and abort write nothing.
+		$second = (int) self::begun( self::planned( array( 'contact' ) )['args'] )['run_id'];
+		self::assertSame( 'done', self::next( $second )['step']['state'], 'The check.' );
+		self::assertSame( 'done', self::next( $second )['step']['state'], 'The page.' );
+		self::assertSame( 'reverting', self::revert( $second )['state'] );
+		$read = AB_MCP_Sync_Run::get( $second );
+		self::assertSame( 'closed_reverted', self::revert_all( $second )['state'] );
+		$was = self::untouched( $second, $pages );
+		self::assertStringContainsString( 'was reverting when this call read it and is closed_reverted now', self::refused( AB_MCP_Sync_Engine::next( $read, null ), 'ab_mcp_sync_run_state' ) );
+		self::refused( AB_MCP_Sync_Engine::abort( $read ), 'ab_mcp_sync_run_state' );
+		self::assertSame( $was, self::untouched( $second, $pages ), 'After the close of the way back: nothing changed.' );
+		self::assertSame( 'Write to us.', self::row_a( (int) $a['contact'] )['post_content'] );
+	}
+
+	public function testUnderTheLockOfItsCallAStepTheCallBeganIsItsOwnAndAStepAnEndedRequestLeftIsInterrupted(): void {
+		// settle() under the lock of the call (the decision of 07.11.2026
+		// evening, Variante A): no other request is in a step there, so a step
+		// begun that this request did not begin belongs to a request that
+		// ended (interrupted), and a step this call began is its own, running,
+		// never interrupted. Before, under its own lock settle() took every
+		// begun step as running, also one a request that ended had left. A
+		// request that reached the engine with the run read before finds the
+		// interruption under the lock and writes nothing; closing as checked
+		// (way (a)) runs under the lock as well and settles the run itself.
+		self::pair();
+		$a = self::pages_on_a( array( 'contact' => 'Write to us.', 'about' => 'About us.' ) );
+		$b = self::pages_on_b( array( 'contact' => 'Write to us.', 'about' => 'About us.' ) );
+		self::paired( self::staged() );
+		self::change_on_b( $b['contact'], 'contact', 'Write to us on staging.' );
+		self::change_on_b( $b['about'], 'about', 'About us, on staging.' );
+		$run_id = (int) self::begun( self::planned( array( 'contact', 'about' ) )['args'] )['run_id'];
+		self::assertSame( 'done', self::next( $run_id )['step']['state'], 'The check.' );
+		$writes = array();
+		foreach ( AB_MCP_Sync_Run::steps( $run_id ) as $step ) {
+			if ( 'write' === $step['op'] ) {
+				$writes[] = (int) $step['seq'];
+			}
+		}
+		list( $mine, $other ) = $writes;
+		// 1. A step this call begins under its lock is its own.
+		$inside = AB_MCP_Sync_Run::under_lock(
+			static function () use ( $run_id, $mine ) {
+				self::assertTrue( AB_MCP_Sync_Run::update_step( $run_id, $mine, array( 'state' => 'begun' ), 'planned' ) );
+				return AB_MCP_Sync_Run::settle( AB_MCP_Sync_Run::get( $run_id ) );
+			},
+			'The test'
+		);
+		self::assertIsArray( $inside );
+		self::assertSame( 'open', $inside['state'], 'The step this call began is its own.' );
+		self::assertSame( 'open', AB_MCP_Sync_Run::get( $run_id )['state'] );
+		self::assertFalse( \AB_MCP_Change_Lock::held() );
+		self::assertTrue( AB_MCP_Sync_Run::update_step( $run_id, $mine, array( 'state' => 'planned' ), 'begun' ) );
+		// 2. The same step begun by a request that ended (begun here without
+		// the lock, as that request did before it ended; the call of step 1 is
+		// over, its own steps forgotten): a request that read the run before
+		// reaches the engine, finds the run interrupted under the lock, and
+		// begins no other step.
+		$read = AB_MCP_Sync_Run::get( $run_id );
+		self::assertTrue( AB_MCP_Sync_Run::update_step( $run_id, $mine, array( 'state' => 'begun' ), 'planned' ) );
+		$text = self::refused( AB_MCP_Sync_Engine::next( $read, null ), 'ab_mcp_sync_run_interrupted' );
+		self::assertStringContainsString( 'begins its way back', $text, 'The way that goes for an interrupted forward run.' );
+		self::assertSame( 'interrupted', AB_MCP_Sync_Run::get( $run_id )['state'] );
+		self::assertSame( 'planned', AB_MCP_Sync_Run::step( $run_id, $other )['state'], 'No other step begun.' );
+		self::assertSame( 'About us.', self::row_a( (int) $a['about'] )['post_content'], 'Nothing written.' );
+		// 3. Closing as checked (way (a)) under the lock: refused as busy while
+		// another request holds it; then it settles the run itself (put back
+		// to open by the test, the step still begun) and closes it.
+		self::assertTrue( AB_MCP_Sync_Run::set_state( $run_id, 'interrupted', 'open' ) );
+		update_option( \AB_MCP_Change_Lock::OPTION, time() );
+		$was = self::untouched( $run_id, array( (int) $a['contact'] ) );
+		self::refused( AB_MCP_Sync_Run::close_checked( $run_id, self::admin(), true ), 'ab_mcp_sync_run_busy' );
+		self::assertSame( $was, self::untouched( $run_id, array( (int) $a['contact'] ) ) );
+		delete_option( \AB_MCP_Change_Lock::OPTION );
+		$closed = AB_MCP_Sync_Run::close_checked( $run_id, self::admin(), true );
+		self::assertIsArray( $closed, is_wp_error( $closed ) ? $closed->get_error_message() : '' );
+		self::assertSame( 'closed_checked', $closed['state'] );
+		self::assertSame( 'unclear', AB_MCP_Sync_Run::step( $run_id, $mine )['state'] );
+		self::assertNull( AB_MCP_Sync_Run::open_run(), 'open_one is free.' );
 	}
 
 	public function testAWriteStepIsNotRunUnderATimeLimitThatDoesNotCarryItWhileTheCheckGoesOnWithASmallerWork(): void {

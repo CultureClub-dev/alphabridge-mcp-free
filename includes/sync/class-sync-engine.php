@@ -19,9 +19,16 @@
  * findings; a qualified close marks forward_closed_at where every write
  * step was written (decision 20).
  *
- * THE WRITE BOUNDARY (decision 17, run_write()): the lock
- * (AB_MCP_Change_Lock::take(); busy: the step stays planned and the answer
- * says so); the step begun with the snapshot of its pair; the takeover lock
+ * ONE LOCK PER CALL (decision 18; the decision of 07.11.2026 evening,
+ * Variante A): next() and abort() run under the lock of the write boundary
+ * for the whole call (AB_MCP_Sync_Run::under_lock(); another request holding
+ * it: refused as busy, nothing read or written), read the run under it once
+ * (fresh(): in the state the caller read it in, settled) and decide only
+ * then; whatever the call does to the run on the way (a step, the close of
+ * the check, of the run, of the way back) is done under that lock.
+ *
+ * THE WRITE BOUNDARY (decision 17, run_write()): under the lock of the call,
+ * the step begun with the snapshot of its pair; the takeover lock
  * of the objects (AB_MCP_Sync_Guard); the target and the rights checked
  * again; the backup kept and read back (AB_MCP_Sync_Backup); the journal
  * written ahead of every part (the row, each meta key, each taxonomy: its
@@ -131,13 +138,63 @@ final class AB_MCP_Sync_Engine {
 	 * Run one step of a run: the next one whose dependencies are done, or a
 	 * named one (refused while a dependency is open). The run has to be
 	 * open (or reverting for a step of the way back), settled and the
-	 * caller's own.
+	 * caller's own. The whole call runs under the lock of the write boundary
+	 * (AB_MCP_Sync_Run::under_lock(): another request holding it refuses the
+	 * call as busy, nothing read or written), and the run is read under it
+	 * (fresh()) before anything is decided.
 	 *
-	 * @param array    $run   The run (AB_MCP_Sync_Run::get()).
+	 * @param array    $run   The run as the caller read it (AB_MCP_Sync_Run::get()).
 	 * @param int|null $named The seq of the step to run; null for the next.
 	 * @return array|WP_Error The answer (answer()).
 	 */
 	public static function next( array $run, $named = null ) {
+		return AB_MCP_Sync_Run::under_lock(
+			static function () use ( $run, $named ) {
+				$fresh = self::fresh( $run );
+				return is_wp_error( $fresh ) ? $fresh : self::step_of_call( $fresh, $named );
+			},
+			sprintf( 'Run %d takes no step', (int) $run['run_id'] )
+		);
+	}
+
+	/**
+	 * The run as it is under the lock of the call, the one place that reads
+	 * it for the decision (decision 18; the decision of 07.11.2026 evening,
+	 * Variante A): in the state the caller read it in, or nothing is written
+	 * (a request that read the run before another call closed, aborted,
+	 * settled or led it on must not write into it; GitHub Codex rounds 4 and
+	 * 6 on free#137), and settled under the lock: a step a request that
+	 * ended left begun makes it interrupted here, refused with both ways.
+	 * Before, each boundary read the run again (still()), and the check
+	 * before the first write, the caches, the check of the run and the close
+	 * of the way back did not.
+	 *
+	 * @param array $run The run as the caller read it.
+	 * @return array|WP_Error The run as it is now.
+	 */
+	private static function fresh( array $run ) {
+		$now = AB_MCP_Sync_Run::get( (int) $run['run_id'] );
+		if ( ! is_array( $now ) ) {
+			return is_wp_error( $now ) ? $now : AB_MCP_Sync_Run::unknown( (int) $run['run_id'] );
+		}
+		if ( (string) $now['state'] !== (string) $run['state'] ) {
+			return new WP_Error( 'ab_mcp_sync_run_state', sprintf( 'Run %1$d was %2$s when this call read it and is %3$s now (another call moved it in between): nothing was written, its steps stay as they are. Ask for the status of the run (wp_site_push action=status) and go on from there.', (int) $run['run_id'], (string) $run['state'], (string) $now['state'] ) );
+		}
+		$now = AB_MCP_Sync_Run::settle( $now );
+		if ( is_wp_error( $now ) ) {
+			return $now;
+		}
+		return 'interrupted' === $now['state'] ? AB_MCP_Sync_Run::interrupted_refusal( $now ) : $now;
+	}
+
+	/**
+	 * next() under the lock, on the run as fresh() read it.
+	 *
+	 * @param array    $run   The run, read under the lock.
+	 * @param int|null $named The seq of the step to run; null for the next.
+	 * @return array|WP_Error The answer (answer()).
+	 */
+	private static function step_of_call( array $run, $named ) {
 		$started = self::now();
 		// The time of this request: raised where set_time_limit() takes, the
 		// work of the call derived from the limit it has (GitHub Codex round 3
@@ -163,7 +220,7 @@ final class AB_MCP_Sync_Engine {
 				if ( is_wp_error( $closed ) ) {
 					return $closed;
 				}
-				return self::answer( $closed, null, $started, 'Every step of the way back ran; the run is closed. The rests it left are named in rests.' );
+				return self::answer( $closed, null, $started, self::closed_note( $closed ) );
 			}
 			return self::answer( $run, null, $started, 'No step is left to run: the run is closed, or every remaining step waits on one that was skipped or failed (see the steps in status).' );
 		}
@@ -203,90 +260,65 @@ final class AB_MCP_Sync_Engine {
 		}
 		$now  = AB_MCP_Sync_Run::get( (int) $run['run_id'] );
 		$step = AB_MCP_Sync_Run::step( (int) $run['run_id'], (int) $picked['seq'] );
+		$next = (string) $done['next'];
 		// A run of the way back closes once no step is left.
 		if ( is_array( $now ) && ( 'reverting' === $now['state'] || ( 'revert' === $now['type'] && 'open' === $now['state'] ) ) && null === self::pick( $now, AB_MCP_Sync_Run::steps( (int) $run['run_id'] ), null, true ) ) {
 			$closed = self::close_revert( $now );
 			if ( ! is_wp_error( $closed ) ) {
-				$now = $closed;
+				$now   = $closed;
+				$next .= ' ' . self::closed_note( $closed );
 			}
 		}
-		return self::answer( is_array( $now ) ? $now : $run, is_array( $step ) ? $step : null, $started, $done['next'], isset( $done['busy'] ) ? $done['busy'] : false );
+		return self::answer( is_array( $now ) ? $now : $run, is_array( $step ) ? $step : null, $started, $next );
 	}
 
 	/**
 	 * Abort an open run: closed as aborted; what its steps wrote stays (the
 	 * way back is wp_site_revert for the run), its booking is given back.
+	 * Under the lock of the write boundary for the whole call (decision 18;
+	 * GitHub Codex round 4 on free#137, P2: before, the abort took no lock,
+	 * and a delayed request could move its planned step to begun and write
+	 * into a closed run whose booking was given back): another request
+	 * holding it refuses as busy, nothing changed; the run is read and
+	 * settled under it, and the close, the booking given back and the
+	 * clean-up of the store run under it as well.
 	 *
 	 * @param array $run Run.
 	 * @return array|WP_Error The run as closed.
 	 */
 	public static function abort( array $run ) {
 		if ( 'open' !== $run['state'] ) {
-			return new WP_Error( 'ab_mcp_sync_run_state', sprintf( 'Only an open run is aborted; this run is %s. An interrupted run is closed as checked by a person on the page AlphaBridge → Staging, or taken back with wp_site_revert; a run of the way back runs to its end.', $run['state'] ) );
+			return new WP_Error( 'ab_mcp_sync_run_state', sprintf( 'Only an open run is aborted; this run is %s. An interrupted run is closed as checked by a person on the page AlphaBridge → Staging, or wp_site_revert action=plan with its run_id leads its way back on or begins it; a run on its way back runs to its end with wp_site_revert action=next; a closed run is not aborted.', (string) $run['state'] ) );
 		}
-		// Under the lock of the write boundary (decision 18): a step being
-		// written holds it, and the run is not aborted beside it; a next that
-		// read the run before the abort finds it closed under the lock
-		// (boundary(), still()) and writes nothing (GitHub Codex round 4 on
-		// free#137, P2: before, the abort took no lock, and a delayed request
-		// could move its planned step to begun and write into a closed run
-		// whose booking was given back).
-		$lock = AB_MCP_Change_Lock::take();
-		if ( is_wp_error( $lock ) ) {
-			return new WP_Error( 'ab_mcp_sync_run_busy', sprintf( 'Run %d is not aborted right now: a step of a run is being written (the lock of the write boundary is held). Call again when the step has answered.', (int) $run['run_id'] ) );
-		}
-		try {
-			$fresh = AB_MCP_Sync_Run::get( (int) $run['run_id'] );
-			if ( ! is_array( $fresh ) ) {
-				return AB_MCP_Sync_Run::unknown( (int) $run['run_id'] );
-			}
-			if ( 'open' !== $fresh['state'] ) {
-				return new WP_Error( 'ab_mcp_sync_run_changed', sprintf( 'The run %1$d is %2$s now (another call moved it since this one read it as open): nothing was changed. Ask for its status (wp_site_push action=status) and go on from there.', (int) $run['run_id'], (string) $fresh['state'] ) );
-			}
-			$steps = AB_MCP_Sync_Run::steps( (int) $run['run_id'] );
-			if ( is_wp_error( $steps ) ) {
-				return $steps;
-			}
-			foreach ( $steps as $step ) {
-				if ( 'begun' === $step['state'] ) {
-					return new WP_Error( 'ab_mcp_sync_run_busy', sprintf( 'Step %d of the run is begun and its request did not answer; the run is not aborted. Ask for the status of the run (wp_site_push action=status), which settles it, then go on from there.', (int) $step['seq'] ) );
+		return AB_MCP_Sync_Run::under_lock(
+			static function () use ( $run ) {
+				$fresh = AB_MCP_Sync_Run::get( (int) $run['run_id'] );
+				if ( ! is_array( $fresh ) ) {
+					return is_wp_error( $fresh ) ? $fresh : AB_MCP_Sync_Run::unknown( (int) $run['run_id'] );
 				}
-			}
-			$moved = AB_MCP_Sync_Run::set_state( (int) $run['run_id'], 'open', 'closed_aborted' );
-			if ( is_wp_error( $moved ) ) {
-				return $moved;
-			}
-		} finally {
-			AB_MCP_Change_Lock::release();
-		}
-		AB_MCP_Store_Budget::release( (int) $run['run_id'] );
-		AB_MCP_Protected_Store::cleanup();
-		$closed = AB_MCP_Sync_Run::get( (int) $run['run_id'] );
-		return is_array( $closed ) ? $closed : $run;
-	}
-
-	/**
-	 * The run as it is under the lock, right before a step is begun: in one
-	 * of the states the step runs in, or the step is not run and nothing is
-	 * written (GitHub Codex round 4 on free#137, P2: a request that read the
-	 * run before another closed it, aborted or settled it must not write
-	 * into it; the state of the step alone, which update_step() checks, does
-	 * not tell).
-	 *
-	 * @param array    $run    The run as this call read it.
-	 * @param int      $seq    The step about to begin.
-	 * @param string[] $states The states the step runs in.
-	 * @return array|WP_Error The run as it is now.
-	 */
-	private static function still( array $run, $seq, array $states ) {
-		$fresh = AB_MCP_Sync_Run::get( (int) $run['run_id'] );
-		if ( ! is_array( $fresh ) ) {
-			return AB_MCP_Sync_Run::unknown( (int) $run['run_id'] );
-		}
-		if ( ! in_array( (string) $fresh['state'], $states, true ) ) {
-			return new WP_Error( 'ab_mcp_sync_run_state', sprintf( 'Step %1$d is not run: run %2$d was %3$s when this call read it and is %4$s now (another call moved it in between); nothing was written, the step stays as it is. Ask for the status of the run (wp_site_push action=status) and go on from there.', (int) $seq, (int) $run['run_id'], (string) $run['state'], (string) $fresh['state'] ) );
-		}
-		return $fresh;
+				if ( 'open' !== $fresh['state'] ) {
+					return new WP_Error( 'ab_mcp_sync_run_changed', sprintf( 'The run %1$d is %2$s now (another call moved it since this one read it as open): nothing was changed. Ask for its status (wp_site_push action=status) and go on from there.', (int) $run['run_id'], (string) $fresh['state'] ) );
+				}
+				// A step begun under the lock of this call is one a request
+				// that ended left: the run is interrupted, and is not aborted.
+				$fresh = AB_MCP_Sync_Run::settle( $fresh );
+				if ( is_wp_error( $fresh ) ) {
+					return $fresh;
+				}
+				if ( 'interrupted' === $fresh['state'] ) {
+					return AB_MCP_Sync_Run::interrupted_refusal( $fresh );
+				}
+				$moved = AB_MCP_Sync_Run::set_state( (int) $run['run_id'], 'open', 'closed_aborted' );
+				if ( is_wp_error( $moved ) ) {
+					return $moved;
+				}
+				AB_MCP_Store_Budget::release( (int) $run['run_id'] );
+				AB_MCP_Protected_Store::cleanup();
+				$closed = AB_MCP_Sync_Run::get( (int) $run['run_id'] );
+				return is_array( $closed ) ? $closed : $run;
+			},
+			sprintf( 'Run %d is not aborted', (int) $run['run_id'] )
+		);
 	}
 
 	/* ----------------------------------------------------------- context */
@@ -514,7 +546,7 @@ final class AB_MCP_Sync_Engine {
 	 * @param array $step    Step.
 	 * @param array $ctx     context().
 	 * @param float $started When the call began.
-	 * @return array|WP_Error next, busy.
+	 * @return array|WP_Error next.
 	 */
 	private static function run_check( array $run, array $step, array $ctx, $started ) {
 		$plan   = is_array( $run['plan'] ) ? $run['plan'] : array();
@@ -536,15 +568,7 @@ final class AB_MCP_Sync_Engine {
 				return self::abort_at( $run, $step, $booked->get_error_message(), array() );
 			}
 			AB_MCP_Sync_Run::set_budget( (int) $run['run_id'], $booked + array( 'resources' => $check['level'] ) );
-			// The lock available (decision 18).
-			$lock = AB_MCP_Change_Lock::take();
-			if ( is_wp_error( $lock ) ) {
-				return array(
-					'next' => $lock->get_error_message(),
-					'busy' => true,
-				);
-			}
-			AB_MCP_Change_Lock::release();
+			// The lock (decision 18) is held: this call runs under it (next()).
 			$result['resources'] = $check['level'];
 			$result['notes']     = array();
 			if ( empty( $plan['environment'] ) ) {
@@ -676,12 +700,13 @@ final class AB_MCP_Sync_Engine {
 	}
 
 	/**
-	 * Phase 5: one write boundary (decision 17).
+	 * Phase 5: one write boundary (decision 17), under the lock of the call
+	 * (next()); the takeover lock of the object given back in every way.
 	 *
 	 * @param array $run  Run.
 	 * @param array $step Step.
 	 * @param array $ctx  context().
-	 * @return array|WP_Error next, busy.
+	 * @return array|WP_Error next.
 	 */
 	private static function run_write( array $run, array $step, array $ctx ) {
 		$plan = is_array( $run['plan'] ) ? $run['plan'] : array();
@@ -694,23 +719,16 @@ final class AB_MCP_Sync_Engine {
 		if ( null === $item ) {
 			return new WP_Error( 'ab_mcp_sync_run_invalid', sprintf( 'The plan of the run names no object for step %d. Ask for the status of the run (wp_site_push action=status).', (int) $step['seq'] ) );
 		}
-		$lock = AB_MCP_Change_Lock::take();
-		if ( is_wp_error( $lock ) ) {
-			return array(
-				'next' => $lock->get_error_message(),
-				'busy' => true,
-			);
-		}
 		try {
 			return self::boundary( $run, $step, $item, $ctx );
 		} finally {
 			AB_MCP_Sync_Guard::end( (int) $run['run_id'], (int) $step['seq'] );
-			AB_MCP_Change_Lock::release();
 		}
 	}
 
 	/**
-	 * The boundary itself, under the lock.
+	 * The boundary itself, under the lock of the call, on the run as the
+	 * call read it under that lock (fresh()).
 	 *
 	 * @param array $run  Run.
 	 * @param array $step Step.
@@ -721,11 +739,6 @@ final class AB_MCP_Sync_Engine {
 	private static function boundary( array $run, array $step, array $item, array $ctx ) {
 		$run_id  = (int) $run['run_id'];
 		$seq     = (int) $step['seq'];
-		// (1) The run as it is under the lock: open, or the step is not run.
-		$still = self::still( $run, $seq, array( 'open' ) );
-		if ( is_wp_error( $still ) ) {
-			return $still;
-		}
 		$live_id = 'update' === $item['op'] ? (int) $item['live_ref'] : null;
 		$before  = null;
 		if ( null !== $live_id ) {
@@ -1967,7 +1980,9 @@ final class AB_MCP_Sync_Engine {
 
 	/**
 	 * A step of the way back (decision 23): one write step of the run (or of
-	 * the closed run a run of the type revert names) taken back part by part.
+	 * the closed run a run of the type revert names) taken back part by part,
+	 * under the lock of the call (next()), on the run as the call read it
+	 * under that lock (fresh()).
 	 *
 	 * @param array $run  Run.
 	 * @param array $step Step.
@@ -1975,18 +1990,10 @@ final class AB_MCP_Sync_Engine {
 	 * @return array|WP_Error
 	 */
 	private static function run_revert( array $run, array $step, array $ctx ) {
-		$lock = AB_MCP_Change_Lock::take();
-		if ( is_wp_error( $lock ) ) {
-			return array(
-				'next' => $lock->get_error_message(),
-				'busy' => true,
-			);
-		}
 		try {
 			return self::revert_boundary( $run, $step, $ctx );
 		} finally {
 			AB_MCP_Sync_Guard::end( (int) $run['run_id'], (int) $step['seq'] );
-			AB_MCP_Change_Lock::release();
 		}
 	}
 
@@ -2008,13 +2015,7 @@ final class AB_MCP_Sync_Engine {
 		$journal = $forward['parts'];
 		$object  = $journal['object'];
 		$live_id = isset( $object['live_ref'] ) ? (int) $object['live_ref'] : 0;
-		// The run as it is under the lock: on its way back (reverting; a run
-		// of the way back open or reverting), or the step is not run.
-		$still = self::still( $run, $seq, 'revert' === $run['type'] ? array( 'open', 'reverting' ) : array( 'reverting' ) );
-		if ( is_wp_error( $still ) ) {
-			return $still;
-		}
-		$begun = AB_MCP_Sync_Run::update_step( $run_id, $seq, array( 'state' => 'begun' ), 'planned' );
+		$begun   = AB_MCP_Sync_Run::update_step( $run_id, $seq, array( 'state' => 'begun' ), 'planned' );
 		if ( is_wp_error( $begun ) ) {
 			return $begun;
 		}
@@ -2113,7 +2114,13 @@ final class AB_MCP_Sync_Engine {
 
 	/**
 	 * Close a run of the way back: reverted where every step went back and
-	 * nothing is left, else with findings (rests, unclear parts).
+	 * nothing is left, else with findings (rests, unclear parts). Under the
+	 * lock of the call (next()), and only once no step of the way back is
+	 * planned or begun: the booking given back and the clean-up of the store
+	 * never run beside a step that still reads its backup (GitHub Codex
+	 * round 6 on free#137, P1: pick() found nothing planned while the last
+	 * step was begun in another request, and the run closed beside it
+	 * without the lock).
 	 *
 	 * @param array $run Run.
 	 * @return array|WP_Error The run as closed.
@@ -2128,6 +2135,9 @@ final class AB_MCP_Sync_Engine {
 			if ( 'revert' !== $step['op'] ) {
 				continue;
 			}
+			if ( in_array( $step['state'], array( 'planned', 'begun' ), true ) ) {
+				return new WP_Error( 'ab_mcp_sync_run_state', sprintf( 'The way back of run %1$d is not closed: its step %2$d is %3$s. Ask for the status of the run (wp_site_push action=status) and go on from there.', (int) $run['run_id'], (int) $step['seq'], (string) $step['state'] ) );
+			}
 			if ( 'done' !== $step['state'] || ( is_array( $step['result'] ) && isset( $step['result']['rest'] ) ) ) {
 				$clean = false;
 			}
@@ -2140,6 +2150,40 @@ final class AB_MCP_Sync_Engine {
 		AB_MCP_Protected_Store::cleanup();
 		$closed = AB_MCP_Sync_Run::get( (int) $run['run_id'] );
 		return is_array( $closed ) ? $closed : $run;
+	}
+
+	/**
+	 * What the close of a way back says: reverted, or with findings, naming
+	 * the steps of the way back that stayed as they are (unclear: the
+	 * interruption, a part changed since, an object that deviated; failed)
+	 * and the rests.
+	 *
+	 * @param array $run The run as closed.
+	 * @return string
+	 */
+	private static function closed_note( array $run ) {
+		if ( 'closed_reverted' === $run['state'] ) {
+			return 'Every step of the way back ran and went back whole; the run is closed as reverted.';
+		}
+		$stayed = array();
+		$rests  = 0;
+		$steps  = AB_MCP_Sync_Run::steps( (int) $run['run_id'] );
+		foreach ( is_array( $steps ) ? $steps : array() as $step ) {
+			if ( 'revert' !== $step['op'] ) {
+				continue;
+			}
+			if ( in_array( $step['state'], array( 'unclear', 'failed' ), true ) ) {
+				$stayed[] = sprintf( 'step %1$d of the way back stayed as it is (%2$s)', (int) $step['seq'], (string) $step['state'] );
+			}
+			if ( is_array( $step['result'] ) && isset( $step['result']['rest'] ) ) {
+				++$rests;
+			}
+		}
+		return sprintf(
+			'Every step of the way back ran; the run is closed with findings: %1$s%2$s. Check those objects in wp-admin (each part left names its value before; their pairs are unclear until wp_site_pairs confirms a new alignment); remove a rest by hand where it should go.',
+			array() === $stayed ? 'no step stayed' : implode( '; ', $stayed ),
+			$rests > 0 ? sprintf( '; %d new object(s) stay as rests (named in rests)', $rests ) : ''
+		);
 	}
 
 	/* ------------------------------------------------------------ helpers */
@@ -2337,10 +2381,9 @@ final class AB_MCP_Sync_Engine {
 	 * @param array|null $step    The step that ran.
 	 * @param float      $started When the call began.
 	 * @param string     $next    What to do next.
-	 * @param bool       $busy    Whether the lock was busy.
 	 * @return array|WP_Error
 	 */
-	private static function answer( array $run, $step, $started, $next, $busy = false ) {
+	private static function answer( array $run, $step, $started, $next ) {
 		$shown = AB_MCP_Sync_Run::shown( $run );
 		if ( is_wp_error( $shown ) ) {
 			return $shown;
@@ -2350,7 +2393,10 @@ final class AB_MCP_Sync_Engine {
 			'type'      => $run['type'],
 			'state'     => $run['state'],
 			'step'      => null,
-			'busy'      => (bool) $busy,
+			// Kept in the shape of an answer: a lock another request holds
+			// refuses the whole call (ab_mcp_sync_run_busy), so an answer is
+			// never busy (the decision of 07.11.2026 evening, Variante A).
+			'busy'      => false,
 			'remaining' => array(
 				'planned' => $shown['counts']['planned'],
 				'seconds' => max( 0, (int) ( self::$work + self::RESERVE - ( self::now() - $started ) ) ),

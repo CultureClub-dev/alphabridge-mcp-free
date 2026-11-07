@@ -37,7 +37,17 @@
  * OWNERSHIP: next, step, status and abort for the account and connection
  * that made the run only (AB_MCP_Sync_Run::owner_refusal()). An interrupted
  * run (decision 18) takes no next and no step: a person closes it as
- * checked on the page «Staging», or wp_site_revert takes its parts back.
+ * checked on the page «Staging», or wp_site_revert leads its way back on or
+ * begins it.
+ *
+ * ONE LOCK PER CALL: next, step and abort run under the lock of the write
+ * boundary from the first read of the run to the answer
+ * (AB_MCP_Sync_Run::under_lock(); another request holding it refuses them as
+ * busy, nothing read or changed, not even the count of calls); status and
+ * the preview of plan read without it (AB_MCP_Sync_Run::settle() takes it
+ * for a moment where a step is begun). plan with the token makes a run and
+ * changes none: it is not under the lock, and open_one keeps a second run
+ * from being made (decision 15).
  *
  * Messages are English without gettext, as the other classes of the
  * takeover; each names the way.
@@ -144,9 +154,48 @@ final class AB_MCP_Sync_Push {
 		if ( is_wp_error( $source ) ) {
 			return $source;
 		}
-		if ( 'status' === $action && ! isset( $a['run_id'] ) ) {
-			return self::overview();
+		if ( 'status' === $action ) {
+			if ( ! isset( $a['run_id'] ) ) {
+				return self::overview();
+			}
+			$run = self::own_run( $a );
+			if ( is_wp_error( $run ) ) {
+				return $run;
+			}
+			AB_MCP_Sync_Run::touch( (int) $run['run_id'], true );
+			$run = AB_MCP_Sync_Run::settle( $run );
+			if ( is_wp_error( $run ) ) {
+				return $run;
+			}
+			$shown = AB_MCP_Sync_Run::shown( $run );
+			if ( is_wp_error( $shown ) ) {
+				return $shown;
+			}
+			$shown['next'] = AB_MCP_Sync_Run::way( $run );
+			return $shown;
 		}
+		// next, step and abort change the run: under the lock of the write
+		// boundary for the whole call, the run read under it (the decision of
+		// 07.11.2026 evening, Variante A).
+		$id = isset( $a['run_id'] ) && is_numeric( $a['run_id'] ) ? (int) $a['run_id'] : 0;
+		return AB_MCP_Sync_Run::under_lock(
+			static function () use ( $a, $action ) {
+				return self::change( $a, $action );
+			},
+			'abort' === $action ? sprintf( 'Run %d is not aborted', $id ) : sprintf( 'Run %d takes no step', $id )
+		);
+	}
+
+	/**
+	 * next, step and abort under the lock of the call: the run read and
+	 * settled under it (a step a request that ended left begun makes it
+	 * interrupted here), then decided.
+	 *
+	 * @param array  $a      Arguments.
+	 * @param string $action next, step or abort.
+	 * @return array|WP_Error
+	 */
+	private static function change( array $a, $action ) {
 		$run = self::own_run( $a );
 		if ( is_wp_error( $run ) ) {
 			return $run;
@@ -155,14 +204,6 @@ final class AB_MCP_Sync_Push {
 		$run = AB_MCP_Sync_Run::settle( $run );
 		if ( is_wp_error( $run ) ) {
 			return $run;
-		}
-		if ( 'status' === $action ) {
-			$shown = AB_MCP_Sync_Run::shown( $run );
-			if ( is_wp_error( $shown ) ) {
-				return $shown;
-			}
-			$shown['next'] = self::status_way( $run );
-			return $shown;
 		}
 		if ( 'abort' === $action ) {
 			$closed = AB_MCP_Sync_Engine::abort( $run );
@@ -176,12 +217,8 @@ final class AB_MCP_Sync_Push {
 			$shown['next'] = 'The run is closed as aborted. What its steps wrote stays as written (their pairs have the new bases); wp_site_revert with this run_id takes it back pair by pair.';
 			return $shown;
 		}
-		// next, step.
 		if ( 'interrupted' === $run['state'] ) {
-			return self::interrupted( $run );
-		}
-		if ( isset( $run['running'] ) ) {
-			return new WP_Error( 'ab_mcp_sync_run_busy', sprintf( 'Step %d of the run is being written right now (its lock is held); call again when it has answered.', (int) $run['running'] ) );
+			return AB_MCP_Sync_Run::interrupted_refusal( $run );
 		}
 		if ( 'open' !== $run['state'] || 'push' !== $run['type'] ) {
 			return new WP_Error( 'ab_mcp_sync_run_state', sprintf( 'The run %1$d is %2$s (%3$s) and takes no step here: a run of the way back goes on with wp_site_revert, a closed run no more. Ask for its status.', (int) $run['run_id'], $run['state'], $run['type'] ) );
@@ -275,6 +312,10 @@ final class AB_MCP_Sync_Push {
 		// report below; any other run that is not closed refuses with the way.
 		$existing = null;
 		$open     = AB_MCP_Sync_Run::open_run();
+		if ( is_array( $open ) ) {
+			// Settled, so the refusal names the ways that go for it.
+			$open = AB_MCP_Sync_Run::settle( $open );
+		}
 		if ( is_wp_error( $open ) ) {
 			return $open;
 		}
@@ -918,14 +959,17 @@ final class AB_MCP_Sync_Push {
 				'own'               => null === AB_MCP_Sync_Run::owner_refusal( $run ),
 			);
 		}
+		if ( null !== $open ) {
+			$settled = AB_MCP_Sync_Run::settle( $open );
+			$open    = is_wp_error( $settled ) ? $open : $settled;
+		}
 		$out = array(
 			'open' => null,
 			'runs' => $runs,
-			'next' => null === $open ? 'No run is open on this site. Plan one with action=plan (report_id, select or all, packages).' : sprintf( 'Run %1$d is %2$s. %3$s', (int) $open['run_id'], $open['state'], self::status_way( $open ) ),
+			'next' => null === $open ? 'No run is open on this site. Plan one with action=plan (report_id, select or all, packages).' : sprintf( 'Run %1$d is %2$s. %3$s', (int) $open['run_id'], $open['state'], AB_MCP_Sync_Run::way( $open ) ),
 		);
 		if ( null !== $open ) {
-			$open        = AB_MCP_Sync_Run::settle( $open );
-			$out['open'] = is_wp_error( $open ) ? null : array(
+			$out['open'] = array(
 				'run_id' => (int) $open['run_id'],
 				'type'   => $open['type'],
 				'state'  => $open['state'],
@@ -957,51 +1001,13 @@ final class AB_MCP_Sync_Push {
 	}
 
 	/**
-	 * What to do with a run in its state.
-	 *
-	 * @param array $run Run.
-	 * @return string
-	 */
-	public static function status_way( array $run ) {
-		switch ( $run['state'] ) {
-			case 'open':
-				return 'push' === $run['type'] ? 'Go on with action=next (one step per call), or action=abort.' : 'Go on with wp_site_revert action=next.';
-			case 'interrupted':
-				return 'revert' === $run['type']
-					? 'The run of the way back was interrupted: a step began and the request that put it back ended before it finished (its lock is no longer held). No step runs and no new run begins until a person closes it as checked on the page AlphaBridge → Staging (nothing is written then; the pairs of the steps left begun become unclear), or wp_site_revert action=plan with this run_id leads it on: the interrupted step stays as it is (unclear), the steps still planned go back one by one (action=next). The journal names each part with its state.'
-					: 'The run was interrupted: a step began and the request that wrote it ended before it finished (its lock is no longer held). No step runs and no new run begins until a person closes it as checked on the page AlphaBridge → Staging (nothing is written then; pairs with unclear parts become unclear), or wp_site_revert action=plan with this run_id takes its own parts back. The journal names each part with its state.';
-			case 'reverting':
-				return 'The way back of this run is running: go on with wp_site_revert action=next.';
-			default:
-				return 'The run is closed. wp_site_revert action=plan with this run_id plans the way back for its pairs.';
-		}
-	}
-
-	/**
-	 * The refusal of a step of an interrupted run (decision 18), with its
-	 * two ways: for a run of the way back, way (b) leads the same run on
-	 * (the interrupted step stays, the steps still planned go back; GitHub
-	 * Codex round 4 on free#137, P1: before, the hint pointed to action=plan,
-	 * which refused a run of the way back).
-	 *
-	 * @param array $run Run.
-	 * @return WP_Error
-	 */
-	public static function interrupted( array $run ) {
-		$way = 'revert' === $run['type']
-			? 'wp_site_revert action=plan with this run_id leads it on: the interrupted step stays as it is (unclear, its parts as they are), the steps still planned go back one by one (action=next)'
-			: 'wp_site_revert action=plan with this run_id takes its own parts back';
-		return new WP_Error( 'ab_mcp_sync_run_interrupted', sprintf( 'Run %1$d%2$s is interrupted and takes no step: a step began and the request that wrote it ended before it finished. Two ways: a person closes it as checked on the page AlphaBridge → Staging after reading its journal (nothing is written), or %3$s. action=status shows the journal.', (int) $run['run_id'], 'revert' === $run['type'] ? ' (a run of the way back)' : '', $way ), array( 'run_id' => (int) $run['run_id'] ) );
-	}
-
-	/**
 	 * @param array $open The run that is not closed.
 	 * @return WP_Error
 	 */
 	private static function another_open( array $open ) {
 		return new WP_Error(
 			'ab_mcp_sync_run_open',
-			sprintf( 'This site has a run that is not closed (run %1$d, %2$s, state %3$s), and at most one run per site is open at a time, so no new plan begins. Ask for its status (wp_site_push action=status). %4$s', (int) $open['run_id'], $open['type'], $open['state'], self::status_way( $open ) ),
+			sprintf( 'This site has a run that is not closed (run %1$d, %2$s, state %3$s), and at most one run per site is open at a time, so no new plan begins. Ask for its status (wp_site_push action=status). %4$s', (int) $open['run_id'], $open['type'], $open['state'], AB_MCP_Sync_Run::way( $open ) ),
 			array(
 				'run_id' => (int) $open['run_id'],
 				'state'  => $open['state'],

@@ -223,9 +223,11 @@ final class SyncSafeCallsTest extends TestCase {
 		// WordPress besides are the rights of the account, the lock, the store
 		// and the probes of the check.
 		'class-sync-run.php'    => array(
-			'AB_MCP_Change_Lock::held'        => array( 1, 'lock_fresh(): whether this request holds the lock of the boundary.' ),
+			'AB_MCP_Change_Lock::held'        => array( 4, 'under_lock(), settle(), update_step() and lock_fresh(): whether this request holds the lock of the write boundary (one lock per call, the decision of 07.11.2026 evening, Variante A).' ),
+			'AB_MCP_Change_Lock::release'     => array( 2, 'under_lock() and settle(): the lock of the write boundary given back at the end of the call, and after the decision of a reading call (decision 18; Variante A).' ),
+			'AB_MCP_Change_Lock::take'        => array( 2, 'under_lock(): the lock of the write boundary for the whole call that can change a run; settle(): for the decision of a reading call where a step is begun (decision 18; Variante A).' ),
 			'AB_MCP_Staging_Gate::connection' => array( 1, 'connection(): the connection of the call, which a run is bound to (decision 15).' ),
-			'get_option'                      => array( 1, 'lock_fresh(): the row of the lock of AB_MCP_Change_Lock, a time this plugin writes itself (decision 18); no value the takeover compares.' ),
+			'get_option'                      => array( 1, 'lock_since(): the row of the lock of AB_MCP_Change_Lock, a time this plugin writes itself (decision 18); no value the takeover compares.' ),
 			'AB_MCP_Protected_Store::backup_days' => array( 1, 'set_state(): the days a close keeps its backups (the filter of Pro), stored as keep_until at the close (decision 20; A7).' ),
 		),
 		'class-sync-guard.php'  => array(
@@ -270,8 +272,6 @@ final class SyncSafeCallsTest extends TestCase {
 			'wp_update_post'                           => array( 2, 'write_row() and restore_row(): the way forward and back of the row (decisions 17 and 23).' ),
 		),
 		'class-sync-engine.php' => array(
-			'AB_MCP_Change_Lock::release'     => array( 4, 'run_check(), run_write(), run_revert() and abort(): the lock of the boundary given back (decision 18; abort under the lock, GitHub Codex round 4 on free#137).' ),
-			'AB_MCP_Change_Lock::take'        => array( 4, 'run_check(), run_write(), run_revert() and abort(): the lock of the boundary taken (decision 18; abort under the lock, so no write step runs beside it, GitHub Codex round 4 on free#137).' ),
 			'AB_MCP_Change_Lock::touch'       => array( 3, 'boundary(), write_parts() (the parts read back as written) and put_back() (each part put back, within the boundary and on the way back; B8): the heartbeat of the lock.' ),
 			'AB_MCP_Php_Probe::run'           => array( 1, 'run_verify(): the PHP probe of the site (decision 33).' ),
 			'AB_MCP_Protected_Store::available' => array( 1, 'run_check(): whether the store is proved (decision 7: no run without it).' ),
@@ -290,8 +290,6 @@ final class SyncSafeCallsTest extends TestCase {
 			'AB_MCP_Protected_Store::bind' => array( 1, 'bind_package(): the packages of objects bound to the run, kept while it is not closed.' ),
 		),
 		'class-sync-revert.php' => array(
-			'AB_MCP_Change_Lock::release'       => array( 1, 'begin(): the lock of the boundary given back after the way back of the same run began, or was refused (decision 18; GitHub Codex round 3 on free#137).' ),
-			'AB_MCP_Change_Lock::take'          => array( 1, 'begin(): the lock of the boundary taken before the way back of the same run begins, so no write step runs beside it (decision 18; GitHub Codex round 3 on free#137).' ),
 			'AB_MCP_Protected_Store::under_lock' => array( 1, 'begin(): a way back for a closed run is made under the lock of the store, against the clean-up (decision 20, rule 4; A6).' ),
 		),
 	);
