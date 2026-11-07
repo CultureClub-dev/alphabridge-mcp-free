@@ -1135,16 +1135,15 @@ final class AB_MCP_Sync_Engine {
 			}
 			$journal['parts'][ $k ]['state']        = 'left';
 			$journal['parts'][ $k ]['value_before'] = AB_MCP_Sync_Post_Writer::before_value( (string) $part['part'], $backup, $state, $live_id );
+			$journal['parts'][ $k ]['value_rules']  = AB_MCP_Sync_Post_Writer::VALUE_RULES;
 			$journal['parts'][ $k ]['note']         = self::noted( $journal['parts'][ $k ], 'Left as it is: the object deviated within the step, so nothing of it is put back by itself; check it by hand, its value before stands in value_before.' );
 			++$left;
 		}
 		if ( 0 === $left ) {
-			// Nothing differs from the backup: nothing deviated that a way back
-			// would leave, so the object carries no mark (Codex round 8, B).
-			$journal['object']['deviated'] = null;
-			foreach ( $journal['parts'] as $k => $part ) {
-				unset( $journal['parts'][ $k ]['deviated'] );
-			}
+			// Nothing differs from the backup: the step is failed, the object
+			// keeps its mark all the same (a part owned before stays never put
+			// back, Codex round 9); the preview of a way back says nothing is
+			// to do for it (AB_MCP_Sync_Revert::plan()).
 			return self::outcome( 'failed', sprintf( 'Nothing was written: %s. The object is as before the step.', $why ), $journal, $live_id );
 		}
 		return self::outcome( 'unclear', sprintf( 'The object deviated within the step: %1$s. Nothing of it is put back by itself (the one boundary, GRENZEN-LAUF.md): %2$d part(s) stay as they are (left, each with its value before in the journal), and the object is unclear. Check it in wp-admin and align the pair (wp_site_pairs).', $why, $left ), $journal, $live_id );
@@ -1437,6 +1436,7 @@ final class AB_MCP_Sync_Engine {
 			}
 			if ( 'left' === $one['state'] ) {
 				$one['value_before'] = AB_MCP_Sync_Post_Writer::before_value( $name, $backup, $seen, $live_id );
+				$one['value_rules']  = AB_MCP_Sync_Post_Writer::VALUE_RULES;
 			}
 			$out[ $i ] = $one;
 		}

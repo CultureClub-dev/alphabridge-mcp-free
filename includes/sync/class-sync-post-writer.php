@@ -108,6 +108,9 @@ final class AB_MCP_Sync_Post_Writer {
 	const WAY_META  = 'refusable';
 	const WAY_TERMS = 'not_refusable';
 
+	/** The rules a value before is composed by (value_rules); a value of other rules is not shown. */
+	const VALUE_RULES = 2;
+
 	/** Characters one value is shown with at most in value_before (before_value()). */
 	const VALUE_CHARS = 80;
 
@@ -1107,6 +1110,31 @@ final class AB_MCP_Sync_Post_Writer {
 			$out[] = self::shown_value( '', (string) $term['slug'] );
 		}
 		return array() === $out ? 'none (no term of the taxonomy)' : implode( ', ', $out );
+	}
+
+	/**
+	 * A value before as an answer shows it, checked once more as it leaves
+	 * (a journal of an earlier build may hold one composed by other rules,
+	 * Codex round 9): where the credential check or the net names a
+	 * credential in the text, only the reference.
+	 *
+	 * @param string   $text  value_before as stored.
+	 * @param int|null $rules value_rules as stored: VALUE_RULES where this build composed it.
+	 * @return string
+	 */
+	public static function checked_before( $text, $rules = null ) {
+		if ( self::VALUE_RULES !== $rules ) {
+			// Composed by an earlier build, by rules this one does not vouch
+			// for (Codex round 9): never shown, fail closed.
+			return '(composed by an earlier build, not shown; the backup of the step in the protected store holds the value)';
+		}
+		$text  = (string) $text;
+		$extra = AB_MCP_Redactor::extra_keys();
+		$check = AB_MCP_Sync_Credentials::unit( '', $text, $extra );
+		if ( 'clean' !== $check['state'] || in_array( AB_MCP_Sync_Net::over_name( $text, $extra ), array( 'credential', 'unreadable' ), true ) ) {
+			return '(holds a credential, not shown)';
+		}
+		return $text;
 	}
 
 	/**

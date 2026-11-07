@@ -2133,7 +2133,7 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( 'failed', $parts['row']['state'] );
 		self::assertStringContainsString( 'changed nothing of the part', (string) $parts['row']['note'] );
 		self::assertArrayNotHasKey( 'value_before', $parts['row'], 'Nothing is left: no value before.' );
-		self::assertNull( $write['step']['parts']['object']['deviated'], 'Nothing differs from the backup: no mark (Codex round 8).' );
+		self::assertSame( 'row', $write['step']['parts']['object']['deviated']['part'], 'The object keeps its mark although nothing differs from the backup (Codex round 9).' );
 		self::assertStringContainsString( 'Nothing was written', $write['step']['result']['message'] );
 		self::assertSame( $before, self::row_a( $contact ), 'The object is as before the step.' );
 		$pair = AB_MCP_Sync_Pairs::find_live( AB_MCP_Sync_Anchor::active()['source_id'], 'post', (string) $contact );
@@ -2141,10 +2141,10 @@ final class SyncRunTest extends TestCase {
 		self::probe_ok();
 		self::assertSame( 'closed_findings', self::finish( (int) $run['run_id'] )['state'] );
 		// The way back of the closed run: every part is as the backup; the
-		// preview says nothing is left (Codex round 8, B).
+		// preview says there is nothing to do (Codex round 8, B).
 		$preview = self::gated( 'wp_site_revert', array( 'action' => 'plan', 'run_id' => (int) $run['run_id'] ) );
 		self::assertIsArray( $preview, is_wp_error( $preview ) ? $preview->get_error_message() : '' );
-		self::assertNotSame( 'left', $preview['preview']['steps'][0]['will'] );
+		self::assertSame( 'nothing', $preview['preview']['steps'][0]['will'] );
 		$begun = self::revert( (int) $run['run_id'] );
 		$back  = self::revert_all( (int) $begun['run_id'] );
 		self::assertSame( 'closed_reverted', $back['state'], json_encode( self::step( $back, 1 )['result'] ) );

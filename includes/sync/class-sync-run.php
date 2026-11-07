@@ -815,7 +815,7 @@ final class AB_MCP_Sync_Run {
 	private static function parts_shown( array $parts ) {
 		$out = array();
 		foreach ( isset( $parts['parts'] ) && is_array( $parts['parts'] ) ? $parts['parts'] : array() as $part ) {
-			$out[] = array_intersect_key( (array) $part, array_flip( array( 'part', 'state', 'before', 'target', 'after', 'own', 'own_after', 'deviated', 'value_before', 'backup', 'way', 'note' ) ) );
+			$out[] = array_intersect_key( (array) $part, array_flip( array( 'part', 'state', 'before', 'target', 'after', 'own', 'own_after', 'deviated', 'value_before', 'value_rules', 'backup', 'way', 'note' ) ) );
 		}
 		return array(
 			'object' => isset( $parts['object'] ) ? $parts['object'] : null,
@@ -845,6 +845,10 @@ final class AB_MCP_Sync_Run {
 					if ( ! is_array( $part ) || ! isset( $part['value_before'] ) || ! is_string( $part['value_before'] ) ) {
 						continue;
 					}
+					// Checked once more as it leaves, in the journal and in the
+					// outcome of a step of the way back (Codex round 9).
+					$part['value_before']                                 = AB_MCP_Sync_Post_Writer::checked_before( $part['value_before'], isset( $part['value_rules'] ) ? (int) $part['value_rules'] : null );
+					$steps[ $s ][ $where ]['parts'][ $p ]['value_before'] = $part['value_before'];
 					$bytes = strlen( $part['value_before'] );
 					if ( $bytes <= $budget ) {
 						$budget -= $bytes;

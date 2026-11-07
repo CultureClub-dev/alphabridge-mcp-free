@@ -290,7 +290,10 @@ final class AB_MCP_Sync_Revert {
 			foreach ( isset( $journal['parts'] ) && is_array( $journal['parts'] ) ? $journal['parts'] : array() as $part ) {
 				$foreign = $foreign || ( is_array( $part ) && ! empty( $part['foreign'] ) );
 			}
-			$will = 'create' === $object['op'] ? 'rest' : ( ! empty( $object['deviated'] ) || ! array_key_exists( 'deviated', $object ) || $foreign ? 'left' : ( 'done' === $step['state'] ? 'back' : 'back where own' ) );
+			// A step failed with its object as the backup (deviated before it
+			// changed anything) has nothing to take back (Codex round 8, B).
+			$as_before = 'failed' === $step['state'] && ! empty( $object['deviated'] );
+			$will      = 'create' === $object['op'] ? 'rest' : ( $as_before ? 'nothing' : ( ! empty( $object['deviated'] ) || ! array_key_exists( 'deviated', $object ) || $foreign ? 'left' : ( 'done' === $step['state'] ? 'back' : 'back where own' ) ) );
 			$shown[] = array(
 				'seq'      => (int) $step['seq'],
 				'state'    => $step['state'],

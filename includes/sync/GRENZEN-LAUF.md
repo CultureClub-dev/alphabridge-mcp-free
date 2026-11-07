@@ -121,8 +121,18 @@ Ablehnung entsteht, nennt sie den Weg.
   Objekt wie abgewichen (`deviated = foreign_mark`, nichts geht zurück, alter
   Wert in der Antwort; Codex-Runde 8). Weicht im Schritt nichts von der
   Sicherung ab (etwa ein Zeilenaufruf, der vor dem Schreiben verweigert
-  wurde), trägt das Objekt keine Marke: der Schritt heisst `failed`, die
-  Vorschau des Rückwegs nennt nichts als stehen gelassen.
+  wurde), heisst der Schritt `failed`, das Objekt behält seine Marke (ein
+  zuvor eigener Teil geht so auch später nie zurück, Codex-Runde 9), und die
+  Vorschau des Rückwegs sagt für ihn `nothing`.
+- Jeder alte Wert trägt die Marke der Regeln, nach denen dieser Build ihn
+  zusammensetzt (`value_rules` = `AB_MCP_Sync_Post_Writer::VALUE_RULES`).
+  Beim Ausgeben (`AB_MCP_Sync_Run::cap_values()`) zeigt die Antwort einen
+  Wert ohne diese Marke nie (Journal eines Zwischenstands, nach anderen
+  Regeln zusammengesetzt), sondern verweist auf die Sicherung; jeder Wert
+  mit Marke geht noch einmal durch die Geheimnisprüfung und das Netz
+  (`checked_before()`, Codex-Runde 9). Grund: Das Netz erkennt ein
+  Zugangsdatum im rohen Wert, im schon zusammengesetzten Text in
+  Anführungszeichen aber nicht in jedem Fall.
 - Im gewöhnlichen Rückweg erreichbar (Lead an die Steuerung): ein Beitrag,
   dessen Schritt alle Kategorien geleert hat (auf Staging ohne Kategorie, nur
   am Editor vorbei möglich), bekommt beim Zeilen-Rückbau von

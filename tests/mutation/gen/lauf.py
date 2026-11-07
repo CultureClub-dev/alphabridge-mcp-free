@@ -328,8 +328,12 @@ e('engine-revert-foreign-mark', 'revert_boundary(): a part the journal marks as 
   "\t\t} elseif ( empty( $object['deviated'] ) && self::marked_foreign( $journal ) ) {", "\t\t} elseif ( false ) {", 'it', 'testAJournalThatMarksAPartForeignLeavesTheWholeObjectOnTheWayBack')
 e('revert-will-foreign', 'plan(): the preview says left for an object whose journal marks a part as another hand\'s (Codex round 8)', RV,
   "|| ! array_key_exists( 'deviated', $object ) || $foreign ? 'left'", "|| ! array_key_exists( 'deviated', $object ) ? 'left'", 'it', 'testAJournalThatMarksAPartForeignLeavesTheWholeObjectOnTheWayBack')
-e('engine-deviated-no-mark', 'deviated(): where no part differs from the backup the object carries no mark, so the preview says nothing is left (Codex round 8, B)', EN,
-  "\t\t\t$journal['object']['deviated'] = null;\n\t\t\tforeach ( $journal['parts'] as $k => $part ) {\n\t\t\t\tunset( $journal['parts'][ $k ]['deviated'] );", "\t\t\tforeach ( $journal['parts'] as $k => $part ) {\n\t\t\t\tunset( $journal['parts'][ $k ]['deviated'] );", 'it', 'testARowCallRefusedBeforeItWroteFailsTheStepAndNothingIsLeft')
+e('writer-before-rules', 'checked_before(): a value before composed by an earlier build (no value_rules of this one) is never shown (Codex round 9)', PW,
+  "\t\tif ( self::VALUE_RULES !== $rules ) {", "\t\tif ( false ) {", 'unit', 'testAnAnswerCarriesAtMostSoManyBytesOfValuesBeforeNewestStepsFirst')
+e('run-cap-checked', 'cap_values(): every value before is checked once more as it leaves (Codex round 9)', RU,
+  "\t\t\t\t\t$part['value_before']                                 = AB_MCP_Sync_Post_Writer::checked_before( $part['value_before'], isset( $part['value_rules'] ) ? (int) $part['value_rules'] : null );", "\t\t\t\t\t$part['value_before']                                 = (string) $part['value_before'];", 'unit', 'testAnAnswerCarriesAtMostSoManyBytesOfValuesBeforeNewestStepsFirst')
+e('revert-will-nothing', 'plan(): the preview says nothing is to do for a step failed with its object as the backup (Codex round 8, B)', RV,
+  "\t\t\t$as_before = 'failed' === $step['state'] && ! empty( $object['deviated'] );", "\t\t\t$as_before = false;", 'it', 'testARowCallRefusedBeforeItWroteFailsTheStepAndNothingIsLeft')
 e('writer-before-password', 'row_before(): post_password is a credential by its name, never shown', PW,
   "\t\t\tif ( 'post_password' === $column || AB_MCP_Sync_Credentials::names_credential( $column, AB_MCP_Redactor::extra_keys() ) ) {", "\t\t\tif ( false ) {", 'unit', 'testTheValueBeforeOfAPartLeftIsShortNeverACredentialAndCapped')
 e('writer-before-long', 'row_before(): a long text by its bytes and the revision that holds it, never whole', PW,

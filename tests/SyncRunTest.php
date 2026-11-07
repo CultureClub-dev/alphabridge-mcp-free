@@ -1323,8 +1323,8 @@ final class SyncRunTest extends TestCase {
 		for ( $seq = 1; $seq <= 20; $seq++ ) {
 			$steps[] = array(
 				'seq'    => $seq,
-				'parts'  => array( 'parts' => array( array( 'part' => 'row', 'state' => 'left', 'value_before' => $value ) ) ),
-				'result' => array( 'parts' => array( array( 'part' => 'meta:note', 'state' => 'left', 'value_before' => $value ), array( 'part' => 'terms:category', 'state' => 'restored' ) ) ),
+				'parts'  => array( 'parts' => array( array( 'part' => 'row', 'state' => 'left', 'value_before' => $value, 'value_rules' => AB_MCP_Sync_Post_Writer::VALUE_RULES ) ) ),
+				'result' => array( 'parts' => array( array( 'part' => 'meta:note', 'state' => 'left', 'value_before' => $value, 'value_rules' => AB_MCP_Sync_Post_Writer::VALUE_RULES ), array( 'part' => 'terms:category', 'state' => 'restored' ) ) ),
 			);
 		}
 		$capped = AB_MCP_Sync_Run::cap_values( $steps );
@@ -1358,6 +1358,30 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( AB_MCP_Sync_Run::VALUE_CUT, $capped[11]['parts']['parts'][0]['value_before'], 'The first past the budget say so.' );
 		self::assertArrayNotHasKey( 'value_before', $capped[0]['result']['parts'][0] );
 		self::assertSame( array(), AB_MCP_Sync_Run::cap_values( array() ) );
+		// Every value before is checked once more as it leaves (Codex round 9):
+		// one a journal of an earlier build holds (no value_rules of this
+		// build) is never shown, a credential in it or not; the values this
+		// build composes pass as they are, a credential in one only as the
+		// reference.
+		$old    = array(
+			array(
+				'seq'   => 1,
+				'parts' => array(
+					'parts' => array(
+						array( 'part' => 'terms:category', 'state' => 'left', 'value_before' => '"api_token:"SYNTHETIC-SECRET-77""' ),
+						array( 'part' => 'row', 'state' => 'left', 'value_before' => 'post_title: "Contact"; post_password: (a credential by its name, not shown); post_content: 260 bytes (revision 702 of the post holds it, wp-admin → Revisions)', 'value_rules' => AB_MCP_Sync_Post_Writer::VALUE_RULES ),
+						array( 'part' => 'meta:note', 'state' => 'left', 'value_before' => '"abc", "def"', 'value_rules' => AB_MCP_Sync_Post_Writer::VALUE_RULES ),
+						array( 'part' => 'meta:snippet', 'state' => 'left', 'value_before' => 'api_token:"SYNTHETIC-SECRET-77"', 'value_rules' => AB_MCP_Sync_Post_Writer::VALUE_RULES ),
+					),
+				),
+			),
+		);
+		$shown  = AB_MCP_Sync_Run::cap_values( $old );
+		self::assertStringStartsWith( '(composed by an earlier build, not shown', $shown[0]['parts']['parts'][0]['value_before'] );
+		self::assertStringNotContainsString( 'SYNTHETIC-SECRET', $shown[0]['parts']['parts'][0]['value_before'] );
+		self::assertSame( $old[0]['parts']['parts'][1]['value_before'], $shown[0]['parts']['parts'][1]['value_before'] );
+		self::assertSame( '"abc", "def"', $shown[0]['parts']['parts'][2]['value_before'] );
+		self::assertSame( '(holds a credential, not shown)', $shown[0]['parts']['parts'][3]['value_before'] );
 	}
 
 	/* -------------------------------------------------------- the run */
