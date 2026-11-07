@@ -922,14 +922,21 @@ final class AB_MCP_Sync_Post_Writer {
 	 * Put the terms of a taxonomy back (decision 23): where the set now is
 	 * the one the step wrote, wp_set_object_terms() to the backed-up ids.
 	 *
-	 * @param int    $live_id  Post.
-	 * @param string $taxonomy Taxonomy.
-	 * @param array  $backup   Term keys before the step (term_keys()).
-	 * @param string $written  The hash of the term keys the step read back (the journal).
+	 * The set is decided on $current where the caller read it before the
+	 * parts went back: the row goes back before the terms, and
+	 * wp_update_post() has side effects on them (the default category of a
+	 * post without one, with_row()), which the terms put back after it undo;
+	 * the engine reads every part again after that (put_back()).
+	 *
+	 * @param int        $live_id  Post.
+	 * @param string     $taxonomy Taxonomy.
+	 * @param array      $backup   Term keys before the step (term_keys()).
+	 * @param string     $written  The hash of the term keys the step read back (the journal).
+	 * @param array|null $current  current() as read before the parts went back; null to read now.
 	 * @return array{state:string,note?:string}|WP_Error
 	 */
-	public static function restore_terms( $live_id, $taxonomy, array $backup, $written ) {
-		$current = self::current( (int) $live_id );
+	public static function restore_terms( $live_id, $taxonomy, array $backup, $written, $current = null ) {
+		$current = is_array( $current ) ? $current : self::current( (int) $live_id );
 		if ( is_wp_error( $current ) || null === $current ) {
 			return is_wp_error( $current ) ? $current : array(
 				'state' => 'left',
