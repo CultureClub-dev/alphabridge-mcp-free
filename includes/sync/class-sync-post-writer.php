@@ -1102,12 +1102,9 @@ final class AB_MCP_Sync_Post_Writer {
 			if ( $term['taxonomy'] !== (string) $taxonomy ) {
 				continue;
 			}
-			$name  = (string) $term['slug'];
-			$found = AB_MCP_Sync_Rows::term( (int) $term['term_id'], (string) $taxonomy );
-			if ( is_array( $found ) && isset( $found['name'] ) && '' !== (string) $found['name'] ) {
-				$name = (string) $found['name'];
-			}
-			$out[] = self::shown_value( '', $name );
+			// The slug the backup holds, never the name the term has now: a
+			// name changed since is no value before (Codex round 8).
+			$out[] = self::shown_value( '', (string) $term['slug'] );
 		}
 		return array() === $out ? 'none (no term of the taxonomy)' : implode( ', ', $out );
 	}
@@ -1127,9 +1124,19 @@ final class AB_MCP_Sync_Post_Writer {
 		if ( '' === $value ) {
 			return '""';
 		}
-		$check = AB_MCP_Sync_Credentials::unit( (string) $key, $value );
+		$extra = AB_MCP_Redactor::extra_keys();
+		$check = AB_MCP_Sync_Credentials::unit( (string) $key, $value, $extra );
 		if ( 'clean' !== $check['state'] ) {
 			return 'b9' === $check['state'] ? '(a credential by its name, not shown)' : ( 'mixed' === $check['state'] ? '(holds a credential, not shown)' : '(not readable to its end, not shown)' );
+		}
+		// The net over the raw value in every layer, as the package checks a
+		// name (AB_MCP_Sync_Import::held_code(); Codex round 8).
+		$net = AB_MCP_Sync_Net::over_name( $value, $extra );
+		if ( 'credential' === $net ) {
+			return '(holds a credential, not shown)';
+		}
+		if ( 'unreadable' === $net ) {
+			return '(not readable to its end, not shown)';
 		}
 		if ( 1 !== preg_match( '//u', $value ) ) {
 			return sprintf( '(%d bytes, not UTF-8)', strlen( $value ) );

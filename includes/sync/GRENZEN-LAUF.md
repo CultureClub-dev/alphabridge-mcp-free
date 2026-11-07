@@ -91,16 +91,20 @@ Ablehnung entsteht, nennt sie den Weg.
   die Sicherung des Schritts (`post_content: 260 bytes (revision 702 of the
   post holds it, wp-admin → Revisions)`); bei Meta die Werte des Schlüssels
   in der Reihenfolge ihrer Zeilen (`"abc", "def"`; `none (no row of the key)`
-  ohne Zeile); bei Termen die Namen der Terme, wie die Site sie heute hat
-  (der Slug, wenn der Term fehlt; `"News", "Other"`). Geheimnisprüfung wie
-  beim Paket (`AB_MCP_Sync_Credentials::unit()` über Schlüssel und Wert;
-  `post_password` nach Namen; Termnamen wie bei A5): ein Wert, den sie
+  ohne Zeile); bei Termen die Slugs, die die Sicherung hält (`"news",
+  "other"`), nie der Name, den ein Term heute hat: ein seither umbenannter
+  Term, auch auf ein Zugangsdatum, ist kein alter Wert (Codex-Runde 8).
+  Geheimnisprüfung wie beim Paket (`AB_MCP_Sync_Credentials::unit()` über
+  Schlüssel und Wert mit `AB_MCP_Redactor::extra_keys()`, dazu das Netz über
+  den rohen Wert in jeder Schicht, `AB_MCP_Sync_Net::over_name()`, wie
+  `AB_MCP_Sync_Import::held_code()`; `post_password` nach Namen): ein Wert, den sie
   trifft, erscheint nur als Verweis (`(a credential by its name, not shown)`,
   `(holds a credential, not shown)`), kein UTF-8 nur als Byteszahl. Je Wert
   höchstens `VALUE_CHARS` = 80 Zeichen, je Teil `PART_CHARS` = 320, mit
   «…(cut)»; je Antwort höchstens `AB_MCP_Sync_Run::ANSWER_VALUE_BYTES` =
   16 KiB über alle gezeigten Schritte, die neuesten zuerst, danach `VALUE_CUT`
-  mit dem Hinweis auf die Sicherung (Prüffälle
+  mit dem Hinweis auf die Sicherung; die Hinweise zählen zum Budget, darüber
+  hinaus fehlt der Wert in der Antwort (Codex-Runde 8; Prüffälle
   `testTheValueBeforeOfAPartLeftIsShortNeverACredentialAndCapped`,
   `testAnAnswerCarriesAtMostSoManyBytesOfValuesBeforeNewestStepsFirst`).
 - Journale aus einem Zwischenstand dieses Zweigs ohne den Schlüssel
@@ -110,6 +114,15 @@ Ablehnung entsteht, nennt sie den Weg.
   gibt es nur auf Sites eines Zwischenstands, kein Tag enthält die
   Sync-Tabellen. Nicht als Mutation geführt (kein Lauf dieses Stands schreibt
   ein solches Journal).
+- Ein Journal, das einen Teil als von fremder Hand geändert vermerkt
+  (`foreign`, im Schritt vor dem eigenen Aufruf gelesen und vor dem Aufruf
+  gespeichert), ohne dass das Objekt als abgewichen markiert ist (der Request
+  endete dazwischen): Der Rückweg und seine Vorschau behandeln das ganze
+  Objekt wie abgewichen (`deviated = foreign_mark`, nichts geht zurück, alter
+  Wert in der Antwort; Codex-Runde 8). Weicht im Schritt nichts von der
+  Sicherung ab (etwa ein Zeilenaufruf, der vor dem Schreiben verweigert
+  wurde), trägt das Objekt keine Marke: der Schritt heisst `failed`, die
+  Vorschau des Rückwegs nennt nichts als stehen gelassen.
 - Im gewöhnlichen Rückweg erreichbar (Lead an die Steuerung): ein Beitrag,
   dessen Schritt alle Kategorien geleert hat (auf Staging ohne Kategorie, nur
   am Editor vorbei möglich), bekommt beim Zeilen-Rückbau von
@@ -594,7 +607,7 @@ Ablehnung entsteht, nennt sie den Weg.
   der alte Wert (`before_value()`: Zeile, langer Text mit Revision, Meta,
   Terme, synthetische Geheimnisse, kein UTF-8, Kürzung je Wert und je Teil)
   und die Kappung je Antwort (`cap_values()`).
-  Integration (`tests/integration/SyncRunTest.php`, siebenunddreissig Fälle): Ende zu Ende mit
+  Integration (`tests/integration/SyncRunTest.php`, achtunddreissig Fälle): Ende zu Ende mit
   Rückweg und `step` auf eine spätere Phase (Merkmal der Sperre beim
   Anlegen), ein Bericht in zwei Läufen geplant, Abweichung in der
   Gesamtvorprüfung, Unterbrechung in eigenem Prozess (die Zeile bleibt mit

@@ -1292,10 +1292,19 @@ final class SyncRunTest extends TestCase {
 		$many = AB_MCP_Sync_Post_Writer::before_value( 'meta:many', $wide, $now, 77 );
 		self::assertStringEndsWith( '…(cut)', $many );
 		self::assertLessThanOrEqual( AB_MCP_Sync_Post_Writer::PART_CHARS + mb_strlen( '…(cut)' ), mb_strlen( $many ) );
-		// Terms by their name as this site has it (a raw row), by their slug
-		// where the term is gone; a name with a credential written into it (as
-		// the package checks the names of terms, A5) is not shown.
-		self::assertSame( '"News", "other"', AB_MCP_Sync_Post_Writer::before_value( 'terms:category', $backup, $now, 77 ) );
+		// Terms by the slug the backup holds, never by the name a term has now
+		// (Codex round 8: a name renamed since, even to a credential, is no
+		// value before); a slug with a credential written into it (as the
+		// package checks the names of terms, A5) is not shown.
+		$db->term_rows[3]['name'] = 'api_token:"SYNTHETIC-SECRET-77"';
+		self::assertSame( '"news", "other"', AB_MCP_Sync_Post_Writer::before_value( 'terms:category', $backup, $now, 77 ) );
+		// A value the net names a credential in (a layer the content check
+		// does not read as one) is not shown either.
+		$netted                 = $backup;
+		$netted['meta'][]       = array( 'meta_id' => 120, 'key' => 'snippet', 'value' => 'api_token:"SYNTHETIC-SECRET-77"' );
+		$snippet                = AB_MCP_Sync_Post_Writer::before_value( 'meta:snippet', $netted, $now, 77 );
+		self::assertSame( '(holds a credential, not shown)', $snippet );
+		self::assertStringNotContainsString( 'SYNTHETIC-SECRET', $snippet );
 		$tag = AB_MCP_Sync_Post_Writer::before_value( 'terms:post_tag', $backup, $now, 77 );
 		self::assertSame( '(holds a credential, not shown)', $tag );
 		self::assertStringNotContainsString( 'synthetic-77', $tag );
@@ -1320,21 +1329,34 @@ final class SyncRunTest extends TestCase {
 		}
 		$capped = AB_MCP_Sync_Run::cap_values( $steps );
 		$kept   = 0;
+		$cut    = 0;
+		$bytes  = 0;
 		foreach ( $capped as $step ) {
 			foreach ( array( $step['parts']['parts'][0], $step['result']['parts'][0] ) as $part ) {
+				if ( ! isset( $part['value_before'] ) ) {
+					continue;
+				}
+				$bytes += strlen( $part['value_before'] );
 				if ( $value === $part['value_before'] ) {
 					++$kept;
 				} else {
 					self::assertSame( AB_MCP_Sync_Run::VALUE_CUT, $part['value_before'] );
+					++$cut;
 				}
 			}
 			self::assertArrayNotHasKey( 'value_before', $step['result']['parts'][1], 'A part not left carries no value before.' );
 		}
 		self::assertSame( 16, $kept, '16 values of 1000 bytes fit into 16384.' );
+		// The marks count against the budget as well (Codex round 8): past it
+		// even for a mark, the value is left out; the answer never carries
+		// more than ANSWER_VALUE_BYTES of values before.
+		self::assertSame( intdiv( 16384 - 16000, strlen( AB_MCP_Sync_Run::VALUE_CUT ) ), $cut );
+		self::assertLessThanOrEqual( 16384, $bytes );
+		self::assertArrayNotHasKey( 'value_before', $capped[0]['parts']['parts'][0], 'The oldest values are left out past the budget.' );
 		self::assertSame( $value, $capped[19]['parts']['parts'][0]['value_before'], 'The newest step keeps its values.' );
 		self::assertSame( $value, $capped[12]['parts']['parts'][0]['value_before'] );
-		self::assertSame( AB_MCP_Sync_Run::VALUE_CUT, $capped[11]['parts']['parts'][0]['value_before'], 'The oldest ones say so.' );
-		self::assertSame( AB_MCP_Sync_Run::VALUE_CUT, $capped[0]['result']['parts'][0]['value_before'] );
+		self::assertSame( AB_MCP_Sync_Run::VALUE_CUT, $capped[11]['parts']['parts'][0]['value_before'], 'The first past the budget say so.' );
+		self::assertArrayNotHasKey( 'value_before', $capped[0]['result']['parts'][0] );
 		self::assertSame( array(), AB_MCP_Sync_Run::cap_values( array() ) );
 	}
 

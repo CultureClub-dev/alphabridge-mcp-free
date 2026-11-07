@@ -1139,6 +1139,12 @@ final class AB_MCP_Sync_Engine {
 			++$left;
 		}
 		if ( 0 === $left ) {
+			// Nothing differs from the backup: nothing deviated that a way back
+			// would leave, so the object carries no mark (Codex round 8, B).
+			$journal['object']['deviated'] = null;
+			foreach ( $journal['parts'] as $k => $part ) {
+				unset( $journal['parts'][ $k ]['deviated'] );
+			}
 			return self::outcome( 'failed', sprintf( 'Nothing was written: %s. The object is as before the step.', $why ), $journal, $live_id );
 		}
 		return self::outcome( 'unclear', sprintf( 'The object deviated within the step: %1$s. Nothing of it is put back by itself (the one boundary, GRENZEN-LAUF.md): %2$d part(s) stay as they are (left, each with its value before in the journal), and the object is unclear. Check it in wp-admin and align the pair (wp_site_pairs).', $why, $left ), $journal, $live_id );
@@ -1305,7 +1311,9 @@ final class AB_MCP_Sync_Engine {
 				'state' => 'left',
 				'why'   => 'earlier_build' === $part['deviated']
 					? sprintf( 'The journal of this step is of an earlier build and does not say whether the object deviated within the step, so nothing of it goes back by itself: the part %s is left as it is; check it by hand, its value before stands beside it (value_before).', $name )
-					: sprintf( 'The object deviated within its step, so nothing of it goes back by itself: the part %s is left as it is; check it by hand, its value before stands beside it (value_before).', $name ),
+					: ( 'foreign_mark' === $part['deviated']
+						? sprintf( 'The journal marks a part of this object as changed by another hand within its step, so nothing of it goes back by itself: the part %s is left as it is; check it by hand, its value before stands beside it (value_before).', $name )
+						: sprintf( 'The object deviated within its step, so nothing of it goes back by itself: the part %s is left as it is; check it by hand, its value before stands beside it (value_before).', $name ) ),
 			);
 		}
 		if ( $own ) {
@@ -1807,6 +1815,13 @@ final class AB_MCP_Sync_Engine {
 			foreach ( $journal['parts'] as $k => $part ) {
 				$journal['parts'][ $k ]['deviated'] = 'earlier_build';
 			}
+		} elseif ( empty( $object['deviated'] ) && self::marked_foreign( $journal ) ) {
+			// A part the journal marks as changed by another hand within the
+			// step, where the step ended before it marked the object (its
+			// request ended): the object deviated all the same (Codex round 8).
+			foreach ( $journal['parts'] as $k => $part ) {
+				$journal['parts'][ $k ]['deviated'] = 'foreign_mark';
+			}
 		}
 		// The parts, each decided right before its turn on the state read then
 		// against the backup and what the run owns (put_back(), decide(): the
@@ -1988,6 +2003,22 @@ final class AB_MCP_Sync_Engine {
 		}
 		AB_MCP_Sync_Run::touch( $run_id );
 		return array( 'next' => 'Not written: ' . $message . ' The run goes on with the next step (action=next); the steps that depend on this object are skipped.' );
+	}
+
+	/**
+	 * Whether a part of the journal is marked as changed by another hand
+	 * (foreign), the mark that deviates its object (Codex round 8).
+	 *
+	 * @param array $journal Journal.
+	 * @return bool
+	 */
+	private static function marked_foreign( array $journal ) {
+		foreach ( isset( $journal['parts'] ) && is_array( $journal['parts'] ) ? $journal['parts'] : array() as $part ) {
+			if ( is_array( $part ) && ! empty( $part['foreign'] ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**

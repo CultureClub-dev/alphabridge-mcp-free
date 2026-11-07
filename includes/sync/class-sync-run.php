@@ -775,6 +775,10 @@ final class AB_MCP_Sync_Run {
 			'unclear'           => array(),
 		);
 		foreach ( $steps as $step ) {
+			// A state of an earlier build (restored) counts under its own name.
+			if ( ! isset( $out['counts'][ $step['state'] ] ) ) {
+				$out['counts'][ $step['state'] ] = 0;
+			}
 			++$out['counts'][ $step['state'] ];
 			$shown = array(
 				'seq'     => (int) $step['seq'],
@@ -846,7 +850,14 @@ final class AB_MCP_Sync_Run {
 						$budget -= $bytes;
 						continue;
 					}
-					$steps[ $s ][ $where ]['parts'][ $p ]['value_before'] = self::VALUE_CUT;
+					// The mark counts as well; past the budget even for it, the
+					// value is left out of the answer (Codex round 8).
+					if ( strlen( self::VALUE_CUT ) <= $budget ) {
+						$steps[ $s ][ $where ]['parts'][ $p ]['value_before'] = self::VALUE_CUT;
+						$budget -= strlen( self::VALUE_CUT );
+					} else {
+						unset( $steps[ $s ][ $where ]['parts'][ $p ]['value_before'] );
+					}
 				}
 			}
 		}

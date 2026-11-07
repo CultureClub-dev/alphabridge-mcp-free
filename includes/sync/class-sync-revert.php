@@ -286,7 +286,11 @@ final class AB_MCP_Sync_Revert {
 			foreach ( isset( $journal['parts'] ) && is_array( $journal['parts'] ) ? $journal['parts'] : array() as $part ) {
 				$parts[] = array_intersect_key( $part, array_flip( array( 'part', 'state', 'way' ) ) );
 			}
-			$will = 'create' === $object['op'] ? 'rest' : ( ! empty( $object['deviated'] ) || ! array_key_exists( 'deviated', $object ) ? 'left' : ( 'done' === $step['state'] ? 'back' : 'back where own' ) );
+			$foreign = false;
+			foreach ( isset( $journal['parts'] ) && is_array( $journal['parts'] ) ? $journal['parts'] : array() as $part ) {
+				$foreign = $foreign || ( is_array( $part ) && ! empty( $part['foreign'] ) );
+			}
+			$will = 'create' === $object['op'] ? 'rest' : ( ! empty( $object['deviated'] ) || ! array_key_exists( 'deviated', $object ) || $foreign ? 'left' : ( 'done' === $step['state'] ? 'back' : 'back where own' ) );
 			$shown[] = array(
 				'seq'      => (int) $step['seq'],
 				'state'    => $step['state'],

@@ -320,6 +320,16 @@ e('run-cap-values', 'cap_values(): one answer carries at most ANSWER_VALUE_BYTES
   "\t\t\t\t\tif ( $bytes <= $budget ) {", "\t\t\t\t\tif ( true ) {", 'unit', 'testAnAnswerCarriesAtMostSoManyBytesOfValuesBeforeNewestStepsFirst')
 e('writer-before-credential', 'shown_value(): a value the credential check names is a reference only, never in the clear', PW,
   "\t\tif ( 'clean' !== $check['state'] ) {", "\t\tif ( false ) {", 'unit', 'testTheValueBeforeOfAPartLeftIsShortNeverACredentialAndCapped')
+e('writer-before-net', 'shown_value(): a value the net names a credential in is a reference only, never in the clear (Codex round 8)', PW,
+  "\t\tif ( 'credential' === $net ) {", "\t\tif ( false ) {", 'unit', 'testTheValueBeforeOfAPartLeftIsShortNeverACredentialAndCapped')
+e('run-cap-mark-counts', 'cap_values(): the mark of a value cut counts against the budget; past it the value is left out (Codex round 8)', RU,
+  "\t\t\t\t\tif ( strlen( self::VALUE_CUT ) <= $budget ) {", "\t\t\t\t\tif ( true ) {", 'unit', 'testAnAnswerCarriesAtMostSoManyBytesOfValuesBeforeNewestStepsFirst')
+e('engine-revert-foreign-mark', 'revert_boundary(): a part the journal marks as another hand\'s leaves the whole object on the way back, also where the step did not mark the object (Codex round 8)', EN,
+  "\t\t} elseif ( empty( $object['deviated'] ) && self::marked_foreign( $journal ) ) {", "\t\t} elseif ( false ) {", 'it', 'testAJournalThatMarksAPartForeignLeavesTheWholeObjectOnTheWayBack')
+e('revert-will-foreign', 'plan(): the preview says left for an object whose journal marks a part as another hand\'s (Codex round 8)', RV,
+  "|| ! array_key_exists( 'deviated', $object ) || $foreign ? 'left'", "|| ! array_key_exists( 'deviated', $object ) ? 'left'", 'it', 'testAJournalThatMarksAPartForeignLeavesTheWholeObjectOnTheWayBack')
+e('engine-deviated-no-mark', 'deviated(): where no part differs from the backup the object carries no mark, so the preview says nothing is left (Codex round 8, B)', EN,
+  "\t\t\t$journal['object']['deviated'] = null;\n\t\t\tforeach ( $journal['parts'] as $k => $part ) {\n\t\t\t\tunset( $journal['parts'][ $k ]['deviated'] );", "\t\t\tforeach ( $journal['parts'] as $k => $part ) {\n\t\t\t\tunset( $journal['parts'][ $k ]['deviated'] );", 'it', 'testARowCallRefusedBeforeItWroteFailsTheStepAndNothingIsLeft')
 e('writer-before-password', 'row_before(): post_password is a credential by its name, never shown', PW,
   "\t\t\tif ( 'post_password' === $column || AB_MCP_Sync_Credentials::names_credential( $column, AB_MCP_Redactor::extra_keys() ) ) {", "\t\t\tif ( false ) {", 'unit', 'testTheValueBeforeOfAPartLeftIsShortNeverACredentialAndCapped')
 e('writer-before-long', 'row_before(): a long text by its bytes and the revision that holds it, never whole', PW,

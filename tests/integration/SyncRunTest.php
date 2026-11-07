@@ -1270,7 +1270,7 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( 'left', $parts['terms:category']['state'], 'Written, deviating: left.' );
 		self::assertStringContainsString( 'Written, deviating', (string) $parts['terms:category']['note'] );
 		self::assertSame( 'left', $parts['row']['state'], 'The row written before stays as well.' );
-		self::assertSame( '"News"', $parts['terms:category']['value_before'], 'The name of the category before, as this site has it.' );
+		self::assertSame( '"news"', $parts['terms:category']['value_before'], 'The slug of the category before, as the backup holds it.' );
 		self::assertSame( 'terms:category', $write['step']['parts']['object']['deviated']['part'] );
 		self::assertStringContainsString( 'deviated within the step', $write['step']['result']['message'] );
 		self::probe_ok();
@@ -1347,7 +1347,7 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( 'terms:category', $write['step']['parts']['object']['deviated']['part'] );
 		self::assertStringContainsString( 'another hand changed the part terms:category', $write['step']['parts']['object']['deviated']['why'] );
 		self::assertStringContainsString( 'though the part reads as its target now', $write['step']['parts']['object']['deviated']['why'] );
-		self::assertSame( '"News"', $parts['terms:category']['value_before'] );
+		self::assertSame( '"news"', $parts['terms:category']['value_before'] );
 		self::assertStringContainsString( 'post_content: 8 bytes (', $parts['row']['value_before'] );
 		self::assertSame( array( 'other' ), $slugs(), 'The category stays as the other hand set it, not put back to News.' );
 		self::assertSame( 'A story, on staging.', self::row_a( $story_a )['post_content'], 'The row stays as written.' );
@@ -1480,7 +1480,7 @@ final class SyncRunTest extends TestCase {
 		$back    = self::revert_all( (int) $begun['run_id'] );
 		$outcome = array_column( self::step( $back, 1 )['result']['parts'], null, 'part' );
 		self::assertSame( 'left', $outcome['terms:category']['state'], 'Never written by the step, so not the run\'s own.' );
-		self::assertSame( '"News"', $outcome['terms:category']['value_before'] );
+		self::assertSame( '"news"', $outcome['terms:category']['value_before'] );
 		self::assertSame( 'unchanged', $outcome['meta:note']['state'] );
 		self::assertSame( 'left', $outcome['row']['state'] );
 		self::assertSame( array( 'other' ), $slugs(), 'The way back leaves the other hand\'s category.' );
@@ -1576,7 +1576,7 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( 'restored', $outcome['row']['state'] );
 		self::assertSame( 'left', $outcome['terms:category']['state'], json_encode( $step['result'] ) );
 		self::assertStringContainsString( 'as the row went back', (string) $outcome['terms:category']['note'] );
-		self::assertSame( '"News"', $outcome['terms:category']['value_before'] );
+		self::assertSame( '"news"', $outcome['terms:category']['value_before'] );
 		self::assertSame( array( $default ), $slugs(), 'The default category the row gave stands; News is not written over the other hand\'s removal.' );
 		self::assertSame( 'unclear', $step['state'] );
 		self::assertSame( 'closed_findings', $back['state'] );
@@ -1775,7 +1775,7 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( 'restored', $outcome['row']['state'] );
 		self::assertSame( 'left', $outcome['terms:category']['state'], 'The default category the row gave back is not the step\'s own: left.' );
 		self::assertStringContainsString( 'as the row went back', (string) $outcome['terms:category']['note'] );
-		self::assertSame( '"News"', $outcome['terms:category']['value_before'] );
+		self::assertSame( '"news"', $outcome['terms:category']['value_before'] );
 		self::assertSame( 'unclear', $step['state'] );
 		$default = get_term( (int) get_option( 'default_category' ), 'category' );
 		self::assertSame( array( $default->slug ), $slugs(), 'The default category the row gave stands; News is not written over it.' );
@@ -2133,19 +2133,67 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( 'failed', $parts['row']['state'] );
 		self::assertStringContainsString( 'changed nothing of the part', (string) $parts['row']['note'] );
 		self::assertArrayNotHasKey( 'value_before', $parts['row'], 'Nothing is left: no value before.' );
-		self::assertSame( 'row', $write['step']['parts']['object']['deviated']['part'] );
+		self::assertNull( $write['step']['parts']['object']['deviated'], 'Nothing differs from the backup: no mark (Codex round 8).' );
 		self::assertStringContainsString( 'Nothing was written', $write['step']['result']['message'] );
 		self::assertSame( $before, self::row_a( $contact ), 'The object is as before the step.' );
 		$pair = AB_MCP_Sync_Pairs::find_live( AB_MCP_Sync_Anchor::active()['source_id'], 'post', (string) $contact );
 		self::assertSame( 'active', $pair['state'], 'Nothing was written: the pair stays as it was.' );
 		self::probe_ok();
 		self::assertSame( 'closed_findings', self::finish( (int) $run['run_id'] )['state'] );
-		// The way back of the closed run: every part is as the backup.
+		// The way back of the closed run: every part is as the backup; the
+		// preview says nothing is left (Codex round 8, B).
+		$preview = self::gated( 'wp_site_revert', array( 'action' => 'plan', 'run_id' => (int) $run['run_id'] ) );
+		self::assertIsArray( $preview, is_wp_error( $preview ) ? $preview->get_error_message() : '' );
+		self::assertNotSame( 'left', $preview['preview']['steps'][0]['will'] );
 		$begun = self::revert( (int) $run['run_id'] );
 		$back  = self::revert_all( (int) $begun['run_id'] );
 		self::assertSame( 'closed_reverted', $back['state'], json_encode( self::step( $back, 1 )['result'] ) );
 		self::assertSame( 'unchanged', array_column( self::step( $back, 1 )['result']['parts'], 'state', 'part' )['row'] );
 		self::assertSame( $before, self::row_a( $contact ) );
+	}
+
+	public function testAJournalThatMarksAPartForeignLeavesTheWholeObjectOnTheWayBack(): void {
+		// Codex round 8: a step whose request ended after a part was marked as
+		// changed by another hand (seen_before(), written ahead of the call)
+		// and before the object was marked deviated. The way back reads the
+		// mark: the object deviated all the same, nothing of it goes back,
+		// the row included. Simulated on the journal of a written step.
+		self::pair();
+		$a = self::pages_on_a( array( 'contact' => 'Write to us.' ) );
+		$b = self::pages_on_b( array( 'contact' => 'Write to us.' ) );
+		self::paired( self::staged() );
+		self::change_on_b( $b['contact'], 'contact', 'Write to us on staging.' );
+		$planned = self::planned( array( 'contact' ) );
+		$run     = self::begun( $planned['args'] );
+		$run_id  = (int) $run['run_id'];
+		self::assertSame( 'closed_done', self::finish( $run_id )['state'] );
+		self::assertSame( 'Write to us on staging.', self::row_a( (int) $a['contact'] )['post_content'] );
+		$step    = AB_MCP_Sync_Run::step( $run_id, 2 );
+		$journal = $step['parts'];
+		self::assertArrayHasKey( 'deviated', $journal['object'] );
+		$journal['object']['deviated'] = null;
+		foreach ( $journal['parts'] as $k => $part ) {
+			if ( 'row' !== $part['part'] ) {
+				$journal['parts'][ $k ]['foreign'] = true;
+			}
+		}
+		$any = false;
+		foreach ( $journal['parts'] as $part ) {
+			$any = $any || ! empty( $part['foreign'] );
+		}
+		if ( ! $any ) {
+			$journal['parts'][0]['foreign'] = true;
+		}
+		$set = AB_MCP_Sync_Run::update_step( $run_id, 2, array( 'parts' => $journal ), 'done' );
+		self::assertNotInstanceOf( WP_Error::class, $set );
+		$preview = self::gated( 'wp_site_revert', array( 'action' => 'plan', 'run_id' => $run_id ) );
+		self::assertIsArray( $preview, is_wp_error( $preview ) ? $preview->get_error_message() : '' );
+		self::assertSame( 'left', $preview['preview']['steps'][0]['will'] );
+		$begun   = self::revert( $run_id );
+		$back    = self::revert_all( (int) $begun['run_id'] );
+		$outcome = array_column( self::step( $back, 1 )['result']['parts'], 'state', 'part' );
+		self::assertSame( 'left', $outcome['row'], json_encode( self::step( $back, 1 )['result'] ) );
+		self::assertSame( 'Write to us on staging.', self::row_a( (int) $a['contact'] )['post_content'], 'Nothing of the object goes back.' );
 	}
 
 	public function testAPostWithACategoryAndATagAndAPageWithATemplateGoOverAndBackWithEveryPartRestored(): void {
