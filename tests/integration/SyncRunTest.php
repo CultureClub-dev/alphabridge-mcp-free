@@ -2652,6 +2652,41 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( 'closed_reverted', self::revert_all( (int) $begun['run_id'] )['state'] );
 	}
 
+	public function testABackupGivesBytesThatAreNoUtf8BackAsBytesNotAsTheMarkerOfTheCanon(): void {
+		// GitHub Codex round 2 on free#137 (P2): a backup is written in the one
+		// spelling of AB_MCP_Sync_Canon::encode(), which writes bytes that are
+		// no UTF-8 as {"~b":"<base64>"}. Read back with json_decode() alone, the
+		// value was an array: meta_hash() hashed it as «Array» and the way back
+		// handed the array to the SQL of restore_meta(). The backup reads back
+		// through AB_MCP_Sync_Canon::decode(): the bytes are the bytes again,
+		// and the hash of the backed-up part is the hash of the row as it was.
+		global $wpdb;
+		$wpdb->insert(
+			AB_MCP_Sync_Schema::table( 'runs' ),
+			array( 'run_id' => 9, 'type' => 'push', 'source_id' => 'src', 'state' => 'open', 'created' => time(), 'updated' => time(), 'closed' => 0, 'open_one' => 1, 'forward_closed_at' => 0, 'keep_until' => 0 )
+		);
+		self::assertSame( '', $wpdb->last_error );
+		$current = array(
+			'row'   => array( 'post_title' => "Caf\xE9", 'post_content' => 'Hello.', 'post_status' => 'publish' ),
+			'meta'  => array( array( 'meta_id' => 7, 'key' => 'note', 'value' => "raw\xE9" ), array( 'meta_id' => 8, 'key' => 'other', 'value' => 'abc' ) ),
+			'terms' => array( array( 'taxonomy' => 'category', 'term_id' => 3, 'slug' => 'news', 'term_order' => 0 ) ),
+		);
+		$ref = AB_MCP_Sync_Backup::put( 9, 'step-0002', $current );
+		self::assertIsArray( $ref, is_wp_error( $ref ) ? $ref->get_error_message() : '' );
+		$text = AB_MCP_Protected_Store::get( 'backups', AB_MCP_Sync_Backup::group( 9 ), $ref['name'], $ref['sha256'] );
+		self::assertIsString( $text );
+		self::assertStringContainsString( '{"~b":"' . base64_encode( "raw\xE9" ) . '"}', $text, 'Kept as the marker of the canon.' );
+		$back = AB_MCP_Sync_Backup::get( 9, $ref );
+		self::assertIsArray( $back, is_wp_error( $back ) ? $back->get_error_message() : '' );
+		self::assertSame( array( "raw\xE9", 'abc' ), array_column( $back['meta'], 'value' ), 'The bytes, not an array.' );
+		self::assertSame( "Caf\xE9", $back['row']['post_title'] );
+		self::assertSame( \AB_MCP_Sync_Post_Writer::meta_hash( array( "raw\xE9" ) ), \AB_MCP_Sync_Post_Writer::part_hash( $back, 'meta:note' ), 'The hash the way back compares with is the hash of the row as it was.' );
+		self::assertSame( \AB_MCP_Sync_Post_Writer::row_hash( $current['row'] ), \AB_MCP_Sync_Post_Writer::part_hash( $back, 'row' ) );
+		self::assertEquals( $current['terms'], $back['terms'] );
+		self::assertSame( 'none (no row of the key)', \AB_MCP_Sync_Post_Writer::before_value( 'meta:gone', $back, $back, 1 ) );
+		self::assertSame( '(4 bytes, not UTF-8)', \AB_MCP_Sync_Post_Writer::before_value( 'meta:note', $back, array( 'row' => $back['row'], 'meta' => array(), 'terms' => array() ), 1 ), 'The value before of bytes that are no UTF-8: by their count.' );
+	}
+
 	public function testTheRetentionKeepsTheLastThreeQualifiedClosesAndWhatAWayBackNeeds(): void {
 		global $wpdb;
 		$runs   = AB_MCP_Sync_Schema::table( 'runs' );

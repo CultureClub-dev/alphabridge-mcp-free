@@ -242,6 +242,44 @@ final class SyncCanonFormTest extends TestCase {
 		self::assertSame( '{"canon":"canon/1","kind":"option","value":{"~f":"' . bin2hex( pack( 'E', INF ) ) . '"}}', AB_MCP_Sync_Canon::encode( $result['form'] ), 'A float of any value has its bits.' );
 	}
 
+	public function testABackupReadsBackBytesThatAreNoUtf8AsBytesNotAsTheMarker(): void {
+		// GitHub Codex round 2 on free#137 (P2): a backup of a run is written
+		// in the one spelling of encode(), which writes bytes that are no
+		// UTF-8 as {"~b":"<base64>"}; read back with json_decode() alone, the
+		// value was an array, and the way back wrote «Array» into the row.
+		// decode() is the inverse for such a form (texts, bytes, integers,
+		// booleans and null under text keys): the bytes come back.
+		$kept = array(
+			'row'   => array( 'post_title' => "Caf\xE9", 'post_content' => 'Hello.', 'menu_order' => '0' ),
+			'meta'  => array( array( 'meta_id' => 7, 'key' => 'note', 'value' => "raw\xE9" ), array( 'meta_id' => 8, 'key' => "k\xFF", 'value' => '' ) ),
+			'terms' => array( array( 'taxonomy' => 'category', 'term_id' => 3, 'slug' => 'news', 'term_order' => 0 ) ),
+			'flags' => array( 'absent' => false, 'none' => null ),
+		);
+		$json = AB_MCP_Sync_Canon::encode( array( 'data' => $kept, 'format' => 'ab-sync-backup/1', 'run_id' => 5 ) );
+		self::assertStringContainsString( '{"~b":"' . base64_encode( "raw\xE9" ) . '"}', $json, 'Written as the marker.' );
+		$back = AB_MCP_Sync_Canon::decode( $json );
+		self::assertIsArray( $back );
+		self::assertSame( 5, $back['run_id'] );
+		self::assertSame( "raw\xE9", $back['data']['meta'][0]['value'], 'The bytes, not the marker.' );
+		self::assertSame( "k\xFF", $back['data']['meta'][1]['key'] );
+		self::assertSame( "Caf\xE9", $back['data']['row']['post_title'] );
+		self::assertSame( 7, $back['data']['meta'][0]['meta_id'], 'Integers stay integers.' );
+		self::assertSame( array( 'absent' => false, 'none' => null ), $back['data']['flags'] );
+		self::assertSame( array( 'data', 'format', 'run_id' ), array_keys( $back ), 'Nothing added.' );
+		self::assertEquals( $kept['terms'], $back['data']['terms'], 'The same pairs of key and value (encode() sorts the keys; their order is no part of a row).' );
+		self::assertEquals( $kept['row'], $back['data']['row'] );
+		// A marker that does not read back is no backup of this spelling: null, fail closed.
+		self::assertNull( AB_MCP_Sync_Canon::decode( '{"data":{"value":{"~b":"***"}}}' ), 'Not base64.' );
+		self::assertNull( AB_MCP_Sync_Canon::decode( '{"data":{"value":{"~b":"' . base64_encode( 'abc' ) . '"}}}' ), 'UTF-8 is never written as the marker.' );
+		self::assertNull( AB_MCP_Sync_Canon::decode( '{"data":{"value":{"~b":1}}}' ) );
+		self::assertNull( AB_MCP_Sync_Canon::decode( '{"data":{"value":{"~f":"3ff199999999999a"}}}' ), 'No backup carries a float.' );
+		self::assertNull( AB_MCP_Sync_Canon::decode( '{"data":{"~k:ff":1}}' ), 'No backup carries a key that is no UTF-8.' );
+		self::assertNull( AB_MCP_Sync_Canon::decode( '{"data":[1.5]}' ), 'A bare float is not the text of encode().' );
+		self::assertNull( AB_MCP_Sync_Canon::decode( '{"data":' ), 'Not JSON.' );
+		self::assertNull( AB_MCP_Sync_Canon::decode( '{"a":{"b":{"c":1}}}', 2 ), 'Deeper than asked.' );
+		self::assertSame( array( '~b' => 'x', 'y' => 1 ), AB_MCP_Sync_Canon::decode( '{"~b":"x","y":1}' ), 'Only an object of the one key is the marker.' );
+	}
+
 	public function testTheVersionIsPartOfEveryFormAndAnotherIsRefused(): void {
 		$acc    = AB_MCP_Sync_Canon::acc();
 		$result = AB_MCP_Sync_Canon::finish( 'option', 'blogname', array(), array( 'value' => 'x' ), $acc );

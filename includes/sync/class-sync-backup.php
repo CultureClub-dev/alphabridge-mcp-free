@@ -12,7 +12,10 @@
  * part, written once and read back against its SHA-256 before the step
  * goes on (decision 17: no mutation without a backup checked by its hash;
  * a backup that does not read back ends the step before the mutation).
- * The journal of the step keeps the reference (name, sha256, bytes).
+ * The journal of the step keeps the reference (name, sha256, bytes). It is
+ * read with AB_MCP_Sync_Canon::decode(), the inverse of that spelling:
+ * bytes that are no UTF-8 come back as their bytes, not as the marker
+ * {"~b"} (GitHub Codex round 2 of branch 8, P2).
  *
  * Nothing here reads a value of the site: the kinds hand the rows over.
  *
@@ -147,9 +150,12 @@ final class AB_MCP_Sync_Backup {
 		if ( is_wp_error( $text ) ) {
 			return $text;
 		}
-		$data = json_decode( $text, true, 64 );
+		// Read back through the inverse of the one spelling: bytes that are
+		// no UTF-8 ({"~b"}) are their bytes again, so the way back writes
+		// what the row held, never the marker (GitHub Codex round 2, P2).
+		$data = AB_MCP_Sync_Canon::decode( $text, 64 );
 		if ( ! is_array( $data ) || self::FORMAT !== ( $data['format'] ?? null ) || (int) $run_id !== ( $data['run_id'] ?? null ) || ! isset( $data['data'] ) || ! is_array( $data['data'] ) ) {
-			return new WP_Error( 'ab_mcp_sync_backup_shape', 'The backup is not one this run wrote, so nothing of it is put back. Check the object in wp-admin.' );
+			return new WP_Error( 'ab_mcp_sync_backup_shape', 'The backup is not one this run wrote (or a value in it does not read back as it was written), so nothing of it is put back. Check the object in wp-admin.' );
 		}
 		return $data['data'];
 	}
