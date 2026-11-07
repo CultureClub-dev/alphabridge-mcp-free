@@ -356,6 +356,29 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( 'old', AB_MCP_Sync_Guard::pre_update_option( 'new', 'old' ), 'A covered option keeps its value, still.' );
 		self::assertNotFalse( has_filter( 'pre_update_option_blogname', array( AB_MCP_Sync_Guard::class, 'pre_update_option' ) ) );
 
+		// The request of the next step (the way back of an interrupted run,
+		// say) was armed on plugins_loaded by the record of the step that
+		// died; once it owns a boundary, its own writes pass the filters.
+		self::assertTrue( AB_MCP_Sync_Guard::begin( 7, 3, array( 5 => 'page' ), array( 'category' ), array( 'blogname' ) ) );
+		self::assertTrue( AB_MCP_Sync_Guard::$owner );
+		self::assertFalse( AB_MCP_Sync_Guard::covers( 5 ), 'The owner is not refused by what arm() read before.' );
+		$own = (object) array( 'ID' => 5 );
+		self::assertSame( $own, AB_MCP_Sync_Guard::rest_pre_insert( $own, null ), 'The owner\'s REST save passes.' );
+		self::assertNull( AB_MCP_Sync_Guard::pre_trash( null, get_post( 5 ) ) );
+		self::assertNull( AB_MCP_Sync_Guard::meta_by_object( null, 5 ) );
+		self::assertTrue( update_metadata( 'post', 5, 'note', 'x' ), 'The owner writes the meta of the covered page.' );
+		self::assertTrue( update_metadata_by_mid( 'post', 40, 'x' ) );
+		self::assertFalse( AB_MCP_Sync_Guard::empty_content( false, array( 'ID' => 5 ) ) );
+		self::assertSame( 'New', AB_MCP_Sync_Guard::pre_insert_term( 'New', 'category' ) );
+		self::assertSame( 'new', AB_MCP_Sync_Guard::pre_update_option( 'new', 'old' ) );
+		AB_MCP_Sync_Guard::end( 7, 3 );
+		self::assertFalse( AB_MCP_Sync_Guard::$owner );
+		AB_MCP_Sync_Guard::$now = 1000;
+		self::assertTrue( AB_MCP_Sync_Guard::begin( 7, 2, array( 5 => 'page' ), array( 'category' ), array( 'blogname' ) ) );
+		AB_MCP_Sync_Guard::disarm();
+		AB_MCP_Sync_Guard::arm();
+		self::assertTrue( AB_MCP_Sync_Guard::covers( 5 ), 'Armed again as another request.' );
+
 		// Past its time the record is none; end() removes it.
 		AB_MCP_Sync_Guard::$now = 1000 + AB_MCP_Change_Lock::TIMEOUT;
 		self::assertFalse( AB_MCP_Sync_Guard::covers( 5 ), 'Past its time.' );
@@ -492,7 +515,9 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( 'post:password_protected', self::lock_of( AB_MCP_Sync_Post_Writer::target_of( self::line( array( 'post_password' => 'x' ) ), self::item(), $ctx ) ) );
 		self::assertSame( 'post:engine_type', self::lock_of( AB_MCP_Sync_Post_Writer::target_of( self::line( array( 'post_status' => 'trash' ) ), self::item(), $ctx ) ), 'The trash is a deletion.' );
 		self::assertSame( 'post:engine_type', self::lock_of( AB_MCP_Sync_Post_Writer::target_of( self::line( array( 'post_status' => 'auto-draft' ) ), self::item(), $ctx ) ) );
-		self::assertSame( 'post:reference_unmapped', self::lock_of( AB_MCP_Sync_Post_Writer::target_of( self::line( array( 'post_parent' => '8' ) ), self::item(), $ctx ) ), 'A parent without a pair.' );
+		$parent = AB_MCP_Sync_Post_Writer::target_of( self::line( array( 'post_parent' => '8' ) ), self::item(), $ctx );
+		self::assertSame( 'post:reference_unmapped', self::lock_of( $parent ), 'A parent without a pair.' );
+		self::assertSame( 'post_parent 8 of the staging site', $parent->get_error_data()['lock']['at'], 'Named as the parent, not caught later as a missing reference of the text.' );
 		self::assertSame( 'post:author_unknown', self::lock_of( AB_MCP_Sync_Post_Writer::target_of( self::line( array( 'post_author' => '2' ), array(), array(), array( 'refs' => array( array( 'space' => 'user', 'id' => 2, 'login' => 'nobody', 'at' => 'post_author', 'strength' => 'strong' ) ) ) ), self::item(), $ctx ) ) );
 		self::assertSame( 'post:author_unknown', self::lock_of( AB_MCP_Sync_Post_Writer::target_of( self::line( array( 'post_author' => '2' ) ), self::item(), $ctx ) ), 'An author without a login in the refs.' );
 		self::assertSame( 'post:meta_rule', self::lock_of( AB_MCP_Sync_Post_Writer::target_of( self::line( array(), array( array( '_thumbnail_id', '5' ) ) ), self::item(), $ctx ) ) );
@@ -701,13 +726,14 @@ final class SyncRunTest extends TestCase {
 
 	public function testTheLineOfAnItemIsCheckedAgainstTheReport(): void {
 		$lines = array(
-			'lines' => array( "post\x0012" => array( 'kind' => 'post', 'ref' => '12', 'hash' => str_repeat( 'a', 64 ) ), "post\x0013" => array( 'kind' => 'post', 'ref' => '13' ) ),
+			'lines' => array( "post\x0012" => array( 'kind' => 'post', 'ref' => '12', 'hash' => str_repeat( 'a', 64 ) ), "post\x0013" => array( 'kind' => 'post', 'ref' => '13', 'hash' => str_repeat( 'a', 64 ) ), "post\x0014" => array( 'kind' => 'post', 'ref' => '14' ) ),
 			'held'  => array( "post\x00" . hash( 'sha256', AB_MCP_Sync_Canon::encode( '13' ) ) => 'credential_field' ),
 		);
 		$item  = array( 'kind' => 'post', 'staging_ref' => '12', 'staging_hash' => str_repeat( 'a', 64 ) );
 		self::assertSame( '12', AB_MCP_Sync_Engine::line_of( $item, $lines )['ref'] );
 		self::assertSame( 'ab_mcp_sync_objects_changed', AB_MCP_Sync_Engine::line_of( array( 'staging_hash' => str_repeat( 'b', 64 ) ) + $item, $lines )->get_error_code(), 'Another hash than the report compared.' );
 		self::assertSame( 'ab_mcp_sync_objects_missing', AB_MCP_Sync_Engine::line_of( array( 'staging_ref' => '99' ) + $item, $lines )->get_error_code() );
-		self::assertSame( 'ab_mcp_sync_objects_held', AB_MCP_Sync_Engine::line_of( array( 'staging_ref' => '13' ) + $item, $lines )->get_error_code() );
+		self::assertSame( 'ab_mcp_sync_objects_held', AB_MCP_Sync_Engine::line_of( array( 'staging_ref' => '13' ) + $item, $lines )->get_error_code(), 'Held by the rules of this site, although its hash is the one of the report.' );
+		self::assertSame( 'ab_mcp_sync_objects_held', AB_MCP_Sync_Engine::line_of( array( 'staging_ref' => '14' ) + $item, $lines )->get_error_code(), 'Held by the staging site: no hash in its line.' );
 	}
 }
