@@ -757,13 +757,16 @@ final class SyncRunTest extends TestCase {
 		$other = self::pages_on_a( array( 'free' => 'Free.' ) );
 		$free  = AB_MCP_IT_Sites::request( 'a', 'POST', '/wp/v2/pages/' . $other['free'], array(), array( 'title' => 'Still free' ) );
 		self::assertSame( 200, $free['status'], $free['raw'] );
-		// In another request of this process: armed, update_metadata_by_mid()
-		// and the trash are refused; the owner passes.
+		// This process passed plugins_loaded long before the boundary began
+		// (its filters were armed with no record in sight, Codex round 1 of
+		// branch 8, A1): update_metadata_by_mid(), the meta, a delete of the
+		// key across every post and the trash are refused all the same; the
+		// owner passes.
 		AB_MCP_Sync_Guard::$owner = false;
-		AB_MCP_Sync_Guard::arm();
 		self::assertFalse( update_metadata_by_mid( 'post', (int) $mid, 'changed' ) );
 		self::assertFalse( delete_metadata_by_mid( 'post', (int) $mid ) );
 		self::assertFalse( update_post_meta( $id, 'note', 'changed' ) );
+		self::assertFalse( delete_post_meta_by_key( 'note' ), 'delete_post_meta_by_key() would reach the covered page.' );
 		self::assertFalse( wp_trash_post( $id ) );
 		self::assertSame( array( 'abc' ), self::meta_a( $id, 'note' ) );
 		self::assertSame( 'publish', self::row_a( $id )['post_status'] );
@@ -913,17 +916,44 @@ final class SyncRunTest extends TestCase {
 		AB_MCP_Protected_Store::cleanup();
 		self::assertEqualsCanonicalizing( array( 2, 3, 5, 6 ), $kept(), 'Run 2 stays for the way back; run 7 has no backups yet.' );
 		// The way back closes: run 2 goes with the next clean-up.
-		$wpdb->update( $runs, array( 'state' => 'closed_reverted', 'open_one' => null, 'closed' => $now ), array( 'run_id' => 6 ) );
+		$wpdb->update( $runs, array( 'state' => 'closed_reverted', 'open_one' => null, 'closed' => $now, 'keep_until' => $now + 7 * DAY_IN_SECONDS ), array( 'run_id' => 6 ) );
 		AB_MCP_Protected_Store::cleanup();
 		self::assertEqualsCanonicalizing( array( 3, 5, 6 ), $kept(), 'Run 6 closed just now: seven days; run 2 pushed out.' );
-		// Pro's filter keeps a qualified close by its age as well.
+		// Every close stores the period it got (decision 20, rules 3 and 5;
+		// A7): seven days in Free, thirty under Pro's filter, for a close that
+		// does not qualify as well.
+		$make( 8, 'open', 0 );
+		self::assertTrue( AB_MCP_Sync_Run::set_state( 8, 'open', 'closed_aborted' ) );
+		$closed = AB_MCP_Sync_Run::get( 8 );
+		self::assertSame( $closed['closed'] + 7 * DAY_IN_SECONDS, $closed['keep_until'], 'Free: seven days for an unqualified close.' );
 		add_filter( AB_MCP_Protected_Store::BACKUP_DAYS_FILTER, static fn(): int => 30 );
-		$make( 8, 'closed_done', $now - 10 );
-		$make( 9, 'closed_done', $now - 5 );
-		AB_MCP_Protected_Store::cleanup();
-		self::assertEqualsCanonicalizing( array( 3, 5, 6 ), $kept(), 'Within 30 days every qualified close stays.' );
+		$make( 9, 'open', 0 );
+		self::assertTrue( AB_MCP_Sync_Run::set_state( 9, 'open', 'closed_aborted' ) );
+		$closed = AB_MCP_Sync_Run::get( 9 );
+		self::assertSame( $closed['closed'] + 30 * DAY_IN_SECONDS, $closed['keep_until'], 'Pro: 30 days for an unqualified close (rule 5).' );
+		$make( 10, 'open', 0 );
+		self::assertTrue( AB_MCP_Sync_Run::set_state( 10, 'open', 'closed_done', true ) );
+		$closed = AB_MCP_Sync_Run::get( 10 );
+		self::assertSame( $closed['closed'] + 30 * DAY_IN_SECONDS, $closed['keep_until'], 'Pro: 30 days for a qualified close (rule 3).' );
+		self::assertGreaterThan( 0, $closed['forward_closed_at'] );
 		remove_all_filters( AB_MCP_Protected_Store::BACKUP_DAYS_FILTER );
+		// Pro → Free (rule 6): the periods stay with the runs. Runs 3 and 5
+		// closed under Pro, say, and two new qualified closes (11, 12) push
+		// them out of the last three: their backups stay until their
+		// keep_until, as do those of run 9, closed as aborted 8 days ago.
+		$wpdb->update( $runs, array( 'keep_until' => $now + 20 * DAY_IN_SECONDS ), array( 'run_id' => 3 ) );
+		$wpdb->update( $runs, array( 'keep_until' => $now + 20 * DAY_IN_SECONDS ), array( 'run_id' => 5 ) );
+		$wpdb->update( $runs, array( 'closed' => $now - 8 * DAY_IN_SECONDS, 'keep_until' => $now + 22 * DAY_IN_SECONDS ), array( 'run_id' => 9 ) );
+		$backup( 9 );
+		$make( 11, 'closed_done', $now - 4 );
+		$make( 12, 'closed_done', $now - 3 );
 		AB_MCP_Protected_Store::cleanup();
-		self::assertEqualsCanonicalizing( array( 6 ), $kept(), 'Free: the last three qualified closes are 7, 8 and 9, which have no backups; 3 and 5 go.' );
+		self::assertEqualsCanonicalizing( array( 3, 5, 6, 9 ), $kept(), 'The last three qualified closes are 10, 11 and 12 (no backups); 3, 5 and 9 stay by the period their close got.' );
+		// Their periods reached: gone, whatever the filter says now.
+		foreach ( array( 3, 5, 9 ) as $id ) {
+			$wpdb->update( $runs, array( 'keep_until' => $now - 1 ), array( 'run_id' => $id ) );
+		}
+		AB_MCP_Protected_Store::cleanup();
+		self::assertEqualsCanonicalizing( array( 6 ), $kept(), 'Run 6 within its seven days; 3, 5 and 9 go.' );
 	}
 }

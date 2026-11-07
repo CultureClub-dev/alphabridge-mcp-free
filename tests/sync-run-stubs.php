@@ -138,3 +138,11 @@ if ( ! function_exists( 'wp_trash_post' ) ) {
 		return null !== $check ? $check : get_post( $post_id );
 	}
 }
+
+if ( ! function_exists( 'get_post_types' ) ) {
+	/** The post types registered: $ab_test_post_types, or the two core types. */
+	function get_post_types( $args = array(), $output = 'names', $operator = 'and' ) {
+		$types = $GLOBALS['ab_test_post_types'] ?? array( 'post', 'page' );
+		return 'names' === $output ? array_combine( $types, $types ) : $types;
+	}
+}

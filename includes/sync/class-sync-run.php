@@ -16,7 +16,10 @@
  * it is, under the unique key of the table, so that at most one run per
  * site is not closed (decision 15; create() refuses with the open run);
  * forward_closed_at, set only by a forward takeover that wrote every
- * planned write step (decision 20: a qualified close); calls, the calls
+ * planned write step (decision 20: a qualified close); keep_until, the
+ * time the backups of a closed run are kept until by the retention
+ * contract as it held when the run closed (decision 20, rules 3, 5 and 6;
+ * AB_MCP_Sync_Schema::keep_until()); calls, the calls
  * since the run was made (status asked, steps, repeats; the record of M2 and
  * M8); plan, what the run writes (AB_MCP_Sync_Push::plan()).
  *
@@ -52,6 +55,7 @@ require_once __DIR__ . '/class-sync-schema.php';
 require_once __DIR__ . '/class-sync-pairs.php';
 require_once __DIR__ . '/class-sync-canon.php';
 require_once dirname( __DIR__ ) . '/class-staging-gate.php';
+require_once dirname( __DIR__ ) . '/class-protected-store.php';
 require_once dirname( __DIR__ ) . '/lifecycle/class-change-lock.php';
 
 /**
@@ -81,7 +85,7 @@ final class AB_MCP_Sync_Run {
 	const MAX_STEPS = 2000;
 
 	/** The columns of runs that hold numbers. */
-	const INT_COLUMNS = array( 'run_id', 'user_id', 'created', 'updated', 'closed', 'heartbeat', 'expires', 'open_one', 'forward_closed_at', 'calls' );
+	const INT_COLUMNS = array( 'run_id', 'user_id', 'created', 'updated', 'closed', 'heartbeat', 'expires', 'open_one', 'forward_closed_at', 'keep_until', 'calls' );
 
 	/** The clock: a callable returning seconds, null for time(). Set by tests only. */
 	public static $clock = null;
@@ -264,6 +268,7 @@ final class AB_MCP_Sync_Run {
 			'budget'            => $budget,
 			'open_one'          => 1,
 			'forward_closed_at' => 0,
+			'keep_until'        => 0,
 			'calls'             => 1,
 			'plan'              => $plan,
 		);
@@ -314,7 +319,7 @@ final class AB_MCP_Sync_Run {
 		if ( is_wp_error( $have ) ) {
 			return $have;
 		}
-		if ( count( $have ) + count( $steps ) > self::MAX_STEPS ) {
+		if ( ! self::has_room( count( $have ), count( $steps ) ) ) {
 			return new WP_Error( 'ab_mcp_sync_run_invalid', sprintf( 'A run has at most %d steps. Choose fewer pairs for one way back.', self::MAX_STEPS ) );
 		}
 		$seq   = array() === $have ? 0 : (int) end( $have )['seq'];
@@ -330,9 +335,26 @@ final class AB_MCP_Sync_Run {
 	}
 
 	/**
+	 * Whether a run with $have steps takes $add more within MAX_STEPS. Asked
+	 * before the way back of the same run changes its state (AB_MCP_Sync_
+	 * Revert::plan()), so that it never fails at this limit once the run is
+	 * reverting (Codex round 1 of branch 8, B5).
+	 *
+	 * @param int $have Steps the run has.
+	 * @param int $add  Steps to add.
+	 * @return bool
+	 */
+	public static function has_room( $have, $add ) {
+		return (int) $have + (int) $add <= self::MAX_STEPS;
+	}
+
+	/**
 	 * Move a run from one state to another, only while it is in the state
 	 * the caller read (or one of them). A closed state frees open_one and
-	 * sets closed; a qualified close sets forward_closed_at (decision 20).
+	 * sets closed; a qualified close sets forward_closed_at (decision 20)
+	 * and every close stores keep_until, the time its backups are kept
+	 * until by the retention contract as it holds now (rules 3, 5 and 6:
+	 * the period a close gets stays with it when the edition changes).
 	 *
 	 * @param int             $run_id    Run.
 	 * @param string|string[] $from      The state read.
@@ -349,20 +371,17 @@ final class AB_MCP_Sync_Run {
 			return new WP_Error( 'ab_mcp_sync_run_invalid', sprintf( 'A run has no state %s. Use one of the states of AB_MCP_Sync_Run.', (string) $to ) );
 		}
 		global $wpdb;
-		$now    = self::now();
-		$set    = array(
+		$now = self::now();
+		$set = array(
 			'state'   => (string) $to,
 			'updated' => $now,
 		);
-		$format = array( '%s', '%d' );
 		if ( in_array( $to, AB_MCP_Sync_Schema::CLOSED, true ) ) {
-			$set['closed']   = $now;
-			$set['open_one'] = null;
-			$format[]        = '%d';
-			$format[]        = null;
+			$set['closed']     = $now;
+			$set['open_one']   = null;
+			$set['keep_until'] = AB_MCP_Sync_Schema::keep_until( $now, (bool) $qualified, AB_MCP_Protected_Store::backup_days() );
 			if ( $qualified ) {
 				$set['forward_closed_at'] = $now;
-				$format[]                 = '%d';
 			}
 		}
 		$states = (array) $from;
@@ -680,6 +699,7 @@ final class AB_MCP_Sync_Run {
 			'calls'             => (int) $run['calls'],
 			'duration'          => ( (int) $run['closed'] > 0 ? (int) $run['closed'] : self::now() ) - (int) $run['created'],
 			'forward_closed_at' => (int) $run['forward_closed_at'],
+			'keep_until'        => (int) $run['keep_until'],
 			'steps'             => array(),
 			'counts'            => array_fill_keys( self::STEP_STATES, 0 ),
 			'rests'             => array(),

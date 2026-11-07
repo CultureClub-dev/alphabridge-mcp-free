@@ -275,6 +275,13 @@ final class AB_MCP_Sync_Revert {
 		if ( array() === $items ) {
 			return new WP_Error( 'ab_mcp_sync_revert_nothing', sprintf( 'Run %d has no written step to take back (none wrote, or every one was taken back already). Use wp_site_push action=status to see its steps.', (int) $run['run_id'] ) );
 		}
+		// The room for the steps of the way back in the same run, asked here,
+		// before the run changes its state (B5): a run of wp_site_push writes
+		// at most AB_MCP_Sync_Push::MAX_OBJECTS objects so that it always has
+		// it; this holds the rule where a run has more steps than that.
+		if ( $same && ! AB_MCP_Sync_Run::has_room( count( $steps ), count( $items ) ) ) {
+			return new WP_Error( 'ab_mcp_sync_revert_steps', sprintf( 'The way back of %1$d step(s) would take run %2$d past its %3$d steps, so it does not begin. Name fewer steps (steps) for this way back and plan the rest once it is closed.', count( $items ), (int) $run['run_id'], AB_MCP_Sync_Run::MAX_STEPS ) );
+		}
 		ksort( $live );
 		$state = hash(
 			'sha256',

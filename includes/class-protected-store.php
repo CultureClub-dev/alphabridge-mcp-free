@@ -84,11 +84,13 @@
  * closed is not cleaned while it is not (AB_MCP_Sync_Schema::open_runs()).
  * The backups of a run follow the retention contract of decision 20
  * (AB_MCP_Sync_Schema::backup_runs(): the last three qualified closes
- * without an age, every qualified close within ab_mcp_staging_backup_days
- * days (BACKUP_DAYS, 0 in Free; Pro sets 30), every run a way back that is
- * not closed needs, a run that closed without qualifying for seven days),
- * never pushed out by the undo store. The clean-up runs when a group is
- * opened and once a day (CRON).
+ * without an age, every closed run until the keep_until its close stored
+ * from ab_mcp_staging_backup_days (BACKUP_DAYS, 0 in Free; Pro sets 30:
+ * a qualified close 30 days, one that does not qualify 7 days in Free and
+ * 30 in Pro, the period staying with the run when the edition changes),
+ * every run a way back that is not closed needs), never pushed out by the
+ * undo store. The clean-up runs when a group is opened and once a day
+ * (CRON).
  *
  * How much (decision 8): AB_MCP_Store_Budget, counted under locked(), a
  * flock() on a file of the folder (the pattern of Pro's upload sessions).
@@ -1755,7 +1757,7 @@ final class AB_MCP_Protected_Store {
 	 */
 	private static function sweep( $root, $id, $now ) {
 		$open    = AB_MCP_Sync_Schema::open_runs();
-		$backups = AB_MCP_Sync_Schema::backup_runs( $now, self::backup_days() );
+		$backups = AB_MCP_Sync_Schema::backup_runs( $now );
 		$removed = 0;
 		$kept    = 0;
 		foreach ( self::AREAS as $area ) {

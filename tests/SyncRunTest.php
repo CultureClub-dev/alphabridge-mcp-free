@@ -110,6 +110,40 @@ final class SyncRunRowsWpdb {
 	}
 }
 
+/**
+ * A $wpdb that answers the row of an option from $ab_test_options, as the
+ * lock of a boundary reads its record afresh (AB_MCP_Sync_Rows::option():
+ * query() and last_result); every other question gives no row.
+ */
+final class SyncRunOptionWpdb {
+	public $prefix      = 'wp_';
+	public $options     = 'wp_options';
+	public $last_error  = '';
+	public $last_result = array();
+	/** @var int Reads of the record. */
+	public $record_reads = 0;
+
+	public function prepare( $query, ...$args ) {
+		return ( new \AbTestSyncWpdb() )->prepare( $query, ...$args );
+	}
+
+	public function query( $sql ) {
+		$this->last_result = array();
+		if ( preg_match( "/FROM wp_options WHERE option_name = '([^']*)' LIMIT 1/", (string) $sql, $m ) ) {
+			$name = stripslashes( $m[1] );
+			if ( AB_MCP_Sync_Guard::OPTION === $name ) {
+				++$this->record_reads;
+			}
+			if ( array_key_exists( $name, $GLOBALS['ab_test_options'] ) ) {
+				$value             = $GLOBALS['ab_test_options'][ $name ];
+				$this->last_result = array( (object) array( 'option_name' => $name, 'option_value' => is_array( $value ) ? serialize( $value ) : (string) $value, 'autoload' => 'on' ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize
+				return 1;
+			}
+		}
+		return 0;
+	}
+}
+
 final class SyncRunTest extends TestCase {
 
 	use SyncTrustSites;
@@ -306,6 +340,8 @@ final class SyncRunTest extends TestCase {
 	/* ---------------------------------------------------- the boundary */
 
 	public function testTheLockOfABoundaryRefusesOtherWritersOfACoveredObjectAndLetsTheOwnerPass(): void {
+		$db                     = new SyncRunOptionWpdb();
+		$GLOBALS['wpdb']        = $db;
 		AB_MCP_Sync_Guard::$now = 1000;
 		ab_test_add_post( 5, array( 'post_type' => 'page' ) );
 		ab_test_add_post( 6, array( 'post_type' => 'page' ) );
@@ -325,8 +361,11 @@ final class SyncRunTest extends TestCase {
 		// Another request: armed, the covered page refused on every way.
 		AB_MCP_Sync_Guard::disarm();
 		AB_MCP_Sync_Guard::arm();
-		self::assertNotFalse( has_filter( 'rest_pre_insert_page', array( AB_MCP_Sync_Guard::class, 'rest_pre_insert' ) ) );
+		do_action( 'rest_api_init' );
+		self::assertNotFalse( has_filter( 'rest_pre_insert_page', array( AB_MCP_Sync_Guard::class, 'rest_pre_insert' ) ), 'The REST way of every registered type, hooked on rest_api_init.' );
+		self::assertNotFalse( has_filter( 'rest_pre_insert_post', array( AB_MCP_Sync_Guard::class, 'rest_pre_insert' ) ) );
 		self::assertTrue( AB_MCP_Sync_Guard::covers( 5 ) );
+		self::assertGreaterThan( 0, $db->record_reads, 'The record is read afresh from its row, past the caches of the request.' );
 		self::assertFalse( AB_MCP_Sync_Guard::covers( 6 ) );
 		$rest = AB_MCP_Sync_Guard::rest_pre_insert( (object) array( 'ID' => 5 ), null );
 		self::assertInstanceOf( WP_Error::class, $rest );
@@ -353,24 +392,34 @@ final class SyncRunTest extends TestCase {
 		$term = AB_MCP_Sync_Guard::pre_insert_term( 'New', 'category' );
 		self::assertInstanceOf( WP_Error::class, $term );
 		self::assertSame( 'New', AB_MCP_Sync_Guard::pre_insert_term( 'New', 'post_tag' ) );
-		self::assertSame( 'old', AB_MCP_Sync_Guard::pre_update_option( 'new', 'old' ), 'A covered option keeps its value, still.' );
-		self::assertNotFalse( has_filter( 'pre_update_option_blogname', array( AB_MCP_Sync_Guard::class, 'pre_update_option' ) ) );
+		self::assertSame( 'old', AB_MCP_Sync_Guard::pre_update_option( 'new', 'blogname', 'old' ), 'A covered option keeps its value, still.' );
+		self::assertSame( 'new', AB_MCP_Sync_Guard::pre_update_option( 'new', 'blogdescription', 'old' ), 'An option not covered is written.' );
+		self::assertNotFalse( has_filter( 'pre_update_option', array( AB_MCP_Sync_Guard::class, 'pre_update_option' ) ), 'The generic filter: every option, whichever the record names.' );
+		$reads = $db->record_reads;
+		self::assertSame( 'new', AB_MCP_Sync_Guard::pre_update_option( 'new', '_transient_x', 'old' ) );
+		self::assertSame( $reads, $db->record_reads, 'An option of group B (a transient) is answered without a read of the record.' );
+		// delete_post_meta_by_key(): the core hands over no object and
+		// delete_all; it would reach the covered page, so it is refused.
+		self::assertFalse( AB_MCP_Sync_Guard::meta_delete( null, null, 'note', '', true ), 'A delete across every post while a boundary covers one.' );
+		self::assertFalse( AB_MCP_Sync_Guard::meta_delete( null, 5, 'note', '', false ) );
+		self::assertNull( AB_MCP_Sync_Guard::meta_delete( null, 6, 'note', '', false ), 'The meta of another page goes.' );
 
 		// The request of the next step (the way back of an interrupted run,
 		// say) was armed on plugins_loaded by the record of the step that
 		// died; once it owns a boundary, its own writes pass the filters.
 		self::assertTrue( AB_MCP_Sync_Guard::begin( 7, 3, array( 5 => 'page' ), array( 'category' ), array( 'blogname' ) ) );
 		self::assertTrue( AB_MCP_Sync_Guard::$owner );
-		self::assertFalse( AB_MCP_Sync_Guard::covers( 5 ), 'The owner is not refused by what arm() read before.' );
+		self::assertFalse( AB_MCP_Sync_Guard::covers( 5 ), 'The owner is not refused by the record.' );
 		$own = (object) array( 'ID' => 5 );
 		self::assertSame( $own, AB_MCP_Sync_Guard::rest_pre_insert( $own, null ), 'The owner\'s REST save passes.' );
 		self::assertNull( AB_MCP_Sync_Guard::pre_trash( null, get_post( 5 ) ) );
 		self::assertNull( AB_MCP_Sync_Guard::meta_by_object( null, 5 ) );
+		self::assertNull( AB_MCP_Sync_Guard::meta_delete( null, null, 'note', '', true ) );
 		self::assertTrue( update_metadata( 'post', 5, 'note', 'x' ), 'The owner writes the meta of the covered page.' );
 		self::assertTrue( update_metadata_by_mid( 'post', 40, 'x' ) );
 		self::assertFalse( AB_MCP_Sync_Guard::empty_content( false, array( 'ID' => 5 ) ) );
 		self::assertSame( 'New', AB_MCP_Sync_Guard::pre_insert_term( 'New', 'category' ) );
-		self::assertSame( 'new', AB_MCP_Sync_Guard::pre_update_option( 'new', 'old' ) );
+		self::assertSame( 'new', AB_MCP_Sync_Guard::pre_update_option( 'new', 'blogname', 'old' ) );
 		AB_MCP_Sync_Guard::end( 7, 3 );
 		self::assertFalse( AB_MCP_Sync_Guard::$owner );
 		AB_MCP_Sync_Guard::$now = 1000;
@@ -378,6 +427,24 @@ final class SyncRunTest extends TestCase {
 		AB_MCP_Sync_Guard::disarm();
 		AB_MCP_Sync_Guard::arm();
 		self::assertTrue( AB_MCP_Sync_Guard::covers( 5 ), 'Armed again as another request.' );
+
+		// A request that passed plugins_loaded before the boundary began
+		// (Codex round 1 of branch 8, A1): nothing was armed from a record
+		// then; its write afterwards meets the record all the same.
+		AB_MCP_Sync_Guard::end( 7, 2 );
+		AB_MCP_Sync_Guard::disarm();
+		AB_MCP_Sync_Guard::arm();
+		self::assertFalse( AB_MCP_Sync_Guard::covers( 5 ), 'No boundary yet.' );
+		self::assertTrue( AB_MCP_Sync_Guard::begin( 9, 1, array( 5 => 'page' ) ), 'Another process begins a boundary now.' );
+		AB_MCP_Sync_Guard::$owner = false;
+		self::assertTrue( AB_MCP_Sync_Guard::covers( 5 ), 'Read afresh at the write, not from what plugins_loaded saw.' );
+		self::assertFalse( update_metadata( 'post', 5, 'note', 'late' ), 'The late write of the early request is refused.' );
+		self::assertFalse( AB_MCP_Sync_Guard::meta_delete( null, null, 'note', '', true ) );
+		AB_MCP_Sync_Guard::end( 9, 1 );
+		self::assertTrue( update_metadata( 'post', 5, 'note', 'after' ), 'Free again once the boundary ended.' );
+		AB_MCP_Sync_Guard::$now = 1000;
+		self::assertTrue( AB_MCP_Sync_Guard::begin( 7, 2, array( 5 => 'page' ), array( 'category' ), array( 'blogname' ) ) );
+		AB_MCP_Sync_Guard::disarm();
 
 		// Past its time the record is none; end() removes it.
 		AB_MCP_Sync_Guard::$now = 1000 + AB_MCP_Change_Lock::TIMEOUT;
@@ -604,40 +671,69 @@ final class SyncRunTest extends TestCase {
 		AB_MCP_Sync_Schema::forget();
 		$now      = 1700000000;
 		$day      = 86400;
+		// Every close stores the period it got (keep_until): in Free a
+		// qualified close none (the last three stay without an age), an
+		// unqualified one seven days.
 		$db->rows = array(
-			array( 'run_id' => 1, 'type' => 'push', 'state' => 'closed_done', 'closed' => $now - 40 * $day, 'forward_closed_at' => $now - 40 * $day, 'plan' => null ),
-			array( 'run_id' => 2, 'type' => 'push', 'state' => 'closed_findings', 'closed' => $now - 20 * $day, 'forward_closed_at' => $now - 20 * $day, 'plan' => null ),
-			array( 'run_id' => 3, 'type' => 'push', 'state' => 'closed_done', 'closed' => $now - 3 * $day, 'forward_closed_at' => $now - 3 * $day, 'plan' => null ),
-			array( 'run_id' => 4, 'type' => 'push', 'state' => 'closed_done', 'closed' => $now - 2 * $day, 'forward_closed_at' => $now - 2 * $day, 'plan' => null ),
-			array( 'run_id' => 5, 'type' => 'push', 'state' => 'closed_aborted', 'closed' => $now - 6 * $day, 'forward_closed_at' => 0, 'plan' => null ),
-			array( 'run_id' => 6, 'type' => 'push', 'state' => 'closed_checked', 'closed' => $now - 8 * $day, 'forward_closed_at' => 0, 'plan' => null ),
-			array( 'run_id' => 7, 'type' => 'revert', 'state' => 'closed_reverted', 'closed' => $now - 1, 'forward_closed_at' => 0, 'plan' => '{"reverts":[1]}' ),
-			array( 'run_id' => 8, 'type' => 'revert', 'state' => 'open', 'closed' => 0, 'forward_closed_at' => 0, 'plan' => '{"reverts":[1]}' ),
-			array( 'run_id' => 9, 'type' => 'push', 'state' => 'interrupted', 'closed' => 0, 'forward_closed_at' => 0, 'plan' => null ),
+			array( 'run_id' => 1, 'type' => 'push', 'state' => 'closed_done', 'closed' => $now - 40 * $day, 'forward_closed_at' => $now - 40 * $day, 'keep_until' => 0, 'plan' => null ),
+			array( 'run_id' => 2, 'type' => 'push', 'state' => 'closed_findings', 'closed' => $now - 20 * $day, 'forward_closed_at' => $now - 20 * $day, 'keep_until' => 0, 'plan' => null ),
+			array( 'run_id' => 3, 'type' => 'push', 'state' => 'closed_done', 'closed' => $now - 3 * $day, 'forward_closed_at' => $now - 3 * $day, 'keep_until' => 0, 'plan' => null ),
+			array( 'run_id' => 4, 'type' => 'push', 'state' => 'closed_done', 'closed' => $now - 2 * $day, 'forward_closed_at' => $now - 2 * $day, 'keep_until' => 0, 'plan' => null ),
+			array( 'run_id' => 5, 'type' => 'push', 'state' => 'closed_aborted', 'closed' => $now - 6 * $day, 'forward_closed_at' => 0, 'keep_until' => $now + 1 * $day, 'plan' => null ),
+			array( 'run_id' => 6, 'type' => 'push', 'state' => 'closed_checked', 'closed' => $now - 8 * $day, 'forward_closed_at' => 0, 'keep_until' => $now - 1 * $day, 'plan' => null ),
+			array( 'run_id' => 7, 'type' => 'revert', 'state' => 'closed_reverted', 'closed' => $now - 1, 'forward_closed_at' => 0, 'keep_until' => $now + 7 * $day - 1, 'plan' => '{"reverts":[1]}' ),
+			array( 'run_id' => 8, 'type' => 'revert', 'state' => 'open', 'closed' => 0, 'forward_closed_at' => 0, 'keep_until' => 0, 'plan' => '{"reverts":[1]}' ),
+			array( 'run_id' => 9, 'type' => 'push', 'state' => 'interrupted', 'closed' => 0, 'forward_closed_at' => 0, 'keep_until' => 0, 'plan' => null ),
 		);
-		$kept = AB_MCP_Sync_Schema::backup_runs( $now, 0 );
+		$kept = AB_MCP_Sync_Schema::backup_runs( $now );
 		ksort( $kept );
 		// Free: the last three qualified closes (2, 3, 4; 1 is the fourth), the
-		// aborted run within seven days (5; 6 is past them), the way back closed
-		// just now (7), the open way back (8) and the run it needs (1), the
-		// interrupted run (9).
+		// aborted run within its seven days (5; 6 is past them), the way back
+		// closed just now (7), the open way back (8) and the run it needs (1),
+		// the interrupted run (9).
 		self::assertSame( array( 1, 2, 3, 4, 5, 7, 8, 9 ), array_keys( $kept ) );
 		// Without the open way back, run 1 goes.
-		$db->rows[7]['state'] = 'closed_reverted';
-		$db->rows[7]['closed'] = $now;
-		$kept                  = AB_MCP_Sync_Schema::backup_runs( $now, 0 );
+		$db->rows[7]['state']      = 'closed_reverted';
+		$db->rows[7]['closed']     = $now;
+		$db->rows[7]['keep_until'] = $now + 7 * $day;
+		$kept                      = AB_MCP_Sync_Schema::backup_runs( $now );
 		ksort( $kept );
 		self::assertSame( array( 2, 3, 4, 5, 7, 8, 9 ), array_keys( $kept ) );
-		// Pro: every qualified close within 30 days as well (1 is 40 days old).
-		$kept = AB_MCP_Sync_Schema::backup_runs( $now, 30 );
-		self::assertArrayNotHasKey( 1, $kept );
+		// A close under Pro stored its 30 days (rules 3 and 5), and keeps them
+		// whatever the edition is now (rule 6; A7): the fourth qualified close
+		// of 29 days ago, the run closed as checked 8 days ago.
 		$db->rows[0]['forward_closed_at'] = $now - 29 * $day;
-		$kept                             = AB_MCP_Sync_Schema::backup_runs( $now, 30 );
-		self::assertArrayHasKey( 1, $kept, 'Within the days of Pro.' );
-		self::assertArrayNotHasKey( 1, AB_MCP_Sync_Schema::backup_runs( $now, 0 ), 'Free keeps the last three only.' );
+		$db->rows[0]['keep_until']        = $now + 1 * $day;
+		$db->rows[5]['keep_until']        = $now + 22 * $day;
+		$kept                             = AB_MCP_Sync_Schema::backup_runs( $now );
+		self::assertArrayHasKey( 1, $kept, 'Within the days its close got.' );
+		self::assertArrayHasKey( 6, $kept, 'An unqualified close of Pro: 30 days, not 7.' );
+		$db->rows[0]['keep_until'] = $now;
+		self::assertArrayNotHasKey( 1, AB_MCP_Sync_Schema::backup_runs( $now ), 'The period reached: the last three only.' );
+		// A row of version 2 (no keep_until) that did not qualify: seven days
+		// from its close.
+		$db->rows[5]['keep_until'] = 0;
+		self::assertArrayNotHasKey( 6, AB_MCP_Sync_Schema::backup_runs( $now ) );
+		$db->rows[5]['closed'] = $now - 6 * $day;
+		self::assertArrayHasKey( 6, AB_MCP_Sync_Schema::backup_runs( $now ) );
+		// The period a close gets (decision 20, rules 3 and 5).
+		self::assertSame( 0, AB_MCP_Sync_Schema::keep_until( $now, true, 0 ), 'Free, qualified: the last three, no age.' );
+		self::assertSame( $now + 30 * $day, AB_MCP_Sync_Schema::keep_until( $now, true, 30 ), 'Pro, qualified: 30 days.' );
+		self::assertSame( $now + 7 * $day, AB_MCP_Sync_Schema::keep_until( $now, false, 0 ), 'Free, unqualified: 7 days.' );
+		self::assertSame( $now + 30 * $day, AB_MCP_Sync_Schema::keep_until( $now, false, 30 ), 'Pro, unqualified: 30 days.' );
+		self::assertSame( $now + 7 * $day, AB_MCP_Sync_Schema::keep_until( $now, false, 3 ), 'Never less than the seven days of Free.' );
 		// The table unreadable: null, so the store keeps everything.
 		$db->last_error = 'gone';
-		self::assertNull( AB_MCP_Sync_Schema::backup_runs( $now, 0 ) );
+		self::assertNull( AB_MCP_Sync_Schema::backup_runs( $now ) );
+	}
+
+	public function testARunLeavesRoomForItsOwnWayBack(): void {
+		// Every written object takes one step of the way back in the same run
+		// (decision 15), besides the four steps of the frame (B5).
+		self::assertLessThanOrEqual( AB_MCP_Sync_Run::MAX_STEPS, 4 + 2 * AB_MCP_Sync_Push::MAX_OBJECTS );
+		self::assertTrue( AB_MCP_Sync_Run::has_room( 4 + AB_MCP_Sync_Push::MAX_OBJECTS, AB_MCP_Sync_Push::MAX_OBJECTS ) );
+		self::assertFalse( AB_MCP_Sync_Run::has_room( AB_MCP_Sync_Run::MAX_STEPS, 1 ) );
+		self::assertTrue( AB_MCP_Sync_Run::has_room( AB_MCP_Sync_Run::MAX_STEPS - 1, 1 ) );
 	}
 
 	/* ------------------------------------------------------- the plan */

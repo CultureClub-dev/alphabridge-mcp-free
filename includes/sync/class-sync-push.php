@@ -63,8 +63,13 @@ final class AB_MCP_Sync_Push {
 	/** The choices for a conflict. */
 	const CHOICES = array( 'staging_wins', 'keep_live', 'leave_open' );
 
-	/** Objects one run writes at most (the steps of a run less the four of the frame). */
-	const MAX_OBJECTS = 1996;
+	/**
+	 * Objects one run writes at most: the steps of a run (AB_MCP_Sync_Run::
+	 * MAX_STEPS) less the four of the frame, halved, so that the way back of
+	 * the same run (one step per written object, decision 15) always has
+	 * room: 4 + 2 × 998 = 2000 (Codex round 1 of branch 8, B5).
+	 */
+	const MAX_OBJECTS = 998;
 
 	/** Steps a preview names at most (all are counted). */
 	const NAMED = 200;
@@ -858,6 +863,7 @@ final class AB_MCP_Sync_Push {
 				'created'           => (int) $run['created'],
 				'closed'            => (int) $run['closed'],
 				'forward_closed_at' => (int) $run['forward_closed_at'],
+				'keep_until'        => (int) $run['keep_until'],
 				'own'               => null === AB_MCP_Sync_Run::owner_refusal( $run ),
 			);
 		}
