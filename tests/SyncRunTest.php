@@ -1062,11 +1062,13 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( array( 'state' => 'unchanged' ), AB_MCP_Sync_Post_Writer::restore_row( 12, $now['row'], $hash_now, str_repeat( '0', 64 ), 1800000000 ), 'As the backup: nothing to do.' );
 		$GLOBALS['ab_test_updated'] = array();
 		$left                       = AB_MCP_Sync_Post_Writer::restore_row( 12, $backup, $before, str_repeat( '0', 64 ), 1800000000 );
+		self::assertIsArray( $left, 'Left, not written: ' . ( is_wp_error( $left ) ? $left->get_error_message() : '' ) );
 		self::assertSame( 'left', $left['state'] );
 		self::assertStringContainsString( 'The row was changed since the step wrote it', $left['note'] );
 		self::assertSame( array(), $GLOBALS['ab_test_updated'], 'wp_update_post() was not called.' );
 		self::assertSame( array( 'state' => 'unchanged' ), AB_MCP_Sync_Post_Writer::restore_meta( 12, 'note', array( 'abc' ), str_repeat( '0', 64 ) ) );
 		$left = AB_MCP_Sync_Post_Writer::restore_meta( 12, 'note', array( 'before' ), str_repeat( '0', 64 ) );
+		self::assertIsArray( $left, 'Left, not written: ' . ( is_wp_error( $left ) ? $left->get_error_message() : '' ) );
 		self::assertSame( 'left', $left['state'] );
 		self::assertStringContainsString( 'The meta note was changed since the step wrote it', $left['note'] );
 	}
