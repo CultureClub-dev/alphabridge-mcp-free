@@ -651,9 +651,15 @@ final class AB_MCP_Sync_Post_Writer {
 	 * parts (AB_MCP_Sync_Exclusions), and an update passes the categories a
 	 * post has back to wp_set_post_categories() unchanged.
 	 *
-	 * @param array      $prepared target_of().
+	 * The row put back (restore_row(), wp_update_post() with the backed-up
+	 * columns, no page_template) asks the same: type the backed-up type,
+	 * postarr empty, $current the state read right before the put back; a
+	 * post without a category at that moment gets the default one with the
+	 * row, which the engine then owns for the put back (N3).
+	 *
+	 * @param array      $prepared target_of(): type and postarr; or type and an empty postarr for the row put back.
 	 * @param int|null   $live_id  The post here, null for a new one.
-	 * @param array|null $current  current() of the post here before the step; null for a new one.
+	 * @param array|null $current  current() of the post here right before the row call; null for a new one.
 	 * @return array<string,string> part => hash.
 	 */
 	public static function with_row( array $prepared, $live_id, $current = null ) {
@@ -922,21 +928,21 @@ final class AB_MCP_Sync_Post_Writer {
 	 * Put the terms of a taxonomy back (decision 23): where the set now is
 	 * the one the step wrote, wp_set_object_terms() to the backed-up ids.
 	 *
-	 * The set is decided on $current where the caller read it before the
-	 * parts went back: the row goes back before the terms, and
-	 * wp_update_post() has side effects on them (the default category of a
-	 * post without one, with_row()), which the terms put back after it undo;
-	 * the engine reads every part again after that (put_back()).
+	 * The set is read now, as it is at the moment of the call, never from a
+	 * state read before another part went back: the row goes back before the
+	 * terms, and wp_update_post() has side effects on them (the default
+	 * category of a post without one, with_row()); the engine decides the
+	 * terms afresh after the row went back (put_back(), N3) and names here
+	 * what they have to hold ($written).
 	 *
-	 * @param int        $live_id  Post.
-	 * @param string     $taxonomy Taxonomy.
-	 * @param array      $backup   Term keys before the step (term_keys()).
-	 * @param string     $written  The hash of the term keys the step read back (the journal).
-	 * @param array|null $current  current() as read before the parts went back; null to read now.
+	 * @param int    $live_id  Post.
+	 * @param string $taxonomy Taxonomy.
+	 * @param array  $backup   Term keys before the step (term_keys()).
+	 * @param string $written  The hash the term keys have to hold now: what the step, or the row put back, wrote (the journal).
 	 * @return array{state:string,note?:string}|WP_Error
 	 */
-	public static function restore_terms( $live_id, $taxonomy, array $backup, $written, $current = null ) {
-		$current = is_array( $current ) ? $current : self::current( (int) $live_id );
+	public static function restore_terms( $live_id, $taxonomy, array $backup, $written ) {
+		$current = self::current( (int) $live_id );
 		if ( is_wp_error( $current ) || null === $current ) {
 			return is_wp_error( $current ) ? $current : array(
 				'state' => 'left',

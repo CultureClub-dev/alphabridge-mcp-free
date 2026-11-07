@@ -798,7 +798,7 @@ final class AB_MCP_Sync_Run {
 	private static function parts_shown( array $parts ) {
 		$out = array();
 		foreach ( isset( $parts['parts'] ) && is_array( $parts['parts'] ) ? $parts['parts'] : array() as $part ) {
-			$out[] = array_intersect_key( (array) $part, array_flip( array( 'part', 'state', 'before', 'target', 'after', 'backup', 'way', 'note' ) ) );
+			$out[] = array_intersect_key( (array) $part, array_flip( array( 'part', 'state', 'before', 'target', 'after', 'own', 'own_after', 'backup', 'way', 'note' ) ) );
 		}
 		return array(
 			'object' => isset( $parts['object'] ) ? $parts['object'] : null,

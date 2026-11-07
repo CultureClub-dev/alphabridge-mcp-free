@@ -1053,6 +1053,159 @@ final class SyncRunTest extends TestCase {
 		self::assertNotSame( AB_MCP_Sync_Post_Writer::terms_hash( array( 'post-format-aside' ) ), AB_MCP_Sync_Post_Writer::terms_hash( array( 'post-format-quote' ) ) );
 	}
 
+	public function testDecideOverEveryCombinationOfOwnershipStateWayAndInterruption(): void {
+		// The one place of the ownership rule (Codex round 6 of branch 8; the
+		// table in GRENZEN-LAUF.md): a part goes back by what the journal owns
+		// of it (own, own_after) and the hash read now, never by its state.
+		// Four distinct hashes: the backup, own_after (what the step read back
+		// after its call changed the part, other than the target: deviating),
+		// the target, and another value. Every combination of own, now,
+		// interrupted, the way (terms, which the lock does not refuse) and the
+		// mark of a change by another hand (foreign); the part never read back
+		// (post null), as the boundary C of decision 18 asks.
+		$hash = array(
+			'backup'    => str_repeat( 'b', 64 ),
+			'own_after' => str_repeat( 'w', 64 ),
+			'target'    => str_repeat( 't', 64 ),
+			'other'     => str_repeat( 'x', 64 ),
+			'null'      => null,
+		);
+		$part = static function ( bool $own, bool $terms, bool $foreign, $post = null, ?string $own_after = null ) use ( $hash ): array {
+			return array(
+				'part'       => $terms ? 'terms:category' : 'meta:note',
+				'way'        => $terms ? AB_MCP_Sync_Post_Writer::WAY_TERMS : AB_MCP_Sync_Post_Writer::WAY_META,
+				'before'     => $hash['backup'],
+				'target'     => $hash['target'],
+				'state'      => 'planned',
+				'after'      => $post,
+				'pre'        => $hash['backup'],
+				'post'       => $post,
+				'own'        => $own,
+				'own_after'  => $own ? ( $own_after ?? $hash['own_after'] ) : null,
+				'own_target' => $own ? $hash['target'] : null,
+				'foreign'    => $foreign,
+			);
+		};
+		// own, now, interrupted, terms, foreign => expected.
+		$table = array(
+			array( true , 'backup'   , true , true , true , 'unchanged' ),
+			array( true , 'backup'   , true , true , false, 'unchanged' ),
+			array( true , 'backup'   , true , false, true , 'unchanged' ),
+			array( true , 'backup'   , true , false, false, 'unchanged' ),
+			array( true , 'backup'   , false, true , true , 'unchanged' ),
+			array( true , 'backup'   , false, true , false, 'unchanged' ),
+			array( true , 'backup'   , false, false, true , 'unchanged' ),
+			array( true , 'backup'   , false, false, false, 'unchanged' ),
+			array( true , 'own_after', true , true , true , 'left'      ),
+			array( true , 'own_after', true , true , false, 'left'      ),
+			array( true , 'own_after', true , false, true , 'put_back'  ),
+			array( true , 'own_after', true , false, false, 'put_back'  ),
+			array( true , 'own_after', false, true , true , 'left'      ),
+			array( true , 'own_after', false, true , false, 'left'      ),
+			array( true , 'own_after', false, false, true , 'put_back'  ),
+			array( true , 'own_after', false, false, false, 'put_back'  ),
+			array( true , 'target'   , true , true , true , 'left'      ),
+			array( true , 'target'   , true , true , false, 'left'      ),
+			array( true , 'target'   , true , false, true , 'left'      ),
+			array( true , 'target'   , true , false, false, 'left'      ),
+			array( true , 'target'   , false, true , true , 'left'      ),
+			array( true , 'target'   , false, true , false, 'left'      ),
+			array( true , 'target'   , false, false, true , 'left'      ),
+			array( true , 'target'   , false, false, false, 'left'      ),
+			array( true , 'other'    , true , true , true , 'left'      ),
+			array( true , 'other'    , true , true , false, 'left'      ),
+			array( true , 'other'    , true , false, true , 'left'      ),
+			array( true , 'other'    , true , false, false, 'left'      ),
+			array( true , 'other'    , false, true , true , 'left'      ),
+			array( true , 'other'    , false, true , false, 'left'      ),
+			array( true , 'other'    , false, false, true , 'left'      ),
+			array( true , 'other'    , false, false, false, 'left'      ),
+			array( true , 'null'     , true , true , true , 'left'      ),
+			array( true , 'null'     , true , true , false, 'left'      ),
+			array( true , 'null'     , true , false, true , 'left'      ),
+			array( true , 'null'     , true , false, false, 'left'      ),
+			array( true , 'null'     , false, true , true , 'left'      ),
+			array( true , 'null'     , false, true , false, 'left'      ),
+			array( true , 'null'     , false, false, true , 'left'      ),
+			array( true , 'null'     , false, false, false, 'left'      ),
+			array( false, 'backup'   , true , true , true , 'unchanged' ),
+			array( false, 'backup'   , true , true , false, 'unchanged' ),
+			array( false, 'backup'   , true , false, true , 'unchanged' ),
+			array( false, 'backup'   , true , false, false, 'unchanged' ),
+			array( false, 'backup'   , false, true , true , 'unchanged' ),
+			array( false, 'backup'   , false, true , false, 'unchanged' ),
+			array( false, 'backup'   , false, false, true , 'unchanged' ),
+			array( false, 'backup'   , false, false, false, 'unchanged' ),
+			array( false, 'own_after', true , true , true , 'left'      ),
+			array( false, 'own_after', true , true , false, 'left'      ),
+			array( false, 'own_after', true , false, true , 'left'      ),
+			array( false, 'own_after', true , false, false, 'left'      ),
+			array( false, 'own_after', false, true , true , 'left'      ),
+			array( false, 'own_after', false, true , false, 'left'      ),
+			array( false, 'own_after', false, false, true , 'left'      ),
+			array( false, 'own_after', false, false, false, 'left'      ),
+			array( false, 'target'   , true , true , true , 'left'      ),
+			array( false, 'target'   , true , true , false, 'put_back'  ),
+			array( false, 'target'   , true , false, true , 'left'      ),
+			array( false, 'target'   , true , false, false, 'put_back'  ),
+			array( false, 'target'   , false, true , true , 'left'      ),
+			array( false, 'target'   , false, true , false, 'left'      ),
+			array( false, 'target'   , false, false, true , 'left'      ),
+			array( false, 'target'   , false, false, false, 'left'      ),
+			array( false, 'other'    , true , true , true , 'left'      ),
+			array( false, 'other'    , true , true , false, 'left'      ),
+			array( false, 'other'    , true , false, true , 'left'      ),
+			array( false, 'other'    , true , false, false, 'left'      ),
+			array( false, 'other'    , false, true , true , 'left'      ),
+			array( false, 'other'    , false, true , false, 'left'      ),
+			array( false, 'other'    , false, false, true , 'left'      ),
+			array( false, 'other'    , false, false, false, 'left'      ),
+			array( false, 'null'     , true , true , true , 'left'      ),
+			array( false, 'null'     , true , true , false, 'left'      ),
+			array( false, 'null'     , true , false, true , 'left'      ),
+			array( false, 'null'     , true , false, false, 'left'      ),
+			array( false, 'null'     , false, true , true , 'left'      ),
+			array( false, 'null'     , false, true , false, 'left'      ),
+			array( false, 'null'     , false, false, true , 'left'      ),
+			array( false, 'null'     , false, false, false, 'left'      ),
+		);
+		self::assertCount( 80, $table, 'Every combination of 2 x 5 x 2 x 2 x 2.' );
+		foreach ( $table as $row ) {
+			list( $own, $now, $interrupted, $terms, $foreign, $expected ) = $row;
+			$case = sprintf( 'own=%s now=%s interrupted=%s terms=%s foreign=%s', var_export( $own, true ), $now, var_export( $interrupted, true ), var_export( $terms, true ), var_export( $foreign, true ) );
+			$got  = AB_MCP_Sync_Engine::decide( $part( $own, $terms, $foreign ), $hash[ $now ], $hash['backup'], $interrupted );
+			self::assertSame( $expected, $got['state'], $case );
+			if ( 'put_back' === $expected ) {
+				self::assertSame( $own ? $hash['own_after'] : $hash['target'], $got['hash'], $case . ': what the part has to hold as it is put back is own_after, or the target for the boundary C.' );
+			} else {
+				self::assertArrayNotHasKey( 'hash', $got, $case );
+			}
+			if ( 'left' === $expected && null !== $hash[ $now ] ) {
+				self::assertStringContainsString( $own ? ( $terms ? 'not provably' : 'changed since the step wrote it' ) : 'Not the step\'s own', $got['why'], $case );
+			}
+		}
+		// A part the step owns that reads back as its target (read, the usual
+		// case): back where it still holds it, on either way; A2 does not
+		// apply, since what was read back is what the call was to write.
+		foreach ( array( false, true ) as $terms ) {
+			$read = $part( true, $terms, false, $hash['target'], $hash['target'] );
+			self::assertSame( 'put_back', AB_MCP_Sync_Engine::decide( $read, $hash['target'], $hash['backup'], false )['state'], 'As its target, the step\'s own: back.' );
+			self::assertSame( 'left', AB_MCP_Sync_Engine::decide( $read, $hash['other'], $hash['backup'], false )['state'], 'Changed since: left.' );
+			self::assertSame( 'unchanged', AB_MCP_Sync_Engine::decide( $read, $hash['backup'], $hash['backup'], true )['state'] );
+		}
+		// The boundary C needs a part never read back: one the row call read
+		// back with the row (post set, not the step's own) holds the target by
+		// another hand, interrupted or not.
+		self::assertSame( 'left', AB_MCP_Sync_Engine::decide( $part( false, true, false, $hash['backup'] ), $hash['target'], $hash['backup'], true )['state'], 'Read back once (with the row) and not changed by the step: another hand set the target.' );
+		self::assertSame( 'left', AB_MCP_Sync_Engine::decide( $part( false, false, false, $hash['target'] ), $hash['target'], $hash['backup'], true )['state'] );
+		// own without own_after owns nothing (a mark without a hash).
+		$bare              = $part( true, false, false );
+		$bare['own_after'] = null;
+		self::assertSame( 'left', AB_MCP_Sync_Engine::decide( $bare, $hash['own_after'], $hash['backup'], false )['state'] );
+		// A journal of an earlier shape without the marks: nothing is owned.
+		self::assertSame( 'left', AB_MCP_Sync_Engine::decide( array( 'part' => 'row', 'way' => AB_MCP_Sync_Post_Writer::WAY_ROW, 'target' => $hash['target'], 'state' => 'written', 'after' => $hash['own_after'] ), $hash['own_after'], $hash['backup'], false )['state'], 'after alone, a description, owns nothing.' );
+	}
+
 	/* -------------------------------------------------------- the run */
 
 	public function testTheShapeOfARunAndWhenItsLockIsFresh(): void {
