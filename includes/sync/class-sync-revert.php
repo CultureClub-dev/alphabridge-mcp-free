@@ -139,7 +139,7 @@ final class AB_MCP_Sync_Revert {
 			return new WP_Error( 'ab_mcp_sync_run_busy', sprintf( 'Step %d of the run is being written right now (its lock is held); call again when it has answered.', (int) $run['running'] ) );
 		}
 		if ( ! ( 'reverting' === $run['state'] || ( 'revert' === $run['type'] && 'open' === $run['state'] ) ) ) {
-			return new WP_Error( 'ab_mcp_sync_run_state', sprintf( 'The run %1$d is %2$s: no way back is running for it. Plan one with action=plan and this run_id.', (int) $run['run_id'], $run['state'] ) );
+			return new WP_Error( 'ab_mcp_sync_run_state', sprintf( 'The run %1$d is %2$s: no way back is running for it. Use action=plan with this run_id to plan one.', (int) $run['run_id'], $run['state'] ) );
 		}
 		return AB_MCP_Sync_Engine::next( $run, null );
 	}
@@ -187,13 +187,13 @@ final class AB_MCP_Sync_Revert {
 			return $run;
 		}
 		if ( isset( $run['running'] ) ) {
-			return new WP_Error( 'ab_mcp_sync_run_busy', sprintf( 'Step %d of the run is being written right now (its lock is held); plan the way back when it has answered.', (int) $run['running'] ) );
+			return new WP_Error( 'ab_mcp_sync_run_busy', sprintf( 'Step %d of the run is being written right now (its lock is held); wait for its answer, then plan the way back.', (int) $run['running'] ) );
 		}
 		if ( 'revert' === $run['type'] ) {
-			return new WP_Error( 'ab_mcp_sync_revert_type', sprintf( 'Run %d is a run of the way back itself; the way back is planned for the run that wrote (its plan names it in reverts).', (int) $run['run_id'] ) );
+			return new WP_Error( 'ab_mcp_sync_revert_type', sprintf( 'Run %d is a run of the way back itself; the way back is planned for the run that wrote (its plan names it in reverts). Use wp_site_push action=status to list the runs.', (int) $run['run_id'] ) );
 		}
 		if ( 'reverting' === $run['state'] ) {
-			return new WP_Error( 'ab_mcp_sync_revert_running', sprintf( 'The way back of run %d is running already: go on with action=next.', (int) $run['run_id'] ) );
+			return new WP_Error( 'ab_mcp_sync_revert_running', sprintf( 'The way back of run %d is running already: use action=next to go on.', (int) $run['run_id'] ) );
 		}
 		$same = in_array( $run['state'], array( 'open', 'interrupted' ), true );
 		if ( ! $same ) {
@@ -202,7 +202,7 @@ final class AB_MCP_Sync_Revert {
 				return $open;
 			}
 			if ( null !== $open ) {
-				return new WP_Error( 'ab_mcp_sync_run_open', sprintf( 'This site has a run that is not closed (run %1$d, %2$s, state %3$s), and at most one run per site is open at a time, so no way back for the closed run %4$d begins. %5$s', (int) $open['run_id'], $open['type'], $open['state'], (int) $run['run_id'], AB_MCP_Sync_Push::status_way( $open ) ) );
+				return new WP_Error( 'ab_mcp_sync_run_open', sprintf( 'This site has a run that is not closed (run %1$d, %2$s, state %3$s), and at most one run per site is open at a time, so no way back for the closed run %4$d begins. Ask for its status (wp_site_push action=status). %5$s', (int) $open['run_id'], $open['type'], $open['state'], (int) $run['run_id'], AB_MCP_Sync_Push::status_way( $open ) ) );
 			}
 		}
 		$steps = AB_MCP_Sync_Run::steps( (int) $run['run_id'] );
@@ -211,7 +211,7 @@ final class AB_MCP_Sync_Revert {
 		}
 		$wanted = isset( $a['steps'] ) ? $a['steps'] : null;
 		if ( null !== $wanted && ( ! is_array( $wanted ) || ! array_is_list( $wanted ) || array() !== array_filter( $wanted, static fn( $s ) => ! is_int( $s ) && ! ( is_string( $s ) && 1 === preg_match( '/^[1-9][0-9]*\z/', $s ) ) ) ) ) {
-			return new WP_Error( 'ab_mcp_sync_revert_steps', 'steps is a list of the seqs of the write steps of the run to take back (status lists them); without it, every step that wrote.' );
+			return new WP_Error( 'ab_mcp_sync_revert_steps', 'steps is a list of the seqs of the write steps of the run to take back; without it, every step that wrote. Use action=status to list them.' );
 		}
 		$wanted   = null === $wanted ? null : array_map( 'intval', $wanted );
 		$reverted = array();
@@ -233,7 +233,7 @@ final class AB_MCP_Sync_Revert {
 			$journal = is_array( $step['parts'] ) && isset( $step['parts']['object'] ) ? $step['parts'] : null;
 			if ( null === $journal || in_array( $step['state'], array( 'planned', 'skipped' ), true ) ) {
 				if ( null !== $wanted ) {
-					return new WP_Error( 'ab_mcp_sync_revert_steps', sprintf( 'Step %1$d is %2$s and wrote nothing: there is nothing to take back for it.', (int) $step['seq'], $step['state'] ) );
+					return new WP_Error( 'ab_mcp_sync_revert_steps', sprintf( 'Step %1$d is %2$s and wrote nothing: there is nothing to take back for it. Choose a step that wrote (action=status lists them).', (int) $step['seq'], $step['state'] ) );
 				}
 				continue;
 			}
@@ -242,7 +242,7 @@ final class AB_MCP_Sync_Revert {
 			}
 			if ( isset( $reverted[ (int) $step['seq'] ] ) ) {
 				if ( null !== $wanted ) {
-					return new WP_Error( 'ab_mcp_sync_revert_steps', sprintf( 'Step %1$d was taken back already (step %2$d of the way back).', (int) $step['seq'], $reverted[ (int) $step['seq'] ] ) );
+					return new WP_Error( 'ab_mcp_sync_revert_steps', sprintf( 'Step %1$d was taken back already (step %2$d of the way back). Choose another step, or leave steps out.', (int) $step['seq'], $reverted[ (int) $step['seq'] ] ) );
 				}
 				continue;
 			}
@@ -273,7 +273,7 @@ final class AB_MCP_Sync_Revert {
 			}
 		}
 		if ( array() === $items ) {
-			return new WP_Error( 'ab_mcp_sync_revert_nothing', sprintf( 'Run %d has no written step to take back (none wrote, or every one was taken back already).', (int) $run['run_id'] ) );
+			return new WP_Error( 'ab_mcp_sync_revert_nothing', sprintf( 'Run %d has no written step to take back (none wrote, or every one was taken back already). Use wp_site_push action=status to see its steps.', (int) $run['run_id'] ) );
 		}
 		ksort( $live );
 		$state = hash(

@@ -164,6 +164,11 @@ require_once AB_MCP_DIR . 'includes/sync/class-sync-schema.php';
 require_once AB_MCP_DIR . 'includes/sync/class-sync-pairs.php';
 require_once AB_MCP_DIR . 'includes/sync/class-sync-kinds.php';
 add_action( 'plugins_loaded', array( 'AB_MCP_Sync_Schema', 'maybe_upgrade' ), 10, 0 );
+// The takeover lock of a write boundary of a run (Z8, branch 8): while a
+// step writes an object, every other request refuses the writes of other
+// users and processes to it through the WordPress API (decision 19).
+require_once AB_MCP_DIR . 'includes/sync/class-sync-guard.php';
+add_action( 'plugins_loaded', array( 'AB_MCP_Sync_Guard', 'arm' ), 11, 0 );
 // The protected store of the takeover (Z8): packages, reports and the
 // backups of a run, in a folder of this installation outside the web root
 // or, after a self-check, in the uploads; its budgets; its daily clean-up.

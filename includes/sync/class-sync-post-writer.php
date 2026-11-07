@@ -114,7 +114,7 @@ final class AB_MCP_Sync_Post_Writer {
 	 *                    now (time), users (login => id, cached).
 	 * @return array|WP_Error
 	 */
-	public static function prepare( array $line, array $item, array $ctx ) {
+	public static function target_of( array $line, array $item, array $ctx ) {
 		$type = isset( $line['identity']['post_type'] ) ? (string) $line['identity']['post_type'] : '';
 		if ( ! in_array( $type, self::TYPES, true ) ) {
 			return self::locked( 'post:engine_type', sprintf( 'post type %s', $type ) );
@@ -270,7 +270,7 @@ final class AB_MCP_Sync_Post_Writer {
 	 * the account, the status WordPress would store, the menu automatic,
 	 * the slug of a new post, the sanitizers ahead.
 	 *
-	 * @param array    $prepared prepare().
+	 * @param array    $prepared target_of().
 	 * @param int|null $live_id  The post here, null for a new one.
 	 * @param int      $now      Time.
 	 * @return true|WP_Error
@@ -545,7 +545,7 @@ final class AB_MCP_Sync_Post_Writer {
 	 * Write the row: wp_insert_post() for a new post, wp_update_post() for
 	 * one here, slashed, with both date columns and edit_date.
 	 *
-	 * @param array    $prepared prepare().
+	 * @param array    $prepared target_of().
 	 * @param int|null $live_id  The post here, null for a new one.
 	 * @return int|WP_Error The id of the post written.
 	 */
@@ -722,7 +722,7 @@ final class AB_MCP_Sync_Post_Writer {
 		$id  = (int) $live_id;
 		$now = self::meta_values_now( $id, $key );
 		if ( null === $now ) {
-			return new WP_Error( 'ab_mcp_sync_rows_unread', sprintf( 'The meta rows of %s could not be read, so nothing of them is put back.', $key ) );
+			return new WP_Error( 'ab_mcp_sync_rows_unread', sprintf( 'The meta rows of %s could not be read, so nothing of them is put back. Try again; if it keeps failing, the database error log names the cause.', $key ) );
 		}
 		if ( self::meta_hash( $now ) === self::meta_hash( $backup ) ) {
 			return array( 'state' => 'unchanged' );
@@ -736,7 +736,7 @@ final class AB_MCP_Sync_Post_Writer {
 		global $wpdb;
 		$rows = AB_MCP_Sync_Rows::meta( 'post', $id );
 		if ( null === $rows ) {
-			return new WP_Error( 'ab_mcp_sync_rows_unread', sprintf( 'The meta rows of %s could not be read, so nothing of them is put back.', $key ) );
+			return new WP_Error( 'ab_mcp_sync_rows_unread', sprintf( 'The meta rows of %s could not be read, so nothing of them is put back. Try again; if it keeps failing, the database error log names the cause.', $key ) );
 		}
 		$own = array();
 		foreach ( $rows as $row ) {
@@ -825,7 +825,7 @@ final class AB_MCP_Sync_Post_Writer {
 		if ( in_array( $key, self::CORE_META, true ) ) {
 			return true;
 		}
-		if ( '' === $key || '_' === $key[0] || is_protected_meta( $key, 'post' ) || AB_MCP_Redactor::redacts_key( $key, AB_MCP_Redactor::extra_keys() ) ) {
+		if ( '' === $key || '_' === $key[0] || is_protected_meta( $key, 'post' ) || AB_MCP_Sync_Credentials::names_credential( $key, AB_MCP_Redactor::extra_keys() ) ) {
 			return false;
 		}
 		return ! AB_MCP_Builders::is_markup_meta_key( $key );
@@ -998,7 +998,7 @@ final class AB_MCP_Sync_Post_Writer {
 		}
 		return new WP_Error(
 			'ab_mcp_sync_locked',
-			sprintf( 'Not written (%1$s, from %2$s): %3$s %4$s Take this object over by hand in wp-admin, or leave it out of the plan.', $lock['key'], $lock['stage'], $lock['reason'], ucfirst( (string) $detail ) . '.' ),
+			sprintf( 'Not written (%1$s, from %2$s): %3$s %4$s Use the editor in wp-admin to take this object over by hand, or leave it out of the plan.', $lock['key'], $lock['stage'], $lock['reason'], ucfirst( (string) $detail ) . '.' ),
 			array( 'lock' => $lock + array( 'at' => (string) $detail ) )
 		);
 	}
@@ -1016,6 +1016,6 @@ final class AB_MCP_Sync_Post_Writer {
 	 * @return WP_Error
 	 */
 	private static function meta_refused( $key ) {
-		return new WP_Error( 'ab_mcp_sync_write_failed', sprintf( 'The meta %s was not written: a filter of this site refused it, or the database did. Nothing more of the step is written.', $key ) );
+		return new WP_Error( 'ab_mcp_sync_write_failed', sprintf( 'The meta %s was not written: a filter of this site refused it, or the database did. Nothing more of the step is written; ask the site administrator which plugin holds it.', $key ) );
 	}
 }

@@ -155,7 +155,7 @@ final class AB_MCP_Sync_Resources {
 		}
 		return new WP_Error(
 			'ab_mcp_sync_run_resources',
-			'Nothing began: the means of this site do not carry a takeover run to its end, and a run that stops halfway would leave the site in between. Two ways: 1. Set staging up with the host first: ' . implode( ' ', $changes ) . ' Then call wp_site_push again (action=plan). 2. Work directly on the live site with the protection as before (undo, confirmation): switch «Staging first» off for this site on the page AlphaBridge → Staging, or answer the question of «Staging first» with staging_acknowledged.',
+			sprintf( 'Nothing began: the means of this site do not carry a takeover run to its end, and a run that stops halfway would leave the site in between. Two ways: 1. Set staging up with the host first: %s Then call wp_site_push again (action=plan). 2. Work directly on the live site with the protection as before (undo, confirmation): switch «Staging first» off for this site on the page AlphaBridge → Staging, or answer the question of «Staging first» with staging_acknowledged.', implode( ' ', $changes ) ),
 			array( 'resources' => $check )
 		);
 	}

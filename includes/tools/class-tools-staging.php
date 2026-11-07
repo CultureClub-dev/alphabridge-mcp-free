@@ -11,8 +11,11 @@
  * since Z8 the packages of the takeover (wp_site_export, wp_site_export_chunk
  * on the staging site, wp_site_import_chunk on the production site;
  * AB_MCP_Sync_Export, AB_MCP_Sync_Import), the object pairs
- * (wp_site_pairs on the production site; AB_MCP_Sync_Pairs_Tool) and the
- * report (wp_site_diff on the production site; AB_MCP_Sync_Report).
+ * (wp_site_pairs on the production site; AB_MCP_Sync_Pairs_Tool), the
+ * report (wp_site_diff on the production site; AB_MCP_Sync_Report), the run
+ * that writes objects of a report onto the production site (wp_site_push;
+ * AB_MCP_Sync_Push, AB_MCP_Sync_Engine) and the way back for what a run
+ * wrote (wp_site_revert; AB_MCP_Sync_Revert).
  *
  * @package AlphaBridge_MCP
  */
@@ -341,6 +344,120 @@ class AB_MCP_Tools_Staging extends AB_MCP_Tools_Base {
 		if ( false === has_filter( 'ab_mcp_prompts', array( __CLASS__, 'add_prompt' ) ) ) {
 			add_filter( 'ab_mcp_prompts', array( __CLASS__, 'add_prompt' ), 10, 2 );
 		}
+		$r->register(
+			'wp_site_push',
+			array(
+				'description' => 'On the production site: write objects of a report (wp_site_diff) from the staging site onto this site, one object per call, each under the lock of AlphaBridge with a backup and a journal, and keep the way back (wp_site_revert). action=plan with report_id, the entries to write (select: their numbers; or all=true for every entry a takeover writes), choices for conflicts (entry and choice: staging_wins writes the staging version, keep_live and leave_open write nothing), as_draft (entries taken over with the status draft: the one confirmed choice for a page of the top level that would be published or scheduled while a menu of this site adds pages by itself) and packages (the package_ids of the objects of the staging site for this report, made there with wp_site_export purpose=objects and taken over here with wp_site_import_chunk): without confirm_token it answers with the preview (the steps, what is locked with its reason and stage, the means of the site) and a token; with the token it makes the run and answers with its run_id (a confirmed call that meets an open run of the same plan, account and connection gets that run). In this version a run writes posts and pages: their row with status and dates, the meta of _wp_page_template and, on a post that is there, plain keys the account may edit, the terms of category, post_tag and post_format; every other kind and type, a meta key or taxonomy outside that rule, a new post with plain meta or a taken slug, a field WordPress would sanitize, an author without an account here and a reference without a counterpart are locked with their stage and are no step. Nothing is deleted, and no status stands in for a deletion. action=next runs the next step whose dependencies are done: first the check of everything before the first write (the means, the booking of the protected store, the lock, the packages against the report, every target as it is now, the rights, the status WordPress would store), which closes the run as aborted on one deviation; then one object per call: the object is locked against the writes of other users and processes through the WordPress API (the REST API, the trash and deletions, meta, the classic way; a change on a way the lock does not refuse, such as wp_publish_post() by the cron, terms on the classic way or SQL, can be lost between the check and the write), its state is backed up and read back, each part (row, meta key, taxonomy) is written through wp_insert_post(), wp_update_post() with both dates and edit_date, the metadata API and wp_set_object_terms(), read back from the rows under the same lock, and a part that reads back other than its target is put back at once where its way is refusable; the object as a whole is read back against its target (the staging version with the confirmed choice), and its pair takes new bases (or is made); then the caches; then the check of the run (every written object against its target, a published object answering 200, the PHP probe, the error log), which closes the run as done or with findings. action=step runs a named step (refused while a dependency is open); action=status shows a run with its steps, journal, rests and calls (without run_id: the open run and the last runs); action=abort closes an open run (what it wrote stays; the way back is wp_site_revert). A run whose step began and whose request ended before it finished is interrupted: no step runs and no new run begins until a person closes it as checked on the page AlphaBridge → Staging or wp_site_revert takes its own parts back. A run belongs to the account and connection that made it. Each step answers within 60 seconds; a long check goes on over calls. Refused on a multisite network and without a confirmed key of a staging site. Needs manage_options and the access level Full.',
+				'capability'  => 'manage_options',
+				'readonly'    => false,
+				'destructive' => true,
+				'dangerous'   => true,
+				'inputSchema' => array(
+					'type'       => 'object',
+					'properties' => array(
+						'action'    => array(
+							'type'        => 'string',
+							'enum'        => array( 'plan', 'next', 'step', 'status', 'abort' ),
+							'description' => 'plan: preview, then make the run (with confirm_token); next: run the next step; step: run a named step (seq); status: show a run; abort: close an open run.',
+						),
+						'report_id' => array(
+							'type'        => 'string',
+							'description' => 'plan: the report of wp_site_diff the objects are of.',
+						),
+						'select'    => array(
+							'type'        => 'array',
+							'items'       => array( 'type' => 'integer' ),
+							'description' => 'plan: the numbers of the entries of the report to write (take_over or create).',
+						),
+						'all'       => array(
+							'type'        => 'boolean',
+							'description' => 'plan: true writes every entry a takeover writes in this version (take_over and create of posts and pages); what it cannot is named, not refused.',
+						),
+						'choices'   => array(
+							'type'        => 'array',
+							'description' => 'plan: for a conflict, the choice of the person: entry and choice (staging_wins, keep_live, leave_open).',
+							'items'       => array(
+								'type'       => 'object',
+								'properties' => array(
+									'entry'  => array( 'type' => 'integer' ),
+									'choice' => array(
+										'type' => 'string',
+										'enum' => array( 'staging_wins', 'keep_live', 'leave_open' ),
+									),
+								),
+							),
+						),
+						'as_draft'  => array(
+							'type'        => 'array',
+							'items'       => array( 'type' => 'integer' ),
+							'description' => 'plan: the entries taken over with the status draft (the confirmed choice where a page of the top level would be published or scheduled while a menu adds pages by itself).',
+						),
+						'packages'  => array(
+							'type'        => 'array',
+							'items'       => array( 'type' => 'string' ),
+							'description' => 'plan: the package_ids of the objects of the staging site for this report, taken over here completely (wp_site_import_chunk, purpose=objects).',
+						),
+						'run_id'    => array(
+							'type'        => 'integer',
+							'minimum'     => 1,
+							'description' => 'next, step, status, abort: the run.',
+						),
+						'seq'       => array(
+							'type'        => 'integer',
+							'minimum'     => 1,
+							'description' => 'step: the number of the step to run.',
+						),
+					),
+					'required'   => array( 'action' ),
+				),
+				'confirm'     => array(
+					'when'    => array( __CLASS__, 'push_when' ),
+					'state'   => array( __CLASS__, 'push_state' ),
+					'preview' => array( __CLASS__, 'push_preview' ),
+					'note'    => 'action=plan runs in two steps: without confirm_token the call changes nothing and returns the preview of the run with a confirm_token, and the same call with that token makes the run; next, step, status and abort run at once. The token holds for this account and connection, while the report, the selection and the objects of this site it covers are unchanged. This guards against a call nobody meant; it does not make the change reversible: the way back is wp_site_revert.',
+				),
+				'callback'    => array( __CLASS__, 'site_push' ),
+			)
+		);
+
+		$r->register(
+			'wp_site_revert',
+			array(
+				'description' => 'On the production site: take back what a run of wp_site_push wrote, pair by pair, byte for byte conditional. action=plan with run_id (without it, the run of this site that is not closed) and steps (the write steps of the run to take back; without them, every step that wrote): without confirm_token it answers with the preview (each object with the parts the run wrote and what will happen: back, back where still its own, or a rest) and a token; with the token the way back begins: for a run that is open or interrupted, the same run moves to reverting and gets its steps of the way back; for a closed run, a run of the way back is made (at most one run per site is not closed). action=next takes one pair back under the lock of AlphaBridge: a part goes back only where its bytes are still what the run wrote (the row through wp_update_post() with the backed-up dates and edit_date, after the check of the status WordPress would store now; meta rows raw and conditional; terms through wp_set_object_terms()); nothing where it is as before the run; a part changed since is left as it is and named, its pair unclear; a new object the run made is never removed and stays as a rest, its pair residual; a backed-up scheduled post whose date has passed is not put back (check needed). The last step closes the run as reverted, or with findings where rests or unclear parts remain. action=status shows the run. A run belongs to the account and connection that made it. Refused on a multisite network and without a confirmed key of a staging site. Needs manage_options and the access level Full.',
+				'capability'  => 'manage_options',
+				'readonly'    => false,
+				'destructive' => true,
+				'dangerous'   => true,
+				'inputSchema' => array(
+					'type'       => 'object',
+					'properties' => array(
+						'action' => array(
+							'type'        => 'string',
+							'enum'        => array( 'plan', 'next', 'status' ),
+							'description' => 'plan: preview, then begin the way back (with confirm_token); next: take one pair back; status: show the run.',
+						),
+						'run_id' => array(
+							'type'        => 'integer',
+							'minimum'     => 1,
+							'description' => 'The run whose pairs go back (plan: the open run when left out); next, status: the run of the way back.',
+						),
+						'steps'  => array(
+							'type'        => 'array',
+							'items'       => array( 'type' => 'integer' ),
+							'description' => 'plan: the seqs of the write steps of the run to take back; without them, every step that wrote.',
+						),
+					),
+					'required'   => array( 'action' ),
+				),
+				'confirm'     => array(
+					'when'    => array( __CLASS__, 'revert_when' ),
+					'state'   => array( __CLASS__, 'revert_state' ),
+					'preview' => array( __CLASS__, 'revert_preview' ),
+					'note'    => 'action=plan runs in two steps: without confirm_token the call changes nothing and returns the preview of the way back with a confirm_token, and the same call with that token begins it; next and status run at once. The token holds for this account and connection, while the run and the objects it covers are unchanged. This guards against a call nobody meant.',
+				),
+				'callback'    => array( __CLASS__, 'site_revert' ),
+			)
+		);
 	}
 
 	/**
@@ -490,6 +607,94 @@ class AB_MCP_Tools_Staging extends AB_MCP_Tools_Base {
 	public static function site_diff( array $a ) {
 		require_once dirname( __DIR__ ) . '/sync/class-sync-report.php';
 		return AB_MCP_Sync_Report::call( $a );
+	}
+
+	/**
+	 * Whether a call of wp_site_push needs the token: a strict false for
+	 * next, step, status and abort only, true for plan and any other.
+	 *
+	 * @param array $a Arguments.
+	 * @return bool
+	 */
+	public static function push_when( array $a ) {
+		return ! ( isset( $a['action'] ) && in_array( $a['action'], array( 'next', 'step', 'status', 'abort' ), true ) );
+	}
+
+	/**
+	 * The state a token of wp_site_push is bound to.
+	 *
+	 * @param array $a Arguments.
+	 * @return string|WP_Error
+	 */
+	public static function push_state( array $a ) {
+		require_once dirname( __DIR__ ) . '/sync/class-sync-push.php';
+		return AB_MCP_Sync_Push::state( $a );
+	}
+
+	/**
+	 * The preview of wp_site_push plan.
+	 *
+	 * @param array $a Arguments.
+	 * @return array|WP_Error
+	 */
+	public static function push_preview( array $a ) {
+		require_once dirname( __DIR__ ) . '/sync/class-sync-push.php';
+		return AB_MCP_Sync_Push::preview( $a );
+	}
+
+	/**
+	 * wp_site_push.
+	 *
+	 * @param array $a Arguments.
+	 * @return array|WP_Error
+	 */
+	public static function site_push( array $a ) {
+		require_once dirname( __DIR__ ) . '/sync/class-sync-push.php';
+		return AB_MCP_Sync_Push::call( $a );
+	}
+
+	/**
+	 * Whether a call of wp_site_revert needs the token: a strict false for
+	 * next and status only.
+	 *
+	 * @param array $a Arguments.
+	 * @return bool
+	 */
+	public static function revert_when( array $a ) {
+		return ! ( isset( $a['action'] ) && in_array( $a['action'], array( 'next', 'status' ), true ) );
+	}
+
+	/**
+	 * The state a token of wp_site_revert is bound to.
+	 *
+	 * @param array $a Arguments.
+	 * @return string|WP_Error
+	 */
+	public static function revert_state( array $a ) {
+		require_once dirname( __DIR__ ) . '/sync/class-sync-revert.php';
+		return AB_MCP_Sync_Revert::state( $a );
+	}
+
+	/**
+	 * The preview of wp_site_revert plan.
+	 *
+	 * @param array $a Arguments.
+	 * @return array|WP_Error
+	 */
+	public static function revert_preview( array $a ) {
+		require_once dirname( __DIR__ ) . '/sync/class-sync-revert.php';
+		return AB_MCP_Sync_Revert::preview( $a );
+	}
+
+	/**
+	 * wp_site_revert.
+	 *
+	 * @param array $a Arguments.
+	 * @return array|WP_Error
+	 */
+	public static function site_revert( array $a ) {
+		require_once dirname( __DIR__ ) . '/sync/class-sync-revert.php';
+		return AB_MCP_Sync_Revert::call( $a );
 	}
 
 	/**

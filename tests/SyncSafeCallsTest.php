@@ -183,8 +183,8 @@ final class SyncSafeCallsTest extends TestCase {
 			'AB_MCP_Staging::role'   => array( 1, 'refusal(): only the confirmed staging site makes and gives out packages.' ),
 			'AB_MCP_Staging::bind'   => array( 2, 'binding() and refusal(): the random value of the role and pair a package is bound to.' ),
 			'AB_MCP_Staging::new_bind' => array( 1, 'refusal(): that value, made where the record has none.' ),
-			'AB_MCP_Staging::record' => array( 3, 'refusal(), make() and binding(): the pair, whose production site a package is for, and the confirmations a package is bound to.' ),
-			'home_url'               => array( 3, 'make(), binding() and relay_refusal(): the own address, for the inventory, the binding and whether it is public.' ),
+			'AB_MCP_Staging::record' => array( 4, 'refusal(), make(), make_objects() and binding(): the pair, whose production site a package is for, and the confirmations a package is bound to.' ),
+			'home_url'               => array( 4, 'make(), make_objects(), binding() and relay_refusal(): the own address, for the inventory, the binding and whether it is public.' ),
 		),
 		// The import (Z8, branch 5; Codex, round 1 of branch 7, A2): the
 		// connection a package is bound to, as a proposal and a report.
@@ -213,6 +213,68 @@ final class SyncSafeCallsTest extends TestCase {
 			'update_option' => array( 2, 'install(): writes that version (or that it failed).' ),
 			'delete_option' => array( 1, 'uninstall: removes that version.' ),
 			'dbDelta'       => array( 1, 'install(): makes the tables of the takeover.' ),
+		),
+		// The run (Z8, branch 8; decisions 17 to 20, 23 and 33): the engine
+		// writes through the API of WordPress by design, and reads back from
+		// the rows (AB_MCP_Sync_Rows) for every comparison; what it asks of
+		// WordPress besides are the rights of the account, the lock, the store
+		// and the probes of the check.
+		'class-sync-run.php'    => array(
+			'AB_MCP_Change_Lock::held'        => array( 1, 'lock_fresh(): whether this request holds the lock of the boundary.' ),
+			'AB_MCP_Staging_Gate::connection' => array( 1, 'connection(): the connection of the call, which a run is bound to (decision 15).' ),
+			'get_option'                      => array( 1, 'lock_fresh(): the row of the lock of AB_MCP_Change_Lock, a time this plugin writes itself (decision 18); no value the takeover compares.' ),
+		),
+		'class-sync-guard.php'  => array(
+			'delete_option'       => array( 2, 'end() and record(): removes the record of the boundary, an option this class writes itself.' ),
+			'get_metadata_by_mid' => array( 1, 'meta_by_mid(): the post a meta id belongs to, for the lock of the boundary by object; no value compared.' ),
+			'get_option'          => array( 3, 'begin(), end() and record(): the record of the boundary, an option this class writes itself.' ),
+			'update_option'       => array( 1, 'begin(): writes that record.' ),
+			'update_post_meta'    => array( 1, 'begin(): the edit lock _edit_lock of a covered post, so an editor sees it taken (decision 19); excluded from every comparison.' ),
+		),
+		'class-sync-resources.php' => array(
+			'AB_MCP_Protected_Store::root' => array( 1, 'measure(): the folder of the store, for the free space and the tempo of a write there (15.11).' ),
+		),
+		'class-sync-post-writer.php' => array(
+			'AB_MCP_Builder_Caches::clear'             => array( 1, 'post_write(): the builder caches of the written post (decision 33).' ),
+			'AB_MCP_Builders::is_markup_meta_key'      => array( 1, 'meta_allowed(): whether a key is the markup of a page builder (the list of the signatures and the filter); no stored value.' ),
+			'AB_MCP_Page_Cache::purge_posts'           => array( 1, 'post_write(): the page cache of the written post (decision 33).' ),
+			'AB_MCP_Tools_Content::saved_status'       => array( 2, 'precheck() and restore_row(): the status WordPress would store for the data handed over (decision 17); a calculation.' ),
+			'AB_MCP_Tools_Content::status_date_refusal' => array( 2, 'precheck() and restore_row(): the refusals of the free writer for a status and date (decision 17); a calculation.' ),
+			'add_metadata'                             => array( 1, 'write_meta(): the way forward of meta (decision 17).' ),
+			'clean_post_cache'                         => array( 1, 'post_write(): the caches of the written post.' ),
+			'current_user_can'                         => array( 6, 'precheck(): the rights of the account for each operation (decision 17, step 4).' ),
+			'delete_metadata'                          => array( 1, 'write_meta(): the way forward of meta.' ),
+			'get_gmt_from_date'                        => array( 1, 'prepare(): the UTC date WordPress derives where a published post hands none over, for the target of the row.' ),
+			'get_post_type_object'                     => array( 1, 'precheck(): the capabilities of the type.' ),
+			'get_term_by'                              => array( 1, 'target_term_ids(): the term here a slug of post_format names, for the target of the terms.' ),
+			'get_user_by'                              => array( 1, 'user_by_login(): the account of this site an author is written as (decision 25).' ),
+			'is_protected_meta'                        => array( 1, 'meta_allowed(): whether a key is protected (the rule of this version).' ),
+			'sanitize_post'                            => array( 1, 'precheck(): the sanitizers ahead, as wp_insert_post() runs them (decision 17).' ),
+			'taxonomy_exists'                          => array( 1, 'precheck(): whether a taxonomy is registered here.' ),
+			'update_metadata'                          => array( 1, 'write_meta(): the way forward of meta.' ),
+			'wp_cache_delete'                          => array( 4, 'post_write() and restore_meta(): the caches of the written post and its meta.' ),
+			'wp_insert_post'                           => array( 1, 'write_row(): the way forward of a new post (decision 17).' ),
+			'wp_set_object_terms'                      => array( 2, 'write_terms() and restore_terms(): the way forward and back of terms (decisions 17 and 23).' ),
+			'wp_slash'                                 => array( 6, 'precheck(), write_row(), write_meta(), restore_row(): the slashing wp_insert_post() and the metadata API expect.' ),
+			'wp_update_post'                           => array( 2, 'write_row() and restore_row(): the way forward and back of the row (decisions 17 and 23).' ),
+		),
+		'class-sync-engine.php' => array(
+			'AB_MCP_Change_Lock::release'     => array( 3, 'run_check(), run_write() and run_revert(): the lock of the boundary given back (decision 18).' ),
+			'AB_MCP_Change_Lock::take'        => array( 3, 'run_check(), run_write() and run_revert(): the lock of the boundary taken (decision 18).' ),
+			'AB_MCP_Change_Lock::touch'       => array( 3, 'boundary(), write_parts() and revert_boundary(): the heartbeat of the lock.' ),
+			'AB_MCP_Php_Probe::run'           => array( 1, 'run_verify(): the PHP probe of the site (decision 33).' ),
+			'AB_MCP_Protected_Store::available' => array( 1, 'run_check(): whether the store is proved (decision 7: no run without it).' ),
+			'AB_MCP_Protected_Store::cleanup' => array( 3, 'abort(), run_verify() and close_revert(): the retention of the backups after a close (decision 20).' ),
+			'AB_MCP_Protected_Store::refusal' => array( 1, 'run_check(): why the store is not proved.' ),
+			'AB_MCP_Store_Budget::book'       => array( 1, 'run_check(): the booking of the run (decision 8).' ),
+			'AB_MCP_Store_Budget::release'    => array( 4, 'abort(), run_verify(), close_revert() and abort_at(): the booking given back.' ),
+			'clean_term_cache'                => array( 1, 'run_post(): the term caches after the run (decision 33).' ),
+			'get_permalink'                   => array( 1, 'run_verify(): the address of a published object for the sample of decision 33; no value compared.' ),
+			'home_url'                        => array( 1, 'context(): the own address, as the export reads its own.' ),
+			'wp_remote_get'                   => array( 1, 'probe(): the sample of a published object answering 200 (decision 33).' ),
+		),
+		'class-sync-push.php'   => array(
+			'AB_MCP_Protected_Store::bind' => array( 1, 'bind_package(): the packages of objects bound to the run, kept while it is not closed.' ),
 		),
 	);
 

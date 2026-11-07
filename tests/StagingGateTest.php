@@ -210,7 +210,7 @@ final class StagingGateTest extends TestCase {
 	/* ------------------------------------------------------ exempt tools */
 
 	public function testTheExemptListHasItsThreeGroupsAndTheFilterOnlyAdds(): void {
-		self::assertSame( array( 'wp_undo', 'wp_undo_discard', 'wp_set_preview_protection', 'wp_clear_cache' ), Gate::WAYS_BACK );
+		self::assertSame( array( 'wp_undo', 'wp_undo_discard', 'wp_set_preview_protection', 'wp_clear_cache', 'wp_site_revert' ), Gate::WAYS_BACK );
 		self::assertSame( array( 'wp_moderate_comment', 'wp_reply_comment', 'wp_wc_update_order_status' ), Gate::OPERATION );
 		self::assertSame( array( 'wp_site_push', 'wp_site_sync', 'wp_site_export', 'wp_site_export_chunk', 'wp_site_import_chunk', 'wp_site_pairs' ), Gate::CARRY_OVER );
 		self::assertSame( array_merge( Gate::WAYS_BACK, Gate::OPERATION, Gate::CARRY_OVER ), Gate::exempt_tools(), 'Without a filter: the three groups, in this order.' );

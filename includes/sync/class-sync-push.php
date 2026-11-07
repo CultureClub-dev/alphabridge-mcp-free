@@ -341,7 +341,7 @@ final class AB_MCP_Sync_Push {
 			return self::selection( sprintf( 'One run writes at most %d objects. Plan in parts.', self::MAX_OBJECTS ) );
 		}
 		if ( array() === $items ) {
-			return new WP_Error( 'ab_mcp_sync_push_nothing', sprintf( 'Nothing of the selection is written in this version: %s', array() === $locked ? 'no entry a takeover writes was chosen.' : implode( ' ', array_map( static fn( $l ) => sprintf( 'Entry %1$d (%2$s %3$s): %4$s', $l['n'], $l['kind'], $l['subtype'], $l['reason'] ), array_slice( $locked, 0, 5 ) ) ) ), array( 'locked' => $locked ) );
+			return new WP_Error( 'ab_mcp_sync_push_nothing', sprintf( 'Nothing of the selection is written in this version: %s Choose entries the report marks take_over or create (posts and pages).', array() === $locked ? 'no entry a takeover writes was chosen.' : implode( ' ', array_map( static fn( $l ) => sprintf( 'Entry %1$d (%2$s %3$s): %4$s', $l['n'], $l['kind'], $l['subtype'], $l['reason'] ), array_slice( $locked, 0, 5 ) ) ) ), array( 'locked' => $locked ) );
 		}
 		// The objects of this site as they are now, and the pairs.
 		$asked = array();
@@ -369,10 +369,10 @@ final class AB_MCP_Sync_Push {
 			$items[ $n ]['live_hash'] = $hash;
 			$pair                     = AB_MCP_Sync_Pairs::get( (int) $item['pair_id'] );
 			if ( is_wp_error( $pair ) || null === $pair ) {
-				return new WP_Error( 'ab_mcp_sync_push_pair', sprintf( 'The pair %1$d of entry %2$d is no longer there. Make a new report and plan again.', (int) $item['pair_id'], $n ) );
+				return new WP_Error( 'ab_mcp_sync_push_pair', sprintf( 'The pair %1$d of entry %2$d is no longer there. Make a new report (wp_site_diff) and plan again.', (int) $item['pair_id'], $n ) );
 			}
 			if ( 'active' !== $pair['state'] ) {
-				return new WP_Error( 'ab_mcp_sync_push_pair', sprintf( 'The pair %1$d of entry %2$d is %3$s since the report, and only an active pair is written over. Make a new report and plan again.', (int) $item['pair_id'], $n, $pair['state'] ) );
+				return new WP_Error( 'ab_mcp_sync_push_pair', sprintf( 'The pair %1$d of entry %2$d is %3$s since the report, and only an active pair is written over. Make a new report (wp_site_diff) and plan again.', (int) $item['pair_id'], $n, $pair['state'] ) );
 			}
 			$items[ $n ]['pair_hash']       = AB_MCP_Sync_Pairs::snapshot_hash( AB_MCP_Sync_Pairs::snapshot( (int) $item['pair_id'] ) );
 			$pairs[ (int) $item['pair_id'] ] = $items[ $n ]['pair_hash'];
@@ -388,7 +388,7 @@ final class AB_MCP_Sync_Push {
 			$locked[] = $l;
 		}
 		if ( array() === $items ) {
-			return new WP_Error( 'ab_mcp_sync_push_nothing', 'Nothing of the selection is written: the objects chosen need each other to be created (mutual references, locked until Z11c).', array( 'locked' => $locked ) );
+			return new WP_Error( 'ab_mcp_sync_push_nothing', 'Nothing of the selection is written: the objects chosen need each other to be created (mutual references, locked until Z11c). Choose objects that do not refer to each other.', array( 'locked' => $locked ) );
 		}
 		// The steps.
 		$bytes = 0;
@@ -932,7 +932,7 @@ final class AB_MCP_Sync_Push {
 	private static function another_open( array $open ) {
 		return new WP_Error(
 			'ab_mcp_sync_run_open',
-			sprintf( 'This site has a run that is not closed (run %1$d, %2$s, state %3$s), and at most one run per site is open at a time, so no new plan begins. %4$s', (int) $open['run_id'], $open['type'], $open['state'], self::status_way( $open ) ),
+			sprintf( 'This site has a run that is not closed (run %1$d, %2$s, state %3$s), and at most one run per site is open at a time, so no new plan begins. Ask for its status (wp_site_push action=status). %4$s', (int) $open['run_id'], $open['type'], $open['state'], self::status_way( $open ) ),
 			array(
 				'run_id' => (int) $open['run_id'],
 				'state'  => $open['state'],
@@ -966,6 +966,6 @@ final class AB_MCP_Sync_Push {
 	 * @return WP_Error
 	 */
 	private static function selection( $what ) {
-		return new WP_Error( 'ab_mcp_sync_push_selection', 'The selection is not one a run takes: ' . $what . ' Pass select (entry numbers of the report of kind post with action take_over or create), choices (entry and choice for a conflict), as_draft (entry numbers taken over with the status draft) or all=true, and packages (the package_ids of the objects).' );
+		return new WP_Error( 'ab_mcp_sync_push_selection', sprintf( 'The selection is not one a run takes: %s Pass select (entry numbers of the report of kind post with action take_over or create), choices (entry and choice for a conflict), as_draft (entry numbers taken over with the status draft) or all=true, and packages (the package_ids of the objects).', $what ) );
 	}
 }

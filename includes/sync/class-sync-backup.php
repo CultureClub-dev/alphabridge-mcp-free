@@ -106,10 +106,10 @@ final class AB_MCP_Sync_Backup {
 			)
 		);
 		if ( '' === $text ) {
-			return new WP_Error( 'ab_mcp_sync_backup_encode', 'What the step replaces cannot be written as a backup (a value JSON cannot hold), so the step writes nothing. Take the object over by hand in wp-admin.' );
+			return new WP_Error( 'ab_mcp_sync_backup_encode', 'What the step replaces cannot be written as a backup (a value JSON cannot hold), so the step writes nothing. Use the editor in wp-admin to take this object over by hand.' );
 		}
 		if ( strlen( $text ) > self::MAX_BYTES ) {
-			return new WP_Error( 'ab_mcp_sync_backup_too_large', sprintf( 'The backup of what the step replaces would hold %1$d bytes, and one backup holds at most %2$d, so the step writes nothing. Take the object over by hand in wp-admin.', strlen( $text ), self::MAX_BYTES ) );
+			return new WP_Error( 'ab_mcp_sync_backup_too_large', sprintf( 'The backup of what the step replaces would hold %1$d bytes, and one backup holds at most %2$d, so the step writes nothing. Use the editor in wp-admin to take the object over by hand.', strlen( $text ), self::MAX_BYTES ) );
 		}
 		$put = AB_MCP_Protected_Store::put( 'backups', $gid, (string) $name, $text );
 		if ( is_wp_error( $put ) ) {
@@ -141,7 +141,7 @@ final class AB_MCP_Sync_Backup {
 			return $gid;
 		}
 		if ( ! isset( $ref['name'], $ref['sha256'] ) ) {
-			return new WP_Error( 'ab_mcp_sync_backup_ref', 'The journal names no backup for this part, so nothing of it is put back.' );
+			return new WP_Error( 'ab_mcp_sync_backup_ref', 'The journal names no backup for this part, so nothing of it is put back. Check the object in wp-admin.' );
 		}
 		$text = AB_MCP_Protected_Store::get( 'backups', $gid, (string) $ref['name'], (string) $ref['sha256'] );
 		if ( is_wp_error( $text ) ) {
@@ -149,7 +149,7 @@ final class AB_MCP_Sync_Backup {
 		}
 		$data = json_decode( $text, true, 64 );
 		if ( ! is_array( $data ) || self::FORMAT !== ( $data['format'] ?? null ) || (int) $run_id !== ( $data['run_id'] ?? null ) || ! isset( $data['data'] ) || ! is_array( $data['data'] ) ) {
-			return new WP_Error( 'ab_mcp_sync_backup_shape', 'The backup is not one this run wrote, so nothing of it is put back.' );
+			return new WP_Error( 'ab_mcp_sync_backup_shape', 'The backup is not one this run wrote, so nothing of it is put back. Check the object in wp-admin.' );
 		}
 		return $data['data'];
 	}

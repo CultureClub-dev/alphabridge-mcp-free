@@ -227,7 +227,7 @@ final class AB_MCP_Sync_Run {
 			return new WP_Error( 'ab_mcp_sync_run_invalid', 'A run is of the type push or revert. Pass one of them.' );
 		}
 		if ( array() === $steps || count( $steps ) > self::MAX_STEPS ) {
-			return new WP_Error( 'ab_mcp_sync_run_invalid', sprintf( 'A run has 1 to %d steps. Plan within that.', self::MAX_STEPS ) );
+			return new WP_Error( 'ab_mcp_sync_run_invalid', sprintf( 'A run has 1 to %d steps. Choose fewer objects for one run.', self::MAX_STEPS ) );
 		}
 		$plan = self::encode_json( isset( $run['plan'] ) ? $run['plan'] : null, self::MAX_PLAN );
 		if ( is_wp_error( $plan ) ) {
@@ -315,7 +315,7 @@ final class AB_MCP_Sync_Run {
 			return $have;
 		}
 		if ( count( $have ) + count( $steps ) > self::MAX_STEPS ) {
-			return new WP_Error( 'ab_mcp_sync_run_invalid', sprintf( 'A run has at most %d steps. Take the pairs back in parts.', self::MAX_STEPS ) );
+			return new WP_Error( 'ab_mcp_sync_run_invalid', sprintf( 'A run has at most %d steps. Choose fewer pairs for one way back.', self::MAX_STEPS ) );
 		}
 		$seq   = array() === $have ? 0 : (int) end( $have )['seq'];
 		$first = $seq + 1;
@@ -346,7 +346,7 @@ final class AB_MCP_Sync_Run {
 			return $ready;
 		}
 		if ( ! in_array( $to, array_merge( self::OPEN_STATES, AB_MCP_Sync_Schema::CLOSED ), true ) ) {
-			return new WP_Error( 'ab_mcp_sync_run_invalid', sprintf( 'A run has no state %s.', (string) $to ) );
+			return new WP_Error( 'ab_mcp_sync_run_invalid', sprintf( 'A run has no state %s. Use one of the states of AB_MCP_Sync_Run.', (string) $to ) );
 		}
 		global $wpdb;
 		$now    = self::now();
@@ -443,7 +443,7 @@ final class AB_MCP_Sync_Run {
 			switch ( $column ) {
 				case 'state':
 					if ( ! in_array( $value, self::STEP_STATES, true ) ) {
-						return new WP_Error( 'ab_mcp_sync_run_invalid', sprintf( 'A step has no state %s.', (string) $value ) );
+						return new WP_Error( 'ab_mcp_sync_run_invalid', sprintf( 'A step has no state %s. Use one of the states of AB_MCP_Sync_Run.', (string) $value ) );
 					}
 					$sets[] = $wpdb->prepare( 'state = %s', (string) $value );
 					break;
@@ -462,7 +462,7 @@ final class AB_MCP_Sync_Run {
 					$sets[] = null === $json ? "$column = NULL" : $wpdb->prepare( "$column = %s", $json ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the column name is ours.
 					break;
 				default:
-					return new WP_Error( 'ab_mcp_sync_run_invalid', sprintf( '%s is not a field a step takes here.', (string) $column ) );
+					return new WP_Error( 'ab_mcp_sync_run_invalid', sprintf( '%s is not a field a step takes here. Pass state, parts, pair_id, pair_before or result.', (string) $column ) );
 			}
 		}
 		$where = $wpdb->prepare( ' WHERE run_id = %d AND seq = %d', (int) $run_id, (int) $seq );
@@ -559,7 +559,7 @@ final class AB_MCP_Sync_Run {
 			return is_wp_error( $run ) ? $run : self::unknown( $run_id );
 		}
 		if ( 'interrupted' !== $run['state'] ) {
-			return new WP_Error( 'ab_mcp_sync_run_not_interrupted', sprintf( 'Only an interrupted run is closed as checked; this run is %s.', $run['state'] ) );
+			return new WP_Error( 'ab_mcp_sync_run_not_interrupted', sprintf( 'Only an interrupted run is closed as checked; this run is %s. Use wp_site_revert for the way back of a run that is open or closed.', $run['state'] ) );
 		}
 		$steps = self::steps( $run_id );
 		if ( is_wp_error( $steps ) ) {
@@ -735,7 +735,7 @@ final class AB_MCP_Sync_Run {
 	 */
 	private static function insert_step( $run_id, $seq, array $step ) {
 		if ( ! isset( $step['op'] ) || ! in_array( $step['op'], self::OPS, true ) ) {
-			return new WP_Error( 'ab_mcp_sync_run_invalid', sprintf( 'Step %d has no operation of check, write, post, verify or revert.', (int) $seq ) );
+			return new WP_Error( 'ab_mcp_sync_run_invalid', sprintf( 'Step %d has no operation of check, write, post, verify or revert. Pass one of them.', (int) $seq ) );
 		}
 		$depends = isset( $step['depends'] ) && is_array( $step['depends'] ) ? array_values( array_map( 'intval', $step['depends'] ) ) : array();
 		$parts   = self::encode_json( isset( $step['parts'] ) ? $step['parts'] : null, self::MAX_PARTS );
@@ -776,10 +776,10 @@ final class AB_MCP_Sync_Run {
 		}
 		$json = AB_MCP_Sync_Canon::encode( $value );
 		if ( '' === $json ) {
-			return new WP_Error( 'ab_mcp_sync_run_invalid', 'A value of the run cannot be written as JSON. Leave it out.' );
+			return new WP_Error( 'ab_mcp_sync_run_invalid', 'A value of the run cannot be written as JSON. Pass values JSON can hold.' );
 		}
 		if ( strlen( $json ) > $max ) {
-			return new WP_Error( 'ab_mcp_sync_run_too_large', sprintf( 'A record of the run holds at most %d bytes as stored, and this one would hold %d. Plan fewer objects for one run.', $max, strlen( $json ) ) );
+			return new WP_Error( 'ab_mcp_sync_run_too_large', sprintf( 'A record of the run holds at most %1$d bytes as stored, and this one would hold %2$d. Choose fewer objects for one run.', $max, strlen( $json ) ) );
 		}
 		return $json;
 	}
@@ -794,7 +794,7 @@ final class AB_MCP_Sync_Run {
 			: 'Go on with it (wp_site_push action=next or action=status with its run_id), abort it (action=abort), or wait until it is closed; then a new run can begin.';
 		return new WP_Error(
 			'ab_mcp_sync_run_open',
-			sprintf( 'This site has a run that is not closed (run %1$d, %2$s, state %3$s), and at most one run per site is open at a time. %4$s', (int) $open['run_id'], $open['type'], $open['state'], $way ),
+			sprintf( 'This site has a run that is not closed (run %1$d, %2$s, state %3$s), and at most one run per site is open at a time. Ask for its status (wp_site_push action=status). %4$s', (int) $open['run_id'], $open['type'], $open['state'], $way ),
 			array(
 				'run_id' => (int) $open['run_id'],
 				'state'  => $open['state'],

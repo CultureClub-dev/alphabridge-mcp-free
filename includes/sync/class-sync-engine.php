@@ -139,7 +139,7 @@ final class AB_MCP_Sync_Engine {
 				$done = self::run_revert( $run, $picked, $ctx );
 				break;
 			default:
-				return new WP_Error( 'ab_mcp_sync_run_invalid', sprintf( 'Step %d has an operation this version does not run.', (int) $picked['seq'] ) );
+				return new WP_Error( 'ab_mcp_sync_run_invalid', sprintf( 'Step %d has an operation this version does not run. Ask for the status of the run (wp_site_push action=status).', (int) $picked['seq'] ) );
 		}
 		if ( is_wp_error( $done ) ) {
 			return $done;
@@ -325,7 +325,7 @@ final class AB_MCP_Sync_Engine {
 			}
 			foreach ( $step['depends'] as $dep ) {
 				if ( ! isset( $by[ $dep ] ) || 'done' !== $by[ $dep ]['state'] ) {
-					return new WP_Error( 'ab_mcp_sync_step_waits', sprintf( 'Step %1$d waits for step %2$d, which is %3$s: a step runs only once the objects it refers to are written. Run the steps in order with action=next.', (int) $named, (int) $dep, isset( $by[ $dep ] ) ? $by[ $dep ]['state'] : 'unknown' ) );
+					return new WP_Error( 'ab_mcp_sync_step_waits', sprintf( 'Step %1$d waits for step %2$d, which is %3$s: a step runs only once the objects it refers to are written. Use action=next to run the steps in order.', (int) $named, (int) $dep, isset( $by[ $dep ] ) ? $by[ $dep ]['state'] : 'unknown' ) );
 				}
 			}
 			return $step;
@@ -480,7 +480,7 @@ final class AB_MCP_Sync_Engine {
 				return self::finding( $item, sprintf( 'The %1$s has a pair here since the plan (pair %2$d), so it is not created anew.', $name, (int) $pair['id'] ) );
 			}
 		}
-		$prepared = AB_MCP_Sync_Post_Writer::prepare( $line, $item, $ctx );
+		$prepared = AB_MCP_Sync_Post_Writer::target_of( $line, $item, $ctx );
 		if ( is_wp_error( $prepared ) ) {
 			return self::finding( $item, $prepared->get_error_message() );
 		}
@@ -540,7 +540,7 @@ final class AB_MCP_Sync_Engine {
 			}
 		}
 		if ( null === $item ) {
-			return new WP_Error( 'ab_mcp_sync_run_invalid', sprintf( 'The plan of the run names no object for step %d.', (int) $step['seq'] ) );
+			return new WP_Error( 'ab_mcp_sync_run_invalid', sprintf( 'The plan of the run names no object for step %d. Ask for the status of the run (wp_site_push action=status).', (int) $step['seq'] ) );
 		}
 		$lock = AB_MCP_Change_Lock::take();
 		if ( is_wp_error( $lock ) ) {
@@ -622,7 +622,7 @@ final class AB_MCP_Sync_Engine {
 		if ( is_wp_error( $line ) ) {
 			return self::fail_step( $run_id, $seq, 'begun', $line->get_error_message(), $journal );
 		}
-		$prepared = AB_MCP_Sync_Post_Writer::prepare( $line, $item, $ctx );
+		$prepared = AB_MCP_Sync_Post_Writer::target_of( $line, $item, $ctx );
 		if ( is_wp_error( $prepared ) ) {
 			return self::fail_step( $run_id, $seq, 'begun', $prepared->get_error_message(), $journal );
 		}
@@ -832,7 +832,7 @@ final class AB_MCP_Sync_Engine {
 	 * @param int        $run_id   Run.
 	 * @param int        $seq      Step.
 	 * @param array      $journal  Journal (parts planned).
-	 * @param array      $prepared prepare().
+	 * @param array      $prepared target_of().
 	 * @param array|null $current  current() before.
 	 * @param int|null   $live_id  Post here, null for a new one.
 	 * @return array{state:string,message:string,journal:array,live_id:int|null}
@@ -1273,7 +1273,7 @@ final class AB_MCP_Sync_Engine {
 	 * @param array  $run      Run.
 	 * @param array  $item     Item.
 	 * @param int    $live_id  The post made.
-	 * @param array  $prepared prepare().
+	 * @param array  $prepared target_of().
 	 * @param string $state    active or residual.
 	 * @return array|WP_Error
 	 */

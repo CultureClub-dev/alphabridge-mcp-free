@@ -303,6 +303,69 @@ final class AB_MCP_Sync_Kinds {
 			'stage'  => 'Z8d',
 			'reason' => 'The stored value of a core option does not keep the rule of its schema.',
 		),
+		// What the engine of the kind post does not carry to its end in this
+		// version (branch 8; AB_MCP_Sync_Post_Writer), and the engines that
+		// follow for the other kinds.
+		'post:engine_type'             => array(
+			'stage'  => 'Z9',
+			'reason' => 'In this version the engine of the kind post writes posts and pages; templates, template parts, global styles, navigations and reusable blocks follow with their field schema.',
+		),
+		'post:meta_rule'               => array(
+			'stage'  => 'Z9',
+			'reason' => 'A meta key outside the rule of this version (_wp_page_template, and plain keys the account may edit on a post that is there) waits for the field schema and the rights per key.',
+		),
+		'post:taxonomy_rule'           => array(
+			'stage'  => 'Z9',
+			'reason' => 'A term of a taxonomy other than category, post_tag and post_format waits for the engine of the terms.',
+		),
+		'post:slug_collision'          => array(
+			'stage'  => 'Z9',
+			'reason' => 'A new post whose slug another post of its type and parent has here would be renamed by WordPress, and the written post would not be the target.',
+		),
+		'post:sanitizer'               => array(
+			'stage'  => 'Z9',
+			'reason' => 'A field of the post differs after the sanitizing WordPress runs on a save (kses without unfiltered_html): the written post would not be the target.',
+		),
+		'post:menu_automatic'          => array(
+			'stage'  => 'Z8',
+			'reason' => 'A page of the top level is published or scheduled only while no menu of this site adds pages by itself (the automatic would add it, and the cron would publish a scheduled one); the confirmed choice is to take it over as draft, or the automatic is switched off in the menu.',
+		),
+		'post:author_unknown'          => array(
+			'stage'  => 'Z8',
+			'reason' => 'The author of the staging object has no account of that login on this site; make the account, or take the object over by hand.',
+		),
+		'post:status_date'             => array(
+			'stage'  => 'Z8',
+			'reason' => 'WordPress would store another status than the staging site has (a scheduled date that passed, or one too close): set the date anew on the staging site.',
+		),
+		'post:reference_unmapped'      => array(
+			'stage'  => 'Z8',
+			'reason' => 'A reference of the object (its parent, a term, an id in its content) has no counterpart on this site: pair or create the target first.',
+		),
+		'term:engine'                  => array(
+			'stage'  => 'Z9',
+			'reason' => 'The engine that writes terms follows with branch 9.',
+		),
+		'attachment:engine'            => array(
+			'stage'  => 'Z10',
+			'reason' => 'The engine that writes attachments and their files follows with branch 10.',
+		),
+		'menu:engine'                  => array(
+			'stage'  => 'Z11',
+			'reason' => 'The engine that writes menus and their items follows with branch 11.',
+		),
+		'widget_area:engine'           => array(
+			'stage'  => 'Z11',
+			'reason' => 'The engine that writes widget areas follows with branch 11.',
+		),
+		'custom_css:engine'            => array(
+			'stage'  => 'Z11',
+			'reason' => 'The engine that writes the additional CSS follows with branch 11.',
+		),
+		'option:engine'                => array(
+			'stage'  => 'Z11',
+			'reason' => 'The engine that writes core options follows with branch 11.',
+		),
 	);
 
 	/** @var array<string,AB_MCP_Sync_Kind> The registered kinds, by name, in order of registration. */
