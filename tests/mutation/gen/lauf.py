@@ -677,10 +677,16 @@ e('run-interrupted-revert-way', 'interrupted_ways(): the way for a run on its wa
 
 # ------------------------------- GitHub Codex round 7 on free#137 (two P2)
 # A relationship of the staging post with a term_order other than 0 locks
-# the post before the first write as one of the post here does.
+# the post before the first write as one of the post here does; the
+# retention reads the plan of a run that is not closed only.
 ORDER_STAGING = 'testAStagingPostWhoseTermHasAnOrderIsLockedBeforeTheFirstWriteAndOneWithoutGoesOverAndBack'
+PLANS = 'testTheRetentionReadsThePlanOfARunThatIsNotClosedOnlyAndKeepsWhatItKept'
 e('writer-staging-term-order-lock', 'target_of(): a relationship of the staging post with a term_order other than 0 is locked before anything is written (P2)', PW,
   "\t\t\tif ( isset( $term['term_order'] ) && 0 !== (int) $term['term_order'] ) {", "\t\t\tif ( false ) {", 'it', ORDER_STAGING)
+e('schema-plan-not-listed', 'backup_rows(): the rows of the retention are read without their plan (P2)', SC,
+  "SELECT run_id, type, state, closed, forward_closed_at, keep_until FROM `", "SELECT run_id, type, state, closed, forward_closed_at, keep_until, plan FROM `", 'unit', PLANS)
+e('schema-plan-per-run', 'backup_rows(): the plan of a run that is not closed, read for it alone, keeps the runs its way back needs', SC,
+  "\t\t\t\t$plan = is_string( $raw ) ? json_decode( $raw, true, 16 ) : null;", "\t\t\t\t$plan = null;", 'unit', PLANS)
 
 
 def test_of(expect):
@@ -807,7 +813,8 @@ out.append('''<?php
  * one place of still()), a step the call began its own, the close of the
  * way back not beside a step of it; one way (b) for every interrupted run,
  * of either type, with the ways that go named. GitHub Codex round 7: a
- * term_order other than 0 on the staging post locks it as well.
+ * term_order other than 0 on the staging post locks it as well; the
+ * retention reads the plan of a run that is not closed only.
  *
  * Written by tests/mutation/gen/lauf.py from the source; change the entries
  * there and run it again.

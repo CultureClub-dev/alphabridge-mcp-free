@@ -94,6 +94,14 @@ final class SyncRunRowsWpdb {
 		if ( preg_match( "/^SHOW TABLES LIKE '(.*)'$/", (string) $query, $m ) ) {
 			return str_replace( array( '\\_', '\\%' ), array( '_', '%' ), stripslashes( $m[1] ) );
 		}
+		// The plan of one run (AB_MCP_Sync_Schema::backup_rows()).
+		if ( preg_match( '/^SELECT plan FROM `[^`]+` WHERE run_id = (\d+)$/', (string) $query, $m ) ) {
+			foreach ( $this->rows as $row ) {
+				if ( isset( $row['run_id'] ) && (int) $row['run_id'] === (int) $m[1] ) {
+					return array_key_exists( 'plan', $row ) ? $row['plan'] : null;
+				}
+			}
+		}
 		return null;
 	}
 
@@ -106,6 +114,11 @@ final class SyncRunRowsWpdb {
 
 	public function get_results( $query, $output = null ) {
 		$this->queries[] = (string) $query;
+		// Only the columns a plain SELECT names, as the database answers.
+		if ( preg_match( '/^SELECT ((?:\w+, )*\w+) FROM /', (string) $query, $m ) ) {
+			$columns = array_flip( explode( ', ', $m[1] ) );
+			return array_map( static fn( array $row ): array => array_intersect_key( $row, $columns ), $this->rows );
+		}
 		return $this->rows;
 	}
 
@@ -1274,6 +1287,36 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( array( 2, 3, 4 ), array_keys( $kept ), 'The last three: on the tie of 100, run 2 before run 1.' );
 		$rows = AB_MCP_Sync_Schema::backup_rows( 1000 );
 		self::assertSame( array( 1 => false, 2 => true, 3 => true, 4 => true ), $rows );
+	}
+
+	public function testTheRetentionReadsThePlanOfARunThatIsNotClosedOnlyAndKeepsWhatItKept(): void {
+		// GitHub Codex round 7 on free#137 (P2): backup_rows() read the plan of
+		// every run of the history of the site (up to MAX_PLAN each) at every
+		// clean-up and every group opened in the store, though only a run that
+		// is not closed needs its plan (rule 4: a way back that is not closed
+		// keeps the runs it takes back). The rows are read without the plan;
+		// the plan of each run that is not closed is read for it alone. What
+		// the retention keeps is the same.
+		$db              = new SyncRunRowsWpdb();
+		$GLOBALS['wpdb'] = $db;
+		update_option( AB_MCP_Sync_Schema::OPTION, (string) AB_MCP_Sync_Schema::VERSION );
+		AB_MCP_Sync_Schema::forget();
+		$now      = 1700000000;
+		$day      = 86400;
+		$big      = (string) json_encode( array( 'objects' => array_fill( 0, 200, str_repeat( 'x', 512 ) ) ) );
+		$db->rows = array(
+			array( 'run_id' => 1, 'type' => 'push', 'state' => 'closed_done', 'closed' => $now - 40 * $day, 'forward_closed_at' => $now - 40 * $day, 'keep_until' => $now - 40 * $day, 'plan' => $big ),
+			array( 'run_id' => 2, 'type' => 'push', 'state' => 'closed_aborted', 'closed' => $now - 8 * $day, 'forward_closed_at' => 0, 'keep_until' => $now - $day, 'plan' => $big ),
+			array( 'run_id' => 3, 'type' => 'revert', 'state' => 'closed_reverted', 'closed' => $now - 8 * $day, 'forward_closed_at' => 0, 'keep_until' => $now - $day, 'plan' => '{"reverts":[5]}' ),
+			array( 'run_id' => 4, 'type' => 'revert', 'state' => 'open', 'closed' => 0, 'forward_closed_at' => 0, 'keep_until' => 0, 'plan' => '{"reverts":[2]}' ),
+			array( 'run_id' => 5, 'type' => 'push', 'state' => 'closed_checked', 'closed' => $now - 9 * $day, 'forward_closed_at' => 0, 'keep_until' => $now - $day, 'plan' => $big ),
+		);
+		// The qualified close (1) among the last three, the run the open way
+		// back needs (2), the open way back (4); the closed way back (3) and
+		// the run its plan names (5) are past their periods.
+		self::assertSame( array( 1 => true, 2 => true, 3 => false, 4 => true, 5 => false ), AB_MCP_Sync_Schema::backup_rows( $now ) );
+		$plans = array_values( array_filter( $db->queries, static fn( string $q ): bool => false !== stripos( $q, 'plan' ) ) );
+		self::assertSame( array( 'SELECT plan FROM `' . AB_MCP_Sync_Schema::table( 'runs' ) . '` WHERE run_id = 4' ), $plans, 'The plan of the run that is not closed, alone; no plan of a closed run.' );
 	}
 
 	public function testTheErrorLogIsCountedFromItsMarkInChunksWithACapAndARotationIsSaidSo(): void {

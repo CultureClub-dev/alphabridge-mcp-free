@@ -415,6 +415,14 @@ final class AB_MCP_Sync_Schema {
 	 * has no row. Null when the table cannot be read, so the caller keeps
 	 * everything.
 	 *
+	 * The rows are read without their plan, which only a run that is not
+	 * closed needs (rule 4) and which holds up to AB_MCP_Sync_Run::MAX_PLAN
+	 * per run: the plan of each run that is not closed is read for it alone
+	 * (one at most in the normal case, open_one; GitHub Codex round 7 on
+	 * free#137, P2: before, every plan of the whole history of the site was
+	 * loaded, at every clean-up and every group opened in the store, and a
+	 * history that grew long enough ended them in an exhausted memory).
+	 *
 	 * @param int|null $now Time; now when null.
 	 * @return array<int,bool>|null
 	 */
@@ -425,7 +433,7 @@ final class AB_MCP_Sync_Schema {
 		}
 		$now = null === $now ? time() : (int) $now;
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table name is ours.
-		$rows = $wpdb->get_results( 'SELECT run_id, type, state, closed, forward_closed_at, keep_until, plan FROM `' . self::table( 'runs' ) . '` ORDER BY run_id', ARRAY_A );
+		$rows = $wpdb->get_results( 'SELECT run_id, type, state, closed, forward_closed_at, keep_until FROM `' . self::table( 'runs' ) . '` ORDER BY run_id', ARRAY_A );
 		if ( '' !== (string) $wpdb->last_error || ! is_array( $rows ) ) {
 			return null;
 		}
@@ -440,8 +448,15 @@ final class AB_MCP_Sync_Schema {
 			}
 			if ( ! in_array( (string) $row['state'], self::CLOSED, true ) ) {
 				$keep[ $id ] = true;
-				// The runs a way back that is not closed needs (rule 4).
-				$plan = is_string( $row['plan'] ) ? json_decode( $row['plan'], true, 16 ) : null;
+				// The runs a way back that is not closed needs (rule 4), from
+				// its plan, read for this run alone; a read that fails keeps
+				// everything (null), as a table that cannot be read.
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table name is ours.
+				$raw = $wpdb->get_var( $wpdb->prepare( 'SELECT plan FROM `' . self::table( 'runs' ) . '` WHERE run_id = %d', $id ) );
+				if ( '' !== (string) $wpdb->last_error ) {
+					return null;
+				}
+				$plan = is_string( $raw ) ? json_decode( $raw, true, 16 ) : null;
 				foreach ( is_array( $plan ) && isset( $plan['reverts'] ) && is_array( $plan['reverts'] ) ? $plan['reverts'] : array() as $needed ) {
 					$keep[ (int) $needed ] = true;
 				}

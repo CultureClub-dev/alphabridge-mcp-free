@@ -77,7 +77,8 @@
  * one place of still()), a step the call began its own, the close of the
  * way back not beside a step of it; one way (b) for every interrupted run,
  * of either type, with the ways that go named. GitHub Codex round 7: a
- * term_order other than 0 on the staging post locks it as well.
+ * term_order other than 0 on the staging post locks it as well; the
+ * retention reads the plan of a run that is not closed only.
  *
  * Written by tests/mutation/gen/lauf.py from the source; change the entries
  * there and run it again.
@@ -2186,5 +2187,23 @@ return array(
 		'replace' => "\t\t\tif ( false ) {",
 		'run'     => $it( 'SyncRunTest', 'testAStagingPostWhoseTermHasAnOrderIsLockedBeforeTheFirstWriteAndOneWithoutGoesOverAndBack' ),
 		'expect'  => '/testAStagingPostWhoseTermHasAnOrderIsLockedBeforeTheFirstWriteAndOneWithoutGoesOverAndBack/',
+	),
+	array(
+		'id'      => 'lauf/schema-plan-not-listed',
+		'clause'  => 'backup_rows(): the rows of the retention are read without their plan (P2)',
+		'file'    => $sc,
+		'search'  => "SELECT run_id, type, state, closed, forward_closed_at, keep_until FROM `",
+		'replace' => "SELECT run_id, type, state, closed, forward_closed_at, keep_until, plan FROM `",
+		'run'     => $unit( 'SyncRunTest', 'testTheRetentionReadsThePlanOfARunThatIsNotClosedOnlyAndKeepsWhatItKept' ),
+		'expect'  => '/testTheRetentionReadsThePlanOfARunThatIsNotClosedOnlyAndKeepsWhatItKept/',
+	),
+	array(
+		'id'      => 'lauf/schema-plan-per-run',
+		'clause'  => 'backup_rows(): the plan of a run that is not closed, read for it alone, keeps the runs its way back needs',
+		'file'    => $sc,
+		'search'  => "\t\t\t\t\$plan = is_string( \$raw ) ? json_decode( \$raw, true, 16 ) : null;",
+		'replace' => "\t\t\t\t\$plan = null;",
+		'run'     => $unit( 'SyncRunTest', 'testTheRetentionReadsThePlanOfARunThatIsNotClosedOnlyAndKeepsWhatItKept' ),
+		'expect'  => '/testTheRetentionReadsThePlanOfARunThatIsNotClosedOnlyAndKeepsWhatItKept/',
 	),
 );

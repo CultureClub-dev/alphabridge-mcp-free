@@ -980,6 +980,17 @@ Ablehnung entsteht, nennt sie den Weg.
   `true` bleibt, `false` geht, wie jung die Gruppe auch ist).
 - Kann die Tabelle der Läufe nicht gelesen werden, bleibt jede Laufsicherung
   (`backup_rows()` gibt `null`), nie umgekehrt.
+- `backup_rows()` liest die Felder der Aufbewahrung ohne die Spalte `plan`
+  und den Plan nur für jeden nicht geschlossenen Lauf einzeln (im Normalfall
+  höchstens einer, `open_one`; GitHub-Codex 7, P2): nur dort steht, welche
+  Läufe ein offener Rückweg braucht (Regel 4). Vorher lud jede Bereinigung
+  und jedes Öffnen einer Gruppe der Ablage (`AB_MCP_Protected_Store::sweep()`)
+  den Plan aller vergangenen Läufe (bis `MAX_PLAN` = 8 MiB je Lauf), und eine
+  lange Geschichte erschöpfte den Speicher. Die Auswahl bleibt gleich, auch
+  der Gleichstand nach `run_id`; scheitert das Lesen eines Plans, bleibt
+  jede Laufsicherung (`null`). Prüffall
+  `testTheRetentionReadsThePlanOfARunThatIsNotClosedOnlyAndKeepsWhatItKept`
+  (Unit, über die Abfragen der `$wpdb`-Attrappe).
 - Schliessen zwei qualifizierte Läufe in derselben Sekunde (`forward_closed_at`
   gleich), zählt der jüngere Lauf (höhere `run_id`) zuerst zu den letzten
   drei (GitHub-Codex 3, P2): vorher kamen die Zeilen nach `run_id`
