@@ -675,6 +675,13 @@ e('run-ways-back', 'interrupted_ways(): the ways of a run on its way back by its
 e('run-interrupted-revert-way', 'interrupted_ways(): the way for a run on its way back leads it on, not a way back planned anew (P1)', RU,
   "\t\t\t? 'wp_site_revert action=plan with this run_id leads it on (confirmed with its token): the interrupted step stays as it is (unclear, nothing of it is put back again), the steps of the way back still planned go back one by one (action=next), and no step is added'", "\t\t\t? 'wp_site_revert action=plan with this run_id begins its way back (confirmed with its token)'", 'it', LED)
 
+# ------------------------------- GitHub Codex round 7 on free#137 (two P2)
+# A relationship of the staging post with a term_order other than 0 locks
+# the post before the first write as one of the post here does.
+ORDER_STAGING = 'testAStagingPostWhoseTermHasAnOrderIsLockedBeforeTheFirstWriteAndOneWithoutGoesOverAndBack'
+e('writer-staging-term-order-lock', 'target_of(): a relationship of the staging post with a term_order other than 0 is locked before anything is written (P2)', PW,
+  "\t\t\tif ( isset( $term['term_order'] ) && 0 !== (int) $term['term_order'] ) {", "\t\t\tif ( false ) {", 'it', ORDER_STAGING)
+
 
 def test_of(expect):
     return expect.split(' with data set "', 1)[0]
@@ -799,7 +806,8 @@ out.append('''<?php
  * changes nothing), the run read and settled under it once (fresh(), the
  * one place of still()), a step the call began its own, the close of the
  * way back not beside a step of it; one way (b) for every interrupted run,
- * of either type, with the ways that go named.
+ * of either type, with the ways that go named. GitHub Codex round 7: a
+ * term_order other than 0 on the staging post locks it as well.
  *
  * Written by tests/mutation/gen/lauf.py from the source; change the entries
  * there and run it again.

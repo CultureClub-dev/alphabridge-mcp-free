@@ -1085,6 +1085,57 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( array( 'news' ), $slugs() );
 	}
 
+	public function testAStagingPostWhoseTermHasAnOrderIsLockedBeforeTheFirstWriteAndOneWithoutGoesOverAndBack(): void {
+		// GitHub Codex round 7 on free#137 (P2): a relationship of the staging
+		// post with a term_order other than 0 is part of its canonical form
+		// and of the target, but target_of() dropped the order and precheck()
+		// asked the relationships of the post here only; the step wrote the
+		// post and its terms with the order 0, the object as a whole did not
+		// hash to its target, deviated, and its way back was gone. Such a post
+		// is locked before the first write as well (post:term_order, the side,
+		// the term and the order named; nothing written); a staging post with
+		// the order 0 goes over and back as before.
+		self::pair();
+		$news_a  = wp_insert_term( 'News', 'category' );
+		$other_a = wp_insert_term( 'Other', 'category' );
+		self::assertIsArray( $news_a, is_wp_error( $news_a ) ? $news_a->get_error_message() : '' );
+		self::assertIsArray( $other_a, is_wp_error( $other_a ) ? $other_a->get_error_message() : '' );
+		$news_b  = (int) self::b( array( array( 'op' => 'insert_term', 'name' => 'News', 'taxonomy' => 'category', 'as' => 'term' ) ) )['term'];
+		$other_b = (int) self::b( array( array( 'op' => 'insert_term', 'name' => 'Other', 'taxonomy' => 'category', 'as' => 'term' ) ) )['term'];
+		$story_a = wp_insert_post( wp_slash( self::page( 'story', 'A story.', array( 'post_type' => 'post', 'post_category' => array( (int) $news_a['term_id'] ) ) ) ), true );
+		self::assertIsInt( $story_a );
+		$story_b = (int) self::b( array( array( 'op' => 'insert_post', 'args' => self::page( 'story', 'A story.', array( 'post_type' => 'post', 'post_category' => array( $news_b ) ) ), 'as' => 'post' ) ) )['post'];
+		self::paired( self::staged() );
+		// On staging the post is changed and gets the category Other, which a
+		// sorting plugin gives the order 7 there; the post here keeps 0.
+		self::change_on_b( (string) $story_b, 'story', 'A story, on staging.', array( 'post_type' => 'post', 'post_category' => array( $other_b ) ) );
+		self::assertSame( 1, self::b( array( array( 'op' => 'term_order', 'post' => $story_b, 'term' => $other_b, 'taxonomy' => 'category', 'order' => 7, 'as' => 'set' ) ) )['set'] );
+		$slugs   = static fn(): array => array_values( array_map( static fn( $t ) => $t->slug, wp_get_object_terms( $story_a, 'category' ) ) );
+		$orders  = static fn(): array => array_column( AB_MCP_IT_Sites::rows( 'a', 'term_relationships', array( 'object_id' => (string) $story_a ) ), 'term_order' );
+		$planned = self::planned( array( 'story' ) );
+		$run     = self::begun( $planned['args'] );
+		$check   = self::finish( (int) $run['run_id'] );
+		self::assertSame( 'closed_aborted', $check['state'], json_encode( $check ) );
+		$finding = json_encode( self::step( $check, 1 )['result']['findings'] );
+		self::assertStringContainsString( 'post:term_order', $finding );
+		self::assertStringContainsString( 'The term other of category on the post of the staging site carries the term_order 7', $finding );
+		self::assertSame( 'A story.', self::row_a( $story_a )['post_content'], 'Nothing written.' );
+		self::assertSame( array( 'news' ), $slugs() );
+		self::assertSame( array( '0' ), $orders() );
+		// With the order 0 on staging the post goes over and back as before.
+		self::b( array( array( 'op' => 'term_order', 'post' => $story_b, 'term' => $other_b, 'taxonomy' => 'category', 'order' => 0 ) ) );
+		$planned = self::planned( array( 'story' ) );
+		$run     = self::begun( $planned['args'] );
+		self::probe_ok();
+		self::assertSame( 'closed_done', self::finish( (int) $run['run_id'] )['state'] );
+		self::assertSame( 'A story, on staging.', self::row_a( $story_a )['post_content'] );
+		self::assertSame( array( 'other' ), $slugs() );
+		$begun = self::revert( (int) $run['run_id'] );
+		self::assertSame( 'closed_reverted', self::revert_all( (int) $begun['run_id'] )['state'] );
+		self::assertSame( array( 'news' ), $slugs() );
+		self::assertSame( 'A story.', self::row_a( $story_a )['post_content'] );
+	}
+
 	public function testTheCachesOfPhaseSevenAreEmptiedInPartsWithinTheWorkOfEachCallEachObjectOnce(): void {
 		// GitHub Codex round 5 on free#137 (P2): phase 7 emptied the caches of
 		// every written object in one call, without a budget and without a

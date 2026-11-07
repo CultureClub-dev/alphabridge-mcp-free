@@ -324,7 +324,7 @@ final class AB_MCP_Sync_Kinds {
 		),
 		'post:term_order'              => array(
 			'stage'  => 'Z9',
-			'reason' => 'A relationship with a term_order other than 0 (a plugin that sorts the terms) waits for the engine of the terms: wp_set_object_terms() makes every relationship anew with the order 0, so the way back could not give the order back.',
+			'reason' => 'A relationship with a term_order other than 0 (a plugin that sorts the terms), on the staging post or on the post of this site, waits for the engine of the terms: wp_set_object_terms() makes every relationship anew with the order 0, so a step could not write the order of the staging site, and the way back could not give the order of this site back.',
 		),
 		'post:slug_collision'          => array(
 			'stage'  => 'Z9',

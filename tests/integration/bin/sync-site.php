@@ -26,7 +26,7 @@
  * (post, for good), trash_post (post), add_term_meta (term, key, value), push (args of wp_site_push,
  * exit_at: a hook at which the process exits inside a boundary, exit_key: only for this meta key), revert (args of
  * wp_site_revert, exit_at and exit_key as for push), raw_post (post, set: columns written
- * by SQL) and wp_version (version: the
+ * by SQL), term_order (post, term, taxonomy, order: the order of that relationship by SQL) and wp_version (version: the
  * $wp_version the steps after it see), and write_access (the site mode
  * Full, as a person switches it on), staging_raw and staging_raw_set
  * (value: the record of role and pair as stored, past save()); for what the
@@ -236,6 +236,13 @@ foreach ( $ab_it_steps as $ab_it_i => $ab_it_step ) {
 			}
 			$_SERVER['DOCUMENT_ROOT'] = AB_MCP_IT_Sites::docroot( $ab_it_key );
 			$ab_it_out                = 'revert' === $ab_it_step['op'] ? AB_MCP_Sync_Revert::call( $ab_it_step['args'] ) : AB_MCP_Sync_Push::call( $ab_it_step['args'] );
+			break;
+		case 'term_order':
+			// The order of a relationship as a plugin that sorts the terms
+			// writes it, past every hook (GitHub Codex round 7 on free#137).
+			$ab_it_tt  = get_term( (int) $ab_it_step['term'], (string) $ab_it_step['taxonomy'] );
+			$ab_it_out = $ab_it_tt instanceof WP_Term ? $GLOBALS['wpdb']->update( $GLOBALS['wpdb']->term_relationships, array( 'term_order' => (int) $ab_it_step['order'] ), array( 'object_id' => (int) $ab_it_step['post'], 'term_taxonomy_id' => (int) $ab_it_tt->term_taxonomy_id ) ) : false;
+			clean_object_term_cache( (int) $ab_it_step['post'], 'post' );
 			break;
 		case 'raw_post':
 			// Columns of a post written past every hook (the way a plugin

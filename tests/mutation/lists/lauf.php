@@ -76,7 +76,8 @@
  * changes nothing), the run read and settled under it once (fresh(), the
  * one place of still()), a step the call began its own, the close of the
  * way back not beside a step of it; one way (b) for every interrupted run,
- * of either type, with the ways that go named.
+ * of either type, with the ways that go named. GitHub Codex round 7: a
+ * term_order other than 0 on the staging post locks it as well.
  *
  * Written by tests/mutation/gen/lauf.py from the source; change the entries
  * there and run it again.
@@ -2176,5 +2177,14 @@ return array(
 		'replace' => "\t\t\t? 'wp_site_revert action=plan with this run_id begins its way back (confirmed with its token)'",
 		'run'     => $it( 'SyncRunTest', 'testAnInterruptedRunOfTheWayBackIsLedOnWithTheTokenOrClosedAsCheckedAndFreesTheSite' ),
 		'expect'  => '/testAnInterruptedRunOfTheWayBackIsLedOnWithTheTokenOrClosedAsCheckedAndFreesTheSite/',
+	),
+	array(
+		'id'      => 'lauf/writer-staging-term-order-lock',
+		'clause'  => 'target_of(): a relationship of the staging post with a term_order other than 0 is locked before anything is written (P2)',
+		'file'    => $pw,
+		'search'  => "\t\t\tif ( isset( \$term['term_order'] ) && 0 !== (int) \$term['term_order'] ) {",
+		'replace' => "\t\t\tif ( false ) {",
+		'run'     => $it( 'SyncRunTest', 'testAStagingPostWhoseTermHasAnOrderIsLockedBeforeTheFirstWriteAndOneWithoutGoesOverAndBack' ),
+		'expect'  => '/testAStagingPostWhoseTermHasAnOrderIsLockedBeforeTheFirstWriteAndOneWithoutGoesOverAndBack/',
 	),
 );

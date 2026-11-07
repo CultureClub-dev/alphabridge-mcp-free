@@ -475,6 +475,18 @@ Ablehnung entsteht, nennt sie den Weg.
   leert jede), ist vor jeder Mutation gesperrt (`post:term_order`, Z9, Grund
   mit Term und Reihenfolge; Prüffall
   `testAPostWhoseTermHasAnOrderIsLockedBeforeTheFirstWriteAndOneWithoutGoesOverAndBack`).
+  Ebenso ein Staging-Post, dessen Sollwert eine Zuordnung mit `term_order`
+  ungleich 0 trägt (GitHub-Codex 7, P2): `target_of()` sperrt ihn vor jeder
+  Mutation mit derselben Sperre, der Grund nennt die Seite («on the post of
+  the staging site» bzw. «of this site»), den Term und die Reihenfolge.
+  Vorher warf `target_of()` die Reihenfolge weg, `precheck()` prüfte nur die
+  Live-Zuordnungen, der Schritt schrieb, und das Objekt wich danach über den
+  Soll-Hash ab (unklar, ohne Rückweg; Prüffall
+  `testAStagingPostWhoseTermHasAnOrderIsLockedBeforeTheFirstWriteAndOneWithoutGoesOverAndBack`:
+  Staging 7, live 0 → `closed_aborted`, nichts geschrieben; mit 0 hin und
+  zurück wie bisher). Jede Staging-Zuordnung liegt in einer Taxonomie, die
+  der Schritt berührt: eine andere Taxonomie sperrt schon
+  `post:taxonomy_rule`.
   Mit Reihenfolge 0, wie der Kern sie schreibt, ändert sich nichts: der
   Vorwärtsschritt legt neue Zuordnungen mit 0 an und berührt bestehende
   nicht (`wp_set_object_terms()` löscht nur entfernte und fügt nur neue ein;
@@ -1067,7 +1079,7 @@ Ablehnung entsteht, nennt sie den Weg.
   der alte Wert (`before_value()`: Zeile, langer Text mit Revision, Meta,
   Terme, synthetische Geheimnisse, kein UTF-8, Kürzung je Wert und je Teil)
   und die Kappung je Antwort (`cap_values()`).
-  Integration (`tests/integration/SyncRunTest.php`, dreiundsechzig Fälle): Ende zu Ende mit
+  Integration (`tests/integration/SyncRunTest.php`, vierundsechzig Fälle): Ende zu Ende mit
   Rückweg und `step` auf eine spätere Phase (Merkmal der Sperre beim
   Anlegen), ein Bericht in zwei Läufen geplant, Abweichung in der
   Gesamtvorprüfung, Unterbrechung in eigenem Prozess (die Zeile bleibt mit

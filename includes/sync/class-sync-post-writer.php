@@ -244,6 +244,17 @@ final class AB_MCP_Sync_Post_Writer {
 			if ( ! in_array( $taxonomy, self::TAXONOMIES, true ) ) {
 				return self::locked( 'post:taxonomy_rule', sprintf( 'taxonomy %s', $taxonomy ) );
 			}
+			// A relationship of the staging post with a term_order other than
+			// 0: the target carries the order (its canonical form, the hash
+			// of its terms), wp_set_object_terms() writes every relationship
+			// with 0, so the object would deviate after its parts were
+			// written. Locked before anything is written, as a relationship
+			// of the post here (precheck(); GitHub Codex round 7 on free#137,
+			// P2: before, the order was dropped here, the step wrote and the
+			// object deviated by its hash).
+			if ( isset( $term['term_order'] ) && 0 !== (int) $term['term_order'] ) {
+				return self::locked( 'post:term_order', sprintf( 'the term %1$s of %2$s on the post of the staging site carries the term_order %3$d', self::bytes( $term['slug'] ), $taxonomy, (int) $term['term_order'] ) );
+			}
 			if ( 'post_format' === $taxonomy ) {
 				$terms[ $taxonomy ][] = self::bytes( $term['slug'] );
 				continue;
