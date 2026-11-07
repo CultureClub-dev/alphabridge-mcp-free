@@ -877,6 +877,12 @@ final class AB_MCP_Sync_Engine {
 	 * the meta keys, the taxonomies. A part that deviates is put back where
 	 * its way is refusable and its bytes are still the written ones.
 	 *
+	 * What the core writes with the row (wp_insert_post(): _wp_page_template
+	 * through page_template, the default category of a new post) is a part
+	 * written at that moment: read back right after the row, kept in the
+	 * journal as written (or read, where it is its target), and put back
+	 * with the row where the step turns (Codex round 2 of branch 8, N2).
+	 *
 	 * @param int        $run_id   Run.
 	 * @param int        $seq      Step.
 	 * @param array      $journal  Journal (parts planned).
@@ -903,14 +909,39 @@ final class AB_MCP_Sync_Engine {
 				$journal['object']['live_ref'] = (string) $live_id;
 				$now                           = AB_MCP_Sync_Post_Writer::current( $live_id );
 				$after                         = is_array( $now ) ? AB_MCP_Sync_Post_Writer::row_hash( $now['row'] ) : null;
+				// The parts the core wrote with the row (N2): every other part
+				// whose hash is no longer the one before was written now; it is
+				// read back here and stands in the journal as written, or read
+				// where it is its target already, so that a turn of the step
+				// takes it back with the row and an interruption shows it.
+				if ( is_array( $now ) ) {
+					foreach ( $journal['parts'] as $k => $other ) {
+						if ( $k === $i || 'planned' !== $other['state'] ) {
+							continue;
+						}
+						$hash = AB_MCP_Sync_Post_Writer::part_hash( $now, (string) $other['part'] );
+						$was  = null !== $other['before'] ? (string) $other['before'] : AB_MCP_Sync_Post_Writer::part_hash( null, (string) $other['part'] );
+						if ( null === $hash || hash_equals( (string) $was, $hash ) ) {
+							continue;
+						}
+						$journal['parts'][ $k ]['state'] = hash_equals( (string) $other['target'], $hash ) ? 'read' : 'written';
+						$journal['parts'][ $k ]['after'] = $hash;
+						$journal['parts'][ $k ]['note']  = 'Written with the row by the core (wp_insert_post()).';
+					}
+				}
 			} elseif ( 0 === strpos( $name, 'meta:' ) ) {
 				$key    = substr( $name, 5 );
 				$values = isset( $prepared['meta'][ $key ] ) ? $prepared['meta'][ $key ] : array();
 				$have   = is_array( $current ) ? AB_MCP_Sync_Post_Writer::meta_values( $current, $key ) : array();
 				// A core key with an API of its own (_wp_page_template) was
-				// written with the row, through page_template (decision 17, B7);
-				// here it is read back only. Its removal goes through the meta API.
-				$done = array() !== $values && in_array( $key, AB_MCP_Sync_Post_Writer::CORE_META, true ) ? true : AB_MCP_Sync_Post_Writer::write_meta( $live_id, $key, $values, $have );
+				// written with the row, through page_template (decision 17, B7),
+				// and read back then (N2); here it is read back once more. Its
+				// removal goes through the meta API.
+				$core = array() !== $values && in_array( $key, AB_MCP_Sync_Post_Writer::CORE_META, true );
+				if ( ! $core ) {
+					unset( $journal['parts'][ $i ]['note'] );
+				}
+				$done = $core ? true : AB_MCP_Sync_Post_Writer::write_meta( $live_id, $key, $values, $have );
 				if ( is_wp_error( $done ) ) {
 					$journal['parts'][ $i ]['state'] = 'failed';
 					$journal['parts'][ $i ]['note']  = $done->get_error_message();
@@ -922,7 +953,8 @@ final class AB_MCP_Sync_Engine {
 			} else {
 				$taxonomy = substr( $name, 6 );
 				$terms    = isset( $prepared['terms'][ $taxonomy ] ) ? $prepared['terms'][ $taxonomy ] : array();
-				$done     = AB_MCP_Sync_Post_Writer::write_terms( $live_id, $taxonomy, $terms );
+				unset( $journal['parts'][ $i ]['note'] );
+				$done = AB_MCP_Sync_Post_Writer::write_terms( $live_id, $taxonomy, $terms );
 				if ( is_wp_error( $done ) ) {
 					$journal['parts'][ $i ]['state'] = 'failed';
 					$journal['parts'][ $i ]['note']  = $done->get_error_message();
@@ -947,13 +979,14 @@ final class AB_MCP_Sync_Engine {
 				// Not refusable, or a new object: unclear.
 				return self::outcome( 'unclear', sprintf( 'The part %s was written but reads back other than its target; it is on a way the lock does not refuse (or the object is new), so it stays and the object is unclear.', $name ), $journal, $live_id );
 			}
-			// The deviating part goes back, and with it the parts written as
-			// their target before it (each read back under this lock: the
-			// step's own, B8), in reverse order; the step is restored only
-			// where every part is back, else unclear and each part says.
+			// The deviating part goes back, and with it every part the step
+			// wrote: those written as their target before it (B8) and those
+			// the core wrote with the row (N2), each read back under this lock
+			// (the step's own), the last written first; the step is restored
+			// only where every part is back, else unclear and each part says.
 			$all_back = true;
-			for ( $j = $i; $j >= 0; $j-- ) {
-				if ( $j < $i && 'read' !== $journal['parts'][ $j ]['state'] ) {
+			for ( $j = count( $journal['parts'] ) - 1; $j >= 0; $j-- ) {
+				if ( $j !== $i && ! in_array( $journal['parts'][ $j ]['state'], array( 'read', 'written' ), true ) ) {
 					continue;
 				}
 				$put                             = self::restore_part( $run_id, $journal, $j, $live_id, $current );
@@ -967,7 +1000,7 @@ final class AB_MCP_Sync_Engine {
 				$save( $journal );
 				AB_MCP_Change_Lock::touch();
 			}
-			return self::outcome( $all_back ? 'restored' : 'unclear', sprintf( 'The part %1$s was written but read back other than its target (a filter of this site changed it); %2$s', $name, $all_back ? 'it and the parts written before it were put back byte for byte: nothing of the object changed.' : 'a part could not be put back (see the parts of the journal), so the object is unclear.' ), $journal, $live_id );
+			return self::outcome( $all_back ? 'restored' : 'unclear', sprintf( 'The part %1$s was written but read back other than its target (a filter of this site changed it); %2$s', $name, $all_back ? 'it and every part written before it or with the row were put back byte for byte: nothing of the object changed.' : 'a part could not be put back (see the parts of the journal), so the object is unclear.' ), $journal, $live_id );
 		}
 		return self::outcome( 'done', '', $journal, $live_id );
 	}

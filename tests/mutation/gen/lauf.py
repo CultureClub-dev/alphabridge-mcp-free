@@ -251,10 +251,16 @@ e('engine-findings-kept', 'run_check(): the findings of a call are kept with the
 e('engine-pending', 'run_check(): an object the run creates is pending for the check of the others (B1)', EN,
   "\t\t\t\t$ctx['pending']['post'][ (int) $one['staging_ref'] ] = true;", '', 'it', 'testANewParentPageAndItsNewChildPageAreWrittenInOneRun')
 e('engine-template-with-row', 'write_parts(): the template was written with the row, the meta part is read back only (B7)', EN,
-  "\t\t\t\t$done = array() !== $values && in_array( $key, AB_MCP_Sync_Post_Writer::CORE_META, true ) ? true : AB_MCP_Sync_Post_Writer::write_meta( $live_id, $key, $values, $have );",
+  "\t\t\t\t$done = $core ? true : AB_MCP_Sync_Post_Writer::write_meta( $live_id, $key, $values, $have );",
   "\t\t\t\t$done = AB_MCP_Sync_Post_Writer::write_meta( $live_id, $key, $values, $have );", 'it', 'testThePageTemplateGoesThroughTheCoreWayAndTheThemeHasToOfferIt')
 e('engine-rollback-earlier', 'write_parts(): the parts written before a deviating one go back with it (B8)', EN,
-  "\t\t\tfor ( $j = $i; $j >= 0; $j-- ) {", "\t\t\tfor ( $j = $i; $j >= $i; $j-- ) {", 'it', 'testADeviatingMetaPartTakesTheRowBackWithItAndTheStepSaysSo')
+  "\t\t\tfor ( $j = count( $journal['parts'] ) - 1; $j >= 0; $j-- ) {", "\t\t\tfor ( $j = $i; $j >= $i; $j-- ) {", 'it', 'testADeviatingMetaPartTakesTheRowBackWithItAndTheStepSaysSo')
+WITH_ROW = 'testATemplateWrittenWithTheRowGoesBackWithTheRow'
+e('engine-with-row', 'write_parts(): what the core wrote with the row is read back then and stands in the journal as written (N2)', EN,
+  "\t\t\t\tif ( is_array( $now ) ) {\n\t\t\t\t\tforeach ( $journal['parts'] as $k => $other ) {", "\t\t\t\tif ( false ) {\n\t\t\t\t\tforeach ( $journal['parts'] as $k => $other ) {", 'it', WITH_ROW)
+e('engine-rollback-written', 'write_parts(): a part written with the row goes back with the row, wherever it stands in the journal (N2)', EN,
+  "\t\t\t\tif ( $j !== $i && ! in_array( $journal['parts'][ $j ]['state'], array( 'read', 'written' ), true ) ) {",
+  "\t\t\t\tif ( $j !== $i && ( $j > $i || ! in_array( $journal['parts'][ $j ]['state'], array( 'read', 'written' ), true ) ) ) {", 'it', WITH_ROW)
 e('engine-deviating-terms-left', 'restore_part(): a deviating part on a way the lock does not refuse is never put back (A2)', EN,
   "\t\tif ( null !== $part['after'] && ! hash_equals( (string) $part['target'], (string) $part['after'] ) && AB_MCP_Sync_Post_Writer::WAY_TERMS === $part['way'] ) {", "\t\tif ( false ) {", 'it', 'testADeviatingTermPartIsNeverTakenBack')
 e('engine-sample-expected', 'sample_finding(): the title of the written object has to be in the body (decision 33; B4)', EN,

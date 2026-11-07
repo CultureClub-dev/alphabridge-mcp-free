@@ -110,7 +110,11 @@ Ablehnung entsteht, nennt sie den Weg.
   Rechtekontext des Kontos (kses ohne `unfiltered_html`). Ein Filter, den
   erst `wp_insert_post_data` anwendet, fällt beim Rücklesen auf: Teil
   «geschrieben, abweichend», Zeile bytegenau zurück (`restored`), Schritt
-  `restored`; bei einem neuen Objekt bleibt es als Rest (`residual`).
+  `restored`; bei einem neuen Objekt bleibt es als Rest (`residual`). Greift
+  derselbe Filter auch beim Zurückschreiben der Zeile (`wp_update_post()`
+  mit der Sicherung, Entscheid 23), liest sie sich nicht als Sicherung
+  zurück: der Teil heisst `unclear` mit Vermerk, das Paar wird *ungeklärt*;
+  der Filter ist in wp-admin abzuschalten und der Rückweg neu zu planen.
 - Ein Meta-Wert, der serialisiert, aber kein Array ist (`b:1;`, `i:5;`), lässt
   sich über die Metadaten-API nicht byteidentisch ablegen
   (`maybe_serialize()` serialisiert ihn ein zweites Mal); solche Werte sperrt
@@ -126,8 +130,17 @@ Ablehnung entsteht, nennt sie den Weg.
 - `_wp_page_template` geht über `page_template` von `wp_insert_post()`
   (Entscheide 17 und 28): die Vorprüfung verlangt, dass das Live-Theme die
   Vorlage für den Typ anbietet (`WP_Theme::get_page_templates()`), sonst
-  Sperre `post:page_template` (WordPress speicherte `default`); der Meta-Teil
-  wird nur zurückgelesen, Entfernen läuft über `delete_metadata()` (B7).
+  Sperre `post:page_template` (WordPress speicherte `default`); der Weg:
+  die Vorlage im Live-Theme ergänzen, oder die Seite von Hand übernehmen und
+  aus dem Plan lassen (B7). Entfernen läuft über `delete_metadata()`.
+- Was der Kern mit der Zeile schreibt (`_wp_page_template` über
+  `page_template`; die Vorgabe-Kategorie eines neuen Beitrags), gilt ab dem
+  Zeilenschreiben als geschrieben: die Grenze liest jeden anderen Teil
+  unmittelbar nach der Zeile zurück, führt einen veränderten im Journal als
+  `read` (gleich dem Soll) oder `written` mit dem Vermerk «mit der Zeile
+  geschrieben», und nimmt ihn beim Rückbau der Zeile mit zurück
+  (`AB_MCP_Sync_Post_Writer::part_hash()`; Codex-Runde 2, N2). Vorher blieb
+  der Vorlagenteil `planned`, während der Schritt `restored` meldete.
 - Verweise auf Objekte, die derselbe Lauf vorher anlegt (Elternteil, Verweis
   im Inhalt), gelten in der Gesamtvorprüfung als ausstehend (`pending`), nicht
   als fehlend; der Schreibschritt mappt sie über das Paar, das der Schritt
@@ -170,10 +183,12 @@ Ablehnung entsteht, nennt sie den Weg.
   abweisbaren Weg (Terme) geht nie zurück, auch wenn der heutige Hash dem
   Ist-Hash gleicht: was zurückgelesen wurde, ist nicht nachweislich eigen.
   Er heisst `left`, das Paar wird `unclear` (Entscheide 17, 23; A2).
-- Weicht ein späterer Teil innerhalb der Grenze ab, gehen die davor als Soll
-  geschriebenen Teile (unter derselben Sperre zurückgelesen, nachweislich
-  eigen) mit zurück; der Schritt heisst nur `restored`, wenn jeder Teil zurück
-  ist, sonst `unclear` mit dem Zustand je Teil im Journal (B8).
+- Weicht ein Teil innerhalb der Grenze ab, gehen alle vom Schritt
+  geschriebenen Teile mit zurück: die davor als Soll geschriebenen (B8) und
+  die, die der Kern mit der Zeile schrieb (N2), jeder unter derselben Sperre
+  zurückgelesen, nachweislich eigen, der zuletzt geschriebene zuerst; der
+  Schritt heisst nur `restored`, wenn jeder Teil zurück ist, sonst `unclear`
+  mit dem Zustand je Teil im Journal.
 - In den Rückweg gehen nur Schritte mit Journal und Sicherung (ohne Sicherung
   keine Mutation, Entscheid 17); ein Schritt, der vor seiner Sicherung
   scheiterte (Ziel seit dem Plan geändert), ist weder Rest noch neu angelegt.

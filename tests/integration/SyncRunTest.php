@@ -1057,6 +1057,53 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( 'proposal', $pair['base_origin'], 'The pair keeps its bases of before.' );
 	}
 
+	public function testATemplateWrittenWithTheRowGoesBackWithTheRow(): void {
+		// The core stores _wp_page_template inside wp_insert_post(), with the
+		// row (page_template, B7). A filter of this site that only
+		// wp_insert_post_data applies changes the title as the row is written:
+		// the row reads back other than its target and goes back, and so does
+		// the template the core wrote with it; the step says restored only
+		// because nothing of the object changed (Codex round 2, N2).
+		self::pair();
+		$a = self::pages_on_a( array( 'contact' => 'Write to us.' ) );
+		$b = self::pages_on_b( array( 'contact' => 'Write to us.' ) );
+		self::paired( self::staged() );
+		$templates = wp_get_theme()->get_page_templates( null, 'page' );
+		self::assertNotEmpty( $templates, 'The theme of the test site offers a template for pages: ' . get_stylesheet() );
+		$template = (string) array_key_first( $templates );
+		self::change_on_b( $b['contact'], 'contact', 'Write to us on staging.', array( 'meta_input' => array( '_wp_page_template' => $template ) ) );
+		$planned = self::planned( array( 'contact' ) );
+		$run     = self::begun( $planned['args'] );
+		$before  = self::row_a( (int) $a['contact'] );
+		self::assertSame( array(), self::meta_a( (int) $a['contact'], '_wp_page_template' ), 'No template here before.' );
+		self::assertSame( 'done', self::next( (int) $run['run_id'] )['step']['state'] );
+		// The filter hits the one write of the step and takes itself out, as a
+		// filter of a plugin that reacts to a saved post once; the way back of
+		// the row (wp_update_post() with the backup) meets no filter then.
+		$once = static function ( array $data ) use ( &$once ): array {
+			remove_filter( 'wp_insert_post_data', $once );
+			$data['post_title'] = 'Changed by a filter';
+			return $data;
+		};
+		add_filter( 'wp_insert_post_data', $once );
+		$write = self::next( (int) $run['run_id'] );
+		remove_all_filters( 'wp_insert_post_data' );
+		self::assertIsArray( $write, is_wp_error( $write ) ? $write->get_error_message() : '' );
+		self::assertSame( 'restored', $write['step']['state'], json_encode( $write['step'] ) );
+		$parts = array_column( $write['step']['parts']['parts'], 'state', 'part' );
+		self::assertSame( array( 'row', 'meta:_wp_page_template' ), array_keys( $parts ) );
+		self::assertSame( 'restored', $parts['row'] );
+		self::assertSame( 'restored', $parts['meta:_wp_page_template'], 'Written with the row by the core, back with the row.' );
+		$notes = array_column( $write['step']['parts']['parts'], 'note', 'part' );
+		self::assertStringContainsString( 'Written with the row', (string) ( $notes['meta:_wp_page_template'] ?? '' ), 'The journal says the core wrote it with the row.' );
+		self::assertSame( $before, self::row_a( (int) $a['contact'] ), 'Nothing of the object changed.' );
+		self::assertSame( array(), self::meta_a( (int) $a['contact'], '_wp_page_template' ), 'The template is as before: none.' );
+		self::assertStringContainsString( 'nothing of the object changed', $write['step']['result']['message'] );
+		$pair = AB_MCP_Sync_Pairs::find_live( AB_MCP_Sync_Anchor::active()['source_id'], 'post', (string) $a['contact'] );
+		self::assertSame( 'active', $pair['state'] );
+		self::assertSame( 'proposal', $pair['base_origin'], 'The pair keeps its bases of before.' );
+	}
+
 	public function testAStepThatFailedBeforeItsBackupIsNoRestOnTheWayBack(): void {
 		// The target changes between the check and the write step: the step
 		// fails before its backup and mutation. The way back has nothing to

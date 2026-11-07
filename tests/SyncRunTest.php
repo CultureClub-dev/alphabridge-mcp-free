@@ -865,6 +865,15 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( AB_MCP_Sync_Post_Writer::terms_hash( array( 3 ) ), $hashes['terms:category'] );
 		self::assertSame( AB_MCP_Sync_Post_Writer::terms_hash( array() ), $hashes['terms:post_tag'] );
 		self::assertSame( array( 'row' => null, 'meta:note' => null ), AB_MCP_Sync_Post_Writer::hashes( null, array( 'note' ), array() ), 'No post: no hash.' );
+		// One part by its name, as the engine asks it after the row was
+		// written for what the core wrote with the row (N2): for no post, the
+		// hash of nothing there, so that a part the write made compares.
+		self::assertSame( $hashes['row'], AB_MCP_Sync_Post_Writer::part_hash( $current, 'row' ) );
+		self::assertSame( $hashes['meta:note'], AB_MCP_Sync_Post_Writer::part_hash( $current, 'meta:note' ) );
+		self::assertSame( $hashes['terms:category'], AB_MCP_Sync_Post_Writer::part_hash( $current, 'terms:category' ) );
+		self::assertNull( AB_MCP_Sync_Post_Writer::part_hash( null, 'row' ) );
+		self::assertSame( AB_MCP_Sync_Post_Writer::meta_hash( array() ), AB_MCP_Sync_Post_Writer::part_hash( null, 'meta:_wp_page_template' ), 'No post: no rows of the key.' );
+		self::assertSame( AB_MCP_Sync_Post_Writer::terms_hash( array() ), AB_MCP_Sync_Post_Writer::part_hash( null, 'terms:category' ) );
 		self::assertSame( array( 'a', 'b' ), AB_MCP_Sync_Post_Writer::meta_values( $current, 'note' ) );
 		self::assertSame( array( 3 ), AB_MCP_Sync_Post_Writer::term_keys( $current, 'category' ) );
 		self::assertSame( 'x', AB_MCP_Sync_Post_Writer::bytes( 'x' ) );

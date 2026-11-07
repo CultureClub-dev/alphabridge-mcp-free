@@ -482,6 +482,33 @@ final class AB_MCP_Sync_Post_Writer {
 	}
 
 	/**
+	 * The hash of one named part of a post as it is now: row, meta:<key> or
+	 * terms:<taxonomy>, as hashes() names them; for no post, the hash of
+	 * nothing there (an empty row set) where $current is null, so that what
+	 * a write made of a part that was not there compares (the engine asks it
+	 * after the row was written, Codex round 2 of branch 8, N2).
+	 *
+	 * @param array|null $current current(), null for no post.
+	 * @param string     $part    The name of the part.
+	 * @return string|null Null for the row of no post.
+	 */
+	public static function part_hash( $current, $part ) {
+		$part    = (string) $part;
+		$current = is_array( $current ) ? $current : array(
+			'row'   => array(),
+			'meta'  => array(),
+			'terms' => array(),
+		);
+		if ( 'row' === $part ) {
+			return array() === $current['row'] ? null : self::row_hash( $current['row'] );
+		}
+		if ( 0 === strpos( $part, 'meta:' ) ) {
+			return self::meta_hash( self::meta_values( $current, substr( $part, 5 ) ) );
+		}
+		return self::terms_hash( self::term_keys( $current, substr( $part, 6 ) ) );
+	}
+
+	/**
 	 * @param array $columns The written columns of a row.
 	 * @return string
 	 */
