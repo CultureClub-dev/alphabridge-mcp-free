@@ -14,10 +14,14 @@ Ablehnung entsteht, nennt sie den Weg.
   beginnt, liest einen Teil, den dieser Request noch verändert. Grund: ein
   abgelaufener Herzschlag beweist kein Ende des Requests (Befund R2-5).
   Darum erscheint der Zustand beim Rückweg und beim Schliessen «als geprüft»
-  frisch gelesen, und der Rückweg nimmt nur Teile zurück, deren heutiger Hash
-  dem Ist-Hash des Journals (oder, ohne Rücklesen, dem Soll-Hash) gleicht;
-  alles andere bleibt stehen und ist benannt (Prüffall
-  `testARequestThatExitsInABoundaryLeavesTheRunInterruptedAndTheWayBackLeadsTheSameRun`).
+  frisch gelesen, und der Rückweg nimmt nur Teile zurück, die der Schritt
+  nach seinem eigenen Aufruf zurückgelesen hat (`own`, `own_after`) und deren
+  heutiger Hash `own_after` gleicht; ein Teil ohne Rücklesen (der Request
+  endete im Aufruf) bleibt `left` mit altem Wert, auch wenn er den Sollwert
+  hält: ein Hash gleich dem Soll beweist kein Eigentum (Entscheid 18 (b);
+  Entscheid A vom 07.11.2026, unten; Prüffälle
+  `testARequestThatExitsInABoundaryLeavesTheRunInterruptedAndTheWayBackLeadsTheSameRun`,
+  `testARequestThatEndsInsideAMetaCallLeavesThePartForTheWayBackOfTheSameRun`).
 - Ob die Sperre gehalten wird, liest `AB_MCP_Sync_Run::lock_fresh()` aus der
   Sperrzeile `ab_mcp_pro_code_change.lock`: eine frische Zeile heisst
   «ein Schritt läuft» (`busy`), auch wenn sie eine Aktivierung oder ein
@@ -36,6 +40,86 @@ Ablehnung entsteht, nennt sie den Weg.
   kein Werkzeug: die Seite «Staging» von Zweig 12 ruft ihn nach ihrer
   Nonce-Prüfung. Ein Werkzeug könnte den Schritt einer Person nicht ersetzen
   (Entscheid 18).
+
+## Die eine Grenze: Abweichung im Schritt (Grenze C; Entscheid A vom 07.11.2026, «mit altem Wert»)
+
+- Weicht bei einem Objekt im Schritt irgendein Teil ab, nehmen weder der
+  Rückbau im Schritt noch `wp_site_revert` das Objekt automatisch zurück
+  (`AB_MCP_Sync_Engine::deviated()`). Abweichung heisst: ein Hook oder eine
+  fremde Hand hat einen Teil verändert (Vermerk `foreign`: `pre ≠ Sicherung`
+  vor dem eigenen Aufruf, oder eine Änderung mit der Zeile ausserhalb dessen,
+  was `with_row()` nennt; auch wenn der eigene Aufruf den Teil danach als Soll
+  schrieb); ein eigener Aufruf wurde verweigert oder ist gescheitert (ob er
+  den Teil vorher veränderte oder nicht; auch ein Teil, der vor seinem Aufruf
+  nicht lesbar war); ein Wert liest anders zurück, als der Aufruf ihn
+  schreiben sollte (eigener Aufruf: das Soll; Zeilenaufruf: was `with_row()`
+  nennt; das Objekt als Ganzes: der Soll-Hash). Dann trägt das Objekt im
+  Journal `object.deviated` (Teil und Grund), jeder Teil das Merkmal
+  `deviated`, jeder Teil, der nicht der Sicherung gleicht, wird `left` mit
+  `value_before` (dem alten Wert aus der Sicherung), der Schritt `unclear`
+  (`failed`, wenn kein Teil von der Sicherung abweicht: der Zeilenaufruf
+  wurde verweigert, bevor er schrieb; Prüffall
+  `testARowCallRefusedBeforeItWroteFailsTheStepAndNothingIsLeft`), das Paar
+  `unclear`. `decide()` gibt für jeden Teil eines solchen Objekts `left`
+  zurück, auch auf dem Rückweg eines geschlossenen Laufs; ein Teil, der der
+  Sicherung gleicht, heisst dort `unchanged`. Die Sicherung bleibt nach
+  Entscheid 20. Weg: das Objekt in wp-admin von Hand prüfen, der alte Wert
+  steht in der Antwort (`value_before`), das Paar mit `wp_site_pairs`
+  bestätigen (Prüffälle
+  `testADeviatingMetaPartLeavesTheObjectWholeWithTheOldValuesInTheAnswer`,
+  `testADeviatedObjectIsLeftWholeOnTheWayBackOfTheClosedRunToo`).
+- Grund: Seit Codex-Runde 2 fand jede Runde einen neuen A-Befund derselben
+  Klasse (welche Teile ein Schritt nachweislich geschrieben hat und was
+  Rückbau und Rückweg zurücknehmen dürfen; Runde 7: F1–F3 nach dem Umbau auf
+  das Eigentumsmerkmal). Mit der Grenze entfallen: der Rückbau im Schritt
+  (die Wende; B8, N2, N4), die Sonderregel für abweichende Terme (A2), die
+  Übernahme des Eigentums an der Vorgabekategorie beim Zeilen-Rückbau (F2)
+  und der Rückweg über den Soll-Hash für einen unterbrochenen Schritt (alte
+  Grenze C); `put_back()` läuft nur noch auf dem Rückweg.
+- Ein Objekt ohne Abweichung verhält sich wie bisher: der Schritt endet
+  `done`, jeder Teil `read`, eigen (`own`, `own_after`), wo der eigene Aufruf
+  ihn veränderte, und der Rückweg nimmt einen eigenen Teil zurück, dessen
+  heutiger Hash `own_after` gleicht (Prüffall
+  `testAPostWithACategoryAndATagAndAPageWithATemplateGoOverAndBackWithEveryPartRestored`).
+  Eine Unterbrechung ist keine Abweichung des Objekts: die zurückgelesenen
+  eigenen Teile gehen zurück, der nie zurückgelesene bleibt `left`.
+- Der alte Wert (`value_before`; `AB_MCP_Sync_Post_Writer::before_value()`):
+  bei der Zeile die Spalten, die vom heutigen Stand abweichen, je mit Wert in
+  Anführungszeichen (`post_title: "Contact"`); lange Texte (`post_content`,
+  `post_excerpt`, `post_content_filtered`) nur nach Länge und mit der
+  Revision des Posts, die den Text bytegenau hält, sonst mit dem Hinweis auf
+  die Sicherung des Schritts (`post_content: 260 bytes (revision 702 of the
+  post holds it, wp-admin → Revisions)`); bei Meta die Werte des Schlüssels
+  in der Reihenfolge ihrer Zeilen (`"abc", "def"`; `none (no row of the key)`
+  ohne Zeile); bei Termen die Namen der Terme, wie die Site sie heute hat
+  (der Slug, wenn der Term fehlt; `"News", "Other"`). Geheimnisprüfung wie
+  beim Paket (`AB_MCP_Sync_Credentials::unit()` über Schlüssel und Wert;
+  `post_password` nach Namen; Termnamen wie bei A5): ein Wert, den sie
+  trifft, erscheint nur als Verweis (`(a credential by its name, not shown)`,
+  `(holds a credential, not shown)`), kein UTF-8 nur als Byteszahl. Je Wert
+  höchstens `VALUE_CHARS` = 80 Zeichen, je Teil `PART_CHARS` = 320, mit
+  «…(cut)»; je Antwort höchstens `AB_MCP_Sync_Run::ANSWER_VALUE_BYTES` =
+  16 KiB über alle gezeigten Schritte, die neuesten zuerst, danach `VALUE_CUT`
+  mit dem Hinweis auf die Sicherung (Prüffälle
+  `testTheValueBeforeOfAPartLeftIsShortNeverACredentialAndCapped`,
+  `testAnAnswerCarriesAtMostSoManyBytesOfValuesBeforeNewestStepsFirst`).
+- Journale aus einem Zwischenstand dieses Zweigs ohne den Schlüssel
+  `object.deviated` sagen nicht, ob das Objekt im Schritt abwich: der Rückweg
+  behandelt sie wie abgewichen (`deviated = earlier_build`, jeder Teil
+  ungleich Sicherung `left` mit altem Wert; fail closed). Solche Journale
+  gibt es nur auf Sites eines Zwischenstands, kein Tag enthält die
+  Sync-Tabellen. Nicht als Mutation geführt (kein Lauf dieses Stands schreibt
+  ein solches Journal).
+- Im gewöhnlichen Rückweg erreichbar (Lead an die Steuerung): ein Beitrag,
+  dessen Schritt alle Kategorien geleert hat (auf Staging ohne Kategorie, nur
+  am Editor vorbei möglich), bekommt beim Zeilen-Rückbau von
+  `wp_update_post()` die Vorgabekategorie; die Terme sind damit nicht mehr
+  eigen und bleiben `left` (Vorgabekategorie statt «keine», alter Wert in der
+  Antwort), der Schritt des Rückwegs `unclear` (Prüffall
+  `testTheDefaultCategoryTheRowGivesBackLeavesTheTermsOfAPostTheStepEmptied`).
+  Ein Beitrag ohne Kategorie auf beiden Seiten, dem Staging eine gibt, geht
+  ganz zurück (Prüffall
+  `testTheWayBackPutsTheRowBackBeforeTheTermsSoAPostWithoutACategoryStaysWithout`).
 
 ## Übernahmesperre (Entscheid 19)
 
@@ -128,13 +212,12 @@ Ablehnung entsteht, nennt sie den Weg.
   Beitragsbild wird in Zweig 8 nicht übernommen.
 - Der Sanitizer-Vorlauf prüft die Felder durch `sanitize_post( …, 'db' )` im
   Rechtekontext des Kontos (kses ohne `unfiltered_html`). Ein Filter, den
-  erst `wp_insert_post_data` anwendet, fällt beim Rücklesen auf: Teil
-  «geschrieben, abweichend», Zeile bytegenau zurück (`restored`), Schritt
-  `restored`; bei einem neuen Objekt bleibt es als Rest (`residual`). Greift
-  derselbe Filter auch beim Zurückschreiben der Zeile (`wp_update_post()`
-  mit der Sicherung, Entscheid 23), liest sie sich nicht als Sicherung
-  zurück: der Teil heisst `unclear` mit Vermerk, das Paar wird *ungeklärt*;
-  der Filter ist in wp-admin abzuschalten und der Rückweg neu zu planen.
+  erst `wp_insert_post_data` anwendet, fällt beim Rücklesen auf: die Zeile
+  liest anders zurück, als der Aufruf sie schreiben sollte, das Objekt ist
+  abgewichen (Grenze C): die Zeile bleibt `left` mit altem Wert, Schritt und
+  Paar `unclear`; bei einem neuen Objekt bleibt es als Rest (`residual`). Der
+  Filter ist in wp-admin abzuschalten, das Objekt von Hand zu prüfen
+  (Prüffall `testARowAFilterChangedLeavesTheObjectWithTheTemplateWrittenWithIt`).
 - Ein Meta-Wert, der serialisiert, aber kein Array ist (`b:1;`, `i:5;`), lässt
   sich über die Metadaten-API nicht byteidentisch ablegen
   (`maybe_serialize()` serialisiert ihn ein zweites Mal); solche Werte sperrt
@@ -174,60 +257,57 @@ Ablehnung entsteht, nennt sie den Weg.
   Vermerk, nie Eigentum (N1: ein Hook setzte `note=fremd` mit der Zeile, der
   eigene Meta-Aufruf wurde verweigert; vorher galt `after ≠ Sicherung` als
   eigene Teilmutation, der Fremdwert wurde zurückgebaut und `restored`
-  gemeldet). Ein verweigerter Aufruf, der nichts veränderte, heisst `failed`
-  («the parts before stay»); einer, der den Teil veränderte und dann
-  scheiterte (mehrwertiger Schlüssel: Zeilen gelöscht, Hinzufügen
-  verweigert), lässt ihn eigen, `written` mit Vermerk «changed the part and
-  then failed», und der Schritt wendet (P1, Prüffall
-  `testAMetaCallThatChangedThePartAndThenFailedIsTheStepsOwnAndGoesBack`).
-  Ein Teil, den eine andere Hand mit der Zeile veränderte und den der eigene
-  Aufruf nicht veränderte (oder dessen Vorlage die Zeile anders schrieb, als
-  sie sollte), heisst `left` («not provably the step's own»), `own = false`,
-  Schritt `unclear`, und auch der Rückweg nimmt ihn nie zurück (N2: vorher
-  schloss `own_hash()` den Zustand `left` nicht aus und lieferte dessen
-  `after`). Zustände bleiben Beschreibung: `read` (gleich Soll), `written`,
-  `failed`, `left`, `not_reached`, nach einer Wende `restored`, `unchanged`,
-  `unclear`, `check_needed`. Ein gescheiterter Rückbau im Schritt (`unclear`
-  mit der Meldung des Kerns) lässt `own`/`own_after` stehen, so dass der
-  spätere Rückweg den Teil noch zurücknimmt, wenn er `own_after` hält (N4:
-  vorher nahm `unclear` das Eigentum weg); ein zurückgenommener oder als
-  Sicherung gelesener Teil ist danach nichts Eigenes mehr (`own = false`).
+  gemeldet). Jede solche Abweichung (Vermerk `foreign` an irgendeinem Teil,
+  ein verweigerter oder gescheiterter Aufruf, ob er den Teil veränderte oder
+  nicht, ein Rücklesen ungleich dem, was der Aufruf schreiben sollte) beendet
+  den Schritt nach Grenze C: nichts wird zurückgebaut, jeder Teil ungleich
+  Sicherung bleibt `left` mit altem Wert (Prüffälle
+  `testAMetaCallThatChangedThePartAndThenFailedLeavesTheObjectWithTheOldValues`
+  für P1, `testAChangeByAnotherHandBeforeARefusedMetaCallIsNotTheStepsOwnAndStays`
+  für N1, `testATemplateAHookChangedWithTheRowIsNotTheStepsOwnAndTheWayBackLeavesIt`
+  für N2). Zustände bleiben Beschreibung: `read` (gleich Soll), `failed`
+  (der Aufruf antwortete mit einem Fehler; der Vermerk sagt, ob er den Teil
+  veränderte), `left` (abgewichenes Objekt, Teil ungleich Sicherung),
+  `not_reached`; auf dem Rückweg `restored`, `unchanged`, `unclear`,
+  `check_needed`, `left`.
 - Die Entscheidung steht an einer Stelle, rein, ohne WordPress-Aufruf und
   ohne Blick auf den Zustand: `AB_MCP_Sync_Engine::decide( $part, $now,
-  $backup, $interrupted )` gibt `unchanged`, `put_back` (mit dem Hash, den
-  der Teil beim Zurückschreiben halten muss) oder `left` (mit Grund).
-  Rückbau im Schritt und Rückweg rufen nur sie, je Teil unmittelbar vor
-  seiner Reihe mit frisch gelesenem `$now`; `put_back()` führt aus. Die
-  Tabelle (`B` Sicherung, `W` `own_after` ≠ Soll, `T` Soll, `X` anderer Wert;
-  Prüffall `testDecideOverEveryCombinationOfOwnershipStateWayAndInterruption`,
-  alle 80 Kombinationen):
+  $backup )` gibt `unchanged`, `put_back` (mit dem Hash, den der Teil beim
+  Zurückschreiben halten muss) oder `left` (mit Grund). Der Rückweg ruft sie
+  je Teil unmittelbar vor seiner Reihe mit frisch gelesenem `$now`;
+  `put_back()` führt aus. Die Tabelle (`B` Sicherung, `W` `own_after`, `T`
+  Soll, `X` anderer Wert; der Weg der Teile und der Vermerk `foreign` ändern
+  seit Entscheid A nichts am Ergebnis, weil jede Abweichung den Schritt
+  beendet; Prüffall
+  `testDecideOverEveryCombinationOfOwnershipStateDeviationWayAndForeignMark`,
+  alle 80 Kombinationen von `own` × `$now` × `deviated` × Weg × Vermerk):
 
-  | `own` | `$now` | unterbrochen | Weg Terme | Vermerk fremd | Ergebnis |
-  |---|---|---|---|---|---|
-  | beliebig | `null` (nicht lesbar) | beliebig | beliebig | beliebig | `left` |
-  | beliebig | `B` | beliebig | beliebig | beliebig | `unchanged` |
-  | ja | `W`, `T` oder `X` | beliebig | ja | beliebig | `left` (A2: `own_after ≠ own_target` auf nicht abweisbarem Weg) |
-  | ja | `W` | beliebig | nein | beliebig | `put_back` (Hash `W`) |
-  | ja | `T` oder `X` | beliebig | nein | beliebig | `left` («changed since the step wrote it») |
-  | nein | `T` | ja | beliebig | nein | `put_back` (Hash `T`), nur ohne jedes Rücklesen (`post` null): Grenze C |
-  | nein | `T` | ja | beliebig | ja | `left` |
-  | nein | `T` | nein | beliebig | beliebig | `left` |
-  | nein | `W` oder `X` | beliebig | beliebig | beliebig | `left` («not the step's own») |
+  | `own` | `$now` | `deviated` | Ergebnis |
+  |---|---|---|---|
+  | beliebig | `null` (nicht lesbar) | beliebig | `left` |
+  | beliebig | `B` | beliebig | `unchanged` |
+  | beliebig | `W`, `T` oder `X` | ja | `left` («the object deviated within its step», Grenze C; `earlier_build`: Journal ohne den Schlüssel `object.deviated`) |
+  | ja | `W` | nein | `put_back` (Hash `W`) |
+  | ja | `T` oder `X` | nein | `left` («changed since the step wrote it») |
+  | nein | `W`, `T` oder `X` | nein | `left` («not the step's own»: fremd; nie erreicht; nie zurückgelesen; kein eigener Aufruf veränderte ihn) |
 
-  Zusätzlich: `own` mit `own_after == T` (als Soll gelesen) geht auf beiden
-  Wegen zurück, wenn `$now == T` (A2 greift nicht: zurückgelesen wurde, was
-  der Aufruf schreiben sollte); ein nicht eigener Teil, den der Zeilenaufruf
-  schon einmal zurücklas (`post` gesetzt), fällt nie unter die Grenze C;
-  `own` ohne `own_after` besitzt nichts; ein Journal älterer Form ohne das
-  Feld `own` (aus einem Zwischenstand dieses Zweigs) geht nie zurück, auch
-  nicht unter der Grenze C (`decide()`, Codex-Runde 7, F3; fail closed).
+  Zusätzlich: `own` mit `own_after == T` (als Soll gelesen, der Normalfall)
+  geht zurück, wenn `$now == T`; `own` ohne `own_after` besitzt nichts; ein
+  Journal älterer Form ohne das Feld `own` besitzt nichts und geht nie zurück
+  (Codex-Runde 7, F3; seit Entscheid A ohne eigene Klausel, Prüffall
+  `testAJournalWithoutTheMarkOfOwnershipIsNeverPutBack`). Ein Teil, der nie
+  zurückgelesen wurde (`post` null, unterbrochener Schritt), geht nie zurück,
+  auch nicht mit heutigem Hash gleich dem Soll: ein Hash gleich dem Soll
+  beweist kein Eigentum (Entscheid 18 (b); vorher Grenze C über den
+  Soll-Hash).
 - Vor jedem eigenen Meta- und Term-Aufruf steht das Journal mit dem Teil
-  ohne Rücklesen (`post = null`) in der Datenbank (Codex-Runde 7, F1): Endet
-  der Request im Aufruf, gilt für diesen Teil die Grenze C oben, nie das
-  Rücklesen des Zeilenaufrufs davor. Der Term-Aufruf ist dabei nicht als
-  Mutation geführt (derselbe Speicherpunkt wie beim Meta-Aufruf; ein Abbruch
-  genau im Term-Aufruf lässt sich ohne einen Haken, der schon beim
-  Zeilenaufruf feuert, nicht stellen).
+  ohne Rücklesen (`post = null`) in der Datenbank (Codex-Runde 7, F1), nur
+  für die Anzeige des Teilstands: Endet der Request im Aufruf, zeigt das
+  Journal den Teil ohne Rücklesen, nie mit dem Rücklesen des Zeilenaufrufs
+  davor; der Rückweg lässt ihn `left` mit altem Wert, so oder so. Der
+  Term-Aufruf ist dabei nicht als Mutation geführt (derselbe Speicherpunkt
+  wie beim Meta-Aufruf; ein Abbruch genau im Term-Aufruf lässt sich ohne
+  einen Haken, der schon beim Zeilenaufruf feuert, nicht stellen).
 - Einen einfachen Schlüssel, den nur die Live-Seite trägt, entfernt der
   Schritt (`write_meta()` ohne Wert); die Metadaten-API fragt selbst kein
   Recht. Darum prüfen Gesamtvorprüfung und Grenze je solchem Schlüssel
@@ -244,25 +324,16 @@ Ablehnung entsteht, nennt sie den Weg.
   der rohe Rückweg. Keine Sperre, weil sonst jeder Live-Post mit einem solchen
   Schlüssel ohne Gewinn gesperrt wäre.
 - Dieselbe Regel gilt für den Rückweg (Codex-Runde 4): Endet ein Schritt in
-  seinem Request selbst (`done`, abweichend, gescheitert), trägt sein Journal
+  seinem Request selbst (`done`, abgewichen, gescheitert), trägt sein Journal
   die Marke `settled`, und die Teile, die er nicht mehr erreicht hat, heissen
   `not_reached` (`AB_MCP_Sync_Engine::settled()`; Beschreibung). Der Rückweg
   nimmt sie nie zurück, weil sie nicht eigen sind (`own = false`): `unchanged`,
-  wo sie der Sicherung gleichen, sonst `left`. Nur ein Schritt, dessen
-  Request vor dem Ende abbrach (`interrupted`, Journal ohne `settled`), wird
-  in `decide()` mit `$interrupted = true` gefragt (Grenze C, Entscheid 18):
-  ein Teil ohne jedes Rücklesen (`post` null: der Request endete zwischen
-  Aufruf und Rücklesen), ohne Vermerk `foreign`, dessen heutiger Hash dem
-  Sollwert gleicht, geht nach dem Sollwert zurück; ein fremder Schreiber, der
-  im selben Fenster genau den Sollwert schrieb, ist nicht zu unterscheiden
-  (unten). Ein Teil, den der Zeilenaufruf schon zurücklas (`post` gesetzt)
-  und den der Schritt dann nicht mehr erreichte, fällt nicht darunter: der
-  Schritt hat ihn nie geschrieben. Vorher galt ein noch geplanter Teil eines
-  regulär beendeten Schritts über seinen Sollwert als eigen. Nicht als
-  Mutation geführt: der Zweig «planned mit Vermerk» und «`post` gesetzt bei
-  unterbrochenem Schritt» (nur bei einem Abbruch nach dem Rücklesen eines
-  nicht erreichten Teils erreichbar), die Marke `settled` selbst (ohne sie
-  gälte jeder Rückweg als unterbrochen; messbar nur, wenn ein regulär
+  wo sie der Sicherung gleichen, sonst `left`. Ein Schritt, dessen Request
+  vor dem Ende abbrach (`interrupted`, Journal ohne `settled`), hinterlässt
+  Teile ohne Rücklesen (`post` null, Zustand `planned`): auch sie nicht eigen,
+  `left` mit altem Wert (Entscheid A; vorher ging ein solcher Teil über den
+  Soll-Hash zurück). Nicht als Mutation geführt: die Marke `settled` selbst
+  (nur Beschreibung des Zustands `not_reached`; messbar nur, wenn ein regulär
   beendeter Schritt einen Teil ohne `post` hinterlässt, also die Datenbank
   unmittelbar nach dem Schreiben nicht mehr liest).
 - Verweise auf Objekte, die derselbe Lauf vorher anlegt (Elternteil, Verweis
@@ -297,11 +368,14 @@ Ablehnung entsteht, nennt sie den Weg.
   bleibt und heisst `left`; das Paar wird `unclear`.
 - Der Rückweg eines Teils eines unterbrochenen Schritts, der nie
   zurückgelesen wurde (`post` null: der Request endete zwischen Aufruf und
-  Rücklesen), prüft gegen den Soll-Hash (`decide()`, Grenze C): gleicht die
-  heutige Zeile dem Sollwert, hat der Schritt sie geschrieben und sie geht
-  zurück; gleicht sie dem Hash vorher, geschah nichts; sonst bleibt sie. Ein
-  fremder Schreiber, der im selben Fenster genau den Sollwert schrieb, ist
-  nicht zu unterscheiden (konstruiert).
+  Rücklesen), lässt ihn `left` mit altem Wert, auch wenn die heutige Zeile
+  dem Sollwert gleicht: ein fremder Schreiber, der im selben Fenster genau
+  den Sollwert schrieb, ist nicht zu unterscheiden, und ein Hash gleich dem
+  Soll beweist kein Eigentum (Entscheid 18 (b): nur nachweislich eigene
+  Teile; Entscheid A). Gleicht er dem Hash vorher, geschah nichts
+  (`unchanged`). Die zurückgelesenen eigenen Teile desselben Schritts (die
+  Zeile vor dem Meta-Aufruf) gehen zurück; der Lauf schliesst mit Befund
+  (`closed_findings`), die Person prüft den Teil von Hand.
 - Der Rückweg eines Schritts kann einmal laufen; ein zweiter Plan für denselben
   Schritt wird abgelehnt (`ab_mcp_sync_revert_steps`, ohne `steps`:
   `ab_mcp_sync_revert_nothing`). Gezählt werden alle Rückweg-Schritte, die den
@@ -313,18 +387,19 @@ Ablehnung entsteht, nennt sie den Weg.
   eine spätere Übernahme desselben Objekts rückgängig (GitHub-Codex 1, P2;
   Prüffall `testAStepGoesBackOnceAlsoAcrossRunsOfTheWayBack`).
 - Ein Teil «geschrieben, abweichend» (Rücklesen ungleich dem, was der
-  Aufruf schreiben sollte: `own_after ≠ own_target`) auf einem nicht
-  abweisbaren Weg (Terme) geht nie zurück, auch wenn der heutige Hash
-  `own_after` gleicht: was zurückgelesen wurde, ist nicht nachweislich eigen.
-  Er heisst `left`, das Paar wird `unclear` (Entscheide 17, 23; A2; Klausel
-  in `decide()`). Die Vorgabe-Kategorie, die der Zeilenaufruf oder der
-  Zeilen-Rückbau setzt, ist mit `own_target` gleich `own_after` eigen und
-  fällt nicht darunter – beim Zeilen-Rückbau nur, wo `decide()` den Teil
-  unmittelbar davor zurückgenommen hätte oder er der Sicherung glich
-  (Codex-Runde 7, F2). Hatte eine andere Hand die Kategorien vorher
-  verändert (etwa alle entfernt), bleibt der Teil `left`, auch mit der
-  Vorgabe-Kategorie, die der Zeilen-Rückbau dazugab; der Schritt heisst
-  nicht `restored`, die Kategorie ist von Hand zu prüfen (fail closed).
+  Aufruf schreiben sollte), auf welchem Weg auch immer, ist eine Abweichung
+  des Objekts (Grenze C): es bleibt ganz `left`, im Schritt und auf dem
+  Rückweg (die frühere A2-Klausel in `decide()` für Terme ist darin
+  aufgegangen; Prüffall `testADeviatingTermPartLeavesTheObjectWhole`). Beim
+  Zeilen-Rückbau ist jede Veränderung eines anderen Teils fremd, auch die
+  Vorgabekategorie, die `wp_update_post()` einem Beitrag ohne Kategorie gibt:
+  keine Übernahme von Eigentum mehr (Codex-Runde 7, F2); der Teil bleibt
+  `left` mit altem Wert (`unchanged`, wenn er so der Sicherung gleicht), der
+  Schritt des Rückwegs `unclear` (Prüffall
+  `testTheDefaultCategoryOfTheRowGoingBackDoesNotTakeBackTermsAnotherHandChanged`:
+  Soll gleich Vorgabekategorie, eine andere Hand entfernte alle Kategorien,
+  der Zeilen-Rückbau gibt die Vorgabekategorie wieder, die Terme bleiben, News
+  wird nicht darübergeschrieben).
 - Term-Hashes werden über die Schlüssel als Zeichenketten gebildet
   (`terms_hash()`, seit B6: Formate nach Slug, Kategorien und Schlagwörter
   nach Paar-ID). Ein Journal aus einem Zwischenstand von Zweig 8, dessen
@@ -334,59 +409,34 @@ Ablehnung entsteht, nennt sie den Weg.
   Hand zurückgesetzt (Codex-Runde 2, N5). Fail closed, nichts wird
   überschrieben; solche Journale gibt es nur auf Sites eines
   Zwischenstands, kein Tag enthält die Sync-Tabellen.
-- Weicht ein Teil innerhalb der Grenze ab (oder hat ein gescheiterter Aufruf
-  ihn verändert), gehen alle eigenen Teile des Schritts mit zurück
-  (Eigentumsregel oben: die davor als Soll geschriebenen, B8, und die, die
-  der Zeilenaufruf laut `with_row()` schrieb, N2); ein nicht eigener Teil,
-  der sich seit der Sicherung geändert hat, bleibt `left`. Rückbau im Schritt
-  und Rückweg laufen durch dieselbe Stelle, `AB_MCP_Sync_Engine::put_back()`
-  mit `decide()` (GitHub-Codex 1, P2; Codex-Runde 6): (1) zurück geht zuerst
-  die Zeile, dann Meta, dann die Zuordnungen, weil `wp_update_post()`
-  Nebenwirkungen auf die Terme hat – einem Beitrag ohne Kategorie gibt es die
-  Vorgabekategorie; (2) jeder Teil wird unmittelbar vor seiner Reihe frisch
-  gelesen und am Ist-Stand entschieden, nie an einem Schnappschuss von vor
-  dem Zeilen-Rückbau (N3: vorher prüfte `restore_terms()` den übergebenen
-  Stand von vor dem Zeilen-Rückbau; ein Hook, der beim Zurückschreiben der
-  Zeile Kategorie C setzte, wurde mit A überschrieben und `restored`
-  gemeldet); (3) nach dem Zeilen-Rückbau liest die Engine die übrigen Teile
-  frisch: eine Veränderung durch den Zeilen-Rückbau gilt nur dann als eigen,
-  wenn `with_row()` sie für genau diesen Zeilenaufruf vorhersagt (Typ der
-  gesicherten Zeile, leeres `postarr`, Stand unmittelbar vor dem Rückbau: die
-  Vorgabekategorie eines Beitrags ohne Kategorie), dann wird sie mit
-  `own`/`own_after`/`own_target` des Rückbaus geführt und so entschieden
-  (Prüffall `testTheTermsGoBackByTheStateReadBeforeTheRowWentBack`: die
-  Terme kehren von der Vorgabekategorie nach News zurück); jede andere
-  Veränderung ist fremd, `own = false`, Vermerk, der Teil bleibt `left`, der
-  Schritt `unclear` (Prüffall `testTermsAHookChangedAsTheRowWentBackAreLeftNotWrittenOver`);
-  die Art liest beim Schreiben noch einmal (`restore_row()`, `restore_meta()`,
-  `restore_terms()` prüfen den übergebenen Hash gegen den Stand im Moment
-  des Schreibens; `restore_terms()` nimmt keinen gelesenen Stand mehr an);
-  (4) Schlussprüfung: jeder als zurück gezählte Teil wird frisch gegen den
-  Hash der Sicherung gelesen; nur wenn alle gleichen, heisst der Schritt
-  `restored` (Rückweg: `done`), sonst `unclear` mit Zustand und Grund je Teil
-  («reads other than the backup after the parts went back»). Vorher gingen
-  die Terme vor der Zeile zurück, und `wp_update_post()` gab einem Beitrag,
-  dessen Sicherung keine Kategorie hat, die Vorgabekategorie wieder, während
-  der Rückweg `restored` meldete (Prüffälle
-  `testTheWayBackPutsTheRowBackBeforeTheTermsSoAPostWithoutACategoryStaysWithout`,
+- Rückbau gibt es nur auf dem Rückweg (`AB_MCP_Sync_Engine::put_back()` mit
+  `decide()`; GitHub-Codex 1, P2; Codex-Runde 6; Entscheid A): (1) zurück
+  geht zuerst die Zeile, dann Meta, dann die Zuordnungen, weil
+  `wp_update_post()` Nebenwirkungen auf die Terme hat; (2) jeder Teil wird
+  unmittelbar vor seiner Reihe frisch gelesen und am Ist-Stand entschieden,
+  nie an einem Schnappschuss von vor dem Zeilen-Rückbau (N3: vorher prüfte
+  `restore_terms()` den übergebenen Stand von vor dem Zeilen-Rückbau; ein
+  Hook, der beim Zurückschreiben der Zeile Kategorie C setzte, wurde mit A
+  überschrieben und `restored` gemeldet); (3) nach dem Zeilen-Rückbau liest
+  die Engine die übrigen Teile frisch: jede Veränderung durch den
+  Zeilen-Rückbau ist fremd (`own = false`, Vermerk), der Teil bleibt `left`,
+  wenn er nicht der Sicherung gleicht (Prüffälle
+  `testTermsAHookChangedAsTheRowWentBackAreLeftNotWrittenOver`,
+  `testTheDefaultCategoryTheRowGivesBackLeavesTheTermsOfAPostTheStepEmptied`);
+  die Art liest beim Schreiben noch einmal (`restore_row()`,
+  `restore_meta()`, `restore_terms()` prüfen den übergebenen Hash gegen den
+  Stand im Moment des Schreibens; `restore_terms()` nimmt keinen gelesenen
+  Stand an); (4) Schlussprüfung: jeder als zurück gezählte Teil wird frisch
+  gegen den Hash der Sicherung gelesen; nur wenn alle gleichen, heisst der
+  Schritt des Rückwegs `done`, sonst `unclear` mit Zustand und Grund je Teil
+  («reads other than the backup after the parts went back»; Prüffall
   `testAPartAHookChangedAfterItWasPutBackIsUnclearNotRestored`). Ein Beitrag
-  ohne Kategorie auf beiden Seiten: die Zeile zurück gibt ihm die
-  Vorgabekategorie, die laut `with_row()` eigen ist, und die Terme gehen
-  danach auf «keine» zurück; seit Runde 6 keine Grenze mehr (nicht als
-  Prüffall geführt, WordPress selbst legt keinen Beitrag ohne Kategorie an).
-  Der Rückweg eines Paars, das die Wende im Schritt `unclear` liess, stellt
-  das Objekt her, das Paar bleibt `unclear`, bis eine Person es bestätigt
-  (`wp_site_pairs`): der Rückweglauf schliesst mit diesem Befund (Prüffall
-  `testAPutBackRefusedWithinTheBoundaryKeepsTheStepsOwnershipSoTheWayBackTakesThePartBackLater`).
-- Die A2-Klausel steht in `decide()`: Ein Term-Teil, der anders zurücklas, als
-  der Aufruf schreiben sollte, geht nie zurück, auch wenn der heutige Hash
-  `own_after` gleicht (Entscheide 17 und 23 verlangen es: nicht abweisbarer
-  Weg). Die Prüfung von GitHub-Codex 1 hat die Klausel als Kandidat zum
-  Entfernen genannt; am Plan und am Prüffall
-  `testADeviatingTermPartIsNeverTakenBack` trägt sie weiter. Fremde
-  Zuordnungen, die schon beim Zeilenaufruf dazukamen und die der eigene
-  Termaufruf netto nicht veränderte (`post == pre`), sind nicht eigen und
-  bleiben schon im Schritt `left`.
+  ohne Kategorie auf beiden Seiten, dem Staging eine gibt: die Zeile zurück
+  gibt keine Vorgabekategorie dazu (der Beitrag hat in dem Moment eine), die
+  Terme gehen danach auf «keine» zurück (Prüffall
+  `testTheWayBackPutsTheRowBackBeforeTheTermsSoAPostWithoutACategoryStaysWithout`).
+  Ein Teil, der auf dem Rückweg `left` heisst, trägt `value_before`
+  (Prüffall `testTheWayBackIsByteForByteAndLeavesWhatChangedSince`).
 - In den Rückweg gehen nur Schritte mit Journal und Sicherung (ohne Sicherung
   keine Mutation, Entscheid 17); ein Schritt, der vor seiner Sicherung
   scheiterte (Ziel seit dem Plan geändert), ist weder Rest noch neu angelegt.
@@ -540,35 +590,46 @@ Ablehnung entsteht, nennt sie den Weg.
   Phasenreihenfolge, Stichprobe mit Titel, Aufbewahrung aus den Zeilen mit
   `keep_until` (auch Zeilen ohne Frist), Paket aus einer Lesung mit
   geprüften Termnamen, Plan (`verdict`, `order`, `line_of`), die
-  Entscheidungsfunktion `decide()` über alle 80 Kombinationen (Tabelle oben).
-  Integration (`tests/integration/SyncRunTest.php`, vierunddreissig Fälle): Ende zu Ende mit
+  Entscheidungsfunktion `decide()` über alle 80 Kombinationen (Tabelle oben),
+  der alte Wert (`before_value()`: Zeile, langer Text mit Revision, Meta,
+  Terme, synthetische Geheimnisse, kein UTF-8, Kürzung je Wert und je Teil)
+  und die Kappung je Antwort (`cap_values()`).
+  Integration (`tests/integration/SyncRunTest.php`, siebenunddreissig Fälle): Ende zu Ende mit
   Rückweg und `step` auf eine spätere Phase (Merkmal der Sperre beim
   Anlegen), ein Bericht in zwei Läufen geplant, Abweichung in der
-  Gesamtvorprüfung, Unterbrechung in eigenem Prozess, bytegenau, Sperrmatrix
-  über REST (Request vor der Grenze), Sollwert «als Entwurf übernehmen»,
-  zeitabhängiger Status, Aufbewahrung mit Fristen (auch Zeilen ohne Frist),
-  neue Eltern- und Unterseite, Befunde über Aufrufe, Prüfung mit Titel und
-  Cursor, Vorlage über den Kernweg, abweichender Meta-Teil nimmt die Zeile
-  mit, mit der Zeile geschriebene Vorlage geht mit der Zeile zurück, fremde
-  Kategorie auf dem Sollwert ist nicht eigen und bleibt (Eigentumsregel),
-  ein nie erreichter Teil geht auf dem Rückweg nicht zurück (`not_reached`),
-  Vorgabe-Kategorie eines neuen Beitrags ist mit der Zeile eigen,
-  gescheiterter Schritt ohne Rest, abweichende Terme bleiben, kein
-  Wiederveröffentlichen bei Menü-Automatik, Rückweglauf unter der
-  Ablagesperre; seit GitHub-Codex 1: gescheiterter Aufruf, der den Teil
-  veränderte, Zeile vor den Termen (Beitrag ohne Kategorie), Terme nach dem
-  Zeilen-Rückbau frisch entschieden (Vorgabekategorie eigen), Schlussprüfung
-  gegen einen Hook, Ziel seit dem Bericht geändert, Schritt höchstens einmal
-  zurück über Rückweg-Läufe; seit Codex-Runde 6 (N1–N4, je ohne die
-  Behebung rot): fremde Änderung vor einem verweigerten Meta-Aufruf bleibt
-  (`failed`, nicht eigen), mit der Zeile von einem Hook geänderte Vorlage
-  bleibt auch auf dem Rückweg (`left`, nicht eigen), beim Zeilen-Rückbau von
-  einem Hook geänderte Terme werden nicht überschrieben, ein im Schritt
-  verweigerter Rückbau lässt das Eigentum stehen und der Rückweg nimmt die
-  Zeile zurück. Unit dazu: Schlüssel mit Backslash, Recht zum Entfernen eines
-  nur live vorhandenen Schlüssels. Mutationen: `tests/mutation/lists/lauf.php`
-  (aus `tests/mutation/gen/lauf.py`), je Bedingung von `decide()` und für die
-  Aufzeichnung von `pre`/`post`/`own`.
+  Gesamtvorprüfung, Unterbrechung in eigenem Prozess (die Zeile bleibt mit
+  altem Wert, der Lauf schliesst mit Befund), bytegenau (die stehen
+  gelassenen Teile mit altem Wert), Sperrmatrix über REST (Request vor der
+  Grenze), Sollwert «als Entwurf übernehmen», zeitabhängiger Status,
+  Aufbewahrung mit Fristen (auch Zeilen ohne Frist), neue Eltern- und
+  Unterseite, Befunde über Aufrufe, Prüfung mit Titel und Cursor, Vorlage
+  über den Kernweg, gescheiterter Schritt ohne Rest, Vorgabe-Kategorie eines
+  neuen Beitrags ist mit der Zeile eigen, kein Wiederveröffentlichen bei
+  Menü-Automatik, Rückweglauf unter der Ablagesperre, Zeile vor den Termen
+  (Beitrag ohne Kategorie), Schlussprüfung gegen einen Hook, Ziel seit dem
+  Bericht geändert, Schritt höchstens einmal zurück über Rückweg-Läufe, beim
+  Zeilen-Rückbau von einem Hook geänderte Terme werden nicht überschrieben
+  (N3); seit Entscheid A (07.11.2026), je ohne die Grenze rot: der
+  Normalfall (Beitrag mit Kategorie und Schlagwort, Seite mit Vorlage, hin
+  und zurück alles `restored`), abweichender Meta-Teil lässt das Objekt ganz
+  stehen mit altem Wert (B8), von einem Filter geänderte Zeile mit der
+  mitgeschriebenen Vorlage (N2 regulär), abweichende Terme (A2), fremde
+  Kategorie mit der Zeile (auch wenn sie dem Soll gleicht; Eigentumsregel),
+  Hook ändert die Terme mit der Zeile anders als der Kern (Beitrag ohne
+  Kategorie), nie erreichter Teil nach verweigertem Meta-Aufruf, Unterbrechung
+  im Meta-Aufruf (die Zeile zurück, die Notiz bleibt mit altem Wert),
+  gescheiterter Aufruf, der den Teil veränderte (P1), die Vorgabekategorie
+  beim Zeilen-Rückbau ist fremd (F2, Soll gleich Vorgabekategorie) und lässt
+  die Terme eines Beitrags, dessen Schritt die Kategorien leerte, stehen,
+  fremde Änderung vor einem verweigerten Meta-Aufruf (N1), von einem Hook
+  mit der Zeile geänderte Vorlage (N2), abgewichenes Objekt bleibt auch auf
+  dem Rückweg des geschlossenen Laufs ganz stehen (Vorschau `will` = `left`),
+  verweigerter Zeilenaufruf ohne Schreiben (`failed`, nichts `left`). Unit
+  dazu: Schlüssel mit Backslash, Recht zum Entfernen eines nur live
+  vorhandenen Schlüssels. Mutationen: `tests/mutation/lists/lauf.php` (aus
+  `tests/mutation/gen/lauf.py`), je Bedingung von `decide()` und
+  `deviated()`, für die Aufzeichnung von `pre`/`post`/`own`, für den alten
+  Wert und seine Kappung.
 - Nicht als Mutation geführt: die Wächter gegen eine Datenbank, die ein Lesen
   oder Schreiben verweigert (keine Test-Site verweigert), das Budget der
   Gesamtvorprüfung über Aufrufe mit Tausenden Objekten (die Fortsetzung selbst
@@ -577,16 +638,18 @@ Ablehnung entsteht, nennt sie den Weg.
   die Kapazitätsprüfung des Rückwegs im Plan (mit 1996 Objekten je Lauf und
   3996 Schritten je Lauf nicht erreichbar), der Schritt ohne Sicherung in `revert_boundary()` (der Plan
   lässt ihn nicht hinein), die belegte Sperre (`busy`: ein zweiter Request
-  derselben Site im selben Augenblick), die Marke `settled` und der Zweig
-  «`post` gesetzt bei unterbrochenem Schritt» in `decide()` (oben, nur mit
+  derselben Site im selben Augenblick), die Marke `settled` (oben, nur mit
   einer Datenbank erreichbar, die unmittelbar nach dem Schreiben nicht liest),
-  der Vermerk `foreign` aus `pre ≠ Sicherung` vor dem eigenen Aufruf (nur
-  Beschreibung: die Entscheidung trifft `own`, der Vermerk zählt allein in der
-  Grenze C eines unterbrochenen Schritts, die ein solcher Vermerk nicht
-  erreicht), `decide()` bei `$now = null` (das Objekt verschwindet während des
-  Laufs nicht: die Sperre verweigert das Löschen), das Löschen von `own` nach
-  einem gelungenen Rückbau in `applied()` (ein Teil, den nach dem Rückbau
-  jemand auf genau den eigenen Hash setzt: konstruiert), die frische Lesung
-  je Teil in `put_back()` (`$seen = $again`: die Art liest beim Schreiben
-  ohnehin noch einmal, beide allein halten N3) und die Texte der Ablehnungen
-  (`AnswerWayTest` hält, dass jede einen Weg nennt).
+  der Vermerk `foreign` aus `pre ≠ Sicherung` vor dem eigenen Aufruf (eine
+  fremde Änderung zwischen Zeilenaufruf und eigenem Aufruf trifft schon der
+  Vermerk aus dem Rücklesen der Zeile; ein Schreiber genau in diesem Fenster
+  ist nicht zu stellen), der Zweig `$core` in `write_parts()` (kein eigener
+  Meta-Aufruf für die mit der Zeile geschriebene Vorlage: ein zweiter Aufruf
+  mit demselben Wert ist am Zustand nicht messbar), `decide()` bei `$now =
+  null` (das Objekt verschwindet während des Laufs nicht: die Sperre
+  verweigert das Löschen), die Behandlung eines Journals ohne den Schlüssel
+  `object.deviated` als abgewichen (kein Lauf dieses Stands schreibt ein
+  solches Journal), die frische Lesung je Teil in `put_back()` (`$seen =
+  $again`: die Art liest beim Schreiben ohnehin noch einmal, beide allein
+  halten N3) und die Texte der Ablehnungen (`AnswerWayTest` hält, dass jede
+  einen Weg nennt).
