@@ -1430,22 +1430,22 @@ final class AB_MCP_Sync_Engine {
 				AB_MCP_Change_Lock::touch();
 				$again = AB_MCP_Sync_Post_Writer::current( $live_id );
 				$again = is_array( $again ) ? $again : null;
-				if ( 'row' === $name ) {
-					// What the row put back changed besides the row is another
-					// hand's (N3; F2): the step owns nothing of it.
-					foreach ( $parts as $k => $other ) {
-						if ( $k === $i ) {
-							continue;
-						}
-						$pre_k  = null === $seen ? null : AB_MCP_Sync_Post_Writer::part_hash( $seen, (string) $other['part'] );
-						$post_k = null === $again ? null : AB_MCP_Sync_Post_Writer::part_hash( $again, (string) $other['part'] );
-						if ( ! self::changed( $pre_k, $post_k ) ) {
-							continue;
-						}
-						$parts[ $k ]['own']     = false;
-						$parts[ $k ]['foreign'] = true;
-						$parts[ $k ]['note']    = self::noted( $other, 'Changed as the row went back (a side effect of wp_update_post(), such as the default category of a post without one, or a hook of this site): the step owns nothing of what the part holds now, so it is left as it is unless it is as the backup; check it by hand.' );
+				// What putting this part back changed besides it is another
+				// hand's (N3; F2; for every part, not the row only: a hook that
+				// sets the tags as the category goes back, Codex round 12): the
+				// step owns nothing of it.
+				foreach ( $parts as $k => $other ) {
+					if ( $k === $i ) {
+						continue;
 					}
+					$pre_k  = null === $seen ? null : AB_MCP_Sync_Post_Writer::part_hash( $seen, (string) $other['part'] );
+					$post_k = null === $again ? null : AB_MCP_Sync_Post_Writer::part_hash( $again, (string) $other['part'] );
+					if ( ! self::changed( $pre_k, $post_k ) ) {
+						continue;
+					}
+					$parts[ $k ]['own']     = false;
+					$parts[ $k ]['foreign'] = true;
+					$parts[ $k ]['note']    = self::noted( $other, sprintf( 'Changed as the part %s went back (a side effect of the core, such as the default category of a post without one, or a hook of this site): the step owns nothing of what the part holds now, so it is left as it is unless it is as the backup; check it by hand.', $name ) );
 				}
 				$seen = $again;
 			}

@@ -138,6 +138,11 @@ Ablehnung entsteht, nennt sie den Weg.
   ganz stehen (`seen_after()`, `unread`; Codex-Runde 11). Die Abweichung im
   Schritt selbst ist nicht als Mutation geführt (keine Test-Site verweigert
   das Lesen), `seen_after()` schon.
+- Ändert das Zurücksetzen eines Teils auf dem Rückweg einen anderen Teil
+  (eine Nebenwirkung des Kerns wie die Vorgabe-Kategorie, oder ein Hook, der
+  etwa beim Zurücksetzen der Kategorie die Schlagwörter setzt), verliert
+  dieser andere Teil jedes Eigentum: er bleibt stehen, ausser er gleicht der
+  Sicherung (für jeden Teil, nicht nur für die Zeile; Codex-Runde 12).
 - Jeder alte Wert trägt die Marke der Regeln, nach denen dieser Build ihn
   zusammensetzt (`value_rules` = `AB_MCP_Sync_Post_Writer::VALUE_RULES`).
   Beim Ausgeben (`AB_MCP_Sync_Run::cap_values()`) zeigt die Antwort einen
@@ -635,7 +640,7 @@ Ablehnung entsteht, nennt sie den Weg.
   der alte Wert (`before_value()`: Zeile, langer Text mit Revision, Meta,
   Terme, synthetische Geheimnisse, kein UTF-8, Kürzung je Wert und je Teil)
   und die Kappung je Antwort (`cap_values()`).
-  Integration (`tests/integration/SyncRunTest.php`, neununddreissig Fälle): Ende zu Ende mit
+  Integration (`tests/integration/SyncRunTest.php`, vierzig Fälle): Ende zu Ende mit
   Rückweg und `step` auf eine spätere Phase (Merkmal der Sperre beim
   Anlegen), ein Bericht in zwei Läufen geplant, Abweichung in der
   Gesamtvorprüfung, Unterbrechung in eigenem Prozess (die Zeile bleibt mit

@@ -1575,11 +1575,55 @@ final class SyncRunTest extends TestCase {
 		$outcome = array_column( $step['result']['parts'], null, 'part' );
 		self::assertSame( 'restored', $outcome['row']['state'] );
 		self::assertSame( 'left', $outcome['terms:category']['state'], json_encode( $step['result'] ) );
-		self::assertStringContainsString( 'as the row went back', (string) $outcome['terms:category']['note'] );
+		self::assertStringContainsString( 'as the part row went back', (string) $outcome['terms:category']['note'] );
 		self::assertSame( '"news"', $outcome['terms:category']['value_before'] );
 		self::assertSame( array( $default ), $slugs(), 'The default category the row gave stands; News is not written over the other hand\'s removal.' );
 		self::assertSame( 'unclear', $step['state'] );
 		self::assertSame( 'closed_findings', $back['state'] );
+	}
+
+	public function testTagsAHookSetsAsTheCategoryGoesBackAreLeftNotTakenBack(): void {
+		// Codex round 12: a post in News with tag Old, taken over to Other with
+		// tag New. Another hand then sets the tag Third. On the way back, a
+		// hook that sets the tag New as the category goes back to News fires;
+		// the tags it set are another hand's (not the step's own, though they
+		// hash as what the step wrote): they are left, not put back to Old.
+		self::pair();
+		$news_a  = wp_insert_term( 'News', 'category' );
+		$other_a = wp_insert_term( 'Other', 'category' );
+		self::assertIsArray( $news_a, is_wp_error( $news_a ) ? $news_a->get_error_message() : '' );
+		self::assertIsArray( $other_a, is_wp_error( $other_a ) ? $other_a->get_error_message() : '' );
+		$news_b  = (int) self::b( array( array( 'op' => 'insert_term', 'name' => 'News', 'taxonomy' => 'category', 'as' => 'term' ) ) )['term'];
+		$other_b = (int) self::b( array( array( 'op' => 'insert_term', 'name' => 'Other', 'taxonomy' => 'category', 'as' => 'term' ) ) )['term'];
+		foreach ( array( 'old', 'new', 'third' ) as $tag ) {
+			self::assertIsArray( wp_insert_term( $tag, 'post_tag' ) );
+			self::b( array( array( 'op' => 'insert_term', 'name' => $tag, 'taxonomy' => 'post_tag', 'as' => 'term' ) ) );
+		}
+		$story_a = wp_insert_post( wp_slash( self::page( 'story', 'A story.', array( 'post_type' => 'post', 'post_category' => array( (int) $news_a['term_id'] ), 'tags_input' => array( 'old' ) ) ) ), true );
+		self::assertIsInt( $story_a );
+		$story_b = (int) self::b( array( array( 'op' => 'insert_post', 'args' => self::page( 'story', 'A story.', array( 'post_type' => 'post', 'post_category' => array( $news_b ), 'tags_input' => array( 'old' ) ) ), 'as' => 'post' ) ) )['post'];
+		self::paired( self::staged() );
+		self::change_on_b( (string) $story_b, 'story', 'A story, on staging.', array( 'post_type' => 'post', 'post_category' => array( $other_b ), 'tags_input' => array( 'new' ) ) );
+		$planned = self::planned( array( 'story' ) );
+		$run     = self::begun( $planned['args'] );
+		$tags    = static fn(): array => array_values( array_map( static fn( $t ) => $t->slug, wp_get_object_terms( $story_a, 'post_tag' ) ) );
+		self::assertSame( 'closed_done', self::finish( (int) $run['run_id'] )['state'] );
+		self::assertSame( array( 'new' ), $tags() );
+		wp_set_object_terms( $story_a, array( 'third' ), 'post_tag', false );
+		$news_id = (int) $news_a['term_id'];
+		$hook    = static function ( $object_id, $terms, $tt_ids, $taxonomy ) use ( $story_a, $news_id, &$hook ) {
+			if ( 'category' === $taxonomy && (int) $object_id === $story_a && has_term( $news_id, 'category', $story_a ) ) {
+				remove_action( 'set_object_terms', $hook, 10 );
+				wp_set_object_terms( $story_a, array( 'new' ), 'post_tag', false );
+			}
+		};
+		add_action( 'set_object_terms', $hook, 10, 4 );
+		$begun = self::revert( (int) $run['run_id'] );
+		$back  = self::revert_all( (int) $begun['run_id'] );
+		remove_all_actions( 'set_object_terms' );
+		$outcome = array_column( self::step( $back, 1 )['result']['parts'], 'state', 'part' );
+		self::assertSame( 'left', $outcome['terms:post_tag'], json_encode( self::step( $back, 1 )['result'] ) );
+		self::assertSame( array( 'new' ), $tags(), 'The tags the hook set stay; not put back to Old.' );
 	}
 
 	public function testTheDefaultCategoryOfANewPostIsWrittenWithTheRowAndTheJournalSaysSo(): void {
@@ -1774,7 +1818,7 @@ final class SyncRunTest extends TestCase {
 		$outcome = array_column( $step['result']['parts'], null, 'part' );
 		self::assertSame( 'restored', $outcome['row']['state'] );
 		self::assertSame( 'left', $outcome['terms:category']['state'], 'The default category the row gave back is not the step\'s own: left.' );
-		self::assertStringContainsString( 'as the row went back', (string) $outcome['terms:category']['note'] );
+		self::assertStringContainsString( 'as the part row went back', (string) $outcome['terms:category']['note'] );
 		self::assertSame( '"news"', $outcome['terms:category']['value_before'] );
 		self::assertSame( 'unclear', $step['state'] );
 		$default = get_term( (int) get_option( 'default_category' ), 'category' );

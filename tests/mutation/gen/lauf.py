@@ -406,10 +406,12 @@ e('engine-put-back-order', 'put_back(): the row goes back first, then the meta, 
 e('engine-put-back-check', 'put_back(): every part counted as back is read again against the backup; one that reads otherwise is unclear, and so is the object', EN,
   "\t\t\t\tif ( null === $now || ! hash_equals( (string) AB_MCP_Sync_Post_Writer::part_hash( $backup, $name ), $now ) ) {", "\t\t\t\tif ( false ) {", 'it', 'testAPartAHookChangedAfterItWasPutBackIsUnclearNotRestored')
 F2 = 'testTheDefaultCategoryOfTheRowGoingBackDoesNotTakeBackTermsAnotherHandChanged'
-e('engine-put-back-row-effects', 'put_back(): what the row put back changed besides the row is another hand\'s, the default category too, even where it is what the step read back (N3; F2)', EN,
-  "\t\t\t\tif ( 'row' === $name ) {\n\t\t\t\t\t// What the row put back changed besides the row is another", "\t\t\t\tif ( false ) {\n\t\t\t\t\t// What the row put back changed besides the row is another", 'it', F2)
+e('engine-put-back-row-effects', 'put_back(): what putting a part back changed besides it is another hand\'s, the default category too, even where it is what the step read back (N3; F2)', EN,
+  "\t\t\t\t\tif ( ! self::changed( $pre_k, $post_k ) ) {\n\t\t\t\t\t\tcontinue;\n\t\t\t\t\t}\n\t\t\t\t\t$parts[ $k ]['own']", "\t\t\t\t\tif ( true ) {\n\t\t\t\t\t\tcontinue;\n\t\t\t\t\t}\n\t\t\t\t\t$parts[ $k ]['own']", 'it', F2)
+e('engine-put-back-any-effects', 'put_back(): the side effects of putting back any part, not the row only, are another hand\'s (Codex round 12)', EN,
+  "\t\t\t\t\tif ( ! self::changed( $pre_k, $post_k ) ) {\n\t\t\t\t\t\tcontinue;\n\t\t\t\t\t}\n\t\t\t\t\t$parts[ $k ]['own']", "\t\t\t\t\tif ( 'row' !== $name || ! self::changed( $pre_k, $post_k ) ) {\n\t\t\t\t\t\tcontinue;\n\t\t\t\t\t}\n\t\t\t\t\t$parts[ $k ]['own']", 'it', 'testTagsAHookSetsAsTheCategoryGoesBackAreLeftNotTakenBack')
 e('engine-put-back-row-foreign', 'put_back(): a part the row put back changed is nothing of the step\'s any more (own false), so decide() leaves it (F2)', EN,
-  "\t\t\t\t\t\t$parts[ $k ]['own']     = false;\n", '', 'it', F2)
+  "\t\t\t\t\t$parts[ $k ]['own']     = false;\n", '', 'it', F2)
 e('plan-report-live', 'plan(): a target that changed since the report is not written over, whatever the report said of it; the hash the plan binds is the one the report compared (P1)', PU,
   "\t\t\tif ( null === $existing && ( ! isset( $compared[ $key ] ) || ! hash_equals( $compared[ $key ], $hash ) ) ) {", "\t\t\tif ( false ) {", 'it', 'testATargetThatChangedSinceTheReportIsNotPlannedWhateverTheReportSaid')
 e('writer-delete-right', 'precheck(): a plain key only this site has, which the step removes, needs the right to remove it (delete_post_meta; decision 28; P2)', PW,
