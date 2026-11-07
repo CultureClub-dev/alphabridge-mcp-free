@@ -185,6 +185,38 @@ final class AB_MCP_Sync_Run {
 	}
 
 	/**
+	 * The runs of the way back that name a run (reverts in their plan): every
+	 * run of the type revert made for the steps of that run once it was
+	 * closed (decision 15), whatever its state. The plan of a further way
+	 * back asks them, so that a step of the run goes back at most once
+	 * (GitHub Codex round 1 of branch 8).
+	 *
+	 * @param int $run_id The run that wrote.
+	 * @return array[]|WP_Error
+	 */
+	public static function reverts_of( $run_id ) {
+		$ready = self::ready();
+		if ( true !== $ready ) {
+			return $ready;
+		}
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table name is ours.
+		$rows = $wpdb->get_results( 'SELECT * FROM `' . AB_MCP_Sync_Schema::table( 'runs' ) . "` WHERE type = 'revert' ORDER BY run_id ASC", ARRAY_A );
+		if ( '' !== (string) $wpdb->last_error || ! is_array( $rows ) ) {
+			return self::db_error();
+		}
+		$out = array();
+		foreach ( $rows as $row ) {
+			$run  = self::decode( $row );
+			$plan = is_array( $run['plan'] ) ? $run['plan'] : array();
+			if ( isset( $plan['reverts'] ) && is_array( $plan['reverts'] ) && in_array( (int) $run_id, array_map( 'intval', $plan['reverts'] ), true ) ) {
+				$out[] = $run;
+			}
+		}
+		return $out;
+	}
+
+	/**
 	 * The steps of a run, by seq.
 	 *
 	 * @param int $run_id Run.

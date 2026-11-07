@@ -214,11 +214,34 @@ final class AB_MCP_Sync_Revert {
 		if ( null !== $wanted && ( ! is_array( $wanted ) || ! array_is_list( $wanted ) || array() !== array_filter( $wanted, static fn( $s ) => ! is_int( $s ) && ! ( is_string( $s ) && 1 === preg_match( '/^[1-9][0-9]*\z/', $s ) ) ) ) ) {
 			return new WP_Error( 'ab_mcp_sync_revert_steps', 'steps is a list of the seqs of the write steps of the run to take back; without it, every step that wrote. Use action=status to list them.' );
 		}
-		$wanted   = null === $wanted ? null : array_map( 'intval', $wanted );
+		$wanted = null === $wanted ? null : array_map( 'intval', $wanted );
+		// A step goes back at most once: every step of the way back that
+		// names it counts, whatever its state, in this run (the way back of a
+		// run that was not closed, decision 15) and in every run of the type
+		// revert made for this run once it was closed (reverts in their plan).
+		// A second way back of the same step would undo a later takeover of
+		// the same object (GitHub Codex round 1 of branch 8).
 		$reverted = array();
-		foreach ( $steps as $step ) {
-			if ( 'revert' === $step['op'] && is_array( $step['parts'] ) && isset( $step['parts']['forward_seq'] ) && 'planned' !== $step['state'] ) {
-				$reverted[ (int) $step['parts']['forward_seq'] ] = (int) $step['seq'];
+		$others   = AB_MCP_Sync_Run::reverts_of( (int) $run['run_id'] );
+		if ( is_wp_error( $others ) ) {
+			return $others;
+		}
+		$ways = array( $run['run_id'] => $steps );
+		foreach ( $others as $other ) {
+			$ways[ (int) $other['run_id'] ] = AB_MCP_Sync_Run::steps( (int) $other['run_id'] );
+			if ( is_wp_error( $ways[ (int) $other['run_id'] ] ) ) {
+				return $ways[ (int) $other['run_id'] ];
+			}
+		}
+		foreach ( $ways as $way_id => $way_steps ) {
+			foreach ( $way_steps as $step ) {
+				if ( 'revert' !== $step['op'] || ! is_array( $step['parts'] ) || ! isset( $step['parts']['forward_seq'] ) ) {
+					continue;
+				}
+				if ( isset( $step['parts']['forward_run'] ) && (int) $step['parts']['forward_run'] !== (int) $run['run_id'] ) {
+					continue;
+				}
+				$reverted[ (int) $step['parts']['forward_seq'] ] = (int) $way_id === (int) $run['run_id'] ? sprintf( 'step %d of this run', (int) $step['seq'] ) : sprintf( 'step %1$d of run %2$d', (int) $step['seq'], (int) $way_id );
 			}
 		}
 		$items = array();
@@ -244,7 +267,7 @@ final class AB_MCP_Sync_Revert {
 			}
 			if ( isset( $reverted[ (int) $step['seq'] ] ) ) {
 				if ( null !== $wanted ) {
-					return new WP_Error( 'ab_mcp_sync_revert_steps', sprintf( 'Step %1$d was taken back already (step %2$d of the way back). Choose another step, or leave steps out.', (int) $step['seq'], $reverted[ (int) $step['seq'] ] ) );
+					return new WP_Error( 'ab_mcp_sync_revert_steps', sprintf( 'Step %1$d was taken back already (%2$s), and a step goes back once. Choose another step, or leave steps out.', (int) $step['seq'], $reverted[ (int) $step['seq'] ] ) );
 				}
 				continue;
 			}
