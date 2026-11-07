@@ -1002,6 +1002,29 @@ final class SyncRunTest extends TestCase {
 		}
 		self::assertIsArray( \AB_MCP_Store_Budget::book( $run_id, $booked ) );
 		self::assertSame( 'done', self::next( $run_id )['step']['state'], 'The next page, within the booking.' );
+		// The backups the run holds already count: a booking that holds one more
+		// backup alone (what the run holds, plus 1000 bytes) does not hold it
+		// beside the one written, so the third page fails before any mutation.
+		$groups = \AB_MCP_Protected_Store::groups( 'backups' );
+		self::assertIsArray( $groups );
+		$used = 0;
+		foreach ( $groups as $entry ) {
+			if ( (int) $entry['run_id'] === $run_id ) {
+				$used += (int) $entry['used'];
+			}
+		}
+		self::assertGreaterThan( 300000, $used, 'The backup of the page written holds the rows of this site.' );
+		self::assertIsArray( \AB_MCP_Store_Budget::book( $run_id, $used + 1000 ) );
+		$failed = self::next( $run_id );
+		self::assertSame( 'failed', $failed['step']['state'], json_encode( $failed['step'] ) );
+		self::assertStringContainsString( sprintf( 'its backups hold %d already', $used ), $failed['step']['result']['message'] );
+		$written = 0;
+		foreach ( $a as $id ) {
+			if ( 'Short, on staging.' === self::row_a( (int) $id )['post_content'] ) {
+				++$written;
+			}
+		}
+		self::assertSame( 1, $written, 'The one page within the booking, no other.' );
 	}
 
 	public function testAPostWhoseTermHasAnOrderIsLockedBeforeTheFirstWriteAndOneWithoutGoesOverAndBack(): void {
