@@ -133,9 +133,16 @@ Position, die das Theme hier nicht registriert, in der Prüfung des Laufs
   Filter auf `pre_update_option_{$option}` läuft vor der Sperre
   (wp-includes/option.php:901, die Sperre auf `pre_update_option` :912):
   verändert er den Wert, wird der eigene Aufruf ebenso abgewiesen, und das
-  Zurücklesen sieht die Zeile anders als geplant. Ein Filter auf
-  `pre_update_option` nach der Sperre (Priorität über 1) verändert den
-  geschriebenen Wert, das sieht das Zurücklesen.
+  Zurücklesen sieht die Zeile anders als geplant. Die Sperre selbst
+  läuft auf `pre_update_option` mit Priorität 1
+  (class-sync-guard.php:251 und :609). Ein Filter dort mit späterer
+  Priorität verändert, was nach ihr kommt: ändert er den Wert des eigenen
+  äusseren Aufrufs, sieht das Zurücklesen die Zeile anders als geplant;
+  ändert er nur den Wert eines verschachtelten Aufrufs, der genau den
+  geplanten Wert trägt und darum durch die Sperre geht, schreibt der
+  innere Aufruf ein Nachbarfeld, und der äussere überschreibt es danach
+  wieder, ohne Abweisung und ohne dass das Zurücklesen es sieht
+  (Codex-Runde 6; konstruiert, siehe Grenze C).
 - Gezählt vor dem Bau (WordPress 7.1.3): kein Weg des Kerns schreibt
   diese Zeilen verschachtelt, während der eigene Aufruf läuft.
   `retrieve_widgets()` und `_wp_sidebars_changed()` (widgets.php:1327,
@@ -513,12 +520,23 @@ Position, die das Theme hier nicht registriert, in der Prüfung des Laufs
   der Kern.
 - Folge, ohne Beschönigung: Diese Änderung geht verloren und wird nicht
   erkannt. So verhält sich WordPress auch beim Speichern in wp-admin.
-- Bei einer geteilten Zeile gehört ein Nachbarfeld nicht dazu: im eigenen
-  Kernaufruf nimmt die Zeile nur den geplanten Wert an, ein Schreibversuch
-  über die API der Optionen auf ein anderes Feld wird abgewiesen und
-  genannt (C1, oben unter «Geteilte Zeilen»). Schreibt ein Hook die Zeile
-  an dieser Sperre vorbei (über `$wpdb` selbst), hat das dieselbe Folge
-  wie beim eigenen Teil.
+- Bei einer geteilten Zeile kann auch ein Nachbarfeld verloren gehen.
+  Im eigenen Kernaufruf nimmt die Zeile nur den geplanten Wert an, ein
+  Schreibversuch über die API der Optionen auf ein anderes Feld wird
+  abgewiesen und genannt (C1, oben unter «Geteilte Zeilen»). Verloren
+  geht ein Nachbarfeld trotzdem, wo ein Hook es in diesem Fenster ausserhalb
+  dieser Sperre schreibt: in der letzten Lesung, bevor `only()` gilt (beim
+  Umsortieren von sidebar-1 setzt der Filter `query` der Lesung von
+  `widget_text` die Liste von sidebar-2, nachdem `sidebars_widgets`
+  gelesen ist, und der Kernaufruf schreibt die vorbereitete Liste;
+  Codex-Runde 6), an der Sperre vorbei (über `$wpdb` selbst), oder über
+  einen späteren Filter auf `pre_update_option`, der einen verschachtelten
+  Aufruf mit genau dem geplanten Wert verändert (oben). Die Folge ist
+  dieselbe wie beim eigenen Teil. Alle diese Fälle sind konstruiert: ein
+  Hook schreibt während des eigenen Aufrufs verschachtelt dieselbe Zeile;
+  laut Zählung (oben unter «Geteilte Zeilen») tut das im gewöhnlichen Lauf
+  weder der Kern noch die geprüften Plugins (Codex-Runde 6: Kern, WP
+  Rocket, WPGraphQL Smart Cache, Polylang).
 - Was der Vergleich nach dem Aufruf sieht: eine Änderung an einem anderen
   Teil des Objekts, den `current()` des Schreibers liest, die nach dem
   Aufruf noch steht; dann weicht der Schritt ab (Entscheid A: nichts davon
