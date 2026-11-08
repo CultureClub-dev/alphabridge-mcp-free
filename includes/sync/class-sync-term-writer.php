@@ -425,9 +425,9 @@ final class AB_MCP_Sync_Term_Writer {
 
 	/**
 	 * The right to bring the rows of a key from these values to those, at
-	 * the term, through map_meta_cap (decision 28): edit_term_meta where
-	 * both sides hold rows, add_term_meta where the target has more,
-	 * delete_term_meta where it has fewer.
+	 * the term, through map_meta_cap (decision 28): the right of every
+	 * operation write_meta() makes for it (AB_MCP_Sync_Post_Writer::
+	 * meta_ops(); branch 9, Codex round 1, A2), no other.
 	 *
 	 * @param int      $live_id Term.
 	 * @param string   $key     Key.
@@ -436,16 +436,7 @@ final class AB_MCP_Sync_Term_Writer {
 	 * @return true|string What the account may not do.
 	 */
 	private static function meta_right( $live_id, $key, array $to, array $from ) {
-		if ( array() !== $to && array() !== $from && ! current_user_can( 'edit_term_meta', (int) $live_id, $key ) ) {
-			return 'edit_term_meta refused';
-		}
-		if ( count( $to ) > count( $from ) && ! current_user_can( 'add_term_meta', (int) $live_id, $key ) ) {
-			return 'add_term_meta refused';
-		}
-		if ( count( $to ) < count( $from ) && ! current_user_can( 'delete_term_meta', (int) $live_id, $key ) ) {
-			return 'delete_term_meta refused';
-		}
-		return true;
+		return AB_MCP_Sync_Post_Writer::ops_right( 'term', $live_id, $key, AB_MCP_Sync_Post_Writer::meta_ops( $to, $from ) );
 	}
 
 	/**
@@ -815,7 +806,8 @@ final class AB_MCP_Sync_Term_Writer {
 		}
 		if ( 0 === strpos( $part, 'meta:' ) ) {
 			$key = substr( $part, 5 );
-			$may = self::meta_right( $id, $key, AB_MCP_Sync_Post_Writer::meta_values( $backup, $key ), isset( $now['meta'] ) ? AB_MCP_Sync_Post_Writer::meta_values( $now, $key ) : array() );
+			// The operations of the way back, row by row (restore_meta()).
+			$may = AB_MCP_Sync_Post_Writer::ops_right( 'term', $id, $key, AB_MCP_Sync_Post_Writer::restore_ops( AB_MCP_Sync_Post_Writer::meta_values( $backup, $key ), isset( $now['meta'] ) ? AB_MCP_Sync_Post_Writer::meta_values( $now, $key ) : array() ) );
 			return true === $may ? true : sprintf( 'change the meta key %1$s of the term (%2$s)', $key, $may );
 		}
 		return true;

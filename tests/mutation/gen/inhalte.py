@@ -119,12 +119,12 @@ e('term-differing-b9', 'differing(): a key with the name of a credential is neve
   "\t\t\tif ( AB_MCP_Sync_Credentials::names_credential( $key, $extra ) ) {\n\t\t\t\tcontinue;", "\t\t\tif ( false ) {\n\t\t\t\tcontinue;", 'term', T_PARTS)
 e('term-way-row', 'WAY_ROW: the row of a term is on a way the lock does not refuse (decision 19)', TW,
   "\tconst WAY_ROW  = 'not_refusable';", "\tconst WAY_ROW  = 'refusable';", 'term', T_PARTS)
-e('term-meta-right-edit', 'meta_right(): edit_term_meta where both sides hold rows', TW,
-  "\t\tif ( array() !== $to && array() !== $from && ! current_user_can( 'edit_term_meta', (int) $live_id, $key ) ) {", "\t\tif ( false ) {", 'term', T_RIGHTS)
-e('term-meta-right-add', 'meta_right(): add_term_meta where the target has more rows', TW,
-  "\t\tif ( count( $to ) > count( $from ) && ! current_user_can( 'add_term_meta', (int) $live_id, $key ) ) {", "\t\tif ( false ) {", 'term', T_RIGHTS)
-e('term-meta-right-delete', 'meta_right(): delete_term_meta where the target has fewer rows', TW,
-  "\t\tif ( count( $to ) < count( $from ) && ! current_user_can( 'delete_term_meta', (int) $live_id, $key ) ) {", "\t\tif ( false ) {", 'term', T_RIGHTS)
+e('term-meta-right-edit', 'restore_ops(): the way back of a key edits its rows in place where both sides hold rows (edit_term_meta)', PW,
+  "\t\tif ( array() !== $backup && array() !== $now ) {\n\t\t\t$ops[] = 'edit';", "\t\tif ( false ) {\n\t\t\t$ops[] = 'edit';", 'term', T_RIGHTS)
+e('term-meta-right-add', 'restore_ops(): the way back adds the rows the step removed (add_term_meta)', PW,
+  "\t\tif ( count( $backup ) > count( $now ) ) {", "\t\tif ( false ) {", 'term', T_RIGHTS)
+e('term-meta-right-delete', 'restore_ops(): the way back removes the rows the step added (delete_term_meta)', PW,
+  "\t\tif ( count( $backup ) < count( $now ) ) {", "\t\tif ( false ) {", 'term', T_RIGHTS)
 e('term-restore-edit-term', 'restore_right(): edit_term first, for every part', TW,
   "\t\tif ( ! current_user_can( 'edit_term', $id ) ) {", "\t\tif ( false ) {", 'term', T_RIGHTS)
 e('term-write-duplicate', 'write_row(): an id not above the highest before the insert is a term WordPress gave back, not the step\'s own', TW,
@@ -260,10 +260,10 @@ e('post-differing-excluded', 'differing(): an excluded key and a credential are 
   "\t\t\tif ( AB_MCP_Sync_Exclusions::post_meta( $key ) || AB_MCP_Sync_Credentials::names_credential( $key, $extra ) ) {\n\t\t\t\tcontinue;", "\t\t\tif ( false ) {\n\t\t\t\tcontinue;", 'unit', P_RULE)
 e('post-meta-refused', 'precheck(): a key that differs and that map_meta_cap refuses locks the post (*:meta_without_rule)', PW,
   "\t\t\t\tif ( true !== $may ) {\n\t\t\t\t\treturn self::locked( '*:meta_without_rule', sprintf( 'meta key %1$s of the post", "\t\t\t\tif ( false ) {\n\t\t\t\t\treturn self::locked( '*:meta_without_rule', sprintf( 'meta key %1$s of the post", 'unit', P_DELETE)
-e('post-meta-edit', 'meta_right(): edit_post_meta where both sides hold rows', PW,
-  "\t\tif ( array() !== $to && array() !== $from && ! current_user_can( 'edit_post_meta', (int) $live_id, $key ) ) {", "\t\tif ( false ) {", 'unit', P_DELETE)
-e('post-meta-add', 'meta_right(): add_post_meta where the target has more rows', PW,
-  "\t\tif ( count( $to ) > count( $from ) && ! current_user_can( 'add_post_meta', (int) $live_id, $key ) ) {", "\t\tif ( false ) {", 'unit', P_FIELD)
+e('post-meta-edit', 'meta_ops(): edit_post_meta where one row stays one row (update_metadata())', PW,
+  "\t\t\treturn array( 'edit' );", "\t\t\treturn array();", 'unit', P_DELETE)
+e('post-meta-add', 'meta_ops(): add_post_meta where values are to be stored', PW,
+  "\t\tif ( array() !== $to ) {\n\t\t\t$ops[] = 'add';", "\t\tif ( false ) {\n\t\t\t$ops[] = 'add';", 'unit', P_FIELD)
 e('post-builder-key', 'precheck(): a key of a page builder needs unfiltered_html', PW,
   "\t\t\tif ( null !== AB_MCP_Builders::markup_meta_refusal( $key ) ) {", "\t\t\tif ( false ) {", 'unit', P_FIELD)
 e('post-sanitize-meta', 'precheck(): each written value through sanitize_meta() (decision 17)', PW,
@@ -302,6 +302,18 @@ e('engine-row-besides', 'write_parts(): what the row call changed besides the pa
   "\t\t\t\t\tif ( null !== $changed_besides ) {", "\t\t\t\t\tif ( false ) {", 'it', C_A1)
 e('engine-row-besides-all', 'changed_besides(): every part read before and after the row call, planned or not (part_names())', EN,
   "\t\tforeach ( self::part_names( is_array( $before ) ? $before : array(), $after ) as $name ) {", "\t\tforeach ( array_keys( $journaled ) as $name ) {", 'it', C_A1)
+C_A2P = 'testTheRightsOfAKeyOfSeveralRowsAreTheOperationsTheWriteMakes'
+C_A2T = 'testTheRightsOfAKeyOfSeveralRowsOfATermAreTheOperationsTheWriteMakes'
+e('post-meta-ops-one-row', 'meta_ops(): edit alone only where one row stays one row; a key of several rows is removed and added anew (Codex round 1, A2)', PW,
+  "\t\tif ( 1 === count( $to ) && 1 === count( $from ) ) {\n\t\t\treturn array( 'edit' );", "\t\tif ( array() !== $to && array() !== $from ) {\n\t\t\treturn array( 'edit' );", 'unit', C_A2P)
+e('post-ops-right', 'ops_right(): the right of every operation asked through map_meta_cap', PW,
+  "\t\t\tif ( ! current_user_can( $cap, (int) $live_id, $key ) ) {", "\t\t\tif ( false ) {", 'unit', C_A2P)
+e('post-write-meta-ops', 'write_meta(): the operations of meta_ops(), no other (update_metadata() only where one row stays one)', PW,
+  "\t\tif ( array( 'edit' ) === $ops ) {", "\t\tif ( array() !== $values && array() !== $current ) {", 'unit', C_A2P)
+e('term-meta-right-ops', 'meta_right(): the rights of a term key are the operations write_meta() makes (Codex round 1, A2)', TW,
+  "\t\treturn AB_MCP_Sync_Post_Writer::ops_right( 'term', $live_id, $key, AB_MCP_Sync_Post_Writer::meta_ops( $to, $from ) );", "\t\treturn true;", 'term', C_A2T)
+e('term-restore-ops', 'restore_right(): the way back of a term key asks the operations of restore_meta(), row by row', TW,
+  "AB_MCP_Sync_Post_Writer::restore_ops( AB_MCP_Sync_Post_Writer::meta_values( $backup, $key )", "AB_MCP_Sync_Post_Writer::meta_ops( AB_MCP_Sync_Post_Writer::meta_values( $backup, $key )", 'term', C_A2T)
 
 def test_of(expect):
     return expect.split(' with data set "', 1)[0]

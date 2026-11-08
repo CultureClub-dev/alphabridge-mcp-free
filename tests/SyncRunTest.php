@@ -2505,6 +2505,61 @@ final class SyncRunTest extends TestCase {
 		unset( $GLOBALS['ab_test_page_templates'] );
 	}
 
+	public function testTheRightsOfAKeyOfSeveralRowsAreTheOperationsTheWriteMakes(): void {
+		// Codex round 1 on branch 9, A2: a key of several rows is removed
+		// whole and added anew (write_meta()). The rights were asked by the
+		// net count of the rows: two rows to two other rows asked edit alone,
+		// and a rule that gave edit but refused add and delete let two other
+		// values through. Now the rights are the operations the write makes
+		// (meta_ops()): delete and add there, edit where one row stays one.
+		$db           = self::post_rows( 'News' );
+		$db->meta[12] = array(
+			array( 'meta_id' => 1, 'meta_key' => 'note', 'meta_value' => 'abc' ),
+			array( 'meta_id' => 2, 'meta_key' => 'colors', 'meta_value' => 'red' ),
+			array( 'meta_id' => 3, 'meta_key' => 'colors', 'meta_value' => 'green' ),
+		);
+		$GLOBALS['wpdb'] = $db;
+		$ctx             = self::ctx();
+		$ctx['now']      = 1800000000;
+		$line            = static fn( array $meta ) => self::line( array( 'post_type' => 'post' ), $meta, array(), array( 'identity' => array( 'post_type' => 'post', 'post_name' => 'hello', 'theme' => '' ) ) );
+		$denied          = array( 'add_post_meta:colors', 'delete_post_meta:colors' );
+		$GLOBALS['ab_test_can'] = static function ( string $cap, array $args ) use ( &$denied ): bool {
+			return ! in_array( $cap . ':' . (string) ( $args[1] ?? '' ), $denied, true );
+		};
+		$two    = AB_MCP_Sync_Post_Writer::target_of( $line( array( array( 'note', 'abc' ), array( 'colors', 'blue' ), array( 'colors', 'yellow' ) ) ), self::item(), $ctx );
+		$locked = AB_MCP_Sync_Post_Writer::precheck( $two, 12, $ctx['now'] );
+		self::assertSame( '*:meta_without_rule', self::lock_of( $locked ), 'edit_post_meta alone does not cover a key removed whole and added anew.' );
+		self::assertStringContainsString( 'Meta key colors of the post on this site: delete_post_meta refused', $locked->get_error_message() );
+		// At the call as well: refused, nothing written.
+		$GLOBALS['ab_test_meta'][12]['colors'] = array( 'red', 'green' );
+		$refused                               = AB_MCP_Sync_Post_Writer::write_part( 12, 'meta:colors', $two, AB_MCP_Sync_Post_Writer::current( 12 ) );
+		self::assertInstanceOf( WP_Error::class, $refused );
+		self::assertSame( 'ab_mcp_sync_rights', $refused->get_error_code() );
+		self::assertSame( array( 'red', 'green' ), $GLOBALS['ab_test_meta'][12]['colors'], 'Nothing written.' );
+		$denied = array( 'delete_post_meta:colors' );
+		self::assertStringContainsString( 'delete_post_meta refused', AB_MCP_Sync_Post_Writer::precheck( $two, 12, $ctx['now'] )->get_error_message(), 'Each operation on its own.' );
+		$denied = array( 'add_post_meta:colors' );
+		self::assertStringContainsString( 'add_post_meta refused', AB_MCP_Sync_Post_Writer::precheck( $two, 12, $ctx['now'] )->get_error_message() );
+		// Two rows to one: removed and added, never edited in place.
+		$one    = AB_MCP_Sync_Post_Writer::target_of( $line( array( array( 'note', 'abc' ), array( 'colors', 'blue' ) ) ), self::item(), $ctx );
+		self::assertStringContainsString( 'add_post_meta refused', AB_MCP_Sync_Post_Writer::precheck( $one, 12, $ctx['now'] )->get_error_message() );
+		// One row to one row: update_metadata(), edit alone.
+		$denied = array( 'add_post_meta:note', 'delete_post_meta:note' );
+		$note   = AB_MCP_Sync_Post_Writer::target_of( $line( array( array( 'note', 'xyz' ), array( 'colors', 'red' ), array( 'colors', 'green' ) ) ), self::item(), $ctx );
+		self::assertTrue( AB_MCP_Sync_Post_Writer::precheck( $note, 12, $ctx['now'] ) );
+		$denied = array( 'edit_post_meta:note' );
+		self::assertStringContainsString( 'edit_post_meta refused', AB_MCP_Sync_Post_Writer::precheck( $note, 12, $ctx['now'] )->get_error_message() );
+		// With every right: written.
+		$denied = array();
+		self::assertTrue( AB_MCP_Sync_Post_Writer::precheck( $two, 12, $ctx['now'] ) );
+		self::assertTrue( AB_MCP_Sync_Post_Writer::write_part( 12, 'meta:colors', $two, AB_MCP_Sync_Post_Writer::current( 12 ) ) );
+		self::assertSame( array( 'blue', 'yellow' ), $GLOBALS['ab_test_meta'][12]['colors'] );
+		self::assertSame( array( 'delete', 'add' ), AB_MCP_Sync_Post_Writer::meta_ops( array( 'b', 'y' ), array( 'r', 'g' ) ) );
+		self::assertSame( array( 'edit' ), AB_MCP_Sync_Post_Writer::meta_ops( array( 'b' ), array( 'r' ) ) );
+		self::assertSame( array( 'add' ), AB_MCP_Sync_Post_Writer::meta_ops( array( 'b' ), array() ) );
+		self::assertSame( array( 'delete' ), AB_MCP_Sync_Post_Writer::meta_ops( array(), array( 'r' ) ) );
+	}
+
 	public function testTheFeaturedImageGoesThroughItsOwnApiToAnAttachmentWordPressShowsAsAnImage(): void {
 		$db               = self::post_rows( 'News' );
 		$db->rows[70]     = array( 'ID' => 70, 'post_type' => 'attachment' ) + $db->rows[12];

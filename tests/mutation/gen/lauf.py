@@ -434,8 +434,8 @@ F2 = 'testTheDefaultCategoryOfTheRowGoingBackDoesNotTakeBackTermsAnotherHandChan
 # holds the halt and its wording.
 e('plan-report-live', 'plan(): a target that changed since the report is not written over, whatever the report said of it; the hash the plan binds is the one the report compared (P1)', PU,
   "\t\t\tif ( null === $existing && ( ! isset( $compared[ $key ] ) || ! hash_equals( $compared[ $key ], $hash ) ) ) {", "\t\t\tif ( false ) {", 'it', 'testATargetThatChangedSinceTheReportIsNotPlannedWhateverTheReportSaid')
-e('writer-delete-right', 'meta_right(): a key only this site has, which the step removes, needs the right to remove it (delete_post_meta; decision 28; P2)', PW,
-  "\t\tif ( count( $to ) < count( $from ) && ! current_user_can( 'delete_post_meta', (int) $live_id, $key ) ) {", "\t\tif ( false ) {", 'unit', 'testRemovingAMetaKeyOnlyThisSiteHasNeedsTheRightToDeleteIt')
+e('writer-delete-right', 'meta_ops(): a key only this site has, which the step removes, needs the right to remove it (delete_post_meta; decision 28; P2)', PW,
+  "\t\tif ( array() !== $from ) {\n\t\t\t$ops[] = 'delete';", "\t\tif ( false ) {\n\t\t\t$ops[] = 'delete';", 'unit', 'testRemovingAMetaKeyOnlyThisSiteHasNeedsTheRightToDeleteIt')
 e('revert-once-across-runs', 'plan(): a step goes back at most once, also across the runs of the way back made for the closed run (P2)', RV,
   "\t\tforeach ( $others as $other ) {\n\t\t\t$ways[ (int) $other['run_id'] ] = AB_MCP_Sync_Run::steps( (int) $other['run_id'] );",
   "\t\tforeach ( array() as $other ) {\n\t\t\t$ways[ (int) $other['run_id'] ] = AB_MCP_Sync_Run::steps( (int) $other['run_id'] );", 'it', 'testAStepGoesBackOnceAlsoAcrossRunsOfTheWayBack')
@@ -443,7 +443,7 @@ SLASH = 'testAMetaKeyWithABackslashIsStoredAndRemovedUnderItsOwnName'
 e('writer-slash-key-update', 'write_meta(): the key slashed for update_metadata(), which unslashes it (P2)', PW,
   "\t\t\t$done = update_metadata( $type, $id, wp_slash( (string) $key ), wp_slash( $values[0] ) );", "\t\t\t$done = update_metadata( $type, $id, $key, wp_slash( $values[0] ) );", 'unit', SLASH)
 e('writer-slash-key-delete', 'write_meta(): the key slashed for delete_metadata(), which unslashes it', PW,
-  "\t\tif ( array() !== $current && false === delete_metadata( $type, $id, wp_slash( (string) $key ) ) ) {", "\t\tif ( array() !== $current && false === delete_metadata( $type, $id, $key ) ) {", 'unit', SLASH)
+  "\t\tif ( in_array( 'delete', $ops, true ) && false === delete_metadata( $type, $id, wp_slash( (string) $key ) ) ) {", "\t\tif ( in_array( 'delete', $ops, true ) && false === delete_metadata( $type, $id, $key ) ) {", 'unit', SLASH)
 e('writer-slash-key-add', 'write_meta(): the key slashed for add_metadata(), which unslashes it', PW,
   "\t\t\tif ( false === add_metadata( $type, $id, wp_slash( (string) $key ), wp_slash( $value ) ) ) {", "\t\t\tif ( false === add_metadata( $type, $id, $key, wp_slash( $value ) ) ) {", 'unit', SLASH)
 

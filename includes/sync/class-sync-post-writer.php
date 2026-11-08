@@ -843,9 +843,8 @@ final class AB_MCP_Sync_Post_Writer {
 
 	/**
 	 * The right to bring the rows of a key from these values to those, at
-	 * the post, through map_meta_cap (decision 28): edit_post_meta where
-	 * both sides hold rows, add_post_meta where the target has more,
-	 * delete_post_meta where it has fewer.
+	 * the post, through map_meta_cap (decision 28): the right of every
+	 * operation write_meta() makes for it (meta_ops()), no other.
 	 *
 	 * @param int      $live_id Post.
 	 * @param string   $key     Key.
@@ -854,14 +853,79 @@ final class AB_MCP_Sync_Post_Writer {
 	 * @return true|string What the account may not do.
 	 */
 	public static function meta_right( $live_id, $key, array $to, array $from ) {
-		if ( array() !== $to && array() !== $from && ! current_user_can( 'edit_post_meta', (int) $live_id, $key ) ) {
-			return 'edit_post_meta refused';
+		return self::ops_right( 'post', $live_id, $key, self::meta_ops( $to, $from ) );
+	}
+
+	/**
+	 * The operations write_meta() makes to bring the rows of a key from
+	 * these values to those, the one place that says them, for the write
+	 * and for its rights (branch 9, Codex round 1, A2: the rights were asked
+	 * by the net count of the rows, while a key of several rows is removed
+	 * whole and added anew; a rule that gave edit but refused add and
+	 * delete let two other values of two rows through): edit where one row
+	 * stays one row (update_metadata()); else delete where rows are there
+	 * (delete_metadata(), every row of the key) and add where values are to
+	 * be stored (add_metadata(), each).
+	 *
+	 * @param array    $to   The values to store.
+	 * @param string[] $from The values stored now.
+	 * @return string[] Of edit, delete, add.
+	 */
+	public static function meta_ops( array $to, array $from ) {
+		if ( 1 === count( $to ) && 1 === count( $from ) ) {
+			return array( 'edit' );
 		}
-		if ( count( $to ) > count( $from ) && ! current_user_can( 'add_post_meta', (int) $live_id, $key ) ) {
-			return 'add_post_meta refused';
+		$ops = array();
+		if ( array() !== $from ) {
+			$ops[] = 'delete';
 		}
-		if ( count( $to ) < count( $from ) && ! current_user_can( 'delete_post_meta', (int) $live_id, $key ) ) {
-			return 'delete_post_meta refused';
+		if ( array() !== $to ) {
+			$ops[] = 'add';
+		}
+		return $ops;
+	}
+
+	/**
+	 * The operations restore_meta() makes to put the rows of a key back,
+	 * row by row: edit where both sides hold rows (a row written back in
+	 * place), add where the backup holds more rows than the object now (a
+	 * row the step removed, inserted), delete where it holds fewer (a row
+	 * the step added, removed).
+	 *
+	 * @param string[] $backup The values of the backup.
+	 * @param string[] $now    The values stored now.
+	 * @return string[] Of edit, add, delete.
+	 */
+	public static function restore_ops( array $backup, array $now ) {
+		$ops = array();
+		if ( array() !== $backup && array() !== $now ) {
+			$ops[] = 'edit';
+		}
+		if ( count( $backup ) > count( $now ) ) {
+			$ops[] = 'add';
+		}
+		if ( count( $backup ) < count( $now ) ) {
+			$ops[] = 'delete';
+		}
+		return $ops;
+	}
+
+	/**
+	 * Whether the account may make each of these operations on a key at the
+	 * object, through map_meta_cap ({op}_{type}_meta, with the key).
+	 *
+	 * @param string   $type    The meta type: post, or term.
+	 * @param int      $live_id The object.
+	 * @param string   $key     Key.
+	 * @param string[] $ops     Of edit, add, delete.
+	 * @return true|string The first capability refused, as "<cap> refused".
+	 */
+	public static function ops_right( $type, $live_id, $key, array $ops ) {
+		foreach ( $ops as $op ) {
+			$cap = $op . '_' . ( 'term' === $type ? 'term' : 'post' ) . '_meta';
+			if ( ! current_user_can( $cap, (int) $live_id, $key ) ) {
+				return $cap . ' refused';
+			}
 		}
 		return true;
 	}
@@ -1433,17 +1497,21 @@ final class AB_MCP_Sync_Post_Writer {
 	public static function write_meta( $live_id, $key, array $values, array $current, $type = 'post' ) {
 		$id   = (int) $live_id;
 		$type = (string) $type;
-		if ( 1 === count( $values ) && 1 === count( $current ) ) {
+		// The operations of meta_ops(), whose rights the step asked: no other.
+		$ops = self::meta_ops( $values, $current );
+		if ( array( 'edit' ) === $ops ) {
 			$done = update_metadata( $type, $id, wp_slash( (string) $key ), wp_slash( $values[0] ) );
 			// false also where the value is the same already.
 			return false === $done && self::meta_values_now( $id, $key, $type ) !== array( self::stored_form( $values[0] ) ) ? self::meta_refused( $key ) : true;
 		}
-		if ( array() !== $current && false === delete_metadata( $type, $id, wp_slash( (string) $key ) ) ) {
+		if ( in_array( 'delete', $ops, true ) && false === delete_metadata( $type, $id, wp_slash( (string) $key ) ) ) {
 			return self::meta_refused( $key );
 		}
-		foreach ( $values as $value ) {
-			if ( false === add_metadata( $type, $id, wp_slash( (string) $key ), wp_slash( $value ) ) ) {
-				return self::meta_refused( $key );
+		if ( in_array( 'add', $ops, true ) ) {
+			foreach ( $values as $value ) {
+				if ( false === add_metadata( $type, $id, wp_slash( (string) $key ), wp_slash( $value ) ) ) {
+					return self::meta_refused( $key );
+				}
 			}
 		}
 		return true;

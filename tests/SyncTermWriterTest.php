@@ -459,6 +459,50 @@ final class SyncTermWriterTest extends TestCase {
 		self::assertSame( 'ab_mcp_sync_target_gone', AB_MCP_Sync_Term_Writer::precheck( $prepared, 34, 0 )->get_error_code() );
 	}
 
+	public function testTheRightsOfAKeyOfSeveralRowsOfATermAreTheOperationsTheWriteMakes(): void {
+		// Codex round 1 on branch 9, A2, for terms: two rows of colors to
+		// two other rows are removed whole and added anew (write_meta()); a
+		// rule that gives edit_term_meta but refuses add and delete locks the
+		// term, and the call is not made. Before, the net count asked edit
+		// alone and the two other values were written.
+		$db       = self::live_term( array(), array( array( 'meta_id' => 1, 'meta_key' => 'colors', 'meta_value' => 'red' ), array( 'meta_id' => 2, 'meta_key' => 'colors', 'meta_value' => 'green' ) ) );
+		$prepared = AB_MCP_Sync_Term_Writer::target_of( self::line( array(), array( array( 'colors', 'blue' ), array( 'colors', 'yellow' ) ) ), self::item(), self::ctx() );
+		self::assertIsArray( $prepared, is_wp_error( $prepared ) ? $prepared->get_error_message() : '' );
+		$denied                 = array( 'add_term_meta', 'delete_term_meta' );
+		$GLOBALS['ab_test_can'] = static function ( string $cap, array $args ) use ( &$denied ): bool {
+			return ! in_array( $cap, $denied, true );
+		};
+		$locked = AB_MCP_Sync_Term_Writer::precheck( $prepared, 34, 0 );
+		self::assertSame( '*:meta_without_rule', self::lock_of( $locked ) );
+		self::assertStringContainsString( 'Meta key colors of the term on this site: delete_term_meta refused', $locked->get_error_message() );
+		$calls  = array();
+		$record = static function ( $check ) use ( &$calls ) {
+			$calls[] = current_filter();
+			return $check;
+		};
+		foreach ( array( 'add_term_metadata', 'update_term_metadata', 'delete_term_metadata' ) as $hook ) {
+			add_filter( $hook, $record );
+		}
+		$refused = AB_MCP_Sync_Term_Writer::write_part( 34, 'meta:colors', $prepared, AB_MCP_Sync_Term_Writer::current( 34 ) );
+		foreach ( array( 'add_term_metadata', 'update_term_metadata', 'delete_term_metadata' ) as $hook ) {
+			remove_filter( $hook, $record );
+		}
+		self::assertInstanceOf( WP_Error::class, $refused );
+		self::assertSame( 'ab_mcp_sync_rights', $refused->get_error_code() );
+		self::assertStringContainsString( 'delete_term_meta refused', $refused->get_error_message() );
+		self::assertSame( array(), $calls, 'Nothing written.' );
+		$denied = array( 'add_term_meta' );
+		self::assertStringContainsString( 'add_term_meta refused', AB_MCP_Sync_Term_Writer::precheck( $prepared, 34, 0 )->get_error_message() );
+		$denied = array();
+		self::assertTrue( AB_MCP_Sync_Term_Writer::precheck( $prepared, 34, 0 ) );
+		// The way back puts the rows back in place (restore_meta()): edit
+		// there, as before.
+		$denied = array( 'add_term_meta', 'delete_term_meta' );
+		$now    = array( 'meta' => array( array( 'meta_id' => 3, 'key' => 'colors', 'value' => 'blue' ), array( 'meta_id' => 4, 'key' => 'colors', 'value' => 'yellow' ) ) );
+		self::assertTrue( AB_MCP_Sync_Term_Writer::restore_right( 'meta:colors', 34, AB_MCP_Sync_Term_Writer::current( 34 ), $now ) );
+		unset( $db );
+	}
+
 	public function testTheRowOfATermIsWrittenThroughTheCoreAndAnIdWordPressGaveBackIsNotTheStepsOwn(): void {
 		$db       = self::live_term();
 		$prepared = AB_MCP_Sync_Term_Writer::target_of( self::line( array( 'name' => 'O\'Neil \\ Co', 'description' => 'A "b"' ) ), self::item( 'create' ), self::ctx() );

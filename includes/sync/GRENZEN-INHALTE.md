@@ -32,9 +32,20 @@ nennt ihre Meldung den Weg.
   Live-Post mit einem Schlüssel ausserhalb der Regel von Zweig 8 die
   Übernahme (`post:meta_rule`), also fast jede Seite mit Plugins. Prüffall
   `testAPluginKeyEqualOnBothSidesStaysUntouchedAndOneThatDiffersWaitsForARuleOfTheSite`.
-- Ein abweichender Schlüssel fragt das Recht seiner Operation über
-  `map_meta_cap` am Live-Post: `edit_post_meta` (Zeilen beidseits),
-  `add_post_meta` (Sollwert hat mehr Zeilen), `delete_post_meta` (weniger).
+- Ein abweichender Schlüssel fragt das Recht jeder Operation, die
+  `write_meta()` für ihn ausführt (`meta_ops()`, die eine Stelle für das
+  Schreiben und seine Rechte), über `map_meta_cap` am Live-Post: bleibt eine
+  Zeile eine Zeile, `edit_post_meta` (`update_metadata()`); sonst
+  `delete_post_meta`, wo Zeilen da sind (`delete_metadata()` entfernt alle
+  Zeilen des Schlüssels), und `add_post_meta`, wo Werte zu speichern sind
+  (`add_metadata()` je Wert). Vorher galt die Nettoanzahl der Zeilen: zwei
+  Zeilen zu zwei anderen fragten nur `edit_post_meta`, und eine Regel, die
+  `edit` gab, `add` und `delete` aber verweigerte, liess zwei andere Werte
+  durch (Codex-Runde 1, A2; Prüffall
+  `testTheRightsOfAKeyOfSeveralRowsAreTheOperationsTheWriteMakes`). Der
+  Rückweg (`restore_meta()`, Zeile um Zeile roh) fragt seine eigenen
+  Operationen (`restore_ops()`): `edit` für Zeilen beidseits, `add` für
+  Zeilen, die der Schritt entfernte, `delete` für Zeilen, die er anlegte.
   Verweigert, sperrt der Post vor jeder Mutation mit `*:meta_without_rule`
   (Z8d, «Feldregel folgt mit Z8d»); das gilt für geschützte Schlüssel ohne
   Regel ihres Plugins. Gibt eine Regel der Site das Recht
@@ -147,8 +158,11 @@ nennt ihre Meldung den Weg.
   `testANewCategoryWithANewChildAndANewPostInTheChildGoInOneRunParentsFirst`).
   Ebenso ein neuer Term, in dem ein neuer Post derselben Planung liegt.
 - Rechte (Entscheid 28): am vorhandenen Term `edit_term`, je abweichendem
-  Meta-Schlüssel `edit_`, `add_` oder `delete_term_meta` über
-  `map_meta_cap` (verweigert: `*:meta_without_rule`, Z8d); für einen neuen
+  Meta-Schlüssel das Recht jeder Operation, die `write_meta()` ausführt
+  (`edit_`, `delete_` und `add_term_meta` wie bei Posts, `meta_ops()`;
+  Codex-Runde 1, A2, Prüffall
+  `testTheRightsOfAKeyOfSeveralRowsOfATermAreTheOperationsTheWriteMakes`),
+  über `map_meta_cap` (verweigert: `*:meta_without_rule`, Z8d); für einen neuen
   Term `manage_terms`, `edit_terms` und `assign_terms` der Taxonomie. Auf
   dem Rückweg dieselben Rechte, `edit_term` zuerst.
 - Neue Terme mit Meta sperrt schon der Bericht (`term:create_with_meta`,

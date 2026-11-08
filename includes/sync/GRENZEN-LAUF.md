@@ -635,7 +635,9 @@ Ablehnung entsteht, nennt sie den Weg.
   Schritt (`write_meta()` ohne Wert); die Metadaten-API fragt selbst kein
   Recht. Darum prüfen Gesamtvorprüfung und Grenze je solchem Schlüssel
   `delete_post_meta` über `map_meta_cap` (Entscheid 28; GitHub-Codex 1, P2),
-  wie `edit_post_meta` für die Schlüssel des Sollwerts; verweigert, sperrt
+  wie `edit_post_meta` für die Schlüssel des Sollwerts (seit Zweig 9,
+  Codex-Runde 1, A2: genau die Operationen, die `write_meta()` ausführt,
+  `AB_MCP_Sync_Post_Writer::meta_ops()`; GRENZEN-INHALTE.md); verweigert, sperrt
   `ab_mcp_sync_rights` mit dem Schlüssel. `_wp_page_template` geht mit
   `edit_post` (eigene API, Entscheid 28).
 - Rechte je Taxonomie (Entscheid 28; GitHub-Codex 2, P2): Gesamtvorprüfung
