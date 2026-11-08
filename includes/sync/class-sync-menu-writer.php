@@ -427,7 +427,9 @@ final class AB_MCP_Sync_Menu_Writer {
 	 * The parts the row call writes besides the row: none; for a new menu,
 	 * whose state before the call is no menu, the positions and the rest of
 	 * the theme mods as they are now (the term call leaves them as they are,
-	 * so a change there is another hand's).
+	 * so a change there is another hand's), and each position the step sets
+	 * that no menu holds yet as absent (Codex round 1 of branch 11, B1: the
+	 * field is not there before the call nor after it).
 	 *
 	 * @param array      $prepared target_of().
 	 * @param int|null   $live_id  The menu here, null for a new one.
@@ -435,14 +437,20 @@ final class AB_MCP_Sync_Menu_Writer {
 	 * @return array<string,string>
 	 */
 	public static function with_row( array $prepared, $live_id, $current = null ) {
-		unset( $prepared, $current );
+		unset( $current );
 		if ( null !== $live_id ) {
 			return array();
 		}
 		$positions = self::positions( null );
+		$parts     = is_array( $positions ) ? $positions['parts'] : array();
 		$out       = array();
-		foreach ( is_array( $positions ) ? $positions['parts'] : array() as $name => $value ) {
+		foreach ( $parts as $name => $value ) {
 			$out[ (string) $name ] = AB_MCP_Sync_Shared_Row::hash( $value );
+		}
+		foreach ( array_keys( self::location_targets( $prepared, $parts ) ) as $name ) {
+			if ( ! isset( $out[ $name ] ) ) {
+				$out[ $name ] = AB_MCP_Sync_Shared_Row::hash( null );
+			}
 		}
 		return $out;
 	}

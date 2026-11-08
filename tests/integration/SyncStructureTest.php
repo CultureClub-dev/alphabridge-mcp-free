@@ -717,6 +717,38 @@ final class SyncStructureTest extends TestCase {
 		self::assertSame( array(), $this->deletions, 'Nothing was deleted, forward or back.' );
 	}
 
+	public function testANewMenuAtAPositionNoMenuHoldsYetGoesOverAndTheWayBackLeavesThePositionEmptyAgain(): void {
+		// A new menu at a position the theme registers and no menu holds yet
+		// (Codex round 1 of branch 11, B1): the field is absent before the
+		// term call and after it, then the step sets it; the way back unsets
+		// it again and leaves the menu and its item as rests.
+		self::pair();
+		self::paired( self::staged() );
+		$new_b = (int) self::one_b( array( 'op' => 'nav_menu', 'name' => 'Footer' ) );
+		$link  = (int) self::one_b( array( 'op' => 'nav_menu_item', 'menu' => $new_b, 'args' => array( 'menu-item-title' => 'Imprint', 'menu-item-url' => 'https://example.test/imprint/', 'menu-item-type' => 'custom', 'menu-item-status' => 'publish', 'menu-item-position' => 1 ) ) );
+		self::one_b( array( 'op' => 'theme_mod', 'name' => 'nav_menu_locations', 'value' => array( 'footer' => $new_b ) ) );
+		$planned = self::planned(
+			array(
+				array( 'menu', 'staging', (string) $new_b ),
+				array( 'menu_item', 'staging', (string) $link ),
+			)
+		);
+		$this->watch_deletions();
+		$run    = self::begun( $planned['args'] );
+		$closed = self::finish( (int) $run['run_id'] );
+		self::assertSame( 'closed_done', $closed['state'], json_encode( self::run_status( (int) $run['run_id'] ) ) );
+		self::assertWrittenWhole( self::run_status( (int) $run['run_id'] ) );
+		wp_cache_flush();
+		$new_a = (int) get_term_by( 'slug', 'footer', 'nav_menu' )->term_id;
+		self::assertSame( array( 'footer' => $new_a ), self::option_of( 'a', 'theme_mods_twentytwentyfive' )['nav_menu_locations'] );
+		$back = self::back( (int) $run['run_id'] );
+		self::assertSame( 'closed_findings', $back['state'], json_encode( $back ) );
+		$mods = self::option_of( 'a', 'theme_mods_twentytwentyfive' );
+		self::assertSame( array(), $mods['nav_menu_locations'] ?? array(), 'The position no menu held before is empty again.' );
+		self::assertSame( 'residual', AB_MCP_Sync_Pairs::find_live( self::source(), 'menu', (string) $new_a )['state'] );
+		self::assertSame( array(), $this->deletions, 'Nothing was deleted, forward or back.' );
+	}
+
 	/* ----------------------------------------------------------- widgets */
 
 	public function testAChangedTextWidgetAndImageWidgetGoOverAndBack(): void {
