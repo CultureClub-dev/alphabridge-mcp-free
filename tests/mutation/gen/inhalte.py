@@ -265,7 +265,7 @@ e('post-meta-edit', 'meta_ops(): edit_post_meta where one row stays one row (upd
 e('post-meta-add', 'meta_ops(): add_post_meta where values are to be stored', PW,
   "\t\tif ( array() !== $to ) {\n\t\t\t$ops[] = 'add';", "\t\tif ( false ) {\n\t\t\t$ops[] = 'add';", 'unit', P_FIELD)
 e('post-builder-key', 'precheck(): a key of a page builder needs unfiltered_html', PW,
-  "\t\t\tif ( null !== AB_MCP_Builders::markup_meta_refusal( $key ) ) {", "\t\t\tif ( false ) {", 'unit', P_FIELD)
+  "\t\t\tif ( null !== AB_MCP_Builders::markup_meta_refusal( $key ) ) {\n\t\t\t\treturn self::rights(", "\t\t\tif ( false ) {\n\t\t\t\treturn self::rights(", 'unit', P_FIELD)
 e('post-sanitize-meta', 'precheck(): each written value through sanitize_meta() (decision 17)', PW,
   "\t\t\t\tif ( self::db_form( sanitize_meta( (string) $key, $value, 'post', $type ) ) !== self::stored_form( $value ) ) {", "\t\t\t\tif ( false ) {", 'unit', P_FIELD)
 e('post-sanitizer-fields', 'precheck(): the other fields of the row through sanitize_post() as well', PW,
@@ -372,6 +372,8 @@ e('post-read-lock-unread', 'read_lock(): a lock of the post of this site this ve
   "\t\treturn self::locked( 'post:lock_unread', sprintf( '%s carries a lock this version does not read', (string) $what ) );", "\t\treturn null;", 'unit', P_TYPES)
 e('push-token-order', 'plan(): the state the token is bound to covers the order of the steps it confirms (Codex round 3, B)', PU,
   "\t\t\t\t\t'order'       => $order,\n", '', 'it', 'testATokenWhoseOrderOfStepsNoLongerHoldsIsStale')
+e('post-restore-markup', 'restore_right(): a key of a page builder goes back only with unfiltered_html, as forward (GitHub Codex round 1 on free#138, P2)', PW,
+  "\t\t\tif ( null !== AB_MCP_Builders::markup_meta_refusal( $key ) ) {\n\t\t\t\treturn sprintf( 'write the page-builder meta key %s of the post (unfiltered_html)', $key );", "\t\t\tif ( false ) {\n\t\t\t\treturn sprintf( 'write the page-builder meta key %s of the post (unfiltered_html)', $key );", 'unit', 'testTheWayBackAsksTheRightsAtTheObjectAsTheForwardWriteDoesBeforeAPartGoesBack')
 
 def test_of(expect):
     return expect.split(' with data set "', 1)[0]

@@ -1094,6 +1094,57 @@ final class SyncContentTest extends TestCase {
 		self::assertStringContainsString( 'changed the part meta:note besides it', $write['parts']['object']['deviated']['why'] );
 	}
 
+	public function testAPageBuilderKeyGoesBackOnlyWithTheRightToStoreUnfilteredHtml(): void {
+		// GitHub Codex round 1 on free#138 (P2): a key of a page builder
+		// (ab_mcp_builder_markup_meta_keys) is written forward only with
+		// unfiltered_html (precheck()). The way back wrote it raw
+		// (restore_meta()) with the post and meta rights alone, also where the
+		// account had lost unfiltered_html since the run wrote
+		// (DISALLOW_UNFILTERED_HTML). Now restore_right() asks it as forward:
+		// without it the part is left with its value before and named; with
+		// it the key goes back as before.
+		$markup = static fn( $keys ) => array_merge( (array) $keys, array( 'hero_markup' ) );
+		add_filter( 'ab_mcp_builder_markup_meta_keys', $markup );
+		self::pair();
+		$team_a  = self::on_a( self::page( 'team', 'Our team.', array( 'meta_input' => array( 'hero_markup' => 'grid one' ) ) ) );
+		$about_a = self::on_a( self::page( 'about', 'About us.', array( 'meta_input' => array( 'hero_markup' => 'grid one' ) ) ) );
+		self::on_b( self::page( 'team', 'Our team.', array( 'meta_input' => array( 'hero_markup' => 'grid one' ) ) ) );
+		self::on_b( self::page( 'about', 'About us.', array( 'meta_input' => array( 'hero_markup' => 'grid one' ) ) ) );
+		self::paired( self::staged() );
+		$entries = self::report( self::staged() )['all'];
+		foreach ( array( 'team', 'about' ) as $name ) {
+			$b_id = (int) self::entry( $entries, 'post:' . $name )['staging']['ref'];
+			self::b( array( array( 'op' => 'update_meta', 'post' => $b_id, 'key' => 'hero_markup', 'value' => 'grid two' ) ) );
+		}
+		// The ordinary way back, with the right: the key goes back.
+		$run = self::begun( self::planned( array( 'post:team' ) )['args'] );
+		self::assertSame( 'closed_done', self::finish( (int) $run['run_id'] )['state'] );
+		self::assertSame( array( 'grid two' ), self::meta_a( 'post', $team_a, 'hero_markup' ) );
+		$back = self::back( (int) $run['run_id'] );
+		self::assertSame( 'closed_reverted', $back['state'], json_encode( $back ) );
+		self::assertSame( array( 'grid one' ), self::meta_a( 'post', $team_a, 'hero_markup' ) );
+		// The right taken away between the run and its way back.
+		$run = self::begun( self::planned( array( 'post:about' ) )['args'] );
+		self::assertSame( 'closed_done', self::finish( (int) $run['run_id'] )['state'] );
+		self::assertSame( array( 'grid two' ), self::meta_a( 'post', $about_a, 'hero_markup' ) );
+		$deny = static fn( $caps, $cap ) => 'unfiltered_html' === $cap ? array( 'do_not_allow' ) : $caps;
+		add_filter( 'map_meta_cap', $deny, 10, 2 );
+		$back = self::back( (int) $run['run_id'] );
+		remove_filter( 'map_meta_cap', $deny, 10 );
+		remove_filter( 'ab_mcp_builder_markup_meta_keys', $markup );
+		self::assertSame( 'closed_findings', $back['state'], json_encode( $back ) );
+		$parts = array();
+		foreach ( $back['steps'] as $step ) {
+			if ( 'revert' === $step['op'] ) {
+				$parts = array_column( $step['result']['parts'], null, 'part' );
+			}
+		}
+		self::assertSame( 'left', $parts['meta:hero_markup']['state'], json_encode( $parts ) );
+		self::assertStringContainsString( 'write the page-builder meta key hero_markup of the post (unfiltered_html)', $parts['meta:hero_markup']['note'] );
+		self::assertSame( '"grid one"', $parts['meta:hero_markup']['value_before'] );
+		self::assertSame( array( 'grid two' ), self::meta_a( 'post', $about_a, 'hero_markup' ), 'Nothing written without the right.' );
+	}
+
 	public function testANewPostWithAPlainKeyGoesAndOneWhoseRightTheNewPostRefusesStaysAsARest(): void {
 		// Decision 28: a new post takes the keys whose right follows the right
 		// at the post itself (branch 9: before, any meta locked a new post).

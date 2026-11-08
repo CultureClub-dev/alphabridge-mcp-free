@@ -655,10 +655,12 @@ final class AB_MCP_Sync_Post_Writer {
 	 * publish_posts where the backed-up status is publish, future or private
 	 * and the row holds another now; edit_others_posts where the backed-up
 	 * author is another account. A meta key: nothing more for the core key
-	 * the row writes (_wp_page_template; CORE_META); else edit_post_meta
-	 * where rows are written over (both sides hold rows), add_post_meta where
-	 * the backup holds more rows than the post now, delete_post_meta where it
-	 * holds fewer, each through map_meta_cap. The terms of a taxonomy:
+	 * the row writes (_wp_page_template; CORE_META); a key of a page builder
+	 * unfiltered_html (AB_MCP_Builders::markup_meta_refusal(), as forward);
+	 * else edit_post_meta where rows are written over (both sides hold
+	 * rows), add_post_meta where the backup holds more rows than the post
+	 * now, delete_post_meta where it holds fewer, each through map_meta_cap.
+	 * The terms of a taxonomy:
 	 * term_right() for the backed-up keys. True, or what the account may
 	 * not do.
 	 *
@@ -694,6 +696,14 @@ final class AB_MCP_Sync_Post_Writer {
 			if ( in_array( $key, self::CORE_META, true ) ) {
 				// The core key the row writes goes with edit_post, asked above.
 				return true;
+			}
+			// A key of a page builder needs unfiltered_html besides, as the
+			// forward write asks it (precheck()) and the free undo of meta
+			// (AB_MCP_Undo_Meta): the account may have lost it since the run
+			// wrote (DISALLOW_UNFILTERED_HTML; GitHub Codex round 1 on
+			// free#138, P2), and restore_meta() writes raw.
+			if ( null !== AB_MCP_Builders::markup_meta_refusal( $key ) ) {
+				return sprintf( 'write the page-builder meta key %s of the post (unfiltered_html)', $key );
 			}
 			$was = count( self::meta_values( $backup, $key ) );
 			$has = count( self::meta_values( $now, $key ) );

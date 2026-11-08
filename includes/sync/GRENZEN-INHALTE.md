@@ -53,7 +53,18 @@ nennt ihre Meldung den Weg.
   geht der Schlüssel hin und zurück. Grund: Entscheid 28 wörtlich; die
   Metadaten-API fragt selbst kein Recht.
 - Ein Schlüssel eines Page-Builders (`AB_MCP_Builders::markup_meta_refusal()`)
-  braucht zusätzlich `unfiltered_html`, wie der Free-Meta-Schreiber.
+  braucht zusätzlich `unfiltered_html`, wie der Free-Meta-Schreiber, vorwärts
+  (`precheck()`) und auf dem Rückweg (`restore_right()`, vor dem rohen
+  `restore_meta()`): hat das Konto das Recht seit dem Lauf verloren
+  (`DISALLOW_UNFILTERED_HTML`), bleibt der Teil `left` mit Grund und altem
+  Wert wie bei jedem verweigerten Recht des Rückwegs (GitHub-Codex 1 auf
+  free#138, P2; Prüffälle
+  `testAPageBuilderKeyGoesBackOnlyWithTheRightToStoreUnfilteredHtml`,
+  `testTheWayBackAsksTheRightsAtTheObjectAsTheForwardWriteDoesBeforeAPartGoesBack`).
+  Term-Meta kennt diese Regel weder vorwärts noch im Free-Undo von Term-Meta
+  (die Liste nennt Post-Meta der Builder); dort fehlt sie darum auch auf dem
+  Rückweg nicht. Einen anderen Weg zu `restore_meta()` als über
+  `restore_right()` gibt es nicht (`put_back()`).
 - Ein Schlüssel mit dem Namen eines Zugangsdatums (B9) und ein Schlüssel
   der Gruppe B (`_edit_lock`, `_wp_old_slug`, …) ist nie Teil: nie
   gepackt, nie verglichen, nie geschrieben, auf keiner Seite.

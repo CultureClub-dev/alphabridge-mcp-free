@@ -1181,6 +1181,18 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( 'remove the meta key extra of the post (delete_post_meta)', $right( 'meta:extra', $denied ) );
 		$denied = array( 'edit_post_meta:12:_wp_page_template', 'add_post_meta:12:_wp_page_template' );
 		self::assertTrue( $right( 'meta:_wp_page_template', $denied ), 'The core key goes with edit_post.' );
+		// A key of a page builder: unfiltered_html besides, as forward and as
+		// the free undo of meta ask it (GitHub Codex round 1 on free#138, P2:
+		// an account that lost it since the run wrote put the key back raw).
+		$builder_backup           = $backup;
+		$builder_backup['meta'][] = array( 'meta_id' => 4, 'key' => 'panels_data', 'value' => 'old' );
+		$builder_now              = $now;
+		$builder_now['meta'][]    = array( 'meta_id' => 4, 'key' => 'panels_data', 'value' => 'new' );
+		$denied                   = array( 'unfiltered_html:' );
+		self::assertSame( 'write the page-builder meta key panels_data of the post (unfiltered_html)', $right( 'meta:panels_data', $denied, $builder_backup, $builder_now ) );
+		self::assertTrue( $right( 'meta:note', $denied ), 'A plain key needs no unfiltered_html.' );
+		$denied = array();
+		self::assertTrue( $right( 'meta:panels_data', $denied, $builder_backup, $builder_now ), 'With the right: back.' );
 		// Every part is the post's: edit_post first, whatever the part (Codex
 		// round 18: assign_term and the meta rights ask nothing of the post).
 		$denied = array( 'edit_post:12' );

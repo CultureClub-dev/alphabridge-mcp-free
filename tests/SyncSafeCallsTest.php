@@ -261,7 +261,7 @@ final class SyncSafeCallsTest extends TestCase {
 		),
 		'class-sync-post-writer.php' => array(
 			'AB_MCP_Builder_Caches::clear'             => array( 1, 'post_write(): the builder caches of the written post (decision 33).' ),
-			'AB_MCP_Builders::markup_meta_refusal'     => array( 1, 'precheck(): a key of a page builder needs unfiltered_html, as the free meta writer asks it (the list of the signatures and the filter, and the capability); no stored value.' ),
+			'AB_MCP_Builders::markup_meta_refusal'     => array( 2, 'precheck() and restore_right(): a key of a page builder needs unfiltered_html, forward and on the way back, as the free meta writer and its undo ask it (the list of the signatures and the filter, and the capability; GitHub Codex round 1 on free#138, P2); no stored value.' ),
 			'AB_MCP_Page_Cache::purge_posts'           => array( 1, 'post_write(): the page cache of the written post (decision 33).' ),
 			'AB_MCP_Tools_Content::saved_status'       => array( 2, 'precheck() and restore_row(): the status WordPress would store for the data handed over (decision 17); a calculation.' ),
 			'AB_MCP_Tools_Content::status_date_refusal' => array( 2, 'precheck() and restore_row(): the refusals of the free writer for a status and date (decision 17); a calculation.' ),
