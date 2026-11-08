@@ -819,6 +819,59 @@ final class SyncStructureTest extends TestCase {
 		self::assertSame( array( 'footer' => $main_a ), self::option_of( 'a', 'theme_mods_twentytwentyfive' )['nav_menu_locations'] );
 	}
 
+	public function testAnotherRequestThatWritesTheThemeModsAsANewMenuGivesItsPositionBackIsHeldOffByTheLock(): void {
+		// Codex round 1 of branch 11, C3: the way back of a new menu puts its
+		// positions back under the takeover lock, which covers the theme mods
+		// (shared_back()). Another request that writes them in that moment
+		// (a theme mod of site A, in a process of its own) is refused: its
+		// value does not land, and the position goes back. Without the lock
+		// its write would land and the position stay as it is (left).
+		self::pair();
+		$old_a = (int) wp_create_nav_menu( 'Old' );
+		$old_b = (int) self::one_b( array( 'op' => 'nav_menu', 'name' => 'Old' ) );
+		set_theme_mod( 'nav_menu_locations', array( 'primary' => $old_a ) );
+		set_theme_mod( 'header_textcolor', '333333' );
+		self::b(
+			array(
+				array( 'op' => 'theme_mod', 'name' => 'nav_menu_locations', 'value' => array( 'primary' => $old_b ) ),
+				array( 'op' => 'theme_mod', 'name' => 'header_textcolor', 'value' => '333333' ),
+			)
+		);
+		self::paired( self::staged() );
+		$new_b = (int) self::one_b( array( 'op' => 'nav_menu', 'name' => 'Footer' ) );
+		self::one_b( array( 'op' => 'theme_mod', 'name' => 'nav_menu_locations', 'value' => array( 'primary' => $new_b ) ) );
+		$planned = self::planned( array( array( 'menu', 'staging', (string) $new_b ) ) );
+		$run     = self::begun( $planned['args'] );
+		self::assertSame( 'closed_done', self::finish( (int) $run['run_id'] )['state'] );
+		$wrote = false;
+		add_filter(
+			'query',
+			static function ( $query ) use ( &$wrote ) {
+				if ( $wrote || false === strpos( (string) $query, "option_name = 'theme_mods_twentytwentyfive'" ) ) {
+					return $query;
+				}
+				// Inside shared_back(), as the writer reads the row to put the
+				// position back (the lock taken before).
+				$frames = array();
+				foreach ( debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS ) as $frame ) {
+					$frames[] = ( $frame['class'] ?? '' ) . '::' . $frame['function'];
+				}
+				if ( in_array( 'AB_MCP_Sync_Engine::shared_back', $frames, true ) && in_array( 'AB_MCP_Sync_Menu_Writer::restore_part', $frames, true ) ) {
+					$wrote = true;
+					AB_MCP_IT_Sync_Steps::run( 'a', array( array( 'op' => 'theme_mod', 'name' => 'header_textcolor', 'value' => 'ff0000' ) ) );
+				}
+				return $query;
+			}
+		);
+		$back = self::back( (int) $run['run_id'] );
+		remove_all_filters( 'query' );
+		self::assertTrue( $wrote, 'The other request ran as the position went back.' );
+		wp_cache_flush();
+		$mods = self::option_of( 'a', 'theme_mods_twentytwentyfive' );
+		self::assertSame( '333333', $mods['header_textcolor'], 'The write of the other request did not land.' );
+		self::assertSame( array( 'primary' => $old_a ), $mods['nav_menu_locations'], 'The position went back: ' . json_encode( $back ) );
+	}
+
 	/* ----------------------------------------------------------- widgets */
 
 	public function testAChangedTextWidgetAndImageWidgetGoOverAndBack(): void {
