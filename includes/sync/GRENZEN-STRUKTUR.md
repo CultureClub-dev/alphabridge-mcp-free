@@ -25,6 +25,15 @@ entsteht, nennt ihre Meldung Schlüssel, Etappe und Weg.
   die Position dem alten Menü zurück und lässt Menü und Eintrag als Rest.
   Prüffall
   `testANewMenuAtAPositionOfTheThemeGoesOverAndTheWayBackPutsThePositionBackAndLeavesTheMenuAsARest`.
+- Ein neues Menü an einer registrierten Position, die noch kein Menü hält:
+  das Feld fehlt vor und nach dem Term-Aufruf (`with_row()` nennt es so,
+  Codex-Runde 1, B1), dann setzt der Schritt es; der Rückweg leert die
+  Position wieder. Prüffall
+  `testANewMenuAtAPositionNoMenuHoldsYetGoesOverAndTheWayBackLeavesThePositionEmptyAgain`.
+- Ein Menü übernimmt die Position eines anderen Menüs desselben Laufs, das
+  sie abgibt: das abgebende kommt zuerst, dann das nehmende, beide fertig.
+  Prüffall
+  `testAMenuThatTakesThePositionOfAnotherMenuOfTheRunGoesAfterItAndAnExchangeIsLocked`.
 - Ein geändertes Text- und ein geändertes Bild-Widget eines Bereichs, den
   beide Sites haben: jede Instanz durch das `update()` ihres Widgets (wie
   der Widget-Bildschirm), die Reihenfolge über `wp_set_sidebars_widgets()`;
@@ -82,6 +91,29 @@ Position, die das Theme hier nicht registriert, in der Prüfung des Laufs
   unklar, eine Person prüft ihn. Das geschieht je Site und Theme höchstens
   einmal (danach steht -1 oder eine Post-ID); der Prüffall des neuen Menüs
   vergleicht die Theme-Mods darum ohne diesen Schlüssel.
+- Vorwärts schreibt der Schritt über die Kernfunktionen
+  (`set_theme_mod()`, `wp_update_custom_css_post()`, `update_option()`,
+  `wp_set_sidebars_widgets()`), die die Zeile noch einmal über den Cache
+  der Optionen lesen. Unmittelbar davor leert der Schritt die Caches dieser
+  Zeile (`forget()`), so liest der Kern dieselbe Zeile, die der Schritt
+  eben aus der Datenbank gelesen und verglichen hat (Codex-Runde 1, A1).
+  Die Änderungssperre leert nur die mit allen geladenen Optionen; eine
+  Zeile mit `autoload` off (WordPress setzt das für grosse Zeilen) hatte
+  ihren Cache behalten, und daraus setzte `set_theme_mod()` fremde Felder
+  zurück, legte `wp_update_custom_css_post()` bei veralteter Verknüpfung
+  einen zweiten CSS-Post an oder schrieb `update_option()` nichts. Prüffall
+  `testAStepWritesFromTheRowsAsTheyAreAndNeverFromAStaleCacheOfThem`.
+- Ein Prozess, der zwischen diesem Lesen und dem Kernaufruf dieselbe Zeile
+  ändert, hält die Übernahmesperre an, wo sie die Zeile deckt (sein Wert
+  kommt nicht an); fällt sein Schreiben trotzdem dazwischen (ein Weg, den
+  die Sperre nicht abweist, etwa SQL), liest die Engine es nach dem Aufruf
+  als fremde Änderung.
+- Auch das Zurücksetzen der Positionen eines neuen Menüs (`shared_back()`)
+  läuft unter der Übernahmesperre über die Theme-Mods: ein anderer Prozess,
+  der sie in diesem Moment schreibt, wird abgewiesen, und die Position geht
+  zurück (ohne die Sperre stünde sein Wert und die Position bliebe `left`;
+  Codex-Runde 1, C3). Prüffall
+  `testAnotherRequestThatWritesTheThemeModsAsANewMenuGivesItsPositionBackIsHeldOffByTheLock`.
 
 ## Menüs und Positionen
 
@@ -106,6 +138,24 @@ Position, die das Theme hier nicht registriert, in der Prüfung des Laufs
   (`nav_menu_options`, `auto_add`), geht nicht mit dem Menü: eine Zeile für
   alle Menüs, gesperrt (`option:nav_menu_options`, Z8d; Entscheid 21 liest
   sie nur).
+- Positionen zwischen Menüs eines Laufs (Codex-Runde 1, B2): die
+  Positionen sind Felder einer Zeile, die Form jedes Menüs nennt sie, und
+  jeder Schritt vergleicht sein Menü mit dem Plan. Nimmt ein Menü eine
+  Position, die ein anderes Menü des Laufs hier hält, kommt es nach diesem
+  (eine Ordnung, keine Abhängigkeit): das andere gibt die Position zuerst
+  ab. Nehmen Menüs einander die Positionen (ein Tausch, etwa primary und
+  footer vertauscht), geht das in keiner Reihenfolge durch: der Plan sperrt
+  jedes davon vor jedem Schreiben (`menu:position_exchange`, Z8d; Weg: eines
+  davon in einem eigenen Lauf zuerst, die anderen aus einem neuen Bericht
+  danach, oder von Hand unter Design → Menüs → Positionen verwalten).
+  Zwischen den zwei Läufen ist eine Position kurz leer. Ihn in einem Lauf
+  durchzulassen bräuchte eine Ausnahme im Vergleich der Grenze, die die
+  Wirkungen früherer eigener Schritte auf geteilte Felder kennt.
+- Die Namen der Positionen eines Menüs (Schlüssel der Theme-Mods) gehen
+  durch die Zugangsprüfung des Exports, ebenso Name und Slug der Menüs im
+  Inhalt eines Eintrags; ein Fund hält das Objekt, sein Inhalt geht nicht
+  ins Paket (Codex-Runde 1, A4). Prüffall
+  `testACredentialInTheNameOfAMenuOrOfItsPositionLandsInNoPackage`.
 - Der Rückweg eines neuen Menüs lässt Menü und Einträge als Rest stehen und
   setzt die Positionen zurück, die es genommen hat (`shared_back()` der
   Engine, aus der Sicherung des Schritts, bytebedingt); eine Position, die
@@ -172,6 +222,18 @@ Position, die das Theme hier nicht registriert, in der Prüfung des Laufs
 - Ändert `update()` des Widgets oder `widget_update_callback` die
   Einstellungen (ein Text-Widget mit HTML ohne `unfiltered_html`), sperrt
   der Bereich vorab (`widget_area:sanitizer`, Z8).
+- Das Schreiben einer Instanz liest die Zeile des Widgets erst nach
+  `update()` des Widgets und `widget_update_callback` (Codex-Runde 1, A2):
+  ändert ein solcher Filter dabei eine andere Instanz, bleibt seine
+  Änderung, und die Engine liest sie als fremde Änderung (der Schritt ist
+  unklar, nichts davon geht von selbst zurück). Prüffall
+  `testAWidgetFilterThatChangesAnotherInstanceAsTheStepWritesKeepsItsChangeAndMakesTheStepUnclear`.
+- Ein Schritt, der eine Instanz angelegt hat und dann abweicht, macht den
+  Bereich zum Rest (`unit_rest()`); nehmen die Paare dieses Speichern nicht
+  an, ist der Schritt unklar und nennt den Weg (das Paar von Hand
+  abgleichen, sonst könnte ein späterer Lauf die Instanz noch einmal
+  anlegen; Codex-Runde 1, C1). Prüffall
+  `testAPairThatCannotBeKeptAsARestMakesTheStepUnclearWithItsWay`.
 - Ein Bereich mit einer neuen Instanz bleibt auf dem Rückweg als Ganzes
   Rest (`residual`): die Instanz bleibt, die Reihenfolge, die sie nennt,
   bleibt mit ihr; die übrigen Instanzen gehen zurück. Erst ein bestätigter
@@ -222,6 +284,20 @@ Position, die das Theme hier nicht registriert, in der Prüfung des Laufs
   Permalink-Bildschirm beim nächsten Speichern.
 - Die Spalte `autoload` bleibt, wie sie ist, hin und zurück.
 
+## Rechte
+
+- Die Rechte jedes Schritts werden unmittelbar vor dem Schreiben noch
+  einmal gefragt, auf jedem Weg, auch nach den Filtern, die dazwischen
+  laufen (Codex-Runde 1, A5): vorwärts nach `update()` eines Widgets,
+  zurück vor dem Zurücksetzen einer Option (nach `sanitize_option()`, mit
+  der Klasse des Namens samt Option Guard), einer Position, des
+  Zusätzlichen CSS, der Zeile eines Menüeintrags (nach `sanitize_post()`)
+  und der Liste und jeder Instanz eines Bereichs (nach `update()` in
+  `restore_right()`). Fehlt ein Recht, bleibt der Teil stehen (`left`) mit
+  Grund und Weg.
+- Die Tokens eines Plans und eines Rückwegs decken auch die Reihenfolge,
+  in der die Teile jeder Art zurückgehen (`PART_ORDER`, Codex-Runde 1, C2).
+
 ## Reichweite der neuen Sperren
 
 Gezählt am 08.11.2026 auf dem lokalen Paar der Integrationssuite (zwei
@@ -243,6 +319,11 @@ frische Sites WordPress 7.1.3, Twenty Twenty-Five, gepaart über
 - Die Sperren der Prüfung des Laufs (Positionen, Sanitizer, Instanzen,
   Theme, Rechte) trafen in den sechs Normalfällen kein Objekt: jeder Lauf
   schloss `closed_done`.
+- `menu:position_exchange` (Codex-Runde 1, B2) trifft nur Pläne, in denen
+  Menüs einander Positionen nehmen; auf dem frischen Paar gibt es keine
+  Menüs, in den Normalfällen keinen solchen Plan. Eine Verschiebung ohne
+  Schleife (ein Menü gibt ab, ein anderes nimmt) sperrt nicht, sie geht in
+  der Ordnung des Plans durch.
 
 Echte Sites (klassische Themes mit Menüpositionen, Widgets von Plugins,
 Optionen von Plugins) sind in diesem Zweig nicht gemessen; ihre Zählung
@@ -252,15 +333,16 @@ Entscheid 27 ohnehin nicht geschrieben werden.
 
 ## Laufzeit
 
-- Die Integrationsklasse `SyncStructureTest` (acht Fälle: sechs
-  Normalfälle, die seltenen Fälle über den ganzen Weg, das bytebedingte
-  Zurücksetzen einer geteilten Zeile) läuft lokal in rund 42 s und
-  erreicht rund 79 MiB Speicher. Sie setzt beide Sites je Fall zurück und
+- Die Integrationsklasse `SyncStructureTest` (fünfzehn Fälle, einer mit
+  zwei Datensätzen: die Normalfälle, die seltenen Fälle über den ganzen
+  Weg, das bytebedingte Zurücksetzen einer geteilten Zeile und die Fälle
+  aus Codex-Runde 1) läuft lokal in rund 81 s und erreicht rund 81 MiB
+  Speicher. Sie setzt beide Sites je Fall zurück und
   setzt keinen leeren oder fremden Stand voraus: Menüs, Positionen,
   Widgets, CSS und Optionen legt jeder Fall selbst an; die Positionen
   `primary` und `footer` registriert sie für Site A selbst (Twenty
   Twenty-Five registriert keine).
-- Die Mutationsliste `struktur` (93 Einträge, 78 über Unit-Tests, 15 über
+- Die Mutationsliste `struktur` (124 Einträge, 91 über Unit-Tests, 33 über
   die Integrationsklasse) lief lokal Eintrag für Eintrag: Unit-Einträge
   rund 1 bis 2 s, Integrations-Einträge rund 7 bis 17 s.
 
@@ -274,10 +356,16 @@ Entscheid 27 ohnehin nicht geschrieben werden.
   `sanitize_key()` des Kernwerts für Typ, Objekt und `target` (der
   gespeicherte Wert ist `sanitize_key()` desselben Werts, die Bedingung
   daneben fällt für jeden solchen Wert gleich aus; der Typ ist vorher gegen
-  die bekannten Typen geprüft); im Rückweg der Felder eines neuen Menüs
-  (`shared_back()`) die Optionen der Übernahmesperre (ein fremder Schreiber
-  zwischen Lesen und Zurücksetzen fällt der bytebedingten Zeile auf,
-  `put_back()` ist geführt; die Sperre hält ihn nur früher an).
+  die bekannten Typen geprüft); vor `set_theme_mod()` und
+  `wp_update_custom_css_post()` das Leeren des Caches von `stylesheet`
+  (`stylesheet` wird mit allen Optionen geladen, und das Leeren der Zeile
+  der Theme-Mods leert diese mit).
+- Die Optionen der Übernahmesperre in `shared_back()` waren hier zuerst
+  als gleichwertig begründet; das traf bei parallelem Zugriff nicht zu
+  (Codex-Runde 1, C3). Sie sind jetzt geführt (`c3-guard-options`).
+- Dass die Tokens die Reihenfolge der Teile decken (C2), zeigt kein Test:
+  eine andere Reihenfolge bräuchte eine Änderung des Codes zwischen Plan
+  und Bestätigung; geführt ist `part_order()`.
 - Nicht geführt, weil kein Prüffall es aufbaut: in `target_of()` des
   Bereichs die Zuordnung früherer Läufe neben der des Laufs
   (`$kept['map']`). Sie zählt erst, wenn ein Lauf einen Bereich schreibt,
