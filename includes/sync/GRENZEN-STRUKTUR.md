@@ -162,8 +162,21 @@ Position, die das Theme hier nicht registriert, in der Prüfung des Laufs
   der Zeile wie die Arten eine Spalte prüfen (der Inhalt des CSS als CSS),
   jede Meta-Zeile, Name und Slug der Terme, jeder andere Teil als Wert. So
   kommt kein nachträglich angehängtes Feld an der Prüfung vorbei, etwa die
-  Version des Themes im Inhalt des CSS. Prüffälle
-  `testACredentialInTheVersionOfTheThemeOfTheCssLandsInNoPackage` und
+  Version des Themes im Inhalt des CSS. Jede Einheit geht dabei durch
+  dieselbe Prüfung wie bei den Arten (`check_unit()`, Codex-Runde 3, A8):
+  die Zugangsprüfung, dann das Netz über den rohen Wert
+  (`AB_MCP_Sync_Net::check()`, dieselbe Funktion, mit jeder Schicht des
+  Werts: Dekodierungen, Base64, `data:`), so dass auch eine kodierte
+  Version (Base64 von `password=…`) das Objekt hält; was das Netz nicht
+  bis zum Ende liest, sperrt und macht das Objekt unvollständig. Nur das
+  Zählen der Verweise läuft dort nicht (`$references = false`): kein Leser
+  von Adressen läuft über den fertigen Inhalt, die Arten haben die Verweise
+  derselben Werte mit ihren Lesern gezählt; eine Adresse mit Id sperrt dort
+  also nicht noch einmal. Das Netz läuft damit über jeden Inhalt zweimal
+  (in der Art und im Export); das kostet Zeit beim Export, nicht beim
+  Schreiben. Prüffälle
+  `testACredentialInTheVersionOfTheThemeOfTheCssLandsInNoPackage` (im
+  Klartext und in Base64) und
   `SyncStructureWritersTest::testTheFinishedContentOfAnObjectGoesThroughTheCredentialCheckOnceMore`.
 - Der Rückweg eines neuen Menüs lässt Menü und Einträge als Rest stehen und
   setzt die Positionen zurück, die es genommen hat (`shared_back()` der

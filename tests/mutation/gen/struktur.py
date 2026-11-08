@@ -45,7 +45,8 @@ PW = 'includes/sync/class-sync-post-writer.php'
 TW = 'includes/sync/class-sync-term-writer.php'
 AW = 'includes/sync/class-sync-attachment-writer.php'
 SW = 'includes/sync/class-sync-write.php'
-FILEVAR = {MW: '$mw', WA: '$wa', CW: '$cw', OW: '$ow', SR: '$sr', EN: '$en', PU: '$pu', DK: '$dk', WW: '$ww', PW: '$pw', TW: '$tw', EX: '$ex', RV: '$rv', AW: '$aw', SW: '$sw'}
+NT = 'includes/sync/class-sync-net.php'
+FILEVAR = {MW: '$mw', WA: '$wa', CW: '$cw', OW: '$ow', SR: '$sr', EN: '$en', PU: '$pu', DK: '$dk', WW: '$ww', PW: '$pw', TW: '$tw', EX: '$ex', RV: '$rv', AW: '$aw', SW: '$sw', NT: '$nt'}
 
 RUNS = {
     'u': ('unit', 'SyncStructureWritersTest'),
@@ -581,17 +582,30 @@ e('a7-type-goes', 'keeping_revisions(): the filter of the type goes again (A7)',
 e('a8-export', 'export of objects: the finished content of each object through the credential check (A8)', EX,
   "\t\t\t\t$object = self::checked_content( $object );\n\t\t\t\t// Its status by the rule of the inventory", "\t\t\t\t// Its status by the rule of the inventory", 'it', IT_THEMEVER)
 e('a8-row', 'checked_content(): each column of the row (A8)', EX,
-  "\t\t\t\t\t\tAB_MCP_Sync_Credentials::column( $acc, $kind, (string) $column, (string) $field, 'custom_css' === $kind && 'post_content' === $column );\n", "", 'u', U_CHECKED)
+  "\t\t\t\t\t\tself::check_unit( $acc, $kind, (string) $column, (string) $field, null, 'custom_css' === $kind && 'post_content' === $column );\n", "", 'u', U_CHECKED)
 e('a8-css-mode', 'checked_content(): the content of the CSS read as CSS (A8)', EX,
-  " (string) $field, 'custom_css' === $kind && 'post_content' === $column );", " (string) $field, false );", 'u', U_CHECKED)
+  " (string) $field, null, 'custom_css' === $kind && 'post_content' === $column );", " (string) $field, null, false );", 'u', U_CHECKED)
 e('a8-meta', 'checked_content(): each meta row (A8)', EX,
-  "\t\t\t\t\t\tAB_MCP_Sync_Credentials::note( $acc, $kind, 'meta:' . (string) $pair[0], AB_MCP_Sync_Credentials::unit( (string) $pair[0], $pair[1] ) );\n", "", 'u', U_CHECKED)
+  "\t\t\t\t\t\tself::check_unit( $acc, $kind, 'meta:' . (string) $pair[0], $pair[1], (string) $pair[0] );\n", "", 'u', U_CHECKED)
 e('a8-terms', 'checked_content(): the names and slugs of the terms (A8)', EX,
-  "\t\t\t\t\t\t\tAB_MCP_Sync_Credentials::note( $acc, $kind, 'term:' . ( isset( $term['taxonomy'] ) ? (string) $term['taxonomy'] : '' ) . ':' . $field, AB_MCP_Sync_Credentials::unit( '', (string) $term[ $field ] ) );\n", "", 'u', U_CHECKED)
+  "\t\t\t\t\t\t\tself::check_unit( $acc, $kind, 'term:' . ( isset( $term['taxonomy'] ) ? (string) $term['taxonomy'] : '' ) . ':' . $field, (string) $term[ $field ], '' );\n", "", 'u', U_CHECKED)
 e('a8-other', 'checked_content(): any other part of the content (A8)', EX,
-  "\t\t\t\tAB_MCP_Sync_Credentials::note( $acc, $kind, 'content:' . (string) $part, AB_MCP_Sync_Credentials::unit( '', $value ) );\n", "", 'u', U_CHECKED)
+  "\t\t\t\tself::check_unit( $acc, $kind, 'content:' . (string) $part, $value, '' );\n", "", 'u', U_CHECKED)
 e('a8-findings', 'checked_content(): the findings into the locks and credentials of the object (A8)', EX,
-  "\t\t$object['locks']       = $acc['locks'];\n\t\t$object['credentials'] = $acc['credentials'];\n\t\treturn $object;", "\t\treturn $object;", 'u', U_CHECKED)
+  "\t\t$object['locks']       = $acc['locks'];\n\t\t$object['credentials'] = $acc['credentials'];\n\t\tif ( array() !== $acc['unread'] ) {", "\t\tif ( array() !== $acc['unread'] ) {", 'u', U_CHECKED)
+# A8 (Codex round 3): the finished content through the net of the kinds.
+e('a8-net', 'check_unit(): the net of the kinds over each unit of the finished content (A8)', EX,
+  "\t\tAB_MCP_Sync_Net::check( $acc, $mark, $kind, $at, $raw, array(), false );\n", "", 'u', U_CHECKED)
+e('a8-net-encoded', 'check_unit(): a credential in base64 in the version of the theme lands in no package (A8)', EX,
+  "\t\tAB_MCP_Sync_Net::check( $acc, $mark, $kind, $at, $raw, array(), false );\n", "", 'it', IT_THEMEVER + ' with data set "in base64"')
+e('a8-mark', 'check_unit(): the mark of the net before the credential check, so the net counts what it named once (A8)', EX,
+  "\t\t$mark = AB_MCP_Sync_Net::mark( $acc );\n\t\tif ( null === $name ) {\n\t\t\tAB_MCP_Sync_Credentials::column( $acc, $kind, $at, $raw, $css );\n\t\t} elseif ( ! AB_MCP_Sync_Credentials::note( $acc, $kind, $at, AB_MCP_Sync_Credentials::unit( $name, $raw ) ) ) {\n\t\t\treturn false;\n\t\t}\n",
+  "\t\tif ( null === $name ) {\n\t\t\tAB_MCP_Sync_Credentials::column( $acc, $kind, $at, $raw, $css );\n\t\t} elseif ( ! AB_MCP_Sync_Credentials::note( $acc, $kind, $at, AB_MCP_Sync_Credentials::unit( $name, $raw ) ) ) {\n\t\t\treturn false;\n\t\t}\n\t\t$mark = AB_MCP_Sync_Net::mark( $acc );\n", 'u', U_CHECKED)
+e('a8-unread', 'checked_content(): what the net did not read to its end makes the object incomplete (A8)', EX,
+  "\t\tif ( array() !== $acc['unread'] ) {\n\t\t\t$object['unread']", "\t\tif ( false ) {\n\t\t\t$object['unread']", 'u', U_CHECKED)
+e('a8-no-references', 'check(): without a reader of addresses, no reference counted (A8)', NT,
+  "\t\t$locked     = ! $references || count( $acc['spelling'] ) > $mark['spelling'];",
+  "\t\t$locked     = count( $acc['spelling'] ) > $mark['spelling'];", 'u', U_CHECKED)
 # C4 (Codex round 2): the way back by the kinds of its journals.
 e('c4-kinds', 'part_orders_of(): the kinds of the journals of the steps that go back (C4)', RV,
   "\t\t\t$kinds[] = is_array( $object ) && isset( $object['kind'] ) && is_string( $object['kind'] ) && '' !== $object['kind'] ? $object['kind'] : 'post';",

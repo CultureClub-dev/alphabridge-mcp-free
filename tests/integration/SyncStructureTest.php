@@ -933,17 +933,27 @@ final class SyncStructureTest extends TestCase {
 		self::assertSame( 'active', AB_MCP_Sync_Pairs::get( $pair_id )['state'], 'The state did not change.' );
 	}
 
-	public function testACredentialInTheVersionOfTheThemeOfTheCssLandsInNoPackage(): void {
+	/** The version of the theme of the CSS: in the clear, and in base64. */
+	public static function themeVersions(): array {
+		return array(
+			'in the clear' => array( 'password=synthetic-review-value' ),
+			'in base64'    => array( base64_encode( 'password=synthetic-review-value' ) ),
+		);
+	}
+
+	#[\PHPUnit\Framework\Attributes\DataProvider( 'themeVersions' )]
+	public function testACredentialInTheVersionOfTheThemeOfTheCssLandsInNoPackage( string $version ): void {
 		// Codex round 2 of branch 11, A8: the content of the CSS carries the
 		// version of its theme, appended after the check of the form. The
 		// export checks the finished content once more: a credential there
 		// holds the CSS, and its value is nowhere in the package of objects.
+		// Codex round 3, A8: with the net of the kinds, also in base64.
 		self::pair();
 		self::paired( self::staged() );
 		$secret = 'synthetic-review-value';
 		$dir    = AB_MCP_IT_Sites::docroot( 'b' ) . '/wp-content/themes/ab-it-version';
 		self::assertTrue( wp_mkdir_p( $dir ) );
-		file_put_contents( $dir . '/style.css', "/*\nTheme Name: AB IT Version\nTemplate: twentytwentyfive\nVersion: password=$secret\n*/\n" );
+		file_put_contents( $dir . '/style.css', "/*\nTheme Name: AB IT Version\nTemplate: twentytwentyfive\nVersion: $version\n*/\n" );
 		try {
 			self::b(
 				array(
@@ -966,6 +976,7 @@ final class SyncStructureTest extends TestCase {
 			self::assertIsArray( $taken, is_wp_error( $taken ) ? $taken->get_error_message() : '' );
 			self::assertCount( 1, $taken['lines'] );
 			self::assertStringNotContainsString( $secret, (string) json_encode( array( $package, $taken ) ), 'No value of a credential in the package.' );
+			self::assertStringNotContainsString( $version, (string) json_encode( array( $package, $taken ) ), 'Nor the version as it is stored.' );
 			self::assertSame( 1, $package['credentials']['held'], (string) json_encode( $package['credentials'] ) );
 		} finally {
 			self::b( array( array( 'op' => 'update_option', 'name' => 'stylesheet', 'value' => 'twentytwentyfive' ) ) );

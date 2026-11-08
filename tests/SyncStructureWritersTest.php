@@ -442,6 +442,31 @@ final class SyncStructureWritersTest extends TestCase {
 		$held                                     = \AB_MCP_Sync_Export::checked_content( $version );
 		self::assertSame( array( 'theme_version' ), array_column( $held['credentials']['mixed'], 'unit' ) );
 		self::assertTrue( \AB_MCP_Sync_Export::credential_locked( $held['locks'] ), 'The version of the theme holds the CSS.' );
+		// Encoded, as the net of the kinds reads every layer of a value
+		// (Codex round 3 of branch 11, A8): the version in base64.
+		$encoded                                    = $css;
+		$encoded['content']['row']['theme_version'] = base64_encode( 'password=synthetic-review-value' );
+		$held                                       = \AB_MCP_Sync_Export::checked_content( $encoded );
+		self::assertTrue( \AB_MCP_Sync_Export::credential_locked( $held['locks'] ), 'The version in base64 holds the CSS.' );
+		self::assertContains( '*:unread_credential', array_column( $held['locks'], 'key' ), 'Found by the net, as in the kinds.' );
+		self::assertSame( array( 'theme_version' ), array_column( $held['credentials']['mixed'], 'unit' ) );
+		// A layer the net cannot read to its end (a body that is no text in
+		// UTF-8): never clean, and the object is not read whole.
+		$body                                    = $css;
+		$body['content']['row']['theme_version'] = 'data:text/plain;base64,' . base64_encode( "\xC3\x28 no text in UTF-8" );
+		$held                                    = \AB_MCP_Sync_Export::checked_content( $body );
+		self::assertTrue( \AB_MCP_Sync_Export::credential_locked( $held['locks'] ) );
+		self::assertSame( array( false, array( 'charset:theme_version:net:raw' ) ), array( $held['complete'], $held['unread'] ) );
+		// No reader of addresses runs here, so the net counts no reference:
+		// an address with an id stays as it was.
+		$linked                                   = $css;
+		$linked['content']['row']['post_content'] = 'a{background:url(index.php?attachment_id=12)}';
+		self::assertSame( $linked, \AB_MCP_Sync_Export::checked_content( $linked ), 'An address: as it was.' );
+		// The content of the CSS read as CSS, not as HTML: markup in a string
+		// of it is no script of a page.
+		$markup                                   = $css;
+		$markup['content']['row']['post_content'] = 'a::after{content:"<b>new</b>"}';
+		self::assertSame( $markup, \AB_MCP_Sync_Export::checked_content( $markup ), 'Markup in a string of the CSS: as it was.' );
 		// The content of the CSS read as CSS (an escape the CSS reader decodes).
 		$escaped                                   = $css;
 		$escaped['content']['row']['post_content'] = 'a{content:"\\70 assword=synthetic-review-value"}';
@@ -452,6 +477,8 @@ final class SyncStructureWritersTest extends TestCase {
 			'a meta row'          => array( 'meta', array( array( 'note', 'password=synthetic-review-value' ) ) ),
 			'the name of a term'  => array( 'terms', array( array( 'name' => 'Shop password=synthetic-review-value', 'slug' => 'shop', 'taxonomy' => 'nav_menu', 'term_id' => 5, 'term_order' => 0 ) ) ),
 			'another part'        => array( 'more', array( 'x' => 'token=synthetic-review-value' ) ),
+			'a meta row in base64' => array( 'meta', array( array( 'note', base64_encode( 'token=synthetic-review-value' ) ) ) ),
+			'a term in base64'     => array( 'terms', array( array( 'name' => base64_encode( 'secret=synthetic-review-value' ), 'slug' => 'shop', 'taxonomy' => 'nav_menu', 'term_id' => 5, 'term_order' => 0 ) ) ),
 		) as $case => list( $part, $value ) ) {
 			$object                      = $css;
 			$object['kind']              = 'menu_item';
