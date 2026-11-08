@@ -105,7 +105,7 @@ final class AB_MCP_Sync_Attachment_Writer {
 	/** Attachments a check of shared paths reads at most beside the one written (named_by()); more is fail closed. */
 	const SHARED_MAX = 20000;
 
-	/** Called right before a file is opened to be laid: callable( string $full ): void. Set by tests only (another hand between the check and the open). */
+	/** Called right before a file is opened to be laid (open) and right after its bytes are written (written): callable( string $full, string $when ): void. Set by tests only (another hand between the check and the open, or as the file is written). */
 	public static $probe = null;
 
 	/* ------------------------------------------------------------ prepare */
@@ -1018,7 +1018,7 @@ final class AB_MCP_Sync_Attachment_Writer {
 			);
 		}
 		if ( is_callable( self::$probe ) ) {
-			call_user_func( self::$probe, (string) $full );
+			call_user_func( self::$probe, (string) $full, 'open' );
 		}
 		$out = @fopen( (string) $full, 'xb' ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- exclusive: a file there is never written over.
 		if ( false === $out ) {
@@ -1046,7 +1046,26 @@ final class AB_MCP_Sync_Attachment_Writer {
 			fclose( $in ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
 		}
 		$flushed = fflush( $out );
+		if ( is_callable( self::$probe ) ) {
+			call_user_func( self::$probe, (string) $full, 'written' );
+		}
+		// The place shown again once the bytes are written, before the file
+		// counts as laid (Codex round 2 of branch 10, A1): another hand that
+		// moved a folder on its way while the handle was open has the bytes
+		// written where the folder went. PHP cannot hold a folder in place
+		// for an open handle; this finds it, it does not prevent it.
+		$written = fstat( $out );
+		clearstatcache();
+		$there   = @lstat( (string) $full ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- a failure is answered.
+		$still   = is_array( $written ) && is_array( $there ) && (int) $written['dev'] === (int) $there['dev'] && (int) $written['ino'] === (int) $there['ino'] && realpath( (string) $full ) === (string) $full && realpath( $dir ) === $dir;
 		fclose( $out ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
+		if ( ! $still ) {
+			return array(
+				'state' => 'unclear',
+				'own'   => false,
+				'note'  => sprintf( 'The bytes of the file %s were written, but the file is not provably at its path under the uploads any more (another hand moved a folder on its way as it was written): the bytes of the attachment may lie outside the uploads now. Nothing more is laid; check the uploads and the folders around them on this site by hand.', $file['path'] ),
+			);
+		}
 		clearstatcache( true, (string) $full );
 		$sha = @hash_file( 'sha256', (string) $full ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- a failed read is answered.
 		if ( false === $done || ! $flushed || ! is_string( $sha ) || ! hash_equals( (string) $file['sha256'], $sha ) || (int) @filesize( (string) $full ) !== (int) $file['size'] ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged

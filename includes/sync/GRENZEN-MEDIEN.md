@@ -81,12 +81,20 @@ entsteht, nennt ihre Meldung den Weg.
   Inode der geöffneten Datei (`fstat()`) gegen die des Pfads (`lstat()`)
   und der aufgelöste Pfad, dass sie unter den Uploads liegt. Sonst wird
   nichts hineingeschrieben, die leere Datei bleibt (unklar, mit Pfad), der
-  Schritt endet `unclear`, gelöscht wird nichts. Rest (Grenze C): ein
-  Prozess mit Schreibrecht an den Uploads, der genau zwischen der letzten
-  Prüfung und dem Öffnen einen Ordner gegen einen Link tauscht, lässt eine
-  leere Datei ausserhalb der Uploads entstehen, und einer, der zwischen der
-  Prüfung eines Ordners und dem Anlegen darunter tauscht, einen leeren
-  Ordner; beides wird gefunden und gemeldet, keines beschrieben.
+  Schritt endet `unclear`, gelöscht wird nichts. Nach dem Schreiben und vor
+  dem Speichern als `laid` wird der Ort noch einmal so belegt (Codex-Runde
+  2, A1); stimmt er nicht, ist die Datei unklar (mit Pfad), der Schritt hält
+  mit Befund an, keine weitere Datei wird gelegt. Rest (Grenze C), ehrlich
+  gefasst: ein paralleler Prozess mit Schreib- und Verschieberecht an den
+  Uploads kann genau zwischen den Prüfungen handeln. Tauscht er zwischen
+  der letzten Prüfung und dem Öffnen einen Ordner gegen einen Link,
+  entsteht eine leere Datei ausserhalb der Uploads; tauscht er zwischen der
+  Prüfung eines Ordners und dem Anlegen darunter, ein leerer Ordner;
+  verschiebt er den schon geöffneten Ordner aus den Uploads, während die
+  Datei geschrieben wird, entstehen die Bytes des Anhangs (nur sie, aus dem
+  signierten Paket) am neuen Ort ausserhalb. Am offenen Handle lässt PHP
+  das nicht ausschliessen: jeder dieser Fälle wird erkannt und gemeldet,
+  keiner verhindert.
 - Ein Schritt legt alle Dateien seines Anhangs in einer Anfrage: höchstens
   48 MiB (`attachment:file_too_large` darüber), Stück für Stück aus dem
   Paket gelesen, nie ganz im Speicher; einen Cursor innerhalb des Schritts

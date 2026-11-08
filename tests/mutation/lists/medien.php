@@ -905,6 +905,15 @@ return array(
 		'expect'  => '/testAFileIsLaidOnlyWhereItIsShownAtItsPathUnderTheUploadsAndAFolderSwappedAsItIsOpenedLeavesItEmptyAndUnclear/',
 	),
 	array(
+		'id'      => 'medien/writer-lay-still',
+		'clause'  => 'lay(): the place shown again after the bytes are written, else the file is unclear (Codex round 2, A1)',
+		'file'    => $aw,
+		'search'  => "\t\tif ( ! \$still ) {",
+		'replace' => "\t\tif ( false ) {",
+		'run'     => $unit( 'SyncMediaPackageTest', 'testAFileIsLaidOnlyWhereItIsShownAtItsPathUnderTheUploadsAndAFolderSwappedAsItIsOpenedLeavesItEmptyAndUnclear' ),
+		'expect'  => '/testAFileIsLaidOnlyWhereItIsShownAtItsPathUnderTheUploadsAndAFolderSwappedAsItIsOpenedLeavesItEmptyAndUnclear/',
+	),
+	array(
 		'id'      => 'medien/engine-lay-unclear',
 		'clause'  => 'boundary(): a step with a file not shown at its path ends unclear, the file named (Codex round 1, A1, A2)',
 		'file'    => $en,

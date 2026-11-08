@@ -1387,8 +1387,8 @@ final class SyncMediaTest extends TestCase {
 		$uploads = AB_MCP_IT_Sites::docroot( 'a' ) . '/wp-content/uploads';
 		$outside = AB_MCP_IT_Sites::docroot( 'a' ) . '/umweg-aussen';
 		mkdir( $outside );
-		\AB_MCP_Sync_Attachment_Writer::$probe = static function ( $full ) use ( $uploads, $outside ) {
-			if ( $uploads . '/2026/08/umweg.jpg' === $full ) {
+		\AB_MCP_Sync_Attachment_Writer::$probe = static function ( $full, $when ) use ( $uploads, $outside ) {
+			if ( 'open' === $when && $uploads . '/2026/08/umweg.jpg' === $full ) {
 				rename( $uploads . '/2026/08', $uploads . '/2026/08-alt' );
 				symlink( $outside, $uploads . '/2026/08' );
 			}

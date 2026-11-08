@@ -286,9 +286,11 @@ final class SyncMediaPackageTest extends TestCase {
 		unlink( $root . '/2026/10' );
 		rename( $root . '/2026/10-alt', $root . '/2026/10' );
 		// Swapped between the check and the open.
-		AB_MCP_Sync_Attachment_Writer::$probe = function () use ( $root ) {
-			rename( $root . '/2026/10', $root . '/2026/10-alt' );
-			symlink( $this->dir . '/aussen', $root . '/2026/10' );
+		AB_MCP_Sync_Attachment_Writer::$probe = function ( $full, $when ) use ( $root ) {
+			if ( 'open' === $when ) {
+				rename( $root . '/2026/10', $root . '/2026/10-alt' );
+				symlink( $this->dir . '/aussen', $root . '/2026/10' );
+			}
 		};
 		try {
 			$c    = array( 'path' => '2026/10/c.jpg' ) + $file;
@@ -300,6 +302,27 @@ final class SyncMediaPackageTest extends TestCase {
 		self::assertFalse( $laid['own'] );
 		self::assertFileExists( $this->dir . '/aussen/c.jpg', 'Made elsewhere by the open, through the link.' );
 		self::assertSame( '', file_get_contents( $this->dir . '/aussen/c.jpg' ), 'Nothing written into it; it stays (nothing is deleted).' );
+		// Codex round 2, A1: another hand moves the folder out of the uploads
+		// while the file is open: the bytes are written where the folder went
+		// (PHP cannot prevent it at an open handle); the place shown again
+		// after the writing finds it, the file is unclear, never laid.
+		unlink( $root . '/2026/10' );
+		rename( $root . '/2026/10-alt', $root . '/2026/10' );
+		AB_MCP_Sync_Attachment_Writer::$probe = function ( $full, $when ) use ( $root ) {
+			if ( 'written' === $when ) {
+				rename( $root . '/2026/10', $this->dir . '/weggezogen' );
+			}
+		};
+		try {
+			$d    = array( 'path' => '2026/10/d.jpg' ) + $file;
+			$laid = self::writer( 'lay', $root, $root . '/2026/10/d.jpg', $from, $d );
+		} finally {
+			AB_MCP_Sync_Attachment_Writer::$probe = null;
+		}
+		self::assertSame( 'unclear', $laid['state'], json_encode( $laid ) );
+		self::assertFalse( $laid['own'] );
+		self::assertStringContainsString( 'may lie outside the uploads', $laid['note'] );
+		self::assertSame( $bytes, file_get_contents( $this->dir . '/weggezogen/d.jpg' ), 'Its own bytes, where the folder went: found and named, not prevented.' );
 	}
 
 	public function testTheFileOfANewAttachmentGoesWithItsRowAndThatOfOneHereByItsOwnCall(): void {
