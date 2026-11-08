@@ -307,8 +307,8 @@ final class AB_MCP_Sync_Kinds {
 		// end (branches 8 and 9; AB_MCP_Sync_Post_Writer, AB_MCP_Sync_Term_Writer),
 		// and the engines that follow for the other kinds.
 		'post:engine_type'             => array(
-			'stage'  => 'Z8d',
-			'reason' => 'The engine of the kind post writes posts and pages in a status it can store (not the trash, no auto-draft); the other core types (templates, template parts, global styles, navigations, reusable blocks) wait for their field schema, and a package without the content of the object is not written.',
+			'stage'  => 'Z9b',
+			'reason' => 'The engine of the kind post writes posts and pages in a status it can store (not the trash, no auto-draft); the other core types (templates, template parts, global styles, navigations, reusable blocks) follow with branch 9b, and a package without the content of the object is not written.',
 		),
 		'post:meta_rule'               => array(
 			'stage'  => 'Z8d',

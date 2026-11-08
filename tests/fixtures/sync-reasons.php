@@ -345,8 +345,8 @@ return array(
 			'plan' => 'Entscheid 27 (Typ und Regel je Name)',
 		),
 		'post:engine_type'             => array(
-			'why'  => 'Branches 8 and 9 write posts and pages end to end; the other core types (templates, template parts, global styles, navigations, reusable blocks) wait for their field schema (Z8d, GRENZEN-INHALTE.md), a status WordPress does not store as it is (trash, auto-draft) is no target, and a package without content writes nothing (fail closed).',
-			'plan' => 'Zweigtabelle Zeile 540 (Zweig 9); Entscheide 21 und 22',
+			'why'  => 'Branches 8 and 9 write posts and pages end to end; the other core types (templates, template parts, global styles, navigations, reusable blocks) follow with branch 9b (heikel/z8-vorlagen, right after branch 9 is merged; GRENZEN-INHALTE.md), a status WordPress does not store as it is (trash, auto-draft) is no target, and a package without content writes nothing (fail closed).',
+			'plan' => 'Zweigtabelle Zeile 540 (Zweig 9); Entscheide 21 und 22; Entscheid von Thomas «A: eigener Zweig 9b» (08.11.2026)',
 		),
 		'post:meta_rule'               => array(
 			'why'  => 'The metadata API stores maybe_serialize() of what it is handed: a serialized scalar would be serialized twice, a serialized value whose bytes serialize() does not give back would read other than its target. Every other key goes by its field rule (decision 28).',

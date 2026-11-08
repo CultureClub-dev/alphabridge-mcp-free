@@ -141,16 +141,21 @@ nennt ihre Meldung den Weg.
   WPBakery gesperrt, Kadence übernommen: Prüffall
   `testAWpBakeryPageIsLockedAndAKadencePageGoesOver`.
 
-## Post: weitere Kern-Typen (offen)
+## Post: weitere Kern-Typen (bis Zweig 9b)
 
 - Vorlagen, Vorlagenteile, globale Stile, Navigationen und
   wiederverwendbare Blöcke (`wp_template`, `wp_template_part`,
-  `wp_global_styles`, `wp_navigation`, `wp_block`) bleiben gesperrt
-  (`post:engine_type`, Stufe Z8d). Entscheid 25 nennt sie bei der Post-Art,
-  der Normalfall des Auftrags nicht. Ihre Identität hängt am Theme
-  (`wp_theme`, `wp_template_part_area`), ihre Eindeutigkeit des Slugs am
-  aktiven Stylesheet (`wp_filter_wp_template_unique_post_slug()`). Offene
-  Frage an Thomas im Bericht von Zweig 9.
+  `wp_global_styles`, `wp_navigation`, `wp_block`) bleiben in Zweig 9
+  gesperrt (`post:engine_type`, Stufe Z9b): Zweig 9b
+  (`heikel/z8-vorlagen`) gibt sie direkt nach dem Merge von Zweig 9 frei
+  (Entscheid von Thomas «A: eigener Zweig 9b», 08.11.2026). Entscheid 25
+  nennt sie bei der Post-Art, der Normalfall des Auftrags nicht. Ihre
+  Identität hängt am Theme (`wp_theme`, `wp_template_part_area`), ihre
+  Eindeutigkeit des Slugs am aktiven Stylesheet
+  (`wp_filter_wp_template_unique_post_slug()`). Dieselbe Sperre trägt, was
+  auch Zweig 9b nicht schreibt: ein Status, den WordPress nicht so
+  speichert (Papierkorb, `auto-draft`), ein Paket ohne Inhalt des Objekts
+  und eine Sperre, die diese Version nicht liest (fail closed).
 
 ## Term (Entscheid 25, A4)
 

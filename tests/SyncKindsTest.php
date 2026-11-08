@@ -250,7 +250,7 @@ final class SyncKindsTest extends TestCase {
 			'attachment:unsafe_path'       => array( array( 'attachment' ), 'unsafe_path', 'Z8b' ),
 			'option:off_schema'            => array( array( 'option' ), 'off_schema', 'Z8d' ),
 			// Branches 8 and 9: the engines of the kinds post and term, and the engines to come.
-			'post:engine_type'             => array( array( 'post' ), 'engine_type', 'Z8d' ),
+			'post:engine_type'             => array( array( 'post' ), 'engine_type', 'Z9b' ),
 			'post:meta_rule'               => array( array( 'post' ), 'meta_rule', 'Z8d' ),
 			'post:taxonomy_rule'           => array( array( 'post' ), 'taxonomy_rule', 'Z8d' ),
 			'post:term_order'              => array( array( 'post' ), 'term_order', 'Z8d' ),
