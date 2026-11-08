@@ -539,6 +539,18 @@ Position, die das Theme hier nicht registriert, in der Prüfung des Laufs
   davor die höchste Id, `MAX(term_id)`, damit ein zurückgegebener Term
   nicht als eigener gilt).
 
+## Bekannte Fehlsperre im Normalfall: serialisierte Werte im Netz
+
+- Prosa wie «Spieler: Anna, Token: drei» in einem serialisierten Array
+  von Post-, Term- oder Menüeintrag-Meta oder einer Kern-Option sperrt mit
+  `*:unread_credential`, entpackt nicht. Grund: Das Netz aus Zweig 4
+  prüft den serialisierten Wert als Text; seine Klammern lassen die Prosa
+  als Feld in Code lesen. Behebung in Zweig 11b `heikel/z8-netz` (Thomas
+  08.11. abends, decisions.md). Bis dahin bleibt die Sperre mit ihrem Grund
+  und Weg stehen. Der Bereich der Widgets ist davon nicht betroffen: seine
+  Art prüft die Instanzen entpackt, und der fertige Inhalt wird seit
+  Codex-Runde 4 (B) in derselben Form geprüft.
+
 ## Reichweite der neuen Sperren
 
 Gezählt am 08.11.2026 auf dem lokalen Paar der Integrationssuite (zwei

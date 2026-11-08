@@ -355,6 +355,10 @@ mit Beispiel und Grund; wo eine Ablehnung entsteht, nennt sie den Weg.
   fünf solche gehaltene Kennungen den Abschluss (Codex-Runde 4 zu Teil 3,
   C). Eine Liste einer Fassung davor gilt als fehlend
   (`ab_mcp_sync_import_held`, Weg: Paket neu holen).
+- Eine bekannte Fehlsperre des Netzes der Arten im Normalfall
+  (serialisierte Prosa in Meta und Kern-Optionen) steht in
+  GRENZEN-STRUKTUR.md, Abschnitt «Bekannte Fehlsperre im Normalfall:
+  serialisierte Werte im Netz»; Behebung in Zweig 11b `heikel/z8-netz`.
 - `unreadable_name` hält auch einen harmlosen Namen, den die Prüfung als
   unfertiges HTML liest, etwa eine Option `literal<foo` (konstruiert; kein
   gewöhnlicher Name eines Plugins so gefunden). Das Paket läuft weiter;
