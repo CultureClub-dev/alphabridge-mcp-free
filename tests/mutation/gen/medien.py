@@ -286,7 +286,7 @@ e('writer-media-missing', 'files_plan(): a file to lay the packages of media of 
   "\t\t\t\tif ( ! is_array( $prepared['media'] ) || ! isset( $prepared['media'][ $key ] ) || ",
   "\t\t\t\tif ( ! is_array( $prepared['media'] ) || ", 'it', LOCKS)
 e('writer-shared', 'files_plan(): a path another attachment of this site names locks', AW,
-  "\t\tforeach ( $named as $path => $ids ) {", "\t\tforeach ( array() as $path => $ids ) {", 'it', LOCKS)
+  "\t\tforeach ( $named as $path => $ids ) {\n\t\t\treturn AB_MCP_Sync_Post_Writer::locked( 'attachment:shared_path'", "\t\tforeach ( array() as $path => $ids ) {\n\t\t\treturn AB_MCP_Sync_Post_Writer::locked( 'attachment:shared_path'", 'it', LOCKS)
 e('writer-shared-except', 'named_by(): the attachment written is no other', ME,
   " AND pm.post_id != %d AND pm.post_id > %d ORDER BY pm.post_id ASC LIMIT %d', array_merge( $args, array( (int) $except, ",
   " AND pm.post_id != %d AND pm.post_id > %d ORDER BY pm.post_id ASC LIMIT %d', array_merge( $args, array( 0, ", 'it', CHANGED)
@@ -348,9 +348,17 @@ e('writer-restore-upload', 'restore_right(): a key that names files needs upload
 e('writer-restore-edit', 'restore_right(): an own key needs edit_post on the way back', AW,
   "\t\tif ( ! current_user_can( 'edit_post', $id ) ) {\n\t\t\treturn sprintf( 'edit the attachment %1$d (edit_post, for the part %2$s)', $id, $part );",
   "\t\tif ( false ) {\n\t\t\treturn sprintf( 'edit the attachment %1$d (edit_post, for the part %2$s)', $id, $part );", 'pkg', U_RIGHTS)
-e('writer-restore-type', 'restore_right(): the file a backed-up _wp_attached_file names of a type this account may upload', AW,
-  "\t\t\t\tif ( ! empty( $check['proper_filename'] ) || ( ( empty( $check['type'] ) || empty( $check['ext'] ) ) && ! current_user_can( 'unfiltered_upload' ) ) ) {",
-  "\t\t\t\tif ( false ) {", 'it', EDIT)
+e('writer-restore-files', 'restore_right(): a key that names files goes back only where every file it names may (Codex round 1, A4)', AW,
+  "\t\t\t$why = self::restore_files( $key, $id, $backup );\n\t\t\tif ( null !== $why ) {",
+  "\t\t\t$why = self::restore_files( $key, $id, $backup );\n\t\t\tif ( false ) {", 'it', EDIT)
+e('writer-restore-type', 'restore_files(): each file by its content a type this account may upload', AW,
+  "\t\t\tif ( ! empty( $check['proper_filename'] ) || ( ( empty( $check['type'] ) || empty( $check['ext'] ) ) && ! $free ) ) {\n\t\t\t\treturn sprintf( 'name the file %s again (by its content",
+  "\t\t\tif ( false ) {\n\t\t\t\treturn sprintf( 'name the file %s again (by its content", 'it', EDIT)
+e('writer-restore-shared', 'restore_files(): no other attachment of this site names a file the value names (Codex round 1, A4)', AW,
+  "\t\tforeach ( $named as $path => $ids ) {\n\t\t\treturn sprintf( 'name the file %1$s again: the attachment",
+  "\t\tforeach ( array() as $path => $ids ) {\n\t\t\treturn sprintf( 'name the file %1$s again: the attachment", 'it', EDIT)
+e('writer-restore-roles', 'restore_files(): the metadata names the sizes and the companions', AW,
+  "\t\t\treturn 'file' !== $role && 0 !== strpos( $role, 'backup:' );", "\t\t\treturn false;", 'it', EDIT)
 
 # ----------------------------------------------------- what lies at a path
 e('state-link-on-way', 'target_state(): a link on the way is unsafe', ME,

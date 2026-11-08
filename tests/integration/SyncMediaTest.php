@@ -1347,14 +1347,24 @@ final class SyncMediaTest extends TestCase {
 		foreach ( $old as $path => $sha ) {
 			self::assertSame( $sha, $now[ $path ] ?? null, "The old file $path stays as it was." );
 		}
-		// The way back, with JPEG no type this account may upload.
+		// The way back (Codex round 1, A4: every file a value that goes back
+		// names, asked as forward): the original, by its content no type this
+		// account may upload (WordPress's check refuses it); an old size
+		// another attachment of this site names now. The backup sizes were not
+		// there before: their removal names no file and goes back.
 		add_filter(
-			'upload_mimes',
-			static function ( $mimes ) {
-				unset( $mimes['jpg|jpeg|jpe'] );
-				return $mimes;
-			}
+			'wp_check_filetype_and_ext',
+			static function ( $answer, $file, $filename ) {
+				return 'bild.jpg' === $filename ? array( 'ext' => false, 'type' => false, 'proper_filename' => false ) : $answer;
+			},
+			10,
+			3
 		);
+		$anderes = self::upload_a( 'anderes.jpg', 'image/jpeg', self::jpeg( 200, 150, array( 9, 9, 99 ) ) );
+		$meta    = wp_get_attachment_metadata( $anderes );
+		$meta['sizes']['geteilt'] = array( 'file' => 'bild-150x150.jpg', 'width' => 150, 'height' => 150, 'mime-type' => 'image/jpeg' );
+		wp_update_attachment_metadata( $anderes, $meta );
+		$now   = self::uploads_of( 'a' );
 		$back  = self::back( (int) $run['run_id'] );
 		$parts = array();
 		foreach ( $back['steps'] as $one ) {
@@ -1371,7 +1381,9 @@ final class SyncMediaTest extends TestCase {
 		self::assertContains( '2026/10/bild-e1700000000.jpg', $named, 'The way back names the files the run laid; they stay.' );
 		self::assertSame( 'left', $parts['meta:_wp_attached_file']['state'], json_encode( $parts ) );
 		self::assertStringContainsString( 'may not upload', $parts['meta:_wp_attached_file']['note'] );
-		self::assertSame( 'restored', $parts['meta:_wp_attachment_metadata']['state'], json_encode( $parts ) );
+		self::assertSame( 'left', $parts['meta:_wp_attachment_metadata']['state'], json_encode( $parts ) );
+		self::assertStringContainsString( 'the attachment ' . $anderes . ' of this site names it as well', $parts['meta:_wp_attachment_metadata']['note'] );
+		self::assertSame( 'restored', $parts['meta:_wp_attachment_backup_sizes']['state'], json_encode( $parts ) );
 		self::assertSame( array( '2026/10/bild-e1700000000.jpg' ), self::meta_a( $a, '_wp_attached_file' ), 'Left with its value before named.' );
 		self::assertSame( $now, self::uploads_of( 'a' ), 'No file is deleted on the way back, not even one the run laid.' );
 		self::assertSame( array(), $this->deletions );

@@ -1113,22 +1113,95 @@ final class AB_MCP_Sync_Attachment_Writer {
 		if ( in_array( $key, self::FILE_META, true ) && ! current_user_can( 'upload_files' ) ) {
 			return sprintf( 'change the files of the attachment %1$d (upload_files, for the part %2$s)', $id, $part );
 		}
-		if ( '_wp_attached_file' === $key ) {
-			$values = AB_MCP_Sync_Post_Writer::meta_values( $backup, $key );
-			if ( array() !== $values ) {
-				$uploads = AB_MCP_Sync_Media::uploads();
-				$root    = '' === $uploads['problem'] ? realpath( $uploads['dir'] ) : false;
-				$file    = (string) $values[0];
-				if ( false === $root || ! AB_MCP_Sync_Media::safe_path( $file ) || 'file' !== AB_MCP_Sync_Media::target_state( $root, $file ) ) {
-					return sprintf( 'name the file %s again: it is not a plain file under the uploads of this site any more', $file );
-				}
-				$check = wp_check_filetype_and_ext( $root . '/' . $file, self::base( $file ), get_allowed_mime_types( wp_get_current_user() ) );
-				if ( ! empty( $check['proper_filename'] ) || ( ( empty( $check['type'] ) || empty( $check['ext'] ) ) && ! current_user_can( 'unfiltered_upload' ) ) ) {
-					return sprintf( 'name the file %s again (by its content a type this account may not upload)', $file );
-				}
+		if ( in_array( $key, self::FILE_META, true ) ) {
+			$why = self::restore_files( $key, $id, $backup );
+			if ( null !== $why ) {
+				return $why;
 			}
 		}
 		return true;
+	}
+
+	/**
+	 * Why the value a key that names files would go back with may not
+	 * (Codex round 1 of branch 10, A4): every file it names, worked out as
+	 * the core does from the backed-up values of the three keys
+	 * (AB_MCP_Sync_Media::paths(): of _wp_attached_file the main file, of
+	 * _wp_attachment_metadata the sizes and the companions, of
+	 * _wp_attachment_backup_sizes the backups), is asked as the forward way
+	 * asks a file: a plain path under the uploads, a plain file there with
+	 * no link on the way (target_state()), no other attachment of this site
+	 * naming it (named_by()), by its content a type this account may upload
+	 * that its name says, the main file of the type the attachment says.
+	 * Nothing is laid on the way back. A value that names no file (the key
+	 * was not there before) goes back.
+	 *
+	 * @param string $key     A key of FILE_META.
+	 * @param int    $live_id Attachment.
+	 * @param array  $backup  current() of the backup.
+	 * @return string|null Why not, as a clause; null where it may.
+	 */
+	private static function restore_files( $key, $live_id, array $backup ) {
+		if ( array() === AB_MCP_Sync_Post_Writer::meta_values( $backup, $key ) ) {
+			return null;
+		}
+		$raw = array();
+		foreach ( self::FILE_META as $one ) {
+			$values      = AB_MCP_Sync_Post_Writer::meta_values( $backup, $one );
+			$raw[ $one ] = array() === $values ? '' : (string) $values[0];
+		}
+		$uploads = AB_MCP_Sync_Media::uploads();
+		$root    = '' === $uploads['problem'] ? realpath( $uploads['dir'] ) : false;
+		$meta    = AB_MCP_Sync_Canon::unserialized( $raw['_wp_attachment_metadata'] );
+		$sizes   = AB_MCP_Sync_Canon::unserialized( $raw['_wp_attachment_backup_sizes'] );
+		if ( false === $root || ! $meta['ok'] || ! $sizes['ok'] || AB_MCP_Sync_Canon::holds_record( $raw['_wp_attached_file'] ) ) {
+			return sprintf( 'name the files of %s again: the uploads of this site, or the values before, do not read whole', $key );
+		}
+		$list = AB_MCP_Sync_Media::paths( $raw['_wp_attached_file'], $meta['value'], $sizes['value'], $uploads['dir'] );
+		$of   = static function ( $role ) use ( $key ) {
+			$role = (string) $role;
+			if ( '_wp_attached_file' === $key ) {
+				return 'file' === $role;
+			}
+			if ( '_wp_attachment_backup_sizes' === $key ) {
+				return 0 === strpos( $role, 'backup:' );
+			}
+			return 'file' !== $role && 0 !== strpos( $role, 'backup:' );
+		};
+		foreach ( $list['problems'] as $problem ) {
+			if ( $of( $problem['role'] ) || 'file' === (string) $problem['role'] ) {
+				return sprintf( 'name the files of %s again: a name in the value before is no plain path under the uploads', $key );
+			}
+		}
+		$mimes = get_allowed_mime_types( wp_get_current_user() );
+		$free  = current_user_can( 'unfiltered_upload' );
+		$mime  = isset( $backup['row']['post_mime_type'] ) ? (string) $backup['row']['post_mime_type'] : '';
+		$paths = array();
+		foreach ( $list['files'] as $entry ) {
+			if ( array() === array_filter( $entry['roles'], $of ) ) {
+				continue;
+			}
+			$file = (string) $entry['path'];
+			if ( 'file' !== AB_MCP_Sync_Media::target_state( $root, $file ) ) {
+				return sprintf( 'name the file %s again: it is not a plain file under the uploads of this site any more', $file );
+			}
+			$check = wp_check_filetype_and_ext( $root . '/' . $file, self::base( $file ), $mimes );
+			if ( ! empty( $check['proper_filename'] ) || ( ( empty( $check['type'] ) || empty( $check['ext'] ) ) && ! $free ) ) {
+				return sprintf( 'name the file %s again (by its content a type this account may not upload)', $file );
+			}
+			if ( in_array( 'file', $entry['roles'], true ) && ! $free && (string) $check['type'] !== $mime ) {
+				return sprintf( 'name the file %1$s again (by its content %2$s, the attachment says %3$s)', $file, (string) $check['type'], $mime );
+			}
+			$paths[] = $file;
+		}
+		$named = array() === $paths ? array() : AB_MCP_Sync_Media::named_by( $paths, (int) $live_id, self::SHARED_MAX );
+		if ( null === $named ) {
+			return sprintf( 'name the files of %s again: the file lists of the other attachments of this site could not be read whole', $key );
+		}
+		foreach ( $named as $path => $ids ) {
+			return sprintf( 'name the file %1$s again: the attachment %2$d of this site names it as well', (string) $path, (int) $ids[0] );
+		}
+		return null;
 	}
 
 	/**

@@ -139,12 +139,19 @@ entsteht, nennt ihre Meldung den Weg.
   darum nach der Regel der Medien-Art (Entscheid 28: «die Schlüssel der
   Menü- und Medien-Art in ihrer Art»). Jeder andere Schlüssel folgt der
   Regel der Post-Art.
-- Der Rückweg fragt dieselben Rechte und dieselbe Typprüfung
-  (`restore_right()`): die Datei, die ein gesicherter `_wp_attached_file`
-  nennt, muss nach ihrem Inhalt ein Typ sein, den das Konto hochladen darf,
-  und als einfache Datei unter den Uploads liegen; sonst bleibt der Teil
-  mit seinem alten Wert stehen, die übrigen Teile gehen zurück. Auf dem
-  Rückweg wird keine Datei gelegt.
+- Der Rückweg fragt dieselben Rechte und dieselben Prüfungen der Dateien
+  wie der Hinweg (`restore_right()`, `restore_files()`; Codex-Runde 1, A4):
+  jede Datei, die der zurückzusetzende Wert eines der drei Schlüssel nennt
+  (`_wp_attached_file` die Hauptdatei, `_wp_attachment_metadata` die
+  Grössen und Begleitdateien, `_wp_attachment_backup_sizes` die
+  Sicherungen; gerechnet wie der Kern aus den gesicherten Werten), muss
+  eine einfache Datei unter den Uploads sein, ohne Link auf dem Weg, von
+  keinem anderen Anhang der Site genannt, nach ihrem Inhalt ein Typ, den
+  das Konto hochladen darf und den ihr Name sagt, die Hauptdatei der Typ
+  des Anhangs. Sonst bleibt der Teil mit seinem alten Wert stehen (`left`,
+  mit Grund), die übrigen Teile gehen zurück. Ein Wert, der keine Datei
+  nennt (der Schlüssel fehlte vorher), geht zurück. Auf dem Rückweg wird
+  keine Datei gelegt.
 - Unmittelbar vor jeder Datei, die ein Schritt legt, fragt er die Rechte
   noch einmal wie die Vorprüfung (Codex-Runde 1, A5): `upload_files` (das
   `create_posts` der Art) für einen neuen Anhang, `edit_post` und
