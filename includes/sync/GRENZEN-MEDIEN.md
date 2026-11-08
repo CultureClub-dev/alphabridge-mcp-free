@@ -73,7 +73,8 @@ entsteht, nennt ihre Meldung den Weg.
   bleibt so liegen.
 - Ordner und Datei werden gegen ausgetauschte Ordner gehärtet (Codex-Runde
   1, A1): der Uploads-Ordner und jeder Ordner auf dem Weg entsteht einzeln
-  mit `mkdir()` unter einem geprüften Ordner und wird danach je Ebene
+  mit `wp_mkdir_p()` für diese eine Ebene unter einem geprüften Ordner
+  (Entscheid 26) und wird danach je Ebene
   geprüft (aufgelöst er selbst, kein Link); unmittelbar vor `fopen( …,
   'xb' )` wird der aufgelöste Ordner der Datei noch einmal gefragt, ohne
   Speichern des Journals dazwischen; nach dem Öffnen belegen Gerät und
@@ -84,7 +85,7 @@ entsteht, nennt ihre Meldung den Weg.
   Prozess mit Schreibrecht an den Uploads, der genau zwischen der letzten
   Prüfung und dem Öffnen einen Ordner gegen einen Link tauscht, lässt eine
   leere Datei ausserhalb der Uploads entstehen, und einer, der zwischen der
-  Prüfung eines Ordners und dem `mkdir()` darunter tauscht, einen leeren
+  Prüfung eines Ordners und dem Anlegen darunter tauscht, einen leeren
   Ordner; beides wird gefunden und gemeldet, keines beschrieben.
 - Ein Schritt legt alle Dateien seines Anhangs in einer Anfrage: höchstens
   48 MiB (`attachment:file_too_large` darüber), Stück für Stück aus dem
@@ -302,7 +303,7 @@ entsteht, nennt ihre Meldung den Weg.
   und Auflösung in `folder()` je für sich (sie sichern einander: ein Link
   auf dem Weg fällt beiden auf; geführt sind der Uploads-Ordner, der Ordner
   je Ebene und die Datei, wo ein Ordner hingehört); das Rennen zwischen
-  der Prüfung eines Ordners und `mkdir()` darunter (keine Naht; die Prüfung
+  der Prüfung eines Ordners und dem Anlegen darunter (keine Naht; die Prüfung
   vor und nach dem Öffnen der Datei führt die Naht `$probe`); die erste
   Lesung der Dateien nach dem Legen (`files_seen` in `lay_files()`:
   gleichwertig, `write_parts()` liest sie sonst vor dem ersten Aufruf

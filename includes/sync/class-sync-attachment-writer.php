@@ -906,8 +906,8 @@ final class AB_MCP_Sync_Attachment_Writer {
 	 * (a site without an upload yet: made in the folder files_plan()
 	 * resolved), then each folder on the way, one level at a time: a link
 	 * locks, a file where a folder goes locks, a missing one is made with
-	 * mkdir() (never recursive, the permissions of the folder above, as
-	 * wp_mkdir_p() takes them) and every level checked again by its resolved
+	 * wp_mkdir_p() for that one level under its checked parent (decision 26)
+	 * and every level checked again by its resolved
 	 * path, so a folder only counts where it resolves to itself under the
 	 * uploads. A folder another hand made somewhere else in between stays as
 	 * it is (nothing is deleted) and the file is not laid.
@@ -928,9 +928,10 @@ final class AB_MCP_Sync_Attachment_Writer {
 				return AB_MCP_Sync_Post_Writer::locked( 'attachment:unsafe_path', sprintf( 'file %s: a link lies on the way to it', $path ) );
 			}
 			if ( ! file_exists( $at ) ) {
-				$stat  = @stat( $above ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- a failure is answered by the check below.
-				$perms = is_array( $stat ) ? ( $stat['mode'] & 0007777 ) : 0755;
-				if ( ! @mkdir( $at, $perms ) && ! is_dir( $at ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- one level under a checked folder, checked again below.
+				// One level under a folder checked just before (its parent):
+				// wp_mkdir_p() makes only it, with the permissions of the folder
+				// above, as for an upload (decision 26).
+				if ( ! is_dir( $above ) || ! wp_mkdir_p( $at ) ) {
 					return new WP_Error( 'ab_mcp_sync_media_folder', sprintf( 'The folder of the file %s could not be made in the uploads of this site, so it was not laid. Ask the host to check that the uploads are writable, then call again.', $path ) );
 				}
 				clearstatcache( true, $at );

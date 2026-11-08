@@ -836,7 +836,7 @@ return array(
 		'id'      => 'medien/writer-folder',
 		'clause'  => 'folder(): the missing folders made under the uploads, one level at a time',
 		'file'    => $aw,
-		'search'  => "\t\t\t\tif ( ! @mkdir( \$at, \$perms ) && ! is_dir( \$at ) ) {",
+		'search'  => "\t\t\t\tif ( ! is_dir( \$above ) || ! wp_mkdir_p( \$at ) ) {",
 		'replace' => "\t\t\t\tif ( true ) {",
 		'run'     => $it( 'SyncMediaTest', 'testANewImageWithItsSizesAndANewPdfInANewPageGoOverAndTheWayBackLeavesThemWithTheirFiles' ),
 		'expect'  => '/testANewImageWithItsSizesAndANewPdfInANewPageGoOverAndTheWayBackLeavesThemWithTheirFiles/',

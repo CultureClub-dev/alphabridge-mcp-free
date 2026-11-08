@@ -325,7 +325,7 @@ e('writer-lay-stop', 'lay_files(): a file not laid stops the files after it', AW
 e('writer-lay-own', 'lay(): a file laid is the run\'s own', AW,
   "\t\t\t'state' => 'laid',\n\t\t\t'own'   => true,", "\t\t\t'state' => 'laid',\n\t\t\t'own'   => false,", 'it', NORMAL)
 e('writer-folder', 'folder(): the missing folders made under the uploads, one level at a time', AW,
-  "\t\t\t\tif ( ! @mkdir( $at, $perms ) && ! is_dir( $at ) ) {", "\t\t\t\tif ( true ) {", 'it', NORMAL)
+  "\t\t\t\tif ( ! is_dir( $above ) || ! wp_mkdir_p( $at ) ) {", "\t\t\t\tif ( true ) {", 'it', NORMAL)
 e('writer-folder-root', 'folder(): the uploads folder itself made where it is missing (Codex round 1, B8)', AW,
   "\t\tforeach ( array_merge( array( '' ), $parts ) as $part ) {", "\t\tforeach ( $parts as $part ) {", 'pkg', U_FOLDER)
 e('writer-folder-file', 'folder(): a file where a folder goes locks', AW,
