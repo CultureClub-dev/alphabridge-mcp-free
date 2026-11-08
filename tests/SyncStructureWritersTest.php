@@ -31,6 +31,12 @@ require_once __DIR__ . '/sync-run-stubs.php';
 require_once __DIR__ . '/../includes/sync/class-sync-engine.php';
 
 require_once __DIR__ . '/structure-stubs.php';
+// What the suite loads through other cases, so that this file also runs
+// alone: AB_MCP_Undo (the option guard asks it), WP_Widget with its own
+// update(), wp_update_nav_menu_item().
+require_once __DIR__ . '/../includes/undo/class-undo.php';
+require_once __DIR__ . '/widgets-meta-ops-stubs.php';
+require_once __DIR__ . '/menus-shop-stubs.php';
 
 /**
  * A $wpdb with option rows, post rows and their meta and terms, as
@@ -107,6 +113,18 @@ final class SyncStructureWpdb {
 				$this->last_result = array( (object) array( 'taxonomy' => $this->term_rows[ (int) $m[1] ]['taxonomy'] ) );
 			}
 			return count( $this->last_result );
+		}
+		// The raw way back of a shared row (AB_MCP_Sync_Shared_Row::put_back()):
+		// written where the row holds the bytes named. Only the decision of
+		// the writer before it is held here; the SQL itself by
+		// SyncStructureTest against the database.
+		if ( preg_match( "/^UPDATE wp_options SET option_value = '((?:[^'\\\\]|\\\\.)*)' WHERE option_name = '((?:[^'\\\\]|\\\\.)*)' AND CAST\\( option_value AS BINARY \\) = CAST\\( '((?:[^'\\\\]|\\\\.)*)' AS BINARY \\)/", $sql, $m ) ) {
+			$name = stripslashes( $m[2] );
+			if ( array_key_exists( $name, $this->option_rows ) && $this->option_rows[ $name ] === stripslashes( $m[3] ) ) {
+				$this->option_rows[ $name ] = stripslashes( $m[1] );
+				return 1;
+			}
+			return 0;
 		}
 		return 0;
 	}
@@ -265,6 +283,21 @@ final class SyncStructureWritersTest extends TestCase {
 		self::assertSame( AB_MCP_Sync_Shared_Row::hash( 'New' ), $parts[0]['target'] );
 		self::assertSame( AB_MCP_Sync_Shared_Row::hash( 'Old' ), $parts[0]['before'] );
 		self::assertSame( array( 'options' => array( 'blogname' ) ), array_intersect_key( AB_MCP_Sync_Option_Writer::guard_of( 'blogname', 'blogname' ), array( 'options' => true ) ), 'The takeover lock covers the option (pre_update_option, decision 19).' );
+		// The way back: raw, where the row holds what the step wrote; left
+		// where it changed since, or where sanitize_option() of this site
+		// would change the value before now.
+		$backup                             = array( 'row' => array( 'value' => 'Old' ), 'meta' => array(), 'terms' => array() );
+		$wrote                              = AB_MCP_Sync_Option_Writer::row_hash( array( 'value' => 'New' ) );
+		self::db()->option_rows['blogname'] = 'New';
+		self::assertSame( 'restored', AB_MCP_Sync_Option_Writer::restore_part( 'row', 'blogname', $backup, $wrote, 0 )['state'] );
+		self::assertSame( 'Old', self::db()->option_rows['blogname'] );
+		self::db()->option_rows['blogname'] = 'By hand';
+		self::assertSame( 'left', AB_MCP_Sync_Option_Writer::restore_part( 'row', 'blogname', $backup, $wrote, 0 )['state'], 'Changed since the step.' );
+		self::assertSame( 'By hand', self::db()->option_rows['blogname'] );
+		self::db()->option_rows['blogname'] = 'New';
+		$GLOBALS['ab_test_sanitize_option'] = static fn( $option, $value ) => $value . '!';
+		self::assertSame( 'left', AB_MCP_Sync_Option_Writer::restore_part( 'row', 'blogname', $backup, $wrote, 0 )['state'], 'sanitize_option() would change the value before.' );
+		self::assertSame( 'New', self::db()->option_rows['blogname'] );
 	}
 
 	/* --------------------------------------------------------------- CSS */
@@ -364,6 +397,10 @@ final class SyncStructureWritersTest extends TestCase {
 		$line = self::menu_line( array() );
 		unset( $line['form']['locations'] );
 		self::assertSame( 'post:content_missing', self::lock_of( AB_MCP_Sync_Menu_Writer::target_of( $line, self::item( 'create' ), self::ctx() ) ) );
+		self::assertSame( 'menu:item_shape', self::lock_of( AB_MCP_Sync_Menu_Writer::target_of( self::menu_line( array(), array( 'taxonomy' => 'category' ) ), self::item( 'create' ), self::ctx() ) ), 'A row of another taxonomy.' );
+		foreach ( array( array( '' ), array( 7 ) ) as $named ) {
+			self::assertSame( 'menu:item_shape', self::lock_of( AB_MCP_Sync_Menu_Writer::target_of( self::menu_line( $named ), self::item( 'create' ), self::ctx() ) ), 'A position that is no name.' );
+		}
 		// Only positions the active theme registers, and edit_theme_options.
 		$GLOBALS['ab_test_way']['taxonomies']['nav_menu']      = (object) array( 'cap' => (object) array( 'manage_terms' => 'edit_theme_options', 'edit_terms' => 'edit_theme_options', 'assign_terms' => 'edit_theme_options' ) );
 		self::db()->option_rows['stylesheet']                  = 'twentytwentyfive';
@@ -408,6 +445,23 @@ final class SyncStructureWritersTest extends TestCase {
 		self::assertSame( array(), AB_MCP_Sync_Menu_Writer::with_row( $prepared, 5, $current ) );
 		self::assertTrue( AB_MCP_Sync_Menu_Writer::shared_part( 'location:primary' ) );
 		self::assertFalse( AB_MCP_Sync_Menu_Writer::shared_part( 'row' ) );
+		self::assertNotSame( AB_MCP_Sync_Shared_Row::hash( null ), AB_MCP_Sync_Shared_Row::hash( '' ), 'An absent field is not an empty one.' );
+		// A position that names the menu here already is no part.
+		$both = AB_MCP_Sync_Menu_Writer::target_of( self::menu_line( array( 'footer', 'primary' ) ), self::item( 'update', '5' ), self::ctx() );
+		self::assertSame( array( 'row', 'location:primary' ), array_column( AB_MCP_Sync_Menu_Writer::journal_parts( $both, $current ), 'part' ), 'footer names the menu here already.' );
+		// Asked again right before a position is set: one the theme registers.
+		$GLOBALS['ab_test_nav_menus'] = array();
+		self::assertSame( 'menu:location_unregistered', self::lock_of( AB_MCP_Sync_Menu_Writer::write_part( 5, 'location:primary', $prepared, $current ) ) );
+		$GLOBALS['ab_test_nav_menus'] = array( 'primary' => 'Primary' );
+		// The way back of a position: back where it holds what the step wrote
+		// (self), left where it changed since.
+		$wrote = AB_MCP_Sync_Shared_Row::hash( AB_MCP_Sync_Menu_Writer::SELF );
+		self::db()->option_rows['theme_mods_twentytwentyfive'] = serialize( array( 'nav_menu_locations' => array( 'primary' => 5, 'footer' => 5 ), 'header_textcolor' => '333333' ) );
+		self::assertSame( 'restored', AB_MCP_Sync_Menu_Writer::restore_part( 'location:primary', 5, $current, $wrote, 0 )['state'] );
+		self::assertSame( array( 'primary' => 3, 'footer' => 5 ), unserialize( self::db()->option_rows['theme_mods_twentytwentyfive'] )['nav_menu_locations'] );
+		self::db()->option_rows['theme_mods_twentytwentyfive'] = serialize( array( 'nav_menu_locations' => array( 'primary' => 9, 'footer' => 5 ), 'header_textcolor' => '333333' ) );
+		self::assertSame( 'left', AB_MCP_Sync_Menu_Writer::restore_part( 'location:primary', 5, $current, $wrote, 0 )['state'], 'Changed since the step: left.' );
+		self::assertSame( 9, unserialize( self::db()->option_rows['theme_mods_twentytwentyfive'] )['nav_menu_locations']['primary'] );
 	}
 
 	/* ------------------------------------------------------- menu items */
@@ -461,6 +515,7 @@ final class SyncStructureWritersTest extends TestCase {
 		// A shape the core does not write through the menu screen.
 		foreach ( array(
 			'a status'              => array( array(), array( 'post_status' => 'pending' ), array( 5 ) ),
+			'another post type'     => array( array(), array( 'post_type' => 'page' ), array( 5 ) ),
 			'no position'           => array( array(), array( 'menu_order' => '0' ), array( 5 ) ),
 			'a type the core lacks' => array( array( '_menu_item_type' => 'acme' ), array(), array( 5 ) ),
 			'a core key twice'      => array( array( '_menu_item_url' => array( 'a', 'b' ) ), array(), array( 5 ) ),
@@ -469,6 +524,17 @@ final class SyncStructureWritersTest extends TestCase {
 		) as $case => list( $meta, $row, $terms ) ) {
 			self::assertSame( 'menu:item_shape', self::lock_of( AB_MCP_Sync_Menu_Item_Writer::target_of( self::item_line( $meta, $row, $terms ), self::item( 'create' ), $ctx ) ), $case );
 		}
+		$other                                    = self::item_line();
+		$other['content']['terms'][0]['taxonomy'] = 'category';
+		self::assertSame( 'menu:item_shape', self::lock_of( AB_MCP_Sync_Menu_Item_Writer::target_of( $other, self::item( 'create' ), $ctx ) ), 'A term of another taxonomy.' );
+		// The core writes the item it is given, with its dates here, or the
+		// step stops (the stub of wp_update_nav_menu_item() answers 900).
+		self::db()->post_rows[21]       = array( 'post_type' => 'nav_menu_item', 'post_date' => '2026-01-02 03:04:05', 'post_date_gmt' => '2026-01-02 02:04:05' );
+		$GLOBALS['ab_test_menu_writes'] = array();
+		$update                         = AB_MCP_Sync_Menu_Item_Writer::target_of( self::item_line( array(), array( 'post_title' => 'Shop \\ Bar' ) ), self::item( 'update', '21' ), $ctx );
+		self::assertSame( 'ab_mcp_sync_write_failed', AB_MCP_Sync_Menu_Item_Writer::write_row( $update, 21 )->get_error_code() );
+		self::assertSame( array( '2026-01-02 03:04:05', '2026-01-02 02:04:05' ), array( $GLOBALS['ab_test_menu_writes'][0][2]['menu-item-post-date'], $GLOBALS['ab_test_menu_writes'][0][2]['menu-item-post-date-gmt'] ), 'With the dates of the item here.' );
+		self::assertSame( 'Shop \\\\ Bar', $GLOBALS['ab_test_menu_writes'][0][2]['menu-item-title'], 'Slashed, as the core unslashes what it is given.' );
 		// References: the menu, the parent item, the object by their pairs.
 		self::assertSame( 'menu:reference_unmapped', self::lock_of( AB_MCP_Sync_Menu_Item_Writer::target_of( self::item_line(), self::item( 'create' ), self::ctx() ) ), 'The menu.' );
 		self::assertIsArray( AB_MCP_Sync_Menu_Item_Writer::target_of( self::item_line(), self::item( 'create' ), self::ctx( array(), array( 'term' => array( 5 => true ) ) ) ), 'A menu the run makes first is pending.' );
@@ -495,9 +561,14 @@ final class SyncStructureWritersTest extends TestCase {
 		$page                     = array( '_menu_item_type' => 'post_type', '_menu_item_object' => 'page', '_menu_item_object_id' => '12', '_menu_item_url' => '' );
 		self::db()->post_rows[120] = array( 'post_type' => 'page', 'post_title' => 'About', 'post_parent' => '7' );
 		self::assertTrue( $check( $page, array( 'post_title' => 'Who we are' ) ) );
-		self::assertSame( 'menu:sanitizer', self::lock_of( $check( $page, array( 'post_title' => 'About' ) ) ), 'The core stores the title of the object as none.' );
+		self::assertSame( 'menu:sanitizer', self::lock_of( $check( $page, array( 'post_title' => 'About', 'post_content' => 'Our team' ) ) ), 'The core stores the title of the object as none.' );
 		self::assertSame( 'menu:sanitizer', self::lock_of( $check( array( '_menu_item_url' => 'https://x.test/' ) + $page ) ), 'The core keeps no address for an item of a page.' );
 		self::assertSame( 'menu:sanitizer', self::lock_of( $check( $page, array( 'post_title' => '', 'post_content' => '' ) ) ), 'A blank item gets a description of one space.' );
+		foreach ( array( serialize( array( 'x' => 'a' ) ), serialize( array( 7 ) ) ) as $classes ) {
+			self::assertSame( 'menu:sanitizer', self::lock_of( AB_MCP_Sync_Menu_Item_Writer::target_of( self::item_line( array( '_menu_item_classes' => $classes ) ), self::item( 'update', '21' ), $ctx ) ), 'The classes no list of names.' );
+		}
+		$own = self::ctx( array( 'term' => array( 5 => 50 ), 'post' => array( 30 => 21 ) ) );
+		self::assertSame( 'menu:sanitizer', self::lock_of( AB_MCP_Sync_Menu_Item_Writer::precheck( AB_MCP_Sync_Menu_Item_Writer::target_of( self::item_line( array( '_menu_item_menu_item_parent' => '30' ) ), self::item( 'update', '21' ), $own ), 21, 0 ) ), 'An item is not its own parent.' );
 		$parent = AB_MCP_Sync_Menu_Item_Writer::target_of( self::item_line( $page, array( 'post_title' => 'Who we are' ) ), self::item( 'update', '21' ), $ctx );
 		self::assertSame( '7', $parent['columns']['post_parent'], 'The parent the core takes from the page.' );
 		// The rights: edit_theme_options, edit_post at the item, assign_term at the menu.
@@ -567,7 +638,56 @@ final class SyncStructureWritersTest extends TestCase {
 		self::assertSame( 'widget_area:remove_instance', self::lock_of( AB_MCP_Sync_Widget_Area_Writer::target_of( self::area_line( array( 'text-2' => array( 'title' => 'B' ) ) ), $item, self::ctx() ) ), 'text-5 here has no counterpart: writing would remove it.' );
 		self::assertSame( 'widget_area:widget_unregistered', self::lock_of( AB_MCP_Sync_Widget_Area_Writer::target_of( self::area_line( array( 'acme-2' => array( 'x' => 1 ) ) ), $item, self::ctx() ) ) );
 		self::assertSame( 'widget_area:widget_unregistered', self::lock_of( AB_MCP_Sync_Widget_Area_Writer::target_of( self::area_line( array( 'search' => null ) ), $item, self::ctx() ) ), 'A widget without a number.' );
+		self::assertSame( 'widget_area:widget_unregistered', self::lock_of( AB_MCP_Sync_Widget_Area_Writer::target_of( self::area_line( array( 'text-3' => null ) ), $item, self::ctx() ) ), 'An instance without its settings on the staging site.' );
 		self::assertSame( 'widget_area:create', self::lock_of( AB_MCP_Sync_Widget_Area_Writer::target_of( self::area_line( array() ), self::item( 'create' ), self::ctx() ) ) );
 		self::assertSame( 'widget_area:create', self::lock_of( AB_MCP_Sync_Widget_Area_Writer::target_of( self::area_line( array() ), self::item( 'update', 'sidebar-9' ), self::ctx() ) ) );
+	}
+
+	public function testTheChecksOfAnAreaAskTheRightTheRowOfEachWidgetAndItsUpdateAhead(): void {
+		if ( ! class_exists( 'WP_Widget', false ) ) {
+			self::markTestSkipped( 'The unit suite runs without WP_Widget.' );
+		}
+		self::areas_here( array( 'text-2' ), array( 2 => array( 'title' => 'A' ) ) );
+		$prepared = array(
+			'area'   => 'sidebar-1',
+			'writes' => array(
+				'text-2' => array(
+					'base'     => 'text',
+					'number'   => 2,
+					'settings' => array( 'title' => 'B', 'seen_number' => 2 ),
+				),
+			),
+		);
+		self::assertTrue( AB_MCP_Sync_Widget_Area_Writer::precheck( $prepared, 'sidebar-1', 0 ), 'As the update() of the widget keeps it (the stub notes its number).' );
+		$tagged = $prepared;
+		$tagged['writes']['text-2']['settings']['title'] = '<b>B</b>';
+		self::assertSame( 'widget_area:sanitizer', self::lock_of( AB_MCP_Sync_Widget_Area_Writer::precheck( $tagged, 'sidebar-1', 0 ) ), 'The update() of the widget strips the tags.' );
+		$GLOBALS['ab_test_can'] = static fn( string $cap, array $args ): bool => 'edit_theme_options' !== $cap;
+		self::assertSame( 'ab_mcp_sync_rights', AB_MCP_Sync_Widget_Area_Writer::precheck( $prepared, 'sidebar-1', 0 )->get_error_code() );
+		$GLOBALS['ab_test_can']                = static fn( string $cap, array $args ): bool => true;
+		self::db()->option_rows['widget_text'] = serialize( array( 2 => array( 'title' => 'A' ) ) );
+		self::assertSame( 'widget_area:widget_unregistered', self::lock_of( AB_MCP_Sync_Widget_Area_Writer::precheck( $prepared, 'sidebar-1', 0 ) ), 'A row without _multiwidget: not written by the widgets of WordPress.' );
+		// Written as the widgets screen writes it: the settings through the
+		// update() of the widget right before (the stub strips the tags and
+		// notes the number), a fresh row marked as one of WordPress.
+		unset( self::db()->option_rows['widget_text'] );
+		$GLOBALS['ab_test_options'] = array();
+		$fresh                      = array(
+			'area'   => 'sidebar-1',
+			'writes' => array(
+				'text-3' => array(
+					'base'     => 'text',
+					'number'   => 3,
+					'settings' => array( 'title' => '<b>C</b>' ),
+				),
+			),
+		);
+		self::assertTrue( AB_MCP_Sync_Widget_Area_Writer::write_part( 'sidebar-1', 'instance:text-3', $fresh, null ) );
+		self::assertSame( array( 3 => array( 'title' => 'C', 'seen_number' => 3 ), '_multiwidget' => 1 ), $GLOBALS['ab_test_options']['widget_text'] );
+		// After the writes: the copy of the areas the core keeps for the
+		// request goes, as wp_set_sidebars_widgets() lets it go.
+		$GLOBALS['_wp_sidebars_widgets'] = array( 'sidebar-1' => array( 'text-2' ) );
+		self::assertContains( 'sidebars_widgets', AB_MCP_Sync_Widget_Area_Writer::post_write( 'sidebar-1' ) );
+		self::assertNull( $GLOBALS['_wp_sidebars_widgets'] );
 	}
 }

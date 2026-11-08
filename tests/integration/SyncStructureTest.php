@@ -42,6 +42,7 @@ use AB_MCP_Sync_Pairs;
 use AB_MCP_Sync_Report;
 use AB_MCP_Sync_Resources;
 use AB_MCP_Sync_Schema;
+use AB_MCP_Sync_Shared_Row;
 use AB_MCP_Tool_Registry;
 use AB_MCP_Tools_Staging;
 use AB_MCP_Widget_Writer;
@@ -851,10 +852,14 @@ final class SyncStructureTest extends TestCase {
 		// permalinks build the rewrite rules anew (decision 33, A19); the way
 		// back puts every one back byte for byte, and the rules with them.
 		self::pair();
-		foreach ( array( 'blogname' => 'A shop', 'blogdescription' => 'Things', 'posts_per_page' => '10' ) as $name => $value ) {
+		foreach ( array( 'blogname' => 'A shop', 'blogdescription' => 'Things', 'posts_per_page' => '10', 'permalink_structure' => '/%year%/%postname%/' ) as $name => $value ) {
 			update_option( $name, $value );
 			self::one_b( array( 'op' => 'update_option', 'name' => $name, 'value' => $value ) );
 		}
+		// The rules of that structure built here, as its permalink screen
+		// leaves them: a run that changes the structure has to build them anew.
+		$GLOBALS['wp_rewrite']->init();
+		flush_rewrite_rules( false );
 		self::paired( self::staged() );
 		self::b(
 			array(
@@ -869,6 +874,13 @@ final class SyncStructureTest extends TestCase {
 		foreach ( $names as $name ) {
 			$before[ $name ] = AB_MCP_IT_Sites::option_row( 'a', $name )['option_value'];
 		}
+		// The rule of a post by its name alone is not among the rules of this
+		// site before (they are of another structure), so its rules show the
+		// flush of the run.
+		$name_rule  = '"([^/]+)(?:/([0-9]+))?/?$"';
+		$rules_were = (string) ( AB_MCP_IT_Sites::option_row( 'a', 'rewrite_rules' )['option_value'] ?? '' );
+		self::assertStringContainsString( '([0-9]{4})/([^/]+)(?:/([0-9]+))?/?$', $rules_were );
+		self::assertStringNotContainsString( $name_rule, $rules_were );
 		$planned = self::planned( array_map( static fn( $n ) => array( 'option', 'live', $n ), $names ) );
 		$this->watch_deletions();
 		$run = self::begun( $planned['args'] );
@@ -876,13 +888,32 @@ final class SyncStructureTest extends TestCase {
 		self::assertWrittenWhole( self::run_status( (int) $run['run_id'] ) );
 		self::assertSame( array( 'A shop &amp; more', 'Fine things', '6', '/%postname%/' ), array_map( static fn( $n ) => AB_MCP_IT_Sites::option_row( 'a', $n )['option_value'], $names ) );
 		$rules = (string) AB_MCP_IT_Sites::option_row( 'a', 'rewrite_rules' )['option_value'];
-		self::assertStringContainsString( '(.?.+?)(?:/([0-9]+))?/?$', $rules, 'The rewrite rules of the new structure.' );
+		self::assertStringContainsString( $name_rule, $rules, 'The rewrite rules of the new structure.' );
+		// Changed by hand since the run (Entscheid A): left as it is, the
+		// others back byte for byte.
+		update_option( 'blogdescription', 'Changed by hand' );
 		$back = self::back( (int) $run['run_id'] );
-		self::assertSame( 'closed_reverted', $back['state'], json_encode( $back ) );
-		foreach ( $names as $name ) {
+		self::assertSame( 'closed_findings', $back['state'], json_encode( $back ) );
+		self::assertSame( 'Changed by hand', AB_MCP_IT_Sites::option_row( 'a', 'blogdescription' )['option_value'] );
+		foreach ( array_diff( $names, array( 'blogdescription' ) ) as $name ) {
 			self::assertSame( $before[ $name ], AB_MCP_IT_Sites::option_row( 'a', $name )['option_value'], $name );
 		}
 		self::assertSame( array(), $this->deletions, 'No option of the site was deleted.' );
+	}
+
+	public function testAFieldOfASharedRowGoesBackOnlyWhereItsBytesAreStillThoseReadAndItsCachesForgetIt(): void {
+		// The raw way back of a shared row (decision 24): the row is written
+		// only where it holds exactly the bytes read, in length and in case,
+		// and the caches of the option (alloptions) do not keep the old value.
+		update_option( 'blogname', 'Old' );
+		self::assertSame( 'Old', get_option( 'blogname' ) );
+		self::assertFalse( AB_MCP_Sync_Shared_Row::put_back( 'blogname', 'Ol', 'X' ) );
+		self::assertFalse( AB_MCP_Sync_Shared_Row::put_back( 'blogname', 'Old ', 'X' ), 'Not with one space more.' );
+		self::assertFalse( AB_MCP_Sync_Shared_Row::put_back( 'blogname', 'OLD', 'X' ), 'Nor in other capitals.' );
+		self::assertSame( 'Old', AB_MCP_IT_Sites::option_row( 'a', 'blogname' )['option_value'] );
+		self::assertTrue( AB_MCP_Sync_Shared_Row::put_back( 'blogname', 'Old', 'X' ) );
+		self::assertSame( 'X', AB_MCP_IT_Sites::option_row( 'a', 'blogname' )['option_value'] );
+		self::assertSame( 'X', get_option( 'blogname' ), 'The caches of the option forget it.' );
 	}
 
 	/* ------------------------------------------------------------- locks */
