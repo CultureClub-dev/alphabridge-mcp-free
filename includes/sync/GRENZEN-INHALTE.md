@@ -252,6 +252,15 @@ nennt ihre Meldung den Weg.
   (`ab_mcp_confirm_mismatch`) und demselben Weg wie bei jeder anderen
   Änderung des Stands: eine neue Vorschau (Codex-Runde 3; Prüffall
   `testATokenWhoseOrderOfStepsNoLongerHoldsIsStale`).
+- Grenze C (konstruiert): `term_depths()` kappt die Tiefe bei
+  `AB_MCP_Sync_Push::MAX_OBJECTS` (1996; durch `<=` erreicht sie 1997, nicht
+  `AB_MCP_Sync_Manifest::MAX_OBJECTS`). In einem Baum, der tiefer ist
+  (hier 1 → … → 1997 → A → B, Soll … → 1997 → B → A), sind beide Tiefen
+  gleich, A geht nach dem Bericht zuerst, scheitert an `term:parent` und
+  bleibt stehen; B geht. Fail closed. Grund: die Obergrenze hält die
+  Rechnung endlich, auch bei einer Schleife der Eltern, die die
+  Gesamtvorprüfung sperrt. Weg: ein zweiter Lauf hängt A um, weil B dann
+  an seinem Platz steht.
 - Grenze C: Ein Elternteil, der am Stand nach dem Lauf eine Schleife
   schlösse (ein Term ausserhalb der Auswahl hängt hier anders als auf
   Staging), sperrt `term:parent` (Z8d): `wp_update_term()` bräche die
