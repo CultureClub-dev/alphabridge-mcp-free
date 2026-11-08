@@ -462,8 +462,9 @@ Ablehnung entsteht, nennt sie den Weg.
   Z8d), auch ein vorhandener Live-Post mit einem Meta-Schlüssel ausserhalb der
   Regel (er stünde sonst nach dem Schreiben nicht auf dem Sollwert).
 - Ein Beitragsbild (`_thumbnail_id`) ist ein Verweis auf ein Attachment; der
-  Bericht lässt den Post darauf warten (Medien: Zweig 10). Ein Post mit
-  Beitragsbild wird in Zweig 8 nicht übernommen.
+  Bericht liess den Post in Zweig 8 und 9 darauf warten. Seit Zweig 10 ist
+  das Attachment eine Art des Laufs: ein Beitragsbild mit Paar geht, eines,
+  das derselbe Lauf anlegt, kommt vor dem Post (`GRENZEN-MEDIEN.md`).
 - Der Sanitizer-Vorlauf prüft die Felder durch `sanitize_post( …, 'db' )` im
   Rechtekontext des Kontos (kses ohne `unfiltered_html`). Ein Filter, den
   erst `wp_insert_post_data` anwendet, fällt beim Rücklesen auf: die Zeile

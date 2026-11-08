@@ -15,10 +15,11 @@ nennt ihre Meldung den Weg.
 ## Der Schreiber je Art
 
 - Die Engine wählt den Schreiber nach der Art des Plans
-  (`AB_MCP_Sync_Engine::WRITERS`: `post`, `term`); alle Aufrufe am Objekt
+  (`AB_MCP_Sync_Engine::WRITERS`: `post`, `term`, seit Zweig 10 auch
+  `attachment`, siehe `GRENZEN-MEDIEN.md`); alle Aufrufe am Objekt
   (Vorbereitung, Vorprüfung, Lesen, Journal-Teile, Schreiben, Rücklesen,
   Rückweg, Rechte, alter Wert, Caches, Sperre) gehen über ihn. Eine Art
-  ohne Schreiber (Menü, Attachment, Widget-Bereich, CSS, Option) schreibt
+  ohne Schreiber (Menü, Widget-Bereich, CSS, Option) schreibt
   kein Schritt; der Plan nimmt sie ohnehin nicht (`verdict()`), die
   Gesamtvorprüfung meldet sie als Befund. Grund: ein Vertrag je Art
   (Vertrag A), keine zweite Grenze.

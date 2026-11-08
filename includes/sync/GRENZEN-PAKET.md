@@ -456,9 +456,11 @@ mit Beispiel und Grund; wo eine Ablehnung entsteht, nennt sie den Weg.
   `pair_print` in `runs` (Zweig 8).
 - Multisite: Export und Import lehnen ab (Entscheid 3), mit Weg
   (`ab_mcp_sync_multisite`).
-- Pakete von Medien (`media`): Export und Import lehnen sie weiterhin mit
-  Weg ab (`ab_mcp_sync_import_purpose`; eine Gruppe, die eine andere Version
-  für `media` begann, endet nach B-3 mit `ab_mcp_sync_import_purpose_held`).
+- Pakete von Medien (`media`): Export und Import nehmen sie seit Zweig 10
+  (`AB_MCP_Sync_Media_Package`, `GRENZEN-MEDIEN.md`); ein anderer Zweck
+  lehnt weiterhin mit Weg ab (`ab_mcp_sync_import_purpose`; eine Gruppe, die
+  eine andere Version für einen Zweck begann, den diese Fassung nicht
+  nimmt, endet nach B-3 mit `ab_mcp_sync_import_purpose_held`).
   Pakete der Umgebung (`env`) nimmt der Import seit Zweig 7, Pakete von
   Objekten (`objects`) seit Zweig 8: ein Paket `objects` oder `media` gehört
   zu einem Bericht (`report_hash`, Zweig 6); der Import verlangt den
