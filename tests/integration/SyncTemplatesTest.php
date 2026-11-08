@@ -1243,7 +1243,9 @@ final class SyncTemplatesTest extends TestCase {
 		// Each reference the boundary asks is an edge of the order: the block
 		// (created: a dependency) and the navigation (changed: before it, no
 		// dependency) before the part, the part (created) before the
-		// template. Over and back.
+		// template. A second new part names only the changed navigation: it
+		// is ready at once, and comes after the navigation all the same (the
+		// rank alone would put it first). Over and back.
 		self::pair();
 		$page = self::para( 'Seite' );
 		self::rest_a( 'POST', '/wp/v2/templates/' . self::THEME . '//page', array( 'content' => $page ) );
@@ -1267,28 +1269,35 @@ final class SyncTemplatesTest extends TestCase {
 		);
 		$block_b = self::on_b( self::made( 'wp_block', 'baustein', self::para( 'Baustein' ) ) );
 		self::rest_b( 'POST', '/wp/v2/template-parts', array( 'slug' => 'promo', 'title' => 'Promo', 'content' => '<!-- wp:block {"ref":' . $block_b . '} /--><!-- wp:navigation {"ref":' . $nav_b . '} /-->', 'area' => 'uncategorized' ) );
+		self::rest_b( 'POST', '/wp/v2/template-parts', array( 'slug' => 'hinweis', 'title' => 'Hinweis', 'content' => '<!-- wp:navigation {"ref":' . $nav_b . '} /-->', 'area' => 'uncategorized' ) );
 		self::rest_b( 'POST', '/wp/v2/templates/' . self::THEME . '//page', array( 'content' => '<!-- wp:template-part {"slug":"promo"} /-->' . $page ) );
 		$before  = self::row_a( $template_a );
-		$names   = array( 'post:wp_template:page', 'post:wp_template_part:promo', 'post:wp_block:baustein', 'post:wp_navigation:menue' );
+		$names   = array( 'post:wp_template:page', 'post:wp_template_part:promo', 'post:wp_block:baustein', 'post:wp_navigation:menue', 'post:wp_template_part:hinweis' );
 		$planned = self::planned( $names );
-		self::assertSame( array( 'take_over', 'create', 'create', 'take_over' ), array_map( static fn( $n ) => self::entry( $planned['report']['all'], $n )['action'], $names ) );
+		self::assertSame( array( 'take_over', 'create', 'create', 'take_over', 'create' ), array_map( static fn( $n ) => self::entry( $planned['report']['all'], $n )['action'], $names ) );
 		$run    = self::begun( $planned['args'] );
 		$closed = self::finish( (int) $run['run_id'] );
 		self::assertSame( 'closed_done', $closed['state'], json_encode( $closed ) . self::check_message( self::run_status( (int) $run['run_id'] ) ) );
 		$status = self::run_status( (int) $run['run_id'] );
-		$types = array_map( static fn( $s ) => $s['parts']['object']['identity']['post_type'], self::writes( $status ) );
-		self::assertSame( array( 'wp_template_part', 'wp_template' ), array_slice( $types, 2 ), 'Each target before the object that names it: ' . implode( ', ', $types ) );
-		self::assertEqualsCanonicalizing( array( 'wp_block', 'wp_navigation' ), array_slice( $types, 0, 2 ) );
+		$slugs = array_map( static fn( $s ) => $s['parts']['object']['identity']['post_name'], self::writes( $status ) );
+		$at    = array_flip( $slugs );
+		$order = implode( ', ', $slugs );
+		self::assertLessThan( $at['promo'], $at['baustein'], 'The block before the part that names it: ' . $order );
+		self::assertLessThan( $at['promo'], $at['menue'], 'The navigation before the part that names it: ' . $order );
+		self::assertLessThan( $at['hinweis'], $at['menue'], 'The navigation before the other part as well: ' . $order );
+		self::assertLessThan( $at['page'], $at['promo'], 'The part before the template that names it: ' . $order );
 		$seq = array();
 		foreach ( self::writes( $status ) as $step ) {
-			$seq[ $step['parts']['object']['identity']['post_type'] ] = $step;
+			$seq[ $step['parts']['object']['identity']['post_name'] ] = $step;
 			self::assertSame( 'done', $step['state'], json_encode( $step ) );
 		}
-		self::assertContains( (int) $seq['wp_block']['seq'], $seq['wp_template_part']['depends'], 'The new block: a dependency of the part.' );
-		self::assertNotContains( (int) $seq['wp_navigation']['seq'], $seq['wp_template_part']['depends'], 'The changed navigation: before it, no dependency.' );
-		self::assertContains( (int) $seq['wp_template_part']['seq'], $seq['wp_template']['depends'], 'The new part: a dependency of the template.' );
-		$block_a = self::id_a( 'wp_block', 'baustein' );
-		$promo_a = self::id_a( 'wp_template_part', 'promo' );
+		self::assertContains( (int) $seq['baustein']['seq'], $seq['promo']['depends'], 'The new block: a dependency of the part.' );
+		self::assertNotContains( (int) $seq['menue']['seq'], $seq['promo']['depends'], 'The changed navigation: before it, no dependency.' );
+		self::assertNotContains( (int) $seq['menue']['seq'], $seq['hinweis']['depends'] );
+		self::assertContains( (int) $seq['promo']['seq'], $seq['page']['depends'], 'The new part: a dependency of the template.' );
+		$block_a   = self::id_a( 'wp_block', 'baustein' );
+		$promo_a   = self::id_a( 'wp_template_part', 'promo' );
+		$hinweis_a = self::id_a( 'wp_template_part', 'hinweis' );
 		self::assertSame( '<!-- wp:block {"ref":' . $block_a . '} /--><!-- wp:navigation {"ref":' . $nav_a . '} /-->', self::row_a( $promo_a )['post_content'] );
 		self::assertSame( '<!-- wp:template-part {"slug":"promo"} /-->' . $page, self::row_a( $template_a )['post_content'] );
 		wp_cache_flush();
@@ -1296,7 +1305,7 @@ final class SyncTemplatesTest extends TestCase {
 		$back = self::back( (int) $run['run_id'] );
 		self::assertSame( 'closed_findings', $back['state'], json_encode( $back ) );
 		self::assertSame( $before, self::row_a( $template_a ), 'The template byte for byte as before the run.' );
-		$expected = array( array( 'post', (string) $block_a ), array( 'post', (string) $promo_a ) );
+		$expected = array( array( 'post', (string) $block_a ), array( 'post', (string) $promo_a ), array( 'post', (string) $hinweis_a ) );
 		sort( $expected );
 		self::assertSame( $expected, self::rests( $back ) );
 	}
