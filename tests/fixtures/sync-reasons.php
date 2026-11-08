@@ -496,6 +496,10 @@ return array(
 			'core' => array( array( 'wp-includes/nav-menu.php', 149, 'function get_registered_nav_menus() {' ) ),
 			'plan' => 'Entscheid 17 (Menüpositionen: nur Positionen, die das Live-Theme registriert)',
 		),
+		'menu:position_exchange'       => array(
+			'why'  => 'Each step of a run compares its object with the plan; the positions are fields of one row (decision 24) and a menu\'s form names them, so a menu that takes the position of another menu of the run changes that menu. One that gives it up goes first; where menus take each other\'s positions no order lets every step find the others as planned, and the run would leave a position empty.',
+			'plan' => 'Entscheid 24 (Felder geteilter Zeilen), Codex-Runde 1 von Zweig 11, B2',
+		),
 		'menu:sanitizer'               => array(
 			'why'  => 'wp_update_nav_menu_item() stores the fields of an item through sanitize_key(), sanitize_html_class() and sanitize_url(), blanks a title that is the title of the object and gives a blank item a description of one space; what it would store otherwise than the staging site is refused ahead.',
 			'core' => array( array( 'wp-includes/nav-menu.php', 588, "update_post_meta( \$menu_item_db_id, '_menu_item_type', sanitize_key( \$args['menu-item-type'] ) );" ) ),

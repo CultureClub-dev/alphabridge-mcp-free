@@ -2875,6 +2875,28 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( array(), $got['locked'] );
 	}
 
+	public function testAMenuThatTakesThePositionOfAnotherMenuOfTheRunComesAfterItAndAnExchangeIsLocked(): void {
+		// Codex round 1 of branch 11, B2: the positions are fields of one
+		// row, the form of each menu names them. A menu that takes a position
+		// another menu of the run holds here comes after it (an order, no
+		// dependency), which gives it up first; menus that take each other's
+		// positions are locked, each of them (menu:position_exchange).
+		$m    = new ReflectionMethod( AB_MCP_Sync_Push::class, 'order' );
+		$menu = static fn( string $ref, array $after = array() ): array => array( 'kind' => 'menu', 'subtype' => 'nav_menu', 'op' => 'update', 'staging_ref' => $ref, 'action' => 'take_over', 'refs' => array(), 'menu_after' => $after );
+		$got  = $m->invoke( null, array( 1 => $menu( '5', array( 2 ) ), 2 => $menu( '6' ) ) );
+		self::assertSame( array( 2, 1 ), array_keys( $got['items'] ), 'The menu that gives the position up first.' );
+		self::assertSame( array( 2 ), $got['items'][1]['after'] );
+		self::assertSame( array(), $got['items'][1]['depends_on'], 'An order, no dependency.' );
+		self::assertSame( array(), $got['locked'] );
+		$got = $m->invoke( null, array( 1 => $menu( '5', array( 2 ) ), 2 => $menu( '6', array( 1 ) ), 3 => $menu( '7' ) ) );
+		self::assertSame( array( 3 ), array_keys( $got['items'] ), 'The other menu goes on.' );
+		self::assertSame( array( 1, 2 ), array_column( $got['locked'], 'n' ) );
+		foreach ( $got['locked'] as $one ) {
+			self::assertStringContainsString( '(menu:position_exchange)', $one['reason'] );
+			self::assertSame( 'Z8d', $one['stage'] );
+		}
+	}
+
 	public function testTheTermsOfARunAreWrittenFromTheRootOfTheTreeItLeavesDown(): void {
 		// Codex rounds 1 and 2 on branch 9, B4: the term steps of a run are
 		// ordered by the depth of their term in the tree the run leaves (the

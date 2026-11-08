@@ -439,6 +439,10 @@ final class AB_MCP_Sync_Kinds {
 		// carry to their end (AB_MCP_Sync_Menu_Writer, AB_MCP_Sync_Menu_Item_Writer,
 		// AB_MCP_Sync_Widget_Area_Writer, AB_MCP_Sync_Css_Writer,
 		// AB_MCP_Sync_Option_Writer).
+		'menu:position_exchange'       => array(
+			'stage'  => 'Z8d',
+			'reason' => 'Two or more menus of the plan take each other\'s position (an exchange): the step of each would change another of them, whose step would then find it changed since the plan and leave a position empty, whatever their order. Plan one of them in a run of its own first and the others from a new report after it, or set the positions by hand under Appearance → Menus → Manage Locations.',
+		),
 		'menu:location_unregistered'   => array(
 			'stage'  => 'Z8',
 			'reason' => 'The menu is at a position the active theme of this site does not register: a position is written only where the theme registers it (as the menu screen offers them). Activate a theme that registers it, or set the position by hand under Appearance → Menus → Manage Locations.',

@@ -68,6 +68,38 @@ final class AB_MCP_Sync_Menu_Writer {
 	/* ------------------------------------------------------------ prepare */
 
 	/**
+	 * The positions a line names for its menu (its form on the staging
+	 * site), names only, for the order of the plan (Codex round 1 of branch
+	 * 11, B2); none where the form names none.
+	 *
+	 * @param array $line The line of the package.
+	 * @return string[]
+	 */
+	public static function line_positions( array $line ) {
+		$named = isset( $line['form']['locations']['~set'] ) && is_array( $line['form']['locations']['~set'] ) ? $line['form']['locations']['~set'] : array();
+		return array_values( array_unique( array_filter( $named, static fn( $l ) => is_string( $l ) && '' !== $l ) ) );
+	}
+
+	/**
+	 * The menu each position of the active theme names here, by its id (the
+	 * positions in another spelling or of no menu left out), for the order
+	 * of the plan (B2); none where the theme mods do not read.
+	 *
+	 * @return array<string,int>
+	 */
+	public static function held_positions() {
+		$positions = self::positions( null );
+		$out       = array();
+		foreach ( is_array( $positions ) ? $positions['locations'] : array() as $location => $value ) {
+			$id = AB_MCP_Sync_Canon::id_spelling( $value );
+			if ( null !== $id && $id > 0 ) {
+				$out[ (string) $location ] = $id;
+			}
+		}
+		return $out;
+	}
+
+	/**
 	 * What a step writes for one menu: the term (as the kind term), its meta
 	 * and its positions.
 	 *

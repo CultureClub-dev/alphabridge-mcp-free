@@ -285,6 +285,7 @@ final class SyncKindsTest extends TestCase {
 			'term:meta_spelling'           => array( array( 'term' ), 'meta_spelling', 'Z8d' ),
 			// Branch 11: the engines of the structure of a site.
 			'menu:location_unregistered'   => array( array( 'menu' ), 'location_unregistered', 'Z8' ),
+			'menu:position_exchange'       => array( array( 'menu' ), 'position_exchange', 'Z8d' ),
 			'menu:sanitizer'               => array( array( 'menu' ), 'sanitizer', 'Z8' ),
 			'menu:item_shape'              => array( array( 'menu' ), 'item_shape', 'Z8d' ),
 			'menu:reference_unmapped'      => array( array( 'menu' ), 'reference_unmapped', 'Z8' ),

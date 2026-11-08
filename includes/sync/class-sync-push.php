@@ -472,6 +472,11 @@ final class AB_MCP_Sync_Push {
 					}
 				}
 			}
+			if ( 'menu' === $item['kind'] ) {
+				// The positions it takes (its form on the staging site), for the
+				// order of the menus (branch 11, Codex round 1, B2).
+				$item['takes'] = AB_MCP_Sync_Menu_Writer::line_positions( $line );
+			}
 			if ( 'post' === $item['kind'] ) {
 				// The references the boundary asks by an id or a name, for the
 				// order (branch 9b, Codex round 1, B): reusable blocks and
@@ -482,6 +487,27 @@ final class AB_MCP_Sync_Push {
 				$item['order_name'] = AB_MCP_Sync_Post_Writer::order_name( $line );
 			}
 			$items[ $n ] = $item;
+		}
+		// The menus of the run (branch 11, Codex round 1, B2): the positions
+		// are fields of one row (decision 24), and a menu's form names them.
+		// A menu that takes a position another menu of the run holds here
+		// comes after that menu (an order, no dependency: order()), which
+		// gives the position up first; else its step would change that menu,
+		// whose step would find it changed since the plan.
+		$menus = array();
+		foreach ( $items as $n => $item ) {
+			if ( 'menu' === $item['kind'] && 'update' === $item['op'] ) {
+				$menus[ (int) $item['live_ref'] ] = $n;
+			}
+		}
+		$held = array() === $menus ? array() : AB_MCP_Sync_Menu_Writer::held_positions();
+		foreach ( $items as $n => $item ) {
+			foreach ( 'menu' === $item['kind'] && isset( $item['takes'] ) ? $item['takes'] : array() as $location ) {
+				$holder = isset( $held[ $location ] ) ? $held[ $location ] : null;
+				if ( null !== $holder && isset( $menus[ $holder ] ) && $menus[ $holder ] !== $n ) {
+					$items[ $n ]['menu_after'][] = $menus[ $holder ];
+				}
+			}
 		}
 		// The attachments of the run (branch 10): a path two of them name is
 		// shared (attachment:shared_path), both are locked; an attachment
@@ -626,7 +652,9 @@ final class AB_MCP_Sync_Push {
 			$locked[] = $l;
 		}
 		if ( array() === $items ) {
-			return new WP_Error( 'ab_mcp_sync_push_nothing', 'Nothing of the selection is written: the objects chosen need each other to be created (mutual references, locked until Z11c). Choose objects that do not refer to each other.', array( 'locked' => $locked ) );
+			// Each lock of the order with its reason (mutual references, an
+			// exchange of positions of menus: Codex round 1 of branch 11, B2).
+			return new WP_Error( 'ab_mcp_sync_push_nothing', sprintf( 'Nothing of the selection is written: the order of the run locks every object chosen. %s Choose objects that do not refer to each other, or follow the way each lock names.', implode( ' ', array_map( static fn( $l ) => sprintf( 'Entry %1$d (%2$s %3$s): %4$s', $l['n'], $l['kind'], $l['subtype'], $l['reason'] ), array_slice( $ordered['locked'], 0, 5 ) ) ) ), array( 'locked' => $locked ) );
 		}
 		// The steps.
 		$bytes = 0;
@@ -666,7 +694,7 @@ final class AB_MCP_Sync_Push {
 				'depends' => array_values( array_unique( $depends ) ),
 				'pair_id' => isset( $item['pair_id'] ) ? $item['pair_id'] : null,
 			);
-			unset( $items[ $n ]['depends_on'], $items[ $n ]['after'], $items[ $n ]['refs'], $items[ $n ]['order_refs'], $items[ $n ]['order_name'], $items[ $n ]['parent_ref'], $items[ $n ]['depth'], $items[ $n ]['files'], $items[ $n ]['weak_parent'] );
+			unset( $items[ $n ]['depends_on'], $items[ $n ]['after'], $items[ $n ]['refs'], $items[ $n ]['order_refs'], $items[ $n ]['order_name'], $items[ $n ]['parent_ref'], $items[ $n ]['depth'], $items[ $n ]['files'], $items[ $n ]['weak_parent'], $items[ $n ]['takes'], $items[ $n ]['menu_after'] );
 		}
 		// The parent steps (branch 10): each after the attachment and its
 		// post, both of the run; the attachment hangs under no post until then.
@@ -925,7 +953,8 @@ final class AB_MCP_Sync_Push {
 				$named[ (string) $item['order_name'] ] = $n;
 			}
 		}
-		$edges = array();
+		$edges    = array();
+		$exchange = array();
 		foreach ( $items as $n => $item ) {
 			$items[ $n ]['depends_on'] = array();
 			$items[ $n ]['after']      = array();
@@ -972,10 +1001,38 @@ final class AB_MCP_Sync_Push {
 					$items[ $n ]['after'][] = $m;
 				}
 			}
+			// A menu after the menus of the run whose positions it takes (B2).
+			foreach ( isset( $item['menu_after'] ) ? $item['menu_after'] : array() as $m ) {
+				if ( $m !== $n && isset( $items[ $m ] ) ) {
+					$items[ $n ]['after'][] = $m;
+					$exchange[ $n ][ $m ]   = true;
+				}
+			}
 			$items[ $n ]['after'] = array_values( array_unique( $items[ $n ]['after'] ) );
 			$items[ $n ]['depends_on'] = array_values( array_unique( $items[ $n ]['depends_on'] ) );
 		}
 		$locked = array();
+		// Menus that take each other's position (an exchange: a loop of these
+		// orders) are locked, each of them: no order lets every step find the
+		// others as planned (B2, menu:position_exchange), and none of them is
+		// written halfway.
+		foreach ( AB_MCP_Sync_Decision::cycles( $exchange ) as $members ) {
+			$lock = AB_MCP_Sync_Kinds::lock( 'menu', 'position_exchange' );
+			foreach ( $members as $n ) {
+				if ( isset( $items[ $n ] ) ) {
+					$locked[] = array(
+						'n'       => (int) $n,
+						'kind'    => $items[ $n ]['kind'],
+						'subtype' => $items[ $n ]['subtype'],
+						'action'  => $items[ $n ]['action'],
+						'result'  => '',
+						'reason'  => sprintf( '%1$s (%2$s)', (string) $lock['reason'], (string) $lock['key'] ),
+						'stage'   => $lock['stage'],
+					);
+					unset( $items[ $n ] );
+				}
+			}
+		}
 		foreach ( AB_MCP_Sync_Decision::cycles( $edges ) as $members ) {
 			$lock = AB_MCP_Sync_Kinds::lock( 'post', 'mutual_references' );
 			foreach ( $members as $n ) {

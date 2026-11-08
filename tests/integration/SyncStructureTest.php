@@ -784,6 +784,41 @@ final class SyncStructureTest extends TestCase {
 		self::assertSame( 2, $package['credentials']['held'], (string) json_encode( $package['credentials'] ) );
 	}
 
+	public function testAMenuThatTakesThePositionOfAnotherMenuOfTheRunGoesAfterItAndAnExchangeIsLocked(): void {
+		// Codex round 1 of branch 11, B2: Main holds primary and Footer holds
+		// footer on both sites. On staging they exchange their positions:
+		// the plan locks both before anything is written
+		// (menu:position_exchange). Then on staging Main moves to footer and
+		// Footer holds none: Footer gives footer up first, Main takes it
+		// after, both written.
+		self::pair();
+		$main_a = (int) wp_create_nav_menu( 'Main' );
+		$foot_a = (int) wp_create_nav_menu( 'Footer' );
+		$main_b = (int) self::one_b( array( 'op' => 'nav_menu', 'name' => 'Main' ) );
+		$foot_b = (int) self::one_b( array( 'op' => 'nav_menu', 'name' => 'Footer' ) );
+		set_theme_mod( 'nav_menu_locations', array( 'primary' => $main_a, 'footer' => $foot_a ) );
+		self::one_b( array( 'op' => 'theme_mod', 'name' => 'nav_menu_locations', 'value' => array( 'primary' => $main_b, 'footer' => $foot_b ) ) );
+		self::paired( self::staged() );
+		$wanted = array( array( 'menu', 'live', (string) $main_a ), array( 'menu', 'live', (string) $foot_a ) );
+		self::one_b( array( 'op' => 'theme_mod', 'name' => 'nav_menu_locations', 'value' => array( 'primary' => $foot_b, 'footer' => $main_b ) ) );
+		$planned = self::planned( $wanted );
+		$refused = self::gated( 'wp_site_push', $planned['args'] );
+		self::assertInstanceOf( \WP_Error::class, $refused, json_encode( $refused ) );
+		self::assertSame( 'ab_mcp_sync_push_nothing', $refused->get_error_code() );
+		self::assertSame( 2, substr_count( $refused->get_error_message(), '(menu:position_exchange)' ), $refused->get_error_message() );
+		self::assertSame( array( 'primary' => $main_a, 'footer' => $foot_a ), self::option_of( 'a', 'theme_mods_twentytwentyfive' )['nav_menu_locations'], 'Nothing written.' );
+		// A move: Footer gives footer up, Main takes it.
+		self::one_b( array( 'op' => 'theme_mod', 'name' => 'nav_menu_locations', 'value' => array( 'footer' => $main_b ) ) );
+		$planned = self::planned( $wanted );
+		$run     = self::begun( $planned['args'] );
+		$closed  = self::finish( (int) $run['run_id'] );
+		self::assertSame( 'closed_done', $closed['state'], json_encode( self::run_status( (int) $run['run_id'] ) ) );
+		$status = self::run_status( (int) $run['run_id'] );
+		self::assertWrittenWhole( $status );
+		self::assertSame( array( (string) $foot_a, (string) $main_a ), array_map( static fn( $s ) => (string) $s['parts']['object']['live_ref'], self::writes( $status ) ), 'Footer first, then Main.' );
+		self::assertSame( array( 'footer' => $main_a ), self::option_of( 'a', 'theme_mods_twentytwentyfive' )['nav_menu_locations'] );
+	}
+
 	/* ----------------------------------------------------------- widgets */
 
 	public function testAChangedTextWidgetAndImageWidgetGoOverAndBack(): void {
