@@ -200,17 +200,17 @@ e('exclusion-category-children', 'OPTIONS: the cache of the hierarchy of the cat
 # --------------------------------------------- the engine, by the kind
 E_IT1 = 'testAChangedCategoryAndANewTagGoOverAndTheWayBackPutsTheChangedOneBackAndLeavesTheNewOneAsARest'
 e('engine-pending-terms', 'pending(): a new term is pending for the check of what refers to it (branch 9)', EN,
-  "\t\t\tif ( isset( $pending[ $space ] ) ) {", "\t\t\tif ( 'post' === $space ) {", 'unit', 'testTheEngineKnowsWhatItCreatesInBothSpacesAndNoStepWritesAKindWithoutAWriter')
+  "\t\t\tif ( null !== $space ) {\n\t\t\t\t$pending[ $space ][ (int) $one['staging_ref'] ] = true;", "\t\t\tif ( 'post' === $space ) {\n\t\t\t\t$pending[ $space ][ (int) $one['staging_ref'] ] = true;", 'unit', 'testTheEngineKnowsWhatItCreatesInBothSpacesAndNoStepWritesAKindWithoutAWriter')
 e('engine-check-no-writer', 'check_item(): no step writes a kind without a writer', EN,
   "\t\tif ( null === $w ) {\n\t\t\treturn self::finding( $item, sprintf( 'No step of this version writes the kind %s.', $item['kind'] ) );", "\t\tif ( false ) {\n\t\t\treturn self::finding( $item, sprintf( 'No step of this version writes the kind %s.', $item['kind'] ) );", 'unit', 'testTheEngineKnowsWhatItCreatesInBothSpacesAndNoStepWritesAKindWithoutAWriter')
 e('engine-guard-terms', 'boundary(): the lock of the boundary covers the term the step writes', EN,
-  "\t\t$guard  = AB_MCP_Sync_Guard::begin( $run_id, $seq, $covers['posts'], $covers['taxonomies'], array(), $covers['terms'] );\n\t\tif ( is_wp_error( $guard ) ) {\n\t\t\treturn self::fail_step( $run_id, $seq, 'begun', $guard->get_error_message(), $journal );",
-  "\t\t$guard  = AB_MCP_Sync_Guard::begin( $run_id, $seq, $covers['posts'], $covers['taxonomies'], array() );\n\t\tif ( is_wp_error( $guard ) ) {\n\t\t\treturn self::fail_step( $run_id, $seq, 'begun', $guard->get_error_message(), $journal );", 'it', 'testAnotherWriterOfATermIsRefusedWhileItsStepWrites')
+  "\t\t$guard  = AB_MCP_Sync_Guard::begin( $run_id, $seq, $covers['posts'], $covers['taxonomies'], isset( $covers['options'] ) ? $covers['options'] : array(), $covers['terms'] );\n\t\tif ( is_wp_error( $guard ) ) {\n\t\t\treturn self::fail_step( $run_id, $seq, 'begun', $guard->get_error_message(), $journal );",
+  "\t\t$guard  = AB_MCP_Sync_Guard::begin( $run_id, $seq, $covers['posts'], $covers['taxonomies'], isset( $covers['options'] ) ? $covers['options'] : array() );\n\t\tif ( is_wp_error( $guard ) ) {\n\t\t\treturn self::fail_step( $run_id, $seq, 'begun', $guard->get_error_message(), $journal );", 'it', 'testAnotherWriterOfATermIsRefusedWhileItsStepWrites')
 e('engine-revert-guard-terms', 'revert_boundary(): the lock of the way back covers the term', EN,
-  "\t\t$guard  = AB_MCP_Sync_Guard::begin( $run_id, $seq, $covers['posts'], $covers['taxonomies'], array(), $covers['terms'] );\n\t\tif ( is_wp_error( $guard ) ) {\n\t\t\treturn self::fail_step( $run_id, $seq, 'begun', $guard->get_error_message() );",
-  "\t\t$guard  = AB_MCP_Sync_Guard::begin( $run_id, $seq, $covers['posts'], $covers['taxonomies'], array() );\n\t\tif ( is_wp_error( $guard ) ) {\n\t\t\treturn self::fail_step( $run_id, $seq, 'begun', $guard->get_error_message() );", 'it', 'testAnotherWriterOfATermIsRefusedWhileItsStepWrites')
+  "\t\t$guard  = AB_MCP_Sync_Guard::begin( $run_id, $seq, $covers['posts'], $covers['taxonomies'], isset( $covers['options'] ) ? $covers['options'] : array(), $covers['terms'] );\n\t\tif ( is_wp_error( $guard ) ) {\n\t\t\treturn self::fail_step( $run_id, $seq, 'begun', $guard->get_error_message() );",
+  "\t\t$guard  = AB_MCP_Sync_Guard::begin( $run_id, $seq, $covers['posts'], $covers['taxonomies'], isset( $covers['options'] ) ? $covers['options'] : array() );\n\t\tif ( is_wp_error( $guard ) ) {\n\t\t\treturn self::fail_step( $run_id, $seq, 'begun', $guard->get_error_message() );", 'it', 'testAnotherWriterOfATermIsRefusedWhileItsStepWrites')
 e('engine-post-by-kind', 'run_post(): the caches of a written term by the writer of its kind', EN,
-  "\t\t\t\t$ids[] = array( null === self::writer( $kind ) ? 'post' : $kind, (int) $one['result']['live_ref'] );", "\t\t\t\t$ids[] = array( 'post', (int) $one['result']['live_ref'] );", 'it', E_IT1)
+  "\t\t\t\t$ids[] = array( null === self::writer( $kind ) ? 'post' : $kind, self::live_of( self::writer( $kind ), $one['result']['live_ref'] ) );", "\t\t\t\t$ids[] = array( 'post', self::live_of( self::writer( $kind ), $one['result']['live_ref'] ) );", 'it', E_IT1)
 e('engine-verify-by-kind', 'run_verify(): a written term against its target by the writer of its kind', EN,
   "\t\t\t\t$w       = self::writer( isset( $one['parts']['object']['kind'] ) ? (string) $one['parts']['object']['kind'] : 'post' );", "\t\t\t\t$w       = self::writer( 'post' );", 'it', E_IT1)
 e('engine-pair-by-kind', 'pair_for_new(): the base of a new term by the writer of its kind', EN,
@@ -222,7 +222,7 @@ e('plan-term-taxonomy', 'verdict(): a term of a taxonomy the term engine does no
 e('plan-item-kind', 'verdict(): the item carries the kind of the entry', PU,
   "\t\t\t\t'kind'        => (string) $entry['kind'],", "\t\t\t\t'kind'        => 'post',", 'unit', 'testWhichEntryOfAReportIsAStepLockedOrNothing')
 e('plan-order-space', 'order(): a new term in the space of terms, a new post in the space of posts', PU,
-  "\t\t\t\t$at[ ( 'term' === $item['kind'] ? 'term' : 'post' ) . \"\\0\" . $item['staging_ref'] ] = $n;", "\t\t\t\t$at[ 'post' . \"\\0\" . $item['staging_ref'] ] = $n;", 'unit', 'testTheOrderOfTheGraphPutsANewTermBeforeThePostThatIsFiledUnderIt')
+  "\t\t\t\t$at[ ( in_array( $item['kind'], AB_MCP_Sync_Proposal::SPACES['term'], true ) ? 'term' : 'post' ) . \"\\0\" . $item['staging_ref'] ] = $n;", "\t\t\t\t$at[ 'post' . \"\\0\" . $item['staging_ref'] ] = $n;", 'unit', 'testTheOrderOfTheGraphPutsANewTermBeforeThePostThatIsFiledUnderIt')
 
 # --------------------------------------------- the kind post, branch 9
 P_RULE = 'testTheRuleOfThisVersionForMetaKeys'

@@ -64,8 +64,10 @@ final class SyncDbKindsTest extends TestCase {
 		foreach ( AB_MCP_Sync_Db_Kinds::all() as $kind ) {
 			// The post kind writes since branch 8, the term kind since branch 9
 			// (AB_MCP_Sync_Term_Writer), the attachment kind since branch 10
-			// (AB_MCP_Sync_Attachment_Writer); every other kind not yet.
-			if ( in_array( $kind->kind(), array( 'post', 'term', 'attachment' ), true ) ) {
+			// (AB_MCP_Sync_Attachment_Writer), the kinds of the structure of a
+			// site since branch 11 (menus, widget areas, the additional CSS,
+			// options): every kind exports its objects.
+			if ( in_array( $kind->kind(), array( 'post', 'term', 'attachment', 'menu', 'widget_area', 'custom_css', 'option' ), true ) ) {
 				self::assertSame( array(), $kind->export( array() ), 'The kind exports its objects (branches 8 and 9): ' . $kind->kind() );
 				self::assertSame( 'ab_mcp_sync_object_invalid', $kind->export( array( 'x' ) )->get_error_code() );
 				continue;

@@ -215,10 +215,10 @@ e('plan-shared-paths', 'plan(): two attachments of the plan naming one path are 
 
 # ------------------------------------------------------------ the engine
 e('engine-writer', 'WRITERS: the kind attachment has its writer', EN,
-  "\t\t'attachment' => 'AB_MCP_Sync_Attachment_Writer',\n", "", 'writer', U_WRITERS)
+  "\t\t'attachment'  => 'AB_MCP_Sync_Attachment_Writer',\n", "", 'writer', U_WRITERS)
 e('engine-pending-attachment', 'pending(): a new attachment is pending in the space of posts', EN,
-  "\t\t\t$space = 'attachment' === (string) $one['kind'] ? 'post' : (string) $one['kind'];",
-  "\t\t\t$space = (string) $one['kind'];", 'it', NORMAL)
+  "\t\t\tforeach ( AB_MCP_Sync_Proposal::SPACES as $name => $kinds ) {",
+  "\t\t\tforeach ( array( 'post' => array( 'post', 'menu_item' ), 'term' => array( 'term', 'menu' ) ) as $name => $kinds ) {", 'it', NORMAL)
 e('engine-media-lines', 'lines(): a package of media of the run by its index', EN,
   "\t\t\tif ( 'media' === AB_MCP_Sync_Import::purpose_of( $package_id ) ) {",
   "\t\t\tif ( false ) {", 'it', NORMAL)

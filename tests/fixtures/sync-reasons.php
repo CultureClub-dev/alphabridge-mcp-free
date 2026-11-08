@@ -490,21 +490,80 @@ return array(
 			'why'  => 'As post:meta_spelling, for termmeta: a write by the key would change the other spelling the collation compares alike.',
 			'plan' => 'Entscheid 17 (Journal je Teilmutation), Entscheid 28',
 		),
-		'menu:engine'                  => array(
-			'why'  => 'The engine of the menus is branch 11.',
-			'plan' => 'Zweigtabelle Zeile 542',
+		// Branch 11: the engines of the structure of a site.
+		'menu:location_unregistered'   => array(
+			'why'  => 'Positions are written only where the active theme registers them, as the menu screen offers them (get_registered_nav_menus()); another position would be a value no theme reads.',
+			'core' => array( array( 'wp-includes/nav-menu.php', 149, 'function get_registered_nav_menus() {' ) ),
+			'plan' => 'Entscheid 17 (Menüpositionen: nur Positionen, die das Live-Theme registriert)',
 		),
-		'widget_area:engine'           => array(
-			'why'  => 'The engine of the widget areas is branch 11.',
-			'plan' => 'Zweigtabelle Zeile 542',
+		'menu:sanitizer'               => array(
+			'why'  => 'wp_update_nav_menu_item() stores the fields of an item through sanitize_key(), sanitize_html_class() and sanitize_url(), blanks a title that is the title of the object and gives a blank item a description of one space; what it would store otherwise than the staging site is refused ahead.',
+			'core' => array( array( 'wp-includes/nav-menu.php', 588, "update_post_meta( \$menu_item_db_id, '_menu_item_type', sanitize_key( \$args['menu-item-type'] ) );" ) ),
+			'plan' => 'Entscheid 17 (Sanitizer vorab)',
 		),
-		'custom_css:engine'            => array(
-			'why'  => 'The engine of the additional CSS is branch 11.',
-			'plan' => 'Zweigtabelle Zeile 542',
+		'menu:item_shape'              => array(
+			'why'  => 'The core writes an item with publish or draft, a position from 1 on, in one menu and one row of each of its meta fields (wp_update_nav_menu_item()); another shape is not written through that way.',
+			'core' => array( array( 'wp-includes/nav-menu.php', 609, "\$post['post_status'] = ( 'draft' === \$args['menu-item-status'] ) ? 'draft' : 'publish';" ) ),
+			'plan' => 'Entscheid 25 (menu: Ziele nach _menu_item_type)',
 		),
-		'option:engine'                => array(
-			'why'  => 'The engine of the core options is branch 11.',
-			'plan' => 'Zweigtabelle Zeile 542',
+		'menu:reference_unmapped'      => array(
+			'why'  => 'A menu, a parent item, an object or an address of the staging site without a pair here would name another object; one the same run creates first is pending (Graph-Reihenfolge).',
+			'plan' => 'Entscheid 12 und 16',
+		),
+		'widget_area:create'           => array(
+			'why'  => 'An area is a key of sidebars_widgets the theme and the core make (retrieve_widgets()); a run does not make one, and nothing would take it back.',
+			'core' => array( array( 'wp-includes/widgets.php', 1327, 'function retrieve_widgets( $theme_changed = false ) {' ) ),
+			'plan' => 'Entscheid 23 (nichts wird entfernt), Entscheid 25',
+		),
+		'widget_area:widget_unregistered' => array(
+			'why'  => 'Only a registered widget can check its settings with its update(); a row of another plugin under the name widget_<base> carries no _multiwidget, the mark WP_Widget::save_settings() writes.',
+			'core' => array( array( 'wp-includes/class-wp-widget.php', 600, "\$settings['_multiwidget'] = 1;" ) ),
+			'plan' => 'Entscheid 25 (nicht registrierter Widget-Typ gesperrt, wie der Schreiber)',
+		),
+		'widget_area:sanitizer'        => array(
+			'why'  => 'The update() of a widget and widget_update_callback sanitize its settings as the widgets screen saves them (AB_MCP_Widget_Writer); what they would store otherwise than the staging site is refused ahead.',
+			'core' => array( array( 'wp-includes/class-wp-widget.php', 476, "\$instance = apply_filters( 'widget_update_callback', \$instance, \$new_instance, \$old_instance, \$this );" ) ),
+			'plan' => 'Entscheid 17 (Widgets durch AB_MCP_Widget_Writer ohne Schreiben)',
+		),
+		'widget_area:instance_unmapped' => array(
+			'why'  => 'The instance of the staging site and that of this site are one only by the mapping of the pair; where the lists of the base do not say it, or the counterpart is placed elsewhere, writing would put a widget in two areas or the wrong settings into one.',
+			'plan' => 'Entscheid 3 (base_extra: Zuordnung Staging-Instanz → Live-Nummer), Entscheid 23',
+		),
+		'widget_area:reference_unmapped' => array(
+			'why'  => 'A reference in the settings of a widget without a pair here would name another object.',
+			'plan' => 'Entscheid 12 (Kern-Widgets mit IDs), Entscheid 16',
+		),
+		'custom_css:theme_mismatch'    => array(
+			'why'  => 'wp_get_custom_css_post() finds the CSS of the active stylesheet by custom_css_post_id only; CSS of another theme, or of another version, styles markup this site does not have.',
+			'core' => array( array( 'wp-includes/theme.php', 2008, 'if ( get_stylesheet() === $stylesheet ) {' ) ),
+			'plan' => 'Entscheid 25 (custom_css: Theme live in gleicher Version)',
+		),
+		'custom_css:markup'            => array(
+			'why'  => 'The Customizer refuses CSS with a closing tag of STYLE or a part of one at its end (WP_Customize_Custom_CSS_Setting::validate()); the takeover keeps that rule, and the filters of a save ahead.',
+			'core' => array( array( 'wp-includes/customize/class-wp-customize-custom-css-setting.php', 165, 'public function validate( $value ) {' ) ),
+			'plan' => 'Entscheid 25 (Prüfung der Customizer-Einstellung, kein </style)',
+		),
+		'custom_css:field_rule'        => array(
+			'why'  => 'The source of a preprocessor in post_content_filtered is in no canonical form and not checked for credentials, so it is neither packed nor written; the core gives Additional CSS the status publish only.',
+			'plan' => 'Entscheid 9 (Zugangsdaten), Entscheid 25',
+		),
+		'custom_css:reference_unmapped' => array(
+			'why'  => 'An address with an id in url() without a pair here would name another attachment.',
+			'plan' => 'Entscheid 12 (Adressen), Entscheid 16',
+		),
+		'option:create'                => array(
+			'why'  => 'populate_options() makes the core options as WordPress is installed and updated; a run only changes them, and nothing would take a new row back (no deletion in Z8).',
+			'core' => array( array( 'wp-admin/includes/schema.php', 362, 'function populate_options( array $options = array() ) {' ) ),
+			'plan' => 'Entscheid 25 (option: nur ändern), Entscheid 27',
+		),
+		'option:sanitizer'             => array(
+			'why'  => 'update_option() stores what sanitize_option() makes of the value; what it would store otherwise than the staging site is refused ahead.',
+			'core' => array( array( 'wp-includes/option.php', 886, 'sanitize_option( $option, $value );' ) ),
+			'plan' => 'Entscheid 17 (Sanitizer vorab: sanitize_option())',
+		),
+		'option:reference_unmapped'    => array(
+			'why'  => 'An option of the schema that names an object (ref, refs) or a text with an address with an id, without a pair here, would name another object.',
+			'plan' => 'Entscheid 12 (Kern-Optionen), Entscheid 27',
 		),
 	),
 

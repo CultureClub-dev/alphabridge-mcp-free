@@ -267,8 +267,8 @@ e('engine-line-hash', 'line_of(): the package holds what the report compared', E
 e('engine-line-held', 'line_of(): an object the credential check holds is not written', EN,
   "\t\tif ( isset( $lines['held'][ (string) $item['kind'] . \"\\0\" . $sha ] ) || ! isset( $line['hash'] ) ) {", "\t\tif ( ! isset( $line['hash'] ) ) {", 'unit', 'testTheLineOfAnItemIsCheckedAgainstTheReport')
 e('engine-check-target', 'check_item(): a target changed since the plan aborts the run (decision 16)', EN,
-  "\t\t\tif ( null === $hash || ! hash_equals( (string) $item['live_hash'], $hash ) ) {\n\t\t\t\treturn self::finding( $item, sprintf( 'The %1$s %2$d of this site changed since the plan (or cannot be read whole), so the %3$s is not written over it.'",
-  "\t\t\tif ( false ) {\n\t\t\t\treturn self::finding( $item, sprintf( 'The %1$s %2$d of this site changed since the plan (or cannot be read whole), so the %3$s is not written over it.'", 'it', 'testTheCheckBeforeTheFirstWriteAbortsOnADeviationAndWritesNothing')
+  "\t\t\tif ( null === $hash || ! hash_equals( (string) $item['live_hash'], $hash ) ) {\n\t\t\t\treturn self::finding( $item, sprintf( 'The %1$s %2$s of this site changed since the plan (or cannot be read whole), so the %3$s is not written over it.'",
+  "\t\t\tif ( false ) {\n\t\t\t\treturn self::finding( $item, sprintf( 'The %1$s %2$s of this site changed since the plan (or cannot be read whole), so the %3$s is not written over it.'", 'it', 'testTheCheckBeforeTheFirstWriteAbortsOnADeviationAndWritesNothing')
 e('engine-write-ahead', 'boundary(): the journal written ahead of the first part (decision 17)', EN,
   "\t\t$ahead            = AB_MCP_Sync_Run::update_step( $run_id, $seq, array( 'parts' => $journal ), 'begun' );", "\t\t$ahead            = true;", 'it', 'testARequestThatExitsInABoundaryLeavesTheRunInterruptedAndTheWayBackLeadsTheSameRun')
 e('engine-qualified', 'run_verify(): a qualified close only where every write step was written (decision 20)', EN,
@@ -421,7 +421,7 @@ e('revert-same-run', 'plan(): the way back of a run that is not closed leads the
 PARTIAL = 'testAMetaCallThatChangedThePartAndThenFailedLeavesTheObjectWithTheOldValues'
 ORDER_T = 'testTheWayBackPutsTheRowBackBeforeTheTermsSoAPostWithoutACategoryStaysWithout'
 e('engine-put-back-order', 'put_back(): the row goes back first, then the meta, then the terms, which undo the side effects of wp_update_post() on them (the default category; P2)', EN,
-  "\t\tforeach ( array( 'row', 'meta:', 'terms:' ) as $prefix ) {", "\t\tforeach ( array( 'terms:', 'meta:', 'row' ) as $prefix ) {", 'it', ORDER_T)
+  "\t\tforeach ( null !== $w && defined( $w . '::PART_ORDER' ) ? $w::PART_ORDER : array( 'row', 'meta:', 'terms:' ) as $prefix ) {", "\t\tforeach ( null !== $w && defined( $w . '::PART_ORDER' ) ? $w::PART_ORDER : array( 'terms:', 'meta:', 'row' ) as $prefix ) {", 'it', ORDER_T)
 e('engine-put-back-check', 'put_back(): every part counted as back is read again against the backup; one that reads otherwise is unclear, and so is the object', EN,
   "\t\t\t\tif ( null === $now || ! hash_equals( (string) $w::part_hash( $backup, $name ), $now ) ) {", "\t\t\t\tif ( false ) {", 'it', 'testAPartAHookChangedAfterItWasPutBackIsUnclearNotRestored')
 F2 = 'testTheDefaultCategoryOfTheRowGoingBackDoesNotTakeBackTermsAnotherHandChanged'

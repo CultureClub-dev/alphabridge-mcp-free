@@ -93,6 +93,10 @@ require_once __DIR__ . '/class-sync-resources.php';
 require_once __DIR__ . '/class-sync-post-writer.php';
 require_once __DIR__ . '/class-sync-term-writer.php';
 require_once __DIR__ . '/class-sync-attachment-writer.php';
+require_once __DIR__ . '/class-sync-menu-writer.php';
+require_once __DIR__ . '/class-sync-widget-area-writer.php';
+require_once __DIR__ . '/class-sync-css-writer.php';
+require_once __DIR__ . '/class-sync-option-writer.php';
 require_once __DIR__ . '/class-sync-import.php';
 require_once __DIR__ . '/class-sync-anchor.php';
 require_once __DIR__ . '/class-sync-urls.php';
@@ -140,12 +144,21 @@ final class AB_MCP_Sync_Engine {
 	 * back one object of the kind, with the same names for every kind
 	 * (target_of(), precheck(), current(), journal_parts(), write_row(),
 	 * write_part(), restore_part(), …). A kind without one is written by no
-	 * step (writer() null: the step fails before anything is written).
+	 * step (writer() null: the step fails before anything is written). Since
+	 * branch 11 the kinds of the structure of a site: a menu (its term and its
+	 * positions) and its items, a widget area with its instances, the
+	 * additional CSS of a stylesheet and a core option; the objects of the
+	 * last three are named by a name, not an id (ref_of(), live_of()).
 	 */
 	const WRITERS = array(
-		'post'       => 'AB_MCP_Sync_Post_Writer',
-		'term'       => 'AB_MCP_Sync_Term_Writer',
-		'attachment' => 'AB_MCP_Sync_Attachment_Writer',
+		'post'        => 'AB_MCP_Sync_Post_Writer',
+		'term'        => 'AB_MCP_Sync_Term_Writer',
+		'attachment'  => 'AB_MCP_Sync_Attachment_Writer',
+		'menu'        => 'AB_MCP_Sync_Menu_Writer',
+		'menu_item'   => 'AB_MCP_Sync_Menu_Item_Writer',
+		'widget_area' => 'AB_MCP_Sync_Widget_Area_Writer',
+		'custom_css'  => 'AB_MCP_Sync_Css_Writer',
+		'option'      => 'AB_MCP_Sync_Option_Writer',
 	);
 
 	/**
@@ -168,6 +181,35 @@ final class AB_MCP_Sync_Engine {
 	 */
 	private static function writer_of( array $journal ) {
 		return self::writer( isset( $journal['object']['kind'] ) ? (string) $journal['object']['kind'] : 'post' );
+	}
+
+	/**
+	 * The object of this site a ref of the plan, of a journal or of a result
+	 * names, in the form the write side of its kind takes it (branch 11): an
+	 * id as an integer (a post, a term, an attachment, a menu and its items),
+	 * as before; a name as the writer reads it where the kind names its
+	 * objects so (ref_of(): a widget area, the stylesheet of the additional
+	 * CSS, an option), null where the ref names none.
+	 *
+	 * @param string|null $w   The write side of the kind (writer()).
+	 * @param mixed       $raw The ref as stored.
+	 * @return int|string|null
+	 */
+	public static function live_of( $w, $raw ) {
+		if ( null !== $w && method_exists( $w, 'ref_of' ) ) {
+			return $w::ref_of( $raw );
+		}
+		return (int) $raw;
+	}
+
+	/**
+	 * Whether live_of() named an object: an id above 0, or a name.
+	 *
+	 * @param mixed $live_id live_of().
+	 * @return bool
+	 */
+	public static function is_ref( $live_id ) {
+		return is_int( $live_id ) ? $live_id > 0 : ( is_string( $live_id ) && '' !== $live_id );
 	}
 
 	/* --------------------------------------------------------------- next */
@@ -721,10 +763,10 @@ final class AB_MCP_Sync_Engine {
 		}
 		$live_id = null;
 		if ( 'update' === $item['op'] ) {
-			$live_id = (int) $item['live_ref'];
+			$live_id = self::live_of( $w, $item['live_ref'] );
 			$hash    = $w::live_hash( $live_id, $ctx['source'] );
 			if ( null === $hash || ! hash_equals( (string) $item['live_hash'], $hash ) ) {
-				return self::finding( $item, sprintf( 'The %1$s %2$d of this site changed since the plan (or cannot be read whole), so the %3$s is not written over it.', $item['kind'], $live_id, $name ) );
+				return self::finding( $item, sprintf( 'The %1$s %2$s of this site changed since the plan (or cannot be read whole), so the %3$s is not written over it.', $item['kind'], $live_id, $name ) );
 			}
 			$pair = AB_MCP_Sync_Pairs::get( (int) $item['pair_id'] );
 			if ( ! is_array( $pair ) || 'active' !== $pair['state'] || ! hash_equals( (string) $item['pair_hash'], AB_MCP_Sync_Pairs::snapshot_hash( AB_MCP_Sync_Pairs::snapshot( (int) $item['pair_id'] ) ) ) ) {
@@ -806,9 +848,16 @@ final class AB_MCP_Sync_Engine {
 			if ( ! isset( $one['op'], $one['kind'], $one['staging_ref'] ) || 'create' !== $one['op'] ) {
 				continue;
 			}
-			// An attachment is in the space of posts (branch 10).
-			$space = 'attachment' === (string) $one['kind'] ? 'post' : (string) $one['kind'];
-			if ( isset( $pending[ $space ] ) ) {
+			// The space of its ids, as the pairs have it (AB_MCP_Sync_Proposal::
+			// SPACES): a post, an attachment (branch 10) and a menu item in that
+			// of posts, a term and a menu in that of terms (branch 11).
+			$space = null;
+			foreach ( AB_MCP_Sync_Proposal::SPACES as $name => $kinds ) {
+				if ( in_array( (string) $one['kind'], $kinds, true ) ) {
+					$space = $name;
+				}
+			}
+			if ( null !== $space ) {
 				$pending[ $space ][ (int) $one['staging_ref'] ] = true;
 			}
 		}
@@ -964,9 +1013,9 @@ final class AB_MCP_Sync_Engine {
 				return self::fail_step( $run_id, $seq, 'planned', $item->get_error_message() );
 			}
 		}
-		$live_id = 'update' === $item['op'] ? (int) $item['live_ref'] : null;
-		$before  = null;
 		$w       = self::writer( $item['kind'] );
+		$live_id = 'update' === $item['op'] ? self::live_of( $w, $item['live_ref'] ) : null;
+		$before  = null;
 		if ( null === $w ) {
 			return self::fail_step( $run_id, $seq, 'planned', sprintf( 'no step of this version writes the kind %s', $item['kind'] ) );
 		}
@@ -1013,7 +1062,7 @@ final class AB_MCP_Sync_Engine {
 		AB_MCP_Sync_Run::touch( $run_id );
 		// (3) The takeover lock of the object (its kind names what it covers).
 		$covers = $w::guard_of( $live_id, (string) $item['subtype'] );
-		$guard  = AB_MCP_Sync_Guard::begin( $run_id, $seq, $covers['posts'], $covers['taxonomies'], array(), $covers['terms'] );
+		$guard  = AB_MCP_Sync_Guard::begin( $run_id, $seq, $covers['posts'], $covers['taxonomies'], isset( $covers['options'] ) ? $covers['options'] : array(), $covers['terms'] );
 		if ( is_wp_error( $guard ) ) {
 			return self::fail_step( $run_id, $seq, 'begun', $guard->get_error_message(), $journal );
 		}
@@ -1057,11 +1106,11 @@ final class AB_MCP_Sync_Engine {
 		}
 		if ( null !== $live_id ) {
 			if ( null === $current ) {
-				return self::fail_step( $run_id, $seq, 'begun', sprintf( 'The %1$s %2$d of this site is no longer there; nothing was written.', $item['kind'], $live_id ), $journal );
+				return self::fail_step( $run_id, $seq, 'begun', sprintf( 'The %1$s %2$s of this site is no longer there; nothing was written.', $item['kind'], $live_id ), $journal );
 			}
 			$hash = $w::live_hash( $live_id, $ctx['source'] );
 			if ( null === $hash || ! hash_equals( (string) $item['live_hash'], $hash ) ) {
-				return self::fail_step( $run_id, $seq, 'begun', sprintf( 'The %1$s %2$d of this site changed since the plan (or cannot be read whole); nothing was written. Make a new report and plan again.', $item['kind'], $live_id ), $journal );
+				return self::fail_step( $run_id, $seq, 'begun', sprintf( 'The %1$s %2$s of this site changed since the plan (or cannot be read whole); nothing was written. Make a new report and plan again.', $item['kind'], $live_id ), $journal );
 			}
 			$ok = $w::live_rule( $live_id, $ctx['source'] );
 			if ( is_wp_error( $ok ) ) {
@@ -1152,6 +1201,13 @@ final class AB_MCP_Sync_Engine {
 					$pair_id = (int) $made['id'];
 				}
 				$rest = self::rest( $item, $live_id );
+			} elseif ( null !== $pair_id && array() !== self::made_in( $w, $journal, $live_id ) ) {
+				// A part of the unit the step made and that stays (a widget
+				// instance, branch 11; decisions 23 and 28): the whole unit is
+				// a rest, its bases of before kept, its mapping of the run in
+				// base_extra, so no later run makes the part a second time.
+				self::unit_rest( $pair_id, $prepared );
+				$rest = self::rest( $item, $live_id ) + array( 'made' => self::made_in( $w, $journal, $live_id ) );
 			} elseif ( null !== $pair_id && 'unclear' === $outcome['state'] ) {
 				AB_MCP_Sync_Pairs::set_state( $pair_id, 'unclear', AB_MCP_Sync_Pairs::snapshot_hash( AB_MCP_Sync_Pairs::snapshot( $pair_id ) ) );
 			}
@@ -1183,6 +1239,10 @@ final class AB_MCP_Sync_Engine {
 					$pair_id = (int) $made['id'];
 				}
 				$rest = self::rest( $item, $live_id );
+			} elseif ( null !== $pair_id && array() !== self::made_in( $w, $journal, $live_id ) ) {
+				// A widget instance the step made stays (branch 11): the unit a rest.
+				self::unit_rest( $pair_id, $prepared );
+				$rest = self::rest( $item, $live_id ) + array( 'made' => self::made_in( $w, $journal, $live_id ) );
 			} elseif ( null !== $pair_id ) {
 				AB_MCP_Sync_Pairs::set_state( $pair_id, 'unclear', AB_MCP_Sync_Pairs::snapshot_hash( AB_MCP_Sync_Pairs::snapshot( $pair_id ) ) );
 			}
@@ -1222,7 +1282,7 @@ final class AB_MCP_Sync_Engine {
 					'base_origin'  => 'push',
 					'override'     => $prepared['as_draft'] ? array( 'post_status' => 'draft' ) : null,
 					'last_run'     => $run_id,
-				),
+				) + ( isset( $prepared['base_extra'] ) && is_array( $prepared['base_extra'] ) ? array( 'base_extra' => $prepared['base_extra'] ) : array() ),
 				AB_MCP_Sync_Pairs::snapshot_hash( $before )
 			);
 			if ( is_wp_error( $rebased ) ) {
@@ -1235,7 +1295,7 @@ final class AB_MCP_Sync_Engine {
 			}
 		}
 		$result = array(
-			'message'  => sprintf( '%1$s %2$s of the staging site written as %3$s %4$d of this site%5$s; read back as its target.%6$s', ucfirst( $item['kind'] ), $item['staging_ref'], $item['kind'], $live_id, $prepared['as_draft'] ? ' with the status draft (the confirmed choice)' : '', ! empty( $prepared['parent_later'] ) ? ' It hangs under no post yet: a step of its own sets its parent once the run has written that post.' : ( ! empty( $item['attach'] ) ? ' Its parent is set.' : '' ) ),
+			'message'  => sprintf( '%1$s %2$s of the staging site written as %3$s %4$s of this site%5$s; read back as its target.%6$s', ucfirst( $item['kind'] ), $item['staging_ref'], $item['kind'], $live_id, $prepared['as_draft'] ? ' with the status draft (the confirmed choice)' : '', ! empty( $prepared['parent_later'] ) ? ' It hangs under no post yet: a step of its own sets its parent once the run has written that post.' : ( ! empty( $item['attach'] ) ? ' Its parent is set.' : '' ) ),
 			'live_ref' => (string) $live_id,
 			'created'  => 'create' === $item['op'],
 			'pair_id'  => $pair_id,
@@ -1351,7 +1411,7 @@ final class AB_MCP_Sync_Engine {
 				if ( is_wp_error( $id ) ) {
 					$error = $id;
 				} else {
-					$live_id                       = (int) $id;
+					$live_id                       = self::live_of( $w, $id );
 					$journal['object']['live_ref'] = (string) $live_id;
 				}
 				// Read back whatever the call answered: an error after the row
@@ -1851,9 +1911,11 @@ final class AB_MCP_Sync_Engine {
 	private static function put_back( array $journal, $live_id, array $backup ) {
 		$parts = $journal['parts'];
 		$out   = array();
-		// The row first, then the meta, then the terms.
+		$w     = self::writer_of( $journal );
+		// The row first, then the meta, then the terms; a kind whose parts
+		// have other names says their order (PART_ORDER; branch 11).
 		$order = array();
-		foreach ( array( 'row', 'meta:', 'terms:' ) as $prefix ) {
+		foreach ( null !== $w && defined( $w . '::PART_ORDER' ) ? $w::PART_ORDER : array( 'row', 'meta:', 'terms:' ) as $prefix ) {
 			foreach ( $parts as $i => $part ) {
 				if ( is_string( $part['part'] ) && 0 === strpos( $part['part'], $prefix ) ) {
 					$order[] = $i;
@@ -2110,7 +2172,7 @@ final class AB_MCP_Sync_Engine {
 		foreach ( $steps as $one ) {
 			if ( 'write' === $one['op'] && 'done' === $one['state'] && is_array( $one['result'] ) && isset( $one['result']['live_ref'] ) ) {
 				$kind  = is_array( $one['parts'] ) && isset( $one['parts']['object']['kind'] ) ? (string) $one['parts']['object']['kind'] : 'post';
-				$ids[] = array( null === self::writer( $kind ) ? 'post' : $kind, (int) $one['result']['live_ref'] );
+				$ids[] = array( null === self::writer( $kind ) ? 'post' : $kind, self::live_of( self::writer( $kind ), $one['result']['live_ref'] ) );
 			}
 		}
 		// In parts, within the work of the call, the cursor kept in the result
@@ -2220,15 +2282,15 @@ final class AB_MCP_Sync_Engine {
 					continue;
 				}
 				++$result['written'];
-				$live_id = isset( $one['result']['live_ref'] ) ? (int) $one['result']['live_ref'] : 0;
 				$target  = isset( $one['parts']['object']['target'] ) ? (string) $one['parts']['object']['target'] : '';
 				$w       = self::writer( isset( $one['parts']['object']['kind'] ) ? (string) $one['parts']['object']['kind'] : 'post' );
+				$live_id = isset( $one['result']['live_ref'] ) ? self::live_of( $w, $one['result']['live_ref'] ) : 0;
 				$later   = ( $last[ ( $one['parts']['object']['kind'] ?? 'post' ) . ':' . (string) $live_id ] ?? (int) $one['seq'] ) !== (int) $one['seq'];
-				$hash    = $live_id > 0 && null !== $w && ! $later ? $w::live_hash( $live_id, $ctx['source'] ) : null;
+				$hash    = self::is_ref( $live_id ) && null !== $w && ! $later ? $w::live_hash( $live_id, $ctx['source'] ) : null;
 				if ( ! $later && ( null === $hash || ! hash_equals( $target, $hash ) ) ) {
 					$result['findings'][] = array(
 						'seq'     => (int) $one['seq'],
-						'message' => sprintf( 'The %1$s %2$d no longer hashes to the target of step %3$d (changed since it was written, or not readable whole).', $one['parts']['object']['kind'] ?? 'post', $live_id, (int) $one['seq'] ),
+						'message' => sprintf( 'The %1$s %2$s no longer hashes to the target of step %3$d (changed since it was written, or not readable whole).', $one['parts']['object']['kind'] ?? 'post', $live_id, (int) $one['seq'] ),
 					);
 				}
 				// The first published object with a page of its own is the
@@ -2450,7 +2512,7 @@ final class AB_MCP_Sync_Engine {
 		}
 		$journal = $forward['parts'];
 		$object  = $journal['object'];
-		$live_id = isset( $object['live_ref'] ) ? (int) $object['live_ref'] : 0;
+		$live_id = isset( $object['live_ref'] ) ? self::live_of( self::writer_of( $journal ), $object['live_ref'] ) : 0;
 		$begun   = AB_MCP_Sync_Run::update_step( $run_id, $seq, array( 'state' => 'begun' ), 'planned' );
 		if ( is_wp_error( $begun ) ) {
 			return $begun;
@@ -2465,7 +2527,7 @@ final class AB_MCP_Sync_Engine {
 		// A new object stays as a rest (decision 23, finding R5-4): by the
 		// operation of the step, never by the shape of its backup.
 		if ( 'create' === $object['op'] ) {
-			if ( $live_id < 1 ) {
+			if ( ! self::is_ref( $live_id ) ) {
 				return self::fail_step( $run_id, $seq, 'begun', sprintf( 'Step %d made no object (its row was not written); there is nothing to take back for it.', (int) $forward['seq'] ) );
 			}
 			$rest = self::rest( array( 'kind' => $object['kind'], 'staging_ref' => $object['staging_ref'] ), $live_id );
@@ -2476,7 +2538,7 @@ final class AB_MCP_Sync_Engine {
 				}
 			}
 			$result = array(
-				'message'  => sprintf( 'The %1$s %2$d was made by the run and is not removed by the way back (nothing is deleted in this version); it stays as a rest, its pair residual. Remove it by hand in wp-admin where it should go.', $object['kind'], $live_id ),
+				'message'  => sprintf( 'The %1$s %2$s was made by the run and is not removed by the way back (nothing is deleted in this version); it stays as a rest, its pair residual. Remove it by hand in wp-admin where it should go.', $object['kind'], $live_id ),
 				'live_ref' => (string) $live_id,
 				'rest'     => $rest,
 				'parts'    => array(),
@@ -2489,7 +2551,7 @@ final class AB_MCP_Sync_Engine {
 			$ended = self::end_step( $run_id, $seq, array( 'state' => 'done', 'result' => $result, 'pair_id' => $pair_id ) );
 			return is_wp_error( $ended ) ? $ended : array( 'next' => $result['message'] );
 		}
-		if ( $live_id < 1 ) {
+		if ( ! self::is_ref( $live_id ) ) {
 			return self::fail_step( $run_id, $seq, 'begun', 'The journal names no object on this site; nothing is put back.' );
 		}
 		$w = self::writer_of( $journal );
@@ -2497,7 +2559,7 @@ final class AB_MCP_Sync_Engine {
 			return self::fail_step( $run_id, $seq, 'begun', sprintf( 'No step of this version writes the kind %s; nothing is put back.', (string) $object['kind'] ) );
 		}
 		$covers = $w::guard_of( $live_id, $w::subtype_of( $object ) );
-		$guard  = AB_MCP_Sync_Guard::begin( $run_id, $seq, $covers['posts'], $covers['taxonomies'], array(), $covers['terms'] );
+		$guard  = AB_MCP_Sync_Guard::begin( $run_id, $seq, $covers['posts'], $covers['taxonomies'], isset( $covers['options'] ) ? $covers['options'] : array(), $covers['terms'] );
 		if ( is_wp_error( $guard ) ) {
 			return self::fail_step( $run_id, $seq, 'begun', $guard->get_error_message() );
 		}
@@ -2534,7 +2596,20 @@ final class AB_MCP_Sync_Engine {
 		$w::post_write( $live_id );
 		// The pair: back to its snapshot where everything went back; unclear otherwise.
 		$pair_note = '';
-		if ( null !== $pair_id ) {
+		$made      = self::made_in( $w, $journal, $live_id );
+		if ( null !== $pair_id && array() !== $made ) {
+			// A part of the unit the run made stays (a widget instance; decision
+			// 23, finding R7-2): the way back does not put this pair back to its
+			// snapshot; the whole unit is a rest, its bases of before and its
+			// mapping of the run (base_extra) kept until a confirmed alignment
+			// (wp_site_pairs) replaces them.
+			$pair = AB_MCP_Sync_Pairs::get( $pair_id );
+			if ( is_array( $pair ) && 'residual' !== $pair['state'] ) {
+				AB_MCP_Sync_Pairs::set_state( $pair_id, 'residual', AB_MCP_Sync_Pairs::snapshot_hash( AB_MCP_Sync_Pairs::snapshot( $pair_id ) ) );
+			}
+			$all_back  = false;
+			$pair_note = sprintf( ' The run made %s in this unit, which the way back does not remove: the unit stays as a rest, its pair residual.', implode( ', ', $made ) );
+		} elseif ( null !== $pair_id ) {
 			$now_hash = AB_MCP_Sync_Pairs::snapshot_hash( AB_MCP_Sync_Pairs::snapshot( $pair_id ) );
 			if ( $all_back && null !== $forward['pair_before'] ) {
 				$restored = AB_MCP_Sync_Pairs::restore( $pair_id, (string) $forward['pair_before'], $now_hash );
@@ -2548,11 +2623,14 @@ final class AB_MCP_Sync_Engine {
 		}
 		$result = array(
 			'message'  => $all_back
-				? sprintf( 'The %1$s %2$d went back to its state before the run: every part the run wrote was still its own and was put back, and every part reads as the backup after that; the pair has its bases of before.%3$s', $object['kind'], $live_id, $pair_note )
-				: sprintf( 'The %1$s %2$d went back only in part: the object deviated within its step and is left whole, or a part was changed since the run wrote it, was never read back, or needs a check, and is left as it is, or reads other than the backup after the parts went back (see parts; a part left names its value before); the pair is unclear until a person confirms a new alignment (wp_site_pairs).%3$s', $object['kind'], $live_id, $pair_note ),
+				? sprintf( 'The %1$s %2$s went back to its state before the run: every part the run wrote was still its own and was put back, and every part reads as the backup after that; the pair has its bases of before.%3$s', $object['kind'], $live_id, $pair_note )
+				: sprintf( 'The %1$s %2$s went back only in part: the object deviated within its step and is left whole, or a part was changed since the run wrote it, was never read back, or needs a check, and is left as it is, or reads other than the backup after the parts went back (see parts; a part left names its value before); the pair is unclear until a person confirms a new alignment (wp_site_pairs).%3$s', $object['kind'], $live_id, $pair_note ),
 			'live_ref' => (string) $live_id,
 			'parts'    => $outcomes,
 		);
+		if ( array() !== $made ) {
+			$result['rest'] = self::rest( array( 'kind' => $object['kind'], 'staging_ref' => $object['staging_ref'] ), $live_id ) + array( 'made' => $made );
+		}
 		// The files the run laid stay (decision 26: nothing is deleted, not
 		// even a file of its own), named with their paths.
 		$result = self::with_files( $result, $journal, $w );
@@ -2731,6 +2809,53 @@ final class AB_MCP_Sync_Engine {
 	}
 
 	/**
+	 * The parts of a unit a step made and that are there now (a widget
+	 * instance of a widget area; branch 11), by the write side of the kind
+	 * (made()); none for a kind without such parts.
+	 *
+	 * @param string|null     $w       The write side of the kind (writer()).
+	 * @param array           $journal The journal of the step.
+	 * @param int|string|null $live_id The object here.
+	 * @return string[]
+	 */
+	private static function made_in( $w, array $journal, $live_id ) {
+		if ( null === $w || null === $live_id || ! method_exists( $w, 'made' ) ) {
+			return array();
+		}
+		return $w::made( $journal, $live_id );
+	}
+
+	/**
+	 * The pair of a unit a step made a part of and left (a widget area with a
+	 * new instance whose step did not end done; decisions 23 and 28): its
+	 * bases of before kept, the mapping of the run in base_extra (the kept
+	 * form of the writer, base_extra_kept), then residual as a whole.
+	 *
+	 * @param int   $pair_id  Pair.
+	 * @param array $prepared target_of() of the step.
+	 */
+	private static function unit_rest( $pair_id, array $prepared ) {
+		$pair = AB_MCP_Sync_Pairs::get( (int) $pair_id );
+		if ( ! is_array( $pair ) || 'active' !== $pair['state'] ) {
+			return;
+		}
+		if ( isset( $prepared['base_extra_kept'] ) && is_array( $prepared['base_extra_kept'] ) ) {
+			AB_MCP_Sync_Pairs::rebase(
+				(int) $pair_id,
+				array(
+					'canon'        => (string) $pair['canon'],
+					'base_live'    => (string) $pair['base_live'],
+					'base_staging' => (string) $pair['base_staging'],
+					'base_origin'  => (string) $pair['base_origin'],
+					'base_extra'   => $prepared['base_extra_kept'],
+				),
+				AB_MCP_Sync_Pairs::snapshot_hash( AB_MCP_Sync_Pairs::snapshot( (int) $pair_id ) )
+			);
+		}
+		AB_MCP_Sync_Pairs::set_state( (int) $pair_id, 'residual', AB_MCP_Sync_Pairs::snapshot_hash( AB_MCP_Sync_Pairs::snapshot( (int) $pair_id ) ) );
+	}
+
+	/**
 	 * A rest the run left: a new object the way back does not remove.
 	 *
 	 * @param array $item    kind, staging_ref.
@@ -2740,7 +2865,7 @@ final class AB_MCP_Sync_Engine {
 	private static function rest( array $item, $live_id ) {
 		return array(
 			'kind'        => (string) $item['kind'],
-			'live_ref'    => (string) (int) $live_id,
+			'live_ref'    => (string) $live_id,
 			'staging_ref' => (string) $item['staging_ref'],
 			'way'         => 'Made by the run and not removed by it: remove it by hand in wp-admin where it should go; its pair is residual until wp_site_pairs confirms a new alignment or discards it.',
 		);
@@ -2825,6 +2950,13 @@ final class AB_MCP_Sync_Engine {
 			}
 			foreach ( isset( $state['terms'] ) && is_array( $state['terms'] ) ? $state['terms'] : array() as $term ) {
 				$names[ 'terms:' . (string) $term['taxonomy'] ] = true;
+			}
+			// The fields of the rows a kind shares with other objects (branch
+			// 11, decision 24: a position of a menu, an instance of a widget,
+			// an area of sidebars_widgets, the rest of such a row), each a part
+			// of the state by its name: what changed besides is another hand's.
+			foreach ( isset( $state['parts'] ) && is_array( $state['parts'] ) ? $state['parts'] : array() as $name => $unused ) {
+				$names[ (string) $name ] = true;
 			}
 		}
 		return array_keys( $names );

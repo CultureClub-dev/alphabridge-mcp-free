@@ -2514,8 +2514,22 @@ final class SyncRunTest extends TestCase {
 		// Other kinds and types: locked with the stage that brings them; a
 		// term of a taxonomy the term engine writes is an item of its kind
 		// (branch 9), one of another taxonomy waits for its classification.
-		foreach ( array( 'term' => 'Z8d', 'menu' => 'Z11', 'option' => 'Z11' ) as $kind => $stage ) {
+		foreach ( array( 'term' => 'Z8d', 'theme_mod' => 'Z8d' ) as $kind => $stage ) {
 			self::assertSame( $stage, self::verdict( self::entry( array( 'kind' => $kind, 'subtype' => '' ) ) )['locked']['stage'], $kind );
+		}
+		// The structure of a site (branch 11): an item of its kind, never as
+		// draft; a widget area, a core option and the additional CSS are not
+		// made by a run.
+		foreach ( array( 'menu', 'menu_item', 'widget_area', 'custom_css', 'option' ) as $kind ) {
+			$one = self::verdict( self::entry( array( 'kind' => $kind, 'subtype' => '' ) ) );
+			self::assertSame( array( $kind, 'update' ), array( $one['item']['kind'], $one['item']['op'] ), $kind );
+			self::assertStringContainsString( 'no status draft', self::verdict( self::entry( array( 'kind' => $kind, 'subtype' => '' ) ), null, true )['locked']['reason'], $kind );
+		}
+		self::assertSame( 'create', self::verdict( self::entry( array( 'kind' => 'menu', 'subtype' => '', 'action' => 'create', 'result' => 'only_staging', 'live' => null, 'pair' => null ) ) )['item']['op'] );
+		foreach ( array( 'widget_area' => 'widget_area:create', 'option' => 'option:create', 'custom_css' => 'custom_css:create' ) as $kind => $key ) {
+			$made = self::verdict( self::entry( array( 'kind' => $kind, 'subtype' => '', 'action' => 'create', 'result' => 'only_staging', 'live' => null, 'pair' => null ) ) );
+			self::assertSame( 'Z8d', $made['locked']['stage'], $kind );
+			self::assertStringContainsString( '(' . $key . ')', $made['locked']['reason'], $kind );
 		}
 		// An attachment is an item of its kind (branch 10), never as draft.
 		$attachment = self::verdict( self::entry( array( 'kind' => 'attachment', 'subtype' => 'attachment' ) ) );
@@ -2828,8 +2842,8 @@ final class SyncRunTest extends TestCase {
 		$pending = new ReflectionMethod( AB_MCP_Sync_Engine::class, 'pending' );
 		self::assertSame(
 			array(
-				'post' => array( 12 => true ),
-				'term' => array( 5 => true ),
+				'post' => array( 12 => true, 8 => true ),
+				'term' => array( 5 => true, 7 => true ),
 			),
 			$pending->invoke(
 				null,
@@ -2838,13 +2852,15 @@ final class SyncRunTest extends TestCase {
 					array( 'op' => 'create', 'kind' => 'term', 'staging_ref' => '5' ),
 					array( 'op' => 'update', 'kind' => 'term', 'staging_ref' => '6' ),
 					array( 'op' => 'create', 'kind' => 'menu', 'staging_ref' => '7' ),
+					array( 'op' => 'create', 'kind' => 'menu_item', 'staging_ref' => '8' ),
+					array( 'op' => 'create', 'kind' => 'option', 'staging_ref' => 'blogname' ),
 				)
 			),
-			'A new post and a new term are pending for the check of what refers to them (B1; branch 9).'
+			'A new post, a new term and a new menu are pending for the check of what refers to them (B1; branches 9 and 11).'
 		);
 		$check   = new ReflectionMethod( AB_MCP_Sync_Engine::class, 'check_item' );
-		$finding = $check->invoke( null, array( 'seq' => 2, 'kind' => 'menu', 'staging_ref' => '7', 'op' => 'create' ), array( 'lines' => array(), 'held' => array() ), self::ctx() );
-		self::assertStringContainsString( 'No step of this version writes the kind menu', $finding['message'] );
+		$finding = $check->invoke( null, array( 'seq' => 2, 'kind' => 'theme_mod', 'staging_ref' => 'tt5/header_textcolor', 'op' => 'update' ), array( 'lines' => array(), 'held' => array() ), self::ctx() );
+		self::assertStringContainsString( 'No step of this version writes the kind theme_mod', $finding['message'] );
 	}
 
 	public function testTheOrderOfTheGraphPutsANewTermBeforeThePostThatIsFiledUnderIt(): void {

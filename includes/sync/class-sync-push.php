@@ -108,6 +108,12 @@ final class AB_MCP_Sync_Push {
 	 */
 	const LAST = array( 'wp_navigation' );
 
+	/**
+	 * The kinds of the structure of a site a run writes (branch 11): a menu
+	 * and its items, a widget area, the additional CSS, a core option.
+	 */
+	const STRUCTURE = array( 'menu', 'menu_item', 'widget_area', 'custom_css', 'option' );
+
 	/** Steps a preview names at most (all are counted). */
 	const NAMED = 200;
 
@@ -536,7 +542,7 @@ final class AB_MCP_Sync_Push {
 			return $refused;
 		}
 		if ( array() === $items ) {
-			return new WP_Error( 'ab_mcp_sync_push_nothing', sprintf( 'Nothing of the selection is written in this version: %s Choose entries the report marks take_over or create (posts, pages and the other types the engine writes, and terms).', array() === $locked ? 'no entry a takeover writes was chosen.' : implode( ' ', array_map( static fn( $l ) => sprintf( 'Entry %1$d (%2$s %3$s): %4$s', $l['n'], $l['kind'], $l['subtype'], $l['reason'] ), array_slice( $locked, 0, 5 ) ) ) ), array( 'locked' => $locked ) );
+			return new WP_Error( 'ab_mcp_sync_push_nothing', sprintf( 'Nothing of the selection is written in this version: %s Choose entries the report marks take_over or create (posts, pages and the other types the engine writes, terms, attachments, menus and their items, widget areas, the additional CSS and core options).', array() === $locked ? 'no entry a takeover writes was chosen.' : implode( ' ', array_map( static fn( $l ) => sprintf( 'Entry %1$d (%2$s %3$s): %4$s', $l['n'], $l['kind'], $l['subtype'], $l['reason'] ), array_slice( $locked, 0, 5 ) ) ) ), array( 'locked' => $locked ) );
 		}
 		// The objects of this site as they are now, and the pairs.
 		$asked = array();
@@ -636,9 +642,9 @@ final class AB_MCP_Sync_Push {
 			// not the staging side: reserved from them, uncompressed, as the
 			// store counts them (AB_MCP_Sync_Backup::size_of(); GitHub Codex
 			// round 6 on free#137, P2). A new object leaves a small mark.
-			$live_id = 'update' === $item['op'] && isset( $item['live_ref'] ) ? (int) $item['live_ref'] : 0;
 			$w       = AB_MCP_Sync_Engine::writer( $item['kind'] );
-			$current = $live_id > 0 && null !== $w ? $w::current( $live_id ) : null;
+			$live_id = 'update' === $item['op'] && isset( $item['live_ref'] ) ? AB_MCP_Sync_Engine::live_of( $w, $item['live_ref'] ) : 0;
+			$current = AB_MCP_Sync_Engine::is_ref( $live_id ) && null !== $w ? $w::current( $live_id ) : null;
 			if ( is_wp_error( $current ) ) {
 				return $current;
 			}
@@ -831,8 +837,19 @@ final class AB_MCP_Sync_Push {
 			if ( $as_draft ) {
 				return $lock( 'An attachment has no status draft: leave it out of as_draft.' );
 			}
+		} elseif ( in_array( $entry['kind'], self::STRUCTURE, true ) ) {
+			// The structure of the site (branch 11): no choice «as draft»; a
+			// widget area or a core option is changed, never made by a run (the
+			// additional CSS is locked to be made in the report already).
+			if ( $as_draft ) {
+				return $lock( sprintf( 'A %s has no status draft: leave it out of as_draft.', (string) $entry['kind'] ) );
+			}
+			if ( 'create' === $action && in_array( $entry['kind'], array( 'widget_area', 'option', 'custom_css' ), true ) ) {
+				$held = AB_MCP_Sync_Kinds::lock( (string) $entry['kind'], 'create' );
+				return $lock( sprintf( '%1$s (%2$s)', (string) $held['reason'], (string) $held['key'] ), (string) $held['stage'] );
+			}
 		} elseif ( 'post' !== $entry['kind'] ) {
-			return $lock( sprintf( 'The kind %s is written from a later branch of Z8 (menus, widget areas, the additional CSS and options: Z11).', (string) $entry['kind'] ), 'Z11' );
+			return $lock( sprintf( 'The kind %s is not written by a run of this version.', (string) $entry['kind'] ), 'Z8d' );
 		} elseif ( ! in_array( (string) ( $entry['subtype'] ?? '' ), AB_MCP_Sync_Post_Writer::TYPES, true ) ) {
 			return $lock( sprintf( 'The engine of the kind post writes the types %1$s; the type %2$s waits for its field schema.', implode( ', ', AB_MCP_Sync_Post_Writer::TYPES ), (string) ( $entry['subtype'] ?? '' ) ), 'Z8d' );
 		} elseif ( in_array( (string) ( $entry['subtype'] ?? '' ), AB_MCP_Sync_Post_Writer::THEMED, true ) ) {
@@ -889,7 +906,9 @@ final class AB_MCP_Sync_Push {
 		$at = array();
 		foreach ( $items as $n => $item ) {
 			if ( 'create' === $item['op'] ) {
-				$at[ ( 'term' === $item['kind'] ? 'term' : 'post' ) . "\0" . $item['staging_ref'] ] = $n;
+				// A menu in the space of terms, a menu item in that of posts
+				// (branch 11; the spaces of the pairs).
+				$at[ ( in_array( $item['kind'], AB_MCP_Sync_Proposal::SPACES['term'], true ) ? 'term' : 'post' ) . "\0" . $item['staging_ref'] ] = $n;
 			}
 		}
 		// The objects of the kind post the run writes, created or changed, by
