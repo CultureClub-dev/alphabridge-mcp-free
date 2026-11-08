@@ -586,7 +586,12 @@ final class SyncTermWriterTest extends TestCase {
 		$db      = self::live_term( array( 'name' => 'News, new' ) );
 		$backup  = array( 'name' => 'News', 'slug' => 'news', 'term_group' => '0', 'taxonomy' => 'category', 'description' => 'Fresh news.', 'parent' => '0' );
 		$written = AB_MCP_Sync_Term_Writer::row_hash( AB_MCP_Sync_Term_Writer::current( 34 )['row'] );
-		self::assertSame( 'left', AB_MCP_Sync_Term_Writer::restore_row( 34, $backup, str_repeat( 'f', 64 ) )['state'], 'Changed since the step wrote it.' );
+		$since = AB_MCP_Sync_Term_Writer::restore_row( 34, $backup, str_repeat( 'f', 64 ) );
+		self::assertSame( 'left', $since['state'], 'Changed since the step wrote it.' );
+		// Said so by the check of the way back itself, before the helper's last
+		// read (whose note names a hook as the row is put back; the CI of
+		// free#141).
+		self::assertStringContainsString( 'The row of the term was changed', $since['note'] );
 		$db->holder = 41;
 		$taken      = AB_MCP_Sync_Term_Writer::restore_row( 34, $backup, $written );
 		self::assertSame( 'left', $taken['state'] );

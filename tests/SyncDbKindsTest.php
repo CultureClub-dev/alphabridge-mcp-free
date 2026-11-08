@@ -70,10 +70,13 @@ final class SyncDbKindsTest extends TestCase {
 			if ( in_array( $kind->kind(), array( 'post', 'term', 'attachment', 'menu', 'widget_area', 'custom_css', 'option' ), true ) ) {
 				self::assertSame( array(), $kind->export( array() ), 'The kind exports its objects (branches 8 and 9): ' . $kind->kind() );
 				self::assertSame( 'ab_mcp_sync_object_invalid', $kind->export( array( 'x' ) )->get_error_code() );
-				continue;
 			}
+			// Every other method of the interface that would write answers
+			// that the kind does not write, whatever the kind: the engine
+			// writes through its writers (AB_MCP_Sync_Engine::WRITERS), never
+			// through a kind (since branch 11 every kind exports, so the
+			// methods are asked for each of them; the CI of free#141).
 			foreach ( array(
-				'export'       => array( array() ),
 				'rights'       => array( 'update', '1' ),
 				'core_effects' => array( 'update' ),
 				'fields'       => array(),

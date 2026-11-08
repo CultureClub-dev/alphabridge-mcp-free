@@ -809,6 +809,17 @@ final class SyncStructureTest extends TestCase {
 		self::assertCount( 2, $taken['lines'] );
 		self::assertStringNotContainsString( $secret, (string) json_encode( array( $package, $taken ) ), 'No value of a credential in the package.' );
 		self::assertSame( 2, $package['credentials']['held'], (string) json_encode( $package['credentials'] ) );
+		// The kind itself, without the check of the finished content in the
+		// export (A8): the name of the menu of an item holds the item there
+		// already (A4; the CI of free#141, where the check of the export
+		// covered it).
+		$menu_a = (int) wp_create_nav_menu( 'Shop password=' . $secret );
+		$item_a = (int) wp_update_nav_menu_item( $menu_a, 0, array( 'menu-item-title' => 'Imprint', 'menu-item-url' => 'https://example.test/imprint/', 'menu-item-type' => 'custom', 'menu-item-status' => 'publish', 'menu-item-position' => 1 ) );
+		$source = \AB_MCP_Sync_Inventory::source( array( home_url() ), \AB_MCP_Sync_Inventory::BUDGET, null, null, null );
+		$read   = \AB_MCP_Sync_Db_Kinds::for_pair( 'menu_item' )->export( array( array( 'kind' => 'menu_item', 'ref' => (string) $item_a, 'source' => $source ) ) );
+		self::assertIsArray( $read, is_wp_error( $read ) ? $read->get_error_message() : '' );
+		self::assertContains( 'term:nav_menu:name', array_column( $read[0]['credentials']['mixed'], 'unit' ), (string) json_encode( $read[0]['credentials'] ) );
+		self::assertTrue( \AB_MCP_Sync_Export::credential_locked( $read[0]['locks'] ), 'The kind holds the item itself.' );
 	}
 
 	public function testAMenuThatTakesThePositionOfAnotherMenuOfTheRunGoesAfterItAndAnExchangeIsLocked(): void {

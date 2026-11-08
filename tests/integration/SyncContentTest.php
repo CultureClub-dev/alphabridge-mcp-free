@@ -873,6 +873,15 @@ final class SyncContentTest extends TestCase {
 			)
 		);
 		self::paired( self::staged() );
+		// The kind itself, without the check of the finished content in the
+		// export (Codex round 3 of branch 11, C): the key with the name of a
+		// credential is not in the content of the term (the CI of free#141,
+		// where the check of the export covered it).
+		$source = \AB_MCP_Sync_Inventory::source( array( home_url() ), \AB_MCP_Sync_Inventory::BUDGET, null, null, null );
+		$read   = \AB_MCP_Sync_Db_Kinds::for_pair( 'term' )->export( array( array( 'kind' => 'term', 'ref' => (string) $shop_a, 'source' => $source ) ) );
+		self::assertIsArray( $read, is_wp_error( $read ) ? $read->get_error_message() : '' );
+		self::assertSame( array( 'color', 'size' ), array_column( $read[0]['content']['meta'], 0 ), 'No row of api_key in the content of the kind.' );
+		self::assertStringNotContainsString( 'live-key', (string) json_encode( $read[0]['content'] ) );
 		$size_rows = AB_MCP_IT_Sites::rows( 'a', 'termmeta', array( 'term_id' => (string) $shop_a, 'meta_key' => 'size' ) );
 		$promo     = self::term_b( 'Promo', 'post_tag' );
 		self::b(
