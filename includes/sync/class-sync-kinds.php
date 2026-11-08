@@ -243,8 +243,8 @@ final class AB_MCP_Sync_Kinds {
 			'reason' => 'A file of the attachment is of a type this account may not upload, or its content is not what its name says (WordPress checks a file by its content as it uploads it, wp_check_filetype_and_ext()): upload it by hand in the media library of this site, or take it over with an account that may upload files of that type.',
 		),
 		'attachment:file_too_large'    => array(
-			'stage'  => 'Z10',
-			'reason' => 'The files of the attachment this site does not have yet are more than one package of media carries: upload the file by hand in the media library of this site.',
+			'stage'  => 'Z8',
+			'reason' => 'The files of the attachment this site does not have yet are larger than one package of media carries (48 MiB): a person resolves it, by uploading the file by hand in the media library of this site.',
 		),
 		'option:unclassified'          => array(
 			'stage'  => 'Z8d',

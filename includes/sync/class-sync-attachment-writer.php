@@ -554,25 +554,28 @@ final class AB_MCP_Sync_Attachment_Writer {
 			return AB_MCP_Sync_Post_Writer::locked( 'attachment:file_too_large', sprintf( '%1$d bytes to lay, %2$d at most', $lay, self::MAX_BYTES ) );
 		}
 		// The main file of the type the attachment says (post_mime_type), by its
-		// name; where the step makes the attachment name a file this site has
-		// already (a new attachment, or another main file), by its content as
-		// well, as the way back asks it of the file it names again
-		// (restore_right()); a file to lay is asked so as it is laid (provide()).
+		// name; every file this site has already by its content as well (below),
+		// as the way back asks it of the files it names again (restore_files());
+		// a file to lay is asked so as it is laid (provide()).
 		$attached = isset( $prepared['meta']['_wp_attached_file'][0] ) ? (string) $prepared['meta']['_wp_attached_file'][0] : '';
 		if ( '' !== $attached ) {
 			$type = wp_check_filetype( self::base( $attached ), $mimes );
 			if ( ! $free && (string) $type['type'] !== (string) $prepared['postarr']['post_mime_type'] ) {
 				return AB_MCP_Sync_Post_Writer::locked( 'attachment:file_type', sprintf( 'the file %1$s is %2$s by its name, the attachment says %3$s', $attached, '' === (string) $type['type'] ? 'of no type this account may upload' : (string) $type['type'], (string) $prepared['postarr']['post_mime_type'] ) );
 			}
-			$current = null === $live_id ? null : AB_MCP_Sync_Post_Writer::current( (int) $live_id );
-			$names   = ! is_array( $current ) || AB_MCP_Sync_Post_Writer::meta_values( $current, '_wp_attached_file' ) !== array( $attached );
-			foreach ( $out as $entry ) {
-				if ( $names && 'present' === $entry['state'] && $entry['path'] === $attached ) {
-					$check = wp_check_filetype_and_ext( $root . '/' . $attached, self::base( $attached ), $mimes );
-					if ( ! empty( $check['proper_filename'] ) || ( ( empty( $check['type'] ) || empty( $check['ext'] ) || (string) $check['type'] !== (string) $prepared['postarr']['post_mime_type'] ) && ! $free ) ) {
-						return AB_MCP_Sync_Post_Writer::locked( 'attachment:file_type', sprintf( 'the file %s of this site the attachment would name is by its content of another type than its name and the attachment say, or of a type this account may not upload', $attached ) );
-					}
-				}
+		}
+		// Every file of the list this site has already (present), by its
+		// content as a file to lay is asked (provide()), the main file of the
+		// type the attachment says (Codex round 1 of branch 10, C: a size left
+		// over byte for byte with a content of another type than its name).
+		foreach ( $out as $entry ) {
+			if ( 'present' !== $entry['state'] ) {
+				continue;
+			}
+			$check = wp_check_filetype_and_ext( $root . '/' . $entry['path'], self::base( $entry['path'] ), $mimes );
+			$main  = '' !== $attached && $entry['path'] === $attached;
+			if ( ! empty( $check['proper_filename'] ) || ( ( empty( $check['type'] ) || empty( $check['ext'] ) || ( $main && (string) $check['type'] !== (string) $prepared['postarr']['post_mime_type'] ) ) && ! $free ) ) {
+				return AB_MCP_Sync_Post_Writer::locked( 'attachment:file_type', sprintf( 'the file %s of this site the attachment would name is by its content of another type than its name and the attachment say, or of a type this account may not upload', $entry['path'] ) );
 			}
 		}
 		// Another attachment of this site that names a path of the list.

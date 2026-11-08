@@ -282,8 +282,8 @@ return array(
 			'plan' => 'Entscheid 26 (Typ nach dem Inhalt, erlaubt für das ausführende Konto)',
 		),
 		'attachment:file_too_large'    => array(
-			'why'  => 'A package carries at most 64 MiB in Free (contract B); the files of one attachment go in one package of media.',
-			'plan' => 'Entscheid 8; Vertrag B (Paket ≤ 64 MiB in Free)',
+			'why'  => 'A package carries at most 64 MiB in Free (contract B); the files of one attachment go in one package of media. Larger than one package carries: a person uploads the file by hand (Z8, as the other locks a person resolves; no later stage of the plan lifts it).',
+			'plan' => 'Entscheid 8; Vertrag B (Paket ≤ 64 MiB in Free); Codex-Runde 1 von Zweig 10, C',
 		),
 		'option:unclassified'          => array(
 			'why'  => 'An option of a plugin or theme, or of the core without a schema: «Option eines Plugins, nicht eingeordnet (Z8d)».',

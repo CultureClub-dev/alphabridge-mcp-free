@@ -272,12 +272,17 @@ final class AB_MCP_Sync_Media_Package {
 	public static function taken( $gid, array $manifest, array $have ) {
 		$names = array_values( array_filter( array_map( 'strval', array_keys( $have ) ), static fn( $name ) => null !== self::index_sha( $name ) ) );
 		$text  = 1 === count( $names ) ? AB_MCP_Protected_Store::get( 'in', $gid, $names[0], self::index_sha( $names[0] ) ) : null;
-		$index = is_string( $text ) ? json_decode( $text, true, 8 ) : null;
+		// The index as unpacked() wrote it (AB_MCP_Sync_Canon::encode()): a
+		// path that is no UTF-8 stands as the marker of its bytes and comes
+		// back as them (Codex round 1 of branch 10, C: json_decode() alone left
+		// the marker, and the index of a package with such a name was never
+		// used).
+		$index = is_string( $text ) ? AB_MCP_Sync_Canon::decode( $text, 8 ) : null;
 		if ( ! is_array( $index ) || ! isset( $index['format'], $index['files'] ) || self::INDEX_FORMAT !== $index['format'] || ! is_array( $index['files'] ) || ! array_is_list( $index['files'] ) ) {
 			return new WP_Error( 'ab_mcp_sync_media_index', 'The package of media is marked complete, but its index does not read back (it was taken over by an older version, or the index was changed), so it is not used. Fetch the package anew: export the media again on the staging site (wp_site_export with purpose=media), then take it over here (wp_site_import_chunk).' );
 		}
 		foreach ( $index['files'] as $file ) {
-			if ( ! is_array( $file ) || array( 'chunks', 'path', 'pieces', 'ref', 'sha256', 'size' ) !== self::sorted_keys( $file ) || ! is_string( $file['ref'] ) || ! is_string( $file['path'] ) || ! is_string( $file['sha256'] ) || ! is_int( $file['size'] ) || ! is_int( $file['pieces'] ) || ! is_array( $file['chunks'] ) || array() === $file['chunks'] ) {
+			if ( ! is_array( $file ) || array( 'chunks', 'path', 'pieces', 'ref', 'sha256', 'size' ) !== self::sorted_keys( $file ) || ! is_string( $file['ref'] ) || ! is_string( $file['path'] ) || ! AB_MCP_Sync_Media::safe_path( $file['path'] ) || ! is_string( $file['sha256'] ) || ! is_int( $file['size'] ) || ! is_int( $file['pieces'] ) || ! is_array( $file['chunks'] ) || array() === $file['chunks'] ) {
 				return new WP_Error( 'ab_mcp_sync_media_index', 'The index of the package of media does not read as this version keeps it, so it is not used. Export the media again on the staging site (wp_site_export with purpose=media), then take it over here (wp_site_import_chunk).' );
 			}
 		}

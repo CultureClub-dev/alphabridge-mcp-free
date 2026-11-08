@@ -122,6 +122,12 @@ entsteht, nennt ihre Meldung den Weg.
 
 ## Typ und Rechte
 
+- Jede Datei der Liste, die die Live-Site schon bytegleich hat (`present`),
+  prüft der Plan nach ihrem Inhalt wie eine zu legende (Codex-Runde 1, C):
+  eine liegengebliebene Grösse mit dem Inhalt eines anderen Typs sperrt mit
+  `attachment:file_type`. Ein Anhang, den Mediathek und Kern gemacht haben,
+  besteht diese Prüfung (WordPress prüft jeden Upload so), der Normalfall
+  bleibt frei.
 - Typ nach dem Inhalt: jede zu legende Datei wird erst ganz in eine
   temporäre Datei dieser Anfrage gelesen (`get_temp_dir()`, ausserhalb der
   Uploads, danach entfernt), gegen Grösse und SHA-256 geprüft und mit
@@ -214,24 +220,34 @@ entsteht, nennt ihre Meldung den Weg.
   es mit `post:reference_unmapped` (Weg: die Seite mitnehmen oder zuerst
   übernehmen).
 - Hat ein vorhandener Anhang auf Staging ein neues Elternteil, das der
-  Lauf anlegt, kommt der Anhang nach diesem (eine Kante der Ordnung); nennt
-  die neue Seite den Anhang zugleich, ist das ein Zyklus und gesperrt
-  (`*:mutual_references`, Z11c). Die Gesamtvorprüfung zählt die Seite als
-  eine, die der Lauf anlegt; die Grenze setzt das Elternteil nach ihrem
-  Paar. Prüffall: der Normalfall mit dem geänderten Logo unter einer neuen
-  Seite.
+  Lauf anlegt, kommt der Anhang nach diesem (eine Kante der Ordnung). Nennt
+  die neue Seite den Anhang zugleich (als Beitragsbild, in einem Block), ist
+  das kein Zyklus: der vorhandene Anhang hat ein Paar, eine Kante der
+  Ordnung führt nur zu einem Objekt, das der Lauf anlegt
+  (`AB_MCP_Sync_Push::order()`); erst die Seite, dann der Anhang
+  (Codex-Runde 1, C: die frühere Beschreibung als Zyklus stimmte nicht).
+  Die Gesamtvorprüfung zählt die Seite als eine, die der Lauf anlegt; die
+  Grenze setzt das Elternteil nach ihrem Paar. Prüffall: der Normalfall mit
+  dem geänderten Logo unter einer neuen Seite.
 
 ## Paket der Medien
 
 - Ein Paket `media` trägt die Dateien ganzer Anhänge, je Stück eine Zeile
   (`AB_MCP_Sync_Media_Package`: Base64 von höchstens 3 MiB), bis 48 MiB
   Dateien je Paket, damit Base64 und gzip unter den 64 MiB eines Pakets in
-  Free bleiben (Vertrag B). Passt ein Anhang nicht mehr, nennt die Antwort
-  ihn in `left` (ein weiteres Paket); sind die Dateien eines Anhangs allein
-  grösser, nennt sie ihn in `too_large`, und der Plan sperrt ihn mit
-  `attachment:file_too_large` (Z10), wenn er mehr als 48 MiB legen müsste
-  (Weg: die Datei von Hand in der Mediathek hochladen). Ein Video über
-  48 MiB ist damit ein Weg von Hand.
+  Free bleiben (Vertrag B), und bis 5000 Zeilen je Paket (so viele Objekte
+  nennt ein Manifest; viele kleine Dateien). Passt ein Anhang nicht mehr,
+  nach Bytes oder nach Zeilen, nennt die Antwort ihn in `left` (ein
+  weiteres Paket; Codex-Runde 1, C: vorher verwarf die Zeilengrenze das
+  ganze Paket); sind die Dateien eines Anhangs allein grösser, nennt sie
+  ihn in `too_large`, und der Plan sperrt ihn mit
+  `attachment:file_too_large` (Z8, wie die übrigen Sperren, die eine Person
+  auflöst; keine spätere Etappe des Plans hebt sie auf), wenn er mehr als
+  48 MiB legen müsste (Weg: die Datei von Hand in der Mediathek
+  hochladen). Ein Video über 48 MiB ist damit ein Weg von Hand.
+- Ein Dateiname, der kein UTF-8 ist (etwa `café.jpg` in Latin-1), steht in
+  den Zeilen und im Index als Marke seiner Bytes und wird als diese Bytes
+  gelesen (Codex-Runde 1, C).
 - Die Inhalte der Dateien werden nicht auf Zugangsdaten gelesen: es sind
   die Dateien, die die Staging-Site unter ihren Adressen ausliefert, und
   ihr Inhalt ist kein Wert der Datenbank. Die Werte des Anhangs

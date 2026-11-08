@@ -235,7 +235,7 @@ final class SyncKindsTest extends TestCase {
 			'attachment:shared_path'       => array( array( 'attachment' ), 'shared_path', 'Z8b' ),
 			// Branch 10: the files of an attachment.
 			'attachment:file_type'         => array( array( 'attachment' ), 'file_type', 'Z8' ),
-			'attachment:file_too_large'    => array( array( 'attachment' ), 'file_too_large', 'Z10' ),
+			'attachment:file_too_large'    => array( array( 'attachment' ), 'file_too_large', 'Z8' ),
 			'option:unclassified'          => array( array( 'option' ), 'unclassified', 'Z8d' ),
 			'*:mutual_references'          => array( $all, 'mutual_references', 'Z11c' ),
 			'*:php_object'                 => array( $all, 'php_object', 'Z8d' ),

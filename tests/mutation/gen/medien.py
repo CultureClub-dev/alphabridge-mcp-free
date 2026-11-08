@@ -154,6 +154,10 @@ e('import-identity-attachment', 'identity_fits(): an attachment is of the type a
   "\t\t\t\treturn 'attachment' === $text['post_type'];", "\t\t\t\treturn true;", 'itpkg', IT_LINES)
 
 # ------------------------------------------------ the export of media
+e('package-index-bytes', 'taken(): a name that is no UTF-8 read back from the index as its bytes (Codex round 1, C)', MP,
+  "\t\t$index = is_string( $text ) ? AB_MCP_Sync_Canon::decode( $text, 8 ) : null;", "\t\t$index = is_string( $text ) ? json_decode( $text, true, 8 ) : null;", 'it', PACKAGE)
+e('export-media-lines-left', 'make_media(): past the lines a manifest names, the next attachment goes to left (Codex round 1, C)', EX,
+  " || $pieces + $lines_of > AB_MCP_Sync_Manifest::MAX_OBJECTS ) {", " ) {", 'it', PACKAGE)
 e('export-media-credential', 'make_media(): an attachment a credential holds is left out, withheld (Codex round 1, A7)', EX,
   "\t\t\tif ( isset( $held[ (string) $id ] ) ) {", "\t\t\tif ( false ) {", 'it', PACKAGE)
 e('export-media-check', 'make_media(): the paths checked as the values of the object (field of a credential, lock of the check)', EX,
@@ -286,7 +290,11 @@ e('writer-type-name', 'files_plan(): a type this account may not upload by its n
 e('writer-main-type', 'files_plan(): the main file of the type the attachment says', AW,
   "\t\t\tif ( ! $free && (string) $type['type'] !== (string) $prepared['postarr']['post_mime_type'] ) {", "\t\t\tif ( false ) {", 'it', LOCKS)
 e('writer-present-main-type', 'files_plan(): a file this site has that the attachment would name, by its content', AW,
-  "\t\t\t\tif ( $names && 'present' === $entry['state'] && $entry['path'] === $attached ) {", "\t\t\t\tif ( false ) {", 'it', LOCKS)
+  "\t\t\tif ( 'present' !== $entry['state'] ) {\n\t\t\t\tcontinue;\n\t\t\t}\n\t\t\t$check = wp_check_filetype_and_ext(",
+  "\t\t\tif ( true ) {\n\t\t\t\tcontinue;\n\t\t\t}\n\t\t\t$check = wp_check_filetype_and_ext(", 'it', LOCKS)
+e('writer-present-every', 'files_plan(): every file of the list this site has, not only the main one, by its content (Codex round 1, C)', AW,
+  "\t\t\tif ( 'present' !== $entry['state'] ) {\n\t\t\t\tcontinue;\n\t\t\t}\n\t\t\t$check = wp_check_filetype_and_ext(",
+  "\t\t\tif ( 'present' !== $entry['state'] || $entry['path'] !== $attached ) {\n\t\t\t\tcontinue;\n\t\t\t}\n\t\t\t$check = wp_check_filetype_and_ext(", 'it', LOCKS)
 e('writer-media-missing', 'files_plan(): a file to lay the packages of media of the run carry', AW,
   "\t\t\t\tif ( ! is_array( $prepared['media'] ) || ! isset( $prepared['media'][ $key ] ) || ",
   "\t\t\t\tif ( ! is_array( $prepared['media'] ) || ", 'it', LOCKS)

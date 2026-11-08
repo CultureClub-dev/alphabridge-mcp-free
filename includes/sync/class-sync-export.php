@@ -496,6 +496,7 @@ final class AB_MCP_Sync_Export {
 		unset( $objects );
 		$take    = array();
 		$total   = 0;
+		$pieces  = 0;
 		foreach ( array_keys( $ids ) as $id ) {
 			if ( isset( $held[ (string) $id ] ) ) {
 				++$told['credentials'][ $held[ (string) $id ] ];
@@ -544,10 +545,26 @@ final class AB_MCP_Sync_Export {
 				);
 				continue;
 			}
-			if ( $total + $bytes > AB_MCP_Sync_Media_Package::MAX_BYTES ) {
+			// The lines it takes, a piece a line: as for the bytes, the next
+			// attachments go to left once a package would hold more lines than
+			// a manifest names objects (Codex round 1 of branch 10, C: before,
+			// the whole package was refused).
+			$lines_of = 0;
+			foreach ( $list['files'] as $file ) {
+				$lines_of += AB_MCP_Sync_Media_Package::pieces( (int) $file['size'] );
+			}
+			if ( $lines_of > AB_MCP_Sync_Manifest::MAX_OBJECTS ) {
+				$media['too_large'][] = array(
+					'ref'   => (string) $id,
+					'bytes' => $bytes,
+				);
+				continue;
+			}
+			if ( $total + $bytes > AB_MCP_Sync_Media_Package::MAX_BYTES || $pieces + $lines_of > AB_MCP_Sync_Manifest::MAX_OBJECTS ) {
 				$media['left'][] = (string) $id;
 				continue;
 			}
+			$pieces            += $lines_of;
 			$total             += $bytes;
 			$take[]             = array( $id, $list['files'] );
 			$media['packed'][]  = (string) $id;

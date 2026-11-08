@@ -1019,6 +1019,18 @@ final class SyncMediaTest extends TestCase {
 		imagepng( $gd );
 		$png  = (string) ob_get_clean();
 		$hier = self::upload_b( 'hier.jpg', 'image/jpeg', $png, array(), null );
+		// A JPEG whose thumbnail this site has left over byte for byte, a PNG
+		// named .jpg (Codex round 1, C: every file of the list by its content,
+		// also one that lies there already).
+		$rest       = self::upload_b( 'rest.jpg', 'image/jpeg', self::jpeg( 300, 200, array( 7, 77, 7 ) ), array(), null );
+		$rest_thumb = '';
+		foreach ( (array) self::b( array( array( 'op' => 'files_of', 'post' => $rest, 'as' => 'list' ) ) )['list']['files'] as $file ) {
+			if ( false !== strpos( $file['path'], '150x150' ) ) {
+				$rest_thumb = $file['path'];
+			}
+		}
+		self::assertNotSame( '', $rest_thumb );
+		self::b( array( array( 'op' => 'put_file', 'path' => $rest_thumb, 'bytes' => base64_encode( $png ) ) ) );
 		// Two attachments of the plan naming one file (the second's thumb is
 		// the first's file).
 		$zwilling_a = self::upload_b( 'zwilling.jpg', 'image/jpeg', self::jpeg( 120, 90, array( 5, 5, 5 ) ), array(), null );
@@ -1049,6 +1061,7 @@ final class SyncMediaTest extends TestCase {
 		wp_mkdir_p( $uploads . '/2026/10' );
 		file_put_contents( $uploads . '/2026/10/ersetzt.jpg', 'another file of this site' );
 		file_put_contents( $uploads . '/2026/10/hier.jpg', $png );
+		file_put_contents( $uploads . '/' . $rest_thumb, $png );
 		$other = self::upload_a( 'anders.jpg', 'image/jpeg', self::jpeg( 300, 200, array( 99, 99, 99 ) ) );
 		$meta  = wp_get_attachment_metadata( $other );
 		$meta['sizes']['geteilt'] = array( 'file' => 'geteilt.jpg', 'width' => 300, 'height' => 200, 'mime-type' => 'image/jpeg' );
@@ -1069,7 +1082,7 @@ final class SyncMediaTest extends TestCase {
 			}
 		);
 		$files_before = self::uploads_of( 'a' );
-		$planned      = self::planned( array( 'attachment:2026/10/ersetzt.jpg', 'attachment:2026/10/geteilt.jpg', 'attachment:2026/09/verlinkt.jpg', 'attachment:2026/10/preise.pdf', 'attachment:2026/10/zwilling.jpg', 'attachment:2026/10/zwilling-zwei.jpg', 'attachment:2026/10/waise.jpg', 'attachment:2026/10/typ.jpg', 'attachment:2026/10/hier.jpg', 'attachment:2026/10/skript.jpg', 'attachment:2026/10/absolut.jpg', 'attachment:2026/10/unklar.jpg' ) );
+		$planned      = self::planned( array( 'attachment:2026/10/ersetzt.jpg', 'attachment:2026/10/geteilt.jpg', 'attachment:2026/09/verlinkt.jpg', 'attachment:2026/10/preise.pdf', 'attachment:2026/10/zwilling.jpg', 'attachment:2026/10/zwilling-zwei.jpg', 'attachment:2026/10/waise.jpg', 'attachment:2026/10/typ.jpg', 'attachment:2026/10/hier.jpg', 'attachment:2026/10/skript.jpg', 'attachment:2026/10/absolut.jpg', 'attachment:2026/10/unklar.jpg', 'attachment:2026/10/rest.jpg' ) );
 		$missing      = self::entry( $planned['report']['all'], 'attachment:2026/10/fehlt.jpg' );
 		self::assertSame( 'locked', $missing['action'] );
 		self::assertContains( 'attachment:missing_file', array_column( $missing['locks'], 'key' ) );
@@ -1092,6 +1105,7 @@ final class SyncMediaTest extends TestCase {
 		self::assertStringContainsString( 'skript-klein.php: a type this account may not upload', $found[ (string) $skript ] ?? '', 'A file of the list besides the main one, by its name: ' . json_encode( $found ) );
 		self::assertStringContainsString( 'the attachment ' . $alt . ' of this site names it as well', $found[ (string) $absolut ] ?? '', 'Its absolute path read as the core reads it: ' . json_encode( $found ) );
 		self::assertStringContainsString( 'could not be read whole', $found[ (string) $unklar ] ?? '', 'A list of a candidate that does not read whole: ' . json_encode( $found ) );
+		self::assertStringContainsString( 'file ' . $rest_thumb . ' of this site the attachment would name is by its content of another type', $found[ (string) $rest ] ?? '', 'A size left over, by its content: ' . json_encode( $found, JSON_UNESCAPED_SLASHES ) );
 		// The same plan without the package of media: every file to lay is
 		// missing; a package of media of another report is refused by the plan.
 		$args             = $planned['args'];
@@ -1125,24 +1139,6 @@ final class SyncMediaTest extends TestCase {
 		// as many as the manifest declares; a package that does not hold is
 		// removed with the way. One that holds is indexed.
 		self::pair();
-		// The staging site packs the files of an attachment only where its
-		// paths pass the check of credentials its values pass (Codex round 1,
-		// A7): a file stored as password=….jpg leaves it out, withheld.
-		$bytes_b = self::jpeg( 80, 60, array( 5, 50, 5 ) );
-		$offen   = (int) self::b( array( array( 'op' => 'upload', 'name' => 'offen.jpg', 'mime' => 'image/jpeg', 'bytes' => base64_encode( $bytes_b ), 'generate' => false, 'as' => 'id' ) ) )['id'];
-		$geheim  = (int) self::b( array( array( 'op' => 'upload', 'name' => 'geheim.jpg', 'mime' => 'image/jpeg', 'bytes' => base64_encode( $bytes_b ), 'generate' => false, 'as' => 'id' ) ) )['id'];
-		self::b(
-			array(
-				array( 'op' => 'put_file', 'path' => '2026/10/password=synthetic-review-value.jpg', 'bytes' => base64_encode( $bytes_b ) ),
-				array( 'op' => 'update_meta', 'post' => $geheim, 'key' => '_wp_attached_file', 'value' => '2026/10/password=synthetic-review-value.jpg' ),
-			)
-		);
-		self::clear_b();
-		$media = self::b( array( array( 'op' => 'export', 'purpose' => 'media', 'report_hash' => str_repeat( 'c', 64 ), 'refs' => array( array( 'kind' => 'attachment', 'ref' => (string) $offen ), array( 'kind' => 'attachment', 'ref' => (string) $geheim ) ), 'as' => 'package' ) ) )['package'];
-		self::assertSame( array( (string) $offen ), $media['media']['packed'], (string) json_encode( $media ) );
-		self::assertSame( array( array( 'kind' => 'attachment', 'needs' => 'credential', 'ref' => (string) $geheim, 'subtype' => 'attachment' ) ), $media['withheld']['objects'] );
-		self::assertSame( 1, $media['credentials']['held'] + $media['credentials']['names'] );
-		self::clear_b();
 		$bytes = random_bytes( 100 );
 		$piece = static fn( string $path, string $data, int $piece = 0, int $pieces = 1, ?string $sha = null, ?int $size = null ): array => array(
 			'data'   => base64_encode( $data ),
@@ -1157,7 +1153,10 @@ final class SyncMediaTest extends TestCase {
 		$big   = random_bytes( \AB_MCP_Sync_Media_Package::PIECE + 5 );
 		$parts = array( substr( $big, 0, \AB_MCP_Sync_Media_Package::PIECE ), substr( $big, \AB_MCP_Sync_Media_Package::PIECE ) );
 		$cases = array(
-			'whole'              => array( array( $piece( '2026/10/a.jpg', $bytes ) ), null ),
+			// A name that is no UTF-8 (caf\xE9.jpg, as Latin-1 stores it): in
+			// the lines and the index as the marker of its bytes (Codex round
+			// 1, C), read back as them.
+			'whole'              => array( array( $piece( "2026/10/caf\xE9.jpg", $bytes ) ), null ),
 			'another hash'       => array( array( $piece( '2026/10/a.jpg', $bytes, 0, 1, hash( 'sha256', 'x' ) ) ), 'ab_mcp_sync_import_lines' ),
 			'a file twice'       => array( array( $piece( '2026/10/a.jpg', $bytes ), $piece( '2026/10/a.jpg', $bytes ) ), 'ab_mcp_sync_import_lines' ),
 			'pieces out of order' => array( array( $piece( '2026/10/b.bin', $parts[1], 1, 2, hash( 'sha256', $big ), strlen( $big ) ), $piece( '2026/10/b.bin', $parts[0], 0, 2, hash( 'sha256', $big ), strlen( $big ) ) ), 'ab_mcp_sync_import_lines' ),
@@ -1199,7 +1198,7 @@ final class SyncMediaTest extends TestCase {
 				self::assertTrue( $state['complete'], $what );
 				$taken = AB_MCP_Sync_Import::taken( $id, 'media' );
 				self::assertIsArray( $taken, $what );
-				self::assertSame( array( array( 'chunks' => array( 0 ), 'path' => '2026/10/a.jpg', 'pieces' => 1, 'ref' => '12', 'sha256' => hash( 'sha256', $bytes ), 'size' => 100 ) ), $taken['files'], 'The index of the files.' );
+				self::assertSame( array( array( 'chunks' => array( 0 ), 'path' => "2026/10/caf\xE9.jpg", 'pieces' => 1, 'ref' => '12', 'sha256' => hash( 'sha256', $bytes ), 'size' => 100 ) ), $taken['files'], 'The index of the files, its name byte for byte.' );
 				$to = (string) tempnam( sys_get_temp_dir(), 'abit' );
 				self::assertTrue( \AB_MCP_Sync_Media_Package::extract( $taken, $taken['files'][0], $to ) );
 				self::assertSame( $bytes, file_get_contents( $to ), 'A file read out of its chunks byte for byte.' );
@@ -1217,6 +1216,48 @@ final class SyncMediaTest extends TestCase {
 			self::assertInstanceOf( \WP_Error::class, $state, $what );
 			self::assertSame( $code, $state->get_error_code(), $what . ': ' . $state->get_error_message() );
 		}
+		// The staging site packs the files of an attachment only where its
+		// paths pass the check of credentials its values pass (Codex round 1,
+		// A7): a file stored as password=….jpg leaves it out, withheld.
+		$bytes_b = self::jpeg( 80, 60, array( 5, 50, 5 ) );
+		$offen   = (int) self::b( array( array( 'op' => 'upload', 'name' => 'offen.jpg', 'mime' => 'image/jpeg', 'bytes' => base64_encode( $bytes_b ), 'generate' => false, 'as' => 'id' ) ) )['id'];
+		$geheim  = (int) self::b( array( array( 'op' => 'upload', 'name' => 'geheim.jpg', 'mime' => 'image/jpeg', 'bytes' => base64_encode( $bytes_b ), 'generate' => false, 'as' => 'id' ) ) )['id'];
+		self::b(
+			array(
+				array( 'op' => 'put_file', 'path' => '2026/10/password=synthetic-review-value.jpg', 'bytes' => base64_encode( $bytes_b ) ),
+				array( 'op' => 'update_meta', 'post' => $geheim, 'key' => '_wp_attached_file', 'value' => '2026/10/password=synthetic-review-value.jpg' ),
+			)
+		);
+		self::clear_b();
+		$media = self::b( array( array( 'op' => 'export', 'purpose' => 'media', 'report_hash' => str_repeat( 'c', 64 ), 'refs' => array( array( 'kind' => 'attachment', 'ref' => (string) $offen ), array( 'kind' => 'attachment', 'ref' => (string) $geheim ) ), 'as' => 'package' ) ) )['package'];
+		self::assertSame( array( (string) $offen ), $media['media']['packed'], (string) json_encode( $media ) );
+		self::assertSame( array( array( 'kind' => 'attachment', 'needs' => 'credential', 'ref' => (string) $geheim, 'subtype' => 'attachment' ) ), $media['withheld']['objects'] );
+		self::assertSame( 1, $media['credentials']['held'] + $media['credentials']['names'] );
+		self::clear_b();
+		// Codex round 1, C: a package holds at most as many lines as a manifest
+		// names objects (a piece a line); the next attachment goes to left, as
+		// for the bytes, the package is made. Two attachments of 2502 empty
+		// files each (a list of many sizes): 5004 lines, the second left.
+		$viele = array();
+		foreach ( array( 'viele-a', 'viele-b' ) as $name ) {
+			$id    = (int) self::b( array( array( 'op' => 'upload', 'name' => $name . '.jpg', 'mime' => 'image/jpeg', 'bytes' => base64_encode( $bytes_b ), 'generate' => false, 'as' => 'id' ) ) )['id'];
+			$steps = array();
+			$sizes = array();
+			for ( $k = 0; $k < 2501; $k++ ) {
+				$file              = sprintf( '%s-%04d.jpg', $name, $k );
+				$steps[]           = array( 'op' => 'put_file', 'path' => '2026/10/' . $file, 'bytes' => '' );
+				$sizes[ 's' . $k ] = array( 'file' => $file, 'width' => 1, 'height' => 1, 'mime-type' => 'image/jpeg' );
+			}
+			$steps[] = array( 'op' => 'update_meta', 'post' => $id, 'key' => '_wp_attachment_metadata', 'value' => array( 'file' => '2026/10/' . $name . '.jpg', 'width' => 80, 'height' => 60, 'sizes' => $sizes ) );
+			self::b( $steps );
+			$viele[] = (string) $id;
+		}
+		$many = self::b( array( array( 'op' => 'export', 'purpose' => 'media', 'report_hash' => str_repeat( 'c', 64 ), 'refs' => array( array( 'kind' => 'attachment', 'ref' => $viele[0] ), array( 'kind' => 'attachment', 'ref' => $viele[1] ) ), 'as' => 'package' ) ) )['package'];
+		self::assertSame( array( $viele[0] ), $many['media']['packed'], substr( (string) json_encode( $many ), 0, 600 ) );
+		self::assertSame( array( $viele[1] ), $many['media']['left'] );
+		self::assertSame( 2502, $many['objects'] );
+		self::clear_b();
+
 	}
 
 	/* ------------------------------------------- the files of one step */
