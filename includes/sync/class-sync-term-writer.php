@@ -920,6 +920,15 @@ final class AB_MCP_Sync_Term_Writer {
 				'note'  => sprintf( 'Not put back: the sanitizing of this account would change the backed-up %s (kses without unfiltered_html). Set it by hand in wp-admin with an account that may.', $refusal ),
 			);
 		}
+		// The last read, after the sanitizers and their filters (Codex round 2
+		// of branch 11, A6): the row as the step wrote it, or it is left.
+		$again = self::current( (int) $live_id );
+		if ( ! is_array( $again ) || ! hash_equals( (string) $written, self::row_hash( $again['row'] ) ) ) {
+			return array(
+				'state' => 'left',
+				'note'  => 'The row of the term changed as it was put back (a hook of this site), so it is left as it is.',
+			);
+		}
 		$done = wp_update_term(
 			(int) $live_id,
 			$taxonomy,

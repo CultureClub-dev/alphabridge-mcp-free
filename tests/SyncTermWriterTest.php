@@ -582,6 +582,21 @@ final class SyncTermWriterTest extends TestCase {
 		add_filter( 'pre_term_name', $upper );
 		self::assertSame( 'left', AB_MCP_Sync_Term_Writer::restore_row( 34, $backup, $written )['state'], 'The sanitizing would change the backed-up name.' );
 		remove_filter( 'pre_term_name', $upper );
+		// A filter of the sanitizers that changes the row as it runs (Codex
+		// round 2 of branch 11, A6): the last read sees it, nothing written.
+		$calls = count( $GLOBALS['ab_test_term_calls'] ?? array() );
+		$was   = $db->term_rows[34]['description'];
+		$hook  = static function ( $v ) use ( $db ) {
+			$db->term_rows[34]['description'] = 'Changed meanwhile.';
+			return $v;
+		};
+		add_filter( 'pre_term_name', $hook );
+		$moved = AB_MCP_Sync_Term_Writer::restore_row( 34, $backup, $written );
+		remove_filter( 'pre_term_name', $hook );
+		self::assertSame( 'left', $moved['state'] );
+		self::assertStringContainsString( 'changed as it was put back', $moved['note'] );
+		self::assertSame( $calls, count( $GLOBALS['ab_test_term_calls'] ?? array() ), 'wp_update_term() was not called.' );
+		$db->term_rows[34]['description'] = $was;
 		// Written back through wp_update_term(); the fake rows do not change,
 		// so it reads other than the backup: unclear, never restored.
 		self::assertSame( 'unclear', AB_MCP_Sync_Term_Writer::restore_row( 34, $backup, $written )['state'] );

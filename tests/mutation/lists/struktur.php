@@ -37,6 +37,7 @@ $pu = 'includes/sync/class-sync-push.php';
 $dk = 'includes/sync/class-sync-db-kinds.php';
 $ww = 'includes/tools/class-widget-writer.php';
 $pw = 'includes/sync/class-sync-post-writer.php';
+$tw = 'includes/sync/class-sync-term-writer.php';
 
 return array(
 	array(
@@ -898,8 +899,8 @@ return array(
 		'id'      => 'struktur/a2-row-after-sanitize',
 		'clause'  => 'write_part(): the row read again after the update() of the widget (A2)',
 		'file'    => $wa,
-		'search'  => "\t\t\$value = self::widget_row( \$write['base'] );\n\t\tif ( is_wp_error( \$value ) ) {\n\t\t\treturn \$value;\n\t\t}\n\t\t// The right again",
-		'replace' => "\t\t// The right again",
+		'search'  => "\t\t// the write no call runs a hook.\n\t\t\$value = self::widget_row( \$write['base'] );\n\t\tif ( is_wp_error( \$value ) ) {\n\t\t\treturn \$value;\n\t\t}\n\t\t\$value[ (int) \$write['number'] ] = \$clean;",
+		'replace' => "\t\t// the write no call runs a hook.\n\t\t\$value[ (int) \$write['number'] ] = \$clean;",
 		'run'     => $it( 'SyncStructureTest', 'testAWidgetFilterThatChangesAnotherInstanceAsTheStepWritesKeepsItsChangeAndMakesTheStepUnclear' ),
 		'expect'  => '/testAWidgetFilterThatChangesAnotherInstanceAsTheStepWritesKeepsItsChangeAndMakesTheStepUnclear/',
 	),
@@ -1006,8 +1007,8 @@ return array(
 		'id'      => 'struktur/a5-widget-forward',
 		'clause'  => 'write_part(): edit_theme_options again after the update() of the widget (A5)',
 		'file'    => $wa,
-		'search'  => "\t\t// branch 11, A5: they may have changed it), right before the write.\n\t\tif ( ! current_user_can( 'edit_theme_options' ) ) {",
-		'replace' => "\t\t// branch 11, A5: they may have changed it), right before the write.\n\t\tif ( false ) {",
+		'search'  => "\t\t// branch 11, A5: they may have changed it), before the last read.\n\t\tif ( ! current_user_can( 'edit_theme_options' ) ) {",
+		'replace' => "\t\t// branch 11, A5: they may have changed it), before the last read.\n\t\tif ( false ) {",
 		'run'     => $unit( 'SyncStructureWritersTest', 'testTheChecksOfAnAreaAskTheRightTheRowOfEachWidgetAndItsUpdateAhead' ),
 		'expect'  => '/testTheChecksOfAnAreaAskTheRightTheRowOfEachWidgetAndItsUpdateAhead/',
 	),
@@ -1154,6 +1155,51 @@ return array(
 		'replace' => "\t\t\tif ( false ) {\n\t\t\t\t\$state              = 'unclear';",
 		'run'     => $it( 'SyncStructureTest', 'testANewObjectWhosePairCannotBecomeARestOnTheWayBackLeavesItsStepUnclearWithItsWay' ),
 		'expect'  => '/testANewObjectWhosePairCannotBecomeARestOnTheWayBackLeavesItsStepUnclearWithItsWay/',
+	),
+	array(
+		'id'      => 'struktur/a6-widget-order',
+		'clause'  => 'write_part(): the row read after the hooks of the right, right before the write (A6)',
+		'file'    => $wa,
+		'search'  => "\t\tif ( ! current_user_can( 'edit_theme_options' ) ) {\n\t\t\treturn AB_MCP_Sync_Post_Writer::rights( 'change the widgets of this site (edit_theme_options)' );\n\t\t}\n\t\t// The row read again after the update() of the widget, its filters\n\t\t// and the hooks of the right (A2; Codex round 2, A6): what they\n\t\t// changed in it (another instance) stays as they left it, and the\n\t\t// engine reads that change as another hand's; between this read and\n\t\t// the write no call runs a hook.\n\t\t\$value = self::widget_row( \$write['base'] );\n\t\tif ( is_wp_error( \$value ) ) {\n\t\t\treturn \$value;\n\t\t}\n",
+		'replace' => "\t\t\$value = self::widget_row( \$write['base'] );\n\t\tif ( is_wp_error( \$value ) ) {\n\t\t\treturn \$value;\n\t\t}\n\t\tif ( ! current_user_can( 'edit_theme_options' ) ) {\n\t\t\treturn AB_MCP_Sync_Post_Writer::rights( 'change the widgets of this site (edit_theme_options)' );\n\t\t}\n",
+		'run'     => $unit( 'SyncStructureWritersTest', 'testTheChecksOfAnAreaAskTheRightTheRowOfEachWidgetAndItsUpdateAhead' ),
+		'expect'  => '/testTheChecksOfAnAreaAskTheRightTheRowOfEachWidgetAndItsUpdateAhead/',
+	),
+	array(
+		'id'      => 'struktur/a6-css-order',
+		'clause'  => 'restore_part(): edit_css before the row is read and compared (A6)',
+		'file'    => $cw,
+		'search'  => "\t\t// The right first (A5), then the row read and compared, then the\n\t\t// write, no call that runs a hook in between (Codex round 2, A6).\n\t\tif ( ! current_user_can( 'edit_css' ) ) {",
+		'replace' => "\t\t// The right first (A5), then the row read and compared, then the\n\t\t// write, no call that runs a hook in between (Codex round 2, A6).\n\t\tif ( false ) {",
+		'run'     => $unit( 'SyncStructureWritersTest', 'testOnlyTheLinkedCssOfTheActiveThemeInTheSameVersionIsChangedAndItsRuleIsAskedAhead' ),
+		'expect'  => '/testOnlyTheLinkedCssOfTheActiveThemeInTheSameVersionIsChangedAndItsRuleIsAskedAhead/',
+	),
+	array(
+		'id'      => 'struktur/a6-item-last-read',
+		'clause'  => 'restore_part(): the last read of an item right before its row goes back (A6)',
+		'file'    => $mw,
+		'search'  => "\t\t\tif ( ! is_array( \$again ) || ! hash_equals( (string) \$hash, self::row_hash( \$again['row'] ) ) ) {",
+		'replace' => "\t\t\tif ( false ) {",
+		'run'     => $unit( 'SyncStructureWritersTest', 'testTheFieldsOfAMenuItemGoThroughWhatTheCoreWouldMakeOfThemBeforeAnythingIsWritten' ),
+		'expect'  => '/testTheFieldsOfAMenuItemGoThroughWhatTheCoreWouldMakeOfThemBeforeAnythingIsWritten/',
+	),
+	array(
+		'id'      => 'struktur/a6-post-last-read',
+		'clause'  => 'restore_row(): the last read of a post right before its row goes back (A6)',
+		'file'    => $pw,
+		'search'  => "\t\tif ( ! is_array( \$again ) || ! hash_equals( \$written, self::row_hash( \$again['row'] ) ) ) {",
+		'replace' => "\t\tif ( false ) {",
+		'run'     => $unit( 'SyncRunTest', 'testTheKindReadsAgainAsItWritesAPartBackAndLeavesOneThatIsNotWhatTheStepRead' ),
+		'expect'  => '/testTheKindReadsAgainAsItWritesAPartBackAndLeavesOneThatIsNotWhatTheStepRead/',
+	),
+	array(
+		'id'      => 'struktur/a6-term-last-read',
+		'clause'  => 'restore_row(): the last read of a term right before its row goes back (A6)',
+		'file'    => $tw,
+		'search'  => "\t\tif ( ! is_array( \$again ) || ! hash_equals( (string) \$written, self::row_hash( \$again['row'] ) ) ) {",
+		'replace' => "\t\tif ( false ) {",
+		'run'     => $unit( 'SyncTermWriterTest', 'testTheRowOfATermGoesBackOnlyWhereItIsWhatTheStepWroteAndItsSlugAndParentAreFree' ),
+		'expect'  => '/testTheRowOfATermGoesBackOnlyWhereItIsWhatTheStepWroteAndItsSlugAndParentAreFree/',
 	),
 	array(
 		'id'      => 'struktur/c2-part-order',

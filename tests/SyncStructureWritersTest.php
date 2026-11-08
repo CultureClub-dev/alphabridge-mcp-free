@@ -397,6 +397,17 @@ final class SyncStructureWritersTest extends TestCase {
 		$GLOBALS['ab_test_can']     = static fn( string $cap, array $args ): bool => 'edit_css' !== $cap;
 		self::assertSame( 'left', AB_MCP_Sync_Css_Writer::restore_part( 'row', 'twentytwentyfive', $backup, AB_MCP_Sync_Css_Writer::row_hash( $now['row'] ), 0 )['state'] );
 		self::assertSame( array(), $GLOBALS['ab_test_updated'] );
+		// A hook of the right that allows and changes the CSS as it is asked
+		// (Codex round 2, A6): the read after it sees the change, it is left.
+		$GLOBALS['ab_test_can'] = static function ( string $cap, array $args ): bool {
+			if ( 'edit_css' === $cap ) {
+				self::db()->post_rows[7]['post_content'] = 'body{color:red}';
+			}
+			return true;
+		};
+		self::assertSame( 'left', AB_MCP_Sync_Css_Writer::restore_part( 'row', 'twentytwentyfive', $backup, AB_MCP_Sync_Css_Writer::row_hash( $now['row'] ), 0 )['state'] );
+		self::assertSame( array(), $GLOBALS['ab_test_updated'] );
+		$GLOBALS['ab_test_can'] = static fn( string $cap, array $args ): bool => true;
 	}
 
 	/* ------------------------------------------------------------ menus */
@@ -617,6 +628,19 @@ final class SyncStructureWritersTest extends TestCase {
 		$GLOBALS['ab_test_can']        = static fn( string $cap, array $args ): bool => 'edit_post' !== $cap;
 		self::assertSame( 'left', AB_MCP_Sync_Menu_Item_Writer::restore_part( 'row', 21, $backup, AB_MCP_Sync_Menu_Item_Writer::row_hash( $now['row'] ), 0 )['state'] );
 		self::assertSame( array(), $GLOBALS['ab_test_updated'] );
+		// A hook of the right that allows and changes the item as it is asked
+		// (Codex round 2, A6): the last read sees it, it is left.
+		$GLOBALS['ab_test_can'] = static function ( string $cap, array $args ): bool {
+			if ( 'edit_post' === $cap ) {
+				self::db()->post_rows[21]['post_title'] = 'Changed by the hook';
+			}
+			return true;
+		};
+		$moved = AB_MCP_Sync_Menu_Item_Writer::restore_part( 'row', 21, $backup, AB_MCP_Sync_Menu_Item_Writer::row_hash( $now['row'] ), 0 );
+		self::assertSame( 'left', $moved['state'], json_encode( $moved ) );
+		self::assertStringContainsString( 'changed as it was put back', $moved['note'] );
+		self::assertSame( array(), $GLOBALS['ab_test_updated'] );
+		self::db()->post_rows[21]['post_title'] = 'Shop';
 		$GLOBALS['ab_test_can'] = static fn( string $cap, array $args ): bool => true;
 		$parent = AB_MCP_Sync_Menu_Item_Writer::target_of( self::item_line( $page, array( 'post_title' => 'Who we are' ) ), self::item( 'update', '21' ), $ctx );
 		self::assertSame( '7', $parent['columns']['post_parent'], 'The parent the core takes from the page.' );
@@ -733,6 +757,21 @@ final class SyncStructureWritersTest extends TestCase {
 		);
 		self::assertTrue( AB_MCP_Sync_Widget_Area_Writer::write_part( 'sidebar-1', 'instance:text-3', $fresh, null ) );
 		self::assertSame( array( 3 => array( 'title' => 'C', 'seen_number' => 3 ), '_multiwidget' => 1 ), $GLOBALS['ab_test_options']['widget_text'] );
+		// A hook of the right that allows and changes another instance of the
+		// row as it is asked (Codex round 2, A6): read after it, its change
+		// stays in what is written.
+		self::db()->option_rows['widget_text'] = serialize( array( 4 => array( 'title' => 'Other' ), '_multiwidget' => 1 ) );
+		$GLOBALS['ab_test_options']            = array();
+		$asked                                 = 0;
+		$GLOBALS['ab_test_can']                = static function ( string $cap, array $args ) use ( &$asked ): bool {
+			if ( 'edit_theme_options' === $cap && 2 === ++$asked ) {
+				self::db()->option_rows['widget_text'] = serialize( array( 4 => array( 'title' => 'Changed by the hook' ), '_multiwidget' => 1 ) );
+			}
+			return true;
+		};
+		self::assertTrue( AB_MCP_Sync_Widget_Area_Writer::write_part( 'sidebar-1', 'instance:text-3', $fresh, null ) );
+		self::assertSame( 'Changed by the hook', $GLOBALS['ab_test_options']['widget_text'][4]['title'] );
+		$GLOBALS['ab_test_can'] = static fn( string $cap, array $args ): bool => true;
 		// The right again after the update() of the widget and its filters
 		// (Codex round 1, A5): a filter that takes it, nothing written.
 		$GLOBALS['ab_test_options']                            = array();

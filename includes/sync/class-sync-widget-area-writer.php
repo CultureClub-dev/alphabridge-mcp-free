@@ -666,19 +666,19 @@ final class AB_MCP_Sync_Widget_Area_Writer {
 		if ( is_wp_error( $clean ) ) {
 			return $clean;
 		}
-		// The row read again after the update() of the widget and
-		// widget_update_callback (Codex round 1 of branch 11, A2): what they
+		// The right again after the filters of the widget (Codex round 1 of
+		// branch 11, A5: they may have changed it), before the last read.
+		if ( ! current_user_can( 'edit_theme_options' ) ) {
+			return AB_MCP_Sync_Post_Writer::rights( 'change the widgets of this site (edit_theme_options)' );
+		}
+		// The row read again after the update() of the widget, its filters
+		// and the hooks of the right (A2; Codex round 2, A6): what they
 		// changed in it (another instance) stays as they left it, and the
-		// engine reads that change as another hand's; never written back from
-		// the row as it was before them.
+		// engine reads that change as another hand's; between this read and
+		// the write no call runs a hook.
 		$value = self::widget_row( $write['base'] );
 		if ( is_wp_error( $value ) ) {
 			return $value;
-		}
-		// The right again after the filters of the widget (Codex round 1 of
-		// branch 11, A5: they may have changed it), right before the write.
-		if ( ! current_user_can( 'edit_theme_options' ) ) {
-			return AB_MCP_Sync_Post_Writer::rights( 'change the widgets of this site (edit_theme_options)' );
 		}
 		$value[ (int) $write['number'] ] = $clean;
 		$value['_multiwidget']           = 1;

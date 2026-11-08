@@ -541,6 +541,14 @@ final class AB_MCP_Sync_Css_Writer {
 				'note'  => sprintf( 'A part %s of the CSS is of a name this version does not know: left as it is.', (string) $name ),
 			);
 		}
+		// The right first (A5), then the row read and compared, then the
+		// write, no call that runs a hook in between (Codex round 2, A6).
+		if ( ! current_user_can( 'edit_css' ) ) {
+			return array(
+				'state' => 'left',
+				'note'  => sprintf( 'Not put back: this account may not %s, asked again right before the write (a filter may have changed the rights). Set it by hand in wp-admin with an account that may.', sprintf( 'change the Additional CSS of %s (edit_css)', (string) $live_id ) ),
+			);
+		}
 		$current = self::current( (string) $live_id );
 		if ( is_wp_error( $current ) ) {
 			return $current;
@@ -560,12 +568,6 @@ final class AB_MCP_Sync_Css_Writer {
 			return array(
 				'state' => 'left',
 				'note'  => 'The CSS was changed since the step wrote it, so it is left as it is.',
-			);
-		}
-		if ( ! current_user_can( 'edit_css' ) ) {
-			return array(
-				'state' => 'left',
-				'note'  => sprintf( 'Not put back: this account may not %s, asked again right before the write (a filter may have changed the rights). Set it by hand in wp-admin with an account that may.', sprintf( 'change the Additional CSS of %s (edit_css)', (string) $live_id ) ),
 			);
 		}
 		$id = AB_MCP_Sync_Post_Writer::keeping_revisions(

@@ -299,6 +299,18 @@ Position, die das Theme hier nicht registriert, in der Prüfung des Laufs
   und der Liste und jeder Instanz eines Bereichs (nach `update()` in
   `restore_right()`). Fehlt ein Recht, bleibt der Teil stehen (`left`) mit
   Grund und Weg.
+- Die Reihenfolge jedes Schreibens (Codex-Runde 2, A6): erst die Rechte und
+  die Prüfungen, die Hooks auslösen, dann die letzte Lesung und der
+  Vergleich, dann sofort das Schreiben, ohne Aufruf dazwischen, der einen
+  Hook auslöst. Vorwärts liest das Widget seine Zeile nach `update()`, den
+  Filtern und der Rechtefrage. Auf dem Rückweg fragt das CSS sein Recht vor
+  dem Lesen; der Menüeintrag, der Post (auch Vorlagen) und der Term (auch
+  das Menü) lesen ihre Zeile direkt vor dem Schreiben noch einmal, weil
+  ihre Prüfungen den Stand davor brauchen; was sich dabei geändert hat,
+  bleibt stehen (`left`). Die rohen Wege (Option, Position, Liste und
+  Instanz eines Bereichs) schreiben nur, wo die Zeile genau die Bytes hält,
+  die vor den Hooks gelesen wurden (`put_back()`); die Reihenfolge der
+  Rechtefrage ändert dort nichts.
 - Die Tokens eines Plans und eines Rückwegs decken auch die Reihenfolge,
   in der die Teile jeder Art zurückgehen (`PART_ORDER`, Codex-Runde 1, C2).
 

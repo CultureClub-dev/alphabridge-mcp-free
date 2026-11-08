@@ -2630,6 +2630,17 @@ final class AB_MCP_Sync_Post_Writer {
 		// it carries (wp_filter_wp_template_unique_post_slug(),
 		// wp-includes/theme-templates.php:64-67). A theme switched since the
 		// run gets its rows back as they were.
+		// The last read, after every check above that may run a hook (the
+		// menus, the navigation, the styles; Codex round 2 of branch 11,
+		// A6): the row as the step wrote it, or it is left. Between this read
+		// and the write no call runs a hook.
+		$again = self::current( (int) $live_id );
+		if ( ! is_array( $again ) || ! hash_equals( $written, self::row_hash( $again['row'] ) ) ) {
+			return array(
+				'state' => 'left',
+				'note'  => 'The row changed as it was put back (a hook of this site), so it is left as it is.',
+			);
+		}
 		$postarr = array_intersect_key( $backup, array_flip( self::WRITTEN_COLUMNS ) );
 		$postarr['ID']          = (int) $live_id;
 		$postarr['post_author'] = (int) $postarr['post_author'];

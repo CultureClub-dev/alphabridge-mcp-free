@@ -1640,12 +1640,21 @@ final class AB_MCP_Sync_Menu_Item_Writer {
 					);
 				}
 			}
-			// The rights again after sanitize_post() and its filters (Codex
-			// round 1 of branch 11, A5), right before the write.
+			// The rights after sanitize_post() and its filters (Codex round 1
+			// of branch 11, A5).
 			if ( ! current_user_can( 'edit_theme_options' ) || ! current_user_can( 'edit_post', $id ) ) {
 				return array(
 					'state' => 'left',
 					'note'  => sprintf( 'Not put back: this account may not %s, asked again right before the write (a filter may have changed the rights). Set it by hand in wp-admin with an account that may.', sprintf( 'edit the menu item %d (edit_theme_options, edit_post)', $id ) ),
+				);
+			}
+			// The last read, after every call that runs a hook (Codex round 2,
+			// A6): the row as the step wrote it, or it is left.
+			$again = self::current( $id );
+			if ( ! is_array( $again ) || ! hash_equals( (string) $hash, self::row_hash( $again['row'] ) ) ) {
+				return array(
+					'state' => 'left',
+					'note'  => 'The row of the menu item changed as it was put back (a hook of this site), so it is left as it is.',
 				);
 			}
 			$done = AB_MCP_Sync_Post_Writer::keeping_revisions(

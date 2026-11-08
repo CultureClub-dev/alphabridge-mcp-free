@@ -40,13 +40,14 @@ PU = 'includes/sync/class-sync-push.php'
 DK = 'includes/sync/class-sync-db-kinds.php'
 WW = 'includes/tools/class-widget-writer.php'
 PW = 'includes/sync/class-sync-post-writer.php'
-FILEVAR = {MW: '$mw', WA: '$wa', CW: '$cw', OW: '$ow', SR: '$sr', EN: '$en', PU: '$pu', DK: '$dk', WW: '$ww', PW: '$pw'}
+FILEVAR = {MW: '$mw', WA: '$wa', CW: '$cw', OW: '$ow', SR: '$sr', EN: '$en', PU: '$pu', DK: '$dk', WW: '$ww', PW: '$pw', 'includes/sync/class-sync-term-writer.php': '$tw'}
 
 RUNS = {
     'u': ('unit', 'SyncStructureWritersTest'),
     'run': ('unit', 'SyncRunTest'),
     'it': ('it', 'SyncStructureTest'),
     'itc': ('it', 'SyncContentTest'),
+    'term': ('unit', 'SyncTermWriterTest'),
 }
 
 entries = []
@@ -91,6 +92,8 @@ IT_REVPAGE = 'testATakeOverOfAPageDeletesNoRevisionOfItWhereTheSiteKeepsANumberO
 IT_NEWREST = 'testANewObjectWhosePairCannotBecomeARestOnTheWayBackLeavesItsStepUnclearWithItsWay'
 IT_GUARD = 'testAnotherRequestThatWritesTheThemeModsAsANewMenuGivesItsPositionBackIsHeldOffByTheLock'
 U_MOVE = 'testAMenuThatTakesThePositionOfAnotherMenuOfTheRunComesAfterItAndAnExchangeIsLocked'
+U_ROWBACK = 'testTheKindReadsAgainAsItWritesAPartBackAndLeavesOneThatIsNotWhatTheStepRead'
+U_TERMBACK = 'testTheRowOfATermGoesBackOnlyWhereItIsWhatTheStepWroteAndItsSlugAndParentAreFree'
 U_PARTORDER = 'testTheOrderOfThePartsOfEachKindIsWhatTheTokensCover'
 
 # ------------------------------------------------------------ core options
@@ -395,8 +398,8 @@ e('a1-widget-forget', 'widget_row(): update_option() of a widget compares with t
   "\t\t$row = AB_MCP_Sync_Shared_Row::read( 'widget_' . $base );", 'it', IT_STALE)
 # A2: the row of a widget read after its update() and filters.
 e('a2-row-after-sanitize', 'write_part(): the row read again after the update() of the widget (A2)', WA,
-  "\t\t$value = self::widget_row( $write['base'] );\n\t\tif ( is_wp_error( $value ) ) {\n\t\t\treturn $value;\n\t\t}\n\t\t// The right again",
-  "\t\t// The right again", 'it', IT_FILTER)
+  "\t\t// the write no call runs a hook.\n\t\t$value = self::widget_row( $write['base'] );\n\t\tif ( is_wp_error( $value ) ) {\n\t\t\treturn $value;\n\t\t}\n\t\t$value[ (int) $write['number'] ] = $clean;",
+  "\t\t// the write no call runs a hook.\n\t\t$value[ (int) $write['number'] ] = $clean;", 'it', IT_FILTER)
 # A3: no revision deleted.
 e('a3-keep-filter', 'keeping_revisions(): no revision of the post deleted by the call (A3)', PW,
   "\t\tadd_filter( 'wp_revisions_to_keep', $keep, PHP_INT_MAX, 2 );\n", "", 'it', IT_CSS)
@@ -427,8 +430,8 @@ e('a4-menu-location-name', 'more(): the names of the positions of a menu through
   "", 'it', IT_CRED)
 # A5: the rights again right before each write.
 e('a5-widget-forward', 'write_part(): edit_theme_options again after the update() of the widget (A5)', WA,
-  "\t\t// branch 11, A5: they may have changed it), right before the write.\n\t\tif ( ! current_user_can( 'edit_theme_options' ) ) {",
-  "\t\t// branch 11, A5: they may have changed it), right before the write.\n\t\tif ( false ) {", 'u', U_AREACHK)
+  "\t\t// branch 11, A5: they may have changed it), before the last read.\n\t\tif ( ! current_user_can( 'edit_theme_options' ) ) {",
+  "\t\t// branch 11, A5: they may have changed it), before the last read.\n\t\tif ( false ) {", 'u', U_AREACHK)
 e('a5-widget-back', 'right_now(): edit_theme_options again right before a field of an area goes back (A5)', WA,
   "\t\treturn current_user_can( 'edit_theme_options' ) ? null : array(",
   "\t\treturn true ? null : array(", 'u', U_AREACHK)
@@ -479,6 +482,22 @@ e('c1-rebase', 'unit_rest(): the answer of rebase() (C1)', EN,
 e('c1-new-rest', 'revert_boundary(): a new object whose pair did not become residual leaves its step unclear (the lead after round 1)', EN,
   "\t\t\tif ( is_wp_error( $kept ) ) {\n\t\t\t\t$state              = 'unclear';",
   "\t\t\tif ( false ) {\n\t\t\t\t$state              = 'unclear';", 'it', IT_NEWREST)
+# A6 (Codex round 2): the rights first, then the last read, then the write.
+e('a6-widget-order', 'write_part(): the row read after the hooks of the right, right before the write (A6)', WA,
+  "\t\tif ( ! current_user_can( 'edit_theme_options' ) ) {\n\t\t\treturn AB_MCP_Sync_Post_Writer::rights( 'change the widgets of this site (edit_theme_options)' );\n\t\t}\n\t\t// The row read again after the update() of the widget, its filters\n\t\t// and the hooks of the right (A2; Codex round 2, A6): what they\n\t\t// changed in it (another instance) stays as they left it, and the\n\t\t// engine reads that change as another hand's; between this read and\n\t\t// the write no call runs a hook.\n\t\t$value = self::widget_row( $write['base'] );\n\t\tif ( is_wp_error( $value ) ) {\n\t\t\treturn $value;\n\t\t}\n",
+  "\t\t$value = self::widget_row( $write['base'] );\n\t\tif ( is_wp_error( $value ) ) {\n\t\t\treturn $value;\n\t\t}\n\t\tif ( ! current_user_can( 'edit_theme_options' ) ) {\n\t\t\treturn AB_MCP_Sync_Post_Writer::rights( 'change the widgets of this site (edit_theme_options)' );\n\t\t}\n", 'u', U_AREACHK)
+e('a6-css-order', 'restore_part(): edit_css before the row is read and compared (A6)', CW,
+  "\t\t// The right first (A5), then the row read and compared, then the\n\t\t// write, no call that runs a hook in between (Codex round 2, A6).\n\t\tif ( ! current_user_can( 'edit_css' ) ) {",
+  "\t\t// The right first (A5), then the row read and compared, then the\n\t\t// write, no call that runs a hook in between (Codex round 2, A6).\n\t\tif ( false ) {", 'u', U_CSS)
+e('a6-item-last-read', 'restore_part(): the last read of an item right before its row goes back (A6)', MW,
+  "\t\t\tif ( ! is_array( $again ) || ! hash_equals( (string) $hash, self::row_hash( $again['row'] ) ) ) {",
+  "\t\t\tif ( false ) {", 'u', U_ITEMSAN)
+e('a6-post-last-read', 'restore_row(): the last read of a post right before its row goes back (A6)', PW,
+  "\t\tif ( ! is_array( $again ) || ! hash_equals( $written, self::row_hash( $again['row'] ) ) ) {",
+  "\t\tif ( false ) {", 'run', U_ROWBACK)
+e('a6-term-last-read', 'restore_row(): the last read of a term right before its row goes back (A6)', 'includes/sync/class-sync-term-writer.php',
+  "\t\tif ( ! is_array( $again ) || ! hash_equals( (string) $written, self::row_hash( $again['row'] ) ) ) {",
+  "\t\tif ( false ) {", 'term', U_TERMBACK)
 # C2: the order of the parts of each kind.
 e('c2-part-order', 'part_order(): the order of the parts of a kind (C2)', EN,
   "\t\treturn null !== $w && defined( $w . '::PART_ORDER' ) ? $w::PART_ORDER : array( 'row', 'meta:', 'terms:' );",
