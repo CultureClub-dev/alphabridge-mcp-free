@@ -1501,6 +1501,121 @@ final class SyncStructureTest extends TestCase {
 		self::assertSame( 'left', $stored['state'] );
 	}
 
+	public function testAHookInTheOwnCallThatWritesAnotherInstanceOfTheRowNestedIsRefused(): void {
+		// Codex round 5 of branch 11, C1: a hook in
+		// pre_update_option_widget_text, run in the step's own update_option()
+		// of the row, writes another instance of the same row nested
+		// (text-3.title = FOREIGN). Before, the request owned the boundary
+		// whole: the nested write went through, and the outer call then stored
+		// the row it had read before over it, unseen by the comparison before
+		// and after. Now, while its own call runs, the row takes the planned
+		// value only (AB_MCP_Sync_Guard::only(), decision 24): the nested write
+		// is refused as any other hand's, never silently: the journal names
+		// it, the object deviates (decision A) with the field and the way.
+		self::pair();
+		$text = self::widget_settings( 'text', array( 'title' => 'Hours', 'text' => 'Mo–Fr', 'filter' => true, 'visual' => true ) );
+		self::widgets_on_both( array( 'text-2' => $text ) );
+		$row                = self::option_of( 'a', 'widget_text' );
+		$row[3]             = $text;
+		$areas              = self::option_of( 'a', 'sidebars_widgets' );
+		$areas['sidebar-2'] = array_merge( $areas['sidebar-2'], array( 'text-3' ) );
+		update_option( 'widget_text', $row );
+		update_option( 'sidebars_widgets', $areas );
+		self::b(
+			array(
+				array( 'op' => 'update_option', 'name' => 'widget_text', 'value' => $row ),
+				array( 'op' => 'update_option', 'name' => 'sidebars_widgets', 'value' => $areas ),
+			)
+		);
+		self::paired( self::staged() );
+		$text_new = self::widget_settings( 'text', array( 'title' => 'Opening hours', 'text' => 'Mo–Sa', 'filter' => true, 'visual' => true ) );
+		$row_b    = $row;
+		$row_b[2] = $text_new;
+		self::one_b( array( 'op' => 'update_option', 'name' => 'widget_text', 'value' => $row_b ) );
+		$planned = self::planned( array( array( 'widget_area', 'live', 'sidebar-1' ) ) );
+		$nested  = null;
+		$between = null;
+		add_filter(
+			'pre_update_option_widget_text',
+			static function ( $value ) use ( &$nested, &$between ) {
+				$writing = false;
+				foreach ( debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS ) as $frame ) {
+					$writing = $writing || ( 'AB_MCP_Sync_Widget_Area_Writer' === ( $frame['class'] ?? '' ) && 'write_part' === $frame['function'] );
+				}
+				if ( $writing && null === $nested ) {
+					$nested            = 'running';
+					$other             = get_option( 'widget_text' );
+					$other[3]['title'] = 'FOREIGN';
+					$nested            = update_option( 'widget_text', $other );
+					$between           = maybe_unserialize( AB_MCP_IT_Sites::option_row( 'a', 'widget_text' )['option_value'] )[3]['title'];
+				}
+				return $value;
+			}
+		);
+		$run    = self::begun( $planned['args'] );
+		$closed = self::finish( (int) $run['run_id'] );
+		remove_all_filters( 'pre_update_option_widget_text' );
+		self::assertNotNull( $nested, 'The hook ran in the own call.' );
+		self::assertFalse( $nested, 'The nested write of the hook is refused.' );
+		self::assertSame( 'Hours', $between, 'Never in the row, not for a moment.' );
+		self::assertSame( $text_new, self::option_of( 'a', 'widget_text' )[2], 'The own instance is written.' );
+		self::assertSame( 'Hours', self::option_of( 'a', 'widget_text' )[3]['title'] );
+		self::assertSame( 'closed_findings', $closed['state'], json_encode( $closed ) );
+		$step = self::writes( self::run_status( (int) $run['run_id'] ) )[0];
+		self::assertSame( 'unclear', $step['state'], json_encode( $step ) );
+		self::assertStringContainsString( 'another writer tried to change the field 3 of the row widget_text as the step\'s own call wrote it (a hook or filter of this site) and was refused', (string) $step['parts']['object']['deviated']['why'] );
+		self::assertStringContainsString( 'find the plugin or theme that writes it', (string) $step['parts']['object']['deviated']['why'], 'With its way.' );
+		$stored = \AB_MCP_Sync_Run::step( (int) $run['run_id'], (int) $step['seq'] )['parts']['object'];
+		self::assertEquals( array( array( 'fields' => array( '3' ), 'option' => 'widget_text' ) ), $stored['refused_writes'], 'In the journal.' );
+	}
+
+	public function testAHookInTheOwnCallThatSetsAnotherPositionNestedIsRefused(): void {
+		// Codex round 5 of branch 11, C1, for the positions: a hook in
+		// pre_set_theme_mod_nav_menu_locations, run in the step's own
+		// set_theme_mod(), sets another position nested (footer). Before, the
+		// outer call then stored the theme mods it had read before over it.
+		// Now the nested write to the row is refused, named in the journal,
+		// and the object deviates.
+		self::pair();
+		$old_a = (int) wp_create_nav_menu( 'Old' );
+		$old_b = (int) self::one_b( array( 'op' => 'nav_menu', 'name' => 'Old' ) );
+		set_theme_mod( 'nav_menu_locations', array( 'primary' => $old_a ) );
+		self::one_b( array( 'op' => 'theme_mod', 'name' => 'nav_menu_locations', 'value' => array( 'primary' => $old_b ) ) );
+		self::paired( self::staged() );
+		$new_b = (int) self::one_b( array( 'op' => 'nav_menu', 'name' => 'Footer' ) );
+		self::one_b( array( 'op' => 'theme_mod', 'name' => 'nav_menu_locations', 'value' => array( 'primary' => $new_b ) ) );
+		$planned = self::planned( array( array( 'menu', 'staging', (string) $new_b ) ) );
+		$nested  = null;
+		$between = null;
+		$hook    = static function ( $value ) use ( $old_a, &$nested, &$between ) {
+			$writing = false;
+			foreach ( debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS ) as $frame ) {
+				$writing = $writing || ( 'AB_MCP_Sync_Menu_Writer' === ( $frame['class'] ?? '' ) && 'write_part' === $frame['function'] );
+			}
+			if ( $writing && null === $nested ) {
+				$nested = 'running';
+				$nested = set_theme_mod( 'nav_menu_locations', array( 'footer' => $old_a ) + (array) get_theme_mod( 'nav_menu_locations', array() ) );
+				$mods   = maybe_unserialize( AB_MCP_IT_Sites::option_row( 'a', 'theme_mods_twentytwentyfive' )['option_value'] );
+				$between = $mods['nav_menu_locations']['footer'] ?? null;
+			}
+			return $value;
+		};
+		add_filter( 'pre_set_theme_mod_nav_menu_locations', $hook );
+		$run    = self::begun( $planned['args'] );
+		$closed = self::finish( (int) $run['run_id'] );
+		remove_filter( 'pre_set_theme_mod_nav_menu_locations', $hook );
+		self::assertNotNull( $nested, 'The hook ran in the own call.' );
+		self::assertFalse( $nested, 'The nested write of the hook is refused.' );
+		self::assertNull( $between, 'Never in the row, not for a moment.' );
+		wp_cache_flush();
+		$new_a = (int) get_term_by( 'slug', 'footer', 'nav_menu' )->term_id;
+		self::assertSame( array( 'primary' => $new_a ), self::option_of( 'a', 'theme_mods_twentytwentyfive' )['nav_menu_locations'], 'The own position is set, the other one not.' );
+		self::assertSame( 'closed_findings', $closed['state'], json_encode( $closed ) );
+		$step = self::writes( self::run_status( (int) $run['run_id'] ) )[0];
+		self::assertSame( 'unclear', $step['state'], json_encode( $step ) );
+		self::assertStringContainsString( 'another writer tried to change the field nav_menu_locations.footer of the row theme_mods_twentytwentyfive', (string) $step['parts']['object']['deviated']['why'] );
+	}
+
 	/** The save of unit_rest() that fails: the new bases, or the state residual. */
 	public static function failingSaves(): array {
 		return array(

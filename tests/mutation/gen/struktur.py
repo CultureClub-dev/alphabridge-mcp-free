@@ -93,6 +93,8 @@ IT_STALE = 'testAStepWritesFromTheRowsAsTheyAreAndNeverFromAStaleCacheOfThem'
 IT_FILTER = 'testAWidgetFilterThatChangesAnotherInstanceAsTheStepWritesKeepsItsChangeAndTheStepWritesNothing'
 IT_HARMLESS = 'testAHarmlessTextWidgetAndSerializedValuesOfMetaAndOptionsGoIntoThePackageWithTheirContent'
 IT_REFUSEOWN = 'testAHookOfTheRightThatChangesTheOptionAndThenRefusesTheRightLeavesNothingOfItTheStepsOwn'
+IT_NESTWIDGET = 'testAHookInTheOwnCallThatWritesAnotherInstanceOfTheRowNestedIsRefused'
+IT_NESTPOS = 'testAHookInTheOwnCallThatSetsAnotherPositionNestedIsRefused'
 IT_HOOKOWN = 'testAHookOfTheRightThatChangesTheInstanceTheStepWritesKeepsItsChangeAndTheStepOwnsNothing'
 IT_CRED = 'testACredentialInTheNameOfAMenuOrOfItsPositionLandsInNoPackage'
 IT_FREEPOS = 'testANewMenuAtAPositionNoMenuHoldsYetGoesOverAndTheWayBackLeavesThePositionEmptyAgain'
@@ -109,6 +111,7 @@ U_CHECKED = 'testTheFinishedContentOfAnObjectGoesThroughTheCredentialCheckOnceMo
 U_PARTORDER = 'testTheOrderOfThePartsOfEachKindIsWhatTheTokensCover'
 U_WRITE = 'testTheOneWriteOfAStepAsksTheRightThenReadsThenComparesThenCalls'
 U_LASTREAD = 'testAHookAtTheLastReadOfTheObjectBeforeTheWriteIsSeenByTheComparison'
+U_NESTED = 'testANestedWriteToTheRowOfTheOwnCallIsRefusedAndNamed'
 U_HOOK = 'testEveryWriterWritesNothingWhereAHookOfItsRightChangesItsOwnFieldRightBeforeTheCall'
 U_TERMROW = 'testTheRowOfATermIsWrittenThroughTheCoreAndAnIdWordPressGaveBackIsNotTheStepsOwn'
 
@@ -144,8 +147,8 @@ e('option-sanitizer', 'sanitizer_refusal(): sanitize_option() ahead, its bytes a
   "\t\treturn null !== $form && $form === (string) $bytes ? null : sprintf(",
   "\t\treturn true ? null : sprintf(", 'u', U_OPTCHK)
 e('option-write', 'write_row(): update_option()', OW,
-  "\t\tupdate_option( $name, $prepared['value'] );",
-  "", 'it', IT_OPTIONS)
+  "static fn() => update_option( $name, $prepared['value'] ) );",
+  "static fn() => null );", 'it', IT_OPTIONS)
 e('option-rewrite', 'post_write(): the rewrite rules built anew for the permalinks', OW,
   "\t\t\tflush_rewrite_rules( false );",
   "", 'it', IT_OPTIONS)
@@ -566,7 +569,7 @@ e('a6-menu-meta-pass', 'write_part() of the menu: its whole state handed to the 
   "\t\t\treturn AB_MCP_Sync_Term_Writer::write_part( (int) $live_id, $name, $prepared, $pre, self::class );",
   "\t\t\treturn AB_MCP_Sync_Term_Writer::write_part( (int) $live_id, $name, $prepared, is_array( $pre ) ? array_intersect_key( $pre, array_flip( array( 'row', 'meta', 'terms' ) ) ) : null );", 'u', U_HOOK)
 e('a6f-engine-row', 'write_parts(): the row call with the state the engine read (A6)', EN,
-  "\t\t\t\t$id = $w::write_row( $prepared, $live_id, $pre_all );", "\t\t\t\t$id = $w::write_row( $prepared, $live_id );", 'it', IT_OPTIONS)
+  "\t\t\t\t$id     = $w::write_row( $prepared, $live_id, $pre_all );", "\t\t\t\t$id     = $w::write_row( $prepared, $live_id );", 'it', IT_OPTIONS)
 # Item 4 of round 4: what the call needs read before the comparison.
 e('a6-needs-first', 'forward(): what the call needs read before current() and the comparison (item 4 of round 4)', SW,
   "\t\t\t\t$done = $first();\n\t\t\t\treturn is_wp_error( $done ) ? $done : $w::current( $live_id );",
@@ -584,6 +587,33 @@ e('a4-with-row-first', 'write_parts(): what the row call writes besides the row 
 e('a4-terms-helper', 'write_part(): the terms of a post through the helper, after the journal is saved (item 4 of round 4)', PW,
   "\t\t\treturn AB_MCP_Sync_Write::forward( self::class, $live_id, $pre, static fn() => true, static fn() => self::write_terms( $live_id, $taxonomy, $terms ) );",
   "\t\t\treturn self::write_terms( $live_id, $taxonomy, $terms );", 'itr', 'testAHookAsTheJournalIsSavedBeforeTheCallOfTheTermsIsSeenAndNothingIsWritten')
+# C1 (Codex round 5): a shared row takes the planned value only while the own call runs.
+GR = 'includes/sync/class-sync-guard.php'
+FILEVAR[GR] = '$gr'
+e('c1-only', 'pre_update_option(): a row of the own call takes its planned value only (C1 of round 5)', GR,
+  "\t\tif ( isset( self::$only[ (string) $option ] ) ) {", "\t\tif ( false ) {", 'it', IT_NESTWIDGET)
+e('c1-only-unit', 'pre_update_option(): a row of the own call takes its planned value only, for an option and the list (C1 of round 5)', GR,
+  "\t\tif ( isset( self::$only[ (string) $option ] ) ) {", "\t\tif ( false ) {", 'u', U_NESTED)
+e('c1-named', 'pre_update_option(): a refused write named for the engine (C1 of round 5)', GR,
+  "\t\t\tself::$refusals[] = array(", "\t\t\t$unused = array(", 'u', U_NESTED)
+e('c1-deviates', 'write_parts(): a refused write makes the object deviate with the field and its way (C1 of round 5)', EN,
+  "\t\t\tif ( array() !== $nested ) {\n\t\t\t\t// A write to the row", "\t\t\tif ( false ) {\n\t\t\t\t// A write to the row", 'it', IT_NESTWIDGET)
+e('c1-journal', 'nested(): a refused write in the journal of the object (C1 of round 5)', EN,
+  "\t\t\t$journal['object']['refused_writes'] = array_merge(", "\t\t\t$unused = array_merge(", 'it', IT_NESTWIDGET)
+e('c1-widget', 'write_part(): the row of the widget through the lock of the own call (C1 of round 5)', WA,
+  "\t\t\t\tAB_MCP_Sync_Guard::only( 'widget_' . $write['base'], $value, static fn() => update_option( 'widget_' . $write['base'], $value ) );",
+  "\t\t\t\tupdate_option( 'widget_' . $write['base'], $value );", 'it', IT_NESTWIDGET)
+e('c1-position', 'write_part(): the theme mods through the lock of the own call (C1 of round 5)', MW,
+  "\t\t\t\tAB_MCP_Sync_Guard::only( $positions['option'], $mods, static fn() => set_theme_mod( 'nav_menu_locations', $locations ) );",
+  "\t\t\t\tset_theme_mod( 'nav_menu_locations', $locations );", 'it', IT_NESTPOS)
+e('c1-list', 'write_row(): sidebars_widgets through the lock of the own call (C1 of round 5)', WA,
+  "\t\t\t\tAB_MCP_Sync_Guard::only( self::AREAS, $map, static fn() => wp_set_sidebars_widgets( $map ) );",
+  "\t\t\t\twp_set_sidebars_widgets( $map );", 'u', U_NESTED)
+e('c1-option', 'write_row(): a core option through the lock of the own call (C1 of round 5)', OW,
+  "\t\t\t\tAB_MCP_Sync_Guard::only( $name, $prepared['value'], static fn() => update_option( $name, $prepared['value'] ) );",
+  "\t\t\t\tupdate_option( $name, $prepared['value'] );", 'u', U_NESTED)
+e('c1-array-version', 'write_row(): the list as wp_set_sidebars_widgets() hands it on (C1 of round 5)', WA,
+  "\t\t\t\tif ( ! isset( $map['array_version'] ) ) {\n\t\t\t\t\t$map['array_version'] = 3;\n\t\t\t\t}\n", "", 'u', U_NESTED)
 # The way back through the helper: the last read against what the step wrote.
 e('a6-css-back', 'restore_part(): the last read of the CSS right before it goes back (A6)', CW,
   "\t\t\tstatic fn( $again ) => is_array( $again ) && $again['row']['post_id'] === $backup['row']['post_id'] && hash_equals( (string) $hash, self::row_hash( $again['row'] ) ),",

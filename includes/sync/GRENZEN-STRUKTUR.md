@@ -115,6 +115,48 @@ Position, die das Theme hier nicht registriert, in der Prüfung des Laufs
   Codex-Runde 1, C3). Prüffall
   `testAnotherRequestThatWritesTheThemeModsAsANewMenuGivesItsPositionBackIsHeldOffByTheLock`.
 
+- Während der eigene Kernaufruf eine geteilte Zeile schreibt (eine
+  Kern-Option, `widget_<base>`, `sidebars_widgets`,
+  `theme_mods_<stylesheet>`), nimmt die Zeile nur den geplanten Wert an,
+  Byte für Byte, wie `update_option()` ihn speichert
+  (`AB_MCP_Sync_Guard::only()`, Codex-Runde 5, C1, wie Entscheid 24 es
+  vorsieht). Jeder andere Schreibversuch auf diese Zeile wird abgewiesen,
+  auch ein verschachtelter aus einem Hook im eigenen Aufruf
+  (`pre_update_option_{$option}`, `pre_set_theme_mod_{$name}`). Vorher
+  liess die Übernahmesperre die ganze eigene Anfrage durch: der
+  verschachtelte Aufruf schrieb ein Nachbarfeld, der äussere speicherte
+  danach die vorher gelesene Zeile darüber, und der Vergleich vorher und
+  nachher sah nichts. Eine Abweisung ist nie still: das Journal nennt sie
+  (`refused_writes`: Zeile und Felder), das Objekt weicht ab (Entscheid
+  A), und der Grund nennt Feld und Zeile mit dem Weg (das Plugin oder
+  Theme finden, das sie beim Speichern der Zeile schreibt). Ein fremder
+  Filter auf `pre_update_option_{$option}` läuft vor der Sperre
+  (wp-includes/option.php:901, die Sperre auf `pre_update_option` :912):
+  verändert er den Wert, wird der eigene Aufruf ebenso abgewiesen, und das
+  Zurücklesen sieht die Zeile anders als geplant. Ein Filter auf
+  `pre_update_option` nach der Sperre (Priorität über 1) verändert den
+  geschriebenen Wert, das sieht das Zurücklesen.
+- Gezählt vor dem Bau (WordPress 7.1.3): kein Weg des Kerns schreibt
+  diese Zeilen verschachtelt, während der eigene Aufruf läuft.
+  `retrieve_widgets()` und `_wp_sidebars_changed()` (widgets.php:1327,
+  :1294) laufen auf den Widget-Bildschirmen (wp-admin/widgets-form.php:121),
+  in der REST-API der Widgets und Bereiche, im Customizer und nach einem
+  Themewechsel (`after_switch_theme`, default-filters.php:377);
+  `_wp_menus_changed()` (nav-menu.php:1214) nach einem Themewechsel
+  (default-filters.php:376); `_wp_check_split_nav_menu_terms()`
+  (taxonomy.php:4619) beim Teilen eines geteilten Terms;
+  `wp_delete_nav_menu()` (nav-menu.php:262) beim Löschen eines Menüs; das
+  Erfassen der Widget-Optionen des Customizers nur in dessen Vorschau
+  (class-wp-customize-widgets.php:2138). Die Hooks des Kerns auf
+  `pre_set_theme_mod_custom_logo` und `update_option_theme_mods_{$theme}`
+  schreiben `site_logo`, eine andere Zeile (blocks/site-logo.php:155,
+  :209). Ein Block-Theme hat keine klassischen Positionen, die der Kern
+  nachzöge. Häufige Plugins sind nicht gemessen. Prüffälle
+  `testAHookInTheOwnCallThatWritesAnotherInstanceOfTheRowNestedIsRefused`,
+  `testAHookInTheOwnCallThatSetsAnotherPositionNestedIsRefused` und
+  `SyncStructureWritersTest::testANestedWriteToTheRowOfTheOwnCallIsRefusedAndNamed`
+  (Option und Liste).
+
 ## Menüs und Positionen
 
 - Das Menü wird geschrieben wie die Art Term (`wp_insert_term()`,

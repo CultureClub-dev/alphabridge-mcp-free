@@ -1060,6 +1060,57 @@ final class SyncStructureWritersTest extends TestCase {
 		}
 	}
 
+	public function testANestedWriteToTheRowOfTheOwnCallIsRefusedAndNamed(): void {
+		// Codex round 5 of branch 11, C1: while the step's own call writes a
+		// row of options, the row takes the planned value only; a hook in the
+		// call that writes the row nested is refused and named for the
+		// engine (AB_MCP_Sync_Guard::refusals()), as the integration suite
+		// holds it for an instance of a widget and a position.
+		\AB_MCP_Sync_Guard::refusals();
+		$nested = static function ( string $option, $foreign ) {
+			$done = false;
+			return static function ( $value ) use ( $option, $foreign, &$done ) {
+				if ( ! $done ) {
+					$done = true;
+					update_option( $option, $foreign );
+				}
+				return $value;
+			};
+		};
+		// A core option.
+		self::db()->option_rows['blogname'] = 'Old';
+		$GLOBALS['ab_test_options']         = array( 'blogname' => 'Old' );
+		$option                             = AB_MCP_Sync_Option_Writer::target_of( self::option_line( 'blogname', 'New' ), self::item( 'update', 'blogname' ), self::ctx() );
+		add_filter( 'pre_update_option_blogname', $nested( 'blogname', 'FOREIGN' ) );
+		self::assertSame( 'blogname', AB_MCP_Sync_Option_Writer::write_row( $option, 'blogname', AB_MCP_Sync_Option_Writer::current( 'blogname' ) ) );
+		$GLOBALS['ab_test_filters'] = array();
+		self::assertSame( 'New', $GLOBALS['ab_test_options']['blogname'], 'The own value.' );
+		self::assertSame( array( array( 'option' => 'blogname', 'fields' => array() ) ), \AB_MCP_Sync_Guard::refusals(), 'The nested write refused and named.' );
+		self::assertSame( array(), \AB_MCP_Sync_Guard::refusals(), 'Taken once.' );
+		// The list of a widget area: the row sidebars_widgets.
+		if ( class_exists( 'WP_Widget', false ) ) {
+			self::areas_here( array( 'text-2', 'text-5' ), array( 2 => array( 'title' => 'B' ), 5 => array( 'title' => 'E' ) ) );
+			$GLOBALS['ab_test_options'] = array( 'sidebars_widgets' => unserialize( self::db()->option_rows['sidebars_widgets'] ) );
+			$foreign                    = array( 'wp_inactive_widgets' => array(), 'sidebar-1' => array( 'text-2', 'text-5' ), 'sidebar-2' => array( 'text-9' ), 'array_version' => 3 );
+			add_filter( 'pre_update_option_sidebars_widgets', $nested( 'sidebars_widgets', $foreign ) );
+			self::assertSame( 'sidebar-1', AB_MCP_Sync_Widget_Area_Writer::write_row( array( 'area' => 'sidebar-1', 'list' => array( 'text-5', 'text-2' ) ), 'sidebar-1', AB_MCP_Sync_Widget_Area_Writer::current( 'sidebar-1' ) ) );
+			$GLOBALS['ab_test_filters'] = array();
+			self::assertSame( array( 'text-5', 'text-2' ), $GLOBALS['ab_test_options']['sidebars_widgets']['sidebar-1'] );
+			self::assertSame( array(), $GLOBALS['ab_test_options']['sidebars_widgets']['sidebar-2'], 'The other area as it was.' );
+			self::assertSame( array( array( 'option' => 'sidebars_widgets', 'fields' => array( 'sidebar-2' ) ) ), \AB_MCP_Sync_Guard::refusals() );
+			// A row without the version of its format: the core adds it as it
+			// stores the list, and that is the planned value (no refusal).
+			self::db()->option_rows['sidebars_widgets'] = serialize( array( 'wp_inactive_widgets' => array(), 'sidebar-1' => array( 'text-2', 'text-5' ), 'sidebar-2' => array() ) );
+			$GLOBALS['ab_test_options']                 = array();
+			self::assertSame( 'sidebar-1', AB_MCP_Sync_Widget_Area_Writer::write_row( array( 'area' => 'sidebar-1', 'list' => array( 'text-5', 'text-2' ) ), 'sidebar-1', AB_MCP_Sync_Widget_Area_Writer::current( 'sidebar-1' ) ) );
+			self::assertSame( array(), \AB_MCP_Sync_Guard::refusals(), 'The own write, with the version the core adds.' );
+			self::assertSame( 3, $GLOBALS['ab_test_options']['sidebars_widgets']['array_version'] );
+			unset( $GLOBALS['ab_test_widget_violation'] );
+		}
+		// Outside the own call the request passes as the owner, as before.
+		self::assertSame( 'own request', apply_filters( 'pre_update_option', 'own request', 'blogname', 'Old' ) );
+	}
+
 	public function testAHookAtTheLastReadOfTheObjectBeforeTheWriteIsSeenByTheComparison(): void {
 		// Codex round 4 of branch 11, item 4: between the comparison of the
 		// helper and the call of the core no read any more. A hook of the

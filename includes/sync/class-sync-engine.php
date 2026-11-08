@@ -1408,6 +1408,7 @@ final class AB_MCP_Sync_Engine {
 			$post_all    = null;
 			$pre_call    = null;
 			$refused     = false;
+			$nested      = array();
 			if ( 'row' === $name ) {
 				// Every part right before the row call: the row call writes
 				// besides the row (with_row()), so every part is read before it
@@ -1431,7 +1432,8 @@ final class AB_MCP_Sync_Engine {
 				// With the state read right before it, for the last read and the
 				// comparison of the writer (AB_MCP_Sync_Write; Codex round 3 of
 				// branch 11, A6).
-				$id = $w::write_row( $prepared, $live_id, $pre_all );
+				$id     = $w::write_row( $prepared, $live_id, $pre_all );
+				$nested = self::nested( $journal );
 				if ( is_wp_error( $id ) ) {
 					$error   = $id;
 					$refused = AB_MCP_Sync_Write::refused( $id );
@@ -1495,10 +1497,19 @@ final class AB_MCP_Sync_Engine {
 					return self::unsaved( $journal, $i, $saved, 'before', $live_id, $backup );
 				}
 				$done                   = $w::write_part( $live_id, $name, $prepared, is_array( $pre_all ) ? $pre_all : null );
+				$nested                 = self::nested( $journal );
 				$error                  = is_wp_error( $done ) ? $done : null;
 				$refused                = AB_MCP_Sync_Write::refused( $error );
 				$post_all               = $w::current( $live_id );
 				$journal['parts'][ $i ] = self::seen_after( $journal['parts'][ $i ], is_array( $post_all ) ? $post_all : null, $refused ? null : $target, false, $w );
+			}
+			if ( array() !== $nested ) {
+				// A write to the row the step's own call wrote, by another
+				// hand as the call ran (a hook or filter of this site), refused
+				// by the takeover lock (AB_MCP_Sync_Guard::only(); Codex round
+				// 5 of branch 11, C1): never silent, the object deviates
+				// (decision A) and says which row and field, with its way.
+				return self::deviated( $journal, $i, sprintf( 'another writer tried to change %s as the step\'s own call wrote it (a hook or filter of this site) and was refused, so the row holds what the step wrote and the other change did not happen; find the plugin or theme that writes it as the row is saved', self::nested_text( $nested ) ), $live_id, $backup );
 			}
 			if ( $refused ) {
 				// The writer made no call (Codex round 3 of branch 11, A6, and
@@ -1599,6 +1610,36 @@ final class AB_MCP_Sync_Engine {
 			return self::deviated( $journal, $i, sprintf( 'the part %s was written but reads back other than its target (a filter of this site changed it as it was written)', $name ), $live_id, $backup );
 		}
 		return self::outcome( 'done', '', $journal, $live_id );
+	}
+
+	/**
+	 * The writes the takeover lock refused within the step's own call just
+	 * made (AB_MCP_Sync_Guard::refusals()), noted in the journal of the
+	 * object (refused_writes), so that no way of a deviation loses them.
+	 *
+	 * @param array $journal Journal (changed).
+	 * @return array<int,array{option:string,fields:string[]}>
+	 */
+	private static function nested( array &$journal ) {
+		$nested = AB_MCP_Sync_Guard::refusals();
+		if ( array() !== $nested ) {
+			$journal['object']['refused_writes'] = array_merge( isset( $journal['object']['refused_writes'] ) && is_array( $journal['object']['refused_writes'] ) ? $journal['object']['refused_writes'] : array(), $nested );
+		}
+		return $nested;
+	}
+
+	/**
+	 * The refused writes in words: the fields and the row of each.
+	 *
+	 * @param array $nested AB_MCP_Sync_Guard::refusals().
+	 * @return string
+	 */
+	private static function nested_text( array $nested ) {
+		$out = array();
+		foreach ( $nested as $one ) {
+			$out[] = array() === $one['fields'] ? sprintf( 'the row %s', $one['option'] ) : sprintf( 'the field %1$s of the row %2$s', implode( ', ', $one['fields'] ), $one['option'] );
+		}
+		return implode( '; ', array_unique( $out ) );
 	}
 
 	/**

@@ -561,7 +561,13 @@ final class AB_MCP_Sync_Menu_Writer {
 				} else {
 					unset( $locations[ $location ] );
 				}
-				set_theme_mod( 'nav_menu_locations', $locations );
+				// The row as set_theme_mod() hands it to update_option(), and
+				// only that while the call runs: a hook in
+				// pre_set_theme_mod_nav_menu_locations that sets another
+				// position nested is refused (Codex round 5 of branch 11, C1).
+				$mods                       = $positions['mods'];
+				$mods['nav_menu_locations'] = $locations;
+				AB_MCP_Sync_Guard::only( $positions['option'], $mods, static fn() => set_theme_mod( 'nav_menu_locations', $locations ) );
 				return true;
 			},
 			static function () use ( $live_id ) {

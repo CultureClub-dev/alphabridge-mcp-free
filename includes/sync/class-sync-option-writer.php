@@ -347,7 +347,9 @@ final class AB_MCP_Sync_Option_Writer {
 			$pre,
 			static fn() => current_user_can( 'manage_options' ) ? true : AB_MCP_Sync_Post_Writer::rights( sprintf( 'change the option %s (manage_options)', $name ) ),
 			static function () use ( $name, $prepared ) {
-				update_option( $name, $prepared['value'] );
+				// Only this value into the row while the call runs (Codex round
+				// 5 of branch 11, C1).
+				AB_MCP_Sync_Guard::only( $name, $prepared['value'], static fn() => update_option( $name, $prepared['value'] ) );
 				return $name;
 			},
 			static function () use ( $name ) {

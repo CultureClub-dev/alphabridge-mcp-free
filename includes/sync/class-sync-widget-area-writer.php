@@ -628,7 +628,13 @@ final class AB_MCP_Sync_Widget_Area_Writer {
 			static fn() => current_user_can( 'edit_theme_options' ) ? true : AB_MCP_Sync_Post_Writer::rights( 'change the widgets of this site (edit_theme_options)' ),
 			static function ( $map ) use ( $prepared, $area ) {
 				$map[ $area ] = array_values( $prepared['list'] );
-				wp_set_sidebars_widgets( $map );
+				// As wp_set_sidebars_widgets() hands it to update_option(), and
+				// only that into the row while the call runs (Codex round 5 of
+				// branch 11, C1).
+				if ( ! isset( $map['array_version'] ) ) {
+					$map['array_version'] = 3;
+				}
+				AB_MCP_Sync_Guard::only( self::AREAS, $map, static fn() => wp_set_sidebars_widgets( $map ) );
 				return $area;
 			},
 			static function () use ( $area ) {
@@ -692,7 +698,10 @@ final class AB_MCP_Sync_Widget_Area_Writer {
 			static function ( $value ) use ( $write, $clean ) {
 				$value[ (int) $write['number'] ] = $clean;
 				$value['_multiwidget']           = 1;
-				update_option( 'widget_' . $write['base'], $value );
+				// Only this row into the option while the call runs: a hook
+				// that writes another instance of it nested is refused (Codex
+				// round 5 of branch 11, C1).
+				AB_MCP_Sync_Guard::only( 'widget_' . $write['base'], $value, static fn() => update_option( 'widget_' . $write['base'], $value ) );
 				return true;
 			},
 			// The row of the widget (its caches emptied) as the first part of
