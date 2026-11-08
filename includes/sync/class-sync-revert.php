@@ -347,9 +347,10 @@ final class AB_MCP_Sync_Revert {
 				$reverted[ (int) $step['parts']['forward_seq'] ] = (int) $way_id === (int) $run['run_id'] ? sprintf( 'step %d of this run', (int) $step['seq'] ) : sprintf( 'step %1$d of run %2$d', (int) $step['seq'], (int) $way_id );
 			}
 		}
-		$items = array();
-		$shown = array();
-		$live  = array();
+		$items   = array();
+		$objects = array();
+		$shown   = array();
+		$live    = array();
 		foreach ( $steps as $step ) {
 			if ( 'write' !== $step['op'] ) {
 				continue;
@@ -380,9 +381,10 @@ final class AB_MCP_Sync_Revert {
 				}
 				continue;
 			}
-			$object  = $journal['object'];
-			$live_id = self::live_ref_of( $object );
-			$items[] = array(
+			$object    = $journal['object'];
+			$live_id   = self::live_ref_of( $object );
+			$objects[] = $object;
+			$items[]   = array(
 				'forward_run' => (int) $run['run_id'],
 				'forward_seq' => (int) $step['seq'],
 			);
@@ -438,8 +440,9 @@ final class AB_MCP_Sync_Revert {
 				array(
 					'items'      => $items,
 					'live'       => $live,
-					// The order in which the parts of each kind go back (C2).
-					'part_order' => AB_MCP_Sync_Engine::part_orders( array_column( $items, 'kind' ) ),
+					// The order in which the parts of each kind go back (C2), by
+					// the kinds of the journals (Codex round 2, C4).
+					'part_order' => self::part_orders_of( $objects ),
 					'print'      => $print,
 					'run_id'     => (int) $run['run_id'],
 					'state'      => $run['state'],
@@ -505,6 +508,23 @@ final class AB_MCP_Sync_Revert {
 	}
 
 	/**
+	 * The orders of the parts of the kinds of these objects of journals, by
+	 * kind (AB_MCP_Sync_Engine::part_orders()), for the token of a way back
+	 * and of its continuation (Codex round 2 of branch 11, C4): a journal
+	 * of branch 8 without a kind is of a post (as writer_of() reads it).
+	 *
+	 * @param array[] $objects The objects of the journals of the steps.
+	 * @return array<string,string[]>
+	 */
+	public static function part_orders_of( array $objects ) {
+		$kinds = array();
+		foreach ( $objects as $object ) {
+			$kinds[] = is_array( $object ) && isset( $object['kind'] ) && is_string( $object['kind'] ) && '' !== $object['kind'] ? $object['kind'] : 'post';
+		}
+		return AB_MCP_Sync_Engine::part_orders( $kinds );
+	}
+
+	/**
 	 * The plan that leads the interrupted way back of a run on (way (b) of
 	 * decision 18, interrupted_plan()), a run of the type revert or the way
 	 * back of the same run alike: no step is added; the step the
@@ -522,9 +542,10 @@ final class AB_MCP_Sync_Revert {
 	 * @return array As plan() returns it, with same_run true and no items.
 	 */
 	private static function continuation( array $run, array $steps, $print, $source ) {
-		$shown = array();
-		$live  = array();
-		$state = array();
+		$shown   = array();
+		$live    = array();
+		$state   = array();
+		$objects = array();
 		foreach ( $steps as $step ) {
 			if ( 'revert' !== $step['op'] || ! in_array( $step['state'], array( 'planned', 'begun' ), true ) ) {
 				continue;
@@ -532,8 +553,9 @@ final class AB_MCP_Sync_Revert {
 			$what    = is_array( $step['parts'] ) ? $step['parts'] : array();
 			$forward = AB_MCP_Sync_Run::step( isset( $what['forward_run'] ) ? (int) $what['forward_run'] : (int) $run['run_id'], isset( $what['forward_seq'] ) ? (int) $what['forward_seq'] : 0 );
 			$object  = is_array( $forward ) && is_array( $forward['parts'] ) && isset( $forward['parts']['object'] ) ? $forward['parts']['object'] : array();
-			$live_id = self::live_ref_of( $object );
-			$shown[] = array(
+			$live_id   = self::live_ref_of( $object );
+			$objects[] = $object;
+			$shown[]   = array(
 				'seq'         => (int) $step['seq'],
 				'state'       => $step['state'],
 				'forward_seq' => isset( $what['forward_seq'] ) ? (int) $what['forward_seq'] : null,
@@ -558,9 +580,11 @@ final class AB_MCP_Sync_Revert {
 				'sha256',
 				AB_MCP_Sync_Canon::encode(
 					array(
-						'continue' => $state,
-						'live'     => $live,
-						'print'    => $print,
+						'continue'   => $state,
+						'live'       => $live,
+						// The order of the parts of each kind still to go (C4).
+						'part_order' => self::part_orders_of( $objects ),
+						'print'      => $print,
 						'run_id'   => (int) $run['run_id'],
 						'state'    => $run['state'],
 					)

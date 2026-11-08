@@ -2898,6 +2898,17 @@ final class SyncRunTest extends TestCase {
 			AB_MCP_Sync_Engine::part_orders( array( 'widget_area', 'menu', 'post', 'menu' ) )
 		);
 		self::assertSame( array( 'row', 'meta:', 'terms:' ), AB_MCP_Sync_Engine::part_order( null ), 'A kind without an order of its own.' );
+		// The way back binds the orders of the kinds of its journals (Codex
+		// round 2 of branch 11, C4); a journal of branch 8 without a kind is
+		// of a post.
+		self::assertSame(
+			array(
+				'menu'        => array( 'row', 'meta:', 'location:' ),
+				'post'        => array( 'row', 'meta:', 'terms:' ),
+				'widget_area' => array( 'instance:', 'row' ),
+			),
+			\AB_MCP_Sync_Revert::part_orders_of( array( array( 'kind' => 'widget_area' ), array( 'kind' => 'menu' ), array( 'op' => 'update' ) ) )
+		);
 	}
 
 	public function testAMenuThatTakesThePositionOfAnotherMenuOfTheRunComesAfterItAndAnExchangeIsLocked(): void {

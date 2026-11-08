@@ -39,9 +39,10 @@ EN = 'includes/sync/class-sync-engine.php'
 PU = 'includes/sync/class-sync-push.php'
 DK = 'includes/sync/class-sync-db-kinds.php'
 WW = 'includes/tools/class-widget-writer.php'
+RV = 'includes/sync/class-sync-revert.php'
 EX = 'includes/sync/class-sync-export.php'
 PW = 'includes/sync/class-sync-post-writer.php'
-FILEVAR = {MW: '$mw', WA: '$wa', CW: '$cw', OW: '$ow', SR: '$sr', EN: '$en', PU: '$pu', DK: '$dk', WW: '$ww', PW: '$pw', 'includes/sync/class-sync-term-writer.php': '$tw', EX: '$ex'}
+FILEVAR = {MW: '$mw', WA: '$wa', CW: '$cw', OW: '$ow', SR: '$sr', EN: '$en', PU: '$pu', DK: '$dk', WW: '$ww', PW: '$pw', 'includes/sync/class-sync-term-writer.php': '$tw', EX: '$ex', RV: '$rv'}
 
 RUNS = {
     'u': ('unit', 'SyncStructureWritersTest'),
@@ -525,6 +526,10 @@ e('a8-other', 'checked_content(): any other part of the content (A8)', EX,
   "\t\t\t\tAB_MCP_Sync_Credentials::note( $acc, $kind, 'content:' . (string) $part, AB_MCP_Sync_Credentials::unit( '', $value ) );\n", "", 'u', U_CHECKED)
 e('a8-findings', 'checked_content(): the findings into the locks and credentials of the object (A8)', EX,
   "\t\t$object['locks']       = $acc['locks'];\n\t\t$object['credentials'] = $acc['credentials'];\n\t\treturn $object;", "\t\treturn $object;", 'u', U_CHECKED)
+# C4 (Codex round 2): the way back by the kinds of its journals.
+e('c4-kinds', 'part_orders_of(): the kinds of the journals of the steps that go back (C4)', RV,
+  "\t\t\t$kinds[] = is_array( $object ) && isset( $object['kind'] ) && is_string( $object['kind'] ) && '' !== $object['kind'] ? $object['kind'] : 'post';",
+  "\t\t\t$kinds[] = 'post';", 'run', U_PARTORDER)
 # C2: the order of the parts of each kind.
 e('c2-part-order', 'part_order(): the order of the parts of a kind (C2)', EN,
   "\t\treturn null !== $w && defined( $w . '::PART_ORDER' ) ? $w::PART_ORDER : array( 'row', 'meta:', 'terms:' );",

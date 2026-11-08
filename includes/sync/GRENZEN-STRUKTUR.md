@@ -396,7 +396,11 @@ Entscheid 27 ohnehin nicht geschrieben werden.
   steht da, damit ein künftiges angehängtes Feld nicht vorbeikommt.
 - Dass die Tokens die Reihenfolge der Teile decken (C2), zeigt kein Test:
   eine andere Reihenfolge bräuchte eine Änderung des Codes zwischen Plan
-  und Bestätigung; geführt ist `part_order()`.
+  und Bestätigung; geführt sind `part_order()` und, für den Rückweg und
+  seine Fortsetzung, die Arten aus den Journalen der Schritte
+  (`AB_MCP_Sync_Revert::part_orders_of()`; vorher las der Token des
+  Rückwegs die Arten aus Einträgen, die keine tragen, und band nichts:
+  Codex-Runde 2, C4).
 - Nicht geführt, weil kein Prüffall es aufbaut: in `target_of()` des
   Bereichs die Zuordnung früherer Läufe neben der des Laufs
   (`$kept['map']`). Sie zählt erst, wenn ein Lauf einen Bereich schreibt,

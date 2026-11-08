@@ -39,6 +39,7 @@ $ww = 'includes/tools/class-widget-writer.php';
 $pw = 'includes/sync/class-sync-post-writer.php';
 $tw = 'includes/sync/class-sync-term-writer.php';
 $ex = 'includes/sync/class-sync-export.php';
+$rv = 'includes/sync/class-sync-revert.php';
 
 return array(
 	array(
@@ -1300,6 +1301,15 @@ return array(
 		'replace' => "\t\treturn \$object;",
 		'run'     => $unit( 'SyncStructureWritersTest', 'testTheFinishedContentOfAnObjectGoesThroughTheCredentialCheckOnceMore' ),
 		'expect'  => '/testTheFinishedContentOfAnObjectGoesThroughTheCredentialCheckOnceMore/',
+	),
+	array(
+		'id'      => 'struktur/c4-kinds',
+		'clause'  => 'part_orders_of(): the kinds of the journals of the steps that go back (C4)',
+		'file'    => $rv,
+		'search'  => "\t\t\t\$kinds[] = is_array( \$object ) && isset( \$object['kind'] ) && is_string( \$object['kind'] ) && '' !== \$object['kind'] ? \$object['kind'] : 'post';",
+		'replace' => "\t\t\t\$kinds[] = 'post';",
+		'run'     => $unit( 'SyncRunTest', 'testTheOrderOfThePartsOfEachKindIsWhatTheTokensCover' ),
+		'expect'  => '/testTheOrderOfThePartsOfEachKindIsWhatTheTokensCover/',
 	),
 	array(
 		'id'      => 'struktur/c2-part-order',
