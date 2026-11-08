@@ -90,6 +90,13 @@ final class AB_MCP_Sync_Post_Writer {
 	/** The post types this version writes. */
 	const TYPES = array( 'post', 'page' );
 
+	/**
+	 * The other core types of the kind post, which follow with branch 9b of
+	 * Z8 (heikel/z8-vorlagen, right after branch 9; the decision of Thomas
+	 * of 08.11.2026): locked with post:engine_type until then, they alone.
+	 */
+	const TYPES_BRANCH_9B = array( 'wp_block', 'wp_template', 'wp_template_part', 'wp_global_styles', 'wp_navigation' );
+
 	/** The taxonomies this version writes the terms of. */
 	const TAXONOMIES = array( 'category', 'post_tag', 'post_format' );
 
@@ -171,7 +178,10 @@ final class AB_MCP_Sync_Post_Writer {
 			);
 		}
 		if ( ! in_array( $type, self::TYPES, true ) ) {
-			return self::locked( 'post:engine_type', sprintf( 'post type %s', $type ) );
+			// The five core types of branch 9b (post:engine_type); a type of
+			// another kind (an attachment, a menu item, the additional CSS) is
+			// never written by the engine of the kind post (post:other_kind).
+			return self::locked( in_array( $type, self::TYPES_BRANCH_9B, true ) ? 'post:engine_type' : 'post:other_kind', sprintf( 'post type %s', $type ) );
 		}
 		// What the canonical form of the staging object found (a page builder
 		// that is not released, decision 31; a value it cannot read; a
@@ -181,7 +191,7 @@ final class AB_MCP_Sync_Post_Writer {
 			return $held;
 		}
 		if ( ! isset( $line['content']['row'], $line['content']['meta'], $line['content']['terms'], $line['form'] ) || ! is_array( $line['form'] ) ) {
-			return self::locked( 'post:engine_type', 'the package carries no content of the object (a row of it could not be read on the staging site)' );
+			return self::locked( 'post:content_missing', 'the package carries no content of the object (a row of it could not be read on the staging site)' );
 		}
 		$row = array();
 		foreach ( $line['content']['row'] as $column => $value ) {
@@ -189,7 +199,7 @@ final class AB_MCP_Sync_Post_Writer {
 		}
 		foreach ( self::WRITTEN_COLUMNS as $column ) {
 			if ( ! array_key_exists( $column, $row ) ) {
-				return self::locked( 'post:engine_type', sprintf( 'the package names no column %s', $column ) );
+				return self::locked( 'post:content_missing', sprintf( 'the package names no column %s', $column ) );
 			}
 		}
 		if ( '' !== $row['post_password'] ) {
@@ -197,7 +207,11 @@ final class AB_MCP_Sync_Post_Writer {
 		}
 		$status = 'create' === $item['op'] || 'update' === $item['op'] ? $row['post_status'] : '';
 		if ( ! in_array( $status, self::STATUSES, true ) ) {
-			return self::locked( 'post:engine_type', sprintf( 'post status %s', $status ) );
+			// The trash is a deletion (post:in_trash, with the deletions); an
+			// auto-draft is no content, never taken over (post:auto_draft);
+			// any other status waits for its field rule (post:status_rule).
+			$key = 'trash' === $status ? 'post:in_trash' : ( 'auto-draft' === $status ? 'post:auto_draft' : 'post:status_rule' );
+			return self::locked( $key, sprintf( 'post status %s', '' === $status ? '(none)' : $status ) );
 		}
 		if ( ! empty( $item['as_draft'] ) ) {
 			$status = 'draft';
@@ -392,7 +406,7 @@ final class AB_MCP_Sync_Post_Writer {
 		$type = $prepared['type'];
 		$pto  = get_post_type_object( $type );
 		if ( ! is_object( $pto ) || ! isset( $pto->cap ) ) {
-			return self::locked( 'post:engine_type', sprintf( 'the post type %s is not registered on this site', $type ) );
+			return self::locked( 'post:type_unregistered', sprintf( 'the post type %s is not registered on this site', $type ) );
 		}
 		$live = null;
 		if ( null !== $live_id ) {
@@ -2190,7 +2204,7 @@ final class AB_MCP_Sync_Post_Writer {
 				);
 			}
 		}
-		return array() === $locks ? null : self::locked( 'post:engine_type', 'the object of the staging site carries a lock this version does not read' );
+		return array() === $locks ? null : self::locked( 'post:lock_unread', 'the object of the staging site carries a lock this version does not read' );
 	}
 
 	/**
@@ -2219,7 +2233,7 @@ final class AB_MCP_Sync_Post_Writer {
 				);
 			}
 		}
-		return self::locked( 'post:engine_type', sprintf( '%s carries a lock this version does not read', (string) $what ) );
+		return self::locked( 'post:lock_unread', sprintf( '%s carries a lock this version does not read', (string) $what ) );
 	}
 
 	/**

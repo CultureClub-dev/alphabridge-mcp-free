@@ -237,7 +237,7 @@ e('post-type-lock', 'target_of(): a type the table locks (a changeset, decision 
 e('post-line-lock', 'target_of(): what the canonical form of the staging object locks (a page builder, decision 31) is refused with that lock', PW,
   "\t\t$held = self::line_lock( $line );\n\t\tif ( null !== $held ) {", "\t\t$held = self::line_lock( $line );\n\t\tif ( false ) {", 'unit', P_TYPES)
 e('post-line-lock-unread', 'line_lock(): a lock this version does not read refuses as well (fail closed)', PW,
-  "\t\treturn array() === $locks ? null : self::locked( 'post:engine_type', 'the object of the staging site carries a lock this version does not read' );", "\t\treturn null;", 'unit', P_TYPES)
+  "\t\treturn array() === $locks ? null : self::locked( 'post:lock_unread', 'the object of the staging site carries a lock this version does not read' );", "\t\treturn null;", 'unit', P_TYPES)
 e('post-live-lock', 'live_rule(): what the canonical form of the post here locks is refused', PW,
   "\t\t$held = self::read_lock( self::live_read( (int) $live_id, $source ), 'the post of this site' );\n\t\tif ( null !== $held ) {", "\t\t$held = self::read_lock( self::live_read( (int) $live_id, $source ), 'the post of this site' );\n\t\tif ( false ) {", 'unit', P_TYPES)
 e('post-target-skip', 'target_of(): what the comparison leaves out, and a credential, is no part of the target', PW,
@@ -342,6 +342,24 @@ e('revert-last-first', 'plan(): the way back goes from the last step to the firs
   "\t\t$items = array_reverse( $items );\n", '', 'it', C_B4)
 e('post-slug-trashed-draft', 'slug_refusal(): a post in the trash with the slug is renamed for a draft as well, so a draft asks it too (Codex round 1, C)', PW,
   "\t\t$trashed = self::trashed_holder( $slug, $id );\n\t\tif ( null === $trashed || 0 !== $trashed ) {", "\t\t$trashed = in_array( $status, $drafts, true ) ? 0 : self::trashed_holder( $slug, $id );\n\t\tif ( null === $trashed || 0 !== $trashed ) {", 'unit', P_SLUG)
+
+# --------------------------------------------- the locks of the kind post after the decision on branch 9b
+e('post-type-branch-9b', 'target_of(): post:engine_type holds the five core types of branch 9b of Z8, they alone', PW,
+  "\t\t\treturn self::locked( in_array( $type, self::TYPES_BRANCH_9B, true ) ? 'post:engine_type' : 'post:other_kind', sprintf( 'post type %s', $type ) );", "\t\t\treturn self::locked( 'post:engine_type', sprintf( 'post type %s', $type ) );", 'unit', P_LOCKS)
+e('post-type-other-kind', 'target_of(): a type of another kind is never written by the engine of the kind post (post:other_kind)', PW,
+  "\t\t\treturn self::locked( in_array( $type, self::TYPES_BRANCH_9B, true ) ? 'post:engine_type' : 'post:other_kind', sprintf( 'post type %s', $type ) );", "\t\t\treturn self::locked( 'post:other_kind', sprintf( 'post type %s', $type ) );", 'unit', P_LOCKS)
+e('post-status-trash', 'target_of(): the trash is a deletion, with the deletions (post:in_trash, Z8d)', PW,
+  "$key = 'trash' === $status ? 'post:in_trash' :", "$key = 'trash' === $status ? 'post:status_rule' :", 'unit', P_LOCKS)
+e('post-status-auto-draft', 'target_of(): an auto-draft is never taken over (post:auto_draft)', PW,
+  "( 'auto-draft' === $status ? 'post:auto_draft' : 'post:status_rule' )", "( 'auto-draft' === $status ? 'post:status_rule' : 'post:status_rule' )", 'unit', P_LOCKS)
+e('post-status-rule', 'target_of(): any other status waits for its field rule (post:status_rule, Z8d)', PW,
+  "( 'auto-draft' === $status ? 'post:auto_draft' : 'post:status_rule' )", "( 'auto-draft' === $status ? 'post:auto_draft' : 'post:auto_draft' )", 'unit', P_LOCKS)
+e('post-content-missing', 'target_of(): a package without the content of the object writes nothing (post:content_missing)', PW,
+  "\t\t\treturn self::locked( 'post:content_missing', 'the package carries no content of the object (a row of it could not be read on the staging site)' );", "\t\t\treturn self::locked( 'post:lock_unread', 'the package carries no content of the object (a row of it could not be read on the staging site)' );", 'unit', P_LOCKS)
+e('post-type-unregistered', 'precheck(): a post type this site does not register is locked before anything is written (post:type_unregistered)', PW,
+  "\t\tif ( ! is_object( $pto ) || ! isset( $pto->cap ) ) {\n\t\t\treturn self::locked( 'post:type_unregistered',", "\t\tif ( false ) {\n\t\t\treturn self::locked( 'post:type_unregistered',", 'unit', P_LOCKS)
+e('post-read-lock-unread', 'read_lock(): a lock of the post of this site this version does not read locks as well (post:lock_unread)', PW,
+  "\t\treturn self::locked( 'post:lock_unread', sprintf( '%s carries a lock this version does not read', (string) $what ) );", "\t\treturn null;", 'unit', P_TYPES)
 
 def test_of(expect):
     return expect.split(' with data set "', 1)[0]

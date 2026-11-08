@@ -345,8 +345,38 @@ return array(
 			'plan' => 'Entscheid 27 (Typ und Regel je Name)',
 		),
 		'post:engine_type'             => array(
-			'why'  => 'Branches 8 and 9 write posts and pages end to end; the other core types (templates, template parts, global styles, navigations, reusable blocks) follow with branch 9b (heikel/z8-vorlagen, right after branch 9 is merged; GRENZEN-INHALTE.md), a status WordPress does not store as it is (trash, auto-draft) is no target, and a package without content writes nothing (fail closed).',
-			'plan' => 'Zweigtabelle Zeile 540 (Zweig 9); Entscheide 21 und 22; Entscheid von Thomas «A: eigener Zweig 9b» (08.11.2026)',
+			'why'  => 'Branches 8 and 9 write posts and pages end to end; the other core types of the kind post (templates, template parts, global styles, navigations, reusable blocks) follow with branch 9b of Z8 (heikel/z8-vorlagen, right after branch 9 is merged; GRENZEN-INHALTE.md). This lock holds these five types and nothing else.',
+			'plan' => 'Zweigtabelle Zeile 540 (Zweig 9); Entscheid von Thomas «A: eigener Zweig 9b» (08.11.2026)',
+		),
+		'post:other_kind'              => array(
+			'why'  => 'An attachment, a menu item and the additional CSS are rows of wp_posts of other kinds (AB_MCP_Sync_Kinds::OWNERSHIP); their engines (branches 10 and 11) write them with their files and fields, the engine of the kind post never does (fail closed where a plan names one with the kind post).',
+			'plan' => 'Entscheid 25 (Zuständigkeit je Objekttyp); Zweigtabelle Zeilen 10 und 11',
+		),
+		'post:in_trash'                => array(
+			'why'  => 'A post in the trash is a deletion on its site (wp_trash_post(), _wp_trash_meta_*, the __trashed slug); writing the status would delete here, and the deletions follow with their way back in Z8d, as *:delete says. The report shows the object as deleted.',
+			'core' => array( array( 'wp-includes/post.php', 4084, 'function wp_trash_post( $post_id = 0 ) {' ) ),
+			'plan' => 'Entscheid 22 (Löschungen)',
+		),
+		'post:auto_draft'              => array(
+			'why'  => 'An auto-draft is the empty post WordPress makes when the editor opens, removed by wp_delete_auto_drafts() after seven days: no content of a person, never compared by the report and never taken over by any stage.',
+			'core' => array( array( 'wp-includes/post.php', 8381, 'function wp_delete_auto_drafts() {' ) ),
+			'plan' => 'Entscheid 22; Bericht: auto-draft not_compared',
+		),
+		'post:status_rule'             => array(
+			'why'  => 'The engine writes the statuses of the core a post or page can be saved in (publish, future, draft, pending, private); a status a plugin registers (register_post_status()) has meaning only for its plugin and waits for its classification, as a taxonomy of a plugin does.',
+			'plan' => 'Entscheid 25; Entscheid 21 (Kern-Folgen)',
+		),
+		'post:content_missing'         => array(
+			'why'  => 'A line of a package without the rows of its object (a row could not be read on the staging site) cannot say what to write; nothing of it is written, fail closed, until a package carries the object whole.',
+			'plan' => 'Entscheid 17 (Grenze, Sollwert aus dem Paket)',
+		),
+		'post:lock_unread'             => array(
+			'why'  => 'A lock of the canonical form this version does not read may stand for anything the other version holds back; fail closed until both sites run the same version.',
+			'plan' => 'Entscheid 31; Lehre aus Zweig 8 (records()/decode(): was nicht gelesen wird, sperrt)',
+		),
+		'post:type_unregistered'       => array(
+			'why'  => 'wp_insert_post() of a type not registered here stores a post no screen of this site shows and no capability guards (get_post_type_object() is null); the rights cannot be asked, so nothing is written.',
+			'plan' => 'Entscheid 28 (Rechte über map_meta_cap)',
 		),
 		'post:meta_rule'               => array(
 			'why'  => 'The metadata API stores maybe_serialize() of what it is handed: a serialized scalar would be serialized twice, a serialized value whose bytes serialize() does not give back would read other than its target. Every other key goes by its field rule (decision 28).',

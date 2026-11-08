@@ -903,11 +903,28 @@ final class SyncRunTest extends TestCase {
 
 	public function testWhatTheEngineOfThePostDoesNotCarryToItsEndIsRefusedWithItsLock(): void {
 		$ctx = self::ctx( array( 'post' => array( 7 => 70 ), 'term' => array( 3 => 30 ) ) );
-		self::assertSame( 'post:engine_type', self::lock_of( AB_MCP_Sync_Post_Writer::target_of( self::line( array( 'post_type' => 'wp_block' ), array(), array(), array( 'identity' => array( 'post_type' => 'wp_block', 'post_name' => 'b', 'theme' => '' ) ) ), self::item(), $ctx ) ) );
-		self::assertSame( 'post:engine_type', self::lock_of( AB_MCP_Sync_Post_Writer::target_of( self::line( array(), array(), array(), array( 'content' => array() ) ), self::item(), $ctx ) ), 'No content in the package.' );
+		// The five core types of branch 9b of Z8, they alone under post:engine_type.
+		foreach ( AB_MCP_Sync_Post_Writer::TYPES_BRANCH_9B as $type ) {
+			$held = AB_MCP_Sync_Post_Writer::target_of( self::line( array( 'post_type' => $type ), array(), array(), array( 'identity' => array( 'post_type' => $type, 'post_name' => 'b', 'theme' => '' ) ) ), self::item(), $ctx );
+			self::assertSame( 'post:engine_type', self::lock_of( $held ), $type );
+			self::assertStringContainsString( 'from Z8)', $held->get_error_message() );
+			self::assertStringContainsString( 'branch 9b of Z8', $held->get_error_message() );
+		}
+		self::assertSame( array( 'wp_block', 'wp_template', 'wp_template_part', 'wp_global_styles', 'wp_navigation' ), AB_MCP_Sync_Post_Writer::TYPES_BRANCH_9B );
+		// A type of another kind: never by the engine of the kind post.
+		self::assertSame( 'post:other_kind', self::lock_of( AB_MCP_Sync_Post_Writer::target_of( self::line( array( 'post_type' => 'attachment' ), array(), array(), array( 'identity' => array( 'post_type' => 'attachment', 'post_name' => 'a', 'theme' => '' ) ) ), self::item(), $ctx ) ) );
+		self::assertSame( 'post:content_missing', self::lock_of( AB_MCP_Sync_Post_Writer::target_of( self::line( array(), array(), array(), array( 'content' => array() ) ), self::item(), $ctx ) ), 'No content in the package.' );
 		self::assertSame( 'post:password_protected', self::lock_of( AB_MCP_Sync_Post_Writer::target_of( self::line( array( 'post_password' => 'x' ) ), self::item(), $ctx ) ) );
-		self::assertSame( 'post:engine_type', self::lock_of( AB_MCP_Sync_Post_Writer::target_of( self::line( array( 'post_status' => 'trash' ) ), self::item(), $ctx ) ), 'The trash is a deletion.' );
-		self::assertSame( 'post:engine_type', self::lock_of( AB_MCP_Sync_Post_Writer::target_of( self::line( array( 'post_status' => 'auto-draft' ) ), self::item(), $ctx ) ) );
+		$trash = AB_MCP_Sync_Post_Writer::target_of( self::line( array( 'post_status' => 'trash' ) ), self::item(), $ctx );
+		self::assertSame( 'post:in_trash', self::lock_of( $trash ), 'The trash is a deletion.' );
+		self::assertStringContainsString( 'from Z8d)', $trash->get_error_message() );
+		self::assertSame( 'post:auto_draft', self::lock_of( AB_MCP_Sync_Post_Writer::target_of( self::line( array( 'post_status' => 'auto-draft' ) ), self::item(), $ctx ) ), 'No content, never taken over.' );
+		self::assertSame( 'post:status_rule', self::lock_of( AB_MCP_Sync_Post_Writer::target_of( self::line( array( 'post_status' => 'wc-pending' ) ), self::item(), $ctx ) ), 'A status of a plugin.' );
+		// A type this site does not register: its rights cannot be asked.
+		$unregistered         = AB_MCP_Sync_Post_Writer::target_of( self::line(), self::item( 'create' ), $ctx );
+		self::assertIsArray( $unregistered, is_wp_error( $unregistered ) ? $unregistered->get_error_message() : '' );
+		$unregistered['type'] = 'gone_type';
+		self::assertSame( 'post:type_unregistered', self::lock_of( AB_MCP_Sync_Post_Writer::precheck( $unregistered, null, 1800000000 ) ) );
 		$parent = AB_MCP_Sync_Post_Writer::target_of( self::line( array( 'post_parent' => '8' ) ), self::item(), $ctx );
 		self::assertSame( 'post:reference_unmapped', self::lock_of( $parent ), 'A parent without a pair.' );
 		self::assertSame( 'post_parent 8 of the staging site', $parent->get_error_data()['lock']['at'], 'Named as the parent, not caught later as a missing reference of the text.' );
@@ -945,7 +962,7 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( array( 'key' => 'post:slug_collision', 'stage' => 'Z8', 'at' => 'slug hello' ), array_intersect_key( $locked->get_error_data()['lock'], array_flip( array( 'key', 'stage', 'at' ) ) ) );
 		self::assertStringContainsString( 'Not written (post:slug_collision, from Z8)', $locked->get_error_message() );
 		self::assertStringContainsString( 'wp-admin', $locked->get_error_message() );
-		foreach ( array( 'engine_type', 'meta_rule', 'taxonomy_rule', 'slug_collision', 'sanitizer', 'menu_automatic', 'author_unknown', 'status_date', 'reference_unmapped', 'page_template', 'thumbnail' ) as $op ) {
+		foreach ( array( 'engine_type', 'other_kind', 'in_trash', 'auto_draft', 'status_rule', 'content_missing', 'lock_unread', 'type_unregistered', 'meta_rule', 'taxonomy_rule', 'slug_collision', 'sanitizer', 'menu_automatic', 'author_unknown', 'status_date', 'reference_unmapped', 'page_template', 'thumbnail' ) as $op ) {
 			self::assertIsArray( AB_MCP_Sync_Kinds::lock( 'post', $op ), $op . ' is a lock of the table.' );
 		}
 	}
@@ -2455,7 +2472,8 @@ final class SyncRunTest extends TestCase {
 		$locked  = AB_MCP_Sync_Post_Writer::target_of( $builder, self::item(), $ctx );
 		self::assertSame( 'post:builder', self::lock_of( $locked ) );
 		self::assertStringContainsString( 'from Z8c', $locked->get_error_message() );
-		self::assertSame( 'post:engine_type', self::lock_of( AB_MCP_Sync_Post_Writer::target_of( self::line( array(), array(), array(), array( 'locks' => array( 'x' ) ) ), self::item(), $ctx ) ), 'A lock this version does not read: fail closed.' );
+		self::assertSame( 'post:lock_unread', self::lock_of( AB_MCP_Sync_Post_Writer::target_of( self::line( array(), array(), array(), array( 'locks' => array( 'x' ) ) ), self::item(), $ctx ) ), 'A lock this version does not read: fail closed.' );
+		self::assertSame( 'post:lock_unread', self::lock_of( AB_MCP_Sync_Post_Writer::read_lock( array( 'locks' => array( 'x' ) ), 'the post of this site' ) ), 'The same on the side of this site.' );
 		// The same on the side of this site (live_rule()): the canonical form of the post here.
 		$db                          = self::post_rows( 'News' );
 		$db->rows[12]['post_content'] = '[vc_row][vc_column]Hi[/vc_column][/vc_row]';

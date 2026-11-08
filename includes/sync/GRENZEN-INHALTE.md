@@ -148,21 +148,49 @@ nennt ihre Meldung den Weg.
   WPBakery gesperrt, Kadence übernommen: Prüffall
   `testAWpBakeryPageIsLockedAndAKadencePageGoesOver`.
 
-## Post: weitere Kern-Typen (bis Zweig 9b)
+## Post: weitere Kern-Typen (bis Zweig 9b) und die übrigen Sperren der Post-Art
 
 - Vorlagen, Vorlagenteile, globale Stile, Navigationen und
   wiederverwendbare Blöcke (`wp_template`, `wp_template_part`,
-  `wp_global_styles`, `wp_navigation`, `wp_block`) bleiben in Zweig 9
-  gesperrt (`post:engine_type`, Stufe Z9b): Zweig 9b
-  (`heikel/z8-vorlagen`) gibt sie direkt nach dem Merge von Zweig 9 frei
-  (Entscheid von Thomas «A: eigener Zweig 9b», 08.11.2026). Entscheid 25
-  nennt sie bei der Post-Art, der Normalfall des Auftrags nicht. Ihre
-  Identität hängt am Theme (`wp_theme`, `wp_template_part_area`), ihre
-  Eindeutigkeit des Slugs am aktiven Stylesheet
-  (`wp_filter_wp_template_unique_post_slug()`). Dieselbe Sperre trägt, was
-  auch Zweig 9b nicht schreibt: ein Status, den WordPress nicht so
-  speichert (Papierkorb, `auto-draft`), ein Paket ohne Inhalt des Objekts
-  und eine Sperre, die diese Version nicht liest (fail closed).
+  `wp_global_styles`, `wp_navigation`, `wp_block`;
+  `AB_MCP_Sync_Post_Writer::TYPES_BRANCH_9B`) bleiben in Zweig 9 gesperrt
+  (`post:engine_type`, Etappe Z8): Zweig 9b von Z8 (`heikel/z8-vorlagen`)
+  gibt sie direkt nach dem Merge von Zweig 9 frei (Entscheid von Thomas
+  «A: eigener Zweig 9b», 08.11.2026). Das Feld der Etappe kennt nur
+  Etappen; der Zweig steht im Grund («follow with branch 9b of Z8»).
+  `post:engine_type` hält nur diese fünf Typen. Entscheid 25 nennt sie bei
+  der Post-Art, der Normalfall des Auftrags nicht. Ihre Identität hängt am
+  Theme (`wp_theme`, `wp_template_part_area`), ihre Eindeutigkeit des Slugs
+  am aktiven Stylesheet (`wp_filter_wp_template_unique_post_slug()`).
+- Die übrigen Lagen, die bis 08.11.2026 unter `post:engine_type` fielen,
+  haben je einen eigenen Schlüssel; keine ist dabei freigegeben (Prüffälle
+  `testWhatTheEngineOfThePostDoesNotCarryToItsEndIsRefusedWithItsLock`,
+  `testATypeTheTableLocksAndWhatTheCanonicalFormLocksAreRefusedWithTheirOwnLock`,
+  je Eintrag `SyncKindsTest::testEachLockedOperationNamesItsStage`):
+  - `post:in_trash` (Z8d): ein Staging-Objekt im Papierkorb ist dort eine
+    Löschung; kein Status steht für eine Löschung, die Löschungen kommen mit
+    ihrem Rückweg in Z8d (wie `*:delete`). Der Bericht zeigt es als gelöscht.
+  - `post:auto_draft` (Z8, nie): ein Auto-Entwurf ist der leere Post, den
+    WordPress beim Öffnen des Editors anlegt und nach sieben Tagen löscht
+    (`wp_delete_auto_drafts()`); kein Inhalt einer Person, vom Bericht nie
+    verglichen, von keiner Etappe übernommen. Das Feld kennt kein «nie»: Z8
+    mit dem Grund «never taken over, by no stage», wie die Regeln von Z8, die
+    eine Person auflöst.
+  - `post:status_rule` (Z8d): ein anderer Status als `publish`, `future`,
+    `draft`, `pending`, `private` (ein Status eines Plugins) wartet auf
+    seine Einordnung, wie eine Taxonomie eines Plugins.
+  - `post:content_missing` (Z8): ein Paket ohne die Zeilen des Objekts (eine
+    Zeile war auf Staging nicht lesbar) sagt nicht, was zu schreiben ist;
+    der Weg ist ein neues Paket, keine Etappe.
+  - `post:lock_unread` (Z8): eine Sperre der kanonischen Form, die diese
+    Version nicht liest (auf Staging oder hier), fail closed; der Weg ist
+    dieselbe Version auf beiden Sites.
+  - `post:type_unregistered` (Z8): ein Typ, den diese Site nicht
+    registriert; seine Rechte lassen sich nicht fragen. Der Weg: Plugin oder
+    Theme hier aktivieren.
+  - `post:other_kind` (Z8): ein Typ einer anderen Art (Anhang, Menüeintrag,
+    zusätzliches CSS) schreibt nie die Engine der Post-Art, sondern die
+    seiner Art (Zweige 10 und 11).
 
 ## Term (Entscheid 25, A4)
 

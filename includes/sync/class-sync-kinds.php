@@ -307,8 +307,36 @@ final class AB_MCP_Sync_Kinds {
 		// end (branches 8 and 9; AB_MCP_Sync_Post_Writer, AB_MCP_Sync_Term_Writer),
 		// and the engines that follow for the other kinds.
 		'post:engine_type'             => array(
-			'stage'  => 'Z9b',
-			'reason' => 'The engine of the kind post writes posts and pages in a status it can store (not the trash, no auto-draft); the other core types (templates, template parts, global styles, navigations, reusable blocks) follow with branch 9b, and a package without the content of the object is not written.',
+			'stage'  => 'Z8',
+			'reason' => 'The other core types of the kind post (templates, template parts, global styles, navigations, reusable blocks) follow with branch 9b of Z8, right after branch 9; until then the engine of the kind post writes posts and pages.',
+		),
+		'post:other_kind'              => array(
+			'stage'  => 'Z8',
+			'reason' => 'A post type of another kind (an attachment, a menu item, the additional CSS) is written by the engine of its own kind, never by the engine of the kind post: plan it again from a fresh report.',
+		),
+		'post:in_trash'                => array(
+			'stage'  => 'Z8d',
+			'reason' => 'The staging object lies in the trash, a deletion on the staging site; no status stands in for a deletion, and deletions follow with their way back (as *:delete).',
+		),
+		'post:auto_draft'              => array(
+			'stage'  => 'Z8',
+			'reason' => 'An auto-draft (WordPress made it for the editor, nobody saved it, WordPress removes it after seven days) has no content: it is never taken over, by no stage.',
+		),
+		'post:status_rule'             => array(
+			'stage'  => 'Z8d',
+			'reason' => 'A status the engine of the kind post does not write (a status of a plugin, or one WordPress gives no post or page) waits for its field rule; the engine writes publish, future, draft, pending and private.',
+		),
+		'post:content_missing'         => array(
+			'stage'  => 'Z8',
+			'reason' => 'The package carries no whole content of the object (a row of it could not be read on the staging site), so nothing of it is written: make the inventory and the package again on the staging site.',
+		),
+		'post:lock_unread'             => array(
+			'stage'  => 'Z8',
+			'reason' => 'The canonical form of the object carries a lock this version does not read (the other site runs another version of AlphaBridge), so nothing of it is written: bring both sites to the same version.',
+		),
+		'post:type_unregistered'       => array(
+			'stage'  => 'Z8',
+			'reason' => 'The post type of the object is not registered on this site (the plugin or theme that registers it is not active here): activate it here, or take the object over by hand.',
 		),
 		'post:meta_rule'               => array(
 			'stage'  => 'Z8d',
