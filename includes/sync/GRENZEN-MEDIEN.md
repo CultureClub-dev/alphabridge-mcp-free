@@ -177,18 +177,19 @@ entsteht, nennt ihre Meldung den Weg.
   Menü- und Medien-Art in ihrer Art»). Jeder andere Schlüssel folgt der
   Regel der Post-Art.
 - Der Rückweg fragt dieselben Rechte und dieselben Prüfungen der Dateien
-  wie der Hinweg (`restore_right()`, `restore_files()`; Codex-Runde 1, A4):
-  jede Datei, die der zurückzusetzende Wert eines der drei Schlüssel nennt
-  (`_wp_attached_file` die Hauptdatei, `_wp_attachment_metadata` die
-  Grössen und Begleitdateien, `_wp_attachment_backup_sizes` die
-  Sicherungen; gerechnet wie der Kern aus den gesicherten Werten), muss
+  wie der Hinweg (`restore_right()`, `restore_files()`; Codex-Runde 1, A4),
+  und die drei Schlüssel, die Dateien nennen (`_wp_attached_file`,
+  `_wp_attachment_metadata`, `_wp_attachment_backup_sizes`), gehen nur
+  gemeinsam zurück (`together()`; Codex-Runde 2, A4): lässt der Rückweg
+  einen davon stehen, weil er nicht mehr der eigene des Laufs ist, oder
+  verweigert die Prüfung ihn, bleiben alle drei stehen (`left`, mit Grund).
+  So prüft `restore_files()` genau die Liste, die danach gilt: jede Datei,
+  die die gesicherten Werte zusammen nennen (gerechnet wie der Kern), muss
   eine einfache Datei unter den Uploads sein, ohne Link auf dem Weg, von
   keinem anderen Anhang der Site genannt, nach ihrem Inhalt ein Typ, den
   das Konto hochladen darf und den ihr Name sagt, die Hauptdatei der Typ
-  des Anhangs. Sonst bleibt der Teil mit seinem alten Wert stehen (`left`,
-  mit Grund), die übrigen Teile gehen zurück. Ein Wert, der keine Datei
-  nennt (der Schlüssel fehlte vorher), geht zurück. Auf dem Rückweg wird
-  keine Datei gelegt.
+  des Anhangs. Hatte der Anhang vorher keinen der drei, geht ihr Entfernen
+  zurück. Auf dem Rückweg wird keine Datei gelegt.
 - Unmittelbar vor jeder Datei, die ein Schritt legt, fragt er die Rechte
   noch einmal wie die Vorprüfung (Codex-Runde 1, A5): `upload_files` (das
   `create_posts` der Art) für einen neuen Anhang, `edit_post` und
@@ -214,7 +215,10 @@ entsteht, nennt ihre Meldung den Weg.
   Haken oder eine andere Hand änderte, auch nach einer Anfrage, die nach
   dem Zeilenaufruf endete: nichts geht zurück) und nach jedem
   zurückgesetzten Teil (ändert ein Haken dabei eine Datei, hält der Rückweg
-  für das Objekt an, die übrigen Teile bleiben). Prüffall
+  für das Objekt an, die übrigen Teile bleiben), und unmittelbar vor jedem
+  Teil, der zurückgeht (Codex-Runde 2, A3: ein Filter der Prüfung des
+  Rückwegs, der eine Datei ändert, hält ihn an, bevor ein weiterer Teil
+  läuft). Prüffall
   `testAFileAHookChangesAsTheStepWritesOrPutsBackDeviatesTheAttachmentAndStopsItsWayBack`.
 - Ein neuer Anhang entsteht mit `wp_insert_attachment()` und seiner Datei,
   wie ein Upload ihn macht (`_wp_attached_file` mit der Zeile, die `guid`

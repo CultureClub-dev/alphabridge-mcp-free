@@ -1889,6 +1889,17 @@ final class AB_MCP_Sync_Engine {
 				$stopped = sprintf( 'the file %s of the attachment changed since the step read it last (a hook of this site, or another hand since)', $moved );
 			}
 		}
+		// The parts that go back only together, all or none (an attachment:
+		// the three keys that name its files; Codex round 2 of branch 10, A4),
+		// decided once, as the first of them comes up.
+		$groups   = method_exists( $w, 'together' ) ? $w::together() : array();
+		$group_of = array();
+		foreach ( $groups as $g => $members ) {
+			foreach ( $members as $member ) {
+				$group_of[ (string) $member ] = $g;
+			}
+		}
+		$group_why = array();
 		foreach ( $order as $i ) {
 			$name    = (string) $parts[ $i ]['part'];
 			$now     = null === $seen ? null : $w::part_hash( $seen, $name );
@@ -1908,6 +1919,18 @@ final class AB_MCP_Sync_Engine {
 					$decided['why'] .= sprintf( ' The way back stopped for this object: %s.', $stopped );
 				}
 			}
+			if ( 'put_back' === $decided['state'] && isset( $group_of[ $name ] ) ) {
+				$g = $group_of[ $name ];
+				if ( ! array_key_exists( $g, $group_why ) ) {
+					$group_why[ $g ] = self::group_refusal( $parts, $groups[ $g ], $seen, $backup, $live_id, $w );
+				}
+				if ( null !== $group_why[ $g ] ) {
+					$decided = array(
+						'state' => 'left',
+						'why'   => sprintf( 'Not put back: the parts %1$s go back only together, and %2$s; so the part %3$s is left as it is, its value before stands beside it (value_before). Set them by hand in wp-admin.', implode( ', ', $groups[ $g ] ), $group_why[ $g ], $name ),
+					);
+				}
+			}
 			if ( 'put_back' === $decided['state'] ) {
 				// The rights at the object, as the forward write asks them
 				// (decision 28; GitHub Codex round 2 of branch 8, P2): the
@@ -1919,6 +1942,23 @@ final class AB_MCP_Sync_Engine {
 					$decided = array(
 						'state' => 'left',
 						'why'   => sprintf( 'Not put back: this account may not %1$s on this site, so the part %2$s is left as it is; its value before stands beside it (value_before). Set it by hand in wp-admin with an account that may.', $may, $name ),
+					);
+				}
+			}
+			if ( 'put_back' === $decided['state'] && is_array( $files_seen ) ) {
+				// The files right before the part goes back (Codex round 2 of
+				// branch 10, A3): a file that changed since the last reading
+				// (a filter that ran as the way back asked a right or a type, or
+				// another hand) stops the way back for the object before any
+				// further part goes back (decision A).
+				$files_now = $w::files_state( $journal );
+				$files_now = is_array( $files_now ) ? $files_now : array();
+				$moved     = self::changed_file( $files_seen, $files_now );
+				if ( null !== $moved ) {
+					$stopped = sprintf( 'the file %1$s of the attachment changed before the part %2$s went back (a hook of this site as the way back asked a right or a type, or another hand)', $moved, $name );
+					$decided = array(
+						'state' => 'left',
+						'why'   => sprintf( 'The way back stopped for this object: %s; the part %s is left as it is, check it by hand.', $stopped, $name ),
 					);
 				}
 			}
@@ -2794,6 +2834,41 @@ final class AB_MCP_Sync_Engine {
 				continue;
 			}
 			return $name;
+		}
+		return null;
+	}
+
+	/**
+	 * Why a group of parts that go back only together may not (together()):
+	 * a member of the journal that the way back leaves by its rule (decide():
+	 * not the step's own, changed since, never read back) or that this
+	 * account may not put back (restore_right()); null where every member
+	 * goes back or is as the backup already.
+	 *
+	 * @param array      $parts   The parts of the journal.
+	 * @param string[]   $members The group.
+	 * @param array|null $seen    current() as read now.
+	 * @param array      $backup  current() of the backup.
+	 * @param int        $live_id The object.
+	 * @param string     $w       The write side of the kind.
+	 * @return string|null Why not, as a clause.
+	 */
+	private static function group_refusal( array $parts, array $members, $seen, array $backup, $live_id, $w ) {
+		foreach ( $parts as $part ) {
+			$member = is_string( $part['part'] ) ? $part['part'] : '';
+			if ( ! in_array( $member, $members, true ) ) {
+				continue;
+			}
+			$decided = self::decide( $part, null === $seen ? null : $w::part_hash( $seen, $member ), (string) $w::part_hash( $backup, $member ) );
+			if ( 'left' === $decided['state'] ) {
+				return sprintf( 'the part %1$s does not go back (%2$s)', $member, rtrim( (string) $decided['why'], '.' ) );
+			}
+			if ( 'put_back' === $decided['state'] ) {
+				$may = $w::restore_right( $member, $live_id, $backup, is_array( $seen ) ? $seen : array() );
+				if ( true !== $may ) {
+					return sprintf( 'this account may not %1$s on this site', $may );
+				}
+			}
 		}
 		return null;
 	}

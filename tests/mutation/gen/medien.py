@@ -237,6 +237,13 @@ e('engine-files-back-put', 'put_back(): a put back that changed a file stops the
   "\t\t\t\t\tif ( null === $stopped && null !== $moved ) {", "\t\t\t\t\tif ( false ) {", 'it', FILEHOOK)
 e('writer-files-state', 'files_state(): a file by its SHA-256 and size (Codex round 1, A3)', AW,
   "\t\t\t\t$state = is_string( $sha ) && false !== $size ? $sha . ':' . (int) $size : 'unreadable';", "\t\t\t\t$state = 'file';", 'it', FILEHOOK)
+e('engine-group-refusal', 'put_back(): a group refused leaves every member (Codex round 2, A4)', EN,
+  "\t\t\t\tif ( null !== $group_why[ $g ] ) {", "\t\t\t\tif ( false ) {", 'it', FILEHOOK)
+e('engine-group-left', 'group_refusal(): a member the way back leaves by its rule refuses the group', EN,
+  "\t\t\tif ( 'left' === $decided['state'] ) {\n\t\t\t\treturn sprintf( 'the part %1$s does not go back (%2$s)'",
+  "\t\t\tif ( false ) {\n\t\t\t\treturn sprintf( 'the part %1$s does not go back (%2$s)'", 'it', FILEHOOK)
+e('engine-files-before-put', 'put_back(): the files compared right before each part goes back (Codex round 2, A3)', EN,
+  "\t\t\tif ( 'put_back' === $decided['state'] && is_array( $files_seen ) ) {", "\t\t\tif ( false ) {", 'it', EDIT)
 e('engine-with-files', 'with_files(): the files the step laid in its result', EN,
   "\t\t\t$files = $w::own_files( $journal );\n\t\t\tif ( array() !== $files ) {\n\t\t\t\t$result['files'] = $files;\n\t\t\t}",
   "\t\t\t$files = $w::own_files( $journal );", 'it', NORMAL)
@@ -377,18 +384,18 @@ e('writer-restore-edit', 'restore_right(): an own key needs edit_post on the way
   "\t\tif ( ! current_user_can( 'edit_post', $id ) ) {\n\t\t\treturn sprintf( 'edit the attachment %1$d (edit_post, for the part %2$s)', $id, $part );",
   "\t\tif ( false ) {\n\t\t\treturn sprintf( 'edit the attachment %1$d (edit_post, for the part %2$s)', $id, $part );", 'pkg', U_RIGHTS)
 e('writer-restore-files', 'restore_right(): a key that names files goes back only where every file it names may (Codex round 1, A4)', AW,
-  "\t\t\t$why = self::restore_files( $key, $id, $backup );\n\t\t\tif ( null !== $why ) {",
-  "\t\t\t$why = self::restore_files( $key, $id, $backup );\n\t\t\tif ( false ) {", 'it', EDIT)
+  "\t\t\t$why = self::restore_files( $id, $backup );\n\t\t\tif ( null !== $why ) {",
+  "\t\t\t$why = self::restore_files( $id, $backup );\n\t\t\tif ( false ) {", 'it', EDIT)
+e('writer-together', 'together(): the three keys that name files go back only together (Codex round 2, A4)', AW,
+  "\t\treturn array( array_map( static fn( $key ) => 'meta:' . $key, self::FILE_META ) );", "\t\treturn array();", 'it', FILEHOOK)
+e('writer-restore-none-all', 'restore_files(): none of the three keys before names no file to check', AW,
+  "\t\tif ( array( '' ) === array_values( array_unique( $raw ) ) ) {\n\t\t\treturn null;", "\t\tif ( false ) {\n\t\t\treturn null;", 'pkg', U_RIGHTS)
 e('writer-restore-type', 'restore_files(): each file by its content a type this account may upload', AW,
   "\t\t\tif ( ! empty( $check['proper_filename'] ) || ( ( empty( $check['type'] ) || empty( $check['ext'] ) ) && ! $free ) ) {\n\t\t\t\treturn sprintf( 'name the file %s again (by its content",
   "\t\t\tif ( false ) {\n\t\t\t\treturn sprintf( 'name the file %s again (by its content", 'it', EDIT)
 e('writer-restore-shared', 'restore_files(): no other attachment of this site names a file the value names (Codex round 1, A4)', AW,
   "\t\tforeach ( $named as $path => $ids ) {\n\t\t\treturn sprintf( 'name the file %1$s again: the attachment",
-  "\t\tforeach ( array() as $path => $ids ) {\n\t\t\treturn sprintf( 'name the file %1$s again: the attachment", 'it', EDIT)
-e('writer-restore-roles', 'restore_files(): the metadata names the sizes and the companions', AW,
-  "\t\t\treturn 'file' !== $role && 0 !== strpos( $role, 'backup:' );", "\t\t\treturn false;", 'it', EDIT)
-
-# ----------------------------------------------------- what lies at a path
+  "\t\tforeach ( array() as $path => $ids ) {\n\t\t\treturn sprintf( 'name the file %1$s again: the attachment", 'it', FILEHOOK)
 e('state-link-on-way', 'target_state(): a link on the way is unsafe', ME,
   "\t\t\tif ( is_link( $at ) ) {\n\t\t\t\treturn 'unsafe';", "\t\t\tif ( false ) {\n\t\t\t\treturn 'unsafe';", 'pkg', U_STATE)
 e('state-file-on-way', 'target_state(): a file on the way is unsafe', ME,

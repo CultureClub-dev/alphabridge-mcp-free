@@ -917,7 +917,12 @@ final class SyncMediaTest extends TestCase {
 		// written (the object deviates, nothing of it goes back); another
 		// hand changes a file of the second after the run (its way back stops
 		// before any part); a hook changes a file of the third as its row is
-		// put back (the alternative text stays).
+		// put back (the alternative text stays). A fourth is edited on staging;
+		// after the run another attachment of this site names one of its old
+		// sizes: its three keys that name files stay together (Codex round 2,
+		// A4), each with the reason. A fifth, edited as well: after the run
+		// its backup sizes change on this site, so that key stays by the rule
+		// of the way back, and the other two with it.
 		self::pair();
 		$ids = array();
 		foreach ( array( 'erstes', 'zweites', 'drittes' ) as $k => $name ) {
@@ -927,7 +932,23 @@ final class SyncMediaTest extends TestCase {
 				'b' => self::upload_b( $name . '.jpg', 'image/jpeg', $bytes, array( 'post_title' => 'Alt' ), 'Alt' ),
 			);
 		}
+		$viertes_bytes = self::jpeg( 300, 200, array( 80, 80, 20 ) );
+		$viertes       = array(
+			'a' => self::upload_a( 'viertes.jpg', 'image/jpeg', $viertes_bytes ),
+			'b' => self::upload_b( 'viertes.jpg', 'image/jpeg', $viertes_bytes ),
+		);
+		$fuenftes_bytes = self::jpeg( 300, 200, array( 20, 20, 80 ) );
+		$fuenftes       = array(
+			'a' => self::upload_a( 'fuenftes.jpg', 'image/jpeg', $fuenftes_bytes ),
+			'b' => self::upload_b( 'fuenftes.jpg', 'image/jpeg', $fuenftes_bytes ),
+		);
 		self::paired( self::staged() );
+		self::b(
+			array(
+				array( 'op' => 'edit_image', 'post' => $viertes['b'], 'suffix' => '1700000001', 'image' => array( 'w' => 200, 'h' => 300, 'rgb' => array( 20, 80, 80 ) ) ),
+				array( 'op' => 'edit_image', 'post' => $fuenftes['b'], 'suffix' => '1700000002', 'image' => array( 'w' => 200, 'h' => 300, 'rgb' => array( 80, 20, 20 ) ) ),
+			)
+		);
 		foreach ( $ids as $name => $id ) {
 			self::b(
 				array(
@@ -936,7 +957,7 @@ final class SyncMediaTest extends TestCase {
 				)
 			);
 		}
-		$planned = self::planned( array( 'attachment:2026/10/erstes.jpg', 'attachment:2026/10/zweites.jpg', 'attachment:2026/10/drittes.jpg' ) );
+		$planned = self::planned( array( 'attachment:2026/10/erstes.jpg', 'attachment:2026/10/zweites.jpg', 'attachment:2026/10/drittes.jpg', 'attachment:2026/10/viertes.jpg', 'attachment:2026/10/fuenftes.jpg' ) );
 		$touch   = null;
 		add_action(
 			'edit_attachment',
@@ -962,8 +983,18 @@ final class SyncMediaTest extends TestCase {
 		self::assertStringContainsString( 'changed the file 2026/10/erstes.jpg of the attachment', (string) $by[ $ids['erstes']['a'] ]['result']['message'] );
 		self::assertSame( 'done', $by[ $ids['zweites']['a'] ]['state'] );
 		self::assertSame( 'done', $by[ $ids['drittes']['a'] ]['state'] );
+		self::assertSame( 'done', $by[ $viertes['a'] ]['state'] );
+		self::assertSame( 'done', $by[ $fuenftes['a'] ]['state'] );
 		// Another hand changes a file of the second; a hook the third as its row goes back.
 		file_put_contents( get_attached_file( $ids['zweites']['a'] ), 'y', FILE_APPEND );
+		$fremd                  = self::upload_a( 'fremd.jpg', 'image/jpeg', self::jpeg( 120, 90, array( 1, 2, 3 ) ) );
+		$fremd_meta             = wp_get_attachment_metadata( $fremd );
+		$fremd_meta['sizes']['geteilt'] = array( 'file' => 'viertes-150x150.jpg', 'width' => 150, 'height' => 150, 'mime-type' => 'image/jpeg' );
+		wp_update_attachment_metadata( $fremd, $fremd_meta );
+		self::assertFileExists( wp_get_upload_dir()['basedir'] . '/2026/10/viertes-150x150.jpg', 'An old size of the fourth.' );
+		$sizes_after                      = get_post_meta( $fuenftes['a'], '_wp_attachment_backup_sizes', true );
+		$sizes_after['full-orig']['note'] = 'changed on this site after the run';
+		update_post_meta( $fuenftes['a'], '_wp_attachment_backup_sizes', $sizes_after );
 		$touch = $ids['drittes']['a'];
 		$back  = self::back( (int) $run['run_id'] );
 		self::assertNull( $touch, 'The hook ran on the way back.' );
@@ -982,6 +1013,19 @@ final class SyncMediaTest extends TestCase {
 		self::assertSame( 'Alt', self::row_a( $ids['drittes']['a'] )['post_title'], 'The row of the third went back before its file changed.' );
 		self::assertSame( array( 'Neu' ), self::meta_a( $ids['drittes']['a'], '_wp_attachment_image_alt' ), 'Then the way back stopped for it.' );
 		self::assertStringContainsString( 'changed the file 2026/10/drittes.jpg of the attachment', (string) json_encode( $steps[ $ids['drittes']['a'] ]['result'], JSON_UNESCAPED_SLASHES ) );
+		$viertes_parts = array_column( $steps[ $viertes['a'] ]['result']['parts'], null, 'part' );
+		foreach ( array( 'meta:_wp_attached_file', 'meta:_wp_attachment_metadata', 'meta:_wp_attachment_backup_sizes' ) as $key ) {
+			self::assertSame( 'left', $viertes_parts[ $key ]['state'] ?? null, $key . ': ' . json_encode( $viertes_parts ) );
+			self::assertStringContainsString( 'the attachment ' . $fremd . ' of this site names it as well', (string) $viertes_parts[ $key ]['note'], $key );
+		}
+		self::assertSame( array( '2026/10/viertes-e1700000001.jpg' ), self::meta_a( $viertes['a'], '_wp_attached_file' ), 'The fourth keeps the files of its edit.' );
+		$fuenftes_parts = array_column( $steps[ $fuenftes['a'] ]['result']['parts'], null, 'part' );
+		foreach ( array( 'meta:_wp_attached_file', 'meta:_wp_attachment_metadata' ) as $key ) {
+			self::assertSame( 'left', $fuenftes_parts[ $key ]['state'] ?? null, $key . ': ' . json_encode( $fuenftes_parts ) );
+			self::assertStringContainsString( 'the part meta:_wp_attachment_backup_sizes does not go back', (string) $fuenftes_parts[ $key ]['note'], $key );
+		}
+		self::assertSame( 'left', $fuenftes_parts['meta:_wp_attachment_backup_sizes']['state'] );
+		self::assertSame( array( '2026/10/fuenftes-e1700000002.jpg' ), self::meta_a( $fuenftes['a'], '_wp_attached_file' ), 'The fifth keeps the files of its edit, all three keys together.' );
 		foreach ( $steps as $one ) {
 			self::assertSame( 'unclear', $one['state'] );
 		}
@@ -1469,16 +1513,25 @@ final class SyncMediaTest extends TestCase {
 		// Forward the keys that name files need upload_files; the new files
 		// are laid, the original stays where it is (present), the old sizes
 		// stay on disk untouched. On the way back every check of the forward
-		// way holds: the file the backed-up _wp_attached_file names has to be
-		// of a type this account may upload by its content; where it is not,
-		// that part stays with its value before, the others go back.
+		// way holds for every file the backed-up values name, and the three
+		// keys that name files go back only together (Codex round 2, A4):
+		// where the original is by its content no type this account may
+		// upload, all three stay with their values before. A filter of that
+		// check that changes a file of the attachment stops the way back for
+		// it before any further part goes back (Codex round 2, A3): the
+		// alternative text, changed on staging as well, stays.
 		self::pair();
 		$bytes = self::jpeg( 800, 600, array( 120, 30, 30 ) );
 		$a     = self::upload_a( 'bild.jpg', 'image/jpeg', $bytes );
 		$b     = self::upload_b( 'bild.jpg', 'image/jpeg', $bytes );
 		$old   = self::uploads_of( 'a' );
 		self::paired( self::staged() );
-		self::b( array( array( 'op' => 'edit_image', 'post' => $b, 'suffix' => '1700000000', 'image' => array( 'w' => 600, 'h' => 800, 'rgb' => array( 30, 30, 120 ) ) ) ) );
+		self::b(
+			array(
+				array( 'op' => 'edit_image', 'post' => $b, 'suffix' => '1700000000', 'image' => array( 'w' => 600, 'h' => 800, 'rgb' => array( 30, 30, 120 ) ) ),
+				array( 'op' => 'update_meta', 'post' => $b, 'key' => '_wp_attachment_image_alt', 'value' => 'Bearbeitet' ),
+			)
+		);
 		$neu     = self::upload_b( 'neu.jpg', 'image/jpeg', self::jpeg( 100, 100, array( 1, 1, 1 ) ) );
 		$planned = self::planned( array( 'attachment:2026/10/bild.jpg', 'attachment:2026/10/neu.jpg' ) );
 		self::assertSame( 'take_over', self::entry( $planned['report']['all'], 'attachment:2026/10/bild.jpg' )['action'] );
@@ -1511,23 +1564,23 @@ final class SyncMediaTest extends TestCase {
 		foreach ( $old as $path => $sha ) {
 			self::assertSame( $sha, $now[ $path ] ?? null, "The old file $path stays as it was." );
 		}
-		// The way back (Codex round 1, A4: every file a value that goes back
-		// names, asked as forward): the original, by its content no type this
-		// account may upload (WordPress's check refuses it); an old size
-		// another attachment of this site names now. The backup sizes were not
-		// there before: their removal names no file and goes back.
+		// The way back (Codex rounds 1 and 2, A4 and A3): the original, by
+		// its content no type this account may upload (WordPress's check
+		// refuses it), and the filter of that check changes an old size of the
+		// attachment as it runs.
+		$uploads = wp_get_upload_dir()['basedir'];
 		add_filter(
 			'wp_check_filetype_and_ext',
-			static function ( $answer, $file, $filename ) {
-				return 'bild.jpg' === $filename ? array( 'ext' => false, 'type' => false, 'proper_filename' => false ) : $answer;
+			static function ( $answer, $file, $filename ) use ( $uploads ) {
+				if ( 'bild.jpg' === $filename ) {
+					file_put_contents( $uploads . '/2026/10/bild-300x225.jpg', 'z', FILE_APPEND );
+					return array( 'ext' => false, 'type' => false, 'proper_filename' => false );
+				}
+				return $answer;
 			},
 			10,
 			3
 		);
-		$anderes = self::upload_a( 'anderes.jpg', 'image/jpeg', self::jpeg( 200, 150, array( 9, 9, 99 ) ) );
-		$meta    = wp_get_attachment_metadata( $anderes );
-		$meta['sizes']['geteilt'] = array( 'file' => 'bild-150x150.jpg', 'width' => 150, 'height' => 150, 'mime-type' => 'image/jpeg' );
-		wp_update_attachment_metadata( $anderes, $meta );
 		$now   = self::uploads_of( 'a' );
 		$back  = self::back( (int) $run['run_id'] );
 		$parts = array();
@@ -1543,13 +1596,21 @@ final class SyncMediaTest extends TestCase {
 			}
 		}
 		self::assertContains( '2026/10/bild-e1700000000.jpg', $named, 'The way back names the files the run laid; they stay.' );
-		self::assertSame( 'left', $parts['meta:_wp_attached_file']['state'], json_encode( $parts ) );
-		self::assertStringContainsString( 'may not upload', $parts['meta:_wp_attached_file']['note'] );
-		self::assertSame( 'left', $parts['meta:_wp_attachment_metadata']['state'], json_encode( $parts ) );
-		self::assertStringContainsString( 'the attachment ' . $anderes . ' of this site names it as well', $parts['meta:_wp_attachment_metadata']['note'] );
-		self::assertSame( 'restored', $parts['meta:_wp_attachment_backup_sizes']['state'], json_encode( $parts ) );
+		// The keys in their order: the first two refused together; the
+		// metadata comes after the alternative text, when the way back has
+		// stopped already.
+		foreach ( array( 'meta:_wp_attached_file', 'meta:_wp_attachment_backup_sizes' ) as $key ) {
+			self::assertSame( 'left', $parts[ $key ]['state'], $key . ': ' . json_encode( $parts ) );
+			self::assertStringContainsString( 'go back only together', $parts[ $key ]['note'], $key );
+			self::assertStringContainsString( 'may not upload', $parts[ $key ]['note'], $key );
+		}
+		self::assertSame( 'left', $parts['meta:_wp_attachment_metadata']['state'] );
+		self::assertStringContainsString( 'The way back stopped for this object', $parts['meta:_wp_attachment_metadata']['note'] );
+		self::assertSame( 'left', $parts['meta:_wp_attachment_image_alt']['state'], json_encode( $parts ) );
+		self::assertStringContainsString( 'changed before the part meta:_wp_attachment_image_alt went back', $parts['meta:_wp_attachment_image_alt']['note'] );
+		self::assertSame( array( 'Bearbeitet' ), self::meta_a( $a, '_wp_attachment_image_alt' ), 'The alternative text stays: the way back stopped for the object.' );
 		self::assertSame( array( '2026/10/bild-e1700000000.jpg' ), self::meta_a( $a, '_wp_attached_file' ), 'Left with its value before named.' );
-		self::assertSame( $now, self::uploads_of( 'a' ), 'No file is deleted on the way back, not even one the run laid.' );
+		self::assertSame( array_keys( $now ), array_keys( self::uploads_of( 'a' ) ), 'No file is deleted on the way back, not even one the run laid.' );
 		self::assertSame( array(), $this->deletions );
 	}
 }
