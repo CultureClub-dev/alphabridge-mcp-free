@@ -105,14 +105,21 @@ nennt ihre Meldung den Weg.
   Fassung, wo der Post sie hat); `wp_unique_post_slug()` mit den Filtern
   des Kerns und der Plugins. Weicht er ab, sperrt `post:slug_collision`
   bzw. `post:sanitizer` (Z8) mit dem Slug, den WordPress speichern würde.
-  Ein Entwurf behält seinen Slug wie im Kern.
+  Ein Entwurf behält seinen Slug wie im Kern (`wp_unique_post_slug()` gibt
+  ihn für `draft`, `pending` und `auto-draft` unverändert zurück).
 - Grenze C (konstruiert): Ein Post im Papierkorb, der den Slug hält
   (seit WordPress 5.5 bekommt ein Post beim Verschieben in den Papierkorb
   `__trashed`; so entsteht er nur mit einem Status `trash` beim Anlegen oder
-  per SQL), sperrt den Schritt: `wp_insert_post()` würde ihn umbenennen
-  (`wp_add_trashed_suffix_to_post_name_for_trashed_posts()`), eine Zeile
-  eines fremden Posts (Prüffall
-  `testANewPageWhoseSlugAPostInTheTrashHoldsIsLockedBeforeAnythingIsWritten`).
+  per SQL), sperrt den Schritt, in jedem Status ausser `trash`, auch für
+  einen Entwurf: `wp_insert_post()` benennt ihn vor `wp_unique_post_slug()`
+  für jeden Post mit Slug um, der nicht in den Papierkorb geht
+  (`wp_add_trashed_suffix_to_post_name_for_trashed_posts()`,
+  wp-includes/post.php:4884), eine Zeile eines fremden Posts (Prüffälle
+  `testANewPageWhoseSlugAPostInTheTrashHoldsIsLockedBeforeAnythingIsWritten`,
+  für den Entwurf `testTheSlugIsWhatWordPressWouldStoreOrTheStepIsLocked`).
+  Vorher übersprang die Vorprüfung diese Frage für Entwürfe, und die
+  Sperrzusage stimmte für sie nicht (Codex-Runde 1, C). Ein Entwurf ohne
+  Slug benennt nichts um.
 - Ein neuer Post, dessen Slug ein anderer Post seines Typs hält, ist meist
   ein Paar, das der Bericht als «auf beiden Seiten neu» vorschlägt
   (Identität Typ, Theme, Slug); die Sperre trifft die Fälle daneben

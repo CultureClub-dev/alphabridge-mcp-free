@@ -340,6 +340,8 @@ e('push-parent-ref', 'plan(): the parent of a term from its references, for the 
   "\t\t\t\t\t\t$item['parent_ref'] = (string) (int) $ref['id'];\n", '', 'it', C_B4)
 e('revert-last-first', 'plan(): the way back goes from the last step to the first (Codex round 1, B4)', RV,
   "\t\t$items = array_reverse( $items );\n", '', 'it', C_B4)
+e('post-slug-trashed-draft', 'slug_refusal(): a post in the trash with the slug is renamed for a draft as well, so a draft asks it too (Codex round 1, C)', PW,
+  "\t\t$trashed = self::trashed_holder( $slug, $id );\n\t\tif ( null === $trashed || 0 !== $trashed ) {", "\t\t$trashed = in_array( $status, $drafts, true ) ? 0 : self::trashed_holder( $slug, $id );\n\t\tif ( null === $trashed || 0 !== $trashed ) {", 'unit', P_SLUG)
 
 def test_of(expect):
     return expect.split(' with data set "', 1)[0]

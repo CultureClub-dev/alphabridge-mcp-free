@@ -1138,4 +1138,13 @@ return array(
 		'run'     => $it( 'SyncContentTest', 'testTwoCategoriesThatSwapTheirPlacesGoOverAndBackAndAnOrdinaryMoveGoesAsWell' ),
 		'expect'  => '/testTwoCategoriesThatSwapTheirPlacesGoOverAndBackAndAnOrdinaryMoveGoesAsWell/',
 	),
+	array(
+		'id'      => 'inhalte/post-slug-trashed-draft',
+		'clause'  => 'slug_refusal(): a post in the trash with the slug is renamed for a draft as well, so a draft asks it too (Codex round 1, C)',
+		'file'    => $pw,
+		'search'  => "\t\t\$trashed = self::trashed_holder( \$slug, \$id );\n\t\tif ( null === \$trashed || 0 !== \$trashed ) {",
+		'replace' => "\t\t\$trashed = in_array( \$status, \$drafts, true ) ? 0 : self::trashed_holder( \$slug, \$id );\n\t\tif ( null === \$trashed || 0 !== \$trashed ) {",
+		'run'     => $unit( 'SyncRunTest', 'testTheSlugIsWhatWordPressWouldStoreOrTheStepIsLocked' ),
+		'expect'  => '/testTheSlugIsWhatWordPressWouldStoreOrTheStepIsLocked/',
+	),
 );

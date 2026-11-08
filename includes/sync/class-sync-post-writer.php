@@ -1013,13 +1013,17 @@ final class AB_MCP_Sync_Post_Writer {
 		if ( $made !== $slug ) {
 			return self::locked( 'post:sanitizer', sprintf( 'field post_name (WordPress would store %s)', $made ) );
 		}
-		if ( in_array( $status, $drafts, true ) ) {
-			// WordPress keeps the slug of a draft as it is (wp_unique_post_slug()).
-			return null;
-		}
+		// A post in the trash with the slug: wp_insert_post() renames it
+		// (__trashed) before wp_unique_post_slug(), for every post with a
+		// slug that does not go to the trash, a draft as well (Codex round 1
+		// on branch 9, C: the check was skipped for drafts).
 		$trashed = self::trashed_holder( $slug, $id );
 		if ( null === $trashed || 0 !== $trashed ) {
 			return self::locked( 'post:slug_collision', null === $trashed ? 'the posts of this site could not be read for the slug' : sprintf( 'the post %1$d of this site lies in the trash with the slug %2$s, and WordPress would rename it (__trashed)', $trashed, $slug ) );
+		}
+		if ( in_array( $status, $drafts, true ) ) {
+			// WordPress keeps the slug of a draft as it is (wp_unique_post_slug()).
+			return null;
 		}
 		$unique = wp_unique_post_slug( $slug, $id, $status, $type, $parent );
 		if ( (string) $unique !== $slug ) {

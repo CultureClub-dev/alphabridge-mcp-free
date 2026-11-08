@@ -148,6 +148,8 @@ final class SyncRunOptionWpdb {
 	public $runs = null;
 	/** @var int Reads of the table of the runs. */
 	public $run_reads = 0;
+	/** @var int|null The post in the trash the query for a slug finds (null: none). */
+	public $trashed = null;
 
 	public function prepare( $query, ...$args ) {
 		return ( new \AbTestSyncWpdb() )->prepare( $query, ...$args );
@@ -164,6 +166,9 @@ final class SyncRunOptionWpdb {
 		if ( 'SELECT run_id FROM `wp_ab_mcp_staging_runs` LIMIT 1' === (string) $query ) {
 			++$this->run_reads;
 			return $this->runs;
+		}
+		if ( false !== strpos( (string) $query, "post_status = 'trash'" ) ) {
+			return $this->trashed;
 		}
 		return null;
 	}
@@ -2627,7 +2632,15 @@ final class SyncRunTest extends TestCase {
 		self::assertStringContainsString( 'WordPress would store the slug hello-2 for hello', $taken->get_error_message() );
 		self::assertTrue( AB_MCP_Sync_Post_Writer::precheck( $new( array( 'post_status' => 'draft', 'post_date_gmt' => '0000-00-00 00:00:00' ) ), null, $ctx['now'] ), 'WordPress keeps the slug of a draft as it is.' );
 		unset( $GLOBALS['ab_test_unique_slugs'] );
-
+		// A post in the trash with the slug: wp_insert_post() renames it
+		// (__trashed) for a draft as well (Codex round 1 on branch 9, C).
+		$GLOBALS['wpdb']->trashed = 77;
+		$draft                    = AB_MCP_Sync_Post_Writer::precheck( $new( array( 'post_status' => 'draft', 'post_date_gmt' => '0000-00-00 00:00:00' ) ), null, $ctx['now'] );
+		self::assertSame( 'post:slug_collision', self::lock_of( $draft ), 'A draft renames the post in the trash as well.' );
+		self::assertStringContainsString( 'The post 77 of this site lies in the trash with the slug hello', $draft->get_error_message() );
+		self::assertSame( 'post:slug_collision', self::lock_of( AB_MCP_Sync_Post_Writer::precheck( $new( array() ), null, $ctx['now'] ) ) );
+		self::assertTrue( AB_MCP_Sync_Post_Writer::precheck( $new( array( 'post_name' => '', 'post_status' => 'draft', 'post_date_gmt' => '0000-00-00 00:00:00' ) ), null, $ctx['now'] ), 'A draft without a slug renames nothing.' );
+		$GLOBALS['wpdb']->trashed = null;
 		// A slug the sanitizing would change.
 		$spaced = AB_MCP_Sync_Post_Writer::precheck( $new( array( 'post_name' => 'Hello World' ) ), null, $ctx['now'] );
 		self::assertSame( 'post:sanitizer', self::lock_of( $spaced ) );
