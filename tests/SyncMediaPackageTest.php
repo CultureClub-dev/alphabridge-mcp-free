@@ -107,8 +107,10 @@ final class SyncMediaPackageTest extends TestCase {
 			'a hash in capitals'     => array( self::line( array( 'sha256' => strtoupper( hash( 'sha256', 'abc' ) ) ) ) ),
 			'a size below zero'      => array( self::line( array( 'size' => -1 ) ) ),
 			'more pieces than its size gives' => array( self::line( array( 'pieces' => 2 ) ) ),
+			'a piece too many, its first whole' => array( self::line( array( 'size' => $big, 'pieces' => 3, 'sha256' => str_repeat( 'a', 64 ), 'data' => base64_encode( str_repeat( 'a', AB_MCP_Sync_Media_Package::PIECE ) ) ) ) ),
 			'a piece past its end'   => array( self::line( array( 'piece' => 1 ) ) ),
 			'data that is no base64' => array( self::line( array( 'data' => 'a b' ) ) ),
+			'its bytes in base64 spelt otherwise' => array( self::line( array( 'data' => 'YW Jj' ) ) ),
 			'data of another size'   => array( self::line( array( 'data' => base64_encode( 'abcd' ) ) ) ),
 			'a short first piece'    => array( self::line( array( 'size' => $big, 'pieces' => 2, 'sha256' => str_repeat( 'a', 64 ) ) ) ),
 		);
@@ -208,6 +210,8 @@ final class SyncMediaPackageTest extends TestCase {
 		self::assertSame( 'file', AB_MCP_Sync_Media::target_state( $this->dir, '2026/10/da.jpg' ) );
 		self::assertSame( 'other', AB_MCP_Sync_Media::target_state( $this->dir, '2026/10/ordner.jpg' ), 'A folder at the path.' );
 		self::assertSame( 'other', AB_MCP_Sync_Media::target_state( $this->dir, '2026/10/link.jpg' ), 'A link at the path.' );
+		symlink( $this->dir . '/nirgends', $this->dir . '/2026/10/tot.jpg' );
+		self::assertSame( 'other', AB_MCP_Sync_Media::target_state( $this->dir, '2026/10/tot.jpg' ), 'A link to nothing at the path: no path to lay at.' );
 		self::assertSame( 'unsafe', AB_MCP_Sync_Media::target_state( $this->dir, '2026/09/neu.jpg' ), 'A link on the way.' );
 		self::assertSame( 'unsafe', AB_MCP_Sync_Media::target_state( $this->dir, 'datei/neu.jpg' ), 'A file on the way.' );
 		self::assertSame( 'unsafe', AB_MCP_Sync_Media::target_state( $this->dir, '../neu.jpg' ) );

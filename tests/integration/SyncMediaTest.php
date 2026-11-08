@@ -13,7 +13,8 @@
  *   byte for byte as on staging; the way back leaves the three new objects
  *   and every file as rests, named.
  * - A changed title, alternative text and description of an attachment
- *   both sites have: only its row and meta go, no file; the way back puts
+ *   both sites have, and a new page it hangs under: the page first, then
+ *   only the row and meta of the attachment, no file; the way back puts
  *   them back byte for byte.
  * - What locks before anything is written: another file at a path, a path
  *   another attachment names, a link on the way, a file of a type the
@@ -666,6 +667,18 @@ final class SyncMediaTest extends TestCase {
 		foreach ( array( 'attachment:2026/10/garten.jpg', 'attachment:2026/10/flyer.pdf', 'post:galerie' ) as $name ) {
 			self::assertSame( 'create', self::entry( $planned['report']['all'], $name )['action'], $name . ': ' . json_encode( self::entry( $planned['report']['all'], $name ) ) );
 		}
+		// A site without an upload yet: its uploads folder is made as the
+		// first file is laid.
+		rmdir( AB_MCP_IT_Sites::docroot( 'a' ) . '/wp-content/uploads' );
+		// The file of a new attachment goes with its row, as an upload makes
+		// it: a hook on add_attachment finds it there already.
+		$at_insert = array();
+		add_action(
+			'add_attachment',
+			static function ( $id ) use ( &$at_insert ) {
+				$at_insert[] = (string) get_post_meta( (int) $id, '_wp_attached_file', true );
+			}
+		);
 		$this->watch_deletions();
 		$run = self::begun( $planned['args'] );
 		// The check, then the first write: the image, made unattached; its
@@ -680,10 +693,13 @@ final class SyncMediaTest extends TestCase {
 		}
 		self::assertIsArray( $first, 'The image was made by one of the first steps.' );
 		self::assertSame( '0', self::row_a( (int) $first['live_ref'] )['post_parent'], 'Unattached until its parent step.' );
-		self::assertNotSame( self::entry( $planned['report']['all'], 'attachment:2026/10/garten.jpg' )['staging']['hash'] ?? null, $first['base_staging'], 'The staging base of the image without its parent.' );
+		self::assertMatchesRegularExpression( '/^[0-9a-f]{64}$/', (string) $first['base_staging'] );
 		$closed = self::finish( (int) $run['run_id'] );
 		$status = self::run_status( (int) $run['run_id'] );
 		self::assertSame( 'closed_done', $closed['state'], json_encode( $closed ) . self::check_message( $status ) );
+		self::assertNotSame( $first['base_staging'], AB_MCP_Sync_Pairs::find_staging( $source, 'attachment', (string) $image )['base_staging'], 'The staging base of the image without its parent until the parent step, with it after (the next report: equal).' );
+		sort( $at_insert );
+		self::assertSame( array( '2026/10/flyer.pdf', '2026/10/garten.jpg' ), $at_insert, 'Each new attachment had its file as its row was made.' );
 		$writes = self::writes( $status );
 		self::assertSame( array( 'attachment', 'attachment', 'post', 'attachment' ), array_map( static fn( $s ) => $s['parts']['object']['kind'], $writes ), 'The attachments first, the page, then the parent step of the image.' );
 		foreach ( $writes as $step ) {
@@ -752,39 +768,51 @@ final class SyncMediaTest extends TestCase {
 		self::assertSame( $files_b, self::uploads_of( 'a' ), 'And still nothing deleted.' );
 	}
 
-	public function testAChangedTitleAltTextAndDescriptionOfAnAttachmentGoOverAndBackWithoutAFile(): void {
+	public function testAChangedTitleAltTextDescriptionAndParentOfAnAttachmentGoOverAndBackWithoutAFile(): void {
+		// The logo both sites have gets a new title, alternative text and
+		// description on staging and hangs under a new page there: the page
+		// first, then the logo under it (the check before the first write
+		// counts the page as one the run creates). Beside it on this site an
+		// attachment whose name holds the logo's name: the prefilter of the
+		// reverse map finds it, its list names none of the logo's files
+		// (named_by(), byte for byte), so nothing is shared.
 		self::pair();
 		$bytes = self::jpeg( 800, 600, array( 200, 80, 40 ) );
 		$a     = self::upload_a( 'logo.jpg', 'image/jpeg', $bytes, array( 'post_title' => 'Logo', 'post_content' => 'Das alte Logo.' ), 'Logo' );
 		$b     = self::upload_b( 'logo.jpg', 'image/jpeg', $bytes, array( 'post_title' => 'Logo', 'post_content' => 'Das alte Logo.' ), 'Logo' );
 		self::assertSame( self::uploads_of( 'a' ), self::uploads_of( 'b' ), 'The same files on both sites.' );
+		self::upload_a( 'vereinslogo.jpg', 'image/jpeg', self::jpeg( 300, 200, array( 20, 80, 200 ) ) );
 		self::paired( self::staged() );
+		$seite = self::on_b( array( 'post_type' => 'page', 'post_status' => 'publish', 'post_title' => 'Verein', 'post_name' => 'verein', 'post_author' => 1, 'post_date' => self::DATE, 'post_date_gmt' => self::DATE, 'post_content' => 'Über den Verein.' ) );
 		self::b(
 			array(
-				array( 'op' => 'update_post', 'args' => array( 'ID' => $b, 'post_title' => 'Logo 2026', 'post_content' => 'Das neue Logo.' ) ),
+				array( 'op' => 'update_post', 'args' => array( 'ID' => $b, 'post_title' => 'Logo 2026', 'post_content' => 'Das neue Logo.', 'post_parent' => $seite ) ),
 				array( 'op' => 'update_meta', 'post' => $b, 'key' => '_wp_attachment_image_alt', 'value' => 'Das Logo des Vereins' ),
 			)
 		);
 		$row_before  = self::row_a( $a );
 		$alt_before  = self::meta_a( $a, '_wp_attachment_image_alt' );
 		$files       = self::uploads_of( 'a' );
-		$planned     = self::planned( array( 'attachment:2026/10/logo.jpg' ) );
+		$planned     = self::planned( array( 'attachment:2026/10/logo.jpg', 'post:verein' ) );
 		self::assertSame( 'take_over', self::entry( $planned['report']['all'], 'attachment:2026/10/logo.jpg' )['action'] );
 		$this->watch_deletions();
 		$run    = self::begun( $planned['args'] );
 		$closed = self::finish( (int) $run['run_id'] );
 		$status = self::run_status( (int) $run['run_id'] );
 		self::assertSame( 'closed_done', $closed['state'], json_encode( $closed ) . self::check_message( $status ) );
-		$step = self::writes( $status )[0];
+		$writes = self::writes( $status );
+		self::assertSame( array( 'post', 'attachment' ), array_map( static fn( $s ) => $s['parts']['object']['kind'], $writes ), 'The page first, then the logo under it.' );
+		$step = $writes[1];
 		self::assertSame( array( 'row', 'meta:_wp_attachment_image_alt' ), array_column( $step['parts']['parts'], 'part' ), 'The row and the alternative text, nothing else.' );
 		self::assertSame( array( 'present' ), array_values( array_unique( array_column( $step['parts']['files'], 'state' ) ) ), 'Every file was there already.' );
 		self::assertArrayNotHasKey( 'files', $step['result'], 'The run laid no file.' );
 		self::assertSame( 'Logo 2026', self::row_a( $a )['post_title'] );
 		self::assertSame( 'Das neue Logo.', self::row_a( $a )['post_content'] );
+		self::assertSame( (string) get_page_by_path( 'verein' )->ID, self::row_a( $a )['post_parent'], 'The logo hangs under the new page.' );
 		self::assertSame( array( 'Das Logo des Vereins' ), self::meta_a( $a, '_wp_attachment_image_alt' ) );
 		self::assertSame( $files, self::uploads_of( 'a' ), 'No file changed.' );
 		$back = self::back( (int) $run['run_id'] );
-		self::assertSame( 'closed_reverted', $back['state'], json_encode( $back ) );
+		self::assertSame( 'closed_findings', $back['state'], 'The page stays as a rest: ' . json_encode( $back ) );
 		$row_now = self::row_a( $a );
 		unset( $row_now['post_modified'], $row_now['post_modified_gmt'], $row_before['post_modified'], $row_before['post_modified_gmt'] );
 		self::assertSame( $row_before, $row_now, 'The row byte for byte as before.' );
@@ -839,6 +867,15 @@ final class SyncMediaTest extends TestCase {
 		$zwilling_b = self::upload_b( 'zwilling-zwei.jpg', 'image/jpeg', self::jpeg( 120, 90, array( 6, 6, 6 ) ), array(), null );
 		self::b( array( array( 'op' => 'update_meta', 'post' => $zwilling_b, 'key' => '_wp_attachment_metadata', 'value' => array( 'file' => '2026/10/zwilling-zwei.jpg', 'width' => 120, 'height' => 90, 'thumb' => 'zwilling.jpg', 'sizes' => array() ) ) ) );
 		unset( $zwilling_a );
+		// An image whose list names a size that is a PHP script by its name
+		// (the main file a JPEG as the attachment says).
+		$skript = self::upload_b( 'skript.jpg', 'image/jpeg', self::jpeg( 120, 90, array( 7, 7, 7 ) ), array(), null );
+		self::b(
+			array(
+				array( 'op' => 'put_file', 'path' => '2026/10/skript-klein.php', 'bytes' => base64_encode( "<?php\n" ) ),
+				array( 'op' => 'update_meta', 'post' => $skript, 'key' => '_wp_attachment_metadata', 'value' => array( 'file' => '2026/10/skript.jpg', 'width' => 120, 'height' => 90, 'sizes' => array( 'klein' => array( 'file' => 'skript-klein.php', 'width' => 60, 'height' => 45, 'mime-type' => 'image/jpeg' ) ) ) ),
+			)
+		);
 		// On A: another file where ersetzt.jpg goes; an attachment whose list
 		// names geteilt.jpg; the folder of September a link; no PDF allowed.
 		$uploads = AB_MCP_IT_Sites::docroot( 'a' ) . '/wp-content/uploads';
@@ -859,7 +896,7 @@ final class SyncMediaTest extends TestCase {
 			}
 		);
 		$files_before = self::uploads_of( 'a' );
-		$planned      = self::planned( array( 'attachment:2026/10/ersetzt.jpg', 'attachment:2026/10/geteilt.jpg', 'attachment:2026/09/verlinkt.jpg', 'attachment:2026/10/preise.pdf', 'attachment:2026/10/zwilling.jpg', 'attachment:2026/10/zwilling-zwei.jpg', 'attachment:2026/10/waise.jpg', 'attachment:2026/10/typ.jpg', 'attachment:2026/10/hier.jpg' ) );
+		$planned      = self::planned( array( 'attachment:2026/10/ersetzt.jpg', 'attachment:2026/10/geteilt.jpg', 'attachment:2026/09/verlinkt.jpg', 'attachment:2026/10/preise.pdf', 'attachment:2026/10/zwilling.jpg', 'attachment:2026/10/zwilling-zwei.jpg', 'attachment:2026/10/waise.jpg', 'attachment:2026/10/typ.jpg', 'attachment:2026/10/hier.jpg', 'attachment:2026/10/skript.jpg' ) );
 		$missing      = self::entry( $planned['report']['all'], 'attachment:2026/10/fehlt.jpg' );
 		self::assertSame( 'locked', $missing['action'] );
 		self::assertContains( 'attachment:missing_file', array_column( $missing['locks'], 'key' ) );
@@ -879,6 +916,7 @@ final class SyncMediaTest extends TestCase {
 		self::assertStringContainsString( 'post:reference_unmapped', $found[ (string) $waise ] ?? '', 'Its page is not in the plan: ' . json_encode( $found ) );
 		self::assertStringContainsString( 'attachment:file_type', $found[ (string) $typ ] ?? '', 'The main file of another type than the attachment says: ' . json_encode( $found ) );
 		self::assertStringContainsString( 'by its content of another type', $found[ (string) $hier ] ?? '', 'A file this site has, by its content: ' . json_encode( $found ) );
+		self::assertStringContainsString( 'skript-klein.php: a type this account may not upload', $found[ (string) $skript ] ?? '', 'A file of the list besides the main one, by its name: ' . json_encode( $found ) );
 		// The same plan without the package of media: every file to lay is
 		// missing; a package of media of another report is refused by the plan.
 		$args             = $planned['args'];
@@ -970,6 +1008,13 @@ final class SyncMediaTest extends TestCase {
 				$to = (string) tempnam( sys_get_temp_dir(), 'abit' );
 				self::assertTrue( \AB_MCP_Sync_Media_Package::extract( $taken, $taken['files'][0], $to ) );
 				self::assertSame( $bytes, file_get_contents( $to ), 'A file read out of its chunks byte for byte.' );
+				// A file whose index names a piece more than its lines hold does
+				// not read whole (its bytes and its hash as they are).
+				$longer           = $taken['files'][0];
+				$longer['pieces'] = 2;
+				$unread           = \AB_MCP_Sync_Media_Package::extract( $taken, $longer, $to );
+				self::assertInstanceOf( \WP_Error::class, $unread );
+				self::assertSame( 'ab_mcp_sync_media_unread', $unread->get_error_code() );
 				unlink( $to );
 				self::assertSame( 'ab_mcp_sync_import_purpose_held', AB_MCP_Sync_Import::taken( $id, 'objects' )->get_error_code(), 'A package of media is no package of objects.' );
 				continue;
@@ -991,7 +1036,8 @@ final class SyncMediaTest extends TestCase {
 		// a file where it goes: the first two are laid, the third is not
 		// (fopen 'xb': nothing written over), and the attachment is not made.
 		// A second attachment of the run, a PNG named .jpg, is refused by its
-		// content before any of its files is laid.
+		// content before any of its files is laid; so is a third, a JPEG
+		// whose thumbnail is a PNG named .jpg.
 		self::pair();
 		self::paired( self::staged() );
 		self::upload_b( 'drei.jpg', 'image/jpeg', self::jpeg( 1600, 1200, array( 70, 70, 140 ) ) );
@@ -1000,8 +1046,19 @@ final class SyncMediaTest extends TestCase {
 		imagepng( $gd );
 		$png = (string) ob_get_clean();
 		self::upload_b( 'falsch.jpg', 'image/jpeg', $png, array(), null );
+		// A JPEG whose thumbnail on staging is a PNG by its content, named
+		// .jpg: a file of the list besides the main one.
+		$klein = self::upload_b( 'klein.jpg', 'image/jpeg', self::jpeg( 300, 200, array( 90, 30, 30 ) ), array(), null );
+		$thumb = '';
+		foreach ( (array) self::b( array( array( 'op' => 'files_of', 'post' => $klein, 'as' => 'list' ) ) )['list']['files'] as $file ) {
+			if ( false !== strpos( $file['path'], '150x150' ) ) {
+				$thumb = $file['path'];
+			}
+		}
+		self::assertNotSame( '', $thumb );
+		self::b( array( array( 'op' => 'put_file', 'path' => $thumb, 'bytes' => base64_encode( $png ) ) ) );
 		$files_b = self::uploads_of( 'b' );
-		$planned = self::planned( array( 'attachment:2026/10/drei.jpg', 'attachment:2026/10/falsch.jpg' ) );
+		$planned = self::planned( array( 'attachment:2026/10/drei.jpg', 'attachment:2026/10/falsch.jpg', 'attachment:2026/10/klein.jpg' ) );
 		$uploads = AB_MCP_IT_Sites::docroot( 'a' ) . '/wp-content/uploads';
 		$checked = 0;
 		$taken   = null;
@@ -1025,10 +1082,18 @@ final class SyncMediaTest extends TestCase {
 		self::assertSame( 'closed_findings', $closed['state'], json_encode( $closed ) . self::check_message( $status ) );
 		self::assertNotNull( $taken );
 		$writes = self::writes( $status );
-		self::assertSame( array( 'failed', 'failed' ), array_column( $writes, 'state' ) );
-		$is_drei = static fn( array $step ): bool => in_array( '2026/10/drei.jpg', array_column( $step['parts']['files'] ?? array(), 'path' ), true );
-		$drei    = $is_drei( $writes[0] ) ? $writes[0] : $writes[1];
-		$falsch  = $is_drei( $writes[0] ) ? $writes[1] : $writes[0];
+		self::assertSame( array( 'failed', 'failed', 'failed' ), array_column( $writes, 'state' ) );
+		$of = static function ( string $path ) use ( $writes ): array {
+			foreach ( $writes as $step ) {
+				if ( in_array( $path, array_column( $step['parts']['files'] ?? array(), 'path' ), true ) ) {
+					return $step;
+				}
+			}
+			self::fail( "No step of $path." );
+		};
+		$drei   = $of( '2026/10/drei.jpg' );
+		$falsch = $of( '2026/10/falsch.jpg' );
+		$klein  = $of( '2026/10/klein.jpg' );
 		$own    = array_column( $drei['result']['files'] ?? array(), 'path' );
 		self::assertCount( 2, $own, 'Two files laid before the third: the run\'s own, named. ' . json_encode( $drei ) );
 		foreach ( $own as $path ) {
@@ -1041,6 +1106,10 @@ final class SyncMediaTest extends TestCase {
 		self::assertStringContainsString( 'attachment:file_type', (string) $falsch['result']['message'] );
 		self::assertArrayNotHasKey( 'files', $falsch['result'], 'Nothing of the PNG was laid.' );
 		self::assertFileDoesNotExist( $uploads . '/2026/10/falsch.jpg' );
+		self::assertStringContainsString( 'its content is of another type than its name says', (string) $klein['result']['message'], 'The thumbnail, by its content.' );
+		self::assertArrayNotHasKey( 'files', $klein['result'], 'Nothing of the JPEG with the PNG thumbnail was laid.' );
+		self::assertFileDoesNotExist( $uploads . '/2026/10/klein.jpg' );
+		self::assertFileDoesNotExist( $uploads . '/' . $thumb );
 		global $wpdb;
 		self::assertSame( '0', (string) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_type = 'attachment'" ), 'No attachment of either.' );
 		self::assertSame( array(), $this->deletions );
