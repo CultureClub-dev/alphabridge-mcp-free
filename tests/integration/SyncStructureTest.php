@@ -1566,7 +1566,7 @@ final class SyncStructureTest extends TestCase {
 		self::assertStringContainsString( 'another writer tried to change the field 3 of the row widget_text as the step\'s own call wrote it (a hook or filter of this site) and was refused', (string) $step['parts']['object']['deviated']['why'] );
 		self::assertStringContainsString( 'find the plugin or theme that writes it', (string) $step['parts']['object']['deviated']['why'], 'With its way.' );
 		$stored = \AB_MCP_Sync_Run::step( (int) $run['run_id'], (int) $step['seq'] )['parts']['object'];
-		self::assertEquals( array( array( 'fields' => array( '3' ), 'option' => 'widget_text' ) ), $stored['refused_writes'], 'In the journal.' );
+		self::assertEquals( array( array( 'fields' => array( '3' ), 'option' => 'widget_text', 'part' => 'instance:text-2' ) ), $stored['refused_writes'], 'In the journal, with the part of the call.' );
 	}
 
 	public function testAHookInTheOwnCallThatSetsAnotherPositionNestedIsRefused(): void {
@@ -1614,6 +1614,96 @@ final class SyncStructureTest extends TestCase {
 		$step = self::writes( self::run_status( (int) $run['run_id'] ) )[0];
 		self::assertSame( 'unclear', $step['state'], json_encode( $step ) );
 		self::assertStringContainsString( 'another writer tried to change the field nav_menu_locations.footer of the row theme_mods_twentytwentyfive', (string) $step['parts']['object']['deviated']['why'] );
+	}
+
+	public function testEveryRefusedWriteIsNamedWhicheverWayTheStepDeviates(): void {
+		// Codex round 6 of branch 11: as the step reorders sidebar-1, a hook
+		// in its own update_option() of sidebars_widgets writes sidebar-2
+		// nested (refused by the lock) and an instance of widget_text (another
+		// row, let through). The step deviates first for the instance changed
+		// besides the row; the refusal is named in that answer as well.
+		self::pair();
+		$text = self::widget_settings( 'text', array( 'title' => 'Hours', 'text' => 'Mo–Fr', 'filter' => true, 'visual' => true ) );
+		self::widgets_on_both( array( 'text-2' => $text, 'text-4' => $text ) );
+		$row                = self::option_of( 'a', 'widget_text' );
+		$row[5]             = $text;
+		$areas              = self::option_of( 'a', 'sidebars_widgets' );
+		$areas['sidebar-2'] = array_merge( $areas['sidebar-2'], array( 'text-5' ) );
+		update_option( 'widget_text', $row );
+		update_option( 'sidebars_widgets', $areas );
+		self::b(
+			array(
+				array( 'op' => 'update_option', 'name' => 'widget_text', 'value' => $row ),
+				array( 'op' => 'update_option', 'name' => 'sidebars_widgets', 'value' => $areas ),
+			)
+		);
+		self::paired( self::staged() );
+		$areas_b              = $areas;
+		$areas_b['sidebar-1'] = array_reverse( $areas['sidebar-1'] );
+		self::one_b( array( 'op' => 'update_option', 'name' => 'sidebars_widgets', 'value' => $areas_b ) );
+		$planned = self::planned( array( array( 'widget_area', 'live', 'sidebar-1' ) ) );
+		$done    = false;
+		add_filter(
+			'pre_update_option_sidebars_widgets',
+			static function ( $value ) use ( &$done ) {
+				$writing = false;
+				foreach ( debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS ) as $frame ) {
+					$writing = $writing || ( 'AB_MCP_Sync_Widget_Area_Writer' === ( $frame['class'] ?? '' ) && 'write_row' === $frame['function'] );
+				}
+				if ( $writing && ! $done ) {
+					$done                   = true;
+					$other                  = get_option( 'sidebars_widgets' );
+					$other['sidebar-2']     = array();
+					update_option( 'sidebars_widgets', $other );
+					$text                   = get_option( 'widget_text' );
+					$text[5]['title']       = 'FOREIGN';
+					update_option( 'widget_text', $text );
+				}
+				return $value;
+			}
+		);
+		$run    = self::begun( $planned['args'] );
+		$closed = self::finish( (int) $run['run_id'] );
+		remove_all_filters( 'pre_update_option_sidebars_widgets' );
+		self::assertTrue( $done, 'The hook ran in the own call.' );
+		self::assertSame( $areas['sidebar-2'], self::option_of( 'a', 'sidebars_widgets' )['sidebar-2'], 'The nested write of sidebar-2 was refused.' );
+		self::assertSame( 'closed_findings', $closed['state'], json_encode( $closed ) );
+		$step = self::writes( self::run_status( (int) $run['run_id'] ) )[0];
+		$why  = (string) $step['parts']['object']['deviated']['why'];
+		self::assertStringContainsString( 'the row call changed the part instance:text-5 besides it', $why );
+		self::assertStringContainsString( 'another writer tried to change the field sidebar-2 of the row sidebars_widgets as the step\'s own call wrote it', $why, 'The refusal named in this answer too.' );
+		self::assertStringContainsString( 'another writer tried to change the field sidebar-2 of the row sidebars_widgets', (string) $step['result']['message'] );
+	}
+
+	public function testAFilterThatChangesTheOwnValueOfTheRowLeavesItAndTheAnswerSaysTheStepDidNotWrite(): void {
+		// Codex round 6 of branch 11: pre_update_option_blogname changes the
+		// value of the step's own call; the takeover lock refuses it (not the
+		// planned value), and blogname stays as it was. The answer says that
+		// the step's own write did not happen, never that the row holds it.
+		self::pair();
+		update_option( 'blogname', 'OLD' );
+		self::one_b( array( 'op' => 'update_option', 'name' => 'blogname', 'value' => 'OLD' ) );
+		self::paired( self::staged() );
+		self::one_b( array( 'op' => 'update_option', 'name' => 'blogname', 'value' => 'NEW' ) );
+		$planned = self::planned( array( array( 'option', 'live', 'blogname' ) ) );
+		$filter  = static function ( $value ) {
+			$writing = false;
+			foreach ( debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS ) as $frame ) {
+				$writing = $writing || ( 'AB_MCP_Sync_Option_Writer' === ( $frame['class'] ?? '' ) && 'write_row' === $frame['function'] );
+			}
+			return $writing ? $value . ' (by the filter)' : $value;
+		};
+		add_filter( 'pre_update_option_blogname', $filter );
+		$run    = self::begun( $planned['args'] );
+		$closed = self::finish( (int) $run['run_id'] );
+		remove_filter( 'pre_update_option_blogname', $filter );
+		self::assertSame( 'OLD', AB_MCP_IT_Sites::option_row( 'a', 'blogname' )['option_value'] );
+		self::assertSame( 'closed_findings', $closed['state'], json_encode( $closed ) );
+		$step    = self::writes( self::run_status( (int) $run['run_id'] ) )[0];
+		$message = (string) $step['result']['message'];
+		self::assertSame( 'failed', $step['state'], json_encode( $step ) );
+		self::assertStringContainsString( 'a write to the row blogname was refused by the takeover lock as the step\'s own call ran, and the row does not hold what the step was to write', $message );
+		self::assertStringNotContainsString( 'the row holds what the step wrote', $message );
 	}
 
 	/** The save of unit_rest() that fails: the new bases, or the state residual. */

@@ -1433,7 +1433,7 @@ final class AB_MCP_Sync_Engine {
 				// comparison of the writer (AB_MCP_Sync_Write; Codex round 3 of
 				// branch 11, A6).
 				$id     = $w::write_row( $prepared, $live_id, $pre_all );
-				$nested = self::nested( $journal );
+				$nested = self::nested( $journal, $name );
 				if ( is_wp_error( $id ) ) {
 					$error   = $id;
 					$refused = AB_MCP_Sync_Write::refused( $id );
@@ -1497,7 +1497,7 @@ final class AB_MCP_Sync_Engine {
 					return self::unsaved( $journal, $i, $saved, 'before', $live_id, $backup );
 				}
 				$done                   = $w::write_part( $live_id, $name, $prepared, is_array( $pre_all ) ? $pre_all : null );
-				$nested                 = self::nested( $journal );
+				$nested                 = self::nested( $journal, $name );
 				$error                  = is_wp_error( $done ) ? $done : null;
 				$refused                = AB_MCP_Sync_Write::refused( $error );
 				$post_all               = $w::current( $live_id );
@@ -1509,7 +1509,7 @@ final class AB_MCP_Sync_Engine {
 				// by the takeover lock (AB_MCP_Sync_Guard::only(); Codex round
 				// 5 of branch 11, C1): never silent, the object deviates
 				// (decision A) and says which row and field, with its way.
-				return self::deviated( $journal, $i, sprintf( 'another writer tried to change %s as the step\'s own call wrote it (a hook or filter of this site) and was refused, so the row holds what the step wrote and the other change did not happen; find the plugin or theme that writes it as the row is saved', self::nested_text( $nested ) ), $live_id, $backup );
+				return self::deviated( $journal, $i, self::refusal_why( $journal ), $live_id, $backup, true );
 			}
 			if ( $refused ) {
 				// The writer made no call (Codex round 3 of branch 11, A6, and
@@ -1615,17 +1615,60 @@ final class AB_MCP_Sync_Engine {
 	/**
 	 * The writes the takeover lock refused within the step's own call just
 	 * made (AB_MCP_Sync_Guard::refusals()), noted in the journal of the
-	 * object (refused_writes), so that no way of a deviation loses them.
+	 * object (refused_writes, with the part of the call), so that no way of
+	 * a deviation loses them: deviated() names them in every answer (Codex
+	 * round 6 of branch 11).
 	 *
-	 * @param array $journal Journal (changed).
-	 * @return array<int,array{option:string,fields:string[]}>
+	 * @param array  $journal Journal (changed).
+	 * @param string $part    The part of the call.
+	 * @return array<int,array{option:string,fields:string[],part:string}>
 	 */
-	private static function nested( array &$journal ) {
+	private static function nested( array &$journal, $part ) {
 		$nested = AB_MCP_Sync_Guard::refusals();
+		foreach ( $nested as $k => $one ) {
+			$nested[ $k ]['part'] = (string) $part;
+		}
 		if ( array() !== $nested ) {
 			$journal['object']['refused_writes'] = array_merge( isset( $journal['object']['refused_writes'] ) && is_array( $journal['object']['refused_writes'] ) ? $journal['object']['refused_writes'] : array(), $nested );
 		}
 		return $nested;
+	}
+
+	/**
+	 * The refused writes of the journal in words, by what the row of each
+	 * holds now: where the part of the call reads as its target, the step
+	 * wrote and only another write was refused; where not, the step's own
+	 * write did not happen either (a filter of this site changed the step's
+	 * own value, so the lock refused it, or changed it after the lock; Codex
+	 * round 6 of branch 11), and the answer says so.
+	 *
+	 * @param array $journal Journal.
+	 * @return string
+	 */
+	private static function refusal_why( array $journal ) {
+		$own   = array();
+		$other = array();
+		foreach ( isset( $journal['object']['refused_writes'] ) && is_array( $journal['object']['refused_writes'] ) ? $journal['object']['refused_writes'] : array() as $one ) {
+			$wrote = false;
+			foreach ( $journal['parts'] as $part ) {
+				if ( isset( $one['part'] ) && (string) $part['part'] === (string) $one['part'] ) {
+					$wrote = isset( $part['post'] ) && null !== $part['post'] && hash_equals( (string) $part['target'], (string) $part['post'] );
+				}
+			}
+			if ( $wrote ) {
+				$own[] = $one;
+			} else {
+				$other[] = $one;
+			}
+		}
+		$out = array();
+		if ( array() !== $own ) {
+			$out[] = sprintf( 'another writer tried to change %s as the step\'s own call wrote it (a hook or filter of this site) and was refused, so the row holds what the step wrote and the other change did not happen; find the plugin or theme that writes it as the row is saved', self::nested_text( $own ) );
+		}
+		if ( array() !== $other ) {
+			$out[] = sprintf( 'a write to %s was refused by the takeover lock as the step\'s own call ran, and the row does not hold what the step was to write: a filter of this site changed the step\'s own value (pre_update_option of the row), so the lock refused the own write as well, or changed it after the lock; find the plugin or theme that changes the row as it is saved', self::nested_text( $other ) );
+		}
+		return implode( '; ', $out );
 	}
 
 	/**
@@ -1723,9 +1766,17 @@ final class AB_MCP_Sync_Engine {
 	 * @param string     $why     Why, as a clause (no capital, no full stop).
 	 * @param int|null   $live_id Post, null where none was made.
 	 * @param array|null $backup  current() of the backup; null for a new object.
+	 * @param bool       $refusals_named Whether $why names the writes the
+	 *                   takeover lock refused already (refusal_why()); else
+	 *                   they are added to it.
 	 * @return array outcome().
 	 */
-	private static function deviated( array $journal, $i, $why, $live_id, $backup ) {
+	private static function deviated( array $journal, $i, $why, $live_id, $backup, $refusals_named = false ) {
+		// Every write the takeover lock refused in the step's own call is
+		// named, whatever way the step deviates (Codex round 6 of branch 11).
+		if ( ! $refusals_named && ! empty( $journal['object']['refused_writes'] ) ) {
+			$why = (string) $why . '; ' . self::refusal_why( $journal );
+		}
 		$name  = (string) $journal['parts'][ $i ]['part'];
 		$w     = self::writer_of( $journal );
 		$state = null === $live_id ? null : $w::current( $live_id );

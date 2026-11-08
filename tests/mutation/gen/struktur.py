@@ -95,6 +95,8 @@ IT_HARMLESS = 'testAHarmlessTextWidgetAndSerializedValuesOfMetaAndOptionsGoIntoT
 IT_REFUSEOWN = 'testAHookOfTheRightThatChangesTheOptionAndThenRefusesTheRightLeavesNothingOfItTheStepsOwn'
 IT_NESTWIDGET = 'testAHookInTheOwnCallThatWritesAnotherInstanceOfTheRowNestedIsRefused'
 IT_NESTPOS = 'testAHookInTheOwnCallThatSetsAnotherPositionNestedIsRefused'
+IT_NAMED = 'testEveryRefusedWriteIsNamedWhicheverWayTheStepDeviates'
+IT_OWNVALUE = 'testAFilterThatChangesTheOwnValueOfTheRowLeavesItAndTheAnswerSaysTheStepDidNotWrite'
 IT_HOOKOWN = 'testAHookOfTheRightThatChangesTheInstanceTheStepWritesKeepsItsChangeAndTheStepOwnsNothing'
 IT_CRED = 'testACredentialInTheNameOfAMenuOrOfItsPositionLandsInNoPackage'
 IT_FREEPOS = 'testANewMenuAtAPositionNoMenuHoldsYetGoesOverAndTheWayBackLeavesThePositionEmptyAgain'
@@ -614,6 +616,13 @@ e('c1-option', 'write_row(): a core option through the lock of the own call (C1 
   "\t\t\t\tupdate_option( $name, $prepared['value'] );", 'u', U_NESTED)
 e('c1-array-version', 'write_row(): the list as wp_set_sidebars_widgets() hands it on (C1 of round 5)', WA,
   "\t\t\t\tif ( ! isset( $map['array_version'] ) ) {\n\t\t\t\t\t$map['array_version'] = 3;\n\t\t\t\t}\n", "", 'u', U_NESTED)
+# Round 6: every refused write named, and what the row holds said truly.
+e('r6-named', 'deviated(): every write the lock refused named, whatever way the step deviates (round 6)', EN,
+  "\t\tif ( ! $refusals_named && ! empty( $journal['object']['refused_writes'] ) ) {", "\t\tif ( false ) {", 'it', IT_NAMED)
+e('r6-own', 'refusal_why(): where the part does not read as its target, the step did not write (round 6)', EN,
+  "\t\t\tif ( $wrote ) {\n\t\t\t\t$own[] = $one;", "\t\t\tif ( true ) {\n\t\t\t\t$own[] = $one;", 'it', IT_OWNVALUE)
+e('r6-part', 'nested(): each refused write with the part of its call (round 6)', EN,
+  "\t\t\t$nested[ $k ]['part'] = (string) $part;\n", "", 'it', IT_NESTWIDGET)
 # The way back through the helper: the last read against what the step wrote.
 e('a6-css-back', 'restore_part(): the last read of the CSS right before it goes back (A6)', CW,
   "\t\t\tstatic fn( $again ) => is_array( $again ) && $again['row']['post_id'] === $backup['row']['post_id'] && hash_equals( (string) $hash, self::row_hash( $again['row'] ) ),",
