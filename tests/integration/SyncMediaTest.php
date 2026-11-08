@@ -668,8 +668,13 @@ final class SyncMediaTest extends TestCase {
 			self::assertSame( 'create', self::entry( $planned['report']['all'], $name )['action'], $name . ': ' . json_encode( self::entry( $planned['report']['all'], $name ) ) );
 		}
 		// A site without an upload yet: its uploads folder is made as the
-		// first file is laid.
-		rmdir( AB_MCP_IT_Sites::docroot( 'a' ) . '/wp-content/uploads' );
+		// first file is laid (a fresh site has none; one a case before
+		// emptied goes here).
+		$uploads_a = AB_MCP_IT_Sites::docroot( 'a' ) . '/wp-content/uploads';
+		if ( is_dir( $uploads_a ) ) {
+			rmdir( $uploads_a );
+		}
+		self::assertDirectoryDoesNotExist( $uploads_a );
 		// The file of a new attachment goes with its row, as an upload makes
 		// it: a hook on add_attachment finds it there already.
 		$at_insert = array();
