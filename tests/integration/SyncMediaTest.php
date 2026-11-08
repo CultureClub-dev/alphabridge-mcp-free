@@ -73,6 +73,9 @@ final class SyncMediaTest extends TestCase {
 	/** @var string[] The files of the uploads of A before the case. */
 	private $files_before = array();
 
+	/** @var callable|null The filter of user_has_cap a case added (only it is removed: the core has its own there). */
+	private $caps_filter = null;
+
 	protected function setUp(): void {
 		AB_MCP_IT_Sites::reset( 'a' );
 		AB_MCP_IT_Sites::reset( 'b' );
@@ -111,7 +114,10 @@ final class SyncMediaTest extends TestCase {
 		remove_all_actions( 'delete_option' );
 		remove_all_actions( 'add_attachment' );
 		remove_all_filters( 'wp_check_filetype_and_ext' );
-		remove_all_filters( 'user_has_cap' );
+		if ( null !== $this->caps_filter ) {
+			remove_filter( 'user_has_cap', $this->caps_filter );
+			$this->caps_filter = null;
+		}
 		self::empty_uploads();
 	}
 
@@ -1145,6 +1151,7 @@ final class SyncMediaTest extends TestCase {
 			$allcaps['upload_files'] = false;
 			return $allcaps;
 		};
+		$this->caps_filter = $no_upload;
 		add_filter( 'user_has_cap', $no_upload );
 		$run    = self::begun( $planned['args'] );
 		$closed = self::finish( (int) $run['run_id'] );
