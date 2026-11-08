@@ -543,6 +543,16 @@ Position, die das Theme hier nicht registriert, in der Prüfung des Laufs
   geht von selbst zurück). Er sieht nicht, was `current()` nicht liest
   (die ausgeschlossenen Spalten und Schlüssel, andere Objekte), und nicht,
   was ein Hook vor dem Zurücklesen wieder zurücknimmt.
+- Zuordnung in der Meldung: Schreibt ein Hook in `pre_update_option_*`
+  verschachtelt genau den Zielwert und verändert er zugleich den Wert des
+  äusseren eigenen Aufrufs, so schreibt der innere Aufruf, und die Sperre
+  weist den äusseren ab. Die Zeile hält dann den Zielwert, und die Meldung
+  sagt, der eigene Aufruf habe geschrieben und ein anderer Schreibversuch
+  sei abgewiesen worden (`class-sync-engine.php` um :1655, :1666; Codex-Runde
+  7). Daten gehen dabei nicht verloren: Der Teil liest als sein Ziel, und die
+  Abweisung steht im Journal; nur die Zuordnung, welcher Aufruf schrieb, ist
+  vertauscht. Konstruiert wie die Fälle oben: ein Hook schreibt während des
+  eigenen Aufrufs verschachtelt dieselbe Zeile.
 - Nicht weiter: Rechtehooks, die Filter von `update()` eines Widgets, die
   Sanitizer der Vorprüfung, das Speichern des Journals und `with_row()`
   liegen vor dem Vergleich; dort sieht der Vergleich jede Änderung, auch am
