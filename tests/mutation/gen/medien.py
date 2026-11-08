@@ -78,6 +78,7 @@ U_FOLDER = 'testTheFolderOfAFileIsMadeLevelByLevelUnderTheUploadsAndTheUploadsTh
 U_LAY = 'testAFileIsLaidOnlyWhereItIsShownAtItsPathUnderTheUploadsAndAFolderSwappedAsItIsOpenedLeavesItEmptyAndUnclear'
 FLAT = 'testTheFirstFilesOfASiteWithoutMonthFoldersGoIntoItsUploadsAndOnlyWithTheRightToUploadAsTheyAreLaid'
 FILEHOOK = 'testAFileAHookChangesAsTheStepWritesOrPutsBackDeviatesTheAttachmentAndStopsItsWayBack'
+WEBP = 'testAWebpSizeAndAnImportOfOldWithAbsolutePathsLockNoAttachmentBesideThem'
 U_KINDS = 'testEachKindRegistersWithWhatTheTableGivesIt'
 U_WRITERS = 'testTheEngineWritesTermsWithTheirOwnWriter'
 IT_LINES = 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain'
@@ -290,19 +291,25 @@ e('writer-type-name', 'files_plan(): a type this account may not upload by its n
 e('writer-main-type', 'files_plan(): the main file of the type the attachment says', AW,
   "\t\t\tif ( ! $free && (string) $type['type'] !== (string) $prepared['postarr']['post_mime_type'] ) {", "\t\t\tif ( false ) {", 'it', LOCKS)
 e('writer-present-main-type', 'files_plan(): a file this site has that the attachment would name, by its content', AW,
-  "\t\t\tif ( 'present' !== $entry['state'] ) {\n\t\t\t\tcontinue;\n\t\t\t}\n\t\t\t$check = wp_check_filetype_and_ext(",
-  "\t\t\tif ( true ) {\n\t\t\t\tcontinue;\n\t\t\t}\n\t\t\t$check = wp_check_filetype_and_ext(", 'it', LOCKS)
+  "\t\t\tif ( 'present' !== $entry['state'] ) {\n\t\t\t\tcontinue;\n\t\t\t}\n\t\t\t$by_name = wp_check_filetype(",
+  "\t\t\tif ( true ) {\n\t\t\t\tcontinue;\n\t\t\t}\n\t\t\t$by_name = wp_check_filetype(", 'it', LOCKS)
+e('writer-present-content-only', 'files_plan(): a file the step does not write asked only whether its content is what its name says, not for the types of the account (Codex round 2, B)', AW,
+  "\t\t\t$check = self::content_check( $root . '/' . $entry['path'], self::base( $entry['path'] ) );",
+  "\t\t\t$check = wp_check_filetype_and_ext( $root . '/' . $entry['path'], self::base( $entry['path'] ), $mimes );", 'it', WEBP)
 e('writer-present-every', 'files_plan(): every file of the list this site has, not only the main one, by its content (Codex round 1, C)', AW,
-  "\t\t\tif ( 'present' !== $entry['state'] ) {\n\t\t\t\tcontinue;\n\t\t\t}\n\t\t\t$check = wp_check_filetype_and_ext(",
-  "\t\t\tif ( 'present' !== $entry['state'] || $entry['path'] !== $attached ) {\n\t\t\t\tcontinue;\n\t\t\t}\n\t\t\t$check = wp_check_filetype_and_ext(", 'it', LOCKS)
+  "\t\t\tif ( 'present' !== $entry['state'] ) {\n\t\t\t\tcontinue;\n\t\t\t}\n\t\t\t$by_name = wp_check_filetype(",
+  "\t\t\tif ( 'present' !== $entry['state'] || $entry['path'] !== $attached ) {\n\t\t\t\tcontinue;\n\t\t\t}\n\t\t\t$by_name = wp_check_filetype(", 'it', LOCKS)
 e('writer-media-missing', 'files_plan(): a file to lay the packages of media of the run carry', AW,
   "\t\t\t\tif ( ! is_array( $prepared['media'] ) || ! isset( $prepared['media'][ $key ] ) || ",
   "\t\t\t\tif ( ! is_array( $prepared['media'] ) || ", 'it', LOCKS)
 e('writer-shared', 'files_plan(): a path another attachment of this site names locks', AW,
   "\t\tforeach ( $named as $path => $ids ) {\n\t\t\treturn AB_MCP_Sync_Post_Writer::locked( 'attachment:shared_path'", "\t\tforeach ( array() as $path => $ids ) {\n\t\t\treturn AB_MCP_Sync_Post_Writer::locked( 'attachment:shared_path'", 'it', LOCKS)
-e('media-named-absolute', 'named_by(): an absolute file under the uploads read as the core reads it (Codex round 1, A6)', ME,
-  "\t\t\t\tif ( '' !== $attached && '/' === $attached[0] && 0 === strpos( $attached, $under ) && strlen( $attached ) > strlen( $under ) ) {",
-  "\t\t\t\tif ( false ) {", 'it', LOCKS)
+e('media-named-absolute', 'named_by(): the list of a candidate read as the core reads it (Codex round 1, A6)', ME,
+  "$backup['value'], $uploads['dir'], true );", "$backup['value'], $uploads['dir'], false );", 'it', LOCKS)
+e('media-paths-core-attached', 'paths() as the core: an absolute _wp_attached_file under the uploads (Codex round 1, A6)', ME,
+  "\t\t\t$attached = self::under( $attached, $basedir );", "", 'it', LOCKS)
+e('media-paths-core-meta-file', 'paths() as the core: an absolute metadata.file under the uploads, the folder of the backups (Codex round 2, B)', ME,
+  "\t\t\t\t$meta['file'] = self::under( $meta['file'], $basedir );", "", 'it', WEBP)
 e('media-named-problems', 'named_by(): a candidate whose list does not read whole locks (fail closed, Codex round 1, A6)', ME,
   "\t\t\t\tif ( array() !== $list['problems'] ) {\n\t\t\t\t\treturn null;",
   "\t\t\t\tif ( false ) {\n\t\t\t\t\treturn null;", 'it', LOCKS)

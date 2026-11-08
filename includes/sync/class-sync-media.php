@@ -139,11 +139,27 @@ final class AB_MCP_Sync_Media {
 	 * @param mixed  $meta     _wp_attachment_metadata unpacked.
 	 * @param mixed  $backup   _wp_attachment_backup_sizes unpacked.
 	 * @param string $basedir  The uploads folder (wp_get_upload_dir()).
+	 * @param bool   $as_core  Read an absolute path under the uploads as the
+	 *                         core does (get_attached_file(), path_join() of the
+	 *                         folder of metadata.file for the backups): the
+	 *                         file at its path relative to them. Only for the
+	 *                         reverse map of this site's own attachments
+	 *                         (named_by()); the canonical form keeps such a path
+	 *                         a problem, since it names a place of the site that
+	 *                         stored it, never one of another site.
 	 * @return array{files:array<int,array{path:string,roles:string[]}>,problems:array}
 	 */
-	public static function paths( $attached, $meta, $backup, $basedir ) {
+	public static function paths( $attached, $meta, $backup, $basedir, $as_core = false ) {
 		$basedir  = rtrim( (string) $basedir, '/' );
 		$attached = (string) $attached;
+		if ( $as_core ) {
+			// Codex rounds 1 and 2 of branch 10 (A6, B): an import of old keeps
+			// _wp_attached_file and metadata.file absolute under the uploads.
+			$attached = self::under( $attached, $basedir );
+			if ( is_array( $meta ) && isset( $meta['file'] ) && is_string( $meta['file'] ) ) {
+				$meta['file'] = self::under( $meta['file'], $basedir );
+			}
+		}
 		$files    = array();
 		$problems = array();
 		// An empty or absolute _wp_attached_file names no file of the
@@ -632,19 +648,17 @@ final class AB_MCP_Sync_Media {
 				if ( ! $meta['ok'] || ! $backup['ok'] || AB_MCP_Sync_Canon::holds_record( $values['_wp_attached_file'] ) ) {
 					return null;
 				}
-				// As the core reads the file of a candidate (get_attached_file():
-				// an absolute path stays as it is; one under the uploads names
-				// the file at its path relative to them, as
-				// _wp_relative_upload_path() stores it; Codex round 1 of branch
-				// 10, A6: an import of old keeps it absolute). A list that still
-				// does not read whole (a name that is no plain path under the
-				// uploads) is not known to name none of the paths: fail closed.
-				$attached = $values['_wp_attached_file'];
-				$under    = rtrim( (string) $uploads['dir'], '/' ) . '/';
-				if ( '' !== $attached && '/' === $attached[0] && 0 === strpos( $attached, $under ) && strlen( $attached ) > strlen( $under ) ) {
-					$attached = (string) substr( $attached, strlen( $under ) );
-				}
-				$list = self::paths( $attached, $meta['value'], $backup['value'], $uploads['dir'] );
+				// As the core reads the files of a candidate (get_attached_file(),
+				// wp_delete_attachment_files(): an absolute path stays as it is;
+				// one under the uploads names the file at its path relative to
+				// them, as _wp_relative_upload_path() stores it), for
+				// _wp_attached_file and for metadata.file, the folder of the
+				// backups (paths() with $as_core; Codex rounds 1 and 2 of branch
+				// 10, A6 and B: an import of old keeps both absolute). Only a
+				// list that does not read whole even so (a name that is no plain
+				// path under the uploads) is not known to name none of the paths:
+				// fail closed.
+				$list = self::paths( $values['_wp_attached_file'], $meta['value'], $backup['value'], $uploads['dir'], true );
 				if ( array() !== $list['problems'] ) {
 					return null;
 				}
@@ -685,6 +699,23 @@ final class AB_MCP_Sync_Media {
 	}
 
 	/* ---------------------------------------------------------- private */
+
+	/**
+	 * An absolute path under the uploads as its path relative to them, as
+	 * _wp_relative_upload_path() stores it; any other path as it is.
+	 *
+	 * @param string $path    Path as stored.
+	 * @param string $basedir The uploads folder, without a trailing slash.
+	 * @return string
+	 */
+	private static function under( $path, $basedir ) {
+		$path  = (string) $path;
+		$under = rtrim( (string) $basedir, '/' ) . '/';
+		if ( '' !== $path && '/' === $path[0] && '/' !== $under && 0 === strpos( $path, $under ) && strlen( $path ) > strlen( $under ) ) {
+			return (string) substr( $path, strlen( $under ) );
+		}
+		return $path;
+	}
 
 	/**
 	 * @param string $problem Problem.

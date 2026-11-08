@@ -107,10 +107,15 @@ entsteht, nennt ihre Meldung den Weg.
   letzten Segment des Pfads und danach der Liste jedes Kandidaten wie der
   Kern sie rechnet (`AB_MCP_Sync_Media::named_by()`). Der Vorfilter ist eine
   Obermenge: der Name jeder Datei einer Liste steht unverändert in einem
-  der drei Schlüssel. Die Datei eines Kandidaten liest sie wie der Kern
-  (`get_attached_file()`): ein absoluter Pfad unter den Uploads nennt die
-  Datei an seinem Pfad relativ zu ihnen, wie `_wp_relative_upload_path()`
-  ihn speichert (ein alter Import; Codex-Runde 1, A6). Mehr als 20 000
+  der drei Schlüssel. Die Dateien eines Kandidaten liest sie wie der Kern
+  (`get_attached_file()`, `wp_delete_attachment_files()`): ein absoluter
+  Pfad unter den Uploads nennt die Datei an seinem Pfad relativ zu ihnen,
+  wie `_wp_relative_upload_path()` ihn speichert, für `_wp_attached_file`
+  und für `metadata.file`, den Ordner der Sicherungen (ein alter Import;
+  Codex-Runde 1, A6; Runde 2, B: ein Januar-Anhang mit beiden absolut und
+  einer Sicherung sperrte einen unbeteiligten neuen Anhang). Die
+  kanonische Form liest so nicht: dort nennt ein absoluter Pfad einen Ort
+  der Site, die ihn speicherte, und bleibt ein Problem. Mehr als 20 000
   Kandidaten oder ein Kandidat, dessen Liste sich nicht ganz lesen lässt
   (ein Name, der kein einfacher Pfad unter den Uploads ist, auch ein
   absoluter ausserhalb), sperren (fail closed). Betroffen ist nur ein
@@ -123,12 +128,21 @@ entsteht, nennt ihre Meldung den Weg.
 
 ## Typ und Rechte
 
-- Jede Datei der Liste, die die Live-Site schon bytegleich hat (`present`),
-  prüft der Plan nach ihrem Inhalt wie eine zu legende (Codex-Runde 1, C):
-  eine liegengebliebene Grösse mit dem Inhalt eines anderen Typs sperrt mit
-  `attachment:file_type`. Ein Anhang, den Mediathek und Kern gemacht haben,
-  besteht diese Prüfung (WordPress prüft jeden Upload so), der Normalfall
-  bleibt frei.
+- Jede Datei der Liste, die die Live-Site schon bytegleich hat (`present`)
+  und die der Schritt darum nicht schreibt, prüft der Plan nur darauf, dass
+  ihr Inhalt zu ihrem Namen passt (Codex-Runde 1, C; Runde 2, B):
+  WordPress' Prüfung nach dem Inhalt, gegen jeden Typ, den WordPress kennt,
+  nicht gegen die Typen des Kontos (`content_check()`: für diesen einen
+  Aufruf sind alle bekannten Typen erlaubt, weil
+  `wp_check_filetype_and_ext()` sonst zuletzt gegen die Typen des Kontos
+  prüft). Eine liegengebliebene Grösse mit dem Inhalt eines anderen Typs
+  sperrt mit `attachment:file_type`; eine WebP-Grösse, die die Mediathek
+  machte, sperrt eine Änderung des Titels nicht, auch für ein Konto, das
+  WebP nicht hochladen darf. Die Typen des Kontos gelten für die Dateien,
+  die der Schritt legt. Die Hauptdatei hat den Typ des Anhangs. Ein Name
+  eines Typs, den WordPress nicht kennt, gibt nichts, wogegen der Inhalt
+  zu prüfen wäre. Prüffall
+  `testAWebpSizeAndAnImportOfOldWithAbsolutePathsLockNoAttachmentBesideThem`.
 - Typ nach dem Inhalt: jede zu legende Datei wird erst ganz in eine
   temporäre Datei dieser Anfrage gelesen (`get_temp_dir()`, ausserhalb der
   Uploads, danach entfernt), gegen Grösse und SHA-256 geprüft und mit

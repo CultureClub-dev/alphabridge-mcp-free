@@ -988,6 +988,83 @@ final class SyncMediaTest extends TestCase {
 		self::assertSame( array(), $this->deletions );
 	}
 
+	public function testAWebpSizeAndAnImportOfOldWithAbsolutePathsLockNoAttachmentBesideThem(): void {
+		// Codex round 2 of branch 10, the two B: a change of the title and the
+		// alternative text of a JPEG both sites have, with a size of WebP the
+		// media library made, goes there and back for an account that may not
+		// upload WebP (a file the step does not write is asked only whether
+		// its content is what its name says). A new image 2026/11/bild.jpg goes
+		// beside an import of old on this site, bild.jpg of January, whose
+		// _wp_attached_file and metadata.file are absolute paths under the
+		// uploads and which has a backup size: its list read as the core reads
+		// it names none of the new paths.
+		self::pair();
+		$bytes = self::jpeg( 400, 300, array( 150, 100, 50 ) );
+		$a     = self::upload_a( 'foto.jpg', 'image/jpeg', $bytes, array( 'post_title' => 'Foto' ), 'Foto' );
+		$b     = self::upload_b( 'foto.jpg', 'image/jpeg', $bytes, array( 'post_title' => 'Foto' ), 'Foto' );
+		$gd    = imagecreatetruecolor( 100, 75 );
+		ob_start();
+		imagewebp( $gd );
+		$webp                  = (string) ob_get_clean();
+		$uploads               = wp_get_upload_dir()['basedir'];
+		$meta                  = wp_get_attachment_metadata( $a );
+		$meta['sizes']['webp'] = array( 'file' => 'foto-100x75.webp', 'width' => 100, 'height' => 75, 'mime-type' => 'image/webp' );
+		file_put_contents( $uploads . '/2026/10/foto-100x75.webp', $webp );
+		wp_update_attachment_metadata( $a, $meta );
+		self::b(
+			array(
+				array( 'op' => 'put_file', 'path' => '2026/10/foto-100x75.webp', 'bytes' => base64_encode( $webp ) ),
+				array( 'op' => 'update_meta', 'post' => $b, 'key' => '_wp_attachment_metadata', 'value' => $meta ),
+			)
+		);
+		self::assertSame( self::uploads_of( 'a' ), self::uploads_of( 'b' ), 'The same files on both sites.' );
+		// The import of old on this site.
+		$old = wp_upload_bits( 'bild.jpg', null, self::jpeg( 320, 240, array( 10, 20, 30 ) ), '2026/01' );
+		self::assertFalse( $old['error'] );
+		$alt = wp_insert_attachment( wp_slash( array( 'post_mime_type' => 'image/jpeg', 'post_title' => 'Altbestand', 'post_name' => 'altbestand-januar', 'post_status' => 'inherit', 'post_date' => self::DATE, 'post_date_gmt' => self::DATE ) ), $old['file'], 0, true );
+		self::assertIsInt( $alt );
+		$old_meta         = wp_generate_attachment_metadata( $alt, $old['file'] );
+		$old_meta['file'] = $old['file'];
+		wp_update_attachment_metadata( $alt, $old_meta );
+		update_post_meta( $alt, '_wp_attached_file', $old['file'] );
+		copy( $old['file'], $uploads . '/2026/01/bild-orig.jpg' );
+		update_post_meta( $alt, '_wp_attachment_backup_sizes', array( 'full-orig' => array( 'width' => 320, 'height' => 240, 'file' => 'bild-orig.jpg' ) ) );
+		self::assertStringStartsWith( '/', (string) get_post_meta( $alt, '_wp_attached_file', true ) );
+		self::paired( self::staged() );
+		self::b(
+			array(
+				array( 'op' => 'update_post', 'args' => array( 'ID' => $b, 'post_title' => 'Foto 2026' ) ),
+				array( 'op' => 'update_meta', 'post' => $b, 'key' => '_wp_attachment_image_alt', 'value' => 'Ein Foto' ),
+				array( 'op' => 'upload', 'name' => 'bild.jpg', 'mime' => 'image/jpeg', 'bytes' => base64_encode( self::jpeg( 300, 200, array( 200, 10, 10 ) ) ), 'time' => '2026/11', 'as' => 'id' ),
+			)
+		);
+		$row_before = self::row_a( $a );
+		add_filter(
+			'upload_mimes',
+			static function ( $mimes ) {
+				unset( $mimes['webp'] );
+				return $mimes;
+			}
+		);
+		$planned = self::planned( array( 'attachment:2026/10/foto.jpg', 'attachment:2026/11/bild.jpg' ) );
+		$this->watch_deletions();
+		$run    = self::begun( $planned['args'] );
+		$closed = self::finish( (int) $run['run_id'] );
+		$status = self::run_status( (int) $run['run_id'] );
+		self::assertSame( 'closed_done', $closed['state'], json_encode( $closed ) . self::check_message( $status ) );
+		self::assertSame( 'Foto 2026', self::row_a( $a )['post_title'] );
+		self::assertSame( array( 'Ein Foto' ), self::meta_a( $a, '_wp_attachment_image_alt' ) );
+		self::assertFileExists( $uploads . '/2026/11/bild.jpg', 'The new image beside the import of old.' );
+		$back = self::back( (int) $run['run_id'] );
+		self::assertSame( 'closed_findings', $back['state'], 'The new image stays as a rest: ' . json_encode( $back ) );
+		$row_now = self::row_a( $a );
+		unset( $row_now['post_modified'], $row_now['post_modified_gmt'], $row_before['post_modified'], $row_before['post_modified_gmt'] );
+		self::assertSame( $row_before, $row_now, 'The row of the JPEG back byte for byte.' );
+		self::assertSame( array( 'Foto' ), self::meta_a( $a, '_wp_attachment_image_alt' ) );
+		self::assertSame( $webp, file_get_contents( $uploads . '/2026/10/foto-100x75.webp' ) );
+		self::assertSame( array(), $this->deletions );
+	}
+
 	/* ----------------------------------------------- what locks, before */
 
 	public function testWhatWouldReplaceShareOrLinkAFileOrIsOfATypeThisAccountMayNotUploadLocksBeforeAnythingIsWritten(): void {

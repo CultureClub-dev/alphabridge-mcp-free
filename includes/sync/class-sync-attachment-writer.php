@@ -554,28 +554,43 @@ final class AB_MCP_Sync_Attachment_Writer {
 			return AB_MCP_Sync_Post_Writer::locked( 'attachment:file_too_large', sprintf( '%1$d bytes to lay, %2$d at most', $lay, self::MAX_BYTES ) );
 		}
 		// The main file of the type the attachment says (post_mime_type), by its
-		// name; every file this site has already by its content as well (below),
-		// as the way back asks it of the files it names again (restore_files());
-		// a file to lay is asked so as it is laid (provide()).
+		// name. The types this account may upload hold for a file the step
+		// lays (above, and provide()); a file this site has already and the
+		// step does not write is asked against every type WordPress knows and
+		// this account's together (Codex round 2 of branch 10, B: a size of
+		// WebP the media library made locked a change of a title for an
+		// account that may not upload WebP).
+		$known    = array_merge( wp_get_mime_types(), $mimes );
 		$attached = isset( $prepared['meta']['_wp_attached_file'][0] ) ? (string) $prepared['meta']['_wp_attached_file'][0] : '';
 		if ( '' !== $attached ) {
-			$type = wp_check_filetype( self::base( $attached ), $mimes );
+			$main_here = false;
+			foreach ( $out as $entry ) {
+				$main_here = $main_here || ( $entry['path'] === $attached && 'present' === $entry['state'] );
+			}
+			$type = wp_check_filetype( self::base( $attached ), $main_here ? $known : $mimes );
 			if ( ! $free && (string) $type['type'] !== (string) $prepared['postarr']['post_mime_type'] ) {
 				return AB_MCP_Sync_Post_Writer::locked( 'attachment:file_type', sprintf( 'the file %1$s is %2$s by its name, the attachment says %3$s', $attached, '' === (string) $type['type'] ? 'of no type this account may upload' : (string) $type['type'], (string) $prepared['postarr']['post_mime_type'] ) );
 			}
 		}
-		// Every file of the list this site has already (present), by its
-		// content as a file to lay is asked (provide()), the main file of the
-		// type the attachment says (Codex round 1 of branch 10, C: a size left
-		// over byte for byte with a content of another type than its name).
+		// Every file of the list this site has already (present), which the
+		// step does not write: only whether its content is what its name says
+		// (a content of another type than its name, a script under the name of
+		// an image: Codex round 1 of branch 10, C), against the types
+		// WordPress knows (above); a name of a type none of them knows says
+		// nothing to check its content against. The main file of the type the
+		// attachment says.
 		foreach ( $out as $entry ) {
 			if ( 'present' !== $entry['state'] ) {
 				continue;
 			}
-			$check = wp_check_filetype_and_ext( $root . '/' . $entry['path'], self::base( $entry['path'] ), $mimes );
+			$by_name = wp_check_filetype( self::base( $entry['path'] ), $known );
+			if ( empty( $by_name['type'] ) ) {
+				continue;
+			}
+			$check = self::content_check( $root . '/' . $entry['path'], self::base( $entry['path'] ) );
 			$main  = '' !== $attached && $entry['path'] === $attached;
 			if ( ! empty( $check['proper_filename'] ) || ( ( empty( $check['type'] ) || empty( $check['ext'] ) || ( $main && (string) $check['type'] !== (string) $prepared['postarr']['post_mime_type'] ) ) && ! $free ) ) {
-				return AB_MCP_Sync_Post_Writer::locked( 'attachment:file_type', sprintf( 'the file %s of this site the attachment would name is by its content of another type than its name and the attachment say, or of a type this account may not upload', $entry['path'] ) );
+				return AB_MCP_Sync_Post_Writer::locked( 'attachment:file_type', sprintf( 'the file %s of this site the attachment would name is by its content of another type than its name, or than the attachment says', $entry['path'] ) );
 			}
 		}
 		// Another attachment of this site that names a path of the list.
@@ -797,6 +812,32 @@ final class AB_MCP_Sync_Attachment_Writer {
 			$out[ $path ] = $state;
 		}
 		return $out;
+	}
+
+	/**
+	 * WordPress's check of a file by its content (wp_check_filetype_and_ext()),
+	 * for a file this site has already and the step does not write: whether
+	 * its content is what its name says, against every type WordPress knows
+	 * (wp_get_mime_types()), not the types this account may upload. The core
+	 * function ends with a test against get_allowed_mime_types() of the
+	 * account, so for this one call every known type is allowed (a filter of
+	 * upload_mimes, last, removed right after it; Codex round 2 of branch 10,
+	 * B).
+	 *
+	 * @param string $full The file.
+	 * @param string $name Its name.
+	 * @return array ext, type, proper_filename.
+	 */
+	private static function content_check( $full, $name ) {
+		$every = static function ( $mimes ) {
+			return array_merge( is_array( $mimes ) ? $mimes : array(), wp_get_mime_types() );
+		};
+		add_filter( 'upload_mimes', $every, PHP_INT_MAX );
+		try {
+			return wp_check_filetype_and_ext( (string) $full, (string) $name, wp_get_mime_types() );
+		} finally {
+			remove_filter( 'upload_mimes', $every, PHP_INT_MAX );
+		}
 	}
 
 	/**
