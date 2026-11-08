@@ -63,6 +63,11 @@ U_LOCKS = 'testWhatTheEngineOfThePostDoesNotCarryToItsEndIsRefusedWithItsLock'
 CSS_BACK = 'testTheWayBackOfTheGlobalStylesAsksTheRuleOfTheCustomCssAsForward'
 SEEN = 'testANewNavigationEveryBlockNamesByItsRefGoesAndOneABlockWithoutAMenuWouldShowIsLocked'
 CHAIN = 'testATemplateANewPartAndWhatThePartNamesGoInTheOrderOfTheirReferences'
+FAILED_PART = 'testANewNavigationAsksWhatTheStepsBeforeItLeftAndAPartThatFailedKeepsItsBlockWithoutAMenu'
+FILE_PART = 'testAPartTheThemeHasAsAFileIsNoDependencyAndTheTemplateGoesWhereTheRowOfThePartFails'
+DROPPED = 'testAPageThatDropsItsLastNavigationBlockLetsANewNavigationGo'
+TOKEN_DEPENDS = 'testATokenWhoseDependenciesNoLongerHoldIsStale'
+U_ORDER = 'testAReferenceByNameIsADependencyOnlyWhereThisSiteCouldNotResolveItAndANavigationComesLast'
 
 # ------------------------------------------------ what the engine writes
 e('types', 'TYPES: the five core types of the kind post are written since branch 9b', PW,
@@ -197,8 +202,38 @@ e('seen-posts-run', 'fallback_shown(): the posts the run writes', PW,
   "\t\t\tif ( self::shows_pages( (string) $one['type'], (string) ( $one['status'] ?? '' ) ) && self::shows_fallback( (string) $one['content'], 0, $state ) ) {",
   "\t\t\tif ( false ) {", 'it', SEEN)
 e('seen-planned', 'boundary(): a navigation is asked with the objects of the run as it writes them', EN,
-  "\t\t$ctx['planned'] = self::planned( isset( $run['plan']['objects'] ) && is_array( $run['plan']['objects'] ) && 'wp_navigation' === (string) ( $item['subtype'] ?? '' ) ? $run['plan']['objects'] : array(), $lines );",
-  "\t\t$ctx['planned'] = array();", 'it', SEEN)
+  "\t\t\t$ctx['planned'] = self::planned( isset( $run['plan']['objects'] ) && is_array( $run['plan']['objects'] ) ? $run['plan']['objects'] : array(), $lines, $states );",
+  "\t\t\t$ctx['planned'] = array();", 'it', SEEN)
+e('seen-states', 'boundary(): by the states of their steps (Codex round 2, 1)', EN,
+  "\t\t\t$ctx['planned'] = self::planned( isset( $run['plan']['objects'] ) && is_array( $run['plan']['objects'] ) ? $run['plan']['objects'] : array(), $lines, $states );",
+  "\t\t\t$ctx['planned'] = self::planned( isset( $run['plan']['objects'] ) && is_array( $run['plan']['objects'] ) ? $run['plan']['objects'] : array(), $lines );", 'it', FAILED_PART)
+e('seen-ended', 'planned(): a step that began or ended leaves this site as it is (Codex round 2, 1)', EN,
+  "\t\t\tif ( is_array( $states ) && ( ! isset( $one['seq'] ) || 'planned' !== ( $states[ (int) $one['seq'] ] ?? '' ) ) ) {",
+  "\t\t\tif ( false ) {", 'it', FAILED_PART)
+e('seen-replaces', 'planned(): an object that replaces one here counts, though it shows no navigation block (Codex round 2, 3)', EN,
+  "\t\t\t$replaces = 'update' === $one['op'] && isset( $one['live_ref'] );",
+  "\t\t\t$replaces = false;", 'it', DROPPED)
+e('order-here', 'order(): an edge to a target this site resolves without its step is an order, no dependency (Codex round 2, 2)', PU,
+  "\t\t\t\tif ( 'create' === $items[ $m ]['op'] && ! $here ) {",
+  "\t\t\t\tif ( 'create' === $items[ $m ]['op'] ) {", 'it', FILE_PART)
+e('order-refs-here', 'order_refs(): the names this site resolves without the run', PW,
+  "\t\t\tif ( self::resolves_here( $name, $type ) ) {\n\t\t\t\t$out['here'][ $name ] = true;",
+  "\t\t\tif ( false ) {\n\t\t\t\t$out['here'][ $name ] = true;", 'it', FILE_PART)
+e('resolves-part', 'resolves_here(): a part of the active theme as a row or a file here', PW,
+  "\t\treturn $theme === (string) get_stylesheet() && true === self::part_here( $theme, $slug );",
+  "\t\treturn false;", 'it', FILE_PART)
+e('resolves-template', 'resolves_here(): a template the theme offers already', PW,
+  "\t\t\treturn self::template_offered( substr( $name, 9 ), (string) $type );",
+  "\t\t\treturn false;", 'unit', U_ORDER)
+e('template-offered', 'template_offered(): the templates the theme of this site offers for the type', PW,
+  "\t\treturn is_array( $templates ) && isset( $templates[ (string) $template ] );",
+  "\t\treturn true;", 'unit', 'testTheTemplateOfAPageGoesThroughTheCoreWayAndTheThemeHasToOfferIt')
+e('order-last', 'order(): a navigation last where nothing orders it otherwise', PU,
+  "\t\t\t\t\t$last  = in_array( (string) ( $items[ $n ]['subtype'] ?? '' ), self::LAST, true ) ? 1 : 0;",
+  "\t\t\t\t\t$last  = 0;", 'unit', U_ORDER)
+e('token-depends', 'plan(): the state of the token covers the dependencies of each step (Codex round 2, 2)', PU,
+  "\t\t\t$order[] = array( (int) $item['seq'], (string) $item['kind'], (string) $item['staging_ref'], $depends_of[ $n ] );",
+  "\t\t\t$order[] = array( (int) $item['seq'], (string) $item['kind'], (string) $item['staging_ref'] );", 'it', TOKEN_DEPENDS)
 e('seen-planned-check', 'run_check(): the check of a navigation knows the objects of the run as it writes them', EN,
   "\t\t$ctx['planned'] = self::planned( $items, $lines );\n", '', 'it', SEEN)
 
@@ -207,14 +242,14 @@ e('order-names', 'order(): a template part and a template another object names a
   "\t\t\tforeach ( array( 'parts', 'templates' ) as $list ) {",
   "\t\t\tforeach ( array() as $list ) {", 'it', CHAIN)
 e('order-ids', 'order(): a reusable block and a navigation another object names by its ref are edges', PU,
-  "\t\t\t\tif ( isset( $posts[ (int) $id ] ) ) {\n\t\t\t\t\t$targets[] = $posts[ (int) $id ];",
-  "\t\t\t\tif ( false ) {\n\t\t\t\t\t$targets[] = $posts[ (int) $id ];", 'it', CHAIN)
-e('order-create-dependency', 'order(): a target the run creates is a dependency', PU,
-  "\t\t\t\tif ( 'create' === $items[ $m ]['op'] ) {\n\t\t\t\t\t$items[ $n ]['depends_on'][] = $m;",
+  "\t\t\t\tif ( isset( $posts[ (int) $id ] ) ) {\n\t\t\t\t\t$targets[] = array( $posts[ (int) $id ], false );",
+  "\t\t\t\tif ( false ) {\n\t\t\t\t\t$targets[] = array( $posts[ (int) $id ], false );", 'it', CHAIN)
+e('order-create-dependency', 'order(): a target the run creates (and this site does not resolve) is a dependency', PU,
+  "\t\t\t\tif ( 'create' === $items[ $m ]['op'] && ! $here ) {\n\t\t\t\t\t$items[ $n ]['depends_on'][] = $m;",
   "\t\t\t\tif ( false ) {\n\t\t\t\t\t$items[ $n ]['depends_on'][] = $m;", 'it', CHAIN)
 e('order-change-no-dependency', 'order(): a target the run changes comes first, no dependency', PU,
-  "\t\t\t\tif ( 'create' === $items[ $m ]['op'] ) {\n\t\t\t\t\t$items[ $n ]['depends_on'][] = $m;",
-  "\t\t\t\tif ( true ) {\n\t\t\t\t\t$items[ $n ]['depends_on'][] = $m;", 'it', CHAIN)
+  "\t\t\t\tif ( 'create' === $items[ $m ]['op'] && ! $here ) {\n\t\t\t\t\t$items[ $n ]['depends_on'][] = $m;",
+  "\t\t\t\tif ( ! $here ) {\n\t\t\t\t\t$items[ $n ]['depends_on'][] = $m;", 'it', CHAIN)
 e('order-after', 'order(): an object comes after the targets it changes', PU,
   "\t\t\t\t\tforeach ( $with_after ? $item['after'] : array() as $m ) {",
   "\t\t\t\t\tforeach ( array() as $m ) {", 'it', CHAIN)
@@ -248,12 +283,12 @@ e('parts-theme', 'parts_refusal(): a part of a theme that is not the active one 
 e('parts-pending', 'parts_refusal(): a part the same run creates first is pending', PW,
   "\t\t\tif ( isset( $pending['wp_template_part'][ $name ] ) ) {",
   "\t\t\tif ( false ) {", 'it', PENDING)
-e('parts-row', 'parts_refusal(): a published part of the theme and slug here', PW,
-  "\t\t\tif ( $row > 0 ) {",
-  "\t\t\tif ( false ) {", 'it', PENDING)
-e('parts-file', 'parts_refusal(): a part of the active theme as a file', PW,
-  "\t\t\tif ( is_object( $file ) && isset( $file->content ) && '' !== (string) $file->content ) {",
-  "\t\t\tif ( false ) {", 'it', PENDING)
+e('parts-row', 'part_here(): a published part of the theme and slug here', PW,
+  "\t\tif ( $row > 0 ) {\n\t\t\treturn true;",
+  "\t\tif ( false ) {\n\t\t\treturn true;", 'it', PENDING)
+e('parts-file', 'part_here(): a part of the active theme as a file', PW,
+  "\t\treturn is_object( $file ) && isset( $file->content ) && '' !== (string) $file->content;",
+  "\t\treturn false;", 'it', PENDING)
 e('parts-row-theme', 'part_row(): the part of that theme, by the name of its term, as the core asks', PW,
   "AND x.taxonomy = 'wp_theme' AND t.name = %s ORDER BY p.ID ASC LIMIT 1\", (string) $slug, (string) $theme ) );",
   "AND x.taxonomy = 'wp_theme' AND t.name != %s ORDER BY p.ID ASC LIMIT 1\", (string) $slug, (string) $theme ) );", 'it', PENDING)

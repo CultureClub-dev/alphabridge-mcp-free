@@ -98,6 +98,15 @@ final class AB_MCP_Sync_Push {
 	 */
 	const NAMED_FIRST = array( 'wp_template_part', 'wp_template' );
 
+	/**
+	 * The types whose steps come last where nothing orders them otherwise
+	 * (branch 9b, Codex round 2): a navigation, whose check asks what the
+	 * other objects of the run leave (AB_MCP_Sync_Post_Writer::
+	 * fallback_shown()): the steps that do not need it have ended by then,
+	 * and the check reads what they wrote.
+	 */
+	const LAST = array( 'wp_navigation' );
+
 	/** Steps a preview names at most (all are counted). */
 	const NAMED = 200;
 
@@ -561,11 +570,13 @@ final class AB_MCP_Sync_Push {
 				: array( 'post_type' => (string) ( $item['subtype'] ?? '' ), 'post_name' => (string) $item['staging_ref'], 'theme' => '' );
 			$bytes += AB_MCP_Sync_Backup::size_of( is_array( $current ) ? $current : array( 'absent' => true, 'identity' => $absent ) );
 		}
+		$depends_of = array();
 		foreach ( $items as $n => $item ) {
 			$depends = array( 1 );
 			foreach ( $item['depends_on'] as $m ) {
 				$depends[] = $by_n[ $m ];
 			}
+			$depends_of[ $n ] = array_values( array_unique( $depends ) );
 			$steps[] = array(
 				'op'      => 'write',
 				'phase'   => 5,
@@ -590,9 +601,12 @@ final class AB_MCP_Sync_Push {
 		// the parents of its ancestors here, term_depths()), so a token whose
 		// order no longer holds is stale like any other change of the state
 		// (branch 9, Codex round 3, B).
+		// The dependencies of each step with it: whether an edge is one rests
+		// on this site as well (a part it has as a file or a row; Codex round 2
+		// of branch 9b, 2), and a dependency decides which step is skipped.
 		$order = array();
-		foreach ( $items as $item ) {
-			$order[] = array( (int) $item['seq'], (string) $item['kind'], (string) $item['staging_ref'] );
+		foreach ( $items as $n => $item ) {
+			$order[] = array( (int) $item['seq'], (string) $item['kind'], (string) $item['staging_ref'], $depends_of[ $n ] );
 		}
 		$state = hash(
 			'sha256',
@@ -785,34 +799,38 @@ final class AB_MCP_Sync_Push {
 			// Each reference the boundary asks (a reusable block or a
 			// navigation by its ref, a template part by theme and slug, the
 			// template of a page) is an edge where its target is written in
-			// the same run: a target the run creates is a dependency (without
-			// it the boundary refuses the object; a cycle is locked), one it
-			// changes comes first without being one (the object is written all
-			// the same where it fails).
+			// the same run. It is a dependency only where this site could not
+			// resolve the target without its step (a target the run creates
+			// and that has no row and no file of the active theme here:
+			// without it the boundary refuses the object; a cycle is locked);
+			// else it is an order, the target first, the object written all
+			// the same where the target fails (a target the run changes, or a
+			// new row of a part the theme has as a file; Codex rounds 1 and 2).
 			$targets = array();
 			foreach ( isset( $item['order_refs']['posts'] ) ? $item['order_refs']['posts'] : array() as $id ) {
 				if ( isset( $posts[ (int) $id ] ) ) {
-					$targets[] = $posts[ (int) $id ];
+					$targets[] = array( $posts[ (int) $id ], false );
 				}
 			}
 			foreach ( array( 'parts', 'templates' ) as $list ) {
 				foreach ( isset( $item['order_refs'][ $list ] ) ? $item['order_refs'][ $list ] : array() as $name ) {
 					if ( isset( $named[ (string) $name ] ) ) {
-						$targets[] = $named[ (string) $name ];
+						$targets[] = array( $named[ (string) $name ], isset( $item['order_refs']['here'][ (string) $name ] ) );
 					}
 				}
 			}
-			foreach ( array_unique( $targets ) as $m ) {
+			foreach ( $targets as list( $m, $here ) ) {
 				if ( $m === $n ) {
 					continue;
 				}
-				if ( 'create' === $items[ $m ]['op'] ) {
+				if ( 'create' === $items[ $m ]['op'] && ! $here ) {
 					$items[ $n ]['depends_on'][] = $m;
 					$edges[ $n ][ $m ]           = true;
 				} else {
 					$items[ $n ]['after'][] = $m;
 				}
 			}
+			$items[ $n ]['after'] = array_values( array_unique( $items[ $n ]['after'] ) );
 			$items[ $n ]['depends_on'] = array_values( array_unique( $items[ $n ]['depends_on'] ) );
 		}
 		$locked = array();
@@ -884,7 +902,8 @@ final class AB_MCP_Sync_Push {
 					// template parts a template names by theme and slug, then the
 					// templates a page names by slug (page_template), then the rest.
 					$named = array_search( (string) ( $items[ $n ]['subtype'] ?? '' ), self::NAMED_FIRST, true );
-					return array( 1, false === $named ? count( self::NAMED_FIRST ) : (int) $named, (int) $n );
+					$last  = in_array( (string) ( $items[ $n ]['subtype'] ?? '' ), self::LAST, true ) ? 1 : 0;
+					return array( 1, false === $named ? count( self::NAMED_FIRST ) + $last : (int) $named, (int) $n );
 				};
 				return $rank( $a ) <=> $rank( $b );
 			}

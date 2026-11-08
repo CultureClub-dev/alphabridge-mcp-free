@@ -168,7 +168,7 @@ e('writer-format-target', 'target_term_keys(): the slug of a format as the targe
 e('writer-page-template', 'target_of(): the template through page_template of wp_insert_post() (decisions 17, 28; B7)', PW,
   "\t\t\t$postarr['page_template'] = $meta['_wp_page_template'][0];", '', 'unit', TARGET)
 e('writer-template-offered', 'precheck(): the theme of this site has to offer the template (B7)', PW,
-  "\t\t\tif ( ! is_array( $templates ) || ! isset( $templates[ $prepared['postarr']['page_template'] ] ) ) {", "\t\t\tif ( false ) {", 'unit', 'testTheTemplateOfAPageGoesThroughTheCoreWayAndTheThemeHasToOfferIt')
+  "\t\t\tif ( ! self::template_offered( (string) $prepared['postarr']['page_template'], $type ) ) {", "\t\t\tif ( false ) {", 'unit', 'testTheTemplateOfAPageGoesThroughTheCoreWayAndTheThemeHasToOfferIt')
 e('writer-pending-parent', 'target_of(): a parent the run creates before the object is pending, not missing (B1)', PW,
   "\t\t\tif ( null === $mapped && isset( $pending['post'][ $parent ] ) ) {", "\t\t\tif ( false ) {", 'unit', LOCKS)
 e('writer-pending-top', 'precheck(): a page with a pending parent is no page of the top level (B1)', PW,

@@ -2529,6 +2529,46 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( 4, $out['locked'][0]['n'] );
 	}
 
+	public function testAReferenceByNameIsADependencyOnlyWhereThisSiteCouldNotResolveItAndANavigationComesLast(): void {
+		// Codex round 2 of branch 9b (2): an edge to a target the run creates
+		// is a dependency only where this site could not resolve the target
+		// without its step; the row of a part the theme has as a file (footer)
+		// is an order, the template written all the same where it fails. A
+		// navigation comes last where nothing orders it otherwise: its check
+		// reads what the other steps left.
+		$m     = new ReflectionMethod( AB_MCP_Sync_Push::class, 'order' );
+		$item  = static fn( string $subtype, string $op, string $ref, array $over = array() ): array => array_merge(
+			array(
+				'kind'        => 'post',
+				'subtype'     => $subtype,
+				'op'          => $op,
+				'staging_ref' => $ref,
+				'action'      => 'create' === $op ? 'create' : 'take_over',
+				'refs'        => array(),
+			),
+			$over
+		);
+		$items = array(
+			1 => $item( 'wp_navigation', 'create', '40' ),
+			2 => $item( 'wp_template', 'update', '10', array( 'order_name' => 'template:single', 'order_refs' => array( 'posts' => array(), 'parts' => array( 'part:tt5//footer', 'part:tt5//promo' ), 'templates' => array(), 'here' => array( 'part:tt5//footer' => true ) ) ) ),
+			3 => $item( 'page', 'update', '50' ),
+			4 => $item( 'wp_template_part', 'create', '20', array( 'order_name' => 'part:tt5//footer' ) ),
+			5 => $item( 'wp_template_part', 'create', '30', array( 'order_name' => 'part:tt5//promo' ) ),
+		);
+		$out   = $m->invoke( null, $items );
+		self::assertSame( array( 5 ), $out['items'][2]['depends_on'], 'The new part without a file here: a dependency.' );
+		self::assertSame( array( 4 ), $out['items'][2]['after'], 'The new row of a part the theme has as a file: an order.' );
+		self::assertSame( array( 4, 5, 2, 3, 1 ), array_keys( $out['items'] ), 'The parts, the template, the page, the navigation last.' );
+		// A template the theme offers without the run (a custom template of
+		// its files): resolved here, so an edge to its row is an order.
+		$GLOBALS['ab_test_page_templates'] = array( 'page' => array( 'page-no-title' => 'Page No Title' ) );
+		self::assertTrue( AB_MCP_Sync_Post_Writer::resolves_here( 'template:page-no-title', 'page' ) );
+		self::assertFalse( AB_MCP_Sync_Post_Writer::resolves_here( 'template:landing', 'page' ), 'One the theme does not offer.' );
+		self::assertFalse( AB_MCP_Sync_Post_Writer::resolves_here( 'template:page-no-title', 'post' ), 'Offered for pages only.' );
+		self::assertFalse( AB_MCP_Sync_Post_Writer::resolves_here( 'neither', 'page' ) );
+		unset( $GLOBALS['ab_test_page_templates'] );
+	}
+
 	public function testTheLineOfAnItemIsCheckedAgainstTheReport(): void {
 		$lines = array(
 			'lines' => array( "post\x0012" => array( 'kind' => 'post', 'ref' => '12', 'hash' => str_repeat( 'a', 64 ) ), "post\x0013" => array( 'kind' => 'post', 'ref' => '13', 'hash' => str_repeat( 'a', 64 ) ), "post\x0014" => array( 'kind' => 'post', 'ref' => '14' ) ),

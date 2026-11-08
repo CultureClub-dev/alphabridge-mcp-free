@@ -1309,4 +1309,158 @@ final class SyncTemplatesTest extends TestCase {
 		sort( $expected );
 		self::assertSame( $expected, self::rests( $back ) );
 	}
+
+	/* ------------------------------------------ Codex round 2 of 9b */
+
+	/** The types of the objects of a run, by the order of their steps (from its plan: a step that failed early has no identity in its journal). */
+	private static function planned_types( int $run_id ): array {
+		$run     = \AB_MCP_Sync_Run::get( $run_id );
+		$objects = is_array( $run ) && isset( $run['plan']['objects'] ) ? $run['plan']['objects'] : array();
+		usort( $objects, static fn( $a, $b ) => (int) $a['seq'] <=> (int) $b['seq'] );
+		return array_map( static fn( $o ) => (string) $o['subtype'], $objects );
+	}
+
+	/** One call of next on a run: its answer. */
+	private static function next( int $run_id ): array {
+		$answer = self::gated( 'wp_site_push', array( 'action' => 'next', 'run_id' => $run_id ) );
+		self::assertIsArray( $answer, is_wp_error( $answer ) ? $answer->get_error_message() : '' );
+		return $answer;
+	}
+
+	public function testANewNavigationAsksWhatTheStepsBeforeItLeftAndAPartThatFailedKeepsItsBlockWithoutAMenu(): void {
+		// Codex round 2 of branch 9b (1): here the header shows a navigation
+		// block without a menu (navigation elf, the only one, shows); on
+		// staging the header names elf by its ref, and a newer navigation is
+		// new. The check before the first write counts the header as the run
+		// writes it. The header step comes first and fails (another hand
+		// changed its title after the check); the step of the new navigation
+		// then reads the header as it is here, without a menu, and is refused
+		// (post:navigation_fallback): the new navigation is not written.
+		self::pair();
+		$link  = '<!-- wp:navigation-link {"label":"Start","url":"/","kind":"custom","isTopLevelLink":true} /-->';
+		$elf_a = self::on_a( self::made( 'wp_navigation', 'elf', $link ) );
+		$elf_b = self::on_b( self::made( 'wp_navigation', 'elf', $link ) );
+		self::rest_a( 'POST', '/wp/v2/template-parts/' . self::THEME . '//header', array( 'content' => '<!-- wp:navigation /-->' ) );
+		self::rest_b( 'POST', '/wp/v2/template-parts/' . self::THEME . '//header', array( 'content' => '<!-- wp:navigation /-->' ) );
+		$header_a = self::id_a( 'wp_template_part', 'header' );
+		$header_b = (int) self::rest_b( 'GET', '/wp/v2/template-parts/' . self::THEME . '//header', array( 'context' => 'edit' ) )['wp_id'];
+		self::same_dates( $header_a, $header_b );
+		self::paired( self::staged() );
+		self::rest_b( 'POST', '/wp/v2/template-parts/' . self::THEME . '//header', array( 'content' => '<!-- wp:navigation {"ref":' . $elf_b . '} /-->' ) );
+		self::on_b( array( 'post_type' => 'wp_navigation', 'post_status' => 'publish', 'post_title' => 'Neu', 'post_name' => 'neu-m', 'post_content' => $link ) );
+		$run = self::begun( self::planned( array( 'post:wp_template_part:header', 'post:wp_navigation:neu-m' ) )['args'] );
+		$id  = (int) $run['run_id'];
+		self::next( $id );
+		self::assertStringContainsString( '"findings":[]', self::check_message( self::run_status( $id ) ), 'The check counts the header as the run writes it.' );
+		global $wpdb;
+		$wpdb->update( $wpdb->posts, array( 'post_title' => 'Kopf, fremd' ), array( 'ID' => $header_a ) );
+		clean_post_cache( $header_a );
+		$closed = self::finish( $id );
+		self::assertSame( 'closed_findings', $closed['state'], json_encode( $closed ) );
+		$writes = self::writes( self::run_status( $id ) );
+		self::assertSame( array( 'wp_template_part', 'wp_navigation' ), self::planned_types( $id ), 'The header first, the navigation last.' );
+		self::assertSame( 'failed', $writes[0]['state'], json_encode( $writes[0] ) );
+		self::assertSame( 'failed', $writes[1]['state'], json_encode( $writes[1] ) );
+		self::assertStringContainsString( 'post:navigation_fallback', (string) json_encode( $writes[1]['result'] ) );
+		self::assertStringContainsString( 'shows a navigation block without a menu of its own', (string) json_encode( $writes[1]['result'] ) );
+		self::assertSame( 0, self::id_a( 'wp_navigation', 'neu-m' ), 'The new navigation is not written.' );
+		self::assertSame( '<!-- wp:navigation /-->', self::row_a( $header_a )['post_content'] );
+		self::assertGreaterThan( 0, $elf_a );
+	}
+
+	public function testAPartTheThemeHasAsAFileIsNoDependencyAndTheTemplateGoesWhereTheRowOfThePartFails(): void {
+		// Codex round 2 of branch 9b (2): Twenty Twenty-Five has the footer as
+		// a file. The run makes its first row (the footer saved on staging)
+		// and changes a template that names it. The edge is an order, no
+		// dependency: the footer resolves here without its step. The row
+		// fails (another hand saved the footer here after the check: the slug
+		// is taken); the template goes all the same.
+		self::pair();
+		$page = self::para( 'Seite' );
+		self::rest_a( 'POST', '/wp/v2/templates/' . self::THEME . '//page', array( 'content' => $page ) );
+		self::rest_b( 'POST', '/wp/v2/templates/' . self::THEME . '//page', array( 'content' => $page ) );
+		$template_a = self::id_a( 'wp_template', 'page' );
+		$template_b = (int) self::rest_b( 'GET', '/wp/v2/templates/' . self::THEME . '//page', array( 'context' => 'edit' ) )['wp_id'];
+		self::same_dates( $template_a, $template_b );
+		self::paired( self::staged() );
+		self::rest_b( 'POST', '/wp/v2/template-parts/' . self::THEME . '//footer', array( 'content' => self::para( 'Fuss neu' ) ) );
+		self::rest_b( 'POST', '/wp/v2/templates/' . self::THEME . '//page', array( 'content' => $page . '<!-- wp:template-part {"slug":"footer","theme":"' . self::THEME . '"} /-->' ) );
+		$run    = self::begun( self::planned( array( 'post:wp_template_part:footer', 'post:wp_template:page' ) )['args'] );
+		$id     = (int) $run['run_id'];
+		$status = self::run_status( $id );
+		$writes = self::writes( $status );
+		self::assertSame( array( 'wp_template_part', 'wp_template' ), self::planned_types( $id ), 'The part first all the same.' );
+		self::assertNotContains( (int) $writes[0]['seq'], $writes[1]['depends'], 'The footer resolves here as a file: no dependency.' );
+		self::next( $id );
+		self::rest_a( 'POST', '/wp/v2/template-parts/' . self::THEME . '//footer', array( 'content' => self::para( 'Fuss, fremd' ) ) );
+		wp_cache_flush();
+		$closed = self::finish( $id );
+		self::assertSame( 'closed_findings', $closed['state'], json_encode( $closed ) );
+		$writes = self::writes( self::run_status( $id ) );
+		self::assertSame( 'failed', $writes[0]['state'], json_encode( $writes[0] ) );
+		self::assertSame( 'done', $writes[1]['state'], json_encode( $writes[1] ) );
+		self::assertSame( $page . '<!-- wp:template-part {"slug":"footer","theme":"' . self::THEME . '"} /-->', self::row_a( $template_a )['post_content'] );
+	}
+
+	public function testAPageThatDropsItsLastNavigationBlockLetsANewNavigationGo(): void {
+		// Codex round 2 of branch 9b (3): here a page shows a navigation block
+		// without a menu (the header names the navigation basis by its ref).
+		// On staging the page drops that block, and a newer navigation is new.
+		// The page as the run writes it counts, though it names no navigation
+		// any more: nothing shows the move, the navigation goes, and back.
+		self::pair();
+		$link    = '<!-- wp:navigation-link {"label":"Start","url":"/","kind":"custom","isTopLevelLink":true} /-->';
+		$basis_a = self::on_a( self::made( 'wp_navigation', 'basis', $link ) );
+		$basis_b = self::on_b( self::made( 'wp_navigation', 'basis', $link ) );
+		self::rest_a( 'POST', '/wp/v2/template-parts/' . self::THEME . '//header', array( 'content' => '<!-- wp:navigation {"ref":' . $basis_a . '} /-->' ) );
+		self::rest_b( 'POST', '/wp/v2/template-parts/' . self::THEME . '//header', array( 'content' => '<!-- wp:navigation {"ref":' . $basis_b . '} /-->' ) );
+		$header_a = self::id_a( 'wp_template_part', 'header' );
+		$header_b = (int) self::rest_b( 'GET', '/wp/v2/template-parts/' . self::THEME . '//header', array( 'context' => 'edit' ) )['wp_id'];
+		self::same_dates( $header_a, $header_b );
+		$page_a = self::on_a( self::made( 'page', 'menueseite', '<!-- wp:navigation /-->' ) );
+		$page_b = self::on_b( self::made( 'page', 'menueseite', '<!-- wp:navigation /-->' ) );
+		self::paired( self::staged() );
+		self::assertSame( 'active', AB_MCP_Sync_Pairs::find_live( AB_MCP_Sync_Anchor::active()['source_id'], 'post', (string) $page_a )['state'] );
+		self::assertNotNull( AB_MCP_Sync_Post_Writer::fallback_shown( array() ), 'Here the page shows a block without a menu.' );
+		self::b(
+			array(
+				array(
+					'op'   => 'update_post',
+					'args' => array( 'ID' => $page_b, 'post_content' => self::para( 'Ohne Menue' ) ),
+				),
+			)
+		);
+		self::on_b( array( 'post_type' => 'wp_navigation', 'post_status' => 'publish', 'post_title' => 'Neu', 'post_name' => 'neu', 'post_content' => $link ) );
+		$run    = self::begun( self::planned( array( 'post:page:menueseite', 'post:wp_navigation:neu' ) )['args'] );
+		$closed = self::finish( (int) $run['run_id'] );
+		self::assertSame( 'closed_done', $closed['state'], json_encode( $closed ) . self::check_message( self::run_status( (int) $run['run_id'] ) ) );
+		self::assertSame( array( 'page', 'wp_navigation' ), array_map( static fn( $s ) => $s['parts']['object']['identity']['post_type'], self::writes( self::run_status( (int) $run['run_id'] ) ) ) );
+		$neu_a = self::id_a( 'wp_navigation', 'neu' );
+		self::assertGreaterThan( 0, $neu_a );
+		self::assertNull( AB_MCP_Sync_Post_Writer::fallback_shown( array() ) );
+		$back = self::back( (int) $run['run_id'] );
+		self::assertSame( 'closed_findings', $back['state'], json_encode( $back ) );
+		self::assertSame( '<!-- wp:navigation /-->', self::row_a( $page_a )['post_content'], 'The page back as before.' );
+		self::assertSame( array( array( 'post', (string) $neu_a ) ), self::rests( $back ) );
+	}
+
+	public function testATokenWhoseDependenciesNoLongerHoldIsStale(): void {
+		// Codex round 2 of branch 9b (2): whether an edge is a dependency rests
+		// on this site (a part it has as a row or a file), and a dependency
+		// decides which step is skipped: the state of the token covers the
+		// dependencies of each step. A row of the part saved here between the
+		// preview and the confirmation makes the token stale.
+		self::pair();
+		self::paired( self::staged() );
+		self::rest_b( 'POST', '/wp/v2/template-parts', array( 'slug' => 'promo', 'title' => 'Promo', 'content' => self::para( 'Promo' ), 'area' => 'uncategorized' ) );
+		self::rest_b( 'POST', '/wp/v2/templates/' . self::THEME . '//single', array( 'content' => '<!-- wp:template-part {"slug":"promo","theme":"' . self::THEME . '"} /-->' ) );
+		$args    = self::planned( array( 'post:wp_template_part:promo', 'post:wp_template:single' ) )['args'];
+		$preview = self::gated( 'wp_site_push', $args );
+		self::assertIsArray( $preview, is_wp_error( $preview ) ? $preview->get_error_message() : '' );
+		self::rest_a( 'POST', '/wp/v2/template-parts', array( 'slug' => 'promo', 'title' => 'Promo', 'content' => self::para( 'Promo hier' ), 'area' => 'uncategorized' ) );
+		wp_cache_flush();
+		$stale = self::gated( 'wp_site_push', $args + array( 'confirm_token' => $preview['confirm_token'] ) );
+		self::assertInstanceOf( \WP_Error::class, $stale, 'The old token confirms another dependency than it showed.' );
+		self::assertSame( 'ab_mcp_confirm_mismatch', $stale->get_error_code() );
+	}
 }

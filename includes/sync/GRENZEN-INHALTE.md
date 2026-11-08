@@ -294,17 +294,25 @@ nennt ihre Meldung den Weg.
   sperrt wie bisher, `*:mutual_references`, Z11c); ändert er es, kommt das
   Ziel nur vorher (das Objekt wird auch geschrieben, wo das Ziel scheitert;
   schliessen solche Kanten eine Schleife, gilt für sie die nächste
-  Abhängigkeit, sie sind keine). Die feste Rangfolge der Typen (Terme, dann
-  Vorlagenteile, Vorlagen, der Rest; `NAMED_FIRST`) bleibt Gleichstand-Regel.
+  Abhängigkeit, sie sind keine). Eine Abhängigkeit ist die Kante nur, wo
+  diese Site das Ziel ohne seinen Schritt nicht auflöste (Codex-Runde 2 von
+  Zweig 9b, 2; `resolves_here()`: keine Zeile, keine Datei des aktiven
+  Themes, keine Vorlage, die das Theme schon anbietet): die erste Zeile des
+  Fusses, den Twenty Twenty-Five als Datei hat, ist nur vorher, und die
+  Vorlage, die ihn nennt, läuft, wo die Zeile scheitert (Prüffall
+  `testAPartTheThemeHasAsAFileIsNoDependencyAndTheTemplateGoesWhereTheRowOfThePartFails`).
+  Die feste Rangfolge der Typen (Terme, dann Vorlagenteile, Vorlagen, der
+  Rest, Navigationen zuletzt; `NAMED_FIRST`, `LAST`) bleibt Gleichstand-Regel.
   Vorher kam eine Vorlage vor dem neuen Teil, den sie nennt, wenn der Teil
   auf einen neuen Block wartete, und die Grenze sperrte die Vorlage. Die
   frühere Grenze C «verschachtelte Vorlagenteile» entfällt: ein Teil, der
   einen neuen Teil nennt, wartet auf ihn; es bleiben echte Zyklen. Der
   Zustand des Tokens deckt die Folge der Schritte ab (Art und Staging-Ref
-  je Schritt); die neuen Kanten folgen aus den Zeilen der Pakete (an den
-  Bericht gebunden), aus Anlegen oder Ändern je Eintrag (ebenso) und, für
-  einen Teil ohne Theme, aus dem aktiven Theme, dessen Wechsel die
-  Vorlagen des alten Themes im Plan sperrt und damit die Folge ändert.
+  je Schritt) und seit Codex-Runde 2 die Abhängigkeiten jedes Schritts: ob
+  eine Kante eine ist, hängt an dieser Site (eine Zeile oder Datei des
+  Teils), und eine Abhängigkeit entscheidet, welcher Schritt übersprungen
+  wird; eine Zeile, die zwischen Vorschau und Bestätigung entsteht, macht
+  den Token veraltet (Prüffall `testATokenWhoseDependenciesNoLongerHoldIsStale`).
   Prüffälle `testATemplateANewPartAndWhatThePartNamesGoInTheOrderOfTheirReferences`
   (Vorlage, neuer Teil, neuer Block, geänderte Navigation: Block und
   Navigation vor dem Teil, der Teil vor der Vorlage; die Abhängigkeiten der
@@ -418,7 +426,35 @@ nennt ihre Meldung den Weg.
   `FALLBACK_POSTS` = 200; mehr ist fail closed); Teile und Muster folgen bis
   `FALLBACK_DEPTH` = 16 Ebenen und `FALLBACK_STEPS` = 2000 Inhalte, mehr ist
   fail closed. Eine geänderte Navigation mit ihrem Datum (der Normalfall)
-  behält ihren Platz und geht. Prüffälle
+  behält ihren Platz und geht.
+- Was nach dem Lauf zu sehen ist, rechnet eine Regel an einer Stelle
+  (`AB_MCP_Sync_Engine::planned()`; Codex-Runde 2 von Zweig 9b, 1 und 3):
+  je Objekt des Laufs die geplante Fassung, wo sein Schritt noch zu
+  schreiben ist (`planned`), und der frisch gelesene Stand dieser Site, wo
+  sein Schritt begann oder endete (`done`, `failed`, `skipped`, `unclear`
+  …): was er schrieb oder nicht schrieb, steht dann hier. In der
+  Gesamtvorprüfung ist kein Schritt geendet, dort gelten alle geplanten
+  Fassungen. Jedes Objekt, das eines dieser Site ersetzt, zählt mit seiner
+  geplanten Fassung, auch wo sie keinen Navigationsblock mehr hat (eine
+  Seite, die ihren letzten Block ohne Menü entfernt, verdeckt nicht mehr die
+  Fassung von hier). Die Grenze der Navigation liest die Zustände der
+  Schritte (`AB_MCP_Sync_Run::steps()`, nicht lesbar: der Schritt scheitert).
+  Eine Navigation kommt im Plan zuletzt, wo keine Kante sie früher verlangt
+  (`AB_MCP_Sync_Push::LAST`, Gleichstand-Regel): die Schritte, die sie nicht
+  brauchen, sind bei ihrer Grenze geendet, und sie liest, was diese
+  hinterliessen. Prüffälle
+  `testANewNavigationAsksWhatTheStepsBeforeItLeftAndAPartThatFailedKeepsItsBlockWithoutAMenu`
+  (der Kopf scheitert, die neue Navigation wird nicht geschrieben),
+  `testAPageThatDropsItsLastNavigationBlockLetsANewNavigationGo`.
+  Grenze C: Ein Objekt, dessen geplante Fassung die Verschiebung verdeckt
+  und das die Navigation über ihren `ref` nennt, kommt nach ihr (die Kante
+  verlangt es) und kann danach noch scheitern; dann ist die Verschiebung zu
+  sehen, ohne dass ein Schritt sie geschrieben hätte, der davon wusste.
+  Sein Schritt endet mit Befund, der Lauf `closed_findings`; Weg: den
+  Schritt wiederholen (neuer Bericht und Plan) oder dem Block sein Menü von
+  Hand geben. Ohne diese Reihenfolge ginge der Normalfall (neue Navigation,
+  die der Kopf des Laufs nennt) nicht.
+- Prüffälle des Sichtbaren
   `testANewNavigationEveryBlockNamesByItsRefGoesAndOneABlockWithoutAMenuWouldShowIsLocked`
   (die neue Navigation, die der Kopf des Laufs über `ref` nennt, geht hin
   und zurück; ein Block ohne Menü in einer Seite des Laufs, einer Vorlage

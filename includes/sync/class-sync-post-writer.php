@@ -606,8 +606,7 @@ final class AB_MCP_Sync_Post_Writer {
 		// of a block theme the same run creates first is pending (branch 9b;
 		// the boundary asks it with the template made).
 		if ( isset( $prepared['postarr']['page_template'] ) && 'default' !== $prepared['postarr']['page_template'] && empty( $prepared['template_pending'] ) ) {
-			$templates = wp_get_theme()->get_page_templates( null, $type );
-			if ( ! is_array( $templates ) || ! isset( $templates[ $prepared['postarr']['page_template'] ] ) ) {
+			if ( ! self::template_offered( (string) $prepared['postarr']['page_template'], $type ) ) {
 				return self::locked( 'post:page_template', sprintf( 'the template %1$s for a %2$s', $prepared['postarr']['page_template'], $type ) );
 			}
 		}
@@ -1715,15 +1714,19 @@ final class AB_MCP_Sync_Post_Writer {
 	 * (part_refs(); without a theme the active one here), as part:theme//slug;
 	 * templates, the template of a page (_wp_page_template), as
 	 * template:slug. Read from the content of the line as it is packed.
+	 * here: the names of parts and templates this site resolves without the
+	 * run (resolves_here(); Codex round 2 of branch 9b, 2): for them an edge
+	 * is an order, never a dependency.
 	 *
 	 * @param array $line The line of the package.
-	 * @return array{posts:int[],parts:string[],templates:string[]}
+	 * @return array{posts:int[],parts:string[],templates:string[],here:array<string,true>}
 	 */
 	public static function order_refs( array $line ) {
 		$out     = array(
 			'posts'     => array(),
 			'parts'     => array(),
 			'templates' => array(),
+			'here'      => array(),
 		);
 		$content = isset( $line['content']['row']['post_content'] ) ? self::bytes( $line['content']['row']['post_content'] ) : '';
 		$refs    = self::part_refs( $content );
@@ -1755,10 +1758,81 @@ final class AB_MCP_Sync_Post_Writer {
 				$out['templates'][] = 'template:' . self::bytes( $pair[1] );
 			}
 		}
-		foreach ( $out as $list => $values ) {
-			$out[ $list ] = array_values( array_unique( $values ) );
+		foreach ( array( 'posts', 'parts', 'templates' ) as $list ) {
+			$out[ $list ] = array_values( array_unique( $out[ $list ] ) );
+		}
+		$type = isset( $line['identity']['post_type'] ) ? (string) $line['identity']['post_type'] : '';
+		foreach ( array_merge( $out['parts'], $out['templates'] ) as $name ) {
+			if ( self::resolves_here( $name, $type ) ) {
+				$out['here'][ $name ] = true;
+			}
 		}
 		return $out;
+	}
+
+	/**
+	 * Whether this site resolves a part or a template an object names
+	 * without the run (Codex round 2 of branch 9b, 2): a template part
+	 * (part:theme//slug) of the active theme as a published row or a file
+	 * of the theme, as parts_refusal() accepts it; a template
+	 * (template:slug) the theme of this site offers for the type of the
+	 * object, as precheck() asks it (WP_Theme::get_page_templates(): its
+	 * files and custom templates, rows of the site among them).
+	 *
+	 * @param string $name part:theme//slug or template:slug.
+	 * @param string $type The post type of the object that names it.
+	 * @return bool
+	 */
+	public static function resolves_here( $name, $type ) {
+		$name = (string) $name;
+		if ( 0 === strpos( $name, 'template:' ) ) {
+			return self::template_offered( substr( $name, 9 ), (string) $type );
+		}
+		if ( 0 !== strpos( $name, 'part:' ) || false === strpos( $name, '//' ) ) {
+			return false;
+		}
+		list( $theme, $slug ) = explode( '//', substr( $name, 5 ), 2 );
+		return $theme === (string) get_stylesheet() && true === self::part_here( $theme, $slug );
+	}
+
+	/**
+	 * Whether the theme of this site offers a template for a post type, as
+	 * wp_insert_post() checks page_template (WP_Theme::get_page_templates(),
+	 * the files and the custom templates of a block theme,
+	 * wp-includes/class-wp-theme.php:1327-1398). The one place precheck() and
+	 * resolves_here() ask it.
+	 *
+	 * @param string $template The template (its file, or the slug of a custom template).
+	 * @param string $type     Post type.
+	 * @return bool
+	 */
+	private static function template_offered( $template, $type ) {
+		$templates = wp_get_theme()->get_page_templates( null, (string) $type );
+		return is_array( $templates ) && isset( $templates[ (string) $template ] );
+	}
+
+	/**
+	 * Whether this site shows a template part of the active theme without a
+	 * run: a published row of that theme and slug (part_row(), the query of
+	 * render_block_core_template_part(), wp-includes/blocks/template-part.php:29-44)
+	 * or a file of the theme (get_block_file_template(), :70-71); null where
+	 * the rows could not be read. The one place parts_refusal() and
+	 * resolves_here() ask it.
+	 *
+	 * @param string $theme Theme (the active one).
+	 * @param string $slug  Slug.
+	 * @return bool|null
+	 */
+	private static function part_here( $theme, $slug ) {
+		$row = self::part_row( (string) $theme, (string) $slug );
+		if ( null === $row ) {
+			return null;
+		}
+		if ( $row > 0 ) {
+			return true;
+		}
+		$file = 0 === validate_file( (string) $slug ) ? get_block_file_template( (string) $theme . '//' . (string) $slug, 'wp_template_part' ) : null;
+		return is_object( $file ) && isset( $file->content ) && '' !== (string) $file->content;
 	}
 
 	/**
@@ -1808,15 +1882,11 @@ final class AB_MCP_Sync_Post_Writer {
 			if ( isset( $pending['wp_template_part'][ $name ] ) ) {
 				continue;
 			}
-			$row = self::part_row( $theme, (string) $ref['slug'] );
-			if ( null === $row ) {
+			$here = self::part_here( $theme, (string) $ref['slug'] );
+			if ( null === $here ) {
 				return self::locked( 'post:reference_unmapped', sprintf( 'the template part %s, whose rows could not be read', $name ) );
 			}
-			if ( $row > 0 ) {
-				continue;
-			}
-			$file = 0 === validate_file( (string) $ref['slug'] ) ? get_block_file_template( $name, 'wp_template_part' ) : null;
-			if ( is_object( $file ) && isset( $file->content ) && '' !== (string) $file->content ) {
+			if ( true === $here ) {
 				continue;
 			}
 			return self::locked( 'post:reference_unmapped', sprintf( 'the template part %s, which this site has neither as a template part nor as a file of its theme', $name ) );
