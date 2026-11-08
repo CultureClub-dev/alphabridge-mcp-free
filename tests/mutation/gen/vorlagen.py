@@ -121,14 +121,20 @@ e('named-here', 'named_refusal(): a term here with that slug and another name wa
 e('css-call', 'precheck(): the custom CSS of the global styles is asked (post:css_markup)', PW,
   "\t\tif ( 'wp_global_styles' === $type ) {\n\t\t\t$refusal = self::css_refusal(",
   "\t\tif ( false ) {\n\t\t\t$refusal = self::css_refusal(", 'it', LOCKS)
-e('css-nested', 'css_values(): every key css at any depth of the JSON', PW,
-  "\t\t\t} elseif ( is_array( $value ) && $depth < AB_MCP_Sync_Canon::MAX_DEPTH ) {",
-  "\t\t\t} elseif ( false ) {", 'unit', U_CSS)
-e('css-no-text', 'css_refusal(): a value of a key css that is no text locks', PW,
-  "\t\t\tif ( ! is_string( $css ) ) {\n\t\t\t\treturn self::locked( 'post:css_markup',",
-  "\t\t\tif ( false ) {\n\t\t\t\treturn self::locked( 'post:css_markup',", 'unit', U_CSS)
-e('css-rule', 'css_refusal(): the rule of the site editor is asked of each value', PW,
-  "\t\t\tif ( self::css_markup( $css ) ) {",
+e('css-nested', 'css_walk(): every key css at any depth of the JSON', PW,
+  "\t\t\t$held = self::css_walk( $value, $at, $depth + 1 );",
+  "\t\t\t$held = null;", 'unit', U_CSS)
+e('css-no-text', 'css_walk(): a value of a key css that is no text locks', PW,
+  "\t\t\t\tif ( ! is_string( $value ) ) {\n\t\t\t\t\treturn self::locked( 'post:css_markup',",
+  "\t\t\t\tif ( false ) {\n\t\t\t\t\treturn self::locked( 'post:css_markup',", 'unit', U_CSS)
+e('css-rule', 'css_walk(): the rule of the site editor is asked of each value', PW,
+  "\t\t\t\tif ( self::css_markup( $value ) ) {",
+  "\t\t\t\tif ( false ) {", 'unit', U_CSS)
+e('css-each', 'css_walk(): each value as it is found, the walk goes on past a clean one (GitHub Codex round 1 on free#139, P2)', PW,
+  "\t\t\t\t\treturn self::locked( 'post:css_markup', sprintf( 'the CSS of %s in the global styles holds </style or ends in a part of it', $at ) );\n\t\t\t\t}\n\t\t\t\tcontinue;",
+  "\t\t\t\t\treturn self::locked( 'post:css_markup', sprintf( 'the CSS of %s in the global styles holds </style or ends in a part of it', $at ) );\n\t\t\t\t}\n\t\t\t\treturn null;", 'unit', U_CSS)
+e('css-deep', 'css_walk(): deeper than it is read locks (fail closed)', PW,
+  "\t\t\tif ( $depth >= AB_MCP_Sync_Canon::MAX_DEPTH ) {",
   "\t\t\tif ( false ) {", 'unit', U_CSS)
 e('css-end', 'css_markup(): a text ending in a part of </style', PW,
   "\t\t\t\tif ( $remaining < 8 ) {\n\t\t\t\t\treturn true;",

@@ -1034,6 +1034,20 @@ final class SyncRunTest extends TestCase {
 		self::assertStringContainsString( 'is no text', $text->get_error_message() );
 		self::assertNull( AB_MCP_Sync_Post_Writer::css_refusal( 'Not JSON </style>' ), 'No JSON object: no global styles the core reads.' );
 		self::assertNull( AB_MCP_Sync_Post_Writer::css_refusal( $styles( array( 'blocks' => array( 'core/quote' => array( 'css' => 'q{}</stylex' ) ) ) ) ), 'A tag of another name.' );
+		// GitHub Codex round 1 on free#139 (P2): a key with a dot in it gives
+		// the path of another value; each value is asked as it is found, in
+		// either order, the path names the place only.
+		$dotted = AB_MCP_Sync_Post_Writer::css_refusal( '{"styles":{"blocks":{"core/button":{"css":"</style>"}},"blocks.core/button":{"css":"body { color: red; }"}}}' );
+		self::assertSame( 'post:css_markup', self::lock_of( $dotted ), 'The </style before a value of the same path.' );
+		self::assertStringContainsString( 'styles.blocks.core/button.css', $dotted->get_error_message() );
+		self::assertSame( 'post:css_markup', self::lock_of( AB_MCP_Sync_Post_Writer::css_refusal( '{"styles":{"blocks.core/button":{"css":"body { color: red; }"},"blocks":{"core/button":{"css":"</style>"}}}}' ) ), 'And after it.' );
+		self::assertNull( AB_MCP_Sync_Post_Writer::css_refusal( '{"styles":{"blocks":{"core/button":{"css":"a{}"}},"blocks.core/button":{"css":"body { color: red; }"}}}' ), 'Clean CSS under such keys goes.' );
+		self::assertSame( 'post:css_markup', self::lock_of( AB_MCP_Sync_Post_Writer::css_refusal( '{"styles":{"css":"body{}","blocks":{"core/button":{"css":"</style>"}}}}' ) ), 'The walk goes on past a clean value beside it.' );
+		$deep = array( 'css' => 'p{}' );
+		for ( $i = 0; $i <= AB_MCP_Sync_Canon::MAX_DEPTH + 1; $i++ ) {
+			$deep = array( 'x' => $deep );
+		}
+		self::assertSame( 'post:css_markup', self::lock_of( AB_MCP_Sync_Post_Writer::css_refusal( (string) json_encode( $deep ) ) ), 'Deeper than it is read: fail closed.' );
 		self::assertTrue( AB_MCP_Sync_Post_Writer::css_markup( '</STYLE/' ), 'In any case, followed by a slash.' );
 		self::assertTrue( AB_MCP_Sync_Post_Writer::css_markup( 'a</s' ), 'Ending in a part of it.' );
 		self::assertFalse( AB_MCP_Sync_Post_Writer::css_markup( 'a<b>' ) );

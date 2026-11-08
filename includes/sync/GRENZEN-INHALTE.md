@@ -365,7 +365,18 @@ nennt ihre Meldung den Weg.
   `post:css_markup` (Z8). Der Schreiber geht über `wp_update_post()` an der
   REST-Prüfung vorbei, darum fragt er sie vorab (`css_markup()`, Schritt für
   Schritt wie der Kern; die Integration hält beide gleich,
-  `testTheRuleOfTheCustomCssIsTheOneOfTheSiteEditor`). Auf dem Rückweg fragt
+  `testTheRuleOfTheCustomCssIsTheOneOfTheSiteEditor`). Jeder Wert wird
+  gefragt, sobald der Durchlauf ihn findet (`css_walk()`); der Pfad dient nur
+  der Meldung (GitHub-Codex 1 auf free#139, P2: gesammelt nach dem Pfad
+  behielt ein Schlüssel mit Punkt, `blocks.core/button` neben `blocks` →
+  `core/button`, nur den letzten Wert, und ein `</style` im ersten blieb
+  ungefragt, vorwärts wie auf dem Rückweg; Prüffälle
+  `testCustomCssUnderAKeyWithADotIsLockedBeforeAnythingIsWritten`,
+  `testCustomCssUnderAKeyWithADotIsAskedForwardAndOnTheWayBack`, Unit
+  `testTheCustomCssOfTheGlobalStylesKeepsTheRuleOfTheSiteEditorAtAnyDepth`).
+  Tiefer als gelesen sperrt (fail closed). Die übrigen Sammlungen von
+  Zweig 9b haben keinen Pfad als Schlüssel (Namen von Teilen und Vorlagen
+  sind je Identität eindeutig, Staging- und Live-IDs Zahlen). Auf dem Rückweg fragt
   `restore_row()` dieselbe Regel am gesicherten Inhalt, bevor es die Zeile
   zurückschreibt: hält er CSS, das der Site-Editor ablehnte, bleibt die Zeile
   `left` mit Grund und altem Wert, wie ein Teil, dessen Recht der Rückweg

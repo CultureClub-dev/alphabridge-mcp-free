@@ -1334,40 +1334,47 @@ final class AB_MCP_Sync_Post_Writer {
 		if ( ! is_array( $data ) ) {
 			return null;
 		}
-		$found = self::css_values( $data, '', 0 );
-		foreach ( $found as $path => $css ) {
-			if ( ! is_string( $css ) ) {
-				return self::locked( 'post:css_markup', sprintf( 'the value of %s in the global styles is no text', $path ) );
-			}
-			if ( self::css_markup( $css ) ) {
-				return self::locked( 'post:css_markup', sprintf( 'the CSS of %s in the global styles holds </style or ends in a part of it', $path ) );
-			}
-		}
-		return null;
+		return self::css_walk( $data, '', 0 );
 	}
 
 	/**
-	 * The values of every key css in decoded JSON, by their path.
+	 * Every value of a key css in decoded JSON, each asked as the walk finds
+	 * it (css_refusal()); the path names the place in the refusal only.
+	 * GitHub Codex round 1 on free#139, P2: the values were first collected
+	 * by their path, and two values whose paths read alike (a key with a dot
+	 * in it: blocks.core/button beside blocks → core/button) kept only the
+	 * last, so a </style in the first was never asked. Deeper than it is read
+	 * is refused (fail closed).
 	 *
 	 * @param array  $data  Decoded JSON.
-	 * @param string $path  Where (dot separated).
+	 * @param string $path  Where (dot separated, for the refusal).
 	 * @param int    $depth Depth reached.
-	 * @return array<string,mixed>
+	 * @return WP_Error|null
 	 */
-	private static function css_values( array $data, $path, $depth ) {
-		$out = array();
+	private static function css_walk( array $data, $path, $depth ) {
 		foreach ( $data as $key => $value ) {
 			$at = '' === $path ? (string) $key : $path . '.' . $key;
 			if ( 'css' === (string) $key ) {
-				$out[ $at ] = $value;
-			} elseif ( is_array( $value ) && $depth < AB_MCP_Sync_Canon::MAX_DEPTH ) {
-				$out = array_merge( $out, self::css_values( $value, $at, $depth + 1 ) );
-			} elseif ( is_array( $value ) ) {
-				// Deeper than it is read: fail closed.
-				$out[ $at ] = null;
+				if ( ! is_string( $value ) ) {
+					return self::locked( 'post:css_markup', sprintf( 'the value of %s in the global styles is no text', $at ) );
+				}
+				if ( self::css_markup( $value ) ) {
+					return self::locked( 'post:css_markup', sprintf( 'the CSS of %s in the global styles holds </style or ends in a part of it', $at ) );
+				}
+				continue;
+			}
+			if ( ! is_array( $value ) ) {
+				continue;
+			}
+			if ( $depth >= AB_MCP_Sync_Canon::MAX_DEPTH ) {
+				return self::locked( 'post:css_markup', sprintf( 'the global styles nest deeper than they are read, at %s', $at ) );
+			}
+			$held = self::css_walk( $value, $at, $depth + 1 );
+			if ( null !== $held ) {
+				return $held;
 			}
 		}
-		return $out;
+		return null;
 	}
 
 	/**

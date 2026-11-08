@@ -1463,4 +1463,87 @@ final class SyncTemplatesTest extends TestCase {
 		self::assertInstanceOf( \WP_Error::class, $stale, 'The old token confirms another dependency than it showed.' );
 		self::assertSame( 'ab_mcp_confirm_mismatch', $stale->get_error_code() );
 	}
+
+	/* ----------------------------------- GitHub Codex round 1 on free#139 */
+
+	public function testCustomCssUnderAKeyWithADotIsAskedForwardAndOnTheWayBack(): void {
+		// GitHub Codex round 1 on free#139 (P2): a key with a dot in it
+		// (blocks.core/button) gave another value the path of the CSS of a
+		// block, and the collection by path kept only the last: </style went
+		// unasked, forward and on the way back. Here the global styles hold
+		// it on both sites; staging cleans them; the run writes them clean and
+		// the way back leaves the row (post:css_markup). Clean styles under
+		// such keys go.
+		self::pair();
+		$dotted   = (string) wp_json_encode( array( 'version' => 3, 'isGlobalStylesUserThemeJSON' => true, 'styles' => array( 'blocks' => array( 'core/button' => array( 'css' => '</style>' ) ), 'blocks.core/button' => array( 'css' => 'body { color: red; }' ) ) ), JSON_UNESCAPED_SLASHES );
+		$clean    = (string) wp_json_encode( array( 'version' => 3, 'isGlobalStylesUserThemeJSON' => true, 'styles' => array( 'blocks' => array( 'core/button' => array( 'css' => 'a{}' ) ), 'blocks.core/button' => array( 'css' => 'body { color: red; }' ) ) ), JSON_UNESCAPED_SLASHES );
+		$styles_a = (int) \WP_Theme_JSON_Resolver::get_user_global_styles_post_id();
+		$styles_b = (int) self::b( array( array( 'op' => 'global_styles_id', 'as' => 'id' ) ) )['id'];
+		self::assertGreaterThan( 0, wp_update_post( wp_slash( array( 'ID' => $styles_a, 'post_content' => $dotted ) ), true ) );
+		self::b(
+			array(
+				array(
+					'op'   => 'update_post',
+					'args' => array( 'ID' => $styles_b, 'post_content' => $dotted ),
+				),
+			)
+		);
+		self::same_dates( $styles_a, $styles_b );
+		self::assertSame( $dotted, self::row_a( $styles_a )['post_content'] );
+		self::paired( self::staged() );
+		self::b(
+			array(
+				array(
+					'op'   => 'update_post',
+					'args' => array( 'ID' => $styles_b, 'post_content' => $clean ),
+				),
+			)
+		);
+		$name   = 'post:wp_global_styles:wp-global-styles-' . self::THEME;
+		$run    = self::begun( self::planned( array( $name ) )['args'] );
+		$closed = self::finish( (int) $run['run_id'] );
+		self::assertSame( 'closed_done', $closed['state'], json_encode( $closed ) . self::check_message( self::run_status( (int) $run['run_id'] ) ) );
+		self::assertSame( $clean, self::row_a( $styles_a )['post_content'], 'Clean styles under such keys go.' );
+		$back = self::back( (int) $run['run_id'] );
+		$row  = null;
+		foreach ( $back['steps'] as $step ) {
+			foreach ( isset( $step['result']['parts'] ) && is_array( $step['result']['parts'] ) ? $step['result']['parts'] : array() as $part ) {
+				if ( 'row' === $part['part'] ) {
+					$row = $part;
+				}
+			}
+		}
+		self::assertSame( 'left', $row['state'] ?? null, json_encode( $back ) );
+		self::assertStringContainsString( 'styles.blocks.core/button.css', (string) $row['note'] );
+		self::assertSame( $clean, self::row_a( $styles_a )['post_content'], 'Left as the run wrote it.' );
+	}
+
+	public function testCustomCssUnderAKeyWithADotIsLockedBeforeAnythingIsWritten(): void {
+		// GitHub Codex round 1 on free#139 (P2), forward: the global styles of
+		// staging hold </style in the CSS of a block beside a key with a dot
+		// whose path reads alike; here there are none yet. The check before the
+		// first write locks them (post:css_markup), nothing is written.
+		self::pair();
+		self::paired( self::staged() );
+		$dotted   = (string) wp_json_encode( array( 'version' => 3, 'isGlobalStylesUserThemeJSON' => true, 'styles' => array( 'blocks' => array( 'core/button' => array( 'css' => '</style>' ) ), 'blocks.core/button' => array( 'css' => 'body { color: red; }' ) ) ), JSON_UNESCAPED_SLASHES );
+		$styles_b = (int) self::b( array( array( 'op' => 'global_styles_id', 'as' => 'id' ) ) )['id'];
+		self::b(
+			array(
+				array(
+					'op'   => 'update_post',
+					'args' => array( 'ID' => $styles_b, 'post_content' => $dotted ),
+				),
+			)
+		);
+		$name    = 'post:wp_global_styles:wp-global-styles-' . self::THEME;
+		$planned = self::planned( array( $name ) );
+		self::assertSame( 'create', self::entry( $planned['report']['all'], $name )['action'] );
+		$run    = self::begun( $planned['args'] );
+		$closed = self::finish( (int) $run['run_id'] );
+		self::assertSame( 'closed_aborted', $closed['state'], json_encode( $closed ) );
+		$message = self::check_message( self::run_status( (int) $run['run_id'] ) );
+		self::assertStringContainsString( 'post:css_markup', $message );
+		self::assertStringContainsString( 'The CSS of styles.blocks.core/button.css in the global styles holds </style', $message );
+		self::assertSame( 0, self::id_a( 'wp_global_styles', 'wp-global-styles-' . self::THEME ), 'Nothing written.' );
+	}
 }
