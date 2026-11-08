@@ -238,7 +238,8 @@ final class SyncTermWriterTest extends TestCase {
 	public function testTheEngineWritesTermsWithTheirOwnWriter(): void {
 		self::assertSame( AB_MCP_Sync_Term_Writer::class, AB_MCP_Sync_Engine::writer( 'term' ) );
 		self::assertSame( AB_MCP_Sync_Post_Writer::class, AB_MCP_Sync_Engine::writer( 'post' ) );
-		self::assertNull( AB_MCP_Sync_Engine::writer( 'menu' ), 'No step writes a kind without a writer (branch 11).' );
+		self::assertNull( AB_MCP_Sync_Engine::writer( 'theme_mod' ), 'No step writes a kind without a writer (theme mods: Z8d).' );
+		self::assertSame( \AB_MCP_Sync_Menu_Writer::class, AB_MCP_Sync_Engine::writer( 'menu' ), 'The menus with their own writer (branch 11).' );
 		self::assertSame( \AB_MCP_Sync_Attachment_Writer::class, AB_MCP_Sync_Engine::writer( 'attachment' ), 'The attachments with their own writer (branch 10).' );
 		self::assertSame( array( 'category', 'post_tag', 'wp_pattern_category' ), AB_MCP_Sync_Term_Writer::TAXONOMIES );
 		foreach ( AB_MCP_Sync_Term_Writer::TAXONOMIES as $taxonomy ) {
@@ -562,6 +563,22 @@ final class SyncTermWriterTest extends TestCase {
 		self::assertInstanceOf( WP_Error::class, $refused );
 		self::assertSame( 'ab_mcp_sync_rights', $refused->get_error_code() );
 		self::assertInstanceOf( WP_Error::class, AB_MCP_Sync_Term_Writer::write_part( 34, 'terms:category', $meta, null ), 'A term carries no terms.' );
+		// A hook of the right that allows and changes the key itself as it is
+		// asked right before the call (Codex round 3 of branch 11, A6): the
+		// last read differs from the state the engine read, nothing is
+		// written; without the hook, the same call writes.
+		$GLOBALS['ab_test_meta'] = array();
+		$pre                     = AB_MCP_Sync_Term_Writer::current( 34 );
+		$GLOBALS['ab_test_can']  = static function ( string $cap, array $args ) use ( $db ): bool {
+			$db->meta[34][0]['meta_value'] = 'green';
+			return true;
+		};
+		self::assertSame( \AB_MCP_Sync_Write::CHANGED, AB_MCP_Sync_Term_Writer::write_part( 34, 'meta:color', $meta, $pre )->get_error_code() );
+		self::assertSame( array(), $GLOBALS['ab_test_meta'], 'Nothing written.' );
+		$db->meta[34][0]['meta_value'] = 'red';
+		$GLOBALS['ab_test_can']        = static fn( string $cap, array $args ): bool => true;
+		self::assertTrue( AB_MCP_Sync_Term_Writer::write_part( 34, 'meta:color', $meta, AB_MCP_Sync_Term_Writer::current( 34 ) ) );
+		self::assertNotSame( array(), $GLOBALS['ab_test_meta'], 'Written without the hook.' );
 		unset( $db );
 	}
 
@@ -569,7 +586,12 @@ final class SyncTermWriterTest extends TestCase {
 		$db      = self::live_term( array( 'name' => 'News, new' ) );
 		$backup  = array( 'name' => 'News', 'slug' => 'news', 'term_group' => '0', 'taxonomy' => 'category', 'description' => 'Fresh news.', 'parent' => '0' );
 		$written = AB_MCP_Sync_Term_Writer::row_hash( AB_MCP_Sync_Term_Writer::current( 34 )['row'] );
-		self::assertSame( 'left', AB_MCP_Sync_Term_Writer::restore_row( 34, $backup, str_repeat( 'f', 64 ) )['state'], 'Changed since the step wrote it.' );
+		$since = AB_MCP_Sync_Term_Writer::restore_row( 34, $backup, str_repeat( 'f', 64 ) );
+		self::assertSame( 'left', $since['state'], 'Changed since the step wrote it.' );
+		// Said so by the check of the way back itself, before the helper's last
+		// read (whose note names a hook as the row is put back; the CI of
+		// free#141).
+		self::assertStringContainsString( 'The row of the term was changed', $since['note'] );
 		$db->holder = 41;
 		$taken      = AB_MCP_Sync_Term_Writer::restore_row( 34, $backup, $written );
 		self::assertSame( 'left', $taken['state'] );
@@ -581,6 +603,21 @@ final class SyncTermWriterTest extends TestCase {
 		add_filter( 'pre_term_name', $upper );
 		self::assertSame( 'left', AB_MCP_Sync_Term_Writer::restore_row( 34, $backup, $written )['state'], 'The sanitizing would change the backed-up name.' );
 		remove_filter( 'pre_term_name', $upper );
+		// A filter of the sanitizers that changes the row as it runs (Codex
+		// round 2 of branch 11, A6): the last read sees it, nothing written.
+		$calls = count( $GLOBALS['ab_test_term_calls'] ?? array() );
+		$was   = $db->term_rows[34]['description'];
+		$hook  = static function ( $v ) use ( $db ) {
+			$db->term_rows[34]['description'] = 'Changed meanwhile.';
+			return $v;
+		};
+		add_filter( 'pre_term_name', $hook );
+		$moved = AB_MCP_Sync_Term_Writer::restore_row( 34, $backup, $written );
+		remove_filter( 'pre_term_name', $hook );
+		self::assertSame( 'left', $moved['state'] );
+		self::assertStringContainsString( 'changed as it was put back', $moved['note'] );
+		self::assertSame( $calls, count( $GLOBALS['ab_test_term_calls'] ?? array() ), 'wp_update_term() was not called.' );
+		$db->term_rows[34]['description'] = $was;
 		// Written back through wp_update_term(); the fake rows do not change,
 		// so it reads other than the backup: unclear, never restored.
 		self::assertSame( 'unclear', AB_MCP_Sync_Term_Writer::restore_row( 34, $backup, $written )['state'] );

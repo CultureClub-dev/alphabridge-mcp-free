@@ -315,6 +315,24 @@ abstract class AB_MCP_Sync_Db_Kind implements AB_MCP_Sync_Kind {
 	}
 
 	/**
+	 * A meta row of the content of a line in the form this kind checks it
+	 * (the credential check and the net over the raw value, as the kind
+	 * read it to make its form): its name for the credential check and its
+	 * value. AB_MCP_Sync_Export::checked_content() checks the finished
+	 * content through it, so that both read the same input (Codex round 4
+	 * of branch 11, B). A row of meta of a post, a term, a menu, a menu
+	 * item or an attachment: its key and its value as stored (meta_form()
+	 * reads the same, a serialized value as its text).
+	 *
+	 * @param string $key    The first field of the row (a meta key).
+	 * @param mixed  $stored The second, as the content carries it.
+	 * @return array{0:string,1:mixed} The name and the value to check.
+	 */
+	public static function checked_meta( $key, $stored ) {
+		return array( (string) $key, $stored );
+	}
+
+	/**
 	 * The theme mods of the active stylesheet (its option row).
 	 *
 	 * @return array|null
@@ -978,6 +996,71 @@ class AB_MCP_Sync_Kind_Menu extends AB_MCP_Sync_Kind_Term {
 	}
 
 	/**
+	 * The objects of a package of objects (branch 11): a menu (pair kind
+	 * menu) with the content of a term (as the kind term packs it: the
+	 * columns, the meta rows without those a credential names, no terms) and
+	 * its positions; an item (pair kind menu_item) with its row (the columns
+	 * the core writes from its fields, and its parent), its meta rows as
+	 * stored without the excluded keys and those a credential names (B9),
+	 * and its menus; each from the one reading of its rows (A4). One that is
+	 * not there is left out; the export names it as gone.
+	 *
+	 * @param array[] $refs Each: kind (menu or menu_item), ref, source.
+	 * @return array[]|WP_Error
+	 */
+	public function export( array $refs ) {
+		$out   = array();
+		$extra = AB_MCP_Redactor::extra_keys();
+		foreach ( $refs as $one ) {
+			if ( ! is_array( $one ) || ! isset( $one['ref'], $one['source'] ) || ! is_array( $one['source'] ) ) {
+				return new WP_Error( 'ab_mcp_sync_object_invalid', 'export() takes a list of array( \'kind\' => …, \'ref\' => …, \'source\' => AB_MCP_Sync_Inventory::source() ). Use that form.' );
+			}
+			if ( isset( $one['kind'] ) && 'menu_item' === $one['kind'] ) {
+				$result = $this->item( (int) $one['ref'], $one['source'], true );
+				if ( is_array( $result ) ) {
+					$result['content'] = isset( $result['content'] ) && is_array( $result['content'] ) ? $result['content'] : array();
+					$out[]             = $result;
+				}
+				continue;
+			}
+			$row = AB_MCP_Sync_Rows::term( (int) $one['ref'], 'nav_menu' );
+			if ( false === $row ) {
+				continue;
+			}
+			if ( null === $row ) {
+				$result            = $this->read( (string) $one['ref'], $one['source'], 'menu' );
+				$result['content'] = array();
+				$out[]             = $result;
+				continue;
+			}
+			$meta   = AB_MCP_Sync_Rows::meta( 'term', (int) $row['term_id'] );
+			$result = $this->form( $row, $one['source'], $meta );
+			$content = array();
+			if ( null !== $meta ) {
+				$columns = array();
+				foreach ( array( 'name', 'slug', 'term_group', 'taxonomy', 'description', 'parent' ) as $column ) {
+					$columns[ $column ] = (string) $row[ $column ];
+				}
+				$rows = array();
+				foreach ( $meta as $m ) {
+					if ( ! AB_MCP_Sync_Credentials::names_credential( (string) $m['key'], $extra ) ) {
+						$rows[] = array( (string) $m['key'], (string) $m['value'] );
+					}
+				}
+				// The positions are in the form (locations), names only.
+				$content = array(
+					'meta'  => $rows,
+					'row'   => $columns,
+					'terms' => array(),
+				);
+			}
+			$result['content'] = $content;
+			$out[]             = $result;
+		}
+		return $out;
+	}
+
+	/**
 	 * The positions of the menu (nav_menu_locations in the theme mods of the
 	 * active stylesheet) as a field of the menu.
 	 *
@@ -1000,6 +1083,10 @@ class AB_MCP_Sync_Kind_Menu extends AB_MCP_Sync_Kind_Term {
 				// spelling: every menu locks.
 				AB_MCP_Sync_Canon::spelling( $acc, 'locations.' . $location );
 			} elseif ( $id > 0 && $id === (int) $row['term_id'] ) {
+				// The name of a position is a key of the theme mods, in the form
+				// as it is: through the credential check (Codex round 1 of
+				// branch 11, A4), the place named without it.
+				AB_MCP_Sync_Credentials::note( $acc, 'menu', 'locations', AB_MCP_Sync_Credentials::unit( '', (string) $location ) );
 				$locations[] = (string) $location;
 			}
 		}
@@ -1010,11 +1097,12 @@ class AB_MCP_Sync_Kind_Menu extends AB_MCP_Sync_Kind_Term {
 	/**
 	 * One menu item.
 	 *
-	 * @param int   $id     Post id.
-	 * @param array $source Source.
+	 * @param int   $id      Post id.
+	 * @param array $source  Source.
+	 * @param bool  $content Whether its content is read with it (export(), branch 11).
 	 * @return array|null
 	 */
-	protected function item( $id, array $source ) {
+	protected function item( $id, array $source, $content = false ) {
 		$row = AB_MCP_Sync_Rows::post( (int) $id );
 		if ( false === $row || ( is_array( $row ) && 'nav_menu_item' !== $row['post_type'] ) ) {
 			return null;
@@ -1085,7 +1173,58 @@ class AB_MCP_Sync_Kind_Menu extends AB_MCP_Sync_Kind_Term {
 			'target'   => null === $whole ? null : $whole[0],
 			'parent'   => null === $whole ? null : $whole[1],
 		);
-		return AB_MCP_Sync_Canon::finish( 'menu_item', $ref, $identity, $form, $acc );
+		$result   = AB_MCP_Sync_Canon::finish( 'menu_item', $ref, $identity, $form, $acc );
+		if ( $content ) {
+			// From the one reading of the rows (A4): the columns the core writes
+			// from the fields of an item, its meta rows as stored without the
+			// excluded keys and those a credential names (B9, as the form
+			// leaves them out), its menus.
+			$columns = array();
+			foreach ( array_merge( self::ITEM_COLUMNS, array( 'post_parent', 'post_type' ) ) as $column ) {
+				$columns[ $column ] = (string) $row[ $column ];
+			}
+			$extra = AB_MCP_Redactor::extra_keys();
+			$rows  = array();
+			foreach ( $meta as $m ) {
+				if ( AB_MCP_Sync_Exclusions::post_meta( $m['key'] ) || AB_MCP_Sync_Credentials::names_credential( (string) $m['key'], $extra ) ) {
+					continue;
+				}
+				$rows[] = array( (string) $m['key'], (string) $m['value'] );
+			}
+			$terms = array();
+			foreach ( $tax as $one ) {
+				$term    = AB_MCP_Sync_Rows::term( $one['term_id'], $one['taxonomy'] );
+				$terms[] = array(
+					'name'       => is_array( $term ) ? (string) $term['name'] : '',
+					'slug'       => (string) $one['slug'],
+					'taxonomy'   => (string) $one['taxonomy'],
+					'term_id'    => (int) $one['term_id'],
+					'term_order' => (int) $one['term_order'],
+				);
+			}
+			$result['content'] = array(
+				'meta'  => $rows,
+				'row'   => $columns,
+				'terms' => $terms,
+			);
+			// The names and slugs of its menus are in the content only (the
+			// form names the menus by their identity): through the credential
+			// check as the post kind takes the terms of its content (Codex
+			// round 1 of branch 11, A4). A credential in one holds the item,
+			// and its line carries no content then.
+			$acc = array(
+				'locks'       => $result['locks'],
+				'credentials' => $result['credentials'],
+			);
+			foreach ( $terms as $term ) {
+				foreach ( array( 'name', 'slug' ) as $field ) {
+					AB_MCP_Sync_Credentials::note( $acc, 'menu_item', 'term:' . $term['taxonomy'] . ':' . $field, AB_MCP_Sync_Credentials::unit( '', (string) $term[ $field ] ) );
+				}
+			}
+			$result['locks']       = $acc['locks'];
+			$result['credentials'] = $acc['credentials'];
+		}
+		return $result;
 	}
 
 	/**
@@ -1183,6 +1322,44 @@ class AB_MCP_Sync_Kind_Widget_Area extends AB_MCP_Sync_Db_Kind {
 
 	/** {@inheritdoc} */
 	protected function read( $ref, array $source, $pair ) {
+		return $this->area( (string) $ref, $source, false );
+	}
+
+	/**
+	 * The objects of a package of objects (branch 11): each widget area read
+	 * as the inventory reads it, with its content from the same reading: the
+	 * instances of its form, in order, each a row of meta with its id and its
+	 * settings as stored (serialize() of them; '' where it has none; an
+	 * instance its form leaves out as a credential is left out here too). One that is not there is left
+	 * out; the export names it as gone.
+	 *
+	 * @param array[] $refs Each: kind, ref, source.
+	 * @return array[]|WP_Error
+	 */
+	public function export( array $refs ) {
+		$out = array();
+		foreach ( $refs as $one ) {
+			if ( ! is_array( $one ) || ! isset( $one['ref'], $one['source'] ) || ! is_array( $one['source'] ) ) {
+				return new WP_Error( 'ab_mcp_sync_object_invalid', 'export() takes a list of array( \'kind\' => …, \'ref\' => …, \'source\' => AB_MCP_Sync_Inventory::source() ). Use that form.' );
+			}
+			$result = $this->area( (string) $one['ref'], $one['source'], true );
+			if ( is_array( $result ) ) {
+				$result['content'] = isset( $result['content'] ) && is_array( $result['content'] ) ? $result['content'] : array();
+				$out[]             = $result;
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * One widget area (read()), with its content where asked (export()).
+	 *
+	 * @param string $ref     The area.
+	 * @param array  $source  Source.
+	 * @param bool   $content Whether its content is read with it.
+	 * @return array|null
+	 */
+	private function area( $ref, array $source, $content ) {
 		$acc   = AB_MCP_Sync_Canon::acc();
 		$ctx   = $source['ctx'];
 		$areas = self::option_array( 'sidebars_widgets' );
@@ -1196,6 +1373,7 @@ class AB_MCP_Sync_Kind_Widget_Area extends AB_MCP_Sync_Db_Kind {
 		$rows      = array();
 		$instances = array();
 		$ids       = array();
+		$packed    = array();
 		foreach ( is_array( $areas[ $ref ] ) ? $areas[ $ref ] : array() as $widget ) {
 			$widget = (string) $widget;
 			if ( ! preg_match( '/^(.+)-(\d+)\z/', $widget, $m ) ) {
@@ -1204,6 +1382,7 @@ class AB_MCP_Sync_Kind_Widget_Area extends AB_MCP_Sync_Db_Kind {
 					'settings' => null,
 				);
 				$ids[]       = $widget;
+				$packed[]    = array( $widget, '' );
 				continue;
 			}
 			$base = $m[1];
@@ -1225,6 +1404,7 @@ class AB_MCP_Sync_Kind_Widget_Area extends AB_MCP_Sync_Db_Kind {
 				'settings' => null === $settings ? array( '~missing' => true ) : AB_MCP_Sync_Canon::structure( $settings, $ctx, $acc, 'widget_area', $at, self::leaf( $base, $ctx, $acc, $at ) ),
 			);
 			$ids[]       = $widget;
+			$packed[]    = array( $widget, null === $settings ? '' : serialize( $settings ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize -- the settings as the row stores them.
 			// The net over the raw value, after the readers of the instance.
 			AB_MCP_Sync_Net::check( $acc, $mark, 'widget_area', $at, $settings, $ctx );
 		}
@@ -1233,7 +1413,40 @@ class AB_MCP_Sync_Kind_Widget_Area extends AB_MCP_Sync_Db_Kind {
 		// (branch 6, part 2): the report tells an instance removed on staging
 		// from those at its base (decision 21).
 		$result['instances'] = $ids;
+		if ( $content ) {
+			// In the one shape of the content of a line (AB_MCP_Sync_Import):
+			// each instance a row of meta, its id and its settings as stored,
+			// in the order of the area.
+			$result['content'] = array(
+				'meta'  => $packed,
+				'row'   => array( 'area' => $ref ),
+				'terms' => array(),
+			);
+		}
 		return $result;
+	}
+
+	/**
+	 * An instance of the content in the form area() checks it: the base of
+	 * the widget as the name, its settings unpacked as the row of the widget
+	 * holds them (AB_MCP_Sync_Canon::unserialized(), as option_array() reads
+	 * the row), never the serialized text the content carries: its braces
+	 * would make the net read prose as code (Codex round 4 of branch 11, B:
+	 * «Spieler: Anna, Token: drei»). A widget without a number, or no
+	 * settings, as area() packs it (an empty text). Settings that do not
+	 * unpack as the text they are, which the credential check then cannot
+	 * read (fail closed).
+	 *
+	 * @param string $key    The id of the instance (base-number).
+	 * @param mixed  $stored Its settings serialized, or ''.
+	 * @return array{0:string,1:mixed}
+	 */
+	public static function checked_meta( $key, $stored ) {
+		if ( ! preg_match( '/^(.+)-(\d+)\z/', (string) $key, $m ) || '' === (string) $stored ) {
+			return array( (string) $key, $stored );
+		}
+		$read = AB_MCP_Sync_Canon::unserialized( (string) $stored );
+		return $read['ok'] ? array( $m[1], $read['value'] ) : array( (string) $key, $stored );
 	}
 
 	/**
@@ -1346,11 +1559,49 @@ class AB_MCP_Sync_Kind_Custom_Css extends AB_MCP_Sync_Db_Kind {
 	 * @return array|null
 	 */
 	protected function read( $ref, array $source, $pair ) {
-		$ref = (string) $ref;
-		$at  = strrpos( $ref, '@' );
+		return $this->by_ref( (string) $ref, $source, false );
+	}
+
+	/**
+	 * The objects of a package of objects (branch 11): each CSS read as the
+	 * inventory reads it, from the one reading of its post, with its content:
+	 * the columns wp_update_custom_css_post() writes (post_content,
+	 * post_content_filtered) as the row holds them, its stylesheet and
+	 * status, and the version of the theme of that stylesheet on this site
+	 * (the engine writes the CSS only to a theme of the same version,
+	 * decision 25). One that is not there is left out.
+	 *
+	 * @param array[] $refs Each: kind, ref, source.
+	 * @return array[]|WP_Error
+	 */
+	public function export( array $refs ) {
+		$out = array();
+		foreach ( $refs as $one ) {
+			if ( ! is_array( $one ) || ! isset( $one['ref'], $one['source'] ) || ! is_array( $one['source'] ) ) {
+				return new WP_Error( 'ab_mcp_sync_object_invalid', 'export() takes a list of array( \'kind\' => …, \'ref\' => …, \'source\' => AB_MCP_Sync_Inventory::source() ). Use that form.' );
+			}
+			$result = $this->by_ref( (string) $one['ref'], $one['source'], true );
+			if ( is_array( $result ) ) {
+				$result['content'] = isset( $result['content'] ) && is_array( $result['content'] ) ? $result['content'] : array();
+				$out[]             = $result;
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * The CSS by its ref (read()), with its content where asked (export()).
+	 *
+	 * @param string $ref     Ref.
+	 * @param array  $source  Source.
+	 * @param bool   $content Whether the content is read with it.
+	 * @return array|null
+	 */
+	private function by_ref( $ref, array $source, $content ) {
+		$at = strrpos( $ref, '@' );
 		if ( false !== $at && preg_match( '/^\d+\z/', substr( $ref, $at + 1 ) ) ) {
 			$id     = (int) substr( $ref, $at + 1 );
-			$result = $this->post_form( $id, $source );
+			$result = $this->post_form( $id, $source, $content );
 		} else {
 			$mods = self::option_array( 'theme_mods_' . $ref );
 			if ( null === $mods ) {
@@ -1359,7 +1610,7 @@ class AB_MCP_Sync_Kind_Custom_Css extends AB_MCP_Sync_Db_Kind {
 				return AB_MCP_Sync_Canon::finish( 'custom_css', $ref, array(), array(), $acc );
 			}
 			$id     = isset( $mods['custom_css_post_id'] ) ? (int) $mods['custom_css_post_id'] : 0;
-			$result = $id > 0 ? $this->post_form( $id, $source ) : null;
+			$result = $id > 0 ? $this->post_form( $id, $source, $content ) : null;
 		}
 		// The ref names the object only as the inventory names it now.
 		return is_array( $result ) && $result['ref'] === $ref ? $result : null;
@@ -1368,11 +1619,12 @@ class AB_MCP_Sync_Kind_Custom_Css extends AB_MCP_Sync_Db_Kind {
 	/**
 	 * The CSS of a custom_css post, with its ref.
 	 *
-	 * @param int   $id     Post id.
-	 * @param array $source Source.
+	 * @param int   $id      Post id.
+	 * @param array $source  Source.
+	 * @param bool  $content Whether the content is read with it (export()).
 	 * @return array|null
 	 */
-	private function post_form( $id, array $source ) {
+	private function post_form( $id, array $source, $content = false ) {
 		$id  = (int) $id;
 		$row = $id > 0 ? AB_MCP_Sync_Rows::post( $id ) : false;
 		if ( false === $row || ( is_array( $row ) && 'custom_css' !== $row['post_type'] ) ) {
@@ -1400,12 +1652,12 @@ class AB_MCP_Sync_Kind_Custom_Css extends AB_MCP_Sync_Db_Kind {
 			// The net over the raw value, after the readers of the column.
 			AB_MCP_Sync_Net::check( $acc, $mark, 'custom_css', 'post_content' === $column ? 'css' : $column, $row[ $column ], $source['ctx'] );
 		}
-		$form = array(
+		$form   = array(
 			'stylesheet' => $row['post_name'],
 			'css'        => $css,
 			'status'     => $row['post_status'],
 		);
-		return AB_MCP_Sync_Canon::finish(
+		$result = AB_MCP_Sync_Canon::finish(
 			'custom_css',
 			$linked ? $row['post_name'] : $row['post_name'] . '@' . $id,
 			array(
@@ -1416,6 +1668,26 @@ class AB_MCP_Sync_Kind_Custom_Css extends AB_MCP_Sync_Db_Kind {
 			$form,
 			$acc
 		);
+		if ( $content ) {
+			// From the one reading of the row (A4), and the version of the
+			// theme of the stylesheet on this site ('' where it is not there).
+			// The source of a preprocessor (post_content_filtered) is neither
+			// in the form nor checked for credentials: it is not packed, only
+			// whether there is one (the engine locks such CSS, branch 11).
+			$version           = (string) wp_get_theme( (string) $row['post_name'] )->get( 'Version' );
+			$result['content'] = array(
+				'meta'  => array(),
+				'row'   => array(
+					'post_content'  => (string) $row['post_content'],
+					'post_name'     => (string) $row['post_name'],
+					'post_status'   => (string) $row['post_status'],
+					'preprocessed'  => '' === (string) $row['post_content_filtered'] ? '' : '1',
+					'theme_version' => $version,
+				),
+				'terms' => array(),
+			);
+		}
+		return $result;
 	}
 }
 
@@ -1503,6 +1775,59 @@ class AB_MCP_Sync_Kind_Option extends AB_MCP_Sync_Db_Kind {
 			return null;
 		}
 		return $this->option( (string) $ref, $row['value'], $class, $source );
+	}
+
+	/**
+	 * The objects of a package of objects (branch 11, AB_MCP_Sync_Export::
+	 * make_objects()): each option read as the inventory reads it, from the
+	 * one reading of its row, with its content: the value as the row holds
+	 * it. A row without a hash (group B, a name of a credential, the guard)
+	 * carries no content; a key of theme mods neither (locked, Z8d). A row
+	 * that is not there is left out; the export names it as gone.
+	 *
+	 * @param array[] $refs Each: kind (option or theme_mod), ref, source.
+	 * @return array[]|WP_Error
+	 */
+	public function export( array $refs ) {
+		$out = array();
+		foreach ( $refs as $one ) {
+			if ( ! is_array( $one ) || ! isset( $one['ref'], $one['source'] ) || ! is_array( $one['source'] ) ) {
+				return new WP_Error( 'ab_mcp_sync_object_invalid', 'export() takes a list of array( \'kind\' => …, \'ref\' => …, \'source\' => AB_MCP_Sync_Inventory::source() ). Use that form.' );
+			}
+			$name = (string) $one['ref'];
+			if ( isset( $one['kind'] ) && 'theme_mod' === $one['kind'] ) {
+				$result = $this->read( $name, $one['source'], 'theme_mod' );
+				if ( is_array( $result ) ) {
+					$result['content'] = array();
+					$out[]             = $result;
+				}
+				continue;
+			}
+			$row = AB_MCP_Sync_Rows::option( $name );
+			if ( false === $row ) {
+				continue;
+			}
+			if ( null === $row ) {
+				$result            = $this->read( $name, $one['source'], 'option' );
+				$result['content'] = array();
+				$out[]             = $result;
+				continue;
+			}
+			$class = AB_MCP_Sync_Option_Schema::classify( $name, $row['value'] );
+			if ( 'owner' === $class['status'] && ( 'fields' === $class['owner']['status'] || ( null !== $class['owner']['kind'] && 'z8' === $class['owner']['status'] ) ) ) {
+				continue;
+			}
+			$result            = $this->option( $name, $row['value'], $class, $one['source'] );
+			// In the one shape of the content of a line (AB_MCP_Sync_Import:
+			// row, meta, terms): the value as the row of the option.
+			$result['content'] = null === $result['hash'] ? array() : array(
+				'meta'  => array(),
+				'row'   => array( 'value' => (string) $row['value'] ),
+				'terms' => array(),
+			);
+			$out[]             = $result;
+		}
+		return $out;
 	}
 
 	/**

@@ -137,6 +137,7 @@ final class SyncSafeCallsTest extends TestCase {
 		// Constructors.
 		'new WP_Block_Parser'                  => 'The parser of the core, without the filter block_parser_class.',
 		'new WP_Error'                         => 'An error object.',
+		'new WeakMap'                          => 'The refusals of AB_MCP_Sync_Write in this request, by their error object; no stored value.',
 		'new AB_MCP_Replace_Engine'            => 'Compiles its patterns.',
 		'new stdClass'                         => 'Stands for a stored object, made without its class.',
 	);
@@ -167,6 +168,58 @@ final class SyncSafeCallsTest extends TestCase {
 			'wp_mkdir_p'                           => array( 1, 'folder(): a missing folder under the uploads for a file to lay, one level under its checked parent at a time, each checked again (decision 26: «fehlende Ordner darunter mit wp_mkdir_p()»; Codex round 1 of branch 10, A1).' ),
 			'wp_slash'                             => array( 3, 'precheck() and write_row(): the slashing wp_insert_post() expects.' ),
 			'wp_update_post'                       => array( 1, 'write_row(): the way forward of the row of an attachment here (decision 17).' ),
+		),
+		// The kinds of the structure of a site (Z8 branch 11): the core ways of
+		// menus, widgets, the additional CSS and the options, with their rights.
+		'class-sync-shared-row.php' => array(
+			'wp_cache_delete' => array( 3, 'forget(): the caches of an option after a write or a put back raw (decision 33: alloptions, notoptions, the row).' ),
+		),
+		'class-sync-option-writer.php' => array(
+			'->init'              => array( 1, 'post_write(): WP_Rewrite::init(), the permalink structure as the option holds it now, before the rules are built from it (A19).' ),
+			'current_user_can'    => array( 3, 'precheck(), write_row() and restore_right(): manage_options, forward, right before the write and on the way back (decision 27).' ),
+			'flush_rewrite_rules' => array( 1, 'post_write(): the rewrite rules built anew after an option of the permalinks was written or put back (decision 33, A19); soft, no file.' ),
+			'sanitize_option'     => array( 1, 'sanitizer_refusal(): the sanitizer ahead, as update_option() runs it (decision 17); the value handed over, no stored value.' ),
+			'update_option'       => array( 1, 'write_row(): the way forward of a core option (decisions 17 and 27).' ),
+		),
+		'class-sync-css-writer.php' => array(
+			'AB_MCP_Page_Cache::purge_site' => array( 1, 'post_write(): the page cache of the whole site after the CSS changed (decision 33).' ),
+			'apply_filters'             => array( 1, 'css_refusal(): update_custom_css_data, the filter wp_update_custom_css_post() saves the CSS with, ahead and without writing (decision 17).' ),
+			'clean_post_cache'          => array( 1, 'post_write(): the caches of the CSS post (decision 33).' ),
+			'current_user_can'          => array( 4, 'precheck(), write_row(), restore_right() and restore_part(): edit_css, as the Customizer asks it for the setting (decision 25), asked again right before the row goes back (Codex round 1 of branch 11, A5).' ),
+			'get_stylesheet'            => array( 2, 'theme_refusal() and restore_right(): the active theme this request runs (the CSS is written only to it).' ),
+			'sanitize_post'             => array( 1, 'css_refusal(): the sanitizers ahead, as wp_update_post() runs them (decision 17).' ),
+			'sanitize_title'            => array( 1, 'target_of(): the slug wp_update_custom_css_post() gives the post, a calculation over the name.' ),
+			'wp_get_theme'              => array( 1, 'theme_refusal(): the version of the active theme from its files (decision 25: «Theme live in gleicher Version»).' ),
+			'wp_slash'                  => array( 2, 'css_refusal() and restore_part(): the slashing wp_update_post() expects.' ),
+			'wp_update_custom_css_post' => array( 1, 'write_row(): the way forward of the additional CSS (decision 25).' ),
+			'wp_update_post'            => array( 1, 'restore_part(): the row put back through the core (decision 23).' ),
+		),
+		'class-sync-db-kinds.php' => array(
+			'wp_get_theme' => array( 1, 'AB_MCP_Sync_Kind_Custom_Css::post_form(): the version of the theme of the stylesheet from its files, packed with the CSS (decision 25), no stored value compared.' ),
+		),
+		'class-sync-menu-writer.php' => array(
+			'AB_MCP_Page_Cache::purge_site' => array( 2, 'post_write() of a menu and of an item: the page cache of the whole site (a menu shows on every page; decision 33).' ),
+			'clean_post_cache'              => array( 1, 'AB_MCP_Sync_Menu_Item_Writer::post_write(): the caches of the item (decision 33).' ),
+			'current_user_can'              => array( 17, 'precheck(), write_row(), location_refusal(), restore_right() and restore_part() of a menu and an item: edit_theme_options, edit_post at an item, the right to make items, assign_term at the menu, forward, right before the write and on the way back, there again right before a position or the row of an item goes back (decision 28; as AB_MCP_Tools_Menus_Users::add_menu_item(); Codex round 1 of branch 11, A5).' ),
+			'get_post_type_object'          => array( 2, 'AB_MCP_Sync_Menu_Item_Writer::precheck() and original_title(): the capabilities of nav_menu_item, the label of a post type archive (code, no stored value).' ),
+			'get_registered_nav_menus'      => array( 3, 'precheck(), location_refusal() and restore_right(): the positions the active theme registers (code of the theme, no stored value).' ),
+			'sanitize_key'                  => array( 3, 'AB_MCP_Sync_Menu_Item_Writer::sanitizer_refusal(): what wp_update_nav_menu_item() makes of the keys of an item, ahead (decision 17).' ),
+			'sanitize_meta'                 => array( 1, 'AB_MCP_Sync_Menu_Item_Writer::precheck(): the sanitizer ahead of another meta value (decision 17).' ),
+			'sanitize_post'                 => array( 2, 'AB_MCP_Sync_Menu_Item_Writer::sanitizer_refusal() and restore_part(): the sanitizers ahead, as wp_insert_post() and wp_update_post() run them (decision 17).' ),
+			'sanitize_url'                  => array( 1, 'AB_MCP_Sync_Menu_Item_Writer::sanitizer_refusal(): what wp_update_nav_menu_item() makes of the address of a custom link, ahead.' ),
+			'set_theme_mod'                 => array( 1, 'AB_MCP_Sync_Menu_Writer::write_part(): a position through the core way of the menu screen (decision 17: set_theme_mod( \'nav_menu_locations\', … )).' ),
+			'wp_cache_delete'               => array( 2, 'AB_MCP_Sync_Menu_Item_Writer::post_write(): the meta and the menu of the item in the cache (decision 33).' ),
+			'wp_slash'                      => array( 4, 'write_row(), sanitizer_refusal() and restore_part() of an item: the slashing wp_update_nav_menu_item() and wp_update_post() expect.' ),
+			'wp_update_nav_menu_item'       => array( 2, 'AB_MCP_Sync_Menu_Item_Writer::write_row(): the way forward of an item, as the menu screen and the REST API write it (decisions 17 and 25), for an item here inside keeping_revisions() (no revision deleted), for a new one without.' ),
+			'wp_update_post'                => array( 1, 'AB_MCP_Sync_Menu_Item_Writer::restore_part(): the row of an item put back through the core (decision 23).' ),
+		),
+		'class-sync-widget-area-writer.php' => array(
+			'AB_MCP_Page_Cache::purge_site' => array( 1, 'post_write(): the page cache of the whole site (a widget area shows on every page; decision 33).' ),
+			'AB_MCP_Widget_Writer::sanitize' => array( 3, 'sanitizer_refusal(), write_part() and restore_right(): the widget writer of this plugin (WP_Widget::update(), widget_update_callback), ahead, right before the write and for the backed-up settings (decision 17); nothing written.' ),
+			'AB_MCP_Widget_Writer::widget'   => array( 1, 'target_of(): whether a widget is registered here (code, no stored value).' ),
+			'current_user_can'               => array( 6, 'precheck(), write_row(), write_part(), restore_right() and right_now(): edit_theme_options, forward, right before each write (in write_part() again after the update() of the widget and its filters) and on the way back, there again right before a field goes back (Codex round 1 of branch 11, A5).' ),
+			'update_option'                  => array( 1, 'write_part(): an instance into the row of its widget, as the widget tools write it (decision 17).' ),
+			'wp_set_sidebars_widgets'        => array( 1, 'write_row(): the list of the area, with the row as stored (decision 17).' ),
 		),
 		'class-sync-backup.php' => array(
 			'AB_MCP_Store_Budget::bookings' => array( 1, 'fits(): the booking of the run, which a backup has to fit beside the backups the run holds (GitHub Codex round 6 on free#137).' ),
@@ -203,6 +256,7 @@ final class SyncSafeCallsTest extends TestCase {
 			'taxonomy_exists'           => array( 1, 'term(): whether WordPress knows its taxonomy.' ),
 		),
 		'class-sync-export.php'   => array(
+			'$reader::checked_meta'  => array( 1, 'checked_content(): a meta row in the form its kind checked it, AB_MCP_Sync_Db_Kind::checked_meta() of the kind AB_MCP_Sync_Db_Kinds::for_pair() names (an instance of a widget unpacked from the text the content carries; no stored value read; Codex round 4 of branch 11, B).' ),
 			'current_user_can'       => array( 1, 'refusal(): only an account with manage_options makes and reads packages (decision 9).' ),
 			'AB_MCP_Site_Mode::is_full' => array( 2, 'refusal() and deliver(): only with write access on (the access level Full, decision 9).' ),
 			'AB_MCP_Site_Mode::way_text' => array( 1, 'refusal(): the way to switch write access on.' ),
@@ -260,7 +314,9 @@ final class SyncSafeCallsTest extends TestCase {
 			'get_option'          => array( 5, 'begin(), end() and record(): the record of the boundary, an option this class writes itself; guarded() and mark(): the mark of a site that has had a run, an option this class writes itself (N3).' ),
 			'get_post_types'      => array( 1, 'arm_rest(): the post types registered, for the REST filters (A1); no stored value.' ),
 			'->get_param'         => array( 1, 'rest_term(): the id of the term a REST request writes, for the lock of the boundary (branch 9); a value of the request, no stored value.' ),
+			'maybe_serialize'     => array( 1, 'stored(): the bytes update_option() stores for the value the step\'s own call is to write, to let only that into the row while the call runs (only(); Codex round 5 of branch 11, C1); a calculation, no stored value.' ),
 			'maybe_unserialize'   => array( 1, 'holding(): the record of the boundary read afresh from its row (AB_MCP_Sync_Rows::option()), an option this class writes itself (A1).' ),
+			'remove_filter'       => array( 1, 'only(): the filter pre_update_option it hooks for one call of the step\'s own, where the lock was not armed in this request, removed right after it; no stored value.' ),
 			'update_option'       => array( 2, 'begin(): writes that record; mark(): writes that mark, autoloaded (N3).' ),
 			'update_post_meta'    => array( 1, 'begin(): the edit lock _edit_lock of a covered post, so an editor sees it taken (decision 19); excluded from every comparison.' ),
 		),
@@ -284,6 +340,7 @@ final class SyncSafeCallsTest extends TestCase {
 		),
 		'class-sync-post-writer.php' => array(
 			'AB_MCP_Builder_Caches::clear'             => array( 1, 'post_write(): the builder caches of the written post (decision 33).' ),
+			'remove_filter'                            => array( 2, 'keeping_revisions(): the filters wp_revisions_to_keep and wp_{$post_type}_revisions_to_keep of the one call that saves a post go again (Codex rounds 1 and 2 of branch 11, A3 and A7; every writer of the engine).' ),
 			'AB_MCP_Builders::markup_meta_refusal'     => array( 2, 'precheck() and restore_right(): a key of a page builder needs unfiltered_html, forward and on the way back, as the free meta writer and its undo ask it (the list of the signatures and the filter, and the capability; GitHub Codex round 1 on free#138, P2); no stored value.' ),
 			'AB_MCP_Page_Cache::purge_posts'           => array( 1, 'post_write(): the page cache of the written post (decision 33).' ),
 			'AB_MCP_Page_Cache::purge_site'            => array( 1, 'post_write(): the page cache of the whole site after a template, a template part, the global styles, a navigation or a reusable block, which any page may show (decision 33; branch 9b).' ),

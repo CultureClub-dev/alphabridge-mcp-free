@@ -351,6 +351,9 @@ final class AB_MCP_Sync_Export {
 			}
 			$found = array();
 			foreach ( $objects as $object ) {
+				// The finished content through the credential check once more,
+				// whatever a kind appended to it (Codex round 2 of branch 11, A8).
+				$object = self::checked_content( $object );
 				// Its status by the rule of the inventory (b9 where the kind named
 				// the object so), before it is sorted: a result of export() names
 				// none of its own (branch 9; before, the test for B9 in sort()
@@ -488,6 +491,7 @@ final class AB_MCP_Sync_Export {
 		}
 		$held = array();
 		foreach ( $objects as $object ) {
+			$object = self::checked_content( $object );
 			$status = AB_MCP_Sync_Inventory::status_of( $object );
 			if ( 'b9' === $status || array() !== $object['credentials']['mixed'] || self::credential_locked( $object['locks'] ) ) {
 				$held[ (string) $object['ref'] ] = 'b9' === $status ? 'names' : 'held';
@@ -693,6 +697,131 @@ final class AB_MCP_Sync_Export {
 			);
 		}
 		return $answer;
+	}
+
+	/**
+	 * The content of an object as it goes into the package, through the
+	 * credential check once more, after every field a kind appended to it
+	 * (Codex round 2 of branch 11, A8: the names of the menus of an item, the
+	 * version of the theme of the CSS came after the check of the form):
+	 * each column of the row as the kinds check a column (the content of the
+	 * CSS read as CSS), each meta row by its key and value, the names and
+	 * slugs of the terms, anything else as a value; each in the form its kind
+	 * checked it (a meta row through AB_MCP_Sync_Db_Kind::checked_meta() of
+	 * the kind: the instance of a widget unpacked, with its base as the
+	 * name; Codex round 4 of branch 11, B). A meta row whose key is
+	 * the name of a credential (B9) is left out of the content and named in
+	 * b9, as the kinds leave such a key out of form and content (Codex round
+	 * 3 of branch 11, C). Each unit as the kinds
+	 * check one (check_unit()): the credential check, then the net over its
+	 * raw value (AB_MCP_Sync_Net::check(): every layer of it, its decodings,
+	 * base64, data:; Codex round 3 of branch 11, A8). A credential in any of
+	 * them holds the object (its line carries no content then, sort() and
+	 * line()); the locks, the credentials and what was not read to its end
+	 * take the findings.
+	 *
+	 * @param array $object A result of AB_MCP_Sync_Kind::export().
+	 * @return array
+	 */
+	public static function checked_content( array $object ) {
+		if ( ! isset( $object['content'] ) || ! is_array( $object['content'] ) || array() === $object['content'] ) {
+			return $object;
+		}
+		$kind = isset( $object['kind'] ) ? (string) $object['kind'] : '';
+		// The kind reads a meta row in the form it checked it (an instance of
+		// a widget unpacked; Codex round 4 of branch 11, B); without a kind,
+		// as stored.
+		static $readers = array();
+		if ( ! isset( $readers[ $kind ] ) ) {
+			$found             = AB_MCP_Sync_Db_Kinds::for_pair( $kind );
+			$readers[ $kind ] = null === $found ? 'AB_MCP_Sync_Db_Kind' : get_class( $found );
+		}
+		$reader = $readers[ $kind ];
+		$acc    = array(
+			'locks'       => isset( $object['locks'] ) && is_array( $object['locks'] ) ? $object['locks'] : array(),
+			'credentials' => isset( $object['credentials'] ) && is_array( $object['credentials'] ) ? $object['credentials'] + array( 'b9' => array(), 'mixed' => array() ) : array( 'b9' => array(), 'mixed' => array() ),
+			// What the net reads beside them (AB_MCP_Sync_Net::mark()).
+			'spelling'    => array(),
+			'addressed'   => array(),
+			'unread'      => array(),
+		);
+		foreach ( $object['content'] as $part => $value ) {
+			if ( 'row' === $part && is_array( $value ) ) {
+				foreach ( $value as $column => $field ) {
+					if ( is_array( $field ) || is_object( $field ) ) {
+						self::check_unit( $acc, $kind, 'content:' . $column, $field, '' );
+					} else {
+						self::check_unit( $acc, $kind, (string) $column, (string) $field, null, 'custom_css' === $kind && 'post_content' === $column );
+					}
+				}
+			} elseif ( 'meta' === $part && is_array( $value ) ) {
+				$kept = array();
+				foreach ( $value as $pair ) {
+					if ( is_array( $pair ) && isset( $pair[0] ) && array_key_exists( 1, $pair ) ) {
+						// A key named as a credential (B9) is no part: left out of
+						// the content and named in b9, as the kinds leave it out of
+						// form and content (Codex round 3 of branch 11, C).
+						list( $name, $input ) = $reader::checked_meta( (string) $pair[0], $pair[1] );
+						if ( ! self::check_unit( $acc, $kind, 'meta:' . (string) $pair[0], $input, $name ) ) {
+							continue;
+						}
+					} else {
+						self::check_unit( $acc, $kind, 'content:meta', $pair, '' );
+					}
+					$kept[] = $pair;
+				}
+				if ( count( $kept ) !== count( $value ) ) {
+					$object['content']['meta'] = $kept;
+				}
+			} elseif ( 'terms' === $part && is_array( $value ) ) {
+				foreach ( $value as $term ) {
+					foreach ( array( 'name', 'slug' ) as $field ) {
+						if ( is_array( $term ) && isset( $term[ $field ] ) ) {
+							self::check_unit( $acc, $kind, 'term:' . ( isset( $term['taxonomy'] ) ? (string) $term['taxonomy'] : '' ) . ':' . $field, (string) $term[ $field ], '' );
+						}
+					}
+				}
+			} else {
+				self::check_unit( $acc, $kind, 'content:' . (string) $part, $value, '' );
+			}
+		}
+		$object['locks']       = $acc['locks'];
+		$object['credentials'] = $acc['credentials'];
+		if ( array() !== $acc['unread'] ) {
+			$object['unread']   = array_merge( isset( $object['unread'] ) && is_array( $object['unread'] ) ? $object['unread'] : array(), $acc['unread'] );
+			$object['complete'] = false;
+		}
+		return $object;
+	}
+
+	/**
+	 * One unit of the finished content, as the kinds check a unit (the
+	 * columns of a row, a meta row, a widget instance, the CSS): the mark of
+	 * the net, the credential check (a column as AB_MCP_Sync_Credentials::
+	 * column() checks one, its CSS as CSS; any other unit by its name and
+	 * value, unit() and note()), then the net over the raw value
+	 * (AB_MCP_Sync_Net::check(), the one the kinds call; without the count of
+	 * references, which the readers of the kinds counted over the same
+	 * values: no reader of addresses runs here). A unit named as a
+	 * credential (B9) is not read further.
+	 *
+	 * @param array       $acc  Accumulator (locks, credentials, spelling, addressed, unread).
+	 * @param string      $kind Kind.
+	 * @param string      $at   The unit (a column, meta:<key>, term:<taxonomy>:<field>, content:<part>).
+	 * @param mixed       $raw  Its value as it goes into the package.
+	 * @param string|null $name The name of the unit for unit() (a meta key, or ''); null for a column.
+	 * @param bool        $css  Whether a column holds CSS.
+	 * @return bool Whether the unit stays in the content (not B9).
+	 */
+	private static function check_unit( array &$acc, $kind, $at, $raw, $name, $css = false ) {
+		$mark = AB_MCP_Sync_Net::mark( $acc );
+		if ( null === $name ) {
+			AB_MCP_Sync_Credentials::column( $acc, $kind, $at, $raw, $css );
+		} elseif ( ! AB_MCP_Sync_Credentials::note( $acc, $kind, $at, AB_MCP_Sync_Credentials::unit( $name, $raw ) ) ) {
+			return false;
+		}
+		AB_MCP_Sync_Net::check( $acc, $mark, $kind, $at, $raw, array(), false );
+		return true;
 	}
 
 	/**

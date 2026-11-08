@@ -1407,12 +1407,22 @@ final class AB_MCP_Sync_Attachment_Writer {
 		if ( null === $key || ! in_array( $key, self::OWN_META, true ) ) {
 			return AB_MCP_Sync_Post_Writer::write_part( $live_id, $name, $prepared, $pre );
 		}
-		if ( ! current_user_can( 'edit_post', (int) $live_id ) || ( in_array( $key, self::FILE_META, true ) && ! current_user_can( 'upload_files' ) ) ) {
-			return new WP_Error( 'ab_mcp_sync_rights', sprintf( 'The meta %1$s of the attachment was not written: this account may not %2$s here. Connect with an account that may, or leave the object out of the plan.', $key, in_array( $key, self::FILE_META, true ) ? 'edit the attachment and upload files (edit_post, upload_files)' : 'edit the attachment (edit_post)' ) );
-		}
 		$values = isset( $prepared['meta'][ $key ] ) ? $prepared['meta'][ $key ] : array();
 		$from   = is_array( $pre ) ? AB_MCP_Sync_Post_Writer::meta_values( $pre, $key ) : array();
-		return AB_MCP_Sync_Post_Writer::write_meta( $live_id, $key, $values, $from );
+		// The right, the last read against the state the engine read, the
+		// call (AB_MCP_Sync_Write; Codex round 3 of branch 11, A6).
+		return AB_MCP_Sync_Write::forward(
+			self::class,
+			$live_id,
+			$pre,
+			static function () use ( $live_id, $key ) {
+				if ( ! current_user_can( 'edit_post', (int) $live_id ) || ( in_array( $key, self::FILE_META, true ) && ! current_user_can( 'upload_files' ) ) ) {
+					return new WP_Error( 'ab_mcp_sync_rights', sprintf( 'The meta %1$s of the attachment was not written: this account may not %2$s here. Connect with an account that may, or leave the object out of the plan.', $key, in_array( $key, self::FILE_META, true ) ? 'edit the attachment and upload files (edit_post, upload_files)' : 'edit the attachment (edit_post)' ) );
+				}
+				return true;
+			},
+			static fn() => AB_MCP_Sync_Post_Writer::write_meta( $live_id, $key, $values, $from )
+		);
 	}
 
 	/* ------------------------------------------------------- as the post */

@@ -75,7 +75,15 @@ final class SyncIdentityTest extends TestCase {
 	 * attachments, each with a language of WPML: the build stays under
 	 * 32 MiB (Codex round 4, B: some 177 MiB before), the index once built
 	 * holds some 3 MiB, and a stored one is taken up the same.
+	 *
+	 * In a process of its own: what it measures is the build, not what the
+	 * tests before it left in the memory of the suite. Before them some
+	 * 120 MiB were held there (74 MiB used, the rest gaps between them),
+	 * and the build's large blocks found no room under a memory_limit of
+	 * 128M (branch 11 of Z8; the same at bb85883 within 1 MiB).
 	 */
+	#[\PHPUnit\Framework\Attributes\RunInSeparateProcess]
+	#[\PHPUnit\Framework\Attributes\PreserveGlobalState( false )]
 	public function testTheIndexOfALargeSiteStaysCompact(): void {
 		$pages = 20000;
 		$files = 50000;

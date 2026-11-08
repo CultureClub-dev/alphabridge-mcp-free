@@ -434,21 +434,78 @@ final class AB_MCP_Sync_Kinds {
 			'stage'  => 'Z8d',
 			'reason' => 'Two meta keys of the term that the database compares alike (Foo and foo under the collation of termmeta) wait for their field rule: update_metadata() and delete_metadata() write by the key and would change both.',
 		),
-		'menu:engine'                  => array(
-			'stage'  => 'Z11',
-			'reason' => 'The engine that writes menus and their items follows with branch 11.',
+		// What the engines of the structure of a site (branch 11: menus and
+		// their items, widget areas, the additional CSS, core options) do not
+		// carry to their end (AB_MCP_Sync_Menu_Writer, AB_MCP_Sync_Menu_Item_Writer,
+		// AB_MCP_Sync_Widget_Area_Writer, AB_MCP_Sync_Css_Writer,
+		// AB_MCP_Sync_Option_Writer).
+		'menu:position_exchange'       => array(
+			'stage'  => 'Z8d',
+			'reason' => 'Two or more menus of the plan take each other\'s position (an exchange): the step of each would change another of them, whose step would then find it changed since the plan and leave a position empty, whatever their order. Plan one of them in a run of its own first and the others from a new report after it, or set the positions by hand under Appearance → Menus → Manage Locations.',
 		),
-		'widget_area:engine'           => array(
-			'stage'  => 'Z11',
-			'reason' => 'The engine that writes widget areas follows with branch 11.',
+		'menu:location_unregistered'   => array(
+			'stage'  => 'Z8',
+			'reason' => 'The menu is at a position the active theme of this site does not register: a position is written only where the theme registers it (as the menu screen offers them). Activate a theme that registers it, or set the position by hand under Appearance → Menus → Manage Locations.',
 		),
-		'custom_css:engine'            => array(
-			'stage'  => 'Z11',
-			'reason' => 'The engine that writes the additional CSS follows with branch 11.',
+		'menu:sanitizer'               => array(
+			'stage'  => 'Z8',
+			'reason' => 'WordPress would store another value for a field of the menu item than the staging site has (wp_update_nav_menu_item() with sanitize_key(), sanitize_html_class(), sanitize_url(), a title it stores as none where it is the title of the object, kses without unfiltered_html): change the item on the staging site, take it over with an account that may store unfiltered HTML, or by hand under Appearance → Menus.',
 		),
-		'option:engine'                => array(
-			'stage'  => 'Z11',
-			'reason' => 'The engine that writes core options follows with branch 11.',
+		'menu:item_shape'              => array(
+			'stage'  => 'Z8d',
+			'reason' => 'The menu item is of a shape the core does not write through the menu screen (another status than publish or draft, no position, in no menu or in several, a type the core does not know, a meta field of the core twice or missing): it waits for its field rule.',
+		),
+		'menu:reference_unmapped'      => array(
+			'stage'  => 'Z8',
+			'reason' => 'A reference of the menu or of its item (its menu, its parent item, the post or term it links, an address with an id) has no counterpart on this site: pair or create the target first.',
+		),
+		'widget_area:create'           => array(
+			'stage'  => 'Z8d',
+			'reason' => 'The widget area is not on this site (no key of sidebars_widgets): it is not made by a run. Open Appearance → Widgets on this site once (the core adds the areas of the theme), then make a new report.',
+		),
+		'widget_area:widget_unregistered' => array(
+			'stage'  => 'Z8',
+			'reason' => 'A widget of the area is of a type that is not registered on this site (its update() cannot check its settings), is no widget with a number, or its row (widget_<base>) was not written by the widgets of WordPress: activate the plugin or theme that provides the widget, or take the area over by hand under Appearance → Widgets.',
+		),
+		'widget_area:sanitizer'        => array(
+			'stage'  => 'Z8',
+			'reason' => 'The update() of a widget or the filter widget_update_callback would store other settings than the staging site has (kses without unfiltered_html, a field the widget sanitizes otherwise here): take it over with an account that may store unfiltered HTML, or by hand under Appearance → Widgets.',
+		),
+		'widget_area:instance_unmapped' => array(
+			'stage'  => 'Z8d',
+			'reason' => 'An instance of the area was there at the base of the pair, and its counterpart on this site is not known by the pair (the lists of both sides did not name the same widgets in the same order when the area was paired) or is placed in another area here: align the pair anew (wp_site_pairs), or take the area over by hand under Appearance → Widgets.',
+		),
+		'widget_area:reference_unmapped' => array(
+			'stage'  => 'Z8',
+			'reason' => 'A reference in the settings of a widget (a post, a term, a menu, an address with an id) has no counterpart on this site: pair or create the target first.',
+		),
+		'custom_css:theme_mismatch'    => array(
+			'stage'  => 'Z8b',
+			'reason' => 'The Additional CSS belongs to a theme that is not the active theme of this site, or is active here in another version than on the staging site: the CSS is written only to the same theme in the same version (a change of the theme is a phase of the code). Bring both sites to the same theme and version, or change the CSS by hand in the Customizer.',
+		),
+		'custom_css:markup'            => array(
+			'stage'  => 'Z8',
+			'reason' => 'The Additional CSS holds a closing tag of STYLE or ends in a part of one (the Customizer refuses to save it, WP_Customize_Custom_CSS_Setting::validate()), or a filter or the sanitizing of a save would change it here: change the CSS on the staging site, or by hand in the Customizer.',
+		),
+		'custom_css:field_rule'        => array(
+			'stage'  => 'Z8d',
+			'reason' => 'The Additional CSS of the staging site has a part the engine does not write as it is (the source of a preprocessor in post_content_filtered, or another status than publish, which the core gives Additional CSS): it waits for its field rule.',
+		),
+		'custom_css:reference_unmapped' => array(
+			'stage'  => 'Z8',
+			'reason' => 'An address with an id in the Additional CSS (url() of an attachment) has no counterpart on this site: pair or create the target first.',
+		),
+		'option:create'                => array(
+			'stage'  => 'Z8d',
+			'reason' => 'The core option is not on this site: an option is changed, never made by a run (WordPress makes its core options as it is installed and updated).',
+		),
+		'option:sanitizer'             => array(
+			'stage'  => 'Z8',
+			'reason' => 'sanitize_option() of this site would store another value for the option than the staging site has: change the setting on the staging site, or by hand in wp-admin (Settings).',
+		),
+		'option:reference_unmapped'    => array(
+			'stage'  => 'Z8',
+			'reason' => 'The option names an object (a page, a category, the sticky posts, an address with an id) that has no counterpart on this site: pair or create the target first.',
 		),
 	);
 

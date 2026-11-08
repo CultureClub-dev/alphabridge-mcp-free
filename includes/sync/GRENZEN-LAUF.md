@@ -357,7 +357,10 @@ Ablehnung entsteht, nennt sie den Weg.
 - `pre_update_option` (generisch, für jeden Optionsnamen des Datensatzes)
   hält einen Wert «still» (der alte Wert kommt zurück, `update_option()`
   schreibt nichts); der schreibende Request erfährt nichts davon. Entscheid 19
-  nimmt das in Kauf; in Zweig 8 deckt kein Schritt Optionen (Zweig 11).
+  nimmt das in Kauf. Seit Zweig 11 decken Schritte Kern-Optionen und die
+  geteilten Zeilen der Theme-Mods und Widgets; ein Wert, den ein anderer
+  Schreiber dort still hält, liest der Schritt nicht als Ziel zurück und
+  weicht ab (`GRENZEN-STRUKTUR.md`).
 
 ## Vorprüfung der Mittel (Konzept 15.11)
 
@@ -533,7 +536,18 @@ Ablehnung entsteht, nennt sie den Weg.
   nach dem Aufruf, ob er `true` oder einen `WP_Error` gab, liest er ihn zurück
   (`post`, zugleich `after`). `own = true`, `own_after = post` genau dann,
   wenn `post ≠ pre`: der Aufruf hat den Teil verändert. `post == pre`: der
-  Aufruf hat nichts verändert, `own` bleibt, wie es war. Für die Teile, die
+  Aufruf hat nichts verändert, `own` bleibt, wie es war. Ein Aufruf, den
+  der Helfer des Schreibers nicht macht (`AB_MCP_Sync_Write::refused()`:
+  das Objekt hat sich nach der Rechtefrage unmittelbar davor geändert,
+  `ab_mcp_sync_changed_before_write`, Zweig 11, Codex-Runde 3, A6; ein
+  Recht fehlt oder die letzte Lesung scheitert, Codex-Runde 4, Punkt 3),
+  macht nichts eigen, auch wo `post ≠ pre`, etwa wo ein Rechtehook das
+  Objekt ändert und dann das Recht verweigert: jeder veränderte Teil ist
+  fremd, der Schritt weicht ab und nennt den ersten davon; ist bei einem
+  geänderten Stand kein Teil des Schritts anders als die Sicherung, ist er
+  `failed` und sagt, dass die fremde Änderung bleibt. Ein Fehler, den der
+  Kernaufruf selbst gibt, ist keine solche Verweigerung: dort gilt die
+  Regel oben. Für die Teile, die
   der Zeilenaufruf laut `AB_MCP_Sync_Post_Writer::with_row()` mitschreibt
   (`_wp_page_template` über `page_template`; die Vorgabe-Kategorie eines
   Beitrags ohne Kategorie), ist `pre` der Stand vor dem Zeilenaufruf, und
@@ -719,8 +733,9 @@ Ablehnung entsteht, nennt sie den Weg.
 
 ## Rückweg (Entscheid 23)
 
-- Neu Angelegtes bleibt (Posts; in späteren Zweigen Terme, Menüs,
-  Attachments), auch veröffentlicht; das Paar wird `residual`, die Antwort
+- Neu Angelegtes bleibt (Posts, Terme, Attachments, Menüs mit ihren
+  Einträgen, Widget-Instanzen mit ihrem Bereich), auch veröffentlicht;
+  das Paar wird `residual`, die Antwort
   nennt den Rest mit dem Weg «von Hand entfernen». Ein zweiter Lauf schreibt
   den Rest nicht (Regel 0 des Berichts), bis `wp_site_pairs` ihn bestätigt
   oder verwirft.

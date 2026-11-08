@@ -91,6 +91,7 @@ require_once __DIR__ . '/class-sync-exclusions.php';
 require_once __DIR__ . '/class-sync-db-kinds.php';
 require_once __DIR__ . '/class-sync-identity.php';
 require_once __DIR__ . '/class-sync-credentials.php';
+require_once __DIR__ . '/class-sync-write.php';
 require_once dirname( __DIR__ ) . '/tools/class-tools-content.php';
 require_once dirname( __DIR__ ) . '/builders/class-builders.php';
 require_once dirname( __DIR__ ) . '/class-redactor.php';
@@ -1980,23 +1981,39 @@ final class AB_MCP_Sync_Post_Writer {
 			$values = isset( $prepared['meta'][ $key ] ) ? $prepared['meta'][ $key ] : array();
 			$from   = is_array( $pre ) ? self::meta_values( $pre, $key ) : array();
 			if ( '_thumbnail_id' === $key ) {
-				return self::write_thumbnail( (int) $live_id, $values );
+				// No right of its own at the call (the right of the post, asked
+				// ahead): the last read against the state the engine read, then
+				// the call; the engine saves the journal between its read and
+				// the call (Codex round 4 of branch 11, item 4).
+				return AB_MCP_Sync_Write::forward( self::class, $live_id, $pre, static fn() => true, static fn() => self::write_thumbnail( (int) $live_id, $values ) );
 			}
 			// The right at the object right before the call (decision 28): of
 			// a new post the first time it can be asked; a refusal is a call
 			// the step does not make, and the object deviates (it stays as a
-			// rest).
-			if ( ! in_array( $key, self::CORE_META, true ) ) {
-				$may = self::meta_right( (int) $live_id, $key, self::targets( $prepared, $key ), $from );
-				if ( true !== $may ) {
-					return new WP_Error( 'ab_mcp_sync_rights', sprintf( 'The meta %1$s of the post was not written: %2$s at the post. Connect with an account that may, or leave the object out of the plan.', $key, $may ) );
-				}
-			}
-			return self::write_meta( $live_id, $key, $values, $from );
+			// rest). Then the last read against the state the engine read,
+			// then the call (AB_MCP_Sync_Write; Codex round 3 of branch 11, A6).
+			return AB_MCP_Sync_Write::forward(
+				self::class,
+				$live_id,
+				$pre,
+				static function () use ( $live_id, $key, $prepared, $from ) {
+					if ( in_array( $key, self::CORE_META, true ) ) {
+						return true;
+					}
+					$may = self::meta_right( (int) $live_id, $key, self::targets( $prepared, $key ), $from );
+					return true === $may ? true : new WP_Error( 'ab_mcp_sync_rights', sprintf( 'The meta %1$s of the post was not written: %2$s at the post. Connect with an account that may, or leave the object out of the plan.', $key, $may ) );
+				},
+				static fn() => self::write_meta( $live_id, $key, $values, $from )
+			);
 		}
 		if ( 0 === strpos( $name, 'terms:' ) ) {
 			$taxonomy = substr( $name, 6 );
-			return self::write_terms( $live_id, $taxonomy, isset( $prepared['terms'][ $taxonomy ] ) ? $prepared['terms'][ $taxonomy ] : array() );
+			$terms    = isset( $prepared['terms'][ $taxonomy ] ) ? $prepared['terms'][ $taxonomy ] : array();
+			// The rights of the terms asked ahead (term_right()); the last read
+			// against the state the engine read, then the call: the engine
+			// saves the journal between its read and the call, through $wpdb
+			// and its filter query (Codex round 4 of branch 11, item 4).
+			return AB_MCP_Sync_Write::forward( self::class, $live_id, $pre, static fn() => true, static fn() => self::write_terms( $live_id, $taxonomy, $terms ) );
 		}
 		return new WP_Error( 'ab_mcp_sync_write_failed', sprintf( 'The part %s is of a name this version does not write. Check the object in wp-admin.', $name ) );
 	}
@@ -2374,11 +2391,64 @@ final class AB_MCP_Sync_Post_Writer {
 	 * @param int|null $live_id  The post here, null for a new one.
 	 * @return int|WP_Error The id of the post written.
 	 */
+	/**
+	 * A call that saves a post here, with no revision of it deleted (Codex
+	 * round 1 of branch 11, A3; nothing is deleted in Z8). Where this site
+	 * keeps a number of revisions (WP_POST_REVISIONS, the filter
+	 * wp_revisions_to_keep), wp_save_post_revision() deletes the oldest
+	 * beyond it as the post is saved; for this call and this post the number
+	 * is none (-1, keep them all). A site that keeps no revisions (0) makes
+	 * none, as before; a post of a type without revisions makes none. The
+	 * core asks the filter of the type of the post after it
+	 * (wp_{$post_type}_revisions_to_keep, wp-includes/revision.php; for the
+	 * CSS wp_custom_css_revisions_to_keep): the same answer there, as the
+	 * first filter meets the post (Codex round 2 of branch 11, A7). Both
+	 * run last (PHP_INT_MAX) and go again in any case (finally). Every
+	 * writer of the engine saves an existing post through it, forward and
+	 * back.
+	 *
+	 * @param int      $post_id The post.
+	 * @param callable $call    The call that saves it.
+	 * @return mixed What the call answers.
+	 */
+	public static function keeping_revisions( $post_id, callable $call ) {
+		$keep  = static function ( $num, $post ) use ( $post_id ) {
+			return is_object( $post ) && (int) $post->ID === (int) $post_id && (int) $num > 0 ? -1 : $num;
+		};
+		$types = array();
+		$first = static function ( $num, $post ) use ( $post_id, $keep, &$types ) {
+			if ( is_object( $post ) && (int) $post->ID === (int) $post_id && isset( $post->post_type ) ) {
+				$hook = 'wp_' . (string) $post->post_type . '_revisions_to_keep';
+				if ( ! isset( $types[ $hook ] ) ) {
+					$types[ $hook ] = true;
+					add_filter( $hook, $keep, PHP_INT_MAX, 2 );
+				}
+			}
+			return $keep( $num, $post );
+		};
+		add_filter( 'wp_revisions_to_keep', $first, PHP_INT_MAX, 2 );
+		try {
+			return $call();
+		} finally {
+			remove_filter( 'wp_revisions_to_keep', $first, PHP_INT_MAX );
+			foreach ( array_keys( $types ) as $hook ) {
+				remove_filter( $hook, $keep, PHP_INT_MAX );
+			}
+		}
+	}
+
 	public static function write_row( array $prepared, $live_id ) {
 		$postarr = $prepared['postarr'];
 		if ( null !== $live_id ) {
 			$postarr['ID'] = (int) $live_id;
-			$id            = wp_update_post( wp_slash( $postarr ), true );
+			// No revision of the post deleted by the save (nothing is deleted
+			// in Z8): keeping_revisions().
+			$id = self::keeping_revisions(
+				(int) $live_id,
+				static function () use ( $postarr ) {
+					return wp_update_post( wp_slash( $postarr ), true );
+				}
+			);
 		} else {
 			$id = wp_insert_post( wp_slash( $postarr ), true );
 		}
@@ -2602,8 +2672,25 @@ final class AB_MCP_Sync_Post_Writer {
 		$postarr['post_parent'] = (int) $postarr['post_parent'];
 		$postarr['menu_order']  = (int) $postarr['menu_order'];
 		$postarr['edit_date']   = true;
-		$id                     = wp_update_post( wp_slash( $postarr ), true );
-		if ( is_wp_error( $id ) ) {
+		// The last read, after every check above that may run a hook (the
+		// menus, the navigation, the styles), against what the step wrote,
+		// then the call (AB_MCP_Sync_Write; Codex rounds 2 and 3 of branch
+		// 11, A6). The rights were asked right before (restore_right()).
+		$id = AB_MCP_Sync_Write::back(
+			static fn() => true,
+			static fn() => self::current( (int) $live_id ),
+			static fn( $again ) => is_array( $again ) && hash_equals( $written, self::row_hash( $again['row'] ) ),
+			static function () use ( $live_id, $postarr ) {
+				return self::keeping_revisions(
+					(int) $live_id,
+					static function () use ( $postarr ) {
+						return wp_update_post( wp_slash( $postarr ), true );
+					}
+				);
+			},
+			'The row changed as it was put back (a hook of this site), so it is left as it is.'
+		);
+		if ( is_wp_error( $id ) || is_array( $id ) ) {
 			return $id;
 		}
 		$after = self::current( (int) $live_id );

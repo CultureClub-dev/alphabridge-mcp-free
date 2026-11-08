@@ -1330,6 +1330,17 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( 'left', $left['state'] );
 		self::assertStringContainsString( 'The row was changed since the step wrote it', $left['note'] );
 		self::assertSame( array(), $GLOBALS['ab_test_updated'], 'wp_update_post() was not called.' );
+		// The row changes after the first read of restore_row() (a hook of
+		// one of its checks; Codex round 2 of branch 11, A6): the last read
+		// right before the write sees it, nothing written.
+		$db->post_reads       = 0;
+		$db->edit_after_first = 'Changed meanwhile';
+		$moved                = AB_MCP_Sync_Post_Writer::restore_row( 12, $backup, $before, $hash_now, 1800000000 );
+		$db->edit_after_first = null;
+		self::assertIsArray( $moved, is_wp_error( $moved ) ? $moved->get_error_message() : '' );
+		self::assertSame( 'left', $moved['state'], json_encode( $moved ) );
+		self::assertStringContainsString( 'changed as it was put back', $moved['note'] );
+		self::assertSame( array(), $GLOBALS['ab_test_updated'], 'wp_update_post() was not called.' );
 		self::assertSame( array( 'state' => 'unchanged' ), AB_MCP_Sync_Post_Writer::restore_meta( 12, 'note', array( 'abc' ), str_repeat( '0', 64 ) ) );
 		$left = AB_MCP_Sync_Post_Writer::restore_meta( 12, 'note', array( 'before' ), str_repeat( '0', 64 ) );
 		self::assertIsArray( $left, 'Left, not written: ' . ( is_wp_error( $left ) ? $left->get_error_message() : '' ) );
@@ -2514,8 +2525,22 @@ final class SyncRunTest extends TestCase {
 		// Other kinds and types: locked with the stage that brings them; a
 		// term of a taxonomy the term engine writes is an item of its kind
 		// (branch 9), one of another taxonomy waits for its classification.
-		foreach ( array( 'term' => 'Z8d', 'menu' => 'Z11', 'option' => 'Z11' ) as $kind => $stage ) {
+		foreach ( array( 'term' => 'Z8d', 'theme_mod' => 'Z8d' ) as $kind => $stage ) {
 			self::assertSame( $stage, self::verdict( self::entry( array( 'kind' => $kind, 'subtype' => '' ) ) )['locked']['stage'], $kind );
+		}
+		// The structure of a site (branch 11): an item of its kind, never as
+		// draft; a widget area, a core option and the additional CSS are not
+		// made by a run.
+		foreach ( array( 'menu', 'menu_item', 'widget_area', 'custom_css', 'option' ) as $kind ) {
+			$one = self::verdict( self::entry( array( 'kind' => $kind, 'subtype' => '' ) ) );
+			self::assertSame( array( $kind, 'update' ), array( $one['item']['kind'], $one['item']['op'] ), $kind );
+			self::assertStringContainsString( 'no status draft', self::verdict( self::entry( array( 'kind' => $kind, 'subtype' => '' ) ), null, true )['locked']['reason'], $kind );
+		}
+		self::assertSame( 'create', self::verdict( self::entry( array( 'kind' => 'menu', 'subtype' => '', 'action' => 'create', 'result' => 'only_staging', 'live' => null, 'pair' => null ) ) )['item']['op'] );
+		foreach ( array( 'widget_area' => 'widget_area:create', 'option' => 'option:create', 'custom_css' => 'custom_css:create' ) as $kind => $key ) {
+			$made = self::verdict( self::entry( array( 'kind' => $kind, 'subtype' => '', 'action' => 'create', 'result' => 'only_staging', 'live' => null, 'pair' => null ) ) );
+			self::assertSame( 'Z8d', $made['locked']['stage'], $kind );
+			self::assertStringContainsString( '(' . $key . ')', $made['locked']['reason'], $kind );
 		}
 		// An attachment is an item of its kind (branch 10), never as draft.
 		$attachment = self::verdict( self::entry( array( 'kind' => 'attachment', 'subtype' => 'attachment' ) ) );
@@ -2781,7 +2806,7 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( 'post:thumbnail', self::lock_of( AB_MCP_Sync_Post_Writer::precheck( AB_MCP_Sync_Post_Writer::target_of( $line( '8' ), self::item(), $ctx ), 12, $ctx['now'] ) ), 'No attachment.' );
 		// Written through set_post_thumbnail(), removed through delete_post_thumbnail().
 		$GLOBALS['ab_test_meta'][12]['_thumbnail_id'] = array();
-		self::assertTrue( AB_MCP_Sync_Post_Writer::write_part( 12, 'meta:_thumbnail_id', $prepared, null ) );
+		self::assertTrue( AB_MCP_Sync_Post_Writer::write_part( 12, 'meta:_thumbnail_id', $prepared, AB_MCP_Sync_Post_Writer::current( 12 ) ) );
 		self::assertSame( array( 70 ), $GLOBALS['ab_test_meta'][12]['_thumbnail_id'] ?? null, 'set_post_thumbnail() of the stubs stores the id.' );
 		self::assertSame( array( array( 'set', 12, 70 ) ), $GLOBALS['ab_test_thumbnails'], 'Through the core\'s own API.' );
 		unset( $GLOBALS['ab_test_images'], $GLOBALS['ab_test_thumbnails'] );
@@ -2828,8 +2853,8 @@ final class SyncRunTest extends TestCase {
 		$pending = new ReflectionMethod( AB_MCP_Sync_Engine::class, 'pending' );
 		self::assertSame(
 			array(
-				'post' => array( 12 => true ),
-				'term' => array( 5 => true ),
+				'post' => array( 12 => true, 8 => true ),
+				'term' => array( 5 => true, 7 => true ),
 			),
 			$pending->invoke(
 				null,
@@ -2838,13 +2863,15 @@ final class SyncRunTest extends TestCase {
 					array( 'op' => 'create', 'kind' => 'term', 'staging_ref' => '5' ),
 					array( 'op' => 'update', 'kind' => 'term', 'staging_ref' => '6' ),
 					array( 'op' => 'create', 'kind' => 'menu', 'staging_ref' => '7' ),
+					array( 'op' => 'create', 'kind' => 'menu_item', 'staging_ref' => '8' ),
+					array( 'op' => 'create', 'kind' => 'option', 'staging_ref' => 'blogname' ),
 				)
 			),
-			'A new post and a new term are pending for the check of what refers to them (B1; branch 9).'
+			'A new post, a new term and a new menu are pending for the check of what refers to them (B1; branches 9 and 11).'
 		);
 		$check   = new ReflectionMethod( AB_MCP_Sync_Engine::class, 'check_item' );
-		$finding = $check->invoke( null, array( 'seq' => 2, 'kind' => 'menu', 'staging_ref' => '7', 'op' => 'create' ), array( 'lines' => array(), 'held' => array() ), self::ctx() );
-		self::assertStringContainsString( 'No step of this version writes the kind menu', $finding['message'] );
+		$finding = $check->invoke( null, array( 'seq' => 2, 'kind' => 'theme_mod', 'staging_ref' => 'tt5/header_textcolor', 'op' => 'update' ), array( 'lines' => array(), 'held' => array() ), self::ctx() );
+		self::assertStringContainsString( 'No step of this version writes the kind theme_mod', $finding['message'] );
 	}
 
 	public function testTheOrderOfTheGraphPutsANewTermBeforeThePostThatIsFiledUnderIt(): void {
@@ -2857,6 +2884,53 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( array( 2, 1 ), array_keys( $got['items'] ), 'The term 5 first: a post 5 and a term 5 are two objects (two spaces of ids).' );
 		self::assertSame( array( 2 ), $got['items'][1]['depends_on'] );
 		self::assertSame( array(), $got['locked'] );
+	}
+
+	public function testTheOrderOfThePartsOfEachKindIsWhatTheTokensCover(): void {
+		// Codex round 1 of branch 11, C2: the tokens of a plan and of a way
+		// back cover the order in which the parts of each kind go back.
+		self::assertSame(
+			array(
+				'menu'        => array( 'row', 'meta:', 'location:' ),
+				'post'        => array( 'row', 'meta:', 'terms:' ),
+				'widget_area' => array( 'instance:', 'row' ),
+			),
+			AB_MCP_Sync_Engine::part_orders( array( 'widget_area', 'menu', 'post', 'menu' ) )
+		);
+		self::assertSame( array( 'row', 'meta:', 'terms:' ), AB_MCP_Sync_Engine::part_order( null ), 'A kind without an order of its own.' );
+		// The way back binds the orders of the kinds of its journals (Codex
+		// round 2 of branch 11, C4); a journal of branch 8 without a kind is
+		// of a post.
+		self::assertSame(
+			array(
+				'menu'        => array( 'row', 'meta:', 'location:' ),
+				'post'        => array( 'row', 'meta:', 'terms:' ),
+				'widget_area' => array( 'instance:', 'row' ),
+			),
+			\AB_MCP_Sync_Revert::part_orders_of( array( array( 'kind' => 'widget_area' ), array( 'kind' => 'menu' ), array( 'op' => 'update' ) ) )
+		);
+	}
+
+	public function testAMenuThatTakesThePositionOfAnotherMenuOfTheRunComesAfterItAndAnExchangeIsLocked(): void {
+		// Codex round 1 of branch 11, B2: the positions are fields of one
+		// row, the form of each menu names them. A menu that takes a position
+		// another menu of the run holds here comes after it (an order, no
+		// dependency), which gives it up first; menus that take each other's
+		// positions are locked, each of them (menu:position_exchange).
+		$m    = new ReflectionMethod( AB_MCP_Sync_Push::class, 'order' );
+		$menu = static fn( string $ref, array $after = array() ): array => array( 'kind' => 'menu', 'subtype' => 'nav_menu', 'op' => 'update', 'staging_ref' => $ref, 'action' => 'take_over', 'refs' => array(), 'menu_after' => $after );
+		$got  = $m->invoke( null, array( 1 => $menu( '5', array( 2 ) ), 2 => $menu( '6' ) ) );
+		self::assertSame( array( 2, 1 ), array_keys( $got['items'] ), 'The menu that gives the position up first.' );
+		self::assertSame( array( 2 ), $got['items'][1]['after'] );
+		self::assertSame( array(), $got['items'][1]['depends_on'], 'An order, no dependency.' );
+		self::assertSame( array(), $got['locked'] );
+		$got = $m->invoke( null, array( 1 => $menu( '5', array( 2 ) ), 2 => $menu( '6', array( 1 ) ), 3 => $menu( '7' ) ) );
+		self::assertSame( array( 3 ), array_keys( $got['items'] ), 'The other menu goes on.' );
+		self::assertSame( array( 1, 2 ), array_column( $got['locked'], 'n' ) );
+		foreach ( $got['locked'] as $one ) {
+			self::assertStringContainsString( '(menu:position_exchange)', $one['reason'] );
+			self::assertSame( 'Z8d', $one['stage'] );
+		}
 	}
 
 	public function testTheTermsOfARunAreWrittenFromTheRootOfTheTreeItLeavesDown(): void {

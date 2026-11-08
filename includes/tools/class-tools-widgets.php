@@ -11,6 +11,7 @@ defined( 'ABSPATH' ) || exit;
 
 require_once __DIR__ . '/class-tools-base.php';
 require_once dirname( __DIR__ ) . '/undo/class-undo-widgets.php';
+require_once __DIR__ . '/class-widget-writer.php';
 
 /**
  * Class AB_MCP_Tools_Widgets
@@ -305,54 +306,9 @@ class AB_MCP_Tools_Widgets extends AB_MCP_Tools_Base {
 	 * @return array|WP_Error Sanitised instance, or an error if it cannot be saved safely.
 	 */
 	protected static function sanitize_widget_settings( $base, $number, $instance, $old = array() ) {
-		global $wp_widget_factory;
-		$widget = null;
-		if ( $wp_widget_factory && ! empty( $wp_widget_factory->widgets ) ) {
-			foreach ( $wp_widget_factory->widgets as $w ) {
-				if ( $w instanceof WP_Widget && isset( $w->id_base ) && $w->id_base === $base ) {
-					$widget = $w;
-					break;
-				}
-			}
-		}
-
-		if ( ! $widget instanceof WP_Widget ) {
-			return new WP_Error(
-				'ab_mcp_unregistered_widget',
-				__( 'This widget type is not currently registered, so its settings cannot be safely sanitised and were not written. Activate the plugin or theme that provides it, then try again.', 'alphabridge-mcp' )
-			);
-		}
-
-		// Reproduce the widgets screen: set the instance context, run the
-		// widget's own update() sanitiser, then the widget_update_callback
-		// filter — same call and order as WP_Widget::update_callback().
-		$widget->_set( (int) $number );
-		try {
-			$clean = $widget->update( $instance, (array) $old );
-			/** This filter is documented in wp-includes/class-wp-widget.php */
-			$clean = apply_filters( 'widget_update_callback', $clean, $instance, (array) $old, $widget );
-		} catch ( \Throwable $e ) {
-			// The core's sanitizers end with a TypeError on a list where they
-			// expect text (sanitize_text_field( array ) under PHP 8).
-			return new WP_Error(
-				'ab_mcp_widget_rejected',
-				sprintf(
-					/* translators: %s: class and message of the error */
-					__( 'The widget could not sanitise these settings (%s); nothing was saved. Most often a field it keeps as text was sent as a list or an object: wp_get_widgets shows the settings it holds now; send them in that form.', 'alphabridge-mcp' ),
-					get_class( $e ) . ': ' . substr( $e->getMessage(), 0, 300 )
-				)
-			);
-		}
-
-		// update() may veto the save by returning false; do NOT write, exactly
-		// as WP_Widget::update_callback() skips the save in that case.
-		if ( false === $clean ) {
-			return new WP_Error(
-				'ab_mcp_widget_rejected',
-				__( 'The widget rejected these settings; nothing was saved. wp_get_widgets shows the settings it holds now; send them in that form.', 'alphabridge-mcp' )
-			);
-		}
-		return (array) $clean;
+		// The one rule, shared with the engine of the takeover (Z8 branch 11):
+		// AB_MCP_Widget_Writer, without a change of behaviour.
+		return AB_MCP_Widget_Writer::sanitize( $base, $number, $instance, $old );
 	}
 
 	/**

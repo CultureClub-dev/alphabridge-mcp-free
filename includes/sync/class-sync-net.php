@@ -267,15 +267,23 @@ final class AB_MCP_Sync_Net {
 	 * @param mixed  $raw  The stored value: a text, or an unpacked structure
 	 *                     (a widget instance) whose texts are read.
 	 * @param array  $ctx  AB_MCP_Sync_Canon::context().
+	 * @param bool   $references Whether the references of the layers are
+	 *                     counted against what the readers of the unit read;
+	 *                     false where no reader of addresses ran over it and
+	 *                     only its credentials are checked once more (the
+	 *                     finished content of an object,
+	 *                     AB_MCP_Sync_Export::checked_content(); Codex round
+	 *                     3 of branch 11, A8). The count of credentials is
+	 *                     the same either way.
 	 * @return void
 	 */
-	public static function check( array &$acc, array $mark, $kind, $at, $raw, array $ctx ) {
+	public static function check( array &$acc, array $mark, $kind, $at, $raw, array $ctx, $references = true ) {
 		$text = self::text( $raw );
 		// What the readers of the unit found: their locks (a reference in
 		// another spelling, noted for finish() or locked at once; a unit
 		// never clean), the pairs of the addresses they read, the names of
 		// the credentials they named.
-		$locked     = count( $acc['spelling'] ) > $mark['spelling'];
+		$locked     = ! $references || count( $acc['spelling'] ) > $mark['spelling'];
 		$unreadable = false;
 		foreach ( array_slice( $acc['locks'], $mark['locks'] ) as $lock ) {
 			$op = (string) substr( (string) $lock['key'], strpos( (string) $lock['key'], ':' ) + 1 );

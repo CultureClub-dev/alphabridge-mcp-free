@@ -134,7 +134,7 @@ e('term-write-split', 'write_row(): an update written under another id is refuse
 e('term-write-slashed', 'write_row(): the name slashed for wp_insert_term(), which unslashes it', TW,
   "\t\t$done = wp_insert_term( wp_slash( (string) $args['name'] ), $taxonomy, $fields );", "\t\t$done = wp_insert_term( (string) $args['name'], $taxonomy, $fields );", 'term', T_WRITE)
 e('term-write-part-right', 'write_part(): the right of a meta key asked at the term right before the call', TW,
-  "\t\tif ( true !== $may ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_rights', sprintf( 'The meta %1$s of the term", "\t\tif ( false ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_rights', sprintf( 'The meta %1$s of the term", 'term', T_WRITE)
+  "\t\t\t\treturn true === $may ? true : new WP_Error( 'ab_mcp_sync_rights', sprintf( 'The meta %1$s of the term", "\t\t\t\treturn true ? true : new WP_Error( 'ab_mcp_sync_rights', sprintf( 'The meta %1$s of the term", 'term', T_WRITE)
 e('term-back-written', 'restore_row(): a row changed since the step wrote it is left', TW,
   "\t\tif ( ! hash_equals( (string) $written, $hash ) ) {\n\t\t\treturn array(\n\t\t\t\t'state' => 'left',\n\t\t\t\t'note'  => 'The row of the term was changed", "\t\tif ( false ) {\n\t\t\treturn array(\n\t\t\t\t'state' => 'left',\n\t\t\t\t'note'  => 'The row of the term was changed", 'term', T_BACK)
 e('term-back-slug', 'restore_row(): a backed-up slug another term holds now is left', TW,
@@ -173,8 +173,6 @@ e('guard-term-arm-rest', 'arm(): the REST refusal of a covered term is hooked', 
   "\t\tadd_filter( 'rest_request_before_callbacks', array( __CLASS__, 'rest_term' ), 1, 3 );\n", '', 'it', 'testAnotherWriterOfATermIsRefusedWhileItsStepWrites')
 
 # --------------------------------------------- the export of a term
-e('export-term-only', 'Kind_Term::export(): the menus (a kind of terms) write from branch 11 on', DK,
-  "\t\tif ( 'term' !== $this->kind() ) {\n\t\t\treturn $this->not_here( 'export' );", "\t\tif ( false ) {\n\t\t\treturn $this->not_here( 'export' );", 'kinds', 'testWhatWritesIsNotInThisBranch')
 e('export-term-b9', 'Kind_Term::export(): a meta row whose key is the name of a credential is never packed (B9)', DK,
   "\t\t\t\t\tif ( AB_MCP_Sync_Credentials::names_credential( (string) $m['key'], $extra ) ) {\n\t\t\t\t\t\tcontinue;", "\t\t\t\t\tif ( false ) {\n\t\t\t\t\t\tcontinue;", 'it', 'testTheMetaOfATermGoesByItsRightAndBackAndANewTermWithMetaIsLocked')
 
@@ -200,17 +198,17 @@ e('exclusion-category-children', 'OPTIONS: the cache of the hierarchy of the cat
 # --------------------------------------------- the engine, by the kind
 E_IT1 = 'testAChangedCategoryAndANewTagGoOverAndTheWayBackPutsTheChangedOneBackAndLeavesTheNewOneAsARest'
 e('engine-pending-terms', 'pending(): a new term is pending for the check of what refers to it (branch 9)', EN,
-  "\t\t\tif ( isset( $pending[ $space ] ) ) {", "\t\t\tif ( 'post' === $space ) {", 'unit', 'testTheEngineKnowsWhatItCreatesInBothSpacesAndNoStepWritesAKindWithoutAWriter')
+  "\t\t\tif ( null !== $space ) {\n\t\t\t\t$pending[ $space ][ (int) $one['staging_ref'] ] = true;", "\t\t\tif ( 'post' === $space ) {\n\t\t\t\t$pending[ $space ][ (int) $one['staging_ref'] ] = true;", 'unit', 'testTheEngineKnowsWhatItCreatesInBothSpacesAndNoStepWritesAKindWithoutAWriter')
 e('engine-check-no-writer', 'check_item(): no step writes a kind without a writer', EN,
   "\t\tif ( null === $w ) {\n\t\t\treturn self::finding( $item, sprintf( 'No step of this version writes the kind %s.', $item['kind'] ) );", "\t\tif ( false ) {\n\t\t\treturn self::finding( $item, sprintf( 'No step of this version writes the kind %s.', $item['kind'] ) );", 'unit', 'testTheEngineKnowsWhatItCreatesInBothSpacesAndNoStepWritesAKindWithoutAWriter')
 e('engine-guard-terms', 'boundary(): the lock of the boundary covers the term the step writes', EN,
-  "\t\t$guard  = AB_MCP_Sync_Guard::begin( $run_id, $seq, $covers['posts'], $covers['taxonomies'], array(), $covers['terms'] );\n\t\tif ( is_wp_error( $guard ) ) {\n\t\t\treturn self::fail_step( $run_id, $seq, 'begun', $guard->get_error_message(), $journal );",
-  "\t\t$guard  = AB_MCP_Sync_Guard::begin( $run_id, $seq, $covers['posts'], $covers['taxonomies'], array() );\n\t\tif ( is_wp_error( $guard ) ) {\n\t\t\treturn self::fail_step( $run_id, $seq, 'begun', $guard->get_error_message(), $journal );", 'it', 'testAnotherWriterOfATermIsRefusedWhileItsStepWrites')
+  "\t\t$guard  = AB_MCP_Sync_Guard::begin( $run_id, $seq, $covers['posts'], $covers['taxonomies'], isset( $covers['options'] ) ? $covers['options'] : array(), $covers['terms'] );\n\t\tif ( is_wp_error( $guard ) ) {\n\t\t\treturn self::fail_step( $run_id, $seq, 'begun', $guard->get_error_message(), $journal );",
+  "\t\t$guard  = AB_MCP_Sync_Guard::begin( $run_id, $seq, $covers['posts'], $covers['taxonomies'], isset( $covers['options'] ) ? $covers['options'] : array() );\n\t\tif ( is_wp_error( $guard ) ) {\n\t\t\treturn self::fail_step( $run_id, $seq, 'begun', $guard->get_error_message(), $journal );", 'it', 'testAnotherWriterOfATermIsRefusedWhileItsStepWrites')
 e('engine-revert-guard-terms', 'revert_boundary(): the lock of the way back covers the term', EN,
-  "\t\t$guard  = AB_MCP_Sync_Guard::begin( $run_id, $seq, $covers['posts'], $covers['taxonomies'], array(), $covers['terms'] );\n\t\tif ( is_wp_error( $guard ) ) {\n\t\t\treturn self::fail_step( $run_id, $seq, 'begun', $guard->get_error_message() );",
-  "\t\t$guard  = AB_MCP_Sync_Guard::begin( $run_id, $seq, $covers['posts'], $covers['taxonomies'], array() );\n\t\tif ( is_wp_error( $guard ) ) {\n\t\t\treturn self::fail_step( $run_id, $seq, 'begun', $guard->get_error_message() );", 'it', 'testAnotherWriterOfATermIsRefusedWhileItsStepWrites')
+  "\t\t$guard  = AB_MCP_Sync_Guard::begin( $run_id, $seq, $covers['posts'], $covers['taxonomies'], isset( $covers['options'] ) ? $covers['options'] : array(), $covers['terms'] );\n\t\tif ( is_wp_error( $guard ) ) {\n\t\t\treturn self::fail_step( $run_id, $seq, 'begun', $guard->get_error_message() );",
+  "\t\t$guard  = AB_MCP_Sync_Guard::begin( $run_id, $seq, $covers['posts'], $covers['taxonomies'], isset( $covers['options'] ) ? $covers['options'] : array() );\n\t\tif ( is_wp_error( $guard ) ) {\n\t\t\treturn self::fail_step( $run_id, $seq, 'begun', $guard->get_error_message() );", 'it', 'testAnotherWriterOfATermIsRefusedWhileItsStepWrites')
 e('engine-post-by-kind', 'run_post(): the caches of a written term by the writer of its kind', EN,
-  "\t\t\t\t$ids[] = array( null === self::writer( $kind ) ? 'post' : $kind, (int) $one['result']['live_ref'] );", "\t\t\t\t$ids[] = array( 'post', (int) $one['result']['live_ref'] );", 'it', E_IT1)
+  "\t\t\t\t$ids[] = array( null === self::writer( $kind ) ? 'post' : $kind, self::live_of( self::writer( $kind ), $one['result']['live_ref'] ) );", "\t\t\t\t$ids[] = array( 'post', self::live_of( self::writer( $kind ), $one['result']['live_ref'] ) );", 'it', E_IT1)
 e('engine-verify-by-kind', 'run_verify(): a written term against its target by the writer of its kind', EN,
   "\t\t\t\t$w       = self::writer( isset( $one['parts']['object']['kind'] ) ? (string) $one['parts']['object']['kind'] : 'post' );", "\t\t\t\t$w       = self::writer( 'post' );", 'it', E_IT1)
 e('engine-pair-by-kind', 'pair_for_new(): the base of a new term by the writer of its kind', EN,
@@ -222,7 +220,7 @@ e('plan-term-taxonomy', 'verdict(): a term of a taxonomy the term engine does no
 e('plan-item-kind', 'verdict(): the item carries the kind of the entry', PU,
   "\t\t\t\t'kind'        => (string) $entry['kind'],", "\t\t\t\t'kind'        => 'post',", 'unit', 'testWhichEntryOfAReportIsAStepLockedOrNothing')
 e('plan-order-space', 'order(): a new term in the space of terms, a new post in the space of posts', PU,
-  "\t\t\t\t$at[ ( 'term' === $item['kind'] ? 'term' : 'post' ) . \"\\0\" . $item['staging_ref'] ] = $n;", "\t\t\t\t$at[ 'post' . \"\\0\" . $item['staging_ref'] ] = $n;", 'unit', 'testTheOrderOfTheGraphPutsANewTermBeforeThePostThatIsFiledUnderIt')
+  "\t\t\t\t$at[ ( in_array( $item['kind'], AB_MCP_Sync_Proposal::SPACES['term'], true ) ? 'term' : 'post' ) . \"\\0\" . $item['staging_ref'] ] = $n;", "\t\t\t\t$at[ 'post' . \"\\0\" . $item['staging_ref'] ] = $n;", 'unit', 'testTheOrderOfTheGraphPutsANewTermBeforeThePostThatIsFiledUnderIt')
 
 # --------------------------------------------- the kind post, branch 9
 P_RULE = 'testTheRuleOfThisVersionForMetaKeys'
@@ -275,9 +273,9 @@ e('post-spelled-template', 'precheck(): the template the row writes is asked for
 e('post-thumbnail-image', 'precheck(): the featured image names an attachment WordPress shows as an image', PW,
   "\t\t\tif ( 'attachment' !== AB_MCP_Sync_Rows::post_type_of( $image ) || '' === (string) wp_get_attachment_image( $image, 'thumbnail' ) ) {", "\t\t\tif ( false ) {", 'unit', P_IMAGE)
 e('post-thumbnail-write', 'write_part(): the featured image through set_post_thumbnail()', PW,
-  "\t\t\tif ( '_thumbnail_id' === $key ) {\n\t\t\t\treturn self::write_thumbnail( (int) $live_id, $values );", "\t\t\tif ( false ) {\n\t\t\t\treturn self::write_thumbnail( (int) $live_id, $values );", 'unit', P_IMAGE)
+  "\t\t\tif ( '_thumbnail_id' === $key ) {\n\t\t\t\t// No right of its own at the call", "\t\t\tif ( false ) {\n\t\t\t\t// No right of its own at the call", 'unit', P_IMAGE)
 e('post-write-part-right', 'write_part(): the right of a key asked at the post right before the call; refused at a new post, the object stays as a rest', PW,
-  "\t\t\t\tif ( true !== $may ) {\n\t\t\t\t\treturn new WP_Error( 'ab_mcp_sync_rights', sprintf( 'The meta %1$s of the post was not written", "\t\t\t\tif ( false ) {\n\t\t\t\t\treturn new WP_Error( 'ab_mcp_sync_rights', sprintf( 'The meta %1$s of the post was not written", 'it', 'testANewPostWithAPlainKeyGoesAndOneWhoseRightTheNewPostRefusesStaysAsARest')
+  "\t\t\t\t\treturn true === $may ? true : new WP_Error( 'ab_mcp_sync_rights', sprintf( 'The meta %1$s of the post was not written", "\t\t\t\t\treturn true ? true : new WP_Error( 'ab_mcp_sync_rights', sprintf( 'The meta %1$s of the post was not written", 'it', 'testANewPostWithAPlainKeyGoesAndOneWhoseRightTheNewPostRefusesStaysAsARest')
 e('post-slug-pending', 'slug_refusal(): a pending post of an account that may not publish it loses its slug', PW,
   "\t\t\tif ( ! $may ) {\n\t\t\t\treturn self::locked( 'post:slug_collision', sprintf( 'WordPress drops the slug", "\t\t\tif ( false ) {\n\t\t\t\treturn self::locked( 'post:slug_collision', sprintf( 'WordPress drops the slug", 'unit', P_SLUG)
 e('post-slug-empty', 'slug_refusal(): a published post without a slug gets one from its title', PW,

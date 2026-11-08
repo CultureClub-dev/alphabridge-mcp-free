@@ -283,10 +283,24 @@ final class SyncKindsTest extends TestCase {
 			'term:reference_unmapped'      => array( array( 'term' ), 'reference_unmapped', 'Z8' ),
 			'term:meta_rule'               => array( array( 'term' ), 'meta_rule', 'Z8d' ),
 			'term:meta_spelling'           => array( array( 'term' ), 'meta_spelling', 'Z8d' ),
-			'menu:engine'                  => array( array( 'menu' ), 'engine', 'Z11' ),
-			'widget_area:engine'           => array( array( 'widget_area' ), 'engine', 'Z11' ),
-			'custom_css:engine'            => array( array( 'custom_css' ), 'engine', 'Z11' ),
-			'option:engine'                => array( array( 'option' ), 'engine', 'Z11' ),
+			// Branch 11: the engines of the structure of a site.
+			'menu:location_unregistered'   => array( array( 'menu' ), 'location_unregistered', 'Z8' ),
+			'menu:position_exchange'       => array( array( 'menu' ), 'position_exchange', 'Z8d' ),
+			'menu:sanitizer'               => array( array( 'menu' ), 'sanitizer', 'Z8' ),
+			'menu:item_shape'              => array( array( 'menu' ), 'item_shape', 'Z8d' ),
+			'menu:reference_unmapped'      => array( array( 'menu' ), 'reference_unmapped', 'Z8' ),
+			'widget_area:create'           => array( array( 'widget_area' ), 'create', 'Z8d' ),
+			'widget_area:widget_unregistered' => array( array( 'widget_area' ), 'widget_unregistered', 'Z8' ),
+			'widget_area:sanitizer'        => array( array( 'widget_area' ), 'sanitizer', 'Z8' ),
+			'widget_area:instance_unmapped' => array( array( 'widget_area' ), 'instance_unmapped', 'Z8d' ),
+			'widget_area:reference_unmapped' => array( array( 'widget_area' ), 'reference_unmapped', 'Z8' ),
+			'custom_css:theme_mismatch'    => array( array( 'custom_css' ), 'theme_mismatch', 'Z8b' ),
+			'custom_css:markup'            => array( array( 'custom_css' ), 'markup', 'Z8' ),
+			'custom_css:field_rule'        => array( array( 'custom_css' ), 'field_rule', 'Z8d' ),
+			'custom_css:reference_unmapped' => array( array( 'custom_css' ), 'reference_unmapped', 'Z8' ),
+			'option:create'                => array( array( 'option' ), 'create', 'Z8d' ),
+			'option:sanitizer'             => array( array( 'option' ), 'sanitizer', 'Z8' ),
+			'option:reference_unmapped'    => array( array( 'option' ), 'reference_unmapped', 'Z8' ),
 		);
 	}
 

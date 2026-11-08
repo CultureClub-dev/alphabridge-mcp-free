@@ -347,9 +347,10 @@ final class AB_MCP_Sync_Revert {
 				$reverted[ (int) $step['parts']['forward_seq'] ] = (int) $way_id === (int) $run['run_id'] ? sprintf( 'step %d of this run', (int) $step['seq'] ) : sprintf( 'step %1$d of run %2$d', (int) $step['seq'], (int) $way_id );
 			}
 		}
-		$items = array();
-		$shown = array();
-		$live  = array();
+		$items   = array();
+		$objects = array();
+		$shown   = array();
+		$live    = array();
 		foreach ( $steps as $step ) {
 			if ( 'write' !== $step['op'] ) {
 				continue;
@@ -380,9 +381,10 @@ final class AB_MCP_Sync_Revert {
 				}
 				continue;
 			}
-			$object  = $journal['object'];
-			$live_id = isset( $object['live_ref'] ) ? (int) $object['live_ref'] : 0;
-			$items[] = array(
+			$object    = $journal['object'];
+			$live_id   = self::live_ref_of( $object );
+			$objects[] = $object;
+			$items[]   = array(
 				'forward_run' => (int) $run['run_id'],
 				'forward_seq' => (int) $step['seq'],
 			);
@@ -404,12 +406,12 @@ final class AB_MCP_Sync_Revert {
 				'state'    => $step['state'],
 				'kind'     => $object['kind'],
 				'op'       => $object['op'],
-				'live_ref' => $live_id > 0 ? (string) $live_id : null,
+				'live_ref' => AB_MCP_Sync_Engine::is_ref( $live_id ) ? (string) $live_id : null,
 				'pair_id'  => isset( $object['pair_id'] ) ? $object['pair_id'] : $step['pair_id'],
 				'parts'    => $parts,
 				'will'     => $will,
 			);
-			if ( $live_id > 0 ) {
+			if ( AB_MCP_Sync_Engine::is_ref( $live_id ) ) {
 				$live[ self::live_key( $object, $live_id ) ] = self::row_now( $object, $live_id );
 			}
 		}
@@ -436,11 +438,14 @@ final class AB_MCP_Sync_Revert {
 			'sha256',
 			AB_MCP_Sync_Canon::encode(
 				array(
-					'items'  => $items,
-					'live'   => $live,
-					'print'  => $print,
-					'run_id' => (int) $run['run_id'],
-					'state'  => $run['state'],
+					'items'      => $items,
+					'live'       => $live,
+					// The order in which the parts of each kind go back (C2), by
+					// the kinds of the journals (Codex round 2, C4).
+					'part_order' => self::part_orders_of( $objects ),
+					'print'      => $print,
+					'run_id'     => (int) $run['run_id'],
+					'state'      => $run['state'],
 				)
 			)
 		);
@@ -457,15 +462,32 @@ final class AB_MCP_Sync_Revert {
 
 	/**
 	 * The key of an object of a step among the objects the token binds: a
-	 * post by its id, as before branch 9; a term by term:<id> (two id spaces).
+	 * post by its id, as before branch 9; a term by term:<id> (two id spaces);
+	 * an object a kind names by a name (branch 11) by kind:<name>.
 	 *
-	 * @param array $object  The object of the journal.
-	 * @param int   $live_id Its id here.
+	 * @param array      $object  The object of the journal.
+	 * @param int|string $live_id Its ref here (live_ref_of()).
 	 * @return string|int
 	 */
 	private static function live_key( array $object, $live_id ) {
 		$kind = isset( $object['kind'] ) ? (string) $object['kind'] : 'post';
-		return 'post' === $kind ? (int) $live_id : $kind . ':' . (int) $live_id;
+		return 'post' === $kind ? (int) $live_id : $kind . ':' . $live_id;
+	}
+
+	/**
+	 * The object of this site a journal names, in the form the write side of
+	 * its kind takes it (AB_MCP_Sync_Engine::live_of(): an id, or a name for
+	 * the kinds of branch 11); 0 where it names none.
+	 *
+	 * @param array $object The object of the journal.
+	 * @return int|string
+	 */
+	private static function live_ref_of( array $object ) {
+		if ( ! isset( $object['live_ref'] ) ) {
+			return 0;
+		}
+		$ref = AB_MCP_Sync_Engine::live_of( AB_MCP_Sync_Engine::writer( isset( $object['kind'] ) ? (string) $object['kind'] : 'post' ), $object['live_ref'] );
+		return null === $ref ? 0 : $ref;
 	}
 
 	/**
@@ -481,8 +503,25 @@ final class AB_MCP_Sync_Revert {
 		if ( null === $w ) {
 			return 'unread';
 		}
-		$current = $w::current( (int) $live_id );
+		$current = $w::current( $live_id );
 		return is_array( $current ) ? $w::row_hash( $current['row'] ) : ( null === $current ? 'gone' : 'unread' );
+	}
+
+	/**
+	 * The orders of the parts of the kinds of these objects of journals, by
+	 * kind (AB_MCP_Sync_Engine::part_orders()), for the token of a way back
+	 * and of its continuation (Codex round 2 of branch 11, C4): a journal
+	 * of branch 8 without a kind is of a post (as writer_of() reads it).
+	 *
+	 * @param array[] $objects The objects of the journals of the steps.
+	 * @return array<string,string[]>
+	 */
+	public static function part_orders_of( array $objects ) {
+		$kinds = array();
+		foreach ( $objects as $object ) {
+			$kinds[] = is_array( $object ) && isset( $object['kind'] ) && is_string( $object['kind'] ) && '' !== $object['kind'] ? $object['kind'] : 'post';
+		}
+		return AB_MCP_Sync_Engine::part_orders( $kinds );
 	}
 
 	/**
@@ -503,9 +542,10 @@ final class AB_MCP_Sync_Revert {
 	 * @return array As plan() returns it, with same_run true and no items.
 	 */
 	private static function continuation( array $run, array $steps, $print, $source ) {
-		$shown = array();
-		$live  = array();
-		$state = array();
+		$shown   = array();
+		$live    = array();
+		$state   = array();
+		$objects = array();
 		foreach ( $steps as $step ) {
 			if ( 'revert' !== $step['op'] || ! in_array( $step['state'], array( 'planned', 'begun' ), true ) ) {
 				continue;
@@ -513,17 +553,18 @@ final class AB_MCP_Sync_Revert {
 			$what    = is_array( $step['parts'] ) ? $step['parts'] : array();
 			$forward = AB_MCP_Sync_Run::step( isset( $what['forward_run'] ) ? (int) $what['forward_run'] : (int) $run['run_id'], isset( $what['forward_seq'] ) ? (int) $what['forward_seq'] : 0 );
 			$object  = is_array( $forward ) && is_array( $forward['parts'] ) && isset( $forward['parts']['object'] ) ? $forward['parts']['object'] : array();
-			$live_id = isset( $object['live_ref'] ) ? (int) $object['live_ref'] : 0;
-			$shown[] = array(
+			$live_id   = self::live_ref_of( $object );
+			$objects[] = $object;
+			$shown[]   = array(
 				'seq'         => (int) $step['seq'],
 				'state'       => $step['state'],
 				'forward_seq' => isset( $what['forward_seq'] ) ? (int) $what['forward_seq'] : null,
 				'kind'        => isset( $object['kind'] ) ? $object['kind'] : null,
-				'live_ref'    => $live_id > 0 ? (string) $live_id : null,
+				'live_ref'    => AB_MCP_Sync_Engine::is_ref( $live_id ) ? (string) $live_id : null,
 				'will'        => 'begun' === $step['state'] ? 'stays' : 'back where own',
 			);
 			$state[] = array( (int) $step['seq'], (string) $step['state'] );
-			if ( 'planned' === $step['state'] && $live_id > 0 ) {
+			if ( 'planned' === $step['state'] && AB_MCP_Sync_Engine::is_ref( $live_id ) ) {
 				$live[ self::live_key( $object, $live_id ) ] = self::row_now( $object, $live_id );
 			}
 		}
@@ -539,9 +580,11 @@ final class AB_MCP_Sync_Revert {
 				'sha256',
 				AB_MCP_Sync_Canon::encode(
 					array(
-						'continue' => $state,
-						'live'     => $live,
-						'print'    => $print,
+						'continue'   => $state,
+						'live'       => $live,
+						// The order of the parts of each kind still to go (C4).
+						'part_order' => self::part_orders_of( $objects ),
+						'print'      => $print,
 						'run_id'   => (int) $run['run_id'],
 						'state'    => $run['state'],
 					)

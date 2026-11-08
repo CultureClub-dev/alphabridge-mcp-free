@@ -104,6 +104,28 @@ final class AB_MCP_Sync_Guard {
 	/** @var int|null The clock for tests; time() when null. */
 	public static $now = null;
 
+	/**
+	 * The rows of options a call of the step's own writes right now, each
+	 * with the bytes it is to store (only()): while it runs, every other
+	 * write to such a row is refused, also one of the step's own request
+	 * (a hook in the call that writes the row nested; Codex round 5 of
+	 * branch 11, C1, as decision 24 has it: a shared row is written by its
+	 * owner of the moment only).
+	 *
+	 * @var array<string,string>
+	 */
+	private static $only = array();
+
+	/**
+	 * The writes only() refused since the engine last took them
+	 * (refusals()): the row and the fields the write would have changed. A
+	 * refusal is never silent: the engine puts it in the journal and the
+	 * object deviates (decision A; Codex round 5 of branch 11, C1).
+	 *
+	 * @var array<int,array{option:string,fields:string[]}>
+	 */
+	private static $refusals = array();
+
 	/* ---------------------------------------------------------- boundary */
 
 	/**
@@ -539,11 +561,115 @@ final class AB_MCP_Sync_Guard {
 	 * @return mixed
 	 */
 	public static function pre_update_option( $value, $option, $old_value = null ) {
+		if ( isset( self::$only[ (string) $option ] ) ) {
+			// A row the step's own call writes right now: its own planned
+			// value, byte for byte as it is stored, and no other. A filter
+			// on pre_update_option_{$option} runs before this one
+			// (wp-includes/option.php:901, this filter :912): where it changed
+			// the value, the write is refused, and the read back sees the row
+			// other than the call was to write.
+			if ( hash_equals( self::$only[ (string) $option ], self::stored( $value ) ) ) {
+				return $value;
+			}
+			self::$refusals[] = array(
+				'option' => (string) $option,
+				'fields' => self::fields( $old_value, $value ),
+			);
+			return $old_value;
+		}
 		if ( self::$owner || AB_MCP_Sync_Exclusions::option( (string) $option ) ) {
 			return $value;
 		}
 		$record = self::holding();
 		return null !== $record && in_array( (string) $option, (array) $record['options'], true ) ? $old_value : $value;
+	}
+
+	/**
+	 * A call of the step's own that writes one row of options (a core
+	 * option, the row of a widget, sidebars_widgets, the theme mods): while
+	 * it runs, the row takes the planned value only, as its bytes are
+	 * stored, and refuses every other write (pre_update_option()), the
+	 * nested one of a hook in the call as well (Codex round 5 of branch 11,
+	 * C1: before, the request owned the boundary whole, a hook in
+	 * pre_update_option_{$option} or pre_set_theme_mod_{$name} wrote a
+	 * neighbouring field of the row, and the call then stored the row it had
+	 * read before over it, unseen). The filter is hooked for the call where
+	 * the lock was not armed in this request.
+	 *
+	 * @param string   $option The option.
+	 * @param mixed    $value  The value the call is to store.
+	 * @param callable $call   The call of the core.
+	 * @return mixed What the call answers.
+	 */
+	public static function only( $option, $value, callable $call ) {
+		$option                 = (string) $option;
+		$hooked                 = false === has_filter( 'pre_update_option', array( __CLASS__, 'pre_update_option' ) );
+		self::$only[ $option ] = self::stored( $value );
+		if ( $hooked ) {
+			add_filter( 'pre_update_option', array( __CLASS__, 'pre_update_option' ), 1, 3 );
+		}
+		try {
+			return $call();
+		} finally {
+			unset( self::$only[ $option ] );
+			if ( $hooked ) {
+				remove_filter( 'pre_update_option', array( __CLASS__, 'pre_update_option' ), 1 );
+			}
+		}
+	}
+
+	/**
+	 * The writes only() refused since the last call, taken (the engine,
+	 * after each call of the step's own).
+	 *
+	 * @return array<int,array{option:string,fields:string[]}>
+	 */
+	public static function refusals() {
+		$out            = self::$refusals;
+		self::$refusals = array();
+		return $out;
+	}
+
+	/**
+	 * The fields of a row a refused write would have changed: its keys
+	 * whose stored bytes differ, the positions within nav_menu_locations by
+	 * their name; at most ten.
+	 *
+	 * @param mixed $old The row as it is.
+	 * @param mixed $new What the write would have stored.
+	 * @return string[]
+	 */
+	private static function fields( $old, $new ) {
+		if ( ! is_array( $old ) || ! is_array( $new ) ) {
+			return array();
+		}
+		$out = array();
+		foreach ( array_unique( array_merge( array_keys( $old ), array_keys( $new ) ) ) as $key ) {
+			$a = array_key_exists( $key, $old ) ? self::stored( $old[ $key ] ) : null;
+			$b = array_key_exists( $key, $new ) ? self::stored( $new[ $key ] ) : null;
+			if ( $a === $b ) {
+				continue;
+			}
+			if ( 'nav_menu_locations' === (string) $key && isset( $old[ $key ], $new[ $key ] ) && is_array( $old[ $key ] ) && is_array( $new[ $key ] ) ) {
+				foreach ( self::fields( $old[ $key ], $new[ $key ] ) as $location ) {
+					$out[] = 'nav_menu_locations.' . $location;
+				}
+				continue;
+			}
+			$out[] = (string) $key;
+		}
+		return array_slice( $out, 0, 10 );
+	}
+
+	/**
+	 * A value as update_option() stores it (maybe_serialize(), a scalar as
+	 * its text), to compare bytes.
+	 *
+	 * @param mixed $value Value.
+	 * @return string
+	 */
+	private static function stored( $value ) {
+		return (string) maybe_serialize( $value );
 	}
 
 	/* ------------------------------------------------------------ helpers */

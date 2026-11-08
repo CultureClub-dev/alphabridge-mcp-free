@@ -733,9 +733,9 @@ final class SyncPackageTest extends TestCase {
 			self::assertSame( 'ab_mcp_sync_export_refs', AB_MCP_Sync_Export::make( 'objects', null, null, array( 'report_hash' => str_repeat( 'a', 64 ), 'refs' => $refs ) )->get_error_code(), var_export( $refs, true ) );
 		}
 		self::assertSame( 'ab_mcp_sync_export_kind', AB_MCP_Sync_Export::make( 'objects', null, null, array( 'report_hash' => str_repeat( 'a', 64 ), 'refs' => array( array( 'kind' => 'plugin', 'ref' => '1' ) ) ) )->get_error_code() );
-		// A kind whose engine writes nothing yet refuses the package, fail
-		// closed: the menus (branch 11); the terms write since branch 9.
-		self::assertSame( 'ab_mcp_sync_not_in_branch', AB_MCP_Sync_Export::make( 'objects', null, null, array( 'report_hash' => str_repeat( 'a', 64 ), 'refs' => array( array( 'kind' => 'menu', 'ref' => '1' ) ) ) )->get_error_code() );
+		// Every kind of the database packs its objects since branch 11 (the
+		// menus, widget areas, the additional CSS and the options); a kind the
+		// takeover does not know refuses the package (above).
 	}
 
 	/** @return array<string,array{0:mixed}> */

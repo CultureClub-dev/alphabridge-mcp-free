@@ -318,7 +318,16 @@ foreach ( $ab_it_steps as $ab_it_i => $ab_it_step ) {
 			$ab_it_out = wp_create_nav_menu( $ab_it_step['name'] );
 			break;
 		case 'nav_menu_item':
-			$ab_it_out = wp_update_nav_menu_item( (int) $ab_it_step['menu'], 0, $ab_it_step['args'] );
+			// A new item, or (item) one there changed as the menu screen saves it.
+			$ab_it_out = wp_update_nav_menu_item( (int) $ab_it_step['menu'], isset( $ab_it_step['item'] ) ? (int) $ab_it_step['item'] : 0, $ab_it_step['args'] );
+			break;
+		case 'custom_css':
+			// The Additional CSS of the active theme, as the Customizer saves it.
+			$ab_it_out = wp_update_custom_css_post( $ab_it_step['css'] );
+			$ab_it_out = $ab_it_out instanceof WP_Post ? $ab_it_out->ID : $ab_it_out;
+			break;
+		case 'theme_mod':
+			$ab_it_out = set_theme_mod( $ab_it_step['name'], $ab_it_step['value'] );
 			break;
 		case 'register_taxonomy':
 			// A taxonomy of a plugin this site does not run (the data of Polylang, nachgebildet).

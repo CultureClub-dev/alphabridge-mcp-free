@@ -2892,6 +2892,121 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( 'unclear', AB_MCP_Sync_Pairs::find_live( AB_MCP_Sync_Anchor::active()['source_id'], 'post', (string) $a['contact'] )['state'] );
 	}
 
+	public function testAnOptionFilterAsTheRowCallIsPreparedIsReadBeforeTheCallAndItsChangeIsAnotherHands(): void {
+		// Codex round 4 of branch 11, item 4: what the row call writes besides
+		// the row (with_row()) reads the default category of a post without
+		// one through get_option() and its filters. It ran after the read
+		// right before the call: a filter there that changed the row was
+		// written over unseen, and the step closed as done. Now it runs before
+		// that read: the change reads as another hand's, the object deviates.
+		self::pair();
+		$story_a = wp_insert_post( wp_slash( self::page( 'story', 'A story.', array( 'post_type' => 'post' ) ) ), true );
+		self::assertIsInt( $story_a );
+		$story_b = (int) self::b( array( array( 'op' => 'insert_post', 'args' => self::page( 'story', 'A story.', array( 'post_type' => 'post' ) ), 'as' => 'post' ) ) )['post'];
+		wp_set_object_terms( $story_a, array(), 'category' );
+		self::b( array( array( 'op' => 'set_terms', 'post' => $story_b, 'terms' => array(), 'taxonomy' => 'category' ) ) );
+		self::paired( self::staged() );
+		self::change_on_b( (string) $story_b, 'story', 'A story, on staging.', array( 'post_type' => 'post' ) );
+		$planned = self::planned( array( 'story' ) );
+		$run     = self::begun( $planned['args'] );
+		self::probe_ok();
+		$changed = false;
+		$filter  = static function ( $value ) use ( $story_a, &$changed ) {
+			global $wpdb;
+			$preparing = false;
+			foreach ( debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS ) as $frame ) {
+				$preparing = $preparing || ( 'AB_MCP_Sync_Post_Writer' === ( $frame['class'] ?? '' ) && 'with_row' === $frame['function'] );
+			}
+			if ( $preparing && ! $changed ) {
+				$changed = true;
+				$wpdb->update( $wpdb->posts, array( 'post_excerpt' => 'Changed by the filter' ), array( 'ID' => $story_a ) );
+				clean_post_cache( $story_a );
+			}
+			return $value;
+		};
+		add_filter( 'option_default_category', $filter );
+		try {
+			$closed = self::finish( (int) $run['run_id'] );
+		} finally {
+			remove_filter( 'option_default_category', $filter );
+		}
+		self::assertTrue( $changed, 'The filter ran as the row call was prepared.' );
+		self::assertSame( 'closed_findings', $closed['state'], json_encode( $closed ) );
+		$write = null;
+		foreach ( self::gated( 'wp_site_push', array( 'action' => 'status', 'run_id' => (int) $run['run_id'] ) )['steps'] as $step ) {
+			if ( 'write' === $step['op'] ) {
+				$write = $step;
+			}
+		}
+		self::assertIsArray( $write );
+		self::assertSame( 'unclear', $write['state'], json_encode( $write ) );
+		self::assertStringContainsString( 'another hand changed the part row within the step', (string) $write['parts']['object']['deviated']['why'] );
+	}
+
+	public function testAHookAsTheJournalIsSavedBeforeTheCallOfTheTermsIsSeenAndNothingIsWritten(): void {
+		// Codex round 4 of branch 11, item 4: the engine saves the journal
+		// between its read and the call of a part (written ahead of the call,
+		// decision 18), through $wpdb and its filter query. The terms of a
+		// post went straight to wp_set_object_terms(): a hook there that set
+		// other terms was written over unseen. Now the terms go through the
+		// helper: its last read sees the change, nothing is written, the
+		// change stays. The row goes first (its save after it is the first
+		// one); the save ahead of the call of the terms is the second.
+		self::pair();
+		$news_a  = wp_insert_term( 'News', 'category' );
+		$other_a = wp_insert_term( 'Other', 'category' );
+		$third_a = wp_insert_term( 'Third', 'category' );
+		self::assertIsArray( $third_a, is_wp_error( $third_a ) ? $third_a->get_error_message() : '' );
+		$news_b  = (int) self::b( array( array( 'op' => 'insert_term', 'name' => 'News', 'taxonomy' => 'category', 'as' => 'term' ) ) )['term'];
+		$other_b = (int) self::b( array( array( 'op' => 'insert_term', 'name' => 'Other', 'taxonomy' => 'category', 'as' => 'term' ) ) )['term'];
+		self::b( array( array( 'op' => 'insert_term', 'name' => 'Third', 'taxonomy' => 'category', 'as' => 'term' ) ) );
+		$story_a = wp_insert_post( wp_slash( self::page( 'story', 'A story.', array( 'post_type' => 'post', 'post_category' => array( (int) $news_a['term_id'] ) ) ) ), true );
+		self::assertIsInt( $story_a );
+		$story_b = (int) self::b( array( array( 'op' => 'insert_post', 'args' => self::page( 'story', 'A story.', array( 'post_type' => 'post', 'post_category' => array( $news_b ) ) ), 'as' => 'post' ) ) )['post'];
+		self::paired( self::staged() );
+		self::b( array( array( 'op' => 'set_terms', 'post' => $story_b, 'terms' => array( $other_b ), 'taxonomy' => 'category' ) ) );
+		$planned = self::planned( array( 'story' ) );
+		$run     = self::begun( $planned['args'] );
+		self::probe_ok();
+		$slugs   = static fn(): array => array_values( array_map( static fn( $t ) => $t->slug, wp_get_object_terms( $story_a, 'category' ) ) );
+		$changed = false;
+		$saves   = 0;
+		$third   = (int) $third_a['term_id'];
+		$hook    = static function ( $query ) use ( $story_a, $third, &$changed, &$saves ) {
+			if ( $changed || 0 !== stripos( ltrim( (string) $query ), 'UPDATE' ) ) {
+				return $query;
+			}
+			$saving = false;
+			$parts  = false;
+			foreach ( debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS ) as $frame ) {
+				$saving = $saving || ( 'AB_MCP_Sync_Run' === ( $frame['class'] ?? '' ) && 'update_step' === $frame['function'] );
+				$parts  = $parts || ( 'AB_MCP_Sync_Engine' === ( $frame['class'] ?? '' ) && 'write_parts' === $frame['function'] );
+			}
+			if ( $saving && $parts && 2 === ++$saves ) {
+				$changed = true;
+				wp_set_object_terms( $story_a, array( $third ), 'category' );
+			}
+			return $query;
+		};
+		add_filter( 'query', $hook );
+		try {
+			$closed = self::finish( (int) $run['run_id'] );
+		} finally {
+			remove_filter( 'query', $hook );
+		}
+		self::assertTrue( $changed, 'The hook ran as the journal was saved before the call.' );
+		self::assertSame( array( 'third' ), $slugs(), 'Not written: the change of the hook stays.' );
+		self::assertSame( 'closed_findings', $closed['state'], json_encode( $closed ) );
+		$write = null;
+		foreach ( self::gated( 'wp_site_push', array( 'action' => 'status', 'run_id' => (int) $run['run_id'] ) )['steps'] as $step ) {
+			if ( 'write' === $step['op'] ) {
+				$write = $step;
+			}
+		}
+		self::assertIsArray( $write );
+		self::assertStringContainsString( 'the part terms:category was not written', (string) $write['parts']['object']['deviated']['why'], json_encode( $write ) );
+	}
+
 	public function testTheDefaultCategoryOfTheRowGoingBackDoesNotTakeBackTermsAnotherHandChanged(): void {
 		// Codex round 7, F2: a post in News, taken over by the step to the
 		// default category of this site (the one wp_update_post() gives a post

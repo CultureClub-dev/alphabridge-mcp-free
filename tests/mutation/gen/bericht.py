@@ -1097,7 +1097,7 @@ e('import-post-status', 'LINE_FIELDS: a line may carry the status of a post', IM
 e('widget-ids', 'read(): the ids of the instances of a widget area', DK,
   "\t\t$result['instances'] = $ids;\n", "", 'itrep', IT_WIDGET)
 e('widget-id-each', 'read(): each instance of the form by its id', DK,
-  "\t\t\t$ids[]       = $widget;\n\t\t\t// The net over the raw value, after the readers of the instance.", "\t\t\t// The net over the raw value, after the readers of the instance.", 'itrep', IT_WIDGET)
+  "\t\t\t$ids[]       = $widget;\n\t\t\t$packed[]    = array( $widget, null === $settings", "\t\t\t$packed[]    = array( $widget, null === $settings", 'itrep', IT_WIDGET)
 e('items-instances', 'items(): the instances of a widget area line', P,
   "\t\t\t\t'instances'       => isset( $line['instances'] ) && is_array( $line['instances'] ) ? $line['instances'] : null,", "\t\t\t\t'instances'       => null,", 'itrep', IT_WIDGET)
 e('side-instances', 'side(): the instances of a widget area with its side', P,

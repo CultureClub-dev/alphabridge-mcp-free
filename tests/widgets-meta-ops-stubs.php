@@ -68,6 +68,11 @@ if ( ! function_exists( 'wp_set_sidebars_widgets' ) ) {
 	/** Pairs the write with the filtered read; the widget tools must not call it. */
 	function wp_set_sidebars_widgets( $sidebars_widgets ) {
 		$GLOBALS['ab_test_widget_violation'] = 'wp_set_sidebars_widgets';
+		// As WordPress (wp-includes/widgets.php:1100): the version of the
+		// format added where it is missing.
+		if ( ! isset( $sidebars_widgets['array_version'] ) ) {
+			$sidebars_widgets['array_version'] = 3;
+		}
 		update_option( 'sidebars_widgets', $sidebars_widgets );
 	}
 }

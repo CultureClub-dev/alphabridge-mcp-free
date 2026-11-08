@@ -103,6 +103,8 @@ final class SyncContentTest extends TestCase {
 		delete_option( \AB_MCP_Change_Lock::OPTION );
 		remove_all_filters( 'map_meta_cap' );
 		remove_all_filters( 'auth_post_meta__seo_title' );
+		remove_all_filters( 'wp_revisions_to_keep' );
+		remove_all_filters( 'wp_page_revisions_to_keep' );
 		remove_all_filters( 'pre_delete_post' );
 		remove_all_filters( 'pre_trash_post' );
 		remove_all_actions( 'pre_delete_term' );
@@ -871,6 +873,15 @@ final class SyncContentTest extends TestCase {
 			)
 		);
 		self::paired( self::staged() );
+		// The kind itself, without the check of the finished content in the
+		// export (Codex round 3 of branch 11, C): the key with the name of a
+		// credential is not in the content of the term (the CI of free#141,
+		// where the check of the export covered it).
+		$source = \AB_MCP_Sync_Inventory::source( array( home_url() ), \AB_MCP_Sync_Inventory::BUDGET, null, null, null );
+		$read   = \AB_MCP_Sync_Db_Kinds::for_pair( 'term' )->export( array( array( 'kind' => 'term', 'ref' => (string) $shop_a, 'source' => $source ) ) );
+		self::assertIsArray( $read, is_wp_error( $read ) ? $read->get_error_message() : '' );
+		self::assertSame( array( 'color', 'size' ), array_column( $read[0]['content']['meta'], 0 ), 'No row of api_key in the content of the kind.' );
+		self::assertStringNotContainsString( 'live-key', (string) json_encode( $read[0]['content'] ) );
 		$size_rows = AB_MCP_IT_Sites::rows( 'a', 'termmeta', array( 'term_id' => (string) $shop_a, 'meta_key' => 'size' ) );
 		$promo     = self::term_b( 'Promo', 'post_tag' );
 		self::b(
@@ -942,12 +953,14 @@ final class SyncContentTest extends TestCase {
 
 	public function testAnObjectWithTheNameOfACredentialNeverLandsInAPackageOfObjects(): void {
 		// B9 (decision 9) in the package of objects (the finding of the lead on
-		// class-sync-export.php:437; branch 9). The kinds whose objects can be
-		// named as a credential as a whole (options, theme mods) make no
-		// package of objects in this version: the export refuses them. The
-		// kinds that do (posts, terms) know B9 by their units: a meta row whose
-		// key is the name of a credential is neither in the form nor in the
-		// content of the line, and its value goes nowhere into the package.
+		// class-sync-export.php:437; branch 9). An option is named as a
+		// credential as a whole: since branch 11 options go into a package of
+		// objects, and one with the name of a credential is left out of it,
+		// counted (credentials.names), its name and its value nowhere in it.
+		// The kinds whose units can be (posts, terms) know B9 by their units:
+		// a meta row whose key is the name of a credential is neither in the
+		// form nor in the content of the line, and its value goes nowhere
+		// into the package.
 		self::pair();
 		self::paired( self::staged() );
 		$option = self::b(
@@ -958,12 +971,14 @@ final class SyncContentTest extends TestCase {
 					'purpose'     => 'objects',
 					'report_hash' => str_repeat( 'a', 64 ),
 					'refs'        => array( array( 'kind' => 'option', 'ref' => 'stripe_secret_key' ) ),
-					'expect'      => 'error',
-					'as'          => 'refused',
+					'as'          => 'package',
 				),
 			)
-		);
-		self::assertSame( 'ab_mcp_sync_not_in_branch', $option['refused']['code'], json_encode( $option['refused'] ) );
+		)['package'];
+		self::assertSame( 1, $option['credentials']['names'], (string) json_encode( $option['credentials'] ) );
+		self::assertStringNotContainsString( 'sk_live_51option', (string) json_encode( $option ), 'No value of a credential in the package.' );
+		self::assertStringNotContainsString( 'stripe_secret_key', (string) json_encode( $option ), 'Nor its name.' );
+		self::clear_b();
 		$post = self::on_b( self::page( 'pay', 'Pay here.', array( 'meta_input' => array( 'api_key' => 'sk_live_51postmeta', 'note' => 'x' ) ) ) );
 		$term = self::term_b( 'Vault', 'category' );
 		self::b( array( array( 'op' => 'add_term_meta', 'term' => $term, 'key' => 'api_key', 'value' => 'sk_live_51termmeta' ) ) );
@@ -998,6 +1013,41 @@ final class SyncContentTest extends TestCase {
 	}
 
 	/* ------------------------------------------------- the field rule */
+
+	public function testATakeOverOfAPageDeletesNoRevisionOfItWhereTheSiteKeepsANumberOfThem(): void {
+		// Branch 11 (the lead after Codex round 1, as A3 for the CSS): where
+		// this site keeps a number of revisions (one here, as
+		// WP_POST_REVISIONS = 1 would), wp_save_post_revision() deletes the
+		// oldest as a post is saved. The page keeps every revision it has,
+		// forward and on the way back (nothing is deleted in Z8).
+		self::pair();
+		$about_a = self::on_a( self::page( 'about', 'About us.' ) );
+		wp_update_post( array( 'ID' => $about_a, 'post_content' => 'About us, once.' ) );
+		wp_update_post( array( 'ID' => $about_a, 'post_content' => 'About us.' ) );
+		self::on_b( self::page( 'about', 'About us.' ) );
+		self::paired( self::staged() );
+		$b_id = (int) self::entry( self::report( self::staged() )['all'], 'post:about' )['staging']['ref'];
+		self::b( array( array( 'op' => 'update_post', 'args' => array( 'ID' => $b_id, 'post_content' => 'About us, new.' ) ) ) );
+		$revisions = array_keys( wp_get_post_revisions( $about_a ) );
+		sort( $revisions );
+		self::assertGreaterThan( 1, count( $revisions ) );
+		add_filter( 'wp_revisions_to_keep', static fn( $num, $post ) => 'page' === $post->post_type ? 1 : $num, 10, 2 );
+		// And by the filter of the type, which the core asks after it (Codex
+		// round 2 of branch 11, A7).
+		add_filter( 'wp_page_revisions_to_keep', static fn() => 1 );
+		$kept = static function () use ( $revisions ): array {
+			global $wpdb;
+			return array_map( 'intval', $wpdb->get_col( 'SELECT ID FROM ' . $wpdb->posts . ' WHERE ID IN (' . implode( ',', array_map( 'intval', $revisions ) ) . ') ORDER BY ID' ) );
+		};
+		$run    = self::begun( self::planned( array( 'post:about' ) )['args'] );
+		$closed = self::finish( (int) $run['run_id'] );
+		self::assertSame( 'closed_done', $closed['state'], json_encode( $closed ) );
+		self::assertSame( 'About us, new.', get_post( $about_a )->post_content );
+		self::assertSame( $revisions, $kept(), 'No revision of the page was deleted.' );
+		$back = self::back( (int) $run['run_id'] );
+		self::assertSame( 'closed_reverted', $back['state'], json_encode( $back ) );
+		self::assertSame( $revisions, $kept(), 'Nor on the way back.' );
+	}
 
 	public function testAPluginKeyEqualOnBothSidesStaysUntouchedAndOneThatDiffersWaitsForARuleOfTheSite(): void {
 		// Decision 28 (branch 9): a protected key of a plugin (_seo_title)
