@@ -435,15 +435,21 @@ Position, die das Theme hier nicht registriert, in der Prüfung des Laufs
 - Die Tokens eines Plans und eines Rückwegs decken auch die Reihenfolge,
   in der die Teile jeder Art zurückgehen (`PART_ORDER`, Codex-Runde 1, C2).
 
-## Grenze C: Hooks im eigenen Kernaufruf (Codex-Runde 4, Punkt 4)
+## Grenze C: die letzte Lesung des Helfers und der Kernaufruf (Codex-Runden 4 und 5)
 
-- Fenster: nur innerhalb des Kernaufrufs selbst, also `wp_insert_post()`
-  und `wp_update_post()` (auch innerhalb von `wp_update_nav_menu_item()`
-  und `wp_update_custom_css_post()`), `wp_update_term()`,
-  `update_metadata()`, `add_metadata()` und `delete_metadata()`,
-  `wp_set_object_terms()` und `set_post_thumbnail()`, `update_option()`
-  (auch innerhalb von `wp_set_sidebars_widgets()` und auf dem Weg einer
-  Instanz) und `set_theme_mod()`.
+- Fenster: die letzte Lesung des Helfers und der Kernaufruf. Die letzte
+  Lesung ist das, was `AB_MCP_Sync_Write` unmittelbar vor dem Vergleich
+  liest (vorwärts `$needs` und `current()` des Schreibers, zurück die
+  Lesung in `back()`); sie läuft über `$wpdb` und damit über dessen Filter
+  `query` (wp-includes/class-wpdb.php:2230), bei jeder ihrer Abfragen. Der
+  Kernaufruf ist `wp_insert_post()` und `wp_update_post()` (auch innerhalb
+  von `wp_update_nav_menu_item()` und `wp_update_custom_css_post()`),
+  `wp_update_term()`, `update_metadata()`, `add_metadata()` und
+  `delete_metadata()`, `wp_set_object_terms()` und `set_post_thumbnail()`,
+  `update_option()` (auch innerhalb von `wp_set_sidebars_widgets()` und auf
+  dem Weg einer Instanz) und `set_theme_mod()`. Andere Lesungen zwischen
+  Vergleich und Kernaufruf gibt es nicht (folgender Punkt); was vor der
+  letzten Lesung läuft, gehört nicht zum Fenster.
 - Zwischen dem Vergleich des Helfers (`AB_MCP_Sync_Write`) und dem
   Kernaufruf läuft kein Hook und keine Lesung: keine Option, kein
   `$wpdb`, keine Rechtefrage über `map_meta_cap`, kein Sanitizer, kein
@@ -498,15 +504,27 @@ Position, die das Theme hier nicht registriert, in der Prüfung des Laufs
   `update_{$meta_type}_meta` (:306), `add_{$meta_type}_metadata` (:90) und
   `add_{$meta_type}_meta` (:128); in jedem dieser Aufrufe der Filter
   `query` von `$wpdb` (class-wpdb.php:2230) auf das eigene SQL des Kerns.
-- Folge, ohne Beschönigung: Ändert ein solcher Hook genau den Teil, den
-  der Kern gleich schreibt, überschreibt ihn der Kern. Diese Änderung geht
-  verloren und wird nicht erkannt. So verhält sich WordPress auch beim
-  Speichern in wp-admin. Änderungen an anderen Teilen erkennt der
-  Vergleich nach dem Aufruf (Entscheid A: der Schritt weicht ab, nichts
-  davon geht von selbst zurück).
-- Die letzte Lesung des Helfers läuft selbst über `$wpdb` und damit über
-  den Filter `query`. Ein Hook dort, der den Teil ändert, nachdem dessen
-  Zeile schon gelesen ist, hat dieselbe Folge.
+- Welcher Teil: derselbe Teil, den der Kernaufruf schreibt. Ändert ein
+  Hook in diesem Fenster genau diesen Teil, im Kernaufruf oder in der
+  letzten Lesung, nachdem dieser Teil schon gelesen ist (Codex-Runde 5,
+  C2: beim Menüeintrag ist die Zeile gelesen, der Filter `query` der
+  folgenden Lesung der Meta setzt den Titel um; der Helfer vergleicht die
+  schon gelesene Zeile, und der Kern schreibt das Ziel), überschreibt ihn
+  der Kern.
+- Folge, ohne Beschönigung: Diese Änderung geht verloren und wird nicht
+  erkannt. So verhält sich WordPress auch beim Speichern in wp-admin.
+- Bei einer geteilten Zeile gehört ein Nachbarfeld nicht dazu: im eigenen
+  Kernaufruf nimmt die Zeile nur den geplanten Wert an, ein Schreibversuch
+  über die API der Optionen auf ein anderes Feld wird abgewiesen und
+  genannt (C1, oben unter «Geteilte Zeilen»). Schreibt ein Hook die Zeile
+  an dieser Sperre vorbei (über `$wpdb` selbst), hat das dieselbe Folge
+  wie beim eigenen Teil.
+- Was der Vergleich nach dem Aufruf sieht: eine Änderung an einem anderen
+  Teil des Objekts, den `current()` des Schreibers liest, die nach dem
+  Aufruf noch steht; dann weicht der Schritt ab (Entscheid A: nichts davon
+  geht von selbst zurück). Er sieht nicht, was `current()` nicht liest
+  (die ausgeschlossenen Spalten und Schlüssel, andere Objekte), und nicht,
+  was ein Hook vor dem Zurücklesen wieder zurücknimmt.
 - Nicht weiter: Rechtehooks, die Filter von `update()` eines Widgets, die
   Sanitizer der Vorprüfung, das Speichern des Journals und `with_row()`
   liegen vor dem Vergleich; dort sieht der Vergleich jede Änderung, auch am
