@@ -1147,6 +1147,15 @@ return array(
 		'expect'  => '/testAPairThatCannotBeKeptAsARestMakesTheStepUnclearWithItsWay with data set "the new bases"/',
 	),
 	array(
+		'id'      => 'struktur/c1-new-rest',
+		'clause'  => 'revert_boundary(): a new object whose pair did not become residual leaves its step unclear (the lead after round 1)',
+		'file'    => $en,
+		'search'  => "\t\t\tif ( is_wp_error( \$kept ) ) {\n\t\t\t\t\$state              = 'unclear';",
+		'replace' => "\t\t\tif ( false ) {\n\t\t\t\t\$state              = 'unclear';",
+		'run'     => $it( 'SyncStructureTest', 'testANewObjectWhosePairCannotBecomeARestOnTheWayBackLeavesItsStepUnclearWithItsWay' ),
+		'expect'  => '/testANewObjectWhosePairCannotBecomeARestOnTheWayBackLeavesItsStepUnclearWithItsWay/',
+	),
+	array(
 		'id'      => 'struktur/c2-part-order',
 		'clause'  => 'part_order(): the order of the parts of a kind (C2)',
 		'file'    => $en,

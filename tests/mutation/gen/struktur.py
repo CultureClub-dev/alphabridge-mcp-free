@@ -88,6 +88,7 @@ IT_FREEPOS = 'testANewMenuAtAPositionNoMenuHoldsYetGoesOverAndTheWayBackLeavesTh
 IT_MOVE = 'testAMenuThatTakesThePositionOfAnotherMenuOfTheRunGoesAfterItAndAnExchangeIsLocked'
 IT_UNITREST = 'testAPairThatCannotBeKeptAsARestMakesTheStepUnclearWithItsWay'
 IT_REVPAGE = 'testATakeOverOfAPageDeletesNoRevisionOfItWhereTheSiteKeepsANumberOfThem'
+IT_NEWREST = 'testANewObjectWhosePairCannotBecomeARestOnTheWayBackLeavesItsStepUnclearWithItsWay'
 IT_GUARD = 'testAnotherRequestThatWritesTheThemeModsAsANewMenuGivesItsPositionBackIsHeldOffByTheLock'
 U_MOVE = 'testAMenuThatTakesThePositionOfAnotherMenuOfTheRunComesAfterItAndAnExchangeIsLocked'
 U_PARTORDER = 'testTheOrderOfThePartsOfEachKindIsWhatTheTokensCover'
@@ -475,6 +476,9 @@ e('c1-set-state', 'unit_rest(): the answer of set_state() (C1)', EN,
 e('c1-rebase', 'unit_rest(): the answer of rebase() (C1)', EN,
   "\t\t\tif ( is_wp_error( $rebased ) ) {\n\t\t\t\treturn $rebased;\n\t\t\t}",
   "\t\t\tif ( false ) {\n\t\t\t\treturn $rebased;\n\t\t\t}", 'it', IT_UNITREST + ' with data set "the new bases"')
+e('c1-new-rest', 'revert_boundary(): a new object whose pair did not become residual leaves its step unclear (the lead after round 1)', EN,
+  "\t\t\tif ( is_wp_error( $kept ) ) {\n\t\t\t\t$state              = 'unclear';",
+  "\t\t\tif ( false ) {\n\t\t\t\t$state              = 'unclear';", 'it', IT_NEWREST)
 # C2: the order of the parts of each kind.
 e('c2-part-order', 'part_order(): the order of the parts of a kind (C2)', EN,
   "\t\treturn null !== $w && defined( $w . '::PART_ORDER' ) ? $w::PART_ORDER : array( 'row', 'meta:', 'terms:' );",

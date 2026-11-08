@@ -898,6 +898,40 @@ final class SyncStructureTest extends TestCase {
 		self::assertSame( array( 'primary' => $old_a ), $mods['nav_menu_locations'], 'The position went back: ' . json_encode( $back ) );
 	}
 
+	public function testANewObjectWhosePairCannotBecomeARestOnTheWayBackLeavesItsStepUnclearWithItsWay(): void {
+		// The lead after Codex round 1 of branch 11 (as C1): the way back
+		// keeps a new object as a rest and sets its pair residual. Where the
+		// pairs do not take that save, the step of the way back says so and
+		// is unclear: a later run could make the object again.
+		self::pair();
+		self::paired( self::staged() );
+		$new_b   = (int) self::one_b( array( 'op' => 'nav_menu', 'name' => 'Footer' ) );
+		$planned = self::planned( array( array( 'menu', 'staging', (string) $new_b ) ) );
+		$run     = self::begun( $planned['args'] );
+		self::assertSame( 'closed_done', self::finish( (int) $run['run_id'] )['state'] );
+		wp_cache_flush();
+		$new_a   = (int) get_term_by( 'slug', 'footer', 'nav_menu' )->term_id;
+		$pair_id = (int) AB_MCP_Sync_Pairs::find_live( self::source(), 'menu', (string) $new_a )['id'];
+		add_filter(
+			'query',
+			static function ( $query ) {
+				$back = false;
+				foreach ( debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS ) as $frame ) {
+					$back = $back || ( 'AB_MCP_Sync_Engine' === ( $frame['class'] ?? '' ) && 'revert_boundary' === $frame['function'] );
+				}
+				return $back && false !== strpos( (string) $query, "SET state = 'residual'" ) ? 'UPDATE ab_mcp_no_such_table SET x = 1' : $query;
+			}
+		);
+		$back = self::back( (int) $run['run_id'] );
+		remove_all_filters( 'query' );
+		self::assertSame( 'closed_findings', $back['state'], json_encode( $back ) );
+		$steps = array_values( array_filter( $back['steps'], static fn( $s ) => isset( $s['result']['rest'] ) ) );
+		self::assertCount( 1, $steps, json_encode( $back['steps'] ) );
+		self::assertSame( 'unclear', $steps[0]['state'], json_encode( $steps[0] ) );
+		self::assertStringContainsString( 'could not be kept as a rest', (string) $steps[0]['result']['message'] );
+		self::assertSame( 'active', AB_MCP_Sync_Pairs::get( $pair_id )['state'], 'The state did not change.' );
+	}
+
 	/* ----------------------------------------------------------- widgets */
 
 	public function testAChangedTextWidgetAndImageWidgetGoOverAndBack(): void {

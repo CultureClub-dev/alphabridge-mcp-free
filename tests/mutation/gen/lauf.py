@@ -403,8 +403,8 @@ e('export-one-reading', 'export(): form and content from the one reading of the 
 e('export-term-credentials', 'export(): the names and slugs of the terms through the credential check (A5)', DK,
   "\t\t\t\t\tAB_MCP_Sync_Credentials::note( $acc, 'post', 'term:' . $term['taxonomy'] . ':' . $field, AB_MCP_Sync_Credentials::unit( '', (string) $term[ $field ] ) );", '', 'unit', 'testATermNameWithACredentialHoldsTheObjectOfThePackage')
 e('engine-rest-residual', 'revert_boundary(): a new object stays as a rest, its pair residual (rule 0)', EN,
-  "\t\t\t\tif ( is_array( $pair ) && 'residual' !== $pair['state'] ) {\n\t\t\t\t\tAB_MCP_Sync_Pairs::set_state( $pair_id, 'residual', AB_MCP_Sync_Pairs::snapshot_hash( AB_MCP_Sync_Pairs::snapshot( $pair_id ) ) );",
-  "\t\t\t\tif ( false ) {\n\t\t\t\t\tAB_MCP_Sync_Pairs::set_state( $pair_id, 'residual', AB_MCP_Sync_Pairs::snapshot_hash( AB_MCP_Sync_Pairs::snapshot( $pair_id ) ) );", 'it', E2E)
+  "\t\t\t\t$kept = is_array( $pair ) && 'residual' !== $pair['state'] ? AB_MCP_Sync_Pairs::set_state(",
+  "\t\t\t\t$kept = false ? AB_MCP_Sync_Pairs::set_state(", 'it', E2E)
 e('engine-pair-restore', 'revert_boundary(): the pair goes back to its snapshot before the step (decision 10)', EN,
   "\t\t\t\t$restored = AB_MCP_Sync_Pairs::restore( $pair_id, (string) $forward['pair_before'], $now_hash );", "\t\t\t\t$restored = true;", 'it', E2E)
 e('engine-reverting-only', 'pick(): a run on its way back runs its steps of the way back only', EN,

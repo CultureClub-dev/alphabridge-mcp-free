@@ -2571,11 +2571,13 @@ final class AB_MCP_Sync_Engine {
 				return self::fail_step( $run_id, $seq, 'begun', sprintf( 'Step %d made no object (its row was not written); there is nothing to take back for it.', (int) $forward['seq'] ) );
 			}
 			$rest = self::rest( array( 'kind' => $object['kind'], 'staging_ref' => $object['staging_ref'] ), $live_id );
+			// The pair residual, its save checked as every save (the lead after
+			// Codex round 1 of branch 11, as C1): a pair that did not become a
+			// rest stays active, and a later run could make the object again.
+			$kept = true;
 			if ( null !== $pair_id ) {
 				$pair = AB_MCP_Sync_Pairs::get( $pair_id );
-				if ( is_array( $pair ) && 'residual' !== $pair['state'] ) {
-					AB_MCP_Sync_Pairs::set_state( $pair_id, 'residual', AB_MCP_Sync_Pairs::snapshot_hash( AB_MCP_Sync_Pairs::snapshot( $pair_id ) ) );
-				}
+				$kept = is_array( $pair ) && 'residual' !== $pair['state'] ? AB_MCP_Sync_Pairs::set_state( $pair_id, 'residual', AB_MCP_Sync_Pairs::snapshot_hash( AB_MCP_Sync_Pairs::snapshot( $pair_id ) ) ) : $pair;
 			}
 			$result = array(
 				'message'  => sprintf( 'The %1$s %2$s was made by the run and is not removed by the way back (nothing is deleted in this version); it stays as a rest, its pair residual. Remove it by hand in wp-admin where it should go.', $object['kind'], $live_id ),
@@ -2598,7 +2600,12 @@ final class AB_MCP_Sync_Engine {
 					}
 				}
 			}
-			$ended = self::end_step( $run_id, $seq, array( 'state' => 'done', 'result' => $result, 'pair_id' => $pair_id ) );
+			$state = 'done';
+			if ( is_wp_error( $kept ) ) {
+				$state              = 'unclear';
+				$result['message'] .= ' ' . self::unit_rest_failed( $kept );
+			}
+			$ended = self::end_step( $run_id, $seq, array( 'state' => $state, 'result' => $result, 'pair_id' => $pair_id ) );
 			return is_wp_error( $ended ) ? $ended : array( 'next' => $result['message'] );
 		}
 		if ( ! self::is_ref( $live_id ) ) {
@@ -3001,7 +3008,7 @@ final class AB_MCP_Sync_Engine {
 	 * @return string
 	 */
 	private static function unit_rest_failed( WP_Error $error ) {
-		return sprintf( 'Its pair could not be kept as a rest (%s): a later run could make the part again, so align the pair by hand (wp_site_pairs) before another run.', $error->get_error_message() );
+		return sprintf( 'Its pair could not be kept as a rest (%s): a later run could make it again, so align the pair by hand (wp_site_pairs) before another run.', $error->get_error_message() );
 	}
 
 	/**
