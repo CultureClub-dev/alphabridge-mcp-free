@@ -340,7 +340,13 @@ entsteht, nennt ihre Meldung den Weg.
   Bilder mit GD erzeugt) läuft lokal in rund 66 s (nach Codex-Runde 2: der
   Fall mit WebP-Grösse und Altbestand neu, rund 7 s; der Hook-Fall mit
   zwei bearbeiteten Bildern mehr; nach Runde 3: ein SVG im WebP-Fall, zwei
-  Bilder vom September im Hook-Fall). Der Paket-Fall erreicht allein rund
+  Bilder vom September im Hook-Fall). Sie arbeitet auf beiden Sites in
+  einem eigenen Uploads-Ordner (`wp-content/uploads-medien` über die
+  Option `upload_path`), den jeder Fall frisch vorfindet und nach sich
+  entfernt: die Suite läuft in der CI für alle Klassen gegen dieselben
+  zwei Sites, und eine frühere Klasse kann Dateien in `wp-content/uploads`
+  lassen (CI-Lauf 42480445606 von free#140); diese berührt die Klasse
+  nicht und setzt sie nicht leer voraus. Der Paket-Fall erreicht allein rund
   123 MiB Speicher (Stücke von 3 MiB), unter den 128 MB eines Prozesses je
   Klasse.
 

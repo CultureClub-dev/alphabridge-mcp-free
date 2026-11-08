@@ -67,6 +67,18 @@ require_once AB_MCP_DIR . 'includes/tools/class-tools-staging.php';
 
 final class SyncMediaTest extends TestCase {
 
+	/**
+	 * The uploads of both sites in these cases, relative to their WordPress
+	 * (the option upload_path): a root of this class alone, made anew for
+	 * each case and removed after it. The integration suite runs every class
+	 * against the same two sites; another class may leave files in
+	 * wp-content/uploads, and these cases neither assume those empty nor
+	 * touch them (CI run 42480445606 of free#140). A filter of the uploads
+	 * would lock the media (AB_MCP_Sync_Media::UPLOAD_HOOKS); the option
+	 * does not.
+	 */
+	private const UPLOADS = 'wp-content/uploads-medien';
+
 	/** The date every object of these tests carries, on both sites. */
 	private const DATE = '2026-10-01 10:00:00';
 
@@ -89,6 +101,13 @@ final class SyncMediaTest extends TestCase {
 		AB_MCP_IT_Sites::reset( 'a' );
 		AB_MCP_IT_Sites::reset( 'b' );
 		self::wipe();
+		// The root of this class on both sites, clear of what a case of it
+		// left before (a run that ended early), never another's files.
+		self::empty_uploads();
+		self::remove_outside();
+		update_option( 'upload_path', self::UPLOADS );
+		wp_upload_dir( null, false, true );
+		self::b( array( array( 'op' => 'update_option', 'name' => 'upload_path', 'value' => self::UPLOADS ) ) );
 		$this->docroot_before     = $_SERVER['DOCUMENT_ROOT'] ?? null;
 		$_SERVER['DOCUMENT_ROOT'] = AB_MCP_IT_Sites::docroot( 'a' );
 		AB_MCP_Protected_Store::forget();
@@ -125,12 +144,7 @@ final class SyncMediaTest extends TestCase {
 		remove_all_actions( 'delete_option' );
 		remove_all_actions( 'add_attachment' );
 		remove_all_filters( 'wp_check_filetype_and_ext' );
-		// The folder outside the uploads a case lets a link point to (a case
-		// that failed before its end leaves it).
-		$outside = AB_MCP_IT_Sites::docroot( 'a' ) . '/umweg-aussen';
-		if ( is_dir( $outside ) ) {
-			self::remove_tree( $outside, (string) AB_MCP_IT_Sites::state()['root'] );
-		}
+		self::remove_outside();
 		if ( null !== $this->caps_filter ) {
 			remove_filter( 'user_has_cap', $this->caps_filter );
 			$this->caps_filter = null;
@@ -141,6 +155,9 @@ final class SyncMediaTest extends TestCase {
 	public static function tearDownAfterClass(): void {
 		AB_MCP_IT_Sites::reset( 'a' );
 		AB_MCP_IT_Sites::reset( 'b' );
+		// The uploads as the sites have them again (the option is gone with
+		// the reset): the cache of this process forgets this class's root.
+		wp_upload_dir( null, false, true );
 		self::wipe();
 		self::empty_uploads();
 		AB_MCP_Protected_Store::forget();
@@ -158,15 +175,27 @@ final class SyncMediaTest extends TestCase {
 		self::remove_tree( $root . '/ab-mcp-store', $root );
 	}
 
-	/** The uploads of both sites emptied (each test makes its own files). */
+	/** The uploads root of this class on a site (UPLOADS). */
+	private static function uploads_root( string $site ): string {
+		return AB_MCP_IT_Sites::docroot( $site ) . '/' . self::UPLOADS;
+	}
+
+	/** The uploads root of this class removed on both sites, with all it holds (only this class writes there). */
 	private static function empty_uploads(): void {
 		$root = (string) AB_MCP_IT_Sites::state()['root'];
 		foreach ( array( 'a', 'b' ) as $site ) {
-			$uploads = AB_MCP_IT_Sites::docroot( $site ) . '/wp-content/uploads';
-			$entries = is_dir( $uploads ) ? array_diff( (array) scandir( $uploads ), array( '.', '..' ) ) : array();
-			foreach ( $entries as $entry ) {
-				self::remove_tree( $uploads . '/' . $entry, $root );
+			$uploads = self::uploads_root( $site );
+			if ( is_dir( $uploads ) || is_link( $uploads ) ) {
+				self::remove_tree( $uploads, $root );
 			}
+		}
+	}
+
+	/** The folder outside the uploads a case lets a link point to (a case that failed before its end leaves it). */
+	private static function remove_outside(): void {
+		$outside = AB_MCP_IT_Sites::docroot( 'a' ) . '/umweg-aussen';
+		if ( is_dir( $outside ) ) {
+			self::remove_tree( $outside, (string) AB_MCP_IT_Sites::state()['root'] );
 		}
 	}
 
@@ -535,7 +564,7 @@ final class SyncMediaTest extends TestCase {
 
 	/** Every file of the uploads of a site: path => SHA-256. */
 	private static function uploads_of( string $site ): array {
-		$root = AB_MCP_IT_Sites::docroot( $site ) . '/wp-content/uploads';
+		$root = self::uploads_root( $site );
 		$out  = array();
 		if ( ! is_dir( $root ) ) {
 			return $out;
@@ -666,7 +695,7 @@ final class SyncMediaTest extends TestCase {
 		self::paired( self::staged() );
 		$image = self::upload_b( 'garten.jpg', 'image/jpeg', self::jpeg( 1600, 1200, array( 40, 120, 60 ) ), array( 'post_title' => 'Garten', 'post_excerpt' => 'Der Garten im Herbst.', 'post_content' => 'Aufgenommen im Oktober.' ), 'Ein Garten mit Bäumen' );
 		$pdf   = self::upload_b( 'flyer.pdf', 'application/pdf', self::PDF, array( 'post_title' => 'Flyer' ) );
-		$url   = AB_MCP_IT_Sites::url( 'b' ) . '/wp-content/uploads/2026/10/';
+		$url   = AB_MCP_IT_Sites::url( 'b' ) . '/' . self::UPLOADS . '/2026/10/';
 		$page  = self::on_b(
 			array(
 				'post_type'     => 'page',
@@ -690,14 +719,9 @@ final class SyncMediaTest extends TestCase {
 		foreach ( array( 'attachment:2026/10/garten.jpg', 'attachment:2026/10/flyer.pdf', 'post:galerie' ) as $name ) {
 			self::assertSame( 'create', self::entry( $planned['report']['all'], $name )['action'], $name . ': ' . json_encode( self::entry( $planned['report']['all'], $name ) ) );
 		}
-		// A site without an upload yet: its uploads folder is made as the
-		// first file is laid (a fresh site has none; one a case before
-		// emptied goes here).
-		$uploads_a = AB_MCP_IT_Sites::docroot( 'a' ) . '/wp-content/uploads';
-		if ( is_dir( $uploads_a ) ) {
-			rmdir( $uploads_a );
-		}
-		self::assertDirectoryDoesNotExist( $uploads_a );
+		// The uploads root of this class, which setUp() removed: it is made as
+		// the first file is laid (a site without an upload yet).
+		self::assertDirectoryDoesNotExist( self::uploads_root( 'a' ) );
 		// The file of a new attachment goes with its row, as an upload makes
 		// it: a hook on add_attachment finds it there already.
 		$at_insert = array();
@@ -756,7 +780,7 @@ final class SyncMediaTest extends TestCase {
 		self::assertStringContainsString( '"id":' . $image_a, (string) $page_a->post_content );
 		self::assertStringContainsString( 'wp-image-' . $image_a, (string) $page_a->post_content );
 		self::assertStringContainsString( '"id":' . $pdf_a, (string) $page_a->post_content );
-		self::assertStringContainsString( AB_MCP_IT_Sites::url( 'a' ) . '/wp-content/uploads/2026/10/flyer.pdf', (string) $page_a->post_content );
+		self::assertStringContainsString( AB_MCP_IT_Sites::url( 'a' ) . '/' . self::UPLOADS . '/2026/10/flyer.pdf', (string) $page_a->post_content );
 		self::assertNotEmpty( wp_get_attachment_image( $image_a, 'medium' ), 'WordPress shows the image here.' );
 		$meta = wp_get_attachment_metadata( $image_a );
 		self::assertIsArray( $meta );
@@ -863,10 +887,9 @@ final class SyncMediaTest extends TestCase {
 		self::b( array( array( 'op' => 'update_option', 'name' => 'uploads_use_yearmonth_folders', 'value' => 1 ) ) );
 		$files_b = self::uploads_of( 'b' );
 		self::assertArrayHasKey( 'flach.jpg', $files_b, 'In the uploads themselves: ' . json_encode( $files_b ) );
-		$uploads_a = AB_MCP_IT_Sites::docroot( 'a' ) . '/wp-content/uploads';
-		if ( is_dir( $uploads_a ) ) {
-			rmdir( $uploads_a );
-		}
+		// The uploads root of this class, removed by setUp() and not made by
+		// the staging site: this site has no uploads folder yet.
+		self::assertDirectoryDoesNotExist( self::uploads_root( 'a' ) );
 		$planned = self::planned( array( 'attachment:flach.jpg' ) );
 		$revoked = false;
 		add_filter(
@@ -1122,7 +1145,7 @@ final class SyncMediaTest extends TestCase {
 				array( 'op' => 'update_post', 'args' => array( 'ID' => $symbol_b, 'post_mime_type' => 'image/svg+xml' ) ),
 			)
 		);
-		unlink( AB_MCP_IT_Sites::docroot( 'b' ) . '/wp-content/uploads/2026/10/symbol.jpg' );
+		unlink( self::uploads_root( 'b' ) . '/2026/10/symbol.jpg' );
 		$bytes = self::jpeg( 400, 300, array( 150, 100, 50 ) );
 		$a     = self::upload_a( 'foto.jpg', 'image/jpeg', $bytes, array( 'post_title' => 'Foto' ), 'Foto' );
 		$b     = self::upload_b( 'foto.jpg', 'image/jpeg', $bytes, array( 'post_title' => 'Foto' ), 'Foto' );
@@ -1231,7 +1254,7 @@ final class SyncMediaTest extends TestCase {
 			}
 		}
 		self::assertNotSame( '', $small );
-		unlink( AB_MCP_IT_Sites::docroot( 'b' ) . '/wp-content/uploads/' . $small );
+		unlink( self::uploads_root( 'b' ) . '/' . $small );
 		// An image under a page of staging the plan leaves out; an image whose
 		// attachment says PNG while its file is a JPEG by its name.
 		$seite = self::on_b( array( 'post_type' => 'page', 'post_status' => 'publish', 'post_title' => 'Seite', 'post_name' => 'seite', 'post_author' => 1, 'post_date' => self::DATE, 'post_date_gmt' => self::DATE, 'post_content' => 'x' ) );
@@ -1307,7 +1330,7 @@ final class SyncMediaTest extends TestCase {
 		);
 		// On A: another file where ersetzt.jpg goes; an attachment whose list
 		// names geteilt.jpg; the folder of September a link; no PDF allowed.
-		$uploads = AB_MCP_IT_Sites::docroot( 'a' ) . '/wp-content/uploads';
+		$uploads = self::uploads_root( 'a' );
 		wp_mkdir_p( $uploads . '/2026/10' );
 		file_put_contents( $uploads . '/2026/10/ersetzt.jpg', 'another file of this site' );
 		file_put_contents( $uploads . '/2026/10/hier.jpg', $png );
@@ -1568,7 +1591,7 @@ final class SyncMediaTest extends TestCase {
 		self::b( array( array( 'op' => 'upload', 'name' => 'umweg.jpg', 'mime' => 'image/jpeg', 'bytes' => base64_encode( self::jpeg( 40, 30, array( 3, 3, 3 ) ) ), 'time' => '2026/08', 'generate' => false, 'as' => 'id' ) ) );
 		$files_b = self::uploads_of( 'b' );
 		$planned = self::planned( array( 'attachment:2026/10/drei.jpg', 'attachment:2026/10/falsch.jpg', 'attachment:2026/10/klein.jpg', 'attachment:2026/08/umweg.jpg' ) );
-		$uploads = AB_MCP_IT_Sites::docroot( 'a' ) . '/wp-content/uploads';
+		$uploads = self::uploads_root( 'a' );
 		$outside = AB_MCP_IT_Sites::docroot( 'a' ) . '/umweg-aussen';
 		mkdir( $outside );
 		\AB_MCP_Sync_Attachment_Writer::$probe = static function ( $full, $when ) use ( $uploads, $outside ) {
