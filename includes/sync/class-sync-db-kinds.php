@@ -39,6 +39,7 @@ require_once __DIR__ . '/class-sync-option-schema.php';
 require_once __DIR__ . '/class-sync-builder-lock.php';
 require_once __DIR__ . '/class-sync-inventory.php';
 require_once __DIR__ . '/class-sync-identity.php';
+require_once __DIR__ . '/class-sync-media.php';
 
 /**
  * Class AB_MCP_Sync_Db_Kind: what the kinds of the database share.
@@ -401,7 +402,7 @@ class AB_MCP_Sync_Kind_Post extends AB_MCP_Sync_Db_Kind {
 	 * @param int $id Post id.
 	 * @return array{row:array|null,meta:array|null,tax:array|null}|null Null where the post is not there; a null member where its table could not be read.
 	 */
-	private static function rows( $id ) {
+	protected static function rows( $id ) {
 		$row = AB_MCP_Sync_Rows::post( (int) $id );
 		if ( false === $row ) {
 			return null;
@@ -539,7 +540,7 @@ class AB_MCP_Sync_Kind_Post extends AB_MCP_Sync_Db_Kind {
 	 * @param array $rows rows().
 	 * @return array{row?:array<string,string>,meta?:array[],terms?:array[]}
 	 */
-	private static function content_of( array $rows ) {
+	protected static function content_of( array $rows ) {
 		$row  = $rows['row'];
 		$meta = $rows['meta'];
 		$tax  = $rows['tax'];
@@ -583,12 +584,16 @@ class AB_MCP_Sync_Kind_Post extends AB_MCP_Sync_Db_Kind {
 	 * the form is a unit of the credential check (decision 9: JSON,
 	 * serialized, blocks and shortcodes in it).
 	 *
-	 * @param array $row Row.
-	 * @param array $ctx Context.
-	 * @param array $acc Accumulator.
+	 * @param array  $row    Row.
+	 * @param array  $ctx    Context.
+	 * @param array  $acc    Accumulator.
+	 * @param string $parent The strength of the reference to the parent:
+	 *                       strong for a post, weak for an attachment
+	 *                       (decision 16: a step of its own sets it after
+	 *                       its target; branch 10).
 	 * @return array
 	 */
-	public static function row_form( array $row, array $ctx, array &$acc ) {
+	public static function row_form( array $row, array $ctx, array &$acc, $parent = 'strong' ) {
 		$out = array();
 		foreach ( AB_MCP_Sync_Rows::POST_COLUMNS as $column ) {
 			if ( AB_MCP_Sync_Exclusions::column( 'posts', $column ) ) {
@@ -617,7 +622,7 @@ class AB_MCP_Sync_Kind_Post extends AB_MCP_Sync_Db_Kind {
 					}
 					break;
 				case 'post_parent':
-					$out[ $column ] = self::id_ref( 'post', $value, $acc, 'post_parent' );
+					$out[ $column ] = self::id_ref( 'post', $value, $acc, 'post_parent', 'weak' === $parent ? 'weak' : 'strong' );
 					break;
 				case 'post_author':
 					// A column BIGINT UNSIGNED: its digits are in the spelling of an id.
@@ -1681,12 +1686,204 @@ class AB_MCP_Sync_Kind_Option extends AB_MCP_Sync_Db_Kind {
 }
 
 /**
+ * Class AB_MCP_Sync_Kind_Attachment: the attachments (A3; decision 26 of the
+ * plan of 01.11.2026, Z8 branch 10). An attachment is a post of the type
+ * attachment with its row, meta and terms read as the kind post reads them
+ * (the rows of one reading, AB_MCP_Sync_Kind_Post::rows(), for the form, the
+ * content and the file list alike), and its file list (AB_MCP_Sync_Media):
+ * each file the core would delete with it, by its path relative to the
+ * uploads, its size and its SHA-256. The parent of an attachment is a weak
+ * reference (decision 16: «Schwache Verweise (Elternteil eines Attachments)
+ * setzt ein eigener Schritt nach dem Ziel»): a post that names its image
+ * and the image that hangs under the post need no order of each other; the
+ * featured image of an audio or a video (_thumbnail_id) is a strong one.
+ * What the list cannot read whole locks the attachment
+ * (AB_MCP_Sync_Media::note(): attachment:missing_file, attachment:unsafe_path,
+ * attachment:uploads_by_code, a value that does not unpack). The identity is
+ * the file (_wp_attached_file as stored) and the language, as
+ * AB_MCP_Sync_Identity names an attachment a reference points to.
+ */
+class AB_MCP_Sync_Kind_Attachment extends AB_MCP_Sync_Kind_Post {
+
+	/** @return string */
+	public function kind() {
+		return 'attachment';
+	}
+
+	/** @return string[] */
+	public function responsibility() {
+		return array( 'post_type:attachment', 'files:attachment' );
+	}
+
+	/** @return string[] */
+	public function pair_kinds() {
+		return array( 'attachment' );
+	}
+
+	/**
+	 * Every attachment of this site, a page at a time.
+	 *
+	 * @param mixed      $source AB_MCP_Sync_Inventory::source().
+	 * @param mixed|null $cursor array( 'after' => id ).
+	 * @return array|WP_Error
+	 */
+	public function inventory( $source, $cursor ) {
+		$after   = is_array( $cursor ) && isset( $cursor['after'] ) ? (int) $cursor['after'] : 0;
+		$objects = array();
+		$seen    = 0;
+		while ( true ) {
+			$ids = AB_MCP_Sync_Rows::post_ids( array( 'attachment' ), $after, self::PAGE );
+			if ( null === $ids ) {
+				return AB_MCP_Sync_Inventory::unreadable( 'posts' );
+			}
+			foreach ( $ids as $row ) {
+				if ( $seen > 0 && AB_MCP_Sync_Inventory::out_of_time( $source ) ) {
+					return array( 'objects' => $objects, 'cursor' => array( 'after' => $after ) );
+				}
+				$after = $row['ID'];
+				++$seen;
+				$result = $this->read( (string) $row['ID'], $source, 'attachment' );
+				if ( is_array( $result ) ) {
+					$objects[] = AB_MCP_Sync_Inventory::entry( $result );
+				}
+			}
+			if ( count( $ids ) < self::PAGE ) {
+				return array( 'objects' => $objects, 'cursor' => null );
+			}
+		}
+	}
+
+	/** {@inheritdoc} */
+	protected function read( $ref, array $source, $pair ) {
+		$id   = (int) $ref;
+		$rows = self::rows( $id );
+		if ( null === $rows || ( is_array( $rows['row'] ) && 'attachment' !== (string) $rows['row']['post_type'] ) ) {
+			return null;
+		}
+		return self::attachment_of( $id, $rows, $source );
+	}
+
+	/**
+	 * The objects of a package of objects: each attachment read as the
+	 * inventory reads it, with its content as the rows hold it (the same
+	 * reading, A4), and its file list in its form.
+	 *
+	 * @param array[] $refs Each: kind, ref, source.
+	 * @return array[]|WP_Error
+	 */
+	public function export( array $refs ) {
+		$out = array();
+		foreach ( $refs as $one ) {
+			if ( ! is_array( $one ) || ! isset( $one['ref'], $one['source'] ) || ! is_array( $one['source'] ) ) {
+				return new WP_Error( 'ab_mcp_sync_object_invalid', 'export() takes a list of array( \'kind\' => …, \'ref\' => …, \'source\' => AB_MCP_Sync_Inventory::source() ). Use that form.' );
+			}
+			$id   = (int) $one['ref'];
+			$rows = self::rows( $id );
+			if ( null === $rows || ( is_array( $rows['row'] ) && 'attachment' !== (string) $rows['row']['post_type'] ) ) {
+				continue;
+			}
+			// The form, the content and the file list from the one reading (A4).
+			$result            = self::attachment_of( $id, $rows, $one['source'] );
+			$content           = self::content_of( $rows );
+			$result['content'] = $content;
+			// The names and slugs of its terms through the credential check, as
+			// for a post (decision 9; AB_MCP_Sync_Kind_Post::export()).
+			$acc = array(
+				'locks'       => $result['locks'],
+				'credentials' => $result['credentials'],
+			);
+			foreach ( isset( $result['content']['terms'] ) ? $result['content']['terms'] : array() as $term ) {
+				foreach ( array( 'name', 'slug' ) as $field ) {
+					AB_MCP_Sync_Credentials::note( $acc, 'attachment', 'term:' . $term['taxonomy'] . ':' . $field, AB_MCP_Sync_Credentials::unit( '', (string) $term[ $field ] ) );
+				}
+			}
+			$result['locks']       = $acc['locks'];
+			$result['credentials'] = $acc['credentials'];
+			$out[]                 = $result;
+		}
+		return $out;
+	}
+
+	/**
+	 * The canonical form of an attachment from the rows of one reading.
+	 *
+	 * @param int   $id     Attachment id.
+	 * @param array $rows   AB_MCP_Sync_Kind_Post::rows().
+	 * @param array $source Source.
+	 * @return array
+	 */
+	private static function attachment_of( $id, array $rows, array $source ) {
+		$acc  = AB_MCP_Sync_Canon::acc();
+		$ctx  = $source['ctx'];
+		$row  = $rows['row'];
+		$meta = $rows['meta'];
+		$tax  = $rows['tax'];
+		if ( null === $row || null === $meta || null === $tax ) {
+			$acc['unread'][] = null === $row ? 'posts' : ( null === $meta ? 'postmeta' : 'term_relationships' );
+			return AB_MCP_Sync_Canon::finish( 'attachment', (string) $id, array(), array(), $acc );
+		}
+		self::type_lock( $acc, AB_MCP_Sync_Kinds::post_type( $row['post_type'] ) );
+		$list = AB_MCP_Sync_Media::of_rows( $meta );
+		AB_MCP_Sync_Media::note( $acc, $list );
+		$files = array();
+		foreach ( $list['files'] as $file ) {
+			$files[] = array(
+				'path'   => (string) $file['path'],
+				'sha256' => (string) $file['sha256'],
+				'size'   => (int) $file['size'],
+			);
+		}
+		usort(
+			$files,
+			static function ( $a, $b ) {
+				return strcmp( $a['path'], $b['path'] );
+			}
+		);
+		$form = array(
+			'row'   => self::row_form( $row, $ctx, $acc, 'weak' ),
+			'meta'  => self::meta_form(
+				$meta,
+				$ctx,
+				$acc,
+				'attachment',
+				true,
+				static function ( $key, $raw, &$acc ) {
+					// The poster of an audio or a video: a strong reference.
+					if ( '_thumbnail_id' !== $key ) {
+						return null;
+					}
+					return self::id_ref( 'post', $raw, $acc, 'meta:_thumbnail_id' );
+				}
+			),
+			'terms' => self::terms_form( $tax, $acc ),
+			'files' => $files,
+		);
+		$file = '';
+		foreach ( $meta as $one ) {
+			if ( '_wp_attached_file' === $one['key'] ) {
+				$file = (string) $one['value'];
+				break;
+			}
+		}
+		$identity = array(
+			'file'      => $file,
+			'post_type' => 'attachment',
+		);
+		$language = AB_MCP_Sync_Identity::language( 'post', $id, $ctx );
+		if ( '' !== $language ) {
+			$identity['language'] = null === $language ? '?' : (string) $language;
+		}
+		return AB_MCP_Sync_Canon::finish( 'attachment', (string) $id, $identity, $form, $acc );
+	}
+}
+
+/**
  * Class AB_MCP_Sync_Db_Kinds: the kinds of the database, registered once.
  */
 final class AB_MCP_Sync_Db_Kinds {
 
 	/** The kinds in the order of their inventory. */
-	const CLASSES = array( 'AB_MCP_Sync_Kind_Post', 'AB_MCP_Sync_Kind_Term', 'AB_MCP_Sync_Kind_Menu', 'AB_MCP_Sync_Kind_Widget_Area', 'AB_MCP_Sync_Kind_Custom_Css', 'AB_MCP_Sync_Kind_Option' );
+	const CLASSES = array( 'AB_MCP_Sync_Kind_Post', 'AB_MCP_Sync_Kind_Term', 'AB_MCP_Sync_Kind_Menu', 'AB_MCP_Sync_Kind_Widget_Area', 'AB_MCP_Sync_Kind_Custom_Css', 'AB_MCP_Sync_Kind_Option', 'AB_MCP_Sync_Kind_Attachment' );
 
 	/**
 	 * Register each kind with AB_MCP_Sync_Kinds that is not there yet.

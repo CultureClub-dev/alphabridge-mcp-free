@@ -699,7 +699,9 @@ final class SyncReportTest extends TestCase {
 				// Two pages that link to each other by their ids.
 				array( 'op' => 'insert_post', 'args' => self::page( 'one', '<a href="' . AB_MCP_IT_Sites::url( 'b' ) . '/?page_id=' . $b['two'] . '">two</a>', array( 'ID' => (int) $b['one'] ) ) ),
 				array( 'op' => 'insert_post', 'args' => self::page( 'two', '<a href="' . AB_MCP_IT_Sites::url( 'b' ) . '/?page_id=' . $b['one'] . '">one</a>', array( 'ID' => (int) $b['two'] ) ) ),
-				// A page with a featured image: attachments are not compared yet.
+				// A page with a featured image whose attachment has no file:
+				// the attachment is locked (since branch 10 the inventory reads
+				// it, attachment:unsafe_path), the page waits for it.
 				array( 'op' => 'insert_post', 'args' => array( 'post_type' => 'attachment', 'post_status' => 'inherit', 'post_name' => 'bild', 'post_title' => 'Bild', 'post_mime_type' => 'image/jpeg' ), 'as' => 'image' ),
 				array( 'op' => 'insert_post', 'args' => self::page( 'with-image', 'x' ), 'as' => 'with_image' ),
 				array( 'op' => 'add_meta', 'post' => '$with_image', 'key' => '_thumbnail_id', 'value' => '{$image}' ),
@@ -715,8 +717,8 @@ final class SyncReportTest extends TestCase {
 		}
 		$image = self::post_entry( $answer['all'], 'with-image' );
 		self::assertSame( 'waits', $image['action'] );
-		self::assertSame( 'meta:_thumbnail_id', $image['waits_for'][0]['at'] );
 		self::assertStringContainsString( 'attachment', $image['waits_for'][0]['why'] );
+		self::assertStringContainsString( 'held back', $image['waits_for'][0]['why'], 'Its attachment is created in the same run but locked.' );
 	}
 
 	/* ------------------------------------------------- rule 0 and override */

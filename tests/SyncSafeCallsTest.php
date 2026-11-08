@@ -145,6 +145,29 @@ final class SyncSafeCallsTest extends TestCase {
 	 * The calls outside ALLOWED, with the reason: file => call => array( count, reason ).
 	 */
 	private const EXCEPTIONS = array(
+		'class-sync-attachment-writer.php' => array(
+			'AB_MCP_Builders::markup_meta_refusal' => array( 1, 'precheck(): a key of a page builder needs unfiltered_html, as for a post (the list of the signatures and the capability); no stored value.' ),
+			'AB_MCP_Change_Lock::touch'            => array( 1, 'lay_files(): the heartbeat of the lock after each file laid.' ),
+			'current_user_can'                     => array( 17, 'precheck(), write_part(), restore_right() and may_lay(): the rights of the account at the attachment (edit_post, upload_files for a new one and for the keys that name files, publish_posts for a private one, edit_others_posts), asked again right before a file is laid (Codex round 1 of branch 10, A5), and unfiltered_upload, which the core asks of a type it does not know (files_plan(), provide(), restore_files(), may_lay()) (decisions 26 and 28; branch 10).' ),
+			'get_allowed_mime_types'               => array( 5, 'files_plan(), provide(), restore_files(), may_lay() and content_check(): the types this account may upload, as _wp_handle_upload() checks a file (decision 26: «erlaubt für das ausführende Konto»), binding for a file the step lays or one no list of this attachment names; in restore_files() and content_check() only added to the types WordPress knows, never a limit (Codex round 3 of branch 10, B); the list of the core and its filter.' ),
+			'get_gmt_from_date'                    => array( 1, 'target_of(): the UTC date WordPress derives where an attachment hands none over, for the target of the row.' ),
+			'get_post_type_object'                 => array( 2, 'precheck() and may_lay(): the capabilities of the type attachment.' ),
+			'get_temp_dir'                         => array( 1, 'provide(): the temporary folder of PHP for the copy of a file before it is laid (wp-includes/functions.php); no stored value compared.' ),
+			'is_object_in_taxonomy'                => array( 1, 'precheck(): whether a taxonomy is registered for attachments here.' ),
+			'remove_filter'                        => array( 1, 'content_check(): the filter of upload_mimes this one call adds, removed right after it (Codex round 2 of branch 10, B); no stored value.' ),
+			'sanitize_meta'                        => array( 1, 'precheck(): the sanitizer ahead of each written meta value (decision 17).' ),
+			'sanitize_post'                        => array( 1, 'precheck(): the sanitizers ahead, as wp_insert_post() runs them (decision 17).' ),
+			'taxonomy_exists'                      => array( 1, 'precheck(): whether a taxonomy is registered here.' ),
+			'wp_check_filetype'                    => array( 5, 'files_plan(), may_lay() and restore_files(): the type of a file to lay by its name, for this account; of a file the list of this attachment here names already, and of one a value that goes back names, against every type WordPress knows; of the main file against the type of the attachment (decision 26); a calculation over the name and the list of types.' ),
+			'wp_check_filetype_and_ext'            => array( 3, 'provide(), files_plan() and content_check(): the type of a file by its content, as _wp_handle_upload() checks an upload (decision 26: «Typ nach dem Inhalt»): of the temporary copy forward and of a file that lies here but no list of this attachment names, for this account; of a file the list of this attachment names, and of one a value that goes back names, against every type WordPress knows (Codex round 1 of branch 10, A4 and C; round 2, B and the decision of the lead).' ),
+			'wp_get_attachment_image'              => array( 1, 'precheck(): whether WordPress shows the poster of an audio or a video as an image, as set_post_thumbnail() asks it (decision 28).' ),
+			'wp_get_current_user'                  => array( 5, 'files_plan(), provide(), restore_files(), may_lay() and content_check(): the account the types it may upload are asked for.' ),
+			'wp_get_mime_types'                    => array( 3, 'files_plan(), content_check() and restore_files(): every type WordPress knows, together with the types upload_mimes gives the account besides, for a file the list of this attachment here names that the step does not write, and for one a value that goes back names (whether its content is what its name says; Codex rounds 2 and 3 of branch 10, B); the list of the core and its filter mime_types.' ),
+			'wp_insert_attachment'                 => array( 1, 'write_row(): the way forward of a new attachment with its file, as an upload makes it (decisions 17 and 26).' ),
+			'wp_mkdir_p'                           => array( 1, 'folder(): a missing folder under the uploads for a file to lay, one level under its checked parent at a time, each checked again (decision 26: «fehlende Ordner darunter mit wp_mkdir_p()»; Codex round 1 of branch 10, A1).' ),
+			'wp_slash'                             => array( 3, 'precheck() and write_row(): the slashing wp_insert_post() expects.' ),
+			'wp_update_post'                       => array( 1, 'write_row(): the way forward of the row of an attachment here (decision 17).' ),
+		),
 		'class-sync-backup.php' => array(
 			'AB_MCP_Store_Budget::bookings' => array( 1, 'fits(): the booking of the run, which a backup has to fit beside the backups the run holds (GitHub Codex round 6 on free#137).' ),
 		),
@@ -186,8 +209,8 @@ final class SyncSafeCallsTest extends TestCase {
 			'AB_MCP_Staging::role'   => array( 1, 'refusal(): only the confirmed staging site makes and gives out packages.' ),
 			'AB_MCP_Staging::bind'   => array( 2, 'binding() and refusal(): the random value of the role and pair a package is bound to.' ),
 			'AB_MCP_Staging::new_bind' => array( 1, 'refusal(): that value, made where the record has none.' ),
-			'AB_MCP_Staging::record' => array( 4, 'refusal(), make(), make_objects() and binding(): the pair, whose production site a package is for, and the confirmations a package is bound to.' ),
-			'home_url'               => array( 4, 'make(), make_objects(), binding() and relay_refusal(): the own address, for the inventory, the binding and whether it is public.' ),
+			'AB_MCP_Staging::record' => array( 5, 'refusal(), make(), make_objects(), make_media() and binding(): the pair, whose production site a package is for, and the confirmations a package is bound to.' ),
+			'home_url'               => array( 5, 'make(), make_objects(), make_media(), binding() and relay_refusal(): the own address, for the inventory (make_media(): the attachments read as the package of objects reads them, Codex round 1 of branch 10, A7), the binding and whether it is public.' ),
 		),
 		// The import (Z8, branch 5; Codex, round 1 of branch 7, A2): the
 		// connection a package is bound to, as a proposal and a report.

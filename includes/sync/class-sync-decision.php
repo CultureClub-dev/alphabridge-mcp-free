@@ -70,8 +70,10 @@
  * target is created first. Any other target makes the entry wait: an
  * unclear pair, a pair whose object is gone on a side, a target without a
  * pair that is not created (locked, new on both sides, not compared, held)
- * or not in the inventory of the staging site (an attachment before media are
- * compared, an object the takeover does not read). Objects that need each
+ * or not in the inventory of the staging site (an object the takeover does
+ * not read). A weak reference (the parent of an attachment, decision 16;
+ * branch 10) waits as a strong one does, but a target created in the same
+ * run is no edge: a step of its own sets it after its target. Objects that need each
  * other to be created (a cycle of edges, one object referring to itself
  * included) are locked (*:mutual_references, Z11c), and whatever needs a
  * locked or waiting target waits for it.
@@ -751,13 +753,15 @@ final class AB_MCP_Sync_Decision {
 			}
 		}
 		$edges = array();
+		$weak  = array();
 		foreach ( $items as $i => $item ) {
 			if ( ! in_array( $item['action'], array( 'take_over', 'create', 'choose' ), true ) || null === $item['s'] ) {
 				continue;
 			}
 			foreach ( isset( $item['s']['refs'] ) && is_array( $item['s']['refs'] ) ? $item['s']['refs'] : array() as $ref ) {
-				$space = $ref['space'] ?? null;
-				if ( ! isset( self::SPACES[ $space ] ) || 'strong' !== ( $ref['strength'] ?? null ) ) {
+				$space    = $ref['space'] ?? null;
+				$strength = $ref['strength'] ?? null;
+				if ( ! isset( self::SPACES[ $space ] ) || ! in_array( $strength, array( 'strong', 'weak' ), true ) ) {
 					continue;
 				}
 				$id = (string) $ref['id'];
@@ -768,7 +772,15 @@ final class AB_MCP_Sync_Decision {
 					continue;
 				}
 				if ( 'edge' === $why ) {
-					$edges[ $i ][ $j ] = true;
+					// A weak reference (the parent of an attachment, decision 16)
+					// is set by a step of its own after its target: no edge, so a
+					// post and the image that hangs under it need no order of each
+					// other (branch 10).
+					if ( 'strong' === $strength ) {
+						$edges[ $i ][ $j ] = true;
+					} else {
+						$weak[ $i ][ $j ] = true;
+					}
 					continue;
 				}
 				$items[ $i ]['waits'][] = array(
@@ -785,11 +797,14 @@ final class AB_MCP_Sync_Decision {
 				$items[ $i ]['locks'][] = self::lock( '*:mutual_references' );
 			}
 		}
-		// What needs a target that is held back waits for it.
+		// What needs a target that is held back waits for it, by a weak
+		// reference as well (its target is not written then either).
 		$back = array();
-		foreach ( $edges as $i => $targets ) {
-			foreach ( array_keys( $targets ) as $j ) {
-				$back[ $j ][] = $i;
+		foreach ( array( $edges, $weak ) as $of ) {
+			foreach ( $of as $i => $targets ) {
+				foreach ( array_keys( $targets ) as $j ) {
+					$back[ $j ][] = $i;
+				}
 			}
 		}
 		$queue = array();
@@ -855,7 +870,7 @@ final class AB_MCP_Sync_Decision {
 			return true;
 		}
 		if ( null === $j ) {
-			return sprintf( 'Its target, the %s of the staging site, is not in its inventory: an attachment (media are compared from branch 10 of Z8 on), or an object of a type the takeover does not read. Until it is, this object is not taken over.', $what );
+			return sprintf( 'Its target, the %s of the staging site, is not in its inventory: an object of a type the takeover does not read, or one withheld from the account that made the inventory. Until it is, this object is not taken over.', $what );
 		}
 		if ( 'create' === $items[ $j ]['action'] ) {
 			return 'edge';

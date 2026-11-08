@@ -66,6 +66,7 @@ require_once __DIR__ . '/class-sync-fetcher.php';
 require_once __DIR__ . '/class-sync-credentials.php';
 require_once __DIR__ . '/class-sync-net.php';
 require_once __DIR__ . '/class-sync-option-schema.php';
+require_once __DIR__ . '/class-sync-media-package.php';
 require_once dirname( __DIR__ ) . '/class-staging-gate.php';
 
 /**
@@ -162,8 +163,8 @@ final class AB_MCP_Sync_Import {
 	/** The spaces of a reference (AB_MCP_Sync_Canon::ref(), the readers). */
 	const SPACES = array( 'post', 'term', 'user' );
 
-	/** The strength of a reference. */
-	const STRENGTHS = array( 'strong' );
+	/** The strength of a reference: strong, or weak for the parent of an attachment (decision 16; branch 10). */
+	const STRENGTHS = array( 'strong', 'weak' );
 
 	/**
 	 * What the readers note in unread where a row could not be read at all
@@ -214,16 +215,23 @@ final class AB_MCP_Sync_Import {
 			'name'      => 'name',
 			'theme_mod' => 'name',
 		),
+		// An attachment by its file and language (branch 10; AB_MCP_Sync_Kind_Attachment).
+		'attachment'  => array(
+			'file'      => 'name',
+			'language'  => 'name',
+			'post_type' => 'name',
+		),
 	);
 
 	/** Fields of IDENTITIES a line leaves out where its object has none (a language, Codex round 3, B2). */
 	const IDENTITY_OPEN = array(
-		'post' => array( 'language' ),
-		'term' => array( 'language' ),
+		'post'       => array( 'language' ),
+		'term'       => array( 'language' ),
+		'attachment' => array( 'language' ),
 	);
 
 	/** The kinds whose ref is an id of the database. */
-	const ID_KINDS = array( 'post', 'term', 'menu', 'menu_item' );
+	const ID_KINDS = array( 'post', 'term', 'menu', 'menu_item', 'attachment' );
 
 	/**
 	 * A lock of a line: exactly these fields (AB_MCP_Sync_Kinds::lock() and
@@ -380,6 +388,11 @@ final class AB_MCP_Sync_Import {
 		if ( ! is_string( $mark ) ) {
 			return new WP_Error( 'ab_mcp_sync_import_incomplete', sprintf( 'The package %s is not complete on this site yet, so it is not read. Hand over or fetch its missing chunks with wp_site_import_chunk until it answers complete true, then call again.', $package_id ) );
 		}
+		// A package of media is read by its index, a file at a time
+		// (AB_MCP_Sync_Media_Package::extract()), never whole (branch 10).
+		if ( 'media' === $purpose ) {
+			return AB_MCP_Sync_Media_Package::taken( $found['gid'], $manifest, $have );
+		}
 		// Each chunk against its hash in the signed manifest, which the import
 		// unpacked and checked line by line before it set the mark: the same
 		// bytes give the same lines.
@@ -405,6 +418,25 @@ final class AB_MCP_Sync_Import {
 			'lines'    => $lines,
 			'held'     => $held,
 		);
+	}
+
+	/**
+	 * The purpose a package this account took over over this connection was
+	 * begun for (the run routes its packages by it: objects, or media;
+	 * branch 10), or null where this site holds no such package.
+	 *
+	 * @param mixed $package_id Package (32 hex).
+	 * @return string|null|WP_Error
+	 */
+	public static function purpose_of( $package_id ) {
+		if ( ! is_string( $package_id ) || ! preg_match( AB_MCP_Sync_Key::ID, $package_id ) ) {
+			return null;
+		}
+		$found = self::find( $package_id );
+		if ( is_wp_error( $found ) ) {
+			return $found;
+		}
+		return is_array( $found ) && is_array( $found['expect'] ) && isset( $found['expect']['purpose'] ) && is_string( $found['expect']['purpose'] ) ? $found['expect']['purpose'] : null;
 	}
 
 	/**
@@ -473,7 +505,7 @@ final class AB_MCP_Sync_Import {
 		$expect = $found['expect'];
 		if ( ! is_array( $expect ) || ! isset( $expect['purpose'] ) || ! in_array( $expect['purpose'], AB_MCP_Sync_Export::PURPOSES, true ) ) {
 			AB_MCP_Protected_Store::remove( 'in', $found['gid'] );
-			return new WP_Error( 'ab_mcp_sync_import_purpose_held', 'This site held the package for a purpose this version does not take (it takes purpose=inventory, purpose=env and purpose=objects), so what arrived of it was removed. Call again with the manifest and purpose as wp_site_export gave them on the staging site.' );
+			return new WP_Error( 'ab_mcp_sync_import_purpose_held', 'This site held the package for a purpose this version does not take (it takes purpose=inventory, purpose=env, purpose=objects and purpose=media), so what arrived of it was removed. Call again with the manifest and purpose as wp_site_export gave them on the staging site.' );
 		}
 		// A purpose a later call names is the one it was begun for (Codex,
 		// round 1 of branch 7, A3): the kept one is not put in its place.
@@ -509,7 +541,7 @@ final class AB_MCP_Sync_Import {
 	private static function expect( array $a, $package_id ) {
 		$purpose = isset( $a['purpose'] ) ? $a['purpose'] : null;
 		if ( ! in_array( $purpose, AB_MCP_Sync_Export::PURPOSES, true ) ) {
-			return new WP_Error( 'ab_mcp_sync_import_purpose', 'This version takes packages of the inventory and of the environment of the staging site and packages of objects for a report (purpose says what a package is read for); packages of media come with the takeover of attachments. Pass purpose=inventory, purpose=env or purpose=objects with the manifest, as wp_site_export gave it.' );
+			return new WP_Error( 'ab_mcp_sync_import_purpose', 'This version takes packages of the inventory and of the environment of the staging site, packages of objects for a report and packages of the files of its attachments (purpose says what a package is read for). Pass purpose=inventory, purpose=env, purpose=objects or purpose=media with the manifest, as wp_site_export gave it.' );
 		}
 		$expect = array(
 			'purpose'    => $purpose,
@@ -520,7 +552,7 @@ final class AB_MCP_Sync_Import {
 		if ( in_array( $purpose, AB_MCP_Sync_Manifest::FOR_REPORT, true ) ) {
 			$hash = isset( $a['report_hash'] ) ? $a['report_hash'] : null;
 			if ( ! is_string( $hash ) || 1 !== preg_match( '/^[0-9a-f]{64}\z/', $hash ) ) {
-				return new WP_Error( 'ab_mcp_sync_import_report', 'A package of objects is read for one report: pass report_hash with the manifest, the 64 hex characters wp_site_diff gave for the report the objects are for (the same the staging site made the package for).' );
+				return new WP_Error( 'ab_mcp_sync_import_report', 'A package of objects or of media is read for one report: pass report_hash with the manifest, the 64 hex characters wp_site_diff gave for the report the objects are for (the same the staging site made the package for).' );
 			}
 			$expect['report_hash'] = $hash;
 		}
@@ -900,6 +932,11 @@ final class AB_MCP_Sync_Import {
 	 */
 	private static function unpacked( array $held ) {
 		$manifest = $held['manifest'];
+		// A package of media holds pieces of files, no object (branch 10):
+		// checked and indexed by its own class.
+		if ( 'media' === $manifest['purpose'] ) {
+			return AB_MCP_Sync_Media_Package::unpacked( $held );
+		}
 		$limits   = AB_MCP_Store_Budget::UNPACK;
 		$extra    = AB_MCP_Redactor::extra_keys();
 		// A package of the environment holds lines of AB_MCP_Sync_Env, no object.
@@ -1167,6 +1204,13 @@ final class AB_MCP_Sync_Import {
 		if ( ! self::identity_fits( $object['kind'], $object['ref'], $object['identity'] ) ) {
 			return false;
 		}
+		// A weak reference only where a reader writes one: the parent of an
+		// attachment (decision 16; AB_MCP_Sync_Kind_Attachment, branch 10).
+		foreach ( isset( $object['refs'] ) && is_array( $object['refs'] ) ? $object['refs'] : array() as $ref ) {
+			if ( 'weak' === ( $ref['strength'] ?? null ) && ! ( 'attachment' === $object['kind'] && 'post' === ( $ref['space'] ?? null ) && 'post_parent' === ( $ref['at'] ?? null ) ) ) {
+				return false;
+			}
+		}
 		// An empty identity only where the row could not be read: the line
 		// says so (not complete, the table in unread).
 		if ( array() === $object['identity'] && ( ! isset( $object['complete'], $object['unread'] ) || false !== $object['complete'] || array() === array_intersect( $object['unread'], self::ROW_UNREAD ) ) ) {
@@ -1239,6 +1283,8 @@ final class AB_MCP_Sync_Import {
 				return 0 === strpos( $text['name'], 'theme_mods_' ) && substr( $text['name'], strlen( 'theme_mods_' ) ) . ( isset( $text['theme_mod'] ) ? '/' . $text['theme_mod'] : '' ) === $ref;
 			case 'custom_css':
 				return $text['stylesheet'] . ( $identity['linked'] ? '' : '@' . $identity['post'] ) === $ref;
+			case 'attachment':
+				return 'attachment' === $text['post_type'];
 			default:
 				return true;
 		}

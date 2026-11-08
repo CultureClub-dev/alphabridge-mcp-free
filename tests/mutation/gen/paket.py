@@ -1036,8 +1036,8 @@ for name, line in (
 BN = "\t\tif ( null === $key || null === $record['pair'] || null === $bind ) {"
 e('paket/binding-no-key', 'binding(): none without a key', EX, BN, BN.replace('null === $key || ', ''), 'package', BIND)
 e('paket/binding-no-pair', 'binding(): none without a pair', EX, BN, BN.replace(" || null === $record['pair']", ''), 'package', BIND)
-e('paket/import-purpose-inventory', 'expect(): the purposes this version takes (AB_MCP_Sync_Export::PURPOSES), not every purpose a manifest may name (media)', IM,
-  "\t\tif ( ! in_array( $purpose, AB_MCP_Sync_Export::PURPOSES, true ) ) {", "\t\tif ( ! in_array( $purpose, AB_MCP_Sync_Manifest::PURPOSES, true ) ) {", 'package', 'testTheProductionSiteTakesPackagesOfTheInventoryTheEnvironmentAndObjectsOnly')
+e('paket/import-purpose-inventory', 'expect(): only the purposes this version takes (AB_MCP_Sync_Export::PURPOSES), not any text (since branch 10 they are every purpose a manifest names)', IM,
+  "\t\tif ( ! in_array( $purpose, AB_MCP_Sync_Export::PURPOSES, true ) ) {", "\t\tif ( ! is_string( $purpose ) ) {", 'package', 'testTheProductionSiteTakesPackagesOfTheInventoryTheEnvironmentAndObjectsOnly')
 e('paket/import-expect-first', 'call(): the purpose checked before anything is read', IM,
   "\t\tif ( array_key_exists( 'manifest', $a ) ) {\n\t\t\t$expect = self::expect(", "\t\tif ( false ) {\n\t\t\t$expect = self::expect(", 'package', 'testTheProductionSiteTakesPackagesOfTheInventoryTheEnvironmentAndObjectsOnly')
 BU = 'StoreBudget'

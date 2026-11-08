@@ -55,6 +55,9 @@ final class AB_MCP_Sync_Media {
 	/** The meta keys the list is read from. */
 	const META_KEYS = array( '_wp_attached_file', '_wp_attachment_metadata', '_wp_attachment_backup_sizes' );
 
+	/** Candidates named_by() reads a page at a time. */
+	const NAMED_PAGE = 200;
+
 	/**
 	 * The hooks through which code changes the basedir of wp_upload_dir():
 	 * its filter, and the filters get_option() and wp_load_alloptions() run
@@ -136,11 +139,27 @@ final class AB_MCP_Sync_Media {
 	 * @param mixed  $meta     _wp_attachment_metadata unpacked.
 	 * @param mixed  $backup   _wp_attachment_backup_sizes unpacked.
 	 * @param string $basedir  The uploads folder (wp_get_upload_dir()).
+	 * @param bool   $as_core  Read an absolute path under the uploads as the
+	 *                         core does (get_attached_file(), path_join() of the
+	 *                         folder of metadata.file for the backups): the
+	 *                         file at its path relative to them. Only for the
+	 *                         reverse map of this site's own attachments
+	 *                         (named_by()); the canonical form keeps such a path
+	 *                         a problem, since it names a place of the site that
+	 *                         stored it, never one of another site.
 	 * @return array{files:array<int,array{path:string,roles:string[]}>,problems:array}
 	 */
-	public static function paths( $attached, $meta, $backup, $basedir ) {
+	public static function paths( $attached, $meta, $backup, $basedir, $as_core = false ) {
 		$basedir  = rtrim( (string) $basedir, '/' );
 		$attached = (string) $attached;
+		if ( $as_core ) {
+			// Codex rounds 1 and 2 of branch 10 (A6, B): an import of old keeps
+			// _wp_attached_file and metadata.file absolute under the uploads.
+			$attached = self::under( $attached, $basedir );
+			if ( is_array( $meta ) && isset( $meta['file'] ) && is_string( $meta['file'] ) ) {
+				$meta['file'] = self::under( $meta['file'], $basedir );
+			}
+		}
 		$files    = array();
 		$problems = array();
 		// An empty or absolute _wp_attached_file names no file of the
@@ -237,6 +256,52 @@ final class AB_MCP_Sync_Media {
 			}
 			$raw[ $key ] = array() === $values ? '' : $values[0];
 		}
+		return self::list_of( $raw );
+	}
+
+	/**
+	 * The file list of an attachment from its meta rows as one reading gave
+	 * them (AB_MCP_Sync_Rows::meta(), by meta_id): of each key of the list
+	 * its first row, as get_post_meta() gives a single value (branch 10:
+	 * the canonical form, its content and its list from the same reading).
+	 *
+	 * @param array[] $rows Meta rows: key, value (meta_id order).
+	 * @return array{files:array,problems:array}
+	 */
+	public static function of_rows( array $rows ) {
+		$raw = array_fill_keys( self::META_KEYS, '' );
+		$got = array();
+		foreach ( $rows as $row ) {
+			$key = isset( $row['key'] ) ? (string) $row['key'] : '';
+			if ( in_array( $key, self::META_KEYS, true ) && ! isset( $got[ $key ] ) ) {
+				$raw[ $key ] = isset( $row['value'] ) ? (string) $row['value'] : '';
+				$got[ $key ] = true;
+			}
+		}
+		return self::list_of( $raw );
+	}
+
+	/**
+	 * The bytes of the files of a list together.
+	 *
+	 * @param array $list Answer of files() or of_rows().
+	 * @return int
+	 */
+	public static function total( array $list ) {
+		$sum = 0;
+		foreach ( isset( $list['files'] ) && is_array( $list['files'] ) ? $list['files'] : array() as $file ) {
+			$sum += isset( $file['size'] ) ? (int) $file['size'] : 0;
+		}
+		return $sum;
+	}
+
+	/**
+	 * The file list from the stored values of the three keys.
+	 *
+	 * @param array<string,string> $raw Key of META_KEYS => its value as stored ('' for none).
+	 * @return array{files:array,problems:array}
+	 */
+	private static function list_of( array $raw ) {
 		$uploads = self::uploads();
 		if ( '' !== $uploads['problem'] ) {
 			// No folder to list in.
@@ -464,7 +529,193 @@ final class AB_MCP_Sync_Media {
 		}
 	}
 
+	/**
+	 * What lies at a path under the resolved uploads, for a file a step would
+	 * lay (decision 26): absent (nothing at the path, every folder on the way
+	 * a folder or not there yet), file (a regular file, its bytes to compare),
+	 * other (anything else at the path: a link, a folder, a device) or unsafe
+	 * (a link, or a file, on the way to it).
+	 *
+	 * @param string $root The resolved uploads folder (realpath()).
+	 * @param string $rel  A path safe_path() lets through.
+	 * @return string absent, file, other or unsafe.
+	 */
+	public static function target_state( $root, $rel ) {
+		if ( ! self::safe_path( $rel ) ) {
+			return 'unsafe';
+		}
+		$parts = explode( '/', (string) $rel );
+		$last  = array_pop( $parts );
+		$at    = rtrim( (string) $root, '/' );
+		clearstatcache( true );
+		foreach ( $parts as $part ) {
+			$at .= '/' . $part;
+			if ( is_link( $at ) ) {
+				return 'unsafe';
+			}
+			if ( ! file_exists( $at ) ) {
+				return 'absent';
+			}
+			if ( ! is_dir( $at ) ) {
+				return 'unsafe';
+			}
+		}
+		$at .= '/' . $last;
+		if ( is_link( $at ) ) {
+			return 'other';
+		}
+		if ( ! file_exists( $at ) ) {
+			return 'absent';
+		}
+		return 'file' === @filetype( $at ) ? 'file' : 'other'; // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- a race is answered as other.
+	}
+
+	/**
+	 * The attachments of this site other than one whose file lists name any
+	 * of these paths (decision 26, the reverse map for the paths of one
+	 * step; Befund R3-4): a prefilter in SQL by the last segment of each path
+	 * (the name of every file of a list is stored as it is in one of the
+	 * three keys, so an attachment whose rows do not hold it names no such
+	 * path), then the list of each candidate worked out as the core does
+	 * (paths()) from its rows and compared byte for byte, a page of
+	 * candidates at a time. A candidate whose list cannot be read whole, more
+	 * candidates than $max, or rows that cannot be read: null (fail closed).
+	 *
+	 * @param string[] $paths  Paths relative to the uploads.
+	 * @param int      $except The attachment written (0 for a new one).
+	 * @param int      $max    Candidates read at most.
+	 * @return array<string,int[]>|null Path => the attachments naming it.
+	 */
+	public static function named_by( array $paths, $except, $max ) {
+		global $wpdb;
+		$paths = array_values( array_unique( array_map( 'strval', $paths ) ) );
+		if ( array() === $paths ) {
+			return array();
+		}
+		$uploads = self::uploads();
+		if ( '' !== $uploads['problem'] || ! is_object( $wpdb ) ) {
+			return null;
+		}
+		$likes = array();
+		$args  = array();
+		foreach ( $paths as $path ) {
+			$at      = strrpos( $path, '/' );
+			$likes[] = 'pm.meta_value LIKE %s';
+			$args[]  = '%' . $wpdb->esc_like( false === $at ? $path : (string) substr( $path, $at + 1 ) ) . '%';
+		}
+		$keys  = "'" . implode( "', '", self::META_KEYS ) . "'";
+		$want  = array_flip( $paths );
+		$out   = array();
+		$after = 0;
+		$seen  = 0;
+		do {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the rows, as the list reads them; tables from $wpdb, keys constant, placeholders built above.
+			$ids = $wpdb->get_col( $wpdb->prepare( "SELECT DISTINCT pm.post_id FROM {$wpdb->postmeta} AS pm INNER JOIN {$wpdb->posts} AS p ON p.ID = pm.post_id WHERE p.post_type = 'attachment' AND pm.meta_key IN ( {$keys} ) AND ( " . implode( ' OR ', $likes ) . ' ) AND pm.post_id != %d AND pm.post_id > %d ORDER BY pm.post_id ASC LIMIT %d', array_merge( $args, array( (int) $except, (int) $after, self::NAMED_PAGE ) ) ) );
+			if ( '' !== (string) $wpdb->last_error || ! is_array( $ids ) ) {
+				return null;
+			}
+			$ids   = array_map( 'intval', $ids );
+			$seen += count( $ids );
+			if ( $seen > (int) $max ) {
+				return null;
+			}
+			if ( array() === $ids ) {
+				break;
+			}
+			// The three keys of the page, each by its exact bytes and its
+			// first row (as get_post_meta() gives a single value).
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- as above; the ids are integers.
+			$rows = $wpdb->get_results( "SELECT post_id, meta_key, meta_value FROM {$wpdb->postmeta} WHERE post_id IN ( " . implode( ', ', $ids ) . " ) AND meta_key IN ( {$keys} ) ORDER BY meta_id ASC", ARRAY_A );
+			if ( '' !== (string) $wpdb->last_error || ! is_array( $rows ) ) {
+				return null;
+			}
+			$raw = array();
+			foreach ( $ids as $id ) {
+				$raw[ $id ] = array_fill_keys( self::META_KEYS, '' );
+			}
+			$got = array();
+			foreach ( $rows as $row ) {
+				$id  = (int) $row['post_id'];
+				$key = (string) $row['meta_key'];
+				if ( isset( $raw[ $id ] ) && in_array( $key, self::META_KEYS, true ) && ! isset( $got[ $id ][ $key ] ) ) {
+					$raw[ $id ][ $key ]   = null === $row['meta_value'] ? '' : (string) $row['meta_value'];
+					$got[ $id ][ $key ] = true;
+				}
+			}
+			foreach ( $raw as $id => $values ) {
+				$meta   = AB_MCP_Sync_Canon::unserialized( $values['_wp_attachment_metadata'] );
+				$backup = AB_MCP_Sync_Canon::unserialized( $values['_wp_attachment_backup_sizes'] );
+				if ( ! $meta['ok'] || ! $backup['ok'] || AB_MCP_Sync_Canon::holds_record( $values['_wp_attached_file'] ) ) {
+					return null;
+				}
+				// As the core reads the files of a candidate (get_attached_file(),
+				// wp_delete_attachment_files(): an absolute path stays as it is;
+				// one under the uploads names the file at its path relative to
+				// them, as _wp_relative_upload_path() stores it), for
+				// _wp_attached_file and for metadata.file, the folder of the
+				// backups (paths() with $as_core; Codex rounds 1 and 2 of branch
+				// 10, A6 and B: an import of old keeps both absolute). Only a
+				// list that does not read whole even so (a name that is no plain
+				// path under the uploads) is not known to name none of the paths:
+				// fail closed.
+				$list = self::paths( $values['_wp_attached_file'], $meta['value'], $backup['value'], $uploads['dir'], true );
+				if ( array() !== $list['problems'] ) {
+					return null;
+				}
+				foreach ( $list['files'] as $entry ) {
+					if ( isset( $want[ $entry['path'] ] ) ) {
+						$out[ $entry['path'] ][] = (int) $id;
+					}
+				}
+			}
+			$after = (int) end( $ids );
+		} while ( count( $ids ) === self::NAMED_PAGE );
+		return $out;
+	}
+
+	/**
+	 * The paths of the file list of an attachment of this site from its
+	 * rows, without reading a file (paths(); for what a plan books).
+	 *
+	 * @param int $id Attachment.
+	 * @return string[]|null Null where a row cannot be read or the list not whole.
+	 */
+	public static function paths_of( $id ) {
+		$raw = array();
+		foreach ( self::META_KEYS as $key ) {
+			$values = AB_MCP_Sync_Rows::meta_values( 'post', (int) $id, $key );
+			if ( null === $values ) {
+				return null;
+			}
+			$raw[ $key ] = array() === $values ? '' : $values[0];
+		}
+		$uploads = self::uploads();
+		$meta    = AB_MCP_Sync_Canon::unserialized( $raw['_wp_attachment_metadata'] );
+		$backup  = AB_MCP_Sync_Canon::unserialized( $raw['_wp_attachment_backup_sizes'] );
+		if ( '' !== $uploads['problem'] || ! $meta['ok'] || ! $backup['ok'] || AB_MCP_Sync_Canon::holds_record( $raw['_wp_attached_file'] ) ) {
+			return null;
+		}
+		return array_column( self::paths( $raw['_wp_attached_file'], $meta['value'], $backup['value'], $uploads['dir'] )['files'], 'path' );
+	}
+
 	/* ---------------------------------------------------------- private */
+
+	/**
+	 * An absolute path under the uploads as its path relative to them, as
+	 * _wp_relative_upload_path() stores it; any other path as it is.
+	 *
+	 * @param string $path    Path as stored.
+	 * @param string $basedir The uploads folder, without a trailing slash.
+	 * @return string
+	 */
+	private static function under( $path, $basedir ) {
+		$path  = (string) $path;
+		$under = rtrim( (string) $basedir, '/' ) . '/';
+		if ( '' !== $path && '/' === $path[0] && '/' !== $under && 0 === strpos( $path, $under ) && strlen( $path ) > strlen( $under ) ) {
+			return (string) substr( $path, strlen( $under ) );
+		}
+		return $path;
+	}
 
 	/**
 	 * @param string $problem Problem.

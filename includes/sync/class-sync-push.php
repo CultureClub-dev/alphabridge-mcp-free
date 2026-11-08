@@ -65,6 +65,7 @@ require_once __DIR__ . '/class-sync-run.php';
 require_once __DIR__ . '/class-sync-engine.php';
 require_once __DIR__ . '/class-sync-report.php';
 require_once __DIR__ . '/class-sync-resources.php';
+require_once __DIR__ . '/class-sync-media.php';
 
 /**
  * Class AB_MCP_Sync_Push
@@ -434,7 +435,29 @@ final class AB_MCP_Sync_Push {
 			}
 			$item['size'] = isset( $line['size'] ) ? (int) $line['size'] : 0;
 			$item['refs'] = array();
+			if ( 'attachment' === $item['kind'] ) {
+				// The bytes of the files it may lay besides its rows (decision 8:
+				// the new media files are booked, with their temporary copies):
+				// of an attachment here only those its list here does not name
+				// (a file at a path it names is never written over); and its file
+				// list for the paths two objects of the run would share (branch 10).
+				$listed = 'update' === $item['op'] ? AB_MCP_Sync_Media::paths_of( (int) $item['live_ref'] ) : array();
+				$item['files'] = array();
+				foreach ( isset( $line['form']['files'] ) && is_array( $line['form']['files'] ) ? $line['form']['files'] : array() as $file ) {
+					if ( is_array( $file ) && isset( $file['path'], $file['size'] ) && is_string( $file['path'] ) ) {
+						$item['files'][] = $file['path'];
+						if ( null === $listed || ! in_array( $file['path'], $listed, true ) ) {
+							$item['size'] += (int) $file['size'];
+						}
+					}
+				}
+			}
 			foreach ( isset( $line['refs'] ) && is_array( $line['refs'] ) ? $line['refs'] : array() as $ref ) {
+				if ( 'attachment' === $item['kind'] && is_array( $ref ) && 'weak' === ( $ref['strength'] ?? null ) && 'post' === ( $ref['space'] ?? null ) && 'post_parent' === ( $ref['at'] ?? null ) && isset( $ref['id'] ) ) {
+					// The parent of an attachment, a weak reference (decision 16).
+					$item['weak_parent'] = (string) (int) $ref['id'];
+					continue;
+				}
 				if ( is_array( $ref ) && isset( $ref['space'], $ref['id'] ) && in_array( $ref['space'], array( 'post', 'term' ), true ) && 'strong' === ( $ref['strength'] ?? null ) ) {
 					$item['refs'][] = array( (string) $ref['space'], (string) (int) $ref['id'] );
 					if ( 'term' === $item['kind'] && 'term' === $ref['space'] && 'parent' === ( $ref['at'] ?? null ) ) {
@@ -454,7 +477,61 @@ final class AB_MCP_Sync_Push {
 			}
 			$items[ $n ] = $item;
 		}
-		$refused = self::too_many( count( $items ) );
+		// The attachments of the run (branch 10): a path two of them name is
+		// shared (attachment:shared_path), both are locked; an attachment
+		// here whose new parent the run creates comes after that post (an
+		// order, a cycle locked); a new one hangs under it by a parent step
+		// after both (decision 16: the weak reference).
+		$by_path = array();
+		foreach ( $items as $n => $item ) {
+			foreach ( 'attachment' === $item['kind'] && isset( $item['files'] ) ? array_unique( $item['files'] ) : array() as $path ) {
+				$by_path[ $path ][] = $n;
+			}
+		}
+		foreach ( $by_path as $path => $ns ) {
+			if ( count( $ns ) < 2 ) {
+				continue;
+			}
+			$held = AB_MCP_Sync_Kinds::lock( 'attachment', 'shared_path' );
+			foreach ( $ns as $n ) {
+				if ( isset( $items[ $n ] ) ) {
+					$locked[] = array(
+						'n'       => (int) $n,
+						'kind'    => 'attachment',
+						'subtype' => (string) $items[ $n ]['subtype'],
+						'action'  => (string) $items[ $n ]['action'],
+						'result'  => '',
+						'reason'  => sprintf( '%1$s (attachment:shared_path) The file %2$s is named by another attachment of this plan as well.', (string) $held['reason'], (string) $path ),
+						'stage'   => (string) $held['stage'],
+					);
+					unset( $items[ $n ] );
+				}
+			}
+		}
+		// The objects of the space of posts the run creates, a parent an
+		// attachment may hang under: a post, and an attachment as well (the
+		// poster image of a new video hangs under the video, which names it
+		// as its _thumbnail_id: the strong reference orders the image first,
+		// the weak one makes no cycle; GitHub Codex on free#140, P2).
+		$made_posts = array();
+		foreach ( $items as $n => $item ) {
+			if ( in_array( $item['kind'], array( 'post', 'attachment' ), true ) && 'create' === $item['op'] ) {
+				$made_posts[ (string) $item['staging_ref'] ] = $n;
+			}
+		}
+		$parents = array();
+		foreach ( $items as $n => $item ) {
+			if ( 'attachment' !== $item['kind'] || ! isset( $item['weak_parent'], $made_posts[ $item['weak_parent'] ] ) || $made_posts[ $item['weak_parent'] ] === $n ) {
+				continue;
+			}
+			if ( 'update' === $item['op'] ) {
+				$items[ $n ]['refs'][] = array( 'post', $item['weak_parent'] );
+			} else {
+				$items[ $n ]['parent_later'] = true;
+				$parents[ $n ]               = $made_posts[ $item['weak_parent'] ];
+			}
+		}
+		$refused = self::too_many( count( $items ) + count( $parents ) );
 		if ( null !== $refused ) {
 			return $refused;
 		}
@@ -583,7 +660,48 @@ final class AB_MCP_Sync_Push {
 				'depends' => array_values( array_unique( $depends ) ),
 				'pair_id' => isset( $item['pair_id'] ) ? $item['pair_id'] : null,
 			);
-			unset( $items[ $n ]['depends_on'], $items[ $n ]['after'], $items[ $n ]['refs'], $items[ $n ]['order_refs'], $items[ $n ]['order_name'], $items[ $n ]['parent_ref'], $items[ $n ]['depth'] );
+			unset( $items[ $n ]['depends_on'], $items[ $n ]['after'], $items[ $n ]['refs'], $items[ $n ]['order_refs'], $items[ $n ]['order_name'], $items[ $n ]['parent_ref'], $items[ $n ]['depth'], $items[ $n ]['files'], $items[ $n ]['weak_parent'] );
+		}
+		// The parent steps (branch 10): each after the attachment and its
+		// post, both of the run; the attachment hangs under no post until then.
+		foreach ( $parents as $n => $m ) {
+			if ( ! isset( $items[ $n ], $items[ $m ], $by_n[ $n ], $by_n[ $m ] ) ) {
+				// The post or the attachment was locked in the order: the
+				// attachment is no longer made unattached, its check locks it.
+				if ( isset( $items[ $n ] ) ) {
+					unset( $items[ $n ]['parent_later'] );
+				}
+				continue;
+			}
+			++$seq;
+			$depends = array( 1, $by_n[ $n ], $by_n[ $m ] );
+			$items[ 'p' . $n ] = array(
+				'n'            => (int) $items[ $n ]['n'],
+				'kind'         => 'attachment',
+				'subtype'      => (string) $items[ $n ]['subtype'],
+				'op'           => 'attach',
+				'staging_ref'  => (string) $items[ $n ]['staging_ref'],
+				'live_ref'     => null,
+				'pair_id'      => null,
+				'pair_hash'    => null,
+				'live_hash'    => null,
+				'as_draft'     => false,
+				'choice'       => null,
+				'action'       => (string) $items[ $n ]['action'],
+				'source_id'    => $source,
+				'staging_hash' => (string) $items[ $n ]['staging_hash'],
+				'size'         => 0,
+				'attach_of'    => $by_n[ $n ],
+				'seq'          => $seq,
+			);
+			$depends_of[ 'p' . $n ] = $depends;
+			$bytes                += self::JOURNAL_BYTES;
+			$steps[]               = array(
+				'op'      => 'write',
+				'phase'   => 5,
+				'depends' => $depends,
+				'pair_id' => null,
+			);
 		}
 		$writes  = range( 2, $seq );
 		$steps[] = array( 'op' => 'post', 'phase' => 7, 'depends' => array( 1 ) );
@@ -708,8 +826,13 @@ final class AB_MCP_Sync_Push {
 			if ( ! in_array( (string) ( $entry['subtype'] ?? '' ), AB_MCP_Sync_Term_Writer::TAXONOMIES, true ) ) {
 				return $lock( sprintf( 'The engine of the kind term writes the terms of %1$s; the taxonomy %2$s waits for its classification.', implode( ', ', AB_MCP_Sync_Term_Writer::TAXONOMIES ), (string) ( $entry['subtype'] ?? '' ) ), 'Z8d' );
 			}
+		} elseif ( 'attachment' === $entry['kind'] ) {
+			// An attachment with its files (branch 10): no choice «as draft».
+			if ( $as_draft ) {
+				return $lock( 'An attachment has no status draft: leave it out of as_draft.' );
+			}
 		} elseif ( 'post' !== $entry['kind'] ) {
-			return $lock( sprintf( 'The kind %s is written from a later branch of Z8 (media: Z10; menus, widget areas, the additional CSS and options: Z11).', (string) $entry['kind'] ), 'attachment' === $entry['kind'] ? 'Z10' : 'Z11' );
+			return $lock( sprintf( 'The kind %s is written from a later branch of Z8 (menus, widget areas, the additional CSS and options: Z11).', (string) $entry['kind'] ), 'Z11' );
 		} elseif ( ! in_array( (string) ( $entry['subtype'] ?? '' ), AB_MCP_Sync_Post_Writer::TYPES, true ) ) {
 			return $lock( sprintf( 'The engine of the kind post writes the types %1$s; the type %2$s waits for its field schema.', implode( ', ', AB_MCP_Sync_Post_Writer::TYPES ), (string) ( $entry['subtype'] ?? '' ) ), 'Z8d' );
 		} elseif ( in_array( (string) ( $entry['subtype'] ?? '' ), AB_MCP_Sync_Post_Writer::THEMED, true ) ) {

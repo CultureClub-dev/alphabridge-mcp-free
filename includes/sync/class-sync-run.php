@@ -1200,11 +1200,20 @@ final class AB_MCP_Sync_Run {
 		foreach ( isset( $parts['parts'] ) && is_array( $parts['parts'] ) ? $parts['parts'] : array() as $part ) {
 			$out[] = array_intersect_key( (array) $part, array_flip( array( 'part', 'state', 'before', 'target', 'after', 'own', 'own_after', 'deviated', 'value_before', 'value_rules', 'backup', 'way', 'note' ) ) );
 		}
-		return array(
+		$shown = array(
 			'object' => isset( $parts['object'] ) ? $parts['object'] : null,
 			'backup' => isset( $parts['backup'] ) && is_array( $parts['backup'] ) ? array_intersect_key( $parts['backup'], array_flip( array( 'name', 'sha256', 'bytes', 'absent' ) ) ) : null,
 			'parts'  => $out,
 		);
+		// The files of an attachment (branch 10): each with its path, hash,
+		// size, state and whether the run laid it (own).
+		if ( isset( $parts['files'] ) && is_array( $parts['files'] ) ) {
+			$shown['files'] = array();
+			foreach ( $parts['files'] as $file ) {
+				$shown['files'][] = array_intersect_key( (array) $file, array_flip( array( 'path', 'sha256', 'size', 'state', 'own', 'note' ) ) );
+			}
+		}
+		return $shown;
 	}
 
 	/**

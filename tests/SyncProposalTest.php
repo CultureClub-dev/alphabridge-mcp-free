@@ -1374,6 +1374,7 @@ final class SyncProposalTest extends TestCase {
 				'custom_css'  => 'custom_css',
 				'option'      => 'option',
 				'theme_mod'   => 'option',
+				'attachment'  => 'attachment',
 			),
 			AB_MCP_Sync_Proposal::db_kinds()
 		);

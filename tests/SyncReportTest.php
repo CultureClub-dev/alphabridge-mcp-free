@@ -765,7 +765,9 @@ final class SyncReportTest extends TestCase {
 	}
 
 	public function testAKindThisSiteDoesNotReadIsNeverDeleted(): void {
-		$entry = self::decided( array(), array(), self::pair( 7, 'attachment', '12', '34' ) );
+		// Since branch 10 the inventory reads the attachments: a kind it does
+		// not read is one of no kind of the database.
+		$entry = self::decided( array(), array(), self::pair( 7, 'gallery', '12', '34' ) );
 		self::assertSame( array( 'not_compared', 'not_compared' ), array( $entry['sides']['staging'], $entry['sides']['live'] ) );
 	}
 
@@ -1050,6 +1052,49 @@ final class SyncReportTest extends TestCase {
 		// An object that exists here refers to itself through its pair: no cycle.
 		$entry = self::decided( array( self::page( '34', 'a', 's1', array( 'refs' => array( self::ref( 'post', 34, 'post_content' ) ) ) ) ), array( self::page( '12', 'a', 'l0' ) ), self::pair( 7, 'post', '12', '34' ) );
 		self::assertSame( 'take_over', $entry['action'] );
+	}
+
+	public function testTheParentOfAnAttachmentIsAWeakReferenceThatWaitsButMakesNoCycle(): void {
+		// Decision 16 (branch 10): a page that shows its image (strong) and
+		// the image that hangs under the page (weak) are created in one run,
+		// no mutual reference; the parent is set by a step of its own. The
+		// weak reference waits where its target is held back, as a strong
+		// one does, and where it has no target at all.
+		$image = static fn( string $ref, string $file, int $parent ): array => self::line(
+			'attachment',
+			$ref,
+			array(
+				'file'      => $file,
+				'post_type' => 'attachment',
+			),
+			self::h( $file ),
+			array(
+				'refs' => array(
+					array(
+						'at'       => 'post_parent',
+						'id'       => $parent,
+						'space'    => 'post',
+						'strength' => 'weak',
+					),
+				),
+			)
+		);
+		$r = self::report(
+			array(
+				$image( '50', '2026/10/a.jpg', 51 ),
+				self::page( '51', 'galerie', 'g', array( 'refs' => array( self::ref( 'post', 50, 'meta:_thumbnail_id' ) ) ) ),
+				$image( '52', '2026/10/b.jpg', 53 ),
+				self::page( '53', 'gesperrt', 'h', array( 'locks' => array( array( 'key' => 'post:builder', 'stage' => 'Z8c', 'reason' => AB_MCP_Sync_Kinds::lock( 'post', 'builder' )['reason'], 'at' => 'meta' ) ) ) ),
+				$image( '54', '2026/10/c.jpg', 99 ),
+			),
+			array()
+		);
+		self::assertSame( array( 'create', array() ), array( self::of( $r, 'attachment', '50' )['action'], self::keys( self::of( $r, 'attachment', '50' ) ) ), 'No cycle with the page.' );
+		self::assertSame( 'create', self::of( $r, 'post', '51' )['action'] );
+		self::assertSame( 'waits', self::of( $r, 'attachment', '52' )['action'], 'Its parent is held back.' );
+		self::assertStringContainsString( 'held back itself', self::of( $r, 'attachment', '52' )['waits_for'][0]['why'] );
+		self::assertSame( 'waits', self::of( $r, 'attachment', '54' )['action'], 'Its parent is not there.' );
+		self::assertSame( array( 'post', 99, 'post_parent' ), array( self::of( $r, 'attachment', '54' )['waits_for'][0]['space'], self::of( $r, 'attachment', '54' )['waits_for'][0]['id'], self::of( $r, 'attachment', '54' )['waits_for'][0]['at'] ) );
 	}
 
 	public function testWaitingIsPassedOnAlongAChain(): void {

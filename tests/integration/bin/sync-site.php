@@ -31,7 +31,10 @@
  * $wp_version the steps after it see), rest (method, route, body: a request
  * to the REST server of this process, its status and data), global_styles_id
  * (the post of the global styles of the active theme, made where there is
- * none), set_term_slugs (post, terms by slug, taxonomy), and write_access (the site mode
+ * none), set_term_slugs (post, terms by slug, taxonomy), upload (an attachment as the media
+ * library makes it, with its file and sizes: name, mime, bytes or image, time, args, alt,
+ * generate), edit_image (post, suffix, image: edited as wp_save_image() saves it), put_file
+ * (path, bytes: a file under the uploads past WordPress), files_of (post: its file list), and write_access (the site mode
  * Full, as a person switches it on), staging_raw and staging_raw_set
  * (value: the record of role and pair as stored, past save()); for what the
  * route loads: loaded
@@ -428,6 +431,89 @@ foreach ( $ab_it_steps as $ab_it_i => $ab_it_step ) {
 			break;
 		case 'set_term_slugs':
 			$ab_it_out = wp_set_object_terms( (int) $ab_it_step['post'], array_map( 'strval', $ab_it_step['terms'] ), $ab_it_step['taxonomy'] );
+			break;
+		case 'upload':
+			// An attachment as the media library makes it (Z8 branch 10): the
+			// file under the uploads of a month (time), then the attachment and
+			// its metadata with the sizes (wp_generate_attachment_metadata());
+			// the bytes in base64 (bytes) or a JPEG of a colour (image: w, h,
+			// rgb); args of the attachment (post_title, post_parent, …), alt.
+			// media.php as the media library has it (the metadata of an audio
+			// or a video: wp_read_video_metadata()).
+			require_once ABSPATH . 'wp-admin/includes/image.php';
+			require_once ABSPATH . 'wp-admin/includes/media.php';
+			$ab_it_bytes = isset( $ab_it_step['bytes'] ) ? base64_decode( (string) $ab_it_step['bytes'] ) : '';
+			if ( isset( $ab_it_step['image'] ) ) {
+				$ab_it_gd = imagecreatetruecolor( (int) $ab_it_step['image']['w'], (int) $ab_it_step['image']['h'] );
+				imagefilledrectangle( $ab_it_gd, 0, 0, (int) $ab_it_step['image']['w'], (int) $ab_it_step['image']['h'], imagecolorallocate( $ab_it_gd, ...array_map( 'intval', $ab_it_step['image']['rgb'] ) ) );
+				ob_start();
+				imagejpeg( $ab_it_gd, null, 90 );
+				$ab_it_bytes = (string) ob_get_clean();
+			}
+			$ab_it_up = wp_upload_bits( (string) $ab_it_step['name'], null, $ab_it_bytes, isset( $ab_it_step['time'] ) ? (string) $ab_it_step['time'] : '2026/10' );
+			if ( ! empty( $ab_it_up['error'] ) ) {
+				$ab_it_out = new WP_Error( 'upload', (string) $ab_it_up['error'] );
+				break;
+			}
+			$ab_it_args = array_merge(
+				array(
+					'post_mime_type' => (string) $ab_it_step['mime'],
+					'post_title'     => pathinfo( (string) $ab_it_step['name'], PATHINFO_FILENAME ),
+					'post_status'    => 'inherit',
+					'post_date'      => '2026-10-01 10:00:00',
+					'post_date_gmt'  => '2026-10-01 10:00:00',
+				),
+				isset( $ab_it_step['args'] ) ? (array) $ab_it_step['args'] : array()
+			);
+			$ab_it_out  = wp_insert_attachment( wp_slash( $ab_it_args ), $ab_it_up['file'], 0, true );
+			if ( is_wp_error( $ab_it_out ) ) {
+				break;
+			}
+			if ( ! isset( $ab_it_step['generate'] ) || $ab_it_step['generate'] ) {
+				wp_update_attachment_metadata( $ab_it_out, wp_generate_attachment_metadata( $ab_it_out, $ab_it_up['file'] ) );
+			}
+			if ( isset( $ab_it_step['alt'] ) ) {
+				update_post_meta( $ab_it_out, '_wp_attachment_image_alt', wp_slash( (string) $ab_it_step['alt'] ) );
+			}
+			break;
+		case 'edit_image':
+			// An image edited as wp_save_image() saves it (Z8 branch 10): the
+			// edited bytes under <name>-e<suffix>.<ext> beside the file, the
+			// attachment pointed at it with its new sizes, the original kept in
+			// _wp_attachment_backup_sizes (full-orig).
+			require_once ABSPATH . 'wp-admin/includes/image.php';
+			$ab_it_file = get_attached_file( (int) $ab_it_step['post'] );
+			$ab_it_info = pathinfo( $ab_it_file );
+			$ab_it_new  = $ab_it_info['dirname'] . '/' . $ab_it_info['filename'] . '-e' . (string) $ab_it_step['suffix'] . '.' . $ab_it_info['extension'];
+			$ab_it_gd   = imagecreatetruecolor( (int) $ab_it_step['image']['w'], (int) $ab_it_step['image']['h'] );
+			imagefilledrectangle( $ab_it_gd, 0, 0, (int) $ab_it_step['image']['w'], (int) $ab_it_step['image']['h'], imagecolorallocate( $ab_it_gd, ...array_map( 'intval', $ab_it_step['image']['rgb'] ) ) );
+			imagejpeg( $ab_it_gd, $ab_it_new, 90 );
+			$ab_it_old  = wp_get_attachment_metadata( (int) $ab_it_step['post'] );
+			update_post_meta(
+				(int) $ab_it_step['post'],
+				'_wp_attachment_backup_sizes',
+				array(
+					'full-orig' => array(
+						'width'  => (int) $ab_it_old['width'],
+						'height' => (int) $ab_it_old['height'],
+						'file'   => wp_basename( $ab_it_file ),
+					),
+				)
+			);
+			update_attached_file( (int) $ab_it_step['post'], $ab_it_new );
+			wp_update_attachment_metadata( (int) $ab_it_step['post'], wp_generate_attachment_metadata( (int) $ab_it_step['post'], $ab_it_new ) );
+			$ab_it_out = get_post_meta( (int) $ab_it_step['post'], '_wp_attached_file', true );
+			break;
+		case 'put_file':
+			// A file under the uploads of the site, past WordPress (path relative to them, bytes in base64).
+			$ab_it_full = wp_get_upload_dir()['basedir'] . '/' . (string) $ab_it_step['path'];
+			wp_mkdir_p( dirname( $ab_it_full ) );
+			$ab_it_out = false !== file_put_contents( $ab_it_full, base64_decode( (string) $ab_it_step['bytes'] ) );
+			break;
+		case 'files_of':
+			// The file list of an attachment (AB_MCP_Sync_Media::files()).
+			require_once AB_MCP_DIR . 'includes/sync/class-sync-media.php';
+			$ab_it_out = AB_MCP_Sync_Media::files( (int) $ab_it_step['post'] );
 			break;
 		default:
 			fwrite( STDERR, "Unknown op {$ab_it_step['op']}.\n" );

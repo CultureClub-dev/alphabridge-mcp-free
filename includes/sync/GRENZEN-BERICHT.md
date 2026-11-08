@@ -404,8 +404,8 @@ Weg.
   «auf Staging gelöscht – Übernahme ab Z8d», ohne Schreibweg (konstruiert:
   die Regeln einer Site ändern sich nach der Paarung).
 - Ein Paar einer Art, die die Bestandsaufnahme dieser Fassung nicht liest
-  (etwa `attachment` vor Zweig 10), heisst auf beiden Seiten «nicht
-  verglichen», nie gelöscht.
+  (etwa `attachment` vor Zweig 10; seit Zweig 10 liest sie die Anhänge),
+  heisst auf beiden Seiten «nicht verglichen», nie gelöscht.
 
 ### Ordnung (Regel 0, Vorrang 1–4)
 

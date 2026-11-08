@@ -456,9 +456,19 @@ mit Beispiel und Grund; wo eine Ablehnung entsteht, nennt sie den Weg.
   `pair_print` in `runs` (Zweig 8).
 - Multisite: Export und Import lehnen ab (Entscheid 3), mit Weg
   (`ab_mcp_sync_multisite`).
-- Pakete von Medien (`media`): Export und Import lehnen sie weiterhin mit
-  Weg ab (`ab_mcp_sync_import_purpose`; eine Gruppe, die eine andere Version
-  für `media` begann, endet nach B-3 mit `ab_mcp_sync_import_purpose_held`).
+- Pakete von Medien (`media`): Export und Import nehmen sie seit Zweig 10
+  (`AB_MCP_Sync_Media_Package`, `GRENZEN-MEDIEN.md`); ein anderer Zweck
+  lehnt weiterhin mit Weg ab (`ab_mcp_sync_import_purpose`; eine Gruppe, die
+  eine andere Version für einen Zweck begann, den diese Fassung nicht
+  nimmt, endet nach B-3 mit `ab_mcp_sync_import_purpose_held`). Seit Zweig
+  10 nimmt diese Fassung jeden Zweck, den ein Manifest nennen kann
+  (`AB_MCP_Sync_Export::PURPOSES` gleich `AB_MCP_Sync_Manifest::PURPOSES`):
+  der Mutationseintrag `paket/import-purpose-inventory`, der die eine Liste
+  gegen die andere tauschte, wäre gleichwertig und hält jetzt die Klausel
+  gegen jeden anderen Text; im Prüffall von `paket/p3r2-strength` nennt die
+  Zeile eine Stärke, die kein Leser schreibt (`weak` ist seit Zweig 10 eine,
+  für das Elternteil eines Anhangs), damit `typed()` sie ablehnt und nicht
+  erst eine spätere Prüfung (CI-Lauf 42480445606 von free#140).
   Pakete der Umgebung (`env`) nimmt der Import seit Zweig 7, Pakete von
   Objekten (`objects`) seit Zweig 8: ein Paket `objects` oder `media` gehört
   zu einem Bericht (`report_hash`, Zweig 6); der Import verlangt den

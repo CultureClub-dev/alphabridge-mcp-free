@@ -238,6 +238,14 @@ final class AB_MCP_Sync_Kinds {
 			'stage'  => 'Z8b',
 			'reason' => 'Another attachment of the live site uses a file at this path.',
 		),
+		'attachment:file_type'         => array(
+			'stage'  => 'Z8',
+			'reason' => 'A file of the attachment is of a type this account may not upload, or its content is not what its name says (WordPress checks a file by its content as it uploads it, wp_check_filetype_and_ext()): upload it by hand in the media library of this site, or take it over with an account that may upload files of that type.',
+		),
+		'attachment:file_too_large'    => array(
+			'stage'  => 'Z8',
+			'reason' => 'The files of the attachment this site does not have yet are larger than one package of media carries (48 MiB): a person resolves it, by uploading the file by hand in the media library of this site.',
+		),
 		'option:unclassified'          => array(
 			'stage'  => 'Z8d',
 			'reason' => 'An option of a plugin or theme, or one without a schema, not classified yet.',
@@ -425,10 +433,6 @@ final class AB_MCP_Sync_Kinds {
 		'term:meta_spelling'           => array(
 			'stage'  => 'Z8d',
 			'reason' => 'Two meta keys of the term that the database compares alike (Foo and foo under the collation of termmeta) wait for their field rule: update_metadata() and delete_metadata() write by the key and would change both.',
-		),
-		'attachment:engine'            => array(
-			'stage'  => 'Z10',
-			'reason' => 'The engine that writes attachments and their files follows with branch 10.',
 		),
 		'menu:engine'                  => array(
 			'stage'  => 'Z11',

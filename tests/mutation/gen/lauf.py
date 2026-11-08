@@ -280,7 +280,7 @@ e('engine-phase-next', 'pick(): next passes no step of a later phase while one o
 e('engine-findings-kept', 'run_check(): the findings of a call are kept with the cursor (B3)', EN,
   "\t\t\t\t$result['findings'] = $findings;\n", '', 'it', 'testTheCheckBeforeTheFirstWriteKeepsItsFindingsAcrossCalls')
 e('engine-pending', 'run_check(): an object the run creates is pending for the check of the others (B1)', EN,
-  "\t\t\t\t$pending[ (string) $one['kind'] ][ (int) $one['staging_ref'] ] = true;", '', 'it', 'testANewParentPageAndItsNewChildPageAreWrittenInOneRun')
+  "\t\t\t\t$pending[ $space ][ (int) $one['staging_ref'] ] = true;", '', 'it', 'testANewParentPageAndItsNewChildPageAreWrittenInOneRun')
 # Codex round 6 of branch 8: ownership is a mark of its own in the journal
 # (own, own_after, own_target), set where a call of the step's own changed
 # the part (post other than pre), never taken from the state of a part;
@@ -612,7 +612,7 @@ SPELL_UNIT = 'testTwoMetaKeysTheDatabaseComparesAlikeLockThePostBeforeTheFirstWr
 SPELL_IT = 'testTwoMetaKeysTheDatabaseComparesAlikeLockThePageBeforeTheFirstWriteAndAnOrdinaryPageRuns'
 BOOKING = 'testTheReservationCountsTheBackupsOfTheObjectsOfThisSiteAndTheWriterHoldsTheRunToIt'
 e('writer-meta-spelling-lock', 'precheck(): a key the database holds under another spelling as well locks the post before anything is written (P2)', PW,
-  "\t\t\t\t\tif ( $row['key'] !== (string) $key ) {\n\t\t\t\t\t\treturn self::locked( 'post:meta_spelling'", "\t\t\t\t\tif ( false ) {\n\t\t\t\t\t\treturn self::locked( 'post:meta_spelling'", 'it', SPELL_IT)
+  "\t\t\t\tif ( $row['key'] !== (string) $key ) {\n\t\t\t\t\treturn self::locked( 'post:meta_spelling'", "\t\t\t\tif ( false ) {\n\t\t\t\t\treturn self::locked( 'post:meta_spelling'", 'it', SPELL_IT)
 e('writer-meta-spelling-live-keys', 'differing(): the keys only this site has, which the step removes, are written keys (and asked for other spellings as well)', PW,
   "\t\tforeach ( $current['meta'] as $row ) {\n\t\t\t$keys[] = (string) $row['key'];\n\t\t}\n\t\t$out   = array();", "\t\tforeach ( array() as $row ) {\n\t\t\t$keys[] = (string) $row['key'];\n\t\t}\n\t\t$out   = array();", 'unit', SPELL_UNIT)
 e('push-plan-backup-bytes', 'plan(): the reservation counts the backup of each object of this site as its rows are (P2)', PU,

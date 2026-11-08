@@ -92,6 +92,7 @@ require_once __DIR__ . '/class-sync-guard.php';
 require_once __DIR__ . '/class-sync-resources.php';
 require_once __DIR__ . '/class-sync-post-writer.php';
 require_once __DIR__ . '/class-sync-term-writer.php';
+require_once __DIR__ . '/class-sync-attachment-writer.php';
 require_once __DIR__ . '/class-sync-import.php';
 require_once __DIR__ . '/class-sync-anchor.php';
 require_once __DIR__ . '/class-sync-urls.php';
@@ -142,8 +143,9 @@ final class AB_MCP_Sync_Engine {
 	 * step (writer() null: the step fails before anything is written).
 	 */
 	const WRITERS = array(
-		'post' => 'AB_MCP_Sync_Post_Writer',
-		'term' => 'AB_MCP_Sync_Term_Writer',
+		'post'       => 'AB_MCP_Sync_Post_Writer',
+		'term'       => 'AB_MCP_Sync_Term_Writer',
+		'attachment' => 'AB_MCP_Sync_Attachment_Writer',
 	);
 
 	/**
@@ -423,7 +425,28 @@ final class AB_MCP_Sync_Engine {
 		$plan  = is_array( $run['plan'] ) ? $run['plan'] : array();
 		$lines = array();
 		$held  = array();
+		$media = array();
 		foreach ( isset( $plan['packages'] ) && is_array( $plan['packages'] ) ? $plan['packages'] : array() as $package_id ) {
+			// A package of media (branch 10): its index of files, by the
+			// attachment of the staging site and the path; its bytes are read
+			// a file at a time as a step lays it.
+			if ( 'media' === AB_MCP_Sync_Import::purpose_of( $package_id ) ) {
+				$taken = AB_MCP_Sync_Import::taken( $package_id, 'media' );
+				if ( is_wp_error( $taken ) ) {
+					return $taken;
+				}
+				if ( ! hash_equals( (string) $run['report_hash'], (string) $taken['manifest']['report_hash'] ) ) {
+					return new WP_Error( 'ab_mcp_sync_objects_report', sprintf( 'The package of media %s was made for another report than the one of this run, and a package is used for its own report only. Export the media again on the staging site for this report (wp_site_export with purpose=media and its report_hash).', $package_id ) );
+				}
+				foreach ( $taken['files'] as $file ) {
+					$media[ $file['ref'] . "\0" . $file['path'] ] = array(
+						'package' => (string) $package_id,
+						'sha256'  => (string) $file['sha256'],
+						'size'    => (int) $file['size'],
+					);
+				}
+				continue;
+			}
 			$taken = AB_MCP_Sync_Import::taken( $package_id, 'objects' );
 			if ( is_wp_error( $taken ) ) {
 				return $taken;
@@ -445,6 +468,7 @@ final class AB_MCP_Sync_Engine {
 		return array(
 			'lines' => $lines,
 			'held'  => $held,
+			'media' => $media,
 		);
 	}
 
@@ -626,6 +650,8 @@ final class AB_MCP_Sync_Engine {
 		if ( is_wp_error( $lines ) ) {
 			return self::abort_at( $run, $step, $lines->get_error_message(), $result );
 		}
+		// The files of the packages of media of the run (branch 10).
+		$ctx['media'] = $lines['media'];
 		// The objects the run creates: a reference to one of them is pending,
 		// not missing (B1); the boundary maps it by the pair its step made.
 		$ctx['pending'] = self::pending( $items );
@@ -686,6 +712,12 @@ final class AB_MCP_Sync_Engine {
 		$line = self::line_of( $item, $lines );
 		if ( is_wp_error( $line ) ) {
 			return self::finding( $item, $line->get_error_message() );
+		}
+		// The parent step of an attachment the run creates (branch 10): the
+		// step that creates it checks the attachment, the step of the parent
+		// the parent; this one writes once both are done.
+		if ( 'attach' === $item['op'] ) {
+			return null;
 		}
 		$live_id = null;
 		if ( 'update' === $item['op'] ) {
@@ -771,8 +803,13 @@ final class AB_MCP_Sync_Engine {
 			'term' => array(),
 		);
 		foreach ( $items as $one ) {
-			if ( isset( $one['op'], $one['kind'], $one['staging_ref'] ) && 'create' === $one['op'] && isset( $pending[ (string) $one['kind'] ] ) ) {
-				$pending[ (string) $one['kind'] ][ (int) $one['staging_ref'] ] = true;
+			if ( ! isset( $one['op'], $one['kind'], $one['staging_ref'] ) || 'create' !== $one['op'] ) {
+				continue;
+			}
+			// An attachment is in the space of posts (branch 10).
+			$space = 'attachment' === (string) $one['kind'] ? 'post' : (string) $one['kind'];
+			if ( isset( $pending[ $space ] ) ) {
+				$pending[ $space ][ (int) $one['staging_ref'] ] = true;
 			}
 		}
 		return $pending;
@@ -919,6 +956,14 @@ final class AB_MCP_Sync_Engine {
 	private static function boundary( array $run, array $step, array $item, array $ctx ) {
 		$run_id  = (int) $run['run_id'];
 		$seq     = (int) $step['seq'];
+		// The parent step of an attachment the run created (branch 10): an
+		// update of that attachment, the one its step made.
+		if ( 'attach' === $item['op'] ) {
+			$item = self::attach_item( $run, $item );
+			if ( is_wp_error( $item ) ) {
+				return self::fail_step( $run_id, $seq, 'planned', $item->get_error_message() );
+			}
+		}
 		$live_id = 'update' === $item['op'] ? (int) $item['live_ref'] : null;
 		$before  = null;
 		$w       = self::writer( $item['kind'] );
@@ -981,6 +1026,8 @@ final class AB_MCP_Sync_Engine {
 		if ( is_wp_error( $line ) ) {
 			return self::fail_step( $run_id, $seq, 'begun', $line->get_error_message(), $journal );
 		}
+		// The files of the packages of media of the run (branch 10).
+		$ctx['media'] = $lines['media'];
 		// For a navigation, the objects of the run by the state of their
 		// steps (planned(); Codex round 2 of branch 9b, 1): a step that ended
 		// before this one (a part that failed) leaves this site as it is.
@@ -1072,6 +1119,22 @@ final class AB_MCP_Sync_Engine {
 			// (decision 17; GitHub Codex round 9 on free#137, P2).
 			return self::fail_step( $run_id, $seq, 'begun', sprintf( 'the journal of the step could not be written ahead of its first part (%s), so nothing of the object was written', $ahead->get_error_message() ) );
 		}
+		// The files of an attachment, before its row (decision 26; branch
+		// 10): each laid exclusively, the journal saved before each; where one
+		// fails, the files laid stay as the run's own and no row is written.
+		if ( method_exists( $w, 'lay_files' ) ) {
+			$laid    = $w::lay_files( $run_id, $seq, $journal, $prepared, $lines, $live_id );
+			$journal = $laid['journal'];
+			if ( true !== $laid['ok'] ) {
+				$result = array(
+					'message'  => $laid['message'],
+					'live_ref' => null === $live_id ? null : (string) $live_id,
+				);
+				$result = self::with_files( $result, $journal, $w );
+				$ended  = self::end_step( $run_id, $seq, array( 'state' => isset( $laid['state'] ) && 'unclear' === $laid['state'] ? 'unclear' : 'failed', 'parts' => self::settled( $journal ), 'result' => $result ) );
+				return is_wp_error( $ended ) ? $ended : array( 'next' => $laid['message'] . ' The run goes on with the next step (action=next); the steps that depend on this object are skipped.' );
+			}
+		}
 		// The writes, part by part, each read back under the lock.
 		$outcome = self::write_parts( $run_id, $seq, $journal, $prepared, $current, $live_id, $w );
 		$journal = self::settled( $outcome['journal'] );
@@ -1099,7 +1162,8 @@ final class AB_MCP_Sync_Engine {
 			if ( null !== $rest ) {
 				$result['rest'] = $rest;
 			}
-			$ended = self::end_step( $run_id, $seq, array( 'state' => $outcome['state'], 'parts' => $journal, 'result' => $result, 'pair_id' => $pair_id ) );
+			$result = self::with_files( $result, $journal, $w );
+			$ended  = self::end_step( $run_id, $seq, array( 'state' => $outcome['state'], 'parts' => $journal, 'result' => $result, 'pair_id' => $pair_id ) );
 			if ( is_wp_error( $ended ) ) {
 				return $ended;
 			}
@@ -1130,7 +1194,8 @@ final class AB_MCP_Sync_Engine {
 			if ( null !== $rest ) {
 				$result['rest'] = $rest;
 			}
-			$ended = self::end_step( $run_id, $seq, array( 'state' => 'unclear', 'parts' => $journal, 'result' => $result, 'pair_id' => $pair_id ) );
+			$result = self::with_files( $result, $journal, $w );
+			$ended  = self::end_step( $run_id, $seq, array( 'state' => 'unclear', 'parts' => $journal, 'result' => $result, 'pair_id' => $pair_id ) );
 			return is_wp_error( $ended ) ? $ended : array( 'next' => $message );
 		}
 		// (8) Done: the pair with its new bases (or made), the step done.
@@ -1170,13 +1235,14 @@ final class AB_MCP_Sync_Engine {
 			}
 		}
 		$result = array(
-			'message'  => sprintf( '%1$s %2$s of the staging site written as %3$s %4$d of this site%5$s; read back as its target.', ucfirst( $item['kind'] ), $item['staging_ref'], $item['kind'], $live_id, $prepared['as_draft'] ? ' with the status draft (the confirmed choice)' : '' ),
+			'message'  => sprintf( '%1$s %2$s of the staging site written as %3$s %4$d of this site%5$s; read back as its target.%6$s', ucfirst( $item['kind'] ), $item['staging_ref'], $item['kind'], $live_id, $prepared['as_draft'] ? ' with the status draft (the confirmed choice)' : '', ! empty( $prepared['parent_later'] ) ? ' It hangs under no post yet: a step of its own sets its parent once the run has written that post.' : ( ! empty( $item['attach'] ) ? ' Its parent is set.' : '' ) ),
 			'live_ref' => (string) $live_id,
 			'created'  => 'create' === $item['op'],
 			'pair_id'  => $pair_id,
 			'status'   => $prepared['status'],
 			'title'    => $w::title_of( $prepared ),
 		);
+		$result = self::with_files( $result, $journal, $w );
 		$ended = self::end_step( $run_id, $seq, array( 'state' => 'done', 'parts' => $journal, 'result' => $result, 'pair_id' => $pair_id ) );
 		return is_wp_error( $ended ) ? $ended : array( 'next' => $result['message'] . ' Call action=next for the next step.' );
 	}
@@ -1257,6 +1323,11 @@ final class AB_MCP_Sync_Engine {
 			return AB_MCP_Sync_Run::update_step( $run_id, $seq, array( 'parts' => $journal ), 'begun' );
 		};
 		$backup = is_array( $current ) ? $current : null;
+		// The files of the object as the last reading saw them (an attachment:
+		// files_state(), saved with the journal since its files were laid;
+		// branch 10, Codex round 1, A3): every call of the step's own is
+		// compared against them, as the parts are.
+		$files_seen = method_exists( $w, 'files_state' ) ? ( isset( $journal['files_seen'] ) && is_array( $journal['files_seen'] ) ? $journal['files_seen'] : $w::files_state( $journal ) ) : null;
 		foreach ( $journal['parts'] as $i => $part ) {
 			$name        = (string) $part['part'];
 			$target      = (string) $part['target'];
@@ -1359,6 +1430,22 @@ final class AB_MCP_Sync_Engine {
 					}
 					return self::deviated( $journal, $i, sprintf( 'the call of the part %1$s changed the part %2$s besides it (a hook of this site reacting to the call)', $name, $other_name ), $live_id, $backup );
 				}
+			}
+			// The files of the object (an attachment; Codex round 1 of branch
+			// 10, A3): a call that changed one of them (a hook of this site,
+			// edit_attachment, an optimizer) changed the object besides its
+			// parts, as a part changed besides: another hand's, the object
+			// deviated, nothing of it goes back by itself (decision A). The
+			// reading is saved with the journal, so the way back compares
+			// against it even after a request that ended here.
+			if ( is_array( $files_seen ) && ! $through_row ) {
+				$files_now = $w::files_state( $journal );
+				$moved     = self::changed_file( $files_seen, is_array( $files_now ) ? $files_now : array() );
+				if ( null !== $moved ) {
+					return self::deviated( $journal, $i, sprintf( 'the call of the part %1$s changed the file %2$s of the attachment besides it (a hook of this site reacting to the call)', $name, $moved ), $live_id, $backup );
+				}
+				$files_seen            = $files_now;
+				$journal['files_seen'] = $files_now;
 			}
 			$one     = $journal['parts'][ $i ];
 			$post    = $one['post'];
@@ -1789,6 +1876,56 @@ final class AB_MCP_Sync_Engine {
 		$seen    = $w::current( $live_id );
 		$seen    = is_array( $seen ) ? $seen : null;
 		$stopped = null;
+		// The files of the object (an attachment; Codex round 1 of branch 10,
+		// A3): one changed since the last reading of the step (a hook as it
+		// wrote, another hand since) stops the way back for the object before
+		// any part goes back; one a put back changes stops it from there.
+		$files_seen = null;
+		if ( method_exists( $w, 'files_state' ) && isset( $journal['files_seen'] ) && is_array( $journal['files_seen'] ) ) {
+			$files_seen = $w::files_state( $journal );
+			$files_seen = is_array( $files_seen ) ? $files_seen : array();
+			$moved      = self::changed_file( $journal['files_seen'], $files_seen );
+			if ( null !== $moved ) {
+				$stopped = sprintf( 'the file %s of the attachment changed since the step read it last (a hook of this site, or another hand since)', $moved );
+			}
+		}
+		// The parts that go back only together, all or none (an attachment:
+		// the three keys that name its files; Codex round 2 of branch 10, A4),
+		// decided once, as the first of them comes up.
+		$groups   = method_exists( $w, 'together' ) ? $w::together() : array();
+		$group_of = array();
+		foreach ( $groups as $g => $members ) {
+			foreach ( $members as $member ) {
+				$group_of[ (string) $member ] = $g;
+			}
+		}
+		$group_why = array();
+		// Every member of such a group as the step left it, also one the
+		// journal does not hold (equal to its target, so no part: as the
+		// backup), against the object now (Codex round 3 of branch 10, A4, at
+		// the place of decision A): a member that changed since is another
+		// hand's change of the object, so nothing of it goes back by itself.
+		// Then restore_files() checks the very list the values after the way
+		// back name.
+		foreach ( $groups as $members ) {
+			foreach ( $members as $member ) {
+				if ( null !== $stopped ) {
+					break 2;
+				}
+				$left_at = $w::part_hash( $backup, (string) $member );
+				foreach ( $parts as $part ) {
+					if ( is_string( $part['part'] ) && $part['part'] === (string) $member ) {
+						$left_at = isset( $part['post'] ) && null !== $part['post'] ? (string) $part['post'] : $part['before'];
+					}
+				}
+				$now = null === $seen ? null : $w::part_hash( $seen, (string) $member );
+				// Both ways: a key that came, went or changed (changed() sees no
+				// key that went).
+				if ( ( null === $left_at ) !== ( null === $now ) || ( null !== $now && ! hash_equals( (string) $left_at, (string) $now ) ) ) {
+					$stopped = sprintf( 'the part %s, which names files of the attachment, changed since the step left it (another hand changed the object)', (string) $member );
+				}
+			}
+		}
 		foreach ( $order as $i ) {
 			$name    = (string) $parts[ $i ]['part'];
 			$now     = null === $seen ? null : $w::part_hash( $seen, $name );
@@ -1808,6 +1945,18 @@ final class AB_MCP_Sync_Engine {
 					$decided['why'] .= sprintf( ' The way back stopped for this object: %s.', $stopped );
 				}
 			}
+			if ( 'put_back' === $decided['state'] && isset( $group_of[ $name ] ) ) {
+				$g = $group_of[ $name ];
+				if ( ! array_key_exists( $g, $group_why ) ) {
+					$group_why[ $g ] = self::group_refusal( $parts, $groups[ $g ], $seen, $backup, $live_id, $w );
+				}
+				if ( null !== $group_why[ $g ] ) {
+					$decided = array(
+						'state' => 'left',
+						'why'   => sprintf( 'Not put back: the parts %1$s go back only together, and %2$s; so the part %3$s is left as it is, its value before stands beside it (value_before). Set them by hand in wp-admin.', implode( ', ', $groups[ $g ] ), $group_why[ $g ], $name ),
+					);
+				}
+			}
 			if ( 'put_back' === $decided['state'] ) {
 				// The rights at the object, as the forward write asks them
 				// (decision 28; GitHub Codex round 2 of branch 8, P2): the
@@ -1819,6 +1968,23 @@ final class AB_MCP_Sync_Engine {
 					$decided = array(
 						'state' => 'left',
 						'why'   => sprintf( 'Not put back: this account may not %1$s on this site, so the part %2$s is left as it is; its value before stands beside it (value_before). Set it by hand in wp-admin with an account that may.', $may, $name ),
+					);
+				}
+			}
+			if ( 'put_back' === $decided['state'] && is_array( $files_seen ) ) {
+				// The files right before the part goes back (Codex round 2 of
+				// branch 10, A3): a file that changed since the last reading
+				// (a filter that ran as the way back asked a right or a type, or
+				// another hand) stops the way back for the object before any
+				// further part goes back (decision A).
+				$files_now = $w::files_state( $journal );
+				$files_now = is_array( $files_now ) ? $files_now : array();
+				$moved     = self::changed_file( $files_seen, $files_now );
+				if ( null !== $moved ) {
+					$stopped = sprintf( 'the file %1$s of the attachment changed before the part %2$s went back (a hook of this site as the way back asked a right or a type, or another hand)', $moved, $name );
+					$decided = array(
+						'state' => 'left',
+						'why'   => sprintf( 'The way back stopped for this object: %s; the part %s is left as it is, check it by hand.', $stopped, $name ),
 					);
 				}
 			}
@@ -1850,6 +2016,15 @@ final class AB_MCP_Sync_Engine {
 						}
 					}
 				}
+				if ( is_array( $files_seen ) ) {
+					$files_again = $w::files_state( $journal );
+					$files_again = is_array( $files_again ) ? $files_again : array();
+					$moved       = self::changed_file( $files_seen, $files_again );
+					if ( null === $stopped && null !== $moved ) {
+						$stopped = sprintf( 'putting the part %1$s back changed the file %2$s of the attachment (a side effect of the core or a hook of this site)', $name, $moved );
+					}
+					$files_seen = $files_again;
+				}
 				$seen = $again;
 			}
 			if ( 'left' === $one['state'] ) {
@@ -1877,8 +2052,9 @@ final class AB_MCP_Sync_Engine {
 			}
 		}
 		// A way back that stopped changed something besides the parts (Codex
-		// round 16): the object is not back as a whole, whatever the parts say.
-		if ( null !== $stopped ) {
+		// round 16): the object is not back as a whole, whatever the parts say;
+		// nor where a file of it changed after the last part went back.
+		if ( null !== $stopped || ( is_array( $files_seen ) && null !== self::changed_file( $files_seen, (array) $w::files_state( $journal ) ) ) ) {
 			$all_back = false;
 		}
 		return array(
@@ -2004,9 +2180,16 @@ final class AB_MCP_Sync_Engine {
 			'probe'    => null,
 		);
 		$writes = array();
+		$last   = array();
 		foreach ( $steps as $one ) {
 			if ( 'write' === $one['op'] ) {
 				$writes[] = $one;
+				if ( 'done' === $one['state'] && is_array( $one['result'] ) && isset( $one['result']['live_ref'] ) ) {
+					// The last step that wrote an object holds its target: the
+					// parent step of an attachment writes after the step that
+					// made it unattached (branch 10).
+					$last[ ( $one['parts']['object']['kind'] ?? 'post' ) . ':' . (string) $one['result']['live_ref'] ] = (int) $one['seq'];
+				}
 			}
 		}
 		$worked = false;
@@ -2040,8 +2223,9 @@ final class AB_MCP_Sync_Engine {
 				$live_id = isset( $one['result']['live_ref'] ) ? (int) $one['result']['live_ref'] : 0;
 				$target  = isset( $one['parts']['object']['target'] ) ? (string) $one['parts']['object']['target'] : '';
 				$w       = self::writer( isset( $one['parts']['object']['kind'] ) ? (string) $one['parts']['object']['kind'] : 'post' );
-				$hash    = $live_id > 0 && null !== $w ? $w::live_hash( $live_id, $ctx['source'] ) : null;
-				if ( null === $hash || ! hash_equals( $target, $hash ) ) {
+				$later   = ( $last[ ( $one['parts']['object']['kind'] ?? 'post' ) . ':' . (string) $live_id ] ?? (int) $one['seq'] ) !== (int) $one['seq'];
+				$hash    = $live_id > 0 && null !== $w && ! $later ? $w::live_hash( $live_id, $ctx['source'] ) : null;
+				if ( ! $later && ( null === $hash || ! hash_equals( $target, $hash ) ) ) {
 					$result['findings'][] = array(
 						'seq'     => (int) $one['seq'],
 						'message' => sprintf( 'The %1$s %2$d no longer hashes to the target of step %3$d (changed since it was written, or not readable whole).', $one['parts']['object']['kind'] ?? 'post', $live_id, (int) $one['seq'] ),
@@ -2297,6 +2481,11 @@ final class AB_MCP_Sync_Engine {
 				'rest'     => $rest,
 				'parts'    => array(),
 			);
+			$made_by = self::writer_of( $journal );
+			if ( null !== $made_by ) {
+				// The files the run laid stay as well (decision 26), named.
+				$result = self::with_files( $result, $journal, $made_by );
+			}
 			$ended = self::end_step( $run_id, $seq, array( 'state' => 'done', 'result' => $result, 'pair_id' => $pair_id ) );
 			return is_wp_error( $ended ) ? $ended : array( 'next' => $result['message'] );
 		}
@@ -2364,7 +2553,10 @@ final class AB_MCP_Sync_Engine {
 			'live_ref' => (string) $live_id,
 			'parts'    => $outcomes,
 		);
-		$ended = self::end_step( $run_id, $seq, array( 'state' => $all_back ? 'done' : 'unclear', 'result' => $result, 'pair_id' => $pair_id ) );
+		// The files the run laid stay (decision 26: nothing is deleted, not
+		// even a file of its own), named with their paths.
+		$result = self::with_files( $result, $journal, $w );
+		$ended  = self::end_step( $run_id, $seq, array( 'state' => $all_back ? 'done' : 'unclear', 'result' => $result, 'pair_id' => $pair_id ) );
 		return is_wp_error( $ended ) ? $ended : array( 'next' => $result['message'] );
 	}
 
@@ -2465,7 +2657,10 @@ final class AB_MCP_Sync_Engine {
 				'staging_ref'  => (string) $item['staging_ref'],
 				'canon'        => AB_MCP_Sync_Canon::VERSION,
 				'base_live'    => null === $hash ? str_repeat( '0', 64 ) : $hash,
-				'base_staging' => (string) $item['staging_hash'],
+				// An attachment made unattached until its parent step (branch 10):
+				// the staging base of that state, so a report sees it changed on
+				// staging until its parent is set.
+				'base_staging' => isset( $prepared['base_staging'] ) && is_string( $prepared['base_staging'] ) ? $prepared['base_staging'] : (string) $item['staging_hash'],
 				'base_origin'  => 'push',
 				'override'     => ! empty( $prepared['as_draft'] ) ? array( 'post_status' => 'draft' ) : null,
 				'last_run'     => (int) $run['run_id'],
@@ -2475,6 +2670,64 @@ final class AB_MCP_Sync_Engine {
 			AB_MCP_Sync_Pairs::set_state( (int) $made['id'], 'residual', AB_MCP_Sync_Pairs::snapshot_hash( AB_MCP_Sync_Pairs::snapshot( (int) $made['id'] ) ) );
 		}
 		return $made;
+	}
+
+	/**
+	 * The parent step of an attachment the run created (branch 10; decision
+	 * 16: the weak reference set by a step of its own after its target), as
+	 * an update of that attachment: the step that created it is done and
+	 * names it and its pair; the pair is active and of this run; the
+	 * attachment is to hash to that step's target (the attachment
+	 * unattached), as an update compares the target of the plan.
+	 *
+	 * @param array $run  Run.
+	 * @param array $item The item of the plan (op attach, attach_of).
+	 * @return array|WP_Error The item as an update.
+	 */
+	private static function attach_item( array $run, array $item ) {
+		$made = AB_MCP_Sync_Run::step( (int) $run['run_id'], isset( $item['attach_of'] ) ? (int) $item['attach_of'] : 0 );
+		if ( ! is_array( $made ) || 'done' !== $made['state'] || ! is_array( $made['result'] ) || empty( $made['result']['live_ref'] ) || empty( $made['result']['pair_id'] ) || ! is_array( $made['parts'] ) || ! isset( $made['parts']['object']['target'] ) ) {
+			return new WP_Error( 'ab_mcp_sync_run_invalid', sprintf( 'The attachment %s of the staging site was not made by step %d of this run, so its parent is not set. It stays unattached: a new report (wp_site_diff) shows it changed on staging, and a run from it sets the parent.', (string) $item['staging_ref'], isset( $item['attach_of'] ) ? (int) $item['attach_of'] : 0 ) );
+		}
+		$pair = AB_MCP_Sync_Pairs::get( (int) $made['result']['pair_id'] );
+		if ( ! is_array( $pair ) || 'active' !== $pair['state'] || (int) $pair['last_run'] !== (int) $run['run_id'] || (string) $pair['live_ref'] !== (string) $made['result']['live_ref'] ) {
+			return new WP_Error( 'ab_mcp_sync_run_invalid', sprintf( 'The pair of the attachment %s changed since step %d of this run made it, so its parent is not set. Make a new report (wp_site_diff) and plan again.', (string) $item['staging_ref'], (int) $item['attach_of'] ) );
+		}
+		$item['op']        = 'update';
+		$item['attach']    = true;
+		$item['live_ref']  = (string) $made['result']['live_ref'];
+		$item['pair_id']   = (int) $made['result']['pair_id'];
+		$item['live_hash'] = (string) $made['parts']['object']['target'];
+		$item['pair_hash'] = AB_MCP_Sync_Pairs::snapshot_hash( AB_MCP_Sync_Pairs::snapshot( (int) $made['result']['pair_id'] ) );
+		return $item;
+	}
+
+	/**
+	 * The files a step laid itself, in its result (decision 26: they stay,
+	 * named with their paths), for a kind that lays files.
+	 *
+	 * @param array  $result  The result of the step.
+	 * @param array  $journal Its journal.
+	 * @param string $w       The write side of the kind.
+	 * @return array
+	 */
+	private static function with_files( array $result, array $journal, $w ) {
+		if ( method_exists( $w, 'own_files' ) ) {
+			$files = $w::own_files( $journal );
+			if ( array() !== $files ) {
+				$result['files'] = $files;
+			}
+		}
+		// The files whose state is unclear (a request that ended as one was
+		// made, one not provably at its path): named, never own (Codex round
+		// 1 of branch 10, A2).
+		if ( method_exists( $w, 'unclear_files' ) ) {
+			$unclear = $w::unclear_files( $journal );
+			if ( array() !== $unclear ) {
+				$result['files_unclear'] = $unclear;
+			}
+		}
+		return $result;
 	}
 
 	/**
@@ -2607,6 +2860,59 @@ final class AB_MCP_Sync_Engine {
 				continue;
 			}
 			return $name;
+		}
+		return null;
+	}
+
+	/**
+	 * Why a group of parts that go back only together may not (together()):
+	 * a member of the journal that the way back leaves by its rule (decide():
+	 * not the step's own, changed since, never read back) or that this
+	 * account may not put back (restore_right()); null where every member
+	 * goes back or is as the backup already.
+	 *
+	 * @param array      $parts   The parts of the journal.
+	 * @param string[]   $members The group.
+	 * @param array|null $seen    current() as read now.
+	 * @param array      $backup  current() of the backup.
+	 * @param int        $live_id The object.
+	 * @param string     $w       The write side of the kind.
+	 * @return string|null Why not, as a clause.
+	 */
+	private static function group_refusal( array $parts, array $members, $seen, array $backup, $live_id, $w ) {
+		foreach ( $parts as $part ) {
+			$member = is_string( $part['part'] ) ? $part['part'] : '';
+			if ( ! in_array( $member, $members, true ) ) {
+				continue;
+			}
+			$decided = self::decide( $part, null === $seen ? null : $w::part_hash( $seen, $member ), (string) $w::part_hash( $backup, $member ) );
+			if ( 'left' === $decided['state'] ) {
+				return sprintf( 'the part %1$s does not go back (%2$s)', $member, rtrim( (string) $decided['why'], '.' ) );
+			}
+			if ( 'put_back' === $decided['state'] ) {
+				$may = $w::restore_right( $member, $live_id, $backup, is_array( $seen ) ? $seen : array() );
+				if ( true !== $may ) {
+					return sprintf( 'this account may not %1$s on this site', $may );
+				}
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * The first file whose state differs between two readings of the files
+	 * of an object (AB_MCP_Sync_Attachment_Writer::files_state(): path =>
+	 * absent, SHA-256 and size, or what else lies there); null where none.
+	 *
+	 * @param array $before A reading.
+	 * @param array $after  A later one.
+	 * @return string|null The path.
+	 */
+	private static function changed_file( array $before, array $after ) {
+		foreach ( array_unique( array_merge( array_map( 'strval', array_keys( $before ) ), array_map( 'strval', array_keys( $after ) ) ) ) as $path ) {
+			if ( ( $before[ $path ] ?? null ) !== ( $after[ $path ] ?? null ) ) {
+				return (string) $path;
+			}
 		}
 		return null;
 	}

@@ -350,7 +350,7 @@ return array(
 		'id'      => 'kanon/parent-ref',
 		'clause'  => 'row_form(): post_parent is a reference',
 		'file'    => $k,
-		'search'  => "					\$out[ \$column ] = self::id_ref( 'post', \$value, \$acc, 'post_parent' );",
+		'search'  => "					\$out[ \$column ] = self::id_ref( 'post', \$value, \$acc, 'post_parent', 'weak' === \$parent ? 'weak' : 'strong' );",
 		'replace' => "					\$out[ \$column ] = \$value;",
 		'run'     => $it_canon,
 		'expect'  => '/testTheSameContentOnBothSitesHashesAlikeWithOtherIdsAndAddresses/',
