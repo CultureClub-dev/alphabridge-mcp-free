@@ -930,12 +930,22 @@ final class SyncTemplatesTest extends TestCase {
 		$planned = self::planned( $names );
 		$index   = self::entry( $planned['report']['all'], 'post:wp_template:index' );
 		self::assertSame( 'twentytwentyfour', $index['staging']['identity']['theme'], 'Its own identity: type, theme and slug.' );
+		// The template of the other theme the plan names locked already, with
+		// the way, and writes no step for it (a staging site keeps the rows of
+		// every theme it tried; all leaves them out).
+		$preview = self::gated( 'wp_site_push', $planned['args'] );
+		self::assertIsArray( $preview, is_wp_error( $preview ) ? $preview->get_error_message() : '' );
+		$locked = array_values( array_filter( $preview['preview']['locked'], static fn( $l ) => (int) $l['n'] === (int) $index['n'] ) );
+		self::assertCount( 1, $locked, json_encode( $preview['preview']['locked'] ) );
+		self::assertSame( 'Z8', $locked[0]['stage'] );
+		self::assertStringContainsString( '(post:theme_mismatch) The wp_template index belongs to the theme twentytwentyfour, and the active theme of this site is ' . self::THEME . '.', $locked[0]['reason'] );
+		self::assertStringContainsString( 'Activate the same theme on both sites', $locked[0]['reason'] );
 		$run    = self::begun( $planned['args'] );
 		$closed = self::finish( (int) $run['run_id'] );
 		self::assertSame( 'closed_aborted', $closed['state'], json_encode( $closed ) );
 		$message = self::check_message( self::run_status( (int) $run['run_id'] ) );
 		self::assertStringContainsString( 'post:theme_mismatch', $message );
-		self::assertStringContainsString( 'belongs to the theme twentytwentyfour, and the active theme of this site is ' . self::THEME, $message );
+		self::assertStringNotContainsString( 'The wp_template index', $message, 'No step for it.' );
 		self::assertStringContainsString( 'The template part ' . self::THEME . '//promo, which this site has neither as a template part nor as a file of its theme', $message );
 		self::assertStringContainsString( 'The template part twentytwentyfour//header, of a theme that is not the active one here', $message );
 		self::assertStringContainsString( 'post:navigation_fallback', $message );
@@ -1069,9 +1079,11 @@ final class SyncTemplatesTest extends TestCase {
 		// The active theme is the one the option row holds as well as the one
 		// get_stylesheet() gives: a filter that shows another theme in a
 		// request (a theme switcher, a preview) makes no active theme
-		// (theme_refusal(); post:theme_mismatch). A template of the theme the
-		// filter shows is locked by the row, one of the theme of the row by
-		// the filter.
+		// (inactive_theme(); post:theme_mismatch). In the plan: a template of
+		// the theme the filter shows is locked by the row, one of the theme of
+		// the row by the filter. At the check before the first write: the
+		// filter come between the plan and the run locks it as well
+		// (theme_refusal()).
 		self::pair();
 		self::paired( self::staged() );
 		self::rest_b( 'POST', '/wp/v2/templates/' . self::THEME . '//single', array( 'content' => self::para( 'Fuenf' ) ) );
@@ -1095,7 +1107,21 @@ final class SyncTemplatesTest extends TestCase {
 		add_filter( 'stylesheet', $shown );
 		try {
 			self::assertSame( 'twentytwentyfour', get_stylesheet() );
-			$run    = self::begun( $planned['args'] );
+			$refused = self::gated( 'wp_site_push', $planned['args'] );
+		} finally {
+			remove_filter( 'stylesheet', $shown );
+		}
+		self::assertInstanceOf( \WP_Error::class, $refused, 'Both locked: nothing to write.' );
+		// The gate hands on the code and the text of a refusal (decision 32);
+		// the text names each locked entry with its reason.
+		$reasons = $refused->get_error_message();
+		self::assertStringContainsString( 'The wp_template index belongs to the theme twentytwentyfour, and the active theme of this site is twentytwentyfour (the option holds ' . self::THEME . ')', $reasons );
+		self::assertStringContainsString( 'The wp_template single belongs to the theme ' . self::THEME . ', and the active theme of this site is twentytwentyfour (the option holds ' . self::THEME . ')', $reasons );
+		// Without the filter the plan takes single; the filter come since
+		// locks it at the check.
+		$run = self::begun( $planned['args'] );
+		add_filter( 'stylesheet', $shown );
+		try {
 			$closed = self::finish( (int) $run['run_id'] );
 		} finally {
 			remove_filter( 'stylesheet', $shown );
@@ -1103,7 +1129,6 @@ final class SyncTemplatesTest extends TestCase {
 		self::assertSame( 'closed_aborted', $closed['state'], json_encode( $closed ) );
 		$message = self::check_message( self::run_status( (int) $run['run_id'] ) );
 		self::assertStringContainsString( 'post:theme_mismatch', $message );
-		self::assertStringContainsString( 'The wp_template index belongs to the theme twentytwentyfour, and the active theme of this site is twentytwentyfour (the option holds ' . self::THEME . ')', $message );
 		self::assertStringContainsString( 'The wp_template single belongs to the theme ' . self::THEME . ', and the active theme of this site is twentytwentyfour (the option holds ' . self::THEME . ')', $message );
 		self::assertSame( 0, self::id_a( 'wp_template', 'index' ) );
 		self::assertSame( 0, self::id_a( 'wp_template', 'single' ) );

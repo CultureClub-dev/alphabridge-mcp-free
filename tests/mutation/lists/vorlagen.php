@@ -93,8 +93,17 @@ return array(
 		'expect'  => '/testWhatTheBranchLocksIsFoundBeforeAnythingIsWritten/',
 	),
 	array(
+		'id'      => 'vorlagen/theme-plan',
+		'clause'  => 'verdict(): the plan names a template of a theme that is not the active one locked (all leaves it out)',
+		'file'    => $pu,
+		'search'  => "\t\t\tif ( null !== \$other ) {\n\t\t\t\t\$held = AB_MCP_Sync_Kinds::lock( 'post', 'theme_mismatch' );",
+		'replace' => "\t\t\tif ( false ) {\n\t\t\t\t\$held = AB_MCP_Sync_Kinds::lock( 'post', 'theme_mismatch' );",
+		'run'     => $it( 'SyncTemplatesTest', 'testWhatTheBranchLocksIsFoundBeforeAnythingIsWritten' ),
+		'expect'  => '/testWhatTheBranchLocksIsFoundBeforeAnythingIsWritten/',
+	),
+	array(
 		'id'      => 'vorlagen/theme-active',
-		'clause'  => 'theme_refusal(): the theme of the object is the active one here (post:theme_mismatch)',
+		'clause'  => 'inactive_theme(): the theme of the object is the active one here (post:theme_mismatch)',
 		'file'    => $pw,
 		'search'  => "\t\tif ( \$active !== \$theme || \$stored !== \$theme ) {",
 		'replace' => "\t\tif ( \$stored !== \$theme ) {",
@@ -103,7 +112,7 @@ return array(
 	),
 	array(
 		'id'      => 'vorlagen/theme-stored',
-		'clause'  => 'theme_refusal(): and the one the option row holds (a filter makes no active theme)',
+		'clause'  => 'inactive_theme(): and the one the option row holds (a filter makes no active theme)',
 		'file'    => $pw,
 		'search'  => "\t\tif ( \$active !== \$theme || \$stored !== \$theme ) {",
 		'replace' => "\t\tif ( \$active !== \$theme ) {",

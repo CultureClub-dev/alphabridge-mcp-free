@@ -1239,16 +1239,11 @@ final class AB_MCP_Sync_Post_Writer {
 	 * @return WP_Error|null
 	 */
 	private static function theme_refusal( array $prepared, $current ) {
-		$theme  = isset( $prepared['identity']['theme'] ) && is_string( $prepared['identity']['theme'] ) ? $prepared['identity']['theme'] : '';
-		$active = (string) get_stylesheet();
-		$row    = AB_MCP_Sync_Rows::option( 'stylesheet' );
-		$stored = is_array( $row ) ? (string) $row['value'] : null;
-		$what   = sprintf( 'the %1$s %2$s', (string) $prepared['type'], (string) $prepared['postarr']['post_name'] );
-		if ( '' === $theme ) {
-			return self::locked( 'post:theme_mismatch', sprintf( '%s of the staging site belongs to no theme (no term of wp_theme)', $what ) );
-		}
-		if ( $active !== $theme || $stored !== $theme ) {
-			return self::locked( 'post:theme_mismatch', sprintf( '%1$s belongs to the theme %2$s, and the active theme of this site is %3$s', $what, $theme, $active === $stored ? $active : $active . ' (the option holds ' . ( null === $stored ? 'none' : $stored ) . ')' ) );
+		$theme = isset( $prepared['identity']['theme'] ) && is_string( $prepared['identity']['theme'] ) ? $prepared['identity']['theme'] : '';
+		$what  = sprintf( 'the %1$s %2$s', (string) $prepared['type'], (string) $prepared['postarr']['post_name'] );
+		$other = self::inactive_theme( $theme );
+		if ( null !== $other ) {
+			return self::locked( 'post:theme_mismatch', $what . ' ' . $other );
 		}
 		$targets = isset( $prepared['terms']['wp_theme'] ) ? $prepared['terms']['wp_theme'] : array();
 		if ( array( $theme ) !== array_values( $targets ) ) {
@@ -1256,6 +1251,30 @@ final class AB_MCP_Sync_Post_Writer {
 		}
 		if ( is_array( $current ) && array( $theme ) !== self::term_keys( $current, 'wp_theme' ) ) {
 			return self::locked( 'post:theme_mismatch', sprintf( '%1$s of this site names the themes %2$s, not the one theme %3$s', $what, implode( ', ', self::term_keys( $current, 'wp_theme' ) ), $theme ) );
+		}
+		return null;
+	}
+
+	/**
+	 * Why a theme is not the active one here, as the end of a sentence, or
+	 * null where it is (branch 9b): the active stylesheet as get_stylesheet()
+	 * gives it and as the option row holds it (a filter that shows another
+	 * theme in this request is no active theme). The one place theme_refusal()
+	 * and the plan (AB_MCP_Sync_Push::verdict()) ask it.
+	 *
+	 * @param string $theme The theme of an object (the slug of its term of wp_theme).
+	 * @return string|null
+	 */
+	public static function inactive_theme( $theme ) {
+		$theme  = (string) $theme;
+		$active = (string) get_stylesheet();
+		$row    = AB_MCP_Sync_Rows::option( 'stylesheet' );
+		$stored = is_array( $row ) ? (string) $row['value'] : null;
+		if ( '' === $theme ) {
+			return 'of the staging site belongs to no theme (no term of wp_theme)';
+		}
+		if ( $active !== $theme || $stored !== $theme ) {
+			return sprintf( 'belongs to the theme %1$s, and the active theme of this site is %2$s', $theme, $active === $stored ? $active : $active . ' (the option holds ' . ( null === $stored ? 'none' : $stored ) . ')' );
 		}
 		return null;
 	}

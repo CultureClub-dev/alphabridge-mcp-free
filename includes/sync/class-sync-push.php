@@ -689,6 +689,19 @@ final class AB_MCP_Sync_Push {
 			return $lock( sprintf( 'The kind %s is written from a later branch of Z8 (media: Z10; menus, widget areas, the additional CSS and options: Z11).', (string) $entry['kind'] ), 'attachment' === $entry['kind'] ? 'Z10' : 'Z11' );
 		} elseif ( ! in_array( (string) ( $entry['subtype'] ?? '' ), AB_MCP_Sync_Post_Writer::TYPES, true ) ) {
 			return $lock( sprintf( 'The engine of the kind post writes the types %1$s; the type %2$s waits for its field schema.', implode( ', ', AB_MCP_Sync_Post_Writer::TYPES ), (string) ( $entry['subtype'] ?? '' ) ), 'Z8d' );
+		} elseif ( in_array( (string) ( $entry['subtype'] ?? '' ), AB_MCP_Sync_Post_Writer::THEMED, true ) ) {
+			// A template, a template part or the global styles of a theme that
+			// is not the active one here (branch 9b): a staging site keeps the
+			// rows of every theme it tried, so the plan names them locked with
+			// the way (all leaves them out) rather than the check before the
+			// first write ending the run for them; the check and the boundary
+			// ask it again (AB_MCP_Sync_Post_Writer::theme_refusal()).
+			$theme = isset( $entry['staging']['identity']['theme'] ) && is_string( $entry['staging']['identity']['theme'] ) ? $entry['staging']['identity']['theme'] : '';
+			$other = AB_MCP_Sync_Post_Writer::inactive_theme( $theme );
+			if ( null !== $other ) {
+				$held = AB_MCP_Sync_Kinds::lock( 'post', 'theme_mismatch' );
+				return $lock( sprintf( '%1$s (post:theme_mismatch) The %2$s %3$s %4$s.', (string) $held['reason'], (string) $entry['subtype'], (string) ( $entry['staging']['identity']['post_name'] ?? '' ), $other ), (string) $held['stage'] );
+			}
 		}
 		$staging = isset( $entry['staging']['ref'] ) ? (string) $entry['staging']['ref'] : '';
 		if ( '' === $staging ) {

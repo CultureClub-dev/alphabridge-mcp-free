@@ -212,12 +212,21 @@ nennt ihre Meldung den Weg.
   das Theme des Objekts das aktive Stylesheet hier ist, wie
   `get_stylesheet()` es gibt und wie die Optionszeile `stylesheet` es hält,
   das Ziel genau dieses eine Theme nennt und ein Objekt hier es ebenso
-  trägt (`theme_refusal()`); sonst `post:theme_mismatch` (Z8) vor jeder
-  Mutation, mit dem Weg (dasselbe Theme auf beiden Sites aktivieren; ein
-  Wechsel des Themes ist Code, Z8b; oder von Hand im Site-Editor). Kein
-  stilles Umschreiben in ein anderes Theme. Prüffall
+  trägt (`theme_refusal()`, `inactive_theme()`); sonst `post:theme_mismatch`
+  (Z8) vor jeder Mutation, mit dem Weg (dasselbe Theme auf beiden Sites
+  aktivieren; ein Wechsel des Themes ist Code, Z8b; oder von Hand im
+  Site-Editor). Kein stilles Umschreiben in ein anderes Theme. Schon der Plan
+  nennt ein solches Objekt gesperrt und macht keinen Schritt daraus
+  (`AB_MCP_Sync_Push::verdict()` über das Theme der Staging-Identität; `all`
+  lässt es mit Grund aus): eine Staging-Site behält die Zeilen jedes Themes,
+  das sie einmal hatte (die globalen Stile legt der Site-Editor beim Öffnen
+  an), und eine Sperre erst in der Gesamtvorprüfung schlösse den ganzen Lauf.
+  Gesamtvorprüfung und Grenze fragen es noch einmal (das Theme kann sich
+  zwischen Plan und Lauf ändern). Prüffälle
   `testWhatTheBranchLocksIsFoundBeforeAnythingIsWritten` (eine Vorlage von
-  Twenty Twenty-Four). Auf dem Rückweg fragt der Schritt das Theme nicht:
+  Twenty Twenty-Four im Plan gesperrt, eine mit zwei Themes in der
+  Gesamtvorprüfung), `testATemplateOfAThemeAFilterShowsInThisRequestOnlyIsLocked`
+  (ein Filter auf `stylesheet` im Plan und zwischen Plan und Lauf). Auf dem Rückweg fragt der Schritt das Theme nicht:
   er schreibt dieselbe Zeile zurück, deren Theme-Term er nicht ändert, und
   `wp_filter_wp_template_unique_post_slug()` fragt bei einem vorhandenen
   Post dessen eigenen Term (`:64-67`).
