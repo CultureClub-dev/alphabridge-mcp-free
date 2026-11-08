@@ -227,7 +227,28 @@ if ( ! function_exists( 'is_taxonomy_hierarchical' ) ) {
 if ( ! function_exists( 'wp_find_hierarchy_loop' ) ) {
 	/** The loop a test names in $ab_test_loop (id => true), none otherwise. */
 	function wp_find_hierarchy_loop( $callback, $start, $start_parent, $callback_args = array() ) {
-		return $GLOBALS['ab_test_loop'] ?? array();
+		if ( ! isset( $GLOBALS['ab_test_parents'] ) ) {
+			return $GLOBALS['ab_test_loop'] ?? array();
+		}
+		// With $ab_test_parents (term => parent here): a walk up the parents
+		// the callback gives, as the core finds a loop; the members met.
+		$seen = array( (int) $start => true );
+		$id   = (int) $start_parent;
+		for ( $i = 0; $i < 100 && $id > 0; $i++ ) {
+			if ( isset( $seen[ $id ] ) ) {
+				return $seen;
+			}
+			$seen[ $id ] = true;
+			$id          = (int) call_user_func_array( $callback, array_merge( array( $id ), $callback_args ) );
+		}
+		return array();
+	}
+}
+
+if ( ! function_exists( 'wp_get_term_taxonomy_parent_id' ) ) {
+	/** The parent of a term from $ab_test_parents (term => parent), 0 without one. */
+	function wp_get_term_taxonomy_parent_id( $term_id, $taxonomy ) {
+		return (int) ( $GLOBALS['ab_test_parents'][ (int) $term_id ] ?? 0 );
 	}
 }
 

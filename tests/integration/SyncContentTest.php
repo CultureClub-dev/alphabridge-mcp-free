@@ -666,6 +666,55 @@ final class SyncContentTest extends TestCase {
 		unset( $order );
 	}
 
+	public function testTwoCategoriesThatSwapTheirPlacesGoOverAndBackAndAnOrdinaryMoveGoesAsWell(): void {
+		// Codex round 1 on branch 9, B4: here Beta is under Alpha; on staging
+		// Beta is a root and Alpha under Beta. The check asks a loop of the
+		// state the run leaves (before, against the state here, Alpha under
+		// Beta closed a loop and the whole run was aborted); the plan writes
+		// Beta first (the parent the run moves), so no state in between
+		// closes a loop that wp_update_term() would break by changing the
+		// other term. The way back goes from the last step to the first:
+		// Alpha back to the root, then Beta back under Alpha. An ordinary
+		// move (Beta from Alpha to Gamma) goes as well.
+		self::pair();
+		$alpha_a = self::term_a( 'Alpha', 'category' );
+		$beta_a  = self::term_a( 'Beta', 'category', array( 'parent' => $alpha_a ) );
+		$gamma_a = self::term_a( 'Gamma', 'category' );
+		$alpha_b = self::term_b( 'Alpha', 'category' );
+		$beta_b  = self::term_b( 'Beta', 'category', array( 'parent' => $alpha_b ) );
+		$gamma_b = self::term_b( 'Gamma', 'category' );
+		self::paired( self::staged() );
+		self::b(
+			array(
+				array( 'op' => 'update_term', 'term' => $beta_b, 'taxonomy' => 'category', 'args' => array( 'parent' => 0 ) ),
+				array( 'op' => 'update_term', 'term' => $alpha_b, 'taxonomy' => 'category', 'args' => array( 'parent' => $beta_b ) ),
+			)
+		);
+		$run    = self::begun( self::planned( array( 'term:category:alpha', 'term:category:beta' ) )['args'] );
+		$closed = self::finish( (int) $run['run_id'] );
+		self::assertSame( 'closed_done', $closed['state'], json_encode( $closed ) . self::check_message( self::run_status( (int) $run['run_id'] ) ) );
+		$steps = self::writes( self::run_status( (int) $run['run_id'] ) );
+		self::assertSame( array( (string) $beta_b, (string) $alpha_b ), array_map( static fn( $s ) => $s['parts']['object']['staging_ref'], $steps ), 'Beta first.' );
+		self::assertSame( (string) $beta_a, self::term_row_a( $alpha_a )['parent'] );
+		self::assertSame( '0', self::term_row_a( $beta_a )['parent'] );
+		$back = self::back( (int) $run['run_id'] );
+		self::assertSame( 'closed_reverted', $back['state'], json_encode( $back ) );
+		self::assertSame( '0', self::term_row_a( $alpha_a )['parent'], 'Alpha back to the root.' );
+		self::assertSame( (string) $alpha_a, self::term_row_a( $beta_a )['parent'], 'Beta back under Alpha.' );
+		// An ordinary move: Beta from Alpha to Gamma (Alpha a root again on staging).
+		self::b(
+			array(
+				array( 'op' => 'update_term', 'term' => $alpha_b, 'taxonomy' => 'category', 'args' => array( 'parent' => 0 ) ),
+				array( 'op' => 'update_term', 'term' => $beta_b, 'taxonomy' => 'category', 'args' => array( 'parent' => $gamma_b ) ),
+			)
+		);
+		$moved  = self::begun( self::planned( array( 'term:category:beta' ) )['args'] );
+		$closed = self::finish( (int) $moved['run_id'] );
+		self::assertSame( 'closed_done', $closed['state'], json_encode( $closed ) );
+		self::assertSame( (string) $gamma_a, self::term_row_a( $beta_a )['parent'] );
+		self::assertSame( '0', self::term_row_a( $alpha_a )['parent'], 'Alpha untouched.' );
+	}
+
 	public function testTheMetaOfATermGoesByItsRightAndBackAndANewTermWithMetaIsLocked(): void {
 		// Term meta (decision 28): a key that differs is written with the
 		// right edit_term_meta at the term and goes back raw, byte for byte;

@@ -180,11 +180,36 @@ nennt ihre Meldung den Weg.
 - Grenze C: `term_group` ungleich 0 (eine Gruppe von Aliassen, ein Rest der
   Link-Kategorien) auf einer der beiden Seiten sperrt `term:term_group`
   (Z8d): die Gruppe ist eine ID der Site selbst, die kein Paar abbildet.
-- Grenze C (konstruiert): Ein Elternteil, der hier eine Schleife schlösse
-  (die Eltern sind auf beiden Sites verschieden gepaart oder geändert),
-  sperrt `term:parent` (Z8d): `wp_update_term()` bräche die Schleife über
-  `wp_check_term_hierarchy_for_loops()`, indem es fremden Termen den
-  Elternteil 0 gibt. Ebenso ein Elternteil in einer Taxonomie ohne Eltern.
+- Umhängen und Tauschen (Codex-Runde 1, B4): Die Gesamtvorprüfung fragt
+  eine Schleife der Eltern am Stand, den der Lauf hinterlässt: die Terme,
+  die er schreibt, mit den Eltern, die er ihnen gibt, jeder andere Term wie
+  hier (`AB_MCP_Sync_Engine::planned_parents()`). Zwei Kategorien, die die
+  Plätze tauschen (hier Beta unter Alpha, auf Staging Alpha unter Beta),
+  schliessen so keine Schleife; vorher sperrte der Abgleich mit dem Stand
+  hier den ganzen Lauf. Der Plan schreibt einen Elternteil, den der Lauf
+  umhängt, zuerst (`order()`, Kante über den Elternteil des Terms; wie
+  jede Kante des Plans: endet der Schritt des Elternteils nicht `done`,
+  wird der Schritt des Kinds übersprungen, auch wo es nur seine
+  Beschreibung ändert, fail closed), und
+  die Grenze prüft den Stand, wie ihn `wp_update_term()` dann sieht; der
+  Rückweg geht vom letzten Schritt zum ersten (`AB_MCP_Sync_Revert::plan()`),
+  so dass auch dort kein Zwischenstand eine Schleife schliesst. Prüffälle
+  `testTwoCategoriesThatSwapTheirPlacesGoOverAndBackAndAnOrdinaryMoveGoesAsWell`
+  (Tausch hin und zurück, gewöhnliches Umhängen von Beta nach Gamma),
+  `testTheLoopOfParentsIsAskedOfTheStateTheRunLeaves`,
+  `testATermTheRunMovesUnderAnotherTermItWritesComesAfterIt`.
+- Grenze C: Ein Elternteil, der am Stand nach dem Lauf eine Schleife
+  schlösse (ein Term ausserhalb der Auswahl hängt hier anders als auf
+  Staging), sperrt `term:parent` (Z8d): `wp_update_term()` bräche die
+  Schleife über `wp_check_term_hierarchy_for_loops()`, indem es fremden
+  Termen den Elternteil 0 gibt. Ebenso ein Elternteil in einer Taxonomie
+  ohne Eltern. Ein Term, dessen neuer Elternteil im selben Lauf erst
+  angelegt wird, zählt in der Gesamtvorprüfung mit seinem Elternteil von
+  hier (fail closed: ein anderer Term, der darunter wandert und hier sein
+  Vorfahr ist, sperrt dann); die Grenze fragt den Stand danach ohnehin
+  noch einmal. Diese Zurückhaltung hat keinen eigenen Mutationseintrag:
+  ohne sie fände die Grenze dieselbe Schleife erst nach dem Anlegen des
+  neuen Elternteils.
 - Slug: hält ihn ein anderer Term der Taxonomie, oder machte
   `wp_unique_term_slug()` einen anderen daraus, sperrt
   `term:slug_collision` (Z8). Ein Term gleicher Identität (Taxonomie,

@@ -172,7 +172,7 @@ final class SyncTermWriterTest extends TestCase {
 	}
 
 	protected function tearDown(): void {
-		unset( $GLOBALS['ab_test_way']['taxonomies'], $GLOBALS['ab_test_taxonomies'], $GLOBALS['ab_test_unique_slugs'], $GLOBALS['ab_test_loop'], $GLOBALS['ab_test_term_calls'], $GLOBALS['ab_test_term_answer'] );
+		unset( $GLOBALS['ab_test_way']['taxonomies'], $GLOBALS['ab_test_taxonomies'], $GLOBALS['ab_test_unique_slugs'], $GLOBALS['ab_test_loop'], $GLOBALS['ab_test_parents'], $GLOBALS['ab_test_term_calls'], $GLOBALS['ab_test_term_answer'] );
 		$GLOBALS['ab_test_can'] = null;
 	}
 
@@ -515,6 +515,27 @@ final class SyncTermWriterTest extends TestCase {
 		$padded = AB_MCP_Sync_Term_Writer::target_of( self::line( array(), array( array( 'rank', '07' ) ) ), self::item(), self::ctx() );
 		self::assertSame( 'term:sanitizer', self::lock_of( AB_MCP_Sync_Term_Writer::precheck( $padded, 34, 0 ) ) );
 		remove_filter( 'sanitize_term_meta_rank', 'absint' );
+	}
+
+	public function testTheLoopOfParentsIsAskedOfTheStateTheRunLeaves(): void {
+		// Codex round 1 on branch 9, B4: here Topics 60 is under News 34; on
+		// staging News goes under Topics and Topics leaves News. Against the
+		// state here News under Topics closes a loop; the check before the
+		// first write asks the state the run leaves (the parents it gives the
+		// terms it writes, ctx parents): no loop. Without the move of Topics
+		// in the run the loop stands (wp_update_term() would change Topics).
+		$db                         = self::live_term();
+		$db->term_rows[60]['parent'] = '34';
+		$GLOBALS['ab_test_parents']  = array( 60 => 34, 34 => 0 );
+		$ctx                        = self::ctx( array( 'term' => array( 7 => 60 ) ) );
+		$alone                      = AB_MCP_Sync_Term_Writer::target_of( self::line( array( 'parent' => '7' ) ), self::item(), $ctx );
+		self::assertSame( 'term:parent', self::lock_of( AB_MCP_Sync_Term_Writer::precheck( $alone, 34, 0 ) ), 'Topics stays under News: a loop.' );
+		$ctx['parents'] = array( 60 => 0, 34 => 60 );
+		$swapped        = AB_MCP_Sync_Term_Writer::target_of( self::line( array( 'parent' => '7' ) ), self::item(), $ctx );
+		self::assertTrue( AB_MCP_Sync_Term_Writer::precheck( $swapped, 34, 0 ), 'Topics leaves News in the same run: no loop.' );
+		$ctx['parents'] = array( 60 => 34 );
+		self::assertSame( 'term:parent', self::lock_of( AB_MCP_Sync_Term_Writer::precheck( AB_MCP_Sync_Term_Writer::target_of( self::line( array( 'parent' => '7' ) ), self::item(), $ctx ), 34, 0 ) ), 'A run that keeps Topics under News.' );
+		unset( $GLOBALS['ab_test_parents'] );
 	}
 
 	public function testTheRowOfATermIsWrittenThroughTheCoreAndAnIdWordPressGaveBackIsNotTheStepsOwn(): void {

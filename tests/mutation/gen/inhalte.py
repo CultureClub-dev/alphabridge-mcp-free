@@ -94,7 +94,7 @@ e('term-parent-hierarchical', 'precheck(): a parent in a taxonomy without parent
 e('term-parent-here', 'precheck(): the parent has to be a term of the taxonomy here', TW,
   "\t\t\tif ( ! is_array( $found ) ) {\n\t\t\t\treturn self::locked( 'term:reference_unmapped'", "\t\t\tif ( false ) {\n\t\t\t\treturn self::locked( 'term:reference_unmapped'", 'term', T_HERE)
 e('term-parent-loop', 'precheck(): a parent that closes a loop is locked (wp_check_term_hierarchy_for_loops() would change other terms)', TW,
-  "\t\t\tif ( null !== $live_id && null !== self::loop( (int) $live_id, $parent, $taxonomy ) ) {", "\t\t\tif ( false ) {", 'term', T_HERE)
+  "\t\t\tif ( null !== $loop ) {\n\t\t\t\treturn self::locked( 'term:parent', sprintf( 'the parent %1$d would close a loop", "\t\t\tif ( false ) {\n\t\t\t\treturn self::locked( 'term:parent', sprintf( 'the parent %1$d would close a loop", 'term', T_HERE)
 e('term-slug-empty', 'precheck(): an empty slug is refused (WordPress would make one)', TW,
   "\t\tif ( '' === $slug ) {\n\t\t\treturn self::locked( 'term:sanitizer'", "\t\tif ( false ) {\n\t\t\treturn self::locked( 'term:sanitizer'", 'term', T_NEW)
 e('term-slug-holder', 'precheck(): a slug another term of the taxonomy holds is locked', TW,
@@ -324,6 +324,22 @@ e('db-form-bool', 'db_form(): a bool as $wpdb writes it (1 or empty)', PW,
   "\t\t\treturn $value ? '1' : '';", "\t\t\treturn null;", 'unit', C_B3P)
 e('db-form-serialize', 'db_form(): maybe_serialize() first, as update_metadata() runs it', PW,
   "\t\t$value = maybe_serialize( $value );\n\t\tif ( is_bool( $value ) ) {", "\t\tif ( is_bool( $value ) ) {", 'unit', C_B3P)
+RV = 'includes/sync/class-sync-revert.php'
+FILEVAR.update({RV: '$rv'})
+C_B4 = 'testTwoCategoriesThatSwapTheirPlacesGoOverAndBackAndAnOrdinaryMoveGoesAsWell'
+T_B4 = 'testTheLoopOfParentsIsAskedOfTheStateTheRunLeaves'
+e('engine-planned-parents', 'run_check(): the check asks a loop of parents of the state the run leaves (Codex round 1, B4)', EN,
+  "\t\t$ctx['parents'] = self::planned_parents( $items, $lines, $ctx );\n", '', 'it', C_B4)
+e('term-prepared-parents', 'target_of(): the parents the run gives the terms it writes go with the target into the check', TW,
+  "\t\t\t'parents'     => isset( $ctx['parents'] ) && is_array( $ctx['parents'] ) ? $ctx['parents'] : array(),", "\t\t\t'parents'     => array(),", 'term', T_B4)
+e('term-loop-planned', 'loop(): a term the run writes stands with the parent the run gives it', TW,
+  "\t\t\treturn isset( $planned[ (int) $id ] ) ? (int) $planned[ (int) $id ] : wp_get_term_taxonomy_parent_id( (int) $id, $tax );", "\t\t\treturn wp_get_term_taxonomy_parent_id( (int) $id, $tax );", 'term', T_B4)
+e('push-order-term-parent', 'order(): a term the run moves under another term it writes comes after it (Codex round 1, B4)', PU,
+  "\t\t\tif ( isset( $item['parent_ref'], $terms[ $item['parent_ref'] ] ) && $terms[ $item['parent_ref'] ] !== $n && ! in_array( $terms[ $item['parent_ref'] ], $items[ $n ]['depends_on'], true ) ) {", "\t\t\tif ( false ) {", 'unit', 'testATermTheRunMovesUnderAnotherTermItWritesComesAfterIt')
+e('push-parent-ref', 'plan(): the parent of a term from its references, for the order', PU,
+  "\t\t\t\t\t\t$item['parent_ref'] = (string) (int) $ref['id'];\n", '', 'it', C_B4)
+e('revert-last-first', 'plan(): the way back goes from the last step to the first (Codex round 1, B4)', RV,
+  "\t\t$items = array_reverse( $items );\n", '', 'it', C_B4)
 
 def test_of(expect):
     return expect.split(' with data set "', 1)[0]
@@ -405,6 +421,7 @@ $dk = 'includes/sync/class-sync-db-kinds.php';
 $ex = 'includes/sync/class-sync-export.php';
 $iv = 'includes/sync/class-sync-inventory.php';
 $excl = 'includes/sync/class-sync-exclusions.php';
+$rv = 'includes/sync/class-sync-revert.php';
 
 return array(''')
 for (id_, clause, file, search, replace, run, expect) in entries:

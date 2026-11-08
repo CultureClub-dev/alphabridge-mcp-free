@@ -37,6 +37,7 @@ $dk = 'includes/sync/class-sync-db-kinds.php';
 $ex = 'includes/sync/class-sync-export.php';
 $iv = 'includes/sync/class-sync-inventory.php';
 $excl = 'includes/sync/class-sync-exclusions.php';
+$rv = 'includes/sync/class-sync-revert.php';
 
 return array(
 	array(
@@ -205,8 +206,8 @@ return array(
 		'id'      => 'inhalte/term-parent-loop',
 		'clause'  => 'precheck(): a parent that closes a loop is locked (wp_check_term_hierarchy_for_loops() would change other terms)',
 		'file'    => $tw,
-		'search'  => "\t\t\tif ( null !== \$live_id && null !== self::loop( (int) \$live_id, \$parent, \$taxonomy ) ) {",
-		'replace' => "\t\t\tif ( false ) {",
+		'search'  => "\t\t\tif ( null !== \$loop ) {\n\t\t\t\treturn self::locked( 'term:parent', sprintf( 'the parent %1\$d would close a loop",
+		'replace' => "\t\t\tif ( false ) {\n\t\t\t\treturn self::locked( 'term:parent', sprintf( 'the parent %1\$d would close a loop",
 		'run'     => $unit( 'SyncTermWriterTest', 'testATermHereAsksItsRightItsGroupItsParentAndTheRightOfEveryKeyThatDiffers' ),
 		'expect'  => '/testATermHereAsksItsRightItsGroupItsParentAndTheRightOfEveryKeyThatDiffers/',
 	),
@@ -1082,5 +1083,59 @@ return array(
 		'replace' => "\t\tif ( is_bool( \$value ) ) {",
 		'run'     => $unit( 'SyncRunTest', 'testASanitizerIsComparedByTheBytesWordPressWouldStore' ),
 		'expect'  => '/testASanitizerIsComparedByTheBytesWordPressWouldStore/',
+	),
+	array(
+		'id'      => 'inhalte/engine-planned-parents',
+		'clause'  => 'run_check(): the check asks a loop of parents of the state the run leaves (Codex round 1, B4)',
+		'file'    => $en,
+		'search'  => "\t\t\$ctx['parents'] = self::planned_parents( \$items, \$lines, \$ctx );\n",
+		'replace' => "/* removed */\n",
+		'run'     => $it( 'SyncContentTest', 'testTwoCategoriesThatSwapTheirPlacesGoOverAndBackAndAnOrdinaryMoveGoesAsWell' ),
+		'expect'  => '/testTwoCategoriesThatSwapTheirPlacesGoOverAndBackAndAnOrdinaryMoveGoesAsWell/',
+	),
+	array(
+		'id'      => 'inhalte/term-prepared-parents',
+		'clause'  => 'target_of(): the parents the run gives the terms it writes go with the target into the check',
+		'file'    => $tw,
+		'search'  => "\t\t\t'parents'     => isset( \$ctx['parents'] ) && is_array( \$ctx['parents'] ) ? \$ctx['parents'] : array(),",
+		'replace' => "\t\t\t'parents'     => array(),",
+		'run'     => $unit( 'SyncTermWriterTest', 'testTheLoopOfParentsIsAskedOfTheStateTheRunLeaves' ),
+		'expect'  => '/testTheLoopOfParentsIsAskedOfTheStateTheRunLeaves/',
+	),
+	array(
+		'id'      => 'inhalte/term-loop-planned',
+		'clause'  => 'loop(): a term the run writes stands with the parent the run gives it',
+		'file'    => $tw,
+		'search'  => "\t\t\treturn isset( \$planned[ (int) \$id ] ) ? (int) \$planned[ (int) \$id ] : wp_get_term_taxonomy_parent_id( (int) \$id, \$tax );",
+		'replace' => "\t\t\treturn wp_get_term_taxonomy_parent_id( (int) \$id, \$tax );",
+		'run'     => $unit( 'SyncTermWriterTest', 'testTheLoopOfParentsIsAskedOfTheStateTheRunLeaves' ),
+		'expect'  => '/testTheLoopOfParentsIsAskedOfTheStateTheRunLeaves/',
+	),
+	array(
+		'id'      => 'inhalte/push-order-term-parent',
+		'clause'  => 'order(): a term the run moves under another term it writes comes after it (Codex round 1, B4)',
+		'file'    => $pu,
+		'search'  => "\t\t\tif ( isset( \$item['parent_ref'], \$terms[ \$item['parent_ref'] ] ) && \$terms[ \$item['parent_ref'] ] !== \$n && ! in_array( \$terms[ \$item['parent_ref'] ], \$items[ \$n ]['depends_on'], true ) ) {",
+		'replace' => "\t\t\tif ( false ) {",
+		'run'     => $unit( 'SyncRunTest', 'testATermTheRunMovesUnderAnotherTermItWritesComesAfterIt' ),
+		'expect'  => '/testATermTheRunMovesUnderAnotherTermItWritesComesAfterIt/',
+	),
+	array(
+		'id'      => 'inhalte/push-parent-ref',
+		'clause'  => 'plan(): the parent of a term from its references, for the order',
+		'file'    => $pu,
+		'search'  => "\t\t\t\t\t\t\$item['parent_ref'] = (string) (int) \$ref['id'];\n",
+		'replace' => "/* removed */\n",
+		'run'     => $it( 'SyncContentTest', 'testTwoCategoriesThatSwapTheirPlacesGoOverAndBackAndAnOrdinaryMoveGoesAsWell' ),
+		'expect'  => '/testTwoCategoriesThatSwapTheirPlacesGoOverAndBackAndAnOrdinaryMoveGoesAsWell/',
+	),
+	array(
+		'id'      => 'inhalte/revert-last-first',
+		'clause'  => 'plan(): the way back goes from the last step to the first (Codex round 1, B4)',
+		'file'    => $rv,
+		'search'  => "\t\t\$items = array_reverse( \$items );\n",
+		'replace' => "/* removed */\n",
+		'run'     => $it( 'SyncContentTest', 'testTwoCategoriesThatSwapTheirPlacesGoOverAndBackAndAnOrdinaryMoveGoesAsWell' ),
+		'expect'  => '/testTwoCategoriesThatSwapTheirPlacesGoOverAndBackAndAnOrdinaryMoveGoesAsWell/',
 	),
 );

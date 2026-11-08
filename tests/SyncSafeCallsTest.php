@@ -250,6 +250,7 @@ final class SyncSafeCallsTest extends TestCase {
 			'sanitize_term'             => array( 1, 'sanitizer_refusal(): the sanitizers ahead, as wp_insert_term() and wp_update_term() run them (decision 17).' ),
 			'wp_cache_delete'           => array( 1, 'post_write(): the meta cache of the written term.' ),
 			'wp_find_hierarchy_loop'    => array( 1, 'loop(): the loop of parents wp_update_term() would break (wp_check_term_hierarchy_for_loops()), read before anything is written; the parents through wp_get_term_taxonomy_parent_id().' ),
+			'wp_get_term_taxonomy_parent_id' => array( 1, 'loop(): the parent here of a term the run does not move, beside the parents it gives the terms it writes (Codex round 1 on branch 9, B4); read for the check of a loop, never compared with the staging site.' ),
 			'wp_insert_term'            => array( 1, 'write_row(): the way forward of a new term (decision 17).' ),
 			'wp_slash'                  => array( 6, 'sanitizer_refusal(), write_row() and restore_row(): the slashing wp_insert_term() and wp_update_term() expect of the name and the description.' ),
 			'wp_unique_term_slug'       => array( 1, 'precheck(): the slug WordPress would store for a new term, read before anything is written.' ),

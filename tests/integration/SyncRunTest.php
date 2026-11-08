@@ -1350,7 +1350,9 @@ final class SyncRunTest extends TestCase {
 				$seqs[ (int) $step['parts']['forward_seq'] ] = (int) $step['seq'];
 			}
 		}
-		ksort( $seqs );
+		// In the order the way back runs them, from the last step of the
+		// run to the first (branch 9, Codex round 1, B4).
+		asort( $seqs );
 		self::assertCount( 3, $seqs );
 		list( $s1, $s2, $s3 ) = array_values( $seqs );
 		$objects = array();
@@ -1594,7 +1596,9 @@ final class SyncRunTest extends TestCase {
 				$objects[ (int) $step['seq'] ] = (int) $step['parts']['object']['live_ref'];
 			}
 		}
-		ksort( $seqs );
+		// In the order the way back runs them, from the last step of the
+		// run to the first (branch 9, Codex round 1, B4).
+		asort( $seqs );
 		self::assertCount( 3, $seqs );
 		list( $s1, $s2, $s3 ) = array_values( $seqs );
 		$live    = static fn( int $seq ): int => $objects[ array_search( $seq, $seqs, true ) ];
@@ -4118,7 +4122,8 @@ final class SyncRunTest extends TestCase {
 		);
 		$begun = self::revert( (int) $run['run_id'] );
 		$back  = self::revert_all( (int) $begun['run_id'] );
-		self::assertSame( array( 'row' => true, 'meta' => true ), $fired, 'The hook fired as the rights were asked.' );
+		ksort( $fired );
+		self::assertSame( array( 'meta' => true, 'row' => true ), $fired, 'The hook fired as the rights were asked.' );
 		self::assertSame( 'closed_findings', $back['state'], json_encode( $back ) );
 		$back  = self::gated( 'wp_site_revert', array( 'action' => 'status', 'run_id' => (int) $begun['run_id'] ) );
 		$steps = array();

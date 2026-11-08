@@ -417,6 +417,10 @@ final class AB_MCP_Sync_Push {
 			foreach ( isset( $line['refs'] ) && is_array( $line['refs'] ) ? $line['refs'] : array() as $ref ) {
 				if ( is_array( $ref ) && isset( $ref['space'], $ref['id'] ) && in_array( $ref['space'], array( 'post', 'term' ), true ) && 'strong' === ( $ref['strength'] ?? null ) ) {
 					$item['refs'][] = array( (string) $ref['space'], (string) (int) $ref['id'] );
+					if ( 'term' === $item['kind'] && 'term' === $ref['space'] && 'parent' === ( $ref['at'] ?? null ) ) {
+						// The parent of a term, for the order (order()).
+						$item['parent_ref'] = (string) (int) $ref['id'];
+					}
 				}
 			}
 			$items[ $n ] = $item;
@@ -537,7 +541,7 @@ final class AB_MCP_Sync_Push {
 				'depends' => array_values( array_unique( $depends ) ),
 				'pair_id' => isset( $item['pair_id'] ) ? $item['pair_id'] : null,
 			);
-			unset( $items[ $n ]['depends_on'], $items[ $n ]['refs'] );
+			unset( $items[ $n ]['depends_on'], $items[ $n ]['refs'], $items[ $n ]['parent_ref'] );
 		}
 		$writes  = range( 2, $seq );
 		$steps[] = array( 'op' => 'post', 'phase' => 7, 'depends' => array( 1 ) );
@@ -697,6 +701,17 @@ final class AB_MCP_Sync_Push {
 				$at[ ( 'term' === $item['kind'] ? 'term' : 'post' ) . "\0" . $item['staging_ref'] ] = $n;
 			}
 		}
+		// The terms the run writes, by their id on the staging site: a term
+		// the run moves under another term it writes comes after it, so no
+		// state in between closes a loop of parents (two categories that
+		// swap their places: the one that leaves first; branch 9, Codex
+		// round 1, B4). The parents of the staging site close no loop.
+		$terms = array();
+		foreach ( $items as $n => $item ) {
+			if ( 'term' === $item['kind'] ) {
+				$terms[ (string) $item['staging_ref'] ] = $n;
+			}
+		}
 		$edges = array();
 		foreach ( $items as $n => $item ) {
 			$items[ $n ]['depends_on'] = array();
@@ -708,6 +723,10 @@ final class AB_MCP_Sync_Push {
 				} elseif ( isset( $at[ $key ] ) ) {
 					$edges[ $n ][ $n ] = true;
 				}
+			}
+			if ( isset( $item['parent_ref'], $terms[ $item['parent_ref'] ] ) && $terms[ $item['parent_ref'] ] !== $n && ! in_array( $terms[ $item['parent_ref'] ], $items[ $n ]['depends_on'], true ) ) {
+				$items[ $n ]['depends_on'][] = $terms[ $item['parent_ref'] ];
+				$edges[ $n ][ $terms[ $item['parent_ref'] ] ] = true;
 			}
 		}
 		$locked = array();

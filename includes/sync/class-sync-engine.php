@@ -629,6 +629,10 @@ final class AB_MCP_Sync_Engine {
 		// The objects the run creates: a reference to one of them is pending,
 		// not missing (B1); the boundary maps it by the pair its step made.
 		$ctx['pending'] = self::pending( $items );
+		// The parents the run gives the terms of this site it writes: the
+		// check asks a loop of parents of the state the run leaves (branch 9,
+		// Codex round 1, B4); the boundary asks the state as it is then.
+		$ctx['parents'] = self::planned_parents( $items, $lines, $ctx );
 		// The findings of the calls before, kept with the cursor (B3).
 		$findings = isset( $result['findings'] ) && is_array( $result['findings'] ) ? $result['findings'] : array();
 		$count    = count( $items );
@@ -708,6 +712,40 @@ final class AB_MCP_Sync_Engine {
 			}
 		}
 		return null;
+	}
+
+	/**
+	 * The parents a run gives the terms of this site it writes: term here =>
+	 * the parent here its target names (AB_MCP_Sync_Term_Writer::target_of()),
+	 * for the check before the first write, which asks a loop of parents of
+	 * the state the run leaves (branch 9, Codex round 1, B4: two categories
+	 * that swap their places were locked against the state here). A term
+	 * whose parent the run makes first is left out: it counts as it is here.
+	 *
+	 * @param array[] $items The objects of the plan.
+	 * @param array   $lines lines().
+	 * @param array   $ctx   context(), with pending.
+	 * @return array<int,int>
+	 */
+	private static function planned_parents( array $items, array $lines, array $ctx ) {
+		$out = array();
+		foreach ( $items as $one ) {
+			if ( 'term' !== ( isset( $one['kind'] ) ? (string) $one['kind'] : '' ) || 'update' !== ( isset( $one['op'] ) ? (string) $one['op'] : '' ) ) {
+				continue;
+			}
+			$line = self::line_of( $one, $lines );
+			if ( is_wp_error( $line ) ) {
+				continue;
+			}
+			$prepared = AB_MCP_Sync_Term_Writer::target_of( $line, $one, $ctx );
+			// A parent the run makes first has no id here yet: the term counts
+			// as it is here (fail closed; the boundary asks it again).
+			if ( is_wp_error( $prepared ) || ! empty( $prepared['pending'] ) ) {
+				continue;
+			}
+			$out[ (int) $one['live_ref'] ] = (int) $prepared['args']['parent'];
+		}
+		return $out;
 	}
 
 	/**

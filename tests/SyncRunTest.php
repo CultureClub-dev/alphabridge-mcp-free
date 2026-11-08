@@ -2627,6 +2627,7 @@ final class SyncRunTest extends TestCase {
 		self::assertStringContainsString( 'WordPress would store the slug hello-2 for hello', $taken->get_error_message() );
 		self::assertTrue( AB_MCP_Sync_Post_Writer::precheck( $new( array( 'post_status' => 'draft', 'post_date_gmt' => '0000-00-00 00:00:00' ) ), null, $ctx['now'] ), 'WordPress keeps the slug of a draft as it is.' );
 		unset( $GLOBALS['ab_test_unique_slugs'] );
+
 		// A slug the sanitizing would change.
 		$spaced = AB_MCP_Sync_Post_Writer::precheck( $new( array( 'post_name' => 'Hello World' ) ), null, $ctx['now'] );
 		self::assertSame( 'post:sanitizer', self::lock_of( $spaced ) );
@@ -2673,6 +2674,26 @@ final class SyncRunTest extends TestCase {
 		$got   = $m->invoke( null, $items );
 		self::assertSame( array( 2, 1 ), array_keys( $got['items'] ), 'The term 5 first: a post 5 and a term 5 are two objects (two spaces of ids).' );
 		self::assertSame( array( 2 ), $got['items'][1]['depends_on'] );
+		self::assertSame( array(), $got['locked'] );
+	}
+
+	public function testATermTheRunMovesUnderAnotherTermItWritesComesAfterIt(): void {
+		// Codex round 1 on branch 9, B4: two categories here swap their
+		// places (Alpha 7 goes under Beta 8, Beta leaves Alpha). Written in
+		// the order of the report, Alpha under Beta while Beta is still under
+		// Alpha would close a loop, which wp_update_term() breaks by changing
+		// another term; the parent the run writes comes first. An ordinary
+		// move under a term the run does not write orders nothing.
+		$m     = new ReflectionMethod( AB_MCP_Sync_Push::class, 'order' );
+		$items = array(
+			1 => array( 'kind' => 'term', 'subtype' => 'category', 'op' => 'update', 'staging_ref' => '7', 'action' => 'take_over', 'refs' => array( array( 'term', '8' ) ), 'parent_ref' => '8' ),
+			2 => array( 'kind' => 'term', 'subtype' => 'category', 'op' => 'update', 'staging_ref' => '8', 'action' => 'take_over', 'refs' => array() ),
+			3 => array( 'kind' => 'term', 'subtype' => 'category', 'op' => 'update', 'staging_ref' => '9', 'action' => 'take_over', 'refs' => array( array( 'term', '4' ) ), 'parent_ref' => '4' ),
+		);
+		$got = $m->invoke( null, $items );
+		self::assertSame( array( 2, 1, 3 ), array_keys( $got['items'] ), 'Beta first, then Alpha under it.' );
+		self::assertSame( array( 2 ), $got['items'][1]['depends_on'] );
+		self::assertSame( array(), $got['items'][3]['depends_on'] );
 		self::assertSame( array(), $got['locked'] );
 	}
 }

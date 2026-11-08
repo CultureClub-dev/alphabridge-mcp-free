@@ -413,6 +413,13 @@ final class AB_MCP_Sync_Revert {
 				$live[ self::live_key( $object, $live_id ) ] = self::row_now( $object, $live_id );
 			}
 		}
+		// The way back goes from the last step to the first (the steps of a
+		// run in the order of the plan, a parent first): a term the run moved
+		// under another term it moved goes back before it, so no state in
+		// between closes a loop of parents (two categories that swapped their
+		// places; branch 9, Codex round 1, B4).
+		$items = array_reverse( $items );
+		$shown = array_reverse( $shown );
 		if ( array() === $items ) {
 			return new WP_Error( 'ab_mcp_sync_revert_nothing', sprintf( 'Run %d has no written step to take back (none wrote, or every one was taken back already). Use wp_site_push action=status to see its steps.', (int) $run['run_id'] ) );
 		}

@@ -203,6 +203,11 @@ final class AB_MCP_Sync_Term_Writer {
 			'identity'    => $line['identity'],
 			'as_draft'    => false,
 			'pending'     => $parent_pending,
+			// The parents the run gives the terms of this site it writes
+			// (the check before the first write only; AB_MCP_Sync_Engine::
+			// planned_parents()): the loop of parents is asked of the state
+			// the run leaves (branch 9, Codex round 1, B4).
+			'parents'     => isset( $ctx['parents'] ) && is_array( $ctx['parents'] ) ? $ctx['parents'] : array(),
 		);
 	}
 
@@ -253,6 +258,11 @@ final class AB_MCP_Sync_Term_Writer {
 		// wp_check_term_hierarchy_for_loops(), which breaks a loop by giving
 		// other terms the parent 0, or gives this one 0). A pending parent is
 		// made by the run before this term: the boundary checks it mapped.
+		// The check before the first write asks the loop of the state the run
+		// leaves (the parents it gives the other terms it writes, $prepared
+		// ['parents']; two categories that swap their places close no loop);
+		// the boundary asks the state as it is then, which wp_update_term()
+		// sees (the plan puts a parent the run moves first; Codex round 1, B4).
 		if ( $parent > 0 && empty( $prepared['pending'] ) ) {
 			if ( ! is_taxonomy_hierarchical( $taxonomy ) ) {
 				return self::locked( 'term:parent', sprintf( 'the taxonomy %s has no parents on this site', $taxonomy ) );
@@ -261,8 +271,10 @@ final class AB_MCP_Sync_Term_Writer {
 			if ( ! is_array( $found ) ) {
 				return self::locked( 'term:reference_unmapped', sprintf( 'the parent %1$d is not a term of %2$s on this site', $parent, $taxonomy ) );
 			}
-			if ( null !== $live_id && null !== self::loop( (int) $live_id, $parent, $taxonomy ) ) {
-				return self::locked( 'term:parent', sprintf( 'the parent %1$d would close a loop of parents on this site: %2$s', $parent, self::loop( (int) $live_id, $parent, $taxonomy ) ) );
+			$planned = isset( $prepared['parents'] ) && is_array( $prepared['parents'] ) ? $prepared['parents'] : array();
+			$loop    = null === $live_id ? null : self::loop( (int) $live_id, $parent, $taxonomy, $planned );
+			if ( null !== $loop ) {
+				return self::locked( 'term:parent', sprintf( 'the parent %1$d would close a loop of parents on this site: %2$s', $parent, $loop ) );
 			}
 		}
 		// The slug: WordPress refuses an update to a slug another term of the
@@ -480,18 +492,24 @@ final class AB_MCP_Sync_Term_Writer {
 	 * The loop the parent would close on an update, as WordPress finds it
 	 * (wp_find_hierarchy_loop() over the parents of this site, the filter
 	 * wp_check_term_hierarchy_for_loops() of wp_update_term()): the ids, or
-	 * null for none.
+	 * null for none. With $planned, the parents the run gives the terms it
+	 * writes stand for theirs here (the state the run leaves; Codex round 1,
+	 * B4); every other term as it is here.
 	 *
-	 * @param int    $term_id  Term.
-	 * @param int    $parent   The new parent.
-	 * @param string $taxonomy Taxonomy.
+	 * @param int             $term_id  Term.
+	 * @param int             $parent   The new parent.
+	 * @param string          $taxonomy Taxonomy.
+	 * @param array<int,int>  $planned  Term here => the parent the run gives it.
 	 * @return string|null
 	 */
-	private static function loop( $term_id, $parent, $taxonomy ) {
+	private static function loop( $term_id, $parent, $taxonomy, array $planned = array() ) {
 		if ( (int) $parent === (int) $term_id ) {
 			return (string) (int) $term_id;
 		}
-		$loop = wp_find_hierarchy_loop( 'wp_get_term_taxonomy_parent_id', (int) $term_id, (int) $parent, array( (string) $taxonomy ) );
+		$parent_of = array() === $planned ? 'wp_get_term_taxonomy_parent_id' : static function ( $id, $tax ) use ( $planned ) {
+			return isset( $planned[ (int) $id ] ) ? (int) $planned[ (int) $id ] : wp_get_term_taxonomy_parent_id( (int) $id, $tax );
+		};
+		$loop = wp_find_hierarchy_loop( $parent_of, (int) $term_id, (int) $parent, array( (string) $taxonomy ) );
 		if ( ! is_array( $loop ) || array() === $loop ) {
 			return null;
 		}
