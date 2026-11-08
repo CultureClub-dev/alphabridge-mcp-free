@@ -2382,22 +2382,41 @@ final class AB_MCP_Sync_Post_Writer {
 	 * beyond it as the post is saved; for this call and this post the number
 	 * is none (-1, keep them all). A site that keeps no revisions (0) makes
 	 * none, as before; a post of a type without revisions makes none. The
-	 * filter goes again in any case (finally). Every writer of the engine
-	 * saves an existing post through it, forward and back.
+	 * core asks the filter of the type of the post after it
+	 * (wp_{$post_type}_revisions_to_keep, wp-includes/revision.php; for the
+	 * CSS wp_custom_css_revisions_to_keep): the same answer there, as the
+	 * first filter meets the post (Codex round 2 of branch 11, A7). Both
+	 * run last (PHP_INT_MAX) and go again in any case (finally). Every
+	 * writer of the engine saves an existing post through it, forward and
+	 * back.
 	 *
 	 * @param int      $post_id The post.
 	 * @param callable $call    The call that saves it.
 	 * @return mixed What the call answers.
 	 */
 	public static function keeping_revisions( $post_id, callable $call ) {
-		$keep = static function ( $num, $post ) use ( $post_id ) {
+		$keep  = static function ( $num, $post ) use ( $post_id ) {
 			return is_object( $post ) && (int) $post->ID === (int) $post_id && (int) $num > 0 ? -1 : $num;
 		};
-		add_filter( 'wp_revisions_to_keep', $keep, PHP_INT_MAX, 2 );
+		$types = array();
+		$first = static function ( $num, $post ) use ( $post_id, $keep, &$types ) {
+			if ( is_object( $post ) && (int) $post->ID === (int) $post_id && isset( $post->post_type ) ) {
+				$hook = 'wp_' . (string) $post->post_type . '_revisions_to_keep';
+				if ( ! isset( $types[ $hook ] ) ) {
+					$types[ $hook ] = true;
+					add_filter( $hook, $keep, PHP_INT_MAX, 2 );
+				}
+			}
+			return $keep( $num, $post );
+		};
+		add_filter( 'wp_revisions_to_keep', $first, PHP_INT_MAX, 2 );
 		try {
 			return $call();
 		} finally {
-			remove_filter( 'wp_revisions_to_keep', $keep, PHP_INT_MAX );
+			remove_filter( 'wp_revisions_to_keep', $first, PHP_INT_MAX );
+			foreach ( array_keys( $types ) as $hook ) {
+				remove_filter( $hook, $keep, PHP_INT_MAX );
+			}
 		}
 	}
 

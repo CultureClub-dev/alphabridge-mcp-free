@@ -30,7 +30,9 @@ nennt ihre Meldung den Weg.
   Revisionen hält (`WP_POST_REVISIONS`, Filter `wp_revisions_to_keep`),
   löscht `wp_save_post_revision()` sonst die ältesten darüber. Für den
   eigenen Aufruf auf genau diesen Post gilt «alle behalten» (-1,
-  `AB_MCP_Sync_Post_Writer::keeping_revisions()`), vorwärts
+  `AB_MCP_Sync_Post_Writer::keeping_revisions()`, im allgemeinen Filter und
+  im Filter seines Typs `wp_{$post_type}_revisions_to_keep`, den der Kern
+  danach fragt; beide zuletzt, Codex-Runde 2, A7), vorwärts
   (`wp_update_post()`) und zurück (die Zeile), für Beiträge, Seiten und die
   Vorlagen und übrigen Typen aus Zweig 9b. Die Zahl kann die Grenze so
   übersteigen, bis ein späteres Speichern in wp-admin aufräumt; eine Site

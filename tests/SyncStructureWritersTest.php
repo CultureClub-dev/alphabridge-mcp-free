@@ -376,6 +376,15 @@ final class SyncStructureWritersTest extends TestCase {
 		$other = (object) array( 'ID' => 8 );
 		self::assertSame( array( -1, 0, 3 ), \AB_MCP_Sync_Post_Writer::keeping_revisions( 7, static fn() => array( apply_filters( 'wp_revisions_to_keep', 3, $post ), apply_filters( 'wp_revisions_to_keep', 0, $post ), apply_filters( 'wp_revisions_to_keep', 3, $other ) ) ) );
 		self::assertSame( array(), $GLOBALS['ab_test_filters']['wp_revisions_to_keep'] ?? array(), 'The filter goes again.' );
+		// The filter of the type the core asks after it (Codex round 2, A7):
+		// a site's filter there (1) does not win over the call.
+		$css   = (object) array( 'ID' => 7, 'post_type' => 'custom_css' );
+		$limit = static fn( $num ) => 1;
+		add_filter( 'wp_custom_css_revisions_to_keep', $limit, 10, 2 );
+		self::assertSame( -1, \AB_MCP_Sync_Post_Writer::keeping_revisions( 7, static fn() => apply_filters( 'wp_custom_css_revisions_to_keep', apply_filters( 'wp_revisions_to_keep', 3, $css ), $css ) ) );
+		self::assertSame( 1, apply_filters( 'wp_custom_css_revisions_to_keep', 3, $css ), 'Only within the call.' );
+		remove_filter( 'wp_custom_css_revisions_to_keep', $limit, 10 );
+		self::assertSame( array(), array_values( $GLOBALS['ab_test_filters']['wp_custom_css_revisions_to_keep'] ?? array() ), 'Its filter goes again.' );
 		try {
 			\AB_MCP_Sync_Post_Writer::keeping_revisions(
 				7,

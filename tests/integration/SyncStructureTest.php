@@ -116,6 +116,7 @@ final class SyncStructureTest extends TestCase {
 		remove_all_actions( 'pre_delete_term' );
 		remove_all_actions( 'delete_option' );
 		remove_all_filters( 'wp_revisions_to_keep' );
+		remove_all_filters( 'wp_custom_css_revisions_to_keep' );
 		remove_post_type_support( 'nav_menu_item', 'revisions' );
 		wp_cache_flush();
 	}
@@ -1049,6 +1050,9 @@ final class SyncStructureTest extends TestCase {
 		sort( $revisions );
 		self::assertNotSame( array(), $revisions );
 		add_filter( 'wp_revisions_to_keep', static fn( $num, $post ) => 'custom_css' === $post->post_type ? 1 : $num, 10, 2 );
+		// And by the filter of the type, which the core asks after it (Codex
+		// round 2 of branch 11, A7).
+		add_filter( 'wp_custom_css_revisions_to_keep', static fn() => 1 );
 		$kept = static function () use ( $revisions ): array {
 			global $wpdb;
 			return array_map( 'intval', $wpdb->get_col( 'SELECT ID FROM ' . $wpdb->posts . ' WHERE ID IN (' . implode( ',', array_map( 'intval', $revisions ) ) . ') ORDER BY ID' ) );

@@ -336,7 +336,7 @@ final class SyncSafeCallsTest extends TestCase {
 		),
 		'class-sync-post-writer.php' => array(
 			'AB_MCP_Builder_Caches::clear'             => array( 1, 'post_write(): the builder caches of the written post (decision 33).' ),
-			'remove_filter'                            => array( 1, 'keeping_revisions(): the filter wp_revisions_to_keep of the one call that saves a post goes again (Codex round 1 of branch 11, A3; every writer of the engine).' ),
+			'remove_filter'                            => array( 2, 'keeping_revisions(): the filters wp_revisions_to_keep and wp_{$post_type}_revisions_to_keep of the one call that saves a post go again (Codex rounds 1 and 2 of branch 11, A3 and A7; every writer of the engine).' ),
 			'AB_MCP_Builders::markup_meta_refusal'     => array( 2, 'precheck() and restore_right(): a key of a page builder needs unfiltered_html, forward and on the way back, as the free meta writer and its undo ask it (the list of the signatures and the filter, and the capability; GitHub Codex round 1 on free#138, P2); no stored value.' ),
 			'AB_MCP_Page_Cache::purge_posts'           => array( 1, 'post_write(): the page cache of the written post (decision 33).' ),
 			'AB_MCP_Page_Cache::purge_site'            => array( 1, 'post_write(): the page cache of the whole site after a template, a template part, the global styles, a navigation or a reusable block, which any page may show (decision 33; branch 9b).' ),

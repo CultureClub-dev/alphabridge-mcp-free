@@ -260,7 +260,9 @@ Position, die das Theme hier nicht registriert, in der Prüfung des Laufs
   Site eine Zahl von Revisionen hält (`WP_POST_REVISIONS`, Filter
   `wp_revisions_to_keep`), löscht `wp_save_post_revision()` sonst die
   ältesten darüber; für den eigenen Aufruf und diesen Post gilt «alle
-  behalten» (-1), der Filter geht danach wieder (Codex-Runde 1, A3). Die
+  behalten» (-1), der Filter geht danach wieder (Codex-Runde 1, A3); ebenso
+  im Filter des Typs, den der Kern danach fragt
+  (`wp_custom_css_revisions_to_keep`, Codex-Runde 2, A7). Die
   Zahl kann die Grenze so übersteigen, bis ein späteres Speichern in
   wp-admin aufräumt. Eine Site, die keine Revisionen hält (0), bekommt
   keine. Prüffall `testChangedAdditionalCssGoesOverAndBackAndThePageShowsIt`.

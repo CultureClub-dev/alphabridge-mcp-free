@@ -104,6 +104,7 @@ final class SyncContentTest extends TestCase {
 		remove_all_filters( 'map_meta_cap' );
 		remove_all_filters( 'auth_post_meta__seo_title' );
 		remove_all_filters( 'wp_revisions_to_keep' );
+		remove_all_filters( 'wp_page_revisions_to_keep' );
 		remove_all_filters( 'pre_delete_post' );
 		remove_all_filters( 'pre_trash_post' );
 		remove_all_actions( 'pre_delete_term' );
@@ -1022,6 +1023,9 @@ final class SyncContentTest extends TestCase {
 		sort( $revisions );
 		self::assertGreaterThan( 1, count( $revisions ) );
 		add_filter( 'wp_revisions_to_keep', static fn( $num, $post ) => 'page' === $post->post_type ? 1 : $num, 10, 2 );
+		// And by the filter of the type, which the core asks after it (Codex
+		// round 2 of branch 11, A7).
+		add_filter( 'wp_page_revisions_to_keep', static fn() => 1 );
 		$kept = static function () use ( $revisions ): array {
 			global $wpdb;
 			return array_map( 'intval', $wpdb->get_col( 'SELECT ID FROM ' . $wpdb->posts . ' WHERE ID IN (' . implode( ',', array_map( 'intval', $revisions ) ) . ') ORDER BY ID' ) );

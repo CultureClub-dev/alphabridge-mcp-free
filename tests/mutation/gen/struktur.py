@@ -402,7 +402,7 @@ e('a2-row-after-sanitize', 'write_part(): the row read again after the update() 
   "\t\t// the write no call runs a hook.\n\t\t$value[ (int) $write['number'] ] = $clean;", 'it', IT_FILTER)
 # A3: no revision deleted.
 e('a3-keep-filter', 'keeping_revisions(): no revision of the post deleted by the call (A3)', PW,
-  "\t\tadd_filter( 'wp_revisions_to_keep', $keep, PHP_INT_MAX, 2 );\n", "", 'it', IT_CSS)
+  "\t\tadd_filter( 'wp_revisions_to_keep', $first, PHP_INT_MAX, 2 );\n", "", 'it', IT_CSS)
 e('a3-keep-back', 'restore_part(): no revision deleted on the way back (A3)', CW,
   "\t\t\t(int) $backup['row']['post_id'],\n\t\t\tstatic function () use ( $backup ) {",
   "\t\t\t0,\n\t\t\tstatic function () use ( $backup ) {", 'it', IT_CSS)
@@ -418,9 +418,9 @@ e('rev-item-back', 'restore_part(): nor by the row of an item put back', MW,
 e('a3-keep-limit', 'keeping_revisions(): only where the site keeps a number, never revisions where it keeps none (A3)', PW,
   " && (int) $num > 0 ? -1 : $num;", " ? -1 : $num;", 'u', U_CSS)
 e('a3-keep-post', 'keeping_revisions(): only the post of the step (A3)', PW,
-  "is_object( $post ) && (int) $post->ID === (int) $post_id && ", "is_object( $post ) && ", 'u', U_CSS)
+  " && (int) $post->ID === (int) $post_id && (int) $num > 0 ? -1 : $num;", " && (int) $num > 0 ? -1 : $num;", 'u', U_CSS)
 e('a3-keep-goes', 'keeping_revisions(): the filter goes again, also after an error (A3)', PW,
-  "\t\t\tremove_filter( 'wp_revisions_to_keep', $keep, PHP_INT_MAX );\n", "", 'u', U_CSS)
+  "\t\t\tremove_filter( 'wp_revisions_to_keep', $first, PHP_INT_MAX );\n", "", 'u', U_CSS)
 # A4: what the content carries beyond the form through the credential check.
 e('a4-item-menu-name', 'item(): the names and slugs of the menus of an item through the credential check (A4)', DK,
   "\t\t\t\t\tAB_MCP_Sync_Credentials::note( $acc, 'menu_item', 'term:' . $term['taxonomy'] . ':' . $field, AB_MCP_Sync_Credentials::unit( '', (string) $term[ $field ] ) );\n",
@@ -498,6 +498,15 @@ e('a6-post-last-read', 'restore_row(): the last read of a post right before its 
 e('a6-term-last-read', 'restore_row(): the last read of a term right before its row goes back (A6)', 'includes/sync/class-sync-term-writer.php',
   "\t\tif ( ! is_array( $again ) || ! hash_equals( (string) $written, self::row_hash( $again['row'] ) ) ) {",
   "\t\tif ( false ) {", 'term', U_TERMBACK)
+# A7 (Codex round 2): the filter of the type of the post as well.
+e('a7-type-filter', 'keeping_revisions(): the filter wp_{$post_type}_revisions_to_keep of the post as well (A7)', PW,
+  "\t\t\t\t\tadd_filter( $hook, $keep, PHP_INT_MAX, 2 );\n", "", 'u', U_CSS)
+e('a7-type-filter-css', 'keeping_revisions(): no revision of the CSS deleted where wp_custom_css_revisions_to_keep keeps one (A7)', PW,
+  "\t\t\t\t\tadd_filter( $hook, $keep, PHP_INT_MAX, 2 );\n", "", 'it', IT_CSS)
+e('a7-type-filter-page', 'keeping_revisions(): nor of a page where wp_page_revisions_to_keep keeps one (A7)', PW,
+  "\t\t\t\t\tadd_filter( $hook, $keep, PHP_INT_MAX, 2 );\n", "", 'itc', IT_REVPAGE)
+e('a7-type-goes', 'keeping_revisions(): the filter of the type goes again (A7)', PW,
+  "\t\t\t\tremove_filter( $hook, $keep, PHP_INT_MAX );\n", "", 'u', U_CSS)
 # C2: the order of the parts of each kind.
 e('c2-part-order', 'part_order(): the order of the parts of a kind (C2)', EN,
   "\t\treturn null !== $w && defined( $w . '::PART_ORDER' ) ? $w::PART_ORDER : array( 'row', 'meta:', 'terms:' );",
