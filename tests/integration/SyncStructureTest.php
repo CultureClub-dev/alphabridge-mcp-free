@@ -750,6 +750,40 @@ final class SyncStructureTest extends TestCase {
 		self::assertSame( array(), $this->deletions, 'Nothing was deleted, forward or back.' );
 	}
 
+	public function testACredentialInTheNameOfAMenuOrOfItsPositionLandsInNoPackage(): void {
+		// Codex round 1 of branch 11, A4: the content of a menu item carries
+		// the name of its menu, appended after the credential check of the
+		// form; the form of a menu carries the names of its positions. A
+		// credential in either holds the object, and its value is nowhere in
+		// the package of objects.
+		self::pair();
+		self::paired( self::staged() );
+		$secret = 'synthetic-review-value';
+		$menu   = (int) self::one_b( array( 'op' => 'nav_menu', 'name' => 'Shop password=' . $secret ) );
+		$item   = (int) self::one_b( array( 'op' => 'nav_menu_item', 'menu' => $menu, 'args' => array( 'menu-item-title' => 'Imprint', 'menu-item-url' => 'https://example.test/imprint/', 'menu-item-type' => 'custom', 'menu-item-status' => 'publish', 'menu-item-position' => 1 ) ) );
+		$other  = (int) self::one_b( array( 'op' => 'nav_menu', 'name' => 'Footer' ) );
+		self::one_b( array( 'op' => 'theme_mod', 'name' => 'nav_menu_locations', 'value' => array( 'password=' . $secret => $other ) ) );
+		$package = self::b(
+			array(
+				array(
+					'op'          => 'export',
+					'purpose'     => 'objects',
+					'report_hash' => str_repeat( 'a', 64 ),
+					'refs'        => array(
+						array( 'kind' => 'menu_item', 'ref' => (string) $item ),
+						array( 'kind' => 'menu', 'ref' => (string) $other ),
+					),
+					'as'          => 'package',
+				),
+			)
+		)['package'];
+		$taken = AB_MCP_Sync_Import::taken( self::import_package( $package, 'objects', str_repeat( 'a', 64 ) ), 'objects' );
+		self::assertIsArray( $taken, is_wp_error( $taken ) ? $taken->get_error_message() : '' );
+		self::assertCount( 2, $taken['lines'] );
+		self::assertStringNotContainsString( $secret, (string) json_encode( array( $package, $taken ) ), 'No value of a credential in the package.' );
+		self::assertSame( 2, $package['credentials']['held'], (string) json_encode( $package['credentials'] ) );
+	}
+
 	/* ----------------------------------------------------------- widgets */
 
 	public function testAChangedTextWidgetAndImageWidgetGoOverAndBack(): void {

@@ -1065,6 +1065,10 @@ class AB_MCP_Sync_Kind_Menu extends AB_MCP_Sync_Kind_Term {
 				// spelling: every menu locks.
 				AB_MCP_Sync_Canon::spelling( $acc, 'locations.' . $location );
 			} elseif ( $id > 0 && $id === (int) $row['term_id'] ) {
+				// The name of a position is a key of the theme mods, in the form
+				// as it is: through the credential check (Codex round 1 of
+				// branch 11, A4), the place named without it.
+				AB_MCP_Sync_Credentials::note( $acc, 'menu', 'locations', AB_MCP_Sync_Credentials::unit( '', (string) $location ) );
 				$locations[] = (string) $location;
 			}
 		}
@@ -1185,6 +1189,22 @@ class AB_MCP_Sync_Kind_Menu extends AB_MCP_Sync_Kind_Term {
 				'row'   => $columns,
 				'terms' => $terms,
 			);
+			// The names and slugs of its menus are in the content only (the
+			// form names the menus by their identity): through the credential
+			// check as the post kind takes the terms of its content (Codex
+			// round 1 of branch 11, A4). A credential in one holds the item,
+			// and its line carries no content then.
+			$acc = array(
+				'locks'       => $result['locks'],
+				'credentials' => $result['credentials'],
+			);
+			foreach ( $terms as $term ) {
+				foreach ( array( 'name', 'slug' ) as $field ) {
+					AB_MCP_Sync_Credentials::note( $acc, 'menu_item', 'term:' . $term['taxonomy'] . ':' . $field, AB_MCP_Sync_Credentials::unit( '', (string) $term[ $field ] ) );
+				}
+			}
+			$result['locks']       = $acc['locks'];
+			$result['credentials'] = $acc['credentials'];
 		}
 		return $result;
 	}
