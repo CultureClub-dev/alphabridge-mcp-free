@@ -304,12 +304,8 @@ final class AB_MCP_Sync_Kinds {
 			'reason' => 'The stored value of a core option does not keep the rule of its schema.',
 		),
 		// What the engines of the kinds post and term do not carry to their
-		// end (branches 8 and 9; AB_MCP_Sync_Post_Writer, AB_MCP_Sync_Term_Writer),
+		// end (branches 8, 9 and 9b; AB_MCP_Sync_Post_Writer, AB_MCP_Sync_Term_Writer),
 		// and the engines that follow for the other kinds.
-		'post:engine_type'             => array(
-			'stage'  => 'Z8',
-			'reason' => 'The other core types of the kind post (templates, template parts, global styles, navigations, reusable blocks) follow with branch 9b of Z8, right after branch 9; until then the engine of the kind post writes posts and pages.',
-		),
 		'post:other_kind'              => array(
 			'stage'  => 'Z8',
 			'reason' => 'A post type of another kind (an attachment, a menu item, the additional CSS) is written by the engine of its own kind, never by the engine of the kind post: plan it again from a fresh report.',
@@ -344,7 +340,7 @@ final class AB_MCP_Sync_Kinds {
 		),
 		'post:taxonomy_rule'           => array(
 			'stage'  => 'Z8d',
-			'reason' => 'A term of a taxonomy of a plugin or theme on the post waits for the classification of that taxonomy; the engine of the kind post sets category, post_tag and post_format.',
+			'reason' => 'A term of a taxonomy of a plugin or theme on the post waits for the classification of that taxonomy; the engine of the kind post sets category, post_tag, post_format, wp_pattern_category, wp_theme and wp_template_part_area. A term of wp_theme or wp_template_part_area whose name is not its slug waits for its field rule as well: WordPress reads the theme and the area by the name, the engine writes them by the slug.',
 		),
 		'post:meta_spelling'           => array(
 			'stage'  => 'Z8d',
@@ -380,7 +376,19 @@ final class AB_MCP_Sync_Kinds {
 		),
 		'post:reference_unmapped'      => array(
 			'stage'  => 'Z8',
-			'reason' => 'A reference of the object (its parent, a term, an id in its content) has no counterpart on this site: pair or create the target first.',
+			'reason' => 'A reference of the object (its parent, a term, an id in its content, a template part it names by theme and slug) has no counterpart on this site: pair or create the target first.',
+		),
+		'post:theme_mismatch'          => array(
+			'stage'  => 'Z8',
+			'reason' => 'A template, a template part or the global styles belong to a theme (the term of wp_theme) that is not the active theme of this site by that very name, or to none: WordPress finds them by the name of the active theme only, and a theme is never rewritten into another. Activate the same theme on both sites (a change of the theme is a phase of the code, Z8b), or take the object over by hand in the site editor.',
+		),
+		'post:navigation_fallback'     => array(
+			'stage'  => 'Z8',
+			'reason' => 'The navigation would change which navigation WordPress shows in a navigation block without a menu of its own (the most recently published one: a new one published after it, a date moved past it, a status that adds or takes away the latest), and a template or a post of this site shows such a block after the run. Give that block its menu (in the site editor, on the staging site as well), or make or publish the navigation by hand in the site editor of this site, where the change shows, or leave it out of the plan.',
+		),
+		'post:css_markup'              => array(
+			'stage'  => 'Z8',
+			'reason' => 'The custom CSS of the global styles holds a closing tag of STYLE (</style followed by a space, a slash or >), ends in a part of one, or is no text, which the site editor refuses to save, or the global styles are no JSON the check of their CSS reads (WordPress shows nothing of them then): change the styles on the staging site, where the site editor saves them anew as JSON.',
 		),
 		'post:page_template'           => array(
 			'stage'  => 'Z8',

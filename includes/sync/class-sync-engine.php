@@ -629,6 +629,13 @@ final class AB_MCP_Sync_Engine {
 		// The objects the run creates: a reference to one of them is pending,
 		// not missing (B1); the boundary maps it by the pair its step made.
 		$ctx['pending'] = self::pending( $items );
+		// The templates and template parts the run creates, by the names a
+		// content or a page names them by (branch 9b): a template part by
+		// theme and slug, a template by its slug (page_template).
+		$ctx['pending_named'] = self::pending_named( $items, $lines );
+		// The objects as the run writes them, for a navigation (where the run
+		// leaves a navigation block without a menu of its own; branch 9b).
+		$ctx['planned'] = self::planned( $items, $lines );
 		// The parents the run gives the terms of this site it writes: the
 		// check asks a loop of parents of the state the run leaves (branch 9,
 		// Codex round 1, B4); the boundary asks the state as it is then.
@@ -772,6 +779,107 @@ final class AB_MCP_Sync_Engine {
 	}
 
 	/**
+	 * The templates and template parts a run creates, by their names (branch
+	 * 9b): a template part by theme//slug (a content names it so,
+	 * core/template-part), a template by its slug (a page names it so in
+	 * _wp_page_template); from the identity of each line. Only for the check
+	 * before the first write, as pending(): the boundary finds them made.
+	 *
+	 * @param array[] $items The objects of the plan.
+	 * @param array   $lines lines().
+	 * @return array{wp_template:array<string,true>,wp_template_part:array<string,true>}
+	 */
+	private static function pending_named( array $items, array $lines ) {
+		$out = array(
+			'wp_template'      => array(),
+			'wp_template_part' => array(),
+		);
+		foreach ( $items as $one ) {
+			if ( ! isset( $one['op'], $one['kind'], $one['subtype'] ) || 'create' !== $one['op'] || 'post' !== $one['kind'] || ! isset( $out[ (string) $one['subtype'] ] ) ) {
+				continue;
+			}
+			$line = self::line_of( $one, $lines );
+			if ( is_wp_error( $line ) || ! isset( $line['identity']['post_name'], $line['identity']['theme'] ) || ! is_string( $line['identity']['post_name'] ) || ! is_string( $line['identity']['theme'] ) ) {
+				continue;
+			}
+			$name = 'wp_template' === $one['subtype'] ? $line['identity']['post_name'] : $line['identity']['theme'] . '//' . $line['identity']['post_name'];
+
+			$out[ (string) $one['subtype'] ][ $name ] = true;
+		}
+		return $out;
+	}
+
+	/**
+	 * The objects of the kind post whose planned version counts for the
+	 * check of a navigation (AB_MCP_Sync_Post_Writer::fallback_shown(); branch
+	 * 9b, Codex rounds 1 and 2): what is seen after the run is, for each
+	 * object of the run, its planned version where its step is still to be
+	 * written (planned), and the state of this site, read afresh, where its
+	 * step began or ended (done, failed, skipped, unclear, …: whatever it
+	 * wrote or did not write stands here now). The check before the first
+	 * write passes no states: no step has ended, every planned version
+	 * counts. Each with type, op, staging_ref, live_ref, theme and slug of
+	 * the identity, the status the step writes (draft for the confirmed
+	 * choice), and the content of the staging object where it can show a
+	 * navigation block (it names a navigation, a pattern, a reusable block or
+	 * a template part), else none: every object that replaces one of this
+	 * site counts with it, also where its new version shows no navigation
+	 * block any more (Codex round 2, 3), as do the templates, template parts
+	 * and reusable blocks it creates. Only where the run writes a navigation.
+	 *
+	 * @param array[]    $items  The objects of the plan.
+	 * @param array      $lines  lines().
+	 * @param array|null $states seq => state of the steps of the run; null for the check before the first write.
+	 * @return array[]
+	 */
+	private static function planned( array $items, array $lines, $states = null ) {
+		$navigation = false;
+		foreach ( $items as $one ) {
+			if ( isset( $one['kind'], $one['subtype'] ) && 'post' === $one['kind'] && 'wp_navigation' === (string) $one['subtype'] ) {
+				$navigation = true;
+			}
+		}
+		if ( ! $navigation ) {
+			return array();
+		}
+		$out = array();
+		foreach ( $items as $one ) {
+			if ( ! isset( $one['kind'], $one['op'], $one['subtype'], $one['staging_ref'] ) || 'post' !== $one['kind'] ) {
+				continue;
+			}
+			// A step that began or ended: the state of this site counts.
+			if ( is_array( $states ) && ( ! isset( $one['seq'] ) || 'planned' !== ( $states[ (int) $one['seq'] ] ?? '' ) ) ) {
+				continue;
+			}
+			$line = self::line_of( $one, $lines );
+			if ( is_wp_error( $line ) || ! isset( $line['content']['row'] ) || ! is_array( $line['content']['row'] ) ) {
+				continue;
+			}
+			$type    = (string) $one['subtype'];
+			$content = AB_MCP_Sync_Post_Writer::bytes( $line['content']['row']['post_content'] ?? '' );
+			$marked  = false;
+			foreach ( array( 'wp:navigation', 'wp:pattern', 'wp:block ', 'wp:template-part' ) as $mark ) {
+				$marked = $marked || false !== strpos( $content, $mark );
+			}
+			$replaces = 'update' === $one['op'] && isset( $one['live_ref'] );
+			if ( ! $marked && ! $replaces && ! in_array( $type, array( 'wp_template', 'wp_template_part', 'wp_block' ), true ) ) {
+				continue;
+			}
+			$out[] = array(
+				'type'        => $type,
+				'op'          => (string) $one['op'],
+				'staging_ref' => (string) $one['staging_ref'],
+				'live_ref'    => 'update' === $one['op'] && isset( $one['live_ref'] ) ? (int) $one['live_ref'] : null,
+				'theme'       => isset( $line['identity']['theme'] ) && is_string( $line['identity']['theme'] ) ? $line['identity']['theme'] : '',
+				'slug'        => isset( $line['identity']['post_name'] ) && is_string( $line['identity']['post_name'] ) ? $line['identity']['post_name'] : '',
+				'status'      => ! empty( $one['as_draft'] ) ? 'draft' : AB_MCP_Sync_Post_Writer::bytes( $line['content']['row']['post_status'] ?? '' ),
+				'content'     => $marked ? $content : '',
+			);
+		}
+		return $out;
+	}
+
+	/**
 	 * Phase 5: one write boundary (decision 17), under the lock of the call
 	 * (next()); the takeover lock of the object given back in every way.
 	 *
@@ -872,6 +980,21 @@ final class AB_MCP_Sync_Engine {
 		$line = self::line_of( $item, $lines );
 		if ( is_wp_error( $line ) ) {
 			return self::fail_step( $run_id, $seq, 'begun', $line->get_error_message(), $journal );
+		}
+		// For a navigation, the objects of the run by the state of their
+		// steps (planned(); Codex round 2 of branch 9b, 1): a step that ended
+		// before this one (a part that failed) leaves this site as it is.
+		$ctx['planned'] = array();
+		if ( 'wp_navigation' === (string) ( $item['subtype'] ?? '' ) ) {
+			$steps = AB_MCP_Sync_Run::steps( $run_id );
+			if ( is_wp_error( $steps ) ) {
+				return self::fail_step( $run_id, $seq, 'begun', $steps->get_error_message(), $journal );
+			}
+			$states = array();
+			foreach ( $steps as $one ) {
+				$states[ (int) $one['seq'] ] = (string) $one['state'];
+			}
+			$ctx['planned'] = self::planned( isset( $run['plan']['objects'] ) && is_array( $run['plan']['objects'] ) ? $run['plan']['objects'] : array(), $lines, $states );
 		}
 		$prepared = $w::target_of( $line, $item, $ctx );
 		if ( is_wp_error( $prepared ) ) {
@@ -1924,8 +2047,11 @@ final class AB_MCP_Sync_Engine {
 						'message' => sprintf( 'The %1$s %2$d no longer hashes to the target of step %3$d (changed since it was written, or not readable whole).', $one['parts']['object']['kind'] ?? 'post', $live_id, (int) $one['seq'] ),
 					);
 				}
-				// The first published object is the sample.
-				if ( null === $result['sample'] && isset( $one['result']['status'] ) && 'publish' === $one['result']['status'] && $live_id > 0 ) {
+				// The first published object with a page of its own is the
+				// sample: a template, a template part, the global styles, a
+				// navigation and a reusable block have none (their types are not
+				// viewable, is_post_type_viewable(); branch 9b), a term neither.
+				if ( null === $result['sample'] && isset( $one['result']['status'] ) && 'publish' === $one['result']['status'] && $live_id > 0 && self::viewable( $one, $live_id ) ) {
 					$result['sample'] = array(
 						'seq'      => (int) $one['seq'],
 						'live_ref' => $live_id,
@@ -2056,6 +2182,24 @@ final class AB_MCP_Sync_Engine {
 		// close pushes the first out.
 		AB_MCP_Protected_Store::cleanup();
 		return array( 'next' => $result['message'] . ' The way back for its pairs is wp_site_revert (action=plan with this run_id).' );
+	}
+
+	/**
+	 * Whether the object a write step wrote has a page of its own for the
+	 * sample (decision 33): a post of a type WordPress makes viewable
+	 * (is_post_type_viewable()), read from its row.
+	 *
+	 * @param array $step    The write step.
+	 * @param int   $live_id The object here.
+	 * @return bool
+	 */
+	private static function viewable( array $step, $live_id ) {
+		$kind = is_array( $step['parts'] ) && isset( $step['parts']['object']['kind'] ) ? (string) $step['parts']['object']['kind'] : 'post';
+		if ( 'post' !== $kind ) {
+			return false;
+		}
+		$type = AB_MCP_Sync_Rows::post_type_of( (int) $live_id );
+		return is_string( $type ) && is_post_type_viewable( $type );
 	}
 
 	/**

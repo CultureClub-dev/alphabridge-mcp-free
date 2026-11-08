@@ -550,7 +550,7 @@ return array(
 		'id'      => 'lauf/writer-template-offered',
 		'clause'  => 'precheck(): the theme of this site has to offer the template (B7)',
 		'file'    => $pw,
-		'search'  => "\t\t\tif ( ! is_array( \$templates ) || ! isset( \$templates[ \$prepared['postarr']['page_template'] ] ) ) {",
+		'search'  => "\t\t\tif ( ! self::template_offered( (string) \$prepared['postarr']['page_template'], \$type ) ) {",
 		'replace' => "\t\t\tif ( false ) {",
 		'run'     => $unit( 'SyncRunTest', 'testTheTemplateOfAPageGoesThroughTheCoreWayAndTheThemeHasToOfferIt' ),
 		'expect'  => '/testTheTemplateOfAPageGoesThroughTheCoreWayAndTheThemeHasToOfferIt/',

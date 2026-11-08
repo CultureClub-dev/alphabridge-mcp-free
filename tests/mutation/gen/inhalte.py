@@ -251,9 +251,9 @@ e('post-roundtrip', 'meta_value(): a serialized value serialize() would not give
 e('post-new-protected', 'new_meta_allowed(): a protected key of a new post is answered at the object only', PW,
   "\t\tif ( is_protected_meta( $key, 'post' ) ) {\n\t\t\treturn false;", "\t\tif ( false ) {\n\t\t\treturn false;", 'unit', P_RULE)
 e('post-new-auth', 'new_meta_allowed(): a key with an authorization filter of its own is answered at the object only', PW,
-  "\t\treturn ! has_filter( \"auth_post_meta_{$key}_for_{$type}\" ) && ! has_filter( \"auth_post_meta_{$key}\" );", "\t\treturn true;", 'unit', P_RULE)
+  "\t\treturn self::auth_follows_post( \"auth_post_meta_{$key}_for_{$type}\" ) && self::auth_follows_post( \"auth_post_meta_{$key}\" );", "\t\treturn true;", 'unit', P_RULE)
 e('post-new-auth-subtype', 'new_meta_allowed(): also by the subtype (register_post_meta() with an auth_callback)', PW,
-  "\t\treturn ! has_filter( \"auth_post_meta_{$key}_for_{$type}\" ) && ! has_filter( \"auth_post_meta_{$key}\" );", "\t\treturn ! has_filter( \"auth_post_meta_{$key}\" );", 'unit', P_RULE)
+  "\t\treturn self::auth_follows_post( \"auth_post_meta_{$key}_for_{$type}\" ) && self::auth_follows_post( \"auth_post_meta_{$key}\" );", "\t\treturn self::auth_follows_post( \"auth_post_meta_{$key}\" );", 'unit', P_RULE)
 e('post-differing-equal', 'differing(): a key equal on both sides is no part (decision 28)', PW,
   "\t\t\tif ( self::targets( $prepared, $key ) !== self::meta_values( $current, $key ) ) {", "\t\t\tif ( true ) {", 'unit', P_RULE)
 e('post-differing-excluded', 'differing(): an excluded key and a credential are never written', PW,
@@ -337,7 +337,7 @@ e('term-loop-planned', 'loop(): a term the run writes stands with the parent the
 C_B4R2 = 'testAChainOfCategoriesTurnedOverGoesOverAndBack'
 U_DEPTH = 'testTheTermsOfARunAreWrittenFromTheRootOfTheTreeItLeavesDown'
 e('push-order-depth', 'order(): the terms by their depth in the tree the run leaves, ancestors first (Codex rounds 1 and 2, B4)', PU,
-  "\t\t\t\t\treturn 'term' === $items[ $n ]['kind'] ? array( 0, isset( $items[ $n ]['depth'] ) ? (int) $items[ $n ]['depth'] : 0, (int) $n ) : array( 1, 0, (int) $n );", "\t\t\t\t\treturn 'term' === $items[ $n ]['kind'] ? array( 0, 0, (int) $n ) : array( 1, 0, (int) $n );", 'unit', U_DEPTH)
+  "\t\t\t\t\t\treturn array( 0, isset( $items[ $n ]['depth'] ) ? (int) $items[ $n ]['depth'] : 0, (int) $n );", "\t\t\t\t\t\treturn array( 0, 0, (int) $n );", 'unit', U_DEPTH)
 e('push-depth-set', 'plan(): the depth of each term goes with its item into the order', PU,
   "\t\t\t$items[ $n ]['depth'] = $depth;\n", '', 'it', C_B4R2)
 e('push-depth-given', 'term_depths(): a term of the run stands under the parent the run gives it when the run writes that parent too', PU,
@@ -354,10 +354,13 @@ e('post-slug-trashed-draft', 'slug_refusal(): a post in the trash with the slug 
   "\t\t$trashed = self::trashed_holder( $slug, $id );\n\t\tif ( null === $trashed || 0 !== $trashed ) {", "\t\t$trashed = in_array( $status, $drafts, true ) ? 0 : self::trashed_holder( $slug, $id );\n\t\tif ( null === $trashed || 0 !== $trashed ) {", 'unit', P_SLUG)
 
 # --------------------------------------------- the locks of the kind post after the decision on branch 9b
-e('post-type-branch-9b', 'target_of(): post:engine_type holds the five core types of branch 9b of Z8, they alone', PW,
-  "\t\t\treturn self::locked( in_array( $type, self::TYPES_BRANCH_9B, true ) ? 'post:engine_type' : 'post:other_kind', sprintf( 'post type %s', $type ) );", "\t\t\treturn self::locked( 'post:engine_type', sprintf( 'post type %s', $type ) );", 'unit', P_LOCKS)
+# Moved over with branch 9b (heikel/z8-vorlagen): post:engine_type is gone,
+# the five core types are written (their clauses: tests/mutation/gen/vorlagen.py);
+# these two hold what took the place of the lock in target_of().
+e('post-type-branch-9b', 'target_of(): the five core types of branch 9b have a target since branch 9b (post:engine_type gone)', PW,
+  "\t\tif ( ! in_array( $type, self::TYPES, true ) ) {\n\t\t\t// A type of another kind", "\t\tif ( ! in_array( $type, array( 'post', 'page' ), true ) ) {\n\t\t\t// A type of another kind", 'unit', P_LOCKS)
 e('post-type-other-kind', 'target_of(): a type of another kind is never written by the engine of the kind post (post:other_kind)', PW,
-  "\t\t\treturn self::locked( in_array( $type, self::TYPES_BRANCH_9B, true ) ? 'post:engine_type' : 'post:other_kind', sprintf( 'post type %s', $type ) );", "\t\t\treturn self::locked( 'post:other_kind', sprintf( 'post type %s', $type ) );", 'unit', P_LOCKS)
+  "\t\t\treturn self::locked( 'post:other_kind', sprintf( 'post type %s', $type ) );", "\t\t\treturn self::locked( 'post:lock_unread', sprintf( 'post type %s', $type ) );", 'unit', P_LOCKS)
 e('post-status-trash', 'target_of(): the trash is a deletion, with the deletions (post:in_trash, Z8d)', PW,
   "$key = 'trash' === $status ? 'post:in_trash' :", "$key = 'trash' === $status ? 'post:status_rule' :", 'unit', P_LOCKS)
 e('post-status-auto-draft', 'target_of(): an auto-draft is never taken over (post:auto_draft)', PW,

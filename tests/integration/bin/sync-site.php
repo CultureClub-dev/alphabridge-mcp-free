@@ -28,7 +28,10 @@
  * exit_at: a hook at which the process exits inside a boundary, exit_key: only for this meta key), revert (args of
  * wp_site_revert, exit_at and exit_key as for push; hook_meta: post, key, value a save_post hook writes), raw_post (post, set: columns written
  * by SQL), term_order (post, term, taxonomy, order: the order of that relationship by SQL) and wp_version (version: the
- * $wp_version the steps after it see), and write_access (the site mode
+ * $wp_version the steps after it see), rest (method, route, body: a request
+ * to the REST server of this process, its status and data), global_styles_id
+ * (the post of the global styles of the active theme, made where there is
+ * none), set_term_slugs (post, terms by slug, taxonomy), and write_access (the site mode
  * Full, as a person switches it on), staging_raw and staging_raw_set
  * (value: the record of role and pair as stored, past save()); for what the
  * route loads: loaded
@@ -403,6 +406,28 @@ foreach ( $ab_it_steps as $ab_it_i => $ab_it_step ) {
 		case 'as_user':
 			wp_set_current_user( (int) $ab_it_step['user'] );
 			$ab_it_out = get_current_user_id();
+			break;
+		case 'rest':
+			// A request to the REST server of this process, as the site editor
+			// saves a template, a template part or the global styles (Z8
+			// branch 9b): method, route, body (its parameters).
+			$ab_it_request = new WP_REST_Request( (string) $ab_it_step['method'], (string) $ab_it_step['route'] );
+			foreach ( isset( $ab_it_step['body'] ) && is_array( $ab_it_step['body'] ) ? $ab_it_step['body'] : array() as $ab_it_name => $ab_it_value ) {
+				$ab_it_request->set_param( $ab_it_name, $ab_it_value );
+			}
+			$ab_it_response = rest_do_request( $ab_it_request );
+			$ab_it_out      = array(
+				'status' => $ab_it_response->get_status(),
+				'data'   => rest_get_server()->response_to_data( $ab_it_response, false ),
+			);
+			break;
+		case 'global_styles_id':
+			// The post of the global styles of the active theme, made as the
+			// site editor makes it where there is none.
+			$ab_it_out = WP_Theme_JSON_Resolver::get_user_global_styles_post_id();
+			break;
+		case 'set_term_slugs':
+			$ab_it_out = wp_set_object_terms( (int) $ab_it_step['post'], array_map( 'strval', $ab_it_step['terms'] ), $ab_it_step['taxonomy'] );
 			break;
 		default:
 			fwrite( STDERR, "Unknown op {$ab_it_step['op']}.\n" );

@@ -25,7 +25,9 @@
  * the way back is wp_site_revert).
  *
  * WHAT A PLAN HOLDS (this version): entries of the kind post of the types
- * the post engine writes (AB_MCP_Sync_Post_Writer::TYPES) and of the kind
+ * the post engine writes (AB_MCP_Sync_Post_Writer::TYPES: posts and pages,
+ * since branch 9b the templates, template parts, global styles,
+ * navigations and reusable blocks as well) and of the kind
  * term of its taxonomies (AB_MCP_Sync_Term_Writer::TAXONOMIES; branch 9);
  * every other entry chosen is named as locked with its reason and stage
  * and is no step. The steps: the check
@@ -86,6 +88,24 @@ final class AB_MCP_Sync_Push {
 	 * then the next entries from the same report.
 	 */
 	const MAX_OBJECTS = AB_MCP_Sync_Run::MAX_STEPS - AB_MCP_Sync_Run::FRAME;
+
+	/**
+	 * The types of the kind post another object names by a name, not an id,
+	 * in the order their steps come before the other objects (branch 9b;
+	 * order()): a template part (core/template-part, theme and slug), a
+	 * template (page_template). The order is no dependency: a step whose
+	 * part is not there yet is refused with its lock as it writes.
+	 */
+	const NAMED_FIRST = array( 'wp_template_part', 'wp_template' );
+
+	/**
+	 * The types whose steps come last where nothing orders them otherwise
+	 * (branch 9b, Codex round 2): a navigation, whose check asks what the
+	 * other objects of the run leave (AB_MCP_Sync_Post_Writer::
+	 * fallback_shown()): the steps that do not need it have ended by then,
+	 * and the check reads what they wrote.
+	 */
+	const LAST = array( 'wp_navigation' );
 
 	/** Steps a preview names at most (all are counted). */
 	const NAMED = 200;
@@ -423,6 +443,15 @@ final class AB_MCP_Sync_Push {
 					}
 				}
 			}
+			if ( 'post' === $item['kind'] ) {
+				// The references the boundary asks by an id or a name, for the
+				// order (branch 9b, Codex round 1, B): reusable blocks and
+				// navigations by their ref, template parts by theme and slug,
+				// the template a page names; and the name of the object itself
+				// where another names it so.
+				$item['order_refs'] = AB_MCP_Sync_Post_Writer::order_refs( $line );
+				$item['order_name'] = AB_MCP_Sync_Post_Writer::order_name( $line );
+			}
 			$items[ $n ] = $item;
 		}
 		$refused = self::too_many( count( $items ) );
@@ -541,18 +570,20 @@ final class AB_MCP_Sync_Push {
 				: array( 'post_type' => (string) ( $item['subtype'] ?? '' ), 'post_name' => (string) $item['staging_ref'], 'theme' => '' );
 			$bytes += AB_MCP_Sync_Backup::size_of( is_array( $current ) ? $current : array( 'absent' => true, 'identity' => $absent ) );
 		}
+		$depends_of = array();
 		foreach ( $items as $n => $item ) {
 			$depends = array( 1 );
 			foreach ( $item['depends_on'] as $m ) {
 				$depends[] = $by_n[ $m ];
 			}
+			$depends_of[ $n ] = array_values( array_unique( $depends ) );
 			$steps[] = array(
 				'op'      => 'write',
 				'phase'   => 5,
 				'depends' => array_values( array_unique( $depends ) ),
 				'pair_id' => isset( $item['pair_id'] ) ? $item['pair_id'] : null,
 			);
-			unset( $items[ $n ]['depends_on'], $items[ $n ]['refs'], $items[ $n ]['parent_ref'], $items[ $n ]['depth'] );
+			unset( $items[ $n ]['depends_on'], $items[ $n ]['after'], $items[ $n ]['refs'], $items[ $n ]['order_refs'], $items[ $n ]['order_name'], $items[ $n ]['parent_ref'], $items[ $n ]['depth'] );
 		}
 		$writes  = range( 2, $seq );
 		$steps[] = array( 'op' => 'post', 'phase' => 7, 'depends' => array( 1 ) );
@@ -570,9 +601,12 @@ final class AB_MCP_Sync_Push {
 		// the parents of its ancestors here, term_depths()), so a token whose
 		// order no longer holds is stale like any other change of the state
 		// (branch 9, Codex round 3, B).
+		// The dependencies of each step with it: whether an edge is one rests
+		// on this site as well (a part it has as a file or a row; Codex round 2
+		// of branch 9b, 2), and a dependency decides which step is skipped.
 		$order = array();
-		foreach ( $items as $item ) {
-			$order[] = array( (int) $item['seq'], (string) $item['kind'], (string) $item['staging_ref'] );
+		foreach ( $items as $n => $item ) {
+			$order[] = array( (int) $item['seq'], (string) $item['kind'], (string) $item['staging_ref'], $depends_of[ $n ] );
 		}
 		$state = hash(
 			'sha256',
@@ -678,6 +712,19 @@ final class AB_MCP_Sync_Push {
 			return $lock( sprintf( 'The kind %s is written from a later branch of Z8 (media: Z10; menus, widget areas, the additional CSS and options: Z11).', (string) $entry['kind'] ), 'attachment' === $entry['kind'] ? 'Z10' : 'Z11' );
 		} elseif ( ! in_array( (string) ( $entry['subtype'] ?? '' ), AB_MCP_Sync_Post_Writer::TYPES, true ) ) {
 			return $lock( sprintf( 'The engine of the kind post writes the types %1$s; the type %2$s waits for its field schema.', implode( ', ', AB_MCP_Sync_Post_Writer::TYPES ), (string) ( $entry['subtype'] ?? '' ) ), 'Z8d' );
+		} elseif ( in_array( (string) ( $entry['subtype'] ?? '' ), AB_MCP_Sync_Post_Writer::THEMED, true ) ) {
+			// A template, a template part or the global styles of a theme that
+			// is not the active one here (branch 9b): a staging site keeps the
+			// rows of every theme it tried, so the plan names them locked with
+			// the way (all leaves them out) rather than the check before the
+			// first write ending the run for them; the check and the boundary
+			// ask it again (AB_MCP_Sync_Post_Writer::theme_refusal()).
+			$theme = isset( $entry['staging']['identity']['theme'] ) && is_string( $entry['staging']['identity']['theme'] ) ? $entry['staging']['identity']['theme'] : '';
+			$other = AB_MCP_Sync_Post_Writer::inactive_theme( $theme );
+			if ( null !== $other ) {
+				$held = AB_MCP_Sync_Kinds::lock( 'post', 'theme_mismatch' );
+				return $lock( sprintf( '%1$s (post:theme_mismatch) The %2$s %3$s %4$s.', (string) $held['reason'], (string) $entry['subtype'], (string) ( $entry['staging']['identity']['post_name'] ?? '' ), $other ), (string) $held['stage'] );
+			}
 		}
 		$staging = isset( $entry['staging']['ref'] ) ? (string) $entry['staging']['ref'] : '';
 		if ( '' === $staging ) {
@@ -722,9 +769,24 @@ final class AB_MCP_Sync_Push {
 				$at[ ( 'term' === $item['kind'] ? 'term' : 'post' ) . "\0" . $item['staging_ref'] ] = $n;
 			}
 		}
+		// The objects of the kind post the run writes, created or changed, by
+		// their staging id and by the name another object names them by
+		// (branch 9b, Codex round 1, B).
+		$posts = array();
+		$named = array();
+		foreach ( $items as $n => $item ) {
+			if ( 'post' !== $item['kind'] ) {
+				continue;
+			}
+			$posts[ (int) $item['staging_ref'] ] = $n;
+			if ( isset( $item['order_name'] ) && null !== $item['order_name'] ) {
+				$named[ (string) $item['order_name'] ] = $n;
+			}
+		}
 		$edges = array();
 		foreach ( $items as $n => $item ) {
 			$items[ $n ]['depends_on'] = array();
+			$items[ $n ]['after']      = array();
 			foreach ( $item['refs'] as list( $space, $id ) ) {
 				$key = $space . "\0" . $id;
 				if ( isset( $at[ $key ] ) && $at[ $key ] !== $n ) {
@@ -734,6 +796,42 @@ final class AB_MCP_Sync_Push {
 					$edges[ $n ][ $n ] = true;
 				}
 			}
+			// Each reference the boundary asks (a reusable block or a
+			// navigation by its ref, a template part by theme and slug, the
+			// template of a page) is an edge where its target is written in
+			// the same run. It is a dependency only where this site could not
+			// resolve the target without its step (a target the run creates
+			// and that has no row and no file of the active theme here:
+			// without it the boundary refuses the object; a cycle is locked);
+			// else it is an order, the target first, the object written all
+			// the same where the target fails (a target the run changes, or a
+			// new row of a part the theme has as a file; Codex rounds 1 and 2).
+			$targets = array();
+			foreach ( isset( $item['order_refs']['posts'] ) ? $item['order_refs']['posts'] : array() as $id ) {
+				if ( isset( $posts[ (int) $id ] ) ) {
+					$targets[] = array( $posts[ (int) $id ], false );
+				}
+			}
+			foreach ( array( 'parts', 'templates' ) as $list ) {
+				foreach ( isset( $item['order_refs'][ $list ] ) ? $item['order_refs'][ $list ] : array() as $name ) {
+					if ( isset( $named[ (string) $name ] ) ) {
+						$targets[] = array( $named[ (string) $name ], isset( $item['order_refs']['here'][ (string) $name ] ) );
+					}
+				}
+			}
+			foreach ( $targets as list( $m, $here ) ) {
+				if ( $m === $n ) {
+					continue;
+				}
+				if ( 'create' === $items[ $m ]['op'] && ! $here ) {
+					$items[ $n ]['depends_on'][] = $m;
+					$edges[ $n ][ $m ]           = true;
+				} else {
+					$items[ $n ]['after'][] = $m;
+				}
+			}
+			$items[ $n ]['after'] = array_values( array_unique( $items[ $n ]['after'] ) );
+			$items[ $n ]['depends_on'] = array_values( array_unique( $items[ $n ]['depends_on'] ) );
 		}
 		$locked = array();
 		foreach ( AB_MCP_Sync_Decision::cycles( $edges ) as $members ) {
@@ -784,6 +882,7 @@ final class AB_MCP_Sync_Push {
 		// ancestors of a term stand where the run puts them when it is
 		// written, and as that tree has no loop, its new parent is never one
 		// of its descendants; branch 9, Codex rounds 1 and 2, B4), then the
+		// template parts and the templates (NAMED_FIRST, branch 9b), then the
 		// other objects; within the same depth by the entry of the report
 		// (stable, whatever order the entries came in). The order is no
 		// dependency: a step whose term deviates leaves the others to run,
@@ -796,7 +895,15 @@ final class AB_MCP_Sync_Push {
 			$left,
 			static function ( $a, $b ) use ( $items ) {
 				$rank = static function ( $n ) use ( $items ) {
-					return 'term' === $items[ $n ]['kind'] ? array( 0, isset( $items[ $n ]['depth'] ) ? (int) $items[ $n ]['depth'] : 0, (int) $n ) : array( 1, 0, (int) $n );
+					if ( 'term' === $items[ $n ]['kind'] ) {
+						return array( 0, isset( $items[ $n ]['depth'] ) ? (int) $items[ $n ]['depth'] : 0, (int) $n );
+					}
+					// The objects named by a name rather than an id (branch 9b): the
+					// template parts a template names by theme and slug, then the
+					// templates a page names by slug (page_template), then the rest.
+					$named = array_search( (string) ( $items[ $n ]['subtype'] ?? '' ), self::NAMED_FIRST, true );
+					$last  = in_array( (string) ( $items[ $n ]['subtype'] ?? '' ), self::LAST, true ) ? 1 : 0;
+					return array( 1, false === $named ? count( self::NAMED_FIRST ) + $last : (int) $named, (int) $n );
 				};
 				return $rank( $a ) <=> $rank( $b );
 			}
@@ -805,19 +912,30 @@ final class AB_MCP_Sync_Push {
 		while ( array() !== $left && $rounds < self::MAX_OBJECTS + 1 ) {
 			++$rounds;
 			$progress = false;
-			foreach ( $left as $n => $item ) {
-				$ready = true;
-				foreach ( $item['depends_on'] as $m ) {
-					if ( ! isset( $placed[ $m ] ) ) {
-						$ready = false;
+			// The first entry whose dependencies and changed targets are
+			// placed (a changed target no longer in the plan counts as placed);
+			// where the changed targets close a loop of their own, the first
+			// whose dependencies are placed (they are an order, no dependency).
+			foreach ( array( true, false ) as $with_after ) {
+				foreach ( $left as $n => $item ) {
+					$ready = true;
+					foreach ( $item['depends_on'] as $m ) {
+						if ( ! isset( $placed[ $m ] ) ) {
+							$ready = false;
+						}
 					}
-				}
-				if ( $ready ) {
-					$ordered[ $n ] = $item;
-					$placed[ $n ]  = true;
-					unset( $left[ $n ] );
-					$progress = true;
-					break;
+					foreach ( $with_after ? $item['after'] : array() as $m ) {
+						if ( isset( $left[ $m ] ) ) {
+							$ready = false;
+						}
+					}
+					if ( $ready ) {
+						$ordered[ $n ] = $item;
+						$placed[ $n ]  = true;
+						unset( $left[ $n ] );
+						$progress = true;
+						break 2;
+					}
 				}
 			}
 			if ( ! $progress ) {

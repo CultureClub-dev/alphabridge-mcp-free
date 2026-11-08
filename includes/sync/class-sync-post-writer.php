@@ -9,7 +9,19 @@
  * WHAT IS WRITTEN (TYPES, TAXONOMIES, CORE_META): a post or page (its row:
  * status and dates, title, content, excerpt, slug, parent, menu order,
  * author, comment and ping status, mime type), its terms of category,
- * post_tag and post_format, and its meta by the field rule of decision 28
+ * post_tag and post_format; since branch 9b the other core types of the
+ * kind post (decision 25): a template, a template part and the global
+ * styles of the active theme (THEMED: their theme, the term of wp_theme,
+ * is the active stylesheet of this site, else post:theme_mismatch; the
+ * area of a template part, the term of wp_template_part_area, is a field
+ * written by its slug, not part of the identity), a navigation (the one
+ * WordPress shows where a navigation block has no menu of its own stays
+ * the one it was, else post:navigation_fallback) and a reusable block
+ * (synced or not, its pattern categories by their pairs); a template part
+ * a content names by theme and slug (core/template-part) has to be one
+ * this site shows (a row, a file of its theme, or one the run creates
+ * first), else post:reference_unmapped; the custom CSS of the global
+ * styles keeps the rule of the site editor (post:css_markup); and its meta by the field rule of decision 28
  * (branch 9): of a post here, each key whose values differ between the
  * target and this site, with the right of its operation through
  * map_meta_cap at the post (edit_, add_ or delete_post_meta; a key the map
@@ -77,6 +89,7 @@ require_once __DIR__ . '/class-sync-refs.php';
 require_once __DIR__ . '/class-sync-kinds.php';
 require_once __DIR__ . '/class-sync-exclusions.php';
 require_once __DIR__ . '/class-sync-db-kinds.php';
+require_once __DIR__ . '/class-sync-identity.php';
 require_once __DIR__ . '/class-sync-credentials.php';
 require_once dirname( __DIR__ ) . '/tools/class-tools-content.php';
 require_once dirname( __DIR__ ) . '/builders/class-builders.php';
@@ -87,18 +100,50 @@ require_once dirname( __DIR__ ) . '/class-redactor.php';
  */
 final class AB_MCP_Sync_Post_Writer {
 
-	/** The post types this version writes. */
-	const TYPES = array( 'post', 'page' );
+	/**
+	 * The post types this version writes: posts and pages (branches 8 and
+	 * 9) and the other core types of the kind post (branch 9b of Z8, the
+	 * decision of Thomas of 08.11.2026, «A: eigener Zweig 9b»; decision 25).
+	 */
+	const TYPES = array( 'post', 'page', 'wp_block', 'wp_template', 'wp_template_part', 'wp_global_styles', 'wp_navigation' );
 
 	/**
-	 * The other core types of the kind post, which follow with branch 9b of
-	 * Z8 (heikel/z8-vorlagen, right after branch 9; the decision of Thomas
-	 * of 08.11.2026): locked with post:engine_type until then, they alone.
+	 * The types whose identity holds their theme (AB_MCP_Sync_Identity::
+	 * THEMED: the term of wp_theme): WordPress finds them by the name of the
+	 * active theme only (get_block_template(),
+	 * WP_Theme_JSON_Resolver::get_user_data_from_wp_global_styles(),
+	 * wp_filter_wp_template_unique_post_slug()), so they are written only
+	 * where that theme is the active one here (theme_refusal()).
 	 */
-	const TYPES_BRANCH_9B = array( 'wp_block', 'wp_template', 'wp_template_part', 'wp_global_styles', 'wp_navigation' );
+	const THEMED = AB_MCP_Sync_Identity::THEMED;
 
-	/** The taxonomies this version writes the terms of. */
-	const TAXONOMIES = array( 'category', 'post_tag', 'post_format' );
+	/**
+	 * The types any page of this site may show: a template, a template
+	 * part, the global styles, a navigation, a reusable block. After a
+	 * write the page cache of the whole site is emptied, not that of the
+	 * object (post_write()).
+	 */
+	const SITE_WIDE = array( 'wp_block', 'wp_template', 'wp_template_part', 'wp_global_styles', 'wp_navigation' );
+
+	/**
+	 * The taxonomies this version writes the terms of: those of posts
+	 * (category, post_tag, post_format), the pattern categories of a
+	 * reusable block, the theme of a themed type and the area of a
+	 * template part (branch 9b).
+	 */
+	const TAXONOMIES = array( 'category', 'post_tag', 'post_format', 'wp_pattern_category', 'wp_theme', 'wp_template_part_area' );
+
+	/**
+	 * The taxonomies of IDENTITY_TAXONOMIES that WordPress reads by the
+	 * name of their term, not its slug: the theme
+	 * (_build_block_template_result_from_post() and the queries of the
+	 * templates and the global styles by the field name) and the area of a
+	 * template part (its name is the area). Written by the slug
+	 * (wp_set_object_terms() makes a missing term with the slug as its
+	 * name), so a term whose name is not its slug, on either side, waits
+	 * for its field rule (post:taxonomy_rule).
+	 */
+	const NAMED_TAXONOMIES = array( 'wp_theme', 'wp_template_part_area' );
 
 	/**
 	 * The core meta keys with an API of their own (decision 28): the
@@ -109,12 +154,15 @@ final class AB_MCP_Sync_Post_Writer {
 	const CORE_META = array( '_wp_page_template', '_thumbnail_id' );
 
 	/**
-	 * The taxonomies whose terms are part of the identity of the post that
-	 * carries them (AB_MCP_Sync_Kinds::OWNERSHIP, kind post): compared and
-	 * written by their slug, not by a term id (the term may not exist here
-	 * yet; wp_set_object_terms() makes it; Codex round 1 of branch 8, B6).
+	 * The taxonomies whose terms are part of the post that carries them, not
+	 * term objects (AB_MCP_Sync_Kinds::OWNERSHIP, kind post; the canonical
+	 * form names them by slug, AB_MCP_Sync_Db_Kind::terms_form()): compared
+	 * and written by their slug, not by a term id (the term may not exist
+	 * here yet; wp_set_object_terms() makes it; Codex round 1 of branch 8,
+	 * B6). The format of a post; the theme and the area of a template
+	 * (branch 9b).
 	 */
-	const IDENTITY_TAXONOMIES = array( 'post_format' );
+	const IDENTITY_TAXONOMIES = array( 'post_format', 'wp_theme', 'wp_template_part_area' );
 
 	/** The statuses a target may have (the trash is a deletion, decision 22; auto-draft no content). */
 	const STATUSES = array( 'publish', 'future', 'draft', 'pending', 'private' );
@@ -129,6 +177,15 @@ final class AB_MCP_Sync_Post_Writer {
 
 	/** The rules a value before is composed by (value_rules); a value of other rules is not shown. */
 	const VALUE_RULES = 2;
+
+	/** Posts fallback_shown() reads at most; more is fail closed. */
+	const FALLBACK_POSTS = 200;
+
+	/** Levels of template parts and patterns fallback_shown() follows at most; deeper is fail closed. */
+	const FALLBACK_DEPTH = 16;
+
+	/** Contents fallback_shown() reads at most for one navigation; more is fail closed. */
+	const FALLBACK_STEPS = 2000;
 
 	/** Characters one value is shown with at most in value_before (before_value()). */
 	const VALUE_CHARS = 80;
@@ -178,10 +235,11 @@ final class AB_MCP_Sync_Post_Writer {
 			);
 		}
 		if ( ! in_array( $type, self::TYPES, true ) ) {
-			// The five core types of branch 9b (post:engine_type); a type of
-			// another kind (an attachment, a menu item, the additional CSS) is
-			// never written by the engine of the kind post (post:other_kind).
-			return self::locked( in_array( $type, self::TYPES_BRANCH_9B, true ) ? 'post:engine_type' : 'post:other_kind', sprintf( 'post type %s', $type ) );
+			// A type of another kind (an attachment, a menu item, the
+			// additional CSS) is never written by the engine of the kind post
+			// (post:other_kind); since branch 9b every core type of the kind
+			// post is one of TYPES.
+			return self::locked( 'post:other_kind', sprintf( 'post type %s', $type ) );
 		}
 		// What the canonical form of the staging object found (a page builder
 		// that is not released, decision 31; a value it cannot read; a
@@ -253,6 +311,13 @@ final class AB_MCP_Sync_Post_Writer {
 		if ( array() !== $missing ) {
 			return self::locked( 'post:reference_unmapped', self::missing_text( $missing ) );
 		}
+		// The template parts the content names by theme and slug
+		// (core/template-part; branch 9b): no id to map, so each has to be one
+		// this site shows, or one the same run creates first.
+		$held = self::parts_refusal( self::part_refs( $content['content'] ), isset( $ctx['pending_named'] ) && is_array( $ctx['pending_named'] ) ? $ctx['pending_named'] : array() );
+		if ( null !== $held ) {
+			return $held;
+		}
 		$texts = array();
 		foreach ( array( 'post_title', 'post_excerpt', 'post_content_filtered' ) as $column ) {
 			$texts[ $column ] = AB_MCP_Sync_Refs::rewrite_text( $row[ $column ], $plan, array(), $changed );
@@ -316,7 +381,13 @@ final class AB_MCP_Sync_Post_Writer {
 			if ( isset( $term['term_order'] ) && 0 !== (int) $term['term_order'] ) {
 				return self::locked( 'post:term_order', sprintf( 'the term %1$s of %2$s on the post of the staging site carries the term_order %3$d', self::bytes( $term['slug'] ), $taxonomy, (int) $term['term_order'] ) );
 			}
-			if ( 'post_format' === $taxonomy ) {
+			if ( in_array( $taxonomy, self::IDENTITY_TAXONOMIES, true ) ) {
+				// The theme and the area are read by the name of their term
+				// (NAMED_TAXONOMIES) and written by its slug: a term whose name
+				// is not its slug would read back as another theme or area here.
+				if ( in_array( $taxonomy, self::NAMED_TAXONOMIES, true ) && ( ! isset( $term['name'] ) || self::bytes( $term['name'] ) !== self::bytes( $term['slug'] ) ) ) {
+					return self::locked( 'post:taxonomy_rule', sprintf( 'the term %1$s of %2$s on the post of the staging site is named %3$s, and WordPress reads it by its name', self::bytes( $term['slug'] ), $taxonomy, isset( $term['name'] ) ? self::bytes( $term['name'] ) : '(none)' ) );
+				}
 				$terms[ $taxonomy ][] = self::bytes( $term['slug'] );
 				continue;
 			}
@@ -363,6 +434,11 @@ final class AB_MCP_Sync_Post_Writer {
 		if ( isset( $meta['_wp_page_template'][0] ) && is_string( $meta['_wp_page_template'][0] ) && '' !== $meta['_wp_page_template'][0] ) {
 			$postarr['page_template'] = $meta['_wp_page_template'][0];
 		}
+		// A template of a block theme the same run creates before this object
+		// (a custom template of the active theme, branch 9b): pending for the
+		// check before the first write, which cannot find it offered yet; the
+		// boundary asks the theme with the template made.
+		$template_pending = isset( $postarr['page_template'], $ctx['pending_named']['wp_template'] ) && is_array( $ctx['pending_named']['wp_template'] ) && isset( $ctx['pending_named']['wp_template'][ (string) $postarr['page_template'] ] );
 		// The columns as WordPress stores them: the UTC date derived where
 		// it is missing on a post that is not floating (wp_insert_post()).
 		$columns = array_intersect_key( $postarr, array_flip( self::WRITTEN_COLUMNS ) );
@@ -378,17 +454,21 @@ final class AB_MCP_Sync_Post_Writer {
 			$target['row']['post_status'] = 'draft';
 		}
 		return array(
-			'type'        => $type,
-			'status'      => $status,
-			'postarr'     => $postarr,
-			'columns'     => $columns,
-			'meta'        => $meta,
-			'terms'       => $terms,
-			'target_form' => $target,
-			'target_hash' => AB_MCP_Sync_Canon::hash( $target ),
-			'identity'    => $line['identity'],
-			'as_draft'    => ! empty( $item['as_draft'] ),
-			'pending'     => $parent_pending,
+			'type'             => $type,
+			'status'           => $status,
+			'postarr'          => $postarr,
+			'columns'          => $columns,
+			'meta'             => $meta,
+			'terms'            => $terms,
+			'target_form'      => $target,
+			'target_hash'      => AB_MCP_Sync_Canon::hash( $target ),
+			'identity'         => $line['identity'],
+			'as_draft'         => ! empty( $item['as_draft'] ),
+			'pending'          => $parent_pending,
+			'template_pending' => $template_pending,
+			// The objects of the run, for a navigation: where the run leaves a
+			// navigation block without a menu of its own (fallback_shown()).
+			'planned'          => 'wp_navigation' === $type && isset( $ctx['planned'] ) && is_array( $ctx['planned'] ) ? $ctx['planned'] : array(),
 		);
 	}
 
@@ -432,6 +512,41 @@ final class AB_MCP_Sync_Post_Writer {
 			$current = self::current( (int) $live_id );
 			if ( is_wp_error( $current ) ) {
 				return $current;
+			}
+		}
+		// The other core types of the kind post (branch 9b): the theme of a
+		// template, a template part or the global styles is the active one
+		// here (theme_refusal()); the terms WordPress reads by their names
+		// carry their slugs as names here as well (named_refusal()); the
+		// custom CSS of the global styles keeps the rule of the site editor
+		// (css_refusal()); a navigation leaves the one WordPress shows in a
+		// navigation block without a menu of its own as it was
+		// (fallback_refusal()).
+		if ( in_array( $type, self::THEMED, true ) ) {
+			$refusal = self::theme_refusal( $prepared, is_array( $current ) ? $current : null );
+			if ( null !== $refusal ) {
+				return $refusal;
+			}
+		}
+		$refusal = self::named_refusal( $prepared );
+		if ( null !== $refusal ) {
+			return $refusal;
+		}
+		if ( 'wp_global_styles' === $type ) {
+			$refusal = self::css_refusal( (string) $prepared['postarr']['post_content'] );
+			if ( null !== $refusal ) {
+				return $refusal;
+			}
+		}
+		if ( 'wp_navigation' === $type ) {
+			$moved = self::fallback_refusal(
+				null === $live_id ? 0 : (int) $live_id,
+				is_array( $live ) && 'publish' === (string) $live['post_status'] ? (string) $live['post_date'] : null,
+				'publish' === $status ? (string) $prepared['columns']['post_date'] : null,
+				isset( $prepared['planned'] ) && is_array( $prepared['planned'] ) ? $prepared['planned'] : array()
+			);
+			if ( null !== $moved ) {
+				return self::locked( 'post:navigation_fallback', $moved );
 			}
 		}
 		// The meta by its field rule (decision 28; branch 9): of a post here,
@@ -487,10 +602,11 @@ final class AB_MCP_Sync_Post_Writer {
 		}
 		// The template the theme of this site offers for the type (B7): as
 		// wp_insert_post() checks page_template (WP_Theme::get_page_templates());
-		// one it does not offer would be stored as default.
-		if ( isset( $prepared['postarr']['page_template'] ) && 'default' !== $prepared['postarr']['page_template'] ) {
-			$templates = wp_get_theme()->get_page_templates( null, $type );
-			if ( ! is_array( $templates ) || ! isset( $templates[ $prepared['postarr']['page_template'] ] ) ) {
+		// one it does not offer would be stored as default. A custom template
+		// of a block theme the same run creates first is pending (branch 9b;
+		// the boundary asks it with the template made).
+		if ( isset( $prepared['postarr']['page_template'] ) && 'default' !== $prepared['postarr']['page_template'] && empty( $prepared['template_pending'] ) ) {
+			if ( ! self::template_offered( (string) $prepared['postarr']['page_template'], $type ) ) {
 				return self::locked( 'post:page_template', sprintf( 'the template %1$s for a %2$s', $prepared['postarr']['page_template'], $type ) );
 			}
 		}
@@ -963,7 +1079,12 @@ final class AB_MCP_Sync_Post_Writer {
 	 * where it follows the right at the post itself): a core key with an API
 	 * of its own, or a key that is not protected and has no authorization
 	 * filter of its own (register_meta() with an auth_callback, or a filter
-	 * auth_post_meta_<key>).
+	 * auth_post_meta_<key>). A key registered without an auth_callback
+	 * counts as one without (branch 9b): register_meta() then hooks
+	 * __return_true for a key that is not protected (wp-includes/meta.php:
+	 * 1511-1531), so map_meta_cap gives the right of the post itself
+	 * (wp-includes/capabilities.php:425-440), as for the pattern sync status
+	 * of a reusable block (wp_create_initial_post_meta()); auth_follows_post().
 	 *
 	 * @param string $key  Key.
 	 * @param string $type Post type.
@@ -977,7 +1098,36 @@ final class AB_MCP_Sync_Post_Writer {
 		if ( is_protected_meta( $key, 'post' ) ) {
 			return false;
 		}
-		return ! has_filter( "auth_post_meta_{$key}_for_{$type}" ) && ! has_filter( "auth_post_meta_{$key}" );
+		return self::auth_follows_post( "auth_post_meta_{$key}_for_{$type}" ) && self::auth_follows_post( "auth_post_meta_{$key}" );
+	}
+
+	/**
+	 * Whether an authorization filter of a meta key leaves the right to the
+	 * right at the post: none is hooked, or every callback hooked is
+	 * __return_true, the one register_meta() hooks for a key registered
+	 * without an auth_callback. Any other callback answers at the object
+	 * only (fail closed), as does a hook this request does not show as
+	 * WordPress keeps it.
+	 *
+	 * @param string $hook Filter.
+	 * @return bool
+	 */
+	private static function auth_follows_post( $hook ) {
+		if ( ! has_filter( (string) $hook ) ) {
+			return true;
+		}
+		$hooks = isset( $GLOBALS['wp_filter'] ) && is_array( $GLOBALS['wp_filter'] ) ? $GLOBALS['wp_filter'] : array();
+		if ( ! isset( $hooks[ $hook ] ) || ! is_object( $hooks[ $hook ] ) || ! isset( $hooks[ $hook ]->callbacks ) || ! is_array( $hooks[ $hook ]->callbacks ) ) {
+			return false;
+		}
+		foreach ( $hooks[ $hook ]->callbacks as $by_priority ) {
+			foreach ( is_array( $by_priority ) ? $by_priority : array() as $one ) {
+				if ( ! is_array( $one ) || ! isset( $one['function'] ) || '__return_true' !== $one['function'] ) {
+					return false;
+				}
+			}
+		}
+		return true;
 	}
 
 	/**
@@ -1069,6 +1219,714 @@ final class AB_MCP_Sync_Post_Writer {
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- the rows, as the comparison reads them.
 		$found = $wpdb->get_var( $wpdb->prepare( "SELECT ID FROM {$wpdb->posts} WHERE post_name = %s AND post_status = 'trash' AND ID != %d ORDER BY ID ASC LIMIT 1", (string) $slug, (int) $id ) );
+		if ( '' !== (string) $wpdb->last_error ) {
+			return null;
+		}
+		return null === $found ? 0 : (int) $found;
+	}
+
+	/* --------------------------------------- the core types of branch 9b */
+
+	/**
+	 * Why a template, a template part or the global styles (THEMED) is not
+	 * written for the theme it belongs to, as a refusal, or null (branch 9b;
+	 * decision 25: their identity is type, theme and slug). WordPress finds
+	 * them by the name of the active theme only: get_block_template() and
+	 * render_block_core_template_part() by get_stylesheet() and the term of
+	 * wp_theme by its name, WP_Theme_JSON_Resolver::
+	 * get_user_data_from_wp_global_styles() likewise, and
+	 * wp_filter_wp_template_unique_post_slug() makes the slug of a new
+	 * template unique among the templates of the active theme
+	 * (wp-includes/theme-templates.php:63). So the theme of the object (its
+	 * identity, the slug of its term of wp_theme) has to be the active
+	 * stylesheet here, as get_stylesheet() gives it and as the option row
+	 * holds it (a filter that shows another theme in this request is no
+	 * active theme), the target names that one theme, and an object here
+	 * carries it as well. Fail closed, never rewritten into another theme:
+	 * where the two sites run other themes, a template of the one is no
+	 * template of the other (post:theme_mismatch, with the way).
+	 *
+	 * @param array      $prepared target_of().
+	 * @param array|null $current  current() of the object here; null for a new one.
+	 * @return WP_Error|null
+	 */
+	private static function theme_refusal( array $prepared, $current ) {
+		$theme = isset( $prepared['identity']['theme'] ) && is_string( $prepared['identity']['theme'] ) ? $prepared['identity']['theme'] : '';
+		$what  = sprintf( 'the %1$s %2$s', (string) $prepared['type'], (string) $prepared['postarr']['post_name'] );
+		$other = self::inactive_theme( $theme );
+		if ( null !== $other ) {
+			return self::locked( 'post:theme_mismatch', $what . ' ' . $other );
+		}
+		$targets = isset( $prepared['terms']['wp_theme'] ) ? $prepared['terms']['wp_theme'] : array();
+		if ( array( $theme ) !== array_values( $targets ) ) {
+			return self::locked( 'post:theme_mismatch', sprintf( '%1$s of the staging site names the themes %2$s, not the one theme %3$s', $what, implode( ', ', array_map( 'strval', $targets ) ), $theme ) );
+		}
+		if ( is_array( $current ) && array( $theme ) !== self::term_keys( $current, 'wp_theme' ) ) {
+			return self::locked( 'post:theme_mismatch', sprintf( '%1$s of this site names the themes %2$s, not the one theme %3$s', $what, implode( ', ', self::term_keys( $current, 'wp_theme' ) ), $theme ) );
+		}
+		return null;
+	}
+
+	/**
+	 * Why a theme is not the active one here, as the end of a sentence, or
+	 * null where it is (branch 9b): the active stylesheet as get_stylesheet()
+	 * gives it and as the option row holds it (a filter that shows another
+	 * theme in this request is no active theme). The one place theme_refusal()
+	 * and the plan (AB_MCP_Sync_Push::verdict()) ask it.
+	 *
+	 * @param string $theme The theme of an object (the slug of its term of wp_theme).
+	 * @return string|null
+	 */
+	public static function inactive_theme( $theme ) {
+		$theme  = (string) $theme;
+		$active = (string) get_stylesheet();
+		$row    = AB_MCP_Sync_Rows::option( 'stylesheet' );
+		$stored = is_array( $row ) ? (string) $row['value'] : null;
+		if ( '' === $theme ) {
+			return 'of the staging site belongs to no theme (no term of wp_theme)';
+		}
+		if ( $active !== $theme || $stored !== $theme ) {
+			return sprintf( 'belongs to the theme %1$s, and the active theme of this site is %2$s', $theme, $active === $stored ? $active : $active . ' (the option holds ' . ( null === $stored ? 'none' : $stored ) . ')' );
+		}
+		return null;
+	}
+
+	/**
+	 * Why a term WordPress reads by its name (NAMED_TAXONOMIES: the theme,
+	 * the area of a template part) would not read here as the target names
+	 * it, as a refusal, or null (branch 9b): the step writes it by its slug
+	 * (wp_set_object_terms() makes a missing term with the slug as its
+	 * name); a term of this site with that slug and another name would read
+	 * as another theme or area (post:taxonomy_rule). The staging side is
+	 * asked in target_of().
+	 *
+	 * @param array $prepared target_of().
+	 * @return WP_Error|null
+	 */
+	private static function named_refusal( array $prepared ) {
+		foreach ( self::NAMED_TAXONOMIES as $taxonomy ) {
+			foreach ( isset( $prepared['terms'][ $taxonomy ] ) ? $prepared['terms'][ $taxonomy ] : array() as $slug ) {
+				$found = get_term_by( 'slug', (string) $slug, $taxonomy );
+				if ( is_object( $found ) && isset( $found->name ) && (string) $found->name !== (string) $slug ) {
+					return self::locked( 'post:taxonomy_rule', sprintf( 'the term %1$s of %2$s on this site is named %3$s, and WordPress reads it by its name', (string) $slug, $taxonomy, (string) $found->name ) );
+				}
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * Why the custom CSS of the global styles would not be saved by the site
+	 * editor, as a refusal, or null (branch 9b): every value of a key css in
+	 * the JSON (the CSS of the styles, of a block, of a variation) through
+	 * the rule of WP_REST_Global_Styles_Controller::validate_custom_css()
+	 * (css_markup()). The core asks it of the top level only; any other key
+	 * css is printed into a STYLE element as well, so it is asked of every
+	 * one (fail closed). A value of a key css that is no text is refused as
+	 * the core refuses it since 7.1.0. Content that is not empty and does not
+	 * decode to an array (no JSON, or deeper than json_decode() reads, or a
+	 * scalar) is refused as well, fail closed (Codex on f2af61f..ce9b7bf: it
+	 * went unasked): the core shows nothing of it, it raises a notice for a
+	 * JSON it cannot decode (WP_Theme_JSON_Resolver::get_user_data(),
+	 * wp-includes/class-wp-theme-json-resolver.php:552-575) and ignores
+	 * anything else (:581-589), and the site editor saves the styles as JSON
+	 * only; the check of the CSS cannot be made, so it refuses with its own
+	 * key and the way (the styles saved anew on the staging site). Empty
+	 * content holds nothing to ask.
+	 *
+	 * @param string $content post_content as written.
+	 * @return WP_Error|null
+	 */
+	public static function css_refusal( $content ) {
+		$content = (string) $content;
+		if ( '' === trim( $content ) ) {
+			return null;
+		}
+		$data = json_decode( $content, true );
+		if ( ! is_array( $data ) ) {
+			return self::locked( 'post:css_markup', sprintf( 'the global styles are no JSON object the check of their CSS reads (%s)', JSON_ERROR_NONE === json_last_error() ? 'a value that is no object' : json_last_error_msg() ) );
+		}
+		return self::css_walk( $data, '', 0 );
+	}
+
+	/**
+	 * Every value of a key css in decoded JSON, each asked as the walk finds
+	 * it (css_refusal()); the path names the place in the refusal only.
+	 * GitHub Codex round 1 on free#139, P2: the values were first collected
+	 * by their path, and two values whose paths read alike (a key with a dot
+	 * in it: blocks.core/button beside blocks → core/button) kept only the
+	 * last, so a </style in the first was never asked. Deeper than it is read
+	 * is refused (fail closed).
+	 *
+	 * @param array  $data  Decoded JSON.
+	 * @param string $path  Where (dot separated, for the refusal).
+	 * @param int    $depth Depth reached.
+	 * @return WP_Error|null
+	 */
+	private static function css_walk( array $data, $path, $depth ) {
+		foreach ( $data as $key => $value ) {
+			$at = '' === $path ? (string) $key : $path . '.' . $key;
+			if ( 'css' === (string) $key ) {
+				if ( ! is_string( $value ) ) {
+					return self::locked( 'post:css_markup', sprintf( 'the value of %s in the global styles is no text', $at ) );
+				}
+				if ( self::css_markup( $value ) ) {
+					return self::locked( 'post:css_markup', sprintf( 'the CSS of %s in the global styles holds </style or ends in a part of it', $at ) );
+				}
+				continue;
+			}
+			if ( ! is_array( $value ) ) {
+				continue;
+			}
+			if ( $depth >= AB_MCP_Sync_Canon::MAX_DEPTH ) {
+				return self::locked( 'post:css_markup', sprintf( 'the global styles nest deeper than they are read, at %s', $at ) );
+			}
+			$held = self::css_walk( $value, $at, $depth + 1 );
+			if ( null !== $held ) {
+				return $held;
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * Whether a text of CSS holds a closing tag of STYLE or ends in a part
+	 * of one: the rule of WP_REST_Global_Styles_Controller::
+	 * validate_custom_css() (wp-includes/rest-api/endpoints/
+	 * class-wp-rest-global-styles-controller.php:683-760), step for step (a
+	 * method of the controller the core keeps protected; the integration
+	 * suite holds the two alike): at each <, «</style» in any case, where
+	 * the text ends before its eighth character or that character is a
+	 * space, a slash or >.
+	 *
+	 * @param string $css CSS.
+	 * @return bool
+	 */
+	public static function css_markup( $css ) {
+		$css    = (string) $css;
+		$length = strlen( $css );
+		for ( $at = strcspn( $css, '<' ); $at < $length; $at += strcspn( $css, '<', ++$at ) ) {
+			$remaining = $length - $at;
+			if ( 0 === substr_compare( $css, '</style', $at, min( 7, $remaining ), true ) ) {
+				if ( $remaining < 8 ) {
+					return true;
+				}
+				if ( 1 === strspn( $css, " \t\f\r\n/>", $at + 7, 1 ) ) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Whether a navigation moves the one WordPress shows where a navigation
+	 * block has no menu of its own, as the reason, or null (branch 9b;
+	 * decision 21: a consequence of the core outside the object is allowed
+	 * only where it is known whole). Such a block shows the most recently
+	 * published navigation of the site (WP_Navigation_Fallback::
+	 * get_most_recently_published_navigation(): post_status publish,
+	 * orderby date DESC, wp-includes/class-wp-navigation-fallback.php:110-130);
+	 * where there is none, WordPress makes one as the page is shown
+	 * (get_fallback(), :70-101). A new navigation published after it, a date
+	 * moved past it, or a status that makes the object published or not
+	 * changes which navigation every such block shows, on pages the plan does
+	 * not name: refused where the one shown before and after the write
+	 * differ, or where the object would share the latest date with another
+	 * (the order of the core is then not told). A navigation that keeps its
+	 * place (a changed menu with its date) passes. Read from the rows.
+	 *
+	 * @param int         $id     The navigation here, 0 for a new one.
+	 * @param string|null $before Its post_date where it is published here now, else null.
+	 * @param string|null $after  Its post_date where it is published after the write, else null.
+	 * @return string|null
+	 */
+	public static function fallback_moves( $id, $before, $after ) {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- the rows, as the order of the core reads them.
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT ID, post_date FROM {$wpdb->posts} WHERE post_type = 'wp_navigation' AND post_status = 'publish' AND ID != %d ORDER BY post_date DESC, ID DESC LIMIT 2", (int) $id ), ARRAY_A );
+		if ( '' !== (string) $wpdb->last_error || ! is_array( $rows ) ) {
+			return 'the navigations of this site could not be read for the one WordPress shows without a menu of its own';
+		}
+		$shown = static function ( $date ) use ( $rows ) {
+			$top = isset( $rows[0] ) ? $rows[0] : null;
+			if ( null !== $date ) {
+				if ( null === $top || strcmp( (string) $date, (string) $top['post_date'] ) > 0 ) {
+					return 'self';
+				}
+				if ( (string) $date === (string) $top['post_date'] ) {
+					return 'tie';
+				}
+			}
+			if ( null === $top ) {
+				return 'none';
+			}
+			if ( isset( $rows[1] ) && (string) $rows[1]['post_date'] === (string) $top['post_date'] ) {
+				return 'others';
+			}
+			return 'post ' . (int) $top['ID'];
+		};
+		$was = $shown( $before );
+		$is  = $shown( $after );
+		if ( 'tie' === $was || 'tie' === $is ) {
+			return 'the navigation would share the latest date of the published navigations of this site with another, and which of them WordPress shows in a navigation block without a menu of its own is not told';
+		}
+		if ( $was !== $is ) {
+			$name = static function ( $who ) {
+				return 'self' === $who ? 'this navigation' : ( 'none' === $who ? 'none (WordPress would make one as a page is shown)' : ( 'others' === $who ? 'one of two navigations of the same date' : 'the navigation ' . substr( $who, 5 ) ) );
+			};
+			return sprintf( 'a navigation block without a menu of its own shows %1$s now and would show %2$s after the write', $name( $was ), $name( $is ) );
+		}
+		return null;
+	}
+
+	/**
+	 * Why a navigation is refused for the one a navigation block without a
+	 * menu of its own shows, or null (branch 9b; decision 21; Codex round 1
+	 * of branch 9b, B): only where it moves (fallback_moves()) and such a
+	 * block is shown on this site after the run (fallback_shown()). A
+	 * navigation every block of the site names by its ref, or that no
+	 * template or post shows, moves nothing visible and goes.
+	 *
+	 * @param int         $id      The navigation here, 0 for a new one.
+	 * @param string|null $before  Its post_date where it is published here now, else null.
+	 * @param string|null $after   Its post_date where it is published after the write, else null.
+	 * @param array       $planned The objects of the run (AB_MCP_Sync_Engine::planned()); none on the way back.
+	 * @return string|null
+	 */
+	public static function fallback_refusal( $id, $before, $after, array $planned ) {
+		$moved = self::fallback_moves( $id, $before, $after );
+		if ( null === $moved ) {
+			return null;
+		}
+		$shown = self::fallback_shown( $planned );
+		return null === $shown ? null : $moved . '; ' . $shown;
+	}
+
+	/**
+	 * Where this site shows a navigation block without a menu of its own
+	 * after the run, as a clause, or null where it shows none (branch 9b):
+	 * a core/navigation block with neither ref nor navigationMenuId nor
+	 * blocks of its own (render_block_core_navigation(),
+	 * wp-includes/blocks/navigation.php:517-547: only then the fallback),
+	 * in what the site shows as the run leaves it:
+	 * - every template of the active theme (get_block_templates(): the rows
+	 *   here over the files of the theme, the templates of plugins), or the
+	 *   version the run writes where it writes one;
+	 * - the published, private or scheduled posts of a type with a page of
+	 *   its own, and the published reusable blocks (a post names one by its
+	 *   ref), whose content holds a navigation, a pattern, a reusable block
+	 *   or a template part: one bounded query (FALLBACK_POSTS; more is fail
+	 *   closed), or the version the run writes;
+	 * each with the template parts it names (as the run leaves them, a row,
+	 * or a file of the theme) and the patterns it names (the registry of
+	 * patterns), to a depth of FALLBACK_DEPTH and FALLBACK_STEPS contents
+	 * (deeper or more is fail closed). A block whose ref names a navigation
+	 * that is not published shows the fallback as well; it is not counted
+	 * (GRENZEN-INHALTE.md).
+	 *
+	 * @param array $planned The objects of the run: type, op, staging_ref, live_ref, theme, slug, status, content.
+	 * @return string|null
+	 */
+	public static function fallback_shown( array $planned ) {
+		global $wpdb;
+		$state = array(
+			'active' => (string) get_stylesheet(),
+			'parts'  => array(),
+			'seen'   => array(),
+			'steps'  => 0,
+		);
+		$templates = array();
+		$replaced  = array();
+		$posts     = array();
+		foreach ( $planned as $one ) {
+			if ( ! is_array( $one ) || ! isset( $one['type'], $one['content'] ) ) {
+				continue;
+			}
+			$name = (string) ( $one['theme'] ?? '' ) . '//' . (string) ( $one['slug'] ?? '' );
+			if ( 'wp_template_part' === $one['type'] ) {
+				$state['parts'][ $name ] = (string) $one['content'];
+			} elseif ( 'wp_template' === $one['type'] ) {
+				$templates[ $name ] = $one;
+			} else {
+				$posts[] = $one;
+			}
+			if ( isset( $one['live_ref'] ) && null !== $one['live_ref'] ) {
+				$replaced[ (int) $one['live_ref'] ] = true;
+			}
+		}
+		// The templates of the active theme as the run leaves them.
+		$found = get_block_templates( array(), 'wp_template' );
+		foreach ( is_array( $found ) ? $found : array() as $template ) {
+			if ( ! is_object( $template ) || isset( $templates[ (string) $template->theme . '//' . (string) $template->slug ] ) ) {
+				continue;
+			}
+			if ( self::shows_fallback( (string) $template->content, 0, $state ) ) {
+				return sprintf( 'the template %s shows a navigation block without a menu of its own', (string) $template->id );
+			}
+		}
+		foreach ( $templates as $name => $one ) {
+			if ( $state['active'] === (string) ( $one['theme'] ?? '' ) && self::shows_fallback( (string) $one['content'], 0, $state ) ) {
+				return sprintf( 'the template %s the run writes shows a navigation block without a menu of its own', $name );
+			}
+		}
+		// The posts that can show one, as the run leaves them.
+		$like = array();
+		foreach ( array( 'wp:navigation', 'wp:pattern', 'wp:block ', 'wp:template-part' ) as $mark ) {
+			$like[] = '%' . $wpdb->esc_like( $mark ) . '%';
+		}
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- the rows, bounded: the posts a navigation block can stand in.
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT ID, post_type, post_status, post_content FROM {$wpdb->posts} WHERE post_status IN ( 'publish', 'private', 'future' ) AND post_type NOT IN ( 'revision', 'wp_template', 'wp_template_part', 'wp_global_styles', 'wp_navigation', 'nav_menu_item', 'attachment' ) AND ( post_content LIKE %s OR post_content LIKE %s OR post_content LIKE %s OR post_content LIKE %s ) ORDER BY ID ASC LIMIT %d", $like[0], $like[1], $like[2], $like[3], self::FALLBACK_POSTS + 1 ), ARRAY_A );
+		if ( '' !== (string) $wpdb->last_error || ! is_array( $rows ) ) {
+			return 'the posts of this site could not be read for navigation blocks without a menu of their own';
+		}
+		if ( count( $rows ) > self::FALLBACK_POSTS ) {
+			return sprintf( 'more than %d posts of this site hold navigation blocks, patterns, reusable blocks or template parts, more than this check reads', self::FALLBACK_POSTS );
+		}
+		foreach ( $rows as $row ) {
+			if ( isset( $replaced[ (int) $row['ID'] ] ) || ! self::shows_pages( (string) $row['post_type'], (string) $row['post_status'] ) ) {
+				continue;
+			}
+			if ( self::shows_fallback( (string) $row['post_content'], 0, $state ) ) {
+				return sprintf( 'the %1$s %2$d shows a navigation block without a menu of its own', (string) $row['post_type'], (int) $row['ID'] );
+			}
+		}
+		foreach ( $posts as $one ) {
+			if ( self::shows_pages( (string) $one['type'], (string) ( $one['status'] ?? '' ) ) && self::shows_fallback( (string) $one['content'], 0, $state ) ) {
+				return sprintf( 'the %1$s %2$s of the staging site the run writes shows a navigation block without a menu of its own', (string) $one['type'], (string) ( $one['staging_ref'] ?? '' ) );
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * Whether a post of this type and status is shown: a published, private
+	 * or scheduled post of a type with a page of its own, or a published
+	 * reusable block (render_block_core_block() shows one only so,
+	 * wp-includes/blocks/block.php:27-44).
+	 *
+	 * @param string $type   Post type.
+	 * @param string $status Status.
+	 * @return bool
+	 */
+	private static function shows_pages( $type, $status ) {
+		if ( 'wp_block' === $type ) {
+			return 'publish' === $status;
+		}
+		return in_array( $status, array( 'publish', 'private', 'future' ), true ) && is_post_type_viewable( $type );
+	}
+
+	/**
+	 * Whether a content shows a navigation block without a menu of its own,
+	 * itself or through a template part or a pattern it names
+	 * (fallback_shown()); fail closed past FALLBACK_DEPTH or FALLBACK_STEPS.
+	 *
+	 * @param string $content Content.
+	 * @param int    $depth   Levels of parts and patterns above.
+	 * @param array  $state   active, parts (theme//slug => content the run writes), seen, steps.
+	 * @return bool
+	 */
+	private static function shows_fallback( $content, $depth, array &$state ) {
+		++$state['steps'];
+		if ( $depth > self::FALLBACK_DEPTH || $state['steps'] > self::FALLBACK_STEPS ) {
+			return true;
+		}
+		$content = (string) $content;
+		if ( false === strpos( $content, 'wp:' ) ) {
+			return false;
+		}
+		$parser = new WP_Block_Parser();
+		return self::blocks_show_fallback( $parser->parse( $content ), $depth, $state );
+	}
+
+	/**
+	 * The blocks of shows_fallback(), at any depth of inner blocks.
+	 *
+	 * @param array $blocks Parsed blocks.
+	 * @param int   $depth  Levels of parts and patterns above.
+	 * @param array $state  As shows_fallback().
+	 * @return bool
+	 */
+	private static function blocks_show_fallback( array $blocks, $depth, array &$state ) {
+		foreach ( $blocks as $block ) {
+			if ( ! is_array( $block ) ) {
+				continue;
+			}
+			$name  = isset( $block['blockName'] ) && is_string( $block['blockName'] ) ? $block['blockName'] : '';
+			$attrs = isset( $block['attrs'] ) && is_array( $block['attrs'] ) ? $block['attrs'] : array();
+			$inner = isset( $block['innerBlocks'] ) && is_array( $block['innerBlocks'] ) ? $block['innerBlocks'] : array();
+			if ( 'core/navigation' === $name && ! array_key_exists( 'ref', $attrs ) && ! array_key_exists( 'navigationMenuId', $attrs ) && array() === $inner ) {
+				return true;
+			}
+			if ( 'core/template-part' === $name && isset( $attrs['slug'] ) && is_string( $attrs['slug'] ) ) {
+				$theme = isset( $attrs['theme'] ) && is_string( $attrs['theme'] ) ? $attrs['theme'] : $state['active'];
+				$part  = $theme . '//' . $attrs['slug'];
+				if ( $theme === $state['active'] && ! isset( $state['seen'][ 'part:' . $part ] ) ) {
+					$state['seen'][ 'part:' . $part ] = true;
+					if ( isset( $state['parts'][ $part ] ) ) {
+						$text = $state['parts'][ $part ];
+					} else {
+						$found = get_block_template( $part, 'wp_template_part' );
+						$text  = is_object( $found ) && isset( $found->content ) ? (string) $found->content : '';
+					}
+					if ( self::shows_fallback( $text, $depth + 1, $state ) ) {
+						return true;
+					}
+				}
+			}
+			if ( 'core/pattern' === $name && isset( $attrs['slug'] ) && is_string( $attrs['slug'] ) && ! isset( $state['seen'][ 'pattern:' . $attrs['slug'] ] ) ) {
+				$state['seen'][ 'pattern:' . $attrs['slug'] ] = true;
+				$pattern = WP_Block_Patterns_Registry::get_instance()->get_registered( $attrs['slug'] );
+				if ( is_array( $pattern ) && isset( $pattern['content'] ) && self::shows_fallback( (string) $pattern['content'], $depth + 1, $state ) ) {
+					return true;
+				}
+			}
+			if ( array() !== $inner && self::blocks_show_fallback( $inner, $depth, $state ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * The template parts a content names (core/template-part, at any depth):
+	 * their slug and their theme (null where the block names none, then the
+	 * active theme, render_block_core_template_part(),
+	 * wp-includes/blocks/template-part.php:25). A block without a slug names
+	 * no part (it shows none on either site).
+	 *
+	 * @param string $content Content.
+	 * @return array[] slug, theme.
+	 */
+	public static function part_refs( $content ) {
+		$content = (string) $content;
+		if ( false === strpos( $content, 'wp:template-part' ) ) {
+			return array();
+		}
+		$parser = new WP_Block_Parser();
+		$out    = array();
+		$walk   = static function ( array $blocks, $depth ) use ( &$walk, &$out ) {
+			foreach ( $blocks as $block ) {
+				if ( ! is_array( $block ) ) {
+					continue;
+				}
+				if ( 'core/template-part' === ( $block['blockName'] ?? null ) && isset( $block['attrs']['slug'] ) && is_string( $block['attrs']['slug'] ) ) {
+					$out[] = array(
+						'slug'  => $block['attrs']['slug'],
+						'theme' => isset( $block['attrs']['theme'] ) && is_string( $block['attrs']['theme'] ) ? $block['attrs']['theme'] : null,
+					);
+				}
+				if ( isset( $block['innerBlocks'] ) && is_array( $block['innerBlocks'] ) && $depth < AB_MCP_Sync_Canon::MAX_DEPTH ) {
+					$walk( $block['innerBlocks'], $depth + 1 );
+				}
+			}
+		};
+		$walk( $parser->parse( $content ), 0 );
+		return $out;
+	}
+
+	/**
+	 * The references of a line the boundary asks by an id or a name, for the
+	 * order of the plan (AB_MCP_Sync_Push::order(); branch 9b, Codex round 1,
+	 * B): posts, the staging ids a core/block or core/navigation names by
+	 * its ref; parts, the template parts it names by theme and slug
+	 * (part_refs(); without a theme the active one here), as part:theme//slug;
+	 * templates, the template of a page (_wp_page_template), as
+	 * template:slug. Read from the content of the line as it is packed.
+	 * here: the names of parts and templates this site resolves without the
+	 * run (resolves_here(); Codex round 2 of branch 9b, 2): for them an edge
+	 * is an order, never a dependency.
+	 *
+	 * @param array $line The line of the package.
+	 * @return array{posts:int[],parts:string[],templates:string[],here:array<string,true>}
+	 */
+	public static function order_refs( array $line ) {
+		$out     = array(
+			'posts'     => array(),
+			'parts'     => array(),
+			'templates' => array(),
+			'here'      => array(),
+		);
+		$content = isset( $line['content']['row']['post_content'] ) ? self::bytes( $line['content']['row']['post_content'] ) : '';
+		$refs    = self::part_refs( $content );
+		if ( array() !== $refs ) {
+			$active = (string) get_stylesheet();
+			foreach ( $refs as $ref ) {
+				$out['parts'][] = 'part:' . ( null === $ref['theme'] ? $active : (string) $ref['theme'] ) . '//' . (string) $ref['slug'];
+			}
+		}
+		if ( false !== strpos( $content, 'wp:block' ) || false !== strpos( $content, 'wp:navigation' ) ) {
+			$parser = new WP_Block_Parser();
+			$walk   = static function ( array $blocks, $depth ) use ( &$walk, &$out ) {
+				foreach ( $blocks as $block ) {
+					if ( ! is_array( $block ) ) {
+						continue;
+					}
+					if ( in_array( $block['blockName'] ?? null, array( 'core/block', 'core/navigation' ), true ) && isset( $block['attrs']['ref'] ) && is_int( $block['attrs']['ref'] ) && $block['attrs']['ref'] > 0 ) {
+						$out['posts'][] = $block['attrs']['ref'];
+					}
+					if ( isset( $block['innerBlocks'] ) && is_array( $block['innerBlocks'] ) && $depth < AB_MCP_Sync_Canon::MAX_DEPTH ) {
+						$walk( $block['innerBlocks'], $depth + 1 );
+					}
+				}
+			};
+			$walk( $parser->parse( $content ), 0 );
+		}
+		foreach ( isset( $line['content']['meta'] ) && is_array( $line['content']['meta'] ) ? $line['content']['meta'] : array() as $pair ) {
+			if ( is_array( $pair ) && isset( $pair[0], $pair[1] ) && '_wp_page_template' === self::bytes( $pair[0] ) && ! in_array( self::bytes( $pair[1] ), array( '', 'default' ), true ) ) {
+				$out['templates'][] = 'template:' . self::bytes( $pair[1] );
+			}
+		}
+		foreach ( array( 'posts', 'parts', 'templates' ) as $list ) {
+			$out[ $list ] = array_values( array_unique( $out[ $list ] ) );
+		}
+		$type = isset( $line['identity']['post_type'] ) ? (string) $line['identity']['post_type'] : '';
+		foreach ( array_merge( $out['parts'], $out['templates'] ) as $name ) {
+			if ( self::resolves_here( $name, $type ) ) {
+				$out['here'][ $name ] = true;
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * Whether this site resolves a part or a template an object names
+	 * without the run (Codex round 2 of branch 9b, 2): a template part
+	 * (part:theme//slug) of the active theme as a published row or a file
+	 * of the theme, as parts_refusal() accepts it; a template
+	 * (template:slug) the theme of this site offers for the type of the
+	 * object, as precheck() asks it (WP_Theme::get_page_templates(): its
+	 * files and custom templates, rows of the site among them).
+	 *
+	 * @param string $name part:theme//slug or template:slug.
+	 * @param string $type The post type of the object that names it.
+	 * @return bool
+	 */
+	public static function resolves_here( $name, $type ) {
+		$name = (string) $name;
+		if ( 0 === strpos( $name, 'template:' ) ) {
+			return self::template_offered( substr( $name, 9 ), (string) $type );
+		}
+		if ( 0 !== strpos( $name, 'part:' ) || false === strpos( $name, '//' ) ) {
+			return false;
+		}
+		list( $theme, $slug ) = explode( '//', substr( $name, 5 ), 2 );
+		return $theme === (string) get_stylesheet() && true === self::part_here( $theme, $slug );
+	}
+
+	/**
+	 * Whether the theme of this site offers a template for a post type, as
+	 * wp_insert_post() checks page_template (WP_Theme::get_page_templates(),
+	 * the files and the custom templates of a block theme,
+	 * wp-includes/class-wp-theme.php:1327-1398). The one place precheck() and
+	 * resolves_here() ask it.
+	 *
+	 * @param string $template The template (its file, or the slug of a custom template).
+	 * @param string $type     Post type.
+	 * @return bool
+	 */
+	private static function template_offered( $template, $type ) {
+		$templates = wp_get_theme()->get_page_templates( null, (string) $type );
+		return is_array( $templates ) && isset( $templates[ (string) $template ] );
+	}
+
+	/**
+	 * Whether this site shows a template part of the active theme without a
+	 * run: a published row of that theme and slug (part_row(), the query of
+	 * render_block_core_template_part(), wp-includes/blocks/template-part.php:29-44)
+	 * or a file of the theme (get_block_file_template(), :70-71); null where
+	 * the rows could not be read. The one place parts_refusal() and
+	 * resolves_here() ask it.
+	 *
+	 * @param string $theme Theme (the active one).
+	 * @param string $slug  Slug.
+	 * @return bool|null
+	 */
+	private static function part_here( $theme, $slug ) {
+		$row = self::part_row( (string) $theme, (string) $slug );
+		if ( null === $row ) {
+			return null;
+		}
+		if ( $row > 0 ) {
+			return true;
+		}
+		$file = 0 === validate_file( (string) $slug ) ? get_block_file_template( (string) $theme . '//' . (string) $slug, 'wp_template_part' ) : null;
+		return is_object( $file ) && isset( $file->content ) && '' !== (string) $file->content;
+	}
+
+	/**
+	 * The name another object names this one by, for the order of the plan
+	 * (order_refs()), or null: a template part as part:theme//slug, a
+	 * template as template:slug, from its identity.
+	 *
+	 * @param array $line The line of the package.
+	 * @return string|null
+	 */
+	public static function order_name( array $line ) {
+		$type = isset( $line['identity']['post_type'] ) ? (string) $line['identity']['post_type'] : '';
+		$slug = isset( $line['identity']['post_name'] ) && is_string( $line['identity']['post_name'] ) ? $line['identity']['post_name'] : '';
+		if ( 'wp_template_part' === $type ) {
+			return 'part:' . ( isset( $line['identity']['theme'] ) && is_string( $line['identity']['theme'] ) ? $line['identity']['theme'] : '' ) . '//' . $slug;
+		}
+		return 'wp_template' === $type ? 'template:' . $slug : null;
+	}
+
+	/**
+	 * Why a template part a content names would show nothing here, as a
+	 * refusal, or null (branch 9b; decision 12: a reference without a
+	 * counterpart locks). It names its part by theme and slug, no id, so no
+	 * pair maps it; it shows here where its theme is the active one (else
+	 * the core shows nothing, render_block_core_template_part(),
+	 * wp-includes/blocks/template-part.php:27) and this site has the part:
+	 * a published template part of that theme and slug (the query of the
+	 * core, :29-44), a part the same run creates before this object
+	 * (pending, for the check before the first write), or a file of the
+	 * active theme (get_block_file_template(), :70-71). Never rewritten.
+	 *
+	 * @param array[] $refs    part_refs().
+	 * @param array   $pending The objects the run creates by name: wp_template_part => theme//slug => true.
+	 * @return WP_Error|null
+	 */
+	private static function parts_refusal( array $refs, array $pending ) {
+		if ( array() === $refs ) {
+			return null;
+		}
+		$active = (string) get_stylesheet();
+		foreach ( $refs as $ref ) {
+			$theme = null === $ref['theme'] ? $active : (string) $ref['theme'];
+			$name  = $theme . '//' . (string) $ref['slug'];
+			if ( $theme !== $active ) {
+				return self::locked( 'post:reference_unmapped', sprintf( 'the template part %1$s, of a theme that is not the active one here (%2$s), which shows nothing', $name, $active ) );
+			}
+			if ( isset( $pending['wp_template_part'][ $name ] ) ) {
+				continue;
+			}
+			$here = self::part_here( $theme, (string) $ref['slug'] );
+			if ( null === $here ) {
+				return self::locked( 'post:reference_unmapped', sprintf( 'the template part %s, whose rows could not be read', $name ) );
+			}
+			if ( true === $here ) {
+				continue;
+			}
+			return self::locked( 'post:reference_unmapped', sprintf( 'the template part %s, which this site has neither as a template part nor as a file of its theme', $name ) );
+		}
+		return null;
+	}
+
+	/**
+	 * A published template part of a theme and slug here, as the core asks
+	 * for it (render_block_core_template_part(): post_name, post_status
+	 * publish, the term of wp_theme by its name): its id, 0 for none, null
+	 * where the rows could not be read.
+	 *
+	 * @param string $theme Theme.
+	 * @param string $slug  Slug.
+	 * @return int|null
+	 */
+	private static function part_row( $theme, $slug ) {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- the rows, as the query of the core reads them.
+		$found = $wpdb->get_var( $wpdb->prepare( "SELECT p.ID FROM {$wpdb->posts} p INNER JOIN {$wpdb->term_relationships} r ON r.object_id = p.ID INNER JOIN {$wpdb->term_taxonomy} x ON x.term_taxonomy_id = r.term_taxonomy_id INNER JOIN {$wpdb->terms} t ON t.term_id = x.term_id WHERE p.post_type = 'wp_template_part' AND p.post_status = 'publish' AND p.post_name = %s AND x.taxonomy = 'wp_theme' AND t.name = %s ORDER BY p.ID ASC LIMIT 1", (string) $slug, (string) $theme ) );
 		if ( '' !== (string) $wpdb->last_error ) {
 			return null;
 		}
@@ -1567,12 +2425,23 @@ final class AB_MCP_Sync_Post_Writer {
 
 	/**
 	 * After the writes of a step (decision 33, phase 7 of the object): the
-	 * caches of the post and its terms.
+	 * caches of the post and its terms. A type any page may show (SITE_WIDE,
+	 * branch 9b: a template, a template part, the global styles, a
+	 * navigation, a reusable block) empties the page cache of the whole site,
+	 * not of the object, which has no page of its own; the global styles
+	 * empty the caches of theme.json as well (wp_clean_theme_json_cache(),
+	 * wp-includes/global-styles-and-settings.php:430-438: the group
+	 * theme_json, kept within a request only, wp-includes/load.php:928, and
+	 * the data of WP_Theme_JSON_Resolver). WordPress 7.1.3 keeps no
+	 * transient of the global styles (none named _wp_theme_json or alike);
+	 * the queries of templates and navigations follow the last change of the
+	 * posts, which clean_post_cache() sets.
 	 *
 	 * @param int $live_id Post.
 	 * @return string[] What was emptied.
 	 */
 	public static function post_write( $live_id ) {
+		$type = AB_MCP_Sync_Rows::post_type_of( (int) $live_id );
 		clean_post_cache( (int) $live_id );
 		wp_cache_delete( (int) $live_id, 'post_meta' );
 		foreach ( self::TAXONOMIES as $taxonomy ) {
@@ -1582,10 +2451,16 @@ final class AB_MCP_Sync_Post_Writer {
 		if ( class_exists( 'AB_MCP_Builder_Caches' ) ) {
 			$done = array_merge( $done, (array) AB_MCP_Builder_Caches::clear( (int) $live_id ) );
 		}
+		if ( 'wp_global_styles' === $type && function_exists( 'wp_clean_theme_json_cache' ) ) {
+			wp_clean_theme_json_cache();
+			$done[] = 'theme_json';
+		}
 		if ( class_exists( 'AB_MCP_Page_Cache' ) ) {
-			$purged = AB_MCP_Page_Cache::purge_posts( array( (int) $live_id ) );
+			// A type of the whole site, or one that cannot be read: every page.
+			$whole  = ! is_string( $type ) || in_array( $type, self::SITE_WIDE, true );
+			$purged = $whole ? AB_MCP_Page_Cache::purge_site() : AB_MCP_Page_Cache::purge_posts( array( (int) $live_id ) );
 			if ( is_array( $purged ) ) {
-				$done[] = 'page_cache';
+				$done[] = $whole ? 'page_cache_site' : 'page_cache';
 			}
 		}
 		return $done;
@@ -1646,6 +2521,52 @@ final class AB_MCP_Sync_Post_Writer {
 				'note'  => sprintf( 'Check needed: putting the page back to %s at the top level would make a menu of this site add it by itself (automatic page addition). Switch the automatic off under Appearance → Menus and plan the way back again, or set the status by hand in wp-admin.', $backup['post_status'] ),
 			);
 		}
+		// Putting a navigation back where that moves the one WordPress shows
+		// in a navigation block without a menu of its own, where a template or
+		// a post of this site shows such a block (decision 21, as forward;
+		// branch 9b): another navigation published since, or the row back to
+		// another date or status, would change every such block.
+		if ( 'wp_navigation' === $backup['post_type'] ) {
+			$moved = self::fallback_refusal(
+				(int) $live_id,
+				'publish' === $current['row']['post_status'] ? (string) $current['row']['post_date'] : null,
+				'publish' === $backup['post_status'] ? (string) $backup['post_date'] : null,
+				array()
+			);
+			if ( null !== $moved ) {
+				return array(
+					'state' => 'check_needed',
+					'note'  => sprintf( 'Check needed: putting the navigation back would change which navigation WordPress shows where a navigation block has no menu of its own (%s). Set the navigation by hand in the site editor.', $moved ),
+				);
+			}
+		}
+		// The custom CSS of the global styles the row would put back keeps the
+		// rule of the site editor, as forward (css_refusal(); branch 9b, Codex
+		// round 1, A: the backup is written through wp_update_post(), past the
+		// check of the REST controller, and an account with unfiltered_html
+		// meets no kses). Refused, the row is left with its value before, as
+		// a part whose right the way back refuses.
+		if ( 'wp_global_styles' === $backup['post_type'] ) {
+			$held = self::css_refusal( (string) $backup['post_content'] );
+			if ( null !== $held ) {
+				$data = $held->get_error_data();
+				return array(
+					'state' => 'left',
+					'note'  => sprintf( 'Not put back: the backed-up global styles hold custom CSS the site editor refuses to save (post:css_markup: %s), so the row is left as it is; its value before stands beside it (value_before). Set the styles by hand in the site editor.', is_array( $data ) && isset( $data['lock']['at'] ) ? (string) $data['lock']['at'] : 'the CSS' ),
+				);
+			}
+		}
+		// The theme is not asked on the way back, unlike forward
+		// (theme_refusal()): the row goes back to the same post, whose term of
+		// wp_theme the step did not change (the pair is of one identity, type,
+		// theme and slug, and the part terms:wp_theme goes back by its own
+		// rule); what the forward check keeps (that the written object shows
+		// under the active theme, and that a new template is made unique among
+		// the templates of the active theme) has no counterpart for a post
+		// that is there: wp_unique_post_slug() asks a post with an id the term
+		// it carries (wp_filter_wp_template_unique_post_slug(),
+		// wp-includes/theme-templates.php:64-67). A theme switched since the
+		// run gets its rows back as they were.
 		$postarr = array_intersect_key( $backup, array_flip( self::WRITTEN_COLUMNS ) );
 		$postarr['ID']          = (int) $live_id;
 		$postarr['post_author'] = (int) $postarr['post_author'];

@@ -249,8 +249,7 @@ final class SyncKindsTest extends TestCase {
 			'attachment:uploads_by_code'   => array( array( 'attachment' ), 'uploads_by_code', 'Z8b' ),
 			'attachment:unsafe_path'       => array( array( 'attachment' ), 'unsafe_path', 'Z8b' ),
 			'option:off_schema'            => array( array( 'option' ), 'off_schema', 'Z8d' ),
-			// Branches 8 and 9: the engines of the kinds post and term, and the engines to come.
-			'post:engine_type'             => array( array( 'post' ), 'engine_type', 'Z8' ),
+			// Branches 8, 9 and 9b: the engines of the kinds post and term, and the engines to come.
 			'post:other_kind'              => array( array( 'post' ), 'other_kind', 'Z8' ),
 			'post:in_trash'                => array( array( 'post' ), 'in_trash', 'Z8d' ),
 			'post:auto_draft'              => array( array( 'post' ), 'auto_draft', 'Z8' ),
@@ -270,6 +269,9 @@ final class SyncKindsTest extends TestCase {
 			'post:status_date'             => array( array( 'post' ), 'status_date', 'Z8' ),
 			'post:reference_unmapped'      => array( array( 'post' ), 'reference_unmapped', 'Z8' ),
 			'post:page_template'           => array( array( 'post' ), 'page_template', 'Z8' ),
+			'post:theme_mismatch'          => array( array( 'post' ), 'theme_mismatch', 'Z8' ),
+			'post:navigation_fallback'     => array( array( 'post' ), 'navigation_fallback', 'Z8' ),
+			'post:css_markup'              => array( array( 'post' ), 'css_markup', 'Z8' ),
 			'term:taxonomy_rule'           => array( array( 'term' ), 'taxonomy_rule', 'Z8d' ),
 			'term:term_group'              => array( array( 'term' ), 'term_group', 'Z8d' ),
 			'term:parent'                  => array( array( 'term' ), 'parent', 'Z8d' ),
