@@ -936,6 +936,21 @@ final class SyncStructureWritersTest extends TestCase {
 			static fn( $pre ) => AB_MCP_Sync_Menu_Writer::write_row( $menu, 5, $pre ),
 			static fn(): bool => array() !== $GLOBALS['ab_test_term_calls']
 		);
+		$with_meta = AB_MCP_Sync_Menu_Writer::target_of( self::menu_line( array( 'primary' ), array( 'name' => 'Main menu' ), array( array( 'acme_color', 'blue' ) ) ), self::item( 'update', '5' ), self::ctx() );
+		self::assertIsArray( $with_meta, is_wp_error( $with_meta ) ? $with_meta->get_error_message() : '' );
+		$writes(
+			'a meta key of the menu, its position moved by the hook (Codex round 4, item 2)',
+			static function () use ( $menu_here ): void {
+				$menu_here();
+				$GLOBALS['ab_test_meta'][5] = array();
+			},
+			static fn() => AB_MCP_Sync_Menu_Writer::current( 5 ),
+			static function (): void {
+				self::db()->option_rows['theme_mods_twentytwentyfive'] = serialize( array( 'nav_menu_locations' => array( 'primary' => 9 ) ) );
+			},
+			static fn( $pre ) => AB_MCP_Sync_Menu_Writer::write_part( 5, 'meta:acme_color', $with_meta, $pre ),
+			static fn(): bool => array() !== ( $GLOBALS['ab_test_meta'][5]['acme_color'] ?? array() )
+		);
 		$writes(
 			'a position of the menu',
 			$menu_here,

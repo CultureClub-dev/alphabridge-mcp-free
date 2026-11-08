@@ -545,7 +545,12 @@ e('a6f-post-meta', 'write_part(): a meta key of a post through the helper (A6)',
 e('a6f-attachment', 'write_part(): an own key of an attachment through the helper (A6)', AW,
   "\t\t\tself::class,\n\t\t\t$live_id,\n\t\t\t$pre,", "\t\t\tself::class,\n\t\t\tnull,\n\t\t\t$pre,", 'u', U_HOOK)
 e('a6f-term-meta', 'write_part(): a meta key of a term through the helper (A6)', TW,
-  "\t\t\tself::class,\n\t\t\t(int) $live_id,\n\t\t\t$pre,", "\t\t\tself::class,\n\t\t\tnull,\n\t\t\t$pre,", 'term', U_TERMROW)
+  "\t\t\tnull === $whole ? self::class : (string) $whole,\n\t\t\t(int) $live_id,\n\t\t\t$pre,", "\t\t\tnull === $whole ? self::class : (string) $whole,\n\t\t\tnull,\n\t\t\t$pre,", 'term', U_TERMROW)
+e('a6-menu-meta-whole', 'write_part() of the term: the meta of a menu compared as the whole menu with its positions (item 2 of round 4)', TW,
+  "\t\t\tnull === $whole ? self::class : (string) $whole,", "\t\t\tself::class,", 'u', U_HOOK)
+e('a6-menu-meta-pass', 'write_part() of the menu: its whole state handed to the term (item 2 of round 4)', MW,
+  "\t\t\treturn AB_MCP_Sync_Term_Writer::write_part( (int) $live_id, $name, $prepared, $pre, self::class );",
+  "\t\t\treturn AB_MCP_Sync_Term_Writer::write_part( (int) $live_id, $name, $prepared, is_array( $pre ) ? array_intersect_key( $pre, array_flip( array( 'row', 'meta', 'terms' ) ) ) : null );", 'u', U_HOOK)
 e('a6f-engine-row', 'write_parts(): the row call with the state the engine read (A6)', EN,
   "\t\t\t\t$id = $w::write_row( $prepared, $live_id, $pre_all );", "\t\t\t\t$id = $w::write_row( $prepared, $live_id );", 'it', IT_OPTIONS)
 # The way back through the helper: the last read against what the step wrote.

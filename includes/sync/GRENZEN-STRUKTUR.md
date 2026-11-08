@@ -368,7 +368,10 @@ Position, die das Theme hier nicht registriert, in der Prüfung des Laufs
   schreiben alle Schreiber, die vor ihrem Aufruf ein Recht fragen: Meta
   eines Posts, eines Terms und die eigenen Schlüssel eines Anhangs, das
   Menü und seine Positionen, die Zeile und die Meta eines Menüeintrags, die
-  Liste und die Instanzen eines Bereichs, das CSS, die Option; zurück die
+  Liste und die Instanzen eines Bereichs, das CSS, die Option (die Meta
+  eines Menüs verglichen als ganzes Menü samt Positionen, nicht nur als
+  Term: ein Rechtehook, der eine Position umhängt, wird vor dem Schreiben
+  erkannt; Codex-Runde 4, Punkt 2); zurück die
   Zeile eines Posts (auch Vorlagen), eines Terms (auch des Menüs), eines
   Menüeintrags und das CSS. Die Aufrufe ohne Rechtefrage zwischen der
   Lesung der Engine und dem Aufruf (die Zeile eines Posts oder Terms, seine

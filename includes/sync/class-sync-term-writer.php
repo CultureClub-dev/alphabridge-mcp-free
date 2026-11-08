@@ -737,13 +737,18 @@ final class AB_MCP_Sync_Term_Writer {
 	 * Write one meta key of a term with a call of its own, to exactly the
 	 * values of the target; the right at the term asked right before.
 	 *
-	 * @param int        $live_id  Term.
-	 * @param string     $name     meta:<key>.
-	 * @param array      $prepared target_of().
-	 * @param array|null $pre      current() right before the call.
+	 * @param int         $live_id  Term.
+	 * @param string      $name     meta:<key>.
+	 * @param array       $prepared target_of().
+	 * @param array|null  $pre      current() right before the call.
+	 * @param string|null $whole    The writer whose current() $pre is, where
+	 *                              a kind writes its meta through this one (the
+	 *                              menu with its positions: the helper compares
+	 *                              the whole object; Codex round 4 of branch
+	 *                              11, item 2); null for a term.
 	 * @return true|WP_Error
 	 */
-	public static function write_part( $live_id, $name, array $prepared, $pre ) {
+	public static function write_part( $live_id, $name, array $prepared, $pre, $whole = null ) {
 		$name = (string) $name;
 		if ( 0 !== strpos( $name, 'meta:' ) ) {
 			return new WP_Error( 'ab_mcp_sync_write_failed', sprintf( 'The part %s is of a name the kind term does not write. Check the term in wp-admin.', $name ) );
@@ -753,7 +758,7 @@ final class AB_MCP_Sync_Term_Writer {
 		// The right, the last read against the state the engine read, the
 		// call (AB_MCP_Sync_Write; Codex round 3 of branch 11, A6).
 		return AB_MCP_Sync_Write::forward(
-			self::class,
+			null === $whole ? self::class : (string) $whole,
 			(int) $live_id,
 			$pre,
 			static function () use ( $live_id, $key, $prepared, $from ) {

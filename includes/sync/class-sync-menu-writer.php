@@ -533,7 +533,10 @@ final class AB_MCP_Sync_Menu_Writer {
 	public static function write_part( $live_id, $name, array $prepared, $pre ) {
 		$name = (string) $name;
 		if ( 0 === strpos( $name, 'meta:' ) ) {
-			return AB_MCP_Sync_Term_Writer::write_part( (int) $live_id, $name, $prepared, is_array( $pre ) ? array_intersect_key( $pre, array_flip( array( 'row', 'meta', 'terms' ) ) ) : null );
+			// As the kind term writes it, compared as the whole menu with its
+			// positions (Codex round 4 of branch 11, item 2: a hook of the
+			// right that moves a position is seen before the write).
+			return AB_MCP_Sync_Term_Writer::write_part( (int) $live_id, $name, $prepared, $pre, self::class );
 		}
 		if ( 0 !== strpos( $name, 'location:' ) ) {
 			return new WP_Error( 'ab_mcp_sync_write_failed', sprintf( 'The part %s is of a name the kind menu does not write. Check the menu in wp-admin (Appearance → Menus).', $name ) );
