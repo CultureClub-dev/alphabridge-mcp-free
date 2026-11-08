@@ -275,7 +275,7 @@ e('post-spelled-template', 'precheck(): the template the row writes is asked for
 e('post-thumbnail-image', 'precheck(): the featured image names an attachment WordPress shows as an image', PW,
   "\t\t\tif ( 'attachment' !== AB_MCP_Sync_Rows::post_type_of( $image ) || '' === (string) wp_get_attachment_image( $image, 'thumbnail' ) ) {", "\t\t\tif ( false ) {", 'unit', P_IMAGE)
 e('post-thumbnail-write', 'write_part(): the featured image through set_post_thumbnail()', PW,
-  "\t\t\tif ( '_thumbnail_id' === $key ) {\n\t\t\t\treturn self::write_thumbnail( (int) $live_id, $values );", "\t\t\tif ( false ) {\n\t\t\t\treturn self::write_thumbnail( (int) $live_id, $values );", 'unit', P_IMAGE)
+  "\t\t\tif ( '_thumbnail_id' === $key ) {\n\t\t\t\t// No right of its own at the call", "\t\t\tif ( false ) {\n\t\t\t\t// No right of its own at the call", 'unit', P_IMAGE)
 e('post-write-part-right', 'write_part(): the right of a key asked at the post right before the call; refused at a new post, the object stays as a rest', PW,
   "\t\t\t\t\treturn true === $may ? true : new WP_Error( 'ab_mcp_sync_rights', sprintf( 'The meta %1$s of the post was not written", "\t\t\t\t\treturn true ? true : new WP_Error( 'ab_mcp_sync_rights', sprintf( 'The meta %1$s of the post was not written", 'it', 'testANewPostWithAPlainKeyGoesAndOneWhoseRightTheNewPostRefusesStaysAsARest')
 e('post-slug-pending', 'slug_refusal(): a pending post of an account that may not publish it loses its slug', PW,

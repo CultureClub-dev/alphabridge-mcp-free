@@ -392,41 +392,43 @@ final class AB_MCP_Sync_Css_Writer {
 		if ( null === $live_id || (string) $live_id !== $stylesheet ) {
 			return AB_MCP_Sync_Post_Writer::locked( 'custom_css:create', sprintf( 'the CSS of %s is not linked to its stylesheet on this site', $stylesheet ) );
 		}
+		if ( null === $pre ) {
+			return AB_MCP_Sync_Post_Writer::locked( 'custom_css:create', sprintf( 'this site links no CSS post to %s (custom_css_post_id)', $stylesheet ) );
+		}
 		// The right, the last read of the CSS against the state the engine
 		// read, the call (AB_MCP_Sync_Write; Codex round 3 of branch 11, A6).
+		// wp_update_custom_css_post() finds the post by the link in the theme
+		// mods, read through the cache of the options: emptied first, so it
+		// finds the post the step read (Codex round 1 of branch 11, A1),
+		// never makes a second one from a stale link; before the last read,
+		// and the post of the call is the one the comparison read (Codex
+		// round 4, item 4: no read between the comparison and the call).
 		return AB_MCP_Sync_Write::forward(
 			self::class,
 			$stylesheet,
 			$pre,
 			static fn() => current_user_can( 'edit_css' ) ? true : AB_MCP_Sync_Post_Writer::rights( sprintf( 'change the Additional CSS of %s (edit_css)', $stylesheet ) ),
-			static fn() => self::css_call( $prepared, $stylesheet )
+			static fn() => self::css_call( $prepared, $stylesheet, (int) $pre['row']['post_id'] ),
+			static function () use ( $stylesheet ) {
+				AB_MCP_Sync_Shared_Row::forget( 'stylesheet' );
+				AB_MCP_Sync_Shared_Row::forget( 'theme_mods_' . $stylesheet );
+				return null;
+			}
 		);
 	}
 
 	/**
-	 * The call of the core for the CSS: the caches of the link emptied, the
-	 * linked post read, wp_update_custom_css_post() with no revision deleted.
+	 * The call of the core for the CSS: wp_update_custom_css_post() with no
+	 * revision of its post deleted.
 	 *
 	 * @param array  $prepared   target_of().
 	 * @param string $stylesheet The stylesheet.
+	 * @param int    $post_id    The linked post, as the last read read it.
 	 * @return string|WP_Error The stylesheet.
 	 */
-	private static function css_call( array $prepared, $stylesheet ) {
-		// wp_update_custom_css_post() finds the post by the link in the theme
-		// mods, read through the cache of the options: emptied first, so it
-		// finds the post the step read (Codex round 1 of branch 11, A1),
-		// never makes a second one from a stale link.
-		AB_MCP_Sync_Shared_Row::forget( 'stylesheet' );
-		AB_MCP_Sync_Shared_Row::forget( 'theme_mods_' . $stylesheet );
-		$current = self::current( $stylesheet );
-		if ( is_wp_error( $current ) ) {
-			return $current;
-		}
-		if ( null === $current ) {
-			return AB_MCP_Sync_Post_Writer::locked( 'custom_css:create', sprintf( 'this site links no CSS post to %s (custom_css_post_id)', $stylesheet ) );
-		}
+	private static function css_call( array $prepared, $stylesheet, $post_id ) {
 		$done = AB_MCP_Sync_Post_Writer::keeping_revisions(
-			(int) $current['row']['post_id'],
+			(int) $post_id,
 			static function () use ( $prepared, $stylesheet ) {
 				return wp_update_custom_css_post(
 					(string) $prepared['css'],

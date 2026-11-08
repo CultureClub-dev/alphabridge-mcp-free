@@ -1981,7 +1981,11 @@ final class AB_MCP_Sync_Post_Writer {
 			$values = isset( $prepared['meta'][ $key ] ) ? $prepared['meta'][ $key ] : array();
 			$from   = is_array( $pre ) ? self::meta_values( $pre, $key ) : array();
 			if ( '_thumbnail_id' === $key ) {
-				return self::write_thumbnail( (int) $live_id, $values );
+				// No right of its own at the call (the right of the post, asked
+				// ahead): the last read against the state the engine read, then
+				// the call; the engine saves the journal between its read and
+				// the call (Codex round 4 of branch 11, item 4).
+				return AB_MCP_Sync_Write::forward( self::class, $live_id, $pre, static fn() => true, static fn() => self::write_thumbnail( (int) $live_id, $values ) );
 			}
 			// The right at the object right before the call (decision 28): of
 			// a new post the first time it can be asked; a refusal is a call
@@ -2004,7 +2008,12 @@ final class AB_MCP_Sync_Post_Writer {
 		}
 		if ( 0 === strpos( $name, 'terms:' ) ) {
 			$taxonomy = substr( $name, 6 );
-			return self::write_terms( $live_id, $taxonomy, isset( $prepared['terms'][ $taxonomy ] ) ? $prepared['terms'][ $taxonomy ] : array() );
+			$terms    = isset( $prepared['terms'][ $taxonomy ] ) ? $prepared['terms'][ $taxonomy ] : array();
+			// The rights of the terms asked ahead (term_right()); the last read
+			// against the state the engine read, then the call: the engine
+			// saves the journal between its read and the call, through $wpdb
+			// and its filter query (Codex round 4 of branch 11, item 4).
+			return AB_MCP_Sync_Write::forward( self::class, $live_id, $pre, static fn() => true, static fn() => self::write_terms( $live_id, $taxonomy, $terms ) );
 		}
 		return new WP_Error( 'ab_mcp_sync_write_failed', sprintf( 'The part %s is of a name this version does not write. Check the object in wp-admin.', $name ) );
 	}

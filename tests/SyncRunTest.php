@@ -2806,7 +2806,7 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( 'post:thumbnail', self::lock_of( AB_MCP_Sync_Post_Writer::precheck( AB_MCP_Sync_Post_Writer::target_of( $line( '8' ), self::item(), $ctx ), 12, $ctx['now'] ) ), 'No attachment.' );
 		// Written through set_post_thumbnail(), removed through delete_post_thumbnail().
 		$GLOBALS['ab_test_meta'][12]['_thumbnail_id'] = array();
-		self::assertTrue( AB_MCP_Sync_Post_Writer::write_part( 12, 'meta:_thumbnail_id', $prepared, null ) );
+		self::assertTrue( AB_MCP_Sync_Post_Writer::write_part( 12, 'meta:_thumbnail_id', $prepared, AB_MCP_Sync_Post_Writer::current( 12 ) ) );
 		self::assertSame( array( 70 ), $GLOBALS['ab_test_meta'][12]['_thumbnail_id'] ?? null, 'set_post_thumbnail() of the stubs stores the id.' );
 		self::assertSame( array( array( 'set', 12, 70 ) ), $GLOBALS['ab_test_thumbnails'], 'Through the core\'s own API.' );
 		unset( $GLOBALS['ab_test_images'], $GLOBALS['ab_test_thumbnails'] );

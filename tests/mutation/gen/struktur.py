@@ -54,6 +54,7 @@ RUNS = {
     'it': ('it', 'SyncStructureTest'),
     'itc': ('it', 'SyncContentTest'),
     'term': ('unit', 'SyncTermWriterTest'),
+    'itr': ('it', 'SyncRunTest'),
 }
 
 entries = []
@@ -107,6 +108,7 @@ U_TERMBACK = 'testTheRowOfATermGoesBackOnlyWhereItIsWhatTheStepWroteAndItsSlugAn
 U_CHECKED = 'testTheFinishedContentOfAnObjectGoesThroughTheCredentialCheckOnceMore'
 U_PARTORDER = 'testTheOrderOfThePartsOfEachKindIsWhatTheTokensCover'
 U_WRITE = 'testTheOneWriteOfAStepAsksTheRightThenReadsThenComparesThenCalls'
+U_LASTREAD = 'testAHookAtTheLastReadOfTheObjectBeforeTheWriteIsSeenByTheComparison'
 U_HOOK = 'testEveryWriterWritesNothingWhereAHookOfItsRightChangesItsOwnFieldRightBeforeTheCall'
 U_TERMROW = 'testTheRowOfATermIsWrittenThroughTheCoreAndAnIdWordPressGaveBackIsNotTheStepsOwn'
 
@@ -312,7 +314,7 @@ e('item-blank', 'sanitizer_refusal(): no title and no description become a descr
   "\t\t\tif ( '' === $title && '' === (string) $f['menu-item-description'] ) {",
   "\t\t\tif ( false ) {", 'u', U_ITEMSAN)
 e('item-dates', 'write_row(): the dates of an item here as they are', MW,
-  "\t\t\t$fields['menu-item-post-date']     = (string) $row['post_date'];\n\t\t\t$fields['menu-item-post-date-gmt'] = (string) $row['post_date_gmt'];",
+  "\t\t\t$fields['menu-item-post-date']     = (string) $dates[0];\n\t\t\t$fields['menu-item-post-date-gmt'] = (string) $dates[1];",
   "", 'u', U_ITEM)
 e('item-slash', 'write_row(): the fields slashed, as the core unslashes them', MW,
   "\t\t\t$fields[ $field ] = wp_slash( (string) $fields[ $field ] );",
@@ -397,13 +399,12 @@ e('engine-pending-space', 'pending(): a new menu is pending in the space of term
 # ------------------------------------------- Codex round 1 of branch 11
 # A1: the caches of a shared row emptied right before the core call.
 e('a1-menu-forget', 'write_part(): set_theme_mod() reads the theme mods the step read (A1)', MW,
-  "\t\t\t\tAB_MCP_Sync_Shared_Row::forget( $positions['option'] );\n\t\t\t\t$locations = $positions['locations'];",
-  "\t\t\t\t$locations = $positions['locations'];", 'it', IT_STALE)
+  "\t\t\t\tif ( ! is_wp_error( $positions ) ) {\n\t\t\t\t\tAB_MCP_Sync_Shared_Row::forget( $positions['option'] );\n\t\t\t\t}\n", "", 'it', IT_STALE)
 e('a1-css-forget', 'write_row(): wp_update_custom_css_post() finds the post by the link the step read (A1)', CW,
   "\t\tAB_MCP_Sync_Shared_Row::forget( 'theme_mods_' . $stylesheet );\n", "", 'it', IT_STALE)
 e('a1-option-forget', 'write_row(): update_option() compares with the row as it is (A1)', OW,
-  "\t\t\t\tAB_MCP_Sync_Shared_Row::forget( $name );\n\t\t\t\tupdate_option( $name, $prepared['value'] );",
-  "\t\t\t\tupdate_option( $name, $prepared['value'] );", 'it', IT_STALE)
+  "\t\t\t\tAB_MCP_Sync_Shared_Row::forget( $name );\n\t\t\t\treturn null;",
+  "\t\t\t\treturn null;", 'it', IT_STALE)
 e('a1-areas-forget', 'write_row(): wp_set_sidebars_widgets() compares with the row as it is (A1)', WA,
   "\t\t\t\tAB_MCP_Sync_Shared_Row::forget( self::AREAS );\n\t\t\t\t$areas = AB_MCP_Sync_Shared_Row::read( self::AREAS );",
   "\t\t\t\t$areas = AB_MCP_Sync_Shared_Row::read( self::AREAS );", 'it', IT_STALE)
@@ -444,8 +445,8 @@ e('a4-menu-location-name', 'more(): the names of the positions of a menu through
   "", 'it', IT_CRED)
 # A5: the rights again right before each write.
 e('a5-widget-forward', 'write_part(): edit_theme_options again after the update() of the widget (A5)', WA,
-  "\t\t\tstatic fn() => current_user_can( 'edit_theme_options' ) ? true : AB_MCP_Sync_Post_Writer::rights( 'change the widgets of this site (edit_theme_options)' ),\n\t\t\tstatic function () use ( $write, $clean ) {",
-  "\t\t\tstatic fn() => true,\n\t\t\tstatic function () use ( $write, $clean ) {", 'u', U_AREACHK)
+  "\t\t\tstatic fn() => current_user_can( 'edit_theme_options' ) ? true : AB_MCP_Sync_Post_Writer::rights( 'change the widgets of this site (edit_theme_options)' ),\n\t\t\tstatic function ( $value ) use ( $write, $clean ) {",
+  "\t\t\tstatic fn() => true,\n\t\t\tstatic function ( $value ) use ( $write, $clean ) {", 'u', U_AREACHK)
 e('a5-widget-back', 'right_now(): edit_theme_options again right before a field of an area goes back (A5)', WA,
   "\t\treturn current_user_can( 'edit_theme_options' ) ? null : array(",
   "\t\treturn true ? null : array(", 'u', U_AREACHK)
@@ -566,6 +567,23 @@ e('a6-menu-meta-pass', 'write_part() of the menu: its whole state handed to the 
   "\t\t\treturn AB_MCP_Sync_Term_Writer::write_part( (int) $live_id, $name, $prepared, is_array( $pre ) ? array_intersect_key( $pre, array_flip( array( 'row', 'meta', 'terms' ) ) ) : null );", 'u', U_HOOK)
 e('a6f-engine-row', 'write_parts(): the row call with the state the engine read (A6)', EN,
   "\t\t\t\t$id = $w::write_row( $prepared, $live_id, $pre_all );", "\t\t\t\t$id = $w::write_row( $prepared, $live_id );", 'it', IT_OPTIONS)
+# Item 4 of round 4: what the call needs read before the comparison.
+e('a6-needs-first', 'forward(): what the call needs read before current() and the comparison (item 4 of round 4)', SW,
+  "\t\t\t\t$done = $first();\n\t\t\t\treturn is_wp_error( $done ) ? $done : $w::current( $live_id );",
+  "\t\t\t\t$now  = $w::current( $live_id );\n\t\t\t\t$done = $first();\n\t\t\t\treturn is_wp_error( $done ) ? $done : $now;", 'u', U_LASTREAD)
+e('a6-needs-first-order', 'forward(): the order of rights, needs and the comparison (item 4 of round 4)', SW,
+  "\t\t\t\t$done = $first();\n\t\t\t\treturn is_wp_error( $done ) ? $done : $w::current( $live_id );",
+  "\t\t\t\t$now  = $w::current( $live_id );\n\t\t\t\t$done = $first();\n\t\t\t\treturn is_wp_error( $done ) ? $done : $now;", 'u', U_WRITE)
+e('a6-needs-unread', 'forward(): what the call needs, unread, refuses the write (item 4 of round 4)', SW,
+  "\t\t\treturn is_wp_error( $needed ) ? $needed : true;", "\t\t\treturn true;", 'u', U_WRITE)
+e('a6-needs-new', 'forward(): what the call of a new object needs is read as well (item 4 of round 4)', SW,
+  "\t\t\treturn self::core( $rights, $first, static fn( $now ) => true, $then );", "\t\t\treturn self::core( $rights, static fn() => true, static fn( $now ) => true, $then );", 'u', U_WRITE)
+e('a4-with-row-first', 'write_parts(): what the row call writes besides the row read before the read right before the call (item 4 of round 4)', EN,
+  "\t\t\t\t$named   = $w::with_row( $prepared, $live_id, $backup );\n\t\t\t\t$pre_all = null === $live_id ? null : $w::current( $live_id );\n\t\t\t\tif ( is_wp_error( $pre_all ) ) {\n\t\t\t\t\treturn self::unread( $journal, $i, $pre_all, $live_id, $backup );\n\t\t\t\t}\n",
+  "\t\t\t\t$pre_all = null === $live_id ? null : $w::current( $live_id );\n\t\t\t\tif ( is_wp_error( $pre_all ) ) {\n\t\t\t\t\treturn self::unread( $journal, $i, $pre_all, $live_id, $backup );\n\t\t\t\t}\n\t\t\t\t$named   = $w::with_row( $prepared, $live_id, $pre_all );\n", 'itr', 'testAnOptionFilterAsTheRowCallIsPreparedIsReadBeforeTheCallAndItsChangeIsAnotherHands')
+e('a4-terms-helper', 'write_part(): the terms of a post through the helper, after the journal is saved (item 4 of round 4)', PW,
+  "\t\t\treturn AB_MCP_Sync_Write::forward( self::class, $live_id, $pre, static fn() => true, static fn() => self::write_terms( $live_id, $taxonomy, $terms ) );",
+  "\t\t\treturn self::write_terms( $live_id, $taxonomy, $terms );", 'itr', 'testAHookAsTheJournalIsSavedBeforeTheCallOfTheTermsIsSeenAndNothingIsWritten')
 # The way back through the helper: the last read against what the step wrote.
 e('a6-css-back', 'restore_part(): the last read of the CSS right before it goes back (A6)', CW,
   "\t\t\tstatic fn( $again ) => is_array( $again ) && $again['row']['post_id'] === $backup['row']['post_id'] && hash_equals( (string) $hash, self::row_hash( $again['row'] ) ),",

@@ -100,22 +100,43 @@ final class AB_MCP_Sync_Write {
 	 * An object here without a state to compare is never written (fail
 	 * closed: every call of the engine hands it).
 	 *
+	 * What the call needs besides (a row it writes whole, the dates of an
+	 * item, the caches of the option API emptied) is read in $needs, as the
+	 * first part of the last read, before current() and the comparison
+	 * (Codex round 4 of branch 11, item 4): between the comparison and the
+	 * call of the core no read, no cache and no hook. The comparison covers
+	 * what $needs read where it is part of the object (the rows of an area
+	 * as its fields, the positions of a menu, the row of an item).
+	 *
 	 * @param string          $w       Writer class.
 	 * @param int|string|null $live_id The object here, null for a new one.
 	 * @param mixed           $pre     current() right before the call.
 	 * @param callable        $rights  As core().
-	 * @param callable        $call    As core().
+	 * @param callable        $call    ( mixed $needed ): mixed, the call of the
+	 *                                 core with what $needs read.
+	 * @param callable|null   $needs   (): mixed|WP_Error, what the call needs.
 	 * @return mixed|WP_Error
 	 */
-	public static function forward( $w, $live_id, $pre, callable $rights, callable $call ) {
+	public static function forward( $w, $live_id, $pre, callable $rights, callable $call, ?callable $needs = null ) {
+		$needed = null;
+		$first  = static function () use ( $needs, &$needed ) {
+			$needed = null === $needs ? null : $needs();
+			return is_wp_error( $needed ) ? $needed : true;
+		};
+		$then   = static function () use ( $call, &$needed ) {
+			return $call( $needed );
+		};
 		if ( null === $live_id ) {
-			return self::core( $rights, static fn() => null, static fn( $now ) => true, $call );
+			return self::core( $rights, $first, static fn( $now ) => true, $then );
 		}
 		return self::core(
 			$rights,
-			static fn() => $w::current( $live_id ),
+			static function () use ( $first, $w, $live_id ) {
+				$done = $first();
+				return is_wp_error( $done ) ? $done : $w::current( $live_id );
+			},
 			static fn( $now ) => is_array( $pre ) && is_array( $now ) && self::same( $pre, $now ),
-			$call
+			$then
 		);
 	}
 

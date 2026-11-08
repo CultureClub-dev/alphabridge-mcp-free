@@ -554,18 +554,7 @@ final class AB_MCP_Sync_Menu_Writer {
 				$refusal = self::location_refusal( $location, $set );
 				return null === $refusal ? true : $refusal;
 			},
-			static function () use ( $live_id, $location, $set ) {
-				// The caches of the row emptied first (Codex round 1 of branch
-				// 11, A1): set_theme_mod() reads the theme mods again through the
-				// cache of the options, so it changes the row as it is now, the
-				// one read here, and no other field of it goes back to a cached
-				// value.
-				AB_MCP_Sync_Shared_Row::forget( 'stylesheet' );
-				$positions = self::positions( (int) $live_id );
-				if ( is_wp_error( $positions ) ) {
-					return $positions;
-				}
-				AB_MCP_Sync_Shared_Row::forget( $positions['option'] );
+			static function ( $positions ) use ( $live_id, $location, $set ) {
 				$locations = $positions['locations'];
 				if ( $set ) {
 					$locations[ $location ] = (int) $live_id;
@@ -574,6 +563,21 @@ final class AB_MCP_Sync_Menu_Writer {
 				}
 				set_theme_mod( 'nav_menu_locations', $locations );
 				return true;
+			},
+			static function () use ( $live_id ) {
+				// The caches of the row emptied first (Codex round 1 of branch
+				// 11, A1): set_theme_mod() reads the theme mods again through the
+				// cache of the options, so it changes the row as it is now, the
+				// one read here, and no other field of it goes back to a cached
+				// value. As the first part of the last read, before the
+				// comparison, which covers the positions read here (Codex round
+				// 4, item 4: no read between the comparison and the call).
+				AB_MCP_Sync_Shared_Row::forget( 'stylesheet' );
+				$positions = self::positions( (int) $live_id );
+				if ( ! is_wp_error( $positions ) ) {
+					AB_MCP_Sync_Shared_Row::forget( $positions['option'] );
+				}
+				return $positions;
 			}
 		);
 	}
@@ -1475,7 +1479,19 @@ final class AB_MCP_Sync_Menu_Item_Writer {
 			null === $live_id ? null : (int) $live_id,
 			$pre,
 			static fn() => current_user_can( 'edit_theme_options' ) && current_user_can( 'assign_term', $menu ) && ( null === $live_id || current_user_can( 'edit_post', (int) $live_id ) ) ? true : AB_MCP_Sync_Post_Writer::rights( sprintf( 'write an item of the menu %d (edit_theme_options, assign_term, edit_post)', $menu ) ),
-			static fn() => self::item_call( $prepared, $live_id, $menu )
+			static fn( $dates ) => self::item_call( $prepared, $live_id, $menu, $dates ),
+			// The dates of an item here as they are: without them the core
+			// gives the item the time of the call (wp_resolve_post_date() of
+			// no date), which the item's form does not hold and the way back
+			// would not give back. Read as the first part of the last read,
+			// before the comparison (Codex round 4, item 4).
+			null === $live_id ? null : static function () use ( $live_id ) {
+				$row = AB_MCP_Sync_Rows::post( (int) $live_id );
+				if ( ! is_array( $row ) ) {
+					return new WP_Error( 'ab_mcp_sync_rows_unread', sprintf( 'The row of the menu item %d could not be read right before it was written, so nothing is written. Try again; if it keeps failing, the database error log names the cause.', (int) $live_id ) );
+				}
+				return array( (string) $row['post_date'], (string) $row['post_date_gmt'] );
+			}
 		);
 	}
 
@@ -1483,27 +1499,24 @@ final class AB_MCP_Sync_Menu_Item_Writer {
 	 * The call of the core for an item: its fields slashed, the dates of an
 	 * item here as they are, wp_update_nav_menu_item().
 	 *
-	 * @param array    $prepared target_of().
-	 * @param int|null $live_id  The item here, null for a new one.
-	 * @param int      $menu     The menu here.
+	 * @param array         $prepared target_of().
+	 * @param int|null      $live_id  The item here, null for a new one.
+	 * @param int           $menu     The menu here.
+	 * @param string[]|null $dates    post_date and post_date_gmt of the item
+	 *                                here, as the last read read them.
 	 * @return int|WP_Error
 	 */
-	private static function item_call( array $prepared, $live_id, $menu ) {
+	private static function item_call( array $prepared, $live_id, $menu, $dates = null ) {
 		$fields = $prepared['fields'];
 		foreach ( array( 'menu-item-title', 'menu-item-url', 'menu-item-description', 'menu-item-attr-title', 'menu-item-classes', 'menu-item-xfn', 'menu-item-target', 'menu-item-object' ) as $field ) {
 			$fields[ $field ] = wp_slash( (string) $fields[ $field ] );
 		}
-		// The dates of an item here as they are: without them the core gives
-		// the item the time of the call (wp_resolve_post_date() of no date),
-		// which the item's form does not hold and the way back would not give
-		// back.
 		if ( null !== $live_id ) {
-			$row = AB_MCP_Sync_Rows::post( (int) $live_id );
-			if ( ! is_array( $row ) ) {
+			if ( ! is_array( $dates ) ) {
 				return new WP_Error( 'ab_mcp_sync_rows_unread', sprintf( 'The row of the menu item %d could not be read right before it was written, so nothing is written. Try again; if it keeps failing, the database error log names the cause.', (int) $live_id ) );
 			}
-			$fields['menu-item-post-date']     = (string) $row['post_date'];
-			$fields['menu-item-post-date-gmt'] = (string) $row['post_date_gmt'];
+			$fields['menu-item-post-date']     = (string) $dates[0];
+			$fields['menu-item-post-date-gmt'] = (string) $dates[1];
 		}
 		// Where menu items keep revisions (a plugin adds them), none deleted
 		// by the save of one here: keeping_revisions().

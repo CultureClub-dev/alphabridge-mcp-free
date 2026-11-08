@@ -72,9 +72,15 @@ final class SyncStructureWpdb {
 		return null;
 	}
 
+	/** @var callable|null Called with each query before it is answered, as the filter query of $wpdb runs. */
+	public $on_query = null;
+
 	public function query( $sql ) {
 		$this->last_result = array();
 		$sql               = (string) $sql;
+		if ( is_callable( $this->on_query ) ) {
+			( $this->on_query )( $sql );
+		}
 		if ( preg_match( "/FROM wp_options WHERE option_name = '((?:[^'\\\\]|\\\\.)*)' LIMIT 1/", $sql, $m ) ) {
 			$name = stripslashes( $m[1] );
 			if ( array_key_exists( $name, $this->option_rows ) ) {
@@ -833,6 +839,35 @@ final class SyncStructureWritersTest extends TestCase {
 		self::assertSame( \AB_MCP_Sync_Write::CHANGED, \AB_MCP_Sync_Write::forward( AB_MCP_Sync_Option_Writer::class, 'blogname', null, $step( 'rights', true ), $step( 'call', 'called' ) )->get_error_code(), 'No state read: not written.' );
 		self::db()->option_rows['blogname'] = 'Other';
 		self::assertSame( \AB_MCP_Sync_Write::CHANGED, \AB_MCP_Sync_Write::forward( AB_MCP_Sync_Option_Writer::class, 'blogname', $pre, $step( 'rights', true ), $step( 'call', 'called' ) )->get_error_code() );
+		// What the call needs is read first, as part of the last read, after
+		// the rights and before current() and the comparison, and goes to the
+		// call (Codex round 4 of branch 11, item 4): between the comparison
+		// and the call nothing is read.
+		self::db()->option_rows['blogname'] = 'Old';
+		$pre                                = AB_MCP_Sync_Option_Writer::current( 'blogname' );
+		$seen                               = array();
+		self::assertSame( 'needed', \AB_MCP_Sync_Write::forward( AB_MCP_Sync_Option_Writer::class, 'blogname', $pre, $step( 'rights', true ), static fn( $needed ) => $needed, $step( 'needs', 'needed' ) ) );
+		self::assertSame( array( 'rights', 'needs' ), $seen );
+		$moved = \AB_MCP_Sync_Write::forward(
+			AB_MCP_Sync_Option_Writer::class,
+			'blogname',
+			$pre,
+			$step( 'rights', true ),
+			$step( 'call', 'called' ),
+			static function () {
+				self::db()->option_rows['blogname'] = 'Changed as the call needs were read';
+				return null;
+			}
+		);
+		self::assertSame( \AB_MCP_Sync_Write::CHANGED, $moved->get_error_code(), 'Before the comparison: it sees what changed as they were read.' );
+		self::db()->option_rows['blogname'] = 'Old';
+		$seen                               = array();
+		$unread                             = \AB_MCP_Sync_Write::forward( AB_MCP_Sync_Option_Writer::class, 'blogname', $pre, $step( 'rights', true ), $step( 'call', 'called' ), $step( 'needs', new WP_Error( 'unread', 'x' ) ) );
+		self::assertSame( array( 'unread', array( 'rights', 'needs' ) ), array( $unread->get_error_code(), $seen ), 'What fails to be read: nothing called.' );
+		self::assertTrue( \AB_MCP_Sync_Write::refused( $unread ) );
+		$seen = array();
+		self::assertSame( 'new', \AB_MCP_Sync_Write::forward( AB_MCP_Sync_Option_Writer::class, null, null, $step( 'rights', true ), static fn( $needed ) => $needed, $step( 'needs', 'new' ) ), 'A new object as well.' );
+		self::assertSame( array( 'rights', 'needs' ), $seen );
 		// Back: a refusal leaves the part as it is, with its note.
 		self::assertSame( array( 'state' => 'left', 'note' => 'Changed.' ), \AB_MCP_Sync_Write::back( $step( 'rights', true ), $step( 'read', 'now' ), $match( false ), $step( 'call', 'called' ), 'Changed.' ) );
 		$left = \AB_MCP_Sync_Write::back( $step( 'rights', 'edit the CSS (edit_css)' ), $step( 'read', 'now' ), $match( true ), $step( 'call', 'called' ), 'Changed.' );
@@ -1020,6 +1055,134 @@ final class SyncStructureWritersTest extends TestCase {
 				},
 				static fn( $pre ) => AB_MCP_Sync_Widget_Area_Writer::write_row( $list, 'sidebar-1', $pre ),
 				static fn(): bool => array_key_exists( 'sidebars_widgets', $GLOBALS['ab_test_options'] )
+			);
+			unset( $GLOBALS['ab_test_widget_violation'] );
+		}
+	}
+
+	public function testAHookAtTheLastReadOfTheObjectBeforeTheWriteIsSeenByTheComparison(): void {
+		// Codex round 4 of branch 11, item 4: between the comparison of the
+		// helper and the call of the core no read any more. A hook of the
+		// query of $wpdb that changes the field the call is to write as the
+		// last read of its row before the write runs: the comparison sees it,
+		// nothing is written. Before, the writers read the row once more
+		// inside the call, after the comparison (the dates of an item, the
+		// positions, the rows of an area, the linked CSS), and wrote over
+		// the change unseen. The number of reads of the row is counted first
+		// in a call without the hook.
+		$writes = static function ( string $case, string $pattern, callable $setup, callable $read, callable $change, callable $call, callable $written ): void {
+			$setup();
+			$pre    = $read();
+			$count  = 0;
+			self::db()->on_query = static function ( string $sql ) use ( $pattern, &$count ): void {
+				$count += preg_match( $pattern, $sql );
+			};
+			$call( $pre );
+			self::db()->on_query = null;
+			self::assertGreaterThan( 0, $count, $case );
+			$setup();
+			$pre  = $read();
+			$seen = 0;
+			self::db()->on_query = static function ( string $sql ) use ( $pattern, $count, $change, &$seen ): void {
+				if ( 1 === preg_match( $pattern, $sql ) && ++$seen === $count ) {
+					$change();
+				}
+			};
+			$refused             = $call( $pre );
+			self::db()->on_query = null;
+			self::assertInstanceOf( WP_Error::class, $refused, $case . ': the change at the last read is seen.' );
+			self::assertSame( \AB_MCP_Sync_Write::CHANGED, $refused->get_error_code(), $case . ': ' . $refused->get_error_message() );
+			self::assertFalse( $written(), $case . ': nothing written.' );
+		};
+		// The CSS: its linked post.
+		$css = AB_MCP_Sync_Css_Writer::target_of( self::css_line( 'p{color:red}' ), self::item( 'update', 'twentytwentyfive' ), self::ctx() );
+		$writes(
+			'the CSS',
+			'/FROM wp_posts WHERE ID = 7\b/',
+			static function (): void {
+				self::css_here();
+				$GLOBALS['ab_test_css_writes'] = array();
+			},
+			static fn() => AB_MCP_Sync_Css_Writer::current( 'twentytwentyfive' ),
+			static function (): void {
+				self::db()->post_rows[7]['post_content'] = 'body{color:blue}';
+			},
+			static fn( $pre ) => AB_MCP_Sync_Css_Writer::write_row( $css, 'twentytwentyfive', $pre ),
+			static fn(): bool => array() !== $GLOBALS['ab_test_css_writes']
+		);
+		// A position of a menu: the theme mods.
+		$menu_here = static function (): void {
+			self::db()->option_rows['stylesheet']                  = 'twentytwentyfive';
+			self::db()->option_rows['theme_mods_twentytwentyfive'] = serialize( array( 'nav_menu_locations' => array( 'primary' => 3 ) ) );
+			self::db()->term_rows[5]                               = array( 'term_id' => '5', 'name' => 'Main', 'slug' => 'main', 'term_group' => '0', 'term_taxonomy_id' => '9', 'taxonomy' => 'nav_menu', 'description' => '', 'parent' => '0', 'count' => '0' );
+			$GLOBALS['ab_test_theme_mods']                         = array();
+		};
+		$menu = AB_MCP_Sync_Menu_Writer::target_of( self::menu_line( array( 'primary' ) ), self::item( 'update', '5' ), self::ctx() );
+		$writes(
+			'a position of the menu',
+			"/option_name = 'theme_mods_twentytwentyfive'/",
+			$menu_here,
+			static fn() => AB_MCP_Sync_Menu_Writer::current( 5 ),
+			static function (): void {
+				self::db()->option_rows['theme_mods_twentytwentyfive'] = serialize( array( 'nav_menu_locations' => array( 'primary' => 9 ) ) );
+			},
+			static fn( $pre ) => AB_MCP_Sync_Menu_Writer::write_part( 5, 'location:primary', $menu, $pre ),
+			static fn(): bool => isset( $GLOBALS['ab_test_theme_mods']['nav_menu_locations'] )
+		);
+		// The row of a menu item: its dates.
+		$item = AB_MCP_Sync_Menu_Item_Writer::target_of( self::item_line( array(), array( 'post_title' => 'Shop now' ) ), self::item( 'update', '21' ), self::ctx( array( 'term' => array( 5 => 50 ) ) ) );
+		$writes(
+			'the row of a menu item',
+			'/FROM wp_posts WHERE ID = 21\b/',
+			static function (): void {
+				self::db()->post_rows[21]       = array( 'post_type' => 'nav_menu_item', 'post_title' => 'Shop', 'post_status' => 'publish', 'menu_order' => '2', 'post_date' => '2026-01-02 03:04:05', 'post_date_gmt' => '2026-01-02 02:04:05' );
+				self::db()->meta[21]            = array();
+				$GLOBALS['ab_test_menu_writes'] = array();
+			},
+			static fn() => AB_MCP_Sync_Menu_Item_Writer::current( 21 ),
+			static function (): void {
+				self::db()->post_rows[21]['post_title'] = 'By the hook';
+			},
+			static fn( $pre ) => AB_MCP_Sync_Menu_Item_Writer::write_row( $item, 21, $pre ),
+			static fn(): bool => array() !== $GLOBALS['ab_test_menu_writes']
+		);
+		// The list and an instance of a widget area: its rows.
+		if ( class_exists( 'WP_Widget', false ) ) {
+			$area_here = static function (): void {
+				self::areas_here( array( 'text-2', 'text-5' ), array( 2 => array( 'title' => 'B' ), 5 => array( 'title' => 'E' ) ) );
+				$GLOBALS['ab_test_options'] = array();
+			};
+			$writes(
+				'the list of a widget area',
+				"/option_name = 'sidebars_widgets'/",
+				$area_here,
+				static fn() => AB_MCP_Sync_Widget_Area_Writer::current( 'sidebar-1' ),
+				static function (): void {
+					self::db()->option_rows['sidebars_widgets'] = serialize( array( 'wp_inactive_widgets' => array(), 'sidebar-1' => array( 'text-5' ), 'sidebar-2' => array(), 'array_version' => 3 ) );
+				},
+				static fn( $pre ) => AB_MCP_Sync_Widget_Area_Writer::write_row( array( 'area' => 'sidebar-1', 'list' => array( 'text-5', 'text-2' ) ), 'sidebar-1', $pre ),
+				static fn(): bool => array_key_exists( 'sidebars_widgets', $GLOBALS['ab_test_options'] )
+			);
+			$fresh = array(
+				'area'   => 'sidebar-1',
+				'writes' => array(
+					'text-2' => array(
+						'base'     => 'text',
+						'number'   => 2,
+						'settings' => array( 'title' => 'C' ),
+					),
+				),
+			);
+			$writes(
+				'an instance of a widget area',
+				"/option_name = 'widget_text'/",
+				$area_here,
+				static fn() => AB_MCP_Sync_Widget_Area_Writer::current( 'sidebar-1' ),
+				static function (): void {
+					self::db()->option_rows['widget_text'] = serialize( array( 2 => array( 'title' => 'By the hook' ), 5 => array( 'title' => 'E' ), '_multiwidget' => 1 ) );
+				},
+				static fn( $pre ) => AB_MCP_Sync_Widget_Area_Writer::write_part( 'sidebar-1', 'instance:text-2', $fresh, $pre ),
+				static fn(): bool => array_key_exists( 'widget_text', $GLOBALS['ab_test_options'] )
 			);
 			unset( $GLOBALS['ab_test_widget_violation'] );
 		}

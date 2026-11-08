@@ -1412,11 +1412,19 @@ final class AB_MCP_Sync_Engine {
 				// Every part right before the row call: the row call writes
 				// besides the row (with_row()), so every part is read before it
 				// and read back after it.
+				// What the row call writes besides the row (with_row()) first:
+				// it may read through the option API and its filters (the
+				// default category of a post without one, get_option()), so it
+				// runs before the read right before the call, and no hook runs
+				// between that read and the call (Codex round 4 of branch 11,
+				// item 4: what a filter there changes reads as another hand's).
+				// Of the state of the backup: the row is the first part of the
+				// object whose with_row() reads it (a post).
+				$named   = $w::with_row( $prepared, $live_id, $backup );
 				$pre_all = null === $live_id ? null : $w::current( $live_id );
 				if ( is_wp_error( $pre_all ) ) {
 					return self::unread( $journal, $i, $pre_all, $live_id, $backup );
 				}
-				$named = $w::with_row( $prepared, $live_id, $pre_all );
 				foreach ( $journal['parts'] as $k => $other ) {
 					$journal['parts'][ $k ] = self::seen_before( $other, $pre_all, $backup, $w );
 				}

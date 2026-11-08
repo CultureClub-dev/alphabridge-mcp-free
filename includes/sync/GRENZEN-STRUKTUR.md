@@ -373,10 +373,17 @@ Position, die das Theme hier nicht registriert, in der Prüfung des Laufs
   Term: ein Rechtehook, der eine Position umhängt, wird vor dem Schreiben
   erkannt; Codex-Runde 4, Punkt 2); zurück die
   Zeile eines Posts (auch Vorlagen), eines Terms (auch des Menüs), eines
-  Menüeintrags und das CSS. Die Aufrufe ohne Rechtefrage zwischen der
-  Lesung der Engine und dem Aufruf (die Zeile eines Posts oder Terms, seine
-  Terme, das Beitragsbild) brauchen ihn nicht: dort ist die Lesung der
-  Engine die letzte. Die rohen Wege (Option, Position, Liste und Instanz
+  Menüeintrags und das CSS; seit Codex-Runde 4 (Punkt 4) auch die Terme
+  und das Beitragsbild eines Posts, ohne eigene Rechtefrage beim Aufruf,
+  weil die Engine zwischen ihrer Lesung und dem Aufruf das Journal
+  speichert (über `$wpdb` und dessen Filter `query`). Ohne den Helfer geht
+  nur die Zeile eines Posts oder Terms vorwärts: dort fragt zwischen der
+  Lesung der Engine und dem Aufruf niemand ein Recht (keine Rechtefrage).
+  Ein Hook lief dort bis Runde 4 doch: `with_row()` des Posts liest für
+  einen Post ohne Kategorie `get_option( 'default_category' )` mit dessen
+  Optionsfiltern (class-sync-post-writer.php:2381); es läuft seither vor
+  der Lesung der Engine, so dass zwischen ihr und dem Aufruf nichts mehr
+  läuft. Die rohen Wege (Option, Position, Liste und Instanz
   eines Bereichs, Meta) schreiben nur, wo die Zeile genau die Bytes hält,
   die vor den Hooks gelesen wurden (`put_back()`), und rufen keinen Kern.
   Prüffälle `testTheOneWriteOfAStepAsksTheRightThenReadsThenComparesThenCalls`
@@ -385,6 +392,92 @@ Position, die das Theme hier nicht registriert, in der Prüfung des Laufs
   `testTheRowOfATermIsWrittenThroughTheCoreAndAnIdWordPressGaveBackIsNotTheStepsOwn`).
 - Die Tokens eines Plans und eines Rückwegs decken auch die Reihenfolge,
   in der die Teile jeder Art zurückgehen (`PART_ORDER`, Codex-Runde 1, C2).
+
+## Grenze C: Hooks im eigenen Kernaufruf (Codex-Runde 4, Punkt 4)
+
+- Fenster: nur innerhalb des Kernaufrufs selbst, also `wp_insert_post()`
+  und `wp_update_post()` (auch innerhalb von `wp_update_nav_menu_item()`
+  und `wp_update_custom_css_post()`), `wp_update_term()`,
+  `update_metadata()`, `add_metadata()` und `delete_metadata()`,
+  `wp_set_object_terms()` und `set_post_thumbnail()`, `update_option()`
+  (auch innerhalb von `wp_set_sidebars_widgets()` und auf dem Weg einer
+  Instanz) und `set_theme_mod()`.
+- Zwischen dem Vergleich des Helfers (`AB_MCP_Sync_Write`) und dem
+  Kernaufruf läuft kein Hook und keine Lesung: keine Option, kein
+  `$wpdb`, keine Rechtefrage über `map_meta_cap`, kein Sanitizer, kein
+  Cache. Was der Aufruf braucht, liest der Helfer als ersten Teil der
+  letzten Lesung, vor dem Vergleich (`forward()` mit `$needs`). Je Art
+  geprüft:
+  - Post: Meta über `write_meta()`, dessen erster Aufruf der Kern ist;
+    Terme und Beitragsbild über den Helfer, dann `wp_set_object_terms()`
+    bzw. `set_post_thumbnail()`; die Zeile vorwärts ohne Helfer, die
+    Lesung der Engine unmittelbar vor `wp_update_post()` (`with_row()`
+    davor). Zurück: `back()`, danach unmittelbar `wp_update_post()`.
+  - Term: Meta wie beim Post; die Zeile wie beim Post, unmittelbar
+    `wp_update_term()`; zurück `back()`, dann `wp_update_term()`.
+  - Menü: die Zeile über den Helfer, dann `wp_update_term()`; die Meta wie
+    beim Term, verglichen als ganzes Menü samt Positionen.
+  - Position: das Leeren der Caches und die Positionen als erster Teil der
+    letzten Lesung, dann `set_theme_mod()` (vorher las der Aufruf die
+    Positionen nach dem Vergleich noch einmal).
+  - Menüeintrag: die Daten der Zeile als erster Teil der letzten Lesung,
+    dann nur `wp_slash()` und `wp_update_nav_menu_item()` (vorher las
+    `item_call()` die Zeile nach dem Vergleich); die Meta wie beim Post;
+    zurück `back()`, dann `wp_update_post()`.
+  - Widget: die Liste (`sidebars_widgets`) und die Zeile des Widgets mit
+    dem Leeren ihrer Caches als erster Teil der letzten Lesung; der
+    Vergleich deckt beide Zeilen ganz (jede Liste, jede Instanz und ihr
+    Rest sind Felder). Dann `wp_set_sidebars_widgets()` bzw.
+    `update_option()` (vorher lasen beide Aufrufe ihre Zeile nach dem
+    Vergleich).
+  - CSS: das Leeren der Caches als erster Teil der letzten Lesung, der
+    Post des Aufrufs aus der verglichenen Lesung, dann
+    `wp_update_custom_css_post()` (vorher las `css_call()` den Post nach
+    dem Vergleich); zurück `back()`, dann `wp_update_post()`.
+  - Option: das Leeren der Caches als erster Teil der letzten Lesung,
+    dann `update_option()` (vorher leerte der Aufruf den Cache nach dem
+    Vergleich).
+  - `keeping_revisions()` hängt vor dem Aufruf nur zwei Filter ein
+    (`add_filter()`); es liest nichts und löst keinen Hook aus.
+- Welche Hooks (WordPress 7.1.3), die des Kerns in diesem Aufruf: beim
+  Post `wp_insert_post_empty_content` (wp-includes/post.php:4695),
+  `wp_insert_post_parent` (:4868), `wp_insert_post_data` (:4978),
+  `pre_post_update` (:4993), die Filter von `sanitize_post()` und
+  `wp_unique_post_slug` (:5730); beim Term `sanitize_term()` mit seinen
+  Filtern (taxonomy.php:3297), `wp_update_term_parent` (:3363),
+  `edit_terms` (:3398), `wp_update_term_data` (:3412); bei der Option
+  `pre_update_option_{$option}` (option.php:901), `pre_update_option`
+  (:912), `update_option` (:943), und das Lesen des alten Werts über
+  `get_option()` mit `pre_option_{$option}` (:132), `pre_option` (:150)
+  und `option_{$option}` (:256); bei den Theme-Mods
+  `pre_set_theme_mod_{$name}` (theme.php:1121); beim CSS
+  `update_custom_css_data` (theme.php:2133); bei der Meta `sanitize_meta()`
+  (meta.php:223), `update_{$meta_type}_metadata` (:250),
+  `update_{$meta_type}_meta` (:306), `add_{$meta_type}_metadata` (:90) und
+  `add_{$meta_type}_meta` (:128); in jedem dieser Aufrufe der Filter
+  `query` von `$wpdb` (class-wpdb.php:2230) auf das eigene SQL des Kerns.
+- Folge, ohne Beschönigung: Ändert ein solcher Hook genau den Teil, den
+  der Kern gleich schreibt, überschreibt ihn der Kern. Diese Änderung geht
+  verloren und wird nicht erkannt. So verhält sich WordPress auch beim
+  Speichern in wp-admin. Änderungen an anderen Teilen erkennt der
+  Vergleich nach dem Aufruf (Entscheid A: der Schritt weicht ab, nichts
+  davon geht von selbst zurück).
+- Die letzte Lesung des Helfers läuft selbst über `$wpdb` und damit über
+  den Filter `query`. Ein Hook dort, der den Teil ändert, nachdem dessen
+  Zeile schon gelesen ist, hat dieselbe Folge.
+- Nicht weiter: Rechtehooks, die Filter von `update()` eines Widgets, die
+  Sanitizer der Vorprüfung, das Speichern des Journals und `with_row()`
+  liegen vor dem Vergleich; dort sieht der Vergleich jede Änderung, auch am
+  eigenen Feld. Prüffälle:
+  `testEveryWriterWritesNothingWhereAHookOfItsRightChangesItsOwnFieldRightBeforeTheCall`,
+  `testAHookAtTheLastReadOfTheObjectBeforeTheWriteIsSeenByTheComparison`
+  (die erneuten Lesungen, je Schreiber rot ohne die Behebung),
+  `SyncRunTest::testAHookAsTheJournalIsSavedBeforeTheCallOfTheTermsIsSeenAndNothingIsWritten`
+  und `SyncRunTest::testAnOptionFilterAsTheRowCallIsPreparedIsReadBeforeTheCallAndItsChangeIsAnotherHands`.
+- Ein neues Objekt hat keinen Stand, den der Helfer vergleichen könnte:
+  dort fragt er die Rechte und ruft dann den Kern (für einen neuen Term
+  davor die höchste Id, `MAX(term_id)`, damit ein zurückgegebener Term
+  nicht als eigener gilt).
 
 ## Reichweite der neuen Sperren
 
@@ -435,6 +528,11 @@ Entscheid 27 ohnehin nicht geschrieben werden.
   rund 1 bis 2 s, Integrations-Einträge rund 7 bis 17 s.
 
 ## Nicht als Mutation geführt
+
+- Das Beitragsbild eines Posts über den Helfer (Codex-Runde 4, Punkt 4):
+  es hat beim Aufruf keine eigene Rechtefrage, an der ein Hook sässe; sein
+  Fenster ist das Speichern des Journals wie bei den Termen, deren Fall
+  geführt ist (`a4-terms-helper`).
 
 - Die Texte der Meldungen und die Einträge der Sperrtabelle
   (`AB_MCP_Sync_Kinds`); sie hält `SyncKindsTest` und der Abgleich der

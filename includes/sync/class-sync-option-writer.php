@@ -347,13 +347,17 @@ final class AB_MCP_Sync_Option_Writer {
 			$pre,
 			static fn() => current_user_can( 'manage_options' ) ? true : AB_MCP_Sync_Post_Writer::rights( sprintf( 'change the option %s (manage_options)', $name ) ),
 			static function () use ( $name, $prepared ) {
+				update_option( $name, $prepared['value'] );
+				return $name;
+			},
+			static function () use ( $name ) {
 				// update_option() compares with the value it reads through the
 				// cache of the options and writes nothing where they are equal:
 				// emptied first, it compares with the row as it is (Codex round
-				// 1, A1).
+				// 1, A1); before the last read, so that no cache is touched
+				// between the comparison and the call (Codex round 4, item 4).
 				AB_MCP_Sync_Shared_Row::forget( $name );
-				update_option( $name, $prepared['value'] );
-				return $name;
+				return null;
 			}
 		);
 	}
