@@ -653,12 +653,14 @@ final class SyncPackageTest extends TestCase {
 			'manifest'   => $package['manifest'],
 			'purpose'    => 'inventory',
 		);
-		// A purpose this version does not take (media); one it takes for a
-		// report (objects, branch 8) without the report, and with a report
-		// for a package that is one of the inventory: refused before anything
-		// is begun, the manifest read against the purpose named.
-		self::refused( AB_MCP_Sync_Import::call( array( 'purpose' => 'media' ) + $args ), 'ab_mcp_sync_import_purpose' );
+		// A purpose this version does not take (files); one it takes for a
+		// report (objects, branch 8; media, branch 10) without the report, and
+		// with a report for a package that is one of the inventory: refused
+		// before anything is begun, the manifest read against the purpose named.
+		self::refused( AB_MCP_Sync_Import::call( array( 'purpose' => 'files' ) + $args ), 'ab_mcp_sync_import_purpose' );
 		self::refused( AB_MCP_Sync_Import::call( array( 'purpose' => 'objects' ) + $args ), 'ab_mcp_sync_import_report' );
+		self::refused( AB_MCP_Sync_Import::call( array( 'purpose' => 'media' ) + $args ), 'ab_mcp_sync_import_report' );
+		self::refused( AB_MCP_Sync_Import::call( array( 'purpose' => 'media', 'report_hash' => str_repeat( 'c', 64 ) ) + $args ), 'ab_mcp_sync_manifest_purpose' );
 		self::refused( AB_MCP_Sync_Import::call( array( 'purpose' => 'objects', 'report_hash' => str_repeat( 'c', 64 ) ) + $args ), 'ab_mcp_sync_manifest_purpose' );
 		self::refused( AB_MCP_Sync_Import::call( array( 'package_id' => str_repeat( 'cd', 16 ) ) + $args ), 'ab_mcp_sync_manifest_package' );
 		self::refused( AB_MCP_Sync_Import::call( array( 'package_id' => $package['package_id'] ) ), 'ab_mcp_sync_import_unknown' );
@@ -1682,9 +1684,9 @@ final class SyncPackageTest extends TestCase {
 				),
 			)
 		)['signed'];
-		// A group as another version would have begun it: for media, a
-		// purpose the manifest knows and this version does not take (objects
-		// it takes since branch 8), with the print of the pair as it is now.
+		// A group as another version would have begun it: for a purpose
+		// this version does not take (objects it takes since branch 8, media
+		// since branch 10), with the print of the pair as it is now.
 		$gid = AB_MCP_Protected_Store::open(
 			'in',
 			array(
@@ -1696,7 +1698,7 @@ final class SyncPackageTest extends TestCase {
 		$record = \AB_MCP_Sync_Canon::encode(
 			array(
 				'connection' => AB_MCP_Sync_Import::connection(),
-				'expect'     => array( 'package_id' => $id, 'purpose' => 'media', 'report_hash' => str_repeat( 'c', 64 ) ),
+				'expect'     => array( 'package_id' => $id, 'purpose' => 'files', 'report_hash' => str_repeat( 'c', 64 ) ),
 				'format'     => AB_MCP_Sync_Import::RECORD,
 				'manifest'   => $signed['manifest'],
 				'print'      => AB_MCP_Sync_Anchor::pair_print(),
@@ -2170,8 +2172,15 @@ final class SyncPackageTest extends TestCase {
 			self::assertSame( array( 'menu', 'menu_item', 'widget_area', 'theme_mod', 'custom_css' ), \AB_MCP_Sync_Export_Rights::THEME );
 			// Options with manage_options, which every export asks first.
 			self::assertNull( $rights( 'option', 'blogname' ) );
+			// An attachment by the rule of the content (branch 10): an
+			// attachment of this site, read as a post is; a post that is no
+			// attachment is none.
+			self::assertSame( 'gone', $rights( 'attachment', $public ) );
+			$image = wp_insert_attachment( array( 'post_mime_type' => 'image/jpeg', 'post_title' => 'Bild', 'post_status' => 'inherit' ), 'bild.jpg' );
+			self::assertIsInt( $image );
+			self::assertNull( $rights( 'attachment', (string) $image ) );
 			// A kind without a rule here: withheld.
-			self::assertSame( 'kind', $rights( 'attachment', $public ) );
+			self::assertSame( 'kind', $rights( 'gallery', $public ) );
 		} finally {
 			remove_filter( 'map_meta_cap', $deny, 10 );
 			remove_action( 'doing_it_wrong_run', $count );
@@ -2411,7 +2420,9 @@ final class SyncPackageTest extends TestCase {
 			'unread that is no list of text' => array( self::package_of( str_repeat( '6a', 16 ), array( array( self::option_line( 'zz_u', array( 'unread' => array( 7 ) ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
 			'a ref that is not its name' => array( self::package_of( str_repeat( '6b', 16 ), array( array( self::option_line( 'zz_n', array( 'ref' => 'zz_other' ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
 			'a post ref that is no id' => array( self::package_of( str_repeat( '6c', 16 ), array( array( array( 'complete' => false, 'identity' => array(), 'kind' => 'post', 'locks' => array(), 'ref' => 'x', 'status' => 'z8', 'unread' => array( 'posts' ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
-			'a kind without a rule'    => array( self::package_of( str_repeat( '6d', 16 ), array( array( array( 'identity' => array(), 'kind' => 'attachment', 'locks' => array(), 'ref' => '7', 'status' => 'z8' ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'a kind without a rule'    => array( self::package_of( str_repeat( '6d', 16 ), array( array( array( 'identity' => array(), 'kind' => 'gallery', 'locks' => array(), 'ref' => '7', 'status' => 'z8' ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'an attachment of another type' => array( self::package_of( str_repeat( '6d', 15 ) . 'aa', array( array( array( 'identity' => array( 'file' => '2026/10/a.jpg', 'post_type' => 'post' ), 'kind' => 'attachment', 'locks' => array(), 'ref' => '7', 'status' => 'z8' ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			'a weak reference of a post' => array( self::package_of( str_repeat( 'a5', 15 ) . 'aa', array( array( array( 'identity' => array( 'post_name' => 'x', 'post_type' => 'page', 'theme' => '' ), 'kind' => 'post', 'locks' => array(), 'ref' => '7', 'refs' => array( array( 'at' => 'post_parent', 'id' => 3, 'space' => 'post', 'strength' => 'weak' ) ), 'status' => 'z8' ) ) ) ), 'ab_mcp_sync_import_lines' ),
 			'a post with another identity' => array( self::package_of( str_repeat( '6e', 16 ), array( array( array( 'identity' => array( 'name' => 'x' ), 'kind' => 'post', 'locks' => array(), 'ref' => '7', 'status' => 'z8' ) ) ) ), 'ab_mcp_sync_import_lines' ),
 			'a theme mod of another key' => array( self::package_of( str_repeat( '6f', 16 ), array( array( array( 'identity' => array( 'name' => 'theme_mods_zz', 'theme_mod' => 'a' ), 'kind' => 'theme_mod', 'locks' => array(), 'ref' => 'zz/b', 'status' => 'locked' ) ) ) ), 'ab_mcp_sync_import_lines' ),
 			'a status of another form' => array( self::package_of( str_repeat( '7a', 16 ), array( array( self::option_line( 'zz_t', array( 'status' => 'Z8 ' ) ) ) ) ), 'ab_mcp_sync_import_lines' ),

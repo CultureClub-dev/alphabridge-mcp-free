@@ -233,6 +233,9 @@ final class SyncKindsTest extends TestCase {
 			'post:builder_unknown'         => array( array( 'post' ), 'builder_unknown', 'Z8c' ),
 			'attachment:replace_file'      => array( array( 'attachment' ), 'replace_file', 'Z8b' ),
 			'attachment:shared_path'       => array( array( 'attachment' ), 'shared_path', 'Z8b' ),
+			// Branch 10: the files of an attachment.
+			'attachment:file_type'         => array( array( 'attachment' ), 'file_type', 'Z8' ),
+			'attachment:file_too_large'    => array( array( 'attachment' ), 'file_too_large', 'Z10' ),
 			'option:unclassified'          => array( array( 'option' ), 'unclassified', 'Z8d' ),
 			'*:mutual_references'          => array( $all, 'mutual_references', 'Z11c' ),
 			'*:php_object'                 => array( $all, 'php_object', 'Z8d' ),
@@ -280,7 +283,6 @@ final class SyncKindsTest extends TestCase {
 			'term:reference_unmapped'      => array( array( 'term' ), 'reference_unmapped', 'Z8' ),
 			'term:meta_rule'               => array( array( 'term' ), 'meta_rule', 'Z8d' ),
 			'term:meta_spelling'           => array( array( 'term' ), 'meta_spelling', 'Z8d' ),
-			'attachment:engine'            => array( array( 'attachment' ), 'engine', 'Z10' ),
 			'menu:engine'                  => array( array( 'menu' ), 'engine', 'Z11' ),
 			'widget_area:engine'           => array( array( 'widget_area' ), 'engine', 'Z11' ),
 			'custom_css:engine'            => array( array( 'custom_css' ), 'engine', 'Z11' ),

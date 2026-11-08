@@ -331,8 +331,9 @@ final class AB_MCP_Sync_Post_Writer {
 		// check at the post here (precheck(): only keys whose values differ);
 		// the featured image by the pair of its attachment; a key whose name is
 		// the name of a credential is never packed (B9).
-		$meta  = array();
-		$extra = AB_MCP_Redactor::extra_keys();
+		$meta              = array();
+		$extra             = AB_MCP_Redactor::extra_keys();
+		$thumbnail_pending = false;
 		foreach ( $line['content']['meta'] as $pair ) {
 			$key   = self::bytes( $pair[0] );
 			$value = self::bytes( $pair[1] );
@@ -343,9 +344,16 @@ final class AB_MCP_Sync_Post_Writer {
 				return self::locked( 'post:create_with_object_meta', sprintf( 'meta key %s (protected, or a plugin answers its right at the object only)', $key ) );
 			}
 			if ( '_thumbnail_id' === $key ) {
-				// The featured image: the attachment by its pair (decision 25).
+				// The featured image: the attachment by its pair (decision 25);
+				// one the same run creates before this post is pending (branch
+				// 10): the check before the first write takes it as mapped, the
+				// boundary maps it by the pair its step made.
 				$mapped = 1 === preg_match( '/^[1-9][0-9]*\z/', $value ) ? AB_MCP_Sync_Refs::mapped_id( $plan, 'post', (int) $value ) : null;
 				$plan['missing'] = array();
+				if ( null === $mapped && 1 === preg_match( '/^[1-9][0-9]*\z/', $value ) && isset( $pending['post'][ (int) $value ] ) ) {
+					$thumbnail_pending = true;
+					$mapped            = 0;
+				}
 				if ( null === $mapped || isset( $meta[ $key ] ) ) {
 					return self::locked( 'post:reference_unmapped', sprintf( 'the featured image %s of the staging site', $value ) );
 				}
@@ -466,6 +474,10 @@ final class AB_MCP_Sync_Post_Writer {
 			'as_draft'         => ! empty( $item['as_draft'] ),
 			'pending'          => $parent_pending,
 			'template_pending' => $template_pending,
+			// A featured image the same run creates first (branch 10): the
+			// check before the first write cannot ask WordPress whether it
+			// shows it yet; the boundary asks it with the image made.
+			'thumbnail_pending' => $thumbnail_pending,
 			// The objects of the run, for a navigation: where the run leaves a
 			// navigation block without a menu of its own (fallback_shown()).
 			'planned'          => 'wp_navigation' === $type && isset( $ctx['planned'] ) && is_array( $ctx['planned'] ) ? $ctx['planned'] : array(),
@@ -582,7 +594,7 @@ final class AB_MCP_Sync_Post_Writer {
 		// only where it is an attachment WordPress shows as an image, and
 		// removes the featured image otherwise; so the attachment the pair
 		// names has to be one.
-		if ( in_array( '_thumbnail_id', $keys, true ) && isset( $prepared['meta']['_thumbnail_id'][0] ) ) {
+		if ( in_array( '_thumbnail_id', $keys, true ) && isset( $prepared['meta']['_thumbnail_id'][0] ) && empty( $prepared['thumbnail_pending'] ) ) {
 			$image = (int) $prepared['meta']['_thumbnail_id'][0];
 			if ( 'attachment' !== AB_MCP_Sync_Rows::post_type_of( $image ) || '' === (string) wp_get_attachment_image( $image, 'thumbnail' ) ) {
 				return self::locked( 'post:thumbnail', sprintf( 'the attachment %d of this site the featured image names is no image WordPress shows', $image ) );
@@ -647,16 +659,9 @@ final class AB_MCP_Sync_Post_Writer {
 			if ( isset( $prepared['postarr']['page_template'] ) ) {
 				$spelled[] = '_wp_page_template';
 			}
-			foreach ( array_unique( $spelled ) as $key ) {
-				$rows = AB_MCP_Undo_Meta::rows( 'post', (int) $live_id, (string) $key );
-				if ( null === $rows ) {
-					return new WP_Error( 'ab_mcp_sync_rows_unread', sprintf( 'The meta rows of the key %s of the post could not be read, so nothing is written for it. Try again; if it keeps failing, the database error log names the cause.', $key ) );
-				}
-				foreach ( $rows as $row ) {
-					if ( $row['key'] !== (string) $key ) {
-						return self::locked( 'post:meta_spelling', sprintf( 'the keys %1$s and %2$s of the post on this site are one key to the database (its collation compares them alike), and a write of one would change the other', (string) $key, (string) $row['key'] ) );
-					}
-				}
+			$refusal = self::spelling_refusal( (int) $live_id, $spelled );
+			if ( null !== $refusal ) {
+				return $refusal;
 			}
 		}
 		// A relationship of the post here with a term_order other than 0 (a
@@ -711,6 +716,30 @@ final class AB_MCP_Sync_Post_Writer {
 			}
 		}
 		return true;
+	}
+
+	/**
+	 * A meta key the step writes or removes whose rows the database holds
+	 * under another spelling as well (Foo and foo, precheck()), as a
+	 * refusal, or null; for the kind attachment as well (branch 10).
+	 *
+	 * @param int      $live_id The post here.
+	 * @param string[] $keys    The keys the step writes or removes.
+	 * @return WP_Error|null
+	 */
+	public static function spelling_refusal( $live_id, array $keys ) {
+		foreach ( array_unique( array_map( 'strval', $keys ) ) as $key ) {
+			$rows = AB_MCP_Undo_Meta::rows( 'post', (int) $live_id, (string) $key );
+			if ( null === $rows ) {
+				return new WP_Error( 'ab_mcp_sync_rows_unread', sprintf( 'The meta rows of the key %s of the post could not be read, so nothing is written for it. Try again; if it keeps failing, the database error log names the cause.', $key ) );
+			}
+			foreach ( $rows as $row ) {
+				if ( $row['key'] !== (string) $key ) {
+					return self::locked( 'post:meta_spelling', sprintf( 'the keys %1$s and %2$s of the post on this site are one key to the database (its collation compares them alike), and a write of one would change the other', (string) $key, (string) $row['key'] ) );
+				}
+			}
+		}
+		return null;
 	}
 
 	/**
@@ -1165,7 +1194,7 @@ final class AB_MCP_Sync_Post_Writer {
 	 * @param string|null $stored   The slug the post here has now.
 	 * @return WP_Error|null
 	 */
-	private static function slug_refusal( array $prepared, $live_id, $stored ) {
+	public static function slug_refusal( array $prepared, $live_id, $stored ) {
 		$slug   = (string) $prepared['postarr']['post_name'];
 		$status = (string) $prepared['status'];
 		$type   = (string) $prepared['type'];
@@ -3021,7 +3050,7 @@ final class AB_MCP_Sync_Post_Writer {
 	 * @param string $at   Where (post_author).
 	 * @return string|null
 	 */
-	private static function login_of( array $line, $at ) {
+	public static function login_of( array $line, $at ) {
 		foreach ( isset( $line['refs'] ) && is_array( $line['refs'] ) ? $line['refs'] : array() as $ref ) {
 			if ( 'user' === ( $ref['space'] ?? null ) && (string) $at === (string) ( $ref['at'] ?? '' ) && isset( $ref['login'] ) && is_string( $ref['login'] ) && '' !== $ref['login'] ) {
 				return $ref['login'];
@@ -3035,7 +3064,7 @@ final class AB_MCP_Sync_Post_Writer {
 	 * @param array  $ctx   Context, with users (login => id) as a cache.
 	 * @return int|null
 	 */
-	private static function user_by_login( $login, array $ctx ) {
+	public static function user_by_login( $login, array $ctx ) {
 		if ( isset( $ctx['users'][ $login ] ) ) {
 			return (int) $ctx['users'][ $login ];
 		}
@@ -3087,7 +3116,7 @@ final class AB_MCP_Sync_Post_Writer {
 	 * @param array   $pending space => staging id => true.
 	 * @return array[]
 	 */
-	private static function unresolved( array $missing, array $pending ) {
+	public static function unresolved( array $missing, array $pending ) {
 		$out = array();
 		foreach ( $missing as $m ) {
 			if ( ! isset( $pending[ (string) ( $m['space'] ?? '' ) ][ (int) ( $m['id'] ?? 0 ) ] ) ) {
@@ -3101,7 +3130,7 @@ final class AB_MCP_Sync_Post_Writer {
 	 * @param array[] $missing The references without a counterpart.
 	 * @return string
 	 */
-	private static function missing_text( array $missing ) {
+	public static function missing_text( array $missing ) {
 		$out = array();
 		foreach ( array_slice( $missing, 0, 5 ) as $m ) {
 			$out[] = (string) ( $m['space'] ?? '?' ) . ' ' . (int) ( $m['id'] ?? 0 );
@@ -3206,7 +3235,7 @@ final class AB_MCP_Sync_Post_Writer {
 	 * @param string $what What the account may not do.
 	 * @return WP_Error
 	 */
-	private static function rights( $what ) {
+	public static function rights( $what ) {
 		return new WP_Error( 'ab_mcp_sync_rights', sprintf( 'Not written: this account may not %s on this site. Connect with an account that may, or leave the object out of the plan.', $what ), array( 'needs' => $what ) );
 	}
 
@@ -3214,7 +3243,7 @@ final class AB_MCP_Sync_Post_Writer {
 	 * @param string $key Key.
 	 * @return WP_Error
 	 */
-	private static function meta_refused( $key ) {
+	public static function meta_refused( $key ) {
 		return new WP_Error( 'ab_mcp_sync_write_failed', sprintf( 'The meta %s was not written: a filter of this site refused it, or the database did. Nothing more of the step is written; ask the site administrator which plugin holds it.', $key ) );
 	}
 }

@@ -539,7 +539,7 @@ e('index-term-taxonomy', 'term_record(): the term of the taxonomy asked', ID, TR
 e('index-term-ttid', 'term_record(): the term of the term_taxonomy_id asked', ID, TR, TR.replace(" || $head['ttid'] === $ttid", ' || true'), 'ident', LANG)
 e('index-term-one', 'term_record(): a term id in two taxonomies names none by the id alone', ID,
   "\t\treturn 1 === count( $found ) ? $found[0] : null;", "\t\treturn $found[0] ?? null;", 'ident', ONE)
-TV = "\t\tif ( 'post' === $kind || 'menu_item' === $kind ) {"
+TV = "\t\tif ( 'post' === $kind || 'menu_item' === $kind || 'attachment' === $kind ) {"
 TF = "\t\tif ( null === $record || 0 === ( $record['flags'] & self::TWIN ) ) {"
 e('twins-flag', 'twins(): only a record that says twin (Codex round 5)', ID, TF, "\t\tif ( null === $record ) {", 'ident', ONE)
 e('twins-count', 'twins(): the count its record holds (Codex round 5)', ID,

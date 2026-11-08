@@ -276,6 +276,15 @@ return array(
 			'core' => array( array( 'wp-includes/post.php', 6933, "Don't delete the thumb if another attachment uses it." ) ),
 			'plan' => 'Entscheid 26; Befund R3-4',
 		),
+		'attachment:file_type'         => array(
+			'why'  => 'The type of a file follows its content and the account, as the upload of the core checks it.',
+			'core' => array( array( 'wp-admin/includes/file.php', 961, 'wp_check_filetype_and_ext( $file[\'tmp_name\'], $file[\'name\'], $mimes )' ), array( 'wp-includes/functions.php', 3693, 'function get_allowed_mime_types( $user = null ) {' ) ),
+			'plan' => 'Entscheid 26 (Typ nach dem Inhalt, erlaubt für das ausführende Konto)',
+		),
+		'attachment:file_too_large'    => array(
+			'why'  => 'A package carries at most 64 MiB in Free (contract B); the files of one attachment go in one package of media.',
+			'plan' => 'Entscheid 8; Vertrag B (Paket ≤ 64 MiB in Free)',
+		),
 		'option:unclassified'          => array(
 			'why'  => 'An option of a plugin or theme, or of the core without a schema: «Option eines Plugins, nicht eingeordnet (Z8d)».',
 			'plan' => 'Entscheid 27',
@@ -480,10 +489,6 @@ return array(
 		'term:meta_spelling'           => array(
 			'why'  => 'As post:meta_spelling, for termmeta: a write by the key would change the other spelling the collation compares alike.',
 			'plan' => 'Entscheid 17 (Journal je Teilmutation), Entscheid 28',
-		),
-		'attachment:engine'            => array(
-			'why'  => 'The engine of the attachments is branch 10.',
-			'plan' => 'Zweigtabelle Zeile 541',
 		),
 		'menu:engine'                  => array(
 			'why'  => 'The engine of the menus is branch 11.',

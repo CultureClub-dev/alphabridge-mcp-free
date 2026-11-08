@@ -39,7 +39,12 @@
  * for at most MAX_REFS objects, each within the raw size of one object of
  * decision 8. An object a credential holds carries no content, as in a
  * package of the inventory; one the account may not read is withheld.
- * Packages of media follow with the takeover of attachments (Z8 branch 10).
+ * A package of media (purpose media, make_media(), branch 10) holds, for
+ * the attachments a report named (its report_hash in the manifest), the
+ * bytes of the files of their file lists (AB_MCP_Sync_Media_Package: one
+ * line a piece of a file), whole attachments up to
+ * AB_MCP_Sync_Media_Package::MAX_BYTES; what does not fit is named for the
+ * next package, one the account may not read is withheld.
  *
  * WHO MAKES IT (decision 9): the confirmed staging site paired with a
  * production site, with write access on (the access level Full), for an
@@ -86,6 +91,7 @@ require_once __DIR__ . '/class-sync-inventory.php';
 require_once __DIR__ . '/class-sync-db-kinds.php';
 require_once __DIR__ . '/class-sync-export-rights.php';
 require_once __DIR__ . '/class-sync-env.php';
+require_once __DIR__ . '/class-sync-media-package.php';
 
 /**
  * Class AB_MCP_Sync_Export
@@ -117,8 +123,8 @@ final class AB_MCP_Sync_Export {
 	/** The way an answer names for withheld objects. */
 	const WITHHELD_WAY = 'These objects are not in the package, because the account that made it may not read them (needs: the capability it lacks; gone: the object is no longer there), and their kinds and subtypes are not complete in it. To include them: 1. Make the package with an account that has the capability named, or give this account that capability. 2. Call wp_site_export again.';
 
-	/** The purposes this version makes packages for: the inventory, the environment (AB_MCP_Sync_Env). */
-	const PURPOSES = array( 'inventory', 'env', 'objects' );
+	/** The purposes this version makes packages for: the inventory, the environment (AB_MCP_Sync_Env), the objects of a report and the files of its attachments. */
+	const PURPOSES = array( 'inventory', 'env', 'objects', 'media' );
 
 	/** Objects a package of objects holds at most (the list a tool call takes, AB_MCP_Security). */
 	const MAX_REFS = 2000;
@@ -158,13 +164,16 @@ final class AB_MCP_Sync_Export {
 			return $refused;
 		}
 		if ( ! in_array( $purpose, self::PURPOSES, true ) ) {
-			return new WP_Error( 'ab_mcp_sync_export_purpose', 'This version makes packages of the inventory and of the environment of the staging site, and packages of objects for a report; packages of media come with the takeover of attachments. Pass purpose=inventory, purpose=env or purpose=objects.' );
+			return new WP_Error( 'ab_mcp_sync_export_purpose', 'This version makes packages of the inventory and of the environment of the staging site, packages of objects for a report and packages of the files of its attachments. Pass purpose=inventory, purpose=env, purpose=objects or purpose=media.' );
 		}
 		if ( 'env' === $purpose ) {
 			return self::make_env( $cursor, null === $objects ? self::OBJECTS : (int) $objects );
 		}
 		if ( 'objects' === $purpose ) {
 			return self::make_objects( is_array( $for ) ? $for : array() );
+		}
+		if ( 'media' === $purpose ) {
+			return self::make_media( is_array( $for ) ? $for : array() );
 		}
 		$from  = null;
 		$index = null;
@@ -326,7 +335,7 @@ final class AB_MCP_Sync_Export {
 		foreach ( $by_kind as $kind_name => $list ) {
 			$kind = AB_MCP_Sync_Db_Kinds::for_pair( $kind_name );
 			if ( null === $kind ) {
-				return new WP_Error( 'ab_mcp_sync_export_kind', sprintf( 'The takeover knows no kind %s, so no package of objects of it is made. Use the kind as the report names it (post, term, menu, menu_item, widget_area, custom_css, option).', $kind_name ), array( 'kind' => $kind_name ) );
+				return new WP_Error( 'ab_mcp_sync_export_kind', sprintf( 'The takeover knows no kind %s, so no package of objects of it is made. Use the kind as the report names it (post, term, attachment, menu, menu_item, widget_area, custom_css, option).', $kind_name ), array( 'kind' => $kind_name ) );
 			}
 			$asked = array();
 			foreach ( array_keys( $list ) as $ref ) {
@@ -392,6 +401,235 @@ final class AB_MCP_Sync_Export {
 			return $packed;
 		}
 		return self::store( 'objects', $packed, array_values( $kinds ), null, $series, $sorted['report'], null, null, $report_hash );
+	}
+
+	/**
+	 * Make a package of media of this staging site for one report of the
+	 * production site (decision 26; branch 10): the files of the file lists
+	 * of the attachments the refs name, each read as the list names it
+	 * (AB_MCP_Sync_Media::files(): the uploads resolved, no link, a regular
+	 * file of its size and SHA-256), a piece a line
+	 * (AB_MCP_Sync_Media_Package::lines_of()), written to the store a chunk
+	 * at a time, so no more than a chunk is held at once. Whole attachments
+	 * up to AB_MCP_Sync_Media_Package::MAX_BYTES: the next ones are named in
+	 * left (export them in another package), one whose files alone are more
+	 * in too_large (upload it by hand there); one the account may not read is
+	 * withheld (decision 9), one whose list does not read whole is named in
+	 * unread with its problem. A file that changed while it was read refuses
+	 * the package, nothing of it is kept.
+	 *
+	 * @param array $for report_hash, refs (kind attachment, ref).
+	 * @return array|WP_Error The package (answer()), with media: packed, left, too_large, unread.
+	 */
+	private static function make_media( array $for ) {
+		$report_hash = isset( $for['report_hash'] ) ? $for['report_hash'] : null;
+		if ( ! is_string( $report_hash ) || 1 !== preg_match( '/^[0-9a-f]{64}\z/', $report_hash ) ) {
+			return new WP_Error( 'ab_mcp_sync_export_report', 'A package of media is made for one report: pass report_hash, the 64 hex characters wp_site_diff gave on the production site, so the package is read for that report only.' );
+		}
+		$refs = isset( $for['refs'] ) ? $for['refs'] : null;
+		if ( ! is_array( $refs ) || ! array_is_list( $refs ) || array() === $refs || count( $refs ) > self::MAX_REFS ) {
+			return new WP_Error( 'ab_mcp_sync_export_refs', sprintf( 'A package of media takes refs: a list of 1 to %d attachments of this staging site, each with kind attachment and ref as the entries of the report name the staging side (staging.ref). Pass that list.', self::MAX_REFS ) );
+		}
+		$ids = array();
+		foreach ( $refs as $i => $one ) {
+			if ( ! is_array( $one ) || ! isset( $one['kind'], $one['ref'] ) || 'attachment' !== $one['kind'] || ! is_scalar( $one['ref'] ) || 1 !== preg_match( '/^[1-9][0-9]*\z/', (string) $one['ref'] ) ) {
+				return new WP_Error( 'ab_mcp_sync_export_refs', sprintf( 'refs[%d] is not an attachment of this staging site: a package of media holds the files of attachments only, each with kind attachment and its ref. Pass the other objects in a package of objects (purpose=objects).', (int) $i ) );
+			}
+			$ids[ (int) $one['ref'] ] = true;
+		}
+		try {
+			$series = bin2hex( random_bytes( 16 ) );
+		} catch ( Throwable $e ) {
+			return new WP_Error( 'ab_mcp_sync_export_random', 'No package was made: PHP has no source of random bytes on this server. Ask the host to check the PHP installation, then call again.' );
+		}
+		$uploads = AB_MCP_Sync_Media::uploads();
+		$root    = '' === $uploads['problem'] ? realpath( $uploads['dir'] ) : false;
+		$media   = array(
+			'packed'    => array(),
+			'left'      => array(),
+			'too_large' => array(),
+			'unread'    => array(),
+		);
+		$told    = array(
+			'withheld'    => array(
+				'count'   => 0,
+				'objects' => array(),
+			),
+			'credentials' => array(
+				'held'  => 0,
+				'names' => 0,
+				'units' => 0,
+			),
+		);
+		$take    = array();
+		$total   = 0;
+		foreach ( array_keys( $ids ) as $id ) {
+			$lacks = AB_MCP_Sync_Export_Rights::withheld(
+				array(
+					'kind' => 'attachment',
+					'ref'  => (string) $id,
+				)
+			);
+			if ( null !== $lacks ) {
+				++$told['withheld']['count'];
+				if ( count( $told['withheld']['objects'] ) < self::WITHHELD_LIST ) {
+					$told['withheld']['objects'][] = array(
+						'kind'    => 'attachment',
+						'needs'   => $lacks,
+						'ref'     => (string) $id,
+						'subtype' => 'attachment',
+					);
+				}
+				continue;
+			}
+			$list = false === $root ? null : AB_MCP_Sync_Media::files( $id );
+			if ( ! is_array( $list ) || array() !== $list['problems'] ) {
+				$media['unread'][] = array(
+					'ref'      => (string) $id,
+					'problems' => is_array( $list ) ? array_slice( array_values( array_unique( array_column( $list['problems'], 'problem' ) ) ), 0, 5 ) : array( false === $root ? 'uploads' : 'unreadable' ),
+				);
+				continue;
+			}
+			$bytes = AB_MCP_Sync_Media::total( $list );
+			if ( $bytes > AB_MCP_Sync_Media_Package::MAX_BYTES ) {
+				$media['too_large'][] = array(
+					'ref'   => (string) $id,
+					'bytes' => $bytes,
+				);
+				continue;
+			}
+			if ( $total + $bytes > AB_MCP_Sync_Media_Package::MAX_BYTES ) {
+				$media['left'][] = (string) $id;
+				continue;
+			}
+			$total             += $bytes;
+			$take[]             = array( $id, $list['files'] );
+			$media['packed'][]  = (string) $id;
+		}
+		if ( array() === $take ) {
+			return new WP_Error( 'ab_mcp_sync_export_media_none', 'No file of the attachments named could be packed: each was withheld, does not read whole, or is too large for one package (see media). Check those attachments in the media library of this site, or pass others in refs.', array( 'media' => $media, 'withheld' => $told['withheld'] ) );
+		}
+		self::discard_stale(); // The packages of another binding go first, as before any package.
+		// The lines (base64, a third more than the bytes) and their gzip stay below this.
+		$declared = (int) ceil( $total * 1.4 ) + 1048576 + self::RECORD_MAX;
+		$label    = 'series:' . $series;
+		$gid      = AB_MCP_Protected_Store::open(
+			'out',
+			array(
+				'declared' => $declared,
+				'label'    => $label,
+			)
+		);
+		if ( is_wp_error( $gid ) ) {
+			return $gid;
+		}
+		$list     = array();
+		$bytes    = 0;
+		$whole    = hash_init( 'sha256' );
+		$slice    = '';
+		$lines    = 0;
+		$unpacked = 0;
+		$flush    = static function () use ( &$slice, &$list, &$bytes, $whole, $gid ) {
+			$gz = function_exists( 'gzencode' ) ? gzencode( $slice, 6 ) : false;
+			if ( ! is_string( $gz ) ) {
+				return new WP_Error( 'ab_mcp_sync_export_gzip', 'The package could not be compressed. Ask the host to enable the zlib extension of PHP, then call again.' );
+			}
+			if ( count( $list ) >= AB_MCP_Sync_Manifest::MAX_LIST || $bytes + strlen( $gz ) > AB_MCP_Sync_Manifest::MAX_BYTES ) {
+				return self::too_large( count( $list ) >= AB_MCP_Sync_Manifest::MAX_LIST ? 'chunks' : 'bytes', count( $list ) >= AB_MCP_Sync_Manifest::MAX_LIST ? AB_MCP_Sync_Manifest::MAX_LIST : AB_MCP_Sync_Manifest::MAX_BYTES );
+			}
+			$put = AB_MCP_Protected_Store::put( 'out', $gid, self::chunk_name( count( $list ) ), $gz );
+			if ( is_wp_error( $put ) ) {
+				return $put;
+			}
+			hash_update( $whole, $gz );
+			$bytes += strlen( $gz );
+			$list[] = array(
+				'bytes'  => strlen( $gz ),
+				'sha256' => hash( 'sha256', $gz ),
+			);
+			$slice  = '';
+			return true;
+		};
+		$put_line = static function ( $line ) use ( &$slice, &$lines, &$unpacked, $flush ) {
+			if ( strlen( $line ) + 1 > self::SLICE ) {
+				return new WP_Error( 'ab_mcp_sync_export_object', 'A piece of a file cannot be written into a package. Update AlphaBridge MCP on both sites to the same version, then call again.' );
+			}
+			if ( '' !== $slice && strlen( $slice ) + strlen( $line ) + 1 > self::SLICE ) {
+				$done = $flush();
+				if ( true !== $done ) {
+					return $done;
+				}
+			}
+			$slice    .= $line . "\n";
+			$unpacked += strlen( $line ) + 1;
+			++$lines;
+			return $lines > AB_MCP_Sync_Manifest::MAX_OBJECTS ? self::too_large( 'objects', AB_MCP_Sync_Manifest::MAX_OBJECTS ) : true;
+		};
+		foreach ( $take as list( $id, $files ) ) {
+			foreach ( $files as $file ) {
+				$done = AB_MCP_Sync_Media_Package::lines_of( (string) $root, (string) $id, $file, $put_line );
+				if ( true !== $done ) {
+					AB_MCP_Protected_Store::remove( 'out', $gid );
+					return $done;
+				}
+			}
+		}
+		$done = $flush();
+		if ( true !== $done ) {
+			AB_MCP_Protected_Store::remove( 'out', $gid );
+			return $done;
+		}
+		if ( $unpacked > AB_MCP_Sync_Manifest::MAX_UNPACKED ) {
+			AB_MCP_Protected_Store::remove( 'out', $gid );
+			return self::too_large( 'unpacked', AB_MCP_Sync_Manifest::MAX_UNPACKED );
+		}
+		$signed = AB_MCP_Sync_Manifest::sign(
+			array(
+				'bytes'       => $bytes,
+				'chunks'      => $list,
+				'kinds'       => array(
+					array(
+						'complete' => false,
+						'kind'     => 'attachment',
+						'subtype'  => 'attachment',
+					),
+				),
+				'objects'     => $lines,
+				'package_id'  => $gid,
+				'purpose'     => 'media',
+				'report_hash' => $report_hash,
+				'sha256'      => hash_final( $whole ),
+				'unpacked'    => $unpacked,
+			)
+		);
+		if ( is_wp_error( $signed ) ) {
+			AB_MCP_Protected_Store::remove( 'out', $gid );
+			return $signed;
+		}
+		$record = AB_MCP_Sync_Canon::encode(
+			array(
+				'binding'   => self::binding(),
+				'cursor'    => null,
+				'format'    => self::RECORD,
+				'index'     => null,
+				'manifest'  => $signed['manifest'],
+				'report'    => $told,
+				'series'    => $series,
+				'signature' => $signed['signature'],
+			)
+		);
+		$put    = AB_MCP_Protected_Store::put( 'out', $gid, hash( 'sha256', $record ), $record );
+		if ( is_wp_error( $put ) ) {
+			AB_MCP_Protected_Store::remove( 'out', $gid );
+			return $put;
+		}
+		$answer = self::answer( json_decode( $signed['manifest'], true ), $signed, null, $told );
+		if ( is_array( $answer ) ) {
+			$answer['media'] = $media + array(
+				'way' => array() === $media['left'] && array() === $media['too_large'] && array() === $media['unread'] ? null : 'Attachments in left did not fit this package: export them in another one (wp_site_export with purpose=media and their refs). One in too_large is more than a package carries: upload its file by hand in the media library of the production site. One in unread has a file list that does not read whole on this site (a file missing, a link, a path out of the uploads): check it in the media library here.',
+			);
+		}
+		return $answer;
 	}
 
 	/**

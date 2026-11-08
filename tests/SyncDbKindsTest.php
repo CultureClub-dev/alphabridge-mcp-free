@@ -44,7 +44,7 @@ final class SyncDbKindsTest extends TestCase {
 			$names[] = $kind->kind();
 			self::assertSame( 5, $kind->phase() );
 		}
-		self::assertSame( array( 'post', 'term', 'menu', 'widget_area', 'custom_css', 'option' ), $names );
+		self::assertSame( array( 'post', 'term', 'menu', 'widget_area', 'custom_css', 'option', 'attachment' ), $names );
 		$claims = array();
 		foreach ( AB_MCP_Sync_Kinds::all() as $kind ) {
 			foreach ( $kind->responsibility() as $key ) {
@@ -53,7 +53,7 @@ final class SyncDbKindsTest extends TestCase {
 			}
 		}
 		foreach ( AB_MCP_Sync_Kinds::OWNERSHIP as $key => $entry ) {
-			if ( isset( $entry['stage'] ) || null === $entry['kind'] || 'attachment' === $entry['kind'] ) {
+			if ( isset( $entry['stage'] ) || null === $entry['kind'] ) {
 				continue;
 			}
 			self::assertSame( $entry['kind'], $claims[ $key ] ?? null, "$key belongs to a kind of this branch." );
@@ -63,8 +63,9 @@ final class SyncDbKindsTest extends TestCase {
 	public function testWhatWritesIsNotInThisBranch(): void {
 		foreach ( AB_MCP_Sync_Db_Kinds::all() as $kind ) {
 			// The post kind writes since branch 8, the term kind since branch 9
-			// (AB_MCP_Sync_Term_Writer); every other kind not yet.
-			if ( in_array( $kind->kind(), array( 'post', 'term' ), true ) ) {
+			// (AB_MCP_Sync_Term_Writer), the attachment kind since branch 10
+			// (AB_MCP_Sync_Attachment_Writer); every other kind not yet.
+			if ( in_array( $kind->kind(), array( 'post', 'term', 'attachment' ), true ) ) {
 				self::assertSame( array(), $kind->export( array() ), 'The kind exports its objects (branches 8 and 9): ' . $kind->kind() );
 				self::assertSame( 'ab_mcp_sync_object_invalid', $kind->export( array( 'x' ) )->get_error_code() );
 				continue;

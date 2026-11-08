@@ -5,7 +5,7 @@
  * in the package; AB_MCP_Sync_Export counts and names it, and its kind and
  * subtype are not complete there.
  *
- * - Content (the kind post): read_post, or edit_post (who may edit an
+ * - Content (the kinds post and attachment): read_post, or edit_post (who may edit an
  *   object may read it; a type that maps its own capabilities, as ACF's
  *   field groups do with map_meta_cap off, gives its editors no read_post);
  *   where it is not publicly viewable (is_post_publicly_viewable(): a
@@ -33,6 +33,8 @@
 
 defined( 'ABSPATH' ) || exit;
 
+require_once __DIR__ . '/class-sync-rows.php';
+
 /**
  * Class AB_MCP_Sync_Export_Rights
  */
@@ -56,6 +58,10 @@ final class AB_MCP_Sync_Export_Rights {
 		$ref  = isset( $object['ref'] ) ? (string) $object['ref'] : '';
 		if ( 'post' === $kind ) {
 			return self::post( $ref );
+		}
+		// An attachment is a post (branch 10): the rule of the content.
+		if ( 'attachment' === $kind ) {
+			return 'attachment' === AB_MCP_Sync_Rows::post_type_of( (int) $ref ) ? self::post( $ref ) : 'gone';
 		}
 		if ( 'term' === $kind ) {
 			return self::term( $ref, isset( $object['identity']['taxonomy'] ) ? (string) $object['identity']['taxonomy'] : '' );

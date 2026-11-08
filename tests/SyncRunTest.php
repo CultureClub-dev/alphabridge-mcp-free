@@ -2514,9 +2514,13 @@ final class SyncRunTest extends TestCase {
 		// Other kinds and types: locked with the stage that brings them; a
 		// term of a taxonomy the term engine writes is an item of its kind
 		// (branch 9), one of another taxonomy waits for its classification.
-		foreach ( array( 'term' => 'Z8d', 'attachment' => 'Z10', 'menu' => 'Z11', 'option' => 'Z11' ) as $kind => $stage ) {
+		foreach ( array( 'term' => 'Z8d', 'menu' => 'Z11', 'option' => 'Z11' ) as $kind => $stage ) {
 			self::assertSame( $stage, self::verdict( self::entry( array( 'kind' => $kind, 'subtype' => '' ) ) )['locked']['stage'], $kind );
 		}
+		// An attachment is an item of its kind (branch 10), never as draft.
+		$attachment = self::verdict( self::entry( array( 'kind' => 'attachment', 'subtype' => 'attachment' ) ) );
+		self::assertSame( array( 'attachment', 'attachment', 'update' ), array( $attachment['item']['kind'], $attachment['item']['subtype'], $attachment['item']['op'] ) );
+		self::assertStringContainsString( 'no status draft', self::verdict( self::entry( array( 'kind' => 'attachment', 'subtype' => 'attachment' ) ), null, true )['locked']['reason'] );
 		$term = self::verdict( self::entry( array( 'kind' => 'term', 'subtype' => 'category' ) ) );
 		self::assertSame( array( 'term', 'category', 'update' ), array( $term['item']['kind'], $term['item']['subtype'], $term['item']['op'] ) );
 		self::assertSame( 'Z8d', self::verdict( self::entry( array( 'kind' => 'term', 'subtype' => 'genre' ) ) )['locked']['stage'] );

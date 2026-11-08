@@ -200,7 +200,7 @@ e('exclusion-category-children', 'OPTIONS: the cache of the hierarchy of the cat
 # --------------------------------------------- the engine, by the kind
 E_IT1 = 'testAChangedCategoryAndANewTagGoOverAndTheWayBackPutsTheChangedOneBackAndLeavesTheNewOneAsARest'
 e('engine-pending-terms', 'pending(): a new term is pending for the check of what refers to it (branch 9)', EN,
-  " && isset( $pending[ (string) $one['kind'] ] ) ) {", " && 'post' === $one['kind'] ) {", 'unit', 'testTheEngineKnowsWhatItCreatesInBothSpacesAndNoStepWritesAKindWithoutAWriter')
+  "\t\t\tif ( isset( $pending[ $space ] ) ) {", "\t\t\tif ( 'post' === $space ) {", 'unit', 'testTheEngineKnowsWhatItCreatesInBothSpacesAndNoStepWritesAKindWithoutAWriter')
 e('engine-check-no-writer', 'check_item(): no step writes a kind without a writer', EN,
   "\t\tif ( null === $w ) {\n\t\t\treturn self::finding( $item, sprintf( 'No step of this version writes the kind %s.', $item['kind'] ) );", "\t\tif ( false ) {\n\t\t\treturn self::finding( $item, sprintf( 'No step of this version writes the kind %s.', $item['kind'] ) );", 'unit', 'testTheEngineKnowsWhatItCreatesInBothSpacesAndNoStepWritesAKindWithoutAWriter')
 e('engine-guard-terms', 'boundary(): the lock of the boundary covers the term the step writes', EN,

@@ -13,8 +13,7 @@
  *    styles only, from the taxonomy wp_theme), its slug and language, and
  *    the identity of its parent; none for a post without a slug;
  *  - an attachment: its file under the uploads (_wp_attached_file) and its
- *    language, as the media kind will pair it (branch 10; read here, not
- *    paired);
+ *    language, as the kind attachment pairs it (branch 10);
  *  - a menu item: the slugs of its menus, its type and object, its target
  *    (the identity of the post or term it shows; for a custom link the
  *    neutral form of its address and its label; else its type and object)
@@ -439,7 +438,7 @@ final class AB_MCP_Sync_Identity {
 	public static function twins( array $result, array $ctx ) {
 		$kind = isset( $result['kind'] ) ? (string) $result['kind'] : '';
 		$ref  = isset( $result['ref'] ) ? (int) $result['ref'] : 0;
-		if ( 'post' === $kind || 'menu_item' === $kind ) {
+		if ( 'post' === $kind || 'menu_item' === $kind || 'attachment' === $kind ) {
 			$record = self::post_record( $ref, $ctx );
 		} elseif ( 'term' === $kind || 'menu' === $kind ) {
 			$taxonomy = isset( $result['identity']['taxonomy'] ) ? (string) $result['identity']['taxonomy'] : ( 'menu' === $kind ? 'nav_menu' : null );

@@ -145,6 +145,27 @@ final class SyncSafeCallsTest extends TestCase {
 	 * The calls outside ALLOWED, with the reason: file => call => array( count, reason ).
 	 */
 	private const EXCEPTIONS = array(
+		'class-sync-attachment-writer.php' => array(
+			'AB_MCP_Builders::markup_meta_refusal' => array( 1, 'precheck(): a key of a page builder needs unfiltered_html, as for a post (the list of the signatures and the capability); no stored value.' ),
+			'AB_MCP_Change_Lock::touch'            => array( 1, 'lay_files(): the heartbeat of the lock after each file laid.' ),
+			'current_user_can'                     => array( 13, 'precheck(), write_part() and restore_right(): the rights of the account at the attachment (edit_post, upload_files for a new one and for the keys that name files, publish_posts for a private one, edit_others_posts), and unfiltered_upload, which the core asks of a type it does not know (files_plan(), provide(), restore_right()) (decisions 26 and 28; branch 10).' ),
+			'get_allowed_mime_types'               => array( 3, 'files_plan(), provide() and restore_right(): the types this account may upload, as _wp_handle_upload() checks a file (decision 26: «erlaubt für das ausführende Konto»); the list of the core and its filter.' ),
+			'get_gmt_from_date'                    => array( 1, 'target_of(): the UTC date WordPress derives where an attachment hands none over, for the target of the row.' ),
+			'get_post_type_object'                 => array( 1, 'precheck(): the capabilities of the type attachment.' ),
+			'get_temp_dir'                         => array( 1, 'provide(): the temporary folder of PHP for the copy of a file before it is laid (wp-includes/functions.php); no stored value compared.' ),
+			'is_object_in_taxonomy'                => array( 1, 'precheck(): whether a taxonomy is registered for attachments here.' ),
+			'sanitize_meta'                        => array( 1, 'precheck(): the sanitizer ahead of each written meta value (decision 17).' ),
+			'sanitize_post'                        => array( 1, 'precheck(): the sanitizers ahead, as wp_insert_post() runs them (decision 17).' ),
+			'taxonomy_exists'                      => array( 1, 'precheck(): whether a taxonomy is registered here.' ),
+			'wp_check_filetype'                    => array( 2, 'files_plan(): the type of a file to lay by its name, for this account, and of the main file against the type of the attachment (decision 26); a calculation over the name and the list of types.' ),
+			'wp_check_filetype_and_ext'            => array( 3, 'provide(), files_plan() and restore_right(): the type of a file by its content, as _wp_handle_upload() checks an upload (decision 26: «Typ nach dem Inhalt»), of the temporary copy forward, of a file this site has that the step makes the attachment name, and of the file the backed-up value names on the way back.' ),
+			'wp_get_attachment_image'              => array( 1, 'precheck(): whether WordPress shows the poster of an audio or a video as an image, as set_post_thumbnail() asks it (decision 28).' ),
+			'wp_get_current_user'                  => array( 3, 'files_plan(), provide() and restore_right(): the account the types it may upload are asked for.' ),
+			'wp_insert_attachment'                 => array( 1, 'write_row(): the way forward of a new attachment with its file, as an upload makes it (decisions 17 and 26).' ),
+			'wp_mkdir_p'                           => array( 1, 'folder(): the missing folders under the uploads for a file to lay (decision 26: «fehlende Ordner darunter mit wp_mkdir_p()»).' ),
+			'wp_slash'                             => array( 3, 'precheck() and write_row(): the slashing wp_insert_post() expects.' ),
+			'wp_update_post'                       => array( 1, 'write_row(): the way forward of the row of an attachment here (decision 17).' ),
+		),
 		'class-sync-backup.php' => array(
 			'AB_MCP_Store_Budget::bookings' => array( 1, 'fits(): the booking of the run, which a backup has to fit beside the backups the run holds (GitHub Codex round 6 on free#137).' ),
 		),
