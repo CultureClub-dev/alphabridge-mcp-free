@@ -298,14 +298,20 @@ e('writer-type-name', 'files_plan(): a type this account may not upload by its n
 e('writer-main-type', 'files_plan(): the main file of the type the attachment says', AW,
   "\t\t\tif ( ! $free && (string) $type['type'] !== (string) $prepared['postarr']['post_mime_type'] ) {", "\t\t\tif ( false ) {", 'it', LOCKS)
 e('writer-present-main-type', 'files_plan(): a file this site has that the attachment would name, by its content', AW,
-  "\t\t\tif ( 'present' !== $entry['state'] ) {\n\t\t\t\tcontinue;\n\t\t\t}\n\t\t\t$by_name = wp_check_filetype(",
-  "\t\t\tif ( true ) {\n\t\t\t\tcontinue;\n\t\t\t}\n\t\t\t$by_name = wp_check_filetype(", 'it', LOCKS)
+  "\t\t\tif ( 'present' !== $entry['state'] ) {\n\t\t\t\tcontinue;\n\t\t\t}\n\t\t\t$main = '' !== $attached && $entry['path'] === $attached;\n\t\t\tif ( isset( $own[ $entry['path'] ] ) ) {",
+  "\t\t\tif ( true ) {\n\t\t\t\tcontinue;\n\t\t\t}\n\t\t\t$main = '' !== $attached && $entry['path'] === $attached;\n\t\t\tif ( isset( $own[ $entry['path'] ] ) ) {", 'it', LOCKS)
+e('writer-present-own-main', 'files_plan(): the main file by every known type only where the list of this attachment here names it (precision of the lead, Codex round 2)', AW,
+  " && 'present' === $entry['state'] && isset( $own[ $entry['path'] ] ) );", " && 'present' === $entry['state'] );", 'it', LOCKS)
+e('writer-present-own-lenient', 'files_plan(): a file that lies here but no list of this attachment names counts as one the step lays (precision of the lead, Codex round 2)', AW,
+  "\t\t\tif ( isset( $own[ $entry['path'] ] ) ) {", "\t\t\tif ( true ) {", 'it', LOCKS)
+e('writer-present-own-strict', 'files_plan(): a file the list of this attachment here names asked only whether its content is what its name says (Codex round 2, B)', AW,
+  "\t\t$own   = null === $live_id ? array() : AB_MCP_Sync_Media::paths_of( (int) $live_id );", "\t\t$own   = array();", 'it', WEBP)
 e('writer-present-content-only', 'files_plan(): a file the step does not write asked only whether its content is what its name says, not for the types of the account (Codex round 2, B)', AW,
-  "\t\t\t$check = self::content_check( $root . '/' . $entry['path'], self::base( $entry['path'] ) );",
-  "\t\t\t$check = wp_check_filetype_and_ext( $root . '/' . $entry['path'], self::base( $entry['path'] ), $mimes );", 'it', WEBP)
+  "\t\t\t\t$check = self::content_check( $root . '/' . $entry['path'], self::base( $entry['path'] ) );",
+  "\t\t\t\t$check = wp_check_filetype_and_ext( $root . '/' . $entry['path'], self::base( $entry['path'] ), $mimes );", 'it', WEBP)
 e('writer-present-every', 'files_plan(): every file of the list this site has, not only the main one, by its content (Codex round 1, C)', AW,
-  "\t\t\tif ( 'present' !== $entry['state'] ) {\n\t\t\t\tcontinue;\n\t\t\t}\n\t\t\t$by_name = wp_check_filetype(",
-  "\t\t\tif ( 'present' !== $entry['state'] || $entry['path'] !== $attached ) {\n\t\t\t\tcontinue;\n\t\t\t}\n\t\t\t$by_name = wp_check_filetype(", 'it', LOCKS)
+  "\t\t\tif ( 'present' !== $entry['state'] ) {\n\t\t\t\tcontinue;\n\t\t\t}\n\t\t\t$main = '' !== $attached && $entry['path'] === $attached;\n\t\t\tif ( isset( $own[ $entry['path'] ] ) ) {",
+  "\t\t\tif ( 'present' !== $entry['state'] || $entry['path'] !== $attached ) {\n\t\t\t\tcontinue;\n\t\t\t}\n\t\t\t$main = '' !== $attached && $entry['path'] === $attached;\n\t\t\tif ( isset( $own[ $entry['path'] ] ) ) {", 'it', LOCKS)
 e('writer-media-missing', 'files_plan(): a file to lay the packages of media of the run carry', AW,
   "\t\t\t\tif ( ! is_array( $prepared['media'] ) || ! isset( $prepared['media'][ $key ] ) || ",
   "\t\t\t\tif ( ! is_array( $prepared['media'] ) || ", 'it', LOCKS)
@@ -390,9 +396,12 @@ e('writer-together', 'together(): the three keys that name files go back only to
   "\t\treturn array( array_map( static fn( $key ) => 'meta:' . $key, self::FILE_META ) );", "\t\treturn array();", 'it', FILEHOOK)
 e('writer-restore-none-all', 'restore_files(): none of the three keys before names no file to check', AW,
   "\t\tif ( array( '' ) === array_values( array_unique( $raw ) ) ) {\n\t\t\treturn null;", "\t\tif ( false ) {\n\t\t\treturn null;", 'pkg', U_RIGHTS)
-e('writer-restore-type', 'restore_files(): each file by its content a type this account may upload', AW,
-  "\t\t\tif ( ! empty( $check['proper_filename'] ) || ( ( empty( $check['type'] ) || empty( $check['ext'] ) ) && ! $free ) ) {\n\t\t\t\treturn sprintf( 'name the file %s again (by its content",
-  "\t\t\tif ( false ) {\n\t\t\t\treturn sprintf( 'name the file %s again (by its content", 'it', EDIT)
+e('writer-restore-type', 'restore_files(): each file its content what its name says (a PNG named .jpg keeps the group)', AW,
+  "\t\t\t\tif ( ! empty( $check['proper_filename'] ) || ( ( empty( $check['type'] ) || empty( $check['ext'] ) || ( $main && (string) $check['type'] !== $mime ) ) && ! $free ) ) {",
+  "\t\t\t\tif ( false ) {", 'it', EDIT)
+e('writer-restore-content-only', 'restore_files(): never the types this account may upload: the way back lays no file (decision of the lead on Codex round 2)', AW,
+  "\t\t\t\t$check = self::content_check( $root . '/' . $file, self::base( $file ) );",
+  "\t\t\t\t$check = wp_check_filetype_and_ext( $root . '/' . $file, self::base( $file ), get_allowed_mime_types( wp_get_current_user() ) );", 'it', FILEHOOK)
 e('writer-restore-shared', 'restore_files(): no other attachment of this site names a file the value names (Codex round 1, A4)', AW,
   "\t\tforeach ( $named as $path => $ids ) {\n\t\t\treturn sprintf( 'name the file %1$s again: the attachment",
   "\t\tforeach ( array() as $path => $ids ) {\n\t\t\treturn sprintf( 'name the file %1$s again: the attachment", 'it', FILEHOOK)

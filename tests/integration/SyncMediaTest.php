@@ -121,6 +121,7 @@ final class SyncMediaTest extends TestCase {
 		remove_all_filters( 'pre_trash_post' );
 		remove_all_filters( 'wp_delete_file' );
 		remove_all_filters( 'upload_mimes' );
+		remove_all_filters( 'mime_types' );
 		remove_all_actions( 'delete_option' );
 		remove_all_actions( 'add_attachment' );
 		remove_all_filters( 'wp_check_filetype_and_ext' );
@@ -922,7 +923,11 @@ final class SyncMediaTest extends TestCase {
 		// sizes: its three keys that name files stay together (Codex round 2,
 		// A4), each with the reason. A fifth, edited as well: after the run
 		// its backup sizes change on this site, so that key stays by the rule
-		// of the way back, and the other two with it.
+		// of the way back, and the other two with it. A sixth, edited: the way
+		// back runs for an account that may upload no JPEG (a filter), and it
+		// goes back whole: the way back lays no file, it asks only whether the
+		// content of each file it names again is what its name says (decision
+		// of the lead on Codex round 2).
 		self::pair();
 		$ids = array();
 		foreach ( array( 'erstes', 'zweites', 'drittes' ) as $k => $name ) {
@@ -942,11 +947,17 @@ final class SyncMediaTest extends TestCase {
 			'a' => self::upload_a( 'fuenftes.jpg', 'image/jpeg', $fuenftes_bytes ),
 			'b' => self::upload_b( 'fuenftes.jpg', 'image/jpeg', $fuenftes_bytes ),
 		);
+		$sechstes_bytes = self::jpeg( 300, 200, array( 60, 20, 60 ) );
+		$sechstes       = array(
+			'a' => self::upload_a( 'sechstes.jpg', 'image/jpeg', $sechstes_bytes ),
+			'b' => self::upload_b( 'sechstes.jpg', 'image/jpeg', $sechstes_bytes ),
+		);
 		self::paired( self::staged() );
 		self::b(
 			array(
 				array( 'op' => 'edit_image', 'post' => $viertes['b'], 'suffix' => '1700000001', 'image' => array( 'w' => 200, 'h' => 300, 'rgb' => array( 20, 80, 80 ) ) ),
 				array( 'op' => 'edit_image', 'post' => $fuenftes['b'], 'suffix' => '1700000002', 'image' => array( 'w' => 200, 'h' => 300, 'rgb' => array( 80, 20, 20 ) ) ),
+				array( 'op' => 'edit_image', 'post' => $sechstes['b'], 'suffix' => '1700000003', 'image' => array( 'w' => 200, 'h' => 300, 'rgb' => array( 20, 60, 20 ) ) ),
 			)
 		);
 		foreach ( $ids as $name => $id ) {
@@ -957,7 +968,7 @@ final class SyncMediaTest extends TestCase {
 				)
 			);
 		}
-		$planned = self::planned( array( 'attachment:2026/10/erstes.jpg', 'attachment:2026/10/zweites.jpg', 'attachment:2026/10/drittes.jpg', 'attachment:2026/10/viertes.jpg', 'attachment:2026/10/fuenftes.jpg' ) );
+		$planned = self::planned( array( 'attachment:2026/10/erstes.jpg', 'attachment:2026/10/zweites.jpg', 'attachment:2026/10/drittes.jpg', 'attachment:2026/10/viertes.jpg', 'attachment:2026/10/fuenftes.jpg', 'attachment:2026/10/sechstes.jpg' ) );
 		$touch   = null;
 		add_action(
 			'edit_attachment',
@@ -985,6 +996,7 @@ final class SyncMediaTest extends TestCase {
 		self::assertSame( 'done', $by[ $ids['drittes']['a'] ]['state'] );
 		self::assertSame( 'done', $by[ $viertes['a'] ]['state'] );
 		self::assertSame( 'done', $by[ $fuenftes['a'] ]['state'] );
+		self::assertSame( 'done', $by[ $sechstes['a'] ]['state'] );
 		// Another hand changes a file of the second; a hook the third as its row goes back.
 		file_put_contents( get_attached_file( $ids['zweites']['a'] ), 'y', FILE_APPEND );
 		$fremd                  = self::upload_a( 'fremd.jpg', 'image/jpeg', self::jpeg( 120, 90, array( 1, 2, 3 ) ) );
@@ -996,6 +1008,13 @@ final class SyncMediaTest extends TestCase {
 		$sizes_after['full-orig']['note'] = 'changed on this site after the run';
 		update_post_meta( $fuenftes['a'], '_wp_attachment_backup_sizes', $sizes_after );
 		$touch = $ids['drittes']['a'];
+		add_filter(
+			'upload_mimes',
+			static function ( $mimes ) {
+				unset( $mimes['jpg|jpeg|jpe'] );
+				return $mimes;
+			}
+		);
 		$back  = self::back( (int) $run['run_id'] );
 		self::assertNull( $touch, 'The hook ran on the way back.' );
 		$steps = array();
@@ -1026,6 +1045,13 @@ final class SyncMediaTest extends TestCase {
 		}
 		self::assertSame( 'left', $fuenftes_parts['meta:_wp_attachment_backup_sizes']['state'] );
 		self::assertSame( array( '2026/10/fuenftes-e1700000002.jpg' ), self::meta_a( $fuenftes['a'], '_wp_attached_file' ), 'The fifth keeps the files of its edit, all three keys together.' );
+		$sechstes_parts = array_column( $steps[ $sechstes['a'] ]['result']['parts'], null, 'part' );
+		foreach ( array( 'meta:_wp_attached_file', 'meta:_wp_attachment_metadata', 'meta:_wp_attachment_backup_sizes' ) as $key ) {
+			self::assertSame( 'restored', $sechstes_parts[ $key ]['state'] ?? null, $key . ': ' . json_encode( $sechstes_parts ) );
+		}
+		self::assertSame( array( '2026/10/sechstes.jpg' ), self::meta_a( $sechstes['a'], '_wp_attached_file' ), 'The sixth back whole, for an account that may upload no JPEG.' );
+		self::assertSame( 'done', $steps[ $sechstes['a'] ]['state'] );
+		unset( $steps[ $sechstes['a'] ] );
 		foreach ( $steps as $one ) {
 			self::assertSame( 'unclear', $one['state'] );
 		}
@@ -1176,6 +1202,30 @@ final class SyncMediaTest extends TestCase {
 		$absolut_bytes = self::jpeg( 160, 120, array( 33, 66, 99 ) );
 		$absolut       = self::upload_b( 'absolut.jpg', 'image/jpeg', $absolut_bytes, array(), null );
 		$unklar        = self::upload_b( 'unklar.jpg', 'image/jpeg', self::jpeg( 160, 120, array( 99, 66, 33 ) ), array(), null );
+		// A new attachment on an SVG that lies on this site byte for byte but
+		// belongs to no attachment here (left over): WordPress knows SVG (a
+		// plugin registers it), this account may not upload it. Only a file
+		// the list of the same attachment here names is asked against every
+		// known type; this one counts as a file the step lays (the precision
+		// of the lead on Codex round 2).
+		$svg    = '<?xml version="1.0" encoding="UTF-8"?>' . "\n" . '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10" fill="red"/></svg>' . "\n";
+		$grafik = (int) self::b( array( array( 'op' => 'upload', 'name' => 'grafik.jpg', 'mime' => 'image/jpeg', 'bytes' => base64_encode( self::jpeg( 10, 10, array( 1, 1, 1 ) ) ), 'generate' => false, 'as' => 'id' ) ) )['id'];
+		self::b(
+			array(
+				array( 'op' => 'put_file', 'path' => '2026/10/grafik.svg', 'bytes' => base64_encode( $svg ) ),
+				array( 'op' => 'update_meta', 'post' => $grafik, 'key' => '_wp_attached_file', 'value' => '2026/10/grafik.svg' ),
+				array( 'op' => 'update_post', 'args' => array( 'ID' => $grafik, 'post_mime_type' => 'image/svg+xml' ) ),
+			)
+		);
+		// And a new JPEG whose list names such an SVG beside it (a size of its
+		// own name, left over here): as a file the step lays.
+		$mitwaise = (int) self::b( array( array( 'op' => 'upload', 'name' => 'mitwaise.jpg', 'mime' => 'image/jpeg', 'bytes' => base64_encode( self::jpeg( 40, 40, array( 4, 40, 4 ) ) ), 'generate' => false, 'as' => 'id' ) ) )['id'];
+		self::b(
+			array(
+				array( 'op' => 'put_file', 'path' => '2026/10/mitwaise-symbol.svg', 'bytes' => base64_encode( $svg ) ),
+				array( 'op' => 'update_meta', 'post' => $mitwaise, 'key' => '_wp_attachment_metadata', 'value' => array( 'file' => '2026/10/mitwaise.jpg', 'width' => 40, 'height' => 40, 'sizes' => array( 'symbol' => array( 'file' => 'mitwaise-symbol.svg', 'width' => 10, 'height' => 10, 'mime-type' => 'image/svg+xml' ) ) ) ),
+			)
+		);
 		// An image whose list names a size that is a PHP script by its name
 		// (the main file a JPEG as the attachment says).
 		$skript = self::upload_b( 'skript.jpg', 'image/jpeg', self::jpeg( 120, 90, array( 7, 7, 7 ) ), array(), null );
@@ -1192,6 +1242,22 @@ final class SyncMediaTest extends TestCase {
 		file_put_contents( $uploads . '/2026/10/ersetzt.jpg', 'another file of this site' );
 		file_put_contents( $uploads . '/2026/10/hier.jpg', $png );
 		file_put_contents( $uploads . '/' . $rest_thumb, $png );
+		file_put_contents( $uploads . '/2026/10/grafik.svg', $svg );
+		file_put_contents( $uploads . '/2026/10/mitwaise-symbol.svg', $svg );
+		add_filter(
+			'mime_types',
+			static function ( $types ) {
+				$types['svg'] = 'image/svg+xml';
+				return $types;
+			}
+		);
+		add_filter(
+			'upload_mimes',
+			static function ( $mimes ) {
+				unset( $mimes['svg'] );
+				return $mimes;
+			}
+		);
 		$other = self::upload_a( 'anders.jpg', 'image/jpeg', self::jpeg( 300, 200, array( 99, 99, 99 ) ) );
 		$meta  = wp_get_attachment_metadata( $other );
 		$meta['sizes']['geteilt'] = array( 'file' => 'geteilt.jpg', 'width' => 300, 'height' => 200, 'mime-type' => 'image/jpeg' );
@@ -1212,7 +1278,7 @@ final class SyncMediaTest extends TestCase {
 			}
 		);
 		$files_before = self::uploads_of( 'a' );
-		$planned      = self::planned( array( 'attachment:2026/10/ersetzt.jpg', 'attachment:2026/10/geteilt.jpg', 'attachment:2026/09/verlinkt.jpg', 'attachment:2026/10/preise.pdf', 'attachment:2026/10/zwilling.jpg', 'attachment:2026/10/zwilling-zwei.jpg', 'attachment:2026/10/waise.jpg', 'attachment:2026/10/typ.jpg', 'attachment:2026/10/hier.jpg', 'attachment:2026/10/skript.jpg', 'attachment:2026/10/absolut.jpg', 'attachment:2026/10/unklar.jpg', 'attachment:2026/10/rest.jpg' ) );
+		$planned      = self::planned( array( 'attachment:2026/10/ersetzt.jpg', 'attachment:2026/10/geteilt.jpg', 'attachment:2026/09/verlinkt.jpg', 'attachment:2026/10/preise.pdf', 'attachment:2026/10/zwilling.jpg', 'attachment:2026/10/zwilling-zwei.jpg', 'attachment:2026/10/waise.jpg', 'attachment:2026/10/typ.jpg', 'attachment:2026/10/hier.jpg', 'attachment:2026/10/skript.jpg', 'attachment:2026/10/absolut.jpg', 'attachment:2026/10/unklar.jpg', 'attachment:2026/10/rest.jpg', 'attachment:2026/10/grafik.svg', 'attachment:2026/10/mitwaise.jpg' ) );
 		$missing      = self::entry( $planned['report']['all'], 'attachment:2026/10/fehlt.jpg' );
 		self::assertSame( 'locked', $missing['action'] );
 		self::assertContains( 'attachment:missing_file', array_column( $missing['locks'], 'key' ) );
@@ -1236,6 +1302,10 @@ final class SyncMediaTest extends TestCase {
 		self::assertStringContainsString( 'the attachment ' . $alt . ' of this site names it as well', $found[ (string) $absolut ] ?? '', 'Its absolute path read as the core reads it: ' . json_encode( $found ) );
 		self::assertStringContainsString( 'could not be read whole', $found[ (string) $unklar ] ?? '', 'A list of a candidate that does not read whole: ' . json_encode( $found ) );
 		self::assertStringContainsString( 'file ' . $rest_thumb . ' of this site the attachment would name is by its content of another type', $found[ (string) $rest ] ?? '', 'A size left over, by its content: ' . json_encode( $found, JSON_UNESCAPED_SLASHES ) );
+		self::assertStringContainsString( 'attachment:file_type', $found[ (string) $grafik ] ?? '', 'A left-over SVG no attachment here names, for an account that may not upload SVG: ' . json_encode( $found, JSON_UNESCAPED_SLASHES ) );
+		self::assertStringContainsString( 'grafik.svg is of no type this account may upload by its name', $found[ (string) $grafik ] ?? '' );
+		self::assertStringContainsString( 'mitwaise-symbol.svg of this site the attachment would name', $found[ (string) $mitwaise ] ?? '', json_encode( $found, JSON_UNESCAPED_SLASHES ) );
+		self::assertStringContainsString( 'it counts as a file the step lays', $found[ (string) $mitwaise ] ?? '' );
 		// The same plan without the package of media: every file to lay is
 		// missing; a package of media of another report is refused by the plan.
 		$args             = $planned['args'];
@@ -1515,15 +1585,22 @@ final class SyncMediaTest extends TestCase {
 		// stay on disk untouched. On the way back every check of the forward
 		// way holds for every file the backed-up values name, and the three
 		// keys that name files go back only together (Codex round 2, A4):
-		// where the original is by its content no type this account may
-		// upload, all three stay with their values before. A filter of that
-		// check that changes a file of the attachment stops the way back for
-		// it before any further part goes back (Codex round 2, A3): the
-		// alternative text, changed on staging as well, stays.
+		// an old size whose content is not what its name says (a PNG named
+		// .jpg, on both sites since before the run) keeps all three with their
+		// values before. A filter of that check that changes a file of the
+		// attachment stops the way back for it before any further part goes
+		// back (Codex round 2, A3): the alternative text, changed on staging
+		// as well, stays.
 		self::pair();
 		$bytes = self::jpeg( 800, 600, array( 120, 30, 30 ) );
 		$a     = self::upload_a( 'bild.jpg', 'image/jpeg', $bytes );
 		$b     = self::upload_b( 'bild.jpg', 'image/jpeg', $bytes );
+		$gd    = imagecreatetruecolor( 150, 150 );
+		ob_start();
+		imagepng( $gd );
+		$verkleidet = (string) ob_get_clean();
+		file_put_contents( wp_get_upload_dir()['basedir'] . '/2026/10/bild-150x150.jpg', $verkleidet );
+		self::b( array( array( 'op' => 'put_file', 'path' => '2026/10/bild-150x150.jpg', 'bytes' => base64_encode( $verkleidet ) ) ) );
 		$old   = self::uploads_of( 'a' );
 		self::paired( self::staged() );
 		self::b(
@@ -1564,22 +1641,20 @@ final class SyncMediaTest extends TestCase {
 		foreach ( $old as $path => $sha ) {
 			self::assertSame( $sha, $now[ $path ] ?? null, "The old file $path stays as it was." );
 		}
-		// The way back (Codex rounds 1 and 2, A4 and A3): the original, by
-		// its content no type this account may upload (WordPress's check
-		// refuses it), and the filter of that check changes an old size of the
-		// attachment as it runs.
+		// The way back (Codex rounds 1 and 2, A4 and A3): the old size that is
+		// a PNG named .jpg refuses the three keys together, and the filter of
+		// that check changes another old size of the attachment as it runs.
 		$uploads = wp_get_upload_dir()['basedir'];
+		$changed = false;
 		add_filter(
 			'wp_check_filetype_and_ext',
-			static function ( $answer, $file, $filename ) use ( $uploads ) {
-				if ( 'bild.jpg' === $filename ) {
+			static function ( $answer ) use ( $uploads, &$changed ) {
+				if ( ! $changed ) {
+					$changed = true;
 					file_put_contents( $uploads . '/2026/10/bild-300x225.jpg', 'z', FILE_APPEND );
-					return array( 'ext' => false, 'type' => false, 'proper_filename' => false );
 				}
 				return $answer;
-			},
-			10,
-			3
+			}
 		);
 		$now   = self::uploads_of( 'a' );
 		$back  = self::back( (int) $run['run_id'] );
@@ -1602,7 +1677,7 @@ final class SyncMediaTest extends TestCase {
 		foreach ( array( 'meta:_wp_attached_file', 'meta:_wp_attachment_backup_sizes' ) as $key ) {
 			self::assertSame( 'left', $parts[ $key ]['state'], $key . ': ' . json_encode( $parts ) );
 			self::assertStringContainsString( 'go back only together', $parts[ $key ]['note'], $key );
-			self::assertStringContainsString( 'may not upload', $parts[ $key ]['note'], $key );
+			self::assertStringContainsString( 'name the file 2026/10/bild-150x150.jpg again (its content is not what its name says', $parts[ $key ]['note'], $key );
 		}
 		self::assertSame( 'left', $parts['meta:_wp_attachment_metadata']['state'] );
 		self::assertStringContainsString( 'The way back stopped for this object', $parts['meta:_wp_attachment_metadata']['note'] );

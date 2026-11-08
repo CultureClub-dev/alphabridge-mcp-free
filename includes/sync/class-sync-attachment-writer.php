@@ -553,44 +553,59 @@ final class AB_MCP_Sync_Attachment_Writer {
 		if ( $lay > self::MAX_BYTES ) {
 			return AB_MCP_Sync_Post_Writer::locked( 'attachment:file_too_large', sprintf( '%1$d bytes to lay, %2$d at most', $lay, self::MAX_BYTES ) );
 		}
+		// The types this account may upload hold for every file the step lays
+		// (above, and provide()) and for every file that lies here but is not
+		// in the list of this attachment here (a new attachment that would take
+		// over a file no attachment names, or a file its new list names): as a
+		// file to lay. Only a file the list of this attachment here names
+		// already, which the step does not write, is asked against every type
+		// WordPress knows, whether its content is what its name says (Codex
+		// round 2 of branch 10, B: a size of WebP the media library made locked
+		// a change of a title; and the precision of the lead after it: an
+		// account without unfiltered_upload makes no file of a type it may not
+		// upload its own medium, SVG or HTML left over under the uploads).
+		$own   = null === $live_id ? array() : AB_MCP_Sync_Media::paths_of( (int) $live_id );
+		$own   = is_array( $own ) ? array_flip( array_map( 'strval', $own ) ) : array();
+		$known = array_merge( wp_get_mime_types(), $mimes );
 		// The main file of the type the attachment says (post_mime_type), by its
-		// name. The types this account may upload hold for a file the step
-		// lays (above, and provide()); a file this site has already and the
-		// step does not write is asked against every type WordPress knows and
-		// this account's together (Codex round 2 of branch 10, B: a size of
-		// WebP the media library made locked a change of a title for an
-		// account that may not upload WebP).
-		$known    = array_merge( wp_get_mime_types(), $mimes );
+		// name.
 		$attached = isset( $prepared['meta']['_wp_attached_file'][0] ) ? (string) $prepared['meta']['_wp_attached_file'][0] : '';
 		if ( '' !== $attached ) {
-			$main_here = false;
+			$main_own = false;
 			foreach ( $out as $entry ) {
-				$main_here = $main_here || ( $entry['path'] === $attached && 'present' === $entry['state'] );
+				$main_own = $main_own || ( $entry['path'] === $attached && 'present' === $entry['state'] && isset( $own[ $entry['path'] ] ) );
 			}
-			$type = wp_check_filetype( self::base( $attached ), $main_here ? $known : $mimes );
+			$type = wp_check_filetype( self::base( $attached ), $main_own ? $known : $mimes );
 			if ( ! $free && (string) $type['type'] !== (string) $prepared['postarr']['post_mime_type'] ) {
-				return AB_MCP_Sync_Post_Writer::locked( 'attachment:file_type', sprintf( 'the file %1$s is %2$s by its name, the attachment says %3$s', $attached, '' === (string) $type['type'] ? 'of no type this account may upload' : (string) $type['type'], (string) $prepared['postarr']['post_mime_type'] ) );
+				return AB_MCP_Sync_Post_Writer::locked( 'attachment:file_type', sprintf( 'the file %1$s is %2$s by its name, the attachment says %3$s', $attached, '' === (string) $type['type'] ? ( $main_own ? 'of no type WordPress knows' : 'of no type this account may upload' ) : (string) $type['type'], (string) $prepared['postarr']['post_mime_type'] ) );
 			}
 		}
 		// Every file of the list this site has already (present), which the
-		// step does not write: only whether its content is what its name says
-		// (a content of another type than its name, a script under the name of
-		// an image: Codex round 1 of branch 10, C), against the types
-		// WordPress knows (above); a name of a type none of them knows says
-		// nothing to check its content against. The main file of the type the
-		// attachment says.
+		// step does not write, by its content (a content of another type than
+		// its name, a script under the name of an image: Codex round 1 of
+		// branch 10, C); the main file of the type the attachment says. One the
+		// list of this attachment here names: against the types WordPress
+		// knows, a name of a type none of them knows says nothing to check its
+		// content against. Any other: as a file to lay, the types this account
+		// may upload.
 		foreach ( $out as $entry ) {
 			if ( 'present' !== $entry['state'] ) {
 				continue;
 			}
-			$by_name = wp_check_filetype( self::base( $entry['path'] ), $known );
-			if ( empty( $by_name['type'] ) ) {
-				continue;
+			$main = '' !== $attached && $entry['path'] === $attached;
+			if ( isset( $own[ $entry['path'] ] ) ) {
+				$by_name = wp_check_filetype( self::base( $entry['path'] ), $known );
+				if ( empty( $by_name['type'] ) ) {
+					continue;
+				}
+				$check = self::content_check( $root . '/' . $entry['path'], self::base( $entry['path'] ) );
+				$whose = 'than its name, or than the attachment says';
+			} else {
+				$check = wp_check_filetype_and_ext( $root . '/' . $entry['path'], self::base( $entry['path'] ), $mimes );
+				$whose = 'than its name and the attachment say, or of a type this account may not upload (it lies here, but no list of this attachment names it: it counts as a file the step lays)';
 			}
-			$check = self::content_check( $root . '/' . $entry['path'], self::base( $entry['path'] ) );
-			$main  = '' !== $attached && $entry['path'] === $attached;
 			if ( ! empty( $check['proper_filename'] ) || ( ( empty( $check['type'] ) || empty( $check['ext'] ) || ( $main && (string) $check['type'] !== (string) $prepared['postarr']['post_mime_type'] ) ) && ! $free ) ) {
-				return AB_MCP_Sync_Post_Writer::locked( 'attachment:file_type', sprintf( 'the file %s of this site the attachment would name is by its content of another type than its name, or than the attachment says', $entry['path'] ) );
+				return AB_MCP_Sync_Post_Writer::locked( 'attachment:file_type', sprintf( 'the file %1$s of this site the attachment would name is by its content of another type %2$s', $entry['path'], $whose ) );
 			}
 		}
 		// Another attachment of this site that names a path of the list.
@@ -1204,12 +1219,13 @@ final class AB_MCP_Sync_Attachment_Writer {
 	 * branch 10, A4): they go back only together (together()), so the list
 	 * they name after the way back is the list the backed-up values name;
 	 * every file of it, worked out as the core does (AB_MCP_Sync_Media::
-	 * paths()), is asked as the forward way asks a file: a plain path under
-	 * the uploads, a plain file there with no link on the way
-	 * (target_state()), no other attachment of this site naming it
-	 * (named_by()), by its content a type this account may upload that its
-	 * name says, the main file of the type the attachment says. Nothing is
-	 * laid on the way back.
+	 * paths()), is asked as the forward way asks a file this site has that it
+	 * does not write: a plain path under the uploads, a plain file there with
+	 * no link on the way (target_state()), no other attachment of this site
+	 * naming it (named_by()), its content what its name says (content_check(),
+	 * every type WordPress knows, never the types this account may upload:
+	 * nothing is laid on the way back), the main file of the type the
+	 * attachment says.
 	 *
 	 * @param int   $live_id Attachment.
 	 * @param array $backup  current() of the backup.
@@ -1237,7 +1253,14 @@ final class AB_MCP_Sync_Attachment_Writer {
 		if ( array() !== $list['problems'] ) {
 			return 'name the files of the attachment again: a name in the values before is no plain path under the uploads';
 		}
-		$mimes = get_allowed_mime_types( wp_get_current_user() );
+		// The way back lays no file; it names again files that stood at the
+		// attachment before the run. As for a file this site has that the
+		// forward way does not write (files_plan()): whether its content is
+		// what its name says, against every type WordPress knows, never the
+		// types this account may upload (decision of the lead on Codex round 2
+		// of branch 10: the list of the account rules what is uploaded or
+		// laid, decision 26). The main file of the type the attachment says.
+		$known = array_merge( wp_get_mime_types(), get_allowed_mime_types( wp_get_current_user() ) );
 		$free  = current_user_can( 'unfiltered_upload' );
 		$mime  = isset( $backup['row']['post_mime_type'] ) ? (string) $backup['row']['post_mime_type'] : '';
 		$paths = array();
@@ -1246,12 +1269,16 @@ final class AB_MCP_Sync_Attachment_Writer {
 			if ( 'file' !== AB_MCP_Sync_Media::target_state( $root, $file ) ) {
 				return sprintf( 'name the file %s again: it is not a plain file under the uploads of this site any more', $file );
 			}
-			$check = wp_check_filetype_and_ext( $root . '/' . $file, self::base( $file ), $mimes );
-			if ( ! empty( $check['proper_filename'] ) || ( ( empty( $check['type'] ) || empty( $check['ext'] ) ) && ! $free ) ) {
-				return sprintf( 'name the file %s again (by its content a type this account may not upload)', $file );
+			$main    = in_array( 'file', $entry['roles'], true );
+			$by_name = wp_check_filetype( self::base( $file ), $known );
+			if ( $main && ! $free && (string) $by_name['type'] !== $mime ) {
+				return sprintf( 'name the file %1$s again (by its name %2$s, the attachment says %3$s)', $file, '' === (string) $by_name['type'] ? 'of no type WordPress knows' : (string) $by_name['type'], $mime );
 			}
-			if ( in_array( 'file', $entry['roles'], true ) && ! $free && (string) $check['type'] !== $mime ) {
-				return sprintf( 'name the file %1$s again (by its content %2$s, the attachment says %3$s)', $file, (string) $check['type'], $mime );
+			if ( ! empty( $by_name['type'] ) ) {
+				$check = self::content_check( $root . '/' . $file, self::base( $file ) );
+				if ( ! empty( $check['proper_filename'] ) || ( ( empty( $check['type'] ) || empty( $check['ext'] ) || ( $main && (string) $check['type'] !== $mime ) ) && ! $free ) ) {
+					return sprintf( 'name the file %s again (its content is not what its name says, or than the attachment says)', $file );
+				}
 			}
 			$paths[] = $file;
 		}

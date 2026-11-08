@@ -137,20 +137,30 @@ entsteht, nennt ihre Meldung den Weg.
 ## Typ und Rechte
 
 - Jede Datei der Liste, die die Live-Site schon bytegleich hat (`present`)
-  und die der Schritt darum nicht schreibt, prüft der Plan nur darauf, dass
-  ihr Inhalt zu ihrem Namen passt (Codex-Runde 1, C; Runde 2, B):
-  WordPress' Prüfung nach dem Inhalt, gegen jeden Typ, den WordPress kennt,
-  nicht gegen die Typen des Kontos (`content_check()`: für diesen einen
-  Aufruf sind alle bekannten Typen erlaubt, weil
-  `wp_check_filetype_and_ext()` sonst zuletzt gegen die Typen des Kontos
-  prüft). Eine liegengebliebene Grösse mit dem Inhalt eines anderen Typs
-  sperrt mit `attachment:file_type`; eine WebP-Grösse, die die Mediathek
-  machte, sperrt eine Änderung des Titels nicht, auch für ein Konto, das
-  WebP nicht hochladen darf. Die Typen des Kontos gelten für die Dateien,
-  die der Schritt legt. Die Hauptdatei hat den Typ des Anhangs. Ein Name
-  eines Typs, den WordPress nicht kennt, gibt nichts, wogegen der Inhalt
-  zu prüfen wäre. Prüffall
-  `testAWebpSizeAndAnImportOfOldWithAbsolutePathsLockNoAttachmentBesideThem`.
+  und die der Schritt darum nicht schreibt, prüft der Plan nach ihrem
+  Inhalt, mit einem Unterschied je nachdem, wem sie gehört (Codex-Runde 1,
+  C; Runde 2, B; Präzisierung der Lead danach):
+  - Nennt die Liste desselben Live-Anhangs sie schon, prüft er nur, dass
+    ihr Inhalt zu ihrem Namen passt: WordPress' Prüfung nach dem Inhalt,
+    gegen jeden Typ, den WordPress kennt, nicht gegen die Typen des Kontos
+    (`content_check()`: für diesen einen Aufruf sind alle bekannten Typen
+    erlaubt, weil `wp_check_filetype_and_ext()` sonst zuletzt gegen die
+    Typen des Kontos prüft). Eine WebP-Grösse, die die Mediathek machte,
+    sperrt so eine Änderung des Titels nicht, auch für ein Konto, das WebP
+    nicht hochladen darf.
+  - Jede andere liegende Datei (ein neuer Anhang, der eine Datei übernähme,
+    die zu keinem Anhang gehört; eine Datei, die erst die neue Liste nennt)
+    zählt wie eine, die der Schritt legt: die Typen des Kontos sind
+    verbindlich. Grund: sonst machte ein Konto ohne `unfiltered_upload`
+    eine liegende Datei eines Typs, den es nicht hochladen darf (SVG, HTML,
+    unter den Uploads liegengeblieben), zu einem eigenen Medium. Selten
+    (verwaiste Dateien, gleich auf Staging), darum sperrt es mit
+    `attachment:file_type`.
+  Eine liegengebliebene Grösse mit dem Inhalt eines anderen Typs sperrt in
+  beiden Fällen. Die Hauptdatei hat den Typ des Anhangs. Prüffälle
+  `testAWebpSizeAndAnImportOfOldWithAbsolutePathsLockNoAttachmentBesideThem`
+  (WebP-Grösse hin und zurück) und der Sperren-Fall (ein neuer Anhang auf
+  einer verwaisten SVG, einer mit einer verwaisten SVG-Grösse).
 - Typ nach dem Inhalt: jede zu legende Datei wird erst ganz in eine
   temporäre Datei dieser Anfrage gelesen (`get_temp_dir()`, ausserhalb der
   Uploads, danach entfernt), gegen Grösse und SHA-256 geprüft und mit
@@ -186,10 +196,18 @@ entsteht, nennt ihre Meldung den Weg.
   So prüft `restore_files()` genau die Liste, die danach gilt: jede Datei,
   die die gesicherten Werte zusammen nennen (gerechnet wie der Kern), muss
   eine einfache Datei unter den Uploads sein, ohne Link auf dem Weg, von
-  keinem anderen Anhang der Site genannt, nach ihrem Inhalt ein Typ, den
-  das Konto hochladen darf und den ihr Name sagt, die Hauptdatei der Typ
-  des Anhangs. Hatte der Anhang vorher keinen der drei, geht ihr Entfernen
-  zurück. Auf dem Rückweg wird keine Datei gelegt.
+  keinem anderen Anhang der Site genannt, ihr Inhalt muss zu ihrem Namen
+  passen (`content_check()`, alle Typen, die WordPress kennt), die
+  Hauptdatei vom Typ des Anhangs. Die Typen des Kontos fragt der Rückweg
+  nicht (Entscheid der Lead auf Codex-Runde 2): er legt keine Datei, er
+  nennt nur Dateien wieder, die vor dem Lauf in der Liste desselben
+  Anhangs standen; die Typen des Kontos regeln nach Entscheid 26, was
+  hochgeladen oder gelegt wird. Die Rechte `edit_post` und `upload_files`
+  für die Dateischlüssel bleiben. Prüffälle: ein bearbeitetes Bild geht
+  für ein Konto, das kein JPEG hochladen darf, ganz zurück; eine alte
+  Grösse, die ein PNG unter `.jpg` ist, lässt die Gruppe stehen. Hatte der
+  Anhang vorher keinen der drei, geht ihr Entfernen zurück. Auf dem
+  Rückweg wird keine Datei gelegt.
 - Unmittelbar vor jeder Datei, die ein Schritt legt, fragt er die Rechte
   noch einmal wie die Vorprüfung (Codex-Runde 1, A5): `upload_files` (das
   `create_posts` der Art) für einen neuen Anhang, `edit_post` und
