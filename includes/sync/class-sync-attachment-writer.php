@@ -616,6 +616,7 @@ final class AB_MCP_Sync_Attachment_Writer {
 			return self::not_laid( $journal, $plan->get_error_message() );
 		}
 		$journal['files'] = array();
+		$watch            = array();
 		foreach ( $plan['files'] as $file ) {
 			$journal['files'][] = array(
 				'path'   => $file['path'],
@@ -624,7 +625,23 @@ final class AB_MCP_Sync_Attachment_Writer {
 				'state'  => 'present' === $file['state'] ? 'present' : 'planned',
 				'own'    => false,
 			);
+			$watch[ (string) $file['path'] ] = true;
 		}
+		// The files the object names before and after the step, read with
+		// every reading of its state (files_state(); Codex round 1, A3): the
+		// list of the target and that of the attachment here.
+		if ( null !== $live_id ) {
+			$here = AB_MCP_Sync_Media::paths_of( (int) $live_id );
+			if ( null === $here ) {
+				return self::not_laid( $journal, 'the file list of the attachment on this site does not read whole, so its files cannot be compared as the step writes' );
+			}
+			foreach ( $here as $path ) {
+				$watch[ (string) $path ] = true;
+			}
+		}
+		$watch = array_map( 'strval', array_keys( $watch ) );
+		sort( $watch, SORT_STRING );
+		$journal['watch'] = $watch;
 		if ( true !== $save( $journal ) ) {
 			return self::not_laid( $journal, 'the journal of the step could not be written ahead of its files, so none was laid' );
 		}
@@ -697,6 +714,12 @@ final class AB_MCP_Sync_Attachment_Writer {
 				}
 				AB_MCP_Change_Lock::touch();
 			}
+			// The files as they lie now, the first reading the calls of the
+			// step are compared against (files_state()).
+			$journal['files_seen'] = self::files_state( $journal );
+			if ( true !== $save( $journal ) ) {
+				return self::not_laid( $journal, 'the journal of the step could not be saved after its files, so its row was not written' );
+			}
 		} finally {
 			foreach ( $temp as $file ) {
 				// The temporary copies of this request, outside the uploads.
@@ -731,6 +754,44 @@ final class AB_MCP_Sync_Attachment_Writer {
 					'state'  => (string) $file['state'],
 				);
 			}
+		}
+		return $out;
+	}
+
+	/**
+	 * What lies at each path a step watches (watch in its journal: the file
+	 * list of its target and that of the attachment here before), read as
+	 * one state of the object beside its rows (Codex round 1 of branch 10,
+	 * A3): absent, the SHA-256 and the size of a plain file, or what else
+	 * lies there (other, unsafe), unreadable where it does not read. The
+	 * engine compares it after every call of the step's own and every part
+	 * the way back puts back (a file a hook changed deviates the object).
+	 *
+	 * @param array $journal Journal.
+	 * @return array<string,string>|null Path => state; null without watch.
+	 */
+	public static function files_state( array $journal ) {
+		if ( ! isset( $journal['watch'] ) || ! is_array( $journal['watch'] ) ) {
+			return null;
+		}
+		$uploads = AB_MCP_Sync_Media::uploads();
+		$root    = '' === $uploads['problem'] ? realpath( $uploads['dir'] ) : false;
+		$out     = array();
+		foreach ( $journal['watch'] as $path ) {
+			$path = (string) $path;
+			if ( false === $root ) {
+				$out[ $path ] = 'unreadable';
+				continue;
+			}
+			$state = AB_MCP_Sync_Media::target_state( $root, $path );
+			if ( 'file' === $state ) {
+				$full = $root . '/' . $path;
+				clearstatcache( true, $full );
+				$sha   = @hash_file( 'sha256', $full ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- a failed read is answered.
+				$size  = @filesize( $full ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+				$state = is_string( $sha ) && false !== $size ? $sha . ':' . (int) $size : 'unreadable';
+			}
+			$out[ $path ] = $state;
 		}
 		return $out;
 	}

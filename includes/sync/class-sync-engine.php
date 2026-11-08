@@ -1323,6 +1323,11 @@ final class AB_MCP_Sync_Engine {
 			return AB_MCP_Sync_Run::update_step( $run_id, $seq, array( 'parts' => $journal ), 'begun' );
 		};
 		$backup = is_array( $current ) ? $current : null;
+		// The files of the object as the last reading saw them (an attachment:
+		// files_state(), saved with the journal since its files were laid;
+		// branch 10, Codex round 1, A3): every call of the step's own is
+		// compared against them, as the parts are.
+		$files_seen = method_exists( $w, 'files_state' ) ? ( isset( $journal['files_seen'] ) && is_array( $journal['files_seen'] ) ? $journal['files_seen'] : $w::files_state( $journal ) ) : null;
 		foreach ( $journal['parts'] as $i => $part ) {
 			$name        = (string) $part['part'];
 			$target      = (string) $part['target'];
@@ -1425,6 +1430,22 @@ final class AB_MCP_Sync_Engine {
 					}
 					return self::deviated( $journal, $i, sprintf( 'the call of the part %1$s changed the part %2$s besides it (a hook of this site reacting to the call)', $name, $other_name ), $live_id, $backup );
 				}
+			}
+			// The files of the object (an attachment; Codex round 1 of branch
+			// 10, A3): a call that changed one of them (a hook of this site,
+			// edit_attachment, an optimizer) changed the object besides its
+			// parts, as a part changed besides: another hand's, the object
+			// deviated, nothing of it goes back by itself (decision A). The
+			// reading is saved with the journal, so the way back compares
+			// against it even after a request that ended here.
+			if ( is_array( $files_seen ) && ! $through_row ) {
+				$files_now = $w::files_state( $journal );
+				$moved     = self::changed_file( $files_seen, is_array( $files_now ) ? $files_now : array() );
+				if ( null !== $moved ) {
+					return self::deviated( $journal, $i, sprintf( 'the call of the part %1$s changed the file %2$s of the attachment besides it (a hook of this site reacting to the call)', $name, $moved ), $live_id, $backup );
+				}
+				$files_seen            = $files_now;
+				$journal['files_seen'] = $files_now;
 			}
 			$one     = $journal['parts'][ $i ];
 			$post    = $one['post'];
@@ -1855,6 +1876,19 @@ final class AB_MCP_Sync_Engine {
 		$seen    = $w::current( $live_id );
 		$seen    = is_array( $seen ) ? $seen : null;
 		$stopped = null;
+		// The files of the object (an attachment; Codex round 1 of branch 10,
+		// A3): one changed since the last reading of the step (a hook as it
+		// wrote, another hand since) stops the way back for the object before
+		// any part goes back; one a put back changes stops it from there.
+		$files_seen = null;
+		if ( method_exists( $w, 'files_state' ) && isset( $journal['files_seen'] ) && is_array( $journal['files_seen'] ) ) {
+			$files_seen = $w::files_state( $journal );
+			$files_seen = is_array( $files_seen ) ? $files_seen : array();
+			$moved      = self::changed_file( $journal['files_seen'], $files_seen );
+			if ( null !== $moved ) {
+				$stopped = sprintf( 'the file %s of the attachment changed since the step read it last (a hook of this site, or another hand since)', $moved );
+			}
+		}
 		foreach ( $order as $i ) {
 			$name    = (string) $parts[ $i ]['part'];
 			$now     = null === $seen ? null : $w::part_hash( $seen, $name );
@@ -1916,6 +1950,15 @@ final class AB_MCP_Sync_Engine {
 						}
 					}
 				}
+				if ( is_array( $files_seen ) ) {
+					$files_again = $w::files_state( $journal );
+					$files_again = is_array( $files_again ) ? $files_again : array();
+					$moved       = self::changed_file( $files_seen, $files_again );
+					if ( null === $stopped && null !== $moved ) {
+						$stopped = sprintf( 'putting the part %1$s back changed the file %2$s of the attachment (a side effect of the core or a hook of this site)', $name, $moved );
+					}
+					$files_seen = $files_again;
+				}
 				$seen = $again;
 			}
 			if ( 'left' === $one['state'] ) {
@@ -1943,8 +1986,9 @@ final class AB_MCP_Sync_Engine {
 			}
 		}
 		// A way back that stopped changed something besides the parts (Codex
-		// round 16): the object is not back as a whole, whatever the parts say.
-		if ( null !== $stopped ) {
+		// round 16): the object is not back as a whole, whatever the parts say;
+		// nor where a file of it changed after the last part went back.
+		if ( null !== $stopped || ( is_array( $files_seen ) && null !== self::changed_file( $files_seen, (array) $w::files_state( $journal ) ) ) ) {
 			$all_back = false;
 		}
 		return array(
@@ -2750,6 +2794,24 @@ final class AB_MCP_Sync_Engine {
 				continue;
 			}
 			return $name;
+		}
+		return null;
+	}
+
+	/**
+	 * The first file whose state differs between two readings of the files
+	 * of an object (AB_MCP_Sync_Attachment_Writer::files_state(): path =>
+	 * absent, SHA-256 and size, or what else lies there); null where none.
+	 *
+	 * @param array $before A reading.
+	 * @param array $after  A later one.
+	 * @return string|null The path.
+	 */
+	private static function changed_file( array $before, array $after ) {
+		foreach ( array_unique( array_merge( array_map( 'strval', array_keys( $before ) ), array_map( 'strval', array_keys( $after ) ) ) ) as $path ) {
+			if ( ( $before[ $path ] ?? null ) !== ( $after[ $path ] ?? null ) ) {
+				return (string) $path;
+			}
 		}
 		return null;
 	}

@@ -899,6 +899,86 @@ final class SyncMediaTest extends TestCase {
 		self::assertSame( array(), $this->deletions );
 	}
 
+	public function testAFileAHookChangesAsTheStepWritesOrPutsBackDeviatesTheAttachmentAndStopsItsWayBack(): void {
+		// Codex round 1 of branch 10, A3: the state of an attachment read
+		// after every call of the step's own and every part the way back puts
+		// back holds its files (path, size, SHA-256), as its form does. Three
+		// images both sites have, each with a new title and alternative text
+		// on staging: a hook changes the file of the first as its row is
+		// written (the object deviates, nothing of it goes back); another
+		// hand changes a file of the second after the run (its way back stops
+		// before any part); a hook changes a file of the third as its row is
+		// put back (the alternative text stays).
+		self::pair();
+		$ids = array();
+		foreach ( array( 'erstes', 'zweites', 'drittes' ) as $k => $name ) {
+			$bytes        = self::jpeg( 300, 200, array( 20 + $k, 40, 60 ) );
+			$ids[ $name ] = array(
+				'a' => self::upload_a( $name . '.jpg', 'image/jpeg', $bytes, array( 'post_title' => 'Alt' ), 'Alt' ),
+				'b' => self::upload_b( $name . '.jpg', 'image/jpeg', $bytes, array( 'post_title' => 'Alt' ), 'Alt' ),
+			);
+		}
+		self::paired( self::staged() );
+		foreach ( $ids as $name => $id ) {
+			self::b(
+				array(
+					array( 'op' => 'update_post', 'args' => array( 'ID' => $id['b'], 'post_title' => 'Neu' ) ),
+					array( 'op' => 'update_meta', 'post' => $id['b'], 'key' => '_wp_attachment_image_alt', 'value' => 'Neu' ),
+				)
+			);
+		}
+		$planned = self::planned( array( 'attachment:2026/10/erstes.jpg', 'attachment:2026/10/zweites.jpg', 'attachment:2026/10/drittes.jpg' ) );
+		$touch   = null;
+		add_action(
+			'edit_attachment',
+			static function ( $id ) use ( &$touch ) {
+				if ( null !== $touch && (int) $id === $touch ) {
+					file_put_contents( get_attached_file( (int) $id ), 'x', FILE_APPEND );
+					$touch = null;
+				}
+			}
+		);
+		$this->watch_deletions();
+		$touch  = $ids['erstes']['a'];
+		$run    = self::begun( $planned['args'] );
+		$closed = self::finish( (int) $run['run_id'] );
+		$status = self::run_status( (int) $run['run_id'] );
+		self::assertNull( $touch, 'The hook ran.' );
+		self::assertSame( 'closed_findings', $closed['state'], json_encode( $closed ) . self::check_message( $status ) );
+		$by = array();
+		foreach ( self::writes( $status ) as $step ) {
+			$by[ (int) $step['parts']['object']['live_ref'] ] = $step;
+		}
+		self::assertSame( 'unclear', $by[ $ids['erstes']['a'] ]['state'] );
+		self::assertStringContainsString( 'changed the file 2026/10/erstes.jpg of the attachment', (string) $by[ $ids['erstes']['a'] ]['result']['message'] );
+		self::assertSame( 'done', $by[ $ids['zweites']['a'] ]['state'] );
+		self::assertSame( 'done', $by[ $ids['drittes']['a'] ]['state'] );
+		// Another hand changes a file of the second; a hook the third as its row goes back.
+		file_put_contents( get_attached_file( $ids['zweites']['a'] ), 'y', FILE_APPEND );
+		$touch = $ids['drittes']['a'];
+		$back  = self::back( (int) $run['run_id'] );
+		self::assertNull( $touch, 'The hook ran on the way back.' );
+		$steps = array();
+		foreach ( $back['steps'] as $one ) {
+			if ( isset( $one['result']['live_ref'] ) ) {
+				$steps[ (int) $one['result']['live_ref'] ] = $one;
+			}
+		}
+		foreach ( array( 'erstes', 'zweites' ) as $name ) {
+			self::assertSame( 'Neu', self::row_a( $ids[ $name ]['a'] )['post_title'], "$name: nothing goes back." );
+		}
+		self::assertSame( array( 'Alt' ), self::meta_a( $ids['erstes']['a'], '_wp_attachment_image_alt' ), 'The first stopped at its row: its alternative text was never written.' );
+		self::assertSame( array( 'Neu' ), self::meta_a( $ids['zweites']['a'], '_wp_attachment_image_alt' ) );
+		self::assertStringContainsString( 'the file 2026/10/zweites.jpg of the attachment changed since the step read it last', (string) json_encode( $steps[ $ids['zweites']['a'] ]['result'], JSON_UNESCAPED_SLASHES ) );
+		self::assertSame( 'Alt', self::row_a( $ids['drittes']['a'] )['post_title'], 'The row of the third went back before its file changed.' );
+		self::assertSame( array( 'Neu' ), self::meta_a( $ids['drittes']['a'], '_wp_attachment_image_alt' ), 'Then the way back stopped for it.' );
+		self::assertStringContainsString( 'changed the file 2026/10/drittes.jpg of the attachment', (string) json_encode( $steps[ $ids['drittes']['a'] ]['result'], JSON_UNESCAPED_SLASHES ) );
+		foreach ( $steps as $one ) {
+			self::assertSame( 'unclear', $one['state'] );
+		}
+		self::assertSame( array(), $this->deletions );
+	}
+
 	/* ----------------------------------------------- what locks, before */
 
 	public function testWhatWouldReplaceShareOrLinkAFileOrIsOfATypeThisAccountMayNotUploadLocksBeforeAnythingIsWritten(): void {

@@ -158,8 +158,20 @@ entsteht, nennt ihre Meldung den Weg.
   (`update_metadata()`, `add_metadata()`), nicht über
   `wp_update_attachment_metadata()`: ein Bildoptimierer, der diesen Filter
   hakt, läuft bei einer Übernahme nicht. Ändert ein Haken der Site trotzdem
-  eine Datei oder einen Wert, weicht das Objekt ab (sein Hash deckt jede
-  Datei), und nichts wird von selbst zurückgesetzt.
+  eine Datei oder einen Wert, weicht das Objekt ab, und nichts wird von
+  selbst zurückgesetzt (Entscheid A). Der gelesene Stand eines Anhangs
+  umfasst dafür neben seinen Zeilen seine Dateien (Codex-Runde 1, A3): je
+  Pfad der Liste des Ziels und der Liste vor dem Schritt (`watch` im
+  Journal) liegt nichts, eine Datei mit SHA-256 und Grösse oder etwas
+  anderes (`files_state()`). Nach jedem eigenen Aufruf wird er verglichen
+  wie die Teile; eine Datei, die ein Aufruf geändert hat, lässt das Objekt
+  abweichen. Die letzte Lesung steht im Journal (`files_seen`); der Rückweg
+  vergleicht vor dem ersten Teil gegen sie (eine Datei, die seitdem ein
+  Haken oder eine andere Hand änderte, auch nach einer Anfrage, die nach
+  dem Zeilenaufruf endete: nichts geht zurück) und nach jedem
+  zurückgesetzten Teil (ändert ein Haken dabei eine Datei, hält der Rückweg
+  für das Objekt an, die übrigen Teile bleiben). Prüffall
+  `testAFileAHookChangesAsTheStepWritesOrPutsBackDeviatesTheAttachmentAndStopsItsWayBack`.
 - Ein neuer Anhang entsteht mit `wp_insert_attachment()` und seiner Datei,
   wie ein Upload ihn macht (`_wp_attached_file` mit der Zeile, die `guid`
   die Adresse der Datei). Die Aktion `add_attachment` läuft dabei; ändert

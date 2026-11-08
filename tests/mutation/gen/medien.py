@@ -77,6 +77,7 @@ U_VERDICT = 'testWhichEntryOfAReportIsAStepLockedOrNothing'
 U_FOLDER = 'testTheFolderOfAFileIsMadeLevelByLevelUnderTheUploadsAndTheUploadsThemselvesWhereTheyAreMissing'
 U_LAY = 'testAFileIsLaidOnlyWhereItIsShownAtItsPathUnderTheUploadsAndAFolderSwappedAsItIsOpenedLeavesItEmptyAndUnclear'
 FLAT = 'testTheFirstFilesOfASiteWithoutMonthFoldersGoIntoItsUploadsAndOnlyWithTheRightToUploadAsTheyAreLaid'
+FILEHOOK = 'testAFileAHookChangesAsTheStepWritesOrPutsBackDeviatesTheAttachmentAndStopsItsWayBack'
 U_KINDS = 'testEachKindRegistersWithWhatTheTableGivesIt'
 U_WRITERS = 'testTheEngineWritesTermsWithTheirOwnWriter'
 IT_LINES = 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain'
@@ -216,6 +217,16 @@ e('engine-lay-files', 'boundary(): the files of an attachment before its row', E
   "\t\tif ( method_exists( $w, 'lay_files' ) ) {", "\t\tif ( false ) {", 'it', NORMAL)
 e('engine-lay-files-stop', 'boundary(): files not laid whole, no row', EN,
   "\t\t\tif ( true !== $laid['ok'] ) {", "\t\t\tif ( false ) {", 'it', RACE)
+e('engine-files-call', 'write_parts(): a call that changed a file of the attachment deviates the object (Codex round 1, A3)', EN,
+  "\t\t\t\tif ( null !== $moved ) {\n\t\t\t\t\treturn self::deviated( $journal, $i, sprintf( 'the call of the part %1$s changed the file",
+  "\t\t\t\tif ( false ) {\n\t\t\t\t\treturn self::deviated( $journal, $i, sprintf( 'the call of the part %1$s changed the file", 'it', FILEHOOK)
+e('engine-files-back-start', 'put_back(): a file changed since the step read it last stops the way back before any part (Codex round 1, A3)', EN,
+  "\t\t\tif ( null !== $moved ) {\n\t\t\t\t$stopped = sprintf( 'the file %s of the attachment changed since",
+  "\t\t\tif ( false ) {\n\t\t\t\t$stopped = sprintf( 'the file %s of the attachment changed since", 'it', FILEHOOK)
+e('engine-files-back-put', 'put_back(): a put back that changed a file stops the way back from there (Codex round 1, A3)', EN,
+  "\t\t\t\t\tif ( null === $stopped && null !== $moved ) {", "\t\t\t\t\tif ( false ) {", 'it', FILEHOOK)
+e('writer-files-state', 'files_state(): a file by its SHA-256 and size (Codex round 1, A3)', AW,
+  "\t\t\t\t$state = is_string( $sha ) && false !== $size ? $sha . ':' . (int) $size : 'unreadable';", "\t\t\t\t$state = 'file';", 'it', FILEHOOK)
 e('engine-with-files', 'with_files(): the files the step laid in its result', EN,
   "\t\t\t$files = $w::own_files( $journal );\n\t\t\tif ( array() !== $files ) {\n\t\t\t\t$result['files'] = $files;\n\t\t\t}",
   "\t\t\t$files = $w::own_files( $journal );", 'it', NORMAL)
