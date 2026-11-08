@@ -547,7 +547,7 @@ final class AB_MCP_Sync_Media {
 		$parts = explode( '/', (string) $rel );
 		$last  = array_pop( $parts );
 		$at    = rtrim( (string) $root, '/' );
-		clearstatcache();
+		clearstatcache( true );
 		foreach ( $parts as $part ) {
 			$at .= '/' . $part;
 			if ( is_link( $at ) ) {

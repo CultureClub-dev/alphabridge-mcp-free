@@ -982,7 +982,7 @@ final class AB_MCP_Sync_Attachment_Writer {
 		foreach ( array_merge( array( '' ), $parts ) as $part ) {
 			$above = '' === $part ? dirname( $at ) : $at;
 			$at    = '' === $part ? $at : $at . '/' . $part;
-			clearstatcache( true, $at );
+			clearstatcache( true );
 			if ( is_link( $at ) ) {
 				return AB_MCP_Sync_Post_Writer::locked( 'attachment:unsafe_path', sprintf( 'file %s: a link lies on the way to it', $path ) );
 			}
@@ -993,7 +993,7 @@ final class AB_MCP_Sync_Attachment_Writer {
 				if ( ! is_dir( $above ) || ! wp_mkdir_p( $at ) ) {
 					return new WP_Error( 'ab_mcp_sync_media_folder', sprintf( 'The folder of the file %s could not be made in the uploads of this site, so it was not laid. Ask the host to check that the uploads are writable, then call again.', $path ) );
 				}
-				clearstatcache( true, $at );
+				clearstatcache( true );
 			}
 			if ( ! is_link( $at ) && file_exists( $at ) && ! is_dir( $at ) ) {
 				return AB_MCP_Sync_Post_Writer::locked( 'attachment:replace_file', sprintf( 'file %s: a file lies where its folder would be', $path ) );
@@ -1026,7 +1026,7 @@ final class AB_MCP_Sync_Attachment_Writer {
 	private static function lay( $root, $full, $from, array $file ) {
 		$root = rtrim( (string) $root, '/' );
 		$dir  = dirname( (string) $full );
-		clearstatcache();
+		clearstatcache( true ); // The realpath cache as well (Codex round 3 of branch 10, A1): realpath() asked fresh.
 		$real_dir = realpath( $dir );
 		if ( is_link( $dir ) || false === $real_dir || $real_dir !== $dir || ! is_dir( $real_dir ) || ( $dir !== $root && 0 !== strpos( $dir, $root . '/' ) ) ) {
 			return array(
@@ -1047,7 +1047,7 @@ final class AB_MCP_Sync_Attachment_Writer {
 			);
 		}
 		$opened = fstat( $out );
-		clearstatcache();
+		clearstatcache( true ); // The realpath cache as well (Codex round 3 of branch 10, A1): realpath() asked fresh.
 		$there  = @lstat( (string) $full ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- a failure is answered.
 		$placed = is_array( $opened ) && is_array( $there ) && (int) $opened['dev'] === (int) $there['dev'] && (int) $opened['ino'] === (int) $there['ino'] && realpath( (string) $full ) === (string) $full && realpath( $dir ) === $dir;
 		if ( ! $placed ) {
@@ -1070,10 +1070,14 @@ final class AB_MCP_Sync_Attachment_Writer {
 		// The place shown again once the bytes are written, before the file
 		// counts as laid (Codex round 2 of branch 10, A1): another hand that
 		// moved a folder on its way while the handle was open has the bytes
-		// written where the folder went. PHP cannot hold a folder in place
-		// for an open handle; this finds it, it does not prevent it.
+		// written where the folder went, also where it set a link to the new
+		// place at the old one (lstat() reaches the same inode through it;
+		// realpath(), asked fresh, does not resolve to the path). PHP cannot
+		// hold a folder in place for an open handle: this finds such a move
+		// where it can be seen, never prevents it, and a swap after this last
+		// check stays unseen (boundary C).
 		$written = fstat( $out );
-		clearstatcache();
+		clearstatcache( true ); // The realpath cache as well (Codex round 3 of branch 10, A1): realpath() asked fresh.
 		$there   = @lstat( (string) $full ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- a failure is answered.
 		$still   = is_array( $written ) && is_array( $there ) && (int) $written['dev'] === (int) $there['dev'] && (int) $written['ino'] === (int) $there['ino'] && realpath( (string) $full ) === (string) $full && realpath( $dir ) === $dir;
 		fclose( $out ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose

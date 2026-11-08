@@ -323,6 +323,25 @@ final class SyncMediaPackageTest extends TestCase {
 		self::assertFalse( $laid['own'] );
 		self::assertStringContainsString( 'may lie outside the uploads', $laid['note'] );
 		self::assertSame( $bytes, file_get_contents( $this->dir . '/weggezogen/d.jpg' ), 'Its own bytes, where the folder went: found and named, not prevented.' );
+		// Codex round 3, A1: moved away with a link at the old place to the new
+		// one, by another process (PHP's own rename() would empty the realpath
+		// cache of this one): lstat() through the link reaches the same inode;
+		// realpath(), with its cache emptied, does not resolve to the path.
+		mkdir( $root . '/2026/10' );
+		AB_MCP_Sync_Attachment_Writer::$probe = function ( $full, $when ) use ( $root ) {
+			if ( 'written' === $when ) {
+				exec( 'mv ' . escapeshellarg( $root . '/2026/10' ) . ' ' . escapeshellarg( $this->dir . '/umgezogen' ) . ' && ln -s ' . escapeshellarg( $this->dir . '/umgezogen' ) . ' ' . escapeshellarg( $root . '/2026/10' ), $out, $code );
+				self::assertSame( 0, $code );
+			}
+		};
+		try {
+			$e    = array( 'path' => '2026/10/e.jpg' ) + $file;
+			$laid = self::writer( 'lay', $root, $root . '/2026/10/e.jpg', $from, $e );
+		} finally {
+			AB_MCP_Sync_Attachment_Writer::$probe = null;
+		}
+		self::assertSame( 'unclear', $laid['state'], json_encode( $laid ) );
+		self::assertSame( $bytes, file_get_contents( $this->dir . '/umgezogen/e.jpg' ) );
 	}
 
 	public function testTheFileOfANewAttachmentGoesWithItsRowAndThatOfOneHereByItsOwnCall(): void {

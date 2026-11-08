@@ -361,6 +361,8 @@ e('writer-lay-placed', 'lay(): the file opened shown at its path under the uploa
   "\t\tif ( ! $placed ) {", "\t\tif ( false ) {", 'pkg', U_LAY)
 e('writer-lay-still', 'lay(): the place shown again after the bytes are written, else the file is unclear (Codex round 2, A1)', AW,
   "\t\tif ( ! $still ) {", "\t\tif ( false ) {", 'pkg', U_LAY)
+e('writer-lay-realpath-fresh', 'lay(): the realpath cache emptied before the place is shown again after the writing (Codex round 3, A1)', AW,
+  "\t\t$written = fstat( $out );\n\t\tclearstatcache( true );", "\t\t$written = fstat( $out );\n\t\tclearstatcache();", 'pkg', U_LAY)
 e('engine-lay-unclear', 'boundary(): a step with a file not shown at its path ends unclear, the file named (Codex round 1, A1, A2)', EN,
   "'state' => isset( $laid['state'] ) && 'unclear' === $laid['state'] ? 'unclear' : 'failed',", "'state' => 'failed',", 'it', RACE)
 e('engine-files-unclear', 'with_files(): the files whose state is unclear named in the result (Codex round 1, A2)', EN,

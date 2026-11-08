@@ -84,17 +84,22 @@ entsteht, nennt ihre Meldung den Weg.
   Schritt endet `unclear`, gelöscht wird nichts. Nach dem Schreiben und vor
   dem Speichern als `laid` wird der Ort noch einmal so belegt (Codex-Runde
   2, A1); stimmt er nicht, ist die Datei unklar (mit Pfad), der Schritt hält
-  mit Befund an, keine weitere Datei wird gelegt. Rest (Grenze C), ehrlich
-  gefasst: ein paralleler Prozess mit Schreib- und Verschieberecht an den
-  Uploads kann genau zwischen den Prüfungen handeln. Tauscht er zwischen
+  mit Befund an, keine weitere Datei wird gelegt. Jede dieser Prüfungen
+  leert vorher auch den Realpath-Cache von PHP und fragt `realpath()`
+  frisch (Codex-Runde 3, A1: ein Ordner, der verschoben und am alten Ort
+  durch einen Link zum neuen ersetzt wird, ist durch `lstat()` derselbe
+  Inode, nur ein frisches `realpath()` zeigt den Umweg). Rest (Grenze C),
+  ehrlich gefasst: ein paralleler Prozess mit Schreib- und Verschieberecht
+  an den Uploads kann zwischen den Prüfungen handeln. Tauscht er zwischen
   der letzten Prüfung und dem Öffnen einen Ordner gegen einen Link,
   entsteht eine leere Datei ausserhalb der Uploads; tauscht er zwischen der
   Prüfung eines Ordners und dem Anlegen darunter, ein leerer Ordner;
   verschiebt er den schon geöffneten Ordner aus den Uploads, während die
   Datei geschrieben wird, entstehen die Bytes des Anhangs (nur sie, aus dem
-  signierten Paket) am neuen Ort ausserhalb. Am offenen Handle lässt PHP
-  das nicht ausschliessen: jeder dieser Fälle wird erkannt und gemeldet,
-  keiner verhindert.
+  signierten Paket) am neuen Ort ausserhalb. Was davon bei der nächsten
+  Prüfung noch sichtbar ist, wird erkannt und gemeldet; ein Tausch nach der
+  letzten Prüfung bleibt unerkannt. Am offenen Handle lässt PHP das nicht
+  ausschliessen; keine Prüfung verhindert es.
 - Ein Schritt legt alle Dateien seines Anhangs in einer Anfrage: höchstens
   48 MiB (`attachment:file_too_large` darüber), Stück für Stück aus dem
   Paket gelesen, nie ganz im Speicher; einen Cursor innerhalb des Schritts

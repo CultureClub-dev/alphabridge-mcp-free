@@ -977,6 +977,15 @@ return array(
 		'expect'  => '/testAFileIsLaidOnlyWhereItIsShownAtItsPathUnderTheUploadsAndAFolderSwappedAsItIsOpenedLeavesItEmptyAndUnclear/',
 	),
 	array(
+		'id'      => 'medien/writer-lay-realpath-fresh',
+		'clause'  => 'lay(): the realpath cache emptied before the place is shown again after the writing (Codex round 3, A1)',
+		'file'    => $aw,
+		'search'  => "\t\t\$written = fstat( \$out );\n\t\tclearstatcache( true );",
+		'replace' => "\t\t\$written = fstat( \$out );\n\t\tclearstatcache();",
+		'run'     => $unit( 'SyncMediaPackageTest', 'testAFileIsLaidOnlyWhereItIsShownAtItsPathUnderTheUploadsAndAFolderSwappedAsItIsOpenedLeavesItEmptyAndUnclear' ),
+		'expect'  => '/testAFileIsLaidOnlyWhereItIsShownAtItsPathUnderTheUploadsAndAFolderSwappedAsItIsOpenedLeavesItEmptyAndUnclear/',
+	),
+	array(
 		'id'      => 'medien/engine-lay-unclear',
 		'clause'  => 'boundary(): a step with a file not shown at its path ends unclear, the file named (Codex round 1, A1, A2)',
 		'file'    => $en,
