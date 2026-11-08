@@ -1210,8 +1210,12 @@ final class AB_MCP_Sync_Engine {
 				// instance, branch 11; decisions 23 and 28): the whole unit is
 				// a rest, its bases of before kept, its mapping of the run in
 				// base_extra, so no later run makes the part a second time.
-				self::unit_rest( $pair_id, $prepared );
+				$kept = self::unit_rest( $pair_id, $prepared );
 				$rest = self::rest( $item, $live_id ) + array( 'made' => self::made_in( $w, $journal, $live_id ) );
+				if ( is_wp_error( $kept ) ) {
+					$outcome['state']    = 'unclear';
+					$outcome['message'] .= ' ' . self::unit_rest_failed( $kept );
+				}
 			} elseif ( null !== $pair_id && 'unclear' === $outcome['state'] ) {
 				AB_MCP_Sync_Pairs::set_state( $pair_id, 'unclear', AB_MCP_Sync_Pairs::snapshot_hash( AB_MCP_Sync_Pairs::snapshot( $pair_id ) ) );
 			}
@@ -1245,8 +1249,11 @@ final class AB_MCP_Sync_Engine {
 				$rest = self::rest( $item, $live_id );
 			} elseif ( null !== $pair_id && array() !== self::made_in( $w, $journal, $live_id ) ) {
 				// A widget instance the step made stays (branch 11): the unit a rest.
-				self::unit_rest( $pair_id, $prepared );
+				$kept = self::unit_rest( $pair_id, $prepared );
 				$rest = self::rest( $item, $live_id ) + array( 'made' => self::made_in( $w, $journal, $live_id ) );
+				if ( is_wp_error( $kept ) ) {
+					$outcome['message'] .= ' ' . self::unit_rest_failed( $kept );
+				}
 			} elseif ( null !== $pair_id ) {
 				AB_MCP_Sync_Pairs::set_state( $pair_id, 'unclear', AB_MCP_Sync_Pairs::snapshot_hash( AB_MCP_Sync_Pairs::snapshot( $pair_id ) ) );
 			}
@@ -2618,11 +2625,13 @@ final class AB_MCP_Sync_Engine {
 			// mapping of the run (base_extra) kept until a confirmed alignment
 			// (wp_site_pairs) replaces them.
 			$pair = AB_MCP_Sync_Pairs::get( $pair_id );
-			if ( is_array( $pair ) && 'residual' !== $pair['state'] ) {
-				AB_MCP_Sync_Pairs::set_state( $pair_id, 'residual', AB_MCP_Sync_Pairs::snapshot_hash( AB_MCP_Sync_Pairs::snapshot( $pair_id ) ) );
-			}
+			$set  = is_array( $pair ) && 'residual' !== $pair['state'] ? AB_MCP_Sync_Pairs::set_state( $pair_id, 'residual', AB_MCP_Sync_Pairs::snapshot_hash( AB_MCP_Sync_Pairs::snapshot( $pair_id ) ) ) : $pair;
 			$all_back  = false;
 			$pair_note = sprintf( ' The run made %s in this unit, which the way back does not remove: the unit stays as a rest, its pair residual.', implode( ', ', $made ) );
+			if ( is_wp_error( $set ) ) {
+				// Checked as every save (C1).
+				$pair_note .= ' ' . self::unit_rest_failed( $set );
+			}
 		} elseif ( null !== $pair_id ) {
 			$now_hash = AB_MCP_Sync_Pairs::snapshot_hash( AB_MCP_Sync_Pairs::snapshot( $pair_id ) );
 			if ( $all_back && null !== $forward['pair_before'] ) {
@@ -2920,16 +2929,23 @@ final class AB_MCP_Sync_Engine {
 	 * bases of before kept, the mapping of the run in base_extra (the kept
 	 * form of the writer, base_extra_kept), then residual as a whole.
 	 *
+	 * Every save checked (Codex round 1 of branch 11, C1): a pair that did
+	 * not become a rest would let a later run make the part a second time.
+	 *
 	 * @param int   $pair_id  Pair.
 	 * @param array $prepared target_of() of the step.
+	 * @return true|WP_Error
 	 */
 	private static function unit_rest( $pair_id, array $prepared ) {
 		$pair = AB_MCP_Sync_Pairs::get( (int) $pair_id );
+		if ( is_wp_error( $pair ) ) {
+			return $pair;
+		}
 		if ( ! is_array( $pair ) || 'active' !== $pair['state'] ) {
-			return;
+			return true;
 		}
 		if ( isset( $prepared['base_extra_kept'] ) && is_array( $prepared['base_extra_kept'] ) ) {
-			AB_MCP_Sync_Pairs::rebase(
+			$rebased = AB_MCP_Sync_Pairs::rebase(
 				(int) $pair_id,
 				array(
 					'canon'        => (string) $pair['canon'],
@@ -2940,8 +2956,23 @@ final class AB_MCP_Sync_Engine {
 				),
 				AB_MCP_Sync_Pairs::snapshot_hash( AB_MCP_Sync_Pairs::snapshot( (int) $pair_id ) )
 			);
+			if ( is_wp_error( $rebased ) ) {
+				return $rebased;
+			}
 		}
-		AB_MCP_Sync_Pairs::set_state( (int) $pair_id, 'residual', AB_MCP_Sync_Pairs::snapshot_hash( AB_MCP_Sync_Pairs::snapshot( (int) $pair_id ) ) );
+		$set = AB_MCP_Sync_Pairs::set_state( (int) $pair_id, 'residual', AB_MCP_Sync_Pairs::snapshot_hash( AB_MCP_Sync_Pairs::snapshot( (int) $pair_id ) ) );
+		return is_wp_error( $set ) ? $set : true;
+	}
+
+	/**
+	 * What a step says where the pair of its unit did not become a rest
+	 * (unit_rest(), C1).
+	 *
+	 * @param WP_Error $error The answer of the pairs.
+	 * @return string
+	 */
+	private static function unit_rest_failed( WP_Error $error ) {
+		return sprintf( 'Its pair could not be kept as a rest (%s): a later run could make the part again, so align the pair by hand (wp_site_pairs) before another run.', $error->get_error_message() );
 	}
 
 	/**

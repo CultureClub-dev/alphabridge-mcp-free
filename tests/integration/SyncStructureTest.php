@@ -1166,6 +1166,81 @@ final class SyncStructureTest extends TestCase {
 		self::assertStringContainsString( 'instance:text-3', (string) $step['parts']['object']['deviated']['why'] );
 	}
 
+	public function testAPairThatCannotBeKeptAsARestMakesTheStepUnclearWithItsWay(): void {
+		// Codex round 1 of branch 11, C1: a step that made an instance and
+		// deviated keeps its unit as a rest (unit_rest()). Where the pairs do
+		// not take that save, the step says so and is unclear: a later run
+		// could make the part again.
+		self::pair();
+		$text = self::widget_settings( 'text', array( 'title' => 'Hours', 'text' => 'Mo–Fr', 'filter' => true, 'visual' => true ) );
+		self::widgets_on_both( array( 'text-2' => $text ) );
+		$row                = self::option_of( 'a', 'widget_text' );
+		$row[3]             = $text;
+		$areas              = self::option_of( 'a', 'sidebars_widgets' );
+		$areas['sidebar-2'] = array_merge( $areas['sidebar-2'], array( 'text-3' ) );
+		update_option( 'widget_text', $row );
+		update_option( 'sidebars_widgets', $areas );
+		self::b(
+			array(
+				array( 'op' => 'update_option', 'name' => 'widget_text', 'value' => $row ),
+				array( 'op' => 'update_option', 'name' => 'sidebars_widgets', 'value' => $areas ),
+			)
+		);
+		self::paired( self::staged() );
+		$row_b                = $row;
+		$row_b[5]             = self::widget_settings( 'text', array( 'title' => 'News', 'text' => 'New', 'filter' => true, 'visual' => true ) );
+		$areas_b              = $areas;
+		$areas_b['sidebar-1'] = array_merge( $areas['sidebar-1'], array( 'text-5' ) );
+		self::b(
+			array(
+				array( 'op' => 'update_option', 'name' => 'widget_text', 'value' => $row_b ),
+				array( 'op' => 'update_option', 'name' => 'sidebars_widgets', 'value' => $areas_b ),
+			)
+		);
+		$planned = self::planned( array( array( 'widget_area', 'live', 'sidebar-1' ) ) );
+		$pair_id = (int) AB_MCP_Sync_Pairs::find_live( self::source(), 'widget_area', 'sidebar-1' )['id'];
+		// As the new instance is written, the filter changes another one
+		// (the step deviates, the instance stays made); the save of the
+		// pair as a rest fails.
+		add_filter(
+			'widget_update_callback',
+			static function ( $instance, $new, $old, $widget ) {
+				unset( $new, $old );
+				$writing = false;
+				foreach ( debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS ) as $frame ) {
+					$writing = $writing || ( 'AB_MCP_Sync_Widget_Area_Writer' === ( $frame['class'] ?? '' ) && 'write_part' === $frame['function'] );
+				}
+				if ( $writing && 5 === (int) $widget->number ) {
+					$other             = get_option( 'widget_text' );
+					$other[3]['title'] = 'Changed by the filter';
+					update_option( 'widget_text', $other );
+				}
+				return $instance;
+			},
+			10,
+			4
+		);
+		add_filter(
+			'query',
+			static function ( $query ) {
+				$saving = false;
+				foreach ( debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS ) as $frame ) {
+					$saving = $saving || ( 'AB_MCP_Sync_Engine' === ( $frame['class'] ?? '' ) && 'unit_rest' === $frame['function'] );
+				}
+				return $saving && 0 === stripos( ltrim( (string) $query ), 'UPDATE' ) ? 'UPDATE ab_mcp_no_such_table SET x = 1' : $query;
+			}
+		);
+		$run    = self::begun( $planned['args'] );
+		$closed = self::finish( (int) $run['run_id'] );
+		remove_all_filters( 'widget_update_callback' );
+		remove_all_filters( 'query' );
+		self::assertSame( 'closed_findings', $closed['state'], json_encode( $closed ) );
+		$step = self::writes( self::run_status( (int) $run['run_id'] ) )[0];
+		self::assertSame( 'unclear', $step['state'], json_encode( $step ) );
+		self::assertStringContainsString( 'could not be kept as a rest', (string) $step['result']['message'] );
+		self::assertSame( 'active', AB_MCP_Sync_Pairs::get( $pair_id )['state'], 'The save did not take.' );
+	}
+
 	/* ----------------------------------------------------------- options */
 
 	public function testChangedCoreOptionsGoOverAndBackAndThePermalinksBuildTheirRulesAnew(): void {
