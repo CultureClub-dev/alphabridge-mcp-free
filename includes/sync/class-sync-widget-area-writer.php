@@ -621,6 +621,9 @@ final class AB_MCP_Sync_Widget_Area_Writer {
 		if ( ! current_user_can( 'edit_theme_options' ) ) {
 			return AB_MCP_Sync_Post_Writer::rights( 'change the widgets of this site (edit_theme_options)' );
 		}
+		// update_option() in wp_set_sidebars_widgets() compares with the
+		// cached row: emptied first (Codex round 1 of branch 11, A1).
+		AB_MCP_Sync_Shared_Row::forget( self::AREAS );
 		$areas = AB_MCP_Sync_Shared_Row::read( self::AREAS );
 		if ( ! is_array( $areas ) || ! $areas['ok'] || ! is_array( $areas['value'] ) || ! array_key_exists( $area, $areas['value'] ) ) {
 			return self::unread( self::AREAS );
@@ -654,23 +657,50 @@ final class AB_MCP_Sync_Widget_Area_Writer {
 			return AB_MCP_Sync_Post_Writer::rights( 'change the widgets of this site (edit_theme_options)' );
 		}
 		$write = $prepared['writes'][ $live ];
-		$row   = AB_MCP_Sync_Shared_Row::read( 'widget_' . $write['base'] );
-		if ( null === $row || ( is_array( $row ) && ( ! $row['ok'] || ! is_array( $row['value'] ) ) ) ) {
-			return self::unread( 'widget_' . $write['base'] );
-		}
-		$value = false === $row ? array() : $row['value'];
-		if ( array() !== $value && empty( $value['_multiwidget'] ) ) {
-			return AB_MCP_Sync_Post_Writer::locked( 'widget_area:widget_unregistered', sprintf( 'the row widget_%s of this site was not written by the widgets of WordPress (no _multiwidget), so it is not changed', $write['base'] ) );
+		$value = self::widget_row( $write['base'] );
+		if ( is_wp_error( $value ) ) {
+			return $value;
 		}
 		$old   = isset( $value[ $write['number'] ] ) && is_array( $value[ $write['number'] ] ) ? $value[ $write['number'] ] : array();
 		$clean = AB_MCP_Widget_Writer::sanitize( $write['base'], (int) $write['number'], $write['settings'], $old );
 		if ( is_wp_error( $clean ) ) {
 			return $clean;
 		}
+		// The row read again after the update() of the widget and
+		// widget_update_callback (Codex round 1 of branch 11, A2): what they
+		// changed in it (another instance) stays as they left it, and the
+		// engine reads that change as another hand's; never written back from
+		// the row as it was before them.
+		$value = self::widget_row( $write['base'] );
+		if ( is_wp_error( $value ) ) {
+			return $value;
+		}
 		$value[ (int) $write['number'] ] = $clean;
 		$value['_multiwidget']           = 1;
 		update_option( 'widget_' . $write['base'], $value );
 		return true;
+	}
+
+	/**
+	 * The row of a widget as it is now, its caches emptied first, so that
+	 * update_option() compares with it (Codex round 1 of branch 11, A1):
+	 * array() for none; a refusal where it does not read or the widgets of
+	 * WordPress did not write it (no _multiwidget).
+	 *
+	 * @param string $base The widget.
+	 * @return array|WP_Error
+	 */
+	private static function widget_row( $base ) {
+		AB_MCP_Sync_Shared_Row::forget( 'widget_' . $base );
+		$row = AB_MCP_Sync_Shared_Row::read( 'widget_' . $base );
+		if ( null === $row || ( is_array( $row ) && ( ! $row['ok'] || ! is_array( $row['value'] ) ) ) ) {
+			return self::unread( 'widget_' . $base );
+		}
+		$value = false === $row ? array() : $row['value'];
+		if ( array() !== $value && empty( $value['_multiwidget'] ) ) {
+			return AB_MCP_Sync_Post_Writer::locked( 'widget_area:widget_unregistered', sprintf( 'the row widget_%s of this site was not written by the widgets of WordPress (no _multiwidget), so it is not changed', $base ) );
+		}
+		return $value;
 	}
 
 	/**

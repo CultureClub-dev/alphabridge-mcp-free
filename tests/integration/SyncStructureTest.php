@@ -875,6 +875,212 @@ final class SyncStructureTest extends TestCase {
 		self::assertStringNotContainsString( 'color: #222222;', $body );
 	}
 
+	/* ----------------------------------------------------- stale caches */
+
+	/**
+	 * The cache of an option of this process made stale: it holds $cached,
+	 * the row in the database stays as it was (as another process that wrote
+	 * the row by SQL, or a cache that missed a write, leaves it). The row is
+	 * one that is not loaded with all options (autoload off, as WordPress
+	 * keeps a large row): its cache has a key of its own, which the change
+	 * lock does not forget as it forgets the rows it loads with all of them.
+	 */
+	private static function stale( string $option, $cached ): void {
+		global $wpdb;
+		$wpdb->update( $wpdb->options, array( 'autoload' => 'off' ), array( 'option_name' => $option ) );
+		wp_cache_delete( 'alloptions', 'options' );
+		wp_cache_delete( 'notoptions', 'options' );
+		wp_cache_delete( $option, 'options' );
+		$raw = AB_MCP_IT_Sites::option_row( 'a', $option )['option_value'];
+		update_option( $option, $cached );
+		$wpdb->update( $wpdb->options, array( 'option_value' => $raw ), array( 'option_name' => $option ) );
+		self::assertSame( $raw, AB_MCP_IT_Sites::option_row( 'a', $option )['option_value'], 'The row as it was.' );
+		self::assertEquals( $cached, get_option( $option ), 'The cache of this process holds another value.' );
+	}
+
+	/**
+	 * Steps until the run is closed, each write step after its preparation
+	 * (by kind and live ref, as the preview of the plan names its object).
+	 */
+	private static function finish_with( int $run_id, array $plan_args, array $before ): array {
+		$preview = self::gated( 'wp_site_push', $plan_args );
+		self::assertIsArray( $preview, is_wp_error( $preview ) ? $preview->get_error_message() : '' );
+		$keys = array();
+		foreach ( $preview['preview']['steps'] as $one ) {
+			if ( 'write' === $one['op'] ) {
+				$keys[ (int) $one['seq'] ] = $one['object']['kind'] . ' ' . (string) $one['object']['live_ref'];
+			}
+		}
+		for ( $i = 0; $i < 14; $i++ ) {
+			foreach ( self::run_status( $run_id )['steps'] as $step ) {
+				if ( 'planned' !== $step['state'] ) {
+					continue;
+				}
+				$key = $keys[ (int) $step['seq'] ] ?? '';
+				if ( isset( $before[ $key ] ) ) {
+					$before[ $key ]();
+					unset( $before[ $key ] );
+				}
+				break;
+			}
+			$answer = self::gated( 'wp_site_push', array( 'action' => 'next', 'run_id' => $run_id ) );
+			self::assertIsArray( $answer, is_wp_error( $answer ) ? $answer->get_error_message() : '' );
+			if ( in_array( $answer['state'], AB_MCP_Sync_Schema::CLOSED, true ) ) {
+				self::assertSame( array(), array_keys( $before ), 'Every preparation ran before its step: ' . json_encode( $answer ) );
+				return $answer;
+			}
+		}
+		self::fail( 'The run did not close.' );
+	}
+
+	public function testAStepWritesFromTheRowsAsTheyAreAndNeverFromAStaleCacheOfThem(): void {
+		// Codex round 1 of branch 11, A1: the core functions a step writes
+		// with (set_theme_mod(), wp_update_custom_css_post(), update_option(),
+		// wp_set_sidebars_widgets()) read the row again through the cache of
+		// the options, the step reads it from the database. Before each step
+		// the cache of its row is made stale: a theme mod of another field
+		// (custom_logo), the link of the CSS post, a core option and the rows
+		// of the widgets as the target already holds them. Each step writes
+		// from the row as it is, and no other field goes back to the cache.
+		self::pair();
+		$menu_a = (int) wp_create_nav_menu( 'Main' );
+		$menu_b = (int) self::one_b( array( 'op' => 'nav_menu', 'name' => 'Main' ) );
+		set_theme_mod( 'nav_menu_locations', array( 'primary' => $menu_a ) );
+		set_theme_mod( 'custom_logo', 222 );
+		wp_update_custom_css_post( 'body { color: #111111; }' );
+		update_option( 'blogdescription', 'Things' );
+		$text = self::widget_settings( 'text', array( 'title' => 'Hours', 'text' => 'Mo–Fr', 'filter' => true, 'visual' => true ) );
+		self::widgets_on_both( array( 'text-2' => $text ) );
+		// Two more in sidebar-2, in the same row widget_text.
+		$row                    = self::option_of( 'a', 'widget_text' );
+		$row[3]                 = $text;
+		$row[4]                 = $text;
+		$areas                  = self::option_of( 'a', 'sidebars_widgets' );
+		$areas['sidebar-2']     = array_merge( $areas['sidebar-2'], array( 'text-3', 'text-4' ) );
+		$sidebar_2              = $areas['sidebar-2'];
+		update_option( 'widget_text', $row );
+		update_option( 'sidebars_widgets', $areas );
+		self::b(
+			array(
+				array( 'op' => 'theme_mod', 'name' => 'nav_menu_locations', 'value' => array( 'primary' => $menu_b ) ),
+				array( 'op' => 'theme_mod', 'name' => 'custom_logo', 'value' => 222 ),
+				array( 'op' => 'custom_css', 'css' => 'body { color: #111111; }' ),
+				array( 'op' => 'update_option', 'name' => 'blogdescription', 'value' => 'Things' ),
+				array( 'op' => 'update_option', 'name' => 'widget_text', 'value' => $row ),
+				array( 'op' => 'update_option', 'name' => 'sidebars_widgets', 'value' => $areas ),
+			)
+		);
+		self::paired( self::staged() );
+		$text_new = self::widget_settings( 'text', array( 'title' => 'Opening hours', 'text' => 'Mo–Sa', 'filter' => true, 'visual' => true ) );
+		$areas_b  = self::option_of( 'a', 'sidebars_widgets' );
+		$areas_b['sidebar-2'] = array_reverse( $areas_b['sidebar-2'] );
+		$row_b    = self::option_of( 'a', 'widget_text' );
+		$row_b[2] = $text_new;
+		self::b(
+			array(
+				array( 'op' => 'theme_mod', 'name' => 'nav_menu_locations', 'value' => array( 'footer' => $menu_b ) ),
+				array( 'op' => 'custom_css', 'css' => 'body { color: #222222; }' ),
+				array( 'op' => 'update_option', 'name' => 'blogdescription', 'value' => 'Fine things' ),
+				array( 'op' => 'update_option', 'name' => 'widget_text', 'value' => $row_b ),
+				array( 'op' => 'update_option', 'name' => 'sidebars_widgets', 'value' => $areas_b ),
+			)
+		);
+		$mods    = 'theme_mods_twentytwentyfive';
+		$css_id  = (int) self::option_of( 'a', $mods )['custom_css_post_id'];
+		$planned = self::planned(
+			array(
+				array( 'menu', 'live', (string) $menu_a ),
+				array( 'custom_css', 'live', 'twentytwentyfive' ),
+				array( 'option', 'live', 'blogdescription' ),
+				array( 'widget_area', 'live', 'sidebar-1' ),
+				array( 'widget_area', 'live', 'sidebar-2' ),
+			)
+		);
+		$this->watch_deletions();
+		$run    = self::begun( $planned['args'] );
+		$closed = self::finish_with(
+			(int) $run['run_id'],
+			$planned['args'],
+			array(
+				'menu ' . $menu_a               => static fn() => self::stale( $mods, array( 'custom_logo' => 111 ) + self::option_of( 'a', $mods ) ),
+				'custom_css twentytwentyfive'   => static fn() => self::stale( $mods, array( 'custom_css_post_id' => -1 ) + self::option_of( 'a', $mods ) ),
+				'option blogdescription'        => static fn() => self::stale( 'blogdescription', 'Fine things' ),
+				'widget_area sidebar-1'         => static fn() => self::stale( 'widget_text', array( 2 => $text_new ) + self::option_of( 'a', 'widget_text' ) ),
+				'widget_area sidebar-2'         => static function () {
+					$target              = self::option_of( 'a', 'sidebars_widgets' );
+					$target['sidebar-2'] = array_reverse( $target['sidebar-2'] );
+					self::stale( 'sidebars_widgets', $target );
+				},
+			)
+		);
+		self::assertSame( 'closed_done', $closed['state'], json_encode( self::run_status( (int) $run['run_id'] ) ) );
+		self::assertWrittenWhole( self::run_status( (int) $run['run_id'] ) );
+		$now = self::option_of( 'a', $mods );
+		self::assertSame( array( 222, array( 'footer' => $menu_a ), $css_id ), array( $now['custom_logo'], $now['nav_menu_locations'], (int) $now['custom_css_post_id'] ), 'The other fields of the theme mods as they were.' );
+		self::assertSame( 'body { color: #222222; }', self::post_row_a( $css_id )['post_content'] );
+		self::assertSame( 1, count( get_posts( array( 'post_type' => 'custom_css', 'post_status' => 'any', 'numberposts' => -1 ) ) ), 'No second CSS post.' );
+		self::assertSame( 'Fine things', AB_MCP_IT_Sites::option_row( 'a', 'blogdescription' )['option_value'] );
+		self::assertSame( $text_new, self::option_of( 'a', 'widget_text' )[2] );
+		self::assertSame( array_reverse( $sidebar_2 ), self::option_of( 'a', 'sidebars_widgets' )['sidebar-2'] );
+		self::assertSame( array(), $this->deletions );
+	}
+
+	public function testAWidgetFilterThatChangesAnotherInstanceAsTheStepWritesKeepsItsChangeAndMakesTheStepUnclear(): void {
+		// Codex round 1 of branch 11, A2: widget_update_callback, run as the
+		// step writes an instance, changes another instance of the same row
+		// (text-3 in sidebar-2). Its change stays as the filter left it, and
+		// the engine reads it as another hand's: the step is unclear, nothing
+		// of it is put back by itself (Entscheid A).
+		self::pair();
+		$text = self::widget_settings( 'text', array( 'title' => 'Hours', 'text' => 'Mo–Fr', 'filter' => true, 'visual' => true ) );
+		self::widgets_on_both( array( 'text-2' => $text ) );
+		$row                = self::option_of( 'a', 'widget_text' );
+		$row[3]             = $text;
+		$areas              = self::option_of( 'a', 'sidebars_widgets' );
+		$areas['sidebar-2'] = array_merge( $areas['sidebar-2'], array( 'text-3' ) );
+		update_option( 'widget_text', $row );
+		update_option( 'sidebars_widgets', $areas );
+		self::b(
+			array(
+				array( 'op' => 'update_option', 'name' => 'widget_text', 'value' => $row ),
+				array( 'op' => 'update_option', 'name' => 'sidebars_widgets', 'value' => $areas ),
+			)
+		);
+		self::paired( self::staged() );
+		$text_new = self::widget_settings( 'text', array( 'title' => 'Opening hours', 'text' => 'Mo–Sa', 'filter' => true, 'visual' => true ) );
+		$row_b    = $row;
+		$row_b[2] = $text_new;
+		self::one_b( array( 'op' => 'update_option', 'name' => 'widget_text', 'value' => $row_b ) );
+		$planned = self::planned( array( array( 'widget_area', 'live', 'sidebar-1' ) ) );
+		$changed = false;
+		add_filter(
+			'widget_update_callback',
+			static function ( $instance ) use ( &$changed ) {
+				$writing = false;
+				foreach ( debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS ) as $frame ) {
+					$writing = $writing || ( 'AB_MCP_Sync_Widget_Area_Writer' === ( $frame['class'] ?? '' ) && 'write_part' === $frame['function'] );
+				}
+				if ( $writing && ! $changed ) {
+					$changed         = true;
+					$other           = get_option( 'widget_text' );
+					$other[3]['title'] = 'Changed by the filter';
+					update_option( 'widget_text', $other );
+				}
+				return $instance;
+			}
+		);
+		$run    = self::begun( $planned['args'] );
+		$closed = self::finish( (int) $run['run_id'] );
+		remove_all_filters( 'widget_update_callback' );
+		self::assertTrue( $changed, 'The filter ran as the step wrote.' );
+		self::assertSame( 'Changed by the filter', self::option_of( 'a', 'widget_text' )[3]['title'], 'The change of the filter stays.' );
+		self::assertSame( $text_new, self::option_of( 'a', 'widget_text' )[2] );
+		self::assertSame( 'closed_findings', $closed['state'], json_encode( $closed ) );
+		$step = self::writes( self::run_status( (int) $run['run_id'] ) )[0];
+		self::assertSame( 'unclear', $step['state'], json_encode( $step ) );
+		self::assertStringContainsString( 'instance:text-3', (string) $step['parts']['object']['deviated']['why'] );
+	}
+
 	/* ----------------------------------------------------------- options */
 
 	public function testChangedCoreOptionsGoOverAndBackAndThePermalinksBuildTheirRulesAnew(): void {

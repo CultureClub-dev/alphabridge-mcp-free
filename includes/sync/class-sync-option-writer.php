@@ -342,6 +342,10 @@ final class AB_MCP_Sync_Option_Writer {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			return AB_MCP_Sync_Post_Writer::rights( sprintf( 'change the option %s (manage_options)', $name ) );
 		}
+		// update_option() compares with the value it reads through the cache
+		// of the options and writes nothing where they are equal: emptied
+		// first, it compares with the row as it is (Codex round 1, A1).
+		AB_MCP_Sync_Shared_Row::forget( $name );
 		update_option( $name, $prepared['value'] );
 		return $name;
 	}

@@ -506,10 +506,16 @@ final class AB_MCP_Sync_Menu_Writer {
 		if ( null !== $refusal ) {
 			return $refusal;
 		}
+		// The caches of the row emptied first (Codex round 1 of branch 11,
+		// A1): set_theme_mod() reads the theme mods again through the cache
+		// of the options, so it changes the row as it is now, the one read
+		// here, and no other field of it goes back to a cached value.
+		AB_MCP_Sync_Shared_Row::forget( 'stylesheet' );
 		$positions = self::positions( (int) $live_id );
 		if ( is_wp_error( $positions ) ) {
 			return $positions;
 		}
+		AB_MCP_Sync_Shared_Row::forget( $positions['option'] );
 		$locations = $positions['locations'];
 		if ( $set ) {
 			$locations[ $location ] = (int) $live_id;

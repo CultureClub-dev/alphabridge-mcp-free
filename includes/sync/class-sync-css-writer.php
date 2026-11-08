@@ -395,6 +395,12 @@ final class AB_MCP_Sync_Css_Writer {
 		if ( ! current_user_can( 'edit_css' ) ) {
 			return AB_MCP_Sync_Post_Writer::rights( sprintf( 'change the Additional CSS of %s (edit_css)', $stylesheet ) );
 		}
+		// wp_update_custom_css_post() finds the post by the link in the theme
+		// mods, read through the cache of the options: emptied first, so it
+		// finds the post the step read (Codex round 1 of branch 11, A1),
+		// never makes a second one from a stale link.
+		AB_MCP_Sync_Shared_Row::forget( 'stylesheet' );
+		AB_MCP_Sync_Shared_Row::forget( 'theme_mods_' . $stylesheet );
 		$done = wp_update_custom_css_post(
 			(string) $prepared['css'],
 			array(
