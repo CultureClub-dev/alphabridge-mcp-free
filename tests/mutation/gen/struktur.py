@@ -79,6 +79,15 @@ IT_CSS = 'testChangedAdditionalCssGoesOverAndBackAndThePageShowsIt'
 IT_OPTIONS = 'testChangedCoreOptionsGoOverAndBackAndThePermalinksBuildTheirRulesAnew'
 IT_SHARED = 'testAFieldOfASharedRowGoesBackOnlyWhereItsBytesAreStillThoseReadAndItsCachesForgetIt'
 IT_LOCKS = 'testWhatARunCannotWriteAsTheCoreWouldIsLockedWithItsKeyAndNothingOfItIsWritten'
+IT_STALE = 'testAStepWritesFromTheRowsAsTheyAreAndNeverFromAStaleCacheOfThem'
+IT_FILTER = 'testAWidgetFilterThatChangesAnotherInstanceAsTheStepWritesKeepsItsChangeAndMakesTheStepUnclear'
+IT_CRED = 'testACredentialInTheNameOfAMenuOrOfItsPositionLandsInNoPackage'
+IT_FREEPOS = 'testANewMenuAtAPositionNoMenuHoldsYetGoesOverAndTheWayBackLeavesThePositionEmptyAgain'
+IT_MOVE = 'testAMenuThatTakesThePositionOfAnotherMenuOfTheRunGoesAfterItAndAnExchangeIsLocked'
+IT_UNITREST = 'testAPairThatCannotBeKeptAsARestMakesTheStepUnclearWithItsWay'
+IT_GUARD = 'testAnotherRequestThatWritesTheThemeModsAsANewMenuGivesItsPositionBackIsHeldOffByTheLock'
+U_MOVE = 'testAMenuThatTakesThePositionOfAnotherMenuOfTheRunComesAfterItAndAnExchangeIsLocked'
+U_PARTORDER = 'testTheOrderOfThePartsOfEachKindIsWhatTheTokensCover'
 
 # ------------------------------------------------------------ core options
 e('option-create', 'target_of(): an option is not made by a run', OW,
@@ -211,8 +220,8 @@ e('menu-write-refusal', 'write_part(): the position asked again right before it 
   "\t\t$refusal  = self::location_refusal( $location, $set );\n\t\tif ( null !== $refusal ) {\n\t\t\treturn $refusal;\n\t\t}",
   "\t\t$refusal  = self::location_refusal( $location, $set );", 'u', U_POS)
 e('menu-new-positions', 'with_row(): a new menu names every position it takes as a part of its row', MW,
-  "\t\t\t$out[ (string) $name ] = AB_MCP_Sync_Shared_Row::hash( $value );\n\t\t}\n\t\treturn $out;\n\t}",
-  "\t\t}\n\t\treturn $out;\n\t}", 'u', U_POS)
+  "\t\t\t$out[ (string) $name ] = AB_MCP_Sync_Shared_Row::hash( $value );\n\t\t}\n\t\tforeach ( array_keys( self::location_targets( $prepared, $parts ) ) as $name ) {",
+  "\t\t}\n\t\tforeach ( array_keys( self::location_targets( $prepared, $parts ) ) as $name ) {", 'u', U_POS)
 e('menu-back-changed', 'restore_part(): a position changed since is left', MW,
   "\t\tif ( ! hash_equals( (string) $hash, AB_MCP_Sync_Shared_Row::hash( $is ) ) || null === $positions['raw'] ) {",
   "\t\tif ( null === $positions['raw'] ) {", 'u', U_POS)
@@ -352,7 +361,7 @@ e('engine-is-ref', 'is_ref(): a name is a ref', EN,
   "\t\treturn is_int( $live_id ) ? $live_id > 0 : ( is_string( $live_id ) && '' !== $live_id );",
   "\t\treturn is_int( $live_id ) && $live_id > 0;", 'u', U_ENGINE)
 e('engine-part-order', 'put_back(): the parts of a kind back in its order', EN,
-  "\t\tforeach ( null !== $w && defined( $w . '::PART_ORDER' ) ? $w::PART_ORDER : array( 'row', 'meta:', 'terms:' ) as $prefix ) {",
+  "\t\tforeach ( self::part_order( $w ) as $prefix ) {",
   "\t\tforeach ( array( 'row', 'meta:', 'terms:' ) as $prefix ) {", 'it', IT_NEWMENU)
 e('engine-shared-back', 'revert: the fields a new object took in shared rows go back', EN,
   "\t\t\t\t$shared = self::shared_back( $run_id, $seq, $journal, $live_id, $what );",
@@ -363,6 +372,105 @@ e('engine-made-rest', 'revert: a unit with an instance the run made is a rest', 
 e('engine-pending-space', 'pending(): a new menu is pending in the space of terms', EN,
   "\t\t\t\tif ( in_array( (string) $one['kind'], $kinds, true ) ) {",
   "\t\t\t\tif ( false ) {", 'run', U_PENDING)
+
+# ------------------------------------------- Codex round 1 of branch 11
+# A1: the caches of a shared row emptied right before the core call.
+e('a1-menu-forget', 'write_part(): set_theme_mod() reads the theme mods the step read (A1)', MW,
+  "\t\tAB_MCP_Sync_Shared_Row::forget( $positions['option'] );\n\t\t$locations = $positions['locations'];",
+  "\t\t$locations = $positions['locations'];", 'it', IT_STALE)
+e('a1-css-forget', 'write_row(): wp_update_custom_css_post() finds the post by the link the step read (A1)', CW,
+  "\t\tAB_MCP_Sync_Shared_Row::forget( 'theme_mods_' . $stylesheet );\n", "", 'it', IT_STALE)
+e('a1-option-forget', 'write_row(): update_option() compares with the row as it is (A1)', OW,
+  "\t\tAB_MCP_Sync_Shared_Row::forget( $name );\n\t\tupdate_option( $name, $prepared['value'] );",
+  "\t\tupdate_option( $name, $prepared['value'] );", 'it', IT_STALE)
+e('a1-areas-forget', 'write_row(): wp_set_sidebars_widgets() compares with the row as it is (A1)', WA,
+  "\t\tAB_MCP_Sync_Shared_Row::forget( self::AREAS );\n\t\t$areas = AB_MCP_Sync_Shared_Row::read( self::AREAS );",
+  "\t\t$areas = AB_MCP_Sync_Shared_Row::read( self::AREAS );", 'it', IT_STALE)
+e('a1-widget-forget', 'widget_row(): update_option() of a widget compares with the row as it is (A1)', WA,
+  "\t\tAB_MCP_Sync_Shared_Row::forget( 'widget_' . $base );\n\t\t$row = AB_MCP_Sync_Shared_Row::read( 'widget_' . $base );",
+  "\t\t$row = AB_MCP_Sync_Shared_Row::read( 'widget_' . $base );", 'it', IT_STALE)
+# A2: the row of a widget read after its update() and filters.
+e('a2-row-after-sanitize', 'write_part(): the row read again after the update() of the widget (A2)', WA,
+  "\t\t$value = self::widget_row( $write['base'] );\n\t\tif ( is_wp_error( $value ) ) {\n\t\t\treturn $value;\n\t\t}\n\t\t// The right again",
+  "\t\t// The right again", 'it', IT_FILTER)
+# A3: no revision deleted.
+e('a3-keep-filter', 'keeping_revisions(): no revision of the post deleted by the call (A3)', CW,
+  "\t\tadd_filter( 'wp_revisions_to_keep', $keep, PHP_INT_MAX, 2 );\n", "", 'it', IT_CSS)
+e('a3-keep-back', 'restore_part(): no revision deleted on the way back (A3)', CW,
+  "\t\t\t(int) $backup['row']['post_id'],\n\t\t\tstatic function () use ( $backup ) {",
+  "\t\t\t0,\n\t\t\tstatic function () use ( $backup ) {", 'it', IT_CSS)
+e('a3-keep-limit', 'keeping_revisions(): only where the site keeps a number, never revisions where it keeps none (A3)', CW,
+  " && (int) $num > 0 ? -1 : $num;", " ? -1 : $num;", 'u', U_CSS)
+e('a3-keep-post', 'keeping_revisions(): only the post of the step (A3)', CW,
+  "is_object( $post ) && (int) $post->ID === (int) $post_id && ", "is_object( $post ) && ", 'u', U_CSS)
+e('a3-keep-goes', 'keeping_revisions(): the filter goes again, also after an error (A3)', CW,
+  "\t\t\tremove_filter( 'wp_revisions_to_keep', $keep, PHP_INT_MAX );\n", "", 'u', U_CSS)
+# A4: what the content carries beyond the form through the credential check.
+e('a4-item-menu-name', 'item(): the names and slugs of the menus of an item through the credential check (A4)', DK,
+  "\t\t\t\t\tAB_MCP_Sync_Credentials::note( $acc, 'menu_item', 'term:' . $term['taxonomy'] . ':' . $field, AB_MCP_Sync_Credentials::unit( '', (string) $term[ $field ] ) );\n",
+  "", 'it', IT_CRED)
+e('a4-menu-location-name', 'more(): the names of the positions of a menu through the credential check (A4)', DK,
+  "\t\t\t\tAB_MCP_Sync_Credentials::note( $acc, 'menu', 'locations', AB_MCP_Sync_Credentials::unit( '', (string) $location ) );\n",
+  "", 'it', IT_CRED)
+# A5: the rights again right before each write.
+e('a5-widget-forward', 'write_part(): edit_theme_options again after the update() of the widget (A5)', WA,
+  "\t\t// branch 11, A5: they may have changed it), right before the write.\n\t\tif ( ! current_user_can( 'edit_theme_options' ) ) {",
+  "\t\t// branch 11, A5: they may have changed it), right before the write.\n\t\tif ( false ) {", 'u', U_AREACHK)
+e('a5-widget-back', 'right_now(): edit_theme_options again right before a field of an area goes back (A5)', WA,
+  "\t\treturn current_user_can( 'edit_theme_options' ) ? null : array(",
+  "\t\treturn true ? null : array(", 'u', U_AREACHK)
+e('a5-widget-back-list', 'restore_part(): the list asks it right before it goes back (A5)', WA,
+  "\t\t\t$right        = self::right_now();\n\t\t\tif ( null !== $right ) {\n\t\t\t\treturn $right;\n\t\t\t}\n",
+  "", 'u', U_AREACHK)
+e('a5-option-back', 'restore_part(): manage_options and the class of the name again right before the option goes back (A5)', OW,
+  "\t\tif ( true !== $right ) {", "\t\tif ( false ) {", 'u', U_OPTCHK)
+e('a5-item-back', 'restore_part(): the rights at the item again right before its row goes back (A5)', MW,
+  "\t\t\tif ( ! current_user_can( 'edit_theme_options' ) || ! current_user_can( 'edit_post', $id ) ) {",
+  "\t\t\tif ( false ) {", 'u', U_ITEMSAN)
+e('a5-position-back', 'restore_part(): edit_theme_options again right before a position goes back (A5)', MW,
+  "\t\t$mods['nav_menu_locations'] = $locations;\n\t\tif ( ! current_user_can( 'edit_theme_options' ) ) {",
+  "\t\t$mods['nav_menu_locations'] = $locations;\n\t\tif ( false ) {", 'u', U_POS)
+e('a5-css-back', 'restore_part(): edit_css again right before the CSS goes back (A5)', CW,
+  "\t\tif ( ! current_user_can( 'edit_css' ) ) {\n\t\t\treturn array(",
+  "\t\tif ( false ) {\n\t\t\treturn array(", 'u', U_CSS)
+# B1: a new menu at a position no menu holds yet.
+e('b1-free-position', 'with_row(): a new menu names the positions it sets that no menu holds yet (B1)', MW,
+  "\t\t\tif ( ! isset( $out[ $name ] ) ) {\n\t\t\t\t$out[ $name ] = AB_MCP_Sync_Shared_Row::hash( null );",
+  "\t\t\tif ( false ) {\n\t\t\t\t$out[ $name ] = AB_MCP_Sync_Shared_Row::hash( null );", 'it', IT_FREEPOS)
+
+# B2: positions between the menus of a run.
+e('b2-takes', 'plan(): the positions a menu takes, from its form (B2)', PU,
+  "\t\t\t\t$item['takes'] = AB_MCP_Sync_Menu_Writer::line_positions( $line );", "", 'it', IT_MOVE)
+e('b2-holder', 'plan(): a menu after the menu of the run that holds a position it takes (B2)', PU,
+  "\t\t\t\tif ( null !== $holder && isset( $menus[ $holder ] ) && $menus[ $holder ] !== $n ) {",
+  "\t\t\t\tif ( false ) {", 'it', IT_MOVE)
+e('b2-after', 'order(): the menu that gives the position up first (B2)', PU,
+  "\t\t\t\t\t$items[ $n ]['after'][] = $m;\n\t\t\t\t\t$exchange[ $n ][ $m ]   = true;",
+  "\t\t\t\t\t$exchange[ $n ][ $m ]   = true;", 'run', U_MOVE)
+e('b2-exchange', 'order(): menus that take each other\'s positions are locked (B2)', PU,
+  "\t\t\t\t\t$items[ $n ]['after'][] = $m;\n\t\t\t\t\t$exchange[ $n ][ $m ]   = true;",
+  "\t\t\t\t\t$items[ $n ]['after'][] = $m;", 'run', U_MOVE)
+e('b2-held', 'held_positions(): the menu each position names here (B2)', MW,
+  "\t\t\tif ( null !== $id && $id > 0 ) {\n\t\t\t\t$out[ (string) $location ] = $id;",
+  "\t\t\tif ( false ) {\n\t\t\t\t$out[ (string) $location ] = $id;", 'it', IT_MOVE)
+# C1: the saves of a unit as a rest.
+e('c1-unit-rest', 'run_post(): a pair that did not become a rest makes the step unclear (C1)', EN,
+  "\t\t\t\tif ( is_wp_error( $kept ) ) {\n\t\t\t\t\t$outcome['state']    = 'unclear';",
+  "\t\t\t\tif ( false ) {\n\t\t\t\t\t$outcome['state']    = 'unclear';", 'it', IT_UNITREST)
+e('c1-set-state', 'unit_rest(): the answer of set_state() (C1)', EN,
+  "\t\treturn is_wp_error( $set ) ? $set : true;\n\t}\n\n\t/**\n\t * What a step says",
+  "\t\treturn true;\n\t}\n\n\t/**\n\t * What a step says", 'it', IT_UNITREST + ' with data set "the state residual"')
+e('c1-rebase', 'unit_rest(): the answer of rebase() (C1)', EN,
+  "\t\t\tif ( is_wp_error( $rebased ) ) {\n\t\t\t\treturn $rebased;\n\t\t\t}",
+  "\t\t\tif ( false ) {\n\t\t\t\treturn $rebased;\n\t\t\t}", 'it', IT_UNITREST + ' with data set "the new bases"')
+# C2: the order of the parts of each kind.
+e('c2-part-order', 'part_order(): the order of the parts of a kind (C2)', EN,
+  "\t\treturn null !== $w && defined( $w . '::PART_ORDER' ) ? $w::PART_ORDER : array( 'row', 'meta:', 'terms:' );",
+  "\t\treturn array( 'row', 'meta:', 'terms:' );", 'run', U_PARTORDER)
+# C3: the lock over the theme mods as the positions of a new menu go back.
+e('c3-guard-options', 'shared_back(): the takeover lock covers the options of the writer (C3)', EN,
+  "\t\t$guard  = AB_MCP_Sync_Guard::begin( $run_id, $seq, $covers['posts'], $covers['taxonomies'], isset( $covers['options'] ) ? $covers['options'] : array(), $covers['terms'] );\n\t\tif ( is_wp_error( $guard ) ) {\n\t\t\treturn $left(",
+  "\t\t$guard  = AB_MCP_Sync_Guard::begin( $run_id, $seq, $covers['posts'], $covers['taxonomies'], array(), $covers['terms'] );\n\t\tif ( is_wp_error( $guard ) ) {\n\t\t\treturn $left(", 'it', IT_GUARD)
 
 # ------------------------------------------------------------------ plan
 e('push-structure', 'verdict(): the kinds of the structure are items', PU,

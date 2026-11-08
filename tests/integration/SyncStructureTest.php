@@ -1219,11 +1219,20 @@ final class SyncStructureTest extends TestCase {
 		self::assertStringContainsString( 'instance:text-3', (string) $step['parts']['object']['deviated']['why'] );
 	}
 
-	public function testAPairThatCannotBeKeptAsARestMakesTheStepUnclearWithItsWay(): void {
+	/** The save of unit_rest() that fails: the new bases, or the state residual. */
+	public static function failingSaves(): array {
+		return array(
+			'the new bases'      => array( 'SET canon = ' ),
+			'the state residual' => array( "SET state = 'residual'" ),
+		);
+	}
+
+	#[\PHPUnit\Framework\Attributes\DataProvider( 'failingSaves' )]
+	public function testAPairThatCannotBeKeptAsARestMakesTheStepUnclearWithItsWay( string $failing ): void {
 		// Codex round 1 of branch 11, C1: a step that made an instance and
 		// deviated keeps its unit as a rest (unit_rest()). Where the pairs do
-		// not take that save, the step says so and is unclear: a later run
-		// could make the part again.
+		// not take that save (either of its two), the step says so and is
+		// unclear: a later run could make the part again.
 		self::pair();
 		$text = self::widget_settings( 'text', array( 'title' => 'Hours', 'text' => 'Mo–Fr', 'filter' => true, 'visual' => true ) );
 		self::widgets_on_both( array( 'text-2' => $text ) );
@@ -1275,12 +1284,12 @@ final class SyncStructureTest extends TestCase {
 		);
 		add_filter(
 			'query',
-			static function ( $query ) {
+			static function ( $query ) use ( $failing ) {
 				$saving = false;
 				foreach ( debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS ) as $frame ) {
 					$saving = $saving || ( 'AB_MCP_Sync_Engine' === ( $frame['class'] ?? '' ) && 'unit_rest' === $frame['function'] );
 				}
-				return $saving && 0 === stripos( ltrim( (string) $query ), 'UPDATE' ) ? 'UPDATE ab_mcp_no_such_table SET x = 1' : $query;
+				return $saving && 0 === stripos( ltrim( (string) $query ), 'UPDATE' ) && false !== strpos( (string) $query, $failing ) ? 'UPDATE ab_mcp_no_such_table SET x = 1' : $query;
 			}
 		);
 		$run    = self::begun( $planned['args'] );
@@ -1291,7 +1300,7 @@ final class SyncStructureTest extends TestCase {
 		$step = self::writes( self::run_status( (int) $run['run_id'] ) )[0];
 		self::assertSame( 'unclear', $step['state'], json_encode( $step ) );
 		self::assertStringContainsString( 'could not be kept as a rest', (string) $step['result']['message'] );
-		self::assertSame( 'active', AB_MCP_Sync_Pairs::get( $pair_id )['state'], 'The save did not take.' );
+		self::assertSame( 'active', AB_MCP_Sync_Pairs::get( $pair_id )['state'], 'The state did not change.' );
 	}
 
 	/* ----------------------------------------------------------- options */

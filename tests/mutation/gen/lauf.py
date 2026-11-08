@@ -421,7 +421,7 @@ e('revert-same-run', 'plan(): the way back of a run that is not closed leads the
 PARTIAL = 'testAMetaCallThatChangedThePartAndThenFailedLeavesTheObjectWithTheOldValues'
 ORDER_T = 'testTheWayBackPutsTheRowBackBeforeTheTermsSoAPostWithoutACategoryStaysWithout'
 e('engine-put-back-order', 'put_back(): the row goes back first, then the meta, then the terms, which undo the side effects of wp_update_post() on them (the default category; P2)', EN,
-  "\t\tforeach ( null !== $w && defined( $w . '::PART_ORDER' ) ? $w::PART_ORDER : array( 'row', 'meta:', 'terms:' ) as $prefix ) {", "\t\tforeach ( null !== $w && defined( $w . '::PART_ORDER' ) ? $w::PART_ORDER : array( 'terms:', 'meta:', 'row' ) as $prefix ) {", 'it', ORDER_T)
+  "\t\treturn null !== $w && defined( $w . '::PART_ORDER' ) ? $w::PART_ORDER : array( 'row', 'meta:', 'terms:' );", "\t\treturn null !== $w && defined( $w . '::PART_ORDER' ) ? $w::PART_ORDER : array( 'terms:', 'meta:', 'row' );", 'it', ORDER_T)
 e('engine-put-back-check', 'put_back(): every part counted as back is read again against the backup; one that reads otherwise is unclear, and so is the object', EN,
   "\t\t\t\tif ( null === $now || ! hash_equals( (string) $w::part_hash( $backup, $name ), $now ) ) {", "\t\t\t\tif ( false ) {", 'it', 'testAPartAHookChangedAfterItWasPutBackIsUnclearNotRestored')
 F2 = 'testTheDefaultCategoryOfTheRowGoingBackDoesNotTakeBackTermsAnotherHandChanged'
