@@ -68,6 +68,14 @@ entsteht, nennt ihre Meldung den Weg.
   zeigt das Journal `creating`: ob die Datei liegt, sagt nur die Platte; sie
   gilt als eigen, weil nur der Lauf sie exklusiv angelegt haben kann. Eine
   teilweise geschriebene Datei bleibt so liegen.
+- Ein Schritt legt alle Dateien seines Anhangs in einer Anfrage: höchstens
+  48 MiB (`attachment:file_too_large` darüber), Stück für Stück aus dem
+  Paket gelesen, nie ganz im Speicher; einen Cursor innerhalb des Schritts
+  gibt es nicht. Endet die Anfrage mittendrin, gilt das Fenster `creating`
+  oben, der Schritt schreibt keine Zeile, und der Lauf führt ihn als
+  unterbrochen wie jeden anderen Schritt (`GRENZEN-LAUF.md`). Grund: ein
+  Anhang ist eine Einheit des Journals; 48 MiB kopiert eine Site in
+  Sekunden.
 - Eigene Dateien eines zurückgenommenen Laufs bleiben liegen und stehen mit
   Pfad im Ergebnis des Schritts und seines Rückwegs (`files`); aufräumbar
   werden sie mit dem Datei-Manifest von Z8b, bis dahin von Hand.
