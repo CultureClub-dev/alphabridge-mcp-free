@@ -25,7 +25,9 @@
  * the way back is wp_site_revert).
  *
  * WHAT A PLAN HOLDS (this version): entries of the kind post of the types
- * the post engine writes (AB_MCP_Sync_Post_Writer::TYPES) and of the kind
+ * the post engine writes (AB_MCP_Sync_Post_Writer::TYPES: posts and pages,
+ * since branch 9b the templates, template parts, global styles,
+ * navigations and reusable blocks as well) and of the kind
  * term of its taxonomies (AB_MCP_Sync_Term_Writer::TAXONOMIES; branch 9);
  * every other entry chosen is named as locked with its reason and stage
  * and is no step. The steps: the check
@@ -86,6 +88,15 @@ final class AB_MCP_Sync_Push {
 	 * then the next entries from the same report.
 	 */
 	const MAX_OBJECTS = AB_MCP_Sync_Run::MAX_STEPS - AB_MCP_Sync_Run::FRAME;
+
+	/**
+	 * The types of the kind post another object names by a name, not an id,
+	 * in the order their steps come before the other objects (branch 9b;
+	 * order()): a template part (core/template-part, theme and slug), a
+	 * template (page_template). The order is no dependency: a step whose
+	 * part is not there yet is refused with its lock as it writes.
+	 */
+	const NAMED_FIRST = array( 'wp_template_part', 'wp_template' );
 
 	/** Steps a preview names at most (all are counted). */
 	const NAMED = 200;
@@ -784,6 +795,7 @@ final class AB_MCP_Sync_Push {
 		// ancestors of a term stand where the run puts them when it is
 		// written, and as that tree has no loop, its new parent is never one
 		// of its descendants; branch 9, Codex rounds 1 and 2, B4), then the
+		// template parts and the templates (NAMED_FIRST, branch 9b), then the
 		// other objects; within the same depth by the entry of the report
 		// (stable, whatever order the entries came in). The order is no
 		// dependency: a step whose term deviates leaves the others to run,
@@ -796,7 +808,14 @@ final class AB_MCP_Sync_Push {
 			$left,
 			static function ( $a, $b ) use ( $items ) {
 				$rank = static function ( $n ) use ( $items ) {
-					return 'term' === $items[ $n ]['kind'] ? array( 0, isset( $items[ $n ]['depth'] ) ? (int) $items[ $n ]['depth'] : 0, (int) $n ) : array( 1, 0, (int) $n );
+					if ( 'term' === $items[ $n ]['kind'] ) {
+						return array( 0, isset( $items[ $n ]['depth'] ) ? (int) $items[ $n ]['depth'] : 0, (int) $n );
+					}
+					// The objects named by a name rather than an id (branch 9b): the
+					// template parts a template names by theme and slug, then the
+					// templates a page names by slug (page_template), then the rest.
+					$named = array_search( (string) ( $items[ $n ]['subtype'] ?? '' ), self::NAMED_FIRST, true );
+					return array( 1, false === $named ? count( self::NAMED_FIRST ) : (int) $named, (int) $n );
 				};
 				return $rank( $a ) <=> $rank( $b );
 			}

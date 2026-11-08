@@ -779,13 +779,47 @@ final class SyncRunTest extends TestCase {
 		self::assertTrue( AB_MCP_Sync_Post_Writer::new_meta_allowed( '_thumbnail_id', 'post' ), 'The featured image through set_post_thumbnail().' );
 		self::assertTrue( AB_MCP_Sync_Post_Writer::new_meta_allowed( 'note', 'page' ) );
 		self::assertFalse( AB_MCP_Sync_Post_Writer::new_meta_allowed( '_my_plugin', 'page' ), 'A protected key: map_meta_cap refuses it without a rule of its owner.' );
-		add_filter( 'auth_post_meta_rating', '__return_true' );
+		$rule = static function ( $allowed ) {
+			return $allowed;
+		};
+		add_filter( 'auth_post_meta_rating', $rule );
 		self::assertFalse( AB_MCP_Sync_Post_Writer::new_meta_allowed( 'rating', 'page' ), 'A key with a rule of its own answers at the object only.' );
-		remove_filter( 'auth_post_meta_rating', '__return_true' );
-		add_filter( 'auth_post_meta_rating_for_page', '__return_true' );
+		remove_filter( 'auth_post_meta_rating', $rule );
+		add_filter( 'auth_post_meta_rating_for_page', $rule );
 		self::assertFalse( AB_MCP_Sync_Post_Writer::new_meta_allowed( 'rating', 'page' ), 'Also by the subtype (register_post_meta() with an auth_callback).' );
 		self::assertTrue( AB_MCP_Sync_Post_Writer::new_meta_allowed( 'rating', 'post' ) );
-		remove_filter( 'auth_post_meta_rating_for_page', '__return_true' );
+		remove_filter( 'auth_post_meta_rating_for_page', $rule );
+		// Branch 9b: a key registered without an auth_callback, for which
+		// register_meta() hooks __return_true (the pattern sync status of a
+		// reusable block, wp_create_initial_post_meta()), follows the right at
+		// the post; the hooks as WordPress keeps them ($wp_filter, WP_Hook).
+		// Any other callback beside it answers at the object only; a hook
+		// this request does not show as WordPress keeps it fails closed.
+		$hook = static function ( array $functions ) {
+			$callbacks = array();
+			foreach ( $functions as $i => $function ) {
+				$callbacks[10][ 'cb' . $i ] = array(
+					'function'      => $function,
+					'accepted_args' => 6,
+				);
+			}
+			return (object) array( 'callbacks' => $callbacks );
+		};
+		$had = array_key_exists( 'wp_filter', $GLOBALS ) ? $GLOBALS['wp_filter'] : null;
+		add_filter( 'auth_post_meta_wp_pattern_sync_status_for_wp_block', '__return_true' );
+		self::assertFalse( AB_MCP_Sync_Post_Writer::new_meta_allowed( 'wp_pattern_sync_status', 'wp_block' ), 'A hook this request does not show as WordPress keeps it: fail closed.' );
+		$GLOBALS['wp_filter'] = array( 'auth_post_meta_wp_pattern_sync_status_for_wp_block' => $hook( array( '__return_true' ) ) );
+		self::assertTrue( AB_MCP_Sync_Post_Writer::new_meta_allowed( 'wp_pattern_sync_status', 'wp_block' ), 'Registered without an auth_callback: the right of the post.' );
+		$GLOBALS['wp_filter'] = array( 'auth_post_meta_wp_pattern_sync_status_for_wp_block' => $hook( array( '__return_true', $rule ) ) );
+		self::assertFalse( AB_MCP_Sync_Post_Writer::new_meta_allowed( 'wp_pattern_sync_status', 'wp_block' ), 'A rule beside it answers at the object only.' );
+		$GLOBALS['wp_filter'] = array( 'auth_post_meta_wp_pattern_sync_status_for_wp_block' => $hook( array( '__return_false' ) ) );
+		self::assertFalse( AB_MCP_Sync_Post_Writer::new_meta_allowed( 'wp_pattern_sync_status', 'wp_block' ), 'A protected key registered without an auth_callback: __return_false.' );
+		remove_filter( 'auth_post_meta_wp_pattern_sync_status_for_wp_block', '__return_true' );
+		if ( null === $had ) {
+			unset( $GLOBALS['wp_filter'] );
+		} else {
+			$GLOBALS['wp_filter'] = $had;
+		}
 		$prepared = array( 'meta' => array( 'same' => array( 'a' ), 'changed' => array( 'b' ), 'new' => array( 'c' ), 'api_key' => array( 'x' ), '_edit_last' => array( '1' ) ) );
 		$current  = array(
 			'meta' => array(
@@ -797,8 +831,12 @@ final class SyncRunTest extends TestCase {
 			),
 		);
 		self::assertSame( array( 'changed', 'gone', 'new' ), AB_MCP_Sync_Post_Writer::differing( $prepared, $current ), 'A key equal on both sides stays untouched; a credential and an excluded key are never written.' );
-		self::assertSame( array( 'post', 'page' ), AB_MCP_Sync_Post_Writer::TYPES );
-		self::assertSame( array( 'category', 'post_tag', 'post_format' ), AB_MCP_Sync_Post_Writer::TAXONOMIES );
+		self::assertSame( array( 'post', 'page', 'wp_block', 'wp_template', 'wp_template_part', 'wp_global_styles', 'wp_navigation' ), AB_MCP_Sync_Post_Writer::TYPES, 'Branch 9b: every core type of the kind post.' );
+		self::assertSame( array( 'category', 'post_tag', 'post_format', 'wp_pattern_category', 'wp_theme', 'wp_template_part_area' ), AB_MCP_Sync_Post_Writer::TAXONOMIES );
+		self::assertSame( array( 'post_format', 'wp_theme', 'wp_template_part_area' ), AB_MCP_Sync_Post_Writer::IDENTITY_TAXONOMIES, 'By their slugs, as the canonical form names them.' );
+		self::assertSame( array( 'wp_theme', 'wp_template_part_area' ), AB_MCP_Sync_Post_Writer::NAMED_TAXONOMIES );
+		self::assertSame( array( 'wp_template', 'wp_template_part', 'wp_global_styles' ), AB_MCP_Sync_Post_Writer::THEMED );
+		self::assertSame( array( 'wp_block', 'wp_template', 'wp_template_part', 'wp_global_styles', 'wp_navigation' ), AB_MCP_Sync_Post_Writer::SITE_WIDE );
 		self::assertSame( array( '_wp_page_template', '_thumbnail_id' ), AB_MCP_Sync_Post_Writer::CORE_META );
 	}
 
@@ -903,14 +941,24 @@ final class SyncRunTest extends TestCase {
 
 	public function testWhatTheEngineOfThePostDoesNotCarryToItsEndIsRefusedWithItsLock(): void {
 		$ctx = self::ctx( array( 'post' => array( 7 => 70 ), 'term' => array( 3 => 30 ) ) );
-		// The five core types of branch 9b of Z8, they alone under post:engine_type.
-		foreach ( AB_MCP_Sync_Post_Writer::TYPES_BRANCH_9B as $type ) {
-			$held = AB_MCP_Sync_Post_Writer::target_of( self::line( array( 'post_type' => $type ), array(), array(), array( 'identity' => array( 'post_type' => $type, 'post_name' => 'b', 'theme' => '' ) ) ), self::item(), $ctx );
-			self::assertSame( 'post:engine_type', self::lock_of( $held ), $type );
-			self::assertStringContainsString( 'from Z8)', $held->get_error_message() );
-			self::assertStringContainsString( 'branch 9b of Z8', $held->get_error_message() );
+		// The five core types of branch 9b of Z8, locked with post:engine_type
+		// in branch 9: since branch 9b each has its target, and the lock is gone.
+		foreach ( array( 'wp_block', 'wp_template', 'wp_template_part', 'wp_global_styles', 'wp_navigation' ) as $type ) {
+			$themed = in_array( $type, array( 'wp_template', 'wp_template_part', 'wp_global_styles' ), true );
+			$terms  = $themed ? array( array( 'name' => 'twentytwentyfive', 'slug' => 'twentytwentyfive', 'taxonomy' => 'wp_theme', 'term_id' => 4, 'term_order' => 0 ) ) : array();
+			$got    = AB_MCP_Sync_Post_Writer::target_of( self::line( array( 'post_type' => $type ), array(), $terms, array( 'identity' => array( 'post_type' => $type, 'post_name' => 'b', 'theme' => $themed ? 'twentytwentyfive' : '' ) ) ), self::item(), $ctx );
+			self::assertIsArray( $got, $type . ( is_wp_error( $got ) ? ': ' . $got->get_error_message() : '' ) );
+			self::assertSame( $type, $got['type'] );
+			self::assertSame( $themed ? array( 'wp_theme' => array( 'twentytwentyfive' ) ) : array(), $got['terms'], 'The theme by its slug, as the canonical form names it.' );
 		}
-		self::assertSame( array( 'wp_block', 'wp_template', 'wp_template_part', 'wp_global_styles', 'wp_navigation' ), AB_MCP_Sync_Post_Writer::TYPES_BRANCH_9B );
+		self::assertNull( AB_MCP_Sync_Kinds::lock( 'post', 'engine_type' ), 'post:engine_type is gone with branch 9b.' );
+		// The theme and the area are read by the name of their term: a term
+		// whose name is not its slug waits for its field rule (branch 9b).
+		$named = AB_MCP_Sync_Post_Writer::target_of( self::line( array( 'post_type' => 'wp_template_part' ), array(), array( array( 'name' => 'twentytwentyfive', 'slug' => 'twentytwentyfive', 'taxonomy' => 'wp_theme', 'term_id' => 4, 'term_order' => 0 ), array( 'name' => 'Header', 'slug' => 'header', 'taxonomy' => 'wp_template_part_area', 'term_id' => 5, 'term_order' => 0 ) ), array( 'identity' => array( 'post_type' => 'wp_template_part', 'post_name' => 'header', 'theme' => 'twentytwentyfive' ) ) ), self::item(), $ctx );
+		self::assertSame( 'post:taxonomy_rule', self::lock_of( $named ) );
+		self::assertStringContainsString( 'is named Header', $named->get_error_message() );
+		$area = AB_MCP_Sync_Post_Writer::target_of( self::line( array( 'post_type' => 'wp_template_part' ), array(), array( array( 'name' => 'twentytwentyfive', 'slug' => 'twentytwentyfive', 'taxonomy' => 'wp_theme', 'term_id' => 4, 'term_order' => 0 ), array( 'name' => 'header', 'slug' => 'header', 'taxonomy' => 'wp_template_part_area', 'term_id' => 5, 'term_order' => 0 ) ), array( 'identity' => array( 'post_type' => 'wp_template_part', 'post_name' => 'header', 'theme' => 'twentytwentyfive' ) ) ), self::item(), $ctx );
+		self::assertSame( array( 'wp_theme' => array( 'twentytwentyfive' ), 'wp_template_part_area' => array( 'header' ) ), $area['terms'], 'The area a field by its slug, not part of the identity.' );
 		// A type of another kind: never by the engine of the kind post.
 		self::assertSame( 'post:other_kind', self::lock_of( AB_MCP_Sync_Post_Writer::target_of( self::line( array( 'post_type' => 'attachment' ), array(), array(), array( 'identity' => array( 'post_type' => 'attachment', 'post_name' => 'a', 'theme' => '' ) ) ), self::item(), $ctx ) ) );
 		self::assertSame( 'post:content_missing', self::lock_of( AB_MCP_Sync_Post_Writer::target_of( self::line( array(), array(), array(), array( 'content' => array() ) ), self::item(), $ctx ) ), 'No content in the package.' );
@@ -962,7 +1010,7 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( array( 'key' => 'post:slug_collision', 'stage' => 'Z8', 'at' => 'slug hello' ), array_intersect_key( $locked->get_error_data()['lock'], array_flip( array( 'key', 'stage', 'at' ) ) ) );
 		self::assertStringContainsString( 'Not written (post:slug_collision, from Z8)', $locked->get_error_message() );
 		self::assertStringContainsString( 'wp-admin', $locked->get_error_message() );
-		foreach ( array( 'engine_type', 'other_kind', 'in_trash', 'auto_draft', 'status_rule', 'content_missing', 'lock_unread', 'type_unregistered', 'meta_rule', 'taxonomy_rule', 'slug_collision', 'sanitizer', 'menu_automatic', 'author_unknown', 'status_date', 'reference_unmapped', 'page_template', 'thumbnail' ) as $op ) {
+		foreach ( array( 'theme_mismatch', 'navigation_fallback', 'css_markup', 'other_kind', 'in_trash', 'auto_draft', 'status_rule', 'content_missing', 'lock_unread', 'type_unregistered', 'meta_rule', 'taxonomy_rule', 'slug_collision', 'sanitizer', 'menu_automatic', 'author_unknown', 'status_date', 'reference_unmapped', 'page_template', 'thumbnail' ) as $op ) {
 			self::assertIsArray( AB_MCP_Sync_Kinds::lock( 'post', $op ), $op . ' is a lock of the table.' );
 		}
 	}

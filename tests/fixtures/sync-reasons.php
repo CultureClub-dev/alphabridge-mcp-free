@@ -344,10 +344,6 @@ return array(
 			'core' => array( array( 'wp-includes/formatting.php', 4923, 'function sanitize_option( $option, $value ) {' ) ),
 			'plan' => 'Entscheid 27 (Typ und Regel je Name)',
 		),
-		'post:engine_type'             => array(
-			'why'  => 'Branches 8 and 9 write posts and pages end to end; the other core types of the kind post (templates, template parts, global styles, navigations, reusable blocks) follow with branch 9b of Z8 (heikel/z8-vorlagen, right after branch 9 is merged; GRENZEN-INHALTE.md). This lock holds these five types and nothing else.',
-			'plan' => 'Zweigtabelle Zeile 540 (Zweig 9); Entscheid von Thomas «A: eigener Zweig 9b» (08.11.2026)',
-		),
 		'post:other_kind'              => array(
 			'why'  => 'An attachment, a menu item and the additional CSS are rows of wp_posts of other kinds (AB_MCP_Sync_Kinds::OWNERSHIP); their engines (branches 10 and 11) write them with their files and fields, the engine of the kind post never does (fail closed where a plan names one with the kind post).',
 			'plan' => 'Entscheid 25 (Zuständigkeit je Objekttyp); Zweigtabelle Zeilen 10 und 11',
@@ -384,8 +380,9 @@ return array(
 			'plan' => 'Entscheid 28; Entscheid 17 (Sanitizer vorab)',
 		),
 		'post:taxonomy_rule'           => array(
-			'why'  => 'Terms of a taxonomy of a plugin or theme wait for the classification of the taxonomy (Z8d); the engine of the kind post sets category, post_tag and post_format.',
-			'plan' => 'Zweigtabelle Zeile 540; Entscheid 25',
+			'why'  => 'Terms of a taxonomy of a plugin or theme wait for the classification of the taxonomy (Z8d); the engine of the kind post sets category, post_tag, post_format, wp_pattern_category, wp_theme and wp_template_part_area. The theme and the area are read by the name of their term (_build_block_template_object_from_post_object()), written by the slug: a term whose name is not its slug waits for its field rule (branch 9b).',
+			'core' => array( array( 'wp-includes/block-template-utils.php', 857, "if ( empty( \$terms['wp_theme'] ) ) {" ) ),
+			'plan' => 'Zweigtabelle Zeilen 540 und 541; Entscheid 25',
 		),
 		'post:thumbnail'               => array(
 			'why'  => 'set_post_thumbnail() keeps the id only for an attachment wp_get_attachment_image() shows and removes the featured image otherwise, so the written post would not be the target.',
@@ -425,8 +422,24 @@ return array(
 			'plan' => 'Entscheid 17 (Status, den WordPress anders speichert)',
 		),
 		'post:reference_unmapped'      => array(
-			'why'  => 'A reference is rewritten only by the map of the pairs (decision 12); one without a counterpart would name another object here.',
-			'plan' => 'Entscheid 12 und 16',
+			'why'  => 'A reference is rewritten only by the map of the pairs (decision 12); one without a counterpart would name another object here. A template part named by theme and slug (core/template-part) shows only under the active theme and where this site has it (branch 9b).',
+			'core' => array( array( 'wp-includes/blocks/template-part.php', 27, "if ( isset( \$attributes['slug'] ) && get_stylesheet() === \$theme ) {" ) ),
+			'plan' => 'Entscheid 12 und 16; Zweigtabelle Zeile 541',
+		),
+		'post:theme_mismatch'          => array(
+			'why'  => 'Templates, template parts and global styles are found by the name of the active theme only (the term of wp_theme), and a new template is made unique among the templates of the active theme; one of another theme would not show here, and no theme is rewritten into another (decision 25: identity type, theme and slug).',
+			'core' => array( array( 'wp-includes/theme-templates.php', 63, '$theme = get_stylesheet();' ) ),
+			'plan' => 'Entscheid 25 (Vorlagen und globale Stile über Typ, Theme, Slug); Zweigtabelle Zeile 541',
+		),
+		'post:navigation_fallback'     => array(
+			'why'  => 'A navigation block without a menu of its own shows the most recently published navigation; a navigation that becomes or stops being that one changes pages the plan does not name, a consequence of the core outside the object (decision 21).',
+			'core' => array( array( 'wp-includes/class-wp-navigation-fallback.php', 110, 'private static function get_most_recently_published_navigation() {' ) ),
+			'plan' => 'Entscheid 21 (Kern-Folgen: erlaubt nur, was vollständig bekannt ist); Zweigtabelle Zeile 541',
+		),
+		'post:css_markup'              => array(
+			'why'  => 'The site editor refuses custom CSS of the global styles that could close its STYLE element; the engine writes through wp_update_post(), past that check, so it asks the same rule before anything is written (decision 17, Sanitizer vorab).',
+			'core' => array( array( 'wp-includes/rest-api/endpoints/class-wp-rest-global-styles-controller.php', 683, 'protected function validate_custom_css( $css ) {' ) ),
+			'plan' => 'Entscheid 17 (Sanitizer vorab); Zweigtabelle Zeile 541',
 		),
 		'post:page_template'           => array(
 			'why'  => 'The template goes through page_template of wp_insert_post(), which checks it against the theme of this site and stores default for one the theme does not offer: the written post would not be the target (Codex round 1 of branch 8, B7).',
