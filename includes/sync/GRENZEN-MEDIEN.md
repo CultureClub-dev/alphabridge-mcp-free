@@ -271,8 +271,11 @@ entsteht, nennt ihre Meldung den Weg.
 
 ## Laufzeit
 
-- Die Integrationsklasse `SyncMediaTest` (sechs Fälle, gemeinsame Hilfen,
-  Bilder mit GD erzeugt) läuft lokal in rund 37 s.
+- Die Integrationsklasse `SyncMediaTest` (acht Fälle, gemeinsame Hilfen,
+  Bilder mit GD erzeugt) läuft lokal in rund 55 s (nach Codex-Runde 1:
+  zwei Fälle mehr, der Paket-Fall mit 5004 leeren Dateien rund 4 s mehr).
+  Der Paket-Fall erreicht allein rund 123 MiB Speicher (Stücke von 3 MiB),
+  unter den 128 MB eines Prozesses je Klasse.
 
 ## Nicht als Mutation geführt
 
@@ -295,6 +298,26 @@ entsteht, nennt ihre Meldung den Weg.
   prüft die Bedingung daneben); in `plan()` das `continue` nach dem
   schwachen Elternverweis (ein schwacher Verweis erfüllt die Bedingung des
   starken danach nicht; geführt ist, dass der Plan ihn liest).
+- Nach Codex-Runde 1 nicht geführt: die Prüfungen eines Ordners auf Link
+  und Auflösung in `folder()` je für sich (sie sichern einander: ein Link
+  auf dem Weg fällt beiden auf; geführt sind der Uploads-Ordner, der Ordner
+  je Ebene und die Datei, wo ein Ordner hingehört); das Rennen zwischen
+  der Prüfung eines Ordners und `mkdir()` darunter (keine Naht; die Prüfung
+  vor und nach dem Öffnen der Datei führt die Naht `$probe`); die erste
+  Lesung der Dateien nach dem Legen (`files_seen` in `lay_files()`:
+  gleichwertig, `write_parts()` liest sie sonst vor dem ersten Aufruf
+  selbst, ein Unterschied entsteht nur bei einer Anfrage, die genau
+  zwischen dem Legen und dem Zeilenaufruf endet); die Pfade, die nur die
+  Liste vor dem Schritt nennt, unter den beobachteten Dateien (kein Fall,
+  in dem ein Haken eine alte Grösse ändert); der Typ nach dem Namen in
+  `may_lay()` (kein Fall ändert die erlaubten Typen zwischen Prüfung und
+  Legen; geführt ist das Recht); in `restore_files()` die Rückkehr ohne
+  Prüfung für einen Wert ohne Datei (gleichwertig: ein solcher Wert nennt
+  keine Datei zu prüfen, ausser die gesicherte Hauptdatei ist kein
+  einfacher Pfad) und in der Inhaltsprüfung liegender Dateien der Typ der
+  Hauptdatei gegen den Anhang (gleichwertig: der Name ist vorher gegen den
+  Anhang geprüft, und ein Inhalt eines anderen Typs als der Name setzt
+  `proper_filename`).
 
 - Ersetzen vorhandener Mediendateien, Aufräumen eigener Dateien, Rückweg
   neu angelegter Attachments mit Verweisgraphen: Z8b (Plan, «Folgen für

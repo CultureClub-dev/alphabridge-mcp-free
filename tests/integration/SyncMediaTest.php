@@ -17,10 +17,19 @@
  *   only the row and meta of the attachment, no file; the way back puts
  *   them back byte for byte.
  * - What locks before anything is written: another file at a path, a path
- *   another attachment names, a link on the way, a file of a type the
- *   account may not upload by its content; a path taken between the check
- *   and the laying refuses the step, the files laid before stay as the
- *   run's own, no attachment is made. No step deletes anything.
+ *   another attachment names (also by an absolute path of old, or a list
+ *   that does not read whole), a link on the way, a file of a type the
+ *   account may not upload by its name or its content (also one that lies
+ *   there already); a path taken between the check and the laying refuses
+ *   the step, the files laid before stay as the run's own, no attachment
+ *   is made; a folder swapped for a link as a file is opened leaves the
+ *   file empty and unclear. No step deletes anything.
+ * - A site without an upload and without folders by month; the rights
+ *   asked again right before a file is laid.
+ * - A file a hook changes as a step writes or puts back deviates the
+ *   attachment and stops its way back (decision A).
+ * - The package of media: lines, index, a name that is no UTF-8, paths
+ *   checked for credentials, the lines of one package.
  *
  * @package AlphaBridge_MCP
  */
