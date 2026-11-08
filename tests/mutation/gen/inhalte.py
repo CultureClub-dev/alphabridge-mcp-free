@@ -296,6 +296,13 @@ e('post-journal-differing', 'journal_parts(): the meta parts of a post here are 
   "\t\t$keys  = is_array( $current ) ? self::differing( $prepared, $current ) : array_keys( $prepared['meta'] );", "\t\t$keys  = array_keys( $prepared['meta'] );", 'it', 'testAPluginKeyEqualOnBothSidesStaysUntouchedAndOneThatDiffersWaitsForARuleOfTheSite')
 
 
+# --------------------------------------------- Codex round 1 on branch 9
+C_A1 = 'testAHookThatChangesAKeyEqualOnBothSidesWithTheRowDeviatesTheObjectAndTheWayBackLeavesIt'
+e('engine-row-besides', 'write_parts(): what the row call changed besides the parts of the journal (a key equal on both sides) deviates the object before the next call (Codex round 1, A1)', EN,
+  "\t\t\t\t\tif ( null !== $changed_besides ) {", "\t\t\t\t\tif ( false ) {", 'it', C_A1)
+e('engine-row-besides-all', 'changed_besides(): every part read before and after the row call, planned or not (part_names())', EN,
+  "\t\tforeach ( self::part_names( is_array( $before ) ? $before : array(), $after ) as $name ) {", "\t\tforeach ( array_keys( $journaled ) as $name ) {", 'it', C_A1)
+
 def test_of(expect):
     return expect.split(' with data set "', 1)[0]
 

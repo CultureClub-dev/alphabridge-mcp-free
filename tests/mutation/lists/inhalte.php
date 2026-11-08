@@ -984,4 +984,22 @@ return array(
 		'run'     => $it( 'SyncContentTest', 'testAPluginKeyEqualOnBothSidesStaysUntouchedAndOneThatDiffersWaitsForARuleOfTheSite' ),
 		'expect'  => '/testAPluginKeyEqualOnBothSidesStaysUntouchedAndOneThatDiffersWaitsForARuleOfTheSite/',
 	),
+	array(
+		'id'      => 'inhalte/engine-row-besides',
+		'clause'  => 'write_parts(): what the row call changed besides the parts of the journal (a key equal on both sides) deviates the object before the next call (Codex round 1, A1)',
+		'file'    => $en,
+		'search'  => "\t\t\t\t\tif ( null !== \$changed_besides ) {",
+		'replace' => "\t\t\t\t\tif ( false ) {",
+		'run'     => $it( 'SyncContentTest', 'testAHookThatChangesAKeyEqualOnBothSidesWithTheRowDeviatesTheObjectAndTheWayBackLeavesIt' ),
+		'expect'  => '/testAHookThatChangesAKeyEqualOnBothSidesWithTheRowDeviatesTheObjectAndTheWayBackLeavesIt/',
+	),
+	array(
+		'id'      => 'inhalte/engine-row-besides-all',
+		'clause'  => 'changed_besides(): every part read before and after the row call, planned or not (part_names())',
+		'file'    => $en,
+		'search'  => "\t\tforeach ( self::part_names( is_array( \$before ) ? \$before : array(), \$after ) as \$name ) {",
+		'replace' => "\t\tforeach ( array_keys( \$journaled ) as \$name ) {",
+		'run'     => $it( 'SyncContentTest', 'testAHookThatChangesAKeyEqualOnBothSidesWithTheRowDeviatesTheObjectAndTheWayBackLeavesIt' ),
+		'expect'  => '/testAHookThatChangesAKeyEqualOnBothSidesWithTheRowDeviatesTheObjectAndTheWayBackLeavesIt/',
+	),
 );

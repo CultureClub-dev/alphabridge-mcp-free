@@ -1132,6 +1132,21 @@ final class AB_MCP_Sync_Engine {
 					$expected               = $k === $i ? (string) $other['target'] : ( isset( $named[ $other['part'] ] ) ? (string) $named[ $other['part'] ] : null );
 					$journal['parts'][ $k ] = self::seen_after( $other, $post_all, $expected, $k !== $i, $w );
 				}
+				// The whole state read before and after the row call, not only
+				// the parts of the journal (branch 9, Codex round 1, A1: a key
+				// equal on both sides is no part, decision 28, and a hook of this
+				// site that changed it with the row went unnoticed up to the hash
+				// of the whole object; a request ending in between left the row
+				// owned for the way back). What changed besides the parts of the
+				// journal, other than what the row call was to write
+				// (with_row()), is another hand's: the object deviated, before
+				// the journal is saved again.
+				if ( is_array( $post_all ) ) {
+					$changed_besides = self::changed_besides( $journal, is_array( $pre_all ) ? $pre_all : null, $post_all, $named, $w );
+					if ( null !== $changed_besides ) {
+						return self::deviated( $journal, $i, sprintf( 'the row call changed the part %s besides it, which the step does not write (a hook of this site reacting to the row)', $changed_besides ), $live_id, $backup );
+					}
+				}
 			} elseif ( $w::through_row( $prepared, $name ) ) {
 				// A core key with an API of its own (_wp_page_template) was
 				// written with the row, through page_template (decision 17,
@@ -2378,6 +2393,40 @@ final class AB_MCP_Sync_Engine {
 			}
 		}
 		return array_keys( $names );
+	}
+
+	/**
+	 * The first part, outside the parts of the journal, that a call changed
+	 * between two reads of the whole state (part_names(): every key and
+	 * taxonomy, planned or not), other than what the row call was to write
+	 * besides the row ($named, with_row()); null where none.
+	 *
+	 * @param array      $journal Journal.
+	 * @param array|null $before  current() before the call; null for no object yet.
+	 * @param array      $after   current() after the call.
+	 * @param array      $named   part => hash the call was to write besides its own part.
+	 * @param string     $w       The write side of the kind (writer()).
+	 * @return string|null
+	 */
+	private static function changed_besides( array $journal, $before, array $after, array $named, $w ) {
+		$journaled = array();
+		foreach ( $journal['parts'] as $part ) {
+			$journaled[ (string) $part['part'] ] = true;
+		}
+		foreach ( self::part_names( is_array( $before ) ? $before : array(), $after ) as $name ) {
+			if ( isset( $journaled[ $name ] ) ) {
+				continue;
+			}
+			$now = $w::part_hash( $after, $name );
+			if ( ! self::changed( $w::part_hash( $before, $name ), $now ) ) {
+				continue;
+			}
+			if ( isset( $named[ $name ] ) && null !== $now && hash_equals( (string) $named[ $name ], (string) $now ) ) {
+				continue;
+			}
+			return $name;
+		}
+		return null;
 	}
 
 	/**

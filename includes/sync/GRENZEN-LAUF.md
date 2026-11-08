@@ -535,7 +535,14 @@ Ablehnung entsteht, nennt sie den Weg.
   Beitrags ohne Kategorie), ist `pre` der Stand vor dem Zeilenaufruf, und
   eigen wird nur, was genau so zurückliest, wie `with_row()` es nennt; jede
   andere Veränderung mit der Zeile ist fremd (ein Hook dieser Site, der auf
-  die Zeile reagiert): Vermerk `foreign`, nie Eigentum. Weicht `pre` von der
+  die Zeile reagiert): Vermerk `foreign`, nie Eigentum. Das gilt für jeden
+  Teil, den das Lesen vor und nach dem Zeilenaufruf kennt, auch einen, der
+  nicht im Journal steht (ein beidseits gleicher Meta-Schlüssel, Entscheid
+  28): ändert der Zeilenaufruf ihn, weicht das Objekt ab, bevor das Journal
+  wieder gespeichert wird; ein Request, der danach endet, hinterlässt die
+  Zeile nie als eigen (Zweig 9, Codex-Runde 1, A1; Prüffall
+  `testAHookThatChangesAKeyEqualOnBothSidesWithTheRowDeviatesTheObjectAndTheWayBackLeavesIt`).
+  Weicht `pre` von der
   Sicherung ab, hat eine andere Hand den Teil vor dem Aufruf geändert:
   Vermerk, nie Eigentum (N1: ein Hook setzte `note=fremd` mit der Zeile, der
   eigene Meta-Aufruf wurde verweigert; vorher galt `after ≠ Sicherung` als

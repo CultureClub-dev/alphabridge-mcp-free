@@ -854,6 +854,62 @@ final class SyncContentTest extends TestCase {
 		self::assertSame( array( 'About' ), self::meta_a( 'post', $about_a, '_seo_title' ) );
 	}
 
+	public function testAHookThatChangesAKeyEqualOnBothSidesWithTheRowDeviatesTheObjectAndTheWayBackLeavesIt(): void {
+		// Codex round 1 on branch 9, A1: the note is equal on both sides, so
+		// no part of the step (decision 28); a save_post hook of this site
+		// changes it as the row is written. The request ends in the call of
+		// the next part (the color), where it gets there. Before, only the
+		// parts of the journal were compared around the row call: the row was
+		// saved as the step's own, and the way back of the interrupted run
+		// put the title back over an object another hand changed within the
+		// step (decision A). Now the whole state read before and after the
+		// row call is compared: the object deviates at the row, before the
+		// next call, and the way back leaves everything.
+		self::pair();
+		$about_a = self::on_a( self::page( 'about', 'About us.', array( 'meta_input' => array( 'note' => 'same', 'color' => 'red' ) ) ) );
+		self::on_b( self::page( 'about', 'About us.', array( 'meta_input' => array( 'note' => 'same', 'color' => 'red' ) ) ) );
+		self::paired( self::staged() );
+		$b_id = (int) self::entry( self::report( self::staged() )['all'], 'post:about' )['staging']['ref'];
+		self::b( array( array( 'op' => 'update_post', 'args' => array( 'ID' => $b_id, 'post_title' => 'About us, new' ) ), array( 'op' => 'update_meta', 'post' => $b_id, 'key' => 'color', 'value' => 'blue' ) ) );
+		$run    = self::begun( self::planned( array( 'post:about' ) )['args'] );
+		$run_id = (int) $run['run_id'];
+		$check  = self::gated( 'wp_site_push', array( 'action' => 'next', 'run_id' => $run_id ) );
+		self::assertIsArray( $check, is_wp_error( $check ) ? $check->get_error_message() : '' );
+		self::assertSame( 'done', $check['step']['state'], json_encode( $check ) );
+		try {
+			AB_MCP_IT_Sync_Steps::run(
+				'a',
+				array(
+					array(
+						'op'        => 'push',
+						'args'      => array( 'action' => 'next', 'run_id' => $run_id ),
+						'exit_at'   => 'updated_post_meta',
+						'exit_key'  => 'color',
+						'hook_meta' => array( 'post' => $about_a, 'key' => 'note', 'value' => 'hooked' ),
+					),
+				)
+			);
+		} catch ( RuntimeException $e ) {
+			// The request ended in the call of the color (the build before).
+			self::assertStringContainsString( 'gave no JSON', $e->getMessage() );
+		}
+		AB_MCP_Protected_Store::forget();
+		AB_MCP_Sync_Backup::forget();
+		wp_cache_flush();
+		self::assertSame( array( 'hooked' ), self::meta_a( 'post', $about_a, 'note' ), 'The hook changed the note with the row.' );
+		self::assertSame( 'About us, new', AB_MCP_IT_Sites::rows( 'a', 'posts', array( 'ID' => (string) $about_a ) )[0]['post_title'] );
+		if ( 'interrupted' !== self::run_status( $run_id )['state'] ) {
+			self::finish( $run_id );
+		}
+		$back = self::back( $run_id );
+		self::assertSame( 'About us, new', AB_MCP_IT_Sites::rows( 'a', 'posts', array( 'ID' => (string) $about_a ) )[0]['post_title'], 'The way back leaves the row of the deviated object: ' . json_encode( $back ) );
+		self::assertSame( array( 'hooked' ), self::meta_a( 'post', $about_a, 'note' ), 'The note stays as the hook set it.' );
+		self::assertSame( array( 'red' ), self::meta_a( 'post', $about_a, 'color' ), 'The color was never written.' );
+		$write = self::writes( self::run_status( $run_id ) )[0];
+		self::assertSame( 'row', $write['parts']['object']['deviated']['part'], json_encode( $write ) );
+		self::assertStringContainsString( 'changed the part meta:note besides it', $write['parts']['object']['deviated']['why'] );
+	}
+
 	public function testANewPostWithAPlainKeyGoesAndOneWhoseRightTheNewPostRefusesStaysAsARest(): void {
 		// Decision 28: a new post takes the keys whose right follows the right
 		// at the post itself (branch 9: before, any meta locked a new post).

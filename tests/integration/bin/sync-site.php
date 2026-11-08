@@ -26,7 +26,7 @@
  * (post, for good), trash_post (post), add_term_meta and update_term_meta (term, key, value), update_term
  * (term, taxonomy, args of wp_update_term()), push (args of wp_site_push,
  * exit_at: a hook at which the process exits inside a boundary, exit_key: only for this meta key), revert (args of
- * wp_site_revert, exit_at and exit_key as for push), raw_post (post, set: columns written
+ * wp_site_revert, exit_at and exit_key as for push; hook_meta: post, key, value a save_post hook writes), raw_post (post, set: columns written
  * by SQL), term_order (post, term, taxonomy, order: the order of that relationship by SQL) and wp_version (version: the
  * $wp_version the steps after it see), and write_access (the site mode
  * Full, as a person switches it on), staging_raw and staging_raw_set
@@ -233,6 +233,21 @@ foreach ( $ab_it_steps as $ab_it_i => $ab_it_step ) {
 					},
 					1,
 					4
+				);
+			}
+			if ( isset( $ab_it_step['hook_meta'] ) ) {
+				// A hook of the site that changes a meta value of the post as it
+				// is saved (save_post; Z8 branch 9, Codex round 1, A1): post, key, value.
+				$ab_it_hook = (array) $ab_it_step['hook_meta'];
+				add_action(
+					'save_post',
+					static function ( $post_id ) use ( $ab_it_hook ) {
+						if ( (int) $post_id === (int) $ab_it_hook['post'] ) {
+							update_post_meta( (int) $post_id, (string) $ab_it_hook['key'], wp_slash( (string) $ab_it_hook['value'] ) );
+						}
+					},
+					10,
+					1
 				);
 			}
 			$_SERVER['DOCUMENT_ROOT'] = AB_MCP_IT_Sites::docroot( $ab_it_key );
