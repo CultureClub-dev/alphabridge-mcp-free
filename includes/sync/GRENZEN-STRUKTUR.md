@@ -174,7 +174,14 @@ Position, die das Theme hier nicht registriert, in der Prüfung des Laufs
   derselben Werte mit ihren Lesern gezählt; eine Adresse mit Id sperrt dort
   also nicht noch einmal. Das Netz läuft damit über jeden Inhalt zweimal
   (in der Art und im Export); das kostet Zeit beim Export, nicht beim
-  Schreiben. Prüffälle
+  Schreiben. Eine Meta-Zeile mit dem Namen eines Zugangsdatums (B9), die
+  erst danach in den Inhalt käme, fällt dort heraus und wird in `b9`
+  genannt (Codex-Runde 3, C), so wie die Arten einen solchen Schlüssel aus
+  Form und Inhalt lassen (GRENZEN-INHALTE: nie Teil, nie gepackt). Gewählt
+  ist das Entfernen statt des Sperrens, weil die Arten an dieser Stelle
+  entfernen: ein gesperrtes Objekt hielte zurück, was die Arten packen, und
+  beide liefen auseinander; der Wert geht so wie dort nie ins Paket, und
+  der Plan erfährt über `b9`, dass der Schlüssel besteht. Prüffälle
   `testACredentialInTheVersionOfTheThemeOfTheCssLandsInNoPackage` (im
   Klartext und in Base64) und
   `SyncStructureWritersTest::testTheFinishedContentOfAnObjectGoesThroughTheCredentialCheckOnceMore`.

@@ -706,7 +706,10 @@ final class AB_MCP_Sync_Export {
 	 * version of the theme of the CSS came after the check of the form):
 	 * each column of the row as the kinds check a column (the content of the
 	 * CSS read as CSS), each meta row by its key and value, the names and
-	 * slugs of the terms, anything else as a value. Each unit as the kinds
+	 * slugs of the terms, anything else as a value. A meta row whose key is
+	 * the name of a credential (B9) is left out of the content and named in
+	 * b9, as the kinds leave such a key out of form and content (Codex round
+	 * 3 of branch 11, C). Each unit as the kinds
 	 * check one (check_unit()): the credential check, then the net over its
 	 * raw value (AB_MCP_Sync_Net::check(): every layer of it, its decodings,
 	 * base64, data:; Codex round 3 of branch 11, A8). A credential in any of
@@ -740,12 +743,22 @@ final class AB_MCP_Sync_Export {
 					}
 				}
 			} elseif ( 'meta' === $part && is_array( $value ) ) {
+				$kept = array();
 				foreach ( $value as $pair ) {
 					if ( is_array( $pair ) && isset( $pair[0] ) && array_key_exists( 1, $pair ) ) {
-						self::check_unit( $acc, $kind, 'meta:' . (string) $pair[0], $pair[1], (string) $pair[0] );
+						// A key named as a credential (B9) is no part: left out of
+						// the content and named in b9, as the kinds leave it out of
+						// form and content (Codex round 3 of branch 11, C).
+						if ( ! self::check_unit( $acc, $kind, 'meta:' . (string) $pair[0], $pair[1], (string) $pair[0] ) ) {
+							continue;
+						}
 					} else {
 						self::check_unit( $acc, $kind, 'content:meta', $pair, '' );
 					}
+					$kept[] = $pair;
+				}
+				if ( count( $kept ) !== count( $value ) ) {
+					$object['content']['meta'] = $kept;
 				}
 			} elseif ( 'terms' === $part && is_array( $value ) ) {
 				foreach ( $value as $term ) {

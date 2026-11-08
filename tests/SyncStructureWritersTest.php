@@ -467,6 +467,18 @@ final class SyncStructureWritersTest extends TestCase {
 		$markup                                   = $css;
 		$markup['content']['row']['post_content'] = 'a::after{content:"<b>new</b>"}';
 		self::assertSame( $markup, \AB_MCP_Sync_Export::checked_content( $markup ), 'Markup in a string of the CSS: as it was.' );
+		// A meta key named as a credential (B9; Codex round 3 of branch 11,
+		// C): left out of the content and named in b9, as the kinds leave it
+		// out of form and content; the object stays packed with its other
+		// parts, and the value is nowhere in it.
+		$named                     = $css;
+		$named['kind']             = 'post';
+		$named['content']['meta']  = array( array( 'note', 'Hello' ), array( 'api_key', 'synthetic-review-value' ), array( 'note', 'Again' ) );
+		$kept                      = \AB_MCP_Sync_Export::checked_content( $named );
+		self::assertSame( array( array( 'note', 'Hello' ), array( 'note', 'Again' ) ), $kept['content']['meta'] );
+		self::assertSame( array( 'meta:api_key' ), $kept['credentials']['b9'] );
+		self::assertFalse( \AB_MCP_Sync_Export::credential_locked( $kept['locks'] ), 'Not held: the kinds pack such an object without the key.' );
+		self::assertStringNotContainsString( 'synthetic-review-value', (string) json_encode( $kept ) );
 		// The content of the CSS read as CSS (an escape the CSS reader decodes).
 		$escaped                                   = $css;
 		$escaped['content']['row']['post_content'] = 'a{content:"\\70 assword=synthetic-review-value"}';
