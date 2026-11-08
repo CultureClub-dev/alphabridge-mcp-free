@@ -1126,10 +1126,14 @@ final class AB_MCP_Sync_Engine {
 		// (AB_MCP_Sync_Backup::fits(); GitHub Codex round 6 on free#137, P2:
 		// the plan reserves from the rows of this site, and the writer holds
 		// the run to its booking before each backup).
+		// A new object leaves a mark; one whose step sets fields of a row other
+		// objects share (the positions of a new menu, branch 11) keeps those
+		// fields as they are now, for its way back (decision 23: the
+		// positions go back, the new object stays).
 		$kept = null === $current ? array(
 			'absent'   => true,
 			'identity' => $prepared['identity'],
-		) : $current;
+		) + ( method_exists( $w, 'shared_state' ) ? array( 'parts' => $w::shared_state() ) : array() ) : $current;
 		$fits = AB_MCP_Sync_Backup::fits( $run_id, $kept );
 		if ( is_wp_error( $fits ) ) {
 			return self::fail_step( $run_id, $seq, 'begun', $fits->get_error_message(), $journal );
@@ -2547,6 +2551,16 @@ final class AB_MCP_Sync_Engine {
 			if ( null !== $made_by ) {
 				// The files the run laid stay as well (decision 26), named.
 				$result = self::with_files( $result, $journal, $made_by );
+				// The fields of a shared row the step set for its new object (a
+				// position of a new menu; decision 23, «setzt … die Positionen
+				// zurück»): put back where they are still the step's own.
+				$shared = self::shared_back( $run_id, $seq, $journal, $live_id, $what );
+				if ( null !== $shared ) {
+					$result['parts'] = $shared['parts'];
+					if ( ! $shared['all_back'] ) {
+						$result['message'] .= ' A field of a row it shares with other objects (a position of a menu) did not go back whole: see parts.';
+					}
+				}
 			}
 			$ended = self::end_step( $run_id, $seq, array( 'state' => 'done', 'result' => $result, 'pair_id' => $pair_id ) );
 			return is_wp_error( $ended ) ? $ended : array( 'next' => $result['message'] );
@@ -2806,6 +2820,81 @@ final class AB_MCP_Sync_Engine {
 			}
 		}
 		return $result;
+	}
+
+	/**
+	 * The way back of the fields a step set in rows other objects share for a
+	 * new object it made (a position of a new menu; branch 11, decision 23):
+	 * the object stays as a rest, these fields go back as any part does
+	 * (put_back(): where they are the step's own and read as it left them),
+	 * from the fields the backup of the new object holds (shared_state()),
+	 * under the takeover lock. Null where the kind has none, or the step set
+	 * none.
+	 *
+	 * @param int        $run_id  Run.
+	 * @param int        $seq     Step of the way back.
+	 * @param array      $journal Journal of the step that made the object.
+	 * @param int|string $live_id The object.
+	 * @param array      $what    forward_run, forward_seq.
+	 * @return array{all_back:bool,parts:array}|null
+	 */
+	private static function shared_back( $run_id, $seq, array $journal, $live_id, array $what ) {
+		$w = self::writer_of( $journal );
+		if ( null === $w || ! method_exists( $w, 'shared_part' ) ) {
+			return null;
+		}
+		$parts = array();
+		foreach ( $journal['parts'] as $part ) {
+			if ( is_array( $part ) && isset( $part['part'] ) && $w::shared_part( (string) $part['part'] ) ) {
+				$parts[] = $part;
+			}
+		}
+		if ( array() === $parts ) {
+			return null;
+		}
+		$left   = static function ( $note ) use ( $parts ) {
+			$out = array();
+			foreach ( $parts as $part ) {
+				$out[] = array(
+					'part'  => (string) $part['part'],
+					'state' => 'left',
+					'note'  => (string) $note,
+				);
+			}
+			return array(
+				'all_back' => false,
+				'parts'    => $out,
+			);
+		};
+		$covers = $w::guard_of( $live_id, $w::subtype_of( $journal['object'] ) );
+		$guard  = AB_MCP_Sync_Guard::begin( $run_id, $seq, $covers['posts'], $covers['taxonomies'], isset( $covers['options'] ) ? $covers['options'] : array(), $covers['terms'] );
+		if ( is_wp_error( $guard ) ) {
+			return $left( $guard->get_error_message() );
+		}
+		$backup = AB_MCP_Sync_Backup::get( isset( $what['forward_run'] ) ? (int) $what['forward_run'] : $run_id, $journal['backup'] );
+		if ( is_wp_error( $backup ) || ! is_array( $backup ) || ! isset( $backup['parts'] ) || ! is_array( $backup['parts'] ) ) {
+			return $left( 'The backup of the step holds no fields of the shared row, so they are left as they are; set them by hand in wp-admin.' );
+		}
+		if ( ! array_key_exists( 'deviated', $journal['object'] ) ) {
+			foreach ( $parts as $k => $part ) {
+				$parts[ $k ]['deviated'] = 'earlier_build';
+			}
+		} elseif ( empty( $journal['object']['deviated'] ) && self::marked_foreign( $journal ) ) {
+			foreach ( $parts as $k => $part ) {
+				$parts[ $k ]['deviated'] = 'foreign_mark';
+			}
+		}
+		$journal['parts'] = $parts;
+		$put              = self::put_back( $journal, $live_id, $backup );
+		$w::post_write( $live_id );
+		$out = array();
+		foreach ( $parts as $i => $part ) {
+			$out[] = array( 'part' => $part['part'] ) + $put['parts'][ $i ];
+		}
+		return array(
+			'all_back' => $put['all_back'],
+			'parts'    => $out,
+		);
 	}
 
 	/**

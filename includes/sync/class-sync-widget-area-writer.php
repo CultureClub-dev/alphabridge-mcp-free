@@ -74,7 +74,11 @@ final class AB_MCP_Sync_Widget_Area_Writer {
 	/** The row of the areas. */
 	const AREAS = 'sidebars_widgets';
 
-	/** The rest of the row of a widget that is not there yet, as the widgets of WordPress write it first (WP_Widget::save_settings()). */
+	/**
+	 * The rest of the row of a widget that holds no instance yet (not there,
+	 * or the empty list the install of WordPress leaves), as the widgets of
+	 * WordPress write it with the first one (WP_Widget::save_settings()).
+	 */
 	const FRESH_REST = array( '_multiwidget' => 1 );
 
 	/**
@@ -109,7 +113,7 @@ final class AB_MCP_Sync_Widget_Area_Writer {
 		if ( null !== $held ) {
 			return $held;
 		}
-		if ( ! isset( $line['content']['instances'], $line['form'] ) || ! is_array( $line['content']['instances'] ) || ! is_array( $line['form'] ) ) {
+		if ( ! isset( $line['content']['meta'], $line['form'] ) || ! is_array( $line['content']['meta'] ) || ! is_array( $line['form'] ) ) {
 			return AB_MCP_Sync_Post_Writer::locked( 'post:content_missing', sprintf( 'the package carries no instances of the area %s', $area ) );
 		}
 		$state = self::state( $area );
@@ -132,15 +136,17 @@ final class AB_MCP_Sync_Widget_Area_Writer {
 		$staging = array();
 		$map     = array();
 		$writes  = array();
-		foreach ( $line['content']['instances'] as $one ) {
-			if ( ! is_array( $one ) || ! isset( $one['id'], $one['base'] ) || ! is_string( $one['id'] ) || ! is_string( $one['base'] ) ) {
-				return AB_MCP_Sync_Post_Writer::locked( 'post:content_missing', sprintf( 'the package names an instance of the area %s without its id', $area ) );
-			}
-			$id   = $one['id'];
-			$base = $one['base'];
-			if ( ! isset( $one['number'], $one['settings'] ) || ! is_int( $one['number'] ) || ! is_string( $one['settings'] ) || $id !== $base . '-' . $one['number'] ) {
+		foreach ( $line['content']['meta'] as $pair ) {
+			$id   = AB_MCP_Sync_Post_Writer::bytes( $pair[0] );
+			$raw  = AB_MCP_Sync_Post_Writer::bytes( $pair[1] );
+			$base = self::base_of( $id );
+			if ( '' === $base || '' === $raw ) {
 				return AB_MCP_Sync_Post_Writer::locked( 'widget_area:widget_unregistered', sprintf( 'the instance %s of the staging site is no widget with a number and settings', $id ) );
 			}
+			$one = array(
+				'number'   => (int) substr( $id, strlen( $base ) + 1 ),
+				'settings' => $raw,
+			);
 			if ( null === AB_MCP_Widget_Writer::widget( $base ) ) {
 				return AB_MCP_Sync_Post_Writer::locked( 'widget_area:widget_unregistered', sprintf( 'the widget %s of the instance %s is not registered on this site', $base, $id ) );
 			}
@@ -470,7 +476,8 @@ final class AB_MCP_Sync_Widget_Area_Writer {
 				return self::unread( 'widget_' . $base );
 			}
 			$value  = false === $row ? array() : $row['value'];
-			$others = false === $row ? self::FRESH_REST : array();
+			$fresh  = array() === $value;
+			$others = $fresh ? self::FRESH_REST : array();
 			foreach ( $value as $key => $settings ) {
 				if ( is_int( $key ) ) {
 					$parts[ 'instance:' . $base . '-' . $key ] = AB_MCP_Sync_Shared_Row::field( $settings );
@@ -482,7 +489,7 @@ final class AB_MCP_Sync_Widget_Area_Writer {
 			$rows[ $base ]                   = array(
 				'raw'    => false === $row ? null : $row['raw'],
 				'value'  => $value,
-				'marked' => false === $row || ! empty( $value['_multiwidget'] ),
+				'marked' => $fresh || ! empty( $value['_multiwidget'] ),
 			);
 		}
 		return array(
@@ -652,7 +659,7 @@ final class AB_MCP_Sync_Widget_Area_Writer {
 			return self::unread( 'widget_' . $write['base'] );
 		}
 		$value = false === $row ? array() : $row['value'];
-		if ( false !== $row && empty( $value['_multiwidget'] ) ) {
+		if ( array() !== $value && empty( $value['_multiwidget'] ) ) {
 			return AB_MCP_Sync_Post_Writer::locked( 'widget_area:widget_unregistered', sprintf( 'the row widget_%s of this site was not written by the widgets of WordPress (no _multiwidget), so it is not changed', $write['base'] ) );
 		}
 		$old   = isset( $value[ $write['number'] ] ) && is_array( $value[ $write['number'] ] ) ? $value[ $write['number'] ] : array();

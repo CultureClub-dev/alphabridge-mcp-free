@@ -98,10 +98,10 @@ final class AB_MCP_Sync_Option_Writer {
 		if ( 'core' !== $class['status'] ) {
 			return self::unclassified( $name, $class );
 		}
-		if ( ! isset( $line['content']['value'], $line['form'] ) || ! is_array( $line['form'] ) ) {
+		if ( ! isset( $line['content']['row']['value'], $line['form'] ) || ! is_array( $line['form'] ) ) {
 			return AB_MCP_Sync_Post_Writer::locked( 'post:content_missing', sprintf( 'the package carries no value of the option %s', $name ) );
 		}
-		$raw     = AB_MCP_Sync_Post_Writer::bytes( $line['content']['value'] );
+		$raw     = AB_MCP_Sync_Post_Writer::bytes( $line['content']['row']['value'] );
 		$plan    = AB_MCP_Sync_Refs::plan( $ctx['map'], $ctx['addresses'], isset( $ctx['routes'] ) ? $ctx['routes'] : null );
 		$changed = false;
 		$written = AB_MCP_Sync_Refs::rewrite_option( $class['schema'], $raw, $plan, $changed );

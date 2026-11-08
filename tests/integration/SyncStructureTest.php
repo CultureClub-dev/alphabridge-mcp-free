@@ -1,0 +1,874 @@
+<?php
+/**
+ * Z8 branch 11 (heikel/z8-struktur) on two WordPress sites: the kinds of the
+ * structure of a site, end to end through wp_site_push and wp_site_revert.
+ * Site B is the staging site, in processes of its own; site A, this
+ * process, the production site (as tests/integration/SyncContentTest.php).
+ *
+ * The ordinary cases, each over and back (the plan of Z8, branch 11):
+ * - a changed menu item (title, target, order) and a new item in a menu
+ *   there; the way back puts the changed ones back and leaves the new one as
+ *   a rest;
+ * - a new menu at a position of the theme; the way back leaves the menu as a
+ *   rest and puts the position back;
+ * - a changed text widget and image widget in a sidebar; a new instance
+ *   makes the whole area a rest with its mapping kept (decision 23);
+ * - changed Additional CSS of the active theme, the rendered page showing it
+ *   and, after the way back, the CSS before;
+ * - changed core options (blogname, blogdescription, posts_per_page, the
+ *   permalinks with the rewrite rules built anew).
+ * No step and no step of the way back deletes a post, a term or an option of
+ * the site (decisions 21, 22).
+ *
+ * @package AlphaBridge_MCP
+ */
+
+declare( strict_types = 1 );
+
+namespace AlphaBridge\Tests\Integration;
+
+use AB_MCP_IT_Sites;
+use AB_MCP_IT_Sync_Steps;
+use AB_MCP_Protected_Store;
+use AB_MCP_REST_Controller;
+use AB_MCP_Staging;
+use AB_MCP_Sync_Anchor;
+use AB_MCP_Sync_Backup;
+use AB_MCP_Sync_Engine;
+use AB_MCP_Sync_Exclusions;
+use AB_MCP_Sync_Guard;
+use AB_MCP_Sync_Import;
+use AB_MCP_Sync_Pairs;
+use AB_MCP_Sync_Report;
+use AB_MCP_Sync_Resources;
+use AB_MCP_Sync_Schema;
+use AB_MCP_Tool_Registry;
+use AB_MCP_Tools_Staging;
+use AB_MCP_Widget_Writer;
+use PHPUnit\Framework\TestCase;
+use RuntimeException;
+
+require_once AB_MCP_DIR . 'includes/sync/class-sync-import.php';
+require_once AB_MCP_DIR . 'includes/sync/class-sync-pairs-tool.php';
+require_once AB_MCP_DIR . 'includes/sync/class-sync-report.php';
+require_once AB_MCP_DIR . 'includes/sync/class-sync-push.php';
+require_once AB_MCP_DIR . 'includes/sync/class-sync-revert.php';
+require_once AB_MCP_DIR . 'includes/tools/class-tools-staging.php';
+require_once AB_MCP_DIR . 'includes/tools/class-widget-writer.php';
+
+final class SyncStructureTest extends TestCase {
+
+	/** The date every page of these tests carries, on both sites. */
+	private const DATE = '2026-10-01 10:00:00';
+
+	/** @var string|null DOCUMENT_ROOT before the case. */
+	private $docroot_before;
+
+	/** @var array[] The deletions the filters of a case saw (watch_deletions()). */
+	private $deletions = array();
+
+	protected function setUp(): void {
+		AB_MCP_IT_Sites::reset( 'a' );
+		AB_MCP_IT_Sites::reset( 'b' );
+		self::wipe();
+		$this->docroot_before     = $_SERVER['DOCUMENT_ROOT'] ?? null;
+		$_SERVER['DOCUMENT_ROOT'] = AB_MCP_IT_Sites::docroot( 'a' );
+		AB_MCP_Protected_Store::forget();
+		AB_MCP_Sync_Schema::forget();
+		AB_MCP_Sync_Backup::forget();
+		AB_MCP_Sync_Guard::disarm();
+		delete_option( AB_MCP_Sync_Guard::OPTION );
+		delete_option( \AB_MCP_Change_Lock::OPTION );
+		wp_set_current_user( self::admin() );
+		self::assertIsArray( AB_MCP_Sync_Schema::install() );
+		// The positions of the theme of site A (Twenty Twenty-Five registers
+		// none; a classic theme would, register_nav_menus()).
+		register_nav_menus(
+			array(
+				'primary' => 'Primary',
+				'footer'  => 'Footer',
+			)
+		);
+		$this->deletions = array();
+		// The caches of this process, after the rows were put back.
+		wp_cache_flush();
+		$GLOBALS['_wp_sidebars_widgets'] = array();
+	}
+
+	protected function tearDown(): void {
+		if ( null === $this->docroot_before ) {
+			unset( $_SERVER['DOCUMENT_ROOT'] );
+		} else {
+			$_SERVER['DOCUMENT_ROOT'] = $this->docroot_before;
+		}
+		AB_MCP_Protected_Store::forget();
+		AB_MCP_Sync_Backup::forget();
+		AB_MCP_Sync_Guard::disarm();
+		AB_MCP_Sync_Engine::$probe    = null;
+		AB_MCP_Sync_Resources::$probe = null;
+		AB_MCP_Sync_Resources::$time  = null;
+		delete_option( \AB_MCP_Change_Lock::OPTION );
+		unregister_nav_menu( 'primary' );
+		unregister_nav_menu( 'footer' );
+		remove_all_filters( 'pre_delete_post' );
+		remove_all_filters( 'pre_trash_post' );
+		remove_all_actions( 'pre_delete_term' );
+		remove_all_actions( 'delete_option' );
+		wp_cache_flush();
+	}
+
+	public static function tearDownAfterClass(): void {
+		AB_MCP_IT_Sites::reset( 'a' );
+		AB_MCP_IT_Sites::reset( 'b' );
+		self::wipe();
+		AB_MCP_Protected_Store::forget();
+		AB_MCP_Sync_Schema::forget();
+	}
+
+	/* ------------------------------------------------------------ helpers */
+
+	private static function admin(): int {
+		return (int) AB_MCP_IT_Sites::site( 'a' )['admin']['user_id'];
+	}
+
+	private static function wipe(): void {
+		$root = (string) AB_MCP_IT_Sites::state()['root'];
+		self::remove_tree( $root . '/ab-mcp-store', $root );
+	}
+
+	private static function remove_tree( string $path, string $root ): void {
+		if ( 0 !== strpos( $path, $root . '/' ) ) {
+			throw new RuntimeException( "Will not remove $path: it is not in AB_IT_ROOT." );
+		}
+		if ( is_link( $path ) || is_file( $path ) ) {
+			unlink( $path );
+			return;
+		}
+		if ( ! is_dir( $path ) ) {
+			return;
+		}
+		foreach ( array_diff( (array) scandir( $path ), array( '.', '..' ) ) as $entry ) {
+			self::remove_tree( $path . '/' . $entry, $root );
+		}
+		rmdir( $path );
+	}
+
+	/** Steps on site B. */
+	private static function b( array $steps ): array {
+		return AB_MCP_IT_Sync_Steps::run( 'b', $steps );
+	}
+
+	/** B the staging site of A, A the production site of B with B's key confirmed. */
+	private static function pair(): void {
+		$b = self::b(
+			array(
+				array( 'op' => 'write_access' ),
+				array(
+					'op'          => 'staging_save',
+					'role'        => 'staging',
+					'partner_url' => AB_MCP_IT_Sites::url( 'a' ),
+					'source'      => 'form',
+				),
+				array(
+					'op' => 'pairing_code',
+					'as' => 'code',
+				),
+			)
+		);
+		\AB_MCP_Settings::set( \AB_MCP_Site_Mode::KEY, \AB_MCP_Site_Mode::FULL );
+		$saved = AB_MCP_Staging::save( 'production', AB_MCP_IT_Sites::url( 'b' ), 'staging', self::admin(), 'form' );
+		self::assertIsArray( $saved, is_wp_error( $saved ) ? $saved->get_error_message() : '' );
+		$prepared = AB_MCP_Sync_Anchor::prepare_from_code( $b['code'], self::admin() );
+		self::assertIsArray( $prepared, is_wp_error( $prepared ) ? $prepared->get_error_message() : '' );
+		self::assertIsArray( AB_MCP_Sync_Anchor::confirm( $prepared['fingerprint'], self::admin() ) );
+	}
+
+	/** The arguments of a page, the same on both sites. */
+	private static function page( string $name ): array {
+		return array(
+			'post_type'     => 'page',
+			'post_status'   => 'publish',
+			'post_title'    => ucfirst( $name ),
+			'post_name'     => $name,
+			'post_content'  => 'The page ' . $name . '.',
+			'post_author'   => 1,
+			'post_date'     => self::DATE,
+			'post_date_gmt' => self::DATE,
+		);
+	}
+
+	/** A post of A, in this process. */
+	private static function on_a( array $args ): int {
+		$id = wp_insert_post( wp_slash( $args ), true );
+		self::assertIsInt( $id, is_wp_error( $id ) ? $id->get_error_message() : '' );
+		return $id;
+	}
+
+	/** One step on B, its answer. */
+	private static function one_b( array $step ) {
+		return self::b( array( $step + array( 'as' => 'out' ) ) )['out'];
+	}
+
+	/** B's packages of before removed (an account keeps three open exports at most). */
+	private static function clear_b(): void {
+		self::b( array( array( 'op' => 'store_cleanup', 'now' => time() + 2 * DAY_IN_SECONDS ) ) );
+	}
+
+	/** B packs its inventory and A takes it over: the package ids. */
+	private static function staged(): array {
+		self::clear_b();
+		$ids    = array();
+		$cursor = null;
+		do {
+			$step = array(
+				'op'      => 'export',
+				'purpose' => 'inventory',
+				'as'      => 'package',
+			);
+			if ( null !== $cursor ) {
+				$step['cursor'] = $cursor;
+			}
+			$package = self::b( array( $step ) )['package'];
+			$cursor  = $package['cursor'];
+			$ids[]   = self::import_package( $package, 'inventory', null );
+		} while ( null !== $cursor && count( $ids ) < 50 );
+		return $ids;
+	}
+
+	/** A package of B taken over here, chunk by chunk. */
+	private static function import_package( array $package, string $purpose, ?string $report_hash ): string {
+		$begin = array(
+			'package_id' => $package['package_id'],
+			'manifest'   => $package['manifest'],
+			'purpose'    => $purpose,
+		);
+		if ( null !== $report_hash ) {
+			$begin['report_hash'] = $report_hash;
+		}
+		$state = AB_MCP_Sync_Import::call( $begin );
+		self::assertIsArray( $state, is_wp_error( $state ) ? $state->get_error_message() : '' );
+		$steps = array();
+		foreach ( range( 0, $package['chunks'] - 1 ) as $i ) {
+			$steps[] = array(
+				'op'         => 'export_chunk',
+				'package_id' => $package['package_id'],
+				'chunk'      => $i,
+				'as'         => 'c' . $i,
+			);
+		}
+		$data = self::b( $steps );
+		foreach ( range( 0, $package['chunks'] - 1 ) as $i ) {
+			$state = AB_MCP_Sync_Import::call(
+				array(
+					'package_id' => $package['package_id'],
+					'chunk'      => $i,
+					'data'       => $data[ 'c' . $i ]['data'],
+				)
+			);
+			self::assertIsArray( $state, is_wp_error( $state ) ? $state->get_error_message() : '' );
+		}
+		self::assertTrue( $state['complete'] );
+		return (string) $package['package_id'];
+	}
+
+	/** B packs the objects of a report and A takes them over: the package id. */
+	private static function objects( string $report_hash, array $refs ): string {
+		self::clear_b();
+		$package = self::b(
+			array(
+				array(
+					'op'          => 'export',
+					'purpose'     => 'objects',
+					'report_hash' => $report_hash,
+					'refs'        => $refs,
+					'as'          => 'package',
+				),
+			)
+		)['package'];
+		self::assertSame( 'objects', $package['purpose'], json_encode( $package ) );
+		return self::import_package( $package, 'objects', $report_hash );
+	}
+
+	/** The definition of a tool of the staging group. */
+	private static function def( string $name ): array {
+		$r = new AB_MCP_Tool_Registry();
+		AB_MCP_Tools_Staging::register( $r );
+		return $r->get( $name );
+	}
+
+	/** A tool through the gate of the plugin, in this process. */
+	private static function gated( string $name, array $a ) {
+		return AB_MCP_REST_Controller::run_tool( $name, self::def( $name ), $a );
+	}
+
+	/** Every entry of these categories of a fresh proposal paired; the proposal. */
+	private static function paired( array $ids, array $categories = array( 'equal' ) ): array {
+		$answer = self::gated( 'wp_site_pairs', array( 'action' => 'propose', 'packages' => $ids ) );
+		while ( is_array( $answer ) && false === $answer['done'] ) {
+			$answer = self::gated( 'wp_site_pairs', array( 'action' => 'propose', 'proposal_id' => $answer['proposal_id'] ) );
+		}
+		self::assertIsArray( $answer, is_wp_error( $answer ) ? $answer->get_error_message() : '' );
+		$args    = array(
+			'action'      => 'confirm',
+			'proposal_id' => $answer['proposal_id'],
+			'categories'  => $categories,
+		);
+		$preview = self::gated( 'wp_site_pairs', $args );
+		self::assertIsArray( $preview, is_wp_error( $preview ) ? $preview->get_error_message() : '' );
+		$done = self::gated( 'wp_site_pairs', $args + array( 'confirm_token' => $preview['confirm_token'] ) );
+		self::assertIsArray( $done, is_wp_error( $done ) ? $done->get_error_message() : '' );
+		return $done;
+	}
+
+	/** wp_site_diff in this process, worked out to its end and paged: every entry. */
+	private static function report( array $ids ): array {
+		$answer = AB_MCP_Sync_Report::call( array( 'packages' => $ids ) );
+		$calls  = 1;
+		while ( is_array( $answer ) && false === $answer['done'] ) {
+			$answer = AB_MCP_Sync_Report::call( array( 'report_id' => $answer['report_id'] ) );
+			++$calls;
+			self::assertLessThan( 300, $calls );
+		}
+		self::assertIsArray( $answer, is_wp_error( $answer ) ? $answer->get_error_message() : '' );
+		$all   = $answer['entries'];
+		$page  = $answer;
+		$pages = 0;
+		while ( null !== $page['cursor'] ) {
+			$page = AB_MCP_Sync_Report::call( array( 'report_id' => $answer['report_id'], 'cursor' => $page['cursor'] ) );
+			self::assertIsArray( $page );
+			$all = array_merge( $all, $page['entries'] );
+			++$pages;
+			self::assertLessThan( 300, $pages );
+		}
+		$answer['all'] = $all;
+		return $answer;
+	}
+
+	/** The entry of an object by its kind and the ref of one side. */
+	private static function entry( array $entries, string $kind, string $side, string $ref ): array {
+		foreach ( $entries as $entry ) {
+			if ( $kind === $entry['kind'] && isset( $entry[ $side ]['ref'] ) && (string) $entry[ $side ]['ref'] === $ref ) {
+				return $entry;
+			}
+		}
+		self::fail( "No entry for $kind $ref on the side $side: " . json_encode( array_map( static fn( $e ) => array( $e['kind'], $e['staging']['ref'] ?? null, $e['live']['ref'] ?? null, $e['result'], $e['action'] ), array_filter( $entries, static fn( $e ) => $e['kind'] === $kind ) ) ) );
+	}
+
+	/** The report, the objects package and the arguments of a plan for these entries (kind, side, ref). */
+	private static function planned( array $wanted ): array {
+		$report = self::report( self::staged() );
+		$select = array();
+		$refs   = array();
+		foreach ( $wanted as list( $kind, $side, $ref ) ) {
+			$entry    = self::entry( $report['all'], $kind, $side, (string) $ref );
+			$select[] = (int) $entry['n'];
+			if ( isset( $entry['staging']['ref'] ) ) {
+				$refs[] = array(
+					'kind' => $entry['kind'],
+					'ref'  => (string) $entry['staging']['ref'],
+				);
+			}
+		}
+		$package = self::objects( $report['report_hash'], $refs );
+		return array(
+			'report' => $report,
+			'args'   => array(
+				'action'    => 'plan',
+				'report_id' => $report['report_id'],
+				'select'    => $select,
+				'packages'  => array( $package ),
+			),
+		);
+	}
+
+	/** A plan confirmed in this process: the run. */
+	private static function begun( array $args ): array {
+		$preview = self::gated( 'wp_site_push', $args );
+		self::assertIsArray( $preview, is_wp_error( $preview ) ? $preview->get_error_message() : '' );
+		self::assertTrue( $preview['confirm_required'], json_encode( $preview ) );
+		$run = self::gated( 'wp_site_push', $args + array( 'confirm_token' => $preview['confirm_token'] ) );
+		self::assertIsArray( $run, is_wp_error( $run ) ? $run->get_error_message() : '' );
+		self::assertSame( 'open', $run['state'] );
+		return $run;
+	}
+
+	/** Steps until the run is closed, at most $max. */
+	private static function finish( int $run_id, int $max = 14 ): array {
+		$answer = null;
+		for ( $i = 0; $i < $max; $i++ ) {
+			$answer = self::gated( 'wp_site_push', array( 'action' => 'next', 'run_id' => $run_id ) );
+			self::assertIsArray( $answer, is_wp_error( $answer ) ? $answer->get_error_message() : '' );
+			if ( in_array( $answer['state'], AB_MCP_Sync_Schema::CLOSED, true ) ) {
+				return $answer;
+			}
+		}
+		self::fail( 'The run did not close within ' . $max . ' steps: ' . json_encode( $answer ) );
+	}
+
+	/** The status of a run, its steps with their journals. */
+	private static function run_status( int $run_id ): array {
+		$status = self::gated( 'wp_site_push', array( 'action' => 'status', 'run_id' => $run_id ) );
+		self::assertIsArray( $status, is_wp_error( $status ) ? $status->get_error_message() : '' );
+		return $status;
+	}
+
+	/** The way back of a run, planned, confirmed and run to its close: its status. */
+	private static function back( int $run_id ): array {
+		$args    = array(
+			'action' => 'plan',
+			'run_id' => $run_id,
+		);
+		$preview = self::gated( 'wp_site_revert', $args );
+		self::assertIsArray( $preview, is_wp_error( $preview ) ? $preview->get_error_message() : '' );
+		$begun = self::gated( 'wp_site_revert', $args + array( 'confirm_token' => $preview['confirm_token'] ) );
+		self::assertIsArray( $begun, is_wp_error( $begun ) ? $begun->get_error_message() : '' );
+		$answer = null;
+		for ( $i = 0; $i < 14; $i++ ) {
+			$answer = self::gated( 'wp_site_revert', array( 'action' => 'next', 'run_id' => (int) $begun['run_id'] ) );
+			self::assertIsArray( $answer, is_wp_error( $answer ) ? $answer->get_error_message() : '' );
+			if ( in_array( $answer['state'], AB_MCP_Sync_Schema::CLOSED, true ) ) {
+				return self::gated( 'wp_site_revert', array( 'action' => 'status', 'run_id' => (int) $begun['run_id'] ) );
+			}
+		}
+		self::fail( 'The way back did not close: ' . json_encode( $answer ) );
+	}
+
+	/** The write steps of a status. */
+	private static function writes( array $status ): array {
+		return array_values( array_filter( $status['steps'], static fn( $s ) => 'write' === $s['op'] ) );
+	}
+
+	/** Each write step done, without a deviation, every part read as its target. */
+	private static function assertWrittenWhole( array $status ): void {
+		foreach ( self::writes( $status ) as $step ) {
+			self::assertSame( 'done', $step['state'], json_encode( $step ) );
+			self::assertNull( $step['parts']['object']['deviated'], json_encode( $step['parts'] ) );
+			foreach ( $step['parts']['parts'] as $part ) {
+				self::assertSame( 'read', $part['state'], $part['part'] . ': ' . json_encode( $part ) );
+			}
+		}
+	}
+
+	/** The rests a way back names, as kind and ref here. */
+	private static function rests( array $back ): array {
+		$out = array();
+		foreach ( $back['steps'] as $step ) {
+			if ( isset( $step['result']['rest'] ) ) {
+				$out[] = array( $step['result']['rest']['kind'], $step['result']['rest']['live_ref'] );
+			}
+		}
+		return $out;
+	}
+
+	/** The value of an option of a site, read from its row, unpacked. */
+	private static function option_of( string $site, string $name ) {
+		$row = AB_MCP_IT_Sites::option_row( $site, $name );
+		return null === $row ? null : maybe_unserialize( (string) $row['option_value'] );
+	}
+
+	/** The row of a post of A, read past every cache. */
+	private static function post_row_a( int $id ): array {
+		$rows = AB_MCP_IT_Sites::rows( 'a', 'posts', array( 'ID' => (string) $id ) );
+		self::assertCount( 1, $rows, "Post $id of A." );
+		unset( $rows[0]['post_modified'], $rows[0]['post_modified_gmt'] );
+		return $rows[0];
+	}
+
+	/** The meta rows of a post of A, as key => values, read past every cache. */
+	private static function meta_rows_a( int $id ): array {
+		$out = array();
+		foreach ( AB_MCP_IT_Sites::rows( 'a', 'postmeta', array( 'post_id' => (string) $id ) ) as $row ) {
+			if ( '_edit_lock' !== $row['meta_key'] ) {
+				$out[ $row['meta_key'] ][] = $row['meta_value'];
+			}
+		}
+		ksort( $out );
+		return $out;
+	}
+
+	/** The source id of the anchor. */
+	private static function source(): string {
+		return (string) AB_MCP_Sync_Anchor::active()['source_id'];
+	}
+
+	/** Filters that record every deletion of a post, a term or an option of the site. */
+	private function watch_deletions(): void {
+		add_filter(
+			'pre_delete_post',
+			function ( $check, $post ) {
+				$this->deletions[] = array( 'delete_post', (int) ( is_object( $post ) ? $post->ID : $post ) );
+				return $check;
+			},
+			1,
+			2
+		);
+		add_filter(
+			'pre_trash_post',
+			function ( $check, $post ) {
+				$this->deletions[] = array( 'trash_post', (int) ( is_object( $post ) ? $post->ID : $post ) );
+				return $check;
+			},
+			1,
+			2
+		);
+		add_action(
+			'pre_delete_term',
+			function ( $term, $taxonomy ) {
+				$this->deletions[] = array( 'delete_term', (int) $term, (string) $taxonomy );
+			},
+			1,
+			2
+		);
+		add_action(
+			'delete_option',
+			function ( $option ) {
+				if ( ! AB_MCP_Sync_Exclusions::option( (string) $option ) ) {
+					$this->deletions[] = array( 'delete_option', (string) $option );
+				}
+			},
+			1,
+			1
+		);
+	}
+
+	/** The settings of an instance as the widget's update() stores them, made in this process. */
+	private static function widget_settings( string $base, array $sent ): array {
+		$clean = AB_MCP_Widget_Writer::sanitize( $base, 2, $sent, array() );
+		self::assertIsArray( $clean, is_wp_error( $clean ) ? $clean->get_error_message() : '' );
+		return $clean;
+	}
+
+	/** The same instances in the same area of both sites, as the rows hold them. */
+	private static function widgets_on_both( array $instances, string $area = 'sidebar-1' ): void {
+		$rows = array();
+		foreach ( $instances as $id => $settings ) {
+			list( $base, $number ) = array( substr( $id, 0, strrpos( $id, '-' ) ), (int) substr( $id, strrpos( $id, '-' ) + 1 ) );
+			$rows[ $base ][ $number ] = $settings;
+		}
+		$areas            = self::option_of( 'a', 'sidebars_widgets' );
+		$areas[ $area ]   = array_merge( $areas[ $area ], array_keys( $instances ) );
+		$steps            = array();
+		foreach ( $rows as $base => $row ) {
+			$row['_multiwidget'] = 1;
+			update_option( 'widget_' . $base, $row );
+			$steps[] = array( 'op' => 'update_option', 'name' => 'widget_' . $base, 'value' => $row );
+		}
+		update_option( 'sidebars_widgets', $areas );
+		$steps[] = array( 'op' => 'update_option', 'name' => 'sidebars_widgets', 'value' => $areas );
+		self::b( $steps );
+	}
+
+	/* ------------------------------------------------------------- menus */
+
+	public function testAChangedMenuItemAndANewItemGoOverAndTheWayBackPutsTheChangedOnesBackAndLeavesTheNewOneAsARest(): void {
+		// The ordinary menu (decision 25, A5): a menu paired on both sites
+		// with an item of a page and a custom link; on staging the page item
+		// gets a title of its own and moves down, the link moves up and opens
+		// in a new tab, and a new link comes at the end. All three go over in
+		// one run through wp_update_nav_menu_item(); the way back puts the
+		// two changed items back byte for byte and leaves the new one as a
+		// rest, its pair residual. Nothing is deleted.
+		self::pair();
+		$about_a = self::on_a( self::page( 'about' ) );
+		$about_b = (int) self::one_b( array( 'op' => 'insert_post', 'args' => self::page( 'about' ) ) );
+		$menu_a  = (int) wp_create_nav_menu( 'Main' );
+		$menu_b  = (int) self::one_b( array( 'op' => 'nav_menu', 'name' => 'Main' ) );
+		$page    = static fn( int $id ) => array( 'menu-item-object-id' => $id, 'menu-item-object' => 'page', 'menu-item-type' => 'post_type', 'menu-item-status' => 'publish', 'menu-item-position' => 1 );
+		$link    = array( 'menu-item-title' => 'Shop', 'menu-item-url' => 'https://example.test/shop/', 'menu-item-type' => 'custom', 'menu-item-status' => 'publish', 'menu-item-position' => 2 );
+		$item_a  = (int) wp_update_nav_menu_item( $menu_a, 0, $page( $about_a ) );
+		$link_a  = (int) wp_update_nav_menu_item( $menu_a, 0, $link );
+		$item_b  = (int) self::one_b( array( 'op' => 'nav_menu_item', 'menu' => $menu_b, 'args' => $page( $about_b ) ) );
+		$link_b  = (int) self::one_b( array( 'op' => 'nav_menu_item', 'menu' => $menu_b, 'args' => $link ) );
+		self::paired( self::staged() );
+		self::b(
+			array(
+				array( 'op' => 'nav_menu_item', 'menu' => $menu_b, 'item' => $item_b, 'args' => array_merge( $page( $about_b ), array( 'menu-item-title' => 'Who we are', 'menu-item-position' => 2 ) ) ),
+				array( 'op' => 'nav_menu_item', 'menu' => $menu_b, 'item' => $link_b, 'args' => array_merge( $link, array( 'menu-item-target' => '_blank', 'menu-item-position' => 1 ) ) ),
+				array( 'op' => 'nav_menu_item', 'menu' => $menu_b, 'args' => array( 'menu-item-title' => 'Blog', 'menu-item-url' => 'https://example.test/blog/', 'menu-item-type' => 'custom', 'menu-item-status' => 'publish', 'menu-item-position' => 3 ), 'as' => 'new' ),
+			)
+		);
+		$before = array(
+			'item'      => self::post_row_a( $item_a ),
+			'item_meta' => self::meta_rows_a( $item_a ),
+			'link'      => self::post_row_a( $link_a ),
+			'link_meta' => self::meta_rows_a( $link_a ),
+		);
+		$report = self::report( self::staged() );
+		$items  = array_values( array_filter( $report['all'], static fn( $e ) => 'menu_item' === $e['kind'] && in_array( $e['action'], array( 'take_over', 'create' ), true ) ) );
+		self::assertCount( 3, $items, json_encode( $items ) );
+		self::assertSame( 'take_over', self::entry( $report['all'], 'menu_item', 'live', (string) $item_a )['action'] );
+		self::assertSame( 'take_over', self::entry( $report['all'], 'menu_item', 'live', (string) $link_a )['action'] );
+		$created = array_values( array_filter( $items, static fn( $e ) => 'create' === $e['action'] ) );
+		self::assertCount( 1, $created );
+		$planned = self::planned(
+			array(
+				array( 'menu_item', 'live', $item_a ),
+				array( 'menu_item', 'live', $link_a ),
+				array( 'menu_item', 'staging', (string) $created[0]['staging']['ref'] ),
+			)
+		);
+		$this->watch_deletions();
+		$run    = self::begun( $planned['args'] );
+		$closed = self::finish( (int) $run['run_id'] );
+		self::assertSame( 'closed_done', $closed['state'], json_encode( self::run_status( (int) $run['run_id'] ) ) );
+		self::assertWrittenWhole( self::run_status( (int) $run['run_id'] ) );
+		self::assertSame( array( '2', '1' ), array( self::post_row_a( $item_a )['menu_order'], self::post_row_a( $link_a )['menu_order'] ), json_encode( array( self::post_row_a( $item_a ), self::post_row_a( $link_a ) ) ) );
+		wp_cache_flush();
+		$items_now = wp_get_nav_menu_items( $menu_a );
+		self::assertSame( array( 'Shop', 'Who we are', 'Blog' ), array_map( static fn( $i ) => $i->title, $items_now ), 'The order and the titles of staging.' );
+		self::assertSame( array( '_blank' ), self::meta_rows_a( $link_a )['_menu_item_target'] );
+		$new_a = (int) end( $items_now )->ID;
+		self::assertSame( array( 'https://example.test/blog/' ), self::meta_rows_a( $new_a )['_menu_item_url'] );
+		self::assertSame( 'active', AB_MCP_Sync_Pairs::find_live( self::source(), 'menu_item', (string) $new_a )['state'] );
+		// The next report sees the menu as equal.
+		$again = self::report( self::staged() );
+		foreach ( array( $item_a, $link_a, $new_a ) as $id ) {
+			self::assertSame( 'equal', self::entry( $again['all'], 'menu_item', 'live', (string) $id )['result'], (string) $id );
+		}
+		// The way back: the changed items back as they were, the new one a rest.
+		$back = self::back( (int) $run['run_id'] );
+		self::assertSame( 'closed_findings', $back['state'], json_encode( $back ) );
+		self::assertSame( $before['item'], self::post_row_a( $item_a ), 'Byte for byte as before the run.' );
+		self::assertSame( $before['item_meta'], self::meta_rows_a( $item_a ) );
+		self::assertSame( $before['link'], self::post_row_a( $link_a ) );
+		self::assertSame( $before['link_meta'], self::meta_rows_a( $link_a ) );
+		self::assertSame( 'residual', AB_MCP_Sync_Pairs::find_live( self::source(), 'menu_item', (string) $new_a )['state'] );
+		self::assertSame( 'publish', self::post_row_a( $new_a )['post_status'], 'The new item stays.' );
+		self::assertSame( array( array( 'menu_item', (string) $new_a ) ), self::rests( $back ) );
+		self::assertSame( array(), $this->deletions, 'Nothing was deleted, forward or back.' );
+	}
+
+	public function testANewMenuAtAPositionOfTheThemeGoesOverAndTheWayBackPutsThePositionBackAndLeavesTheMenuAsARest(): void {
+		// A new menu at a position of the theme (decisions 17 and 25): the
+		// position primary holds the menu Old on both sites; on staging a new
+		// menu Footer with one link takes primary. The menu and its item are
+		// made in one run, the menu first (graph order), the position set
+		// through set_theme_mod( 'nav_menu_locations' ); the way back leaves
+		// the menu and the item as rests and gives primary back to Old
+		// (decision 23: «setzt … die Positionen zurück»). The rest of the theme
+		// mods is a field of the row the step does not change (decision 24).
+		self::pair();
+		$old_a = (int) wp_create_nav_menu( 'Old' );
+		$old_b = (int) self::one_b( array( 'op' => 'nav_menu', 'name' => 'Old' ) );
+		set_theme_mod( 'nav_menu_locations', array( 'primary' => $old_a ) );
+		set_theme_mod( 'header_textcolor', '333333' );
+		self::b(
+			array(
+				array( 'op' => 'theme_mod', 'name' => 'nav_menu_locations', 'value' => array( 'primary' => $old_b ) ),
+				array( 'op' => 'theme_mod', 'name' => 'header_textcolor', 'value' => '333333' ),
+			)
+		);
+		self::paired( self::staged() );
+		$new_b = (int) self::one_b( array( 'op' => 'nav_menu', 'name' => 'Footer' ) );
+		$link  = (int) self::one_b( array( 'op' => 'nav_menu_item', 'menu' => $new_b, 'args' => array( 'menu-item-title' => 'Imprint', 'menu-item-url' => 'https://example.test/imprint/', 'menu-item-type' => 'custom', 'menu-item-status' => 'publish', 'menu-item-position' => 1 ) ) );
+		self::one_b( array( 'op' => 'theme_mod', 'name' => 'nav_menu_locations', 'value' => array( 'primary' => $new_b ) ) );
+		$mods_before = AB_MCP_IT_Sites::option_row( 'a', 'theme_mods_twentytwentyfive' )['option_value'];
+		$planned     = self::planned(
+			array(
+				array( 'menu', 'staging', (string) $new_b ),
+				array( 'menu_item', 'staging', (string) $link ),
+			)
+		);
+		self::assertSame( 'create', self::entry( $planned['report']['all'], 'menu', 'staging', (string) $new_b )['action'] );
+		$this->watch_deletions();
+		$run    = self::begun( $planned['args'] );
+		$closed = self::finish( (int) $run['run_id'] );
+		self::assertSame( 'closed_done', $closed['state'], json_encode( self::run_status( (int) $run['run_id'] ) ) );
+		$status = self::run_status( (int) $run['run_id'] );
+		self::assertWrittenWhole( $status );
+		self::assertSame( array( 'menu', 'menu_item' ), array_map( static fn( $s ) => $s['parts']['object']['kind'], self::writes( $status ) ), 'The menu first, then its item.' );
+		wp_cache_flush();
+		$new_a = (int) get_term_by( 'slug', 'footer', 'nav_menu' )->term_id;
+		self::assertSame( array( 'primary' => $new_a ), self::option_of( 'a', 'theme_mods_twentytwentyfive' )['nav_menu_locations'], 'The new menu at the position of staging.' );
+		self::assertSame( '333333', self::option_of( 'a', 'theme_mods_twentytwentyfive' )['header_textcolor'], 'The rest of the theme mods as it was.' );
+		self::assertSame( array( 'Imprint' ), array_map( static fn( $i ) => $i->title, wp_get_nav_menu_items( $new_a ) ) );
+		// The way back: the position back to Old, the menu and its item rests.
+		$back = self::back( (int) $run['run_id'] );
+		self::assertSame( 'closed_findings', $back['state'], json_encode( $back ) );
+		// The theme mods as before the run, byte for byte in every field but
+		// the cache of the core for the CSS post (custom_css_post_id -1, which
+		// wp_get_custom_css_post() sets as a page of this site is shown: the
+		// probe of the check after the run showed one).
+		$mods = self::option_of( 'a', 'theme_mods_twentytwentyfive' );
+		self::assertSame( -1, $mods['custom_css_post_id'] ?? -1 );
+		unset( $mods['custom_css_post_id'] );
+		self::assertSame( $mods_before, serialize( $mods ), 'The theme mods byte for byte as before the run.' );
+		wp_cache_flush();
+		self::assertIsObject( get_term( $new_a, 'nav_menu' ), 'The new menu stays.' );
+		self::assertSame( 'residual', AB_MCP_Sync_Pairs::find_live( self::source(), 'menu', (string) $new_a )['state'] );
+		$rests = self::rests( $back );
+		sort( $rests );
+		self::assertSame( 'menu', $rests[0][0] );
+		self::assertSame( 'menu_item', $rests[1][0] );
+		self::assertSame( array(), $this->deletions, 'Nothing was deleted, forward or back.' );
+	}
+
+	/* ----------------------------------------------------------- widgets */
+
+	public function testAChangedTextWidgetAndImageWidgetGoOverAndBack(): void {
+		// The ordinary widget area (decision 25, A7): a text widget and an
+		// image widget in sidebar-1, paired on both sites; on staging both are
+		// changed. The area goes over as a whole with each instance a field of
+		// its row (decision 24), through the widget writer; the way back puts
+		// both back byte for byte and the pair to its bases of before.
+		self::pair();
+		$text  = self::widget_settings( 'text', array( 'title' => 'Hours', 'text' => 'Mo–Fr 9–17', 'filter' => true, 'visual' => true ) );
+		$image = self::widget_settings( 'media_image', array( 'title' => 'Logo', 'url' => 'https://example.test/logo.png', 'alt' => 'Logo', 'size' => 'full', 'link_type' => 'none' ) );
+		self::widgets_on_both( array( 'text-2' => $text, 'media_image-2' => $image ) );
+		self::paired( self::staged() );
+		$text_new  = self::widget_settings( 'text', array( 'title' => 'Opening hours', 'text' => 'Mo–Sa 9–18', 'filter' => true, 'visual' => true ) );
+		$image_new = self::widget_settings( 'media_image', array( 'title' => 'Our logo', 'url' => 'https://example.test/logo-2.png', 'alt' => 'Logo', 'size' => 'full', 'link_type' => 'none' ) );
+		self::b(
+			array(
+				array( 'op' => 'update_option', 'name' => 'widget_text', 'value' => array( 2 => $text_new, '_multiwidget' => 1 ) ),
+				array( 'op' => 'update_option', 'name' => 'widget_media_image', 'value' => array( 2 => $image_new, '_multiwidget' => 1 ) ),
+			)
+		);
+		$before  = array( AB_MCP_IT_Sites::option_row( 'a', 'widget_text' )['option_value'], AB_MCP_IT_Sites::option_row( 'a', 'widget_media_image' )['option_value'], AB_MCP_IT_Sites::option_row( 'a', 'sidebars_widgets' )['option_value'] );
+		$pair    = AB_MCP_Sync_Pairs::find_live( self::source(), 'widget_area', 'sidebar-1' );
+		$planned = self::planned( array( array( 'widget_area', 'live', 'sidebar-1' ) ) );
+		self::assertSame( 'take_over', self::entry( $planned['report']['all'], 'widget_area', 'live', 'sidebar-1' )['action'] );
+		$this->watch_deletions();
+		$run    = self::begun( $planned['args'] );
+		$closed = self::finish( (int) $run['run_id'] );
+		self::assertSame( 'closed_done', $closed['state'], json_encode( self::run_status( (int) $run['run_id'] ) ) );
+		self::assertWrittenWhole( self::run_status( (int) $run['run_id'] ) );
+		self::assertSame( $text_new, self::option_of( 'a', 'widget_text' )[2] );
+		self::assertSame( $image_new, self::option_of( 'a', 'widget_media_image' )[2] );
+		self::assertSame( $before[2], AB_MCP_IT_Sites::option_row( 'a', 'sidebars_widgets' )['option_value'], 'The list of the area did not change.' );
+		$again = self::report( self::staged() );
+		self::assertSame( 'equal', self::entry( $again['all'], 'widget_area', 'live', 'sidebar-1' )['result'] );
+		$back = self::back( (int) $run['run_id'] );
+		self::assertSame( 'closed_reverted', $back['state'], json_encode( $back ) );
+		self::assertSame( $before, array( AB_MCP_IT_Sites::option_row( 'a', 'widget_text' )['option_value'], AB_MCP_IT_Sites::option_row( 'a', 'widget_media_image' )['option_value'], AB_MCP_IT_Sites::option_row( 'a', 'sidebars_widgets' )['option_value'] ), 'Byte for byte as before the run.' );
+		$now = AB_MCP_Sync_Pairs::find_live( self::source(), 'widget_area', 'sidebar-1' );
+		self::assertSame( array( 'active', $pair['base_live'], $pair['base_extra'] ), array( $now['state'], $now['base_live'], $now['base_extra'] ), 'The pair with its bases of before.' );
+		self::assertSame( array(), $this->deletions );
+	}
+
+	public function testANewInstanceMakesTheWholeAreaARestWithItsMappingAndNoLaterRunMakesItTwice(): void {
+		// Decision 23, finding R7-2: a paired area, the run makes the instance
+		// text-3 of staging (its number free here); the way back leaves it,
+		// and with it the whole area residual, its mapping (staging instance →
+		// number here) kept in base_extra. A later report shows the rest; a
+		// later run does not write the area, also where staging changes the
+		// instance again, and makes no second instance; wp_site_pairs confirm
+		// makes the pair active with new bases, the mapping kept.
+		self::pair();
+		$text = self::widget_settings( 'text', array( 'title' => 'Hours', 'text' => 'Mo–Fr', 'filter' => true, 'visual' => true ) );
+		self::widgets_on_both( array( 'text-2' => $text ) );
+		self::paired( self::staged() );
+		$added = self::widget_settings( 'text', array( 'title' => 'News', 'text' => 'Fresh.', 'filter' => true, 'visual' => true ) );
+		$areas = self::option_of( 'b', 'sidebars_widgets' );
+		$areas['sidebar-1'][] = 'text-3';
+		self::b(
+			array(
+				array( 'op' => 'update_option', 'name' => 'widget_text', 'value' => array( 2 => $text, 3 => $added, '_multiwidget' => 1 ) ),
+				array( 'op' => 'update_option', 'name' => 'sidebars_widgets', 'value' => $areas ),
+			)
+		);
+		$planned = self::planned( array( array( 'widget_area', 'live', 'sidebar-1' ) ) );
+		$run     = self::begun( $planned['args'] );
+		self::assertSame( 'closed_done', self::finish( (int) $run['run_id'] )['state'], json_encode( self::run_status( (int) $run['run_id'] ) ) );
+		self::assertSame( $added, self::option_of( 'a', 'widget_text' )[3], 'The number of staging, free here.' );
+		self::assertContains( 'text-3', self::option_of( 'a', 'sidebars_widgets' )['sidebar-1'] );
+		$pair = AB_MCP_Sync_Pairs::find_live( self::source(), 'widget_area', 'sidebar-1' );
+		self::assertSame( 'text-3', $pair['base_extra']['map']['text-3'], 'The mapping of the run in base_extra.' );
+		// The way back: text-3 stays, so does the list; the area a rest.
+		$back = self::back( (int) $run['run_id'] );
+		self::assertSame( 'closed_findings', $back['state'], json_encode( $back ) );
+		self::assertSame( $added, self::option_of( 'a', 'widget_text' )[3] );
+		$rest = AB_MCP_Sync_Pairs::find_live( self::source(), 'widget_area', 'sidebar-1' );
+		self::assertSame( 'residual', $rest['state'] );
+		self::assertSame( 'text-3', $rest['base_extra']['map']['text-3'], 'The mapping kept.' );
+		self::assertSame( array( array( 'widget_area', 'sidebar-1' ) ), self::rests( $back ) );
+		// Staging changes the instance again: the report shows the rest, a
+		// run writes nothing of the area and makes no second instance.
+		$again = self::widget_settings( 'text', array( 'title' => 'News', 'text' => 'Fresher.', 'filter' => true, 'visual' => true ) );
+		self::one_b( array( 'op' => 'update_option', 'name' => 'widget_text', 'value' => array( 2 => $text, 3 => $again, '_multiwidget' => 1 ) ) );
+		$report = self::report( self::staged() );
+		$entry  = self::entry( $report['all'], 'widget_area', 'live', 'sidebar-1' );
+		self::assertSame( '0', (string) $entry['rule'], json_encode( $entry ) );
+		self::assertNotContains( $entry['action'], array( 'take_over', 'create', 'choose' ) );
+		self::assertSame( array( 2, 3 ), array_values( array_filter( array_keys( self::option_of( 'a', 'widget_text' ) ), 'is_int' ) ), 'No second instance.' );
+		// confirm: active with new bases of both sides, the mapping kept.
+		self::paired( self::staged(), array( 'equal', 'realign' ) );
+		$confirmed = AB_MCP_Sync_Pairs::find_live( self::source(), 'widget_area', 'sidebar-1' );
+		self::assertSame( 'active', $confirmed['state'], json_encode( $confirmed ) );
+		self::assertSame( 'text-3', $confirmed['base_extra']['map']['text-3'] );
+	}
+
+	/* --------------------------------------------------------------- CSS */
+
+	public function testChangedAdditionalCssGoesOverAndBackAndThePageShowsIt(): void {
+		// The Additional CSS of the active theme (decision 25, A9): linked on
+		// both sites (custom_css_post_id), changed on staging. It goes over
+		// through wp_update_custom_css_post(), which changes the linked post
+		// and leaves the link; the rendered page shows the new CSS; the way
+		// back puts the content back and the page shows the CSS before.
+		self::pair();
+		wp_update_custom_css_post( 'body { color: #111111; }' );
+		self::one_b( array( 'op' => 'custom_css', 'css' => 'body { color: #111111; }' ) );
+		self::paired( self::staged() );
+		self::one_b( array( 'op' => 'custom_css', 'css' => 'body { color: #222222; }' ) );
+		$link_before = self::option_of( 'a', 'theme_mods_twentytwentyfive' )['custom_css_post_id'];
+		$planned     = self::planned( array( array( 'custom_css', 'live', 'twentytwentyfive' ) ) );
+		$run         = self::begun( $planned['args'] );
+		self::assertSame( 'closed_done', self::finish( (int) $run['run_id'] )['state'], json_encode( self::run_status( (int) $run['run_id'] ) ) );
+		self::assertWrittenWhole( self::run_status( (int) $run['run_id'] ) );
+		self::assertSame( 'body { color: #222222; }', self::post_row_a( (int) $link_before )['post_content'] );
+		self::assertSame( $link_before, self::option_of( 'a', 'theme_mods_twentytwentyfive' )['custom_css_post_id'], 'The link as it was.' );
+		$page = wp_remote_get( AB_MCP_IT_Sites::url( 'a', '/' ), array( 'timeout' => 30 ) );
+		self::assertStringContainsString( 'color: #222222;', (string) wp_remote_retrieve_body( $page ), 'The rendered page shows the new CSS.' );
+		$back = self::back( (int) $run['run_id'] );
+		self::assertSame( 'closed_reverted', $back['state'], json_encode( $back ) );
+		self::assertSame( 'body { color: #111111; }', self::post_row_a( (int) $link_before )['post_content'] );
+		$page = wp_remote_get( AB_MCP_IT_Sites::url( 'a', '/' ), array( 'timeout' => 30 ) );
+		$body = (string) wp_remote_retrieve_body( $page );
+		self::assertStringContainsString( 'color: #111111;', $body, 'The rendered page shows the CSS before.' );
+		self::assertStringNotContainsString( 'color: #222222;', $body );
+	}
+
+	/* ----------------------------------------------------------- options */
+
+	public function testChangedCoreOptionsGoOverAndBackAndThePermalinksBuildTheirRulesAnew(): void {
+		// Core options with a schema (decision 27): blogname, blogdescription,
+		// posts_per_page and the permalinks, equal and paired on both sites,
+		// changed on staging. Each goes over through update_option(); the
+		// permalinks build the rewrite rules anew (decision 33, A19); the way
+		// back puts every one back byte for byte, and the rules with them.
+		self::pair();
+		foreach ( array( 'blogname' => 'A shop', 'blogdescription' => 'Things', 'posts_per_page' => '10' ) as $name => $value ) {
+			update_option( $name, $value );
+			self::one_b( array( 'op' => 'update_option', 'name' => $name, 'value' => $value ) );
+		}
+		self::paired( self::staged() );
+		self::b(
+			array(
+				array( 'op' => 'update_option', 'name' => 'blogname', 'value' => 'A shop & more' ),
+				array( 'op' => 'update_option', 'name' => 'blogdescription', 'value' => 'Fine things' ),
+				array( 'op' => 'update_option', 'name' => 'posts_per_page', 'value' => '6' ),
+				array( 'op' => 'update_option', 'name' => 'permalink_structure', 'value' => '/%postname%/' ),
+			)
+		);
+		$names  = array( 'blogname', 'blogdescription', 'posts_per_page', 'permalink_structure' );
+		$before = array();
+		foreach ( $names as $name ) {
+			$before[ $name ] = AB_MCP_IT_Sites::option_row( 'a', $name )['option_value'];
+		}
+		$planned = self::planned( array_map( static fn( $n ) => array( 'option', 'live', $n ), $names ) );
+		$this->watch_deletions();
+		$run = self::begun( $planned['args'] );
+		self::assertSame( 'closed_done', self::finish( (int) $run['run_id'], 20 )['state'], json_encode( self::run_status( (int) $run['run_id'] ) ) );
+		self::assertWrittenWhole( self::run_status( (int) $run['run_id'] ) );
+		self::assertSame( array( 'A shop &amp; more', 'Fine things', '6', '/%postname%/' ), array_map( static fn( $n ) => AB_MCP_IT_Sites::option_row( 'a', $n )['option_value'], $names ) );
+		$rules = (string) AB_MCP_IT_Sites::option_row( 'a', 'rewrite_rules' )['option_value'];
+		self::assertStringContainsString( '(.?.+?)(?:/([0-9]+))?/?$', $rules, 'The rewrite rules of the new structure.' );
+		$back = self::back( (int) $run['run_id'] );
+		self::assertSame( 'closed_reverted', $back['state'], json_encode( $back ) );
+		foreach ( $names as $name ) {
+			self::assertSame( $before[ $name ], AB_MCP_IT_Sites::option_row( 'a', $name )['option_value'], $name );
+		}
+		self::assertSame( array(), $this->deletions, 'No option of the site was deleted.' );
+	}
+}

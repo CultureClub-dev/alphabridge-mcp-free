@@ -90,15 +90,18 @@ final class AB_MCP_Sync_Css_Writer {
 		if ( null !== $held ) {
 			return $held;
 		}
-		if ( ! isset( $line['content']['row'], $line['content']['version'], $line['form'] ) || ! is_array( $line['form'] ) || ! array_key_exists( 'preprocessed', $line['content'] ) ) {
+		if ( ! isset( $line['content']['row'], $line['form'] ) || ! is_array( $line['form'] ) ) {
 			return AB_MCP_Sync_Post_Writer::locked( 'post:content_missing', sprintf( 'the package carries no content of the CSS of %s', $stylesheet ) );
 		}
 		$row = array();
-		foreach ( array( 'post_content', 'post_name', 'post_status' ) as $column ) {
-			$row[ $column ] = isset( $line['content']['row'][ $column ] ) ? AB_MCP_Sync_Post_Writer::bytes( $line['content']['row'][ $column ] ) : '';
+		foreach ( array( 'post_content', 'post_name', 'post_status', 'preprocessed', 'theme_version' ) as $column ) {
+			if ( ! isset( $line['content']['row'][ $column ] ) ) {
+				return AB_MCP_Sync_Post_Writer::locked( 'post:content_missing', sprintf( 'the package names no column %1$s of the CSS of %2$s', $column, $stylesheet ) );
+			}
+			$row[ $column ] = AB_MCP_Sync_Post_Writer::bytes( $line['content']['row'][ $column ] );
 		}
-		if ( true === $line['content']['preprocessed'] || 'publish' !== $row['post_status'] ) {
-			return AB_MCP_Sync_Post_Writer::locked( 'custom_css:field_rule', true === $line['content']['preprocessed'] ? 'the CSS of the staging site carries the source of a preprocessor (post_content_filtered)' : sprintf( 'the CSS post of the staging site has the status %s', $row['post_status'] ) );
+		if ( '' !== $row['preprocessed'] || 'publish' !== $row['post_status'] ) {
+			return AB_MCP_Sync_Post_Writer::locked( 'custom_css:field_rule', '' !== $row['preprocessed'] ? 'the CSS of the staging site carries the source of a preprocessor (post_content_filtered)' : sprintf( 'the CSS post of the staging site has the status %s', $row['post_status'] ) );
 		}
 		$plan    = AB_MCP_Sync_Refs::plan( $ctx['map'], $ctx['addresses'], isset( $ctx['routes'] ) ? $ctx['routes'] : null );
 		$changed = false;
@@ -111,7 +114,7 @@ final class AB_MCP_Sync_Css_Writer {
 		return array(
 			'type'        => 'custom_css',
 			'stylesheet'  => $stylesheet,
-			'version'     => AB_MCP_Sync_Post_Writer::bytes( $line['content']['version'] ),
+			'version'     => $row['theme_version'],
 			'status'      => null,
 			'css'         => $css,
 			// As wp_update_custom_css_post() writes them (wp-includes/theme.php).

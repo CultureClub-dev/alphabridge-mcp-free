@@ -85,8 +85,13 @@ final class AB_MCP_Sync_Menu_Writer {
 		if ( null !== $held ) {
 			return $held;
 		}
-		if ( ! isset( $line['content']['row'], $line['content']['meta'], $line['content']['locations'], $line['form'] ) || ! is_array( $line['form'] ) || ! is_array( $line['content']['locations'] ) ) {
+		if ( ! isset( $line['content']['row'], $line['content']['meta'], $line['form'] ) || ! is_array( $line['form'] ) ) {
 			return AB_MCP_Sync_Post_Writer::locked( 'post:content_missing', 'the package carries no content of the menu (a row of it could not be read on the staging site)' );
+		}
+		// The positions of the menu on the staging site: names, in its form.
+		$named = isset( $line['form']['locations']['~set'] ) && is_array( $line['form']['locations']['~set'] ) ? $line['form']['locations']['~set'] : null;
+		if ( null === $named ) {
+			return AB_MCP_Sync_Post_Writer::locked( 'post:content_missing', 'the form of the menu in the package names no positions' );
 		}
 		$row = array();
 		foreach ( AB_MCP_Sync_Term_Writer::WRITTEN_COLUMNS as $column ) {
@@ -132,7 +137,7 @@ final class AB_MCP_Sync_Menu_Writer {
 			$meta[ $key ][] = $written;
 		}
 		$locations = array();
-		foreach ( $line['content']['locations'] as $location ) {
+		foreach ( $named as $location ) {
 			if ( ! is_string( $location ) || '' === $location ) {
 				return AB_MCP_Sync_Post_Writer::locked( 'menu:item_shape', 'the package names a position of the menu that is no name' );
 			}
@@ -338,6 +343,28 @@ final class AB_MCP_Sync_Menu_Writer {
 			'locations' => $locations,
 			'parts'     => $parts,
 		);
+	}
+
+	/**
+	 * The fields of the row of the theme mods as they are now, for the backup
+	 * of a new menu (the engine): its positions go back on the way back,
+	 * where they are still the step's own (decision 23), the menu stays.
+	 *
+	 * @return array<string,string> location:<name> and mods:rest => bytes.
+	 */
+	public static function shared_state() {
+		$positions = self::positions( null );
+		return is_array( $positions ) ? $positions['parts'] : array();
+	}
+
+	/**
+	 * Whether a part is a field of the shared row (a position).
+	 *
+	 * @param string $name The name of the part.
+	 * @return bool
+	 */
+	public static function shared_part( $name ) {
+		return 0 === strpos( (string) $name, 'location:' );
 	}
 
 	/**
@@ -778,8 +805,15 @@ final class AB_MCP_Sync_Menu_Item_Writer {
 		if ( null !== $held ) {
 			return $held;
 		}
-		if ( ! isset( $line['content']['row'], $line['content']['meta'], $line['content']['menus'], $line['form'] ) || ! is_array( $line['form'] ) || ! is_array( $line['content']['menus'] ) ) {
+		if ( ! isset( $line['content']['row'], $line['content']['meta'], $line['content']['terms'], $line['form'] ) || ! is_array( $line['form'] ) || ! is_array( $line['content']['terms'] ) ) {
 			return AB_MCP_Sync_Post_Writer::locked( 'post:content_missing', 'the package carries no content of the menu item (a row of it could not be read on the staging site)' );
+		}
+		$menus = array();
+		foreach ( $line['content']['terms'] as $term ) {
+			if ( ! is_array( $term ) || 'nav_menu' !== AB_MCP_Sync_Post_Writer::bytes( $term['taxonomy'] ?? '' ) ) {
+				return AB_MCP_Sync_Post_Writer::locked( 'menu:item_shape', 'the menu item of the staging site carries a term of another taxonomy than nav_menu' );
+			}
+			$menus[] = (int) $term['term_id'];
 		}
 		$row = array();
 		foreach ( self::ROW as $column ) {
@@ -840,10 +874,10 @@ final class AB_MCP_Sync_Menu_Item_Writer {
 			}
 		}
 		// The menu, by its pair; one the run makes first is pending.
-		if ( 1 !== count( $line['content']['menus'] ) ) {
-			return AB_MCP_Sync_Post_Writer::locked( 'menu:item_shape', sprintf( 'the menu item of the staging site is in %d menus, where the core keeps it in one', count( $line['content']['menus'] ) ) );
+		if ( 1 !== count( $menus ) ) {
+			return AB_MCP_Sync_Post_Writer::locked( 'menu:item_shape', sprintf( 'the menu item of the staging site is in %d menus, where the core keeps it in one', count( $menus ) ) );
 		}
-		$staging_menu = (int) $line['content']['menus'][0];
+		$staging_menu = (int) $menus[0];
 		$plan['missing'] = array();
 		$menu            = AB_MCP_Sync_Refs::mapped_id( $plan, 'term', $staging_menu );
 		$menu_pending    = null === $menu && isset( $pending['term'][ $staging_menu ] );
@@ -1367,6 +1401,18 @@ final class AB_MCP_Sync_Menu_Item_Writer {
 		$fields = $prepared['fields'];
 		foreach ( array( 'menu-item-title', 'menu-item-url', 'menu-item-description', 'menu-item-attr-title', 'menu-item-classes', 'menu-item-xfn', 'menu-item-target', 'menu-item-object' ) as $field ) {
 			$fields[ $field ] = wp_slash( (string) $fields[ $field ] );
+		}
+		// The dates of an item here as they are: without them the core gives
+		// the item the time of the call (wp_resolve_post_date() of no date),
+		// which the item's form does not hold and the way back would not give
+		// back.
+		if ( null !== $live_id ) {
+			$row = AB_MCP_Sync_Rows::post( (int) $live_id );
+			if ( ! is_array( $row ) ) {
+				return new WP_Error( 'ab_mcp_sync_rows_unread', sprintf( 'The row of the menu item %d could not be read right before it was written, so nothing is written. Try again; if it keeps failing, the database error log names the cause.', (int) $live_id ) );
+			}
+			$fields['menu-item-post-date']     = (string) $row['post_date'];
+			$fields['menu-item-post-date-gmt'] = (string) $row['post_date_gmt'];
 		}
 		$id = wp_update_nav_menu_item( $menu, null === $live_id ? 0 : (int) $live_id, $fields );
 		if ( is_wp_error( $id ) ) {
