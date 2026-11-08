@@ -337,9 +337,10 @@ entsteht, nennt ihre Meldung den Weg.
 ## Laufzeit
 
 - Die Integrationsklasse `SyncMediaTest` (neun Fälle, gemeinsame Hilfen,
-  Bilder mit GD erzeugt) läuft lokal in rund 64 s (nach Codex-Runde 2: der
+  Bilder mit GD erzeugt) läuft lokal in rund 66 s (nach Codex-Runde 2: der
   Fall mit WebP-Grösse und Altbestand neu, rund 7 s; der Hook-Fall mit
-  zwei bearbeiteten Bildern mehr). Der Paket-Fall erreicht allein rund
+  zwei bearbeiteten Bildern mehr; nach Runde 3: ein SVG im WebP-Fall, zwei
+  Bilder vom September im Hook-Fall). Der Paket-Fall erreicht allein rund
   123 MiB Speicher (Stücke von 3 MiB), unter den 128 MB eines Prozesses je
   Klasse.
 
