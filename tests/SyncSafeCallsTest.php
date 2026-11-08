@@ -186,6 +186,7 @@ final class SyncSafeCallsTest extends TestCase {
 			'clean_post_cache'          => array( 1, 'post_write(): the caches of the CSS post (decision 33).' ),
 			'current_user_can'          => array( 3, 'precheck(), write_row() and restore_right(): edit_css, as the Customizer asks it for the setting (decision 25).' ),
 			'get_stylesheet'            => array( 2, 'theme_refusal() and restore_right(): the active theme this request runs (the CSS is written only to it).' ),
+			'remove_filter'             => array( 1, 'keeping_revisions(): the filter wp_revisions_to_keep of the one call goes again (Codex round 1 of branch 11, A3).' ),
 			'sanitize_post'             => array( 1, 'css_refusal(): the sanitizers ahead, as wp_update_post() runs them (decision 17).' ),
 			'sanitize_title'            => array( 1, 'target_of(): the slug wp_update_custom_css_post() gives the post, a calculation over the name.' ),
 			'wp_get_theme'              => array( 1, 'theme_refusal(): the version of the active theme from its files (decision 25: «Theme live in gleicher Version»).' ),

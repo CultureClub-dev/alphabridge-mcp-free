@@ -115,6 +115,7 @@ final class SyncStructureTest extends TestCase {
 		remove_all_filters( 'pre_trash_post' );
 		remove_all_actions( 'pre_delete_term' );
 		remove_all_actions( 'delete_option' );
+		remove_all_filters( 'wp_revisions_to_keep' );
 		wp_cache_flush();
 	}
 
@@ -853,17 +854,30 @@ final class SyncStructureTest extends TestCase {
 		// and leaves the link; the rendered page shows the new CSS; the way
 		// back puts the content back and the page shows the CSS before.
 		self::pair();
+		wp_update_custom_css_post( 'body { color: #000000; }' );
 		wp_update_custom_css_post( 'body { color: #111111; }' );
 		self::one_b( array( 'op' => 'custom_css', 'css' => 'body { color: #111111; }' ) );
 		self::paired( self::staged() );
 		self::one_b( array( 'op' => 'custom_css', 'css' => 'body { color: #222222; }' ) );
 		$link_before = self::option_of( 'a', 'theme_mods_twentytwentyfive' )['custom_css_post_id'];
+		// This site keeps one revision (as WP_POST_REVISIONS = 1 would; Codex
+		// round 1 of branch 11, A3): no revision the post has goes, forward
+		// or back (nothing is deleted in Z8).
+		$revisions = array_keys( wp_get_post_revisions( (int) $link_before ) );
+		sort( $revisions );
+		self::assertNotSame( array(), $revisions );
+		add_filter( 'wp_revisions_to_keep', static fn( $num, $post ) => 'custom_css' === $post->post_type ? 1 : $num, 10, 2 );
+		$kept = static function () use ( $revisions ): array {
+			global $wpdb;
+			return array_map( 'intval', $wpdb->get_col( 'SELECT ID FROM ' . $wpdb->posts . ' WHERE ID IN (' . implode( ',', array_map( 'intval', $revisions ) ) . ') ORDER BY ID' ) );
+		};
 		$planned     = self::planned( array( array( 'custom_css', 'live', 'twentytwentyfive' ) ) );
 		$run         = self::begun( $planned['args'] );
 		self::assertSame( 'closed_done', self::finish( (int) $run['run_id'] )['state'], json_encode( self::run_status( (int) $run['run_id'] ) ) );
 		self::assertWrittenWhole( self::run_status( (int) $run['run_id'] ) );
 		self::assertSame( 'body { color: #222222; }', self::post_row_a( (int) $link_before )['post_content'] );
 		self::assertSame( $link_before, self::option_of( 'a', 'theme_mods_twentytwentyfive' )['custom_css_post_id'], 'The link as it was.' );
+		self::assertSame( array_map( 'intval', $revisions ), $kept(), 'No revision of the post was deleted.' );
 		$page = wp_remote_get( AB_MCP_IT_Sites::url( 'a', '/' ), array( 'timeout' => 30 ) );
 		self::assertStringContainsString( 'color: #222222;', (string) wp_remote_retrieve_body( $page ), 'The rendered page shows the new CSS.' );
 		$back = self::back( (int) $run['run_id'] );
@@ -873,6 +887,8 @@ final class SyncStructureTest extends TestCase {
 		$body = (string) wp_remote_retrieve_body( $page );
 		self::assertStringContainsString( 'color: #111111;', $body, 'The rendered page shows the CSS before.' );
 		self::assertStringNotContainsString( 'color: #222222;', $body );
+		self::assertSame( array_map( 'intval', $revisions ), $kept(), 'Nor on the way back.' );
+		remove_all_filters( 'wp_revisions_to_keep' );
 	}
 
 	/* ----------------------------------------------------- stale caches */
