@@ -1025,6 +1025,15 @@ final class SyncMediaTest extends TestCase {
 		$zwilling_b = self::upload_b( 'zwilling-zwei.jpg', 'image/jpeg', self::jpeg( 120, 90, array( 6, 6, 6 ) ), array(), null );
 		self::b( array( array( 'op' => 'update_meta', 'post' => $zwilling_b, 'key' => '_wp_attachment_metadata', 'value' => array( 'file' => '2026/10/zwilling-zwei.jpg', 'width' => 120, 'height' => 90, 'thumb' => 'zwilling.jpg', 'sizes' => array() ) ) ) );
 		unset( $zwilling_a );
+		// Codex round 1, A6: an image this site has already, byte for byte, but
+		// under an attachment that keeps its file as an absolute path in the
+		// uploads (an import of old): the reverse map reads it as the core
+		// does, so the path is shared. And an image whose name another
+		// attachment of this site holds in a name that is no plain path (its
+		// list does not read whole): fail closed.
+		$absolut_bytes = self::jpeg( 160, 120, array( 33, 66, 99 ) );
+		$absolut       = self::upload_b( 'absolut.jpg', 'image/jpeg', $absolut_bytes, array(), null );
+		$unklar        = self::upload_b( 'unklar.jpg', 'image/jpeg', self::jpeg( 160, 120, array( 99, 66, 33 ) ), array(), null );
 		// An image whose list names a size that is a PHP script by its name
 		// (the main file a JPEG as the attachment says).
 		$skript = self::upload_b( 'skript.jpg', 'image/jpeg', self::jpeg( 120, 90, array( 7, 7, 7 ) ), array(), null );
@@ -1044,6 +1053,12 @@ final class SyncMediaTest extends TestCase {
 		$meta  = wp_get_attachment_metadata( $other );
 		$meta['sizes']['geteilt'] = array( 'file' => 'geteilt.jpg', 'width' => 300, 'height' => 200, 'mime-type' => 'image/jpeg' );
 		wp_update_attachment_metadata( $other, $meta );
+		$alt = self::upload_a( 'absolut.jpg', 'image/jpeg', $absolut_bytes, array( 'post_name' => 'altbestand' ) );
+		update_post_meta( $alt, '_wp_attached_file', wp_get_upload_dir()['basedir'] . '/2026/10/absolut.jpg' );
+		$quer = self::upload_a( 'unklar-alt.jpg', 'image/jpeg', self::jpeg( 100, 100, array( 1, 9, 1 ) ) );
+		$meta = wp_get_attachment_metadata( $quer );
+		$meta['sizes']['quer'] = array( 'file' => '../unklar.jpg', 'width' => 100, 'height' => 100, 'mime-type' => 'image/jpeg' );
+		wp_update_attachment_metadata( $quer, $meta );
 		wp_mkdir_p( AB_MCP_IT_Sites::docroot( 'a' ) . '/elsewhere' );
 		symlink( AB_MCP_IT_Sites::docroot( 'a' ) . '/elsewhere', $uploads . '/2026/09' );
 		add_filter(
@@ -1054,7 +1069,7 @@ final class SyncMediaTest extends TestCase {
 			}
 		);
 		$files_before = self::uploads_of( 'a' );
-		$planned      = self::planned( array( 'attachment:2026/10/ersetzt.jpg', 'attachment:2026/10/geteilt.jpg', 'attachment:2026/09/verlinkt.jpg', 'attachment:2026/10/preise.pdf', 'attachment:2026/10/zwilling.jpg', 'attachment:2026/10/zwilling-zwei.jpg', 'attachment:2026/10/waise.jpg', 'attachment:2026/10/typ.jpg', 'attachment:2026/10/hier.jpg', 'attachment:2026/10/skript.jpg' ) );
+		$planned      = self::planned( array( 'attachment:2026/10/ersetzt.jpg', 'attachment:2026/10/geteilt.jpg', 'attachment:2026/09/verlinkt.jpg', 'attachment:2026/10/preise.pdf', 'attachment:2026/10/zwilling.jpg', 'attachment:2026/10/zwilling-zwei.jpg', 'attachment:2026/10/waise.jpg', 'attachment:2026/10/typ.jpg', 'attachment:2026/10/hier.jpg', 'attachment:2026/10/skript.jpg', 'attachment:2026/10/absolut.jpg', 'attachment:2026/10/unklar.jpg' ) );
 		$missing      = self::entry( $planned['report']['all'], 'attachment:2026/10/fehlt.jpg' );
 		self::assertSame( 'locked', $missing['action'] );
 		self::assertContains( 'attachment:missing_file', array_column( $missing['locks'], 'key' ) );
@@ -1075,6 +1090,8 @@ final class SyncMediaTest extends TestCase {
 		self::assertStringContainsString( 'attachment:file_type', $found[ (string) $typ ] ?? '', 'The main file of another type than the attachment says: ' . json_encode( $found ) );
 		self::assertStringContainsString( 'by its content of another type', $found[ (string) $hier ] ?? '', 'A file this site has, by its content: ' . json_encode( $found ) );
 		self::assertStringContainsString( 'skript-klein.php: a type this account may not upload', $found[ (string) $skript ] ?? '', 'A file of the list besides the main one, by its name: ' . json_encode( $found ) );
+		self::assertStringContainsString( 'the attachment ' . $alt . ' of this site names it as well', $found[ (string) $absolut ] ?? '', 'Its absolute path read as the core reads it: ' . json_encode( $found ) );
+		self::assertStringContainsString( 'could not be read whole', $found[ (string) $unklar ] ?? '', 'A list of a candidate that does not read whole: ' . json_encode( $found ) );
 		// The same plan without the package of media: every file to lay is
 		// missing; a package of media of another report is refused by the plan.
 		$args             = $planned['args'];
@@ -1091,7 +1108,9 @@ final class SyncMediaTest extends TestCase {
 		self::assertSame( 'ab_mcp_sync_objects_report', $refused->get_error_code(), $refused->get_error_message() );
 		self::assertSame( $files_before, self::uploads_of( 'a' ), 'Nothing was laid, nothing written over.' );
 		self::assertSame( 'another file of this site', file_get_contents( $uploads . '/2026/10/ersetzt.jpg' ) );
-		self::assertSame( array( 'anders.jpg' ), array_map( 'basename', array_map( 'get_attached_file', get_posts( array( 'post_type' => 'attachment', 'post_status' => 'any', 'fields' => 'ids', 'numberposts' => -1 ) ) ) ), 'No attachment was made.' );
+		$made = array_map( 'basename', array_map( 'get_attached_file', get_posts( array( 'post_type' => 'attachment', 'post_status' => 'any', 'fields' => 'ids', 'numberposts' => -1 ) ) ) );
+		sort( $made );
+		self::assertSame( array( 'absolut.jpg', 'anders.jpg', 'unklar-alt.jpg' ), $made, 'No attachment was made.' );
 		self::assertSame( array(), $this->deletions );
 		unlink( $uploads . '/2026/09' );
 		rmdir( AB_MCP_IT_Sites::docroot( 'a' ) . '/elsewhere' );

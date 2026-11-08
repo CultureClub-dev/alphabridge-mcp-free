@@ -106,8 +106,16 @@ entsteht, nennt ihre Meldung den Weg.
   letzten Segment des Pfads und danach der Liste jedes Kandidaten wie der
   Kern sie rechnet (`AB_MCP_Sync_Media::named_by()`). Der Vorfilter ist eine
   Obermenge: der Name jeder Datei einer Liste steht unverändert in einem
-  der drei Schlüssel. Mehr als 20 000 Kandidaten oder ein Kandidat, dessen
-  Liste sich nicht lesen lässt, sperren (fail closed). Die Prüfung läuft in
+  der drei Schlüssel. Die Datei eines Kandidaten liest sie wie der Kern
+  (`get_attached_file()`): ein absoluter Pfad unter den Uploads nennt die
+  Datei an seinem Pfad relativ zu ihnen, wie `_wp_relative_upload_path()`
+  ihn speichert (ein alter Import; Codex-Runde 1, A6). Mehr als 20 000
+  Kandidaten oder ein Kandidat, dessen Liste sich nicht ganz lesen lässt
+  (ein Name, der kein einfacher Pfad unter den Uploads ist, auch ein
+  absoluter ausserhalb), sperren (fail closed). Betroffen ist nur ein
+  Anhang, dessen Dateiname ein solcher Kandidat enthält; WordPress
+  speichert seit 2.7 relativ, ein Upload der Mediathek ergibt nie einen
+  solchen Namen, der Normalfall bleibt frei. Die Prüfung läuft in
   der Gesamtvorprüfung und in der Grenze; der Bericht selbst ist rein und
   nennt sie nicht, der Plan erst bei der Vorprüfung. Zwei Anhänge desselben
   Plans, die einen Pfad nennen, sperrt schon der Plan (beide).

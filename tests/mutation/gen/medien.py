@@ -287,6 +287,12 @@ e('writer-media-missing', 'files_plan(): a file to lay the packages of media of 
   "\t\t\t\tif ( ! is_array( $prepared['media'] ) || ", 'it', LOCKS)
 e('writer-shared', 'files_plan(): a path another attachment of this site names locks', AW,
   "\t\tforeach ( $named as $path => $ids ) {\n\t\t\treturn AB_MCP_Sync_Post_Writer::locked( 'attachment:shared_path'", "\t\tforeach ( array() as $path => $ids ) {\n\t\t\treturn AB_MCP_Sync_Post_Writer::locked( 'attachment:shared_path'", 'it', LOCKS)
+e('media-named-absolute', 'named_by(): an absolute file under the uploads read as the core reads it (Codex round 1, A6)', ME,
+  "\t\t\t\tif ( '' !== $attached && '/' === $attached[0] && 0 === strpos( $attached, $under ) && strlen( $attached ) > strlen( $under ) ) {",
+  "\t\t\t\tif ( false ) {", 'it', LOCKS)
+e('media-named-problems', 'named_by(): a candidate whose list does not read whole locks (fail closed, Codex round 1, A6)', ME,
+  "\t\t\t\tif ( array() !== $list['problems'] ) {\n\t\t\t\t\treturn null;",
+  "\t\t\t\tif ( false ) {\n\t\t\t\t\treturn null;", 'it', LOCKS)
 e('writer-shared-except', 'named_by(): the attachment written is no other', ME,
   " AND pm.post_id != %d AND pm.post_id > %d ORDER BY pm.post_id ASC LIMIT %d', array_merge( $args, array( (int) $except, ",
   " AND pm.post_id != %d AND pm.post_id > %d ORDER BY pm.post_id ASC LIMIT %d', array_merge( $args, array( 0, ", 'it', CHANGED)

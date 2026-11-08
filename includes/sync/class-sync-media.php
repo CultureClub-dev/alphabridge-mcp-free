@@ -632,7 +632,22 @@ final class AB_MCP_Sync_Media {
 				if ( ! $meta['ok'] || ! $backup['ok'] || AB_MCP_Sync_Canon::holds_record( $values['_wp_attached_file'] ) ) {
 					return null;
 				}
-				$list = self::paths( $values['_wp_attached_file'], $meta['value'], $backup['value'], $uploads['dir'] );
+				// As the core reads the file of a candidate (get_attached_file():
+				// an absolute path stays as it is; one under the uploads names
+				// the file at its path relative to them, as
+				// _wp_relative_upload_path() stores it; Codex round 1 of branch
+				// 10, A6: an import of old keeps it absolute). A list that still
+				// does not read whole (a name that is no plain path under the
+				// uploads) is not known to name none of the paths: fail closed.
+				$attached = $values['_wp_attached_file'];
+				$under    = rtrim( (string) $uploads['dir'], '/' ) . '/';
+				if ( '' !== $attached && '/' === $attached[0] && 0 === strpos( $attached, $under ) && strlen( $attached ) > strlen( $under ) ) {
+					$attached = (string) substr( $attached, strlen( $under ) );
+				}
+				$list = self::paths( $attached, $meta['value'], $backup['value'], $uploads['dir'] );
+				if ( array() !== $list['problems'] ) {
+					return null;
+				}
 				foreach ( $list['files'] as $entry ) {
 					if ( isset( $want[ $entry['path'] ] ) ) {
 						$out[ $entry['path'] ][] = (int) $id;
