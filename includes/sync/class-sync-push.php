@@ -565,11 +565,21 @@ final class AB_MCP_Sync_Push {
 		}
 		ksort( $live );
 		ksort( $pairs );
+		// The order of the steps the token confirms, object by object: it
+		// rests on more than the objects chosen (the depth of a term reads
+		// the parents of its ancestors here, term_depths()), so a token whose
+		// order no longer holds is stale like any other change of the state
+		// (branch 9, Codex round 3, B).
+		$order = array();
+		foreach ( $items as $item ) {
+			$order[] = array( (int) $item['seq'], (string) $item['kind'], (string) $item['staging_ref'] );
+		}
 		$state = hash(
 			'sha256',
 			AB_MCP_Sync_Canon::encode(
 				array(
 					'live'        => $live,
+					'order'       => $order,
 					'pairs'       => $pairs,
 					'print'       => $print,
 					'report_hash' => $report_hash,

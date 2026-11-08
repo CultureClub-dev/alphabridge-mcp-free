@@ -1255,4 +1255,13 @@ return array(
 		'run'     => $unit( 'SyncRunTest', 'testATypeTheTableLocksAndWhatTheCanonicalFormLocksAreRefusedWithTheirOwnLock' ),
 		'expect'  => '/testATypeTheTableLocksAndWhatTheCanonicalFormLocksAreRefusedWithTheirOwnLock/',
 	),
+	array(
+		'id'      => 'inhalte/push-token-order',
+		'clause'  => 'plan(): the state the token is bound to covers the order of the steps it confirms (Codex round 3, B)',
+		'file'    => $pu,
+		'search'  => "\t\t\t\t\t'order'       => \$order,\n",
+		'replace' => "/* removed */\n",
+		'run'     => $it( 'SyncContentTest', 'testATokenWhoseOrderOfStepsNoLongerHoldsIsStale' ),
+		'expect'  => '/testATokenWhoseOrderOfStepsNoLongerHoldsIsStale/',
+	),
 );

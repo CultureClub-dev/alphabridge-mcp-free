@@ -792,6 +792,64 @@ final class SyncContentTest extends TestCase {
 		self::assertSame( 'Changed here.', self::term_row_a( $topics_a )['description'], 'The other hand\'s change stands.' );
 	}
 
+	public function testATokenWhoseOrderOfStepsNoLongerHoldsIsStale(): void {
+		// Codex round 3 on branch 9, B: only the descriptions of Alpha and
+		// Beta are chosen, Alpha first in the report; here Root → Pole →
+		// Alpha and Quay → Beta. The preview writes Beta (depth 1) before
+		// Alpha (depth 2). Before the confirmation another hand hangs Pole,
+		// which is not chosen, to the root: Alpha and Beta are unchanged, yet
+		// the order turns (both of depth 1, by the report). The token covers
+		// the order of the steps it confirms: stale, the same refusal and
+		// way as for any change of the state (a fresh preview). Before, the
+		// old token went through with another order than the one shown.
+		self::pair();
+		$root_a  = self::term_a( 'Root', 'category' );
+		$pole_a  = self::term_a( 'Pole', 'category', array( 'parent' => $root_a ) );
+		$alpha_a = self::term_a( 'Alpha', 'category', array( 'parent' => $pole_a, 'description' => 'A.' ) );
+		$quay_a  = self::term_a( 'Quay', 'category' );
+		$beta_a  = self::term_a( 'Beta', 'category', array( 'parent' => $quay_a, 'description' => 'B.' ) );
+		$root_b  = self::term_b( 'Root', 'category' );
+		$pole_b  = self::term_b( 'Pole', 'category', array( 'parent' => $root_b ) );
+		$alpha_b = self::term_b( 'Alpha', 'category', array( 'parent' => $pole_b, 'description' => 'A.' ) );
+		$quay_b  = self::term_b( 'Quay', 'category' );
+		$beta_b  = self::term_b( 'Beta', 'category', array( 'parent' => $quay_b, 'description' => 'B.' ) );
+		self::paired( self::staged() );
+		self::b(
+			array(
+				array( 'op' => 'update_term', 'term' => $alpha_b, 'taxonomy' => 'category', 'args' => array( 'description' => 'A, on staging.' ) ),
+				array( 'op' => 'update_term', 'term' => $beta_b, 'taxonomy' => 'category', 'args' => array( 'description' => 'B, on staging.' ) ),
+			)
+		);
+		$args    = self::planned( array( 'term:category:alpha', 'term:category:beta' ) )['args'];
+		$order   = static function ( array $preview ): array {
+			$out = array();
+			foreach ( $preview['preview']['steps'] ?? $preview['steps'] ?? array() as $step ) {
+				if ( isset( $step['object'] ) ) {
+					$out[] = (string) $step['object']['staging_ref'];
+				}
+			}
+			return $out;
+		};
+		$preview = self::gated( 'wp_site_push', $args );
+		self::assertIsArray( $preview, is_wp_error( $preview ) ? $preview->get_error_message() : '' );
+		self::assertSame( array( (string) $beta_b, (string) $alpha_b ), $order( $preview ), 'Beta first: ' . json_encode( $preview ) );
+		// Another hand hangs Pole to the root; Alpha and Beta stay as they are.
+		$moved = wp_update_term( $pole_a, 'category', array( 'parent' => 0 ) );
+		self::assertIsArray( $moved, is_wp_error( $moved ) ? $moved->get_error_message() : '' );
+		$stale = self::gated( 'wp_site_push', $args + array( 'confirm_token' => $preview['confirm_token'] ) );
+		self::assertInstanceOf( \WP_Error::class, $stale, 'The old token confirms another order than it showed.' );
+		self::assertSame( 'ab_mcp_confirm_mismatch', $stale->get_error_code() );
+		self::assertNull( AB_MCP_Sync_Run::open_run(), 'No run was made.' );
+		// A fresh preview shows the order as it is now and confirms.
+		$again = self::gated( 'wp_site_push', $args );
+		self::assertSame( array( (string) $alpha_b, (string) $beta_b ), $order( $again ), 'Both of depth 1 now: by the report.' );
+		$run = self::gated( 'wp_site_push', $args + array( 'confirm_token' => $again['confirm_token'] ) );
+		self::assertIsArray( $run, is_wp_error( $run ) ? $run->get_error_message() : '' );
+		self::assertSame( 'closed_done', self::finish( (int) $run['run_id'] )['state'] );
+		self::assertSame( 'A, on staging.', self::term_row_a( $alpha_a )['description'] );
+		self::assertSame( 'B, on staging.', self::term_row_a( $beta_a )['description'] );
+	}
+
 	public function testTheMetaOfATermGoesByItsRightAndBackAndANewTermWithMetaIsLocked(): void {
 		// Term meta (decision 28): a key that differs is written with the
 		// right edit_term_meta at the term and goes back raw, byte for byte;

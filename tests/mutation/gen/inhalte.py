@@ -370,6 +370,8 @@ e('post-type-unregistered', 'precheck(): a post type this site does not register
   "\t\tif ( ! is_object( $pto ) || ! isset( $pto->cap ) ) {\n\t\t\treturn self::locked( 'post:type_unregistered',", "\t\tif ( false ) {\n\t\t\treturn self::locked( 'post:type_unregistered',", 'unit', P_LOCKS)
 e('post-read-lock-unread', 'read_lock(): a lock of the post of this site this version does not read locks as well (post:lock_unread)', PW,
   "\t\treturn self::locked( 'post:lock_unread', sprintf( '%s carries a lock this version does not read', (string) $what ) );", "\t\treturn null;", 'unit', P_TYPES)
+e('push-token-order', 'plan(): the state the token is bound to covers the order of the steps it confirms (Codex round 3, B)', PU,
+  "\t\t\t\t\t'order'       => $order,\n", '', 'it', 'testATokenWhoseOrderOfStepsNoLongerHoldsIsStale')
 
 def test_of(expect):
     return expect.split(' with data set "', 1)[0]

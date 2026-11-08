@@ -243,6 +243,15 @@ nennt ihre Meldung den Weg.
   `testAChildWhoseParentStepFailsGoesAllTheSame`,
   `testTheLoopOfParentsIsAskedOfTheStateTheRunLeaves`,
   `testTheTermsOfARunAreWrittenFromTheRootOfTheTreeItLeavesDown`.
+  Die Reihenfolge ruht auf mehr als den gewählten Objekten (die Tiefe eines
+  Terms liest die Eltern seiner Vorfahren hier): der Zustand, an den der
+  Token der Vorschau gebunden ist, deckt darum die Folge der Schritte ab
+  (Art und Staging-Ref je Schritt). Hängt eine andere Hand vor der
+  Bestätigung einen nicht gewählten Vorfahren um und kehrt sich die
+  Reihenfolge, ist der Token veraltet, mit derselben Ablehnung
+  (`ab_mcp_confirm_mismatch`) und demselben Weg wie bei jeder anderen
+  Änderung des Stands: eine neue Vorschau (Codex-Runde 3; Prüffall
+  `testATokenWhoseOrderOfStepsNoLongerHoldsIsStale`).
 - Grenze C: Ein Elternteil, der am Stand nach dem Lauf eine Schleife
   schlösse (ein Term ausserhalb der Auswahl hängt hier anders als auf
   Staging), sperrt `term:parent` (Z8d): `wp_update_term()` bräche die
