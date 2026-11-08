@@ -334,20 +334,28 @@ final class AB_MCP_Sync_Option_Writer {
 	 * @param string|null $live_id  Option name.
 	 * @return string|WP_Error The name.
 	 */
-	public static function write_row( array $prepared, $live_id ) {
+	public static function write_row( array $prepared, $live_id, $pre = null ) {
 		$name = (string) $prepared['name'];
 		if ( null === $live_id || (string) $live_id !== $name ) {
 			return AB_MCP_Sync_Post_Writer::locked( 'option:create', sprintf( 'the option %s is not on this site', $name ) );
 		}
-		if ( ! current_user_can( 'manage_options' ) ) {
-			return AB_MCP_Sync_Post_Writer::rights( sprintf( 'change the option %s (manage_options)', $name ) );
-		}
-		// update_option() compares with the value it reads through the cache
-		// of the options and writes nothing where they are equal: emptied
-		// first, it compares with the row as it is (Codex round 1, A1).
-		AB_MCP_Sync_Shared_Row::forget( $name );
-		update_option( $name, $prepared['value'] );
-		return $name;
+		// The right, the last read of the option against the state the engine
+		// read, the call (AB_MCP_Sync_Write; Codex round 3 of branch 11, A6).
+		return AB_MCP_Sync_Write::forward(
+			self::class,
+			$name,
+			$pre,
+			static fn() => current_user_can( 'manage_options' ) ? true : AB_MCP_Sync_Post_Writer::rights( sprintf( 'change the option %s (manage_options)', $name ) ),
+			static function () use ( $name, $prepared ) {
+				// update_option() compares with the value it reads through the
+				// cache of the options and writes nothing where they are equal:
+				// emptied first, it compares with the row as it is (Codex round
+				// 1, A1).
+				AB_MCP_Sync_Shared_Row::forget( $name );
+				update_option( $name, $prepared['value'] );
+				return $name;
+			}
+		);
 	}
 
 	/**

@@ -42,7 +42,10 @@ WW = 'includes/tools/class-widget-writer.php'
 RV = 'includes/sync/class-sync-revert.php'
 EX = 'includes/sync/class-sync-export.php'
 PW = 'includes/sync/class-sync-post-writer.php'
-FILEVAR = {MW: '$mw', WA: '$wa', CW: '$cw', OW: '$ow', SR: '$sr', EN: '$en', PU: '$pu', DK: '$dk', WW: '$ww', PW: '$pw', 'includes/sync/class-sync-term-writer.php': '$tw', EX: '$ex', RV: '$rv'}
+TW = 'includes/sync/class-sync-term-writer.php'
+AW = 'includes/sync/class-sync-attachment-writer.php'
+SW = 'includes/sync/class-sync-write.php'
+FILEVAR = {MW: '$mw', WA: '$wa', CW: '$cw', OW: '$ow', SR: '$sr', EN: '$en', PU: '$pu', DK: '$dk', WW: '$ww', PW: '$pw', TW: '$tw', EX: '$ex', RV: '$rv', AW: '$aw', SW: '$sw'}
 
 RUNS = {
     'u': ('unit', 'SyncStructureWritersTest'),
@@ -85,7 +88,8 @@ IT_OPTIONS = 'testChangedCoreOptionsGoOverAndBackAndThePermalinksBuildTheirRules
 IT_SHARED = 'testAFieldOfASharedRowGoesBackOnlyWhereItsBytesAreStillThoseReadAndItsCachesForgetIt'
 IT_LOCKS = 'testWhatARunCannotWriteAsTheCoreWouldIsLockedWithItsKeyAndNothingOfItIsWritten'
 IT_STALE = 'testAStepWritesFromTheRowsAsTheyAreAndNeverFromAStaleCacheOfThem'
-IT_FILTER = 'testAWidgetFilterThatChangesAnotherInstanceAsTheStepWritesKeepsItsChangeAndMakesTheStepUnclear'
+IT_FILTER = 'testAWidgetFilterThatChangesAnotherInstanceAsTheStepWritesKeepsItsChangeAndTheStepWritesNothing'
+IT_HOOKOWN = 'testAHookOfTheRightThatChangesTheInstanceTheStepWritesKeepsItsChangeAndTheStepOwnsNothing'
 IT_CRED = 'testACredentialInTheNameOfAMenuOrOfItsPositionLandsInNoPackage'
 IT_FREEPOS = 'testANewMenuAtAPositionNoMenuHoldsYetGoesOverAndTheWayBackLeavesThePositionEmptyAgain'
 IT_MOVE = 'testAMenuThatTakesThePositionOfAnotherMenuOfTheRunGoesAfterItAndAnExchangeIsLocked'
@@ -99,6 +103,9 @@ U_ROWBACK = 'testTheKindReadsAgainAsItWritesAPartBackAndLeavesOneThatIsNotWhatTh
 U_TERMBACK = 'testTheRowOfATermGoesBackOnlyWhereItIsWhatTheStepWroteAndItsSlugAndParentAreFree'
 U_CHECKED = 'testTheFinishedContentOfAnObjectGoesThroughTheCredentialCheckOnceMore'
 U_PARTORDER = 'testTheOrderOfThePartsOfEachKindIsWhatTheTokensCover'
+U_WRITE = 'testTheOneWriteOfAStepAsksTheRightThenReadsThenComparesThenCalls'
+U_HOOK = 'testEveryWriterWritesNothingWhereAHookOfItsRightChangesItsOwnFieldRightBeforeTheCall'
+U_TERMROW = 'testTheRowOfATermIsWrittenThroughTheCoreAndAnIdWordPressGaveBackIsNotTheStepsOwn'
 
 # ------------------------------------------------------------ core options
 e('option-create', 'target_of(): an option is not made by a run', OW,
@@ -228,8 +235,8 @@ e('menu-unchanged-position', 'journal_parts(): a position whose value stays is n
   "\t\t\tif ( $before === $target ) {\n\t\t\t\tcontinue;\n\t\t\t}\n\t\t\t$out[] = array(\n\t\t\t\t'part'   => $name,\n\t\t\t\t'way'    => self::WAY_LOCATION,",
   "\t\t\t$out[] = array(\n\t\t\t\t'part'   => $name,\n\t\t\t\t'way'    => self::WAY_LOCATION,", 'u', U_POS)
 e('menu-write-refusal', 'write_part(): the position asked again right before it is set', MW,
-  "\t\t$refusal  = self::location_refusal( $location, $set );\n\t\tif ( null !== $refusal ) {\n\t\t\treturn $refusal;\n\t\t}",
-  "\t\t$refusal  = self::location_refusal( $location, $set );", 'u', U_POS)
+  "\t\t\t\treturn null === $refusal ? true : $refusal;",
+  "\t\t\t\treturn true;", 'u', U_POS)
 e('menu-new-positions', 'with_row(): a new menu names every position it takes as a part of its row', MW,
   "\t\t\t$out[ (string) $name ] = AB_MCP_Sync_Shared_Row::hash( $value );\n\t\t}\n\t\tforeach ( array_keys( self::location_targets( $prepared, $parts ) ) as $name ) {",
   "\t\t}\n\t\tforeach ( array_keys( self::location_targets( $prepared, $parts ) ) as $name ) {", 'u', U_POS)
@@ -387,38 +394,38 @@ e('engine-pending-space', 'pending(): a new menu is pending in the space of term
 # ------------------------------------------- Codex round 1 of branch 11
 # A1: the caches of a shared row emptied right before the core call.
 e('a1-menu-forget', 'write_part(): set_theme_mod() reads the theme mods the step read (A1)', MW,
-  "\t\tAB_MCP_Sync_Shared_Row::forget( $positions['option'] );\n\t\t$locations = $positions['locations'];",
-  "\t\t$locations = $positions['locations'];", 'it', IT_STALE)
+  "\t\t\t\tAB_MCP_Sync_Shared_Row::forget( $positions['option'] );\n\t\t\t\t$locations = $positions['locations'];",
+  "\t\t\t\t$locations = $positions['locations'];", 'it', IT_STALE)
 e('a1-css-forget', 'write_row(): wp_update_custom_css_post() finds the post by the link the step read (A1)', CW,
   "\t\tAB_MCP_Sync_Shared_Row::forget( 'theme_mods_' . $stylesheet );\n", "", 'it', IT_STALE)
 e('a1-option-forget', 'write_row(): update_option() compares with the row as it is (A1)', OW,
-  "\t\tAB_MCP_Sync_Shared_Row::forget( $name );\n\t\tupdate_option( $name, $prepared['value'] );",
-  "\t\tupdate_option( $name, $prepared['value'] );", 'it', IT_STALE)
+  "\t\t\t\tAB_MCP_Sync_Shared_Row::forget( $name );\n\t\t\t\tupdate_option( $name, $prepared['value'] );",
+  "\t\t\t\tupdate_option( $name, $prepared['value'] );", 'it', IT_STALE)
 e('a1-areas-forget', 'write_row(): wp_set_sidebars_widgets() compares with the row as it is (A1)', WA,
-  "\t\tAB_MCP_Sync_Shared_Row::forget( self::AREAS );\n\t\t$areas = AB_MCP_Sync_Shared_Row::read( self::AREAS );",
-  "\t\t$areas = AB_MCP_Sync_Shared_Row::read( self::AREAS );", 'it', IT_STALE)
+  "\t\t\t\tAB_MCP_Sync_Shared_Row::forget( self::AREAS );\n\t\t\t\t$areas = AB_MCP_Sync_Shared_Row::read( self::AREAS );",
+  "\t\t\t\t$areas = AB_MCP_Sync_Shared_Row::read( self::AREAS );", 'it', IT_STALE)
 e('a1-widget-forget', 'widget_row(): update_option() of a widget compares with the row as it is (A1)', WA,
   "\t\tAB_MCP_Sync_Shared_Row::forget( 'widget_' . $base );\n\t\t$row = AB_MCP_Sync_Shared_Row::read( 'widget_' . $base );",
   "\t\t$row = AB_MCP_Sync_Shared_Row::read( 'widget_' . $base );", 'it', IT_STALE)
 # A2: the row of a widget read after its update() and filters.
-e('a2-row-after-sanitize', 'write_part(): the row read again after the update() of the widget (A2)', WA,
-  "\t\t// the write no call runs a hook.\n\t\t$value = self::widget_row( $write['base'] );\n\t\tif ( is_wp_error( $value ) ) {\n\t\t\treturn $value;\n\t\t}\n\t\t$value[ (int) $write['number'] ] = $clean;",
-  "\t\t// the write no call runs a hook.\n\t\t$value[ (int) $write['number'] ] = $clean;", 'it', IT_FILTER)
+e('a2-row-after-sanitize', 'write_part(): the area compared after the update() of the widget with the state the engine read, not with one read after it (A2, A6)', WA,
+  "\t\t\t(string) $live_id,\n\t\t\t$pre,",
+  "\t\t\t(string) $live_id,\n\t\t\tself::current( (string) $live_id ),", 'it', IT_FILTER)
 # A3: no revision deleted.
 e('a3-keep-filter', 'keeping_revisions(): no revision of the post deleted by the call (A3)', PW,
   "\t\tadd_filter( 'wp_revisions_to_keep', $first, PHP_INT_MAX, 2 );\n", "", 'it', IT_CSS)
 e('a3-keep-back', 'restore_part(): no revision deleted on the way back (A3)', CW,
-  "\t\t\t(int) $backup['row']['post_id'],\n\t\t\tstatic function () use ( $backup ) {",
-  "\t\t\t0,\n\t\t\tstatic function () use ( $backup ) {", 'it', IT_CSS)
+  "\t\t\t\t\t(int) $backup['row']['post_id'],\n\t\t\t\t\tstatic function () use ( $backup ) {",
+  "\t\t\t\t\t0,\n\t\t\t\t\tstatic function () use ( $backup ) {", 'it', IT_CSS)
 e('rev-page-forward', 'write_row(): no revision of a post here deleted by its save (the lead after Codex round 1)', PW,
   "\t\t\t$id = self::keeping_revisions(\n\t\t\t\t(int) $live_id,", "\t\t\t$id = self::keeping_revisions(\n\t\t\t\t0,", 'itc', IT_REVPAGE)
 e('rev-page-back', 'restore_row(): nor by the row put back', PW,
-  "\t\t$id                     = self::keeping_revisions(\n\t\t\t(int) $live_id,", "\t\t$id                     = self::keeping_revisions(\n\t\t\t0,", 'itc', IT_REVPAGE)
+  "\t\t\t\treturn self::keeping_revisions(\n\t\t\t\t\t(int) $live_id,", "\t\t\t\treturn self::keeping_revisions(\n\t\t\t\t\t0,", 'itc', IT_REVPAGE)
 e('rev-item-forward', 'write_row(): no revision of a menu item here deleted by its save', MW,
   "AB_MCP_Sync_Post_Writer::keeping_revisions(\n\t\t\t(int) $live_id,\n\t\t\tstatic function () use ( $menu, $live_id, $fields ) {",
   "AB_MCP_Sync_Post_Writer::keeping_revisions(\n\t\t\t0,\n\t\t\tstatic function () use ( $menu, $live_id, $fields ) {", 'it', IT_ITEMS)
 e('rev-item-back', 'restore_part(): nor by the row of an item put back', MW,
-  "\t\t\t$done = AB_MCP_Sync_Post_Writer::keeping_revisions(\n\t\t\t\t$id,", "\t\t\t$done = AB_MCP_Sync_Post_Writer::keeping_revisions(\n\t\t\t\t0,", 'it', IT_ITEMS)
+  "\t\t\t\t\treturn AB_MCP_Sync_Post_Writer::keeping_revisions(\n\t\t\t\t\t\t$id,", "\t\t\t\t\treturn AB_MCP_Sync_Post_Writer::keeping_revisions(\n\t\t\t\t\t\t0,", 'it', IT_ITEMS)
 e('a3-keep-limit', 'keeping_revisions(): only where the site keeps a number, never revisions where it keeps none (A3)', PW,
   " && (int) $num > 0 ? -1 : $num;", " ? -1 : $num;", 'u', U_CSS)
 e('a3-keep-post', 'keeping_revisions(): only the post of the step (A3)', PW,
@@ -434,8 +441,8 @@ e('a4-menu-location-name', 'more(): the names of the positions of a menu through
   "", 'it', IT_CRED)
 # A5: the rights again right before each write.
 e('a5-widget-forward', 'write_part(): edit_theme_options again after the update() of the widget (A5)', WA,
-  "\t\t// branch 11, A5: they may have changed it), before the last read.\n\t\tif ( ! current_user_can( 'edit_theme_options' ) ) {",
-  "\t\t// branch 11, A5: they may have changed it), before the last read.\n\t\tif ( false ) {", 'u', U_AREACHK)
+  "\t\t\tstatic fn() => current_user_can( 'edit_theme_options' ) ? true : AB_MCP_Sync_Post_Writer::rights( 'change the widgets of this site (edit_theme_options)' ),\n\t\t\tstatic function () use ( $write, $clean ) {",
+  "\t\t\tstatic fn() => true,\n\t\t\tstatic function () use ( $write, $clean ) {", 'u', U_AREACHK)
 e('a5-widget-back', 'right_now(): edit_theme_options again right before a field of an area goes back (A5)', WA,
   "\t\treturn current_user_can( 'edit_theme_options' ) ? null : array(",
   "\t\treturn true ? null : array(", 'u', U_AREACHK)
@@ -445,14 +452,14 @@ e('a5-widget-back-list', 'restore_part(): the list asks it right before it goes 
 e('a5-option-back', 'restore_part(): manage_options and the class of the name again right before the option goes back (A5)', OW,
   "\t\tif ( true !== $right ) {", "\t\tif ( false ) {", 'u', U_OPTCHK)
 e('a5-item-back', 'restore_part(): the rights at the item again right before its row goes back (A5)', MW,
-  "\t\t\tif ( ! current_user_can( 'edit_theme_options' ) || ! current_user_can( 'edit_post', $id ) ) {",
-  "\t\t\tif ( false ) {", 'u', U_ITEMSAN)
+  "\t\t\t\tstatic fn() => current_user_can( 'edit_theme_options' ) && current_user_can( 'edit_post', $id ) ? true : sprintf(",
+  "\t\t\t\tstatic fn() => true ? true : sprintf(", 'u', U_ITEMSAN)
 e('a5-position-back', 'restore_part(): edit_theme_options again right before a position goes back (A5)', MW,
   "\t\t$mods['nav_menu_locations'] = $locations;\n\t\tif ( ! current_user_can( 'edit_theme_options' ) ) {",
   "\t\t$mods['nav_menu_locations'] = $locations;\n\t\tif ( false ) {", 'u', U_POS)
 e('a5-css-back', 'restore_part(): edit_css again right before the CSS goes back (A5)', CW,
-  "\t\tif ( ! current_user_can( 'edit_css' ) ) {\n\t\t\treturn array(",
-  "\t\tif ( false ) {\n\t\t\treturn array(", 'u', U_CSS)
+  "\t\t\tstatic fn() => current_user_can( 'edit_css' ) ? true : sprintf( 'change the Additional CSS of %s (edit_css)', (string) $live_id ),",
+  "\t\t\tstatic fn() => true,", 'u', U_CSS)
 # B1: a new menu at a position no menu holds yet.
 e('b1-free-position', 'with_row(): a new menu names the positions it sets that no menu holds yet (B1)', MW,
   "\t\t\tif ( ! isset( $out[ $name ] ) ) {\n\t\t\t\t$out[ $name ] = AB_MCP_Sync_Shared_Row::hash( null );",
@@ -486,22 +493,81 @@ e('c1-rebase', 'unit_rest(): the answer of rebase() (C1)', EN,
 e('c1-new-rest', 'revert_boundary(): a new object whose pair did not become residual leaves its step unclear (the lead after round 1)', EN,
   "\t\t\tif ( is_wp_error( $kept ) ) {\n\t\t\t\t$state              = 'unclear';",
   "\t\t\tif ( false ) {\n\t\t\t\t$state              = 'unclear';", 'it', IT_NEWREST)
-# A6 (Codex round 2): the rights first, then the last read, then the write.
-e('a6-widget-order', 'write_part(): the row read after the hooks of the right, right before the write (A6)', WA,
-  "\t\tif ( ! current_user_can( 'edit_theme_options' ) ) {\n\t\t\treturn AB_MCP_Sync_Post_Writer::rights( 'change the widgets of this site (edit_theme_options)' );\n\t\t}\n\t\t// The row read again after the update() of the widget, its filters\n\t\t// and the hooks of the right (A2; Codex round 2, A6): what they\n\t\t// changed in it (another instance) stays as they left it, and the\n\t\t// engine reads that change as another hand's; between this read and\n\t\t// the write no call runs a hook.\n\t\t$value = self::widget_row( $write['base'] );\n\t\tif ( is_wp_error( $value ) ) {\n\t\t\treturn $value;\n\t\t}\n",
-  "\t\t$value = self::widget_row( $write['base'] );\n\t\tif ( is_wp_error( $value ) ) {\n\t\t\treturn $value;\n\t\t}\n\t\tif ( ! current_user_can( 'edit_theme_options' ) ) {\n\t\t\treturn AB_MCP_Sync_Post_Writer::rights( 'change the widgets of this site (edit_theme_options)' );\n\t\t}\n", 'u', U_AREACHK)
-e('a6-css-order', 'restore_part(): edit_css before the row is read and compared (A6)', CW,
-  "\t\t// The right first (A5), then the row read and compared, then the\n\t\t// write, no call that runs a hook in between (Codex round 2, A6).\n\t\tif ( ! current_user_can( 'edit_css' ) ) {",
-  "\t\t// The right first (A5), then the row read and compared, then the\n\t\t// write, no call that runs a hook in between (Codex round 2, A6).\n\t\tif ( false ) {", 'u', U_CSS)
+# A6 (Codex rounds 2 and 3): one helper for every write with a call of the
+# core, forward and back: the rights, the last read, the comparison with the
+# state the engine expects, the call.
+e('a6-order', 'core(): the rights before the last read (A6)', SW,
+  "\t\t$may = $rights();\n\t\tif ( true !== $may ) {\n\t\t\treturn is_wp_error( $may ) ? $may : new WP_Error( 'ab_mcp_sync_rights', sprintf( 'Not written: this account may not %s. Connect with an account that may, or leave the object out of the plan.', (string) $may ) );\n\t\t}\n\t\t$now = $read();\n",
+  "\t\t$now = $read();\n\t\t$may = $rights();\n\t\tif ( true !== $may ) {\n\t\t\treturn is_wp_error( $may ) ? $may : new WP_Error( 'ab_mcp_sync_rights', sprintf( 'Not written: this account may not %s. Connect with an account that may, or leave the object out of the plan.', (string) $may ) );\n\t\t}\n", 'u', U_WRITE)
+e('a6-rights', 'core(): a right missing, nothing read, nothing called (A6)', SW,
+  "\t\tif ( true !== $may ) {\n\t\t\treturn is_wp_error( $may )", "\t\tif ( false ) {\n\t\t\treturn is_wp_error( $may )", 'u', U_WRITE)
+e('a6-unread', 'core(): a last read that fails, nothing compared, nothing called (A6)', SW,
+  "\t\tif ( is_wp_error( $now ) ) {\n\t\t\treturn $now;\n\t\t}\n", "", 'u', U_WRITE)
+e('a6-compare', 'core(): another state than the engine expects, nothing called (A6)', SW,
+  "\t\tif ( true !== $matches( $now ) ) {", "\t\tif ( false ) {", 'u', U_HOOK)
+e('a6-strict', 'core(): only true is the same state (A6)', SW,
+  "\t\tif ( true !== $matches( $now ) ) {", "\t\tif ( ! $matches( $now ) ) {", 'u', U_WRITE)
+e('a6-forward-state', 'forward(): the state the engine read against the last read (A6)', SW,
+  "\t\t\tstatic fn( $now ) => is_array( $pre ) && is_array( $now ) && self::same( $pre, $now ),",
+  "\t\t\tstatic fn( $now ) => is_array( $now ),", 'u', U_HOOK)
+e('a6-same-bytes', 'same(): byte for byte, not by loose equality (A6)', SW,
+  "\t\treturn hash_equals( hash( 'sha256', AB_MCP_Sync_Shared_Row::field( $a ) ), hash( 'sha256', AB_MCP_Sync_Shared_Row::field( $b ) ) );",
+  "\t\treturn $a == $b;", 'u', U_WRITE)
+e('a6-back-left', 'back(): a refusal leaves the part with its note (A6)', SW,
+  "\t\tif ( is_wp_error( $done ) && in_array( $done->get_error_code(), array( 'ab_mcp_sync_rights', self::CHANGED ), true ) ) {",
+  "\t\tif ( false ) {", 'u', U_WRITE)
+# Each writer through the helper (Codex round 3, A6): with the object here,
+# never as a new one without a state to compare.
+e('a6f-option', 'write_row(): the option through the helper (A6)', OW,
+  "\t\t\tself::class,\n\t\t\t$name,\n\t\t\t$pre,", "\t\t\tself::class,\n\t\t\tnull,\n\t\t\t$pre,", 'u', U_HOOK)
+e('a6f-css', 'write_row(): the CSS through the helper (A6)', CW,
+  "\t\t\tself::class,\n\t\t\t$stylesheet,\n\t\t\t$pre,", "\t\t\tself::class,\n\t\t\tnull,\n\t\t\t$pre,", 'u', U_HOOK)
+e('a6f-menu', 'write_row(): the term of a menu through the helper (A6)', MW,
+  "\t\t\tnull === $live_id ? null : (int) $live_id,\n\t\t\t$pre,\n\t\t\tstatic fn() => current_user_can( 'edit_theme_options' ) ? true : AB_MCP_Sync_Post_Writer::rights( 'change the menus",
+  "\t\t\tnull,\n\t\t\t$pre,\n\t\t\tstatic fn() => current_user_can( 'edit_theme_options' ) ? true : AB_MCP_Sync_Post_Writer::rights( 'change the menus", 'u', U_HOOK)
+e('a6f-position', 'write_part(): a position of a menu through the helper (A6)', MW,
+  "\t\t\t(int) $live_id,\n\t\t\t$pre,\n\t\t\tstatic function () use ( $location, $set ) {",
+  "\t\t\tnull,\n\t\t\t$pre,\n\t\t\tstatic function () use ( $location, $set ) {", 'u', U_HOOK)
+e('a6f-item', 'write_row(): the row of a menu item through the helper (A6)', MW,
+  "\t\t\tnull === $live_id ? null : (int) $live_id,\n\t\t\t$pre,\n\t\t\tstatic fn() => current_user_can( 'edit_theme_options' ) && current_user_can( 'assign_term', $menu )",
+  "\t\t\tnull,\n\t\t\t$pre,\n\t\t\tstatic fn() => current_user_can( 'edit_theme_options' ) && current_user_can( 'assign_term', $menu )", 'u', U_HOOK)
+e('a6f-item-meta', 'write_part(): a meta key of a menu item through the helper (A6)', MW,
+  "\t\t\t(int) $live_id,\n\t\t\t$pre,\n\t\t\tstatic function () use ( $live_id, $key, $prepared, $from ) {",
+  "\t\t\tnull,\n\t\t\t$pre,\n\t\t\tstatic function () use ( $live_id, $key, $prepared, $from ) {", 'u', U_HOOK)
+e('a6f-area-list', 'write_row(): the list of an area through the helper (A6)', WA,
+  "\t\t\tself::class,\n\t\t\t$area,\n\t\t\t$pre,", "\t\t\tself::class,\n\t\t\tnull,\n\t\t\t$pre,", 'u', U_HOOK)
+e('a6f-area-instance', 'write_part(): an instance of an area through the helper (A6)', WA,
+  "\t\t\tself::class,\n\t\t\t(string) $live_id,\n\t\t\t$pre,", "\t\t\tself::class,\n\t\t\tnull,\n\t\t\t$pre,", 'u', U_AREACHK)
+e('a6f-post-meta', 'write_part(): a meta key of a post through the helper (A6)', PW,
+  "\t\t\t\tself::class,\n\t\t\t\t$live_id,\n\t\t\t\t$pre,", "\t\t\t\tself::class,\n\t\t\t\tnull,\n\t\t\t\t$pre,", 'u', U_HOOK)
+e('a6f-attachment', 'write_part(): an own key of an attachment through the helper (A6)', AW,
+  "\t\t\tself::class,\n\t\t\t$live_id,\n\t\t\t$pre,", "\t\t\tself::class,\n\t\t\tnull,\n\t\t\t$pre,", 'u', U_HOOK)
+e('a6f-term-meta', 'write_part(): a meta key of a term through the helper (A6)', TW,
+  "\t\t\tself::class,\n\t\t\t(int) $live_id,\n\t\t\t$pre,", "\t\t\tself::class,\n\t\t\tnull,\n\t\t\t$pre,", 'term', U_TERMROW)
+e('a6f-engine-row', 'write_parts(): the row call with the state the engine read (A6)', EN,
+  "\t\t\t\t$id = $w::write_row( $prepared, $live_id, $pre_all );", "\t\t\t\t$id = $w::write_row( $prepared, $live_id );", 'it', IT_OPTIONS)
+# The way back through the helper: the last read against what the step wrote.
+e('a6-css-back', 'restore_part(): the last read of the CSS right before it goes back (A6)', CW,
+  "\t\t\tstatic fn( $again ) => is_array( $again ) && $again['row']['post_id'] === $backup['row']['post_id'] && hash_equals( (string) $hash, self::row_hash( $again['row'] ) ),",
+  "\t\t\tstatic fn( $again ) => true,", 'u', U_CSS)
 e('a6-item-last-read', 'restore_part(): the last read of an item right before its row goes back (A6)', MW,
-  "\t\t\tif ( ! is_array( $again ) || ! hash_equals( (string) $hash, self::row_hash( $again['row'] ) ) ) {",
-  "\t\t\tif ( false ) {", 'u', U_ITEMSAN)
+  "\t\t\t\tstatic fn( $again ) => is_array( $again ) && hash_equals( (string) $hash, self::row_hash( $again['row'] ) ),",
+  "\t\t\t\tstatic fn( $again ) => true,", 'u', U_ITEMSAN)
 e('a6-post-last-read', 'restore_row(): the last read of a post right before its row goes back (A6)', PW,
-  "\t\tif ( ! is_array( $again ) || ! hash_equals( $written, self::row_hash( $again['row'] ) ) ) {",
-  "\t\tif ( false ) {", 'run', U_ROWBACK)
-e('a6-term-last-read', 'restore_row(): the last read of a term right before its row goes back (A6)', 'includes/sync/class-sync-term-writer.php',
-  "\t\tif ( ! is_array( $again ) || ! hash_equals( (string) $written, self::row_hash( $again['row'] ) ) ) {",
-  "\t\tif ( false ) {", 'term', U_TERMBACK)
+  "\t\t\tstatic fn( $again ) => is_array( $again ) && hash_equals( $written, self::row_hash( $again['row'] ) ),",
+  "\t\t\tstatic fn( $again ) => true,", 'run', U_ROWBACK)
+e('a6-term-last-read', 'restore_row(): the last read of a term right before its row goes back (A6)', TW,
+  "\t\t\tstatic fn( $again ) => is_array( $again ) && hash_equals( (string) $written, self::row_hash( $again['row'] ) ),",
+  "\t\t\tstatic fn( $again ) => true,", 'term', U_TERMBACK)
+# The engine: a call the writer refused owns nothing.
+e('a6-refused', 'write_parts(): a refused call deviates as one that was not made (A6)', EN,
+  "\t\t\tif ( $refused ) {\n\t\t\t\t// The writer made no call", "\t\t\tif ( false ) {\n\t\t\t\t// The writer made no call", 'it', IT_FILTER)
+e('a6-refused-own', 'write_parts(): a refused part call never makes its part the step\'s own (A6)', EN,
+  " is_array( $post_all ) ? $post_all : null, $refused ? null : $target, false, $w );",
+  " is_array( $post_all ) ? $post_all : null, $target, false, $w );", 'it', IT_HOOKOWN)
+e('a6-refused-message', 'refused(): a step that wrote nothing says that the change of the other hand stays (A6)', EN,
+  "\t\tif ( 'failed' === $out['state'] ) {", "\t\tif ( false ) {", 'it', IT_FILTER)
+
 # A7 (Codex round 2): the filter of the type of the post as well.
 e('a7-type-filter', 'keeping_revisions(): the filter wp_{$post_type}_revisions_to_keep of the post as well (A7)', PW,
   "\t\t\t\t\tadd_filter( $hook, $keep, PHP_INT_MAX, 2 );\n", "", 'u', U_CSS)

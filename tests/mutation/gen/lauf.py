@@ -294,8 +294,8 @@ INTERRUPTED = 'testARequestThatExitsInABoundaryLeavesTheRunInterruptedAndTheWayB
 MATRIX = 'testDecideOverEveryCombinationOfOwnershipStateDeviationWayAndForeignMark'
 NORMAL = 'testAPostWithACategoryAndATagAndAPageWithATemplateGoOverAndBackWithEveryPartRestored'
 e('engine-with-row', 'write_parts(): what the row call writes besides the row (with_row()) is read back with the row and is the step\'s own where it reads so; without it the template of an ordinary page is another hand\'s and the step deviates (N2)', EN,
-  "\t\t\t\t\t$expected               = $k === $i ? (string) $other['target'] : ( isset( $named[ $other['part'] ] ) ? (string) $named[ $other['part'] ] : null );",
-  "\t\t\t\t\t$expected               = $k === $i ? (string) $other['target'] : null;", 'it', NORMAL)
+  "\t\t\t\t\t$expected               = $refused ? null : ( $k === $i ? (string) $other['target'] : ( isset( $named[ $other['part'] ] ) ? (string) $named[ $other['part'] ] : null ) );",
+  "\t\t\t\t\t$expected               = $refused ? null : ( $k === $i ? (string) $other['target'] : null );", 'it', NORMAL)
 e('engine-own-after', 'seen_after(): the hash read back after the call that changed the part is own_after, what the way back compares with', EN,
   "\t\t\t$part['own_after']  = $post;\n", '', 'it', E2E)
 e('engine-changed-owns', 'seen_after(): a call that changed nothing of the part (post as pre) marks nothing of it, neither the step\'s own nor another hand\'s (N1)', EN,

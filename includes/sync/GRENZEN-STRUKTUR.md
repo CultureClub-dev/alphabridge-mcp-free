@@ -231,12 +231,14 @@ Position, die das Theme hier nicht registriert, in der Prüfung des Laufs
 - Ändert `update()` des Widgets oder `widget_update_callback` die
   Einstellungen (ein Text-Widget mit HTML ohne `unfiltered_html`), sperrt
   der Bereich vorab (`widget_area:sanitizer`, Z8).
-- Das Schreiben einer Instanz liest die Zeile des Widgets erst nach
-  `update()` des Widgets und `widget_update_callback` (Codex-Runde 1, A2):
-  ändert ein solcher Filter dabei eine andere Instanz, bleibt seine
-  Änderung, und die Engine liest sie als fremde Änderung (der Schritt ist
-  unklar, nichts davon geht von selbst zurück). Prüffall
-  `testAWidgetFilterThatChangesAnotherInstanceAsTheStepWritesKeepsItsChangeAndMakesTheStepUnclear`.
+- Das Schreiben einer Instanz liest den Bereich erst nach `update()` des
+  Widgets, `widget_update_callback` und der Rechtefrage und vergleicht ihn
+  mit dem Stand, den die Engine unmittelbar vor dem Aufruf gelesen hat
+  (Codex-Runde 1, A2; Codex-Runde 3, A6): ändert ein solcher Filter dabei
+  eine andere Instanz oder diese, bleibt seine Änderung, die Instanz wird
+  nicht geschrieben, und der Schritt weicht ab (`failed`, jeder Teil des
+  Schritts wie vorher; nichts davon geht von selbst zurück). Prüffall
+  `testAWidgetFilterThatChangesAnotherInstanceAsTheStepWritesKeepsItsChangeAndTheStepWritesNothing`.
 - Ein Schritt, der eine Instanz angelegt hat und dann abweicht, macht den
   Bereich zum Rest (`unit_rest()`); nehmen die Paare dieses Speichern nicht
   an, ist der Schritt unklar und nennt den Weg (das Paar von Hand
@@ -310,18 +312,36 @@ Position, die das Theme hier nicht registriert, in der Prüfung des Laufs
   und der Liste und jeder Instanz eines Bereichs (nach `update()` in
   `restore_right()`). Fehlt ein Recht, bleibt der Teil stehen (`left`) mit
   Grund und Weg.
-- Die Reihenfolge jedes Schreibens (Codex-Runde 2, A6): erst die Rechte und
-  die Prüfungen, die Hooks auslösen, dann die letzte Lesung und der
-  Vergleich, dann sofort das Schreiben, ohne Aufruf dazwischen, der einen
-  Hook auslöst. Vorwärts liest das Widget seine Zeile nach `update()`, den
-  Filtern und der Rechtefrage. Auf dem Rückweg fragt das CSS sein Recht vor
-  dem Lesen; der Menüeintrag, der Post (auch Vorlagen) und der Term (auch
-  das Menü) lesen ihre Zeile direkt vor dem Schreiben noch einmal, weil
-  ihre Prüfungen den Stand davor brauchen; was sich dabei geändert hat,
-  bleibt stehen (`left`). Die rohen Wege (Option, Position, Liste und
-  Instanz eines Bereichs) schreiben nur, wo die Zeile genau die Bytes hält,
-  die vor den Hooks gelesen wurden (`put_back()`); die Reihenfolge der
-  Rechtefrage ändert dort nichts.
+- Die Reihenfolge jedes Schreibens mit einem Kernaufruf, vorwärts und
+  zurück, steht an einer Stelle (`AB_MCP_Sync_Write`, Codex-Runden 2 und 3,
+  A6): erst die Rechte (ihre Hooks, `map_meta_cap` und `user_has_cap`,
+  laufen hier), dann die letzte Lesung des Objekts, dann der Vergleich
+  dieser Lesung mit dem Stand, den die Engine für diesen Schritt erwartet,
+  dann sofort der Aufruf; zwischen Lesung und Aufruf läuft kein Hook.
+  Vorwärts ist der Stand das ganze Objekt, wie die Engine es unmittelbar
+  vor dem Aufruf gelesen hat (`current()`, Byte für Byte), zurück die ganze
+  Zeile, wie der Schritt sie geschrieben hat. Weicht er ab (ein Rechtehook,
+  `update()` eines Widgets oder ein Filter hat das Objekt geändert, auch das
+  Feld, das der Aufruf schreiben soll), wird nichts geschrieben: vorwärts
+  weicht der Schritt ab (`ab_mcp_sync_changed_before_write`; die Engine
+  vermerkt jeden veränderten Teil als fremd, keinen als eigen, Entscheid
+  A), zurück bleibt der Teil stehen (`left`). Ein Objekt hier ohne Stand
+  der Engine wird nie geschrieben (fail closed). Durch diesen Helfer
+  schreiben alle Schreiber, die vor ihrem Aufruf ein Recht fragen: Meta
+  eines Posts, eines Terms und die eigenen Schlüssel eines Anhangs, das
+  Menü und seine Positionen, die Zeile und die Meta eines Menüeintrags, die
+  Liste und die Instanzen eines Bereichs, das CSS, die Option; zurück die
+  Zeile eines Posts (auch Vorlagen), eines Terms (auch des Menüs), eines
+  Menüeintrags und das CSS. Die Aufrufe ohne Rechtefrage zwischen der
+  Lesung der Engine und dem Aufruf (die Zeile eines Posts oder Terms, seine
+  Terme, das Beitragsbild) brauchen ihn nicht: dort ist die Lesung der
+  Engine die letzte. Die rohen Wege (Option, Position, Liste und Instanz
+  eines Bereichs, Meta) schreiben nur, wo die Zeile genau die Bytes hält,
+  die vor den Hooks gelesen wurden (`put_back()`), und rufen keinen Kern.
+  Prüffälle `testTheOneWriteOfAStepAsksTheRightThenReadsThenComparesThenCalls`
+  (die Reihenfolge), `testEveryWriterWritesNothingWhereAHookOfItsRightChangesItsOwnFieldRightBeforeTheCall`
+  (ein Fall je Schreiber; der Term in
+  `testTheRowOfATermIsWrittenThroughTheCoreAndAnIdWordPressGaveBackIsNotTheStepsOwn`).
 - Die Tokens eines Plans und eines Rückwegs decken auch die Reihenfolge,
   in der die Teile jeder Art zurückgehen (`PART_ORDER`, Codex-Runde 1, C2).
 

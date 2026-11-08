@@ -31,6 +31,14 @@ if ( ! function_exists( 'set_theme_mod' ) ) {
 	}
 }
 
+if ( ! function_exists( 'wp_update_custom_css_post' ) ) {
+	/** Recorded ($ab_test_css_writes); answers the post 7 of the CSS. */
+	function wp_update_custom_css_post( $css, $args = array() ) {
+		$GLOBALS['ab_test_css_writes'][] = array( (string) $css, (array) $args );
+		return (object) array( 'ID' => 7 );
+	}
+}
+
 if ( ! function_exists( 'sanitize_html_class' ) ) {
 	/** As WordPress (wp-includes/formatting.php), without the filter. */
 	function sanitize_html_class( $classname, $fallback = '' ) {

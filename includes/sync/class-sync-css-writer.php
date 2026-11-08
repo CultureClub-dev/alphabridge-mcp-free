@@ -387,14 +387,31 @@ final class AB_MCP_Sync_Css_Writer {
 	 * @param string|null $live_id  The stylesheet.
 	 * @return string|WP_Error The stylesheet.
 	 */
-	public static function write_row( array $prepared, $live_id ) {
+	public static function write_row( array $prepared, $live_id, $pre = null ) {
 		$stylesheet = (string) $prepared['stylesheet'];
 		if ( null === $live_id || (string) $live_id !== $stylesheet ) {
 			return AB_MCP_Sync_Post_Writer::locked( 'custom_css:create', sprintf( 'the CSS of %s is not linked to its stylesheet on this site', $stylesheet ) );
 		}
-		if ( ! current_user_can( 'edit_css' ) ) {
-			return AB_MCP_Sync_Post_Writer::rights( sprintf( 'change the Additional CSS of %s (edit_css)', $stylesheet ) );
-		}
+		// The right, the last read of the CSS against the state the engine
+		// read, the call (AB_MCP_Sync_Write; Codex round 3 of branch 11, A6).
+		return AB_MCP_Sync_Write::forward(
+			self::class,
+			$stylesheet,
+			$pre,
+			static fn() => current_user_can( 'edit_css' ) ? true : AB_MCP_Sync_Post_Writer::rights( sprintf( 'change the Additional CSS of %s (edit_css)', $stylesheet ) ),
+			static fn() => self::css_call( $prepared, $stylesheet )
+		);
+	}
+
+	/**
+	 * The call of the core for the CSS: the caches of the link emptied, the
+	 * linked post read, wp_update_custom_css_post() with no revision deleted.
+	 *
+	 * @param array  $prepared   target_of().
+	 * @param string $stylesheet The stylesheet.
+	 * @return string|WP_Error The stylesheet.
+	 */
+	private static function css_call( array $prepared, $stylesheet ) {
 		// wp_update_custom_css_post() finds the post by the link in the theme
 		// mods, read through the cache of the options: emptied first, so it
 		// finds the post the step read (Codex round 1 of branch 11, A1),
@@ -541,14 +558,6 @@ final class AB_MCP_Sync_Css_Writer {
 				'note'  => sprintf( 'A part %s of the CSS is of a name this version does not know: left as it is.', (string) $name ),
 			);
 		}
-		// The right first (A5), then the row read and compared, then the
-		// write, no call that runs a hook in between (Codex round 2, A6).
-		if ( ! current_user_can( 'edit_css' ) ) {
-			return array(
-				'state' => 'left',
-				'note'  => sprintf( 'Not put back: this account may not %s, asked again right before the write (a filter may have changed the rights). Set it by hand in wp-admin with an account that may.', sprintf( 'change the Additional CSS of %s (edit_css)', (string) $live_id ) ),
-			);
-		}
 		$current = self::current( (string) $live_id );
 		if ( is_wp_error( $current ) ) {
 			return $current;
@@ -570,25 +579,35 @@ final class AB_MCP_Sync_Css_Writer {
 				'note'  => 'The CSS was changed since the step wrote it, so it is left as it is.',
 			);
 		}
-		$id = AB_MCP_Sync_Post_Writer::keeping_revisions(
-			(int) $backup['row']['post_id'],
+		// The right (A5), the last read against what the step wrote, the call
+		// (AB_MCP_Sync_Write; Codex rounds 2 and 3 of branch 11, A6).
+		$id = AB_MCP_Sync_Write::back(
+			static fn() => current_user_can( 'edit_css' ) ? true : sprintf( 'change the Additional CSS of %s (edit_css)', (string) $live_id ),
+			static fn() => self::current( (string) $live_id ),
+			static fn( $again ) => is_array( $again ) && $again['row']['post_id'] === $backup['row']['post_id'] && hash_equals( (string) $hash, self::row_hash( $again['row'] ) ),
 			static function () use ( $backup ) {
-				return wp_update_post(
-					wp_slash(
-						array(
-							'ID'                    => (int) $backup['row']['post_id'],
-							'post_content'          => (string) $backup['row']['post_content'],
-							'post_content_filtered' => (string) $backup['row']['post_content_filtered'],
-							'post_title'            => (string) $backup['row']['post_title'],
-							'post_name'             => (string) $backup['row']['post_name'],
-							'post_status'           => (string) $backup['row']['post_status'],
-						)
-					),
-					true
+				return AB_MCP_Sync_Post_Writer::keeping_revisions(
+					(int) $backup['row']['post_id'],
+					static function () use ( $backup ) {
+						return wp_update_post(
+							wp_slash(
+								array(
+									'ID'                    => (int) $backup['row']['post_id'],
+									'post_content'          => (string) $backup['row']['post_content'],
+									'post_content_filtered' => (string) $backup['row']['post_content_filtered'],
+									'post_title'            => (string) $backup['row']['post_title'],
+									'post_name'             => (string) $backup['row']['post_name'],
+									'post_status'           => (string) $backup['row']['post_status'],
+								)
+							),
+							true
+						);
+					}
 				);
-			}
+			},
+			'The CSS changed as it was put back (a hook of this site), so it is left as it is.'
 		);
-		if ( is_wp_error( $id ) ) {
+		if ( is_wp_error( $id ) || is_array( $id ) ) {
 			return $id;
 		}
 		$after = self::current( (string) $live_id );

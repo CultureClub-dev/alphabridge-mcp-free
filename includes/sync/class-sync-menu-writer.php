@@ -501,15 +501,21 @@ final class AB_MCP_Sync_Menu_Writer {
 	 * Write the term: as the kind term writes it (wp_insert_term(),
 	 * wp_update_term() on nav_menu); edit_theme_options asked right before.
 	 *
-	 * @param array    $prepared target_of().
-	 * @param int|null $live_id  The menu here, null for a new one.
+	 * @param array      $prepared target_of().
+	 * @param int|null   $live_id  The menu here, null for a new one.
+	 * @param array|null $pre      current() right before the call (the engine).
 	 * @return int|WP_Error
 	 */
-	public static function write_row( array $prepared, $live_id ) {
-		if ( ! current_user_can( 'edit_theme_options' ) ) {
-			return AB_MCP_Sync_Post_Writer::rights( 'change the menus of this site (edit_theme_options)' );
-		}
-		return AB_MCP_Sync_Term_Writer::write_row( $prepared, $live_id );
+	public static function write_row( array $prepared, $live_id, $pre = null ) {
+		// The right, the last read against the state the engine read, the
+		// call (AB_MCP_Sync_Write; Codex round 3 of branch 11, A6).
+		return AB_MCP_Sync_Write::forward(
+			self::class,
+			null === $live_id ? null : (int) $live_id,
+			$pre,
+			static fn() => current_user_can( 'edit_theme_options' ) ? true : AB_MCP_Sync_Post_Writer::rights( 'change the menus of this site (edit_theme_options)' ),
+			static fn() => AB_MCP_Sync_Term_Writer::write_row( $prepared, $live_id )
+		);
 	}
 
 	/**
@@ -534,28 +540,39 @@ final class AB_MCP_Sync_Menu_Writer {
 		}
 		$location = substr( $name, strlen( 'location:' ) );
 		$set      = in_array( $location, $prepared['locations'], true );
-		$refusal  = self::location_refusal( $location, $set );
-		if ( null !== $refusal ) {
-			return $refusal;
-		}
-		// The caches of the row emptied first (Codex round 1 of branch 11,
-		// A1): set_theme_mod() reads the theme mods again through the cache
-		// of the options, so it changes the row as it is now, the one read
-		// here, and no other field of it goes back to a cached value.
-		AB_MCP_Sync_Shared_Row::forget( 'stylesheet' );
-		$positions = self::positions( (int) $live_id );
-		if ( is_wp_error( $positions ) ) {
-			return $positions;
-		}
-		AB_MCP_Sync_Shared_Row::forget( $positions['option'] );
-		$locations = $positions['locations'];
-		if ( $set ) {
-			$locations[ $location ] = (int) $live_id;
-		} else {
-			unset( $locations[ $location ] );
-		}
-		set_theme_mod( 'nav_menu_locations', $locations );
-		return true;
+		// The right and the registered position, the last read of the menu
+		// against the state the engine read, the call (AB_MCP_Sync_Write;
+		// Codex round 3 of branch 11, A6).
+		return AB_MCP_Sync_Write::forward(
+			self::class,
+			(int) $live_id,
+			$pre,
+			static function () use ( $location, $set ) {
+				$refusal = self::location_refusal( $location, $set );
+				return null === $refusal ? true : $refusal;
+			},
+			static function () use ( $live_id, $location, $set ) {
+				// The caches of the row emptied first (Codex round 1 of branch
+				// 11, A1): set_theme_mod() reads the theme mods again through the
+				// cache of the options, so it changes the row as it is now, the
+				// one read here, and no other field of it goes back to a cached
+				// value.
+				AB_MCP_Sync_Shared_Row::forget( 'stylesheet' );
+				$positions = self::positions( (int) $live_id );
+				if ( is_wp_error( $positions ) ) {
+					return $positions;
+				}
+				AB_MCP_Sync_Shared_Row::forget( $positions['option'] );
+				$locations = $positions['locations'];
+				if ( $set ) {
+					$locations[ $location ] = (int) $live_id;
+				} else {
+					unset( $locations[ $location ] );
+				}
+				set_theme_mod( 'nav_menu_locations', $locations );
+				return true;
+			}
+		);
 	}
 
 	/**
@@ -1441,15 +1458,34 @@ final class AB_MCP_Sync_Menu_Item_Writer {
 	 * slashed (it hands them to wp_insert_post() and update_post_meta(), which
 	 * unslash them); the rights asked right before.
 	 *
-	 * @param array    $prepared target_of().
-	 * @param int|null $live_id  The item here, null for a new one.
+	 * @param array      $prepared target_of().
+	 * @param int|null   $live_id  The item here, null for a new one.
+	 * @param array|null $pre      current() right before the call (the engine).
 	 * @return int|WP_Error The id of the item written.
 	 */
-	public static function write_row( array $prepared, $live_id ) {
+	public static function write_row( array $prepared, $live_id, $pre = null ) {
 		$menu = (int) $prepared['menu'];
-		if ( ! current_user_can( 'edit_theme_options' ) || ! current_user_can( 'assign_term', $menu ) || ( null !== $live_id && ! current_user_can( 'edit_post', (int) $live_id ) ) ) {
-			return AB_MCP_Sync_Post_Writer::rights( sprintf( 'write an item of the menu %d (edit_theme_options, assign_term, edit_post)', $menu ) );
-		}
+		// The rights, the last read against the state the engine read, the
+		// call (AB_MCP_Sync_Write; Codex round 3 of branch 11, A6).
+		return AB_MCP_Sync_Write::forward(
+			self::class,
+			null === $live_id ? null : (int) $live_id,
+			$pre,
+			static fn() => current_user_can( 'edit_theme_options' ) && current_user_can( 'assign_term', $menu ) && ( null === $live_id || current_user_can( 'edit_post', (int) $live_id ) ) ? true : AB_MCP_Sync_Post_Writer::rights( sprintf( 'write an item of the menu %d (edit_theme_options, assign_term, edit_post)', $menu ) ),
+			static fn() => self::item_call( $prepared, $live_id, $menu )
+		);
+	}
+
+	/**
+	 * The call of the core for an item: its fields slashed, the dates of an
+	 * item here as they are, wp_update_nav_menu_item().
+	 *
+	 * @param array    $prepared target_of().
+	 * @param int|null $live_id  The item here, null for a new one.
+	 * @param int      $menu     The menu here.
+	 * @return int|WP_Error
+	 */
+	private static function item_call( array $prepared, $live_id, $menu ) {
 		$fields = $prepared['fields'];
 		foreach ( array( 'menu-item-title', 'menu-item-url', 'menu-item-description', 'menu-item-attr-title', 'menu-item-classes', 'menu-item-xfn', 'menu-item-target', 'menu-item-object' ) as $field ) {
 			$fields[ $field ] = wp_slash( (string) $fields[ $field ] );
@@ -1500,11 +1536,18 @@ final class AB_MCP_Sync_Menu_Item_Writer {
 		}
 		$key  = substr( $name, 5 );
 		$from = is_array( $pre ) ? AB_MCP_Sync_Post_Writer::meta_values( $pre, $key ) : array();
-		$may  = AB_MCP_Sync_Post_Writer::meta_right( (int) $live_id, $key, self::targets( $prepared, $key ), $from );
-		if ( true !== $may ) {
-			return new WP_Error( 'ab_mcp_sync_rights', sprintf( 'The meta %1$s of the menu item was not written: %2$s at the item. Connect with an account that may, or leave the item out of the plan.', $key, $may ) );
-		}
-		return AB_MCP_Sync_Post_Writer::write_meta( (int) $live_id, $key, isset( $prepared['meta'][ $key ] ) ? $prepared['meta'][ $key ] : array(), $from );
+		// The right, the last read against the state the engine read, the
+		// call (AB_MCP_Sync_Write; Codex round 3 of branch 11, A6).
+		return AB_MCP_Sync_Write::forward(
+			self::class,
+			(int) $live_id,
+			$pre,
+			static function () use ( $live_id, $key, $prepared, $from ) {
+				$may = AB_MCP_Sync_Post_Writer::meta_right( (int) $live_id, $key, self::targets( $prepared, $key ), $from );
+				return true === $may ? true : new WP_Error( 'ab_mcp_sync_rights', sprintf( 'The meta %1$s of the menu item was not written: %2$s at the item. Connect with an account that may, or leave the item out of the plan.', $key, $may ) );
+			},
+			static fn() => AB_MCP_Sync_Post_Writer::write_meta( (int) $live_id, $key, isset( $prepared['meta'][ $key ] ) ? $prepared['meta'][ $key ] : array(), $from )
+		);
 	}
 
 	/**
@@ -1640,43 +1683,37 @@ final class AB_MCP_Sync_Menu_Item_Writer {
 					);
 				}
 			}
-			// The rights after sanitize_post() and its filters (Codex round 1
-			// of branch 11, A5).
-			if ( ! current_user_can( 'edit_theme_options' ) || ! current_user_can( 'edit_post', $id ) ) {
-				return array(
-					'state' => 'left',
-					'note'  => sprintf( 'Not put back: this account may not %s, asked again right before the write (a filter may have changed the rights). Set it by hand in wp-admin with an account that may.', sprintf( 'edit the menu item %d (edit_theme_options, edit_post)', $id ) ),
-				);
-			}
-			// The last read, after every call that runs a hook (Codex round 2,
-			// A6): the row as the step wrote it, or it is left.
-			$again = self::current( $id );
-			if ( ! is_array( $again ) || ! hash_equals( (string) $hash, self::row_hash( $again['row'] ) ) ) {
-				return array(
-					'state' => 'left',
-					'note'  => 'The row of the menu item changed as it was put back (a hook of this site), so it is left as it is.',
-				);
-			}
-			$done = AB_MCP_Sync_Post_Writer::keeping_revisions(
-				$id,
+			// The rights after sanitize_post() and its filters (A5), the last
+			// read against what the step wrote, the call (AB_MCP_Sync_Write;
+			// Codex rounds 2 and 3 of branch 11, A6).
+			$done = AB_MCP_Sync_Write::back(
+				static fn() => current_user_can( 'edit_theme_options' ) && current_user_can( 'edit_post', $id ) ? true : sprintf( 'edit the menu item %d (edit_theme_options, edit_post)', $id ),
+				static fn() => self::current( $id ),
+				static fn( $again ) => is_array( $again ) && hash_equals( (string) $hash, self::row_hash( $again['row'] ) ),
 				static function () use ( $id, $backup ) {
-					return wp_update_post(
-						wp_slash(
-							array(
-								'ID'           => $id,
-								'post_title'   => (string) $backup['row']['post_title'],
-								'post_excerpt' => (string) $backup['row']['post_excerpt'],
-								'post_content' => (string) $backup['row']['post_content'],
-								'post_status'  => (string) $backup['row']['post_status'],
-								'menu_order'   => (int) $backup['row']['menu_order'],
-								'post_parent'  => (int) $backup['row']['post_parent'],
-							)
-						),
-						true
+					return AB_MCP_Sync_Post_Writer::keeping_revisions(
+						$id,
+						static function () use ( $id, $backup ) {
+							return wp_update_post(
+								wp_slash(
+									array(
+										'ID'           => $id,
+										'post_title'   => (string) $backup['row']['post_title'],
+										'post_excerpt' => (string) $backup['row']['post_excerpt'],
+										'post_content' => (string) $backup['row']['post_content'],
+										'post_status'  => (string) $backup['row']['post_status'],
+										'menu_order'   => (int) $backup['row']['menu_order'],
+										'post_parent'  => (int) $backup['row']['post_parent'],
+									)
+								),
+								true
+							);
+						}
 					);
-				}
+				},
+				'The row of the menu item changed as it was put back (a hook of this site), so it is left as it is.'
 			);
-			if ( is_wp_error( $done ) ) {
+			if ( is_wp_error( $done ) || is_array( $done ) ) {
 				return $done;
 			}
 			$after = self::current( $id );

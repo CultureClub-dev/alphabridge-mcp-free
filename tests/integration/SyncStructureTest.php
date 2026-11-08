@@ -1268,12 +1268,16 @@ final class SyncStructureTest extends TestCase {
 		self::assertSame( array(), $this->deletions );
 	}
 
-	public function testAWidgetFilterThatChangesAnotherInstanceAsTheStepWritesKeepsItsChangeAndMakesTheStepUnclear(): void {
+	public function testAWidgetFilterThatChangesAnotherInstanceAsTheStepWritesKeepsItsChangeAndTheStepWritesNothing(): void {
 		// Codex round 1 of branch 11, A2: widget_update_callback, run as the
 		// step writes an instance, changes another instance of the same row
 		// (text-3 in sidebar-2). Its change stays as the filter left it, and
 		// the engine reads it as another hand's: the step is unclear, nothing
-		// of it is put back by itself (Entscheid A).
+		// of it is put back by itself (Entscheid A). Since Codex round 3, A6:
+		// the writer reads the area after the filter and the rights and
+		// compares it with the state the engine read right before the call;
+		// it differs, so the instance is not written at all, the journal owns
+		// nothing of it, and the step failed with every part of it as before.
 		self::pair();
 		$text = self::widget_settings( 'text', array( 'title' => 'Hours', 'text' => 'Mo–Fr', 'filter' => true, 'visual' => true ) );
 		self::widgets_on_both( array( 'text-2' => $text ) );
@@ -1317,11 +1321,68 @@ final class SyncStructureTest extends TestCase {
 		remove_all_filters( 'widget_update_callback' );
 		self::assertTrue( $changed, 'The filter ran as the step wrote.' );
 		self::assertSame( 'Changed by the filter', self::option_of( 'a', 'widget_text' )[3]['title'], 'The change of the filter stays.' );
-		self::assertSame( $text_new, self::option_of( 'a', 'widget_text' )[2] );
+		self::assertSame( $text, self::option_of( 'a', 'widget_text' )[2], 'Not written: the area changed right before the call.' );
+		self::assertSame( 'closed_findings', $closed['state'], json_encode( $closed ) );
+		$step = self::writes( self::run_status( (int) $run['run_id'] ) )[0];
+		self::assertSame( 'failed', $step['state'], json_encode( $step ) );
+		self::assertStringContainsString( 'the part instance:text-2 was not written: the part instance:text-3 changed right before the call', (string) $step['parts']['object']['deviated']['why'] );
+		self::assertStringContainsString( 'Nothing was written: the part instance:text-3 changed right before the call of the part instance:text-2', (string) $step['result']['message'] );
+		self::assertStringContainsString( 'That change stays as it is', (string) $step['result']['message'] );
+		$parts = array_column( $step['parts']['parts'], null, 'part' );
+		self::assertSame( 'failed', $parts['instance:text-2']['state'], json_encode( $parts ) );
+		self::assertTrue( empty( $parts['instance:text-2']['own'] ), 'Nothing written, nothing of it the step\'s own.' );
+		self::assertStringContainsString( 'Not written (Nothing was written: the object changed right before the call', (string) $parts['instance:text-2']['note'] );
+	}
+
+	public function testAHookOfTheRightThatChangesTheInstanceTheStepWritesKeepsItsChangeAndTheStepOwnsNothing(): void {
+		// Codex round 3 of branch 11, A6: a hook of the right (user_has_cap)
+		// that allows and changes the very instance the step is to write, as
+		// the writer asks its right right before the call. The writer reads
+		// the area after it, compares it with the state the engine read, and
+		// writes nothing; the change of the hook stays, and the engine marks
+		// the part as another hand's, never as the step's own.
+		self::pair();
+		$text = self::widget_settings( 'text', array( 'title' => 'Hours', 'text' => 'Mo–Fr', 'filter' => true, 'visual' => true ) );
+		self::widgets_on_both( array( 'text-2' => $text ) );
+		self::paired( self::staged() );
+		$row      = self::option_of( 'a', 'widget_text' );
+		$text_new = self::widget_settings( 'text', array( 'title' => 'Opening hours', 'text' => 'Mo–Sa', 'filter' => true, 'visual' => true ) );
+		$row_b    = $row;
+		$row_b[2] = $text_new;
+		self::one_b( array( 'op' => 'update_option', 'name' => 'widget_text', 'value' => $row_b ) );
+		$planned = self::planned( array( array( 'widget_area', 'live', 'sidebar-1' ) ) );
+		$changed = false;
+		add_filter(
+			'user_has_cap',
+			static function ( $allcaps ) use ( &$changed ) {
+				$asking = false;
+				foreach ( debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS ) as $frame ) {
+					$asking = $asking || ( 'AB_MCP_Sync_Write' === ( $frame['class'] ?? '' ) && 'core' === $frame['function'] );
+				}
+				if ( $asking && ! $changed ) {
+					$changed           = true;
+					$other             = get_option( 'widget_text' );
+					$other[2]['title'] = 'Changed by the hook';
+					update_option( 'widget_text', $other );
+				}
+				return $allcaps;
+			}
+		);
+		$run    = self::begun( $planned['args'] );
+		$closed = self::finish( (int) $run['run_id'] );
+		remove_all_filters( 'user_has_cap' );
+		self::assertTrue( $changed, 'The hook ran as the right was asked.' );
+		self::assertSame( 'Changed by the hook', self::option_of( 'a', 'widget_text' )[2]['title'], 'Its change stays: nothing was written over it.' );
 		self::assertSame( 'closed_findings', $closed['state'], json_encode( $closed ) );
 		$step = self::writes( self::run_status( (int) $run['run_id'] ) )[0];
 		self::assertSame( 'unclear', $step['state'], json_encode( $step ) );
-		self::assertStringContainsString( 'instance:text-3', (string) $step['parts']['object']['deviated']['why'] );
+		self::assertStringContainsString( 'the part instance:text-2 was not written: the part instance:text-2 changed right before the call', (string) $step['parts']['object']['deviated']['why'] );
+		$part = array_column( $step['parts']['parts'], null, 'part' )['instance:text-2'];
+		self::assertTrue( empty( $part['own'] ), 'Not the step\'s own: ' . json_encode( $part ) );
+		$stored = array_column( \AB_MCP_Sync_Run::step( (int) $run['run_id'], (int) $step['seq'] )['parts']['parts'], null, 'part' )['instance:text-2'];
+		self::assertTrue( ! empty( $stored['foreign'] ), 'Another hand\'s, in the journal as it is stored.' );
+		self::assertSame( 'left', $part['state'], 'Left with its value before.' );
+		self::assertStringContainsString( 'Changed right before the step\'s call of the part instance:text-2', (string) $part['note'] );
 	}
 
 	/** The save of unit_rest() that fails: the new bases, or the state residual. */
@@ -1366,26 +1427,29 @@ final class SyncStructureTest extends TestCase {
 		);
 		$planned = self::planned( array( array( 'widget_area', 'live', 'sidebar-1' ) ) );
 		$pair_id = (int) AB_MCP_Sync_Pairs::find_live( self::source(), 'widget_area', 'sidebar-1' )['id'];
-		// As the new instance is written, the filter changes another one
-		// (the step deviates, the instance stays made); the save of the
-		// pair as a rest fails.
-		add_filter(
-			'widget_update_callback',
-			static function ( $instance, $new, $old, $widget ) {
-				unset( $new, $old );
+		// Right after the new instance is written, a hook of the row changes
+		// another one (the step deviates, the instance stays made; Codex
+		// round 3, A6: a change before the call, in the update() of the
+		// widget, would leave it not made); the save of the pair as a rest
+		// fails.
+		$changed = false;
+		add_action(
+			'update_option_widget_text',
+			static function ( $old, $value ) use ( &$changed ) {
+				unset( $old );
 				$writing = false;
 				foreach ( debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS ) as $frame ) {
 					$writing = $writing || ( 'AB_MCP_Sync_Widget_Area_Writer' === ( $frame['class'] ?? '' ) && 'write_part' === $frame['function'] );
 				}
-				if ( $writing && 5 === (int) $widget->number ) {
+				if ( $writing && ! $changed && isset( $value[5] ) ) {
+					$changed           = true;
 					$other             = get_option( 'widget_text' );
-					$other[3]['title'] = 'Changed by the filter';
+					$other[3]['title'] = 'Changed by the hook';
 					update_option( 'widget_text', $other );
 				}
-				return $instance;
 			},
 			10,
-			4
+			2
 		);
 		add_filter(
 			'query',
@@ -1399,8 +1463,9 @@ final class SyncStructureTest extends TestCase {
 		);
 		$run    = self::begun( $planned['args'] );
 		$closed = self::finish( (int) $run['run_id'] );
-		remove_all_filters( 'widget_update_callback' );
+		remove_all_actions( 'update_option_widget_text' );
 		remove_all_filters( 'query' );
+		self::assertTrue( $changed, 'The hook ran after the instance was written.' );
 		self::assertSame( 'closed_findings', $closed['state'], json_encode( $closed ) );
 		$step = self::writes( self::run_status( (int) $run['run_id'] ) )[0];
 		self::assertSame( 'unclear', $step['state'], json_encode( $step ) );

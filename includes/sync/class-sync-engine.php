@@ -96,6 +96,7 @@ require_once __DIR__ . '/class-sync-attachment-writer.php';
 require_once __DIR__ . '/class-sync-menu-writer.php';
 require_once __DIR__ . '/class-sync-widget-area-writer.php';
 require_once __DIR__ . '/class-sync-css-writer.php';
+require_once __DIR__ . '/class-sync-write.php';
 require_once __DIR__ . '/class-sync-option-writer.php';
 require_once __DIR__ . '/class-sync-import.php';
 require_once __DIR__ . '/class-sync-anchor.php';
@@ -1406,6 +1407,7 @@ final class AB_MCP_Sync_Engine {
 			$error       = null;
 			$post_all    = null;
 			$pre_call    = null;
+			$refused     = false;
 			if ( 'row' === $name ) {
 				// Every part right before the row call: the row call writes
 				// besides the row (with_row()), so every part is read before it
@@ -1418,9 +1420,13 @@ final class AB_MCP_Sync_Engine {
 				foreach ( $journal['parts'] as $k => $other ) {
 					$journal['parts'][ $k ] = self::seen_before( $other, $pre_all, $backup, $w );
 				}
-				$id = $w::write_row( $prepared, $live_id );
+				// With the state read right before it, for the last read and the
+				// comparison of the writer (AB_MCP_Sync_Write; Codex round 3 of
+				// branch 11, A6).
+				$id = $w::write_row( $prepared, $live_id, $pre_all );
 				if ( is_wp_error( $id ) ) {
-					$error = $id;
+					$error   = $id;
+					$refused = AB_MCP_Sync_Write::CHANGED === $id->get_error_code();
 				} else {
 					$live_id                       = self::live_of( $w, $id );
 					$journal['object']['live_ref'] = (string) $live_id;
@@ -1431,9 +1437,12 @@ final class AB_MCP_Sync_Engine {
 				// (with_row()) and it reads so, another hand's otherwise.
 				$post_all = null === $live_id ? null : $w::current( $live_id );
 				$post_all = is_array( $post_all ) ? $post_all : null;
+				// A call the writer refused because the object changed right
+				// before it (AB_MCP_Sync_Write::CHANGED) wrote nothing: what
+				// differs now is another hand's, never the step's own.
 				foreach ( $journal['parts'] as $k => $other ) {
-					$expected               = $k === $i ? (string) $other['target'] : ( isset( $named[ $other['part'] ] ) ? (string) $named[ $other['part'] ] : null );
-					$journal['parts'][ $k ] = self::seen_after( $other, $post_all, $expected, $k !== $i, $w );
+					$expected               = $refused ? null : ( $k === $i ? (string) $other['target'] : ( isset( $named[ $other['part'] ] ) ? (string) $named[ $other['part'] ] : null ) );
+					$journal['parts'][ $k ] = self::seen_after( $other, $post_all, $expected, ! $refused && $k !== $i, $w );
 				}
 				// The whole state read before and after the row call, not only
 				// the parts of the journal (branch 9, Codex round 1, A1: a key
@@ -1444,7 +1453,7 @@ final class AB_MCP_Sync_Engine {
 				// journal, other than what the row call was to write
 				// (with_row()), is another hand's: the object deviated, before
 				// the journal is saved again.
-				if ( is_array( $post_all ) ) {
+				if ( is_array( $post_all ) && ! $refused ) {
 					$changed_besides = self::changed_besides( $journal, is_array( $pre_all ) ? $pre_all : null, $post_all, $named, $w );
 					if ( null !== $changed_besides ) {
 						return self::deviated( $journal, $i, sprintf( 'the row call changed the part %s besides it, which the step does not write (a hook of this site reacting to the row)', $changed_besides ), $live_id, $backup );
@@ -1478,8 +1487,17 @@ final class AB_MCP_Sync_Engine {
 				}
 				$done                   = $w::write_part( $live_id, $name, $prepared, is_array( $pre_all ) ? $pre_all : null );
 				$error                  = is_wp_error( $done ) ? $done : null;
+				$refused                = null !== $error && AB_MCP_Sync_Write::CHANGED === $error->get_error_code();
 				$post_all               = $w::current( $live_id );
-				$journal['parts'][ $i ] = self::seen_after( $journal['parts'][ $i ], is_array( $post_all ) ? $post_all : null, $target, false, $w );
+				$journal['parts'][ $i ] = self::seen_after( $journal['parts'][ $i ], is_array( $post_all ) ? $post_all : null, $refused ? null : $target, false, $w );
+			}
+			if ( $refused ) {
+				// The writer made no call: the object changed right before it,
+				// after the last check of the rights (Codex round 3 of branch 11,
+				// A6). Every part that differs from the read before is another
+				// hand's; the step deviates, nothing of it goes back by itself
+				// (decision A).
+				return self::refused( $journal, $i, $error, $pre_all, $post_all, $live_id, $backup, $w );
 			}
 			// Whatever this call changed besides its own part (a hook of this
 			// site reacting to the call): a part the step wrote before or has
@@ -1573,6 +1591,53 @@ final class AB_MCP_Sync_Engine {
 			return self::deviated( $journal, $i, sprintf( 'the part %s was written but reads back other than its target (a filter of this site changed it as it was written)', $name ), $live_id, $backup );
 		}
 		return self::outcome( 'done', '', $journal, $live_id );
+	}
+
+	/**
+	 * A call the writer did not make (AB_MCP_Sync_Write::CHANGED; Codex
+	 * round 3 of branch 11, A6): its last read, after the rights, differed
+	 * from the state the engine read right before the call. Nothing was
+	 * written; every part that differs between that state and the read back
+	 * is another hand's (foreign, never the step's own), and the step
+	 * deviates with the first of them named.
+	 *
+	 * @param array      $journal Journal.
+	 * @param int        $i       The part of the call.
+	 * @param WP_Error   $error   The refusal of the writer.
+	 * @param array|null $pre     The state the engine read right before the call.
+	 * @param array|null $post    The state read back.
+	 * @param int|null   $live_id The object here.
+	 * @param array|null $backup  current() of the backup.
+	 * @param string     $w       The write side of the kind.
+	 * @return array{state:string,message:string,journal:array,live_id:int|null}
+	 */
+	private static function refused( array $journal, $i, WP_Error $error, $pre, $post, $live_id, $backup, $w ) {
+		$name  = (string) $journal['parts'][ $i ]['part'];
+		$first = null;
+		if ( is_array( $pre ) && is_array( $post ) ) {
+			foreach ( self::part_names( $pre, $post ) as $other_name ) {
+				if ( ! self::changed( $w::part_hash( $pre, $other_name ), $w::part_hash( $post, $other_name ) ) ) {
+					continue;
+				}
+				$first = null === $first ? $other_name : $first;
+				foreach ( $journal['parts'] as $k => $other ) {
+					if ( (string) $other['part'] === $other_name ) {
+						$journal['parts'][ $k ]['foreign'] = true;
+						$journal['parts'][ $k ]['note']    = self::noted( $other, sprintf( 'Changed right before the step\'s call of the part %s, after the last check of the rights (a hook of this site): not the step\'s own.', $name ) );
+					}
+				}
+			}
+		}
+		$journal['parts'][ $i ]['state'] = 'failed';
+		$journal['parts'][ $i ]['note']  = self::noted( $journal['parts'][ $i ], sprintf( 'Not written (%s).', $error->get_error_message() ) );
+		$changed = null === $first ? 'the object' : 'the part ' . $first;
+		$out     = self::deviated( $journal, $i, sprintf( 'the part %1$s was not written: %2$s changed right before the call, after the last check of the rights (a hook of this site), not by the step', $name, $changed ), $live_id, $backup );
+		if ( 'failed' === $out['state'] ) {
+			// No part of the step differs from its backup: the step wrote
+			// nothing, and what changed is another hand's and stays.
+			$out['message'] = sprintf( 'Nothing was written: %1$s changed right before the call of the part %2$s, after the last check of the rights (a hook of this site), not by the step. That change stays as it is; every part of the step is as before it. Check the object in wp-admin, then make a new report and plan again.', $changed, $name );
+		}
+		return $out;
 	}
 
 	/**

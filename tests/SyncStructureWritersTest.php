@@ -633,7 +633,7 @@ final class SyncStructureWritersTest extends TestCase {
 		self::db()->post_rows[21]       = array( 'post_type' => 'nav_menu_item', 'post_date' => '2026-01-02 03:04:05', 'post_date_gmt' => '2026-01-02 02:04:05' );
 		$GLOBALS['ab_test_menu_writes'] = array();
 		$update                         = AB_MCP_Sync_Menu_Item_Writer::target_of( self::item_line( array(), array( 'post_title' => 'Shop \\ Bar' ) ), self::item( 'update', '21' ), $ctx );
-		self::assertSame( 'ab_mcp_sync_write_failed', AB_MCP_Sync_Menu_Item_Writer::write_row( $update, 21 )->get_error_code() );
+		self::assertSame( 'ab_mcp_sync_write_failed', AB_MCP_Sync_Menu_Item_Writer::write_row( $update, 21, AB_MCP_Sync_Menu_Item_Writer::current( 21 ) )->get_error_code() );
 		self::assertSame( array( '2026-01-02 03:04:05', '2026-01-02 02:04:05' ), array( $GLOBALS['ab_test_menu_writes'][0][2]['menu-item-post-date'], $GLOBALS['ab_test_menu_writes'][0][2]['menu-item-post-date-gmt'] ), 'With the dates of the item here.' );
 		self::assertSame( 'Shop \\\\ Bar', $GLOBALS['ab_test_menu_writes'][0][2]['menu-item-title'], 'Slashed, as the core unslashes what it is given.' );
 		// References: the menu, the parent item, the object by their pairs.
@@ -700,6 +700,225 @@ final class SyncStructureWritersTest extends TestCase {
 		foreach ( array( 'edit_theme_options', 'edit_post', 'assign_term' ) as $cap ) {
 			$GLOBALS['ab_test_can'] = static fn( string $c, array $args ): bool => $c !== $cap;
 			self::assertSame( 'ab_mcp_sync_rights', $check( array() )->get_error_code(), $cap );
+		}
+	}
+
+	/* ------------------------------------------- the one write of a step */
+
+	public function testTheOneWriteOfAStepAsksTheRightThenReadsThenComparesThenCalls(): void {
+		// Codex round 3 of branch 11, A6: one place for the order of every
+		// write of a step with a call of the core, forward and back.
+		$seen = array();
+		$step = static function ( string $name, $answer ) use ( &$seen ) {
+			return static function () use ( $name, $answer, &$seen ) {
+				$seen[] = $name;
+				return $answer;
+			};
+		};
+		$match = static function ( $answer ) use ( &$seen ) {
+			return static function ( $now ) use ( $answer, &$seen ) {
+				$seen[] = 'matches ' . $now;
+				return $answer;
+			};
+		};
+		self::assertSame( 'called', \AB_MCP_Sync_Write::core( $step( 'rights', true ), $step( 'read', 'now' ), $match( true ), $step( 'call', 'called' ) ) );
+		self::assertSame( array( 'rights', 'read', 'matches now', 'call' ), $seen, 'The rights, the last read, the comparison of that read, the call.' );
+		$seen    = array();
+		$refusal = \AB_MCP_Sync_Write::core( $step( 'rights', 'edit the CSS (edit_css)' ), $step( 'read', 'now' ), $match( true ), $step( 'call', 'called' ) );
+		self::assertSame( array( 'ab_mcp_sync_rights', array( 'rights' ) ), array( $refusal->get_error_code(), $seen ), 'A right missing: nothing read, nothing called.' );
+		self::assertStringContainsString( 'may not edit the CSS (edit_css)', $refusal->get_error_message() );
+		$seen = array();
+		self::assertSame( 'own', \AB_MCP_Sync_Write::core( $step( 'rights', new WP_Error( 'own', 'x' ) ), $step( 'read', 'now' ), $match( true ), $step( 'call', 'called' ) )->get_error_code(), 'The refusal of a writer as it is.' );
+		$seen = array();
+		self::assertSame( array( 'unread', array( 'rights', 'read' ) ), array( \AB_MCP_Sync_Write::core( $step( 'rights', true ), $step( 'read', new WP_Error( 'unread', 'x' ) ), $match( true ), $step( 'call', 'called' ) )->get_error_code(), $seen ), 'A read that fails: nothing compared, nothing called.' );
+		foreach ( array( false, 1, 'yes' ) as $answer ) {
+			$seen = array();
+			self::assertSame( array( \AB_MCP_Sync_Write::CHANGED, array( 'rights', 'read', 'matches now' ) ), array( \AB_MCP_Sync_Write::core( $step( 'rights', true ), $step( 'read', 'now' ), $match( $answer ), $step( 'call', 'called' ) )->get_error_code(), $seen ), 'Another state (only true is the same): nothing called.' );
+		}
+		// Forward: a new object has no state to compare; one here without a
+		// state the engine read is never written (fail closed).
+		$seen = array();
+		self::assertSame( array( 'called', array( 'rights', 'call' ) ), array( \AB_MCP_Sync_Write::forward( AB_MCP_Sync_Option_Writer::class, null, null, $step( 'rights', true ), $step( 'call', 'called' ) ), $seen ) );
+		self::db()->option_rows['blogname'] = 'Old';
+		$pre                                = AB_MCP_Sync_Option_Writer::current( 'blogname' );
+		self::assertSame( 'called', \AB_MCP_Sync_Write::forward( AB_MCP_Sync_Option_Writer::class, 'blogname', $pre, $step( 'rights', true ), $step( 'call', 'called' ) ) );
+		self::assertSame( \AB_MCP_Sync_Write::CHANGED, \AB_MCP_Sync_Write::forward( AB_MCP_Sync_Option_Writer::class, 'blogname', null, $step( 'rights', true ), $step( 'call', 'called' ) )->get_error_code(), 'No state read: not written.' );
+		self::db()->option_rows['blogname'] = 'Other';
+		self::assertSame( \AB_MCP_Sync_Write::CHANGED, \AB_MCP_Sync_Write::forward( AB_MCP_Sync_Option_Writer::class, 'blogname', $pre, $step( 'rights', true ), $step( 'call', 'called' ) )->get_error_code() );
+		// Back: a refusal leaves the part as it is, with its note.
+		self::assertSame( array( 'state' => 'left', 'note' => 'Changed.' ), \AB_MCP_Sync_Write::back( $step( 'rights', true ), $step( 'read', 'now' ), $match( false ), $step( 'call', 'called' ), 'Changed.' ) );
+		$left = \AB_MCP_Sync_Write::back( $step( 'rights', 'edit the CSS (edit_css)' ), $step( 'read', 'now' ), $match( true ), $step( 'call', 'called' ), 'Changed.' );
+		self::assertSame( 'left', $left['state'] );
+		self::assertStringContainsString( 'may not edit the CSS (edit_css), asked again right before the write', $left['note'] );
+		self::assertSame( 'failed', \AB_MCP_Sync_Write::back( $step( 'rights', true ), $step( 'read', 'now' ), $match( true ), $step( 'call', new WP_Error( 'failed', 'x' ) ), 'Changed.' )->get_error_code(), 'An error of the call as it is.' );
+		// The same state, byte for byte: never two states that encode alike.
+		self::assertTrue( \AB_MCP_Sync_Write::same( array( 'a' => '1' ), array( 'a' => '1' ) ) );
+		self::assertFalse( \AB_MCP_Sync_Write::same( array( 'a' => '1' ), array( 'a' => 1 ) ) );
+		self::assertFalse( \AB_MCP_Sync_Write::same( array( 'a' => 1, 'b' => 2 ), array( 'b' => 2, 'a' => 1 ) ) );
+		self::assertFalse( \AB_MCP_Sync_Write::same( '', false ) );
+	}
+
+	public function testEveryWriterWritesNothingWhereAHookOfItsRightChangesItsOwnFieldRightBeforeTheCall(): void {
+		// Codex round 3 of branch 11, A6: the hook of a right (map_meta_cap,
+		// user_has_cap) that allows and changes the field the call is to
+		// write. The writer reads the object after the rights and compares it
+		// with the state the engine read right before the call: it differs,
+		// nothing is written (the step deviates). Without the hook the same
+		// call writes.
+		$writes = static function ( string $case, callable $setup, callable $read, callable $change, callable $call, callable $written ): void {
+			$setup();
+			$pre                    = $read();
+			$GLOBALS['ab_test_can'] = static function ( string $cap, array $args ) use ( $change ): bool {
+				$change();
+				return true;
+			};
+			$refused                = $call( $pre );
+			$GLOBALS['ab_test_can'] = static fn( string $cap, array $args ): bool => true;
+			self::assertInstanceOf( WP_Error::class, $refused, $case );
+			self::assertSame( \AB_MCP_Sync_Write::CHANGED, $refused->get_error_code(), $case . ': ' . $refused->get_error_message() );
+			self::assertFalse( $written(), $case . ': nothing written.' );
+			$setup();
+			$done = $call( $read() );
+			self::assertFalse( is_wp_error( $done ) && \AB_MCP_Sync_Write::CHANGED === $done->get_error_code(), $case . ': without the hook.' );
+			self::assertTrue( $written(), $case . ': written without the hook.' );
+		};
+		// A meta key of a post, an own key of an attachment.
+		$writes(
+			'a meta key of a post',
+			static function (): void {
+				self::db()->post_rows[12]    = array( 'post_type' => 'post', 'post_title' => 'Hello', 'post_status' => 'publish' );
+				self::db()->meta[12]         = array( array( 'meta_id' => '1', 'meta_key' => 'colors', 'meta_value' => 'red' ) );
+				$GLOBALS['ab_test_meta'][12] = array( 'colors' => array( 'red' ) );
+			},
+			static fn() => \AB_MCP_Sync_Post_Writer::current( 12 ),
+			static function (): void {
+				self::db()->meta[12][0]['meta_value'] = 'green';
+			},
+			static fn( $pre ) => \AB_MCP_Sync_Post_Writer::write_part( 12, 'meta:colors', array( 'meta' => array( 'colors' => array( 'blue' ) ) ), $pre ),
+			static fn(): bool => array( 'red' ) !== $GLOBALS['ab_test_meta'][12]['colors']
+		);
+		$writes(
+			'an own key of an attachment',
+			static function (): void {
+				self::db()->post_rows[8]    = array( 'post_type' => 'attachment', 'post_title' => 'Dog', 'post_status' => 'inherit', 'post_mime_type' => 'image/jpeg' );
+				self::db()->meta[8]         = array( array( 'meta_id' => '4', 'meta_key' => '_wp_attachment_image_alt', 'meta_value' => 'A dog' ) );
+				$GLOBALS['ab_test_meta'][8] = array( '_wp_attachment_image_alt' => array( 'A dog' ) );
+			},
+			static fn() => \AB_MCP_Sync_Attachment_Writer::current( 8 ),
+			static function (): void {
+				self::db()->meta[8][0]['meta_value'] = 'A cat';
+			},
+			static fn( $pre ) => \AB_MCP_Sync_Attachment_Writer::write_part( 8, 'meta:_wp_attachment_image_alt', array( 'meta' => array( '_wp_attachment_image_alt' => array( 'A bird' ) ) ), $pre ),
+			static fn(): bool => array( 'A dog' ) !== $GLOBALS['ab_test_meta'][8]['_wp_attachment_image_alt']
+		);
+		// The option.
+		$option = AB_MCP_Sync_Option_Writer::target_of( self::option_line( 'blogname', 'New' ), self::item( 'update', 'blogname' ), self::ctx() );
+		$writes(
+			'the option',
+			static function (): void {
+				self::db()->option_rows['blogname'] = 'Old';
+				$GLOBALS['ab_test_options']         = array();
+			},
+			static fn() => AB_MCP_Sync_Option_Writer::current( 'blogname' ),
+			static function (): void {
+				self::db()->option_rows['blogname'] = 'By the hook';
+			},
+			static fn( $pre ) => AB_MCP_Sync_Option_Writer::write_row( $option, 'blogname', $pre ),
+			static fn(): bool => array_key_exists( 'blogname', $GLOBALS['ab_test_options'] )
+		);
+		// The CSS.
+		self::css_here();
+		$css = AB_MCP_Sync_Css_Writer::target_of( self::css_line( 'p{color:red}' ), self::item( 'update', 'twentytwentyfive' ), self::ctx() );
+		$writes(
+			'the CSS',
+			static function (): void {
+				self::css_here();
+				$GLOBALS['ab_test_css_writes'] = array();
+			},
+			static fn() => AB_MCP_Sync_Css_Writer::current( 'twentytwentyfive' ),
+			static function (): void {
+				self::db()->post_rows[7]['post_content'] = 'body{color:blue}';
+			},
+			static fn( $pre ) => AB_MCP_Sync_Css_Writer::write_row( $css, 'twentytwentyfive', $pre ),
+			static fn(): bool => array() !== $GLOBALS['ab_test_css_writes']
+		);
+		// The menu: its term and a position.
+		$menu_here = static function (): void {
+			self::db()->option_rows['stylesheet']                  = 'twentytwentyfive';
+			self::db()->option_rows['theme_mods_twentytwentyfive'] = serialize( array( 'nav_menu_locations' => array( 'primary' => 3 ) ) );
+			self::db()->term_rows[5]                               = array( 'term_id' => '5', 'name' => 'Main', 'slug' => 'main', 'term_group' => '0', 'term_taxonomy_id' => '9', 'taxonomy' => 'nav_menu', 'description' => '', 'parent' => '0', 'count' => '0' );
+			$GLOBALS['ab_test_term_calls']                         = array();
+			$GLOBALS['ab_test_theme_mods']                         = array();
+		};
+		$menu = AB_MCP_Sync_Menu_Writer::target_of( self::menu_line( array( 'primary' ), array( 'name' => 'Main menu' ) ), self::item( 'update', '5' ), self::ctx() );
+		self::assertIsArray( $menu, is_wp_error( $menu ) ? $menu->get_error_message() : '' );
+		$writes(
+			'the term of the menu',
+			$menu_here,
+			static fn() => AB_MCP_Sync_Menu_Writer::current( 5 ),
+			static function (): void {
+				self::db()->term_rows[5]['name'] = 'By the hook';
+			},
+			static fn( $pre ) => AB_MCP_Sync_Menu_Writer::write_row( $menu, 5, $pre ),
+			static fn(): bool => array() !== $GLOBALS['ab_test_term_calls']
+		);
+		$writes(
+			'a position of the menu',
+			$menu_here,
+			static fn() => AB_MCP_Sync_Menu_Writer::current( 5 ),
+			static function (): void {
+				self::db()->option_rows['theme_mods_twentytwentyfive'] = serialize( array( 'nav_menu_locations' => array( 'primary' => 9 ) ) );
+			},
+			static fn( $pre ) => AB_MCP_Sync_Menu_Writer::write_part( 5, 'location:primary', $menu, $pre ),
+			static fn(): bool => isset( $GLOBALS['ab_test_theme_mods']['nav_menu_locations'] )
+		);
+		// The menu item: its row and a meta key of its own call.
+		$ctx       = self::ctx( array( 'term' => array( 5 => 50 ) ) );
+		$item_here = static function (): void {
+			self::db()->post_rows[21]       = array( 'post_type' => 'nav_menu_item', 'post_title' => 'Shop', 'post_status' => 'publish', 'menu_order' => '2', 'post_date' => '2026-01-02 03:04:05', 'post_date_gmt' => '2026-01-02 02:04:05' );
+			self::db()->meta[21]            = array();
+			$GLOBALS['ab_test_menu_writes'] = array();
+			$GLOBALS['ab_test_meta'][21]    = array();
+		};
+		$item = AB_MCP_Sync_Menu_Item_Writer::target_of( self::item_line( array( 'acme_icon' => 'star' ), array( 'post_title' => 'Shop now' ) ), self::item( 'update', '21' ), $ctx );
+		self::assertIsArray( $item, is_wp_error( $item ) ? $item->get_error_message() : '' );
+		$writes(
+			'the row of the menu item',
+			$item_here,
+			static fn() => AB_MCP_Sync_Menu_Item_Writer::current( 21 ),
+			static function (): void {
+				self::db()->post_rows[21]['post_title'] = 'By the hook';
+			},
+			static fn( $pre ) => AB_MCP_Sync_Menu_Item_Writer::write_row( $item, 21, $pre ),
+			static fn(): bool => array() !== $GLOBALS['ab_test_menu_writes']
+		);
+		$writes(
+			'a meta key of the menu item',
+			$item_here,
+			static fn() => AB_MCP_Sync_Menu_Item_Writer::current( 21 ),
+			static function (): void {
+				self::db()->meta[21] = array( array( 'meta_id' => '3', 'meta_key' => 'acme_icon', 'meta_value' => 'moon' ) );
+			},
+			static fn( $pre ) => AB_MCP_Sync_Menu_Item_Writer::write_part( 21, 'meta:acme_icon', $item, $pre ),
+			static fn(): bool => array() !== ( $GLOBALS['ab_test_meta'][21]['acme_icon'] ?? array() )
+		);
+		// The list of a widget area (its instances: see the checks of an area).
+		if ( class_exists( 'WP_Widget', false ) ) {
+			$list = array( 'area' => 'sidebar-1', 'list' => array( 'text-5', 'text-2' ) );
+			$writes(
+				'the list of a widget area',
+				static function (): void {
+					self::areas_here( array( 'text-2', 'text-5' ), array( 2 => array( 'title' => 'B' ), 5 => array( 'title' => 'E' ) ) );
+					$GLOBALS['ab_test_options'] = array();
+				},
+				static fn() => AB_MCP_Sync_Widget_Area_Writer::current( 'sidebar-1' ),
+				static function (): void {
+					self::db()->option_rows['sidebars_widgets'] = serialize( array( 'wp_inactive_widgets' => array(), 'sidebar-1' => array( 'text-5' ), 'sidebar-2' => array(), 'array_version' => 3 ) );
+				},
+				static fn( $pre ) => AB_MCP_Sync_Widget_Area_Writer::write_row( $list, 'sidebar-1', $pre ),
+				static fn(): bool => array_key_exists( 'sidebars_widgets', $GLOBALS['ab_test_options'] )
+			);
+			unset( $GLOBALS['ab_test_widget_violation'] );
 		}
 	}
 
@@ -807,22 +1026,23 @@ final class SyncStructureWritersTest extends TestCase {
 				),
 			),
 		);
-		self::assertTrue( AB_MCP_Sync_Widget_Area_Writer::write_part( 'sidebar-1', 'instance:text-3', $fresh, null ) );
+		self::assertTrue( AB_MCP_Sync_Widget_Area_Writer::write_part( 'sidebar-1', 'instance:text-3', $fresh, AB_MCP_Sync_Widget_Area_Writer::current( 'sidebar-1' ) ) );
 		self::assertSame( array( 3 => array( 'title' => 'C', 'seen_number' => 3 ), '_multiwidget' => 1 ), $GLOBALS['ab_test_options']['widget_text'] );
-		// A hook of the right that allows and changes another instance of the
-		// row as it is asked (Codex round 2, A6): read after it, its change
-		// stays in what is written.
-		self::db()->option_rows['widget_text'] = serialize( array( 4 => array( 'title' => 'Other' ), '_multiwidget' => 1 ) );
+		// A hook of the right that allows and changes the instance itself as
+		// it is asked right before the write (Codex round 3, A6): the last
+		// read differs from the state the engine read, nothing is written.
+		self::db()->option_rows['widget_text'] = serialize( array( 3 => array( 'title' => 'C' ), '_multiwidget' => 1 ) );
 		$GLOBALS['ab_test_options']            = array();
 		$asked                                 = 0;
+		$pre                                   = AB_MCP_Sync_Widget_Area_Writer::current( 'sidebar-1' );
 		$GLOBALS['ab_test_can']                = static function ( string $cap, array $args ) use ( &$asked ): bool {
 			if ( 'edit_theme_options' === $cap && 2 === ++$asked ) {
-				self::db()->option_rows['widget_text'] = serialize( array( 4 => array( 'title' => 'Changed by the hook' ), '_multiwidget' => 1 ) );
+				self::db()->option_rows['widget_text'] = serialize( array( 3 => array( 'title' => 'Changed by the hook' ), '_multiwidget' => 1 ) );
 			}
 			return true;
 		};
-		self::assertTrue( AB_MCP_Sync_Widget_Area_Writer::write_part( 'sidebar-1', 'instance:text-3', $fresh, null ) );
-		self::assertSame( 'Changed by the hook', $GLOBALS['ab_test_options']['widget_text'][4]['title'] );
+		self::assertSame( \AB_MCP_Sync_Write::CHANGED, AB_MCP_Sync_Widget_Area_Writer::write_part( 'sidebar-1', 'instance:text-3', $fresh, $pre )->get_error_code() );
+		self::assertArrayNotHasKey( 'widget_text', $GLOBALS['ab_test_options'], 'Nothing written.' );
 		$GLOBALS['ab_test_can'] = static fn( string $cap, array $args ): bool => true;
 		// The right again after the update() of the widget and its filters
 		// (Codex round 1, A5): a filter that takes it, nothing written.
@@ -833,7 +1053,7 @@ final class SyncStructureWritersTest extends TestCase {
 				return $instance;
 			},
 		);
-		self::assertSame( 'ab_mcp_sync_rights', AB_MCP_Sync_Widget_Area_Writer::write_part( 'sidebar-1', 'instance:text-3', $fresh, null )->get_error_code() );
+		self::assertSame( 'ab_mcp_sync_rights', AB_MCP_Sync_Widget_Area_Writer::write_part( 'sidebar-1', 'instance:text-3', $fresh, AB_MCP_Sync_Widget_Area_Writer::current( 'sidebar-1' ) )->get_error_code() );
 		self::assertArrayNotHasKey( 'widget_text', $GLOBALS['ab_test_options'] );
 		$GLOBALS['ab_test_filters'] = array();
 		$GLOBALS['ab_test_can']     = static fn( string $cap, array $args ): bool => true;

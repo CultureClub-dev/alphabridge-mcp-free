@@ -536,7 +536,13 @@ Ablehnung entsteht, nennt sie den Weg.
   nach dem Aufruf, ob er `true` oder einen `WP_Error` gab, liest er ihn zurück
   (`post`, zugleich `after`). `own = true`, `own_after = post` genau dann,
   wenn `post ≠ pre`: der Aufruf hat den Teil verändert. `post == pre`: der
-  Aufruf hat nichts verändert, `own` bleibt, wie es war. Für die Teile, die
+  Aufruf hat nichts verändert, `own` bleibt, wie es war. Ein Aufruf, den
+  der Schreiber nicht macht, weil das Objekt sich nach der Rechtefrage
+  unmittelbar davor geändert hat (`ab_mcp_sync_changed_before_write`,
+  `AB_MCP_Sync_Write`; Zweig 11, Codex-Runde 3, A6), macht nichts eigen,
+  auch wo `post ≠ pre`: jeder veränderte Teil ist fremd, der Schritt weicht
+  ab und nennt den ersten davon; ist kein Teil des Schritts anders als die
+  Sicherung, ist er `failed` und sagt, dass die fremde Änderung bleibt. Für die Teile, die
   der Zeilenaufruf laut `AB_MCP_Sync_Post_Writer::with_row()` mitschreibt
   (`_wp_page_template` über `page_template`; die Vorgabe-Kategorie eines
   Beitrags ohne Kategorie), ist `pre` der Stand vor dem Zeilenaufruf, und

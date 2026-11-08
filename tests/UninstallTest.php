@@ -62,6 +62,10 @@ final class UninstallTest extends TestCase {
 		'ab_mcp_store_max_packages',
 		'ab_mcp_store_max_bytes',
 		'ab_mcp_store_max_exports',
+		// The code of the error of a write the takeover refused because its
+		// object changed right before the call (AB_MCP_Sync_Write::CHANGED,
+		// Z8 branch 11): no option.
+		'ab_mcp_sync_changed_before_write',
 	);
 
 	public static function setUpBeforeClass(): void {

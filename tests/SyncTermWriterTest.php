@@ -563,6 +563,22 @@ final class SyncTermWriterTest extends TestCase {
 		self::assertInstanceOf( WP_Error::class, $refused );
 		self::assertSame( 'ab_mcp_sync_rights', $refused->get_error_code() );
 		self::assertInstanceOf( WP_Error::class, AB_MCP_Sync_Term_Writer::write_part( 34, 'terms:category', $meta, null ), 'A term carries no terms.' );
+		// A hook of the right that allows and changes the key itself as it is
+		// asked right before the call (Codex round 3 of branch 11, A6): the
+		// last read differs from the state the engine read, nothing is
+		// written; without the hook, the same call writes.
+		$GLOBALS['ab_test_meta'] = array();
+		$pre                     = AB_MCP_Sync_Term_Writer::current( 34 );
+		$GLOBALS['ab_test_can']  = static function ( string $cap, array $args ) use ( $db ): bool {
+			$db->meta[34][0]['meta_value'] = 'green';
+			return true;
+		};
+		self::assertSame( \AB_MCP_Sync_Write::CHANGED, AB_MCP_Sync_Term_Writer::write_part( 34, 'meta:color', $meta, $pre )->get_error_code() );
+		self::assertSame( array(), $GLOBALS['ab_test_meta'], 'Nothing written.' );
+		$db->meta[34][0]['meta_value'] = 'red';
+		$GLOBALS['ab_test_can']        = static fn( string $cap, array $args ): bool => true;
+		self::assertTrue( AB_MCP_Sync_Term_Writer::write_part( 34, 'meta:color', $meta, AB_MCP_Sync_Term_Writer::current( 34 ) ) );
+		self::assertNotSame( array(), $GLOBALS['ab_test_meta'], 'Written without the hook.' );
 		unset( $db );
 	}
 

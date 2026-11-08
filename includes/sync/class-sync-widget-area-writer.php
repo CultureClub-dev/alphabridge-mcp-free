@@ -611,27 +611,35 @@ final class AB_MCP_Sync_Widget_Area_Writer {
 	 *
 	 * @param array       $prepared target_of().
 	 * @param string|null $live_id  The area.
+	 * @param array|null  $pre      current() right before the call (the engine).
 	 * @return string|WP_Error The area.
 	 */
-	public static function write_row( array $prepared, $live_id ) {
+	public static function write_row( array $prepared, $live_id, $pre = null ) {
 		$area = (string) $prepared['area'];
 		if ( null === $live_id || (string) $live_id !== $area ) {
 			return AB_MCP_Sync_Post_Writer::locked( 'widget_area:create', sprintf( 'the area %s is not on this site', $area ) );
 		}
-		if ( ! current_user_can( 'edit_theme_options' ) ) {
-			return AB_MCP_Sync_Post_Writer::rights( 'change the widgets of this site (edit_theme_options)' );
-		}
-		// update_option() in wp_set_sidebars_widgets() compares with the
-		// cached row: emptied first (Codex round 1 of branch 11, A1).
-		AB_MCP_Sync_Shared_Row::forget( self::AREAS );
-		$areas = AB_MCP_Sync_Shared_Row::read( self::AREAS );
-		if ( ! is_array( $areas ) || ! $areas['ok'] || ! is_array( $areas['value'] ) || ! array_key_exists( $area, $areas['value'] ) ) {
-			return self::unread( self::AREAS );
-		}
-		$map          = $areas['value'];
-		$map[ $area ] = array_values( $prepared['list'] );
-		wp_set_sidebars_widgets( $map );
-		return $area;
+		// The right, the last read of the area against the state the engine
+		// read, the call (AB_MCP_Sync_Write; Codex round 3 of branch 11, A6).
+		return AB_MCP_Sync_Write::forward(
+			self::class,
+			$area,
+			$pre,
+			static fn() => current_user_can( 'edit_theme_options' ) ? true : AB_MCP_Sync_Post_Writer::rights( 'change the widgets of this site (edit_theme_options)' ),
+			static function () use ( $prepared, $area ) {
+				// update_option() in wp_set_sidebars_widgets() compares with the
+				// cached row: emptied first (Codex round 1 of branch 11, A1).
+				AB_MCP_Sync_Shared_Row::forget( self::AREAS );
+				$areas = AB_MCP_Sync_Shared_Row::read( self::AREAS );
+				if ( ! is_array( $areas ) || ! $areas['ok'] || ! is_array( $areas['value'] ) || ! array_key_exists( $area, $areas['value'] ) ) {
+					return self::unread( self::AREAS );
+				}
+				$map          = $areas['value'];
+				$map[ $area ] = array_values( $prepared['list'] );
+				wp_set_sidebars_widgets( $map );
+				return $area;
+			}
+		);
 	}
 
 	/**
@@ -647,7 +655,6 @@ final class AB_MCP_Sync_Widget_Area_Writer {
 	 * @return true|WP_Error
 	 */
 	public static function write_part( $live_id, $name, array $prepared, $pre ) {
-		unset( $live_id, $pre );
 		$name = (string) $name;
 		$live = 0 === strpos( $name, 'instance:' ) ? substr( $name, strlen( 'instance:' ) ) : '';
 		if ( ! isset( $prepared['writes'][ $live ] ) ) {
@@ -666,24 +673,28 @@ final class AB_MCP_Sync_Widget_Area_Writer {
 		if ( is_wp_error( $clean ) ) {
 			return $clean;
 		}
-		// The right again after the filters of the widget (Codex round 1 of
-		// branch 11, A5: they may have changed it), before the last read.
-		if ( ! current_user_can( 'edit_theme_options' ) ) {
-			return AB_MCP_Sync_Post_Writer::rights( 'change the widgets of this site (edit_theme_options)' );
-		}
-		// The row read again after the update() of the widget, its filters
-		// and the hooks of the right (A2; Codex round 2, A6): what they
-		// changed in it (another instance) stays as they left it, and the
-		// engine reads that change as another hand's; between this read and
-		// the write no call runs a hook.
-		$value = self::widget_row( $write['base'] );
-		if ( is_wp_error( $value ) ) {
-			return $value;
-		}
-		$value[ (int) $write['number'] ] = $clean;
-		$value['_multiwidget']           = 1;
-		update_option( 'widget_' . $write['base'], $value );
-		return true;
+		// The right again after the update() of the widget and its filters
+		// (A5), the last read of the area against the state the engine read
+		// (what update(), its filters or the hooks of the right changed in it,
+		// another instance or this one, makes it differ: nothing is written,
+		// the step deviates; A2), then the call (AB_MCP_Sync_Write; Codex
+		// rounds 2 and 3 of branch 11, A6).
+		return AB_MCP_Sync_Write::forward(
+			self::class,
+			(string) $live_id,
+			$pre,
+			static fn() => current_user_can( 'edit_theme_options' ) ? true : AB_MCP_Sync_Post_Writer::rights( 'change the widgets of this site (edit_theme_options)' ),
+			static function () use ( $write, $clean ) {
+				$value = self::widget_row( $write['base'] );
+				if ( is_wp_error( $value ) ) {
+					return $value;
+				}
+				$value[ (int) $write['number'] ] = $clean;
+				$value['_multiwidget']           = 1;
+				update_option( 'widget_' . $write['base'], $value );
+				return true;
+			}
+		);
 	}
 
 	/**

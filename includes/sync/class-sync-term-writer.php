@@ -750,11 +750,18 @@ final class AB_MCP_Sync_Term_Writer {
 		}
 		$key  = substr( $name, 5 );
 		$from = is_array( $pre ) ? AB_MCP_Sync_Post_Writer::meta_values( $pre, $key ) : array();
-		$may  = self::meta_right( (int) $live_id, $key, self::targets( $prepared, $key ), $from );
-		if ( true !== $may ) {
-			return new WP_Error( 'ab_mcp_sync_rights', sprintf( 'The meta %1$s of the term was not written: %2$s at the term. Connect with an account that may, or leave the term out of the plan.', $key, $may ) );
-		}
-		return AB_MCP_Sync_Post_Writer::write_meta( (int) $live_id, $key, isset( $prepared['meta'][ $key ] ) ? $prepared['meta'][ $key ] : array(), $from, 'term' );
+		// The right, the last read against the state the engine read, the
+		// call (AB_MCP_Sync_Write; Codex round 3 of branch 11, A6).
+		return AB_MCP_Sync_Write::forward(
+			self::class,
+			(int) $live_id,
+			$pre,
+			static function () use ( $live_id, $key, $prepared, $from ) {
+				$may = self::meta_right( (int) $live_id, $key, self::targets( $prepared, $key ), $from );
+				return true === $may ? true : new WP_Error( 'ab_mcp_sync_rights', sprintf( 'The meta %1$s of the term was not written: %2$s at the term. Connect with an account that may, or leave the term out of the plan.', $key, $may ) );
+			},
+			static fn() => AB_MCP_Sync_Post_Writer::write_meta( (int) $live_id, $key, isset( $prepared['meta'][ $key ] ) ? $prepared['meta'][ $key ] : array(), $from, 'term' )
+		);
 	}
 
 	/**
@@ -920,26 +927,27 @@ final class AB_MCP_Sync_Term_Writer {
 				'note'  => sprintf( 'Not put back: the sanitizing of this account would change the backed-up %s (kses without unfiltered_html). Set it by hand in wp-admin with an account that may.', $refusal ),
 			);
 		}
-		// The last read, after the sanitizers and their filters (Codex round 2
-		// of branch 11, A6): the row as the step wrote it, or it is left.
-		$again = self::current( (int) $live_id );
-		if ( ! is_array( $again ) || ! hash_equals( (string) $written, self::row_hash( $again['row'] ) ) ) {
-			return array(
-				'state' => 'left',
-				'note'  => 'The row of the term changed as it was put back (a hook of this site), so it is left as it is.',
-			);
-		}
-		$done = wp_update_term(
-			(int) $live_id,
-			$taxonomy,
-			array(
-				'name'        => wp_slash( $args['name'] ),
-				'slug'        => $args['slug'],
-				'description' => wp_slash( $args['description'] ),
-				'parent'      => $parent,
-			)
+		// The last read, after the sanitizers and their filters, against what
+		// the step wrote, then the call (AB_MCP_Sync_Write; Codex rounds 2 and
+		// 3 of branch 11, A6). The rights were asked right before
+		// (restore_right()).
+		$done = AB_MCP_Sync_Write::back(
+			static fn() => true,
+			static fn() => self::current( (int) $live_id ),
+			static fn( $again ) => is_array( $again ) && hash_equals( (string) $written, self::row_hash( $again['row'] ) ),
+			static fn() => wp_update_term(
+				(int) $live_id,
+				$taxonomy,
+				array(
+					'name'        => wp_slash( $args['name'] ),
+					'slug'        => $args['slug'],
+					'description' => wp_slash( $args['description'] ),
+					'parent'      => $parent,
+				)
+			),
+			'The row of the term changed as it was put back (a hook of this site), so it is left as it is.'
 		);
-		if ( is_wp_error( $done ) ) {
+		if ( is_wp_error( $done ) || is_array( $done ) && isset( $done['state'] ) ) {
 			return $done;
 		}
 		$after = self::current( (int) $live_id );

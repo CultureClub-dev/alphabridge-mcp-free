@@ -91,6 +91,7 @@ require_once __DIR__ . '/class-sync-exclusions.php';
 require_once __DIR__ . '/class-sync-db-kinds.php';
 require_once __DIR__ . '/class-sync-identity.php';
 require_once __DIR__ . '/class-sync-credentials.php';
+require_once __DIR__ . '/class-sync-write.php';
 require_once dirname( __DIR__ ) . '/tools/class-tools-content.php';
 require_once dirname( __DIR__ ) . '/builders/class-builders.php';
 require_once dirname( __DIR__ ) . '/class-redactor.php';
@@ -1985,14 +1986,21 @@ final class AB_MCP_Sync_Post_Writer {
 			// The right at the object right before the call (decision 28): of
 			// a new post the first time it can be asked; a refusal is a call
 			// the step does not make, and the object deviates (it stays as a
-			// rest).
-			if ( ! in_array( $key, self::CORE_META, true ) ) {
-				$may = self::meta_right( (int) $live_id, $key, self::targets( $prepared, $key ), $from );
-				if ( true !== $may ) {
-					return new WP_Error( 'ab_mcp_sync_rights', sprintf( 'The meta %1$s of the post was not written: %2$s at the post. Connect with an account that may, or leave the object out of the plan.', $key, $may ) );
-				}
-			}
-			return self::write_meta( $live_id, $key, $values, $from );
+			// rest). Then the last read against the state the engine read,
+			// then the call (AB_MCP_Sync_Write; Codex round 3 of branch 11, A6).
+			return AB_MCP_Sync_Write::forward(
+				self::class,
+				$live_id,
+				$pre,
+				static function () use ( $live_id, $key, $prepared, $from ) {
+					if ( in_array( $key, self::CORE_META, true ) ) {
+						return true;
+					}
+					$may = self::meta_right( (int) $live_id, $key, self::targets( $prepared, $key ), $from );
+					return true === $may ? true : new WP_Error( 'ab_mcp_sync_rights', sprintf( 'The meta %1$s of the post was not written: %2$s at the post. Connect with an account that may, or leave the object out of the plan.', $key, $may ) );
+				},
+				static fn() => self::write_meta( $live_id, $key, $values, $from )
+			);
 		}
 		if ( 0 === strpos( $name, 'terms:' ) ) {
 			$taxonomy = substr( $name, 6 );
@@ -2649,30 +2657,31 @@ final class AB_MCP_Sync_Post_Writer {
 		// it carries (wp_filter_wp_template_unique_post_slug(),
 		// wp-includes/theme-templates.php:64-67). A theme switched since the
 		// run gets its rows back as they were.
-		// The last read, after every check above that may run a hook (the
-		// menus, the navigation, the styles; Codex round 2 of branch 11,
-		// A6): the row as the step wrote it, or it is left. Between this read
-		// and the write no call runs a hook.
-		$again = self::current( (int) $live_id );
-		if ( ! is_array( $again ) || ! hash_equals( $written, self::row_hash( $again['row'] ) ) ) {
-			return array(
-				'state' => 'left',
-				'note'  => 'The row changed as it was put back (a hook of this site), so it is left as it is.',
-			);
-		}
 		$postarr = array_intersect_key( $backup, array_flip( self::WRITTEN_COLUMNS ) );
 		$postarr['ID']          = (int) $live_id;
 		$postarr['post_author'] = (int) $postarr['post_author'];
 		$postarr['post_parent'] = (int) $postarr['post_parent'];
 		$postarr['menu_order']  = (int) $postarr['menu_order'];
 		$postarr['edit_date']   = true;
-		$id                     = self::keeping_revisions(
-			(int) $live_id,
-			static function () use ( $postarr ) {
-				return wp_update_post( wp_slash( $postarr ), true );
-			}
+		// The last read, after every check above that may run a hook (the
+		// menus, the navigation, the styles), against what the step wrote,
+		// then the call (AB_MCP_Sync_Write; Codex rounds 2 and 3 of branch
+		// 11, A6). The rights were asked right before (restore_right()).
+		$id = AB_MCP_Sync_Write::back(
+			static fn() => true,
+			static fn() => self::current( (int) $live_id ),
+			static fn( $again ) => is_array( $again ) && hash_equals( $written, self::row_hash( $again['row'] ) ),
+			static function () use ( $live_id, $postarr ) {
+				return self::keeping_revisions(
+					(int) $live_id,
+					static function () use ( $postarr ) {
+						return wp_update_post( wp_slash( $postarr ), true );
+					}
+				);
+			},
+			'The row changed as it was put back (a hook of this site), so it is left as it is.'
 		);
-		if ( is_wp_error( $id ) ) {
+		if ( is_wp_error( $id ) || is_array( $id ) ) {
 			return $id;
 		}
 		$after = self::current( (int) $live_id );

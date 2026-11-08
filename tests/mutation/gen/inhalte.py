@@ -134,7 +134,7 @@ e('term-write-split', 'write_row(): an update written under another id is refuse
 e('term-write-slashed', 'write_row(): the name slashed for wp_insert_term(), which unslashes it', TW,
   "\t\t$done = wp_insert_term( wp_slash( (string) $args['name'] ), $taxonomy, $fields );", "\t\t$done = wp_insert_term( (string) $args['name'], $taxonomy, $fields );", 'term', T_WRITE)
 e('term-write-part-right', 'write_part(): the right of a meta key asked at the term right before the call', TW,
-  "\t\tif ( true !== $may ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_rights', sprintf( 'The meta %1$s of the term", "\t\tif ( false ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_rights', sprintf( 'The meta %1$s of the term", 'term', T_WRITE)
+  "\t\t\t\treturn true === $may ? true : new WP_Error( 'ab_mcp_sync_rights', sprintf( 'The meta %1$s of the term", "\t\t\t\treturn true ? true : new WP_Error( 'ab_mcp_sync_rights', sprintf( 'The meta %1$s of the term", 'term', T_WRITE)
 e('term-back-written', 'restore_row(): a row changed since the step wrote it is left', TW,
   "\t\tif ( ! hash_equals( (string) $written, $hash ) ) {\n\t\t\treturn array(\n\t\t\t\t'state' => 'left',\n\t\t\t\t'note'  => 'The row of the term was changed", "\t\tif ( false ) {\n\t\t\treturn array(\n\t\t\t\t'state' => 'left',\n\t\t\t\t'note'  => 'The row of the term was changed", 'term', T_BACK)
 e('term-back-slug', 'restore_row(): a backed-up slug another term holds now is left', TW,
@@ -277,7 +277,7 @@ e('post-thumbnail-image', 'precheck(): the featured image names an attachment Wo
 e('post-thumbnail-write', 'write_part(): the featured image through set_post_thumbnail()', PW,
   "\t\t\tif ( '_thumbnail_id' === $key ) {\n\t\t\t\treturn self::write_thumbnail( (int) $live_id, $values );", "\t\t\tif ( false ) {\n\t\t\t\treturn self::write_thumbnail( (int) $live_id, $values );", 'unit', P_IMAGE)
 e('post-write-part-right', 'write_part(): the right of a key asked at the post right before the call; refused at a new post, the object stays as a rest', PW,
-  "\t\t\t\tif ( true !== $may ) {\n\t\t\t\t\treturn new WP_Error( 'ab_mcp_sync_rights', sprintf( 'The meta %1$s of the post was not written", "\t\t\t\tif ( false ) {\n\t\t\t\t\treturn new WP_Error( 'ab_mcp_sync_rights', sprintf( 'The meta %1$s of the post was not written", 'it', 'testANewPostWithAPlainKeyGoesAndOneWhoseRightTheNewPostRefusesStaysAsARest')
+  "\t\t\t\t\treturn true === $may ? true : new WP_Error( 'ab_mcp_sync_rights', sprintf( 'The meta %1$s of the post was not written", "\t\t\t\t\treturn true ? true : new WP_Error( 'ab_mcp_sync_rights', sprintf( 'The meta %1$s of the post was not written", 'it', 'testANewPostWithAPlainKeyGoesAndOneWhoseRightTheNewPostRefusesStaysAsARest')
 e('post-slug-pending', 'slug_refusal(): a pending post of an account that may not publish it loses its slug', PW,
   "\t\t\tif ( ! $may ) {\n\t\t\t\treturn self::locked( 'post:slug_collision', sprintf( 'WordPress drops the slug", "\t\t\tif ( false ) {\n\t\t\t\treturn self::locked( 'post:slug_collision', sprintf( 'WordPress drops the slug", 'unit', P_SLUG)
 e('post-slug-empty', 'slug_refusal(): a published post without a slug gets one from its title', PW,
