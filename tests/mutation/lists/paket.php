@@ -3415,10 +3415,10 @@ return array(
 	),
 	array(
 		'id'      => 'paket/import-purpose-inventory',
-		'clause'  => 'expect(): the purposes this version takes (AB_MCP_Sync_Export::PURPOSES), not every purpose a manifest may name (media)',
+		'clause'  => 'expect(): only the purposes this version takes (AB_MCP_Sync_Export::PURPOSES), not any text (since branch 10 they are every purpose a manifest names)',
 		'file'    => $im,
 		'search'  => "\t\tif ( ! in_array( \$purpose, AB_MCP_Sync_Export::PURPOSES, true ) ) {",
-		'replace' => "\t\tif ( ! in_array( \$purpose, AB_MCP_Sync_Manifest::PURPOSES, true ) ) {",
+		'replace' => "\t\tif ( ! is_string( \$purpose ) ) {",
 		'run'     => $unit( 'SyncPackageTest', 'testTheProductionSiteTakesPackagesOfTheInventoryTheEnvironmentAndObjectsOnly' ),
 		'expect'  => '/testTheProductionSiteTakesPackagesOfTheInventoryTheEnvironmentAndObjectsOnly/',
 	),

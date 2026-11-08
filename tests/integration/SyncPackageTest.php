@@ -2441,7 +2441,10 @@ final class SyncPackageTest extends TestCase {
 			'a lock with another reason' => array( self::package_of( str_repeat( '9d', 16 ), array( array( self::option_line( 'zz_lr', array( 'locks' => array( array( 'reason' => '{"password":"CANARY-ONLY"}' ) + $lock[0] ) ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
 			'a lock with another stage' => array( self::package_of( str_repeat( '9e', 16 ), array( array( self::option_line( 'zz_ls', array( 'locks' => array( array( 'stage' => 'Z99' ) + $lock[0] ) ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
 			'a space no reader writes' => array( self::package_of( str_repeat( 'a4', 16 ), array( array( self::option_line( 'zz_sp', array( 'refs' => array( array( 'at' => 'value', 'id' => 7, 'space' => 'option', 'strength' => 'strong' ) ) ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
-			'a strength no reader writes' => array( self::package_of( str_repeat( 'a5', 16 ), array( array( self::option_line( 'zz_st', array( 'refs' => array( array( 'at' => 'value', 'id' => 7, 'space' => 'post', 'strength' => 'weak' ) ) ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
+			// No reader writes this strength (since branch 10 weak is one, for
+			// the parent of an attachment only; a weak one elsewhere is the case
+			// above): typed() refuses it, not a later check.
+			'a strength no reader writes' => array( self::package_of( str_repeat( 'a5', 16 ), array( array( self::option_line( 'zz_st', array( 'refs' => array( array( 'at' => 'value', 'id' => 7, 'space' => 'post', 'strength' => 'soft' ) ) ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
 			'a status no reader writes' => array( self::package_of( str_repeat( 'a7', 16 ), array( array( self::option_line( 'zz_ex', array( 'status' => 'excluded' ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
 			'no identity, readable'    => array( self::package_of( str_repeat( 'a8', 16 ), array( array( array( 'identity' => array(), 'kind' => 'option', 'locks' => array(), 'ref' => 'api_token', 'status' => 'z8' ) ) ) ), 'ab_mcp_sync_import_lines' ),
 			'no identity, complete'    => array( self::package_of( str_repeat( 'a9', 16 ), array( array( array( 'complete' => true, 'identity' => array(), 'kind' => 'post', 'locks' => array(), 'ref' => '7', 'status' => 'z8', 'unread' => array( 'posts' ) ) ) ) ), 'ab_mcp_sync_import_lines' ),
