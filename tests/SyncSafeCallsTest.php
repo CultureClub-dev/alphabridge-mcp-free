@@ -276,6 +276,7 @@ final class SyncSafeCallsTest extends TestCase {
 			'get_term_by'                              => array( 1, 'term_right(): the id of the term of this site a slug names (post_format), for assign_term through map_meta_cap; the id is asked of the rights, never compared with the staging site (decision 28; GitHub Codex round 2 on free#137).' ),
 			'get_user_by'                              => array( 1, 'user_by_login(): the account of this site an author is written as (decision 25).' ),
 			'is_protected_meta'                        => array( 1, 'new_meta_allowed(): whether a key of a new post is protected, so its right is answered at the object only (decision 28; branch 9).' ),
+			'maybe_serialize'                          => array( 1, 'db_form(): the bytes WordPress stores for what sanitize_meta() gives back, as update_metadata() serializes it (Codex round 1 on branch 9, B3); a calculation, no stored value.' ),
 			'sanitize_meta'                            => array( 1, 'precheck(): the sanitizer ahead of each written meta value, as update_metadata() runs it (decision 17; branch 9).' ),
 			'sanitize_post'                            => array( 1, 'precheck(): the sanitizers ahead, as wp_insert_post() runs them (decision 17).' ),
 			'sanitize_title'                           => array( 2, 'slug_refusal(): the slug as wp_insert_post() makes it, in the old sanitizing for an update and the new one (branch 9); a string function with its filters.' ),

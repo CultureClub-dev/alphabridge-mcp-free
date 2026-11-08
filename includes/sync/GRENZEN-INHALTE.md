@@ -123,7 +123,12 @@ nennt ihre Meldung den Weg.
 - `sanitize_post( …, 'db' )` prüft jetzt auch `comment_status`,
   `ping_status` und `post_mime_type`, `sanitize_meta()` jeden
   geschriebenen Wert; eine Abweichung sperrt `post:sanitizer` vor dem
-  ersten Teil. Ein unbekannter Hook, der erst beim Schreiben ändert
+  ersten Teil. Verglichen werden die Bytes, die WordPress speichern würde
+  (`db_form()`: `maybe_serialize()`, ein Skalar als sein Text, ein Bool als
+  `1` oder leer), nicht der PHP-Wert: `absint()` gibt für `'5'` die Zahl 5,
+  gespeichert wird wieder `5`, nichts ändert sich (Codex-Runde 1, B3;
+  vorher sperrte `!==` jeden numerischen Sanitizer; Prüffall
+  `testASanitizerIsComparedByTheBytesWordPressWouldStore`). Ein unbekannter Hook, der erst beim Schreiben ändert
   (`updated_post_meta`), bleibt «geschrieben, abweichend» nach der einen
   Grenze von `GRENZEN-LAUF.md`.
 - Was die kanonische Form einer Seite sperrt, sperrt auch der Schreiber:
@@ -182,7 +187,8 @@ nennt ihre Meldung den Weg.
   daneben (Zwillinge, andere Sprache).
 - `sanitize_term( …, 'db' )` (die Filter `pre_term_name`,
   `pre_term_description`, kses ohne `unfiltered_html`) und `sanitize_meta()`
-  vorab; ein leerer Name oder Slug sperrt `term:sanitizer` (Z8).
+  vorab (Meta nach den gespeicherten Bytes wie beim Post, Codex-Runde 1,
+  B3); ein leerer Name oder Slug sperrt `term:sanitizer` (Z8).
 - Grenze C (konstruiert): `wp_insert_term()` gibt für einen Doppelgänger
   (gleicher Slug, gleiche Ebene, nach dem Einfügen gefunden) die ID des
   vorhandenen Terms zurück und löscht die eingefügten Zeilen. Ein Term,

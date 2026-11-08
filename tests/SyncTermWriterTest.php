@@ -503,6 +503,20 @@ final class SyncTermWriterTest extends TestCase {
 		unset( $db );
 	}
 
+	public function testASanitizerOfTheMetaOfATermIsComparedByTheBytesWordPressWouldStore(): void {
+		// Codex round 1 on branch 9, B3, for terms: rank with absint(), '5'
+		// on this site and '7' on staging: the sanitizer gives 7, stored as
+		// '7', so the term goes; '07' would be stored as 7 and locks.
+		self::live_term( array(), array( array( 'meta_id' => 1, 'meta_key' => 'rank', 'meta_value' => '5' ) ) );
+		add_filter( 'sanitize_term_meta_rank', 'absint' );
+		$seven = AB_MCP_Sync_Term_Writer::target_of( self::line( array(), array( array( 'rank', '7' ) ) ), self::item(), self::ctx() );
+		self::assertIsArray( $seven, is_wp_error( $seven ) ? $seven->get_error_message() : '' );
+		self::assertTrue( AB_MCP_Sync_Term_Writer::precheck( $seven, 34, 0 ) );
+		$padded = AB_MCP_Sync_Term_Writer::target_of( self::line( array(), array( array( 'rank', '07' ) ) ), self::item(), self::ctx() );
+		self::assertSame( 'term:sanitizer', self::lock_of( AB_MCP_Sync_Term_Writer::precheck( $padded, 34, 0 ) ) );
+		remove_filter( 'sanitize_term_meta_rank', 'absint' );
+	}
+
 	public function testTheRowOfATermIsWrittenThroughTheCoreAndAnIdWordPressGaveBackIsNotTheStepsOwn(): void {
 		$db       = self::live_term();
 		$prepared = AB_MCP_Sync_Term_Writer::target_of( self::line( array( 'name' => 'O\'Neil \\ Co', 'description' => 'A "b"' ) ), self::item( 'create' ), self::ctx() );

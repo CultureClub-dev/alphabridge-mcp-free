@@ -314,7 +314,8 @@ final class AB_MCP_Sync_Term_Writer {
 					return self::locked( '*:meta_without_rule', sprintf( 'meta key %1$s of the term on this site: %2$s', $key, $may ) );
 				}
 				foreach ( isset( $prepared['meta'][ $key ] ) ? $prepared['meta'][ $key ] : array() as $value ) {
-					if ( sanitize_meta( $key, $value, 'term', $taxonomy ) !== $value ) {
+					// By the bytes WordPress would store (Codex round 1, B3).
+					if ( AB_MCP_Sync_Post_Writer::db_form( sanitize_meta( $key, $value, 'term', $taxonomy ) ) !== AB_MCP_Sync_Post_Writer::stored_form( $value ) ) {
 						return self::locked( 'term:sanitizer', sprintf( 'meta key %s (sanitize_meta() changes its value)', $key ) );
 					}
 				}

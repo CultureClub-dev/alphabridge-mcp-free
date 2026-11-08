@@ -2560,6 +2560,35 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( array( 'delete' ), AB_MCP_Sync_Post_Writer::meta_ops( array(), array( 'r' ) ) );
 	}
 
+	public function testASanitizerIsComparedByTheBytesWordPressWouldStore(): void {
+		// Codex round 1 on branch 9, B3: a plain key rank with the sanitizer
+		// absint(): the database holds '5', the sanitizer gives the integer
+		// 5, and WordPress stores '5' again. Compared with !== on the PHP
+		// value, the post was locked (post:sanitizer); now by the bytes
+		// WordPress would store (maybe_serialize(), a scalar as its text).
+		$db              = self::post_rows( 'News' );
+		$GLOBALS['wpdb'] = $db;
+		$ctx             = self::ctx();
+		$ctx['now']      = 1800000000;
+		$GLOBALS['ab_test_can'] = static fn( string $cap, array $args ): bool => true;
+		$line            = static fn( array $meta ) => self::line( array( 'post_type' => 'post' ), $meta, array(), array( 'identity' => array( 'post_type' => 'post', 'post_name' => 'hello', 'theme' => '' ) ) );
+		add_filter( 'sanitize_post_meta_rank', 'absint' );
+		$five = AB_MCP_Sync_Post_Writer::target_of( $line( array( array( 'note', 'abc' ), array( 'rank', '5' ) ) ), self::item(), $ctx );
+		self::assertTrue( AB_MCP_Sync_Post_Writer::precheck( $five, 12, $ctx['now'] ), 'absint() gives 5, stored as 5: nothing changes.' );
+		$padded = AB_MCP_Sync_Post_Writer::target_of( $line( array( array( 'note', 'abc' ), array( 'rank', '05' ) ) ), self::item(), $ctx );
+		self::assertSame( 'post:sanitizer', self::lock_of( AB_MCP_Sync_Post_Writer::precheck( $padded, 12, $ctx['now'] ) ), 'WordPress would store 5 for 05.' );
+		remove_filter( 'sanitize_post_meta_rank', 'absint' );
+		$yes = static fn( $v ) => '1' === $v;
+		add_filter( 'sanitize_post_meta_rank', $yes );
+		$one = AB_MCP_Sync_Post_Writer::target_of( $line( array( array( 'note', 'abc' ), array( 'rank', '1' ) ) ), self::item(), $ctx );
+		self::assertTrue( AB_MCP_Sync_Post_Writer::precheck( $one, 12, $ctx['now'] ), 'true is stored as 1.' );
+		remove_filter( 'sanitize_post_meta_rank', $yes );
+		self::assertSame( '5', AB_MCP_Sync_Post_Writer::db_form( 5 ) );
+		self::assertSame( '', AB_MCP_Sync_Post_Writer::db_form( false ) );
+		self::assertSame( 'a:1:{i:0;s:1:"x";}', AB_MCP_Sync_Post_Writer::db_form( array( 'x' ) ) );
+		self::assertNull( AB_MCP_Sync_Post_Writer::db_form( null ), 'NULL equals no target.' );
+	}
+
 	public function testTheFeaturedImageGoesThroughItsOwnApiToAnAttachmentWordPressShowsAsAnImage(): void {
 		$db               = self::post_rows( 'News' );
 		$db->rows[70]     = array( 'ID' => 70, 'post_type' => 'attachment' ) + $db->rows[12];

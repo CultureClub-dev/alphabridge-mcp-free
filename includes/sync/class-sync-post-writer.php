@@ -460,10 +460,13 @@ final class AB_MCP_Sync_Post_Writer {
 			}
 		}
 		// Every written value through sanitize_meta() as update_metadata()
-		// runs it (decision 17, the sanitizers ahead).
+		// runs it (decision 17, the sanitizers ahead), compared by the bytes
+		// WordPress would store (db_form()): a sanitizer that gives the same
+		// bytes as another type (absint(): 5 for '5') changes nothing
+		// (branch 9, Codex round 1, B3).
 		foreach ( $keys as $key ) {
 			foreach ( isset( $prepared['meta'][ $key ] ) ? $prepared['meta'][ $key ] : array() as $value ) {
-				if ( sanitize_meta( (string) $key, $value, 'post', $type ) !== $value ) {
+				if ( self::db_form( sanitize_meta( (string) $key, $value, 'post', $type ) ) !== self::stored_form( $value ) ) {
 					return self::locked( 'post:sanitizer', sprintf( 'meta key %s (sanitize_meta() changes its value)', $key ) );
 				}
 			}
@@ -2022,6 +2025,24 @@ final class AB_MCP_Sync_Post_Writer {
 	 */
 	public static function stored_form( $value ) {
 		return is_array( $value ) ? serialize( $value ) : (string) $value; // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize -- as maybe_serialize() stores an array.
+	}
+
+	/**
+	 * The bytes WordPress stores for what sanitize_meta() gave back
+	 * (update_metadata(), add_metadata(): maybe_serialize(), then $wpdb
+	 * writes a scalar as its text: a bool as '1' or '', a number as PHP
+	 * writes it); null where it stores no such bytes (NULL, or a value no
+	 * column holds), which no target equals (fail closed).
+	 *
+	 * @param mixed $value What sanitize_meta() gave back.
+	 * @return string|null
+	 */
+	public static function db_form( $value ) {
+		$value = maybe_serialize( $value );
+		if ( is_bool( $value ) ) {
+			return $value ? '1' : '';
+		}
+		return is_scalar( $value ) ? (string) $value : null;
 	}
 
 	/**

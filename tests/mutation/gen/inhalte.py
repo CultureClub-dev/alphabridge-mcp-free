@@ -110,7 +110,7 @@ e('term-name-empty', 'sanitizer_refusal(): an empty name is refused (WordPress r
 e('term-meta-right', 'precheck(): a key that differs and that map_meta_cap refuses locks the term (decision 28)', TW,
   "\t\t\t\tif ( true !== $may ) {\n\t\t\t\t\treturn self::locked( '*:meta_without_rule'", "\t\t\t\tif ( false ) {\n\t\t\t\t\treturn self::locked( '*:meta_without_rule'", 'term', T_HERE)
 e('term-sanitize-meta', 'precheck(): each written value through sanitize_meta() (decision 17)', TW,
-  "\t\t\t\t\tif ( sanitize_meta( $key, $value, 'term', $taxonomy ) !== $value ) {", "\t\t\t\t\tif ( false ) {", 'term', T_HERE)
+  "\t\t\t\t\tif ( AB_MCP_Sync_Post_Writer::db_form( sanitize_meta( $key, $value, 'term', $taxonomy ) ) !== AB_MCP_Sync_Post_Writer::stored_form( $value ) ) {", "\t\t\t\t\tif ( false ) {", 'term', T_HERE)
 e('term-meta-spelling', 'precheck(): two spellings of a key the database compares alike lock the term', TW,
   "\t\t\t\t\tif ( $one['key'] !== (string) $key ) {", "\t\t\t\t\tif ( false ) {", 'term', T_HERE)
 e('term-differing-equal', 'differing(): a key equal on both sides is no part (decision 28)', TW,
@@ -267,7 +267,7 @@ e('post-meta-add', 'meta_ops(): add_post_meta where values are to be stored', PW
 e('post-builder-key', 'precheck(): a key of a page builder needs unfiltered_html', PW,
   "\t\t\tif ( null !== AB_MCP_Builders::markup_meta_refusal( $key ) ) {", "\t\t\tif ( false ) {", 'unit', P_FIELD)
 e('post-sanitize-meta', 'precheck(): each written value through sanitize_meta() (decision 17)', PW,
-  "\t\t\t\tif ( sanitize_meta( (string) $key, $value, 'post', $type ) !== $value ) {", "\t\t\t\tif ( false ) {", 'unit', P_FIELD)
+  "\t\t\t\tif ( self::db_form( sanitize_meta( (string) $key, $value, 'post', $type ) ) !== self::stored_form( $value ) ) {", "\t\t\t\tif ( false ) {", 'unit', P_FIELD)
 e('post-sanitizer-fields', 'precheck(): the other fields of the row through sanitize_post() as well', PW,
   "\t\t$fields    = array( 'post_title', 'post_content', 'post_excerpt', 'post_content_filtered', 'comment_status', 'ping_status', 'post_mime_type' );", "\t\t$fields    = array( 'post_title', 'post_content', 'post_excerpt', 'post_content_filtered' );", 'unit', P_FIELD)
 e('post-spelled-template', 'precheck(): the template the row writes is asked for other spellings, equal or not', PW,
@@ -314,6 +314,16 @@ e('term-meta-right-ops', 'meta_right(): the rights of a term key are the operati
   "\t\treturn AB_MCP_Sync_Post_Writer::ops_right( 'term', $live_id, $key, AB_MCP_Sync_Post_Writer::meta_ops( $to, $from ) );", "\t\treturn true;", 'term', C_A2T)
 e('term-restore-ops', 'restore_right(): the way back of a term key asks the operations of restore_meta(), row by row', TW,
   "AB_MCP_Sync_Post_Writer::restore_ops( AB_MCP_Sync_Post_Writer::meta_values( $backup, $key )", "AB_MCP_Sync_Post_Writer::meta_ops( AB_MCP_Sync_Post_Writer::meta_values( $backup, $key )", 'term', C_A2T)
+C_B3P = 'testASanitizerIsComparedByTheBytesWordPressWouldStore'
+C_B3T = 'testASanitizerOfTheMetaOfATermIsComparedByTheBytesWordPressWouldStore'
+e('post-sanitize-bytes', 'precheck(): the sanitized value compared by the bytes WordPress would store, not as a PHP value (Codex round 1, B3)', PW,
+  "\t\t\t\tif ( self::db_form( sanitize_meta( (string) $key, $value, 'post', $type ) ) !== self::stored_form( $value ) ) {", "\t\t\t\tif ( sanitize_meta( (string) $key, $value, 'post', $type ) !== $value ) {", 'unit', C_B3P)
+e('term-sanitize-bytes', 'precheck(): the sanitized value of a term key compared by the bytes WordPress would store (Codex round 1, B3)', TW,
+  "\t\t\t\t\tif ( AB_MCP_Sync_Post_Writer::db_form( sanitize_meta( $key, $value, 'term', $taxonomy ) ) !== AB_MCP_Sync_Post_Writer::stored_form( $value ) ) {", "\t\t\t\t\tif ( sanitize_meta( $key, $value, 'term', $taxonomy ) !== $value ) {", 'term', C_B3T)
+e('db-form-bool', 'db_form(): a bool as $wpdb writes it (1 or empty)', PW,
+  "\t\t\treturn $value ? '1' : '';", "\t\t\treturn null;", 'unit', C_B3P)
+e('db-form-serialize', 'db_form(): maybe_serialize() first, as update_metadata() runs it', PW,
+  "\t\t$value = maybe_serialize( $value );\n\t\tif ( is_bool( $value ) ) {", "\t\tif ( is_bool( $value ) ) {", 'unit', C_B3P)
 
 def test_of(expect):
     return expect.split(' with data set "', 1)[0]
