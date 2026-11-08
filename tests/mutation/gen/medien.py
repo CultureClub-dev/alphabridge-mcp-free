@@ -154,6 +154,11 @@ e('import-identity-attachment', 'identity_fits(): an attachment is of the type a
   "\t\t\t\treturn 'attachment' === $text['post_type'];", "\t\t\t\treturn true;", 'itpkg', IT_LINES)
 
 # ------------------------------------------------ the export of media
+e('export-media-credential', 'make_media(): an attachment a credential holds is left out, withheld (Codex round 1, A7)', EX,
+  "\t\t\tif ( isset( $held[ (string) $id ] ) ) {", "\t\t\tif ( false ) {", 'it', PACKAGE)
+e('export-media-check', 'make_media(): the paths checked as the values of the object (field of a credential, lock of the check)', EX,
+  "\t\t\tif ( 'b9' === $status || array() !== $object['credentials']['mixed'] || self::credential_locked( $object['locks'] ) ) {",
+  "\t\t\tif ( 'b9' === $status ) {", 'it', PACKAGE)
 e('export-media', 'make(): the purpose media makes a package of media', EX,
   "\t\tif ( 'media' === $purpose ) {\n\t\t\treturn self::make_media( is_array( $for ) ? $for : array() );",
   "\t\tif ( false ) {\n\t\t\treturn self::make_media( is_array( $for ) ? $for : array() );", 'it', NORMAL)

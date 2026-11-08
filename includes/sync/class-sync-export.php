@@ -461,9 +461,55 @@ final class AB_MCP_Sync_Export {
 				'units' => 0,
 			),
 		);
+		// Each attachment read as the package of objects reads it (its kind,
+		// AB_MCP_Sync_Kind::export()), so its paths and file names go through
+		// the same check of credentials as its values (Codex round 1 of branch
+		// 10, A7: a stored path such as password=….jpg): one a credential holds
+		// (B9, a field of one, a lock of the check) is left out, counted and
+		// named as withheld (needs credential), none of its files packed.
+		$pair   = AB_MCP_Staging::record()['pair'];
+		$source = AB_MCP_Sync_Inventory::source( array( home_url(), $pair['partner_url'] ), AB_MCP_Sync_Inventory::BUDGET, null, null, null );
+		$kind   = AB_MCP_Sync_Db_Kinds::for_pair( 'attachment' );
+		if ( null === $kind ) {
+			return new WP_Error( 'ab_mcp_sync_export_kind', 'The takeover knows no kind attachment in this version, so no package of media is made. Update AlphaBridge MCP on both sites to the same version, then call again.' );
+		}
+		$asked = array();
+		foreach ( array_keys( $ids ) as $id ) {
+			$asked[] = array(
+				'kind'   => 'attachment',
+				'ref'    => (string) $id,
+				'source' => $source,
+			);
+		}
+		$objects = $kind->export( $asked );
+		AB_MCP_Sync_Identity::reset();
+		if ( is_wp_error( $objects ) ) {
+			return $objects;
+		}
+		$held = array();
+		foreach ( $objects as $object ) {
+			$status = AB_MCP_Sync_Inventory::status_of( $object );
+			if ( 'b9' === $status || array() !== $object['credentials']['mixed'] || self::credential_locked( $object['locks'] ) ) {
+				$held[ (string) $object['ref'] ] = 'b9' === $status ? 'names' : 'held';
+			}
+		}
+		unset( $objects );
 		$take    = array();
 		$total   = 0;
 		foreach ( array_keys( $ids ) as $id ) {
+			if ( isset( $held[ (string) $id ] ) ) {
+				++$told['credentials'][ $held[ (string) $id ] ];
+				++$told['withheld']['count'];
+				if ( count( $told['withheld']['objects'] ) < self::WITHHELD_LIST ) {
+					$told['withheld']['objects'][] = array(
+						'kind'    => 'attachment',
+						'needs'   => 'credential',
+						'ref'     => (string) $id,
+						'subtype' => 'attachment',
+					);
+				}
+				continue;
+			}
 			$lacks = AB_MCP_Sync_Export_Rights::withheld(
 				array(
 					'kind' => 'attachment',

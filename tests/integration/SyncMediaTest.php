@@ -1125,6 +1125,24 @@ final class SyncMediaTest extends TestCase {
 		// as many as the manifest declares; a package that does not hold is
 		// removed with the way. One that holds is indexed.
 		self::pair();
+		// The staging site packs the files of an attachment only where its
+		// paths pass the check of credentials its values pass (Codex round 1,
+		// A7): a file stored as password=….jpg leaves it out, withheld.
+		$bytes_b = self::jpeg( 80, 60, array( 5, 50, 5 ) );
+		$offen   = (int) self::b( array( array( 'op' => 'upload', 'name' => 'offen.jpg', 'mime' => 'image/jpeg', 'bytes' => base64_encode( $bytes_b ), 'generate' => false, 'as' => 'id' ) ) )['id'];
+		$geheim  = (int) self::b( array( array( 'op' => 'upload', 'name' => 'geheim.jpg', 'mime' => 'image/jpeg', 'bytes' => base64_encode( $bytes_b ), 'generate' => false, 'as' => 'id' ) ) )['id'];
+		self::b(
+			array(
+				array( 'op' => 'put_file', 'path' => '2026/10/password=synthetic-review-value.jpg', 'bytes' => base64_encode( $bytes_b ) ),
+				array( 'op' => 'update_meta', 'post' => $geheim, 'key' => '_wp_attached_file', 'value' => '2026/10/password=synthetic-review-value.jpg' ),
+			)
+		);
+		self::clear_b();
+		$media = self::b( array( array( 'op' => 'export', 'purpose' => 'media', 'report_hash' => str_repeat( 'c', 64 ), 'refs' => array( array( 'kind' => 'attachment', 'ref' => (string) $offen ), array( 'kind' => 'attachment', 'ref' => (string) $geheim ) ), 'as' => 'package' ) ) )['package'];
+		self::assertSame( array( (string) $offen ), $media['media']['packed'], (string) json_encode( $media ) );
+		self::assertSame( array( array( 'kind' => 'attachment', 'needs' => 'credential', 'ref' => (string) $geheim, 'subtype' => 'attachment' ) ), $media['withheld']['objects'] );
+		self::assertSame( 1, $media['credentials']['held'] + $media['credentials']['names'] );
+		self::clear_b();
 		$bytes = random_bytes( 100 );
 		$piece = static fn( string $path, string $data, int $piece = 0, int $pieces = 1, ?string $sha = null, ?int $size = null ): array => array(
 			'data'   => base64_encode( $data ),

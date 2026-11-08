@@ -236,7 +236,13 @@ entsteht, nennt ihre Meldung den Weg.
   die Dateien, die die Staging-Site unter ihren Adressen ausliefert, und
   ihr Inhalt ist kein Wert der Datenbank. Die Werte des Anhangs
   (Bildmetadaten, Titel, Beschreibung) gehen durch die Zugangsdatenprüfung
-  wie jede Meta.
+  wie jede Meta, und mit ihnen die Pfade und Dateinamen der Liste: das
+  Paket der Medien liest jeden Anhang so, wie das Paket der Objekte ihn
+  liest, und lässt einen, den eine Zugangsangabe hält (ein Name nach B9,
+  ein Feld davon, eine Sperre der Prüfung; etwa ein gespeicherter Pfad
+  `password=….jpg`), draussen: in `withheld` mit `needs: credential`,
+  gezählt in `credentials`, keine seiner Dateien im Paket (Codex-Runde 1,
+  A7).
 - Die Live-Site prüft ein Paket der Medien ganz, bevor es als vollständig
   gilt (jede Zeile in ihrer einen Schreibweise und Form, die Stücke einer
   Datei in ihrer Reihenfolge und Grösse, jede Datei gegen ihren SHA-256),
