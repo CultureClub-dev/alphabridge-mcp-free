@@ -38,6 +38,7 @@ $dk = 'includes/sync/class-sync-db-kinds.php';
 $ww = 'includes/tools/class-widget-writer.php';
 $pw = 'includes/sync/class-sync-post-writer.php';
 $tw = 'includes/sync/class-sync-term-writer.php';
+$ex = 'includes/sync/class-sync-export.php';
 
 return array(
 	array(
@@ -1236,6 +1237,69 @@ return array(
 		'replace' => "/* removed */\n",
 		'run'     => $unit( 'SyncStructureWritersTest', 'testOnlyTheLinkedCssOfTheActiveThemeInTheSameVersionIsChangedAndItsRuleIsAskedAhead' ),
 		'expect'  => '/testOnlyTheLinkedCssOfTheActiveThemeInTheSameVersionIsChangedAndItsRuleIsAskedAhead/',
+	),
+	array(
+		'id'      => 'struktur/a8-export',
+		'clause'  => 'export of objects: the finished content of each object through the credential check (A8)',
+		'file'    => $ex,
+		'search'  => "\t\t\t\t\$object = self::checked_content( \$object );\n\t\t\t\t// Its status by the rule of the inventory",
+		'replace' => "\t\t\t\t// Its status by the rule of the inventory",
+		'run'     => $it( 'SyncStructureTest', 'testACredentialInTheVersionOfTheThemeOfTheCssLandsInNoPackage' ),
+		'expect'  => '/testACredentialInTheVersionOfTheThemeOfTheCssLandsInNoPackage/',
+	),
+	array(
+		'id'      => 'struktur/a8-row',
+		'clause'  => 'checked_content(): each column of the row (A8)',
+		'file'    => $ex,
+		'search'  => "\t\t\t\t\t\tAB_MCP_Sync_Credentials::column( \$acc, \$kind, (string) \$column, (string) \$field, 'custom_css' === \$kind && 'post_content' === \$column );\n",
+		'replace' => "/* removed */\n",
+		'run'     => $unit( 'SyncStructureWritersTest', 'testTheFinishedContentOfAnObjectGoesThroughTheCredentialCheckOnceMore' ),
+		'expect'  => '/testTheFinishedContentOfAnObjectGoesThroughTheCredentialCheckOnceMore/',
+	),
+	array(
+		'id'      => 'struktur/a8-css-mode',
+		'clause'  => 'checked_content(): the content of the CSS read as CSS (A8)',
+		'file'    => $ex,
+		'search'  => " (string) \$field, 'custom_css' === \$kind && 'post_content' === \$column );",
+		'replace' => " (string) \$field, false );",
+		'run'     => $unit( 'SyncStructureWritersTest', 'testTheFinishedContentOfAnObjectGoesThroughTheCredentialCheckOnceMore' ),
+		'expect'  => '/testTheFinishedContentOfAnObjectGoesThroughTheCredentialCheckOnceMore/',
+	),
+	array(
+		'id'      => 'struktur/a8-meta',
+		'clause'  => 'checked_content(): each meta row (A8)',
+		'file'    => $ex,
+		'search'  => "\t\t\t\t\t\tAB_MCP_Sync_Credentials::note( \$acc, \$kind, 'meta:' . (string) \$pair[0], AB_MCP_Sync_Credentials::unit( (string) \$pair[0], \$pair[1] ) );\n",
+		'replace' => "/* removed */\n",
+		'run'     => $unit( 'SyncStructureWritersTest', 'testTheFinishedContentOfAnObjectGoesThroughTheCredentialCheckOnceMore' ),
+		'expect'  => '/testTheFinishedContentOfAnObjectGoesThroughTheCredentialCheckOnceMore/',
+	),
+	array(
+		'id'      => 'struktur/a8-terms',
+		'clause'  => 'checked_content(): the names and slugs of the terms (A8)',
+		'file'    => $ex,
+		'search'  => "\t\t\t\t\t\t\tAB_MCP_Sync_Credentials::note( \$acc, \$kind, 'term:' . ( isset( \$term['taxonomy'] ) ? (string) \$term['taxonomy'] : '' ) . ':' . \$field, AB_MCP_Sync_Credentials::unit( '', (string) \$term[ \$field ] ) );\n",
+		'replace' => "/* removed */\n",
+		'run'     => $unit( 'SyncStructureWritersTest', 'testTheFinishedContentOfAnObjectGoesThroughTheCredentialCheckOnceMore' ),
+		'expect'  => '/testTheFinishedContentOfAnObjectGoesThroughTheCredentialCheckOnceMore/',
+	),
+	array(
+		'id'      => 'struktur/a8-other',
+		'clause'  => 'checked_content(): any other part of the content (A8)',
+		'file'    => $ex,
+		'search'  => "\t\t\t\tAB_MCP_Sync_Credentials::note( \$acc, \$kind, 'content:' . (string) \$part, AB_MCP_Sync_Credentials::unit( '', \$value ) );\n",
+		'replace' => "/* removed */\n",
+		'run'     => $unit( 'SyncStructureWritersTest', 'testTheFinishedContentOfAnObjectGoesThroughTheCredentialCheckOnceMore' ),
+		'expect'  => '/testTheFinishedContentOfAnObjectGoesThroughTheCredentialCheckOnceMore/',
+	),
+	array(
+		'id'      => 'struktur/a8-findings',
+		'clause'  => 'checked_content(): the findings into the locks and credentials of the object (A8)',
+		'file'    => $ex,
+		'search'  => "\t\t\$object['locks']       = \$acc['locks'];\n\t\t\$object['credentials'] = \$acc['credentials'];\n\t\treturn \$object;",
+		'replace' => "\t\treturn \$object;",
+		'run'     => $unit( 'SyncStructureWritersTest', 'testTheFinishedContentOfAnObjectGoesThroughTheCredentialCheckOnceMore' ),
+		'expect'  => '/testTheFinishedContentOfAnObjectGoesThroughTheCredentialCheckOnceMore/',
 	),
 	array(
 		'id'      => 'struktur/c2-part-order',

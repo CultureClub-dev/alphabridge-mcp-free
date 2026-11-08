@@ -39,8 +39,9 @@ EN = 'includes/sync/class-sync-engine.php'
 PU = 'includes/sync/class-sync-push.php'
 DK = 'includes/sync/class-sync-db-kinds.php'
 WW = 'includes/tools/class-widget-writer.php'
+EX = 'includes/sync/class-sync-export.php'
 PW = 'includes/sync/class-sync-post-writer.php'
-FILEVAR = {MW: '$mw', WA: '$wa', CW: '$cw', OW: '$ow', SR: '$sr', EN: '$en', PU: '$pu', DK: '$dk', WW: '$ww', PW: '$pw', 'includes/sync/class-sync-term-writer.php': '$tw'}
+FILEVAR = {MW: '$mw', WA: '$wa', CW: '$cw', OW: '$ow', SR: '$sr', EN: '$en', PU: '$pu', DK: '$dk', WW: '$ww', PW: '$pw', 'includes/sync/class-sync-term-writer.php': '$tw', EX: '$ex'}
 
 RUNS = {
     'u': ('unit', 'SyncStructureWritersTest'),
@@ -90,10 +91,12 @@ IT_MOVE = 'testAMenuThatTakesThePositionOfAnotherMenuOfTheRunGoesAfterItAndAnExc
 IT_UNITREST = 'testAPairThatCannotBeKeptAsARestMakesTheStepUnclearWithItsWay'
 IT_REVPAGE = 'testATakeOverOfAPageDeletesNoRevisionOfItWhereTheSiteKeepsANumberOfThem'
 IT_NEWREST = 'testANewObjectWhosePairCannotBecomeARestOnTheWayBackLeavesItsStepUnclearWithItsWay'
+IT_THEMEVER = 'testACredentialInTheVersionOfTheThemeOfTheCssLandsInNoPackage'
 IT_GUARD = 'testAnotherRequestThatWritesTheThemeModsAsANewMenuGivesItsPositionBackIsHeldOffByTheLock'
 U_MOVE = 'testAMenuThatTakesThePositionOfAnotherMenuOfTheRunComesAfterItAndAnExchangeIsLocked'
 U_ROWBACK = 'testTheKindReadsAgainAsItWritesAPartBackAndLeavesOneThatIsNotWhatTheStepRead'
 U_TERMBACK = 'testTheRowOfATermGoesBackOnlyWhereItIsWhatTheStepWroteAndItsSlugAndParentAreFree'
+U_CHECKED = 'testTheFinishedContentOfAnObjectGoesThroughTheCredentialCheckOnceMore'
 U_PARTORDER = 'testTheOrderOfThePartsOfEachKindIsWhatTheTokensCover'
 
 # ------------------------------------------------------------ core options
@@ -507,6 +510,21 @@ e('a7-type-filter-page', 'keeping_revisions(): nor of a page where wp_page_revis
   "\t\t\t\t\tadd_filter( $hook, $keep, PHP_INT_MAX, 2 );\n", "", 'itc', IT_REVPAGE)
 e('a7-type-goes', 'keeping_revisions(): the filter of the type goes again (A7)', PW,
   "\t\t\t\tremove_filter( $hook, $keep, PHP_INT_MAX );\n", "", 'u', U_CSS)
+# A8 (Codex round 2): the finished content checked once more in the export.
+e('a8-export', 'export of objects: the finished content of each object through the credential check (A8)', EX,
+  "\t\t\t\t$object = self::checked_content( $object );\n\t\t\t\t// Its status by the rule of the inventory", "\t\t\t\t// Its status by the rule of the inventory", 'it', IT_THEMEVER)
+e('a8-row', 'checked_content(): each column of the row (A8)', EX,
+  "\t\t\t\t\t\tAB_MCP_Sync_Credentials::column( $acc, $kind, (string) $column, (string) $field, 'custom_css' === $kind && 'post_content' === $column );\n", "", 'u', U_CHECKED)
+e('a8-css-mode', 'checked_content(): the content of the CSS read as CSS (A8)', EX,
+  " (string) $field, 'custom_css' === $kind && 'post_content' === $column );", " (string) $field, false );", 'u', U_CHECKED)
+e('a8-meta', 'checked_content(): each meta row (A8)', EX,
+  "\t\t\t\t\t\tAB_MCP_Sync_Credentials::note( $acc, $kind, 'meta:' . (string) $pair[0], AB_MCP_Sync_Credentials::unit( (string) $pair[0], $pair[1] ) );\n", "", 'u', U_CHECKED)
+e('a8-terms', 'checked_content(): the names and slugs of the terms (A8)', EX,
+  "\t\t\t\t\t\t\tAB_MCP_Sync_Credentials::note( $acc, $kind, 'term:' . ( isset( $term['taxonomy'] ) ? (string) $term['taxonomy'] : '' ) . ':' . $field, AB_MCP_Sync_Credentials::unit( '', (string) $term[ $field ] ) );\n", "", 'u', U_CHECKED)
+e('a8-other', 'checked_content(): any other part of the content (A8)', EX,
+  "\t\t\t\tAB_MCP_Sync_Credentials::note( $acc, $kind, 'content:' . (string) $part, AB_MCP_Sync_Credentials::unit( '', $value ) );\n", "", 'u', U_CHECKED)
+e('a8-findings', 'checked_content(): the findings into the locks and credentials of the object (A8)', EX,
+  "\t\t$object['locks']       = $acc['locks'];\n\t\t$object['credentials'] = $acc['credentials'];\n\t\treturn $object;", "\t\treturn $object;", 'u', U_CHECKED)
 # C2: the order of the parts of each kind.
 e('c2-part-order', 'part_order(): the order of the parts of a kind (C2)', EN,
   "\t\treturn null !== $w && defined( $w . '::PART_ORDER' ) ? $w::PART_ORDER : array( 'row', 'meta:', 'terms:' );",

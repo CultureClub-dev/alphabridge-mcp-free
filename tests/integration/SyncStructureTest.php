@@ -933,6 +933,47 @@ final class SyncStructureTest extends TestCase {
 		self::assertSame( 'active', AB_MCP_Sync_Pairs::get( $pair_id )['state'], 'The state did not change.' );
 	}
 
+	public function testACredentialInTheVersionOfTheThemeOfTheCssLandsInNoPackage(): void {
+		// Codex round 2 of branch 11, A8: the content of the CSS carries the
+		// version of its theme, appended after the check of the form. The
+		// export checks the finished content once more: a credential there
+		// holds the CSS, and its value is nowhere in the package of objects.
+		self::pair();
+		self::paired( self::staged() );
+		$secret = 'synthetic-review-value';
+		$dir    = AB_MCP_IT_Sites::docroot( 'b' ) . '/wp-content/themes/ab-it-version';
+		self::assertTrue( wp_mkdir_p( $dir ) );
+		file_put_contents( $dir . '/style.css', "/*\nTheme Name: AB IT Version\nTemplate: twentytwentyfive\nVersion: password=$secret\n*/\n" );
+		try {
+			self::b(
+				array(
+					array( 'op' => 'update_option', 'name' => 'stylesheet', 'value' => 'ab-it-version' ),
+					array( 'op' => 'custom_css', 'css' => 'body { color: #111111; }' ),
+				)
+			);
+			$package = self::b(
+				array(
+					array(
+						'op'          => 'export',
+						'purpose'     => 'objects',
+						'report_hash' => str_repeat( 'a', 64 ),
+						'refs'        => array( array( 'kind' => 'custom_css', 'ref' => 'ab-it-version' ) ),
+						'as'          => 'package',
+					),
+				)
+			)['package'];
+			$taken = AB_MCP_Sync_Import::taken( self::import_package( $package, 'objects', str_repeat( 'a', 64 ) ), 'objects' );
+			self::assertIsArray( $taken, is_wp_error( $taken ) ? $taken->get_error_message() : '' );
+			self::assertCount( 1, $taken['lines'] );
+			self::assertStringNotContainsString( $secret, (string) json_encode( array( $package, $taken ) ), 'No value of a credential in the package.' );
+			self::assertSame( 1, $package['credentials']['held'], (string) json_encode( $package['credentials'] ) );
+		} finally {
+			self::b( array( array( 'op' => 'update_option', 'name' => 'stylesheet', 'value' => 'twentytwentyfive' ) ) );
+			@unlink( $dir . '/style.css' );
+			@rmdir( $dir );
+		}
+	}
+
 	/* ----------------------------------------------------------- widgets */
 
 	public function testAChangedTextWidgetAndImageWidgetGoOverAndBack(): void {

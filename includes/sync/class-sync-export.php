@@ -351,6 +351,9 @@ final class AB_MCP_Sync_Export {
 			}
 			$found = array();
 			foreach ( $objects as $object ) {
+				// The finished content through the credential check once more,
+				// whatever a kind appended to it (Codex round 2 of branch 11, A8).
+				$object = self::checked_content( $object );
 				// Its status by the rule of the inventory (b9 where the kind named
 				// the object so), before it is sorted: a result of export() names
 				// none of its own (branch 9; before, the test for B9 in sort()
@@ -488,6 +491,7 @@ final class AB_MCP_Sync_Export {
 		}
 		$held = array();
 		foreach ( $objects as $object ) {
+			$object = self::checked_content( $object );
 			$status = AB_MCP_Sync_Inventory::status_of( $object );
 			if ( 'b9' === $status || array() !== $object['credentials']['mixed'] || self::credential_locked( $object['locks'] ) ) {
 				$held[ (string) $object['ref'] ] = 'b9' === $status ? 'names' : 'held';
@@ -693,6 +697,64 @@ final class AB_MCP_Sync_Export {
 			);
 		}
 		return $answer;
+	}
+
+	/**
+	 * The content of an object as it goes into the package, through the
+	 * credential check once more, after every field a kind appended to it
+	 * (Codex round 2 of branch 11, A8: the names of the menus of an item, the
+	 * version of the theme of the CSS came after the check of the form):
+	 * each column of the row as the kinds check a column (the content of the
+	 * CSS read as CSS), each meta row by its key and value, the names and
+	 * slugs of the terms, anything else as a value. A credential in any of
+	 * them holds the object (its line carries no content then, sort() and
+	 * line()); the locks and the credentials of the object take the
+	 * findings.
+	 *
+	 * @param array $object A result of AB_MCP_Sync_Kind::export().
+	 * @return array
+	 */
+	public static function checked_content( array $object ) {
+		if ( ! isset( $object['content'] ) || ! is_array( $object['content'] ) || array() === $object['content'] ) {
+			return $object;
+		}
+		$kind = isset( $object['kind'] ) ? (string) $object['kind'] : '';
+		$acc  = array(
+			'locks'       => isset( $object['locks'] ) && is_array( $object['locks'] ) ? $object['locks'] : array(),
+			'credentials' => isset( $object['credentials'] ) && is_array( $object['credentials'] ) ? $object['credentials'] + array( 'b9' => array(), 'mixed' => array() ) : array( 'b9' => array(), 'mixed' => array() ),
+		);
+		foreach ( $object['content'] as $part => $value ) {
+			if ( 'row' === $part && is_array( $value ) ) {
+				foreach ( $value as $column => $field ) {
+					if ( is_array( $field ) || is_object( $field ) ) {
+						AB_MCP_Sync_Credentials::note( $acc, $kind, 'content:' . $column, AB_MCP_Sync_Credentials::unit( '', $field ) );
+					} else {
+						AB_MCP_Sync_Credentials::column( $acc, $kind, (string) $column, (string) $field, 'custom_css' === $kind && 'post_content' === $column );
+					}
+				}
+			} elseif ( 'meta' === $part && is_array( $value ) ) {
+				foreach ( $value as $pair ) {
+					if ( is_array( $pair ) && isset( $pair[0] ) && array_key_exists( 1, $pair ) ) {
+						AB_MCP_Sync_Credentials::note( $acc, $kind, 'meta:' . (string) $pair[0], AB_MCP_Sync_Credentials::unit( (string) $pair[0], $pair[1] ) );
+					} else {
+						AB_MCP_Sync_Credentials::note( $acc, $kind, 'content:meta', AB_MCP_Sync_Credentials::unit( '', $pair ) );
+					}
+				}
+			} elseif ( 'terms' === $part && is_array( $value ) ) {
+				foreach ( $value as $term ) {
+					foreach ( array( 'name', 'slug' ) as $field ) {
+						if ( is_array( $term ) && isset( $term[ $field ] ) ) {
+							AB_MCP_Sync_Credentials::note( $acc, $kind, 'term:' . ( isset( $term['taxonomy'] ) ? (string) $term['taxonomy'] : '' ) . ':' . $field, AB_MCP_Sync_Credentials::unit( '', (string) $term[ $field ] ) );
+						}
+					}
+				}
+			} else {
+				AB_MCP_Sync_Credentials::note( $acc, $kind, 'content:' . (string) $part, AB_MCP_Sync_Credentials::unit( '', $value ) );
+			}
+		}
+		$object['locks']       = $acc['locks'];
+		$object['credentials'] = $acc['credentials'];
+		return $object;
 	}
 
 	/**

@@ -29,6 +29,7 @@ use WP_Error;
 require_once __DIR__ . '/site-info-stubs.php';
 require_once __DIR__ . '/sync-run-stubs.php';
 require_once __DIR__ . '/../includes/sync/class-sync-engine.php';
+require_once __DIR__ . '/../includes/sync/class-sync-export.php';
 
 require_once __DIR__ . '/structure-stubs.php';
 // What the suite loads through other cases, so that this file also runs
@@ -417,6 +418,48 @@ final class SyncStructureWritersTest extends TestCase {
 		self::assertSame( 'left', AB_MCP_Sync_Css_Writer::restore_part( 'row', 'twentytwentyfive', $backup, AB_MCP_Sync_Css_Writer::row_hash( $now['row'] ), 0 )['state'] );
 		self::assertSame( array(), $GLOBALS['ab_test_updated'] );
 		$GLOBALS['ab_test_can'] = static fn( string $cap, array $args ): bool => true;
+	}
+
+	public function testTheFinishedContentOfAnObjectGoesThroughTheCredentialCheckOnceMore(): void {
+		// Codex round 2 of branch 11, A8: what a kind appends to the content
+		// after the check of its form (the version of the theme of the CSS,
+		// the names of the menus of an item) is checked once more as the
+		// content goes into the package; a credential there holds the object.
+		$css = array(
+			'kind'        => 'custom_css',
+			'ref'         => 'twentytwentyfive',
+			'locks'       => array(),
+			'credentials' => array( 'b9' => array(), 'mixed' => array() ),
+			'content'     => array(
+				'meta'  => array(),
+				'row'   => array( 'post_content' => 'p{color:red}', 'post_name' => 'twentytwentyfive', 'post_status' => 'publish', 'preprocessed' => '', 'theme_version' => '1.2' ),
+				'terms' => array(),
+			),
+		);
+		self::assertSame( $css, \AB_MCP_Sync_Export::checked_content( $css ), 'Clean: as it was.' );
+		$version                                  = $css;
+		$version['content']['row']['theme_version'] = 'password=synthetic-review-value';
+		$held                                     = \AB_MCP_Sync_Export::checked_content( $version );
+		self::assertSame( array( 'theme_version' ), array_column( $held['credentials']['mixed'], 'unit' ) );
+		self::assertTrue( \AB_MCP_Sync_Export::credential_locked( $held['locks'] ), 'The version of the theme holds the CSS.' );
+		// The content of the CSS read as CSS (an escape the CSS reader decodes).
+		$escaped                                   = $css;
+		$escaped['content']['row']['post_content'] = 'a{content:"\\70 assword=synthetic-review-value"}';
+		self::assertNotSame( array(), \AB_MCP_Sync_Export::checked_content( $escaped )['credentials']['mixed'] );
+		// Any field appended, wherever in the content it stands.
+		foreach ( array(
+			'a column of the row' => array( 'row', array( 'post_content' => 'p{}', 'appended' => 'api_key=synthetic-review-value' ) ),
+			'a meta row'          => array( 'meta', array( array( 'note', 'password=synthetic-review-value' ) ) ),
+			'the name of a term'  => array( 'terms', array( array( 'name' => 'Shop password=synthetic-review-value', 'slug' => 'shop', 'taxonomy' => 'nav_menu', 'term_id' => 5, 'term_order' => 0 ) ) ),
+			'another part'        => array( 'more', array( 'x' => 'token=synthetic-review-value' ) ),
+		) as $case => list( $part, $value ) ) {
+			$object                      = $css;
+			$object['kind']              = 'menu_item';
+			$object['content'][ $part ]  = $value;
+			$held                        = \AB_MCP_Sync_Export::checked_content( $object );
+			self::assertNotSame( array(), $held['credentials']['mixed'], $case );
+			self::assertTrue( \AB_MCP_Sync_Export::credential_locked( $held['locks'] ), $case );
+		}
 	}
 
 	/* ------------------------------------------------------------ menus */

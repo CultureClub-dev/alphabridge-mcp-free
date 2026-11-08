@@ -156,6 +156,15 @@ Position, die das Theme hier nicht registriert, in der Prüfung des Laufs
   Inhalt eines Eintrags; ein Fund hält das Objekt, sein Inhalt geht nicht
   ins Paket (Codex-Runde 1, A4). Prüffall
   `testACredentialInTheNameOfAMenuOrOfItsPositionLandsInNoPackage`.
+- Darüber hinaus prüft der Export den fertigen Inhalt jedes Objekts noch
+  einmal, nachdem jede Art alles angehängt hat
+  (`AB_MCP_Sync_Export::checked_content()`, Codex-Runde 2, A8): jede Spalte
+  der Zeile wie die Arten eine Spalte prüfen (der Inhalt des CSS als CSS),
+  jede Meta-Zeile, Name und Slug der Terme, jeder andere Teil als Wert. So
+  kommt kein nachträglich angehängtes Feld an der Prüfung vorbei, etwa die
+  Version des Themes im Inhalt des CSS. Prüffälle
+  `testACredentialInTheVersionOfTheThemeOfTheCssLandsInNoPackage` und
+  `SyncStructureWritersTest::testTheFinishedContentOfAnObjectGoesThroughTheCredentialCheckOnceMore`.
 - Der Rückweg eines neuen Menüs lässt Menü und Einträge als Rest stehen und
   setzt die Positionen zurück, die es genommen hat (`shared_back()` der
   Engine, aus der Sicherung des Schritts, bytebedingt); eine Position, die
@@ -381,6 +390,10 @@ Entscheid 27 ohnehin nicht geschrieben werden.
 - Die Optionen der Übernahmesperre in `shared_back()` waren hier zuerst
   als gleichwertig begründet; das traf bei parallelem Zugriff nicht zu
   (Codex-Runde 1, C3). Sie sind jetzt geführt (`c3-guard-options`).
+- Die abschliessende Prüfung des Inhalts im Paket der Medien (A8): ein
+  Anhang hängt nach seiner Form nichts an, das seine Art nicht schon prüft;
+  kein Prüffall kann den Aufruf dort von seinem Fehlen unterscheiden. Er
+  steht da, damit ein künftiges angehängtes Feld nicht vorbeikommt.
 - Dass die Tokens die Reihenfolge der Teile decken (C2), zeigt kein Test:
   eine andere Reihenfolge bräuchte eine Änderung des Codes zwischen Plan
   und Bestätigung; geführt ist `part_order()`.
