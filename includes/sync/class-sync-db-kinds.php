@@ -1613,7 +1613,7 @@ class AB_MCP_Sync_Kind_Custom_Css extends AB_MCP_Sync_Db_Kind {
 			// The source of a preprocessor (post_content_filtered) is neither
 			// in the form nor checked for credentials: it is not packed, only
 			// whether there is one (the engine locks such CSS, branch 11).
-			$theme             = wp_get_theme( (string) $row['post_name'] );
+			$version           = (string) wp_get_theme( (string) $row['post_name'] )->get( 'Version' );
 			$result['content'] = array(
 				'meta'  => array(),
 				'row'   => array(
@@ -1621,7 +1621,7 @@ class AB_MCP_Sync_Kind_Custom_Css extends AB_MCP_Sync_Db_Kind {
 					'post_name'     => (string) $row['post_name'],
 					'post_status'   => (string) $row['post_status'],
 					'preprocessed'  => '' === (string) $row['post_content_filtered'] ? '' : '1',
-					'theme_version' => $theme->exists() ? (string) $theme->get( 'Version' ) : '',
+					'theme_version' => $version,
 				),
 				'terms' => array(),
 			);

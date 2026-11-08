@@ -177,8 +177,9 @@ final class AB_MCP_Sync_Css_Writer {
 		if ( $active !== $stylesheet ) {
 			return AB_MCP_Sync_Post_Writer::locked( 'custom_css:theme_mismatch', sprintf( 'the CSS is of the theme %1$s, and the active theme of this site is %2$s', $stylesheet, $active ) );
 		}
-		$theme = wp_get_theme( $stylesheet );
-		$here  = $theme->exists() ? (string) $theme->get( 'Version' ) : '';
+		// The version of the theme from its files ('' where it is not there:
+		// WP_Theme::get() answers false then).
+		$here = (string) wp_get_theme( $stylesheet )->get( 'Version' );
 		if ( $here !== $version ) {
 			return AB_MCP_Sync_Post_Writer::locked( 'custom_css:theme_mismatch', sprintf( 'the theme %1$s is in the version %2$s on this site and %3$s on the staging site', $stylesheet, '' === $here ? '(none)' : $here, '' === $version ? '(none)' : $version ) );
 		}

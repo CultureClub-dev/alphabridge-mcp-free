@@ -181,7 +181,6 @@ final class SyncSafeCallsTest extends TestCase {
 			'update_option'       => array( 1, 'write_row(): the way forward of a core option (decisions 17 and 27).' ),
 		),
 		'class-sync-css-writer.php' => array(
-			'->exists'                  => array( 1, 'theme_refusal(): whether the theme of the stylesheet is installed (its files).' ),
 			'AB_MCP_Page_Cache::purge_site' => array( 1, 'post_write(): the page cache of the whole site after the CSS changed (decision 33).' ),
 			'apply_filters'             => array( 1, 'css_refusal(): update_custom_css_data, the filter wp_update_custom_css_post() saves the CSS with, ahead and without writing (decision 17).' ),
 			'clean_post_cache'          => array( 1, 'post_write(): the caches of the CSS post (decision 33).' ),
@@ -195,7 +194,6 @@ final class SyncSafeCallsTest extends TestCase {
 			'wp_update_post'            => array( 1, 'restore_part(): the row put back through the core (decision 23).' ),
 		),
 		'class-sync-db-kinds.php' => array(
-			'->exists'     => array( 1, 'AB_MCP_Sync_Kind_Custom_Css::post_form(): whether the theme of the stylesheet is installed, for the content of a package (branch 11).' ),
 			'wp_get_theme' => array( 1, 'AB_MCP_Sync_Kind_Custom_Css::post_form(): the version of the theme of the stylesheet from its files, packed with the CSS (decision 25), no stored value compared.' ),
 		),
 		'class-sync-menu-writer.php' => array(
