@@ -401,6 +401,15 @@ return array(
 		'expect'  => '/testAChangedTitleAltTextDescriptionAndParentOfAnAttachmentGoOverAndBackWithoutAFile/',
 	),
 	array(
+		'id'      => 'medien/plan-made-attachments',
+		'clause'  => 'plan(): a new attachment counts as a parent the run creates (a poster under its new video; GitHub Codex on free#140, P2)',
+		'file'    => $pu,
+		'search'  => "\t\t\tif ( in_array( \$item['kind'], array( 'post', 'attachment' ), true ) && 'create' === \$item['op'] ) {\n\t\t\t\t\$made_posts[",
+		'replace' => "\t\t\tif ( 'post' === \$item['kind'] && 'create' === \$item['op'] ) {\n\t\t\t\t\$made_posts[",
+		'run'     => $it( 'SyncMediaTest', 'testANewVideoWithANewPosterImageThatHangsUnderItGoesOverAndBack' ),
+		'expect'  => '/testANewVideoWithANewPosterImageThatHangsUnderItGoesOverAndBack/',
+	),
+	array(
 		'id'      => 'medien/plan-parent-later',
 		'clause'  => 'plan(): a new attachment under a post the run creates is made unattached first',
 		'file'    => $pu,

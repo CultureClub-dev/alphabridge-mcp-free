@@ -820,6 +820,51 @@ final class SyncMediaTest extends TestCase {
 		self::assertSame( $files_b, self::uploads_of( 'a' ), 'And still nothing deleted.' );
 	}
 
+	public function testANewVideoWithANewPosterImageThatHangsUnderItGoesOverAndBack(): void {
+		// A video uploaded in the media library with a poster image, both new
+		// (GitHub Codex on free#140, P2): the video names the image as its
+		// _thumbnail_id (strong: the image first), the image hangs under the
+		// video (weak: no cycle). A new attachment counts as a parent the run
+		// creates: the image is made unattached, the video after it, and the
+		// parent step of the image after both. The way back leaves both as
+		// rests, with their files.
+		self::pair();
+		self::paired( self::staged() );
+		$mp4   = "\x00\x00\x00\x18ftypisom\x00\x00\x02\x00isomiso2\x00\x00\x00\x08free\x00\x00\x04\x08mdat" . str_repeat( "\x00", 1024 );
+		$video = self::upload_b( 'clip.mp4', 'video/mp4', $mp4, array( 'post_title' => 'Clip' ) );
+		$bild  = self::upload_b( 'clip-poster.jpg', 'image/jpeg', self::jpeg( 320, 180, array( 10, 10, 60 ) ), array( 'post_title' => 'Poster', 'post_parent' => $video ) );
+		self::b( array( array( 'op' => 'update_meta', 'post' => $video, 'key' => '_thumbnail_id', 'value' => (string) $bild ) ) );
+		$files_b = self::uploads_of( 'b' );
+		$planned = self::planned( array( 'attachment:2026/10/clip.mp4', 'attachment:2026/10/clip-poster.jpg' ) );
+		foreach ( array( 'attachment:2026/10/clip.mp4', 'attachment:2026/10/clip-poster.jpg' ) as $name ) {
+			self::assertSame( 'create', self::entry( $planned['report']['all'], $name )['action'], $name . ': ' . json_encode( self::entry( $planned['report']['all'], $name ) ) );
+		}
+		$this->watch_deletions();
+		$run    = self::begun( $planned['args'] );
+		$closed = self::finish( (int) $run['run_id'] );
+		$status = self::run_status( (int) $run['run_id'] );
+		self::assertSame( 'closed_done', $closed['state'], json_encode( $closed ) . self::check_message( $status ) );
+		$writes = self::writes( $status );
+		self::assertSame( array( (string) $bild, (string) $video, (string) $bild ), array_map( static fn( $s ) => (string) $s['parts']['object']['staging_ref'], $writes ), 'The image (unattached), the video (its poster made already), the parent step of the image: no cycle.' );
+		foreach ( $writes as $step ) {
+			self::assertSame( 'done', $step['state'], json_encode( $step ) );
+		}
+		$video_a = self::attachment_a( '2026/10/clip.mp4' );
+		$bild_a  = self::attachment_a( '2026/10/clip-poster.jpg' );
+		self::assertSame( array( (string) $bild_a ), self::meta_a( $video_a, '_thumbnail_id' ), 'The video shows the poster.' );
+		self::assertSame( (string) $video_a, self::row_a( $bild_a )['post_parent'], 'The poster hangs under the video.' );
+		self::assertSame( $files_b, self::uploads_of( 'a' ), 'Every file of both, byte for byte.' );
+		$again = self::report( self::staged() );
+		foreach ( array( 'attachment:2026/10/clip.mp4', 'attachment:2026/10/clip-poster.jpg' ) as $name ) {
+			self::assertSame( 'equal', self::entry( $again['all'], $name )['result'], $name );
+		}
+		$back = self::back( (int) $run['run_id'] );
+		self::assertSame( 'closed_findings', $back['state'], json_encode( $back ) );
+		self::assertSame( '0', self::row_a( $bild_a )['post_parent'], 'The parent step went back.' );
+		self::assertSame( $files_b, self::uploads_of( 'a' ), 'No file is deleted.' );
+		self::assertSame( array(), $this->deletions );
+	}
+
 	public function testAChangedTitleAltTextDescriptionAndParentOfAnAttachmentGoOverAndBackWithoutAFile(): void {
 		// The logo both sites have gets a new title, alternative text and
 		// description on staging and hangs under a new page there: the page

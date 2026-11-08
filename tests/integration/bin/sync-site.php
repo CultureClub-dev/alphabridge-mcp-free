@@ -438,7 +438,10 @@ foreach ( $ab_it_steps as $ab_it_i => $ab_it_step ) {
 			// its metadata with the sizes (wp_generate_attachment_metadata());
 			// the bytes in base64 (bytes) or a JPEG of a colour (image: w, h,
 			// rgb); args of the attachment (post_title, post_parent, …), alt.
+			// media.php as the media library has it (the metadata of an audio
+			// or a video: wp_read_video_metadata()).
 			require_once ABSPATH . 'wp-admin/includes/image.php';
+			require_once ABSPATH . 'wp-admin/includes/media.php';
 			$ab_it_bytes = isset( $ab_it_step['bytes'] ) ? base64_decode( (string) $ab_it_step['bytes'] ) : '';
 			if ( isset( $ab_it_step['image'] ) ) {
 				$ab_it_gd = imagecreatetruecolor( (int) $ab_it_step['image']['w'], (int) $ab_it_step['image']['h'] );

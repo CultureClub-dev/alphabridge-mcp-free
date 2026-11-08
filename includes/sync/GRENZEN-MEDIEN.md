@@ -273,6 +273,12 @@ entsteht, nennt ihre Meldung den Weg.
 - Das Elternteil eines Anhangs ist ein schwacher Verweis: legt derselbe
   Lauf die Seite an, unter der das Bild hängt, entsteht das Bild zuerst
   ohne Elternteil, und ein eigener Elternschritt setzt es nach der Seite.
+  Ein neuer Anhang zählt dabei wie ein neuer Post (GitHub-Codex auf
+  free#140, P2): das Titelbild eines neuen Videos hängt unter dem Video,
+  das Video nennt es als `_thumbnail_id`; der starke Verweis ordnet das
+  Bild zuerst, der schwache macht keinen Zyklus, der Elternschritt des
+  Bilds kommt nach beiden. Prüffall
+  `testANewVideoWithANewPosterImageThatHangsUnderItGoesOverAndBack`.
   Bis dahin trägt das Paar als Staging-Basis den Stand ohne Elternteil
   (im Normalfall gemessen: die Basis vor und nach dem Elternschritt
   verschieden, der nächste Bericht gleich); scheitert die Seite, sperrt der
@@ -340,7 +346,8 @@ entsteht, nennt ihre Meldung den Weg.
   Bilder mit GD erzeugt) läuft lokal in rund 66 s (nach Codex-Runde 2: der
   Fall mit WebP-Grösse und Altbestand neu, rund 7 s; der Hook-Fall mit
   zwei bearbeiteten Bildern mehr; nach Runde 3: ein SVG im WebP-Fall, zwei
-  Bilder vom September im Hook-Fall). Sie arbeitet auf beiden Sites in
+  Bilder vom September im Hook-Fall; nach GitHub-Codex auf free#140 ein
+  zehnter Fall, Video mit Titelbild, rund 8 s; zusammen rund 73 s). Sie arbeitet auf beiden Sites in
   einem eigenen Uploads-Ordner (`wp-content/uploads-medien` über die
   Option `upload_path`), den jeder Fall frisch vorfindet und nach sich
   entfernt: die Suite läuft in der CI für alle Klassen gegen dieselben

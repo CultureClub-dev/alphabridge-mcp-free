@@ -79,6 +79,7 @@ U_LAY = 'testAFileIsLaidOnlyWhereItIsShownAtItsPathUnderTheUploadsAndAFolderSwap
 FLAT = 'testTheFirstFilesOfASiteWithoutMonthFoldersGoIntoItsUploadsAndOnlyWithTheRightToUploadAsTheyAreLaid'
 FILEHOOK = 'testAFileAHookChangesAsTheStepWritesOrPutsBackDeviatesTheAttachmentAndStopsItsWayBack'
 WEBP = 'testAWebpSizeAndAnImportOfOldWithAbsolutePathsLockNoAttachmentBesideThem'
+VIDEO = 'testANewVideoWithANewPosterImageThatHangsUnderItGoesOverAndBack'
 U_KINDS = 'testEachKindRegistersWithWhatTheTableGivesIt'
 U_WRITERS = 'testTheEngineWritesTermsWithTheirOwnWriter'
 IT_LINES = 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain'
@@ -202,6 +203,9 @@ e('plan-weak-parent', 'plan(): the weak parent of an attachment is read for its 
   "\t\t\t\t\tcontinue;", 'it', NORMAL)
 e('plan-parent-edge', 'plan(): an attachment here comes after the new parent the run creates', PU,
   "\t\t\t\t$items[ $n ]['refs'][] = array( 'post', $item['weak_parent'] );\n", "", 'it', CHANGED)
+e('plan-made-attachments', 'plan(): a new attachment counts as a parent the run creates (a poster under its new video; GitHub Codex on free#140, P2)', PU,
+  "\t\t\tif ( in_array( $item['kind'], array( 'post', 'attachment' ), true ) && 'create' === $item['op'] ) {\n\t\t\t\t$made_posts[",
+  "\t\t\tif ( 'post' === $item['kind'] && 'create' === $item['op'] ) {\n\t\t\t\t$made_posts[", 'it', VIDEO)
 e('plan-parent-later', 'plan(): a new attachment under a post the run creates is made unattached first', PU,
   "\t\t\t\t$items[ $n ]['parent_later'] = true;\n", "", 'it', NORMAL)
 e('plan-parent-step', 'plan(): the parent step after the attachment and its post', PU,

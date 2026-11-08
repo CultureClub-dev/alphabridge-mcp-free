@@ -508,15 +508,20 @@ final class AB_MCP_Sync_Push {
 				}
 			}
 		}
+		// The objects of the space of posts the run creates, a parent an
+		// attachment may hang under: a post, and an attachment as well (the
+		// poster image of a new video hangs under the video, which names it
+		// as its _thumbnail_id: the strong reference orders the image first,
+		// the weak one makes no cycle; GitHub Codex on free#140, P2).
 		$made_posts = array();
 		foreach ( $items as $n => $item ) {
-			if ( 'post' === $item['kind'] && 'create' === $item['op'] ) {
+			if ( in_array( $item['kind'], array( 'post', 'attachment' ), true ) && 'create' === $item['op'] ) {
 				$made_posts[ (string) $item['staging_ref'] ] = $n;
 			}
 		}
 		$parents = array();
 		foreach ( $items as $n => $item ) {
-			if ( 'attachment' !== $item['kind'] || ! isset( $item['weak_parent'], $made_posts[ $item['weak_parent'] ] ) ) {
+			if ( 'attachment' !== $item['kind'] || ! isset( $item['weak_parent'], $made_posts[ $item['weak_parent'] ] ) || $made_posts[ $item['weak_parent'] ] === $n ) {
 				continue;
 			}
 			if ( 'update' === $item['op'] ) {
