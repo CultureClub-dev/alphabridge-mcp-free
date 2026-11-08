@@ -173,8 +173,6 @@ e('guard-term-arm-rest', 'arm(): the REST refusal of a covered term is hooked', 
   "\t\tadd_filter( 'rest_request_before_callbacks', array( __CLASS__, 'rest_term' ), 1, 3 );\n", '', 'it', 'testAnotherWriterOfATermIsRefusedWhileItsStepWrites')
 
 # --------------------------------------------- the export of a term
-e('export-term-only', 'Kind_Term::export(): the menus (a kind of terms) write from branch 11 on', DK,
-  "\t\tif ( 'term' !== $this->kind() ) {\n\t\t\treturn $this->not_here( 'export' );", "\t\tif ( false ) {\n\t\t\treturn $this->not_here( 'export' );", 'kinds', 'testWhatWritesIsNotInThisBranch')
 e('export-term-b9', 'Kind_Term::export(): a meta row whose key is the name of a credential is never packed (B9)', DK,
   "\t\t\t\t\tif ( AB_MCP_Sync_Credentials::names_credential( (string) $m['key'], $extra ) ) {\n\t\t\t\t\t\tcontinue;", "\t\t\t\t\tif ( false ) {\n\t\t\t\t\t\tcontinue;", 'it', 'testTheMetaOfATermGoesByItsRightAndBackAndANewTermWithMetaIsLocked')
 

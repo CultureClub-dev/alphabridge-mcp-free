@@ -735,6 +735,12 @@ nennt ihre Meldung den Weg.
 
 ## Nicht als Mutation geführt
 
+- Die Weiche in `AB_MCP_Sync_Kind_Term::export()`, die eine andere Art von
+  Termen als `term` mit `ab_mcp_sync_not_in_branch` abweist: seit Zweig 11
+  hat die einzige solche Art, das Menü (`AB_MCP_Sync_Kind_Menu`), ihr
+  eigenes `export()`, die Weiche ist darum unerreichbar und ihr Mutant
+  gleichwertig (vorher `inhalte/export-term-only`, gestrichen nach der CI
+  von free#141).
 - `writer()` mit einer Art ohne Schreiber in `boundary()` und
   `revert_boundary()` (der Plan nimmt keine solche Art; die
   Gesamtvorprüfung ist geführt: `inhalte/engine-check-no-writer`).

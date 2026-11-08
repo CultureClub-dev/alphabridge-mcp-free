@@ -545,15 +545,6 @@ return array(
 		'expect'  => '/testAnotherWriterOfATermIsRefusedWhileItsStepWrites/',
 	),
 	array(
-		'id'      => 'inhalte/export-term-only',
-		'clause'  => 'Kind_Term::export(): the menus (a kind of terms) write from branch 11 on',
-		'file'    => $dk,
-		'search'  => "\t\tif ( 'term' !== \$this->kind() ) {\n\t\t\treturn \$this->not_here( 'export' );",
-		'replace' => "\t\tif ( false ) {\n\t\t\treturn \$this->not_here( 'export' );",
-		'run'     => $unit( 'SyncDbKindsTest', 'testWhatWritesIsNotInThisBranch' ),
-		'expect'  => '/testWhatWritesIsNotInThisBranch/',
-	),
-	array(
 		'id'      => 'inhalte/export-term-b9',
 		'clause'  => 'Kind_Term::export(): a meta row whose key is the name of a credential is never packed (B9)',
 		'file'    => $dk,
