@@ -467,6 +467,41 @@ final class SyncStructureWritersTest extends TestCase {
 		$markup                                   = $css;
 		$markup['content']['row']['post_content'] = 'a::after{content:"<b>new</b>"}';
 		self::assertSame( $markup, \AB_MCP_Sync_Export::checked_content( $markup ), 'Markup in a string of the CSS: as it was.' );
+		// Each part in the form its kind checked it (Codex round 4 of branch
+		// 11, B): an instance of a widget unpacked, with the base of the
+		// widget as its name, as the kind of the area reads it. Prose that
+		// reads as a field of code only in the serialized text (its braces)
+		// is no credential; a serialized value of meta, read as its kind
+		// reads it, neither.
+		$settings = array( 'title' => 'Spielanleitung', 'text' => 'Spieler: Anna, Token: drei', 'filter' => true, 'visual' => true );
+		$area     = array(
+			'kind'        => 'widget_area',
+			'ref'         => 'sidebar-1',
+			'locks'       => array(),
+			'credentials' => array( 'b9' => array(), 'mixed' => array() ),
+			'content'     => array(
+				'meta'  => array( array( 'text-2', serialize( $settings ) ), array( 'search', '' ) ),
+				'row'   => array( 'area' => 'sidebar-1' ),
+				'terms' => array(),
+			),
+		);
+		self::assertSame( $area, \AB_MCP_Sync_Export::checked_content( $area ), 'A harmless text widget: as it was.' );
+		$post                     = $area;
+		$post['kind']             = 'post';
+		$post['content']['meta']  = array( array( 'layout', serialize( array( 'layout' => 'wide', 'columns' => 3, 'label' => 'Spieler: Anna' ) ) ) );
+		self::assertSame( $post, \AB_MCP_Sync_Export::checked_content( $post ), 'A serialized value of meta: as it was.' );
+		$option                   = $area;
+		$option['kind']           = 'option';
+		$option['content']        = array( 'meta' => array(), 'row' => array( 'value' => serialize( array( 12, 13 ) ) ), 'terms' => array() );
+		self::assertSame( $option, \AB_MCP_Sync_Export::checked_content( $option ), 'A serialized option: as it was.' );
+		// A credential in the settings of an instance still holds the area,
+		// and settings that do not unpack are not read as clean.
+		$secret                             = $area;
+		$secret['content']['meta'][0][1]    = serialize( array( 'title' => 'x', 'text' => 'password=synthetic-review-value' ) );
+		self::assertTrue( \AB_MCP_Sync_Export::credential_locked( \AB_MCP_Sync_Export::checked_content( $secret )['locks'] ), 'A credential in an instance.' );
+		$broken                             = $area;
+		$broken['content']['meta'][0][1]    = 'a:2:{s:5:"title";s:1:"x";';
+		self::assertTrue( \AB_MCP_Sync_Export::credential_locked( \AB_MCP_Sync_Export::checked_content( $broken )['locks'] ), 'Settings that do not unpack.' );
 		// A meta key named as a credential (B9; Codex round 3 of branch 11,
 		// C): left out of the content and named in b9, as the kinds leave it
 		// out of form and content; the object stays packed with its other

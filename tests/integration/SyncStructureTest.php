@@ -985,6 +985,62 @@ final class SyncStructureTest extends TestCase {
 		}
 	}
 
+	public function testAHarmlessTextWidgetAndSerializedValuesOfMetaAndOptionsGoIntoThePackageWithTheirContent(): void {
+		// Codex round 4 of branch 11, B: the export checks the finished
+		// content of each object once more (A8), and since this round in the
+		// form its kind checked it: the settings of an instance of a widget
+		// unpacked, as the kind of the area reads them, not the serialized
+		// text the content carries, whose braces made the net read the prose
+		// of a text widget as a field of code (*:unread_credential, the line
+		// locked). A serialized value of meta and a serialized option, which
+		// their kinds read as stored, go as normal objects as well.
+		self::pair();
+		self::paired( self::staged() );
+		$text = self::widget_settings( 'text', array( 'title' => 'Spielanleitung', 'text' => 'Spieler: Anna, Token: drei', 'filter' => true, 'visual' => true ) );
+		self::widgets_on_both( array( 'text-2' => $text ) );
+		$post = (int) self::b( array( array( 'op' => 'insert_post', 'args' => array( 'post_title' => 'Spielregeln', 'post_status' => 'publish' ), 'as' => 'post' ) ) )['post'];
+		$was  = self::option_of( 'b', 'sticky_posts' );
+		self::b(
+			array(
+				array( 'op' => 'add_meta', 'post' => $post, 'key' => 'ab_it_layout', 'value' => array( 'layout' => 'wide', 'columns' => 3, 'label' => 'Spieler: Anna' ) ),
+				array( 'op' => 'update_option', 'name' => 'sticky_posts', 'value' => array( $post ) ),
+			)
+		);
+		try {
+			$package = self::b(
+				array(
+					array(
+						'op'          => 'export',
+						'purpose'     => 'objects',
+						'report_hash' => str_repeat( 'a', 64 ),
+						'refs'        => array(
+							array( 'kind' => 'widget_area', 'ref' => 'sidebar-1' ),
+							array( 'kind' => 'post', 'ref' => (string) $post ),
+							array( 'kind' => 'option', 'ref' => 'sticky_posts' ),
+						),
+						'as'          => 'package',
+					),
+				)
+			)['package'];
+		} finally {
+			self::b( array( array( 'op' => 'update_option', 'name' => 'sticky_posts', 'value' => is_array( $was ) ? $was : array() ) ) );
+		}
+		self::assertSame( 0, $package['credentials']['held'], (string) json_encode( $package['credentials'] ) );
+		$taken = AB_MCP_Sync_Import::taken( self::import_package( $package, 'objects', str_repeat( 'a', 64 ) ), 'objects' );
+		self::assertIsArray( $taken, is_wp_error( $taken ) ? $taken->get_error_message() : '' );
+		$lines = array();
+		foreach ( $taken['lines'] as $line ) {
+			$lines[ $line['kind'] . ':' . $line['ref'] ] = $line;
+		}
+		foreach ( array( 'widget_area:sidebar-1', 'post:' . $post, 'option:sticky_posts' ) as $ref ) {
+			self::assertArrayHasKey( $ref, $lines, (string) json_encode( array_keys( $lines ) ) );
+			self::assertArrayHasKey( 'hash', $lines[ $ref ], $ref . ': ' . json_encode( $lines[ $ref ] ) );
+			self::assertNotSame( array(), $lines[ $ref ]['content'], $ref );
+			self::assertSame( array(), array_values( array_filter( array_column( $lines[ $ref ]['locks'], 'key' ), static fn( $key ) => \AB_MCP_Sync_Export::credential_locked( array( array( 'key' => $key ) ) ) ) ), $ref . ': no lock of the credential check.' );
+		}
+		self::assertSame( array( array( 'text-2', serialize( $text ) ) ), array_values( array_filter( $lines['widget_area:sidebar-1']['content']['meta'], static fn( $row ) => 'text-2' === $row[0] ) ), 'The instance goes with its settings.' );
+	}
+
 	/* ----------------------------------------------------------- widgets */
 
 	public function testAChangedTextWidgetAndImageWidgetGoOverAndBack(): void {

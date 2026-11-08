@@ -255,6 +255,7 @@ final class SyncSafeCallsTest extends TestCase {
 			'taxonomy_exists'           => array( 1, 'term(): whether WordPress knows its taxonomy.' ),
 		),
 		'class-sync-export.php'   => array(
+			'$reader::checked_meta'  => array( 1, 'checked_content(): a meta row in the form its kind checked it, AB_MCP_Sync_Db_Kind::checked_meta() of the kind AB_MCP_Sync_Db_Kinds::for_pair() names (an instance of a widget unpacked from the text the content carries; no stored value read; Codex round 4 of branch 11, B).' ),
 			'current_user_can'       => array( 1, 'refusal(): only an account with manage_options makes and reads packages (decision 9).' ),
 			'AB_MCP_Site_Mode::is_full' => array( 2, 'refusal() and deliver(): only with write access on (the access level Full, decision 9).' ),
 			'AB_MCP_Site_Mode::way_text' => array( 1, 'refusal(): the way to switch write access on.' ),

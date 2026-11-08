@@ -168,7 +168,25 @@ Position, die das Theme hier nicht registriert, in der Prüfung des Laufs
   (`AB_MCP_Sync_Net::check()`, dieselbe Funktion, mit jeder Schicht des
   Werts: Dekodierungen, Base64, `data:`), so dass auch eine kodierte
   Version (Base64 von `password=…`) das Objekt hält; was das Netz nicht
-  bis zum Ende liest, sperrt und macht das Objekt unvollständig. Nur das
+  bis zum Ende liest, sperrt und macht das Objekt unvollständig.
+  Jeder Teil geht in der Form durch die Prüfung, in der seine Art ihn
+  geprüft hat (Codex-Runde 4, B; die Meta-Zeilen über
+  `AB_MCP_Sync_Db_Kind::checked_meta()` der Art): Post, Anhang und Vorlage
+  (JSON im Inhalt), Term, Menü und Menüeintrag tragen Spalten und
+  Meta-Zeilen als gespeicherte Texte, ein serialisierter Wert als sein
+  Text, so wie `meta_form()` und `row_form()` ihn lesen; die Option ihren
+  gespeicherten Wert als Text, wie `option()` ihn liest; das CSS seine
+  Spalten als Texte; Theme-Mods tragen keinen Inhalt. Nur der Bereich
+  trägt seine Instanzen anders, als er sie prüft: im Inhalt serialisiert,
+  geprüft entpackt mit der Basis des Widgets als Namen (`area()`).
+  `checked_meta()` des Bereichs entpackt sie darum wie die Art
+  (`AB_MCP_Sync_Canon::unserialized()`); was nicht entpackt, geht als Text
+  in die Prüfung und sperrt dort. Vorher las das Netz die Klammern der
+  serialisierten Einstellungen als Code und die Prosa eines Text-Widgets
+  («Spieler: Anna, Token: drei») als Zugangsfeld: die Zeile war gesperrt.
+  Prüffall
+  `testAHarmlessTextWidgetAndSerializedValuesOfMetaAndOptionsGoIntoThePackageWithTheirContent`
+  (mit je einem serialisierten Normalwert für Meta und Option). Nur das
   Zählen der Verweise läuft dort nicht (`$references = false`): kein Leser
   von Adressen läuft über den fertigen Inhalt, die Arten haben die Verweise
   derselben Werte mit ihren Lesern gezählt; eine Adresse mit Id sperrt dort

@@ -706,7 +706,10 @@ final class AB_MCP_Sync_Export {
 	 * version of the theme of the CSS came after the check of the form):
 	 * each column of the row as the kinds check a column (the content of the
 	 * CSS read as CSS), each meta row by its key and value, the names and
-	 * slugs of the terms, anything else as a value. A meta row whose key is
+	 * slugs of the terms, anything else as a value; each in the form its kind
+	 * checked it (a meta row through AB_MCP_Sync_Db_Kind::checked_meta() of
+	 * the kind: the instance of a widget unpacked, with its base as the
+	 * name; Codex round 4 of branch 11, B). A meta row whose key is
 	 * the name of a credential (B9) is left out of the content and named in
 	 * b9, as the kinds leave such a key out of form and content (Codex round
 	 * 3 of branch 11, C). Each unit as the kinds
@@ -725,7 +728,16 @@ final class AB_MCP_Sync_Export {
 			return $object;
 		}
 		$kind = isset( $object['kind'] ) ? (string) $object['kind'] : '';
-		$acc  = array(
+		// The kind reads a meta row in the form it checked it (an instance of
+		// a widget unpacked; Codex round 4 of branch 11, B); without a kind,
+		// as stored.
+		static $readers = array();
+		if ( ! isset( $readers[ $kind ] ) ) {
+			$found             = AB_MCP_Sync_Db_Kinds::for_pair( $kind );
+			$readers[ $kind ] = null === $found ? 'AB_MCP_Sync_Db_Kind' : get_class( $found );
+		}
+		$reader = $readers[ $kind ];
+		$acc    = array(
 			'locks'       => isset( $object['locks'] ) && is_array( $object['locks'] ) ? $object['locks'] : array(),
 			'credentials' => isset( $object['credentials'] ) && is_array( $object['credentials'] ) ? $object['credentials'] + array( 'b9' => array(), 'mixed' => array() ) : array( 'b9' => array(), 'mixed' => array() ),
 			// What the net reads beside them (AB_MCP_Sync_Net::mark()).
@@ -749,7 +761,8 @@ final class AB_MCP_Sync_Export {
 						// A key named as a credential (B9) is no part: left out of
 						// the content and named in b9, as the kinds leave it out of
 						// form and content (Codex round 3 of branch 11, C).
-						if ( ! self::check_unit( $acc, $kind, 'meta:' . (string) $pair[0], $pair[1], (string) $pair[0] ) ) {
+						list( $name, $input ) = $reader::checked_meta( (string) $pair[0], $pair[1] );
+						if ( ! self::check_unit( $acc, $kind, 'meta:' . (string) $pair[0], $input, $name ) ) {
 							continue;
 						}
 					} else {

@@ -90,6 +90,7 @@ IT_SHARED = 'testAFieldOfASharedRowGoesBackOnlyWhereItsBytesAreStillThoseReadAnd
 IT_LOCKS = 'testWhatARunCannotWriteAsTheCoreWouldIsLockedWithItsKeyAndNothingOfItIsWritten'
 IT_STALE = 'testAStepWritesFromTheRowsAsTheyAreAndNeverFromAStaleCacheOfThem'
 IT_FILTER = 'testAWidgetFilterThatChangesAnotherInstanceAsTheStepWritesKeepsItsChangeAndTheStepWritesNothing'
+IT_HARMLESS = 'testAHarmlessTextWidgetAndSerializedValuesOfMetaAndOptionsGoIntoThePackageWithTheirContent'
 IT_HOOKOWN = 'testAHookOfTheRightThatChangesTheInstanceTheStepWritesKeepsItsChangeAndTheStepOwnsNothing'
 IT_CRED = 'testACredentialInTheNameOfAMenuOrOfItsPositionLandsInNoPackage'
 IT_FREEPOS = 'testANewMenuAtAPositionNoMenuHoldsYetGoesOverAndTheWayBackLeavesThePositionEmptyAgain'
@@ -586,7 +587,7 @@ e('a8-row', 'checked_content(): each column of the row (A8)', EX,
 e('a8-css-mode', 'checked_content(): the content of the CSS read as CSS (A8)', EX,
   " (string) $field, null, 'custom_css' === $kind && 'post_content' === $column );", " (string) $field, null, false );", 'u', U_CHECKED)
 e('a8-meta', 'checked_content(): each meta row (A8)', EX,
-  "\t\t\t\t\t\tif ( ! self::check_unit( $acc, $kind, 'meta:' . (string) $pair[0], $pair[1], (string) $pair[0] ) ) {", "\t\t\t\t\t\tif ( false ) {", 'u', U_CHECKED)
+  "\t\t\t\t\t\tif ( ! self::check_unit( $acc, $kind, 'meta:' . (string) $pair[0], $input, $name ) ) {", "\t\t\t\t\t\tif ( false ) {", 'u', U_CHECKED)
 e('a8-terms', 'checked_content(): the names and slugs of the terms (A8)', EX,
   "\t\t\t\t\t\t\tself::check_unit( $acc, $kind, 'term:' . ( isset( $term['taxonomy'] ) ? (string) $term['taxonomy'] : '' ) . ':' . $field, (string) $term[ $field ], '' );\n", "", 'u', U_CHECKED)
 e('a8-other', 'checked_content(): any other part of the content (A8)', EX,
@@ -606,6 +607,19 @@ e('a8-unread', 'checked_content(): what the net did not read to its end makes th
 e('a8-no-references', 'check(): without a reader of addresses, no reference counted (A8)', NT,
   "\t\t$locked     = ! $references || count( $acc['spelling'] ) > $mark['spelling'];",
   "\t\t$locked     = count( $acc['spelling'] ) > $mark['spelling'];", 'u', U_CHECKED)
+# B (Codex round 4): each part in the form its kind checked it.
+e('b-widget-form', 'checked_meta() of the area: an instance checked unpacked, as area() checks it (B)', DK,
+  "\t\treturn $read['ok'] ? array( $m[1], $read['value'] ) : array( (string) $key, $stored );",
+  "\t\treturn array( (string) $key, $stored );", 'u', U_CHECKED)
+e('b-widget-form-it', 'checked_meta() of the area: a harmless text widget goes into the package with its content (B)', DK,
+  "\t\treturn $read['ok'] ? array( $m[1], $read['value'] ) : array( (string) $key, $stored );",
+  "\t\treturn array( (string) $key, $stored );", 'it', IT_HARMLESS)
+e('b-widget-unreadable', 'checked_meta() of the area: settings that do not unpack are checked as their text (B)', DK,
+  "\t\treturn $read['ok'] ? array( $m[1], $read['value'] ) : array( (string) $key, $stored );",
+  "\t\treturn array( $m[1], $read['value'] );", 'u', U_CHECKED)
+e('b-reader', 'checked_content(): each meta row through the reader of its kind (B)', EX,
+  "\t\t\t$readers[ $kind ] = null === $found ? 'AB_MCP_Sync_Db_Kind' : get_class( $found );",
+  "\t\t\t$readers[ $kind ] = 'AB_MCP_Sync_Db_Kind';", 'u', U_CHECKED)
 # C (Codex round 3): a meta key named as a credential leaves the content.
 e('c-b9-drop', 'checked_content(): a meta row named as a credential (B9) is left out of the content (C)', EX,
   "\t\t\t\t\t\t\tcontinue;\n\t\t\t\t\t\t}\n\t\t\t\t\t} else {\n\t\t\t\t\t\tself::check_unit( $acc, $kind, 'content:meta', $pair, '' );",

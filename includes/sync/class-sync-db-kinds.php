@@ -315,6 +315,24 @@ abstract class AB_MCP_Sync_Db_Kind implements AB_MCP_Sync_Kind {
 	}
 
 	/**
+	 * A meta row of the content of a line in the form this kind checks it
+	 * (the credential check and the net over the raw value, as the kind
+	 * read it to make its form): its name for the credential check and its
+	 * value. AB_MCP_Sync_Export::checked_content() checks the finished
+	 * content through it, so that both read the same input (Codex round 4
+	 * of branch 11, B). A row of meta of a post, a term, a menu, a menu
+	 * item or an attachment: its key and its value as stored (meta_form()
+	 * reads the same, a serialized value as its text).
+	 *
+	 * @param string $key    The first field of the row (a meta key).
+	 * @param mixed  $stored The second, as the content carries it.
+	 * @return array{0:string,1:mixed} The name and the value to check.
+	 */
+	public static function checked_meta( $key, $stored ) {
+		return array( (string) $key, $stored );
+	}
+
+	/**
 	 * The theme mods of the active stylesheet (its option row).
 	 *
 	 * @return array|null
@@ -1406,6 +1424,29 @@ class AB_MCP_Sync_Kind_Widget_Area extends AB_MCP_Sync_Db_Kind {
 			);
 		}
 		return $result;
+	}
+
+	/**
+	 * An instance of the content in the form area() checks it: the base of
+	 * the widget as the name, its settings unpacked as the row of the widget
+	 * holds them (AB_MCP_Sync_Canon::unserialized(), as option_array() reads
+	 * the row), never the serialized text the content carries: its braces
+	 * would make the net read prose as code (Codex round 4 of branch 11, B:
+	 * «Spieler: Anna, Token: drei»). A widget without a number, or no
+	 * settings, as area() packs it (an empty text). Settings that do not
+	 * unpack as the text they are, which the credential check then cannot
+	 * read (fail closed).
+	 *
+	 * @param string $key    The id of the instance (base-number).
+	 * @param mixed  $stored Its settings serialized, or ''.
+	 * @return array{0:string,1:mixed}
+	 */
+	public static function checked_meta( $key, $stored ) {
+		if ( ! preg_match( '/^(.+)-(\d+)\z/', (string) $key, $m ) || '' === (string) $stored ) {
+			return array( (string) $key, $stored );
+		}
+		$read = AB_MCP_Sync_Canon::unserialized( (string) $stored );
+		return $read['ok'] ? array( $m[1], $read['value'] ) : array( (string) $key, $stored );
 	}
 
 	/**
