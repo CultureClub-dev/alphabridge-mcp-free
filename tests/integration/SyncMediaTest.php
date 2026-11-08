@@ -243,8 +243,8 @@ final class SyncMediaTest extends TestCase {
 	}
 
 	/** An attachment of A, in this process, as the media library makes it. */
-	private static function upload_a( string $name, string $mime, string $bytes, array $args = array(), ?string $alt = null ): int {
-		$up = wp_upload_bits( $name, null, $bytes, '2026/10' );
+	private static function upload_a( string $name, string $mime, string $bytes, array $args = array(), ?string $alt = null, string $time = '2026/10' ): int {
+		$up = wp_upload_bits( $name, null, $bytes, $time );
 		self::assertFalse( $up['error'] );
 		$id = wp_insert_attachment(
 			wp_slash(
@@ -922,12 +922,16 @@ final class SyncMediaTest extends TestCase {
 		// after the run another attachment of this site names one of its old
 		// sizes: its three keys that name files stay together (Codex round 2,
 		// A4), each with the reason. A fifth, edited as well: after the run
-		// its backup sizes change on this site, so that key stays by the rule
-		// of the way back, and the other two with it. A sixth, edited: the way
+		// its backup sizes change on this site: another hand changed the
+		// object, it stays whole (round 3, A4). A sixth, edited: the way
 		// back runs for an account that may upload no JPEG (a filter), and it
 		// goes back whole: the way back lays no file, it asks only whether the
 		// content of each file it names again is what its name says (decision
-		// of the lead on Codex round 2).
+		// of the lead on Codex round 2). Two images of September whose staging
+		// sides change only their metadata: after the run another hand points
+		// _wp_attached_file of the first to October, a key the journal does not
+		// hold: the object is left whole (Codex round 3, A4); the second, which
+		// no hand touched, goes back whole.
 		self::pair();
 		$ids = array();
 		foreach ( array( 'erstes', 'zweites', 'drittes' ) as $k => $name ) {
@@ -952,7 +956,20 @@ final class SyncMediaTest extends TestCase {
 			'a' => self::upload_a( 'sechstes.jpg', 'image/jpeg', $sechstes_bytes ),
 			'b' => self::upload_b( 'sechstes.jpg', 'image/jpeg', $sechstes_bytes ),
 		);
+		$herbst = array();
+		foreach ( array( 'herbst', 'winter' ) as $k => $name ) {
+			$bytes_sep       = self::jpeg( 300, 200, array( 90, 50 + $k, 10 ) );
+			$herbst[ $name ] = array(
+				'a' => self::upload_a( $name . '.jpg', 'image/jpeg', $bytes_sep, array(), null, '2026/09' ),
+				'b' => (int) self::b( array( array( 'op' => 'upload', 'name' => $name . '.jpg', 'mime' => 'image/jpeg', 'bytes' => base64_encode( $bytes_sep ), 'time' => '2026/09', 'as' => 'id' ) ) )['id'],
+			);
+		}
 		self::paired( self::staged() );
+		foreach ( $herbst as $name => $id ) {
+			$m                          = wp_get_attachment_metadata( $id['a'] );
+			$m['image_meta']['caption'] = ucfirst( $name ) . ' im Garten';
+			self::b( array( array( 'op' => 'update_meta', 'post' => $id['b'], 'key' => '_wp_attachment_metadata', 'value' => $m ) ) );
+		}
 		self::b(
 			array(
 				array( 'op' => 'edit_image', 'post' => $viertes['b'], 'suffix' => '1700000001', 'image' => array( 'w' => 200, 'h' => 300, 'rgb' => array( 20, 80, 80 ) ) ),
@@ -968,7 +985,7 @@ final class SyncMediaTest extends TestCase {
 				)
 			);
 		}
-		$planned = self::planned( array( 'attachment:2026/10/erstes.jpg', 'attachment:2026/10/zweites.jpg', 'attachment:2026/10/drittes.jpg', 'attachment:2026/10/viertes.jpg', 'attachment:2026/10/fuenftes.jpg', 'attachment:2026/10/sechstes.jpg' ) );
+		$planned = self::planned( array( 'attachment:2026/10/erstes.jpg', 'attachment:2026/10/zweites.jpg', 'attachment:2026/10/drittes.jpg', 'attachment:2026/10/viertes.jpg', 'attachment:2026/10/fuenftes.jpg', 'attachment:2026/10/sechstes.jpg', 'attachment:2026/09/herbst.jpg', 'attachment:2026/09/winter.jpg' ) );
 		$touch   = null;
 		add_action(
 			'edit_attachment',
@@ -997,6 +1014,11 @@ final class SyncMediaTest extends TestCase {
 		self::assertSame( 'done', $by[ $viertes['a'] ]['state'] );
 		self::assertSame( 'done', $by[ $fuenftes['a'] ]['state'] );
 		self::assertSame( 'done', $by[ $sechstes['a'] ]['state'] );
+		foreach ( $herbst as $name => $id ) {
+			self::assertSame( 'done', $by[ $id['a'] ]['state'], $name );
+			self::assertContains( 'meta:_wp_attachment_metadata', array_column( $by[ $id['a'] ]['parts']['parts'], 'part' ), $name );
+			self::assertNotContains( 'meta:_wp_attached_file', array_column( $by[ $id['a'] ]['parts']['parts'], 'part' ), $name . ': its file is no part of the journal.' );
+		}
 		// Another hand changes a file of the second; a hook the third as its row goes back.
 		file_put_contents( get_attached_file( $ids['zweites']['a'] ), 'y', FILE_APPEND );
 		$fremd                  = self::upload_a( 'fremd.jpg', 'image/jpeg', self::jpeg( 120, 90, array( 1, 2, 3 ) ) );
@@ -1004,6 +1026,11 @@ final class SyncMediaTest extends TestCase {
 		$fremd_meta['sizes']['geteilt'] = array( 'file' => 'viertes-150x150.jpg', 'width' => 150, 'height' => 150, 'mime-type' => 'image/jpeg' );
 		wp_update_attachment_metadata( $fremd, $fremd_meta );
 		self::assertFileExists( wp_get_upload_dir()['basedir'] . '/2026/10/viertes-150x150.jpg', 'An old size of the fourth.' );
+		// Another hand points the first of September to a copy in October.
+		$basedir = wp_get_upload_dir()['basedir'];
+		wp_mkdir_p( $basedir . '/2026/10' );
+		copy( $basedir . '/2026/09/herbst.jpg', $basedir . '/2026/10/herbst.jpg' );
+		update_post_meta( $herbst['herbst']['a'], '_wp_attached_file', '2026/10/herbst.jpg' );
 		$sizes_after                      = get_post_meta( $fuenftes['a'], '_wp_attachment_backup_sizes', true );
 		$sizes_after['full-orig']['note'] = 'changed on this site after the run';
 		update_post_meta( $fuenftes['a'], '_wp_attachment_backup_sizes', $sizes_after );
@@ -1041,7 +1068,7 @@ final class SyncMediaTest extends TestCase {
 		$fuenftes_parts = array_column( $steps[ $fuenftes['a'] ]['result']['parts'], null, 'part' );
 		foreach ( array( 'meta:_wp_attached_file', 'meta:_wp_attachment_metadata' ) as $key ) {
 			self::assertSame( 'left', $fuenftes_parts[ $key ]['state'] ?? null, $key . ': ' . json_encode( $fuenftes_parts ) );
-			self::assertStringContainsString( 'the part meta:_wp_attachment_backup_sizes does not go back', (string) $fuenftes_parts[ $key ]['note'], $key );
+			self::assertStringContainsString( 'the part meta:_wp_attachment_backup_sizes, which names files of the attachment, changed since the step left it', (string) $fuenftes_parts[ $key ]['note'], $key );
 		}
 		self::assertSame( 'left', $fuenftes_parts['meta:_wp_attachment_backup_sizes']['state'] );
 		self::assertSame( array( '2026/10/fuenftes-e1700000002.jpg' ), self::meta_a( $fuenftes['a'], '_wp_attached_file' ), 'The fifth keeps the files of its edit, all three keys together.' );
@@ -1051,7 +1078,15 @@ final class SyncMediaTest extends TestCase {
 		}
 		self::assertSame( array( '2026/10/sechstes.jpg' ), self::meta_a( $sechstes['a'], '_wp_attached_file' ), 'The sixth back whole, for an account that may upload no JPEG.' );
 		self::assertSame( 'done', $steps[ $sechstes['a'] ]['state'] );
-		unset( $steps[ $sechstes['a'] ] );
+		$herbst_parts = array_column( $steps[ $herbst['herbst']['a'] ]['result']['parts'], null, 'part' );
+		self::assertSame( 'left', $herbst_parts['meta:_wp_attachment_metadata']['state'], json_encode( $herbst_parts ) );
+		self::assertStringContainsString( 'the part meta:_wp_attached_file, which names files of the attachment, changed since the step left it', (string) $herbst_parts['meta:_wp_attachment_metadata']['note'] );
+		self::assertSame( 'Herbst im Garten', wp_get_attachment_metadata( $herbst['herbst']['a'] )['image_meta']['caption'] ?? null, 'Its metadata stays as the run wrote it.' );
+		$winter_parts = array_column( $steps[ $herbst['winter']['a'] ]['result']['parts'], null, 'part' );
+		self::assertSame( 'restored', $winter_parts['meta:_wp_attachment_metadata']['state'], json_encode( $winter_parts ) );
+		self::assertSame( 'done', $steps[ $herbst['winter']['a'] ]['state'], 'An ordinary way back of the metadata alone: whole.' );
+		self::assertSame( '', wp_get_attachment_metadata( $herbst['winter']['a'] )['image_meta']['caption'] ?? null );
+		unset( $steps[ $sechstes['a'] ], $steps[ $herbst['winter']['a'] ] );
 		foreach ( $steps as $one ) {
 			self::assertSame( 'unclear', $one['state'] );
 		}

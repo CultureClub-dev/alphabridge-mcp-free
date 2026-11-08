@@ -1900,6 +1900,32 @@ final class AB_MCP_Sync_Engine {
 			}
 		}
 		$group_why = array();
+		// Every member of such a group as the step left it, also one the
+		// journal does not hold (equal to its target, so no part: as the
+		// backup), against the object now (Codex round 3 of branch 10, A4, at
+		// the place of decision A): a member that changed since is another
+		// hand's change of the object, so nothing of it goes back by itself.
+		// Then restore_files() checks the very list the values after the way
+		// back name.
+		foreach ( $groups as $members ) {
+			foreach ( $members as $member ) {
+				if ( null !== $stopped ) {
+					break 2;
+				}
+				$left_at = $w::part_hash( $backup, (string) $member );
+				foreach ( $parts as $part ) {
+					if ( is_string( $part['part'] ) && $part['part'] === (string) $member ) {
+						$left_at = isset( $part['post'] ) && null !== $part['post'] ? (string) $part['post'] : $part['before'];
+					}
+				}
+				$now = null === $seen ? null : $w::part_hash( $seen, (string) $member );
+				// Both ways: a key that came, went or changed (changed() sees no
+				// key that went).
+				if ( ( null === $left_at ) !== ( null === $now ) || ( null !== $now && ! hash_equals( (string) $left_at, (string) $now ) ) ) {
+					$stopped = sprintf( 'the part %s, which names files of the attachment, changed since the step left it (another hand changed the object)', (string) $member );
+				}
+			}
+		}
 		foreach ( $order as $i ) {
 			$name    = (string) $parts[ $i ]['part'];
 			$now     = null === $seen ? null : $w::part_hash( $seen, $name );

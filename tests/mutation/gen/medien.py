@@ -237,11 +237,12 @@ e('engine-files-back-put', 'put_back(): a put back that changed a file stops the
   "\t\t\t\t\tif ( null === $stopped && null !== $moved ) {", "\t\t\t\t\tif ( false ) {", 'it', FILEHOOK)
 e('writer-files-state', 'files_state(): a file by its SHA-256 and size (Codex round 1, A3)', AW,
   "\t\t\t\t$state = is_string( $sha ) && false !== $size ? $sha . ':' . (int) $size : 'unreadable';", "\t\t\t\t$state = 'file';", 'it', FILEHOOK)
-e('engine-group-refusal', 'put_back(): a group refused leaves every member (Codex round 2, A4)', EN,
-  "\t\t\t\tif ( null !== $group_why[ $g ] ) {", "\t\t\t\tif ( false ) {", 'it', FILEHOOK)
-e('engine-group-left', 'group_refusal(): a member the way back leaves by its rule refuses the group', EN,
-  "\t\t\tif ( 'left' === $decided['state'] ) {\n\t\t\t\treturn sprintf( 'the part %1$s does not go back (%2$s)'",
-  "\t\t\tif ( false ) {\n\t\t\t\treturn sprintf( 'the part %1$s does not go back (%2$s)'", 'it', FILEHOOK)
+e('engine-group-keys', 'put_back(): a key that names files changed since the step left it leaves the object whole (Codex round 3, A4)', EN,
+  "\t\t\t\tif ( ( null === $left_at ) !== ( null === $now ) || ( null !== $now && ! hash_equals( (string) $left_at, (string) $now ) ) ) {",
+  "\t\t\t\tif ( false ) {", 'it', FILEHOOK)
+e('engine-group-keys-unjournaled', 'put_back(): also a key the journal does not hold, as the backup (Codex round 3, A4)', EN,
+  "\t\t\t\t$left_at = $w::part_hash( $backup, (string) $member );",
+  "\t\t\t\t$left_at = null === $seen ? null : $w::part_hash( $seen, (string) $member );", 'it', FILEHOOK)
 e('engine-files-before-put', 'put_back(): the files compared right before each part goes back (Codex round 2, A3)', EN,
   "\t\t\tif ( 'put_back' === $decided['state'] && is_array( $files_seen ) ) {", "\t\t\tif ( false ) {", 'it', EDIT)
 e('engine-with-files', 'with_files(): the files the step laid in its result', EN,

@@ -201,6 +201,18 @@ entsteht, nennt ihre Meldung den Weg.
   gemeinsam zurück (`together()`; Codex-Runde 2, A4): lässt der Rückweg
   einen davon stehen, weil er nicht mehr der eigene des Laufs ist, oder
   verweigert die Prüfung ihn, bleiben alle drei stehen (`left`, mit Grund).
+  Vor dem Rückweg eines Anhangs vergleicht er alle drei, auch die, die das
+  Journal nicht hält (gleich ihrem Ziel, also wie die Sicherung), mit dem
+  Stand, den der Schritt hinterliess (Codex-Runde 3, A4, an der Stelle von
+  Entscheid A): weicht einer ab, hat eine andere Hand das Objekt geändert,
+  und das ganze Objekt bleibt stehen (etwa: der Lauf änderte nur die
+  Metadaten, danach zeigte jemand `_wp_attached_file` von September auf
+  Oktober). Ein gewöhnlicher Rückweg ändert keinen der drei zwischen Lauf
+  und Rückweg; der einzige Weg des Kerns, der einen schreibt, ist
+  `wp_maybe_generate_attachment_metadata()` auf der Bearbeitungsseite eines
+  Audios oder Videos, dem der Schlüssel `_wp_attachment_metadata` ganz
+  fehlt (ein Upload der Mediathek schreibt ihn immer): ein solcher Anhang
+  bliebe beim Rückweg stehen (Grenze C).
   So prüft `restore_files()` genau die Liste, die danach gilt: jede Datei,
   die die gesicherten Werte zusammen nennen (gerechnet wie der Kern), muss
   eine einfache Datei unter den Uploads sein, ohne Link auf dem Weg, von
@@ -372,6 +384,16 @@ entsteht, nennt ihre Meldung den Weg.
   Hauptdatei gegen den Anhang (gleichwertig: der Name ist vorher gegen den
   Anhang geprüft, und ein Inhalt eines anderen Typs als der Name setzt
   `proper_filename`).
+- Nach Codex-Runde 3 nicht geführt: die Entscheidung der Gruppe in
+  `put_back()` und `group_refusal()` über ein Glied, das der Rückweg nach
+  seiner Regel stehen lässt. Den Fall, den sie hielten (ein Glied seit dem
+  Lauf geändert), hält jetzt der Vergleich vor dem Rückweg; eine
+  Verweigerung durch `restore_right()` war schon gleichwertig. Übrig bleibt
+  ein Glied, das der Schritt nie zurücklas, weil seine Anfrage zwischen
+  zwei Dateischlüsseln endete: die Gruppe lässt dann auch die schon
+  geschriebenen stehen. Ein Prüffall bräuchte eine Anfrage in einem eigenen
+  Prozess, die genau zwischen den beiden Metadaten-Aufrufen endet; diese
+  Klasse hat keinen, ein nachgestelltes Journal wäre eine Attrappe.
 - Nach Codex-Runde 2 nicht geführt: in `files_plan()` die bekannten Typen
   als Massstab für den Namen einer liegenden Datei (`$known`; mit den Typen
   des Kontos allein wäre eine solche Datei nur nicht geprüft, also
