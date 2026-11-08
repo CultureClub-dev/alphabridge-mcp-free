@@ -1919,6 +1919,35 @@ final class AB_MCP_Sync_Engine {
 	 * @param array $backup  The backed-up state (current() before the step).
 	 * @return array{all_back:bool,parts:array<int,array{state:string,note?:string,value_before?:string}>} parts: the outcome by the index of the part.
 	 */
+	/**
+	 * The order in which the parts of a kind go back (put_back()): the row,
+	 * the meta, the terms; a kind whose parts have other names says its own
+	 * (PART_ORDER, branch 11).
+	 *
+	 * @param string|null $w Writer class.
+	 * @return string[] Prefixes of the names of the parts.
+	 */
+	public static function part_order( $w ) {
+		return null !== $w && defined( $w . '::PART_ORDER' ) ? $w::PART_ORDER : array( 'row', 'meta:', 'terms:' );
+	}
+
+	/**
+	 * The orders of the parts of these kinds, by kind: what the tokens of a
+	 * plan and of a way back cover with the rest of the order of a run
+	 * (Codex round 1 of branch 11, C2).
+	 *
+	 * @param string[] $kinds Kinds.
+	 * @return array<string,string[]>
+	 */
+	public static function part_orders( array $kinds ) {
+		$out = array();
+		foreach ( array_unique( array_map( 'strval', $kinds ) ) as $kind ) {
+			$out[ $kind ] = self::part_order( self::writer( $kind ) );
+		}
+		ksort( $out, SORT_STRING );
+		return $out;
+	}
+
 	private static function put_back( array $journal, $live_id, array $backup ) {
 		$parts = $journal['parts'];
 		$out   = array();
@@ -1926,7 +1955,7 @@ final class AB_MCP_Sync_Engine {
 		// The row first, then the meta, then the terms; a kind whose parts
 		// have other names says their order (PART_ORDER; branch 11).
 		$order = array();
-		foreach ( null !== $w && defined( $w . '::PART_ORDER' ) ? $w::PART_ORDER : array( 'row', 'meta:', 'terms:' ) as $prefix ) {
+		foreach ( self::part_order( $w ) as $prefix ) {
 			foreach ( $parts as $i => $part ) {
 				if ( is_string( $part['part'] ) && 0 === strpos( $part['part'], $prefix ) ) {
 					$order[] = $i;

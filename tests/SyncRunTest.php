@@ -2875,6 +2875,20 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( array(), $got['locked'] );
 	}
 
+	public function testTheOrderOfThePartsOfEachKindIsWhatTheTokensCover(): void {
+		// Codex round 1 of branch 11, C2: the tokens of a plan and of a way
+		// back cover the order in which the parts of each kind go back.
+		self::assertSame(
+			array(
+				'menu'        => array( 'row', 'meta:', 'location:' ),
+				'post'        => array( 'row', 'meta:', 'terms:' ),
+				'widget_area' => array( 'instance:', 'row' ),
+			),
+			AB_MCP_Sync_Engine::part_orders( array( 'widget_area', 'menu', 'post', 'menu' ) )
+		);
+		self::assertSame( array( 'row', 'meta:', 'terms:' ), AB_MCP_Sync_Engine::part_order( null ), 'A kind without an order of its own.' );
+	}
+
 	public function testAMenuThatTakesThePositionOfAnotherMenuOfTheRunComesAfterItAndAnExchangeIsLocked(): void {
 		// Codex round 1 of branch 11, B2: the positions are fields of one
 		// row, the form of each menu names them. A menu that takes a position

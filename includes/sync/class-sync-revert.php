@@ -436,11 +436,13 @@ final class AB_MCP_Sync_Revert {
 			'sha256',
 			AB_MCP_Sync_Canon::encode(
 				array(
-					'items'  => $items,
-					'live'   => $live,
-					'print'  => $print,
-					'run_id' => (int) $run['run_id'],
-					'state'  => $run['state'],
+					'items'      => $items,
+					'live'       => $live,
+					// The order in which the parts of each kind go back (C2).
+					'part_order' => AB_MCP_Sync_Engine::part_orders( array_column( $items, 'kind' ) ),
+					'print'      => $print,
+					'run_id'     => (int) $run['run_id'],
+					'state'      => $run['state'],
 				)
 			)
 		);

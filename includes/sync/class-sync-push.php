@@ -766,6 +766,8 @@ final class AB_MCP_Sync_Push {
 				array(
 					'live'        => $live,
 					'order'       => $order,
+					// The order of the parts of each kind on the way back (C2).
+					'part_order'  => AB_MCP_Sync_Engine::part_orders( array_column( $items, 'kind' ) ),
 					'pairs'       => $pairs,
 					'print'       => $print,
 					'report_hash' => $report_hash,
