@@ -389,12 +389,12 @@ entsteht, nennt ihre Meldung den Weg.
   `put_back()` und `group_refusal()` über ein Glied, das der Rückweg nach
   seiner Regel stehen lässt. Den Fall, den sie hielten (ein Glied seit dem
   Lauf geändert), hält jetzt der Vergleich vor dem Rückweg; eine
-  Verweigerung durch `restore_right()` war schon gleichwertig. Übrig bleibt
-  ein Glied, das der Schritt nie zurücklas, weil seine Anfrage zwischen
-  zwei Dateischlüsseln endete: die Gruppe lässt dann auch die schon
-  geschriebenen stehen. Ein Prüffall bräuchte eine Anfrage in einem eigenen
-  Prozess, die genau zwischen den beiden Metadaten-Aufrufen endet; diese
-  Klasse hat keinen, ein nachgestelltes Journal wäre eine Attrappe.
+  Verweigerung durch `restore_right()` war schon gleichwertig. Einen Fall,
+  den die Gruppe danach allein hielte, gibt es nicht: ein Glied, das der
+  Schritt nicht zurücklas (etwa weil seine Anfrage zwischen zwei
+  Dateischlüsseln endete), ist entweder noch wie vor dem Schritt bzw. wie
+  in der Sicherung und damit unverändert, oder es ist verändert und wird
+  vom Vergleich vor dem Rückweg erfasst (Codex-Runde 4).
 - Nach Codex-Runde 2 nicht geführt: in `files_plan()` die bekannten Typen
   als Massstab für den Namen einer liegenden Datei (`$known`; mit den Typen
   des Kontos allein wäre eine solche Datei nur nicht geprüft, also
