@@ -1015,6 +1015,30 @@ final class SyncRunTest extends TestCase {
 		}
 	}
 
+	public function testTheCustomCssOfTheGlobalStylesKeepsTheRuleOfTheSiteEditorAtAnyDepth(): void {
+		// Branch 9b: every value of a key css in the JSON of the global
+		// styles through the rule of validate_custom_css() (css_markup(); the
+		// integration suite holds it against the core), not only the top level
+		// the core asks; a value of a key css that is no text locks as the
+		// core refuses it; content that is no JSON object carries no CSS.
+		$styles = static fn( array $styles ): string => (string) json_encode( array( 'version' => 3, 'isGlobalStylesUserThemeJSON' => true, 'styles' => $styles ) );
+		self::assertNull( AB_MCP_Sync_Post_Writer::css_refusal( $styles( array( 'css' => 'body{color:red}', 'color' => array( 'background' => '#112233' ) ) ) ) );
+		$top = AB_MCP_Sync_Post_Writer::css_refusal( $styles( array( 'css' => 'body{}</style>' ) ) );
+		self::assertSame( 'post:css_markup', self::lock_of( $top ) );
+		self::assertStringContainsString( 'The CSS of styles.css in the global styles', $top->get_error_message() );
+		$block = AB_MCP_Sync_Post_Writer::css_refusal( $styles( array( 'blocks' => array( 'core/paragraph' => array( 'css' => 'p{}</sty' ) ) ) ) );
+		self::assertSame( 'post:css_markup', self::lock_of( $block ), 'The CSS of a block, ending in a part of the closing tag.' );
+		self::assertStringContainsString( 'styles.blocks.core/paragraph.css', $block->get_error_message() );
+		$text = AB_MCP_Sync_Post_Writer::css_refusal( $styles( array( 'css' => array( 'p{}' ) ) ) );
+		self::assertSame( 'post:css_markup', self::lock_of( $text ), 'No text.' );
+		self::assertStringContainsString( 'is no text', $text->get_error_message() );
+		self::assertNull( AB_MCP_Sync_Post_Writer::css_refusal( 'Not JSON </style>' ), 'No JSON object: no global styles the core reads.' );
+		self::assertNull( AB_MCP_Sync_Post_Writer::css_refusal( $styles( array( 'blocks' => array( 'core/quote' => array( 'css' => 'q{}</stylex' ) ) ) ) ), 'A tag of another name.' );
+		self::assertTrue( AB_MCP_Sync_Post_Writer::css_markup( '</STYLE/' ), 'In any case, followed by a slash.' );
+		self::assertTrue( AB_MCP_Sync_Post_Writer::css_markup( 'a</s' ), 'Ending in a part of it.' );
+		self::assertFalse( AB_MCP_Sync_Post_Writer::css_markup( 'a<b>' ) );
+	}
+
 	public function testTheTemplateOfAPageGoesThroughTheCoreWayAndTheThemeHasToOfferIt(): void {
 		// The theme of this site offers one template for pages (B7).
 		$GLOBALS['wpdb']               = new SyncRunOptionWpdb();

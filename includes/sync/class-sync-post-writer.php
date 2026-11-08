@@ -1298,7 +1298,7 @@ final class AB_MCP_Sync_Post_Writer {
 	 * @param string $content post_content as written.
 	 * @return WP_Error|null
 	 */
-	private static function css_refusal( $content ) {
+	public static function css_refusal( $content ) {
 		$data = json_decode( (string) $content, true );
 		if ( ! is_array( $data ) ) {
 			return null;

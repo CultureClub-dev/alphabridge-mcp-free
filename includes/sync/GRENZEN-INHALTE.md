@@ -1,9 +1,11 @@
-# Grenzen der Inhalte (Z8, Zweig «Inhalte»)
+# Grenzen der Inhalte (Z8, Zweige «Inhalte» und «Vorlagen»)
 
 Gesammelte Gruppe-C-Grenzen von Zweig 9 (`heikel/z8-inhalte`): die Term-Art
 (`AB_MCP_Sync_Term_Writer`) und die Post-Art mit Feldregel, Slug,
 Sanitizern vorab und Beitragsbild (`AB_MCP_Sync_Post_Writer`; Entscheide
-17, 19, 21, 25, 28, 30, 31). Eine eigene Datei statt eines Abschnitts in
+17, 19, 21, 25, 28, 30, 31); dazu von Zweig 9b (`heikel/z8-vorlagen`) die
+übrigen Kern-Typen der Post-Art: Vorlagen, Vorlagenteile, globale Stile,
+Navigationen und wiederverwendbare Blöcke. Eine eigene Datei statt eines Abschnitts in
 `GRENZEN-LAUF.md`, weil diese Grenzen die Arten betreffen und nicht den
 Lauf; die Grenzen des Laufs (Sperre, Unterbrechung, Journal, die eine
 Grenze «Abweichung im Schritt», Rückweg) gelten für beide Arten unverändert
@@ -159,20 +161,232 @@ nennt ihre Meldung den Weg.
   WPBakery gesperrt, Kadence übernommen: Prüffall
   `testAWpBakeryPageIsLockedAndAKadencePageGoesOver`.
 
-## Post: weitere Kern-Typen (bis Zweig 9b) und die übrigen Sperren der Post-Art
+## Post: Vorlagen, Vorlagenteile, globale Stile, Navigationen und wiederverwendbare Blöcke (Zweig 9b)
 
-- Vorlagen, Vorlagenteile, globale Stile, Navigationen und
-  wiederverwendbare Blöcke (`wp_template`, `wp_template_part`,
-  `wp_global_styles`, `wp_navigation`, `wp_block`;
-  `AB_MCP_Sync_Post_Writer::TYPES_BRANCH_9B`) bleiben in Zweig 9 gesperrt
-  (`post:engine_type`, Etappe Z8): Zweig 9b von Z8 (`heikel/z8-vorlagen`)
-  gibt sie direkt nach dem Merge von Zweig 9 frei (Entscheid von Thomas
-  «A: eigener Zweig 9b», 08.11.2026). Das Feld der Etappe kennt nur
-  Etappen; der Zweig steht im Grund («follow with branch 9b of Z8»).
-  `post:engine_type` hält nur diese fünf Typen. Entscheid 25 nennt sie bei
-  der Post-Art, der Normalfall des Auftrags nicht. Ihre Identität hängt am
-  Theme (`wp_theme`, `wp_template_part_area`), ihre Eindeutigkeit des Slugs
-  am aktiven Stylesheet (`wp_filter_wp_template_unique_post_slug()`).
+- Seit Zweig 9b schreibt die Engine der Post-Art alle Kern-Typen aus
+  Entscheid 25 (`AB_MCP_Sync_Post_Writer::TYPES`: `post`, `page`,
+  `wp_block`, `wp_template`, `wp_template_part`, `wp_global_styles`,
+  `wp_navigation`; Entscheid von Thomas «A: eigener Zweig 9b», 08.11.2026).
+  Die Sperre `post:engine_type` von Zweig 9 ist aufgehoben: Schlüssel,
+  Begründung in `tests/fixtures/sync-reasons.php` und Eintrag in
+  `SyncKindsTest` entfernt; der Unit-Fall von Zweig 9
+  (`testWhatTheEngineOfThePostDoesNotCarryToItsEndIsRefusedWithItsLock`)
+  prüft jetzt, dass jeder der fünf Typen ein Ziel hat und der Schlüssel
+  fehlt; die Mutationseinträge `inhalte/post-type-branch-9b` und
+  `inhalte/post-type-other-kind` sind auf die neue Zeile umgestellt. Keine
+  Lage des Normalfalls ist durch einen neuen Schlüssel ersetzt; die neuen
+  Schlüssel (`post:theme_mismatch`, `post:navigation_fallback`,
+  `post:css_markup`) treffen Lagen daneben, je mit Grund und Weg.
+- Prüfsites: beide Sites laufen mit Twenty Twenty-Five, dem Standard-Theme
+  von WordPress 7.1.3 (`WP_DEFAULT_THEME`, `wp-includes/default-constants.php:437`),
+  das `wp_install()` aktiviert: ein Block-Theme mit Vorlagen und
+  Vorlagenteilen als Dateien. So gilt der Normalfall (dasselbe aktive
+  Block-Theme auf beiden Sites) ohne eigenes Theme der Tests; der erste
+  Fall prüft es (`SyncTemplatesTest`). Gespeichert wird auf Staging über die
+  REST-Routen des Site-Editors (`/wp/v2/templates`, `/wp/v2/template-parts`,
+  `/wp/v2/global-styles`), also so, wie der Kern die Zeilen anlegt.
+
+### Identität, Theme, Bereich
+
+- Vorlage, Vorlagenteil und globale Stile haben ihre Identität über Typ,
+  Theme und Slug (Entscheid 25; `AB_MCP_Sync_Identity::THEMED`, das Theme ist
+  der Slug ihres Terms von `wp_theme`); die globalen Stile tragen den Slug
+  `wp-global-styles-<stylesheet>` (`WP_Theme_JSON_Resolver::
+  get_user_data_from_wp_global_styles()`, `wp-includes/class-wp-theme-json-resolver.php:478-532`).
+  Der Bereich eines Vorlagenteils (`wp_template_part_area`) ist ein Feld,
+  kein Teil der Identität (Berichtigung der Steuerung vom 08.11.2026 zum
+  Auftrag): der Kern macht den Slug je Typ und Theme eindeutig
+  (`wp_filter_wp_template_unique_post_slug()`, `wp-includes/theme-templates.php:47-99`)
+  und nennt einen Teil `theme//slug`; ein Wechsel des Bereichs ist eine
+  Änderung desselben Objekts. Theme und Bereich werden wie `post_format`
+  über den Slug geschrieben und verglichen (`IDENTITY_TAXONOMIES`), so wie
+  die kanonische Form sie nennt (`AB_MCP_Sync_Db_Kind::terms_form()`).
+  Prüffall `testATemplateItsPartsAndTheGlobalStylesOfTheActiveThemeGoOverAndBack`
+  (Bereich des neuen Fusses geschrieben, `get_block_template()` liest ihn).
+- Aktives Theme verschieden: Der Kern findet diese drei Typen nur über den
+  Namen des aktiven Themes (`get_block_template()`,
+  `render_block_core_template_part()`, `wp-includes/blocks/template-part.php:27`,
+  die globalen Stile über `get_stylesheet()`), und eine neue Vorlage wird
+  unter den Vorlagen des aktiven Themes eindeutig gemacht
+  (`wp-includes/theme-templates.php:63`). Darum schreibt der Schritt nur, wo
+  das Theme des Objekts das aktive Stylesheet hier ist, wie
+  `get_stylesheet()` es gibt und wie die Optionszeile `stylesheet` es hält,
+  das Ziel genau dieses eine Theme nennt und ein Objekt hier es ebenso
+  trägt (`theme_refusal()`); sonst `post:theme_mismatch` (Z8) vor jeder
+  Mutation, mit dem Weg (dasselbe Theme auf beiden Sites aktivieren; ein
+  Wechsel des Themes ist Code, Z8b; oder von Hand im Site-Editor). Kein
+  stilles Umschreiben in ein anderes Theme. Prüffall
+  `testWhatTheBranchLocksIsFoundBeforeAnythingIsWritten` (eine Vorlage von
+  Twenty Twenty-Four). Auf dem Rückweg fragt der Schritt das Theme nicht:
+  er schreibt dieselbe Zeile zurück, deren Theme-Term er nicht ändert, und
+  `wp_filter_wp_template_unique_post_slug()` fragt bei einem vorhandenen
+  Post dessen eigenen Term (`:64-67`).
+- Namen der Terme: Der Kern liest Theme und Bereich über den Namen ihres
+  Terms (`_build_block_template_object_from_post_object()`,
+  `wp-includes/block-template-utils.php:857-895`; die Abfragen mit
+  `field => name`), der Schritt schreibt sie über den Slug
+  (`wp_set_object_terms()` legt einen fehlenden Term mit dem Slug als Namen
+  an). Ein Term, dessen Name nicht sein Slug ist, auf Staging (im Paket) oder
+  hier (`named_refusal()`), sperrt `post:taxonomy_rule` (Z8d). Grenze C: ein
+  Theme, dessen Ordnername kein Slug ist (Grossbuchstaben, Punkt), hat
+  einen Term mit anderem Namen als Slug; seine Vorlagen sperren schon
+  `post:theme_mismatch` (der Slug ist nicht das Stylesheet).
+
+### Vorlage nur als Datei auf der Live-Site
+
+- Beim ersten Speichern einer Vorlage oder eines Vorlagenteils des Themes
+  im Site-Editor legt der Kern eine Zeile an
+  (`WP_REST_Templates_Controller::prepare_item_for_database()`,
+  `wp-includes/rest-api/endpoints/class-wp-rest-templates-controller.php:575-662`):
+  Status `publish`, der Slug, der Term von `wp_theme` mit dem Theme der
+  Datei, die Meta `origin` = `theme`, beim Vorlagenteil der Bereich der Datei
+  (`wp_template_part_area`), Autor das Konto. Hat Staging so eine Zeile und
+  die Live-Site nur die Datei, sagt der Bericht `create`; der Schritt legt
+  dieselbe Zeile über `wp_insert_post()` an, die Meta über die
+  Metadaten-API, die Terme über `wp_set_object_terms()`. Danach zeigt der
+  Kern die Zeile statt der Datei (`get_block_template()`: `source` =
+  `custom`). Nach dem Rückweg bleibt die Zeile als benannter Rest
+  (`residual`, nichts wird gelöscht); erst wenn eine Person sie entfernt
+  (im Site-Editor «Zurücksetzen»), gilt wieder die Datei. Prüffall
+  `testATemplateItsPartsAndTheGlobalStylesOfTheActiveThemeGoOverAndBack`
+  (Fuss und Vorlage `single`).
+
+### Verweise
+
+- `core/block` und `core/navigation` mit `ref` gehen über das Paar und den
+  Umschreiber aus Zweig 4 (`AB_MCP_Sync_Refs::BLOCKS`); ohne Paar sperrt
+  `post:reference_unmapped` (Z8), ein Ziel, das derselbe Lauf vorher
+  anlegt, ist ausstehend wie bisher. Prüffall
+  `testANavigationAndAReusableBlockGoOverAndBackAndAPageNamesBothByTheirIds`.
+- `core/template-part` nennt Theme und Slug, keine ID, also kein Paar
+  (`part_refs()`, `parts_refusal()`): ein genannter Teil muss hier zu sehen
+  sein, das heisst sein Theme ist das aktive (ohne Attribut gilt das aktive,
+  `wp-includes/blocks/template-part.php:25`; ein anderes zeigt nichts, :27),
+  und die Site hat ihn als veröffentlichte Zeile dieses Themes und Slugs
+  (die Abfrage des Kerns, :29-44), als Teil, den derselbe Lauf vorher
+  anlegt (in der Gesamtvorprüfung ausstehend, `pending_named()`), oder als
+  Datei des aktiven Themes (`get_block_file_template()`, :70-71). Sonst
+  `post:reference_unmapped` mit dem Teil und dem Weg; nie umgeschrieben.
+  Gilt für jeden Typ der Post-Art, auch eine Seite mit einem Vorlagenteil.
+- Eine Seite, die eine eigene Vorlage des Block-Themes nutzt
+  (`_wp_page_template` = Slug der Vorlage; der Kern bietet sie über
+  `WP_Theme::get_post_templates()` an, `wp-includes/class-wp-theme.php:1372-1387`),
+  deren Vorlage derselbe Lauf anlegt: die Prüfung des Angebots
+  (`post:page_template`) gilt in der Gesamtvorprüfung als ausstehend
+  (`template_pending`), die Grenze fragt sie mit der angelegten Vorlage.
+- Reihenfolge: Der Plan legt die Schritte der Vorlagenteile, dann der
+  Vorlagen vor die übrigen Objekte (`AB_MCP_Sync_Push::NAMED_FIRST`; Terme
+  weiter zuerst), so stehen sie beim Schreiben der Vorlage bzw. Seite schon
+  da. Die Reihenfolge ist keine Abhängigkeit: scheitert der Teil, sperrt die
+  Grenze der Vorlage selbst. Prüffall
+  `testWhatTheSameRunCreatesFirstIsPendingAndANavigationAsDraftLeavesTheFallback`.
+  Grenze C: ein Vorlagenteil, der einen anderen Vorlagenteil einbindet, den
+  derselbe Lauf erst anlegt: beide haben denselben Rang, es entscheidet die
+  Nummer im Bericht; kommt der äussere zuerst, sperrt seine Grenze
+  (`post:reference_unmapped`, fail closed), ein zweiter Lauf nimmt ihn mit.
+
+### Rechte und Feldregeln
+
+- Die Rechte der Typen sind ihre registrierten Capabilities
+  (`get_post_type_object()->cap`, `wp-includes/post.php:302-583`), vorwärts in
+  `precheck()` und auf dem Rückweg in `restore_right()` (`edit_post` zuerst):
+  Vorlagen, Vorlagenteile und Navigationen verlangen für alles
+  `edit_theme_options`; die globalen Stile `edit_theme_options`, zum
+  Veröffentlichen aber `publish_posts` (der Kern nennt für den Typ kein
+  eigenes, :496-527); wiederverwendbare Blöcke `edit_posts`, zum Anlegen
+  `publish_posts` (:335-349). Die Terme von `wp_theme` und
+  `wp_template_part_area` fragen die Rechte ihrer Taxonomie (der Kern
+  registriert keine eigenen: `assign_terms` = `edit_posts`, `edit_terms` =
+  `manage_categories`), die von `wp_pattern_category` ebenso; `assign_term`
+  je Term wie bisher (`term_right()`).
+- Feldregel `wp_block`: Die Meta `wp_pattern_sync_status` (ungesynchtes
+  Muster) registriert der Kern ohne `auth_callback`
+  (`wp_create_initial_post_meta()`, `wp-includes/post.php:8853-8869`);
+  `register_meta()` hängt dann `__return_true` ein (`wp-includes/meta.php:1511-1531`),
+  und `map_meta_cap` gibt das Recht am Post selbst. Ein solcher Schlüssel
+  gilt jetzt für einen neuen Post als einer ohne eigene Regel
+  (`auth_follows_post()`): vorher sperrte `has_filter()` jedes neue
+  ungesynchte Muster (`post:create_with_object_meta`). Ein anderer Callback
+  neben `__return_true`, oder ein Hook, den die Anfrage nicht so zeigt, wie
+  WordPress ihn hält, sperrt weiter (fail closed). Das gilt für jeden
+  Schlüssel, den `register_meta()` ohne `auth_callback` registriert.
+  Prüffälle `testTheRuleOfThisVersionForMetaKeys` (Unit),
+  `testANavigationAndAReusableBlockGoOverAndBackAndAPageNamesBothByTheirIds`.
+- Grenze C: Die geschützte Meta `_wp_ignored_hooked_blocks` (Block Hooks
+  eines Plugins, `wp-includes/blocks.php:1455-1497`) bleibt unberührt, wo sie
+  auf beiden Seiten gleich ist; weicht sie ab, sperrt `*:meta_without_rule`
+  (Z8d) wie jeder geschützte Schlüssel ohne Regel.
+- Globale Stile, Sanitizer vorab: Der Inhalt läuft wie jeder Post durch
+  `sanitize_post( …, 'db' )`; ohne `unfiltered_html` gehört dazu
+  `wp_filter_global_styles_post()` (`wp-includes/kses.php:2464-2487`), das
+  Custom-CSS nur mit `edit_css` behält (`WP_Theme_JSON::remove_insecure_properties()`,
+  `wp-includes/class-wp-theme-json.php:4701-4703`); eine Änderung sperrt
+  `post:sanitizer` wie bisher. Zusätzlich fragt der Schritt die Regel, mit
+  der der Site-Editor Custom-CSS ablehnt
+  (`WP_REST_Global_Styles_Controller::validate_custom_css()`,
+  `wp-includes/rest-api/endpoints/class-wp-rest-global-styles-controller.php:683-760`:
+  kein `</style` gefolgt von Leerzeichen, `/` oder `>`, kein Ende in einem
+  Teil davon, CSS ist Text), für jeden Schlüssel `css` des JSON, nicht nur
+  den obersten wie der Kern (jeder wird in ein STYLE-Element gedruckt):
+  `post:css_markup` (Z8). Der Schreiber geht über `wp_update_post()` an der
+  REST-Prüfung vorbei, darum fragt er sie vorab (`css_markup()`, Schritt für
+  Schritt wie der Kern; die Integration hält beide gleich,
+  `testTheRuleOfTheCustomCssIsTheOneOfTheSiteEditor`). Der Rückweg schreibt
+  die Zeile über `wp_update_post()` im Rechtekontext des Kontos, kses greift
+  dort selbst; ein so geänderter Inhalt liest anders zurück und bleibt
+  `unclear` (die bestehende Abgrenzung aus Codex-Runde 5 von Zweig 9).
+
+### Kern-Folgen und Caches (Entscheid 21, 33)
+
+- Navigation ohne eigenes Menü: Ein Navigationsblock ohne `ref` und ohne
+  eigene Einträge zeigt die zuletzt veröffentlichte Navigation der Site
+  (`WP_Navigation_Fallback::get_most_recently_published_navigation()`,
+  `wp-includes/class-wp-navigation-fallback.php:110-130`, Status `publish`,
+  nach Datum absteigend); gibt es keine, legt der Kern beim Anzeigen eine an
+  (`get_fallback()`, :70-101). Twenty Twenty-Five hat so einen Block im
+  Kopf. Eine Navigation, die diese Rolle übernähme oder abgäbe (eine neue,
+  später datierte, ein verschobenes Datum, ein anderer Status), änderte
+  Seiten, die der Plan nicht nennt: `fallback_moves()` vergleicht aus den
+  Zeilen, welche Navigation vor und nach dem Schreiben angezeigt würde, und
+  sperrt bei einem Unterschied oder einem Gleichstand des neuesten Datums
+  (die Reihenfolge des Kerns ist dann nicht bestimmt): `post:navigation_fallback`
+  (Z8), vorwärts in `precheck()`, auf dem Rückweg in `restore_row()` als
+  «Prüfung nötig» (`check_needed`) mit dem Weg. Eine geänderte Navigation
+  mit ihrem Datum (der Normalfall) behält ihren Platz und geht. Prüffälle
+  `testWhatTheBranchLocksIsFoundBeforeAnythingIsWritten`,
+  `testWhatTheSameRunCreatesFirstIsPendingAndANavigationAsDraftLeavesTheFallback`
+  (als Entwurf übernommen geht sie),
+  `testTheWayBackOfANavigationThatWouldMoveTheFallbackIsLeftForAPerson`.
+  Grenze C: die Sperre fragt nicht, ob hier überhaupt ein Navigationsblock
+  ohne eigenes Menü angezeigt wird (das hiesse jede Vorlage, jeden Teil und
+  jedes Muster des Themes auswerten); sie trifft darum auch eine neue
+  Navigation, die alle Blöcke über `ref` einbinden. Weg: die Navigation im
+  Site-Editor der Live-Site anlegen oder veröffentlichen, oder sie als
+  Entwurf übernehmen und dort veröffentlichen (ein Block mit `ref` zeigt
+  einen Entwurf nicht, `wp-includes/blocks/navigation.php:330`).
+- Caches in Phase 7 (`post_write()`): Für die fünf Typen leert der Schritt
+  den Seiten-Cache der ganzen Site (`AB_MCP_Page_Cache::purge_site()`,
+  `SITE_WIDE`): jede Seite kann sie zeigen, eigene Seiten haben sie nicht.
+  Für die globalen Stile zusätzlich `wp_clean_theme_json_cache()`
+  (`wp-includes/global-styles-and-settings.php:430-438`: die Gruppe
+  `theme_json` und die Daten von `WP_Theme_JSON_Resolver`); diese Gruppe
+  hält WordPress nur je Anfrage (`wp-includes/load.php:928`). Einen
+  Transienten der globalen Stile (etwa `_wp_theme_json`) kennt WordPress
+  7.1.3 nicht; die Abfragen der Vorlagen, Teile und Navigationen folgen dem
+  letzten Wechsel der Posts, den `clean_post_cache()` setzt; die Terme von
+  `wp_theme`, `wp_template_part_area` und `wp_pattern_category` leert
+  `run_post()` mit den übrigen Taxonomien. Der Transient der Muster des
+  Themes (`wp_theme_files_patterns-*`, `wp-includes/class-wp-theme.php:2017`)
+  betrifft Dateien und bleibt unberührt.
+- Stichprobe in Phase 8: nur ein veröffentlichtes Objekt eines Typs mit
+  eigener Seite (`is_post_type_viewable()`, `AB_MCP_Sync_Engine::viewable()`);
+  ein Lauf nur mit Vorlagen, Teilen, Stilen, Navigationen oder Blöcken hat
+  keine Stichprobe (kein Befund), wie ein Lauf nur mit Termen. Grenze: ob
+  eine Seite die neue Vorlage zeigt, prüft der Lauf nicht über HTTP; die
+  Hashes der geschriebenen Objekte prüft er wie immer.
+
+### Die übrigen Sperren der Post-Art
+
 - Die übrigen Lagen, die bis 08.11.2026 unter `post:engine_type` fielen,
   haben je einen eigenen Schlüssel; keine ist dabei freigegeben (Prüffälle
   `testWhatTheEngineOfThePostDoesNotCarryToItsEndIsRefusedWithItsLock`,
@@ -382,3 +596,16 @@ nennt ihre Meldung den Weg.
 - `live_key()` im Plan des Rückwegs (Post-ID und Term-ID im selben
   Zustands-Hash getrennt; ein gleicher Wert beider Räume in einem Rückweg
   lässt sich auf den Test-Sites nicht gezielt stellen).
+- Zweig 9b (Liste `vorlagen`, `tests/mutation/gen/vorlagen.py`; eine eigene
+  Liste, weil ihre Klauseln die von Zweig 9b sind und fast alle von
+  `SyncTemplatesTest` gehalten werden): nicht geführt sind die Texte der
+  Meldungen (der Name «keine Navigation», «zwei Navigationen desselben
+  Datums» in `fallback_moves()`: dieselben Zeilen vor und nach dem Schreiben,
+  so dass der Name das Urteil nicht ändert; ein Objekt ohne Term von
+  `wp_theme`, das die Prüfung des aktiven Themes ohnehin sperrt), die
+  Fehlerwege einer nicht lesbaren Zeile (`fallback_moves()`, `part_row()`,
+  `pending_named()` bei einem fehlenden Paket), ein Objekt hier mit zwei
+  Themes (`theme_refusal()` am Objekt hier: ein Paar dieser Identität lässt
+  sich auf den Test-Sites nur mit Zeilen am Kern vorbei stellen) und die
+  Art in `AB_MCP_Sync_Engine::viewable()` (ein Term hat keinen Status für
+  die Stichprobe).

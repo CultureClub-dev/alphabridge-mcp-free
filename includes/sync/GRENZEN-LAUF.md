@@ -454,9 +454,10 @@ Ablehnung entsteht, nennt sie den Weg.
   Unterstrich, nicht geschützt, keine Zugangsangabe, kein Builder-Markup, die
   das Konto bearbeiten darf) und Terme von `category`, `post_tag` und
   `post_format`. Alles andere der Post-Art ist fail closed gesperrt mit Grund
-  und Etappe (`post:engine_type`: seit Zweig 9 nur die fünf Kern-Typen von
-  Zweig 9b, Etappe Z8, die übrigen Lagen mit eigenen Schlüsseln,
-  GRENZEN-INHALTE.md; `post:meta_rule`, `post:taxonomy_rule`,
+  und Etappe (`post:engine_type`: in Zweig 9 nur die fünf Kern-Typen von
+  Zweig 9b, Etappe Z8, die übrigen Lagen mit eigenen Schlüsseln; seit
+  Zweig 9b aufgehoben, die fünf Typen geschrieben, GRENZEN-INHALTE.md;
+  `post:meta_rule`, `post:taxonomy_rule`,
   `post:slug_collision`, `post:sanitizer`: Z9; `post:create_with_object_meta`:
   Z8d), auch ein vorhandener Live-Post mit einem Meta-Schlüssel ausserhalb der
   Regel (er stünde sonst nach dem Schreiben nicht auf dem Sollwert).
@@ -1120,7 +1121,10 @@ Ablehnung entsteht, nennt sie den Weg.
   ersten Objekt (Prüffall
   `testTheCachesOfPhaseSevenAreEmptiedInPartsWithinTheWorkOfEachCallEachObjectOnce`).
 - Die Stichprobe fragt eine veröffentlichte Adresse mit `wp_remote_get()`
-  (Loopback) und verlangt 200 und die erwartete Zeichenkette: den Titel des
+  (Loopback), seit Zweig 9b nur die eines Typs mit eigener Seite
+  (`is_post_type_viewable()`: keine Vorlage, kein Vorlagenteil, keine
+  globalen Stile, keine Navigation, kein wiederverwendbarer Block;
+  GRENZEN-INHALTE.md), und verlangt 200 und die erwartete Zeichenkette: den Titel des
   Sollwerts, wie die Seite ihn zeigt (roh, `esc_html()`, texturiert). Hosts
   ohne Loopback antworten nicht → Befund «no answer»; ein Theme ohne Titel
   oder ein Seiten-Cache mit alter Seite → Befund «did not show the title»;

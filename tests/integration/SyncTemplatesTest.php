@@ -520,7 +520,7 @@ final class SyncTemplatesTest extends TestCase {
 	private static function check_message( array $status ): string {
 		foreach ( $status['steps'] as $step ) {
 			if ( 'check' === $step['op'] ) {
-				return (string) json_encode( $step['result'] );
+				return (string) json_encode( $step['result'], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
 			}
 		}
 		return '';
@@ -613,6 +613,31 @@ final class SyncTemplatesTest extends TestCase {
 		);
 	}
 
+	/**
+	 * The same dates for an object on both sites, as a staging site copied
+	 * from this one has them: the site editor saves with the time of the
+	 * save, which two sites rarely share to the second, and two objects of
+	 * other dates are paired unclear (a person confirms their bases).
+	 */
+	private static function same_dates( int $id_a, int $id_b ): void {
+		global $wpdb;
+		$set = array(
+			'post_date'     => self::DATE,
+			'post_date_gmt' => self::DATE,
+		);
+		$wpdb->update( $wpdb->posts, $set, array( 'ID' => $id_a ) );
+		clean_post_cache( $id_a );
+		self::b(
+			array(
+				array(
+					'op'   => 'raw_post',
+					'post' => $id_b,
+					'set'  => $set,
+				),
+			)
+		);
+	}
+
 	/** The block of a paragraph. */
 	private static function para( string $text ): string {
 		return '<!-- wp:paragraph --><p>' . $text . '</p><!-- /wp:paragraph -->';
@@ -642,10 +667,16 @@ final class SyncTemplatesTest extends TestCase {
 		self::assertGreaterThan( 0, $styles_a );
 		self::assertGreaterThan( 0, $styles_b );
 		$header_a = self::id_a( 'wp_template_part', 'header' );
+		$header_b = (int) self::rest_b( 'GET', '/wp/v2/template-parts/' . self::THEME . '//header', array( 'context' => 'edit' ) )['wp_id'];
+		self::same_dates( $header_a, $header_b );
+		self::same_dates( $styles_a, $styles_b );
 		self::assertSame( array( self::THEME ), self::terms_a( $header_a, 'wp_theme' ), 'What the core makes as the site editor saves a part of the theme.' );
 		self::assertSame( array( 'header' ), self::terms_a( $header_a, 'wp_template_part_area' ) );
 		self::assertSame( array( 'theme' ), self::meta_a( $header_a, 'origin' ) );
-		self::paired( self::staged(), array( 'equal', 'differs' ) );
+		self::paired( self::staged() );
+		$source = AB_MCP_Sync_Anchor::active()['source_id'];
+		self::assertSame( 'active', AB_MCP_Sync_Pairs::find_live( $source, 'post', (string) $header_a )['state'], 'Equal on both sites: paired.' );
+		self::assertSame( 'active', AB_MCP_Sync_Pairs::find_live( $source, 'post', (string) $styles_a )['state'] );
 		// The changes on staging.
 		self::rest_b( 'POST', '/wp/v2/template-parts/' . self::THEME . '//header', array( 'content' => self::para( 'Kopf neu' ) ) );
 		self::rest_b( 'POST', '/wp/v2/template-parts/' . self::THEME . '//footer', array( 'content' => self::para( 'Fuss neu' ) ) );
@@ -656,6 +687,9 @@ final class SyncTemplatesTest extends TestCase {
 		self::assertSame( 0, self::id_a( 'wp_template', 'single' ) );
 		$before_header = self::row_a( $header_a );
 		$before_styles = self::row_a( $styles_a );
+		// The user data of theme.json as this request holds it before the run
+		// (WP_Theme_JSON_Resolver keeps it for the request).
+		self::assertNull( \WP_Theme_JSON_Resolver::get_user_data()->get_raw_data()['styles']['color']['background'] ?? null );
 		$names         = array( 'post:wp_template_part:header', 'post:wp_template_part:footer', 'post:wp_template:single', 'post:wp_global_styles:wp-global-styles-' . self::THEME );
 		$planned       = self::planned( $names );
 		self::assertSame( array( 'take_over', 'create', 'create', 'take_over' ), array_map( static fn( $n ) => self::entry( $planned['report']['all'], $n )['action'], $names ) );
@@ -670,6 +704,9 @@ final class SyncTemplatesTest extends TestCase {
 		}
 		// The parts first, then the template (NAMED_FIRST), then the rest.
 		self::assertSame( array( 'wp_template_part', 'wp_template_part', 'wp_template', 'wp_global_styles' ), array_map( static fn( $s ) => $s['parts']['object']['identity']['post_type'], self::writes( $status ) ) );
+		// The global styles as this request reads them now: phase 7 emptied
+		// the caches of theme.json (wp_clean_theme_json_cache()).
+		self::assertSame( '#112233', \WP_Theme_JSON_Resolver::get_user_data()->get_raw_data()['styles']['color']['background'] ?? null, 'The global styles as the core reads them.' );
 		// WordPress shows them here.
 		wp_cache_flush();
 		$header = get_block_template( self::THEME . '//header', 'wp_template_part' );
@@ -686,7 +723,6 @@ final class SyncTemplatesTest extends TestCase {
 		self::assertSame( $single, $template->content );
 		$single_a = self::id_a( 'wp_template', 'single' );
 		self::assertSame( array( self::THEME ), self::terms_a( $single_a, 'wp_theme' ) );
-		self::assertSame( '#112233', \WP_Theme_JSON_Resolver::get_user_data()->get_raw_data()['styles']['color']['background'] ?? null, 'The global styles as the core reads them.' );
 		// Phase 7: the page cache of the whole site, the caches of theme.json.
 		foreach ( $status['steps'] as $step ) {
 			if ( 'post' === $step['op'] ) {
@@ -712,12 +748,364 @@ final class SyncTemplatesTest extends TestCase {
 		$expected = array( array( 'post', (string) $footer_a ), array( 'post', (string) $single_a ) );
 		sort( $expected );
 		self::assertSame( $expected, self::rests( $back ), 'The new rows are named as rests.' );
-		$source = AB_MCP_Sync_Anchor::active()['source_id'];
 		self::assertSame( 'residual', AB_MCP_Sync_Pairs::find_live( $source, 'post', (string) $footer_a )['state'] );
 		self::assertSame( 'residual', AB_MCP_Sync_Pairs::find_live( $source, 'post', (string) $single_a )['state'] );
 		self::assertSame( 'active', AB_MCP_Sync_Pairs::find_live( $source, 'post', (string) $header_a )['state'] );
 		wp_cache_flush();
 		self::assertSame( 'custom', get_block_template( self::THEME . '//footer', 'wp_template_part' )->source, 'The new row stays as a rest.' );
 		self::assertSame( array(), $this->deletions, 'Nothing was deleted, forward or back.' );
+	}
+
+	public function testANavigationAndAReusableBlockGoOverAndBackAndAPageNamesBothByTheirIds(): void {
+		// The normal case of the two types that do not hang on the theme: a
+		// navigation and a reusable block, paired, changed on staging; a page
+		// new there that names both by their ids (core/block and
+		// core/navigation with ref), rewritten by the pairs; a new unsynced
+		// pattern (wp_pattern_sync_status, registered without an
+		// auth_callback) in a new pattern category. The navigation keeps its
+		// date: the one a navigation block without a menu of its own shows
+		// stays the one it was. The way back puts navigation and block back
+		// and leaves page, pattern and category as rests.
+		self::pair();
+		$link  = static fn( string $label, string $site ): string => '<!-- wp:navigation-link {"label":"' . $label . '","url":"' . AB_MCP_IT_Sites::url( $site ) . '/","kind":"custom","isTopLevelLink":true} /-->';
+		$nav_a = self::on_a( self::made( 'wp_navigation', 'hauptmenu', $link( 'Start', 'a' ) ) );
+		$nav_b = self::on_b( self::made( 'wp_navigation', 'hauptmenu', $link( 'Start', 'b' ) ) );
+		$blk_a = self::on_a( self::made( 'wp_block', 'hinweis', self::para( 'Alt' ) ) );
+		$blk_b = self::on_b( self::made( 'wp_block', 'hinweis', self::para( 'Alt' ) ) );
+		self::paired( self::staged() );
+		$source = AB_MCP_Sync_Anchor::active()['source_id'];
+		self::assertSame( 'active', AB_MCP_Sync_Pairs::find_live( $source, 'post', (string) $nav_a )['state'], 'The navigations are one object by type and slug, the address of each site in its link.' );
+		self::assertSame( 'active', AB_MCP_Sync_Pairs::find_live( $source, 'post', (string) $blk_a )['state'] );
+		self::b(
+			array(
+				array(
+					'op'   => 'update_post',
+					'args' => array( 'ID' => $nav_b, 'post_content' => $link( 'Start', 'b' ) . $link( 'Kontakt', 'b' ) ),
+				),
+				array(
+					'op'   => 'update_post',
+					'args' => array( 'ID' => $blk_b, 'post_content' => self::para( 'Neu' ) ),
+				),
+				array(
+					'op'       => 'insert_term',
+					'name'     => 'Hinweise',
+					'taxonomy' => 'wp_pattern_category',
+					'as'       => 'category',
+				),
+				array(
+					'op'   => 'insert_post',
+					'args' => self::made( 'wp_block', 'vorlage', self::para( 'Vorlage' ), array( 'meta_input' => array( 'wp_pattern_sync_status' => 'unsynced' ) ) ),
+					'as'   => 'pattern',
+				),
+				array(
+					'op'       => 'set_terms',
+					'post'     => '$pattern',
+					'terms'    => array( '$category' ),
+					'taxonomy' => 'wp_pattern_category',
+				),
+				array(
+					'op'   => 'insert_post',
+					'args' => self::made( 'page', 'mit-bezug', '<!-- wp:block {"ref":' . $blk_b . '} /--><!-- wp:navigation {"ref":' . $nav_b . '} /-->' ),
+				),
+			)
+		);
+		$before_nav = self::row_a( $nav_a );
+		$before_blk = self::row_a( $blk_a );
+		$names      = array( 'post:wp_navigation:hauptmenu', 'post:wp_block:hinweis', 'post:page:mit-bezug', 'post:wp_block:vorlage', 'term:wp_pattern_category:hinweise' );
+		$planned    = self::planned( $names );
+		self::assertSame( array( 'take_over', 'take_over', 'create', 'create', 'create' ), array_map( static fn( $n ) => self::entry( $planned['report']['all'], $n )['action'], $names ) );
+		$this->watch_deletions();
+		$run    = self::begun( $planned['args'] );
+		$closed = self::finish( (int) $run['run_id'] );
+		self::assertSame( 'closed_done', $closed['state'], json_encode( $closed ) );
+		$status = self::run_status( (int) $run['run_id'] );
+		foreach ( self::writes( $status ) as $step ) {
+			self::assertSame( 'done', $step['state'], json_encode( $step ) );
+		}
+		self::assertSame( $link( 'Start', 'a' ) . $link( 'Kontakt', 'a' ), self::row_a( $nav_a )['post_content'], 'The addresses of this site.' );
+		self::assertSame( self::para( 'Neu' ), self::row_a( $blk_a )['post_content'] );
+		$page_a = self::id_a( 'page', 'mit-bezug' );
+		self::assertSame( '<!-- wp:block {"ref":' . $blk_a . '} /--><!-- wp:navigation {"ref":' . $nav_a . '} /-->', self::row_a( $page_a )['post_content'], 'Both ids by their pairs.' );
+		$pattern_a = self::id_a( 'wp_block', 'vorlage' );
+		self::assertSame( array( 'unsynced' ), self::meta_a( $pattern_a, 'wp_pattern_sync_status' ), 'A key registered without an auth_callback goes with a new post.' );
+		self::assertSame( array( 'hinweise' ), self::terms_a( $pattern_a, 'wp_pattern_category' ), 'In the category the same run made first.' );
+		foreach ( $status['steps'] as $step ) {
+			if ( 'verify' === $step['op'] ) {
+				self::assertSame( $page_a, (int) $step['result']['sample']['live_ref'], 'The page is the sample, not the navigation or the block.' );
+			}
+		}
+		$back = self::back( (int) $run['run_id'] );
+		self::assertSame( 'closed_findings', $back['state'], json_encode( $back ) );
+		self::assertSame( $before_nav, self::row_a( $nav_a ), 'The navigation byte for byte as before the run.' );
+		self::assertSame( $before_blk, self::row_a( $blk_a ), 'The block likewise.' );
+		$category_a = (int) get_term_by( 'slug', 'hinweise', 'wp_pattern_category' )->term_id;
+		$expected   = array( array( 'post', (string) $page_a ), array( 'post', (string) $pattern_a ), array( 'term', (string) $category_a ) );
+		sort( $expected );
+		self::assertSame( $expected, self::rests( $back ) );
+		self::assertSame( array(), $this->deletions, 'Nothing was deleted, forward or back.' );
+	}
+
+	/* ----------------------------------------------- the locks of 9b */
+
+	public function testWhatTheBranchLocksIsFoundBeforeAnythingIsWritten(): void {
+		// The locks of branch 9b, each with its way, found by the check before
+		// the first write in one run (nothing written, the run closed
+		// aborted): a template of another theme than the active one here
+		// (post:theme_mismatch, never rewritten into this theme); a template
+		// that names a template part this site does not show, and one that
+		// names a part of another theme (post:reference_unmapped); a new
+		// navigation that would become the one a navigation block without a
+		// menu of its own shows (post:navigation_fallback); global styles
+		// whose custom CSS holds </style (post:css_markup).
+		self::pair();
+		self::paired( self::staged() );
+		$part = static fn( string $slug, ?string $theme ): string => '<!-- wp:template-part {"slug":"' . $slug . '"' . ( null === $theme ? '' : ',"theme":"' . $theme . '"' ) . '} /-->';
+		// A template of two themes, the active one last (its identity then
+		// names the active theme): made first, so the term of the other theme
+		// comes first.
+		self::b(
+			array(
+				array(
+					'op'   => 'insert_post',
+					'args' => array( 'post_type' => 'wp_template', 'post_status' => 'publish', 'post_title' => 'Search', 'post_name' => 'search', 'post_content' => self::para( 'Zwei Themes' ) ),
+					'as'   => 'two',
+				),
+				array(
+					'op'       => 'set_term_slugs',
+					'post'     => '$two',
+					'terms'    => array( 'twentytwentyfour', self::THEME ),
+					'taxonomy' => 'wp_theme',
+				),
+				// A part in an area this site names otherwise (its term
+				// Sidebar here, sidebar there).
+				array(
+					'op'   => 'insert_post',
+					'args' => array( 'post_type' => 'wp_template_part', 'post_status' => 'publish', 'post_title' => 'Aside', 'post_name' => 'aside', 'post_content' => self::para( 'Seitlich' ) ),
+					'as'   => 'aside',
+				),
+				array(
+					'op'       => 'set_term_slugs',
+					'post'     => '$aside',
+					'terms'    => array( self::THEME ),
+					'taxonomy' => 'wp_theme',
+				),
+				array(
+					'op'       => 'set_term_slugs',
+					'post'     => '$aside',
+					'terms'    => array( 'sidebar' ),
+					'taxonomy' => 'wp_template_part_area',
+				),
+			)
+		);
+		self::assertIsArray( wp_insert_term( 'Sidebar', 'wp_template_part_area', array( 'slug' => 'sidebar' ) ) );
+		$styles_b = (int) self::b( array( array( 'op' => 'global_styles_id', 'as' => 'id' ) ) )['id'];
+		self::rest_b( 'POST', '/wp/v2/template-parts', array( 'slug' => 'promo', 'title' => 'Promo', 'content' => self::para( 'Promo' ), 'area' => 'uncategorized' ) );
+		// The part named inside a group, at a depth.
+		self::rest_b( 'POST', '/wp/v2/templates/' . self::THEME . '//page', array( 'content' => '<!-- wp:group --><div class="wp-block-group">' . $part( 'promo', null ) . '</div><!-- /wp:group -->' . self::para( 'Seite' ) ) );
+		self::rest_b( 'POST', '/wp/v2/templates/' . self::THEME . '//archive', array( 'content' => $part( 'header', 'twentytwentyfour' ) ) );
+		self::b(
+			array(
+				array(
+					'op'   => 'insert_post',
+					'args' => array( 'post_type' => 'wp_template', 'post_status' => 'publish', 'post_title' => 'Index', 'post_name' => 'index', 'post_content' => self::para( 'Anderes Theme' ) ),
+					'as'   => 'other',
+				),
+				array(
+					'op'       => 'set_term_slugs',
+					'post'     => '$other',
+					'terms'    => array( 'twentytwentyfour' ),
+					'taxonomy' => 'wp_theme',
+				),
+				array(
+					'op'   => 'insert_post',
+					'args' => array( 'post_type' => 'wp_navigation', 'post_status' => 'publish', 'post_title' => 'Neu', 'post_name' => 'neu', 'post_content' => '<!-- wp:navigation-link {"label":"Start","url":"/","kind":"custom","isTopLevelLink":true} /-->' ),
+				),
+				array(
+					'op'   => 'update_post',
+					'args' => array( 'ID' => $styles_b, 'post_content' => (string) wp_json_encode( array( 'version' => 3, 'isGlobalStylesUserThemeJSON' => true, 'styles' => array( 'css' => 'body{color:red}</style>' ) ), JSON_UNESCAPED_SLASHES ) ),
+				),
+			)
+		);
+		$names   = array( 'post:wp_template:index', 'post:wp_template:page', 'post:wp_template:archive', 'post:wp_navigation:neu', 'post:wp_global_styles:wp-global-styles-' . self::THEME, 'post:wp_template:search', 'post:wp_template_part:aside' );
+		$planned = self::planned( $names );
+		$index   = self::entry( $planned['report']['all'], 'post:wp_template:index' );
+		self::assertSame( 'twentytwentyfour', $index['staging']['identity']['theme'], 'Its own identity: type, theme and slug.' );
+		$run    = self::begun( $planned['args'] );
+		$closed = self::finish( (int) $run['run_id'] );
+		self::assertSame( 'closed_aborted', $closed['state'], json_encode( $closed ) );
+		$message = self::check_message( self::run_status( (int) $run['run_id'] ) );
+		self::assertStringContainsString( 'post:theme_mismatch', $message );
+		self::assertStringContainsString( 'belongs to the theme twentytwentyfour, and the active theme of this site is ' . self::THEME, $message );
+		self::assertStringContainsString( 'The template part ' . self::THEME . '//promo, which this site has neither as a template part nor as a file of its theme', $message );
+		self::assertStringContainsString( 'The template part twentytwentyfour//header, of a theme that is not the active one here', $message );
+		self::assertStringContainsString( 'post:navigation_fallback', $message );
+		self::assertStringContainsString( 'A navigation block without a menu of its own shows none (WordPress would make one as a page is shown) now and would show this navigation after the write', $message );
+		self::assertStringContainsString( 'post:css_markup', $message );
+		self::assertStringContainsString( 'The CSS of styles.css in the global styles holds </style', $message );
+		self::assertStringContainsString( 'The wp_template search of the staging site names the themes ' . self::THEME . ', twentytwentyfour, not the one theme ' . self::THEME, $message );
+		self::assertStringContainsString( 'post:taxonomy_rule', $message );
+		self::assertStringContainsString( 'The term sidebar of wp_template_part_area on this site is named Sidebar, and WordPress reads it by its name', $message );
+		self::assertSame( 0, self::id_a( 'wp_template_part', 'aside' ) );
+		foreach ( array( 'index', 'page', 'archive', 'search' ) as $slug ) {
+			self::assertSame( 0, self::id_a( 'wp_template', $slug ), "Nothing written: $slug." );
+		}
+		self::assertSame( 0, self::id_a( 'wp_navigation', 'neu' ) );
+		self::assertSame( 0, self::id_a( 'wp_global_styles', 'wp-global-styles-' . self::THEME ) );
+	}
+
+	public function testWhatTheSameRunCreatesFirstIsPendingAndANavigationAsDraftLeavesTheFallback(): void {
+		// The ways the locks name: a template part the same run creates before
+		// the template that names it, and a custom template the same run
+		// creates before the page that uses it, are pending in the check
+		// before the first write, not missing; the plan writes them first
+		// (NAMED_FIRST), the boundary finds them made. A new navigation taken
+		// over as draft (the confirmed choice) leaves the one a navigation
+		// block without a menu shows as it was.
+		self::pair();
+		self::paired( self::staged() );
+		self::rest_b( 'POST', '/wp/v2/template-parts', array( 'slug' => 'promo', 'title' => 'Promo', 'content' => self::para( 'Promo' ), 'area' => 'uncategorized' ) );
+		// The custom template names the new part, and the sidebar of the
+		// theme, a file of the theme only on both sites.
+		self::rest_b( 'POST', '/wp/v2/templates', array( 'slug' => 'wp-custom-template-landing', 'title' => 'Landing', 'content' => '<!-- wp:template-part {"slug":"promo","theme":"' . self::THEME . '"} /-->' . self::para( 'Landing' ) . '<!-- wp:template-part {"slug":"sidebar","theme":"' . self::THEME . '"} /-->' ) );
+		self::b(
+			array(
+				array(
+					'op'   => 'insert_post',
+					'args' => self::made( 'page', 'aktion', 'Die Aktion.', array( 'page_template' => 'wp-custom-template-landing' ) ),
+				),
+				array(
+					'op'   => 'insert_post',
+					'args' => array( 'post_type' => 'wp_navigation', 'post_status' => 'publish', 'post_title' => 'Neu', 'post_name' => 'neu', 'post_content' => '<!-- wp:navigation-link {"label":"Start","url":"/","kind":"custom","isTopLevelLink":true} /-->' ),
+				),
+			)
+		);
+		// The page first in the report, the part last: the plan orders them.
+		$names   = array( 'post:page:aktion', 'post:wp_template:wp-custom-template-landing', 'post:wp_template_part:promo', 'post:wp_navigation:neu' );
+		$planned = self::planned( $names, array(), array( 'post:wp_navigation:neu' ) );
+		$run     = self::begun( $planned['args'] );
+		$closed  = self::finish( (int) $run['run_id'] );
+		self::assertSame( 'closed_done', $closed['state'], json_encode( $closed ) . self::check_message( self::run_status( (int) $run['run_id'] ) ) );
+		$status = self::run_status( (int) $run['run_id'] );
+		self::assertSame( array( 'wp_template_part', 'wp_template', 'page', 'wp_navigation' ), array_map( static fn( $s ) => $s['parts']['object']['identity']['post_type'], self::writes( $status ) ) );
+		wp_cache_flush();
+		self::assertSame( 0, self::id_a( 'wp_template_part', 'sidebar' ), 'The sidebar is the file of the theme here.' );
+		$landing = get_block_template( self::THEME . '//wp-custom-template-landing', 'wp_template' );
+		self::assertSame( 'custom', $landing->source );
+		self::assertTrue( $landing->is_custom );
+		$page_a = self::id_a( 'page', 'aktion' );
+		self::assertSame( array( 'wp-custom-template-landing' ), self::meta_a( $page_a, '_wp_page_template' ), 'The custom template the run made first, through page_template.' );
+		self::assertSame( 'publish', get_post_status( $page_a ) );
+		$nav_a = self::id_a( 'wp_navigation', 'neu' );
+		self::assertSame( 'draft', get_post_status( $nav_a ), 'As draft: no navigation block shows it by itself.' );
+		self::assertNull( AB_MCP_Sync_Post_Writer::fallback_moves( $nav_a, null, null ) );
+	}
+
+	public function testTheWayBackOfANavigationThatWouldMoveTheFallbackIsLeftForAPerson(): void {
+		// Decision 21 on the way back as forward (branch 9b): a navigation
+		// written with a later date stays the one a navigation block without
+		// a menu of its own shows; another navigation published since, dated
+		// between the two, would become that one as the row goes back to its
+		// older date. The row is left, «check needed», with the way; the
+		// order of the core read from the rows (fallback_moves()), a tie of
+		// the latest date fail closed.
+		self::pair();
+		$link = '<!-- wp:navigation-link {"label":"Start","url":"/","kind":"custom","isTopLevelLink":true} /-->';
+		$old  = array(
+			'post_date'     => '2026-09-01 10:00:00',
+			'post_date_gmt' => '2026-09-01 10:00:00',
+		);
+		$nav_a = self::on_a( self::made( 'wp_navigation', 'menu', $link, $old ) );
+		$nav_b = self::on_b( self::made( 'wp_navigation', 'menu', $link, $old ) );
+		self::paired( self::staged() );
+		$new = '2026-10-05 10:00:00';
+		self::b(
+			array(
+				array(
+					'op'   => 'update_post',
+					'args' => array( 'ID' => $nav_b, 'post_content' => $link . $link, 'post_date' => $new, 'post_date_gmt' => $new, 'edit_date' => true ),
+				),
+			)
+		);
+		$run    = self::begun( self::planned( array( 'post:wp_navigation:menu' ) )['args'] );
+		$closed = self::finish( (int) $run['run_id'] );
+		self::assertSame( 'closed_done', $closed['state'], json_encode( $closed ) );
+		self::assertSame( $new, self::row_a( $nav_a )['post_date'], 'The only navigation stays the one shown, with its later date.' );
+		// Another hand publishes a navigation dated between the two.
+		$mid   = '2026-09-15 10:00:00';
+		$other = self::on_a( self::made( 'wp_navigation', 'andere', $link, array( 'post_date' => $mid, 'post_date_gmt' => $mid ) ) );
+		self::assertNull( AB_MCP_Sync_Post_Writer::fallback_moves( $nav_a, $new, $new ), 'Keeping its date it stays the one shown.' );
+		self::assertStringContainsString( 'shows this navigation now and would show the navigation ' . $other . ' after the write', (string) AB_MCP_Sync_Post_Writer::fallback_moves( $nav_a, $new, '2026-09-01 10:00:00' ) );
+		self::assertStringContainsString( 'share the latest date', (string) AB_MCP_Sync_Post_Writer::fallback_moves( 0, null, $new ), 'A tie of the latest date: the order of the core is not told.' );
+		self::assertNull( AB_MCP_Sync_Post_Writer::fallback_moves( 0, null, null ), 'A draft moves nothing.' );
+		$back = self::back( (int) $run['run_id'] );
+		self::assertSame( 'closed_findings', $back['state'], json_encode( $back ) );
+		$parts = array();
+		foreach ( $back['steps'] as $step ) {
+			foreach ( isset( $step['result']['parts'] ) && is_array( $step['result']['parts'] ) ? $step['result']['parts'] : array() as $part ) {
+				$parts[ $part['part'] ] = $part;
+			}
+		}
+		self::assertSame( 'check_needed', $parts['row']['state'] ?? null, json_encode( $back ) );
+		self::assertStringContainsString( 'would change which navigation WordPress shows where a navigation block has no menu of its own', (string) json_encode( $back, JSON_UNESCAPED_SLASHES ) );
+		self::assertSame( $new, self::row_a( $nav_a )['post_date'], 'The row is left as the run wrote it.' );
+	}
+
+	public function testTheRuleOfTheCustomCssIsTheOneOfTheSiteEditor(): void {
+		// css_markup() is the rule of WP_REST_Global_Styles_Controller::
+		// validate_custom_css() (protected in the core), step for step: held
+		// here against the method itself on the edges of the rule.
+		// Since PHP 8.1 a protected method is invoked by reflection as it is.
+		$core = new \ReflectionMethod( \WP_REST_Global_Styles_Controller::class, 'validate_custom_css' );
+		$controller = new \WP_REST_Global_Styles_Controller();
+		$samples    = array( '', 'p{color:red}', 'a<b', '<', '</', '</s', '</styl', '</style', '</STYLE', '</style>', '</style ', "</style\t", "</style\n", '</style/', '</stylex', '</styles>', 'p{}</style>p{}', 'p{}<</style', 'x</St', '<<<', 'p { content: "</style>" }', "a\x00</style>" );
+		foreach ( $samples as $css ) {
+			self::assertSame( is_wp_error( $core->invoke( $controller, $css ) ), AB_MCP_Sync_Post_Writer::css_markup( $css ), json_encode( $css ) );
+		}
+		self::assertTrue( AB_MCP_Sync_Post_Writer::css_markup( 'body{}</style>' ) );
+		self::assertFalse( AB_MCP_Sync_Post_Writer::css_markup( 'body{color:#112233}' ) );
+	}
+
+	public function testATemplateOfAThemeAFilterShowsInThisRequestOnlyIsLocked(): void {
+		// The active theme is the one the option row holds as well as the one
+		// get_stylesheet() gives: a filter that shows another theme in a
+		// request (a theme switcher, a preview) makes no active theme
+		// (theme_refusal(); post:theme_mismatch). A template of the theme the
+		// filter shows is locked by the row, one of the theme of the row by
+		// the filter.
+		self::pair();
+		self::paired( self::staged() );
+		self::rest_b( 'POST', '/wp/v2/templates/' . self::THEME . '//single', array( 'content' => self::para( 'Fuenf' ) ) );
+		self::b(
+			array(
+				array(
+					'op'   => 'insert_post',
+					'args' => array( 'post_type' => 'wp_template', 'post_status' => 'publish', 'post_title' => 'Index', 'post_name' => 'index', 'post_content' => self::para( 'Vier' ) ),
+					'as'   => 'other',
+				),
+				array(
+					'op'       => 'set_term_slugs',
+					'post'     => '$other',
+					'terms'    => array( 'twentytwentyfour' ),
+					'taxonomy' => 'wp_theme',
+				),
+			)
+		);
+		$planned = self::planned( array( 'post:wp_template:index', 'post:wp_template:single' ) );
+		$shown   = static fn() => 'twentytwentyfour';
+		add_filter( 'stylesheet', $shown );
+		try {
+			self::assertSame( 'twentytwentyfour', get_stylesheet() );
+			$run    = self::begun( $planned['args'] );
+			$closed = self::finish( (int) $run['run_id'] );
+		} finally {
+			remove_filter( 'stylesheet', $shown );
+		}
+		self::assertSame( 'closed_aborted', $closed['state'], json_encode( $closed ) );
+		$message = self::check_message( self::run_status( (int) $run['run_id'] ) );
+		self::assertStringContainsString( 'post:theme_mismatch', $message );
+		self::assertStringContainsString( 'The wp_template index belongs to the theme twentytwentyfour, and the active theme of this site is twentytwentyfour (the option holds ' . self::THEME . ')', $message );
+		self::assertStringContainsString( 'The wp_template single belongs to the theme ' . self::THEME . ', and the active theme of this site is twentytwentyfour (the option holds ' . self::THEME . ')', $message );
+		self::assertSame( 0, self::id_a( 'wp_template', 'index' ) );
+		self::assertSame( 0, self::id_a( 'wp_template', 'single' ) );
 	}
 }

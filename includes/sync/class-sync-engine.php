@@ -799,7 +799,8 @@ final class AB_MCP_Sync_Engine {
 			if ( is_wp_error( $line ) || ! isset( $line['identity']['post_name'], $line['identity']['theme'] ) || ! is_string( $line['identity']['post_name'] ) || ! is_string( $line['identity']['theme'] ) ) {
 				continue;
 			}
-			$name                                   = 'wp_template' === $one['subtype'] ? $line['identity']['post_name'] : $line['identity']['theme'] . '//' . $line['identity']['post_name'];
+			$name = 'wp_template' === $one['subtype'] ? $line['identity']['post_name'] : $line['identity']['theme'] . '//' . $line['identity']['post_name'];
+
 			$out[ (string) $one['subtype'] ][ $name ] = true;
 		}
 		return $out;
