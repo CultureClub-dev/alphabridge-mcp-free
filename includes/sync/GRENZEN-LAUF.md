@@ -357,7 +357,10 @@ Ablehnung entsteht, nennt sie den Weg.
 - `pre_update_option` (generisch, für jeden Optionsnamen des Datensatzes)
   hält einen Wert «still» (der alte Wert kommt zurück, `update_option()`
   schreibt nichts); der schreibende Request erfährt nichts davon. Entscheid 19
-  nimmt das in Kauf; in Zweig 8 deckt kein Schritt Optionen (Zweig 11).
+  nimmt das in Kauf. Seit Zweig 11 decken Schritte Kern-Optionen und die
+  geteilten Zeilen der Theme-Mods und Widgets; ein Wert, den ein anderer
+  Schreiber dort still hält, liest der Schritt nicht als Ziel zurück und
+  weicht ab (`GRENZEN-STRUKTUR.md`).
 
 ## Vorprüfung der Mittel (Konzept 15.11)
 
@@ -719,8 +722,9 @@ Ablehnung entsteht, nennt sie den Weg.
 
 ## Rückweg (Entscheid 23)
 
-- Neu Angelegtes bleibt (Posts; in späteren Zweigen Terme, Menüs,
-  Attachments), auch veröffentlicht; das Paar wird `residual`, die Antwort
+- Neu Angelegtes bleibt (Posts, Terme, Attachments, Menüs mit ihren
+  Einträgen, Widget-Instanzen mit ihrem Bereich), auch veröffentlicht;
+  das Paar wird `residual`, die Antwort
   nennt den Rest mit dem Weg «von Hand entfernen». Ein zweiter Lauf schreibt
   den Rest nicht (Regel 0 des Berichts), bis `wp_site_pairs` ihn bestätigt
   oder verwirft.
