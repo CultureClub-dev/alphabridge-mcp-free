@@ -779,6 +779,15 @@ return array(
 		'expect'  => '/testAWebpSizeAndAnImportOfOldWithAbsolutePathsLockNoAttachmentBesideThem/',
 	),
 	array(
+		'id'      => 'medien/writer-content-union',
+		'clause'  => 'content_check(): the types WordPress knows together with those upload_mimes adds, never narrower (Codex round 3, B)',
+		'file'    => $aw,
+		'search'  => "\t\t\$known = array_merge( wp_get_mime_types(), get_allowed_mime_types( wp_get_current_user() ) );\n\t\t\$every = static function ( \$mimes ) use ( \$known ) {",
+		'replace' => "\t\t\$known = wp_get_mime_types();\n\t\t\$every = static function ( \$mimes ) use ( \$known ) {",
+		'run'     => $it( 'SyncMediaTest', 'testAWebpSizeAndAnImportOfOldWithAbsolutePathsLockNoAttachmentBesideThem' ),
+		'expect'  => '/testAWebpSizeAndAnImportOfOldWithAbsolutePathsLockNoAttachmentBesideThem/',
+	),
+	array(
 		'id'      => 'medien/writer-present-content-only',
 		'clause'  => 'files_plan(): a file the step does not write asked only whether its content is what its name says, not for the types of the account (Codex round 2, B)',
 		'file'    => $aw,

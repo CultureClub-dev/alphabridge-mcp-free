@@ -1067,8 +1067,27 @@ final class SyncMediaTest extends TestCase {
 		// beside an import of old on this site, bild.jpg of January, whose
 		// _wp_attached_file and metadata.file are absolute paths under the
 		// uploads and which has a backup size: its list read as the core reads
-		// it names none of the new paths.
+		// it names none of the new paths. And an SVG both sites have, a type a
+		// plugin registers through upload_mimes for this account (no
+		// unfiltered_upload): its title and alternative text go there and
+		// back as well (Codex round 3, B: the check of a file that lies there
+		// asked the types WordPress knows without the ones upload_mimes adds).
 		self::pair();
+		$svg       = '<?xml version="1.0" encoding="UTF-8"?>' . "\n" . '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12"><circle cx="6" cy="6" r="5" fill="blue"/></svg>' . "\n";
+		$svg_dir   = wp_get_upload_dir()['basedir'] . '/2026/10';
+		wp_mkdir_p( $svg_dir );
+		file_put_contents( $svg_dir . '/symbol.svg', $svg );
+		$symbol_a = wp_insert_attachment( wp_slash( array( 'post_mime_type' => 'image/svg+xml', 'post_title' => 'symbol', 'post_status' => 'inherit', 'post_date' => self::DATE, 'post_date_gmt' => self::DATE ) ), $svg_dir . '/symbol.svg', 0, true );
+		self::assertIsInt( $symbol_a );
+		$symbol_b = (int) self::b( array( array( 'op' => 'upload', 'name' => 'symbol.jpg', 'mime' => 'image/jpeg', 'bytes' => base64_encode( self::jpeg( 12, 12, array( 0, 0, 200 ) ) ), 'generate' => false, 'as' => 'id' ) ) )['id'];
+		self::b(
+			array(
+				array( 'op' => 'put_file', 'path' => '2026/10/symbol.svg', 'bytes' => base64_encode( $svg ) ),
+				array( 'op' => 'update_meta', 'post' => $symbol_b, 'key' => '_wp_attached_file', 'value' => '2026/10/symbol.svg' ),
+				array( 'op' => 'update_post', 'args' => array( 'ID' => $symbol_b, 'post_mime_type' => 'image/svg+xml' ) ),
+			)
+		);
+		unlink( AB_MCP_IT_Sites::docroot( 'b' ) . '/wp-content/uploads/2026/10/symbol.jpg' );
 		$bytes = self::jpeg( 400, 300, array( 150, 100, 50 ) );
 		$a     = self::upload_a( 'foto.jpg', 'image/jpeg', $bytes, array( 'post_title' => 'Foto' ), 'Foto' );
 		$b     = self::upload_b( 'foto.jpg', 'image/jpeg', $bytes, array( 'post_title' => 'Foto' ), 'Foto' );
@@ -1088,6 +1107,13 @@ final class SyncMediaTest extends TestCase {
 			)
 		);
 		self::assertSame( self::uploads_of( 'a' ), self::uploads_of( 'b' ), 'The same files on both sites.' );
+		add_filter(
+			'upload_mimes',
+			static function ( $mimes ) {
+				$mimes['svg'] = 'image/svg+xml';
+				return $mimes;
+			}
+		);
 		// The import of old on this site.
 		$old = wp_upload_bits( 'bild.jpg', null, self::jpeg( 320, 240, array( 10, 20, 30 ) ), '2026/01' );
 		self::assertFalse( $old['error'] );
@@ -1105,10 +1131,13 @@ final class SyncMediaTest extends TestCase {
 			array(
 				array( 'op' => 'update_post', 'args' => array( 'ID' => $b, 'post_title' => 'Foto 2026' ) ),
 				array( 'op' => 'update_meta', 'post' => $b, 'key' => '_wp_attachment_image_alt', 'value' => 'Ein Foto' ),
+				array( 'op' => 'update_post', 'args' => array( 'ID' => $symbol_b, 'post_title' => 'Symbol 2026' ) ),
+				array( 'op' => 'update_meta', 'post' => $symbol_b, 'key' => '_wp_attachment_image_alt', 'value' => 'Ein Symbol' ),
 				array( 'op' => 'upload', 'name' => 'bild.jpg', 'mime' => 'image/jpeg', 'bytes' => base64_encode( self::jpeg( 300, 200, array( 200, 10, 10 ) ) ), 'time' => '2026/11', 'as' => 'id' ),
 			)
 		);
 		$row_before = self::row_a( $a );
+		$svg_before = self::row_a( $symbol_a );
 		add_filter(
 			'upload_mimes',
 			static function ( $mimes ) {
@@ -1116,7 +1145,7 @@ final class SyncMediaTest extends TestCase {
 				return $mimes;
 			}
 		);
-		$planned = self::planned( array( 'attachment:2026/10/foto.jpg', 'attachment:2026/11/bild.jpg' ) );
+		$planned = self::planned( array( 'attachment:2026/10/foto.jpg', 'attachment:2026/11/bild.jpg', 'attachment:2026/10/symbol.svg' ) );
 		$this->watch_deletions();
 		$run    = self::begun( $planned['args'] );
 		$closed = self::finish( (int) $run['run_id'] );
@@ -1124,6 +1153,8 @@ final class SyncMediaTest extends TestCase {
 		self::assertSame( 'closed_done', $closed['state'], json_encode( $closed ) . self::check_message( $status ) );
 		self::assertSame( 'Foto 2026', self::row_a( $a )['post_title'] );
 		self::assertSame( array( 'Ein Foto' ), self::meta_a( $a, '_wp_attachment_image_alt' ) );
+		self::assertSame( 'Symbol 2026', self::row_a( $symbol_a )['post_title'] );
+		self::assertSame( array( 'Ein Symbol' ), self::meta_a( $symbol_a, '_wp_attachment_image_alt' ) );
 		self::assertFileExists( $uploads . '/2026/11/bild.jpg', 'The new image beside the import of old.' );
 		$back = self::back( (int) $run['run_id'] );
 		self::assertSame( 'closed_findings', $back['state'], 'The new image stays as a rest: ' . json_encode( $back ) );
@@ -1131,6 +1162,10 @@ final class SyncMediaTest extends TestCase {
 		unset( $row_now['post_modified'], $row_now['post_modified_gmt'], $row_before['post_modified'], $row_before['post_modified_gmt'] );
 		self::assertSame( $row_before, $row_now, 'The row of the JPEG back byte for byte.' );
 		self::assertSame( array( 'Foto' ), self::meta_a( $a, '_wp_attachment_image_alt' ) );
+		$svg_now = self::row_a( $symbol_a );
+		unset( $svg_now['post_modified'], $svg_now['post_modified_gmt'], $svg_before['post_modified'], $svg_before['post_modified_gmt'] );
+		self::assertSame( $svg_before, $svg_now, 'The row of the SVG back byte for byte.' );
+		self::assertSame( array(), self::meta_a( $symbol_a, '_wp_attachment_image_alt' ), 'Its alternative text, there not before, gone again.' );
 		self::assertSame( $webp, file_get_contents( $uploads . '/2026/10/foto-100x75.webp' ) );
 		self::assertSame( array(), $this->deletions );
 	}

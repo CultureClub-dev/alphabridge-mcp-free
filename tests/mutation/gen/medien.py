@@ -306,6 +306,9 @@ e('writer-present-own-lenient', 'files_plan(): a file that lies here but no list
   "\t\t\tif ( isset( $own[ $entry['path'] ] ) ) {", "\t\t\tif ( true ) {", 'it', LOCKS)
 e('writer-present-own-strict', 'files_plan(): a file the list of this attachment here names asked only whether its content is what its name says (Codex round 2, B)', AW,
   "\t\t$own   = null === $live_id ? array() : AB_MCP_Sync_Media::paths_of( (int) $live_id );", "\t\t$own   = array();", 'it', WEBP)
+e('writer-content-union', 'content_check(): the types WordPress knows together with those upload_mimes adds, never narrower (Codex round 3, B)', AW,
+  "\t\t$known = array_merge( wp_get_mime_types(), get_allowed_mime_types( wp_get_current_user() ) );\n\t\t$every = static function ( $mimes ) use ( $known ) {",
+  "\t\t$known = wp_get_mime_types();\n\t\t$every = static function ( $mimes ) use ( $known ) {", 'it', WEBP)
 e('writer-present-content-only', 'files_plan(): a file the step does not write asked only whether its content is what its name says, not for the types of the account (Codex round 2, B)', AW,
   "\t\t\t\t$check = self::content_check( $root . '/' . $entry['path'], self::base( $entry['path'] ) );",
   "\t\t\t\t$check = wp_check_filetype_and_ext( $root . '/' . $entry['path'], self::base( $entry['path'] ), $mimes );", 'it', WEBP)

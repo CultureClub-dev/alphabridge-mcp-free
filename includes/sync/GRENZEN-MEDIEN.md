@@ -142,10 +142,13 @@ entsteht, nennt ihre Meldung den Weg.
   C; Runde 2, B; Präzisierung der Lead danach):
   - Nennt die Liste desselben Live-Anhangs sie schon, prüft er nur, dass
     ihr Inhalt zu ihrem Namen passt: WordPress' Prüfung nach dem Inhalt,
-    gegen jeden Typ, den WordPress kennt, nicht gegen die Typen des Kontos
-    (`content_check()`: für diesen einen Aufruf sind alle bekannten Typen
-    erlaubt, weil `wp_check_filetype_and_ext()` sonst zuletzt gegen die
-    Typen des Kontos prüft). Eine WebP-Grösse, die die Mediathek machte,
+    gegen jeden Typ, den WordPress kennt, vereinigt mit dem, was
+    `upload_mimes` dem Konto sonst gibt (ein Plugin, das SVG dort
+    registriert), nie als Schranke des Kontos (`content_check()`: für
+    diesen einen Aufruf ist die Vereinigung erlaubt, ein Filter, der die
+    Liste ergänzt und nichts ersetzt, weil `wp_check_filetype_and_ext()`
+    sonst zuletzt gegen die Typen des Kontos prüft; Codex-Runde 3, B: ein
+    SVG mit Titeländerung sperrte, weil die Ergänzung verloren ging). Eine WebP-Grösse, die die Mediathek machte,
     sperrt so eine Änderung des Titels nicht, auch für ein Konto, das WebP
     nicht hochladen darf.
   - Jede andere liegende Datei (ein neuer Anhang, der eine Datei übernähme,

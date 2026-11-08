@@ -833,23 +833,26 @@ final class AB_MCP_Sync_Attachment_Writer {
 	 * WordPress's check of a file by its content (wp_check_filetype_and_ext()),
 	 * for a file this site has already and the step does not write: whether
 	 * its content is what its name says, against every type WordPress knows
-	 * (wp_get_mime_types()), not the types this account may upload. The core
-	 * function ends with a test against get_allowed_mime_types() of the
-	 * account, so for this one call every known type is allowed (a filter of
-	 * upload_mimes, last, removed right after it; Codex round 2 of branch 10,
-	 * B).
+	 * (wp_get_mime_types()) together with every type upload_mimes gives this
+	 * account besides (a plugin that registers SVG there), never narrower
+	 * than either; not as a limit of the account. The core function ends with
+	 * a test against get_allowed_mime_types() of the account, so for this one
+	 * call the union is allowed (a filter of upload_mimes, last, that adds
+	 * to the list and replaces nothing, removed right after it; Codex rounds
+	 * 2 and 3 of branch 10, B).
 	 *
 	 * @param string $full The file.
 	 * @param string $name Its name.
 	 * @return array ext, type, proper_filename.
 	 */
 	private static function content_check( $full, $name ) {
-		$every = static function ( $mimes ) {
-			return array_merge( is_array( $mimes ) ? $mimes : array(), wp_get_mime_types() );
+		$known = array_merge( wp_get_mime_types(), get_allowed_mime_types( wp_get_current_user() ) );
+		$every = static function ( $mimes ) use ( $known ) {
+			return array_merge( is_array( $mimes ) ? $mimes : array(), $known );
 		};
 		add_filter( 'upload_mimes', $every, PHP_INT_MAX );
 		try {
-			return wp_check_filetype_and_ext( (string) $full, (string) $name, wp_get_mime_types() );
+			return wp_check_filetype_and_ext( (string) $full, (string) $name, $known );
 		} finally {
 			remove_filter( 'upload_mimes', $every, PHP_INT_MAX );
 		}
