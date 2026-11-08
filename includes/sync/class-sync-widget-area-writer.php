@@ -675,6 +675,11 @@ final class AB_MCP_Sync_Widget_Area_Writer {
 		if ( is_wp_error( $value ) ) {
 			return $value;
 		}
+		// The right again after the filters of the widget (Codex round 1 of
+		// branch 11, A5: they may have changed it), right before the write.
+		if ( ! current_user_can( 'edit_theme_options' ) ) {
+			return AB_MCP_Sync_Post_Writer::rights( 'change the widgets of this site (edit_theme_options)' );
+		}
 		$value[ (int) $write['number'] ] = $clean;
 		$value['_multiwidget']           = 1;
 		update_option( 'widget_' . $write['base'], $value );
@@ -900,6 +905,10 @@ final class AB_MCP_Sync_Widget_Area_Writer {
 			}
 			$map          = $state['areas']['value'];
 			$map[ $area ] = $read['value'];
+			$right        = self::right_now();
+			if ( null !== $right ) {
+				return $right;
+			}
 			if ( ! AB_MCP_Sync_Shared_Row::put_back( self::AREAS, (string) $state['areas']['raw'], AB_MCP_Sync_Shared_Row::field( $map ) ) ) {
 				return array(
 					'state' => 'left',
@@ -944,6 +953,10 @@ final class AB_MCP_Sync_Widget_Area_Writer {
 		}
 		$value                                         = $state['rows'][ $base ]['value'];
 		$value[ (int) substr( $live, strlen( $base ) + 1 ) ] = $read['value'];
+		$right                                         = self::right_now();
+		if ( null !== $right ) {
+			return $right;
+		}
 		if ( ! AB_MCP_Sync_Shared_Row::put_back( 'widget_' . $base, (string) $state['rows'][ $base ]['raw'], AB_MCP_Sync_Shared_Row::field( $value ) ) ) {
 			return array(
 				'state' => 'left',
@@ -952,6 +965,21 @@ final class AB_MCP_Sync_Widget_Area_Writer {
 		}
 		$after = self::state( $area );
 		return array( 'state' => is_array( $after ) && ( isset( $after['parts'][ $name ] ) ? (string) $after['parts'][ $name ] : null ) === $was ? 'restored' : 'unclear' );
+	}
+
+	/**
+	 * The right of the way back asked again right before a field is put back
+	 * (Codex round 1 of branch 11, A5): restore_right() ran the update() of
+	 * the widget and its filters, which may have changed it. Null where the
+	 * account may.
+	 *
+	 * @return array{state:string,note:string}|null
+	 */
+	private static function right_now() {
+		return current_user_can( 'edit_theme_options' ) ? null : array(
+			'state' => 'left',
+			'note'  => sprintf( 'Not put back: this account may not %s, asked again right before the write (a filter may have changed the rights). Set it by hand in wp-admin with an account that may.', 'change the widgets of this site (edit_theme_options)' ),
+		);
 	}
 
 	/**

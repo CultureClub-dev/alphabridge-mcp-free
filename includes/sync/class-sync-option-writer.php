@@ -488,6 +488,16 @@ final class AB_MCP_Sync_Option_Writer {
 				'note'  => sprintf( 'Not put back: the backed-up value of %s does not keep the schema of the option or would be changed by sanitize_option() of this site now, so it is left as it is; its value before stands beside it (value_before). Set it by hand in wp-admin.', $option ),
 			);
 		}
+		// The right and the class of the name again, after sanitize_option()
+		// and its filters (Codex round 1 of branch 11, A5), right before the
+		// write.
+		$right = self::restore_right( 'row', $option, $backup, $current );
+		if ( true !== $right ) {
+			return array(
+				'state' => 'left',
+				'note'  => sprintf( 'Not put back: this account may not %s, asked again right before the write (a filter may have changed the rights). Set it by hand in wp-admin with an account that may.', $right ),
+			);
+		}
 		if ( ! AB_MCP_Sync_Shared_Row::put_back( $option, (string) $current['row']['value'], $was ) ) {
 			return array(
 				'state' => 'left',

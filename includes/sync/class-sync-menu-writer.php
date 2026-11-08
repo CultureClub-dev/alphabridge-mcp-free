@@ -712,6 +712,12 @@ final class AB_MCP_Sync_Menu_Writer {
 			$locations[ $location ] = $read['value'];
 		}
 		$mods['nav_menu_locations'] = $locations;
+		if ( ! current_user_can( 'edit_theme_options' ) ) {
+			return array(
+				'state' => 'left',
+				'note'  => sprintf( 'Not put back: this account may not %s, asked again right before the write (a filter may have changed the rights). Set it by hand in wp-admin with an account that may.', sprintf( 'set the position %s (edit_theme_options)', $location ) ),
+			);
+		}
 		if ( ! AB_MCP_Sync_Shared_Row::put_back( $positions['option'], (string) $positions['raw'], AB_MCP_Sync_Shared_Row::field( $mods ) ) ) {
 			return array(
 				'state' => 'left',
@@ -1594,6 +1600,14 @@ final class AB_MCP_Sync_Menu_Item_Writer {
 						'note'  => sprintf( 'Not put back: the sanitizing of this account would change the backed-up %s (kses without unfiltered_html). Set it by hand in wp-admin with an account that may.', $field ),
 					);
 				}
+			}
+			// The rights again after sanitize_post() and its filters (Codex
+			// round 1 of branch 11, A5), right before the write.
+			if ( ! current_user_can( 'edit_theme_options' ) || ! current_user_can( 'edit_post', $id ) ) {
+				return array(
+					'state' => 'left',
+					'note'  => sprintf( 'Not put back: this account may not %s, asked again right before the write (a filter may have changed the rights). Set it by hand in wp-admin with an account that may.', sprintf( 'edit the menu item %d (edit_theme_options, edit_post)', $id ) ),
+				);
 			}
 			$done = wp_update_post(
 				wp_slash(

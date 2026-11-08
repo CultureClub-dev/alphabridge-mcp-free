@@ -298,6 +298,11 @@ final class SyncStructureWritersTest extends TestCase {
 		$GLOBALS['ab_test_sanitize_option'] = static fn( $option, $value ) => $value . '!';
 		self::assertSame( 'left', AB_MCP_Sync_Option_Writer::restore_part( 'row', 'blogname', $backup, $wrote, 0 )['state'], 'sanitize_option() would change the value before.' );
 		self::assertSame( 'New', self::db()->option_rows['blogname'] );
+		// The right asked again right before the write (Codex round 1, A5).
+		$GLOBALS['ab_test_sanitize_option'] = null;
+		$GLOBALS['ab_test_can']             = static fn( string $cap, array $args ): bool => 'manage_options' !== $cap;
+		self::assertSame( 'left', AB_MCP_Sync_Option_Writer::restore_part( 'row', 'blogname', $backup, $wrote, 0 )['state'], 'Without manage_options.' );
+		self::assertSame( 'New', self::db()->option_rows['blogname'] );
 	}
 
 	/* --------------------------------------------------------------- CSS */
@@ -364,6 +369,32 @@ final class SyncStructureWritersTest extends TestCase {
 		self::assertSame( 'custom_css:field_rule', self::lock_of( AB_MCP_Sync_Css_Writer::target_of( self::css_line( 'p{}', array( 'preprocessed' => '1' ) ), $item, self::ctx() ) ) );
 		self::assertSame( 'custom_css:field_rule', self::lock_of( AB_MCP_Sync_Css_Writer::target_of( self::css_line( 'p{}', array( 'post_status' => 'draft' ) ), $item, self::ctx() ) ) );
 		self::assertSame( 'custom_css:reference_unmapped', self::lock_of( AB_MCP_Sync_Css_Writer::target_of( self::css_line( '.a{background:url(https://staging.test/?attachment_id=12)}' ), $item, self::ctx() ) ) );
+		// No revision deleted by the call (Codex round 1, A3): for this post,
+		// where the site keeps a number, none; the filter goes again, also
+		// after an error of the call.
+		$keep  = new \ReflectionMethod( AB_MCP_Sync_Css_Writer::class, 'keeping_revisions' );
+		$post  = (object) array( 'ID' => 7 );
+		$other = (object) array( 'ID' => 8 );
+		self::assertSame( array( -1, 0, 3 ), $keep->invoke( null, 7, static fn() => array( apply_filters( 'wp_revisions_to_keep', 3, $post ), apply_filters( 'wp_revisions_to_keep', 0, $post ), apply_filters( 'wp_revisions_to_keep', 3, $other ) ) ) );
+		self::assertSame( array(), $GLOBALS['ab_test_filters']['wp_revisions_to_keep'] ?? array(), 'The filter goes again.' );
+		try {
+			$keep->invoke( null, 7, static function () {
+				throw new \RuntimeException( 'The call failed.' );
+			} );
+		} catch ( \RuntimeException $e ) {
+			unset( $e );
+		}
+		self::assertSame( array(), $GLOBALS['ab_test_filters']['wp_revisions_to_keep'] ?? array(), 'Also after an error.' );
+		// The way back asks edit_css again right before the write (Codex
+		// round 1, A5): without it nothing is handed to wp_update_post().
+		self::css_here();
+		$now                       = AB_MCP_Sync_Css_Writer::current( 'twentytwentyfive' );
+		$backup                    = $now;
+		$backup['row']['post_content'] = 'p{}';
+		$GLOBALS['ab_test_updated'] = array();
+		$GLOBALS['ab_test_can']     = static fn( string $cap, array $args ): bool => 'edit_css' !== $cap;
+		self::assertSame( 'left', AB_MCP_Sync_Css_Writer::restore_part( 'row', 'twentytwentyfive', $backup, AB_MCP_Sync_Css_Writer::row_hash( $now['row'] ), 0 )['state'] );
+		self::assertSame( array(), $GLOBALS['ab_test_updated'] );
 	}
 
 	/* ------------------------------------------------------------ menus */
@@ -462,6 +493,11 @@ final class SyncStructureWritersTest extends TestCase {
 		self::db()->option_rows['theme_mods_twentytwentyfive'] = serialize( array( 'nav_menu_locations' => array( 'primary' => 9, 'footer' => 5 ), 'header_textcolor' => '333333' ) );
 		self::assertSame( 'left', AB_MCP_Sync_Menu_Writer::restore_part( 'location:primary', 5, $current, $wrote, 0 )['state'], 'Changed since the step: left.' );
 		self::assertSame( 9, unserialize( self::db()->option_rows['theme_mods_twentytwentyfive'] )['nav_menu_locations']['primary'] );
+		// The right asked again right before the write (Codex round 1, A5).
+		self::db()->option_rows['theme_mods_twentytwentyfive'] = serialize( array( 'nav_menu_locations' => array( 'primary' => 5, 'footer' => 5 ), 'header_textcolor' => '333333' ) );
+		$GLOBALS['ab_test_can']                                = static fn( string $cap, array $args ): bool => 'edit_theme_options' !== $cap;
+		self::assertSame( 'left', AB_MCP_Sync_Menu_Writer::restore_part( 'location:primary', 5, $current, $wrote, 0 )['state'], 'Without edit_theme_options.' );
+		self::assertSame( 5, unserialize( self::db()->option_rows['theme_mods_twentytwentyfive'] )['nav_menu_locations']['primary'] );
 	}
 
 	/* ------------------------------------------------------- menu items */
@@ -569,6 +605,17 @@ final class SyncStructureWritersTest extends TestCase {
 		}
 		$own = self::ctx( array( 'term' => array( 5 => 50 ), 'post' => array( 30 => 21 ) ) );
 		self::assertSame( 'menu:sanitizer', self::lock_of( AB_MCP_Sync_Menu_Item_Writer::precheck( AB_MCP_Sync_Menu_Item_Writer::target_of( self::item_line( array( '_menu_item_menu_item_parent' => '30' ) ), self::item( 'update', '21' ), $own ), 21, 0 ) ), 'An item is not its own parent.' );
+		// The way back asks the rights again right before the row (Codex
+		// round 1, A5): without them nothing is handed to wp_update_post().
+		$now                           = AB_MCP_Sync_Menu_Item_Writer::current( 21 );
+		self::assertIsArray( $now );
+		$backup                        = $now;
+		$backup['row']['post_title']   = 'Shop before';
+		$GLOBALS['ab_test_updated']    = array();
+		$GLOBALS['ab_test_can']        = static fn( string $cap, array $args ): bool => 'edit_post' !== $cap;
+		self::assertSame( 'left', AB_MCP_Sync_Menu_Item_Writer::restore_part( 'row', 21, $backup, AB_MCP_Sync_Menu_Item_Writer::row_hash( $now['row'] ), 0 )['state'] );
+		self::assertSame( array(), $GLOBALS['ab_test_updated'] );
+		$GLOBALS['ab_test_can'] = static fn( string $cap, array $args ): bool => true;
 		$parent = AB_MCP_Sync_Menu_Item_Writer::target_of( self::item_line( $page, array( 'post_title' => 'Who we are' ) ), self::item( 'update', '21' ), $ctx );
 		self::assertSame( '7', $parent['columns']['post_parent'], 'The parent the core takes from the page.' );
 		// The rights: edit_theme_options, edit_post at the item, assign_term at the menu.
@@ -684,6 +731,43 @@ final class SyncStructureWritersTest extends TestCase {
 		);
 		self::assertTrue( AB_MCP_Sync_Widget_Area_Writer::write_part( 'sidebar-1', 'instance:text-3', $fresh, null ) );
 		self::assertSame( array( 3 => array( 'title' => 'C', 'seen_number' => 3 ), '_multiwidget' => 1 ), $GLOBALS['ab_test_options']['widget_text'] );
+		// The right again after the update() of the widget and its filters
+		// (Codex round 1, A5): a filter that takes it, nothing written.
+		$GLOBALS['ab_test_options']                            = array();
+		$GLOBALS['ab_test_filters']['widget_update_callback'][] = array(
+			'fn' => static function ( $instance ) {
+				$GLOBALS['ab_test_can'] = static fn( string $cap, array $args ): bool => 'edit_theme_options' !== $cap;
+				return $instance;
+			},
+		);
+		self::assertSame( 'ab_mcp_sync_rights', AB_MCP_Sync_Widget_Area_Writer::write_part( 'sidebar-1', 'instance:text-3', $fresh, null )->get_error_code() );
+		self::assertArrayNotHasKey( 'widget_text', $GLOBALS['ab_test_options'] );
+		$GLOBALS['ab_test_filters'] = array();
+		$GLOBALS['ab_test_can']     = static fn( string $cap, array $args ): bool => true;
+		// The way back asks it again right before a field goes back.
+		self::areas_here( array( 'text-2' ), array( 2 => array( 'title' => 'B', 'seen_number' => 2 ) ) );
+		$now                                  = AB_MCP_Sync_Widget_Area_Writer::current( 'sidebar-1' );
+		$backup                               = $now;
+		$backup['parts']['instance:text-2']   = AB_MCP_Sync_Shared_Row::field( array( 'title' => 'A', 'seen_number' => 2 ) );
+		$wrote                                = AB_MCP_Sync_Shared_Row::hash( $now['parts']['instance:text-2'] );
+		$row                                  = self::db()->option_rows['widget_text'];
+		$GLOBALS['ab_test_can']               = static fn( string $cap, array $args ): bool => 'edit_theme_options' !== $cap;
+		self::assertSame( 'left', AB_MCP_Sync_Widget_Area_Writer::restore_part( 'instance:text-2', 'sidebar-1', $backup, $wrote, 0 )['state'], 'Without edit_theme_options.' );
+		self::assertSame( $row, self::db()->option_rows['widget_text'] );
+		$GLOBALS['ab_test_can'] = static fn( string $cap, array $args ): bool => true;
+		self::assertSame( 'restored', AB_MCP_Sync_Widget_Area_Writer::restore_part( 'instance:text-2', 'sidebar-1', $backup, $wrote, 0 )['state'], 'With it.' );
+		// The list of the area as well.
+		self::areas_here( array( 'text-2', 'text-5' ), array( 2 => array( 'title' => 'B' ), 5 => array( 'title' => 'E' ) ) );
+		$now                    = AB_MCP_Sync_Widget_Area_Writer::current( 'sidebar-1' );
+		$backup                 = $now;
+		$backup['row']['area']  = AB_MCP_Sync_Shared_Row::field( array( 'text-5', 'text-2' ) );
+		$wrote                  = AB_MCP_Sync_Shared_Row::hash( $now['row']['area'] );
+		$areas                  = self::db()->option_rows['sidebars_widgets'];
+		$GLOBALS['ab_test_can'] = static fn( string $cap, array $args ): bool => 'edit_theme_options' !== $cap;
+		self::assertSame( 'left', AB_MCP_Sync_Widget_Area_Writer::restore_part( 'row', 'sidebar-1', $backup, $wrote, 0 )['state'], 'Without edit_theme_options.' );
+		self::assertSame( $areas, self::db()->option_rows['sidebars_widgets'] );
+		$GLOBALS['ab_test_can'] = static fn( string $cap, array $args ): bool => true;
+		self::assertSame( 'restored', AB_MCP_Sync_Widget_Area_Writer::restore_part( 'row', 'sidebar-1', $backup, $wrote, 0 )['state'], 'With it.' );
 		// After the writes: the copy of the areas the core keeps for the
 		// request goes, as wp_set_sidebars_widgets() lets it go.
 		$GLOBALS['_wp_sidebars_widgets'] = array( 'sidebar-1' => array( 'text-2' ) );

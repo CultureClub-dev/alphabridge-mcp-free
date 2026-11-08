@@ -587,6 +587,12 @@ final class AB_MCP_Sync_Css_Writer {
 				'note'  => 'The CSS was changed since the step wrote it, so it is left as it is.',
 			);
 		}
+		if ( ! current_user_can( 'edit_css' ) ) {
+			return array(
+				'state' => 'left',
+				'note'  => sprintf( 'Not put back: this account may not %s, asked again right before the write (a filter may have changed the rights). Set it by hand in wp-admin with an account that may.', sprintf( 'change the Additional CSS of %s (edit_css)', (string) $live_id ) ),
+			);
+		}
 		$id = self::keeping_revisions(
 			(int) $backup['row']['post_id'],
 			static function () use ( $backup ) {
