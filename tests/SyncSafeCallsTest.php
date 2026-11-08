@@ -311,6 +311,7 @@ final class SyncSafeCallsTest extends TestCase {
 		),
 		'class-sync-push.php'   => array(
 			'AB_MCP_Protected_Store::bind' => array( 1, 'bind_package(): the packages of objects bound to the run, kept while it is not closed.' ),
+			'wp_get_term_taxonomy_parent_id' => array( 1, 'term_depths(): the parent here of a term the run does not write, for the depth of the terms of the run in the tree it leaves, which orders their steps (Codex rounds 1 and 2 on branch 9, B4); read for the order, never compared with the staging site.' ),
 		),
 		'class-sync-revert.php' => array(
 			'AB_MCP_Protected_Store::under_lock' => array( 1, 'begin(): a way back for a closed run is made under the lock of the store, against the clean-up (decision 20, rule 4; A6).' ),

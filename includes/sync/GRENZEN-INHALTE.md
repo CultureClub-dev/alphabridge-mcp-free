@@ -215,24 +215,34 @@ nennt ihre Meldung den Weg.
 - Grenze C: `term_group` ungleich 0 (eine Gruppe von Aliassen, ein Rest der
   Link-Kategorien) auf einer der beiden Seiten sperrt `term:term_group`
   (Z8d): die Gruppe ist eine ID der Site selbst, die kein Paar abbildet.
-- Umhängen und Tauschen (Codex-Runde 1, B4): Die Gesamtvorprüfung fragt
-  eine Schleife der Eltern am Stand, den der Lauf hinterlässt: die Terme,
-  die er schreibt, mit den Eltern, die er ihnen gibt, jeder andere Term wie
-  hier (`AB_MCP_Sync_Engine::planned_parents()`). Zwei Kategorien, die die
-  Plätze tauschen (hier Beta unter Alpha, auf Staging Alpha unter Beta),
-  schliessen so keine Schleife; vorher sperrte der Abgleich mit dem Stand
-  hier den ganzen Lauf. Der Plan schreibt einen Elternteil, den der Lauf
-  umhängt, zuerst (`order()`, Kante über den Elternteil des Terms; wie
-  jede Kante des Plans: endet der Schritt des Elternteils nicht `done`,
-  wird der Schritt des Kinds übersprungen, auch wo es nur seine
-  Beschreibung ändert, fail closed), und
-  die Grenze prüft den Stand, wie ihn `wp_update_term()` dann sieht; der
-  Rückweg geht vom letzten Schritt zum ersten (`AB_MCP_Sync_Revert::plan()`),
-  so dass auch dort kein Zwischenstand eine Schleife schliesst. Prüffälle
+- Umhängen und Tauschen (Codex-Runden 1 und 2, B4): Die Gesamtvorprüfung
+  fragt eine Schleife der Eltern am Stand, den der Lauf hinterlässt: die
+  Terme, die er schreibt, mit den Eltern, die er ihnen gibt, jeder andere
+  Term wie hier (`AB_MCP_Sync_Engine::planned_parents()`). Zwei Kategorien,
+  die die Plätze tauschen (hier Beta unter Alpha, auf Staging Alpha unter
+  Beta), schliessen so keine Schleife; vorher sperrte der Abgleich mit dem
+  Stand hier den ganzen Lauf. Der Plan ordnet die Schritte der Terme nach
+  der Tiefe ihres Terms in diesem Zielbaum (`AB_MCP_Sync_Push::
+  term_depths()`, `order()`): Vorfahren zuerst, bei gleicher Tiefe nach dem
+  Bericht, die Terme vor den übrigen Objekten. So stehen beim Schreiben
+  eines Terms alle seine Ziel-Vorfahren schon an ihrem Zielort, und da der
+  Zielbaum keine Schleife hat, ist sein neuer Elternteil nie sein Nachfahre,
+  auch über Terme ohne Schritt hinweg (Kette hier Alpha → Beta → Gamma,
+  Soll Beta → Gamma → Alpha: Beta vor Alpha, obwohl der direkte Elternteil
+  Gamma keinen Schritt hat; Codex-Runde 2). Die Reihenfolge ist keine
+  Abhängigkeit: scheitert der Schritt eines Elternteils, läuft der Schritt
+  des Kinds trotzdem (vorher übersprang ihn eine Kante zum Elternteil, auch
+  wo es nur seine Beschreibung änderte; Codex-Runde 2). Jeder Schritt fragt
+  beim Schreiben seine Schleife am Stand, wie ihn `wp_update_term()` dann
+  sieht (`term:parent`, fail closed). Der Rückweg geht vom letzten Schritt
+  zum ersten (`AB_MCP_Sync_Revert::plan()`), so dass auch dort kein
+  Zwischenstand eine Schleife schliesst. Prüffälle
   `testTwoCategoriesThatSwapTheirPlacesGoOverAndBackAndAnOrdinaryMoveGoesAsWell`
   (Tausch hin und zurück, gewöhnliches Umhängen von Beta nach Gamma),
+  `testAChainOfCategoriesTurnedOverGoesOverAndBack`,
+  `testAChildWhoseParentStepFailsGoesAllTheSame`,
   `testTheLoopOfParentsIsAskedOfTheStateTheRunLeaves`,
-  `testATermTheRunMovesUnderAnotherTermItWritesComesAfterIt`.
+  `testTheTermsOfARunAreWrittenFromTheRootOfTheTreeItLeavesDown`.
 - Grenze C: Ein Elternteil, der am Stand nach dem Lauf eine Schleife
   schlösse (ein Term ausserhalb der Auswahl hängt hier anders als auf
   Staging), sperrt `term:parent` (Z8d): `wp_update_term()` bräche die

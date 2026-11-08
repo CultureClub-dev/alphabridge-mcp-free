@@ -334,8 +334,18 @@ e('term-prepared-parents', 'target_of(): the parents the run gives the terms it 
   "\t\t\t'parents'     => isset( $ctx['parents'] ) && is_array( $ctx['parents'] ) ? $ctx['parents'] : array(),", "\t\t\t'parents'     => array(),", 'term', T_B4)
 e('term-loop-planned', 'loop(): a term the run writes stands with the parent the run gives it', TW,
   "\t\t\treturn isset( $planned[ (int) $id ] ) ? (int) $planned[ (int) $id ] : wp_get_term_taxonomy_parent_id( (int) $id, $tax );", "\t\t\treturn wp_get_term_taxonomy_parent_id( (int) $id, $tax );", 'term', T_B4)
-e('push-order-term-parent', 'order(): a term the run moves under another term it writes comes after it (Codex round 1, B4)', PU,
-  "\t\t\tif ( isset( $item['parent_ref'], $terms[ $item['parent_ref'] ] ) && $terms[ $item['parent_ref'] ] !== $n && ! in_array( $terms[ $item['parent_ref'] ], $items[ $n ]['depends_on'], true ) ) {", "\t\t\tif ( false ) {", 'unit', 'testATermTheRunMovesUnderAnotherTermItWritesComesAfterIt')
+C_B4R2 = 'testAChainOfCategoriesTurnedOverGoesOverAndBack'
+U_DEPTH = 'testTheTermsOfARunAreWrittenFromTheRootOfTheTreeItLeavesDown'
+e('push-order-depth', 'order(): the terms by their depth in the tree the run leaves, ancestors first (Codex rounds 1 and 2, B4)', PU,
+  "\t\t\t\t\treturn 'term' === $items[ $n ]['kind'] ? array( 0, isset( $items[ $n ]['depth'] ) ? (int) $items[ $n ]['depth'] : 0, (int) $n ) : array( 1, 0, (int) $n );", "\t\t\t\t\treturn 'term' === $items[ $n ]['kind'] ? array( 0, 0, (int) $n ) : array( 1, 0, (int) $n );", 'unit', U_DEPTH)
+e('push-depth-set', 'plan(): the depth of each term goes with its item into the order', PU,
+  "\t\t\t$items[ $n ]['depth'] = $depth;\n", '', 'it', C_B4R2)
+e('push-depth-given', 'term_depths(): a term of the run stands under the parent the run gives it when the run writes that parent too', PU,
+  "\t\t\t\t$given[ $node ] = $node_of[ (string) $item['parent_ref'] ];", "\t\t\t\t$given[ $node ] = false;", 'unit', U_DEPTH)
+e('push-depth-mapped', 'term_depths(): else under its parent by the pair', PU,
+  "\t\t\t\t$given[ $node ] = null === $here ? false : 'l:' . (int) $here;", "\t\t\t\t$given[ $node ] = false;", 'unit', U_DEPTH)
+e('push-depth-live-parent', 'term_depths(): a term the run does not write stands under its parent here', PU,
+  "\t\t\t\t\t$parent = (int) wp_get_term_taxonomy_parent_id( (int) substr( $at, 2 ), $taxonomy );", "\t\t\t\t\t$parent = 0;", 'unit', U_DEPTH)
 e('push-parent-ref', 'plan(): the parent of a term from its references, for the order', PU,
   "\t\t\t\t\t\t$item['parent_ref'] = (string) (int) $ref['id'];\n", '', 'it', C_B4)
 e('revert-last-first', 'plan(): the way back goes from the last step to the first (Codex round 1, B4)', RV,

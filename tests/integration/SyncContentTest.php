@@ -715,6 +715,83 @@ final class SyncContentTest extends TestCase {
 		self::assertSame( '0', self::term_row_a( $alpha_a )['parent'], 'Alpha untouched.' );
 	}
 
+	public function testAChainOfCategoriesTurnedOverGoesOverAndBack(): void {
+		// Codex round 2 on branch 9, B4: here Alpha is the root, Beta under
+		// Alpha, Gamma under Beta; on staging Beta is the root, Gamma under
+		// Beta, Alpha under Gamma. Only Alpha and Beta change, Gamma keeps
+		// its parent and has no step. The terms are written from the root of
+		// the tree the run leaves down: Beta (depth 0) before Alpha (depth 2,
+		// under Gamma under Beta); before, the order knew the direct parent
+		// only, Alpha went first and closed a loop (term:parent), and Beta
+		// was moved alone. The way back goes from the last step to the first.
+		self::pair();
+		$alpha_a = self::term_a( 'Alpha', 'category' );
+		$beta_a  = self::term_a( 'Beta', 'category', array( 'parent' => $alpha_a ) );
+		$gamma_a = self::term_a( 'Gamma', 'category', array( 'parent' => $beta_a ) );
+		$alpha_b = self::term_b( 'Alpha', 'category' );
+		$beta_b  = self::term_b( 'Beta', 'category', array( 'parent' => $alpha_b ) );
+		$gamma_b = self::term_b( 'Gamma', 'category', array( 'parent' => $beta_b ) );
+		self::paired( self::staged() );
+		self::b(
+			array(
+				array( 'op' => 'update_term', 'term' => $beta_b, 'taxonomy' => 'category', 'args' => array( 'parent' => 0 ) ),
+				array( 'op' => 'update_term', 'term' => $alpha_b, 'taxonomy' => 'category', 'args' => array( 'parent' => $gamma_b ) ),
+			)
+		);
+		$run    = self::begun( self::planned( array( 'term:category:alpha', 'term:category:beta' ) )['args'] );
+		$closed = self::finish( (int) $run['run_id'] );
+		self::assertSame( 'closed_done', $closed['state'], json_encode( $closed ) . self::check_message( self::run_status( (int) $run['run_id'] ) ) );
+		$steps = self::writes( self::run_status( (int) $run['run_id'] ) );
+		self::assertSame( array( (string) $beta_b, (string) $alpha_b ), array_map( static fn( $s ) => $s['parts']['object']['staging_ref'], $steps ), 'Beta first.' );
+		self::assertSame( (string) $gamma_a, self::term_row_a( $alpha_a )['parent'] );
+		self::assertSame( '0', self::term_row_a( $beta_a )['parent'] );
+		self::assertSame( (string) $beta_a, self::term_row_a( $gamma_a )['parent'], 'Gamma untouched.' );
+		$back = self::back( (int) $run['run_id'] );
+		self::assertSame( 'closed_reverted', $back['state'], json_encode( $back ) );
+		self::assertSame( '0', self::term_row_a( $alpha_a )['parent'] );
+		self::assertSame( (string) $alpha_a, self::term_row_a( $beta_a )['parent'] );
+		self::assertSame( (string) $beta_a, self::term_row_a( $gamma_a )['parent'] );
+	}
+
+	public function testAChildWhoseParentStepFailsGoesAllTheSame(): void {
+		// Codex round 2 on branch 9, B4: a parent and its child change their
+		// descriptions only. After the check another hand changes the
+		// description of the parent here: its step fails on the fresh hash,
+		// as it should. The child goes all the same: the order of the terms
+		// is no dependency (before, an edge to the parent skipped the child).
+		self::pair();
+		$topics_a = self::term_a( 'Topics', 'category', array( 'description' => 'All topics.' ) );
+		$garden_a = self::term_a( 'Garden', 'category', array( 'parent' => $topics_a, 'description' => 'Plants.' ) );
+		$topics_b = self::term_b( 'Topics', 'category', array( 'description' => 'All topics.' ) );
+		$garden_b = self::term_b( 'Garden', 'category', array( 'parent' => $topics_b, 'description' => 'Plants.' ) );
+		self::paired( self::staged() );
+		self::b(
+			array(
+				array( 'op' => 'update_term', 'term' => $topics_b, 'taxonomy' => 'category', 'args' => array( 'description' => 'All topics, on staging.' ) ),
+				array( 'op' => 'update_term', 'term' => $garden_b, 'taxonomy' => 'category', 'args' => array( 'description' => 'Plants, on staging.' ) ),
+			)
+		);
+		$run    = self::begun( self::planned( array( 'term:category:topics', 'term:category:garden' ) )['args'] );
+		$run_id = (int) $run['run_id'];
+		$check  = self::gated( 'wp_site_push', array( 'action' => 'next', 'run_id' => $run_id ) );
+		self::assertIsArray( $check, is_wp_error( $check ) ? $check->get_error_message() : '' );
+		self::assertSame( 'done', $check['step']['state'], json_encode( $check ) );
+		// Another hand, after the check.
+		$changed = wp_update_term( $topics_a, 'category', array( 'description' => 'Changed here.' ) );
+		self::assertIsArray( $changed, is_wp_error( $changed ) ? $changed->get_error_message() : '' );
+		$closed = self::finish( $run_id );
+		self::assertSame( 'closed_findings', $closed['state'], json_encode( $closed ) );
+		$refs  = array_column( AB_MCP_Sync_Run::get( $run_id )['plan']['objects'], 'staging_ref', 'seq' );
+		$steps = array();
+		foreach ( self::writes( self::run_status( $run_id ) ) as $step ) {
+			$steps[ (string) $refs[ (int) $step['seq'] ] ] = $step['state'];
+		}
+		self::assertNotSame( 'done', $steps[ (string) $topics_b ], json_encode( $steps ) );
+		self::assertSame( 'done', $steps[ (string) $garden_b ], 'The child goes: ' . json_encode( $steps ) );
+		self::assertSame( 'Plants, on staging.', self::term_row_a( $garden_a )['description'] );
+		self::assertSame( 'Changed here.', self::term_row_a( $topics_a )['description'], 'The other hand\'s change stands.' );
+	}
+
 	public function testTheMetaOfATermGoesByItsRightAndBackAndANewTermWithMetaIsLocked(): void {
 		// Term meta (decision 28): a key that differs is written with the
 		// right edit_term_meta at the term and goes back raw, byte for byte;

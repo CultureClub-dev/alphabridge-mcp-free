@@ -492,6 +492,17 @@ final class AB_MCP_Sync_Push {
 			$items[ $n ]['pair_hash']       = AB_MCP_Sync_Pairs::snapshot_hash( AB_MCP_Sync_Pairs::snapshot( (int) $item['pair_id'] ) );
 			$pairs[ (int) $item['pair_id'] ] = $items[ $n ]['pair_hash'];
 		}
+		// The depth of each term in the tree the run leaves, for the order.
+		$depths = self::term_depths(
+			$items,
+			static function ( $staging_id ) use ( $source ) {
+				$pair = AB_MCP_Sync_Pairs::find_staging( (string) $source, 'term', (string) $staging_id );
+				return is_array( $pair ) && isset( $pair['live_ref'] ) ? (int) $pair['live_ref'] : null;
+			}
+		);
+		foreach ( $depths as $n => $depth ) {
+			$items[ $n ]['depth'] = $depth;
+		}
 		// The order: an object created in the run before the one that refers
 		// to it (decision 16); a cycle is locked (mutual references).
 		$ordered = self::order( $items );
@@ -541,7 +552,7 @@ final class AB_MCP_Sync_Push {
 				'depends' => array_values( array_unique( $depends ) ),
 				'pair_id' => isset( $item['pair_id'] ) ? $item['pair_id'] : null,
 			);
-			unset( $items[ $n ]['depends_on'], $items[ $n ]['refs'], $items[ $n ]['parent_ref'] );
+			unset( $items[ $n ]['depends_on'], $items[ $n ]['refs'], $items[ $n ]['parent_ref'], $items[ $n ]['depth'] );
 		}
 		$writes  = range( 2, $seq );
 		$steps[] = array( 'op' => 'post', 'phase' => 7, 'depends' => array( 1 ) );
@@ -701,17 +712,6 @@ final class AB_MCP_Sync_Push {
 				$at[ ( 'term' === $item['kind'] ? 'term' : 'post' ) . "\0" . $item['staging_ref'] ] = $n;
 			}
 		}
-		// The terms the run writes, by their id on the staging site: a term
-		// the run moves under another term it writes comes after it, so no
-		// state in between closes a loop of parents (two categories that
-		// swap their places: the one that leaves first; branch 9, Codex
-		// round 1, B4). The parents of the staging site close no loop.
-		$terms = array();
-		foreach ( $items as $n => $item ) {
-			if ( 'term' === $item['kind'] ) {
-				$terms[ (string) $item['staging_ref'] ] = $n;
-			}
-		}
 		$edges = array();
 		foreach ( $items as $n => $item ) {
 			$items[ $n ]['depends_on'] = array();
@@ -723,10 +723,6 @@ final class AB_MCP_Sync_Push {
 				} elseif ( isset( $at[ $key ] ) ) {
 					$edges[ $n ][ $n ] = true;
 				}
-			}
-			if ( isset( $item['parent_ref'], $terms[ $item['parent_ref'] ] ) && $terms[ $item['parent_ref'] ] !== $n && ! in_array( $terms[ $item['parent_ref'] ], $items[ $n ]['depends_on'], true ) ) {
-				$items[ $n ]['depends_on'][] = $terms[ $item['parent_ref'] ];
-				$edges[ $n ][ $terms[ $item['parent_ref'] ] ] = true;
 			}
 		}
 		$locked = array();
@@ -772,12 +768,29 @@ final class AB_MCP_Sync_Push {
 				}
 			}
 		}
-		// Topological order: each time the smallest entry whose targets are
-		// placed (stable, whatever order the entries came in).
+		// Topological order: each time the first entry whose targets are
+		// placed, the terms first by their depth in the tree the run leaves
+		// (term_depths(): written from the root of that tree down, all the
+		// ancestors of a term stand where the run puts them when it is
+		// written, and as that tree has no loop, its new parent is never one
+		// of its descendants; branch 9, Codex rounds 1 and 2, B4), then the
+		// other objects; within the same depth by the entry of the report
+		// (stable, whatever order the entries came in). The order is no
+		// dependency: a step whose term deviates leaves the others to run,
+		// and each step asks its own loop of parents as it writes
+		// (term:parent, fail closed).
 		$ordered = array();
 		$placed  = array();
 		$left    = $items;
-		ksort( $left );
+		uksort(
+			$left,
+			static function ( $a, $b ) use ( $items ) {
+				$rank = static function ( $n ) use ( $items ) {
+					return 'term' === $items[ $n ]['kind'] ? array( 0, isset( $items[ $n ]['depth'] ) ? (int) $items[ $n ]['depth'] : 0, (int) $n ) : array( 1, 0, (int) $n );
+				};
+				return $rank( $a ) <=> $rank( $b );
+			}
+		);
 		$rounds = 0;
 		while ( array() !== $left && $rounds < self::MAX_OBJECTS + 1 ) {
 			++$rounds;
@@ -805,6 +818,73 @@ final class AB_MCP_Sync_Push {
 			'items'  => $ordered,
 			'locked' => $locked,
 		);
+	}
+
+	/**
+	 * The depth of each term the run writes in the tree it leaves: every
+	 * term here with its parent here, the terms of the run with the parent
+	 * they are given (the parent of the staging site, by the run when it
+	 * writes that parent too, else by its pair); a new term stands as a node
+	 * of its own until its step made it. 0 for a root; a parent without a
+	 * pair, or a loop (which the check locks, term:parent), ends the walk.
+	 *
+	 * @param array    $items  The items of the plan (kind, op, staging_ref, live_ref, subtype, parent_ref).
+	 * @param callable $mapped Staging id of a term => its id here, or null.
+	 * @return array<int,int> n => depth, for the terms.
+	 */
+	private static function term_depths( array $items, callable $mapped ) {
+		$node_of = array();
+		foreach ( $items as $n => $item ) {
+			if ( 'term' === $item['kind'] ) {
+				$node_of[ (string) $item['staging_ref'] ] = 'update' === $item['op'] ? 'l:' . (int) $item['live_ref'] : 'n:' . (string) $item['staging_ref'];
+			}
+		}
+		// The parent each term of the run is given: a node, null for none (a
+		// root), false where it has no counterpart here.
+		$given = array();
+		foreach ( $items as $n => $item ) {
+			if ( 'term' !== $item['kind'] ) {
+				continue;
+			}
+			$node = $node_of[ (string) $item['staging_ref'] ];
+			if ( ! isset( $item['parent_ref'] ) ) {
+				$given[ $node ] = null;
+			} elseif ( isset( $node_of[ (string) $item['parent_ref'] ] ) ) {
+				$given[ $node ] = $node_of[ (string) $item['parent_ref'] ];
+			} else {
+				$here           = $mapped( (string) $item['parent_ref'] );
+				$given[ $node ] = null === $here ? false : 'l:' . (int) $here;
+			}
+		}
+		$out = array();
+		foreach ( $items as $n => $item ) {
+			if ( 'term' !== $item['kind'] ) {
+				continue;
+			}
+			$taxonomy = isset( $item['subtype'] ) ? (string) $item['subtype'] : '';
+			$at       = $node_of[ (string) $item['staging_ref'] ];
+			$seen     = array( $at => true );
+			$depth    = 0;
+			while ( $depth <= self::MAX_OBJECTS ) {
+				if ( array_key_exists( $at, $given ) ) {
+					$up = $given[ $at ];
+				} elseif ( 0 === strpos( $at, 'l:' ) ) {
+					// A term the run does not write: its parent here.
+					$parent = (int) wp_get_term_taxonomy_parent_id( (int) substr( $at, 2 ), $taxonomy );
+					$up     = $parent > 0 ? 'l:' . $parent : null;
+				} else {
+					$up = null;
+				}
+				if ( ! is_string( $up ) || isset( $seen[ $up ] ) ) {
+					break;
+				}
+				$seen[ $up ] = true;
+				$at          = $up;
+				++$depth;
+			}
+			$out[ $n ] = $depth;
+		}
+		return $out;
 	}
 
 	/**

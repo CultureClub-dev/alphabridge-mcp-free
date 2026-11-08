@@ -2708,23 +2708,49 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( array(), $got['locked'] );
 	}
 
-	public function testATermTheRunMovesUnderAnotherTermItWritesComesAfterIt(): void {
-		// Codex round 1 on branch 9, B4: two categories here swap their
-		// places (Alpha 7 goes under Beta 8, Beta leaves Alpha). Written in
-		// the order of the report, Alpha under Beta while Beta is still under
-		// Alpha would close a loop, which wp_update_term() breaks by changing
-		// another term; the parent the run writes comes first. An ordinary
-		// move under a term the run does not write orders nothing.
-		$m     = new ReflectionMethod( AB_MCP_Sync_Push::class, 'order' );
-		$items = array(
-			1 => array( 'kind' => 'term', 'subtype' => 'category', 'op' => 'update', 'staging_ref' => '7', 'action' => 'take_over', 'refs' => array( array( 'term', '8' ) ), 'parent_ref' => '8' ),
-			2 => array( 'kind' => 'term', 'subtype' => 'category', 'op' => 'update', 'staging_ref' => '8', 'action' => 'take_over', 'refs' => array() ),
-			3 => array( 'kind' => 'term', 'subtype' => 'category', 'op' => 'update', 'staging_ref' => '9', 'action' => 'take_over', 'refs' => array( array( 'term', '4' ) ), 'parent_ref' => '4' ),
+	public function testTheTermsOfARunAreWrittenFromTheRootOfTheTreeItLeavesDown(): void {
+		// Codex rounds 1 and 2 on branch 9, B4: the term steps of a run are
+		// ordered by the depth of their term in the tree the run leaves (the
+		// parents here, the terms of the run with the parents it gives
+		// them), ancestors first, the same depth by the report. Here A 11
+		// is the root, B 12 under A, C 13 under B; on staging B is the
+		// root, C under B, A under C: only A and B change. A comes after B
+		// (depth 2: under C, which stays under B), though the report names
+		// A first and C has no step. The order is no dependency: nothing
+		// waits on the step of a parent (an unchanged child that only
+		// changes its description runs whatever its parent does).
+		$GLOBALS['ab_test_parents'] = array( 11 => 0, 12 => 11, 13 => 12 );
+		$mapped                     = static fn( string $staging ): ?int => array( '1' => 11, '2' => 12, '3' => 13 )[ $staging ] ?? null;
+		$depths                     = new ReflectionMethod( AB_MCP_Sync_Push::class, 'term_depths' );
+		$items                      = array(
+			1 => array( 'kind' => 'term', 'subtype' => 'category', 'op' => 'update', 'staging_ref' => '1', 'live_ref' => '11', 'action' => 'take_over', 'refs' => array( array( 'term', '3' ) ), 'parent_ref' => '3' ),
+			2 => array( 'kind' => 'term', 'subtype' => 'category', 'op' => 'update', 'staging_ref' => '2', 'live_ref' => '12', 'action' => 'take_over', 'refs' => array() ),
+			3 => array( 'kind' => 'post', 'subtype' => 'post', 'op' => 'update', 'staging_ref' => '9', 'live_ref' => '90', 'action' => 'take_over', 'refs' => array( array( 'term', '1' ) ) ),
 		);
-		$got = $m->invoke( null, $items );
-		self::assertSame( array( 2, 1, 3 ), array_keys( $got['items'] ), 'Beta first, then Alpha under it.' );
-		self::assertSame( array( 2 ), $got['items'][1]['depends_on'] );
-		self::assertSame( array(), $got['items'][3]['depends_on'] );
+		self::assertSame( array( 1 => 2, 2 => 0 ), $depths->invoke( null, $items, $mapped ) );
+		foreach ( $depths->invoke( null, $items, $mapped ) as $n => $depth ) {
+			$items[ $n ]['depth'] = $depth;
+		}
+		$order = new ReflectionMethod( AB_MCP_Sync_Push::class, 'order' );
+		$got   = $order->invoke( null, $items );
+		self::assertSame( array( 2, 1, 3 ), array_keys( $got['items'] ), 'B first, then A; the terms before the other objects.' );
+		self::assertSame( array(), $got['items'][1]['depends_on'], 'No dependency on the step of the parent.' );
 		self::assertSame( array(), $got['locked'] );
+		// Two categories that swap their places: the one that leaves first.
+		$GLOBALS['ab_test_parents'] = array( 11 => 0, 12 => 11 );
+		$swap                       = array(
+			1 => array( 'kind' => 'term', 'subtype' => 'category', 'op' => 'update', 'staging_ref' => '1', 'live_ref' => '11', 'action' => 'take_over', 'refs' => array( array( 'term', '2' ) ), 'parent_ref' => '2' ),
+			2 => array( 'kind' => 'term', 'subtype' => 'category', 'op' => 'update', 'staging_ref' => '2', 'live_ref' => '12', 'action' => 'take_over', 'refs' => array() ),
+		);
+		self::assertSame( array( 1 => 1, 2 => 0 ), $depths->invoke( null, $swap, $mapped ) );
+		// A new term under a new parent: a node of its own, below it; a
+		// parent without a pair ends the walk.
+		$new = array(
+			1 => array( 'kind' => 'term', 'subtype' => 'category', 'op' => 'create', 'staging_ref' => '5', 'action' => 'create', 'refs' => array( array( 'term', '6' ) ), 'parent_ref' => '6' ),
+			2 => array( 'kind' => 'term', 'subtype' => 'category', 'op' => 'create', 'staging_ref' => '6', 'action' => 'create', 'refs' => array( array( 'term', '1' ) ), 'parent_ref' => '1' ),
+			3 => array( 'kind' => 'term', 'subtype' => 'category', 'op' => 'create', 'staging_ref' => '7', 'action' => 'create', 'refs' => array( array( 'term', '8' ) ), 'parent_ref' => '8' ),
+		);
+		self::assertSame( array( 1 => 2, 2 => 1, 3 => 0 ), $depths->invoke( null, $new, $mapped ), 'Under 6, which goes under A 11, a root here; 8 has no pair.' );
+		unset( $GLOBALS['ab_test_parents'] );
 	}
 }
