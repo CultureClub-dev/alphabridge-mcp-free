@@ -461,6 +461,19 @@ final class SyncStructureTest extends TestCase {
 	}
 
 	/** The value of an option of a site, read from its row, unpacked. */
+	/** The findings of the check of a run by the staging ref of their object. */
+	private static function findings( array $status ): array {
+		$out = array();
+		foreach ( $status['steps'] as $step ) {
+			if ( 'check' === $step['op'] ) {
+				foreach ( $step['result']['findings'] ?? array() as $finding ) {
+					$out[ (string) ( $finding['staging_ref'] ?? '' ) ] = (string) $finding['message'];
+				}
+			}
+		}
+		return $out;
+	}
+
 	private static function option_of( string $site, string $name ) {
 		$row = AB_MCP_IT_Sites::option_row( $site, $name );
 		return null === $row ? null : maybe_unserialize( (string) $row['option_value'] );
@@ -870,5 +883,66 @@ final class SyncStructureTest extends TestCase {
 			self::assertSame( $before[ $name ], AB_MCP_IT_Sites::option_row( 'a', $name )['option_value'], $name );
 		}
 		self::assertSame( array(), $this->deletions, 'No option of the site was deleted.' );
+	}
+
+	/* ------------------------------------------------------------- locks */
+
+	public function testWhatARunCannotWriteAsTheCoreWouldIsLockedWithItsKeyAndNothingOfItIsWritten(): void {
+		// The rare cases fail closed, each with its own key, reason and way
+		// (Grenzen C of branch 11, GRENZEN-STRUKTUR.md), one of each stage:
+		// an option of a plugin is locked in the report already
+		// (option:unclassified); Additional CSS with the closing tag of STYLE
+		// (custom_css:markup, the rule of WP_Customize_Custom_CSS_Setting::
+		// validate()) and a new menu at a position the theme of this site does
+		// not register (menu:location_unregistered) are refused by the check
+		// of the run, before any step writes. The site stays as it was.
+		self::pair();
+		wp_update_custom_css_post( 'body { color: #111111; }' );
+		update_option( 'acme_settings', 'a' );
+		self::b(
+			array(
+				array( 'op' => 'custom_css', 'css' => 'body { color: #111111; }' ),
+				array( 'op' => 'update_option', 'name' => 'acme_settings', 'value' => 'a' ),
+			)
+		);
+		self::paired( self::staged() );
+		$menu_b = (int) self::one_b( array( 'op' => 'nav_menu', 'name' => 'Aside' ) );
+		self::b(
+			array(
+				array( 'op' => 'custom_css', 'css' => 'body { color: #222222; } </style>' ),
+				array( 'op' => 'update_option', 'name' => 'acme_settings', 'value' => 'b' ),
+				array( 'op' => 'theme_mod', 'name' => 'nav_menu_locations', 'value' => array( 'aside' => $menu_b ) ),
+			)
+		);
+		$css_a       = (int) self::option_of( 'a', 'theme_mods_twentytwentyfive' )['custom_css_post_id'];
+		$mods_before = AB_MCP_IT_Sites::option_row( 'a', 'theme_mods_twentytwentyfive' )['option_value'];
+		$wanted      = array(
+			array( 'custom_css', 'live', 'twentytwentyfive' ),
+			array( 'option', 'live', 'acme_settings' ),
+			array( 'menu', 'staging', (string) $menu_b ),
+		);
+		$planned     = self::planned( $wanted );
+		$option      = self::entry( $planned['report']['all'], 'option', 'live', 'acme_settings' );
+		self::assertSame( 'locked', $option['action'], json_encode( $option ) );
+		self::assertSame( 'option:unclassified', $option['locks'][0]['key'] );
+		$preview = self::gated( 'wp_site_push', $planned['args'] );
+		self::assertIsArray( $preview, is_wp_error( $preview ) ? $preview->get_error_message() : '' );
+		self::assertSame( array( 'option' ), array_column( $preview['preview']['locked'], 'kind' ), 'The option is not in the steps.' );
+		self::assertSame( array( 'custom_css', 'menu' ), array_map( static fn( $s ) => $s['object']['kind'], array_values( array_filter( $preview['preview']['steps'], static fn( $s ) => 'write' === $s['op'] ) ) ) );
+		$this->watch_deletions();
+		$run    = self::begun( $planned['args'] );
+		$closed = self::finish( (int) $run['run_id'] );
+		self::assertSame( 'closed_aborted', $closed['state'], json_encode( $closed ) );
+		$status = self::run_status( (int) $run['run_id'] );
+		$found  = self::findings( $status );
+		self::assertStringContainsString( 'custom_css:markup', $found['twentytwentyfive'] ?? '', json_encode( $found ) );
+		self::assertStringContainsString( 'menu:location_unregistered', $found[ (string) $menu_b ] ?? '', json_encode( $found ) );
+		self::assertNotContains( 'done', array_column( self::writes( $status ), 'state' ), 'No step wrote.' );
+		self::assertSame( 'body { color: #111111; }', self::post_row_a( $css_a )['post_content'] );
+		self::assertSame( 'a', AB_MCP_IT_Sites::option_row( 'a', 'acme_settings' )['option_value'] );
+		self::assertSame( $mods_before, AB_MCP_IT_Sites::option_row( 'a', 'theme_mods_twentytwentyfive' )['option_value'], 'No position set.' );
+		wp_cache_flush();
+		self::assertFalse( get_term_by( 'slug', 'aside', 'nav_menu' ), 'No menu made.' );
+		self::assertSame( array(), $this->deletions );
 	}
 }

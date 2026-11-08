@@ -942,12 +942,14 @@ final class SyncContentTest extends TestCase {
 
 	public function testAnObjectWithTheNameOfACredentialNeverLandsInAPackageOfObjects(): void {
 		// B9 (decision 9) in the package of objects (the finding of the lead on
-		// class-sync-export.php:437; branch 9). The kinds whose objects can be
-		// named as a credential as a whole (options, theme mods) make no
-		// package of objects in this version: the export refuses them. The
-		// kinds that do (posts, terms) know B9 by their units: a meta row whose
-		// key is the name of a credential is neither in the form nor in the
-		// content of the line, and its value goes nowhere into the package.
+		// class-sync-export.php:437; branch 9). An option is named as a
+		// credential as a whole: since branch 11 options go into a package of
+		// objects, and one with the name of a credential is left out of it,
+		// counted (credentials.names), its name and its value nowhere in it.
+		// The kinds whose units can be (posts, terms) know B9 by their units:
+		// a meta row whose key is the name of a credential is neither in the
+		// form nor in the content of the line, and its value goes nowhere
+		// into the package.
 		self::pair();
 		self::paired( self::staged() );
 		$option = self::b(
@@ -958,12 +960,14 @@ final class SyncContentTest extends TestCase {
 					'purpose'     => 'objects',
 					'report_hash' => str_repeat( 'a', 64 ),
 					'refs'        => array( array( 'kind' => 'option', 'ref' => 'stripe_secret_key' ) ),
-					'expect'      => 'error',
-					'as'          => 'refused',
+					'as'          => 'package',
 				),
 			)
-		);
-		self::assertSame( 'ab_mcp_sync_not_in_branch', $option['refused']['code'], json_encode( $option['refused'] ) );
+		)['package'];
+		self::assertSame( 1, $option['credentials']['names'], (string) json_encode( $option['credentials'] ) );
+		self::assertStringNotContainsString( 'sk_live_51option', (string) json_encode( $option ), 'No value of a credential in the package.' );
+		self::assertStringNotContainsString( 'stripe_secret_key', (string) json_encode( $option ), 'Nor its name.' );
+		self::clear_b();
 		$post = self::on_b( self::page( 'pay', 'Pay here.', array( 'meta_input' => array( 'api_key' => 'sk_live_51postmeta', 'note' => 'x' ) ) ) );
 		$term = self::term_b( 'Vault', 'category' );
 		self::b( array( array( 'op' => 'add_term_meta', 'term' => $term, 'key' => 'api_key', 'value' => 'sk_live_51termmeta' ) ) );
