@@ -298,11 +298,12 @@ entsteht, nennt ihre Meldung den Weg.
 
 ## Laufzeit
 
-- Die Integrationsklasse `SyncMediaTest` (acht Fälle, gemeinsame Hilfen,
-  Bilder mit GD erzeugt) läuft lokal in rund 55 s (nach Codex-Runde 1:
-  zwei Fälle mehr, der Paket-Fall mit 5004 leeren Dateien rund 4 s mehr).
-  Der Paket-Fall erreicht allein rund 123 MiB Speicher (Stücke von 3 MiB),
-  unter den 128 MB eines Prozesses je Klasse.
+- Die Integrationsklasse `SyncMediaTest` (neun Fälle, gemeinsame Hilfen,
+  Bilder mit GD erzeugt) läuft lokal in rund 64 s (nach Codex-Runde 2: der
+  Fall mit WebP-Grösse und Altbestand neu, rund 7 s; der Hook-Fall mit
+  zwei bearbeiteten Bildern mehr). Der Paket-Fall erreicht allein rund
+  123 MiB Speicher (Stücke von 3 MiB), unter den 128 MB eines Prozesses je
+  Klasse.
 
 ## Nicht als Mutation geführt
 
@@ -345,6 +346,15 @@ entsteht, nennt ihre Meldung den Weg.
   Hauptdatei gegen den Anhang (gleichwertig: der Name ist vorher gegen den
   Anhang geprüft, und ein Inhalt eines anderen Typs als der Name setzt
   `proper_filename`).
+- Nach Codex-Runde 2 nicht geführt: in `files_plan()` die bekannten Typen
+  als Massstab für den Namen einer liegenden Datei (`$known`; mit den Typen
+  des Kontos allein wäre eine solche Datei nur nicht geprüft, also
+  lockerer, nie gesperrt) und das Überspringen eines Namens, dessen Typ
+  WordPress nicht kennt (kein Fall hat eine solche liegende Datei); in
+  `group_refusal()` die Verweigerung durch `restore_right()` (gleichwertig:
+  `restore_files()` prüft die ganze Liste, jedes Glied der Gruppe bekommt
+  an seiner Stelle dieselbe Verweigerung; geführt ist die Gruppe über ein
+  Glied, das der Rückweg nach seiner Regel stehen lässt).
 
 - Ersetzen vorhandener Mediendateien, Aufräumen eigener Dateien, Rückweg
   neu angelegter Attachments mit Verweisgraphen: Z8b (Plan, «Folgen für
