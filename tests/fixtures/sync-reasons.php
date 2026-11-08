@@ -432,7 +432,7 @@ return array(
 			'plan' => 'Entscheid 25 (Vorlagen und globale Stile über Typ, Theme, Slug); Zweigtabelle Zeile 541',
 		),
 		'post:navigation_fallback'     => array(
-			'why'  => 'A navigation block without a menu of its own shows the most recently published navigation; a navigation that becomes or stops being that one changes pages the plan does not name, a consequence of the core outside the object (decision 21).',
+			'why'  => 'A navigation block without a menu of its own shows the most recently published navigation; a navigation that becomes or stops being that one changes pages the plan does not name where a template or a post shows such a block after the run, a consequence of the core outside the object (decision 21; Codex round 1 of branch 9b, B: only where it is seen).',
 			'core' => array( array( 'wp-includes/class-wp-navigation-fallback.php', 110, 'private static function get_most_recently_published_navigation() {' ) ),
 			'plan' => 'Entscheid 21 (Kern-Folgen: erlaubt nur, was vollständig bekannt ist); Zweigtabelle Zeile 541',
 		),

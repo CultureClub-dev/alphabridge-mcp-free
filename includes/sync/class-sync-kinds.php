@@ -384,7 +384,7 @@ final class AB_MCP_Sync_Kinds {
 		),
 		'post:navigation_fallback'     => array(
 			'stage'  => 'Z8',
-			'reason' => 'The navigation would change which navigation WordPress shows in every navigation block without a menu of its own (the most recently published one): a new one published after it, a date moved past it, a status that adds or takes away the latest. Make or publish the navigation by hand in the site editor of this site, where the change shows, or leave it out of the plan.',
+			'reason' => 'The navigation would change which navigation WordPress shows in a navigation block without a menu of its own (the most recently published one: a new one published after it, a date moved past it, a status that adds or takes away the latest), and a template or a post of this site shows such a block after the run. Give that block its menu (in the site editor, on the staging site as well), or make or publish the navigation by hand in the site editor of this site, where the change shows, or leave it out of the plan.',
 		),
 		'post:css_markup'              => array(
 			'stage'  => 'Z8',

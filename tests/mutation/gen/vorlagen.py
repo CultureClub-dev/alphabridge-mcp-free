@@ -60,6 +60,9 @@ FILTERED = 'testATemplateOfAThemeAFilterShowsInThisRequestOnlyIsLocked'
 U_CSS = 'testTheCustomCssOfTheGlobalStylesKeepsTheRuleOfTheSiteEditorAtAnyDepth'
 U_META = 'testTheRuleOfThisVersionForMetaKeys'
 U_LOCKS = 'testWhatTheEngineOfThePostDoesNotCarryToItsEndIsRefusedWithItsLock'
+CSS_BACK = 'testTheWayBackOfTheGlobalStylesAsksTheRuleOfTheCustomCssAsForward'
+SEEN = 'testANewNavigationEveryBlockNamesByItsRefGoesAndOneABlockWithoutAMenuWouldShowIsLocked'
+CHAIN = 'testATemplateANewPartAndWhatThePartNamesGoInTheOrderOfTheirReferences'
 
 # ------------------------------------------------ what the engine writes
 e('types', 'TYPES: the five core types of the kind post are written since branch 9b', PW,
@@ -134,8 +137,8 @@ e('css-case', 'css_markup(): in any case', PW,
 
 # --------------------------------------- the navigation without a menu
 e('fallback-call', 'precheck(): a navigation asks whether it moves the one a block without a menu shows', PW,
-  "\t\tif ( 'wp_navigation' === $type ) {\n\t\t\t$moved = self::fallback_moves(",
-  "\t\tif ( false ) {\n\t\t\t$moved = self::fallback_moves(", 'it', LOCKS)
+  "\t\tif ( 'wp_navigation' === $type ) {\n\t\t\t$moved = self::fallback_refusal(",
+  "\t\tif ( false ) {\n\t\t\t$moved = self::fallback_refusal(", 'it', LOCKS)
 e('fallback-differs', 'fallback_moves(): the one shown before and after the write differ', PW,
   "\t\tif ( $was !== $is ) {",
   "\t\tif ( false ) {", 'it', LOCKS)
@@ -146,18 +149,96 @@ e('fallback-later', 'fallback_moves(): a later date than the latest of the other
   "\t\t\t\tif ( null === $top || strcmp( (string) $date, (string) $top['post_date'] ) > 0 ) {",
   "\t\t\t\tif ( null === $top ) {", 'it', BACK)
 e('fallback-draft-way', 'precheck(): only a published navigation counts after the write (the way «as draft»)', PW,
-  "\t\t\t\t'publish' === $status ? (string) $prepared['columns']['post_date'] : null\n",
-  "\t\t\t\t(string) $prepared['columns']['post_date']\n", 'it', PENDING)
+  "\t\t\t\t'publish' === $status ? (string) $prepared['columns']['post_date'] : null,\n",
+  "\t\t\t\t(string) $prepared['columns']['post_date'],\n", 'it', PENDING)
 e('fallback-back', 'restore_row(): the way back of a navigation that would move it is left, check needed', PW,
   "\t\tif ( 'wp_navigation' === $backup['post_type'] ) {",
   "\t\tif ( false ) {", 'it', BACK)
+
+e('css-back', 'restore_row(): the custom CSS of the global styles the way back writes keeps the rule as forward (Codex round 1, A)', PW,
+  "\t\tif ( 'wp_global_styles' === $backup['post_type'] ) {\n\t\t\t$held = self::css_refusal(",
+  "\t\tif ( false ) {\n\t\t\t$held = self::css_refusal(", 'it', CSS_BACK)
+
+# ----------------------- the fallback navigation, where it is seen (round 1, B)
+e('seen-gate', 'fallback_refusal(): a move of the fallback locks only where a block without a menu shows it', PW,
+  "\t\treturn null === $shown ? null : $moved . '; ' . $shown;",
+  "\t\treturn $moved;", 'it', SEEN)
+e('seen-block', 'blocks_show_fallback(): a navigation block without ref and blocks of its own shows the fallback', PW,
+  "\t\t\tif ( 'core/navigation' === $name && ! array_key_exists( 'ref', $attrs ) && ! array_key_exists( 'navigationMenuId', $attrs ) && array() === $inner ) {",
+  "\t\t\tif ( false ) {", 'it', LOCKS)
+e('seen-ref', 'blocks_show_fallback(): a navigation block with its ref has a menu of its own', PW,
+  "\t\t\tif ( 'core/navigation' === $name && ! array_key_exists( 'ref', $attrs ) && ! array_key_exists( 'navigationMenuId', $attrs ) && array() === $inner ) {",
+  "\t\t\tif ( 'core/navigation' === $name && ! array_key_exists( 'navigationMenuId', $attrs ) && array() === $inner ) {", 'it', SEEN)
+e('seen-inner', 'blocks_show_fallback(): a navigation block with blocks of its own has a menu of its own', PW,
+  "\t\t\tif ( 'core/navigation' === $name && ! array_key_exists( 'ref', $attrs ) && ! array_key_exists( 'navigationMenuId', $attrs ) && array() === $inner ) {",
+  "\t\t\tif ( 'core/navigation' === $name && ! array_key_exists( 'ref', $attrs ) && ! array_key_exists( 'navigationMenuId', $attrs ) ) {", 'it', SEEN)
+e('seen-part', 'blocks_show_fallback(): the template part a content names, as it shows', PW,
+  "\t\t\t\t\tif ( self::shows_fallback( $text, $depth + 1, $state ) ) {",
+  "\t\t\t\t\tif ( false ) {", 'it', LOCKS)
+e('seen-part-run', 'blocks_show_fallback(): a template part the run writes in the version it writes', PW,
+  "\t\t\t\t\tif ( isset( $state['parts'][ $part ] ) ) {",
+  "\t\t\t\t\tif ( false ) {", 'it', SEEN)
+e('seen-pattern', 'blocks_show_fallback(): the pattern a content names', PW,
+  "\t\t\t\tif ( is_array( $pattern ) && isset( $pattern['content'] ) && self::shows_fallback( (string) $pattern['content'], $depth + 1, $state ) ) {",
+  "\t\t\t\tif ( false ) {", 'it', LOCKS)
+e('seen-inner-blocks', 'blocks_show_fallback(): a navigation block at any depth of inner blocks', PW,
+  "\t\t\tif ( array() !== $inner && self::blocks_show_fallback( $inner, $depth, $state ) ) {",
+  "\t\t\tif ( false ) {", 'it', SEEN)
+e('seen-templates', 'fallback_shown(): the templates of the active theme here', PW,
+  "\t\t\tif ( self::shows_fallback( (string) $template->content, 0, $state ) ) {",
+  "\t\t\tif ( false ) {", 'it', LOCKS)
+e('seen-templates-run', 'fallback_shown(): the templates the run writes', PW,
+  "\t\t\tif ( $state['active'] === (string) ( $one['theme'] ?? '' ) && self::shows_fallback( (string) $one['content'], 0, $state ) ) {",
+  "\t\t\tif ( false ) {", 'it', SEEN)
+e('seen-posts', 'fallback_shown(): the posts here, by a bounded query', PW,
+  "\t\t\tif ( self::shows_fallback( (string) $row['post_content'], 0, $state ) ) {",
+  "\t\t\tif ( false ) {", 'it', SEEN)
+e('seen-posts-run', 'fallback_shown(): the posts the run writes', PW,
+  "\t\t\tif ( self::shows_pages( (string) $one['type'], (string) ( $one['status'] ?? '' ) ) && self::shows_fallback( (string) $one['content'], 0, $state ) ) {",
+  "\t\t\tif ( false ) {", 'it', SEEN)
+e('seen-planned', 'boundary(): a navigation is asked with the objects of the run as it writes them', EN,
+  "\t\t$ctx['planned'] = self::planned( isset( $run['plan']['objects'] ) && is_array( $run['plan']['objects'] ) && 'wp_navigation' === (string) ( $item['subtype'] ?? '' ) ? $run['plan']['objects'] : array(), $lines );",
+  "\t\t$ctx['planned'] = array();", 'it', SEEN)
+e('seen-planned-check', 'run_check(): the check of a navigation knows the objects of the run as it writes them', EN,
+  "\t\t$ctx['planned'] = self::planned( $items, $lines );\n", '', 'it', SEEN)
+
+# ---------------------- the order of the references (round 1, B)
+e('order-names', 'order(): a template part and a template another object names are edges', PU,
+  "\t\t\tforeach ( array( 'parts', 'templates' ) as $list ) {",
+  "\t\t\tforeach ( array() as $list ) {", 'it', CHAIN)
+e('order-ids', 'order(): a reusable block and a navigation another object names by its ref are edges', PU,
+  "\t\t\t\tif ( isset( $posts[ (int) $id ] ) ) {\n\t\t\t\t\t$targets[] = $posts[ (int) $id ];",
+  "\t\t\t\tif ( false ) {\n\t\t\t\t\t$targets[] = $posts[ (int) $id ];", 'it', CHAIN)
+e('order-create-dependency', 'order(): a target the run creates is a dependency', PU,
+  "\t\t\t\tif ( 'create' === $items[ $m ]['op'] ) {\n\t\t\t\t\t$items[ $n ]['depends_on'][] = $m;",
+  "\t\t\t\tif ( false ) {\n\t\t\t\t\t$items[ $n ]['depends_on'][] = $m;", 'it', CHAIN)
+e('order-change-no-dependency', 'order(): a target the run changes comes first, no dependency', PU,
+  "\t\t\t\tif ( 'create' === $items[ $m ]['op'] ) {\n\t\t\t\t\t$items[ $n ]['depends_on'][] = $m;",
+  "\t\t\t\tif ( true ) {\n\t\t\t\t\t$items[ $n ]['depends_on'][] = $m;", 'it', CHAIN)
+e('order-after', 'order(): an object comes after the targets it changes', PU,
+  "\t\t\t\t\tforeach ( $with_after ? $item['after'] : array() as $m ) {",
+  "\t\t\t\t\tforeach ( array() as $m ) {", 'it', CHAIN)
+e('order-refs-theme', 'order_refs(): a template part without a theme is of the active one', PW,
+  "\t\t\t\t$out['parts'][] = 'part:' . ( null === $ref['theme'] ? $active : (string) $ref['theme'] ) . '//' . (string) $ref['slug'];",
+  "\t\t\t\t$out['parts'][] = 'part:' . (string) $ref['theme'] . '//' . (string) $ref['slug'];", 'it', CHAIN)
+e('order-refs-ids', 'order_refs(): core/block and core/navigation by their ref', PW,
+  "\t\t\t\t\t\t$out['posts'][] = $block['attrs']['ref'];\n", '', 'it', CHAIN)
+e('order-refs-template', 'order_refs(): the template of a page', PW,
+  "\t\t\t\t$out['templates'][] = 'template:' . self::bytes( $pair[1] );\n", '', 'it', PENDING)
+e('order-name-part', 'order_name(): a template part by theme//slug', PW,
+  "\t\t\treturn 'part:' . ( isset( $line['identity']['theme'] ) && is_string( $line['identity']['theme'] ) ? $line['identity']['theme'] : '' ) . '//' . $slug;",
+  "\t\t\treturn null;", 'it', CHAIN)
+e('order-name-template', 'order_name(): a template by its slug', PW,
+  "\t\treturn 'wp_template' === $type ? 'template:' . $slug : null;",
+  "\t\treturn null;", 'it', PENDING)
 
 # ------------------------------------------ template parts by name
 e('parts-call', 'target_of(): the template parts a content names are asked', PW,
   "\t\t$held = self::parts_refusal( self::part_refs( $content['content'] ), isset( $ctx['pending_named'] ) && is_array( $ctx['pending_named'] ) ? $ctx['pending_named'] : array() );",
   "\t\t$held = null;", 'it', LOCKS)
 e('parts-walk', 'part_refs(): a part named at any depth', PW,
-  "\t\t\t\t\t$walk( $block['innerBlocks'], $depth + 1 );\n", '', 'it', LOCKS)
+  "\n\t\t\t\tif ( isset( $block['innerBlocks'] ) && is_array( $block['innerBlocks'] ) && $depth < AB_MCP_Sync_Canon::MAX_DEPTH ) {\n\t\t\t\t\t$walk( $block['innerBlocks'], $depth + 1 );\n",
+  "\n\t\t\t\tif ( false ) {\n\t\t\t\t\t$walk( $block['innerBlocks'], $depth + 1 );\n", 'it', LOCKS)
 e('parts-theme-default', 'part_refs(): a part without a theme is of the active theme; one with a theme keeps it', PW,
   "\t\t\t\t\t\t'theme' => isset( $block['attrs']['theme'] ) && is_string( $block['attrs']['theme'] ) ? $block['attrs']['theme'] : null,",
   "\t\t\t\t\t\t'theme' => null,", 'it', LOCKS)

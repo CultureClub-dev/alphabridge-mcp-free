@@ -633,6 +633,9 @@ final class AB_MCP_Sync_Engine {
 		// content or a page names them by (branch 9b): a template part by
 		// theme and slug, a template by its slug (page_template).
 		$ctx['pending_named'] = self::pending_named( $items, $lines );
+		// The objects as the run writes them, for a navigation (where the run
+		// leaves a navigation block without a menu of its own; branch 9b).
+		$ctx['planned'] = self::planned( $items, $lines );
 		// The parents the run gives the terms of this site it writes: the
 		// check asks a loop of parents of the state the run leaves (branch 9,
 		// Codex round 1, B4); the boundary asks the state as it is then.
@@ -807,6 +810,63 @@ final class AB_MCP_Sync_Engine {
 	}
 
 	/**
+	 * The objects of the kind post a run writes, as it writes them, for the
+	 * check of a navigation (AB_MCP_Sync_Post_Writer::fallback_shown(); branch
+	 * 9b, Codex round 1, B): type, op, staging_ref, live_ref, theme and slug
+	 * of the identity, the status the step writes (draft for the confirmed
+	 * choice), the content of the staging object. Only where the run writes
+	 * a navigation (none else is asked); only the contents that can show a
+	 * navigation block (templates, template parts, reusable blocks, and a
+	 * content that names a navigation, a pattern, a reusable block or a
+	 * template part).
+	 *
+	 * @param array[] $items The objects of the plan.
+	 * @param array   $lines lines().
+	 * @return array[]
+	 */
+	private static function planned( array $items, array $lines ) {
+		$navigation = false;
+		foreach ( $items as $one ) {
+			if ( isset( $one['kind'], $one['subtype'] ) && 'post' === $one['kind'] && 'wp_navigation' === (string) $one['subtype'] ) {
+				$navigation = true;
+			}
+		}
+		if ( ! $navigation ) {
+			return array();
+		}
+		$out = array();
+		foreach ( $items as $one ) {
+			if ( ! isset( $one['kind'], $one['op'], $one['subtype'], $one['staging_ref'] ) || 'post' !== $one['kind'] ) {
+				continue;
+			}
+			$line = self::line_of( $one, $lines );
+			if ( is_wp_error( $line ) || ! isset( $line['content']['row'] ) || ! is_array( $line['content']['row'] ) ) {
+				continue;
+			}
+			$type    = (string) $one['subtype'];
+			$content = AB_MCP_Sync_Post_Writer::bytes( $line['content']['row']['post_content'] ?? '' );
+			$marked  = false;
+			foreach ( array( 'wp:navigation', 'wp:pattern', 'wp:block ', 'wp:template-part' ) as $mark ) {
+				$marked = $marked || false !== strpos( $content, $mark );
+			}
+			if ( ! $marked && ! in_array( $type, array( 'wp_template', 'wp_template_part', 'wp_block' ), true ) ) {
+				continue;
+			}
+			$out[] = array(
+				'type'        => $type,
+				'op'          => (string) $one['op'],
+				'staging_ref' => (string) $one['staging_ref'],
+				'live_ref'    => 'update' === $one['op'] && isset( $one['live_ref'] ) ? (int) $one['live_ref'] : null,
+				'theme'       => isset( $line['identity']['theme'] ) && is_string( $line['identity']['theme'] ) ? $line['identity']['theme'] : '',
+				'slug'        => isset( $line['identity']['post_name'] ) && is_string( $line['identity']['post_name'] ) ? $line['identity']['post_name'] : '',
+				'status'      => ! empty( $one['as_draft'] ) ? 'draft' : AB_MCP_Sync_Post_Writer::bytes( $line['content']['row']['post_status'] ?? '' ),
+				'content'     => $content,
+			);
+		}
+		return $out;
+	}
+
+	/**
 	 * Phase 5: one write boundary (decision 17), under the lock of the call
 	 * (next()); the takeover lock of the object given back in every way.
 	 *
@@ -908,7 +968,8 @@ final class AB_MCP_Sync_Engine {
 		if ( is_wp_error( $line ) ) {
 			return self::fail_step( $run_id, $seq, 'begun', $line->get_error_message(), $journal );
 		}
-		$prepared = $w::target_of( $line, $item, $ctx );
+		$ctx['planned'] = self::planned( isset( $run['plan']['objects'] ) && is_array( $run['plan']['objects'] ) && 'wp_navigation' === (string) ( $item['subtype'] ?? '' ) ? $run['plan']['objects'] : array(), $lines );
+		$prepared       = $w::target_of( $line, $item, $ctx );
 		if ( is_wp_error( $prepared ) ) {
 			return self::fail_step( $run_id, $seq, 'begun', $prepared->get_error_message(), $journal );
 		}

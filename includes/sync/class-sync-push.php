@@ -434,6 +434,15 @@ final class AB_MCP_Sync_Push {
 					}
 				}
 			}
+			if ( 'post' === $item['kind'] ) {
+				// The references the boundary asks by an id or a name, for the
+				// order (branch 9b, Codex round 1, B): reusable blocks and
+				// navigations by their ref, template parts by theme and slug,
+				// the template a page names; and the name of the object itself
+				// where another names it so.
+				$item['order_refs'] = AB_MCP_Sync_Post_Writer::order_refs( $line );
+				$item['order_name'] = AB_MCP_Sync_Post_Writer::order_name( $line );
+			}
 			$items[ $n ] = $item;
 		}
 		$refused = self::too_many( count( $items ) );
@@ -563,7 +572,7 @@ final class AB_MCP_Sync_Push {
 				'depends' => array_values( array_unique( $depends ) ),
 				'pair_id' => isset( $item['pair_id'] ) ? $item['pair_id'] : null,
 			);
-			unset( $items[ $n ]['depends_on'], $items[ $n ]['refs'], $items[ $n ]['parent_ref'], $items[ $n ]['depth'] );
+			unset( $items[ $n ]['depends_on'], $items[ $n ]['after'], $items[ $n ]['refs'], $items[ $n ]['order_refs'], $items[ $n ]['order_name'], $items[ $n ]['parent_ref'], $items[ $n ]['depth'] );
 		}
 		$writes  = range( 2, $seq );
 		$steps[] = array( 'op' => 'post', 'phase' => 7, 'depends' => array( 1 ) );
@@ -746,9 +755,24 @@ final class AB_MCP_Sync_Push {
 				$at[ ( 'term' === $item['kind'] ? 'term' : 'post' ) . "\0" . $item['staging_ref'] ] = $n;
 			}
 		}
+		// The objects of the kind post the run writes, created or changed, by
+		// their staging id and by the name another object names them by
+		// (branch 9b, Codex round 1, B).
+		$posts = array();
+		$named = array();
+		foreach ( $items as $n => $item ) {
+			if ( 'post' !== $item['kind'] ) {
+				continue;
+			}
+			$posts[ (int) $item['staging_ref'] ] = $n;
+			if ( isset( $item['order_name'] ) && null !== $item['order_name'] ) {
+				$named[ (string) $item['order_name'] ] = $n;
+			}
+		}
 		$edges = array();
 		foreach ( $items as $n => $item ) {
 			$items[ $n ]['depends_on'] = array();
+			$items[ $n ]['after']      = array();
 			foreach ( $item['refs'] as list( $space, $id ) ) {
 				$key = $space . "\0" . $id;
 				if ( isset( $at[ $key ] ) && $at[ $key ] !== $n ) {
@@ -758,6 +782,38 @@ final class AB_MCP_Sync_Push {
 					$edges[ $n ][ $n ] = true;
 				}
 			}
+			// Each reference the boundary asks (a reusable block or a
+			// navigation by its ref, a template part by theme and slug, the
+			// template of a page) is an edge where its target is written in
+			// the same run: a target the run creates is a dependency (without
+			// it the boundary refuses the object; a cycle is locked), one it
+			// changes comes first without being one (the object is written all
+			// the same where it fails).
+			$targets = array();
+			foreach ( isset( $item['order_refs']['posts'] ) ? $item['order_refs']['posts'] : array() as $id ) {
+				if ( isset( $posts[ (int) $id ] ) ) {
+					$targets[] = $posts[ (int) $id ];
+				}
+			}
+			foreach ( array( 'parts', 'templates' ) as $list ) {
+				foreach ( isset( $item['order_refs'][ $list ] ) ? $item['order_refs'][ $list ] : array() as $name ) {
+					if ( isset( $named[ (string) $name ] ) ) {
+						$targets[] = $named[ (string) $name ];
+					}
+				}
+			}
+			foreach ( array_unique( $targets ) as $m ) {
+				if ( $m === $n ) {
+					continue;
+				}
+				if ( 'create' === $items[ $m ]['op'] ) {
+					$items[ $n ]['depends_on'][] = $m;
+					$edges[ $n ][ $m ]           = true;
+				} else {
+					$items[ $n ]['after'][] = $m;
+				}
+			}
+			$items[ $n ]['depends_on'] = array_values( array_unique( $items[ $n ]['depends_on'] ) );
 		}
 		$locked = array();
 		foreach ( AB_MCP_Sync_Decision::cycles( $edges ) as $members ) {
@@ -837,19 +893,30 @@ final class AB_MCP_Sync_Push {
 		while ( array() !== $left && $rounds < self::MAX_OBJECTS + 1 ) {
 			++$rounds;
 			$progress = false;
-			foreach ( $left as $n => $item ) {
-				$ready = true;
-				foreach ( $item['depends_on'] as $m ) {
-					if ( ! isset( $placed[ $m ] ) ) {
-						$ready = false;
+			// The first entry whose dependencies and changed targets are
+			// placed (a changed target no longer in the plan counts as placed);
+			// where the changed targets close a loop of their own, the first
+			// whose dependencies are placed (they are an order, no dependency).
+			foreach ( array( true, false ) as $with_after ) {
+				foreach ( $left as $n => $item ) {
+					$ready = true;
+					foreach ( $item['depends_on'] as $m ) {
+						if ( ! isset( $placed[ $m ] ) ) {
+							$ready = false;
+						}
 					}
-				}
-				if ( $ready ) {
-					$ordered[ $n ] = $item;
-					$placed[ $n ]  = true;
-					unset( $left[ $n ] );
-					$progress = true;
-					break;
+					foreach ( $with_after ? $item['after'] : array() as $m ) {
+						if ( isset( $left[ $m ] ) ) {
+							$ready = false;
+						}
+					}
+					if ( $ready ) {
+						$ordered[ $n ] = $item;
+						$placed[ $n ]  = true;
+						unset( $left[ $n ] );
+						$progress = true;
+						break 2;
+					}
 				}
 			}
 			if ( ! $progress ) {

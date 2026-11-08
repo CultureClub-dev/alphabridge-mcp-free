@@ -283,16 +283,33 @@ nennt ihre Meldung den Weg.
   deren Vorlage derselbe Lauf anlegt: die Prüfung des Angebots
   (`post:page_template`) gilt in der Gesamtvorprüfung als ausstehend
   (`template_pending`), die Grenze fragt sie mit der angelegten Vorlage.
-- Reihenfolge: Der Plan legt die Schritte der Vorlagenteile, dann der
-  Vorlagen vor die übrigen Objekte (`AB_MCP_Sync_Push::NAMED_FIRST`; Terme
-  weiter zuerst), so stehen sie beim Schreiben der Vorlage bzw. Seite schon
-  da. Die Reihenfolge ist keine Abhängigkeit: scheitert der Teil, sperrt die
-  Grenze der Vorlage selbst. Prüffall
-  `testWhatTheSameRunCreatesFirstIsPendingAndANavigationAsDraftLeavesTheFallback`.
-  Grenze C: ein Vorlagenteil, der einen anderen Vorlagenteil einbindet, den
-  derselbe Lauf erst anlegt: beide haben denselben Rang, es entscheidet die
-  Nummer im Bericht; kommt der äussere zuerst, sperrt seine Grenze
-  (`post:reference_unmapped`, fail closed), ein zweiter Lauf nimmt ihn mit.
+- Reihenfolge (Codex-Runde 1 von Zweig 9b, B): Jeder Verweis, den die
+  Grenze fragt, ist eine Kante der Ordnung, wo sein Ziel im selben Lauf
+  geschrieben wird (`AB_MCP_Sync_Post_Writer::order_refs()`, `order_name()`,
+  `AB_MCP_Sync_Push::order()`): ein wiederverwendbarer Block und eine
+  Navigation über ihren `ref`, ein Vorlagenteil über Theme und Slug (ohne
+  Theme das aktive), die Vorlage einer Seite (`_wp_page_template`). Legt der
+  Lauf das Ziel an, ist die Kante eine Abhängigkeit (ohne Ziel sperrte die
+  Grenze das Objekt; scheitert das Ziel, wartet es, «waits for»; ein Zyklus
+  sperrt wie bisher, `*:mutual_references`, Z11c); ändert er es, kommt das
+  Ziel nur vorher (das Objekt wird auch geschrieben, wo das Ziel scheitert;
+  schliessen solche Kanten eine Schleife, gilt für sie die nächste
+  Abhängigkeit, sie sind keine). Die feste Rangfolge der Typen (Terme, dann
+  Vorlagenteile, Vorlagen, der Rest; `NAMED_FIRST`) bleibt Gleichstand-Regel.
+  Vorher kam eine Vorlage vor dem neuen Teil, den sie nennt, wenn der Teil
+  auf einen neuen Block wartete, und die Grenze sperrte die Vorlage. Die
+  frühere Grenze C «verschachtelte Vorlagenteile» entfällt: ein Teil, der
+  einen neuen Teil nennt, wartet auf ihn; es bleiben echte Zyklen. Der
+  Zustand des Tokens deckt die Folge der Schritte ab (Art und Staging-Ref
+  je Schritt); die neuen Kanten folgen aus den Zeilen der Pakete (an den
+  Bericht gebunden), aus Anlegen oder Ändern je Eintrag (ebenso) und, für
+  einen Teil ohne Theme, aus dem aktiven Theme, dessen Wechsel die
+  Vorlagen des alten Themes im Plan sperrt und damit die Folge ändert.
+  Prüffälle `testATemplateANewPartAndWhatThePartNamesGoInTheOrderOfTheirReferences`
+  (Vorlage, neuer Teil, neuer Block, geänderte Navigation: Block und
+  Navigation vor dem Teil, der Teil vor der Vorlage; die Abhängigkeiten der
+  Schritte), `testWhatTheSameRunCreatesFirstIsPendingAndANavigationAsDraftLeavesTheFallback`
+  (die Seite wartet auf ihre Vorlage, die Vorlage auf ihren Teil).
 
 ### Rechte und Feldregeln
 
@@ -340,39 +357,86 @@ nennt ihre Meldung den Weg.
   `post:css_markup` (Z8). Der Schreiber geht über `wp_update_post()` an der
   REST-Prüfung vorbei, darum fragt er sie vorab (`css_markup()`, Schritt für
   Schritt wie der Kern; die Integration hält beide gleich,
-  `testTheRuleOfTheCustomCssIsTheOneOfTheSiteEditor`). Der Rückweg schreibt
-  die Zeile über `wp_update_post()` im Rechtekontext des Kontos, kses greift
-  dort selbst; ein so geänderter Inhalt liest anders zurück und bleibt
-  `unclear` (die bestehende Abgrenzung aus Codex-Runde 5 von Zweig 9).
+  `testTheRuleOfTheCustomCssIsTheOneOfTheSiteEditor`). Auf dem Rückweg fragt
+  `restore_row()` dieselbe Regel am gesicherten Inhalt, bevor es die Zeile
+  zurückschreibt: hält er CSS, das der Site-Editor ablehnte, bleibt die Zeile
+  `left` mit Grund und altem Wert, wie ein Teil, dessen Recht der Rückweg
+  verweigert (Codex-Runde 1 von Zweig 9b, A: die Live-Site hielt
+  `</style>` im CSS eines Blocks, das der Kern nur oben prüft; der Rückweg
+  schrieb es über `wp_update_post()` ungeprüft zurück, mit
+  `unfiltered_html` ohne kses; Prüffall
+  `testTheWayBackOfTheGlobalStylesAsksTheRuleOfTheCustomCssAsForward`). Ohne
+  `unfiltered_html` greift kses dort selbst; ein so geänderter Inhalt liest
+  anders zurück und bleibt `unclear` (die bestehende Abgrenzung aus
+  Codex-Runde 5 von Zweig 9).
+- Rückweg und Vorwärtsprüfungen der fünf Typen (Codex-Runde 1 von Zweig 9b,
+  A, dieselbe Lehre wie GitHub-Codex 1 auf free#138): die Capabilities des
+  Typs fragt `restore_right()` (`edit_post`, `publish_posts` bei einem
+  anderen Status, `edit_others_posts`, über `get_post_type_object()`), die
+  Rechte der Terme `term_right()`, das Builder-Markup `unfiltered_html`, die
+  Fallback-Navigation `restore_row()` (unten), das CSS `restore_row()`;
+  kses läuft in `wp_update_post()` selbst. Nicht gefragt wird das Theme, mit
+  Grund am Code (`restore_row()`): die Zeile geht an denselben Post zurück,
+  dessen Term von `wp_theme` der Schritt nicht änderte (das Paar ist eines
+  Typs, Themes und Slugs); was die Vorwärtsprüfung hält (das Objekt zeigt
+  sich unter dem aktiven Theme, eine neue Vorlage wird unter dessen
+  Vorlagen eindeutig), hat für einen vorhandenen Post kein Gegenstück, und
+  `wp_filter_wp_template_unique_post_slug()` fragt für ihn seinen eigenen
+  Term (`wp-includes/theme-templates.php:64-67`). Die Namen der Terme, die
+  Vorlagenteile eines Inhalts und der Slug fragt der Rückweg nicht neu: er
+  stellt den gesicherten Stand dieser Site selbst her, nicht den einer
+  anderen.
 
 ### Kern-Folgen und Caches (Entscheid 21, 33)
 
-- Navigation ohne eigenes Menü: Ein Navigationsblock ohne `ref` und ohne
-  eigene Einträge zeigt die zuletzt veröffentlichte Navigation der Site
+- Navigation ohne eigenes Menü: Ein Navigationsblock ohne `ref` (und ohne
+  `navigationMenuId`) und ohne eigene Einträge zeigt die zuletzt
+  veröffentlichte Navigation der Site
   (`WP_Navigation_Fallback::get_most_recently_published_navigation()`,
   `wp-includes/class-wp-navigation-fallback.php:110-130`, Status `publish`,
-  nach Datum absteigend); gibt es keine, legt der Kern beim Anzeigen eine an
-  (`get_fallback()`, :70-101). Twenty Twenty-Five hat so einen Block im
-  Kopf. Eine Navigation, die diese Rolle übernähme oder abgäbe (eine neue,
-  später datierte, ein verschobenes Datum, ein anderer Status), änderte
-  Seiten, die der Plan nicht nennt: `fallback_moves()` vergleicht aus den
-  Zeilen, welche Navigation vor und nach dem Schreiben angezeigt würde, und
-  sperrt bei einem Unterschied oder einem Gleichstand des neuesten Datums
-  (die Reihenfolge des Kerns ist dann nicht bestimmt): `post:navigation_fallback`
+  nach Datum absteigend; `wp-includes/blocks/navigation.php:517-547`); gibt
+  es keine, legt der Kern beim Anzeigen eine an (`get_fallback()`, :70-101).
+  Twenty Twenty-Five hat so einen Block im Kopf (Muster
+  `twentytwentyfive/header`). `fallback_moves()` vergleicht aus den Zeilen,
+  welche Navigation vor und nach dem Schreiben so angezeigt würde (ein
+  Gleichstand des neuesten Datums gilt als Verschiebung: die Reihenfolge des
+  Kerns ist dann nicht bestimmt). Gesperrt wird nur, wo die Verschiebung zu
+  sehen ist (`fallback_refusal()`, `fallback_shown()`; Codex-Runde 1 von
+  Zweig 9b, B: vorher sperrte jede neue, später datierte Navigation, auch
+  eine, die alle Blöcke über `ref` einbinden): nach dem Lauf zeigt eine
+  Vorlage des aktiven Themes (`get_block_templates()`: Zeilen hier über den
+  Dateien des Themes, Vorlagen von Plugins; oder die Fassung, die der Lauf
+  schreibt) oder ein veröffentlichter, privater oder geplanter Post eines
+  Typs mit eigener Seite oder ein veröffentlichter wiederverwendbarer Block
+  (hier oder in der Fassung des Laufs) einen solchen Block, selbst oder über
+  die Vorlagenteile (Zeile hier, Datei des Themes, Fassung des Laufs) und
+  Muster (die Registry der Muster), die er nennt. Dann `post:navigation_fallback`
   (Z8), vorwärts in `precheck()`, auf dem Rückweg in `restore_row()` als
-  «Prüfung nötig» (`check_needed`) mit dem Weg. Eine geänderte Navigation
-  mit ihrem Datum (der Normalfall) behält ihren Platz und geht. Prüffälle
-  `testWhatTheBranchLocksIsFoundBeforeAnythingIsWritten`,
-  `testWhatTheSameRunCreatesFirstIsPendingAndANavigationAsDraftLeavesTheFallback`
-  (als Entwurf übernommen geht sie),
+  «Prüfung nötig» (`check_needed`) mit dem Weg; sonst geht die Navigation.
+  Die Posts liest eine begrenzte Abfrage (Inhalt mit `wp:navigation`,
+  `wp:pattern`, `wp:block` oder `wp:template-part`, höchstens
+  `FALLBACK_POSTS` = 200; mehr ist fail closed); Teile und Muster folgen bis
+  `FALLBACK_DEPTH` = 16 Ebenen und `FALLBACK_STEPS` = 2000 Inhalte, mehr ist
+  fail closed. Eine geänderte Navigation mit ihrem Datum (der Normalfall)
+  behält ihren Platz und geht. Prüffälle
+  `testANewNavigationEveryBlockNamesByItsRefGoesAndOneABlockWithoutAMenuWouldShowIsLocked`
+  (die neue Navigation, die der Kopf des Laufs über `ref` nennt, geht hin
+  und zurück; ein Block ohne Menü in einer Seite des Laufs, einer Vorlage
+  des Laufs oder einer Seite hier, auch in einer Gruppe, sperrt),
+  `testWhatTheBranchLocksIsFoundBeforeAnythingIsWritten` (der Kopf des
+  Themes zeigt einen solchen Block),
+  `testWhatTheSameRunCreatesFirstIsPendingAndANavigationAsDraftLeavesTheFallback`,
   `testTheWayBackOfANavigationThatWouldMoveTheFallbackIsLeftForAPerson`.
-  Grenze C: die Sperre fragt nicht, ob hier überhaupt ein Navigationsblock
-  ohne eigenes Menü angezeigt wird (das hiesse jede Vorlage, jeden Teil und
-  jedes Muster des Themes auswerten); sie trifft darum auch eine neue
-  Navigation, die alle Blöcke über `ref` einbinden. Weg: die Navigation im
-  Site-Editor der Live-Site anlegen oder veröffentlichen, oder sie als
-  Entwurf übernehmen und dort veröffentlichen (ein Block mit `ref` zeigt
-  einen Entwurf nicht, `wp-includes/blocks/navigation.php:330`).
+  Grenze C: ein Block, dessen `ref` eine Navigation nennt, die hier nicht
+  veröffentlicht ist (fehlt, Entwurf, leer), zeigt ebenfalls die
+  Fallback-Navigation; er zählt nicht als Block ohne Menü (Staging zeigt
+  dieselbe Verschiebung, und ein solcher Verweis ist ein Fehler der Seite).
+  Grenze C: die Abfrage liest Vorlagen und Posts, nicht Widgets, Menüs
+  klassischer Themes oder Inhalte, die ein Plugin ausserhalb von Posts hält;
+  ein unbenutzter wiederverwendbarer Block mit einem Block ohne Menü sperrt
+  (fail closed). Weg: dem Block sein Menü geben (im Site-Editor, auch auf
+  Staging), oder die Navigation im Site-Editor der Live-Site anlegen oder
+  veröffentlichen.
 - Caches in Phase 7 (`post_write()`): Für die fünf Typen leert der Schritt
   den Seiten-Cache der ganzen Site (`AB_MCP_Page_Cache::purge_site()`,
   `SITE_WIDE`): jede Seite kann sie zeigen, eigene Seiten haben sie nicht.
