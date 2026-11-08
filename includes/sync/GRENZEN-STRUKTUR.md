@@ -264,6 +264,10 @@ Position, die das Theme hier nicht registriert, in der Prüfung des Laufs
   Zahl kann die Grenze so übersteigen, bis ein späteres Speichern in
   wp-admin aufräumt. Eine Site, die keine Revisionen hält (0), bekommt
   keine. Prüffall `testChangedAdditionalCssGoesOverAndBackAndThePageShowsIt`.
+  Derselbe Weg gilt seither für jedes Speichern eines Posts hier
+  (`AB_MCP_Sync_Post_Writer::keeping_revisions()`, `GRENZEN-INHALTE.md`),
+  auch für Menüeinträge, wo ein Plugin ihnen Revisionen gibt (Prüffall
+  `testAChangedMenuItemAndANewItemGoOverAndTheWayBackPutsTheChangedOnesBackAndLeavesTheNewOneAsARest`).
 
 ## Kern-Optionen
 

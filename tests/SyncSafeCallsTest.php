@@ -186,7 +186,6 @@ final class SyncSafeCallsTest extends TestCase {
 			'clean_post_cache'          => array( 1, 'post_write(): the caches of the CSS post (decision 33).' ),
 			'current_user_can'          => array( 4, 'precheck(), write_row(), restore_right() and restore_part(): edit_css, as the Customizer asks it for the setting (decision 25), asked again right before the row goes back (Codex round 1 of branch 11, A5).' ),
 			'get_stylesheet'            => array( 2, 'theme_refusal() and restore_right(): the active theme this request runs (the CSS is written only to it).' ),
-			'remove_filter'             => array( 1, 'keeping_revisions(): the filter wp_revisions_to_keep of the one call goes again (Codex round 1 of branch 11, A3).' ),
 			'sanitize_post'             => array( 1, 'css_refusal(): the sanitizers ahead, as wp_update_post() runs them (decision 17).' ),
 			'sanitize_title'            => array( 1, 'target_of(): the slug wp_update_custom_css_post() gives the post, a calculation over the name.' ),
 			'wp_get_theme'              => array( 1, 'theme_refusal(): the version of the active theme from its files (decision 25: «Theme live in gleicher Version»).' ),
@@ -210,7 +209,7 @@ final class SyncSafeCallsTest extends TestCase {
 			'set_theme_mod'                 => array( 1, 'AB_MCP_Sync_Menu_Writer::write_part(): a position through the core way of the menu screen (decision 17: set_theme_mod( \'nav_menu_locations\', … )).' ),
 			'wp_cache_delete'               => array( 2, 'AB_MCP_Sync_Menu_Item_Writer::post_write(): the meta and the menu of the item in the cache (decision 33).' ),
 			'wp_slash'                      => array( 4, 'write_row(), sanitizer_refusal() and restore_part() of an item: the slashing wp_update_nav_menu_item() and wp_update_post() expect.' ),
-			'wp_update_nav_menu_item'       => array( 1, 'AB_MCP_Sync_Menu_Item_Writer::write_row(): the way forward of an item, as the menu screen and the REST API write it (decisions 17 and 25).' ),
+			'wp_update_nav_menu_item'       => array( 2, 'AB_MCP_Sync_Menu_Item_Writer::write_row(): the way forward of an item, as the menu screen and the REST API write it (decisions 17 and 25), for an item here inside keeping_revisions() (no revision deleted), for a new one without.' ),
 			'wp_update_post'                => array( 1, 'AB_MCP_Sync_Menu_Item_Writer::restore_part(): the row of an item put back through the core (decision 23).' ),
 		),
 		'class-sync-widget-area-writer.php' => array(
@@ -337,6 +336,7 @@ final class SyncSafeCallsTest extends TestCase {
 		),
 		'class-sync-post-writer.php' => array(
 			'AB_MCP_Builder_Caches::clear'             => array( 1, 'post_write(): the builder caches of the written post (decision 33).' ),
+			'remove_filter'                            => array( 1, 'keeping_revisions(): the filter wp_revisions_to_keep of the one call that saves a post goes again (Codex round 1 of branch 11, A3; every writer of the engine).' ),
 			'AB_MCP_Builders::markup_meta_refusal'     => array( 2, 'precheck() and restore_right(): a key of a page builder needs unfiltered_html, forward and on the way back, as the free meta writer and its undo ask it (the list of the signatures and the filter, and the capability; GitHub Codex round 1 on free#138, P2); no stored value.' ),
 			'AB_MCP_Page_Cache::purge_posts'           => array( 1, 'post_write(): the page cache of the written post (decision 33).' ),
 			'AB_MCP_Page_Cache::purge_site'            => array( 1, 'post_write(): the page cache of the whole site after a template, a template part, the global styles, a navigation or a reusable block, which any page may show (decision 33; branch 9b).' ),

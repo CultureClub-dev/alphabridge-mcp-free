@@ -103,6 +103,7 @@ final class SyncContentTest extends TestCase {
 		delete_option( \AB_MCP_Change_Lock::OPTION );
 		remove_all_filters( 'map_meta_cap' );
 		remove_all_filters( 'auth_post_meta__seo_title' );
+		remove_all_filters( 'wp_revisions_to_keep' );
 		remove_all_filters( 'pre_delete_post' );
 		remove_all_filters( 'pre_trash_post' );
 		remove_all_actions( 'pre_delete_term' );
@@ -1002,6 +1003,38 @@ final class SyncContentTest extends TestCase {
 	}
 
 	/* ------------------------------------------------- the field rule */
+
+	public function testATakeOverOfAPageDeletesNoRevisionOfItWhereTheSiteKeepsANumberOfThem(): void {
+		// Branch 11 (the lead after Codex round 1, as A3 for the CSS): where
+		// this site keeps a number of revisions (one here, as
+		// WP_POST_REVISIONS = 1 would), wp_save_post_revision() deletes the
+		// oldest as a post is saved. The page keeps every revision it has,
+		// forward and on the way back (nothing is deleted in Z8).
+		self::pair();
+		$about_a = self::on_a( self::page( 'about', 'About us.' ) );
+		wp_update_post( array( 'ID' => $about_a, 'post_content' => 'About us, once.' ) );
+		wp_update_post( array( 'ID' => $about_a, 'post_content' => 'About us.' ) );
+		self::on_b( self::page( 'about', 'About us.' ) );
+		self::paired( self::staged() );
+		$b_id = (int) self::entry( self::report( self::staged() )['all'], 'post:about' )['staging']['ref'];
+		self::b( array( array( 'op' => 'update_post', 'args' => array( 'ID' => $b_id, 'post_content' => 'About us, new.' ) ) ) );
+		$revisions = array_keys( wp_get_post_revisions( $about_a ) );
+		sort( $revisions );
+		self::assertGreaterThan( 1, count( $revisions ) );
+		add_filter( 'wp_revisions_to_keep', static fn( $num, $post ) => 'page' === $post->post_type ? 1 : $num, 10, 2 );
+		$kept = static function () use ( $revisions ): array {
+			global $wpdb;
+			return array_map( 'intval', $wpdb->get_col( 'SELECT ID FROM ' . $wpdb->posts . ' WHERE ID IN (' . implode( ',', array_map( 'intval', $revisions ) ) . ') ORDER BY ID' ) );
+		};
+		$run    = self::begun( self::planned( array( 'post:about' ) )['args'] );
+		$closed = self::finish( (int) $run['run_id'] );
+		self::assertSame( 'closed_done', $closed['state'], json_encode( $closed ) );
+		self::assertSame( 'About us, new.', get_post( $about_a )->post_content );
+		self::assertSame( $revisions, $kept(), 'No revision of the page was deleted.' );
+		$back = self::back( (int) $run['run_id'] );
+		self::assertSame( 'closed_reverted', $back['state'], json_encode( $back ) );
+		self::assertSame( $revisions, $kept(), 'Nor on the way back.' );
+	}
 
 	public function testAPluginKeyEqualOnBothSidesStaysUntouchedAndOneThatDiffersWaitsForARuleOfTheSite(): void {
 		// Decision 28 (branch 9): a protected key of a plugin (_seo_title)

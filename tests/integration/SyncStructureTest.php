@@ -116,6 +116,7 @@ final class SyncStructureTest extends TestCase {
 		remove_all_actions( 'pre_delete_term' );
 		remove_all_actions( 'delete_option' );
 		remove_all_filters( 'wp_revisions_to_keep' );
+		remove_post_type_support( 'nav_menu_item', 'revisions' );
 		wp_cache_flush();
 	}
 
@@ -594,6 +595,29 @@ final class SyncStructureTest extends TestCase {
 		$link_a  = (int) wp_update_nav_menu_item( $menu_a, 0, $link );
 		$item_b  = (int) self::one_b( array( 'op' => 'nav_menu_item', 'menu' => $menu_b, 'args' => $page( $about_b ) ) );
 		$link_b  = (int) self::one_b( array( 'op' => 'nav_menu_item', 'menu' => $menu_b, 'args' => $link ) );
+		// Menu items with revisions on this site (as a plugin adds them), two
+		// of the page item, whose title the run changes (WordPress saves a
+		// revision, and cuts the oldest, where the title, content or excerpt
+		// change); the site keeps one (the lead after Codex round 1 of branch
+		// 11): none of them goes, forward or back.
+		add_post_type_support( 'nav_menu_item', 'revisions' );
+		wp_update_post( array( 'ID' => $item_a, 'post_content' => 'Once.' ) );
+		wp_update_post( array( 'ID' => $item_a, 'post_content' => '' ) );
+		// The same saves on staging, so both items stay alike.
+		self::b(
+			array(
+				array( 'op' => 'update_post', 'args' => array( 'ID' => $item_b, 'post_content' => 'Once.' ) ),
+				array( 'op' => 'update_post', 'args' => array( 'ID' => $item_b, 'post_content' => '' ) ),
+			)
+		);
+		$revisions = array_keys( wp_get_post_revisions( $item_a ) );
+		sort( $revisions );
+		self::assertGreaterThan( 1, count( $revisions ) );
+		$kept = static function () use ( $revisions ): array {
+			global $wpdb;
+			return array_map( 'intval', $wpdb->get_col( 'SELECT ID FROM ' . $wpdb->posts . ' WHERE ID IN (' . implode( ',', array_map( 'intval', $revisions ) ) . ') ORDER BY ID' ) );
+		};
+		add_filter( 'wp_revisions_to_keep', static fn( $num, $post ) => 'nav_menu_item' === $post->post_type ? 1 : $num, 10, 2 );
 		self::paired( self::staged() );
 		self::b(
 			array(
@@ -634,6 +658,7 @@ final class SyncStructureTest extends TestCase {
 		self::assertSame( array( '_blank' ), self::meta_rows_a( $link_a )['_menu_item_target'] );
 		$new_a = (int) end( $items_now )->ID;
 		self::assertSame( array( 'https://example.test/blog/' ), self::meta_rows_a( $new_a )['_menu_item_url'] );
+		self::assertSame( $revisions, $kept(), 'No revision of the page item was deleted.' );
 		self::assertSame( 'active', AB_MCP_Sync_Pairs::find_live( self::source(), 'menu_item', (string) $new_a )['state'] );
 		// The next report sees the menu as equal.
 		$again = self::report( self::staged() );
@@ -647,6 +672,7 @@ final class SyncStructureTest extends TestCase {
 		self::assertSame( $before['item_meta'], self::meta_rows_a( $item_a ) );
 		self::assertSame( $before['link'], self::post_row_a( $link_a ) );
 		self::assertSame( $before['link_meta'], self::meta_rows_a( $link_a ) );
+		self::assertSame( $revisions, $kept(), 'Nor on the way back.' );
 		self::assertSame( 'residual', AB_MCP_Sync_Pairs::find_live( self::source(), 'menu_item', (string) $new_a )['state'] );
 		self::assertSame( 'publish', self::post_row_a( $new_a )['post_status'], 'The new item stays.' );
 		self::assertSame( array( array( 'menu_item', (string) $new_a ) ), self::rests( $back ) );

@@ -1466,7 +1466,14 @@ final class AB_MCP_Sync_Menu_Item_Writer {
 			$fields['menu-item-post-date']     = (string) $row['post_date'];
 			$fields['menu-item-post-date-gmt'] = (string) $row['post_date_gmt'];
 		}
-		$id = wp_update_nav_menu_item( $menu, null === $live_id ? 0 : (int) $live_id, $fields );
+		// Where menu items keep revisions (a plugin adds them), none deleted
+		// by the save of one here: keeping_revisions().
+		$id = null === $live_id ? wp_update_nav_menu_item( $menu, 0, $fields ) : AB_MCP_Sync_Post_Writer::keeping_revisions(
+			(int) $live_id,
+			static function () use ( $menu, $live_id, $fields ) {
+				return wp_update_nav_menu_item( $menu, (int) $live_id, $fields );
+			}
+		);
 		if ( is_wp_error( $id ) ) {
 			return $id;
 		}
@@ -1641,19 +1648,24 @@ final class AB_MCP_Sync_Menu_Item_Writer {
 					'note'  => sprintf( 'Not put back: this account may not %s, asked again right before the write (a filter may have changed the rights). Set it by hand in wp-admin with an account that may.', sprintf( 'edit the menu item %d (edit_theme_options, edit_post)', $id ) ),
 				);
 			}
-			$done = wp_update_post(
-				wp_slash(
-					array(
-						'ID'           => $id,
-						'post_title'   => (string) $backup['row']['post_title'],
-						'post_excerpt' => (string) $backup['row']['post_excerpt'],
-						'post_content' => (string) $backup['row']['post_content'],
-						'post_status'  => (string) $backup['row']['post_status'],
-						'menu_order'   => (int) $backup['row']['menu_order'],
-						'post_parent'  => (int) $backup['row']['post_parent'],
-					)
-				),
-				true
+			$done = AB_MCP_Sync_Post_Writer::keeping_revisions(
+				$id,
+				static function () use ( $id, $backup ) {
+					return wp_update_post(
+						wp_slash(
+							array(
+								'ID'           => $id,
+								'post_title'   => (string) $backup['row']['post_title'],
+								'post_excerpt' => (string) $backup['row']['post_excerpt'],
+								'post_content' => (string) $backup['row']['post_content'],
+								'post_status'  => (string) $backup['row']['post_status'],
+								'menu_order'   => (int) $backup['row']['menu_order'],
+								'post_parent'  => (int) $backup['row']['post_parent'],
+							)
+						),
+						true
+					);
+				}
 			);
 			if ( is_wp_error( $done ) ) {
 				return $done;

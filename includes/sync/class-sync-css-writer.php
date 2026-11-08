@@ -408,7 +408,7 @@ final class AB_MCP_Sync_Css_Writer {
 		if ( null === $current ) {
 			return AB_MCP_Sync_Post_Writer::locked( 'custom_css:create', sprintf( 'this site links no CSS post to %s (custom_css_post_id)', $stylesheet ) );
 		}
-		$done = self::keeping_revisions(
+		$done = AB_MCP_Sync_Post_Writer::keeping_revisions(
 			(int) $current['row']['post_id'],
 			static function () use ( $prepared, $stylesheet ) {
 				return wp_update_custom_css_post(
@@ -424,31 +424,6 @@ final class AB_MCP_Sync_Css_Writer {
 			return $done;
 		}
 		return $stylesheet;
-	}
-
-	/**
-	 * A call that saves the CSS post, with no revision of it deleted (Codex
-	 * round 1 of branch 11, A3: nothing is deleted in Z8). Where this site
-	 * keeps a number of revisions (WP_POST_REVISIONS, the filter
-	 * wp_revisions_to_keep), wp_save_post_revision() deletes the oldest
-	 * beyond it as the post is saved; for this call and this post the number
-	 * is none (-1, keep them all). A site that keeps no revisions (0) makes
-	 * none, as before. The filter goes again in any case (finally).
-	 *
-	 * @param int      $post_id The CSS post.
-	 * @param callable $call    The call that saves it.
-	 * @return mixed What the call answers.
-	 */
-	private static function keeping_revisions( $post_id, callable $call ) {
-		$keep = static function ( $num, $post ) use ( $post_id ) {
-			return is_object( $post ) && (int) $post->ID === (int) $post_id && (int) $num > 0 ? -1 : $num;
-		};
-		add_filter( 'wp_revisions_to_keep', $keep, PHP_INT_MAX, 2 );
-		try {
-			return $call();
-		} finally {
-			remove_filter( 'wp_revisions_to_keep', $keep, PHP_INT_MAX );
-		}
 	}
 
 	/**
@@ -593,7 +568,7 @@ final class AB_MCP_Sync_Css_Writer {
 				'note'  => sprintf( 'Not put back: this account may not %s, asked again right before the write (a filter may have changed the rights). Set it by hand in wp-admin with an account that may.', sprintf( 'change the Additional CSS of %s (edit_css)', (string) $live_id ) ),
 			);
 		}
-		$id = self::keeping_revisions(
+		$id = AB_MCP_Sync_Post_Writer::keeping_revisions(
 			(int) $backup['row']['post_id'],
 			static function () use ( $backup ) {
 				return wp_update_post(

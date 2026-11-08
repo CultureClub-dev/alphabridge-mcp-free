@@ -39,12 +39,14 @@ EN = 'includes/sync/class-sync-engine.php'
 PU = 'includes/sync/class-sync-push.php'
 DK = 'includes/sync/class-sync-db-kinds.php'
 WW = 'includes/tools/class-widget-writer.php'
-FILEVAR = {MW: '$mw', WA: '$wa', CW: '$cw', OW: '$ow', SR: '$sr', EN: '$en', PU: '$pu', DK: '$dk', WW: '$ww'}
+PW = 'includes/sync/class-sync-post-writer.php'
+FILEVAR = {MW: '$mw', WA: '$wa', CW: '$cw', OW: '$ow', SR: '$sr', EN: '$en', PU: '$pu', DK: '$dk', WW: '$ww', PW: '$pw'}
 
 RUNS = {
     'u': ('unit', 'SyncStructureWritersTest'),
     'run': ('unit', 'SyncRunTest'),
     'it': ('it', 'SyncStructureTest'),
+    'itc': ('it', 'SyncContentTest'),
 }
 
 entries = []
@@ -85,6 +87,7 @@ IT_CRED = 'testACredentialInTheNameOfAMenuOrOfItsPositionLandsInNoPackage'
 IT_FREEPOS = 'testANewMenuAtAPositionNoMenuHoldsYetGoesOverAndTheWayBackLeavesThePositionEmptyAgain'
 IT_MOVE = 'testAMenuThatTakesThePositionOfAnotherMenuOfTheRunGoesAfterItAndAnExchangeIsLocked'
 IT_UNITREST = 'testAPairThatCannotBeKeptAsARestMakesTheStepUnclearWithItsWay'
+IT_REVPAGE = 'testATakeOverOfAPageDeletesNoRevisionOfItWhereTheSiteKeepsANumberOfThem'
 IT_GUARD = 'testAnotherRequestThatWritesTheThemeModsAsANewMenuGivesItsPositionBackIsHeldOffByTheLock'
 U_MOVE = 'testAMenuThatTakesThePositionOfAnotherMenuOfTheRunComesAfterItAndAnExchangeIsLocked'
 U_PARTORDER = 'testTheOrderOfThePartsOfEachKindIsWhatTheTokensCover'
@@ -394,16 +397,25 @@ e('a2-row-after-sanitize', 'write_part(): the row read again after the update() 
   "\t\t$value = self::widget_row( $write['base'] );\n\t\tif ( is_wp_error( $value ) ) {\n\t\t\treturn $value;\n\t\t}\n\t\t// The right again",
   "\t\t// The right again", 'it', IT_FILTER)
 # A3: no revision deleted.
-e('a3-keep-filter', 'keeping_revisions(): no revision of the post deleted by the call (A3)', CW,
+e('a3-keep-filter', 'keeping_revisions(): no revision of the post deleted by the call (A3)', PW,
   "\t\tadd_filter( 'wp_revisions_to_keep', $keep, PHP_INT_MAX, 2 );\n", "", 'it', IT_CSS)
 e('a3-keep-back', 'restore_part(): no revision deleted on the way back (A3)', CW,
   "\t\t\t(int) $backup['row']['post_id'],\n\t\t\tstatic function () use ( $backup ) {",
   "\t\t\t0,\n\t\t\tstatic function () use ( $backup ) {", 'it', IT_CSS)
-e('a3-keep-limit', 'keeping_revisions(): only where the site keeps a number, never revisions where it keeps none (A3)', CW,
+e('rev-page-forward', 'write_row(): no revision of a post here deleted by its save (the lead after Codex round 1)', PW,
+  "\t\t\t$id = self::keeping_revisions(\n\t\t\t\t(int) $live_id,", "\t\t\t$id = self::keeping_revisions(\n\t\t\t\t0,", 'itc', IT_REVPAGE)
+e('rev-page-back', 'restore_row(): nor by the row put back', PW,
+  "\t\t$id                     = self::keeping_revisions(\n\t\t\t(int) $live_id,", "\t\t$id                     = self::keeping_revisions(\n\t\t\t0,", 'itc', IT_REVPAGE)
+e('rev-item-forward', 'write_row(): no revision of a menu item here deleted by its save', MW,
+  "AB_MCP_Sync_Post_Writer::keeping_revisions(\n\t\t\t(int) $live_id,\n\t\t\tstatic function () use ( $menu, $live_id, $fields ) {",
+  "AB_MCP_Sync_Post_Writer::keeping_revisions(\n\t\t\t0,\n\t\t\tstatic function () use ( $menu, $live_id, $fields ) {", 'it', IT_ITEMS)
+e('rev-item-back', 'restore_part(): nor by the row of an item put back', MW,
+  "\t\t\t$done = AB_MCP_Sync_Post_Writer::keeping_revisions(\n\t\t\t\t$id,", "\t\t\t$done = AB_MCP_Sync_Post_Writer::keeping_revisions(\n\t\t\t\t0,", 'it', IT_ITEMS)
+e('a3-keep-limit', 'keeping_revisions(): only where the site keeps a number, never revisions where it keeps none (A3)', PW,
   " && (int) $num > 0 ? -1 : $num;", " ? -1 : $num;", 'u', U_CSS)
-e('a3-keep-post', 'keeping_revisions(): only the post of the step (A3)', CW,
+e('a3-keep-post', 'keeping_revisions(): only the post of the step (A3)', PW,
   "is_object( $post ) && (int) $post->ID === (int) $post_id && ", "is_object( $post ) && ", 'u', U_CSS)
-e('a3-keep-goes', 'keeping_revisions(): the filter goes again, also after an error (A3)', CW,
+e('a3-keep-goes', 'keeping_revisions(): the filter goes again, also after an error (A3)', PW,
   "\t\t\tremove_filter( 'wp_revisions_to_keep', $keep, PHP_INT_MAX );\n", "", 'u', U_CSS)
 # A4: what the content carries beyond the form through the credential check.
 e('a4-item-menu-name', 'item(): the names and slugs of the menus of an item through the credential check (A4)', DK,

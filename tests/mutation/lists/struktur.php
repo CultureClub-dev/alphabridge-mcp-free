@@ -36,6 +36,7 @@ $en = 'includes/sync/class-sync-engine.php';
 $pu = 'includes/sync/class-sync-push.php';
 $dk = 'includes/sync/class-sync-db-kinds.php';
 $ww = 'includes/tools/class-widget-writer.php';
+$pw = 'includes/sync/class-sync-post-writer.php';
 
 return array(
 	array(
@@ -905,7 +906,7 @@ return array(
 	array(
 		'id'      => 'struktur/a3-keep-filter',
 		'clause'  => 'keeping_revisions(): no revision of the post deleted by the call (A3)',
-		'file'    => $cw,
+		'file'    => $pw,
 		'search'  => "\t\tadd_filter( 'wp_revisions_to_keep', \$keep, PHP_INT_MAX, 2 );\n",
 		'replace' => "/* removed */\n",
 		'run'     => $it( 'SyncStructureTest', 'testChangedAdditionalCssGoesOverAndBackAndThePageShowsIt' ),
@@ -921,9 +922,45 @@ return array(
 		'expect'  => '/testChangedAdditionalCssGoesOverAndBackAndThePageShowsIt/',
 	),
 	array(
+		'id'      => 'struktur/rev-page-forward',
+		'clause'  => 'write_row(): no revision of a post here deleted by its save (the lead after Codex round 1)',
+		'file'    => $pw,
+		'search'  => "\t\t\t\$id = self::keeping_revisions(\n\t\t\t\t(int) \$live_id,",
+		'replace' => "\t\t\t\$id = self::keeping_revisions(\n\t\t\t\t0,",
+		'run'     => $it( 'SyncContentTest', 'testATakeOverOfAPageDeletesNoRevisionOfItWhereTheSiteKeepsANumberOfThem' ),
+		'expect'  => '/testATakeOverOfAPageDeletesNoRevisionOfItWhereTheSiteKeepsANumberOfThem/',
+	),
+	array(
+		'id'      => 'struktur/rev-page-back',
+		'clause'  => 'restore_row(): nor by the row put back',
+		'file'    => $pw,
+		'search'  => "\t\t\$id                     = self::keeping_revisions(\n\t\t\t(int) \$live_id,",
+		'replace' => "\t\t\$id                     = self::keeping_revisions(\n\t\t\t0,",
+		'run'     => $it( 'SyncContentTest', 'testATakeOverOfAPageDeletesNoRevisionOfItWhereTheSiteKeepsANumberOfThem' ),
+		'expect'  => '/testATakeOverOfAPageDeletesNoRevisionOfItWhereTheSiteKeepsANumberOfThem/',
+	),
+	array(
+		'id'      => 'struktur/rev-item-forward',
+		'clause'  => 'write_row(): no revision of a menu item here deleted by its save',
+		'file'    => $mw,
+		'search'  => "AB_MCP_Sync_Post_Writer::keeping_revisions(\n\t\t\t(int) \$live_id,\n\t\t\tstatic function () use ( \$menu, \$live_id, \$fields ) {",
+		'replace' => "AB_MCP_Sync_Post_Writer::keeping_revisions(\n\t\t\t0,\n\t\t\tstatic function () use ( \$menu, \$live_id, \$fields ) {",
+		'run'     => $it( 'SyncStructureTest', 'testAChangedMenuItemAndANewItemGoOverAndTheWayBackPutsTheChangedOnesBackAndLeavesTheNewOneAsARest' ),
+		'expect'  => '/testAChangedMenuItemAndANewItemGoOverAndTheWayBackPutsTheChangedOnesBackAndLeavesTheNewOneAsARest/',
+	),
+	array(
+		'id'      => 'struktur/rev-item-back',
+		'clause'  => 'restore_part(): nor by the row of an item put back',
+		'file'    => $mw,
+		'search'  => "\t\t\t\$done = AB_MCP_Sync_Post_Writer::keeping_revisions(\n\t\t\t\t\$id,",
+		'replace' => "\t\t\t\$done = AB_MCP_Sync_Post_Writer::keeping_revisions(\n\t\t\t\t0,",
+		'run'     => $it( 'SyncStructureTest', 'testAChangedMenuItemAndANewItemGoOverAndTheWayBackPutsTheChangedOnesBackAndLeavesTheNewOneAsARest' ),
+		'expect'  => '/testAChangedMenuItemAndANewItemGoOverAndTheWayBackPutsTheChangedOnesBackAndLeavesTheNewOneAsARest/',
+	),
+	array(
 		'id'      => 'struktur/a3-keep-limit',
 		'clause'  => 'keeping_revisions(): only where the site keeps a number, never revisions where it keeps none (A3)',
-		'file'    => $cw,
+		'file'    => $pw,
 		'search'  => " && (int) \$num > 0 ? -1 : \$num;",
 		'replace' => " ? -1 : \$num;",
 		'run'     => $unit( 'SyncStructureWritersTest', 'testOnlyTheLinkedCssOfTheActiveThemeInTheSameVersionIsChangedAndItsRuleIsAskedAhead' ),
@@ -932,7 +969,7 @@ return array(
 	array(
 		'id'      => 'struktur/a3-keep-post',
 		'clause'  => 'keeping_revisions(): only the post of the step (A3)',
-		'file'    => $cw,
+		'file'    => $pw,
 		'search'  => "is_object( \$post ) && (int) \$post->ID === (int) \$post_id && ",
 		'replace' => "is_object( \$post ) && ",
 		'run'     => $unit( 'SyncStructureWritersTest', 'testOnlyTheLinkedCssOfTheActiveThemeInTheSameVersionIsChangedAndItsRuleIsAskedAhead' ),
@@ -941,7 +978,7 @@ return array(
 	array(
 		'id'      => 'struktur/a3-keep-goes',
 		'clause'  => 'keeping_revisions(): the filter goes again, also after an error (A3)',
-		'file'    => $cw,
+		'file'    => $pw,
 		'search'  => "\t\t\tremove_filter( 'wp_revisions_to_keep', \$keep, PHP_INT_MAX );\n",
 		'replace' => "/* removed */\n",
 		'run'     => $unit( 'SyncStructureWritersTest', 'testOnlyTheLinkedCssOfTheActiveThemeInTheSameVersionIsChangedAndItsRuleIsAskedAhead' ),

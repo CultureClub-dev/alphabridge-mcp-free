@@ -2374,11 +2374,45 @@ final class AB_MCP_Sync_Post_Writer {
 	 * @param int|null $live_id  The post here, null for a new one.
 	 * @return int|WP_Error The id of the post written.
 	 */
+	/**
+	 * A call that saves a post here, with no revision of it deleted (Codex
+	 * round 1 of branch 11, A3; nothing is deleted in Z8). Where this site
+	 * keeps a number of revisions (WP_POST_REVISIONS, the filter
+	 * wp_revisions_to_keep), wp_save_post_revision() deletes the oldest
+	 * beyond it as the post is saved; for this call and this post the number
+	 * is none (-1, keep them all). A site that keeps no revisions (0) makes
+	 * none, as before; a post of a type without revisions makes none. The
+	 * filter goes again in any case (finally). Every writer of the engine
+	 * saves an existing post through it, forward and back.
+	 *
+	 * @param int      $post_id The post.
+	 * @param callable $call    The call that saves it.
+	 * @return mixed What the call answers.
+	 */
+	public static function keeping_revisions( $post_id, callable $call ) {
+		$keep = static function ( $num, $post ) use ( $post_id ) {
+			return is_object( $post ) && (int) $post->ID === (int) $post_id && (int) $num > 0 ? -1 : $num;
+		};
+		add_filter( 'wp_revisions_to_keep', $keep, PHP_INT_MAX, 2 );
+		try {
+			return $call();
+		} finally {
+			remove_filter( 'wp_revisions_to_keep', $keep, PHP_INT_MAX );
+		}
+	}
+
 	public static function write_row( array $prepared, $live_id ) {
 		$postarr = $prepared['postarr'];
 		if ( null !== $live_id ) {
 			$postarr['ID'] = (int) $live_id;
-			$id            = wp_update_post( wp_slash( $postarr ), true );
+			// No revision of the post deleted by the save (nothing is deleted
+			// in Z8): keeping_revisions().
+			$id = self::keeping_revisions(
+				(int) $live_id,
+				static function () use ( $postarr ) {
+					return wp_update_post( wp_slash( $postarr ), true );
+				}
+			);
 		} else {
 			$id = wp_insert_post( wp_slash( $postarr ), true );
 		}
@@ -2602,7 +2636,12 @@ final class AB_MCP_Sync_Post_Writer {
 		$postarr['post_parent'] = (int) $postarr['post_parent'];
 		$postarr['menu_order']  = (int) $postarr['menu_order'];
 		$postarr['edit_date']   = true;
-		$id                     = wp_update_post( wp_slash( $postarr ), true );
+		$id                     = self::keeping_revisions(
+			(int) $live_id,
+			static function () use ( $postarr ) {
+				return wp_update_post( wp_slash( $postarr ), true );
+			}
+		);
 		if ( is_wp_error( $id ) ) {
 			return $id;
 		}

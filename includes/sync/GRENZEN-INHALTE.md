@@ -25,6 +25,20 @@ nennt ihre Meldung den Weg.
   (Vertrag A), keine zweite Grenze.
 - Ein Journal aus Zweig 8 ohne `object.kind` gilt als Post-Journal
   (`writer_of()`); Zweig 8 schrieb nur Posts.
+- Kein Speichern eines Posts hier löscht eine Revision (in Z8 wird nichts
+  gelöscht; Zweig 11, nach Codex-Runde 1): wo diese Site eine Zahl von
+  Revisionen hält (`WP_POST_REVISIONS`, Filter `wp_revisions_to_keep`),
+  löscht `wp_save_post_revision()` sonst die ältesten darüber. Für den
+  eigenen Aufruf auf genau diesen Post gilt «alle behalten» (-1,
+  `AB_MCP_Sync_Post_Writer::keeping_revisions()`), vorwärts
+  (`wp_update_post()`) und zurück (die Zeile), für Beiträge, Seiten und die
+  Vorlagen und übrigen Typen aus Zweig 9b. Die Zahl kann die Grenze so
+  übersteigen, bis ein späteres Speichern in wp-admin aufräumt; eine Site
+  ohne Revisionen (0) bekommt keine. Ein neuer Post hat keine älteren.
+  Anhänge legen keine Revisionen an (`wp_insert_post()` kehrt für ein
+  Attachment vor `post_updated` zurück, wp-includes/post.php:5212), auch
+  wo ein Plugin sie für Attachments meldet. Prüffall
+  `SyncContentTest::testATakeOverOfAPageDeletesNoRevisionOfItWhereTheSiteKeepsANumberOfThem`.
 
 ## Post: Feldregel (Entscheid 28)
 

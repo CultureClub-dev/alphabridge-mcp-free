@@ -372,15 +372,17 @@ final class SyncStructureWritersTest extends TestCase {
 		// No revision deleted by the call (Codex round 1, A3): for this post,
 		// where the site keeps a number, none; the filter goes again, also
 		// after an error of the call.
-		$keep  = new \ReflectionMethod( AB_MCP_Sync_Css_Writer::class, 'keeping_revisions' );
 		$post  = (object) array( 'ID' => 7 );
 		$other = (object) array( 'ID' => 8 );
-		self::assertSame( array( -1, 0, 3 ), $keep->invoke( null, 7, static fn() => array( apply_filters( 'wp_revisions_to_keep', 3, $post ), apply_filters( 'wp_revisions_to_keep', 0, $post ), apply_filters( 'wp_revisions_to_keep', 3, $other ) ) ) );
+		self::assertSame( array( -1, 0, 3 ), \AB_MCP_Sync_Post_Writer::keeping_revisions( 7, static fn() => array( apply_filters( 'wp_revisions_to_keep', 3, $post ), apply_filters( 'wp_revisions_to_keep', 0, $post ), apply_filters( 'wp_revisions_to_keep', 3, $other ) ) ) );
 		self::assertSame( array(), $GLOBALS['ab_test_filters']['wp_revisions_to_keep'] ?? array(), 'The filter goes again.' );
 		try {
-			$keep->invoke( null, 7, static function () {
-				throw new \RuntimeException( 'The call failed.' );
-			} );
+			\AB_MCP_Sync_Post_Writer::keeping_revisions(
+				7,
+				static function () {
+					throw new \RuntimeException( 'The call failed.' );
+				}
+			);
 		} catch ( \RuntimeException $e ) {
 			unset( $e );
 		}
