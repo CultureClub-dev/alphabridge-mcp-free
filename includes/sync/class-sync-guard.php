@@ -52,10 +52,18 @@
  *  - the classic way: wp_insert_post_empty_content (the core's own text
  *    then), and the edit lock _edit_lock set on the posts, so an editor
  *    sees them taken;
+ *  - a covered term (branch 9): a save through the REST API with the
+ *    message (rest_request_before_callbacks for a write to the term by its
+ *    id through a controller of terms: rest_pre_insert_{$taxonomy} cannot
+ *    refuse, WP_REST_Terms_Controller::update_item() casts what it answers
+ *    to the arguments of wp_update_term()); its meta, by the object and by
+ *    the meta id, as for posts;
  *  - a covered option: pre_update_option answers the old value (still).
  * NOT refused, named in the texts (decision 19): wp_publish_post() (the
  * cron publishing a scheduled post writes the status by SQL), the classic
- * way of terms, wp_set_object_terms(), delete_option(), any writer past
+ * way of terms (wp_update_term() and wp_delete_term() of another plugin or
+ * of wp-admin's term screens, which have no filter to refuse with),
+ * wp_set_object_terms(), delete_option(), any writer past
  * the WordPress API. For them a change between the check of the target and
  * the write can be lost without the read back seeing it; the step's own
  * check of the target hash right before the write narrows that window.
@@ -107,20 +115,25 @@ final class AB_MCP_Sync_Guard {
 	 * @param array $posts      id => post type of the posts the step writes.
 	 * @param array $taxonomies Taxonomies new terms are refused in.
 	 * @param array $options    Option names the step writes.
+	 * @param array $terms      id => taxonomy of the terms the step writes (branch 9).
 	 * @return true|WP_Error
 	 */
-	public static function begin( $run_id, $seq, array $posts, array $taxonomies = array(), array $options = array() ) {
+	public static function begin( $run_id, $seq, array $posts, array $taxonomies = array(), array $options = array(), array $terms = array() ) {
 		$record = array(
 			'run_id'     => (int) $run_id,
 			'seq'        => (int) $seq,
 			'posts'      => array(),
 			'taxonomies' => array_values( array_map( 'strval', $taxonomies ) ),
 			'options'    => array_values( array_map( 'strval', $options ) ),
+			'terms'      => array(),
 			'until'      => self::now() + self::TTL,
 			'user_id'    => (int) get_current_user_id(),
 		);
 		foreach ( $posts as $id => $type ) {
 			$record['posts'][ (string) (int) $id ] = (string) $type;
+		}
+		foreach ( $terms as $id => $taxonomy ) {
+			$record['terms'][ (string) (int) $id ] = (string) $taxonomy;
 		}
 		self::$owner = true;
 		self::mark();
@@ -214,6 +227,12 @@ final class AB_MCP_Sync_Guard {
 		add_filter( 'delete_post_metadata_by_mid', array( __CLASS__, 'meta_by_mid' ), 1, 2 );
 		add_filter( 'wp_insert_post_empty_content', array( __CLASS__, 'empty_content' ), 1, 2 );
 		add_filter( 'pre_update_option', array( __CLASS__, 'pre_update_option' ), 1, 3 );
+		add_filter( 'rest_request_before_callbacks', array( __CLASS__, 'rest_term' ), 1, 3 );
+		add_filter( 'add_term_metadata', array( __CLASS__, 'term_meta_by_object' ), 1, 2 );
+		add_filter( 'update_term_metadata', array( __CLASS__, 'term_meta_by_object' ), 1, 2 );
+		add_filter( 'delete_term_metadata', array( __CLASS__, 'term_meta_delete' ), 1, 5 );
+		add_filter( 'update_term_metadata_by_mid', array( __CLASS__, 'term_meta_by_mid' ), 1, 2 );
+		add_filter( 'delete_term_metadata_by_mid', array( __CLASS__, 'term_meta_by_mid' ), 1, 2 );
 	}
 
 	/**
@@ -321,6 +340,33 @@ final class AB_MCP_Sync_Guard {
 	}
 
 	/**
+	 * rest_request_before_callbacks: a write to a covered term through the
+	 * REST API (a controller of terms, the term by its id, any method that
+	 * writes) is refused with the message (branch 9). The record is read only
+	 * for such a request.
+	 *
+	 * @param mixed           $response Null, or what an earlier filter answered.
+	 * @param array           $handler  The route handler (its callback).
+	 * @param WP_REST_Request $request  Request.
+	 * @return mixed|WP_Error
+	 */
+	public static function rest_term( $response, $handler, $request ) {
+		if ( null !== $response || ! is_object( $request ) || ! method_exists( $request, 'get_method' ) || in_array( strtoupper( (string) $request->get_method() ), array( 'GET', 'HEAD', 'OPTIONS' ), true ) ) {
+			return $response;
+		}
+		$controller = isset( $handler['callback'] ) && is_array( $handler['callback'] ) && isset( $handler['callback'][0] ) ? $handler['callback'][0] : null;
+		$id         = (int) $request->get_param( 'id' );
+		if ( $id < 1 || ! $controller instanceof WP_REST_Terms_Controller ) {
+			return $response;
+		}
+		$record = self::holding();
+		if ( null !== $record && isset( $record['terms'][ (string) $id ] ) ) {
+			return new WP_Error( self::CODE, self::message( $record ), array( 'status' => 423 ) );
+		}
+		return $response;
+	}
+
+	/**
 	 * pre_trash_post, pre_delete_post, pre_delete_attachment: refused for a
 	 * covered post (false stops the core).
 	 *
@@ -405,6 +451,66 @@ final class AB_MCP_Sync_Guard {
 		}
 		$meta = get_metadata_by_mid( 'post', (int) $meta_id );
 		return is_object( $meta ) && isset( $meta->post_id ) && isset( $record['posts'][ (string) (int) $meta->post_id ] ) ? false : $check;
+	}
+
+	/**
+	 * Whether a term is covered by a boundary another request holds.
+	 *
+	 * @param mixed $id Term id.
+	 * @return bool
+	 */
+	public static function covers_term( $id ) {
+		$record = self::holding();
+		return null !== $record && isset( $record['terms'][ (string) (int) $id ] );
+	}
+
+	/**
+	 * add_term_metadata, update_term_metadata: the meta of a covered term is
+	 * not written (false short-circuits).
+	 *
+	 * @param mixed $check     Null to go on.
+	 * @param int   $object_id Term.
+	 * @return mixed
+	 */
+	public static function term_meta_by_object( $check, $object_id ) {
+		return self::covers_term( $object_id ) ? false : $check;
+	}
+
+	/**
+	 * delete_term_metadata: the meta of a covered term is not removed; a
+	 * delete across every term (delete_metadata() with delete_all) is
+	 * refused while a boundary covers any term.
+	 *
+	 * @param mixed  $check      Null to go on.
+	 * @param mixed  $object_id  Term.
+	 * @param string $meta_key   Key.
+	 * @param mixed  $meta_value Value.
+	 * @param bool   $delete_all Whether the key goes from every term.
+	 * @return mixed
+	 */
+	public static function term_meta_delete( $check, $object_id, $meta_key = '', $meta_value = '', $delete_all = false ) {
+		if ( $delete_all ) {
+			$record = self::holding();
+			return null !== $record && ! empty( $record['terms'] ) ? false : $check;
+		}
+		return self::covers_term( $object_id ) ? false : $check;
+	}
+
+	/**
+	 * update_term_metadata_by_mid, delete_term_metadata_by_mid: by the term
+	 * the meta id belongs to.
+	 *
+	 * @param mixed $check   Null to go on.
+	 * @param int   $meta_id Meta id.
+	 * @return mixed
+	 */
+	public static function term_meta_by_mid( $check, $meta_id ) {
+		$record = self::holding();
+		if ( null === $record || empty( $record['terms'] ) ) {
+			return $check;
+		}
+		$meta = get_metadata_by_mid( 'term', (int) $meta_id );
+		return is_object( $meta ) && isset( $meta->term_id ) && isset( $record['terms'][ (string) (int) $meta->term_id ] ) ? false : $check;
 	}
 
 	/**

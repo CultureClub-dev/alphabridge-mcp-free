@@ -233,42 +233,65 @@ final class SyncSafeCallsTest extends TestCase {
 		'class-sync-guard.php'  => array(
 			'add_action'          => array( 1, 'arm(): rest_api_init, where the REST filters of every registered type are hooked (A1).' ),
 			'delete_option'       => array( 2, 'end() and record(): removes the record of the boundary, an option this class writes itself.' ),
-			'get_metadata_by_mid' => array( 1, 'meta_by_mid(): the post a meta id belongs to, for the lock of the boundary by object; no value compared.' ),
+			'get_metadata_by_mid' => array( 2, 'meta_by_mid() and term_meta_by_mid(): the post or term a meta id belongs to, for the lock of the boundary by object (branch 9 for terms); no value compared.' ),
 			'get_option'          => array( 5, 'begin(), end() and record(): the record of the boundary, an option this class writes itself; guarded() and mark(): the mark of a site that has had a run, an option this class writes itself (N3).' ),
 			'get_post_types'      => array( 1, 'arm_rest(): the post types registered, for the REST filters (A1); no stored value.' ),
+			'->get_param'         => array( 1, 'rest_term(): the id of the term a REST request writes, for the lock of the boundary (branch 9); a value of the request, no stored value.' ),
 			'maybe_unserialize'   => array( 1, 'holding(): the record of the boundary read afresh from its row (AB_MCP_Sync_Rows::option()), an option this class writes itself (A1).' ),
 			'update_option'       => array( 2, 'begin(): writes that record; mark(): writes that mark, autoloaded (N3).' ),
 			'update_post_meta'    => array( 1, 'begin(): the edit lock _edit_lock of a covered post, so an editor sees it taken (decision 19); excluded from every comparison.' ),
+		),
+		'class-sync-term-writer.php' => array(
+			'clean_term_cache'          => array( 1, 'post_write(): the caches of the written term (decision 33).' ),
+			'current_user_can'          => array( 3, 'precheck(): the rights of the account at the term (edit_term) or of the taxonomy for a new one (manage_terms, edit_terms, assign_terms); restore_right(): edit_term on the way back. The rights of the meta of a term go through AB_MCP_Sync_Post_Writer::ops_right() (Codex round 1, A2).' ),
+			'get_taxonomy'              => array( 1, 'precheck(): the capabilities of the taxonomy; no stored value compared.' ),
+			'is_taxonomy_hierarchical'  => array( 1, 'precheck(): whether the taxonomy has parents, as registered in this request.' ),
+			'sanitize_meta'             => array( 1, 'precheck(): the sanitizer ahead of each written meta value, as update_metadata() runs it (decision 17).' ),
+			'sanitize_term'             => array( 1, 'sanitizer_refusal(): the sanitizers ahead, as wp_insert_term() and wp_update_term() run them (decision 17).' ),
+			'wp_cache_delete'           => array( 1, 'post_write(): the meta cache of the written term.' ),
+			'wp_find_hierarchy_loop'    => array( 1, 'loop(): the loop of parents wp_update_term() would break (wp_check_term_hierarchy_for_loops()), read before anything is written; the parents through wp_get_term_taxonomy_parent_id().' ),
+			'wp_get_term_taxonomy_parent_id' => array( 1, 'loop(): the parent here of a term the run does not move, beside the parents it gives the terms it writes (Codex round 1 on branch 9, B4); read for the check of a loop, never compared with the staging site.' ),
+			'wp_insert_term'            => array( 1, 'write_row(): the way forward of a new term (decision 17).' ),
+			'wp_slash'                  => array( 6, 'sanitizer_refusal(), write_row() and restore_row(): the slashing wp_insert_term() and wp_update_term() expect of the name and the description.' ),
+			'wp_unique_term_slug'       => array( 1, 'precheck(): the slug WordPress would store for a new term, read before anything is written.' ),
+			'wp_update_term'            => array( 2, 'write_row() and restore_row(): the way forward and back of the row of a term (decisions 17 and 23).' ),
 		),
 		'class-sync-resources.php' => array(
 			'AB_MCP_Protected_Store::root' => array( 1, 'measure(): the folder of the store, for the free space and the tempo of a write there (15.11).' ),
 		),
 		'class-sync-post-writer.php' => array(
 			'AB_MCP_Builder_Caches::clear'             => array( 1, 'post_write(): the builder caches of the written post (decision 33).' ),
-			'AB_MCP_Builders::is_markup_meta_key'      => array( 1, 'meta_allowed(): whether a key is the markup of a page builder (the list of the signatures and the filter); no stored value.' ),
+			'AB_MCP_Builders::markup_meta_refusal'     => array( 2, 'precheck() and restore_right(): a key of a page builder needs unfiltered_html, forward and on the way back, as the free meta writer and its undo ask it (the list of the signatures and the filter, and the capability; GitHub Codex round 1 on free#138, P2); no stored value.' ),
 			'AB_MCP_Page_Cache::purge_posts'           => array( 1, 'post_write(): the page cache of the written post (decision 33).' ),
 			'AB_MCP_Tools_Content::saved_status'       => array( 2, 'precheck() and restore_row(): the status WordPress would store for the data handed over (decision 17); a calculation.' ),
 			'AB_MCP_Tools_Content::status_date_refusal' => array( 2, 'precheck() and restore_row(): the refusals of the free writer for a status and date (decision 17); a calculation.' ),
 			'add_metadata'                             => array( 1, 'write_meta(): the way forward of meta (decision 17).' ),
 			'clean_post_cache'                         => array( 1, 'post_write(): the caches of the written post.' ),
-			'current_user_can'                         => array( 15, 'precheck(): the rights of the account for each operation (decision 17, step 4), and delete_post_meta for a plain key only this site has, which the step removes (decision 28; GitHub Codex round 1 on free#137); term_right(): the right of a taxonomy to assign its terms, assign_term for each term, the right to make a term for a slug this site has no term of; restore_right(): the same rights asked again right before a part goes back on the way back, edit_post first for every part (GitHub Codex round 2 on free#137; Codex round 18).' ),
+			'current_user_can'                         => array( 16, 'precheck(): the rights of the account for each operation (decision 17, step 4); ops_right(): edit_, add_ and delete_post_meta or _term_meta per key that differs, exactly the operations write_meta() makes (meta_ops()), through map_meta_cap at the object (decision 28; branch 9; Codex round 1, A2); slug_refusal(): whether the account may publish a pending post, without which WordPress drops its slug; term_right(): the right of a taxonomy to assign its terms, assign_term for each term, the right to make a term for a slug this site has no term of; restore_right(): the same rights asked again right before a part goes back on the way back, edit_post first for every part (GitHub Codex round 2 on free#137; Codex round 18).' ),
+			'delete_post_thumbnail'                    => array( 1, 'write_thumbnail(): the featured image removed through the core\'s own API (decision 28).' ),
 			'delete_metadata'                          => array( 1, 'write_meta(): the way forward of meta.' ),
 			'get_gmt_from_date'                        => array( 1, 'prepare(): the UTC date WordPress derives where a published post hands none over, for the target of the row.' ),
 			'get_option'                               => array( 1, 'with_row(): the default category wp_insert_post() gives a new post with the row (the ownership rule, Codex round 3); read to know what the row call was to write, not compared to the staging site.' ),
-			'get_post_type_object'                     => array( 2, 'precheck() and restore_right(): the capabilities of the type.' ),
+			'get_post_type_object'                     => array( 3, 'precheck(), slug_refusal() and restore_right(): the capabilities of the type.' ),
 			'get_taxonomy'                             => array( 1, 'term_right(): the capabilities of the taxonomy (assign_terms, edit_terms), as the rights ask them; no stored value compared (GitHub Codex round 2 on free#137).' ),
 			'get_term_by'                              => array( 1, 'term_right(): the id of the term of this site a slug names (post_format), for assign_term through map_meta_cap; the id is asked of the rights, never compared with the staging site (decision 28; GitHub Codex round 2 on free#137).' ),
 			'get_user_by'                              => array( 1, 'user_by_login(): the account of this site an author is written as (decision 25).' ),
-			'is_protected_meta'                        => array( 1, 'meta_allowed(): whether a key is protected (the rule of this version).' ),
+			'is_protected_meta'                        => array( 1, 'new_meta_allowed(): whether a key of a new post is protected, so its right is answered at the object only (decision 28; branch 9).' ),
+			'maybe_serialize'                          => array( 1, 'db_form(): the bytes WordPress stores for what sanitize_meta() gives back, as update_metadata() serializes it (Codex round 1 on branch 9, B3); a calculation, no stored value.' ),
+			'sanitize_meta'                            => array( 1, 'precheck(): the sanitizer ahead of each written meta value, as update_metadata() runs it (decision 17; branch 9).' ),
 			'sanitize_post'                            => array( 1, 'precheck(): the sanitizers ahead, as wp_insert_post() runs them (decision 17).' ),
+			'sanitize_title'                           => array( 2, 'slug_refusal(): the slug as wp_insert_post() makes it, in the old sanitizing for an update and the new one (branch 9); a string function with its filters.' ),
+			'set_post_thumbnail'                       => array( 1, 'write_thumbnail(): the featured image through the core\'s own API (decision 28).' ),
 			'taxonomy_exists'                          => array( 2, 'precheck() and restore_right(): whether a taxonomy is registered here.' ),
 			'update_metadata'                          => array( 1, 'write_meta(): the way forward of meta.' ),
 			'wp_cache_delete'                          => array( 4, 'post_write() and restore_meta(): the caches of the written post and its meta.' ),
 			'wp_get_theme'                             => array( 1, 'precheck(): the theme of this site, for the templates it offers (B7); no stored value compared.' ),
 			'->get_page_templates'                     => array( 1, 'precheck(): whether the theme offers the template page_template names, as wp_insert_post() checks it (decisions 17 and 28; B7).' ),
+			'wp_get_attachment_image'                  => array( 1, 'precheck(): whether WordPress shows the attachment of the featured image as an image, as set_post_thumbnail() asks it before it keeps the id (decision 28; branch 9).' ),
 			'wp_insert_post'                           => array( 1, 'write_row(): the way forward of a new post (decision 17).' ),
 			'wp_set_object_terms'                      => array( 2, 'write_terms() and restore_terms(): the way forward and back of terms (decisions 17 and 23).' ),
 			'wp_slash'                                 => array( 9, 'precheck(), write_row(), write_meta(), restore_row(): the slashing wp_insert_post() and the metadata API expect; in write_meta() the key as well as the value, since the metadata API unslashes both (GitHub Codex round 1 on free#137).' ),
+			'wp_unique_post_slug'                      => array( 1, 'slug_refusal(): the slug WordPress would store, read before anything is written, with the filters of the core and the plugins (branch 9).' ),
 			'wp_update_post'                           => array( 2, 'write_row() and restore_row(): the way forward and back of the row (decisions 17 and 23).' ),
 		),
 		'class-sync-engine.php' => array(
@@ -288,6 +311,7 @@ final class SyncSafeCallsTest extends TestCase {
 		),
 		'class-sync-push.php'   => array(
 			'AB_MCP_Protected_Store::bind' => array( 1, 'bind_package(): the packages of objects bound to the run, kept while it is not closed.' ),
+			'wp_get_term_taxonomy_parent_id' => array( 1, 'term_depths(): the parent here of a term the run does not write, for the depth of the terms of the run in the tree it leaves, which orders their steps (Codex rounds 1 and 2 on branch 9, B4); read for the order, never compared with the staging site.' ),
 		),
 		'class-sync-revert.php' => array(
 			'AB_MCP_Protected_Store::under_lock' => array( 1, 'begin(): a way back for a closed run is made under the lock of the store, against the clean-up (decision 20, rule 4; A6).' ),
@@ -372,6 +396,11 @@ final class SyncSafeCallsTest extends TestCase {
 					$class = is_array( $class ) ? ltrim( $class[1], '\\' ) : '';
 					if ( in_array( $class, array( 'self', 'static', 'parent' ), true ) ) {
 						$call = isset( $methods[ $name ] ) ? '' : ( $parents[ $base ][0] ?? '?' ) . '::' . $name;
+					} elseif ( '$w' === $class ) {
+						// The write side of a kind (AB_MCP_Sync_Engine::writer(), branch 9):
+						// one of WRITERS, classes declared here, and $w is assigned from
+						// writer() only (testTheWriteSideOfAKindIsAClassOfTheTakeover).
+						$call = '';
 					} else {
 						$call = isset( $declared[ $class ] ) ? '' : $class . '::' . $name;
 					}
@@ -420,6 +449,33 @@ final class SyncSafeCallsTest extends TestCase {
 	/** @param array $tokens Tokens. */
 	private static function before( array $tokens, int $i ) {
 		return $tokens[ self::index_before( $tokens, $i ) ] ?? null;
+	}
+
+	public function testTheWriteSideOfAKindIsAClassOfTheTakeover(): void {
+		// The calls through $w (branch 9) count as calls of a class declared
+		// under includes/sync/ (scan()): so every writer is one, and $w is
+		// assigned nowhere but from AB_MCP_Sync_Engine::writer() or
+		// writer_of(), which answer from WRITERS.
+		foreach ( \AB_MCP_Sync_Engine::WRITERS as $kind => $class ) {
+			self::assertTrue( class_exists( $class ), $kind );
+			self::assertStringStartsWith( dirname( __DIR__ ) . '/includes/sync/', (string) ( new \ReflectionClass( $class ) )->getFileName(), $kind );
+		}
+		$assigned = 0;
+		foreach ( glob( dirname( __DIR__ ) . '/includes/sync/*.php' ) as $file ) {
+			$text = (string) file_get_contents( $file );
+			if ( false === strpos( $text, '$w::' ) ) {
+				// A file that calls nothing through $w may name a variable so
+				// (the nodes of AB_MCP_Sync_Decision::cycles()).
+				continue;
+			}
+			foreach ( preg_split( '/\R/', $text ) as $n => $line ) {
+				if ( 1 === preg_match( '/\$w\s*=(?!=)/', $line ) ) {
+					++$assigned;
+					self::assertMatchesRegularExpression( '/\$w\s*=\s*(self::writer(_of)?|AB_MCP_Sync_Engine::writer)\(/', $line, basename( $file ) . ':' . ( $n + 1 ) );
+				}
+			}
+		}
+		self::assertGreaterThan( 0, $assigned );
 	}
 
 	public function testEveryCallIsAllowedWithItsReasonOrAnExceptionWithItsCount(): void {

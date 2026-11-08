@@ -24,9 +24,11 @@
  * steps, journal and rests; abort closes an open run (what it wrote stays;
  * the way back is wp_site_revert).
  *
- * WHAT A PLAN HOLDS (this version): entries of the kind post that are posts
- * or pages (AB_MCP_Sync_Post_Writer); every other entry chosen is named as
- * locked with its reason and stage and is no step. The steps: the check
+ * WHAT A PLAN HOLDS (this version): entries of the kind post of the types
+ * the post engine writes (AB_MCP_Sync_Post_Writer::TYPES) and of the kind
+ * term of its taxonomies (AB_MCP_Sync_Term_Writer::TAXONOMIES; branch 9);
+ * every other entry chosen is named as locked with its reason and stage
+ * and is no step. The steps: the check
  * before the first write (decision 16; the means of 15.11), one write step
  * per object in the order of the graph of their references (an object
  * created in the same run before the one that refers to it), the caches,
@@ -415,6 +417,10 @@ final class AB_MCP_Sync_Push {
 			foreach ( isset( $line['refs'] ) && is_array( $line['refs'] ) ? $line['refs'] : array() as $ref ) {
 				if ( is_array( $ref ) && isset( $ref['space'], $ref['id'] ) && in_array( $ref['space'], array( 'post', 'term' ), true ) && 'strong' === ( $ref['strength'] ?? null ) ) {
 					$item['refs'][] = array( (string) $ref['space'], (string) (int) $ref['id'] );
+					if ( 'term' === $item['kind'] && 'term' === $ref['space'] && 'parent' === ( $ref['at'] ?? null ) ) {
+						// The parent of a term, for the order (order()).
+						$item['parent_ref'] = (string) (int) $ref['id'];
+					}
 				}
 			}
 			$items[ $n ] = $item;
@@ -424,7 +430,7 @@ final class AB_MCP_Sync_Push {
 			return $refused;
 		}
 		if ( array() === $items ) {
-			return new WP_Error( 'ab_mcp_sync_push_nothing', sprintf( 'Nothing of the selection is written in this version: %s Choose entries the report marks take_over or create (posts and pages).', array() === $locked ? 'no entry a takeover writes was chosen.' : implode( ' ', array_map( static fn( $l ) => sprintf( 'Entry %1$d (%2$s %3$s): %4$s', $l['n'], $l['kind'], $l['subtype'], $l['reason'] ), array_slice( $locked, 0, 5 ) ) ) ), array( 'locked' => $locked ) );
+			return new WP_Error( 'ab_mcp_sync_push_nothing', sprintf( 'Nothing of the selection is written in this version: %s Choose entries the report marks take_over or create (posts, pages and the other types the engine writes, and terms).', array() === $locked ? 'no entry a takeover writes was chosen.' : implode( ' ', array_map( static fn( $l ) => sprintf( 'Entry %1$d (%2$s %3$s): %4$s', $l['n'], $l['kind'], $l['subtype'], $l['reason'] ), array_slice( $locked, 0, 5 ) ) ) ), array( 'locked' => $locked ) );
 		}
 		// The objects of this site as they are now, and the pairs.
 		$asked = array();
@@ -486,6 +492,17 @@ final class AB_MCP_Sync_Push {
 			$items[ $n ]['pair_hash']       = AB_MCP_Sync_Pairs::snapshot_hash( AB_MCP_Sync_Pairs::snapshot( (int) $item['pair_id'] ) );
 			$pairs[ (int) $item['pair_id'] ] = $items[ $n ]['pair_hash'];
 		}
+		// The depth of each term in the tree the run leaves, for the order.
+		$depths = self::term_depths(
+			$items,
+			static function ( $staging_id ) use ( $source ) {
+				$pair = AB_MCP_Sync_Pairs::find_staging( (string) $source, 'term', (string) $staging_id );
+				return is_array( $pair ) && isset( $pair['live_ref'] ) ? (int) $pair['live_ref'] : null;
+			}
+		);
+		foreach ( $depths as $n => $depth ) {
+			$items[ $n ]['depth'] = $depth;
+		}
 		// The order: an object created in the run before the one that refers
 		// to it (decision 16); a cycle is locked (mutual references).
 		$ordered = self::order( $items );
@@ -514,11 +531,15 @@ final class AB_MCP_Sync_Push {
 			// store counts them (AB_MCP_Sync_Backup::size_of(); GitHub Codex
 			// round 6 on free#137, P2). A new object leaves a small mark.
 			$live_id = 'update' === $item['op'] && isset( $item['live_ref'] ) ? (int) $item['live_ref'] : 0;
-			$current = $live_id > 0 ? AB_MCP_Sync_Post_Writer::current( $live_id ) : null;
+			$w       = AB_MCP_Sync_Engine::writer( $item['kind'] );
+			$current = $live_id > 0 && null !== $w ? $w::current( $live_id ) : null;
 			if ( is_wp_error( $current ) ) {
 				return $current;
 			}
-			$bytes += AB_MCP_Sync_Backup::size_of( is_array( $current ) ? $current : array( 'absent' => true, 'identity' => array( 'post_type' => (string) ( $item['subtype'] ?? '' ), 'post_name' => (string) $item['staging_ref'], 'theme' => '' ) ) );
+			$absent = 'term' === $item['kind']
+				? array( 'taxonomy' => (string) ( $item['subtype'] ?? '' ), 'slug' => (string) $item['staging_ref'] )
+				: array( 'post_type' => (string) ( $item['subtype'] ?? '' ), 'post_name' => (string) $item['staging_ref'], 'theme' => '' );
+			$bytes += AB_MCP_Sync_Backup::size_of( is_array( $current ) ? $current : array( 'absent' => true, 'identity' => $absent ) );
 		}
 		foreach ( $items as $n => $item ) {
 			$depends = array( 1 );
@@ -531,7 +552,7 @@ final class AB_MCP_Sync_Push {
 				'depends' => array_values( array_unique( $depends ) ),
 				'pair_id' => isset( $item['pair_id'] ) ? $item['pair_id'] : null,
 			);
-			unset( $items[ $n ]['depends_on'], $items[ $n ]['refs'] );
+			unset( $items[ $n ]['depends_on'], $items[ $n ]['refs'], $items[ $n ]['parent_ref'], $items[ $n ]['depth'] );
 		}
 		$writes  = range( 2, $seq );
 		$steps[] = array( 'op' => 'post', 'phase' => 7, 'depends' => array( 1 ) );
@@ -544,11 +565,21 @@ final class AB_MCP_Sync_Push {
 		}
 		ksort( $live );
 		ksort( $pairs );
+		// The order of the steps the token confirms, object by object: it
+		// rests on more than the objects chosen (the depth of a term reads
+		// the parents of its ancestors here, term_depths()), so a token whose
+		// order no longer holds is stale like any other change of the state
+		// (branch 9, Codex round 3, B).
+		$order = array();
+		foreach ( $items as $item ) {
+			$order[] = array( (int) $item['seq'], (string) $item['kind'], (string) $item['staging_ref'] );
+		}
 		$state = hash(
 			'sha256',
 			AB_MCP_Sync_Canon::encode(
 				array(
 					'live'        => $live,
+					'order'       => $order,
 					'pairs'       => $pairs,
 					'print'       => $print,
 					'report_hash' => $report_hash,
@@ -639,11 +670,14 @@ final class AB_MCP_Sync_Push {
 			}
 			return $lock( sprintf( 'The report says %s for this entry: a takeover writes nothing for it.', $action ) );
 		}
-		if ( 'post' !== $entry['kind'] ) {
-			return $lock( sprintf( 'The kind %s is written from a later branch of Z8 (terms: Z9; media: Z10; menus, widget areas, the additional CSS and options: Z11).', (string) $entry['kind'] ), 'term' === $entry['kind'] ? 'Z9' : ( 'attachment' === $entry['kind'] ? 'Z10' : 'Z11' ) );
-		}
-		if ( ! in_array( (string) ( $entry['subtype'] ?? '' ), AB_MCP_Sync_Post_Writer::TYPES, true ) ) {
-			return $lock( sprintf( 'In this version the engine of the kind post writes posts and pages; the type %s follows with Z9.', (string) ( $entry['subtype'] ?? '' ) ), 'Z9' );
+		if ( 'term' === $entry['kind'] ) {
+			if ( ! in_array( (string) ( $entry['subtype'] ?? '' ), AB_MCP_Sync_Term_Writer::TAXONOMIES, true ) ) {
+				return $lock( sprintf( 'The engine of the kind term writes the terms of %1$s; the taxonomy %2$s waits for its classification.', implode( ', ', AB_MCP_Sync_Term_Writer::TAXONOMIES ), (string) ( $entry['subtype'] ?? '' ) ), 'Z8d' );
+			}
+		} elseif ( 'post' !== $entry['kind'] ) {
+			return $lock( sprintf( 'The kind %s is written from a later branch of Z8 (media: Z10; menus, widget areas, the additional CSS and options: Z11).', (string) $entry['kind'] ), 'attachment' === $entry['kind'] ? 'Z10' : 'Z11' );
+		} elseif ( ! in_array( (string) ( $entry['subtype'] ?? '' ), AB_MCP_Sync_Post_Writer::TYPES, true ) ) {
+			return $lock( sprintf( 'The engine of the kind post writes the types %1$s; the type %2$s waits for its field schema.', implode( ', ', AB_MCP_Sync_Post_Writer::TYPES ), (string) ( $entry['subtype'] ?? '' ) ), 'Z8d' );
 		}
 		$staging = isset( $entry['staging']['ref'] ) ? (string) $entry['staging']['ref'] : '';
 		if ( '' === $staging ) {
@@ -656,7 +690,7 @@ final class AB_MCP_Sync_Push {
 		return array(
 			'item' => array(
 				'n'           => $n,
-				'kind'        => 'post',
+				'kind'        => (string) $entry['kind'],
 				'subtype'     => (string) $entry['subtype'],
 				'op'          => $op,
 				'staging_ref' => $staging,
@@ -679,10 +713,13 @@ final class AB_MCP_Sync_Push {
 	 * @return array{items:array,locked:array}|WP_Error
 	 */
 	private static function order( array $items ) {
+		// The objects the run creates, by the space of their ids: a post in
+		// the space of posts, a term in the space of terms (a new post in a
+		// new category, a new term under a new parent: branch 9).
 		$at = array();
 		foreach ( $items as $n => $item ) {
 			if ( 'create' === $item['op'] ) {
-				$at[ 'post' . "\0" . $item['staging_ref'] ] = $n;
+				$at[ ( 'term' === $item['kind'] ? 'term' : 'post' ) . "\0" . $item['staging_ref'] ] = $n;
 			}
 		}
 		$edges = array();
@@ -741,12 +778,29 @@ final class AB_MCP_Sync_Push {
 				}
 			}
 		}
-		// Topological order: each time the smallest entry whose targets are
-		// placed (stable, whatever order the entries came in).
+		// Topological order: each time the first entry whose targets are
+		// placed, the terms first by their depth in the tree the run leaves
+		// (term_depths(): written from the root of that tree down, all the
+		// ancestors of a term stand where the run puts them when it is
+		// written, and as that tree has no loop, its new parent is never one
+		// of its descendants; branch 9, Codex rounds 1 and 2, B4), then the
+		// other objects; within the same depth by the entry of the report
+		// (stable, whatever order the entries came in). The order is no
+		// dependency: a step whose term deviates leaves the others to run,
+		// and each step asks its own loop of parents as it writes
+		// (term:parent, fail closed).
 		$ordered = array();
 		$placed  = array();
 		$left    = $items;
-		ksort( $left );
+		uksort(
+			$left,
+			static function ( $a, $b ) use ( $items ) {
+				$rank = static function ( $n ) use ( $items ) {
+					return 'term' === $items[ $n ]['kind'] ? array( 0, isset( $items[ $n ]['depth'] ) ? (int) $items[ $n ]['depth'] : 0, (int) $n ) : array( 1, 0, (int) $n );
+				};
+				return $rank( $a ) <=> $rank( $b );
+			}
+		);
 		$rounds = 0;
 		while ( array() !== $left && $rounds < self::MAX_OBJECTS + 1 ) {
 			++$rounds;
@@ -774,6 +828,73 @@ final class AB_MCP_Sync_Push {
 			'items'  => $ordered,
 			'locked' => $locked,
 		);
+	}
+
+	/**
+	 * The depth of each term the run writes in the tree it leaves: every
+	 * term here with its parent here, the terms of the run with the parent
+	 * they are given (the parent of the staging site, by the run when it
+	 * writes that parent too, else by its pair); a new term stands as a node
+	 * of its own until its step made it. 0 for a root; a parent without a
+	 * pair, or a loop (which the check locks, term:parent), ends the walk.
+	 *
+	 * @param array    $items  The items of the plan (kind, op, staging_ref, live_ref, subtype, parent_ref).
+	 * @param callable $mapped Staging id of a term => its id here, or null.
+	 * @return array<int,int> n => depth, for the terms.
+	 */
+	private static function term_depths( array $items, callable $mapped ) {
+		$node_of = array();
+		foreach ( $items as $n => $item ) {
+			if ( 'term' === $item['kind'] ) {
+				$node_of[ (string) $item['staging_ref'] ] = 'update' === $item['op'] ? 'l:' . (int) $item['live_ref'] : 'n:' . (string) $item['staging_ref'];
+			}
+		}
+		// The parent each term of the run is given: a node, null for none (a
+		// root), false where it has no counterpart here.
+		$given = array();
+		foreach ( $items as $n => $item ) {
+			if ( 'term' !== $item['kind'] ) {
+				continue;
+			}
+			$node = $node_of[ (string) $item['staging_ref'] ];
+			if ( ! isset( $item['parent_ref'] ) ) {
+				$given[ $node ] = null;
+			} elseif ( isset( $node_of[ (string) $item['parent_ref'] ] ) ) {
+				$given[ $node ] = $node_of[ (string) $item['parent_ref'] ];
+			} else {
+				$here           = $mapped( (string) $item['parent_ref'] );
+				$given[ $node ] = null === $here ? false : 'l:' . (int) $here;
+			}
+		}
+		$out = array();
+		foreach ( $items as $n => $item ) {
+			if ( 'term' !== $item['kind'] ) {
+				continue;
+			}
+			$taxonomy = isset( $item['subtype'] ) ? (string) $item['subtype'] : '';
+			$at       = $node_of[ (string) $item['staging_ref'] ];
+			$seen     = array( $at => true );
+			$depth    = 0;
+			while ( $depth <= self::MAX_OBJECTS ) {
+				if ( array_key_exists( $at, $given ) ) {
+					$up = $given[ $at ];
+				} elseif ( 0 === strpos( $at, 'l:' ) ) {
+					// A term the run does not write: its parent here.
+					$parent = (int) wp_get_term_taxonomy_parent_id( (int) substr( $at, 2 ), $taxonomy );
+					$up     = $parent > 0 ? 'l:' . $parent : null;
+				} else {
+					$up = null;
+				}
+				if ( ! is_string( $up ) || isset( $seen[ $up ] ) ) {
+					break;
+				}
+				$seen[ $up ] = true;
+				$at          = $up;
+				++$depth;
+			}
+			$out[ $n ] = $depth;
+		}
+		return $out;
 	}
 
 	/**
@@ -1041,7 +1162,7 @@ final class AB_MCP_Sync_Push {
 	 * @return WP_Error
 	 */
 	private static function selection( $what ) {
-		return new WP_Error( 'ab_mcp_sync_push_selection', sprintf( 'The selection is not one a run takes: %s Pass select (entry numbers of the report of kind post with action take_over or create), choices (entry and choice for a conflict), as_draft (entry numbers taken over with the status draft) or all=true, and packages (the package_ids of the objects).', $what ) );
+		return new WP_Error( 'ab_mcp_sync_push_selection', sprintf( 'The selection is not one a run takes: %s Pass select (entry numbers of the report of kind post or term with action take_over or create), choices (entry and choice for a conflict), as_draft (entry numbers taken over with the status draft) or all=true, and packages (the package_ids of the objects).', $what ) );
 	}
 
 	/**

@@ -410,10 +410,16 @@ final class AB_MCP_Sync_Revert {
 				'will'     => $will,
 			);
 			if ( $live_id > 0 ) {
-				$current             = AB_MCP_Sync_Post_Writer::current( $live_id );
-				$live[ $live_id ]    = is_array( $current ) ? AB_MCP_Sync_Post_Writer::row_hash( $current['row'] ) : ( null === $current ? 'gone' : 'unread' );
+				$live[ self::live_key( $object, $live_id ) ] = self::row_now( $object, $live_id );
 			}
 		}
+		// The way back goes from the last step to the first (the steps of a
+		// run in the order of the plan, a parent first): a term the run moved
+		// under another term it moved goes back before it, so no state in
+		// between closes a loop of parents (two categories that swapped their
+		// places; branch 9, Codex round 1, B4).
+		$items = array_reverse( $items );
+		$shown = array_reverse( $shown );
 		if ( array() === $items ) {
 			return new WP_Error( 'ab_mcp_sync_revert_nothing', sprintf( 'Run %d has no written step to take back (none wrote, or every one was taken back already). Use wp_site_push action=status to see its steps.', (int) $run['run_id'] ) );
 		}
@@ -447,6 +453,36 @@ final class AB_MCP_Sync_Revert {
 			'source'   => $source,
 			'state'    => $state,
 		);
+	}
+
+	/**
+	 * The key of an object of a step among the objects the token binds: a
+	 * post by its id, as before branch 9; a term by term:<id> (two id spaces).
+	 *
+	 * @param array $object  The object of the journal.
+	 * @param int   $live_id Its id here.
+	 * @return string|int
+	 */
+	private static function live_key( array $object, $live_id ) {
+		$kind = isset( $object['kind'] ) ? (string) $object['kind'] : 'post';
+		return 'post' === $kind ? (int) $live_id : $kind . ':' . (int) $live_id;
+	}
+
+	/**
+	 * The hash of the row of an object as it is now, by the write side of its
+	 * kind: gone, unread, or the hash.
+	 *
+	 * @param array $object  The object of the journal.
+	 * @param int   $live_id Its id here.
+	 * @return string
+	 */
+	private static function row_now( array $object, $live_id ) {
+		$w = AB_MCP_Sync_Engine::writer( isset( $object['kind'] ) ? (string) $object['kind'] : 'post' );
+		if ( null === $w ) {
+			return 'unread';
+		}
+		$current = $w::current( (int) $live_id );
+		return is_array( $current ) ? $w::row_hash( $current['row'] ) : ( null === $current ? 'gone' : 'unread' );
 	}
 
 	/**
@@ -488,8 +524,7 @@ final class AB_MCP_Sync_Revert {
 			);
 			$state[] = array( (int) $step['seq'], (string) $step['state'] );
 			if ( 'planned' === $step['state'] && $live_id > 0 ) {
-				$current          = AB_MCP_Sync_Post_Writer::current( $live_id );
-				$live[ $live_id ] = is_array( $current ) ? AB_MCP_Sync_Post_Writer::row_hash( $current['row'] ) : ( null === $current ? 'gone' : 'unread' );
+				$live[ self::live_key( $object, $live_id ) ] = self::row_now( $object, $live_id );
 			}
 		}
 		ksort( $live );

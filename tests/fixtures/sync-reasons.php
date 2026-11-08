@@ -345,23 +345,59 @@ return array(
 			'plan' => 'Entscheid 27 (Typ und Regel je Name)',
 		),
 		'post:engine_type'             => array(
-			'why'  => 'Branch 8 writes posts and pages end to end; the other core types wait for the field schema of branch 9 (fail closed).',
-			'plan' => 'Zweigtabelle Zeile 539 und 540 (Zweig 8, Zweig 9)',
+			'why'  => 'Branches 8 and 9 write posts and pages end to end; the other core types of the kind post (templates, template parts, global styles, navigations, reusable blocks) follow with branch 9b of Z8 (heikel/z8-vorlagen, right after branch 9 is merged; GRENZEN-INHALTE.md). This lock holds these five types and nothing else.',
+			'plan' => 'Zweigtabelle Zeile 540 (Zweig 9); Entscheid von Thomas «A: eigener Zweig 9b» (08.11.2026)',
+		),
+		'post:other_kind'              => array(
+			'why'  => 'An attachment, a menu item and the additional CSS are rows of wp_posts of other kinds (AB_MCP_Sync_Kinds::OWNERSHIP); their engines (branches 10 and 11) write them with their files and fields, the engine of the kind post never does (fail closed where a plan names one with the kind post).',
+			'plan' => 'Entscheid 25 (Zuständigkeit je Objekttyp); Zweigtabelle Zeilen 10 und 11',
+		),
+		'post:in_trash'                => array(
+			'why'  => 'A post in the trash is a deletion on its site (wp_trash_post(), _wp_trash_meta_*, the __trashed slug); writing the status would delete here, and the deletions follow with their way back in Z8d, as *:delete says. The report shows the object as deleted.',
+			'core' => array( array( 'wp-includes/post.php', 4084, 'function wp_trash_post( $post_id = 0 ) {' ) ),
+			'plan' => 'Entscheid 22 (Löschungen)',
+		),
+		'post:auto_draft'              => array(
+			'why'  => 'An auto-draft is the empty post WordPress makes when the editor opens, removed by wp_delete_auto_drafts() after seven days: no content of a person, never compared by the report and never taken over by any stage.',
+			'core' => array( array( 'wp-includes/post.php', 8381, 'function wp_delete_auto_drafts() {' ) ),
+			'plan' => 'Entscheid 22; Bericht: auto-draft not_compared',
+		),
+		'post:status_rule'             => array(
+			'why'  => 'The engine writes the statuses of the core a post or page can be saved in (publish, future, draft, pending, private); a status a plugin registers (register_post_status()) has meaning only for its plugin and waits for its classification, as a taxonomy of a plugin does.',
+			'plan' => 'Entscheid 25; Entscheid 21 (Kern-Folgen)',
+		),
+		'post:content_missing'         => array(
+			'why'  => 'A line of a package without the rows of its object (a row could not be read on the staging site) cannot say what to write; nothing of it is written, fail closed, until a package carries the object whole.',
+			'plan' => 'Entscheid 17 (Grenze, Sollwert aus dem Paket)',
+		),
+		'post:lock_unread'             => array(
+			'why'  => 'A lock of the canonical form this version does not read may stand for anything the other version holds back; fail closed until both sites run the same version.',
+			'plan' => 'Entscheid 31; Lehre aus Zweig 8 (records()/decode(): was nicht gelesen wird, sperrt)',
+		),
+		'post:type_unregistered'       => array(
+			'why'  => 'wp_insert_post() of a type not registered here stores a post no screen of this site shows and no capability guards (get_post_type_object() is null); the rights cannot be asked, so nothing is written.',
+			'plan' => 'Entscheid 28 (Rechte über map_meta_cap)',
 		),
 		'post:meta_rule'               => array(
-			'why'  => 'The rights per meta key and the field schema are branch 9; this version writes _wp_page_template and plain keys the account may edit on a post that is there.',
-			'plan' => 'Entscheid 28; Zweigtabelle Zeile 540',
+			'why'  => 'The metadata API stores maybe_serialize() of what it is handed: a serialized scalar would be serialized twice, a serialized value whose bytes serialize() does not give back would read other than its target. Every other key goes by its field rule (decision 28).',
+			'core' => array( array( 'wp-includes/meta.php', 223, '$meta_value   = sanitize_meta( $meta_key, $meta_value, $meta_type, $meta_subtype );' ) ),
+			'plan' => 'Entscheid 28; Entscheid 17 (Sanitizer vorab)',
 		),
 		'post:taxonomy_rule'           => array(
-			'why'  => 'Terms of other taxonomies need the engine of the terms (branch 9); this version sets category, post_tag and post_format.',
-			'plan' => 'Zweigtabelle Zeile 540',
+			'why'  => 'Terms of a taxonomy of a plugin or theme wait for the classification of the taxonomy (Z8d); the engine of the kind post sets category, post_tag and post_format.',
+			'plan' => 'Zweigtabelle Zeile 540; Entscheid 25',
+		),
+		'post:thumbnail'               => array(
+			'why'  => 'set_post_thumbnail() keeps the id only for an attachment wp_get_attachment_image() shows and removes the featured image otherwise, so the written post would not be the target.',
+			'core' => array( array( 'wp-includes/post.php', 8349, "if ( wp_get_attachment_image( \$thumbnail_id, 'thumbnail' ) ) {" ) ),
+			'plan' => 'Entscheid 28 (geschützte Schlüssel über ihre eigene API: _thumbnail_id über set_post_thumbnail())',
 		),
 		'post:meta_spelling'           => array(
 			'why'  => 'postmeta compares meta_key with its collation (utf8mb4_unicode_ci and the like: Foo and foo are one key), and update_metadata() and delete_metadata() write with WHERE meta_key = …: a write of one key would change the other, which the journal, which tells keys byte for byte, could not account for (GitHub Codex round 6 on free#137). Locked before the first write; AB_MCP_Undo_Meta::rows() finds every spelling the database matches.',
 			'plan' => 'Entscheid 17 (Journal je Teilmutation), Entscheid 28; GitHub-Codex 6 auf free#137',
 		),
 		'post:term_order'              => array(
-			'why'  => 'A relationship with a term_order other than 0 (a plugin that sorts the terms) would lose its order on the way back: wp_set_object_terms() makes every relationship anew with the order 0, forward and back, and the way back compared the keys of the terms only (GitHub Codex round 5 on free#137). Locked before the first write until the engine of the terms (branch 9) carries the order.',
+			'why'  => 'A relationship with a term_order other than 0 (a plugin that sorts the terms) would lose its order on the way back: wp_set_object_terms() makes every relationship anew with the order 0, forward and back, and the way back compared the keys of the terms only (GitHub Codex round 5 on free#137). Locked before the first write until a field rule carries the order (Z8d; branch 9 keeps the lock, GRENZEN-INHALTE.md).',
 			'plan' => 'Entscheid 23 (bytegenauer Rückweg); GitHub-Codex 5 auf free#137',
 		),
 		'post:slug_collision'          => array(
@@ -396,9 +432,41 @@ return array(
 			'why'  => 'The template goes through page_template of wp_insert_post(), which checks it against the theme of this site and stores default for one the theme does not offer: the written post would not be the target (Codex round 1 of branch 8, B7).',
 			'plan' => 'Entscheide 17 und 28 (Vorlage über page_template)',
 		),
-		'term:engine'                  => array(
-			'why'  => 'The engine of the terms is branch 9.',
-			'plan' => 'Zweigtabelle Zeile 540',
+		'term:taxonomy_rule'           => array(
+			'why'  => 'The engine of the kind term writes the taxonomies the table gives it (category, post_tag, wp_pattern_category), registered here, from a package with the content of the term; any other is no target (fail closed).',
+			'plan' => 'Entscheid 25 (term, A4); Zweigtabelle Zeile 540',
+		),
+		'term:term_group'              => array(
+			'why'  => 'The group of aliases is an id of the site of its own (wp_insert_term() makes it from MAX(term_group) + 1); no pair maps it, and wp_update_term() keeps the stored one.',
+			'core' => array( array( 'wp-includes/taxonomy.php', 3325, "\$term_group = \$parsed_args['term_group'] ?? 0;" ) ),
+			'plan' => 'Entscheid 25; Grenze C (GRENZEN-INHALTE.md)',
+		),
+		'term:parent'                  => array(
+			'why'  => 'wp_update_term() runs wp_check_term_hierarchy_for_loops() on the parent, which gives the term the parent 0 or the members of another loop the parent 0: rows of other terms the step does not own.',
+			'core' => array( array( 'wp-includes/taxonomy.php', 5109, 'function wp_check_term_hierarchy_for_loops( $parent_term, $term_id, $taxonomy ) {' ) ),
+			'plan' => 'Entscheid 21 (Kern-Folgen); Entscheid 25 (Eltern zuerst)',
+		),
+		'term:slug_collision'          => array(
+			'why'  => 'wp_update_term() refuses a slug another term of the taxonomy has (or renames it where the parent changes), and wp_insert_term() makes it unique (wp_unique_term_slug()): the written term would not be the target.',
+			'core' => array( array( 'wp-includes/taxonomy.php', 3136, 'function wp_unique_term_slug( $slug, $term ) {' ) ),
+			'plan' => 'Zweigtabelle Zeile 540 (Slug); Entscheid 17',
+		),
+		'term:sanitizer'               => array(
+			'why'  => 'sanitize_term() with the context db runs the filters of term names and descriptions (sanitize_text_field(), kses for an account without unfiltered_html); a field it changes is refused ahead, as for posts.',
+			'core' => array( array( 'wp-includes/taxonomy.php', 1734, "function sanitize_term( \$term, \$taxonomy, \$context = 'display' ) {" ) ),
+			'plan' => 'Entscheid 17 (Sanitizer vorab: Terme durch sanitize_term())',
+		),
+		'term:reference_unmapped'      => array(
+			'why'  => 'A parent or an address of the staging site without a pair here would be written as it is and name another object; a parent the same run creates first is pending (Eltern zuerst).',
+			'plan' => 'Entscheid 16 (Graph-Reihenfolge); Entscheid 25',
+		),
+		'term:meta_rule'               => array(
+			'why'  => 'As post:meta_rule, for the meta of a term: what the metadata API cannot store byte for byte is not written through it.',
+			'plan' => 'Entscheid 28 (Term-Meta)',
+		),
+		'term:meta_spelling'           => array(
+			'why'  => 'As post:meta_spelling, for termmeta: a write by the key would change the other spelling the collation compares alike.',
+			'plan' => 'Entscheid 17 (Journal je Teilmutation), Entscheid 28',
 		),
 		'attachment:engine'            => array(
 			'why'  => 'The engine of the attachments is branch 10.',
@@ -534,6 +602,11 @@ return array(
 			'why'  => 'The plugins the core deactivated on this site during an update of the core.',
 			'core' => array( array( 'wp-admin/includes/schema.php', 559, "'wp_force_deactivated_plugins'" ), array( 'wp-admin/includes/update-core.php', 2174, "update_option( 'wp_force_deactivated_plugins', \$deactivated_plugins, false );" ) ),
 			'plan' => 'Entscheid 27',
+		),
+		'option:category_children'               => array(
+			'why'  => 'The hierarchy of the categories as a cache of the core: _get_term_hierarchy() writes it when it is asked and finds none, clean_term_cache() deletes it as a category changes (also when a run writes one, branch 9); never content of the site.',
+			'core' => array( array( 'wp-includes/taxonomy.php', 3990, 'update_option( "{$taxonomy}_children", $children );' ), array( 'wp-includes/taxonomy.php', 3782, 'delete_option( "{$taxonomy}_children" );' ) ),
+			'plan' => 'Entscheid 21 (Caches erlaubt und aus dem Vergleich ausgenommen); Entscheid 11',
 		),
 		'option_prefix:_transient_'              => array(
 			'why'  => 'Transients are caches (B5).',

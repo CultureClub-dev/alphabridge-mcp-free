@@ -441,12 +441,22 @@ Ablehnung entsteht, nennt sie den Weg.
 
 ## Post-Art in Zweig 8 (Zweig 9 bringt den Rest)
 
+- Stand Zweig 9: Die Feldregel (Entscheid 28), der Slug, die weiteren
+  Sanitizer, das Beitragsbild und die Term-Art stehen in
+  `GRENZEN-INHALTE.md`; was dieser Abschnitt über `post:meta_rule`,
+  `post:create_with_object_meta`, `post:slug_collision` und die einfachen
+  Schlüssel sagt, gilt in der Fassung dort. Die Sperren mit Stufe Z9 sind
+  aufgelöst (Z8 oder Z8d); `live_meta_rule()` heisst jetzt
+  `AB_MCP_Sync_Post_Writer::live_rule()` und prüft die Taxonomien und die
+  Sperren der kanonischen Form des Live-Posts.
 - Geschrieben werden nur `post` und `page` mit Zeile, Meta von
   `_wp_page_template` und auf vorhandenen Posts einfachen Schlüsseln (kein
   Unterstrich, nicht geschützt, keine Zugangsangabe, kein Builder-Markup, die
   das Konto bearbeiten darf) und Terme von `category`, `post_tag` und
   `post_format`. Alles andere der Post-Art ist fail closed gesperrt mit Grund
-  und Etappe (`post:engine_type`, `post:meta_rule`, `post:taxonomy_rule`,
+  und Etappe (`post:engine_type`: seit Zweig 9 nur die fünf Kern-Typen von
+  Zweig 9b, Etappe Z8, die übrigen Lagen mit eigenen Schlüsseln,
+  GRENZEN-INHALTE.md; `post:meta_rule`, `post:taxonomy_rule`,
   `post:slug_collision`, `post:sanitizer`: Z9; `post:create_with_object_meta`:
   Z8d), auch ein vorhandener Live-Post mit einem Meta-Schlüssel ausserhalb der
   Regel (er stünde sonst nach dem Schreiben nicht auf dem Sollwert).
@@ -527,7 +537,14 @@ Ablehnung entsteht, nennt sie den Weg.
   Beitrags ohne Kategorie), ist `pre` der Stand vor dem Zeilenaufruf, und
   eigen wird nur, was genau so zurückliest, wie `with_row()` es nennt; jede
   andere Veränderung mit der Zeile ist fremd (ein Hook dieser Site, der auf
-  die Zeile reagiert): Vermerk `foreign`, nie Eigentum. Weicht `pre` von der
+  die Zeile reagiert): Vermerk `foreign`, nie Eigentum. Das gilt für jeden
+  Teil, den das Lesen vor und nach dem Zeilenaufruf kennt, auch einen, der
+  nicht im Journal steht (ein beidseits gleicher Meta-Schlüssel, Entscheid
+  28): ändert der Zeilenaufruf ihn, weicht das Objekt ab, bevor das Journal
+  wieder gespeichert wird; ein Request, der danach endet, hinterlässt die
+  Zeile nie als eigen (Zweig 9, Codex-Runde 1, A1; Prüffall
+  `testAHookThatChangesAKeyEqualOnBothSidesWithTheRowDeviatesTheObjectAndTheWayBackLeavesIt`).
+  Weicht `pre` von der
   Sicherung ab, hat eine andere Hand den Teil vor dem Aufruf geändert:
   Vermerk, nie Eigentum (N1: ein Hook setzte `note=fremd` mit der Zeile, der
   eigene Meta-Aufruf wurde verweigert; vorher galt `after ≠ Sicherung` als
@@ -620,7 +637,9 @@ Ablehnung entsteht, nennt sie den Weg.
   Schritt (`write_meta()` ohne Wert); die Metadaten-API fragt selbst kein
   Recht. Darum prüfen Gesamtvorprüfung und Grenze je solchem Schlüssel
   `delete_post_meta` über `map_meta_cap` (Entscheid 28; GitHub-Codex 1, P2),
-  wie `edit_post_meta` für die Schlüssel des Sollwerts; verweigert, sperrt
+  wie `edit_post_meta` für die Schlüssel des Sollwerts (seit Zweig 9,
+  Codex-Runde 1, A2: genau die Operationen, die `write_meta()` ausführt,
+  `AB_MCP_Sync_Post_Writer::meta_ops()`; GRENZEN-INHALTE.md); verweigert, sperrt
   `ab_mcp_sync_rights` mit dem Schlüssel. `_wp_page_template` geht mit
   `edit_post` (eigene API, Entscheid 28).
 - Rechte je Taxonomie (Entscheid 28; GitHub-Codex 2, P2): Gesamtvorprüfung

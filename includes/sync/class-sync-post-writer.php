@@ -1,33 +1,40 @@
 <?php
 /**
  * The write side of the kind post (contract A of the plan of 01.11.2026;
- * Z8 branch 8, decisions 17, 19, 21 and 23): what a step of a run writes
- * for one post or page, how it is backed up, read back and put back. The
- * first kind the takeover writes end to end; the full engine of the kind
- * (its field schema, the rights per meta key, slug collisions, every
- * sanitizer ahead, the core consequences with the menu automatic) is
- * branch 9: everything of the kind this version does not carry to its end
- * is refused here, fail closed, with the lock of its stage.
+ * Z8 branches 8 and 9, decisions 17, 19, 21, 23, 28, 30 and 31): what a step
+ * of a run writes for one post or page, how it is backed up, read back and
+ * put back. The kind term has its own (AB_MCP_Sync_Term_Writer) with the
+ * same methods; the engine picks by the kind (AB_MCP_Sync_Engine::WRITERS).
  *
- * WHAT THIS VERSION WRITES (TYPES, TAXONOMIES, CORE_META): a post or page
- * (its row: status and dates, title, content, excerpt, slug, parent, menu
- * order, author, comment and ping status, mime type), its meta of the one
- * core key with an API of its own (_wp_page_template) and, on a post that
- * is there, plain keys (not beginning with _) the account may edit on it
- * (edit_post_meta, and delete_post_meta for a key only this site has, which
- * the step removes; never a protected, credential or page builder key), its
- * terms of category, post_tag and post_format. A post of another core type
- * (templates, template parts, global styles, navigations, reusable blocks),
- * a meta key outside that rule, a term of another taxonomy, a new post with
- * plain meta (the right to it is answered by the object only, Z8d), a new
- * post whose slug another post of its type and parent has here, a field
- * WordPress's own sanitizing would change (kses without unfiltered_html), an
- * author without an account here, a reference without a counterpart, a
- * status WordPress would store otherwise (a scheduled date that passed) are
- * refused with their lock (AB_MCP_Sync_Kinds::LOCKS) before anything is
- * written; a page of the top level that would be published or scheduled
- * while a menu of this site adds pages by itself is refused unless the
- * person confirmed the choice «as draft» (decision 21).
+ * WHAT IS WRITTEN (TYPES, TAXONOMIES, CORE_META): a post or page (its row:
+ * status and dates, title, content, excerpt, slug, parent, menu order,
+ * author, comment and ping status, mime type), its terms of category,
+ * post_tag and post_format, and its meta by the field rule of decision 28
+ * (branch 9): of a post here, each key whose values differ between the
+ * target and this site, with the right of its operation through
+ * map_meta_cap at the post (edit_, add_ or delete_post_meta; a key the map
+ * refuses locks the post, *:meta_without_rule, «Feldregel folgt mit Z8d»),
+ * a key equal on both sides untouched; the core keys with an API of their
+ * own with edit_post (the template through page_template of the row, the
+ * featured image through set_post_thumbnail() by the pair of its
+ * attachment); a key of a page builder only for an account with
+ * unfiltered_html; a key whose name is the name of a credential never (B9).
+ * A new post takes the keys whose right follows the right at the post
+ * itself (not protected, no authorization filter of their own; asked at the
+ * post right before each call); any other locks it before it is made
+ * (post:create_with_object_meta, Z8d). Refused with their lock before
+ * anything is written (AB_MCP_Sync_Kinds::LOCKS): another core type, a
+ * status that is no target, a type the table locks (a changeset, decision
+ * 30), what the canonical form of either side locks (a page builder that is
+ * not released, decision 31), a term of another taxonomy, a slug WordPress
+ * would store otherwise (wp_unique_post_slug(), a post in the trash holding
+ * it), a field or value WordPress's own sanitizing would change (kses
+ * without unfiltered_html, sanitize_title(), sanitize_meta()), an author
+ * without an account here, a reference without a counterpart, a status
+ * WordPress would store otherwise (a scheduled date that passed); a page of
+ * the top level that would be published or scheduled while a menu of this
+ * site adds pages by itself is refused unless the person confirmed the
+ * choice «as draft» (decision 21). Nothing is deleted.
  *
  * THE WAY FORWARD (decision 17): the row through wp_insert_post() and
  * wp_update_post() with both date columns and edit_date (the way of the
@@ -83,11 +90,23 @@ final class AB_MCP_Sync_Post_Writer {
 	/** The post types this version writes. */
 	const TYPES = array( 'post', 'page' );
 
+	/**
+	 * The other core types of the kind post, which follow with branch 9b of
+	 * Z8 (heikel/z8-vorlagen, right after branch 9; the decision of Thomas
+	 * of 08.11.2026): locked with post:engine_type until then, they alone.
+	 */
+	const TYPES_BRANCH_9B = array( 'wp_block', 'wp_template', 'wp_template_part', 'wp_global_styles', 'wp_navigation' );
+
 	/** The taxonomies this version writes the terms of. */
 	const TAXONOMIES = array( 'category', 'post_tag', 'post_format' );
 
-	/** The core meta keys with an API of their own this version writes. */
-	const CORE_META = array( '_wp_page_template' );
+	/**
+	 * The core meta keys with an API of their own (decision 28): the
+	 * template through page_template of the row, the featured image through
+	 * set_post_thumbnail() and delete_post_thumbnail(); both with the right
+	 * edit_post, as the core asks it for them.
+	 */
+	const CORE_META = array( '_wp_page_template', '_thumbnail_id' );
 
 	/**
 	 * The taxonomies whose terms are part of the identity of the post that
@@ -144,12 +163,35 @@ final class AB_MCP_Sync_Post_Writer {
 	 * @return array|WP_Error
 	 */
 	public static function target_of( array $line, array $item, array $ctx ) {
-		$type = isset( $line['identity']['post_type'] ) ? (string) $line['identity']['post_type'] : '';
+		$type   = isset( $line['identity']['post_type'] ) ? (string) $line['identity']['post_type'] : '';
+		$answer = AB_MCP_Sync_Kinds::post_type( $type );
+		if ( 'locked' === $answer['status'] ) {
+			// A type the table locks (a changeset, decision 30; a font; a type
+			// of a plugin): its own lock and stage (branch 9).
+			return self::refusal(
+				array(
+					'key'    => (string) $answer['key'],
+					'stage'  => (string) $answer['stage'],
+					'reason' => (string) $answer['reason'],
+				),
+				sprintf( 'post type %s', $type )
+			);
+		}
 		if ( ! in_array( $type, self::TYPES, true ) ) {
-			return self::locked( 'post:engine_type', sprintf( 'post type %s', $type ) );
+			// The five core types of branch 9b (post:engine_type); a type of
+			// another kind (an attachment, a menu item, the additional CSS) is
+			// never written by the engine of the kind post (post:other_kind).
+			return self::locked( in_array( $type, self::TYPES_BRANCH_9B, true ) ? 'post:engine_type' : 'post:other_kind', sprintf( 'post type %s', $type ) );
+		}
+		// What the canonical form of the staging object found (a page builder
+		// that is not released, decision 31; a value it cannot read; a
+		// credential in a field): refused with that lock (branch 9).
+		$held = self::line_lock( $line );
+		if ( null !== $held ) {
+			return $held;
 		}
 		if ( ! isset( $line['content']['row'], $line['content']['meta'], $line['content']['terms'], $line['form'] ) || ! is_array( $line['form'] ) ) {
-			return self::locked( 'post:engine_type', 'the package carries no content of the object (a row of it could not be read on the staging site)' );
+			return self::locked( 'post:content_missing', 'the package carries no content of the object (a row of it could not be read on the staging site)' );
 		}
 		$row = array();
 		foreach ( $line['content']['row'] as $column => $value ) {
@@ -157,7 +199,7 @@ final class AB_MCP_Sync_Post_Writer {
 		}
 		foreach ( self::WRITTEN_COLUMNS as $column ) {
 			if ( ! array_key_exists( $column, $row ) ) {
-				return self::locked( 'post:engine_type', sprintf( 'the package names no column %s', $column ) );
+				return self::locked( 'post:content_missing', sprintf( 'the package names no column %s', $column ) );
 			}
 		}
 		if ( '' !== $row['post_password'] ) {
@@ -165,7 +207,11 @@ final class AB_MCP_Sync_Post_Writer {
 		}
 		$status = 'create' === $item['op'] || 'update' === $item['op'] ? $row['post_status'] : '';
 		if ( ! in_array( $status, self::STATUSES, true ) ) {
-			return self::locked( 'post:engine_type', sprintf( 'post status %s', $status ) );
+			// The trash is a deletion (post:in_trash, with the deletions); an
+			// auto-draft is no content, never taken over (post:auto_draft);
+			// any other status waits for its field rule (post:status_rule).
+			$key = 'trash' === $status ? 'post:in_trash' : ( 'auto-draft' === $status ? 'post:auto_draft' : 'post:status_rule' );
+			return self::locked( $key, sprintf( 'post status %s', '' === $status ? '(none)' : $status ) );
 		}
 		if ( ! empty( $item['as_draft'] ) ) {
 			$status = 'draft';
@@ -215,16 +261,31 @@ final class AB_MCP_Sync_Post_Writer {
 				return self::locked( 'post:reference_unmapped', self::missing_text( $missing ) );
 			}
 		}
-		// The meta by the rule of this version.
-		$meta = array();
+		// The meta by its field rule (decision 28): every key of the staging
+		// post; which of them a step writes, and with which right, decides the
+		// check at the post here (precheck(): only keys whose values differ);
+		// the featured image by the pair of its attachment; a key whose name is
+		// the name of a credential is never packed (B9).
+		$meta  = array();
+		$extra = AB_MCP_Redactor::extra_keys();
 		foreach ( $line['content']['meta'] as $pair ) {
 			$key   = self::bytes( $pair[0] );
 			$value = self::bytes( $pair[1] );
-			if ( ! self::meta_allowed( $key ) ) {
-				return self::locked( 'post:meta_rule', sprintf( 'meta key %s', $key ) );
+			if ( '' === $key || AB_MCP_Sync_Exclusions::post_meta( $key ) || AB_MCP_Sync_Credentials::names_credential( $key, $extra ) ) {
+				continue;
 			}
-			if ( 'create' === $item['op'] && ! in_array( $key, self::CORE_META, true ) ) {
-				return self::locked( 'post:create_with_object_meta', sprintf( 'meta key %s', $key ) );
+			if ( 'create' === $item['op'] && ! self::new_meta_allowed( $key, $type ) ) {
+				return self::locked( 'post:create_with_object_meta', sprintf( 'meta key %s (protected, or a plugin answers its right at the object only)', $key ) );
+			}
+			if ( '_thumbnail_id' === $key ) {
+				// The featured image: the attachment by its pair (decision 25).
+				$mapped = 1 === preg_match( '/^[1-9][0-9]*\z/', $value ) ? AB_MCP_Sync_Refs::mapped_id( $plan, 'post', (int) $value ) : null;
+				$plan['missing'] = array();
+				if ( null === $mapped || isset( $meta[ $key ] ) ) {
+					return self::locked( 'post:reference_unmapped', sprintf( 'the featured image %s of the staging site', $value ) );
+				}
+				$meta[ $key ][] = (string) (int) $mapped;
+				continue;
 			}
 			$written = self::meta_value( $value, $plan, $changed );
 			if ( is_wp_error( $written ) ) {
@@ -260,6 +321,15 @@ final class AB_MCP_Sync_Post_Writer {
 				continue;
 			}
 			$mapped = AB_MCP_Sync_Refs::mapped_id( $plan, 'term', (int) $term['term_id'] );
+			if ( null === $mapped && isset( $pending['term'][ (int) $term['term_id'] ] ) ) {
+				// A term the same run creates before this post (a new post in a
+				// new category, branch 9): pending for the check before the
+				// first write, which asks the right of its taxonomy; the
+				// boundary maps it by the pair its step made.
+				$plan['missing']       = array();
+				$terms[ $taxonomy ]    = isset( $terms[ $taxonomy ] ) ? $terms[ $taxonomy ] : array();
+				continue;
+			}
 			if ( null === $mapped ) {
 				return self::locked( 'post:reference_unmapped', sprintf( 'term %d of the taxonomy %s of the staging site', (int) $term['term_id'], $taxonomy ) );
 			}
@@ -336,7 +406,7 @@ final class AB_MCP_Sync_Post_Writer {
 		$type = $prepared['type'];
 		$pto  = get_post_type_object( $type );
 		if ( ! is_object( $pto ) || ! isset( $pto->cap ) ) {
-			return self::locked( 'post:engine_type', sprintf( 'the post type %s is not registered on this site', $type ) );
+			return self::locked( 'post:type_unregistered', sprintf( 'the post type %s is not registered on this site', $type ) );
 		}
 		$live = null;
 		if ( null !== $live_id ) {
@@ -357,11 +427,6 @@ final class AB_MCP_Sync_Post_Writer {
 		if ( (int) $prepared['postarr']['post_author'] !== (int) get_current_user_id() && ! current_user_can( $pto->cap->edit_others_posts ) ) {
 			return self::rights( sprintf( 'write a %1$s of another author (%2$s)', $type, (string) $pto->cap->edit_others_posts ) );
 		}
-		foreach ( array_keys( $prepared['meta'] ) as $key ) {
-			if ( null !== $live_id && ! in_array( $key, self::CORE_META, true ) && ! current_user_can( 'edit_post_meta', (int) $live_id, $key ) ) {
-				return self::rights( sprintf( 'edit the meta key %s of the post (edit_post_meta)', $key ) );
-			}
-		}
 		$current = null;
 		if ( null !== $live_id ) {
 			$current = self::current( (int) $live_id );
@@ -369,14 +434,55 @@ final class AB_MCP_Sync_Post_Writer {
 				return $current;
 			}
 		}
-		// A plain key only this site has is removed by the step (write_meta()
-		// with no value): the right to remove it, per key, through
-		// map_meta_cap, before anything is written (decision 28; the metadata
-		// API asks no right itself; GitHub Codex round 1 of branch 8). The
-		// core key with an API of its own goes with edit_post.
-		foreach ( is_array( $current ) ? $current['meta'] : array() as $row ) {
-			if ( ! isset( $prepared['meta'][ $row['key'] ] ) && ! in_array( $row['key'], self::CORE_META, true ) && ! current_user_can( 'delete_post_meta', (int) $live_id, $row['key'] ) ) {
-				return self::rights( sprintf( 'remove the meta key %s of the post (delete_post_meta)', $row['key'] ) );
+		// The meta by its field rule (decision 28; branch 9): of a post here,
+		// each key whose values differ between the target and this site (a
+		// key equal on both sides is no part and stays untouched), with the
+		// right of its operation through map_meta_cap at the post (edit_,
+		// add_ or delete_post_meta: the authorization filters of registered
+		// meta and the lock of protected keys apply there); a key the map
+		// refuses locks the post («Feldregel folgt mit Z8d»). The core keys
+		// with an API of their own go with edit_post (asked above). A key of a
+		// page builder needs unfiltered_html besides, as the free meta writer
+		// asks it (AB_MCP_Builders::markup_meta_refusal()). Of a new post, every
+		// key of the target (new_meta_allowed() in target_of(): the right
+		// follows the right at the post the step makes, asked at it again
+		// right before each call, write_part()).
+		$keys = is_array( $current ) ? self::differing( $prepared, $current ) : array_keys( $prepared['meta'] );
+		foreach ( $keys as $key ) {
+			$key = (string) $key;
+			if ( in_array( $key, self::CORE_META, true ) ) {
+				continue;
+			}
+			if ( is_array( $current ) ) {
+				$may = self::meta_right( (int) $live_id, $key, self::targets( $prepared, $key ), self::meta_values( $current, $key ) );
+				if ( true !== $may ) {
+					return self::locked( '*:meta_without_rule', sprintf( 'meta key %1$s of the post on this site: %2$s', $key, $may ) );
+				}
+			}
+			if ( null !== AB_MCP_Builders::markup_meta_refusal( $key ) ) {
+				return self::rights( sprintf( 'write the page-builder meta key %s (unfiltered_html)', $key ) );
+			}
+		}
+		// The featured image (decision 28): set_post_thumbnail() keeps the id
+		// only where it is an attachment WordPress shows as an image, and
+		// removes the featured image otherwise; so the attachment the pair
+		// names has to be one.
+		if ( in_array( '_thumbnail_id', $keys, true ) && isset( $prepared['meta']['_thumbnail_id'][0] ) ) {
+			$image = (int) $prepared['meta']['_thumbnail_id'][0];
+			if ( 'attachment' !== AB_MCP_Sync_Rows::post_type_of( $image ) || '' === (string) wp_get_attachment_image( $image, 'thumbnail' ) ) {
+				return self::locked( 'post:thumbnail', sprintf( 'the attachment %d of this site the featured image names is no image WordPress shows', $image ) );
+			}
+		}
+		// Every written value through sanitize_meta() as update_metadata()
+		// runs it (decision 17, the sanitizers ahead), compared by the bytes
+		// WordPress would store (db_form()): a sanitizer that gives the same
+		// bytes as another type (absint(): 5 for '5') changes nothing
+		// (branch 9, Codex round 1, B3).
+		foreach ( $keys as $key ) {
+			foreach ( isset( $prepared['meta'][ $key ] ) ? $prepared['meta'][ $key ] : array() as $value ) {
+				if ( self::db_form( sanitize_meta( (string) $key, $value, 'post', $type ) ) !== self::stored_form( $value ) ) {
+					return self::locked( 'post:sanitizer', sprintf( 'meta key %s (sanitize_meta() changes its value)', $key ) );
+				}
 			}
 		}
 		// The template the theme of this site offers for the type (B7): as
@@ -421,11 +527,11 @@ final class AB_MCP_Sync_Post_Writer {
 		// the journal and the way back tell keys byte for byte; GitHub Codex
 		// round 6 on free#137, P2).
 		if ( null !== $live_id ) {
-			$keys = array_keys( $prepared['meta'] );
-			foreach ( is_array( $current ) ? $current['meta'] : array() as $row ) {
-				$keys[] = (string) $row['key'];
+			$spelled = $keys;
+			if ( isset( $prepared['postarr']['page_template'] ) ) {
+				$spelled[] = '_wp_page_template';
 			}
-			foreach ( array_unique( $keys ) as $key ) {
+			foreach ( array_unique( $spelled ) as $key ) {
 				$rows = AB_MCP_Undo_Meta::rows( 'post', (int) $live_id, (string) $key );
 				if ( null === $rows ) {
 					return new WP_Error( 'ab_mcp_sync_rows_unread', sprintf( 'The meta rows of the key %s of the post could not be read, so nothing is written for it. Try again; if it keeps failing, the database error log names the cause.', $key ) );
@@ -467,18 +573,23 @@ final class AB_MCP_Sync_Post_Writer {
 		if ( 'page' === $type && $top && in_array( $status, array( 'publish', 'future' ), true ) && self::menu_adds_pages() ) {
 			return self::locked( 'post:menu_automatic', sprintf( 'the page would be %s at the top level', $status ) );
 		}
-		// A new post whose slug is taken: WordPress would rename it, and the
-		// written post would not be the target (branch 9 settles the rule).
-		// With a pending parent nothing is under it yet.
-		if ( null === $live_id && empty( $prepared['pending'] ) && '' !== $prepared['postarr']['post_name'] && self::slug_taken( $prepared['postarr']['post_name'], $type, (int) $prepared['postarr']['post_parent'] ) ) {
-			return self::locked( 'post:slug_collision', sprintf( 'slug %s', $prepared['postarr']['post_name'] ) );
+		// The slug (branch 9): what WordPress would store for it, as
+		// wp_insert_post() makes it (slug_refusal()); with a pending parent
+		// nothing is under it yet, the boundary checks it with the parent
+		// mapped.
+		if ( empty( $prepared['pending'] ) ) {
+			$refusal = self::slug_refusal( $prepared, $live_id, is_array( $live ) ? (string) $live['post_name'] : null );
+			if ( null !== $refusal ) {
+				return $refusal;
+			}
 		}
 		// The sanitizers ahead (decision 17): the fields through
 		// sanitize_post() as wp_insert_post() runs it, in the rights of this
 		// account (kses without unfiltered_html), compared slashed.
-		$slashed   = wp_slash( array_intersect_key( $prepared['postarr'], array_flip( array( 'post_title', 'post_content', 'post_excerpt', 'post_content_filtered', 'post_name' ) ) ) );
+		$fields    = array( 'post_title', 'post_content', 'post_excerpt', 'post_content_filtered', 'comment_status', 'ping_status', 'post_mime_type' );
+		$slashed   = wp_slash( array_intersect_key( $prepared['postarr'], array_flip( array_merge( $fields, array( 'post_name' ) ) ) ) );
 		$sanitized = (array) sanitize_post( $slashed + array( 'post_type' => $type ), 'db' );
-		foreach ( array( 'post_title', 'post_content', 'post_excerpt', 'post_content_filtered' ) as $field ) {
+		foreach ( $fields as $field ) {
 			if ( ! isset( $sanitized[ $field ] ) || (string) $sanitized[ $field ] !== (string) $slashed[ $field ] ) {
 				return self::locked( 'post:sanitizer', sprintf( 'field %s', $field ) );
 			}
@@ -544,10 +655,12 @@ final class AB_MCP_Sync_Post_Writer {
 	 * publish_posts where the backed-up status is publish, future or private
 	 * and the row holds another now; edit_others_posts where the backed-up
 	 * author is another account. A meta key: nothing more for the core key
-	 * the row writes (_wp_page_template; CORE_META); else edit_post_meta
-	 * where rows are written over (both sides hold rows), add_post_meta where
-	 * the backup holds more rows than the post now, delete_post_meta where it
-	 * holds fewer, each through map_meta_cap. The terms of a taxonomy:
+	 * the row writes (_wp_page_template; CORE_META); a key of a page builder
+	 * unfiltered_html (AB_MCP_Builders::markup_meta_refusal(), as forward);
+	 * else edit_post_meta where rows are written over (both sides hold
+	 * rows), add_post_meta where the backup holds more rows than the post
+	 * now, delete_post_meta where it holds fewer, each through map_meta_cap.
+	 * The terms of a taxonomy:
 	 * term_right() for the backed-up keys. True, or what the account may
 	 * not do.
 	 *
@@ -584,6 +697,14 @@ final class AB_MCP_Sync_Post_Writer {
 				// The core key the row writes goes with edit_post, asked above.
 				return true;
 			}
+			// A key of a page builder needs unfiltered_html besides, as the
+			// forward write asks it (precheck()) and the free undo of meta
+			// (AB_MCP_Undo_Meta): the account may have lost it since the run
+			// wrote (DISALLOW_UNFILTERED_HTML; GitHub Codex round 1 on
+			// free#138, P2), and restore_meta() writes raw.
+			if ( null !== AB_MCP_Builders::markup_meta_refusal( $key ) ) {
+				return sprintf( 'write the page-builder meta key %s of the post (unfiltered_html)', $key );
+			}
 			$was = count( self::meta_values( $backup, $key ) );
 			$has = count( self::meta_values( $now, $key ) );
 			if ( $was > 0 && $has > 0 && ! current_user_can( 'edit_post_meta', $id, $key ) ) {
@@ -602,6 +723,454 @@ final class AB_MCP_Sync_Post_Writer {
 			return sprintf( 'assign the terms of %s (the taxonomy is not registered on this site)', $taxonomy );
 		}
 		return self::term_right( $taxonomy, self::term_keys( $backup, $taxonomy ) );
+	}
+
+	/**
+	 * Whether the post here is one this version writes as it is: its
+	 * canonical form carries no lock, and no term of a taxonomy outside the
+	 * rule, which would stay and make the written object differ from the
+	 * target (fail closed). Its meta is the field rule's (precheck()).
+	 *
+	 * @param int   $live_id Post.
+	 * @param array $source  AB_MCP_Sync_Inventory::source().
+	 * @return true|WP_Error
+	 */
+	public static function live_rule( $live_id, array $source ) {
+		$current = self::current( $live_id );
+		if ( is_wp_error( $current ) || null === $current ) {
+			return is_wp_error( $current ) ? $current : true;
+		}
+		// What the canonical form of the post here found (a page builder, a
+		// value it cannot read, a credential in a field; branch 9): the report
+		// holds the entry back on this side, the boundary checks it again.
+		$held = self::read_lock( self::live_read( (int) $live_id, $source ), 'the post of this site' );
+		if ( null !== $held ) {
+			return $held;
+		}
+		foreach ( $current['terms'] as $term ) {
+			if ( ! in_array( $term['taxonomy'], self::TAXONOMIES, true ) ) {
+				return self::locked( 'post:taxonomy_rule', sprintf( 'taxonomy %s of the post on this site', $term['taxonomy'] ) );
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * The parts of the journal of a step (decision 17, step 6, written
+	 * ahead): the row, each meta key whose values differ between the target
+	 * and this site (every key of the target for a new post), each taxonomy
+	 * of the target and of this site, each with its way, its hash before (the
+	 * backup) and its target.
+	 *
+	 * @param array      $prepared target_of().
+	 * @param array|null $current  current() of the post here; null for a new one.
+	 * @return array[] part, way, before, target.
+	 */
+	public static function journal_parts( array $prepared, $current ) {
+		// The meta keys whose values differ (decision 28: a key equal on both
+		// sides is no part and stays untouched; branch 9); every taxonomy of
+		// the target and of this site, which the step sets or clears.
+		$keys  = is_array( $current ) ? self::differing( $prepared, $current ) : array_keys( $prepared['meta'] );
+		$taxes = array_keys( $prepared['terms'] );
+		if ( is_array( $current ) ) {
+			foreach ( $current['terms'] as $term ) {
+				$taxes[] = $term['taxonomy'];
+			}
+		}
+		$keys   = array_values( array_unique( $keys ) );
+		$taxes  = array_values( array_unique( $taxes ) );
+		$hashes = self::hashes( $current, $keys, $taxes );
+		$out    = array(
+			array(
+				'part'   => 'row',
+				'way'    => self::WAY_ROW,
+				'before' => $hashes['row'],
+				'target' => self::row_hash( $prepared['columns'] ),
+			),
+		);
+		foreach ( $keys as $key ) {
+			$stored = array();
+			foreach ( isset( $prepared['meta'][ $key ] ) ? $prepared['meta'][ $key ] : array() as $value ) {
+				$stored[] = self::stored_form( $value );
+			}
+			$out[] = array(
+				'part'   => 'meta:' . $key,
+				'way'    => self::WAY_META,
+				'before' => $hashes[ 'meta:' . $key ],
+				'target' => self::meta_hash( $stored ),
+			);
+		}
+		foreach ( $taxes as $taxonomy ) {
+			$out[] = array(
+				'part'   => 'terms:' . $taxonomy,
+				'way'    => self::WAY_TERMS,
+				'before' => $hashes[ 'terms:' . $taxonomy ],
+				'target' => self::terms_hash( isset( $prepared['terms'][ $taxonomy ] ) ? self::target_term_keys( $taxonomy, $prepared['terms'][ $taxonomy ] ) : array() ),
+			);
+		}
+		return $out;
+	}
+
+	/**
+	 * Whether a part is written by the row call, with no call of its own: the
+	 * template through page_template (decision 17, B7), where the target has
+	 * one; its removal goes through the meta API.
+	 *
+	 * @param array  $prepared target_of().
+	 * @param string $name     The name of the part.
+	 * @return bool
+	 */
+	public static function through_row( array $prepared, $name ) {
+		return 'meta:_wp_page_template' === (string) $name && isset( $prepared['meta']['_wp_page_template'] ) && array() !== $prepared['meta']['_wp_page_template'];
+	}
+
+	/**
+	 * The keys whose values differ between the target and the post here,
+	 * sorted: those a step writes (decision 28). Never a key the comparison
+	 * leaves out (AB_MCP_Sync_Exclusions, group B) or whose name is the name
+	 * of a credential (B9: never packed, never compared, never written).
+	 *
+	 * @param array $prepared target_of().
+	 * @param array $current  current().
+	 * @return string[]
+	 */
+	public static function differing( array $prepared, array $current ) {
+		$keys = array_map( 'strval', array_keys( $prepared['meta'] ) );
+		foreach ( $current['meta'] as $row ) {
+			$keys[] = (string) $row['key'];
+		}
+		$out   = array();
+		$extra = AB_MCP_Redactor::extra_keys();
+		foreach ( array_unique( $keys ) as $key ) {
+			if ( AB_MCP_Sync_Exclusions::post_meta( $key ) || AB_MCP_Sync_Credentials::names_credential( $key, $extra ) ) {
+				continue;
+			}
+			if ( self::targets( $prepared, $key ) !== self::meta_values( $current, $key ) ) {
+				$out[] = $key;
+			}
+		}
+		sort( $out, SORT_STRING );
+		return $out;
+	}
+
+	/**
+	 * The values of a key of the target as the metadata API stores them.
+	 *
+	 * @param array  $prepared target_of().
+	 * @param string $key      Key.
+	 * @return string[]
+	 */
+	public static function targets( array $prepared, $key ) {
+		$out = array();
+		foreach ( isset( $prepared['meta'][ $key ] ) ? $prepared['meta'][ $key ] : array() as $value ) {
+			$out[] = self::stored_form( $value );
+		}
+		return $out;
+	}
+
+	/**
+	 * The right to bring the rows of a key from these values to those, at
+	 * the post, through map_meta_cap (decision 28): the right of every
+	 * operation write_meta() makes for it (meta_ops()), no other.
+	 *
+	 * @param int      $live_id Post.
+	 * @param string   $key     Key.
+	 * @param string[] $to      The values to store.
+	 * @param string[] $from    The values stored now.
+	 * @return true|string What the account may not do.
+	 */
+	public static function meta_right( $live_id, $key, array $to, array $from ) {
+		return self::ops_right( 'post', $live_id, $key, self::meta_ops( $to, $from ) );
+	}
+
+	/**
+	 * The operations write_meta() makes to bring the rows of a key from
+	 * these values to those, the one place that says them, for the write
+	 * and for its rights (branch 9, Codex round 1, A2: the rights were asked
+	 * by the net count of the rows, while a key of several rows is removed
+	 * whole and added anew; a rule that gave edit but refused add and
+	 * delete let two other values of two rows through): edit where one row
+	 * stays one row (update_metadata()); else delete where rows are there
+	 * (delete_metadata(), every row of the key) and add where values are to
+	 * be stored (add_metadata(), each).
+	 *
+	 * @param array    $to   The values to store.
+	 * @param string[] $from The values stored now.
+	 * @return string[] Of edit, delete, add.
+	 */
+	public static function meta_ops( array $to, array $from ) {
+		if ( 1 === count( $to ) && 1 === count( $from ) ) {
+			return array( 'edit' );
+		}
+		$ops = array();
+		if ( array() !== $from ) {
+			$ops[] = 'delete';
+		}
+		if ( array() !== $to ) {
+			$ops[] = 'add';
+		}
+		return $ops;
+	}
+
+	/**
+	 * The operations restore_meta() makes to put the rows of a key back,
+	 * row by row: edit where both sides hold rows (a row written back in
+	 * place), add where the backup holds more rows than the object now (a
+	 * row the step removed, inserted), delete where it holds fewer (a row
+	 * the step added, removed).
+	 *
+	 * @param string[] $backup The values of the backup.
+	 * @param string[] $now    The values stored now.
+	 * @return string[] Of edit, add, delete.
+	 */
+	public static function restore_ops( array $backup, array $now ) {
+		$ops = array();
+		if ( array() !== $backup && array() !== $now ) {
+			$ops[] = 'edit';
+		}
+		if ( count( $backup ) > count( $now ) ) {
+			$ops[] = 'add';
+		}
+		if ( count( $backup ) < count( $now ) ) {
+			$ops[] = 'delete';
+		}
+		return $ops;
+	}
+
+	/**
+	 * Whether the account may make each of these operations on a key at the
+	 * object, through map_meta_cap ({op}_{type}_meta, with the key).
+	 *
+	 * @param string   $type    The meta type: post, or term.
+	 * @param int      $live_id The object.
+	 * @param string   $key     Key.
+	 * @param string[] $ops     Of edit, add, delete.
+	 * @return true|string The first capability refused, as "<cap> refused".
+	 */
+	public static function ops_right( $type, $live_id, $key, array $ops ) {
+		foreach ( $ops as $op ) {
+			$cap = $op . '_' . ( 'term' === $type ? 'term' : 'post' ) . '_meta';
+			if ( ! current_user_can( $cap, (int) $live_id, $key ) ) {
+				return $cap . ' refused';
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * Whether a meta key of a new post may be written before the post exists
+	 * (decision 28: the right of a new object can be asked without it only
+	 * where it follows the right at the post itself): a core key with an API
+	 * of its own, or a key that is not protected and has no authorization
+	 * filter of its own (register_meta() with an auth_callback, or a filter
+	 * auth_post_meta_<key>).
+	 *
+	 * @param string $key  Key.
+	 * @param string $type Post type.
+	 * @return bool
+	 */
+	public static function new_meta_allowed( $key, $type ) {
+		$key = (string) $key;
+		if ( in_array( $key, self::CORE_META, true ) ) {
+			return true;
+		}
+		if ( is_protected_meta( $key, 'post' ) ) {
+			return false;
+		}
+		return ! has_filter( "auth_post_meta_{$key}_for_{$type}" ) && ! has_filter( "auth_post_meta_{$key}" );
+	}
+
+	/**
+	 * The featured image through the core's own API (decision 28):
+	 * set_post_thumbnail() to the one value, delete_post_thumbnail() for
+	 * none.
+	 *
+	 * @param int      $live_id Post.
+	 * @param string[] $values  The value of the target (the attachment's id here), or none.
+	 * @return true|WP_Error
+	 */
+	private static function write_thumbnail( $live_id, array $values ) {
+		if ( array() === $values ) {
+			$done = delete_post_thumbnail( (int) $live_id );
+			return false === $done && array() !== self::meta_values_now( (int) $live_id, '_thumbnail_id' ) ? self::meta_refused( '_thumbnail_id' ) : true;
+		}
+		$done = set_post_thumbnail( (int) $live_id, (int) $values[0] );
+		return false === $done && self::meta_values_now( (int) $live_id, '_thumbnail_id' ) !== array( (string) (int) $values[0] ) ? self::meta_refused( '_thumbnail_id' ) : true;
+	}
+
+	/**
+	 * Why WordPress would store another slug than the target's, as a
+	 * refusal, or null (branch 9; the steps of wp_insert_post(),
+	 * wp-includes/post.php: a pending post written by an account that may
+	 * not publish it loses its slug; an empty slug of a post that is not a
+	 * draft is made from the title; the slug through sanitize_title(), on an
+	 * update in the old sanitizing where the post has it so; a post in the
+	 * trash holding the slug would be renamed with __trashed, a row of
+	 * another post (wp_add_trashed_suffix_to_post_name_for_trashed_posts());
+	 * the slug made unique among the posts of its type and parent, and by
+	 * the filters of the core and the plugins, wp_unique_post_slug()).
+	 *
+	 * @param array       $prepared target_of().
+	 * @param int|null    $live_id  The post here, null for a new one.
+	 * @param string|null $stored   The slug the post here has now.
+	 * @return WP_Error|null
+	 */
+	private static function slug_refusal( array $prepared, $live_id, $stored ) {
+		$slug   = (string) $prepared['postarr']['post_name'];
+		$status = (string) $prepared['status'];
+		$type   = (string) $prepared['type'];
+		$parent = (int) $prepared['postarr']['post_parent'];
+		$id     = null === $live_id ? 0 : (int) $live_id;
+		$drafts = array( 'draft', 'pending', 'auto-draft' );
+		if ( 'pending' === $status && '' !== $slug ) {
+			$pto = get_post_type_object( $type );
+			$may = null === $live_id ? ( is_object( $pto ) && current_user_can( $pto->cap->publish_posts ) ) : current_user_can( 'publish_post', $id );
+			if ( ! $may ) {
+				return self::locked( 'post:slug_collision', sprintf( 'WordPress drops the slug %s of a pending post this account may not publish', $slug ) );
+			}
+		}
+		if ( '' === $slug ) {
+			return in_array( $status, $drafts, true ) ? null : self::locked( 'post:slug_collision', sprintf( 'the %s has no slug, and WordPress would make one from its title', $status ) );
+		}
+		$check = sanitize_title( $slug, '', 'old-save' );
+		$made  = null !== $live_id && strtolower( urlencode( $slug ) ) === $check && $stored === $check ? $check : sanitize_title( $slug );
+		if ( $made !== $slug ) {
+			return self::locked( 'post:sanitizer', sprintf( 'field post_name (WordPress would store %s)', $made ) );
+		}
+		// A post in the trash with the slug: wp_insert_post() renames it
+		// (__trashed) before wp_unique_post_slug(), for every post with a
+		// slug that does not go to the trash, a draft as well (Codex round 1
+		// on branch 9, C: the check was skipped for drafts).
+		$trashed = self::trashed_holder( $slug, $id );
+		if ( null === $trashed || 0 !== $trashed ) {
+			return self::locked( 'post:slug_collision', null === $trashed ? 'the posts of this site could not be read for the slug' : sprintf( 'the post %1$d of this site lies in the trash with the slug %2$s, and WordPress would rename it (__trashed)', $trashed, $slug ) );
+		}
+		if ( in_array( $status, $drafts, true ) ) {
+			// WordPress keeps the slug of a draft as it is (wp_unique_post_slug()).
+			return null;
+		}
+		$unique = wp_unique_post_slug( $slug, $id, $status, $type, $parent );
+		if ( (string) $unique !== $slug ) {
+			return self::locked( 'post:slug_collision', sprintf( 'WordPress would store the slug %1$s for %2$s', (string) $unique, $slug ) );
+		}
+		return null;
+	}
+
+	/**
+	 * A post in the trash with this slug, other than the one given: its id, 0
+	 * for none, null where the rows could not be read. Of every type, as
+	 * wp_add_trashed_suffix_to_post_name_for_trashed_posts() asks.
+	 *
+	 * @param string $slug Slug.
+	 * @param int    $id   The post written, 0 for a new one.
+	 * @return int|null
+	 */
+	private static function trashed_holder( $slug, $id ) {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- the rows, as the comparison reads them.
+		$found = $wpdb->get_var( $wpdb->prepare( "SELECT ID FROM {$wpdb->posts} WHERE post_name = %s AND post_status = 'trash' AND ID != %d ORDER BY ID ASC LIMIT 1", (string) $slug, (int) $id ) );
+		if ( '' !== (string) $wpdb->last_error ) {
+			return null;
+		}
+		return null === $found ? 0 : (int) $found;
+	}
+
+	/**
+	 * Write one part with a call of its own: a meta key (write_meta(), to
+	 * exactly the values of the target), the terms of a taxonomy
+	 * (write_terms()).
+	 *
+	 * @param int        $live_id  Post.
+	 * @param string     $name     The name of the part (meta:<key>, terms:<taxonomy>).
+	 * @param array      $prepared target_of().
+	 * @param array|null $pre      current() right before the call.
+	 * @return true|WP_Error
+	 */
+	public static function write_part( $live_id, $name, array $prepared, $pre ) {
+		$name = (string) $name;
+		if ( 0 === strpos( $name, 'meta:' ) ) {
+			$key    = substr( $name, 5 );
+			$values = isset( $prepared['meta'][ $key ] ) ? $prepared['meta'][ $key ] : array();
+			$from   = is_array( $pre ) ? self::meta_values( $pre, $key ) : array();
+			if ( '_thumbnail_id' === $key ) {
+				return self::write_thumbnail( (int) $live_id, $values );
+			}
+			// The right at the object right before the call (decision 28): of
+			// a new post the first time it can be asked; a refusal is a call
+			// the step does not make, and the object deviates (it stays as a
+			// rest).
+			if ( ! in_array( $key, self::CORE_META, true ) ) {
+				$may = self::meta_right( (int) $live_id, $key, self::targets( $prepared, $key ), $from );
+				if ( true !== $may ) {
+					return new WP_Error( 'ab_mcp_sync_rights', sprintf( 'The meta %1$s of the post was not written: %2$s at the post. Connect with an account that may, or leave the object out of the plan.', $key, $may ) );
+				}
+			}
+			return self::write_meta( $live_id, $key, $values, $from );
+		}
+		if ( 0 === strpos( $name, 'terms:' ) ) {
+			$taxonomy = substr( $name, 6 );
+			return self::write_terms( $live_id, $taxonomy, isset( $prepared['terms'][ $taxonomy ] ) ? $prepared['terms'][ $taxonomy ] : array() );
+		}
+		return new WP_Error( 'ab_mcp_sync_write_failed', sprintf( 'The part %s is of a name this version does not write. Check the object in wp-admin.', $name ) );
+	}
+
+	/**
+	 * Put one part back from the backup of the step (decision 23): the row
+	 * through wp_update_post() (restore_row()), meta raw (restore_meta()),
+	 * the terms through wp_set_object_terms() (restore_terms()); each only
+	 * where what it holds is the hash decide() named.
+	 *
+	 * @param string $name    The name of the part.
+	 * @param int    $live_id Post.
+	 * @param array  $backup  current() of the backup.
+	 * @param string $hash    The hash the part has to hold as it is put back.
+	 * @param int    $now     Time.
+	 * @return array{state:string,note?:string}|WP_Error
+	 */
+	public static function restore_part( $name, $live_id, array $backup, $hash, $now ) {
+		$name = (string) $name;
+		if ( 'row' === $name ) {
+			return self::restore_row( $live_id, $backup['row'], self::row_hash( $backup['row'] ), (string) $hash, $now );
+		}
+		if ( 0 === strpos( $name, 'meta:' ) ) {
+			$key = substr( $name, 5 );
+			return self::restore_meta( $live_id, $key, self::meta_values( $backup, $key ), (string) $hash );
+		}
+		return self::restore_terms( $live_id, substr( $name, 6 ), $backup, (string) $hash );
+	}
+
+	/**
+	 * What the takeover lock of a step covers (AB_MCP_Sync_Guard::begin()):
+	 * the post here with its type; nothing for a new one (no id yet).
+	 *
+	 * @param int|null $live_id Post, null for a new one.
+	 * @param string   $subtype Post type.
+	 * @return array{posts:array,taxonomies:string[],terms:array}
+	 */
+	public static function guard_of( $live_id, $subtype ) {
+		return array(
+			'posts'      => null === $live_id ? array() : array( (int) $live_id => (string) $subtype ),
+			'taxonomies' => array(),
+			'terms'      => array(),
+		);
+	}
+
+	/**
+	 * The subtype of the object of a journal: its post type.
+	 *
+	 * @param array $object The object of a journal.
+	 * @return string
+	 */
+	public static function subtype_of( array $object ) {
+		return isset( $object['identity']['post_type'] ) ? (string) $object['identity']['post_type'] : 'post';
+	}
+
+	/**
+	 * @param array $prepared target_of().
+	 * @return string The title of the written object (the sample of the check of the run).
+	 */
+	public static function title_of( array $prepared ) {
+		return (string) $prepared['postarr']['post_title'];
 	}
 
 	/* ---------------------------------------------------------- reading */
@@ -845,6 +1414,18 @@ final class AB_MCP_Sync_Post_Writer {
 	 * @return string|null Null where it is not there or could not be read whole.
 	 */
 	public static function live_hash( $live_id, array $source ) {
+		$read = self::live_read( (int) $live_id, $source );
+		return is_array( $read ) && isset( $read['hash'] ) && ! empty( $read['complete'] ) ? (string) $read['hash'] : null;
+	}
+
+	/**
+	 * The canonical form of a post here, read as the inventory reads it.
+	 *
+	 * @param int   $live_id Post.
+	 * @param array $source  AB_MCP_Sync_Inventory::source().
+	 * @return array|null
+	 */
+	private static function live_read( $live_id, array $source ) {
 		$kind = AB_MCP_Sync_Db_Kinds::for_pair( 'post' );
 		$read = null === $kind ? null : $kind->canonical(
 			array(
@@ -853,7 +1434,7 @@ final class AB_MCP_Sync_Post_Writer {
 				'source' => $source,
 			)
 		);
-		return is_array( $read ) && isset( $read['hash'] ) && ! empty( $read['complete'] ) ? (string) $read['hash'] : null;
+		return is_array( $read ) ? $read : null;
 	}
 
 	/* ----------------------------------------------------------- writing */
@@ -941,21 +1522,27 @@ final class AB_MCP_Sync_Post_Writer {
 	 * @param string   $key     Key.
 	 * @param array    $values  The values to store (a text, or an array for a serialized one).
 	 * @param string[] $current The values stored now.
+	 * @param string   $type    The meta type: post, or term (AB_MCP_Sync_Term_Writer).
 	 * @return true|WP_Error
 	 */
-	public static function write_meta( $live_id, $key, array $values, array $current ) {
-		$id = (int) $live_id;
-		if ( 1 === count( $values ) && 1 === count( $current ) ) {
-			$done = update_metadata( 'post', $id, wp_slash( (string) $key ), wp_slash( $values[0] ) );
+	public static function write_meta( $live_id, $key, array $values, array $current, $type = 'post' ) {
+		$id   = (int) $live_id;
+		$type = (string) $type;
+		// The operations of meta_ops(), whose rights the step asked: no other.
+		$ops = self::meta_ops( $values, $current );
+		if ( array( 'edit' ) === $ops ) {
+			$done = update_metadata( $type, $id, wp_slash( (string) $key ), wp_slash( $values[0] ) );
 			// false also where the value is the same already.
-			return false === $done && self::meta_values_now( $id, $key ) !== array( self::stored_form( $values[0] ) ) ? self::meta_refused( $key ) : true;
+			return false === $done && self::meta_values_now( $id, $key, $type ) !== array( self::stored_form( $values[0] ) ) ? self::meta_refused( $key ) : true;
 		}
-		if ( array() !== $current && false === delete_metadata( 'post', $id, wp_slash( (string) $key ) ) ) {
+		if ( in_array( 'delete', $ops, true ) && false === delete_metadata( $type, $id, wp_slash( (string) $key ) ) ) {
 			return self::meta_refused( $key );
 		}
-		foreach ( $values as $value ) {
-			if ( false === add_metadata( 'post', $id, wp_slash( (string) $key ), wp_slash( $value ) ) ) {
-				return self::meta_refused( $key );
+		if ( in_array( 'add', $ops, true ) ) {
+			foreach ( $values as $value ) {
+				if ( false === add_metadata( $type, $id, wp_slash( (string) $key ), wp_slash( $value ) ) ) {
+					return self::meta_refused( $key );
+				}
 			}
 		}
 		return true;
@@ -1091,11 +1678,15 @@ final class AB_MCP_Sync_Post_Writer {
 	 * @param string   $key     Key.
 	 * @param string[] $backup  The values before the step, in order.
 	 * @param string   $written The hash of the values the step read back (the journal).
+	 * @param string   $type    The meta type: post, or term (AB_MCP_Sync_Term_Writer).
 	 * @return array{state:string,note?:string}|WP_Error state restored, unchanged or left.
 	 */
-	public static function restore_meta( $live_id, $key, array $backup, $written ) {
-		$id  = (int) $live_id;
-		$now = self::meta_values_now( $id, $key );
+	public static function restore_meta( $live_id, $key, array $backup, $written, $type = 'post' ) {
+		$id    = (int) $live_id;
+		$type  = 'term' === $type ? 'term' : 'post';
+		$now   = self::meta_values_now( $id, $key, $type );
+		$table = 'term' === $type ? 'termmeta' : 'postmeta';
+		$col   = 'term' === $type ? 'term_id' : 'post_id';
 		if ( null === $now ) {
 			return new WP_Error( 'ab_mcp_sync_rows_unread', sprintf( 'The meta rows of %s could not be read, so nothing of them is put back. Try again; if it keeps failing, the database error log names the cause.', $key ) );
 		}
@@ -1109,7 +1700,7 @@ final class AB_MCP_Sync_Post_Writer {
 			);
 		}
 		global $wpdb;
-		$rows = AB_MCP_Sync_Rows::meta( 'post', $id );
+		$rows = AB_MCP_Sync_Rows::meta( $type, $id );
 		if ( null === $rows ) {
 			return new WP_Error( 'ab_mcp_sync_rows_unread', sprintf( 'The meta rows of %s could not be read, so nothing of them is put back. Try again; if it keeps failing, the database error log names the cause.', $key ) );
 		}
@@ -1127,9 +1718,9 @@ final class AB_MCP_Sync_Post_Writer {
 				continue;
 			}
 			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery -- byte for byte conditional, the point of the way back.
-			$done = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->postmeta} SET meta_value = %s WHERE meta_id = %d AND post_id = %d AND CAST( meta_value AS BINARY ) = CAST( %s AS BINARY ) AND OCTET_LENGTH( meta_value ) = %d", $backup[ $i ], (int) $own[ $i ]['meta_id'], $id, $own[ $i ]['value'], strlen( $own[ $i ]['value'] ) ) );
+			$done = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->$table} SET meta_value = %s WHERE meta_id = %d AND {$col} = %d AND CAST( meta_value AS BINARY ) = CAST( %s AS BINARY ) AND OCTET_LENGTH( meta_value ) = %d", $backup[ $i ], (int) $own[ $i ]['meta_id'], $id, $own[ $i ]['value'], strlen( $own[ $i ]['value'] ) ) );
 			if ( 1 !== (int) $done ) {
-				wp_cache_delete( $id, 'post_meta' );
+				wp_cache_delete( $id, $type . '_meta' );
 				return array(
 					'state' => 'left',
 					'note'  => sprintf( 'A row of the meta %s changed while it was put back, so the rest is left as it is.', $key ),
@@ -1138,14 +1729,14 @@ final class AB_MCP_Sync_Post_Writer {
 		}
 		for ( $i = $count; $i < count( $own ); $i++ ) {
 			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery -- only with the bytes the step wrote.
-			$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->postmeta} WHERE meta_id = %d AND post_id = %d AND CAST( meta_value AS BINARY ) = CAST( %s AS BINARY ) AND OCTET_LENGTH( meta_value ) = %d", (int) $own[ $i ]['meta_id'], $id, $own[ $i ]['value'], strlen( $own[ $i ]['value'] ) ) );
+			$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->$table} WHERE meta_id = %d AND {$col} = %d AND CAST( meta_value AS BINARY ) = CAST( %s AS BINARY ) AND OCTET_LENGTH( meta_value ) = %d", (int) $own[ $i ]['meta_id'], $id, $own[ $i ]['value'], strlen( $own[ $i ]['value'] ) ) );
 		}
 		for ( $i = $count; $i < count( $backup ); $i++ ) {
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- the raw row the step removed, as it was.
-			$wpdb->insert( $wpdb->postmeta, array( 'post_id' => $id, 'meta_key' => (string) $key, 'meta_value' => $backup[ $i ] ), array( '%d', '%s', '%s' ) );
+			$wpdb->insert( $wpdb->$table, array( $col => $id, 'meta_key' => (string) $key, 'meta_value' => $backup[ $i ] ), array( '%d', '%s', '%s' ) );
 		}
-		wp_cache_delete( $id, 'post_meta' );
-		$after = self::meta_values_now( $id, $key );
+		wp_cache_delete( $id, $type . '_meta' );
+		$after = self::meta_values_now( $id, $key, $type );
 		return array( 'state' => is_array( $after ) && self::meta_hash( $after ) === self::meta_hash( $backup ) ? 'restored' : 'unclear' );
 	}
 
@@ -1310,7 +1901,7 @@ final class AB_MCP_Sync_Post_Writer {
 	 * @param string[] $values The values before, in the order of their rows.
 	 * @return string
 	 */
-	private static function meta_before( $key, array $values ) {
+	public static function meta_before( $key, array $values ) {
 		if ( array() === $values ) {
 			return 'none (no row of the key)';
 		}
@@ -1374,7 +1965,7 @@ final class AB_MCP_Sync_Post_Writer {
 	 * @param string $value The value.
 	 * @return string
 	 */
-	private static function shown_value( $key, $value ) {
+	public static function shown_value( $key, $value ) {
 		$value = (string) $value;
 		if ( '' === $value ) {
 			return '""';
@@ -1404,7 +1995,7 @@ final class AB_MCP_Sync_Post_Writer {
 	 * @param int    $max  Characters.
 	 * @return string The text, cut with the mark where longer.
 	 */
-	private static function cut( $text, $max ) {
+	public static function cut( $text, $max ) {
 		$text = (string) $text;
 		if ( 1 !== preg_match( '//u', $text ) ) {
 			return sprintf( '(%d bytes, not UTF-8)', strlen( $text ) );
@@ -1418,25 +2009,6 @@ final class AB_MCP_Sync_Post_Writer {
 	/* ----------------------------------------------------------- helpers */
 
 	/**
-	 * Whether a meta key is one this version writes: a core key with an API
-	 * of its own, or a plain key that is neither protected, nor the name of
-	 * a credential, nor the markup of a page builder.
-	 *
-	 * @param string $key Key.
-	 * @return bool
-	 */
-	public static function meta_allowed( $key ) {
-		$key = (string) $key;
-		if ( in_array( $key, self::CORE_META, true ) ) {
-			return true;
-		}
-		if ( '' === $key || '_' === $key[0] || is_protected_meta( $key, 'post' ) || AB_MCP_Sync_Credentials::names_credential( $key, AB_MCP_Redactor::extra_keys() ) ) {
-			return false;
-		}
-		return ! AB_MCP_Builders::is_markup_meta_key( $key );
-	}
-
-	/**
 	 * The value of a meta row as the metadata API stores it back to the
 	 * same bytes: a serialized array unpacked (update_metadata() serializes
 	 * it again, the same way), a text with its addresses rewritten; a
@@ -1446,17 +2018,29 @@ final class AB_MCP_Sync_Post_Writer {
 	 * @param string $raw     As stored on the staging site.
 	 * @param array  $plan    AB_MCP_Sync_Refs::plan(), collecting missing.
 	 * @param bool   $changed Set when the addresses changed.
+	 * @param string $lock    The lock of a value the API cannot store as it is (post:meta_rule, term:meta_rule).
 	 * @return string|array|WP_Error
 	 */
-	private static function meta_value( $raw, array &$plan, &$changed ) {
+	public static function meta_value( $raw, array &$plan, &$changed, $lock = 'post:meta_rule' ) {
 		if ( is_serialized( $raw ) ) {
 			$read = AB_MCP_Sync_Canon::unserialized( $raw );
 			if ( ! $read['ok'] || ! is_array( $read['value'] ) ) {
-				return self::locked( 'post:meta_rule', 'a serialized value that is no array is not written through the metadata API as it is' );
+				return self::locked( $lock, 'a serialized value that is no array is not written through the metadata API as it is' );
 			}
 			$text = AB_MCP_Sync_Refs::rewrite_value( $raw, $plan, $changed );
 			$read = AB_MCP_Sync_Canon::unserialized( $text );
-			return $read['ok'] && is_array( $read['value'] ) ? $read['value'] : self::locked( 'post:meta_rule', 'a serialized value that does not unpack after its addresses were rewritten' );
+			if ( ! $read['ok'] || ! is_array( $read['value'] ) ) {
+				return self::locked( $lock, 'a serialized value that does not unpack after its addresses were rewritten' );
+			}
+			// The metadata API stores serialize() of what it is handed: a
+			// value that does not serialize back to its own bytes (a float
+			// written by an older PHP, a key or a string written by hand) would
+			// read back other than its target. Locked before anything is
+			// written (decision 17, the sanitizers ahead; branch 9).
+			if ( serialize( $read['value'] ) !== $text ) { // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize -- as maybe_serialize() stores an array.
+				return self::locked( $lock, 'a serialized value whose bytes the metadata API would not store again as they are (serialize() of it differs)' );
+			}
+			return $read['value'];
 		}
 		return AB_MCP_Sync_Refs::rewrite_value( $raw, $plan, $changed );
 	}
@@ -1467,17 +2051,36 @@ final class AB_MCP_Sync_Post_Writer {
 	 * @param string|array $value Value.
 	 * @return string
 	 */
-	private static function stored_form( $value ) {
+	public static function stored_form( $value ) {
 		return is_array( $value ) ? serialize( $value ) : (string) $value; // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize -- as maybe_serialize() stores an array.
 	}
 
 	/**
-	 * @param int    $id  Post.
-	 * @param string $key Key.
+	 * The bytes WordPress stores for what sanitize_meta() gave back
+	 * (update_metadata(), add_metadata(): maybe_serialize(), then $wpdb
+	 * writes a scalar as its text: a bool as '1' or '', a number as PHP
+	 * writes it); null where it stores no such bytes (NULL, or a value no
+	 * column holds), which no target equals (fail closed).
+	 *
+	 * @param mixed $value What sanitize_meta() gave back.
+	 * @return string|null
+	 */
+	public static function db_form( $value ) {
+		$value = maybe_serialize( $value );
+		if ( is_bool( $value ) ) {
+			return $value ? '1' : '';
+		}
+		return is_scalar( $value ) ? (string) $value : null;
+	}
+
+	/**
+	 * @param int    $id   Post (or term).
+	 * @param string $key  Key.
+	 * @param string $type The meta type: post or term.
 	 * @return string[]|null The values now, by row.
 	 */
-	private static function meta_values_now( $id, $key ) {
-		$rows = AB_MCP_Sync_Rows::meta( 'post', (int) $id );
+	public static function meta_values_now( $id, $key, $type = 'post' ) {
+		$rows = AB_MCP_Sync_Rows::meta( (string) $type, (int) $id );
 		if ( null === $rows ) {
 			return null;
 		}
@@ -1540,22 +2143,6 @@ final class AB_MCP_Sync_Post_Writer {
 	}
 
 	/**
-	 * Whether a post of this type and parent with this slug is here (not in
-	 * the trash is not asked: WordPress renames against every status).
-	 *
-	 * @param string $slug   Slug.
-	 * @param string $type   Post type.
-	 * @param int    $parent Parent.
-	 * @return bool
-	 */
-	public static function slug_taken( $slug, $type, $parent ) {
-		global $wpdb;
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- the rows, as the comparison reads them.
-		$found = $wpdb->get_var( $wpdb->prepare( "SELECT ID FROM {$wpdb->posts} WHERE post_name = %s AND post_type = %s AND post_parent = %d LIMIT 1", (string) $slug, (string) $type, (int) $parent ) );
-		return null !== $found && '' !== (string) $wpdb->last_error ? true : null !== $found;
-	}
-
-	/**
 	 * A value of the package as bytes (the byte form of the canon decoded).
 	 *
 	 * @param mixed $value Value.
@@ -1602,6 +2189,79 @@ final class AB_MCP_Sync_Post_Writer {
 	}
 
 	/**
+	 * The first lock the line of a package carries, as a refusal, or null
+	 * (branch 9): what the canonical form found in the staging object (a
+	 * page builder that is not released, decision 31; a type the table
+	 * locks, such as a changeset, decision 30; a value it cannot read, a
+	 * credential in a field). The report holds such an object back already;
+	 * the writer refuses it as well, before anything is written, so no path
+	 * past the report writes it.
+	 *
+	 * @param array $line The line of the package.
+	 * @return WP_Error|null
+	 */
+	public static function line_lock( array $line ) {
+		$locks = isset( $line['locks'] ) && is_array( $line['locks'] ) ? $line['locks'] : array();
+		foreach ( $locks as $lock ) {
+			if ( is_array( $lock ) && isset( $lock['key'], $lock['stage'], $lock['reason'] ) && is_string( $lock['key'] ) ) {
+				return self::refusal(
+					array(
+						'key'    => $lock['key'],
+						'stage'  => (string) $lock['stage'],
+						'reason' => (string) $lock['reason'],
+					),
+					sprintf( 'the object of the staging site, at %s', isset( $lock['at'] ) && is_string( $lock['at'] ) ? $lock['at'] : 'its form' )
+				);
+			}
+		}
+		return array() === $locks ? null : self::locked( 'post:lock_unread', 'the object of the staging site carries a lock this version does not read' );
+	}
+
+	/**
+	 * The locks of the canonical form of an object of this site, as a
+	 * refusal, or null (the mirror of line_lock() for the live side): what
+	 * the report holds back on this side, checked under the lock of the
+	 * boundary as well.
+	 *
+	 * @param array|null $read The result of AB_MCP_Sync_Kind::canonical().
+	 * @param string     $what The object, for the detail (the post of this site).
+	 * @return WP_Error|null
+	 */
+	public static function read_lock( $read, $what ) {
+		if ( ! is_array( $read ) || empty( $read['locks'] ) || ! is_array( $read['locks'] ) ) {
+			return null;
+		}
+		foreach ( $read['locks'] as $lock ) {
+			if ( is_array( $lock ) && isset( $lock['key'], $lock['stage'], $lock['reason'] ) && is_string( $lock['key'] ) ) {
+				return self::refusal(
+					array(
+						'key'    => $lock['key'],
+						'stage'  => (string) $lock['stage'],
+						'reason' => (string) $lock['reason'],
+					),
+					sprintf( '%1$s, at %2$s', (string) $what, isset( $lock['at'] ) && is_string( $lock['at'] ) ? $lock['at'] : 'its form' )
+				);
+			}
+		}
+		return self::locked( 'post:lock_unread', sprintf( '%s carries a lock this version does not read', (string) $what ) );
+	}
+
+	/**
+	 * A refusal with a lock as the table or the canonical form names it.
+	 *
+	 * @param array  $lock   key, stage, reason.
+	 * @param string $detail What was found.
+	 * @return WP_Error
+	 */
+	private static function refusal( array $lock, $detail ) {
+		return new WP_Error(
+			'ab_mcp_sync_locked',
+			sprintf( 'Not written (%1$s, from %2$s): %3$s %4$s Use the editor in wp-admin to take this object over by hand, or leave it out of the plan.', $lock['key'], $lock['stage'], $lock['reason'], ucfirst( (string) $detail ) . '.' ),
+			array( 'lock' => $lock + array( 'at' => (string) $detail ) )
+		);
+	}
+
+	/**
 	 * A refusal with the lock of its stage (AB_MCP_Sync_Kinds::LOCKS).
 	 *
 	 * @param string $key    Lock key (post:…).
@@ -1618,11 +2278,7 @@ final class AB_MCP_Sync_Post_Writer {
 				'reason' => 'Not carried to its end in this version.',
 			);
 		}
-		return new WP_Error(
-			'ab_mcp_sync_locked',
-			sprintf( 'Not written (%1$s, from %2$s): %3$s %4$s Use the editor in wp-admin to take this object over by hand, or leave it out of the plan.', $lock['key'], $lock['stage'], $lock['reason'], ucfirst( (string) $detail ) . '.' ),
-			array( 'lock' => $lock + array( 'at' => (string) $detail ) )
-		);
+		return self::refusal( $lock, $detail );
 	}
 
 	/**
