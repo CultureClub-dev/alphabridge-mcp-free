@@ -104,6 +104,7 @@ final class SyncMediaTest extends TestCase {
 		AB_MCP_Sync_Backup::forget();
 		AB_MCP_Sync_Guard::disarm();
 		AB_MCP_Sync_Engine::$probe    = null;
+		\AB_MCP_Sync_Attachment_Writer::$probe = null;
 		AB_MCP_Sync_Resources::$probe = null;
 		AB_MCP_Sync_Resources::$time  = null;
 		delete_option( \AB_MCP_Change_Lock::OPTION );
@@ -114,6 +115,12 @@ final class SyncMediaTest extends TestCase {
 		remove_all_actions( 'delete_option' );
 		remove_all_actions( 'add_attachment' );
 		remove_all_filters( 'wp_check_filetype_and_ext' );
+		// The folder outside the uploads a case lets a link point to (a case
+		// that failed before its end leaves it).
+		$outside = AB_MCP_IT_Sites::docroot( 'a' ) . '/umweg-aussen';
+		if ( is_dir( $outside ) ) {
+			self::remove_tree( $outside, (string) AB_MCP_IT_Sites::state()['root'] );
+		}
 		if ( null !== $this->caps_filter ) {
 			remove_filter( 'user_has_cap', $this->caps_filter );
 			$this->caps_filter = null;
@@ -832,6 +839,66 @@ final class SyncMediaTest extends TestCase {
 		self::assertSame( array(), $this->deletions );
 	}
 
+	public function testTheFirstFilesOfASiteWithoutMonthFoldersGoIntoItsUploadsAndOnlyWithTheRightToUploadAsTheyAreLaid(): void {
+		// Codex round 1 of branch 10, B8: a production site without an upload
+		// yet, the staging site without folders by month (the file bild.jpg,
+		// no folder on its way): the uploads folder itself is made. A5: the
+		// rights again right before a file is laid; an account that loses
+		// upload_files as the files are provided (a filter of this site) lays
+		// none, the step ends with the reason, and a run after that goes.
+		self::pair();
+		self::paired( self::staged() );
+		self::b( array( array( 'op' => 'update_option', 'name' => 'uploads_use_yearmonth_folders', 'value' => 0 ) ) );
+		self::upload_b( 'flach.jpg', 'image/jpeg', self::jpeg( 400, 300, array( 60, 90, 120 ) ) );
+		self::b( array( array( 'op' => 'update_option', 'name' => 'uploads_use_yearmonth_folders', 'value' => 1 ) ) );
+		$files_b = self::uploads_of( 'b' );
+		self::assertArrayHasKey( 'flach.jpg', $files_b, 'In the uploads themselves: ' . json_encode( $files_b ) );
+		$uploads_a = AB_MCP_IT_Sites::docroot( 'a' ) . '/wp-content/uploads';
+		if ( is_dir( $uploads_a ) ) {
+			rmdir( $uploads_a );
+		}
+		$planned = self::planned( array( 'attachment:flach.jpg' ) );
+		$revoked = false;
+		add_filter(
+			'wp_check_filetype_and_ext',
+			function ( $answer ) use ( &$revoked ) {
+				if ( ! $revoked ) {
+					$revoked           = true;
+					$this->caps_filter = static function ( $allcaps ) {
+						$allcaps['upload_files'] = false;
+						return $allcaps;
+					};
+					add_filter( 'user_has_cap', $this->caps_filter );
+				}
+				return $answer;
+			}
+		);
+		$this->watch_deletions();
+		$run    = self::begun( $planned['args'] );
+		$closed = self::finish( (int) $run['run_id'] );
+		$status = self::run_status( (int) $run['run_id'] );
+		self::assertTrue( $revoked );
+		self::assertSame( 'closed_findings', $closed['state'], json_encode( $closed ) . self::check_message( $status ) );
+		$step = self::writes( $status )[0];
+		self::assertSame( 'failed', $step['state'] );
+		self::assertStringContainsString( 'may not upload files here any more', (string) $step['result']['message'] );
+		self::assertArrayNotHasKey( 'files', $step['result'] );
+		self::assertSame( array(), self::uploads_of( 'a' ), 'Nothing laid.' );
+		remove_all_filters( 'wp_check_filetype_and_ext' );
+		remove_filter( 'user_has_cap', $this->caps_filter );
+		$this->caps_filter = null;
+		// The same again, with the right: every file in the uploads folder,
+		// which is made for the first of them.
+		$planned = self::planned( array( 'attachment:flach.jpg' ) );
+		$run     = self::begun( $planned['args'] );
+		$closed  = self::finish( (int) $run['run_id'] );
+		$status  = self::run_status( (int) $run['run_id'] );
+		self::assertSame( 'closed_done', $closed['state'], json_encode( $closed ) . self::check_message( $status ) );
+		self::assertSame( $files_b, self::uploads_of( 'a' ), 'Every file, byte for byte, in the uploads folder itself.' );
+		self::assertSame( array( 'flach.jpg' ), self::meta_a( self::attachment_a( 'flach.jpg' ), '_wp_attached_file' ) );
+		self::assertSame( array(), $this->deletions );
+	}
+
 	/* ----------------------------------------------- what locks, before */
 
 	public function testWhatWouldReplaceShareOrLinkAFileOrIsOfATypeThisAccountMayNotUploadLocksBeforeAnythingIsWritten(): void {
@@ -1048,7 +1115,9 @@ final class SyncMediaTest extends TestCase {
 		// (fopen 'xb': nothing written over), and the attachment is not made.
 		// A second attachment of the run, a PNG named .jpg, is refused by its
 		// content before any of its files is laid; so is a third, a JPEG
-		// whose thumbnail is a PNG named .jpg.
+		// whose thumbnail is a PNG named .jpg. A fourth: another hand swaps
+		// its folder for a link as its file is opened (Codex round 1, A1):
+		// the file made through the link stays empty and unclear, named.
 		self::pair();
 		self::paired( self::staged() );
 		self::upload_b( 'drei.jpg', 'image/jpeg', self::jpeg( 1600, 1200, array( 70, 70, 140 ) ) );
@@ -1068,9 +1137,18 @@ final class SyncMediaTest extends TestCase {
 		}
 		self::assertNotSame( '', $thumb );
 		self::b( array( array( 'op' => 'put_file', 'path' => $thumb, 'bytes' => base64_encode( $png ) ) ) );
+		self::b( array( array( 'op' => 'upload', 'name' => 'umweg.jpg', 'mime' => 'image/jpeg', 'bytes' => base64_encode( self::jpeg( 40, 30, array( 3, 3, 3 ) ) ), 'time' => '2026/08', 'generate' => false, 'as' => 'id' ) ) );
 		$files_b = self::uploads_of( 'b' );
-		$planned = self::planned( array( 'attachment:2026/10/drei.jpg', 'attachment:2026/10/falsch.jpg', 'attachment:2026/10/klein.jpg' ) );
+		$planned = self::planned( array( 'attachment:2026/10/drei.jpg', 'attachment:2026/10/falsch.jpg', 'attachment:2026/10/klein.jpg', 'attachment:2026/08/umweg.jpg' ) );
 		$uploads = AB_MCP_IT_Sites::docroot( 'a' ) . '/wp-content/uploads';
+		$outside = AB_MCP_IT_Sites::docroot( 'a' ) . '/umweg-aussen';
+		mkdir( $outside );
+		\AB_MCP_Sync_Attachment_Writer::$probe = static function ( $full ) use ( $uploads, $outside ) {
+			if ( $uploads . '/2026/08/umweg.jpg' === $full ) {
+				rename( $uploads . '/2026/08', $uploads . '/2026/08-alt' );
+				symlink( $outside, $uploads . '/2026/08' );
+			}
+		};
 		$checked = 0;
 		$taken   = null;
 		add_filter(
@@ -1093,7 +1171,9 @@ final class SyncMediaTest extends TestCase {
 		self::assertSame( 'closed_findings', $closed['state'], json_encode( $closed ) . self::check_message( $status ) );
 		self::assertNotNull( $taken );
 		$writes = self::writes( $status );
-		self::assertSame( array( 'failed', 'failed', 'failed' ), array_column( $writes, 'state' ) );
+		$states = array_column( $writes, 'state' );
+		sort( $states );
+		self::assertSame( array( 'failed', 'failed', 'failed', 'unclear' ), $states );
 		$of = static function ( string $path ) use ( $writes ): array {
 			foreach ( $writes as $step ) {
 				if ( in_array( $path, array_column( $step['parts']['files'] ?? array(), 'path' ), true ) ) {
@@ -1105,6 +1185,7 @@ final class SyncMediaTest extends TestCase {
 		$drei   = $of( '2026/10/drei.jpg' );
 		$falsch = $of( '2026/10/falsch.jpg' );
 		$klein  = $of( '2026/10/klein.jpg' );
+		$umweg  = $of( '2026/08/umweg.jpg' );
 		$own    = array_column( $drei['result']['files'] ?? array(), 'path' );
 		self::assertCount( 2, $own, 'Two files laid before the third: the run\'s own, named. ' . json_encode( $drei ) );
 		foreach ( $own as $path ) {
@@ -1121,8 +1202,18 @@ final class SyncMediaTest extends TestCase {
 		self::assertArrayNotHasKey( 'files', $klein['result'], 'Nothing of the JPEG with the PNG thumbnail was laid.' );
 		self::assertFileDoesNotExist( $uploads . '/2026/10/klein.jpg' );
 		self::assertFileDoesNotExist( $uploads . '/' . $thumb );
+		self::assertSame( 'unclear', $umweg['state'] );
+		self::assertSame( array( '2026/08/umweg.jpg' ), array_column( $umweg['result']['files_unclear'] ?? array(), 'path' ), json_encode( $umweg['result'] ) );
+		self::assertArrayNotHasKey( 'files', $umweg['result'], 'Not the run\'s own.' );
+		self::assertSame( '', file_get_contents( $outside . '/umweg.jpg' ), 'Made through the link, nothing written into it.' );
+		self::assertFileDoesNotExist( $uploads . '/2026/08-alt/umweg.jpg' );
 		global $wpdb;
 		self::assertSame( '0', (string) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_type = 'attachment'" ), 'No attachment of either.' );
+		// No step made a row: there is no way back (each step names its
+		// files in its own result, above).
+		$none = self::gated( 'wp_site_revert', array( 'action' => 'plan', 'run_id' => (int) $run['run_id'] ) );
+		self::assertInstanceOf( \WP_Error::class, $none );
+		self::assertSame( 'ab_mcp_sync_revert_nothing', $none->get_error_code() );
 		self::assertSame( array(), $this->deletions );
 	}
 

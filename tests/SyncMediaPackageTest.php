@@ -231,8 +231,75 @@ final class SyncMediaPackageTest extends TestCase {
 				array( 'path' => 'f.jpg', 'sha256' => 'h6', 'size' => 1, 'state' => 'planned', 'own' => false ),
 			),
 		);
-		self::assertSame( array( 'b.jpg', 'c.jpg', 'e.jpg' ), array_column( AB_MCP_Sync_Attachment_Writer::own_files( $journal ), 'path' ), 'Laid by the run, or being laid when its request ended.' );
+		self::assertSame( array( 'b.jpg', 'e.jpg' ), array_column( AB_MCP_Sync_Attachment_Writer::own_files( $journal ), 'path' ), 'Laid by the run, shown at its path: own; being made when its request ended: never own (Codex round 1, A2).' );
+		self::assertSame( array( array( 'path' => 'c.jpg', 'state' => 'unclear' ) ), array_map( static fn( $f ) => array( 'path' => $f['path'], 'state' => $f['state'] ), AB_MCP_Sync_Attachment_Writer::unclear_files( $journal ) ), 'Named as unclear, with its path.' );
+		$journal['files'][] = array( 'path' => 'g.jpg', 'sha256' => 'h7', 'size' => 1, 'state' => 'unclear', 'own' => true, 'note' => 'x' );
+		self::assertNotContains( 'g.jpg', array_column( AB_MCP_Sync_Attachment_Writer::own_files( $journal ), 'path' ), 'A file not shown at its path is never own, whatever its mark.' );
 		self::assertSame( array(), AB_MCP_Sync_Attachment_Writer::own_files( array() ) );
+		self::assertSame( array(), AB_MCP_Sync_Attachment_Writer::unclear_files( array() ) );
+	}
+
+	/** A private method of the writer. */
+	private static function writer( string $name, ...$args ) {
+		$m = new \ReflectionMethod( AB_MCP_Sync_Attachment_Writer::class, $name );
+		return $m->invoke( null, ...$args );
+	}
+
+	public function testTheFolderOfAFileIsMadeLevelByLevelUnderTheUploadsAndTheUploadsThemselvesWhereTheyAreMissing(): void {
+		// Codex round 1 of branch 10, B8: a site without an upload yet and
+		// without folders by month: the uploads folder itself is made.
+		$root = $this->dir . '/neu-uploads';
+		self::assertTrue( self::writer( 'folder', $root, 'bild.jpg' ) );
+		self::assertDirectoryExists( $root );
+		self::assertTrue( self::writer( 'folder', $root, '2027/01/bild.jpg' ) );
+		self::assertDirectoryExists( $root . '/2027/01' );
+		// A1: a link on the way, a file where a folder goes.
+		mkdir( $this->dir . '/anderswo' );
+		symlink( $this->dir . '/anderswo', $root . '/2027/02' );
+		self::assertStringContainsString( 'attachment:unsafe_path', self::writer( 'folder', $root, '2027/02/bild.jpg' )->get_error_message() );
+		file_put_contents( $root . '/2027/03', 'x' );
+		self::assertStringContainsString( 'attachment:replace_file', self::writer( 'folder', $root, '2027/03/bild.jpg' )->get_error_message() );
+		self::assertFileDoesNotExist( $this->dir . '/anderswo/bild.jpg' );
+	}
+
+	public function testAFileIsLaidOnlyWhereItIsShownAtItsPathUnderTheUploadsAndAFolderSwappedAsItIsOpenedLeavesItEmptyAndUnclear(): void {
+		// Codex round 1 of branch 10, A1: right before the open the folder is
+		// asked again; right after it the file opened is the one at its path
+		// (device and inode, the resolved path). Another hand swaps the folder
+		// for a link between the two: the file is made elsewhere, nothing is
+		// written into it, it stays empty, and the step reads it as unclear.
+		$root  = $this->dir;
+		$bytes = 'the bytes of a file';
+		$from  = $this->dir . '/temp';
+		file_put_contents( $from, $bytes );
+		$file = array( 'path' => '2026/10/a.jpg', 'sha256' => hash( 'sha256', $bytes ), 'size' => strlen( $bytes ) );
+		self::assertSame( 'laid', self::writer( 'lay', $root, $root . '/2026/10/a.jpg', $from, $file )['state'] );
+		self::assertSame( $bytes, file_get_contents( $root . '/2026/10/a.jpg' ) );
+		self::assertSame( 'failed', self::writer( 'lay', $root, $root . '/2026/10/a.jpg', $from, $file )['state'], 'Never over a file there.' );
+		// The folder no longer the checked one before the open: nothing made.
+		mkdir( $this->dir . '/aussen' );
+		rename( $root . '/2026/10', $root . '/2026/10-alt' );
+		symlink( $this->dir . '/aussen', $root . '/2026/10' );
+		$b = array( 'path' => '2026/10/b.jpg' ) + $file;
+		self::assertSame( 'failed', self::writer( 'lay', $root, $root . '/2026/10/b.jpg', $from, $b )['state'] );
+		self::assertFileDoesNotExist( $this->dir . '/aussen/b.jpg' );
+		unlink( $root . '/2026/10' );
+		rename( $root . '/2026/10-alt', $root . '/2026/10' );
+		// Swapped between the check and the open.
+		AB_MCP_Sync_Attachment_Writer::$probe = function () use ( $root ) {
+			rename( $root . '/2026/10', $root . '/2026/10-alt' );
+			symlink( $this->dir . '/aussen', $root . '/2026/10' );
+		};
+		try {
+			$c    = array( 'path' => '2026/10/c.jpg' ) + $file;
+			$laid = self::writer( 'lay', $root, $root . '/2026/10/c.jpg', $from, $c );
+		} finally {
+			AB_MCP_Sync_Attachment_Writer::$probe = null;
+		}
+		self::assertSame( 'unclear', $laid['state'] );
+		self::assertFalse( $laid['own'] );
+		self::assertFileExists( $this->dir . '/aussen/c.jpg', 'Made elsewhere by the open, through the link.' );
+		self::assertSame( '', file_get_contents( $this->dir . '/aussen/c.jpg' ), 'Nothing written into it; it stays (nothing is deleted).' );
 	}
 
 	public function testTheFileOfANewAttachmentGoesWithItsRowAndThatOfOneHereByItsOwnCall(): void {

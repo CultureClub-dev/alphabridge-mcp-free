@@ -105,6 +105,9 @@ final class AB_MCP_Sync_Attachment_Writer {
 	/** Attachments a check of shared paths reads at most beside the one written (named_by()); more is fail closed. */
 	const SHARED_MAX = 20000;
 
+	/** Called right before a file is opened to be laid: callable( string $full ): void. Set by tests only (another hand between the check and the open). */
+	public static $probe = null;
+
 	/* ------------------------------------------------------------ prepare */
 
 	/**
@@ -655,6 +658,23 @@ final class AB_MCP_Sync_Attachment_Writer {
 				if ( 'absent' !== $file['state'] ) {
 					continue;
 				}
+				// Ahead of the folder and the file: whatever this request makes
+				// from here on stands in the journal (creating: unclear until the
+				// file is shown laid, never the run's own by that state alone).
+				// The rights as the check before asked them, again right before
+				// the file (Codex round 1, A5: a filter that ran as the files were
+				// provided may have changed them): nothing is laid without them.
+				$may = self::may_lay( $live_id, $file );
+				if ( true !== $may ) {
+					return self::not_laid( $journal, $may );
+				}
+				$journal['files'][ $i ]['state'] = 'creating';
+				if ( true !== $save( $journal ) ) {
+					$journal['files'][ $i ]['state'] = 'planned';
+					return self::not_laid( $journal, sprintf( 'the journal of the step could not be saved before the file %s, so it was not laid', $file['path'] ) );
+				}
+				// The folder, then the file, with no save of the journal in
+				// between (Codex round 1, A1).
 				$dir = self::folder( $plan['root'], $file['path'] );
 				if ( is_wp_error( $dir ) ) {
 					$journal['files'][ $i ]['state'] = 'failed';
@@ -662,12 +682,7 @@ final class AB_MCP_Sync_Attachment_Writer {
 					$save( $journal );
 					return self::not_laid( $journal, $dir->get_error_message() );
 				}
-				$journal['files'][ $i ]['state'] = 'creating';
-				if ( true !== $save( $journal ) ) {
-					$journal['files'][ $i ]['state'] = 'planned';
-					return self::not_laid( $journal, sprintf( 'the journal of the step could not be saved before the file %s, so it was not laid', $file['path'] ) );
-				}
-				$laid = self::lay( $plan['root'] . '/' . $file['path'], $temp[ $i ], $file );
+				$laid = self::lay( $plan['root'], $plan['root'] . '/' . $file['path'], $temp[ $i ], $file );
 				$journal['files'][ $i ]['state'] = $laid['state'];
 				$journal['files'][ $i ]['own']   = $laid['own'];
 				if ( '' !== $laid['note'] ) {
@@ -698,7 +713,10 @@ final class AB_MCP_Sync_Attachment_Writer {
 	/**
 	 * The files of a journal the run laid itself (own): path and SHA-256, for
 	 * the result of a step and of its way back (decision 26: they stay, named
-	 * with their paths).
+	 * with their paths). Own is only what stands with own after the file was
+	 * made exclusively and shown at its path (lay()); a file the journal
+	 * shows as creating (the request ended as it was made) or unclear is
+	 * never own (Codex round 1, A2: unclear_files()).
 	 *
 	 * @param array $journal Journal.
 	 * @return array[]
@@ -706,11 +724,65 @@ final class AB_MCP_Sync_Attachment_Writer {
 	public static function own_files( array $journal ) {
 		$out = array();
 		foreach ( isset( $journal['files'] ) && is_array( $journal['files'] ) ? $journal['files'] : array() as $file ) {
-			if ( ! empty( $file['own'] ) || 'creating' === ( $file['state'] ?? '' ) ) {
+			if ( ! empty( $file['own'] ) && in_array( (string) ( $file['state'] ?? '' ), array( 'laid', 'partial' ), true ) ) {
 				$out[] = array(
 					'path'   => (string) $file['path'],
 					'sha256' => (string) $file['sha256'],
 					'state'  => (string) $file['state'],
+				);
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * Whether this account may lay a file of the step now, as the check
+	 * before the first write asked it (precheck(), files_plan()): a new
+	 * attachment with the right to make one (upload_files, the create_posts
+	 * of the type), one here with edit_post and upload_files; the file of a
+	 * type this account may upload by its name (unfiltered_upload any).
+	 *
+	 * @param int|null $live_id The attachment here, null for a new one.
+	 * @param array    $file    An entry of files_plan().
+	 * @return true|string Why not, as a clause.
+	 */
+	private static function may_lay( $live_id, array $file ) {
+		$pto = get_post_type_object( self::TYPE );
+		if ( ! is_object( $pto ) || ! isset( $pto->cap ) ) {
+			return 'the post type attachment is not registered on this site';
+		}
+		if ( null === $live_id ? ! current_user_can( (string) $pto->cap->create_posts ) : ( ! current_user_can( 'edit_post', (int) $live_id ) || ! current_user_can( 'upload_files' ) ) ) {
+			return sprintf( 'this account may not upload files here any more (%s), so the file %s was not laid', null === $live_id ? (string) $pto->cap->create_posts : 'edit_post, upload_files', (string) $file['path'] );
+		}
+		if ( ! current_user_can( 'unfiltered_upload' ) ) {
+			$type = wp_check_filetype( self::base( $file['path'] ), get_allowed_mime_types( wp_get_current_user() ) );
+			if ( empty( $type['type'] ) || empty( $type['ext'] ) ) {
+				return sprintf( 'the file %s is of a type this account may not upload any more', (string) $file['path'] );
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * The files of a journal whose state is unclear, with their paths: one
+	 * the journal shows as creating (the request ended between the journal
+	 * and the file: whether a file lies there, and whose, only the disk
+	 * says) and one made but not provably at its path (lay()). Never the
+	 * run's own; named in the result of the step and of its way back, so a
+	 * person checks them (nothing is deleted).
+	 *
+	 * @param array $journal Journal.
+	 * @return array[] path, state, note.
+	 */
+	public static function unclear_files( array $journal ) {
+		$out = array();
+		foreach ( isset( $journal['files'] ) && is_array( $journal['files'] ) ? $journal['files'] : array() as $file ) {
+			$state = (string) ( $file['state'] ?? '' );
+			if ( 'creating' === $state || 'unclear' === $state ) {
+				$out[] = array(
+					'path'  => (string) $file['path'],
+					'state' => 'unclear',
+					'note'  => 'creating' === $state ? sprintf( 'The request ended as the file %s was being made: whether a file lies there, and whose, only the uploads of this site say. It is not the run\'s own; check it by hand.', (string) $file['path'] ) : (string) ( $file['note'] ?? '' ),
 				);
 			}
 		}
@@ -765,9 +837,16 @@ final class AB_MCP_Sync_Attachment_Writer {
 	}
 
 	/**
-	 * The folder of a file to lay, under the resolved uploads: every folder
-	 * on the way a folder and no link; the missing ones made (wp_mkdir_p())
-	 * and checked again by their resolved path.
+	 * The folder of a file to lay, under the resolved uploads (decision 26;
+	 * branch 10, Codex round 1, A1 and B8): the uploads folder itself first
+	 * (a site without an upload yet: made in the folder files_plan()
+	 * resolved), then each folder on the way, one level at a time: a link
+	 * locks, a file where a folder goes locks, a missing one is made with
+	 * mkdir() (never recursive, the permissions of the folder above, as
+	 * wp_mkdir_p() takes them) and every level checked again by its resolved
+	 * path, so a folder only counts where it resolves to itself under the
+	 * uploads. A folder another hand made somewhere else in between stays as
+	 * it is (nothing is deleted) and the file is not laid.
 	 *
 	 * @param string $root The resolved uploads.
 	 * @param string $path The file, relative (AB_MCP_Sync_Media::safe_path()).
@@ -776,48 +855,83 @@ final class AB_MCP_Sync_Attachment_Writer {
 	private static function folder( $root, $path ) {
 		$parts = explode( '/', (string) $path );
 		array_pop( $parts );
-		$at      = (string) $root;
-		$missing = false;
-		foreach ( $parts as $part ) {
-			$at .= '/' . $part;
+		$at = rtrim( (string) $root, '/' );
+		foreach ( array_merge( array( '' ), $parts ) as $part ) {
+			$above = '' === $part ? dirname( $at ) : $at;
+			$at    = '' === $part ? $at : $at . '/' . $part;
+			clearstatcache( true, $at );
 			if ( is_link( $at ) ) {
 				return AB_MCP_Sync_Post_Writer::locked( 'attachment:unsafe_path', sprintf( 'file %s: a link lies on the way to it', $path ) );
 			}
 			if ( ! file_exists( $at ) ) {
-				$missing = true;
-				break;
+				$stat  = @stat( $above ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- a failure is answered by the check below.
+				$perms = is_array( $stat ) ? ( $stat['mode'] & 0007777 ) : 0755;
+				if ( ! @mkdir( $at, $perms ) && ! is_dir( $at ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- one level under a checked folder, checked again below.
+					return new WP_Error( 'ab_mcp_sync_media_folder', sprintf( 'The folder of the file %s could not be made in the uploads of this site, so it was not laid. Ask the host to check that the uploads are writable, then call again.', $path ) );
+				}
+				clearstatcache( true, $at );
 			}
-			if ( ! is_dir( $at ) ) {
+			if ( ! is_link( $at ) && file_exists( $at ) && ! is_dir( $at ) ) {
 				return AB_MCP_Sync_Post_Writer::locked( 'attachment:replace_file', sprintf( 'file %s: a file lies where its folder would be', $path ) );
 			}
-		}
-		$dir = array() === $parts ? (string) $root : (string) $root . '/' . implode( '/', $parts );
-		if ( $missing && ! wp_mkdir_p( $dir ) ) {
-			return new WP_Error( 'ab_mcp_sync_media_folder', sprintf( 'The folder of the file %s could not be made in the uploads of this site, so it was not laid. Ask the host to check that the uploads are writable, then call again.', $path ) );
-		}
-		$real = realpath( $dir );
-		if ( false === $real || $real !== $dir || ! is_dir( $real ) ) {
-			return AB_MCP_Sync_Post_Writer::locked( 'attachment:unsafe_path', sprintf( 'file %s: its folder does not resolve to itself under the uploads', $path ) );
+			$real = realpath( $at );
+			if ( is_link( $at ) || false === $real || $real !== $at || ! is_dir( $real ) ) {
+				return AB_MCP_Sync_Post_Writer::locked( 'attachment:unsafe_path', sprintf( 'file %s: its folder does not resolve to itself under the uploads', $path ) );
+			}
 		}
 		return true;
 	}
 
 	/**
 	 * Lay one file exclusively (fopen 'xb': never over anything) from its
-	 * temporary copy, and read it back.
+	 * temporary copy, and read it back (branch 10, Codex round 1, A1): right
+	 * before the open its folder is asked again (it resolves to itself under
+	 * the uploads, no link), with no save of the journal in between; right
+	 * after it the file opened is shown to be the one at its path under the
+	 * uploads (device and inode of the handle, fstat(), as those of the path,
+	 * lstat(); the path and its folder resolve to themselves). Where it is
+	 * not, nothing is written into it: it is closed and stays as it is, empty
+	 * and named (unclear, never the run's own, nothing deleted).
 	 *
+	 * @param string $root The resolved uploads.
 	 * @param string $full The path of the file.
 	 * @param string $from The temporary copy.
 	 * @param array  $file path, sha256, size.
-	 * @return array{state:string,own:bool,note:string} state laid, failed (nothing laid: the path was taken) or partial (laid by the run, not as planned).
+	 * @return array{state:string,own:bool,note:string} state laid, failed (nothing laid: the path was taken, or its folder is no longer the checked one), unclear (a file was made, not provably at its path under the uploads) or partial (laid by the run, not as planned).
 	 */
-	private static function lay( $full, $from, array $file ) {
+	private static function lay( $root, $full, $from, array $file ) {
+		$root = rtrim( (string) $root, '/' );
+		$dir  = dirname( (string) $full );
+		clearstatcache();
+		$real_dir = realpath( $dir );
+		if ( is_link( $dir ) || false === $real_dir || $real_dir !== $dir || ! is_dir( $real_dir ) || ( $dir !== $root && 0 !== strpos( $dir, $root . '/' ) ) ) {
+			return array(
+				'state' => 'failed',
+				'own'   => false,
+				'note'  => sprintf( 'The file %s was not laid: its folder does not resolve to itself under the uploads any more (another hand changed it since the check); nothing was written.', $file['path'] ),
+			);
+		}
+		if ( is_callable( self::$probe ) ) {
+			call_user_func( self::$probe, (string) $full );
+		}
 		$out = @fopen( (string) $full, 'xb' ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- exclusive: a file there is never written over.
 		if ( false === $out ) {
 			return array(
 				'state' => 'failed',
 				'own'   => false,
 				'note'  => sprintf( 'The file %s was not laid: the path is taken on this site since the check (another file, a link), or the folder is not writable; nothing there was written over.', $file['path'] ),
+			);
+		}
+		$opened = fstat( $out );
+		clearstatcache();
+		$there  = @lstat( (string) $full ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- a failure is answered.
+		$placed = is_array( $opened ) && is_array( $there ) && (int) $opened['dev'] === (int) $there['dev'] && (int) $opened['ino'] === (int) $there['ino'] && realpath( (string) $full ) === (string) $full && realpath( $dir ) === $dir;
+		if ( ! $placed ) {
+			fclose( $out ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
+			return array(
+				'state' => 'unclear',
+				'own'   => false,
+				'note'  => sprintf( 'A file was made for %s, but it is not provably the one at that path under the uploads (another hand changed a folder on the way as it was opened): nothing was written into it, it stays as it is, empty; check the uploads and the folders around them on this site by hand.', $file['path'] ),
 			);
 		}
 		$in   = @fopen( (string) $from, 'rb' ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_fopen
@@ -851,11 +965,13 @@ final class AB_MCP_Sync_Attachment_Writer {
 	 * @return array{ok:bool,journal:array,message:string}
 	 */
 	private static function not_laid( array $journal, $why ) {
-		$own = self::own_files( $journal );
+		$own     = self::own_files( $journal );
+		$unclear = self::unclear_files( $journal );
 		return array(
 			'ok'      => false,
+			'state'   => array() === $unclear ? 'failed' : 'unclear',
 			'journal' => $journal,
-			'message' => sprintf( 'The files of the attachment were not laid whole: %1$s. Its row was not written%2$s.', rtrim( (string) $why, '.' ), array() === $own ? '' : sprintf( '; the %d file(s) the run laid before stay as its own (files, with their paths): nothing is deleted, they are tidied with the manifest of the files (Z8b), or by hand', count( $own ) ) ),
+			'message' => sprintf( 'The files of the attachment were not laid whole: %1$s. Its row was not written%2$s%3$s.', rtrim( (string) $why, '.' ), array() === $own ? '' : sprintf( '; the %d file(s) the run laid before stay as its own (files, with their paths): nothing is deleted, they are tidied with the manifest of the files (Z8b), or by hand', count( $own ) ), array() === $unclear ? '' : sprintf( '; %d file(s) are unclear (files_unclear, with their paths): check them by hand', count( $unclear ) ) ),
 		);
 	}
 

@@ -1130,11 +1130,8 @@ final class AB_MCP_Sync_Engine {
 					'message'  => $laid['message'],
 					'live_ref' => null === $live_id ? null : (string) $live_id,
 				);
-				$files  = $w::own_files( $journal );
-				if ( array() !== $files ) {
-					$result['files'] = $files;
-				}
-				$ended = self::end_step( $run_id, $seq, array( 'state' => 'failed', 'parts' => self::settled( $journal ), 'result' => $result ) );
+				$result = self::with_files( $result, $journal, $w );
+				$ended  = self::end_step( $run_id, $seq, array( 'state' => isset( $laid['state'] ) && 'unclear' === $laid['state'] ? 'unclear' : 'failed', 'parts' => self::settled( $journal ), 'result' => $result ) );
 				return is_wp_error( $ended ) ? $ended : array( 'next' => $laid['message'] . ' The run goes on with the next step (action=next); the steps that depend on this object are skipped.' );
 			}
 		}
@@ -2609,6 +2606,15 @@ final class AB_MCP_Sync_Engine {
 			$files = $w::own_files( $journal );
 			if ( array() !== $files ) {
 				$result['files'] = $files;
+			}
+		}
+		// The files whose state is unclear (a request that ended as one was
+		// made, one not provably at its path): named, never own (Codex round
+		// 1 of branch 10, A2).
+		if ( method_exists( $w, 'unclear_files' ) ) {
+			$unclear = $w::unclear_files( $journal );
+			if ( array() !== $unclear ) {
+				$result['files_unclear'] = $unclear;
 			}
 		}
 		return $result;

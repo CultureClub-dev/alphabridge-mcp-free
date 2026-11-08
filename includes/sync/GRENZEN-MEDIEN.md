@@ -62,12 +62,30 @@ entsteht, nennt ihre Meldung den Weg.
   `attachment:replace_file` (Z8b), ein Link oder eine Datei auf dem Weg mit
   `attachment:unsafe_path` (Z8b). Das gilt auch für eine eigene Datei eines
   früheren Laufs: überschrieben wird nie, gelöscht auch nicht.
-- Eigen ist nur, was das Journal des Schritts als `laid` (oder `partial`)
-  mit `own` führt; vor jedem Anlegen steht die Datei im Journal als
-  `creating` (gespeichert, geprüft). Endet die Anfrage in diesem Fenster,
-  zeigt das Journal `creating`: ob die Datei liegt, sagt nur die Platte; sie
-  gilt als eigen, weil nur der Lauf sie exklusiv angelegt haben kann. Eine
-  teilweise geschriebene Datei bleibt so liegen.
+- Eigen ist nur, was das Journal des Schritts nach dem exklusiven Anlegen
+  als `laid` (oder `partial`) mit `own` führt; vor jedem Anlegen steht die
+  Datei im Journal als `creating` (gespeichert, geprüft). Endet die Anfrage
+  in diesem Fenster, zeigt das Journal `creating`: ob dort eine Datei liegt
+  und wessen, sagt nur die Platte, denn ein anderer Upload kann den Pfad
+  danach belegt haben. Eine solche Datei ist nie eigen, sondern unklar: sie
+  steht mit Pfad in `files_unclear` im Ergebnis des Schritts und seines
+  Rückwegs (Codex-Runde 1, A2). Eine teilweise geschriebene eigene Datei
+  bleibt so liegen.
+- Ordner und Datei werden gegen ausgetauschte Ordner gehärtet (Codex-Runde
+  1, A1): der Uploads-Ordner und jeder Ordner auf dem Weg entsteht einzeln
+  mit `mkdir()` unter einem geprüften Ordner und wird danach je Ebene
+  geprüft (aufgelöst er selbst, kein Link); unmittelbar vor `fopen( …,
+  'xb' )` wird der aufgelöste Ordner der Datei noch einmal gefragt, ohne
+  Speichern des Journals dazwischen; nach dem Öffnen belegen Gerät und
+  Inode der geöffneten Datei (`fstat()`) gegen die des Pfads (`lstat()`)
+  und der aufgelöste Pfad, dass sie unter den Uploads liegt. Sonst wird
+  nichts hineingeschrieben, die leere Datei bleibt (unklar, mit Pfad), der
+  Schritt endet `unclear`, gelöscht wird nichts. Rest (Grenze C): ein
+  Prozess mit Schreibrecht an den Uploads, der genau zwischen der letzten
+  Prüfung und dem Öffnen einen Ordner gegen einen Link tauscht, lässt eine
+  leere Datei ausserhalb der Uploads entstehen, und einer, der zwischen der
+  Prüfung eines Ordners und dem `mkdir()` darunter tauscht, einen leeren
+  Ordner; beides wird gefunden und gemeldet, keines beschrieben.
 - Ein Schritt legt alle Dateien seines Anhangs in einer Anfrage: höchstens
   48 MiB (`attachment:file_too_large` darüber), Stück für Stück aus dem
   Paket gelesen, nie ganz im Speicher; einen Cursor innerhalb des Schritts
@@ -78,7 +96,11 @@ entsteht, nennt ihre Meldung den Weg.
   Sekunden.
 - Eigene Dateien eines zurückgenommenen Laufs bleiben liegen und stehen mit
   Pfad im Ergebnis des Schritts und seines Rückwegs (`files`); aufräumbar
-  werden sie mit dem Datei-Manifest von Z8b, bis dahin von Hand.
+  werden sie mit dem Datei-Manifest von Z8b, bis dahin von Hand. Ein
+  Schritt, der Dateien legte, aber keinen neuen Anhang anlegte (eine Datei
+  scheiterte), nennt sie nur in seinem eigenen Ergebnis: einen Rückweg hat
+  er nicht, weil er keine Zeile schrieb (`wp_site_revert` nimmt nur
+  Schritte, die schrieben).
 - Ein Pfad, den ein anderes Attachment der Live-Site nennt, sperrt mit
   `attachment:shared_path` (Z8b), geprüft mit einem SQL-Vorfilter nach dem
   letzten Segment des Pfads und danach der Liste jedes Kandidaten wie der
@@ -123,6 +145,12 @@ entsteht, nennt ihre Meldung den Weg.
   und als einfache Datei unter den Uploads liegen; sonst bleibt der Teil
   mit seinem alten Wert stehen, die übrigen Teile gehen zurück. Auf dem
   Rückweg wird keine Datei gelegt.
+- Unmittelbar vor jeder Datei, die ein Schritt legt, fragt er die Rechte
+  noch einmal wie die Vorprüfung (Codex-Runde 1, A5): `upload_files` (das
+  `create_posts` der Art) für einen neuen Anhang, `edit_post` und
+  `upload_files` für einen vorhandenen, der Typ nach dem Namen für das
+  Konto erlaubt. Hat ein Filter, der beim Bereitstellen lief, sie
+  genommen, liegt keine Datei, und der Schritt endet mit dem Grund.
 
 ## Schreibwege
 
@@ -137,9 +165,10 @@ entsteht, nennt ihre Meldung den Weg.
   die Adresse der Datei). Die Aktion `add_attachment` läuft dabei; ändert
   ein Plugin dort etwas am Anhang, weicht er ab.
 - Fehlt der Uploads-Ordner (eine Site ohne Upload), entsteht er mit der
-  ersten Datei, wie WordPress ihn beim ersten Upload macht; fehlende
-  Unterordner mit `wp_mkdir_p()`, danach geprüft: aufgelöst unter den
-  Uploads, kein Link.
+  ersten Datei, wie WordPress ihn beim ersten Upload macht, auch wo die
+  Datei in keinem Unterordner liegt (Ordner nach Monaten aus, Codex-Runde
+  1, B8); fehlende Unterordner einzeln, je Ebene geprüft (oben). Prüffall
+  `testTheFirstFilesOfASiteWithoutMonthFoldersGoIntoItsUploadsAndOnlyWithTheRightToUploadAsTheyAreLaid`.
 
 ## Elternverweis (schwach, Entscheid 16)
 

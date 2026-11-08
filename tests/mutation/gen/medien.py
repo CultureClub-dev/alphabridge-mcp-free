@@ -74,6 +74,9 @@ U_ROW = 'testTheFileOfANewAttachmentGoesWithItsRowAndThatOfOneHereByItsOwnCall'
 U_RIGHTS = 'testTheOwnKeysOfAnAttachmentAskTheRightToItAndToUploadForwardAndBack'
 U_WEAK = 'testTheParentOfAnAttachmentIsAWeakReferenceThatWaitsButMakesNoCycle'
 U_VERDICT = 'testWhichEntryOfAReportIsAStepLockedOrNothing'
+U_FOLDER = 'testTheFolderOfAFileIsMadeLevelByLevelUnderTheUploadsAndTheUploadsThemselvesWhereTheyAreMissing'
+U_LAY = 'testAFileIsLaidOnlyWhereItIsShownAtItsPathUnderTheUploadsAndAFolderSwappedAsItIsOpenedLeavesItEmptyAndUnclear'
+FLAT = 'testTheFirstFilesOfASiteWithoutMonthFoldersGoIntoItsUploadsAndOnlyWithTheRightToUploadAsTheyAreLaid'
 U_KINDS = 'testEachKindRegistersWithWhatTheTableGivesIt'
 U_WRITERS = 'testTheEngineWritesTermsWithTheirOwnWriter'
 IT_LINES = 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain'
@@ -214,8 +217,8 @@ e('engine-lay-files', 'boundary(): the files of an attachment before its row', E
 e('engine-lay-files-stop', 'boundary(): files not laid whole, no row', EN,
   "\t\t\tif ( true !== $laid['ok'] ) {", "\t\t\tif ( false ) {", 'it', RACE)
 e('engine-with-files', 'with_files(): the files the step laid in its result', EN,
-  "\t\t\t$files = $w::own_files( $journal );\n\t\t\tif ( array() !== $files ) {\n\t\t\t\t$result['files'] = $files;\n\t\t\t}\n\t\t}\n\t\treturn $result;",
-  "\t\t}\n\t\treturn $result;", 'it', NORMAL)
+  "\t\t\t$files = $w::own_files( $journal );\n\t\t\tif ( array() !== $files ) {\n\t\t\t\t$result['files'] = $files;\n\t\t\t}",
+  "\t\t\t$files = $w::own_files( $journal );", 'it', NORMAL)
 e('engine-pair-staging-base', 'pair_for_new(): an attachment made unattached takes the staging base of that state', EN,
   "'base_staging' => isset( $prepared['base_staging'] ) && is_string( $prepared['base_staging'] ) ? $prepared['base_staging'] : (string) $item['staging_hash'],",
   "'base_staging' => (string) $item['staging_hash'],", 'it', NORMAL)
@@ -291,12 +294,34 @@ e('writer-lay-stop', 'lay_files(): a file not laid stops the files after it', AW
   "\t\t\t\tif ( false ) {\n\t\t\t\t\treturn self::not_laid( $journal, $laid['note'] );", 'it', RACE)
 e('writer-lay-own', 'lay(): a file laid is the run\'s own', AW,
   "\t\t\t'state' => 'laid',\n\t\t\t'own'   => true,", "\t\t\t'state' => 'laid',\n\t\t\t'own'   => false,", 'it', NORMAL)
-e('writer-folder', 'folder(): the missing folders made under the uploads', AW,
-  "\t\tif ( $missing && ! wp_mkdir_p( $dir ) ) {", "\t\tif ( $missing ) {", 'it', NORMAL)
+e('writer-folder', 'folder(): the missing folders made under the uploads, one level at a time', AW,
+  "\t\t\t\tif ( ! @mkdir( $at, $perms ) && ! is_dir( $at ) ) {", "\t\t\t\tif ( true ) {", 'it', NORMAL)
+e('writer-folder-root', 'folder(): the uploads folder itself made where it is missing (Codex round 1, B8)', AW,
+  "\t\tforeach ( array_merge( array( '' ), $parts ) as $part ) {", "\t\tforeach ( $parts as $part ) {", 'pkg', U_FOLDER)
+e('writer-folder-file', 'folder(): a file where a folder goes locks', AW,
+  "\t\t\tif ( ! is_link( $at ) && file_exists( $at ) && ! is_dir( $at ) ) {\n\t\t\t\treturn AB_MCP_Sync_Post_Writer::locked( 'attachment:replace_file'",
+  "\t\t\tif ( false ) {\n\t\t\t\treturn AB_MCP_Sync_Post_Writer::locked( 'attachment:replace_file'", 'pkg', U_FOLDER)
+e('writer-lay-dir-again', 'lay(): the folder of the file asked again right before the open (Codex round 1, A1)', AW,
+  "\t\tif ( is_link( $dir ) || false === $real_dir || $real_dir !== $dir || ! is_dir( $real_dir ) || ( $dir !== $root && 0 !== strpos( $dir, $root . '/' ) ) ) {",
+  "\t\tif ( false ) {", 'pkg', U_LAY)
+e('writer-lay-placed', 'lay(): the file opened shown at its path under the uploads, else nothing written into it (Codex round 1, A1)', AW,
+  "\t\tif ( ! $placed ) {", "\t\tif ( false ) {", 'pkg', U_LAY)
+e('engine-lay-unclear', 'boundary(): a step with a file not shown at its path ends unclear, the file named (Codex round 1, A1, A2)', EN,
+  "'state' => isset( $laid['state'] ) && 'unclear' === $laid['state'] ? 'unclear' : 'failed',", "'state' => 'failed',", 'it', RACE)
+e('engine-files-unclear', 'with_files(): the files whose state is unclear named in the result (Codex round 1, A2)', EN,
+  "\t\tif ( method_exists( $w, 'unclear_files' ) ) {", "\t\tif ( false ) {", 'it', RACE)
+e('writer-may-lay', 'lay_files(): the rights asked again right before a file is laid (Codex round 1, A5)', AW,
+  "\t\t\t\tif ( true !== $may ) {\n\t\t\t\t\treturn self::not_laid( $journal, $may );",
+  "\t\t\t\tif ( false ) {\n\t\t\t\t\treturn self::not_laid( $journal, $may );", 'it', FLAT)
+e('writer-may-lay-upload', 'may_lay(): upload_files (create_posts of the type) for a new attachment', AW,
+  "\t\tif ( null === $live_id ? ! current_user_can( (string) $pto->cap->create_posts ) : ( ! current_user_can( 'edit_post', (int) $live_id ) || ! current_user_can( 'upload_files' ) ) ) {",
+  "\t\tif ( null === $live_id ? false : ( ! current_user_can( 'edit_post', (int) $live_id ) || ! current_user_can( 'upload_files' ) ) ) {", 'it', FLAT)
 e('writer-uploads-missing', 'files_plan(): a site without an upload yet', AW,
   "\t\t\t$root = $parent . '/' . basename( $dir );", "\t\t\treturn AB_MCP_Sync_Post_Writer::locked( 'attachment:unsafe_path', 'x' );", 'it', NORMAL)
-e('writer-own-files', 'own_files(): what the run laid, or was laying', AW,
-  "\t\t\tif ( ! empty( $file['own'] ) || 'creating' === ( $file['state'] ?? '' ) ) {", "\t\t\tif ( ! empty( $file['own'] ) ) {", 'pkg', U_OWN)
+e('writer-own-files', 'own_files(): own only what was laid and shown at its path, never creating (Codex round 1, A2)', AW,
+  "\t\t\tif ( ! empty( $file['own'] ) && in_array( (string) ( $file['state'] ?? '' ), array( 'laid', 'partial' ), true ) ) {", "\t\t\tif ( ! empty( $file['own'] ) || 'creating' === ( $file['state'] ?? '' ) ) {", 'pkg', U_OWN)
+e('writer-unclear-files', 'unclear_files(): a file being made when the request ended is unclear, named (Codex round 1, A2)', AW,
+  "\t\t\tif ( 'creating' === $state || 'unclear' === $state ) {", "\t\t\tif ( 'unclear' === $state ) {", 'pkg', U_OWN)
 e('writer-through-row', 'through_row(): the file of a new attachment goes with its row', AW,
   "\t\treturn 'meta:_wp_attached_file' === (string) $name && 'create' === $prepared['op'] && isset( $prepared['postarr']['file'] );",
   "\t\treturn false;", 'pkg', U_ROW)
