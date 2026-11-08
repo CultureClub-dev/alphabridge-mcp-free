@@ -303,9 +303,9 @@ e('template-pending', 'target_of(): a custom template the same run creates first
 e('template-pending-skip', 'precheck(): the offer of a pending template is asked at the boundary', PW,
   " && 'default' !== $prepared['postarr']['page_template'] && empty( $prepared['template_pending'] ) ) {",
   " && 'default' !== $prepared['postarr']['page_template'] ) {", 'it', PENDING)
-e('named-first', 'order(): template parts, then templates, before the other objects', PU,
+e('named-first', 'order(): template parts, then templates, before the other objects where no edge orders them (a tie-break since Codex round 2; the edges order a named target)', PU,
   "\t\t\t\t\t$named = array_search( (string) ( $items[ $n ]['subtype'] ?? '' ), self::NAMED_FIRST, true );",
-  "\t\t\t\t\t$named = false;", 'it', PENDING)
+  "\t\t\t\t\t$named = false;", 'unit', U_ORDER)
 
 # --------------------------------------------- meta of a reusable block
 e('auth-follows', 'new_meta_allowed(): a key registered without an auth_callback follows the right at the post', PW,

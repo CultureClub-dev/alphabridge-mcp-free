@@ -697,12 +697,12 @@ return array(
 	),
 	array(
 		'id'      => 'vorlagen/named-first',
-		'clause'  => 'order(): template parts, then templates, before the other objects',
+		'clause'  => 'order(): template parts, then templates, before the other objects where no edge orders them (a tie-break since Codex round 2; the edges order a named target)',
 		'file'    => $pu,
 		'search'  => "\t\t\t\t\t\$named = array_search( (string) ( \$items[ \$n ]['subtype'] ?? '' ), self::NAMED_FIRST, true );",
 		'replace' => "\t\t\t\t\t\$named = false;",
-		'run'     => $it( 'SyncTemplatesTest', 'testWhatTheSameRunCreatesFirstIsPendingAndANavigationAsDraftLeavesTheFallback' ),
-		'expect'  => '/testWhatTheSameRunCreatesFirstIsPendingAndANavigationAsDraftLeavesTheFallback/',
+		'run'     => $unit( 'SyncRunTest', 'testAReferenceByNameIsADependencyOnlyWhereThisSiteCouldNotResolveItAndANavigationComesLast' ),
+		'expect'  => '/testAReferenceByNameIsADependencyOnlyWhereThisSiteCouldNotResolveItAndANavigationComesLast/',
 	),
 	array(
 		'id'      => 'vorlagen/auth-follows',
