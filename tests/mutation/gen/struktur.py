@@ -91,6 +91,7 @@ IT_LOCKS = 'testWhatARunCannotWriteAsTheCoreWouldIsLockedWithItsKeyAndNothingOfI
 IT_STALE = 'testAStepWritesFromTheRowsAsTheyAreAndNeverFromAStaleCacheOfThem'
 IT_FILTER = 'testAWidgetFilterThatChangesAnotherInstanceAsTheStepWritesKeepsItsChangeAndTheStepWritesNothing'
 IT_HARMLESS = 'testAHarmlessTextWidgetAndSerializedValuesOfMetaAndOptionsGoIntoThePackageWithTheirContent'
+IT_REFUSEOWN = 'testAHookOfTheRightThatChangesTheOptionAndThenRefusesTheRightLeavesNothingOfItTheStepsOwn'
 IT_HOOKOWN = 'testAHookOfTheRightThatChangesTheInstanceTheStepWritesKeepsItsChangeAndTheStepOwnsNothing'
 IT_CRED = 'testACredentialInTheNameOfAMenuOrOfItsPositionLandsInNoPackage'
 IT_FREEPOS = 'testANewMenuAtAPositionNoMenuHoldsYetGoesOverAndTheWayBackLeavesThePositionEmptyAgain'
@@ -499,12 +500,24 @@ e('c1-new-rest', 'revert_boundary(): a new object whose pair did not become resi
 # core, forward and back: the rights, the last read, the comparison with the
 # state the engine expects, the call.
 e('a6-order', 'core(): the rights before the last read (A6)', SW,
-  "\t\t$may = $rights();\n\t\tif ( true !== $may ) {\n\t\t\treturn is_wp_error( $may ) ? $may : new WP_Error( 'ab_mcp_sync_rights', sprintf( 'Not written: this account may not %s. Connect with an account that may, or leave the object out of the plan.', (string) $may ) );\n\t\t}\n\t\t$now = $read();\n",
-  "\t\t$now = $read();\n\t\t$may = $rights();\n\t\tif ( true !== $may ) {\n\t\t\treturn is_wp_error( $may ) ? $may : new WP_Error( 'ab_mcp_sync_rights', sprintf( 'Not written: this account may not %s. Connect with an account that may, or leave the object out of the plan.', (string) $may ) );\n\t\t}\n", 'u', U_WRITE)
+  "\t\t$may = $rights();\n\t\tif ( true !== $may ) {\n\t\t\treturn self::refusal( is_wp_error( $may ) ? $may : new WP_Error( 'ab_mcp_sync_rights', sprintf( 'Not written: this account may not %s. Connect with an account that may, or leave the object out of the plan.', (string) $may ) ) );\n\t\t}\n\t\t$now = $read();\n",
+  "\t\t$now = $read();\n\t\t$may = $rights();\n\t\tif ( true !== $may ) {\n\t\t\treturn self::refusal( is_wp_error( $may ) ? $may : new WP_Error( 'ab_mcp_sync_rights', sprintf( 'Not written: this account may not %s. Connect with an account that may, or leave the object out of the plan.', (string) $may ) ) );\n\t\t}\n", 'u', U_WRITE)
 e('a6-rights', 'core(): a right missing, nothing read, nothing called (A6)', SW,
-  "\t\tif ( true !== $may ) {\n\t\t\treturn is_wp_error( $may )", "\t\tif ( false ) {\n\t\t\treturn is_wp_error( $may )", 'u', U_WRITE)
+  "\t\tif ( true !== $may ) {\n\t\t\treturn self::refusal(", "\t\tif ( false ) {\n\t\t\treturn self::refusal(", 'u', U_WRITE)
 e('a6-unread', 'core(): a last read that fails, nothing compared, nothing called (A6)', SW,
-  "\t\tif ( is_wp_error( $now ) ) {\n\t\t\treturn $now;\n\t\t}\n", "", 'u', U_WRITE)
+  "\t\tif ( is_wp_error( $now ) ) {\n\t\t\treturn self::refusal( $now );\n\t\t}\n", "", 'u', U_WRITE)
+e('a6-refusal-rights', 'core(): a right missing is a refusal of the helper, nothing of it owned (item 3 of round 4)', SW,
+  "\t\t\treturn self::refusal( is_wp_error( $may ) ? $may : new WP_Error(", "\t\t\treturn ( is_wp_error( $may ) ? $may : new WP_Error(", 'u', U_WRITE)
+e('a6-refusal-rights-it', 'core(): a hook of the right that changes the option and refuses leaves nothing of it the step\'s own (item 3 of round 4)', SW,
+  "\t\t\treturn self::refusal( is_wp_error( $may ) ? $may : new WP_Error(", "\t\t\treturn ( is_wp_error( $may ) ? $may : new WP_Error(", 'it', IT_REFUSEOWN)
+e('a6-refusal-read', 'core(): a last read that fails is a refusal of the helper (item 3 of round 4)', SW,
+  "\t\t\treturn self::refusal( $now );", "\t\t\treturn $now;", 'u', U_WRITE)
+e('a6-refusal-changed', 'core(): another state is a refusal of the helper (item 3 of round 4)', SW,
+  "\t\t\treturn self::refusal( self::changed() );", "\t\t\treturn self::changed();", 'it', IT_HOOKOWN)
+e('a6-refusal-noted', 'refusal(): the refusal noted for refused() (item 3 of round 4)', SW,
+  "\t\tself::$refusals[ $error ] = true;\n", "", 'u', U_WRITE)
+e('a6-refused-other', 'refused() of the engine: a right missing names the refusal and what the hook changed (item 3 of round 4)', EN,
+  "\t\tif ( AB_MCP_Sync_Write::CHANGED !== $error->get_error_code() ) {", "\t\tif ( false ) {", 'it', IT_REFUSEOWN)
 e('a6-compare', 'core(): another state than the engine expects, nothing called (A6)', SW,
   "\t\tif ( true !== $matches( $now ) ) {", "\t\tif ( false ) {", 'u', U_HOOK)
 e('a6-strict', 'core(): only true is the same state (A6)', SW,

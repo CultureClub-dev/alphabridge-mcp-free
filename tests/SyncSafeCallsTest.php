@@ -137,6 +137,7 @@ final class SyncSafeCallsTest extends TestCase {
 		// Constructors.
 		'new WP_Block_Parser'                  => 'The parser of the core, without the filter block_parser_class.',
 		'new WP_Error'                         => 'An error object.',
+		'new WeakMap'                          => 'The refusals of AB_MCP_Sync_Write in this request, by their error object; no stored value.',
 		'new AB_MCP_Replace_Engine'            => 'Compiles its patterns.',
 		'new stdClass'                         => 'Stands for a stored object, made without its class.',
 	);

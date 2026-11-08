@@ -809,6 +809,20 @@ final class SyncStructureWritersTest extends TestCase {
 			$seen = array();
 			self::assertSame( array( \AB_MCP_Sync_Write::CHANGED, array( 'rights', 'read', 'matches now' ) ), array( \AB_MCP_Sync_Write::core( $step( 'rights', true ), $step( 'read', 'now' ), $match( $answer ), $step( 'call', 'called' ) )->get_error_code(), $seen ), 'Another state (only true is the same): nothing called.' );
 		}
+		// Every refusal of the helper is one (no call of the core made), an
+		// error the call answers none (Codex round 4 of branch 11, item 3).
+		$refusals = array(
+			'a right missing'  => \AB_MCP_Sync_Write::core( $step( 'rights', 'edit the CSS (edit_css)' ), $step( 'read', 'now' ), $match( true ), $step( 'call', 'called' ) ),
+			'its own refusal'  => \AB_MCP_Sync_Write::core( $step( 'rights', new WP_Error( 'own', 'x' ) ), $step( 'read', 'now' ), $match( true ), $step( 'call', 'called' ) ),
+			'a read that fails' => \AB_MCP_Sync_Write::core( $step( 'rights', true ), $step( 'read', new WP_Error( 'unread', 'x' ) ), $match( true ), $step( 'call', 'called' ) ),
+			'another state'    => \AB_MCP_Sync_Write::core( $step( 'rights', true ), $step( 'read', 'now' ), $match( false ), $step( 'call', 'called' ) ),
+		);
+		foreach ( $refusals as $case => $refusal ) {
+			self::assertTrue( \AB_MCP_Sync_Write::refused( $refusal ), $case );
+		}
+		self::assertFalse( \AB_MCP_Sync_Write::refused( \AB_MCP_Sync_Write::core( $step( 'rights', true ), $step( 'read', 'now' ), $match( true ), $step( 'call', new WP_Error( 'failed', 'x' ) ) ) ), 'An error of the call.' );
+		self::assertFalse( \AB_MCP_Sync_Write::refused( new WP_Error( 'ab_mcp_sync_changed_before_write', 'x' ) ), 'Its code alone makes no refusal.' );
+		self::assertFalse( \AB_MCP_Sync_Write::refused( true ) );
 		// Forward: a new object has no state to compare; one here without a
 		// state the engine read is never written (fail closed).
 		$seen = array();

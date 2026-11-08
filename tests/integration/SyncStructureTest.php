@@ -1452,6 +1452,55 @@ final class SyncStructureTest extends TestCase {
 		self::assertStringContainsString( 'Changed right before the step\'s call of the part instance:text-2', (string) $part['note'] );
 	}
 
+	public function testAHookOfTheRightThatChangesTheOptionAndThenRefusesTheRightLeavesNothingOfItTheStepsOwn(): void {
+		// Codex round 4 of branch 11, item 3: a hook of the right that
+		// changes blogname as the writer asks manage_options right before
+		// its call, and then refuses it. No call of the core is made; before,
+		// the journal named the row the step's own (own true, foreign false),
+		// because it reads other than before. Every refusal of the helper
+		// owns nothing, not only a changed state.
+		self::pair();
+		update_option( 'blogname', 'A shop' );
+		self::one_b( array( 'op' => 'update_option', 'name' => 'blogname', 'value' => 'A shop' ) );
+		self::paired( self::staged() );
+		self::one_b( array( 'op' => 'update_option', 'name' => 'blogname', 'value' => 'A shop & more' ) );
+		$planned = self::planned( array( array( 'option', 'live', 'blogname' ) ) );
+		$asked   = false;
+		add_filter(
+			'user_has_cap',
+			static function ( $allcaps, $caps ) use ( &$asked ) {
+				$writing = false;
+				foreach ( debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS ) as $frame ) {
+					$writing = $writing || ( 'AB_MCP_Sync_Write' === ( $frame['class'] ?? '' ) && 'core' === $frame['function'] );
+				}
+				if ( $writing && in_array( 'manage_options', (array) $caps, true ) ) {
+					if ( ! $asked ) {
+						$asked = true;
+						update_option( 'blogname', 'Changed by the hook' );
+					}
+					unset( $allcaps['manage_options'] );
+				}
+				return $allcaps;
+			},
+			10,
+			2
+		);
+		$run    = self::begun( $planned['args'] );
+		$closed = self::finish( (int) $run['run_id'] );
+		remove_all_filters( 'user_has_cap' );
+		self::assertTrue( $asked, 'The hook ran as the right was asked.' );
+		self::assertSame( 'Changed by the hook', AB_MCP_IT_Sites::option_row( 'a', 'blogname' )['option_value'], 'Not written: the change of the hook stays.' );
+		self::assertSame( 'closed_findings', $closed['state'], json_encode( $closed ) );
+		$step = self::writes( self::run_status( (int) $run['run_id'] ) )[0];
+		self::assertSame( 'unclear', $step['state'], json_encode( $step ) );
+		self::assertStringContainsString( 'the part row was not written (Not written: this account may not change the option blogname', (string) $step['parts']['object']['deviated']['why'] );
+		self::assertStringContainsString( 'the part row changed right before it', (string) $step['parts']['object']['deviated']['why'] );
+		$stored = array_column( \AB_MCP_Sync_Run::step( (int) $run['run_id'], (int) $step['seq'] )['parts']['parts'], null, 'part' )['row'];
+		self::assertTrue( empty( $stored['own'] ), 'No call of the core: nothing of it the step\'s own. ' . json_encode( $stored ) );
+		self::assertTrue( ! empty( $stored['foreign'] ), 'Another hand\'s.' );
+		self::assertSame( 'left', $stored['state'] );
+	}
+
 	/** The save of unit_rest() that fails: the new bases, or the state residual. */
 	public static function failingSaves(): array {
 		return array(

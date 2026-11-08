@@ -32,6 +32,16 @@ final class AB_MCP_Sync_Write {
 	const CHANGED = 'ab_mcp_sync_changed_before_write';
 
 	/**
+	 * Every refusal of this helper in this request (a right missing, the
+	 * last read failed, the state changed): no call of the core was made, so
+	 * nothing of it is the step's own (refused(); Codex round 4 of branch
+	 * 11, item 3). An error the call of the core answers is none of them.
+	 *
+	 * @var WeakMap|null
+	 */
+	private static $refusals = null;
+
+	/**
 	 * The rights, the last read, the comparison, the call: in this order.
 	 *
 	 * @param callable $rights  (): true|string|WP_Error, a string the right
@@ -45,16 +55,42 @@ final class AB_MCP_Sync_Write {
 	public static function core( callable $rights, callable $read, callable $matches, callable $call ) {
 		$may = $rights();
 		if ( true !== $may ) {
-			return is_wp_error( $may ) ? $may : new WP_Error( 'ab_mcp_sync_rights', sprintf( 'Not written: this account may not %s. Connect with an account that may, or leave the object out of the plan.', (string) $may ) );
+			return self::refusal( is_wp_error( $may ) ? $may : new WP_Error( 'ab_mcp_sync_rights', sprintf( 'Not written: this account may not %s. Connect with an account that may, or leave the object out of the plan.', (string) $may ) ) );
 		}
 		$now = $read();
 		if ( is_wp_error( $now ) ) {
-			return $now;
+			return self::refusal( $now );
 		}
 		if ( true !== $matches( $now ) ) {
-			return self::changed();
+			return self::refusal( self::changed() );
 		}
 		return $call();
+	}
+
+	/**
+	 * Whether an error is a refusal of this helper: no call of the core was
+	 * made for it (the engine then owns nothing of the part, whatever reads
+	 * other than before; Codex round 4 of branch 11, item 3).
+	 *
+	 * @param mixed $error An answer of a writer.
+	 * @return bool
+	 */
+	public static function refused( $error ) {
+		return $error instanceof WP_Error && null !== self::$refusals && isset( self::$refusals[ $error ] );
+	}
+
+	/**
+	 * A refusal, noted as one.
+	 *
+	 * @param WP_Error $error The refusal.
+	 * @return WP_Error
+	 */
+	private static function refusal( WP_Error $error ) {
+		if ( null === self::$refusals ) {
+			self::$refusals = new WeakMap();
+		}
+		self::$refusals[ $error ] = true;
+		return $error;
 	}
 
 	/**

@@ -537,12 +537,17 @@ Ablehnung entsteht, nennt sie den Weg.
   (`post`, zugleich `after`). `own = true`, `own_after = post` genau dann,
   wenn `post ≠ pre`: der Aufruf hat den Teil verändert. `post == pre`: der
   Aufruf hat nichts verändert, `own` bleibt, wie es war. Ein Aufruf, den
-  der Schreiber nicht macht, weil das Objekt sich nach der Rechtefrage
-  unmittelbar davor geändert hat (`ab_mcp_sync_changed_before_write`,
-  `AB_MCP_Sync_Write`; Zweig 11, Codex-Runde 3, A6), macht nichts eigen,
-  auch wo `post ≠ pre`: jeder veränderte Teil ist fremd, der Schritt weicht
-  ab und nennt den ersten davon; ist kein Teil des Schritts anders als die
-  Sicherung, ist er `failed` und sagt, dass die fremde Änderung bleibt. Für die Teile, die
+  der Helfer des Schreibers nicht macht (`AB_MCP_Sync_Write::refused()`:
+  das Objekt hat sich nach der Rechtefrage unmittelbar davor geändert,
+  `ab_mcp_sync_changed_before_write`, Zweig 11, Codex-Runde 3, A6; ein
+  Recht fehlt oder die letzte Lesung scheitert, Codex-Runde 4, Punkt 3),
+  macht nichts eigen, auch wo `post ≠ pre`, etwa wo ein Rechtehook das
+  Objekt ändert und dann das Recht verweigert: jeder veränderte Teil ist
+  fremd, der Schritt weicht ab und nennt den ersten davon; ist bei einem
+  geänderten Stand kein Teil des Schritts anders als die Sicherung, ist er
+  `failed` und sagt, dass die fremde Änderung bleibt. Ein Fehler, den der
+  Kernaufruf selbst gibt, ist keine solche Verweigerung: dort gilt die
+  Regel oben. Für die Teile, die
   der Zeilenaufruf laut `AB_MCP_Sync_Post_Writer::with_row()` mitschreibt
   (`_wp_page_template` über `page_template`; die Vorgabe-Kategorie eines
   Beitrags ohne Kategorie), ist `pre` der Stand vor dem Zeilenaufruf, und

@@ -1426,7 +1426,7 @@ final class AB_MCP_Sync_Engine {
 				$id = $w::write_row( $prepared, $live_id, $pre_all );
 				if ( is_wp_error( $id ) ) {
 					$error   = $id;
-					$refused = AB_MCP_Sync_Write::CHANGED === $id->get_error_code();
+					$refused = AB_MCP_Sync_Write::refused( $id );
 				} else {
 					$live_id                       = self::live_of( $w, $id );
 					$journal['object']['live_ref'] = (string) $live_id;
@@ -1437,9 +1437,10 @@ final class AB_MCP_Sync_Engine {
 				// (with_row()) and it reads so, another hand's otherwise.
 				$post_all = null === $live_id ? null : $w::current( $live_id );
 				$post_all = is_array( $post_all ) ? $post_all : null;
-				// A call the writer refused because the object changed right
-				// before it (AB_MCP_Sync_Write::CHANGED) wrote nothing: what
-				// differs now is another hand's, never the step's own.
+				// A call the helper of the writer refused (AB_MCP_Sync_Write::
+				// refused(): the object changed right before it, a right
+				// missing, a last read that failed) wrote nothing: what differs
+				// now is another hand's, never the step's own.
 				foreach ( $journal['parts'] as $k => $other ) {
 					$expected               = $refused ? null : ( $k === $i ? (string) $other['target'] : ( isset( $named[ $other['part'] ] ) ? (string) $named[ $other['part'] ] : null ) );
 					$journal['parts'][ $k ] = self::seen_after( $other, $post_all, $expected, ! $refused && $k !== $i, $w );
@@ -1487,16 +1488,15 @@ final class AB_MCP_Sync_Engine {
 				}
 				$done                   = $w::write_part( $live_id, $name, $prepared, is_array( $pre_all ) ? $pre_all : null );
 				$error                  = is_wp_error( $done ) ? $done : null;
-				$refused                = null !== $error && AB_MCP_Sync_Write::CHANGED === $error->get_error_code();
+				$refused                = AB_MCP_Sync_Write::refused( $error );
 				$post_all               = $w::current( $live_id );
 				$journal['parts'][ $i ] = self::seen_after( $journal['parts'][ $i ], is_array( $post_all ) ? $post_all : null, $refused ? null : $target, false, $w );
 			}
 			if ( $refused ) {
-				// The writer made no call: the object changed right before it,
-				// after the last check of the rights (Codex round 3 of branch 11,
-				// A6). Every part that differs from the read before is another
-				// hand's; the step deviates, nothing of it goes back by itself
-				// (decision A).
+				// The writer made no call (Codex round 3 of branch 11, A6, and
+				// round 4, item 3): every part that differs from the read before
+				// is another hand's; the step deviates, nothing of it goes back
+				// by itself (decision A).
 				return self::refused( $journal, $i, $error, $pre_all, $post_all, $live_id, $backup, $w );
 			}
 			// Whatever this call changed besides its own part (a hook of this
@@ -1594,12 +1594,14 @@ final class AB_MCP_Sync_Engine {
 	}
 
 	/**
-	 * A call the writer did not make (AB_MCP_Sync_Write::CHANGED; Codex
-	 * round 3 of branch 11, A6): its last read, after the rights, differed
-	 * from the state the engine read right before the call. Nothing was
-	 * written; every part that differs between that state and the read back
-	 * is another hand's (foreign, never the step's own), and the step
-	 * deviates with the first of them named.
+	 * A call the writer did not make (AB_MCP_Sync_Write::refused(): its last
+	 * read, after the rights, differed from the state the engine read right
+	 * before the call, CHANGED, Codex round 3 of branch 11, A6; or a right
+	 * missing or a last read that failed, Codex round 4, item 3). Nothing
+	 * was written; every part that differs between that state and the read
+	 * back is another hand's (foreign, never the step's own: a hook of the
+	 * rights may change the object and then refuse), and the step deviates
+	 * with the first of them named.
 	 *
 	 * @param array      $journal Journal.
 	 * @param int        $i       The part of the call.
@@ -1623,7 +1625,7 @@ final class AB_MCP_Sync_Engine {
 				foreach ( $journal['parts'] as $k => $other ) {
 					if ( (string) $other['part'] === $other_name ) {
 						$journal['parts'][ $k ]['foreign'] = true;
-						$journal['parts'][ $k ]['note']    = self::noted( $other, sprintf( 'Changed right before the step\'s call of the part %s, after the last check of the rights (a hook of this site): not the step\'s own.', $name ) );
+						$journal['parts'][ $k ]['note']    = self::noted( $other, sprintf( 'Changed right before the step\'s call of the part %s, as or after the rights were asked (a hook of this site): not the step\'s own.', $name ) );
 					}
 				}
 			}
@@ -1631,7 +1633,13 @@ final class AB_MCP_Sync_Engine {
 		$journal['parts'][ $i ]['state'] = 'failed';
 		$journal['parts'][ $i ]['note']  = self::noted( $journal['parts'][ $i ], sprintf( 'Not written (%s).', $error->get_error_message() ) );
 		$changed = null === $first ? 'the object' : 'the part ' . $first;
-		$out     = self::deviated( $journal, $i, sprintf( 'the part %1$s was not written: %2$s changed right before the call, after the last check of the rights (a hook of this site), not by the step', $name, $changed ), $live_id, $backup );
+		if ( AB_MCP_Sync_Write::CHANGED !== $error->get_error_code() ) {
+			// A right missing or a last read that failed (Codex round 4 of
+			// branch 11, item 3): no call was made either; what a hook of the
+			// rights changed before it is named, never the step's own.
+			return self::deviated( $journal, $i, sprintf( 'the part %1$s was not written (%2$s)%3$s', $name, $error->get_error_message(), null === $first ? '' : sprintf( '; the part %s changed right before it (a hook of this site), not by the step', $first ) ), $live_id, $backup );
+		}
+		$out = self::deviated( $journal, $i, sprintf( 'the part %1$s was not written: %2$s changed right before the call, after the last check of the rights (a hook of this site), not by the step', $name, $changed ), $live_id, $backup );
 		if ( 'failed' === $out['state'] ) {
 			// No part of the step differs from its backup: the step wrote
 			// nothing, and what changed is another hand's and stays.
