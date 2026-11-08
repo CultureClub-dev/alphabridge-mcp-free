@@ -106,6 +106,22 @@ final class DuplicatePostMetaTest extends TestCase {
 		return $m[1];
 	}
 
+	/**
+	 * Two lists of element ids as the same set: each sorted as text. The ids
+	 * are random hex, and PHP's default comparison reads one such as 6e87921
+	 * as a number (6·10^87921) beside the others as text, so sort() is not
+	 * transitive there and assertEqualsCanonicalizing() can put the same ids
+	 * in two orders (CI run 42531648446, PHP 8.3).
+	 *
+	 * @param string[] $expected Ids.
+	 * @param string[] $actual   Ids.
+	 */
+	private static function assertSameIds( array $expected, array $actual ): void {
+		sort( $expected, SORT_STRING );
+		sort( $actual, SORT_STRING );
+		self::assertSame( $expected, $actual );
+	}
+
 	/** @return string[] */
 	private static function skipped( array $out, string $reason ): array {
 		return $out['meta_skipped'][ $reason ]['keys'] ?? array();
@@ -240,7 +256,7 @@ final class DuplicatePostMetaTest extends TestCase {
 		$out = self::duplicate();
 
 		$stored = json_decode( self::copied( $out )['_elementor_data'][0], true );
-		self::assertEqualsCanonicalizing( self::elementIds( self::copied( $out )['_elementor_data'][0] ), $seen );
+		self::assertSameIds( self::elementIds( self::copied( $out )['_elementor_data'][0] ), $seen );
 		self::assertCount( 4, $seen );
 		self::assertTrue( $stored[0]['by_filter'] );
 		self::assertTrue( $stored[0]['elements'][2]['by_filter'] );
@@ -249,12 +265,35 @@ final class DuplicatePostMetaTest extends TestCase {
 		self::assertArrayNotHasKey( 'meta_altered_on_write', $out );
 	}
 
+	public function testTheIdsTheFilterSawCompareAsTextWhateverTheirOrder(): void {
+		// Children first, as Elementor walks: the filter sees the ids in
+		// another order than the layout stores them. With these four, PHP's
+		// default comparison is not transitive (1e00009 and 2000000 compare
+		// as numbers, each beside 1f00000 and abcdef0 as text), and the two
+		// orders sort differently: the ids must compare as text.
+		$GLOBALS['ab_test_rand'] = array( 0x1e00009, 0x2000000, 0x1f00000, 0xabcdef0 );
+		$seen                    = array();
+		add_filter(
+			'elementor/document/element/replace_id',
+			static function ( $element ) use ( &$seen ) {
+				$seen[] = $element['id'];
+				return $element;
+			}
+		);
+		self::meta( self::fixture( 'elementor_v4' ) );
+		$out    = self::duplicate();
+		$stored = self::elementIds( self::copied( $out )['_elementor_data'][0] );
+		self::assertSame( array( 'abcdef0', '1e00009', '2000000', '1f00000' ), $stored );
+		self::assertSame( array( '1e00009', '2000000', '1f00000', 'abcdef0' ), $seen );
+		self::assertSameIds( $stored, $seen );
+	}
+
 	public function testANewIdNeverRepeatsAnIdOfTheOriginal(): void {
 		// The first two draws are ids the layout already uses.
 		$GLOBALS['ab_test_rand'] = array( 0xc0ffee1, 0xa1b2c3d, 1, 2, 3, 4 );
 		self::meta( array( '_elementor_data' => self::fixture( 'elementor_v3' )['_elementor_data'] ) );
 		$out = self::duplicate();
-		self::assertEqualsCanonicalizing(
+		self::assertSameIds(
 			array( '0000001', '0000002', '0000003', '0000004' ),
 			self::elementIds( self::copied( $out )['_elementor_data'][0] )
 		);
