@@ -130,6 +130,12 @@ e('css-no-text', 'css_walk(): a value of a key css that is no text locks', PW,
 e('css-rule', 'css_walk(): the rule of the site editor is asked of each value', PW,
   "\t\t\t\tif ( self::css_markup( $value ) ) {",
   "\t\t\t\tif ( false ) {", 'unit', U_CSS)
+e('css-undecodable', 'css_refusal(): global styles that do not decode to an array are refused, fail closed (Codex on f2af61f..ce9b7bf)', PW,
+  "\t\t\treturn self::locked( 'post:css_markup', sprintf( 'the global styles are no JSON object the check of their CSS reads (%s)', JSON_ERROR_NONE === json_last_error() ? 'a value that is no object' : json_last_error_msg() ) );",
+  "\t\t\treturn null;", 'unit', U_CSS)
+e('css-empty', 'css_refusal(): empty global styles hold nothing to ask', PW,
+  "\t\tif ( '' === trim( $content ) ) {\n\t\t\treturn null;",
+  "\t\tif ( false ) {\n\t\t\treturn null;", 'unit', U_CSS)
 e('css-each', 'css_walk(): each value as it is found, the walk goes on past a clean one (GitHub Codex round 1 on free#139, P2)', PW,
   "\t\t\t\t\treturn self::locked( 'post:css_markup', sprintf( 'the CSS of %s in the global styles holds </style or ends in a part of it', $at ) );\n\t\t\t\t}\n\t\t\t\tcontinue;",
   "\t\t\t\t\treturn self::locked( 'post:css_markup', sprintf( 'the CSS of %s in the global styles holds </style or ends in a part of it', $at ) );\n\t\t\t\t}\n\t\t\t\treturn null;", 'unit', U_CSS)

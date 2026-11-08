@@ -1032,7 +1032,16 @@ final class SyncRunTest extends TestCase {
 		$text = AB_MCP_Sync_Post_Writer::css_refusal( $styles( array( 'css' => array( 'p{}' ) ) ) );
 		self::assertSame( 'post:css_markup', self::lock_of( $text ), 'No text.' );
 		self::assertStringContainsString( 'is no text', $text->get_error_message() );
-		self::assertNull( AB_MCP_Sync_Post_Writer::css_refusal( 'Not JSON </style>' ), 'No JSON object: no global styles the core reads.' );
+		// Content that does not decode to an array is refused, fail closed
+		// (Codex on f2af61f..ce9b7bf): no JSON, deeper than json_decode()
+		// reads, a scalar. Empty content and the default of the core go.
+		$broken = AB_MCP_Sync_Post_Writer::css_refusal( 'Not JSON </style>' );
+		self::assertSame( 'post:css_markup', self::lock_of( $broken ), 'No JSON: its CSS cannot be asked.' );
+		self::assertStringContainsString( 'no JSON object the check of their CSS reads', $broken->get_error_message() );
+		self::assertSame( 'post:css_markup', self::lock_of( AB_MCP_Sync_Post_Writer::css_refusal( str_repeat( '[', 600 ) . '"x"' . str_repeat( ']', 600 ) ) ), 'Deeper than json_decode() reads.' );
+		self::assertSame( 'post:css_markup', self::lock_of( AB_MCP_Sync_Post_Writer::css_refusal( '"p{}"' ) ), 'A scalar.' );
+		self::assertNull( AB_MCP_Sync_Post_Writer::css_refusal( '' ), 'Empty: nothing to ask.' );
+		self::assertNull( AB_MCP_Sync_Post_Writer::css_refusal( '{"version": 3, "isGlobalStylesUserThemeJSON": true }' ), 'The default the core makes (WP_Theme_JSON_Resolver::get_user_data_from_wp_global_styles()).' );
 		self::assertNull( AB_MCP_Sync_Post_Writer::css_refusal( $styles( array( 'blocks' => array( 'core/quote' => array( 'css' => 'q{}</stylex' ) ) ) ) ), 'A tag of another name.' );
 		// GitHub Codex round 1 on free#139 (P2): a key with a dot in it gives
 		// the path of another value; each value is asked as it is found, in

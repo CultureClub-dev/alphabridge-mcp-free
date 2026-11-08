@@ -1323,16 +1323,28 @@ final class AB_MCP_Sync_Post_Writer {
 	 * (css_markup()). The core asks it of the top level only; any other key
 	 * css is printed into a STYLE element as well, so it is asked of every
 	 * one (fail closed). A value of a key css that is no text is refused as
-	 * the core refuses it since 7.1.0. Content that is no JSON object
-	 * carries no CSS to ask (the core reads no global styles from it).
+	 * the core refuses it since 7.1.0. Content that is not empty and does not
+	 * decode to an array (no JSON, or deeper than json_decode() reads, or a
+	 * scalar) is refused as well, fail closed (Codex on f2af61f..ce9b7bf: it
+	 * went unasked): the core shows nothing of it, it raises a notice for a
+	 * JSON it cannot decode (WP_Theme_JSON_Resolver::get_user_data(),
+	 * wp-includes/class-wp-theme-json-resolver.php:552-575) and ignores
+	 * anything else (:581-589), and the site editor saves the styles as JSON
+	 * only; the check of the CSS cannot be made, so it refuses with its own
+	 * key and the way (the styles saved anew on the staging site). Empty
+	 * content holds nothing to ask.
 	 *
 	 * @param string $content post_content as written.
 	 * @return WP_Error|null
 	 */
 	public static function css_refusal( $content ) {
-		$data = json_decode( (string) $content, true );
-		if ( ! is_array( $data ) ) {
+		$content = (string) $content;
+		if ( '' === trim( $content ) ) {
 			return null;
+		}
+		$data = json_decode( $content, true );
+		if ( ! is_array( $data ) ) {
+			return self::locked( 'post:css_markup', sprintf( 'the global styles are no JSON object the check of their CSS reads (%s)', JSON_ERROR_NONE === json_last_error() ? 'a value that is no object' : json_last_error_msg() ) );
 		}
 		return self::css_walk( $data, '', 0 );
 	}

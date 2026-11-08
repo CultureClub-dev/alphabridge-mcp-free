@@ -388,7 +388,7 @@ final class AB_MCP_Sync_Kinds {
 		),
 		'post:css_markup'              => array(
 			'stage'  => 'Z8',
-			'reason' => 'The custom CSS of the global styles holds a closing tag of STYLE (</style followed by a space, a slash or >), ends in a part of one, or is no text, which the site editor refuses to save: change the CSS on the staging site.',
+			'reason' => 'The custom CSS of the global styles holds a closing tag of STYLE (</style followed by a space, a slash or >), ends in a part of one, or is no text, which the site editor refuses to save, or the global styles are no JSON the check of their CSS reads (WordPress shows nothing of them then): change the styles on the staging site, where the site editor saves them anew as JSON.',
 		),
 		'post:page_template'           => array(
 			'stage'  => 'Z8',

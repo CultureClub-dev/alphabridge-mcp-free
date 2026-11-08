@@ -374,7 +374,18 @@ nennt ihre Meldung den Weg.
   `testCustomCssUnderAKeyWithADotIsLockedBeforeAnythingIsWritten`,
   `testCustomCssUnderAKeyWithADotIsAskedForwardAndOnTheWayBack`, Unit
   `testTheCustomCssOfTheGlobalStylesKeepsTheRuleOfTheSiteEditorAtAnyDepth`).
-  Tiefer als gelesen sperrt (fail closed). Die übrigen Sammlungen von
+  Tiefer als gelesen sperrt (fail closed); ebenso ein Inhalt, der nicht leer
+  ist und sich nicht zu einem Array dekodieren lässt (kein JSON, tiefer als
+  `json_decode()` liest, ein Skalar): der Kern zeigt davon nichts, meldet bei
+  JSON, das er nicht dekodiert, einen Hinweis
+  (`WP_Theme_JSON_Resolver::get_user_data()`,
+  `wp-includes/class-wp-theme-json-resolver.php:552-589`), und der
+  Site-Editor speichert die Stile nur als JSON; die Prüfung des CSS lässt
+  sich nicht machen, darum `post:css_markup` mit dem Weg (die Stile auf
+  Staging neu speichern). Leerer Inhalt und der Standard des Kerns
+  (`{"version": 3, "isGlobalStylesUserThemeJSON": true }`) gehen. Ein
+  eigener Schlüssel brächte keinen anderen Weg; `*:unreadable_value` (Z8d)
+  wartet auf eine Feldregel, hier fehlt keine, der Inhalt ist kaputt. Die übrigen Sammlungen von
   Zweig 9b haben keinen Pfad als Schlüssel (Namen von Teilen und Vorlagen
   sind je Identität eindeutig, Staging- und Live-IDs Zahlen). Auf dem Rückweg fragt
   `restore_row()` dieselbe Regel am gesicherten Inhalt, bevor es die Zeile

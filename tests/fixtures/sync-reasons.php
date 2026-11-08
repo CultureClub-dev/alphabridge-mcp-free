@@ -437,7 +437,7 @@ return array(
 			'plan' => 'Entscheid 21 (Kern-Folgen: erlaubt nur, was vollständig bekannt ist); Zweigtabelle Zeile 541',
 		),
 		'post:css_markup'              => array(
-			'why'  => 'The site editor refuses custom CSS of the global styles that could close its STYLE element; the engine writes through wp_update_post(), past that check, so it asks the same rule before anything is written (decision 17, Sanitizer vorab).',
+			'why'  => 'The site editor refuses custom CSS of the global styles that could close its STYLE element; the engine writes through wp_update_post(), past that check, so it asks the same rule before anything is written (decision 17, Sanitizer vorab); global styles that do not decode as JSON cannot be asked and are refused as well (fail closed).',
 			'core' => array( array( 'wp-includes/rest-api/endpoints/class-wp-rest-global-styles-controller.php', 683, 'protected function validate_custom_css( $css ) {' ) ),
 			'plan' => 'Entscheid 17 (Sanitizer vorab); Zweigtabelle Zeile 541',
 		),
