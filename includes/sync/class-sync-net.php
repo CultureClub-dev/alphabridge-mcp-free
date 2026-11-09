@@ -96,7 +96,8 @@
  * of the readers). The braces and quotes of the serialized text are no
  * code there: prose in a leaf («Spieler: Anna, Token: drei») is prose. A
  * text that does not serialize back from its value byte for byte (a key
- * twice, bytes after its end) is read as a whole as well; one that does not
+ * twice, bytes after its end) is read by every string of its format as
+ * well, each on its own; one that does not
  * unpack or holds an object locks the unit, and so does what the layers of
  * one of its texts do not read to its end, as for a column (Codex round 1
  * of branch 11b, A2: the quotes of the serialized text end a data: address
@@ -125,12 +126,11 @@
  *   image, in another charset): locked;
  * - a body of a data: address of a text type in a charset it does not
  *   declare and that no BOM gives: not read, locked;
- * - a serialized value that does not serialize back from its value byte for
- *   byte although nothing was dropped (a float written with another
- *   serialize_precision than the one of this site, such as 17 digits: any
- *   PHP with serialize_precision=17 writes so, PHP 8.5 too, and PHP before
- *   7.1 by default; a key of digits as a text): read as a whole as well, so prose in
- *   its braces («…, Token: drei») locks there as before branch 11b.
+ * - a serialized value whose format does not read to its end by the
+ *   strings it states (serialized_strings()) and that does not serialize
+ *   back from its value byte for byte: read as a whole as well, so prose in
+ *   its braces («…, Token: drei») locks there as before branch 11b (none
+ *   that AB_MCP_Sync_Canon::unserialized() lets through is known).
  * And what is neither read nor locked: a script of an image that builds the
  * name of a credential at run time (a template literal with ${…}, a
  * concatenation): only literal spellings are read, an image runs no
@@ -492,16 +492,19 @@ final class AB_MCP_Sync_Net {
 	 * the layers its readers read (AB_MCP_Sync_Canon::MAX_DEPTH and
 	 * MAX_LAYERS; beyond: not read to its end, too_deep()). Nothing is lost
 	 * unread: where a serialized text does not serialize back from its value
-	 * byte for byte, unpacking dropped a part of it (a key twice, whose first
-	 * value the second replaces; bytes after its end), so the text itself is
-	 * handed on as well, as the net read it before. A text that does not
+	 * byte for byte, unpacking may have dropped a part of it (a key twice,
+	 * whose first value the second replaces; bytes after its end), so every
+	 * string of its format is handed on as well, each on its own
+	 * (serialized_strings(); its braces are no code either), or the text
+	 * itself where its format does not read to its end. A text that does not
 	 * unpack, or that holds an object, locks the unit (*:unreadable_value,
 	 * *:php_object): what is not read is never clean.
 	 *
 	 * The place of a text names positions, never a key or a value (a key may
 	 * be a credential): php for a value unpacked, .<n> for the n-th entry of
-	 * an array (from 0), .<n>.key for its key; '' for the text of the value
-	 * itself.
+	 * an array (from 0), .<n>.key for its key, string.<n> for the n-th string
+	 * of the format of a text that does not serialize back; '' for the text
+	 * of the value itself.
 	 *
 	 * @param mixed    $value A value: a text, an array, a scalar.
 	 * @param string   $where Its place.
@@ -534,7 +537,17 @@ final class AB_MCP_Sync_Net {
 				return;
 			}
 			if ( serialize( $read['value'] ) !== trim( $value ) ) { // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize -- the round trip of the text, compared.
-				$each( $where, $value );
+				// Unpacking may have dropped a part of it: every string of its
+				// format, each on its own, the dropped ones among them; where
+				// the format does not read, the text as a whole.
+				$strings = self::serialized_strings( trim( $value ) );
+				if ( null === $strings ) {
+					$each( $where, $value );
+				} else {
+					foreach ( $strings as $i => $string ) {
+						self::texts( $string, ( '' === $where ? '' : $where . '.' ) . 'string.' . $i, $layer + 1, $depth, $acc, $kind, $at, $each );
+					}
+				}
 			}
 			self::texts( $read['value'], '' === $where ? 'php' : $where . '.php', $layer + 1, $depth, $acc, $kind, $at, $each );
 			return;
@@ -1351,6 +1364,57 @@ final class AB_MCP_Sync_Net {
 	 */
 	private static function is_text( $bytes ) {
 		return false === strpos( $bytes, "\0" ) && 1 === preg_match( '//u', $bytes );
+	}
+
+	/**
+	 * Every string of a serialized text, in order, keys and values, read by
+	 * the format as AB_MCP_Sync_Canon::unserialized() lets it through (its
+	 * check of the records refused every other record before: a:<n>:{, s:<n>:"…";,
+	 * i:…;, d:…;, b:…;, N;, }), each by the length it states, a string that
+	 * unpacking drops among them (the first value of a key twice, what
+	 * follows the end of the value). Null where the text is not read so to
+	 * its end.
+	 *
+	 * @param string $text A serialized text, trimmed.
+	 * @return string[]|null
+	 */
+	private static function serialized_strings( $text ) {
+		$out = array();
+		$n   = strlen( $text );
+		$i   = 0;
+		while ( $i < $n ) {
+			$c = $text[ $i ];
+			if ( 's' === $c ) {
+				if ( ! preg_match( '/\Gs:(\d+):"/', $text, $m, 0, $i ) ) {
+					return null;
+				}
+				$len = (int) $m[1];
+				$i  += strlen( $m[0] );
+				if ( $len > $n - $i || '";' !== substr( $text, $i + $len, 2 ) ) {
+					return null;
+				}
+				$out[] = (string) substr( $text, $i, $len );
+				$i    += $len + 2;
+			} elseif ( 'a' === $c ) {
+				if ( ! preg_match( '/\Ga:\d+:\{/', $text, $m, 0, $i ) ) {
+					return null;
+				}
+				$i += strlen( $m[0] );
+			} elseif ( 'i' === $c || 'd' === $c || 'b' === $c ) {
+				$end = strpos( $text, ';', $i );
+				if ( false === $end ) {
+					return null;
+				}
+				$i = $end + 1;
+			} elseif ( 'N' === $c && 'N;' === substr( $text, $i, 2 ) ) {
+				$i += 2;
+			} elseif ( '}' === $c ) {
+				++$i;
+			} else {
+				return null;
+			}
+		}
+		return $out;
 	}
 
 	/**

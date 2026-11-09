@@ -604,10 +604,13 @@ Position, die das Theme hier nicht registriert, in der Prüfung des Laufs
 - Nichts geht beim Entpacken ungeprüft verloren. Die Schlüssel eines
   Arrays sind Texte der Prüfung (auch im Widget-Bereich, der sie vorher
   ausliess) und zählen für die Verweise mit. Serialisiert der entpackte
-  Wert nicht Byte für Byte zu seinem Text zurück, hat das Entpacken etwas
-  verworfen (ein Schlüssel zweimal, dessen erster Wert ersetzt wird; Bytes
-  nach dem Ende des Werts): dann wird der Text zusätzlich als Ganzes
-  geprüft, wie vor Zweig 11b. Die Orte einer Sperre nennen im Wert nur
+  Wert nicht Byte für Byte zu seinem Text zurück, kann das Entpacken etwas
+  verworfen haben (ein Schlüssel zweimal, dessen erster Wert ersetzt wird;
+  Bytes nach dem Ende des Werts): dann wird zusätzlich jede Zeichenkette
+  des Formats geprüft, jede für sich, nach der Länge, die sie angibt
+  (`serialized_strings()`, Ort `string.<n>`), die verworfenen darunter;
+  eine serialisierte darunter wird ihrerseits entpackt. Die Klammern des
+  Formats sind auch dort kein Code. Die Orte einer Sperre nennen im Wert nur
   Positionen (`meta:<Meta-Schlüssel>:net:php.0.key:raw/base64`: der
   Schlüssel des ersten Eintrags des entpackten Werts), nie einen Schlüssel
   oder Wert des Arrays, der selbst ein Zugangsdatum sein kann.
@@ -643,19 +646,20 @@ Position, die das Theme hier nicht registriert, in der Prüfung des Laufs
   `testAStoredValueThatDoesNotUnpackOrHoldsAnObjectIsNeverClean`,
   `testEachKeyAndLeafOfAStructureIsReadOnItsOwn` und
   `SyncStructureTest::testACredentialInASerializedValueOfMetaAndOfAnOptionStillHoldsItInTheReportAndThePackage`.
-- Grenze C: Ein Wert, der nicht Byte für Byte zurück serialisiert, ohne
-  dass etwas verloren ging (eine Gleitkommazahl, die mit einer anderen
-  `serialize_precision` geschrieben wurde als der, mit der die prüfende
-  Site zurück serialisiert, etwa mit 17 Stellen,
-  `d:0.10000000000000001;`: so schreibt jedes PHP mit
-  `serialize_precision=17`, auch PHP 8.5, und PHP vor 7.1 als Vorgabe;
-  ein Schlüssel aus Ziffern als Text, `s:1:"5"`), wird ebenfalls als
-  Ganzes geprüft; Prosa der Form «…, Token: drei» in seinen Klammern
-  sperrt dort wie vor Zweig 11b (selten: die Vorgabe von PHP ab 7.1 ist
-  `serialize_precision=-1`, die kürzeste Schreibweise; eine Site mit 17
-  liest ihre eigenen Werte gleich zurück, nur Werte einer anderen
-  Einstellung weichen ab). Prüffall
-  `SyncNetTest::testAValueThatDoesNotSerializeBackIsReadAsItsTextAsWell`.
+- Ein Wert, der nicht Byte für Byte zurück serialisiert, ohne dass etwas
+  verloren ging, urteilt so wie sein Inhalt: eine Gleitkommazahl, die mit
+  einer anderen `serialize_precision` geschrieben wurde als der, mit der
+  die prüfende Site zurück serialisiert, etwa mit 17 Stellen,
+  `d:0.10000000000000001;` (so schreibt jedes PHP mit
+  `serialize_precision=17`, auch PHP 8.5, und PHP vor 7.1 als Vorgabe),
+  ein Schlüssel aus Ziffern als Text (`s:1:"5"`). Prosa darin bleibt frei;
+  vorher wurde ein solcher Wert als Ganzes geprüft, und «…, Token: drei»
+  in seinen Klammern sperrte (Codex-Runde 1 zu 11b, Tabelle zu A1 und B).
+  Als Ganzes geprüft wird nur noch ein Text, dessen Format sich nach den
+  angegebenen Längen nicht zu Ende lesen lässt; einen solchen lässt
+  `AB_MCP_Sync_Canon::unserialized()` nicht durch, kein Fall bekannt.
+  Prüffall
+  `SyncNetTest::testAValueThatDoesNotSerializeBackIsReadByTheStringsOfItsFormat`.
 - Gezählt am 09.11.2026 auf dem lokalen Paar (Site B, Inventar aller
   Arten, vorher auf `8df6146`, nachher auf diesem Zweig): die frische Site
   mit 93 Objekten gleich, ohne Sperre der Zugangsprüfung. Mit sieben
@@ -725,6 +729,14 @@ Entscheid 27 ohnehin nicht geschrieben werden.
   rund 1 bis 2 s, Integrations-Einträge rund 7 bis 17 s.
 
 ## Nicht als Mutation geführt
+
+- In `texts()` des Netzes (Zweig 11b): das `trim()` des Texts vor der
+  Rundreise (ein Text mit Leerraum darum urteilt über die Zeichenketten
+  seines Formats so wie über seinen Wert; die Mutation überlebte, keine
+  Probe unterscheidet sie), und der Rückfall auf den ganzen Text, wo sich
+  das Format nicht nach seinen Längen lesen lässt (`serialized_strings()`
+  gibt null): `AB_MCP_Sync_Canon::unserialized()` lässt keinen solchen
+  Text durch, der Zweig ist von keinem Prüffall zu erreichen.
 
 - `b-widget-form-it` (Codex-Runde 4, B, über die Integrationsklasse): seit
   Zweig 11b liest das Netz des Exports jede Meta-Zeile entpackt; ob

@@ -151,13 +151,13 @@ SyncNetTest, SyncCanonFormTest).
   Blatt für sich; die Verweise zählt es weiter über den Rohwert
   (GRENZEN-STRUKTUR.md, Abschnitt «Serialisierte Werte im Netz»). Ein
   serialisierter Wert, der aus seinem Wert nicht Byte für Byte zurück
-  serialisiert, wird zusätzlich als Ganzes gelesen, weil das Entpacken
-  dort etwas verworfen haben kann (ein Schlüssel zweimal, Bytes nach dem
-  Ende). Das trifft auch Werte, bei denen nichts verloren ging: eine
-  Gleitkommazahl, geschrieben mit einer anderen `serialize_precision` als
-  der der prüfenden Site (17 Stellen, `d:0.10000000000000001;`: jedes PHP
-  mit `serialize_precision=17`, auch PHP 8.5, und PHP vor 7.1 als
-  Vorgabe), ein Schlüssel aus Ziffern als Text
-  (`s:1:"5"`); Prosa wie «…, Token: drei» in den Klammern eines solchen
-  Werts sperrt dort wie vor Zweig 11b (SyncNetTest
-  `testAValueThatDoesNotSerializeBackIsReadAsItsTextAsWell`).
+  serialisiert, wird zusätzlich über jede Zeichenkette seines Formats
+  gelesen, jede für sich, weil das Entpacken dort etwas verworfen haben
+  kann (ein Schlüssel zweimal, Bytes nach dem Ende). Ein Wert, bei dem
+  nichts verloren ging (eine Gleitkommazahl, geschrieben mit einer anderen
+  `serialize_precision` als der der prüfenden Site: 17 Stellen,
+  `d:0.10000000000000001;`, schreibt jedes PHP mit
+  `serialize_precision=17`, auch PHP 8.5, und PHP vor 7.1 als Vorgabe;
+  ein Schlüssel aus Ziffern als Text), urteilt so wie sein Inhalt: Prosa
+  darin bleibt frei (SyncNetTest
+  `testAValueThatDoesNotSerializeBackIsReadByTheStringsOfItsFormat`).

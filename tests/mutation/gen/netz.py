@@ -62,6 +62,7 @@ IT_CRED = 'testACredentialInASerializedValueOfMetaAndOfAnOptionStillHoldsItInThe
 N_LEAFREAD = 'testALeafTheNetDoesNotReadToItsEndLocksAsAColumnDoes'
 N_DEPTH = 'testBeyondTheDepthTheUnitIsNotReadToItsEnd'
 N_REFLEAF = 'testAReferenceInALayerTakenOutOfALeafLocks'
+N_STRINGS = 'testAValueThatDoesNotSerializeBackIsReadByTheStringsOfItsFormat'
 IT_HIDDEN = 'testTheNetLocksAHiddenReferenceInEveryUnit'
 
 # ------------------------------------------------------- check(): the form
@@ -138,9 +139,28 @@ e('texts-unreadable', 'texts(): a text that does not unpack or holds an object l
 e('texts-round-trip', 'texts(): a text that does not serialize back from its value byte for byte read whole as well (a key twice, bytes after its end)', NT,
   "\t\t\tif ( serialize( $read['value'] ) !== trim( $value ) ) {",
   "\t\t\tif ( false ) {", 'net', N_CRED)
-e('texts-round-trip-trim', 'texts(): the round trip against the text as unserialize() reads it (trimmed)', NT,
-  "\t\t\tif ( serialize( $read['value'] ) !== trim( $value ) ) {",
-  "\t\t\tif ( serialize( $read['value'] ) !== $value ) {", 'net', N_PROSE)
+# Not listed: the trim() of the text before the round trip (a text with white
+# space around it, read by the strings of its format, judges as its value),
+# and the text as a whole where its format does not read to its end (no text
+# AB_MCP_Sync_Canon::unserialized() lets through is one); GRENZEN-STRUKTUR.md.
+# The strings of the format of a text that does not serialize back
+# (the table of A1 and B: the float of 17 digits judged as its prose).
+e('texts-strings', 'texts(): every string of the format of a text that does not serialize back, each on its own', NT,
+  "\t\t\t\t\t\tself::texts( $string, ( '' === $where ? '' : $where . '.' ) . 'string.' . $i, $layer + 1, $depth, $acc, $kind, $at, $each );\n", "", 'net', N_CRED)
+e('texts-strings-not-whole', 'texts(): the strings of the format, not the whole text with its braces', NT,
+  "\t\t\t\t$strings = self::serialized_strings( trim( $value ) );", "\t\t\t\t$strings = null;", 'net', N_STRINGS)
+e('strings-string', 'serialized_strings(): each string by the length it states', NT,
+  "\t\t\t\t$out[] = (string) substr( $text, $i, $len );\n", "", 'net', N_CRED)
+e('strings-string-end', 'serialized_strings(): a string ends with its quote and ";"', NT,
+  "\t\t\t\t$i    += $len + 2;", "\t\t\t\t$i    += $len;", 'net', N_STRINGS)
+e('strings-scalars', 'serialized_strings(): a number or a flag read to its ";"', NT,
+  "\t\t\t\t$end = strpos( $text, ';', $i );\n\t\t\t\tif ( false === $end ) {\n\t\t\t\t\treturn null;\n\t\t\t\t}\n\t\t\t\t$i = $end + 1;",
+  "\t\t\t\treturn null;", 'net', N_STRINGS)
+e('strings-null', 'serialized_strings(): N; read', NT,
+  "\t\t\t} elseif ( 'N' === $c && 'N;' === substr( $text, $i, 2 ) ) {\n\t\t\t\t$i += 2;",
+  "\t\t\t} elseif ( 'N' === $c && 'N;' === substr( $text, $i, 2 ) ) {\n\t\t\t\treturn null;", 'net', N_STRINGS)
+e('strings-close', 'serialized_strings(): the end of an array read', NT,
+  "\t\t\t} elseif ( '}' === $c ) {\n\t\t\t\t++$i;", "\t\t\t} elseif ( '}' === $c ) {\n\t\t\t\treturn null;", 'net', N_STRINGS)
 e('texts-object', 'texts(): an object in a structure locks', NT,
   "\t\t\tAB_MCP_Sync_Canon::lock( $acc, $kind, 'php_object', $here );\n", "", 'net', N_STRUCT)
 # ------------------------------------------- strings(): the references

@@ -980,9 +980,9 @@ final class SyncNetTest extends TestCase {
 		$twice = 'a:2:{s:4:"note";s:' . strlen( $b64 ) . ':"' . $b64 . '";s:4:"note";s:4:"frei";}';
 		self::assertSame( array( 'note' => 'frei' ), unserialize( $twice ), 'The first value is gone unpacked.' );
 		foreach ( array(
-			'the first value of a key twice' => array( $twice, 'raw/base64' ),
-			'nested'                         => array( serialize( array( 'x' => $twice ) ), 'php.0:raw/base64' ),
-			'after the end of the value'     => array( serialize( array( 'note' => 'frei' ) ) . serialize( array( 'note' => $b64 ) ), 'raw/base64' ),
+			'the first value of a key twice' => array( $twice, 'string.1:raw/base64' ),
+			'nested'                         => array( serialize( array( 'x' => $twice ) ), 'php.0.string.1:raw/base64' ),
+			'after the end of the value'     => array( serialize( array( 'note' => 'frei' ) ) . serialize( array( 'note' => $b64 ) ), 'string.3:raw/base64' ),
 		) as $case => list( $raw, $place ) ) {
 			list( $locks ) = self::stored( $raw );
 			self::assertSame( array( '*:unread_credential@u:net:' . $place ), $locks, $case );
@@ -1161,23 +1161,35 @@ final class SyncNetTest extends TestCase {
 		self::assertSame( array( '*:unreadable_value@w:net:0' . str_repeat( '.php', AB_MCP_Sync_Canon::MAX_LAYERS - 1 ) ), $net( array( 'text' => serialize( $leaf ) ) ), 'Beyond them.' );
 	}
 
-	public function testAValueThatDoesNotSerializeBackIsReadAsItsTextAsWell(): void {
-		// The limit of the form: a value whose text does not come back byte
-		// for byte from its value (a float written with another precision, a
-		// key of digits as a text) is read in its raw text as well, as the
-		// net read every serialized value before branch 11b; prose in braces
-		// there locks as it did then.
+	public function testAValueThatDoesNotSerializeBackIsReadByTheStringsOfItsFormat(): void {
+		// A value whose text does not come back byte for byte from its value
+		// although nothing was dropped (a float written with another
+		// serialize_precision, as PHP 8.5 writes it with 17; a key of digits
+		// as a text) is read by every string of its format as well, each on
+		// its own, not as the whole text with its braces: prose is prose
+		// there too (Codex round 1 of branch 11b, the table of A1 and B).
 		$prose = 'Spieler: Anna, Token: drei';
 		$float = 'a:2:{s:1:"f";d:0.10000000000000001;s:4:"text";s:' . strlen( $prose ) . ':"' . $prose . '";}';
 		self::assertNotSame( $float, serialize( unserialize( $float ) ) );
-		list( $locks ) = self::stored( $float );
-		self::assertSame( array( '*:unread_credential@u:net:raw' ), $locks );
-		$digits = 'a:1:{s:1:"5";s:' . strlen( $prose ) . ':"' . $prose . '";}';
-		list( $locks ) = self::stored( $digits );
-		self::assertSame( array( '*:unread_credential@u:net:raw' ), $locks );
-		// Without prose in braces, nothing.
-		list( $locks ) = self::stored( 'a:1:{s:1:"f";d:0.10000000000000001;}' );
-		self::assertSame( array(), $locks );
+		foreach ( array(
+			'a float'                 => $float,
+			'a key of digits as text' => 'a:1:{s:1:"5";s:' . strlen( $prose ) . ':"' . $prose . '";}',
+			'a float, nested'         => serialize( array( 'x' => $float ) ),
+			'a float, a null, a flag' => 'a:4:{s:1:"f";d:0.10000000000000001;s:1:"n";N;s:1:"b";b:1;s:4:"text";s:' . strlen( $prose ) . ':"' . $prose . '";}',
+			'a float without prose'   => 'a:1:{s:1:"f";d:0.10000000000000001;}',
+		) as $case => $raw ) {
+			list( $locks, $acc ) = self::stored( $raw );
+			self::assertSame( array( array(), array() ), array( $locks, $acc['unread'] ), $case );
+		}
+		// A credential in such a value still locks, by its string.
+		$b64 = base64_encode( 'password=demo-secret' );
+		list( $locks ) = self::stored( 'a:2:{s:1:"f";d:0.10000000000000001;s:4:"note";s:' . strlen( $b64 ) . ':"' . $b64 . '";}' );
+		self::assertSame( array( '*:unread_credential@u:net:string.2:raw/base64' ), $locks );
+		// A string of the format that is serialized in its turn is unpacked
+		// (a dropped value that holds an object locks, never made).
+		$inner = 'a:1:{s:1:"o";O:8:"stdClass":0:{}}';
+		list( $locks ) = self::stored( 'a:2:{s:1:"x";s:' . strlen( $inner ) . ':"' . $inner . '";s:1:"x";s:4:"frei";}', false );
+		self::assertSame( array( '*:php_object@u:net:string.1' ), $locks );
 	}
 
 	public function testBeyondTheDepthTheUnitIsNotReadToItsEnd(): void {
