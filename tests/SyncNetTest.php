@@ -639,7 +639,7 @@ final class SyncNetTest extends TestCase {
 		foreach ( array(
 			'github_token'      => array( $t['ghp'], $t['github_pat'], 'gh' . 'p_' . str_repeat( 'fake', 9 ), 'gh' . 'p_' . $alnum( 'g', 40 ) ),
 			'stripe_secret_key' => array( $t['sk_live'], $t['rk_live'], 'sk' . '_live_' . str_repeat( 'my', 12 ) ),
-			'aws_access_key_id' => array( $t['akia'], 'AK' . 'IAQ3ZT7W2VX' . 'EXAMPLE', 'AK' . 'IAIOSFODNN7' . 'EXAMPLE1', 'AK' . 'IAIOSFODNN7' . 'EXAMPLEX' ),
+			'aws_access_key_id' => array( $t['akia'], 'AK' . 'IAQ3ZT7W2VX' . 'EXAMPLE', 'AK' . 'IAIOSFODNN7' . 'EXAMPLE1', 'AK' . 'IAIOSFODNN7' . 'EXAMPLEX', $t['akia'] . '/', $t['akia'] . '/20261109/eu-central-1/s3/aws4_request' ),
 			'slack_token'       => array( $t['xoxb'], $t['xoxp'] ),
 			'mailchimp_api_key' => array( $t['mailchimp'], $hex( 'm', 32 ) . '-us' . '1' ),
 			'access_token'      => array( $t['jwt'] ),
@@ -673,7 +673,6 @@ final class SyncNetTest extends TestCase {
 			$t['akia'] . 'BCx',
 			'AK' . 'IA' . str_repeat( 'B', 18 ) . 'xyz',
 			$t['akia'] . '+',
-			$t['akia'] . '/',
 			$t['akia'] . '=',
 			'Binärdaten (Base64): /AK' . 'IA' . str_repeat( 'A', 16 ) . 'g==',
 			'xo' . 'xb-2048-4096-' . $alnum( 'x', 7 ),
@@ -736,6 +735,7 @@ final class SyncNetTest extends TestCase {
 			// Inside base64 or before a small letter, «+», «/» or «=» no key of
 			// AWS (Codex round 5, C1).
 			$e['aws access key id'] . '/x',
+			'Der Scope lautet ' . $e['aws access key id'] . '/20130524/us-east-1/s3/aws4_request.',
 			$e['aws access key id'] . 'x',
 			'Binärdaten (Base64): /AK' . 'IA' . str_repeat( 'A', 16 ) . 'g==',
 			$e['slack 1'] . "\n" . $e['slack 2'] . "\n" . $e['slack 3'],
@@ -745,7 +745,7 @@ final class SyncNetTest extends TestCase {
 		}
 		// One character more or less, a value of its own: no example.
 		foreach ( array(
-			'aws_access_key_id' => array( $e['aws access key id'] . ' und ' . $t['akia'], $e['aws access key id'] . '2', 'AK' . 'IAQ3ZT7W2VX' . 'EXAMPLE', substr( $e['aws access key id'], 0, 19 ) . 'F', $e['aws access key id'] . '..', 'Mein ' . $e['aws access key id'] . 'X', $e['aws access key id'] . '-x' ),
+			'aws_access_key_id' => array( 'Scope: AK' . 'IAQ3ZT7W2VX' . 'EXAMPLE/20261109/eu-central-1/s3/aws4_request', $e['aws access key id'] . ' und ' . $t['akia'], $e['aws access key id'] . '2', 'AK' . 'IAQ3ZT7W2VX' . 'EXAMPLE', substr( $e['aws access key id'], 0, 19 ) . 'F', $e['aws access key id'] . '..', 'Mein ' . $e['aws access key id'] . 'X', $e['aws access key id'] . '-x' ),
 			'access_token'      => array( $jwt[0] . '.' . $jwt[1] . '.' . strrev( $jwt[2] ), $e['jwt.io'] . 'A', $jwt[0] . '.' . $jwt[1] . 'AAAA.' . $jwt[2] ),
 			'slack_token'       => array( $e['slack 2'] . '9', $e['slack 3'] . '-x', $e['slack 2'] . '/x', $e['slack 1'] . '..' ),
 			'authorization'     => array( 'Authorization: Bearer ' . $e['aws secret access key'] . '..', 'Authorization: Basic ' . base64_encode( $e['aws access key id'] . ':' . $e['aws secret access key'] ), 'Authorization: Basic ' . base64_encode( 'admin:' . $e['aws secret access key'] ), 'Authorization: Bearer ' . $e['aws secret access key'] . 'X', 'Authorization: Bearer x' . $e['aws secret access key'], 'Authorization: Basic ' . base64_encode( 'admin:' . $e['aws secret access key'] . '1' ), 'Authorization: Basic ' . base64_encode( 'a:' . $e['rfc 6750'] . 'x' ) ),
@@ -818,8 +818,18 @@ final class SyncNetTest extends TestCase {
 			'Authorization: Basic ' . $b64( 'api:SECRET' ),
 			'Authorization: Basic ' . $b64( 'admin:Open Sesame' ),
 			'Authorization: Basic ' . $b64( 'ali:opensesame' ),
-			'Authorization: Basic ' . $b64( 'User:Password' ),
 			'Authorization: Basic ' . $b64( 'user:password ' ),
+			// Defaults of devices and sites, in any case (the steering after
+			// Codex round 6): never pairs of examples.
+			'Authorization: Basic ' . $b64( 'Admin:Admin' ),
+			'Authorization: Basic ' . $b64( 'ADMIN:PASSWORD' ),
+			'Authorization: Basic ' . $b64( 'admin:1234' ),
+			'Authorization: Basic ' . $b64( 'root:toor' ),
+			'Authorization: Basic ' . $b64( 'ROOT:ROOT' ),
+			'Authorization: Basic ' . $b64( 'administrator:password' ),
+			'Authorization: Basic ' . $b64( 'guest:guest' ),
+			'Authorization: Basic ' . $b64( 'test:test' ),
+			'Authorization: Basic ' . $b64( 'john:secret' ),
 			'Authorization: Basic ' . $b64( 'key-of-the-account:' ),
 			'Authorization: Basic ' . $b64( ':secret-only' ),
 			'Proxy-Authorization: Basic ' . $b64( 'proxy:Kq7vR2pX' ) . ';',
@@ -891,6 +901,18 @@ final class SyncNetTest extends TestCase {
 			'Authorization: Basic ' . $b64( 'key:secret' ),
 			'Authorization: Basic ' . $b64( 'user:passwd' ),
 			'Authorization: Basic ' . $b64( 'smith:secret' ),
+			// In any case of user and password (Codex round 6, B1).
+			'Authorization: Basic ' . $b64( 'User:Password' ),
+			'Authorization: Basic ' . $b64( 'Username:Password' ),
+			'Authorization: Basic ' . $b64( 'USER:PASSWORD' ),
+			'Authorization: Basic ' . $b64( 'ALADDIN:OPEN SESAME' ),
+			'Authorization: Basic ' . $b64( 'Aladdin:OpenSesame' ),
+			'Authorization: Basic ' . $b64( 'user:pass' ),
+			'Authorization: Basic ' . $b64( 'foo:bar' ),
+			'Authorization: Basic ' . $b64( 'FOO:BAR' ),
+			'Authorization: Basic ' . $b64( "test:123\u{00A3}" ),
+			'Authorization: Basic ' . $b64( 'deploy:pa:ss' ),
+			'Authorization: Basic ' . $b64( 'TestUser:SecurePassword123' ),
 			'Authorization: Basic <base64>',
 			'Authorization: Basic ' . $b64( 'foobar' ),
 			'Authorization: Basic ' . $b64( 'admin:YOUR_PASSWORD' ),
@@ -1043,6 +1065,17 @@ final class SyncNetTest extends TestCase {
 		) as $text ) {
 			self::assertSame( array(), AB_MCP_Sync_Net::credentials( $text, $extra ), $text );
 		}
+	}
+
+	public function testThePairsOfExamplesOfBasicHoldNoDefaultOfADeviceOrASite(): void {
+		// The steering after Codex round 6: defaults and the usual standard
+		// accounts never come into the list of the pairs, in any case; the
+		// list is written in small letters, as basic() compares it.
+		foreach ( AB_MCP_Sync_Net::EXAMPLE_PAIRS as $pair ) {
+			self::assertSame( strtolower( $pair ), $pair );
+		}
+		$defaults = array( 'admin:admin', 'admin:password', 'admin:1234', 'admin:12345', 'admin:', 'admin:changeme', 'admin:default', 'admin:secret', 'root:root', 'root:toor', 'root:', 'root:password', 'administrator:password', 'administrator:admin', 'guest:guest', 'user:user', 'test:test', 'pi:raspberry', 'ubnt:ubnt', 'cisco:cisco', 'demo:demo' );
+		self::assertSame( array(), array_values( array_intersect( AB_MCP_Sync_Net::EXAMPLE_PAIRS, $defaults ) ) );
 	}
 
 	public function testAPlaceholderIsOneOnlyInItsExactFormAsTheWholeValue(): void {

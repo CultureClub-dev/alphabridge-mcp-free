@@ -907,6 +907,28 @@ trait SyncCoreReads {
 			'a tutorial of RFC 7617'                              => array( $para( 'Das Beispiel aus RFC 7617 (Aladdin:open sesame):' ) . $code( "GET / HTTP/1.1\nAuthorization: Basic " . $e['rfc 7617'] ), 'frei' ),
 			'a tutorial of MDN'                                   => array( $para( 'Das Beispiel von MDN (aladdin:opensesame):' ) . $code( "GET / HTTP/1.1\nAuthorization: Basic " . $e['mdn basic'] ), 'frei' ),
 			'a tutorial with a placeholder as the password'       => array( $para( 'Setze dein Passwort ein:' ) . $code( "GET / HTTP/1.1\nAuthorization: Basic " . $b64( 'admin:YOUR_PASSWORD' ) ), 'frei' ),
+			// Codex round 6 of branch 11b: B1 the pairs of examples in any
+			// case, never a default; A1 a key of AWS before «/».
+			'Basic User:Password of Veeam'                        => array( $para( 'In the value of the header, the client must prepend Basic before the Username:Password pair:' ) . $code( "GET /api/sessionMngr/ HTTP/1.1\nAuthorization: Basic " . $b64( 'User:Password' ) ), 'frei' ),
+			'Basic Username:Password of CycleSoftware'            => array( $code( "GET /api/v3/articles HTTP/1.1\nAuthorization: Basic " . $b64( 'Username:Password' ) ), 'frei' ),
+			'Basic USER:PASSWORD'                                 => array( 'Authorization: Basic ' . $b64( 'USER:PASSWORD' ), 'frei' ),
+			'Basic ALADDIN:OPEN SESAME'                           => array( 'Authorization: Basic ' . $b64( 'ALADDIN:OPEN SESAME' ), 'frei' ),
+			'Basic user:pass of Ruby'                             => array( 'Authorization: Basic ' . $b64( 'user:pass' ), 'frei' ),
+			'Basic User:Pass'                                     => array( 'Authorization: Basic ' . $b64( 'User:Pass' ), 'frei' ),
+			'Basic foo:bar of npm'                                => array( 'Authorization: Basic ' . $b64( 'foo:bar' ), 'frei' ),
+			'Basic Foo:Bar'                                       => array( 'Authorization: Basic ' . $b64( 'Foo:Bar' ), 'frei' ),
+			'Basic test:123£ of RFC 7617'                         => array( 'Authorization: Basic ' . $b64( "test:123\u{00A3}" ), 'frei' ),
+			'Basic deploy:pa:ss of zerotool'                      => array( 'Authorization: Basic ' . $b64( 'deploy:pa:ss' ), 'frei' ),
+			'Basic TestUser:SecurePassword123 of AriesPortal'     => array( 'Authorization: Basic ' . $b64( 'TestUser:SecurePassword123' ), 'frei' ),
+			'Basic Me:Pwd of curl'                                => array( 'Authorization: Basic ' . $b64( 'Me:Pwd' ), 'frei' ),
+			'Basic Admin:Admin'                                   => array( 'Authorization: Basic ' . $b64( 'Admin:Admin' ), 'sperrt' ),
+			'Basic ADMIN:PASSWORD'                                => array( 'Authorization: Basic ' . $b64( 'ADMIN:PASSWORD' ), 'sperrt' ),
+			'Basic Admin:Password'                                => array( 'Authorization: Basic ' . $b64( 'Admin:Password' ), 'sperrt' ),
+			'Basic root:toor'                                     => array( 'Authorization: Basic ' . $b64( 'root:toor' ), 'sperrt' ),
+			'Basic guest:guest'                                   => array( 'Authorization: Basic ' . $b64( 'guest:guest' ), 'sperrt' ),
+			'Basic test:test (limit C)'                           => array( 'Authorization: Basic ' . $b64( 'test:test' ), 'sperrt' ),
+			'a key of AWS before / (SigV4)'                       => array( 'Scope: AK' . 'IAQ3ZT7W2VX' . 'EXAMPLE/20261109/eu-central-1/s3/aws4_request', 'sperrt' ),
+			'the key of the AWS documentation in a scope'         => array( 'Der Scope lautet ' . $e['aws access key id'] . '/20130524/us-east-1/s3/aws4_request.', 'frei' ),
 		);
 		foreach ( require __DIR__ . '/fixtures/sync-tutorials.php' as $name => $text ) {
 			$out[ 'tutorial ' . $name ] = array( $text, in_array( substr( $name, 0, 3 ), array( 'T2 ', 'T6 ' ), true ) ? null : 'frei' );

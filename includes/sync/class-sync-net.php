@@ -288,8 +288,10 @@ final class AB_MCP_Sync_Net {
 	 * letters and digits, github_pat_), Stripe (sk_live_, rk_live_ and 24),
 	 * AWS (AKIA and 16 capitals and digits, a longer run of them as well: the
 	 * whole run is the value; never inside base64, no character of base64
-	 * before it and no small letter, «+», «/» or «=» right after the run:
-	 * Codex round 5 of branch 11b, C1), Slack (xoxb-, xoxp- with their
+	 * before it and no small letter, «+» or «=» right after the run: Codex
+	 * round 5 of branch 11b, C1; a «/» after it ends the key of the scope of
+	 * SigV4, AKIA…/20261109/eu-central-1/s3/aws4_request, Codex round 6, A1),
+	 * Slack (xoxb-, xoxp- with their
 	 * numbers), Mailchimp (32 hex and -us with the number of the data
 	 * centre; two of the ten tutorials counted on 09.11.2026 name its key,
 	 * none in this form).
@@ -298,7 +300,7 @@ final class AB_MCP_Sync_Net {
 		'/(?<![A-Za-z0-9])ghp_[A-Za-z0-9]{36}/'                       => 'github_token',
 		'/(?<![A-Za-z0-9])github_pat_[A-Za-z0-9_]{36}/'               => 'github_token',
 		'/(?<![A-Za-z0-9])[rs]k_live_[A-Za-z0-9]{24}/'                => 'stripe_secret_key',
-		'/(?<![A-Za-z0-9+\/])AKIA[0-9A-Z]{16}[0-9A-Z]*+(?![a-z+\/=])/' => 'aws_access_key_id',
+		'/(?<![A-Za-z0-9+\/])AKIA[0-9A-Z]{16}[0-9A-Z]*+(?![a-z+=])/'   => 'aws_access_key_id',
 		'/(?<![A-Za-z0-9])xox[bp]-[0-9]+-[0-9]+-[A-Za-z0-9-]{8}/'     => 'slack_token',
 		'/(?<![0-9A-Za-z])[0-9a-f]{32}-us[0-9]{1,2}(?![0-9A-Za-z])/' => 'mailchimp_api_key',
 	);
@@ -375,18 +377,31 @@ final class AB_MCP_Sync_Net {
 	const WORD_PLACEHOLDER = '/^(?:[a-z]{2,}(?:[_-]+[a-z]{2,})+|[A-Z]{2,}(?:[_-]+[A-Z]{2,})+)\z/';
 
 	/**
-	 * The pairs of examples of Basic, each only as the whole pair, exactly
-	 * (Codex round 5 of branch 11b, A4; the steering after it): a word of an
-	 * example alone frees none (admin:password, admin:secret, secret: lock, as
-	 * admin:admin does: a working weak credential). Read at their sources on
-	 * 09.11.2026: RFC 7617, section 2 (Aladdin:open sesame); MDN,
-	 * «Authorization» (aladdin:opensesame) and «HTTP authentication»
-	 * (username:password, in an address); the manual of curl
-	 * (curl.se/docs/manpage.html: -u user:password, name:password, user:secret,
-	 * me:pwd, key:secret with --aws-sigv4; --proxy-user user:passwd,
-	 * smith:secret); the tutorial T10 of the count (user:password).
+	 * The pairs of examples of Basic, each only as the whole pair, in any
+	 * case of user and password (Codex rounds 5 and 6 of branch 11b, A4 and
+	 * B1; the steering after them), written here in small letters: a word of
+	 * an example alone frees none (admin:password, admin:secret, secret: lock,
+	 * as admin:admin does: a working weak credential). Only pairs read as an
+	 * example at a source, on 09.11.2026, never a default of a device or a
+	 * site (admin:admin, admin:password, root:toor, guest:guest …, also where
+	 * a page shows one; SyncNetTest holds that none is here):
+	 * - aladdin:open sesame, test:123£: RFC 7617, sections 2 and 2.1;
+	 * - aladdin:opensesame: MDN, «Authorization»;
+	 * - username:password: MDN, «HTTP authentication» (in an address);
+	 *   riptutorial, «HTTP Basic Authentication»; CycleSoftware, its API
+	 *   (Username:Password);
+	 * - user:password: the manual of curl (curl.se/docs/manpage.html); Veeam,
+	 *   «HTTP Authentication» of its REST API (User:Password); the tutorial
+	 *   T10 of the count;
+	 * - name:password, user:secret, me:pwd, key:secret, user:passwd,
+	 *   smith:secret: the manual of curl (-u, --aws-sigv4, --proxy-user);
+	 * - user:pass: Ruby, Net::HTTPHeader#basic_auth;
+	 * - foo:bar: npm, the package jm-basic-auth-credentials (its README);
+	 * - deploy:pa:ss: zerotool, «Basic auth header generator guide»;
+	 * - testuser:securepassword123: AriesPortal, NIBRS, «AuthInfo»
+	 *   (TestUser:SecurePassword123).
 	 */
-	const EXAMPLE_PAIRS = array( 'Aladdin:open sesame', 'aladdin:opensesame', 'username:password', 'user:password', 'name:password', 'user:secret', 'me:pwd', 'key:secret', 'user:passwd', 'smith:secret' );
+	const EXAMPLE_PAIRS = array( 'aladdin:open sesame', "test:123\u{00A3}", 'aladdin:opensesame', 'username:password', 'user:password', 'name:password', 'user:secret', 'me:pwd', 'key:secret', 'user:passwd', 'smith:secret', 'user:pass', 'foo:bar', 'deploy:pa:ss', 'testuser:securepassword123' );
 
 	/**
 	 * A placeholder, only in its exact form as the whole value (the steering,
@@ -1785,7 +1800,7 @@ final class AB_MCP_Sync_Net {
 		foreach ( self::TOKENS as $pattern => $name ) {
 			if ( preg_match_all( $pattern, $text, $m, PREG_OFFSET_CAPTURE ) ) {
 				foreach ( $m[0] as $hit ) {
-					if ( ! self::example( self::whole( $text, (int) $hit[1] ) ) ) {
+					if ( ! self::example( self::whole( $text, (int) $hit[1], 'aws_access_key_id' === $name ? '/' : '' ) ) ) {
 						$found[] = $name;
 						break;
 					}
@@ -1945,7 +1960,7 @@ final class AB_MCP_Sync_Net {
 	 * Whether the value after Basic in the header Authorization is a pair:
 	 * base64 at its start that decodes to a text user:password, without a
 	 * sign of control, the two not both empty; free only where the pair as a
-	 * whole is one of EXAMPLE_PAIRS or the password (where it is empty, the
+	 * whole is one of EXAMPLE_PAIRS, in any case, or the password (where it is empty, the
 	 * user: a key as the user) a placeholder (YOUR_PASSWORD, <password>,
 	 * xxxx xxxx …), whatever its length: admin:password, a:b and admin:admin
 	 * lock (Codex round 5 of branch 11b, A4).
@@ -1966,7 +1981,7 @@ final class AB_MCP_Sync_Net {
 			return false;
 		}
 		$password = (string) substr( $pair, $at + 1 );
-		return ! in_array( $pair, self::EXAMPLE_PAIRS, true ) && ! self::placeholder( '' === $password ? (string) substr( $pair, 0, $at ) : $password );
+		return ! in_array( strtolower( $pair ), self::EXAMPLE_PAIRS, true ) && ! self::placeholder( '' === $password ? (string) substr( $pair, 0, $at ) : $password );
 	}
 
 	/**
@@ -1994,14 +2009,18 @@ final class AB_MCP_Sync_Net {
 	/**
 	 * The whole value of a token from where its match begins: the run of
 	 * TOKEN_CHARS from there (AKIA…EXAMPLE2 to its end), without one «.» at
-	 * its end, which ends a sentence (sentence_end()).
+	 * its end, which ends a sentence (sentence_end()); for a key of AWS to a
+	 * «/», where the scope of SigV4 begins (the documented key in
+	 * AKIAIOSFODNN7…/20130524/us-east-1/s3/aws4_request is the example).
 	 *
 	 * @param string $text Text.
 	 * @param int    $at   Where the match begins.
+	 * @param string $stop A character of a token that ends the value here.
 	 * @return string
 	 */
-	private static function whole( $text, $at ) {
-		return self::sentence_end( (string) substr( (string) $text, $at, strspn( (string) $text, self::TOKEN_CHARS, $at ) ) );
+	private static function whole( $text, $at, $stop = '' ) {
+		$chars = '' === $stop ? self::TOKEN_CHARS : str_replace( $stop, '', self::TOKEN_CHARS );
+		return self::sentence_end( (string) substr( (string) $text, $at, strspn( (string) $text, $chars, $at ) ) );
 	}
 
 	/**
