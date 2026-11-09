@@ -73,6 +73,13 @@ final class AB_MCP_Transfer {
 	/** Runs the list shows, the newest first. */
 	const RUNS = 10;
 
+	/**
+	 * Runs to act on the list shows above its page at most (pinned());
+	 * further ones are counted and named with the way to them (Codex round
+	 * 2 of branch 12, B).
+	 */
+	const PINNED = 20;
+
 	/** Pairs one page of the list shows. */
 	const PAIRS = 50;
 
@@ -105,6 +112,7 @@ final class AB_MCP_Transfer {
 		require_once __DIR__ . '/sync/class-sync-revert.php';
 		require_once __DIR__ . '/sync/class-sync-report.php';
 		require_once __DIR__ . '/sync/class-sync-pairs-tool.php';
+		require_once __DIR__ . '/sync/class-sync-shown.php';
 	}
 
 	/* ------------------------------------------------- wp_staging_status */
@@ -240,13 +248,49 @@ final class AB_MCP_Transfer {
 			}
 		}
 		if ( $interrupted ) {
-			$shown          = AB_MCP_Sync_Run::shown( $run );
+			$shown          = AB_MCP_Sync_Run::shown( $run, $steps );
 			$out['journal'] = is_wp_error( $shown ) ? array() : $shown['steps'];
 			$out['rest']    = self::rest( $run, $steps );
 			$out['rests']   = is_wp_error( $shown ) ? array() : $shown['rests'];
 			$out['unclear'] = is_wp_error( $shown ) ? array() : $shown['unclear'];
 		}
+		if ( ! self::keyed() ) {
+			// The ways of the tools need the key (Codex round 2 of branch 12,
+			// B): only what goes without it.
+			$out['next'] = self::way_without_key( $run, $interrupted );
+		}
 		return $out;
+	}
+
+	/**
+	 * Whether the tools of the takeover go on here: a confirmed key of the
+	 * staging site (AB_MCP_Sync_Proposal::source_id(), which wp_site_push,
+	 * wp_site_revert and wp_site_pairs ask first).
+	 *
+	 * @return bool
+	 */
+	public static function keyed() {
+		return ! is_wp_error( AB_MCP_Sync_Proposal::source_id() );
+	}
+
+	/**
+	 * The way of a run that is not closed while no key of the staging site
+	 * is confirmed: only what needs no key (closing as checked, aborting on
+	 * the page «Staging»), and that the rest waits for the key.
+	 *
+	 * @param array $run         The run.
+	 * @param bool  $interrupted Whether it is, or will be taken as, interrupted.
+	 * @return string
+	 */
+	public static function way_without_key( array $run, $interrupted ) {
+		$id = (int) $run['run_id'];
+		if ( $interrupted ) {
+			return sprintf( 'Run %d is interrupted, and no key of the staging site is confirmed here: a person reads its journal and closes it as checked on the page AlphaBridge → Staging (nothing is written). Leading its way back waits until the key is confirmed again there.', $id );
+		}
+		if ( 'push' === $run['type'] && 'open' === $run['state'] ) {
+			return sprintf( 'Run %d is open, and no key of the staging site is confirmed here, so it takes no step: a person aborts it on the page AlphaBridge → Staging (what its steps wrote stays), or confirms the key again there.', $id );
+		}
+		return sprintf( 'The way back of run %d waits: no key of the staging site is confirmed here. It goes on once a person confirms the key again on the page AlphaBridge → Staging.', $id );
 	}
 
 	/**
@@ -334,6 +378,7 @@ final class AB_MCP_Transfer {
 			'runs_next'   => null,
 			'runs_after'  => 0,
 			'pinned'      => array(),
+			'pinned_more' => 0,
 			'anchored'    => false,
 			'open'        => null,
 			'interrupted' => null,
@@ -395,7 +440,9 @@ final class AB_MCP_Transfer {
 			}
 			$view['runs_next']  = $page['next'];
 			$view['runs_after'] = $after;
-			$view['pinned']     = self::pinned( $keep, $on );
+			$pinned               = self::pinned( $keep, $on );
+			$view['pinned']       = $pinned['runs'];
+			$view['pinned_more']  = $pinned['more'];
 		}
 
 		$selected = isset( $args['run'] ) ? (int) $args['run'] : 0;
@@ -410,7 +457,23 @@ final class AB_MCP_Transfer {
 		}
 
 		$source = $anchored ? (string) AB_MCP_Sync_Anchor::active()['source_id'] : '';
-		$pairs  = $anchored ? AB_MCP_Sync_Pairs::page_source( $source, isset( $args['pairs_after'] ) ? max( 0, (int) $args['pairs_after'] ) : 0, self::PAIRS ) : null;
+		// One reading of the page of pairs, and from it the print of each
+		// form (AB_MCP_Sync_Shown::shown(); the discard goes through the
+		// other side of the helper).
+		$after_p = isset( $args['pairs_after'] ) ? max( 0, (int) $args['pairs_after'] ) : 0;
+		$shown_p = $anchored ? AB_MCP_Sync_Shown::shown(
+			static function () use ( $source, $after_p ) {
+				return AB_MCP_Sync_Pairs::page_source_shown( $source, $after_p, self::PAIRS );
+			},
+			static function ( array $page ) {
+				$prints = array();
+				foreach ( $page['pairs'] as $pair ) {
+					$prints[ (int) $pair['id'] ] = AB_MCP_Sync_Pairs_Tool::state_shown( $pair );
+				}
+				return $prints;
+			}
+		) : null;
+		$pairs   = is_array( $shown_p ) ? $shown_p['read'] : null;
 		if ( is_array( $pairs ) ) {
 			$view['pairs'] = array(
 				'source' => $source,
@@ -419,12 +482,8 @@ final class AB_MCP_Transfer {
 				'after'  => isset( $args['pairs_after'] ) ? max( 0, (int) $args['pairs_after'] ) : 0,
 			);
 			foreach ( $pairs['pairs'] as $pair ) {
-				$state                    = AB_MCP_Sync_Pairs_Tool::state(
-					array(
-						'action'   => 'discard',
-						'pair_ids' => array( (int) $pair['id'] ),
-					)
-				);
+				// The form binds the row shown, read once (Codex round 2, A).
+				$state                    = $shown_p['print'][ (int) $pair['id'] ];
 				$view['pairs']['pairs'][] = array(
 					'id'          => (int) $pair['id'],
 					'kind'        => (string) $pair['kind'],
@@ -432,7 +491,7 @@ final class AB_MCP_Transfer {
 					'staging_ref' => (string) $pair['staging_ref'],
 					'state'       => (string) $pair['state'],
 					'last_run'    => null === $pair['last_run'] ? null : (int) $pair['last_run'],
-					'discard'     => is_wp_error( $state ) ? null : $state,
+					'discard'     => $state,
 				);
 			}
 		}
@@ -455,19 +514,26 @@ final class AB_MCP_Transfer {
 	 * interrupted, going back), and every closed run of the type push whose
 	 * backups the retention contract keeps and which still has a write step
 	 * no way back named. Not the ones on the page already ($on). The newest
-	 * first.
+	 * first; at most PINNED of them, and how many runs whose backups are
+	 * kept were not read beyond (more), each once.
 	 *
-	 * @param array|null     $keep AB_MCP_Sync_Schema::backup_rows().
+	 * @param array|null      $keep AB_MCP_Sync_Schema::backup_rows().
 	 * @param array<int,true> $on   The runs on the page.
-	 * @return array[] As run_row() each.
+	 * @return array{runs:array[],more:int} runs as run_row() each.
 	 */
 	public static function pinned( $keep, array $on ) {
-		$out = array();
+		$out = array(
+			'runs' => array(),
+			'more' => 0,
+		);
 		$ids = is_array( $keep ) ? array_keys( array_filter( $keep ) ) : array();
 		rsort( $ids );
-		foreach ( $ids as $id ) {
-			if ( isset( $on[ (int) $id ] ) ) {
-				continue;
+		$ids = array_values( array_filter( $ids, static fn( $id ) => ! isset( $on[ (int) $id ] ) ) );
+		foreach ( $ids as $i => $id ) {
+			if ( count( $out['runs'] ) >= self::PINNED ) {
+				// Not read: kept runs not on the page that may need acting on.
+				$out['more'] = count( $ids ) - $i;
+				break;
 			}
 			$run = AB_MCP_Sync_Run::get( (int) $id );
 			if ( ! is_array( $run ) ) {
@@ -475,7 +541,7 @@ final class AB_MCP_Transfer {
 			}
 			$closed = in_array( (string) $run['state'], AB_MCP_Sync_Schema::CLOSED, true );
 			if ( ! $closed || ( 'push' === $run['type'] && self::way_back_open( $run ) ) ) {
-				$out[] = self::run_row( $run, $keep );
+				$out['runs'][] = self::run_row( $run, $keep );
 			}
 		}
 		return $out;
@@ -569,7 +635,9 @@ final class AB_MCP_Transfer {
 			'backups' => self::backups( $run, $keep, $now ),
 			'm2'      => AB_MCP_Transfer_Moments::m2( $run, count( $steps ) ),
 			'abort'   => 'push' === $run['type'] && 'open' === $run['state'],
-			'go_on'   => 'revert' === $run['type'] && 'open' === $run['state'] && null === AB_MCP_Sync_Run::owner_refusal( $run ),
+			// Going on calls wp_site_revert, which needs the key (Codex round
+			// 2 of branch 12, B).
+			'go_on'   => 'revert' === $run['type'] && 'open' === $run['state'] && null === AB_MCP_Sync_Run::owner_refusal( $run ) && self::keyed(),
 		);
 	}
 
@@ -622,9 +690,22 @@ final class AB_MCP_Transfer {
 	 * @return array
 	 */
 	public static function run_view( array $run, $forms = false ) {
-		$shown = AB_MCP_Sync_Run::shown( $run );
-		$steps = AB_MCP_Sync_Run::steps( (int) $run['run_id'] );
-		$steps = is_wp_error( $steps ) ? array() : $steps;
+		// One reading of the steps for the journal, the print of the form,
+		// the rest and the pairs taken back (Codex round 2 of branch 12, A:
+		// two readings let the form carry the print of a later interruption
+		// beside the journal of an earlier one).
+		// The print through AB_MCP_Sync_Shown::shown(), the side of the page
+		// of the helper the close goes through as well.
+		$read  = AB_MCP_Sync_Shown::shown(
+			static function () use ( $run ) {
+				return AB_MCP_Sync_Run::steps( (int) $run['run_id'] );
+			},
+			static function ( array $steps ) use ( $run ) {
+				return 'interrupted' === $run['state'] ? AB_MCP_Sync_Run::interruption_print( $run, $steps ) : null;
+			}
+		);
+		$shown = is_wp_error( $read ) ? $read : AB_MCP_Sync_Run::shown( $run, $read['read'] );
+		$steps = is_wp_error( $read ) ? array() : $read['read'];
 		$back  = self::pairs_back( $run, $steps );
 		$out   = array(
 			'run'     => $run,
@@ -638,7 +719,7 @@ final class AB_MCP_Transfer {
 			'no_back' => null,
 			// The interruption as the page shows it, for the form «Close as
 			// checked» (AB_MCP_Sync_Run::interruption_print()).
-			'print'   => 'interrupted' === $run['state'] ? AB_MCP_Sync_Run::interruption_print( $run, $steps ) : null,
+			'print'   => is_wp_error( $read ) ? null : $read['print'],
 			// The object each step of the way back takes back, from the step
 			// that wrote it (the journal of a step of the way back names only
 			// that step; its outcome stands in its result).

@@ -85,7 +85,7 @@ final class AB_MCP_Transfer_View {
 		if ( null === $active ) {
 			// The runs stay without the key (Codex round 1 of branch 12, B);
 			// only what needs it is left out, and why.
-			$html .= '<p class="ab-note ab-staging-transfer__no-key">' . esc_html( 'The report, the object pairs and taking a pair back need the confirmed key of the staging site, so they are not shown while there is none. The runs of this site stay: their journal, «Close as checked» and «Abort» need no key.' ) . '</p>';
+			$html .= '<p class="ab-note ab-staging-transfer__no-key">' . esc_html( 'The report, the object pairs, taking a pair back and going on with a way back need the confirmed key of the staging site, so they are not shown while there is none. The runs of this site stay: their journal, «Close as checked» and «Abort» need no key.' ) . '</p>';
 		}
 		$html .= self::notice_html( $view['notice'], $view['notes'] );
 		if ( null !== $view['interrupted'] ) {
@@ -97,7 +97,7 @@ final class AB_MCP_Transfer_View {
 		if ( null !== $active ) {
 			$html .= self::report_html( $view['report'], $view['notice'] );
 		}
-		$html .= self::runs_html( $view['runs'], $view['pinned'] ?? array(), $view['runs_next'] ?? null );
+		$html .= self::runs_html( $view['runs'], $view['pinned'] ?? array(), $view['runs_next'] ?? null, (int) ( $view['pinned_more'] ?? 0 ) );
 		$html .= self::pairs_html( $view['pairs'] );
 		// The switch stands in the notice where one shows, else here.
 		$html .= null === $view['notice'] ? self::notes_html( $view['notes'] ) : '';
@@ -318,9 +318,10 @@ final class AB_MCP_Transfer_View {
 	 * @param array[]  $runs   AB_MCP_Transfer::run_row() each, a page of the list.
 	 * @param array[]  $pinned The runs to act on that are not on the page.
 	 * @param int|null $next   The run_id the next page goes on after; null for none.
+	 * @param int      $more   Kept runs beyond the PINNED looked at.
 	 * @return string
 	 */
-	private static function runs_html( array $runs, array $pinned = array(), $next = null ) {
+	private static function runs_html( array $runs, array $pinned = array(), $next = null, $more = 0 ) {
 		$html = '<div class="ab-staging ab-staging-transfer__runs"><h3 class="ab-setting__title">' . esc_html( 'Runs' ) . '</h3>';
 		if ( array() === $runs && array() === $pinned ) {
 			return $html . '<p class="ab-note">' . esc_html( 'No run yet. A run takes over what a person approved from a report, one step per call of the assistant (wp_site_push).' ) . '</p></div>';
@@ -328,6 +329,9 @@ final class AB_MCP_Transfer_View {
 		if ( array() !== $pinned ) {
 			$html .= '<p class="ab-note">' . esc_html( 'To act on: a run that is not closed, or a takeover whose pairs can still be taken back.' ) . '</p>';
 			$html .= self::runs_table( $pinned, 'ab-staging-transfer__pinned' );
+			if ( $more > 0 ) {
+				$html .= '<p class="ab-note ab-staging-transfer__more">' . esc_html( sprintf( 'At most %1$d runs to act on are listed here; %2$d further runs whose backups are kept were not looked at. They are in the list below (Older runs), and wp_staging_status names the run that is not closed.', AB_MCP_Transfer::PINNED, (int) $more ) ) . '</p>';
+			}
 		}
 		if ( array() !== $runs ) {
 			$html .= self::runs_table( $runs, 'ab-staging-transfer__list' );

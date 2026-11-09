@@ -880,4 +880,281 @@ final class StagingTransferTest extends TestCase {
 		self::assertIsString( AB_MCP_Transfer::take_back( $push, (int) $entry['seq'], $entry['plan_state'], true ) );
 		self::assertSame( array(), AB_MCP_Transfer::view()['pinned'] );
 	}
+
+	/* ------------------------------------- Codex round 2 of branch 12 */
+
+	/**
+	 * A filter of the queries that, from within a method of AB_MCP_Transfer
+	 * ($within, view() unless named), runs
+	 * $change once right before the second query that names $needle, or
+	 * marks that it never came (then the test makes the change after the
+	 * view, as a change after the page was shown).
+	 */
+	private static function before_second_read( string $needle, callable $change, string $within = 'view' ): array {
+		$state  = array( 'seen' => 0, 'fired' => false );
+		$filter = static function ( $query ) use ( &$state, $needle, $change, $within ) {
+			if ( $state['fired'] || false === strpos( (string) $query, $needle ) ) {
+				return $query;
+			}
+			$in_view = false;
+			foreach ( debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS ) as $frame ) {
+				$in_view = $in_view || ( $within === ( $frame['function'] ?? '' ) && AB_MCP_Transfer::class === ( $frame['class'] ?? '' ) );
+			}
+			if ( ! $in_view ) {
+				return $query;
+			}
+			++$state['seen'];
+			if ( 2 === $state['seen'] ) {
+				$state['fired'] = true;
+				$change();
+			}
+			return $query;
+		};
+		add_filter( 'query', $filter );
+		return array(
+			'filter' => $filter,
+			'state'  => &$state,
+		);
+	}
+
+	public function testTheFormOfAnInterruptedRunCarriesThePrintOfTheJournalItShows(): void {
+		// A: the way back begins and is interrupted between two readings of
+		// the steps; the form must not carry the print of the later state.
+		$run_id = self::interrupted_run();
+		self::assertSame( 'interrupted', AB_MCP_Transfer::view()['open']['state'] );
+		$table  = AB_MCP_Sync_Schema::table( 'steps' );
+		$change = static function () use ( $run_id ): void {
+			// Another request: the step 4 begun (and its request ended).
+			AB_MCP_Sync_Run::update_step( $run_id, 4, array( 'state' => 'begun' ), 'planned' );
+		};
+		// Between two readings of its steps by the view of the run (the
+		// page settles the run before, with a reading of its own).
+		$hook   = self::before_second_read( "`$table` WHERE run_id = " . $run_id . ' ORDER BY seq', $change, 'run_view' );
+		$fired  = false;
+		try {
+			$view  = AB_MCP_Transfer::view( array( 'run' => $run_id ) );
+			$fired = $hook['state']['fired'];
+		} finally {
+			remove_filter( 'query', $hook['filter'] );
+		}
+		if ( ! $fired ) {
+			$change();
+		}
+		self::assertSame( 'planned', array_column( $view['interrupted']['shown']['steps'], 'state', 'seq' )[4], 'The journal shown: step 4 not begun.' );
+		$closed = AB_MCP_Transfer::close_checked( $run_id, $view['interrupted']['print'], true );
+		self::assertInstanceOf( WP_Error::class, $closed, 'The print is the one of the journal shown, not of the later state.' );
+		self::assertSame( 'ab_mcp_sync_run_changed', $closed->get_error_code() );
+		self::assertSame( 'interrupted', AB_MCP_Sync_Run::get( $run_id )['state'] );
+	}
+
+	public function testCloseAsCheckedSettlesTheRunFromItsOneReading(): void {
+		// The run as a request that ended left it (a step begun, the run
+		// still open, nobody settled it): the close reads it once under the
+		// lock, takes it as interrupted from that reading and closes it.
+		$run_id = self::interrupted_run();
+		self::assertSame( 'open', AB_MCP_Sync_Run::get( $run_id )['state'] );
+		$closed = AB_MCP_Sync_Run::close_checked( $run_id, self::admin(), true );
+		self::assertIsArray( $closed, is_wp_error( $closed ) ? $closed->get_error_message() : '' );
+		self::assertSame( 'closed_checked', $closed['state'] );
+		self::assertSame( 'unclear', AB_MCP_Sync_Run::step( $run_id, 3 )['state'] );
+	}
+
+	public function testTheCloseReadsTheStepsOnceAndComparesAndActsOnThatReading(): void {
+		// The helper of both actions (AB_MCP_Sync_Shown::done()): under the
+		// lock one reading of the steps, its print compared, the close made
+		// on it. A second reading of the steps within the close would meet
+		// the change made before it here.
+		$run_id = self::interrupted_run();
+		$print  = AB_MCP_Transfer::view()['interrupted']['print'];
+		$table  = AB_MCP_Sync_Schema::table( 'steps' );
+		$reads  = 0;
+		$filter = static function ( $query ) use ( &$reads, $table, $run_id ) {
+			if ( false === strpos( (string) $query, "`$table` WHERE run_id = " . $run_id . ' ORDER BY seq' ) ) {
+				return $query;
+			}
+			foreach ( debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS ) as $frame ) {
+				if ( 'close_checked' === ( $frame['function'] ?? '' ) && AB_MCP_Sync_Run::class === ( $frame['class'] ?? '' ) ) {
+					++$reads;
+					if ( 2 === $reads ) {
+						AB_MCP_Sync_Run::update_step( $run_id, 4, array( 'state' => 'begun' ), 'planned' );
+					}
+					break;
+				}
+			}
+			return $query;
+		};
+		add_filter( 'query', $filter );
+		try {
+			$done = AB_MCP_Transfer::close_checked( $run_id, $print, true );
+		} finally {
+			remove_filter( 'query', $filter );
+		}
+		self::assertIsString( $done, is_wp_error( $done ) ? $done->get_error_message() : '' );
+		self::assertSame( 1, $reads, 'One reading of the steps between the comparison and the close.' );
+		self::assertSame( 'closed_checked', AB_MCP_Sync_Run::get( $run_id )['state'] );
+	}
+
+	public function testTheFormOfAPairCarriesTheStateOfTheRowItShows(): void {
+		// A: the pair changes between the reading the page shows and the
+		// state of its form; nothing is deleted.
+		self::pair();
+		$p      = self::same_pages( array( 'contact' => 'Write to us.' ) );
+		$source = AB_MCP_Sync_Anchor::active()['source_id'];
+		$id     = (int) AB_MCP_Sync_Pairs::find_live( $source, 'post', (string) $p['contact'][0] )['id'];
+		$change = static function () use ( $id ): void {
+			AB_MCP_Sync_Pairs::set_state( $id, 'unclear', AB_MCP_Sync_Pairs::snapshot_hash( AB_MCP_Sync_Pairs::snapshot( $id ) ) );
+		};
+		$hook  = self::before_second_read( AB_MCP_Sync_Schema::table( 'pairs' ), $change );
+		$fired = false;
+		try {
+			$view  = AB_MCP_Transfer::view( array( 'pairs_after' => $id - 1 ) );
+			$fired = $hook['state']['fired'];
+		} finally {
+			remove_filter( 'query', $hook['filter'] );
+		}
+		if ( ! $fired ) {
+			$change();
+		}
+		$shown = $view['pairs']['pairs'][0];
+		self::assertSame( array( $id, 'active' ), array( $shown['id'], $shown['state'] ), 'The page shows the pair active.' );
+		$done = AB_MCP_Transfer::discard( $id, (string) $shown['discard'] );
+		self::assertInstanceOf( WP_Error::class, $done, 'The form binds the row shown, not a newer one.' );
+		self::assertSame( 'ab_mcp_sync_pairs_changed', $done->get_error_code() );
+		self::assertSame( 'unclear', AB_MCP_Sync_Pairs::get( $id )['state'], 'Nothing deleted.' );
+		// The action deletes the row it read, byte for byte: a change right
+		// before its DELETE leaves the pair (nothing is read in between).
+		$again  = AB_MCP_Transfer::view( array( 'pairs_after' => $id - 1 ) )['pairs']['pairs'][0];
+		$table  = AB_MCP_Sync_Schema::table( 'pairs' );
+		$fired  = false;
+		$filter = static function ( $query ) use ( &$fired, $table, $id ) {
+			if ( ! $fired && 0 === strpos( (string) $query, 'DELETE FROM ' . $table ) ) {
+				$fired = true;
+				AB_MCP_Sync_Pairs::set_state( $id, 'residual', AB_MCP_Sync_Pairs::snapshot_hash( AB_MCP_Sync_Pairs::snapshot( $id ) ) );
+			}
+			return $query;
+		};
+		add_filter( 'query', $filter );
+		try {
+			$late = AB_MCP_Transfer::discard( $id, (string) $again['discard'] );
+		} finally {
+			remove_filter( 'query', $filter );
+		}
+		self::assertTrue( $fired );
+		self::assertSame( 'ab_mcp_sync_pairs_changed', $late->get_error_code() );
+		// The change inside the transaction of the deletion is taken back with
+		// it; the row the action read is not deleted.
+		self::assertIsArray( AB_MCP_Sync_Pairs::get( $id ), 'Not deleted.' );
+		// As shown and unchanged: the form discards it.
+		$again = AB_MCP_Transfer::view( array( 'pairs_after' => $id - 1 ) )['pairs']['pairs'][0];
+		self::assertSame( \AB_MCP_Sync_Pairs_Tool::state( array( 'action' => 'discard', 'pair_ids' => array( $id ) ) ), $again['discard'], 'The state of the row shown is the state of the tool.' );
+		self::assertIsString( AB_MCP_Transfer::discard( $id, $again['discard'] ) );
+	}
+
+	public function testWithoutTheKeyAWayBackIsNotOfferedToGoOnAndNoWayNeedsTheKey(): void {
+		// B: going on calls wp_site_revert, which needs the key.
+		self::pair();
+		$p = self::same_pages( array( 'contact' => 'Write to us.' ) );
+		self::change_on_b( $p['contact'][1], 'contact', 'Write to us on staging.' );
+		$push = self::begun( array( 'contact' ) )['run_id'];
+		self::finish( $push );
+		$seq   = self::seq_of( $push, $p['contact'][0] );
+		$entry = self::back_entry( AB_MCP_Transfer::view( array( 'run' => $push ) ), $seq );
+		$left  = \AB_MCP_Sync_Revert::begin_for_person( array( 'run_id' => $push, 'steps' => array( $seq ) ), $entry['plan_state'], true );
+		self::assertIsArray( $left );
+		self::assertTrue( AB_MCP_Transfer::view()['runs'][0]['go_on'], 'With the key: go on.' );
+		self::assertTrue( AB_MCP_Sync_Anchor::forget() );
+		$view = AB_MCP_Transfer::view();
+		self::assertSame( (int) $left['run_id'], (int) $view['runs'][0]['run_id'] );
+		self::assertFalse( $view['runs'][0]['go_on'], 'Without the key: not offered.' );
+		$html = AB_MCP_Transfer_View::html( $view );
+		self::assertStringNotContainsString( 'value="ab_mcp_transfer_go_on"', $html );
+		self::assertStringContainsString( 'going on with a way back need the confirmed key of the staging site', $html );
+		$status = AB_MCP_Staging::report( false )['transfer'];
+		self::assertSame( (int) $left['run_id'], $status['run']['run_id'] );
+		self::assertStringContainsString( 'waits', $status['run']['next'] );
+		self::assertDoesNotMatchRegularExpression( '/wp_site_(push|revert|pairs)/', $status['run']['next'], 'No way that needs the key.' );
+		self::assertDoesNotMatchRegularExpression( '/wp_site_(push|revert|pairs)/', $status['next'] );
+	}
+
+	public function testOlderRunsTurnThePageOfThePageStaging(): void {
+		// B: render_staging() passes runs_after on.
+		self::pair();
+		$anchor = AB_MCP_Sync_Anchor::active();
+		$ids    = array();
+		for ( $i = 0; $i <= AB_MCP_Transfer::RUNS; $i++ ) {
+			$ids[] = self::closed_run( 'revert', $anchor, $i );
+		}
+		$_GET = array( 'runs_after' => (string) $ids[1] );
+		ob_start();
+		try {
+			( new \AB_MCP_Admin() )->render_staging();
+		} finally {
+			$html = (string) ob_get_clean();
+			$_GET = array();
+		}
+		$doc = new \DOMDocument();
+		$doc->loadHTML( '<!doctype html><meta charset="utf-8"><body>' . $html, LIBXML_NOERROR | LIBXML_NOWARNING );
+		$rows = ( new \DOMXPath( $doc ) )->query( '//table[contains(@class, "ab-staging-transfer__list")]/tbody/tr/td[1]' );
+		self::assertSame( 1, $rows->length, 'The page after the second newest run: the oldest one only.' );
+		self::assertStringStartsWith( $ids[0] . ', way back', trim( $rows->item( 0 )->textContent ) );
+	}
+
+	/** A closed run made directly, of the type given; with $wrote a write step that wrote, so its way back is open. */
+	private static function closed_run( string $type, array $anchor, int $i, bool $wrote = false ): int {
+		$step = $wrote
+			? array(
+				'op'      => 'write',
+				'phase'   => 5,
+				'depends' => array(),
+				'parts'   => array(
+					'object' => array( 'kind' => 'post', 'op' => 'update', 'live_ref' => (string) ( 1000 + $i ), 'staging_ref' => (string) ( 2000 + $i ) ),
+					'backup' => array( 'name' => 'step-0001', 'sha256' => str_repeat( 'b', 64 ), 'bytes' => 1 ),
+					'parts'  => array(),
+				),
+			)
+			: array(
+				'op'      => 'check',
+				'phase'   => 0,
+				'depends' => array(),
+			);
+		$made = AB_MCP_Sync_Run::create(
+			array(
+				'type'        => $type,
+				'source_id'   => (string) $anchor['source_id'],
+				'key_id'      => (string) $anchor['key_id'],
+				'pair_print'  => (string) AB_MCP_Sync_Anchor::pair_print(),
+				'report_hash' => str_repeat( 'a', 64 ),
+				'plan_hash'   => hash( 'sha256', $type . ' ' . $i ),
+				'user_id'     => self::admin(),
+				'connection'  => AB_MCP_Sync_Run::connection(),
+				'expires'     => time() + 3600,
+				'budget'      => array( 'bytes' => 0 ),
+				'plan'        => array( 'reverts' => array(), 'items' => array() ),
+			),
+			array( $step )
+		);
+		self::assertIsArray( $made, is_wp_error( $made ) ? $made->get_error_message() : '' );
+		if ( $wrote ) {
+			self::assertTrue( AB_MCP_Sync_Run::update_step( (int) $made['run_id'], 1, array( 'state' => 'done' ), 'planned' ) );
+		}
+		self::assertTrue( AB_MCP_Sync_Run::set_state( (int) $made['run_id'], 'open', 'revert' === $type ? 'closed_reverted' : 'closed_aborted' ) );
+		return (int) $made['run_id'];
+	}
+
+	public function testTheRunsToActOnAreAtMostAFixedNumberAndTheRestIsCounted(): void {
+		// B: «To act on» does not grow without a bound.
+		self::pair();
+		$anchor = AB_MCP_Sync_Anchor::active();
+		$total  = AB_MCP_Transfer::RUNS + AB_MCP_Transfer::PINNED + 3;
+		for ( $i = 0; $i < $total; $i++ ) {
+			self::closed_run( 'push', $anchor, $i, true );
+		}
+		$view = AB_MCP_Transfer::view();
+		self::assertCount( AB_MCP_Transfer::RUNS, $view['runs'] );
+		self::assertCount( AB_MCP_Transfer::PINNED, $view['pinned'] );
+		self::assertSame( 3, $view['pinned_more'] );
+		$listed = array_merge( array_column( $view['runs'], 'run_id' ), array_column( $view['pinned'], 'run_id' ) );
+		self::assertSame( $listed, array_values( array_unique( $listed ) ), 'No run twice.' );
+		self::assertStringContainsString( 'At most 20 runs to act on are listed here; 3 further runs', AB_MCP_Transfer_View::html( $view ) );
+	}
 }

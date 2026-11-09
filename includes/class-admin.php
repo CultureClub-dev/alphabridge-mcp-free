@@ -1478,11 +1478,12 @@ class AB_MCP_Admin {
 		$this->notice();
 		// The section «Takeover» (Z8, decision 35), read once for the page:
 		// an interrupted run shows first, above the card (decision 18).
-		// phpcs:disable WordPress.Security.NonceVerification.Recommended -- which run and which page of pairs to show; nothing is changed.
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended -- which run, which page of the runs and of the pairs to show; nothing is changed.
 		$transfer = AB_MCP_Transfer::view(
 			array(
 				'run'         => isset( $_GET['run'] ) ? absint( wp_unslash( $_GET['run'] ) ) : 0,
 				'pairs_after' => isset( $_GET['pairs_after'] ) ? absint( wp_unslash( $_GET['pairs_after'] ) ) : 0,
+				'runs_after'  => isset( $_GET['runs_after'] ) ? absint( wp_unslash( $_GET['runs_after'] ) ) : 0,
 			)
 		);
 		// phpcs:enable WordPress.Security.NonceVerification.Recommended

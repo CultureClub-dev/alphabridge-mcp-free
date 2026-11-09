@@ -182,6 +182,100 @@ final class AB_MCP_Sync_Pairs {
 	 * @return array{pairs:array[],next:int|null}|WP_Error next is the $after of the next page.
 	 */
 	public static function page_source( $source_id, $after = 0, $limit = self::PER_PAGE ) {
+		$page = self::rows_of_source( $source_id, $after, $limit );
+		if ( is_wp_error( $page ) ) {
+			return $page;
+		}
+		return array(
+			'pairs' => array_map( array( __CLASS__, 'decode' ), $page['rows'] ),
+			'next'  => $page['next'],
+		);
+	}
+
+	/**
+	 * page_source() for a page that shows the pairs with a form each (Z8,
+	 * branch 12: «Discard» on the page «Staging»): each pair decoded, with
+	 * the snapshot hash of the very row it was decoded from (snapshot_hash()
+	 * of snapshot()), so that the form binds what the page shows and no
+	 * second reading in between can put a newer state into it (Codex round 2
+	 * of branch 12, A).
+	 *
+	 * @param string $source_id Source.
+	 * @param int    $after     The last id of the page before (0: from the start).
+	 * @param int    $limit     At most this many (1 to PER_PAGE).
+	 * @return array{pairs:array[],next:int|null}|WP_Error Each pair with snapshot_hash.
+	 */
+	public static function page_source_shown( $source_id, $after = 0, $limit = self::PER_PAGE ) {
+		$page = self::rows_of_source( $source_id, $after, $limit );
+		if ( is_wp_error( $page ) ) {
+			return $page;
+		}
+		$pairs = array();
+		foreach ( $page['rows'] as $raw ) {
+			$snapshot = self::snapshot_of( $raw );
+			$pairs[]  = self::decode( $raw ) + array( 'snapshot_hash' => is_wp_error( $snapshot ) ? null : self::snapshot_hash( $snapshot ) );
+		}
+		return array(
+			'pairs' => $pairs,
+			'next'  => $page['next'],
+		);
+	}
+
+	/**
+	 * One pair as page_source_shown() gives it, read once by its id, with
+	 * the row as stored (raw), for an action on exactly that row
+	 * (discard_row(); AB_MCP_Sync_Pairs_Tool::discard_as_shown()). Null
+	 * where there is none.
+	 *
+	 * @param int $id Pair id.
+	 * @return array|null|WP_Error The pair decoded, with snapshot_hash and raw.
+	 */
+	public static function shown_row( $id ) {
+		$raw = self::raw( (int) $id );
+		if ( ! is_array( $raw ) ) {
+			return $raw;
+		}
+		$snapshot = self::snapshot_of( $raw );
+		if ( is_wp_error( $snapshot ) ) {
+			return $snapshot;
+		}
+		return self::decode( $raw ) + array(
+			'snapshot_hash' => self::snapshot_hash( $snapshot ),
+			'raw'           => $raw,
+		);
+	}
+
+	/**
+	 * End a pair as it was read (shown_row()): its row deleted only where it
+	 * is still that row byte for byte, by one conditional DELETE, with no
+	 * reading in between.
+	 *
+	 * @param array $raw The row as read.
+	 * @return true|WP_Error ab_mcp_sync_pairs_changed where it is not that row any more.
+	 */
+	public static function discard_row( array $raw ) {
+		$ready = self::ready();
+		if ( true !== $ready ) {
+			return $ready;
+		}
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table name is ours; the values are prepared.
+		$done = $wpdb->query( 'DELETE FROM ' . AB_MCP_Sync_Schema::table( 'pairs' ) . ' WHERE ' . self::where_row( $raw ) );
+		if ( false === $done ) {
+			return self::db_error();
+		}
+		return 1 === (int) $done ? true : self::changed();
+	}
+
+	/**
+	 * The rows of a page of the pairs of a source, as stored.
+	 *
+	 * @param string $source_id Source.
+	 * @param int    $after     The last id of the page before.
+	 * @param int    $limit     At most this many.
+	 * @return array{rows:array[],next:int|null}|WP_Error
+	 */
+	private static function rows_of_source( $source_id, $after, $limit ) {
 		$ready = self::ready();
 		if ( true !== $ready ) {
 			return $ready;
@@ -204,8 +298,8 @@ final class AB_MCP_Sync_Pairs {
 			$next = (int) $rows[ $limit - 1 ]['id'];
 		}
 		return array(
-			'pairs' => array_map( array( __CLASS__, 'decode' ), $rows ),
-			'next'  => $next,
+			'rows' => $rows,
+			'next' => $next,
 		);
 	}
 

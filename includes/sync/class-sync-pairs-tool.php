@@ -138,23 +138,100 @@ final class AB_MCP_Sync_Pairs_Tool {
 	 * @return array|WP_Error As discard() returns it.
 	 */
 	public static function discard_as_shown( array $a, $state ) {
-		require_once __DIR__ . '/class-sync-run.php';
+		require_once __DIR__ . '/class-sync-shown.php';
 		if ( ! isset( $a['action'] ) || 'discard' !== $a['action'] ) {
 			return self::no_action();
 		}
-		return AB_MCP_Sync_Run::under_lock(
-			static function () use ( $a, $state ) {
-				$plan = self::plan( $a );
-				if ( is_wp_error( $plan ) ) {
-					return $plan;
-				}
-				if ( ! is_string( $state ) || ! hash_equals( hash( 'sha256', AB_MCP_Sync_Canon::encode( $plan['state'] ) ), $state ) ) {
-					return new WP_Error( 'ab_mcp_sync_pairs_changed', 'No pair was discarded: a pair changed since the page was loaded (a run took it over or back, or it was aligned anew). Look at it again on the page AlphaBridge → Staging and discard it then.' );
-				}
-				return self::discard( $plan );
+		$ids = self::numbers( isset( $a['pair_ids'] ) ? $a['pair_ids'] : null );
+		if ( null === $ids || array() === $ids || count( $ids ) > self::MAX || count( array_unique( $ids ) ) !== count( $ids ) ) {
+			return self::selection( sprintf( 'discard takes pair_ids: the ids of the pairs to end (wp_site_pairs action=list names them), each once, at most %d.', self::MAX ) );
+		}
+		// One reading under the lock, compared with the print of the form,
+		// and the rows of that reading deleted byte for byte, nothing read in
+		// between (AB_MCP_Sync_Shown::done(); Codex rounds 1 and 2 of
+		// branch 12, A).
+		return AB_MCP_Sync_Shown::done(
+			static function () use ( $ids ) {
+				return self::rows_as_read( $ids );
+			},
+			static function ( array $rows ) {
+				return self::state_of_rows( $rows );
+			},
+			is_string( $state ) ? $state : '',
+			static function ( array $rows ) {
+				return self::discard_rows( $rows );
+			},
+			static function () {
+				return new WP_Error( 'ab_mcp_sync_pairs_changed', 'No pair was discarded: a pair changed since the page was loaded (a run took it over or back, or it was aligned anew). Look at it again on the page AlphaBridge → Staging and discard it then.' );
 			},
 			'No pair is discarded'
 		);
+	}
+
+	/**
+	 * The pairs to end, each read once (AB_MCP_Sync_Pairs::shown_row()), of
+	 * the source of the confirmed key.
+	 *
+	 * @param int[] $ids Pair ids.
+	 * @return array[]|WP_Error
+	 */
+	private static function rows_as_read( array $ids ) {
+		$source = AB_MCP_Sync_Proposal::source_id();
+		if ( is_wp_error( $source ) ) {
+			return $source;
+		}
+		$rows = array();
+		foreach ( $ids as $id ) {
+			$row = AB_MCP_Sync_Pairs::shown_row( $id );
+			if ( is_wp_error( $row ) ) {
+				return $row;
+			}
+			if ( null === $row || $source !== $row['source_id'] ) {
+				return self::selection( sprintf( 'There is no pair %d of the staging site whose key is confirmed here.', $id ) );
+			}
+			$rows[] = $row;
+		}
+		return $rows;
+	}
+
+	/**
+	 * The print of pairs as read or shown (each with snapshot_hash): the
+	 * state discard of them is bound to, as state() gives it while they are
+	 * as read.
+	 *
+	 * @param array[] $rows Pairs with snapshot_hash.
+	 * @return string
+	 */
+	private static function state_of_rows( array $rows ) {
+		$ops = array();
+		foreach ( $rows as $row ) {
+			$ops[] = self::discard_op( $row, (string) $row['snapshot_hash'] );
+		}
+		return hash( 'sha256', AB_MCP_Sync_Canon::encode( self::state_of_ops( $ops ) ) );
+	}
+
+	/**
+	 * End the pairs as read: each row deleted byte for byte as read
+	 * (AB_MCP_Sync_Pairs::discard_row()), in one transaction, all or nothing.
+	 *
+	 * @param array[] $rows Pairs as read (rows_as_read()).
+	 * @return array|WP_Error As discard() answers.
+	 */
+	private static function discard_rows( array $rows ) {
+		$ops  = array();
+		$done = AB_MCP_Sync_Pairs::transaction(
+			static function () use ( $rows, &$ops ) {
+				foreach ( $rows as $row ) {
+					$result = AB_MCP_Sync_Pairs::discard_row( $row['raw'] );
+					if ( is_wp_error( $result ) ) {
+						return new WP_Error( 'ab_mcp_sync_pairs_changed', sprintf( 'Pair %1$d was not discarded: it is not the pair as read any more (%2$s), so nothing was ended; the database took back all of it. Look at it again on the page AlphaBridge → Staging and discard it then.', (int) $row['id'], $result->get_error_message() ) );
+					}
+					$ops[] = self::discard_op( $row, (string) $row['snapshot_hash'] );
+				}
+				return true;
+			}
+		);
+		return is_wp_error( $done ) ? $done : self::discarded( $ops );
 	}
 
 	/* -------------------------------------------------------------- plan */
@@ -185,12 +262,57 @@ final class AB_MCP_Sync_Pairs_Tool {
 		// state binds what they meet now: each operation with the pair it
 		// finds and the object of this site read fresh, the print of the pair
 		// of sites, the connection.
-		$plan['state'] = array(
+		$plan['state'] = self::state_of_ops( $plan['ops'] );
+		return $plan;
+	}
+
+	/**
+	 * The state a plan binds, of its operations (plan()).
+	 *
+	 * @param array[] $ops The operations.
+	 * @return array
+	 */
+	private static function state_of_ops( array $ops ) {
+		return array(
 			'connection' => AB_MCP_Sync_Proposal::connection(),
-			'ops'        => $plan['ops'],
+			'ops'        => $ops,
 			'print'      => (string) AB_MCP_Sync_Anchor::pair_print(),
 		);
-		return $plan;
+	}
+
+	/**
+	 * The state discard of one pair is bound to, from the pair as a page
+	 * showed it (AB_MCP_Sync_Pairs::page_source_shown(): decoded with the
+	 * snapshot hash of the same row), without reading it again: what
+	 * state() gives for it while the pair is as shown, so that
+	 * discard_as_shown() deletes exactly that row or nothing (Codex round 2
+	 * of branch 12, A: the page showed one row and its form bound a newer
+	 * one read after it).
+	 *
+	 * @param array $pair The pair as shown, with snapshot_hash.
+	 * @return string|null Null where the row gave no snapshot.
+	 */
+	public static function state_shown( array $pair ) {
+		return empty( $pair['snapshot_hash'] ) ? null : self::state_of_rows( array( $pair ) );
+	}
+
+	/**
+	 * The operation that ends a pair (plan_discard(), state_shown()).
+	 *
+	 * @param array  $pair     The pair (decoded).
+	 * @param string $expected Its snapshot hash.
+	 * @return array
+	 */
+	private static function discard_op( array $pair, $expected ) {
+		return array(
+			'op'          => 'discard',
+			'pair_id'     => (int) $pair['id'],
+			'kind'        => $pair['kind'],
+			'live_ref'    => $pair['live_ref'],
+			'staging_ref' => $pair['staging_ref'],
+			'state'       => $pair['state'],
+			'expected'    => (string) $expected,
+		);
 	}
 
 	/**
@@ -389,15 +511,7 @@ final class AB_MCP_Sync_Pairs_Tool {
 			if ( is_wp_error( $snapshot ) ) {
 				return $snapshot;
 			}
-			$ops[] = array(
-				'op'          => 'discard',
-				'pair_id'     => (int) $id,
-				'kind'        => $pair['kind'],
-				'live_ref'    => $pair['live_ref'],
-				'staging_ref' => $pair['staging_ref'],
-				'state'       => $pair['state'],
-				'expected'    => AB_MCP_Sync_Pairs::snapshot_hash( $snapshot ),
-			);
+			$ops[] = self::discard_op( $pair, AB_MCP_Sync_Pairs::snapshot_hash( $snapshot ) );
 		}
 		return array(
 			'ops'     => $ops,
@@ -634,9 +748,19 @@ final class AB_MCP_Sync_Pairs_Tool {
 		if ( is_wp_error( $done ) ) {
 			return $done;
 		}
+		return self::discarded( $plan['ops'] );
+	}
+
+	/**
+	 * The answer of discard: the pairs ended.
+	 *
+	 * @param array[] $ops The operations done.
+	 * @return array
+	 */
+	private static function discarded( array $ops ) {
 		return array(
 			'done'   => true,
-			'counts' => array( 'discarded' => count( $plan['ops'] ) ),
+			'counts' => array( 'discarded' => count( $ops ) ),
 			'pairs'  => array_map(
 				static function ( $op ) {
 					return array(
@@ -648,7 +772,7 @@ final class AB_MCP_Sync_Pairs_Tool {
 						'done'        => 'ended',
 					);
 				},
-				array_slice( $plan['ops'], 0, self::NAMED )
+				array_slice( $ops, 0, self::NAMED )
 			),
 			'next'   => 'The objects of these pairs are without a pair now; no content changed. Propose again (wp_site_pairs action=propose) to pair them anew.',
 		);

@@ -37,7 +37,9 @@ RV = 'includes/sync/class-sync-revert.php'
 RP = 'includes/sync/class-sync-report.php'
 RU = 'includes/sync/class-sync-run.php'
 PT = 'includes/sync/class-sync-pairs-tool.php'
-FILEVAR = {TR: '$tr', MO: '$mo', VW: '$vw', AD: '$ad', ST: '$st', RC: '$rc', GD: '$gd', TS: '$ts', RV: '$rv', RP: '$rp', RU: '$ru', PT: '$pt'}
+SH = 'includes/sync/class-sync-shown.php'
+PR = 'includes/sync/class-sync-pairs.php'
+FILEVAR = {SH: '$sh', PR: '$pr', TR: '$tr', MO: '$mo', VW: '$vw', AD: '$ad', ST: '$st', RC: '$rc', GD: '$gd', TS: '$ts', RV: '$rv', RP: '$rp', RU: '$ru', PT: '$pt'}
 
 RUNS = {
     'u': ('unit', 'StagingTransferTest'),
@@ -96,6 +98,14 @@ IT_BUSY = 'testADiscardWaitsForAStepOfARunBeingWritten'
 IT_NOKEY = 'testWithoutTheKeyTheRunsStayOnThePageAndInTheStatus'
 IT_NOPAIR = 'testWithoutThePairTheRunsStayOnThePageAndInTheStatus'
 IT_PINNED = 'testTheRunThatWroteStaysInViewBehindTenNewerRunsOfTheWayBack'
+IT_JOURNAL_PRINT = 'testTheFormOfAnInterruptedRunCarriesThePrintOfTheJournalItShows'
+IT_ROW_PRINT = 'testTheFormOfAPairCarriesTheStateOfTheRowItShows'
+IT_GO_ON_KEY = 'testWithoutTheKeyAWayBackIsNotOfferedToGoOnAndNoWayNeedsTheKey'
+IT_OLDER = 'testOlderRunsTurnThePageOfThePageStaging'
+IT_CAP = 'testTheRunsToActOnAreAtMostAFixedNumberAndTheRestIsCounted'
+IT_SETTLE = 'testCloseAsCheckedSettlesTheRunFromItsOneReading'
+IT_ONCE = 'testTheCloseReadsTheStepsOnceAndComparesAndActsOnThatReading'
+U_MORE = 'testBeyondTheFixedNumberOfRunsToActOnASentenceCountsTheRestAndNamesTheWay'
 U_NOKEY = 'testWithoutTheKeyTheRunsStayWithTheirJournalAndCloseAsChecked'
 U_PINNED = 'testTheRunsToActOnStandAboveThePageOfTheListWithTheWayToOlderRuns'
 U_RESULT = 'testTheJournalShowsTheOutcomeOfAStepOfTheWayBackAsTheToolReportsIt'
@@ -145,8 +155,6 @@ e('status-begun', 'transfer: a step begun whose request ended is named, not sett
   "\t\t\t\t$out['begun']   = $begun;\n", "", 'it', IT_ABORT)
 e('status-lock', 'transfer: a step begun while the lock is held fresh is running', TR,
   "\t\t\tif ( AB_MCP_Sync_Run::lock_fresh() ) {", "\t\t\tif ( true ) {", 'it', IT_ABORT)
-e('status-journal', 'transfer: an interrupted run with its journal, parts and rest (decision 18)', TR,
-  "\t\tif ( $interrupted ) {\n\t\t\t$shown          = AB_MCP_Sync_Run::shown( $run );", "\t\tif ( false ) {\n\t\t\t$shown          = AB_MCP_Sync_Run::shown( $run );", 'it', IT_ABORT)
 e('rest-planned', 'rest(): only the steps not run', TR,
   "\t\t\tif ( 'planned' !== $step['state'] ) {\n\t\t\t\tcontinue;", "\t\t\tif ( false ) {\n\t\t\t\tcontinue;", 'u', U_REST)
 e('rest-object', 'rest(): each with its object from the plan', TR,
@@ -171,9 +179,6 @@ e('report-takeable', 'report_view(): what a run takes over: take_over and create
   "\tconst TAKEABLE = array( 'take_over', 'create' );", "\tconst TAKEABLE = array( 'take_over' );", 'u', U_REPORT)
 e('row-abort', 'run_row(): abort for an open run of the type push only', TR,
   "\t\t\t'abort'   => 'push' === $run['type'] && 'open' === $run['state'],", "\t\t\t'abort'   => 'push' === $run['type'],", 'it', IT_NORMAL)
-e('row-go-on', 'run_row(): go on with an open run of the way back of this person', TR,
-  "\t\t\t'go_on'   => 'revert' === $run['type'] && 'open' === $run['state'] && null === AB_MCP_Sync_Run::owner_refusal( $run ),",
-  "\t\t\t'go_on'   => false,", 'it', IT_NORMAL)
 e('backups-open', 'backups(): kept while the run is not closed', TR,
   "\t\tif ( ! in_array( (string) $run['state'], AB_MCP_Sync_Schema::CLOSED, true ) ) {\n\t\t\treturn array( 'state' => 'open'",
   "\t\tif ( false ) {\n\t\t\treturn array( 'state' => 'open'", 'u', U_KEEP)
@@ -207,17 +212,11 @@ e('checked-confirmed', 'close_checked(): only behind the nonce', TR,
 e('checked-print', 'close_checked(): on the interruption the page showed (Codex round 1, A)', TR,
   "\t\t$closed = AB_MCP_Sync_Run::close_checked( (int) $run_id, get_current_user_id(), $confirmed, (string) $print );",
   "\t\t$closed = AB_MCP_Sync_Run::close_checked( (int) $run_id, get_current_user_id(), $confirmed );", 'it', IT_PRINT)
-e('print-under-lock', 'close_checked_locked(): the print checked under the lock, else nothing is closed (Codex round 1, A)', RU,
-  "\t\tif ( null !== $expected && ! hash_equals( self::interruption_print( $run, $steps ), (string) $expected ) ) {", "\t\tif ( false ) {", 'it', IT_PRINT)
 e('form-checked-print', 'the form «Close as checked» carries the print of the interruption', VW,
   "<input type=\"hidden\" name=\"state\" value=\"' . esc_attr( (string) $run['print'] ) . '\">", "", 'u', U_INT)
 e('go-on-closed', 'go_on(): action=next until the run of the way back is closed', TR,
   "\t\t\tif ( in_array( (string) $answer['state'], AB_MCP_Sync_Schema::CLOSED, true ) ) {\n\t\t\t\tbreak;",
   "\t\t\tif ( false ) {\n\t\t\t\tbreak;", 'it', IT_NORMAL)
-e('discard-state', 'discard_as_shown(): only on the state the page showed', PT,
-  "\t\t\t\tif ( ! is_string( $state ) || ! hash_equals( hash( 'sha256', AB_MCP_Sync_Canon::encode( $plan['state'] ) ), $state ) ) {", "\t\t\t\tif ( false ) {", 'it', IT_PAIRS)
-e('discard-lock', 'discard_as_shown(): under the lock of the write boundary (Codex round 1, A)', PT,
-  "\t\treturn AB_MCP_Sync_Run::under_lock(\n\t\t\tstatic function () use ( $a, $state ) {", "\t\treturn call_user_func(\n\t\t\tstatic function () use ( $a, $state ) {", 'it', IT_BUSY)
 e('view-without-key', 'view(): the runs without the key of the staging site', TR,
   "\t\t$view['anchored'] = $anchored;\n", "\t\t$view['anchored'] = $anchored;\n\t\tif ( ! $anchored ) {\n\t\t\treturn $view;\n\t\t}\n", 'it', IT_NOKEY)
 e('status-run-without-key', 'status(): the run without the key', TR,
@@ -230,10 +229,6 @@ e('html-why-not', 'html(): the sentence why the report and the pairs are not sho
   "\t\tif ( null === $active ) {\n\t\t\t// The runs stay without the key", "\t\tif ( false ) {\n\t\t\t// The runs stay without the key", 'u', U_NOKEY)
 e('runs-after', 'view(): a page of the list after the run the page before ended with', TR,
   "\t\t$page  = AB_MCP_Sync_Run::page( $after, self::RUNS );", "\t\t$page  = AB_MCP_Sync_Run::page( 0, self::RUNS );", 'it', IT_PINNED)
-e('pinned', 'view(): the runs to act on whatever page it is', TR,
-  "\t\t\t$view['pinned']     = self::pinned( $keep, $on );", "\t\t\t$view['pinned']     = array();", 'it', IT_PINNED)
-e('pinned-not-twice', 'pinned(): not a run on the page already', TR,
-  "\t\t\tif ( isset( $on[ (int) $id ] ) ) {", "\t\t\tif ( false ) {", 'it', IT_PINNED)
 e('pinned-way-back-open', 'way_back_open(): a write step no way back named', TR,
   " && ! isset( $named[ (int) $step['seq'] ] ) ) {", " ) {", 'it', IT_PINNED)
 e('html-older-runs', 'runs_html(): the way to older runs', VW,
@@ -323,6 +318,54 @@ e('nonce-discard', 'the form «Discard» signed for its pair', VW,
   "wp_nonce_field( 'ab_mcp_transfer_discard_' . (int) $pair['id'], ", "wp_nonce_field( 'ab_mcp_transfer_discard', ", 'u', U_FORMS)
 e('form-discard-state', 'the form «Discard» carries the state the page showed', VW,
   "<input type=\"hidden\" name=\"state\" value=\"' . esc_attr( $pair['discard'] ) . '\">", "", 'u', U_FORMS)
+
+# ------------------------------------- Codex rounds 1 and 2, the helper
+e('status-journal', 'run_status(): an interrupted run with its journal, parts and rest (decision 18)', TR,
+  "\t\tif ( $interrupted ) {\n\t\t\t$shown          = AB_MCP_Sync_Run::shown( $run, $steps );", "\t\tif ( false ) {\n\t\t\t$shown          = AB_MCP_Sync_Run::shown( $run, $steps );", 'it', IT_ABORT)
+e('helper-compare', 'AB_MCP_Sync_Shown::done(): nothing happens where the print of the form does not hold', SH,
+  "\t\t\t\tif ( null !== $expected && ( ! is_string( $expected ) || ! hash_equals( (string) call_user_func( $print, $data ), $expected ) ) ) {",
+  "\t\t\t\tif ( false ) {", 'it', IT_PRINT)
+e('helper-compare-pairs', 'AB_MCP_Sync_Shown::done(): the same for «Discard»', SH,
+  "\t\t\t\tif ( null !== $expected && ( ! is_string( $expected ) || ! hash_equals( (string) call_user_func( $print, $data ), $expected ) ) ) {",
+  "\t\t\t\tif ( null === $expected ) {", 'it', IT_RACE)
+e('helper-lock', 'AB_MCP_Sync_Shown::done(): under the lock of the write boundary', SH,
+  "\t\treturn AB_MCP_Sync_Run::under_lock(\n\t\t\tstatic function () use ( $read, $print, $expected, $act, $refusal ) {",
+  "\t\treturn call_user_func(\n\t\t\tstatic function () use ( $read, $print, $expected, $act, $refusal ) {", 'it', IT_BUSY)
+e('close-one-reading', 'close_checked(): the print from the reading the close acts on, not a reading of its own', RU,
+  "\t\t\t\treturn self::interruption_print( $read['run'], $read['steps'] );",
+  "\t\t\t\treturn self::interruption_print( $read['run'], self::steps( (int) $read['run']['run_id'] ) );", 'it', IT_ONCE)
+e('close-settle', 'interruption_read(): a step begun by a request that ended makes the run interrupted, from the one reading', RU,
+  "\t\t\t\tif ( 'begun' === $step['state'] && ! isset( self::$own[ (int) $run_id ][ (int) $step['seq'] ] ) ) {\n\t\t\t\t\t$moved = self::set_state( $run_id, $run['state'], 'interrupted' );",
+  "\t\t\t\tif ( false ) {\n\t\t\t\t\t$moved = self::set_state( $run_id, $run['state'], 'interrupted' );", 'it', IT_SETTLE)
+e('view-one-reading', 'run_view(): journal and print from one reading', TR,
+  "\t\t$shown = is_wp_error( $read ) ? $read : AB_MCP_Sync_Run::shown( $run, $read['read'] );",
+  "\t\t$shown = is_wp_error( $read ) ? $read : AB_MCP_Sync_Run::shown( $run );", 'it', IT_JOURNAL_PRINT)
+e('pairs-row-print', 'view(): the print of the form of a pair from the row shown', TR,
+  "\t\t\t\t$state                    = $shown_p['print'][ (int) $pair['id'] ];",
+  "\t\t\t\t$state                    = AB_MCP_Sync_Pairs_Tool::state( array( 'action' => 'discard', 'pair_ids' => array( (int) $pair['id'] ) ) );", 'it', IT_ROW_PRINT)
+e('discard-row-condition', 'discard_row(): one row deleted, else changed', PR,
+  "\t\treturn 1 === (int) $done ? true : self::changed();\n\t}\n\n\t/**\n\t * The rows of a page",
+  "\t\treturn true;\n\t}\n\n\t/**\n\t * The rows of a page", 'it', IT_ROW_PRINT)
+e('row-go-on', 'run_row(): go on with an open run of the way back of this person, with the key', TR,
+  "\t\t\t'go_on'   => 'revert' === $run['type'] && 'open' === $run['state'] && null === AB_MCP_Sync_Run::owner_refusal( $run ) && self::keyed(),",
+  "\t\t\t'go_on'   => 'revert' === $run['type'] && 'open' === $run['state'] && null === AB_MCP_Sync_Run::owner_refusal( $run ),", 'it', IT_GO_ON_KEY)
+e('row-go-on-any', 'run_row(): go on only with an open run of the way back', TR,
+  "\t\t\t'go_on'   => 'revert' === $run['type'] && 'open' === $run['state'] && null === AB_MCP_Sync_Run::owner_refusal( $run ) && self::keyed(),",
+  "\t\t\t'go_on'   => false,", 'it', IT_NORMAL)
+e('next-without-key', 'run_status(): without the key no way that needs it', TR,
+  "\t\tif ( ! self::keyed() ) {\n\t\t\t// The ways of the tools need the key", "\t\tif ( false ) {\n\t\t\t// The ways of the tools need the key", 'it', IT_GO_ON_KEY)
+e('pinned', 'view(): the runs to act on whatever page it is', TR,
+  "\t\t\t$view['pinned']       = $pinned['runs'];", "\t\t\t$view['pinned']       = array();", 'it', IT_PINNED)
+e('pinned-not-twice', 'pinned(): not a run on the page already', TR,
+  "static fn( $id ) => ! isset( $on[ (int) $id ] )", "static fn( $id ) => true", 'it', IT_PINNED)
+e('pinned-cap', 'pinned(): at most PINNED', TR,
+  "\t\t\tif ( count( $out['runs'] ) >= self::PINNED ) {", "\t\t\tif ( false ) {", 'it', IT_CAP)
+e('pinned-more', 'pinned(): the rest counted', TR,
+  "\t\t\t\t$out['more'] = count( $ids ) - $i;", "\t\t\t\t$out['more'] = 0;", 'it', IT_CAP)
+e('html-more', 'runs_html(): the sentence with the number of further runs and the way', VW,
+  "\t\t\tif ( $more > 0 ) {", "\t\t\tif ( false ) {", 'u', U_MORE)
+e('page-runs-after', 'render_staging(): the page of the runs passed on', AD,
+  "\t\t\t\t'runs_after'  => isset( $_GET['runs_after'] ) ? absint( wp_unslash( $_GET['runs_after'] ) ) : 0,", "\t\t\t\t'runs_after'  => 0,", 'it', IT_OLDER)
 
 # ------------------------------------------------------------ handlers
 e('handler-hook', 'the handler of «Abort» hooked', AD,

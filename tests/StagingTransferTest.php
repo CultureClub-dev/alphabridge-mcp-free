@@ -601,7 +601,7 @@ final class StagingTransferTest extends TestCase {
 			$actions = array_column( self::forms( $html ), 'action' );
 			self::assertSame( array( 'ab_mcp_transfer_checked', 'ab_mcp_transfer_abort' ), $actions, $side . ': close as checked and abort, without the key.' );
 			self::assertStringContainsString( 'Run 4 is interrupted', self::text( $html ) );
-			self::assertStringContainsString( 'The report, the object pairs and taking a pair back need the confirmed key of the staging site', self::text( $html ), $side . ': why the rest is not shown.' );
+			self::assertStringContainsString( 'The report, the object pairs, taking a pair back and going on with a way back need the confirmed key of the staging site', self::text( $html ), $side . ': why the rest is not shown.' );
 			self::assertStringNotContainsString( 'Last report', self::text( $html ) );
 		}
 		$none = AB_MCP_Transfer_View::html( self::view( 'none' ) );
@@ -629,6 +629,22 @@ final class StagingTransferTest extends TestCase {
 		self::assertStringEndsWith( 'admin.php?page=alphabridge-staging&runs_after=14#ab-staging-transfer', $older->item( 0 )->getAttribute( 'href' ) );
 		$view['runs_next'] = null;
 		self::assertStringNotContainsString( 'Older runs', AB_MCP_Transfer_View::html( $view ) );
+	}
+
+	public function testBeyondTheFixedNumberOfRunsToActOnASentenceCountsTheRestAndNamesTheWay(): void {
+		// Codex round 2 of branch 12, B.
+		$view = self::view(
+			'production',
+			array(
+				'pinned'      => array( self::row( 2, 'closed_aborted' ) ),
+				'pinned_more' => 7,
+			)
+		);
+		$text = self::text( AB_MCP_Transfer_View::html( $view ) );
+		self::assertStringContainsString( 'At most 20 runs to act on are listed here; 7 further runs whose backups are kept were not looked at. They are in the list below (Older runs), and wp_staging_status names the run that is not closed.', $text );
+		self::assertSame( 20, AB_MCP_Transfer::PINNED );
+		$view['pinned_more'] = 0;
+		self::assertStringNotContainsString( 'further runs', self::text( AB_MCP_Transfer_View::html( $view ) ) );
 	}
 
 	public function testTheJournalShowsTheOutcomeOfAStepOfTheWayBackAsTheToolReportsIt(): void {
