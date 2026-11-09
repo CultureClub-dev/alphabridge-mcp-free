@@ -465,9 +465,12 @@ class AB_MCP_Tools_Staging extends AB_MCP_Tools_Base {
 	 * sentence in the server instructions (AB_MCP_Staging::offered():
 	 * wp_staging_status on in the registry the server answers with, and a
 	 * connection that can write): the way from a change the person asks
-	 * for to a staging site, the work there and the changes carried over
-	 * one at a time. It names only what wp_staging_status reports about the
-	 * host and advertises nothing.
+	 * for to a staging site, the work there and the changes carried over:
+	 * step 7 since Z8 (decision 35 of the plan of 01.11.2026, branch 12)
+	 * report, approval, takeover, check and way back for a production site
+	 * paired with its staging site and its key confirmed, one object at a
+	 * time with the usual tools without such a pair. It names only what
+	 * wp_staging_status reports about the host and advertises nothing.
 	 *
 	 * @param array                     $prompts  Prompts.
 	 * @param AB_MCP_Tool_Registry|null $registry The tools of the server.
@@ -480,7 +483,7 @@ class AB_MCP_Tools_Staging extends AB_MCP_Tools_Base {
 		}
 		$prompts[] = array(
 			'name'        => 'staging_workflow',
-			'description' => 'Guided steps: make a change on a staging site first — say why and how, set up and protect the staging site, work there, then carry the change over to the production site one object at a time and check it.',
+			'description' => 'Guided steps: make a change on a staging site first — say why and how, set up and protect the staging site, work there, then carry the change over to the production site: report, approval, takeover, check, way back.',
 			'arguments'   => array(
 				array(
 					'name'        => 'change',
@@ -500,7 +503,9 @@ class AB_MCP_Tools_Staging extends AB_MCP_Tools_Base {
 				. "4. Set it up. The person makes the copy, in the host's control panel or the plugin's own screen, and AlphaBridge MCP has to be active on it. On the page AlphaBridge → Staging of each site, the person confirms its role and enters the address of the other site; a copy can carry the settings of this site, so check the role on the copy. Then the person connects you to the staging site as well, so you can work there.\n"
 				. "5. Protect the staging site. On the staging site, switch on the preview protection with wp_set_preview_protection (enabled=true), or on its page AlphaBridge → Staging, and give the person the password from the answer for whoever should see the preview. If the protection is on already, the answer says changed=false and carries no password: ask the person for the password they have, or, only with their yes, set a new one with new_password=true, which signs every visitor out; say so first.\n"
 				. "6. Work on the staging site. Make the change there with the usual tools, show it to the person with the preview password, and get their approval.\n"
-				. "7. Carry it over one object at a time. This needs a connection that can write on both sites; if one is missing or only reads, tell the person how to get it: connect you on the page AlphaBridge → AI Connection on that site (Connect your AI assistant) or add the site in the hub, with the access level Full (Content reaches posts, pages, media, terms and comments only) and write access switched on there. Read each changed page, post, menu, term or setting on the staging site and write it on the production site with the same tools, after showing the person what will change. Where a tool records an undo point, its answer carries an undo token, and wp_undo with it takes the change back; where the answer has none, tell the person that this change has no way back through AlphaBridge. A file: wp_upload_media_from_url with its address on the staging site (the preview protection does not cover files under /wp-content/uploads/).\n"
+				. "7. Carry it over: report, approval, takeover, check, way back. This needs a connection that can write on both sites; if one is missing or only reads, tell the person how to get it: connect you on the page AlphaBridge → AI Connection on that site (Connect your AI assistant) or add the site in the hub, with the access level Full (Content reaches posts, pages, media, terms and comments only) and write access switched on there. "
+				. "Where the production site is paired with the staging site and a person confirmed the key of the staging site on the page AlphaBridge → Staging of the production site (wp_staging_status on the production site reports it under transfer), the takeover carries the change over. The report: on the staging site wp_site_export with purpose=inventory, on the production site wp_site_import_chunk until each package is complete, then wp_site_diff there with the packages (wp_site_pairs first where the report asks for pairs). The approval: show the person what the report says will change, and take over only what they approve. The takeover: on the staging site wp_site_export with purpose=objects, the report_hash and the refs of what was approved, taken over the same way, then wp_site_push with action=plan on the production site, its preview shown and confirmed with its token in the same call, then action=next, one step per call, until the run is closed. The check: the last step of the run checks it, and action=status shows its journal, each part with its state. The way back: wp_site_revert takes back what a run wrote, pair by pair, and a person can do the same on the page AlphaBridge → Staging of the production site. "
+				. "Without such a pair, read each changed page, post, menu, term or setting on the staging site and write it on the production site with the same tools, after showing the person what will change. Where a tool records an undo point, its answer carries an undo token, and wp_undo with it takes the change back; where the answer has none, tell the person that this change has no way back through AlphaBridge. A file: wp_upload_media_from_url with its address on the staging site (the preview protection does not cover files under /wp-content/uploads/).\n"
 				. "8. Check. Read the changed objects on the production site again and tell the person what changed and where to look.\n\n"
 				. 'If the person would rather not use staging, or chooses drafts, go ahead that way: the choice is theirs.',
 		);

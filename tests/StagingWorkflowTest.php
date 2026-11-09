@@ -30,7 +30,10 @@
  *   stay as they are. Its steps keep drafts to posts and pages, have
  *   wp_staging_status check the setting up only, cover a protection that
  *   is on already, and say that carrying over needs a connection that can
- *   write on both sites.
+ *   write on both sites. Step 7 (Z8, decision 35) is report, approval,
+ *   takeover, check and way back, in that order, for a production site
+ *   paired with its staging site and its key confirmed, and the usual tools
+ *   one object at a time without such a pair.
  * - The sentence, the prompt and the checklist of wp_staging_status keep
  *   drafts to the same content, posts and pages; the prompt and the
  *   checklist say that media, menus and settings take effect at once.
@@ -297,10 +300,19 @@ final class StagingWorkflowTest extends TestCase {
 			'nothing of the host it does not say'   => 'Name a host and its staging function only where wp_staging_status names them',
 			'the preview protection'                => 'switch on the preview protection with wp_set_preview_protection (enabled=true), or on its page AlphaBridge → Staging',
 			'a protection on already'               => 'If the protection is on already, the answer says changed=false and carries no password: ask the person for the password they have, or, only with their yes, set a new one with new_password=true, which signs every visitor out; say so first.',
-			'one object at a time'                  => 'Carry it over one object at a time.',
+			// Step 7 since Z8 (decision 35, branch 12): report, approval,
+			// takeover, check, way back for a paired production site with its
+			// key confirmed; the usual tools without such a pair.
+			'the five of step 7'                    => '7. Carry it over: report, approval, takeover, check, way back.',
+			'where the takeover goes'               => 'Where the production site is paired with the staging site and a person confirmed the key of the staging site on the page AlphaBridge → Staging of the production site (wp_staging_status on the production site reports it under transfer), the takeover carries the change over.',
+			'the report'                            => 'The report: on the staging site wp_site_export with purpose=inventory, on the production site wp_site_import_chunk until each package is complete, then wp_site_diff there with the packages (wp_site_pairs first where the report asks for pairs).',
+			'the approval'                          => 'The approval: show the person what the report says will change, and take over only what they approve.',
+			'the takeover'                          => 'then wp_site_push with action=plan on the production site, its preview shown and confirmed with its token in the same call, then action=next, one step per call, until the run is closed.',
+			'the check'                             => 'The check: the last step of the run checks it, and action=status shows its journal, each part with its state.',
+			'the way back'                          => 'The way back: wp_site_revert takes back what a run wrote, pair by pair, and a person can do the same on the page AlphaBridge → Staging of the production site.',
 			'a connection that writes on both'      => 'This needs a connection that can write on both sites; if one is missing or only reads, tell the person how to get it',
 			'the way to that connection'            => 'connect you on the page AlphaBridge → AI Connection on that site (Connect your AI assistant) or add the site in the hub, with the access level Full (Content reaches posts, pages, media, terms and comments only) and write access switched on there',
-			'read there, write here'                => 'Read each changed page, post, menu, term or setting on the staging site and write it on the production site with the same tools',
+			'read there, write here, without a pair' => 'Without such a pair, read each changed page, post, menu, term or setting on the staging site and write it on the production site with the same tools',
 			'undo where a tool records a point'     => 'Where a tool records an undo point, its answer carries an undo token, and wp_undo with it takes the change back',
 			'and where it records none'             => 'where the answer has none, tell the person that this change has no way back through AlphaBridge',
 			'the person decides'                    => 'If the person would rather not use staging, or chooses drafts, go ahead that way',
@@ -308,6 +320,17 @@ final class StagingWorkflowTest extends TestCase {
 		foreach ( $parts as $what => $part ) {
 			self::assertStringContainsString( $part, $prompt['text'], $what );
 		}
+		// The five in the order of the step, each once as its sentence begins.
+		$at = array();
+		foreach ( array( 'The report: ', 'The approval: ', 'The takeover: ', 'The check: ', 'The way back: ' ) as $part ) {
+			self::assertSame( 1, substr_count( $prompt['text'], $part ), $part );
+			$at[] = strpos( $prompt['text'], $part );
+		}
+		$sorted = $at;
+		sort( $sorted );
+		self::assertSame( $sorted, $at, 'Report, approval, takeover, check, way back.' );
+		self::assertLessThan( strpos( $prompt['text'], '8. Check.' ), strpos( $prompt['text'], 'The way back: ' ), 'All of it in step 7.' );
+		self::assertStringNotContainsString( 'Carry it over one object at a time.', $prompt['text'], 'The step of before is gone.' );
 	}
 
 	public function testThePromptIsListedAndFilledThroughTheServer(): void {
