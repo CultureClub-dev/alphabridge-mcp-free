@@ -7184,7 +7184,7 @@ msgstr "La ejecución %1$d tenía el estado %2$s cuando esta llamada la leyó y 
 
 #, php-format
 msgid "Step %1$d is not run: the PHP time limit of this request is %2$d s (set_time_limit() did not raise it), and one step that writes needs up to %3$d s; a step ended by the limit halfway would leave the object in between. Nothing was written; the step stays planned. Raise max_execution_time to at least %3$d s at the host (at Infomaniak under Advanced → PHP | Apache), or let set_time_limit() take, then call again."
-msgstr "El paso %1$d no se ejecuta: el límite de tiempo de PHP de esta petición es de %2$d s (set_time_limit() no lo ha aumentado), y un paso que escribe necesita hasta %3$d s; un paso terminado a medias por el límite dejaría el objeto a medio camino. No se ha escrito nada; el paso sigue planificado. Aumenta max_execution_time a al menos %3$d s en el hosting (en Infomaniak en Avanzado → PHP | Apache) o deja que set_time_limit() surta efecto, y después vuelve a llamar."
+msgstr "El paso %1$d no se ejecuta: el límite de tiempo de PHP de esta petición es de %2$d s (set_time_limit() no lo ha aumentado), y un paso que escribe necesita hasta %3$d s; un paso terminado a medias por el límite dejaría el objeto a medio camino. No se ha escrito nada; el paso sigue planificado. Aumenta max_execution_time a al menos %3$d s en el hosting (en Infomaniak en Advanced → PHP | Apache) o deja que set_time_limit() surta efecto, y después vuelve a llamar."
 
 #, php-format
 msgid "Step %d has an operation this version does not run. Ask for the status of the run (wp_site_push action=status)."

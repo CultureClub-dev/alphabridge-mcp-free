@@ -9491,7 +9491,7 @@ msgstr "Libérez au moins %1$s sur le disque du site (%2$s libres actuellement).
 
 #, php-format
 msgid "Raise the PHP time limit (max_execution_time) to at least %1$d s (today %2$d s); at Infomaniak under Advanced → PHP | Apache."
-msgstr "Augmentez la limite de temps PHP (max_execution_time) à au moins %1$d s (actuellement %2$d s) ; chez Infomaniak sous Avancé → PHP | Apache."
+msgstr "Augmentez la limite de temps PHP (max_execution_time) à au moins %1$d s (actuellement %2$d s) ; chez Infomaniak sous Advanced → PHP | Apache."
 
 #, php-format
 msgid "Raise the PHP memory limit (memory_limit) to at least %1$s (today %2$s)."
