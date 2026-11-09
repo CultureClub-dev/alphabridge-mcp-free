@@ -651,7 +651,8 @@ e('now-changed', 'now(): a pair changed since the proposal is skipped', T,
   "\t\treturn hash_equals( $op['expected'], AB_MCP_Sync_Pairs::snapshot_hash( $snapshot ) ) ? null : sprintf( 'pair %d changed since the proposal', $op['pair_id'] );", "\t\treturn null;", 'it', 'testAPairChangedSinceTheProposalIsSkippedNotOverwritten')
 e('nothing-left', 'plan_confirm(): nothing left to confirm is refused', T,
   "\t\tif ( array() === $fresh ) {", "\t\tif ( false ) {", 'it', 'testAProposalOfTheStagingInventoryIsConfirmedListedAndDiscardedOverMcp')
-DI = "\t\tif ( null === $ids || array() === $ids || count( $ids ) > self::MAX || count( array_unique( $ids ) ) !== count( $ids ) ) {"
+# plan_discard() by the line before (discard_as_shown() checks the same, branch 12).
+DI = "$source ) {\n\t\t$ids = self::numbers( isset( $a['pair_ids'] ) ? $a['pair_ids'] : null );\n\t\tif ( null === $ids || array() === $ids || count( $ids ) > self::MAX || count( array_unique( $ids ) ) !== count( $ids ) ) {"
 e('discard-ids', 'plan_discard(): pair_ids is a list of numbers', T, DI, DI.replace('null === $ids || ', ''), 'tool', TOOL_IDS)
 e('discard-empty', 'plan_discard(): at least one', T, DI, DI.replace('array() === $ids || ', ''), 'tool', TOOL_IDS)
 e('discard-max', 'plan_discard(): at most MAX', T, DI, DI.replace('count( $ids ) > self::MAX || ', ''), 'tool', TOOL_IDS)
@@ -674,8 +675,8 @@ e('live-changed-shown', 'named(): the preview says an object changed since the p
   "\t\t\t$op['changed_since_proposal'] = $op['live_now'] !== $op['base_live'];", "\t\t\t$op['changed_since_proposal'] = false;", 'it', 'testTheTokenCoversTheObjectsOfThisSiteAsTheyAreWhenConfirmed')
 e('state-connection', 'plan(): the state binds the connection', T,
   "\t\t\t'connection' => AB_MCP_Sync_Proposal::connection(),\n\t\t\t'ops'", "\t\t\t'ops'", 'it', 'testEachPartOfTheStateOfADiscardBindsItsToken')
-e('state-print', 'plan(): the state binds the print of the pair of sites', T,
-  "\t\t\t'print'      => (string) AB_MCP_Sync_Anchor::pair_print(),\n\t\t);\n\t\treturn $plan;", "\t\t);\n\t\treturn $plan;", 'it', 'testEachPartOfTheStateOfADiscardBindsItsToken')
+e('state-print', 'plan(): the state binds the print of the pair of sites (state_of_ops(), since branch 12)', T,
+  "\t\t\t'print'      => (string) AB_MCP_Sync_Anchor::pair_print(),\n\t\t);\n\t}", "\t\t);\n\t}", 'it', 'testEachPartOfTheStateOfADiscardBindsItsToken')
 e('confirm-transaction', 'confirm(): one transaction, nothing kept where a pair fails', T,
   "\t\t$done = AB_MCP_Sync_Pairs::transaction(\n\t\t\tstatic function () use ( $plan, &$out ) {", "\t\t$done = call_user_func(\n\t\t\tstatic function () use ( $plan, &$out ) {", 'it', 'testAConfirmationThatCannotWriteAPairKeepsNothing')
 e('confirm-transaction-read', 'confirm(): nothing kept where the read after an insert fails', T,
@@ -1055,7 +1056,7 @@ FE = "\t\tif ( self::now() >= (int) $head['expires'] ) {"
 e('rep-find-expires', 'find(): not after it expired', R, FE, "\t\tif ( false ) {", 'itrep', IT_DAY)
 e('rep-find-expires-at', 'find(): at its expiry it holds no more', R, FE, FE.replace('>=', '>'), 'itrep', IT_DAY)
 e('rep-find-format', 'find(): a head of this format', R,
-  "\t\tif ( ! is_array( $head ) || self::FORMAT !== ( $head['format'] ?? null ) ) {", "\t\tif ( ! is_array( $head ) ) {", 'itrep', IT_HEAD)
+  "\t\tif ( ! is_array( $head ) || self::FORMAT !== ( $head['format'] ?? null ) ) {\n\t\t\treturn self::unknown();", "\t\tif ( ! is_array( $head ) ) {\n\t\t\treturn self::unknown();", 'itrep', IT_HEAD)
 e('rep-find-label', 'find(): a group of the label of reports only', R,
   "\t\t\tif ( $report_id === $entry['gid'] && self::LABEL === $entry['label'] ) {", "\t\t\tif ( $report_id === $entry['gid'] ) {", 'itrep', IT_HEAD)
 e('rep-find-id', 'find(): a report id is 32 hex', R,

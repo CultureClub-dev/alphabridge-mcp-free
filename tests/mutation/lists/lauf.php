@@ -121,6 +121,7 @@ $g  = 'includes/class-staging-gate.php';
 $dk = 'includes/sync/class-sync-db-kinds.php';
 $bk = 'includes/sync/class-sync-backup.php';
 $cn = 'includes/sync/class-sync-canon.php';
+$sh = 'includes/sync/class-sync-shown.php';
 
 return array(
 	array(
@@ -2026,26 +2027,26 @@ return array(
 		'id'      => 'lauf/run-settle-own',
 		'clause'  => 'begun(): a step this request began under the lock of its call is not interrupted',
 		'file'    => $ru,
-		'search'  => "\t\t\tif ( 'begun' === \$step['state'] && ! isset( self::\$own[ (int) \$run_id ][ (int) \$step['seq'] ] ) ) {",
-		'replace' => "\t\t\tif ( 'begun' === \$step['state'] ) {",
+		'search'  => "\t\t\tif ( 'begun' === \$step['state'] && ! isset( self::\$own[ (int) \$run_id ][ (int) \$step['seq'] ] ) ) {\n\t\t\t\treturn \$step;",
+		'replace' => "\t\t\tif ( 'begun' === \$step['state'] ) {\n\t\t\t\treturn \$step;",
 		'run'     => $it( 'SyncRunTest', 'testUnderTheLockOfItsCallAStepTheCallBeganIsItsOwnAndAStepAnEndedRequestLeftIsInterrupted' ),
 		'expect'  => '/testUnderTheLockOfItsCallAStepTheCallBeganIsItsOwnAndAStepAnEndedRequestLeftIsInterrupted/',
 	),
 	array(
 		'id'      => 'lauf/run-close-checked-lock',
-		'clause'  => 'close_checked(): under the lock of the call; another request holding it refuses as busy',
-		'file'    => $ru,
-		'search'  => "\t\treturn self::under_lock(\n\t\t\tstatic function () use ( \$run_id, \$user_id ) {",
-		'replace' => "\t\treturn call_user_func(\n\t\t\tstatic function () use ( \$run_id, \$user_id ) {",
+		'clause'  => 'close_checked(): under the lock of the call (AB_MCP_Sync_Shown::done()); another request holding it refuses as busy',
+		'file'    => $sh,
+		'search'  => "\t\treturn AB_MCP_Sync_Run::under_lock(\n\t\t\tstatic function () use ( \$read, \$print, \$expected, \$act, \$refusal ) {",
+		'replace' => "\t\treturn call_user_func(\n\t\t\tstatic function () use ( \$read, \$print, \$expected, \$act, \$refusal ) {",
 		'run'     => $it( 'SyncRunTest', 'testUnderTheLockOfItsCallAStepTheCallBeganIsItsOwnAndAStepAnEndedRequestLeftIsInterrupted' ),
 		'expect'  => '/testUnderTheLockOfItsCallAStepTheCallBeganIsItsOwnAndAStepAnEndedRequestLeftIsInterrupted/',
 	),
 	array(
 		'id'      => 'lauf/run-close-checked-settle',
-		'clause'  => 'close_checked(): the run settled under the lock, so a step a request that ended left makes it interrupted and it is closed',
+		'clause'  => 'close_checked(): the run settled under the lock from its one reading (interruption_read()), so a step a request that ended left makes it interrupted and it is closed',
 		'file'    => $ru,
-		'search'  => "\t\t\$run = self::settle( \$run );\n\t\tif ( is_wp_error( \$run ) ) {\n\t\t\treturn \$run;\n\t\t}\n\t\tif ( 'interrupted' !== \$run['state'] ) {",
-		'replace' => "\t\tif ( 'interrupted' !== \$run['state'] ) {",
+		'search'  => "\t\t\t\tif ( 'begun' === \$step['state'] && ! isset( self::\$own[ (int) \$run_id ][ (int) \$step['seq'] ] ) ) {\n\t\t\t\t\t\$moved = self::set_state( \$run_id, \$run['state'], 'interrupted' );",
+		'replace' => "\t\t\t\tif ( false ) {\n\t\t\t\t\t\$moved = self::set_state( \$run_id, \$run['state'], 'interrupted' );",
 		'run'     => $it( 'SyncRunTest', 'testUnderTheLockOfItsCallAStepTheCallBeganIsItsOwnAndAStepAnEndedRequestLeftIsInterrupted' ),
 		'expect'  => '/testUnderTheLockOfItsCallAStepTheCallBeganIsItsOwnAndAStepAnEndedRequestLeftIsInterrupted/',
 	),
