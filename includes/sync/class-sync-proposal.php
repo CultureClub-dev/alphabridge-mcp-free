@@ -999,7 +999,7 @@ final class AB_MCP_Sync_Proposal {
 			'live'        => $index['live'],
 			'entries'     => $entries,
 			'next_after'  => $page['more'] ? $last : null,
-			'next'        => 'Show the entries to the person; nothing is paired yet. To pair, call wp_site_pairs with action=confirm, this proposal_id and the entries the person chose: select (entry numbers), categories (all equal, differs or realign entries, after the number in after) or choices (for an uncertain entry: the staging_ref and live_ref the person chose; these are never paired otherwise). equal is paired as active, differs and a chosen pair of other content as unclear (the report then asks which side wins), realign makes the states of both sides now the new bases.' . ( $page['more'] ? ' More entries: call again with action=propose, this proposal_id and after=' . $last . '.' : '' ),
+			'next'        => __( 'Nothing is paired yet.', 'alphabridge-mcp' ) . ' Show the entries to the person. To pair, call wp_site_pairs with action=confirm, this proposal_id and the entries the person chose: select (entry numbers), categories (all equal, differs or realign entries, after the number in after) or choices (for an uncertain entry: the staging_ref and live_ref the person chose; these are never paired otherwise). equal is paired as active, differs and a chosen pair of other content as unclear (the report then asks which side wins), realign makes the states of both sides now the new bases.' . ( $page['more'] ? ' More entries: call again with action=propose, this proposal_id and after=' . $last . '.' : '' ),
 		);
 	}
 

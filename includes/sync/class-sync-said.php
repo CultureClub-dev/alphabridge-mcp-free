@@ -13,7 +13,8 @@
  * is the stable key, to a literal gettext call. A text this list does not
  * know is given as it is.
  *
- * The list holds every reason of the tables (SyncSaidTest holds it to them).
+ * The list holds every reason of the tables, those of the environment
+ * (AB_MCP_Sync_Env::LOCKS) among them (SyncSaidTest holds it to them).
  *
  * @package AlphaBridge_MCP
  */
@@ -227,6 +228,16 @@ final class AB_MCP_Sync_Said {
 			'sanitize_option() of this site would store another value for the option than the staging site has: change the setting on the staging site, or by hand in wp-admin (Settings).' => __( 'sanitize_option() of this site would store another value for the option than the staging site has: change the setting on the staging site, or by hand in wp-admin (Settings).', 'alphabridge-mcp' ),
 			'The option names an object (a page, a category, the sticky posts, an address with an id) that has no counterpart on this site: pair or create the target first.' => __( 'The option names an object (a page, a category, the sticky posts, an address with an id) that has no counterpart on this site: pair or create the target first.', 'alphabridge-mcp' ),
 			'Data of the running site (group B): never compared, never taken over.' => __( 'Data of the running site (group B): never compared, never taken over.', 'alphabridge-mcp' ),
+			// The reasons of the locks of the environment (AB_MCP_Sync_Env::LOCKS).
+			'A plugin is code: its files and whether it runs are compared and taken over with the code of the site.' => __( 'A plugin is code: its files and whether it runs are compared and taken over with the code of the site.', 'alphabridge-mcp' ),
+			'A theme is code: its files and which theme runs are compared and taken over with the code of the site.' => __( 'A theme is code: its files and which theme runs are compared and taken over with the code of the site.', 'alphabridge-mcp' ),
+			'WordPress itself is never taken over: where staging is newer, this site is updated first (wp_update_core); its files are compared with the code of the site.' => __( 'WordPress itself is never taken over: where staging is newer, this site is updated first (wp_update_core); its files are compared with the code of the site.', 'alphabridge-mcp' ),
+			'A must-use plugin is a file: compared by its SHA-256, taken over with the files of the site.' => __( 'A must-use plugin is a file: compared by its SHA-256, taken over with the files of the site.', 'alphabridge-mcp' ),
+			'A table of a plugin without an adapter: shown by its rows and schema, its rows are not read; taken over only through an adapter, or as a whole on a confirmation per table.' => __( 'A table of a plugin without an adapter: shown by its rows and schema, its rows are not read; taken over only through an adapter, or as a whole on a confirmation per table.', 'alphabridge-mcp' ),
+			'The language files are counted and summed, their contents not compared; they are compared and taken over with the files of the site.' => __( 'The language files are counted and summed, their contents not compared; they are compared and taken over with the files of the site.', 'alphabridge-mcp' ),
+			'The files of the font library are counted and summed, their contents not compared; they come with the fonts of the font library.' => __( 'The files of the font library are counted and summed, their contents not compared; they come with the fonts of the font library.', 'alphabridge-mcp' ),
+			'The files of the must-use folder WordPress does not load itself (in its subfolders) are counted and summed, their contents not compared.' => __( 'The files of the must-use folder WordPress does not load itself (in its subfolders) are counted and summed, their contents not compared.', 'alphabridge-mcp' ),
+			'Files under uploads outside the file lists of attachments are counted and summed, their contents not compared.' => __( 'Files under uploads outside the file lists of attachments are counted and summed, their contents not compared.', 'alphabridge-mcp' ),
 			// The reasons of AB_MCP_Sync_Option_Schema (REASON_TEXTS and the messages of settle()).
 			'The option guard of AlphaBridge MCP refuses this option name, so it is not taken over. An administrator changes it in wp-admin.' => __( 'The option guard of AlphaBridge MCP refuses this option name, so it is not taken over. An administrator changes it in wp-admin.', 'alphabridge-mcp' ),
 			'The option could not be looked up, so it is not classified. Try again; if it keeps failing, the database error log names the cause.' => __( 'The option could not be looked up, so it is not classified. Try again; if it keeps failing, the database error log names the cause.', 'alphabridge-mcp' ),

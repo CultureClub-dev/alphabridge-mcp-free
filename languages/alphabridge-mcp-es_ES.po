@@ -10593,3 +10593,36 @@ msgid "The way back has %d step and nothing is written yet."
 msgid_plural "The way back has %d steps and nothing is written yet."
 msgstr[0] "La vuelta atrás tiene %d paso y todavía no se ha escrito nada."
 msgstr[1] "La vuelta atrás tiene %d pasos y todavía no se ha escrito nada."
+
+msgid "A plugin is code: its files and whether it runs are compared and taken over with the code of the site."
+msgstr "Un plugin es código: sus archivos y si está activo se comparan y se traspasan con el código del sitio."
+
+msgid "A theme is code: its files and which theme runs are compared and taken over with the code of the site."
+msgstr "Un tema es código: sus archivos y qué tema está activo se comparan y se traspasan con el código del sitio."
+
+msgid "WordPress itself is never taken over: where staging is newer, this site is updated first (wp_update_core); its files are compared with the code of the site."
+msgstr "WordPress en sí nunca se traspasa: donde el sitio de staging es más reciente, primero se actualiza este sitio (wp_update_core); sus archivos se comparan con el código del sitio."
+
+msgid "A must-use plugin is a file: compared by its SHA-256, taken over with the files of the site."
+msgstr "Un plugin must-use es un archivo: se compara por su SHA-256 y se traspasa con los archivos del sitio."
+
+msgid "A table of a plugin without an adapter: shown by its rows and schema, its rows are not read; taken over only through an adapter, or as a whole on a confirmation per table."
+msgstr "Una tabla de un plugin sin adaptador: se muestra por su número de filas y su esquema, sus filas no se leen; solo se traspasa mediante un adaptador, o entera con una confirmación por tabla."
+
+msgid "The language files are counted and summed, their contents not compared; they are compared and taken over with the files of the site."
+msgstr "Los archivos de idioma se cuentan y se suman sus bytes, su contenido no se compara; se comparan y se traspasan con los archivos del sitio."
+
+msgid "The files of the font library are counted and summed, their contents not compared; they come with the fonts of the font library."
+msgstr "Los archivos de la biblioteca de fuentes se cuentan y se suman sus bytes, su contenido no se compara; llegan con las fuentes de la biblioteca de fuentes."
+
+msgid "The files of the must-use folder WordPress does not load itself (in its subfolders) are counted and summed, their contents not compared."
+msgstr "Los archivos de la carpeta must-use que WordPress no carga por sí mismo (en sus subcarpetas) se cuentan y se suman sus bytes, su contenido no se compara."
+
+msgid "Files under uploads outside the file lists of attachments are counted and summed, their contents not compared."
+msgstr "Los archivos bajo uploads fuera de las listas de archivos de los adjuntos se cuentan y se suman sus bytes, su contenido no se compara."
+
+msgid "Nothing was written on either site."
+msgstr "No se ha escrito nada en ninguno de los dos sitios."
+
+msgid "Nothing is paired yet."
+msgstr "Todavía no hay nada emparejado."

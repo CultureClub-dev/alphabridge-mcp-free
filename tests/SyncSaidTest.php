@@ -2,9 +2,10 @@
 /**
  * The English texts of the report and of the transport said to a person in
  * the language of the site (AB_MCP_Sync_Said; branch 13 text/z8, Codex
- * round 2, B1): every reason of the tables is known, a known text and a
- * form with its values are given translated, an unknown text as it is, and
- * a kind reads as the page «Staging» names it.
+ * round 2, B1): every reason of the tables, those of the environment
+ * among them, is known, a known text and a form with its values are given
+ * translated, an unknown text as it is, and a kind reads as the page
+ * «Staging» names it.
  *
  * @package AlphaBridge_MCP
  */
@@ -13,12 +14,14 @@ declare( strict_types = 1 );
 
 namespace AlphaBridge\Tests;
 
+use AB_MCP_Sync_Env;
 use AB_MCP_Sync_Kinds;
 use AB_MCP_Sync_Option_Schema;
 use AB_MCP_Sync_Said;
 use AB_MCP_Transfer_View;
 use PHPUnit\Framework\TestCase;
 
+require_once __DIR__ . '/../includes/sync/class-sync-env.php';
 require_once __DIR__ . '/../includes/sync/class-sync-kinds.php';
 require_once __DIR__ . '/../includes/sync/class-sync-option-schema.php';
 require_once __DIR__ . '/../includes/sync/class-sync-said.php';
@@ -45,6 +48,10 @@ final class SyncSaidTest extends TestCase {
 			$reasons[ 'option schema ' . $code ] = sprintf( $text, 'siteurl' );
 		}
 		self::assertGreaterThan( 90, count( $reasons ) );
+		self::assertCount( 9, AB_MCP_Sync_Env::LOCKS );
+		foreach ( AB_MCP_Sync_Env::LOCKS as $key => $lock ) {
+			$reasons[ 'env ' . $key ] = $lock['reason'];
+		}
 		foreach ( $reasons as $key => $reason ) {
 			self::assertTrue( AB_MCP_Sync_Said::knows( $reason ), $key . ': ' . $reason );
 		}

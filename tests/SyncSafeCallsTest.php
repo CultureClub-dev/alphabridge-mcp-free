@@ -294,14 +294,14 @@ final class SyncSafeCallsTest extends TestCase {
 		// The proposal of pairs (Z8, branch 6): the connection it is bound to
 		// and the own address of the inventory, as the export reads its own.
 		'class-sync-proposal.php' => array(
-			'__' => array( 10, 'the refusals and errors the tools wp_site_* pass on, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2).' ),
+			'__' => array( 11, 'the refusals and errors the tools wp_site_* pass on and the result of a page of the proposal in next, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 to 3).' ),
 			'AB_MCP_Staging_Gate::connection' => array( 1, 'connection(): the connection of the call (the hash of its token, or its account), which a proposal and a confirmation are bound to (decision 15); no value the proposal compares.' ),
 			'home_url'                        => array( 1, 'step(): the own address, for the inventory of this site with the addresses of both sites neutral, as the export reads its own.' ),
 		),
 		// The report (Z8, branch 6, part 2): the way of a refusal of the whole
 		// call (decision 32), a text of the plugin and the address of its page.
 		'class-sync-report.php' => array(
-			'__' => array( 27, 'the reasons and steps of the refusals of wp_site_diff, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2).' ),
+			'__' => array( 28, 'the reasons and steps of the refusals of wp_site_diff and the result of a page of the report in next, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 to 3).' ),
 			'_n' => array( 1, 'the progress of the environment: the same texts where a count decides the form, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes (branch 13 text/z8, Codex round 2, B1).' ),
 			'AB_MCP_Guidance::compose'      => array( 1, 'refusal(): the reason, the steps, the link and the handover of a refusal, in the language of the site (the locale and the bundled translation are read; branch 13 text/z8); no value the report compares.' ),
 			'AB_MCP_Guidance::settings_url' => array( 1, 'refusal(): the address of the page «Staging» at an anchor (admin_url()); no value the report compares.' ),
@@ -358,7 +358,7 @@ final class SyncSafeCallsTest extends TestCase {
 			'wp_update_term'            => array( 2, 'write_row() and restore_row(): the way forward and back of the row of a term (decisions 17 and 23).' ),
 		),
 		'class-sync-said.php' => array(
-			'__' => array( 127, 'text(): the reasons of the report, of the proposal of the pairs and the messages of AB_MCP_Outbound, said to a person in the language of the site where they are set into a refusal or a note; the stored English text is only the key, and the locale of the site and its bundled translation are read, no value the takeover compares or hashes (branch 13 text/z8, Codex round 2, B1).' ),
+			'__' => array( 136, 'text(): the reasons of the report, the locks of the environment among them, of the proposal of the pairs and the messages of AB_MCP_Outbound, said to a person in the language of the site where they are set into a refusal or a note; the stored English text is only the key, and the locale of the site and its bundled translation are read, no value the takeover compares or hashes (branch 13 text/z8, Codex rounds 2 and 3).' ),
 			'_x' => array( 8, 'kind(): the word of a kind of an object in a note of the journal, as the page «Staging» says it; the locale of the site and its bundled translation are read, no value the takeover compares or hashes (branch 13 text/z8, Codex round 2, B1).' ),
 		),
 		'class-sync-resources.php' => array(
