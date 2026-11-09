@@ -544,8 +544,8 @@ final class AB_MCP_Sync_Push {
 						'subtype' => (string) $items[ $n ]['subtype'],
 						'action'  => (string) $items[ $n ]['action'],
 						'result'  => '',
-						/* translators: 1: the reason of the lock as the report names it (English, a value of the report), 2: the path of the file under the uploads. */
-						'reason'  => sprintf( __( '%1$s (attachment:shared_path) The file %2$s is named by another attachment of this plan as well.', 'alphabridge-mcp' ), (string) $held['reason'], (string) $path ),
+						/* translators: 1: the reason of the lock, a whole sentence in the language of the site, 2: the path of the file under the uploads. */
+						'reason'  => sprintf( __( '%1$s (attachment:shared_path) The file %2$s is named by another attachment of this plan as well.', 'alphabridge-mcp' ), AB_MCP_Sync_Said::text( (string) $held['reason'] ), (string) $path ),
 						'stage'   => (string) $held['stage'],
 					);
 					unset( $items[ $n ] );
@@ -1076,7 +1076,7 @@ final class AB_MCP_Sync_Push {
 						'subtype' => $items[ $n ]['subtype'],
 						'action'  => $items[ $n ]['action'],
 						'result'  => '',
-						'reason'  => $lock['reason'],
+						'reason'  => AB_MCP_Sync_Said::text( (string) $lock['reason'] ),
 						'stage'   => $lock['stage'],
 					);
 					unset( $items[ $n ] );
