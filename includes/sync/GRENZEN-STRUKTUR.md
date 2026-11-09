@@ -660,6 +660,21 @@ Position, die das Theme hier nicht registriert, in der Prüfung des Laufs
   `AB_MCP_Sync_Canon::unserialized()` nicht durch, kein Fall bekannt.
   Prüffall
   `SyncNetTest::testAValueThatDoesNotSerializeBackIsReadByTheStringsOfItsFormat`.
+- Ein Text in einem serialisierten Wert urteilt wie derselbe Text als
+  einfacher Wert seiner Art: derselbe Leser, derselbe Textanfang, dieselbe
+  Erkennung von Feldern nach einem Trenner, ob eine Klammer des Formats
+  davor steht oder nicht (Codex-Runde 1 zu 11b, A1 und B). Der Prüffall
+  `SyncNetTest::testATextInASerializedValueIsJudgedAsTheSameTextAsAPlainValue`
+  hält das für Meta (Blatt, verschachtelt, mit Gleitkommazahl), Option,
+  Option eines Plugins und Text-Widget fest. Vorbestehend und gemeldet,
+  nicht in diesem Zweig: der einfache Wert sperrt schon auf `8df6146`
+  nicht bei einem Authorization-Header mit Bearer oder Basic nach «;»,
+  einem privaten Schlüssel im PEM-Format, einem Cookie-Header mit
+  `wordpress_logged_in_…` und `api_key: abc123def`; er sperrt bei
+  zitierter Prosa am Textanfang (`Token: "Ein Spielstein pro Zug"`). Auf
+  `8df6146` sperrten die beiden Header in einem serialisierten Wert nur
+  über die Klammern des Formats; jetzt urteilt das Blatt wie der einfache
+  Wert.
 - Gezählt am 09.11.2026 auf dem lokalen Paar (Site B, Inventar aller
   Arten, vorher auf `8df6146`, nachher auf diesem Zweig): die frische Site
   mit 93 Objekten gleich, ohne Sperre der Zugangsprüfung. Mit sieben

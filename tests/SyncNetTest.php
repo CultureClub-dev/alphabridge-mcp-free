@@ -21,6 +21,7 @@ namespace AlphaBridge\Tests;
 
 use AB_MCP_Sync_Canon;
 use AB_MCP_Sync_Net;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 require_once __DIR__ . '/../includes/sync/class-sync-net.php';
@@ -1113,6 +1114,84 @@ final class SyncNetTest extends TestCase {
 		// out of a text counts every pair.
 		list( $locks ) = self::stored( serialize( array( 'url' => 'https://staging.test/?p=12', 'text' => 'siehe /?p=13' ) ) );
 		self::assertSame( array(), $locks );
+	}
+
+	/**
+	 * The comparison of Codex round 1 of branch 11b (A1, B; the table the
+	 * report names): each text in a serialized value of its kind (a leaf, a
+	 * nested leaf, a value with a float of 17 digits, a widget instance, an
+	 * option) and the same text as a plain value of that kind. expected is
+	 * the verdict both give where it is settled; null where the plain value
+	 * misses a pattern of a credential already on 8df6146 (a finding of its
+	 * own, reported, not in this branch): there only the equality is held.
+	 *
+	 * @return array<string,array{0:string,1:mixed,2:string,3:?string}>
+	 */
+	public static function leafAndPlainValue(): array {
+		$prose = 'Spieler: Anna, Token: drei';
+		$leaf  = static fn( string $t ): string => serialize( array( 'text' => $t ) );
+		$cases = self::unread_leaves();
+		$text  = array(
+			'Bearer in headers'           => array( 'Accept: application/json; Authorization: Bearer REVIEW_ONLY', null ),
+			'Basic with base64'           => array( 'Accept: application/json; Authorization: Basic ' . base64_encode( 'review:REVIEW_ONLY' ), null ),
+			'quoted prose after Token:'   => array( 'Token: "Ein Spielstein pro Zug"', 'unread_credential' ),
+			'prose'                       => array( $prose, 'frei' ),
+			'a leaf too deep'             => array( $cases['deep'], 'unreadable_value' ),
+			'a leaf not readable'         => array( $cases['utf16'], 'unreadable_value' ),
+			'password=geheim'             => array( 'password=geheim', 'credential_field' ),
+			'api_key: abc123def'          => array( 'api_key: abc123def', null ),
+			'a plain address'             => array( 'https://example.test/spiele/regeln/', 'frei' ),
+			'a private key'               => array( "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC7\n-----END PRIVATE KEY-----", null ),
+			'a cookie header'             => array( 'Cookie: wordpress_logged_in_5c3e=admin%7C1762700000%7Cabc%7Cdef; wp-settings-1=x', null ),
+		);
+		$out = array();
+		foreach ( $text as $name => list( $t, $expected ) ) {
+			$out[ 'meta, ' . $name ]          = array( 'meta', $leaf( $t ), $t, $expected );
+			$out[ 'meta nested, ' . $name ]   = array( 'meta', serialize( array( 'x' => $leaf( $t ) ) ), $t, $expected );
+			$out[ 'option, ' . $name ]        = array( 'option', $leaf( $t ), $t, $expected );
+		}
+		$out['meta, a float of 17 digits and prose'] = array( 'meta', 'a:2:{s:1:"f";d:0.10000000000000001;s:4:"text";s:' . strlen( $prose ) . ':"' . $prose . '";}', $prose, 'frei' );
+		$out['a text widget with prose']             = array( 'widget', array( 'title' => 'Spielanleitung', 'text' => $prose, 'filter' => true, 'visual' => true ), $prose, 'frei' );
+		$out['the option of a plugin with prose']    = array( 'option', serialize( array( 'login_label' => 'Login: Name, Token: aus der App', 'enabled' => '1' ) ), 'Login: Name, Token: aus der App', 'frei' );
+		return $out;
+	}
+
+	/** The verdict of the readers of a kind and the net on a value: the keys of the locks of the checks, or frei. */
+	private static function verdict( string $kind, $raw ): string {
+		$ctx  = self::ctx();
+		$acc  = AB_MCP_Sync_Canon::acc();
+		$mark = AB_MCP_Sync_Net::mark( $acc );
+		$k    = 'meta' === $kind ? 'post' : ( 'widget' === $kind ? 'widget_area' : 'option' );
+		$at   = 'meta' === $kind ? 'meta:ab_note' : ( 'widget' === $kind ? 'widget:text-2' : 'option_value' );
+		$name = 'meta' === $kind ? 'ab_note' : ( 'widget' === $kind ? 'text' : 'image_default_link_type' );
+		if ( \AB_MCP_Sync_Credentials::note( $acc, $k, $at, \AB_MCP_Sync_Credentials::unit( $name, $raw ) ) ) {
+			if ( is_array( $raw ) ) {
+				AB_MCP_Sync_Canon::structure( $raw, $ctx, $acc, $k, $at );
+			} else {
+				AB_MCP_Sync_Canon::value( $raw, $ctx, $acc, $k, $at );
+			}
+			AB_MCP_Sync_Net::check( $acc, $mark, $k, $at, $raw, $ctx, true, 'widget' !== $kind );
+		}
+		$keys = array();
+		foreach ( $acc['locks'] as $lock ) {
+			if ( 0 === strpos( (string) $lock['key'], '*:' ) ) {
+				$keys[ substr( (string) $lock['key'], 2 ) ] = true;
+			}
+		}
+		return array() === $keys ? 'frei' : implode( '+', array_keys( $keys ) );
+	}
+
+	#[DataProvider( 'leafAndPlainValue' )]
+	public function testATextInASerializedValueIsJudgedAsTheSameTextAsAPlainValue( string $kind, $serialized, string $plain, ?string $expected ): void {
+		// Codex round 1 of branch 11b, A1 and B: a leaf gets no other context
+		// than the same text as a plain value of its kind (the same reader,
+		// the start of the text, the fields after a separator), nested, in a
+		// value that does not serialize back, in a widget, in an option.
+		$leaf = self::verdict( $kind, $serialized );
+		self::assertSame( self::verdict( $kind, $plain ), $leaf );
+		if ( null !== $expected ) {
+			self::assertSame( $expected, $leaf );
+		}
 	}
 
 	public function testTheReferencesOfAStoredValueAreCountedOverItsRawText(): void {
