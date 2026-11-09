@@ -877,6 +877,36 @@ trait SyncCoreReads {
 			'a real AKIA key with EXAMPLE in it'                  => array( 'Schlüssel: AK' . 'IAQ3ZT7W2VX' . 'EXAMPLE', 'sperrt' ),
 			'the token of jwt.io changed'                         => array( 'Authorization: Bearer ' . $jwt[0] . '.' . $jwt[1] . '.' . strrev( $jwt[2] ), 'sperrt' ),
 			'the secret key of AWS with one more'                 => array( 'Authorization: Bearer ' . $e['aws secret access key'] . 'X', 'sperrt' ),
+			// Codex round 5 of branch 11b: A4 the pairs of Basic, A5 one «.» of
+			// a sentence, C1 the bounds of AKIA; A1 to A3 limit C (GRENZEN.md).
+			'Basic admin:password'                                => array( 'Authorization: Basic ' . $b64( 'admin:password' ), 'sperrt' ),
+			'Basic admin:secret'                                  => array( 'Authorization: Basic ' . $b64( 'admin:secret' ), 'sperrt' ),
+			'Basic secret: (a key as the user)'                   => array( 'Authorization: Basic ' . $b64( 'secret:' ), 'sperrt' ),
+			'Basic admin:Passwort'                                => array( 'Authorization: Basic ' . $b64( 'admin:Passwort' ), 'sperrt' ),
+			'Basic api:SECRET'                                    => array( 'Authorization: Basic ' . $b64( 'api:SECRET' ), 'sperrt' ),
+			'Basic, the pair of the keys of AWS'                  => array( 'Authorization: Basic ' . $b64( $e['aws access key id'] . ':' . $e['aws secret access key'] ), 'sperrt' ),
+			'Basic username:password'                             => array( 'Authorization: Basic ' . $b64( 'username:password' ), 'frei' ),
+			'Basic user:passwd of curl'                           => array( 'Authorization: Basic ' . $b64( 'user:passwd' ), 'frei' ),
+			'Basic me:pwd of curl'                                => array( 'Authorization: Basic ' . $b64( 'me:pwd' ), 'frei' ),
+			'the secret key of AWS ending a sentence'             => array( 'Authorization: Bearer ' . $e['aws secret access key'] . '.', 'frei' ),
+			'the secret key of AWS and ..'                        => array( 'Authorization: Bearer ' . $e['aws secret access key'] . '..', 'sperrt' ),
+			'the access key of AWS and ..'                        => array( 'Die ID lautet ' . $e['aws access key id'] . '..', 'sperrt' ),
+			'19 characters ending a sentence'                     => array( 'Authorization: Bearer R7v2K9m4Q6s8T3p5N1x.', 'frei' ),
+			'20 characters and ..'                                => array( 'Authorization: Bearer R7v2K9m4Q6s8T3p5N1xZ..', 'sperrt' ),
+			'base64 with /AKIA in it'                             => array( 'Binärdaten (Base64): /AK' . 'IA' . str_repeat( 'A', 16 ) . 'g==', 'frei' ),
+			'base64 with +AKIA in it'                             => array( 'Daten: +AK' . 'IA' . str_repeat( 'Q', 16 ) . '/w==', 'frei' ),
+			'a key of AWS before a dash'                          => array( 'Die ID ' . $t['akia'] . '-alt ist abgelaufen.', 'sperrt' ),
+			'limit C, A1: a passphrase after Bearer'              => array( 'Authorization: Bearer birke-wolke-fluss-kiesel', 'frei' ),
+			'limit C, A2: 19 characters after Bearer'             => array( 'Authorization: Bearer R7v2K9m4Q6s8T3p5N1x', 'frei' ),
+			'limit C, A3: three dots in the value'                => array( 'Authorization: Bearer R7v2K9m4...Q6s8T3p5N1xZ', 'frei' ),
+			// Tutorials cut short, and of Basic after A4 (the steering after
+			// Codex round 5), the header on a line of its own.
+			'a tutorial with eyJhbGciOi...'                       => array( $para( 'Der Header sieht so aus:' ) . $code( "GET /api HTTP/1.1\nAuthorization: Bearer eyJhbGciOi..." ), 'frei' ),
+			'a tutorial with sk_live_...abcd'                     => array( $para( 'Dein Schlüssel endet so:' ) . $code( "curl https://api.example.test/ \\\n  -H 'Authorization: Bearer sk" . "_live_...abcd'" ), 'frei' ),
+			'a tutorial with ghp_...'                             => array( $para( 'Ein Token von GitHub:' ) . $code( "GET /user HTTP/1.1\nAuthorization: Bearer gh" . 'p_...' ), 'frei' ),
+			'a tutorial of RFC 7617'                              => array( $para( 'Das Beispiel aus RFC 7617 (Aladdin:open sesame):' ) . $code( "GET / HTTP/1.1\nAuthorization: Basic " . $e['rfc 7617'] ), 'frei' ),
+			'a tutorial of MDN'                                   => array( $para( 'Das Beispiel von MDN (aladdin:opensesame):' ) . $code( "GET / HTTP/1.1\nAuthorization: Basic " . $e['mdn basic'] ), 'frei' ),
+			'a tutorial with a placeholder as the password'       => array( $para( 'Setze dein Passwort ein:' ) . $code( "GET / HTTP/1.1\nAuthorization: Basic " . $b64( 'admin:YOUR_PASSWORD' ) ), 'frei' ),
 		);
 		foreach ( require __DIR__ . '/fixtures/sync-tutorials.php' as $name => $text ) {
 			$out[ 'tutorial ' . $name ] = array( $text, in_array( substr( $name, 0, 3 ), array( 'T2 ', 'T6 ' ), true ) ? null : 'frei' );

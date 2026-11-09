@@ -2094,7 +2094,8 @@ final class SyncRunTest extends TestCase {
 		// Codex round 4 of branch 11b, g: shown_value() and checked_before()
 		// ask the net (AB_MCP_Sync_Net::over_name()); since the fix after the
 		// round they show the examples of API tutorials and the documented
-		// examples, and still hide a value in the form of a token.
+		// examples, and still hide a value in the form of a token, and since
+		// round 5 a pair of Basic with a word of an example (admin:password).
 		$t = require __DIR__ . '/fixtures/sync-tokens.php';
 		foreach ( array(
 			'Authorization: Bearer TOKEN',
@@ -2112,6 +2113,7 @@ final class SyncRunTest extends TestCase {
 			'Authorization: Bearer ' . $t['hex32'],
 			'Authorization: Bearer abcdefghijklmnopqrstuvwx',
 			'Authorization: Basic ' . base64_encode( 'admin:admin' ),
+			'Authorization: Basic ' . base64_encode( 'admin:password' ),
 			'Mein Token: ' . $t['ghp'],
 			'Bearer ' . $t['jwt'],
 			'AWS Access Key ID [None]: ' . $t['examples']['aws access key id'] . '2',

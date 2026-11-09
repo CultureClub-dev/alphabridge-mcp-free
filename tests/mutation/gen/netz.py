@@ -196,12 +196,23 @@ e('token-stripe-prefix', 'TOKENS: only the secret and the restricted key of Stri
   "'/(?<![A-Za-z0-9])[rs]k_live_", "'/(?<![A-Za-z0-9])[a-z]k_live_", 'net', N_TOKENS)
 e('token-stripe-before', 'TOKENS: sk_live_ not glued to a letter or digit before it', NT,
   "'/(?<![A-Za-z0-9])[rs]k_live_", "'/[rs]k_live_", 'net', N_TOKENS)
+AKIA = "'/(?<![A-Za-z0-9+\\/])AKIA[0-9A-Z]{16}[0-9A-Z]*+(?![a-z+\\/=])/'"
 e('token-aws-length', 'TOKENS: AKIA with 16 capitals and digits', NT,
-  "AKIA[0-9A-Z]{16}/'", "AKIA[0-9A-Z]{17}/'", 'net', N_TOKENS)
+  AKIA, AKIA.replace("{16}", "{17}"), 'net', N_TOKENS)
 e('token-aws-longer', 'TOKENS: AKIA and 16 as the start of a longer run as well (AKIA…EXAMPLE2 locks; the steering after Codex round 4)', NT,
-  "AKIA[0-9A-Z]{16}/'", "AKIA[0-9A-Z]{16}(?![0-9A-Za-z])/'", 'net', N_EXAMPLE)
+  AKIA, AKIA.replace("[0-9A-Z]*+(?![a-z+\\/=])", "(?![0-9A-Za-z+\\/=])"), 'net', N_EXAMPLE)
 e('token-aws-before', 'TOKENS: AKIA not glued to a letter or digit before it', NT,
-  "'/(?<![A-Za-z0-9])AKIA", "'/AKIA", 'net', N_TOKENS)
+  AKIA, AKIA.replace("(?<![A-Za-z0-9+\\/])", "(?<![+\\/])"), 'net', N_TOKENS)
+e('token-aws-before-base64', 'TOKENS: AKIA not after «+» or «/» of base64 (Codex round 5, C1)', NT,
+  AKIA, AKIA.replace("(?<![A-Za-z0-9+\\/])", "(?<![A-Za-z0-9])"), 'net', N_TOKENS)
+e('token-aws-after-base64', 'TOKENS: AKIA, no small letter, «+», «/» or «=» right after the run (Codex round 5, C1)', NT,
+  AKIA, AKIA.replace("(?![a-z+\\/=])/'", "/'"), 'net', N_TOKENS)
+e('token-aws-after-letter', 'TOKENS: AKIA, no small letter right after the run', NT,
+  AKIA, AKIA.replace("(?![a-z+\\/=])", "(?![+\\/=])"), 'net', N_TOKENS)
+e('token-aws-after-signs', 'TOKENS: AKIA, no «+», «/» or «=» right after the run', NT,
+  AKIA, AKIA.replace("(?![a-z+\\/=])", "(?![a-z])"), 'net', N_TOKENS)
+e('token-aws-run', 'TOKENS: AKIA, the whole run of capitals and digits before the bound (possessive)', NT,
+  AKIA, AKIA.replace("[0-9A-Z]*+(?!", "[0-9A-Z]*(?!"), 'net', N_TOKENS)
 e('token-slack-length', 'TOKENS: xoxb-, xoxp- with their numbers and 8 or more after them', NT,
   "[0-9]+-[0-9]+-[A-Za-z0-9-]{8}/'", "[0-9]+-[0-9]+-[A-Za-z0-9-]{7}/'", 'net', N_TOKENS)
 e('token-slack-prefix', 'TOKENS: only xoxb- and xoxp-', NT,
@@ -281,8 +292,13 @@ e('auth-case', 'AUTHORIZATION: in any case, as HTTP reads a header', NT,
   AUTH, AUTH.replace(")/i';", ")/';"), 'net', N_AUTH)
 e('bearer-start', 'bearer(): the characters of a token at the start of the value', NT,
   "const BEARER_TOKEN = '#^[A-Za-z0-9\\-._~+/]+=*#';", "const BEARER_TOKEN = '#[A-Za-z0-9\\-._~+/]+=*#';", 'net', N_AUTH)
-e('bearer-dot', 'bearer(): a «.» at its end ends a sentence', NT,
-  "\t\t$token = rtrim( $m[0], '.' );", "\t\t$token = $m[0];", 'net', N_AUTH)
+e('bearer-dot', 'bearer(): one «.» at its end ends a sentence', NT,
+  "\t\t$token = self::sentence_end( $m[0] );", "\t\t$token = $m[0];", 'net', N_AUTH)
+SENT = "\t\treturn '.' === substr( (string) $value, -1 ) ? (string) substr( (string) $value, 0, -1 ) : (string) $value;"
+e('sentence-end', 'sentence_end(): one «.» at the end, the end of a sentence', NT,
+  SENT, "\t\treturn (string) $value;", 'net', N_EXAMPLE)
+e('sentence-end-one', 'sentence_end(): never more than one «.» (Codex round 5, A5: «..» locks)', NT,
+  SENT, "\t\treturn rtrim( (string) $value, '.' );", 'net', N_EXAMPLE)
 BEARER_RETURN = "\t\treturn strlen( $token ) >= self::TOKEN_LENGTH && ! self::placeholder( $token ) && 1 !== preg_match( self::WORD_PLACEHOLDER, $token ) && ! self::example( $token );"
 e('bearer-length', 'bearer(): 20 characters of a token or more (Codex round 4, B)', NT,
   BEARER_RETURN, BEARER_RETURN.replace("strlen( $token ) >= self::TOKEN_LENGTH && ", "'' !== $token && "), 'net', N_AUTH)
@@ -322,32 +338,32 @@ e('basic-colon', 'basic(): a pair with «:»', NT,
   "\t\tif ( false === $at || 1 === strlen( $pair ) ) {", "\t\tif ( 1 === strlen( $pair ) ) {", 'net', N_AUTH)
 e('basic-both-empty', 'basic(): user and password not both empty', NT,
   "\t\tif ( false === $at || 1 === strlen( $pair ) ) {", "\t\tif ( false === $at ) {", 'net', N_AUTH)
+BASIC_RETURN = "\t\treturn ! in_array( $pair, self::EXAMPLE_PAIRS, true ) && ! self::placeholder( '' === $password ? (string) substr( $pair, 0, $at ) : $password );"
 e('basic-user', 'basic(): with an empty password, the user (a key as the user) no placeholder', NT,
-  "\t\t$secret   = '' === $password ? (string) substr( $pair, 0, $at ) : $password;", "\t\t$secret   = $password;", 'net', N_AUTH)
-BASIC_RETURN = "\t\treturn ! self::placeholder( $secret ) && ! in_array( strtolower( $secret ), self::EXAMPLE_PASSWORDS, true ) && ! self::example( $secret );"
+  BASIC_RETURN, BASIC_RETURN.replace("'' === $password ? (string) substr( $pair, 0, $at ) : $password", "$password"), 'net', N_AUTH)
 e('basic-placeholder', 'basic(): the password no placeholder', NT,
-  BASIC_RETURN, BASIC_RETURN.replace("! self::placeholder( $secret ) && ", ""), 'net', N_AUTH)
-e('basic-words', 'basic(): the password no example word (user:password, Aladdin:open sesame; Codex round 4, B)', NT,
-  BASIC_RETURN, BASIC_RETURN.replace(" && ! in_array( strtolower( $secret ), self::EXAMPLE_PASSWORDS, true )", ""), 'net', N_AUTH)
-e('basic-words-case', 'basic(): an example word in any case (PASSWORD, Passwort, SECRET)', NT,
-  BASIC_RETURN, BASIC_RETURN.replace("strtolower( $secret )", "$secret"), 'net', N_AUTH)
-e('basic-example-password', 'basic(): the password no documented example (the secret key of AWS)', NT,
-  BASIC_RETURN, BASIC_RETURN.replace(" && ! self::example( $secret )", ""), 'net', N_EXAMPLE)
-WORDLIST = "\tconst EXAMPLE_PASSWORDS = array( 'password', 'passwort', 'pass', 'secret', 'open sesame', 'opensesame' );"
-for w in ['password', 'passwort', 'pass', 'secret', 'open sesame', 'opensesame']:
-    e('basic-word-' + w.replace(' ', '-'), 'EXAMPLE_PASSWORDS: ' + w, NT,
-      WORDLIST, WORDLIST.replace("'" + w + "', ", "").replace(", '" + w + "' )", " )"), 'net', N_AUTH)
+  BASIC_RETURN, BASIC_RETURN.replace(" && ! self::placeholder( '' === $password ? (string) substr( $pair, 0, $at ) : $password )", ""), 'net', N_AUTH)
+e('basic-pairs', 'basic(): a pair of an example as the whole pair is free (Codex round 5, A4)', NT,
+  BASIC_RETURN, BASIC_RETURN.replace("! in_array( $pair, self::EXAMPLE_PAIRS, true ) && ", ""), 'net', N_AUTH)
+e('basic-pairs-exact', 'basic(): the pair exactly, in its case', NT,
+  BASIC_RETURN, BASIC_RETURN.replace("in_array( $pair, self::EXAMPLE_PAIRS, true )", "in_array( strtolower( $pair ), array_map( 'strtolower', self::EXAMPLE_PAIRS ), true )"), 'net', N_AUTH)
+e('basic-pairs-whole', 'basic(): the whole pair, not its password alone (admin:password locks; Codex round 5, A4)', NT,
+  BASIC_RETURN, BASIC_RETURN.replace("in_array( $pair, self::EXAMPLE_PAIRS, true )", "in_array( 'user:' . $password, self::EXAMPLE_PAIRS, true )"), 'net', N_AUTH)
+PAIRS = "\tconst EXAMPLE_PAIRS = array( 'Aladdin:open sesame', 'aladdin:opensesame', 'username:password', 'user:password', 'name:password', 'user:secret', 'me:pwd', 'key:secret', 'user:passwd', 'smith:secret' );"
+for w in ['Aladdin:open sesame', 'aladdin:opensesame', 'username:password', 'user:password', 'name:password', 'user:secret', 'me:pwd', 'key:secret', 'user:passwd', 'smith:secret']:
+    e('basic-pair-' + w.replace(' ', '-').replace(':', '-').lower(), 'EXAMPLE_PAIRS: ' + w, NT,
+      PAIRS, PAIRS.replace("'" + w + "', ", "").replace(", '" + w + "' )", " )"), 'net', N_AUTH)
 e('example', 'example(): a value by the SHA-256 of the whole of it', NT,
   "\t\treturn isset( self::EXAMPLES[ hash( 'sha256', (string) $value ) ] );", "\t\treturn false;", 'net', N_EXAMPLE)
 e('example-only', 'example(): only a value of the list', NT,
   "\t\treturn isset( self::EXAMPLES[ hash( 'sha256', (string) $value ) ] );", "\t\treturn '' !== (string) $value;", 'net', N_EXAMPLE)
-WHOLE = "\t\treturn rtrim( (string) substr( (string) $text, $at, strspn( (string) $text, self::TOKEN_CHARS, $at ) ), '.' );"
+WHOLE = "\t\treturn self::sentence_end( (string) substr( (string) $text, $at, strspn( (string) $text, self::TOKEN_CHARS, $at ) ) );"
 e('whole-run', 'whole(): the whole run of the characters of a token (AKIA…EXAMPLE2 is no example)', NT,
   WHOLE, "\t\treturn (string) substr( (string) $text, $at, 20 );", 'net', N_EXAMPLE)
-e('whole-dot', 'whole(): a «.» at its end ends a sentence', NT,
-  WHOLE, WHOLE.replace("return rtrim( (string) substr", "return ( (string) substr").replace("), '.' );", ") );"), 'net', N_EXAMPLE)
+e('whole-dot', 'whole(): one «.» at its end ends a sentence', NT,
+  WHOLE, WHOLE.replace("return self::sentence_end( (string) substr", "return ( (string) substr"), 'net', N_EXAMPLE)
 TCH = "\tconst TOKEN_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~+/=';"
-e('whole-chars-slash', 'TOKEN_CHARS: «/» a character of a token (AKIA…EXAMPLE/x is no example)', NT,
+e('whole-chars-slash', 'TOKEN_CHARS: «/» a character of a token (an example of Slack and /x is none)', NT,
   TCH, TCH.replace("~+/=", "~+="), 'net', N_EXAMPLE)
 e('whole-chars-dot', 'TOKEN_CHARS: «.» a character of a token (the whole JSON Web Token)', NT,
   TCH, TCH.replace("-._~", "-_~"), 'net', N_EXAMPLE)

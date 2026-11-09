@@ -73,8 +73,9 @@
  *   AWS, Slack, Mailchimp) and a JSON Web Token (JWT); at the start of a
  *   line or of a field the header Authorization with Bearer and a value in
  *   the form of a token (20 characters of a token or more, no placeholder,
- *   none of words), or Basic and the base64 of user:password whose password
- *   is no example (AUTHORIZATION); a private key
+ *   none of words), or Basic and the base64 of user:password that is no
+ *   pair of an example and whose password is no placeholder
+ *   (AUTHORIZATION); a private key
  *   in PEM by its frame and a body of base64 (PEM); the value of a login
  *   cookie of WordPress by its form (COOKIE). A name of a credential
  *   counts as a key of the serialized format with a value as well
@@ -285,8 +286,10 @@ final class AB_MCP_Sync_Net {
 	 * no placeholder (Codex round 3 of branch 11b, A1); a documented example
 	 * is none only as the whole value (EXAMPLES). GitHub (ghp_ and 36
 	 * letters and digits, github_pat_), Stripe (sk_live_, rk_live_ and 24),
-	 * AWS (AKIA and 16 capitals and digits, a longer run as well: the whole
-	 * run is the value), Slack (xoxb-, xoxp- with their
+	 * AWS (AKIA and 16 capitals and digits, a longer run of them as well: the
+	 * whole run is the value; never inside base64, no character of base64
+	 * before it and no small letter, «+», «/» or «=» right after the run:
+	 * Codex round 5 of branch 11b, C1), Slack (xoxb-, xoxp- with their
 	 * numbers), Mailchimp (32 hex and -us with the number of the data
 	 * centre; two of the ten tutorials counted on 09.11.2026 name its key,
 	 * none in this form).
@@ -295,7 +298,7 @@ final class AB_MCP_Sync_Net {
 		'/(?<![A-Za-z0-9])ghp_[A-Za-z0-9]{36}/'                       => 'github_token',
 		'/(?<![A-Za-z0-9])github_pat_[A-Za-z0-9_]{36}/'               => 'github_token',
 		'/(?<![A-Za-z0-9])[rs]k_live_[A-Za-z0-9]{24}/'                => 'stripe_secret_key',
-		'/(?<![A-Za-z0-9])AKIA[0-9A-Z]{16}/'                          => 'aws_access_key_id',
+		'/(?<![A-Za-z0-9+\/])AKIA[0-9A-Z]{16}[0-9A-Z]*+(?![a-z+\/=])/' => 'aws_access_key_id',
 		'/(?<![A-Za-z0-9])xox[bp]-[0-9]+-[0-9]+-[A-Za-z0-9-]{8}/'     => 'slack_token',
 		'/(?<![0-9A-Za-z])[0-9a-f]{32}-us[0-9]{1,2}(?![0-9A-Za-z])/' => 'mailchimp_api_key',
 	);
@@ -372,14 +375,18 @@ final class AB_MCP_Sync_Net {
 	const WORD_PLACEHOLDER = '/^(?:[a-z]{2,}(?:[_-]+[a-z]{2,})+|[A-Z]{2,}(?:[_-]+[A-Z]{2,})+)\z/';
 
 	/**
-	 * The words that stand for a password in examples, each only as the whole
-	 * password, in any case (the steering after Codex round 4 of branch 11b,
-	 * 09.11.2026): «user:password» of the tutorials, «Aladdin:open sesame» of
-	 * RFC 7617 and «aladdin:opensesame» of MDN (its page of Authorization,
-	 * read on 09.11.2026). A user equal to its password is none: admin:admin
-	 * can be a real weak credential.
+	 * The pairs of examples of Basic, each only as the whole pair, exactly
+	 * (Codex round 5 of branch 11b, A4; the steering after it): a word of an
+	 * example alone frees none (admin:password, admin:secret, secret: lock, as
+	 * admin:admin does: a working weak credential). Read at their sources on
+	 * 09.11.2026: RFC 7617, section 2 (Aladdin:open sesame); MDN,
+	 * «Authorization» (aladdin:opensesame) and «HTTP authentication»
+	 * (username:password, in an address); the manual of curl
+	 * (curl.se/docs/manpage.html: -u user:password, name:password, user:secret,
+	 * me:pwd, key:secret with --aws-sigv4; --proxy-user user:passwd,
+	 * smith:secret); the tutorial T10 of the count (user:password).
 	 */
-	const EXAMPLE_PASSWORDS = array( 'password', 'passwort', 'pass', 'secret', 'open sesame', 'opensesame' );
+	const EXAMPLE_PAIRS = array( 'Aladdin:open sesame', 'aladdin:opensesame', 'username:password', 'user:password', 'name:password', 'user:secret', 'me:pwd', 'key:secret', 'user:passwd', 'smith:secret' );
 
 	/**
 	 * A placeholder, only in its exact form as the whole value (the steering,
@@ -395,8 +402,8 @@ final class AB_MCP_Sync_Net {
 	 * Publicly documented examples, none valid anywhere (the steering after
 	 * Codex round 4 of branch 11b, 09.11.2026): each frees only itself, as
 	 * the whole value, in every form the net judges by its value (a token of
-	 * a service, a JSON Web Token, the value after Bearer, the password of
-	 * Basic). One character more or less (AKIA…EXAMPLE2, a
+	 * a service, a JSON Web Token, the value after Bearer; Basic frees its
+	 * pairs of examples only, EXAMPLE_PAIRS). One character more or less (AKIA…EXAMPLE2, a
 	 * real key with EXAMPLE in it, a changed token of jwt.io) locks. Kept as
 	 * the SHA-256 of the exact value, never the value: no text of the source
 	 * looks like a token to the push protection of GitHub or to a scanner.
@@ -1812,8 +1819,8 @@ final class AB_MCP_Sync_Net {
 		// The header Authorization with Bearer or Basic at the start of a
 		// line or of a field (Codex round 1 of branch 11b, A1; the steering,
 		// 09.11.2026): Bearer with a value in the form of a token, Basic with
-		// the base64 of user:password (after Codex round 4: no example of a
-		// tutorial, bearer() and basic()).
+		// the base64 of user:password (after Codex rounds 4 and 5: no example
+		// of a tutorial, no pair of an example, bearer() and basic()).
 		if ( preg_match_all( self::AUTHORIZATION, $text, $m, PREG_SET_ORDER ) ) {
 			foreach ( $m as $hit ) {
 				if ( 'basic' === strtolower( $hit[1] ) ? self::basic( $hit[2] ) : self::bearer( $hit[2] ) ) {
@@ -1909,8 +1916,8 @@ final class AB_MCP_Sync_Net {
 	/**
 	 * Whether the value after Bearer in the header Authorization has the form
 	 * of a token (the steering after Codex round 4 of branch 11b, 09.11.2026):
-	 * the characters of a token at its start (BEARER_TOKEN; a «.» at its end
-	 * ends a sentence), TOKEN_LENGTH or more, with a digit or without. Free: a
+	 * the characters of a token at its start (BEARER_TOKEN; one «.» at its
+	 * end ends a sentence, sentence_end()), TOKEN_LENGTH or more, with a digit or without. Free: a
 	 * placeholder (YOUR_TOKEN, xxx, ...; <token>, $TOKEN, {token}, *** and
 	 * &lt;token&gt; have no character of a token at all), a placeholder in the
 	 * form of words (WORD_PLACEHOLDER), a documented example as the whole
@@ -1930,21 +1937,18 @@ final class AB_MCP_Sync_Net {
 		if ( false !== strpos( $m[0], '...' ) || 0 === strpos( $rest, '...' ) || 0 === strpos( $rest, "\u{2026}" ) ) {
 			return false;
 		}
-		$token = rtrim( $m[0], '.' );
+		$token = self::sentence_end( $m[0] );
 		return strlen( $token ) >= self::TOKEN_LENGTH && ! self::placeholder( $token ) && 1 !== preg_match( self::WORD_PLACEHOLDER, $token ) && ! self::example( $token );
 	}
 
 	/**
 	 * Whether the value after Basic in the header Authorization is a pair:
 	 * base64 at its start that decodes to a text user:password, without a
-	 * sign of control, the two not both empty, the password (or, where it is
-	 * empty, the user: a key as the user) neither a placeholder
-	 * (YOUR_PASSWORD, <password>, xxxx xxxx …) nor, as the whole of it in any
-	 * case, a word of EXAMPLE_PASSWORDS (user:password, Aladdin:open sesame,
-	 * aladdin:opensesame), nor a documented example (EXAMPLES: the secret
-	 * key of AWS; the pairs of RFC 7617 and MDN are free by their words),
-	 * whatever its length: a:b and admin:admin lock (the steering, 09.11.2026,
-	 * and after Codex round 4 of branch 11b).
+	 * sign of control, the two not both empty; free only where the pair as a
+	 * whole is one of EXAMPLE_PAIRS or the password (where it is empty, the
+	 * user: a key as the user) a placeholder (YOUR_PASSWORD, <password>,
+	 * xxxx xxxx …), whatever its length: admin:password, a:b and admin:admin
+	 * lock (Codex round 5 of branch 11b, A4).
 	 *
 	 * @param string $value The word after the scheme.
 	 * @return bool
@@ -1962,8 +1966,7 @@ final class AB_MCP_Sync_Net {
 			return false;
 		}
 		$password = (string) substr( $pair, $at + 1 );
-		$secret   = '' === $password ? (string) substr( $pair, 0, $at ) : $password;
-		return ! self::placeholder( $secret ) && ! in_array( strtolower( $secret ), self::EXAMPLE_PASSWORDS, true ) && ! self::example( $secret );
+		return ! in_array( $pair, self::EXAMPLE_PAIRS, true ) && ! self::placeholder( '' === $password ? (string) substr( $pair, 0, $at ) : $password );
 	}
 
 	/**
@@ -1990,15 +1993,28 @@ final class AB_MCP_Sync_Net {
 
 	/**
 	 * The whole value of a token from where its match begins: the run of
-	 * TOKEN_CHARS from there (AKIA…EXAMPLE2 to its end), without a «.» at
-	 * its end, which ends a sentence.
+	 * TOKEN_CHARS from there (AKIA…EXAMPLE2 to its end), without one «.» at
+	 * its end, which ends a sentence (sentence_end()).
 	 *
 	 * @param string $text Text.
 	 * @param int    $at   Where the match begins.
 	 * @return string
 	 */
 	private static function whole( $text, $at ) {
-		return rtrim( (string) substr( (string) $text, $at, strspn( (string) $text, self::TOKEN_CHARS, $at ) ), '.' );
+		return self::sentence_end( (string) substr( (string) $text, $at, strspn( (string) $text, self::TOKEN_CHARS, $at ) ) );
+	}
+
+	/**
+	 * A value without the one «.» at its end that ends a sentence, never more
+	 * (Codex round 5 of branch 11b, A5): «….» is the value, «…..» is the
+	 * value and a «.» of its own, before the length and the comparison with
+	 * EXAMPLES.
+	 *
+	 * @param string $value Value.
+	 * @return string
+	 */
+	private static function sentence_end( $value ) {
+		return '.' === substr( (string) $value, -1 ) ? (string) substr( (string) $value, 0, -1 ) : (string) $value;
 	}
 
 	/**
