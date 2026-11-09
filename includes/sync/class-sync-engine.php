@@ -374,7 +374,8 @@ final class AB_MCP_Sync_Engine {
 	 */
 	public static function abort( array $run ) {
 		if ( 'open' !== $run['state'] ) {
-			return new WP_Error( 'ab_mcp_sync_run_state', sprintf( 'Only an open run is aborted; this run is %s. An interrupted run is closed as checked by a person on the page AlphaBridge → Staging, or wp_site_revert action=plan with its run_id leads its way back on or begins it; a run on its way back runs to its end with wp_site_revert action=next; a closed run is not aborted.', (string) $run['state'] ) );
+			/* translators: %s: the state of the run, as the tools name it (interrupted, reverting, …). */
+			return new WP_Error( 'ab_mcp_sync_run_state', sprintf( __( 'Only an open run is aborted; this run is %s. An interrupted run is closed as checked by a person on the page AlphaBridge → Staging, or wp_site_revert action=plan with its run_id leads its way back on or begins it; a run on its way back runs to its end with wp_site_revert action=next; a closed run is not aborted.', 'alphabridge-mcp' ), (string) $run['state'] ) );
 		}
 		return AB_MCP_Sync_Run::under_lock(
 			static function () use ( $run ) {
@@ -383,7 +384,8 @@ final class AB_MCP_Sync_Engine {
 					return is_wp_error( $fresh ) ? $fresh : AB_MCP_Sync_Run::unknown( (int) $run['run_id'] );
 				}
 				if ( 'open' !== $fresh['state'] ) {
-					return new WP_Error( 'ab_mcp_sync_run_changed', sprintf( 'The run %1$d is %2$s now (another call moved it since this one read it as open): nothing was changed. Ask for its status (wp_site_push action=status) and go on from there.', (int) $run['run_id'], (string) $fresh['state'] ) );
+					/* translators: 1: run number, 2: its state now, as the tools name it. */
+					return new WP_Error( 'ab_mcp_sync_run_changed', sprintf( __( 'The run %1$d is %2$s now (another call moved it since this one read it as open): nothing was changed. Ask for its status (wp_site_push action=status) and go on from there.', 'alphabridge-mcp' ), (int) $run['run_id'], (string) $fresh['state'] ) );
 				}
 				// A step begun under the lock of this call is one a request
 				// that ended left: the run is interrupted, and is not aborted.

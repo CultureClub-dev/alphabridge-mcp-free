@@ -205,7 +205,7 @@ final class AB_MCP_Sync_Revert {
 	public static function plan_for_person( array $a ) {
 		$run_id = isset( $a['run_id'] ) && is_numeric( $a['run_id'] ) ? (int) $a['run_id'] : 0;
 		if ( $run_id < 1 ) {
-			return new WP_Error( 'ab_mcp_sync_push_run', 'Pass run_id, the run whose pairs go back.' );
+			return new WP_Error( 'ab_mcp_sync_push_run', __( 'Pass run_id, the run whose pairs go back.', 'alphabridge-mcp' ) );
 		}
 		$run = AB_MCP_Sync_Run::get( $run_id );
 		if ( ! is_array( $run ) ) {
@@ -216,7 +216,8 @@ final class AB_MCP_Sync_Revert {
 			return $run;
 		}
 		if ( 'push' !== $run['type'] || ! in_array( $run['state'], AB_MCP_Sync_Schema::CLOSED, true ) ) {
-			return new WP_Error( 'ab_mcp_sync_revert_person', sprintf( 'Run %1$d is %2$s (%3$s): on the page AlphaBridge → Staging a person takes back the pairs of a closed run that wrote. An open run is aborted first (or goes back over the connection that made it, wp_site_revert), an interrupted one is closed as checked first, and a run of the way back is not taken back.', $run_id, $run['state'], $run['type'] ) );
+			/* translators: 1: run number, 2: its state, 3: its type (push or revert), both as the tools name them. */
+			return new WP_Error( 'ab_mcp_sync_revert_person', sprintf( __( 'Run %1$d is %2$s (%3$s): on the page AlphaBridge → Staging a person takes back the pairs of a closed run that wrote. An open run is aborted first (or goes back over the connection that made it, wp_site_revert), an interrupted one is closed as checked first, and a run of the way back is not taken back.', 'alphabridge-mcp' ), $run_id, $run['state'], $run['type'] ) );
 		}
 		$args = array(
 			'action' => 'plan',
@@ -244,14 +245,15 @@ final class AB_MCP_Sync_Revert {
 	 */
 	public static function begin_for_person( array $a, $state, $confirmed ) {
 		if ( true !== $confirmed ) {
-			return new WP_Error( 'ab_mcp_sync_run_unconfirmed', 'A way back begins on the page AlphaBridge → Staging only from its form: pass true only for a request whose nonce was checked there.' );
+			return new WP_Error( 'ab_mcp_sync_run_unconfirmed', __( 'A way back begins on the page AlphaBridge → Staging only from its form: pass true only for a request whose nonce was checked there.', 'alphabridge-mcp' ) );
 		}
 		$plan = self::plan_for_person( $a );
 		if ( is_wp_error( $plan ) ) {
 			return $plan;
 		}
 		if ( ! is_string( $state ) || ! hash_equals( (string) $plan['state'], $state ) ) {
-			return new WP_Error( 'ab_mcp_sync_revert_changed', sprintf( 'The way back of run %d does not begin: the run or an object of this site changed since the page was loaded, so what it showed is not the plan as it is now. Nothing was written. Load the page AlphaBridge → Staging again and look at the pair once more.', (int) $plan['run']['run_id'] ) );
+			/* translators: %d: run number. */
+			return new WP_Error( 'ab_mcp_sync_revert_changed', sprintf( __( 'The way back of run %d does not begin: the run or an object of this site changed since the page was loaded, so what it showed is not the plan as it is now. Nothing was written. Load the page AlphaBridge → Staging again and look at the pair once more.', 'alphabridge-mcp' ), (int) $plan['run']['run_id'] ) );
 		}
 		$args = array(
 			'action' => 'plan',

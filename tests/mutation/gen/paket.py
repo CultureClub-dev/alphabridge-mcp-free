@@ -1279,9 +1279,9 @@ e('paket/r6-confirm-current-retired', 'confirm(): a retired anchor is not confir
 
 # ------------------------------------------------------ Codex round 7
 e('paket/r7-renew-post-only', 'handle_staging_key_renew(): a POST only, nothing on a GET with the nonce (R1)', AD,
-  "\t\tif ( 'POST' !== $method ) {\n\t\t\twp_die( esc_html( 'Nothing was changed: «Renew the key»", "\t\tif ( false ) {\n\t\t\twp_die( esc_html( 'Nothing was changed: «Renew the key»", 'trust', R6['flow'])
+  "\t\tif ( 'POST' !== $method ) {\n\t\t\twp_die( esc_html__( 'Nothing was changed: «Renew the key»", "\t\tif ( false ) {\n\t\t\twp_die( esc_html__( 'Nothing was changed: «Renew the key»", 'trust', R6['flow'])
 e('paket/r8-renew-post-exact', 'handle_staging_key_renew(): the method exactly POST, not as normalised (R1)', AD,
-  "? wp_unslash( $_SERVER['REQUEST_METHOD'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- compared exactly with 'POST' below, never stored or shown.\n\t\tif ( 'POST' !== $method ) {\n\t\t\twp_die( esc_html( 'Nothing was changed: «Renew the key»", "? strtoupper( sanitize_key( wp_unslash( $_SERVER['REQUEST_METHOD'] ) ) ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- compared exactly with 'POST' below, never stored or shown.\n\t\tif ( 'POST' !== $method ) {\n\t\t\twp_die( esc_html( 'Nothing was changed: «Renew the key»", 'trust', R6['flow'])
+  "? wp_unslash( $_SERVER['REQUEST_METHOD'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- compared exactly with 'POST' below, never stored or shown.\n\t\tif ( 'POST' !== $method ) {\n\t\t\twp_die( esc_html__( 'Nothing was changed: «Renew the key»", "? strtoupper( sanitize_key( wp_unslash( $_SERVER['REQUEST_METHOD'] ) ) ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- compared exactly with 'POST' below, never stored or shown.\n\t\tif ( 'POST' !== $method ) {\n\t\t\twp_die( esc_html__( 'Nothing was changed: «Renew the key»", 'trust', R6['flow'])
 
 # ------------------------------------------- part 3 (decisions 9 and 8)
 T3 = {

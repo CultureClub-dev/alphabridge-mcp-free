@@ -162,7 +162,7 @@ final class AB_MCP_Sync_Pairs_Tool {
 				return self::discard_rows( $rows );
 			},
 			static function () {
-				return new WP_Error( 'ab_mcp_sync_pairs_changed', 'No pair was discarded: a pair changed since the page was loaded (a run took it over or back, or it was aligned anew). Look at it again on the page AlphaBridge → Staging and discard it then.' );
+				return new WP_Error( 'ab_mcp_sync_pairs_changed', __( 'No pair was discarded: a pair changed since the page was loaded (a run took it over or back, or it was aligned anew). Look at it again on the page AlphaBridge → Staging and discard it then.', 'alphabridge-mcp' ) );
 			},
 			'No pair is discarded'
 		);

@@ -307,6 +307,7 @@ final class SyncSafeCallsTest extends TestCase {
 			'AB_MCP_Staging_Gate::connection' => array( 1, 'connection(): the connection of the call, which a run is bound to (decision 15).' ),
 			'get_option'                      => array( 1, 'lock_since(): the row of the lock of AB_MCP_Change_Lock, a time this plugin writes itself (decision 18); no value the takeover compares.' ),
 			'AB_MCP_Protected_Store::backup_days' => array( 1, 'set_state(): the days a close keeps its backups (the filter of Pro), stored as keep_until at the close (decision 20; A7).' ),
+			'__'                              => array( 4, 'close_checked(), interruption_read() and unknown(): the refusals a person reads on the page «Staging» after «Close as checked» or «Abort», in the language of the site; the locale of the site and its bundled translation are read, no value the takeover compares (the text of a refusal, branch 13 text/z8).' ),
 		),
 		'class-sync-guard.php'  => array(
 			'add_action'          => array( 1, 'arm(): rest_api_init, where the REST filters of every registered type are hooked (A1).' ),
@@ -400,12 +401,17 @@ final class SyncSafeCallsTest extends TestCase {
 			'is_post_type_viewable'           => array( 1, 'viewable(): whether the type of a written object has a page of its own for the sample of decision 33 (a template, a navigation and the other types of branch 9b have none); the types registered in this request.' ),
 			'wp_remote_get'                   => array( 1, 'probe(): the sample of a published object answering 200 with its title (decision 33).' ),
 			'wptexturize'                     => array( 1, 'sample_finding(): the title as a theme shows it texturized (B4); a calculation on the journal\'s title.' ),
+			'__'                              => array( 2, 'abort(): the two refusals a person reads on the page «Staging» after «Abort», in the language of the site; the locale of the site and its bundled translation are read, no value the takeover compares (the text of a refusal, branch 13 text/z8).' ),
 		),
 		'class-sync-push.php'   => array(
 			'AB_MCP_Protected_Store::bind' => array( 1, 'bind_package(): the packages of objects bound to the run, kept while it is not closed.' ),
 			'wp_get_term_taxonomy_parent_id' => array( 1, 'term_depths(): the parent here of a term the run does not write, for the depth of the terms of the run in the tree it leaves, which orders their steps (Codex rounds 1 and 2 on branch 9, B4); read for the order, never compared with the staging site.' ),
 		),
+		'class-sync-pairs-tool.php' => array(
+			'__' => array( 1, 'discard_as_shown(): the refusal a person reads on the page «Staging» after «Discard» where the pair changed, in the language of the site; the locale of the site and its bundled translation are read, no value the takeover compares (the text of a refusal, branch 13 text/z8).' ),
+		),
 		'class-sync-revert.php' => array(
+			'__'                                 => array( 4, 'plan_for_person() and begin_for_person(): the refusals a person reads on the page «Staging» after «Take this pair back», in the language of the site; the locale of the site and its bundled translation are read, no value the takeover compares (the text of a refusal, branch 13 text/z8).' ),
 			'AB_MCP_Protected_Store::under_lock' => array( 1, 'begin(): a way back for a closed run is made under the lock of the store, against the clean-up (decision 20, rule 4; A6).' ),
 		),
 	);

@@ -950,7 +950,7 @@ final class AB_MCP_Sync_Run {
 	 */
 	public static function close_checked( $run_id, $user_id, $confirmed, $expected = null ) {
 		if ( true !== $confirmed ) {
-			return new WP_Error( 'ab_mcp_sync_run_unconfirmed', 'Closing an interrupted run as checked takes a person in wp-admin (page AlphaBridge → Staging): pass true only for a request whose nonce was checked there.' );
+			return new WP_Error( 'ab_mcp_sync_run_unconfirmed', __( 'Closing an interrupted run as checked takes a person in wp-admin (page AlphaBridge → Staging): pass true only for a request whose nonce was checked there.', 'alphabridge-mcp' ) );
 		}
 		// One reading under the lock of the call (ONE LOCK PER CALL), the
 		// print compared with it and the close made on it
@@ -971,7 +971,8 @@ final class AB_MCP_Sync_Run {
 				return self::close_checked_on( $read['run'], $read['steps'], (int) $user_id );
 			},
 			static function ( array $read ) {
-				return new WP_Error( 'ab_mcp_sync_run_changed', sprintf( 'Run %d is not closed as checked: it is not the interruption the page showed any more (its way back began, or it went on and was interrupted again, since the page was loaded). Nothing was written. Load the page AlphaBridge → Staging again, read the journal as it is now, and close it then.', (int) $read['run']['run_id'] ) );
+				/* translators: %d: run number. */
+				return new WP_Error( 'ab_mcp_sync_run_changed', sprintf( __( 'Run %d is not closed as checked: it is not the interruption the page showed any more (its way back began, or it went on and was interrupted again, since the page was loaded). Nothing was written. Load the page AlphaBridge → Staging again, read the journal as it is now, and close it then.', 'alphabridge-mcp' ), (int) $read['run']['run_id'] ) );
 			},
 			sprintf( 'Run %d is not closed as checked', (int) $run_id )
 		);
@@ -1009,7 +1010,8 @@ final class AB_MCP_Sync_Run {
 			}
 		}
 		if ( 'interrupted' !== $run['state'] ) {
-			return new WP_Error( 'ab_mcp_sync_run_not_interrupted', sprintf( 'Only an interrupted run is closed as checked; this run is %s. Use wp_site_revert for the way back of a run that is open or closed.', $run['state'] ) );
+			/* translators: %s: the state of the run, as the tools name it (open, closed_done, …). */
+			return new WP_Error( 'ab_mcp_sync_run_not_interrupted', sprintf( __( 'Only an interrupted run is closed as checked; this run is %s. Use wp_site_revert for the way back of a run that is open or closed.', 'alphabridge-mcp' ), $run['state'] ) );
 		}
 		return array(
 			'run'   => $run,
@@ -1433,7 +1435,8 @@ final class AB_MCP_Sync_Run {
 	 * @return WP_Error
 	 */
 	public static function unknown( $run_id ) {
-		return new WP_Error( 'ab_mcp_sync_run_unknown', sprintf( 'This site has no run %d. Ask for the runs with wp_site_push action=status without a run_id (the open run), or plan one (action=plan).', (int) $run_id ) );
+		/* translators: %d: run number. */
+		return new WP_Error( 'ab_mcp_sync_run_unknown', sprintf( __( 'This site has no run %d. Ask for the runs with wp_site_push action=status without a run_id (the open run), or plan one (action=plan).', 'alphabridge-mcp' ), (int) $run_id ) );
 	}
 
 	/**
