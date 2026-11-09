@@ -2090,6 +2090,37 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( 'unchanged', AB_MCP_Sync_Engine::decide( $old, str_repeat( 'b', 64 ), str_repeat( 'b', 64 ) )['state'] );
 	}
 
+	public function testTheValueShownIsAnExampleOfATutorialAndNeverARealToken(): void {
+		// Codex round 4 of branch 11b, g: shown_value() and checked_before()
+		// ask the net (AB_MCP_Sync_Net::over_name()); since the fix after the
+		// round they show the examples of API tutorials and the documented
+		// examples, and still hide a value in the form of a token.
+		$t = require __DIR__ . '/fixtures/sync-tokens.php';
+		foreach ( array(
+			'Authorization: Bearer TOKEN',
+			'curl -H "Authorization: Bearer TOKEN" https://api.github.com/graphql',
+			"Beispiel:\nAuthorization: Bearer abc123",
+			'Authorization: Bearer your_api_token_goes_here',
+			'Authorization: Basic ' . base64_encode( 'user:password' ),
+			'Authorization: Bearer ' . $t['examples']['rfc 6750'],
+			'AWS Access Key ID [None]: ' . $t['examples']['aws access key id'],
+		) as $text ) {
+			self::assertSame( '"' . $text . '"', AB_MCP_Sync_Post_Writer::shown_value( 'note', $text ), $text );
+			self::assertSame( $text, AB_MCP_Sync_Post_Writer::checked_before( $text, AB_MCP_Sync_Post_Writer::VALUE_RULES ), $text );
+		}
+		foreach ( array(
+			'Authorization: Bearer ' . $t['hex32'],
+			'Authorization: Bearer abcdefghijklmnopqrstuvwx',
+			'Authorization: Basic ' . base64_encode( 'admin:admin' ),
+			'Mein Token: ' . $t['ghp'],
+			'Bearer ' . $t['jwt'],
+			'AWS Access Key ID [None]: ' . $t['examples']['aws access key id'] . '2',
+		) as $text ) {
+			self::assertSame( '(holds a credential, not shown)', AB_MCP_Sync_Post_Writer::shown_value( 'note', $text ), $text );
+			self::assertSame( '(holds a credential, not shown)', AB_MCP_Sync_Post_Writer::checked_before( $text, AB_MCP_Sync_Post_Writer::VALUE_RULES ), $text );
+		}
+	}
+
 	public function testTheValueBeforeOfAPartLeftIsShortNeverACredentialAndCapped(): void {
 		// The decision of 07.11.2026, «mit altem Wert»: a part left names what
 		// it held before the step, from the backup (before_value()): the row by
