@@ -28,6 +28,7 @@ defined( 'ABSPATH' ) || exit;
 
 require_once __DIR__ . '/class-sync-kind.php';
 require_once __DIR__ . '/class-sync-exclusions.php';
+require_once __DIR__ . '/class-sync-said.php';
 
 /**
  * Class AB_MCP_Sync_Kinds

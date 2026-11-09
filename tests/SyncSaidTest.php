@@ -1,0 +1,86 @@
+<?php
+/**
+ * The English texts of the report and of the transport said to a person in
+ * the language of the site (AB_MCP_Sync_Said; branch 13 text/z8, Codex
+ * round 2, B1): every reason of the tables is known, a known text and a
+ * form with its values are given translated, an unknown text as it is, and
+ * a kind reads as the page «Staging» names it.
+ *
+ * @package AlphaBridge_MCP
+ */
+
+declare( strict_types = 1 );
+
+namespace AlphaBridge\Tests;
+
+use AB_MCP_Sync_Kinds;
+use AB_MCP_Sync_Option_Schema;
+use AB_MCP_Sync_Said;
+use AB_MCP_Transfer_View;
+use PHPUnit\Framework\TestCase;
+
+require_once __DIR__ . '/../includes/sync/class-sync-kinds.php';
+require_once __DIR__ . '/../includes/sync/class-sync-option-schema.php';
+require_once __DIR__ . '/../includes/sync/class-sync-said.php';
+require_once __DIR__ . '/../includes/class-transfer-view.php';
+
+final class SyncSaidTest extends TestCase {
+
+	protected function tearDown(): void {
+		unset( $GLOBALS['ab_test_translations'] );
+	}
+
+	public function testEveryReasonOfTheTablesIsKnown(): void {
+		$reasons = array();
+		foreach ( array( AB_MCP_Sync_Kinds::OWNERSHIP, AB_MCP_Sync_Kinds::LOCKS ) as $table ) {
+			foreach ( $table as $key => $entry ) {
+				if ( isset( $entry['reason'] ) ) {
+					$reasons[ $key ] = $entry['reason'];
+				}
+			}
+		}
+		$excluded           = new \ReflectionMethod( AB_MCP_Sync_Kinds::class, 'excluded' );
+		$reasons['group B'] = $excluded->invoke( null, 'option:cron' )['reason'];
+		foreach ( AB_MCP_Sync_Option_Schema::REASON_TEXTS as $code => $text ) {
+			$reasons[ 'option schema ' . $code ] = sprintf( $text, 'siteurl' );
+		}
+		self::assertGreaterThan( 90, count( $reasons ) );
+		foreach ( $reasons as $key => $reason ) {
+			self::assertTrue( AB_MCP_Sync_Said::knows( $reason ), $key . ': ' . $reason );
+		}
+	}
+
+	public function testAKnownTextIsSaidInTheLanguageOfTheSite(): void {
+		$reason                          = AB_MCP_Sync_Kinds::LOCKS['option:create']['reason'];
+		$GLOBALS['ab_test_translations'] = array( $reason => 'Die Kernoption fehlt auf dieser Website.' );
+		self::assertSame( 'Die Kernoption fehlt auf dieser Website.', AB_MCP_Sync_Said::text( $reason ) );
+	}
+
+	public function testAFormIsSaidWithItsValuesInTheirPlaces(): void {
+		$GLOBALS['ab_test_translations'] = array(
+			'Its target, the %1$s of the staging site, has an unclear pair (pair %2$d): a person confirms which side wins first.' => 'Paar %2$d ist unklar, Ziel %1$s.',
+			'WordPress reads the row %s under this name, so this row is never read and is not taken over.'                       => 'WordPress liest die Zeile %s.',
+		);
+		self::assertSame( 'Paar 7 ist unklar, Ziel post 12.', AB_MCP_Sync_Said::text( 'Its target, the post 12 of the staging site, has an unclear pair (pair 7): a person confirms which side wins first.' ) );
+		self::assertSame( 'WordPress liest die Zeile home.', AB_MCP_Sync_Said::text( 'WordPress reads the row home under this name, so this row is never read and is not taken over.' ) );
+		$twice = 'It needs the term 5 of the staging site, which is created in the same run but is held back itself (locked, or waiting for another).';
+		self::assertTrue( AB_MCP_Sync_Said::knows( $twice ) );
+		self::assertSame( $twice, AB_MCP_Sync_Said::text( $twice ), 'Without a translation the English text, with its values.' );
+	}
+
+	public function testAnUnknownTextIsGivenAsItIs(): void {
+		$GLOBALS['ab_test_translations'] = array( 'Not carried to its end in this version.' => 'Nicht zu Ende geführt.' );
+		foreach ( array( 'cURL error 28: Operation timed out after 10001 milliseconds.', '', 'Not carried to its end in this version. More.' ) as $text ) {
+			self::assertFalse( AB_MCP_Sync_Said::knows( $text ), $text );
+			self::assertSame( $text, AB_MCP_Sync_Said::text( $text ) );
+		}
+		self::assertSame( 'Nicht zu Ende geführt.', AB_MCP_Sync_Said::text( 'Not carried to its end in this version.' ) );
+	}
+
+	public function testAKindReadsAsThePageStagingNamesIt(): void {
+		foreach ( array( 'post', 'term', 'attachment', 'menu', 'menu_item', 'widget_area', 'custom_css', 'option', 'other' ) as $kind ) {
+			self::assertSame( AB_MCP_Transfer_View::kind( $kind ), AB_MCP_Sync_Said::kind( $kind ), $kind );
+		}
+		self::assertSame( 'widget area', AB_MCP_Sync_Said::kind( 'widget_area' ) );
+	}
+}

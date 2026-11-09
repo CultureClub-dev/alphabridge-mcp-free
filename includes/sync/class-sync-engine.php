@@ -94,6 +94,7 @@ defined( 'ABSPATH' ) || exit;
 
 require_once __DIR__ . '/class-sync-run.php';
 require_once __DIR__ . '/class-sync-backup.php';
+require_once __DIR__ . '/class-sync-said.php';
 require_once __DIR__ . '/class-sync-guard.php';
 require_once __DIR__ . '/class-sync-resources.php';
 require_once __DIR__ . '/class-sync-post-writer.php';
@@ -1346,10 +1347,10 @@ final class AB_MCP_Sync_Engine {
 			}
 		}
 		$message = $prepared['as_draft']
-			/* translators: 1: kind of the object, as the tools name it (post, term, …), 2: its reference on the staging site, 3: its reference on this site. */
-			? sprintf( __( 'The %1$s %2$s of the staging site was written as %1$s %3$s of this site with the status draft (the confirmed choice); read back as its target.', 'alphabridge-mcp' ), $item['kind'], $item['staging_ref'], $live_id )
-			/* translators: 1: kind of the object, as the tools name it (post, term, …), 2: its reference on the staging site, 3: its reference on this site. */
-			: sprintf( __( 'The %1$s %2$s of the staging site was written as %1$s %3$s of this site; read back as its target.', 'alphabridge-mcp' ), $item['kind'], $item['staging_ref'], $live_id );
+			/* translators: 1: kind of the object, in the language of the site as the page «Staging» names it (post, term, …), 2: its reference on the staging site, 3: its reference on this site. */
+			? sprintf( __( 'The %1$s %2$s of the staging site was written as %1$s %3$s of this site with the status draft (the confirmed choice); read back as its target.', 'alphabridge-mcp' ), AB_MCP_Sync_Said::kind( $item['kind'] ), $item['staging_ref'], $live_id )
+			/* translators: 1: kind of the object, in the language of the site as the page «Staging» names it (post, term, …), 2: its reference on the staging site, 3: its reference on this site. */
+			: sprintf( __( 'The %1$s %2$s of the staging site was written as %1$s %3$s of this site; read back as its target.', 'alphabridge-mcp' ), AB_MCP_Sync_Said::kind( $item['kind'] ), $item['staging_ref'], $live_id );
 		if ( ! empty( $prepared['parent_later'] ) ) {
 			$message .= ' ' . __( 'It hangs under no post yet: a step of its own sets its parent once the run has written that post.', 'alphabridge-mcp' );
 		} elseif ( ! empty( $item['attach'] ) ) {

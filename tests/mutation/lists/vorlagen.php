@@ -195,7 +195,7 @@ return array(
 		'id'      => 'vorlagen/css-undecodable',
 		'clause'  => 'css_refusal(): global styles that do not decode to an array are refused, fail closed (Codex on f2af61f..ce9b7bf)',
 		'file'    => $pw,
-		'search'  => "\t\t\treturn self::locked(\n\t\t\t\t'post:css_markup',\n\t\t\t\tJSON_ERROR_NONE === json_last_error()\n\t\t\t\t\t? __( 'The global styles are no JSON object the check of their CSS reads (a value that is no object).', 'alphabridge-mcp' )\n\t\t\t\t\t/* translators: %s: the error of the JSON parser of PHP (English). */\n\t\t\t\t\t: sprintf( __( 'The global styles are no JSON object the check of their CSS reads (%s).', 'alphabridge-mcp' ), json_last_error_msg() )\n\t\t\t);",
+		'search'  => "\t\t\treturn self::locked( 'post:css_markup', self::json_refusal( json_last_error() ) );",
 		'replace' => "\t\t\treturn null;",
 		'run'     => $unit( 'SyncRunTest', 'testTheCustomCssOfTheGlobalStylesKeepsTheRuleOfTheSiteEditorAtAnyDepth' ),
 		'expect'  => '/testTheCustomCssOfTheGlobalStylesKeepsTheRuleOfTheSiteEditorAtAnyDepth/',

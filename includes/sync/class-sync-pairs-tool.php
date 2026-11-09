@@ -40,6 +40,7 @@
 defined( 'ABSPATH' ) || exit;
 
 require_once __DIR__ . '/class-sync-proposal.php';
+require_once __DIR__ . '/class-sync-said.php';
 
 /**
  * Class AB_MCP_Sync_Pairs_Tool
@@ -94,9 +95,11 @@ final class AB_MCP_Sync_Pairs_Tool {
 		if ( isset( $plan['rest'] ) && null !== $plan['rest'] ) {
 			$out['more_after'] = $plan['rest'];
 		}
+		// The person sees the preview (AB_MCP_Confirm_Token): in the language
+		// of the site (Codex round 2 of branch 13, B1).
 		$out['effect'] = 'confirm' === $plan['action']
-			? 'Writes the table of object pairs of this site only: no content changes on either site. A pair made from an entry equal is active (both sides as its base); from differs, or a chosen pair of other content, it is unclear, and the report asks which side wins; realign makes the state of each side now its new base.'
-			: 'Removes these pairs from the table of object pairs of this site only: their objects stay as they are on both sites, each without a pair from then on (an object of this site then shows as only live, one of the staging site as only staging).';
+			? __( 'Writes the table of object pairs of this site only: no content changes on either site. A pair made from an entry equal is active (both sides as its base); from differs, or a chosen pair of other content, it is unclear, and the report asks which side wins; realign makes the state of each side now its new base.', 'alphabridge-mcp' )
+			: __( 'Removes these pairs from the table of object pairs of this site only: their objects stay as they are on both sites, each without a pair from then on (an object of this site then shows as only live, one of the staging site as only staging).', 'alphabridge-mcp' );
 		return $out;
 	}
 
@@ -376,15 +379,15 @@ final class AB_MCP_Sync_Pairs_Tool {
 			if ( ! in_array( $entry['category'], array( 'equal', 'differs', 'realign' ), true ) ) {
 				return self::selection(
 					isset( $entry['reason'] )
-						/* translators: 1: entry number of the proposal, 2: its category, as the tools name it (only_live, …), 3: the reason the proposal names (English, a value of the proposal). */
-						? sprintf( __( 'Entry %1$d is %2$s and is not paired: %3$s', 'alphabridge-mcp' ), $n, $entry['category'], $entry['reason'] )
+						/* translators: 1: entry number of the proposal, 2: its category, as the tools name it (only_live, …), 3: the reason the proposal names, a whole sentence in the language of the site. */
+						? sprintf( __( 'Entry %1$d is %2$s and is not paired: %3$s', 'alphabridge-mcp' ), $n, $entry['category'], AB_MCP_Sync_Said::text( (string) $entry['reason'] ) )
 						/* translators: 1: entry number of the proposal, 2: its category, as the tools name it (only_live, …). */
 						: sprintf( __( 'Entry %1$d is %2$s and is not paired: it has no counterpart to pair it with.', 'alphabridge-mcp' ), $n, $entry['category'] )
 				);
 			}
 			if ( 'realign' === $entry['category'] && null === $entry['confirm'] ) {
-				/* translators: 1: entry number of the proposal, 2: the reason the proposal names (English, a value of the proposal). */
-				return self::selection( sprintf( __( 'Entry %1$d cannot be aligned anew: %2$s', 'alphabridge-mcp' ), $n, $entry['reason'] ) );
+				/* translators: 1: entry number of the proposal, 2: the reason the proposal names, a whole sentence in the language of the site. */
+				return self::selection( sprintf( __( 'Entry %1$d cannot be aligned anew: %2$s', 'alphabridge-mcp' ), $n, AB_MCP_Sync_Said::text( (string) $entry['reason'] ) ) );
 			}
 			$chosen[ $n ] = $entry;
 		}
@@ -406,7 +409,7 @@ final class AB_MCP_Sync_Pairs_Tool {
 				if ( 'realign' === $entry['category'] && null === $entry['confirm'] ) {
 					$skipped[] = array(
 						'entry'  => $entry['n'],
-						'reason' => $entry['reason'],
+						'reason' => AB_MCP_Sync_Said::text( (string) $entry['reason'] ),
 					);
 					continue;
 				}
@@ -494,7 +497,7 @@ final class AB_MCP_Sync_Pairs_Tool {
 			$list = implode(
 				' ',
 				array_map(
-					/* translators: 1: entry number of the proposal, 2: why it is skipped, a whole sentence (or a reason the proposal names). */
+					/* translators: 1: entry number of the proposal, 2: why it is skipped, a whole sentence in the language of the site. */
 					static fn( $s ) => sprintf( __( 'Entry %1$d: %2$s', 'alphabridge-mcp' ), (int) $s['entry'], (string) $s['reason'] ),
 					array_slice( $skipped, 0, 5 )
 				)

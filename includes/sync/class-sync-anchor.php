@@ -60,6 +60,7 @@ defined( 'ABSPATH' ) || exit;
 require_once dirname( __DIR__ ) . '/class-staging.php';
 require_once __DIR__ . '/class-sync-key.php';
 require_once __DIR__ . '/class-sync-fetcher.php';
+require_once __DIR__ . '/class-sync-said.php';
 
 /**
  * Class AB_MCP_Sync_Anchor
@@ -125,8 +126,8 @@ final class AB_MCP_Sync_Anchor {
 		if ( is_wp_error( $response ) ) {
 			return new WP_Error(
 				'ab_mcp_sync_anchor_unreached',
-				/* translators: 1: address the key was fetched from, 2: the error message of the request, a whole sentence. */
-				sprintf( __( 'The key of the staging site could not be fetched from %1$s: %2$s Check that the staging site answers (wp_staging_status with check_partner=true), or enter its pairing code from its page AlphaBridge → Staging instead.', 'alphabridge-mcp' ), $url, $response->get_error_message() ),
+				/* translators: 1: address the key was fetched from, 2: the error message of the request, a whole sentence in the language of the site where AlphaBridge made it. */
+				sprintf( __( 'The key of the staging site could not be fetched from %1$s: %2$s Check that the staging site answers (wp_staging_status with check_partner=true), or enter its pairing code from its page AlphaBridge → Staging instead.', 'alphabridge-mcp' ), $url, AB_MCP_Sync_Said::text( $response->get_error_message() ) ),
 				array(
 					'url'   => $url,
 					'cause' => $response->get_error_code(),

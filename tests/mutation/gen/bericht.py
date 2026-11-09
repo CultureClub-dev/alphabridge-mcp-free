@@ -628,7 +628,7 @@ e('sel-entry', 'plan_confirm(): an entry of the proposal', T,
 e('sel-category', 'plan_confirm(): only equal, differs and realign are paired', T,
   "\t\t\tif ( ! in_array( $entry['category'], array( 'equal', 'differs', 'realign' ), true ) ) {", "\t\t\tif ( false ) {", 'it', SEL)
 e('sel-realign-ready', 'plan_confirm(): a realign entry that cannot be aligned is refused', T,
-  "\t\t\tif ( 'realign' === $entry['category'] && null === $entry['confirm'] ) {\n\t\t\t\t/* translators: 1: entry number of the proposal, 2: the reason the proposal names (English, a value of the proposal). */\n\t\t\t\treturn self::selection(", "\t\t\tif ( false ) {\n\t\t\t\t/* translators: 1: entry number of the proposal, 2: the reason the proposal names (English, a value of the proposal). */\n\t\t\t\treturn self::selection(", 'it', SEL)
+  "\t\t\tif ( 'realign' === $entry['category'] && null === $entry['confirm'] ) {\n\t\t\t\t/* translators: 1: entry number of the proposal, 2: the reason the proposal names, a whole sentence in the language of the site. */\n\t\t\t\treturn self::selection(", "\t\t\tif ( false ) {\n\t\t\t\t/* translators: 1: entry number of the proposal, 2: the reason the proposal names, a whole sentence in the language of the site. */\n\t\t\t\treturn self::selection(", 'it', SEL)
 e('sel-realign-skip', 'plan_confirm(): by category, such a realign entry is skipped', T,
   "\t\t\t\tif ( 'realign' === $entry['category'] && null === $entry['confirm'] ) {\n\t\t\t\t\t$skipped[]", "\t\t\t\tif ( false ) {\n\t\t\t\t\t$skipped[]", 'it', SEL)
 e('sel-room', 'plan_confirm(): categories only where select and choices leave room', T,

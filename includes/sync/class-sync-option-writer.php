@@ -180,8 +180,8 @@ final class AB_MCP_Sync_Option_Writer {
 		$lock = AB_MCP_Sync_Kinds::lock( 'option', 'unclassified' );
 		return new WP_Error(
 			'ab_mcp_sync_locked',
-			/* translators: 1: the stage that releases the lock (Z8d, …), 2: the reason of the lock as the report names it (English, a value of the report), 3: the name of the option, 4: why it is no core option with a schema here, as the report names it (English), or its class (plugin, guarded, …). */
-			sprintf( __( 'Not written (option:unclassified, from %1$s): %2$s The option %3$s: %4$s Use wp-admin (Settings) to change it by hand, or leave it out of the plan.', 'alphabridge-mcp' ), (string) $lock['stage'], (string) $lock['reason'], $name, null === $class['reason'] ? $class['status'] : (string) $class['reason'] ),
+			/* translators: 1: the stage that releases the lock (Z8d, …), 2: the reason of the lock, a whole sentence in the language of the site, 3: the name of the option, 4: why it is no core option with a schema here, a whole sentence in the language of the site, or its class (plugin, guarded, …). */
+			sprintf( __( 'Not written (option:unclassified, from %1$s): %2$s The option %3$s: %4$s Use wp-admin (Settings) to change it by hand, or leave it out of the plan.', 'alphabridge-mcp' ), (string) $lock['stage'], AB_MCP_Sync_Said::text( (string) $lock['reason'] ), $name, null === $class['reason'] ? $class['status'] : AB_MCP_Sync_Said::text( (string) $class['reason'] ) ),
 			array( 'lock' => $lock + array( 'at' => 'option ' . $name ) )
 		);
 	}

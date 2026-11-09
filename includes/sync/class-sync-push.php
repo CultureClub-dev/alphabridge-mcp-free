@@ -872,9 +872,9 @@ final class AB_MCP_Sync_Push {
 			$first = array() !== $locks ? $locks[0] : null;
 			return $lock(
 				'locked' === $action
-					? ( null === $first ? __( 'Locked in the report.', 'alphabridge-mcp' ) : (string) $first['reason'] )
-					/* translators: %s: what the entry waits for, as the report says it (English, values of the report). */
-					: sprintf( __( 'Waits in the report: %s', 'alphabridge-mcp' ), implode( ' ', array_map( static fn( $w ) => (string) ( $w['why'] ?? '' ), isset( $entry['waits_for'] ) && is_array( $entry['waits_for'] ) ? array_slice( $entry['waits_for'], 0, 3 ) : array() ) ) ),
+					? ( null === $first ? __( 'Locked in the report.', 'alphabridge-mcp' ) : AB_MCP_Sync_Said::text( (string) $first['reason'] ) )
+					/* translators: %s: what the entry waits for, whole sentences in the language of the site. */
+					: sprintf( __( 'Waits in the report: %s', 'alphabridge-mcp' ), implode( ' ', array_map( static fn( $w ) => AB_MCP_Sync_Said::text( (string) ( $w['why'] ?? '' ) ), isset( $entry['waits_for'] ) && is_array( $entry['waits_for'] ) ? array_slice( $entry['waits_for'], 0, 3 ) : array() ) ) ),
 				null === $first ? null : (string) $first['stage']
 			);
 		}
@@ -905,7 +905,7 @@ final class AB_MCP_Sync_Push {
 			}
 			if ( 'create' === $action && in_array( $entry['kind'], array( 'widget_area', 'option', 'custom_css' ), true ) ) {
 				$held = AB_MCP_Sync_Kinds::lock( (string) $entry['kind'], 'create' );
-				return $lock( sprintf( '%1$s (%2$s)', (string) $held['reason'], (string) $held['key'] ), (string) $held['stage'] );
+				return $lock( sprintf( '%1$s (%2$s)', AB_MCP_Sync_Said::text( (string) $held['reason'] ), (string) $held['key'] ), (string) $held['stage'] );
 			}
 		} elseif ( 'post' !== $entry['kind'] ) {
 			/* translators: %s: kind of the object, as the tools name it. */
@@ -921,10 +921,10 @@ final class AB_MCP_Sync_Push {
 			// first write ending the run for them; the check and the boundary
 			// ask it again (AB_MCP_Sync_Post_Writer::theme_refusal()).
 			$theme = isset( $entry['staging']['identity']['theme'] ) && is_string( $entry['staging']['identity']['theme'] ) ? $entry['staging']['identity']['theme'] : '';
-			$other = AB_MCP_Sync_Post_Writer::inactive_theme( $theme );
+			$other = AB_MCP_Sync_Post_Writer::inactive_theme_detail( (string) $entry['subtype'], (string) ( $entry['staging']['identity']['post_name'] ?? '' ), $theme );
 			if ( null !== $other ) {
 				$held = AB_MCP_Sync_Kinds::lock( 'post', 'theme_mismatch' );
-				return $lock( sprintf( '%1$s (post:theme_mismatch) The %2$s %3$s %4$s.', (string) $held['reason'], (string) $entry['subtype'], (string) ( $entry['staging']['identity']['post_name'] ?? '' ), $other ), (string) $held['stage'] );
+				return $lock( sprintf( '%1$s (post:theme_mismatch) %2$s', AB_MCP_Sync_Said::text( (string) $held['reason'] ), $other ), (string) $held['stage'] );
 			}
 		}
 		$staging = isset( $entry['staging']['ref'] ) ? (string) $entry['staging']['ref'] : '';
@@ -1394,8 +1394,10 @@ final class AB_MCP_Sync_Push {
 			'locked'      => $plan['locked'],
 			'not_written' => $plan['skipped'],
 			'resources'   => $plan['resources'],
-			'environment' => $plan['environment'] ? 'compared' : 'not compared: the report was made without the packages of the environment; the run writes objects only, which this does not hold back',
-			'effect'      => 'Makes a run that writes these objects of the staging site onto this site, one per call (action=next), each under the lock of AlphaBridge with a backup and a journal, read back against its target; a new object stays on the way back (a rest); the pairs take new bases. Nothing is deleted. The way back is wp_site_revert, pair by pair, byte for byte conditional. A change of another user or process on a way the lock does not refuse (wp_publish_post() by the cron, terms on the classic way, SQL) between the check and the write can be lost without the read back seeing it.',
+			// The person sees the preview (AB_MCP_Confirm_Token): its words in
+			// the language of the site (Codex round 2 of branch 13, B1).
+			'environment' => $plan['environment'] ? _x( 'compared', 'the environment of the report, in the preview of a takeover', 'alphabridge-mcp' ) : __( 'not compared: the report was made without the packages of the environment; the run writes objects only, which this does not hold back', 'alphabridge-mcp' ),
+			'effect'      => __( 'Makes a run that writes these objects of the staging site onto this site, one per call (action=next), each under the lock of AlphaBridge with a backup and a journal, read back against its target; a new object stays on the way back (a rest); the pairs take new bases. Nothing is deleted. The way back is wp_site_revert, pair by pair, byte for byte conditional. A change of another user or process on a way the lock does not refuse (wp_publish_post() by the cron, terms on the classic way, SQL) between the check and the write can be lost without the read back seeing it.', 'alphabridge-mcp' ),
 		);
 		if ( isset( $plan['existing_run'] ) ) {
 			$out['existing_run'] = (int) $plan['existing_run'];

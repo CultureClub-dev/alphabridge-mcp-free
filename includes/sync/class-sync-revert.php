@@ -74,13 +74,21 @@ final class AB_MCP_Sync_Revert {
 	/** The actions. */
 	const ACTIONS = array( 'plan', 'next', 'status' );
 
-	/** The limits of the way back, named with every preview (concept section 5). */
-	const LIMITS = array(
-		'A new object the run made is not removed: it stays as a rest, its pair residual; remove it by hand in wp-admin where it should go.',
-		'A part changed on this site since the run wrote it is left as it is and named with its value before; its pair is unclear until a person confirms a new alignment (wp_site_pairs).',
-		'An object that deviated within its step (a hook of this site changed a part, a call was refused, a part read back other than written) is never put back by itself: every part of it is left as it is and named with its value before; check it by hand in wp-admin. The same for a part the step never read back (an interrupted step).',
-		'A backed-up scheduled post whose date has passed is not put back (WordPress would publish it); it is named as «check needed»: set its date anew in wp-admin.',
-	);
+	/**
+	 * The limits of the way back, named with every preview (concept section
+	 * 5), in the language of the site: the person sees the preview
+	 * (AB_MCP_Confirm_Token, Codex round 2 of branch 13, B1).
+	 *
+	 * @return string[]
+	 */
+	private static function limits() {
+		return array(
+			__( 'A new object the run made is not removed: it stays as a rest, its pair residual; remove it by hand in wp-admin where it should go.', 'alphabridge-mcp' ),
+			__( 'A part changed on this site since the run wrote it is left as it is and named with its value before; its pair is unclear until a person confirms a new alignment (wp_site_pairs).', 'alphabridge-mcp' ),
+			__( 'An object that deviated within its step (a hook of this site changed a part, a call was refused, a part read back other than written) is never put back by itself: every part of it is left as it is and named with its value before; check it by hand in wp-admin. The same for a part the step never read back (an interrupted step).', 'alphabridge-mcp' ),
+			__( 'A backed-up scheduled post whose date has passed is not put back (WordPress would publish it); it is named as «not put back, check needed»: set its date anew in wp-admin.', 'alphabridge-mcp' ),
+		);
+	}
 
 	/* ------------------------------------------------- the confirmation */
 
@@ -117,10 +125,10 @@ final class AB_MCP_Sync_Revert {
 			'run_state' => $plan['run']['state'],
 			'same_run'  => $plan['same_run'],
 			'steps'     => $plan['shown'],
-			'limits'    => self::LIMITS,
+			'limits'    => self::limits(),
 			'effect'    => $plan['same_run']
-				? 'Leads this run to reverting and takes its own parts back, one pair per call (action=next), under the lock; then it is closed as reverted, or with findings where rests or unclear parts remain.'
-				: 'Makes a run of the way back for these pairs of the closed run and takes their parts back, one pair per call (action=next), under the lock; then it is closed as reverted, or with findings where rests or unclear parts remain.',
+				? __( 'Leads this run to reverting and takes its own parts back, one pair per call (action=next), under the lock; then it is closed as reverted, or with findings where rests or unclear parts remain.', 'alphabridge-mcp' )
+				: __( 'Makes a run of the way back for these pairs of the closed run and takes their parts back, one pair per call (action=next), under the lock; then it is closed as reverted, or with findings where rests or unclear parts remain.', 'alphabridge-mcp' ),
 		);
 	}
 
@@ -823,7 +831,7 @@ final class AB_MCP_Sync_Revert {
 			return $shown;
 		}
 		$shown['same_run'] = $plan['same_run'];
-		$shown['limits']   = self::LIMITS;
+		$shown['limits']   = self::limits();
 		$shown['next']     = array() === $steps && $plan['same_run']
 			? sprintf( 'The way back of run %1$d goes on: the step the interruption left begun stays as it is (unclear, its pair unclear; nothing of it is put back again), and %2$d step(s) of the way back are still to go, none added. Call wp_site_revert action=next with run_id %1$d: each call takes one pair back under the lock, byte for byte where the part is still what the run wrote; the call that finds none left closes the run with the findings.', (int) $now['run_id'], (int) $shown['counts']['planned'] )
 			: sprintf( 'The way back has %1$d step(s) and nothing is written yet. Call wp_site_revert action=next with run_id %2$d: each call takes one pair back under the lock, byte for byte where the part is still what the run wrote; the last one closes the run.', count( $steps ), (int) $now['run_id'] );

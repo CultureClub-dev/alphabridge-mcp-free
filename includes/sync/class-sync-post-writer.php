@@ -1368,11 +1368,10 @@ final class AB_MCP_Sync_Post_Writer {
 	}
 
 	/**
-	 * inactive_theme() for the refusal of the writer: the object and why its
-	 * theme is not the active one here, a whole sentence in the language of
-	 * the site; null where it is. inactive_theme() itself is still the
-	 * English end of a sentence the plan sets into its lock
-	 * (AB_MCP_Sync_Push::verdict()); that lock is a text for the person and
+	 * inactive_theme() for the refusal of the writer and the lock of the
+	 * plan (AB_MCP_Sync_Push::verdict()): the object and why its theme is not
+	 * the active one here, a whole sentence in the language of the site;
+	 * null where it is. The lock of the plan is a text for the person and
 	 * goes into no print of the plan (plan_hash and the state in
 	 * AB_MCP_Sync_Push hold the report hash, the selection, the objects and
 	 * the pairs, no lock).
@@ -1382,7 +1381,7 @@ final class AB_MCP_Sync_Post_Writer {
 	 * @param string $theme The theme of the object.
 	 * @return string|null
 	 */
-	private static function inactive_theme_detail( $type, $name, $theme ) {
+	public static function inactive_theme_detail( $type, $name, $theme ) {
 		if ( null === self::inactive_theme( $theme ) ) {
 			return null;
 		}
@@ -1410,7 +1409,8 @@ final class AB_MCP_Sync_Post_Writer {
 	 * null where it is (branch 9b): the active stylesheet as get_stylesheet()
 	 * gives it and as the option row holds it (a filter that shows another
 	 * theme in this request is no active theme). The one place theme_refusal()
-	 * and the plan (AB_MCP_Sync_Push::verdict()) ask it.
+	 * and the plan (AB_MCP_Sync_Push::verdict()) ask it, through
+	 * inactive_theme_detail(), which says it to the person.
 	 *
 	 * @param string $theme The theme of an object (the slug of its term of wp_theme).
 	 * @return string|null
@@ -1483,15 +1483,38 @@ final class AB_MCP_Sync_Post_Writer {
 		}
 		$data = json_decode( $content, true );
 		if ( ! is_array( $data ) ) {
-			return self::locked(
-				'post:css_markup',
-				JSON_ERROR_NONE === json_last_error()
-					? __( 'The global styles are no JSON object the check of their CSS reads (a value that is no object).', 'alphabridge-mcp' )
-					/* translators: %s: the error of the JSON parser of PHP (English). */
-					: sprintf( __( 'The global styles are no JSON object the check of their CSS reads (%s).', 'alphabridge-mcp' ), json_last_error_msg() )
-			);
+			return self::locked( 'post:css_markup', self::json_refusal( json_last_error() ) );
 		}
 		return self::css_walk( $data, '', 0 );
+	}
+
+	/**
+	 * Why the global styles are no JSON object the check of their CSS reads,
+	 * by the code of json_last_error(), a whole sentence in the language of
+	 * the site; the message of PHP only for a code this list does not know.
+	 *
+	 * @param int $code json_last_error().
+	 * @return string
+	 */
+	private static function json_refusal( $code ) {
+		switch ( (int) $code ) {
+			case JSON_ERROR_NONE:
+				return __( 'The global styles are no JSON object the check of their CSS reads (a value that is no object).', 'alphabridge-mcp' );
+			case JSON_ERROR_DEPTH:
+				return __( 'The global styles are no JSON object the check of their CSS reads: they are nested deeper than the parser reads.', 'alphabridge-mcp' );
+			case JSON_ERROR_STATE_MISMATCH:
+			case JSON_ERROR_SYNTAX:
+				return __( 'The global styles are no JSON object the check of their CSS reads: their JSON is not well formed.', 'alphabridge-mcp' );
+			case JSON_ERROR_CTRL_CHAR:
+				return __( 'The global styles are no JSON object the check of their CSS reads: they hold a control character where JSON allows none.', 'alphabridge-mcp' );
+			case JSON_ERROR_UTF8:
+			case JSON_ERROR_UTF16:
+				return __( 'The global styles are no JSON object the check of their CSS reads: they hold characters that are not valid UTF-8 or UTF-16.', 'alphabridge-mcp' );
+			case JSON_ERROR_INVALID_PROPERTY_NAME:
+				return __( 'The global styles are no JSON object the check of their CSS reads: a key of them is not one PHP can hold.', 'alphabridge-mcp' );
+		}
+		/* translators: %s: the error of the JSON parser of PHP, a technical value (English). */
+		return sprintf( __( 'The global styles are no JSON object the check of their CSS reads (%s).', 'alphabridge-mcp' ), json_last_error_msg() );
 	}
 
 	/**
@@ -3508,8 +3531,8 @@ final class AB_MCP_Sync_Post_Writer {
 	private static function refusal( array $lock, $detail ) {
 		return new WP_Error(
 			'ab_mcp_sync_locked',
-			/* translators: 1: the key of the lock (post:…), 2: the stage that brings it (Z8d, …), 3: its reason, as the table of the locks names it (English), 4: what was found, a whole sentence in the language of the site (The option blogname is not on this site.). */
-			sprintf( __( 'Not written (%1$s, from %2$s): %3$s %4$s Use the editor in wp-admin to take this object over by hand, or leave it out of the plan.', 'alphabridge-mcp' ), $lock['key'], $lock['stage'], $lock['reason'], (string) $detail ),
+			/* translators: 1: the key of the lock (post:…), 2: the stage that brings it (Z8d, …), 3: its reason, a whole sentence in the language of the site, 4: what was found, a whole sentence in the language of the site (The option blogname is not on this site.). */
+			sprintf( __( 'Not written (%1$s, from %2$s): %3$s %4$s Use the editor in wp-admin to take this object over by hand, or leave it out of the plan.', 'alphabridge-mcp' ), $lock['key'], $lock['stage'], AB_MCP_Sync_Said::text( $lock['reason'] ), (string) $detail ),
 			array( 'lock' => $lock + array( 'at' => (string) $detail ) )
 		);
 	}

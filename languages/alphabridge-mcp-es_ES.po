@@ -10035,3 +10035,444 @@ msgstr "No se ha escrito nada: el objeto cambió justo antes de la llamada, desp
 msgctxt "state of a part"
 msgid "not put back, check needed"
 msgstr "no restaurada, hay que comprobarla"
+
+msgid "Writes the table of object pairs of this site only: no content changes on either site. A pair made from an entry equal is active (both sides as its base); from differs, or a chosen pair of other content, it is unclear, and the report asks which side wins; realign makes the state of each side now its new base."
+msgstr "Escribe la tabla de pares de objetos solo de este sitio: no cambia ningún contenido en ninguno de los dos sitios. Un par creado a partir de un elemento equal queda activo (ambos lados como su base); a partir de differs, o un par elegido de otro contenido, queda incierto, y el informe pregunta qué lado prevalece; realign convierte el estado actual de cada lado en su nueva base."
+
+msgid "Removes these pairs from the table of object pairs of this site only: their objects stay as they are on both sites, each without a pair from then on (an object of this site then shows as only live, one of the staging site as only staging)."
+msgstr "Quita estos pares de la tabla de pares de objetos solo de este sitio: sus objetos se quedan como están en ambos sitios, cada uno sin par a partir de entonces (un objeto de este sitio aparece entonces como solo en producción; uno del sitio de staging, como solo en staging)."
+
+msgid "The global styles are no JSON object the check of their CSS reads: they are nested deeper than the parser reads."
+msgstr "Los estilos globales no son un objeto JSON que la comprobación de su CSS pueda leer: están anidados a más profundidad de la que lee el analizador."
+
+msgid "The global styles are no JSON object the check of their CSS reads: their JSON is not well formed."
+msgstr "Los estilos globales no son un objeto JSON que la comprobación de su CSS pueda leer: su JSON no está bien formado."
+
+msgid "The global styles are no JSON object the check of their CSS reads: they hold a control character where JSON allows none."
+msgstr "Los estilos globales no son un objeto JSON que la comprobación de su CSS pueda leer: contienen un carácter de control donde JSON no admite ninguno."
+
+msgid "The global styles are no JSON object the check of their CSS reads: they hold characters that are not valid UTF-8 or UTF-16."
+msgstr "Los estilos globales no son un objeto JSON que la comprobación de su CSS pueda leer: contienen caracteres que no son UTF-8 ni UTF-16 válidos."
+
+msgid "The global styles are no JSON object the check of their CSS reads: a key of them is not one PHP can hold."
+msgstr "Los estilos globales no son un objeto JSON que la comprobación de su CSS pueda leer: una de sus claves no es una que PHP pueda contener."
+
+msgctxt "the environment of the report, in the preview of a takeover"
+msgid "compared"
+msgstr "comparado"
+
+msgid "not compared: the report was made without the packages of the environment; the run writes objects only, which this does not hold back"
+msgstr "sin comparar: el informe se hizo sin los paquetes del entorno; la ejecución solo escribe objetos, y eso no la detiene"
+
+msgid "Makes a run that writes these objects of the staging site onto this site, one per call (action=next), each under the lock of AlphaBridge with a backup and a journal, read back against its target; a new object stays on the way back (a rest); the pairs take new bases. Nothing is deleted. The way back is wp_site_revert, pair by pair, byte for byte conditional. A change of another user or process on a way the lock does not refuse (wp_publish_post() by the cron, terms on the classic way, SQL) between the check and the write can be lost without the read back seeing it."
+msgstr "Crea una ejecución que escribe estos objetos del sitio de staging en este sitio, uno por llamada (action=next), cada uno bajo el bloqueo de AlphaBridge con una copia de seguridad y un registro, y vuelto a leer frente a su objetivo; un objeto nuevo se queda en la vuelta atrás (un resto); los pares reciben bases nuevas. No se borra nada. La vuelta atrás es wp_site_revert, par por par, condicionada byte a byte. Un cambio de otro usuario o proceso por una vía que el bloqueo no rechaza (wp_publish_post() del cron, términos por la vía clásica, SQL) entre la comprobación y la escritura puede perderse sin que la relectura lo detecte."
+
+msgid "A new object the run made is not removed: it stays as a rest, its pair residual; remove it by hand in wp-admin where it should go."
+msgstr "Un objeto nuevo que creó la ejecución no se elimina: se queda como resto, y su par como residual; elimínalo a mano en wp-admin donde corresponda."
+
+msgid "A part changed on this site since the run wrote it is left as it is and named with its value before; its pair is unclear until a person confirms a new alignment (wp_site_pairs)."
+msgstr "Una parte cambiada en este sitio desde que la ejecución la escribió se deja como está y se indica con su valor anterior; su par queda incierto hasta que una persona confirme un nuevo ajuste (wp_site_pairs)."
+
+msgid "An object that deviated within its step (a hook of this site changed a part, a call was refused, a part read back other than written) is never put back by itself: every part of it is left as it is and named with its value before; check it by hand in wp-admin. The same for a part the step never read back (an interrupted step)."
+msgstr "Un objeto que se desvió dentro de su paso (un hook de este sitio cambió una parte, se rechazó una llamada, una parte se volvió a leer distinta de como se escribió) nunca se restaura por sí solo: cada una de sus partes se deja como está y se indica con su valor anterior; compruébalo a mano en wp-admin. Lo mismo vale para una parte que el paso nunca volvió a leer (un paso interrumpido)."
+
+msgid "A backed-up scheduled post whose date has passed is not put back (WordPress would publish it); it is named as «not put back, check needed»: set its date anew in wp-admin."
+msgstr "Una entrada programada con copia de seguridad cuya fecha ya ha pasado no se restaura (WordPress la publicaría); se indica como «no restaurada, revisión necesaria»: vuelve a fijar su fecha en wp-admin."
+
+msgid "Leads this run to reverting and takes its own parts back, one pair per call (action=next), under the lock; then it is closed as reverted, or with findings where rests or unclear parts remain."
+msgstr "Lleva esta ejecución a la reversión y revierte sus propias partes, un par por llamada (action=next), bajo el bloqueo; después se cierra como revertida, o con incidencias donde quedan restos o partes inciertas."
+
+msgid "Makes a run of the way back for these pairs of the closed run and takes their parts back, one pair per call (action=next), under the lock; then it is closed as reverted, or with findings where rests or unclear parts remain."
+msgstr "Crea una ejecución de vuelta atrás para estos pares de la ejecución cerrada y revierte sus partes, un par por llamada (action=next), bajo el bloqueo; después se cierra como revertida, o con incidencias donde quedan restos o partes inciertas."
+
+msgid "A Customizer changeset runs its settings when it is published, as stored users or with the capability exist; it needs a schema of its own."
+msgstr "Un conjunto de cambios del Personalizador aplica sus ajustes al publicarse, según los usuarios guardados o con la capacidad que existan entonces; necesita un esquema propio."
+
+msgid "A font of the font library comes with its files under uploads/fonts, which are not attachments."
+msgstr "Una fuente de la biblioteca de fuentes trae sus archivos en uploads/fonts, que no son adjuntos."
+
+msgid "A post type of a plugin or theme, not classified yet."
+msgstr "Un tipo de contenido de un plugin o tema, aún sin clasificar."
+
+msgid "The categories of the link manager, whose table links has no engine."
+msgstr "Las categorías del gestor de enlaces, cuya tabla links no tiene motor."
+
+msgid "A taxonomy of a plugin or theme, not classified yet."
+msgstr "Una taxonomía de un plugin o tema, aún sin clasificar."
+
+msgid "Roles follow with the rule for the registration as a class of the core (decision 29)."
+msgstr "Los roles llegan junto con la regla para el registro como clase del núcleo (decisión 29)."
+
+msgid "The registration pair follows with the rule for the registration as a class of the core (decision 29)."
+msgstr "El par de ajustes de registro llega junto con la regla para el registro como clase del núcleo (decisión 29)."
+
+msgid "Which plugins run is the code of the site."
+msgstr "Qué plugins se ejecutan forma parte del código del sitio."
+
+msgid "A change of the theme is a phase of the code."
+msgstr "Un cambio de tema es una fase del código."
+
+msgid "Whether a menu adds new top-level pages by itself is a field of the menu in a row of all menus; Z8 reads it (decision 21) and does not take it over."
+msgstr "Si un menú añade por sí solo nuevas páginas de nivel superior es un campo del menú en una fila de todos los menús; Z8 lo lee (decisión 21) y no lo traspasa."
+
+msgid "set_theme_mod() skips the sanitizers and capabilities of the Customizer settings; theme mods follow through those."
+msgstr "set_theme_mod() se salta las funciones de saneamiento y las capacidades de los ajustes del Personalizador; los theme mods llegan a través de ellos."
+
+msgid "Files outside the file lists of attachments: counted, their contents not compared."
+msgstr "Archivos fuera de las listas de archivos de los adjuntos: se cuentan, pero su contenido no se compara."
+
+msgid "No object is deleted in Z8, and no status stands in for a deletion: an object deleted on staging is shown as such."
+msgstr "En Z8 no se borra ningún objeto, y ningún estado sustituye a un borrado: un objeto borrado en staging se muestra como tal."
+
+msgid "Bringing back an object deleted on one site, from the other site or from a backup, follows with the deletions and their way back."
+msgstr "Recuperar un objeto borrado en un sitio, desde el otro sitio o desde una copia de seguridad, llega junto con los borrados y su vuelta atrás."
+
+msgid "Removing a menu item is a deletion with the consequences of wp_delete_post(); a menu with an item removed on staging is locked as a whole."
+msgstr "Quitar un elemento de menú es un borrado con las consecuencias de wp_delete_post(); un menú con un elemento quitado en staging se bloquea entero."
+
+msgid "A widget area with an instance removed on staging is locked as a whole: writing the rest would not bring it to the staging state."
+msgstr "Un área de widgets con una instancia quitada en staging se bloquea entera: escribir el resto no la llevaría al estado de staging."
+
+msgid "Creating Additional CSS sets custom_css_post_id as well, and no way back through the trash undoes it."
+msgstr "Crear el CSS adicional también establece custom_css_post_id, y ninguna vuelta atrás por la papelera lo deshace."
+
+msgid "The right to the meta of a new term can only be asked once the term exists, and a term made in a run is not taken back."
+msgstr "El permiso sobre los metadatos de un término nuevo solo se puede consultar cuando el término ya existe, y un término creado en una ejecución no se revierte."
+
+msgid "The right to a meta key of a new post that only the object answers can only be asked once the post exists."
+msgstr "El permiso sobre una clave meta de una entrada nueva que solo el objeto responde solo se puede consultar cuando la entrada ya existe."
+
+msgid "A meta key map_meta_cap refuses and that differs between the sides waits for its field rule."
+msgstr "Una clave meta que map_meta_cap rechaza y que difiere entre los lados espera su regla de campo."
+
+msgid "A document of a page builder other than the six released block libraries."
+msgstr "Un documento de un constructor de páginas distinto de las seis bibliotecas de bloques publicadas."
+
+msgid "A plugin registers a reader for a page builder that has no signature here; which posts it built only that reader's code tells, so no post is taken over while it is registered."
+msgstr "Un plugin registra un lector para un constructor de páginas que aquí no tiene firma; qué entradas construyó solo lo dice el código de ese lector, así que no se traspasa ninguna entrada mientras esté registrado."
+
+msgid "A different file at the path on the live site would be replaced."
+msgstr "Se reemplazaría un archivo distinto en esa ruta del sitio de producción."
+
+msgid "Another attachment of the live site uses a file at this path."
+msgstr "Otro adjunto del sitio de producción usa un archivo en esta ruta."
+
+msgid "A file of the attachment is of a type this account may not upload, or its content is not what its name says (WordPress checks a file by its content as it uploads it, wp_check_filetype_and_ext()): upload it by hand in the media library of this site, or take it over with an account that may upload files of that type."
+msgstr "Un archivo del adjunto es de un tipo que esta cuenta no puede subir, o su contenido no es lo que dice su nombre (WordPress comprueba un archivo por su contenido al subirlo, wp_check_filetype_and_ext()): súbelo a mano en la biblioteca de medios de este sitio, o traspásalo con una cuenta que pueda subir archivos de ese tipo."
+
+msgid "The files of the attachment this site does not have yet are larger than one package of media carries (48 MiB): a person resolves it, by uploading the file by hand in the media library of this site."
+msgstr "Los archivos del adjunto que este sitio aún no tiene son más grandes de lo que lleva un paquete de medios (48 MiB): lo resuelve una persona, subiendo el archivo a mano en la biblioteca de medios de este sitio."
+
+msgid "An option of a plugin or theme, or one without a schema, not classified yet."
+msgstr "Una opción de un plugin o tema, o una sin esquema, aún sin clasificar."
+
+msgid "Objects that need each other cannot be made visible together in WordPress; how often that happens is measured first."
+msgstr "Los objetos que se necesitan mutuamente no se pueden hacer visibles a la vez en WordPress; primero se mide con qué frecuencia ocurre."
+
+msgid "A stored value holds a PHP object, a reference or a record that is read only with the code of its class; it is neither compared nor taken over without that class."
+msgstr "Un valor guardado contiene un objeto PHP, una referencia o un registro que solo se lee con el código de su clase; sin esa clase no se compara ni se traspasa."
+
+msgid "A stored value looks serialized but does not unpack, or nests deeper than it is read: nothing says what it holds."
+msgstr "Un valor guardado parece serializado pero no se desempaqueta, o está anidado a más profundidad de la que se lee: nada indica qué contiene."
+
+msgid "A whole number without a known schema equals the staging id of an object in the scope whose live id differs: it may point to that object, and no rule says whether to rewrite it."
+msgstr "Un número entero sin esquema conocido coincide con el id de staging de un objeto del alcance cuyo id en producción es distinto: puede apuntar a ese objeto, y ninguna regla dice si hay que reescribirlo."
+
+msgid "A reference is stored in a spelling the rewriter does not write back as WordPress reads it (backslash escapes, character references, other quotes, the attribute twice, an image id outside the class): it is not rewritten."
+msgstr "Una referencia está guardada con una grafía que el reescritor no vuelve a escribir tal como la lee WordPress (escapes con barra invertida, referencias de caracteres, otras comillas, el atributo dos veces, un id de imagen fuera de la clase): no se reescribe."
+
+msgid "A field inside the value has the name of a credential: the value is mixed, and no field rule says which part may go."
+msgstr "Un campo dentro del valor tiene el nombre de una credencial: el valor es mixto, y ninguna regla de campo dice qué parte puede pasar."
+
+msgid "The post is protected by a password (post_password): the password is a credential, so the post is taken over by hand only."
+msgstr "La entrada está protegida con contraseña (post_password): la contraseña es una credencial, así que la entrada solo se traspasa a mano."
+
+msgid "The value holds HTML outside the list of tags and attributes WordPress lets through in posts (kses), such as srcdoc, SVG, embed or base: what it names is not read, so it is taken over by hand only."
+msgstr "El valor contiene HTML fuera de la lista de etiquetas y atributos que WordPress deja pasar en las entradas (kses), como srcdoc, SVG, embed o base: lo que nombra no se lee, así que solo se traspasa a mano."
+
+msgid "The value holds a script of JavaScript, which no parser of WordPress reads: what it names (ids, addresses, credentials) is not known, so it is taken over by hand only."
+msgstr "El valor contiene un script de JavaScript, que ningún analizador de WordPress lee: lo que nombra (ids, direcciones, credenciales) no se conoce, así que solo se traspasa a mano."
+
+msgid "A layer of the stored value (its text decoded, a data: address, base64, a string of CSS, JSON a plugin reads) holds an address of the sites that names an object by its id where no reader of WordPress read it: it would be taken over unchanged and name another object on the live site, so the object is taken over by hand only."
+msgstr "Una capa del valor guardado (su texto decodificado, una dirección data:, base64, una cadena de CSS, JSON que lee un plugin) contiene una dirección de los sitios que nombra un objeto por su id donde ningún lector de WordPress la ha leído: se traspasaría sin cambios y nombraría otro objeto en el sitio de producción, así que el objeto solo se traspasa a mano."
+
+msgid "A layer of the stored value (its text decoded, a data: address, base64, an image, a script of an image, a dropped value of JSON) holds the name of a credential with a value beside it that the credential check did not name: nothing of it is compared or packed, the object is taken over by hand only."
+msgstr "Una capa del valor guardado (su texto decodificado, una dirección data:, base64, una imagen, un script de una imagen, un valor descartado de JSON) contiene el nombre de una credencial con un valor al lado que la comprobación de credenciales no ha señalado: no se compara ni se empaqueta nada de ella, y el objeto solo se traspasa a mano."
+
+msgid "A file of the attachment's file list is not there."
+msgstr "Falta un archivo de la lista de archivos del adjunto."
+
+msgid "Code decides where the uploads lie (a filter on upload_dir or on the option upload_path, as offload plugins add, or a network of sites): the files are neither compared nor taken over."
+msgstr "Es el código el que decide dónde están los uploads (un filtro en upload_dir o en la opción upload_path, como los que añaden los plugins de almacenamiento externo, o una red de sitios): los archivos no se comparan ni se traspasan."
+
+msgid "A path of the attachment's file list is not a plain relative path under the uploads, or a link or no regular file lies on the way."
+msgstr "Una ruta de la lista de archivos del adjunto no es una ruta relativa simple bajo los uploads, o en el camino hay un enlace o algo que no es un archivo normal."
+
+msgid "The stored value of a core option does not keep the rule of its schema."
+msgstr "El valor guardado de una opción del núcleo no cumple la regla de su esquema."
+
+msgid "A post type of another kind (an attachment, a menu item, the additional CSS) is written by the engine of its own kind, never by the engine of the kind post: plan it again from a fresh report."
+msgstr "Un tipo de contenido de otra clase (un adjunto, un elemento de menú, el CSS adicional) lo escribe el motor de su propia clase, nunca el motor del tipo post: vuelve a planificarlo a partir de un informe nuevo."
+
+msgid "The staging object lies in the trash, a deletion on the staging site; no status stands in for a deletion, and deletions follow with their way back (as *:delete)."
+msgstr "El objeto de staging está en la papelera, un borrado en el sitio de staging; ningún estado sustituye a un borrado, y los borrados llegan junto con su vuelta atrás (como *:delete)."
+
+msgid "An auto-draft (WordPress made it for the editor, nobody saved it, WordPress removes it after seven days) has no content: it is never taken over, by no stage."
+msgstr "Un borrador automático (WordPress lo creó para el editor, nadie lo guardó, WordPress lo elimina a los siete días) no tiene contenido: nunca se traspasa, en ninguna etapa."
+
+msgid "A status the engine of the kind post does not write (a status of a plugin, or one WordPress gives no post or page) waits for its field rule; the engine writes publish, future, draft, pending and private."
+msgstr "Un estado que el motor del tipo post no escribe (un estado de un plugin, o uno que WordPress no da a ninguna entrada ni página) espera su regla de campo; el motor escribe publish, future, draft, pending y private."
+
+msgid "The package carries no whole content of the object (a row of it could not be read on the staging site), so nothing of it is written: make the inventory and the package again on the staging site."
+msgstr "El paquete no lleva el contenido completo del objeto (una fila suya no se pudo leer en el sitio de staging), así que no se escribe nada de él: vuelve a hacer el inventario y el paquete en el sitio de staging."
+
+msgid "The canonical form of the object carries a lock this version does not read (the other site runs another version of AlphaBridge), so nothing of it is written: bring both sites to the same version."
+msgstr "La forma canónica del objeto lleva un bloqueo que esta versión no lee (el otro sitio ejecuta otra versión de AlphaBridge), así que no se escribe nada de él: lleva ambos sitios a la misma versión."
+
+msgid "The post type of the object is not registered on this site (the plugin or theme that registers it is not active here): activate it here, or take the object over by hand."
+msgstr "El tipo de contenido del objeto no está registrado en este sitio (el plugin o tema que lo registra no está activo aquí): actívalo aquí, o traspasa el objeto a mano."
+
+msgid "A meta value the metadata API cannot store byte for byte (a serialized value that is no array, or one serialize() would not give back as it is) waits for its field rule."
+msgstr "Un valor meta que la API de metadatos no puede guardar byte a byte (un valor serializado que no es un array, o uno que serialize() no devolvería tal cual) espera su regla de campo."
+
+msgid "A term of a taxonomy of a plugin or theme on the post waits for the classification of that taxonomy; the engine of the kind post sets category, post_tag, post_format, wp_pattern_category, wp_theme and wp_template_part_area. A term of wp_theme or wp_template_part_area whose name is not its slug waits for its field rule as well: WordPress reads the theme and the area by the name, the engine writes them by the slug."
+msgstr "Un término de una taxonomía de un plugin o tema en la entrada espera la clasificación de esa taxonomía; el motor del tipo post establece category, post_tag, post_format, wp_pattern_category, wp_theme y wp_template_part_area. Un término de wp_theme o wp_template_part_area cuyo nombre no es su slug también espera su regla de campo: WordPress lee el tema y el área por el nombre, y el motor los escribe por el slug."
+
+msgid "Two meta keys of the post that the database compares alike (Foo and foo under the collation of postmeta) wait for their field rule: update_metadata() and delete_metadata() write by the key and would change both."
+msgstr "Dos claves meta de la entrada que la base de datos compara como iguales (Foo y foo con la intercalación de postmeta) esperan su regla de campo: update_metadata() y delete_metadata() escriben por la clave y cambiarían ambas."
+
+msgid "A relationship with a term_order other than 0 (a plugin that sorts the terms), on the staging post or on the post of this site, waits for its field rule: wp_set_object_terms() makes every relationship anew with the order 0, so a step could not write the order of the staging site, and the way back could not give the order of this site back."
+msgstr "Una relación con un term_order distinto de 0 (un plugin que ordena los términos), en la entrada de staging o en la entrada de este sitio, espera su regla de campo: wp_set_object_terms() vuelve a crear cada relación con el orden 0, así que un paso no podría escribir el orden del sitio de staging, y la vuelta atrás no podría devolver el orden de este sitio."
+
+msgid "WordPress would store another slug than the staging object has (another post of its type and parent holds it, a post in the trash holds it and would be renamed, a pending post of an account that may not publish it loses it, a published one without a slug gets one from its title): change the slug on the staging site, or pair the two objects first (wp_site_pairs)."
+msgstr "WordPress guardaría un slug distinto del que tiene el objeto de staging (otra entrada de su tipo y padre lo tiene, una entrada en la papelera lo tiene y se renombraría, una entrada pendiente de una cuenta que no puede publicarla lo pierde, una publicada sin slug recibe uno a partir de su título): cambia el slug en el sitio de staging, o empareja primero los dos objetos (wp_site_pairs)."
+
+msgid "A field or meta value of the object changes in the sanitizing WordPress runs on a save (kses without unfiltered_html, sanitize_title(), sanitize_meta()), so the written object would not be the target: take it over with an account that may store unfiltered HTML, or by hand."
+msgstr "Un campo o valor meta del objeto cambia con el saneamiento que WordPress aplica al guardar (kses sin unfiltered_html, sanitize_title(), sanitize_meta()), así que el objeto escrito no sería el objetivo: traspásalo con una cuenta que pueda guardar HTML sin filtrar, o a mano."
+
+msgid "The featured image names an attachment of this site that WordPress shows as no image, and set_post_thumbnail() would remove the featured image instead of setting it: check the attachment in the media library of this site."
+msgstr "La imagen destacada indica un adjunto de este sitio que WordPress no muestra como imagen, y set_post_thumbnail() quitaría la imagen destacada en lugar de establecerla: comprueba el adjunto en la biblioteca de medios de este sitio."
+
+msgid "A page of the top level is published or scheduled only while no menu of this site adds pages by itself (the automatic would add it, and the cron would publish a scheduled one); the confirmed choice is to take it over as draft, or the automatic is switched off in the menu."
+msgstr "Una página de nivel superior solo se publica o programa mientras ningún menú de este sitio añada páginas por sí solo (la opción automática la añadiría, y el cron publicaría una programada); la elección confirmada es traspasarla como borrador, o se desactiva la opción automática en el menú."
+
+msgid "The author of the staging object has no account of that login on this site; make the account, or take the object over by hand."
+msgstr "El autor del objeto de staging no tiene en este sitio ninguna cuenta con ese nombre de usuario; crea la cuenta, o traspasa el objeto a mano."
+
+msgid "WordPress would store another status than the staging site has (a scheduled date that passed, or one too close): set the date anew on the staging site."
+msgstr "WordPress guardaría un estado distinto del que tiene el sitio de staging (una fecha programada que ya ha pasado, o una demasiado cercana): vuelve a fijar la fecha en el sitio de staging."
+
+msgid "A reference of the object (its parent, a term, an id in its content, a template part it names by theme and slug) has no counterpart on this site: pair or create the target first."
+msgstr "Una referencia del objeto (su padre, un término, un id en su contenido, una parte de plantilla que nombra por tema y slug) no tiene equivalente en este sitio: empareja o crea primero el destino."
+
+msgid "A template, a template part or the global styles belong to a theme (the term of wp_theme) that is not the active theme of this site by that very name, or to none: WordPress finds them by the name of the active theme only, and a theme is never rewritten into another. Activate the same theme on both sites (a change of the theme is a phase of the code, Z8b), or take the object over by hand in the site editor."
+msgstr "Una plantilla, una parte de plantilla o los estilos globales pertenecen a un tema (el término de wp_theme) que no es, con ese mismo nombre, el tema activo de este sitio, o a ninguno: WordPress solo los encuentra por el nombre del tema activo, y un tema nunca se reescribe en otro. Activa el mismo tema en ambos sitios (un cambio de tema es una fase del código, Z8b), o traspasa el objeto a mano en el editor del sitio."
+
+msgid "The navigation would change which navigation WordPress shows in a navigation block without a menu of its own (the most recently published one: a new one published after it, a date moved past it, a status that adds or takes away the latest), and a template or a post of this site shows such a block after the run. Give that block its menu (in the site editor, on the staging site as well), or make or publish the navigation by hand in the site editor of this site, where the change shows, or leave it out of the plan."
+msgstr "La navegación cambiaría qué navegación muestra WordPress en un bloque de navegación sin menú propio (la publicada más recientemente: una nueva publicada después, una fecha movida más allá, un estado que añade o quita la más reciente), y una plantilla o una entrada de este sitio muestra un bloque así después de la ejecución. Asigna a ese bloque su menú (en el editor del sitio, también en el sitio de staging), o crea o publica la navegación a mano en el editor del sitio de este sitio, donde se ve el cambio, o déjala fuera del plan."
+
+msgid "The custom CSS of the global styles holds a closing tag of STYLE (</style followed by a space, a slash or a closing angle bracket), ends in a part of one, or is no text, which the site editor refuses to save, or the global styles are no JSON the check of their CSS reads (WordPress shows nothing of them then): change the styles on the staging site, where the site editor saves them anew as JSON."
+msgstr "El CSS personalizado de los estilos globales contiene una etiqueta de cierre de STYLE (</style seguido de un espacio, una barra o un corchete angular de cierre), termina en una parte de una, o no es texto, lo que el editor del sitio se niega a guardar, o los estilos globales no son un JSON que la comprobación de su CSS pueda leer (WordPress no muestra entonces nada de ellos): cambia los estilos en el sitio de staging, donde el editor del sitio los vuelve a guardar como JSON."
+
+msgid "The template of the staging object (_wp_page_template) is not one the theme of this site offers for its type, so WordPress would store default instead: add the template to the theme of this site, or take the object over by hand."
+msgstr "La plantilla del objeto de staging (_wp_page_template) no es una que el tema de este sitio ofrezca para su tipo, así que WordPress guardaría default en su lugar: añade la plantilla al tema de este sitio, o traspasa el objeto a mano."
+
+msgid "The engine of the kind term writes the terms of category, post_tag and wp_pattern_category, registered on this site, from a package with their content; a term of another taxonomy waits for its classification."
+msgstr "El motor del tipo term escribe los términos de category, post_tag y wp_pattern_category, registrados en este sitio, a partir de un paquete con su contenido; un término de otra taxonomía espera su clasificación."
+
+msgid "A term in a group of aliases (term_group other than 0) waits for its field rule: the group is an id of the site's own, which no pair maps."
+msgstr "Un término en un grupo de alias (term_group distinto de 0) espera su regla de campo: el grupo es un id propio del sitio, que ningún par asigna."
+
+msgid "The parent would close a loop of parents on this site (wp_update_term() would break it by changing the parent of other terms), or the taxonomy has no parents here: set the parents by hand in wp-admin."
+msgstr "El padre cerraría un bucle de padres en este sitio (wp_update_term() lo rompería cambiando el padre de otros términos), o la taxonomía aquí no tiene padres: establece los padres a mano en wp-admin."
+
+msgid "Another term of the taxonomy holds the slug on this site, or WordPress would store another one: change the slug on the staging site, or pair the two terms first (wp_site_pairs)."
+msgstr "Otro término de la taxonomía tiene el slug en este sitio, o WordPress guardaría otro: cambia el slug en el sitio de staging, o empareja primero los dos términos (wp_site_pairs)."
+
+msgid "A field or meta value of the term changes in the sanitizing WordPress runs on a save (the filters of term names and descriptions, kses without unfiltered_html, sanitize_meta()), or the slug is empty: take it over with an account that may store unfiltered HTML, or by hand."
+msgstr "Un campo o valor meta del término cambia con el saneamiento que WordPress aplica al guardar (los filtros de nombres y descripciones de términos, kses sin unfiltered_html, sanitize_meta()), o el slug está vacío: traspásalo con una cuenta que pueda guardar HTML sin filtrar, o a mano."
+
+msgid "A reference of the term (its parent, an address in its name, description or meta) has no counterpart on this site: pair or create the target first."
+msgstr "Una referencia del término (su padre, una dirección en su nombre, su descripción o sus metadatos) no tiene equivalente en este sitio: empareja o crea primero el destino."
+
+msgid "A meta value of the term the metadata API cannot store byte for byte (a serialized value that is no array, or one serialize() would not give back as it is) waits for its field rule."
+msgstr "Un valor meta del término que la API de metadatos no puede guardar byte a byte (un valor serializado que no es un array, o uno que serialize() no devolvería tal cual) espera su regla de campo."
+
+msgid "Two meta keys of the term that the database compares alike (Foo and foo under the collation of termmeta) wait for their field rule: update_metadata() and delete_metadata() write by the key and would change both."
+msgstr "Dos claves meta del término que la base de datos compara como iguales (Foo y foo con la intercalación de termmeta) esperan su regla de campo: update_metadata() y delete_metadata() escriben por la clave y cambiarían ambas."
+
+msgid "Two or more menus of the plan take each other's position (an exchange): the step of each would change another of them, whose step would then find it changed since the plan and leave a position empty, whatever their order. Plan one of them in a run of its own first and the others from a new report after it, or set the positions by hand under Appearance → Menus → Manage Locations."
+msgstr "Dos o más menús del plan intercambian sus ubicaciones (un intercambio): el paso de cada uno cambiaría otro de ellos, cuyo paso lo encontraría entonces cambiado desde el plan y dejaría una ubicación vacía, sea cual sea su orden. Planifica primero uno de ellos en una ejecución propia y los demás después a partir de un informe nuevo, o establece las ubicaciones a mano en Apariencia → Menús → Gestionar ubicaciones."
+
+msgid "The menu is at a position the active theme of this site does not register: a position is written only where the theme registers it (as the menu screen offers them). Activate a theme that registers it, or set the position by hand under Appearance → Menus → Manage Locations."
+msgstr "El menú está en una ubicación que el tema activo de este sitio no registra: una ubicación solo se escribe donde el tema la registra (tal como las ofrece la pantalla de menús). Activa un tema que la registre, o establece la ubicación a mano en Apariencia → Menús → Gestionar ubicaciones."
+
+msgid "WordPress would store another value for a field of the menu item than the staging site has (wp_update_nav_menu_item() with sanitize_key(), sanitize_html_class(), sanitize_url(), a title it stores as none where it is the title of the object, kses without unfiltered_html): change the item on the staging site, take it over with an account that may store unfiltered HTML, or by hand under Appearance → Menus."
+msgstr "WordPress guardaría para un campo del elemento de menú un valor distinto del que tiene el sitio de staging (wp_update_nav_menu_item() con sanitize_key(), sanitize_html_class(), sanitize_url(), un título que guarda como vacío cuando es el título del objeto, kses sin unfiltered_html): cambia el elemento en el sitio de staging, traspásalo con una cuenta que pueda guardar HTML sin filtrar, o a mano en Apariencia → Menús."
+
+msgid "The menu item is of a shape the core does not write through the menu screen (another status than publish or draft, no position, in no menu or in several, a type the core does not know, a meta field of the core twice or missing): it waits for its field rule."
+msgstr "El elemento de menú tiene una forma que el núcleo no escribe a través de la pantalla de menús (un estado distinto de publish o draft, sin posición, en ningún menú o en varios, un tipo que el núcleo no conoce, un campo meta del núcleo duplicado o ausente): espera su regla de campo."
+
+msgid "A reference of the menu or of its item (its menu, its parent item, the post or term it links, an address with an id) has no counterpart on this site: pair or create the target first."
+msgstr "Una referencia del menú o de su elemento (su menú, su elemento padre, la entrada o el término que enlaza, una dirección con un id) no tiene equivalente en este sitio: empareja o crea primero el destino."
+
+msgid "The widget area is not on this site (no key of sidebars_widgets): it is not made by a run. Open Appearance → Widgets on this site once (the core adds the areas of the theme), then make a new report."
+msgstr "El área de widgets no está en este sitio (no hay ninguna clave de sidebars_widgets): una ejecución no la crea. Abre una vez Apariencia → Widgets en este sitio (el núcleo añade las áreas del tema) y después haz un informe nuevo."
+
+msgid "A widget of the area is of a type that is not registered on this site (its update() cannot check its settings), is no widget with a number, or its row (widget_<base>) was not written by the widgets of WordPress: activate the plugin or theme that provides the widget, or take the area over by hand under Appearance → Widgets."
+msgstr "Un widget del área es de un tipo que no está registrado en este sitio (su update() no puede comprobar sus ajustes), no es un widget con número, o su fila (widget_<base>) no la escribieron los widgets de WordPress: activa el plugin o tema que proporciona el widget, o traspasa el área a mano en Apariencia → Widgets."
+
+msgid "The update() of a widget or the filter widget_update_callback would store other settings than the staging site has (kses without unfiltered_html, a field the widget sanitizes otherwise here): take it over with an account that may store unfiltered HTML, or by hand under Appearance → Widgets."
+msgstr "El update() de un widget o el filtro widget_update_callback guardaría ajustes distintos de los que tiene el sitio de staging (kses sin unfiltered_html, un campo que el widget sanea aquí de otra forma): traspásalo con una cuenta que pueda guardar HTML sin filtrar, o a mano en Apariencia → Widgets."
+
+msgid "An instance of the area was there at the base of the pair, and its counterpart on this site is not known by the pair (the lists of both sides did not name the same widgets in the same order when the area was paired) or is placed in another area here: align the pair anew (wp_site_pairs), or take the area over by hand under Appearance → Widgets."
+msgstr "Una instancia del área existía en la base del par, y el par no conoce su equivalente en este sitio (las listas de ambos lados no nombraban los mismos widgets en el mismo orden cuando se emparejó el área) o aquí está colocada en otra área: vuelve a ajustar el par (wp_site_pairs), o traspasa el área a mano en Apariencia → Widgets."
+
+msgid "A reference in the settings of a widget (a post, a term, a menu, an address with an id) has no counterpart on this site: pair or create the target first."
+msgstr "Una referencia en los ajustes de un widget (una entrada, un término, un menú, una dirección con un id) no tiene equivalente en este sitio: empareja o crea primero el destino."
+
+msgid "The Additional CSS belongs to a theme that is not the active theme of this site, or is active here in another version than on the staging site: the CSS is written only to the same theme in the same version (a change of the theme is a phase of the code). Bring both sites to the same theme and version, or change the CSS by hand in the Customizer."
+msgstr "El CSS adicional pertenece a un tema que no es el tema activo de este sitio, o que aquí está activo en otra versión que en el sitio de staging: el CSS solo se escribe en el mismo tema en la misma versión (un cambio de tema es una fase del código). Lleva ambos sitios al mismo tema y versión, o cambia el CSS a mano en el Personalizador."
+
+msgid "The Additional CSS holds a closing tag of STYLE or ends in a part of one (the Customizer refuses to save it, WP_Customize_Custom_CSS_Setting::validate()), or a filter or the sanitizing of a save would change it here: change the CSS on the staging site, or by hand in the Customizer."
+msgstr "El CSS adicional contiene una etiqueta de cierre de STYLE o termina en una parte de una (el Personalizador se niega a guardarlo, WP_Customize_Custom_CSS_Setting::validate()), o un filtro o el saneamiento al guardar lo cambiaría aquí: cambia el CSS en el sitio de staging, o a mano en el Personalizador."
+
+msgid "The Additional CSS of the staging site has a part the engine does not write as it is (the source of a preprocessor in post_content_filtered, or another status than publish, which the core gives Additional CSS): it waits for its field rule."
+msgstr "El CSS adicional del sitio de staging tiene una parte que el motor no escribe tal cual (el código fuente de un preprocesador en post_content_filtered, o un estado distinto de publish, que es el que el núcleo da al CSS adicional): espera su regla de campo."
+
+msgid "An address with an id in the Additional CSS (url() of an attachment) has no counterpart on this site: pair or create the target first."
+msgstr "Una dirección con un id en el CSS adicional (url() de un adjunto) no tiene equivalente en este sitio: empareja o crea primero el destino."
+
+msgid "The core option is not on this site: an option is changed, never made by a run (WordPress makes its core options as it is installed and updated)."
+msgstr "La opción del núcleo no está en este sitio: una ejecución cambia una opción, nunca la crea (WordPress crea sus opciones del núcleo al instalarse y actualizarse)."
+
+msgid "sanitize_option() of this site would store another value for the option than the staging site has: change the setting on the staging site, or by hand in wp-admin (Settings)."
+msgstr "sanitize_option() de este sitio guardaría para la opción un valor distinto del que tiene el sitio de staging: cambia el ajuste en el sitio de staging, o a mano en wp-admin (Ajustes)."
+
+msgid "The option names an object (a page, a category, the sticky posts, an address with an id) that has no counterpart on this site: pair or create the target first."
+msgstr "La opción nombra un objeto (una página, una categoría, las entradas fijas, una dirección con un id) que no tiene equivalente en este sitio: empareja o crea primero el destino."
+
+msgid "Data of the running site (group B): never compared, never taken over."
+msgstr "Datos del sitio en funcionamiento (grupo B): nunca se comparan ni se traspasan."
+
+msgid "The option guard of AlphaBridge MCP refuses this option name, so it is not taken over. An administrator changes it in wp-admin."
+msgstr "La protección de opciones de AlphaBridge MCP rechaza este nombre de opción, así que no se traspasa. Un administrador la cambia en wp-admin."
+
+msgid "The option could not be looked up, so it is not classified. Try again; if it keeps failing, the database error log names the cause."
+msgstr "No se ha podido consultar la opción, así que no se clasifica. Vuelve a intentarlo; si sigue fallando, el registro de errores de la base de datos indica la causa."
+
+msgid "The option name could not be settled, so it is not classified. Try again; if it keeps failing, the database error log names the cause."
+msgstr "No se ha podido determinar el nombre de la opción, así que no se clasifica. Vuelve a intentarlo; si sigue fallando, el registro de errores de la base de datos indica la causa."
+
+msgid "Its name cannot be held by a pair (longer than 191 characters, a control character, or not UTF-8), so it is not paired. Take it over by hand."
+msgstr "Su nombre no cabe en un par (más de 191 caracteres, un carácter de control o no es UTF-8), así que no se empareja. Traspásalo a mano."
+
+msgid "Without a slug, an object is named by nothing but its id, so it is paired only by the choice of a person."
+msgstr "Sin slug, un objeto no se nombra por nada más que su id, así que solo se empareja por elección de una persona."
+
+msgid "The path of its parents is not known whole on its site (a parent not read, without a slug, or with the slug of another), so it is paired only by the choice of a person."
+msgstr "La ruta de sus padres no se conoce completa en su sitio (un padre no leído, sin slug o con el slug de otro), así que solo se empareja por elección de una persona."
+
+msgid "What the menu item shows, or the item it hangs under, has no identity of its own on its site (a target that is gone or has no slug, or another with the same: two links of one address and label), so it is paired only by the choice of a person."
+msgstr "Lo que muestra el elemento de menú, o el elemento del que cuelga, no tiene identidad propia en su sitio (un destino que ya no existe o no tiene slug, u otro con la misma: dos enlaces de una misma dirección y etiqueta), así que solo se empareja por elección de una persona."
+
+msgid "The same slug on another path of parents (another parent, or a parent of another type, theme or language): another object, or one that moved. It is paired only by the choice of a person."
+msgstr "El mismo slug en otra ruta de padres (otro padre, o un padre de otro tipo, tema o idioma): otro objeto, o uno que se ha movido. Solo se empareja por elección de una persona."
+
+msgid "Another item of its menu has the same identity on its site (two links of one address and label, or one target, under one parent), so only its place tells them apart: it is paired only by the choice of a person."
+msgstr "Otro elemento de su menú tiene la misma identidad en su sitio (dos enlaces de una misma dirección y etiqueta, o un mismo destino, bajo un mismo padre), así que solo su lugar los distingue: solo se empareja por elección de una persona."
+
+msgid "Another object of its site has the same identity (a post of the same type, slug, language and parent, such as a published page and a draft of its slug; a term of the same taxonomy, slug and language), so neither is named by it. Such objects are paired by an equal content only where it is there once on each side and every one of them of both sites is at hand; this one is paired only by the choice of a person, also where a package holds only one of them or the other one was paired."
+msgstr "Otro objeto de su sitio tiene la misma identidad (una entrada del mismo tipo, slug, idioma y padre, como una página publicada y un borrador con su slug; un término de la misma taxonomía, slug e idioma), así que ninguno de los dos queda nombrado por ella. Estos objetos se emparejan por un contenido igual solo donde este está una vez en cada lado y todos ellos de ambos sitios están disponibles; este solo se empareja por elección de una persona, también cuando un paquete contiene solo uno de ellos o el otro ya se emparejó."
+
+msgid "The inventory of the staging site does not show that it holds every object of this kind: it was read across packages (a package does not say which other packages belong to its series, so this site cannot tell a whole series from one with a package left out), or objects of it were withheld from the account that made it. So an object of this site without a counterpart is not called only live. Where objects were withheld, export again with an account that may read every object (wp_site_export); a kind read across packages stays so in this version."
+msgstr "El inventario del sitio de staging no muestra que contenga todos los objetos de este tipo: se leyó a lo largo de varios paquetes (un paquete no indica qué otros paquetes pertenecen a su serie, así que este sitio no puede distinguir una serie completa de una a la que le falta un paquete), o se le ocultaron objetos a la cuenta que lo hizo. Por eso un objeto de este sitio sin equivalente no se califica como solo en producción. Donde se ocultaron objetos, vuelve a exportar con una cuenta que pueda leer todos los objetos (wp_site_export); un tipo leído a lo largo de varios paquetes se queda así en esta versión."
+
+msgid "What names it on its site (the parent of a post; the target, parent item or menu of a menu item) is the object of a pair on one side and another object on the other (the object of the pair renamed, and another object of its site took its slug): another object, or one that moved. It is paired only by the choice of a person."
+msgstr "Lo que lo nombra en su sitio (el padre de una entrada; el destino, el elemento padre o el menú de un elemento de menú) es el objeto de un par en un lado y otro objeto en el otro (el objeto del par se renombró y otro objeto de su sitio tomó su slug): otro objeto, o uno que se ha movido. Solo se empareja por elección de una persona."
+
+msgid "A name of this object holds a credential by the rules of this site (held: credential_name, credential_field or unreadable_name), so it is shown by the SHA-256 of its ref only and is not paired. Take it over by hand."
+msgstr "Un nombre de este objeto contiene una credencial según las reglas de este sitio (held: credential_name, credential_field o unreadable_name), así que solo se muestra por el SHA-256 de su ref y no se empareja. Traspásalo a mano."
+
+msgid "Rest removed: the object is no longer on this site. A new alignment needs both objects; to end the pair, call wp_site_pairs with action=discard and its pair id."
+msgstr "Resto eliminado: el objeto ya no está en este sitio. Un nuevo ajuste necesita ambos objetos; para terminar el par, llama a wp_site_pairs con action=discard y su id de par."
+
+msgid "The object is no longer on this site. A new alignment needs both objects; to end the pair, call wp_site_pairs with action=discard and its pair id."
+msgstr "El objeto ya no está en este sitio. Un nuevo ajuste necesita ambos objetos; para terminar el par, llama a wp_site_pairs con action=discard y su id de par."
+
+msgid "The object is not in the inventory of the staging site. A new alignment needs both objects; to end the pair, call wp_site_pairs with action=discard and its pair id."
+msgstr "El objeto no está en el inventario del sitio de staging. Un nuevo ajuste necesita ambos objetos; para terminar el par, llama a wp_site_pairs con action=discard y su id de par."
+
+msgid "A side of this pair is not compared (no hash, or a credential holds it), so it is not aligned anew. Take it over by hand, or call wp_site_pairs with action=discard and its pair id."
+msgstr "Un lado de este par no se compara (no tiene hash, o lo retiene una credencial), así que no se vuelve a ajustar. Traspásalo a mano, o llama a wp_site_pairs con action=discard y su id de par."
+
+msgid "A credential holds this object (a field of a credential, a post protected by a password, a script, HTML outside kses, a value that does not unpack), so it is never compared; its locks name why. Take it over by hand."
+msgstr "Una credencial retiene este objeto (un campo de una credencial, una entrada protegida con contraseña, un script, HTML fuera de kses, un valor que no se desempaqueta), así que nunca se compara; sus bloqueos indican por qué. Traspásalo a mano."
+
+msgid "The staging site could not read this row, so it has no identity to match. Make the inventory again on the staging site (wp_site_export), take it over here, then propose again."
+msgstr "El sitio de staging no ha podido leer esta fila, así que no tiene identidad con la que coincidir. Vuelve a hacer el inventario en el sitio de staging (wp_site_export), tráelo aquí y vuelve a proponer."
+
+msgid "This site could not read this row, so it has no identity to match. Try again; if it keeps failing, the database error log names the cause."
+msgstr "Este sitio no ha podido leer esta fila, así que no tiene identidad con la que coincidir. Vuelve a intentarlo; si sigue fallando, el registro de errores de la base de datos indica la causa."
+
+msgid "Not carried to its end in this version."
+msgstr "No se lleva hasta el final en esta versión."
+
+msgid "Not sent: without cURL the request cannot be tied to the checked addresses."
+msgstr "No enviada: sin cURL la petición no se puede vincular a las direcciones comprobadas."
+
+msgid "The address was not asked: the request would go through the proxy, which looks the name up itself."
+msgstr "No se ha consultado la dirección: la petición pasaría por el proxy, que resuelve el nombre por sí mismo."
+
+msgid "The answer was discarded: the request went out without cURL, so it was not tied to the checked addresses."
+msgstr "Se ha descartado la respuesta: la petición salió sin cURL, así que no estaba vinculada a las direcciones comprobadas."
+
+msgid "The address was not asked: its host name has no address."
+msgstr "No se ha consultado la dirección: su nombre de host no tiene dirección."
+
+msgid "The address was not asked: it is local or not public."
+msgstr "No se ha consultado la dirección: es local o no es pública."
+
+#, php-format
+msgid "WordPress reads the row %s under this name, so this row is never read and is not taken over. An administrator changes it in wp-admin."
+msgstr "WordPress lee la fila %s con este nombre, así que esta fila nunca se lee y no se traspasa. Un administrador la cambia en wp-admin."
+
+#, php-format
+msgid "WordPress reads the row %s under this name, so this row is never read and is not taken over."
+msgstr "WordPress lee la fila %s con este nombre, así que esta fila nunca se lee y no se traspasa."
+
+#, php-format
+msgid "It needs the %1$s %2$s of the staging site, which is created in the same run but is held back itself (locked, or waiting for another)."
+msgstr "Necesita el objeto %1$s %2$s del sitio de staging, que se crea en la misma ejecución pero queda retenido él mismo (bloqueado, o a la espera de otro)."
+
+#, php-format
+msgid "Its target, the %1$s of the staging site, has an unclear pair (pair %2$d): a person confirms which side wins first."
+msgstr "Su destino, el objeto %1$s del sitio de staging, tiene un par incierto (par %2$d): primero una persona confirma qué lado prevalece."
+
+#, php-format
+msgid "Its target, the %1$s of the staging site, was taken over as deleted (pair %2$d)."
+msgstr "Su destino, el objeto %1$s del sitio de staging, se traspasó como borrado (par %2$d)."
+
+#, php-format
+msgid "Its target, the %1$s of its pair %2$d, is not in the inventory of the staging site (deleted there, or not read)."
+msgstr "Su destino, el objeto %1$s de su par %2$d, no está en el inventario del sitio de staging (se borró allí, o no se leyó)."
+
+#, php-format
+msgid "Its target, the %1$s of the staging site, is gone on this site (pair %2$d)."
+msgstr "Su destino, el objeto %1$s del sitio de staging, ya no existe en este sitio (par %2$d)."
+
+#, php-format
+msgid "Its target, the %1$s of the staging site, is in the trash there (pair %2$d)."
+msgstr "Su destino, el objeto %1$s del sitio de staging, está allí en la papelera (par %2$d)."
+
+#, php-format
+msgid "Its target, the %s of the staging site, is not in its inventory: an object of a type the takeover does not read, or one withheld from the account that made the inventory. Until it is, this object is not taken over."
+msgstr "Su destino, el objeto %s del sitio de staging, no está en su inventario: un objeto de un tipo que el traspaso no lee, o uno oculto a la cuenta que hizo el inventario. Mientras no lo esté, este objeto no se traspasa."
+
+#, php-format
+msgid "Its target, the %s of the staging site, has no pair yet but an object of its identity on this site: pair them first (wp_site_pairs)."
+msgstr "Su destino, el objeto %s del sitio de staging, aún no tiene par, pero en este sitio hay un objeto con su identidad: emparéjalos primero (wp_site_pairs)."
+
+#, php-format
+msgid "Its target, the %1$s of the staging site, has no pair and is not created here (%2$s)."
+msgstr "Su destino, el objeto %1$s del sitio de staging, no tiene par y no se crea aquí (%2$s)."
