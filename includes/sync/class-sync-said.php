@@ -373,6 +373,67 @@ final class AB_MCP_Sync_Said {
 			'The answer was discarded: the request went out without cURL, so it was not tied to the checked addresses.' => __( 'The answer was discarded: the request went out without cURL, so it was not tied to the checked addresses.', 'alphabridge-mcp' ),
 			'The address was not asked: its host name has no address.' => __( 'The address was not asked: its host name has no address.', 'alphabridge-mcp' ),
 			'The address was not asked: it is local or not public.' => __( 'The address was not asked: it is local or not public.', 'alphabridge-mcp' ),
+			// The reason of an option whose name is a credential (AB_MCP_Sync_DB_Kinds).
+			'The name is the name of a credential (B9): never compared, never packed, counted.' => __( 'The name is the name of a credential (B9): never compared, never packed, counted.', 'alphabridge-mcp' ),
+			// The words of the results of AB_MCP_Sync_Decision (WORDS) and its reasons why a side is not compared.
+			'Equal on both sides: nothing to take over.' => __( 'Equal on both sides: nothing to take over.', 'alphabridge-mcp' ),
+			'Changed on staging, unchanged on this site: taken over.' => __( 'Changed on staging, unchanged on this site: taken over.', 'alphabridge-mcp' ),
+			'Deleted on staging – taken over from Z8d: nothing is deleted in this version, and no status stands in for a deletion. Delete it here by hand in wp-admin where it should go.' => __( 'Deleted on staging – taken over from Z8d: nothing is deleted in this version, and no status stands in for a deletion. Delete it here by hand in wp-admin where it should go.', 'alphabridge-mcp' ),
+			'Changed on this site, unchanged on staging: kept and shown.' => __( 'Changed on this site, unchanged on staging: kept and shown.', 'alphabridge-mcp' ),
+			'Changed on both sides, differently: a conflict. A person chooses: staging wins, keep this site, or leave it open.' => __( 'Changed on both sides, differently: a conflict. A person chooses: staging wins, keep this site, or leave it open.', 'alphabridge-mcp' ),
+			'Changed on both sides alike: nothing to take over; the bases of the pair move on with the next run.' => __( 'Changed on both sides alike: nothing to take over; the bases of the pair move on with the next run.', 'alphabridge-mcp' ),
+			'Deleted on staging, changed on this site: a conflict, kept on this site by default; the deletion is taken over from Z8d.' => __( 'Deleted on staging, changed on this site: a conflict, kept on this site by default; the deletion is taken over from Z8d.', 'alphabridge-mcp' ),
+			'Deleted on this site, unchanged on staging: nothing to do, the deletion holds.' => __( 'Deleted on this site, unchanged on staging: nothing to do, the deletion holds.', 'alphabridge-mcp' ),
+			'Deleted on this site, changed on staging: a conflict, deleted here by default; bringing it back from staging follows with Z8d.' => __( 'Deleted on this site, changed on staging: a conflict, deleted here by default; bringing it back from staging follows with Z8d.', 'alphabridge-mcp' ),
+			'Deleted on both sides, removed on both (neither is in the trash): nothing to do; wp_site_pairs action=discard ends the pair.' => __( 'Deleted on both sides, removed on both (neither is in the trash): nothing to do; wp_site_pairs action=discard ends the pair.', 'alphabridge-mcp' ),
+			'Deleted on both sides, in the trash on at least one: nothing to do. The pair is then taken over as deleted (the deletion holds), which follows with Z8d; until then it stays as it is, and it is not ended: only a pair whose objects are removed on both sides is, so an object in the trash can still come back to its pair.' => __( 'Deleted on both sides, in the trash on at least one: nothing to do. The pair is then taken over as deleted (the deletion holds), which follows with Z8d; until then it stays as it is, and it is not ended: only a pair whose objects are removed on both sides is, so an object in the trash can still come back to its pair.', 'alphabridge-mcp' ),
+			'Only on staging, new: created on this site.' => __( 'Only on staging, new: created on this site.', 'alphabridge-mcp' ),
+			'Only on this site, new (written here): kept and shown. Refresh the staging site to have it there as well.' => __( 'Only on this site, new (written here): kept and shown. Refresh the staging site to have it there as well.', 'alphabridge-mcp' ),
+			'New on both sides, without a pair: pair them first (wp_site_pairs action=propose, then confirm).' => __( 'New on both sides, without a pair: pair them first (wp_site_pairs action=propose, then confirm).', 'alphabridge-mcp' ),
+			'An unclear pair: treated as a conflict, a person chooses which side wins, until a person confirms its bases (wp_site_pairs action=propose shows it for a new alignment, confirm sets them).' => __( 'An unclear pair: treated as a conflict, a person chooses which side wins, until a person confirms its bases (wp_site_pairs action=propose shows it for a new alignment, confirm sets them).', 'alphabridge-mcp' ),
+			'Rest after a way back or an error: the pair keeps its mapping, and nothing is taken over or created for it, also where staging changes it. Only a confirmed new alignment moves it on (wp_site_pairs action=propose shows it, confirm makes it active with the bases of both sides now, discard ends the pair).' => __( 'Rest after a way back or an error: the pair keeps its mapping, and nothing is taken over or created for it, also where staging changes it. Only a confirmed new alignment moves it on (wp_site_pairs action=propose shows it, confirm makes it active with the bases of both sides now, discard ends the pair).', 'alphabridge-mcp' ),
+			'Rest removed: the object of this rest is no longer on this site. wp_site_pairs action=discard ends the pair.' => __( 'Rest removed: the object of this rest is no longer on this site. wp_site_pairs action=discard ends the pair.', 'alphabridge-mcp' ),
+			'Taken over as deleted and deleted on staging: nothing to do.' => __( 'Taken over as deleted and deleted on staging: nothing to do.', 'alphabridge-mcp' ),
+			'Taken over as deleted, and there again on staging: bringing it back here follows with Z8d.' => __( 'Taken over as deleted, and there again on staging: bringing it back here follows with Z8d.', 'alphabridge-mcp' ),
+			'Not compared.' => __( 'Not compared.', 'alphabridge-mcp' ),
+			'A name of this object holds a credential by the rules of this site: shown by the SHA-256 of its ref only, never compared. Take it over by hand.' => __( 'A name of this object holds a credential by the rules of this site: shown by the SHA-256 of its ref only, never compared. Take it over by hand.', 'alphabridge-mcp' ),
+			'In the trash on its site, without a pair: not taken over.' => __( 'In the trash on its site, without a pair: not taken over.', 'alphabridge-mcp' ),
+			'In the trash on this site: still a rest. A rest is removed only where its object is no longer on this site.' => __( 'In the trash on this site: still a rest. A rest is removed only where its object is no longer on this site.', 'alphabridge-mcp' ),
+			'The staging site did not read this object whole, so it is not created here. Make the inventory again on the staging site (wp_site_export).' => __( 'The staging site did not read this object whole, so it is not created here. Make the inventory again on the staging site (wp_site_export).', 'alphabridge-mcp' ),
+			'An auto-draft WordPress made for the editor (an object nobody saved yet, removed by WordPress after seven days): no content, never taken over.' => __( 'An auto-draft WordPress made for the editor (an object nobody saved yet, removed by WordPress after seven days): no content, never taken over.', 'alphabridge-mcp' ),
+			'Taken over as deleted, and there again on this site: its state here is the base, then the table with the staging side.' => __( 'Taken over as deleted, and there again on this site: its state here is the base, then the table with the staging side.', 'alphabridge-mcp' ),
+			'The staging site did not read this object whole (a part of its rows could not be read), so it is not compared. Make the inventory again on the staging site (wp_site_export).' => __( 'The staging site did not read this object whole (a part of its rows could not be read), so it is not compared. Make the inventory again on the staging site (wp_site_export).', 'alphabridge-mcp' ),
+			'This site did not read this object whole (a part of its rows could not be read), so it is not compared. Try again; if it keeps failing, the database error log names the cause.' => __( 'This site did not read this object whole (a part of its rows could not be read), so it is not compared. Try again; if it keeps failing, the database error log names the cause.', 'alphabridge-mcp' ),
+			'The line is of another version of the comparison data than the bases of its pair. Make the inventory of both sites with the same version of AlphaBridge MCP.' => __( 'The line is of another version of the comparison data than the bases of its pair. Make the inventory of both sites with the same version of AlphaBridge MCP.', 'alphabridge-mcp' ),
+			// The note of a new alignment of AB_MCP_Sync_Proposal.
+			'The two sides differ now. Confirming makes the state of each side now its new base: the difference is then no change to carry over.' => __( 'The two sides differ now. Confirming makes the state of each side now its new base: the difference is then no change to carry over.', 'alphabridge-mcp' ),
+			// The words of the environment (AB_MCP_Sync_Env::WORDS, HOST_WORDS and what entry() adds) and its whys.
+			'No package of the environment of the staging site was given, so plugins, themes, files, tables and the host are not compared. 1. On the staging site, call wp_site_export with purpose=env (and its cursor until it gives none). 2. Here, take each package over with wp_site_import_chunk (purpose=env). 3. Call wp_site_diff with packages and environment.' => __( 'No package of the environment of the staging site was given, so plugins, themes, files, tables and the host are not compared. 1. On the staging site, call wp_site_export with purpose=env (and its cursor until it gives none). 2. Here, take each package over with wp_site_import_chunk (purpose=env). 3. Call wp_site_diff with packages and environment.', 'alphabridge-mcp' ),
+			'Equal on both sides, by the SHA-256 of the file.' => __( 'Equal on both sides, by the SHA-256 of the file.', 'alphabridge-mcp' ),
+			'The same value on both sides, shown only: what lies behind it (how the host builds and sets up PHP, the database or the server) is not compared.' => __( 'The same value on both sides, shown only: what lies behind it (how the host builds and sets up PHP, the database or the server) is not compared.', 'alphabridge-mcp' ),
+			'Differs between the sides.' => __( 'Differs between the sides.', 'alphabridge-mcp' ),
+			'Counted, contents not compared: the same version, rows or count on both sides says nothing about the contents.' => __( 'Counted, contents not compared: the same version, rows or count on both sides says nothing about the contents.', 'alphabridge-mcp' ),
+			'Only on staging.' => __( 'Only on staging.', 'alphabridge-mcp' ),
+			'Only on this site.' => __( 'Only on this site.', 'alphabridge-mcp' ),
+			'Not compared: one side could not be read whole.' => __( 'Not compared: one side could not be read whole.', 'alphabridge-mcp' ),
+			'The list of tables could not be read whole on this site.' => __( 'The list of tables could not be read whole on this site.', 'alphabridge-mcp' ),
+			'The list of tables could not be read whole on the staging site.' => __( 'The list of tables could not be read whole on the staging site.', 'alphabridge-mcp' ),
+			'Shown only: the language is the option WPLANG, compared with the options; its files are counted under languages.' => __( 'Shown only: the language is the option WPLANG, compared with the options; its files are counted under languages.', 'alphabridge-mcp' ),
+			'Change at the host: nothing of this is taken over.' => __( 'Change at the host: nothing of this is taken over.', 'alphabridge-mcp' ),
+			'This kind of line is not known here.' => __( 'This kind of line is not known here.', 'alphabridge-mcp' ),
+			'A value of it could not be read on the staging site.' => __( 'A value of it could not be read on the staging site.', 'alphabridge-mcp' ),
+			'A value of it could not be read on this site.' => __( 'A value of it could not be read on this site.', 'alphabridge-mcp' ),
+			// The value of a form of AB_MCP_Sync_Option_Schema where no row is named.
+			'of another name' => __( 'of another name', 'alphabridge-mcp' ),
+			// Why a folder of the environment was not counted (AB_MCP_Sync_Env::why_files()), said in the sentence that names the folder.
+			'code decides where these files lie, a filter or a network of sites' => __( 'code decides where these files lie, a filter or a network of sites', 'alphabridge-mcp' ),
+			'a folder of it could not be read' => __( 'a folder of it could not be read', 'alphabridge-mcp' ),
+			'WordPress names no such folder' => __( 'WordPress names no such folder', 'alphabridge-mcp' ),
+			'its place is no folder' => __( 'its place is no folder', 'alphabridge-mcp' ),
+			'the file list of an attachment could not be read whole' => __( 'the file list of an attachment could not be read whole', 'alphabridge-mcp' ),
+			'the file lists of the attachments are too many to hold within one call' => __( 'the file lists of the attachments are too many to hold within one call', 'alphabridge-mcp' ),
+			'the file or folder the call before stopped at (kept by its SHA-256 only, never by its name) is gone since, so where to go on is not known' => __( 'the file or folder the call before stopped at (kept by its SHA-256 only, never by its name) is gone since, so where to go on is not known', 'alphabridge-mcp' ),
+			'not known why' => __( 'not known why', 'alphabridge-mcp' ),
 		);
 	}
 
@@ -408,6 +469,22 @@ final class AB_MCP_Sync_Said {
 			'Its target, the %s of the staging site, has no pair yet but an object of its identity on this site: pair them first (wp_site_pairs).' => __( 'Its target, the %s of the staging site, has no pair yet but an object of its identity on this site: pair them first (wp_site_pairs).', 'alphabridge-mcp' ),
 			/* translators: 1: kind and id of the target, as the tools name them (post 12, …), 2: the result of the target in the report (new_staging, …). */
 			'Its target, the %1$s of the staging site, has no pair and is not created here (%2$s).' => __( 'Its target, the %1$s of the staging site, has no pair and is not created here (%2$s).', 'alphabridge-mcp' ),
+			// The reasons of AB_MCP_Sync_Decision.
+			/* translators: %s: the fields the confirmed target sets, each with its value (post_status draft). */
+			'Compared against the confirmed target: taken over with %s.' => __( 'Compared against the confirmed target: taken over with %s.', 'alphabridge-mcp' ),
+			/* translators: 1: the version of the comparison data of the bases, 2: the version this site reads. */
+			'The bases of this pair are of the version %1$s of the comparison data, this site reads %2$s, so they are not compared here. Propose again (wp_site_pairs action=propose), which works the pair out in the version of now.' => __( 'The bases of this pair are of the version %1$s of the comparison data, this site reads %2$s, so they are not compared here. Propose again (wp_site_pairs action=propose), which works the pair out in the version of now.', 'alphabridge-mcp' ),
+			/* translators: %s: the kind of the objects (post, term, …). */
+			'The inventory of this version reads no objects of the kind %s, so a missing one is not called deleted.' => __( 'The inventory of this version reads no objects of the kind %s, so a missing one is not called deleted.', 'alphabridge-mcp' ),
+			// The words and whys of AB_MCP_Sync_Env.
+			/* translators: %s: the stage that brings it (Z8b, …). */
+			'Their contents are compared from %s.' => __( 'Their contents are compared from %s.', 'alphabridge-mcp' ),
+			/* translators: %s: the code of what holds it (credential_name, …). */
+			'Its name holds a credential by the rules of a site (held: %s), so it is shown by its SHA-256 only.' => __( 'Its name holds a credential by the rules of a site (held: %s), so it is shown by its SHA-256 only.', 'alphabridge-mcp' ),
+			/* translators: 1: the folder as the environment names it (uploads, fonts, …), 2: why, a phrase of its own. */
+			'The %1$s could not be counted to its end on this site (%2$s).' => __( 'The %1$s could not be counted to its end on this site (%2$s).', 'alphabridge-mcp' ),
+			/* translators: 1: the folder as the environment names it (uploads, fonts, …), 2: why, a phrase of its own. */
+			'The %1$s could not be counted to its end on the staging site (%2$s).' => __( 'The %1$s could not be counted to its end on the staging site (%2$s).', 'alphabridge-mcp' ),
 		);
 	}
 }

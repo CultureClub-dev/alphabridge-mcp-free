@@ -10626,3 +10626,196 @@ msgstr "Nada foi escrito em nenhum dos dois sites."
 
 msgid "Nothing is paired yet."
 msgstr "Ainda nada está emparelhado."
+
+msgid "The name is the name of a credential (B9): never compared, never packed, counted."
+msgstr "O nome é o nome de uma credencial (B9): nunca comparado, nunca empacotado, contado."
+
+msgid "Equal on both sides: nothing to take over."
+msgstr "Igual em ambos os lados: nada a assumir."
+
+msgid "Changed on staging, unchanged on this site: taken over."
+msgstr "Alterado no staging, inalterado neste site: é assumido."
+
+msgid "Deleted on staging – taken over from Z8d: nothing is deleted in this version, and no status stands in for a deletion. Delete it here by hand in wp-admin where it should go."
+msgstr "Eliminado no staging – assumido a partir de Z8d: nesta versão nada é eliminado, e nenhum estado substitui uma eliminação. Elimine-o aqui manualmente no wp-admin se deve desaparecer."
+
+msgid "Changed on this site, unchanged on staging: kept and shown."
+msgstr "Alterado neste site, inalterado no staging: mantido e mostrado."
+
+msgid "Changed on both sides, differently: a conflict. A person chooses: staging wins, keep this site, or leave it open."
+msgstr "Alterado em ambos os lados, de forma diferente: um conflito. Uma pessoa escolhe: o staging prevalece, manter este site ou deixar em aberto."
+
+msgid "Changed on both sides alike: nothing to take over; the bases of the pair move on with the next run."
+msgstr "Alterado em ambos os lados da mesma forma: nada a assumir; as bases do par avançam com a próxima execução."
+
+msgid "Deleted on staging, changed on this site: a conflict, kept on this site by default; the deletion is taken over from Z8d."
+msgstr "Eliminado no staging, alterado neste site: um conflito, mantido por predefinição neste site; a eliminação é assumida a partir de Z8d."
+
+msgid "Deleted on this site, unchanged on staging: nothing to do, the deletion holds."
+msgstr "Eliminado neste site, inalterado no staging: nada a fazer, a eliminação mantém-se."
+
+msgid "Deleted on this site, changed on staging: a conflict, deleted here by default; bringing it back from staging follows with Z8d."
+msgstr "Eliminado neste site, alterado no staging: um conflito, eliminado aqui por predefinição; trazê-lo de volta do staging segue com Z8d."
+
+msgid "Deleted on both sides, removed on both (neither is in the trash): nothing to do; wp_site_pairs action=discard ends the pair."
+msgstr "Eliminado em ambos os lados, removido em ambos (nenhum está no lixo): nada a fazer; wp_site_pairs action=discard termina o par."
+
+msgid "Deleted on both sides, in the trash on at least one: nothing to do. The pair is then taken over as deleted (the deletion holds), which follows with Z8d; until then it stays as it is, and it is not ended: only a pair whose objects are removed on both sides is, so an object in the trash can still come back to its pair."
+msgstr "Eliminado em ambos os lados, no lixo em pelo menos um: nada a fazer. O par é então assumido como eliminado (a eliminação mantém-se), o que segue com Z8d; até lá fica como está e não é terminado: só é terminado um par cujos objetos foram removidos em ambos os lados, para que um objeto no lixo ainda possa voltar ao seu par."
+
+msgid "Only on staging, new: created on this site."
+msgstr "Só no staging, novo: é criado neste site."
+
+msgid "Only on this site, new (written here): kept and shown. Refresh the staging site to have it there as well."
+msgstr "Só neste site, novo (escrito aqui): mantido e mostrado. Atualize o site de staging para o ter também lá."
+
+msgid "New on both sides, without a pair: pair them first (wp_site_pairs action=propose, then confirm)."
+msgstr "Novo em ambos os lados, sem par: emparelhe-os primeiro (wp_site_pairs action=propose, depois confirm)."
+
+msgid "An unclear pair: treated as a conflict, a person chooses which side wins, until a person confirms its bases (wp_site_pairs action=propose shows it for a new alignment, confirm sets them)."
+msgstr "Um par incerto: tratado como um conflito, uma pessoa escolhe qual lado prevalece, até que uma pessoa confirme as suas bases (wp_site_pairs action=propose mostra-o para um novo alinhamento, confirm define-as)."
+
+msgid "Rest after a way back or an error: the pair keeps its mapping, and nothing is taken over or created for it, also where staging changes it. Only a confirmed new alignment moves it on (wp_site_pairs action=propose shows it, confirm makes it active with the bases of both sides now, discard ends the pair)."
+msgstr "Resto após um caminho de volta ou um erro: o par mantém o seu mapeamento, e nada é assumido ou criado para ele, mesmo onde o staging o altera. Só um novo alinhamento confirmado o faz avançar (wp_site_pairs action=propose mostra-o, confirm torna-o ativo com as bases atuais de ambos os lados, discard termina o par)."
+
+msgid "Rest removed: the object of this rest is no longer on this site. wp_site_pairs action=discard ends the pair."
+msgstr "Resto removido: o objeto deste resto já não existe neste site. wp_site_pairs action=discard termina o par."
+
+msgid "Taken over as deleted and deleted on staging: nothing to do."
+msgstr "Assumido como eliminado e eliminado no staging: nada a fazer."
+
+msgid "Taken over as deleted, and there again on staging: bringing it back here follows with Z8d."
+msgstr "Assumido como eliminado, e de novo presente no staging: trazê-lo de volta aqui segue com Z8d."
+
+msgid "Not compared."
+msgstr "Não comparado."
+
+msgid "A name of this object holds a credential by the rules of this site: shown by the SHA-256 of its ref only, never compared. Take it over by hand."
+msgstr "Um nome deste objeto contém uma credencial segundo as regras deste site: mostrado apenas pelo SHA-256 da sua ref, nunca comparado. Assuma-o manualmente."
+
+msgid "In the trash on its site, without a pair: not taken over."
+msgstr "No lixo do seu site, sem par: não é assumido."
+
+msgid "In the trash on this site: still a rest. A rest is removed only where its object is no longer on this site."
+msgstr "No lixo deste site: continua a ser um resto. Um resto só é removido quando o seu objeto já não existe neste site."
+
+msgid "The staging site did not read this object whole, so it is not created here. Make the inventory again on the staging site (wp_site_export)."
+msgstr "O site de staging não leu este objeto por inteiro, por isso não é criado aqui. Crie novamente o inventário no site de staging (wp_site_export)."
+
+msgid "An auto-draft WordPress made for the editor (an object nobody saved yet, removed by WordPress after seven days): no content, never taken over."
+msgstr "Um rascunho automático que o WordPress criou para o editor (um objeto que ninguém guardou ainda, removido pelo WordPress após sete dias): sem conteúdo, nunca assumido."
+
+msgid "Taken over as deleted, and there again on this site: its state here is the base, then the table with the staging side."
+msgstr "Assumido como eliminado, e de novo presente neste site: o seu estado aqui é a base, depois aplica-se a tabela com o lado do staging."
+
+msgid "The staging site did not read this object whole (a part of its rows could not be read), so it is not compared. Make the inventory again on the staging site (wp_site_export)."
+msgstr "O site de staging não leu este objeto por inteiro (não foi possível ler uma parte dos seus registos), por isso não é comparado. Crie novamente o inventário no site de staging (wp_site_export)."
+
+msgid "This site did not read this object whole (a part of its rows could not be read), so it is not compared. Try again; if it keeps failing, the database error log names the cause."
+msgstr "Este site não leu este objeto por inteiro (não foi possível ler uma parte dos seus registos), por isso não é comparado. Tente novamente; se continuar a falhar, o registo de erros da base de dados indica a causa."
+
+msgid "The line is of another version of the comparison data than the bases of its pair. Make the inventory of both sites with the same version of AlphaBridge MCP."
+msgstr "A linha é de outra versão dos dados de comparação que as bases do seu par. Crie o inventário de ambos os sites com a mesma versão do AlphaBridge MCP."
+
+msgid "The two sides differ now. Confirming makes the state of each side now its new base: the difference is then no change to carry over."
+msgstr "Os dois lados diferem agora. Confirmar torna o estado atual de cada lado a sua nova base: a diferença deixa então de ser uma alteração a transferir."
+
+msgid "No package of the environment of the staging site was given, so plugins, themes, files, tables and the host are not compared. 1. On the staging site, call wp_site_export with purpose=env (and its cursor until it gives none). 2. Here, take each package over with wp_site_import_chunk (purpose=env). 3. Call wp_site_diff with packages and environment."
+msgstr "Não foi entregue nenhum pacote do ambiente do site de staging, por isso os plugins, temas, ficheiros, tabelas e o alojamento não são comparados. 1. No site de staging, chame wp_site_export com purpose=env (e o seu cursor até não devolver nenhum). 2. Aqui, assuma cada pacote com wp_site_import_chunk (purpose=env). 3. Chame wp_site_diff com packages e environment."
+
+msgid "Equal on both sides, by the SHA-256 of the file."
+msgstr "Igual em ambos os lados, pelo SHA-256 do ficheiro."
+
+msgid "The same value on both sides, shown only: what lies behind it (how the host builds and sets up PHP, the database or the server) is not compared."
+msgstr "O mesmo valor em ambos os lados, apenas mostrado: o que está por trás (como o alojamento compila e configura o PHP, a base de dados ou o servidor) não é comparado."
+
+msgid "Differs between the sides."
+msgstr "Difere entre os lados."
+
+msgid "Counted, contents not compared: the same version, rows or count on both sides says nothing about the contents."
+msgstr "Contado, conteúdo não comparado: a mesma versão, número de linhas ou contagem em ambos os lados não diz nada sobre o conteúdo."
+
+msgid "Only on staging."
+msgstr "Só no staging."
+
+msgid "Only on this site."
+msgstr "Só neste site."
+
+msgid "Not compared: one side could not be read whole."
+msgstr "Não comparado: um lado não pôde ser lido por inteiro."
+
+msgid "The list of tables could not be read whole on this site."
+msgstr "A lista de tabelas não pôde ser lida por inteiro neste site."
+
+msgid "The list of tables could not be read whole on the staging site."
+msgstr "A lista de tabelas não pôde ser lida por inteiro no site de staging."
+
+msgid "Shown only: the language is the option WPLANG, compared with the options; its files are counted under languages."
+msgstr "Apenas mostrado: o idioma é a opção WPLANG, comparada com as opções; os seus ficheiros são contados em languages."
+
+msgid "Change at the host: nothing of this is taken over."
+msgstr "Alterar no alojamento: nada disto é assumido."
+
+msgid "This kind of line is not known here."
+msgstr "Este tipo de linha não é conhecido aqui."
+
+msgid "A value of it could not be read on the staging site."
+msgstr "Um dos seus valores não pôde ser lido no site de staging."
+
+msgid "A value of it could not be read on this site."
+msgstr "Um dos seus valores não pôde ser lido neste site."
+
+msgid "code decides where these files lie, a filter or a network of sites"
+msgstr "é código que decide onde ficam estes ficheiros, um filtro ou uma rede de sites"
+
+msgid "a folder of it could not be read"
+msgstr "não foi possível ler uma das suas pastas"
+
+msgid "WordPress names no such folder"
+msgstr "o WordPress não indica tal pasta"
+
+msgid "its place is no folder"
+msgstr "no seu lugar não há uma pasta"
+
+msgid "the file list of an attachment could not be read whole"
+msgstr "não foi possível ler por inteiro a lista de ficheiros de um anexo"
+
+msgid "the file lists of the attachments are too many to hold within one call"
+msgstr "as listas de ficheiros dos anexos são demasiadas para caber numa só chamada"
+
+msgid "the file or folder the call before stopped at (kept by its SHA-256 only, never by its name) is gone since, so where to go on is not known"
+msgstr "o ficheiro ou a pasta onde a chamada anterior parou (guardado apenas pelo seu SHA-256, nunca pelo seu nome) desapareceu entretanto, por isso não se sabe onde continuar"
+
+msgid "not known why"
+msgstr "motivo desconhecido"
+
+msgid "of another name"
+msgstr "de outro nome"
+
+#, php-format
+msgid "Compared against the confirmed target: taken over with %s."
+msgstr "Comparado com o alvo confirmado: assumido com %s."
+
+#, php-format
+msgid "The bases of this pair are of the version %1$s of the comparison data, this site reads %2$s, so they are not compared here. Propose again (wp_site_pairs action=propose), which works the pair out in the version of now."
+msgstr "As bases deste par são da versão %1$s dos dados de comparação, este site lê a %2$s, por isso não são comparadas aqui. Proponha novamente (wp_site_pairs action=propose), o que calcula o par na versão atual."
+
+#, php-format
+msgid "The inventory of this version reads no objects of the kind %s, so a missing one is not called deleted."
+msgstr "O inventário desta versão não lê objetos do tipo %s, por isso um em falta não é considerado eliminado."
+
+#, php-format
+msgid "Their contents are compared from %s."
+msgstr "O seu conteúdo é comparado a partir de %s."
+
+#, php-format
+msgid "Its name holds a credential by the rules of a site (held: %s), so it is shown by its SHA-256 only."
+msgstr "O seu nome contém uma credencial segundo as regras de um site (retido: %s), por isso é mostrado apenas pelo seu SHA-256."
+
+#, php-format
+msgid "The %1$s could not be counted to its end on this site (%2$s)."
+msgstr "Os ficheiros em %1$s não puderam ser contados até ao fim neste site (%2$s)."
+
+#, php-format
+msgid "The %1$s could not be counted to its end on the staging site (%2$s)."
+msgstr "Os ficheiros em %1$s não puderam ser contados até ao fim no site de staging (%2$s)."
