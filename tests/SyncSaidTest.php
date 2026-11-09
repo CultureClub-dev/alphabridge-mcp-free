@@ -84,6 +84,53 @@ final class SyncSaidTest extends TestCase {
 		self::assertSame( 'Nicht zu Ende geführt.', AB_MCP_Sync_Said::text( 'Not carried to its end in this version.' ) );
 	}
 
+	/**
+	 * Codex round 4 on branch 13 (B): the reasons in the answers of
+	 * wp_site_diff (blocked, entries, environment) and wp_site_pairs
+	 * action=propose (entries) reach the person; the copy in the answer says
+	 * them in the language of the site, the stored value stays as it is.
+	 */
+	public function testAnAnswerSaysItsReasonsAndKeepsEverythingElse(): void {
+		$plugin                          = AB_MCP_Sync_Env::LOCKS['plugin']['reason'];
+		$GLOBALS['ab_test_translations'] = array(
+			$plugin                                   => 'Ein Plugin ist Code.',
+			'Not carried to its end in this version.' => 'Nicht zu Ende geführt.',
+		);
+		$stored = array(
+			'blocked' => array(
+				array(
+					'key'    => 'env:plugin',
+					'reason' => $plugin,
+					'stage'  => 'Z8b',
+					'count'  => 2,
+				),
+			),
+			'entries' => array(
+				array(
+					'n'         => 1,
+					'reason'    => 'Not carried to its end in this version.',
+					'waits_for' => array( array( 'why' => 'Not carried to its end in this version.', 'ref' => 'post 4' ) ),
+					'locks'     => array( array( 'reason' => 'cURL error 28', 'stage' => 'Z8d' ) ),
+					'result'    => 'Not carried to its end in this version.',
+					'reasons'   => array( 'reason' => 7 ),
+				),
+			),
+		);
+		$copy   = $stored;
+		$shown  = AB_MCP_Sync_Said::shown( $copy );
+		self::assertSame( $stored, $copy, 'The value given in is not changed.' );
+		self::assertSame( 'Ein Plugin ist Code.', $shown['blocked'][0]['reason'] );
+		self::assertSame( array( 'env:plugin', 'Z8b', 2 ), array( $shown['blocked'][0]['key'], $shown['blocked'][0]['stage'], $shown['blocked'][0]['count'] ) );
+		self::assertSame( 'Nicht zu Ende geführt.', $shown['entries'][0]['reason'] );
+		self::assertSame( 'Nicht zu Ende geführt.', $shown['entries'][0]['waits_for'][0]['why'], 'Nested, a why too.' );
+		self::assertSame( 'cURL error 28', $shown['entries'][0]['locks'][0]['reason'], 'An unknown reason as it is.' );
+		self::assertSame( 'Not carried to its end in this version.', $shown['entries'][0]['result'], 'Only reason and why.' );
+		self::assertSame( array( 'reason' => 7 ), $shown['entries'][0]['reasons'], 'A reason that is no text stays.' );
+		self::assertSame( 1, $shown['entries'][0]['n'] );
+		self::assertNull( AB_MCP_Sync_Said::shown( null ) );
+		self::assertSame( 'x', AB_MCP_Sync_Said::shown( 'x' ) );
+	}
+
 	public function testAKindReadsAsThePageStagingNamesIt(): void {
 		foreach ( array( 'post', 'term', 'attachment', 'menu', 'menu_item', 'widget_area', 'custom_css', 'option', 'other' ) as $kind ) {
 			self::assertSame( AB_MCP_Transfer_View::kind( $kind ), AB_MCP_Sync_Said::kind( $kind ), $kind );

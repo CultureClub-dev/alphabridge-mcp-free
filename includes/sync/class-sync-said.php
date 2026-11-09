@@ -49,6 +49,30 @@ final class AB_MCP_Sync_Said {
 	}
 
 	/**
+	 * A part of an answer of wp_site_diff or wp_site_pairs as the person reads
+	 * it: every reason and why in it in the language of the site (text()),
+	 * everything else as it is. Only the copy that goes into the answer:
+	 * the stored report and proposal, their parts and their hashes are not
+	 * touched, and no answer is read back.
+	 *
+	 * @param mixed $data A value of the answer.
+	 * @return mixed
+	 */
+	public static function shown( $data ) {
+		if ( ! is_array( $data ) ) {
+			return $data;
+		}
+		foreach ( $data as $key => $value ) {
+			if ( ( 'reason' === $key || 'why' === $key ) && is_string( $value ) ) {
+				$data[ $key ] = self::text( $value );
+			} elseif ( is_array( $value ) ) {
+				$data[ $key ] = self::shown( $value );
+			}
+		}
+		return $data;
+	}
+
+	/**
 	 * Whether the list knows a text (whole, or by one of its forms).
 	 *
 	 * @param string $english The text.

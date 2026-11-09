@@ -66,6 +66,7 @@ defined( 'ABSPATH' ) || exit;
 
 require_once __DIR__ . '/class-sync-decision.php';
 require_once __DIR__ . '/class-sync-env.php';
+require_once __DIR__ . '/class-sync-said.php';
 
 /**
  * Class AB_MCP_Sync_Report
@@ -769,13 +770,13 @@ final class AB_MCP_Sync_Report {
 			'expires'     => (int) $found['head']['expires'],
 			'wordpress'   => $found['head']['wordpress'],
 			'counts'      => $index['counts'],
-			'blocked'     => $index['blocked'],
+			'blocked'     => AB_MCP_Sync_Said::shown( $index['blocked'] ),
 			'pairs'       => $index['pairs'],
 			'staging'     => $index['staging'],
 			'live'        => $index['live'],
-			'environment' => $index['environment'] ?? null,
+			'environment' => AB_MCP_Sync_Said::shown( $index['environment'] ?? null ),
 			'total'       => $index['total'],
-			'entries'     => $entries,
+			'entries'     => AB_MCP_Sync_Said::shown( $entries ),
 			'cursor'      => $more ? $last : null,
 			'next'        => __( 'Nothing was written on either site.', 'alphabridge-mcp' ) . ' Show the report to the person. Each entry says what differs (result, sides) and what a takeover would do (action): take_over and create are written by a run, choose waits for the choice of a person, waits and locked are held back (waits_for and locks name why, each lock with the stage that brings it), pair asks for wp_site_pairs first, keep and none leave the object as it is. The entries of kind environment come after the objects: plugins, themes, must-use plugins, drop-ins, tables, files and the host; equal or differs only for what was read by its SHA-256 (must-use plugins, drop-ins), same_value or differs for the values of the host and the language (shown only, what lies behind a value not compared), counted for what was only counted or summed (contents not compared; stage says from when they are), host for what is changed at the host (the drop-ins and the host, whatever the result); a name held (held) is shown by its SHA-256 only; nothing of the environment is taken over.' . ( $more ? ' More entries: call wp_site_diff again with this report_id and cursor=' . $last . '.' : '' ),
 		);
