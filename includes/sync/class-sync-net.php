@@ -146,7 +146,13 @@
  * name of a credential at run time (a template literal with ${…}, a
  * concatenation): only literal spellings are read, an image runs no
  * script; a span of base64 whose bytes are no text in UTF-8 and carry no
- * BOM (a binary, a text in a charset it does not declare) is bytes.
+ * BOM (a binary, a text in a charset it does not declare) is bytes; a
+ * credential in prose («password: Sommer2026» in the text of a post,
+ * «user: …, password: …», before a tag of HTML), as wp_get_post hands out
+ * the raw content anyway (branch 11b; the steering, 09.11.2026): only the
+ * names before = and the other spellings of code count, and the fixed
+ * formats; the header Authorization in a sentence, after a tag or a «,»
+ * (GRENZEN.md).
  *
  * @package AlphaBridge_MCP
  */

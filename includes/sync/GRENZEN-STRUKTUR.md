@@ -673,15 +673,18 @@ Position, die das Theme hier nicht registriert, in der Prüfung des Laufs
   davor steht oder nicht (Codex-Runde 1 zu 11b, A1 und B). Der Prüffall
   `SyncNetTest::testATextInASerializedValueIsJudgedAsTheSameTextAsAPlainValue`
   hält das für Meta (Blatt, verschachtelt, mit Gleitkommazahl), Option,
-  Option eines Plugins und Text-Widget fest. Vorbestehend und gemeldet,
-  nicht in diesem Zweig: der einfache Wert sperrt schon auf `8df6146`
-  nicht bei einem Authorization-Header mit Bearer oder Basic nach «;»,
-  einem privaten Schlüssel im PEM-Format, einem Cookie-Header mit
-  `wordpress_logged_in_…` und `api_key: abc123def`; er sperrt bei
-  zitierter Prosa am Textanfang (`Token: "Ein Spielstein pro Zug"`). Auf
-  `8df6146` sperrten die beiden Header in einem serialisierten Wert nur
-  über die Klammern des Formats; jetzt urteilt das Blatt wie der einfache
-  Wert.
+  Option eines Plugins und Text-Widget fest, dazu
+  `SyncCoreReads::testATextIsJudgedAlikeInEveryFormItIsStoredIn` in
+  sieben Formen (auch `post_content` und Widget, Unit und Integration).
+  Auf `8df6146` sperrte der einfache Wert nicht bei einem
+  Authorization-Header mit Bearer oder Basic nach «;», einem privaten
+  Schlüssel im PEM-Format und einem Login-Cookie; im serialisierten Wert
+  sperrten die Header nur über die Klammern des Formats. Seit dem
+  Neuansatz nach festen Formaten (GRENZEN.md, Abschnitt «Zugangsdaten nach
+  festen Formaten») sperren sie in jeder Form. `api_key: abc123def` und
+  andere Zugangsdaten in Prosa bleiben frei (Grenze C dort); zitierte
+  Prosa am Textanfang (`Token: "Ein Spielstein pro Zug"`) sperrt wie auf
+  `8df6146` im einfachen Wert, jetzt auch im Blatt.
 - Gezählt am 09.11.2026 auf dem lokalen Paar (Site B, Inventar aller
   Arten, vorher auf `8df6146`, nachher auf diesem Zweig): die frische Site
   mit 93 Objekten gleich, ohne Sperre der Zugangsprüfung. Mit sieben
@@ -691,10 +694,13 @@ Position, die das Theme hier nicht registriert, in der Prüfung des Laufs
   Plugins) und drei echten Zugangsdaten (Code in einem Blatt, Base64 in
   einem Blatt und als Schlüssel): vorher zehn Sperren
   `*:unread_credential`, nachher nur die drei echten.
-- Die Klauseln stehen in der Mutationsliste `netz` (30 Einträge, 28 über
-  Unit-Tests, 2 über `SyncStructureTest`; geschrieben von
-  `tests/mutation/gen/netz.py`), die Klauseln des Netzes aus Zweig 4 weiter
-  in `kanon`. Lokal lief jeder Eintrag von `netz` und jeder Eintrag von
+- Die Klauseln stehen in der Mutationsliste `netz` (133 Einträge, 129 über
+  Unit-Tests, 3 über `SyncStructureTest`, 1 über `SyncLocksTest`;
+  geschrieben von `tests/mutation/gen/netz.py`), die Klauseln des Netzes
+  aus Zweig 4 weiter in `kanon`. Die festen Formate (GRENZEN.md) brachten
+  83 Einträge; auf dem Stand nach ihnen lief jeder davon einzeln, dazu die
+  24 Einträge von `kanon` in `credentials()` und die 3 von `inventar` am
+  geänderten Prüffall von `SyncEnvTest`: alle 110 getötet. Lokal lief jeder Eintrag von `netz` und jeder Eintrag von
   `kanon` und `struktur`, dessen Suchtext im geänderten Code liegt, einzeln
   (76 Einträge): 73 getötet; `b-widget-form`, `b-widget-form-it` und
   `b-reader` überlebten, weil das Netz des Exports jetzt jede Meta-Zeile

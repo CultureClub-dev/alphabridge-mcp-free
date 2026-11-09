@@ -363,6 +363,18 @@ mit Beispiel und Grund; wo eine Ablehnung entsteht, nennt sie den Weg.
   Schlüssels) hält es weiter, ein Wert, der nicht entpackt oder ein Objekt
   enthält, ebenso. Einzelheiten und die Grenze C in GRENZEN-STRUKTUR.md,
   Abschnitt «Serialisierte Werte im Netz (Zweig 11b)».
+- Feste Formate von Zugangsdaten halten das Objekt in jeder Form (Blatt,
+  einfacher Wert, `post_content`, Meta, Option, Widget): Tokens von GitHub,
+  Stripe, AWS, Slack und Mailchimp, JSON Web Tokens, `Authorization` mit
+  Bearer oder Basic am Anfang einer Zeile oder eines Felds, private
+  Schlüssel in PEM, der Wert eines Login-Cookies, Passwortfelder in Code-
+  und Konfigurationsform (Zweig 11b, GRENZEN.md, Abschnitt «Zugangsdaten
+  nach festen Formaten»). Grenze C: Zugangsdaten in Prosa («password:
+  Sommer2026» im Beitragstext, «user: …, password: …», `<p>password:
+  …</p>`) gehen ins Paket wie auf `8df6146`. Grund: `wp_get_post` gibt den
+  Rohinhalt ohnehin aus (`includes/tools/class-tools-content.php:83`) und
+  verweigert nur Meta-Schlüssel mit Namen eines Zugangsdatums; das Paket
+  zeigt nichts, was das Lesewerkzeug nicht schon zeigt.
 - `unreadable_name` hält auch einen harmlosen Namen, den die Prüfung als
   unfertiges HTML liest, etwa eine Option `literal<foo` (konstruiert; kein
   gewöhnlicher Name eines Plugins so gefunden). Das Paket läuft weiter;

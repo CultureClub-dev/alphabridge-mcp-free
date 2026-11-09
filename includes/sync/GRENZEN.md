@@ -161,3 +161,100 @@ SyncNetTest, SyncCanonFormTest).
   ein Schlüssel aus Ziffern als Text), urteilt so wie sein Inhalt: Prosa
   darin bleibt frei (SyncNetTest
   `testAValueThatDoesNotSerializeBackIsReadByTheStringsOfItsFormat`).
+
+## Zugangsdaten nach festen Formaten (Zweig 11b)
+
+Neben den Namen mit Wert (oben) zählt das Netz feste Formate, wo immer sie
+stehen und welcher Name auch davorsteht: im einfachen Wert, im Blatt eines
+serialisierten Werts (auch verschachtelt), in `post_content`, in Meta, in
+einer Option und im Widget, in jeder Schicht (Dekodierungen, Base64,
+`data:`). Neuansatz nach dem Stopp (Thomas 09.11.2026 früh, «a»,
+decisions.md). Jede Regel wurde vor dem Commit in WordPress über die zehn
+Tutorials (`tests/fixtures/sync-tutorials.php`) und 47 Prosafälle in den
+sieben Formen gezählt: gegenüber `8df6146` sperrt kein gewöhnlicher Text
+neu.
+
+- Tokens eines Dienstes nach Präfix und Form (`TOKENS`): `ghp_` und 36
+  Buchstaben und Ziffern, `github_pat_` und 36 oder mehr, `sk_live_` und
+  `rk_live_` mit 24, `AKIA` und 16 Grossbuchstaben und Ziffern, `xoxb-` und
+  `xoxp-` mit ihren Nummern, Mailchimp mit 32 Hex und `-us` mit der Nummer
+  des Rechenzentrums (aufgenommen, weil zwei der zehn Tutorials seinen
+  Schlüssel nennen, keines in dieser Form). Die Form entscheidet, kein Wort
+  darin: `…EXAMPLE` (das Beispiel von AWS), `fake`, `my_` im Token sperren
+  (Codex-Runde 3 zu 11b, A1).
+- Ein JSON Web Token (`JWT`): drei Teile base64url, der Kopf `eyJ…` ein
+  Objekt von JSON mit `alg`, Nutzlast und Signatur base64url. Gekürzt
+  (`eyJhbGciOi…`) hat er keine zwei Punkte.
+- Der Header `Authorization` (auch `Proxy-Authorization`) mit `Bearer`
+  oder `Basic` am Anfang einer Zeile oder eines Felds (`AUTHORIZATION`): am
+  Textanfang, nach einem Zeilenumbruch, nach «;» (Zeile mit Headern), nach
+  einem Anführungszeichen (`-H "…"`) oder nach dem «:» eines Header-Arrays.
+  `Bearer` sperrt mit jedem Token, der kein Platzhalter ist, auch kurz
+  (`abc123`, `TOKEN`, `your_api_token_goes_here`; Codex-Runde 1 zu 11b,
+  A1: `Accept: …; Authorization: Bearer REVIEW_ONLY`). `Basic` sperrt, wo
+  das Base64 zu `user:password` dekodiert und das Passwort kein Platzhalter
+  ist, auch `user:password` und das Beispiel `Aladdin:open sesame` von
+  RFC 7617; mit leerem Passwort entscheidet der Benutzer (ein Schlüssel als
+  Benutzer). Der Wert endet an «;» und «,»: ein Feld danach wird als eigenes
+  gelesen (Codex-Runde 3 zu 11b, A3). `"Authorization":` von JSON und
+  `Authorization=` oder `=>` zählen wie bisher nach dem Namen.
+- Ein privater Schlüssel in PEM (`PEM`: RSA, EC, OPENSSH, ENCRYPTED, PGP …
+  PRIVATE KEY, bis zur END-Zeile derselben Bezeichnung): wo sein Körper
+  ohne die Kopfzeilen eines verschlüsselten Schlüssels und ohne die
+  Prüfsumme von PGP gültiges Base64 ist (nur das Alphabet mit Auffüllung,
+  eine Länge in Vielfachen von vier), auch auf einer Zeile oder mit `<br>`.
+  Frei bleiben ein gekürztes Beispiel (`...`, `…`), Text im Block
+  («(dein Schlüssel)», «Hier kommt der Key 2 hin»), ein Wort einer anderen
+  Länge, ein Satz mit BEGIN und END, öffentliche Schlüssel und
+  Zertifikate.
+- Der Wert eines Login-Cookies (`COOKIE`) in der Form von
+  `wp_generate_auth_cookie()`: ab dem ersten «|» der Ablauf mit zehn
+  Ziffern, das Token mit 43 Buchstaben und Ziffern, das HMAC mit 64 Hex,
+  jedes «|» roh oder URL-kodiert. Mit dem Namen des Cookies oder ohne (ein
+  Blatt für sich), was auch immer der Benutzer ist: mit Leerzeichen roh,
+  als «+» und als `%20` (Codex-Runde 3 zu 11b, A4). Frei bleiben der Name
+  allein (`wordpress_sec_[hash]`), ein gekürzter Wert, `deleted` und
+  `wordpress_test_cookie`.
+- Passwort- und Secret-Felder nur in Code- und Konfigurationsform: `=`,
+  `=>`, `"password":` von JSON, das Array von PHP (alle schon vorher) und
+  neu der Schlüssel des serialisierten Formats mit Wert
+  (`s:8:"password";s:…;`, `i:`, `d:`) in einem Text, der nicht entpackt
+  wird (eine Spalte, ein Blatt, ein Bruchstück in Prosa).
+- Ein Platzhalter ist nur einer in exakter Form als ganzer Wert
+  (`PLACEHOLDER`): `<token>` (in HTML `&lt;token&gt;`), `{var}`, `{{var}}`,
+  `$VAR`, `${VAR}`, `YOUR_` mit Grossbuchstaben (`YOUR_TOKEN`,
+  `YOUR_PASSWORD`), `xxx` (auch in Gruppen, `xxxx xxxx`), `***`, `...`,
+  `…`, `[REDACTED]`; nie als Teil eines Worts (Codex-Runde 3 zu 11b, A1).
+
+Grenzen (Gruppe C):
+
+- Zugangsdaten in Prosa sperren nicht, wie auf `8df6146`: «password:
+  Sommer2026» im Beitragstext, `<p>password: …</p>` vor einem Endtag
+  (Codex-Runde 3 zu 11b, A2), «user: anna, password: …» (A3), «Token:
+  Zugreihenfolgemarkierung», «Password: RESET». Grund: `wp_get_post` gibt
+  den Rohinhalt eines Beitrags ohnehin aus
+  (`includes/tools/class-tools-content.php:83`); verweigert werden dort nur
+  Meta-Schlüssel mit Namen eines Zugangsdatums. Prosa zeigt das
+  Lesewerkzeug also schon heute; das Paket zeigt nichts, was es nicht
+  zeigt. Ein Name mit Doppelpunkt in Prosa lässt sich nach der Form nicht
+  von einem Satz unterscheiden (der Versuch auf `heikel/z8-netz-referenz`
+  scheiterte an A2 und A3); die festen Formate oben schon.
+- `Authorization` im Satz («den Header Authorization: Basic mit …»), nach
+  einem Tag (`<code>Authorization: …`) oder nach «,» steht am Anfang
+  keiner Zeile und keines Felds und zählt nicht nach seinem Wert; so
+  bleiben die Beispiele in Code-Blöcken (T1, T3, T10) frei. Ein Token
+  einer festen Form sperrt auch dort.
+- Andere Schemata als Bearer und Basic (`Token`, `Digest`) zählen nicht
+  nach dem Wert, und `Bearer` ohne `Authorization` davor nicht
+  (`Bearer REVIEWONLY`, «This is a bearer instrument.»); ein Token einer
+  festen Form darin sperrt.
+- Ein gekürzter Wert am Anfang einer Zeile (`Authorization: Bearer
+  eyJhbGciOi…`) sperrt: «…» im Wort ist kein Platzhalter. Ein Platzhalter
+  `<token>` unkodiert in einem Text sperrt in WordPress weiter als Tag
+  ausserhalb der kses-Liste (vorbestehend).
+- `define( 'DB_PASSWORD', '…' )` aus `wp-config.php` ist keine der Formen
+  oben und bleibt frei wie auf `8df6146` (Tutorials zu `wp-config.php`
+  zeigen `password_here`).
+- Ein JWT ohne Signatur (`alg: none`, zwei Punkte und nichts danach) und
+  ein Login-Cookie in der Form vor WordPress 4.0 (ohne Token) zählen nicht
+  nach der Form.
