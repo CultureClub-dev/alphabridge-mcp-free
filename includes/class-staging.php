@@ -1337,6 +1337,42 @@ class AB_MCP_Staging {
 		return false;
 	}
 
+	/**
+	 * The sentence of the server instructions for a site of a pair (Z8,
+	 * decision 35 of the plan of 01.11.2026, branch 12): the way a change
+	 * goes from the staging site to the production site, report, approval,
+	 * takeover, check and way back. Under the condition of offered() (the
+	 * caller asks it), only for a confirmed role with a pair, and only where
+	 * the tool it names first is in the registry and switched on for this
+	 * connection (on the production site wp_site_push, on the staging site
+	 * wp_site_export), so it never names a tool that is not there. On a
+	 * production site whose key of the staging site no person confirmed yet,
+	 * it says that comes first. Empty otherwise.
+	 *
+	 * @param AB_MCP_Tool_Registry|null $registry The tools of the server.
+	 * @return string With a leading space, or ''.
+	 */
+	public static function paired_way( $registry ) {
+		if ( ! $registry instanceof AB_MCP_Tool_Registry ) {
+			return '';
+		}
+		$record = self::record();
+		if ( null === $record['role'] || null === $record['pair'] ) {
+			return '';
+		}
+		$production = self::ROLE_PRODUCTION === $record['role']['value'];
+		$tool       = $production ? 'wp_site_push' : 'wp_site_export';
+		$def        = $registry->get( $tool );
+		if ( ! is_array( $def ) || ! AB_MCP_Settings::is_tool_enabled( $tool, $def ) || ! AB_MCP_Tool_Registry::scope_allows( AB_MCP_Auth::current_scope(), $tool, $def ) ) {
+			return '';
+		}
+		if ( ! $production ) {
+			return ' This site is the staging site of a pair: make the changes here; the production site takes them over (wp_site_export here gives it the packages, and there come the report, the approval of the person, the takeover, its check and the way back). The prompt staging_workflow has the steps.';
+		}
+		$first = null === AB_MCP_Sync_Anchor::active() ? ' First a person confirms the key of the staging site on the page AlphaBridge → Staging.' : '';
+		return ' This site is the production site of a pair: changes are made on its staging site and carried over here by the takeover: the report (wp_site_diff), the approval of the person, the takeover (wp_site_push, confirmed with its token, one step per call), its check, and the way back pair by pair (wp_site_revert); wp_staging_status reports it under transfer, and the prompt staging_workflow has the steps.' . $first;
+	}
+
 	/* ------------------------------------------------------- REST route */
 
 	/**

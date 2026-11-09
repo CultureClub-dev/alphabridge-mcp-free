@@ -23,6 +23,13 @@
  *   writing tool switched off: not a word of it, and no prompt.
  * - The sentence stands before the filter of the add-ons and is short: the
  *   instructions go with every connection.
+ * - A site of a pair is outside the gate (Z8, decision 35): instead of the
+ *   question, the production site is told the way of the takeover (report,
+ *   approval, takeover, check, way back), and that a person confirms the
+ *   key of the staging site first while none is confirmed; the staging site
+ *   that the production site takes its changes over. Only where the tool
+ *   the sentence names first (wp_site_push, wp_site_export) is there for
+ *   this connection, and never without a pair.
  * - The prompt staging_workflow comes under the same condition, once, with
  *   its two optional arguments and its steps, through prompts/list and
  *   prompts/get; not without the tool in the registry the server answers
@@ -62,8 +69,11 @@ use ReflectionProperty;
 require_once __DIR__ . '/../includes/class-page-cache.php';
 require_once __DIR__ . '/../includes/class-preview-protection.php';
 require_once __DIR__ . '/../includes/tools/class-tools-staging.php';
+require_once __DIR__ . '/SyncTrustSites.php';
 
 final class StagingWorkflowTest extends TestCase {
+
+	use SyncTrustSites;
 
 	/**
 	 * The sentence, word for word: the reason and the way every time
@@ -77,6 +87,15 @@ final class StagingWorkflowTest extends TestCase {
 		. ' on staging it is checked first, then carried over) and how (the host\'s staging function, a staging plugin,'
 		. ' connecting an existing staging site, or drafts for posts and pages alone; its checklist has the steps), and offer to set up'
 		. ' staging now and continue there (prompt staging_workflow). If the person declines, go ahead here with staging_acknowledged true.';
+
+	/** The way of a paired production site (Z8, decision 35; AB_MCP_Staging::paired_way()). */
+	const PAIRED_LIVE = ' This site is the production site of a pair: changes are made on its staging site and carried over here by the takeover: the report (wp_site_diff), the approval of the person, the takeover (wp_site_push, confirmed with its token, one step per call), its check, and the way back pair by pair (wp_site_revert); wp_staging_status reports it under transfer, and the prompt staging_workflow has the steps.';
+
+	/** What comes first while no person confirmed the key of the staging site. */
+	const PAIRED_FIRST = ' First a person confirms the key of the staging site on the page AlphaBridge → Staging.';
+
+	/** The way of a paired staging site. */
+	const PAIRED_STAGING = ' This site is the staging site of a pair: make the changes here; the production site takes them over (wp_site_export here gives it the packages, and there come the report, the approval of the person, the takeover, its check and the way back). The prompt staging_workflow has the steps.';
 
 	/** What would advertise an edition, as the staging tool's own test reads it, and what would link anything. */
 	const ADVERTISING = '/\bPro\b|Agency|upgrade|licen[cs]e|price|pricing|checkout|freemius|https?:\/\/|alphabridge-mcp\.com/i';
@@ -261,6 +280,53 @@ final class StagingWorkflowTest extends TestCase {
 		self::assertLessThan( strpos( $text, ' NOT ON THIS SITE' ), strpos( $text, self::SENTENCE ), 'With the other lines on the tools, before the paragraph on what is not here.' );
 	}
 
+	/* --------------------------------------------- a site of a pair */
+
+	public function testAPairedProductionSiteIsToldTheWayOfTheTakeoverAndWhatComesFirst(): void {
+		$this->paired();
+		$text = self::instructions( self::staging_registry() );
+		self::assertStringContainsString( self::PAIRED_LIVE . self::PAIRED_FIRST, $text, 'No key confirmed yet: that comes first.' );
+		self::assertStringNotContainsString( self::SENTENCE, $text, 'A site of a pair is outside the gate: not the question.' );
+		self::assertLessThan( strpos( $text, ' NOT ON THIS SITE' ), strpos( $text, self::PAIRED_LIVE ), 'With the other lines on the tools.' );
+
+		$this->anchored();
+		$text = self::instructions( self::staging_registry() );
+		self::assertStringContainsString( self::PAIRED_LIVE, $text );
+		self::assertStringNotContainsString( self::PAIRED_FIRST, $text, 'The key is confirmed.' );
+		self::assertSame( 1, substr_count( $text, 'This site is the production site of a pair' ), 'Once.' );
+	}
+
+	public function testAPairedStagingSiteIsToldThatTheProductionSiteTakesItOver(): void {
+		$this->paired();
+		$this->on( 'staging' );
+		$text = self::instructions( self::staging_registry() );
+		self::assertStringContainsString( self::PAIRED_STAGING, $text );
+		self::assertStringNotContainsString( self::PAIRED_LIVE, $text );
+		self::assertStringNotContainsString( self::SENTENCE, $text );
+	}
+
+	public function testNoWayOfAPairWithoutItsToolForThisConnectionOrWithoutAPair(): void {
+		$this->paired();
+		AB_MCP_Settings::set_tool_state( array( 'wp_site_push' => false ) );
+		self::assertStringNotContainsString( 'of a pair', self::instructions( self::staging_registry() ), 'wp_site_push switched off: it would name a tool that is not there.' );
+		AB_MCP_Settings::set_tool_state( array( 'wp_site_push' => true ) );
+		self::assertStringContainsString( self::PAIRED_LIVE, self::instructions( self::staging_registry() ) );
+		self::assertStringNotContainsString( 'of a pair', self::instructions( self::with_content_writer( new AB_MCP_Tool_Registry() ) ), 'Without the staging tools: not a word.' );
+		self::assertSame( '', AB_MCP_Staging::paired_way( null ), 'Without a registry.' );
+		self::scope( 'content' );
+		self::assertSame( '', AB_MCP_Staging::paired_way( self::staging_registry() ), 'The access level Content does not reach wp_site_push.' );
+		self::scope( 'full' );
+
+		$this->on( 'staging' );
+		AB_MCP_Settings::set_tool_state( array( 'wp_site_export' => false ) );
+		self::assertStringNotContainsString( 'of a pair', self::instructions( self::staging_registry() ), 'wp_site_export switched off on the staging site.' );
+
+		$this->on( 'live' );
+		AB_MCP_Staging::save( 'production', '', null, 3, 'form' );
+		self::assertSame( '', AB_MCP_Staging::paired_way( self::staging_registry() ), 'The production site without a pair: the gate asks instead.' );
+		self::assertStringContainsString( self::SENTENCE, self::instructions( self::staging_registry() ) );
+	}
+
 	/* ------------------------------------------------------- the prompt */
 
 	public function testThePromptComesWithTheToolOnceWithItsArgumentsAndSteps(): void {
@@ -402,7 +468,7 @@ final class StagingWorkflowTest extends TestCase {
 	public function testNeitherAdvertisesAnything(): void {
 		$prompt = AB_MCP_Tools_Staging::add_prompt( array(), self::staging_registry() )[0];
 		$texts  = array_merge(
-			array( self::SENTENCE, $prompt['description'], $prompt['text'] ),
+			array( self::SENTENCE, self::PAIRED_LIVE, self::PAIRED_FIRST, self::PAIRED_STAGING, $prompt['description'], $prompt['text'] ),
 			array_column( $prompt['arguments'], 'description' )
 		);
 		foreach ( $texts as $text ) {

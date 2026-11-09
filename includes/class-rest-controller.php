@@ -1196,6 +1196,10 @@ class AB_MCP_REST_Controller {
 					. ' under Staging first (the refusal has the steps and the link). Until then, work on a staging site: wp_staging_status shows where the site stands,'
 					. ' and the prompt staging_workflow has the steps.';
 			}
+			// A site of a pair is outside the gate: the way of the takeover
+			// instead (Z8, decision 35; AB_MCP_Staging::paired_way(), only
+			// where the tool it names is there for this connection).
+			$instructions .= AB_MCP_Staging::paired_way( $this->registry );
 		}
 
 		// Without the tools of AlphaBridge MCP Pro: what is not on this site,
