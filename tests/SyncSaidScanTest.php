@@ -69,6 +69,15 @@ final class SyncSaidScanTest extends TestCase {
 	/**
 	 * Where the scan cannot follow a text, by file and expression, and why
 	 * no English text the list does not know comes that way.
+	 *
+	 * Beside these, by rule rather than one by one (Codex round 6, C1): a
+	 * value read under a key of prose ($lock['reason'], $item['reason'],
+	 * $part['note'], …) is not followed. It was written under such a key at a
+	 * sink the scan reads (or, from the staging site, compared there with the
+	 * same tables, AB_MCP_Sync_Import), or it is a note of the journal made
+	 * through gettext. Statically the scan cannot tell which write a read
+	 * comes from; an English text that slips through that way stays English
+	 * in the answer, a gap of wording only.
 	 */
 	const UNSEEN = array(
 		'class-sync-attachment-writer.php: $made -> get_error_message ( )'  => 'A note of the journal: the message of a WP_Error of WordPress or of a gettext call, in the language of the site.',
@@ -77,6 +86,7 @@ final class SyncSaidScanTest extends TestCase {
 		'class-sync-engine.php: (string) $why'                              => 'deviated(): every call gives a gettext text or refusal_why(), which is one.',
 		'class-sync-engine.php: (string) $note'                             => 'shared_back(): the closure $left is given gettext texts.',
 		'class-sync-decision.php: $state [ 1 ]'                             => 'The why of side_state() (RETURNS), through foreach over both sides.',
+		'class-sync-decision.php: implode ( \', \' , $fields )'            => 'The fields and values of a confirmed target (post_status draft), codes, as the value of the form «Compared against the confirmed target: taken over with %s.».',
 		'class-sync-env.php: $complete ? null : $why'                       => 'files_line(): a code (by_code, …), said by why_files() (RETURNS) in judged().',
 		'class-sync-option-schema.php: $resolved -> get_error_message ( )'  => 'The messages of AB_MCP_Sync_Option_Name::settle(), which testTheMessagesOfSettleAreKnown holds to the list.',
 		'class-sync-pairs-tool.php: $now'                                   => 'now(): a gettext text, or a WP_Error that call() returns before.',
@@ -85,13 +95,22 @@ final class SyncSaidScanTest extends TestCase {
 		'class-sync-write.php: $note'                                       => 'From the arguments $changed and $whole, which the writers give as gettext texts, or a gettext text.',
 	);
 
-	private static function scan(): SaidScan {
+	/**
+	 * @param array<string,array<string,string>> $replace File => what => by what, in memory only.
+	 */
+	private static function scan( array $replace = array() ): SaidScan {
 		$scan          = new SaidScan();
 		$scan->helpers = self::HELPERS;
 		$scan->returns = self::RETURNS;
 		foreach ( glob( __DIR__ . '/../includes/sync/*.php' ) as $file ) {
-			if ( 'class-sync-said.php' !== basename( $file ) ) {
-				$scan->add( basename( $file ), (string) file_get_contents( $file ) );
+			$name = basename( $file );
+			if ( 'class-sync-said.php' !== $name ) {
+				$source = (string) file_get_contents( $file );
+				foreach ( $replace[ $name ] ?? array() as $from => $to ) {
+					self::assertSame( 1, substr_count( $source, $from ), $name . ' ' . $from );
+					$source = str_replace( $from, $to, $source );
+				}
+				$scan->add( $name, $source );
 			}
 		}
 		$scan->run();
@@ -108,6 +127,31 @@ final class SyncSaidScanTest extends TestCase {
 		}
 		self::assertGreaterThan( 250, count( $scan->found ), 'The scan reads the code at all.' );
 		self::assertSame( array(), array_values( array_unique( $unknown ) ) );
+	}
+
+	public function testEveryPieceAddedToATextIsAWholeSentence(): void {
+		self::assertSame( array(), self::scan()->fragments );
+	}
+
+	/**
+	 * Codex round 6 (C1): its two counterproofs on the code itself, in
+	 * memory: an unknown value of a form, and a one-word sentence.
+	 */
+	public function testTheScanFailsOnCodexCounterproofs(): void {
+		foreach ( array(
+			array( 'class-sync-option-schema.php', "'of another name'", "'of some other name'", 'of some other name' ),
+			array( 'class-sync-decision.php', "'Not compared.'", "'Uncompared.'", 'Uncompared.' ),
+		) as $case ) {
+			list( $file, $from, $to, $text ) = $case;
+			$scan = self::scan( array( $file => array( $from => $to ) ) );
+			$found = array();
+			foreach ( $scan->found as $one ) {
+				if ( ! AB_MCP_Sync_Said::knows( $one[2] ) ) {
+					$found[] = $one[2];
+				}
+			}
+			self::assertContains( $text, $found, $file );
+		}
 	}
 
 	public function testWhatTheScanCannotFollowIsNamed(): void {
@@ -163,6 +207,9 @@ final class Probe {
 		$out['reason'] = 'Unknown eight on ' . ( $s ? 'this site' : 'the staging site' ) . '.';
 		$out['words'] .= ' Unknown nine as a piece.';
 		$out['note']   = 'Unknown ten with ' . implode( ', ', $x ) . '.';
+		$out['note']   = sprintf( 'Known %s.', $x ? 'unknown fifteen as a value' : $s );
+		$out['words'] .= ' and a fragment';
+		$out['why']    = 'Unknownsixteen.';
 		self::helper( 1, 'Unknown eleven as an argument.' );
 		list( $a, $b ) = self::tuple();
 		$read          = static function () {
@@ -213,13 +260,16 @@ PHP;
 			'Unknown twelve in a tuple.',
 			'Unknown thirteen from a closure.',
 			'Unknown fourteen as a return.',
+			'unknown fifteen as a value',
+			'Unknownsixteen.',
 		) as $text ) {
 			self::assertContains( $text, $found, $text );
 			self::assertFalse( AB_MCP_Sync_Said::knows( $text ), $text );
 		}
 		self::assertNotContains( 'Said already.', $found, 'A gettext text is said already.' );
 		self::assertNotContains( 'Z8x', $found, 'Only keys of prose.' );
-		self::assertSame( array( '$x -> message ( )' ), array_column( $scan->unseen, 2 ), 'What it cannot follow, it names.' );
+		self::assertSame( array( 'implode ( \', \' , $x )', '$x -> message ( )' ), array_column( $scan->unseen, 2 ), 'What it cannot follow, it names.' );
+		self::assertSame( array( ' and a fragment' ), array_column( $scan->fragments, 2 ), 'A piece that is no whole sentence.' );
 	}
 
 	/**

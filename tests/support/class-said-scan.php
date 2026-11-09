@@ -11,13 +11,16 @@
  * a key (HELPERS of the test) and a return of a function whose value goes
  * there (RETURNS). Of the expression of a sink it takes every text it can
  * give: literals, both sides of ?: and ??, concatenations (a value it cannot
- * read becomes %s, so the text is a form), the format of sprintf(), the
+ * read becomes %s, so the text is a form; what implode() joins is named as
+ * unseen), the format of sprintf() and the literal values given to it, the
  * values of a constant table it names (self::WORDS[ … ]), a local variable
  * by its assignments in the function and what a closure in one returns. A
  * text in a gettext call or passed through AB_MCP_Sync_Said is said
  * already; a value read under a key of prose was written at a sink the scan
- * sees; a text without a space is a code. What it cannot follow it reports
- * as unseen, by file and expression.
+ * sees; a text without a space is a code, unless it is a one-word sentence
+ * (Uncompared.). A piece added with .= must be a whole sentence after the
+ * one before (fragments). What it cannot follow it reports as unseen, by
+ * file and expression (Codex round 6, C1).
  *
  * @package AlphaBridge_MCP
  */
@@ -48,6 +51,8 @@ final class SaidScan {
 	public $found   = array();
 	/** @var array<int,array{0:string,1:int,2:string}> file, line, expression */
 	public $unseen  = array();
+	/** @var array<int,array{0:string,1:int,2:string}> file, line, a piece added with .= that is no whole sentence */
+	public $fragments = array();
 	private $guard  = array();
 
 	public function add( $name, $source ) {
@@ -294,13 +299,42 @@ final class SaidScan {
 			return;
 		}
 		$v = str_replace( array( self::UNSEEN, self::PH ), '%s', $v );
-		if ( $piece ) {
-			$v = trim( $v );
-		}
-		if ( 1 !== preg_match( '/[A-Za-z]+ [A-Za-z%]/', $v ) ) {
+		if ( ! self::prose( $v ) ) {
 			return;
 		}
+		if ( $piece ) {
+			// A piece added to a text is a whole sentence after the one before
+			// (AB_MCP_Sync_Said says a text sentence by sentence).
+			if ( 1 !== preg_match( '/\A \S.*[.!?]\z/s', $v ) ) {
+				$this->fragments[] = array( $file, $line, $v );
+			}
+			$v = trim( $v );
+		}
 		$this->found[] = array( $file, $line, $v, $piece );
+	}
+
+	/**
+	 * Whether a text is prose, not a code: words with a space between them,
+	 * or one word that is a sentence (Uncompared.).
+	 *
+	 * @param string $v Text.
+	 * @return bool
+	 */
+	public static function prose( $v ) {
+		return 1 === preg_match( '/[A-Za-z]+ [A-Za-z%]/', $v ) || 1 === preg_match( '/\A\s*[A-Z][A-Za-z-]*[.!?:]\s*\z/', $v );
+	}
+
+	/** The literal values given to a form (sprintf), each a text said on its own. */
+	private function values( $file, $args ) {
+		foreach ( array_slice( $args, 1 ) as $arg ) {
+			$line = $this->files[ $file ][ $arg[0] ][2] ?? 0;
+			foreach ( $this->expand( $file, $arg[0], $arg[1] ) as $v ) {
+				if ( '' === $v || 1 === preg_match( '/[\x01\x02\x04]/', $v ) || ! self::prose( $v ) ) {
+					continue;
+				}
+				$this->found[] = array( $file, $line, $v, false );
+			}
+		}
 	}
 
 	public function text( $file, $a, $b ) {
@@ -414,7 +448,13 @@ final class SaidScan {
 			}
 			if ( 'sprintf' === $x[1] ) {
 				$args = $this->args( $file, $a + 1 );
+				$this->values( $file, $args );
 				return $this->expand( $file, $args[0][0], $args[0][1] );
+			}
+			if ( 'implode' === $x[1] && ! $alone ) {
+				// What it joins is a value of the text, not followed: named.
+				$this->unseen[] = array( $file, $x[2], $this->text( $file, $a, $b ) );
+				return array( self::PH );
 			}
 			return $this->has_gettext( $file, $a + 1 ) ? array( self::SKIP ) : array( self::UNSEEN );
 		}
