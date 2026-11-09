@@ -542,6 +542,66 @@ final class SyncStructureWritersTest extends TestCase {
 		}
 	}
 
+	public function testTheFinishedContentReadsSerializedMetaAndAnOptionUnpackedAsTheirKinds(): void {
+		// Branch 11b: the net reads a meta value and the value of an option
+		// as WordPress hands them out, unpacked, in the kinds and in the
+		// export alike (AB_MCP_Sync_Net::check() with $stored); prose in a
+		// serialized array («Spieler: Anna, Token: drei») goes into the
+		// package, a credential in it holds the object as before.
+		$prose  = 'Spieler: Anna, Token: drei';
+		$nested = serialize( array( 'text' => serialize( array( 'text' => $prose ) ) ) );
+		$line   = static function ( string $kind, array $meta, array $row = array() ): array {
+			return array(
+				'kind'        => $kind,
+				'ref'         => '7',
+				'locks'       => array(),
+				'credentials' => array( 'b9' => array(), 'mixed' => array() ),
+				'content'     => array( 'meta' => $meta, 'row' => $row, 'terms' => array() ),
+			);
+		};
+		foreach ( array( 'post', 'term', 'menu', 'menu_item', 'attachment' ) as $kind ) {
+			foreach ( array( serialize( array( 'text' => $prose ) ), $nested ) as $value ) {
+				$object = $line( $kind, array( array( 'ab_spiel', $value ) ) );
+				self::assertSame( $object, \AB_MCP_Sync_Export::checked_content( $object ), $kind . ': as it was.' );
+			}
+		}
+		$option = $line( 'option', array(), array( 'value' => $nested ) );
+		self::assertSame( $option, \AB_MCP_Sync_Export::checked_content( $option ), 'The value of an option: as it was.' );
+		// The instance of a widget goes to the check as area() checks it:
+		// unpacked as the row of the widget holds it, the base of the widget
+		// as its name (Codex round 4 of branch 11, B); since the net reads a
+		// meta value unpacked anyway, the form is held here, at the kind.
+		$settings = array( 'title' => 'Spielanleitung', 'text' => $prose );
+		self::assertSame( array( 'text', $settings ), \AB_MCP_Sync_Kind_Widget_Area::checked_meta( 'text-2', serialize( $settings ) ) );
+		self::assertSame( array( 'text-2', 'a:2:{s:5:"title";' ), \AB_MCP_Sync_Kind_Widget_Area::checked_meta( 'text-2', 'a:2:{s:5:"title";' ), 'Settings that do not unpack: as stored.' );
+		self::assertSame( array( 'search', '' ), \AB_MCP_Sync_Kind_Widget_Area::checked_meta( 'search', '' ), 'A widget without a number.' );
+		self::assertSame( array( 'note', $nested ), \AB_MCP_Sync_Db_Kind::checked_meta( 'note', $nested ), 'Any other kind: as stored.' );
+		self::assertSame( array( false, true ), array( \AB_MCP_Sync_Db_Kind::stored_column( 'value' ), \AB_MCP_Sync_Kind_Option::stored_column( 'value' ) ) );
+		// A column WordPress hands out as stored is read as stored: there the
+		// braces of a serialized text still read as code.
+		$column = $line( 'post', array(), array( 'post_content' => serialize( array( 'text' => $prose ) ) ) );
+		self::assertTrue( \AB_MCP_Sync_Export::credential_locked( \AB_MCP_Sync_Export::checked_content( $column )['locks'] ), 'A column of a post: as stored.' );
+		// A credential in a serialized value holds the object: nested, in
+		// base64 in a leaf or a key, in the first value of a key twice, a
+		// value that does not unpack or holds an object.
+		$b64   = base64_encode( 'password=synthetic-review-value' );
+		$twice = 'a:2:{s:4:"note";s:' . strlen( $b64 ) . ':"' . $b64 . '";s:4:"note";s:4:"frei";}';
+		foreach ( array(
+			'code nested'       => serialize( array( 'x' => serialize( array( 'cfg' => '{api_key:"synthetic-review-value"}' ) ) ) ),
+			'base64 in a leaf'  => serialize( array( 'note' => $b64 ) ),
+			'base64 as a key'   => serialize( array( $b64 => 'frei' ) ),
+			'a key twice'       => $twice,
+			'does not unpack'   => 'a:2:{s:4:"text";s:4:"kurz";}',
+			'an object'         => 'a:1:{s:1:"x";O:8:"stdClass":0:{}}',
+		) as $case => $value ) {
+			foreach ( array( $line( 'post', array( array( 'ab_spiel', $value ) ) ), $line( 'menu_item', array( array( 'ab_spiel', $value ) ) ), $line( 'option', array(), array( 'value' => $value ) ) ) as $object ) {
+				$held = \AB_MCP_Sync_Export::checked_content( $object );
+				self::assertTrue( \AB_MCP_Sync_Export::credential_locked( $held['locks'] ), $case . ' (' . $object['kind'] . ')' );
+				self::assertStringNotContainsString( 'synthetic-review-value', (string) json_encode( array( $held['locks'], $held['credentials'] ) ), $case );
+			}
+		}
+	}
+
 	/* ------------------------------------------------------------ menus */
 
 	private static function menu_line( array $locations, array $row = array(), array $meta = array() ): array {

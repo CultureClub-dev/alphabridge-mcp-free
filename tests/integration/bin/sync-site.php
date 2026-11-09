@@ -27,7 +27,8 @@
  * (term, taxonomy, args of wp_update_term()), push (args of wp_site_push,
  * exit_at: a hook at which the process exits inside a boundary, exit_key: only for this meta key), revert (args of
  * wp_site_revert, exit_at and exit_key as for push; hook_meta: post, key, value a save_post hook writes), raw_post (post, set: columns written
- * by SQL), term_order (post, term, taxonomy, order: the order of that relationship by SQL) and wp_version (version: the
+ * by SQL), raw_meta (post, key, value: the value of an existing meta row by SQL), raw_option (name, value: the value of an
+ * option row by SQL, made where there is none), term_order (post, term, taxonomy, order: the order of that relationship by SQL) and wp_version (version: the
  * $wp_version the steps after it see), rest (method, route, body: a request
  * to the REST server of this process, its status and data), global_styles_id
  * (the post of the global styles of the active theme, made where there is
@@ -271,6 +272,20 @@ foreach ( $ab_it_steps as $ab_it_i => $ab_it_step ) {
 			// with its own SQL writes), for the tests of the way back.
 			$ab_it_out = $GLOBALS['wpdb']->update( $GLOBALS['wpdb']->posts, $ab_it_step['set'], array( 'ID' => (int) $ab_it_step['post'] ) );
 			clean_post_cache( (int) $ab_it_step['post'] );
+			break;
+		case 'raw_meta':
+			// A meta value as a plugin with its own SQL writes it, past every
+			// hook and past maybe_serialize() (branch 11b: a key twice, an
+			// object, a text that does not unpack).
+			$ab_it_out = $GLOBALS['wpdb']->update( $GLOBALS['wpdb']->postmeta, array( 'meta_value' => (string) $ab_it_step['value'] ), array( 'post_id' => (int) $ab_it_step['post'], 'meta_key' => (string) $ab_it_step['key'] ) );
+			wp_cache_delete( (int) $ab_it_step['post'], 'post_meta' );
+			break;
+		case 'raw_option':
+			// The value of an option row by SQL, likewise (branch 11b).
+			$ab_it_out = $GLOBALS['wpdb']->query( $GLOBALS['wpdb']->prepare( "INSERT INTO {$GLOBALS['wpdb']->options} (option_name, option_value, autoload) VALUES (%s, %s, 'off') ON DUPLICATE KEY UPDATE option_value = VALUES(option_value)", (string) $ab_it_step['name'], (string) $ab_it_step['value'] ) );
+			wp_cache_delete( (string) $ab_it_step['name'], 'options' );
+			wp_cache_delete( 'alloptions', 'options' );
+			wp_cache_delete( 'notoptions', 'options' );
 			break;
 		case 'import':
 			require_once AB_MCP_DIR . 'includes/sync/class-sync-import.php';

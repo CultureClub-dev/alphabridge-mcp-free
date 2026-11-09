@@ -222,10 +222,12 @@ Position, die das Theme hier nicht registriert, in der Prüfung des Laufs
   geprüft hat (Codex-Runde 4, B; die Meta-Zeilen über
   `AB_MCP_Sync_Db_Kind::checked_meta()` der Art): Post, Anhang und Vorlage
   (JSON im Inhalt), Term, Menü und Menüeintrag tragen Spalten und
-  Meta-Zeilen als gespeicherte Texte, ein serialisierter Wert als sein
-  Text, so wie `meta_form()` und `row_form()` ihn lesen; die Option ihren
-  gespeicherten Wert als Text, wie `option()` ihn liest; das CSS seine
-  Spalten als Texte; Theme-Mods tragen keinen Inhalt. Nur der Bereich
+  Meta-Zeilen als gespeicherte Texte, so wie `meta_form()` und
+  `row_form()` sie lesen; die Option ihren gespeicherten Wert, wie
+  `option()` ihn liest; das CSS seine Spalten als Texte; Theme-Mods tragen
+  keinen Inhalt. Das Netz liest eine Meta-Zeile und den Wert der Option
+  dabei entpackt, wie die Arten (seit Zweig 11b, Abschnitt «Serialisierte
+  Werte im Netz»). Nur der Bereich
   trägt seine Instanzen anders, als er sie prüft: im Inhalt serialisiert,
   geprüft entpackt mit der Basis des Widgets als Namen (`area()`).
   `checked_meta()` des Bereichs entpackt sie darum wie die Art
@@ -567,17 +569,172 @@ Position, die das Theme hier nicht registriert, in der Prüfung des Laufs
   davor die höchste Id, `MAX(term_id)`, damit ein zurückgegebener Term
   nicht als eigener gilt).
 
-## Bekannte Fehlsperre im Normalfall: serialisierte Werte im Netz
+## Serialisierte Werte im Netz (Zweig 11b)
 
-- Prosa wie «Spieler: Anna, Token: drei» in einem serialisierten Array
-  von Post-, Term- oder Menüeintrag-Meta oder einer Kern-Option sperrt mit
-  `*:unread_credential`, entpackt nicht. Grund: Das Netz aus Zweig 4
-  prüft den serialisierten Wert als Text; seine Klammern lassen die Prosa
-  als Feld in Code lesen. Behebung in Zweig 11b `heikel/z8-netz` (Thomas
-  08.11. abends, decisions.md). Bis dahin bleibt die Sperre mit ihrem Grund
-  und Weg stehen. Der Bereich der Widgets ist davon nicht betroffen: seine
-  Art prüft die Instanzen entpackt, und der fertige Inhalt wird seit
-  Codex-Runde 4 (B) in derselben Form geprüft.
+- Das Netz über den Rohwert (`AB_MCP_Sync_Net::check()`, Zweig 4) prüft
+  die Zugangsdaten von Post-, Term- und Menüeintrag-Meta und von Optionen
+  in der Form, in der WordPress sie herausgibt: entpackt, jeden Schlüssel
+  und jedes Blatt als eigenen Text mit allen seinen Schichten (Dekodierungen,
+  Base64, `data:`), verschachtelte serialisierte Texte ebenso, so wie die
+  Instanzen eines Widget-Bereichs (`$stored`, `texts()`; Thomas 08.11.2026
+  abends «a», decisions.md). Vorher prüfte es den serialisierten Wert als
+  Text; seine Klammern liessen Prosa als Feld in Code lesen, und
+  «Spieler: Anna, Token: drei» in einem serialisierten Array sperrte mit
+  `*:unread_credential`. Der Export prüft den fertigen Inhalt in derselben
+  Form (`AB_MCP_Sync_Export::checked_content()`: jede Meta-Zeile und die
+  Spalte, die die Art als gespeicherten Wert nennt,
+  `AB_MCP_Sync_Db_Kind::stored_column()`, bei der Option `value`), über
+  dieselbe Funktion wie die Arten. Die Spalten einer Zeile (Post, Term,
+  Menüeintrag, CSS) gibt WordPress heraus, wie sie gespeichert sind: dort
+  bleibt die Prüfung über den Text. Prüffälle
+  `SyncNetTest::testProseInASerializedValueIsProseWhereTheValueIsReadUnpacked`,
+  `SyncStructureWritersTest::testTheFinishedContentReadsSerializedMetaAndAnOptionUnpackedAsTheirKinds`,
+  `SyncStructureTest::testProseInASerializedValueOfMetaAndOfACoreOptionGoesThroughTheReportAndIntoThePackage`
+  (Bericht und Paket: Meta von Post, Term und Menüeintrag, verschachtelt,
+  die Kern-Option `image_default_link_type`, deren Schema Text zulässt;
+  `sticky_posts` mit gültigen Ids wie bisher).
+- Entpackt wird nur über `AB_MCP_Sync_Canon::unserialized()` (seine
+  Prüfung des Datensatzes vor `unserialize()`: kein Objekt, keine Enum,
+  keine Referenz), innerhalb der Tiefe und der Schichten der Leser
+  (`AB_MCP_Sync_Canon::MAX_DEPTH`, `MAX_LAYERS`; ein Widget-Bereich zählt
+  wie `AB_MCP_Sync_Canon::structure()` ab der ersten Schicht). Was nicht
+  entpackt, ein Objekt enthält oder tiefer reicht, sperrt
+  (`*:unreadable_value`, `*:php_object`): bei den Arten schon durch die
+  Zugangsprüfung, das Netz allein ebenso.
+- Nichts geht beim Entpacken ungeprüft verloren. Die Schlüssel eines
+  Arrays sind Texte der Prüfung (auch im Widget-Bereich, der sie vorher
+  ausliess) und zählen für die Verweise mit. Serialisiert der entpackte
+  Wert nicht Byte für Byte zu seinem Text zurück, kann das Entpacken etwas
+  verworfen haben (ein Schlüssel zweimal, dessen erster Wert ersetzt wird;
+  Bytes nach dem Ende des Werts): dann wird zusätzlich jede Zeichenkette
+  des Formats geprüft, jede für sich, nach der Länge, die sie angibt
+  (`serialized_strings()`, Ort `string.<n>`), die verworfenen darunter;
+  eine serialisierte darunter wird ihrerseits entpackt. Die Klammern des
+  Formats sind auch dort kein Code. Die Orte einer Sperre nennen im Wert nur
+  Positionen (`meta:<Meta-Schlüssel>:net:php.0.key:raw/base64`: der
+  Schlüssel des ersten Eintrags des entpackten Werts), nie einen Schlüssel
+  oder Wert des Arrays, der selbst ein Zugangsdatum sein kann.
+- Die Zählung der Verweise aus Zweig 4 bleibt über den Rohwert: bei Meta
+  und Optionen über den serialisierten Text, beim Widget-Bereich über
+  Schlüssel und Blätter. Was die Schichten des Rohwerts nicht zu Ende
+  lesen (ein Körper, der kein UTF-8 ist, tiefer als das Netz liest),
+  sperrt wie bisher. Ebenso sperrt, was die Schichten eines einzelnen
+  Texts nicht zu Ende lesen, wie bei einer Spalte (Codex-Runde 1 zu 11b,
+  A2): eine `data:`-Adresse in einem Blatt, die tiefer reicht, als das Netz
+  liest, ein Körper in UTF-16 ohne Zeichensatz. Der Rohwert steht dafür
+  nicht ein: die Anführungszeichen des serialisierten Texts beenden die
+  Adresse dort an anderer Stelle (`… x"`), ihr Körper dekodiert dann nicht.
+  Prüffälle
+  `SyncNetTest::testALeafTheNetDoesNotReadToItsEndLocksAsAColumnDoes` und
+  zwei Fälle in
+  `SyncStructureTest::testACredentialInASerializedValueOfMetaAndOfAnOptionStillHoldsItInTheReportAndThePackage`;
+  auf `8df6146` gingen beide durch. Aus demselben Grund sperrt eine
+  Adresse mit Id in einer Schicht, die aus einem Text des Werts
+  herausgelöst ist (`data:`, Base64), auch wo der Rohwert sie nicht
+  herauslöst: etwa ein Körper in UTF-16LE mit Zeichensatz, dessen Adresse
+  im Rohwert erst am Anführungszeichen endet und dessen Base64 ohne BOM
+  dort keine Schicht ist (vorbestehend, gefunden bei A2). Die Adressen des
+  Texts selbst und seiner Dekodierungen zählt das Netz weiter über den
+  Rohwert, gegen das, was die Leser gelesen haben. Prüffälle
+  `SyncNetTest::testAReferenceInALayerTakenOutOfALeafLocks` und
+  `SyncLocksTest::testTheNetLocksAHiddenReferenceInEveryUnit`.
+- Ein echtes Zugangsdatum sperrt weiter: im Blatt als Code
+  (`{api_key:"…"}`), verschachtelt, in Base64 in einem Blatt oder einem
+  Schlüssel, im verdrängten ersten Wert eines doppelten Schlüssels, in
+  einer `data:`-Adresse. Prüffälle
+  `SyncNetTest::testACredentialInASerializedValueLocksWhereverItStands`,
+  `testAStoredValueThatDoesNotUnpackOrHoldsAnObjectIsNeverClean`,
+  `testEachKeyAndLeafOfAStructureIsReadOnItsOwn` und
+  `SyncStructureTest::testACredentialInASerializedValueOfMetaAndOfAnOptionStillHoldsItInTheReportAndThePackage`.
+- Ein Wert, der nicht Byte für Byte zurück serialisiert, ohne dass etwas
+  verloren ging, urteilt so wie sein Inhalt: eine Gleitkommazahl, die mit
+  einer anderen `serialize_precision` geschrieben wurde als der, mit der
+  die prüfende Site zurück serialisiert, etwa mit 17 Stellen,
+  `d:0.10000000000000001;` (so schreibt jedes PHP mit
+  `serialize_precision=17`, auch PHP 8.5, und PHP vor 7.1 als Vorgabe),
+  ein Schlüssel aus Ziffern als Text (`s:1:"5"`). Prosa darin bleibt frei;
+  vorher wurde ein solcher Wert als Ganzes geprüft, und «…, Token: drei»
+  in seinen Klammern sperrte (Codex-Runde 1 zu 11b, Tabelle zu A1 und B).
+  Als Ganzes geprüft wird ein Text, dessen Format sich nach den
+  angegebenen Längen nicht zu Ende lesen lässt. Ein Skalar zählt dabei nur
+  in der strengen Form, die `serialize()` schreibt (`i:` Ziffern mit
+  Vorzeichen, `d:` eine Zahl der Form von PHP samt `INF` und `NAN`, `b:`
+  0 oder 1; `SCALARS`): Codex-Runde 2 zu 11b, A, fand
+  `a:1:{s:4:"note";s:4:"frei";}i:password=REVIEW_ONLY;`, dessen Anhang
+  `unserialize()` verwirft und den der Leser vorher als Zahl übersprang;
+  jetzt wird der Text als Ganzes gelesen und sperrt, ebenso mit `d:`, `b:`
+  und Base64 hinter `i:`. Prüffall
+  `SyncNetTest::testAScalarOfTheFormatOnlyInItsStrictFormElseTheTextIsReadWhole`.
+  Prüffall
+  `SyncNetTest::testAValueThatDoesNotSerializeBackIsReadByTheStringsOfItsFormat`.
+- Ein Text in einem serialisierten Wert urteilt wie derselbe Text als
+  einfacher Wert seiner Art: derselbe Leser, derselbe Textanfang, dieselbe
+  Erkennung von Feldern nach einem Trenner, ob eine Klammer des Formats
+  davor steht oder nicht (Codex-Runde 1 zu 11b, A1 und B). Der Prüffall
+  `SyncNetTest::testATextInASerializedValueIsJudgedAsTheSameTextAsAPlainValue`
+  hält das für Meta (Blatt, verschachtelt, mit Gleitkommazahl), Option,
+  Option eines Plugins und Text-Widget fest, dazu
+  `SyncCoreReads::testATextIsJudgedAlikeInEveryFormItIsStoredIn` in
+  sieben Formen (auch `post_content` und Widget, Unit und Integration).
+  Auf `8df6146` sperrte der einfache Wert nicht bei einem
+  Authorization-Header mit Bearer oder Basic nach «;», einem privaten
+  Schlüssel im PEM-Format und einem Login-Cookie; im serialisierten Wert
+  sperrten die Header nur über die Klammern des Formats. Seit dem
+  Neuansatz nach festen Formaten (GRENZEN.md, Abschnitt «Zugangsdaten nach
+  festen Formaten») sperren sie in jeder Form. `api_key: abc123def` und
+  andere Zugangsdaten in Prosa bleiben frei (Grenze C dort); zitierte
+  Prosa am Textanfang (`Token: "Ein Spielstein pro Zug"`) sperrt wie auf
+  `8df6146` im einfachen Wert, jetzt auch im Blatt.
+- Gezählt am 09.11.2026 auf dem lokalen Paar (Site B, Inventar aller
+  Arten, vorher auf `8df6146`, nachher auf diesem Zweig): die frische Site
+  mit 93 Objekten gleich, ohne Sperre der Zugangsprüfung. Mit sieben
+  gewöhnlichen serialisierten Werten mit Prosa (Meta eines Posts flach und
+  verschachtelt, `_elementor_page_settings`, `panels_data` von SiteOrigin,
+  Term-Meta, die Kern-Option `image_default_link_type`, die Option eines
+  Plugins) und drei echten Zugangsdaten (Code in einem Blatt, Base64 in
+  einem Blatt und als Schlüssel): vorher zehn Sperren
+  `*:unread_credential`, nachher nur die drei echten.
+- Die Klauseln stehen in der Mutationsliste `netz` (175 Einträge, 171 über
+  Unit-Tests, 3 über `SyncStructureTest`, 1 über `SyncLocksTest`;
+  geschrieben von `tests/mutation/gen/netz.py`), die Klauseln des Netzes
+  aus Zweig 4 weiter in `kanon`. Die festen Formate (GRENZEN.md) brachten
+  83 Einträge; auf dem Stand nach ihnen lief jeder davon einzeln, dazu die
+  24 Einträge von `kanon` in `credentials()` und die 3 von `inventar` am
+  geänderten Prüffall von `SyncEnvTest`: alle 110 getötet. Die Behebung
+  nach Codex-Runde 4 (Bearer nach der Form eines Tokens, die
+  Beispielwörter von Basic, die Liste der dokumentierten Beispiele) brachte
+  32 Einträge, änderte 6 und strich 2 (`token-aws-after`: die Form von AKIA
+  endet nicht mehr nach 16 Zeichen; `bearer-empty`: aufgegangen in
+  `bearer-length`); danach liefen 147 einzeln (113 von `netz`, 29
+  von `kanon` in `credentials()`, 5 von `lauf` an der Anzeige des
+  Post-Writers): alle getötet, drei erst mit neuen Prüffällen
+  (`bearer-dot`, `bearer-start`, `token-aws-before`). Die Behebung nach
+  Codex-Runde 5 (die Beispielpaare von Basic, ein Punkt als Satzende, die
+  Grenzen von AKIA) brachte 20 Einträge, änderte 9 und strich 9 (die
+  Beispielwörter von Basic, `basic-words`, `basic-words-case`,
+  `basic-example-password`: die Regel gibt es nicht mehr); danach liefen
+  127 einzeln (93 von `netz`, 29 von `kanon`, 5 von `lauf`): alle
+  getötet, `token-aws-run` erst mit einem neuen Prüffall (ein Lauf von 18
+  Grossbuchstaben vor einem kleinen Buchstaben).
+  Die Behebung nach Codex-Runde 6 (die Beispielpaare ohne Rücksicht auf
+  die Schreibweise, «/» nach einem Schlüssel von AWS) brachte 9 Einträge,
+  änderte 26 und strich 1 (`basic-pairs-exact`, ersetzt durch
+  `basic-pairs-case`); danach liefen
+  135 einzeln (101 von `netz`, 29 von `kanon`, 5 von `lauf`): alle
+  getötet.
+  Der Entscheid vom 09.11.2026 vormittags (Basic nach dem Ort, ohne
+  Liste) brachte 11 Einträge (die Weiche, `basic-place`, `basic-check`,
+  `prose-unit` und ihre Varianten), änderte 6 und strich 18: die Liste
+  der Beispielpaare (`basic-pairs`, `basic-pairs-case`,
+  `basic-pairs-whole`, je ein Eintrag je Paar) gibt es nicht mehr; danach
+  liefen 133 einzeln (98 von `netz`, 30 von `kanon`, 5 von `lauf`): alle
+  getötet. Lokal lief jeder Eintrag von `netz` und jeder Eintrag von
+  `kanon` und `struktur`, dessen Suchtext im geänderten Code liegt, einzeln
+  (76 Einträge): 73 getötet; `b-widget-form`, `b-widget-form-it` und
+  `b-reader` überlebten, weil das Netz des Exports jetzt jede Meta-Zeile
+  selbst entpackt. `b-widget-form` und `b-reader` laufen jetzt über den
+  Prüffall an der Art und sind getötet, `b-widget-form-it` ist gestrichen
+  (siehe unten).
 
 ## Reichweite der neuen Sperren
 
@@ -628,6 +785,21 @@ Entscheid 27 ohnehin nicht geschrieben werden.
   rund 1 bis 2 s, Integrations-Einträge rund 7 bis 17 s.
 
 ## Nicht als Mutation geführt
+
+- In `texts()` des Netzes (Zweig 11b): das `trim()` des Texts vor der
+  Rundreise (ein Text mit Leerraum darum urteilt über die Zeichenketten
+  seines Formats so wie über seinen Wert; die Mutation überlebte, keine
+  Probe unterscheidet sie). Der Rückfall auf den ganzen Text, wo sich das
+  Format nicht nach seinen Längen lesen lässt, ist seit Codex-Runde 2 zu
+  11b erreichbar und geführt (`texts-strings-whole`, unten).
+
+- `b-widget-form-it` (Codex-Runde 4, B, über die Integrationsklasse): seit
+  Zweig 11b liest das Netz des Exports jede Meta-Zeile entpackt; ob
+  `checked_meta()` des Bereichs die Instanz entpackt, ändert für das
+  harmlose Text-Widget nichts mehr, die Mutation überlebte dort. Die Form
+  hält jetzt der Prüffall an der Art selbst
+  (`testTheFinishedContentReadsSerializedMetaAndAnOptionUnpackedAsTheirKinds`,
+  Einträge `b-widget-form` und `b-reader`).
 
 - Das Beitragsbild eines Posts über den Helfer (Codex-Runde 4, Punkt 4):
   es hat beim Aufruf keine eigene Rechtefrage, an der ein Hook sässe; sein

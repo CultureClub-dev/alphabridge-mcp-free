@@ -205,8 +205,9 @@ abstract class AB_MCP_Sync_Db_Kind implements AB_MCP_Sync_Kind {
 			if ( null === $value ) {
 				$value = AB_MCP_Sync_Canon::value( $row['value'], $ctx, $acc, $kind, $at, AB_MCP_Sync_Refs::possible_leaf( $acc, $at ) );
 			}
-			// The net over the raw value, after the readers of the unit.
-			AB_MCP_Sync_Net::check( $acc, $mark, $kind, $at, $row['value'], $ctx );
+			// The net over the raw value, after the readers of the unit: a
+			// meta value as WordPress reads it, unpacked (branch 11b).
+			AB_MCP_Sync_Net::check( $acc, $mark, $kind, $at, $row['value'], $ctx, true, true );
 			$out[] = array( $row['key'], $value );
 		}
 		return $out;
@@ -322,7 +323,9 @@ abstract class AB_MCP_Sync_Db_Kind implements AB_MCP_Sync_Kind {
 	 * content through it, so that both read the same input (Codex round 4
 	 * of branch 11, B). A row of meta of a post, a term, a menu, a menu
 	 * item or an attachment: its key and its value as stored (meta_form()
-	 * reads the same, a serialized value as its text).
+	 * reads the same, a serialized value as its text, which the net reads
+	 * unpacked as WordPress reads it: AB_MCP_Sync_Net::check() with
+	 * $stored, in meta_form() and in the export alike; branch 11b).
 	 *
 	 * @param string $key    The first field of the row (a meta key).
 	 * @param mixed  $stored The second, as the content carries it.
@@ -330,6 +333,22 @@ abstract class AB_MCP_Sync_Db_Kind implements AB_MCP_Sync_Kind {
 	 */
 	public static function checked_meta( $key, $stored ) {
 		return array( (string) $key, $stored );
+	}
+
+	/**
+	 * Whether a column of the row of the content of a line holds a value
+	 * WordPress unpacks as it reads it (maybe_unserialize()), which the net
+	 * then reads unpacked (AB_MCP_Sync_Net::check() with $stored; branch
+	 * 11b): the kind and AB_MCP_Sync_Export::checked_content() ask the same
+	 * here, so that both read the same form. No column of a post, a term, a
+	 * menu, an item, an area or a CSS is one: WordPress hands those out as
+	 * they are stored.
+	 *
+	 * @param string $column A column of the row of the content.
+	 * @return bool
+	 */
+	public static function stored_column( $column ) {
+		return false;
 	}
 
 	/**
@@ -1831,6 +1850,19 @@ class AB_MCP_Sync_Kind_Option extends AB_MCP_Sync_Db_Kind {
 	}
 
 	/**
+	 * The value of an option (the column value of the row of its content,
+	 * export()) is one WordPress unpacks as it reads it (get_option():
+	 * maybe_unserialize()): the net reads it unpacked (branch 11b), in
+	 * option() and in the export alike.
+	 *
+	 * @param string $column A column of the row of the content.
+	 * @return bool
+	 */
+	public static function stored_column( $column ) {
+		return 'value' === (string) $column;
+	}
+
+	/**
 	 * The inventory entries of one row: none for group B and the widget
 	 * kind's rows, one per locked key of theme mods, one for every other.
 	 *
@@ -1895,8 +1927,9 @@ class AB_MCP_Sync_Kind_Option extends AB_MCP_Sync_Db_Kind {
 			);
 			$value          = AB_MCP_Sync_Canon::value( $raw, $source['ctx'], $acc, 'option', 'option_value' );
 		}
-		// The net over the raw value, after the readers of the option.
-		AB_MCP_Sync_Net::check( $acc, $mark, 'option', 'option_value', $raw, $source['ctx'] );
+		// The net over the raw value, after the readers of the option: the
+		// value as WordPress reads it, unpacked (branch 11b).
+		AB_MCP_Sync_Net::check( $acc, $mark, 'option', 'option_value', $raw, $source['ctx'], true, self::stored_column( 'value' ) );
 		$result           = AB_MCP_Sync_Canon::finish( 'option', $name, array( 'name' => $name ), array( 'name' => $name, 'value' => $value ), $acc );
 		$result['status'] = $class['status'];
 		return $result;

@@ -709,7 +709,10 @@ final class AB_MCP_Sync_Export {
 	 * slugs of the terms, anything else as a value; each in the form its kind
 	 * checked it (a meta row through AB_MCP_Sync_Db_Kind::checked_meta() of
 	 * the kind: the instance of a widget unpacked, with its base as the
-	 * name; Codex round 4 of branch 11, B). A meta row whose key is
+	 * name; Codex round 4 of branch 11, B), and the net reads a meta value
+	 * and a column the kind names (AB_MCP_Sync_Db_Kind::stored_column(): the
+	 * value of an option) unpacked, as WordPress reads them and as the kinds
+	 * check them (branch 11b). A meta row whose key is
 	 * the name of a credential (B9) is left out of the content and named in
 	 * b9, as the kinds leave such a key out of form and content (Codex round
 	 * 3 of branch 11, C). Each unit as the kinds
@@ -751,7 +754,9 @@ final class AB_MCP_Sync_Export {
 					if ( is_array( $field ) || is_object( $field ) ) {
 						self::check_unit( $acc, $kind, 'content:' . $column, $field, '' );
 					} else {
-						self::check_unit( $acc, $kind, (string) $column, (string) $field, null, 'custom_css' === $kind && 'post_content' === $column );
+						// A column the kind reads as WordPress unpacks it (the value
+						// of an option), unpacked here as well (branch 11b).
+						self::check_unit( $acc, $kind, (string) $column, (string) $field, null, 'custom_css' === $kind && 'post_content' === $column, $reader::stored_column( (string) $column ) );
 					}
 				}
 			} elseif ( 'meta' === $part && is_array( $value ) ) {
@@ -762,7 +767,9 @@ final class AB_MCP_Sync_Export {
 						// the content and named in b9, as the kinds leave it out of
 						// form and content (Codex round 3 of branch 11, C).
 						list( $name, $input ) = $reader::checked_meta( (string) $pair[0], $pair[1] );
-						if ( ! self::check_unit( $acc, $kind, 'meta:' . (string) $pair[0], $input, $name ) ) {
+						// A meta value as WordPress reads it, unpacked, as the
+						// kinds read it (meta_form(); branch 11b).
+						if ( ! self::check_unit( $acc, $kind, 'meta:' . (string) $pair[0], $input, $name, false, true ) ) {
 							continue;
 						}
 					} else {
@@ -809,18 +816,22 @@ final class AB_MCP_Sync_Export {
 	 * @param string      $kind Kind.
 	 * @param string      $at   The unit (a column, meta:<key>, term:<taxonomy>:<field>, content:<part>).
 	 * @param mixed       $raw  Its value as it goes into the package.
-	 * @param string|null $name The name of the unit for unit() (a meta key, or ''); null for a column.
-	 * @param bool        $css  Whether a column holds CSS.
+	 * @param string|null $name   The name of the unit for unit() (a meta key, or ''); null for a column.
+	 * @param bool        $css    Whether a column holds CSS.
+	 * @param bool        $stored Whether the value is one WordPress unpacks as
+	 *                            it reads it (a meta value, the value of an
+	 *                            option): the net reads it unpacked, as the
+	 *                            kinds do (AB_MCP_Sync_Net::check(); branch 11b).
 	 * @return bool Whether the unit stays in the content (not B9).
 	 */
-	private static function check_unit( array &$acc, $kind, $at, $raw, $name, $css = false ) {
+	private static function check_unit( array &$acc, $kind, $at, $raw, $name, $css = false, $stored = false ) {
 		$mark = AB_MCP_Sync_Net::mark( $acc );
 		if ( null === $name ) {
 			AB_MCP_Sync_Credentials::column( $acc, $kind, $at, $raw, $css );
 		} elseif ( ! AB_MCP_Sync_Credentials::note( $acc, $kind, $at, AB_MCP_Sync_Credentials::unit( $name, $raw ) ) ) {
 			return false;
 		}
-		AB_MCP_Sync_Net::check( $acc, $mark, $kind, $at, $raw, array(), false );
+		AB_MCP_Sync_Net::check( $acc, $mark, $kind, $at, $raw, array(), false, $stored );
 		return true;
 	}
 

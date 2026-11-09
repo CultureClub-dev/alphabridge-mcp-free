@@ -67,7 +67,20 @@
  *   value or secret within WINDOW bytes. A value is what is not empty after
  *   its white space is trimmed (" demo" is one). A name without a value, a
  *   word in prose ("design tokens", "Token: x", «Name, Token: "abc"» outside
- *   of braces) counts for nothing.
+ *   of braces) counts for nothing. Beside the names, by fixed formats in any
+ *   context (branch 11b; the steering, 09.11.2026), whatever name stands
+ *   before them: a token of a service in its form (TOKENS: GitHub, Stripe,
+ *   AWS, Slack, Mailchimp) and a JSON Web Token (JWT); at the start of a
+ *   line or of a field the header Authorization with Bearer and a value in
+ *   the form of a token (20 characters of a token or more, no placeholder,
+ *   none of words), or Basic and the base64 of user:password whose
+ *   password is no placeholder, outside of post_content (AUTHORIZATION,
+ *   prose_unit()); a private key
+ *   in PEM by its frame and a body of base64 (PEM); the value of a login
+ *   cookie of WordPress by its form (COOKIE). A name of a credential
+ *   counts as a key of the serialized format with a value as well
+ *   (s:8:"password";s:…). A placeholder is
+ *   one only in its exact form as the whole value (PLACEHOLDER).
  *
  * COMPARE (check()): the structured readers of the unit noted every (space,
  * id) pair of an address they read (AB_MCP_Sync_Canon::text():
@@ -83,6 +96,26 @@
  * they could not read (an object, a script, HTML outside the list of kses,
  * nested deeper than read) is never clean: there it adds nothing for the
  * credentials.
+ *
+ * THE FORM (branch 11b; Thomas, 08.11.2026): the references are counted
+ * over the raw text of the unit (a structure: its keys and leaves, one per
+ * line). The credentials are counted over the raw text where it is the
+ * text WordPress hands out (a column of a row, a plain meta value); over
+ * the texts of a structure (a widget instance) and of a value WordPress
+ * unpacks as it reads it (a serialized meta value of a post, a term, a menu
+ * item, the value of an option: $stored), each on its own, every key and
+ * every leaf, nested serialized texts unpacked in their turn (texts():
+ * AB_MCP_Sync_Canon::unserialized() only, within the depth and the layers
+ * of the readers). The braces and quotes of the serialized text are no
+ * code there: prose in a leaf («Spieler: Anna, Token: drei») is prose. A
+ * text that does not serialize back from its value byte for byte (a key
+ * twice, bytes after its end) is read by every string of its format as
+ * well, each on its own; one that does not
+ * unpack or holds an object locks the unit, and so does what the layers of
+ * one of its texts do not read to its end, as for a column (Codex round 1
+ * of branch 11b, A2: the quotes of the serialized text end a data: address
+ * elsewhere, so the raw text does not stand for it); a pair in a layer taken
+ * out of one of its texts (data:, base64) locks it as in the raw text.
  *
  * The net only locks. Rewriting stays with the structured readers, in the
  * spellings they read as the core reads them (the JSON of a data-*
@@ -105,12 +138,24 @@
  *   (base64, a data: address of any type, an SVG image, a script of an
  *   image, in another charset): locked;
  * - a body of a data: address of a text type in a charset it does not
- *   declare and that no BOM gives: not read, locked.
+ *   declare and that no BOM gives: not read, locked;
+ * - a serialized value whose format does not read to its end by the
+ *   strings it states (serialized_strings(): a scalar only in its strict
+ *   form, SCALARS) and that does not serialize back from its value byte for
+ *   byte: read as a whole as well, so prose in its braces («…, Token:
+ *   drei») locks there as before branch 11b (bytes after the end of the
+ *   value that are no record, Codex round 2 of branch 11b, A).
  * And what is neither read nor locked: a script of an image that builds the
  * name of a credential at run time (a template literal with ${…}, a
  * concatenation): only literal spellings are read, an image runs no
  * script; a span of base64 whose bytes are no text in UTF-8 and carry no
- * BOM (a binary, a text in a charset it does not declare) is bytes.
+ * BOM (a binary, a text in a charset it does not declare) is bytes; a
+ * credential in prose («password: Sommer2026» in the text of a post,
+ * «user: …, password: …», before a tag of HTML), as wp_get_post hands out
+ * the raw content anyway (branch 11b; the steering, 09.11.2026): only the
+ * names before = and the other spellings of code count, and the fixed
+ * formats; the header Authorization in a sentence, after a tag or a «,»
+ * (GRENZEN.md).
  *
  * @package AlphaBridge_MCP
  */
@@ -234,6 +279,155 @@ final class AB_MCP_Sync_Net {
 	const VALUE = '(?:["\'`]\s*[^"\'`\s]|[^\s"\'`&;,)}\]>])';
 
 	/**
+	 * The tokens of a service in the form the service gives them, by their
+	 * prefix (credentials(); the steering, 09.11.2026): wherever they stand,
+	 * in any context, each counted as the name it is noted as. The form
+	 * decides, not a word in it: «…EXAMPLE», «fake», «my_» in a token are
+	 * no placeholder (Codex round 3 of branch 11b, A1); a documented example
+	 * is none only as the whole value (EXAMPLES). GitHub (ghp_ and 36
+	 * letters and digits, github_pat_), Stripe (sk_live_, rk_live_ and 24),
+	 * AWS (AKIA and 16 capitals and digits, a longer run of them as well: the
+	 * whole run is the value; never inside base64, no character of base64
+	 * before it and no small letter, «+» or «=» right after the run: Codex
+	 * round 5 of branch 11b, C1; a «/» after it ends the key of the scope of
+	 * SigV4, AKIA…/20261109/eu-central-1/s3/aws4_request, Codex round 6, A1),
+	 * Slack (xoxb-, xoxp- with their
+	 * numbers), Mailchimp (32 hex and -us with the number of the data
+	 * centre; two of the ten tutorials counted on 09.11.2026 name its key,
+	 * none in this form).
+	 */
+	const TOKENS = array(
+		'/(?<![A-Za-z0-9])ghp_[A-Za-z0-9]{36}/'                       => 'github_token',
+		'/(?<![A-Za-z0-9])github_pat_[A-Za-z0-9_]{36}/'               => 'github_token',
+		'/(?<![A-Za-z0-9])[rs]k_live_[A-Za-z0-9]{24}/'                => 'stripe_secret_key',
+		'/(?<![A-Za-z0-9+\/])AKIA[0-9A-Z]{16}[0-9A-Z]*+(?![a-z+=])/'   => 'aws_access_key_id',
+		'/(?<![A-Za-z0-9])xox[bp]-[0-9]+-[0-9]+-[A-Za-z0-9-]{8}/'     => 'slack_token',
+		'/(?<![0-9A-Za-z])[0-9a-f]{32}-us[0-9]{1,2}(?![0-9A-Za-z])/' => 'mailchimp_api_key',
+	);
+
+	/**
+	 * A JSON Web Token: three parts of base64url between two dots, the first
+	 * «eyJ» (credentials(); the steering, 09.11.2026). It counts (as
+	 * access_token) where its header decodes to an object of JSON with
+	 * «alg» (RFC 7515) and its other parts are base64url that decodes; a
+	 * token cut short («eyJhbGciOi…») has no two dots.
+	 */
+	const JWT = '/(?<![A-Za-z0-9_\-])(eyJ[A-Za-z0-9_\-]*)\.([A-Za-z0-9_\-]+)\.([A-Za-z0-9_\-]+)/';
+
+	/**
+	 * The header Authorization (or Proxy-Authorization) with Bearer or Basic,
+	 * at the start of a line or of a field (credentials(); Codex round 1 of
+	 * branch 11b, A1; the steering, 09.11.2026): at the start of the text,
+	 * after a line break, a «;» (a line of headers), a quote (a string of
+	 * code, -H "…") or a «:» (an entry of an array of headers), then «:»
+	 * ("Authorization": of JSON and Authorization= or => count by the name
+	 * already). The value is the word after the scheme, to a «;» or «,»: a
+	 * field after it is read as one of its own (Codex round 3 of branch 11b,
+	 * A3). In a sentence («den Header Authorization: Basic mit …») and after
+	 * a tag (<code>Authorization: …) it stands at the start of neither: a
+	 * limit (GRENZEN.md).
+	 */
+	const AUTHORIZATION = '/(?:^|(?<=[\r\n;"\'`:]))[ \t]*(?:proxy-)?authorization[ \t]*:[ \t]*["\'`]?[ \t]*(bearer|basic)[ \t]+([^\s"\'`;,]*)/i';
+
+	/**
+	 * A private key in PEM (RSA, EC, OPENSSH, ENCRYPTED, PGP … PRIVATE KEY)
+	 * by its frame, its body to the END line of the same label
+	 * (credentials(); the steering, 09.11.2026): it counts (as private_key)
+	 * by a body of valid base64 (pem()); a public key or a certificate
+	 * never.
+	 */
+	const PEM = '/-----BEGIN ((?:[A-Z0-9]+ )*)PRIVATE KEY((?: BLOCK)?)-----(.*?)-----END \\1PRIVATE KEY\\2-----/s';
+
+	/**
+	 * The value of a login cookie of WordPress in the form
+	 * wp_generate_auth_cookie() writes it, user|expiration|token|hmac
+	 * (credentials(); the steering, 09.11.2026): from the first «|» on, the
+	 * expiration of ten digits, the token of 43 letters and digits
+	 * (WP_Session_Tokens::create()), the HMAC of 64 hex (SHA-256), each «|»
+	 * raw or URL-encoded (%7C). It counts (as auth_token) wherever it
+	 * stands, with the name of the cookie or without (a leaf of its own),
+	 * whatever the user is: with spaces in it raw, as «+» or as %20 (Codex
+	 * round 3 of branch 11b, A4).
+	 */
+	const COOKIE = '/(?:\\||%7[cC])\\d{10}(?:\\||%7[cC])[A-Za-z0-9]{43}(?:\\||%7[cC])[0-9a-f]{64}/';
+
+	/** The characters of a token of Bearer at the start of its value (b64token of RFC 6750). */
+	const BEARER_TOKEN = '#^[A-Za-z0-9\-._~+/]+=*#';
+
+	/**
+	 * How long a value after Bearer is that has the form of a token (the
+	 * steering after Codex round 4 of branch 11b, 09.11.2026, as after round
+	 * 2): 20 characters of a token or more, with a digit or without, in any
+	 * case. Shorter, it is an example of a tutorial (abc123, TOKEN, the
+	 * REVIEW_ONLY of Codex round 1).
+	 */
+	const TOKEN_LENGTH = 20;
+
+	/**
+	 * A placeholder in the form of words, the one exception from 20 on
+	 * (bearer()): letters only, in one case, in groups of two or more joined
+	 * by «_» or «-», no digit (your_api_token_goes_here,
+	 * YOUR-PERSONAL-ACCESS-TOKEN). Without a sign between the groups there is
+	 * none: 24 small letters lock. A random token of the characters of a
+	 * token is so in fewer than one of seven million from 20 on (all of them
+	 * small letters, «_» and «-», or all capitals and these: at most
+	 * 2 · (28/64)^20), one of letters and digits never (it has no «_» or «-»);
+	 * a passphrase of words joined by «-» would be (GRENZEN.md).
+	 */
+	const WORD_PLACEHOLDER = '/^(?:[a-z]{2,}(?:[_-]+[a-z]{2,})+|[A-Z]{2,}(?:[_-]+[A-Z]{2,})+)\z/';
+
+
+	/**
+	 * A placeholder, only in its exact form as the whole value (the steering,
+	 * 09.11.2026; Codex round 3 of branch 11b, A1): <token>, {var} and
+	 * {{var}}, $VAR and ${VAR}, YOUR_TOKEN (YOUR_ and capitals), xxx (x
+	 * three times or more, in groups too: «xxxx xxxx»), ***, ..., …,
+	 * [REDACTED]. Never a part of a word: «fake», «my_», «example» in a value
+	 * make none.
+	 */
+	const PLACEHOLDER = '/^(?:<[^<>]+>|\{\{?[^{}]+\}\}?|\$\{?[A-Za-z_][A-Za-z0-9_]*\}?|YOUR_[A-Z0-9_]*[A-Z0-9]|[xX]{3,}(?:[ \-][xX]{3,})*|\*{3,}|\.{3,}|\x{2026}+|\[REDACTED\])\z/u';
+
+	/**
+	 * Publicly documented examples, none valid anywhere (the steering after
+	 * Codex round 4 of branch 11b, 09.11.2026): each frees only itself, as
+	 * the whole value, in every form the net judges by its value (a token of
+	 * a service, a JSON Web Token, the value after Bearer; Basic goes by its
+	 * place, prose_unit()). One character more or less (AKIA…EXAMPLE2, a
+	 * real key with EXAMPLE in it, a changed token of jwt.io) locks. Kept as
+	 * the SHA-256 of the exact value, never the value: no text of the source
+	 * looks like a token to the push protection of GitHub or to a scanner.
+	 * The tests put each value together from parts and hold it to its hash
+	 * (SyncNetTest). Each was read at its source on 09.11.2026.
+	 */
+	const EXAMPLES = array(
+		// AWS IAM User Guide, «Manage access keys for IAM users»: the access key ID of the example.
+		'1a5d44a2dca19669d72edf4c4f1c27c4c1ca4b4408fbb17f6ce4ad452d78ddb3' => 'aws access key id',
+		// The same page: the secret access key of the example (40 characters, EXAMPLEKEY at its end).
+		'78314b11be2e581549ac1c4f616563fad3fdf0c3b71678f6e2299182080e0598' => 'aws secret access key',
+		// jwt.io, the token of its debugger before 2024: HS256, sub 1234567890, name John Doe, iat 1516239022, signed with your-256-bit-secret (its signature recomputed by HMAC).
+		'7f75367e7881255134e1375e723d1dea8ad5f6a4fdb79d938df1f1754a830606' => 'jwt.io',
+		// jwt.io, the token of its debugger since 2024: the same with admin true, signed with a-string-secret-at-least-256-bits-long (recomputed by HMAC).
+		'c794fa6d20c64efb9adf980ae93af472a1679775862d421ffe55d4a57fad5b3e' => 'jwt.io admin',
+		// RFC 7617, section 2: the base64 of Aladdin:open sesame. It acts only
+		// after Bearer now (bearer()): Basic goes by its place, without a list.
+		'cf4d418ed3de92d71f767db5391d5a2dacd40e1ce49e75d1137e2ecf4982d844' => 'rfc 7617',
+		// MDN, «Authorization» (HTTP headers): the base64 of aladdin:opensesame;
+		// as the one of RFC 7617, after Bearer only.
+		'ad62d48d8b069026a2a0d0291f857a77e1975edf610aa3502e8bc71bd96f513a' => 'mdn basic',
+		// RFC 6750, sections 2.1 to 2.3 and 4: the access token of the example.
+		'b8e148545b13c78bc74da2f1a7275dd71e56ddece129d7d2f7b3ecc06f7994da' => 'rfc 6750',
+		// Slack, docs.slack.dev/authentication/tokens: the user token before August 2016, short.
+		'cdb61cc3ce2e4d206d00cf152e0521f8a1fe77264fb9c8d17570eb81478ec0d0' => 'slack 1',
+		// The same page: the user token before August 2016.
+		'248309dfe66c89f08ed968e76db5339f09822c53e3829788f451b5579c572418' => 'slack 2',
+		// The same page: a user token with a long secret.
+		'c3349c3f46ceb7d96c81faa6252470d3a342dadeadb824489e3356a75e776984' => 'slack 3',
+	);
+
+	/** The characters of a value of a token: b64token of RFC 6750 and its padding, for the whole value of a match (whole()). */
+	const TOKEN_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~+/=';
+
+	/**
 	 * The locks of the readers that make a unit one that is never clean
 	 * (the credential check, the depth, an object): the net adds nothing to
 	 * it. Beside them the readers lock a reference in another spelling
@@ -265,7 +459,7 @@ final class AB_MCP_Sync_Net {
 	 * @param string $kind Kind, for the locks.
 	 * @param string $at   The unit (meta:_key, post_content, option_value …).
 	 * @param mixed  $raw  The stored value: a text, or an unpacked structure
-	 *                     (a widget instance) whose texts are read.
+	 *                     (a widget instance) whose keys and leaves are read.
 	 * @param array  $ctx  AB_MCP_Sync_Canon::context().
 	 * @param bool   $references Whether the references of the layers are
 	 *                     counted against what the readers of the unit read;
@@ -275,9 +469,15 @@ final class AB_MCP_Sync_Net {
 	 *                     AB_MCP_Sync_Export::checked_content(); Codex round
 	 *                     3 of branch 11, A8). The count of credentials is
 	 *                     the same either way.
+	 * @param bool   $stored Whether the value is one WordPress unpacks as it
+	 *                     reads it (maybe_unserialize(): a meta value, the
+	 *                     value of an option; branch 11b): a serialized text
+	 *                     is then checked for credentials in its unpacked
+	 *                     form, as a structure is (texts()). The references
+	 *                     are counted over the raw text either way.
 	 * @return void
 	 */
-	public static function check( array &$acc, array $mark, $kind, $at, $raw, array $ctx, $references = true ) {
+	public static function check( array &$acc, array $mark, $kind, $at, $raw, array $ctx, $references = true, $stored = false ) {
 		$text = self::text( $raw );
 		// What the readers of the unit found: their locks (a reference in
 		// another spelling, noted for finish() or locked at once; a unit
@@ -309,6 +509,10 @@ final class AB_MCP_Sync_Net {
 		$deep   = false;
 		$unread = array();
 		$layers = self::layers( $text, $deep, $unread );
+		// Basic in the header Authorization counts by the place of the value
+		// (Thomas, 09.11.2026 vormittags, «A: nach Kontext»): not in
+		// post_content, everywhere else (prose_unit()).
+		$basic = ! self::prose_unit( (string) $kind, (string) $at );
 		foreach ( $layers as $layer ) {
 			list( $path, $one, $extracted ) = $layer;
 			if ( ! $locked ) {
@@ -323,12 +527,114 @@ final class AB_MCP_Sync_Net {
 					}
 				}
 			}
+		}
+		// The credentials: in the layers of the raw text; of a structure and
+		// of a stored value that unpacks (a serialized meta value or option),
+		// in the layers of each of its texts on its own, every key and every
+		// leaf as WordPress hands it out (texts(); branch 11b): the braces of
+		// the serialized text are no code, «Spieler: Anna, Token: drei» in a
+		// leaf is prose there as anywhere.
+		if ( is_array( $raw ) || ( $stored && is_string( $raw ) && is_serialized( $raw ) ) ) {
+			self::texts(
+				$raw,
+				'',
+				// A structure is unpacked already (AB_MCP_Sync_Canon::structure()).
+				is_array( $raw ) ? 1 : 0,
+				0,
+				$acc,
+				(string) $kind,
+				(string) $at,
+				static function ( $where, $one ) use ( &$acc, $kind, $at, $named, $extra, &$unreadable, &$locked, $ctx, $basic ) {
+					$deep   = false;
+					$unread = array();
+					$place  = $at . ':net:' . ( '' === $where ? '' : $where . ':' );
+					$layers = self::layers( $one, $deep, $unread );
+					// A layer taken out of a text (data:, base64): every pair
+					// in it is unread, also where the raw text does not take
+					// it out alike (its quotes end a data: address elsewhere;
+					// a body in UTF-16 then is no layer of it). The pairs of
+					// the text itself and of its decodings are counted over
+					// the raw text, where the readers' count stands.
+					if ( ! $locked ) {
+						foreach ( $layers as $layer ) {
+							if ( $layer[2] && array() !== self::references( $layer[1], $ctx ) ) {
+								AB_MCP_Sync_Canon::lock( $acc, (string) $kind, 'unread_reference', $place . $layer[0] );
+								$locked = true;
+								break;
+							}
+						}
+					}
+					self::count_credentials( $acc, (string) $kind, (string) $at, $place, $layers, $named, $extra, $unreadable, $basic );
+					// What the layers of the text do not read to its end locks
+					// the unit, as for a column: the raw text does not stand
+					// for it, its quotes end a data: address elsewhere than
+					// the text does (Codex round 1 of branch 11b, A2).
+					self::not_read( $acc, (string) $kind, $place, $unread, $deep ? $at . ':net' . ( '' === $where ? '' : ':' . $where ) : null );
+				}
+			);
+		} else {
+			self::count_credentials( $acc, (string) $kind, (string) $at, $at . ':net:', $layers, $named, $extra, $unreadable, $basic );
+		}
+		// What the layers of the raw text did not read to its end locks the
+		// unit, in every form.
+		self::not_read( $acc, (string) $kind, $at . ':net:', $unread, $deep ? $at . ':net' : null );
+	}
+
+	/**
+	 * What the layers of a text did not read to its end locks the unit: a
+	 * body that is no text in UTF-8 (not read, never clean), a derivation
+	 * beyond the depth or the layers (too_deep()).
+	 *
+	 * @param array       $acc    Accumulator.
+	 * @param string      $kind   Kind.
+	 * @param string      $place  Where the layers stand, before the path of a
+	 *                            layer (<unit>:net:, <unit>:net:<where>:).
+	 * @param string[]    $unread The paths of layers() with such a body.
+	 * @param string|null $deep   Where the text stands where layers() did not
+	 *                            follow a derivation; null where it did.
+	 * @return void
+	 */
+	private static function not_read( array &$acc, $kind, $place, array $unread, $deep ) {
+		foreach ( $unread as $path ) {
+			AB_MCP_Sync_Canon::lock( $acc, $kind, 'unreadable_value', $place . $path );
+			$acc['unread'][] = 'charset:' . $place . $path;
+		}
+		if ( null !== $deep ) {
+			AB_MCP_Sync_Canon::too_deep( $acc, $deep, $kind );
+		}
+	}
+
+	/**
+	 * The count of credentials over the layers of one text of a unit
+	 * (check()): a name of a credential with a value beside it that the
+	 * readers did not name locks the unit (*:unread_credential), the name
+	 * noted among the credentials of the unit, never a value; braces of code
+	 * that cannot be counted lock it as not read to its end. Once a unit is
+	 * locked so, nothing more is counted for it ($unreadable): one lock and
+	 * one note per unit, from the first layer that names one.
+	 *
+	 * @param array  $acc        Accumulator.
+	 * @param string $kind       Kind.
+	 * @param string $unit       The unit (meta:_key, option_value …).
+	 * @param string $place      Where the layers stand, before the path of a
+	 *                           layer (<unit>:net:, <unit>:net:<where>:).
+	 * @param array  $layers     layers() of the text.
+	 * @param array  $named      The names the readers named, normalised.
+	 * @param array  $extra      AB_MCP_Redactor::extra_keys().
+	 * @param bool   $unreadable Set where the unit is locked so.
+	 * @param bool   $basic      Whether Basic in the header Authorization counts
+	 *                           (prose_unit(): not in post_content).
+	 * @return void
+	 */
+	private static function count_credentials( array &$acc, $kind, $unit, $place, array $layers, array $named, array $extra, &$unreadable, $basic ) {
+		foreach ( $layers as $layer ) {
 			if ( $unreadable ) {
-				continue;
+				return;
 			}
+			$path        = $layer[0];
 			$new         = array();
 			$undecidable = false;
-			foreach ( self::credentials( $one, $extra, $undecidable, '/code' === substr( $path, -5 ) ) as $name ) {
+			foreach ( self::credentials( $layer[1], $extra, $undecidable, '/code' === substr( $path, -5 ), $basic ) as $name ) {
 				if ( ! isset( $named[ $name ] ) ) {
 					$new[ $name ] = '~' . $name;
 				}
@@ -336,26 +642,106 @@ final class AB_MCP_Sync_Net {
 			// The braces of code cannot be counted (a RegExp literal, more
 			// closed than opened; Codex, round 23, A-4): never clean.
 			if ( $undecidable ) {
-				AB_MCP_Sync_Canon::lock( $acc, (string) $kind, 'unreadable_value', $at . ':net:' . $path );
-				$acc['unread'][] = 'code:' . $at . ':net:' . $path;
+				AB_MCP_Sync_Canon::lock( $acc, $kind, 'unreadable_value', $place . $path );
+				$acc['unread'][] = 'code:' . $place . $path;
 				$unreadable      = true;
 			}
 			if ( array() !== $new ) {
 				$acc['credentials']['mixed'][] = array(
-					'unit'   => (string) $at,
+					'unit'   => $unit,
 					'fields' => array_values( $new ),
 				);
-				AB_MCP_Sync_Canon::lock( $acc, (string) $kind, 'unread_credential', $at . ':net:' . $path );
+				AB_MCP_Sync_Canon::lock( $acc, $kind, 'unread_credential', $place . $path );
 				$unreadable = true;
 			}
 		}
-		// A body that is no text in UTF-8: not read, never clean.
-		foreach ( $unread as $path ) {
-			AB_MCP_Sync_Canon::lock( $acc, (string) $kind, 'unreadable_value', $at . ':net:' . $path );
-			$acc['unread'][] = 'charset:' . $at . ':net:' . $path;
+	}
+
+	/**
+	 * The texts of a structure or of a stored value as WordPress reads it,
+	 * each handed to $each on its own as it is reached (branch 11b): every
+	 * key of an array that is a text, every leaf that is a text; a text that
+	 * is serialized unpacked in its turn (AB_MCP_Sync_Canon::unserialized(),
+	 * with its check of the records before unserialize(): no object, no
+	 * enum, no reference), nested serialized texts too, within the depth and
+	 * the layers its readers read (AB_MCP_Sync_Canon::MAX_DEPTH and
+	 * MAX_LAYERS; beyond: not read to its end, too_deep()). Nothing is lost
+	 * unread: where a serialized text does not serialize back from its value
+	 * byte for byte, unpacking may have dropped a part of it (a key twice,
+	 * whose first value the second replaces; bytes after its end), so every
+	 * string of its format is handed on as well, each on its own
+	 * (serialized_strings(); its braces are no code either), or the text
+	 * itself where its format does not read to its end. A text that does not
+	 * unpack, or that holds an object, locks the unit (*:unreadable_value,
+	 * *:php_object): what is not read is never clean.
+	 *
+	 * The place of a text names positions, never a key or a value (a key may
+	 * be a credential): php for a value unpacked, .<n> for the n-th entry of
+	 * an array (from 0), .<n>.key for its key, string.<n> for the n-th string
+	 * of the format of a text that does not serialize back; '' for the text
+	 * of the value itself.
+	 *
+	 * @param mixed    $value A value: a text, an array, a scalar.
+	 * @param string   $where Its place.
+	 * @param int      $layer Serialized texts unpacked above.
+	 * @param int      $depth How deep it stands in its arrays.
+	 * @param array    $acc   Accumulator.
+	 * @param string   $kind  Kind.
+	 * @param string   $at    The unit.
+	 * @param callable $each  function( string $where, string $text ).
+	 * @return void
+	 */
+	private static function texts( $value, $where, $layer, $depth, array &$acc, $kind, $at, callable $each ) {
+		$here = $at . ':net' . ( '' === $where ? '' : ':' . $where );
+		if ( $depth > AB_MCP_Sync_Canon::MAX_DEPTH ) {
+			AB_MCP_Sync_Canon::too_deep( $acc, $here, $kind );
+			return;
 		}
-		if ( $deep ) {
-			AB_MCP_Sync_Canon::too_deep( $acc, $at . ':net', (string) $kind );
+		if ( is_string( $value ) ) {
+			if ( ! is_serialized( $value ) ) {
+				$each( $where, $value );
+				return;
+			}
+			if ( $layer >= AB_MCP_Sync_Canon::MAX_LAYERS ) {
+				AB_MCP_Sync_Canon::too_deep( $acc, $here, $kind );
+				return;
+			}
+			$read = AB_MCP_Sync_Canon::unserialized( $value );
+			if ( ! $read['ok'] ) {
+				AB_MCP_Sync_Canon::lock( $acc, $kind, $read['why'], $here );
+				return;
+			}
+			if ( serialize( $read['value'] ) !== trim( $value ) ) { // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize -- the round trip of the text, compared.
+				// Unpacking may have dropped a part of it: every string of its
+				// format, each on its own, the dropped ones among them; where
+				// the format does not read, the text as a whole.
+				$strings = self::serialized_strings( trim( $value ) );
+				if ( null === $strings ) {
+					$each( $where, $value );
+				} else {
+					foreach ( $strings as $i => $string ) {
+						self::texts( $string, ( '' === $where ? '' : $where . '.' ) . 'string.' . $i, $layer + 1, $depth, $acc, $kind, $at, $each );
+					}
+				}
+			}
+			self::texts( $read['value'], '' === $where ? 'php' : $where . '.php', $layer + 1, $depth, $acc, $kind, $at, $each );
+			return;
+		}
+		if ( is_object( $value ) ) {
+			AB_MCP_Sync_Canon::lock( $acc, $kind, 'php_object', $here );
+			return;
+		}
+		if ( ! is_array( $value ) ) {
+			return;
+		}
+		$n = 0;
+		foreach ( $value as $key => $item ) {
+			$entry = ( '' === $where ? '' : $where . '.' ) . $n;
+			if ( is_string( $key ) ) {
+				$each( $entry . '.key', $key );
+			}
+			self::texts( $item, $entry, $layer, $depth + 1, $acc, $kind, $at, $each );
+			++$n;
 		}
 	}
 
@@ -1156,8 +1542,76 @@ final class AB_MCP_Sync_Net {
 	}
 
 	/**
-	 * The text of a stored value: the value itself, or the texts of an
-	 * unpacked structure, one per line.
+	 * The scalars of the serialized format in the strict form serialize()
+	 * writes them (serialized_strings()): an integer with its sign, a float
+	 * as PHP writes one (digits, a fraction, an exponent, INF, NAN), a
+	 * boolean 0 or 1, each to its ";".
+	 */
+	const SCALARS = array(
+		'i' => '/\Gi:[+-]?\d+;/',
+		'd' => '/\Gd:(?:[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?|[+-]?INF|NAN);/',
+		'b' => '/\Gb:[01];/',
+	);
+
+	/**
+	 * Every string of a serialized text, in order, keys and values, read by
+	 * the format as AB_MCP_Sync_Canon::unserialized() lets it through (its
+	 * check of the records refused every other record before: a:<n>:{, s:<n>:"…";,
+	 * i:…;, d:…;, b:…;, N;, }), each by the length it states, a string that
+	 * unpacking drops among them (the first value of a key twice, what
+	 * follows the end of the value). Null where the text is not read so to
+	 * its end, a scalar not in its strict form (SCALARS) among them: every
+	 * byte belongs to a record, else the text is read as a whole.
+	 *
+	 * @param string $text A serialized text, trimmed.
+	 * @return string[]|null
+	 */
+	private static function serialized_strings( $text ) {
+		$out = array();
+		$n   = strlen( $text );
+		$i   = 0;
+		while ( $i < $n ) {
+			$c = $text[ $i ];
+			if ( 's' === $c ) {
+				if ( ! preg_match( '/\Gs:(\d+):"/', $text, $m, 0, $i ) ) {
+					return null;
+				}
+				$len = (int) $m[1];
+				$i  += strlen( $m[0] );
+				if ( $len > $n - $i || '";' !== substr( $text, $i + $len, 2 ) ) {
+					return null;
+				}
+				$out[] = (string) substr( $text, $i, $len );
+				$i    += $len + 2;
+			} elseif ( 'a' === $c ) {
+				if ( ! preg_match( '/\Ga:\d+:\{/', $text, $m, 0, $i ) ) {
+					return null;
+				}
+				$i += strlen( $m[0] );
+			} elseif ( 'i' === $c || 'd' === $c || 'b' === $c ) {
+				// A scalar only in the strict form PHP writes it (Codex round 2 of
+				// branch 11b, A: i:password=…; is no number); anything else is
+				// no record: the text is read as a whole.
+				if ( ! preg_match( self::SCALARS[ $c ], $text, $m, 0, $i ) ) {
+					return null;
+				}
+				$i += strlen( $m[0] );
+			} elseif ( 'N' === $c && 'N;' === substr( $text, $i, 2 ) ) {
+				$i += 2;
+			} elseif ( '}' === $c ) {
+				++$i;
+			} else {
+				return null;
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * The text of a stored value, whose references are counted: the value
+	 * itself, or the texts of an unpacked structure, its keys and its leaves,
+	 * one per line (a key is no text a reader rewrites: an address with an
+	 * id in it is one no reader read).
 	 *
 	 * @param mixed $raw Value.
 	 * @return string
@@ -1170,15 +1624,28 @@ final class AB_MCP_Sync_Net {
 			return '';
 		}
 		$out = array();
-		array_walk_recursive(
-			$raw,
-			static function ( $leaf ) use ( &$out ) {
-				if ( is_string( $leaf ) && '' !== $leaf ) {
-					$out[] = $leaf;
-				}
-			}
-		);
+		self::strings( $raw, $out );
 		return implode( "\n", $out );
+	}
+
+	/**
+	 * The keys and leaves of a structure that are texts, not empty, in order.
+	 *
+	 * @param array    $value Structure.
+	 * @param string[] $out   The texts.
+	 * @return void
+	 */
+	private static function strings( array $value, array &$out ) {
+		foreach ( $value as $key => $item ) {
+			if ( is_string( $key ) && '' !== $key ) {
+				$out[] = $key;
+			}
+			if ( is_array( $item ) ) {
+				self::strings( $item, $out );
+			} elseif ( is_string( $item ) && '' !== $item ) {
+				$out[] = $item;
+			}
+		}
 	}
 
 	/* ------------------------------------------------------------- count */
@@ -1288,21 +1755,79 @@ final class AB_MCP_Sync_Net {
 	 * The names of credentials with a value beside them in a layer (see the
 	 * header), normalised, each once.
 	 *
-	 * @param string   $text  A layer.
-	 * @param string[] $extra AB_MCP_Redactor::extra_keys().
+	 * @param string   $text        A layer.
+	 * @param string[] $extra       AB_MCP_Redactor::extra_keys().
+	 * @param bool     $undecidable Set where the braces of code cannot be counted.
+	 * @param bool     $code        Whether the layer is one of code.
+	 * @param bool     $basic       Whether Basic in the header Authorization
+	 *                              counts (prose_unit(): not in post_content).
 	 * @return string[]
 	 */
-	public static function credentials( $text, array $extra, &$undecidable = null, $code = false ) {
+	public static function credentials( $text, array $extra, &$undecidable = null, $code = false, $basic = true ) {
 		$text  = (string) $text;
 		$found = array();
 		foreach ( array(
 			'/(?<![A-Za-z0-9_\-.\x80-\xFF])(' . self::NAME . ')["\'`]?\s*\]?\s*=(?!=)>?\s*' . self::VALUE . '/',
+			// A key of the serialized format with a value (the steering,
+			// 09.11.2026): s:8:"password";s:6:"…"; or i:… in a text that is
+			// not unpacked (a column, a leaf, a fragment in prose).
+			'/s:\d+:"(' . self::NAME . ')";(?:s:[1-9]\d*:"|[id]:)/',
 			'/["\'`](' . self::NAME . ')["\'`]\s*:\s*' . self::VALUE . '/',
 			'/\{\s*-{0,2}(' . self::NAME . ')\s*:\s*' . self::VALUE . '/',
 			'/^\s*(' . self::NAME . ')\s*:\s*["\'`]\s*[^"\'`\s]/',
 		) as $pattern ) {
 			if ( preg_match_all( $pattern, $text, $m ) ) {
 				$found = array_merge( $found, $m[1] );
+			}
+		}
+		// The tokens of a service and a JSON Web Token, in any context, by
+		// their form (the steering, 09.11.2026).
+		// A documented example frees only itself, as the whole value (EXAMPLES).
+		foreach ( self::TOKENS as $pattern => $name ) {
+			if ( preg_match_all( $pattern, $text, $m, PREG_OFFSET_CAPTURE ) ) {
+				foreach ( $m[0] as $hit ) {
+					if ( ! self::example( self::whole( $text, (int) $hit[1], 'aws_access_key_id' === $name ? '/' : '' ) ) ) {
+						$found[] = $name;
+						break;
+					}
+				}
+			}
+		}
+		if ( preg_match_all( self::JWT, $text, $m, PREG_SET_ORDER | PREG_OFFSET_CAPTURE ) ) {
+			foreach ( $m as $hit ) {
+				if ( self::jwt( $hit[1][0], $hit[2][0], $hit[3][0] ) && ! self::example( self::whole( $text, (int) $hit[0][1] ) ) ) {
+					$found[] = 'access_token';
+					break;
+				}
+			}
+		}
+		// A private key in PEM by its frame and its body (the steering,
+		// 09.11.2026): «...», «…», «(dein Schlüssel)» in it are no base64.
+		if ( preg_match_all( self::PEM, $text, $m ) ) {
+			foreach ( $m[3] as $body ) {
+				if ( self::pem( $body ) ) {
+					$found[] = 'private_key';
+					break;
+				}
+			}
+		}
+		// A login cookie of WordPress by the form of its value (the steering,
+		// 09.11.2026): «wordpress_logged_in_[hash]», a value cut short («…»)
+		// are none.
+		if ( 1 === preg_match( self::COOKIE, $text ) ) {
+			$found[] = 'auth_token';
+		}
+		// The header Authorization with Bearer or Basic at the start of a
+		// line or of a field (Codex round 1 of branch 11b, A1; the steering,
+		// 09.11.2026): Bearer with a value in the form of a token, Basic with
+		// the base64 of user:password where the place counts Basic ($basic,
+		// prose_unit(); Thomas, 09.11.2026 vormittags), bearer() and basic().
+		if ( preg_match_all( self::AUTHORIZATION, $text, $m, PREG_SET_ORDER ) ) {
+			foreach ( $m as $hit ) {
+				if ( 'basic' === strtolower( $hit[1] ) ? $basic && self::basic( $hit[2] ) : self::bearer( $hit[2] ) ) {
+					$found[] = 'authorization';
+					break;
+				}
 			}
 		}
 		// In code a name after "," or ";" as well: where a "{" is open before
@@ -1342,6 +1867,178 @@ final class AB_MCP_Sync_Net {
 			}
 		}
 		return array_keys( $out );
+	}
+
+	/**
+	 * Whether three parts are a JSON Web Token (JWT): the header base64url
+	 * that decodes to an object of JSON with «alg», the payload and the
+	 * signature base64url that decodes (no part of a length that leaves one
+	 * character over).
+	 *
+	 * @param string $header    The first part.
+	 * @param string $payload   The second part.
+	 * @param string $signature The third part.
+	 * @return bool
+	 */
+	public static function jwt( $header, $payload, $signature ) {
+		foreach ( array( $header, $payload, $signature ) as $part ) {
+			if ( 1 === strlen( (string) $part ) % 4 ) {
+				return false;
+			}
+		}
+		$json = base64_decode( strtr( (string) $header, '-_', '+/' ), true ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- the header of a token, read.
+		$head = is_string( $json ) ? json_decode( $json, true ) : null;
+		return is_array( $head ) && array_key_exists( 'alg', $head );
+	}
+
+	/**
+	 * Whether the body of a private key in PEM is valid base64: its lines (a
+	 * <br> of HTML a line break as well) without the headers of an encrypted
+	 * key (Proc-Type, DEK-Info, Version: a name and «: ») and the checksum of
+	 * PGP («=» and four), together the alphabet of base64 with its padding
+	 * and a length of a multiple of four (what base64_decode() then decodes
+	 * strictly). A sentence, a word of another length, «...» or «…» are
+	 * none.
+	 *
+	 * @param string $body The text between the BEGIN and END lines.
+	 * @return bool
+	 */
+	public static function pem( $body ) {
+		$base64 = '';
+		foreach ( preg_split( '/\r\n|\r|\n|<br\s*\/?>/i', (string) $body ) as $line ) {
+			$line = trim( (string) $line );
+			if ( 1 !== preg_match( '/^[A-Za-z][A-Za-z0-9-]*:\s|^=[A-Za-z0-9+\/]{4}\z/', $line ) ) {
+				$base64 .= $line;
+			}
+		}
+		return 1 === preg_match( '/^[A-Za-z0-9+\/]+={0,2}\z/', $base64 ) && 0 === strlen( $base64 ) % 4;
+	}
+
+	/**
+	 * Whether a unit is the text of a post, where Basic in the header
+	 * Authorization counts for nothing (Thomas, 09.11.2026 vormittags, «A:
+	 * nach Kontext»; limit C as credentials in prose, as wp_get_post hands
+	 * out the raw content anyway, includes/tools/class-tools-content.php:83):
+	 * the column post_content of any kind but the CSS of a theme, as the kinds
+	 * and the export (AB_MCP_Sync_Export::checked_content()) name it. Every
+	 * other unit (meta of a post, a term, a menu item; an option; a widget;
+	 * post_excerpt, the description of a term) counts Basic, every pair.
+	 *
+	 * @param string $kind Kind.
+	 * @param string $at   The unit.
+	 * @return bool
+	 */
+	public static function prose_unit( $kind, $at ) {
+		return 'custom_css' !== $kind && in_array( $at, array( 'post_content', 'content:post_content' ), true );
+	}
+
+	/**
+	 * Whether the value after Bearer in the header Authorization has the form
+	 * of a token (the steering after Codex round 4 of branch 11b, 09.11.2026):
+	 * the characters of a token at its start (BEARER_TOKEN; one «.» at its
+	 * end ends a sentence, sentence_end()), TOKEN_LENGTH or more, with a digit or without. Free: a
+	 * placeholder (YOUR_TOKEN, xxx, ...; <token>, $TOKEN, {token}, *** and
+	 * &lt;token&gt; have no character of a token at all), a placeholder in the
+	 * form of words (WORD_PLACEHOLDER), a documented example as the whole
+	 * value (EXAMPLES), a value cut short («…» or «...» right after it, «...»
+	 * in it), one shorter than TOKEN_LENGTH. A token of a
+	 * service in its form and a JSON Web Token count anywhere (TOKENS, JWT).
+	 *
+	 * @param string $value The word after the scheme.
+	 * @return bool
+	 */
+	public static function bearer( $value ) {
+		$value = (string) $value;
+		if ( ! preg_match( self::BEARER_TOKEN, $value, $m ) ) {
+			return false;
+		}
+		$rest = (string) substr( $value, strlen( $m[0] ) );
+		if ( false !== strpos( $m[0], '...' ) || 0 === strpos( $rest, '...' ) || 0 === strpos( $rest, "\u{2026}" ) ) {
+			return false;
+		}
+		$token = self::sentence_end( $m[0] );
+		return strlen( $token ) >= self::TOKEN_LENGTH && ! self::placeholder( $token ) && 1 !== preg_match( self::WORD_PLACEHOLDER, $token ) && ! self::example( $token );
+	}
+
+	/**
+	 * Whether the value after Basic in the header Authorization is a pair:
+	 * base64 at its start that decodes to a text user:password, without a
+	 * sign of control, the two not both empty, the password (where it is
+	 * empty, the user: a key as the user) no placeholder (YOUR_PASSWORD,
+	 * <password>, xxxx xxxx …). Every other pair counts, a documented example
+	 * as well (Aladdin:open sesame, user:password) and a default (admin:admin):
+	 * the place decides (prose_unit(); Thomas, 09.11.2026 vormittags, «A: nach
+	 * Kontext»), no list.
+	 *
+	 * @param string $value The word after the scheme.
+	 * @return bool
+	 */
+	public static function basic( $value ) {
+		if ( ! preg_match( '#^[A-Za-z0-9+/]+={0,2}#', (string) $value, $m ) ) {
+			return false;
+		}
+		$pair = base64_decode( $m[0], true ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- the pair of Basic, read.
+		if ( ! is_string( $pair ) || ! self::is_text( $pair ) || 1 === preg_match( '/[\x00-\x1F\x7F]/', $pair ) ) {
+			return false;
+		}
+		$at = strpos( $pair, ':' );
+		if ( false === $at || 1 === strlen( $pair ) ) {
+			return false;
+		}
+		$password = (string) substr( $pair, $at + 1 );
+		return ! self::placeholder( '' === $password ? (string) substr( $pair, 0, $at ) : $password );
+	}
+
+	/**
+	 * Whether a value is a placeholder: exactly one of PLACEHOLDER, as the
+	 * whole value.
+	 *
+	 * @param string $value Value.
+	 * @return bool
+	 */
+	public static function placeholder( $value ) {
+		return 1 === preg_match( self::PLACEHOLDER, (string) $value );
+	}
+
+	/**
+	 * Whether a value is a documented example: its SHA-256 one of EXAMPLES,
+	 * the value as a whole.
+	 *
+	 * @param string $value Value.
+	 * @return bool
+	 */
+	public static function example( $value ) {
+		return isset( self::EXAMPLES[ hash( 'sha256', (string) $value ) ] );
+	}
+
+	/**
+	 * The whole value of a token from where its match begins: the run of
+	 * TOKEN_CHARS from there (AKIA…EXAMPLE2 to its end), without one «.» at
+	 * its end, which ends a sentence (sentence_end()); for a key of AWS to a
+	 * «/», where the scope of SigV4 begins (the documented key in
+	 * AKIAIOSFODNN7…/20130524/us-east-1/s3/aws4_request is the example).
+	 *
+	 * @param string $text Text.
+	 * @param int    $at   Where the match begins.
+	 * @param string $stop A character of a token that ends the value here.
+	 * @return string
+	 */
+	private static function whole( $text, $at, $stop = '' ) {
+		$chars = '' === $stop ? self::TOKEN_CHARS : str_replace( $stop, '', self::TOKEN_CHARS );
+		return self::sentence_end( (string) substr( (string) $text, $at, strspn( (string) $text, $chars, $at ) ) );
+	}
+
+	/**
+	 * A value without the one «.» at its end that ends a sentence, never more
+	 * (Codex round 5 of branch 11b, A5): «….» is the value, «…..» is the
+	 * value and a «.» of its own, before the length and the comparison with
+	 * EXAMPLES.
+	 *
+	 * @param string $value Value.
+	 * @return string
+	 */
+	private static function sentence_end( $value ) {
+		return '.' === substr( (string) $value, -1 ) ? (string) substr( (string) $value, 0, -1 ) : (string) $value;
 	}
 
 	/**

@@ -1052,6 +1052,183 @@ final class SyncStructureTest extends TestCase {
 		self::assertSame( array( array( 'text-2', serialize( $text ) ) ), array_values( array_filter( $lines['widget_area:sidebar-1']['content']['meta'], static fn( $row ) => 'text-2' === $row[0] ) ), 'The instance goes with its settings.' );
 	}
 
+	/** Whether a lock of the credential check is among these locks. */
+	private static function held_by_credential( array $locks ): bool {
+		return \AB_MCP_Sync_Export::credential_locked( $locks );
+	}
+
+	public function testProseInASerializedValueOfMetaAndOfACoreOptionGoesThroughTheReportAndIntoThePackage(): void {
+		// Branch 11b (Thomas, 08.11.2026; the find of branch 11): the net of
+		// the kinds read a serialized meta value or option as its text, whose
+		// braces made it read prose as a field of code (*:unread_credential).
+		// Now it reads them unpacked, as WordPress hands them out: the meta of
+		// a post, a term and a menu item, nested as well, and a core option
+		// whose schema takes a text (image_default_link_type), are ordinary
+		// objects in the report and in the package. sticky_posts, which takes
+		// only ids, stays as it was.
+		self::pair();
+		self::paired( self::staged() );
+		$prose  = 'Spieler: Anna, Token: drei';
+		$nested = array( 'text' => serialize( array( 'text' => $prose ) ) );
+		$made   = self::b(
+			array(
+				array( 'op' => 'insert_post', 'args' => array( 'post_title' => 'Spielregeln', 'post_status' => 'publish', 'post_type' => 'page' ), 'as' => 'post' ),
+				array( 'op' => 'add_meta', 'post' => '$post', 'key' => 'ab_it_spiel', 'value' => $nested ),
+				array( 'op' => 'add_meta', 'post' => '$post', 'key' => 'ab_it_layout', 'value' => array( 'layout' => 'wide', 'columns' => 3, 'label' => $prose ) ),
+				array( 'op' => 'insert_term', 'name' => 'Spiele', 'taxonomy' => 'category', 'as' => 'term' ),
+				array( 'op' => 'add_term_meta', 'term' => '$term', 'key' => 'ab_it_spiel', 'value' => $nested ),
+				array( 'op' => 'nav_menu', 'name' => 'Spielmenü', 'as' => 'menu' ),
+				array( 'op' => 'nav_menu_item', 'menu' => '$menu', 'args' => array( 'menu-item-title' => 'Regeln', 'menu-item-url' => 'https://example.test/regeln/', 'menu-item-type' => 'custom', 'menu-item-status' => 'publish' ), 'as' => 'item' ),
+				array( 'op' => 'add_meta', 'post' => '$item', 'key' => 'ab_it_spiel', 'value' => $nested ),
+				array( 'op' => 'update_option', 'name' => 'image_default_link_type', 'value' => array( 'text' => $prose ) ),
+			)
+		);
+		$post = (int) $made['post'];
+		$was  = self::option_of( 'b', 'sticky_posts' );
+		self::b( array( array( 'op' => 'update_option', 'name' => 'sticky_posts', 'value' => array( $post ) ) ) );
+		self::assertSame( serialize( array( 'text' => $prose ) ), AB_MCP_IT_Sites::option_row( 'b', 'image_default_link_type' )['option_value'], 'The core option holds the array serialized.' );
+		$objects = array(
+			array( 'post', (string) $post ),
+			array( 'term', (string) $made['term'] ),
+			array( 'menu_item', (string) $made['item'] ),
+			array( 'option', 'image_default_link_type' ),
+			array( 'option', 'sticky_posts' ),
+		);
+		try {
+			// The report: none of them held by the check of credentials.
+			$report = self::report( self::staged() );
+			$held   = array();
+			foreach ( $objects as list( $kind, $ref ) ) {
+				$entry = self::entry( $report['all'], $kind, 'staging', $ref );
+				if ( self::held_by_credential( $entry['locks'] ?? array() ) ) {
+					$held[ $kind . ':' . $ref ] = array_column( $entry['locks'], 'key' );
+				}
+			}
+			self::assertSame( array(), $held, 'Held in the report.' );
+			// The package: each line with its content.
+			$package = self::b(
+				array(
+					array(
+						'op'          => 'export',
+						'purpose'     => 'objects',
+						'report_hash' => str_repeat( 'a', 64 ),
+						'refs'        => array_map( static fn( $o ) => array( 'kind' => $o[0], 'ref' => $o[1] ), $objects ),
+						'as'          => 'package',
+					),
+				)
+			)['package'];
+		} finally {
+			self::b( array( array( 'op' => 'update_option', 'name' => 'sticky_posts', 'value' => is_array( $was ) ? $was : array() ) ) );
+		}
+		$taken = AB_MCP_Sync_Import::taken( self::import_package( $package, 'objects', str_repeat( 'a', 64 ) ), 'objects' );
+		self::assertIsArray( $taken, is_wp_error( $taken ) ? $taken->get_error_message() : '' );
+		$lines = array();
+		$held  = array();
+		foreach ( $taken['lines'] as $line ) {
+			$lines[ $line['kind'] . ':' . $line['ref'] ] = $line;
+			if ( self::held_by_credential( $line['locks'] ) ) {
+				$held[] = $line['kind'] . ':' . $line['ref'];
+			}
+		}
+		self::assertSame( array(), $held, 'Held in the package.' );
+		self::assertSame( 0, $package['credentials']['held'], (string) json_encode( $package['credentials'] ) );
+		foreach ( $objects as list( $kind, $ref ) ) {
+			$line = $lines[ $kind . ':' . $ref ] ?? null;
+			self::assertIsArray( $line, $kind . ':' . $ref . ' ' . json_encode( array_keys( $lines ) ) );
+			self::assertArrayHasKey( 'hash', $line, $kind . ':' . $ref . ': ' . json_encode( $line ) );
+			self::assertNotSame( array(), $line['content'], $kind . ':' . $ref );
+			self::assertFalse( self::held_by_credential( $line['locks'] ), $kind . ':' . $ref . ': ' . json_encode( $line['locks'] ) );
+		}
+		self::assertContains( array( 'ab_it_spiel', serialize( $nested ) ), $lines[ 'post:' . $post ]['content']['meta'], 'The meta goes as stored.' );
+		self::assertSame( serialize( array( 'text' => $prose ) ), $lines['option:image_default_link_type']['content']['row']['value'] );
+		self::assertSame( serialize( array( $post ) ), $lines['option:sticky_posts']['content']['row']['value'], 'sticky_posts with its ids, as before.' );
+	}
+
+	public function testACredentialInASerializedValueOfMetaAndOfAnOptionStillHoldsItInTheReportAndThePackage(): void {
+		// The other way of branch 11b: a credential in a serialized value
+		// still holds its object, read unpacked as well, in the report and in
+		// the package; nested, in base64 in a leaf or a key, in the first
+		// value of a key twice (which unpacking drops: read in the raw text),
+		// and a value that does not unpack or holds an object (fail closed).
+		self::pair();
+		self::paired( self::staged() );
+		$secret = 'synthetic-net-' . bin2hex( random_bytes( 4 ) );
+		$b64    = base64_encode( 'password=' . $secret );
+		$twice  = 'a:2:{s:4:"note";s:' . strlen( $b64 ) . ':"' . $b64 . '";s:4:"note";s:4:"frei";}';
+		$cases  = array(
+			'nested code'     => array( 'value' => array( 'x' => serialize( array( 'cfg' => '{api_key:"' . $secret . '"}' ) ) ) ),
+			'base64 leaf'     => array( 'value' => array( 'note' => $b64 ) ),
+			'base64 key'      => array( 'value' => array( $b64 => 'frei' ) ),
+			'a key twice'     => array( 'raw' => $twice ),
+			'an object'       => array( 'raw' => 'a:1:{s:1:"x";O:8:"stdClass":0:{}}' ),
+			'does not unpack' => array( 'raw' => 'a:2:{s:4:"text";s:4:"kurz";}' ),
+		);
+		// A leaf the net does not read to its end: a data: address too deep, a
+		// body in UTF-16 that declares no charset (Codex round 1 of branch
+		// 11b, A2; the quotes of the serialized text end the address there).
+		$enc = 'password=' . $secret;
+		for ( $i = 0; $i < 4; $i++ ) {
+			$enc = rawurlencode( $enc );
+		}
+		$cases['a leaf too deep']      = array( 'value' => array( 'text' => 'data:text/plain;charset=utf-16le;base64,' . base64_encode( mb_convert_encoding( $enc, 'UTF-16LE', 'UTF-8' ) ) . ' x' ) );
+		$cases['a leaf not readable'] = array( 'value' => array( 'text' => 'data:text/plain;base64,' . base64_encode( mb_convert_encoding( 'password=' . $secret, 'UTF-16LE', 'UTF-8' ) ) . ' x' ) );
+		$posts = array();
+		foreach ( $cases as $case => $how ) {
+			$steps = array(
+				array( 'op' => 'insert_post', 'args' => array( 'post_title' => 'Fall ' . $case, 'post_status' => 'publish', 'post_type' => 'page' ), 'as' => 'post' ),
+				array( 'op' => 'add_meta', 'post' => '$post', 'key' => 'ab_it_note', 'value' => $how['value'] ?? 'x' ),
+			);
+			if ( isset( $how['raw'] ) ) {
+				$steps[] = array( 'op' => 'raw_meta', 'post' => '$post', 'key' => 'ab_it_note', 'value' => $how['raw'] );
+			}
+			$posts[ $case ] = (int) self::b( $steps )['post'];
+		}
+		$made = self::b(
+			array(
+				array( 'op' => 'insert_term', 'name' => 'Geheim', 'taxonomy' => 'category', 'as' => 'term' ),
+				array( 'op' => 'add_term_meta', 'term' => '$term', 'key' => 'ab_it_note', 'value' => array( $b64 => 'frei' ) ),
+				array( 'op' => 'nav_menu', 'name' => 'Geheimmenü', 'as' => 'menu' ),
+				array( 'op' => 'nav_menu_item', 'menu' => '$menu', 'args' => array( 'menu-item-title' => 'Regeln', 'menu-item-url' => 'https://example.test/regeln/', 'menu-item-type' => 'custom', 'menu-item-status' => 'publish' ), 'as' => 'item' ),
+				array( 'op' => 'add_meta', 'post' => '$item', 'key' => 'ab_it_note', 'value' => array( 'x' => serialize( array( 'cfg' => '{api_key:"' . $secret . '"}' ) ) ) ),
+				array( 'op' => 'update_option', 'name' => 'image_default_link_type', 'value' => array( 'note' => $b64 ) ),
+				array( 'op' => 'raw_option', 'name' => 'ab_it_settings', 'value' => $twice ),
+			)
+		);
+		$objects = array( array( 'term', (string) $made['term'] ), array( 'menu_item', (string) $made['item'] ), array( 'option', 'image_default_link_type' ), array( 'option', 'ab_it_settings' ) );
+		foreach ( $posts as $post ) {
+			$objects[] = array( 'post', (string) $post );
+		}
+		$report = self::report( self::staged() );
+		$free   = array();
+		foreach ( $objects as list( $kind, $ref ) ) {
+			$entry = self::entry( $report['all'], $kind, 'staging', $ref );
+			if ( ! self::held_by_credential( $entry['locks'] ?? array() ) ) {
+				$free[] = $kind . ':' . $ref . ( 'post' === $kind ? ' (' . array_search( (int) $ref, $posts, true ) . ')' : '' );
+			}
+		}
+		self::assertSame( array(), $free, 'Not held in the report.' );
+		$package = self::b(
+			array(
+				array(
+					'op'          => 'export',
+					'purpose'     => 'objects',
+					'report_hash' => str_repeat( 'a', 64 ),
+					'refs'        => array_map( static fn( $o ) => array( 'kind' => $o[0], 'ref' => $o[1] ), $objects ),
+					'as'          => 'package',
+				),
+			)
+		)['package'];
+		self::assertSame( count( $objects ), $package['credentials']['held'], (string) json_encode( $package['credentials'] ) );
+		$taken = AB_MCP_Sync_Import::taken( self::import_package( $package, 'objects', str_repeat( 'a', 64 ) ), 'objects' );
+		self::assertIsArray( $taken, is_wp_error( $taken ) ? $taken->get_error_message() : '' );
+		self::assertStringNotContainsString( $secret, (string) json_encode( array( $report['all'], $package, $taken ) ), 'No value of a credential in the report or the package.' );
+		self::assertStringNotContainsString( $b64, (string) json_encode( array( $report['all'], $package, $taken ) ), 'Nor its base64.' );
+		foreach ( $taken['lines'] as $line ) {
+			self::assertTrue( self::held_by_credential( $line['locks'] ), $line['kind'] . ':' . $line['ref'] );
+			self::assertSame( array(), $line['content'] ?? array(), $line['kind'] . ':' . $line['ref'] . ': held, no content.' );
+		}
+	}
+
 	/* ----------------------------------------------------------- widgets */
 
 	public function testAChangedTextWidgetAndImageWidgetGoOverAndBack(): void {

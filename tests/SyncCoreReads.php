@@ -27,6 +27,7 @@ use AB_MCP_Sync_Refs;
 use PHPUnit\Framework\Attributes\DataProvider;
 
 require_once __DIR__ . '/../includes/sync/class-sync-net.php';
+require_once __DIR__ . '/../includes/sync/class-sync-export.php';
 
 trait SyncCoreReads {
 
@@ -753,6 +754,347 @@ trait SyncCoreReads {
 		self::assertContains( '*:unread_credential@u:net:' . $layer, $locks, $raw . ' ' . json_encode( $locks ) );
 		self::assertContains( '~' . $name, $names );
 		self::assertStringNotContainsString( 'demo-secret', json_encode( $acc ), 'Never a value.' );
+	}
+
+	/**
+	 * The comparison of branch 11b (Codex rounds 1 to 3; the steering,
+	 * 09.11.2026, fixed formats): each text judged alike as a plain value
+	 * and as a leaf of a serialized value of meta, nested, as post_content,
+	 * as a plain value and a leaf of an option, and in a widget instance;
+	 * with the verdict it must have ('sperrt', 'frei'), null where it locks
+	 * already on 8df6146 by the names before = and : (T2, T6), 'ort' for
+	 * Basic in the header Authorization: free in the text of a post, locked
+	 * in every other form (Thomas, 09.11.2026 vormittags, «A: nach Kontext»;
+	 * alike by place, PROSE_FORMS). The tokens
+	 * are put together at run time (tests/fixtures/sync-tokens.php).
+	 *
+	 * @return array<string,array{0:string,1:?string}>
+	 */
+	public static function sameEverywhere(): array {
+		$t    = require __DIR__ . '/fixtures/sync-tokens.php';
+		$b64  = static fn( string $s ): string => base64_encode( $s );
+		$tail = $t['cookie_tail'];
+		$out  = array(
+			// The fixed formats: locked in every form.
+			'GitHub ghp_'                       => array( 'Mein Token ist ' . $t['ghp'] . ', bitte nicht weitergeben.', 'sperrt' ),
+			'GitHub github_pat_'                => array( $t['github_pat'], 'sperrt' ),
+			'Stripe sk_live_'                   => array( 'api_key: ' . $t['sk_live'], 'sperrt' ),
+			'AWS AKIA'                          => array( 'aws_access_key: ' . $t['akia'], 'sperrt' ),
+			'Slack xoxb-'                       => array( 'Bearer ' . $t['xoxb'], 'sperrt' ),
+			'Mailchimp'                         => array( 'Der Schlüssel lautet ' . $t['mailchimp'] . '.', 'sperrt' ),
+			'JWT'                               => array( 'Schick den Header mit Bearer ' . $t['jwt'] . ' mit.', 'sperrt' ),
+			'Bearer at the start'               => array( 'Authorization: Bearer Qm9dXyT3kLz8wR2vNp6s', 'sperrt' ),
+			'Bearer after ;'                    => array( 'Accept: application/json; Authorization: Bearer ' . $t['hex32'], 'sperrt' ),
+			'Bearer after a line break'         => array( "Host: example.test\nAuthorization: Bearer " . $t['hex32'], 'sperrt' ),
+			'Bearer after a quote'              => array( 'curl -H "Authorization: Bearer ' . $t['hex32'] . '" https://api.example.test/', 'sperrt' ),
+			'Bearer, a placeholder in a word'   => array( 'Authorization: Bearer my_fake_' . $t['hex32'], 'sperrt' ),
+			'Basic, a pair'                     => array( 'Accept: application/json; Authorization: Basic ' . $b64( 'review:REVIEW_ONLY' ), 'ort' ),
+			'a field after a field'             => array( 'Authorization: Basic ' . $b64( 'abc' ) . ';Authorization: Bearer ' . $t['hex32'], 'sperrt' ),
+			'PEM'                               => array( $t['pem']( '', $t['pem_body'] ), 'sperrt' ),
+			'a login cookie'                    => array( 'Cookie: wordpress_logged_in_5c3e2a91=' . rawurlencode( 'admin|' . $tail ) . '; wp-settings-1=x', 'sperrt' ),
+			'a login cookie, a space'           => array( 'wordpress_sec_5c3e2a91=Anna Muster|' . $tail, 'sperrt' ),
+			'a login cookie, a space as +'      => array( 'wordpress_sec_5c3e2a91=' . urlencode( 'Anna Muster|' . $tail ), 'sperrt' ),
+			'a login cookie, a space as %20'    => array( 'wordpress_sec_5c3e2a91=' . rawurlencode( 'Anna Muster|' . $tail ), 'sperrt' ),
+			'the value of a login cookie alone' => array( 'Anna Muster|' . $tail, 'sperrt' ),
+			'password='                         => array( 'password=Sommer2026', 'sperrt' ),
+			"'password' =>"                     => array( "'password' => 'Sommer2026'", 'sperrt' ),
+			'"password": of JSON'               => array( '{"password": "Sommer2026"}', 'sperrt' ),
+			'a key of the serialized format'    => array( 'Export: s:8:"password";s:10:"Sommer2026";', 'sperrt' ),
+			'i:password= after the end'         => array( 'a:1:{s:4:"note";s:4:"frei";}i:password=REVIEW_ONLY;', 'sperrt' ),
+			// Placeholders in their exact form, words, cut short: free.
+			'Bearer YOUR_TOKEN'                 => array( 'Authorization: Bearer YOUR_TOKEN', 'frei' ),
+			'Bearer &lt;token&gt;'              => array( 'Authorization: Bearer &lt;token&gt;', 'frei' ),
+			'Bearer xxx'                        => array( 'Authorization: Bearer xxxxxxxxxxxxxxxxxxxxxxxx', 'frei' ),
+			'Bearer ***'                        => array( 'Authorization: Bearer ************', 'frei' ),
+			'Bearer ...'                        => array( 'Authorization: Bearer ...', 'frei' ),
+			'Bearer $TOKEN'                     => array( 'Authorization: Bearer $TOKEN', 'frei' ),
+			'Bearer {token}'                    => array( 'Authorization: Bearer {token}', 'frei' ),
+			'Bearer [REDACTED]'                 => array( 'Authorization: Bearer [REDACTED]', 'frei' ),
+			'Basic admin:YOUR_PASSWORD'         => array( 'Authorization: Basic ' . $b64( 'admin:YOUR_PASSWORD' ), 'frei' ),
+			'Basic admin:xxxx'                  => array( 'Authorization: Basic ' . $b64( 'admin:xxxx xxxx xxxx xxxx xxxx xxxx' ), 'frei' ),
+			'Basic, no pair'                    => array( 'Authorization: Basic ' . $b64( 'foobar' ), 'frei' ),
+			'Bearer REVIEWONLY'                 => array( 'Bearer REVIEWONLY', 'frei' ),
+			'a bearer instrument.'              => array( 'This is a bearer instrument.', 'frei' ),
+			'Authorization: erteilt'            => array( 'Authorization: erteilt am 3.11. durch die Leitung.', 'frei' ),
+			'Authorization in a sentence'       => array( 'Setze den Header Authorization: Bearer abc123 in Postman.', 'frei' ),
+			'Authorization after a tag'         => array( '<code>Authorization: Bearer abc123</code>', 'frei' ),
+			'a JWT cut short'                   => array( 'Das Token beginnt mit eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOi' . "\u{2026}", 'frei' ),
+			'a PEM cut short'                   => array( $t['pem']( '', "MIIEvQIBADANBgkqhkiG9w0BAQEFAASC...\n" ), 'frei' ),
+			'a cookie cut short'                => array( 'Cookie: wordpress_logged_in_5c3e' . "\u{2026}" . '=admin%7C1700000000%7C' . "\u{2026}" . '%7C' . "\u{2026}", 'frei' ),
+			'api_key: abc123def'                => array( 'api_key: abc123def', 'frei' ),
+			// Credentials in prose: limit C (GRENZEN.md), free as on 8df6146.
+			'password: Sommer2026'              => array( 'password: Sommer2026', 'frei' ),
+			'<p>password: …</p>'                => array( '<p>password: Sommer2026</p>', 'frei' ),
+			'user: …, password: …'              => array( 'user: anna, password: Sommer2026', 'frei' ),
+			'Token: Zugreihenfolgemarkierung'   => array( 'Token: Zugreihenfolgemarkierung', 'frei' ),
+			'Password: RESET'                   => array( 'Password: RESET', 'frei' ),
+			'prose with Token:'                 => array( 'Spieler: Anna, Token: drei', 'frei' ),
+			'prose with Password:'              => array( 'Password: at least twelve characters, ideally a whole sentence.', 'frei' ),
+			'prose with The secret:'            => array( 'The secret: consistency beats intensity.', 'frei' ),
+			'secret: true'                      => array( 'secret: true', 'frei' ),
+		);
+		// Codex round 4 of branch 11b, B, and the steering after it: the
+		// examples of API tutorials free, real values locked, each at the
+		// start of the text and after a line break.
+		$under = implode( '_', str_split( substr( $t['hex32'], 0, 10 ) . 'Qm9dXyT3kL' . substr( $t['hex32'], 10, 10 ), 10 ) );
+		foreach ( array(
+			'Bearer abc123'                      => array( 'Authorization: Bearer abc123', 'frei' ),
+			'Bearer TOKEN'                       => array( 'Authorization: Bearer TOKEN', 'frei' ),
+			'bearer TOKEN of GitHub'             => array( 'Authorization: bearer TOKEN', 'frei' ),
+			'Bearer your_api_token_goes_here'    => array( 'Authorization: Bearer your_api_token_goes_here', 'frei' ),
+			'Bearer your_personal_access_token'  => array( 'Authorization: Bearer your_personal_access_token', 'frei' ),
+			'Bearer YOUR-PERSONAL-ACCESS-TOKEN'  => array( 'Authorization: Bearer YOUR-PERSONAL-ACCESS-TOKEN', 'frei' ),
+			'Bearer eyJ…'                        => array( "Authorization: Bearer eyJ\u{2026}", 'frei' ),
+			'Bearer sk_live_…'                   => array( 'Authorization: Bearer sk' . "_live_\u{2026}", 'frei' ),
+			'Bearer, a JWT cut short'            => array( 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOi' . "\u{2026}", 'frei' ),
+			'curl of GitHub with TOKEN'          => array( 'curl -H "Authorization: Bearer TOKEN" https://api.github.com/graphql', 'frei' ),
+			'Bearer REVIEW_ONLY after ;'         => array( 'Accept: application/json; Authorization: Bearer REVIEW_ONLY', 'frei' ),
+			'Basic user:password'                => array( 'Authorization: Basic ' . $b64( 'user:password' ), 'ort' ),
+			'Basic Aladdin of RFC 7617'          => array( 'Authorization: Basic ' . $b64( 'Aladdin:open sesame' ), 'ort' ),
+			'Basic aladdin of MDN'               => array( 'Authorization: Basic ' . $b64( 'aladdin:opensesame' ), 'ort' ),
+			'Bearer of 40 hex'                   => array( 'Authorization: Bearer ' . $t['hex32'] . substr( $t['hex32'], 0, 8 ), 'sperrt' ),
+			'Bearer of 32 mixed'                 => array( 'Authorization: Bearer ' . substr( $t['github_pat'], 11, 22 ) . substr( $t['github_pat'], 34, 10 ), 'sperrt' ),
+			'Bearer of 24 small letters'         => array( 'Authorization: Bearer abcdefghijklmnopqrstuvwx', 'sperrt' ),
+			'Bearer of 32 with _ and digits'     => array( 'Authorization: Bearer ' . $under, 'sperrt' ),
+			'Basic, a real password'             => array( 'Authorization: Basic ' . $b64( 'review:Sommer2026' ), 'ort' ),
+			'Basic admin:admin'                  => array( 'Authorization: Basic ' . $b64( 'admin:admin' ), 'ort' ),
+			'Basic a:b'                          => array( 'Authorization: Basic ' . $b64( 'a:b' ), 'ort' ),
+		) as $name => list( $text, $verdict ) ) {
+			$out[ $name ]                       = array( $text, $verdict );
+			$out[ $name . ', after a break' ]   = array( "Beispiel:\n" . $text, $verdict );
+		}
+		// The documented examples (AB_MCP_Sync_Net::EXAMPLES): free as the
+		// whole value, one character more or less locked.
+		$e    = $t['examples'];
+		$jwt  = explode( '.', $e['jwt.io'] );
+		$para = static fn( string $s ): string => '<!-- wp:paragraph --><p>' . $s . '</p><!-- /wp:paragraph -->';
+		$code = static fn( string $s ): string => '<!-- wp:code --><pre class="wp-block-code"><code>' . htmlspecialchars( $s, ENT_NOQUOTES ) . '</code></pre><!-- /wp:code -->';
+		$out += array(
+			'an AWS tutorial with both keys of its documentation' => array( $para( 'Die Zugangsschlüssel bestehen aus einer Access Key ID (zum Beispiel ' . $e['aws access key id'] . ') und einem Secret Access Key (zum Beispiel ' . $e['aws secret access key'] . ').' ) . $code( "\$ aws configure\nAWS Access Key ID [None]: " . $e['aws access key id'] . "\nAWS Secret Access Key [None]: " . $e['aws secret access key'] . "\nDefault region name [None]: us-west-2" ), 'frei' ),
+			'a JWT tutorial with the example of jwt.io'           => array( $para( 'Das Beispiel von jwt.io:' ) . $code( 'Authorization: Bearer ' . $e['jwt.io'] ), 'frei' ),
+			'the example of jwt.io since 2024'                    => array( "Beispiel:\nAuthorization: Bearer " . $e['jwt.io admin'], 'frei' ),
+			'the example of RFC 6750'                             => array( 'Authorization: Bearer ' . $e['rfc 6750'], 'frei' ),
+			'the examples of Slack'                               => array( $code( $e['slack 1'] . "\n" . $e['slack 2'] . "\n" . $e['slack 3'] ), 'frei' ),
+			'the secret key of AWS after Bearer'                  => array( 'Authorization: Bearer ' . $e['aws secret access key'], 'frei' ),
+			'the access key of AWS with a 2 after it'             => array( 'Schlüssel: ' . $e['aws access key id'] . '2', 'sperrt' ),
+			'a real AKIA key with EXAMPLE in it'                  => array( 'Schlüssel: AK' . 'IAQ3ZT7W2VX' . 'EXAMPLE', 'sperrt' ),
+			'the token of jwt.io changed'                         => array( 'Authorization: Bearer ' . $jwt[0] . '.' . $jwt[1] . '.' . strrev( $jwt[2] ), 'sperrt' ),
+			'the secret key of AWS with one more'                 => array( 'Authorization: Bearer ' . $e['aws secret access key'] . 'X', 'sperrt' ),
+			// Codex round 5 of branch 11b: A4 the pairs of Basic, A5 one «.» of
+			// a sentence, C1 the bounds of AKIA; A1 to A3 limit C (GRENZEN.md).
+			'Basic admin:password'                                => array( 'Authorization: Basic ' . $b64( 'admin:password' ), 'ort' ),
+			'Basic admin:secret'                                  => array( 'Authorization: Basic ' . $b64( 'admin:secret' ), 'ort' ),
+			'Basic secret: (a key as the user)'                   => array( 'Authorization: Basic ' . $b64( 'secret:' ), 'ort' ),
+			'Basic admin:Passwort'                                => array( 'Authorization: Basic ' . $b64( 'admin:Passwort' ), 'ort' ),
+			'Basic api:SECRET'                                    => array( 'Authorization: Basic ' . $b64( 'api:SECRET' ), 'ort' ),
+			'Basic, the pair of the keys of AWS'                  => array( 'Authorization: Basic ' . $b64( $e['aws access key id'] . ':' . $e['aws secret access key'] ), 'ort' ),
+			'Basic username:password'                             => array( 'Authorization: Basic ' . $b64( 'username:password' ), 'ort' ),
+			'Basic user:passwd of curl'                           => array( 'Authorization: Basic ' . $b64( 'user:passwd' ), 'ort' ),
+			'Basic me:pwd of curl'                                => array( 'Authorization: Basic ' . $b64( 'me:pwd' ), 'ort' ),
+			'the secret key of AWS ending a sentence'             => array( 'Authorization: Bearer ' . $e['aws secret access key'] . '.', 'frei' ),
+			'the secret key of AWS and ..'                        => array( 'Authorization: Bearer ' . $e['aws secret access key'] . '..', 'sperrt' ),
+			'the access key of AWS and ..'                        => array( 'Die ID lautet ' . $e['aws access key id'] . '..', 'sperrt' ),
+			'19 characters ending a sentence'                     => array( 'Authorization: Bearer R7v2K9m4Q6s8T3p5N1x.', 'frei' ),
+			'20 characters and ..'                                => array( 'Authorization: Bearer R7v2K9m4Q6s8T3p5N1xZ..', 'sperrt' ),
+			'base64 with /AKIA in it'                             => array( 'Binärdaten (Base64): /AK' . 'IA' . str_repeat( 'A', 16 ) . 'g==', 'frei' ),
+			'base64 with +AKIA in it'                             => array( 'Daten: +AK' . 'IA' . str_repeat( 'Q', 16 ) . '/w==', 'frei' ),
+			'a key of AWS before a dash'                          => array( 'Die ID ' . $t['akia'] . '-alt ist abgelaufen.', 'sperrt' ),
+			'limit C, A1: a passphrase after Bearer'              => array( 'Authorization: Bearer birke-wolke-fluss-kiesel', 'frei' ),
+			'limit C, A2: 19 characters after Bearer'             => array( 'Authorization: Bearer R7v2K9m4Q6s8T3p5N1x', 'frei' ),
+			'limit C, A3: three dots in the value'                => array( 'Authorization: Bearer R7v2K9m4...Q6s8T3p5N1xZ', 'frei' ),
+			// Tutorials cut short, and of Basic after A4 (the steering after
+			// Codex round 5), the header on a line of its own.
+			'a tutorial with eyJhbGciOi...'                       => array( $para( 'Der Header sieht so aus:' ) . $code( "GET /api HTTP/1.1\nAuthorization: Bearer eyJhbGciOi..." ), 'frei' ),
+			'a tutorial with sk_live_...abcd'                     => array( $para( 'Dein Schlüssel endet so:' ) . $code( "curl https://api.example.test/ \\\n  -H 'Authorization: Bearer sk" . "_live_...abcd'" ), 'frei' ),
+			'a tutorial with ghp_...'                             => array( $para( 'Ein Token von GitHub:' ) . $code( "GET /user HTTP/1.1\nAuthorization: Bearer gh" . 'p_...' ), 'frei' ),
+			'a tutorial of RFC 7617'                              => array( $para( 'Das Beispiel aus RFC 7617 (Aladdin:open sesame):' ) . $code( "GET / HTTP/1.1\nAuthorization: Basic " . $b64( 'Aladdin:open sesame' ) ), 'ort' ),
+			'a tutorial of MDN'                                   => array( $para( 'Das Beispiel von MDN (aladdin:opensesame):' ) . $code( "GET / HTTP/1.1\nAuthorization: Basic " . $b64( 'aladdin:opensesame' ) ), 'ort' ),
+			'a tutorial with a placeholder as the password'       => array( $para( 'Setze dein Passwort ein:' ) . $code( "GET / HTTP/1.1\nAuthorization: Basic " . $b64( 'admin:YOUR_PASSWORD' ) ), 'frei' ),
+			// Codex round 6 of branch 11b: B1 the pairs of examples in any
+			// case, never a default; A1 a key of AWS before «/».
+			'Basic User:Password of Veeam'                        => array( $para( 'In the value of the header, the client must prepend Basic before the Username:Password pair:' ) . $code( "GET /api/sessionMngr/ HTTP/1.1\nAuthorization: Basic " . $b64( 'User:Password' ) ), 'ort' ),
+			'Basic Username:Password of CycleSoftware'            => array( $code( "GET /api/v3/articles HTTP/1.1\nAuthorization: Basic " . $b64( 'Username:Password' ) ), 'ort' ),
+			'Basic USER:PASSWORD'                                 => array( 'Authorization: Basic ' . $b64( 'USER:PASSWORD' ), 'ort' ),
+			'Basic ALADDIN:OPEN SESAME'                           => array( 'Authorization: Basic ' . $b64( 'ALADDIN:OPEN SESAME' ), 'ort' ),
+			'Basic user:pass of Ruby'                             => array( 'Authorization: Basic ' . $b64( 'user:pass' ), 'ort' ),
+			'Basic User:Pass'                                     => array( 'Authorization: Basic ' . $b64( 'User:Pass' ), 'ort' ),
+			'Basic foo:bar of npm'                                => array( 'Authorization: Basic ' . $b64( 'foo:bar' ), 'ort' ),
+			'Basic Foo:Bar'                                       => array( 'Authorization: Basic ' . $b64( 'Foo:Bar' ), 'ort' ),
+			'Basic test:123£ of RFC 7617'                         => array( 'Authorization: Basic ' . $b64( "test:123\u{00A3}" ), 'ort' ),
+			'Basic deploy:pa:ss of zerotool'                      => array( 'Authorization: Basic ' . $b64( 'deploy:pa:ss' ), 'ort' ),
+			'Basic TestUser:SecurePassword123 of AriesPortal'     => array( 'Authorization: Basic ' . $b64( 'TestUser:SecurePassword123' ), 'ort' ),
+			'Basic Me:Pwd of curl'                                => array( 'Authorization: Basic ' . $b64( 'Me:Pwd' ), 'ort' ),
+			'Basic Admin:Admin'                                   => array( 'Authorization: Basic ' . $b64( 'Admin:Admin' ), 'ort' ),
+			'Basic ADMIN:PASSWORD'                                => array( 'Authorization: Basic ' . $b64( 'ADMIN:PASSWORD' ), 'ort' ),
+			'Basic Admin:Password'                                => array( 'Authorization: Basic ' . $b64( 'Admin:Password' ), 'ort' ),
+			'Basic root:toor'                                     => array( 'Authorization: Basic ' . $b64( 'root:toor' ), 'ort' ),
+			'Basic guest:guest'                                   => array( 'Authorization: Basic ' . $b64( 'guest:guest' ), 'ort' ),
+			'Basic test:test (limit C)'                           => array( 'Authorization: Basic ' . $b64( 'test:test' ), 'ort' ),
+			'a key of AWS before / (SigV4)'                       => array( 'Scope: AK' . 'IAQ3ZT7W2VX' . 'EXAMPLE/20261109/eu-central-1/s3/aws4_request', 'sperrt' ),
+			'the key of the AWS documentation in a scope'         => array( 'Der Scope lautet ' . $e['aws access key id'] . '/20130524/us-east-1/s3/aws4_request.', 'frei' ),
+			// Basic by its place (Thomas, 09.11.2026 vormittags, «A: nach
+			// Kontext»): a list of headers stored in a field locks.
+			'a list of headers of JSON with Basic'                => array( '{"headers":["Accept: application/json","Authorization: Basic ' . $b64( 'user:password' ) . '"]}', 'ort' ),
+		);
+		foreach ( array(
+			'Quarkus'  => 'Alice:secret',
+			'Swagger'  => 'demo:p@55w0rd',
+			'Ruby'     => 'my_account:my_password',
+			'Veeam'    => 'User:Password',
+			'RFC 7617' => 'Aladdin:open sesame',
+			'MDN'      => 'aladdin:opensesame',
+			'curl'     => 'user:password',
+			'admin'    => 'admin:admin',
+			'review'   => 'review:Sommer2026',
+		) as $source => $pair ) {
+			$header = 'Authorization: Basic ' . $b64( $pair );
+			$out[ 'Basic of ' . $source . ', at the start' ]       = array( $header, 'ort' );
+			$out[ 'Basic of ' . $source . ', after a break' ]      = array( "GET / HTTP/1.1\n" . $header, 'ort' );
+			$out[ 'Basic of ' . $source . ', in quotes' ]          = array( 'curl -H "' . $header . '" https://api.example.test/', 'ort' );
+			$out[ 'a tutorial of ' . $source . ' with Basic' ]     = array( $para( 'Der Header für die Anmeldung:' ) . $code( "GET / HTTP/1.1\n" . $header ), 'ort' );
+		}
+		foreach ( require __DIR__ . '/fixtures/sync-tutorials.php' as $name => $text ) {
+			$out[ 'tutorial ' . $name ] = array( $text, in_array( substr( $name, 0, 3 ), array( 'T2 ', 'T6 ' ), true ) ? null : 'frei' );
+			// The header on a line of its own in the block of code (Codex round 4, B).
+			if ( false !== strpos( $text, '<code>Authorization' ) ) {
+				$out[ 'tutorial ' . $name . ', the header after a break' ] = array( str_replace( '<code>Authorization', "<code>\nAuthorization", $text ), in_array( substr( $name, 0, 3 ), array( 'T2 ', 'T6 ' ), true ) ? null : ( 'T10' === substr( $name, 0, 3 ) ? 'ort' : 'frei' ) );
+			}
+		}
+		return $out;
+	}
+
+	/** The forms of the comparison: the readers of the kinds and the check of the export (Codex round 4 of branch 11b, c). */
+	const SAME_FORMS = array( 'meta', 'meta leaf', 'meta nested', 'post_content', 'option', 'option leaf', 'widget', 'term meta', 'term meta leaf', 'menu item meta', 'menu item meta leaf', 'post_excerpt', 'term description', 'export meta', 'export term meta', 'export menu item meta', 'export option', 'export post_content', 'export post_excerpt', 'export term description' );
+
+	/** The forms of the text of a post, where Basic in the header Authorization counts for nothing (AB_MCP_Sync_Net::prose_unit()). */
+	const PROSE_FORMS = array( 'post_content', 'export post_content' );
+
+	/**
+	 * The verdict of the readers of a kind and the net (the keys of the locks
+	 * of the checks), in a form of sameEverywhere(): the meta of a term and
+	 * of a menu item through the reader of their kinds
+	 * (AB_MCP_Sync_Db_Kind::meta_form(), protected, called in its scope; for
+	 * an item with AB_MCP_Sync_Kind_Menu::item_meta() as the kind calls it),
+	 * the finished content through the check of the export
+	 * (AB_MCP_Sync_Export::checked_content()).
+	 */
+	private static function verdict_in( string $form, string $text ): string {
+		$ctx  = self::net_ctx();
+		$acc  = AB_MCP_Sync_Canon::acc();
+		$mark = AB_MCP_Sync_Net::mark( $acc );
+		$leaf = false !== strpos( $form, 'leaf' ) ? serialize( array( 'text' => $text ) ) : $text;
+		if ( 0 === strpos( $form, 'export' ) ) {
+			$kind   = array( 'export meta' => 'post', 'export term meta' => 'term', 'export menu item meta' => 'menu_item', 'export option' => 'option', 'export post_content' => 'post', 'export post_excerpt' => 'post', 'export term description' => 'term' )[ $form ];
+			$rows   = array(
+				'export option'           => array( 'value' => $text ),
+				'export post_content'     => array( 'post_content' => $text ),
+				'export post_excerpt'     => array( 'post_excerpt' => $text ),
+				'export term description' => array( 'description' => $text ),
+			);
+			$parts  = isset( $rows[ $form ] ) ? array( 'row' => $rows[ $form ] ) : array( 'meta' => array( array( 'ab_note', $text ) ) );
+			$object = \AB_MCP_Sync_Export::checked_content(
+				array(
+					'kind'        => $kind,
+					'ref'         => '7',
+					'locks'       => array(),
+					'credentials' => array( 'b9' => array(), 'mixed' => array() ),
+					'content'     => $parts + array( 'terms' => array() ),
+				)
+			);
+			$acc['locks'] = $object['locks'];
+		} elseif ( 0 === strpos( $form, 'term meta' ) || 0 === strpos( $form, 'menu item meta' ) ) {
+			$item  = 0 === strpos( $form, 'menu' );
+			$rows  = array( array( 'meta_id' => 1, 'key' => 'ab_note', 'value' => $leaf ) );
+			$read  = \Closure::bind(
+				static function ( array $rows, array $ctx, array &$acc, bool $item ) {
+					return self::meta_form(
+						$rows,
+						$ctx,
+						$acc,
+						$item ? 'menu' : 'term',
+						$item,
+						$item ? static function ( $key, $raw, &$acc ) use ( $ctx ) {
+							return \AB_MCP_Sync_Kind_Menu::item_meta( $key, $raw, 'custom', 7, $ctx, $acc );
+						} : null
+					);
+				},
+				null,
+				\AB_MCP_Sync_Db_Kind::class
+			);
+			$read( $rows, $ctx, $acc, $item );
+		} elseif ( 'post_excerpt' === $form || 'term description' === $form ) {
+			// A column of the row as the kinds read it (row_form(), term_form()).
+			$kind   = 'post_excerpt' === $form ? 'post' : 'term';
+			$column = 'post_excerpt' === $form ? 'post_excerpt' : 'description';
+			AB_MCP_Sync_Credentials::column( $acc, $kind, $column, $text );
+			AB_MCP_Sync_Canon::text( $text, $ctx, array(), $acc, $column );
+			AB_MCP_Sync_Net::check( $acc, $mark, $kind, $column, $text, $ctx );
+		} elseif ( 'post_content' === $form ) {
+			AB_MCP_Sync_Credentials::column( $acc, 'post', 'post_content', $text );
+			AB_MCP_Sync_Refs::content( $text, $ctx, $acc, 'post', 'post_content' );
+			AB_MCP_Sync_Net::check( $acc, $mark, 'post', 'post_content', $text, $ctx );
+		} elseif ( 'widget' === $form ) {
+			$settings = array(
+				'title' => 'Hinweis',
+				'text'  => $text,
+			);
+			if ( AB_MCP_Sync_Credentials::note( $acc, 'widget_area', 'widget:text-2', AB_MCP_Sync_Credentials::unit( 'text', $settings ) ) ) {
+				AB_MCP_Sync_Canon::structure( $settings, $ctx, $acc, 'widget_area', 'widget:text-2' );
+				AB_MCP_Sync_Net::check( $acc, $mark, 'widget_area', 'widget:text-2', $settings, $ctx );
+			}
+		} else {
+			$kind  = 0 === strpos( $form, 'option' ) ? 'option' : 'post';
+			$at    = 'option' === $kind ? 'option_value' : 'meta:ab_note';
+			$value = $text;
+			if ( false !== strpos( $form, 'leaf' ) ) {
+				$value = serialize( array( 'text' => $text ) );
+			} elseif ( false !== strpos( $form, 'nested' ) ) {
+				$value = serialize( array( 'x' => serialize( array( 'text' => $text ) ) ) );
+			}
+			if ( AB_MCP_Sync_Credentials::note( $acc, $kind, $at, AB_MCP_Sync_Credentials::unit( 'option' === $kind ? 'image_default_link_type' : 'ab_note', $value ) ) ) {
+				AB_MCP_Sync_Canon::value( $value, $ctx, $acc, $kind, $at );
+				AB_MCP_Sync_Net::check( $acc, $mark, $kind, $at, $value, $ctx, true, true );
+			}
+		}
+		// The locks of the credential check and of the net (the list of
+		// AB_MCP_Sync_Export::CREDENTIAL_LOCKS); a reference read otherwise
+		// in post_content is no part of the comparison.
+		$keys = array();
+		foreach ( $acc['locks'] as $lock ) {
+			$op = substr( (string) $lock['key'], 2 );
+			if ( 0 === strpos( (string) $lock['key'], '*:' ) && in_array( $op, array( 'credential_field', 'password_protected', 'script', 'html_outside_kses', 'php_object', 'unreadable_value', 'unread_credential' ), true ) ) {
+				$keys[ $op ] = true;
+			}
+		}
+		ksort( $keys );
+		return array() === $keys ? 'frei' : implode( '+', array_keys( $keys ) );
+	}
+
+	#[DataProvider( 'sameEverywhere' )]
+	public function testATextIsJudgedAlikeInEveryFormItIsStoredIn( string $text, ?string $expected ): void {
+		$forms = array();
+		foreach ( self::SAME_FORMS as $form ) {
+			$forms[ $form ] = self::verdict_in( $form, $text );
+		}
+		$short = static fn( string $v ): string => 'frei' === $v ? 'frei' : 'sperrt';
+		if ( 'ort' === $expected ) {
+			// Basic in the header Authorization by its place (Thomas, 09.11.2026
+			// vormittags): alike in the text of a post, alike everywhere else;
+			// free there, locked here.
+			$prose = array_unique( array_map( $short, array_intersect_key( $forms, array_flip( self::PROSE_FORMS ) ) ) );
+			$other = array_unique( array_map( $short, array_diff_key( $forms, array_flip( self::PROSE_FORMS ) ) ) );
+			self::assertCount( 1, $prose, (string) json_encode( $forms ) );
+			self::assertCount( 1, $other, (string) json_encode( $forms ) );
+			if ( ! self::closed( $text ) ) {
+				self::assertSame( array( array( 'frei' ), array( 'sperrt' ) ), array( array_values( $prose ), array_values( $other ) ), (string) json_encode( $forms ) );
+			}
+			return;
+		}
+		$alike = array_unique( array_map( $short, $forms ) );
+		self::assertCount( 1, $alike, (string) json_encode( $forms ) );
+		if ( null !== $expected && ! self::closed( $text ) ) {
+			self::assertSame( array( $expected ), array_values( $alike ), (string) json_encode( $forms ) );
+		}
 	}
 
 	/**

@@ -355,10 +355,44 @@ mit Beispiel und Grund; wo eine Ablehnung entsteht, nennt sie den Weg.
   fünf solche gehaltene Kennungen den Abschluss (Codex-Runde 4 zu Teil 3,
   C). Eine Liste einer Fassung davor gilt als fehlend
   (`ab_mcp_sync_import_held`, Weg: Paket neu holen).
-- Eine bekannte Fehlsperre des Netzes der Arten im Normalfall
-  (serialisierte Prosa in Meta und Kern-Optionen) steht in
-  GRENZEN-STRUKTUR.md, Abschnitt «Bekannte Fehlsperre im Normalfall:
-  serialisierte Werte im Netz»; Behebung in Zweig 11b `heikel/z8-netz`.
+- Serialisierte Werte von Meta und Optionen prüft das Netz der Arten und
+  des Exports seit Zweig 11b `heikel/z8-netz` entpackt, jeden Schlüssel und
+  jedes Blatt für sich: Prosa in einem serialisierten Array («Spieler:
+  Anna, Token: drei») hält das Objekt nicht mehr, ein echtes Zugangsdatum
+  darin (auch verschachtelt, in Base64, im verdrängten Wert eines doppelten
+  Schlüssels) hält es weiter, ein Wert, der nicht entpackt oder ein Objekt
+  enthält, ebenso. Einzelheiten und die Grenze C in GRENZEN-STRUKTUR.md,
+  Abschnitt «Serialisierte Werte im Netz (Zweig 11b)».
+- Feste Formate von Zugangsdaten halten das Objekt in jeder Form (Blatt,
+  einfacher Wert, `post_content`, Meta, Option, Widget): Tokens von GitHub,
+  Stripe, AWS, Slack und Mailchimp, JSON Web Tokens, `Authorization` mit
+  Bearer (ein Wert in der Form eines Tokens, ab 20 Zeichen) oder Basic
+  (jedes Paar, dessen Passwort kein Platzhalter ist, ausserhalb von
+  `post_content`) am Anfang einer Zeile oder eines
+  Felds, private
+  Schlüssel in PEM, der Wert eines Login-Cookies, Passwortfelder in Code-
+  und Konfigurationsform (Zweig 11b, GRENZEN.md, Abschnitt «Zugangsdaten
+  nach festen Formaten»). Grenze C: Zugangsdaten in Prosa («password:
+  Sommer2026» im Beitragstext, «user: …, password: …», `<p>password:
+  …</p>`) gehen ins Paket wie auf `8df6146`. Grund: `wp_get_post` gibt den
+  Rohinhalt ohnehin aus (`includes/tools/class-tools-content.php:83`) und
+  verweigert nur Meta-Schlüssel mit Namen eines Zugangsdatums; das Paket
+  zeigt nichts, was das Lesewerkzeug nicht schon zeigt. Ebenso gehen die
+  Beispiele der API-Anleitungen ins Paket (`Authorization: Bearer TOKEN`,
+  `Bearer abc123`, Codex-Runde 4 zu 11b). `Basic` im Header geht nach dem
+  Ort (Thomas, 09.11.2026 vormittags, «A: nach Kontext», decisions.md): in
+  `post_content` geht jedes Paar ins Paket, auch `admin:admin` (Grenze C,
+  Grund wie oben), ausser im CSS eines Themes, das als `post_content`
+  gespeichert ist: dort sperrt ein Basic-Header, auch in einem Kommentar
+  des CSS (Codex-Runde 8 zu 11b, C2); in Meta, Optionen, Widgets,
+  `post_excerpt` und der
+  Beschreibung eines Terms hält jedes Paar das Objekt, auch
+  `Aladdin:open sesame` und eine gespeicherte Liste von Headern
+  (`{"headers":["Authorization: Basic …"]}`); eine Anleitung mit
+  Basic-Header ausserhalb von `post_content` ist der beschriebene seltene
+  Fall (GRENZEN.md). Öffentlich dokumentierte Beispielwerte gehen als
+  ganzer Wert ins Paket (die Schlüssel der AWS-Doku, die Tokens von jwt.io,
+  RFC 6750, die Beispiele der Slack-Doku; GRENZEN.md, `EXAMPLES`).
 - `unreadable_name` hält auch einen harmlosen Namen, den die Prüfung als
   unfertiges HTML liest, etwa eine Option `literal<foo` (konstruiert; kein
   gewöhnlicher Name eines Plugins so gefunden). Das Paket läuft weiter;

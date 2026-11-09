@@ -21,6 +21,7 @@ namespace AlphaBridge\Tests;
 
 use AB_MCP_Sync_Canon;
 use AB_MCP_Sync_Net;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 require_once __DIR__ . '/../includes/sync/class-sync-net.php';
@@ -621,6 +622,513 @@ final class SyncNetTest extends TestCase {
 		self::assertSame( array( 'client_secret' ), AB_MCP_Sync_Net::credentials( 'client-secret=x clientSecret=y', $extra ), 'One name in its spellings.' );
 	}
 
+	/** The tokens of the tests, composed at run time (tests/fixtures/sync-tokens.php). */
+	private static function tokens(): array {
+		return require __DIR__ . '/fixtures/sync-tokens.php';
+	}
+
+	public function testTheTokensOfAServiceAndAJsonWebTokenCountByTheirFormInAnyContext(): void {
+		// The steering, 09.11.2026: by the prefix and the form the service
+		// gives them, wherever they stand (alone, in prose, after Bearer, in a
+		// tag, in quotes); the form decides, a word in it frees none (Codex
+		// round 3 of branch 11b, A1).
+		$t     = self::tokens();
+		$alnum = $t['alnum'];
+		$hex   = $t['hex'];
+		$extra = array();
+		foreach ( array(
+			'github_token'      => array( $t['ghp'], $t['github_pat'], 'gh' . 'p_' . str_repeat( 'fake', 9 ), 'gh' . 'p_' . $alnum( 'g', 40 ) ),
+			'stripe_secret_key' => array( $t['sk_live'], $t['rk_live'], 'sk' . '_live_' . str_repeat( 'my', 12 ) ),
+			'aws_access_key_id' => array( $t['akia'], 'AK' . 'IAQ3ZT7W2VX' . 'EXAMPLE', 'AK' . 'IAIOSFODNN7' . 'EXAMPLE1', 'AK' . 'IAIOSFODNN7' . 'EXAMPLEX', $t['akia'] . '/', $t['akia'] . '/20261109/eu-central-1/s3/aws4_request' ),
+			'slack_token'       => array( $t['xoxb'], $t['xoxp'] ),
+			'mailchimp_api_key' => array( $t['mailchimp'], $hex( 'm', 32 ) . '-us' . '1' ),
+			'access_token'      => array( $t['jwt'] ),
+		) as $name => $values ) {
+			foreach ( $values as $value ) {
+				foreach ( array( '%s', 'Mein Schlüssel: %s, bitte nicht weitergeben.', 'Bearer %s', '<code>%s</code>', '"%s"', "x\n%s." ) as $context ) {
+					$text = sprintf( $context, $value );
+					self::assertSame( array( $name ), AB_MCP_Sync_Net::credentials( $text, $extra ), $text );
+				}
+			}
+		}
+		// Not in the form: shorter than the service writes it, glued to a
+		// letter or digit before it, a letter or digit after a token of a
+		// fixed length, a JSON Web Token whose header has no «alg» or is no
+		// JSON, a part of a length base64url never has, one cut short.
+		$b64url = $t['b64url'];
+		$jwt    = explode( '.', $t['jwt'] );
+		foreach ( array(
+			'gh' . 'p_' . $alnum( 'g', 35 ),
+			'xgh' . 'p_' . $alnum( 'g', 36 ),
+			'github' . '_pat_' . $alnum( 'g', 35 ),
+			'sk' . '_live_' . $alnum( 's', 23 ),
+			'sk' . '_test_' . $alnum( 's', 24 ),
+			'pk' . '_live_' . $alnum( 's', 24 ),
+			'1sk' . '_live_' . $alnum( 's', 24 ),
+			'AK' . 'IA' . 'IOSFODNN7EXAMP',
+			'X' . $t['akia'],
+			'/' . $t['akia'],
+			'+' . $t['akia'],
+			$t['akia'] . 'x',
+			$t['akia'] . 'BCx',
+			'AK' . 'IA' . str_repeat( 'B', 18 ) . 'xyz',
+			$t['akia'] . '+',
+			$t['akia'] . '=',
+			'Binärdaten (Base64): /AK' . 'IA' . str_repeat( 'A', 16 ) . 'g==',
+			'xo' . 'xb-2048-4096-' . $alnum( 'x', 7 ),
+			'xo' . 'xa-2048-4096-' . $alnum( 'x', 24 ),
+			'xo' . 'xb-your-token',
+			'axo' . 'xb-2048-4096-' . $alnum( 'x', 24 ),
+			$hex( 'm', 31 ) . '-us21',
+			$hex( 'm', 32 ) . '-us21x',
+			$hex( 'm', 32 ) . '-us',
+			'a' . $hex( 'm', 32 ) . '-us21',
+			'abc123def456-us21',
+			$b64url( '{"typ":"JWT"}' ) . '.' . $jwt[1] . '.' . $jwt[2],
+			'eyJ' . $alnum( 'h', 16 ) . '.' . $jwt[1] . '.' . $jwt[2],
+			$jwt[0] . '.' . $jwt[1] . 'AAA.' . $jwt[2],
+			$jwt[0] . '.' . $jwt[1] . '.' . $jwt[2] . 'AB',
+			$jwt[0] . '.' . $jwt[1] . "\u{2026}",
+			$jwt[0] . '.' . $jwt[1] . '.',
+			'x' . $t['jwt'],
+		) as $text ) {
+			self::assertSame( array(), AB_MCP_Sync_Net::credentials( $text, $extra ), $text );
+		}
+		self::assertTrue( AB_MCP_Sync_Net::jwt( $jwt[0], $jwt[1], $jwt[2] ) );
+		self::assertTrue( AB_MCP_Sync_Net::jwt( $b64url( '{"alg":"none"}' ), $jwt[1], 'c2ln' ), 'Its header unpadded, any alg.' );
+		$kid = $b64url( '{"alg":"HS256","kid":"~~~"}' );
+		self::assertStringContainsString( '-', $kid );
+		self::assertTrue( AB_MCP_Sync_Net::jwt( $kid, $jwt[1], $jwt[2] ), 'Its header with the - and _ of base64url.' );
+		self::assertSame( array( 'access_token' ), AB_MCP_Sync_Net::credentials( $kid . '.' . $jwt[1] . '.' . $jwt[2], $extra ) );
+		self::assertFalse( AB_MCP_Sync_Net::jwt( $jwt[0] . 'A', $jwt[1], $jwt[2] ) );
+		self::assertFalse( AB_MCP_Sync_Net::jwt( $b64url( '"alg"' ), $jwt[1], $jwt[2] ), 'Its header no object.' );
+	}
+
+	public function testADocumentedExampleIsFreeOnlyAsTheWholeValue(): void {
+		// The steering after Codex round 4 of branch 11b: the examples of the
+		// documentation of AWS, jwt.io, RFC 6750 and Slack free
+		// themselves only, as the whole value, in every form the net judges by
+		// its value; kept as SHA-256, put together here from parts.
+		$t     = self::tokens();
+		$e     = $t['examples'];
+		$extra = array();
+		$names = array();
+		foreach ( $e as $name => $value ) {
+			self::assertTrue( AB_MCP_Sync_Net::example( $value ), $name );
+			self::assertSame( $name, AB_MCP_Sync_Net::EXAMPLES[ hash( 'sha256', $value ) ] );
+			$names[] = $name;
+		}
+		self::assertSame( array_values( AB_MCP_Sync_Net::EXAMPLES ), $names, 'Each entry of the list held by a value here.' );
+		$jwt = explode( '.', $e['jwt.io'] );
+		foreach ( array(
+			'Access Key ID (zum Beispiel ' . $e['aws access key id'] . ')',
+			"AWS Access Key ID [None]: " . $e['aws access key id'] . "\nAWS Secret Access Key [None]: " . $e['aws secret access key'],
+			$e['aws access key id'] . '.',
+			'Authorization: Bearer ' . $e['jwt.io'],
+			"Beispiel:\nAuthorization: Bearer " . $e['jwt.io admin'],
+			$e['jwt.io'] . '.',
+			'Authorization: Bearer ' . $e['rfc 6750'],
+			'Authorization: Bearer ' . $e['aws secret access key'],
+			'Authorization: Bearer ' . $e['aws secret access key'] . '.',
+			// Inside base64 or before a small letter, «+», «/» or «=» no key of
+			// AWS (Codex round 5, C1).
+			$e['aws access key id'] . '/x',
+			'Der Scope lautet ' . $e['aws access key id'] . '/20130524/us-east-1/s3/aws4_request.',
+			$e['aws access key id'] . 'x',
+			'Binärdaten (Base64): /AK' . 'IA' . str_repeat( 'A', 16 ) . 'g==',
+			$e['slack 1'] . "\n" . $e['slack 2'] . "\n" . $e['slack 3'],
+			'Authorization: Bearer ' . $e['slack 3'],
+		) as $text ) {
+			self::assertSame( array(), AB_MCP_Sync_Net::credentials( $text, $extra ), $text );
+		}
+		// One character more or less, a value of its own: no example.
+		foreach ( array(
+			'aws_access_key_id' => array( 'Scope: AK' . 'IAQ3ZT7W2VX' . 'EXAMPLE/20261109/eu-central-1/s3/aws4_request', $e['aws access key id'] . ' und ' . $t['akia'], $e['aws access key id'] . '2', 'AK' . 'IAQ3ZT7W2VX' . 'EXAMPLE', substr( $e['aws access key id'], 0, 19 ) . 'F', $e['aws access key id'] . '..', 'Mein ' . $e['aws access key id'] . 'X', $e['aws access key id'] . '-x' ),
+			'access_token'      => array( $jwt[0] . '.' . $jwt[1] . '.' . strrev( $jwt[2] ), $e['jwt.io'] . 'A', $jwt[0] . '.' . $jwt[1] . 'AAAA.' . $jwt[2] ),
+			'slack_token'       => array( $e['slack 2'] . '9', $e['slack 3'] . '-x', $e['slack 2'] . '/x', $e['slack 1'] . '..' ),
+			'authorization'     => array( 'Authorization: Bearer ' . $e['aws secret access key'] . '..', 'Authorization: Basic ' . base64_encode( $e['aws access key id'] . ':' . $e['aws secret access key'] ), 'Authorization: Basic ' . base64_encode( 'admin:' . $e['aws secret access key'] ), 'Authorization: Bearer ' . $e['aws secret access key'] . 'X', 'Authorization: Bearer x' . $e['aws secret access key'], 'Authorization: Basic ' . base64_encode( 'admin:' . $e['aws secret access key'] . '1' ), 'Authorization: Basic ' . base64_encode( 'a:' . $e['rfc 6750'] . 'x' ) ),
+		) as $name => $texts ) {
+			foreach ( $texts as $text ) {
+				self::assertSame( array( $name ), AB_MCP_Sync_Net::credentials( $text, $extra ), $text );
+			}
+		}
+		self::assertFalse( AB_MCP_Sync_Net::example( '' ) );
+		self::assertFalse( AB_MCP_Sync_Net::example( ' ' . $e['rfc 6750'] ) );
+	}
+
+	public function testTheHeaderAuthorizationCountsAtTheStartOfALineOrAField(): void {
+		// Codex round 1 of branch 11b, A1; the steering, 09.11.2026, and after
+		// Codex round 4 (B): at the start of the text, after a line break,
+		// «;», a quote or the «:» of an array of headers; Bearer with a value
+		// in the form of a token (20 characters of a token or more, with a
+		// digit or without, no placeholder of words), Basic with the base64
+		// of user:password whose password is no example.
+		$t     = self::tokens();
+		$hex   = $t['hex32'];
+		$tok   = 'Qm9dXyT3kLz8wR2vNp6s';
+		$b64   = static fn( string $s ): string => base64_encode( $s );
+		$under = implode( '_', str_split( substr( $hex, 0, 10 ) . 'Qm9dXyT3kL' . substr( $hex, 10, 10 ), 10 ) );
+		$extra = array();
+		self::assertSame( 20, strlen( $tok ) );
+		self::assertSame( array( 32, 2 ), array( strlen( $under ), substr_count( $under, '_' ) ) );
+		self::assertMatchesRegularExpression( '/[0-9]/', $under );
+		foreach ( array(
+			'Authorization: Bearer ' . $tok,
+			'authorization: bearer ' . $tok,
+			'AUTHORIZATION:Bearer ' . $tok . '.',
+			'Accept: application/json; Authorization: Bearer ' . $hex,
+			'Accept: */*;Authorization: Bearer ' . $tok,
+			"Host: example.test\nAuthorization: Bearer " . $hex,
+			"Host: example.test\r\n\tAuthorization: Bearer " . $tok,
+			"Host: example.test\nAuthorization: 'Bearer " . $tok . "'",
+			'curl -H "Authorization: Bearer ' . $hex . '" https://api.example.test/',
+			"-H 'Authorization: Bearer " . $tok . "'",
+			'`Authorization: Bearer ' . $tok . '`',
+			'headers: Authorization: Bearer ' . $tok,
+			'Proxy-Authorization: Bearer ' . $tok,
+			// The form of a token: 20 or more, with a digit or without; a
+			// value of words only where its groups are joined by «_» or «-».
+			'Authorization: Bearer ' . substr( $hex, 0, 20 ),
+			'Authorization: Bearer QmdXyTkLzwRvNpsHcaJf',
+			'Authorization: Bearer abcdefghijklmnopqrs1',
+			'Authorization: Bearer ABCDEFGHIJKLMNOPQRS1',
+			'Authorization: Bearer abcdefghijklmnopqrst',
+			'Authorization: Bearer abcdefghijklmnopqrstuvwx',
+			'Authorization: Bearer ABCDEFGHIJKLMNOPQRST',
+			'Authorization: Bearer ' . $under,
+			'Authorization: Bearer Your_api_token_goes_here',
+			'Authorization: Bearer your_api_token_2026_here',
+			'Authorization: Bearer a_bcdefghijklmnopqrstu',
+			'Authorization: Bearer your.api.token.goes.here',
+			'Authorization: Bearer ' . $hex . substr( $hex, 0, 8 ),
+			'Authorization: Basic ' . $b64( 'review:REVIEW_ONLY' ),
+			'Authorization: Basic ' . $b64( 'review:Sommer2026' ),
+			'Authorization: Basic ' . $b64( 'a:b' ),
+			'Authorization: Basic ' . $b64( 'a:b1' ),
+			'Authorization: Basic ' . $b64( 'admin:admin' ),
+			// A word of an example alone frees none (Codex round 5, A4).
+			'Authorization: Basic ' . $b64( 'admin:password' ),
+			'Authorization: Basic ' . $b64( 'admin:secret' ),
+			'Authorization: Basic ' . $b64( 'secret:' ),
+			'Authorization: Basic ' . $b64( 'pass:' ),
+			'Authorization: Basic ' . $b64( 'admin:PASSWORD' ),
+			'Authorization: Basic ' . $b64( 'admin:Passwort' ),
+			'Authorization: Basic ' . $b64( 'api:SECRET' ),
+			'Authorization: Basic ' . $b64( 'admin:Open Sesame' ),
+			'Authorization: Basic ' . $b64( 'ali:opensesame' ),
+			'Authorization: Basic ' . $b64( 'user:password ' ),
+			// Defaults of devices and sites, in any case (the steering after
+			// Codex round 6): never pairs of examples.
+			'Authorization: Basic ' . $b64( 'Admin:Admin' ),
+			'Authorization: Basic ' . $b64( 'ADMIN:PASSWORD' ),
+			'Authorization: Basic ' . $b64( 'admin:1234' ),
+			'Authorization: Basic ' . $b64( 'root:toor' ),
+			'Authorization: Basic ' . $b64( 'ROOT:ROOT' ),
+			'Authorization: Basic ' . $b64( 'administrator:password' ),
+			'Authorization: Basic ' . $b64( 'guest:guest' ),
+			'Authorization: Basic ' . $b64( 'test:test' ),
+			'Authorization: Basic ' . $b64( 'john:secret' ),
+			'Authorization: Basic ' . $b64( 'key-of-the-account:' ),
+			'Authorization: Basic ' . $b64( ':secret-only' ),
+			'Proxy-Authorization: Basic ' . $b64( 'proxy:Kq7vR2pX' ) . ';',
+			// Every pair counts, a documented example as well: the place decides
+			// (prose_unit(); Thomas, 09.11.2026 vormittags), no list.
+			'Authorization: Basic ' . $b64( 'user:password' ),
+			'Authorization: Basic ' . $b64( 'Aladdin:open sesame' ),
+			'Authorization: Basic ' . $b64( 'aladdin:opensesame' ),
+			'Authorization: Basic ' . $b64( 'username:password' ),
+			'Authorization: Basic ' . $b64( 'name:password' ),
+			'Authorization: Basic ' . $b64( 'user:secret' ),
+			'Authorization: Basic ' . $b64( 'me:pwd' ),
+			'Authorization: Basic ' . $b64( 'key:secret' ),
+			'Authorization: Basic ' . $b64( 'user:passwd' ),
+			'Authorization: Basic ' . $b64( 'smith:secret' ),
+			'Authorization: Basic ' . $b64( 'User:Password' ),
+			'Authorization: Basic ' . $b64( 'Username:Password' ),
+			'Authorization: Basic ' . $b64( 'USER:PASSWORD' ),
+			'Authorization: Basic ' . $b64( 'ALADDIN:OPEN SESAME' ),
+			'Authorization: Basic ' . $b64( 'Aladdin:OpenSesame' ),
+			'Authorization: Basic ' . $b64( 'user:pass' ),
+			'Authorization: Basic ' . $b64( 'foo:bar' ),
+			'Authorization: Basic ' . $b64( 'FOO:BAR' ),
+			'Authorization: Basic ' . $b64( "test:123\u{00A3}" ),
+			'Authorization: Basic ' . $b64( 'deploy:pa:ss' ),
+			'Authorization: Basic ' . $b64( 'TestUser:SecurePassword123' ),
+			// A placeholder or an example word in a word is none (Codex round 3, A1).
+			'Authorization: Bearer my_' . $hex,
+			'Authorization: Bearer fake_token_1234567890',
+			'Authorization: Bearer YOUR_TOKEN_abcdefghij1',
+			'Authorization: Basic ' . $b64( 'admin:my_password' ),
+			'Authorization: Basic ' . $b64( 'admin:password123' ),
+			'Authorization: Basic ' . $b64( 'admin:open sesame!' ),
+			// A field after a field is one of its own (Codex round 3, A3).
+			'Authorization: Basic ' . $b64( 'abc' ) . ';Authorization: Bearer ' . $tok,
+			'Authorization: Bearer YOUR_TOKEN;Authorization: Bearer ' . $tok,
+			'Authorization: Bearer <token>; Authorization: Basic ' . $b64( 'a:b1' ),
+		) as $text ) {
+			self::assertSame( array( 'authorization' ), AB_MCP_Sync_Net::credentials( $text, $extra ), $text );
+		}
+		foreach ( array(
+			// The examples of tutorials (Codex round 4, B): shorter than 20, a
+			// word in one case without a digit, cut short.
+			'Authorization: Bearer abc123',
+			'Authorization: Bearer TOKEN',
+			'Authorization: bearer TOKEN',
+			'curl -H "Authorization: Bearer TOKEN" https://api.github.com/graphql',
+			"Beispiel:\nAuthorization: Bearer abc123",
+			'Accept: application/json; Authorization: Bearer REVIEW_ONLY',
+			'Authorization: Bearer ' . substr( $tok, 0, 19 ),
+			'Authorization: Bearer ' . substr( $tok, 0, 19 ) . '.',
+			'Authorization: Bearer your_api_token_goes_here.',
+			'Authorization: Bearer <' . $tok . '>',
+			'Authorization: Bearer &lt;' . $tok . '&gt;',
+			'Authorization: Bearer your_api_token_goes_here',
+			'Authorization: Bearer your_personal_access_token',
+			'Authorization: Bearer YOUR-PERSONAL-ACCESS-TOKEN',
+			'Authorization: Bearer YOUR_API_TOKEN_HERE',
+			'Authorization: Bearer ABCDEFGHIJ-KLMNOPQRST',
+			'Authorization: Bearer ab__cd--ef_gh-ij_kl_mn',
+			"Authorization: Bearer eyJ\u{2026}",
+			'Authorization: Bearer sk' . "_live_\u{2026}",
+			'Authorization: Bearer ' . $tok . "\u{2026}",
+			'Authorization: Bearer ' . $tok . '...',
+			'Authorization: Bearer ' . $tok . '==...',
+			'Authorization: Bearer Qm9dXyT3kL...z8wR2vNp6s',
+			'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOi...',
+			// Placeholders in their exact form, and code that builds the value.
+			'Authorization: Bearer <token>',
+			'Authorization: Bearer &lt;token&gt;',
+			'Authorization: Bearer YOUR_TOKEN',
+			'Authorization: Bearer YOUR_ACCESS_TOKEN.',
+			'Authorization: Bearer YOUR_TOKEN_2026_ABCDEFGH',
+			'Authorization: Bearer xxxxxxxxxxxxxxxxxxxxxxxx',
+			'Authorization: Bearer ************',
+			'Authorization: Bearer ...',
+			"Authorization: Bearer \u{2026}",
+			'Authorization: Bearer $TOKEN',
+			'Authorization: Bearer ${TOKEN}',
+			'Authorization: Bearer {token}',
+			'Authorization: Bearer {{token}}',
+			'Authorization: Bearer [REDACTED]',
+			"\$h[] = 'Authorization: Bearer ' . \$token;",
+			'Authorization: Basic <base64>',
+			'Authorization: Basic ' . $b64( 'foobar' ),
+			'Authorization: Basic ' . $b64( 'admin:YOUR_PASSWORD' ),
+			'Authorization: Basic ' . $b64( 'admin:xxxx xxxx xxxx xxxx xxxx xxxx' ),
+			'Authorization: Basic ' . $b64( 'admin:<password>' ),
+			'Authorization: Basic ' . $b64( 'YOUR_API_KEY:' ),
+			'Authorization: Basic ' . $b64( ':' ),
+			'Authorization: Basic ' . $b64( "a:\x01b1" ),
+			'Authorization: Basic ' . $b64( "a:\xFFb1" ),
+			'Authorization: Basic mit Benutzer und Passwort',
+			// At the start of no line and no field: a limit (GRENZEN.md).
+			'Setze den Header Authorization: Bearer ' . $hex . ' in Postman.',
+			'<code>Authorization: Bearer ' . $hex . '</code>',
+			'Accept: */*, Authorization: Bearer ' . $hex,
+			// Another scheme, no scheme, no header.
+			'Authorization: Token ' . $hex,
+			'Authorization: Digest username="a"',
+			'Authorization: erteilt am 3.11. durch die Leitung.',
+			'Bearer ' . $hex,
+			'This is a bearer instrument.',
+		) as $text ) {
+			self::assertSame( array(), AB_MCP_Sync_Net::credentials( $text, $extra ), $text );
+		}
+		self::assertTrue( AB_MCP_Sync_Net::bearer( $tok . '</code>' ) );
+		self::assertFalse( AB_MCP_Sync_Net::bearer( 'abc123</code>' ) );
+		self::assertFalse( AB_MCP_Sync_Net::bearer( '' ) );
+		self::assertTrue( AB_MCP_Sync_Net::basic( $b64( 'a:b1' ) . '</code>' ) );
+		self::assertFalse( AB_MCP_Sync_Net::basic( '' ) );
+	}
+
+	public function testBasicCountsByThePlaceOfTheValue(): void {
+		// Thomas, 09.11.2026 vormittags, «A: nach Kontext»: in post_content
+		// Basic counts for nothing (limit C as credentials in prose); in every
+		// other unit every pair counts; Bearer and the rest the same anywhere.
+		$b64    = static fn( string $s ): string => base64_encode( $s );
+		$header = 'Authorization: Basic ' . $b64( 'Aladdin:open sesame' );
+		$list   = '{"headers":["Accept: application/json","Authorization: Basic ' . $b64( 'user:password' ) . '"]}';
+		self::assertSame( array( 'authorization' ), AB_MCP_Sync_Net::credentials( $header, array() ) );
+		self::assertSame( array(), AB_MCP_Sync_Net::credentials( $header, array(), $undecidable, false, false ) );
+		self::assertSame( array( 'authorization' ), AB_MCP_Sync_Net::credentials( 'Authorization: Bearer Qm9dXyT3kLz8wR2vNp6s', array(), $undecidable, false, false ), 'Bearer by its form wherever it stands.' );
+		self::assertSame( array( 'github_token' ), AB_MCP_Sync_Net::credentials( $header . "\n" . self::tokens()['ghp'], array(), $undecidable, false, false ) );
+		// The base64 of the pairs of RFC 7617 and MDN after Bearer: free as on
+		// d37bc83 (EXAMPLES, Codex round 8, C1), in post_content and in meta;
+		// the same pairs after Basic lock outside of post_content.
+		$e = self::tokens()['examples'];
+		foreach ( array( $e['rfc 7617'], $e['mdn basic'] ) as $value ) {
+			self::assertSame( base64_encode( 'rfc 7617' === array_search( $value, $e, true ) ? 'Aladdin:open sesame' : 'aladdin:opensesame' ), $value );
+			self::assertSame( array(), AB_MCP_Sync_Net::credentials( 'Authorization: Bearer ' . $value, array() ) );
+			self::assertSame( array(), AB_MCP_Sync_Net::credentials( 'Authorization: Bearer ' . $value, array(), $undecidable, false, false ) );
+			self::assertSame( array( 'authorization' ), AB_MCP_Sync_Net::credentials( 'Authorization: Basic ' . $value, array() ) );
+			self::assertSame( array(), AB_MCP_Sync_Net::credentials( 'Authorization: Basic ' . $value, array(), $undecidable, false, false ) );
+		}
+		self::assertTrue( AB_MCP_Sync_Net::prose_unit( 'post', 'post_content' ) );
+		self::assertTrue( AB_MCP_Sync_Net::prose_unit( 'attachment', 'post_content' ) );
+		self::assertTrue( AB_MCP_Sync_Net::prose_unit( 'post', 'content:post_content' ) );
+		self::assertFalse( AB_MCP_Sync_Net::prose_unit( 'custom_css', 'post_content' ), 'The CSS of a theme is no text of a post.' );
+		foreach ( array( 'post_excerpt', 'post_title', 'description', 'meta:post_content', 'option_value', 'widget:text-2', 'post_content_filtered' ) as $at ) {
+			self::assertFalse( AB_MCP_Sync_Net::prose_unit( 'post', $at ), $at );
+		}
+		$locks = static function ( string $kind, string $at, $raw, bool $stored = false ): array {
+			$acc  = AB_MCP_Sync_Canon::acc();
+			$mark = AB_MCP_Sync_Net::mark( $acc );
+			AB_MCP_Sync_Net::check( $acc, $mark, $kind, $at, $raw, self::ctx(), true, $stored );
+			return array_values( array_filter( array_column( $acc['locks'], 'key' ), static fn( $k ) => 0 === strpos( (string) $k, '*:unread_credential' ) ) );
+		};
+		self::assertSame( array(), $locks( 'post', 'post_content', $header ) );
+		self::assertSame( array(), $locks( 'post', 'post_content', "GET / HTTP/1.1\n" . $header ) );
+		self::assertSame( array(), $locks( 'post', 'post_content', $list ) );
+		foreach ( array(
+			array( 'post', 'post_excerpt', $header, false ),
+			array( 'term', 'description', $header, false ),
+			array( 'custom_css', 'post_content', $header, false ),
+			array( 'post', 'meta:ab_note', $header, true ),
+			array( 'post', 'meta:ab_note', serialize( array( 'text' => $header ) ), true ),
+			array( 'post', 'meta:ab_headers', $list, true ),
+			array( 'option', 'option_value', serialize( array( 'headers' => array( 'Authorization: Basic ' . $b64( 'user:password' ) ) ) ), true ),
+			array( 'option', 'option_value', $list, true ),
+			array( 'widget_area', 'widget:text-2', array( 'title' => 'API', 'text' => $header ), false ),
+		) as list( $kind, $at, $raw, $stored ) ) {
+			self::assertNotSame( array(), $locks( $kind, $at, $raw, $stored ), $kind . ' ' . $at );
+		}
+	}
+
+	public function testAPrivateKeyInPemCountsByItsFrameAndABodyOfBase64(): void {
+		// The steering, 09.11.2026: by its frame (BEGIN and END of the same
+		// label) and a body of valid base64, in any context.
+		$t     = self::tokens();
+		$pem   = $t['pem'];
+		$body  = $t['pem_body'];
+		$extra = array();
+		$end   = static fn( string $label ): string => '-----END ' . $label . 'PRIVATE' . ' KEY-----';
+		foreach ( array(
+			$pem( '', $body ),
+			$pem( 'RSA ', $body ),
+			$pem( 'EC ', $body ),
+			$pem( 'OPENSSH ', $body ),
+			$pem( 'ENCRYPTED ', $body ),
+			$pem( 'RSA ', "Proc-Type: 4,ENCRYPTED\nDEK-Info: AES-128-CBC,3F17F5316E2BAC89\n\n" . $body ),
+			str_replace( 'PRIVATE KEY-----', 'PRIVATE KEY BLOCK-----', $pem( 'PGP ', "Version: GnuPG v2\n\n" . $body . "=nP3x\n" ) ),
+			str_replace( "\n", "\r\n", $pem( '', $body ) ),
+			str_replace( "\n", "\r", $pem( '', $body ) ),
+			'<p>' . str_replace( "\n", '<br>', $pem( '', $body ) ) . '</p>',
+			str_replace( "\n", "<br />\n", $pem( '', $body ) ),
+			$pem( '', preg_replace( '/^/m', '    ', $body ) ),
+			'Hier mein Schlüssel: ' . $pem( '', $body ) . ' – bitte nicht weitergeben.',
+			$pem( '', "MIIEvQIB\n" ),
+			$pem( '', "MIIEvQIBADANBg...\n" ) . "\n" . $pem( '', $body ),
+		) as $text ) {
+			self::assertSame( array( 'private_key' ), AB_MCP_Sync_Net::credentials( $text, $extra ), $text );
+		}
+		foreach ( array(
+			$pem( '', "MIIEvQIBADANBgkqhkiG9w0BAQEFAASC...\n" ),
+			$pem( '', "MIIEpAIBAAKCAQEA\u{2026}\n" ),
+			$pem( '', "(dein Schlüssel)\n" ),
+			$pem( '', "Hier kommt der Key 2 hin\n" ),
+			$pem( '', "Schluessel\n" ),
+			$pem( '', '' ),
+			$pem( '', "...\n" ),
+			"-----BEGIN PUBLIC KEY-----\n" . $body . '-----END PUBLIC KEY-----',
+			"-----BEGIN CERTIFICATE-----\n" . $body . '-----END CERTIFICATE-----',
+			'-----BEGIN RSA PRIVATE' . " KEY-----\n" . $body . $end( 'EC ' ),
+			str_replace( 'BEGIN PGP PRIVATE KEY-----', 'BEGIN PGP PRIVATE KEY BLOCK-----', $pem( 'PGP ', $body ) ),
+			'-----BEGIN PRIVATE' . " KEY-----\n" . $body,
+			'Ein privater Schlüssel beginnt mit -----BEGIN PRIVATE' . ' KEY----- und endet mit ' . $end( '' ) . '. Dazwischen steht Base64.',
+		) as $text ) {
+			self::assertSame( array(), AB_MCP_Sync_Net::credentials( $text, $extra ), $text );
+		}
+		self::assertTrue( AB_MCP_Sync_Net::pem( "MIIE\nvQIB\n" ) );
+		self::assertTrue( AB_MCP_Sync_Net::pem( "Proc-Type: 4,ENCRYPTED\nMIIE" ) );
+		self::assertTrue( AB_MCP_Sync_Net::pem( "=nP3x\nMIIE" ) );
+		self::assertTrue( AB_MCP_Sync_Net::pem( 'MII=' ) );
+		self::assertFalse( AB_MCP_Sync_Net::pem( 'MIIE vQIB' ) );
+		self::assertFalse( AB_MCP_Sync_Net::pem( 'MIIEv' ) );
+		self::assertFalse( AB_MCP_Sync_Net::pem( 'MIIE=vQI' ) );
+	}
+
+	public function testTheValueOfALoginCookieCountsByTheFormWordPressGivesIt(): void {
+		// The steering, 09.11.2026: user|expiration|token|hmac as
+		// wp_generate_auth_cookie() writes it, raw or URL-encoded, with the
+		// name of the cookie or alone; a user with spaces raw, as «+» and as
+		// %20 (Codex round 3 of branch 11b, A4).
+		$t     = self::tokens();
+		$tail  = $t['cookie_tail'];
+		$alnum = $t['alnum'];
+		$hex   = $t['hex'];
+		$extra = array();
+		foreach ( array(
+			'wordpress_logged_in_5c3e2a91=admin|' . $tail,
+			'Cookie: wordpress_logged_in_5c3e2a91=' . rawurlencode( 'admin|' . $tail ) . '; wp-settings-1=x',
+			'wordpress_sec_5c3e2a91=Anna Muster|' . $tail,
+			'wordpress_sec_5c3e2a91=' . urlencode( 'Anna Muster|' . $tail ),
+			'wordpress_sec_5c3e2a91=' . rawurlencode( 'Anna Muster|' . $tail ),
+			'Anna Muster|' . $tail,
+			str_replace( '%7C', '%7c', rawurlencode( 'anna@example.test|' . $tail ) ),
+			'<p>admin|' . $tail . '</p>',
+			'{"c":"admin|' . $tail . '"}',
+			'|' . $tail,
+		) as $text ) {
+			self::assertSame( array( 'auth_token' ), AB_MCP_Sync_Net::credentials( $text, $extra ), $text );
+		}
+		$exp = '1762790400';
+		foreach ( array(
+			'Cookie: wordpress_logged_in_5c3e' . "\u{2026}" . '=admin%7C1700000000%7C' . "\u{2026}" . '%7C' . "\u{2026}",
+			'Cookie: wordpress_logged_in_5c3e=admin%7C1762700000%7Cabc%7Cdef; wp-settings-1=x',
+			'Set-Cookie: wordpress_logged_in_5c3e2a91=deleted; expires=Thu, 01-Jan-1970 00:00:01 GMT',
+			'Das Cookie wordpress_sec_[hash] hat den Wert benutzer|ablauf|token|hmac.',
+			'Cookie: wordpress_test_cookie=WP%20Cookie%20check',
+			'admin|176279040|' . $alnum( 'c', 43 ) . '|' . $hex( 'c', 64 ),
+			'admin|' . $exp . '|' . $alnum( 'c', 42 ) . '|' . $hex( 'c', 64 ),
+			'admin|' . $exp . '|' . $alnum( 'c', 43 ) . '|' . $hex( 'c', 63 ),
+			'admin|' . $exp . '|' . $alnum( 'c', 43 ) . '|' . strtoupper( $hex( 'c', 64 ) ),
+			'admin%7D' . $exp . '%7C' . $alnum( 'c', 43 ) . '%7C' . $hex( 'c', 64 ),
+			'admin|' . $exp . '-' . $alnum( 'c', 43 ) . '|' . $hex( 'c', 64 ),
+			'admin|' . $exp . '|' . $alnum( 'c', 43 ) . '%7D' . $hex( 'c', 64 ),
+		) as $text ) {
+			self::assertSame( array(), AB_MCP_Sync_Net::credentials( $text, $extra ), $text );
+		}
+	}
+
+	public function testAKeyOfTheSerializedFormatWithAValueCountsInATextThatIsNotUnpacked(): void {
+		// The steering, 09.11.2026: a field of a password in the forms of code
+		// and configuration (=, =>, "password": of JSON, an array of PHP, a
+		// key of the serialized format), the last in a column, a leaf, a
+		// fragment in prose.
+		$extra = array();
+		foreach ( array(
+			's:8:"password";s:10:"Sommer2026";'              => array( 'password' ),
+			'Export: a:1:{s:7:"api_key";s:3:"abc";} Ende'     => array( 'api_key' ),
+			's:6:"secret";i:1234;'                            => array( 'secret' ),
+			's:11:"db_password";d:1.5;'                       => array( 'db_password' ),
+			"\$cfg = array( 'db_password' => 'Sommer2026' );" => array( 'db_password' ),
+			'{"password": "Sommer2026"}'                      => array( 'password' ),
+		) as $text => $names ) {
+			self::assertSame( $names, AB_MCP_Sync_Net::credentials( $text, $extra ), $text );
+		}
+		foreach ( array(
+			's:8:"password";s:0:"";',
+			's:8:"password";N;',
+			's:8:"password";b:1;',
+			's:8:"password";a:0:{}',
+			's:5:"title";s:3:"abc";',
+			'x:"password";s:3:"abc";',
+		) as $text ) {
+			self::assertSame( array(), AB_MCP_Sync_Net::credentials( $text, $extra ), $text );
+		}
+	}
+
+	public function testAPlaceholderIsOneOnlyInItsExactFormAsTheWholeValue(): void {
+		// The steering, 09.11.2026; Codex round 3 of branch 11b, A1: never as a
+		// part of a word.
+		foreach ( array( '<token>', '<your token>', '{token}', '{{token}}', '$TOKEN', '${API_KEY}', 'YOUR_TOKEN', 'YOUR_PASSWORD', 'YOUR_ACCESS_TOKEN_2', 'xxx', 'XXXXXXXX', 'xxxx xxxx xxxx xxxx xxxx xxxx', 'xxxx-xxxx', '***', '************', '...', '.....', "\u{2026}", "\u{2026}\u{2026}", '[REDACTED]' ) as $value ) {
+			self::assertTrue( AB_MCP_Sync_Net::placeholder( $value ), $value );
+		}
+		foreach ( array( '', 'fake', 'my_token', 'example', 'your-token', 'your_api_token', 'YOUR_', 'YOUR_TOKENabc', 'xYOUR_TOKEN', 'YOUR_TOKEN.', 'xx', 'x x x', 'xxxx  xxxx', 'xxx1', '**', '..', 'a...', '...a', '<token>x', 'x<token>', '<>', '{}', '$1', '$', '[redacted]', '[REDACTED] ', ' xxx', "xxx\n", "\xFF" ) as $value ) {
+			self::assertFalse( AB_MCP_Sync_Net::placeholder( $value ), $value );
+		}
+	}
+
 	/* ----------------------------------------------------------- compare */
 
 	/** A unit through its readers (a plain value) and the net. */
@@ -897,6 +1405,430 @@ final class SyncNetTest extends TestCase {
 			$acc = AB_MCP_Sync_Canon::acc();
 			AB_MCP_Sync_Net::check( $acc, AB_MCP_Sync_Net::mark( $acc ), 'post', 'u', $empty, $ctx );
 			self::assertSame( array(), $acc['locks'], json_encode( $empty ) );
+		}
+	}
+
+	/* -------------------------------------------- the form (branch 11b) */
+
+	/**
+	 * A stored value (a meta value, an option) through the readers of its
+	 * kind and the net in its stored form, as meta_form() and option() run
+	 * it (Thomas, 08.11.2026: branch 11b); without readers ($readers false)
+	 * the net alone.
+	 */
+	private static function stored( string $raw, bool $readers = true ): array {
+		$ctx  = self::ctx();
+		$acc  = AB_MCP_Sync_Canon::acc();
+		$mark = AB_MCP_Sync_Net::mark( $acc );
+		if ( $readers ) {
+			\AB_MCP_Sync_Credentials::note( $acc, 'post', 'u', \AB_MCP_Sync_Credentials::unit( 'ab_note', $raw ) );
+			AB_MCP_Sync_Canon::value( $raw, $ctx, $acc, 'post', 'u' );
+		}
+		AB_MCP_Sync_Net::check( $acc, $mark, 'post', 'u', $raw, $ctx, true, true );
+		$locks = array();
+		foreach ( $acc['locks'] as $lock ) {
+			$locks[] = $lock['key'] . '@' . $lock['at'];
+		}
+		return array( $locks, $acc );
+	}
+
+	public function testProseInASerializedValueIsProseWhereTheValueIsReadUnpacked(): void {
+		// Branch 11b (Thomas, 08.11.2026; the find of branch 11): the net read
+		// a serialized meta value or option as its text, whose braces made it
+		// read prose as a field of code. Read unpacked, as WordPress hands it
+		// out, each key and leaf on its own: prose is prose there.
+		$prose = 'Spieler: Anna, Token: drei';
+		foreach ( array(
+			'an array'                  => serialize( array( 'text' => $prose ) ),
+			'nested'                    => serialize( array( 'text' => serialize( array( 'text' => $prose ) ) ) ),
+			'serialized twice'          => serialize( serialize( array( 'text' => $prose ) ) ),
+			'a list'                    => serialize( array( 'Felder: Name, Token: "abc"', $prose ) ),
+			'a leaf of CSS beside it'   => serialize( array( 'css' => '{{WRAPPER}} .x{color:red', 'text' => $prose ) ),
+			'deeper in arrays'          => serialize( array( 'a' => array( 'b' => array( 'c' => $prose ) ), 'n' => 3, 'f' => 0.5, 'on' => true ) ),
+			'a text serialized'         => serialize( $prose ),
+			'with white space around'   => "\n " . serialize( array( 'text' => $prose ) ) . "\n",
+		) as $case => $raw ) {
+			list( $locks, $acc ) = self::stored( $raw );
+			self::assertSame( array(), $locks, $case );
+			self::assertSame( array( array(), array() ), array( $acc['credentials']['mixed'], $acc['unread'] ), $case );
+		}
+		// A text read as it is stored (a column of a row, which WordPress
+		// hands out as stored): its braces as before.
+		list( $locks ) = self::check( serialize( array( 'text' => $prose ) ) );
+		self::assertSame( array( '*:unread_credential@u:net:raw' ), $locks, 'A column: the raw text.' );
+		// A meta value that is no serialized text: the raw text, as before.
+		list( $locks ) = self::stored( 'x = {a:1, token: "abc"}' );
+		self::assertSame( array( '*:unread_credential@u:net:raw' ), $locks );
+	}
+
+	public function testACredentialInASerializedValueLocksWhereverItStands(): void {
+		// The other way: a name of a credential with a value beside it in a
+		// key or a leaf, nested, encoded, still locks the unit; the place
+		// names positions, never a key or a value.
+		$b64 = base64_encode( 'password=demo-secret' );
+		foreach ( array(
+			'code in a leaf'      => array( serialize( array( 'cfg' => '{api_key:"demo-secret"}' ) ), 'php.0:raw' ),
+			'nested'              => array( serialize( array( 'x' => serialize( array( 'cfg' => '{api_key:"demo-secret"}' ) ) ) ), 'php.0.php.0:raw' ),
+			'base64 in a leaf'    => array( serialize( array( 'note' => $b64 ) ), 'php.0:raw/base64' ),
+			'base64 nested'       => array( serialize( array( 'a' => array( 'b' => serialize( array( 'note' => $b64 ) ) ) ) ), 'php.0.0.php.0:raw/base64' ),
+			'base64 as a key'     => array( serialize( array( 'title' => 'x', $b64 => 'frei' ) ), 'php.1.key:raw/base64' ),
+			'base64 as a key nested' => array( serialize( array( 'x' => serialize( array( $b64 => 'frei' ) ) ) ), 'php.0.php.0.key:raw/base64' ),
+			'data: in a leaf'     => array( serialize( array( 'img' => 'data:text/plain;base64,' . base64_encode( 'token=demo-secret' ) ) ), 'php.0:raw/data' ),
+			'a leaf of JSON in base64' => array( serialize( array( 'b' => base64_encode( '{"name":"token","value":"s"}' ) ) ), 'php.0:raw/base64' ),
+		) as $case => list( $raw, $place ) ) {
+			list( $locks, $acc ) = self::stored( $raw );
+			self::assertSame( array( '*:unread_credential@u:net:' . $place ), $locks, $case );
+			self::assertSame( 'u', $acc['credentials']['mixed'][0]['unit'], $case );
+			self::assertStringNotContainsString( 'demo-secret', (string) json_encode( array( $acc['locks'], $acc['credentials'], $acc['unread'] ) ), $case );
+			self::assertStringNotContainsString( $b64, (string) json_encode( array( $acc['locks'], $acc['credentials'], $acc['unread'] ) ), $case . ': no key in a place.' );
+		}
+		// What unpacking drops is read in the raw text: the first value of a
+		// key twice (the second replaces it), what follows the end of the
+		// value. The value does not serialize back to the text byte for byte.
+		$twice = 'a:2:{s:4:"note";s:' . strlen( $b64 ) . ':"' . $b64 . '";s:4:"note";s:4:"frei";}';
+		self::assertSame( array( 'note' => 'frei' ), unserialize( $twice ), 'The first value is gone unpacked.' );
+		foreach ( array(
+			'the first value of a key twice' => array( $twice, 'string.1:raw/base64' ),
+			'nested'                         => array( serialize( array( 'x' => $twice ) ), 'php.0.string.1:raw/base64' ),
+			'after the end of the value'     => array( serialize( array( 'note' => 'frei' ) ) . serialize( array( 'note' => $b64 ) ), 'string.3:raw/base64' ),
+		) as $case => list( $raw, $place ) ) {
+			list( $locks ) = self::stored( $raw );
+			self::assertSame( array( '*:unread_credential@u:net:' . $place ), $locks, $case );
+		}
+		// One lock and one note per unit, from the first text that names one.
+		list( $locks, $acc ) = self::stored( serialize( array( 'a' => base64_encode( 'token=demo-secret' ), 'b' => '{api_key:"demo-secret"}' ) ) );
+		self::assertSame( array( '*:unread_credential@u:net:php.0:raw/base64' ), $locks );
+		self::assertCount( 1, $acc['credentials']['mixed'] );
+		// A name the readers named already is free, in a leaf as in the raw text.
+		list( $locks, $acc ) = self::stored( serialize( array( 'cfg' => '{"api_key":"demo-secret"}' ) ) );
+		self::assertSame( array( '*:credential_field@u' ), $locks, 'The credential check named it: the net adds nothing.' );
+	}
+
+	public function testAStoredValueThatDoesNotUnpackOrHoldsAnObjectIsNeverClean(): void {
+		// The readers of the kinds lock such a value (the credential check,
+		// the canonical form), and the net adds nothing to it; the net alone
+		// fails closed as well. Unpacked only through
+		// AB_MCP_Sync_Canon::unserialized(): no object is made.
+		$object = 'a:1:{s:1:"x";O:24:"AB_Net_Test_Never_Woken":0:{}}';
+		foreach ( array(
+			'a count too high'   => array( 'a:2:{s:4:"text";s:4:"kurz";}', '*:unreadable_value@u' ),
+			'a length too high'  => array( 'a:1:{s:4:"text";s:9:"zu kurz";}', '*:php_object@u' ),
+			'an object'          => array( $object, '*:php_object@u' ),
+			'an enum'            => array( 'a:1:{s:1:"x";E:11:"Suit:Hearts";}', '*:php_object@u' ),
+		) as $case => list( $raw, $lock ) ) {
+			list( $locks ) = self::stored( $raw );
+			self::assertSame( array( $lock ), $locks, $case . ': the lock of the readers.' );
+			list( $locks ) = self::stored( $raw, false );
+			self::assertSame( array( $lock . ':net' ), $locks, $case . ': the net alone.' );
+		}
+		self::assertFalse( class_exists( 'AB_Net_Test_Never_Woken', false ), 'No class was asked for.' );
+		// Nested: the leaf that does not unpack, by its place.
+		list( $locks ) = self::stored( serialize( array( 'x' => $object ) ), false );
+		self::assertSame( array( '*:php_object@u:net:php.0' ), $locks );
+		list( $locks ) = self::stored( serialize( array( 'ok' => 'x', 'y' => 'a:2:{s:1:"z";s:4:"kurz";}' ) ), false );
+		self::assertSame( array( '*:unreadable_value@u:net:php.1' ), $locks );
+		// Beyond the layers and the depth of the readers: not read to its end.
+		$layers = 'Spieler: Anna, Token: drei';
+		for ( $i = 0; $i <= AB_MCP_Sync_Canon::MAX_LAYERS; $i++ ) {
+			$layers = serialize( $layers );
+		}
+		list( $locks, $acc ) = self::stored( $layers, false );
+		self::assertSame( array( '*:unreadable_value@u:net:' . implode( '.', array_fill( 0, AB_MCP_Sync_Canon::MAX_LAYERS, 'php' ) ) ), $locks );
+		self::assertSame( array( 'depth:u:net:' . implode( '.', array_fill( 0, AB_MCP_Sync_Canon::MAX_LAYERS, 'php' ) ) ), $acc['unread'] );
+		$deep = 'x';
+		for ( $i = 0; $i <= AB_MCP_Sync_Canon::MAX_DEPTH; $i++ ) {
+			$deep = array( $deep );
+		}
+		list( $locks, $acc ) = self::stored( serialize( $deep ), false );
+		self::assertSame( array( '*:unreadable_value' ), array_map( static fn( $l ) => explode( '@', $l )[0], $locks ) );
+		self::assertCount( 1, $acc['unread'] );
+		self::assertStringStartsWith( 'depth:u:net:php.0.0.0', $acc['unread'][0] );
+	}
+
+	/** A data: address the net reads too deep, and a body in UTF-16 that declares no charset (Codex round 1 of branch 11b, A2). */
+	private static function unread_leaves(): array {
+		$enc = 'password=REVIEW_ONLY';
+		for ( $i = 0; $i < 4; $i++ ) {
+			$enc = rawurlencode( $enc );
+		}
+		return array(
+			'deep'  => 'data:text/plain;charset=utf-16le;base64,' . base64_encode( mb_convert_encoding( $enc, 'UTF-16LE', 'UTF-8' ) ) . ' x',
+			'utf16' => 'data:text/plain;base64,' . base64_encode( mb_convert_encoding( 'password=REVIEW_ONLY', 'UTF-16LE', 'UTF-8' ) ) . ' x',
+		);
+	}
+
+	public function testALeafTheNetDoesNotReadToItsEndLocksAsAColumnDoes(): void {
+		// Codex round 1 of branch 11b, A2: what the layers of a text of the
+		// value do not read to its end (deeper than MAX_DEPTH, a body that is
+		// no text in UTF-8) locks the unit, as the same text does as a column
+		// or a plain value. The raw text does not stand for it: the quotes of
+		// the serialized text end the data: address there (" x" inside it),
+		// its body then does not decode.
+		$leaves = self::unread_leaves();
+		foreach ( array(
+			'plain'  => array( $leaves['deep'], '*:unreadable_value@u:net', 'depth:u:net' ),
+			'a leaf' => array( serialize( array( 'text' => $leaves['deep'] ) ), '*:unreadable_value@u:net:php.0', 'depth:u:net:php.0' ),
+			'nested' => array( serialize( array( 'x' => serialize( array( 'text' => $leaves['deep'] ) ) ) ), '*:unreadable_value@u:net:php.0.php.0', 'depth:u:net:php.0.php.0' ),
+			'a key'  => array( serialize( array( $leaves['deep'] => 'frei' ) ), '*:unreadable_value@u:net:php.0.key', 'depth:u:net:php.0.key' ),
+		) as $case => list( $raw, $lock, $unread ) ) {
+			list( $locks, $acc ) = self::stored( $raw );
+			self::assertSame( array( $lock ), $locks, 'deep, ' . $case );
+			self::assertSame( array( $unread ), $acc['unread'], 'deep, ' . $case );
+		}
+		foreach ( array(
+			'plain'  => array( $leaves['utf16'], 'u:net:raw' ),
+			'a leaf' => array( serialize( array( 'text' => $leaves['utf16'] ) ), 'u:net:php.0:raw' ),
+			'nested' => array( serialize( array( 'x' => serialize( array( 'text' => $leaves['utf16'] ) ) ) ), 'u:net:php.0.php.0:raw' ),
+		) as $case => list( $raw, $place ) ) {
+			list( $locks, $acc ) = self::stored( $raw );
+			self::assertSame( array( '*:unreadable_value@' . $place ), $locks, 'UTF-16, ' . $case );
+			self::assertSame( array( 'charset:' . $place ), $acc['unread'], 'UTF-16, ' . $case );
+		}
+		// A widget instance (a structure) alike.
+		$ctx = self::ctx();
+		foreach ( $leaves as $leaf ) {
+			$acc = AB_MCP_Sync_Canon::acc();
+			AB_MCP_Sync_Net::check( $acc, AB_MCP_Sync_Net::mark( $acc ), 'widget_area', 'w', array( 'title' => 'x', 'text' => $leaf ), $ctx );
+			self::assertSame( array( '*:unreadable_value' ), array_values( array_unique( array_column( $acc['locks'], 'key' ) ) ) );
+			self::assertNotSame( array(), $acc['unread'] );
+		}
+	}
+
+	public function testAReferenceInALayerTakenOutOfALeafLocks(): void {
+		// The same cause as A2 (Codex round 1 of branch 11b): in the raw text
+		// the quotes of the serialized text end the data: address after " x",
+		// its body in UTF-16 does not decode there, and its span of base64 is
+		// no text without a BOM: the raw text holds no layer with the pair.
+		// Every pair in a layer taken out of a text of the value locks, as in
+		// a column.
+		$data = 'data:text/plain;charset=utf-16le;base64,' . base64_encode( mb_convert_encoding( '<a href="/?p=12">Regeln</a>', 'UTF-16LE', 'UTF-8' ) ) . ' x';
+		foreach ( array(
+			'plain'  => array( $data, 'u:net:raw/data' ),
+			'a leaf' => array( serialize( array( 'text' => $data ) ), 'u:net:php.0:raw/data' ),
+			'nested' => array( serialize( array( 'x' => serialize( array( 'text' => $data ) ) ) ), 'u:net:php.0.php.0:raw/data' ),
+		) as $case => list( $raw, $place ) ) {
+			list( $locks ) = self::stored( $raw );
+			self::assertSame( array( '*:unread_reference@' . $place ), $locks, $case );
+		}
+		// One lock of the references per unit.
+		list( $locks ) = self::stored( serialize( array( 'a' => $data, 'b' => $data ) ) );
+		self::assertSame( array( '*:unread_reference@u:net:php.0:raw/data' ), $locks );
+		// The readers locked the unit already (another spelling): nothing is added.
+		$spelled = 'https://staging.test/?p=1%32 ';
+		list( $locks, $acc ) = self::stored( serialize( array( 'a' => $spelled, 'text' => $data ) ) );
+		self::assertSame( array( array(), array( 'u.a?p' ) ), array( $locks, $acc['spelling'] ) );
+		// An address the readers read in a leaf stays free: only a layer taken
+		// out of a text counts every pair.
+		list( $locks ) = self::stored( serialize( array( 'url' => 'https://staging.test/?p=12', 'text' => 'siehe /?p=13' ) ) );
+		self::assertSame( array(), $locks );
+	}
+
+	/**
+	 * The comparison of Codex round 1 of branch 11b (A1, B; the table the
+	 * report names): each text in a serialized value of its kind (a leaf, a
+	 * nested leaf, a value with a float of 17 digits, a widget instance, an
+	 * option) and the same text as a plain value of that kind. expected is
+	 * the verdict both give where it is settled; null where the plain value
+	 * misses a pattern of a credential already on 8df6146 (a finding of its
+	 * own, reported, not in this branch): there only the equality is held.
+	 *
+	 * @return array<string,array{0:string,1:mixed,2:string,3:?string}>
+	 */
+	public static function leafAndPlainValue(): array {
+		$prose = 'Spieler: Anna, Token: drei';
+		$leaf  = static fn( string $t ): string => serialize( array( 'text' => $t ) );
+		$cases = self::unread_leaves();
+		$tok   = self::tokens();
+		$text  = array(
+			'Bearer in headers'           => array( 'Accept: application/json; Authorization: Bearer ' . $tok['hex32'], 'unread_credential' ),
+			'Bearer REVIEW_ONLY in headers' => array( 'Accept: application/json; Authorization: Bearer REVIEW_ONLY', 'frei' ),
+			'Basic with base64'           => array( 'Accept: application/json; Authorization: Basic ' . base64_encode( 'review:REVIEW_ONLY' ), 'unread_credential' ),
+			'quoted prose after Token:'   => array( 'Token: "Ein Spielstein pro Zug"', 'unread_credential' ),
+			'prose'                       => array( $prose, 'frei' ),
+			'a leaf too deep'             => array( $cases['deep'], 'unreadable_value' ),
+			'a leaf not readable'         => array( $cases['utf16'], 'unreadable_value' ),
+			'password=geheim'             => array( 'password=geheim', 'credential_field' ),
+			'api_key: abc123def'          => array( 'api_key: abc123def', null ),
+			'a plain address'             => array( 'https://example.test/spiele/regeln/', 'frei' ),
+			'a private key'               => array( self::tokens()['pem']( '', "MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC7\n" ), 'unread_credential' ),
+			'a cookie header'             => array( 'Cookie: wordpress_logged_in_5c3e=admin%7C1762700000%7Cabc%7Cdef; wp-settings-1=x', 'frei' ),
+			// The fixed formats (the steering, 09.11.2026) and Codex round 3
+			// of branch 11b: A1 a placeholder in a word, A3 a field after a
+			// field, A4 a user with spaces; credentials in prose stay free
+			// (limit C, GRENZEN.md), A2 among them.
+			'a token of a service'        => array( 'Mein Token ist ' . $tok['ghp'] . ', bitte nicht weitergeben.', 'unread_credential' ),
+			'a JSON Web Token'            => array( $tok['jwt'], 'unread_credential' ),
+			'Bearer at the start'         => array( 'Authorization: Bearer Qm9dXyT3kLz8wR2vNp6s', 'unread_credential' ),
+			'Bearer abc123 (Codex 4, B)'  => array( 'Authorization: Bearer abc123', 'frei' ),
+			'Bearer TOKEN after a break'  => array( "Beispiel:\nAuthorization: Bearer TOKEN", 'frei' ),
+			'Basic user:password'         => array( 'Authorization: Basic ' . base64_encode( 'user:password' ), 'unread_credential' ),
+			'Basic admin:admin'           => array( 'Authorization: Basic ' . base64_encode( 'admin:admin' ), 'unread_credential' ),
+			'Basic admin:password'        => array( 'Authorization: Basic ' . base64_encode( 'admin:password' ), 'unread_credential' ),
+			'Bearer YOUR_TOKEN'           => array( 'Authorization: Bearer YOUR_TOKEN', 'frei' ),
+			'A1 a placeholder in a word'  => array( 'Authorization: Bearer my_fake_' . $tok['hex32'], 'unread_credential' ),
+			'A3 a field after a field'    => array( 'Authorization: Basic ' . base64_encode( 'abc' ) . ';Authorization: Bearer ' . $tok['hex32'], 'unread_credential' ),
+			'A4 a cookie, a space'        => array( 'wordpress_sec_5c3e2a91=Anna Muster|' . $tok['cookie_tail'], 'unread_credential' ),
+			'A4 a cookie, a space as +'   => array( 'wordpress_sec_5c3e2a91=' . urlencode( 'Anna Muster|' . $tok['cookie_tail'] ), 'unread_credential' ),
+			'A4 a cookie, a space as %20' => array( 'wordpress_sec_5c3e2a91=' . rawurlencode( 'Anna Muster|' . $tok['cookie_tail'] ), 'unread_credential' ),
+			'a key of the serialized format' => array( 'Export: s:8:"password";s:10:"Sommer2026";', 'unread_credential' ),
+			'password: Sommer2026'        => array( 'password: Sommer2026', 'frei' ),
+			'A2 password before a tag'    => array( '<p>password: Sommer2026</p>', null ),
+			'A3 user:, password: in prose' => array( 'user: anna, password: Sommer2026', 'frei' ),
+			'Token: Zugreihenfolgemarkierung' => array( 'Token: Zugreihenfolgemarkierung', 'frei' ),
+			'Password: RESET'             => array( 'Password: RESET', 'frei' ),
+		);
+		$out = array();
+		foreach ( $text as $name => list( $t, $expected ) ) {
+			$out[ 'meta, ' . $name ]          = array( 'meta', $leaf( $t ), $t, $expected );
+			$out[ 'meta nested, ' . $name ]   = array( 'meta', serialize( array( 'x' => $leaf( $t ) ) ), $t, $expected );
+			$out[ 'option, ' . $name ]        = array( 'option', $leaf( $t ), $t, $expected );
+		}
+		$out['meta, a float of 17 digits and prose'] = array( 'meta', 'a:2:{s:1:"f";d:0.10000000000000001;s:4:"text";s:' . strlen( $prose ) . ':"' . $prose . '";}', $prose, 'frei' );
+		$out['a text widget with prose']             = array( 'widget', array( 'title' => 'Spielanleitung', 'text' => $prose, 'filter' => true, 'visual' => true ), $prose, 'frei' );
+		$out['the option of a plugin with prose']    = array( 'option', serialize( array( 'login_label' => 'Login: Name, Token: aus der App', 'enabled' => '1' ) ), 'Login: Name, Token: aus der App', 'frei' );
+		return $out;
+	}
+
+	/** The verdict of the readers of a kind and the net on a value: the keys of the locks of the checks, or frei. */
+	private static function verdict( string $kind, $raw ): string {
+		$ctx  = self::ctx();
+		$acc  = AB_MCP_Sync_Canon::acc();
+		$mark = AB_MCP_Sync_Net::mark( $acc );
+		$k    = 'meta' === $kind ? 'post' : ( 'widget' === $kind ? 'widget_area' : 'option' );
+		$at   = 'meta' === $kind ? 'meta:ab_note' : ( 'widget' === $kind ? 'widget:text-2' : 'option_value' );
+		$name = 'meta' === $kind ? 'ab_note' : ( 'widget' === $kind ? 'text' : 'image_default_link_type' );
+		if ( \AB_MCP_Sync_Credentials::note( $acc, $k, $at, \AB_MCP_Sync_Credentials::unit( $name, $raw ) ) ) {
+			if ( is_array( $raw ) ) {
+				AB_MCP_Sync_Canon::structure( $raw, $ctx, $acc, $k, $at );
+			} else {
+				AB_MCP_Sync_Canon::value( $raw, $ctx, $acc, $k, $at );
+			}
+			AB_MCP_Sync_Net::check( $acc, $mark, $k, $at, $raw, $ctx, true, 'widget' !== $kind );
+		}
+		$keys = array();
+		foreach ( $acc['locks'] as $lock ) {
+			if ( 0 === strpos( (string) $lock['key'], '*:' ) ) {
+				$keys[ substr( (string) $lock['key'], 2 ) ] = true;
+			}
+		}
+		return array() === $keys ? 'frei' : implode( '+', array_keys( $keys ) );
+	}
+
+	#[DataProvider( 'leafAndPlainValue' )]
+	public function testATextInASerializedValueIsJudgedAsTheSameTextAsAPlainValue( string $kind, $serialized, string $plain, ?string $expected ): void {
+		// Codex round 1 of branch 11b, A1 and B: a leaf gets no other context
+		// than the same text as a plain value of its kind (the same reader,
+		// the start of the text, the fields after a separator), nested, in a
+		// value that does not serialize back, in a widget, in an option.
+		$leaf = self::verdict( $kind, $serialized );
+		self::assertSame( self::verdict( $kind, $plain ), $leaf );
+		if ( null !== $expected ) {
+			self::assertSame( $expected, $leaf );
+		}
+	}
+
+	public function testTheReferencesOfAStoredValueAreCountedOverItsRawText(): void {
+		// The count of branch 4 stays over the raw value: what the readers
+		// read in the leaves, the net counts in the raw text; a key, which no
+		// reader rewrites, counts as well.
+		list( $locks ) = self::stored( serialize( array( 'text' => 'siehe index.php?p=12' ) ) );
+		self::assertSame( array( '*:unread_reference@u:net:raw' ), $locks );
+		list( $locks, $acc ) = self::stored( serialize( array( 'url' => 'https://staging.test/?p=12', 'text' => 'siehe /?p=13' ) ) );
+		self::assertSame( array( array(), array( 'post:12', 'post:13' ) ), array( $locks, $acc['addressed'] ) );
+		list( $locks ) = self::stored( serialize( array( '/?p=12' => 'x' ) ) );
+		self::assertSame( array( '*:unread_reference@u:net:raw' ), $locks, 'An address with an id in a key.' );
+		list( $locks ) = self::stored( serialize( array( 'note' => base64_encode( '{"src":"/?p=12"}' ) ) ) );
+		self::assertSame( array( '*:unread_reference@u:net:raw/base64' ), $locks );
+	}
+
+	public function testEachKeyAndLeafOfAStructureIsReadOnItsOwn(): void {
+		// A widget instance (a structure): every key and every leaf a text of
+		// its own (branch 11b; before, the leaves joined and no key), its
+		// keys counted for the references too.
+		$ctx = self::ctx();
+		$net = static function ( array $settings ) use ( $ctx ): array {
+			$acc = AB_MCP_Sync_Canon::acc();
+			AB_MCP_Sync_Net::check( $acc, AB_MCP_Sync_Net::mark( $acc ), 'widget_area', 'w', $settings, $ctx );
+			return array_map( static fn( $l ) => $l['key'] . '@' . $l['at'], $acc['locks'] );
+		};
+		self::assertSame( array( '*:unread_credential@w:net:1.key:raw/base64' ), $net( array( 'title' => 'x', base64_encode( 'password=demo-secret' ) => 'frei' ) ) );
+		self::assertSame( array( '*:unread_credential@w:net:0.1:raw/base64' ), $net( array( 'items' => array( 'a', base64_encode( 'token=demo-secret' ) ) ) ) );
+		self::assertSame( array( '*:unread_reference@w:net:raw' ), $net( array( '/?p=12' => 'x' ) ), 'An address with an id in a key.' );
+		// A leaf with an open brace leaves the next one prose.
+		self::assertSame( array(), $net( array( 'css' => '.x{', 'text' => 'Felder: Name, Token: "abc"' ) ) );
+		// A leaf serialized in its turn: unpacked.
+		self::assertSame( array(), $net( array( 'text' => serialize( array( 'text' => 'Spieler: Anna, Token: drei' ) ) ) ) );
+		self::assertSame( array( '*:unread_credential@w:net:0.php.0:raw' ), $net( array( 'cfg' => serialize( array( 'x' => '{api_key:"demo-secret"}' ) ) ) ) );
+		// An object in a structure (none comes from AB_MCP_Sync_Canon::
+		// unserialized(), fail closed all the same).
+		self::assertSame( array( '*:php_object@w:net:1' ), $net( array( 'title' => 'x', 'o' => new \stdClass() ) ) );
+		// A structure is unpacked already, as AB_MCP_Sync_Canon::structure()
+		// counts it: a leaf serialized as often as the layers allow is not
+		// read to its end.
+		$leaf = 'Spieler: Anna, Token: drei';
+		for ( $i = 1; $i < AB_MCP_Sync_Canon::MAX_LAYERS; $i++ ) {
+			$leaf = serialize( $leaf );
+		}
+		self::assertSame( array(), $net( array( 'text' => $leaf ) ), 'Within the layers.' );
+		self::assertSame( array( '*:unreadable_value@w:net:0' . str_repeat( '.php', AB_MCP_Sync_Canon::MAX_LAYERS - 1 ) ), $net( array( 'text' => serialize( $leaf ) ) ), 'Beyond them.' );
+	}
+
+	public function testAValueThatDoesNotSerializeBackIsReadByTheStringsOfItsFormat(): void {
+		// A value whose text does not come back byte for byte from its value
+		// although nothing was dropped (a float written with another
+		// serialize_precision, as PHP 8.5 writes it with 17; a key of digits
+		// as a text) is read by every string of its format as well, each on
+		// its own, not as the whole text with its braces: prose is prose
+		// there too (Codex round 1 of branch 11b, the table of A1 and B).
+		$prose = 'Spieler: Anna, Token: drei';
+		$float = 'a:2:{s:1:"f";d:0.10000000000000001;s:4:"text";s:' . strlen( $prose ) . ':"' . $prose . '";}';
+		self::assertNotSame( $float, serialize( unserialize( $float ) ) );
+		foreach ( array(
+			'a float'                 => $float,
+			'a key of digits as text' => 'a:1:{s:1:"5";s:' . strlen( $prose ) . ':"' . $prose . '";}',
+			'a float, nested'         => serialize( array( 'x' => $float ) ),
+			'a float, a null, a flag' => 'a:4:{s:1:"f";d:0.10000000000000001;s:1:"n";N;s:1:"b";b:1;s:4:"text";s:' . strlen( $prose ) . ':"' . $prose . '";}',
+			'a float without prose'   => 'a:1:{s:1:"f";d:0.10000000000000001;}',
+		) as $case => $raw ) {
+			list( $locks, $acc ) = self::stored( $raw );
+			self::assertSame( array( array(), array() ), array( $locks, $acc['unread'] ), $case );
+		}
+		// A credential in such a value still locks, by its string.
+		$b64 = base64_encode( 'password=demo-secret' );
+		list( $locks ) = self::stored( 'a:2:{s:1:"f";d:0.10000000000000001;s:4:"note";s:' . strlen( $b64 ) . ':"' . $b64 . '";}' );
+		self::assertSame( array( '*:unread_credential@u:net:string.2:raw/base64' ), $locks );
+		// A string of the format that is serialized in its turn is unpacked
+		// (a dropped value that holds an object locks, never made).
+		$inner = 'a:1:{s:1:"o";O:8:"stdClass":0:{}}';
+		list( $locks ) = self::stored( 'a:2:{s:1:"x";s:' . strlen( $inner ) . ':"' . $inner . '";s:1:"x";s:4:"frei";}', false );
+		self::assertSame( array( '*:php_object@u:net:string.1' ), $locks );
+	}
+
+	public function testAScalarOfTheFormatOnlyInItsStrictFormElseTheTextIsReadWhole(): void {
+		// Codex round 2 of branch 11b, A: serialized_strings() took any bytes
+		// after i:, d: or b: to the next ";" as a scalar, so what follows the
+		// end of the value went unread (unserialize() drops it, the round
+		// trip differs, the strings were read: none held it). A scalar counts
+		// only in the strict form serialize() writes it; anything else is no
+		// record, the text is read as a whole.
+		$b64 = base64_encode( 'password=REVIEW_ONLY' );
+		foreach ( array(
+			'i:'             => array( 'i:password=REVIEW_ONLY;', 'raw' ),
+			'd:'             => array( 'd:password=REVIEW_ONLY;', 'raw' ),
+			'b:'             => array( 'b:password=REVIEW_ONLY;', 'raw' ),
+			'base64 after i:' => array( 'i:' . $b64 . ';', 'raw/base64' ),
+		) as $case => list( $tail, $path ) ) {
+			$raw = 'a:1:{s:4:"note";s:4:"frei";}' . $tail;
+			self::assertSame( array( 'note' => 'frei' ), @unserialize( $raw ), $case . ': unserialize() drops it.' );
+			list( $locks ) = self::stored( $raw );
+			self::assertSame( array( '*:unread_credential@u:net:' . $path ), $locks, $case . ' (the readers find it clean)' );
+		}
+		// The forms serialize() writes stay records, read by their strings:
+		// prose beside them free (the text as a whole would lock it).
+		$prose = 'Spieler: Anna, Token: drei';
+		foreach ( array( 'i:-12;', 'i:+7;', 'd:0.1;', 'd:-1.5E-10;', 'd:1.0E+25;', 'd:INF;', 'd:-INF;', 'd:NAN;', 'b:0;', 'b:1;', 'N;' ) as $scalar ) {
+			list( $locks ) = self::stored( 'a:3:{s:1:"f";d:0.10000000000000001;s:1:"x";' . $scalar . 's:4:"text";s:' . strlen( $prose ) . ':"' . $prose . '";}', false );
+			self::assertSame( array(), $locks, $scalar );
 		}
 	}
 
