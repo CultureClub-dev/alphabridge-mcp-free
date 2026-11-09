@@ -1428,6 +1428,7 @@ final class SyncNetTest extends TestCase {
 		$prose = 'Spieler: Anna, Token: drei';
 		$leaf  = static fn( string $t ): string => serialize( array( 'text' => $t ) );
 		$cases = self::unread_leaves();
+		$tok   = self::tokens();
 		$text  = array(
 			'Bearer in headers'           => array( 'Accept: application/json; Authorization: Bearer REVIEW_ONLY', 'unread_credential' ),
 			'Basic with base64'           => array( 'Accept: application/json; Authorization: Basic ' . base64_encode( 'review:REVIEW_ONLY' ), 'unread_credential' ),
@@ -1439,7 +1440,26 @@ final class SyncNetTest extends TestCase {
 			'api_key: abc123def'          => array( 'api_key: abc123def', null ),
 			'a plain address'             => array( 'https://example.test/spiele/regeln/', 'frei' ),
 			'a private key'               => array( self::tokens()['pem']( '', "MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC7\n" ), 'unread_credential' ),
-			'a cookie header'             => array( 'Cookie: wordpress_logged_in_5c3e=admin%7C1762700000%7Cabc%7Cdef; wp-settings-1=x', null ),
+			'a cookie header'             => array( 'Cookie: wordpress_logged_in_5c3e=admin%7C1762700000%7Cabc%7Cdef; wp-settings-1=x', 'frei' ),
+			// The fixed formats (the steering, 09.11.2026) and Codex round 3
+			// of branch 11b: A1 a placeholder in a word, A3 a field after a
+			// field, A4 a user with spaces; credentials in prose stay free
+			// (limit C, GRENZEN.md), A2 among them.
+			'a token of a service'        => array( 'Mein Token ist ' . $tok['ghp'] . ', bitte nicht weitergeben.', 'unread_credential' ),
+			'a JSON Web Token'            => array( $tok['jwt'], 'unread_credential' ),
+			'Bearer at the start'         => array( 'Authorization: Bearer abc123', 'unread_credential' ),
+			'Bearer YOUR_TOKEN'           => array( 'Authorization: Bearer YOUR_TOKEN', 'frei' ),
+			'A1 a placeholder in a word'  => array( 'Authorization: Bearer my_fake_' . $tok['hex32'], 'unread_credential' ),
+			'A3 a field after a field'    => array( 'Authorization: Basic ' . base64_encode( 'abc' ) . ';Authorization: Bearer abc123', 'unread_credential' ),
+			'A4 a cookie, a space'        => array( 'wordpress_sec_5c3e2a91=Anna Muster|' . $tok['cookie_tail'], 'unread_credential' ),
+			'A4 a cookie, a space as +'   => array( 'wordpress_sec_5c3e2a91=' . urlencode( 'Anna Muster|' . $tok['cookie_tail'] ), 'unread_credential' ),
+			'A4 a cookie, a space as %20' => array( 'wordpress_sec_5c3e2a91=' . rawurlencode( 'Anna Muster|' . $tok['cookie_tail'] ), 'unread_credential' ),
+			'a key of the serialized format' => array( 'Export: s:8:"password";s:10:"Sommer2026";', 'unread_credential' ),
+			'password: Sommer2026'        => array( 'password: Sommer2026', 'frei' ),
+			'A2 password before a tag'    => array( '<p>password: Sommer2026</p>', null ),
+			'A3 user:, password: in prose' => array( 'user: anna, password: Sommer2026', 'frei' ),
+			'Token: Zugreihenfolgemarkierung' => array( 'Token: Zugreihenfolgemarkierung', 'frei' ),
+			'Password: RESET'             => array( 'Password: RESET', 'frei' ),
 		);
 		$out = array();
 		foreach ( $text as $name => list( $t, $expected ) ) {
