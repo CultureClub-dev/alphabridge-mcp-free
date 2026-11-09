@@ -97,7 +97,10 @@
  * code there: prose in a leaf («Spieler: Anna, Token: drei») is prose. A
  * text that does not serialize back from its value byte for byte (a key
  * twice, bytes after its end) is read as a whole as well; one that does not
- * unpack or holds an object locks the unit.
+ * unpack or holds an object locks the unit, and so does what the layers of
+ * one of its texts do not read to its end, as for a column (Codex round 1
+ * of branch 11b, A2: the quotes of the serialized text end a data: address
+ * elsewhere, so the raw text does not stand for it).
  *
  * The net only locks. Rewriting stays with the structured readers, in the
  * spellings they read as the core reads them (the JSON of a data-*
@@ -366,25 +369,46 @@ final class AB_MCP_Sync_Net {
 				(string) $kind,
 				(string) $at,
 				static function ( $where, $one ) use ( &$acc, $kind, $at, $named, $extra, &$unreadable ) {
-					$place = $at . ':net:' . ( '' === $where ? '' : $where . ':' );
-					self::count_credentials( $acc, (string) $kind, (string) $at, $place, self::layers( $one ), $named, $extra, $unreadable );
+					$deep   = false;
+					$unread = array();
+					$place  = $at . ':net:' . ( '' === $where ? '' : $where . ':' );
+					self::count_credentials( $acc, (string) $kind, (string) $at, $place, self::layers( $one, $deep, $unread ), $named, $extra, $unreadable );
+					// What the layers of the text do not read to its end locks
+					// the unit, as for a column: the raw text does not stand
+					// for it, its quotes end a data: address elsewhere than
+					// the text does (Codex round 1 of branch 11b, A2).
+					self::not_read( $acc, (string) $kind, $place, $unread, $deep ? $at . ':net' . ( '' === $where ? '' : ':' . $where ) : null );
 				}
 			);
 		} else {
 			self::count_credentials( $acc, (string) $kind, (string) $at, $at . ':net:', $layers, $named, $extra, $unreadable );
 		}
 		// What the layers of the raw text did not read to its end locks the
-		// unit, in every form: the raw text holds each text of the value as
-		// its bytes (a key, a leaf, a serialized text inside), so a body
-		// that is no text in UTF-8 in one of them is one in the raw text, and
-		// its layers reach at least as deep. A body that is no text in UTF-8:
-		// not read, never clean.
+		// unit, in every form.
+		self::not_read( $acc, (string) $kind, $at . ':net:', $unread, $deep ? $at . ':net' : null );
+	}
+
+	/**
+	 * What the layers of a text did not read to its end locks the unit: a
+	 * body that is no text in UTF-8 (not read, never clean), a derivation
+	 * beyond the depth or the layers (too_deep()).
+	 *
+	 * @param array       $acc    Accumulator.
+	 * @param string      $kind   Kind.
+	 * @param string      $place  Where the layers stand, before the path of a
+	 *                            layer (<unit>:net:, <unit>:net:<where>:).
+	 * @param string[]    $unread The paths of layers() with such a body.
+	 * @param string|null $deep   Where the text stands where layers() did not
+	 *                            follow a derivation; null where it did.
+	 * @return void
+	 */
+	private static function not_read( array &$acc, $kind, $place, array $unread, $deep ) {
 		foreach ( $unread as $path ) {
-			AB_MCP_Sync_Canon::lock( $acc, (string) $kind, 'unreadable_value', $at . ':net:' . $path );
-			$acc['unread'][] = 'charset:' . $at . ':net:' . $path;
+			AB_MCP_Sync_Canon::lock( $acc, $kind, 'unreadable_value', $place . $path );
+			$acc['unread'][] = 'charset:' . $place . $path;
 		}
-		if ( $deep ) {
-			AB_MCP_Sync_Canon::too_deep( $acc, $at . ':net', (string) $kind );
+		if ( null !== $deep ) {
+			AB_MCP_Sync_Canon::too_deep( $acc, $deep, $kind );
 		}
 	}
 

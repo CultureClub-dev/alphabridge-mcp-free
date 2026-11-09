@@ -1163,6 +1163,15 @@ final class SyncStructureTest extends TestCase {
 			'an object'       => array( 'raw' => 'a:1:{s:1:"x";O:8:"stdClass":0:{}}' ),
 			'does not unpack' => array( 'raw' => 'a:2:{s:4:"text";s:4:"kurz";}' ),
 		);
+		// A leaf the net does not read to its end: a data: address too deep, a
+		// body in UTF-16 that declares no charset (Codex round 1 of branch
+		// 11b, A2; the quotes of the serialized text end the address there).
+		$enc = 'password=' . $secret;
+		for ( $i = 0; $i < 4; $i++ ) {
+			$enc = rawurlencode( $enc );
+		}
+		$cases['a leaf too deep']      = array( 'value' => array( 'text' => 'data:text/plain;charset=utf-16le;base64,' . base64_encode( mb_convert_encoding( $enc, 'UTF-16LE', 'UTF-8' ) ) . ' x' ) );
+		$cases['a leaf not readable'] = array( 'value' => array( 'text' => 'data:text/plain;base64,' . base64_encode( mb_convert_encoding( 'password=' . $secret, 'UTF-16LE', 'UTF-8' ) ) . ' x' ) );
 		$posts = array();
 		foreach ( $cases as $case => $how ) {
 			$steps = array(
@@ -1190,10 +1199,14 @@ final class SyncStructureTest extends TestCase {
 			$objects[] = array( 'post', (string) $post );
 		}
 		$report = self::report( self::staged() );
+		$free   = array();
 		foreach ( $objects as list( $kind, $ref ) ) {
 			$entry = self::entry( $report['all'], $kind, 'staging', $ref );
-			self::assertTrue( self::held_by_credential( $entry['locks'] ), $kind . ' ' . $ref . ': ' . json_encode( $entry['locks'] ) );
+			if ( ! self::held_by_credential( $entry['locks'] ?? array() ) ) {
+				$free[] = $kind . ':' . $ref . ( 'post' === $kind ? ' (' . array_search( (int) $ref, $posts, true ) . ')' : '' );
+			}
 		}
+		self::assertSame( array(), $free, 'Not held in the report.' );
 		$package = self::b(
 			array(
 				array(

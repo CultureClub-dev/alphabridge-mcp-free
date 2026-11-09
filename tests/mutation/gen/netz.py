@@ -57,6 +57,9 @@ N_NAMED = 'testTheNetLocksANameTheCheckDidNotNameAndNotesIt'
 N_TEXTS = 'testTheNetReadsTheTextsOfAStructureAndNothingOfAnEmptyValue'
 U_FORM = 'testTheFinishedContentReadsSerializedMetaAndAnOptionUnpackedAsTheirKinds'
 IT_PROSE = 'testProseInASerializedValueOfMetaAndOfACoreOptionGoesThroughTheReportAndIntoThePackage'
+IT_CRED = 'testACredentialInASerializedValueOfMetaAndOfAnOptionStillHoldsItInTheReportAndThePackage'
+N_LEAFREAD = 'testALeafTheNetDoesNotReadToItsEndLocksAsAColumnDoes'
+N_DEPTH = 'testBeyondTheDepthTheUnitIsNotReadToItsEnd'
 
 # ------------------------------------------------------- check(): the form
 APART = "\t\tif ( is_array( $raw ) || ( $stored && is_string( $raw ) && is_serialized( $raw ) ) ) {"
@@ -69,10 +72,10 @@ e('apart-only-stored', 'check(): a text WordPress hands out as stored (a column)
 e('structure-layer', 'check(): a structure is unpacked already, its layers counted from one as AB_MCP_Sync_Canon::structure() counts them', NT,
   "\t\t\t\tis_array( $raw ) ? 1 : 0,", "\t\t\t\t0,", 'net', N_STRUCT)
 e('place', 'check(): the place of a text in the lock (positions, never a key or a value)', NT,
-  "\t\t\t\t\t$place = $at . ':net:' . ( '' === $where ? '' : $where . ':' );",
-  "\t\t\t\t\t$place = $at . ':net:';", 'net', N_CRED)
+  "\t\t\t\t\t$place  = $at . ':net:' . ( '' === $where ? '' : $where . ':' );",
+  "\t\t\t\t\t$place  = $at . ':net:';", 'net', N_CRED)
 e('texts-each', 'check(): the credentials counted in each text of the value', NT,
-  "\t\t\t\t\tself::count_credentials( $acc, (string) $kind, (string) $at, $place, self::layers( $one ), $named, $extra, $unreadable );\n",
+  "\t\t\t\t\tself::count_credentials( $acc, (string) $kind, (string) $at, $place, self::layers( $one, $deep, $unread ), $named, $extra, $unreadable );\n",
   "", 'net', N_CRED)
 e('raw-whole', 'check(): the credentials of a text read as it is stored counted in its layers', NT,
   "\t\t\tself::count_credentials( $acc, (string) $kind, (string) $at, $at . ':net:', $layers, $named, $extra, $unreadable );\n",
@@ -80,6 +83,18 @@ e('raw-whole', 'check(): the credentials of a text read as it is stored counted 
 e('count-once', 'count_credentials(): one lock and one note per unit, over its texts as well', NT,
   "\t\t\tif ( $unreadable ) {\n\t\t\t\treturn;\n\t\t\t}",
   "\t\t\tif ( false ) {\n\t\t\t\treturn;\n\t\t\t}", 'net', N_CRED)
+# Codex round 1 of branch 11b, A2: a text not read to its end locks as a column.
+LEAF_NOT_READ = "\t\t\t\t\tself::not_read( $acc, (string) $kind, $place, $unread, $deep ? $at . ':net' . ( '' === $where ? '' : ':' . $where ) : null );\n"
+e('leaf-not-read', 'check(): what the layers of a text of the value do not read to its end locks the unit, as for a column (A2)', NT,
+  LEAF_NOT_READ, "", 'net', N_LEAFREAD)
+e('leaf-not-read-it', 'check(): a leaf too deep or not readable is held in the report and the package (A2)', NT,
+  LEAF_NOT_READ, "", 'it', IT_CRED)
+e('leaf-deep', 'check(): a text of the value read deeper than the net reads locks (A2)', NT,
+  "$deep ? $at . ':net' . ( '' === $where ? '' : ':' . $where ) : null );",
+  "null );", 'net', N_LEAFREAD)
+e('raw-not-read', 'check(): what the layers of the raw text do not read to its end locks the unit', NT,
+  "\t\tself::not_read( $acc, (string) $kind, $at . ':net:', $unread, $deep ? $at . ':net' : null );\n", "", 'net', N_DEPTH)
+
 # ------------------------------------------------------------- texts()
 e('texts-depth', 'texts(): deeper than the readers read: not read to its end', NT,
   "\t\tif ( $depth > AB_MCP_Sync_Canon::MAX_DEPTH ) {", "\t\tif ( false ) {", 'net', N_UNREAD)

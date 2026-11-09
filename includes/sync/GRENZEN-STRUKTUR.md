@@ -613,9 +613,19 @@ Position, die das Theme hier nicht registriert, in der Prüfung des Laufs
   oder Wert des Arrays, der selbst ein Zugangsdatum sein kann.
 - Die Zählung der Verweise aus Zweig 4 bleibt über den Rohwert: bei Meta
   und Optionen über den serialisierten Text, beim Widget-Bereich über
-  Schlüssel und Blätter. Was dort nicht zu Ende gelesen ist (ein Körper,
-  der kein UTF-8 ist, tiefer als das Netz liest), sperrt wie bisher; der
-  Rohwert enthält jeden Text des Werts, darum gilt das für jede Form.
+  Schlüssel und Blätter. Was die Schichten des Rohwerts nicht zu Ende
+  lesen (ein Körper, der kein UTF-8 ist, tiefer als das Netz liest),
+  sperrt wie bisher. Ebenso sperrt, was die Schichten eines einzelnen
+  Texts nicht zu Ende lesen, wie bei einer Spalte (Codex-Runde 1 zu 11b,
+  A2): eine `data:`-Adresse in einem Blatt, die tiefer reicht, als das Netz
+  liest, ein Körper in UTF-16 ohne Zeichensatz. Der Rohwert steht dafür
+  nicht ein: die Anführungszeichen des serialisierten Texts beenden die
+  Adresse dort an anderer Stelle (`… x"`), ihr Körper dekodiert dann nicht.
+  Prüffälle
+  `SyncNetTest::testALeafTheNetDoesNotReadToItsEndLocksAsAColumnDoes` und
+  zwei Fälle in
+  `SyncStructureTest::testACredentialInASerializedValueOfMetaAndOfAnOptionStillHoldsItInTheReportAndThePackage`;
+  auf `8df6146` gingen beide durch.
 - Ein echtes Zugangsdatum sperrt weiter: im Blatt als Code
   (`{api_key:"…"}`), verschachtelt, in Base64 in einem Blatt oder einem
   Schlüssel, im verdrängten ersten Wert eines doppelten Schlüssels, in

@@ -1037,6 +1037,55 @@ final class SyncNetTest extends TestCase {
 		self::assertStringStartsWith( 'depth:u:net:php.0.0.0', $acc['unread'][0] );
 	}
 
+	/** A data: address the net reads too deep, and a body in UTF-16 that declares no charset (Codex round 1 of branch 11b, A2). */
+	private static function unread_leaves(): array {
+		$enc = 'password=REVIEW_ONLY';
+		for ( $i = 0; $i < 4; $i++ ) {
+			$enc = rawurlencode( $enc );
+		}
+		return array(
+			'deep'  => 'data:text/plain;charset=utf-16le;base64,' . base64_encode( mb_convert_encoding( $enc, 'UTF-16LE', 'UTF-8' ) ) . ' x',
+			'utf16' => 'data:text/plain;base64,' . base64_encode( mb_convert_encoding( 'password=REVIEW_ONLY', 'UTF-16LE', 'UTF-8' ) ) . ' x',
+		);
+	}
+
+	public function testALeafTheNetDoesNotReadToItsEndLocksAsAColumnDoes(): void {
+		// Codex round 1 of branch 11b, A2: what the layers of a text of the
+		// value do not read to its end (deeper than MAX_DEPTH, a body that is
+		// no text in UTF-8) locks the unit, as the same text does as a column
+		// or a plain value. The raw text does not stand for it: the quotes of
+		// the serialized text end the data: address there (" x" inside it),
+		// its body then does not decode.
+		$leaves = self::unread_leaves();
+		foreach ( array(
+			'plain'  => array( $leaves['deep'], '*:unreadable_value@u:net', 'depth:u:net' ),
+			'a leaf' => array( serialize( array( 'text' => $leaves['deep'] ) ), '*:unreadable_value@u:net:php.0', 'depth:u:net:php.0' ),
+			'nested' => array( serialize( array( 'x' => serialize( array( 'text' => $leaves['deep'] ) ) ) ), '*:unreadable_value@u:net:php.0.php.0', 'depth:u:net:php.0.php.0' ),
+			'a key'  => array( serialize( array( $leaves['deep'] => 'frei' ) ), '*:unreadable_value@u:net:php.0.key', 'depth:u:net:php.0.key' ),
+		) as $case => list( $raw, $lock, $unread ) ) {
+			list( $locks, $acc ) = self::stored( $raw );
+			self::assertSame( array( $lock ), $locks, 'deep, ' . $case );
+			self::assertSame( array( $unread ), $acc['unread'], 'deep, ' . $case );
+		}
+		foreach ( array(
+			'plain'  => array( $leaves['utf16'], 'u:net:raw' ),
+			'a leaf' => array( serialize( array( 'text' => $leaves['utf16'] ) ), 'u:net:php.0:raw' ),
+			'nested' => array( serialize( array( 'x' => serialize( array( 'text' => $leaves['utf16'] ) ) ) ), 'u:net:php.0.php.0:raw' ),
+		) as $case => list( $raw, $place ) ) {
+			list( $locks, $acc ) = self::stored( $raw );
+			self::assertSame( array( '*:unreadable_value@' . $place ), $locks, 'UTF-16, ' . $case );
+			self::assertSame( array( 'charset:' . $place ), $acc['unread'], 'UTF-16, ' . $case );
+		}
+		// A widget instance (a structure) alike.
+		$ctx = self::ctx();
+		foreach ( $leaves as $leaf ) {
+			$acc = AB_MCP_Sync_Canon::acc();
+			AB_MCP_Sync_Net::check( $acc, AB_MCP_Sync_Net::mark( $acc ), 'widget_area', 'w', array( 'title' => 'x', 'text' => $leaf ), $ctx );
+			self::assertSame( array( '*:unreadable_value' ), array_values( array_unique( array_column( $acc['locks'], 'key' ) ) ) );
+			self::assertNotSame( array(), $acc['unread'] );
+		}
+	}
+
 	public function testTheReferencesOfAStoredValueAreCountedOverItsRawText(): void {
 		// The count of branch 4 stays over the raw value: what the readers
 		// read in the leaves, the net counts in the raw text; a key, which no
