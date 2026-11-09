@@ -127,10 +127,11 @@
  * - a body of a data: address of a text type in a charset it does not
  *   declare and that no BOM gives: not read, locked;
  * - a serialized value whose format does not read to its end by the
- *   strings it states (serialized_strings()) and that does not serialize
- *   back from its value byte for byte: read as a whole as well, so prose in
- *   its braces («…, Token: drei») locks there as before branch 11b (none
- *   that AB_MCP_Sync_Canon::unserialized() lets through is known).
+ *   strings it states (serialized_strings(): a scalar only in its strict
+ *   form, SCALARS) and that does not serialize back from its value byte for
+ *   byte: read as a whole as well, so prose in its braces («…, Token:
+ *   drei») locks there as before branch 11b (bytes after the end of the
+ *   value that are no record, Codex round 2 of branch 11b, A).
  * And what is neither read nor locked: a script of an image that builds the
  * name of a credential at run time (a template literal with ${…}, a
  * concatenation): only literal spellings are read, an image runs no
@@ -1367,13 +1368,26 @@ final class AB_MCP_Sync_Net {
 	}
 
 	/**
+	 * The scalars of the serialized format in the strict form serialize()
+	 * writes them (serialized_strings()): an integer with its sign, a float
+	 * as PHP writes one (digits, a fraction, an exponent, INF, NAN), a
+	 * boolean 0 or 1, each to its ";".
+	 */
+	const SCALARS = array(
+		'i' => '/\Gi:[+-]?\d+;/',
+		'd' => '/\Gd:(?:[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?|[+-]?INF|NAN);/',
+		'b' => '/\Gb:[01];/',
+	);
+
+	/**
 	 * Every string of a serialized text, in order, keys and values, read by
 	 * the format as AB_MCP_Sync_Canon::unserialized() lets it through (its
 	 * check of the records refused every other record before: a:<n>:{, s:<n>:"…";,
 	 * i:…;, d:…;, b:…;, N;, }), each by the length it states, a string that
 	 * unpacking drops among them (the first value of a key twice, what
 	 * follows the end of the value). Null where the text is not read so to
-	 * its end.
+	 * its end, a scalar not in its strict form (SCALARS) among them: every
+	 * byte belongs to a record, else the text is read as a whole.
 	 *
 	 * @param string $text A serialized text, trimmed.
 	 * @return string[]|null
@@ -1401,11 +1415,13 @@ final class AB_MCP_Sync_Net {
 				}
 				$i += strlen( $m[0] );
 			} elseif ( 'i' === $c || 'd' === $c || 'b' === $c ) {
-				$end = strpos( $text, ';', $i );
-				if ( false === $end ) {
+				// A scalar only in the strict form PHP writes it (Codex round 2 of
+				// branch 11b, A: i:password=…; is no number); anything else is
+				// no record: the text is read as a whole.
+				if ( ! preg_match( self::SCALARS[ $c ], $text, $m, 0, $i ) ) {
 					return null;
 				}
-				$i = $end + 1;
+				$i += strlen( $m[0] );
 			} elseif ( 'N' === $c && 'N;' === substr( $text, $i, 2 ) ) {
 				$i += 2;
 			} elseif ( '}' === $c ) {

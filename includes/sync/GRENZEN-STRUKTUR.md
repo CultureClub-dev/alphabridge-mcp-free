@@ -655,9 +655,16 @@ Position, die das Theme hier nicht registriert, in der Prüfung des Laufs
   ein Schlüssel aus Ziffern als Text (`s:1:"5"`). Prosa darin bleibt frei;
   vorher wurde ein solcher Wert als Ganzes geprüft, und «…, Token: drei»
   in seinen Klammern sperrte (Codex-Runde 1 zu 11b, Tabelle zu A1 und B).
-  Als Ganzes geprüft wird nur noch ein Text, dessen Format sich nach den
-  angegebenen Längen nicht zu Ende lesen lässt; einen solchen lässt
-  `AB_MCP_Sync_Canon::unserialized()` nicht durch, kein Fall bekannt.
+  Als Ganzes geprüft wird ein Text, dessen Format sich nach den
+  angegebenen Längen nicht zu Ende lesen lässt. Ein Skalar zählt dabei nur
+  in der strengen Form, die `serialize()` schreibt (`i:` Ziffern mit
+  Vorzeichen, `d:` eine Zahl der Form von PHP samt `INF` und `NAN`, `b:`
+  0 oder 1; `SCALARS`): Codex-Runde 2 zu 11b, A, fand
+  `a:1:{s:4:"note";s:4:"frei";}i:password=REVIEW_ONLY;`, dessen Anhang
+  `unserialize()` verwirft und den der Leser vorher als Zahl übersprang;
+  jetzt wird der Text als Ganzes gelesen und sperrt, ebenso mit `d:`, `b:`
+  und Base64 hinter `i:`. Prüffall
+  `SyncNetTest::testAScalarOfTheFormatOnlyInItsStrictFormElseTheTextIsReadWhole`.
   Prüffall
   `SyncNetTest::testAValueThatDoesNotSerializeBackIsReadByTheStringsOfItsFormat`.
 - Ein Text in einem serialisierten Wert urteilt wie derselbe Text als
@@ -748,10 +755,9 @@ Entscheid 27 ohnehin nicht geschrieben werden.
 - In `texts()` des Netzes (Zweig 11b): das `trim()` des Texts vor der
   Rundreise (ein Text mit Leerraum darum urteilt über die Zeichenketten
   seines Formats so wie über seinen Wert; die Mutation überlebte, keine
-  Probe unterscheidet sie), und der Rückfall auf den ganzen Text, wo sich
-  das Format nicht nach seinen Längen lesen lässt (`serialized_strings()`
-  gibt null): `AB_MCP_Sync_Canon::unserialized()` lässt keinen solchen
-  Text durch, der Zweig ist von keinem Prüffall zu erreichen.
+  Probe unterscheidet sie). Der Rückfall auf den ganzen Text, wo sich das
+  Format nicht nach seinen Längen lesen lässt, ist seit Codex-Runde 2 zu
+  11b erreichbar und geführt (`texts-strings-whole`, unten).
 
 - `b-widget-form-it` (Codex-Runde 4, B, über die Integrationsklasse): seit
   Zweig 11b liest das Netz des Exports jede Meta-Zeile entpackt; ob

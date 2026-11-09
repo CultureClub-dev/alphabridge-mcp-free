@@ -1271,6 +1271,34 @@ final class SyncNetTest extends TestCase {
 		self::assertSame( array( '*:php_object@u:net:string.1' ), $locks );
 	}
 
+	public function testAScalarOfTheFormatOnlyInItsStrictFormElseTheTextIsReadWhole(): void {
+		// Codex round 2 of branch 11b, A: serialized_strings() took any bytes
+		// after i:, d: or b: to the next ";" as a scalar, so what follows the
+		// end of the value went unread (unserialize() drops it, the round
+		// trip differs, the strings were read: none held it). A scalar counts
+		// only in the strict form serialize() writes it; anything else is no
+		// record, the text is read as a whole.
+		$b64 = base64_encode( 'password=REVIEW_ONLY' );
+		foreach ( array(
+			'i:'             => array( 'i:password=REVIEW_ONLY;', 'raw' ),
+			'd:'             => array( 'd:password=REVIEW_ONLY;', 'raw' ),
+			'b:'             => array( 'b:password=REVIEW_ONLY;', 'raw' ),
+			'base64 after i:' => array( 'i:' . $b64 . ';', 'raw/base64' ),
+		) as $case => list( $tail, $path ) ) {
+			$raw = 'a:1:{s:4:"note";s:4:"frei";}' . $tail;
+			self::assertSame( array( 'note' => 'frei' ), @unserialize( $raw ), $case . ': unserialize() drops it.' );
+			list( $locks ) = self::stored( $raw );
+			self::assertSame( array( '*:unread_credential@u:net:' . $path ), $locks, $case . ' (the readers find it clean)' );
+		}
+		// The forms serialize() writes stay records, read by their strings:
+		// prose beside them free (the text as a whole would lock it).
+		$prose = 'Spieler: Anna, Token: drei';
+		foreach ( array( 'i:-12;', 'i:+7;', 'd:0.1;', 'd:-1.5E-10;', 'd:1.0E+25;', 'd:INF;', 'd:-INF;', 'd:NAN;', 'b:0;', 'b:1;', 'N;' ) as $scalar ) {
+			list( $locks ) = self::stored( 'a:3:{s:1:"f";d:0.10000000000000001;s:1:"x";' . $scalar . 's:4:"text";s:' . strlen( $prose ) . ':"' . $prose . '";}', false );
+			self::assertSame( array(), $locks, $scalar );
+		}
+	}
+
 	public function testBeyondTheDepthTheUnitIsNotReadToItsEnd(): void {
 		$text = '/?p=12';
 		for ( $i = 0; $i <= AB_MCP_Sync_Net::MAX_DEPTH; $i++ ) {

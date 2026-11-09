@@ -63,6 +63,7 @@ N_LEAFREAD = 'testALeafTheNetDoesNotReadToItsEndLocksAsAColumnDoes'
 N_DEPTH = 'testBeyondTheDepthTheUnitIsNotReadToItsEnd'
 N_REFLEAF = 'testAReferenceInALayerTakenOutOfALeafLocks'
 N_STRINGS = 'testAValueThatDoesNotSerializeBackIsReadByTheStringsOfItsFormat'
+N_SCALARS = 'testAScalarOfTheFormatOnlyInItsStrictFormElseTheTextIsReadWhole'
 IT_HIDDEN = 'testTheNetLocksAHiddenReferenceInEveryUnit'
 
 # ------------------------------------------------------- check(): the form
@@ -140,9 +141,8 @@ e('texts-round-trip', 'texts(): a text that does not serialize back from its val
   "\t\t\tif ( serialize( $read['value'] ) !== trim( $value ) ) {",
   "\t\t\tif ( false ) {", 'net', N_CRED)
 # Not listed: the trim() of the text before the round trip (a text with white
-# space around it, read by the strings of its format, judges as its value),
-# and the text as a whole where its format does not read to its end (no text
-# AB_MCP_Sync_Canon::unserialized() lets through is one); GRENZEN-STRUKTUR.md.
+# space around it, read by the strings of its format, judges as its value);
+# GRENZEN-STRUKTUR.md.
 # The strings of the format of a text that does not serialize back
 # (the table of A1 and B: the float of 17 digits judged as its prose).
 e('texts-strings', 'texts(): every string of the format of a text that does not serialize back, each on its own', NT,
@@ -153,9 +153,20 @@ e('strings-string', 'serialized_strings(): each string by the length it states',
   "\t\t\t\t$out[] = (string) substr( $text, $i, $len );\n", "", 'net', N_CRED)
 e('strings-string-end', 'serialized_strings(): a string ends with its quote and ";"', NT,
   "\t\t\t\t$i    += $len + 2;", "\t\t\t\t$i    += $len;", 'net', N_STRINGS)
-e('strings-scalars', 'serialized_strings(): a number or a flag read to its ";"', NT,
-  "\t\t\t\t$end = strpos( $text, ';', $i );\n\t\t\t\tif ( false === $end ) {\n\t\t\t\t\treturn null;\n\t\t\t\t}\n\t\t\t\t$i = $end + 1;",
-  "\t\t\t\treturn null;", 'net', N_STRINGS)
+SCALAR_STRICT = "\t\t\t\tif ( ! preg_match( self::SCALARS[ $c ], $text, $m, 0, $i ) ) {\n\t\t\t\t\treturn null;\n\t\t\t\t}\n\t\t\t\t$i += strlen( $m[0] );"
+e('strings-scalars', 'serialized_strings(): a number or a flag read in its strict form', NT,
+  SCALAR_STRICT, "\t\t\t\treturn null;", 'net', N_SCALARS)
+# Codex round 2 of branch 11b, A: a scalar only in its strict form, else the text whole.
+e('texts-strings-whole', 'texts(): where the format does not read to its end (a scalar not in its strict form), the text as a whole (Codex round 2, A)', NT,
+  "\t\t\t\tif ( null === $strings ) {\n\t\t\t\t\t$each( $where, $value );", "\t\t\t\tif ( null === $strings ) {\n\t\t\t\t\t// not read", 'net', N_SCALARS)
+e('strings-scalars-lax', 'serialized_strings(): no scalar read to the next ";" whatever it holds (Codex round 2, A)', NT,
+  SCALAR_STRICT, "\t\t\t\t$i = strpos( $text, ';', $i ) + 1;", 'net', N_SCALARS)
+e('scalar-i', 'SCALARS: an integer only of digits with its sign (Codex round 2, A)', NT,
+  "\t\t'i' => '/\\Gi:[+-]?\\d+;/',", "\t\t'i' => '/\\Gi:[^;]*;/',", 'net', N_SCALARS)
+e('scalar-d', 'SCALARS: a float only in the form PHP writes it (Codex round 2, A)', NT,
+  "\t\t'd' => '/\\Gd:(?:[+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[eE][+-]?\\d+)?|[+-]?INF|NAN);/',", "\t\t'd' => '/\\Gd:[^;]*;/',", 'net', N_SCALARS)
+e('scalar-b', 'SCALARS: a boolean only 0 or 1 (Codex round 2, A)', NT,
+  "\t\t'b' => '/\\Gb:[01];/',", "\t\t'b' => '/\\Gb:[^;]*;/',", 'net', N_SCALARS)
 e('strings-null', 'serialized_strings(): N; read', NT,
   "\t\t\t} elseif ( 'N' === $c && 'N;' === substr( $text, $i, 2 ) ) {\n\t\t\t\t$i += 2;",
   "\t\t\t} elseif ( 'N' === $c && 'N;' === substr( $text, $i, 2 ) ) {\n\t\t\t\treturn null;", 'net', N_STRINGS)
