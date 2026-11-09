@@ -333,7 +333,7 @@ final class BundledTranslationsTest extends TestCase {
 	 */
 	const SAME_AS_ENGLISH_IN = array(
 		'de' => array( "tool group\x04Export", "main group of tools\x04Shop (WooCommerce)", 'Status', 'Token', 'Undo', "main group of tools\x04Undo", "tool group\x04Undo", 'Widgets', "tool group\x04Widgets", 'Plugins & Themes' ),
-		'fr' => array( 'Actions', 'Assistant', 'Claude Code, scripts', 'Guides', 'Widgets', "tool group\x04Widgets" ),
+		'fr' => array( 'Actions', 'Assistant', 'Claude Code, scripts', 'Guides', 'Widgets', "tool group\x04Widgets", "kind of an object\x04menu", "kind of an object\x04option" ),
 		'it' => array( "tool group\x04Database", 'Media', "tool group\x04Media", 'Token', 'Password' ),
 		'es' => array( 'Token', 'Widgets', "tool group\x04Widgets" ),
 		'pt' => array( 'Token', 'Widgets', "tool group\x04Widgets" ),
