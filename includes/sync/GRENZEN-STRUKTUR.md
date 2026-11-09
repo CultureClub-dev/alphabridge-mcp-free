@@ -694,7 +694,7 @@ Position, die das Theme hier nicht registriert, in der Prüfung des Laufs
   Plugins) und drei echten Zugangsdaten (Code in einem Blatt, Base64 in
   einem Blatt und als Schlüssel): vorher zehn Sperren
   `*:unread_credential`, nachher nur die drei echten.
-- Die Klauseln stehen in der Mutationsliste `netz` (174 Einträge, 170 über
+- Die Klauseln stehen in der Mutationsliste `netz` (182 Einträge, 178 über
   Unit-Tests, 3 über `SyncStructureTest`, 1 über `SyncLocksTest`;
   geschrieben von `tests/mutation/gen/netz.py`), die Klauseln des Netzes
   aus Zweig 4 weiter in `kanon`. Die festen Formate (GRENZEN.md) brachten
@@ -715,7 +715,13 @@ Position, die das Theme hier nicht registriert, in der Prüfung des Laufs
   `basic-example-password`: die Regel gibt es nicht mehr); danach liefen
   127 einzeln (93 von `netz`, 29 von `kanon`, 5 von `lauf`): alle
   getötet, `token-aws-run` erst mit einem neuen Prüffall (ein Lauf von 18
-  Grossbuchstaben vor einem kleinen Buchstaben). Lokal lief jeder Eintrag von `netz` und jeder Eintrag von
+  Grossbuchstaben vor einem kleinen Buchstaben).
+  Die Behebung nach Codex-Runde 6 (die Beispielpaare ohne Rücksicht auf
+  die Schreibweise, «/» nach einem Schlüssel von AWS) brachte 9 Einträge,
+  änderte 26 und strich 1 (`basic-pairs-exact`, ersetzt durch
+  `basic-pairs-case`); danach liefen
+  135 einzeln (101 von `netz`, 29 von `kanon`, 5 von `lauf`): alle
+  getötet. Lokal lief jeder Eintrag von `netz` und jeder Eintrag von
   `kanon` und `struktur`, dessen Suchtext im geänderten Code liegt, einzeln
   (76 Einträge): 73 getötet; `b-widget-form`, `b-widget-form-it` und
   `b-reader` überlebten, weil das Netz des Exports jetzt jede Meta-Zeile

@@ -179,8 +179,11 @@ neu.
   `rk_live_` mit 24, `AKIA` und 16 Grossbuchstaben und Ziffern (auch als
   Anfang eines längeren Laufs: der ganze Lauf ist der Wert; nie in Base64:
   links kein Zeichen aus `[A-Za-z0-9+/]`, rechts nach dem Lauf kein kleiner
-  Buchstabe, `+`, `/` oder `=`, Codex-Runde 5 zu 11b, C1: «Binärdaten
-  (Base64): /AKIA…g==» bleibt frei), `xoxb-` und
+  Buchstabe, `+` oder `=`, Codex-Runde 5 zu 11b, C1: «Binärdaten
+  (Base64): /AKIA…g==» bleibt frei; vor einem «/» sperrt der Schlüssel,
+  dort beginnt der Scope von SigV4, `AKIA…/20261109/eu-central-1/s3/
+  aws4_request`, Codex-Runde 6, A1; die ID der AWS-Doku bleibt dort frei,
+  weil ihr Wert am «/» endet), `xoxb-` und
   `xoxp-` mit ihren Nummern, Mailchimp mit 32 Hex und `-us` mit der Nummer
   des Rechenzentrums (aufgenommen, weil zwei der zehn Tutorials seinen
   Schlüssel nennen, keines in dieser Form). Die Form entscheidet, kein Wort
@@ -208,23 +211,40 @@ neu.
   sperrte jeder Wert, auch die Beispiele der API-Anleitungen
   («Authorization: bearer TOKEN» von GitHub, «Bearer abc123»).
   `Basic` sperrt, wo das Base64 zu `user:password` dekodiert; frei nur,
-  wo das Paar als Ganzes genau ein dokumentiertes Beispielpaar ist
-  (`EXAMPLE_PAIRS`) oder das Passwort (bei leerem Passwort der Benutzer:
-  ein Schlüssel als Benutzer) ein exakter Platzhalter. Codex-Runde 5 zu
+  wo das Paar als Ganzes ein dokumentiertes Beispielpaar ist
+  (`EXAMPLE_PAIRS`), ohne Rücksicht auf die Schreibweise von Benutzer und
+  Passwort (Codex-Runde 6 zu 11b, B1: `User:Password` der Veeam-Doku und
+  `Username:Password` der CycleSoftware-Doku sperrten nach dem exakten
+  Vergleich neu), oder das Passwort (bei leerem Passwort der Benutzer: ein
+  Schlüssel als Benutzer) ein exakter Platzhalter ist. Codex-Runde 5 zu
   11b, A4: ein Beispielwort allein gibt nichts frei, `admin:password`,
   `admin:secret`, `secret:`, `admin:Passwort` und `api:SECRET` sperren wie
   `admin:admin`, `a:b` und `review:Sommer2026`, weil sie funktionierende
-  schwache Zugänge sein können. Die Beispielpaare, gelesen am 09.11.2026:
-  - RFC 7617, Abschnitt 2: `Aladdin:open sesame`;
+  schwache Zugänge sein können. Die Liste enthält ausschliesslich Paare,
+  die an einer Quelle als Beispiel stehen, je mit Fundstelle im Kommentar
+  des Codes, gelesen am 09.11.2026:
+  - RFC 7617, Abschnitt 2: `Aladdin:open sesame`; Abschnitt 2.1:
+    `test:123£`;
   - MDN, «Authorization»: `aladdin:opensesame`; MDN, «HTTP
-    authentication»: `username:password` (in einer Adresse);
+    authentication»: `username:password` (in einer Adresse); riptutorial,
+    «HTTP Basic Authentication»: `username:password`; CycleSoftware, Doku
+    der API: `Username:Password`;
   - curl, Handbuch (curl.se/docs/manpage.html): `user:password`
     (`--location-trusted`, `--ntlm`), `name:password` (`--basic`,
     `--digest`), `user:secret`, `me:pwd` (`--anyauth`), `key:secret`
     (`--aws-sigv4`), bei `--proxy-user` `user:passwd` und `smith:secret`;
+    Veeam, «HTTP Authentication» der REST-API: `User:Password`;
+  - Ruby, `Net::HTTPHeader#basic_auth`: `user:pass`;
+  - npm, Paket jm-basic-auth-credentials (README): `foo:bar`;
+  - zerotool, «Basic auth header generator guide»: `deploy:pa:ss`;
+  - AriesPortal, NIBRS, «AuthInfo»: `TestUser:SecurePassword123`;
   - das Tutorial T10 der Zählung: `user:password`.
-  Kein Tutorial und kein Text der Zählung zeigt ein Paar wie
-  `admin:password`; T1 zeigt `admin:` mit einem Platzhalter
+  Nie in der Liste, in keiner Schreibweise, auch wo eine Seite sie zeigt:
+  Werksvorgaben und übliche Standardzugänge (`admin:admin`,
+  `admin:password`, `admin:1234`, `admin:12345`, `root:root`, `root:toor`,
+  `administrator:password`, `guest:guest` und ähnliche); SyncNetTest hält
+  fest, dass keines darin steht. Kein Tutorial und kein Text der Zählung
+  zeigt ein solches Paar; T1 zeigt `admin:` mit einem Platzhalter
   (`xxxx xxxx …`), frei. Der Wert endet an «;» und «,»: ein Feld
   danach wird als eigenes gelesen (Codex-Runde 3 zu 11b, A3).
   `"Authorization":` von JSON und `Authorization=` oder `=>` zählen wie
@@ -339,17 +359,35 @@ Grenzen (Gruppe C):
   `unit()`) sperrt so `name=…`, `"name": …`, `'name': …`, die Schlüssel
   einer Struktur (auch JSON und serialisiert) und den Namen eines
   Formularfelds; das Netz sperrt nach dem Namen `name']=…`, `=>`, `{name:`
-  im Code und `name: "…"` am Textanfang. Namen eines Zugangsdatums sind die
-  von `AB_MCP_Redactor::redacts_key()`: als letztes Wort `token`, `secret`,
-  `password`, `pass`, `pwd`, `passphrase`, `passcode`, `otp`,
-  `credential` (und ihre Mehrzahl), irgendwo im Namen `api_key`, `apikey`,
-  `api_token`, `api_secret`, `access_key`, `access_token`, `secret_key`,
-  `private_key`, `client_secret`, `refresh_token`, `auth_token`,
-  `license_key`, `oauth`, `_token`, `_secret`, `_password`, `passwd`, dazu
-  `authorization`, `auth`, `user_pass` (geprüft am 09.11.2026:
-  `github_token`, `webhook_secret`, `api_key`, `aws_secret_access_key`
-  sperren; `bearer`, `jwt`, `key`, `cookie`, `session_id`, `signature`,
-  `hmac`, `dsn`, `client_id` und `pin` sind keine solchen Namen). Prosa
+  im Code und `name: "…"` am Textanfang. Ob ein Name der eines
+  Zugangsdatums ist, sagt `AB_MCP_Redactor::redacts_key()`, in dieser
+  Reihenfolge:
+  1. der Name wie geschrieben, in kleinen Buchstaben
+     (`is_credential_key()`): genau ein Wort von `CREDENTIAL_EXACT`
+     (`token`, `secret`, `password`, `pass`, `pwd`, `passphrase`,
+     `passcode`, `otp`, `credential`, je mit Mehrzahl) oder irgendwo
+     wörtlich ein Teil von `CREDENTIAL_NEEDLES` (darunter `api_key`,
+     `apikey`, `access_token`, `consumer_key`, `oauth`, `_token`,
+     `_secret`, `_password`, `passwd`): ja;
+  2. der normalisierte Name (`normalize_key()`: camelCase getrennt, «-» und
+     Leerzeichen als «_», kleine Buchstaben) ist einer von `EXTRA_NAMES`
+     (`authorization`, `proxy_authorization`, `auth`, `user_pass`,
+     `user_activation_key`, `php_auth_pw`) oder von `ab_mcp_redact_keys`:
+     ja;
+  3. sein erstes Wort ist eines von `ABOUT` (`has`, `is`, `total`, `num`,
+     `count`, `max`, `min`, `use`, `show`, `enable`, `require`): nein;
+  4. sein letztes Wort ist eines von `CREDENTIAL_EXACT` oder
+     `authorization`, oder ein Teil von `CREDENTIAL_NEEDLES` ohne «_» am
+     Anfang steht darin: ja.
+  Darum bleiben `hasToken`, `show-password` und `totalTokens` frei (Schritt
+  1 findet wörtlich nichts, Schritt 3 nimmt sie aus), während `has_token`,
+  `show_password` und `total_tokens` sperren (Schritt 1 findet `_token`
+  und `_password`, vor der Ausnahme); `consumer_key` sperrt in Schritt 1,
+  `user_activation_key` in Schritt 2, `githubToken`, `accessToken` und
+  `userPassword` in Schritt 4. Geprüft am 09.11.2026: `github_token`,
+  `webhook_secret`, `api_key` und `aws_secret_access_key` sperren;
+  `bearer`, `jwt`, `key`, `cookie`, `session_id`, `signature`, `hmac`,
+  `dsn`, `client_id` und `pin` sind keine solchen Namen. Prosa
   zeigt `wp_get_post` ohnehin. Betroffen ist also nur ein solcher Wert in
   einem Feld mit einem anderen Namen, in Prosa nach einem Doppelpunkt
   (`github_token: …` ohne Anführungszeichen) oder im Text.
@@ -364,6 +402,21 @@ Grenzen (Gruppe C):
   gekürzten JWT mit «...» und einen gekürzten Schlüssel von Stripe mit
   14 Zeichen vor «...». Keine bekannte Tokenform enthält drei Punkte
   hintereinander; ein JWT hat einzelne zwischen seinen Teilen.
+- Codex-Runde 6 zu 11b, A2: ein dokumentiertes Beispielpaar von Basic
+  bleibt frei, auch wo jemand es als echten Zugang vergibt (`me:pwd` und
+  `user:passwd` aus dem Handbuch von curl, ebenso `user:password`). Die
+  Liste enthält ausschliesslich Paare aus gelesenen Quellen (oben, und im
+  Kommentar von `EXAMPLE_PAIRS`). Nicht darin, weil keine gelesene Quelle
+  sie als Beispiel zeigt: `test:test` (auch ein häufiger echter
+  Testzugang: im Zweifel gesperrt) und `john:secret`; sie sperren.
+- Ein Standardzugang in einem Basic-Header sperrt, auch wo eine Anleitung
+  ihn zeigt: so zeigt die Community von Adobe Experience League (AEM,
+  «How to get Authorization: Basic Auth Header from AEM Author») das Paar
+  `admin:admin` als Header. Grund: Thomas' Vorgabe vom 04.11.2026 («was
+  sehr selten oder konstruiert ist kann gesperrt werden»); keine neue
+  Fehlsperre im Sinn des Zählers. Steht er wie dort in der Spur von curl
+  (`> Authorization: Basic …`), steht er am Anfang keiner Zeile und zählt
+  nicht nach dem Wert (die Grenze der Stellung oben).
 - Ein dokumentiertes Beispiel in einem Feld mit dem Namen eines
   Zugangsdatums (`aws_secret_access_key = …`, `"password": "…"`) sperrt
   weiter wie auf `8df6146`: dort sperrt die Zugangsprüfung
