@@ -143,3 +143,19 @@ SyncNetTest, SyncCanonFormTest).
 - Eine data:-Adresse in `href` oder ein data:-Bild, dessen Bytes nicht zu
   seinem Typ passen (`data:image/png` mit SVG-Bytes), sperrt, weil ein
   eingebettetes Dokument mehr tragen kann als ein Bild (Runden 16, 22).
+
+## Serialisierte Werte (Zweig 11b)
+
+- Seit Zweig 11b liest das Netz die Zugangsdaten einer Meta-Zeile, einer
+  Option und eines Widget-Bereichs entpackt, jeden Schlüssel und jedes
+  Blatt für sich; die Verweise zählt es weiter über den Rohwert
+  (GRENZEN-STRUKTUR.md, Abschnitt «Serialisierte Werte im Netz»). Ein
+  serialisierter Wert, der aus seinem Wert nicht Byte für Byte zurück
+  serialisiert, wird zusätzlich als Ganzes gelesen, weil das Entpacken
+  dort etwas verworfen haben kann (ein Schlüssel zweimal, Bytes nach dem
+  Ende). Das trifft auch Werte, bei denen nichts verloren ging: eine
+  Gleitkommazahl mit 17 Stellen aus PHP vor 7.1
+  (`d:0.10000000000000001;`), ein Schlüssel aus Ziffern als Text
+  (`s:1:"5"`); Prosa wie «…, Token: drei» in den Klammern eines solchen
+  Werts sperrt dort wie vor Zweig 11b (SyncNetTest
+  `testAValueThatDoesNotSerializeBackIsReadAsItsTextAsWell`).
