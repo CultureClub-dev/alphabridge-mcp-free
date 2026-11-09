@@ -55,6 +55,12 @@ class AB_MCP_Guidance {
 	 * WordPress core, and switching plugins and themes on and off; since
 	 * 4.12.0 the abilities of other plugins (wp_list_abilities,
 	 * wp_run_ability). wp_change_site_address is Pro's since Pro 4.17.0.
+	 * wp_site_sync, the takeover of a run in bundled steps on the production
+	 * site, is named since Z8 (branch 12; plan of the incentives of
+	 * 03.11.2026, section 7, step 2): this plugin carries a run over with
+	 * wp_site_push one step per call, and a call of wp_site_sync gets the
+	 * answer of an edition instead of «Unknown tool», without a price or a
+	 * request.
 	 */
 	const PRO_TOOLS = array(
 		'wp_blueprint_diff',
@@ -87,6 +93,7 @@ class AB_MCP_Guidance {
 		'wp_save_php_snippet',
 		'wp_schedule_cron',
 		'wp_set_transient',
+		'wp_site_sync',
 		'wp_toggle_php_snippet',
 		'wp_unschedule_cron',
 		'wp_update_option',
