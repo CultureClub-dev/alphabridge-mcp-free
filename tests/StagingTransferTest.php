@@ -160,7 +160,7 @@ final class StagingTransferTest extends TestCase {
 				'type'              => 'push',
 				'state'             => $state,
 				'created'           => 1762680000,
-				'updated'           => 1762681380,
+				'updated'           => 1762682000,
 				'closed'            => in_array( $state, array( 'open', 'interrupted', 'reverting' ), true ) ? 0 : 1762681380,
 				'calls'             => 41,
 				'forward_closed_at' => 0,

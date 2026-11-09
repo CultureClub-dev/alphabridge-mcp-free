@@ -452,6 +452,8 @@ final class StagingTransferTest extends TestCase {
 		self::assertNull( $view['store']['rule'] );
 		self::assertSame( $run_id, (int) $view['open']['run_id'] );
 		self::assertTrue( $view['runs'][0]['abort'], 'An open run of the type push: abort.' );
+		$open = \AB_MCP_Sync_Revert::plan_for_person( array( 'run_id' => $run_id ) );
+		self::assertSame( 'ab_mcp_sync_revert_person', $open->get_error_code(), 'A run that is not closed goes back over its own connection, not from the page.' );
 
 		$closed = self::finish( $run_id );
 		self::assertSame( 'closed_done', $closed['state'] );
@@ -506,7 +508,26 @@ final class StagingTransferTest extends TestCase {
 		self::assertSame( 1, $view['run']['back'] );
 		self::assertSame( array( $about ), array_column( $view['run']['pairs'], 'seq' ), 'A step goes back once.' );
 		self::assertSame( array( 'revert', 'closed_reverted' ), array( $view['runs'][0]['type'], $view['runs'][0]['state'] ), 'The run of the way back first in the list.' );
+		self::assertFalse( $view['runs'][0]['go_on'], 'Closed: nothing to go on with.' );
 		self::assertDoesNotMatchRegularExpression( '/\bPro\b|USD|trial/', AB_MCP_Transfer_View::html( $view ), 'Nothing published: no edition part.' );
+
+		// A way back the person began and did not finish (its request ended
+		// after the begin): the list offers to go on with it; nobody aborts it.
+		$entry = self::back_entry( $view, $about );
+		$left  = \AB_MCP_Sync_Revert::begin_for_person( array( 'run_id' => $run_id, 'steps' => array( $about ) ), $entry['plan_state'], true );
+		self::assertIsArray( $left, is_wp_error( $left ) ? $left->get_error_message() : '' );
+		$view = AB_MCP_Transfer::view( array( 'run' => $run_id ) );
+		self::assertSame( array( (int) $left['run_id'], 'revert', 'open' ), array( $view['runs'][0]['run_id'], $view['runs'][0]['type'], $view['runs'][0]['state'] ) );
+		self::assertTrue( $view['runs'][0]['go_on'] );
+		self::assertFalse( $view['runs'][0]['abort'], 'A run of the way back runs to its end.' );
+		self::assertSame( 'ab_mcp_sync_run_state', AB_MCP_Transfer::abort( (int) $left['run_id'] )->get_error_code() );
+		self::assertSame( 1, $view['run']['back'], 'A step of the way back still planned has taken nothing back.' );
+		self::assertStringContainsString( 'value="ab_mcp_transfer_go_on"', AB_MCP_Transfer_View::html( $view ) );
+		$done = AB_MCP_Transfer::go_on( (int) $left['run_id'] );
+		self::assertIsString( $done, is_wp_error( $done ) ? $done->get_error_message() : '' );
+		self::assertStringStartsWith( 'Taken back', $done );
+		self::assertSame( 'About us.', self::content_a( $p['about'][0] ) );
+		self::assertSame( 2, AB_MCP_Transfer::view( array( 'run' => $run_id ) )['run']['back'] );
 	}
 
 	public function testFromTheThirdPairOfARunTakenBackM3AndItsNoticeOnlyOncePublished(): void {
@@ -559,6 +580,13 @@ final class StagingTransferTest extends TestCase {
 		self::assertSame( '10 changes ready.', $view['report']['m1'] );
 		self::assertNull( $view['notice'] );
 		self::assertStringContainsString( '10 changes ready.', AB_MCP_Transfer_View::html( $view ) );
+		self::assertGreaterThan( 0, AB_MCP_Transfer_Moments::state()['first_report'], 'The first report seen, without a run.' );
+		AB_MCP_Transfer_Moments::$published = array( 'site_sync' );
+		$view                               = AB_MCP_Transfer::view();
+		self::assertSame( 'm1', $view['notice']['moment'], 'Once its feature is published, the notice.' );
+		self::assertSame( '10 changes ready.', $view['notice']['text'] );
+		self::assertStringEndsWith( 'You can take all 10 over one by one now.', $view['notice']['edition']['text'] );
+		self::assertNull( AB_MCP_Transfer::view()['notice'], 'Once per site.' );
 	}
 
 	/* ------------------------------------------------ abort, interrupted */
@@ -621,6 +649,14 @@ final class StagingTransferTest extends TestCase {
 		self::assertSame( 'unclear', AB_MCP_Sync_Run::step( $run_id, 2 )['state'] );
 		self::assertNull( AB_MCP_Sync_Run::open_run(), 'The site takes a run again.' );
 		self::assertNull( AB_MCP_Staging::report( false )['transfer']['run'] );
+
+		// A site with runs has seen a report, also once its reports are gone.
+		delete_option( AB_MCP_Transfer_Moments::OPTION );
+		foreach ( AB_MCP_Protected_Store::groups( 'reports' ) as $group ) {
+			AB_MCP_Protected_Store::remove( 'reports', $group['gid'] );
+		}
+		self::assertNull( AB_MCP_Transfer::view()['report'] );
+		self::assertGreaterThan( 0, AB_MCP_Transfer_Moments::state()['first_report'] );
 	}
 
 	/* ----------------------------------------------------------- pairs */
