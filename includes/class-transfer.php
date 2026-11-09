@@ -39,7 +39,11 @@
  * such, and the next call that changes the run takes it as interrupted.
  *
  * The texts are English without gettext, as the other texts of the
- * takeover until branch 13 translates them.
+ * takeover: BundledTranslationsTest asks every text in a gettext call to
+ * be translated in all nine bundled languages at once, so branch 13
+ * (text/z8) wraps them in gettext calls with the text domain
+ * alphabridge-mcp and translates them in one go (the decision of the
+ * lead after Codex round 1 of branch 12, C).
  *
  * @package AlphaBridge_MCP
  */
@@ -129,10 +133,19 @@ final class AB_MCP_Transfer {
 		}
 		$partner = AB_MCP_Staging::ROLE_PRODUCTION === $role ? AB_MCP_Sync_Anchor::partner() : null;
 		if ( ! is_string( $partner ) ) {
-			return array(
+			$out = array(
 				'side' => 'none',
+				'run'  => null,
 				'next' => 'The takeover runs on the confirmed production site paired with a staging site: a person confirms the role and the pair on the page AlphaBridge → Staging of both sites.',
 			);
+			// A run left from before the pair changed stays named, with its
+			// way (Codex round 1 of branch 12, B).
+			$open = self::open_or_null();
+			if ( null !== $open ) {
+				$out['run']  = self::run_status( $open );
+				$out['next'] = $out['run']['next'] . ' ' . $out['next'];
+			}
+			return $out;
 		}
 		$out = array(
 			'side'   => 'production',
@@ -145,6 +158,12 @@ final class AB_MCP_Transfer {
 			$out['next'] = null === $out['anchor']['prepared']
 				? 'No key of the staging site is confirmed here: fetch it or enter its pairing code on the page AlphaBridge → Staging, compare the fingerprint with the one the staging site shows, and confirm it there. Until then nothing is taken over.'
 				: 'A key of the staging site is prepared but not confirmed: a person compares its fingerprint with the one the staging site shows on its page AlphaBridge → Staging, and confirms it on this site\'s page. Until then nothing is taken over.';
+			// A run needs no key to be read, aborted or closed as checked.
+			$open = $out['tables'] ? self::open_or_null() : null;
+			if ( null !== $open ) {
+				$out['run']  = self::run_status( $open );
+				$out['next'] = $out['run']['next'] . ' ' . $out['next'];
+			}
 			return $out;
 		}
 		if ( ! $out['tables'] ) {
@@ -163,6 +182,20 @@ final class AB_MCP_Transfer {
 		$out['run']  = self::run_status( $open );
 		$out['next'] = $out['run']['next'];
 		return $out;
+	}
+
+	/**
+	 * The run of this site that is not closed, or null (also where the
+	 * tables cannot be read). Reads only.
+	 *
+	 * @return array|null
+	 */
+	private static function open_or_null() {
+		if ( ! AB_MCP_Sync_Schema::available() ) {
+			return null;
+		}
+		$open = AB_MCP_Sync_Run::open_run();
+		return is_array( $open ) ? $open : null;
 	}
 
 	/**
@@ -298,6 +331,10 @@ final class AB_MCP_Transfer {
 			'store'       => 'none' === $status['side'] ? null : self::store(),
 			'report'      => null,
 			'runs'        => array(),
+			'runs_next'   => null,
+			'runs_after'  => 0,
+			'pinned'      => array(),
+			'anchored'    => false,
 			'open'        => null,
 			'interrupted' => null,
 			'run'         => null,
@@ -309,13 +346,19 @@ final class AB_MCP_Transfer {
 			),
 			'outcome'     => self::take_outcome(),
 		);
-		if ( 'production' !== $status['side'] || null === $status['anchor']['active'] || ! $status['tables'] ) {
+		// The runs need the tables only, not the key of the staging site: a
+		// run, its journal, «Close as checked» and «Abort» stay on the page
+		// when the anchor is gone or the pair changed (Codex round 1 of
+		// branch 12, B). The report, the pairs and the way back of a pair
+		// need the confirmed key; without it the page says so.
+		if ( ! AB_MCP_Sync_Schema::available() ) {
 			return $view;
 		}
-		$source = (string) AB_MCP_Sync_Anchor::active()['source_id'];
-		$due    = array();
+		$anchored         = 'production' === $status['side'] && null !== $status['anchor']['active'];
+		$view['anchored'] = $anchored;
+		$due              = array();
 
-		$report = AB_MCP_Sync_Report::latest( $source );
+		$report = $anchored ? AB_MCP_Sync_Report::latest( (string) AB_MCP_Sync_Anchor::active()['source_id'] ) : null;
 		if ( is_array( $report ) ) {
 			$view['report'] = self::report_view( $report );
 			if ( $view['report']['done'] ) {
@@ -337,16 +380,22 @@ final class AB_MCP_Transfer {
 				$view['interrupted'] = self::run_view( $open );
 			}
 		}
-		$page = AB_MCP_Sync_Run::page( 0, self::RUNS );
+		$after = isset( $args['runs_after'] ) ? max( 0, (int) $args['runs_after'] ) : 0;
+		$page  = AB_MCP_Sync_Run::page( $after, self::RUNS );
 		if ( is_array( $page ) ) {
 			if ( array() !== $page['runs'] ) {
 				// A run needs a report: a site with a run has seen one.
 				AB_MCP_Transfer_Moments::report_seen( (int) end( $page['runs'] )['created'] );
 			}
 			$keep = AB_MCP_Sync_Schema::backup_rows();
+			$on   = array();
 			foreach ( $page['runs'] as $run ) {
-				$view['runs'][] = self::run_row( $run, $keep );
+				$view['runs'][]               = self::run_row( $run, $keep );
+				$on[ (int) $run['run_id'] ] = true;
 			}
+			$view['runs_next']  = $page['next'];
+			$view['runs_after'] = $after;
+			$view['pinned']     = self::pinned( $keep, $on );
 		}
 
 		$selected = isset( $args['run'] ) ? (int) $args['run'] : 0;
@@ -360,7 +409,8 @@ final class AB_MCP_Transfer {
 			}
 		}
 
-		$pairs = AB_MCP_Sync_Pairs::page_source( $source, isset( $args['pairs_after'] ) ? max( 0, (int) $args['pairs_after'] ) : 0, self::PAIRS );
+		$source = $anchored ? (string) AB_MCP_Sync_Anchor::active()['source_id'] : '';
+		$pairs  = $anchored ? AB_MCP_Sync_Pairs::page_source( $source, isset( $args['pairs_after'] ) ? max( 0, (int) $args['pairs_after'] ) : 0, self::PAIRS ) : null;
 		if ( is_array( $pairs ) ) {
 			$view['pairs'] = array(
 				'source' => $source,
@@ -396,6 +446,77 @@ final class AB_MCP_Transfer {
 			);
 		}
 		return $view;
+	}
+
+	/**
+	 * The runs the page shows whatever page of the list it is on (Codex
+	 * round 1 of branch 12, B: ten newer runs of the way back pushed the run
+	 * that wrote off the list): every run that is not closed (open,
+	 * interrupted, going back), and every closed run of the type push whose
+	 * backups the retention contract keeps and which still has a write step
+	 * no way back named. Not the ones on the page already ($on). The newest
+	 * first.
+	 *
+	 * @param array|null     $keep AB_MCP_Sync_Schema::backup_rows().
+	 * @param array<int,true> $on   The runs on the page.
+	 * @return array[] As run_row() each.
+	 */
+	public static function pinned( $keep, array $on ) {
+		$out = array();
+		$ids = is_array( $keep ) ? array_keys( array_filter( $keep ) ) : array();
+		rsort( $ids );
+		foreach ( $ids as $id ) {
+			if ( isset( $on[ (int) $id ] ) ) {
+				continue;
+			}
+			$run = AB_MCP_Sync_Run::get( (int) $id );
+			if ( ! is_array( $run ) ) {
+				continue;
+			}
+			$closed = in_array( (string) $run['state'], AB_MCP_Sync_Schema::CLOSED, true );
+			if ( ! $closed || ( 'push' === $run['type'] && self::way_back_open( $run ) ) ) {
+				$out[] = self::run_row( $run, $keep );
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * Whether a run that wrote has a write step no way back named yet: one
+	 * with a journal and a backup (it wrote), whose seq no step of the way
+	 * back takes back, in the run itself or in a run of the type revert made
+	 * for it, whatever its state (a step goes back once,
+	 * AB_MCP_Sync_Revert).
+	 *
+	 * @param array $run The run.
+	 * @return bool
+	 */
+	public static function way_back_open( array $run ) {
+		$steps = AB_MCP_Sync_Run::steps( (int) $run['run_id'] );
+		if ( is_wp_error( $steps ) ) {
+			return false;
+		}
+		$ways   = array( $steps );
+		$others = AB_MCP_Sync_Run::reverts_of( (int) $run['run_id'] );
+		foreach ( is_wp_error( $others ) ? array() : $others as $other ) {
+			$other_steps = AB_MCP_Sync_Run::steps( (int) $other['run_id'] );
+			$ways[]      = is_wp_error( $other_steps ) ? array() : $other_steps;
+		}
+		$named = array();
+		foreach ( $ways as $way ) {
+			foreach ( $way as $step ) {
+				if ( 'revert' === $step['op'] && is_array( $step['parts'] ) && isset( $step['parts']['forward_seq'] ) && ( ! isset( $step['parts']['forward_run'] ) || (int) $step['parts']['forward_run'] === (int) $run['run_id'] ) ) {
+					$named[ (int) $step['parts']['forward_seq'] ] = true;
+				}
+			}
+		}
+		foreach ( $steps as $step ) {
+			$journal = is_array( $step['parts'] ) && isset( $step['parts']['object'] ) ? $step['parts'] : null;
+			if ( 'write' === $step['op'] && null !== $journal && ! in_array( $step['state'], array( 'planned', 'skipped' ), true ) && is_array( $journal['backup'] ?? null ) && ! isset( $named[ (int) $step['seq'] ] ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -515,6 +636,13 @@ final class AB_MCP_Transfer {
 			'm3'      => 'push' === $run['type'] ? AB_MCP_Transfer_Moments::m3( (int) $run['run_id'], $back ) : null,
 			'pairs'   => array(),
 			'no_back' => null,
+			// The interruption as the page shows it, for the form «Close as
+			// checked» (AB_MCP_Sync_Run::interruption_print()).
+			'print'   => 'interrupted' === $run['state'] ? AB_MCP_Sync_Run::interruption_print( $run, $steps ) : null,
+			// The object each step of the way back takes back, from the step
+			// that wrote it (the journal of a step of the way back names only
+			// that step; its outcome stands in its result).
+			'back_of' => self::back_of( $run, $steps ),
 		);
 		if ( ! $forms || 'push' !== $run['type'] || ! in_array( (string) $run['state'], AB_MCP_Sync_Schema::CLOSED, true ) ) {
 			return $out;
@@ -532,6 +660,33 @@ final class AB_MCP_Transfer {
 				)
 			);
 			$out['pairs'][] = $entry + array( 'plan_state' => is_wp_error( $one ) ? null : (string) $one['state'] );
+		}
+		return $out;
+	}
+
+	/**
+	 * For each step of the way back of a run: the step it takes back and that
+	 * step's object (kind, ref here), by seq.
+	 *
+	 * @param array   $run   The run.
+	 * @param array[] $steps Its steps.
+	 * @return array<int,array{run:int,seq:int,kind:string,live_ref:string}>
+	 */
+	public static function back_of( array $run, array $steps ) {
+		$out = array();
+		foreach ( $steps as $step ) {
+			if ( 'revert' !== $step['op'] || ! is_array( $step['parts'] ) || ! isset( $step['parts']['forward_seq'] ) ) {
+				continue;
+			}
+			$forward_run = isset( $step['parts']['forward_run'] ) ? (int) $step['parts']['forward_run'] : (int) $run['run_id'];
+			$forward     = AB_MCP_Sync_Run::step( $forward_run, (int) $step['parts']['forward_seq'] );
+			$object      = is_array( $forward ) && is_array( $forward['parts'] ) && is_array( $forward['parts']['object'] ?? null ) ? $forward['parts']['object'] : array();
+			$out[ (int) $step['seq'] ] = array(
+				'run'      => $forward_run,
+				'seq'      => (int) $step['parts']['forward_seq'],
+				'kind'     => (string) ( $object['kind'] ?? '' ),
+				'live_ref' => isset( $object['live_ref'] ) && null !== $object['live_ref'] ? (string) $object['live_ref'] : '',
+			);
 		}
 		return $out;
 	}
@@ -617,15 +772,18 @@ final class AB_MCP_Transfer {
 
 	/**
 	 * Close an interrupted run as checked (decision 18, way a), through
-	 * AB_MCP_Sync_Run::close_checked(), under the lock of the write boundary.
+	 * AB_MCP_Sync_Run::close_checked(), under the lock of the write boundary,
+	 * only where it is still the interruption the page showed (its print,
+	 * checked under the lock).
 	 *
-	 * @param int  $run_id    Run.
-	 * @param bool $confirmed True only after the nonce of the form was checked.
+	 * @param int    $run_id    Run.
+	 * @param string $print     The print of the interruption the page showed.
+	 * @param bool   $confirmed True only after the nonce of the form was checked.
 	 * @return string|WP_Error
 	 */
-	public static function close_checked( $run_id, $confirmed ) {
+	public static function close_checked( $run_id, $print, $confirmed ) {
 		self::load();
-		$closed = AB_MCP_Sync_Run::close_checked( (int) $run_id, get_current_user_id(), $confirmed );
+		$closed = AB_MCP_Sync_Run::close_checked( (int) $run_id, get_current_user_id(), $confirmed, (string) $print );
 		if ( is_wp_error( $closed ) ) {
 			return $closed;
 		}
@@ -696,8 +854,9 @@ final class AB_MCP_Transfer {
 
 	/**
 	 * Discard a pair of the source of the confirmed key, through the tool's
-	 * discard (AB_MCP_Sync_Pairs_Tool), on the state the page showed (the
-	 * snapshot of the pair, as a token binds it).
+	 * discard (AB_MCP_Sync_Pairs_Tool::discard_as_shown()): one plan on the
+	 * state the page showed (the snapshot of the pair, as a token binds it),
+	 * deleted conditionally under the lock of the write boundary.
 	 *
 	 * @param int    $pair_id Pair.
 	 * @param string $state   The state the page showed.
@@ -705,18 +864,13 @@ final class AB_MCP_Transfer {
 	 */
 	public static function discard( $pair_id, $state ) {
 		self::load();
-		$args = array(
-			'action'   => 'discard',
-			'pair_ids' => array( (int) $pair_id ),
+		$done = AB_MCP_Sync_Pairs_Tool::discard_as_shown(
+			array(
+				'action'   => 'discard',
+				'pair_ids' => array( (int) $pair_id ),
+			),
+			$state
 		);
-		$now  = AB_MCP_Sync_Pairs_Tool::state( $args );
-		if ( is_wp_error( $now ) ) {
-			return $now;
-		}
-		if ( ! is_string( $state ) || ! hash_equals( $now, $state ) ) {
-			return new WP_Error( 'ab_mcp_sync_pairs_changed', sprintf( 'Pair %d was not discarded: it changed since the page was loaded. Look at it again on the page AlphaBridge → Staging and discard it then.', (int) $pair_id ) );
-		}
-		$done = AB_MCP_Sync_Pairs_Tool::call( $args );
 		if ( is_wp_error( $done ) ) {
 			return $done;
 		}

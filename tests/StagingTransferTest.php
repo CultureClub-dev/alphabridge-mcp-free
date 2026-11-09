@@ -230,6 +230,8 @@ final class StagingTransferTest extends TestCase {
 				'm3'      => null,
 				'pairs'   => array(),
 				'no_back' => null,
+				'print'   => str_repeat( 'e', 64 ),
+				'back_of' => array(),
 			),
 			$over
 		);
@@ -565,18 +567,104 @@ final class StagingTransferTest extends TestCase {
 		$text = self::text( $html );
 		self::assertLessThan( strpos( $text, 'Last report' ), strpos( $text, 'Run 4 is interrupted' ), 'First in the section.' );
 		$x = self::xpath( $html );
-		self::assertSame( array( '1', 'check', 'done', '' ), array_map( static fn( $td ) => trim( $td->textContent ), iterator_to_array( $x->query( '//table[contains(@class, "ab-staging-transfer__journal")]/tbody/tr[1]/td' ) ) ) );
-		self::assertSame( array( '2', 'write: post 12', 'begun', 'row written, meta:note planned' ), array_map( static fn( $td ) => trim( $td->textContent ), iterator_to_array( $x->query( '//table[contains(@class, "ab-staging-transfer__journal")]/tbody/tr[2]/td' ) ) ), 'Each part with its state.' );
+		self::assertSame( array( '1', 'check', 'done', '', '' ), array_map( static fn( $td ) => trim( $td->textContent ), iterator_to_array( $x->query( '//table[contains(@class, "ab-staging-transfer__journal")]/tbody/tr[1]/td' ) ) ) );
+		self::assertSame( array( '2', 'write: post 12', 'begun', 'row written; meta:note planned', '' ), array_map( static fn( $td ) => trim( $td->textContent ), iterator_to_array( $x->query( '//table[contains(@class, "ab-staging-transfer__journal")]/tbody/tr[2]/td' ) ) ), 'Each part with its state.' );
 		self::assertStringContainsString( 'Not run: step 3 (write: term 9).', $text, 'The rest, named.' );
 		self::assertStringContainsString( 'Left as a rest (made by the run; remove by hand in wp-admin where it should go): post 40.', $text );
 		$forms = self::forms( $html );
 		unset( $forms[0]['_wp_http_referer'] );
-		self::assertSame( array( '_wpnonce' => 'nonce-ab_mcp_transfer_checked_4', 'action' => 'ab_mcp_transfer_checked', 'run_id' => '4' ), $forms[0] );
+		self::assertSame( array( '_wpnonce' => 'nonce-ab_mcp_transfer_checked_4', 'action' => 'ab_mcp_transfer_checked', 'run_id' => '4', 'state' => str_repeat( 'e', 64 ) ), $forms[0], 'Bound to the interruption the page shows (Codex round 1 of branch 12, A).' );
 		self::assertCount( 1, $forms, 'One form: close as checked.' );
 		self::assertSame( 'Close as checked', trim( $x->query( '//div[contains(@class, "ab-staging-transfer__interrupted")]//button' )->item( 0 )->textContent ) );
 		self::assertStringContainsString( 'Read its journal', self::text( AB_MCP_Transfer_View::interrupted_line( $run ) ) );
 		self::assertSame( '', AB_MCP_Transfer_View::interrupted_line( self::a_run( 4, 'open' ) ) );
 		self::assertSame( '', AB_MCP_Transfer_View::interrupted_line( null ) );
+	}
+
+	public function testWithoutTheKeyTheRunsStayWithTheirJournalAndCloseAsChecked(): void {
+		// Codex round 1 of branch 12, B: the anchor gone, or the pair changed
+		// while a run is interrupted.
+		$run = self::a_run( 4, 'interrupted' );
+		foreach ( array( 'production', 'none' ) as $side ) {
+			$view = self::view(
+				$side,
+				array(
+					'open'        => $run,
+					'interrupted' => self::run_view( $run ),
+					'runs'        => array( self::row( 4, 'interrupted' ), self::row( 3, 'open', array( 'abort' => true ) ) ),
+				)
+			);
+			if ( 'production' === $side ) {
+				$view['status']['anchor']['active'] = null;
+			}
+			$html    = AB_MCP_Transfer_View::html( $view );
+			$actions = array_column( self::forms( $html ), 'action' );
+			self::assertSame( array( 'ab_mcp_transfer_checked', 'ab_mcp_transfer_abort' ), $actions, $side . ': close as checked and abort, without the key.' );
+			self::assertStringContainsString( 'Run 4 is interrupted', self::text( $html ) );
+			self::assertStringContainsString( 'The report, the object pairs and taking a pair back need the confirmed key of the staging site', self::text( $html ), $side . ': why the rest is not shown.' );
+			self::assertStringNotContainsString( 'Last report', self::text( $html ) );
+		}
+		$none = AB_MCP_Transfer_View::html( self::view( 'none' ) );
+		self::assertStringNotContainsString( 'need the confirmed key', self::text( $none ), 'Without a run: one line, as before.' );
+	}
+
+	public function testTheRunsToActOnStandAboveThePageOfTheListWithTheWayToOlderRuns(): void {
+		// Codex round 1 of branch 12, B: ten newer runs of the way back pushed
+		// the run that wrote off the list.
+		$view = self::view(
+			'production',
+			array(
+				'runs'      => array( self::row( 14, 'closed_reverted', array( 'type' => 'revert' ) ) ),
+				'pinned'    => array( self::row( 2, 'closed_done', array( 'backups' => array( 'state' => 'last_three', 'until' => 0 ) ) ) ),
+				'runs_next' => 14,
+			)
+		);
+		$html = AB_MCP_Transfer_View::html( $view );
+		$x    = self::xpath( $html );
+		self::assertSame( 1, $x->query( '//table[contains(@class, "ab-staging-transfer__pinned")]/tbody/tr' )->length );
+		self::assertStringStartsWith( '2, takeover', trim( $x->query( '//table[contains(@class, "ab-staging-transfer__pinned")]/tbody/tr/td' )->item( 0 )->textContent ) );
+		self::assertLessThan( strpos( $html, 'ab-staging-transfer__list' ), strpos( $html, 'ab-staging-transfer__pinned' ) );
+		$older = $x->query( '//div[contains(@class, "ab-staging-transfer__runs")]//p/a' );
+		self::assertSame( 'Older runs', $older->item( 0 )->textContent );
+		self::assertStringEndsWith( 'admin.php?page=alphabridge-staging&runs_after=14#ab-staging-transfer', $older->item( 0 )->getAttribute( 'href' ) );
+		$view['runs_next'] = null;
+		self::assertStringNotContainsString( 'Older runs', AB_MCP_Transfer_View::html( $view ) );
+	}
+
+	public function testTheJournalShowsTheOutcomeOfAStepOfTheWayBackAsTheToolReportsIt(): void {
+		// Codex round 1 of branch 12, B: the outcome stands in step.result.
+		$run  = self::a_run( 8, 'closed_findings', array( 'type' => 'revert' ) );
+		$view = self::run_view(
+			$run,
+			array(
+				'shown'   => array(
+					'steps'   => array(
+						array(
+							'seq'    => 1,
+							'op'     => 'revert',
+							'state'  => 'unclear',
+							'parts'  => array( 'object' => null, 'backup' => null, 'parts' => array() ),
+							'result' => array(
+								'message'  => 'The post 12 went back only in part.',
+								'live_ref' => '12',
+								'parts'    => array(
+									array( 'part' => 'row', 'state' => 'left', 'note' => 'changed here since the run wrote it', 'value_before' => 'post_content: 12 bytes <b>x</b>' ),
+								),
+							),
+						),
+					),
+					'rests'   => array(),
+					'unclear' => array( 1 ),
+				),
+				'rest'    => array(),
+				'back_of' => array( 1 => array( 'run' => 7, 'seq' => 2, 'kind' => 'post', 'live_ref' => '12' ) ),
+			)
+		);
+		$html = AB_MCP_Transfer_View::html( self::view( 'production', array( 'run' => $view ) ) );
+		$x    = self::xpath( $html );
+		$tds  = array_map( static fn( $td ) => trim( $td->textContent ), iterator_to_array( $x->query( '//table[contains(@class, "ab-staging-transfer__journal")]/tbody/tr[1]/td' ) ) );
+		self::assertSame( array( '1', 'revert of step 2 of run 7: post 12', 'unclear', 'row left: changed here since the run wrote it (before: post_content: 12 bytes <b>x</b>)', 'The post 12 went back only in part.' ), $tds, 'Object, state of the part, why, the value before, the finding.' );
+		self::assertStringNotContainsString( '<b>x</b>', $html, 'Escaped.' );
 	}
 
 	public function testEveryFormPostsToItsActionWithANonceBoundToItsObjectAndTheStateThePageShowed(): void {

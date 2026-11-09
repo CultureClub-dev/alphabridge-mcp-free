@@ -1068,11 +1068,12 @@ class AB_MCP_Admin {
 
 	/**
 	 * Close an interrupted run as checked (Z8, decision 18, way a), through
-	 * AB_MCP_Transfer::close_checked().
+	 * AB_MCP_Transfer::close_checked(), on the interruption the page showed.
 	 */
 	public function handle_transfer_checked() {
 		$run_id = $this->transfer_guard( 'checked', 'run_id' );
-		$this->transfer_done( AB_MCP_Transfer::close_checked( $run_id, true ) );
+		$print  = isset( $_POST['state'] ) ? sanitize_text_field( wp_unslash( $_POST['state'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing -- checked in transfer_guard().
+		$this->transfer_done( AB_MCP_Transfer::close_checked( $run_id, $print, true ) );
 	}
 
 	/**

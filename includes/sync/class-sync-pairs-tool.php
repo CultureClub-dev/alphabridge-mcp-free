@@ -122,6 +122,41 @@ final class AB_MCP_Sync_Pairs_Tool {
 		return self::no_action();
 	}
 
+	/**
+	 * discard as a person confirmed it on the page «Staging» (Z8, decision
+	 * 35, branch 12): the token of the tool is the state the page showed
+	 * (state()). One plan, compared with it, and the snapshots of that very
+	 * plan deleted conditionally (discard(), AB_MCP_Sync_Pairs::discard()),
+	 * with no plan made anew in between, all of it under the lock of the
+	 * write boundary (AB_MCP_Sync_Run::under_lock()), so no step of a run
+	 * changes a pair between the comparison and the deletion (Codex round 1
+	 * of branch 12, A: before, the page compared one plan and the tool made
+	 * a second one, whose newer state it deleted).
+	 *
+	 * @param array  $a     Arguments: action discard, pair_ids.
+	 * @param string $state The state the page showed (state()).
+	 * @return array|WP_Error As discard() returns it.
+	 */
+	public static function discard_as_shown( array $a, $state ) {
+		require_once __DIR__ . '/class-sync-run.php';
+		if ( ! isset( $a['action'] ) || 'discard' !== $a['action'] ) {
+			return self::no_action();
+		}
+		return AB_MCP_Sync_Run::under_lock(
+			static function () use ( $a, $state ) {
+				$plan = self::plan( $a );
+				if ( is_wp_error( $plan ) ) {
+					return $plan;
+				}
+				if ( ! is_string( $state ) || ! hash_equals( hash( 'sha256', AB_MCP_Sync_Canon::encode( $plan['state'] ) ), $state ) ) {
+					return new WP_Error( 'ab_mcp_sync_pairs_changed', 'No pair was discarded: a pair changed since the page was loaded (a run took it over or back, or it was aligned anew). Look at it again on the page AlphaBridge → Staging and discard it then.' );
+				}
+				return self::discard( $plan );
+			},
+			'No pair is discarded'
+		);
+	}
+
 	/* -------------------------------------------------------------- plan */
 
 	/**

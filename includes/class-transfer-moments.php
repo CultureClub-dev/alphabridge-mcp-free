@@ -38,7 +38,11 @@
  * (AB_MCP_Sync_Schema::backup_rows()).
  *
  * The texts are English without gettext, as the other texts of the
- * takeover until branch 13 translates them.
+ * takeover: BundledTranslationsTest asks every text in a gettext call to
+ * be translated in all nine bundled languages at once, so branch 13
+ * (text/z8) wraps them in gettext calls with the text domain
+ * alphabridge-mcp and translates them in one go (the decision of the
+ * lead after Codex round 1 of branch 12, C).
  *
  * @package AlphaBridge_MCP
  */

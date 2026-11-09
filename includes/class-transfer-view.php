@@ -19,7 +19,11 @@
  * checks with manage_options before anything is done.
  *
  * The texts are English without gettext, as the other texts of the
- * takeover until branch 13 translates them.
+ * takeover: BundledTranslationsTest asks every text in a gettext call to
+ * be translated in all nine bundled languages at once, so branch 13
+ * (text/z8) wraps them in gettext calls with the text domain
+ * alphabridge-mcp and translates them in one go (the decision of the
+ * lead after Codex round 1 of branch 12, C).
  *
  * @package AlphaBridge_MCP
  */
@@ -61,19 +65,27 @@ final class AB_MCP_Transfer_View {
 			$html .= self::store_html( $view['store'] );
 			return $html . '</section>';
 		}
-		if ( 'production' !== $view['side'] ) {
+		$active = 'production' === $view['side'] ? $view['status']['anchor']['active'] : null;
+		$runs   = array() !== $view['runs'] || array() !== ( $view['pinned'] ?? array() ) || null !== $view['interrupted'] || null !== $view['run'];
+		if ( null !== $active ) {
+			$html .= '<p class="ab-direct__status">' . esc_html( 'The key of the staging site is confirmed (fingerprint' ) . ' <code>' . esc_html( $active['fingerprint'] ) . '</code>' . esc_html( '): this site reads its packages and takes over what a person approves.' ) . '</p>';
+			$html .= self::store_html( $view['store'] );
+			if ( ! $view['status']['tables'] ) {
+				return $html . '<p class="ab-direct__status">' . esc_html( $view['status']['next'] ) . '</p></section>';
+			}
+		} elseif ( 'production' === $view['side'] ) {
+			$html .= '<p class="ab-direct__status">' . esc_html( $view['status']['next'] ) . '</p>';
+			$html .= self::store_html( $view['store'] );
+		} else {
 			$html .= '<p class="ab-note">' . esc_html( 'Shown here once this site is the confirmed production site paired with a staging site: the report of what differs, the runs that take changes over, and the way back pair by pair.' ) . '</p>';
+		}
+		if ( null === $active && ! $runs ) {
 			return $html . '</section>';
 		}
-		$active = $view['status']['anchor']['active'];
 		if ( null === $active ) {
-			$html .= '<p class="ab-direct__status">' . esc_html( $view['status']['next'] ) . '</p>';
-			return $html . self::store_html( $view['store'] ) . '</section>';
-		}
-		$html .= '<p class="ab-direct__status">' . esc_html( 'The key of the staging site is confirmed (fingerprint' ) . ' <code>' . esc_html( $active['fingerprint'] ) . '</code>' . esc_html( '): this site reads its packages and takes over what a person approves.' ) . '</p>';
-		$html .= self::store_html( $view['store'] );
-		if ( ! $view['status']['tables'] ) {
-			return $html . '<p class="ab-direct__status">' . esc_html( $view['status']['next'] ) . '</p></section>';
+			// The runs stay without the key (Codex round 1 of branch 12, B);
+			// only what needs it is left out, and why.
+			$html .= '<p class="ab-note ab-staging-transfer__no-key">' . esc_html( 'The report, the object pairs and taking a pair back need the confirmed key of the staging site, so they are not shown while there is none. The runs of this site stay: their journal, «Close as checked» and «Abort» need no key.' ) . '</p>';
 		}
 		$html .= self::notice_html( $view['notice'], $view['notes'] );
 		if ( null !== $view['interrupted'] ) {
@@ -82,8 +94,10 @@ final class AB_MCP_Transfer_View {
 		if ( null !== $view['run'] && ( null === $view['interrupted'] || (int) $view['run']['run']['run_id'] !== (int) $view['interrupted']['run']['run_id'] ) ) {
 			$html .= self::run_html( $view['run'], $view['notice'] );
 		}
-		$html .= self::report_html( $view['report'], $view['notice'] );
-		$html .= self::runs_html( $view['runs'] );
+		if ( null !== $active ) {
+			$html .= self::report_html( $view['report'], $view['notice'] );
+		}
+		$html .= self::runs_html( $view['runs'], $view['pinned'] ?? array(), $view['runs_next'] ?? null );
 		$html .= self::pairs_html( $view['pairs'] );
 		// The switch stands in the notice where one shows, else here.
 		$html .= null === $view['notice'] ? self::notes_html( $view['notes'] ) : '';
@@ -163,7 +177,7 @@ final class AB_MCP_Transfer_View {
 		$html .= '<p class="ab-direct__status">' . esc_html( 'A step began and the request that ran it ended before it finished. Nothing more is written until a person decides: read the journal below, check the objects it names in wp-admin, then close the run as checked here (nothing is written; the pairs of its steps left begun become unclear), or let the connection that made it lead its way back (wp_site_revert action=plan with this run, confirmed with its token).' ) . '</p>';
 		$html .= self::journal_html( $run );
 		$html .= '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">' . wp_nonce_field( 'ab_mcp_transfer_checked_' . $id, '_wpnonce', true, false );
-		$html .= '<input type="hidden" name="action" value="ab_mcp_transfer_checked"><input type="hidden" name="run_id" value="' . esc_attr( (string) $id ) . '">';
+		$html .= '<input type="hidden" name="action" value="ab_mcp_transfer_checked"><input type="hidden" name="run_id" value="' . esc_attr( (string) $id ) . '"><input type="hidden" name="state" value="' . esc_attr( (string) $run['print'] ) . '">';
 		$html .= '<p><button class="ab-btn">' . esc_html( 'Close as checked' ) . '</button></p></form>';
 		return $html . '</div>';
 	}
@@ -223,15 +237,32 @@ final class AB_MCP_Transfer_View {
 		if ( null === $run['shown'] ) {
 			return '<p class="ab-direct__status">' . esc_html( (string) $run['error'] ) . '</p>';
 		}
-		$html = '<div class="ab-table-wrap"><table class="ab-table ab-staging-transfer__journal"><thead><tr><th scope="col">' . esc_html( 'Step' ) . '</th><th scope="col">' . esc_html( 'What' ) . '</th><th scope="col">' . esc_html( 'State' ) . '</th><th scope="col">' . esc_html( 'Parts' ) . '</th></tr></thead><tbody>';
+		$html = '<div class="ab-table-wrap"><table class="ab-table ab-staging-transfer__journal"><thead><tr><th scope="col">' . esc_html( 'Step' ) . '</th><th scope="col">' . esc_html( 'What' ) . '</th><th scope="col">' . esc_html( 'State' ) . '</th><th scope="col">' . esc_html( 'Parts' ) . '</th><th scope="col">' . esc_html( 'Finding' ) . '</th></tr></thead><tbody>';
 		foreach ( $run['shown']['steps'] as $step ) {
 			$object = is_array( $step['parts'] ) && is_array( $step['parts']['object'] ?? null ) ? $step['parts']['object'] : null;
 			$what   = $step['op'] . ( null !== $object ? ': ' . ( $object['kind'] ?? '' ) . ' ' . ( isset( $object['live_ref'] ) && null !== $object['live_ref'] ? (string) $object['live_ref'] : (string) ( $object['staging_ref'] ?? '' ) ) : '' );
-			$parts  = array();
+			$back   = $run['back_of'][ (int) $step['seq'] ] ?? null;
+			if ( null !== $back ) {
+				// A step of the way back: the step it takes back and its object.
+				$what = sprintf( 'revert of step %1$d%2$s: %3$s %4$s', $back['seq'], (int) $back['run'] !== (int) $run['run']['run_id'] ? ' of run ' . $back['run'] : '', $back['kind'], $back['live_ref'] );
+			}
+			$parts = array();
 			foreach ( is_array( $step['parts'] ) && isset( $step['parts']['parts'] ) && is_array( $step['parts']['parts'] ) ? $step['parts']['parts'] : array() as $part ) {
 				$parts[] = ( $part['part'] ?? '' ) . ' ' . ( $part['state'] ?? '' );
 			}
-			$html .= '<tr><td>' . esc_html( (string) $step['seq'] ) . '</td><td>' . esc_html( trim( $what ) ) . '</td><td>' . esc_html( (string) $step['state'] ) . '</td><td>' . esc_html( implode( ', ', $parts ) ) . '</td></tr>';
+			// The outcome of a step as the tool reports it (Codex round 1 of
+			// branch 12, B): each part with its state, why it was left and
+			// the value it held before (checked as it leaves the run,
+			// AB_MCP_Sync_Run::cap_values(): never a credential).
+			$result = isset( $step['result'] ) && is_array( $step['result'] ) ? $step['result'] : array();
+			foreach ( isset( $result['parts'] ) && is_array( $result['parts'] ) ? $result['parts'] : array() as $part ) {
+				if ( ! is_array( $part ) ) {
+					continue;
+				}
+				$parts[] = trim( ( $part['part'] ?? '' ) . ' ' . ( $part['state'] ?? '' ) . ( isset( $part['note'] ) && '' !== (string) $part['note'] ? ': ' . (string) $part['note'] : '' ) . ( isset( $part['value_before'] ) && is_string( $part['value_before'] ) ? ' (before: ' . $part['value_before'] . ')' : '' ) );
+			}
+			$finding = isset( $result['message'] ) && is_string( $result['message'] ) ? $result['message'] : '';
+			$html   .= '<tr><td>' . esc_html( (string) $step['seq'] ) . '</td><td>' . esc_html( trim( $what ) ) . '</td><td>' . esc_html( (string) $step['state'] ) . '</td><td>' . esc_html( implode( '; ', $parts ) ) . '</td><td>' . esc_html( $finding ) . '</td></tr>';
 		}
 		$html .= '</tbody></table></div>';
 		if ( array() !== $run['rest'] ) {
@@ -278,18 +309,44 @@ final class AB_MCP_Transfer_View {
 	}
 
 	/**
-	 * The runs: state, steps, backups, M2, the steps link and «Abort» or «Go
-	 * on».
+	 * The runs: those to act on whatever page of the list it is on (the run
+	 * that is not closed, a run that wrote with a way back still open and
+	 * its backups kept; AB_MCP_Transfer::pinned()), then a page of the list,
+	 * the newest first, with the way to the next page. Each with its state,
+	 * steps, backups, M2, the steps link and «Abort» or «Go on».
 	 *
-	 * @param array[] $runs AB_MCP_Transfer::run_row() each.
+	 * @param array[]  $runs   AB_MCP_Transfer::run_row() each, a page of the list.
+	 * @param array[]  $pinned The runs to act on that are not on the page.
+	 * @param int|null $next   The run_id the next page goes on after; null for none.
 	 * @return string
 	 */
-	private static function runs_html( array $runs ) {
+	private static function runs_html( array $runs, array $pinned = array(), $next = null ) {
 		$html = '<div class="ab-staging ab-staging-transfer__runs"><h3 class="ab-setting__title">' . esc_html( 'Runs' ) . '</h3>';
-		if ( array() === $runs ) {
+		if ( array() === $runs && array() === $pinned ) {
 			return $html . '<p class="ab-note">' . esc_html( 'No run yet. A run takes over what a person approved from a report, one step per call of the assistant (wp_site_push).' ) . '</p></div>';
 		}
-		$html .= '<div class="ab-table-wrap"><table class="ab-table ab-staging-transfer__list"><thead><tr><th scope="col">' . esc_html( 'Run' ) . '</th><th scope="col">' . esc_html( 'State' ) . '</th><th scope="col">' . esc_html( 'Steps' ) . '</th><th scope="col">' . esc_html( 'Backups' ) . '</th><th scope="col"><span class="screen-reader-text">' . esc_html( 'Actions' ) . '</span></th></tr></thead><tbody>';
+		if ( array() !== $pinned ) {
+			$html .= '<p class="ab-note">' . esc_html( 'To act on: a run that is not closed, or a takeover whose pairs can still be taken back.' ) . '</p>';
+			$html .= self::runs_table( $pinned, 'ab-staging-transfer__pinned' );
+		}
+		if ( array() !== $runs ) {
+			$html .= self::runs_table( $runs, 'ab-staging-transfer__list' );
+		}
+		if ( null !== $next ) {
+			$html .= '<p><a href="' . esc_url( self::url( array( 'runs_after' => (int) $next ), AB_MCP_Transfer::ANCHOR ) ) . '">' . esc_html( 'Older runs' ) . '</a></p>';
+		}
+		return $html . '<p class="ab-note">' . esc_html( 'Aborting closes an open run: what its steps wrote stays, and its pairs can be taken back one by one. The backups of the last three completed takeovers are kept without an age; others for the period their close got.' ) . '</p></div>';
+	}
+
+	/**
+	 * A table of runs.
+	 *
+	 * @param array[] $runs  AB_MCP_Transfer::run_row() each.
+	 * @param string  $class The class of the table.
+	 * @return string
+	 */
+	private static function runs_table( array $runs, $class ) {
+		$html = '<div class="ab-table-wrap"><table class="ab-table ' . esc_attr( $class ) . '"><thead><tr><th scope="col">' . esc_html( 'Run' ) . '</th><th scope="col">' . esc_html( 'State' ) . '</th><th scope="col">' . esc_html( 'Steps' ) . '</th><th scope="col">' . esc_html( 'Backups' ) . '</th><th scope="col"><span class="screen-reader-text">' . esc_html( 'Actions' ) . '</span></th></tr></thead><tbody>';
 		foreach ( $runs as $run ) {
 			$id    = (int) $run['run_id'];
 			$what  = sprintf( '%1$d, %2$s, %3$s', $id, 'revert' === $run['type'] ? 'way back' : 'takeover', self::when( $run['created'] ) );
@@ -308,7 +365,7 @@ final class AB_MCP_Transfer_View {
 			}
 			$html .= '</td></tr>';
 		}
-		return $html . '</tbody></table></div><p class="ab-note">' . esc_html( 'Aborting closes an open run: what its steps wrote stays, and its pairs can be taken back one by one. The backups of the last three completed takeovers are kept without an age; others for the period their close got.' ) . '</p></div>';
+		return $html . '</tbody></table></div>';
 	}
 
 	/**
