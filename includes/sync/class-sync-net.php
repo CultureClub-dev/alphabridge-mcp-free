@@ -126,8 +126,10 @@
  * - a body of a data: address of a text type in a charset it does not
  *   declare and that no BOM gives: not read, locked;
  * - a serialized value that does not serialize back from its value byte for
- *   byte although nothing was dropped (a float of 17 digits a PHP before 7.1
- *   wrote, a key of digits as a text): read as a whole as well, so prose in
+ *   byte although nothing was dropped (a float written with another
+ *   serialize_precision than the one of this site, such as 17 digits: any
+ *   PHP with serialize_precision=17 writes so, PHP 8.5 too, and PHP before
+ *   7.1 by default; a key of digits as a text): read as a whole as well, so prose in
  *   its braces («…, Token: drei») locks there as before branch 11b.
  * And what is neither read nor locked: a script of an image that builds the
  * name of a credential at run time (a template literal with ${…}, a

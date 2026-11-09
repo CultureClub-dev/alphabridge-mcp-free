@@ -644,12 +644,17 @@ Position, die das Theme hier nicht registriert, in der Prüfung des Laufs
   `testEachKeyAndLeafOfAStructureIsReadOnItsOwn` und
   `SyncStructureTest::testACredentialInASerializedValueOfMetaAndOfAnOptionStillHoldsItInTheReportAndThePackage`.
 - Grenze C: Ein Wert, der nicht Byte für Byte zurück serialisiert, ohne
-  dass etwas verloren ging (eine Gleitkommazahl, die ein PHP vor 7.1 mit
-  17 Stellen schrieb, `d:0.10000000000000001;`; ein Schlüssel aus Ziffern
-  als Text, `s:1:"5"`), wird ebenfalls als Ganzes geprüft; Prosa der Form
-  «…, Token: drei» in seinen Klammern sperrt dort wie vor Zweig 11b
-  (selten: WordPress und PHP ab 7.1 schreiben so nicht; ein solcher Wert
-  wird beim nächsten Speichern neu geschrieben). Prüffall
+  dass etwas verloren ging (eine Gleitkommazahl, die mit einer anderen
+  `serialize_precision` geschrieben wurde als der, mit der die prüfende
+  Site zurück serialisiert, etwa mit 17 Stellen,
+  `d:0.10000000000000001;`: so schreibt jedes PHP mit
+  `serialize_precision=17`, auch PHP 8.5, und PHP vor 7.1 als Vorgabe;
+  ein Schlüssel aus Ziffern als Text, `s:1:"5"`), wird ebenfalls als
+  Ganzes geprüft; Prosa der Form «…, Token: drei» in seinen Klammern
+  sperrt dort wie vor Zweig 11b (selten: die Vorgabe von PHP ab 7.1 ist
+  `serialize_precision=-1`, die kürzeste Schreibweise; eine Site mit 17
+  liest ihre eigenen Werte gleich zurück, nur Werte einer anderen
+  Einstellung weichen ab). Prüffall
   `SyncNetTest::testAValueThatDoesNotSerializeBackIsReadAsItsTextAsWell`.
 - Gezählt am 09.11.2026 auf dem lokalen Paar (Site B, Inventar aller
   Arten, vorher auf `8df6146`, nachher auf diesem Zweig): die frische Site
