@@ -607,8 +607,10 @@ Position, die das Theme hier nicht registriert, in der Prüfung des Laufs
   Wert nicht Byte für Byte zu seinem Text zurück, hat das Entpacken etwas
   verworfen (ein Schlüssel zweimal, dessen erster Wert ersetzt wird; Bytes
   nach dem Ende des Werts): dann wird der Text zusätzlich als Ganzes
-  geprüft, wie vor Zweig 11b. Die Orte einer Sperre nennen Positionen
-  (`meta:<key>:net:php.0.key:raw/base64`), nie einen Schlüssel oder Wert.
+  geprüft, wie vor Zweig 11b. Die Orte einer Sperre nennen im Wert nur
+  Positionen (`meta:<Meta-Schlüssel>:net:php.0.key:raw/base64`: der
+  Schlüssel des ersten Eintrags des entpackten Werts), nie einen Schlüssel
+  oder Wert des Arrays, der selbst ein Zugangsdatum sein kann.
 - Die Zählung der Verweise aus Zweig 4 bleibt über den Rohwert: bei Meta
   und Optionen über den serialisierten Text, beim Widget-Bereich über
   Schlüssel und Blätter. Was dort nicht zu Ende gelesen ist (ein Körper,
