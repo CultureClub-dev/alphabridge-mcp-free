@@ -694,7 +694,7 @@ Position, die das Theme hier nicht registriert, in der Prüfung des Laufs
   Plugins) und drei echten Zugangsdaten (Code in einem Blatt, Base64 in
   einem Blatt und als Schlüssel): vorher zehn Sperren
   `*:unread_credential`, nachher nur die drei echten.
-- Die Klauseln stehen in der Mutationsliste `netz` (182 Einträge, 178 über
+- Die Klauseln stehen in der Mutationsliste `netz` (175 Einträge, 171 über
   Unit-Tests, 3 über `SyncStructureTest`, 1 über `SyncLocksTest`;
   geschrieben von `tests/mutation/gen/netz.py`), die Klauseln des Netzes
   aus Zweig 4 weiter in `kanon`. Die festen Formate (GRENZEN.md) brachten
@@ -721,6 +721,13 @@ Position, die das Theme hier nicht registriert, in der Prüfung des Laufs
   änderte 26 und strich 1 (`basic-pairs-exact`, ersetzt durch
   `basic-pairs-case`); danach liefen
   135 einzeln (101 von `netz`, 29 von `kanon`, 5 von `lauf`): alle
+  getötet.
+  Der Entscheid vom 09.11.2026 vormittags (Basic nach dem Ort, ohne
+  Liste) brachte 11 Einträge (die Weiche, `basic-place`, `basic-check`,
+  `prose-unit` und ihre Varianten), änderte 6 und strich 18: die Liste
+  der Beispielpaare (`basic-pairs`, `basic-pairs-case`,
+  `basic-pairs-whole`, je ein Eintrag je Paar) gibt es nicht mehr; danach
+  liefen 133 einzeln (98 von `netz`, 30 von `kanon`, 5 von `lauf`): alle
   getötet. Lokal lief jeder Eintrag von `netz` und jeder Eintrag von
   `kanon` und `struktur`, dessen Suchtext im geänderten Code liegt, einzeln
   (76 Einträge): 73 getötet; `b-widget-form`, `b-widget-form-it` und

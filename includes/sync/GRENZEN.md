@@ -210,42 +210,24 @@ neu.
   (`abcdefghijklmnopqrstuvwx` sperrt). Codex-Runde 4 zu 11b, B: vorher
   sperrte jeder Wert, auch die Beispiele der API-Anleitungen
   («Authorization: bearer TOKEN» von GitHub, «Bearer abc123»).
-  `Basic` sperrt, wo das Base64 zu `user:password` dekodiert; frei nur,
-  wo das Paar als Ganzes ein dokumentiertes Beispielpaar ist
-  (`EXAMPLE_PAIRS`), ohne Rücksicht auf die Schreibweise von Benutzer und
-  Passwort (Codex-Runde 6 zu 11b, B1: `User:Password` der Veeam-Doku und
-  `Username:Password` der CycleSoftware-Doku sperrten nach dem exakten
-  Vergleich neu), oder das Passwort (bei leerem Passwort der Benutzer: ein
-  Schlüssel als Benutzer) ein exakter Platzhalter ist. Codex-Runde 5 zu
-  11b, A4: ein Beispielwort allein gibt nichts frei, `admin:password`,
-  `admin:secret`, `secret:`, `admin:Passwort` und `api:SECRET` sperren wie
-  `admin:admin`, `a:b` und `review:Sommer2026`, weil sie funktionierende
-  schwache Zugänge sein können. Die Liste enthält ausschliesslich Paare,
-  die an einer Quelle als Beispiel stehen, je mit Fundstelle im Kommentar
-  des Codes, gelesen am 09.11.2026:
-  - RFC 7617, Abschnitt 2: `Aladdin:open sesame`; Abschnitt 2.1:
-    `test:123£`;
-  - MDN, «Authorization»: `aladdin:opensesame`; MDN, «HTTP
-    authentication»: `username:password` (in einer Adresse); riptutorial,
-    «HTTP Basic Authentication»: `username:password`; CycleSoftware, Doku
-    der API: `Username:Password`;
-  - curl, Handbuch (curl.se/docs/manpage.html): `user:password`
-    (`--location-trusted`, `--ntlm`), `name:password` (`--basic`,
-    `--digest`), `user:secret`, `me:pwd` (`--anyauth`), `key:secret`
-    (`--aws-sigv4`), bei `--proxy-user` `user:passwd` und `smith:secret`;
-    Veeam, «HTTP Authentication» der REST-API: `User:Password`;
-  - Ruby, `Net::HTTPHeader#basic_auth`: `user:pass`;
-  - npm, Paket jm-basic-auth-credentials (README): `foo:bar`;
-  - zerotool, «Basic auth header generator guide»: `deploy:pa:ss`;
-  - AriesPortal, NIBRS, «AuthInfo»: `TestUser:SecurePassword123`;
-  - das Tutorial T10 der Zählung: `user:password`.
-  Nie in der Liste, in keiner Schreibweise, auch wo eine Seite sie zeigt:
-  Werksvorgaben und übliche Standardzugänge (`admin:admin`,
-  `admin:password`, `admin:1234`, `admin:12345`, `root:root`, `root:toor`,
-  `administrator:password`, `guest:guest` und ähnliche); SyncNetTest hält
-  fest, dass keines darin steht. Kein Tutorial und kein Text der Zählung
-  zeigt ein solches Paar; T1 zeigt `admin:` mit einem Platzhalter
-  (`xxxx xxxx …`), frei. Der Wert endet an «;» und «,»: ein Feld
+  `Basic` zählt nach dem Ort des Werts (Thomas, 09.11.2026 vormittags,
+  «A: nach Kontext», decisions.md; `prose_unit()`): in `post_content`
+  nicht, für jedes Paar und jede Schreibweise, auch `admin:admin` (Grenze
+  C wie Zugangsdaten in Prosa, unten); überall sonst, in der Meta von
+  Post, Term und Menüeintrag, in Optionen, Widgets und den anderen Spalten
+  wie `post_excerpt` und der Beschreibung eines Terms, in der Art wie im
+  Export und im Paket, sperrt es an jeder Stelle der Regel, wo das Base64
+  zu `user:password` dekodiert: jedes Paar, auch ein dokumentiertes
+  Beispiel (`Aladdin:open sesame` aus RFC 7617, `user:password`) und eine
+  gespeicherte Liste von Headern (`{"headers":["Authorization: Basic …"]}`,
+  als einfacher Wert und als Blatt). Frei bleibt dort nur ein Passwort
+  (bei leerem Passwort der Benutzer: ein Schlüssel als Benutzer), das ein
+  exakter Platzhalter ist (`admin:YOUR_PASSWORD`). Die Weiche hängt an der
+  Einheit, aus der der Wert stammt (`$at`, `$kind`), nicht an der Stelle
+  im Text: was aus `post_content` stammt, urteilt im Export und im Paket
+  wie `post_content`; das CSS eines Themes, das als `post_content`
+  gespeichert ist, zählt Basic. Die Liste der Beispielpaare und die
+  Sonderregel für Standardzugänge der Runden 5 und 6 sind gestrichen. Der Wert endet an «;» und «,»: ein Feld
   danach wird als eigenes gelesen (Codex-Runde 3 zu 11b, A3).
   `"Authorization":` von JSON und `Authorization=` oder `=>` zählen wie
   bisher nach dem Namen.
@@ -279,8 +261,7 @@ neu.
 - Öffentlich dokumentierte Beispielwerte (`EXAMPLES`, Steuerung nach
   Codex-Runde 4 zu 11b) sind frei, nur als ganzer Wert und in jeder Form,
   die das Netz nach dem Wert beurteilt: als Token eines Dienstes, als JWT,
-  nach Bearer (Basic nur mit seinen Beispielpaaren, oben; der
-  Geheimschlüssel von AWS als Passwort eines Paars sperrt). Höchstens ein
+  nach Bearer (Basic geht nach seinem Ort, oben, ohne Liste). Höchstens ein
   «.» am Ende fällt vor dem Vergleich weg, das Satzende (Codex-Runde 5 zu
   11b, A5): der Geheimschlüssel von AWS mit «.» bleibt frei, mit «..»
   sperrt er. Ein Zeichen
@@ -300,8 +281,6 @@ neu.
     `a-string-secret-at-least-256-bits-long`); beide hier mit HMAC aus dem
     dokumentierten Schlüssel nachgerechnet, die Seite zeigt das Token nur
     als Bild;
-  - RFC 7617, Abschnitt 2: das Base64 von `Aladdin:open sesame`;
-  - MDN, «Authorization»: das Base64 von `aladdin:opensesame`;
   - RFC 6750, Abschnitte 2.1 bis 2.3 und 4: das Access Token des
     Beispiels (15 Zeichen, nach Bearer schon unter 20 frei);
   - Slack, docs.slack.dev/authentication/tokens: die drei Beispiele von
@@ -309,7 +288,10 @@ neu.
     2016, mit langem Geheimnis).
   GitHub (Blog zu den Formaten der Tokens) und Stripe (Seite der
   API-Schlüssel) zeigen kein vollständiges Token einer der Formen oben;
-  `sk_test_…` zählt nicht. Gezählt mit einer AWS-Anleitung mit beiden
+  `sk_test_…` zählt nicht. Die Base64-Werte aus RFC 7617 und MDN sind
+  gestrichen (09.11.2026 vormittags): ihre dokumentierte Form ist Basic,
+  und Basic fragt keine Liste mehr; nach Bearer zeigt sie keine Doku.
+  Gezählt mit einer AWS-Anleitung mit beiden
   Schlüsseln (Fliesstext und `aws configure`), zwei JWT-Anleitungen, dem
   Beispiel aus RFC 6750, dem Block der Slack-Doku, dem Geheimschlüssel von
   AWS nach Bearer und im Basic-Paar: auf `8df6146` frei, vor der Liste
@@ -364,8 +346,11 @@ Grenzen (Gruppe C):
   Reihenfolge:
   1. der Name wie geschrieben, in kleinen Buchstaben
      (`is_credential_key()`): genau ein Wort von `CREDENTIAL_EXACT`
-     (`token`, `secret`, `password`, `pass`, `pwd`, `passphrase`,
-     `passcode`, `otp`, `credential`, je mit Mehrzahl) oder irgendwo
+     (`pass`, `token`, `tokens`, `secret`, `secrets`, `password`,
+     `passwords`, `passphrase`, `passphrases`, `passcode`, `passcodes`,
+     `pwd`, `pwds`, `otp`, `otps`, `credential`, `credentials`; nicht
+     `passes`: `passes` und `userPasses` sind keine Namen eines
+     Zugangsdatums, Codex-Runde 7, C1) oder irgendwo
      wörtlich ein Teil von `CREDENTIAL_NEEDLES` (darunter `api_key`,
      `apikey`, `access_token`, `consumer_key`, `oauth`, `_token`,
      `_secret`, `_password`, `passwd`): ja;
@@ -402,21 +387,33 @@ Grenzen (Gruppe C):
   gekürzten JWT mit «...» und einen gekürzten Schlüssel von Stripe mit
   14 Zeichen vor «...». Keine bekannte Tokenform enthält drei Punkte
   hintereinander; ein JWT hat einzelne zwischen seinen Teilen.
-- Codex-Runde 6 zu 11b, A2: ein dokumentiertes Beispielpaar von Basic
-  bleibt frei, auch wo jemand es als echten Zugang vergibt (`me:pwd` und
-  `user:passwd` aus dem Handbuch von curl, ebenso `user:password`). Die
-  Liste enthält ausschliesslich Paare aus gelesenen Quellen (oben, und im
-  Kommentar von `EXAMPLE_PAIRS`). Nicht darin, weil keine gelesene Quelle
-  sie als Beispiel zeigt: `test:test` (auch ein häufiger echter
-  Testzugang: im Zweifel gesperrt) und `john:secret`; sie sperren.
-- Ein Standardzugang in einem Basic-Header sperrt, auch wo eine Anleitung
-  ihn zeigt: so zeigt die Community von Adobe Experience League (AEM,
-  «How to get Authorization: Basic Auth Header from AEM Author») das Paar
-  `admin:admin` als Header. Grund: Thomas' Vorgabe vom 04.11.2026 («was
-  sehr selten oder konstruiert ist kann gesperrt werden»); keine neue
-  Fehlsperre im Sinn des Zählers. Steht er wie dort in der Spur von curl
-  (`> Authorization: Basic …`), steht er am Anfang keiner Zeile und zählt
-  nicht nach dem Wert (die Grenze der Stellung oben).
+- Grenze C, `Basic` in `post_content` (Thomas, 09.11.2026 vormittags,
+  «A: nach Kontext», decisions.md): ein Header `Authorization: Basic …`
+  im Text eines Posts sperrt nicht, welches Paar auch darin steht, auch
+  ein echtes (`admin:admin`, `review:Sommer2026`), am Textanfang, nach
+  einem Zeilenumbruch und in Anführungszeichen. Grund wie für Zugangsdaten
+  in Prosa: `wp_get_post` gibt den Rohinhalt ohnehin aus
+  (`includes/tools/class-tools-content.php:83`). Gezählt am 09.11.2026:
+  die Anleitungen mit Basic von Quarkus (`Alice:secret`), Swagger
+  (`demo:p@55w0rd`), Ruby (`my_account:my_password`), Veeam, RFC 7617,
+  MDN und curl bleiben in `post_content` frei; gegenüber `8df6146` sperrt
+  dort kein gewöhnlicher Text neu. `"Authorization":` von JSON und
+  `'Authorization' =>` sperren dort wie auf `8df6146` nach dem Namen.
+- Seltener Fall nach demselben Entscheid: eine Anleitung mit einem
+  Basic-Header ausserhalb von `post_content` (ein HTML-Widget, die
+  Beschreibung eines Terms, ein Auszug, ein Meta-Feld eines Builders)
+  sperrt. Gezählt: das Tutorial T10 mit dem Header auf eigener Zeile, die
+  Anleitungen von Veeam und CycleSoftware, das Beispiel aus RFC 7617 und
+  die Anleitungen von Quarkus, Swagger, Ruby, MDN, curl und mit
+  `admin:admin` oder `review:Sommer2026` sperren in Meta, Option, Widget,
+  `post_excerpt` und der Beschreibung eines Terms, in `post_content` nicht.
+  Steht der Header wie in der Spur von curl (`> Authorization: Basic …`)
+  nach einem Zeichen, steht er am Anfang keiner Zeile und zählt nicht nach
+  dem Wert (die Grenze der Stellung oben).
+- Die Anzeige der Schreiber (`AB_MCP_Sync_Post_Writer::shown_value()`,
+  `checked_before()`) fragt `over_name()`, das keinen Ort kennt: sie
+  verbirgt jedes Paar von Basic, auch aus `post_content`. Das hält
+  nichts fest, was das Paket enthält, und zeigt nur weniger.
 - Ein dokumentiertes Beispiel in einem Feld mit dem Namen eines
   Zugangsdatums (`aws_secret_access_key = …`, `"password": "…"`) sperrt
   weiter wie auf `8df6146`: dort sperrt die Zugangsprüfung
