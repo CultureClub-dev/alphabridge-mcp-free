@@ -5911,3 +5911,589 @@ msgstr "Demandez à un administrateur d'ouvrir la page Extensions dans wp-admin,
 
 msgid "The plugin file was missing, so the plugin had not been loaded: only its entry was taken out of the list of active plugins, as the Plugins page of wp-admin does."
 msgstr "Le fichier de l'extension manquait, l'extension n'avait donc pas été chargée : seule son entrée a été retirée de la liste des extensions actives, comme le fait la page Extensions de wp-admin."
+
+# The takeover on the page «Staging» (Z8): the key of the staging site and its pairing code,
+# the section «Takeover» with its runs, the way back and the moments, the notices of its forms,
+# the protected store and the refusals the forms pass on.
+msgid "The key of this staging site was made. Its fingerprint and pairing code are below: confirm it on the page AlphaBridge → Staging of the production site."
+msgstr "La clé de ce site de staging a été créée. Son empreinte et son code d’appairage figurent ci-dessous : confirmez-la sur la page AlphaBridge → Staging du site de production."
+
+msgid "This staging site has its key already; nothing was changed."
+msgstr "Ce site de staging a déjà sa clé ; rien n’a été modifié."
+
+msgid "The key of this staging site was renewed: packages and fetch addresses of the old key are given out no more. 1. On the production site, open AlphaBridge → Staging. 2. Enter the new pairing code shown below, or fetch the key again. 3. Compare the fingerprint with the one below and confirm it there. Copies of packages delivered before stay readable there for up to 24 hours while the old key is confirmed there; confirming the new key, or removing the pair there, ends that."
+msgstr "La clé de ce site de staging a été renouvelée : les paquets et les adresses de récupération de l’ancienne clé ne sont plus délivrés. 1. Sur le site de production, ouvrez AlphaBridge → Staging. 2. Saisissez le nouveau code d’appairage affiché ci-dessous, ou récupérez à nouveau la clé. 3. Comparez l’empreinte avec celle ci-dessous et confirmez-la là-bas. Les copies des paquets livrés auparavant y restent lisibles jusqu’à 24 heures tant que l’ancienne clé y est confirmée ; confirmer la nouvelle clé, ou y retirer la paire, y met fin."
+
+msgid "The key of the staging site is prepared, not confirmed. Compare its fingerprint below with the one the staging site shows on its page AlphaBridge → Staging, and confirm it only if the two are the same."
+msgstr "La clé du site de staging est préparée, pas confirmée. Comparez son empreinte ci-dessous avec celle que le site de staging affiche sur sa page AlphaBridge → Staging, et ne la confirmez que si les deux sont identiques."
+
+msgid "The key of the staging site is confirmed: this site reads the packages signed with it."
+msgstr "La clé du site de staging est confirmée : ce site lit les paquets signés avec elle."
+
+msgid "Nothing was changed: the action was not to fetch the key, to enter a pairing code or to confirm the key."
+msgstr "Rien n’a été modifié : l’action n’était ni récupérer la clé, ni saisir un code d’appairage, ni confirmer la clé."
+
+msgid "Nothing was made: only a confirmed staging site has a key. Confirm the role staging site above first."
+msgstr "Rien n’a été créé : seul un site de staging confirmé a une clé. Confirmez d’abord le rôle site de staging ci-dessus."
+
+msgid "Nothing was saved: the new key of this staging site could not be made or did not read back from the database, and the old key was removed, so this site signs nothing. Ask the host to enable the sodium extension of PHP and to check that the database accepts writes to the options, then confirm the role or make the key again."
+msgstr "Rien n’a été enregistré : la nouvelle clé de ce site de staging n’a pas pu être créée ou n’a pas été relue depuis la base de données, et l’ancienne clé a été retirée ; ce site ne signe donc rien. Demandez à l’hébergeur d’activer l’extension sodium de PHP et de vérifier que la base de données accepte les écritures dans les options, puis confirmez le rôle ou créez à nouveau la clé."
+
+msgid "Nothing was done: only the confirmed production site anchors the key of a staging site. Confirm the role production site above first."
+msgstr "Rien n’a été fait : seul le site de production confirmé ancre la clé d’un site de staging. Confirmez d’abord le rôle site de production ci-dessus."
+
+msgid "Nothing was done: this production site has no staging site paired. Enter the address of the staging site above first."
+msgstr "Rien n’a été fait : ce site de production n’est apparié à aucun site de staging. Saisissez d’abord l’adresse du site de staging ci-dessus."
+
+msgid "Nothing was fetched: the key is fetched only over https, and the address of the staging site stored here is not an https:// address. Enter the pairing code of the staging site instead."
+msgstr "Rien n’a été récupéré : la clé n’est récupérée qu’en https, et l’adresse du site de staging enregistrée ici n’est pas une adresse https://. Saisissez plutôt le code d’appairage du site de staging."
+
+msgid "The key could not be fetched: the staging site did not answer this site. Check that it answers (the checklist above), or enter its pairing code instead."
+msgstr "La clé n’a pas pu être récupérée : le site de staging n’a pas répondu à ce site. Vérifiez qu’il répond (la liste de contrôle ci-dessus), ou saisissez plutôt son code d’appairage."
+
+msgid "The staging site did not give its key (a redirect is not followed). On the staging site, confirm the role staging site and make its key, and update AlphaBridge MCP there; then fetch again, or enter its pairing code instead."
+msgstr "Le site de staging n’a pas donné sa clé (une redirection n’est pas suivie). Sur le site de staging, confirmez le rôle site de staging et créez sa clé, et mettez à jour AlphaBridge MCP là-bas ; puis récupérez à nouveau, ou saisissez plutôt son code d’appairage."
+
+msgid "The staging site answered, but not with a key this site can read. Update AlphaBridge MCP on the staging site, or enter its pairing code instead."
+msgstr "Le site de staging a répondu, mais pas avec une clé que ce site peut lire. Mettez à jour AlphaBridge MCP sur le site de staging, ou saisissez plutôt son code d’appairage."
+
+msgid "The pairing code does not read as the code of a staging site. Copy it again in full from the page AlphaBridge → Staging of the staging site and enter it again."
+msgstr "Le code d’appairage ne se lit pas comme le code d’un site de staging. Copiez-le à nouveau en entier depuis la page AlphaBridge → Staging du site de staging et saisissez-le à nouveau."
+
+msgid "Nothing was prepared: the key names another address of the staging site than the one stored here, and the two must be the same exactly. Correct the address on the site that has it wrong, then try again."
+msgstr "Rien n’a été préparé : la clé désigne une autre adresse du site de staging que celle enregistrée ici, et les deux doivent être exactement identiques. Corrigez l’adresse sur le site où elle est erronée, puis réessayez."
+
+msgid "There is no prepared key to confirm. Fetch the key, or enter the pairing code of the staging site, first."
+msgstr "Il n’y a pas de clé préparée à confirmer. Récupérez d’abord la clé, ou saisissez d’abord le code d’appairage du site de staging."
+
+msgid "Not confirmed: the prepared key belongs to another address than the staging site stored now. Fetch the key, or enter the pairing code, again."
+msgstr "Non confirmée : la clé préparée appartient à une autre adresse que le site de staging enregistré maintenant. Récupérez à nouveau la clé, ou saisissez à nouveau le code d’appairage."
+
+msgid "Not confirmed: the fingerprint is not the one of the prepared key. Load this page again, compare the fingerprint with the one the staging site shows, and confirm again."
+msgstr "Non confirmée : l’empreinte n’est pas celle de la clé préparée. Rechargez cette page, comparez l’empreinte avec celle que le site de staging affiche, et confirmez à nouveau."
+
+msgid "Nothing was prepared or confirmed: this key of the staging site was confirmed here before and then replaced or revoked (the pair was removed or changed), so it is not confirmed again. 1. On the staging site, open AlphaBridge → Staging and click «Renew the key» under «Key of this staging site». 2. Here, enter its new pairing code or fetch the key again. 3. Compare the fingerprint with the one the staging site shows and confirm it."
+msgstr "Rien n’a été préparé ni confirmé : cette clé du site de staging a été confirmée ici auparavant, puis remplacée ou révoquée (la paire a été retirée ou modifiée) ; elle n’est donc pas confirmée à nouveau. 1. Sur le site de staging, ouvrez AlphaBridge → Staging et cliquez sur « Renouveler la clé » sous « Clé de ce site de staging ». 2. Ici, saisissez son nouveau code d’appairage ou récupérez à nouveau la clé. 3. Comparez l’empreinte avec celle que le site de staging affiche et confirmez-la."
+
+msgid "The new key was not confirmed: the key it replaces could not be kept as replaced (the database refused the write), and without that the old key could be confirmed again. The old key stays confirmed. 1. Ask the host to check that the database accepts writes to the options of this site. 2. Then confirm the new key again here."
+msgstr "La nouvelle clé n’a pas été confirmée : la clé qu’elle remplace n’a pas pu être conservée comme remplacée (la base de données a refusé l’écriture), et sans cela l’ancienne clé pourrait être confirmée à nouveau. L’ancienne clé reste confirmée. 1. Demandez à l’hébergeur de vérifier que la base de données accepte les écritures dans les options de ce site. 2. Confirmez ensuite à nouveau la nouvelle clé ici."
+
+msgid "Nothing was saved: the pair stays as it was, because the confirmed key of the staging site could not be kept as revoked (the database refused the write), and without that it could be confirmed here again. 1. Ask the host to check that the database accepts writes to the options of this site. 2. Then remove or change the pair again."
+msgstr "Rien n’a été enregistré : la paire reste telle qu’elle était, car la clé confirmée du site de staging n’a pas pu être conservée comme révoquée (la base de données a refusé l’écriture), et sans cela elle pourrait être confirmée à nouveau ici. 1. Demandez à l’hébergeur de vérifier que la base de données accepte les écritures dans les options de ce site. 2. Retirez ou modifiez ensuite à nouveau la paire."
+
+msgid "The key was not confirmed: the anchor did not read back from the database. 1. Ask the host to check that the database accepts writes to the options of this site. 2. Then confirm the key again here."
+msgstr "La clé n’a pas été confirmée : l’ancrage n’a pas été relu depuis la base de données. 1. Demandez à l’hébergeur de vérifier que la base de données accepte les écritures dans les options de ce site. 2. Confirmez ensuite à nouveau la clé ici."
+
+msgid "This staging site has its key, but the secret its fetch addresses are signed with could not be stored (the database refused the write). 1. Ask the host to check that the database accepts writes to the options of this site. 2. Then make the package again; the key and its confirmation on the production site stay."
+msgstr "Ce site de staging a sa clé, mais le secret avec lequel ses adresses de récupération sont signées n’a pas pu être enregistré (la base de données a refusé l’écriture). 1. Demandez à l’hébergeur de vérifier que la base de données accepte les écritures dans les options de ce site. 2. Créez ensuite à nouveau le paquet ; la clé et sa confirmation sur le site de production restent."
+
+msgid "Nothing was changed: «Renew the key» works only from the button on the page AlphaBridge → Staging. Open that page and click it there."
+msgstr "Rien n’a été modifié : « Renouveler la clé » ne fonctionne que depuis le bouton de la page AlphaBridge → Staging. Ouvrez cette page et cliquez-y."
+
+msgid "The edition notes are hidden on this site; what each moment says of this site stays."
+msgstr "Les notes sur les éditions sont masquées sur ce site ; ce que chaque moment indique sur ce site reste affiché."
+
+msgid "The edition notes show again on this site."
+msgstr "Les notes sur les éditions s’affichent de nouveau sur ce site."
+
+msgid "Nothing was changed: the forms of the takeover work only from their buttons on the page AlphaBridge → Staging. Open that page and click it there."
+msgstr "Rien n’a été modifié : les formulaires de la reprise ne fonctionnent que depuis leurs boutons sur la page AlphaBridge → Staging. Ouvrez cette page et cliquez-y."
+
+msgid "Key for taking changes over"
+msgstr "Clé pour reprendre des modifications"
+
+msgid "Shown here once this site is confirmed as the staging site, or as the production site paired with a staging site."
+msgstr "Affiché ici dès que ce site est confirmé comme site de staging, ou comme site de production apparié à un site de staging."
+
+msgid "Key of this staging site"
+msgstr "Clé de ce site de staging"
+
+msgid "This staging site has no key yet. The production site takes changes over only from a staging site whose key a person confirmed there."
+msgstr "Ce site de staging n’a pas encore de clé. Le site de production ne reprend des modifications que depuis un site de staging dont une personne y a confirmé la clé."
+
+msgid "Make the key"
+msgstr "Créer la clé"
+
+msgid "Fingerprint: %s"
+msgstr "Empreinte : %s"
+
+msgid "On the production site, fetch this key over https or enter the pairing code below on its page AlphaBridge → Staging, compare the fingerprint it shows with this one, and confirm it there."
+msgstr "Sur le site de production, récupérez cette clé en https ou saisissez le code d’appairage ci-dessous sur sa page AlphaBridge → Staging, comparez l’empreinte qu’il affiche avec celle-ci, et confirmez-la là-bas."
+
+msgid "Pairing code"
+msgstr "Code d’appairage"
+
+msgid "Renew the key where the production site no longer accepts this one (it was replaced or revoked there, for instance when the pair was removed), or where it may be known to others. The role of this site stays. Packages and fetch addresses of this key are given out no more at once; the production site reads new packages of this site once a person has confirmed the new key there, with its new pairing code or by fetching it. Copies of packages delivered before stay readable there for up to 24 hours while this key is confirmed there; confirming the new key, or removing the pair there, ends that."
+msgstr "Renouvelez la clé lorsque le site de production n’accepte plus celle-ci (elle y a été remplacée ou révoquée, par exemple quand la paire a été retirée), ou lorsqu’elle peut être connue d’autres personnes. Le rôle de ce site reste. Les paquets et les adresses de récupération de cette clé ne sont aussitôt plus délivrés ; le site de production lit les nouveaux paquets de ce site dès qu’une personne y a confirmé la nouvelle clé, avec son nouveau code d’appairage ou en la récupérant. Les copies des paquets livrés auparavant y restent lisibles jusqu’à 24 heures tant que cette clé y est confirmée ; confirmer la nouvelle clé, ou y retirer la paire, y met fin."
+
+msgid "Renew the key"
+msgstr "Renouveler la clé"
+
+msgid "Key of the staging site"
+msgstr "Clé du site de staging"
+
+msgid "Confirmed by %1$s on %2$s: the key of the staging site %3$s with the fingerprint %4$s. This site reads the packages signed with it."
+msgstr "Confirmée par %1$s le %2$s : la clé du site de staging %3$s avec l’empreinte %4$s. Ce site lit les paquets signés avec elle."
+
+msgid "No key of the staging site %s is confirmed here yet, so this site takes nothing over from it."
+msgstr "Aucune clé du site de staging %s n’est encore confirmée ici ; ce site n’en reprend donc rien."
+
+msgid "Fetched on %1$s, not confirmed: the key with the fingerprint %2$s. Compare it with the fingerprint the staging site shows on its page AlphaBridge → Staging, and confirm it only if the two are the same."
+msgstr "Récupérée le %1$s, non confirmée : la clé avec l’empreinte %2$s. Comparez-la avec l’empreinte que le site de staging affiche sur sa page AlphaBridge → Staging, et ne la confirmez que si les deux sont identiques."
+
+msgid "Entered on %1$s, not confirmed: the key with the fingerprint %2$s. Compare it with the fingerprint the staging site shows on its page AlphaBridge → Staging, and confirm it only if the two are the same."
+msgstr "Saisie le %1$s, non confirmée : la clé avec l’empreinte %2$s. Comparez-la avec l’empreinte que le site de staging affiche sur sa page AlphaBridge → Staging, et ne la confirmez que si les deux sont identiques."
+
+msgid "Confirm the key"
+msgstr "Confirmer la clé"
+
+msgid "Fetch the key from the staging site"
+msgstr "Récupérer la clé depuis le site de staging"
+
+msgid "The address of the staging site is not an https:// address, so its key is not fetched from here: enter its pairing code."
+msgstr "L’adresse du site de staging n’est pas une adresse https://, sa clé n’est donc pas récupérée d’ici : saisissez son code d’appairage."
+
+msgid "Pairing code of the staging site"
+msgstr "Code d’appairage du site de staging"
+
+msgid "Prepare the key from the code"
+msgstr "Préparer la clé à partir du code"
+
+msgid "A fetched or entered key is only prepared: this site reads nothing signed with it until a person confirms it here."
+msgstr "Une clé récupérée ou saisie est seulement préparée : ce site ne lit rien de signé avec elle tant qu’une personne ne l’a pas confirmée ici."
+
+msgid "Beside WordPress: the folder ab-mcp-store beside the WordPress folder would lie inside the web root."
+msgstr "À côté de WordPress : le dossier ab-mcp-store à côté du dossier WordPress se trouverait dans la racine web."
+
+msgid "Beside WordPress: the folder ab-mcp-store beside the WordPress folder cannot be created or written, or a part of it is a link."
+msgstr "À côté de WordPress : le dossier ab-mcp-store à côté du dossier WordPress ne peut pas être créé ou écrit, ou une partie de celui-ci est un lien."
+
+msgid "Beside WordPress: the folder for this installation there belongs to another installation."
+msgstr "À côté de WordPress : le dossier de cette installation à cet endroit appartient à une autre installation."
+
+msgid "In the uploads folder: there is no uploads folder."
+msgstr "Dans le dossier uploads : il n’y a pas de dossier uploads."
+
+msgid "In the uploads folder: the folder ab-mcp-store-… in it cannot be created or written, or a part of it is a link."
+msgstr "Dans le dossier uploads : le dossier ab-mcp-store-… qu’il contient ne peut pas être créé ou écrit, ou une partie de celui-ci est un lien."
+
+msgid "In the uploads folder: the folder for this installation there belongs to another installation."
+msgstr "Dans le dossier uploads : le dossier de cette installation à cet endroit appartient à une autre installation."
+
+msgid "In the uploads folder: this site cannot fetch its own files to check them (its address is local or private, or the request failed)."
+msgstr "Dans le dossier uploads : ce site ne peut pas récupérer ses propres fichiers pour les vérifier (son adresse est locale ou privée, ou la requête a échoué)."
+
+msgid "In the uploads folder: a test file beside the folder was not served at the address of the uploads folder, so the check would prove nothing."
+msgstr "Dans le dossier uploads : un fichier de test à côté du dossier n’a pas été servi à l’adresse du dossier uploads, la vérification ne prouverait donc rien."
+
+msgid "In the uploads folder: a test file in the folder was served: the web server does not honour its .htaccess or web.config."
+msgstr "Dans le dossier uploads : un fichier de test dans le dossier a été servi : le serveur web ne respecte pas son .htaccess ou son web.config."
+
+msgid "There is no protected store, so nothing is exported, imported or taken over: the id of this installation (the option ab_mcp_install_id) could not be stored. Ask the host to check that the database user of WordPress may write to the options table, then try again."
+msgstr "Il n’y a pas de dépôt protégé, donc rien n’est exporté, importé ni repris : l’identifiant de cette installation (l’option ab_mcp_install_id) n’a pas pu être enregistré. Demandez à l’hébergeur de vérifier que l’utilisateur de base de données de WordPress peut écrire dans la table des options, puis réessayez."
+
+msgid "There is no protected store in this request, so nothing is exported, imported or taken over: another request moved the store just now. Call it again."
+msgstr "Il n’y a pas de dépôt protégé dans cette requête, donc rien n’est exporté, importé ni repris : une autre requête vient de déplacer le dépôt. Appelez à nouveau."
+
+msgid "There is no protected store in this request, so nothing is exported, imported or taken over: the request does not know the document root of the web server, so it cannot check that the folder beside WordPress lies outside the web root, and no proof of a web request of the last 24 hours is there. Call it again over the web, through the MCP endpoint or in wp-admin."
+msgstr "Il n’y a pas de dépôt protégé dans cette requête, donc rien n’est exporté, importé ni repris : la requête ne connaît pas la racine des documents du serveur web ; elle ne peut donc pas vérifier que le dossier à côté de WordPress se trouve hors de la racine web, et aucune preuve d’une requête web des dernières 24 heures n’est disponible. Appelez à nouveau par le web, via le point de terminaison MCP ou dans wp-admin."
+
+msgid "Beside WordPress: the folder cannot be used."
+msgstr "À côté de WordPress : le dossier ne peut pas être utilisé."
+
+msgid "In the uploads folder: the folder cannot be used."
+msgstr "Dans le dossier uploads : le dossier ne peut pas être utilisé."
+
+msgid "There is no protected store, so nothing is exported, imported or taken over. %s Ask the host to let PHP create the folder ab-mcp-store beside the WordPress folder, outside the web root (the safe place), or to make the web server refuse the folder ab-mcp-store-… in the uploads folder (Apache and LiteSpeed read the .htaccess in it, IIS its web.config; nginx needs a rule such as location ~ /ab-mcp-store- { deny all; }); then try again."
+msgstr "Il n’y a pas de dépôt protégé, donc rien n’est exporté, importé ni repris. %s Demandez à l’hébergeur de laisser PHP créer le dossier ab-mcp-store à côté du dossier WordPress, hors de la racine web (l’emplacement sûr), ou de faire refuser par le serveur web le dossier ab-mcp-store-… dans le dossier uploads (Apache et LiteSpeed lisent le .htaccess qu’il contient, IIS son web.config ; nginx a besoin d’une règle comme location ~ /ab-mcp-store- { deny all; }) ; puis réessayez."
+
+msgid "%d change ready."
+msgid_plural "%d changes ready."
+msgstr[0] "%d modification prête."
+msgstr[1] "%d modifications prêtes."
+
+msgid "Run %1$d: %2$d steps, %3$d calls since the run was made, duration %4$s."
+msgstr "Exécution %1$d : %2$d étapes, %3$d appels depuis la création de l’exécution, durée %4$s."
+
+msgid "You are taking run %d back pair by pair."
+msgstr "Vous annulez l’exécution %d paire par paire."
+
+msgid "%d second"
+msgid_plural "%d seconds"
+msgstr[0] "%d seconde"
+msgstr[1] "%d secondes"
+
+msgid "%d minute"
+msgid_plural "%d minutes"
+msgstr[0] "%d minute"
+msgstr[1] "%d minutes"
+
+msgid "%1$d h %2$d min"
+msgstr "%1$d h %2$d min"
+
+msgid "Pro monthly, 9 USD"
+msgstr "Pro mensuel, 9 USD"
+
+msgid "Free carries the takeover over step by step, each step a call of your AI of its own, with the lock and a check per step. Pro bundles many steps per call, holds the lock over the whole run and makes a restore point automatically before a bulk takeover. In both editions the lock does not cover every way of writing; a change made past it meanwhile can be lost. You can take all %d over one by one now."
+msgstr "Free effectue la reprise étape par étape, chaque étape étant un appel distinct de votre IA, avec le verrou et une vérification par étape. Pro regroupe de nombreuses étapes par appel, conserve le verrou pendant toute l’exécution et crée automatiquement un point de restauration avant une reprise en masse. Dans les deux éditions, le verrou ne couvre pas toutes les manières d’écrire ; une modification faite entre-temps en le contournant peut être perdue. Vous pouvez maintenant reprendre les %d une par une."
+
+msgid "Try it for 7 days"
+msgstr "Essayez-le pendant 7 jours"
+
+msgid "Free works this way so that every object pair is checked. Pro takes the supported changes of a run back together. What was changed here since and what cannot be taken back stays as a finding in both editions."
+msgstr "Free fonctionne ainsi pour que chaque paire d’objets soit vérifiée. Pro annule ensemble les modifications prises en charge d’une exécution. Ce qui a été modifié ici depuis et ce qui ne peut pas être annulé reste comme constat dans les deux éditions."
+
+msgctxt "state of a run"
+msgid "open"
+msgstr "ouverte"
+
+msgctxt "state of a run"
+msgid "interrupted"
+msgstr "interrompue"
+
+msgctxt "state of a run"
+msgid "going back"
+msgstr "en retour en arrière"
+
+msgctxt "state of a run"
+msgid "done"
+msgstr "terminée"
+
+msgctxt "state of a run"
+msgid "closed with findings"
+msgstr "clôturée avec constats"
+
+msgctxt "state of a run"
+msgid "aborted"
+msgstr "abandonnée"
+
+msgctxt "state of a run"
+msgid "closed as checked"
+msgstr "clôturée comme vérifiée"
+
+msgctxt "state of a run"
+msgid "taken back"
+msgstr "annulée"
+
+msgid "Takeover"
+msgstr "Reprise"
+
+msgid "Take changes over from the staging site"
+msgstr "Reprendre des modifications depuis le site de staging"
+
+msgid "The key of the staging site is confirmed (fingerprint %s): this site reads its packages and takes over what a person approves."
+msgstr "La clé du site de staging est confirmée (empreinte %s) : ce site lit ses paquets et reprend ce qu’une personne approuve."
+
+msgid "Shown here once this site is the confirmed production site paired with a staging site: the report of what differs, the runs that take changes over, and the way back pair by pair."
+msgstr "Affiché ici dès que ce site est le site de production confirmé apparié à un site de staging : le rapport des différences, les exécutions qui reprennent des modifications, et le retour en arrière paire par paire."
+
+msgid "The report, the object pairs, taking a pair back and going on with a way back need the confirmed key of the staging site, so they are not shown while there is none. The runs of this site stay: their journal, «Close as checked» and «Abort» need no key."
+msgstr "Le rapport, les paires d’objets, l’annulation d’une paire et la poursuite d’un retour en arrière nécessitent la clé confirmée du site de staging ; ils ne sont donc pas affichés tant qu’il n’y en a pas. Les exécutions de ce site restent : leur journal, « Clôturer comme vérifiée » et « Abandonner » n’ont besoin d’aucune clé."
+
+msgid "Run %d is interrupted: no step runs and no new run begins until a person closes it as checked or the way back leads it on."
+msgstr "L’exécution %d est interrompue : aucune étape ne s’exécute et aucune nouvelle exécution ne commence tant qu’une personne ne l’a pas clôturée comme vérifiée ou que le retour en arrière ne l’a pas prise en charge."
+
+msgid "Read its journal"
+msgstr "Lire son journal"
+
+msgid "Protected store"
+msgstr "Dépôt protégé"
+
+msgid "Beside the WordPress folder, outside the web root: no web request reaches the packages, reports and backups, checked on %s."
+msgstr "À côté du dossier WordPress, hors de la racine web : aucune requête web n’atteint les paquets, les rapports et les sauvegardes, vérifié le %s."
+
+msgid "Beside the WordPress folder, outside the web root: no web request reaches the packages, reports and backups."
+msgstr "À côté du dossier WordPress, hors de la racine web : aucune requête web n’atteint les paquets, les rapports et les sauvegardes."
+
+msgid "In the uploads folder, closed to the web, checked on %s."
+msgstr "Dans le dossier uploads, fermé au web, vérifié le %s."
+
+msgid "In the uploads folder, closed to the web."
+msgstr "Dans le dossier uploads, fermé au web."
+
+msgid "Run %d is interrupted"
+msgstr "L’exécution %d est interrompue"
+
+msgid "A step began and the request that ran it ended before it finished. Nothing more is written until a person decides: read the journal below, check the objects it names in wp-admin, then close the run as checked here (nothing is written; the pairs of its steps left begun become unclear), or let the connection that made it lead its way back (wp_site_revert action=plan with this run, confirmed with its token)."
+msgstr "Une étape a commencé et la requête qui l’exécutait s’est terminée avant qu’elle soit finie. Plus rien n’est écrit tant qu’une personne n’a pas décidé : lisez le journal ci-dessous, vérifiez dans wp-admin les objets qu’il nomme, puis clôturez ici l’exécution comme vérifiée (rien n’est écrit ; les paires de ses étapes restées commencées deviennent incertaines), ou laissez la connexion qui l’a créée mener son retour en arrière (wp_site_revert action=plan avec cette exécution, confirmé avec son jeton)."
+
+msgid "Close as checked"
+msgstr "Clôturer comme vérifiée"
+
+msgid "Run %1$d (%2$s): its steps"
+msgstr "Exécution %1$d (%2$s) : ses étapes"
+
+msgid "The way back, pair by pair"
+msgstr "Le retour en arrière, paire par paire"
+
+msgid "Each pair goes back on its own, byte for byte where a part is still what the run wrote. A part changed here since is left with its value before; an object the run made stays as a rest."
+msgstr "Chaque paire revient en arrière séparément, octet pour octet là où une partie est encore ce que l’exécution a écrit. Une partie modifiée ici depuis est laissée avec sa valeur d’avant ; un objet créé par l’exécution reste comme résidu."
+
+msgid "Step"
+msgstr "Étape"
+
+msgid "Object"
+msgstr "Objet"
+
+msgid "The way back"
+msgstr "Le retour en arrière"
+
+msgid "goes back"
+msgstr "revient en arrière"
+
+msgid "goes back where a part is still the run's"
+msgstr "revient en arrière là où une partie est encore celle de l’exécution"
+
+msgid "stays as it is (it deviated within its step): check it by hand"
+msgstr "reste tel quel (il a dévié au cours de son étape) : vérifiez-le à la main"
+
+msgid "made by the run: stays as a rest"
+msgstr "créé par l’exécution : reste comme résidu"
+
+msgid "Take this pair back"
+msgstr "Annuler cette paire"
+
+msgid "What"
+msgstr "Quoi"
+
+msgid "State"
+msgstr "État"
+
+msgid "Parts"
+msgstr "Parties"
+
+msgid "Finding"
+msgstr "Constat"
+
+msgid "revert of step %1$d of run %2$d: %3$s %4$s"
+msgstr "annulation de l’étape %1$d de l’exécution %2$d : %3$s %4$s"
+
+msgid "revert of step %1$d: %2$s %3$s"
+msgstr "annulation de l’étape %1$d : %2$s %3$s"
+
+msgid "(before: %s)"
+msgstr "(avant : %s)"
+
+msgid "step %1$d (%2$s: %3$s)"
+msgstr "étape %1$d (%2$s : %3$s)"
+
+msgid "step %1$d (%2$s, takes step %3$d back)"
+msgstr "étape %1$d (%2$s, annule l’étape %3$d)"
+
+msgid "step %1$d (%2$s)"
+msgstr "étape %1$d (%2$s)"
+
+msgid "Not run: %s."
+msgstr "Non exécutées : %s."
+
+msgid "Left as a rest (made by the run; remove by hand in wp-admin where it should go): %s."
+msgstr "Laissés comme résidus (créés par l’exécution ; à retirer à la main dans wp-admin s’ils doivent disparaître) : %s."
+
+msgid "Last report"
+msgstr "Dernier rapport"
+
+msgid "No report is kept on this site (a report holds a day at most). An assistant makes one with wp_site_diff from the packages of the staging site."
+msgstr "Aucun rapport n’est conservé sur ce site (un rapport reste valable un jour au plus). Un assistant en crée un avec wp_site_diff à partir des paquets du site de staging."
+
+msgid "A report begun on %s is not done yet: the assistant goes on with it (wp_site_diff with its report_id)."
+msgstr "Un rapport commencé le %s n’est pas encore terminé : l’assistant le poursuit (wp_site_diff avec son report_id)."
+
+msgid "Made on %1$s, holds until %2$s: %3$d entries; %4$d can be taken over (%5$d changed on the staging site, %6$d only there), %7$d wait for a choice, %8$d wait for another object, %9$d are locked."
+msgstr "Créé le %1$s, valable jusqu’au %2$s : %3$d entrées ; %4$d peuvent être reprises (%5$d modifiées sur le site de staging, %6$d présentes là-bas seulement), %7$d attendent un choix, %8$d attendent un autre objet, %9$d sont verrouillées."
+
+msgid "Runs"
+msgstr "Exécutions"
+
+msgid "No run yet. A run takes over what a person approved from a report, one step per call of the assistant (wp_site_push)."
+msgstr "Aucune exécution pour l’instant. Une exécution reprend ce qu’une personne a approuvé d’un rapport, une étape par appel de l’assistant (wp_site_push)."
+
+msgid "To act on: a run that is not closed, or a takeover whose pairs can still be taken back."
+msgstr "À traiter : une exécution qui n’est pas clôturée, ou une reprise dont les paires peuvent encore être annulées."
+
+msgid "At most %1$d runs to act on are listed here; %2$d further runs whose backups are kept were not looked at. They are in the list below (Older runs), and wp_staging_status names the run that is not closed."
+msgstr "Au plus %1$d exécutions à traiter sont listées ici ; %2$d autres exécutions dont les sauvegardes sont conservées n’ont pas été examinées. Elles figurent dans la liste ci-dessous (Exécutions plus anciennes), et wp_staging_status nomme l’exécution qui n’est pas clôturée."
+
+msgid "Older runs"
+msgstr "Exécutions plus anciennes"
+
+msgid "Aborting closes an open run: what its steps wrote stays, and its pairs can be taken back one by one. The backups of the last three completed takeovers are kept without an age; others for the period their close got."
+msgstr "Abandonner clôture une exécution ouverte : ce que ses étapes ont écrit reste, et ses paires peuvent être annulées une par une. Les sauvegardes des trois dernières reprises terminées sont conservées sans limite d’âge ; les autres pendant la durée fixée lors de leur clôture."
+
+msgid "Run"
+msgstr "Exécution"
+
+msgid "Steps"
+msgstr "Étapes"
+
+msgid "Backups"
+msgstr "Sauvegardes"
+
+msgid "%1$d, way back, %2$s"
+msgstr "%1$d, retour en arrière, %2$s"
+
+msgid "%1$d, takeover, %2$s"
+msgstr "%1$d, reprise, %2$s"
+
+msgid "%1$d of %2$d done"
+msgstr "%1$d sur %2$d faites"
+
+msgid "Abort"
+msgstr "Abandonner"
+
+msgid "Go on with the way back"
+msgstr "Poursuivre le retour en arrière"
+
+msgid "kept while the run is not closed"
+msgstr "conservées tant que l’exécution n’est pas clôturée"
+
+msgid "kept: one of the last three completed takeovers"
+msgstr "conservées : l’une des trois dernières reprises terminées"
+
+msgid "kept until %s"
+msgstr "conservées jusqu’au %s"
+
+msgid "kept (closed before periods were stored)"
+msgstr "conservées (clôturée avant que les durées soient enregistrées)"
+
+msgid "kept for a way back that is not closed"
+msgstr "conservées pour un retour en arrière qui n’est pas clôturé"
+
+msgid "no longer kept"
+msgstr "plus conservées"
+
+msgid "kept (the runs could not be read)"
+msgstr "conservées (les exécutions n’ont pas pu être lues)"
+
+msgid "Object pairs"
+msgstr "Paires d’objets"
+
+msgid "No pair of the staging site whose key is confirmed here after these."
+msgstr "Aucune paire du site de staging dont la clé est confirmée ici après celles-ci."
+
+msgid "No pair of the staging site whose key is confirmed here. An assistant pairs objects with wp_site_pairs, or a run pairs what it takes over."
+msgstr "Aucune paire du site de staging dont la clé est confirmée ici. Un assistant apparie des objets avec wp_site_pairs, ou une exécution apparie ce qu’elle reprend."
+
+msgid "Discarding a pair changes no content: its objects stay as they are on both sites, each without a pair from then on."
+msgstr "Écarter une paire ne modifie aucun contenu : ses objets restent tels quels sur les deux sites, chacun sans paire désormais."
+
+msgid "Pair"
+msgstr "Paire"
+
+msgid "Kind"
+msgstr "Type"
+
+msgid "Here"
+msgstr "Ici"
+
+msgid "On the staging site"
+msgstr "Sur le site de staging"
+
+msgid "%1$s, run %2$d"
+msgstr "%1$s, exécution %2$d"
+
+msgid "Discard"
+msgstr "Écarter"
+
+msgid "Next pairs"
+msgstr "Paires suivantes"
+
+msgid "Show edition notes"
+msgstr "Afficher les notes sur les éditions"
+
+msgid "Hide edition notes"
+msgstr "Masquer les notes sur les éditions"
+
+msgid "This staging site has no key yet: a person makes it on the page AlphaBridge → Staging of this site and confirms it on the production site; only then does the production site take anything over from here."
+msgstr "Ce site de staging n’a pas encore de clé : une personne la crée sur la page AlphaBridge → Staging de ce site et la confirme sur le site de production ; ce n’est qu’ensuite que le site de production reprend quoi que ce soit d’ici."
+
+msgid "The production site takes changes over from this site: wp_site_export here makes its packages (purpose=inventory for the report, purpose=objects for a run), and the page AlphaBridge → Staging of the production site shows the report, the runs and the way back."
+msgstr "Le site de production reprend des modifications depuis ce site : wp_site_export crée ici ses paquets (purpose=inventory pour le rapport, purpose=objects pour une exécution), et la page AlphaBridge → Staging du site de production affiche le rapport, les exécutions et le retour en arrière."
+
+msgid "The takeover runs on the confirmed production site paired with a staging site: a person confirms the role and the pair on the page AlphaBridge → Staging of both sites."
+msgstr "La reprise s’exécute sur le site de production confirmé apparié à un site de staging : une personne confirme le rôle et la paire sur la page AlphaBridge → Staging des deux sites."
+
+msgid "No key of the staging site is confirmed here: fetch it or enter its pairing code on the page AlphaBridge → Staging, compare the fingerprint with the one the staging site shows, and confirm it there. Until then nothing is taken over."
+msgstr "Aucune clé du site de staging n’est confirmée ici : récupérez-la ou saisissez son code d’appairage sur la page AlphaBridge → Staging, comparez l’empreinte avec celle que le site de staging affiche, et confirmez-la là. D’ici là, rien n’est repris."
+
+msgid "A key of the staging site is prepared but not confirmed: a person compares its fingerprint with the one the staging site shows on its page AlphaBridge → Staging, and confirms it on this site's page. Until then nothing is taken over."
+msgstr "Une clé du site de staging est préparée mais pas confirmée : une personne compare son empreinte avec celle que le site de staging affiche sur sa page AlphaBridge → Staging, et la confirme sur la page de ce site. D’ici là, rien n’est repris."
+
+msgid "The tables of the takeover are not there: deactivate and activate AlphaBridge in wp-admin so they are made, or ask the host to let the database user create tables."
+msgstr "Les tables de la reprise sont absentes : désactivez puis activez AlphaBridge dans wp-admin pour qu’elles soient créées, ou demandez à l’hébergeur de permettre à l’utilisateur de base de données de créer des tables."
+
+msgid "No run is open. The way: the report (wp_site_diff from the packages of the staging site), the approval of the person, the takeover (wp_site_push), its check, and the way back pair by pair (wp_site_revert); the page AlphaBridge → Staging shows the last report and the runs."
+msgstr "Aucune exécution n’est ouverte. Le chemin : le rapport (wp_site_diff à partir des paquets du site de staging), l’approbation de la personne, la reprise (wp_site_push), sa vérification, et le retour en arrière paire par paire (wp_site_revert) ; la page AlphaBridge → Staging affiche le dernier rapport et les exécutions."
+
+msgid "Step %1$d of run %2$d was begun by a request that ended before it finished (the lock is no longer held): the next call that reads the run with the lock (wp_site_push action=status) marks it interrupted. Then a person closes it as checked on the page AlphaBridge → Staging, or wp_site_revert action=plan with its run_id leads its way back."
+msgstr "L’étape %1$d de l’exécution %2$d a été commencée par une requête qui s’est terminée avant qu’elle soit finie (le verrou n’est plus détenu) : le prochain appel qui lit l’exécution avec le verrou (wp_site_push action=status) la marque comme interrompue. Ensuite, une personne la clôture comme vérifiée sur la page AlphaBridge → Staging, ou wp_site_revert action=plan avec son run_id mène son retour en arrière."
+
+msgid "Run %d is interrupted, and no key of the staging site is confirmed here: a person reads its journal and closes it as checked on the page AlphaBridge → Staging (nothing is written). Leading its way back waits until the key is confirmed again there."
+msgstr "L’exécution %d est interrompue, et aucune clé du site de staging n’est confirmée ici : une personne lit son journal et la clôture comme vérifiée sur la page AlphaBridge → Staging (rien n’est écrit). Mener son retour en arrière attend que la clé y soit à nouveau confirmée."
+
+msgid "Run %d is open, and no key of the staging site is confirmed here, so it takes no step: a person aborts it on the page AlphaBridge → Staging (what its steps wrote stays), or confirms the key again there."
+msgstr "L’exécution %d est ouverte, et aucune clé du site de staging n’est confirmée ici ; elle n’effectue donc aucune étape : une personne l’abandonne sur la page AlphaBridge → Staging (ce que ses étapes ont écrit reste), ou y confirme à nouveau la clé."
+
+msgid "The way back of run %d waits: no key of the staging site is confirmed here. It goes on once a person confirms the key again on the page AlphaBridge → Staging."
+msgstr "Le retour en arrière de l’exécution %d attend : aucune clé du site de staging n’est confirmée ici. Il se poursuit dès qu’une personne confirme à nouveau la clé sur la page AlphaBridge → Staging."
+
+msgid "The store lies in the folder ab-mcp-store-… of the uploads folder, which its .htaccess (Apache, LiteSpeed) or web.config (IIS) closes to the web; the self-check found it closed. On nginx the web server reads neither: there the host adds a rule such as location ~ /ab-mcp-store- { deny all; }. The safe place is the folder ab-mcp-store beside the WordPress folder, outside the web root, where PHP may create it."
+msgstr "Le dépôt se trouve dans le dossier ab-mcp-store-… du dossier uploads, que son .htaccess (Apache, LiteSpeed) ou son web.config (IIS) ferme au web ; l’autovérification l’a trouvé fermé. Sous nginx, le serveur web ne lit ni l’un ni l’autre : l’hébergeur y ajoute une règle comme location ~ /ab-mcp-store- { deny all; }. L’emplacement sûr est le dossier ab-mcp-store à côté du dossier WordPress, hors de la racine web, là où PHP peut le créer."
+
+msgid "Run %d is a run of the way back: it is not aborted, it runs to its end. Go on with it with wp_site_revert action=next over the connection that began it, or with «Go on with the way back» on the page AlphaBridge → Staging where it was begun there."
+msgstr "L’exécution %d est une exécution du retour en arrière : elle n’est pas abandonnée, elle va jusqu’à son terme. Poursuivez-la avec wp_site_revert action=next via la connexion qui l’a commencée, ou avec « Poursuivre le retour en arrière » sur la page AlphaBridge → Staging si elle y a été commencée."
+
+msgid "Run %d is closed as aborted. What its steps wrote stays as written; its pairs can be taken back one by one below."
+msgstr "L’exécution %d est clôturée comme abandonnée. Ce que ses étapes ont écrit reste tel quel ; ses paires peuvent être annulées une par une ci-dessous."
+
+msgid "Run %d is closed as checked. Nothing was written; the pairs of its steps left begun are unclear until a person aligns them (wp_site_pairs), and the site takes a new run again."
+msgstr "L’exécution %d est clôturée comme vérifiée. Rien n’a été écrit ; les paires de ses étapes restées commencées sont incertaines jusqu’à ce qu’une personne les aligne (wp_site_pairs), et le site accepte de nouveau une nouvelle exécution."
+
+msgid "The way back (run %d) goes on: it is not closed yet. Go on with it in the list of the runs."
+msgstr "Le retour en arrière (exécution %d) se poursuit : il n’est pas encore clôturé. Poursuivez-le dans la liste des exécutions."
+
+msgid "Taken back (run %d of the way back): the pair is as it was before the run."
+msgstr "Annulée (exécution %d du retour en arrière) : la paire est telle qu’elle était avant l’exécution."
+
+msgid "The way back (run %1$d) is closed with findings: %2$d object the run made stays as a rest; remove it by hand in wp-admin where it should go. Its steps below say what was left and why."
+msgid_plural "The way back (run %1$d) is closed with findings: %2$d objects the run made stay as a rest; remove them by hand in wp-admin where they should go. Its steps below say what was left and why."
+msgstr[0] "Le retour en arrière (exécution %1$d) est clôturé avec constats : %2$d objet créé par l’exécution reste comme résidu ; retirez-le à la main dans wp-admin s’il doit disparaître. Ses étapes ci-dessous indiquent ce qui a été laissé et pourquoi."
+msgstr[1] "Le retour en arrière (exécution %1$d) est clôturé avec constats : %2$d objets créés par l’exécution restent comme résidus ; retirez-les à la main dans wp-admin s’ils doivent disparaître. Ses étapes ci-dessous indiquent ce qui a été laissé et pourquoi."
+
+msgid "The way back (run %d) is closed with findings: a part changed here since the run wrote it, or did not read back, was left with its value before. Its steps below say what was left and why."
+msgstr "Le retour en arrière (exécution %d) est clôturé avec constats : une partie modifiée ici depuis que l’exécution l’a écrite, ou qui n’a pas été relue, a été laissée avec sa valeur d’avant. Ses étapes ci-dessous indiquent ce qui a été laissé et pourquoi."
+
+msgid "Pair %d is discarded: its objects stay as they are on both sites, each without a pair from now on."
+msgstr "La paire %d est écartée : ses objets restent tels quels sur les deux sites, chacun sans paire désormais."
+
+msgid "Only an open run is aborted; this run is %s. An interrupted run is closed as checked by a person on the page AlphaBridge → Staging, or wp_site_revert action=plan with its run_id leads its way back on or begins it; a run on its way back runs to its end with wp_site_revert action=next; a closed run is not aborted."
+msgstr "Seule une exécution ouverte est abandonnée ; cette exécution est %s. Une exécution interrompue est clôturée comme vérifiée par une personne sur la page AlphaBridge → Staging, ou wp_site_revert action=plan avec son run_id poursuit ou commence son retour en arrière ; une exécution en retour en arrière va jusqu’à son terme avec wp_site_revert action=next ; une exécution clôturée n’est pas abandonnée."
+
+msgid "The run %1$d is %2$s now (another call moved it since this one read it as open): nothing was changed. Ask for its status (wp_site_push action=status) and go on from there."
+msgstr "L’exécution %1$d est maintenant %2$s (un autre appel l’a fait évoluer depuis que celui-ci l’a lue comme ouverte) : rien n’a été modifié. Demandez son état (wp_site_push action=status) et poursuivez à partir de là."
+
+msgid "No pair was discarded: a pair changed since the page was loaded (a run took it over or back, or it was aligned anew). Look at it again on the page AlphaBridge → Staging and discard it then."
+msgstr "Aucune paire n’a été écartée : une paire a changé depuis le chargement de la page (une exécution l’a reprise ou annulée, ou elle a été réalignée). Examinez-la à nouveau sur la page AlphaBridge → Staging et écartez-la ensuite."
+
+msgid "Pass run_id, the run whose pairs go back."
+msgstr "Transmettez run_id, l’exécution dont les paires reviennent en arrière."
+
+msgid "Run %1$d is %2$s (%3$s): on the page AlphaBridge → Staging a person takes back the pairs of a closed run that wrote. An open run is aborted first (or goes back over the connection that made it, wp_site_revert), an interrupted one is closed as checked first, and a run of the way back is not taken back."
+msgstr "L’exécution %1$d est %2$s (%3$s) : sur la page AlphaBridge → Staging, une personne annule les paires d’une exécution clôturée qui a écrit. Une exécution ouverte est d’abord abandonnée (ou revient en arrière via la connexion qui l’a créée, wp_site_revert), une exécution interrompue est d’abord clôturée comme vérifiée, et une exécution du retour en arrière n’est pas annulée."
+
+msgid "A way back begins on the page AlphaBridge → Staging only from its form: pass true only for a request whose nonce was checked there."
+msgstr "Un retour en arrière ne commence sur la page AlphaBridge → Staging que depuis son formulaire : ne transmettez true que pour une requête dont le nonce y a été vérifié."
+
+msgid "The way back of run %d does not begin: the run or an object of this site changed since the page was loaded, so what it showed is not the plan as it is now. Nothing was written. Load the page AlphaBridge → Staging again and look at the pair once more."
+msgstr "Le retour en arrière de l’exécution %d ne commence pas : l’exécution ou un objet de ce site a changé depuis le chargement de la page ; ce qu’elle montrait n’est donc pas le plan tel qu’il est maintenant. Rien n’a été écrit. Rechargez la page AlphaBridge → Staging et examinez la paire une nouvelle fois."
+
+msgid "Closing an interrupted run as checked takes a person in wp-admin (page AlphaBridge → Staging): pass true only for a request whose nonce was checked there."
+msgstr "Clôturer une exécution interrompue comme vérifiée demande une personne dans wp-admin (page AlphaBridge → Staging) : ne transmettez true que pour une requête dont le nonce y a été vérifié."
+
+msgid "Run %d is not closed as checked: it is not the interruption the page showed any more (its way back began, or it went on and was interrupted again, since the page was loaded). Nothing was written. Load the page AlphaBridge → Staging again, read the journal as it is now, and close it then."
+msgstr "L’exécution %d n’est pas clôturée comme vérifiée : ce n’est plus l’interruption que la page montrait (son retour en arrière a commencé, ou elle a continué et a de nouveau été interrompue, depuis le chargement de la page). Rien n’a été écrit. Rechargez la page AlphaBridge → Staging, lisez le journal tel qu’il est maintenant, et clôturez-la ensuite."
+
+msgid "Only an interrupted run is closed as checked; this run is %s. Use wp_site_revert for the way back of a run that is open or closed."
+msgstr "Seule une exécution interrompue est clôturée comme vérifiée ; cette exécution est %s. Utilisez wp_site_revert pour le retour en arrière d’une exécution ouverte ou clôturée."
+
+msgid "This site has no run %d. Ask for the runs with wp_site_push action=status without a run_id (the open run), or plan one (action=plan)."
+msgstr "Ce site n’a pas d’exécution %d. Demandez les exécutions avec wp_site_push action=status sans run_id (l’exécution ouverte), ou planifiez-en une (action=plan)."
