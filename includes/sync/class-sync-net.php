@@ -72,7 +72,8 @@
  *   before them: a token of a service in its form (TOKENS: GitHub, Stripe,
  *   AWS, Slack, Mailchimp) and a JSON Web Token (JWT); at the start of a
  *   line or of a field the header Authorization with Bearer and a token, or
- *   Basic and the base64 of user:password (AUTHORIZATION). A placeholder is
+ *   Basic and the base64 of user:password (AUTHORIZATION); a private key
+ *   in PEM by its frame and a body of base64 (PEM). A placeholder is
  *   one only in its exact form as the whole value (PLACEHOLDER).
  *
  * COMPARE (check()): the structured readers of the unit noted every (space,
@@ -309,6 +310,15 @@ final class AB_MCP_Sync_Net {
 	 * limit (GRENZEN.md).
 	 */
 	const AUTHORIZATION = '/(?:^|(?<=[\r\n;"\'`:]))[ \t]*(?:proxy-)?authorization[ \t]*:[ \t]*["\'`]?[ \t]*(bearer|basic)[ \t]+([^\s"\'`;,]*)/i';
+
+	/**
+	 * A private key in PEM (RSA, EC, OPENSSH, ENCRYPTED, PGP … PRIVATE KEY)
+	 * by its frame, its body to the END line of the same label
+	 * (credentials(); the steering, 09.11.2026): it counts (as private_key)
+	 * by a body of valid base64 (pem()); a public key or a certificate
+	 * never.
+	 */
+	const PEM = '/-----BEGIN ((?:[A-Z0-9]+ )*)PRIVATE KEY((?: BLOCK)?)-----(.*?)-----END \\1PRIVATE KEY\\2-----/s';
 
 	/** The characters of a token of Bearer at the start of its value (b64token of RFC 6750). */
 	const BEARER_TOKEN = '#^[A-Za-z0-9\-._~+/]+=*#';
@@ -1677,6 +1687,16 @@ final class AB_MCP_Sync_Net {
 				}
 			}
 		}
+		// A private key in PEM by its frame and its body (the steering,
+		// 09.11.2026): «...», «…», «(dein Schlüssel)» in it are no base64.
+		if ( preg_match_all( self::PEM, $text, $m ) ) {
+			foreach ( $m[3] as $body ) {
+				if ( self::pem( $body ) ) {
+					$found[] = 'private_key';
+					break;
+				}
+			}
+		}
 		// The header Authorization with Bearer or Basic at the start of a
 		// line or of a field (Codex round 1 of branch 11b, A1; the steering,
 		// 09.11.2026): Bearer with a token that is no placeholder, Basic with
@@ -1748,6 +1768,29 @@ final class AB_MCP_Sync_Net {
 		$json = base64_decode( strtr( (string) $header, '-_', '+/' ), true ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- the header of a token, read.
 		$head = is_string( $json ) ? json_decode( $json, true ) : null;
 		return is_array( $head ) && array_key_exists( 'alg', $head );
+	}
+
+	/**
+	 * Whether the body of a private key in PEM is valid base64: its lines (a
+	 * <br> of HTML a line break as well) without the headers of an encrypted
+	 * key (Proc-Type, DEK-Info, Version: a name and «: ») and the checksum of
+	 * PGP («=» and four), together the alphabet of base64 with its padding
+	 * and a length of a multiple of four (what base64_decode() then decodes
+	 * strictly). A sentence, a word of another length, «...» or «…» are
+	 * none.
+	 *
+	 * @param string $body The text between the BEGIN and END lines.
+	 * @return bool
+	 */
+	public static function pem( $body ) {
+		$base64 = '';
+		foreach ( preg_split( '/\r\n|\r|\n|<br\s*\/?>/i', (string) $body ) as $line ) {
+			$line = trim( (string) $line );
+			if ( 1 !== preg_match( '/^[A-Za-z][A-Za-z0-9-]*:\s|^=[A-Za-z0-9+\/]{4}\z/', $line ) ) {
+				$base64 .= $line;
+			}
+		}
+		return 1 === preg_match( '/^[A-Za-z0-9+\/]+={0,2}\z/', $base64 ) && 0 === strlen( $base64 ) % 4;
 	}
 
 	/**

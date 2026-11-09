@@ -784,6 +784,59 @@ final class SyncNetTest extends TestCase {
 		self::assertFalse( AB_MCP_Sync_Net::basic( '' ) );
 	}
 
+	public function testAPrivateKeyInPemCountsByItsFrameAndABodyOfBase64(): void {
+		// The steering, 09.11.2026: by its frame (BEGIN and END of the same
+		// label) and a body of valid base64, in any context.
+		$t     = self::tokens();
+		$pem   = $t['pem'];
+		$body  = $t['pem_body'];
+		$extra = array();
+		$end   = static fn( string $label ): string => '-----END ' . $label . 'PRIVATE' . ' KEY-----';
+		foreach ( array(
+			$pem( '', $body ),
+			$pem( 'RSA ', $body ),
+			$pem( 'EC ', $body ),
+			$pem( 'OPENSSH ', $body ),
+			$pem( 'ENCRYPTED ', $body ),
+			$pem( 'RSA ', "Proc-Type: 4,ENCRYPTED\nDEK-Info: AES-128-CBC,3F17F5316E2BAC89\n\n" . $body ),
+			str_replace( 'PRIVATE KEY-----', 'PRIVATE KEY BLOCK-----', $pem( 'PGP ', "Version: GnuPG v2\n\n" . $body . "=nP3x\n" ) ),
+			str_replace( "\n", "\r\n", $pem( '', $body ) ),
+			str_replace( "\n", "\r", $pem( '', $body ) ),
+			'<p>' . str_replace( "\n", '<br>', $pem( '', $body ) ) . '</p>',
+			str_replace( "\n", "<br />\n", $pem( '', $body ) ),
+			$pem( '', preg_replace( '/^/m', '    ', $body ) ),
+			'Hier mein Schlüssel: ' . $pem( '', $body ) . ' – bitte nicht weitergeben.',
+			$pem( '', "MIIEvQIB\n" ),
+			$pem( '', "MIIEvQIBADANBg...\n" ) . "\n" . $pem( '', $body ),
+		) as $text ) {
+			self::assertSame( array( 'private_key' ), AB_MCP_Sync_Net::credentials( $text, $extra ), $text );
+		}
+		foreach ( array(
+			$pem( '', "MIIEvQIBADANBgkqhkiG9w0BAQEFAASC...\n" ),
+			$pem( '', "MIIEpAIBAAKCAQEA\u{2026}\n" ),
+			$pem( '', "(dein Schlüssel)\n" ),
+			$pem( '', "Hier kommt der Key 2 hin\n" ),
+			$pem( '', "Schluessel\n" ),
+			$pem( '', '' ),
+			$pem( '', "...\n" ),
+			"-----BEGIN PUBLIC KEY-----\n" . $body . '-----END PUBLIC KEY-----',
+			"-----BEGIN CERTIFICATE-----\n" . $body . '-----END CERTIFICATE-----',
+			'-----BEGIN RSA PRIVATE' . " KEY-----\n" . $body . $end( 'EC ' ),
+			str_replace( 'BEGIN PGP PRIVATE KEY-----', 'BEGIN PGP PRIVATE KEY BLOCK-----', $pem( 'PGP ', $body ) ),
+			'-----BEGIN PRIVATE' . " KEY-----\n" . $body,
+			'Ein privater Schlüssel beginnt mit -----BEGIN PRIVATE' . ' KEY----- und endet mit ' . $end( '' ) . '. Dazwischen steht Base64.',
+		) as $text ) {
+			self::assertSame( array(), AB_MCP_Sync_Net::credentials( $text, $extra ), $text );
+		}
+		self::assertTrue( AB_MCP_Sync_Net::pem( "MIIE\nvQIB\n" ) );
+		self::assertTrue( AB_MCP_Sync_Net::pem( "Proc-Type: 4,ENCRYPTED\nMIIE" ) );
+		self::assertTrue( AB_MCP_Sync_Net::pem( "=nP3x\nMIIE" ) );
+		self::assertTrue( AB_MCP_Sync_Net::pem( 'MII=' ) );
+		self::assertFalse( AB_MCP_Sync_Net::pem( 'MIIE vQIB' ) );
+		self::assertFalse( AB_MCP_Sync_Net::pem( 'MIIEv' ) );
+		self::assertFalse( AB_MCP_Sync_Net::pem( 'MIIE=vQI' ) );
+	}
+
 	public function testAPlaceholderIsOneOnlyInItsExactFormAsTheWholeValue(): void {
 		// The steering, 09.11.2026; Codex round 3 of branch 11b, A1: never as a
 		// part of a word.
@@ -1314,7 +1367,7 @@ final class SyncNetTest extends TestCase {
 			'password=geheim'             => array( 'password=geheim', 'credential_field' ),
 			'api_key: abc123def'          => array( 'api_key: abc123def', null ),
 			'a plain address'             => array( 'https://example.test/spiele/regeln/', 'frei' ),
-			'a private key'               => array( "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC7\n-----END PRIVATE KEY-----", null ),
+			'a private key'               => array( self::tokens()['pem']( '', "MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC7\n" ), 'unread_credential' ),
 			'a cookie header'             => array( 'Cookie: wordpress_logged_in_5c3e=admin%7C1762700000%7Cabc%7Cdef; wp-settings-1=x', null ),
 		);
 		$out = array();

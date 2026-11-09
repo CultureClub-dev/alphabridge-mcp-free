@@ -293,6 +293,35 @@ e('basic-user', 'basic(): with an empty password, the user (a key as the user) n
 e('basic-placeholder', 'basic(): the password no placeholder', NT,
   "\t\treturn ! self::placeholder( '' === $password ? (string) substr( $pair, 0, $at ) : $password );", "\t\treturn true;", 'net', N_AUTH)
 
+N_PEM = 'testAPrivateKeyInPemCountsByItsFrameAndABodyOfBase64'
+PEM = "const PEM = '/-----BEGIN ((?:[A-Z0-9]+ )*)PRIVATE KEY((?: BLOCK)?)-----(.*?)-----END \\\\1PRIVATE KEY\\\\2-----/s';"
+e('pem', 'credentials(): a private key in PEM counts by its frame and its body', NT,
+  "\t\t\t\tif ( self::pem( $body ) ) {", "\t\t\t\tif ( false ) {", 'net', N_PEM)
+e('pem-label', 'PEM: the END line of the same label', NT,
+  PEM, PEM.replace("-----END \\\\1PRIVATE", "-----END (?:[A-Z0-9]+ )*PRIVATE"), 'net', N_PEM)
+e('pem-block', 'PEM: BLOCK in both lines or in neither', NT,
+  PEM, PEM.replace("PRIVATE KEY\\\\2-----/s", "PRIVATE KEY(?: BLOCK)?-----/s"), 'net', N_PEM)
+e('pem-lazy', 'PEM: each key to its own END line', NT,
+  PEM, PEM.replace("-----(.*?)-----END", "-----(.*)-----END"), 'net', N_PEM)
+e('pem-lines', 'PEM: the body over its lines', NT,
+  PEM, PEM.replace("-----/s';", "-----/';"), 'net', N_PEM)
+e('pem-split', 'pem(): its lines at every line break and a <br> of HTML', NT,
+  "preg_split( '/\\r\\n|\\r|\\n|<br\\s*\\/?>/i', (string) $body )", "preg_split( '/\\r\\n|\\n/i', (string) $body )", 'net', N_PEM)
+e('pem-split-br', 'pem(): a <br> of HTML a line break', NT,
+  "preg_split( '/\\r\\n|\\r|\\n|<br\\s*\\/?>/i', (string) $body )", "preg_split( '/\\r\\n|\\r|\\n/i', (string) $body )", 'net', N_PEM)
+e('pem-trim', 'pem(): each line without the white space around it', NT,
+  "\t\t\t$line = trim( (string) $line );", "\t\t\t$line = (string) $line;", 'net', N_PEM)
+e('pem-headers', 'pem(): the headers of an encrypted key are no body', NT,
+  "if ( 1 !== preg_match( '/^[A-Za-z][A-Za-z0-9-]*:\\s|^=[A-Za-z0-9+\\/]{4}\\z/', $line ) ) {", "if ( 1 !== preg_match( '/^=[A-Za-z0-9+\\/]{4}\\z/', $line ) ) {", 'net', N_PEM)
+e('pem-checksum', 'pem(): the checksum of PGP is no body', NT,
+  "if ( 1 !== preg_match( '/^[A-Za-z][A-Za-z0-9-]*:\\s|^=[A-Za-z0-9+\\/]{4}\\z/', $line ) ) {", "if ( 1 !== preg_match( '/^[A-Za-z][A-Za-z0-9-]*:\\s/', $line ) ) {", 'net', N_PEM)
+e('pem-base64', 'pem(): the body base64 only, not empty', NT,
+  "return 1 === preg_match( '/^[A-Za-z0-9+\\/]+={0,2}\\z/', $base64 ) && 0 === strlen( $base64 ) % 4;", "return 1 === preg_match( '/^[A-Za-z0-9+\\/]*={0,2}\\z/', $base64 ) && 0 === strlen( $base64 ) % 4;", 'net', N_PEM)
+e('pem-alphabet', 'pem(): a sentence is no body', NT,
+  "return 1 === preg_match( '/^[A-Za-z0-9+\\/]+={0,2}\\z/', $base64 ) && 0 === strlen( $base64 ) % 4;", "return 0 === strlen( $base64 ) % 4;", 'net', N_PEM)
+e('pem-length', 'pem(): a length of a multiple of four', NT,
+  "return 1 === preg_match( '/^[A-Za-z0-9+\\/]+={0,2}\\z/', $base64 ) && 0 === strlen( $base64 ) % 4;", "return 1 === preg_match( '/^[A-Za-z0-9+\\/]+={0,2}\\z/', $base64 );", 'net', N_PEM)
+
 # ------------------------------------------- strings(): the references
 e('strings-keys', 'strings(): the keys of a structure counted for the references', NT,
   "\t\t\tif ( is_string( $key ) && '' !== $key ) {\n\t\t\t\t$out[] = $key;\n\t\t\t}\n", "", 'net', N_STRUCT)
