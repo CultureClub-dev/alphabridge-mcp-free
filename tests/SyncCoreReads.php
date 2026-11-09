@@ -762,7 +762,10 @@ trait SyncCoreReads {
 	 * and as a leaf of a serialized value of meta, nested, as post_content,
 	 * as a plain value and a leaf of an option, and in a widget instance;
 	 * with the verdict it must have ('sperrt', 'frei'), null where it locks
-	 * already on 8df6146 by the names before = and : (T2, T6). The tokens
+	 * already on 8df6146 by the names before = and : (T2, T6), 'ort' for
+	 * Basic in the header Authorization: free in the text of a post, locked
+	 * in every other form (Thomas, 09.11.2026 vormittags, «A: nach Kontext»;
+	 * alike by place, PROSE_FORMS). The tokens
 	 * are put together at run time (tests/fixtures/sync-tokens.php).
 	 *
 	 * @return array<string,array{0:string,1:?string}>
@@ -785,7 +788,7 @@ trait SyncCoreReads {
 			'Bearer after a line break'         => array( "Host: example.test\nAuthorization: Bearer " . $t['hex32'], 'sperrt' ),
 			'Bearer after a quote'              => array( 'curl -H "Authorization: Bearer ' . $t['hex32'] . '" https://api.example.test/', 'sperrt' ),
 			'Bearer, a placeholder in a word'   => array( 'Authorization: Bearer my_fake_' . $t['hex32'], 'sperrt' ),
-			'Basic, a pair'                     => array( 'Accept: application/json; Authorization: Basic ' . $b64( 'review:REVIEW_ONLY' ), 'sperrt' ),
+			'Basic, a pair'                     => array( 'Accept: application/json; Authorization: Basic ' . $b64( 'review:REVIEW_ONLY' ), 'ort' ),
 			'a field after a field'             => array( 'Authorization: Basic ' . $b64( 'abc' ) . ';Authorization: Bearer ' . $t['hex32'], 'sperrt' ),
 			'PEM'                               => array( $t['pem']( '', $t['pem_body'] ), 'sperrt' ),
 			'a login cookie'                    => array( 'Cookie: wordpress_logged_in_5c3e2a91=' . rawurlencode( 'admin|' . $tail ) . '; wp-settings-1=x', 'sperrt' ),
@@ -846,16 +849,16 @@ trait SyncCoreReads {
 			'Bearer, a JWT cut short'            => array( 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOi' . "\u{2026}", 'frei' ),
 			'curl of GitHub with TOKEN'          => array( 'curl -H "Authorization: Bearer TOKEN" https://api.github.com/graphql', 'frei' ),
 			'Bearer REVIEW_ONLY after ;'         => array( 'Accept: application/json; Authorization: Bearer REVIEW_ONLY', 'frei' ),
-			'Basic user:password'                => array( 'Authorization: Basic ' . $b64( 'user:password' ), 'frei' ),
-			'Basic Aladdin of RFC 7617'          => array( 'Authorization: Basic ' . $t['examples']['rfc 7617'], 'frei' ),
-			'Basic aladdin of MDN'               => array( 'Authorization: Basic ' . $t['examples']['mdn basic'], 'frei' ),
+			'Basic user:password'                => array( 'Authorization: Basic ' . $b64( 'user:password' ), 'ort' ),
+			'Basic Aladdin of RFC 7617'          => array( 'Authorization: Basic ' . $b64( 'Aladdin:open sesame' ), 'ort' ),
+			'Basic aladdin of MDN'               => array( 'Authorization: Basic ' . $b64( 'aladdin:opensesame' ), 'ort' ),
 			'Bearer of 40 hex'                   => array( 'Authorization: Bearer ' . $t['hex32'] . substr( $t['hex32'], 0, 8 ), 'sperrt' ),
 			'Bearer of 32 mixed'                 => array( 'Authorization: Bearer ' . substr( $t['github_pat'], 11, 22 ) . substr( $t['github_pat'], 34, 10 ), 'sperrt' ),
 			'Bearer of 24 small letters'         => array( 'Authorization: Bearer abcdefghijklmnopqrstuvwx', 'sperrt' ),
 			'Bearer of 32 with _ and digits'     => array( 'Authorization: Bearer ' . $under, 'sperrt' ),
-			'Basic, a real password'             => array( 'Authorization: Basic ' . $b64( 'review:Sommer2026' ), 'sperrt' ),
-			'Basic admin:admin'                  => array( 'Authorization: Basic ' . $b64( 'admin:admin' ), 'sperrt' ),
-			'Basic a:b'                          => array( 'Authorization: Basic ' . $b64( 'a:b' ), 'sperrt' ),
+			'Basic, a real password'             => array( 'Authorization: Basic ' . $b64( 'review:Sommer2026' ), 'ort' ),
+			'Basic admin:admin'                  => array( 'Authorization: Basic ' . $b64( 'admin:admin' ), 'ort' ),
+			'Basic a:b'                          => array( 'Authorization: Basic ' . $b64( 'a:b' ), 'ort' ),
 		) as $name => list( $text, $verdict ) ) {
 			$out[ $name ]                       = array( $text, $verdict );
 			$out[ $name . ', after a break' ]   = array( "Beispiel:\n" . $text, $verdict );
@@ -879,15 +882,15 @@ trait SyncCoreReads {
 			'the secret key of AWS with one more'                 => array( 'Authorization: Bearer ' . $e['aws secret access key'] . 'X', 'sperrt' ),
 			// Codex round 5 of branch 11b: A4 the pairs of Basic, A5 one «.» of
 			// a sentence, C1 the bounds of AKIA; A1 to A3 limit C (GRENZEN.md).
-			'Basic admin:password'                                => array( 'Authorization: Basic ' . $b64( 'admin:password' ), 'sperrt' ),
-			'Basic admin:secret'                                  => array( 'Authorization: Basic ' . $b64( 'admin:secret' ), 'sperrt' ),
-			'Basic secret: (a key as the user)'                   => array( 'Authorization: Basic ' . $b64( 'secret:' ), 'sperrt' ),
-			'Basic admin:Passwort'                                => array( 'Authorization: Basic ' . $b64( 'admin:Passwort' ), 'sperrt' ),
-			'Basic api:SECRET'                                    => array( 'Authorization: Basic ' . $b64( 'api:SECRET' ), 'sperrt' ),
-			'Basic, the pair of the keys of AWS'                  => array( 'Authorization: Basic ' . $b64( $e['aws access key id'] . ':' . $e['aws secret access key'] ), 'sperrt' ),
-			'Basic username:password'                             => array( 'Authorization: Basic ' . $b64( 'username:password' ), 'frei' ),
-			'Basic user:passwd of curl'                           => array( 'Authorization: Basic ' . $b64( 'user:passwd' ), 'frei' ),
-			'Basic me:pwd of curl'                                => array( 'Authorization: Basic ' . $b64( 'me:pwd' ), 'frei' ),
+			'Basic admin:password'                                => array( 'Authorization: Basic ' . $b64( 'admin:password' ), 'ort' ),
+			'Basic admin:secret'                                  => array( 'Authorization: Basic ' . $b64( 'admin:secret' ), 'ort' ),
+			'Basic secret: (a key as the user)'                   => array( 'Authorization: Basic ' . $b64( 'secret:' ), 'ort' ),
+			'Basic admin:Passwort'                                => array( 'Authorization: Basic ' . $b64( 'admin:Passwort' ), 'ort' ),
+			'Basic api:SECRET'                                    => array( 'Authorization: Basic ' . $b64( 'api:SECRET' ), 'ort' ),
+			'Basic, the pair of the keys of AWS'                  => array( 'Authorization: Basic ' . $b64( $e['aws access key id'] . ':' . $e['aws secret access key'] ), 'ort' ),
+			'Basic username:password'                             => array( 'Authorization: Basic ' . $b64( 'username:password' ), 'ort' ),
+			'Basic user:passwd of curl'                           => array( 'Authorization: Basic ' . $b64( 'user:passwd' ), 'ort' ),
+			'Basic me:pwd of curl'                                => array( 'Authorization: Basic ' . $b64( 'me:pwd' ), 'ort' ),
 			'the secret key of AWS ending a sentence'             => array( 'Authorization: Bearer ' . $e['aws secret access key'] . '.', 'frei' ),
 			'the secret key of AWS and ..'                        => array( 'Authorization: Bearer ' . $e['aws secret access key'] . '..', 'sperrt' ),
 			'the access key of AWS and ..'                        => array( 'Die ID lautet ' . $e['aws access key id'] . '..', 'sperrt' ),
@@ -904,44 +907,67 @@ trait SyncCoreReads {
 			'a tutorial with eyJhbGciOi...'                       => array( $para( 'Der Header sieht so aus:' ) . $code( "GET /api HTTP/1.1\nAuthorization: Bearer eyJhbGciOi..." ), 'frei' ),
 			'a tutorial with sk_live_...abcd'                     => array( $para( 'Dein Schlüssel endet so:' ) . $code( "curl https://api.example.test/ \\\n  -H 'Authorization: Bearer sk" . "_live_...abcd'" ), 'frei' ),
 			'a tutorial with ghp_...'                             => array( $para( 'Ein Token von GitHub:' ) . $code( "GET /user HTTP/1.1\nAuthorization: Bearer gh" . 'p_...' ), 'frei' ),
-			'a tutorial of RFC 7617'                              => array( $para( 'Das Beispiel aus RFC 7617 (Aladdin:open sesame):' ) . $code( "GET / HTTP/1.1\nAuthorization: Basic " . $e['rfc 7617'] ), 'frei' ),
-			'a tutorial of MDN'                                   => array( $para( 'Das Beispiel von MDN (aladdin:opensesame):' ) . $code( "GET / HTTP/1.1\nAuthorization: Basic " . $e['mdn basic'] ), 'frei' ),
+			'a tutorial of RFC 7617'                              => array( $para( 'Das Beispiel aus RFC 7617 (Aladdin:open sesame):' ) . $code( "GET / HTTP/1.1\nAuthorization: Basic " . $b64( 'Aladdin:open sesame' ) ), 'ort' ),
+			'a tutorial of MDN'                                   => array( $para( 'Das Beispiel von MDN (aladdin:opensesame):' ) . $code( "GET / HTTP/1.1\nAuthorization: Basic " . $b64( 'aladdin:opensesame' ) ), 'ort' ),
 			'a tutorial with a placeholder as the password'       => array( $para( 'Setze dein Passwort ein:' ) . $code( "GET / HTTP/1.1\nAuthorization: Basic " . $b64( 'admin:YOUR_PASSWORD' ) ), 'frei' ),
 			// Codex round 6 of branch 11b: B1 the pairs of examples in any
 			// case, never a default; A1 a key of AWS before «/».
-			'Basic User:Password of Veeam'                        => array( $para( 'In the value of the header, the client must prepend Basic before the Username:Password pair:' ) . $code( "GET /api/sessionMngr/ HTTP/1.1\nAuthorization: Basic " . $b64( 'User:Password' ) ), 'frei' ),
-			'Basic Username:Password of CycleSoftware'            => array( $code( "GET /api/v3/articles HTTP/1.1\nAuthorization: Basic " . $b64( 'Username:Password' ) ), 'frei' ),
-			'Basic USER:PASSWORD'                                 => array( 'Authorization: Basic ' . $b64( 'USER:PASSWORD' ), 'frei' ),
-			'Basic ALADDIN:OPEN SESAME'                           => array( 'Authorization: Basic ' . $b64( 'ALADDIN:OPEN SESAME' ), 'frei' ),
-			'Basic user:pass of Ruby'                             => array( 'Authorization: Basic ' . $b64( 'user:pass' ), 'frei' ),
-			'Basic User:Pass'                                     => array( 'Authorization: Basic ' . $b64( 'User:Pass' ), 'frei' ),
-			'Basic foo:bar of npm'                                => array( 'Authorization: Basic ' . $b64( 'foo:bar' ), 'frei' ),
-			'Basic Foo:Bar'                                       => array( 'Authorization: Basic ' . $b64( 'Foo:Bar' ), 'frei' ),
-			'Basic test:123£ of RFC 7617'                         => array( 'Authorization: Basic ' . $b64( "test:123\u{00A3}" ), 'frei' ),
-			'Basic deploy:pa:ss of zerotool'                      => array( 'Authorization: Basic ' . $b64( 'deploy:pa:ss' ), 'frei' ),
-			'Basic TestUser:SecurePassword123 of AriesPortal'     => array( 'Authorization: Basic ' . $b64( 'TestUser:SecurePassword123' ), 'frei' ),
-			'Basic Me:Pwd of curl'                                => array( 'Authorization: Basic ' . $b64( 'Me:Pwd' ), 'frei' ),
-			'Basic Admin:Admin'                                   => array( 'Authorization: Basic ' . $b64( 'Admin:Admin' ), 'sperrt' ),
-			'Basic ADMIN:PASSWORD'                                => array( 'Authorization: Basic ' . $b64( 'ADMIN:PASSWORD' ), 'sperrt' ),
-			'Basic Admin:Password'                                => array( 'Authorization: Basic ' . $b64( 'Admin:Password' ), 'sperrt' ),
-			'Basic root:toor'                                     => array( 'Authorization: Basic ' . $b64( 'root:toor' ), 'sperrt' ),
-			'Basic guest:guest'                                   => array( 'Authorization: Basic ' . $b64( 'guest:guest' ), 'sperrt' ),
-			'Basic test:test (limit C)'                           => array( 'Authorization: Basic ' . $b64( 'test:test' ), 'sperrt' ),
+			'Basic User:Password of Veeam'                        => array( $para( 'In the value of the header, the client must prepend Basic before the Username:Password pair:' ) . $code( "GET /api/sessionMngr/ HTTP/1.1\nAuthorization: Basic " . $b64( 'User:Password' ) ), 'ort' ),
+			'Basic Username:Password of CycleSoftware'            => array( $code( "GET /api/v3/articles HTTP/1.1\nAuthorization: Basic " . $b64( 'Username:Password' ) ), 'ort' ),
+			'Basic USER:PASSWORD'                                 => array( 'Authorization: Basic ' . $b64( 'USER:PASSWORD' ), 'ort' ),
+			'Basic ALADDIN:OPEN SESAME'                           => array( 'Authorization: Basic ' . $b64( 'ALADDIN:OPEN SESAME' ), 'ort' ),
+			'Basic user:pass of Ruby'                             => array( 'Authorization: Basic ' . $b64( 'user:pass' ), 'ort' ),
+			'Basic User:Pass'                                     => array( 'Authorization: Basic ' . $b64( 'User:Pass' ), 'ort' ),
+			'Basic foo:bar of npm'                                => array( 'Authorization: Basic ' . $b64( 'foo:bar' ), 'ort' ),
+			'Basic Foo:Bar'                                       => array( 'Authorization: Basic ' . $b64( 'Foo:Bar' ), 'ort' ),
+			'Basic test:123£ of RFC 7617'                         => array( 'Authorization: Basic ' . $b64( "test:123\u{00A3}" ), 'ort' ),
+			'Basic deploy:pa:ss of zerotool'                      => array( 'Authorization: Basic ' . $b64( 'deploy:pa:ss' ), 'ort' ),
+			'Basic TestUser:SecurePassword123 of AriesPortal'     => array( 'Authorization: Basic ' . $b64( 'TestUser:SecurePassword123' ), 'ort' ),
+			'Basic Me:Pwd of curl'                                => array( 'Authorization: Basic ' . $b64( 'Me:Pwd' ), 'ort' ),
+			'Basic Admin:Admin'                                   => array( 'Authorization: Basic ' . $b64( 'Admin:Admin' ), 'ort' ),
+			'Basic ADMIN:PASSWORD'                                => array( 'Authorization: Basic ' . $b64( 'ADMIN:PASSWORD' ), 'ort' ),
+			'Basic Admin:Password'                                => array( 'Authorization: Basic ' . $b64( 'Admin:Password' ), 'ort' ),
+			'Basic root:toor'                                     => array( 'Authorization: Basic ' . $b64( 'root:toor' ), 'ort' ),
+			'Basic guest:guest'                                   => array( 'Authorization: Basic ' . $b64( 'guest:guest' ), 'ort' ),
+			'Basic test:test (limit C)'                           => array( 'Authorization: Basic ' . $b64( 'test:test' ), 'ort' ),
 			'a key of AWS before / (SigV4)'                       => array( 'Scope: AK' . 'IAQ3ZT7W2VX' . 'EXAMPLE/20261109/eu-central-1/s3/aws4_request', 'sperrt' ),
 			'the key of the AWS documentation in a scope'         => array( 'Der Scope lautet ' . $e['aws access key id'] . '/20130524/us-east-1/s3/aws4_request.', 'frei' ),
+			// Basic by its place (Thomas, 09.11.2026 vormittags, «A: nach
+			// Kontext»): a list of headers stored in a field locks.
+			'a list of headers of JSON with Basic'                => array( '{"headers":["Accept: application/json","Authorization: Basic ' . $b64( 'user:password' ) . '"]}', 'ort' ),
 		);
+		foreach ( array(
+			'Quarkus'  => 'Alice:secret',
+			'Swagger'  => 'demo:p@55w0rd',
+			'Ruby'     => 'my_account:my_password',
+			'Veeam'    => 'User:Password',
+			'RFC 7617' => 'Aladdin:open sesame',
+			'MDN'      => 'aladdin:opensesame',
+			'curl'     => 'user:password',
+			'admin'    => 'admin:admin',
+			'review'   => 'review:Sommer2026',
+		) as $source => $pair ) {
+			$header = 'Authorization: Basic ' . $b64( $pair );
+			$out[ 'Basic of ' . $source . ', at the start' ]       = array( $header, 'ort' );
+			$out[ 'Basic of ' . $source . ', after a break' ]      = array( "GET / HTTP/1.1\n" . $header, 'ort' );
+			$out[ 'Basic of ' . $source . ', in quotes' ]          = array( 'curl -H "' . $header . '" https://api.example.test/', 'ort' );
+			$out[ 'a tutorial of ' . $source . ' with Basic' ]     = array( $para( 'Der Header für die Anmeldung:' ) . $code( "GET / HTTP/1.1\n" . $header ), 'ort' );
+		}
 		foreach ( require __DIR__ . '/fixtures/sync-tutorials.php' as $name => $text ) {
 			$out[ 'tutorial ' . $name ] = array( $text, in_array( substr( $name, 0, 3 ), array( 'T2 ', 'T6 ' ), true ) ? null : 'frei' );
 			// The header on a line of its own in the block of code (Codex round 4, B).
 			if ( false !== strpos( $text, '<code>Authorization' ) ) {
-				$out[ 'tutorial ' . $name . ', the header after a break' ] = array( str_replace( '<code>Authorization', "<code>\nAuthorization", $text ), in_array( substr( $name, 0, 3 ), array( 'T2 ', 'T6 ' ), true ) ? null : 'frei' );
+				$out[ 'tutorial ' . $name . ', the header after a break' ] = array( str_replace( '<code>Authorization', "<code>\nAuthorization", $text ), in_array( substr( $name, 0, 3 ), array( 'T2 ', 'T6 ' ), true ) ? null : ( 'T10' === substr( $name, 0, 3 ) ? 'ort' : 'frei' ) );
 			}
 		}
 		return $out;
 	}
 
 	/** The forms of the comparison: the readers of the kinds and the check of the export (Codex round 4 of branch 11b, c). */
-	const SAME_FORMS = array( 'meta', 'meta leaf', 'meta nested', 'post_content', 'option', 'option leaf', 'widget', 'term meta', 'term meta leaf', 'menu item meta', 'menu item meta leaf', 'export meta', 'export term meta', 'export menu item meta', 'export option', 'export post_content' );
+	const SAME_FORMS = array( 'meta', 'meta leaf', 'meta nested', 'post_content', 'option', 'option leaf', 'widget', 'term meta', 'term meta leaf', 'menu item meta', 'menu item meta leaf', 'post_excerpt', 'term description', 'export meta', 'export term meta', 'export menu item meta', 'export option', 'export post_content', 'export post_excerpt', 'export term description' );
+
+	/** The forms of the text of a post, where Basic in the header Authorization counts for nothing (AB_MCP_Sync_Net::prose_unit()). */
+	const PROSE_FORMS = array( 'post_content', 'export post_content' );
 
 	/**
 	 * The verdict of the readers of a kind and the net (the keys of the locks
@@ -958,8 +984,14 @@ trait SyncCoreReads {
 		$mark = AB_MCP_Sync_Net::mark( $acc );
 		$leaf = false !== strpos( $form, 'leaf' ) ? serialize( array( 'text' => $text ) ) : $text;
 		if ( 0 === strpos( $form, 'export' ) ) {
-			$kind   = array( 'export meta' => 'post', 'export term meta' => 'term', 'export menu item meta' => 'menu_item', 'export option' => 'option', 'export post_content' => 'post' )[ $form ];
-			$parts  = 'export option' === $form ? array( 'row' => array( 'value' => $text ) ) : ( 'export post_content' === $form ? array( 'row' => array( 'post_content' => $text ) ) : array( 'meta' => array( array( 'ab_note', $text ) ) ) );
+			$kind   = array( 'export meta' => 'post', 'export term meta' => 'term', 'export menu item meta' => 'menu_item', 'export option' => 'option', 'export post_content' => 'post', 'export post_excerpt' => 'post', 'export term description' => 'term' )[ $form ];
+			$rows   = array(
+				'export option'           => array( 'value' => $text ),
+				'export post_content'     => array( 'post_content' => $text ),
+				'export post_excerpt'     => array( 'post_excerpt' => $text ),
+				'export term description' => array( 'description' => $text ),
+			);
+			$parts  = isset( $rows[ $form ] ) ? array( 'row' => $rows[ $form ] ) : array( 'meta' => array( array( 'ab_note', $text ) ) );
 			$object = \AB_MCP_Sync_Export::checked_content(
 				array(
 					'kind'        => $kind,
@@ -990,6 +1022,13 @@ trait SyncCoreReads {
 				\AB_MCP_Sync_Db_Kind::class
 			);
 			$read( $rows, $ctx, $acc, $item );
+		} elseif ( 'post_excerpt' === $form || 'term description' === $form ) {
+			// A column of the row as the kinds read it (row_form(), term_form()).
+			$kind   = 'post_excerpt' === $form ? 'post' : 'term';
+			$column = 'post_excerpt' === $form ? 'post_excerpt' : 'description';
+			AB_MCP_Sync_Credentials::column( $acc, $kind, $column, $text );
+			AB_MCP_Sync_Canon::text( $text, $ctx, array(), $acc, $column );
+			AB_MCP_Sync_Net::check( $acc, $mark, $kind, $column, $text, $ctx );
 		} elseif ( 'post_content' === $form ) {
 			AB_MCP_Sync_Credentials::column( $acc, 'post', 'post_content', $text );
 			AB_MCP_Sync_Refs::content( $text, $ctx, $acc, 'post', 'post_content' );
@@ -1037,7 +1076,21 @@ trait SyncCoreReads {
 		foreach ( self::SAME_FORMS as $form ) {
 			$forms[ $form ] = self::verdict_in( $form, $text );
 		}
-		$alike = array_unique( array_map( static fn( string $v ): string => 'frei' === $v ? 'frei' : 'sperrt', $forms ) );
+		$short = static fn( string $v ): string => 'frei' === $v ? 'frei' : 'sperrt';
+		if ( 'ort' === $expected ) {
+			// Basic in the header Authorization by its place (Thomas, 09.11.2026
+			// vormittags): alike in the text of a post, alike everywhere else;
+			// free there, locked here.
+			$prose = array_unique( array_map( $short, array_intersect_key( $forms, array_flip( self::PROSE_FORMS ) ) ) );
+			$other = array_unique( array_map( $short, array_diff_key( $forms, array_flip( self::PROSE_FORMS ) ) ) );
+			self::assertCount( 1, $prose, (string) json_encode( $forms ) );
+			self::assertCount( 1, $other, (string) json_encode( $forms ) );
+			if ( ! self::closed( $text ) ) {
+				self::assertSame( array( array( 'frei' ), array( 'sperrt' ) ), array( array_values( $prose ), array_values( $other ) ), (string) json_encode( $forms ) );
+			}
+			return;
+		}
+		$alike = array_unique( array_map( $short, $forms ) );
 		self::assertCount( 1, $alike, (string) json_encode( $forms ) );
 		if ( null !== $expected && ! self::closed( $text ) ) {
 			self::assertSame( array( $expected ), array_values( $alike ), (string) json_encode( $forms ) );

@@ -73,9 +73,9 @@
  *   AWS, Slack, Mailchimp) and a JSON Web Token (JWT); at the start of a
  *   line or of a field the header Authorization with Bearer and a value in
  *   the form of a token (20 characters of a token or more, no placeholder,
- *   none of words), or Basic and the base64 of user:password that is no
- *   pair of an example and whose password is no placeholder
- *   (AUTHORIZATION); a private key
+ *   none of words), or Basic and the base64 of user:password whose
+ *   password is no placeholder, outside of post_content (AUTHORIZATION,
+ *   prose_unit()); a private key
  *   in PEM by its frame and a body of base64 (PEM); the value of a login
  *   cookie of WordPress by its form (COOKIE). A name of a credential
  *   counts as a key of the serialized format with a value as well
@@ -376,32 +376,6 @@ final class AB_MCP_Sync_Net {
 	 */
 	const WORD_PLACEHOLDER = '/^(?:[a-z]{2,}(?:[_-]+[a-z]{2,})+|[A-Z]{2,}(?:[_-]+[A-Z]{2,})+)\z/';
 
-	/**
-	 * The pairs of examples of Basic, each only as the whole pair, in any
-	 * case of user and password (Codex rounds 5 and 6 of branch 11b, A4 and
-	 * B1; the steering after them), written here in small letters: a word of
-	 * an example alone frees none (admin:password, admin:secret, secret: lock,
-	 * as admin:admin does: a working weak credential). Only pairs read as an
-	 * example at a source, on 09.11.2026, never a default of a device or a
-	 * site (admin:admin, admin:password, root:toor, guest:guest …, also where
-	 * a page shows one; SyncNetTest holds that none is here):
-	 * - aladdin:open sesame, test:123£: RFC 7617, sections 2 and 2.1;
-	 * - aladdin:opensesame: MDN, «Authorization»;
-	 * - username:password: MDN, «HTTP authentication» (in an address);
-	 *   riptutorial, «HTTP Basic Authentication»; CycleSoftware, its API
-	 *   (Username:Password);
-	 * - user:password: the manual of curl (curl.se/docs/manpage.html); Veeam,
-	 *   «HTTP Authentication» of its REST API (User:Password); the tutorial
-	 *   T10 of the count;
-	 * - name:password, user:secret, me:pwd, key:secret, user:passwd,
-	 *   smith:secret: the manual of curl (-u, --aws-sigv4, --proxy-user);
-	 * - user:pass: Ruby, Net::HTTPHeader#basic_auth;
-	 * - foo:bar: npm, the package jm-basic-auth-credentials (its README);
-	 * - deploy:pa:ss: zerotool, «Basic auth header generator guide»;
-	 * - testuser:securepassword123: AriesPortal, NIBRS, «AuthInfo»
-	 *   (TestUser:SecurePassword123).
-	 */
-	const EXAMPLE_PAIRS = array( 'aladdin:open sesame', "test:123\u{00A3}", 'aladdin:opensesame', 'username:password', 'user:password', 'name:password', 'user:secret', 'me:pwd', 'key:secret', 'user:passwd', 'smith:secret', 'user:pass', 'foo:bar', 'deploy:pa:ss', 'testuser:securepassword123' );
 
 	/**
 	 * A placeholder, only in its exact form as the whole value (the steering,
@@ -417,8 +391,8 @@ final class AB_MCP_Sync_Net {
 	 * Publicly documented examples, none valid anywhere (the steering after
 	 * Codex round 4 of branch 11b, 09.11.2026): each frees only itself, as
 	 * the whole value, in every form the net judges by its value (a token of
-	 * a service, a JSON Web Token, the value after Bearer; Basic frees its
-	 * pairs of examples only, EXAMPLE_PAIRS). One character more or less (AKIA…EXAMPLE2, a
+	 * a service, a JSON Web Token, the value after Bearer; Basic goes by its
+	 * place, prose_unit()). One character more or less (AKIA…EXAMPLE2, a
 	 * real key with EXAMPLE in it, a changed token of jwt.io) locks. Kept as
 	 * the SHA-256 of the exact value, never the value: no text of the source
 	 * looks like a token to the push protection of GitHub or to a scanner.
@@ -434,10 +408,6 @@ final class AB_MCP_Sync_Net {
 		'7f75367e7881255134e1375e723d1dea8ad5f6a4fdb79d938df1f1754a830606' => 'jwt.io',
 		// jwt.io, the token of its debugger since 2024: the same with admin true, signed with a-string-secret-at-least-256-bits-long (recomputed by HMAC).
 		'c794fa6d20c64efb9adf980ae93af472a1679775862d421ffe55d4a57fad5b3e' => 'jwt.io admin',
-		// RFC 7617, section 2: the base64 of Aladdin:open sesame.
-		'cf4d418ed3de92d71f767db5391d5a2dacd40e1ce49e75d1137e2ecf4982d844' => 'rfc 7617',
-		// MDN, «Authorization» (HTTP headers): the base64 of aladdin:opensesame.
-		'ad62d48d8b069026a2a0d0291f857a77e1975edf610aa3502e8bc71bd96f513a' => 'mdn basic',
 		// RFC 6750, sections 2.1 to 2.3 and 4: the access token of the example.
 		'b8e148545b13c78bc74da2f1a7275dd71e56ddece129d7d2f7b3ecc06f7994da' => 'rfc 6750',
 		// Slack, docs.slack.dev/authentication/tokens: the user token before August 2016, short.
@@ -533,6 +503,10 @@ final class AB_MCP_Sync_Net {
 		$deep   = false;
 		$unread = array();
 		$layers = self::layers( $text, $deep, $unread );
+		// Basic in the header Authorization counts by the place of the value
+		// (Thomas, 09.11.2026 vormittags, «A: nach Kontext»): not in
+		// post_content, everywhere else (prose_unit()).
+		$basic = ! self::prose_unit( (string) $kind, (string) $at );
 		foreach ( $layers as $layer ) {
 			list( $path, $one, $extracted ) = $layer;
 			if ( ! $locked ) {
@@ -564,7 +538,7 @@ final class AB_MCP_Sync_Net {
 				$acc,
 				(string) $kind,
 				(string) $at,
-				static function ( $where, $one ) use ( &$acc, $kind, $at, $named, $extra, &$unreadable, &$locked, $ctx ) {
+				static function ( $where, $one ) use ( &$acc, $kind, $at, $named, $extra, &$unreadable, &$locked, $ctx, $basic ) {
 					$deep   = false;
 					$unread = array();
 					$place  = $at . ':net:' . ( '' === $where ? '' : $where . ':' );
@@ -584,7 +558,7 @@ final class AB_MCP_Sync_Net {
 							}
 						}
 					}
-					self::count_credentials( $acc, (string) $kind, (string) $at, $place, $layers, $named, $extra, $unreadable );
+					self::count_credentials( $acc, (string) $kind, (string) $at, $place, $layers, $named, $extra, $unreadable, $basic );
 					// What the layers of the text do not read to its end locks
 					// the unit, as for a column: the raw text does not stand
 					// for it, its quotes end a data: address elsewhere than
@@ -593,7 +567,7 @@ final class AB_MCP_Sync_Net {
 				}
 			);
 		} else {
-			self::count_credentials( $acc, (string) $kind, (string) $at, $at . ':net:', $layers, $named, $extra, $unreadable );
+			self::count_credentials( $acc, (string) $kind, (string) $at, $at . ':net:', $layers, $named, $extra, $unreadable, $basic );
 		}
 		// What the layers of the raw text did not read to its end locks the
 		// unit, in every form.
@@ -642,9 +616,11 @@ final class AB_MCP_Sync_Net {
 	 * @param array  $named      The names the readers named, normalised.
 	 * @param array  $extra      AB_MCP_Redactor::extra_keys().
 	 * @param bool   $unreadable Set where the unit is locked so.
+	 * @param bool   $basic      Whether Basic in the header Authorization counts
+	 *                           (prose_unit(): not in post_content).
 	 * @return void
 	 */
-	private static function count_credentials( array &$acc, $kind, $unit, $place, array $layers, array $named, array $extra, &$unreadable ) {
+	private static function count_credentials( array &$acc, $kind, $unit, $place, array $layers, array $named, array $extra, &$unreadable, $basic ) {
 		foreach ( $layers as $layer ) {
 			if ( $unreadable ) {
 				return;
@@ -652,7 +628,7 @@ final class AB_MCP_Sync_Net {
 			$path        = $layer[0];
 			$new         = array();
 			$undecidable = false;
-			foreach ( self::credentials( $layer[1], $extra, $undecidable, '/code' === substr( $path, -5 ) ) as $name ) {
+			foreach ( self::credentials( $layer[1], $extra, $undecidable, '/code' === substr( $path, -5 ), $basic ) as $name ) {
 				if ( ! isset( $named[ $name ] ) ) {
 					$new[ $name ] = '~' . $name;
 				}
@@ -1773,11 +1749,15 @@ final class AB_MCP_Sync_Net {
 	 * The names of credentials with a value beside them in a layer (see the
 	 * header), normalised, each once.
 	 *
-	 * @param string   $text  A layer.
-	 * @param string[] $extra AB_MCP_Redactor::extra_keys().
+	 * @param string   $text        A layer.
+	 * @param string[] $extra       AB_MCP_Redactor::extra_keys().
+	 * @param bool     $undecidable Set where the braces of code cannot be counted.
+	 * @param bool     $code        Whether the layer is one of code.
+	 * @param bool     $basic       Whether Basic in the header Authorization
+	 *                              counts (prose_unit(): not in post_content).
 	 * @return string[]
 	 */
-	public static function credentials( $text, array $extra, &$undecidable = null, $code = false ) {
+	public static function credentials( $text, array $extra, &$undecidable = null, $code = false, $basic = true ) {
 		$text  = (string) $text;
 		$found = array();
 		foreach ( array(
@@ -1834,11 +1814,11 @@ final class AB_MCP_Sync_Net {
 		// The header Authorization with Bearer or Basic at the start of a
 		// line or of a field (Codex round 1 of branch 11b, A1; the steering,
 		// 09.11.2026): Bearer with a value in the form of a token, Basic with
-		// the base64 of user:password (after Codex rounds 4 and 5: no example
-		// of a tutorial, no pair of an example, bearer() and basic()).
+		// the base64 of user:password where the place counts Basic ($basic,
+		// prose_unit(); Thomas, 09.11.2026 vormittags), bearer() and basic().
 		if ( preg_match_all( self::AUTHORIZATION, $text, $m, PREG_SET_ORDER ) ) {
 			foreach ( $m as $hit ) {
-				if ( 'basic' === strtolower( $hit[1] ) ? self::basic( $hit[2] ) : self::bearer( $hit[2] ) ) {
+				if ( 'basic' === strtolower( $hit[1] ) ? $basic && self::basic( $hit[2] ) : self::bearer( $hit[2] ) ) {
 					$found[] = 'authorization';
 					break;
 				}
@@ -1929,6 +1909,24 @@ final class AB_MCP_Sync_Net {
 	}
 
 	/**
+	 * Whether a unit is the text of a post, where Basic in the header
+	 * Authorization counts for nothing (Thomas, 09.11.2026 vormittags, «A:
+	 * nach Kontext»; limit C as credentials in prose, as wp_get_post hands
+	 * out the raw content anyway, includes/tools/class-tools-content.php:83):
+	 * the column post_content of any kind but the CSS of a theme, as the kinds
+	 * and the export (AB_MCP_Sync_Export::checked_content()) name it. Every
+	 * other unit (meta of a post, a term, a menu item; an option; a widget;
+	 * post_excerpt, the description of a term) counts Basic, every pair.
+	 *
+	 * @param string $kind Kind.
+	 * @param string $at   The unit.
+	 * @return bool
+	 */
+	public static function prose_unit( $kind, $at ) {
+		return 'custom_css' !== $kind && in_array( $at, array( 'post_content', 'content:post_content' ), true );
+	}
+
+	/**
 	 * Whether the value after Bearer in the header Authorization has the form
 	 * of a token (the steering after Codex round 4 of branch 11b, 09.11.2026):
 	 * the characters of a token at its start (BEARER_TOKEN; one «.» at its
@@ -1959,11 +1957,12 @@ final class AB_MCP_Sync_Net {
 	/**
 	 * Whether the value after Basic in the header Authorization is a pair:
 	 * base64 at its start that decodes to a text user:password, without a
-	 * sign of control, the two not both empty; free only where the pair as a
-	 * whole is one of EXAMPLE_PAIRS, in any case, or the password (where it is empty, the
-	 * user: a key as the user) a placeholder (YOUR_PASSWORD, <password>,
-	 * xxxx xxxx …), whatever its length: admin:password, a:b and admin:admin
-	 * lock (Codex round 5 of branch 11b, A4).
+	 * sign of control, the two not both empty, the password (where it is
+	 * empty, the user: a key as the user) no placeholder (YOUR_PASSWORD,
+	 * <password>, xxxx xxxx …). Every other pair counts, a documented example
+	 * as well (Aladdin:open sesame, user:password) and a default (admin:admin):
+	 * the place decides (prose_unit(); Thomas, 09.11.2026 vormittags, «A: nach
+	 * Kontext»), no list.
 	 *
 	 * @param string $value The word after the scheme.
 	 * @return bool
@@ -1981,7 +1980,7 @@ final class AB_MCP_Sync_Net {
 			return false;
 		}
 		$password = (string) substr( $pair, $at + 1 );
-		return ! in_array( strtolower( $pair ), self::EXAMPLE_PAIRS, true ) && ! self::placeholder( '' === $password ? (string) substr( $pair, 0, $at ) : $password );
+		return ! self::placeholder( '' === $password ? (string) substr( $pair, 0, $at ) : $password );
 	}
 
 	/**

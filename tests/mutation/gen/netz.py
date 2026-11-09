@@ -80,10 +80,10 @@ e('place', 'check(): the place of a text in the lock (positions, never a key or 
   "\t\t\t\t\t$place  = $at . ':net:' . ( '' === $where ? '' : $where . ':' );",
   "\t\t\t\t\t$place  = $at . ':net:';", 'net', N_CRED)
 e('texts-each', 'check(): the credentials counted in each text of the value', NT,
-  "\t\t\t\t\tself::count_credentials( $acc, (string) $kind, (string) $at, $place, $layers, $named, $extra, $unreadable );\n",
+  "\t\t\t\t\tself::count_credentials( $acc, (string) $kind, (string) $at, $place, $layers, $named, $extra, $unreadable, $basic );\n",
   "", 'net', N_CRED)
 e('raw-whole', 'check(): the credentials of a text read as it is stored counted in its layers', NT,
-  "\t\t\tself::count_credentials( $acc, (string) $kind, (string) $at, $at . ':net:', $layers, $named, $extra, $unreadable );\n",
+  "\t\t\tself::count_credentials( $acc, (string) $kind, (string) $at, $at . ':net:', $layers, $named, $extra, $unreadable, $basic );\n",
   "", 'net', N_NAMED)
 e('count-once', 'count_credentials(): one lock and one note per unit, over its texts as well', NT,
   "\t\t\tif ( $unreadable ) {\n\t\t\t\treturn;\n\t\t\t}",
@@ -271,10 +271,35 @@ e('placeholder-call', 'placeholder(): exactly PLACEHOLDER', NT,
 
 N_AUTH = 'testTheHeaderAuthorizationCountsAtTheStartOfALineOrAField'
 AUTH = "const AUTHORIZATION = '/(?:^|(?<=[\\r\\n;\"\\'`:]))[ \\t]*(?:proxy-)?authorization[ \\t]*:[ \\t]*[\"\\'`]?[ \\t]*(bearer|basic)[ \\t]+([^\\s\"\\'`;,]*)/i';"
+AUTH_IF = "\t\t\t\tif ( 'basic' === strtolower( $hit[1] ) ? $basic && self::basic( $hit[2] ) : self::bearer( $hit[2] ) ) {"
 e('auth', 'credentials(): the header Authorization with Bearer or Basic counts (Codex round 1, A1)', NT,
-  "\t\t\t\tif ( 'basic' === strtolower( $hit[1] ) ? self::basic( $hit[2] ) : self::bearer( $hit[2] ) ) {", "\t\t\t\tif ( false ) {", 'net', N_AUTH)
+  AUTH_IF, "\t\t\t\tif ( false ) {", 'net', N_AUTH)
 e('auth-scheme', 'credentials(): Basic by its pair, Bearer by its token', NT,
-  "\t\t\t\tif ( 'basic' === strtolower( $hit[1] ) ? self::basic( $hit[2] ) : self::bearer( $hit[2] ) ) {", "\t\t\t\tif ( self::bearer( $hit[2] ) ) {", 'net', N_AUTH)
+  AUTH_IF, "\t\t\t\tif ( self::bearer( $hit[2] ) ) {", 'net', N_AUTH)
+N_PLACE_BASIC = 'testBasicCountsByThePlaceOfTheValue'
+e('basic-place', 'credentials(): Basic only where the place counts it (not in post_content; Thomas, 09.11.2026 vormittags)', NT,
+  AUTH_IF, AUTH_IF.replace("$basic && self::basic", "self::basic"), 'net', N_PLACE_BASIC)
+e('basic-place-bearer', 'credentials(): the place frees Basic only, never Bearer', NT,
+  AUTH_IF, AUTH_IF.replace(" : self::bearer( $hit[2] ) ) {", " : $basic && self::bearer( $hit[2] ) ) {"), 'net', N_PLACE_BASIC)
+e('basic-default', 'credentials(): Basic counts where no place is given (a name of a package, the answer of the writers)', NT,
+  "\tpublic static function credentials( $text, array $extra, &$undecidable = null, $code = false, $basic = true ) {", "\tpublic static function credentials( $text, array $extra, &$undecidable = null, $code = false, $basic = false ) {", 'net', N_AUTH)
+e('basic-check', 'check(): the place of the unit decides for Basic (prose_unit())', NT,
+  "\t\t$basic = ! self::prose_unit( (string) $kind, (string) $at );", "\t\t$basic = true;", 'net', N_PLACE_BASIC)
+e('basic-check-other', 'check(): every unit but the text of a post counts Basic', NT,
+  "\t\t$basic = ! self::prose_unit( (string) $kind, (string) $at );", "\t\t$basic = false;", 'net', N_PLACE_BASIC)
+e('basic-texts', 'check(): the place reaches the texts of a stored value', NT,
+  "\t\t\t\tstatic function ( $where, $one ) use ( &$acc, $kind, $at, $named, $extra, &$unreadable, &$locked, $ctx, $basic ) {", "\t\t\t\tstatic function ( $where, $one ) use ( &$acc, $kind, $at, $named, $extra, &$unreadable, &$locked, $ctx ) {\n\t\t\t\t\t$basic = false;", 'net', N_PLACE_BASIC)
+e('basic-count', 'count_credentials(): the place passed on to credentials()', NT,
+  "\t\t\tforeach ( self::credentials( $layer[1], $extra, $undecidable, '/code' === substr( $path, -5 ), $basic ) as $name ) {", "\t\t\tforeach ( self::credentials( $layer[1], $extra, $undecidable, '/code' === substr( $path, -5 ) ) as $name ) {", 'net', N_PLACE_BASIC)
+PROSE = "\t\treturn 'custom_css' !== $kind && in_array( $at, array( 'post_content', 'content:post_content' ), true );"
+e('prose-unit', 'prose_unit(): the column post_content is the text of a post', NT,
+  PROSE, "\t\treturn false;", 'net', N_PLACE_BASIC)
+e('prose-unit-css', 'prose_unit(): the CSS of a theme is none', NT,
+  PROSE, PROSE.replace("'custom_css' !== $kind && ", ""), 'net', N_PLACE_BASIC)
+e('prose-unit-content', 'prose_unit(): post_content as the export names a field of it as well', NT,
+  PROSE, PROSE.replace(", 'content:post_content'", ""), 'net', N_PLACE_BASIC)
+e('prose-unit-only', 'prose_unit(): no other column (post_excerpt, description)', NT,
+  PROSE, PROSE.replace("in_array( $at, array( 'post_content', 'content:post_content' ), true )", "( 'post_content' === $at || 'post_excerpt' === $at || 'description' === $at || 'content:post_content' === $at )"), 'net', N_PLACE_BASIC)
 e('auth-start', 'AUTHORIZATION: at the start of the text', NT,
   AUTH, AUTH.replace("(?:^|(?<=", "(?:(?<="), 'net', N_AUTH)
 e('auth-anywhere', 'AUTHORIZATION: only at the start of a line or a field (not in a sentence, not after a tag)', NT,
@@ -343,23 +368,11 @@ e('basic-colon', 'basic(): a pair with «:»', NT,
   "\t\tif ( false === $at || 1 === strlen( $pair ) ) {", "\t\tif ( 1 === strlen( $pair ) ) {", 'net', N_AUTH)
 e('basic-both-empty', 'basic(): user and password not both empty', NT,
   "\t\tif ( false === $at || 1 === strlen( $pair ) ) {", "\t\tif ( false === $at ) {", 'net', N_AUTH)
-BASIC_RETURN = "\t\treturn ! in_array( strtolower( $pair ), self::EXAMPLE_PAIRS, true ) && ! self::placeholder( '' === $password ? (string) substr( $pair, 0, $at ) : $password );"
+BASIC_RETURN = "\t\treturn ! self::placeholder( '' === $password ? (string) substr( $pair, 0, $at ) : $password );"
 e('basic-user', 'basic(): with an empty password, the user (a key as the user) no placeholder', NT,
   BASIC_RETURN, BASIC_RETURN.replace("'' === $password ? (string) substr( $pair, 0, $at ) : $password", "$password"), 'net', N_AUTH)
 e('basic-placeholder', 'basic(): the password no placeholder', NT,
-  BASIC_RETURN, BASIC_RETURN.replace(" && ! self::placeholder( '' === $password ? (string) substr( $pair, 0, $at ) : $password )", ""), 'net', N_AUTH)
-e('basic-pairs', 'basic(): a pair of an example as the whole pair is free (Codex round 5, A4)', NT,
-  BASIC_RETURN, BASIC_RETURN.replace("! in_array( strtolower( $pair ), self::EXAMPLE_PAIRS, true ) && ", ""), 'net', N_AUTH)
-e('basic-pairs-case', 'basic(): a pair of an example in any case of user and password (Codex round 6, B1: User:Password, Username:Password)', NT,
-  BASIC_RETURN, BASIC_RETURN.replace("in_array( strtolower( $pair ), self::EXAMPLE_PAIRS, true )", "in_array( $pair, self::EXAMPLE_PAIRS, true )"), 'net', N_AUTH)
-e('basic-pairs-whole', 'basic(): the whole pair, not its password alone (admin:password locks; Codex round 5, A4)', NT,
-  BASIC_RETURN, BASIC_RETURN.replace("in_array( strtolower( $pair ), self::EXAMPLE_PAIRS, true )", "in_array( 'user:' . strtolower( $password ), self::EXAMPLE_PAIRS, true )"), 'net', N_AUTH)
-PAIRS = "\tconst EXAMPLE_PAIRS = array( 'aladdin:open sesame', \"test:123\\u{00A3}\", 'aladdin:opensesame', 'username:password', 'user:password', 'name:password', 'user:secret', 'me:pwd', 'key:secret', 'user:passwd', 'smith:secret', 'user:pass', 'foo:bar', 'deploy:pa:ss', 'testuser:securepassword123' );"
-for w in ['aladdin:open sesame', 'aladdin:opensesame', 'username:password', 'user:password', 'name:password', 'user:secret', 'me:pwd', 'key:secret', 'user:passwd', 'smith:secret', 'user:pass', 'foo:bar', 'deploy:pa:ss', 'testuser:securepassword123']:
-    e('basic-pair-' + w.replace(' ', '-').replace(':', '-'), 'EXAMPLE_PAIRS: ' + w, NT,
-      PAIRS, PAIRS.replace("'" + w + "', ", "").replace(", '" + w + "' )", " )"), 'net', N_AUTH)
-e('basic-pair-test-123', 'EXAMPLE_PAIRS: test:123£ (RFC 7617, 2.1)', NT,
-  PAIRS, PAIRS.replace(", \"test:123\\u{00A3}\"", ""), 'net', N_AUTH)
+  BASIC_RETURN, "\t\treturn true;", 'net', N_AUTH)
 e('example', 'example(): a value by the SHA-256 of the whole of it', NT,
   "\t\treturn isset( self::EXAMPLES[ hash( 'sha256', (string) $value ) ] );", "\t\treturn false;", 'net', N_EXAMPLE)
 e('example-only', 'example(): only a value of the list', NT,

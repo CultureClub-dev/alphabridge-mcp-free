@@ -706,7 +706,7 @@ final class SyncNetTest extends TestCase {
 
 	public function testADocumentedExampleIsFreeOnlyAsTheWholeValue(): void {
 		// The steering after Codex round 4 of branch 11b: the examples of the
-		// documentation of AWS, jwt.io, RFC 7617, MDN, RFC 6750 and Slack free
+		// documentation of AWS, jwt.io, RFC 6750 and Slack free
 		// themselves only, as the whole value, in every form the net judges by
 		// its value; kept as SHA-256, put together here from parts.
 		$t     = self::tokens();
@@ -728,8 +728,6 @@ final class SyncNetTest extends TestCase {
 			"Beispiel:\nAuthorization: Bearer " . $e['jwt.io admin'],
 			$e['jwt.io'] . '.',
 			'Authorization: Bearer ' . $e['rfc 6750'],
-			'Authorization: Basic ' . $e['rfc 7617'],
-			'Authorization: Basic ' . $e['mdn basic'],
 			'Authorization: Bearer ' . $e['aws secret access key'],
 			'Authorization: Bearer ' . $e['aws secret access key'] . '.',
 			// Inside base64 or before a small letter, «+», «/» or «=» no key of
@@ -833,6 +831,29 @@ final class SyncNetTest extends TestCase {
 			'Authorization: Basic ' . $b64( 'key-of-the-account:' ),
 			'Authorization: Basic ' . $b64( ':secret-only' ),
 			'Proxy-Authorization: Basic ' . $b64( 'proxy:Kq7vR2pX' ) . ';',
+			// Every pair counts, a documented example as well: the place decides
+			// (prose_unit(); Thomas, 09.11.2026 vormittags), no list.
+			'Authorization: Basic ' . $b64( 'user:password' ),
+			'Authorization: Basic ' . $b64( 'Aladdin:open sesame' ),
+			'Authorization: Basic ' . $b64( 'aladdin:opensesame' ),
+			'Authorization: Basic ' . $b64( 'username:password' ),
+			'Authorization: Basic ' . $b64( 'name:password' ),
+			'Authorization: Basic ' . $b64( 'user:secret' ),
+			'Authorization: Basic ' . $b64( 'me:pwd' ),
+			'Authorization: Basic ' . $b64( 'key:secret' ),
+			'Authorization: Basic ' . $b64( 'user:passwd' ),
+			'Authorization: Basic ' . $b64( 'smith:secret' ),
+			'Authorization: Basic ' . $b64( 'User:Password' ),
+			'Authorization: Basic ' . $b64( 'Username:Password' ),
+			'Authorization: Basic ' . $b64( 'USER:PASSWORD' ),
+			'Authorization: Basic ' . $b64( 'ALADDIN:OPEN SESAME' ),
+			'Authorization: Basic ' . $b64( 'Aladdin:OpenSesame' ),
+			'Authorization: Basic ' . $b64( 'user:pass' ),
+			'Authorization: Basic ' . $b64( 'foo:bar' ),
+			'Authorization: Basic ' . $b64( 'FOO:BAR' ),
+			'Authorization: Basic ' . $b64( "test:123\u{00A3}" ),
+			'Authorization: Basic ' . $b64( 'deploy:pa:ss' ),
+			'Authorization: Basic ' . $b64( 'TestUser:SecurePassword123' ),
 			// A placeholder or an example word in a word is none (Codex round 3, A1).
 			'Authorization: Bearer my_' . $hex,
 			'Authorization: Bearer fake_token_1234567890',
@@ -890,29 +911,6 @@ final class SyncNetTest extends TestCase {
 			'Authorization: Bearer {{token}}',
 			'Authorization: Bearer [REDACTED]',
 			"\$h[] = 'Authorization: Bearer ' . \$token;",
-			// Basic: a pair of an example as the whole pair (Codex round 5, A4).
-			'Authorization: Basic ' . $b64( 'user:password' ),
-			'Authorization: Basic ' . $t['examples']['rfc 7617'],
-			'Authorization: Basic ' . $t['examples']['mdn basic'],
-			'Authorization: Basic ' . $b64( 'username:password' ),
-			'Authorization: Basic ' . $b64( 'name:password' ),
-			'Authorization: Basic ' . $b64( 'user:secret' ),
-			'Authorization: Basic ' . $b64( 'me:pwd' ),
-			'Authorization: Basic ' . $b64( 'key:secret' ),
-			'Authorization: Basic ' . $b64( 'user:passwd' ),
-			'Authorization: Basic ' . $b64( 'smith:secret' ),
-			// In any case of user and password (Codex round 6, B1).
-			'Authorization: Basic ' . $b64( 'User:Password' ),
-			'Authorization: Basic ' . $b64( 'Username:Password' ),
-			'Authorization: Basic ' . $b64( 'USER:PASSWORD' ),
-			'Authorization: Basic ' . $b64( 'ALADDIN:OPEN SESAME' ),
-			'Authorization: Basic ' . $b64( 'Aladdin:OpenSesame' ),
-			'Authorization: Basic ' . $b64( 'user:pass' ),
-			'Authorization: Basic ' . $b64( 'foo:bar' ),
-			'Authorization: Basic ' . $b64( 'FOO:BAR' ),
-			'Authorization: Basic ' . $b64( "test:123\u{00A3}" ),
-			'Authorization: Basic ' . $b64( 'deploy:pa:ss' ),
-			'Authorization: Basic ' . $b64( 'TestUser:SecurePassword123' ),
 			'Authorization: Basic <base64>',
 			'Authorization: Basic ' . $b64( 'foobar' ),
 			'Authorization: Basic ' . $b64( 'admin:YOUR_PASSWORD' ),
@@ -941,6 +939,48 @@ final class SyncNetTest extends TestCase {
 		self::assertFalse( AB_MCP_Sync_Net::bearer( '' ) );
 		self::assertTrue( AB_MCP_Sync_Net::basic( $b64( 'a:b1' ) . '</code>' ) );
 		self::assertFalse( AB_MCP_Sync_Net::basic( '' ) );
+	}
+
+	public function testBasicCountsByThePlaceOfTheValue(): void {
+		// Thomas, 09.11.2026 vormittags, «A: nach Kontext»: in post_content
+		// Basic counts for nothing (limit C as credentials in prose); in every
+		// other unit every pair counts; Bearer and the rest the same anywhere.
+		$b64    = static fn( string $s ): string => base64_encode( $s );
+		$header = 'Authorization: Basic ' . $b64( 'Aladdin:open sesame' );
+		$list   = '{"headers":["Accept: application/json","Authorization: Basic ' . $b64( 'user:password' ) . '"]}';
+		self::assertSame( array( 'authorization' ), AB_MCP_Sync_Net::credentials( $header, array() ) );
+		self::assertSame( array(), AB_MCP_Sync_Net::credentials( $header, array(), $undecidable, false, false ) );
+		self::assertSame( array( 'authorization' ), AB_MCP_Sync_Net::credentials( 'Authorization: Bearer Qm9dXyT3kLz8wR2vNp6s', array(), $undecidable, false, false ), 'Bearer by its form wherever it stands.' );
+		self::assertSame( array( 'github_token' ), AB_MCP_Sync_Net::credentials( $header . "\n" . self::tokens()['ghp'], array(), $undecidable, false, false ) );
+		self::assertTrue( AB_MCP_Sync_Net::prose_unit( 'post', 'post_content' ) );
+		self::assertTrue( AB_MCP_Sync_Net::prose_unit( 'attachment', 'post_content' ) );
+		self::assertTrue( AB_MCP_Sync_Net::prose_unit( 'post', 'content:post_content' ) );
+		self::assertFalse( AB_MCP_Sync_Net::prose_unit( 'custom_css', 'post_content' ), 'The CSS of a theme is no text of a post.' );
+		foreach ( array( 'post_excerpt', 'post_title', 'description', 'meta:post_content', 'option_value', 'widget:text-2', 'post_content_filtered' ) as $at ) {
+			self::assertFalse( AB_MCP_Sync_Net::prose_unit( 'post', $at ), $at );
+		}
+		$locks = static function ( string $kind, string $at, $raw, bool $stored = false ): array {
+			$acc  = AB_MCP_Sync_Canon::acc();
+			$mark = AB_MCP_Sync_Net::mark( $acc );
+			AB_MCP_Sync_Net::check( $acc, $mark, $kind, $at, $raw, self::ctx(), true, $stored );
+			return array_values( array_filter( array_column( $acc['locks'], 'key' ), static fn( $k ) => 0 === strpos( (string) $k, '*:unread_credential' ) ) );
+		};
+		self::assertSame( array(), $locks( 'post', 'post_content', $header ) );
+		self::assertSame( array(), $locks( 'post', 'post_content', "GET / HTTP/1.1\n" . $header ) );
+		self::assertSame( array(), $locks( 'post', 'post_content', $list ) );
+		foreach ( array(
+			array( 'post', 'post_excerpt', $header, false ),
+			array( 'term', 'description', $header, false ),
+			array( 'custom_css', 'post_content', $header, false ),
+			array( 'post', 'meta:ab_note', $header, true ),
+			array( 'post', 'meta:ab_note', serialize( array( 'text' => $header ) ), true ),
+			array( 'post', 'meta:ab_headers', $list, true ),
+			array( 'option', 'option_value', serialize( array( 'headers' => array( 'Authorization: Basic ' . $b64( 'user:password' ) ) ) ), true ),
+			array( 'option', 'option_value', $list, true ),
+			array( 'widget_area', 'widget:text-2', array( 'title' => 'API', 'text' => $header ), false ),
+		) as list( $kind, $at, $raw, $stored ) ) {
+			self::assertNotSame( array(), $locks( $kind, $at, $raw, $stored ), $kind . ' ' . $at );
+		}
 	}
 
 	public function testAPrivateKeyInPemCountsByItsFrameAndABodyOfBase64(): void {
@@ -1065,17 +1105,6 @@ final class SyncNetTest extends TestCase {
 		) as $text ) {
 			self::assertSame( array(), AB_MCP_Sync_Net::credentials( $text, $extra ), $text );
 		}
-	}
-
-	public function testThePairsOfExamplesOfBasicHoldNoDefaultOfADeviceOrASite(): void {
-		// The steering after Codex round 6: defaults and the usual standard
-		// accounts never come into the list of the pairs, in any case; the
-		// list is written in small letters, as basic() compares it.
-		foreach ( AB_MCP_Sync_Net::EXAMPLE_PAIRS as $pair ) {
-			self::assertSame( strtolower( $pair ), $pair );
-		}
-		$defaults = array( 'admin:admin', 'admin:password', 'admin:1234', 'admin:12345', 'admin:', 'admin:changeme', 'admin:default', 'admin:secret', 'root:root', 'root:toor', 'root:', 'root:password', 'administrator:password', 'administrator:admin', 'guest:guest', 'user:user', 'test:test', 'pi:raspberry', 'ubnt:ubnt', 'cisco:cisco', 'demo:demo' );
-		self::assertSame( array(), array_values( array_intersect( AB_MCP_Sync_Net::EXAMPLE_PAIRS, $defaults ) ) );
 	}
 
 	public function testAPlaceholderIsOneOnlyInItsExactFormAsTheWholeValue(): void {
@@ -1621,7 +1650,7 @@ final class SyncNetTest extends TestCase {
 			'Bearer at the start'         => array( 'Authorization: Bearer Qm9dXyT3kLz8wR2vNp6s', 'unread_credential' ),
 			'Bearer abc123 (Codex 4, B)'  => array( 'Authorization: Bearer abc123', 'frei' ),
 			'Bearer TOKEN after a break'  => array( "Beispiel:\nAuthorization: Bearer TOKEN", 'frei' ),
-			'Basic user:password'         => array( 'Authorization: Basic ' . base64_encode( 'user:password' ), 'frei' ),
+			'Basic user:password'         => array( 'Authorization: Basic ' . base64_encode( 'user:password' ), 'unread_credential' ),
 			'Basic admin:admin'           => array( 'Authorization: Basic ' . base64_encode( 'admin:admin' ), 'unread_credential' ),
 			'Basic admin:password'        => array( 'Authorization: Basic ' . base64_encode( 'admin:password' ), 'unread_credential' ),
 			'Bearer YOUR_TOKEN'           => array( 'Authorization: Bearer YOUR_TOKEN', 'frei' ),
