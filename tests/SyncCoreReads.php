@@ -27,6 +27,7 @@ use AB_MCP_Sync_Refs;
 use PHPUnit\Framework\Attributes\DataProvider;
 
 require_once __DIR__ . '/../includes/sync/class-sync-net.php';
+require_once __DIR__ . '/../includes/sync/class-sync-export.php';
 
 trait SyncCoreReads {
 
@@ -779,15 +780,13 @@ trait SyncCoreReads {
 			'Slack xoxb-'                       => array( 'Bearer ' . $t['xoxb'], 'sperrt' ),
 			'Mailchimp'                         => array( 'Der Schlüssel lautet ' . $t['mailchimp'] . '.', 'sperrt' ),
 			'JWT'                               => array( 'Schick den Header mit Bearer ' . $t['jwt'] . ' mit.', 'sperrt' ),
-			'Bearer at the start'               => array( 'Authorization: Bearer abc123', 'sperrt' ),
-			'Bearer after ;'                    => array( 'Accept: application/json; Authorization: Bearer REVIEW_ONLY', 'sperrt' ),
+			'Bearer at the start'               => array( 'Authorization: Bearer Qm9dXyT3kLz8wR2vNp6s', 'sperrt' ),
+			'Bearer after ;'                    => array( 'Accept: application/json; Authorization: Bearer ' . $t['hex32'], 'sperrt' ),
 			'Bearer after a line break'         => array( "Host: example.test\nAuthorization: Bearer " . $t['hex32'], 'sperrt' ),
 			'Bearer after a quote'              => array( 'curl -H "Authorization: Bearer ' . $t['hex32'] . '" https://api.example.test/', 'sperrt' ),
 			'Bearer, a placeholder in a word'   => array( 'Authorization: Bearer my_fake_' . $t['hex32'], 'sperrt' ),
-			'Bearer, a token cut short'         => array( 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOi' . "\u{2026}", 'sperrt' ),
 			'Basic, a pair'                     => array( 'Accept: application/json; Authorization: Basic ' . $b64( 'review:REVIEW_ONLY' ), 'sperrt' ),
-			'Basic user:password'               => array( 'Authorization: Basic ' . $b64( 'user:password' ), 'sperrt' ),
-			'a field after a field'             => array( 'Authorization: Basic ' . $b64( 'abc' ) . ';Authorization: Bearer abc123', 'sperrt' ),
+			'a field after a field'             => array( 'Authorization: Basic ' . $b64( 'abc' ) . ';Authorization: Bearer ' . $t['hex32'], 'sperrt' ),
 			'PEM'                               => array( $t['pem']( '', $t['pem_body'] ), 'sperrt' ),
 			'a login cookie'                    => array( 'Cookie: wordpress_logged_in_5c3e2a91=' . rawurlencode( 'admin|' . $tail ) . '; wp-settings-1=x', 'sperrt' ),
 			'a login cookie, a space'           => array( 'wordpress_sec_5c3e2a91=Anna Muster|' . $tail, 'sperrt' ),
@@ -831,18 +830,115 @@ trait SyncCoreReads {
 			'prose with The secret:'            => array( 'The secret: consistency beats intensity.', 'frei' ),
 			'secret: true'                      => array( 'secret: true', 'frei' ),
 		);
+		// Codex round 4 of branch 11b, B, and the steering after it: the
+		// examples of API tutorials free, real values locked, each at the
+		// start of the text and after a line break.
+		$under = implode( '_', str_split( substr( $t['hex32'], 0, 10 ) . 'Qm9dXyT3kL' . substr( $t['hex32'], 10, 10 ), 10 ) );
+		foreach ( array(
+			'Bearer abc123'                      => array( 'Authorization: Bearer abc123', 'frei' ),
+			'Bearer TOKEN'                       => array( 'Authorization: Bearer TOKEN', 'frei' ),
+			'bearer TOKEN of GitHub'             => array( 'Authorization: bearer TOKEN', 'frei' ),
+			'Bearer your_api_token_goes_here'    => array( 'Authorization: Bearer your_api_token_goes_here', 'frei' ),
+			'Bearer your_personal_access_token'  => array( 'Authorization: Bearer your_personal_access_token', 'frei' ),
+			'Bearer YOUR-PERSONAL-ACCESS-TOKEN'  => array( 'Authorization: Bearer YOUR-PERSONAL-ACCESS-TOKEN', 'frei' ),
+			'Bearer eyJ…'                        => array( "Authorization: Bearer eyJ\u{2026}", 'frei' ),
+			'Bearer sk_live_…'                   => array( 'Authorization: Bearer sk' . "_live_\u{2026}", 'frei' ),
+			'Bearer, a JWT cut short'            => array( 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOi' . "\u{2026}", 'frei' ),
+			'curl of GitHub with TOKEN'          => array( 'curl -H "Authorization: Bearer TOKEN" https://api.github.com/graphql', 'frei' ),
+			'Bearer REVIEW_ONLY after ;'         => array( 'Accept: application/json; Authorization: Bearer REVIEW_ONLY', 'frei' ),
+			'Basic user:password'                => array( 'Authorization: Basic ' . $b64( 'user:password' ), 'frei' ),
+			'Basic Aladdin of RFC 7617'          => array( 'Authorization: Basic ' . $t['examples']['rfc 7617'], 'frei' ),
+			'Basic aladdin of MDN'               => array( 'Authorization: Basic ' . $t['examples']['mdn basic'], 'frei' ),
+			'Bearer of 40 hex'                   => array( 'Authorization: Bearer ' . $t['hex32'] . substr( $t['hex32'], 0, 8 ), 'sperrt' ),
+			'Bearer of 32 mixed'                 => array( 'Authorization: Bearer ' . substr( $t['github_pat'], 11, 22 ) . substr( $t['github_pat'], 34, 10 ), 'sperrt' ),
+			'Bearer of 24 small letters'         => array( 'Authorization: Bearer abcdefghijklmnopqrstuvwx', 'sperrt' ),
+			'Bearer of 32 with _ and digits'     => array( 'Authorization: Bearer ' . $under, 'sperrt' ),
+			'Basic, a real password'             => array( 'Authorization: Basic ' . $b64( 'review:Sommer2026' ), 'sperrt' ),
+			'Basic admin:admin'                  => array( 'Authorization: Basic ' . $b64( 'admin:admin' ), 'sperrt' ),
+			'Basic a:b'                          => array( 'Authorization: Basic ' . $b64( 'a:b' ), 'sperrt' ),
+		) as $name => list( $text, $verdict ) ) {
+			$out[ $name ]                       = array( $text, $verdict );
+			$out[ $name . ', after a break' ]   = array( "Beispiel:\n" . $text, $verdict );
+		}
+		// The documented examples (AB_MCP_Sync_Net::EXAMPLES): free as the
+		// whole value, one character more or less locked.
+		$e    = $t['examples'];
+		$jwt  = explode( '.', $e['jwt.io'] );
+		$para = static fn( string $s ): string => '<!-- wp:paragraph --><p>' . $s . '</p><!-- /wp:paragraph -->';
+		$code = static fn( string $s ): string => '<!-- wp:code --><pre class="wp-block-code"><code>' . htmlspecialchars( $s, ENT_NOQUOTES ) . '</code></pre><!-- /wp:code -->';
+		$out += array(
+			'an AWS tutorial with both keys of its documentation' => array( $para( 'Die Zugangsschlüssel bestehen aus einer Access Key ID (zum Beispiel ' . $e['aws access key id'] . ') und einem Secret Access Key (zum Beispiel ' . $e['aws secret access key'] . ').' ) . $code( "\$ aws configure\nAWS Access Key ID [None]: " . $e['aws access key id'] . "\nAWS Secret Access Key [None]: " . $e['aws secret access key'] . "\nDefault region name [None]: us-west-2" ), 'frei' ),
+			'a JWT tutorial with the example of jwt.io'           => array( $para( 'Das Beispiel von jwt.io:' ) . $code( 'Authorization: Bearer ' . $e['jwt.io'] ), 'frei' ),
+			'the example of jwt.io since 2024'                    => array( "Beispiel:\nAuthorization: Bearer " . $e['jwt.io admin'], 'frei' ),
+			'the example of RFC 6750'                             => array( 'Authorization: Bearer ' . $e['rfc 6750'], 'frei' ),
+			'the examples of Slack'                               => array( $code( $e['slack 1'] . "\n" . $e['slack 2'] . "\n" . $e['slack 3'] ), 'frei' ),
+			'the secret key of AWS after Bearer'                  => array( 'Authorization: Bearer ' . $e['aws secret access key'], 'frei' ),
+			'the access key of AWS with a 2 after it'             => array( 'Schlüssel: ' . $e['aws access key id'] . '2', 'sperrt' ),
+			'a real AKIA key with EXAMPLE in it'                  => array( 'Schlüssel: AK' . 'IAQ3ZT7W2VX' . 'EXAMPLE', 'sperrt' ),
+			'the token of jwt.io changed'                         => array( 'Authorization: Bearer ' . $jwt[0] . '.' . $jwt[1] . '.' . strrev( $jwt[2] ), 'sperrt' ),
+			'the secret key of AWS with one more'                 => array( 'Authorization: Bearer ' . $e['aws secret access key'] . 'X', 'sperrt' ),
+		);
 		foreach ( require __DIR__ . '/fixtures/sync-tutorials.php' as $name => $text ) {
 			$out[ 'tutorial ' . $name ] = array( $text, in_array( substr( $name, 0, 3 ), array( 'T2 ', 'T6 ' ), true ) ? null : 'frei' );
+			// The header on a line of its own in the block of code (Codex round 4, B).
+			if ( false !== strpos( $text, '<code>Authorization' ) ) {
+				$out[ 'tutorial ' . $name . ', the header after a break' ] = array( str_replace( '<code>Authorization', "<code>\nAuthorization", $text ), in_array( substr( $name, 0, 3 ), array( 'T2 ', 'T6 ' ), true ) ? null : 'frei' );
+			}
 		}
 		return $out;
 	}
 
-	/** The verdict of the readers of a kind and the net (the keys of the locks of the checks), in a form of sameEverywhere(). */
+	/** The forms of the comparison: the readers of the kinds and the check of the export (Codex round 4 of branch 11b, c). */
+	const SAME_FORMS = array( 'meta', 'meta leaf', 'meta nested', 'post_content', 'option', 'option leaf', 'widget', 'term meta', 'term meta leaf', 'menu item meta', 'menu item meta leaf', 'export meta', 'export term meta', 'export menu item meta', 'export option', 'export post_content' );
+
+	/**
+	 * The verdict of the readers of a kind and the net (the keys of the locks
+	 * of the checks), in a form of sameEverywhere(): the meta of a term and
+	 * of a menu item through the reader of their kinds
+	 * (AB_MCP_Sync_Db_Kind::meta_form(), protected, called in its scope; for
+	 * an item with AB_MCP_Sync_Kind_Menu::item_meta() as the kind calls it),
+	 * the finished content through the check of the export
+	 * (AB_MCP_Sync_Export::checked_content()).
+	 */
 	private static function verdict_in( string $form, string $text ): string {
 		$ctx  = self::net_ctx();
 		$acc  = AB_MCP_Sync_Canon::acc();
 		$mark = AB_MCP_Sync_Net::mark( $acc );
-		if ( 'post_content' === $form ) {
+		$leaf = false !== strpos( $form, 'leaf' ) ? serialize( array( 'text' => $text ) ) : $text;
+		if ( 0 === strpos( $form, 'export' ) ) {
+			$kind   = array( 'export meta' => 'post', 'export term meta' => 'term', 'export menu item meta' => 'menu_item', 'export option' => 'option', 'export post_content' => 'post' )[ $form ];
+			$parts  = 'export option' === $form ? array( 'row' => array( 'value' => $text ) ) : ( 'export post_content' === $form ? array( 'row' => array( 'post_content' => $text ) ) : array( 'meta' => array( array( 'ab_note', $text ) ) ) );
+			$object = \AB_MCP_Sync_Export::checked_content(
+				array(
+					'kind'        => $kind,
+					'ref'         => '7',
+					'locks'       => array(),
+					'credentials' => array( 'b9' => array(), 'mixed' => array() ),
+					'content'     => $parts + array( 'terms' => array() ),
+				)
+			);
+			$acc['locks'] = $object['locks'];
+		} elseif ( 0 === strpos( $form, 'term meta' ) || 0 === strpos( $form, 'menu item meta' ) ) {
+			$item  = 0 === strpos( $form, 'menu' );
+			$rows  = array( array( 'meta_id' => 1, 'key' => 'ab_note', 'value' => $leaf ) );
+			$read  = \Closure::bind(
+				static function ( array $rows, array $ctx, array &$acc, bool $item ) {
+					return self::meta_form(
+						$rows,
+						$ctx,
+						$acc,
+						$item ? 'menu' : 'term',
+						$item,
+						$item ? static function ( $key, $raw, &$acc ) use ( $ctx ) {
+							return \AB_MCP_Sync_Kind_Menu::item_meta( $key, $raw, 'custom', 7, $ctx, $acc );
+						} : null
+					);
+				},
+				null,
+				\AB_MCP_Sync_Db_Kind::class
+			);
+			$read( $rows, $ctx, $acc, $item );
+		} elseif ( 'post_content' === $form ) {
 			AB_MCP_Sync_Credentials::column( $acc, 'post', 'post_content', $text );
 			AB_MCP_Sync_Refs::content( $text, $ctx, $acc, 'post', 'post_content' );
 			AB_MCP_Sync_Net::check( $acc, $mark, 'post', 'post_content', $text, $ctx );
@@ -886,7 +982,7 @@ trait SyncCoreReads {
 	#[DataProvider( 'sameEverywhere' )]
 	public function testATextIsJudgedAlikeInEveryFormItIsStoredIn( string $text, ?string $expected ): void {
 		$forms = array();
-		foreach ( array( 'meta', 'meta leaf', 'meta nested', 'post_content', 'option', 'option leaf', 'widget' ) as $form ) {
+		foreach ( self::SAME_FORMS as $form ) {
 			$forms[ $form ] = self::verdict_in( $form, $text );
 		}
 		$alike = array_unique( array_map( static fn( string $v ): string => 'frei' === $v ? 'frei' : 'sperrt', $forms ) );

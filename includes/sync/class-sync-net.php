@@ -71,8 +71,10 @@
  *   context (branch 11b; the steering, 09.11.2026), whatever name stands
  *   before them: a token of a service in its form (TOKENS: GitHub, Stripe,
  *   AWS, Slack, Mailchimp) and a JSON Web Token (JWT); at the start of a
- *   line or of a field the header Authorization with Bearer and a token, or
- *   Basic and the base64 of user:password (AUTHORIZATION); a private key
+ *   line or of a field the header Authorization with Bearer and a value in
+ *   the form of a token (20 characters of a token or more, no placeholder,
+ *   none of words), or Basic and the base64 of user:password whose password
+ *   is no example (AUTHORIZATION); a private key
  *   in PEM by its frame and a body of base64 (PEM); the value of a login
  *   cookie of WordPress by its form (COOKIE). A name of a credential
  *   counts as a key of the serialized format with a value as well
@@ -280,9 +282,11 @@ final class AB_MCP_Sync_Net {
 	 * prefix (credentials(); the steering, 09.11.2026): wherever they stand,
 	 * in any context, each counted as the name it is noted as. The form
 	 * decides, not a word in it: «…EXAMPLE», «fake», «my_» in a token are
-	 * no placeholder (Codex round 3 of branch 11b, A1). GitHub (ghp_ and 36
+	 * no placeholder (Codex round 3 of branch 11b, A1); a documented example
+	 * is none only as the whole value (EXAMPLES). GitHub (ghp_ and 36
 	 * letters and digits, github_pat_), Stripe (sk_live_, rk_live_ and 24),
-	 * AWS (AKIA and 16 capitals and digits), Slack (xoxb-, xoxp- with their
+	 * AWS (AKIA and 16 capitals and digits, a longer run as well: the whole
+	 * run is the value), Slack (xoxb-, xoxp- with their
 	 * numbers), Mailchimp (32 hex and -us with the number of the data
 	 * centre; two of the ten tutorials counted on 09.11.2026 name its key,
 	 * none in this form).
@@ -291,7 +295,7 @@ final class AB_MCP_Sync_Net {
 		'/(?<![A-Za-z0-9])ghp_[A-Za-z0-9]{36}/'                       => 'github_token',
 		'/(?<![A-Za-z0-9])github_pat_[A-Za-z0-9_]{36}/'               => 'github_token',
 		'/(?<![A-Za-z0-9])[rs]k_live_[A-Za-z0-9]{24}/'                => 'stripe_secret_key',
-		'/(?<![A-Za-z0-9])AKIA[0-9A-Z]{16}(?![0-9A-Za-z])/'           => 'aws_access_key_id',
+		'/(?<![A-Za-z0-9])AKIA[0-9A-Z]{16}/'                          => 'aws_access_key_id',
 		'/(?<![A-Za-z0-9])xox[bp]-[0-9]+-[0-9]+-[A-Za-z0-9-]{8}/'     => 'slack_token',
 		'/(?<![0-9A-Za-z])[0-9a-f]{32}-us[0-9]{1,2}(?![0-9A-Za-z])/' => 'mailchimp_api_key',
 	);
@@ -346,6 +350,38 @@ final class AB_MCP_Sync_Net {
 	const BEARER_TOKEN = '#^[A-Za-z0-9\-._~+/]+=*#';
 
 	/**
+	 * How long a value after Bearer is that has the form of a token (the
+	 * steering after Codex round 4 of branch 11b, 09.11.2026, as after round
+	 * 2): 20 characters of a token or more, with a digit or without, in any
+	 * case. Shorter, it is an example of a tutorial (abc123, TOKEN, the
+	 * REVIEW_ONLY of Codex round 1).
+	 */
+	const TOKEN_LENGTH = 20;
+
+	/**
+	 * A placeholder in the form of words, the one exception from 20 on
+	 * (bearer()): letters only, in one case, in groups of two or more joined
+	 * by «_» or «-», no digit (your_api_token_goes_here,
+	 * YOUR-PERSONAL-ACCESS-TOKEN). Without a sign between the groups there is
+	 * none: 24 small letters lock. A random token of the characters of a
+	 * token is so in fewer than one of seven million from 20 on (all of them
+	 * small letters, «_» and «-», or all capitals and these: at most
+	 * 2 · (28/64)^20), one of letters and digits never (it has no «_» or «-»);
+	 * a passphrase of words joined by «-» would be (GRENZEN.md).
+	 */
+	const WORD_PLACEHOLDER = '/^(?:[a-z]{2,}(?:[_-]+[a-z]{2,})+|[A-Z]{2,}(?:[_-]+[A-Z]{2,})+)\z/';
+
+	/**
+	 * The words that stand for a password in examples, each only as the whole
+	 * password, in any case (the steering after Codex round 4 of branch 11b,
+	 * 09.11.2026): «user:password» of the tutorials, «Aladdin:open sesame» of
+	 * RFC 7617 and «aladdin:opensesame» of MDN (its page of Authorization,
+	 * read on 09.11.2026). A user equal to its password is none: admin:admin
+	 * can be a real weak credential.
+	 */
+	const EXAMPLE_PASSWORDS = array( 'password', 'passwort', 'pass', 'secret', 'open sesame', 'opensesame' );
+
+	/**
 	 * A placeholder, only in its exact form as the whole value (the steering,
 	 * 09.11.2026; Codex round 3 of branch 11b, A1): <token>, {var} and
 	 * {{var}}, $VAR and ${VAR}, YOUR_TOKEN (YOUR_ and capitals), xxx (x
@@ -354,6 +390,44 @@ final class AB_MCP_Sync_Net {
 	 * make none.
 	 */
 	const PLACEHOLDER = '/^(?:<[^<>]+>|\{\{?[^{}]+\}\}?|\$\{?[A-Za-z_][A-Za-z0-9_]*\}?|YOUR_[A-Z0-9_]*[A-Z0-9]|[xX]{3,}(?:[ \-][xX]{3,})*|\*{3,}|\.{3,}|\x{2026}+|\[REDACTED\])\z/u';
+
+	/**
+	 * Publicly documented examples, none valid anywhere (the steering after
+	 * Codex round 4 of branch 11b, 09.11.2026): each frees only itself, as
+	 * the whole value, in every form the net judges by its value (a token of
+	 * a service, a JSON Web Token, the value after Bearer, the password of
+	 * Basic). One character more or less (AKIA…EXAMPLE2, a
+	 * real key with EXAMPLE in it, a changed token of jwt.io) locks. Kept as
+	 * the SHA-256 of the exact value, never the value: no text of the source
+	 * looks like a token to the push protection of GitHub or to a scanner.
+	 * The tests put each value together from parts and hold it to its hash
+	 * (SyncNetTest). Each was read at its source on 09.11.2026.
+	 */
+	const EXAMPLES = array(
+		// AWS IAM User Guide, «Manage access keys for IAM users»: the access key ID of the example.
+		'1a5d44a2dca19669d72edf4c4f1c27c4c1ca4b4408fbb17f6ce4ad452d78ddb3' => 'aws access key id',
+		// The same page: the secret access key of the example (40 characters, EXAMPLEKEY at its end).
+		'78314b11be2e581549ac1c4f616563fad3fdf0c3b71678f6e2299182080e0598' => 'aws secret access key',
+		// jwt.io, the token of its debugger before 2024: HS256, sub 1234567890, name John Doe, iat 1516239022, signed with your-256-bit-secret (its signature recomputed by HMAC).
+		'7f75367e7881255134e1375e723d1dea8ad5f6a4fdb79d938df1f1754a830606' => 'jwt.io',
+		// jwt.io, the token of its debugger since 2024: the same with admin true, signed with a-string-secret-at-least-256-bits-long (recomputed by HMAC).
+		'c794fa6d20c64efb9adf980ae93af472a1679775862d421ffe55d4a57fad5b3e' => 'jwt.io admin',
+		// RFC 7617, section 2: the base64 of Aladdin:open sesame.
+		'cf4d418ed3de92d71f767db5391d5a2dacd40e1ce49e75d1137e2ecf4982d844' => 'rfc 7617',
+		// MDN, «Authorization» (HTTP headers): the base64 of aladdin:opensesame.
+		'ad62d48d8b069026a2a0d0291f857a77e1975edf610aa3502e8bc71bd96f513a' => 'mdn basic',
+		// RFC 6750, sections 2.1 to 2.3 and 4: the access token of the example.
+		'b8e148545b13c78bc74da2f1a7275dd71e56ddece129d7d2f7b3ecc06f7994da' => 'rfc 6750',
+		// Slack, docs.slack.dev/authentication/tokens: the user token before August 2016, short.
+		'cdb61cc3ce2e4d206d00cf152e0521f8a1fe77264fb9c8d17570eb81478ec0d0' => 'slack 1',
+		// The same page: the user token before August 2016.
+		'248309dfe66c89f08ed968e76db5339f09822c53e3829788f451b5579c572418' => 'slack 2',
+		// The same page: a user token with a long secret.
+		'c3349c3f46ceb7d96c81faa6252470d3a342dadeadb824489e3356a75e776984' => 'slack 3',
+	);
+
+	/** The characters of a value of a token: b64token of RFC 6750 and its padding, for the whole value of a match (whole()). */
+	const TOKEN_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~+/=';
 
 	/**
 	 * The locks of the readers that make a unit one that is never clean
@@ -1700,14 +1774,20 @@ final class AB_MCP_Sync_Net {
 		}
 		// The tokens of a service and a JSON Web Token, in any context, by
 		// their form (the steering, 09.11.2026).
+		// A documented example frees only itself, as the whole value (EXAMPLES).
 		foreach ( self::TOKENS as $pattern => $name ) {
-			if ( 1 === preg_match( $pattern, $text ) ) {
-				$found[] = $name;
+			if ( preg_match_all( $pattern, $text, $m, PREG_OFFSET_CAPTURE ) ) {
+				foreach ( $m[0] as $hit ) {
+					if ( ! self::example( self::whole( $text, (int) $hit[1] ) ) ) {
+						$found[] = $name;
+						break;
+					}
+				}
 			}
 		}
-		if ( preg_match_all( self::JWT, $text, $m, PREG_SET_ORDER ) ) {
+		if ( preg_match_all( self::JWT, $text, $m, PREG_SET_ORDER | PREG_OFFSET_CAPTURE ) ) {
 			foreach ( $m as $hit ) {
-				if ( self::jwt( $hit[1], $hit[2], $hit[3] ) ) {
+				if ( self::jwt( $hit[1][0], $hit[2][0], $hit[3][0] ) && ! self::example( self::whole( $text, (int) $hit[0][1] ) ) ) {
 					$found[] = 'access_token';
 					break;
 				}
@@ -1731,8 +1811,9 @@ final class AB_MCP_Sync_Net {
 		}
 		// The header Authorization with Bearer or Basic at the start of a
 		// line or of a field (Codex round 1 of branch 11b, A1; the steering,
-		// 09.11.2026): Bearer with a token that is no placeholder, Basic with
-		// the base64 of user:password.
+		// 09.11.2026): Bearer with a value in the form of a token, Basic with
+		// the base64 of user:password (after Codex round 4: no example of a
+		// tutorial, bearer() and basic()).
 		if ( preg_match_all( self::AUTHORIZATION, $text, $m, PREG_SET_ORDER ) ) {
 			foreach ( $m as $hit ) {
 				if ( 'basic' === strtolower( $hit[1] ) ? self::basic( $hit[2] ) : self::bearer( $hit[2] ) ) {
@@ -1826,29 +1907,44 @@ final class AB_MCP_Sync_Net {
 	}
 
 	/**
-	 * Whether the value after Bearer in the header Authorization is a token:
+	 * Whether the value after Bearer in the header Authorization has the form
+	 * of a token (the steering after Codex round 4 of branch 11b, 09.11.2026):
 	 * the characters of a token at its start (BEARER_TOKEN; a «.» at its end
-	 * ends a sentence), not empty and no placeholder (YOUR_TOKEN, xxx, ...;
-	 * <token>, $TOKEN, {token}, *** and &lt;token&gt; have none of them),
-	 * however short (the steering, 09.11.2026).
+	 * ends a sentence), TOKEN_LENGTH or more, with a digit or without. Free: a
+	 * placeholder (YOUR_TOKEN, xxx, ...; <token>, $TOKEN, {token}, *** and
+	 * &lt;token&gt; have no character of a token at all), a placeholder in the
+	 * form of words (WORD_PLACEHOLDER), a documented example as the whole
+	 * value (EXAMPLES), a value cut short («…» or «...» right after it, «...»
+	 * in it), one shorter than TOKEN_LENGTH. A token of a
+	 * service in its form and a JSON Web Token count anywhere (TOKENS, JWT).
 	 *
 	 * @param string $value The word after the scheme.
 	 * @return bool
 	 */
 	public static function bearer( $value ) {
-		if ( ! preg_match( self::BEARER_TOKEN, (string) $value, $m ) ) {
+		$value = (string) $value;
+		if ( ! preg_match( self::BEARER_TOKEN, $value, $m ) ) {
+			return false;
+		}
+		$rest = (string) substr( $value, strlen( $m[0] ) );
+		if ( false !== strpos( $m[0], '...' ) || 0 === strpos( $rest, '...' ) || 0 === strpos( $rest, "\u{2026}" ) ) {
 			return false;
 		}
 		$token = rtrim( $m[0], '.' );
-		return '' !== $token && ! self::placeholder( $token );
+		return strlen( $token ) >= self::TOKEN_LENGTH && ! self::placeholder( $token ) && 1 !== preg_match( self::WORD_PLACEHOLDER, $token ) && ! self::example( $token );
 	}
 
 	/**
 	 * Whether the value after Basic in the header Authorization is a pair:
 	 * base64 at its start that decodes to a text user:password, without a
 	 * sign of control, the two not both empty, the password (or, where it is
-	 * empty, the user: a key as the user) no placeholder (YOUR_PASSWORD,
-	 * <password>, xxxx xxxx …), however short (the steering, 09.11.2026).
+	 * empty, the user: a key as the user) neither a placeholder
+	 * (YOUR_PASSWORD, <password>, xxxx xxxx …) nor, as the whole of it in any
+	 * case, a word of EXAMPLE_PASSWORDS (user:password, Aladdin:open sesame,
+	 * aladdin:opensesame), nor a documented example (EXAMPLES: the secret
+	 * key of AWS; the pairs of RFC 7617 and MDN are free by their words),
+	 * whatever its length: a:b and admin:admin lock (the steering, 09.11.2026,
+	 * and after Codex round 4 of branch 11b).
 	 *
 	 * @param string $value The word after the scheme.
 	 * @return bool
@@ -1866,7 +1962,8 @@ final class AB_MCP_Sync_Net {
 			return false;
 		}
 		$password = (string) substr( $pair, $at + 1 );
-		return ! self::placeholder( '' === $password ? (string) substr( $pair, 0, $at ) : $password );
+		$secret   = '' === $password ? (string) substr( $pair, 0, $at ) : $password;
+		return ! self::placeholder( $secret ) && ! in_array( strtolower( $secret ), self::EXAMPLE_PASSWORDS, true ) && ! self::example( $secret );
 	}
 
 	/**
@@ -1878,6 +1975,30 @@ final class AB_MCP_Sync_Net {
 	 */
 	public static function placeholder( $value ) {
 		return 1 === preg_match( self::PLACEHOLDER, (string) $value );
+	}
+
+	/**
+	 * Whether a value is a documented example: its SHA-256 one of EXAMPLES,
+	 * the value as a whole.
+	 *
+	 * @param string $value Value.
+	 * @return bool
+	 */
+	public static function example( $value ) {
+		return isset( self::EXAMPLES[ hash( 'sha256', (string) $value ) ] );
+	}
+
+	/**
+	 * The whole value of a token from where its match begins: the run of
+	 * TOKEN_CHARS from there (AKIA…EXAMPLE2 to its end), without a «.» at
+	 * its end, which ends a sentence.
+	 *
+	 * @param string $text Text.
+	 * @param int    $at   Where the match begins.
+	 * @return string
+	 */
+	private static function whole( $text, $at ) {
+		return rtrim( (string) substr( (string) $text, $at, strspn( (string) $text, self::TOKEN_CHARS, $at ) ), '.' );
 	}
 
 	/**

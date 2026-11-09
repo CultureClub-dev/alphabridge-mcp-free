@@ -639,7 +639,7 @@ final class SyncNetTest extends TestCase {
 		foreach ( array(
 			'github_token'      => array( $t['ghp'], $t['github_pat'], 'gh' . 'p_' . str_repeat( 'fake', 9 ), 'gh' . 'p_' . $alnum( 'g', 40 ) ),
 			'stripe_secret_key' => array( $t['sk_live'], $t['rk_live'], 'sk' . '_live_' . str_repeat( 'my', 12 ) ),
-			'aws_access_key_id' => array( $t['akia'], 'AK' . 'IAIOSFODNN7' . 'EXAMPLE' ),
+			'aws_access_key_id' => array( $t['akia'], 'AK' . 'IAQ3ZT7W2VX' . 'EXAMPLE', 'AK' . 'IAIOSFODNN7' . 'EXAMPLE1', 'AK' . 'IAIOSFODNN7' . 'EXAMPLEx' ),
 			'slack_token'       => array( $t['xoxb'], $t['xoxp'] ),
 			'mailchimp_api_key' => array( $t['mailchimp'], $hex( 'm', 32 ) . '-us' . '1' ),
 			'access_token'      => array( $t['jwt'] ),
@@ -666,9 +666,7 @@ final class SyncNetTest extends TestCase {
 			'pk' . '_live_' . $alnum( 's', 24 ),
 			'1sk' . '_live_' . $alnum( 's', 24 ),
 			'AK' . 'IA' . 'IOSFODNN7EXAMP',
-			'AK' . 'IA' . 'IOSFODNN7EXAMPLE1',
-			'AK' . 'IA' . 'IOSFODNN7EXAMPLEx',
-			'XAK' . 'IA' . 'IOSFODNN7EXAMPLE',
+			'X' . $t['akia'],
 			'xo' . 'xb-2048-4096-' . $alnum( 'x', 7 ),
 			'xo' . 'xa-2048-4096-' . $alnum( 'x', 24 ),
 			'xo' . 'xb-your-token',
@@ -698,54 +696,156 @@ final class SyncNetTest extends TestCase {
 		self::assertFalse( AB_MCP_Sync_Net::jwt( $b64url( '"alg"' ), $jwt[1], $jwt[2] ), 'Its header no object.' );
 	}
 
-	public function testTheHeaderAuthorizationCountsAtTheStartOfALineOrAField(): void {
-		// Codex round 1 of branch 11b, A1; the steering, 09.11.2026: Bearer
-		// with a token that is no placeholder, Basic with the base64 of
-		// user:password, at the start of the text, after a line break, «;», a
-		// quote or the «:» of an array of headers.
-		$hex   = self::tokens()['hex32'];
-		$b64   = static fn( string $t ): string => base64_encode( $t );
+	public function testADocumentedExampleIsFreeOnlyAsTheWholeValue(): void {
+		// The steering after Codex round 4 of branch 11b: the examples of the
+		// documentation of AWS, jwt.io, RFC 7617, MDN, RFC 6750 and Slack free
+		// themselves only, as the whole value, in every form the net judges by
+		// its value; kept as SHA-256, put together here from parts.
+		$t     = self::tokens();
+		$e     = $t['examples'];
 		$extra = array();
+		$names = array();
+		foreach ( $e as $name => $value ) {
+			self::assertTrue( AB_MCP_Sync_Net::example( $value ), $name );
+			self::assertSame( $name, AB_MCP_Sync_Net::EXAMPLES[ hash( 'sha256', $value ) ] );
+			$names[] = $name;
+		}
+		self::assertSame( array_values( AB_MCP_Sync_Net::EXAMPLES ), $names, 'Each entry of the list held by a value here.' );
+		$jwt = explode( '.', $e['jwt.io'] );
 		foreach ( array(
-			'Authorization: Bearer abc123',
-			'authorization: bearer abc123',
-			'AUTHORIZATION:Bearer abc123.',
-			'Accept: application/json; Authorization: Bearer REVIEW_ONLY',
-			'Accept: */*;Authorization: Bearer abc123',
+			'Access Key ID (zum Beispiel ' . $e['aws access key id'] . ')',
+			"AWS Access Key ID [None]: " . $e['aws access key id'] . "\nAWS Secret Access Key [None]: " . $e['aws secret access key'],
+			$e['aws access key id'] . '.',
+			'Authorization: Bearer ' . $e['jwt.io'],
+			"Beispiel:\nAuthorization: Bearer " . $e['jwt.io admin'],
+			$e['jwt.io'] . '.',
+			'Authorization: Bearer ' . $e['rfc 6750'],
+			'Authorization: Basic ' . $e['rfc 7617'],
+			'Authorization: Basic ' . $e['mdn basic'],
+			'Authorization: Bearer ' . $e['aws secret access key'],
+			'Authorization: Basic ' . base64_encode( $e['aws access key id'] . ':' . $e['aws secret access key'] ),
+			'Authorization: Basic ' . base64_encode( 'admin:' . $e['aws secret access key'] ),
+			$e['slack 1'] . "\n" . $e['slack 2'] . "\n" . $e['slack 3'],
+			'Authorization: Bearer ' . $e['slack 3'],
+		) as $text ) {
+			self::assertSame( array(), AB_MCP_Sync_Net::credentials( $text, $extra ), $text );
+		}
+		// One character more or less, a value of its own: no example.
+		foreach ( array(
+			'aws_access_key_id' => array( $e['aws access key id'] . ' und ' . $t['akia'], $e['aws access key id'] . '2', 'AK' . 'IAQ3ZT7W2VX' . 'EXAMPLE', substr( $e['aws access key id'], 0, 19 ) . 'F', $e['aws access key id'] . '/x', 'Mein ' . $e['aws access key id'] . 'X' ),
+			'access_token'      => array( $jwt[0] . '.' . $jwt[1] . '.' . strrev( $jwt[2] ), $e['jwt.io'] . 'A', $jwt[0] . '.' . $jwt[1] . 'AAAA.' . $jwt[2] ),
+			'slack_token'       => array( $e['slack 2'] . '9', $e['slack 3'] . '-x' ),
+			'authorization'     => array( 'Authorization: Bearer ' . $e['aws secret access key'] . 'X', 'Authorization: Bearer x' . $e['aws secret access key'], 'Authorization: Basic ' . base64_encode( 'admin:' . $e['aws secret access key'] . '1' ), 'Authorization: Basic ' . base64_encode( 'a:' . $e['rfc 6750'] . 'x' ) ),
+		) as $name => $texts ) {
+			foreach ( $texts as $text ) {
+				self::assertSame( array( $name ), AB_MCP_Sync_Net::credentials( $text, $extra ), $text );
+			}
+		}
+		self::assertFalse( AB_MCP_Sync_Net::example( '' ) );
+		self::assertFalse( AB_MCP_Sync_Net::example( ' ' . $e['rfc 6750'] ) );
+	}
+
+	public function testTheHeaderAuthorizationCountsAtTheStartOfALineOrAField(): void {
+		// Codex round 1 of branch 11b, A1; the steering, 09.11.2026, and after
+		// Codex round 4 (B): at the start of the text, after a line break,
+		// «;», a quote or the «:» of an array of headers; Bearer with a value
+		// in the form of a token (20 characters of a token or more, with a
+		// digit or without, no placeholder of words), Basic with the base64
+		// of user:password whose password is no example.
+		$t     = self::tokens();
+		$hex   = $t['hex32'];
+		$tok   = 'Qm9dXyT3kLz8wR2vNp6s';
+		$b64   = static fn( string $s ): string => base64_encode( $s );
+		$under = implode( '_', str_split( substr( $hex, 0, 10 ) . 'Qm9dXyT3kL' . substr( $hex, 10, 10 ), 10 ) );
+		$extra = array();
+		self::assertSame( 20, strlen( $tok ) );
+		self::assertSame( array( 32, 2 ), array( strlen( $under ), substr_count( $under, '_' ) ) );
+		self::assertMatchesRegularExpression( '/[0-9]/', $under );
+		foreach ( array(
+			'Authorization: Bearer ' . $tok,
+			'authorization: bearer ' . $tok,
+			'AUTHORIZATION:Bearer ' . $tok . '.',
+			'Accept: application/json; Authorization: Bearer ' . $hex,
+			'Accept: */*;Authorization: Bearer ' . $tok,
 			"Host: example.test\nAuthorization: Bearer " . $hex,
-			"Host: example.test\r\n\tAuthorization: Bearer abc123",
-			"Host: example.test\nAuthorization: 'Bearer abc123'",
-			'curl -H "Authorization: Bearer abc123" https://api.example.test/',
-			"-H 'Authorization: Bearer abc123'",
-			'`Authorization: Bearer abc123`',
-			'headers: Authorization: Bearer abc123',
-			'Proxy-Authorization: Bearer abc123',
+			"Host: example.test\r\n\tAuthorization: Bearer " . $tok,
+			"Host: example.test\nAuthorization: 'Bearer " . $tok . "'",
+			'curl -H "Authorization: Bearer ' . $hex . '" https://api.example.test/',
+			"-H 'Authorization: Bearer " . $tok . "'",
+			'`Authorization: Bearer ' . $tok . '`',
+			'headers: Authorization: Bearer ' . $tok,
+			'Proxy-Authorization: Bearer ' . $tok,
+			// The form of a token: 20 or more, with a digit or without; a
+			// value of words only where its groups are joined by «_» or «-».
+			'Authorization: Bearer ' . substr( $hex, 0, 20 ),
+			'Authorization: Bearer QmdXyTkLzwRvNpsHcaJf',
+			'Authorization: Bearer abcdefghijklmnopqrs1',
+			'Authorization: Bearer ABCDEFGHIJKLMNOPQRS1',
+			'Authorization: Bearer abcdefghijklmnopqrst',
+			'Authorization: Bearer abcdefghijklmnopqrstuvwx',
+			'Authorization: Bearer ABCDEFGHIJKLMNOPQRST',
+			'Authorization: Bearer ' . $under,
+			'Authorization: Bearer Your_api_token_goes_here',
+			'Authorization: Bearer your_api_token_2026_here',
+			'Authorization: Bearer a_bcdefghijklmnopqrstu',
+			'Authorization: Bearer your.api.token.goes.here',
+			'Authorization: Bearer ' . $hex . substr( $hex, 0, 8 ),
 			'Authorization: Basic ' . $b64( 'review:REVIEW_ONLY' ),
+			'Authorization: Basic ' . $b64( 'review:Sommer2026' ),
+			'Authorization: Basic ' . $b64( 'a:b' ),
 			'Authorization: Basic ' . $b64( 'a:b1' ),
-			'Authorization: Basic ' . $b64( 'user:password' ),
-			'Authorization: Basic ' . $b64( 'Aladdin:open sesame' ),
+			'Authorization: Basic ' . $b64( 'admin:admin' ),
 			'Authorization: Basic ' . $b64( 'key-of-the-account:' ),
 			'Authorization: Basic ' . $b64( ':secret-only' ),
 			'Proxy-Authorization: Basic ' . $b64( 'proxy:Kq7vR2pX' ) . ';',
-			// A placeholder in a word is none (Codex round 3, A1).
+			// A placeholder or an example word in a word is none (Codex round 3, A1).
 			'Authorization: Bearer my_' . $hex,
-			'Authorization: Bearer fake_token_123',
-			'Authorization: Bearer YOUR_TOKENabc',
+			'Authorization: Bearer fake_token_1234567890',
+			'Authorization: Bearer YOUR_TOKEN_abcdefghij1',
 			'Authorization: Basic ' . $b64( 'admin:my_password' ),
+			'Authorization: Basic ' . $b64( 'admin:password123' ),
+			'Authorization: Basic ' . $b64( 'admin:open sesame!' ),
 			// A field after a field is one of its own (Codex round 3, A3).
-			'Authorization: Basic ' . $b64( 'abc' ) . ';Authorization: Bearer abc123',
-			'Authorization: Bearer YOUR_TOKEN;Authorization: Bearer abc123',
+			'Authorization: Basic ' . $b64( 'abc' ) . ';Authorization: Bearer ' . $tok,
+			'Authorization: Bearer YOUR_TOKEN;Authorization: Bearer ' . $tok,
 			'Authorization: Bearer <token>; Authorization: Basic ' . $b64( 'a:b1' ),
 		) as $text ) {
 			self::assertSame( array( 'authorization' ), AB_MCP_Sync_Net::credentials( $text, $extra ), $text );
 		}
 		foreach ( array(
+			// The examples of tutorials (Codex round 4, B): shorter than 20, a
+			// word in one case without a digit, cut short.
+			'Authorization: Bearer abc123',
+			'Authorization: Bearer TOKEN',
+			'Authorization: bearer TOKEN',
+			'curl -H "Authorization: Bearer TOKEN" https://api.github.com/graphql',
+			"Beispiel:\nAuthorization: Bearer abc123",
+			'Accept: application/json; Authorization: Bearer REVIEW_ONLY',
+			'Authorization: Bearer ' . substr( $tok, 0, 19 ),
+			'Authorization: Bearer ' . substr( $tok, 0, 19 ) . '.',
+			'Authorization: Bearer your_api_token_goes_here.',
+			'Authorization: Bearer <' . $tok . '>',
+			'Authorization: Bearer &lt;' . $tok . '&gt;',
+			'Authorization: Bearer your_api_token_goes_here',
+			'Authorization: Bearer your_personal_access_token',
+			'Authorization: Bearer YOUR-PERSONAL-ACCESS-TOKEN',
+			'Authorization: Bearer YOUR_API_TOKEN_HERE',
+			'Authorization: Bearer ABCDEFGHIJ-KLMNOPQRST',
+			'Authorization: Bearer ab__cd--ef_gh-ij_kl_mn',
+			"Authorization: Bearer eyJ\u{2026}",
+			'Authorization: Bearer sk' . "_live_\u{2026}",
+			'Authorization: Bearer ' . $tok . "\u{2026}",
+			'Authorization: Bearer ' . $tok . '...',
+			'Authorization: Bearer ' . $tok . '==...',
+			'Authorization: Bearer Qm9dXyT3kL...z8wR2vNp6s',
+			'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOi...',
 			// Placeholders in their exact form, and code that builds the value.
 			'Authorization: Bearer <token>',
 			'Authorization: Bearer &lt;token&gt;',
 			'Authorization: Bearer YOUR_TOKEN',
 			'Authorization: Bearer YOUR_ACCESS_TOKEN.',
-			'Authorization: Bearer xxxxxxxxxxxxxxxx',
+			'Authorization: Bearer YOUR_TOKEN_2026_ABCDEFGH',
+			'Authorization: Bearer xxxxxxxxxxxxxxxxxxxxxxxx',
 			'Authorization: Bearer ************',
 			'Authorization: Bearer ...',
 			"Authorization: Bearer \u{2026}",
@@ -755,6 +855,16 @@ final class SyncNetTest extends TestCase {
 			'Authorization: Bearer {{token}}',
 			'Authorization: Bearer [REDACTED]',
 			"\$h[] = 'Authorization: Bearer ' . \$token;",
+			// Basic: the example words as the whole password, in any case.
+			'Authorization: Basic ' . $b64( 'user:password' ),
+			'Authorization: Basic ' . $b64( 'admin:PASSWORD' ),
+			'Authorization: Basic ' . $b64( 'admin:Passwort' ),
+			'Authorization: Basic ' . $b64( 'api:SECRET' ),
+			'Authorization: Basic ' . $b64( 'pass:' ),
+			'Authorization: Basic ' . $t['examples']['rfc 7617'],
+			'Authorization: Basic ' . $t['examples']['mdn basic'],
+			'Authorization: Basic ' . $b64( 'admin:Open Sesame' ),
+			'Authorization: Basic ' . $b64( 'ali:OpenSesame' ),
 			'Authorization: Basic <base64>',
 			'Authorization: Basic ' . $b64( 'foobar' ),
 			'Authorization: Basic ' . $b64( 'admin:YOUR_PASSWORD' ),
@@ -766,19 +876,20 @@ final class SyncNetTest extends TestCase {
 			'Authorization: Basic ' . $b64( "a:\xFFb1" ),
 			'Authorization: Basic mit Benutzer und Passwort',
 			// At the start of no line and no field: a limit (GRENZEN.md).
-			'Setze den Header Authorization: Bearer abc123 in Postman.',
-			'<code>Authorization: Bearer abc123</code>',
-			'Accept: */*, Authorization: Bearer abc123',
+			'Setze den Header Authorization: Bearer ' . $hex . ' in Postman.',
+			'<code>Authorization: Bearer ' . $hex . '</code>',
+			'Accept: */*, Authorization: Bearer ' . $hex,
 			// Another scheme, no scheme, no header.
-			'Authorization: Token abc123',
+			'Authorization: Token ' . $hex,
 			'Authorization: Digest username="a"',
 			'Authorization: erteilt am 3.11. durch die Leitung.',
-			'Bearer abc123',
+			'Bearer ' . $hex,
 			'This is a bearer instrument.',
 		) as $text ) {
 			self::assertSame( array(), AB_MCP_Sync_Net::credentials( $text, $extra ), $text );
 		}
-		self::assertTrue( AB_MCP_Sync_Net::bearer( 'abc123</code>' ) );
+		self::assertTrue( AB_MCP_Sync_Net::bearer( $tok . '</code>' ) );
+		self::assertFalse( AB_MCP_Sync_Net::bearer( 'abc123</code>' ) );
 		self::assertFalse( AB_MCP_Sync_Net::bearer( '' ) );
 		self::assertTrue( AB_MCP_Sync_Net::basic( $b64( 'a:b1' ) . '</code>' ) );
 		self::assertFalse( AB_MCP_Sync_Net::basic( '' ) );
@@ -1430,7 +1541,8 @@ final class SyncNetTest extends TestCase {
 		$cases = self::unread_leaves();
 		$tok   = self::tokens();
 		$text  = array(
-			'Bearer in headers'           => array( 'Accept: application/json; Authorization: Bearer REVIEW_ONLY', 'unread_credential' ),
+			'Bearer in headers'           => array( 'Accept: application/json; Authorization: Bearer ' . $tok['hex32'], 'unread_credential' ),
+			'Bearer REVIEW_ONLY in headers' => array( 'Accept: application/json; Authorization: Bearer REVIEW_ONLY', 'frei' ),
 			'Basic with base64'           => array( 'Accept: application/json; Authorization: Basic ' . base64_encode( 'review:REVIEW_ONLY' ), 'unread_credential' ),
 			'quoted prose after Token:'   => array( 'Token: "Ein Spielstein pro Zug"', 'unread_credential' ),
 			'prose'                       => array( $prose, 'frei' ),
@@ -1447,10 +1559,14 @@ final class SyncNetTest extends TestCase {
 			// (limit C, GRENZEN.md), A2 among them.
 			'a token of a service'        => array( 'Mein Token ist ' . $tok['ghp'] . ', bitte nicht weitergeben.', 'unread_credential' ),
 			'a JSON Web Token'            => array( $tok['jwt'], 'unread_credential' ),
-			'Bearer at the start'         => array( 'Authorization: Bearer abc123', 'unread_credential' ),
+			'Bearer at the start'         => array( 'Authorization: Bearer Qm9dXyT3kLz8wR2vNp6s', 'unread_credential' ),
+			'Bearer abc123 (Codex 4, B)'  => array( 'Authorization: Bearer abc123', 'frei' ),
+			'Bearer TOKEN after a break'  => array( "Beispiel:\nAuthorization: Bearer TOKEN", 'frei' ),
+			'Basic user:password'         => array( 'Authorization: Basic ' . base64_encode( 'user:password' ), 'frei' ),
+			'Basic admin:admin'           => array( 'Authorization: Basic ' . base64_encode( 'admin:admin' ), 'unread_credential' ),
 			'Bearer YOUR_TOKEN'           => array( 'Authorization: Bearer YOUR_TOKEN', 'frei' ),
 			'A1 a placeholder in a word'  => array( 'Authorization: Bearer my_fake_' . $tok['hex32'], 'unread_credential' ),
-			'A3 a field after a field'    => array( 'Authorization: Basic ' . base64_encode( 'abc' ) . ';Authorization: Bearer abc123', 'unread_credential' ),
+			'A3 a field after a field'    => array( 'Authorization: Basic ' . base64_encode( 'abc' ) . ';Authorization: Bearer ' . $tok['hex32'], 'unread_credential' ),
 			'A4 a cookie, a space'        => array( 'wordpress_sec_5c3e2a91=Anna Muster|' . $tok['cookie_tail'], 'unread_credential' ),
 			'A4 a cookie, a space as +'   => array( 'wordpress_sec_5c3e2a91=' . urlencode( 'Anna Muster|' . $tok['cookie_tail'] ), 'unread_credential' ),
 			'A4 a cookie, a space as %20' => array( 'wordpress_sec_5c3e2a91=' . rawurlencode( 'Anna Muster|' . $tok['cookie_tail'] ), 'unread_credential' ),

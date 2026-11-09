@@ -8,7 +8,9 @@
  *
  * Returns name => text: ghp, github_pat, sk_live, rk_live, akia, xoxb, xoxp,
  * mailchimp, jwt, cookie_tail (expiration|token|hmac of a login cookie),
- * pem_body (lines of base64), hex32; and as closures alnum( seed, n ),
+ * pem_body (lines of base64), hex32; examples, the publicly documented
+ * examples of AB_MCP_Sync_Net::EXAMPLES by name (the two tokens of jwt.io
+ * signed anew with their documented keys); and as closures alnum( seed, n ),
  * hex( seed, n ), b64url( text ), pem( label, body ).
  *
  * @package AlphaBridge_MCP
@@ -31,7 +33,24 @@ $b64url = static fn( string $text ): string => rtrim( strtr( base64_encode( $tex
 $caps   = static fn( string $seed, int $n ): string => strtoupper( substr( $hex( $seed, 64 ) . $alnum( $seed, 64 ), 0, $n ) );
 $pem    = static fn( string $label, string $body ): string => '-----BEGIN ' . $label . 'PRIVATE' . ' KEY-----' . "\n" . $body . '-----END ' . $label . 'PRIVATE' . ' KEY-----';
 
+$jwtio  = static function ( string $payload, string $key ) use ( $b64url ): string {
+	$head = $b64url( '{"alg":"HS256","typ":"JWT"}' ) . '.' . $b64url( $payload );
+	return $head . '.' . $b64url( hash_hmac( 'sha256', $head, $key, true ) );
+};
+
 return array(
+	'examples'    => array(
+		'aws access key id'     => 'AK' . 'IA' . 'IOSFODNN7' . 'EXAMPLE',
+		'aws secret access key' => 'wJalrXUtnFEMI/K7MDENG/' . 'bPxRfiCY' . 'EXAMPLEKEY',
+		'jwt.io'                => $jwtio( '{"sub":"1234567890","name":"John Doe","iat":1516239022}', 'your-256-bit-secret' ),
+		'jwt.io admin'          => $jwtio( '{"sub":"1234567890","name":"John Doe","admin":true,"iat":1516239022}', 'a-string-secret-at-least-256-bits-long' ),
+		'rfc 7617'              => 'QWxhZGRpbjpvcGVuIHNlc2FtZQ' . '==',
+		'mdn basic'             => 'YWxhZGRpbjpvcGVu' . 'c2VzYW1l',
+		'rfc 6750'              => 'mF_9.' . 'B5f-4.1JqM',
+		'slack 1'               => 'xo' . 'xp-111-222-333-' . 'd6bc76',
+		'slack 2'               => 'xo' . 'xp-111-222-333-' . 'd6bc768412',
+		'slack 3'               => 'xo' . 'xp-111-222-333-' . 'd6bc768406e5c2e6958cfc399b438004',
+	),
 	'ghp'         => 'gh' . 'p_' . $alnum( 'ghp', 36 ),
 	'github_pat'  => 'github' . '_pat_' . $alnum( 'pat1', 22 ) . '_' . $alnum( 'pat2', 59 ),
 	'sk_live'     => 'sk' . '_live_' . $alnum( 'sk', 24 ),

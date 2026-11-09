@@ -177,8 +177,13 @@ e('texts-object', 'texts(): an object in a structure locks', NT,
 # ------------------------------------- the forms of the steering (09.11.2026)
 N_TOKENS = 'testTheTokensOfAServiceAndAJsonWebTokenCountByTheirFormInAnyContext'
 N_PLACE = 'testAPlaceholderIsOneOnlyInItsExactFormAsTheWholeValue'
+N_EXAMPLE = 'testADocumentedExampleIsFreeOnlyAsTheWholeValue'
 e('tokens', 'credentials(): a token of a service counts by its form, in any context', NT,
-  "\t\t\tif ( 1 === preg_match( $pattern, $text ) ) {\n\t\t\t\t$found[] = $name;", "\t\t\tif ( 1 === preg_match( $pattern, $text ) ) {\n\t\t\t\t// not counted", 'net', N_TOKENS)
+  "\t\t\t\t\tif ( ! self::example( self::whole( $text, (int) $hit[1] ) ) ) {\n\t\t\t\t\t\t$found[] = $name;", "\t\t\t\t\tif ( ! self::example( self::whole( $text, (int) $hit[1] ) ) ) {\n\t\t\t\t\t\t// not counted", 'net', N_TOKENS)
+e('tokens-example', 'credentials(): a documented example as the whole value frees a token of a service (the steering after Codex round 4)', NT,
+  "\t\t\t\t\tif ( ! self::example( self::whole( $text, (int) $hit[1] ) ) ) {", "\t\t\t\t\tif ( true ) {", 'net', N_EXAMPLE)
+e('tokens-each', 'credentials(): each match of a form on its own, an example before a real token frees none', NT,
+  "\t\t\tif ( preg_match_all( $pattern, $text, $m, PREG_OFFSET_CAPTURE ) ) {\n\t\t\t\tforeach ( $m[0] as $hit ) {", "\t\t\tif ( preg_match_all( $pattern, $text, $m, PREG_OFFSET_CAPTURE ) ) {\n\t\t\t\tforeach ( array_slice( $m[0], 0, 1 ) as $hit ) {", 'net', N_EXAMPLE)
 e('token-ghp-length', 'TOKENS: ghp_ with 36 letters and digits', NT,
   "ghp_[A-Za-z0-9]{36}/'", "ghp_[A-Za-z0-9]{35}/'", 'net', N_TOKENS)
 e('token-ghp-before', 'TOKENS: ghp_ not glued to a letter or digit before it', NT,
@@ -192,9 +197,9 @@ e('token-stripe-prefix', 'TOKENS: only the secret and the restricted key of Stri
 e('token-stripe-before', 'TOKENS: sk_live_ not glued to a letter or digit before it', NT,
   "'/(?<![A-Za-z0-9])[rs]k_live_", "'/[rs]k_live_", 'net', N_TOKENS)
 e('token-aws-length', 'TOKENS: AKIA with 16 capitals and digits', NT,
-  "AKIA[0-9A-Z]{16}(?![0-9A-Za-z])", "AKIA[0-9A-Z]{15}(?![0-9A-Za-z])", 'net', N_TOKENS)
-e('token-aws-after', 'TOKENS: AKIA, no letter or digit after the 16', NT,
-  "AKIA[0-9A-Z]{16}(?![0-9A-Za-z])", "AKIA[0-9A-Z]{16}", 'net', N_TOKENS)
+  "AKIA[0-9A-Z]{16}/'", "AKIA[0-9A-Z]{17}/'", 'net', N_TOKENS)
+e('token-aws-longer', 'TOKENS: AKIA and 16 as the start of a longer run as well (AKIA…EXAMPLE2 locks; the steering after Codex round 4)', NT,
+  "AKIA[0-9A-Z]{16}/'", "AKIA[0-9A-Z]{16}(?![0-9A-Za-z])/'", 'net', N_EXAMPLE)
 e('token-aws-before', 'TOKENS: AKIA not glued to a letter or digit before it', NT,
   "'/(?<![A-Za-z0-9])AKIA", "'/AKIA", 'net', N_TOKENS)
 e('token-slack-length', 'TOKENS: xoxb-, xoxp- with their numbers and 8 or more after them', NT,
@@ -212,7 +217,9 @@ e('token-mailchimp-centre', 'TOKENS: Mailchimp with the number of its data centr
 e('token-mailchimp-after', 'TOKENS: Mailchimp, no letter or digit after its number', NT,
   "-us[0-9]{1,2}(?![0-9A-Za-z])/'", "-us[0-9]{1,2}/'", 'net', N_TOKENS)
 e('jwt', 'credentials(): a JSON Web Token counts by its form, in any context', NT,
-  "\t\t\t\tif ( self::jwt( $hit[1], $hit[2], $hit[3] ) ) {", "\t\t\t\tif ( false ) {", 'net', N_TOKENS)
+  "\t\t\t\tif ( self::jwt( $hit[1][0], $hit[2][0], $hit[3][0] ) && ! self::example( self::whole( $text, (int) $hit[0][1] ) ) ) {", "\t\t\t\tif ( false ) {", 'net', N_TOKENS)
+e('jwt-example', 'credentials(): a documented JSON Web Token (jwt.io) frees itself as the whole value (the steering after Codex round 4)', NT,
+  "\t\t\t\tif ( self::jwt( $hit[1][0], $hit[2][0], $hit[3][0] ) && ! self::example( self::whole( $text, (int) $hit[0][1] ) ) ) {", "\t\t\t\tif ( self::jwt( $hit[1][0], $hit[2][0], $hit[3][0] ) ) {", 'net', N_EXAMPLE)
 e('jwt-before', 'JWT: not glued to a character of base64url before it', NT,
   "const JWT = '/(?<![A-Za-z0-9_\\-])(eyJ", "const JWT = '/(eyJ", 'net', N_TOKENS)
 e('jwt-signature', 'JWT: three parts, the signature not empty', NT,
@@ -276,10 +283,37 @@ e('bearer-start', 'bearer(): the characters of a token at the start of the value
   "const BEARER_TOKEN = '#^[A-Za-z0-9\\-._~+/]+=*#';", "const BEARER_TOKEN = '#[A-Za-z0-9\\-._~+/]+=*#';", 'net', N_AUTH)
 e('bearer-dot', 'bearer(): a «.» at its end ends a sentence', NT,
   "\t\t$token = rtrim( $m[0], '.' );", "\t\t$token = $m[0];", 'net', N_AUTH)
-e('bearer-empty', 'bearer(): not empty', NT,
-  "\t\treturn '' !== $token && ! self::placeholder( $token );", "\t\treturn ! self::placeholder( $token );", 'net', N_AUTH)
+BEARER_RETURN = "\t\treturn strlen( $token ) >= self::TOKEN_LENGTH && ! self::placeholder( $token ) && 1 !== preg_match( self::WORD_PLACEHOLDER, $token ) && ! self::example( $token );"
+e('bearer-length', 'bearer(): 20 characters of a token or more (Codex round 4, B)', NT,
+  BEARER_RETURN, BEARER_RETURN.replace("strlen( $token ) >= self::TOKEN_LENGTH && ", "'' !== $token && "), 'net', N_AUTH)
+e('bearer-length-20', 'bearer(): from 20 on, 20 among them', NT,
+  BEARER_RETURN, BEARER_RETURN.replace(">= self::TOKEN_LENGTH", "> self::TOKEN_LENGTH"), 'net', N_AUTH)
 e('bearer-placeholder', 'bearer(): no placeholder', NT,
-  "\t\treturn '' !== $token && ! self::placeholder( $token );", "\t\treturn '' !== $token;", 'net', N_AUTH)
+  BEARER_RETURN, BEARER_RETURN.replace(" && ! self::placeholder( $token )", ""), 'net', N_AUTH)
+e('bearer-words', 'bearer(): no placeholder of words (your_api_token_goes_here; Codex round 4, B)', NT,
+  BEARER_RETURN, BEARER_RETURN.replace(" && 1 !== preg_match( self::WORD_PLACEHOLDER, $token )", ""), 'net', N_AUTH)
+e('bearer-example', 'bearer(): no documented example as the whole value (the steering after Codex round 4)', NT,
+  BEARER_RETURN, BEARER_RETURN.replace(" && ! self::example( $token )", ""), 'net', N_EXAMPLE)
+CUT = "\t\tif ( false !== strpos( $m[0], '...' ) || 0 === strpos( $rest, '...' ) || 0 === strpos( $rest, \"\\u{2026}\" ) ) {"
+e('bearer-cut-in', 'bearer(): «...» in the value cuts it short (Codex round 4, B)', NT,
+  CUT, CUT.replace("false !== strpos( $m[0], '...' ) || ", ""), 'net', N_AUTH)
+e('bearer-cut-dots', 'bearer(): «...» right after the value cuts it short', NT,
+  CUT, CUT.replace(" || 0 === strpos( $rest, '...' )", ""), 'net', N_AUTH)
+e('bearer-cut-ellipsis', 'bearer(): «…» right after the value cuts it short (eyJ…, sk_live_…)', NT,
+  CUT, CUT.replace(" || 0 === strpos( $rest, \"\\u{2026}\" )", ""), 'net', N_AUTH)
+WORDS = "const WORD_PLACEHOLDER = '/^(?:[a-z]{2,}(?:[_-]+[a-z]{2,})+|[A-Z]{2,}(?:[_-]+[A-Z]{2,})+)\\z/';"
+e('words-sign', 'WORD_PLACEHOLDER: groups joined by «_» or «-», none without (24 small letters lock)', NT,
+  WORDS, WORDS.replace("(?:[_-]+[a-z]{2,})+|", "(?:[_-]*[a-z]{2,})+|"), 'net', N_AUTH)
+e('words-groups', 'WORD_PLACEHOLDER: groups of two letters or more', NT,
+  WORDS, WORDS.replace("'/^(?:[a-z]{2,}(?:[_-]+[a-z]{2,})+|", "'/^(?:[a-z]+(?:[_-]+[a-z]+)+|"), 'net', N_AUTH)
+e('words-case', 'WORD_PLACEHOLDER: in one case', NT,
+  WORDS, WORDS.replace("'/^(?:[a-z]{2,}(?:[_-]+[a-z]{2,})+|", "'/^(?:[a-zA-Z]{2,}(?:[_-]+[a-zA-Z]{2,})+|"), 'net', N_AUTH)
+e('words-capitals', 'WORD_PLACEHOLDER: capitals as well (YOUR-PERSONAL-ACCESS-TOKEN)', NT,
+  WORDS, WORDS.replace("|[A-Z]{2,}(?:[_-]+[A-Z]{2,})+)", ")"), 'net', N_AUTH)
+e('words-dash', 'WORD_PLACEHOLDER: «-» joins as «_» does', NT,
+  WORDS, WORDS.replace("[_-]", "[_]"), 'net', N_AUTH)
+e('words-end', 'WORD_PLACEHOLDER: the whole value (a digit after the words locks)', NT,
+  WORDS, WORDS.replace(")\\z/';", ")/';"), 'net', N_AUTH)
 e('basic-control', 'basic(): a text without a sign of control', NT,
   "|| ! self::is_text( $pair ) || 1 === preg_match( '/[\\x00-\\x1F\\x7F]/', $pair ) ) {", "|| ! self::is_text( $pair ) ) {", 'net', N_AUTH)
 e('basic-text', 'basic(): a text in UTF-8', NT,
@@ -289,9 +323,34 @@ e('basic-colon', 'basic(): a pair with «:»', NT,
 e('basic-both-empty', 'basic(): user and password not both empty', NT,
   "\t\tif ( false === $at || 1 === strlen( $pair ) ) {", "\t\tif ( false === $at ) {", 'net', N_AUTH)
 e('basic-user', 'basic(): with an empty password, the user (a key as the user) no placeholder', NT,
-  "\t\treturn ! self::placeholder( '' === $password ? (string) substr( $pair, 0, $at ) : $password );", "\t\treturn ! self::placeholder( $password );", 'net', N_AUTH)
+  "\t\t$secret   = '' === $password ? (string) substr( $pair, 0, $at ) : $password;", "\t\t$secret   = $password;", 'net', N_AUTH)
+BASIC_RETURN = "\t\treturn ! self::placeholder( $secret ) && ! in_array( strtolower( $secret ), self::EXAMPLE_PASSWORDS, true ) && ! self::example( $secret );"
 e('basic-placeholder', 'basic(): the password no placeholder', NT,
-  "\t\treturn ! self::placeholder( '' === $password ? (string) substr( $pair, 0, $at ) : $password );", "\t\treturn true;", 'net', N_AUTH)
+  BASIC_RETURN, BASIC_RETURN.replace("! self::placeholder( $secret ) && ", ""), 'net', N_AUTH)
+e('basic-words', 'basic(): the password no example word (user:password, Aladdin:open sesame; Codex round 4, B)', NT,
+  BASIC_RETURN, BASIC_RETURN.replace(" && ! in_array( strtolower( $secret ), self::EXAMPLE_PASSWORDS, true )", ""), 'net', N_AUTH)
+e('basic-words-case', 'basic(): an example word in any case (PASSWORD, Passwort, SECRET)', NT,
+  BASIC_RETURN, BASIC_RETURN.replace("strtolower( $secret )", "$secret"), 'net', N_AUTH)
+e('basic-example-password', 'basic(): the password no documented example (the secret key of AWS)', NT,
+  BASIC_RETURN, BASIC_RETURN.replace(" && ! self::example( $secret )", ""), 'net', N_EXAMPLE)
+WORDLIST = "\tconst EXAMPLE_PASSWORDS = array( 'password', 'passwort', 'pass', 'secret', 'open sesame', 'opensesame' );"
+for w in ['password', 'passwort', 'pass', 'secret', 'open sesame', 'opensesame']:
+    e('basic-word-' + w.replace(' ', '-'), 'EXAMPLE_PASSWORDS: ' + w, NT,
+      WORDLIST, WORDLIST.replace("'" + w + "', ", "").replace(", '" + w + "' )", " )"), 'net', N_AUTH)
+e('example', 'example(): a value by the SHA-256 of the whole of it', NT,
+  "\t\treturn isset( self::EXAMPLES[ hash( 'sha256', (string) $value ) ] );", "\t\treturn false;", 'net', N_EXAMPLE)
+e('example-only', 'example(): only a value of the list', NT,
+  "\t\treturn isset( self::EXAMPLES[ hash( 'sha256', (string) $value ) ] );", "\t\treturn '' !== (string) $value;", 'net', N_EXAMPLE)
+WHOLE = "\t\treturn rtrim( (string) substr( (string) $text, $at, strspn( (string) $text, self::TOKEN_CHARS, $at ) ), '.' );"
+e('whole-run', 'whole(): the whole run of the characters of a token (AKIA…EXAMPLE2 is no example)', NT,
+  WHOLE, "\t\treturn (string) substr( (string) $text, $at, 20 );", 'net', N_EXAMPLE)
+e('whole-dot', 'whole(): a «.» at its end ends a sentence', NT,
+  WHOLE, WHOLE.replace("return rtrim( (string) substr", "return ( (string) substr").replace("), '.' );", ") );"), 'net', N_EXAMPLE)
+TCH = "\tconst TOKEN_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~+/=';"
+e('whole-chars-slash', 'TOKEN_CHARS: «/» a character of a token (AKIA…EXAMPLE/x is no example)', NT,
+  TCH, TCH.replace("~+/=", "~+="), 'net', N_EXAMPLE)
+e('whole-chars-dot', 'TOKEN_CHARS: «.» a character of a token (the whole JSON Web Token)', NT,
+  TCH, TCH.replace("-._~", "-_~"), 'net', N_EXAMPLE)
 
 N_PEM = 'testAPrivateKeyInPemCountsByItsFrameAndABodyOfBase64'
 PEM = "const PEM = '/-----BEGIN ((?:[A-Z0-9]+ )*)PRIVATE KEY((?: BLOCK)?)-----(.*?)-----END \\\\1PRIVATE KEY\\\\2-----/s';"
