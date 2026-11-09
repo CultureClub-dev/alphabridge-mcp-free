@@ -79,10 +79,13 @@ final class SyncSaidTest extends TestCase {
 
 	public function testAnUnknownTextIsGivenAsItIs(): void {
 		$GLOBALS['ab_test_translations'] = array( 'Not carried to its end in this version.' => 'Nicht zu Ende geführt.' );
-		foreach ( array( 'cURL error 28: Operation timed out after 10001 milliseconds.', '', 'Not carried to its end in this version. More.' ) as $text ) {
+		foreach ( array( 'cURL error 28: Operation timed out after 10001 milliseconds.', '', 'Not carried to its end in this version.More.' ) as $text ) {
 			self::assertFalse( AB_MCP_Sync_Said::knows( $text ), $text );
 			self::assertSame( $text, AB_MCP_Sync_Said::text( $text ) );
 		}
+		// A known sentence beside an unknown one: said, the unknown one as it is (Codex round 6).
+		self::assertFalse( AB_MCP_Sync_Said::knows( 'Not carried to its end in this version. More.' ) );
+		self::assertSame( 'Nicht zu Ende geführt. More.', AB_MCP_Sync_Said::text( 'Not carried to its end in this version. More.' ) );
 		self::assertSame( 'Nicht zu Ende geführt.', AB_MCP_Sync_Said::text( 'Not carried to its end in this version.' ) );
 	}
 
@@ -166,8 +169,8 @@ final class SyncSaidTest extends TestCase {
 
 	/**
 	 * Sentences the list knows, one after another and separated by a space,
-	 * are said each in turn; one sentence it does not know leaves the whole
-	 * text as it is.
+	 * are said each in turn; a sentence it does not know stays whole and as
+	 * it is (Codex round 6).
 	 */
 	public function testKnownSentencesOneAfterAnotherAreSaidEachInTurn(): void {
 		$plugin                          = AB_MCP_Sync_Env::LOCKS['plugin']['reason'];
@@ -182,7 +185,41 @@ final class SyncSaidTest extends TestCase {
 		self::assertSame( 'Ein Theme ist Code. Ein Plugin ist Code. Ein Theme ist Code.', AB_MCP_Sync_Said::text( $theme . ' ' . $plugin . ' ' . $theme ) );
 		$unknown = $plugin . ' Something else. ' . $theme;
 		self::assertFalse( AB_MCP_Sync_Said::knows( $unknown ) );
-		self::assertSame( $unknown, AB_MCP_Sync_Said::text( $unknown ) );
+		self::assertSame( 'Ein Plugin ist Code. Something else. Ein Theme ist Code.', AB_MCP_Sync_Said::text( $unknown ), 'An unknown sentence whole and as it is, the others said.' );
+	}
+
+	/**
+	 * Codex round 6 (B1): a plugin counted on both sides whose name holds a
+	 * credential has three sentences in words. Each is said on its own; a
+	 * value of a form never reaches over the end of a sentence, so no English
+	 * sentence is swallowed into a said one.
+	 */
+	public function testTheSentencesOfAnEntryOfTheEnvironmentAreSaidEachWhole(): void {
+		$line  = array(
+			'env'     => 'plugin',
+			'ref'     => 'akismet/akismet.php',
+			'version' => '5.3',
+			'active'  => true,
+			'held'    => 'credential_field',
+		);
+		$entry = ( new \ReflectionMethod( AB_MCP_Sync_Env::class, 'entry' ) )->invoke( null, 'plugin', 'akismet/akismet.php', $line, $line, array( 's' => true, 'l' => true ) );
+		self::assertSame( 'counted', $entry['result'] );
+		self::assertSame( 'Counted, contents not compared: the same version, rows or count on both sides says nothing about the contents. Their contents are compared from Z8b. Its name holds a credential by the rules of a site (held: credential_field), so it is shown by its SHA-256 only.', $entry['words'] );
+		$GLOBALS['ab_test_translations'] = array(
+			'Counted, contents not compared: the same version, rows or count on both sides says nothing about the contents.' => 'Gezählt, Inhalt nicht verglichen: Dieselbe Version, Zeilenzahl oder Anzahl auf beiden Seiten sagt nichts über den Inhalt.',
+			'Their contents are compared from %s.' => 'Der Inhalt wird ab %s verglichen.',
+			'Its name holds a credential by the rules of a site (held: %s), so it is shown by its SHA-256 only.' => 'Sein Name enthält nach den Regeln einer Website Zugangsdaten (zurückgehalten: %s), darum wird es nur über seinen SHA-256 gezeigt.',
+		);
+		self::assertTrue( AB_MCP_Sync_Said::knows( $entry['words'] ) );
+		$said = AB_MCP_Sync_Said::shown( $entry )['words'];
+		self::assertSame( 'Gezählt, Inhalt nicht verglichen: Dieselbe Version, Zeilenzahl oder Anzahl auf beiden Seiten sagt nichts über den Inhalt. Der Inhalt wird ab Z8b verglichen. Sein Name enthält nach den Regeln einer Website Zugangsdaten (zurückgehalten: credential_field), darum wird es nur über seinen SHA-256 gezeigt.', $said );
+		self::assertDoesNotMatchRegularExpression( '/\b(Its|name|holds|shown|only)\b/', $said, 'No English piece in a said sentence.' );
+		// A sentence the list does not know: whole and English, the others said.
+		$unknown = 'Counted, contents not compared: the same version, rows or count on both sides says nothing about the contents. Their contents are compared from Z8b. Something new is said here.';
+		self::assertFalse( AB_MCP_Sync_Said::knows( $unknown ) );
+		self::assertSame( 'Gezählt, Inhalt nicht verglichen: Dieselbe Version, Zeilenzahl oder Anzahl auf beiden Seiten sagt nichts über den Inhalt. Der Inhalt wird ab Z8b verglichen. Something new is said here.', AB_MCP_Sync_Said::text( $unknown ) );
+		$inside = 'Their contents are compared from Z8b. Something new.';
+		self::assertSame( 'Der Inhalt wird ab Z8b verglichen. Something new.', AB_MCP_Sync_Said::text( $inside ), 'The value of a form stops at the end of its sentence.' );
 	}
 
 	/**

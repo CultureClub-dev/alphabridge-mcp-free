@@ -29,21 +29,27 @@ defined( 'ABSPATH' ) || exit;
 final class AB_MCP_Sync_Said {
 
 	/**
-	 * The keys of an answer whose text is said to the person: a reason, a
-	 * why, the words of a result and a note (Codex round 5 on branch 13).
-	 * Every other key (key, stage, result, action, kind, ref, report_hash,
-	 * cursor, n, …) carries a code or a reference and stays as it is.
+	 * The keys of an answer whose stored English text is said to the person
+	 * here: a reason, a why, the words of a result and a note (Codex round 5
+	 * on branch 13). The other keys stay as they are: most carry a code or a
+	 * reference (key, stage, result, action, kind, ref, report_hash, cursor,
+	 * n, …); some carry prose that is said where it is made, in the language
+	 * of the site through gettext (effect, way, message), or the instruction
+	 * to the assistant after a sentence for the person (next), which stays
+	 * English by design (Codex round 6).
 	 */
 	const PROSE = array( 'reason', 'why', 'words', 'note' );
 
 	/**
 	 * An English text of the report or the transport in the language of the
 	 * site; a text the list does not know as it is. Known are a text of the
-	 * list, a text of one of its forms (the values in it said again, where
+	 * list and a text of one of its forms (the values in it said again, where
 	 * the list knows them: the reason why a folder was not counted in the
-	 * sentence that names the folder) and a text of such sentences one after
-	 * another, separated by a space (the words of an entry of the
-	 * environment with what it adds).
+	 * sentence that names the folder; a value never reaches over the end of
+	 * a sentence). A text of several sentences (the words of an entry of the
+	 * environment with what it adds) is said sentence by sentence: each
+	 * known one in the language of the site, an unknown one whole as it is,
+	 * never as a piece inside a said sentence (Codex round 6, B1).
 	 *
 	 * @param string $english The text as it is stored.
 	 * @return string
@@ -54,8 +60,11 @@ final class AB_MCP_Sync_Said {
 		if ( null !== $said ) {
 			return $said;
 		}
-		$pieces = self::pieces( $english );
-		return null === $pieces ? $english : implode( ' ', array_map( array( __CLASS__, 'said' ), $pieces ) );
+		$out = array();
+		foreach ( self::sentences( $english ) as $piece ) {
+			$out[] = $piece[1] ? self::said( $piece[0] ) : $piece[0];
+		}
+		return implode( ' ', $out );
 	}
 
 	/**
@@ -97,7 +106,12 @@ final class AB_MCP_Sync_Said {
 		if ( self::known( $english ) ) {
 			return true;
 		}
-		return null !== self::pieces( $english );
+		foreach ( self::sentences( $english ) as $piece ) {
+			if ( ! $piece[1] ) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	/**
@@ -140,36 +154,43 @@ final class AB_MCP_Sync_Said {
 	}
 
 	/**
-	 * A text as sentences the list knows, in their order, each ending before
-	 * a space that follows a full stop; null where it is not two or more of
-	 * them.
+	 * A text as its sentences, in their order: each piece a text the list
+	 * knows (one sentence or more, whole or by a form) or one sentence it
+	 * does not know, with whether it is known. A sentence ends before a space
+	 * that follows a full stop. Of the ways through the text the one with the
+	 * fewest unknown sentences, then the fewest pieces.
 	 *
 	 * @param string $english The text.
-	 * @return string[]|null
+	 * @return array<int,array{0:string,1:bool}>
 	 */
-	private static function pieces( $english ) {
+	private static function sentences( $english ) {
 		$ends = array( 0 );
 		$at   = 0;
 		while ( false !== ( $at = strpos( $english, '. ', $at ) ) ) {
 			$ends[] = $at + 2;
 			++$at;
 		}
-		$ends[] = strlen( $english ) + 1;
-		// The shortest way through the text, piece by known piece.
-		$way = array( 0 => array() );
+		$last   = strlen( $english ) + 1;
+		$ends[] = $last;
+		$way    = array( 0 => array( 0, array() ) );
 		foreach ( $ends as $i => $from ) {
 			if ( ! isset( $way[ $from ] ) ) {
 				continue;
 			}
-			foreach ( array_slice( $ends, $i + 1 ) as $to ) {
+			foreach ( array_slice( $ends, $i + 1 ) as $k => $to ) {
 				$piece = substr( $english, $from, $to - 1 - $from );
-				if ( ! isset( $way[ $to ] ) && '' !== $piece && self::known( $piece ) ) {
-					$way[ $to ] = array_merge( $way[ $from ], array( $piece ) );
+				$known = '' !== $piece && self::known( $piece );
+				if ( ! $known && 0 !== $k ) {
+					continue; // An unknown piece is one sentence, never more.
+				}
+				$cost = $way[ $from ][0] + ( $known ? 0 : 1 );
+				$list = array_merge( $way[ $from ][1], array( array( $piece, $known ) ) );
+				if ( ! isset( $way[ $to ] ) || $cost < $way[ $to ][0] || ( $cost === $way[ $to ][0] && count( $list ) < count( $way[ $to ][1] ) ) ) {
+					$way[ $to ] = array( $cost, $list );
 				}
 			}
 		}
-		$whole = $way[ strlen( $english ) + 1 ] ?? null;
-		return null !== $whole && count( $whole ) > 1 ? $whole : null;
+		return $way[ $last ][1];
 	}
 
 	/**
@@ -219,7 +240,7 @@ final class AB_MCP_Sync_Said {
 				continue;
 			}
 			$order[ $number ] = $digit;
-			$pattern         .= '(?P<p' . $number . '>' . ( $digit ? '-?[0-9]+' : '.+?' ) . ')';
+			$pattern         .= '(?P<p' . $number . '>' . ( $digit ? '-?[0-9]+' : '(?:(?!\\. ).)+?' ) . ')';
 		}
 		if ( 1 !== preg_match( '/\A' . $pattern . '\z/s', $text, $found ) ) {
 			return null;
