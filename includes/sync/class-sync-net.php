@@ -70,8 +70,10 @@
  *   of braces) counts for nothing. Beside the names, by fixed formats in any
  *   context (branch 11b; the steering, 09.11.2026), whatever name stands
  *   before them: a token of a service in its form (TOKENS: GitHub, Stripe,
- *   AWS, Slack, Mailchimp) and a JSON Web Token (JWT). A placeholder is one
- *   only in its exact form as the whole value (PLACEHOLDER).
+ *   AWS, Slack, Mailchimp) and a JSON Web Token (JWT); at the start of a
+ *   line or of a field the header Authorization with Bearer and a token, or
+ *   Basic and the base64 of user:password (AUTHORIZATION). A placeholder is
+ *   one only in its exact form as the whole value (PLACEHOLDER).
  *
  * COMPARE (check()): the structured readers of the unit noted every (space,
  * id) pair of an address they read (AB_MCP_Sync_Canon::text():
@@ -292,6 +294,24 @@ final class AB_MCP_Sync_Net {
 	 * token cut short («eyJhbGciOi…») has no two dots.
 	 */
 	const JWT = '/(?<![A-Za-z0-9_\-])(eyJ[A-Za-z0-9_\-]*)\.([A-Za-z0-9_\-]+)\.([A-Za-z0-9_\-]+)/';
+
+	/**
+	 * The header Authorization (or Proxy-Authorization) with Bearer or Basic,
+	 * at the start of a line or of a field (credentials(); Codex round 1 of
+	 * branch 11b, A1; the steering, 09.11.2026): at the start of the text,
+	 * after a line break, a «;» (a line of headers), a quote (a string of
+	 * code, -H "…") or a «:» (an entry of an array of headers), then «:»
+	 * ("Authorization": of JSON and Authorization= or => count by the name
+	 * already). The value is the word after the scheme, to a «;» or «,»: a
+	 * field after it is read as one of its own (Codex round 3 of branch 11b,
+	 * A3). In a sentence («den Header Authorization: Basic mit …») and after
+	 * a tag (<code>Authorization: …) it stands at the start of neither: a
+	 * limit (GRENZEN.md).
+	 */
+	const AUTHORIZATION = '/(?:^|(?<=[\r\n;"\'`:]))[ \t]*(?:proxy-)?authorization[ \t]*:[ \t]*["\'`]?[ \t]*(bearer|basic)[ \t]+([^\s"\'`;,]*)/i';
+
+	/** The characters of a token of Bearer at the start of its value (b64token of RFC 6750). */
+	const BEARER_TOKEN = '#^[A-Za-z0-9\-._~+/]+=*#';
 
 	/**
 	 * A placeholder, only in its exact form as the whole value (the steering,
@@ -1657,6 +1677,18 @@ final class AB_MCP_Sync_Net {
 				}
 			}
 		}
+		// The header Authorization with Bearer or Basic at the start of a
+		// line or of a field (Codex round 1 of branch 11b, A1; the steering,
+		// 09.11.2026): Bearer with a token that is no placeholder, Basic with
+		// the base64 of user:password.
+		if ( preg_match_all( self::AUTHORIZATION, $text, $m, PREG_SET_ORDER ) ) {
+			foreach ( $m as $hit ) {
+				if ( 'basic' === strtolower( $hit[1] ) ? self::basic( $hit[2] ) : self::bearer( $hit[2] ) ) {
+					$found[] = 'authorization';
+					break;
+				}
+			}
+		}
 		// In code a name after "," or ";" as well: where a "{" is open before
 		// it (in prose, «Name, Token: "abc"» is none), the braces counted
 		// with the strings blanked (a "}" in a string closes none; Codex,
@@ -1716,6 +1748,50 @@ final class AB_MCP_Sync_Net {
 		$json = base64_decode( strtr( (string) $header, '-_', '+/' ), true ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- the header of a token, read.
 		$head = is_string( $json ) ? json_decode( $json, true ) : null;
 		return is_array( $head ) && array_key_exists( 'alg', $head );
+	}
+
+	/**
+	 * Whether the value after Bearer in the header Authorization is a token:
+	 * the characters of a token at its start (BEARER_TOKEN; a «.» at its end
+	 * ends a sentence), not empty and no placeholder (YOUR_TOKEN, xxx, ...;
+	 * <token>, $TOKEN, {token}, *** and &lt;token&gt; have none of them),
+	 * however short (the steering, 09.11.2026).
+	 *
+	 * @param string $value The word after the scheme.
+	 * @return bool
+	 */
+	public static function bearer( $value ) {
+		if ( ! preg_match( self::BEARER_TOKEN, (string) $value, $m ) ) {
+			return false;
+		}
+		$token = rtrim( $m[0], '.' );
+		return '' !== $token && ! self::placeholder( $token );
+	}
+
+	/**
+	 * Whether the value after Basic in the header Authorization is a pair:
+	 * base64 at its start that decodes to a text user:password, without a
+	 * sign of control, the two not both empty, the password (or, where it is
+	 * empty, the user: a key as the user) no placeholder (YOUR_PASSWORD,
+	 * <password>, xxxx xxxx …), however short (the steering, 09.11.2026).
+	 *
+	 * @param string $value The word after the scheme.
+	 * @return bool
+	 */
+	public static function basic( $value ) {
+		if ( ! preg_match( '#^[A-Za-z0-9+/]+={0,2}#', (string) $value, $m ) ) {
+			return false;
+		}
+		$pair = base64_decode( $m[0], true ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- the pair of Basic, read.
+		if ( ! is_string( $pair ) || ! self::is_text( $pair ) || 1 === preg_match( '/[\x00-\x1F\x7F]/', $pair ) ) {
+			return false;
+		}
+		$at = strpos( $pair, ':' );
+		if ( false === $at || 1 === strlen( $pair ) ) {
+			return false;
+		}
+		$password = (string) substr( $pair, $at + 1 );
+		return ! self::placeholder( '' === $password ? (string) substr( $pair, 0, $at ) : $password );
 	}
 
 	/**

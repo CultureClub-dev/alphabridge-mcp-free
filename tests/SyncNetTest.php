@@ -698,6 +698,92 @@ final class SyncNetTest extends TestCase {
 		self::assertFalse( AB_MCP_Sync_Net::jwt( $b64url( '"alg"' ), $jwt[1], $jwt[2] ), 'Its header no object.' );
 	}
 
+	public function testTheHeaderAuthorizationCountsAtTheStartOfALineOrAField(): void {
+		// Codex round 1 of branch 11b, A1; the steering, 09.11.2026: Bearer
+		// with a token that is no placeholder, Basic with the base64 of
+		// user:password, at the start of the text, after a line break, «;», a
+		// quote or the «:» of an array of headers.
+		$hex   = self::tokens()['hex32'];
+		$b64   = static fn( string $t ): string => base64_encode( $t );
+		$extra = array();
+		foreach ( array(
+			'Authorization: Bearer abc123',
+			'authorization: bearer abc123',
+			'AUTHORIZATION:Bearer abc123.',
+			'Accept: application/json; Authorization: Bearer REVIEW_ONLY',
+			'Accept: */*;Authorization: Bearer abc123',
+			"Host: example.test\nAuthorization: Bearer " . $hex,
+			"Host: example.test\r\n\tAuthorization: Bearer abc123",
+			"Host: example.test\nAuthorization: 'Bearer abc123'",
+			'curl -H "Authorization: Bearer abc123" https://api.example.test/',
+			"-H 'Authorization: Bearer abc123'",
+			'`Authorization: Bearer abc123`',
+			'headers: Authorization: Bearer abc123',
+			'Proxy-Authorization: Bearer abc123',
+			'Authorization: Basic ' . $b64( 'review:REVIEW_ONLY' ),
+			'Authorization: Basic ' . $b64( 'a:b1' ),
+			'Authorization: Basic ' . $b64( 'user:password' ),
+			'Authorization: Basic ' . $b64( 'Aladdin:open sesame' ),
+			'Authorization: Basic ' . $b64( 'key-of-the-account:' ),
+			'Authorization: Basic ' . $b64( ':secret-only' ),
+			'Proxy-Authorization: Basic ' . $b64( 'proxy:Kq7vR2pX' ) . ';',
+			// A placeholder in a word is none (Codex round 3, A1).
+			'Authorization: Bearer my_' . $hex,
+			'Authorization: Bearer fake_token_123',
+			'Authorization: Bearer YOUR_TOKENabc',
+			'Authorization: Basic ' . $b64( 'admin:my_password' ),
+			// A field after a field is one of its own (Codex round 3, A3).
+			'Authorization: Basic ' . $b64( 'abc' ) . ';Authorization: Bearer abc123',
+			'Authorization: Bearer YOUR_TOKEN;Authorization: Bearer abc123',
+			'Authorization: Bearer <token>; Authorization: Basic ' . $b64( 'a:b1' ),
+		) as $text ) {
+			self::assertSame( array( 'authorization' ), AB_MCP_Sync_Net::credentials( $text, $extra ), $text );
+		}
+		foreach ( array(
+			// Placeholders in their exact form, and code that builds the value.
+			'Authorization: Bearer <token>',
+			'Authorization: Bearer &lt;token&gt;',
+			'Authorization: Bearer YOUR_TOKEN',
+			'Authorization: Bearer YOUR_ACCESS_TOKEN.',
+			'Authorization: Bearer xxxxxxxxxxxxxxxx',
+			'Authorization: Bearer ************',
+			'Authorization: Bearer ...',
+			"Authorization: Bearer \u{2026}",
+			'Authorization: Bearer $TOKEN',
+			'Authorization: Bearer ${TOKEN}',
+			'Authorization: Bearer {token}',
+			'Authorization: Bearer {{token}}',
+			'Authorization: Bearer [REDACTED]',
+			"\$h[] = 'Authorization: Bearer ' . \$token;",
+			'Authorization: Basic <base64>',
+			'Authorization: Basic ' . $b64( 'foobar' ),
+			'Authorization: Basic ' . $b64( 'admin:YOUR_PASSWORD' ),
+			'Authorization: Basic ' . $b64( 'admin:xxxx xxxx xxxx xxxx xxxx xxxx' ),
+			'Authorization: Basic ' . $b64( 'admin:<password>' ),
+			'Authorization: Basic ' . $b64( 'YOUR_API_KEY:' ),
+			'Authorization: Basic ' . $b64( ':' ),
+			'Authorization: Basic ' . $b64( "a:\x01b1" ),
+			'Authorization: Basic ' . $b64( "a:\xFFb1" ),
+			'Authorization: Basic mit Benutzer und Passwort',
+			// At the start of no line and no field: a limit (GRENZEN.md).
+			'Setze den Header Authorization: Bearer abc123 in Postman.',
+			'<code>Authorization: Bearer abc123</code>',
+			'Accept: */*, Authorization: Bearer abc123',
+			// Another scheme, no scheme, no header.
+			'Authorization: Token abc123',
+			'Authorization: Digest username="a"',
+			'Authorization: erteilt am 3.11. durch die Leitung.',
+			'Bearer abc123',
+			'This is a bearer instrument.',
+		) as $text ) {
+			self::assertSame( array(), AB_MCP_Sync_Net::credentials( $text, $extra ), $text );
+		}
+		self::assertTrue( AB_MCP_Sync_Net::bearer( 'abc123</code>' ) );
+		self::assertFalse( AB_MCP_Sync_Net::bearer( '' ) );
+		self::assertTrue( AB_MCP_Sync_Net::basic( $b64( 'a:b1' ) . '</code>' ) );
+		self::assertFalse( AB_MCP_Sync_Net::basic( '' ) );
+	}
+
 	public function testAPlaceholderIsOneOnlyInItsExactFormAsTheWholeValue(): void {
 		// The steering, 09.11.2026; Codex round 3 of branch 11b, A1: never as a
 		// part of a word.
@@ -1219,8 +1305,8 @@ final class SyncNetTest extends TestCase {
 		$leaf  = static fn( string $t ): string => serialize( array( 'text' => $t ) );
 		$cases = self::unread_leaves();
 		$text  = array(
-			'Bearer in headers'           => array( 'Accept: application/json; Authorization: Bearer REVIEW_ONLY', null ),
-			'Basic with base64'           => array( 'Accept: application/json; Authorization: Basic ' . base64_encode( 'review:REVIEW_ONLY' ), null ),
+			'Bearer in headers'           => array( 'Accept: application/json; Authorization: Bearer REVIEW_ONLY', 'unread_credential' ),
+			'Basic with base64'           => array( 'Accept: application/json; Authorization: Basic ' . base64_encode( 'review:REVIEW_ONLY' ), 'unread_credential' ),
 			'quoted prose after Token:'   => array( 'Token: "Ein Spielstein pro Zug"', 'unread_credential' ),
 			'prose'                       => array( $prose, 'frei' ),
 			'a leaf too deep'             => array( $cases['deep'], 'unreadable_value' ),

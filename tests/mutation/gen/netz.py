@@ -246,6 +246,53 @@ e('placeholder-var', 'PLACEHOLDER: $VAR begins with a letter or _', NT,
 e('placeholder-call', 'placeholder(): exactly PLACEHOLDER', NT,
   "return 1 === preg_match( self::PLACEHOLDER, (string) $value );", "return 0 !== preg_match( self::PLACEHOLDER, (string) $value );", 'net', N_PLACE)
 
+N_AUTH = 'testTheHeaderAuthorizationCountsAtTheStartOfALineOrAField'
+AUTH = "const AUTHORIZATION = '/(?:^|(?<=[\\r\\n;\"\\'`:]))[ \\t]*(?:proxy-)?authorization[ \\t]*:[ \\t]*[\"\\'`]?[ \\t]*(bearer|basic)[ \\t]+([^\\s\"\\'`;,]*)/i';"
+e('auth', 'credentials(): the header Authorization with Bearer or Basic counts (Codex round 1, A1)', NT,
+  "\t\t\t\tif ( 'basic' === strtolower( $hit[1] ) ? self::basic( $hit[2] ) : self::bearer( $hit[2] ) ) {", "\t\t\t\tif ( false ) {", 'net', N_AUTH)
+e('auth-scheme', 'credentials(): Basic by its pair, Bearer by its token', NT,
+  "\t\t\t\tif ( 'basic' === strtolower( $hit[1] ) ? self::basic( $hit[2] ) : self::bearer( $hit[2] ) ) {", "\t\t\t\tif ( self::bearer( $hit[2] ) ) {", 'net', N_AUTH)
+e('auth-start', 'AUTHORIZATION: at the start of the text', NT,
+  AUTH, AUTH.replace("(?:^|(?<=", "(?:(?<="), 'net', N_AUTH)
+e('auth-anywhere', 'AUTHORIZATION: only at the start of a line or a field (not in a sentence, not after a tag)', NT,
+  AUTH, AUTH.replace("(?:^|(?<=[\\r\\n;\"\\'`:]))", ""), 'net', N_AUTH)
+e('auth-line', 'AUTHORIZATION: after a line break', NT,
+  AUTH, AUTH.replace("(?<=[\\r\\n;", "(?<=[;"), 'net', N_AUTH)
+e('auth-semicolon', 'AUTHORIZATION: after a «;» of a line of headers (Codex round 1, A1)', NT,
+  AUTH, AUTH.replace("(?<=[\\r\\n;", "(?<=[\\r\\n"), 'net', N_AUTH)
+e('auth-quote', 'AUTHORIZATION: after a quote', NT,
+  AUTH, AUTH.replace(";\"\\'`:]))", ";:]))"), 'net', N_AUTH)
+e('auth-colon', 'AUTHORIZATION: after the «:» of an array of headers', NT,
+  AUTH, AUTH.replace(";\"\\'`:]))", ";\"\\'`]))"), 'net', N_AUTH)
+e('auth-proxy', 'AUTHORIZATION: Proxy-Authorization as well', NT,
+  AUTH, AUTH.replace("(?:proxy-)?authorization", "authorization"), 'net', N_AUTH)
+e('auth-quoted-scheme', 'AUTHORIZATION: the scheme in quotes after «:»', NT,
+  AUTH, AUTH.replace("[ \\t]*:[ \\t]*[\"\\'`]?[ \\t]*(bearer", "[ \\t]*:[ \\t]*(bearer"), 'net', N_AUTH)
+e('auth-field-end', 'AUTHORIZATION: the value to a «;» or «,», a field after it one of its own (Codex round 3, A3)', NT,
+  AUTH, AUTH.replace("([^\\s\"\\'`;,]*)", "([^\\s\"\\'`]*)"), 'net', N_AUTH)
+e('auth-case', 'AUTHORIZATION: in any case, as HTTP reads a header', NT,
+  AUTH, AUTH.replace(")/i';", ")/';"), 'net', N_AUTH)
+e('bearer-start', 'bearer(): the characters of a token at the start of the value', NT,
+  "const BEARER_TOKEN = '#^[A-Za-z0-9\\-._~+/]+=*#';", "const BEARER_TOKEN = '#[A-Za-z0-9\\-._~+/]+=*#';", 'net', N_AUTH)
+e('bearer-dot', 'bearer(): a «.» at its end ends a sentence', NT,
+  "\t\t$token = rtrim( $m[0], '.' );", "\t\t$token = $m[0];", 'net', N_AUTH)
+e('bearer-empty', 'bearer(): not empty', NT,
+  "\t\treturn '' !== $token && ! self::placeholder( $token );", "\t\treturn ! self::placeholder( $token );", 'net', N_AUTH)
+e('bearer-placeholder', 'bearer(): no placeholder', NT,
+  "\t\treturn '' !== $token && ! self::placeholder( $token );", "\t\treturn '' !== $token;", 'net', N_AUTH)
+e('basic-control', 'basic(): a text without a sign of control', NT,
+  "|| ! self::is_text( $pair ) || 1 === preg_match( '/[\\x00-\\x1F\\x7F]/', $pair ) ) {", "|| ! self::is_text( $pair ) ) {", 'net', N_AUTH)
+e('basic-text', 'basic(): a text in UTF-8', NT,
+  "|| ! self::is_text( $pair ) || 1 === preg_match( '/[\\x00-\\x1F\\x7F]/', $pair ) ) {", "|| 1 === preg_match( '/[\\x00-\\x1F\\x7F]/', $pair ) ) {", 'net', N_AUTH)
+e('basic-colon', 'basic(): a pair with «:»', NT,
+  "\t\tif ( false === $at || 1 === strlen( $pair ) ) {", "\t\tif ( 1 === strlen( $pair ) ) {", 'net', N_AUTH)
+e('basic-both-empty', 'basic(): user and password not both empty', NT,
+  "\t\tif ( false === $at || 1 === strlen( $pair ) ) {", "\t\tif ( false === $at ) {", 'net', N_AUTH)
+e('basic-user', 'basic(): with an empty password, the user (a key as the user) no placeholder', NT,
+  "\t\treturn ! self::placeholder( '' === $password ? (string) substr( $pair, 0, $at ) : $password );", "\t\treturn ! self::placeholder( $password );", 'net', N_AUTH)
+e('basic-placeholder', 'basic(): the password no placeholder', NT,
+  "\t\treturn ! self::placeholder( '' === $password ? (string) substr( $pair, 0, $at ) : $password );", "\t\treturn true;", 'net', N_AUTH)
+
 # ------------------------------------------- strings(): the references
 e('strings-keys', 'strings(): the keys of a structure counted for the references', NT,
   "\t\t\tif ( is_string( $key ) && '' !== $key ) {\n\t\t\t\t$out[] = $key;\n\t\t\t}\n", "", 'net', N_STRUCT)
