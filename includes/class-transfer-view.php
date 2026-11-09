@@ -141,7 +141,7 @@ final class AB_MCP_Transfer_View {
 			'unclear'      => _x( 'unclear', 'state of a part', 'alphabridge-mcp' ),
 			'unchanged'    => _x( 'unchanged (as the backup)', 'state of a part', 'alphabridge-mcp' ),
 			'restored'     => _x( 'put back', 'state of a part', 'alphabridge-mcp' ),
-			'check_needed' => _x( 'put back, check needed', 'state of a part', 'alphabridge-mcp' ),
+			'check_needed' => _x( 'not put back, check needed', 'state of a part', 'alphabridge-mcp' ),
 			'creating'     => _x( 'being made', 'state of a part', 'alphabridge-mcp' ),
 			'laid'         => _x( 'laid', 'state of a part', 'alphabridge-mcp' ),
 			'partial'      => _x( 'laid in part', 'state of a part', 'alphabridge-mcp' ),

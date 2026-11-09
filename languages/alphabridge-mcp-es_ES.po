@@ -6612,10 +6612,6 @@ msgid "put back"
 msgstr "restaurada"
 
 msgctxt "state of a part"
-msgid "put back, check needed"
-msgstr "restaurada, hay que comprobarla"
-
-msgctxt "state of a part"
 msgid "being made"
 msgstr "creándose"
 
@@ -10035,3 +10031,7 @@ msgstr "ajustes: %s"
 
 msgid "Nothing was written: the object changed right before the call, after the last check of the rights (a hook of this site, or another hand). The step deviates; check the object in wp-admin, then make a new report and plan again."
 msgstr "No se ha escrito nada: el objeto cambió justo antes de la llamada, después de la última comprobación de los permisos (un hook de este sitio u otra mano). El paso se desvía; comprueba el objeto en wp-admin y después crea un informe nuevo y vuelve a planificar."
+
+msgctxt "state of a part"
+msgid "not put back, check needed"
+msgstr "no restaurada, hay que comprobarla"
