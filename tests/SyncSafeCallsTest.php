@@ -302,7 +302,7 @@ final class SyncSafeCallsTest extends TestCase {
 		// call (decision 32), a text of the plugin and the address of its page.
 		'class-sync-report.php' => array(
 			'__' => array( 26, 'the reasons and steps of the refusals of wp_site_diff, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares, hashes or parses (branch 13 text/z8, Codex round 1).' ),
-			'AB_MCP_Guidance::compose'      => array( 1, 'refusal(): the reason, the steps, the link and the handover of a refusal; no stored value.' ),
+			'AB_MCP_Guidance::compose'      => array( 1, 'refusal(): the reason, the steps, the link and the handover of a refusal, in the language of the site (the locale and the bundled translation are read; branch 13 text/z8); no value the report compares.' ),
 			'AB_MCP_Guidance::settings_url' => array( 1, 'refusal(): the address of the page «Staging» at an anchor (admin_url()); no value the report compares.' ),
 		),
 		'class-sync-schema.php' => array(
