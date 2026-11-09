@@ -187,7 +187,7 @@ Ablehnung entsteht, nennt sie den Weg.
   `(holds a credential, not shown)`), kein UTF-8 nur als Byteszahl. Je Wert
   höchstens `VALUE_CHARS` = 80 Zeichen, je Teil `PART_CHARS` = 320, mit
   «…(cut)»; je Antwort höchstens `AB_MCP_Sync_Run::ANSWER_VALUE_BYTES` =
-  16 KiB über alle gezeigten Schritte, die neuesten zuerst, danach `VALUE_CUT`
+  16 KiB über alle gezeigten Schritte, die neuesten zuerst, danach `value_cut()`
   mit dem Hinweis auf die Sicherung; die Hinweise zählen zum Budget, darüber
   hinaus fehlt der Wert in der Antwort (Codex-Runde 8; Prüffälle
   `testTheValueBeforeOfAPartLeftIsShortNeverACredentialAndCapped`,

@@ -53,8 +53,11 @@
  * holding a credential by the SHA-256 of its ref only (B9 never in plain
  * text).
  *
- * Messages are English without gettext, as the other classes of the
- * takeover; each names the way.
+ * Refusals and errors are gettext texts in the language of the site, each
+ * naming the way; codes, states, kinds and parameters stay as the tools
+ * name them. The words of the report (reasons of a lock, the why of a
+ * decision, the words of the environment) stay English: they are compared
+ * across the two sites and go into the hashes of the report and the plan.
  *
  * @package AlphaBridge_MCP
  */
@@ -131,8 +134,9 @@ final class AB_MCP_Sync_Report {
 		if ( ! is_array( $packages ) || ! array_is_list( $packages ) || array() === $packages || count( $packages ) > AB_MCP_Sync_Proposal::MAX_PACKAGES || count( array_unique( array_map( 'strval', $packages ) ) ) !== count( $packages ) ) {
 			return self::refusal(
 				'ab_mcp_sync_report_packages',
-				sprintf( 'A report begins with packages: the package_ids of the inventory of the staging site this site took over completely, each once, at most %d.', AB_MCP_Sync_Proposal::MAX_PACKAGES ),
-				'1. On the staging site, call wp_site_export with purpose=inventory (and its cursor until it gives none). 2. Here, take each package over with wp_site_import_chunk until it answers complete true. 3. Call wp_site_diff with packages, or with report_id to go on with a report.',
+				/* translators: %d: the most packages a report takes. */
+				sprintf( __( 'A report begins with packages: the package_ids of the inventory of the staging site this site took over completely, each once, at most %d.', 'alphabridge-mcp' ), AB_MCP_Sync_Proposal::MAX_PACKAGES ),
+				__( '1. On the staging site, call wp_site_export with purpose=inventory (and its cursor until it gives none). 2. Here, take each package over with wp_site_import_chunk until it answers complete true. 3. Call wp_site_diff with packages, or with report_id to go on with a report.', 'alphabridge-mcp' ),
 				self::ANCHOR_TRUST
 			);
 		}
@@ -140,8 +144,9 @@ final class AB_MCP_Sync_Report {
 		if ( ! is_array( $environment ) || ! array_is_list( $environment ) || count( $environment ) > self::MAX_ENVIRONMENT || count( array_unique( array_map( 'strval', $environment ) ) ) !== count( $environment ) || array() !== array_intersect( array_map( 'strval', $environment ), array_map( 'strval', $packages ) ) ) {
 			return self::refusal(
 				'ab_mcp_sync_report_environment',
-				sprintf( 'environment names the package_ids of the environment of the staging site this site took over completely, each once, at most %d, in the order of their series, and none of the packages of the inventory.', self::MAX_ENVIRONMENT ),
-				'1. On the staging site, call wp_site_export with purpose=env (and its cursor until it gives none). 2. Here, take each package over with wp_site_import_chunk with purpose=env until it answers complete true. 3. Call wp_site_diff with packages and environment.',
+				/* translators: %d: the most packages of the environment a report takes. */
+				sprintf( __( 'environment names the package_ids of the environment of the staging site this site took over completely, each once, at most %d, in the order of their series, and none of the packages of the inventory.', 'alphabridge-mcp' ), self::MAX_ENVIRONMENT ),
+				__( '1. On the staging site, call wp_site_export with purpose=env (and its cursor until it gives none). 2. Here, take each package over with wp_site_import_chunk with purpose=env until it answers complete true. 3. Call wp_site_diff with packages and environment.', 'alphabridge-mcp' ),
 				self::ANCHOR_TRUST
 			);
 		}
@@ -210,8 +215,8 @@ final class AB_MCP_Sync_Report {
 		if ( is_multisite() ) {
 			return self::refusal(
 				'ab_mcp_sync_report_multisite',
-				'The report is not available on a multisite installation: the takeover from a staging site works between single sites.',
-				'Use a single site as the production site and a single site as its staging site.',
+				__( 'The report is not available on a multisite installation: the takeover from a staging site works between single sites.', 'alphabridge-mcp' ),
+				__( 'Use a single site as the production site and a single site as its staging site.', 'alphabridge-mcp' ),
 				''
 			);
 		}
@@ -219,8 +224,8 @@ final class AB_MCP_Sync_Report {
 		if ( is_wp_error( $partner ) ) {
 			return self::refusal(
 				'ab_mcp_sync_report_pair',
-				'This site is not the confirmed production site of a pair of sites, so there is no staging site to compare it with.',
-				'1. On the page AlphaBridge → Staging of this site, confirm the role production site. 2. Enter the address of the staging site there. 3. Call wp_site_diff again.',
+				__( 'This site is not the confirmed production site of a pair of sites, so there is no staging site to compare it with.', 'alphabridge-mcp' ),
+				__( '1. On the page AlphaBridge → Staging of this site, confirm the role production site. 2. Enter the address of the staging site there. 3. Call wp_site_diff again.', 'alphabridge-mcp' ),
 				self::ANCHOR_PAIR
 			);
 		}
@@ -229,14 +234,14 @@ final class AB_MCP_Sync_Report {
 			return null !== AB_MCP_Sync_Anchor::prepared()
 				? self::refusal(
 					'ab_mcp_sync_report_unconfirmed',
-					'The key of the staging site is prepared on this site but not confirmed by a person, so nothing of it is read.',
-					'1. On the page AlphaBridge → Staging of this site, compare the fingerprint of the key with the one the staging site shows on its page. 2. Confirm the key. 3. Call wp_site_diff again.',
+					__( 'The key of the staging site is prepared on this site but not confirmed by a person, so nothing of it is read.', 'alphabridge-mcp' ),
+					__( '1. On the page AlphaBridge → Staging of this site, compare the fingerprint of the key with the one the staging site shows on its page. 2. Confirm the key. 3. Call wp_site_diff again.', 'alphabridge-mcp' ),
 					self::ANCHOR_TRUST
 				)
 				: self::refusal(
 					'ab_mcp_sync_report_no_anchor',
-					'This site has no confirmed key of its staging site, so no package of it is read.',
-					'1. On the page AlphaBridge → Staging of this site, fetch the key of the staging site, or enter its pairing code. 2. Compare its fingerprint with the one the staging site shows and confirm it. 3. Call wp_site_diff again.',
+					__( 'This site has no confirmed key of its staging site, so no package of it is read.', 'alphabridge-mcp' ),
+					__( '1. On the page AlphaBridge → Staging of this site, fetch the key of the staging site, or enter its pairing code. 2. Compare its fingerprint with the one the staging site shows and confirm it. 3. Call wp_site_diff again.', 'alphabridge-mcp' ),
 					self::ANCHOR_TRUST
 				);
 		}
@@ -316,8 +321,8 @@ final class AB_MCP_Sync_Report {
 			if ( ! is_array( $page ) || 'page' !== ( $page['env'] ?? null ) || $i + 1 !== $page['seq'] || ( null !== $walk && $walk !== $page['walk'] ) || ( count( $ids ) === $i + 1 ) !== $page['last'] ) {
 				return self::refusal(
 					'ab_mcp_sync_report_environment_series',
-					'The packages of the environment are not one whole series in its order: each package of a reading of the environment names its place in it, and the last one says it is the last.',
-					'1. Pass in environment every package one wp_site_export with purpose=env and its cursors made, in that order, from the first to the one without a cursor. 2. Or export the environment anew on the staging site and take it over here.',
+					__( 'The packages of the environment are not one whole series in its order: each package of a reading of the environment names its place in it, and the last one says it is the last.', 'alphabridge-mcp' ),
+					__( '1. Pass in environment every package one wp_site_export with purpose=env and its cursors made, in that order, from the first to the one without a cursor. 2. Or export the environment anew on the staging site and take it over here.', 'alphabridge-mcp' ),
 					self::ANCHOR_TRUST
 				);
 			}
@@ -350,18 +355,31 @@ final class AB_MCP_Sync_Report {
 		$staging = (string) $staging;
 		$live    = (string) $live;
 		if ( 1 !== preg_match( AB_MCP_Sync_Manifest::WORDPRESS, $staging ) || 1 !== preg_match( AB_MCP_Sync_Manifest::WORDPRESS, $live ) ) {
+			if ( '' === $staging && '' === $live ) {
+				$reason = __( 'The version of WordPress can be read neither on the staging site nor on this site (none is named), so the two cannot be compared.', 'alphabridge-mcp' );
+			} elseif ( '' === $staging ) {
+				/* translators: %s: version of WordPress on this site as it is named. */
+				$reason = sprintf( __( 'The version of WordPress on the staging site cannot be read (none is named; on this site: %s), so the two cannot be compared.', 'alphabridge-mcp' ), $live );
+			} elseif ( '' === $live ) {
+				/* translators: %s: version of WordPress on the staging site as it is named. */
+				$reason = sprintf( __( 'The version of WordPress on this site cannot be read (none is named; on the staging site: %s), so the two cannot be compared.', 'alphabridge-mcp' ), $staging );
+			} else {
+				/* translators: 1: version of WordPress on the staging site as it is named, 2: the one on this site. */
+				$reason = sprintf( __( 'The version of WordPress on the staging site (%1$s) or on this site (%2$s) cannot be read, so the two cannot be compared.', 'alphabridge-mcp' ), $staging, $live );
+			}
 			return self::refusal(
 				'ab_mcp_sync_report_wordpress',
-				sprintf( 'The version of WordPress on the staging site (%1$s) or on this site (%2$s) cannot be read, so the two cannot be compared.', '' === $staging ? 'none' : $staging, '' === $live ? 'none' : $live ),
-				'1. Update AlphaBridge MCP on both sites to the same version. 2. Export the inventory on the staging site again (wp_site_export) and take it over here. 3. Call wp_site_diff again.',
+				$reason,
+				__( '1. Update AlphaBridge MCP on both sites to the same version. 2. Export the inventory on the staging site again (wp_site_export) and take it over here. 3. Call wp_site_diff again.', 'alphabridge-mcp' ),
 				self::ANCHOR_TRUST
 			);
 		}
 		if ( version_compare( $staging, $live, '>' ) ) {
 			return self::refusal(
 				'ab_mcp_sync_report_wordpress',
-				sprintf( 'WordPress on the staging site (%1$s) is newer than on this site (%2$s), and nothing made with a newer WordPress is taken over onto an older one.', $staging, $live ),
-				'1. Update WordPress on this site first: wp_update_core (it has no way back through AlphaBridge, and asks for a confirmation of its own), or in wp-admin under Dashboard → Updates. 2. Call wp_site_diff again with the same packages.',
+				/* translators: 1: version of WordPress on the staging site, 2: version of WordPress on this site. */
+				sprintf( __( 'WordPress on the staging site (%1$s) is newer than on this site (%2$s), and nothing made with a newer WordPress is taken over onto an older one.', 'alphabridge-mcp' ), $staging, $live ),
+				__( '1. Update WordPress on this site first: wp_update_core (it has no way back through AlphaBridge, and asks for a confirmation of its own), or in wp-admin under Dashboard → Updates. 2. Call wp_site_diff again with the same packages.', 'alphabridge-mcp' ),
 				''
 			);
 		}
@@ -801,13 +819,13 @@ final class AB_MCP_Sync_Report {
 			return self::unknown();
 		}
 		if ( ! hash_equals( (string) $head['connection'], AB_MCP_Sync_Proposal::connection() ) ) {
-			return new WP_Error( 'ab_mcp_sync_report_foreign', 'This report belongs to another account or connection, and only the one that made it goes on with it or pages it. Make a report over this connection: call wp_site_diff with the packages of the inventory of the staging site.' );
+			return new WP_Error( 'ab_mcp_sync_report_foreign', __( 'This report belongs to another account or connection, and only the one that made it goes on with it or pages it. Make a report over this connection: call wp_site_diff with the packages of the inventory of the staging site.', 'alphabridge-mcp' ) );
 		}
 		if ( AB_MCP_Sync_Canon::VERSION !== $head['canon'] || $source !== $head['source_id'] || ! hash_equals( (string) $head['print'], (string) AB_MCP_Sync_Anchor::pair_print() ) ) {
-			return new WP_Error( 'ab_mcp_sync_report_stale', 'The role of this site, its pair, the confirmed key of the staging site or the version of the comparison data changed since this report was made, so it holds no more. Make a new report: call wp_site_diff with the packages of a fresh inventory of the staging site.' );
+			return new WP_Error( 'ab_mcp_sync_report_stale', __( 'The role of this site, its pair, the confirmed key of the staging site or the version of the comparison data changed since this report was made, so it holds no more. Make a new report: call wp_site_diff with the packages of a fresh inventory of the staging site.', 'alphabridge-mcp' ) );
 		}
 		if ( self::now() >= (int) $head['expires'] ) {
-			return new WP_Error( 'ab_mcp_sync_report_expired', 'This report expired: it holds as long as the packages it was made from (a day at most). Export the inventory on the staging site again (wp_site_export), take it over here (wp_site_import_chunk), then call wp_site_diff with the packages.' );
+			return new WP_Error( 'ab_mcp_sync_report_expired', __( 'This report expired: it holds as long as the packages it was made from (a day at most). Export the inventory on the staging site again (wp_site_export), take it over here (wp_site_import_chunk), then call wp_site_diff with the packages.', 'alphabridge-mcp' ) );
 		}
 		$parts = AB_MCP_Sync_Proposal::parts( $report_id, $files, self::FORMAT, self::concurrent() );
 		if ( is_wp_error( $parts ) ) {
@@ -935,7 +953,7 @@ final class AB_MCP_Sync_Report {
 	 * @return WP_Error
 	 */
 	private static function refusal( $code, $reason, $steps, $anchor ) {
-		return new WP_Error( $code, AB_MCP_Guidance::compose( $reason, $steps, AB_MCP_Guidance::settings_url( $anchor, 'staging' ), false ) );
+		return new WP_Error( $code, AB_MCP_Guidance::compose( $reason, $steps, AB_MCP_Guidance::settings_url( $anchor, 'staging' ) ) );
 	}
 
 	/**
@@ -956,13 +974,13 @@ final class AB_MCP_Sync_Report {
 	 * @return WP_Error No report of that id.
 	 */
 	private static function unknown() {
-		return new WP_Error( 'ab_mcp_sync_report_unknown', 'This site holds no report of that id (a report is kept a day at most, and a new one of the same connection replaces it). Make a report: call wp_site_diff with the packages of the inventory of the staging site.' );
+		return new WP_Error( 'ab_mcp_sync_report_unknown', __( 'This site holds no report of that id (a report is kept a day at most, and a new one of the same connection replaces it). Make a report: call wp_site_diff with the packages of the inventory of the staging site.', 'alphabridge-mcp' ) );
 	}
 
 	/**
 	 * @return WP_Error The files of a report are not as one call wrote them.
 	 */
 	public static function concurrent() {
-		return new WP_Error( 'ab_mcp_sync_report_parts', 'The files of this report are not as one call after the other wrote them (two calls went on with it at once, or a file was changed in the protected store). Make a new report: call wp_site_diff with the packages of the inventory of the staging site, and go on with one call at a time.' );
+		return new WP_Error( 'ab_mcp_sync_report_parts', __( 'The files of this report are not as one call after the other wrote them (two calls went on with it at once, or a file was changed in the protected store). Make a new report: call wp_site_diff with the packages of the inventory of the staging site, and go on with one call at a time.', 'alphabridge-mcp' ) );
 	}
 }

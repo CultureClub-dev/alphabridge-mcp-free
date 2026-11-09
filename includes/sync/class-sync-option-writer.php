@@ -32,8 +32,10 @@
  * of the schema) builds the rewrite rules anew after it was written or put
  * back (post_write()), as the permalink screen does.
  *
- * Messages are English without gettext, as the other classes of the
- * takeover; each names the way.
+ * Messages are in gettext, in the language of the site as they arise (a
+ * refusal, a note of the journal); each names the way. Codes, states,
+ * kinds and the other values the tools name stay as they are, and no
+ * translated text is compared, hashed or part of a print.
  *
  * @package AlphaBridge_MCP
  */
@@ -85,21 +87,24 @@ final class AB_MCP_Sync_Option_Writer {
 	public static function target_of( array $line, array $item, array $ctx ) {
 		$name = isset( $line['identity']['name'] ) && is_string( $line['identity']['name'] ) ? $line['identity']['name'] : '';
 		if ( 'update' !== $item['op'] ) {
-			return AB_MCP_Sync_Post_Writer::locked( 'option:create', sprintf( 'the option %s is not on this site', $name ) );
+			/* translators: %s: the name of the option (blogname, …). */
+			return AB_MCP_Sync_Post_Writer::locked( 'option:create', sprintf( __( 'The option %s is not on this site.', 'alphabridge-mcp' ), $name ) );
 		}
 		$held = AB_MCP_Sync_Post_Writer::line_lock( $line );
 		if ( null !== $held ) {
 			return $held;
 		}
 		if ( (string) $item['live_ref'] !== $name ) {
-			return AB_MCP_Sync_Post_Writer::locked( 'option:unclassified', sprintf( 'the option %1$s of the staging site is paired with the option %2$s of this site, and an option is written under its own name only', $name, (string) $item['live_ref'] ) );
+			/* translators: 1: the name of the option on the staging site, 2: the name of the option on this site. */
+			return AB_MCP_Sync_Post_Writer::locked( 'option:unclassified', sprintf( __( 'The option %1$s of the staging site is paired with the option %2$s of this site, and an option is written under its own name only.', 'alphabridge-mcp' ), $name, (string) $item['live_ref'] ) );
 		}
 		$class = AB_MCP_Sync_Option_Schema::classify( $name );
 		if ( 'core' !== $class['status'] ) {
 			return self::unclassified( $name, $class );
 		}
 		if ( ! isset( $line['content']['row']['value'], $line['form'] ) || ! is_array( $line['form'] ) ) {
-			return AB_MCP_Sync_Post_Writer::locked( 'post:content_missing', sprintf( 'the package carries no value of the option %s', $name ) );
+			/* translators: %s: the name of the option (blogname, …). */
+			return AB_MCP_Sync_Post_Writer::locked( 'post:content_missing', sprintf( __( 'The package carries no value of the option %s.', 'alphabridge-mcp' ), $name ) );
 		}
 		$raw     = AB_MCP_Sync_Post_Writer::bytes( $line['content']['row']['value'] );
 		$plan    = AB_MCP_Sync_Refs::plan( $ctx['map'], $ctx['addresses'], isset( $ctx['routes'] ) ? $ctx['routes'] : null );
@@ -108,13 +113,15 @@ final class AB_MCP_Sync_Option_Writer {
 		$pending = isset( $ctx['pending'] ) && is_array( $ctx['pending'] ) ? $ctx['pending'] : array();
 		$missing = AB_MCP_Sync_Post_Writer::unresolved( $plan['missing'], $pending );
 		if ( array() !== $missing ) {
-			return AB_MCP_Sync_Post_Writer::locked( 'option:reference_unmapped', AB_MCP_Sync_Post_Writer::missing_text( $missing ) );
+			/* translators: 1: the name of the option, 2: the references, each as its kind and id (post 12, term 4), separated by commas. */
+			return AB_MCP_Sync_Post_Writer::locked( 'option:reference_unmapped', sprintf( __( 'The option %1$s refers to objects without a counterpart on this site: %2$s.', 'alphabridge-mcp' ), $name, self::missing_refs( $missing ) ) );
 		}
 		$value = $written;
 		if ( 'refs' === $class['schema']['type'] ) {
 			$read = AB_MCP_Sync_Canon::unserialized( $written );
 			if ( ! $read['ok'] || ! is_array( $read['value'] ) || AB_MCP_Sync_Shared_Row::field( $read['value'] ) !== $written ) {
-				return AB_MCP_Sync_Post_Writer::locked( 'option:off_schema', sprintf( 'the list of the option %s does not unpack to a list update_option() would store again as it is', $name ) );
+				/* translators: %s: the name of the option (blogname, …). */
+				return AB_MCP_Sync_Post_Writer::locked( 'option:off_schema', sprintf( __( 'The list of the option %s does not unpack to a list update_option() would store again as it is.', 'alphabridge-mcp' ), $name ) );
 			}
 			$value = $read['value'];
 		}
@@ -134,6 +141,34 @@ final class AB_MCP_Sync_Option_Writer {
 	}
 
 	/**
+	 * What this account may not do without manage_options, as a whole
+	 * sentence in the language of the site (the refusal of the right, and
+	 * what restore_right() answers).
+	 *
+	 * @param string $name Option name.
+	 * @return string
+	 */
+	private static function may_not( $name ) {
+		/* translators: %s: the name of the option (blogname, …). */
+		return sprintf( __( 'This account may not change the option %s (manage_options).', 'alphabridge-mcp' ), $name );
+	}
+
+	/**
+	 * The references without a counterpart, each as its kind and id, the
+	 * first five (as AB_MCP_Sync_Post_Writer::missing_text() lists them).
+	 *
+	 * @param array $missing The references (space, id).
+	 * @return string
+	 */
+	private static function missing_refs( array $missing ) {
+		$out = array();
+		foreach ( array_slice( $missing, 0, 5 ) as $m ) {
+			$out[] = (string) ( $m['space'] ?? '?' ) . ' ' . (int) ( $m['id'] ?? 0 );
+		}
+		return implode( ', ', $out );
+	}
+
+	/**
 	 * The refusal of an option that is no core option with a schema here: its
 	 * own lock (another kind, the guard, a plugin), as classify() names it.
 	 *
@@ -145,7 +180,8 @@ final class AB_MCP_Sync_Option_Writer {
 		$lock = AB_MCP_Sync_Kinds::lock( 'option', 'unclassified' );
 		return new WP_Error(
 			'ab_mcp_sync_locked',
-			sprintf( 'Not written (option:unclassified, from %1$s): %2$s The option %3$s: %4$s Use wp-admin (Settings) to change it by hand, or leave it out of the plan.', (string) $lock['stage'], (string) $lock['reason'], $name, null === $class['reason'] ? $class['status'] : (string) $class['reason'] ),
+			/* translators: 1: the stage that releases the lock (Z8d, …), 2: the reason of the lock as the report names it (English, a value of the report), 3: the name of the option, 4: why it is no core option with a schema here, as the report names it (English), or its class (plugin, guarded, …). */
+			sprintf( __( 'Not written (option:unclassified, from %1$s): %2$s The option %3$s: %4$s Use wp-admin (Settings) to change it by hand, or leave it out of the plan.', 'alphabridge-mcp' ), (string) $lock['stage'], (string) $lock['reason'], $name, null === $class['reason'] ? $class['status'] : (string) $class['reason'] ),
 			array( 'lock' => $lock + array( 'at' => 'option ' . $name ) )
 		);
 	}
@@ -164,7 +200,7 @@ final class AB_MCP_Sync_Option_Writer {
 		unset( $now );
 		$name = (string) $prepared['name'];
 		if ( ! current_user_can( 'manage_options' ) ) {
-			return AB_MCP_Sync_Post_Writer::rights( sprintf( 'change the option %s (manage_options)', $name ) );
+			return AB_MCP_Sync_Post_Writer::rights( self::may_not( $name ) );
 		}
 		$class = AB_MCP_Sync_Option_Schema::classify( $name );
 		if ( 'core' !== $class['status'] ) {
@@ -175,10 +211,12 @@ final class AB_MCP_Sync_Option_Writer {
 			return $current;
 		}
 		if ( null === $current ) {
-			return AB_MCP_Sync_Post_Writer::locked( 'option:create', sprintf( 'the option %s is not on this site', $name ) );
+			/* translators: %s: the name of the option (blogname, …). */
+			return AB_MCP_Sync_Post_Writer::locked( 'option:create', sprintf( __( 'The option %s is not on this site.', 'alphabridge-mcp' ), $name ) );
 		}
 		if ( ! AB_MCP_Sync_Option_Schema::fits( $prepared['schema'], $prepared['columns']['value'] ) ) {
-			return AB_MCP_Sync_Post_Writer::locked( 'option:off_schema', sprintf( 'the value of the staging site for %s', $name ) );
+			/* translators: %s: the name of the option (blogname, …). */
+			return AB_MCP_Sync_Post_Writer::locked( 'option:off_schema', sprintf( __( 'The value of the staging site for %s does not keep the schema of the option.', 'alphabridge-mcp' ), $name ) );
 		}
 		$refusal = self::sanitizer_refusal( $name, $prepared['value'], $prepared['columns']['value'] );
 		return null === $refusal ? true : AB_MCP_Sync_Post_Writer::locked( 'option:sanitizer', $refusal );
@@ -197,7 +235,8 @@ final class AB_MCP_Sync_Option_Writer {
 	private static function sanitizer_refusal( $name, $value, $bytes ) {
 		$clean = sanitize_option( (string) $name, $value );
 		$form  = AB_MCP_Sync_Post_Writer::db_form( $clean );
-		return null !== $form && $form === (string) $bytes ? null : sprintf( 'sanitize_option() of this site changes the value of %s', $name );
+		/* translators: %s: the name of the option (blogname, …). */
+		return null !== $form && $form === (string) $bytes ? null : sprintf( __( 'sanitize_option() of this site changes the value of %s.', 'alphabridge-mcp' ), $name );
 	}
 
 	/**
@@ -210,7 +249,8 @@ final class AB_MCP_Sync_Option_Writer {
 	 */
 	public static function live_rule( $live_id, array $source ) {
 		$read = self::live_read( (string) $live_id, $source );
-		$lock = AB_MCP_Sync_Post_Writer::read_lock( $read, sprintf( 'the option %s of this site', (string) $live_id ) );
+		/* translators: %s: the name of the option (blogname, …). */
+		$lock = AB_MCP_Sync_Post_Writer::read_lock( $read, sprintf( __( 'The object is the option %s of this site.', 'alphabridge-mcp' ), (string) $live_id ) );
 		return null === $lock ? true : $lock;
 	}
 
@@ -247,7 +287,8 @@ final class AB_MCP_Sync_Option_Writer {
 			return null;
 		}
 		if ( ! is_array( $row ) ) {
-			return new WP_Error( 'ab_mcp_sync_rows_unread', sprintf( 'The row of the option %s could not be read, so nothing is written for it. Try again; if it keeps failing, the database error log names the cause.', (string) $live_id ) );
+			/* translators: %s: the name of the option (blogname, …). */
+			return new WP_Error( 'ab_mcp_sync_rows_unread', sprintf( __( 'The row of the option %s could not be read, so nothing is written for it. Try again; if it keeps failing, the database error log names the cause.', 'alphabridge-mcp' ), (string) $live_id ) );
 		}
 		return array(
 			'row'   => array( 'value' => (string) $row['value'] ),
@@ -337,7 +378,8 @@ final class AB_MCP_Sync_Option_Writer {
 	public static function write_row( array $prepared, $live_id, $pre = null ) {
 		$name = (string) $prepared['name'];
 		if ( null === $live_id || (string) $live_id !== $name ) {
-			return AB_MCP_Sync_Post_Writer::locked( 'option:create', sprintf( 'the option %s is not on this site', $name ) );
+			/* translators: %s: the name of the option (blogname, …). */
+			return AB_MCP_Sync_Post_Writer::locked( 'option:create', sprintf( __( 'The option %s is not on this site.', 'alphabridge-mcp' ), $name ) );
 		}
 		// The right, the last read of the option against the state the engine
 		// read, the call (AB_MCP_Sync_Write; Codex round 3 of branch 11, A6).
@@ -345,7 +387,7 @@ final class AB_MCP_Sync_Option_Writer {
 			self::class,
 			$name,
 			$pre,
-			static fn() => current_user_can( 'manage_options' ) ? true : AB_MCP_Sync_Post_Writer::rights( sprintf( 'change the option %s (manage_options)', $name ) ),
+			static fn() => current_user_can( 'manage_options' ) ? true : AB_MCP_Sync_Post_Writer::rights( self::may_not( $name ) ),
 			static function () use ( $name, $prepared ) {
 				// Only this value into the row while the call runs (Codex round
 				// 5 of branch 11, C1).
@@ -375,7 +417,8 @@ final class AB_MCP_Sync_Option_Writer {
 	 */
 	public static function write_part( $live_id, $name, array $prepared, $pre ) {
 		unset( $live_id, $prepared, $pre );
-		return new WP_Error( 'ab_mcp_sync_write_failed', sprintf( 'The part %s is of a name the kind option does not write. Check the object in wp-admin.', (string) $name ) );
+		/* translators: %s: the name of the part, as the journal names it. */
+		return new WP_Error( 'ab_mcp_sync_write_failed', sprintf( __( 'The part %s is of a name the kind option does not write. Check the object in wp-admin.', 'alphabridge-mcp' ), (string) $name ) );
 	}
 
 	/**
@@ -447,10 +490,11 @@ final class AB_MCP_Sync_Option_Writer {
 	public static function restore_right( $part, $live_id, array $backup, array $now ) {
 		unset( $part, $backup, $now );
 		if ( ! current_user_can( 'manage_options' ) ) {
-			return sprintf( 'change the option %s (manage_options)', (string) $live_id );
+			return self::may_not( (string) $live_id );
 		}
 		$class = AB_MCP_Sync_Option_Schema::classify( (string) $live_id );
-		return 'core' === $class['status'] ? true : sprintf( 'write the option %s, which is no core option with a schema here (or the option guard refuses it)', (string) $live_id );
+		/* translators: %s: the name of the option (blogname, …). */
+		return 'core' === $class['status'] ? true : sprintf( __( 'This account may not write the option %s, which is no core option with a schema here (or the option guard refuses it).', 'alphabridge-mcp' ), (string) $live_id );
 	}
 
 	/**
@@ -470,7 +514,8 @@ final class AB_MCP_Sync_Option_Writer {
 		if ( 'row' !== (string) $name ) {
 			return array(
 				'state' => 'left',
-				'note'  => sprintf( 'A part %s of an option is of a name this version does not know: left as it is.', (string) $name ),
+				/* translators: %s: the name of the part, as the journal names it. */
+				'note'  => sprintf( __( 'A part %s of an option is of a name this version does not know: left as it is.', 'alphabridge-mcp' ), (string) $name ),
 			);
 		}
 		$option  = (string) $live_id;
@@ -481,7 +526,8 @@ final class AB_MCP_Sync_Option_Writer {
 		if ( null === $current ) {
 			return array(
 				'state' => 'left',
-				'note'  => sprintf( 'The option %s is no longer on this site.', $option ),
+				/* translators: %s: the name of the option (blogname, …). */
+				'note'  => sprintf( __( 'The option %s is no longer on this site.', 'alphabridge-mcp' ), $option ),
 			);
 		}
 		$was = (string) $backup['row']['value'];
@@ -491,7 +537,8 @@ final class AB_MCP_Sync_Option_Writer {
 		if ( ! hash_equals( (string) $hash, self::row_hash( $current['row'] ) ) ) {
 			return array(
 				'state' => 'left',
-				'note'  => sprintf( 'The option %s was changed since the step wrote it, so it is left as it is.', $option ),
+				/* translators: %s: the name of the option (blogname, …). */
+				'note'  => sprintf( __( 'The option %s was changed since the step wrote it, so it is left as it is.', 'alphabridge-mcp' ), $option ),
 			);
 		}
 		$schema = isset( AB_MCP_Sync_Option_Schema::CORE[ $option ] ) ? AB_MCP_Sync_Option_Schema::CORE[ $option ] : null;
@@ -499,7 +546,8 @@ final class AB_MCP_Sync_Option_Writer {
 		if ( null === $schema || ! AB_MCP_Sync_Option_Schema::fits( $schema, $was ) || ! $read['ok'] || null !== self::sanitizer_refusal( $option, $read['value'], $was ) ) {
 			return array(
 				'state' => 'left',
-				'note'  => sprintf( 'Not put back: the backed-up value of %s does not keep the schema of the option or would be changed by sanitize_option() of this site now, so it is left as it is; its value before stands beside it (value_before). Set it by hand in wp-admin.', $option ),
+				/* translators: %s: the name of the option (blogname, …). */
+				'note'  => sprintf( __( 'Not put back: the backed-up value of %s does not keep the schema of the option or would be changed by sanitize_option() of this site now, so it is left as it is; its value before stands beside it (value_before). Set it by hand in wp-admin.', 'alphabridge-mcp' ), $option ),
 			);
 		}
 		// The right and the class of the name again, after sanitize_option()
@@ -509,13 +557,15 @@ final class AB_MCP_Sync_Option_Writer {
 		if ( true !== $right ) {
 			return array(
 				'state' => 'left',
-				'note'  => sprintf( 'Not put back: this account may not %s, asked again right before the write (a filter may have changed the rights). Set it by hand in wp-admin with an account that may.', $right ),
+				/* translators: %s: what this account may not do, a whole sentence. */
+				'note'  => sprintf( __( 'Not put back: %s It was asked again right before the write (a filter may have changed the rights). Set it by hand in wp-admin with an account that may.', 'alphabridge-mcp' ), $right ),
 			);
 		}
 		if ( ! AB_MCP_Sync_Shared_Row::put_back( $option, (string) $current['row']['value'], $was ) ) {
 			return array(
 				'state' => 'left',
-				'note'  => sprintf( 'The option %s changed while it was put back, so it is left as it is.', $option ),
+				/* translators: %s: the name of the option (blogname, …). */
+				'note'  => sprintf( __( 'The option %s changed while it was put back, so it is left as it is.', 'alphabridge-mcp' ), $option ),
 			);
 		}
 		$after = self::current( $option );
@@ -534,8 +584,9 @@ final class AB_MCP_Sync_Option_Writer {
 	public static function before_value( $part, $backup, $now, $live_id ) {
 		unset( $part, $now );
 		if ( ! is_array( $backup ) ) {
-			return 'none: the option was not on this site before the run.';
+			return __( 'none: the option was not on this site before the run.', 'alphabridge-mcp' );
 		}
-		return AB_MCP_Sync_Post_Writer::cut( 'value: ' . AB_MCP_Sync_Post_Writer::shown_value( (string) $live_id, (string) $backup['row']['value'] ), AB_MCP_Sync_Post_Writer::PART_CHARS );
+		/* translators: %s: the backed-up value of the option, as shown (a credential never). */
+		return AB_MCP_Sync_Post_Writer::cut( sprintf( __( 'value: %s', 'alphabridge-mcp' ), AB_MCP_Sync_Post_Writer::shown_value( (string) $live_id, (string) $backup['row']['value'] ) ), AB_MCP_Sync_Post_Writer::PART_CHARS );
 	}
 }

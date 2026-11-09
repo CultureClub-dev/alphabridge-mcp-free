@@ -85,7 +85,11 @@ final class AB_MCP_Sync_Canon {
 		}
 		return new WP_Error(
 			'ab_mcp_sync_canon_version',
-			sprintf( 'The other site computes its comparison data as %1$s and this site as %2$s, so the two cannot be compared. Update AlphaBridge MCP on both sites to the same version and try again.', is_string( $theirs ) && '' !== $theirs ? $theirs : 'an unknown version', self::VERSION ),
+			is_string( $theirs ) && '' !== $theirs
+				/* translators: 1: version of the comparison data on the other site, 2: the one on this site. */
+				? sprintf( __( 'The other site computes its comparison data as %1$s and this site as %2$s, so the two cannot be compared. Update AlphaBridge MCP on both sites to the same version and try again.', 'alphabridge-mcp' ), $theirs, self::VERSION )
+				/* translators: %s: version of the comparison data on this site. */
+				: sprintf( __( 'The other site computes its comparison data in an unknown version and this site as %s, so the two cannot be compared. Update AlphaBridge MCP on both sites to the same version and try again.', 'alphabridge-mcp' ), self::VERSION ),
 			array(
 				'theirs' => is_string( $theirs ) ? $theirs : null,
 				'ours'   => self::VERSION,

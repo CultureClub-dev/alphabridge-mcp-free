@@ -66,8 +66,9 @@
  * padding and bits that encode nothing, and so does sodium_compat where
  * WordPress brings it.
  *
- * Messages are English without gettext, as the other classes of the
- * takeover; each names the way.
+ * Messages are in gettext, in the language of the site, as the other
+ * classes of the takeover; each names the way. Codes and machine values
+ * (kinds, purposes, parameters, fields) stay as the tools name them.
  *
  * @package AlphaBridge_MCP
  */
@@ -134,7 +135,7 @@ final class AB_MCP_Sync_Key {
 			$source = bin2hex( random_bytes( 16 ) );
 			$mac    = bin2hex( random_bytes( 32 ) );
 		} catch ( Throwable $e ) {
-			return new WP_Error( 'ab_mcp_sync_key_failed', 'No key was made: PHP could not make an Ed25519 key pair or random bytes on this server. Ask the host to enable the sodium extension of PHP, then make the key on the page AlphaBridge → Staging.' );
+			return new WP_Error( 'ab_mcp_sync_key_failed', __( 'No key was made: PHP could not make an Ed25519 key pair or random bytes on this server. Ask the host to enable the sodium extension of PHP, then make the key on the page AlphaBridge → Staging.', 'alphabridge-mcp' ) );
 		}
 		$key_id = self::key_id( $public );
 		self::store_secret(
@@ -171,7 +172,8 @@ final class AB_MCP_Sync_Key {
 			self::forget();
 			return new WP_Error(
 				'ab_mcp_sync_key_failed',
-				sprintf( 'Nothing was saved: the new key of this staging site did not read back from the options %1$s, %2$s and %3$s (the database refused or changed the write), and the old key was removed, so this site signs nothing until a new key is stored. Ask the host to check that the database accepts writes to the options of this site, then confirm the role staging site on the page AlphaBridge → Staging, or, where it is confirmed, make the key there under «Key of this staging site».', self::OPTION_SECRET, self::OPTION_SOURCE, self::OPTION_MAC ),
+				/* translators: 1, 2, 3: names of the three options of the key. */
+				sprintf( __( 'Nothing was saved: the new key of this staging site did not read back from the options %1$s, %2$s and %3$s (the database refused or changed the write), and the old key was removed, so this site signs nothing until a new key is stored. Ask the host to check that the database accepts writes to the options of this site, then confirm the role staging site on the page AlphaBridge → Staging, or, where it is confirmed, make the key there under «Key of this staging site».', 'alphabridge-mcp' ), self::OPTION_SECRET, self::OPTION_SOURCE, self::OPTION_MAC ),
 				array( 'options' => array( self::OPTION_SECRET, self::OPTION_SOURCE, self::OPTION_MAC ) )
 			);
 		}
@@ -264,7 +266,8 @@ final class AB_MCP_Sync_Key {
 	public static function mac_refusal() {
 		return new WP_Error(
 			'ab_mcp_sync_mac_failed',
-			sprintf( 'This staging site has its key, but the secret its fetch addresses are signed with is missing and could not be stored in the option %s (the database refused or changed the write, or PHP has no random bytes). Ask the host to check that the database accepts writes to the options of this site, then call again; the key and its confirmation on the production site stay.', self::OPTION_MAC ),
+			/* translators: %s: name of the option. */
+			sprintf( __( 'This staging site has its key, but the secret its fetch addresses are signed with is missing and could not be stored in the option %s (the database refused or changed the write, or PHP has no random bytes). Ask the host to check that the database accepts writes to the options of this site, then call again; the key and its confirmation on the production site stay.', 'alphabridge-mcp' ), self::OPTION_MAC ),
 			array( 'option' => self::OPTION_MAC )
 		);
 	}
@@ -305,15 +308,15 @@ final class AB_MCP_Sync_Key {
 		}
 		$found = self::found();
 		if ( null === $found ) {
-			return new WP_Error( 'ab_mcp_sync_key_missing', 'This staging site has no usable key: make it on the page AlphaBridge → Staging under «Key of this staging site», confirm it on the production site, then call again.' );
+			return new WP_Error( 'ab_mcp_sync_key_missing', __( 'This staging site has no usable key: make it on the page AlphaBridge → Staging under «Key of this staging site», confirm it on the production site, then call again.', 'alphabridge-mcp' ) );
 		}
 		if ( ! is_string( $key_id ) || ! hash_equals( $found['key']['key_id'], $key_id ) ) {
-			return new WP_Error( 'ab_mcp_sync_key_changed', 'The key of this staging site changed while the package was signed; nothing was signed. Call again: the new key is used, and the production site needs it confirmed.' );
+			return new WP_Error( 'ab_mcp_sync_key_changed', __( 'The key of this staging site changed while the package was signed; nothing was signed. Call again: the new key is used, and the production site needs it confirmed.', 'alphabridge-mcp' ) );
 		}
 		try {
 			return sodium_crypto_sign_detached( (string) $message, $found['secret'] );
 		} catch ( Throwable $e ) {
-			return new WP_Error( 'ab_mcp_sync_key_failed', 'Nothing was signed: PHP could not sign with the key of this site. Ask the host to enable the sodium extension of PHP, then call again.' );
+			return new WP_Error( 'ab_mcp_sync_key_failed', __( 'Nothing was signed: PHP could not sign with the key of this site. Ask the host to enable the sodium extension of PHP, then call again.', 'alphabridge-mcp' ) );
 		}
 	}
 
@@ -553,7 +556,16 @@ final class AB_MCP_Sync_Key {
 			return '';
 		}
 		$known = preg_match( '#^https?://([a-z0-9-]+\.)*xn--#', (string) $a ) ? (string) $a : ( preg_match( '#^https?://([a-z0-9-]+\.)*xn--#', (string) $b ) ? (string) $b : '' );
-		return ( $read ? ' This server cannot read the international domain name as it is stored' : ' This server cannot compare international domain names (PHP has no intl)' ) . ': store the address on both sites in its xn-- form (Punycode)' . ( '' !== $known ? ', here ' . $known : '' ) . '.';
+		if ( '' !== $known ) {
+			return ' ' . ( $read
+				/* translators: %s: the address in its xn-- form. */
+				? sprintf( __( 'This server cannot read the international domain name as it is stored: store the address on both sites in its xn-- form (Punycode), here %s.', 'alphabridge-mcp' ), $known )
+				/* translators: %s: the address in its xn-- form. */
+				: sprintf( __( 'This server cannot compare international domain names (PHP has no intl): store the address on both sites in its xn-- form (Punycode), here %s.', 'alphabridge-mcp' ), $known ) );
+		}
+		return ' ' . ( $read
+			? __( 'This server cannot read the international domain name as it is stored: store the address on both sites in its xn-- form (Punycode).', 'alphabridge-mcp' )
+			: __( 'This server cannot compare international domain names (PHP has no intl): store the address on both sites in its xn-- form (Punycode).', 'alphabridge-mcp' ) );
 	}
 
 	/**
@@ -596,7 +608,7 @@ final class AB_MCP_Sync_Key {
 		unset( $request );
 		$answer = self::answer();
 		if ( null === $answer ) {
-			return new WP_Error( 'ab_mcp_staging_key_none', 'This site has no key of a staging site to give: it is not confirmed as the staging site, or its key is not made yet. On this site, confirm the role staging site and make its key on the page AlphaBridge → Staging; or use the address of the staging site.', array( 'status' => 404 ) );
+			return new WP_Error( 'ab_mcp_staging_key_none', __( 'This site has no key of a staging site to give: it is not confirmed as the staging site, or its key is not made yet. On this site, confirm the role staging site and make its key on the page AlphaBridge → Staging; or use the address of the staging site.', 'alphabridge-mcp' ), array( 'status' => 404 ) );
 		}
 		$response = new WP_REST_Response( $answer );
 		$response->header( 'Cache-Control', 'no-store' );
@@ -756,20 +768,20 @@ final class AB_MCP_Sync_Key {
 	 * @return WP_Error This site is no confirmed staging site.
 	 */
 	private static function role_refusal() {
-		return new WP_Error( 'ab_mcp_sync_key_role', 'Only a confirmed staging site has a key: confirm the role staging site on the page AlphaBridge → Staging of this site first.' );
+		return new WP_Error( 'ab_mcp_sync_key_role', __( 'Only a confirmed staging site has a key: confirm the role staging site on the page AlphaBridge → Staging of this site first.', 'alphabridge-mcp' ) );
 	}
 
 	/**
 	 * @return WP_Error The pairing code does not read.
 	 */
 	private static function code_refusal() {
-		return new WP_Error( 'ab_mcp_sync_key_code', 'The pairing code does not read as the code of a staging site. Copy it again in full from the page AlphaBridge → Staging of the staging site (under «Key of this staging site») and enter it again.' );
+		return new WP_Error( 'ab_mcp_sync_key_code', __( 'The pairing code does not read as the code of a staging site. Copy it again in full from the page AlphaBridge → Staging of the staging site (under «Key of this staging site») and enter it again.', 'alphabridge-mcp' ) );
 	}
 
 	/**
 	 * @return WP_Error The answer of the route does not read.
 	 */
 	private static function answer_refusal() {
-		return new WP_Error( 'ab_mcp_sync_key_answer', 'The staging site answered, but not with a key this site can read. Update AlphaBridge MCP on the staging site to the version of this site, or enter its pairing code from its page AlphaBridge → Staging instead.' );
+		return new WP_Error( 'ab_mcp_sync_key_answer', __( 'The staging site answered, but not with a key this site can read. Update AlphaBridge MCP on the staging site to the version of this site, or enter its pairing code from its page AlphaBridge → Staging instead.', 'alphabridge-mcp' ) );
 	}
 }

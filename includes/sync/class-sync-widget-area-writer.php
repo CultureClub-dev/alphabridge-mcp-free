@@ -107,21 +107,21 @@ final class AB_MCP_Sync_Widget_Area_Writer {
 	public static function target_of( array $line, array $item, array $ctx ) {
 		$area = isset( $line['identity']['area'] ) && is_string( $line['identity']['area'] ) ? $line['identity']['area'] : '';
 		if ( 'update' !== $item['op'] || (string) $item['live_ref'] !== $area ) {
-			return AB_MCP_Sync_Post_Writer::locked( 'widget_area:create', sprintf( 'the area %s is not on this site', $area ) );
+			return self::not_here( $area );
 		}
 		$held = AB_MCP_Sync_Post_Writer::line_lock( $line );
 		if ( null !== $held ) {
 			return $held;
 		}
 		if ( ! isset( $line['content']['meta'], $line['form'] ) || ! is_array( $line['content']['meta'] ) || ! is_array( $line['form'] ) ) {
-			return AB_MCP_Sync_Post_Writer::locked( 'post:content_missing', sprintf( 'the package carries no instances of the area %s', $area ) );
+			return AB_MCP_Sync_Post_Writer::locked( 'post:content_missing', sprintf( __( 'The package carries no instances of the area %s.', 'alphabridge-mcp' ), $area ) );
 		}
 		$state = self::state( $area );
 		if ( is_wp_error( $state ) ) {
 			return $state;
 		}
 		if ( null === $state ) {
-			return AB_MCP_Sync_Post_Writer::locked( 'widget_area:create', sprintf( 'the area %s is not on this site', $area ) );
+			return self::not_here( $area );
 		}
 		$pair  = isset( $item['pair_id'] ) ? AB_MCP_Sync_Pairs::get( (int) $item['pair_id'] ) : null;
 		$extra = is_array( $pair ) && is_array( $pair['base_extra'] ) ? $pair['base_extra'] : array();
@@ -141,24 +141,28 @@ final class AB_MCP_Sync_Widget_Area_Writer {
 			$raw  = AB_MCP_Sync_Post_Writer::bytes( $pair[1] );
 			$base = self::base_of( $id );
 			if ( '' === $base || '' === $raw ) {
-				return AB_MCP_Sync_Post_Writer::locked( 'widget_area:widget_unregistered', sprintf( 'the instance %s of the staging site is no widget with a number and settings', $id ) );
+				/* translators: %s: the id of the widget instance on the staging site (text-2, …). */
+				return AB_MCP_Sync_Post_Writer::locked( 'widget_area:widget_unregistered', sprintf( __( 'The instance %s of the staging site is no widget with a number and settings.', 'alphabridge-mcp' ), $id ) );
 			}
 			$one = array(
 				'number'   => (int) substr( $id, strlen( $base ) + 1 ),
 				'settings' => $raw,
 			);
 			if ( null === AB_MCP_Widget_Writer::widget( $base ) ) {
-				return AB_MCP_Sync_Post_Writer::locked( 'widget_area:widget_unregistered', sprintf( 'the widget %s of the instance %s is not registered on this site', $base, $id ) );
+				/* translators: 1: the widget (text, …), 2: the id of its instance on the staging site (text-2, …). */
+				return AB_MCP_Sync_Post_Writer::locked( 'widget_area:widget_unregistered', sprintf( __( 'The widget %1$s of the instance %2$s is not registered on this site.', 'alphabridge-mcp' ), $base, $id ) );
 			}
 			$read = AB_MCP_Sync_Canon::unserialized( $one['settings'] );
 			if ( ! $read['ok'] || ! is_array( $read['value'] ) ) {
-				return AB_MCP_Sync_Post_Writer::locked( 'widget_area:unreadable_value', sprintf( 'the settings of the instance %s of the staging site', $id ) );
+				/* translators: %s: the id of the widget instance on the staging site (text-2, …). */
+				return AB_MCP_Sync_Post_Writer::locked( 'widget_area:unreadable_value', sprintf( __( 'The settings of the instance %s of the staging site do not unpack.', 'alphabridge-mcp' ), $id ) );
 			}
 			$plan['missing'] = array();
 			$changed         = false;
 			$settings        = AB_MCP_Sync_Refs::rewrite_widget( $base, $read['value'], $plan, $changed );
 			if ( array() !== AB_MCP_Sync_Post_Writer::unresolved( $plan['missing'], $pending ) ) {
-				return AB_MCP_Sync_Post_Writer::locked( 'widget_area:reference_unmapped', sprintf( 'the instance %1$s: %2$s', $id, AB_MCP_Sync_Post_Writer::missing_text( $plan['missing'] ) ) );
+				/* translators: 1: the id of the widget instance on the staging site (text-2, …), 2: the references, each as its kind and id (post 12, term 4), separated by commas. */
+				return AB_MCP_Sync_Post_Writer::locked( 'widget_area:reference_unmapped', sprintf( __( 'The instance %1$s refers to objects without a counterpart on this site: %2$s.', 'alphabridge-mcp' ), $id, self::missing_refs( $plan['missing'] ) ) );
 			}
 			$live = self::counterpart( $id, $base, (int) $one['number'], $known, $state, $taken, $area );
 			if ( is_wp_error( $live ) ) {
@@ -181,7 +185,8 @@ final class AB_MCP_Sync_Widget_Area_Writer {
 		// removed from it: a deletion (decisions 21 and 22).
 		foreach ( $state['list'] as $live ) {
 			if ( ! isset( $taken[ (string) $live ] ) ) {
-				return AB_MCP_Sync_Post_Writer::locked( 'widget_area:remove_instance', sprintf( 'the instance %1$s of the area %2$s on this site has no counterpart on the staging site', (string) $live, $area ) );
+				/* translators: 1: the id of the widget instance on this site (text-2, …), 2: the id of the widget area. */
+				return AB_MCP_Sync_Post_Writer::locked( 'widget_area:remove_instance', sprintf( __( 'The instance %1$s of the area %2$s on this site has no counterpart on the staging site.', 'alphabridge-mcp' ), (string) $live, $area ) );
 			}
 		}
 		$kept        = $extra;
@@ -257,11 +262,13 @@ final class AB_MCP_Sync_Widget_Area_Writer {
 		if ( array_key_exists( $id, $known ) ) {
 			$live = $known[ $id ];
 			if ( null === $live || self::base_of( $live ) !== $base || ! isset( $state['parts'][ 'instance:' . $live ] ) || isset( $taken[ $live ] ) ) {
-				return AB_MCP_Sync_Post_Writer::locked( 'widget_area:instance_unmapped', sprintf( 'the instance %1$s of the staging site was in the area at its base, and its counterpart on this site is not known (or no longer there)', $id ) );
+				/* translators: %s: the id of the widget instance on the staging site (text-2, …). */
+				return AB_MCP_Sync_Post_Writer::locked( 'widget_area:instance_unmapped', sprintf( __( 'The instance %s of the staging site was in the area at its base, and its counterpart on this site is not known (or no longer there).', 'alphabridge-mcp' ), $id ) );
 			}
 			$elsewhere = self::placed( $live, $state, $area );
 			if ( null !== $elsewhere ) {
-				return AB_MCP_Sync_Post_Writer::locked( 'widget_area:instance_unmapped', sprintf( 'the counterpart %1$s of the instance %2$s is placed in the area %3$s on this site', $live, $id, $elsewhere ) );
+				/* translators: 1: the id of the widget instance on this site, 2: the id of its instance on the staging site, 3: the id of the other widget area. */
+				return AB_MCP_Sync_Post_Writer::locked( 'widget_area:instance_unmapped', sprintf( __( 'The counterpart %1$s of the instance %2$s is placed in the area %3$s on this site.', 'alphabridge-mcp' ), $live, $id, $elsewhere ) );
 			}
 			return $live;
 		}
@@ -311,6 +318,43 @@ final class AB_MCP_Sync_Widget_Area_Writer {
 	}
 
 	/**
+	 * What this account may not do without edit_theme_options, as a whole
+	 * sentence in the language of the site (the refusal of the right, and
+	 * what restore_right() answers).
+	 *
+	 * @return string
+	 */
+	private static function may_not() {
+		return __( 'This account may not change the widgets of this site (edit_theme_options).', 'alphabridge-mcp' );
+	}
+
+	/**
+	 * The refusal for an area that is not on this site (a step creates none).
+	 *
+	 * @param string $area The area.
+	 * @return WP_Error
+	 */
+	private static function not_here( $area ) {
+		/* translators: %s: the id of the widget area (sidebar-1, …). */
+		return AB_MCP_Sync_Post_Writer::locked( 'widget_area:create', sprintf( __( 'The area %s is not on this site.', 'alphabridge-mcp' ), $area ) );
+	}
+
+	/**
+	 * The references without a counterpart, each as its kind and id, the
+	 * first five (as AB_MCP_Sync_Post_Writer::missing_text() lists them).
+	 *
+	 * @param array $missing The references (space, id).
+	 * @return string
+	 */
+	private static function missing_refs( array $missing ) {
+		$out = array();
+		foreach ( array_slice( $missing, 0, 5 ) as $m ) {
+			$out[] = (string) ( $m['space'] ?? '?' ) . ' ' . (int) ( $m['id'] ?? 0 );
+		}
+		return implode( ', ', $out );
+	}
+
+	/**
 	 * The checks before the first part: edit_theme_options; each instance
 	 * through the widget writer ahead (its update() keeps the settings, its
 	 * widget registered), each row written by the widgets of WordPress.
@@ -323,14 +367,14 @@ final class AB_MCP_Sync_Widget_Area_Writer {
 	public static function precheck( array $prepared, $live_id, $now ) {
 		unset( $now );
 		if ( ! current_user_can( 'edit_theme_options' ) ) {
-			return AB_MCP_Sync_Post_Writer::rights( 'change the widgets of this site (edit_theme_options)' );
+			return AB_MCP_Sync_Post_Writer::rights( self::may_not() );
 		}
 		$state = self::state( null === $live_id ? (string) $prepared['area'] : (string) $live_id );
 		if ( is_wp_error( $state ) ) {
 			return $state;
 		}
 		if ( null === $state ) {
-			return AB_MCP_Sync_Post_Writer::locked( 'widget_area:create', sprintf( 'the area %s is not on this site', (string) $prepared['area'] ) );
+			return self::not_here( (string) $prepared['area'] );
 		}
 		foreach ( $prepared['writes'] as $live => $write ) {
 			$refusal = self::sanitizer_refusal( $write['base'], (int) $write['number'], $write['settings'], $state );
@@ -354,15 +398,18 @@ final class AB_MCP_Sync_Widget_Area_Writer {
 	 */
 	private static function sanitizer_refusal( $base, $number, array $settings, array $state ) {
 		if ( ! isset( $state['rows'][ $base ] ) || ! $state['rows'][ $base ]['marked'] ) {
-			return AB_MCP_Sync_Post_Writer::locked( 'widget_area:widget_unregistered', sprintf( 'the row widget_%s of this site was not written by the widgets of WordPress (no _multiwidget), so it is not changed', $base ) );
+			/* translators: %s: the widget (text, …); widget_text is the name of its row. */
+			return AB_MCP_Sync_Post_Writer::locked( 'widget_area:widget_unregistered', sprintf( __( 'The row widget_%s of this site was not written by the widgets of WordPress (no _multiwidget), so it is not changed.', 'alphabridge-mcp' ), $base ) );
 		}
 		$old   = isset( $state['rows'][ $base ]['value'][ $number ] ) && is_array( $state['rows'][ $base ]['value'][ $number ] ) ? $state['rows'][ $base ]['value'][ $number ] : array();
 		$clean = AB_MCP_Widget_Writer::sanitize( $base, $number, $settings, $old );
 		if ( is_wp_error( $clean ) ) {
-			return AB_MCP_Sync_Post_Writer::locked( 'unregistered_widget' === $clean->get_error_code() || 'ab_mcp_unregistered_widget' === $clean->get_error_code() ? 'widget_area:widget_unregistered' : 'widget_area:sanitizer', sprintf( 'the instance %1$s-%2$d: %3$s', $base, $number, $clean->get_error_message() ) );
+			/* translators: 1: the widget (text, …), 2: the number of its instance on this site, 3: the message of the widget writer, a whole sentence. */
+			return AB_MCP_Sync_Post_Writer::locked( 'unregistered_widget' === $clean->get_error_code() || 'ab_mcp_unregistered_widget' === $clean->get_error_code() ? 'widget_area:widget_unregistered' : 'widget_area:sanitizer', sprintf( __( 'The widget writer refuses the instance %1$s-%2$d: %3$s', 'alphabridge-mcp' ), $base, $number, $clean->get_error_message() ) );
 		}
 		if ( AB_MCP_Sync_Shared_Row::field( $clean ) !== AB_MCP_Sync_Shared_Row::field( $settings ) ) {
-			return AB_MCP_Sync_Post_Writer::locked( 'widget_area:sanitizer', sprintf( 'the instance %1$s-%2$d (the update() of the widget or widget_update_callback changes its settings)', $base, $number ) );
+			/* translators: 1: the widget (text, …), 2: the number of its instance on this site. */
+			return AB_MCP_Sync_Post_Writer::locked( 'widget_area:sanitizer', sprintf( __( 'The update() of the widget or widget_update_callback changes the settings of the instance %1$s-%2$d.', 'alphabridge-mcp' ), $base, $number ) );
 		}
 		return null;
 	}
@@ -375,7 +422,8 @@ final class AB_MCP_Sync_Widget_Area_Writer {
 	 * @return true|WP_Error
 	 */
 	public static function live_rule( $live_id, array $source ) {
-		$lock = AB_MCP_Sync_Post_Writer::read_lock( self::live_read( (string) $live_id, $source ), sprintf( 'the widget area %s of this site', (string) $live_id ) );
+		/* translators: %s: the id of the widget area (sidebar-1, …). */
+		$lock = AB_MCP_Sync_Post_Writer::read_lock( self::live_read( (string) $live_id, $source ), sprintf( __( 'The object is the widget area %s of this site.', 'alphabridge-mcp' ), (string) $live_id ) );
 		return null === $lock ? true : $lock;
 	}
 
@@ -506,7 +554,8 @@ final class AB_MCP_Sync_Widget_Area_Writer {
 	 * @return WP_Error
 	 */
 	private static function unread( $option ) {
-		return new WP_Error( 'ab_mcp_sync_rows_unread', sprintf( 'The row %s of this site could not be read or does not unpack, so no widget is written. Try again; if it keeps failing, check the widgets in wp-admin (Appearance → Widgets).', $option ) );
+		/* translators: %s: the name of the option row (sidebars_widgets, widget_text, …). */
+		return new WP_Error( 'ab_mcp_sync_rows_unread', sprintf( __( 'The row %s of this site could not be read or does not unpack, so no widget is written. Try again; if it keeps failing, check the widgets in wp-admin (Appearance → Widgets).', 'alphabridge-mcp' ), $option ) );
 	}
 
 	/**
@@ -617,7 +666,7 @@ final class AB_MCP_Sync_Widget_Area_Writer {
 	public static function write_row( array $prepared, $live_id, $pre = null ) {
 		$area = (string) $prepared['area'];
 		if ( null === $live_id || (string) $live_id !== $area ) {
-			return AB_MCP_Sync_Post_Writer::locked( 'widget_area:create', sprintf( 'the area %s is not on this site', $area ) );
+			return self::not_here( $area );
 		}
 		// The right, the last read of the area against the state the engine
 		// read, the call (AB_MCP_Sync_Write; Codex round 3 of branch 11, A6).
@@ -625,7 +674,7 @@ final class AB_MCP_Sync_Widget_Area_Writer {
 			self::class,
 			$area,
 			$pre,
-			static fn() => current_user_can( 'edit_theme_options' ) ? true : AB_MCP_Sync_Post_Writer::rights( 'change the widgets of this site (edit_theme_options)' ),
+			static fn() => current_user_can( 'edit_theme_options' ) ? true : AB_MCP_Sync_Post_Writer::rights( self::may_not() ),
 			static function ( $map ) use ( $prepared, $area ) {
 				$map[ $area ] = array_values( $prepared['list'] );
 				// As wp_set_sidebars_widgets() hands it to update_option(), and
@@ -669,10 +718,11 @@ final class AB_MCP_Sync_Widget_Area_Writer {
 		$name = (string) $name;
 		$live = 0 === strpos( $name, 'instance:' ) ? substr( $name, strlen( 'instance:' ) ) : '';
 		if ( ! isset( $prepared['writes'][ $live ] ) ) {
-			return new WP_Error( 'ab_mcp_sync_write_failed', sprintf( 'The part %s is of a name the kind widget_area does not write. Check the area in wp-admin (Appearance → Widgets).', $name ) );
+			/* translators: %s: the name of the part, as the journal names it. */
+			return new WP_Error( 'ab_mcp_sync_write_failed', sprintf( __( 'The part %s is of a name the kind widget_area does not write. Check the area in wp-admin (Appearance → Widgets).', 'alphabridge-mcp' ), $name ) );
 		}
 		if ( ! current_user_can( 'edit_theme_options' ) ) {
-			return AB_MCP_Sync_Post_Writer::rights( 'change the widgets of this site (edit_theme_options)' );
+			return AB_MCP_Sync_Post_Writer::rights( self::may_not() );
 		}
 		$write = $prepared['writes'][ $live ];
 		$value = self::widget_row( $write['base'] );
@@ -694,7 +744,7 @@ final class AB_MCP_Sync_Widget_Area_Writer {
 			self::class,
 			(string) $live_id,
 			$pre,
-			static fn() => current_user_can( 'edit_theme_options' ) ? true : AB_MCP_Sync_Post_Writer::rights( 'change the widgets of this site (edit_theme_options)' ),
+			static fn() => current_user_can( 'edit_theme_options' ) ? true : AB_MCP_Sync_Post_Writer::rights( self::may_not() ),
 			static function ( $value ) use ( $write, $clean ) {
 				$value[ (int) $write['number'] ] = $clean;
 				$value['_multiwidget']           = 1;
@@ -728,7 +778,8 @@ final class AB_MCP_Sync_Widget_Area_Writer {
 		}
 		$value = false === $row ? array() : $row['value'];
 		if ( array() !== $value && empty( $value['_multiwidget'] ) ) {
-			return AB_MCP_Sync_Post_Writer::locked( 'widget_area:widget_unregistered', sprintf( 'the row widget_%s of this site was not written by the widgets of WordPress (no _multiwidget), so it is not changed', $base ) );
+			/* translators: %s: the widget (text, …); widget_text is the name of its row. */
+			return AB_MCP_Sync_Post_Writer::locked( 'widget_area:widget_unregistered', sprintf( __( 'The row widget_%s of this site was not written by the widgets of WordPress (no _multiwidget), so it is not changed.', 'alphabridge-mcp' ), $base ) );
 		}
 		return $value;
 	}
@@ -860,7 +911,7 @@ final class AB_MCP_Sync_Widget_Area_Writer {
 		unset( $live_id, $now );
 		$part = (string) $part;
 		if ( ! current_user_can( 'edit_theme_options' ) ) {
-			return 'change the widgets of this site (edit_theme_options)';
+			return self::may_not();
 		}
 		if ( 0 !== strpos( $part, 'instance:' ) || ! isset( $backup['parts'][ $part ] ) ) {
 			return true;
@@ -869,11 +920,13 @@ final class AB_MCP_Sync_Widget_Area_Writer {
 		$base = self::base_of( $live );
 		$read = AB_MCP_Sync_Canon::unserialized( (string) $backup['parts'][ $part ] );
 		if ( ! $read['ok'] || ! is_array( $read['value'] ) ) {
-			return sprintf( 'store the backed-up settings of %s, which do not unpack', $live );
+			/* translators: %s: the id of the widget instance (text-2, …). */
+			return sprintf( __( 'This account may not store the backed-up settings of %s, which do not unpack.', 'alphabridge-mcp' ), $live );
 		}
 		$clean = AB_MCP_Widget_Writer::sanitize( $base, (int) substr( $live, strlen( $base ) + 1 ), $read['value'], $read['value'] );
 		if ( is_wp_error( $clean ) || AB_MCP_Sync_Shared_Row::field( $clean ) !== (string) $backup['parts'][ $part ] ) {
-			return sprintf( 'store the backed-up settings of %s (the widget is not registered here, or its update() changes them)', $live );
+			/* translators: %s: the id of the widget instance (text-2, …). */
+			return sprintf( __( 'This account may not store the backed-up settings of %s (the widget is not registered here, or its update() changes them).', 'alphabridge-mcp' ), $live );
 		}
 		return true;
 	}
@@ -898,7 +951,8 @@ final class AB_MCP_Sync_Widget_Area_Writer {
 		if ( ! is_array( $state ) ) {
 			return is_wp_error( $state ) ? $state : array(
 				'state' => 'left',
-				'note'  => sprintf( 'The area %s is no longer on this site.', $area ),
+				/* translators: %s: the id of the widget area (sidebar-1, …). */
+				'note'  => sprintf( __( 'The area %s is no longer on this site.', 'alphabridge-mcp' ), $area ),
 			);
 		}
 		if ( 'row' === $name ) {
@@ -910,21 +964,23 @@ final class AB_MCP_Sync_Widget_Area_Writer {
 			if ( ! hash_equals( (string) $hash, AB_MCP_Sync_Shared_Row::hash( $is ) ) ) {
 				return array(
 					'state' => 'left',
-					'note'  => sprintf( 'The list of the area %s was changed since the step wrote it, so it is left as it is.', $area ),
+					/* translators: %s: the id of the widget area (sidebar-1, …). */
+					'note'  => sprintf( __( 'The list of the area %s was changed since the step wrote it, so it is left as it is.', 'alphabridge-mcp' ), $area ),
 				);
 			}
 			$read = AB_MCP_Sync_Canon::unserialized( $was );
 			if ( ! $read['ok'] || ! is_array( $read['value'] ) ) {
 				return array(
 					'state' => 'left',
-					'note'  => 'The backed-up list of the area does not unpack, so it is left as it is.',
+					'note'  => __( 'The backed-up list of the area does not unpack, so it is left as it is.', 'alphabridge-mcp' ),
 				);
 			}
 			foreach ( $state['list'] as $live ) {
 				if ( ! in_array( $live, $read['value'], true ) && ! isset( $backup['parts'][ 'instance:' . $live ] ) ) {
 					return array(
 						'state' => 'left',
-						'note'  => sprintf( 'The list of the area names the instance %s the run made, which the way back does not remove: the list is left as it is, the area a rest.', (string) $live ),
+						/* translators: %s: the id of the widget instance (text-2, …). */
+						'note'  => sprintf( __( 'The list of the area names the instance %s the run made, which the way back does not remove: the list is left as it is, the area a rest.', 'alphabridge-mcp' ), (string) $live ),
 					);
 				}
 			}
@@ -937,7 +993,7 @@ final class AB_MCP_Sync_Widget_Area_Writer {
 			if ( ! AB_MCP_Sync_Shared_Row::put_back( self::AREAS, (string) $state['areas']['raw'], AB_MCP_Sync_Shared_Row::field( $map ) ) ) {
 				return array(
 					'state' => 'left',
-					'note'  => 'The areas changed while the list was put back, so it is left as it is.',
+					'note'  => __( 'The areas changed while the list was put back, so it is left as it is.', 'alphabridge-mcp' ),
 				);
 			}
 			$GLOBALS['_wp_sidebars_widgets'] = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- the request copy of the core.
@@ -947,7 +1003,8 @@ final class AB_MCP_Sync_Widget_Area_Writer {
 		if ( 0 !== strpos( $name, 'instance:' ) ) {
 			return array(
 				'state' => 'left',
-				'note'  => sprintf( 'A part %s of a widget area is of a name this version does not know: left as it is.', $name ),
+				/* translators: %s: the name of the part, as the journal names it. */
+				'note'  => sprintf( __( 'A part %s of a widget area is of a name this version does not know: left as it is.', 'alphabridge-mcp' ), $name ),
 			);
 		}
 		$live = substr( $name, strlen( 'instance:' ) );
@@ -957,7 +1014,8 @@ final class AB_MCP_Sync_Widget_Area_Writer {
 		if ( null === $was ) {
 			return array(
 				'state' => 'left',
-				'note'  => sprintf( 'The instance %s was made by the run and is not removed by the way back: it stays, and the area with it is a rest.', $live ),
+				/* translators: %s: the id of the widget instance (text-2, …). */
+				'note'  => sprintf( __( 'The instance %s was made by the run and is not removed by the way back: it stays, and the area with it is a rest.', 'alphabridge-mcp' ), $live ),
 			);
 		}
 		if ( $was === $is ) {
@@ -966,14 +1024,16 @@ final class AB_MCP_Sync_Widget_Area_Writer {
 		if ( null === $is || ! hash_equals( (string) $hash, AB_MCP_Sync_Shared_Row::hash( $is ) ) || ! isset( $state['rows'][ $base ] ) || null === $state['rows'][ $base ]['raw'] ) {
 			return array(
 				'state' => 'left',
-				'note'  => sprintf( 'The instance %s was changed since the step wrote it, so it is left as it is.', $live ),
+				/* translators: %s: the id of the widget instance (text-2, …). */
+				'note'  => sprintf( __( 'The instance %s was changed since the step wrote it, so it is left as it is.', 'alphabridge-mcp' ), $live ),
 			);
 		}
 		$read = AB_MCP_Sync_Canon::unserialized( $was );
 		if ( ! $read['ok'] ) {
 			return array(
 				'state' => 'left',
-				'note'  => sprintf( 'The backed-up settings of %s do not unpack, so they are left as they are.', $live ),
+				/* translators: %s: the id of the widget instance (text-2, …). */
+				'note'  => sprintf( __( 'The backed-up settings of %s do not unpack, so they are left as they are.', 'alphabridge-mcp' ), $live ),
 			);
 		}
 		$value                                         = $state['rows'][ $base ]['value'];
@@ -985,7 +1045,8 @@ final class AB_MCP_Sync_Widget_Area_Writer {
 		if ( ! AB_MCP_Sync_Shared_Row::put_back( 'widget_' . $base, (string) $state['rows'][ $base ]['raw'], AB_MCP_Sync_Shared_Row::field( $value ) ) ) {
 			return array(
 				'state' => 'left',
-				'note'  => sprintf( 'The row widget_%1$s changed while the instance %2$s was put back, so it is left as it is.', $base, $live ),
+				/* translators: 1: the widget (text, …); widget_text is the name of its row, 2: the id of the widget instance (text-2, …). */
+				'note'  => sprintf( __( 'The row widget_%1$s changed while the instance %2$s was put back, so it is left as it is.', 'alphabridge-mcp' ), $base, $live ),
 			);
 		}
 		$after = self::state( $area );
@@ -1003,7 +1064,7 @@ final class AB_MCP_Sync_Widget_Area_Writer {
 	private static function right_now() {
 		return current_user_can( 'edit_theme_options' ) ? null : array(
 			'state' => 'left',
-			'note'  => sprintf( 'Not put back: this account may not %s, asked again right before the write (a filter may have changed the rights). Set it by hand in wp-admin with an account that may.', 'change the widgets of this site (edit_theme_options)' ),
+			'note'  => __( 'Not put back: this account may not change the widgets of this site (edit_theme_options), asked again right before the write (a filter may have changed the rights). Set it by hand in wp-admin with an account that may.', 'alphabridge-mcp' ),
 		);
 	}
 
@@ -1019,17 +1080,19 @@ final class AB_MCP_Sync_Widget_Area_Writer {
 	public static function before_value( $part, $backup, $now, $live_id ) {
 		unset( $now, $live_id );
 		if ( ! is_array( $backup ) ) {
-			return 'none: the area was not on this site before the run.';
+			return __( 'none: the area was not on this site before the run.', 'alphabridge-mcp' );
 		}
 		$part = (string) $part;
 		if ( 'row' === $part ) {
 			$read = AB_MCP_Sync_Canon::unserialized( (string) $backup['row']['area'] );
-			return AB_MCP_Sync_Post_Writer::cut( 'instances: ' . ( $read['ok'] && is_array( $read['value'] ) ? implode( ', ', array_map( 'strval', $read['value'] ) ) : '(unreadable)' ), AB_MCP_Sync_Post_Writer::PART_CHARS );
+			/* translators: %s: the ids of the widget instances of the area, separated by commas. */
+			return AB_MCP_Sync_Post_Writer::cut( $read['ok'] && is_array( $read['value'] ) ? sprintf( __( 'instances: %s', 'alphabridge-mcp' ), implode( ', ', array_map( 'strval', $read['value'] ) ) ) : __( 'instances: (unreadable)', 'alphabridge-mcp' ), AB_MCP_Sync_Post_Writer::PART_CHARS );
 		}
 		if ( ! isset( $backup['parts'][ $part ] ) ) {
-			return 'none: the instance was not on this site before the run.';
+			return __( 'none: the instance was not on this site before the run.', 'alphabridge-mcp' );
 		}
 		$base = self::base_of( substr( $part, strlen( 'instance:' ) ) );
-		return AB_MCP_Sync_Post_Writer::cut( 'settings: ' . AB_MCP_Sync_Post_Writer::shown_value( $base, (string) $backup['parts'][ $part ] ), AB_MCP_Sync_Post_Writer::PART_CHARS );
+		/* translators: %s: the backed-up settings of the widget instance, as shown (a credential never). */
+		return AB_MCP_Sync_Post_Writer::cut( sprintf( __( 'settings: %s', 'alphabridge-mcp' ), AB_MCP_Sync_Post_Writer::shown_value( $base, (string) $backup['parts'][ $part ] ) ), AB_MCP_Sync_Post_Writer::PART_CHARS );
 	}
 }

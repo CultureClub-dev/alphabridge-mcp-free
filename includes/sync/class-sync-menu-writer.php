@@ -32,8 +32,10 @@
  * holds what the step read back, to a menu that is there and a position the
  * theme registers.
  *
- * Messages are English without gettext, as the other classes of the
- * takeover; each names the way.
+ * Messages and notes are in gettext, in the language of the site as they
+ * arise (a note is stored in the journal as it was written); error codes,
+ * states, kinds and the names of parts stay as the tools name them. Each
+ * names the way.
  *
  * @package AlphaBridge_MCP
  */
@@ -111,35 +113,40 @@ final class AB_MCP_Sync_Menu_Writer {
 	public static function target_of( array $line, array $item, array $ctx ) {
 		$taxonomy = isset( $line['identity']['taxonomy'] ) ? (string) $line['identity']['taxonomy'] : '';
 		if ( 'nav_menu' !== $taxonomy ) {
-			return AB_MCP_Sync_Post_Writer::locked( 'menu:item_shape', sprintf( 'the menu of the staging site is a term of %s, not of nav_menu', $taxonomy ) );
+			/* translators: %s: a taxonomy, as WordPress names it. */
+			return AB_MCP_Sync_Post_Writer::locked( 'menu:item_shape', sprintf( __( 'The menu of the staging site is a term of %s, not of nav_menu.', 'alphabridge-mcp' ), $taxonomy ) );
 		}
 		$held = AB_MCP_Sync_Post_Writer::line_lock( $line );
 		if ( null !== $held ) {
 			return $held;
 		}
 		if ( ! isset( $line['content']['row'], $line['content']['meta'], $line['form'] ) || ! is_array( $line['form'] ) ) {
-			return AB_MCP_Sync_Post_Writer::locked( 'post:content_missing', 'the package carries no content of the menu (a row of it could not be read on the staging site)' );
+			return AB_MCP_Sync_Post_Writer::locked( 'post:content_missing', __( 'The package carries no content of the menu (a row of it could not be read on the staging site).', 'alphabridge-mcp' ) );
 		}
 		// The positions of the menu on the staging site: names, in its form.
 		$named = isset( $line['form']['locations']['~set'] ) && is_array( $line['form']['locations']['~set'] ) ? $line['form']['locations']['~set'] : null;
 		if ( null === $named ) {
-			return AB_MCP_Sync_Post_Writer::locked( 'post:content_missing', 'the form of the menu in the package names no positions' );
+			return AB_MCP_Sync_Post_Writer::locked( 'post:content_missing', __( 'The form of the menu in the package names no positions.', 'alphabridge-mcp' ) );
 		}
 		$row = array();
 		foreach ( AB_MCP_Sync_Term_Writer::WRITTEN_COLUMNS as $column ) {
 			if ( ! isset( $line['content']['row'][ $column ] ) ) {
-				return AB_MCP_Sync_Post_Writer::locked( 'post:content_missing', sprintf( 'the package names no column %s of the menu', $column ) );
+				/* translators: %s: a column of the terms table (name, slug, …). */
+				return AB_MCP_Sync_Post_Writer::locked( 'post:content_missing', sprintf( __( 'The package names no column %s of the menu.', 'alphabridge-mcp' ), $column ) );
 			}
 			$row[ $column ] = AB_MCP_Sync_Post_Writer::bytes( $line['content']['row'][ $column ] );
 		}
 		if ( 'nav_menu' !== $row['taxonomy'] ) {
-			return AB_MCP_Sync_Post_Writer::locked( 'menu:item_shape', sprintf( 'the row of the menu names the taxonomy %s', $row['taxonomy'] ) );
+			/* translators: %s: a taxonomy, as WordPress names it. */
+			return AB_MCP_Sync_Post_Writer::locked( 'menu:item_shape', sprintf( __( 'The row of the menu names the taxonomy %s.', 'alphabridge-mcp' ), $row['taxonomy'] ) );
 		}
 		if ( '0' !== $row['term_group'] ) {
-			return AB_MCP_Sync_Post_Writer::locked( 'term:term_group', sprintf( 'the menu of the staging site carries the term_group %s', $row['term_group'] ) );
+			/* translators: %s: the value of the column term_group. */
+			return AB_MCP_Sync_Post_Writer::locked( 'term:term_group', sprintf( __( 'The menu of the staging site carries the term_group %s.', 'alphabridge-mcp' ), $row['term_group'] ) );
 		}
 		if ( '0' !== $row['parent'] ) {
-			return AB_MCP_Sync_Post_Writer::locked( 'term:parent', sprintf( 'the menu of the staging site has the parent %s, and menus have none', $row['parent'] ) );
+			/* translators: %s: the id of the parent term. */
+			return AB_MCP_Sync_Post_Writer::locked( 'term:parent', sprintf( __( 'The menu of the staging site has the parent %s, and menus have none.', 'alphabridge-mcp' ), $row['parent'] ) );
 		}
 		$plan    = AB_MCP_Sync_Refs::plan( $ctx['map'], $ctx['addresses'], isset( $ctx['routes'] ) ? $ctx['routes'] : null );
 		$changed = false;
@@ -149,14 +156,16 @@ final class AB_MCP_Sync_Menu_Writer {
 			$texts[ $column ] = AB_MCP_Sync_Refs::rewrite_text( $row[ $column ], $plan, array(), $changed );
 			$missing          = AB_MCP_Sync_Post_Writer::unresolved( $plan['missing'], isset( $ctx['pending'] ) && is_array( $ctx['pending'] ) ? $ctx['pending'] : array() );
 			if ( array() !== $missing ) {
-				return AB_MCP_Sync_Post_Writer::locked( 'menu:reference_unmapped', sprintf( 'the %1$s of the menu: %2$s', $column, AB_MCP_Sync_Post_Writer::missing_text( $missing ) ) );
+				/* translators: 1: a field of the menu (name or description), 2: the references, as the tools name them (post 12, term 4, …). */
+				return AB_MCP_Sync_Post_Writer::locked( 'menu:reference_unmapped', sprintf( __( 'The field %1$s of the menu holds references without a counterpart on this site: %2$s.', 'alphabridge-mcp' ), $column, self::missing_refs( $missing ) ) );
 			}
 		}
 		$meta = array();
 		foreach ( $line['content']['meta'] as $pair ) {
 			$key = AB_MCP_Sync_Post_Writer::bytes( $pair[0] );
 			if ( 'create' === $item['op'] ) {
-				return AB_MCP_Sync_Post_Writer::locked( 'term:create_with_meta', sprintf( 'meta key %s of the new menu', $key ) );
+				/* translators: %s: a meta key. */
+				return AB_MCP_Sync_Post_Writer::locked( 'term:create_with_meta', sprintf( __( 'The new menu carries the meta key %s.', 'alphabridge-mcp' ), $key ) );
 			}
 			$plan['missing'] = array();
 			$written         = AB_MCP_Sync_Post_Writer::meta_value( AB_MCP_Sync_Post_Writer::bytes( $pair[1] ), $plan, $changed, 'term:meta_rule' );
@@ -164,14 +173,15 @@ final class AB_MCP_Sync_Menu_Writer {
 				return $written;
 			}
 			if ( array() !== $plan['missing'] ) {
-				return AB_MCP_Sync_Post_Writer::locked( 'menu:reference_unmapped', sprintf( 'a reference in the meta key %s of the menu without a counterpart on this site', $key ) );
+				/* translators: %s: a meta key. */
+				return AB_MCP_Sync_Post_Writer::locked( 'menu:reference_unmapped', sprintf( __( 'A reference in the meta key %s of the menu has no counterpart on this site.', 'alphabridge-mcp' ), $key ) );
 			}
 			$meta[ $key ][] = $written;
 		}
 		$locations = array();
 		foreach ( $named as $location ) {
 			if ( ! is_string( $location ) || '' === $location ) {
-				return AB_MCP_Sync_Post_Writer::locked( 'menu:item_shape', 'the package names a position of the menu that is no name' );
+				return AB_MCP_Sync_Post_Writer::locked( 'menu:item_shape', __( 'The package names a position of the menu that is no name.', 'alphabridge-mcp' ) );
 			}
 			$locations[] = $location;
 		}
@@ -220,7 +230,7 @@ final class AB_MCP_Sync_Menu_Writer {
 	 */
 	public static function precheck( array $prepared, $live_id, $now ) {
 		if ( ! current_user_can( 'edit_theme_options' ) ) {
-			return AB_MCP_Sync_Post_Writer::rights( 'change the menus of this site (edit_theme_options)' );
+			return AB_MCP_Sync_Post_Writer::rights( __( 'This account may not change the menus of this site (edit_theme_options).', 'alphabridge-mcp' ) );
 		}
 		if ( null !== $live_id ) {
 			$current = self::current( (int) $live_id );
@@ -228,7 +238,8 @@ final class AB_MCP_Sync_Menu_Writer {
 				return $current;
 			}
 			if ( null === $current ) {
-				return new WP_Error( 'ab_mcp_sync_target_gone', sprintf( 'The menu %d of this site is no longer there, so nothing is written for it. Make a new report (wp_site_diff) and plan again.', (int) $live_id ) );
+				/* translators: %d: menu id on this site. */
+				return new WP_Error( 'ab_mcp_sync_target_gone', sprintf( __( 'The menu %d of this site is no longer there, so nothing is written for it. Make a new report (wp_site_diff) and plan again.', 'alphabridge-mcp' ), (int) $live_id ) );
 			}
 		}
 		$ok = AB_MCP_Sync_Term_Writer::precheck( $prepared, $live_id, $now );
@@ -242,7 +253,8 @@ final class AB_MCP_Sync_Menu_Writer {
 		$registered = get_registered_nav_menus();
 		foreach ( $prepared['locations'] as $location ) {
 			if ( ! isset( $registered[ $location ] ) ) {
-				return AB_MCP_Sync_Post_Writer::locked( 'menu:location_unregistered', sprintf( 'the position %s, which the active theme of this site does not register', $location ) );
+				/* translators: %s: a menu position, as the theme names it. */
+				return AB_MCP_Sync_Post_Writer::locked( 'menu:location_unregistered', sprintf( __( 'The active theme of this site does not register the position %s.', 'alphabridge-mcp' ), $location ) );
 			}
 		}
 		return true;
@@ -258,7 +270,9 @@ final class AB_MCP_Sync_Menu_Writer {
 	 * @return true|WP_Error
 	 */
 	public static function live_rule( $live_id, array $source ) {
-		$lock = AB_MCP_Sync_Post_Writer::read_lock( self::live_read( (int) $live_id, $source ), sprintf( 'the menu %d of this site', (int) $live_id ) );
+		// The object for the detail of read_lock(), a whole sentence.
+		/* translators: %d: term ID of a menu. */
+		$lock = AB_MCP_Sync_Post_Writer::read_lock( self::live_read( (int) $live_id, $source ), sprintf( __( 'The object is the menu %d of this site.', 'alphabridge-mcp' ), (int) $live_id ) );
 		return null === $lock ? true : $lock;
 	}
 
@@ -349,17 +363,19 @@ final class AB_MCP_Sync_Menu_Writer {
 	public static function positions( $self ) {
 		$sheet = AB_MCP_Sync_Rows::option( 'stylesheet' );
 		if ( ! is_array( $sheet ) || '' === (string) $sheet['value'] ) {
-			return new WP_Error( 'ab_mcp_sync_rows_unread', 'The active theme of this site could not be read (the option stylesheet), so no position of a menu is written. Try again; if it keeps failing, the database error log names the cause.' );
+			return new WP_Error( 'ab_mcp_sync_rows_unread', __( 'The active theme of this site could not be read (the option stylesheet), so no position of a menu is written. Try again; if it keeps failing, the database error log names the cause.', 'alphabridge-mcp' ) );
 		}
 		$option = 'theme_mods_' . (string) $sheet['value'];
 		$row    = AB_MCP_Sync_Shared_Row::read( $option );
 		if ( null === $row || ( is_array( $row ) && ( ! $row['ok'] || ! is_array( $row['value'] ) ) ) ) {
-			return new WP_Error( 'ab_mcp_sync_rows_unread', sprintf( 'The theme mods of this site (%s) could not be read or do not unpack, so no position of a menu is written. Check them in wp-admin (Appearance → Menus → Manage Locations).', $option ) );
+			/* translators: %s: the name of the option of the theme mods (theme_mods_…). */
+			return new WP_Error( 'ab_mcp_sync_rows_unread', sprintf( __( 'The theme mods of this site (%s) could not be read or do not unpack, so no position of a menu is written. Check them in wp-admin (Appearance → Menus → Manage Locations).', 'alphabridge-mcp' ), $option ) );
 		}
 		$mods      = false === $row ? array() : $row['value'];
 		$locations = array_key_exists( 'nav_menu_locations', $mods ) ? $mods['nav_menu_locations'] : array();
 		if ( ! is_array( $locations ) ) {
-			return new WP_Error( 'ab_mcp_sync_rows_unread', sprintf( 'The positions of the menus in %s are no list, so no position of a menu is written. Check them in wp-admin (Appearance → Menus → Manage Locations).', $option ) );
+			/* translators: %s: the name of the option of the theme mods (theme_mods_…). */
+			return new WP_Error( 'ab_mcp_sync_rows_unread', sprintf( __( 'The positions of the menus in %s are no list, so no position of a menu is written. Check them in wp-admin (Appearance → Menus → Manage Locations).', 'alphabridge-mcp' ), $option ) );
 		}
 		$rest = $mods;
 		unset( $rest['nav_menu_locations'] );
@@ -513,7 +529,7 @@ final class AB_MCP_Sync_Menu_Writer {
 			self::class,
 			null === $live_id ? null : (int) $live_id,
 			$pre,
-			static fn() => current_user_can( 'edit_theme_options' ) ? true : AB_MCP_Sync_Post_Writer::rights( 'change the menus of this site (edit_theme_options)' ),
+			static fn() => current_user_can( 'edit_theme_options' ) ? true : AB_MCP_Sync_Post_Writer::rights( __( 'This account may not change the menus of this site (edit_theme_options).', 'alphabridge-mcp' ) ),
 			static fn() => AB_MCP_Sync_Term_Writer::write_row( $prepared, $live_id )
 		);
 	}
@@ -539,7 +555,8 @@ final class AB_MCP_Sync_Menu_Writer {
 			return AB_MCP_Sync_Term_Writer::write_part( (int) $live_id, $name, $prepared, $pre, self::class );
 		}
 		if ( 0 !== strpos( $name, 'location:' ) ) {
-			return new WP_Error( 'ab_mcp_sync_write_failed', sprintf( 'The part %s is of a name the kind menu does not write. Check the menu in wp-admin (Appearance → Menus).', $name ) );
+			/* translators: %s: the name of a part, as the tools name it (row, meta:…, location:…). */
+			return new WP_Error( 'ab_mcp_sync_write_failed', sprintf( __( 'The part %s is of a name the kind menu does not write. Check the menu in wp-admin (Appearance → Menus).', 'alphabridge-mcp' ), $name ) );
 		}
 		$location = substr( $name, strlen( 'location:' ) );
 		$set      = in_array( $location, $prepared['locations'], true );
@@ -598,11 +615,13 @@ final class AB_MCP_Sync_Menu_Writer {
 	 */
 	private static function location_refusal( $location, $set ) {
 		if ( ! current_user_can( 'edit_theme_options' ) ) {
-			return AB_MCP_Sync_Post_Writer::rights( sprintf( 'set the position %s of a menu (edit_theme_options)', $location ) );
+			/* translators: %s: a menu position, as the theme names it. */
+			return AB_MCP_Sync_Post_Writer::rights( sprintf( __( 'This account may not set the position %s of a menu (edit_theme_options).', 'alphabridge-mcp' ), $location ) );
 		}
 		$registered = get_registered_nav_menus();
 		if ( $set && ! isset( $registered[ $location ] ) ) {
-			return AB_MCP_Sync_Post_Writer::locked( 'menu:location_unregistered', sprintf( 'the position %s, which the active theme of this site does not register', $location ) );
+			/* translators: %s: a menu position, as the theme names it. */
+			return AB_MCP_Sync_Post_Writer::locked( 'menu:location_unregistered', sprintf( __( 'The active theme of this site does not register the position %s.', 'alphabridge-mcp' ), $location ) );
 		}
 		return null;
 	}
@@ -680,7 +699,7 @@ final class AB_MCP_Sync_Menu_Writer {
 	public static function restore_right( $part, $live_id, array $backup, array $now ) {
 		$part = (string) $part;
 		if ( ! current_user_can( 'edit_theme_options' ) ) {
-			return 'change the menus of this site (edit_theme_options)';
+			return __( 'This account may not change the menus of this site (edit_theme_options).', 'alphabridge-mcp' );
 		}
 		if ( 'row' === $part || 0 === strpos( $part, 'meta:' ) ) {
 			return AB_MCP_Sync_Term_Writer::restore_right( $part, (int) $live_id, array_intersect_key( $backup, array_flip( array( 'row', 'meta', 'terms' ) ) ), array_intersect_key( $now, array_flip( array( 'row', 'meta', 'terms' ) ) ) );
@@ -692,11 +711,13 @@ final class AB_MCP_Sync_Menu_Writer {
 			}
 			$registered = get_registered_nav_menus();
 			if ( ! isset( $registered[ substr( $part, strlen( 'location:' ) ) ] ) ) {
-				return sprintf( 'set the position %s, which the active theme of this site does not register now', substr( $part, strlen( 'location:' ) ) );
+				/* translators: %s: a menu position, as the theme names it. */
+				return sprintf( __( 'The position %s cannot be set back: the active theme of this site does not register it now.', 'alphabridge-mcp' ), substr( $part, strlen( 'location:' ) ) );
 			}
 			$menu = self::SELF === $value ? (int) $live_id : self::menu_of( $value );
 			if ( null === $menu || ( $menu > 0 && ! is_array( AB_MCP_Sync_Rows::term( $menu, 'nav_menu' ) ) ) ) {
-				return sprintf( 'set the position %s to a menu that is no longer there', substr( $part, strlen( 'location:' ) ) );
+				/* translators: %s: a menu position, as the theme names it. */
+				return sprintf( __( 'The position %s cannot be set back: the menu it named is no longer there.', 'alphabridge-mcp' ), substr( $part, strlen( 'location:' ) ) );
 			}
 		}
 		return true;
@@ -738,7 +759,8 @@ final class AB_MCP_Sync_Menu_Writer {
 		if ( 0 !== strpos( $name, 'location:' ) ) {
 			return array(
 				'state' => 'left',
-				'note'  => sprintf( 'A part %s of a menu is of a name this version does not know: left as it is.', $name ),
+				/* translators: %s: the name of a part, as the journal names it. */
+				'note'  => sprintf( __( 'A part %s of a menu is of a name this version does not know: left as it is.', 'alphabridge-mcp' ), $name ),
 			);
 		}
 		$positions = self::positions( (int) $live_id );
@@ -753,7 +775,8 @@ final class AB_MCP_Sync_Menu_Writer {
 		if ( ! hash_equals( (string) $hash, AB_MCP_Sync_Shared_Row::hash( $is ) ) || null === $positions['raw'] ) {
 			return array(
 				'state' => 'left',
-				'note'  => sprintf( 'The position %s was changed since the step wrote it, so it is left as it is.', substr( $name, strlen( 'location:' ) ) ),
+				/* translators: %s: a menu position, as the theme names it. */
+				'note'  => sprintf( __( 'The position %s was changed since the step wrote it, so it is left as it is.', 'alphabridge-mcp' ), substr( $name, strlen( 'location:' ) ) ),
 			);
 		}
 		$location  = substr( $name, strlen( 'location:' ) );
@@ -768,7 +791,8 @@ final class AB_MCP_Sync_Menu_Writer {
 			if ( ! $read['ok'] ) {
 				return array(
 					'state' => 'left',
-					'note'  => sprintf( 'The backed-up value of the position %s does not unpack, so it is left as it is.', $location ),
+					/* translators: %s: a menu position, as the theme names it. */
+					'note'  => sprintf( __( 'The backed-up value of the position %s does not unpack, so it is left as it is.', 'alphabridge-mcp' ), $location ),
 				);
 			}
 			$locations[ $location ] = $read['value'];
@@ -777,13 +801,15 @@ final class AB_MCP_Sync_Menu_Writer {
 		if ( ! current_user_can( 'edit_theme_options' ) ) {
 			return array(
 				'state' => 'left',
-				'note'  => sprintf( 'Not put back: this account may not %s, asked again right before the write (a filter may have changed the rights). Set it by hand in wp-admin with an account that may.', sprintf( 'set the position %s (edit_theme_options)', $location ) ),
+				/* translators: %s: a menu position, as the theme names it. */
+				'note'  => sprintf( __( 'Not put back: this account may not set the position %s (edit_theme_options), asked again right before the write (a filter may have changed the rights). Set it by hand in wp-admin with an account that may.', 'alphabridge-mcp' ), $location ),
 			);
 		}
 		if ( ! AB_MCP_Sync_Shared_Row::put_back( $positions['option'], (string) $positions['raw'], AB_MCP_Sync_Shared_Row::field( $mods ) ) ) {
 			return array(
 				'state' => 'left',
-				'note'  => sprintf( 'The theme mods changed while the position %s was put back, so it is left as it is.', $location ),
+				/* translators: %s: a menu position, as the theme names it. */
+				'note'  => sprintf( __( 'The theme mods changed while the position %s was put back, so it is left as it is.', 'alphabridge-mcp' ), $location ),
 			);
 		}
 		$after = self::positions( (int) $live_id );
@@ -805,17 +831,39 @@ final class AB_MCP_Sync_Menu_Writer {
 			return AB_MCP_Sync_Term_Writer::before_value( $part, is_array( $backup ) ? array_intersect_key( $backup, array_flip( array( 'row', 'meta', 'terms' ) ) ) : null, is_array( $now ) ? array_intersect_key( $now, array_flip( array( 'row', 'meta', 'terms' ) ) ) : null, $live_id );
 		}
 		if ( ! is_array( $backup ) ) {
-			return 'none: the menu was not on this site before the run.';
+			return __( 'none: the menu was not on this site before the run.', 'alphabridge-mcp' );
 		}
 		$was = isset( $backup['parts'][ $part ] ) ? $backup['parts'][ $part ] : null;
 		if ( null === $was ) {
-			return sprintf( 'position %s: no menu', substr( $part, strlen( 'location:' ) ) );
+			/* translators: %s: a menu position, as the theme names it. */
+			return sprintf( __( 'position %s: no menu', 'alphabridge-mcp' ), substr( $part, strlen( 'location:' ) ) );
 		}
 		if ( self::SELF === $was ) {
-			return sprintf( 'position %s: this menu', substr( $part, strlen( 'location:' ) ) );
+			/* translators: %s: a menu position, as the theme names it. */
+			return sprintf( __( 'position %s: this menu', 'alphabridge-mcp' ), substr( $part, strlen( 'location:' ) ) );
 		}
 		$menu = self::menu_of( $was );
-		return null === $menu ? sprintf( 'position %s: a value that is no menu id', substr( $part, strlen( 'location:' ) ) ) : sprintf( 'position %1$s: the menu %2$d', substr( $part, strlen( 'location:' ) ), $menu );
+		return null === $menu
+			/* translators: %s: a menu position, as the theme names it. */
+			? sprintf( __( 'position %s: a value that is no menu id', 'alphabridge-mcp' ), substr( $part, strlen( 'location:' ) ) )
+			/* translators: 1: a menu position, as the theme names it, 2: menu id. */
+			: sprintf( __( 'position %1$s: the menu %2$d', 'alphabridge-mcp' ), substr( $part, strlen( 'location:' ) ), $menu );
+	}
+
+	/**
+	 * The references of a field without a counterpart on this site, as the
+	 * tools name them (post 12, term 4; the first five), for a sentence of
+	 * the caller.
+	 *
+	 * @param array[] $missing The missing references (space, id).
+	 * @return string
+	 */
+	public static function missing_refs( array $missing ) {
+		$out = array();
+		foreach ( array_slice( $missing, 0, 5 ) as $m ) {
+			$out[] = (string) ( $m['space'] ?? '?' ) . ' ' . (int) ( $m['id'] ?? 0 );
+		}
+		return implode( ', ', $out );
 	}
 }
 
@@ -888,30 +936,34 @@ final class AB_MCP_Sync_Menu_Item_Writer {
 			return $held;
 		}
 		if ( ! isset( $line['content']['row'], $line['content']['meta'], $line['content']['terms'], $line['form'] ) || ! is_array( $line['form'] ) || ! is_array( $line['content']['terms'] ) ) {
-			return AB_MCP_Sync_Post_Writer::locked( 'post:content_missing', 'the package carries no content of the menu item (a row of it could not be read on the staging site)' );
+			return AB_MCP_Sync_Post_Writer::locked( 'post:content_missing', __( 'The package carries no content of the menu item (a row of it could not be read on the staging site).', 'alphabridge-mcp' ) );
 		}
 		$menus = array();
 		foreach ( $line['content']['terms'] as $term ) {
 			if ( ! is_array( $term ) || 'nav_menu' !== AB_MCP_Sync_Post_Writer::bytes( $term['taxonomy'] ?? '' ) ) {
-				return AB_MCP_Sync_Post_Writer::locked( 'menu:item_shape', 'the menu item of the staging site carries a term of another taxonomy than nav_menu' );
+				return AB_MCP_Sync_Post_Writer::locked( 'menu:item_shape', __( 'The menu item of the staging site carries a term of another taxonomy than nav_menu.', 'alphabridge-mcp' ) );
 			}
 			$menus[] = (int) $term['term_id'];
 		}
 		$row = array();
 		foreach ( self::ROW as $column ) {
 			if ( ! isset( $line['content']['row'][ $column ] ) ) {
-				return AB_MCP_Sync_Post_Writer::locked( 'post:content_missing', sprintf( 'the package names no column %s of the menu item', $column ) );
+				/* translators: %s: a column of the posts table (post_title, …). */
+				return AB_MCP_Sync_Post_Writer::locked( 'post:content_missing', sprintf( __( 'The package names no column %s of the menu item.', 'alphabridge-mcp' ), $column ) );
 			}
 			$row[ $column ] = AB_MCP_Sync_Post_Writer::bytes( $line['content']['row'][ $column ] );
 		}
 		if ( 'nav_menu_item' !== $row['post_type'] ) {
-			return AB_MCP_Sync_Post_Writer::locked( 'menu:item_shape', sprintf( 'the menu item of the staging site is a post of the type %s', $row['post_type'] ) );
+			/* translators: %s: a post type, as WordPress names it. */
+			return AB_MCP_Sync_Post_Writer::locked( 'menu:item_shape', sprintf( __( 'The menu item of the staging site is a post of the type %s.', 'alphabridge-mcp' ), $row['post_type'] ) );
 		}
 		if ( ! in_array( $row['post_status'], array( 'publish', 'draft' ), true ) ) {
-			return AB_MCP_Sync_Post_Writer::locked( 'menu:item_shape', sprintf( 'the menu item of the staging site has the status %s; the core gives an item publish or draft', $row['post_status'] ) );
+			/* translators: %s: a post status, as WordPress names it. */
+			return AB_MCP_Sync_Post_Writer::locked( 'menu:item_shape', sprintf( __( 'The menu item of the staging site has the status %s; the core gives an item publish or draft.', 'alphabridge-mcp' ), $row['post_status'] ) );
 		}
 		if ( 1 !== preg_match( '/^[1-9][0-9]*\z/', $row['menu_order'] ) ) {
-			return AB_MCP_Sync_Post_Writer::locked( 'menu:item_shape', sprintf( 'the menu item of the staging site has the position %s; the core gives an item one from 1 on', $row['menu_order'] ) );
+			/* translators: %s: the value of the column menu_order. */
+			return AB_MCP_Sync_Post_Writer::locked( 'menu:item_shape', sprintf( __( 'The menu item of the staging site has the position %s; the core gives an item one from 1 on.', 'alphabridge-mcp' ), $row['menu_order'] ) );
 		}
 		$meta = array();
 		foreach ( $line['content']['meta'] as $pair ) {
@@ -919,12 +971,14 @@ final class AB_MCP_Sync_Menu_Item_Writer {
 		}
 		foreach ( self::CORE_META as $key ) {
 			if ( ! isset( $meta[ $key ] ) || 1 !== count( $meta[ $key ] ) ) {
-				return AB_MCP_Sync_Post_Writer::locked( 'menu:item_shape', sprintf( 'the menu item of the staging site has %1$d rows of %2$s, where the core writes one', isset( $meta[ $key ] ) ? count( $meta[ $key ] ) : 0, $key ) );
+				/* translators: 1: number of rows (0 or more than 1), 2: a meta key of the core. */
+				return AB_MCP_Sync_Post_Writer::locked( 'menu:item_shape', sprintf( __( 'The menu item of the staging site has %1$d rows of %2$s, where the core writes one.', 'alphabridge-mcp' ), isset( $meta[ $key ] ) ? count( $meta[ $key ] ) : 0, $key ) );
 			}
 		}
 		$type = $meta['_menu_item_type'][0];
 		if ( ! in_array( $type, self::TYPES, true ) ) {
-			return AB_MCP_Sync_Post_Writer::locked( 'menu:item_shape', sprintf( 'the menu item of the staging site is of the type %s', $type ) );
+			/* translators: %s: the value of _menu_item_type. */
+			return AB_MCP_Sync_Post_Writer::locked( 'menu:item_shape', sprintf( __( 'The menu item of the staging site is of the type %s.', 'alphabridge-mcp' ), $type ) );
 		}
 		$live_id = 'update' === $item['op'] ? (int) $item['live_ref'] : null;
 		$plan    = AB_MCP_Sync_Refs::plan( $ctx['map'], $ctx['addresses'], isset( $ctx['routes'] ) ? $ctx['routes'] : null );
@@ -940,7 +994,8 @@ final class AB_MCP_Sync_Menu_Item_Writer {
 			$plan['missing'] = array();
 			$written[ $key ] = AB_MCP_Sync_Refs::rewrite_menu_item_meta( $key, $meta[ $key ][0], $type, $live_id, $plan, $changed );
 			if ( array() !== AB_MCP_Sync_Post_Writer::unresolved( $plan['missing'], $pending ) ) {
-				return AB_MCP_Sync_Post_Writer::locked( 'menu:reference_unmapped', sprintf( '%1$s of the menu item: %2$s', $key, AB_MCP_Sync_Post_Writer::missing_text( $plan['missing'] ) ) );
+				/* translators: 1: a meta key of the core, 2: the references, as the tools name them (post 12, term 4, …). */
+				return AB_MCP_Sync_Post_Writer::locked( 'menu:reference_unmapped', sprintf( __( 'The meta %1$s of the menu item holds references without a counterpart on this site: %2$s.', 'alphabridge-mcp' ), $key, AB_MCP_Sync_Menu_Writer::missing_refs( $plan['missing'] ) ) );
 			}
 		}
 		// A reference the run makes first (the check only): its id here is not
@@ -952,19 +1007,22 @@ final class AB_MCP_Sync_Menu_Item_Writer {
 			$plan['missing']  = array();
 			$texts[ $column ] = AB_MCP_Sync_Refs::rewrite_text( $row[ $column ], $plan, array(), $changed );
 			if ( array() !== AB_MCP_Sync_Post_Writer::unresolved( $plan['missing'], $pending ) ) {
-				return AB_MCP_Sync_Post_Writer::locked( 'menu:reference_unmapped', sprintf( 'the %1$s of the menu item: %2$s', $column, AB_MCP_Sync_Post_Writer::missing_text( $plan['missing'] ) ) );
+				/* translators: 1: a column of the posts table (post_title, …), 2: the references, as the tools name them (post 12, term 4, …). */
+				return AB_MCP_Sync_Post_Writer::locked( 'menu:reference_unmapped', sprintf( __( 'The field %1$s of the menu item holds references without a counterpart on this site: %2$s.', 'alphabridge-mcp' ), $column, AB_MCP_Sync_Menu_Writer::missing_refs( $plan['missing'] ) ) );
 			}
 		}
 		// The menu, by its pair; one the run makes first is pending.
 		if ( 1 !== count( $menus ) ) {
-			return AB_MCP_Sync_Post_Writer::locked( 'menu:item_shape', sprintf( 'the menu item of the staging site is in %d menus, where the core keeps it in one', count( $menus ) ) );
+			/* translators: %d: number of menus (0 or more than 1). */
+			return AB_MCP_Sync_Post_Writer::locked( 'menu:item_shape', sprintf( __( 'The menu item of the staging site is in %d menus, where the core keeps it in one.', 'alphabridge-mcp' ), count( $menus ) ) );
 		}
 		$staging_menu = (int) $menus[0];
 		$plan['missing'] = array();
 		$menu            = AB_MCP_Sync_Refs::mapped_id( $plan, 'term', $staging_menu );
 		$menu_pending    = null === $menu && isset( $pending['term'][ $staging_menu ] );
 		if ( null === $menu && ! $menu_pending ) {
-			return AB_MCP_Sync_Post_Writer::locked( 'menu:reference_unmapped', sprintf( 'the menu %d of the staging site the item is in', $staging_menu ) );
+			/* translators: %d: menu id on the staging site. */
+			return AB_MCP_Sync_Post_Writer::locked( 'menu:reference_unmapped', sprintf( __( 'The menu %d of the staging site the item is in has no counterpart on this site.', 'alphabridge-mcp' ), $staging_menu ) );
 		}
 		// The other meta (decision 28): by its right, as for a post.
 		$other = array();
@@ -975,7 +1033,8 @@ final class AB_MCP_Sync_Menu_Item_Writer {
 				continue;
 			}
 			if ( 'create' === $item['op'] && ! AB_MCP_Sync_Post_Writer::new_meta_allowed( $key, 'nav_menu_item' ) ) {
-				return AB_MCP_Sync_Post_Writer::locked( 'post:create_with_object_meta', sprintf( 'meta key %s of the new menu item', $key ) );
+				/* translators: %s: a meta key. */
+				return AB_MCP_Sync_Post_Writer::locked( 'post:create_with_object_meta', sprintf( __( 'The new menu item carries the meta key %s.', 'alphabridge-mcp' ), $key ) );
 			}
 			foreach ( $values as $raw ) {
 				$plan['missing'] = array();
@@ -984,14 +1043,15 @@ final class AB_MCP_Sync_Menu_Item_Writer {
 					return $value;
 				}
 				if ( array() !== AB_MCP_Sync_Post_Writer::unresolved( $plan['missing'], $pending ) ) {
-					return AB_MCP_Sync_Post_Writer::locked( 'menu:reference_unmapped', sprintf( 'a reference in the meta key %s of the menu item without a counterpart on this site', $key ) );
+					/* translators: %s: a meta key. */
+					return AB_MCP_Sync_Post_Writer::locked( 'menu:reference_unmapped', sprintf( __( 'A reference in the meta key %s of the menu item has no counterpart on this site.', 'alphabridge-mcp' ), $key ) );
 				}
 				$other[ $key ][] = $value;
 			}
 		}
 		$classes = AB_MCP_Sync_Canon::unserialized( $written['_menu_item_classes'] );
 		if ( ! $classes['ok'] || ! is_array( $classes['value'] ) || ! array_is_list( $classes['value'] ) || array() !== array_filter( $classes['value'], static fn( $c ) => ! is_string( $c ) ) ) {
-			return AB_MCP_Sync_Post_Writer::locked( 'menu:sanitizer', 'the classes of the menu item are no list of names (_menu_item_classes)' );
+			return AB_MCP_Sync_Post_Writer::locked( 'menu:sanitizer', __( 'The classes of the menu item are no list of names (_menu_item_classes).', 'alphabridge-mcp' ) );
 		}
 		$target = AB_MCP_Sync_Canon::mapped( $line['form'], $ctx['map'] );
 		$fields = array(
@@ -1050,7 +1110,7 @@ final class AB_MCP_Sync_Menu_Item_Writer {
 	public static function precheck( array $prepared, $live_id, $now ) {
 		unset( $now );
 		if ( ! current_user_can( 'edit_theme_options' ) ) {
-			return AB_MCP_Sync_Post_Writer::rights( 'change the menus of this site (edit_theme_options)' );
+			return AB_MCP_Sync_Post_Writer::rights( __( 'This account may not change the menus of this site (edit_theme_options).', 'alphabridge-mcp' ) );
 		}
 		$current = null;
 		if ( null !== $live_id ) {
@@ -1059,24 +1119,28 @@ final class AB_MCP_Sync_Menu_Item_Writer {
 				return $current;
 			}
 			if ( null === $current ) {
-				return new WP_Error( 'ab_mcp_sync_target_gone', sprintf( 'The menu item %d of this site is no longer there, so nothing is written for it. Make a new report (wp_site_diff) and plan again.', (int) $live_id ) );
+				/* translators: %d: menu item id on this site. */
+				return new WP_Error( 'ab_mcp_sync_target_gone', sprintf( __( 'The menu item %d of this site is no longer there, so nothing is written for it. Make a new report (wp_site_diff) and plan again.', 'alphabridge-mcp' ), (int) $live_id ) );
 			}
 			if ( ! current_user_can( 'edit_post', (int) $live_id ) ) {
-				return AB_MCP_Sync_Post_Writer::rights( sprintf( 'edit the menu item %d (edit_post)', (int) $live_id ) );
+				/* translators: %d: menu item id on this site. */
+				return AB_MCP_Sync_Post_Writer::rights( sprintf( __( 'This account may not edit the menu item %d (edit_post).', 'alphabridge-mcp' ), (int) $live_id ) );
 			}
 		} else {
 			$pto = get_post_type_object( 'nav_menu_item' );
 			if ( ! is_object( $pto ) || ! current_user_can( $pto->cap->create_posts ) ) {
-				return AB_MCP_Sync_Post_Writer::rights( 'make a menu item (create_posts of nav_menu_item)' );
+				return AB_MCP_Sync_Post_Writer::rights( __( 'This account may not make a menu item (create_posts of nav_menu_item).', 'alphabridge-mcp' ) );
 			}
 		}
 		if ( empty( $prepared['pending'] ) ) {
 			$menu = (int) $prepared['menu'];
 			if ( ! is_array( AB_MCP_Sync_Rows::term( $menu, 'nav_menu' ) ) ) {
-				return AB_MCP_Sync_Post_Writer::locked( 'menu:reference_unmapped', sprintf( 'the menu %d of this site is not there', $menu ) );
+				/* translators: %d: menu id on this site. */
+				return AB_MCP_Sync_Post_Writer::locked( 'menu:reference_unmapped', sprintf( __( 'The menu %d of this site is not there.', 'alphabridge-mcp' ), $menu ) );
 			}
 			if ( ! current_user_can( 'assign_term', $menu ) ) {
-				return AB_MCP_Sync_Post_Writer::rights( sprintf( 'add items to the menu %d (assign_term)', $menu ) );
+				/* translators: %d: menu id on this site. */
+				return AB_MCP_Sync_Post_Writer::rights( sprintf( __( 'This account may not add items to the menu %d (assign_term).', 'alphabridge-mcp' ), $menu ) );
 			}
 			$refusal = self::sanitizer_refusal( $prepared, $live_id );
 			if ( null !== $refusal ) {
@@ -1090,12 +1154,14 @@ final class AB_MCP_Sync_Menu_Item_Writer {
 			if ( is_array( $current ) ) {
 				$may = AB_MCP_Sync_Post_Writer::meta_right( (int) $live_id, $key, self::targets( $prepared, $key ), AB_MCP_Sync_Post_Writer::meta_values( $current, $key ) );
 				if ( true !== $may ) {
-					return AB_MCP_Sync_Post_Writer::locked( '*:meta_without_rule', sprintf( 'meta key %1$s of the menu item on this site: %2$s', $key, $may ) );
+					/* translators: 1: a meta key, 2: the capability WordPress refused, as the code names it (add_post_meta, …). */
+					return AB_MCP_Sync_Post_Writer::locked( '*:meta_without_rule', sprintf( __( 'Meta key %1$s of the menu item on this site: %2$s refused.', 'alphabridge-mcp' ), $key, $may ) );
 				}
 			}
 			foreach ( isset( $prepared['meta'][ $key ] ) ? $prepared['meta'][ $key ] : array() as $value ) {
 				if ( AB_MCP_Sync_Post_Writer::db_form( sanitize_meta( (string) $key, $value, 'post', 'nav_menu_item' ) ) !== AB_MCP_Sync_Post_Writer::stored_form( $value ) ) {
-					return AB_MCP_Sync_Post_Writer::locked( 'menu:sanitizer', sprintf( 'meta key %s (sanitize_meta() changes its value)', $key ) );
+					/* translators: %s: a meta key. */
+					return AB_MCP_Sync_Post_Writer::locked( 'menu:sanitizer', sprintf( __( 'sanitize_meta() changes the value of the meta key %s of the menu item.', 'alphabridge-mcp' ), $key ) );
 				}
 			}
 		}
@@ -1121,7 +1187,7 @@ final class AB_MCP_Sync_Menu_Item_Writer {
 	 *
 	 * @param array    $prepared target_of().
 	 * @param int|null $live_id  The item here.
-	 * @return string|null
+	 * @return string|null A whole sentence, or null.
 	 */
 	private static function sanitizer_refusal( array $prepared, $live_id ) {
 		$f    = $prepared['fields'];
@@ -1129,31 +1195,32 @@ final class AB_MCP_Sync_Menu_Item_Writer {
 		$type = (string) $f['menu-item-type'];
 		foreach ( array( '_menu_item_type' => $type, '_menu_item_object' => 'custom' === $type ? 'custom' : sanitize_key( (string) $f['menu-item-object'] ), '_menu_item_target' => sanitize_key( (string) $f['menu-item-target'] ) ) as $key => $stored ) {
 			if ( sanitize_key( (string) $core[ $key ] ) !== (string) $core[ $key ] || $stored !== (string) $core[ $key ] ) {
-				return sprintf( '%s (sanitize_key() changes it, or the core writes another one)', $key );
+				/* translators: %s: a meta key of the core (_menu_item_type, …). */
+				return sprintf( __( 'The meta %s of the menu item would be stored otherwise (sanitize_key() changes it, or the core writes another one).', 'alphabridge-mcp' ), $key );
 			}
 		}
 		$classes = array_map( 'sanitize_html_class', explode( ' ', (string) $f['menu-item-classes'] ) );
 		if ( AB_MCP_Sync_Shared_Row::field( $classes ) !== (string) $core['_menu_item_classes'] ) {
-			return '_menu_item_classes (sanitize_html_class() changes them)';
+			return __( 'The classes of the menu item would be stored otherwise (_menu_item_classes: sanitize_html_class() changes them).', 'alphabridge-mcp' );
 		}
 		if ( implode( ' ', array_map( 'sanitize_html_class', explode( ' ', (string) $f['menu-item-xfn'] ) ) ) !== (string) $core['_menu_item_xfn'] ) {
-			return '_menu_item_xfn (sanitize_html_class() changes it)';
+			return __( 'The XFN of the menu item would be stored otherwise (_menu_item_xfn: sanitize_html_class() changes it).', 'alphabridge-mcp' );
 		}
 		$url = 'custom' === $type ? sanitize_url( trim( (string) $f['menu-item-url'] ) ) : '';
 		if ( $url !== (string) $core['_menu_item_url'] ) {
-			return '_menu_item_url (sanitize_url() changes it, or the item is no custom link and the core keeps no address for it)';
+			return __( 'The address of the menu item would be stored otherwise (_menu_item_url: sanitize_url() changes it, or the item is no custom link and the core keeps no address for it).', 'alphabridge-mcp' );
 		}
 		if ( (string) (int) $core['_menu_item_menu_item_parent'] !== (string) $core['_menu_item_menu_item_parent'] || ( null !== $live_id && (int) $core['_menu_item_menu_item_parent'] === (int) $live_id ) ) {
-			return '_menu_item_menu_item_parent (not the id of another item)';
+			return __( 'The parent item of the menu item is not the id of another item (_menu_item_menu_item_parent).', 'alphabridge-mcp' );
 		}
 		if ( 'custom' !== $type ) {
 			$original = self::original_title( $type, (string) $f['menu-item-object'], (int) $f['menu-item-object-id'] );
 			$title    = (string) $f['menu-item-title'] === $original ? '' : (string) $f['menu-item-title'];
 			if ( $title !== (string) $prepared['columns']['post_title'] ) {
-				return 'the title is the title of its object on this site, which the core stores as no title';
+				return __( 'The title of the menu item is the title of its object on this site, which the core stores as no title.', 'alphabridge-mcp' );
 			}
 			if ( '' === $title && '' === (string) $f['menu-item-description'] ) {
-				return 'the item has no title and no description, which the core stores as a description of one space';
+				return __( 'The menu item has no title and no description, which the core stores as a description of one space.', 'alphabridge-mcp' );
 			}
 		}
 		$fields    = array( 'post_title' => (string) $f['menu-item-title'], 'post_content' => (string) $f['menu-item-description'], 'post_excerpt' => (string) $f['menu-item-attr-title'] );
@@ -1161,7 +1228,8 @@ final class AB_MCP_Sync_Menu_Item_Writer {
 		$sanitized = (array) sanitize_post( $slashed + array( 'post_type' => 'nav_menu_item' ), 'db' );
 		foreach ( array_keys( $fields ) as $field ) {
 			if ( ! isset( $sanitized[ $field ] ) || (string) $sanitized[ $field ] !== (string) $slashed[ $field ] ) {
-				return sprintf( 'field %s (the sanitizing of a save changes it, kses without unfiltered_html)', $field );
+				/* translators: %s: a column of the posts table (post_title, post_content, post_excerpt). */
+				return sprintf( __( 'The sanitizing of a save changes the field %s of the menu item (kses without unfiltered_html).', 'alphabridge-mcp' ), $field );
 			}
 		}
 		return null;
@@ -1219,7 +1287,9 @@ final class AB_MCP_Sync_Menu_Item_Writer {
 	 * @return true|WP_Error
 	 */
 	public static function live_rule( $live_id, array $source ) {
-		$lock = AB_MCP_Sync_Post_Writer::read_lock( self::live_read( (int) $live_id, $source ), sprintf( 'the menu item %d of this site', (int) $live_id ) );
+		// The object for the detail of read_lock(), a whole sentence.
+		/* translators: %d: post ID of a menu item. */
+		$lock = AB_MCP_Sync_Post_Writer::read_lock( self::live_read( (int) $live_id, $source ), sprintf( __( 'The object is the menu item %d of this site.', 'alphabridge-mcp' ), (int) $live_id ) );
 		return null === $lock ? true : $lock;
 	}
 
@@ -1484,7 +1554,8 @@ final class AB_MCP_Sync_Menu_Item_Writer {
 			self::class,
 			null === $live_id ? null : (int) $live_id,
 			$pre,
-			static fn() => current_user_can( 'edit_theme_options' ) && current_user_can( 'assign_term', $menu ) && ( null === $live_id || current_user_can( 'edit_post', (int) $live_id ) ) ? true : AB_MCP_Sync_Post_Writer::rights( sprintf( 'write an item of the menu %d (edit_theme_options, assign_term, edit_post)', $menu ) ),
+			/* translators: %d: menu id on this site. */
+			static fn() => current_user_can( 'edit_theme_options' ) && current_user_can( 'assign_term', $menu ) && ( null === $live_id || current_user_can( 'edit_post', (int) $live_id ) ) ? true : AB_MCP_Sync_Post_Writer::rights( sprintf( __( 'This account may not write an item of the menu %d (edit_theme_options, assign_term, edit_post).', 'alphabridge-mcp' ), $menu ) ),
 			static fn( $dates ) => self::item_call( $prepared, $live_id, $menu, $dates ),
 			// The dates of an item here as they are: without them the core
 			// gives the item the time of the call (wp_resolve_post_date() of
@@ -1494,7 +1565,8 @@ final class AB_MCP_Sync_Menu_Item_Writer {
 			null === $live_id ? null : static function () use ( $live_id ) {
 				$row = AB_MCP_Sync_Rows::post( (int) $live_id );
 				if ( ! is_array( $row ) ) {
-					return new WP_Error( 'ab_mcp_sync_rows_unread', sprintf( 'The row of the menu item %d could not be read right before it was written, so nothing is written. Try again; if it keeps failing, the database error log names the cause.', (int) $live_id ) );
+					/* translators: %d: menu item id on this site. */
+					return new WP_Error( 'ab_mcp_sync_rows_unread', sprintf( __( 'The row of the menu item %d could not be read right before it was written, so nothing is written. Try again; if it keeps failing, the database error log names the cause.', 'alphabridge-mcp' ), (int) $live_id ) );
 				}
 				return array( (string) $row['post_date'], (string) $row['post_date_gmt'] );
 			}
@@ -1519,7 +1591,8 @@ final class AB_MCP_Sync_Menu_Item_Writer {
 		}
 		if ( null !== $live_id ) {
 			if ( ! is_array( $dates ) ) {
-				return new WP_Error( 'ab_mcp_sync_rows_unread', sprintf( 'The row of the menu item %d could not be read right before it was written, so nothing is written. Try again; if it keeps failing, the database error log names the cause.', (int) $live_id ) );
+				/* translators: %d: menu item id on this site. */
+				return new WP_Error( 'ab_mcp_sync_rows_unread', sprintf( __( 'The row of the menu item %d could not be read right before it was written, so nothing is written. Try again; if it keeps failing, the database error log names the cause.', 'alphabridge-mcp' ), (int) $live_id ) );
 			}
 			$fields['menu-item-post-date']     = (string) $dates[0];
 			$fields['menu-item-post-date-gmt'] = (string) $dates[1];
@@ -1536,7 +1609,7 @@ final class AB_MCP_Sync_Menu_Item_Writer {
 			return $id;
 		}
 		if ( ! is_int( $id ) || $id < 1 || ( null !== $live_id && $id !== (int) $live_id ) ) {
-			return new WP_Error( 'ab_mcp_sync_write_failed', 'WordPress wrote no menu item (wp_update_nav_menu_item() gave no id, or another one). Nothing more of the step is written.' );
+			return new WP_Error( 'ab_mcp_sync_write_failed', __( 'WordPress wrote no menu item (wp_update_nav_menu_item() gave no id, or another one). Nothing more of the step is written.', 'alphabridge-mcp' ) );
 		}
 		return $id;
 	}
@@ -1554,7 +1627,8 @@ final class AB_MCP_Sync_Menu_Item_Writer {
 	public static function write_part( $live_id, $name, array $prepared, $pre ) {
 		$name = (string) $name;
 		if ( 0 !== strpos( $name, 'meta:' ) ) {
-			return new WP_Error( 'ab_mcp_sync_write_failed', sprintf( 'The part %s is of a name the kind menu item writes with its row only. Check the item in wp-admin (Appearance → Menus).', $name ) );
+			/* translators: %s: the name of a part, as the tools name it (row, meta:…). */
+			return new WP_Error( 'ab_mcp_sync_write_failed', sprintf( __( 'The part %s is of a name the kind menu item writes with its row only. Check the item in wp-admin (Appearance → Menus).', 'alphabridge-mcp' ), $name ) );
 		}
 		$key  = substr( $name, 5 );
 		$from = is_array( $pre ) ? AB_MCP_Sync_Post_Writer::meta_values( $pre, $key ) : array();
@@ -1566,7 +1640,8 @@ final class AB_MCP_Sync_Menu_Item_Writer {
 			$pre,
 			static function () use ( $live_id, $key, $prepared, $from ) {
 				$may = AB_MCP_Sync_Post_Writer::meta_right( (int) $live_id, $key, self::targets( $prepared, $key ), $from );
-				return true === $may ? true : new WP_Error( 'ab_mcp_sync_rights', sprintf( 'The meta %1$s of the menu item was not written: %2$s at the item. Connect with an account that may, or leave the item out of the plan.', $key, $may ) );
+				/* translators: 1: a meta key, 2: the capability WordPress refused, as the code names it (add_post_meta, …). */
+				return true === $may ? true : new WP_Error( 'ab_mcp_sync_rights', sprintf( __( 'The meta %1$s of the menu item was not written: %2$s refused at the item. Connect with an account that may, or leave the item out of the plan.', 'alphabridge-mcp' ), $key, $may ) );
 			},
 			static fn() => AB_MCP_Sync_Post_Writer::write_meta( (int) $live_id, $key, isset( $prepared['meta'][ $key ] ) ? $prepared['meta'][ $key ] : array(), $from )
 		);
@@ -1641,12 +1716,14 @@ final class AB_MCP_Sync_Menu_Item_Writer {
 	public static function restore_right( $part, $live_id, array $backup, array $now ) {
 		$part = (string) $part;
 		if ( ! current_user_can( 'edit_theme_options' ) || ! current_user_can( 'edit_post', (int) $live_id ) ) {
-			return sprintf( 'edit the menu item %d (edit_theme_options, edit_post)', (int) $live_id );
+			/* translators: %d: menu item id on this site. */
+			return sprintf( __( 'This account may not edit the menu item %d (edit_theme_options, edit_post).', 'alphabridge-mcp' ), (int) $live_id );
 		}
 		if ( 'terms:nav_menu' === $part ) {
 			foreach ( AB_MCP_Sync_Post_Writer::term_keys( $backup, 'nav_menu' ) as $menu ) {
 				if ( ! current_user_can( 'assign_term', (int) $menu ) ) {
-					return sprintf( 'put the item back into the menu %d (assign_term)', (int) $menu );
+					/* translators: %d: menu id on this site. */
+					return sprintf( __( 'This account may not put the item back into the menu %d (assign_term).', 'alphabridge-mcp' ), (int) $menu );
 				}
 			}
 			return true;
@@ -1654,7 +1731,8 @@ final class AB_MCP_Sync_Menu_Item_Writer {
 		if ( 0 === strpos( $part, 'meta:' ) && ! in_array( substr( $part, 5 ), self::CORE_META, true ) ) {
 			$key = substr( $part, 5 );
 			$may = AB_MCP_Sync_Post_Writer::ops_right( 'post', (int) $live_id, $key, AB_MCP_Sync_Post_Writer::restore_ops( AB_MCP_Sync_Post_Writer::meta_values( $backup, $key ), isset( $now['meta'] ) ? AB_MCP_Sync_Post_Writer::meta_values( $now, $key ) : array() ) );
-			return true === $may ? true : sprintf( 'change the meta key %1$s of the menu item (%2$s)', $key, $may );
+			/* translators: 1: a meta key, 2: the capability WordPress refused, as the code names it (delete_post_meta, …). */
+			return true === $may ? true : sprintf( __( 'This account may not change the meta key %1$s of the menu item (%2$s refused).', 'alphabridge-mcp' ), $key, $may );
 		}
 		return true;
 	}
@@ -1680,7 +1758,7 @@ final class AB_MCP_Sync_Menu_Item_Writer {
 			if ( ! is_array( $current ) ) {
 				return is_wp_error( $current ) ? $current : array(
 					'state' => 'left',
-					'note'  => 'The menu item is no longer on this site.',
+					'note'  => __( 'The menu item is no longer on this site.', 'alphabridge-mcp' ),
 				);
 			}
 			$before = self::row_hash( $backup['row'] );
@@ -1691,7 +1769,7 @@ final class AB_MCP_Sync_Menu_Item_Writer {
 			if ( ! hash_equals( (string) $hash, $is ) ) {
 				return array(
 					'state' => 'left',
-					'note'  => 'The row of the menu item was changed since the step wrote it, so it is left as it is.',
+					'note'  => __( 'The row of the menu item was changed since the step wrote it, so it is left as it is.', 'alphabridge-mcp' ),
 				);
 			}
 			$fields    = array( 'post_title' => (string) $backup['row']['post_title'], 'post_content' => (string) $backup['row']['post_content'], 'post_excerpt' => (string) $backup['row']['post_excerpt'] );
@@ -1701,7 +1779,8 @@ final class AB_MCP_Sync_Menu_Item_Writer {
 				if ( ! isset( $sanitized[ $field ] ) || (string) $sanitized[ $field ] !== (string) $slashed[ $field ] ) {
 					return array(
 						'state' => 'left',
-						'note'  => sprintf( 'Not put back: the sanitizing of this account would change the backed-up %s (kses without unfiltered_html). Set it by hand in wp-admin with an account that may.', $field ),
+						/* translators: %s: a column of the posts table (post_title, post_content, post_excerpt). */
+						'note'  => sprintf( __( 'Not put back: the sanitizing of this account would change the backed-up field %s (kses without unfiltered_html). Set it by hand in wp-admin with an account that may.', 'alphabridge-mcp' ), $field ),
 					);
 				}
 			}
@@ -1709,7 +1788,8 @@ final class AB_MCP_Sync_Menu_Item_Writer {
 			// read against what the step wrote, the call (AB_MCP_Sync_Write;
 			// Codex rounds 2 and 3 of branch 11, A6).
 			$done = AB_MCP_Sync_Write::back(
-				static fn() => current_user_can( 'edit_theme_options' ) && current_user_can( 'edit_post', $id ) ? true : sprintf( 'edit the menu item %d (edit_theme_options, edit_post)', $id ),
+				/* translators: %d: menu item id on this site. */
+				static fn() => current_user_can( 'edit_theme_options' ) && current_user_can( 'edit_post', $id ) ? true : sprintf( __( 'This account may not edit the menu item %d (edit_theme_options, edit_post).', 'alphabridge-mcp' ), $id ),
 				static fn() => self::current( $id ),
 				static fn( $again ) => is_array( $again ) && hash_equals( (string) $hash, self::row_hash( $again['row'] ) ),
 				static function () use ( $id, $backup ) {
@@ -1733,7 +1813,7 @@ final class AB_MCP_Sync_Menu_Item_Writer {
 						}
 					);
 				},
-				'The row of the menu item changed as it was put back (a hook of this site), so it is left as it is.'
+				__( 'The row of the menu item changed as it was put back (a hook of this site), so it is left as it is.', 'alphabridge-mcp' )
 			);
 			if ( is_wp_error( $done ) || is_array( $done ) ) {
 				return $done;
@@ -1747,7 +1827,7 @@ final class AB_MCP_Sync_Menu_Item_Writer {
 			if ( ! is_array( $state ) ) {
 				return is_wp_error( $state ) ? $state : array(
 					'state' => 'left',
-					'note'  => 'The menu item is no longer on this site.',
+					'note'  => __( 'The menu item is no longer on this site.', 'alphabridge-mcp' ),
 				);
 			}
 			// The hash of the journal names the item itself as SELF; the meta
@@ -1756,7 +1836,8 @@ final class AB_MCP_Sync_Menu_Item_Writer {
 			if ( ! hash_equals( (string) $hash, (string) self::part_hash( $state, $name ) ) && ! hash_equals( (string) self::part_hash( $backup, $name ), (string) self::part_hash( $state, $name ) ) ) {
 				return array(
 					'state' => 'left',
-					'note'  => sprintf( 'The meta %s was changed since the step wrote it, so it is left as it is.', $key ),
+					/* translators: %s: a meta key. */
+					'note'  => sprintf( __( 'The meta %s was changed since the step wrote it, so it is left as it is.', 'alphabridge-mcp' ), $key ),
 				);
 			}
 			return AB_MCP_Sync_Post_Writer::restore_meta( $id, $key, AB_MCP_Sync_Post_Writer::meta_values( $backup, $key ), AB_MCP_Sync_Post_Writer::meta_hash( AB_MCP_Sync_Post_Writer::meta_values( $state, $key ) ) );
@@ -1766,7 +1847,8 @@ final class AB_MCP_Sync_Menu_Item_Writer {
 		}
 		return array(
 			'state' => 'left',
-			'note'  => sprintf( 'A part %s of a menu item is of a name this version does not know: left as it is.', $name ),
+			/* translators: %s: the name of a part, as the journal names it. */
+			'note'  => sprintf( __( 'A part %s of a menu item is of a name this version does not know: left as it is.', 'alphabridge-mcp' ), $name ),
 		);
 	}
 
@@ -1782,14 +1864,15 @@ final class AB_MCP_Sync_Menu_Item_Writer {
 	public static function before_value( $part, $backup, $now, $live_id ) {
 		unset( $live_id );
 		if ( ! is_array( $backup ) ) {
-			return 'none: the menu item was not on this site before the run.';
+			return __( 'none: the menu item was not on this site before the run.', 'alphabridge-mcp' );
 		}
 		$part = (string) $part;
 		if ( 0 === strpos( $part, 'meta:' ) ) {
 			return AB_MCP_Sync_Post_Writer::cut( AB_MCP_Sync_Post_Writer::meta_before( substr( $part, 5 ), AB_MCP_Sync_Post_Writer::meta_values( $backup, substr( $part, 5 ) ) ), AB_MCP_Sync_Post_Writer::PART_CHARS );
 		}
 		if ( 0 === strpos( $part, 'terms:' ) ) {
-			return 'menus: ' . implode( ', ', array_map( 'strval', AB_MCP_Sync_Post_Writer::term_keys( $backup, substr( $part, 6 ) ) ) );
+			/* translators: %s: the menu ids, separated by commas. */
+			return sprintf( __( 'menus: %s', 'alphabridge-mcp' ), implode( ', ', array_map( 'strval', AB_MCP_Sync_Post_Writer::term_keys( $backup, substr( $part, 6 ) ) ) ) );
 		}
 		$out = array();
 		foreach ( self::ROW as $column ) {

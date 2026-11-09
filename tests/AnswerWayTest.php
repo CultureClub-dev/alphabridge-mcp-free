@@ -440,6 +440,11 @@ final class AnswerWayTest extends TestCase {
 				$strings = array();
 				$depth   = 0;
 				$compose = false;
+				// The texts of the message in gettext under includes/sync/
+				// (branch 13 text/z8): each variant a whole message, where a
+				// condition chooses one, so none is left out of the check.
+				$texts   = array();
+				$gettext = 0;
 				for ( $k = $j + 1; $k < $count; $k++ ) {
 					if ( '(' === $tokens[ $k ] ) {
 						++$depth;
@@ -448,8 +453,24 @@ final class AnswerWayTest extends TestCase {
 					}
 					if ( is_array( $tokens[ $k ] ) && T_CONSTANT_ENCAPSED_STRING === $tokens[ $k ][0] ) {
 						$strings[] = stripcslashes( substr( $tokens[ $k ][1], 1, -1 ) );
+						if ( $gettext > 0 ) {
+							$texts[] = end( $strings );
+							--$gettext;
+						}
 					} elseif ( is_array( $tokens[ $k ] ) && T_STRING === $tokens[ $k ][0] && 'compose' === $tokens[ $k ][1] ) {
 						$compose = true;
+					} elseif ( is_array( $tokens[ $k ] ) && T_STRING === $tokens[ $k ][0] && in_array( $tokens[ $k ][1], array( '__', '_n' ), true ) ) {
+						$gettext = '_n' === $tokens[ $k ][1] ? 2 : 1;
+					} elseif ( ! ( is_array( $tokens[ $k ] ) && in_array( $tokens[ $k ][0], array( T_WHITESPACE, T_COMMENT ), true ) ) && '(' !== $tokens[ $k ] && ',' !== $tokens[ $k ] ) {
+						$gettext = 0;
+					}
+				}
+				$where = substr( (string) $file, strlen( $root ) + 1 ) . ':' . $tokens[ $j ][2];
+				if ( ! $compose && isset( $strings[0] ) && str_starts_with( $where, 'sync/' ) ) {
+					foreach ( $texts as $n => $text ) {
+						if ( ( $strings[1] ?? null ) !== $text && preg_match( '/\s/', $text ) ) {
+							$cases[ $where . '#' . ( $n + 1 ) ] = array( $strings[0], $text );
+						}
 					}
 				}
 				// A literal of white space only joins parts; it is no text.
@@ -464,7 +485,6 @@ final class AnswerWayTest extends TestCase {
 				if ( $compose ) {
 					$message = implode( ' ', array_filter( array_slice( $strings, 1 ), static fn( string $s ): bool => (bool) preg_match( '/\s/', $s ) ) );
 				}
-				$where           = substr( (string) $file, strlen( $root ) + 1 ) . ':' . $tokens[ $j ][2];
 				$cases[ $where ] = array( $strings[0], $message );
 			}
 		}

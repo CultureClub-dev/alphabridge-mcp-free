@@ -95,8 +95,11 @@
  * the group; it holds for that account and connection, while the print of the
  * pair and the packages hold, until the earliest package expires.
  *
- * Messages are English without gettext, as the other classes of the
- * takeover; each names the way.
+ * Refusals and errors are gettext texts in the language of the site, each
+ * naming the way; codes, states, kinds and parameters stay as the tools
+ * name them. The words of the report (reasons of a lock, the why of a
+ * decision, the words of the environment) stay English: they are compared
+ * across the two sites and go into the hashes of the report and the plan.
  *
  * @package AlphaBridge_MCP
  */
@@ -202,7 +205,8 @@ final class AB_MCP_Sync_Proposal {
 		}
 		$packages = isset( $a['packages'] ) ? $a['packages'] : null;
 		if ( ! is_array( $packages ) || ! array_is_list( $packages ) || array() === $packages || count( $packages ) > self::MAX_PACKAGES || count( array_unique( array_map( 'strval', $packages ) ) ) !== count( $packages ) ) {
-			return new WP_Error( 'ab_mcp_sync_pairs_packages', sprintf( 'A proposal begins with packages: the package_ids of the inventory of the staging site this site took over completely with wp_site_import_chunk, each once, at most %d. Pass them, or proposal_id to go on with a proposal.', self::MAX_PACKAGES ) );
+			/* translators: %d: the most packages a proposal takes. */
+			return new WP_Error( 'ab_mcp_sync_pairs_packages', sprintf( __( 'A proposal begins with packages: the package_ids of the inventory of the staging site this site took over completely with wp_site_import_chunk, each once, at most %d. Pass them, or proposal_id to go on with a proposal.', 'alphabridge-mcp' ), self::MAX_PACKAGES ) );
 		}
 		$staging = self::staging( $packages );
 		if ( is_wp_error( $staging ) ) {
@@ -310,10 +314,10 @@ final class AB_MCP_Sync_Proposal {
 			return self::foreign();
 		}
 		if ( AB_MCP_Sync_Canon::VERSION !== $head['canon'] || $source !== $head['source_id'] || ! hash_equals( (string) $head['print'], (string) AB_MCP_Sync_Anchor::pair_print() ) ) {
-			return new WP_Error( 'ab_mcp_sync_pairs_stale', 'The role of this site, its pair, the confirmed key of the staging site or the version of the canonical form changed since this proposal was made, so it holds no more. Propose again: call wp_site_pairs with action=propose and the packages of a fresh inventory of the staging site.' );
+			return new WP_Error( 'ab_mcp_sync_pairs_stale', __( 'The role of this site, its pair, the confirmed key of the staging site or the version of the canonical form changed since this proposal was made, so it holds no more. Propose again: call wp_site_pairs with action=propose and the packages of a fresh inventory of the staging site.', 'alphabridge-mcp' ) );
 		}
 		if ( self::now() >= (int) $head['expires'] ) {
-			return new WP_Error( 'ab_mcp_sync_pairs_expired', 'This proposal expired: it holds as long as the packages it was made from (a day at most). Propose again: export the inventory on the staging site (wp_site_export), take it over here (wp_site_import_chunk), then call wp_site_pairs with action=propose.' );
+			return new WP_Error( 'ab_mcp_sync_pairs_expired', __( 'This proposal expired: it holds as long as the packages it was made from (a day at most). Propose again: export the inventory on the staging site (wp_site_export), take it over here (wp_site_import_chunk), then call wp_site_pairs with action=propose.', 'alphabridge-mcp' ) );
 		}
 		$parts = self::parts( $proposal_id, $files );
 		if ( is_wp_error( $parts ) ) {
@@ -414,11 +418,11 @@ final class AB_MCP_Sync_Proposal {
 	 */
 	public static function source_id() {
 		if ( is_multisite() ) {
-			return new WP_Error( 'ab_mcp_sync_multisite', 'Object pairs are not available on a multisite installation: the takeover from a staging site works between single sites. Use a single site as the production site.' );
+			return new WP_Error( 'ab_mcp_sync_multisite', __( 'Object pairs are not available on a multisite installation: the takeover from a staging site works between single sites. Use a single site as the production site.', 'alphabridge-mcp' ) );
 		}
 		$anchor = AB_MCP_Sync_Anchor::active();
 		if ( null === $anchor ) {
-			return new WP_Error( 'ab_mcp_sync_pairs_no_anchor', 'This site has no confirmed key of a staging site, so it has no object pairs with one. Ask the person to fetch the key of the staging site, or enter its pairing code, and confirm it on the page AlphaBridge → Staging of this site; then call again.' );
+			return new WP_Error( 'ab_mcp_sync_pairs_no_anchor', __( 'This site has no confirmed key of a staging site, so it has no object pairs with one. Ask the person to fetch the key of the staging site, or enter its pairing code, and confirm it on the page AlphaBridge → Staging of this site; then call again.', 'alphabridge-mcp' ) );
 		}
 		return (string) $anchor['source_id'];
 	}
@@ -2264,27 +2268,27 @@ final class AB_MCP_Sync_Proposal {
 	 * @return WP_Error No proposal of that id.
 	 */
 	private static function unknown() {
-		return new WP_Error( 'ab_mcp_sync_pairs_unknown', 'This site holds no proposal of that id (a proposal is kept a day at most). Propose again: call wp_site_pairs with action=propose and the packages of the inventory of the staging site.' );
+		return new WP_Error( 'ab_mcp_sync_pairs_unknown', __( 'This site holds no proposal of that id (a proposal is kept a day at most). Propose again: call wp_site_pairs with action=propose and the packages of the inventory of the staging site.', 'alphabridge-mcp' ) );
 	}
 
 	/**
 	 * @return WP_Error A proposal of another account or connection.
 	 */
 	private static function foreign() {
-		return new WP_Error( 'ab_mcp_sync_pairs_foreign', 'This proposal belongs to another account or connection, and only the one that made it goes on with it or confirms it. Propose again over this connection: call wp_site_pairs with action=propose and the packages of the inventory of the staging site.' );
+		return new WP_Error( 'ab_mcp_sync_pairs_foreign', __( 'This proposal belongs to another account or connection, and only the one that made it goes on with it or confirms it. Propose again over this connection: call wp_site_pairs with action=propose and the packages of the inventory of the staging site.', 'alphabridge-mcp' ) );
 	}
 
 	/**
 	 * @return WP_Error Packages of more than one series.
 	 */
 	private static function mixed() {
-		return new WP_Error( 'ab_mcp_sync_pairs_series', 'The packages are not of one inventory: an object is in two of them, or a kind read whole in one package has objects in another (packages of two exports). Pass the packages of one series only: the first wp_site_export without a cursor and each one after with the cursor of the one before, all taken over here; then call again.' );
+		return new WP_Error( 'ab_mcp_sync_pairs_series', __( 'The packages are not of one inventory: an object is in two of them, or a kind read whole in one package has objects in another (packages of two exports). Pass the packages of one series only: the first wp_site_export without a cursor and each one after with the cursor of the one before, all taken over here; then call again.', 'alphabridge-mcp' ) );
 	}
 
 	/**
 	 * @return WP_Error The files of a proposal are not as one call wrote them.
 	 */
 	private static function concurrent() {
-		return new WP_Error( 'ab_mcp_sync_pairs_parts', 'The files of this proposal are not as one call after the other wrote them (two calls went on with it at once, or a file was changed in the protected store). Propose again: call wp_site_pairs with action=propose and the packages of the inventory of the staging site, and go on with one call at a time.' );
+		return new WP_Error( 'ab_mcp_sync_pairs_parts', __( 'The files of this proposal are not as one call after the other wrote them (two calls went on with it at once, or a file was changed in the protected store). Propose again: call wp_site_pairs with action=propose and the packages of the inventory of the staging site, and go on with one call at a time.', 'alphabridge-mcp' ) );
 	}
 }

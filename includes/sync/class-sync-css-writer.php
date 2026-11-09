@@ -27,8 +27,10 @@
  * after the same checks as forward (edit_css, the theme, the rule of the
  * Customizer for the backed-up CSS).
  *
- * Messages are English without gettext, as the other classes of the
- * takeover; each names the way.
+ * Messages are in gettext, in the language of the site as they arise (a
+ * refusal, a note of the journal); each names the way. Codes, states,
+ * kinds and the other values the tools name stay as they are, and no
+ * translated text is compared, hashed or part of a print.
  *
  * @package AlphaBridge_MCP
  */
@@ -84,31 +86,36 @@ final class AB_MCP_Sync_Css_Writer {
 	public static function target_of( array $line, array $item, array $ctx ) {
 		$stylesheet = isset( $line['identity']['stylesheet'] ) && is_string( $line['identity']['stylesheet'] ) ? $line['identity']['stylesheet'] : '';
 		if ( 'update' !== $item['op'] || (string) $item['live_ref'] !== $stylesheet ) {
-			return AB_MCP_Sync_Post_Writer::locked( 'custom_css:create', sprintf( 'the CSS of %s is not linked to its stylesheet on this site', $stylesheet ) );
+			/* translators: %s: the stylesheet of the theme (twentytwentyfour, …). */
+			return AB_MCP_Sync_Post_Writer::locked( 'custom_css:create', sprintf( __( 'The CSS of %s is not linked to its stylesheet on this site.', 'alphabridge-mcp' ), $stylesheet ) );
 		}
 		$held = AB_MCP_Sync_Post_Writer::line_lock( $line );
 		if ( null !== $held ) {
 			return $held;
 		}
 		if ( ! isset( $line['content']['row'], $line['form'] ) || ! is_array( $line['form'] ) ) {
-			return AB_MCP_Sync_Post_Writer::locked( 'post:content_missing', sprintf( 'the package carries no content of the CSS of %s', $stylesheet ) );
+			/* translators: %s: the stylesheet of the theme (twentytwentyfour, …). */
+			return AB_MCP_Sync_Post_Writer::locked( 'post:content_missing', sprintf( __( 'The package carries no content of the CSS of %s.', 'alphabridge-mcp' ), $stylesheet ) );
 		}
 		$row = array();
 		foreach ( array( 'post_content', 'post_name', 'post_status', 'preprocessed', 'theme_version' ) as $column ) {
 			if ( ! isset( $line['content']['row'][ $column ] ) ) {
-				return AB_MCP_Sync_Post_Writer::locked( 'post:content_missing', sprintf( 'the package names no column %1$s of the CSS of %2$s', $column, $stylesheet ) );
+				/* translators: 1: the column (post_content, …), 2: the stylesheet of the theme. */
+				return AB_MCP_Sync_Post_Writer::locked( 'post:content_missing', sprintf( __( 'The package names no column %1$s of the CSS of %2$s.', 'alphabridge-mcp' ), $column, $stylesheet ) );
 			}
 			$row[ $column ] = AB_MCP_Sync_Post_Writer::bytes( $line['content']['row'][ $column ] );
 		}
 		if ( '' !== $row['preprocessed'] || 'publish' !== $row['post_status'] ) {
-			return AB_MCP_Sync_Post_Writer::locked( 'custom_css:field_rule', '' !== $row['preprocessed'] ? 'the CSS of the staging site carries the source of a preprocessor (post_content_filtered)' : sprintf( 'the CSS post of the staging site has the status %s', $row['post_status'] ) );
+			/* translators: %s: the status of the CSS post (draft, …), as WordPress names it. */
+			return AB_MCP_Sync_Post_Writer::locked( 'custom_css:field_rule', '' !== $row['preprocessed'] ? __( 'The CSS of the staging site carries the source of a preprocessor (post_content_filtered).', 'alphabridge-mcp' ) : sprintf( __( 'The CSS post of the staging site has the status %s.', 'alphabridge-mcp' ), $row['post_status'] ) );
 		}
 		$plan    = AB_MCP_Sync_Refs::plan( $ctx['map'], $ctx['addresses'], isset( $ctx['routes'] ) ? $ctx['routes'] : null );
 		$changed = false;
 		$css     = AB_MCP_Sync_Refs::rewrite_text( $row['post_content'], $plan, array(), $changed, false, true );
 		$missing = AB_MCP_Sync_Post_Writer::unresolved( $plan['missing'], isset( $ctx['pending'] ) && is_array( $ctx['pending'] ) ? $ctx['pending'] : array() );
 		if ( array() !== $missing ) {
-			return AB_MCP_Sync_Post_Writer::locked( 'custom_css:reference_unmapped', AB_MCP_Sync_Post_Writer::missing_text( $missing ) );
+			/* translators: %s: the references, each as its kind and id (post 12, term 4), separated by commas. */
+			return AB_MCP_Sync_Post_Writer::locked( 'custom_css:reference_unmapped', sprintf( __( 'The CSS refers to objects without a counterpart on this site: %s.', 'alphabridge-mcp' ), self::missing_refs( $missing ) ) );
 		}
 		$target = AB_MCP_Sync_Canon::mapped( $line['form'], $ctx['map'] );
 		return array(
@@ -148,7 +155,7 @@ final class AB_MCP_Sync_Css_Writer {
 		unset( $now );
 		$stylesheet = (string) $prepared['stylesheet'];
 		if ( ! current_user_can( 'edit_css' ) ) {
-			return AB_MCP_Sync_Post_Writer::rights( sprintf( 'change the Additional CSS of %s (edit_css)', $stylesheet ) );
+			return AB_MCP_Sync_Post_Writer::rights( self::may_not( $stylesheet ) );
 		}
 		$refusal = self::theme_refusal( $stylesheet, (string) $prepared['version'] );
 		if ( null !== $refusal ) {
@@ -159,7 +166,8 @@ final class AB_MCP_Sync_Css_Writer {
 			return $current;
 		}
 		if ( null === $current || 'trash' === $current['row']['post_status'] ) {
-			return AB_MCP_Sync_Post_Writer::locked( 'custom_css:create', null === $current ? sprintf( 'this site links no CSS post to %s (custom_css_post_id)', $stylesheet ) : sprintf( 'the CSS post %s of this site lies in the trash', $current['row']['post_id'] ) );
+			/* translators: %s: the stylesheet of the theme, or the id of the CSS post. */
+			return AB_MCP_Sync_Post_Writer::locked( 'custom_css:create', null === $current ? sprintf( __( 'This site links no CSS post to %s (custom_css_post_id).', 'alphabridge-mcp' ), $stylesheet ) : sprintf( __( 'The CSS post %s of this site lies in the trash.', 'alphabridge-mcp' ), $current['row']['post_id'] ) );
 		}
 		return self::css_refusal( (string) $prepared['css'], $stylesheet, (int) $current['row']['post_id'] );
 	}
@@ -175,13 +183,23 @@ final class AB_MCP_Sync_Css_Writer {
 	private static function theme_refusal( $stylesheet, $version ) {
 		$active = get_stylesheet();
 		if ( $active !== $stylesheet ) {
-			return AB_MCP_Sync_Post_Writer::locked( 'custom_css:theme_mismatch', sprintf( 'the CSS is of the theme %1$s, and the active theme of this site is %2$s', $stylesheet, $active ) );
+			/* translators: 1: the stylesheet of the CSS, 2: the stylesheet of the active theme. */
+			return AB_MCP_Sync_Post_Writer::locked( 'custom_css:theme_mismatch', sprintf( __( 'The CSS is of the theme %1$s, and the active theme of this site is %2$s.', 'alphabridge-mcp' ), $stylesheet, $active ) );
 		}
 		// The version of the theme from its files ('' where it is not there:
 		// WP_Theme::get() answers false then).
 		$here = (string) wp_get_theme( $stylesheet )->get( 'Version' );
 		if ( $here !== $version ) {
-			return AB_MCP_Sync_Post_Writer::locked( 'custom_css:theme_mismatch', sprintf( 'the theme %1$s is in the version %2$s on this site and %3$s on the staging site', $stylesheet, '' === $here ? '(none)' : $here, '' === $version ? '(none)' : $version ) );
+			if ( '' === $here ) {
+				/* translators: 1: the stylesheet of the theme, 2: its version on the staging site. */
+				return AB_MCP_Sync_Post_Writer::locked( 'custom_css:theme_mismatch', sprintf( __( 'The theme %1$s names no version on this site (or is not there) and is in the version %2$s on the staging site.', 'alphabridge-mcp' ), $stylesheet, $version ) );
+			}
+			if ( '' === $version ) {
+				/* translators: 1: the stylesheet of the theme, 2: its version on this site. */
+				return AB_MCP_Sync_Post_Writer::locked( 'custom_css:theme_mismatch', sprintf( __( 'The theme %1$s is in the version %2$s on this site and names no version on the staging site.', 'alphabridge-mcp' ), $stylesheet, $here ) );
+			}
+			/* translators: 1: the stylesheet of the theme, 2: its version on this site, 3: its version on the staging site. */
+			return AB_MCP_Sync_Post_Writer::locked( 'custom_css:theme_mismatch', sprintf( __( 'The theme %1$s is in the version %2$s on this site and %3$s on the staging site.', 'alphabridge-mcp' ), $stylesheet, $here, $version ) );
 		}
 		return null;
 	}
@@ -197,7 +215,7 @@ final class AB_MCP_Sync_Css_Writer {
 	 */
 	private static function css_refusal( $css, $stylesheet, $post_id ) {
 		if ( AB_MCP_Sync_Post_Writer::css_markup( $css ) ) {
-			return AB_MCP_Sync_Post_Writer::locked( 'custom_css:markup', 'the CSS holds a closing tag of STYLE, or ends in a part of one (WP_Customize_Custom_CSS_Setting::validate())' );
+			return AB_MCP_Sync_Post_Writer::locked( 'custom_css:markup', __( 'The CSS holds a closing tag of STYLE, or ends in a part of one (WP_Customize_Custom_CSS_Setting::validate()).', 'alphabridge-mcp' ) );
 		}
 		$args = array(
 			'preprocessed' => '',
@@ -206,12 +224,12 @@ final class AB_MCP_Sync_Css_Writer {
 		);
 		$data = apply_filters( 'update_custom_css_data', array( 'css' => $css, 'preprocessed' => '' ), $args );
 		if ( ! is_array( $data ) || ! isset( $data['css'], $data['preprocessed'] ) || (string) $data['css'] !== $css || '' !== (string) $data['preprocessed'] ) {
-			return AB_MCP_Sync_Post_Writer::locked( 'custom_css:markup', 'a filter of this site changes the CSS as it is saved (update_custom_css_data)' );
+			return AB_MCP_Sync_Post_Writer::locked( 'custom_css:markup', __( 'A filter of this site changes the CSS as it is saved (update_custom_css_data).', 'alphabridge-mcp' ) );
 		}
 		$slashed   = wp_slash( array( 'post_content' => $css ) );
 		$sanitized = (array) sanitize_post( $slashed + array( 'post_type' => 'custom_css', 'ID' => (int) $post_id ), 'db' );
 		if ( ! isset( $sanitized['post_content'] ) || (string) $sanitized['post_content'] !== (string) $slashed['post_content'] ) {
-			return AB_MCP_Sync_Post_Writer::locked( 'custom_css:markup', 'the sanitizing WordPress runs on a save changes the CSS (kses without unfiltered_html)' );
+			return AB_MCP_Sync_Post_Writer::locked( 'custom_css:markup', __( 'The sanitizing WordPress runs on a save changes the CSS (kses without unfiltered_html).', 'alphabridge-mcp' ) );
 		}
 		return true;
 	}
@@ -225,7 +243,8 @@ final class AB_MCP_Sync_Css_Writer {
 	 * @return true|WP_Error
 	 */
 	public static function live_rule( $live_id, array $source ) {
-		$lock = AB_MCP_Sync_Post_Writer::read_lock( self::live_read( (string) $live_id, $source ), sprintf( 'the CSS of %s on this site', (string) $live_id ) );
+		/* translators: %s: the stylesheet of the theme (twentytwentyfour, …). */
+		$lock = AB_MCP_Sync_Post_Writer::read_lock( self::live_read( (string) $live_id, $source ), sprintf( __( 'The object is the CSS of %s on this site.', 'alphabridge-mcp' ), (string) $live_id ) );
 		return null === $lock ? true : $lock;
 	}
 
@@ -294,11 +313,40 @@ final class AB_MCP_Sync_Css_Writer {
 	}
 
 	/**
+	 * What this account may not do without edit_css, as a whole sentence in
+	 * the language of the site (the refusal of the right, and what
+	 * restore_right() answers).
+	 *
+	 * @param string $stylesheet The stylesheet.
+	 * @return string
+	 */
+	private static function may_not( $stylesheet ) {
+		/* translators: %s: the stylesheet of the theme (twentytwentyfour, …). */
+		return sprintf( __( 'This account may not change the Additional CSS of %s (edit_css).', 'alphabridge-mcp' ), $stylesheet );
+	}
+
+	/**
+	 * The references without a counterpart, each as its kind and id, the
+	 * first five (as AB_MCP_Sync_Post_Writer::missing_text() lists them).
+	 *
+	 * @param array $missing The references (space, id).
+	 * @return string
+	 */
+	private static function missing_refs( array $missing ) {
+		$out = array();
+		foreach ( array_slice( $missing, 0, 5 ) as $m ) {
+			$out[] = (string) ( $m['space'] ?? '?' ) . ' ' . (int) ( $m['id'] ?? 0 );
+		}
+		return implode( ', ', $out );
+	}
+
+	/**
 	 * @param string $stylesheet The stylesheet.
 	 * @return WP_Error
 	 */
 	private static function unread( $stylesheet ) {
-		return new WP_Error( 'ab_mcp_sync_rows_unread', sprintf( 'The CSS of %s could not be read (its theme mods or its post), so nothing is written for it. Try again; if it keeps failing, the database error log names the cause.', $stylesheet ) );
+		/* translators: %s: the stylesheet of the theme (twentytwentyfour, …). */
+		return new WP_Error( 'ab_mcp_sync_rows_unread', sprintf( __( 'The CSS of %s could not be read (its theme mods or its post), so nothing is written for it. Try again; if it keeps failing, the database error log names the cause.', 'alphabridge-mcp' ), $stylesheet ) );
 	}
 
 	/**
@@ -390,10 +438,12 @@ final class AB_MCP_Sync_Css_Writer {
 	public static function write_row( array $prepared, $live_id, $pre = null ) {
 		$stylesheet = (string) $prepared['stylesheet'];
 		if ( null === $live_id || (string) $live_id !== $stylesheet ) {
-			return AB_MCP_Sync_Post_Writer::locked( 'custom_css:create', sprintf( 'the CSS of %s is not linked to its stylesheet on this site', $stylesheet ) );
+			/* translators: %s: the stylesheet of the theme (twentytwentyfour, …). */
+			return AB_MCP_Sync_Post_Writer::locked( 'custom_css:create', sprintf( __( 'The CSS of %s is not linked to its stylesheet on this site.', 'alphabridge-mcp' ), $stylesheet ) );
 		}
 		if ( null === $pre ) {
-			return AB_MCP_Sync_Post_Writer::locked( 'custom_css:create', sprintf( 'this site links no CSS post to %s (custom_css_post_id)', $stylesheet ) );
+			/* translators: %s: the stylesheet of the theme (twentytwentyfour, …). */
+			return AB_MCP_Sync_Post_Writer::locked( 'custom_css:create', sprintf( __( 'This site links no CSS post to %s (custom_css_post_id).', 'alphabridge-mcp' ), $stylesheet ) );
 		}
 		// The right, the last read of the CSS against the state the engine
 		// read, the call (AB_MCP_Sync_Write; Codex round 3 of branch 11, A6).
@@ -407,7 +457,7 @@ final class AB_MCP_Sync_Css_Writer {
 			self::class,
 			$stylesheet,
 			$pre,
-			static fn() => current_user_can( 'edit_css' ) ? true : AB_MCP_Sync_Post_Writer::rights( sprintf( 'change the Additional CSS of %s (edit_css)', $stylesheet ) ),
+			static fn() => current_user_can( 'edit_css' ) ? true : AB_MCP_Sync_Post_Writer::rights( self::may_not( $stylesheet ) ),
 			static fn() => self::css_call( $prepared, $stylesheet, (int) $pre['row']['post_id'] ),
 			static function () use ( $stylesheet ) {
 				AB_MCP_Sync_Shared_Row::forget( 'stylesheet' );
@@ -456,7 +506,8 @@ final class AB_MCP_Sync_Css_Writer {
 	 */
 	public static function write_part( $live_id, $name, array $prepared, $pre ) {
 		unset( $live_id, $prepared, $pre );
-		return new WP_Error( 'ab_mcp_sync_write_failed', sprintf( 'The part %s is of a name the kind custom_css does not write. Check the object in wp-admin.', (string) $name ) );
+		/* translators: %s: the name of the part, as the journal names it. */
+		return new WP_Error( 'ab_mcp_sync_write_failed', sprintf( __( 'The part %s is of a name the kind custom_css does not write. Check the object in wp-admin.', 'alphabridge-mcp' ), (string) $name ) );
 	}
 
 	/**
@@ -530,13 +581,14 @@ final class AB_MCP_Sync_Css_Writer {
 	public static function restore_right( $part, $live_id, array $backup, array $now ) {
 		unset( $part, $now );
 		if ( ! current_user_can( 'edit_css' ) ) {
-			return sprintf( 'change the Additional CSS of %s (edit_css)', (string) $live_id );
+			return self::may_not( (string) $live_id );
 		}
 		if ( get_stylesheet() !== (string) $live_id ) {
-			return sprintf( 'write the CSS of %s, which is not the active theme of this site now', (string) $live_id );
+			/* translators: %s: the stylesheet of the theme (twentytwentyfour, …). */
+			return sprintf( __( 'This account may not write the CSS of %s, which is not the active theme of this site now.', 'alphabridge-mcp' ), (string) $live_id );
 		}
 		if ( AB_MCP_Sync_Post_Writer::css_markup( (string) $backup['row']['post_content'] ) ) {
-			return 'store the backed-up CSS, which holds a closing tag of STYLE (the rule of the Customizer)';
+			return __( 'This account may not store the backed-up CSS, which holds a closing tag of STYLE (the rule of the Customizer).', 'alphabridge-mcp' );
 		}
 		return true;
 	}
@@ -557,7 +609,8 @@ final class AB_MCP_Sync_Css_Writer {
 		if ( 'row' !== (string) $name ) {
 			return array(
 				'state' => 'left',
-				'note'  => sprintf( 'A part %s of the CSS is of a name this version does not know: left as it is.', (string) $name ),
+				/* translators: %s: the name of the part, as the journal names it. */
+				'note'  => sprintf( __( 'A part %s of the CSS is of a name this version does not know: left as it is.', 'alphabridge-mcp' ), (string) $name ),
 			);
 		}
 		$current = self::current( (string) $live_id );
@@ -567,7 +620,7 @@ final class AB_MCP_Sync_Css_Writer {
 		if ( null === $current || $current['row']['post_id'] !== $backup['row']['post_id'] ) {
 			return array(
 				'state' => 'left',
-				'note'  => 'This site no longer links the CSS post of the backup to the stylesheet, so the CSS is left as it is.',
+				'note'  => __( 'This site no longer links the CSS post of the backup to the stylesheet, so the CSS is left as it is.', 'alphabridge-mcp' ),
 			);
 		}
 		$before = self::row_hash( $backup['row'] );
@@ -578,13 +631,13 @@ final class AB_MCP_Sync_Css_Writer {
 		if ( ! hash_equals( (string) $hash, $now ) ) {
 			return array(
 				'state' => 'left',
-				'note'  => 'The CSS was changed since the step wrote it, so it is left as it is.',
+				'note'  => __( 'The CSS was changed since the step wrote it, so it is left as it is.', 'alphabridge-mcp' ),
 			);
 		}
 		// The right (A5), the last read against what the step wrote, the call
 		// (AB_MCP_Sync_Write; Codex rounds 2 and 3 of branch 11, A6).
 		$id = AB_MCP_Sync_Write::back(
-			static fn() => current_user_can( 'edit_css' ) ? true : sprintf( 'change the Additional CSS of %s (edit_css)', (string) $live_id ),
+			static fn() => current_user_can( 'edit_css' ) ? true : self::may_not( (string) $live_id ),
 			static fn() => self::current( (string) $live_id ),
 			static fn( $again ) => is_array( $again ) && $again['row']['post_id'] === $backup['row']['post_id'] && hash_equals( (string) $hash, self::row_hash( $again['row'] ) ),
 			static function () use ( $backup ) {
@@ -607,7 +660,7 @@ final class AB_MCP_Sync_Css_Writer {
 					}
 				);
 			},
-			'The CSS changed as it was put back (a hook of this site), so it is left as it is.'
+			__( 'The CSS changed as it was put back (a hook of this site), so it is left as it is.', 'alphabridge-mcp' )
 		);
 		if ( is_wp_error( $id ) || is_array( $id ) ) {
 			return $id;
@@ -628,9 +681,10 @@ final class AB_MCP_Sync_Css_Writer {
 	public static function before_value( $part, $backup, $now, $live_id ) {
 		unset( $part, $now, $live_id );
 		if ( ! is_array( $backup ) ) {
-			return 'none: the CSS was not on this site before the run.';
+			return __( 'none: the CSS was not on this site before the run.', 'alphabridge-mcp' );
 		}
 		$css = (string) $backup['row']['post_content'];
-		return AB_MCP_Sync_Post_Writer::cut( sprintf( 'post_content: %1$d bytes, %2$s', strlen( $css ), AB_MCP_Sync_Post_Writer::shown_value( 'post_content', $css ) ), AB_MCP_Sync_Post_Writer::PART_CHARS );
+		/* translators: 1: the size of the CSS in bytes, 2: the CSS as shown (a credential never). */
+		return AB_MCP_Sync_Post_Writer::cut( sprintf( __( 'post_content: %1$d bytes, %2$s', 'alphabridge-mcp' ), strlen( $css ), AB_MCP_Sync_Post_Writer::shown_value( 'post_content', $css ) ), AB_MCP_Sync_Post_Writer::PART_CHARS );
 	}
 }

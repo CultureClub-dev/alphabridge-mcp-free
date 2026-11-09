@@ -73,7 +73,8 @@ abstract class AB_MCP_Sync_Db_Kind implements AB_MCP_Sync_Kind {
 		}
 		$result = $this->read( (string) $object['ref'], $object['source'], $pair );
 		if ( null === $result ) {
-			return new WP_Error( 'ab_mcp_sync_object_missing', sprintf( 'The %1$s %2$s is not on this site. Use the inventory to see which objects are.', $this->kind(), (string) $object['ref'] ), array( 'ref' => (string) $object['ref'] ) );
+			/* translators: 1: kind of the object, as the tools name it (post, term, …), 2: its reference. */
+			return new WP_Error( 'ab_mcp_sync_object_missing', sprintf( __( 'The %1$s %2$s is not on this site. Use the inventory to see which objects are.', 'alphabridge-mcp' ), $this->kind(), (string) $object['ref'] ), array( 'ref' => (string) $object['ref'] ) );
 		}
 		return $result;
 	}

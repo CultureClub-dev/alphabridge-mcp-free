@@ -52,8 +52,9 @@
  * rest at most); where less than MIN_FETCH is left, the call ends and the
  * next one goes on.
  *
- * Messages are English without gettext, as the other classes of the
- * takeover; each names the way.
+ * Messages are in gettext, in the language of the site, as the other
+ * classes of the takeover; each names the way. Codes and machine values
+ * (kinds, purposes, parameters, fields) stay as the tools name them.
  *
  * @package AlphaBridge_MCP
  */
@@ -292,12 +293,12 @@ final class AB_MCP_Sync_Import {
 		}
 		$package_id = isset( $a['package_id'] ) ? $a['package_id'] : null;
 		if ( ! is_string( $package_id ) || 1 !== preg_match( AB_MCP_Sync_Key::ID, $package_id ) ) {
-			return new WP_Error( 'ab_mcp_sync_import_package', 'package_id is the 32 hex characters wp_site_export named the package with. Pass it as the staging site gave it.' );
+			return new WP_Error( 'ab_mcp_sync_import_package', __( 'package_id is the 32 hex characters wp_site_export named the package with. Pass it as the staging site gave it.', 'alphabridge-mcp' ) );
 		}
 		$has_data  = array_key_exists( 'data', $a ) || array_key_exists( 'chunk', $a );
 		$has_fetch = array_key_exists( 'fetch', $a );
 		if ( $has_data && $has_fetch ) {
-			return new WP_Error( 'ab_mcp_sync_import_both', 'A call either hands over one chunk (chunk and data) or fetch addresses (fetch), not both. Pass one of them, then call again with the other.' );
+			return new WP_Error( 'ab_mcp_sync_import_both', __( 'A call either hands over one chunk (chunk and data) or fetch addresses (fetch), not both. Pass one of them, then call again with the other.', 'alphabridge-mcp' ) );
 		}
 		$relay = $has_data ? AB_MCP_Sync_Export::relay_refusal() : null;
 		if ( null !== $relay ) {
@@ -357,21 +358,24 @@ final class AB_MCP_Sync_Import {
 	 */
 	public static function taken( $package_id, $purpose = 'inventory' ) {
 		if ( ! is_string( $package_id ) || ! preg_match( AB_MCP_Sync_Key::ID, $package_id ) ) {
-			return new WP_Error( 'ab_mcp_sync_import_package', 'A package is named by the 32 hex characters wp_site_export named it with. Pass the package_id as the staging site gave it.' );
+			return new WP_Error( 'ab_mcp_sync_import_package', __( 'A package is named by the 32 hex characters wp_site_export named it with. Pass the package_id as the staging site gave it.', 'alphabridge-mcp' ) );
 		}
 		$found = self::find( $package_id );
 		if ( is_wp_error( $found ) ) {
 			return $found;
 		}
 		if ( null === $found ) {
-			return new WP_Error( 'ab_mcp_sync_import_unknown', sprintf( 'This site holds no package %s taken over by this account over this connection (packages are kept a day, and each belongs to the account and connection that began it). Take it over first: call wp_site_export on the staging site, then wp_site_import_chunk here with the package_id, manifest and purpose it gives, until complete is true.', $package_id ) );
+			/* translators: %s: id of the package (package_id). */
+			return new WP_Error( 'ab_mcp_sync_import_unknown', sprintf( __( 'This site holds no package %s taken over by this account over this connection (packages are kept a day, and each belongs to the account and connection that began it). Take it over first: call wp_site_export on the staging site, then wp_site_import_chunk here with the package_id, manifest and purpose it gives, until complete is true.', 'alphabridge-mcp' ), $package_id ) );
 		}
 		$expect = $found['expect'];
 		if ( ! is_array( $expect ) || ! isset( $expect['purpose'] ) || $purpose !== $expect['purpose'] ) {
-			return new WP_Error( 'ab_mcp_sync_import_purpose_held', sprintf( 'This site holds the package %1$s for another purpose than %2$s, so it is not read as one: a package of the inventory goes in packages, a package of the environment in environment, a package of objects in the objects of a run. Pass it where it belongs, or fetch a package of %2$s: call wp_site_export on the staging site with purpose=%2$s, then wp_site_import_chunk here with the same purpose.', $package_id, in_array( $purpose, AB_MCP_Sync_Export::PURPOSES, true ) ? $purpose : 'inventory' ) );
+			/* translators: 1: id of the package (package_id), 2: purpose that was passed, as the tools name it (inventory, env, objects, media). */
+			return new WP_Error( 'ab_mcp_sync_import_purpose_held', sprintf( __( 'This site holds the package %1$s for another purpose than %2$s, so it is not read as one: a package of the inventory goes in packages, a package of the environment in environment, a package of objects in the objects of a run. Pass it where it belongs, or fetch a package of %2$s: call wp_site_export on the staging site with purpose=%2$s, then wp_site_import_chunk here with the same purpose.', 'alphabridge-mcp' ), $package_id, in_array( $purpose, AB_MCP_Sync_Export::PURPOSES, true ) ? $purpose : 'inventory' ) );
 		}
 		if ( true !== self::bound( $found, AB_MCP_Sync_Anchor::pair_print() ) ) {
-			return new WP_Error( 'ab_mcp_sync_import_pair_changed', sprintf( 'The role of this site, its pair or the confirmed key of the staging site changed since the package %s was begun, so it is not read. Fetch the package anew: call wp_site_export on the staging site, then wp_site_import_chunk here with the package_id and manifest it gives.', $package_id ) );
+			/* translators: %s: id of the package (package_id). */
+			return new WP_Error( 'ab_mcp_sync_import_pair_changed', sprintf( __( 'The role of this site, its pair or the confirmed key of the staging site changed since the package %s was begun, so it is not read. Fetch the package anew: call wp_site_export on the staging site, then wp_site_import_chunk here with the package_id and manifest it gives.', 'alphabridge-mcp' ), $package_id ) );
 		}
 		$checked = AB_MCP_Sync_Manifest::verify( $found['signed'], $expect );
 		if ( is_wp_error( $checked ) ) {
@@ -386,7 +390,8 @@ final class AB_MCP_Sync_Import {
 		// against its own hash: the mark of this manifest only.
 		$mark = isset( $have[ self::COMPLETE ] ) ? AB_MCP_Protected_Store::get( 'in', $found['gid'], self::COMPLETE, hash( 'sha256', $manifest['sha256'] ) ) : null;
 		if ( ! is_string( $mark ) ) {
-			return new WP_Error( 'ab_mcp_sync_import_incomplete', sprintf( 'The package %s is not complete on this site yet, so it is not read. Hand over or fetch its missing chunks with wp_site_import_chunk until it answers complete true, then call again.', $package_id ) );
+			/* translators: %s: id of the package (package_id). */
+			return new WP_Error( 'ab_mcp_sync_import_incomplete', sprintf( __( 'The package %s is not complete on this site yet, so it is not read. Hand over or fetch its missing chunks with wp_site_import_chunk until it answers complete true, then call again.', 'alphabridge-mcp' ), $package_id ) );
 		}
 		// A package of media is read by its index, a file at a time
 		// (AB_MCP_Sync_Media_Package::extract()), never whole (branch 10).
@@ -491,7 +496,7 @@ final class AB_MCP_Sync_Import {
 		}
 		if ( null === $found ) {
 			if ( null === $expect ) {
-				return new WP_Error( 'ab_mcp_sync_import_unknown', 'This site holds no package of that id begun by this account over this connection yet: the first call brings its manifest. Pass manifest and purpose as wp_site_export gave them on the staging site.' );
+				return new WP_Error( 'ab_mcp_sync_import_unknown', __( 'This site holds no package of that id begun by this account over this connection yet: the first call brings its manifest. Pass manifest and purpose as wp_site_export gave them on the staging site.', 'alphabridge-mcp' ) );
 			}
 			$checked = AB_MCP_Sync_Manifest::verify( $a['manifest'], $expect );
 			if ( is_wp_error( $checked ) ) {
@@ -505,12 +510,13 @@ final class AB_MCP_Sync_Import {
 		$expect = $found['expect'];
 		if ( ! is_array( $expect ) || ! isset( $expect['purpose'] ) || ! in_array( $expect['purpose'], AB_MCP_Sync_Export::PURPOSES, true ) ) {
 			AB_MCP_Protected_Store::remove( 'in', $found['gid'] );
-			return new WP_Error( 'ab_mcp_sync_import_purpose_held', 'This site held the package for a purpose this version does not take (it takes purpose=inventory, purpose=env, purpose=objects and purpose=media), so what arrived of it was removed. Call again with the manifest and purpose as wp_site_export gave them on the staging site.' );
+			return new WP_Error( 'ab_mcp_sync_import_purpose_held', __( 'This site held the package for a purpose this version does not take (it takes purpose=inventory, purpose=env, purpose=objects and purpose=media), so what arrived of it was removed. Call again with the manifest and purpose as wp_site_export gave them on the staging site.', 'alphabridge-mcp' ) );
 		}
 		// A purpose a later call names is the one it was begun for (Codex,
 		// round 1 of branch 7, A3): the kept one is not put in its place.
 		if ( array_key_exists( 'purpose', $a ) && $expect['purpose'] !== $a['purpose'] ) {
-			return new WP_Error( 'ab_mcp_sync_import_purpose_other', sprintf( 'This site holds the package for purpose=%1$s, as its first call began it, and this call names another purpose, so nothing of it was taken. Pass purpose=%1$s, as wp_site_export gave it with the manifest, or leave purpose out to go on with the package.', $expect['purpose'] ) );
+			/* translators: %s: purpose the package was begun with, as the tools name it (inventory, env, objects, media). */
+			return new WP_Error( 'ab_mcp_sync_import_purpose_other', sprintf( __( 'This site holds the package for purpose=%1$s, as its first call began it, and this call names another purpose, so nothing of it was taken. Pass purpose=%1$s, as wp_site_export gave it with the manifest, or leave purpose out to go on with the package.', 'alphabridge-mcp' ), $expect['purpose'] ) );
 		}
 		// The pair it was begun with (decision 15): a new confirmation of the
 		// role, another pair or another anchor ends it, before its manifest
@@ -519,10 +525,10 @@ final class AB_MCP_Sync_Import {
 		// until the end of its day; Codex P2 on PR 132).
 		if ( ! self::bound( $found, AB_MCP_Sync_Anchor::pair_print() ) ) {
 			AB_MCP_Protected_Store::remove( 'in', $found['gid'] );
-			return new WP_Error( 'ab_mcp_sync_import_pair_changed', 'The role of this site, its pair or the confirmed key of the staging site changed since this package was begun, so it is not continued, and what arrived of it was removed. Fetch the package anew: call wp_site_export on the staging site, then wp_site_import_chunk with the package_id and manifest it gives.' );
+			return new WP_Error( 'ab_mcp_sync_import_pair_changed', __( 'The role of this site, its pair or the confirmed key of the staging site changed since this package was begun, so it is not continued, and what arrived of it was removed. Fetch the package anew: call wp_site_export on the staging site, then wp_site_import_chunk with the package_id and manifest it gives.', 'alphabridge-mcp' ) );
 		}
 		if ( array_key_exists( 'manifest', $a ) && ( ! is_array( $a['manifest'] ) || array( 'manifest', 'signature' ) !== self::sorted_keys( $a['manifest'] ) || $found['signed']['manifest'] !== $a['manifest']['manifest'] || $found['signed']['signature'] !== $a['manifest']['signature'] ) ) {
-			return new WP_Error( 'ab_mcp_sync_import_other_manifest', 'This site holds the package with another manifest than the one passed now. Pass the manifest of the first call, or leave it out.' );
+			return new WP_Error( 'ab_mcp_sync_import_other_manifest', __( 'This site holds the package with another manifest than the one passed now. Pass the manifest of the first call, or leave it out.', 'alphabridge-mcp' ) );
 		}
 		$checked = AB_MCP_Sync_Manifest::verify( $found['signed'], $expect );
 		if ( is_wp_error( $checked ) ) {
@@ -541,7 +547,7 @@ final class AB_MCP_Sync_Import {
 	private static function expect( array $a, $package_id ) {
 		$purpose = isset( $a['purpose'] ) ? $a['purpose'] : null;
 		if ( ! in_array( $purpose, AB_MCP_Sync_Export::PURPOSES, true ) ) {
-			return new WP_Error( 'ab_mcp_sync_import_purpose', 'This version takes packages of the inventory and of the environment of the staging site, packages of objects for a report and packages of the files of its attachments (purpose says what a package is read for). Pass purpose=inventory, purpose=env, purpose=objects or purpose=media with the manifest, as wp_site_export gave it.' );
+			return new WP_Error( 'ab_mcp_sync_import_purpose', __( 'This version takes packages of the inventory and of the environment of the staging site, packages of objects for a report and packages of the files of its attachments (purpose says what a package is read for). Pass purpose=inventory, purpose=env, purpose=objects or purpose=media with the manifest, as wp_site_export gave it.', 'alphabridge-mcp' ) );
 		}
 		$expect = array(
 			'purpose'    => $purpose,
@@ -552,7 +558,7 @@ final class AB_MCP_Sync_Import {
 		if ( in_array( $purpose, AB_MCP_Sync_Manifest::FOR_REPORT, true ) ) {
 			$hash = isset( $a['report_hash'] ) ? $a['report_hash'] : null;
 			if ( ! is_string( $hash ) || 1 !== preg_match( '/^[0-9a-f]{64}\z/', $hash ) ) {
-				return new WP_Error( 'ab_mcp_sync_import_report', 'A package of objects or of media is read for one report: pass report_hash with the manifest, the 64 hex characters wp_site_diff gave for the report the objects are for (the same the staging site made the package for).' );
+				return new WP_Error( 'ab_mcp_sync_import_report', __( 'A package of objects or of media is read for one report: pass report_hash with the manifest, the 64 hex characters wp_site_diff gave for the report the objects are for (the same the staging site made the package for).', 'alphabridge-mcp' ) );
 			}
 			$expect['report_hash'] = $hash;
 		}
@@ -727,7 +733,7 @@ final class AB_MCP_Sync_Import {
 		// One spelling: what base64_encode() writes for the bytes; a chunk
 		// has at least one byte.
 		if ( '' === $text || base64_encode( (string) $data ) !== $text ) { // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- the round trip.
-			return new WP_Error( 'ab_mcp_sync_import_data', 'data is the chunk as base64, exactly as wp_site_export_chunk gave it on the staging site. Pass it unchanged.' );
+			return new WP_Error( 'ab_mcp_sync_import_data', __( 'data is the chunk as base64, exactly as wp_site_export_chunk gave it on the staging site. Pass it unchanged.', 'alphabridge-mcp' ) );
 		}
 		return self::keep( $held, $chunk, $data );
 	}
@@ -801,7 +807,8 @@ final class AB_MCP_Sync_Import {
 	private static function arrived( array $held, $chunk, $answer ) {
 		$status = (int) wp_remote_retrieve_response_code( $answer );
 		if ( 200 !== $status ) {
-			return new WP_Error( 'ab_mcp_sync_import_fetch', sprintf( 'The staging site answered %d for this chunk: its fetch address was wrong or older than ten minutes, or the package is gone there. Get fresh fetch addresses with wp_site_export (package_id) on the staging site, then call again with them.', $status ), array( 'status' => $status ) );
+			/* translators: %d: HTTP status code. */
+			return new WP_Error( 'ab_mcp_sync_import_fetch', sprintf( __( 'The staging site answered %d for this chunk: its fetch address was wrong or older than ten minutes, or the package is gone there. Get fresh fetch addresses with wp_site_export (package_id) on the staging site, then call again with them.', 'alphabridge-mcp' ), $status ), array( 'status' => $status ) );
 		}
 		return self::keep( $held, $chunk, (string) wp_remote_retrieve_body( $answer ) );
 	}
@@ -957,14 +964,14 @@ final class AB_MCP_Sync_Import {
 				return AB_MCP_Store_Budget::unpack_refusal( array( 'object_bytes' => $limits['object_bytes'] + 1 ) );
 			}
 			if ( ! is_string( $text ) ) {
-				return self::unpack_refusal( 'A chunk does not unpack within the package: it is no gzip, or it inflates to more than the manifest declares.' );
+				return self::unpack_refusal( __( 'A chunk does not unpack within the package: it is no gzip, or it inflates to more than the manifest declares.', 'alphabridge-mcp' ) );
 			}
 			$total += strlen( $text );
 			if ( '' === $text ) {
 				continue;
 			}
 			if ( "\n" !== substr( $text, -1 ) ) {
-				return self::unpack_refusal( 'A chunk does not end with a whole line.' );
+				return self::unpack_refusal( __( 'A chunk does not end with a whole line.', 'alphabridge-mcp' ) );
 			}
 			foreach ( explode( "\n", substr( $text, 0, -1 ) ) as $line ) {
 				++$count;
@@ -977,11 +984,11 @@ final class AB_MCP_Sync_Import {
 					return AB_MCP_Store_Budget::unpack_refusal( array( 'depth' => $limits['depth'] + 1 ) );
 				}
 				if ( ! is_array( $object ) || AB_MCP_Sync_Canon::encode( $object ) !== $line ) {
-					return self::unpack_refusal( 'A line is not an object in the one spelling of the staging site.' );
+					return self::unpack_refusal( __( 'A line is not an object in the one spelling of the staging site.', 'alphabridge-mcp' ) );
 				}
 				if ( $env ) {
 					if ( ! AB_MCP_Sync_Env::shaped( $object ) ) {
-						return self::unpack_refusal( 'A line is not one of the environment as the staging site writes it: a kind of line or a field it has no place for, or a field of another type.' );
+						return self::unpack_refusal( __( 'A line is not one of the environment as the staging site writes it: a kind of line or a field it has no place for, or a field of another type.', 'alphabridge-mcp' ) );
 					}
 					// A name of the site (a file, a plugin, a table) a credential
 					// holds by the rules of this site, or the staging site held:
@@ -997,12 +1004,12 @@ final class AB_MCP_Sync_Import {
 				if ( $with_content ) {
 					$split = self::object_split( $object );
 					if ( null === $split ) {
-						return self::unpack_refusal( 'A line of a package of objects is not one as the staging site writes it: its form or its content (the columns of its row, its meta rows, its terms) has a field it has no place for or of another type, or an object a credential holds carries content.' );
+						return self::unpack_refusal( __( 'A line of a package of objects is not one as the staging site writes it: its form or its content (the columns of its row, its meta rows, its terms) has a field it has no place for or of another type, or an object a credential holds carries content.', 'alphabridge-mcp' ) );
 					}
 					list( $object, $content ) = $split;
 				}
 				if ( ! self::line_shaped( $object ) ) {
-					return self::unpack_refusal( 'A line is not one as the staging site writes it: a field it has no place for or of another type, a status, lock, space, strength or reason code outside its list, bytes not in the byte form, an identity not of its kind or naming another object, an object whose name is the name of a credential, or more than the identity of an object a credential holds.' );
+					return self::unpack_refusal( __( 'A line is not one as the staging site writes it: a field it has no place for or of another type, a status, lock, space, strength or reason code outside its list, bytes not in the byte form, an identity not of its kind or naming another object, an object whose name is the name of a credential, or more than the identity of an object a credential holds.', 'alphabridge-mcp' ) );
 				}
 				$code = self::held_code( $object, $extra );
 				if ( null === $code && null !== $content ) {
@@ -1017,7 +1024,7 @@ final class AB_MCP_Sync_Import {
 			}
 		}
 		if ( $count !== $manifest['objects'] || $total !== $manifest['unpacked'] ) {
-			return self::unpack_refusal( 'The lines are not as many, or not as long, as the manifest declares.' );
+			return self::unpack_refusal( __( 'The lines are not as many, or not as long, as the manifest declares.', 'alphabridge-mcp' ) );
 		}
 		return $out;
 	}
@@ -1594,7 +1601,7 @@ final class AB_MCP_Sync_Import {
 		$text  = 1 === count( $names ) ? AB_MCP_Protected_Store::get( 'in', $held['gid'], $names[0], self::held_sha( $names[0] ) ) : null;
 		$list  = is_string( $text ) ? json_decode( $text, true, 8 ) : null;
 		if ( ! is_array( $list ) || ! isset( $list['format'], $list['objects'] ) || self::HELD_FORMAT !== $list['format'] || ! is_array( $list['objects'] ) ) {
-			return new WP_Error( 'ab_mcp_sync_import_held', 'The package is marked complete, but the list of its objects a credential holds on this site does not read back (it was taken over by an older version, or the list was changed), so it is not used, and what arrived of it was removed. Fetch the package anew: 1. Call wp_site_import_chunk again with the package_id, manifest and purpose as wp_site_export gave them, while the manifest is valid; or export it again on the staging site (wp_site_export). 2. Hand over or fetch its chunks.' );
+			return new WP_Error( 'ab_mcp_sync_import_held', __( 'The package is marked complete, but the list of its objects a credential holds on this site does not read back (it was taken over by an older version, or the list was changed), so it is not used, and what arrived of it was removed. Fetch the package anew: 1. Call wp_site_import_chunk again with the package_id, manifest and purpose as wp_site_export gave them, while the manifest is valid; or export it again on the staging site (wp_site_export). 2. Hand over or fetch its chunks.', 'alphabridge-mcp' ) );
 		}
 		return $list['objects'];
 	}
@@ -1606,7 +1613,7 @@ final class AB_MCP_Sync_Import {
 	 * @return WP_Error
 	 */
 	private static function unpack_refusal( $what ) {
-		return new WP_Error( 'ab_mcp_sync_import_lines', $what . ' So the package is not used, and what arrived of it was removed. 1. Update AlphaBridge MCP on the staging site to the version of this site. 2. Export the package again there (wp_site_export). 3. Import it again with the new package_id and manifest.' );
+		return new WP_Error( 'ab_mcp_sync_import_lines', $what . ' ' . __( 'So the package is not used, and what arrived of it was removed. 1. Update AlphaBridge MCP on the staging site to the version of this site. 2. Export the package again there (wp_site_export). 3. Import it again with the new package_id and manifest.', 'alphabridge-mcp' ) );
 	}
 
 	/**
@@ -1633,7 +1640,7 @@ final class AB_MCP_Sync_Import {
 	 * @return WP_Error fetch is not a list of fetch addresses.
 	 */
 	private static function grants_refusal() {
-		return new WP_Error( 'ab_mcp_sync_import_fetch_list', 'fetch is the list of fetch addresses wp_site_export gave on the staging site (fetch: chunk, expires, signature each). Pass them unchanged.' );
+		return new WP_Error( 'ab_mcp_sync_import_fetch_list', __( 'fetch is the list of fetch addresses wp_site_export gave on the staging site (fetch: chunk, expires, signature each). Pass them unchanged.', 'alphabridge-mcp' ) );
 	}
 
 	/**

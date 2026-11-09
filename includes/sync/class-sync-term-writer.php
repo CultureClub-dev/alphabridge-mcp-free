@@ -41,8 +41,10 @@
  * the taxonomy are refused, AB_MCP_Sync_Guard), its meta on a refusable
  * one.
  *
- * Messages are English without gettext, as the other classes of the
- * takeover; each names the way.
+ * Messages and notes are in gettext, in the language of the site as they
+ * arise (a note is stored in the journal as it was written); error codes,
+ * states, kinds and the names of parts stay as the tools name them. Each
+ * names the way.
  *
  * @package AlphaBridge_MCP
  */
@@ -102,14 +104,15 @@ final class AB_MCP_Sync_Term_Writer {
 		$taxonomy = isset( $line['identity']['taxonomy'] ) ? (string) $line['identity']['taxonomy'] : '';
 		$answer   = AB_MCP_Sync_Kinds::taxonomy( $taxonomy );
 		if ( ! in_array( $taxonomy, self::TAXONOMIES, true ) || 'term' !== $answer['kind'] || 'z8' !== $answer['status'] ) {
-			return self::locked( 'term:taxonomy_rule', sprintf( 'taxonomy %s', $taxonomy ) );
+			/* translators: %s: the taxonomy of the term, as WordPress names it. */
+			return self::locked( 'term:taxonomy_rule', sprintf( __( 'The term is of the taxonomy %s.', 'alphabridge-mcp' ), $taxonomy ) );
 		}
 		$held = AB_MCP_Sync_Post_Writer::line_lock( $line );
 		if ( null !== $held ) {
 			return $held;
 		}
 		if ( ! isset( $line['content']['row'], $line['content']['meta'], $line['content']['terms'], $line['form'] ) || ! is_array( $line['form'] ) || array() !== $line['content']['terms'] ) {
-			return self::locked( 'term:taxonomy_rule', 'the package carries no content of the term (a row of it could not be read on the staging site)' );
+			return self::locked( 'term:taxonomy_rule', __( 'The package carries no content of the term (a row of it could not be read on the staging site).', 'alphabridge-mcp' ) );
 		}
 		$row = array();
 		foreach ( $line['content']['row'] as $column => $value ) {
@@ -117,17 +120,20 @@ final class AB_MCP_Sync_Term_Writer {
 		}
 		foreach ( self::WRITTEN_COLUMNS as $column ) {
 			if ( ! array_key_exists( $column, $row ) ) {
-				return self::locked( 'term:taxonomy_rule', sprintf( 'the package names no column %s', $column ) );
+				/* translators: %s: a column of the terms table (name, slug, …). */
+				return self::locked( 'term:taxonomy_rule', sprintf( __( 'The package names no column %s of the term.', 'alphabridge-mcp' ), $column ) );
 			}
 		}
 		if ( $row['taxonomy'] !== $taxonomy ) {
-			return self::locked( 'term:taxonomy_rule', sprintf( 'the row names the taxonomy %1$s, the identity %2$s', $row['taxonomy'], $taxonomy ) );
+			/* translators: 1: taxonomy in the row, 2: taxonomy in the identity, both as WordPress names them. */
+			return self::locked( 'term:taxonomy_rule', sprintf( __( 'The row of the term names the taxonomy %1$s, its identity the taxonomy %2$s.', 'alphabridge-mcp' ), $row['taxonomy'], $taxonomy ) );
 		}
 		// The group of aliases (term_group): an id of this site's own groups,
 		// which nothing maps; only 0 is written (and kept, wp_update_term()
 		// merges the stored one).
 		if ( '0' !== $row['term_group'] ) {
-			return self::locked( 'term:term_group', sprintf( 'the term of the staging site carries the term_group %s', $row['term_group'] ) );
+			/* translators: %s: the value of the column term_group. */
+			return self::locked( 'term:term_group', sprintf( __( 'The term of the staging site carries the term_group %s.', 'alphabridge-mcp' ), $row['term_group'] ) );
 		}
 		$plan    = AB_MCP_Sync_Refs::plan( $ctx['map'], $ctx['addresses'], isset( $ctx['routes'] ) ? $ctx['routes'] : null );
 		$changed = false;
@@ -144,7 +150,8 @@ final class AB_MCP_Sync_Term_Writer {
 				$mapped          = 0;
 			}
 			if ( null === $mapped ) {
-				return self::locked( 'term:reference_unmapped', sprintf( 'the parent %d of the staging site', $parent ) );
+				/* translators: %d: the id of the parent term on the staging site. */
+				return self::locked( 'term:reference_unmapped', sprintf( __( 'The parent %d of the staging site has no counterpart on this site.', 'alphabridge-mcp' ), $parent ) );
 			}
 			$parent = (int) $mapped;
 		}
@@ -155,7 +162,8 @@ final class AB_MCP_Sync_Term_Writer {
 			$plan['missing']  = array();
 			$texts[ $column ] = AB_MCP_Sync_Refs::rewrite_text( $row[ $column ], $plan, array(), $changed );
 			if ( array() !== self::unresolved( $plan['missing'], $pending ) ) {
-				return self::locked( 'term:reference_unmapped', sprintf( 'a reference in the %s without a counterpart on this site', $column ) );
+				/* translators: %s: the field of the term (name or description). */
+				return self::locked( 'term:reference_unmapped', sprintf( __( 'A reference in the field %s of the term has no counterpart on this site.', 'alphabridge-mcp' ), $column ) );
 			}
 		}
 		// The meta: none on a new term (decision 28); on one here, each value
@@ -164,7 +172,8 @@ final class AB_MCP_Sync_Term_Writer {
 		foreach ( $line['content']['meta'] as $pair ) {
 			$key = AB_MCP_Sync_Post_Writer::bytes( $pair[0] );
 			if ( 'create' === $item['op'] ) {
-				return self::locked( 'term:create_with_meta', sprintf( 'meta key %s', $key ) );
+				/* translators: %s: a meta key. */
+				return self::locked( 'term:create_with_meta', sprintf( __( 'The new term carries the meta key %s.', 'alphabridge-mcp' ), $key ) );
 			}
 			$plan['missing'] = array();
 			$written         = AB_MCP_Sync_Post_Writer::meta_value( AB_MCP_Sync_Post_Writer::bytes( $pair[1] ), $plan, $changed, 'term:meta_rule' );
@@ -172,7 +181,8 @@ final class AB_MCP_Sync_Term_Writer {
 				return $written;
 			}
 			if ( array() !== self::unresolved( $plan['missing'], $pending ) ) {
-				return self::locked( 'term:reference_unmapped', sprintf( 'a reference in the meta key %s without a counterpart on this site', $key ) );
+				/* translators: %s: a meta key. */
+				return self::locked( 'term:reference_unmapped', sprintf( __( 'A reference in the meta key %s of the term has no counterpart on this site.', 'alphabridge-mcp' ), $key ) );
 			}
 			$meta[ $key ][] = $written;
 		}
@@ -226,7 +236,8 @@ final class AB_MCP_Sync_Term_Writer {
 		$taxonomy = (string) $prepared['type'];
 		$object   = get_taxonomy( $taxonomy );
 		if ( ! is_object( $object ) || ! isset( $object->cap->manage_terms, $object->cap->edit_terms, $object->cap->assign_terms ) ) {
-			return self::locked( 'term:taxonomy_rule', sprintf( 'the taxonomy %s is not registered on this site', $taxonomy ) );
+			/* translators: %s: a taxonomy, as WordPress names it. */
+			return self::locked( 'term:taxonomy_rule', sprintf( __( 'The taxonomy %s is not registered on this site.', 'alphabridge-mcp' ), $taxonomy ) );
 		}
 		$current = null;
 		if ( null !== $live_id ) {
@@ -235,19 +246,23 @@ final class AB_MCP_Sync_Term_Writer {
 				return $current;
 			}
 			if ( ! is_array( $current ) || $current['row']['taxonomy'] !== $taxonomy ) {
-				return new WP_Error( 'ab_mcp_sync_target_gone', sprintf( 'The term %1$d of %2$s of this site is no longer there, so nothing is written for it. Make a new report (wp_site_diff) and plan again.', (int) $live_id, $taxonomy ) );
+				/* translators: 1: term id on this site, 2: its taxonomy, as WordPress names it. */
+				return new WP_Error( 'ab_mcp_sync_target_gone', sprintf( __( 'The term %1$d of %2$s of this site is no longer there, so nothing is written for it. Make a new report (wp_site_diff) and plan again.', 'alphabridge-mcp' ), (int) $live_id, $taxonomy ) );
 			}
 			if ( ! current_user_can( 'edit_term', (int) $live_id ) ) {
-				return self::rights( sprintf( 'edit the term %1$d of %2$s (edit_term)', (int) $live_id, $taxonomy ) );
+				/* translators: 1: term id on this site, 2: its taxonomy, as WordPress names it. */
+				return self::rights( sprintf( __( 'This account may not edit the term %1$d of %2$s on this site (edit_term).', 'alphabridge-mcp' ), (int) $live_id, $taxonomy ) );
 			}
 			if ( '0' !== (string) $current['row']['term_group'] ) {
-				return self::locked( 'term:term_group', sprintf( 'the term %1$d of this site carries the term_group %2$s', (int) $live_id, (string) $current['row']['term_group'] ) );
+				/* translators: 1: term id on this site, 2: the value of its column term_group. */
+				return self::locked( 'term:term_group', sprintf( __( 'The term %1$d of this site carries the term_group %2$s.', 'alphabridge-mcp' ), (int) $live_id, (string) $current['row']['term_group'] ) );
 			}
 		} else {
 			// A new term: the rights of the taxonomy (decision 28).
 			foreach ( array( 'manage_terms', 'edit_terms', 'assign_terms' ) as $cap ) {
 				if ( ! current_user_can( (string) $object->cap->$cap ) ) {
-					return self::rights( sprintf( 'make a term of %1$s (%2$s)', $taxonomy, (string) $object->cap->$cap ) );
+					/* translators: 1: a taxonomy, as WordPress names it, 2: the capability it lacks (manage_categories, …). */
+					return self::rights( sprintf( __( 'This account may not make a term of %1$s on this site (%2$s).', 'alphabridge-mcp' ), $taxonomy, (string) $object->cap->$cap ) );
 				}
 			}
 		}
@@ -265,16 +280,19 @@ final class AB_MCP_Sync_Term_Writer {
 		// sees (the plan puts a parent the run moves first; Codex round 1, B4).
 		if ( $parent > 0 && empty( $prepared['pending'] ) ) {
 			if ( ! is_taxonomy_hierarchical( $taxonomy ) ) {
-				return self::locked( 'term:parent', sprintf( 'the taxonomy %s has no parents on this site', $taxonomy ) );
+				/* translators: %s: a taxonomy, as WordPress names it. */
+				return self::locked( 'term:parent', sprintf( __( 'The taxonomy %s has no parents on this site.', 'alphabridge-mcp' ), $taxonomy ) );
 			}
 			$found = AB_MCP_Sync_Rows::term( $parent, $taxonomy );
 			if ( ! is_array( $found ) ) {
-				return self::locked( 'term:reference_unmapped', sprintf( 'the parent %1$d is not a term of %2$s on this site', $parent, $taxonomy ) );
+				/* translators: 1: term id of the parent on this site, 2: a taxonomy, as WordPress names it. */
+				return self::locked( 'term:reference_unmapped', sprintf( __( 'The parent %1$d is not a term of %2$s on this site.', 'alphabridge-mcp' ), $parent, $taxonomy ) );
 			}
 			$planned = isset( $prepared['parents'] ) && is_array( $prepared['parents'] ) ? $prepared['parents'] : array();
 			$loop    = null === $live_id ? null : self::loop( (int) $live_id, $parent, $taxonomy, $planned );
 			if ( null !== $loop ) {
-				return self::locked( 'term:parent', sprintf( 'the parent %1$d would close a loop of parents on this site: %2$s', $parent, $loop ) );
+				/* translators: 1: term id of the parent on this site, 2: the term ids of the loop. */
+				return self::locked( 'term:parent', sprintf( __( 'The parent %1$d would close a loop of parents on this site: %2$s.', 'alphabridge-mcp' ), $parent, $loop ) );
 			}
 		}
 		// The slug: WordPress refuses an update to a slug another term of the
@@ -282,14 +300,15 @@ final class AB_MCP_Sync_Term_Writer {
 		// new term another one (wp_unique_term_slug()).
 		$slug = (string) $args['slug'];
 		if ( '' === $slug ) {
-			return self::locked( 'term:sanitizer', 'the slug is empty (WordPress would make one from the name)' );
+			return self::locked( 'term:sanitizer', __( 'The slug is empty (WordPress would make one from the name).', 'alphabridge-mcp' ) );
 		}
 		$holder = self::slug_holder( $slug, $taxonomy );
 		if ( null === $holder ) {
-			return new WP_Error( 'ab_mcp_sync_rows_unread', 'The terms of this site could not be read, so nothing is written. Try again; if it keeps failing, the database error log names the cause.' );
+			return new WP_Error( 'ab_mcp_sync_rows_unread', __( 'The terms of this site could not be read, so nothing is written. Try again; if it keeps failing, the database error log names the cause.', 'alphabridge-mcp' ) );
 		}
 		if ( 0 !== $holder && $holder !== (int) $live_id ) {
-			return self::locked( 'term:slug_collision', sprintf( 'the term %1$d of %2$s on this site holds the slug %3$s', $holder, $taxonomy, $slug ) );
+			/* translators: 1: term id on this site, 2: a taxonomy, as WordPress names it, 3: a slug. */
+			return self::locked( 'term:slug_collision', sprintf( __( 'The term %1$d of %2$s on this site holds the slug %3$s.', 'alphabridge-mcp' ), $holder, $taxonomy, $slug ) );
 		}
 		if ( null === $live_id && empty( $prepared['pending'] ) ) {
 			$unique = wp_unique_term_slug(
@@ -301,7 +320,8 @@ final class AB_MCP_Sync_Term_Writer {
 				)
 			);
 			if ( (string) $unique !== $slug ) {
-				return self::locked( 'term:slug_collision', sprintf( 'WordPress would store the slug %1$s for %2$s', (string) $unique, $slug ) );
+				/* translators: 1: the slug WordPress would make, 2: the slug of the staging site. */
+				return self::locked( 'term:slug_collision', sprintf( __( 'WordPress would store the slug %1$s for %2$s.', 'alphabridge-mcp' ), (string) $unique, $slug ) );
 			}
 		}
 		// The sanitizers ahead (decision 17): the fields through
@@ -311,7 +331,13 @@ final class AB_MCP_Sync_Term_Writer {
 		// slashed as they are handed over.
 		$refusal = self::sanitizer_refusal( $args, $taxonomy, null === $live_id ? 0 : (int) $live_id );
 		if ( null !== $refusal ) {
-			return self::locked( 'term:sanitizer', $refusal );
+			return self::locked(
+				'term:sanitizer',
+				'' === $refusal
+					? __( 'The name of the term is empty.', 'alphabridge-mcp' )
+					/* translators: %s: a field of the term (name, slug or description). */
+					: sprintf( __( 'sanitize_term() would change the field %s of the term.', 'alphabridge-mcp' ), $refusal )
+			);
 		}
 		// The meta of a term here (decision 28): each key whose values differ
 		// between the target and this site, with the right per operation
@@ -323,21 +349,25 @@ final class AB_MCP_Sync_Term_Writer {
 			foreach ( self::differing( $prepared, $current ) as $key ) {
 				$may = self::meta_right( (int) $live_id, $key, self::targets( $prepared, $key ), AB_MCP_Sync_Post_Writer::meta_values( $current, $key ) );
 				if ( true !== $may ) {
-					return self::locked( '*:meta_without_rule', sprintf( 'meta key %1$s of the term on this site: %2$s', $key, $may ) );
+					/* translators: 1: a meta key, 2: the capability WordPress refused, as the code names it (add_term_meta, …). */
+					return self::locked( '*:meta_without_rule', sprintf( __( 'Meta key %1$s of the term on this site: %2$s refused.', 'alphabridge-mcp' ), $key, $may ) );
 				}
 				foreach ( isset( $prepared['meta'][ $key ] ) ? $prepared['meta'][ $key ] : array() as $value ) {
 					// By the bytes WordPress would store (Codex round 1, B3).
 					if ( AB_MCP_Sync_Post_Writer::db_form( sanitize_meta( $key, $value, 'term', $taxonomy ) ) !== AB_MCP_Sync_Post_Writer::stored_form( $value ) ) {
-						return self::locked( 'term:sanitizer', sprintf( 'meta key %s (sanitize_meta() changes its value)', $key ) );
+						/* translators: %s: a meta key. */
+						return self::locked( 'term:sanitizer', sprintf( __( 'sanitize_meta() changes the value of the meta key %s of the term.', 'alphabridge-mcp' ), $key ) );
 					}
 				}
 				$rows = AB_MCP_Undo_Meta::rows( 'term', (int) $live_id, (string) $key );
 				if ( null === $rows ) {
-					return new WP_Error( 'ab_mcp_sync_rows_unread', sprintf( 'The meta rows of the key %s of the term could not be read, so nothing is written for it. Try again; if it keeps failing, the database error log names the cause.', $key ) );
+					/* translators: %s: a meta key. */
+					return new WP_Error( 'ab_mcp_sync_rows_unread', sprintf( __( 'The meta rows of the key %s of the term could not be read, so nothing is written for it. Try again; if it keeps failing, the database error log names the cause.', 'alphabridge-mcp' ), $key ) );
 				}
 				foreach ( $rows as $one ) {
 					if ( $one['key'] !== (string) $key ) {
-						return self::locked( 'term:meta_spelling', sprintf( 'the keys %1$s and %2$s of the term on this site are one key to the database', (string) $key, (string) $one['key'] ) );
+						/* translators: 1, 2: two meta keys. */
+						return self::locked( 'term:meta_spelling', sprintf( __( 'The keys %1$s and %2$s of the term on this site are one key to the database.', 'alphabridge-mcp' ), (string) $key, (string) $one['key'] ) );
 					}
 				}
 			}
@@ -359,7 +389,13 @@ final class AB_MCP_Sync_Term_Writer {
 		$read = self::live_read( (int) $live_id, $source );
 		if ( is_array( $read ) && ! empty( $read['locks'] ) ) {
 			$lock = $read['locks'][0];
-			return AB_MCP_Sync_Post_Writer::locked( (string) $lock['key'], sprintf( 'the term of this site, at %s', isset( $lock['at'] ) ? (string) $lock['at'] : 'its form' ) );
+			return AB_MCP_Sync_Post_Writer::locked(
+				(string) $lock['key'],
+				isset( $lock['at'] )
+					/* translators: %s: where in the term the lock is (a column or meta key, as the canonical form names it). */
+					? sprintf( __( 'The lock is in the term of this site, at %s.', 'alphabridge-mcp' ), (string) $lock['at'] )
+					: __( 'The lock is in the form of the term of this site.', 'alphabridge-mcp' )
+			);
 		}
 		return true;
 	}
@@ -453,7 +489,9 @@ final class AB_MCP_Sync_Term_Writer {
 	}
 
 	/**
-	 * Why sanitize_term() would change a field, or null.
+	 * Why sanitize_term() would change a field, or null: the name of the
+	 * field, or '' where the name is empty (the callers say it in a sentence
+	 * of their own).
 	 *
 	 * @param array  $args     name, slug, description, parent.
 	 * @param string $taxonomy Taxonomy.
@@ -479,11 +517,11 @@ final class AB_MCP_Sync_Term_Writer {
 		);
 		foreach ( array( 'name', 'slug', 'description' ) as $field ) {
 			if ( ! isset( $sanitized[ $field ] ) || (string) $sanitized[ $field ] !== (string) $slashed[ $field ] ) {
-				return sprintf( 'field %s', $field );
+				return $field;
 			}
 		}
 		if ( '' === trim( (string) $args['name'] ) ) {
-			return 'the name is empty';
+			return '';
 		}
 		return null;
 	}
@@ -554,7 +592,8 @@ final class AB_MCP_Sync_Term_Writer {
 			return null;
 		}
 		if ( 1 !== count( $taxonomies ) ) {
-			return new WP_Error( 'ab_mcp_sync_rows_unread', sprintf( 'The term %d of this site has rows in more than one taxonomy (a term WordPress did not split), so nothing is written for it. Check it in wp-admin: saving it there once splits it; then make a new report (wp_site_diff).', (int) $live_id ) );
+			/* translators: %d: term id on this site. */
+			return new WP_Error( 'ab_mcp_sync_rows_unread', sprintf( __( 'The term %d of this site has rows in more than one taxonomy (a term WordPress did not split), so nothing is written for it. Check it in wp-admin: saving it there once splits it; then make a new report (wp_site_diff).', 'alphabridge-mcp' ), (int) $live_id ) );
 		}
 		$row  = AB_MCP_Sync_Rows::term( (int) $live_id, (string) $taxonomies[0] );
 		$meta = AB_MCP_Sync_Rows::meta( 'term', (int) $live_id );
@@ -588,7 +627,8 @@ final class AB_MCP_Sync_Term_Writer {
 	 * @return WP_Error
 	 */
 	private static function unread( $live_id ) {
-		return new WP_Error( 'ab_mcp_sync_rows_unread', sprintf( 'A row of the term %d could not be read, so nothing is written for it. Try again; if it keeps failing, the database error log names the cause.', (int) $live_id ) );
+		/* translators: %d: term id on this site. */
+		return new WP_Error( 'ab_mcp_sync_rows_unread', sprintf( __( 'A row of the term %d could not be read, so nothing is written for it. Try again; if it keeps failing, the database error log names the cause.', 'alphabridge-mcp' ), (int) $live_id ) );
 	}
 
 	/**
@@ -713,14 +753,15 @@ final class AB_MCP_Sync_Term_Writer {
 				return $done;
 			}
 			if ( ! is_array( $done ) || (int) $done['term_id'] !== (int) $live_id ) {
-				return new WP_Error( 'ab_mcp_sync_write_failed', sprintf( 'WordPress wrote the term under another id than %d (it split a shared term): nothing more of the step is written. Check the term in wp-admin and make a new report (wp_site_diff).', (int) $live_id ) );
+				/* translators: %d: term id on this site. */
+				return new WP_Error( 'ab_mcp_sync_write_failed', sprintf( __( 'WordPress wrote the term under another id than %d (it split a shared term): nothing more of the step is written. Check the term in wp-admin and make a new report (wp_site_diff).', 'alphabridge-mcp' ), (int) $live_id ) );
 			}
 			return (int) $live_id;
 		}
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- the highest id before the insert, to tell a term WordPress made from one it gave back.
 		$highest = (int) $wpdb->get_var( "SELECT MAX(term_id) FROM {$wpdb->terms}" );
 		if ( '' !== (string) $wpdb->last_error ) {
-			return new WP_Error( 'ab_mcp_sync_write_failed', 'The terms of this site could not be read before the term was made, so it was not made. Try again; if it keeps failing, the database error log names the cause.' );
+			return new WP_Error( 'ab_mcp_sync_write_failed', __( 'The terms of this site could not be read before the term was made, so it was not made. Try again; if it keeps failing, the database error log names the cause.', 'alphabridge-mcp' ) );
 		}
 		$done = wp_insert_term( wp_slash( (string) $args['name'] ), $taxonomy, $fields );
 		if ( is_wp_error( $done ) ) {
@@ -728,7 +769,8 @@ final class AB_MCP_Sync_Term_Writer {
 		}
 		$id = is_array( $done ) && isset( $done['term_id'] ) ? (int) $done['term_id'] : 0;
 		if ( $id <= $highest ) {
-			return new WP_Error( 'ab_mcp_sync_write_failed', sprintf( 'WordPress gave back the term %d, which was there before the step (a duplicate of the slug at the same level): it is not the step\'s own, and nothing more is written. Check the terms of the taxonomy in wp-admin and make a new report (wp_site_diff).', $id ) );
+			/* translators: %d: term id on this site. */
+			return new WP_Error( 'ab_mcp_sync_write_failed', sprintf( __( 'WordPress gave back the term %d, which was there before the step (a duplicate of the slug at the same level): it is not the step\'s own, and nothing more is written. Check the terms of the taxonomy in wp-admin and make a new report (wp_site_diff).', 'alphabridge-mcp' ), $id ) );
 		}
 		return $id;
 	}
@@ -751,7 +793,8 @@ final class AB_MCP_Sync_Term_Writer {
 	public static function write_part( $live_id, $name, array $prepared, $pre, $whole = null ) {
 		$name = (string) $name;
 		if ( 0 !== strpos( $name, 'meta:' ) ) {
-			return new WP_Error( 'ab_mcp_sync_write_failed', sprintf( 'The part %s is of a name the kind term does not write. Check the term in wp-admin.', $name ) );
+			/* translators: %s: the name of a part, as the tools name it (row, meta:…). */
+			return new WP_Error( 'ab_mcp_sync_write_failed', sprintf( __( 'The part %s is of a name the kind term does not write. Check the term in wp-admin.', 'alphabridge-mcp' ), $name ) );
 		}
 		$key  = substr( $name, 5 );
 		$from = is_array( $pre ) ? AB_MCP_Sync_Post_Writer::meta_values( $pre, $key ) : array();
@@ -763,7 +806,8 @@ final class AB_MCP_Sync_Term_Writer {
 			$pre,
 			static function () use ( $live_id, $key, $prepared, $from ) {
 				$may = self::meta_right( (int) $live_id, $key, self::targets( $prepared, $key ), $from );
-				return true === $may ? true : new WP_Error( 'ab_mcp_sync_rights', sprintf( 'The meta %1$s of the term was not written: %2$s at the term. Connect with an account that may, or leave the term out of the plan.', $key, $may ) );
+				/* translators: 1: a meta key, 2: the capability WordPress refused, as the code names it (add_term_meta, …). */
+				return true === $may ? true : new WP_Error( 'ab_mcp_sync_rights', sprintf( __( 'The meta %1$s of the term was not written: %2$s refused at the term. Connect with an account that may, or leave the term out of the plan.', 'alphabridge-mcp' ), $key, $may ) );
 			},
 			static fn() => AB_MCP_Sync_Post_Writer::write_meta( (int) $live_id, $key, isset( $prepared['meta'][ $key ] ) ? $prepared['meta'][ $key ] : array(), $from, 'term' )
 		);
@@ -833,13 +877,18 @@ final class AB_MCP_Sync_Term_Writer {
 		$part = (string) $part;
 		$id   = (int) $live_id;
 		if ( ! current_user_can( 'edit_term', $id ) ) {
-			return sprintf( 'edit the term %1$d (edit_term%2$s)', $id, 'row' === $part ? '' : ', for the part ' . $part );
+			return 'row' === $part
+				/* translators: %d: term id on this site. */
+				? sprintf( __( 'This account may not edit the term %d (edit_term).', 'alphabridge-mcp' ), $id )
+				/* translators: 1: term id on this site, 2: the name of a part, as the tools name it (meta:…). */
+				: sprintf( __( 'This account may not edit the term %1$d (edit_term, for the part %2$s).', 'alphabridge-mcp' ), $id, $part );
 		}
 		if ( 0 === strpos( $part, 'meta:' ) ) {
 			$key = substr( $part, 5 );
 			// The operations of the way back, row by row (restore_meta()).
 			$may = AB_MCP_Sync_Post_Writer::ops_right( 'term', $id, $key, AB_MCP_Sync_Post_Writer::restore_ops( AB_MCP_Sync_Post_Writer::meta_values( $backup, $key ), isset( $now['meta'] ) ? AB_MCP_Sync_Post_Writer::meta_values( $now, $key ) : array() ) );
-			return true === $may ? true : sprintf( 'change the meta key %1$s of the term (%2$s)', $key, $may );
+			/* translators: 1: a meta key, 2: the capability WordPress refused, as the code names it (delete_term_meta, …). */
+			return true === $may ? true : sprintf( __( 'This account may not change the meta key %1$s of the term (%2$s refused).', 'alphabridge-mcp' ), $key, $may );
 		}
 		return true;
 	}
@@ -866,7 +915,8 @@ final class AB_MCP_Sync_Term_Writer {
 		}
 		return array(
 			'state' => 'left',
-			'note'  => sprintf( 'A part %s of a term is of a name this version does not know: left as it is.', $name ),
+			/* translators: %s: the name of a part, as the journal names it. */
+			'note'  => sprintf( __( 'A part %s of a term is of a name this version does not know: left as it is.', 'alphabridge-mcp' ), $name ),
 		);
 	}
 
@@ -890,7 +940,7 @@ final class AB_MCP_Sync_Term_Writer {
 		if ( null === $current ) {
 			return array(
 				'state' => 'left',
-				'note'  => 'The term is no longer on this site.',
+				'note'  => __( 'The term is no longer on this site.', 'alphabridge-mcp' ),
 			);
 		}
 		$before = self::row_hash( $backup );
@@ -901,7 +951,7 @@ final class AB_MCP_Sync_Term_Writer {
 		if ( ! hash_equals( (string) $written, $hash ) ) {
 			return array(
 				'state' => 'left',
-				'note'  => 'The row of the term was changed since the step wrote it, so it is left as it is.',
+				'note'  => __( 'The row of the term was changed since the step wrote it, so it is left as it is.', 'alphabridge-mcp' ),
 			);
 		}
 		$taxonomy = (string) $backup['taxonomy'];
@@ -909,14 +959,16 @@ final class AB_MCP_Sync_Term_Writer {
 		if ( null === $holder || ( 0 !== $holder && $holder !== (int) $live_id ) ) {
 			return array(
 				'state' => 'left',
-				'note'  => sprintf( 'Not put back: the slug %s of the backup is held by another term of %s on this site now (or the terms could not be read), so WordPress would refuse or rename it. Set it by hand in wp-admin.', (string) $backup['slug'], $taxonomy ),
+				/* translators: 1: a slug, 2: a taxonomy, as WordPress names it. */
+				'note'  => sprintf( __( 'Not put back: the slug %1$s of the backup is held by another term of %2$s on this site now (or the terms could not be read), so WordPress would refuse or rename it. Set it by hand in wp-admin.', 'alphabridge-mcp' ), (string) $backup['slug'], $taxonomy ),
 			);
 		}
 		$parent = (int) $backup['parent'];
 		if ( $parent > 0 && ( ! is_array( AB_MCP_Sync_Rows::term( $parent, $taxonomy ) ) || null !== self::loop( (int) $live_id, $parent, $taxonomy ) ) ) {
 			return array(
 				'state' => 'left',
-				'note'  => sprintf( 'Not put back: the parent %d of the backup is no longer a term of %s here, or would close a loop of parents now. Set the parent by hand in wp-admin.', $parent, $taxonomy ),
+				/* translators: 1: term id of the parent, 2: a taxonomy, as WordPress names it. */
+				'note'  => sprintf( __( 'Not put back: the parent %1$d of the backup is no longer a term of %2$s here, or would close a loop of parents now. Set the parent by hand in wp-admin.', 'alphabridge-mcp' ), $parent, $taxonomy ),
 			);
 		}
 		$args = array(
@@ -929,7 +981,10 @@ final class AB_MCP_Sync_Term_Writer {
 		if ( null !== $refusal ) {
 			return array(
 				'state' => 'left',
-				'note'  => sprintf( 'Not put back: the sanitizing of this account would change the backed-up %s (kses without unfiltered_html). Set it by hand in wp-admin with an account that may.', $refusal ),
+				'note'  => '' === $refusal
+					? __( 'Not put back: the backed-up name of the term is empty. Set it by hand in wp-admin.', 'alphabridge-mcp' )
+					/* translators: %s: a field of the term (name, slug or description). */
+					: sprintf( __( 'Not put back: the sanitizing of this account would change the backed-up field %s (kses without unfiltered_html). Set it by hand in wp-admin with an account that may.', 'alphabridge-mcp' ), $refusal ),
 			);
 		}
 		// The last read, after the sanitizers and their filters, against what
@@ -950,7 +1005,7 @@ final class AB_MCP_Sync_Term_Writer {
 					'parent'      => $parent,
 				)
 			),
-			'The row of the term changed as it was put back (a hook of this site), so it is left as it is.'
+			__( 'The row of the term changed as it was put back (a hook of this site), so it is left as it is.', 'alphabridge-mcp' )
 		);
 		if ( is_wp_error( $done ) || is_array( $done ) && isset( $done['state'] ) ) {
 			return $done;
@@ -959,7 +1014,7 @@ final class AB_MCP_Sync_Term_Writer {
 		if ( ! is_array( $after ) || ! hash_equals( $before, self::row_hash( $after['row'] ) ) ) {
 			return array(
 				'state' => 'unclear',
-				'note'  => 'The row of the term was written back but does not read as the backup.',
+				'note'  => __( 'The row of the term was written back but does not read as the backup.', 'alphabridge-mcp' ),
 			);
 		}
 		return array( 'state' => 'restored' );
@@ -982,7 +1037,7 @@ final class AB_MCP_Sync_Term_Writer {
 	public static function before_value( $part, $backup, $now, $live_id ) {
 		unset( $live_id );
 		if ( ! is_array( $backup ) ) {
-			return 'none: the object was not on this site before the run.';
+			return __( 'none: the object was not on this site before the run.', 'alphabridge-mcp' );
 		}
 		$part = (string) $part;
 		if ( 0 === strpos( $part, 'meta:' ) ) {
@@ -1040,10 +1095,11 @@ final class AB_MCP_Sync_Term_Writer {
 	}
 
 	/**
-	 * @param string $what What the account may not do.
+	 * @param string $what What the account may not do, as a whole sentence («This account may not …»).
 	 * @return WP_Error
 	 */
 	private static function rights( $what ) {
-		return new WP_Error( 'ab_mcp_sync_rights', sprintf( 'Not written: this account may not %s on this site. Connect with an account that may, or leave the object out of the plan.', $what ), array( 'needs' => $what ) );
+		/* translators: %s: a whole sentence saying what this account may not do. */
+		return new WP_Error( 'ab_mcp_sync_rights', sprintf( __( 'Not written: %s Connect with an account that may, or leave the object out of the plan.', 'alphabridge-mcp' ), $what ), array( 'needs' => $what ) );
 	}
 }

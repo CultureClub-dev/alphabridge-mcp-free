@@ -78,8 +78,14 @@
  * ANSWERS (decision 32): the step with its result and journal as fields; a
  * WP_Error only for the refusal of the whole call.
  *
- * Messages are English without gettext, as the other classes of the
- * takeover; each names the way.
+ * MESSAGES: the refusals, the messages, findings and notes of the journal
+ * and the reasons of the way back are in gettext, in the language of the
+ * site, translated as they arise and stored so (a diagnosis: nothing
+ * compares, hashes, parses or keys on them; the decisions run on states,
+ * codes and hashes). Each names the way. The codes, states, kinds, names
+ * of parts and parameters stay as the tools name them, and the hints of
+ * next, which address the assistant, stay English as the server
+ * instructions.
  *
  * @package AlphaBridge_MCP
  */
@@ -234,7 +240,8 @@ final class AB_MCP_Sync_Engine {
 				$fresh = self::fresh( $run );
 				return is_wp_error( $fresh ) ? $fresh : self::step_of_call( $fresh, $named );
 			},
-			sprintf( 'Run %d takes no step', (int) $run['run_id'] )
+			/* translators: %d: run number. */
+			sprintf( __( 'Run %d takes no step.', 'alphabridge-mcp' ), (int) $run['run_id'] )
 		);
 	}
 
@@ -261,10 +268,12 @@ final class AB_MCP_Sync_Engine {
 		if ( isset( $now['unread'] ) ) {
 			// A record of the run that does not read back as it was written
 			// (AB_MCP_Sync_Run::records()): nothing is decided on it.
-			return new WP_Error( 'ab_mcp_sync_run_unread', sprintf( 'Run %1$d is not changed: its %2$s does not read back as it was written (a marker of its bytes that does not hold), so nothing of the run is decided on it. Ask the host to check the table of the runs; the backups of the run in the protected store hold the objects as they were before its steps.', (int) $run['run_id'], implode( ' and ', $now['unread'] ) ) );
+			/* translators: 1: run number, 2: the fields of its record that do not read back, as the tools name them (plan, budget, …), separated by commas. */
+			return new WP_Error( 'ab_mcp_sync_run_unread', sprintf( __( 'Run %1$d is not changed: its record (%2$s) does not read back as it was written (a marker of its bytes that does not hold), so nothing of the run is decided on it. Ask the host to check the table of the runs; the backups of the run in the protected store hold the objects as they were before its steps.', 'alphabridge-mcp' ), (int) $run['run_id'], implode( ', ', $now['unread'] ) ) );
 		}
 		if ( (string) $now['state'] !== (string) $run['state'] ) {
-			return new WP_Error( 'ab_mcp_sync_run_state', sprintf( 'Run %1$d was %2$s when this call read it and is %3$s now (another call moved it in between): nothing was written, its steps stay as they are. Ask for the status of the run (wp_site_push action=status) and go on from there.', (int) $run['run_id'], (string) $run['state'], (string) $now['state'] ) );
+			/* translators: 1: run number, 2: its state as this call read it, 3: its state now; both as the tools name them (open, interrupted, …). */
+			return new WP_Error( 'ab_mcp_sync_run_state', sprintf( __( 'Run %1$d was %2$s when this call read it and is %3$s now (another call moved it in between): nothing was written, its steps stay as they are. Ask for the status of the run (wp_site_push action=status) and go on from there.', 'alphabridge-mcp' ), (int) $run['run_id'], (string) $run['state'], (string) $now['state'] ) );
 		}
 		$now = AB_MCP_Sync_Run::settle( $now );
 		if ( is_wp_error( $now ) ) {
@@ -318,7 +327,8 @@ final class AB_MCP_Sync_Engine {
 		if ( in_array( $picked['op'], array( 'write', 'revert' ), true ) && ! $time['writes'] ) {
 			return new WP_Error(
 				'ab_mcp_sync_run_time',
-				sprintf( 'Step %1$d is not run: the PHP time limit of this request is %2$d s (set_time_limit() did not raise it), and one step that writes needs up to %3$d s; a step ended by the limit halfway would leave the object in between. Nothing was written; the step stays planned. Raise max_execution_time to at least %3$d s at the host (at Infomaniak under Advanced → PHP | Apache), or let set_time_limit() take, then call again.', (int) $picked['seq'], (int) $time['limit'], AB_MCP_Sync_Resources::MIN_TIME ),
+				/* translators: 1: step number, 2: the PHP time limit of this request in seconds, 3: the seconds a step that writes needs. */
+				sprintf( __( 'Step %1$d is not run: the PHP time limit of this request is %2$d s (set_time_limit() did not raise it), and one step that writes needs up to %3$d s; a step ended by the limit halfway would leave the object in between. Nothing was written; the step stays planned. Raise max_execution_time to at least %3$d s at the host (at Infomaniak under Advanced → PHP | Apache), or let set_time_limit() take, then call again.', 'alphabridge-mcp' ), (int) $picked['seq'], (int) $time['limit'], AB_MCP_Sync_Resources::MIN_TIME ),
 				array( 'time' => $time )
 			);
 		}
@@ -339,7 +349,8 @@ final class AB_MCP_Sync_Engine {
 				$done = self::run_revert( $run, $picked, $ctx );
 				break;
 			default:
-				return new WP_Error( 'ab_mcp_sync_run_invalid', sprintf( 'Step %d has an operation this version does not run. Ask for the status of the run (wp_site_push action=status).', (int) $picked['seq'] ) );
+				/* translators: %d: step number. */
+				return new WP_Error( 'ab_mcp_sync_run_invalid', sprintf( __( 'Step %d has an operation this version does not run. Ask for the status of the run (wp_site_push action=status).', 'alphabridge-mcp' ), (int) $picked['seq'] ) );
 		}
 		if ( is_wp_error( $done ) ) {
 			return $done;
@@ -405,7 +416,8 @@ final class AB_MCP_Sync_Engine {
 				$closed = AB_MCP_Sync_Run::get( (int) $run['run_id'] );
 				return is_array( $closed ) ? $closed : $run;
 			},
-			sprintf( 'Run %d is not aborted', (int) $run['run_id'] )
+			/* translators: %d: run number. */
+			sprintf( __( 'Run %d is not aborted.', 'alphabridge-mcp' ), (int) $run['run_id'] )
 		);
 	}
 
@@ -481,7 +493,8 @@ final class AB_MCP_Sync_Engine {
 					return $taken;
 				}
 				if ( ! hash_equals( (string) $run['report_hash'], (string) $taken['manifest']['report_hash'] ) ) {
-					return new WP_Error( 'ab_mcp_sync_objects_report', sprintf( 'The package of media %s was made for another report than the one of this run, and a package is used for its own report only. Export the media again on the staging site for this report (wp_site_export with purpose=media and its report_hash).', $package_id ) );
+					/* translators: %s: id of the package of media. */
+					return new WP_Error( 'ab_mcp_sync_objects_report', sprintf( __( 'The package of media %s was made for another report than the one of this run, and a package is used for its own report only. Export the media again on the staging site for this report (wp_site_export with purpose=media and its report_hash).', 'alphabridge-mcp' ), $package_id ) );
 				}
 				foreach ( $taken['files'] as $file ) {
 					$media[ $file['ref'] . "\0" . $file['path'] ] = array(
@@ -497,7 +510,8 @@ final class AB_MCP_Sync_Engine {
 				return $taken;
 			}
 			if ( ! hash_equals( (string) $run['report_hash'], (string) $taken['manifest']['report_hash'] ) ) {
-				return new WP_Error( 'ab_mcp_sync_objects_report', sprintf( 'The package of objects %s was made for another report than the one of this run, and a package is used for its own report only. Export the objects again on the staging site for this report (wp_site_export with purpose=objects and its report_hash).', $package_id ) );
+				/* translators: %s: id of the package of objects. */
+				return new WP_Error( 'ab_mcp_sync_objects_report', sprintf( __( 'The package of objects %s was made for another report than the one of this run, and a package is used for its own report only. Export the objects again on the staging site for this report (wp_site_export with purpose=objects and its report_hash).', 'alphabridge-mcp' ), $package_id ) );
 			}
 			foreach ( $taken['lines'] as $line ) {
 				if ( is_array( $line ) && isset( $line['kind'], $line['ref'] ) ) {
@@ -528,15 +542,18 @@ final class AB_MCP_Sync_Engine {
 	public static function line_of( array $item, array $lines ) {
 		$key = (string) $item['kind'] . "\0" . (string) $item['staging_ref'];
 		if ( ! isset( $lines['lines'][ $key ] ) ) {
-			return new WP_Error( 'ab_mcp_sync_objects_missing', sprintf( 'The packages of objects of this run hold no %1$s %2$s of the staging site. Export it there (wp_site_export with purpose=objects, the report_hash and this ref), take the package over here (wp_site_import_chunk) and plan again.', $item['kind'], $item['staging_ref'] ) );
+			/* translators: 1: kind of the object, as the tools name it (post, term, …), 2: its reference on the staging site. */
+			return new WP_Error( 'ab_mcp_sync_objects_missing', sprintf( __( 'The packages of objects of this run hold no %1$s %2$s of the staging site. Export it there (wp_site_export with purpose=objects, the report_hash and this ref), take the package over here (wp_site_import_chunk) and plan again.', 'alphabridge-mcp' ), $item['kind'], $item['staging_ref'] ) );
 		}
 		$line = $lines['lines'][ $key ];
 		$sha  = hash( 'sha256', AB_MCP_Sync_Canon::encode( (string) $item['staging_ref'] ) );
 		if ( isset( $lines['held'][ (string) $item['kind'] . "\0" . $sha ] ) || ! isset( $line['hash'] ) ) {
-			return new WP_Error( 'ab_mcp_sync_objects_held', sprintf( 'The %1$s %2$s of the staging site is held by the credential check of this site, so it is not written. Take it over by hand in wp-admin, or leave it out of the plan.', $item['kind'], $item['staging_ref'] ) );
+			/* translators: 1: kind of the object, as the tools name it (post, term, …), 2: its reference on the staging site. */
+			return new WP_Error( 'ab_mcp_sync_objects_held', sprintf( __( 'The %1$s %2$s of the staging site is held by the credential check of this site, so it is not written. Take it over by hand in wp-admin, or leave it out of the plan.', 'alphabridge-mcp' ), $item['kind'], $item['staging_ref'] ) );
 		}
 		if ( ! hash_equals( (string) $item['staging_hash'], (string) $line['hash'] ) ) {
-			return new WP_Error( 'ab_mcp_sync_objects_changed', sprintf( 'The %1$s %2$s in the package of objects is not the one the report compared (its hash differs: it changed on the staging site since). Make a new report (wp_site_diff), export the objects again and plan again.', $item['kind'], $item['staging_ref'] ) );
+			/* translators: 1: kind of the object, as the tools name it (post, term, …), 2: its reference on the staging site. */
+			return new WP_Error( 'ab_mcp_sync_objects_changed', sprintf( __( 'The %1$s %2$s in the package of objects is not the one the report compared (its hash differs: it changed on the staging site since). Make a new report (wp_site_diff), export the objects again and plan again.', 'alphabridge-mcp' ), $item['kind'], $item['staging_ref'] ) );
 		}
 		return $line;
 	}
@@ -562,20 +579,24 @@ final class AB_MCP_Sync_Engine {
 		}
 		if ( null !== $named ) {
 			if ( ! isset( $by[ (int) $named ] ) ) {
-				return new WP_Error( 'ab_mcp_sync_step_unknown', sprintf( 'The run has no step %d. Ask for its status to see its steps.', (int) $named ) );
+				/* translators: %d: step number. */
+				return new WP_Error( 'ab_mcp_sync_step_unknown', sprintf( __( 'The run has no step %d. Ask for its status to see its steps.', 'alphabridge-mcp' ), (int) $named ) );
 			}
 			$step = $by[ (int) $named ];
 			if ( 'planned' !== $step['state'] ) {
-				return new WP_Error( 'ab_mcp_sync_step_state', sprintf( 'Step %1$d is %2$s and runs no more; a step runs once. Use action=next for the next planned step.', (int) $named, $step['state'] ) );
+				/* translators: 1: step number, 2: its state, as the tools name it (done, failed, …). */
+				return new WP_Error( 'ab_mcp_sync_step_state', sprintf( __( 'Step %1$d is %2$s and runs no more; a step runs once. Use action=next for the next planned step.', 'alphabridge-mcp' ), (int) $named, $step['state'] ) );
 			}
 			foreach ( $step['depends'] as $dep ) {
 				if ( ! isset( $by[ $dep ] ) || 'done' !== $by[ $dep ]['state'] ) {
-					return new WP_Error( 'ab_mcp_sync_step_waits', sprintf( 'Step %1$d waits for step %2$d, which is %3$s: a step runs only once the objects it refers to are written. Use action=next to run the steps in order.', (int) $named, (int) $dep, isset( $by[ $dep ] ) ? $by[ $dep ]['state'] : 'unknown' ) );
+					/* translators: 1: step number, 2: the step it waits for, 3: that step's state, as the tools name it (planned, skipped, unknown, …). */
+					return new WP_Error( 'ab_mcp_sync_step_waits', sprintf( __( 'Step %1$d waits for step %2$d, which is %3$s: a step runs only once the objects it refers to are written. Use action=next to run the steps in order.', 'alphabridge-mcp' ), (int) $named, (int) $dep, isset( $by[ $dep ] ) ? $by[ $dep ]['state'] : 'unknown' ) );
 				}
 			}
 			$earlier = self::earlier_phase_open( $by, $step );
 			if ( null !== $earlier ) {
-				return new WP_Error( 'ab_mcp_sync_step_waits', sprintf( 'Step %1$d runs in phase %2$d, after every step of the phases before it (decision 16); step %3$d is %4$s. Use action=next, which runs the steps in order.', (int) $named, (int) $step['phase'], (int) $earlier, $by[ $earlier ]['state'] ) );
+				/* translators: 1: step number, 2: its phase, 3: a step of an earlier phase, 4: that step's state, as the tools name it (planned, begun). */
+				return new WP_Error( 'ab_mcp_sync_step_waits', sprintf( __( 'Step %1$d runs in phase %2$d, after every step of the phases before it (decision 16); step %3$d is %4$s. Use action=next, which runs the steps in order.', 'alphabridge-mcp' ), (int) $named, (int) $step['phase'], (int) $earlier, $by[ $earlier ]['state'] ) );
 			}
 			return $step;
 		}
@@ -605,7 +626,8 @@ final class AB_MCP_Sync_Engine {
 						(int) $step['seq'],
 						array(
 							'state'  => 'skipped',
-							'result' => array( 'message' => sprintf( 'Skipped: waits for step %1$d, which is %2$s.', (int) $waits, $by[ $waits ]['state'] ) ),
+							/* translators: 1: the step it waits for, 2: that step's state, as the tools name it (skipped, failed, …). */
+							'result' => array( 'message' => sprintf( __( 'Skipped: waits for step %1$d, which is %2$s.', 'alphabridge-mcp' ), (int) $waits, $by[ $waits ]['state'] ) ),
 						),
 						'planned'
 					);
@@ -668,7 +690,8 @@ final class AB_MCP_Sync_Engine {
 			$bytes = isset( $plan['bytes'] ) ? (int) $plan['bytes'] : 0;
 			$check = AB_MCP_Sync_Resources::check( $bytes );
 			if ( AB_MCP_Sync_Resources::INSUFFICIENT === $check['level'] ) {
-				return self::abort_at( $run, $step, 'The means of this site do not carry the run to its end: ' . AB_MCP_Sync_Resources::refusal( $check )->get_error_message(), array( 'resources' => $check ) );
+				/* translators: %s: the refusal of the means (one or more whole sentences). */
+				return self::abort_at( $run, $step, sprintf( __( 'The means of this site do not carry the run to its end. %s', 'alphabridge-mcp' ), AB_MCP_Sync_Resources::refusal( $check )->get_error_message() ), array( 'resources' => $check ) );
 			}
 			if ( ! AB_MCP_Protected_Store::available() ) {
 				return self::abort_at( $run, $step, AB_MCP_Protected_Store::refusal()->get_error_message(), array() );
@@ -682,7 +705,7 @@ final class AB_MCP_Sync_Engine {
 			$result['resources'] = $check['level'];
 			$result['notes']     = array();
 			if ( empty( $plan['environment'] ) ) {
-				$result['notes'][] = 'The environment of the two sites was not compared in the report (wp_site_diff without environment): the run writes objects only, which this does not hold back.';
+				$result['notes'][] = __( 'The environment of the two sites was not compared in the report (wp_site_diff without environment): the run writes objects only, which this does not hold back.', 'alphabridge-mcp' );
 			}
 			// The error log marked by its size: the verification counts the
 			// lines it gained from there (error_log_lines_since()).
@@ -731,10 +754,12 @@ final class AB_MCP_Sync_Engine {
 		}
 		$result['findings'] = $findings;
 		if ( array() !== $findings ) {
-			return self::abort_at( $run, $step, sprintf( 'The check before the first write found %d deviation(s) from the plan; nothing was written and the run is closed. Make a new report (wp_site_diff) and plan again.', count( $findings ) ), $result );
+			/* translators: %d: number of deviations found. */
+			return self::abort_at( $run, $step, sprintf( _n( 'The check before the first write found %d deviation from the plan; nothing was written and the run is closed. Make a new report (wp_site_diff) and plan again.', 'The check before the first write found %d deviations from the plan; nothing was written and the run is closed. Make a new report (wp_site_diff) and plan again.', count( $findings ), 'alphabridge-mcp' ), count( $findings ) ), $result );
 		}
 		unset( $result['cursor'] );
-		$result['message'] = sprintf( 'Checked %d object(s): the targets are as planned, the rights and the means suffice, the packages hold what the report compared.', $count );
+		/* translators: %d: number of objects checked. */
+		$result['message'] = sprintf( _n( 'Checked %d object: the targets are as planned, the rights and the means suffice, the packages hold what the report compared.', 'Checked %d objects: the targets are as planned, the rights and the means suffice, the packages hold what the report compared.', $count, 'alphabridge-mcp' ), $count );
 		AB_MCP_Sync_Run::update_step( (int) $run['run_id'], (int) $step['seq'], array( 'state' => 'done', 'result' => $result ), 'planned' );
 		AB_MCP_Sync_Run::touch( (int) $run['run_id'] );
 		return array( 'next' => 'The check passed. Call action=next for the first write step; each call writes one object, under the lock, with its backup and journal.' );
@@ -749,10 +774,10 @@ final class AB_MCP_Sync_Engine {
 	 * @return array|null A finding (seq, object, message), or null.
 	 */
 	private static function check_item( array $item, array $lines, array $ctx ) {
-		$name = sprintf( '%1$s %2$s of the staging site', $item['kind'], $item['staging_ref'] );
-		$w    = self::writer( $item['kind'] );
+		$w = self::writer( $item['kind'] );
 		if ( null === $w ) {
-			return self::finding( $item, sprintf( 'No step of this version writes the kind %s.', $item['kind'] ) );
+			/* translators: %s: kind of the object, as the tools name it (post, term, …). */
+			return self::finding( $item, sprintf( __( 'No step of this version writes the kind %s.', 'alphabridge-mcp' ), $item['kind'] ) );
 		}
 		$line = self::line_of( $item, $lines );
 		if ( is_wp_error( $line ) ) {
@@ -769,16 +794,19 @@ final class AB_MCP_Sync_Engine {
 			$live_id = self::live_of( $w, $item['live_ref'] );
 			$hash    = $w::live_hash( $live_id, $ctx['source'] );
 			if ( null === $hash || ! hash_equals( (string) $item['live_hash'], $hash ) ) {
-				return self::finding( $item, sprintf( 'The %1$s %2$s of this site changed since the plan (or cannot be read whole), so the %3$s is not written over it.', $item['kind'], $live_id, $name ) );
+				/* translators: 1: kind of the object, as the tools name it (post, term, …), 2: its reference on this site, 3: the reference of the object of the staging site. */
+				return self::finding( $item, sprintf( __( 'The %1$s %2$s of this site changed since the plan (or cannot be read whole), so the %1$s %3$s of the staging site is not written over it.', 'alphabridge-mcp' ), $item['kind'], $live_id, $item['staging_ref'] ) );
 			}
 			$pair = AB_MCP_Sync_Pairs::get( (int) $item['pair_id'] );
 			if ( ! is_array( $pair ) || 'active' !== $pair['state'] || ! hash_equals( (string) $item['pair_hash'], AB_MCP_Sync_Pairs::snapshot_hash( AB_MCP_Sync_Pairs::snapshot( (int) $item['pair_id'] ) ) ) ) {
-				return self::finding( $item, sprintf( 'The pair %d changed since the plan.', (int) $item['pair_id'] ) );
+				/* translators: %d: number of the pair. */
+				return self::finding( $item, sprintf( __( 'The pair %d changed since the plan.', 'alphabridge-mcp' ), (int) $item['pair_id'] ) );
 			}
 		} else {
 			$pair = AB_MCP_Sync_Pairs::find_staging( (string) $item['source_id'], (string) $item['kind'], (string) $item['staging_ref'] );
 			if ( is_array( $pair ) ) {
-				return self::finding( $item, sprintf( 'The %1$s has a pair here since the plan (pair %2$d), so it is not created anew.', $name, (int) $pair['id'] ) );
+				/* translators: 1: kind of the object, as the tools name it (post, term, …), 2: its reference on the staging site, 3: number of the pair. */
+				return self::finding( $item, sprintf( __( 'The %1$s %2$s of the staging site has a pair here since the plan (pair %3$d), so it is not created anew.', 'alphabridge-mcp' ), $item['kind'], $item['staging_ref'], (int) $pair['id'] ) );
 			}
 		}
 		$prepared = $w::target_of( $line, $item, $ctx );
@@ -986,7 +1014,8 @@ final class AB_MCP_Sync_Engine {
 			}
 		}
 		if ( null === $item ) {
-			return new WP_Error( 'ab_mcp_sync_run_invalid', sprintf( 'The plan of the run names no object for step %d. Ask for the status of the run (wp_site_push action=status).', (int) $step['seq'] ) );
+			/* translators: %d: step number. */
+			return new WP_Error( 'ab_mcp_sync_run_invalid', sprintf( __( 'The plan of the run names no object for step %d. Ask for the status of the run (wp_site_push action=status).', 'alphabridge-mcp' ), (int) $step['seq'] ) );
 		}
 		try {
 			return self::boundary( $run, $step, $item, $ctx );
@@ -1020,7 +1049,8 @@ final class AB_MCP_Sync_Engine {
 		$live_id = 'update' === $item['op'] ? self::live_of( $w, $item['live_ref'] ) : null;
 		$before  = null;
 		if ( null === $w ) {
-			return self::fail_step( $run_id, $seq, 'planned', sprintf( 'no step of this version writes the kind %s', $item['kind'] ) );
+			/* translators: %s: kind of the object, as the tools name it (post, term, …). */
+			return self::fail_step( $run_id, $seq, 'planned', sprintf( __( 'No step of this version writes the kind %s.', 'alphabridge-mcp' ), $item['kind'] ) );
 		}
 		if ( null !== $live_id ) {
 			$before = AB_MCP_Sync_Pairs::snapshot( (int) $item['pair_id'] );
@@ -1028,7 +1058,8 @@ final class AB_MCP_Sync_Engine {
 				return self::fail_step( $run_id, $seq, 'planned', $before->get_error_message() );
 			}
 			if ( ! hash_equals( (string) $item['pair_hash'], AB_MCP_Sync_Pairs::snapshot_hash( $before ) ) ) {
-				return self::fail_step( $run_id, $seq, 'planned', sprintf( 'The pair %d changed since the plan; nothing was written. Make a new report and plan again.', (int) $item['pair_id'] ) );
+				/* translators: %d: number of the pair. */
+				return self::fail_step( $run_id, $seq, 'planned', sprintf( __( 'The pair %d changed since the plan; nothing was written. Make a new report and plan again.', 'alphabridge-mcp' ), (int) $item['pair_id'] ) );
 			}
 		}
 		$journal = array(
@@ -1109,18 +1140,21 @@ final class AB_MCP_Sync_Engine {
 		}
 		if ( null !== $live_id ) {
 			if ( null === $current ) {
-				return self::fail_step( $run_id, $seq, 'begun', sprintf( 'The %1$s %2$s of this site is no longer there; nothing was written.', $item['kind'], $live_id ), $journal );
+				/* translators: 1: kind of the object, as the tools name it (post, term, …), 2: its reference on this site. */
+				return self::fail_step( $run_id, $seq, 'begun', sprintf( __( 'The %1$s %2$s of this site is no longer there; nothing was written.', 'alphabridge-mcp' ), $item['kind'], $live_id ), $journal );
 			}
 			$hash = $w::live_hash( $live_id, $ctx['source'] );
 			if ( null === $hash || ! hash_equals( (string) $item['live_hash'], $hash ) ) {
-				return self::fail_step( $run_id, $seq, 'begun', sprintf( 'The %1$s %2$s of this site changed since the plan (or cannot be read whole); nothing was written. Make a new report and plan again.', $item['kind'], $live_id ), $journal );
+				/* translators: 1: kind of the object, as the tools name it (post, term, …), 2: its reference on this site. */
+				return self::fail_step( $run_id, $seq, 'begun', sprintf( __( 'The %1$s %2$s of this site changed since the plan (or cannot be read whole); nothing was written. Make a new report and plan again.', 'alphabridge-mcp' ), $item['kind'], $live_id ), $journal );
 			}
 			$ok = $w::live_rule( $live_id, $ctx['source'] );
 			if ( is_wp_error( $ok ) ) {
 				return self::fail_step( $run_id, $seq, 'begun', $ok->get_error_message(), $journal );
 			}
 		} elseif ( is_array( AB_MCP_Sync_Pairs::find_staging( (string) $item['source_id'], (string) $item['kind'], (string) $item['staging_ref'] ) ) ) {
-			return self::fail_step( $run_id, $seq, 'begun', sprintf( 'The %1$s %2$s of the staging site has a pair here since the plan; it is not created anew.', $item['kind'], $item['staging_ref'] ), $journal );
+			/* translators: 1: kind of the object, as the tools name it (post, term, …), 2: its reference on the staging site. */
+			return self::fail_step( $run_id, $seq, 'begun', sprintf( __( 'The %1$s %2$s of the staging site has a pair here since the plan; it is not created anew.', 'alphabridge-mcp' ), $item['kind'], $item['staging_ref'] ), $journal );
 		}
 		$journal['object']['target']   = $prepared['target_hash'];
 		$journal['object']['identity'] = $prepared['identity'];
@@ -1173,7 +1207,8 @@ final class AB_MCP_Sync_Engine {
 		if ( is_wp_error( $ahead ) ) {
 			// Nothing of the object is written without its journal ahead
 			// (decision 17; GitHub Codex round 9 on free#137, P2).
-			return self::fail_step( $run_id, $seq, 'begun', sprintf( 'the journal of the step could not be written ahead of its first part (%s), so nothing of the object was written', $ahead->get_error_message() ) );
+			/* translators: %s: the error of the database (one or more whole sentences). */
+			return self::fail_step( $run_id, $seq, 'begun', sprintf( __( 'The journal of the step could not be written ahead of its first part, so nothing of the object was written (%s)', 'alphabridge-mcp' ), $ahead->get_error_message() ) );
 		}
 		// The files of an attachment, before its row (decision 26; branch
 		// 10): each laid exclusively, the journal saved before each; where one
@@ -1240,7 +1275,7 @@ final class AB_MCP_Sync_Engine {
 		// other (deviated()), the parts left with their values before.
 		$hash = $w::live_hash( $live_id, $ctx['source'] );
 		if ( null === $hash || ! hash_equals( $prepared['target_hash'], $hash ) ) {
-			$outcome = self::deviated( $journal, 0, 'every part read back as written, but the object as a whole does not hash to its target (a filter of this site changed what the rows hold, or the object cannot be read whole)', $live_id, $current );
+			$outcome = self::deviated( $journal, 0, __( 'Every part read back as written, but the object as a whole does not hash to its target (a filter of this site changed what the rows hold, or the object cannot be read whole).', 'alphabridge-mcp' ), $live_id, $current );
 			$journal = $outcome['journal'];
 			$pair_id = isset( $item['pair_id'] ) ? (int) $item['pair_id'] : null;
 			$rest    = null;
@@ -1260,7 +1295,7 @@ final class AB_MCP_Sync_Engine {
 			} elseif ( null !== $pair_id ) {
 				AB_MCP_Sync_Pairs::set_state( $pair_id, 'unclear', AB_MCP_Sync_Pairs::snapshot_hash( AB_MCP_Sync_Pairs::snapshot( $pair_id ) ) );
 			}
-			$message = $outcome['message'] . ( null === $rest ? '' : ' The object is new: it stays as a rest.' );
+			$message = $outcome['message'] . ( null === $rest ? '' : ' ' . __( 'The object is new: it stays as a rest.', 'alphabridge-mcp' ) );
 			$result  = array(
 				'message'  => $message,
 				'live_ref' => (string) $live_id,
@@ -1278,7 +1313,8 @@ final class AB_MCP_Sync_Engine {
 			$made = self::pair_for_new( $run, $item, $live_id, $prepared, 'active' );
 			if ( is_wp_error( $made ) ) {
 				$result = array(
-					'message'  => 'The object was written as its target, but its pair could not be made: ' . $made->get_error_message(),
+					/* translators: %s: the error of the object pairs (one or more whole sentences). */
+					'message'  => sprintf( __( 'The object was written as its target, but its pair could not be made. %s', 'alphabridge-mcp' ), $made->get_error_message() ),
 					'live_ref' => (string) $live_id,
 					'rest'     => self::rest( $item, $live_id ),
 				);
@@ -1301,15 +1337,26 @@ final class AB_MCP_Sync_Engine {
 			);
 			if ( is_wp_error( $rebased ) ) {
 				$result = array(
-					'message'  => 'The object was written as its target, but its pair did not take the new bases: ' . $rebased->get_error_message(),
+					/* translators: %s: the error of the object pairs (one or more whole sentences). */
+					'message'  => sprintf( __( 'The object was written as its target, but its pair did not take the new bases. %s', 'alphabridge-mcp' ), $rebased->get_error_message() ),
 					'live_ref' => (string) $live_id,
 				);
 				$ended = self::end_step( $run_id, $seq, array( 'state' => 'unclear', 'parts' => $journal, 'result' => $result ) );
 				return is_wp_error( $ended ) ? $ended : array( 'next' => $result['message'] );
 			}
 		}
+		$message = $prepared['as_draft']
+			/* translators: 1: kind of the object, as the tools name it (post, term, …), 2: its reference on the staging site, 3: its reference on this site. */
+			? sprintf( __( 'The %1$s %2$s of the staging site was written as %1$s %3$s of this site with the status draft (the confirmed choice); read back as its target.', 'alphabridge-mcp' ), $item['kind'], $item['staging_ref'], $live_id )
+			/* translators: 1: kind of the object, as the tools name it (post, term, …), 2: its reference on the staging site, 3: its reference on this site. */
+			: sprintf( __( 'The %1$s %2$s of the staging site was written as %1$s %3$s of this site; read back as its target.', 'alphabridge-mcp' ), $item['kind'], $item['staging_ref'], $live_id );
+		if ( ! empty( $prepared['parent_later'] ) ) {
+			$message .= ' ' . __( 'It hangs under no post yet: a step of its own sets its parent once the run has written that post.', 'alphabridge-mcp' );
+		} elseif ( ! empty( $item['attach'] ) ) {
+			$message .= ' ' . __( 'Its parent is set.', 'alphabridge-mcp' );
+		}
 		$result = array(
-			'message'  => sprintf( '%1$s %2$s of the staging site written as %3$s %4$s of this site%5$s; read back as its target.%6$s', ucfirst( $item['kind'] ), $item['staging_ref'], $item['kind'], $live_id, $prepared['as_draft'] ? ' with the status draft (the confirmed choice)' : '', ! empty( $prepared['parent_later'] ) ? ' It hangs under no post yet: a step of its own sets its parent once the run has written that post.' : ( ! empty( $item['attach'] ) ? ' Its parent is set.' : '' ) ),
+			'message'  => $message,
 			'live_ref' => (string) $live_id,
 			'created'  => 'create' === $item['op'],
 			'pair_id'  => $pair_id,
@@ -1340,7 +1387,11 @@ final class AB_MCP_Sync_Engine {
 		if ( true !== $done ) {
 			return new WP_Error(
 				'ab_mcp_sync_run_journal',
-				sprintf( 'Step %1$d of run %2$d ran, but its end could not be recorded (%3$s): nothing more was written, and the step stays begun, so the next call finds the run interrupted. Ask for the status of the run (wp_site_push action=status) once the database takes writes again: a person closes it as checked on the page AlphaBridge → Staging, or wp_site_revert action=plan with this run_id goes on from there and leaves every part that is not provably the run\'s own as it is.', (int) $seq, (int) $run_id, is_wp_error( $done ) ? $done->get_error_message() : 'no answer' )
+				is_wp_error( $done )
+					/* translators: 1: step number, 2: run number, 3: the error of the database (one or more whole sentences). */
+					? sprintf( __( 'Step %1$d of run %2$d ran, but its end could not be recorded (%3$s): nothing more was written, and the step stays begun, so the next call finds the run interrupted. Ask for the status of the run (wp_site_push action=status) once the database takes writes again: a person closes it as checked on the page AlphaBridge → Staging, or wp_site_revert action=plan with this run_id goes on from there and leaves every part that is not provably the run\'s own as it is.', 'alphabridge-mcp' ), (int) $seq, (int) $run_id, $done->get_error_message() )
+					/* translators: 1: step number, 2: run number. */
+					: sprintf( __( 'Step %1$d of run %2$d ran, but its end could not be recorded (the database gave no answer): nothing more was written, and the step stays begun, so the next call finds the run interrupted. Ask for the status of the run (wp_site_push action=status) once the database takes writes again: a person closes it as checked on the page AlphaBridge → Staging, or wp_site_revert action=plan with this run_id goes on from there and leaves every part that is not provably the run\'s own as it is.', 'alphabridge-mcp' ), (int) $seq, (int) $run_id )
 			);
 		}
 		AB_MCP_Sync_Run::touch( $run_id );
@@ -1469,7 +1520,8 @@ final class AB_MCP_Sync_Engine {
 				if ( is_array( $post_all ) && ! $refused ) {
 					$changed_besides = self::changed_besides( $journal, is_array( $pre_all ) ? $pre_all : null, $post_all, $named, $w );
 					if ( null !== $changed_besides ) {
-						return self::deviated( $journal, $i, sprintf( 'the row call changed the part %s besides it, which the step does not write (a hook of this site reacting to the row)', $changed_besides ), $live_id, $backup );
+						/* translators: %s: name of the part, as the tools name it (meta:…, terms:…). */
+						return self::deviated( $journal, $i, sprintf( __( 'The row call changed the part %s besides it, which the step does not write (a hook of this site reacting to the row).', 'alphabridge-mcp' ), $changed_besides ), $live_id, $backup );
 					}
 				}
 			} elseif ( $w::through_row( $prepared, $name ) ) {
@@ -1535,10 +1587,12 @@ final class AB_MCP_Sync_Engine {
 					foreach ( $journal['parts'] as $k => $other ) {
 						if ( (string) $other['part'] === $other_name ) {
 							$journal['parts'][ $k ]['foreign'] = true;
-							$journal['parts'][ $k ]['note']    = self::noted( $other, sprintf( 'Changed as the step wrote the part %s (a hook of this site reacting to the call): not provably the step\'s own.', $name ) );
+							/* translators: %s: name of the part the step wrote, as the tools name it (row, meta:…, terms:…). */
+							$journal['parts'][ $k ]['note']    = self::noted( $other, sprintf( __( 'Changed as the step wrote the part %s (a hook of this site reacting to the call): not provably the step\'s own.', 'alphabridge-mcp' ), $name ) );
 						}
 					}
-					return self::deviated( $journal, $i, sprintf( 'the call of the part %1$s changed the part %2$s besides it (a hook of this site reacting to the call)', $name, $other_name ), $live_id, $backup );
+					/* translators: 1: name of the part the step wrote, 2: name of the part that changed besides; both as the tools name them (row, meta:…, terms:…). */
+					return self::deviated( $journal, $i, sprintf( __( 'The call of the part %1$s changed the part %2$s besides it (a hook of this site reacting to the call).', 'alphabridge-mcp' ), $name, $other_name ), $live_id, $backup );
 				}
 			}
 			// The files of the object (an attachment; Codex round 1 of branch
@@ -1552,7 +1606,8 @@ final class AB_MCP_Sync_Engine {
 				$files_now = $w::files_state( $journal );
 				$moved     = self::changed_file( $files_seen, is_array( $files_now ) ? $files_now : array() );
 				if ( null !== $moved ) {
-					return self::deviated( $journal, $i, sprintf( 'the call of the part %1$s changed the file %2$s of the attachment besides it (a hook of this site reacting to the call)', $name, $moved ), $live_id, $backup );
+					/* translators: 1: name of the part, as the tools name it (row, meta:…), 2: path of the file under the uploads. */
+					return self::deviated( $journal, $i, sprintf( __( 'The call of the part %1$s changed the file %2$s of the attachment besides it (a hook of this site reacting to the call).', 'alphabridge-mcp' ), $name, $moved ), $live_id, $backup );
 				}
 				$files_seen            = $files_now;
 				$journal['files_seen'] = $files_now;
@@ -1565,14 +1620,32 @@ final class AB_MCP_Sync_Engine {
 				// changed the part before (a key of several rows: removed, the
 				// new ones refused) or not.
 				$journal['parts'][ $i ]['state'] = 'failed';
-				$journal['parts'][ $i ]['note']  = self::noted( $one, sprintf( 'The call failed (%1$s)%2$s.', $error->get_error_message(), $changed ? ' after it changed the part' : ' and changed nothing of the part' ) );
-				return self::deviated( $journal, $i, sprintf( 'the call of the part %1$s failed (%2$s)%3$s', $name, $error->get_error_message(), $changed ? ' after it changed the part' : '' ), $live_id, $backup );
+				$journal['parts'][ $i ]['note']  = self::noted(
+					$one,
+					$changed
+						/* translators: %s: the error of the call (one or more whole sentences). */
+						? sprintf( __( 'The call failed after it changed the part (%s).', 'alphabridge-mcp' ), $error->get_error_message() )
+						/* translators: %s: the error of the call (one or more whole sentences). */
+						: sprintf( __( 'The call failed and changed nothing of the part (%s).', 'alphabridge-mcp' ), $error->get_error_message() )
+				);
+				return self::deviated(
+					$journal,
+					$i,
+					$changed
+						/* translators: 1: name of the part, as the tools name it (row, meta:…, terms:…), 2: the error of the call (one or more whole sentences). */
+						? sprintf( __( 'The call of the part %1$s failed after it changed the part (%2$s).', 'alphabridge-mcp' ), $name, $error->get_error_message() )
+						/* translators: 1: name of the part, as the tools name it (row, meta:…, terms:…), 2: the error of the call (one or more whole sentences). */
+						: sprintf( __( 'The call of the part %1$s failed (%2$s).', 'alphabridge-mcp' ), $name, $error->get_error_message() ),
+					$live_id,
+					$backup
+				);
 			}
 			// A part not read back after the call: whether it holds what the
 			// call wrote is unknown, a deviation (Codex round 11).
 			if ( ! empty( $one['unread'] ) ) {
-				$journal['parts'][ $i ]['note'] = self::noted( $one, 'Could not be read back after the call.' );
-				return self::deviated( $journal, $i, sprintf( 'the part %s could not be read back after the call', $name ), $live_id, $backup );
+				$journal['parts'][ $i ]['note'] = self::noted( $one, __( 'Could not be read back after the call.', 'alphabridge-mcp' ) );
+				/* translators: %s: name of the part, as the tools name it (row, meta:…, terms:…). */
+				return self::deviated( $journal, $i, sprintf( __( 'The part %s could not be read back after the call.', 'alphabridge-mcp' ), $name ), $live_id, $backup );
 			}
 			// Another hand changed a part within the step (seen_before(),
 			// seen_after(): with the row, or before the step's call): a
@@ -1580,9 +1653,22 @@ final class AB_MCP_Sync_Engine {
 			// its target.
 			foreach ( $journal['parts'] as $k => $other ) {
 				if ( ! empty( $other['foreign'] ) ) {
-					$journal['parts'][ $k ]['note'] = self::noted( $other, 'Not provably the step\'s own.' );
+					$journal['parts'][ $k ]['note'] = self::noted( $other, __( 'Not provably the step\'s own.', 'alphabridge-mcp' ) );
 					$as_target = isset( $other['post'] ) && null !== $other['post'] && hash_equals( (string) $other['target'], (string) $other['post'] );
-					return self::deviated( $journal, $k, sprintf( 'another hand changed the part %1$s within the step (a hook of this site%2$s)%3$s', (string) $other['part'], 'not_refusable' === $other['way'] ? ', or a writer on a way the lock does not refuse' : '', $as_target ? ', though the part reads as its target now' : '' ), $live_id, $backup );
+					if ( 'not_refusable' === $other['way'] ) {
+						$why = $as_target
+							/* translators: %s: name of the part, as the tools name it (row, meta:…, terms:…). */
+							? __( 'Another hand changed the part %s within the step (a hook of this site, or a writer on a way the lock does not refuse), though the part reads as its target now.', 'alphabridge-mcp' )
+							/* translators: %s: name of the part, as the tools name it (row, meta:…, terms:…). */
+							: __( 'Another hand changed the part %s within the step (a hook of this site, or a writer on a way the lock does not refuse).', 'alphabridge-mcp' );
+					} else {
+						$why = $as_target
+							/* translators: %s: name of the part, as the tools name it (row, meta:…, terms:…). */
+							? __( 'Another hand changed the part %s within the step (a hook of this site), though the part reads as its target now.', 'alphabridge-mcp' )
+							/* translators: %s: name of the part, as the tools name it (row, meta:…, terms:…). */
+							: __( 'Another hand changed the part %s within the step (a hook of this site).', 'alphabridge-mcp' );
+					}
+					return self::deviated( $journal, $k, sprintf( $why, (string) $other['part'] ), $live_id, $backup );
 				}
 			}
 			if ( null !== $post && hash_equals( $target, $post ) ) {
@@ -1590,7 +1676,7 @@ final class AB_MCP_Sync_Engine {
 				if ( ! $through_row && isset( $one['note'] ) && '' !== (string) $one['note'] ) {
 					// The row call wrote it (the default category) before the
 					// step wrote it as its target: said in the journal.
-					$journal['parts'][ $i ]['note'] = (string) $one['note'] . ' Written as its target by the step after that.';
+					$journal['parts'][ $i ]['note'] = self::noted( $one, __( 'Written as its target by the step after that.', 'alphabridge-mcp' ) );
 				}
 				$saved = $save( $journal );
 				if ( true !== $saved ) {
@@ -1603,13 +1689,15 @@ final class AB_MCP_Sync_Engine {
 				// The call answered well, yet the part holds what it held before
 				// the call, other than its target: nothing was written.
 				$journal['parts'][ $i ]['state'] = 'failed';
-				$journal['parts'][ $i ]['note']  = self::noted( $one, $through_row ? 'The core did not write it with the row: it reads as before the row call, other than its target.' : 'The call changed nothing of it: it reads as before the call, other than its target.' );
-				return self::deviated( $journal, $i, sprintf( 'the part %s was not written: it reads as before the call, other than its target', $name ), $live_id, $backup );
+				$journal['parts'][ $i ]['note']  = self::noted( $one, $through_row ? __( 'The core did not write it with the row: it reads as before the row call, other than its target.', 'alphabridge-mcp' ) : __( 'The call changed nothing of it: it reads as before the call, other than its target.', 'alphabridge-mcp' ) );
+				/* translators: %s: name of the part, as the tools name it (row, meta:…, terms:…). */
+				return self::deviated( $journal, $i, sprintf( __( 'The part %s was not written: it reads as before the call, other than its target.', 'alphabridge-mcp' ), $name ), $live_id, $backup );
 			}
 			// Written, deviating (decision 17): read back other than the call
 			// was to write (a filter of this site changed it as it was written).
-			$journal['parts'][ $i ]['note'] = self::noted( $one, 'Written, deviating: read back other than its target.' );
-			return self::deviated( $journal, $i, sprintf( 'the part %s was written but reads back other than its target (a filter of this site changed it as it was written)', $name ), $live_id, $backup );
+			$journal['parts'][ $i ]['note'] = self::noted( $one, __( 'Written, deviating: read back other than its target.', 'alphabridge-mcp' ) );
+			/* translators: %s: name of the part, as the tools name it (row, meta:…, terms:…). */
+			return self::deviated( $journal, $i, sprintf( __( 'The part %s was written but reads back other than its target (a filter of this site changed it as it was written).', 'alphabridge-mcp' ), $name ), $live_id, $backup );
 		}
 		return self::outcome( 'done', '', $journal, $live_id );
 	}
@@ -1665,16 +1753,19 @@ final class AB_MCP_Sync_Engine {
 		}
 		$out = array();
 		if ( array() !== $own ) {
-			$out[] = sprintf( 'another writer tried to change %s as the step\'s own call wrote it (a hook or filter of this site) and was refused, so the row holds what the step wrote and the other change did not happen; find the plugin or theme that writes it as the row is saved', self::nested_text( $own ) );
+			/* translators: %s: the rows of the options with the fields in parentheses, separated by semicolons. */
+			$out[] = sprintf( __( 'Another writer tried to change %s as the step\'s own call wrote it (a hook or filter of this site) and was refused, so the row holds what the step wrote and the other change did not happen. Find the plugin or theme that writes it as the row is saved.', 'alphabridge-mcp' ), self::nested_text( $own ) );
 		}
 		if ( array() !== $other ) {
-			$out[] = sprintf( 'a write to %s was refused by the takeover lock as the step\'s own call ran, and the row does not hold what the step was to write: a filter of this site changed the step\'s own value (pre_update_option of the row), so the lock refused the own write as well, or changed it after the lock; find the plugin or theme that changes the row as it is saved', self::nested_text( $other ) );
+			/* translators: %s: the rows of the options with the fields in parentheses, separated by semicolons. */
+			$out[] = sprintf( __( 'A write to %s was refused by the takeover lock as the step\'s own call ran, and the row does not hold what the step was to write: a filter of this site changed the step\'s own value (pre_update_option of the row), so the lock refused the own write as well, or changed it after the lock. Find the plugin or theme that changes the row as it is saved.', 'alphabridge-mcp' ), self::nested_text( $other ) );
 		}
-		return implode( '; ', $out );
+		return implode( ' ', $out );
 	}
 
 	/**
-	 * The refused writes in words: the fields and the row of each.
+	 * The refused writes: each row by its name, its fields in parentheses
+	 * (names only, no words, so the sentence around it is whole).
 	 *
 	 * @param array $nested AB_MCP_Sync_Guard::refusals().
 	 * @return string
@@ -1682,7 +1773,7 @@ final class AB_MCP_Sync_Engine {
 	private static function nested_text( array $nested ) {
 		$out = array();
 		foreach ( $nested as $one ) {
-			$out[] = array() === $one['fields'] ? sprintf( 'the row %s', $one['option'] ) : sprintf( 'the field %1$s of the row %2$s', implode( ', ', $one['fields'] ), $one['option'] );
+			$out[] = array() === $one['fields'] ? (string) $one['option'] : (string) $one['option'] . ' (' . implode( ', ', $one['fields'] ) . ')';
 		}
 		return implode( '; ', array_unique( $out ) );
 	}
@@ -1719,25 +1810,46 @@ final class AB_MCP_Sync_Engine {
 				foreach ( $journal['parts'] as $k => $other ) {
 					if ( (string) $other['part'] === $other_name ) {
 						$journal['parts'][ $k ]['foreign'] = true;
-						$journal['parts'][ $k ]['note']    = self::noted( $other, sprintf( 'Changed right before the step\'s call of the part %s, as or after the rights were asked (a hook of this site): not the step\'s own.', $name ) );
+						/* translators: %s: name of the part, as the tools name it (row, meta:…, terms:…). */
+						$journal['parts'][ $k ]['note']    = self::noted( $other, sprintf( __( 'Changed right before the step\'s call of the part %s, as or after the rights were asked (a hook of this site): not the step\'s own.', 'alphabridge-mcp' ), $name ) );
 					}
 				}
 			}
 		}
 		$journal['parts'][ $i ]['state'] = 'failed';
-		$journal['parts'][ $i ]['note']  = self::noted( $journal['parts'][ $i ], sprintf( 'Not written (%s).', $error->get_error_message() ) );
-		$changed = null === $first ? 'the object' : 'the part ' . $first;
+		/* translators: %s: the refusal of the writer (one or more whole sentences). */
+		$journal['parts'][ $i ]['note']  = self::noted( $journal['parts'][ $i ], sprintf( __( 'Not written (%s)', 'alphabridge-mcp' ), $error->get_error_message() ) );
 		if ( AB_MCP_Sync_Write::CHANGED !== $error->get_error_code() ) {
 			// A right missing or a last read that failed (Codex round 4 of
 			// branch 11, item 3): no call was made either; what a hook of the
 			// rights changed before it is named, never the step's own.
-			return self::deviated( $journal, $i, sprintf( 'the part %1$s was not written (%2$s)%3$s', $name, $error->get_error_message(), null === $first ? '' : sprintf( '; the part %s changed right before it (a hook of this site), not by the step', $first ) ), $live_id, $backup );
+			/* translators: 1: name of the part, as the tools name it (row, meta:…, terms:…), 2: the refusal of the writer (one or more whole sentences). */
+			$why = sprintf( __( 'The part %1$s was not written (%2$s)', 'alphabridge-mcp' ), $name, $error->get_error_message() );
+			if ( null !== $first ) {
+				/* translators: %s: name of the part that changed, as the tools name it (row, meta:…, terms:…). */
+				$why .= ' ' . sprintf( __( 'The part %s changed right before it (a hook of this site), not by the step.', 'alphabridge-mcp' ), $first );
+			}
+			return self::deviated( $journal, $i, $why, $live_id, $backup );
 		}
-		$out = self::deviated( $journal, $i, sprintf( 'the part %1$s was not written: %2$s changed right before the call, after the last check of the rights (a hook of this site), not by the step', $name, $changed ), $live_id, $backup );
+		$out = self::deviated(
+			$journal,
+			$i,
+			null === $first
+				/* translators: %s: name of the part, as the tools name it (row, meta:…, terms:…). */
+				? sprintf( __( 'The part %s was not written: the object changed right before the call, after the last check of the rights (a hook of this site), not by the step.', 'alphabridge-mcp' ), $name )
+				/* translators: 1: name of the part of the call, 2: name of the part that changed; both as the tools name them (row, meta:…, terms:…). */
+				: sprintf( __( 'The part %1$s was not written: the part %2$s changed right before the call, after the last check of the rights (a hook of this site), not by the step.', 'alphabridge-mcp' ), $name, $first ),
+			$live_id,
+			$backup
+		);
 		if ( 'failed' === $out['state'] ) {
 			// No part of the step differs from its backup: the step wrote
 			// nothing, and what changed is another hand's and stays.
-			$out['message'] = sprintf( 'Nothing was written: %1$s changed right before the call of the part %2$s, after the last check of the rights (a hook of this site), not by the step. That change stays as it is; every part of the step is as before it. Check the object in wp-admin, then make a new report and plan again.', $changed, $name );
+			$out['message'] = null === $first
+				/* translators: %s: name of the part, as the tools name it (row, meta:…, terms:…). */
+				? sprintf( __( 'Nothing was written: the object changed right before the call of the part %s, after the last check of the rights (a hook of this site), not by the step. That change stays as it is; every part of the step is as before it. Check the object in wp-admin, then make a new report and plan again.', 'alphabridge-mcp' ), $name )
+				/* translators: 1: name of the part of the call, 2: name of the part that changed; both as the tools name them (row, meta:…, terms:…). */
+				: sprintf( __( 'Nothing was written: the part %2$s changed right before the call of the part %1$s, after the last check of the rights (a hook of this site), not by the step. That change stays as it is; every part of the step is as before it. Check the object in wp-admin, then make a new report and plan again.', 'alphabridge-mcp' ), $name, $first );
 		}
 		return $out;
 	}
@@ -1765,7 +1877,9 @@ final class AB_MCP_Sync_Engine {
 	 *
 	 * @param array      $journal Journal.
 	 * @param int        $i       The part that deviated.
-	 * @param string     $why     Why, as a clause (no capital, no full stop).
+	 * @param string     $why     Why, as one or more whole sentences in the
+	 *                   language of the site (a diagnosis of the journal,
+	 *                   compared with nothing).
 	 * @param int|null   $live_id Post, null where none was made.
 	 * @param array|null $backup  current() of the backup; null for a new object.
 	 * @param bool       $refusals_named Whether $why names the writes the
@@ -1777,7 +1891,7 @@ final class AB_MCP_Sync_Engine {
 		// Every write the takeover lock refused in the step's own call is
 		// named, whatever way the step deviates (Codex round 6 of branch 11).
 		if ( ! $refusals_named && ! empty( $journal['object']['refused_writes'] ) ) {
-			$why = (string) $why . '; ' . self::refusal_why( $journal );
+			$why = (string) $why . ' ' . self::refusal_why( $journal );
 		}
 		$name  = (string) $journal['parts'][ $i ]['part'];
 		$w     = self::writer_of( $journal );
@@ -1798,7 +1912,7 @@ final class AB_MCP_Sync_Engine {
 			$journal['parts'][ $k ]['state']        = 'left';
 			$journal['parts'][ $k ]['value_before'] = $w::before_value( (string) $part['part'], $backup, $state, $live_id );
 			$journal['parts'][ $k ]['value_rules']  = $w::VALUE_RULES;
-			$journal['parts'][ $k ]['note']         = self::noted( $journal['parts'][ $k ], 'Left as it is: the object deviated within the step, so nothing of it is put back by itself; check it by hand, its value before stands in value_before.' );
+			$journal['parts'][ $k ]['note']         = self::noted( $journal['parts'][ $k ], __( 'Left as it is: the object deviated within the step, so nothing of it is put back by itself; check it by hand, its value before stands in value_before.', 'alphabridge-mcp' ) );
 			++$left;
 		}
 		if ( 0 === $left ) {
@@ -1806,9 +1920,11 @@ final class AB_MCP_Sync_Engine {
 			// keeps its mark all the same (a part owned before stays never put
 			// back, Codex round 9); the preview of a way back says nothing is
 			// to do for it (AB_MCP_Sync_Revert::plan()).
-			return self::outcome( 'failed', sprintf( 'Nothing was written: %s. The object is as before the step.', $why ), $journal, $live_id );
+			/* translators: %s: why, one or more whole sentences. */
+			return self::outcome( 'failed', sprintf( __( 'Nothing was written. %s The object is as before the step.', 'alphabridge-mcp' ), $why ), $journal, $live_id );
 		}
-		return self::outcome( 'unclear', sprintf( 'The object deviated within the step: %1$s. Nothing of it is put back by itself (the one boundary, GRENZEN-LAUF.md): %2$d part(s) stay as they are (left, each with its value before in the journal), and the object is unclear. Check it in wp-admin and align the pair (wp_site_pairs).', $why, $left ), $journal, $live_id );
+		/* translators: 1: why, one or more whole sentences, 2: number of parts left as they are. */
+		return self::outcome( 'unclear', sprintf( _n( 'The object deviated within the step. %1$s Nothing of it is put back by itself (the one boundary, GRENZEN-LAUF.md): %2$d part stays as it is (left, with its value before in the journal), and the object is unclear. Check it in wp-admin and align the pair (wp_site_pairs).', 'The object deviated within the step. %1$s Nothing of it is put back by itself (the one boundary, GRENZEN-LAUF.md): %2$d parts stay as they are (left, each with its value before in the journal), and the object is unclear. Check it in wp-admin and align the pair (wp_site_pairs).', $left, 'alphabridge-mcp' ), $why, $left ), $journal, $live_id );
 	}
 
 	/**
@@ -1837,7 +1953,7 @@ final class AB_MCP_Sync_Engine {
 		$holds_own    = ! empty( $part['own'] ) && isset( $part['own_after'] ) && null !== $part['own_after'] && null !== $pre && hash_equals( (string) $part['own_after'], $pre );
 		if ( null !== $pre && null !== $was && ! hash_equals( $was, $pre ) && ! $holds_own && empty( $part['foreign'] ) ) {
 			$part['foreign'] = true;
-			$part['note']    = 'Changed since the backup of the step by another hand (a hook of this site, or a writer on a way the lock does not refuse) before the step\'s call: not the step\'s own, never put back.';
+			$part['note']    = __( 'Changed since the backup of the step by another hand (a hook of this site, or a writer on a way the lock does not refuse) before the step\'s call: not the step\'s own, never put back.', 'alphabridge-mcp' );
 		}
 		return $part;
 	}
@@ -1881,15 +1997,15 @@ final class AB_MCP_Sync_Engine {
 			$part['own_target'] = (string) $expected;
 			if ( $by_row ) {
 				$part['state'] = hash_equals( (string) $part['target'], (string) $post ) ? 'read' : 'written';
-				$part['note']  = 'Written with the row by the core (wp_insert_post()).';
+				$part['note']  = __( 'Written with the row by the core (wp_insert_post()).', 'alphabridge-mcp' );
 			}
 			return $part;
 		}
 		if ( $by_row ) {
 			$part['foreign'] = true;
 			$part['note']    = null !== $expected
-				? 'Written with the row by the core, but read back other than what the row was to write: not provably the step\'s own, not put back.'
-				: 'Changed since the backup of the step by another hand (a hook of this site reacting to the row, or a writer on a way the lock does not refuse), not by the step: not the step\'s own, not put back.';
+				? __( 'Written with the row by the core, but read back other than what the row was to write: not provably the step\'s own, not put back.', 'alphabridge-mcp' )
+				: __( 'Changed since the backup of the step by another hand (a hook of this site reacting to the row, or a writer on a way the lock does not refuse), not by the step: not the step\'s own, not put back.', 'alphabridge-mcp' );
 		}
 		return $part;
 	}
@@ -1940,9 +2056,26 @@ final class AB_MCP_Sync_Engine {
 	 */
 	private static function unsaved( array $journal, $i, $error, $when, $live_id, $backup ) {
 		$name   = (string) $journal['parts'][ $i ]['part'];
-		$reason = is_wp_error( $error ) ? $error->get_error_message() : 'no answer';
-		$journal['parts'][ $i ]['note'] = self::noted( $journal['parts'][ $i ], 'before' === $when ? sprintf( 'Not written: the journal of the step could not be saved before its call (%s), so the call was not made.', $reason ) : sprintf( 'The journal of the step could not be saved after its call (%s); the step stopped there.', $reason ) );
-		return self::deviated( $journal, $i, sprintf( 'the journal of the step could not be saved %1$s the call of the part %2$s (%3$s), so the step wrote nothing more: a request that ended in a later call could not be told from the journal', 'before' === $when ? 'before' : 'after', $name, $reason ), $live_id, $backup );
+		$reason = is_wp_error( $error ) ? $error->get_error_message() : __( 'The database gave no answer.', 'alphabridge-mcp' );
+		$journal['parts'][ $i ]['note'] = self::noted(
+			$journal['parts'][ $i ],
+			'before' === $when
+				/* translators: %s: the error of the database (one or more whole sentences). */
+				? sprintf( __( 'Not written: the journal of the step could not be saved before its call, so the call was not made (%s)', 'alphabridge-mcp' ), $reason )
+				/* translators: %s: the error of the database (one or more whole sentences). */
+				: sprintf( __( 'The journal of the step could not be saved after its call; the step stopped there (%s)', 'alphabridge-mcp' ), $reason )
+		);
+		return self::deviated(
+			$journal,
+			$i,
+			'before' === $when
+				/* translators: 1: name of the part, as the tools name it (row, meta:…, terms:…), 2: the error of the database (one or more whole sentences). */
+				? sprintf( __( 'The journal of the step could not be saved before the call of the part %1$s, so the step wrote nothing more: a request that ended in a later call could not be told from the journal (%2$s)', 'alphabridge-mcp' ), $name, $reason )
+				/* translators: 1: name of the part, as the tools name it (row, meta:…, terms:…), 2: the error of the database (one or more whole sentences). */
+				: sprintf( __( 'The journal of the step could not be saved after the call of the part %1$s, so the step wrote nothing more: a request that ended in a later call could not be told from the journal (%2$s)', 'alphabridge-mcp' ), $name, $reason ),
+			$live_id,
+			$backup
+		);
 	}
 
 	/**
@@ -1960,15 +2093,19 @@ final class AB_MCP_Sync_Engine {
 	private static function unread( array $journal, $i, WP_Error $error, $live_id, $backup ) {
 		$name                            = (string) $journal['parts'][ $i ]['part'];
 		$journal['parts'][ $i ]['state'] = 'failed';
-		$journal['parts'][ $i ]['note']  = 'Not written: the part could not be read before the call (' . $error->get_error_message() . ').';
-		return self::deviated( $journal, $i, sprintf( 'the part %1$s could not be read before its call (%2$s)', $name, $error->get_error_message() ), $live_id, $backup );
+		/* translators: %s: the error of the read (one or more whole sentences). */
+		$journal['parts'][ $i ]['note']  = sprintf( __( 'Not written: the part could not be read before the call (%s)', 'alphabridge-mcp' ), $error->get_error_message() );
+		/* translators: 1: name of the part, as the tools name it (row, meta:…, terms:…), 2: the error of the read (one or more whole sentences). */
+		return self::deviated( $journal, $i, sprintf( __( 'The part %1$s could not be read before its call (%2$s)', 'alphabridge-mcp' ), $name, $error->get_error_message() ), $live_id, $backup );
 	}
 
 	/**
 	 * Whether a part goes back, from the journal and the state read now; the
 	 * one place of the rule (decisions 17, 18 and 23; Codex round 6 of
-	 * branch 8; the decision of 07.11.2026), pure: no call of WordPress,
-	 * nothing of the state of the part. The way back of the run asks it, each
+	 * branch 8; the decision of 07.11.2026), pure: no call of WordPress
+	 * besides the translation of the why (a text for the journal, which
+	 * decides nothing), nothing of the state of the part. The state alone
+	 * decides; the way back of the run asks it, each
 	 * part right before its turn, on a hash read then.
 	 *
 	 * 1. $now null (the part could not be read): left.
@@ -1995,23 +2132,26 @@ final class AB_MCP_Sync_Engine {
 		if ( null === $now ) {
 			return array(
 				'state' => 'left',
-				'why'   => 'Could not be read, so whether it changed since the backup is unknown: left as it is.',
+				'why'   => __( 'Could not be read, so whether it changed since the backup is unknown: left as it is.', 'alphabridge-mcp' ),
 			);
 		}
 		if ( hash_equals( (string) $backup, (string) $now ) ) {
 			return array(
 				'state' => 'unchanged',
-				'why'   => $own ? '' : 'As before the run.',
+				'why'   => $own ? '' : __( 'As before the run.', 'alphabridge-mcp' ),
 			);
 		}
 		if ( ! empty( $part['deviated'] ) ) {
 			return array(
 				'state' => 'left',
 				'why'   => 'earlier_build' === $part['deviated']
-					? sprintf( 'The journal of this step is of an earlier build and does not say whether the object deviated within the step, so nothing of it goes back by itself: the part %s is left as it is; check it by hand, its value before stands beside it (value_before).', $name )
+					/* translators: %s: name of the part, as the tools name it (row, meta:…, terms:…). */
+					? sprintf( __( 'The journal of this step is of an earlier build and does not say whether the object deviated within the step, so nothing of it goes back by itself: the part %s is left as it is; check it by hand, its value before stands beside it (value_before).', 'alphabridge-mcp' ), $name )
 					: ( 'foreign_mark' === $part['deviated']
-						? sprintf( 'The journal marks a part of this object as changed by another hand within its step, so nothing of it goes back by itself: the part %s is left as it is; check it by hand, its value before stands beside it (value_before).', $name )
-						: sprintf( 'The object deviated within its step, so nothing of it goes back by itself: the part %s is left as it is; check it by hand, its value before stands beside it (value_before).', $name ) ),
+						/* translators: %s: name of the part, as the tools name it (row, meta:…, terms:…). */
+						? sprintf( __( 'The journal marks a part of this object as changed by another hand within its step, so nothing of it goes back by itself: the part %s is left as it is; check it by hand, its value before stands beside it (value_before).', 'alphabridge-mcp' ), $name )
+						/* translators: %s: name of the part, as the tools name it (row, meta:…, terms:…). */
+						: sprintf( __( 'The object deviated within its step, so nothing of it goes back by itself: the part %s is left as it is; check it by hand, its value before stands beside it (value_before).', 'alphabridge-mcp' ), $name ) ),
 			);
 		}
 		if ( $own ) {
@@ -2024,35 +2164,37 @@ final class AB_MCP_Sync_Engine {
 			}
 			return array(
 				'state' => 'left',
-				'why'   => sprintf( 'The part %s was changed since the step wrote it, so it is left as it is.', $name ),
+				/* translators: %s: name of the part, as the tools name it (row, meta:…, terms:…). */
+				'why'   => sprintf( __( 'The part %s was changed since the step wrote it, so it is left as it is.', 'alphabridge-mcp' ), $name ),
 			);
 		}
 		return array(
 			'state' => 'left',
-			'why'   => 'Not the step\'s own (' . self::not_own_why( $part ) . '), so it is left as it is.',
+			'why'   => self::not_own_why( $part ),
 		);
 	}
 
 	/**
 	 * Why a part is not the step's own, for the journal and the answer: a
-	 * wording from the marks of the part (its state only names the moment).
+	 * wording from the marks of the part (its state only names the moment),
+	 * whole sentences; the note of the journal follows as written.
 	 *
 	 * @param array $part Part of the journal.
 	 * @return string
 	 */
 	private static function not_own_why( array $part ) {
-		$note  = isset( $part['note'] ) && '' !== (string) $part['note'] ? ': ' . (string) $part['note'] : '';
+		$note  = isset( $part['note'] ) && '' !== (string) $part['note'] ? ' ' . trim( (string) $part['note'] ) : '';
 		$state = isset( $part['state'] ) ? (string) $part['state'] : '';
 		if ( ! empty( $part['foreign'] ) ) {
-			return 'changed by another hand, not by the step' . $note;
+			return __( 'Not the step\'s own: changed by another hand, not by the step, so it is left as it is.', 'alphabridge-mcp' ) . $note;
 		}
 		if ( 'not_reached' === $state ) {
-			return 'the step ended before it reached this part, so it never wrote it';
+			return __( 'Not the step\'s own: the step ended before it reached this part, so it never wrote it, and it is left as it is.', 'alphabridge-mcp' );
 		}
 		if ( ! isset( $part['post'] ) || null === $part['post'] ) {
-			return 'the step never read it back (its request ended in the call), so whether the step wrote what it holds is unknown';
+			return __( 'Not the step\'s own: the step never read it back (its request ended in the call), so whether the step wrote what it holds is unknown, and it is left as it is.', 'alphabridge-mcp' );
 		}
-		return 'no call of the step changed it, so what it holds now is another hand\'s' . $note;
+		return __( 'Not the step\'s own: no call of the step changed it, so what it holds now is another hand\'s, and it is left as it is.', 'alphabridge-mcp' ) . $note;
 	}
 
 	/**
@@ -2145,7 +2287,7 @@ final class AB_MCP_Sync_Engine {
 			if ( ! in_array( $i, $order, true ) ) {
 				$out[ $i ] = array(
 					'state' => 'left',
-					'note'  => 'A part of a name this version does not know: left as it is, check the object by hand.',
+					'note'  => __( 'A part of a name this version does not know: left as it is, check the object by hand.', 'alphabridge-mcp' ),
 				);
 			}
 		}
@@ -2163,7 +2305,8 @@ final class AB_MCP_Sync_Engine {
 			$files_seen = is_array( $files_seen ) ? $files_seen : array();
 			$moved      = self::changed_file( $journal['files_seen'], $files_seen );
 			if ( null !== $moved ) {
-				$stopped = sprintf( 'the file %s of the attachment changed since the step read it last (a hook of this site, or another hand since)', $moved );
+				/* translators: %s: path of the file under the uploads. */
+				$stopped = sprintf( __( 'The file %s of the attachment changed since the step read it last (a hook of this site, or another hand since).', 'alphabridge-mcp' ), $moved );
 			}
 		}
 		// The parts that go back only together, all or none (an attachment:
@@ -2199,7 +2342,8 @@ final class AB_MCP_Sync_Engine {
 				// Both ways: a key that came, went or changed (changed() sees no
 				// key that went).
 				if ( ( null === $left_at ) !== ( null === $now ) || ( null !== $now && ! hash_equals( (string) $left_at, (string) $now ) ) ) {
-					$stopped = sprintf( 'the part %s, which names files of the attachment, changed since the step left it (another hand changed the object)', (string) $member );
+					/* translators: %s: name of the part, as the tools name it (meta:…). */
+					$stopped = sprintf( __( 'The part %s, which names files of the attachment, changed since the step left it (another hand changed the object).', 'alphabridge-mcp' ), (string) $member );
 				}
 			}
 		}
@@ -2216,10 +2360,12 @@ final class AB_MCP_Sync_Engine {
 				if ( 'put_back' === $decided['state'] ) {
 					$decided = array(
 						'state' => 'left',
-						'why'   => sprintf( 'The way back stopped for this object: %s; the part %s is left as it is, check it by hand.', $stopped, $name ),
+						/* translators: 1: why the way back stopped, one or more whole sentences, 2: name of the part, as the tools name it (row, meta:…, terms:…). */
+						'why'   => sprintf( __( 'The way back stopped for this object. %1$s The part %2$s is left as it is; check it by hand.', 'alphabridge-mcp' ), $stopped, $name ),
 					);
 				} elseif ( 'left' === $decided['state'] ) {
-					$decided['why'] .= sprintf( ' The way back stopped for this object: %s.', $stopped );
+					/* translators: %s: why the way back stopped, one or more whole sentences. */
+					$decided['why'] = trim( $decided['why'] . ' ' . sprintf( __( 'The way back stopped for this object. %s', 'alphabridge-mcp' ), $stopped ) );
 				}
 			}
 			if ( 'put_back' === $decided['state'] && isset( $group_of[ $name ] ) ) {
@@ -2230,7 +2376,8 @@ final class AB_MCP_Sync_Engine {
 				if ( null !== $group_why[ $g ] ) {
 					$decided = array(
 						'state' => 'left',
-						'why'   => sprintf( 'Not put back: the parts %1$s go back only together, and %2$s; so the part %3$s is left as it is, its value before stands beside it (value_before). Set them by hand in wp-admin.', implode( ', ', $groups[ $g ] ), $group_why[ $g ], $name ),
+						/* translators: 1: the names of the parts that go back only together, separated by commas, 2: why one of them does not go back, one or more whole sentences, 3: name of this part; names as the tools name them (meta:…). */
+						'why'   => sprintf( __( 'Not put back: the parts %1$s go back only together, and one of them does not. %2$s So the part %3$s is left as it is, its value before stands beside it (value_before). Set them by hand in wp-admin.', 'alphabridge-mcp' ), implode( ', ', $groups[ $g ] ), $group_why[ $g ], $name ),
 					);
 				}
 			}
@@ -2244,7 +2391,8 @@ final class AB_MCP_Sync_Engine {
 				if ( true !== $may ) {
 					$decided = array(
 						'state' => 'left',
-						'why'   => sprintf( 'Not put back: this account may not %1$s on this site, so the part %2$s is left as it is; its value before stands beside it (value_before). Set it by hand in wp-admin with an account that may.', $may, $name ),
+						/* translators: 1: what this account may not do, a whole sentence in the language of the site with its capability (This account may not edit the post 5 on this site (edit_post).), 2: name of the part, as the tools name it (row, meta:…, terms:…). */
+						'why'   => sprintf( __( 'Not put back: %1$s So the part %2$s is left as it is; its value before stands beside it (value_before). Set it by hand in wp-admin with an account that may.', 'alphabridge-mcp' ), $may, $name ),
 					);
 				}
 			}
@@ -2258,10 +2406,12 @@ final class AB_MCP_Sync_Engine {
 				$files_now = is_array( $files_now ) ? $files_now : array();
 				$moved     = self::changed_file( $files_seen, $files_now );
 				if ( null !== $moved ) {
-					$stopped = sprintf( 'the file %1$s of the attachment changed before the part %2$s went back (a hook of this site as the way back asked a right or a type, or another hand)', $moved, $name );
+					/* translators: 1: path of the file under the uploads, 2: name of the part, as the tools name it (meta:…). */
+					$stopped = sprintf( __( 'The file %1$s of the attachment changed before the part %2$s went back (a hook of this site as the way back asked a right or a type, or another hand).', 'alphabridge-mcp' ), $moved, $name );
 					$decided = array(
 						'state' => 'left',
-						'why'   => sprintf( 'The way back stopped for this object: %s; the part %s is left as it is, check it by hand.', $stopped, $name ),
+						/* translators: 1: why the way back stopped, one or more whole sentences, 2: name of the part, as the tools name it (row, meta:…, terms:…). */
+						'why'   => sprintf( __( 'The way back stopped for this object. %1$s The part %2$s is left as it is; check it by hand.', 'alphabridge-mcp' ), $stopped, $name ),
 					);
 				}
 			}
@@ -2288,7 +2438,8 @@ final class AB_MCP_Sync_Engine {
 				if ( null === $stopped && is_array( $seen ) && is_array( $again ) ) {
 					foreach ( self::part_names( $seen, $again ) as $other_name ) {
 						if ( $other_name !== $name && self::changed( $w::part_hash( $seen, $other_name ), $w::part_hash( $again, $other_name ) ) ) {
-							$stopped = sprintf( 'putting the part %1$s back changed the part %2$s besides it (a side effect of the core or a hook of this site)', $name, $other_name );
+							/* translators: 1: name of the part put back, 2: name of the part that changed besides; both as the tools name them (row, meta:…, terms:…). */
+							$stopped = sprintf( __( 'Putting the part %1$s back changed the part %2$s besides it (a side effect of the core or a hook of this site).', 'alphabridge-mcp' ), $name, $other_name );
 							break;
 						}
 					}
@@ -2298,7 +2449,8 @@ final class AB_MCP_Sync_Engine {
 					$files_again = is_array( $files_again ) ? $files_again : array();
 					$moved       = self::changed_file( $files_seen, $files_again );
 					if ( null === $stopped && null !== $moved ) {
-						$stopped = sprintf( 'putting the part %1$s back changed the file %2$s of the attachment (a side effect of the core or a hook of this site)', $name, $moved );
+						/* translators: 1: name of the part put back, as the tools name it (meta:…), 2: path of the file under the uploads. */
+						$stopped = sprintf( __( 'Putting the part %1$s back changed the file %2$s of the attachment (a side effect of the core or a hook of this site).', 'alphabridge-mcp' ), $name, $moved );
 					}
 					$files_seen = $files_again;
 				}
@@ -2320,7 +2472,7 @@ final class AB_MCP_Sync_Engine {
 				if ( null === $now || ! hash_equals( (string) $w::part_hash( $backup, $name ), $now ) ) {
 					$out[ $i ] = array(
 						'state' => 'unclear',
-						'note'  => sprintf( 'The part %1$s reads other than the backup after the parts went back%2$s: a side effect of the core or a hook of this site changed it after it was %3$s. Check the object in wp-admin.', $name, null === $now ? ' (it could not be read)' : '', 'restored' === $out[ $i ]['state'] ? 'put back' : 'read as the backup' ),
+						'note'  => self::unclear_after( $name, null === $now, 'restored' === $out[ $i ]['state'] ),
 					);
 				}
 			}
@@ -2418,7 +2570,8 @@ final class AB_MCP_Sync_Engine {
 			clean_term_cache( array(), $taxonomy, true );
 		}
 		unset( $result['cursor'] );
-		$result['message'] = sprintf( 'The caches of %d written object(s) were emptied (post, meta and term caches, the builder caches, the page cache where a caching plugin is known).', count( $result['objects'] ) );
+		/* translators: %d: number of written objects. */
+		$result['message'] = sprintf( _n( 'The caches of %d written object were emptied (post, meta and term caches, the builder caches, the page cache where a caching plugin is known).', 'The caches of %d written objects were emptied (post, meta and term caches, the builder caches, the page cache where a caching plugin is known).', count( $result['objects'] ), 'alphabridge-mcp' ), count( $result['objects'] ) );
 		AB_MCP_Sync_Run::update_step( (int) $run['run_id'], (int) $step['seq'], array( 'state' => 'done', 'result' => $result ), 'planned' );
 		AB_MCP_Sync_Run::touch( (int) $run['run_id'] );
 		return array( 'next' => $result['message'] . ' Call action=next for the check of the run, which closes it.' );
@@ -2492,7 +2645,11 @@ final class AB_MCP_Sync_Engine {
 				if ( 'done' !== $one['state'] ) {
 					$result['findings'][] = array(
 						'seq'     => (int) $one['seq'],
-						'message' => sprintf( 'Step %1$d is %2$s: %3$s', (int) $one['seq'], $one['state'], is_array( $one['result'] ) && isset( $one['result']['message'] ) ? $one['result']['message'] : 'not written.' ),
+						'message' => is_array( $one['result'] ) && isset( $one['result']['message'] )
+							/* translators: 1: step number, 2: its state, as the tools name it (failed, unclear, …), 3: the message of the step as its journal holds it (one or more whole sentences). */
+							? sprintf( __( 'Step %1$d is %2$s. %3$s', 'alphabridge-mcp' ), (int) $one['seq'], $one['state'], $one['result']['message'] )
+							/* translators: 1: step number, 2: its state, as the tools name it (failed, unclear, …). */
+							: sprintf( __( 'Step %1$d is %2$s: not written.', 'alphabridge-mcp' ), (int) $one['seq'], $one['state'] ),
 					);
 					continue;
 				}
@@ -2505,7 +2662,8 @@ final class AB_MCP_Sync_Engine {
 				if ( ! $later && ( null === $hash || ! hash_equals( $target, $hash ) ) ) {
 					$result['findings'][] = array(
 						'seq'     => (int) $one['seq'],
-						'message' => sprintf( 'The %1$s %2$s no longer hashes to the target of step %3$d (changed since it was written, or not readable whole).', $one['parts']['object']['kind'] ?? 'post', $live_id, (int) $one['seq'] ),
+						/* translators: 1: kind of the object, as the tools name it (post, term, …), 2: its reference on this site, 3: step number. */
+						'message' => sprintf( __( 'The %1$s %2$s no longer hashes to the target of step %3$d (changed since it was written, or not readable whole).', 'alphabridge-mcp' ), $one['parts']['object']['kind'] ?? 'post', $live_id, (int) $one['seq'] ),
 					);
 				}
 				// The first published object with a page of its own is the
@@ -2539,14 +2697,14 @@ final class AB_MCP_Sync_Engine {
 					$row   = AB_MCP_Sync_Rows::post( $live_id );
 					$title = is_array( $row ) ? (string) $row['post_title'] : '';
 				}
-				$finding                      = self::sample_finding( $answer['status'], $answer['body'], $title );
+				$finding                      = self::sample_finding( $answer['status'], $answer['body'], $title, (string) ( $result['sample']['kind'] ?? 'post' ), $live_id );
 				$result['sample']['status']   = $answer['status'];
 				$result['sample']['asked']    = true;
 				$result['sample']['finding']  = $finding;
 				if ( null !== $finding ) {
 					$result['findings'][] = array(
 						'seq'     => (int) $result['sample']['seq'],
-						'message' => sprintf( 'The published %1$s %2$d %3$s', $result['sample']['kind'] ?? 'post', $live_id, $finding ),
+						'message' => $finding,
 					);
 				}
 			}
@@ -2567,7 +2725,8 @@ final class AB_MCP_Sync_Engine {
 			if ( 'passed' !== $result['probe'] ) {
 				$result['findings'][] = array(
 					'seq'     => 0,
-					'message' => 'fatal' === $result['probe'] ? 'The PHP probe of the site found a fatal error after the run.' : sprintf( 'The PHP probe of the site did not pass whole after the run (%s): open the site and wp-admin in the browser; wp_site_health shows the probe.', $result['probe'] ),
+					/* translators: %s: the result of the PHP probe, as the tools name it (partial, unreachable, unavailable). */
+					'message' => 'fatal' === $result['probe'] ? __( 'The PHP probe of the site found a fatal error after the run.', 'alphabridge-mcp' ) : sprintf( __( 'The PHP probe of the site did not pass whole after the run (%s): open the site and wp-admin in the browser; wp_site_health shows the probe.', 'alphabridge-mcp' ), $result['probe'] ),
 				);
 			}
 			$result['stage'] = 'log';
@@ -2595,34 +2754,38 @@ final class AB_MCP_Sync_Engine {
 			if ( 'lines' === $marked || ! $marked || null === $mark ) {
 				$result['findings'][] = array(
 					'seq'     => 0,
-					'message' => 'The error log of the site is readable now but was not marked at the check before the run (a run begun before this build, or the log made since), so new lines since the run began cannot be told: read it by hand (wp_get_error_log).',
+					'message' => __( 'The error log of the site is readable now but was not marked at the check before the run (a run begun before this build, or the log made since), so new lines since the run began cannot be told: read it by hand (wp_get_error_log).', 'alphabridge-mcp' ),
 				);
 			} else {
 				$since = self::error_log_lines_since( $path, (int) $mark, self::LOG_BYTES );
 				if ( null === $since ) {
 					$result['findings'][] = array(
 						'seq'     => 0,
-						'message' => 'The error log of the site could not be read after the run, so new lines since the run began cannot be told: read it by hand (wp_get_error_log).',
+						'message' => __( 'The error log of the site could not be read after the run, so new lines since the run began cannot be told: read it by hand (wp_get_error_log).', 'alphabridge-mcp' ),
 					);
 				} elseif ( $since['rotated'] ) {
 					$result['findings'][] = array(
 						'seq'     => 0,
-						'message' => sprintf( 'The error log of the site is smaller than at the check before the run (rotated or emptied in between); it holds %d line(s) now, which cannot be told from lines the run added: read it by hand (wp_get_error_log).', (int) $since['lines'] ),
+						/* translators: %d: number of lines in the error log. */
+						'message' => sprintf( _n( 'The error log of the site is smaller than at the check before the run (rotated or emptied in between); it holds %d line now, which cannot be told from lines the run added: read it by hand (wp_get_error_log).', 'The error log of the site is smaller than at the check before the run (rotated or emptied in between); it holds %d lines now, which cannot be told from lines the run added: read it by hand (wp_get_error_log).', (int) $since['lines'], 'alphabridge-mcp' ), (int) $since['lines'] ),
 					);
 				} elseif ( $since['failed'] ) {
 					$result['findings'][] = array(
 						'seq'     => 0,
-						'message' => sprintf( 'The error log of the site could not be read to its end after the run (a read failed; %d line(s) counted up to there): read it by hand (wp_get_error_log).', (int) $since['lines'] ),
+						/* translators: %d: number of lines counted. */
+						'message' => sprintf( _n( 'The error log of the site could not be read to its end after the run (a read failed; %d line counted up to there): read it by hand (wp_get_error_log).', 'The error log of the site could not be read to its end after the run (a read failed; %d lines counted up to there): read it by hand (wp_get_error_log).', (int) $since['lines'], 'alphabridge-mcp' ), (int) $since['lines'] ),
 					);
 				} elseif ( $since['capped'] ) {
 					$result['findings'][] = array(
 						'seq'     => 0,
-						'message' => sprintf( 'The error log of the site grew by more than %1$d MiB since the check before the run (%2$d line(s) counted up to there, not to its end): read it by hand (wp_get_error_log).', (int) ( self::LOG_BYTES / 1048576 ), (int) $since['lines'] ),
+						/* translators: 1: the cap in MiB, 2: number of lines counted. */
+						'message' => sprintf( _n( 'The error log of the site grew by more than %1$d MiB since the check before the run (%2$d line counted up to there, not to its end): read it by hand (wp_get_error_log).', 'The error log of the site grew by more than %1$d MiB since the check before the run (%2$d lines counted up to there, not to its end): read it by hand (wp_get_error_log).', (int) $since['lines'], 'alphabridge-mcp' ), (int) ( self::LOG_BYTES / 1048576 ), (int) $since['lines'] ),
 					);
 				} elseif ( $since['lines'] > 0 ) {
 					$result['findings'][] = array(
 						'seq'     => 0,
-						'message' => sprintf( 'The error log of the site has %d new line(s) since the check before the run (wp_get_error_log shows them).', (int) $since['lines'] ),
+						/* translators: %d: number of new lines. */
+						'message' => sprintf( _n( 'The error log of the site has %d new line since the check before the run (wp_get_error_log shows it).', 'The error log of the site has %d new lines since the check before the run (wp_get_error_log shows them).', (int) $since['lines'], 'alphabridge-mcp' ), (int) $since['lines'] ),
 					);
 				}
 			}
@@ -2632,7 +2795,11 @@ final class AB_MCP_Sync_Engine {
 		$writes_n          = (int) $result['writes'];
 		$qualified         = $writes_n > 0 && $written === $writes_n;
 		$state             = array() === $result['findings'] ? 'closed_done' : 'closed_findings';
-		$result['message'] = array() === $result['findings'] ? sprintf( 'Checked: %d written object(s) hash to their targets; the sample shows its object, the probe passed and the log has no new line. The run is closed as done.', $written ) : sprintf( 'Checked with %d finding(s); the run is closed with findings.', count( $result['findings'] ) );
+		$result['message'] = array() === $result['findings']
+			/* translators: %d: number of written objects. */
+			? sprintf( _n( 'Checked: %d written object hashes to its target; the sample shows its object, the probe passed and the log has no new line. The run is closed as done.', 'Checked: %d written objects hash to their targets; the sample shows its object, the probe passed and the log has no new line. The run is closed as done.', $written, 'alphabridge-mcp' ), $written )
+			/* translators: %d: number of findings. */
+			: sprintf( _n( 'Checked with %d finding; the run is closed with findings.', 'Checked with %d findings; the run is closed with findings.', count( $result['findings'] ), 'alphabridge-mcp' ), count( $result['findings'] ) );
 		AB_MCP_Sync_Run::update_step( (int) $run['run_id'], (int) $step['seq'], array( 'state' => 'done', 'result' => $result ), 'planned' );
 		$moved = AB_MCP_Sync_Run::set_state( (int) $run['run_id'], 'open', $state, $qualified );
 		if ( is_wp_error( $moved ) ) {
@@ -2672,11 +2839,19 @@ final class AB_MCP_Sync_Engine {
 	 * @param int|null $status The status answered; null for no answer.
 	 * @param string   $body   The body answered.
 	 * @param string   $title  The title of the written object.
-	 * @return string|null
+	 * @param string   $kind   The kind of the object, as the tools name it.
+	 * @param int      $id     The object here.
+	 * @return string|null A whole sentence in the language of the site (a
+	 *                     diagnosis of the journal, compared with nothing).
 	 */
-	public static function sample_finding( $status, $body, $title ) {
+	public static function sample_finding( $status, $body, $title, $kind = 'post', $id = 0 ) {
+		if ( null === $status ) {
+			/* translators: 1: kind of the object, as the tools name it (post), 2: its id on this site. */
+			return sprintf( __( 'The published %1$s %2$d did not answer 200 (no answer).', 'alphabridge-mcp' ), (string) $kind, (int) $id );
+		}
 		if ( 200 !== (int) $status ) {
-			return sprintf( 'did not answer 200 (%s).', null === $status ? 'no answer' : (string) (int) $status );
+			/* translators: 1: kind of the object, as the tools name it (post), 2: its id on this site, 3: the HTTP status it answered. */
+			return sprintf( __( 'The published %1$s %2$d did not answer 200 (%3$d).', 'alphabridge-mcp' ), (string) $kind, (int) $id, (int) $status );
 		}
 		$title   = trim( (string) $title );
 		$needles = array( $title, esc_html( $title ) );
@@ -2688,7 +2863,8 @@ final class AB_MCP_Sync_Engine {
 				return null;
 			}
 		}
-		return 'answered 200 but did not show the title of the written object: a page cache may serve an old version (empty it and open the page), or the theme does not show titles.';
+		/* translators: 1: kind of the object, as the tools name it (post), 2: its id on this site. */
+		return sprintf( __( 'The published %1$s %2$d answered 200 but did not show the title of the written object: a page cache may serve an old version (empty it and open the page), or the theme does not show titles.', 'alphabridge-mcp' ), (string) $kind, (int) $id );
 	}
 
 	/**
@@ -2723,7 +2899,7 @@ final class AB_MCP_Sync_Engine {
 		$what    = is_array( $step['parts'] ) ? $step['parts'] : array();
 		$forward = AB_MCP_Sync_Run::step( isset( $what['forward_run'] ) ? (int) $what['forward_run'] : $run_id, isset( $what['forward_seq'] ) ? (int) $what['forward_seq'] : 0 );
 		if ( ! is_array( $forward ) || ! is_array( $forward['parts'] ) || ! isset( $forward['parts']['object'] ) ) {
-			return self::fail_step( $run_id, $seq, 'planned', 'The step of the way back names no written step with a journal; nothing is put back.' );
+			return self::fail_step( $run_id, $seq, 'planned', __( 'The step of the way back names no written step with a journal; nothing is put back.', 'alphabridge-mcp' ) );
 		}
 		$journal = $forward['parts'];
 		$object  = $journal['object'];
@@ -2737,13 +2913,15 @@ final class AB_MCP_Sync_Engine {
 		// A step without a backup wrote nothing (it failed before the backup):
 		// there is nothing to take back; the plan leaves such a step out (B9).
 		if ( ! is_array( $journal['backup'] ) ) {
-			return self::fail_step( $run_id, $seq, 'begun', sprintf( 'Step %d wrote nothing (its journal holds no backup); there is nothing to take back for it.', (int) $forward['seq'] ) );
+			/* translators: %d: step number. */
+			return self::fail_step( $run_id, $seq, 'begun', sprintf( __( 'Step %d wrote nothing (its journal holds no backup); there is nothing to take back for it.', 'alphabridge-mcp' ), (int) $forward['seq'] ) );
 		}
 		// A new object stays as a rest (decision 23, finding R5-4): by the
 		// operation of the step, never by the shape of its backup.
 		if ( 'create' === $object['op'] ) {
 			if ( ! self::is_ref( $live_id ) ) {
-				return self::fail_step( $run_id, $seq, 'begun', sprintf( 'Step %d made no object (its row was not written); there is nothing to take back for it.', (int) $forward['seq'] ) );
+				/* translators: %d: step number. */
+				return self::fail_step( $run_id, $seq, 'begun', sprintf( __( 'Step %d made no object (its row was not written); there is nothing to take back for it.', 'alphabridge-mcp' ), (int) $forward['seq'] ) );
 			}
 			$rest = self::rest( array( 'kind' => $object['kind'], 'staging_ref' => $object['staging_ref'] ), $live_id );
 			// The pair residual, its save checked as every save (the lead after
@@ -2755,7 +2933,8 @@ final class AB_MCP_Sync_Engine {
 				$kept = is_array( $pair ) && 'residual' !== $pair['state'] ? AB_MCP_Sync_Pairs::set_state( $pair_id, 'residual', AB_MCP_Sync_Pairs::snapshot_hash( AB_MCP_Sync_Pairs::snapshot( $pair_id ) ) ) : $pair;
 			}
 			$result = array(
-				'message'  => sprintf( 'The %1$s %2$s was made by the run and is not removed by the way back (nothing is deleted in this version); it stays as a rest, its pair residual. Remove it by hand in wp-admin where it should go.', $object['kind'], $live_id ),
+				/* translators: 1: kind of the object, as the tools name it (post, term, …), 2: its reference on this site. */
+				'message'  => sprintf( __( 'The %1$s %2$s was made by the run and is not removed by the way back (nothing is deleted in this version); it stays as a rest, its pair residual. Remove it by hand in wp-admin where it should go.', 'alphabridge-mcp' ), $object['kind'], $live_id ),
 				'live_ref' => (string) $live_id,
 				'rest'     => $rest,
 				'parts'    => array(),
@@ -2771,7 +2950,7 @@ final class AB_MCP_Sync_Engine {
 				if ( null !== $shared ) {
 					$result['parts'] = $shared['parts'];
 					if ( ! $shared['all_back'] ) {
-						$result['message'] .= ' A field of a row it shares with other objects (a position of a menu) did not go back whole: see parts.';
+						$result['message'] .= ' ' . __( 'A field of a row it shares with other objects (a position of a menu) did not go back whole: see parts.', 'alphabridge-mcp' );
 					}
 				}
 			}
@@ -2784,11 +2963,12 @@ final class AB_MCP_Sync_Engine {
 			return is_wp_error( $ended ) ? $ended : array( 'next' => $result['message'] );
 		}
 		if ( ! self::is_ref( $live_id ) ) {
-			return self::fail_step( $run_id, $seq, 'begun', 'The journal names no object on this site; nothing is put back.' );
+			return self::fail_step( $run_id, $seq, 'begun', __( 'The journal names no object on this site; nothing is put back.', 'alphabridge-mcp' ) );
 		}
 		$w = self::writer_of( $journal );
 		if ( null === $w ) {
-			return self::fail_step( $run_id, $seq, 'begun', sprintf( 'No step of this version writes the kind %s; nothing is put back.', (string) $object['kind'] ) );
+			/* translators: %s: kind of the object, as the tools name it (post, term, …). */
+			return self::fail_step( $run_id, $seq, 'begun', sprintf( __( 'No step of this version writes the kind %s; nothing is put back.', 'alphabridge-mcp' ), (string) $object['kind'] ) );
 		}
 		$covers = $w::guard_of( $live_id, $w::subtype_of( $object ) );
 		$guard  = AB_MCP_Sync_Guard::begin( $run_id, $seq, $covers['posts'], $covers['taxonomies'], isset( $covers['options'] ) ? $covers['options'] : array(), $covers['terms'] );
@@ -2838,7 +3018,8 @@ final class AB_MCP_Sync_Engine {
 			$pair = AB_MCP_Sync_Pairs::get( $pair_id );
 			$set  = is_array( $pair ) && 'residual' !== $pair['state'] ? AB_MCP_Sync_Pairs::set_state( $pair_id, 'residual', AB_MCP_Sync_Pairs::snapshot_hash( AB_MCP_Sync_Pairs::snapshot( $pair_id ) ) ) : $pair;
 			$all_back  = false;
-			$pair_note = sprintf( ' The run made %s in this unit, which the way back does not remove: the unit stays as a rest, its pair residual.', implode( ', ', $made ) );
+			/* translators: %s: what the run made in the unit, by name, separated by commas (widget instances such as text-3). */
+			$pair_note = ' ' . sprintf( __( 'The run made %s in this unit, which the way back does not remove: the unit stays as a rest, its pair residual.', 'alphabridge-mcp' ), implode( ', ', $made ) );
 			if ( is_wp_error( $set ) ) {
 				// Checked as every save (C1).
 				$pair_note .= ' ' . self::unit_rest_failed( $set );
@@ -2848,7 +3029,8 @@ final class AB_MCP_Sync_Engine {
 			if ( $all_back && null !== $forward['pair_before'] ) {
 				$restored = AB_MCP_Sync_Pairs::restore( $pair_id, (string) $forward['pair_before'], $now_hash );
 				if ( is_wp_error( $restored ) ) {
-					$pair_note = ' The pair did not go back to its state before: ' . $restored->get_error_message();
+					/* translators: %s: the error of the object pairs (one or more whole sentences). */
+					$pair_note = ' ' . sprintf( __( 'The pair did not go back to its state before. %s', 'alphabridge-mcp' ), $restored->get_error_message() );
 					$all_back  = false;
 				}
 			} else {
@@ -2856,9 +3038,11 @@ final class AB_MCP_Sync_Engine {
 			}
 		}
 		$result = array(
-			'message'  => $all_back
-				? sprintf( 'The %1$s %2$s went back to its state before the run: every part the run wrote was still its own and was put back, and every part reads as the backup after that; the pair has its bases of before.%3$s', $object['kind'], $live_id, $pair_note )
-				: sprintf( 'The %1$s %2$s went back only in part: the object deviated within its step and is left whole, or a part was changed since the run wrote it, was never read back, or needs a check, and is left as it is, or reads other than the backup after the parts went back (see parts; a part left names its value before); the pair is unclear until a person confirms a new alignment (wp_site_pairs).%3$s', $object['kind'], $live_id, $pair_note ),
+			'message'  => ( $all_back
+				/* translators: 1: kind of the object, as the tools name it (post, term, …), 2: its reference on this site. */
+				? sprintf( __( 'The %1$s %2$s went back to its state before the run: every part the run wrote was still its own and was put back, and every part reads as the backup after that; the pair has its bases of before.', 'alphabridge-mcp' ), $object['kind'], $live_id )
+				/* translators: 1: kind of the object, as the tools name it (post, term, …), 2: its reference on this site. */
+				: sprintf( __( 'The %1$s %2$s went back only in part: the object deviated within its step and is left whole, or a part was changed since the run wrote it, was never read back, or needs a check, and is left as it is, or reads other than the backup after the parts went back (see parts; a part left names its value before); the pair is unclear until a person confirms a new alignment (wp_site_pairs).', 'alphabridge-mcp' ), $object['kind'], $live_id ) ) . $pair_note,
 			'live_ref' => (string) $live_id,
 			'parts'    => $outcomes,
 		);
@@ -2896,7 +3080,8 @@ final class AB_MCP_Sync_Engine {
 				continue;
 			}
 			if ( in_array( $step['state'], array( 'planned', 'begun' ), true ) ) {
-				return new WP_Error( 'ab_mcp_sync_run_state', sprintf( 'The way back of run %1$d is not closed: its step %2$d is %3$s. Ask for the status of the run (wp_site_push action=status) and go on from there.', (int) $run['run_id'], (int) $step['seq'], (string) $step['state'] ) );
+				/* translators: 1: run number, 2: step number, 3: its state, as the tools name it (planned, begun). */
+				return new WP_Error( 'ab_mcp_sync_run_state', sprintf( __( 'The way back of run %1$d is not closed: its step %2$d is %3$s. Ask for the status of the run (wp_site_push action=status) and go on from there.', 'alphabridge-mcp' ), (int) $run['run_id'], (int) $step['seq'], (string) $step['state'] ) );
 			}
 			if ( 'done' !== $step['state'] || ( is_array( $step['result'] ) && isset( $step['result']['rest'] ) ) ) {
 				$clean = false;
@@ -2999,11 +3184,13 @@ final class AB_MCP_Sync_Engine {
 	private static function attach_item( array $run, array $item ) {
 		$made = AB_MCP_Sync_Run::step( (int) $run['run_id'], isset( $item['attach_of'] ) ? (int) $item['attach_of'] : 0 );
 		if ( ! is_array( $made ) || 'done' !== $made['state'] || ! is_array( $made['result'] ) || empty( $made['result']['live_ref'] ) || empty( $made['result']['pair_id'] ) || ! is_array( $made['parts'] ) || ! isset( $made['parts']['object']['target'] ) ) {
-			return new WP_Error( 'ab_mcp_sync_run_invalid', sprintf( 'The attachment %s of the staging site was not made by step %d of this run, so its parent is not set. It stays unattached: a new report (wp_site_diff) shows it changed on staging, and a run from it sets the parent.', (string) $item['staging_ref'], isset( $item['attach_of'] ) ? (int) $item['attach_of'] : 0 ) );
+			/* translators: 1: reference of the attachment on the staging site, 2: step number. */
+			return new WP_Error( 'ab_mcp_sync_run_invalid', sprintf( __( 'The attachment %1$s of the staging site was not made by step %2$d of this run, so its parent is not set. It stays unattached: a new report (wp_site_diff) shows it changed on staging, and a run from it sets the parent.', 'alphabridge-mcp' ), (string) $item['staging_ref'], isset( $item['attach_of'] ) ? (int) $item['attach_of'] : 0 ) );
 		}
 		$pair = AB_MCP_Sync_Pairs::get( (int) $made['result']['pair_id'] );
 		if ( ! is_array( $pair ) || 'active' !== $pair['state'] || (int) $pair['last_run'] !== (int) $run['run_id'] || (string) $pair['live_ref'] !== (string) $made['result']['live_ref'] ) {
-			return new WP_Error( 'ab_mcp_sync_run_invalid', sprintf( 'The pair of the attachment %s changed since step %d of this run made it, so its parent is not set. Make a new report (wp_site_diff) and plan again.', (string) $item['staging_ref'], (int) $item['attach_of'] ) );
+			/* translators: 1: reference of the attachment on the staging site, 2: step number. */
+			return new WP_Error( 'ab_mcp_sync_run_invalid', sprintf( __( 'The pair of the attachment %1$s changed since step %2$d of this run made it, so its parent is not set. Make a new report (wp_site_diff) and plan again.', 'alphabridge-mcp' ), (string) $item['staging_ref'], (int) $item['attach_of'] ) );
 		}
 		$item['op']        = 'update';
 		$item['attach']    = true;
@@ -3093,7 +3280,7 @@ final class AB_MCP_Sync_Engine {
 		}
 		$backup = AB_MCP_Sync_Backup::get( isset( $what['forward_run'] ) ? (int) $what['forward_run'] : $run_id, $journal['backup'] );
 		if ( is_wp_error( $backup ) || ! is_array( $backup ) || ! isset( $backup['parts'] ) || ! is_array( $backup['parts'] ) ) {
-			return $left( 'The backup of the step holds no fields of the shared row, so they are left as they are; set them by hand in wp-admin.' );
+			return $left( __( 'The backup of the step holds no fields of the shared row, so they are left as they are; set them by hand in wp-admin.', 'alphabridge-mcp' ) );
 		}
 		if ( ! array_key_exists( 'deviated', $journal['object'] ) ) {
 			foreach ( $parts as $k => $part ) {
@@ -3183,7 +3370,8 @@ final class AB_MCP_Sync_Engine {
 	 * @return string
 	 */
 	private static function unit_rest_failed( WP_Error $error ) {
-		return sprintf( 'Its pair could not be kept as a rest (%s): a later run could make it again, so align the pair by hand (wp_site_pairs) before another run.', $error->get_error_message() );
+		/* translators: %s: the error of the object pairs (one or more whole sentences). */
+		return sprintf( __( 'Its pair could not be kept as a rest: a later run could make it again, so align the pair by hand (wp_site_pairs) before another run (%s)', 'alphabridge-mcp' ), $error->get_error_message() );
 	}
 
 	/**
@@ -3198,7 +3386,7 @@ final class AB_MCP_Sync_Engine {
 			'kind'        => (string) $item['kind'],
 			'live_ref'    => (string) $live_id,
 			'staging_ref' => (string) $item['staging_ref'],
-			'way'         => 'Made by the run and not removed by it: remove it by hand in wp-admin where it should go; its pair is residual until wp_site_pairs confirms a new alignment or discards it.',
+			'way'         => __( 'Made by the run and not removed by it: remove it by hand in wp-admin where it should go; its pair is residual until wp_site_pairs confirms a new alignment or discards it.', 'alphabridge-mcp' ),
 		);
 	}
 
@@ -3245,14 +3433,18 @@ final class AB_MCP_Sync_Engine {
 	 * @param int        $run_id  Run.
 	 * @param int        $seq     Step.
 	 * @param string     $from    The state read.
-	 * @param string     $message Why.
+	 * @param string     $message Why, one or more whole sentences in the
+	 *                            language of the site (a diagnosis of the
+	 *                            journal, compared with nothing).
 	 * @param array|null $journal Journal, where there is one.
 	 * @return array|WP_Error
 	 */
 	private static function fail_step( $run_id, $seq, $from, $message, $journal = null ) {
+		/* translators: %s: why, one or more whole sentences. */
+		$why = sprintf( __( 'Not written: %s', 'alphabridge-mcp' ), $message );
 		$set = array(
 			'state'  => 'failed',
-			'result' => array( 'message' => 'Not written: ' . $message ),
+			'result' => array( 'message' => $why ),
 		);
 		if ( null !== $journal ) {
 			$set['parts'] = $journal;
@@ -3262,7 +3454,7 @@ final class AB_MCP_Sync_Engine {
 			return $done;
 		}
 		AB_MCP_Sync_Run::touch( $run_id );
-		return array( 'next' => 'Not written: ' . $message . ' The run goes on with the next step (action=next); the steps that depend on this object are skipped.' );
+		return array( 'next' => $why . ' The run goes on with the next step (action=next); the steps that depend on this object are skipped.' );
 	}
 
 	/**
@@ -3328,6 +3520,30 @@ final class AB_MCP_Sync_Engine {
 	}
 
 	/**
+	 * The note of a part that reads other than the backup after the parts
+	 * went back (put_back(), the check after), one whole sentence per case.
+	 *
+	 * @param string $name     The part.
+	 * @param bool   $unread   Whether it could not be read.
+	 * @param bool   $restored Whether it was put back (else read as the backup).
+	 * @return string
+	 */
+	private static function unclear_after( $name, $unread, $restored ) {
+		if ( $unread ) {
+			return $restored
+				/* translators: %s: name of the part, as the tools name it (row, meta:…, terms:…). */
+				? sprintf( __( 'The part %s reads other than the backup after the parts went back (it could not be read): a side effect of the core or a hook of this site changed it after it was put back. Check the object in wp-admin.', 'alphabridge-mcp' ), $name )
+				/* translators: %s: name of the part, as the tools name it (row, meta:…, terms:…). */
+				: sprintf( __( 'The part %s reads other than the backup after the parts went back (it could not be read): a side effect of the core or a hook of this site changed it after it was read as the backup. Check the object in wp-admin.', 'alphabridge-mcp' ), $name );
+		}
+		return $restored
+			/* translators: %s: name of the part, as the tools name it (row, meta:…, terms:…). */
+			? sprintf( __( 'The part %s reads other than the backup after the parts went back: a side effect of the core or a hook of this site changed it after it was put back. Check the object in wp-admin.', 'alphabridge-mcp' ), $name )
+			/* translators: %s: name of the part, as the tools name it (row, meta:…, terms:…). */
+			: sprintf( __( 'The part %s reads other than the backup after the parts went back: a side effect of the core or a hook of this site changed it after it was read as the backup. Check the object in wp-admin.', 'alphabridge-mcp' ), $name );
+	}
+
+	/**
 	 * Why a group of parts that go back only together may not (together()):
 	 * a member of the journal that the way back leaves by its rule (decide():
 	 * not the step's own, changed since, never read back) or that this
@@ -3340,7 +3556,7 @@ final class AB_MCP_Sync_Engine {
 	 * @param array      $backup  current() of the backup.
 	 * @param int        $live_id The object.
 	 * @param string     $w       The write side of the kind.
-	 * @return string|null Why not, as a clause.
+	 * @return string|null Why not, as one or more whole sentences.
 	 */
 	private static function group_refusal( array $parts, array $members, $seen, array $backup, $live_id, $w ) {
 		foreach ( $parts as $part ) {
@@ -3350,12 +3566,14 @@ final class AB_MCP_Sync_Engine {
 			}
 			$decided = self::decide( $part, null === $seen ? null : $w::part_hash( $seen, $member ), (string) $w::part_hash( $backup, $member ) );
 			if ( 'left' === $decided['state'] ) {
-				return sprintf( 'the part %1$s does not go back (%2$s)', $member, rtrim( (string) $decided['why'], '.' ) );
+				/* translators: 1: name of the part, as the tools name it (meta:…), 2: why, one or more whole sentences. */
+				return sprintf( __( 'The part %1$s does not go back. %2$s', 'alphabridge-mcp' ), $member, (string) $decided['why'] );
 			}
 			if ( 'put_back' === $decided['state'] ) {
 				$may = $w::restore_right( $member, $live_id, $backup, is_array( $seen ) ? $seen : array() );
 				if ( true !== $may ) {
-					return sprintf( 'this account may not %1$s on this site', $may );
+					/* translators: 1: name of the part, as the tools name it (meta:…), 2: what this account may not do, a whole sentence in the language of the site with its capability. */
+					return sprintf( __( 'The part %1$s does not go back. %2$s', 'alphabridge-mcp' ), $member, (string) $may );
 				}
 			}
 		}

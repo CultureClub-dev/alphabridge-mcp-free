@@ -20,8 +20,9 @@
  * is (send()), nothing is redirected. The known limit (decision 6): whoever
  * sees such an address within its ten minutes reads that chunk.
  *
- * Messages are English without gettext, as the other classes of the
- * takeover; each names the way.
+ * Refusals and errors are gettext texts in the language of the site, each
+ * naming the way; codes, states, kinds and parameters stay as the tools
+ * name them.
  *
  * @package AlphaBridge_MCP
  */
@@ -69,7 +70,7 @@ final class AB_MCP_Sync_Grant {
 		for ( $i = 0; $i < (int) $count; $i++ ) {
 			$mac = AB_MCP_Sync_Key::mac( self::MAC, self::grant_text( $package_id, $i, $expires ) );
 			if ( null === $mac ) {
-				return new WP_Error( 'ab_mcp_sync_key_missing', 'This staging site has no usable key: make it on the page AlphaBridge → Staging under «Key of this staging site», confirm it on the production site, then call again.' );
+				return new WP_Error( 'ab_mcp_sync_key_missing', __( 'This staging site has no usable key: make it on the page AlphaBridge → Staging under «Key of this staging site», confirm it on the production site, then call again.', 'alphabridge-mcp' ) );
 			}
 			$out[] = array(
 				'chunk'     => $i,

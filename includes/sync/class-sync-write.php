@@ -44,8 +44,9 @@ final class AB_MCP_Sync_Write {
 	/**
 	 * The rights, the last read, the comparison, the call: in this order.
 	 *
-	 * @param callable $rights  (): true|string|WP_Error, a string the right
-	 *                          that is missing.
+	 * @param callable $rights  (): true|string|WP_Error, a string what this
+	 *                          account may not do, a whole sentence in the
+	 *                          language of the site («This account may not …»).
 	 * @param callable $read    (): mixed|WP_Error, the state now.
 	 * @param callable $matches ( mixed $now ): bool, whether it is the state
 	 *                          the engine expects.
@@ -55,7 +56,10 @@ final class AB_MCP_Sync_Write {
 	public static function core( callable $rights, callable $read, callable $matches, callable $call ) {
 		$may = $rights();
 		if ( true !== $may ) {
-			return self::refusal( is_wp_error( $may ) ? $may : new WP_Error( 'ab_mcp_sync_rights', sprintf( 'Not written: this account may not %s. Connect with an account that may, or leave the object out of the plan.', (string) $may ) ) );
+			// A WP_Error of the writer carries its whole sentence; a string is
+			// the whole sentence of what this account may not do, set in here.
+			/* translators: %s: what this account may not do, a whole sentence in the language of the site with the capability (This account may not change the menus of this site (edit_theme_options).). */
+			return self::refusal( is_wp_error( $may ) ? $may : new WP_Error( 'ab_mcp_sync_rights', sprintf( __( 'Not written: %s Connect with an account that may, or leave the object out of the plan.', 'alphabridge-mcp' ), (string) $may ) ) );
 		}
 		$now = $read();
 		if ( is_wp_error( $now ) ) {
@@ -145,7 +149,8 @@ final class AB_MCP_Sync_Write {
 	 * last read, whether it holds what the step wrote ($matches), then the
 	 * call; a refusal leaves the part as it is (left) with its note.
 	 *
-	 * @param callable $rights  (): true|string.
+	 * @param callable $rights  (): true|string|WP_Error, a string the right
+	 *                          that is missing, a WP_Error the whole note.
 	 * @param callable $read    (): mixed|WP_Error, the state now.
 	 * @param callable $matches ( mixed $now ): bool.
 	 * @param callable $call    (): mixed, the call of the core.
@@ -153,9 +158,14 @@ final class AB_MCP_Sync_Write {
 	 * @return mixed|WP_Error|array{state:string,note:string}
 	 */
 	public static function back( callable $rights, callable $read, callable $matches, callable $call, $changed ) {
-		$done = self::core(
-			static function () use ( $rights ) {
+		$whole = null;
+		$done  = self::core(
+			static function () use ( $rights, &$whole ) {
 				$may = $rights();
+				if ( is_wp_error( $may ) ) {
+					$whole = $may->get_error_message();
+					return new WP_Error( 'ab_mcp_sync_rights', $whole );
+				}
 				return true === $may ? true : new WP_Error( 'ab_mcp_sync_rights', (string) $may );
 			},
 			$read,
@@ -163,9 +173,17 @@ final class AB_MCP_Sync_Write {
 			$call
 		);
 		if ( is_wp_error( $done ) && in_array( $done->get_error_code(), array( 'ab_mcp_sync_rights', self::CHANGED ), true ) ) {
+			if ( self::CHANGED === $done->get_error_code() ) {
+				$note = (string) $changed;
+			} elseif ( null !== $whole ) {
+				$note = $whole;
+			} else {
+				/* translators: %s: what this account may not do, a whole sentence in the language of the site with the capability (This account may not edit the menu item 5 (edit_theme_options, edit_post).). */
+				$note = sprintf( __( 'Not put back: %s It was asked again right before the write (a filter may have changed the rights). Set it by hand in wp-admin with an account that may.', 'alphabridge-mcp' ), $done->get_error_message() );
+			}
 			return array(
 				'state' => 'left',
-				'note'  => self::CHANGED === $done->get_error_code() ? (string) $changed : sprintf( 'Not put back: this account may not %s, asked again right before the write (a filter may have changed the rights). Set it by hand in wp-admin with an account that may.', $done->get_error_message() ),
+				'note'  => $note,
 			);
 		}
 		return $done;
@@ -190,6 +208,6 @@ final class AB_MCP_Sync_Write {
 	 * @return WP_Error
 	 */
 	public static function changed() {
-		return new WP_Error( self::CHANGED, 'Nothing was written: the object changed right before the call, after the last check of the rights (a hook of this site, or another hand). The step deviates; check the object in wp-admin, then make a new report and plan again.' );
+		return new WP_Error( self::CHANGED, __( 'Nothing was written: the object changed right before the call, after the last check of the rights (a hook of this site, or another hand). The step deviates; check the object in wp-admin, then make a new report and plan again.', 'alphabridge-mcp' ) );
 	}
 }

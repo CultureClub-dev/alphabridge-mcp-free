@@ -68,8 +68,9 @@
  * the write can be lost without the read back seeing it; the step's own
  * check of the target hash right before the write narrows that window.
  *
- * Messages are English without gettext, as the other classes of the
- * takeover.
+ * Refusals and errors are gettext texts in the language of the site, each
+ * naming the way; codes, states, kinds and parameters stay as the tools
+ * name them.
  *
  * @package AlphaBridge_MCP
  */
@@ -163,7 +164,7 @@ final class AB_MCP_Sync_Guard {
 		$read = get_option( self::OPTION );
 		if ( ! is_array( $read ) || (int) $read['run_id'] !== (int) $run_id || (int) $read['seq'] !== (int) $seq ) {
 			self::$owner = false;
-			return new WP_Error( self::CODE . '_write', 'The lock of the write boundary could not be written to the options of this site, so the step writes nothing. Ask the host to check that the database accepts writes to the options, then call again.' );
+			return new WP_Error( self::CODE . '_write', __( 'The lock of the write boundary could not be written to the options of this site, so the step writes nothing. Ask the host to check that the database accepts writes to the options, then call again.', 'alphabridge-mcp' ) );
 		}
 		foreach ( array_keys( $record['posts'] ) as $id ) {
 			// The edit lock of wp-admin: an editor sees the post taken.
@@ -338,7 +339,8 @@ final class AB_MCP_Sync_Guard {
 	 */
 	public static function message( $record = null ) {
 		$left = is_array( $record ) ? max( 0, (int) $record['until'] - self::now() ) : 0;
-		return sprintf( 'A takeover from the staging site is writing this object right now (AlphaBridge run %1$d, step %2$d); it is free again in at most %3$d s. Save again then. Nothing of yours was written.', is_array( $record ) ? (int) $record['run_id'] : 0, is_array( $record ) ? (int) $record['seq'] : 0, $left );
+		/* translators: 1: run number, 2: step number, 3: seconds until the object is free again. */
+		return sprintf( __( 'A takeover from the staging site is writing this object right now (AlphaBridge run %1$d, step %2$d); it is free again in at most %3$d s. Save again then. Nothing of yours was written.', 'alphabridge-mcp' ), is_array( $record ) ? (int) $record['run_id'] : 0, is_array( $record ) ? (int) $record['seq'] : 0, $left );
 	}
 
 	/**

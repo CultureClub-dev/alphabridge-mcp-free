@@ -47,9 +47,10 @@
  * Stored in one option without autoload (OPTION); a part that is not
  * exactly what this class writes reads as absent.
  *
- * Messages are English without gettext, as the other classes of the
- * takeover; each names the way. The page shows them as they are until the
- * texts of the takeover are translated with its interface (branches 12, 13).
+ * Messages are in gettext, in the language of the site, as the other
+ * classes of the takeover; each names the way. Codes and machine values
+ * (kinds, purposes, parameters, fields) stay as the tools name them. The
+ * page «Staging» reads its own texts by the error code (AB_MCP_Admin).
  *
  * @package AlphaBridge_MCP
  */
@@ -106,7 +107,7 @@ final class AB_MCP_Sync_Anchor {
 			return $partner;
 		}
 		if ( 0 !== strpos( $partner, 'https://' ) ) {
-			return new WP_Error( 'ab_mcp_sync_anchor_not_https', 'The key of the staging site is fetched only over https, and the address of the staging site stored here is not an https:// address. Enter the pairing code the staging site shows on its page AlphaBridge → Staging instead, or store its https:// address on both sites.', array( 'partner_url' => $partner ) );
+			return new WP_Error( 'ab_mcp_sync_anchor_not_https', __( 'The key of the staging site is fetched only over https, and the address of the staging site stored here is not an https:// address. Enter the pairing code the staging site shows on its page AlphaBridge → Staging instead, or store its https:// address on both sites.', 'alphabridge-mcp' ), array( 'partner_url' => $partner ) );
 		}
 		// The host of an international domain name in its xn-- form, as the
 		// lookup of the fetch needs it (AB_MCP_Sync_Key::site_form()).
@@ -124,7 +125,8 @@ final class AB_MCP_Sync_Anchor {
 		if ( is_wp_error( $response ) ) {
 			return new WP_Error(
 				'ab_mcp_sync_anchor_unreached',
-				sprintf( 'The key of the staging site could not be fetched from %1$s: %2$s Check that the staging site answers (wp_staging_status with check_partner=true), or enter its pairing code from its page AlphaBridge → Staging instead.', $url, $response->get_error_message() ),
+				/* translators: 1: address the key was fetched from, 2: the error message of the request, a whole sentence. */
+				sprintf( __( 'The key of the staging site could not be fetched from %1$s: %2$s Check that the staging site answers (wp_staging_status with check_partner=true), or enter its pairing code from its page AlphaBridge → Staging instead.', 'alphabridge-mcp' ), $url, $response->get_error_message() ),
 				array(
 					'url'   => $url,
 					'cause' => $response->get_error_code(),
@@ -135,7 +137,8 @@ final class AB_MCP_Sync_Anchor {
 		if ( 200 !== $status ) {
 			return new WP_Error(
 				'ab_mcp_sync_anchor_no_key',
-				sprintf( 'The staging site did not give its key at %1$s (HTTP %2$d; a redirect is not followed). On the staging site, confirm the role staging site and make its key on its page AlphaBridge → Staging, and update AlphaBridge MCP there to the version of this site; then fetch again, or enter its pairing code instead.', $url, $status ),
+				/* translators: 1: address the key was fetched from, 2: HTTP status code. */
+				sprintf( __( 'The staging site did not give its key at %1$s (HTTP %2$d; a redirect is not followed). On the staging site, confirm the role staging site and make its key on its page AlphaBridge → Staging, and update AlphaBridge MCP there to the version of this site; then fetch again, or enter its pairing code instead.', 'alphabridge-mcp' ), $url, $status ),
 				array(
 					'url'    => $url,
 					'status' => $status,
@@ -210,13 +213,13 @@ final class AB_MCP_Sync_Anchor {
 			return $current;
 		}
 		if ( null === $prepared ) {
-			return new WP_Error( 'ab_mcp_sync_anchor_nothing', 'There is no prepared key of the staging site to confirm. Fetch it, or enter the pairing code of the staging site, on the page AlphaBridge → Staging first.' );
+			return new WP_Error( 'ab_mcp_sync_anchor_nothing', __( 'There is no prepared key of the staging site to confirm. Fetch it, or enter the pairing code of the staging site, on the page AlphaBridge → Staging first.', 'alphabridge-mcp' ) );
 		}
 		if ( $prepared['partner_url'] !== $partner ) {
-			return new WP_Error( 'ab_mcp_sync_anchor_stale', 'The prepared key belongs to another address than the staging site now stored here, so it was not confirmed. Fetch the key again, or enter the pairing code again, on the page AlphaBridge → Staging.' );
+			return new WP_Error( 'ab_mcp_sync_anchor_stale', __( 'The prepared key belongs to another address than the staging site now stored here, so it was not confirmed. Fetch the key again, or enter the pairing code again, on the page AlphaBridge → Staging.', 'alphabridge-mcp' ) );
 		}
 		if ( ! is_string( $fingerprint ) || ! hash_equals( $prepared['fingerprint'], $fingerprint ) ) {
-			return new WP_Error( 'ab_mcp_sync_anchor_fingerprint', 'The key was not confirmed: the fingerprint is not the one of the prepared key (it may have changed since the page was loaded). Load the page AlphaBridge → Staging again, compare the fingerprint with the one the staging site shows, and confirm again.' );
+			return new WP_Error( 'ab_mcp_sync_anchor_fingerprint', __( 'The key was not confirmed: the fingerprint is not the one of the prepared key (it may have changed since the page was loaded). Load the page AlphaBridge → Staging again, compare the fingerprint with the one the staging site shows, and confirm again.', 'alphabridge-mcp' ) );
 		}
 		if ( self::retired( $prepared['key_id'] ) ) {
 			return self::retired_refusal();
@@ -240,7 +243,8 @@ final class AB_MCP_Sync_Anchor {
 		if ( self::read()['active'] !== $active ) {
 			return new WP_Error(
 				'ab_mcp_sync_anchor_write_failed',
-				sprintf( 'The key was not confirmed: the anchor did not read back from the option %s (the database refused or changed the write). Ask the host to check that the database accepts writes to the options of this site, then confirm the key again on the page AlphaBridge → Staging.', self::OPTION ),
+				/* translators: %s: name of the option. */
+				sprintf( __( 'The key was not confirmed: the anchor did not read back from the option %s (the database refused or changed the write). Ask the host to check that the database accepts writes to the options of this site, then confirm the key again on the page AlphaBridge → Staging.', 'alphabridge-mcp' ), self::OPTION ),
 				array( 'option' => self::OPTION )
 			);
 		}
@@ -287,7 +291,8 @@ final class AB_MCP_Sync_Anchor {
 		if ( null !== $active && ! self::retire( $active['key_id'] ) ) {
 			return new WP_Error(
 				'ab_mcp_sync_anchor_revoke_failed',
-				sprintf( 'Nothing was changed: the confirmed key of the staging site could not be kept as revoked in the option %s (the database refused or changed the write), and without that it could be confirmed here again, so the pair and the key stay as they were. Ask the host to check that the database accepts writes to the options of this site, then remove or change the pair again.', self::OPTION_RETIRED ),
+				/* translators: %s: name of the option. */
+				sprintf( __( 'Nothing was changed: the confirmed key of the staging site could not be kept as revoked in the option %s (the database refused or changed the write), and without that it could be confirmed here again, so the pair and the key stay as they were. Ask the host to check that the database accepts writes to the options of this site, then remove or change the pair again.', 'alphabridge-mcp' ), self::OPTION_RETIRED ),
 				array( 'option' => self::OPTION_RETIRED )
 			);
 		}
@@ -314,12 +319,12 @@ final class AB_MCP_Sync_Anchor {
 	public static function partner() {
 		$record = AB_MCP_Staging::record();
 		if ( null === $record['role'] || AB_MCP_Staging::ROLE_PRODUCTION !== $record['role']['value'] ) {
-			return new WP_Error( 'ab_mcp_sync_anchor_role', 'Only the confirmed production site anchors the key of a staging site: confirm the role production site on the page AlphaBridge → Staging of this site first.' );
+			return new WP_Error( 'ab_mcp_sync_anchor_role', __( 'Only the confirmed production site anchors the key of a staging site: confirm the role production site on the page AlphaBridge → Staging of this site first.', 'alphabridge-mcp' ) );
 		}
 		// A stored pair of a production site is always one with a staging
 		// site (AB_MCP_Staging::record() reads no other).
 		if ( null === $record['pair'] ) {
-			return new WP_Error( 'ab_mcp_sync_anchor_pair', 'This production site has no staging site paired: enter the address of the staging site on the page AlphaBridge → Staging of this site first.' );
+			return new WP_Error( 'ab_mcp_sync_anchor_pair', __( 'This production site has no staging site paired: enter the address of the staging site on the page AlphaBridge → Staging of this site first.', 'alphabridge-mcp' ) );
 		}
 		return $record['pair']['partner_url'];
 	}
@@ -381,7 +386,8 @@ final class AB_MCP_Sync_Anchor {
 		if ( '' === $site || AB_MCP_Sync_Key::site_form( $partner ) !== $site ) {
 			return new WP_Error(
 				'ab_mcp_sync_anchor_site',
-				sprintf( 'The key names the staging site %1$s, but the staging site stored here is %2$s, and the two must be the same address exactly (scheme, host, port and path). Correct the address on the page AlphaBridge → Staging of the site that has it wrong, then fetch the key or enter the pairing code again.', $key['site'], $partner ) . AB_MCP_Sync_Key::idn_hint( $key['site'], $partner ),
+				/* translators: 1: address the key names, 2: address of the staging site stored here. */
+				sprintf( __( 'The key names the staging site %1$s, but the staging site stored here is %2$s, and the two must be the same address exactly (scheme, host, port and path). Correct the address on the page AlphaBridge → Staging of the site that has it wrong, then fetch the key or enter the pairing code again.', 'alphabridge-mcp' ), $key['site'], $partner ) . AB_MCP_Sync_Key::idn_hint( $key['site'], $partner ),
 				array(
 					'site'        => $key['site'],
 					'partner_url' => $partner,
@@ -521,7 +527,7 @@ final class AB_MCP_Sync_Anchor {
 	 * @return WP_Error A key confirmed here before is not confirmed again.
 	 */
 	private static function retired_refusal() {
-		return new WP_Error( 'ab_mcp_sync_anchor_retired', 'This key of the staging site was confirmed here before and then replaced or revoked, so it is not confirmed again. On the staging site, click «Renew the key» under «Key of this staging site» on its page AlphaBridge → Staging; then, on the page AlphaBridge → Staging of this site, enter its new pairing code or fetch the key again, compare the fingerprint and confirm it.' );
+		return new WP_Error( 'ab_mcp_sync_anchor_retired', __( 'This key of the staging site was confirmed here before and then replaced or revoked, so it is not confirmed again. On the staging site, click «Renew the key» under «Key of this staging site» on its page AlphaBridge → Staging; then, on the page AlphaBridge → Staging of this site, enter its new pairing code or fetch the key again, compare the fingerprint and confirm it.', 'alphabridge-mcp' ) );
 	}
 
 	/**
@@ -530,7 +536,8 @@ final class AB_MCP_Sync_Anchor {
 	private static function retire_failed() {
 		return new WP_Error(
 			'ab_mcp_sync_anchor_retire_failed',
-			sprintf( 'The new key was not confirmed: the key it replaces could not be kept as replaced in the option %s (the database refused or changed the write), and without that the old key could be confirmed again. Ask the host to check that the database accepts writes to the options of this site, then confirm again on the page AlphaBridge → Staging.', self::OPTION_RETIRED ),
+			/* translators: %s: name of the option. */
+			sprintf( __( 'The new key was not confirmed: the key it replaces could not be kept as replaced in the option %s (the database refused or changed the write), and without that the old key could be confirmed again. Ask the host to check that the database accepts writes to the options of this site, then confirm again on the page AlphaBridge → Staging.', 'alphabridge-mcp' ), self::OPTION_RETIRED ),
 			array( 'option' => self::OPTION_RETIRED )
 		);
 	}
