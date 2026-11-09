@@ -622,6 +622,93 @@ final class SyncNetTest extends TestCase {
 		self::assertSame( array( 'client_secret' ), AB_MCP_Sync_Net::credentials( 'client-secret=x clientSecret=y', $extra ), 'One name in its spellings.' );
 	}
 
+	/** The tokens of the tests, composed at run time (tests/fixtures/sync-tokens.php). */
+	private static function tokens(): array {
+		return require __DIR__ . '/fixtures/sync-tokens.php';
+	}
+
+	public function testTheTokensOfAServiceAndAJsonWebTokenCountByTheirFormInAnyContext(): void {
+		// The steering, 09.11.2026: by the prefix and the form the service
+		// gives them, wherever they stand (alone, in prose, after Bearer, in a
+		// tag, in quotes); the form decides, a word in it frees none (Codex
+		// round 3 of branch 11b, A1).
+		$t     = self::tokens();
+		$alnum = $t['alnum'];
+		$hex   = $t['hex'];
+		$extra = array();
+		foreach ( array(
+			'github_token'      => array( $t['ghp'], $t['github_pat'], 'gh' . 'p_' . str_repeat( 'fake', 9 ), 'gh' . 'p_' . $alnum( 'g', 40 ) ),
+			'stripe_secret_key' => array( $t['sk_live'], $t['rk_live'], 'sk' . '_live_' . str_repeat( 'my', 12 ) ),
+			'aws_access_key_id' => array( $t['akia'], 'AK' . 'IAIOSFODNN7' . 'EXAMPLE' ),
+			'slack_token'       => array( $t['xoxb'], $t['xoxp'] ),
+			'mailchimp_api_key' => array( $t['mailchimp'], $hex( 'm', 32 ) . '-us' . '1' ),
+			'access_token'      => array( $t['jwt'] ),
+		) as $name => $values ) {
+			foreach ( $values as $value ) {
+				foreach ( array( '%s', 'Mein Schlüssel: %s, bitte nicht weitergeben.', 'Bearer %s', '<code>%s</code>', '"%s"', "x\n%s." ) as $context ) {
+					$text = sprintf( $context, $value );
+					self::assertSame( array( $name ), AB_MCP_Sync_Net::credentials( $text, $extra ), $text );
+				}
+			}
+		}
+		// Not in the form: shorter than the service writes it, glued to a
+		// letter or digit before it, a letter or digit after a token of a
+		// fixed length, a JSON Web Token whose header has no «alg» or is no
+		// JSON, a part of a length base64url never has, one cut short.
+		$b64url = $t['b64url'];
+		$jwt    = explode( '.', $t['jwt'] );
+		foreach ( array(
+			'gh' . 'p_' . $alnum( 'g', 35 ),
+			'xgh' . 'p_' . $alnum( 'g', 36 ),
+			'github' . '_pat_' . $alnum( 'g', 35 ),
+			'sk' . '_live_' . $alnum( 's', 23 ),
+			'sk' . '_test_' . $alnum( 's', 24 ),
+			'pk' . '_live_' . $alnum( 's', 24 ),
+			'1sk' . '_live_' . $alnum( 's', 24 ),
+			'AK' . 'IA' . 'IOSFODNN7EXAMP',
+			'AK' . 'IA' . 'IOSFODNN7EXAMPLE1',
+			'AK' . 'IA' . 'IOSFODNN7EXAMPLEx',
+			'XAK' . 'IA' . 'IOSFODNN7EXAMPLE',
+			'xo' . 'xb-2048-4096-' . $alnum( 'x', 7 ),
+			'xo' . 'xa-2048-4096-' . $alnum( 'x', 24 ),
+			'xo' . 'xb-your-token',
+			'axo' . 'xb-2048-4096-' . $alnum( 'x', 24 ),
+			$hex( 'm', 31 ) . '-us21',
+			$hex( 'm', 32 ) . '-us21x',
+			$hex( 'm', 32 ) . '-us',
+			'a' . $hex( 'm', 32 ) . '-us21',
+			'abc123def456-us21',
+			$b64url( '{"typ":"JWT"}' ) . '.' . $jwt[1] . '.' . $jwt[2],
+			'eyJ' . $alnum( 'h', 16 ) . '.' . $jwt[1] . '.' . $jwt[2],
+			$jwt[0] . '.' . $jwt[1] . 'AAA.' . $jwt[2],
+			$jwt[0] . '.' . $jwt[1] . '.' . $jwt[2] . 'AB',
+			$jwt[0] . '.' . $jwt[1] . "\u{2026}",
+			$jwt[0] . '.' . $jwt[1] . '.',
+			'x' . $t['jwt'],
+		) as $text ) {
+			self::assertSame( array(), AB_MCP_Sync_Net::credentials( $text, $extra ), $text );
+		}
+		self::assertTrue( AB_MCP_Sync_Net::jwt( $jwt[0], $jwt[1], $jwt[2] ) );
+		self::assertTrue( AB_MCP_Sync_Net::jwt( $b64url( '{"alg":"none"}' ), $jwt[1], 'c2ln' ), 'Its header unpadded, any alg.' );
+		$kid = $b64url( '{"alg":"HS256","kid":"~~~"}' );
+		self::assertStringContainsString( '-', $kid );
+		self::assertTrue( AB_MCP_Sync_Net::jwt( $kid, $jwt[1], $jwt[2] ), 'Its header with the - and _ of base64url.' );
+		self::assertSame( array( 'access_token' ), AB_MCP_Sync_Net::credentials( $kid . '.' . $jwt[1] . '.' . $jwt[2], $extra ) );
+		self::assertFalse( AB_MCP_Sync_Net::jwt( $jwt[0] . 'A', $jwt[1], $jwt[2] ) );
+		self::assertFalse( AB_MCP_Sync_Net::jwt( $b64url( '"alg"' ), $jwt[1], $jwt[2] ), 'Its header no object.' );
+	}
+
+	public function testAPlaceholderIsOneOnlyInItsExactFormAsTheWholeValue(): void {
+		// The steering, 09.11.2026; Codex round 3 of branch 11b, A1: never as a
+		// part of a word.
+		foreach ( array( '<token>', '<your token>', '{token}', '{{token}}', '$TOKEN', '${API_KEY}', 'YOUR_TOKEN', 'YOUR_PASSWORD', 'YOUR_ACCESS_TOKEN_2', 'xxx', 'XXXXXXXX', 'xxxx xxxx xxxx xxxx xxxx xxxx', 'xxxx-xxxx', '***', '************', '...', '.....', "\u{2026}", "\u{2026}\u{2026}", '[REDACTED]' ) as $value ) {
+			self::assertTrue( AB_MCP_Sync_Net::placeholder( $value ), $value );
+		}
+		foreach ( array( '', 'fake', 'my_token', 'example', 'your-token', 'your_api_token', 'YOUR_', 'YOUR_TOKENabc', 'xYOUR_TOKEN', 'YOUR_TOKEN.', 'xx', 'x x x', 'xxxx  xxxx', 'xxx1', '**', '..', 'a...', '...a', '<token>x', 'x<token>', '<>', '{}', '$1', '$', '[redacted]', '[REDACTED] ', ' xxx', "xxx\n", "\xFF" ) as $value ) {
+			self::assertFalse( AB_MCP_Sync_Net::placeholder( $value ), $value );
+		}
+	}
+
 	/* ----------------------------------------------------------- compare */
 
 	/** A unit through its readers (a plain value) and the net. */

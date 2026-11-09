@@ -67,7 +67,11 @@
  *   value or secret within WINDOW bytes. A value is what is not empty after
  *   its white space is trimmed (" demo" is one). A name without a value, a
  *   word in prose ("design tokens", "Token: x", «Name, Token: "abc"» outside
- *   of braces) counts for nothing.
+ *   of braces) counts for nothing. Beside the names, by fixed formats in any
+ *   context (branch 11b; the steering, 09.11.2026), whatever name stands
+ *   before them: a token of a service in its form (TOKENS: GitHub, Stripe,
+ *   AWS, Slack, Mailchimp) and a JSON Web Token (JWT). A placeholder is one
+ *   only in its exact form as the whole value (PLACEHOLDER).
  *
  * COMPARE (check()): the structured readers of the unit noted every (space,
  * id) pair of an address they read (AB_MCP_Sync_Canon::text():
@@ -258,6 +262,46 @@ final class AB_MCP_Sync_Net {
 	 * value (a space, "&", ";", ",", a bracket, ">").
 	 */
 	const VALUE = '(?:["\'`]\s*[^"\'`\s]|[^\s"\'`&;,)}\]>])';
+
+	/**
+	 * The tokens of a service in the form the service gives them, by their
+	 * prefix (credentials(); the steering, 09.11.2026): wherever they stand,
+	 * in any context, each counted as the name it is noted as. The form
+	 * decides, not a word in it: «…EXAMPLE», «fake», «my_» in a token are
+	 * no placeholder (Codex round 3 of branch 11b, A1). GitHub (ghp_ and 36
+	 * letters and digits, github_pat_), Stripe (sk_live_, rk_live_ and 24),
+	 * AWS (AKIA and 16 capitals and digits), Slack (xoxb-, xoxp- with their
+	 * numbers), Mailchimp (32 hex and -us with the number of the data
+	 * centre; two of the ten tutorials counted on 09.11.2026 name its key,
+	 * none in this form).
+	 */
+	const TOKENS = array(
+		'/(?<![A-Za-z0-9])ghp_[A-Za-z0-9]{36}/'                       => 'github_token',
+		'/(?<![A-Za-z0-9])github_pat_[A-Za-z0-9_]{36}/'               => 'github_token',
+		'/(?<![A-Za-z0-9])[rs]k_live_[A-Za-z0-9]{24}/'                => 'stripe_secret_key',
+		'/(?<![A-Za-z0-9])AKIA[0-9A-Z]{16}(?![0-9A-Za-z])/'           => 'aws_access_key_id',
+		'/(?<![A-Za-z0-9])xox[bp]-[0-9]+-[0-9]+-[A-Za-z0-9-]{8}/'     => 'slack_token',
+		'/(?<![0-9A-Za-z])[0-9a-f]{32}-us[0-9]{1,2}(?![0-9A-Za-z])/' => 'mailchimp_api_key',
+	);
+
+	/**
+	 * A JSON Web Token: three parts of base64url between two dots, the first
+	 * «eyJ» (credentials(); the steering, 09.11.2026). It counts (as
+	 * access_token) where its header decodes to an object of JSON with
+	 * «alg» (RFC 7515) and its other parts are base64url that decodes; a
+	 * token cut short («eyJhbGciOi…») has no two dots.
+	 */
+	const JWT = '/(?<![A-Za-z0-9_\-])(eyJ[A-Za-z0-9_\-]*)\.([A-Za-z0-9_\-]+)\.([A-Za-z0-9_\-]+)/';
+
+	/**
+	 * A placeholder, only in its exact form as the whole value (the steering,
+	 * 09.11.2026; Codex round 3 of branch 11b, A1): <token>, {var} and
+	 * {{var}}, $VAR and ${VAR}, YOUR_TOKEN (YOUR_ and capitals), xxx (x
+	 * three times or more, in groups too: «xxxx xxxx»), ***, ..., …,
+	 * [REDACTED]. Never a part of a word: «fake», «my_», «example» in a value
+	 * make none.
+	 */
+	const PLACEHOLDER = '/^(?:<[^<>]+>|\{\{?[^{}]+\}\}?|\$\{?[A-Za-z_][A-Za-z0-9_]*\}?|YOUR_[A-Z0-9_]*[A-Z0-9]|[xX]{3,}(?:[ \-][xX]{3,})*|\*{3,}|\.{3,}|\x{2026}+|\[REDACTED\])\z/u';
 
 	/**
 	 * The locks of the readers that make a unit one that is never clean
@@ -1598,6 +1642,21 @@ final class AB_MCP_Sync_Net {
 				$found = array_merge( $found, $m[1] );
 			}
 		}
+		// The tokens of a service and a JSON Web Token, in any context, by
+		// their form (the steering, 09.11.2026).
+		foreach ( self::TOKENS as $pattern => $name ) {
+			if ( 1 === preg_match( $pattern, $text ) ) {
+				$found[] = $name;
+			}
+		}
+		if ( preg_match_all( self::JWT, $text, $m, PREG_SET_ORDER ) ) {
+			foreach ( $m as $hit ) {
+				if ( self::jwt( $hit[1], $hit[2], $hit[3] ) ) {
+					$found[] = 'access_token';
+					break;
+				}
+			}
+		}
 		// In code a name after "," or ";" as well: where a "{" is open before
 		// it (in prose, «Name, Token: "abc"» is none), the braces counted
 		// with the strings blanked (a "}" in a string closes none; Codex,
@@ -1635,6 +1694,39 @@ final class AB_MCP_Sync_Net {
 			}
 		}
 		return array_keys( $out );
+	}
+
+	/**
+	 * Whether three parts are a JSON Web Token (JWT): the header base64url
+	 * that decodes to an object of JSON with «alg», the payload and the
+	 * signature base64url that decodes (no part of a length that leaves one
+	 * character over).
+	 *
+	 * @param string $header    The first part.
+	 * @param string $payload   The second part.
+	 * @param string $signature The third part.
+	 * @return bool
+	 */
+	public static function jwt( $header, $payload, $signature ) {
+		foreach ( array( $header, $payload, $signature ) as $part ) {
+			if ( 1 === strlen( (string) $part ) % 4 ) {
+				return false;
+			}
+		}
+		$json = base64_decode( strtr( (string) $header, '-_', '+/' ), true ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- the header of a token, read.
+		$head = is_string( $json ) ? json_decode( $json, true ) : null;
+		return is_array( $head ) && array_key_exists( 'alg', $head );
+	}
+
+	/**
+	 * Whether a value is a placeholder: exactly one of PLACEHOLDER, as the
+	 * whole value.
+	 *
+	 * @param string $value Value.
+	 * @return bool
+	 */
+	public static function placeholder( $value ) {
+		return 1 === preg_match( self::PLACEHOLDER, (string) $value );
 	}
 
 	/**

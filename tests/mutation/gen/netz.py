@@ -174,6 +174,78 @@ e('strings-close', 'serialized_strings(): the end of an array read', NT,
   "\t\t\t} elseif ( '}' === $c ) {\n\t\t\t\t++$i;", "\t\t\t} elseif ( '}' === $c ) {\n\t\t\t\treturn null;", 'net', N_STRINGS)
 e('texts-object', 'texts(): an object in a structure locks', NT,
   "\t\t\tAB_MCP_Sync_Canon::lock( $acc, $kind, 'php_object', $here );\n", "", 'net', N_STRUCT)
+# ------------------------------------- the forms of the steering (09.11.2026)
+N_TOKENS = 'testTheTokensOfAServiceAndAJsonWebTokenCountByTheirFormInAnyContext'
+N_PLACE = 'testAPlaceholderIsOneOnlyInItsExactFormAsTheWholeValue'
+e('tokens', 'credentials(): a token of a service counts by its form, in any context', NT,
+  "\t\t\tif ( 1 === preg_match( $pattern, $text ) ) {\n\t\t\t\t$found[] = $name;", "\t\t\tif ( 1 === preg_match( $pattern, $text ) ) {\n\t\t\t\t// not counted", 'net', N_TOKENS)
+e('token-ghp-length', 'TOKENS: ghp_ with 36 letters and digits', NT,
+  "ghp_[A-Za-z0-9]{36}/'", "ghp_[A-Za-z0-9]{35}/'", 'net', N_TOKENS)
+e('token-ghp-before', 'TOKENS: ghp_ not glued to a letter or digit before it', NT,
+  "'/(?<![A-Za-z0-9])ghp_", "'/ghp_", 'net', N_TOKENS)
+e('token-pat-length', 'TOKENS: github_pat_ with 36 or more', NT,
+  "github_pat_[A-Za-z0-9_]{36}/'", "github_pat_[A-Za-z0-9_]{35}/'", 'net', N_TOKENS)
+e('token-stripe-length', 'TOKENS: sk_live_ and rk_live_ with 24', NT,
+  "k_live_[A-Za-z0-9]{24}/'", "k_live_[A-Za-z0-9]{23}/'", 'net', N_TOKENS)
+e('token-stripe-prefix', 'TOKENS: only the secret and the restricted key of Stripe (not pk_live_)', NT,
+  "'/(?<![A-Za-z0-9])[rs]k_live_", "'/(?<![A-Za-z0-9])[a-z]k_live_", 'net', N_TOKENS)
+e('token-stripe-before', 'TOKENS: sk_live_ not glued to a letter or digit before it', NT,
+  "'/(?<![A-Za-z0-9])[rs]k_live_", "'/[rs]k_live_", 'net', N_TOKENS)
+e('token-aws-length', 'TOKENS: AKIA with 16 capitals and digits', NT,
+  "AKIA[0-9A-Z]{16}(?![0-9A-Za-z])", "AKIA[0-9A-Z]{15}(?![0-9A-Za-z])", 'net', N_TOKENS)
+e('token-aws-after', 'TOKENS: AKIA, no letter or digit after the 16', NT,
+  "AKIA[0-9A-Z]{16}(?![0-9A-Za-z])", "AKIA[0-9A-Z]{16}", 'net', N_TOKENS)
+e('token-aws-before', 'TOKENS: AKIA not glued to a letter or digit before it', NT,
+  "'/(?<![A-Za-z0-9])AKIA", "'/AKIA", 'net', N_TOKENS)
+e('token-slack-length', 'TOKENS: xoxb-, xoxp- with their numbers and 8 or more after them', NT,
+  "[0-9]+-[0-9]+-[A-Za-z0-9-]{8}/'", "[0-9]+-[0-9]+-[A-Za-z0-9-]{7}/'", 'net', N_TOKENS)
+e('token-slack-prefix', 'TOKENS: only xoxb- and xoxp-', NT,
+  "'/(?<![A-Za-z0-9])xox[bp]-", "'/(?<![A-Za-z0-9])xox[a-z]-", 'net', N_TOKENS)
+e('token-slack-before', 'TOKENS: xoxb- not glued to a letter or digit before it', NT,
+  "'/(?<![A-Za-z0-9])xox[bp]-", "'/xox[bp]-", 'net', N_TOKENS)
+e('token-mailchimp-length', 'TOKENS: Mailchimp with 32 hex', NT,
+  "'/(?<![0-9A-Za-z])[0-9a-f]{32}-us", "'/(?<![0-9A-Za-z])[0-9a-f]{31}-us", 'net', N_TOKENS)
+e('token-mailchimp-before', 'TOKENS: Mailchimp, no letter or digit before the 32 hex', NT,
+  "'/(?<![0-9A-Za-z])[0-9a-f]{32}-us", "'/[0-9a-f]{32}-us", 'net', N_TOKENS)
+e('token-mailchimp-centre', 'TOKENS: Mailchimp with the number of its data centre', NT,
+  "-us[0-9]{1,2}(?![0-9A-Za-z])/'", "-us[0-9]{0,2}(?![0-9A-Za-z])/'", 'net', N_TOKENS)
+e('token-mailchimp-after', 'TOKENS: Mailchimp, no letter or digit after its number', NT,
+  "-us[0-9]{1,2}(?![0-9A-Za-z])/'", "-us[0-9]{1,2}/'", 'net', N_TOKENS)
+e('jwt', 'credentials(): a JSON Web Token counts by its form, in any context', NT,
+  "\t\t\t\tif ( self::jwt( $hit[1], $hit[2], $hit[3] ) ) {", "\t\t\t\tif ( false ) {", 'net', N_TOKENS)
+e('jwt-before', 'JWT: not glued to a character of base64url before it', NT,
+  "const JWT = '/(?<![A-Za-z0-9_\\-])(eyJ", "const JWT = '/(eyJ", 'net', N_TOKENS)
+e('jwt-signature', 'JWT: three parts, the signature not empty', NT,
+  "\\.([A-Za-z0-9_\\-]+)\\.([A-Za-z0-9_\\-]+)/';", "\\.([A-Za-z0-9_\\-]+)\\.([A-Za-z0-9_\\-]*)/';", 'net', N_TOKENS)
+e('jwt-lengths', 'jwt(): no part of a length base64url never has', NT,
+  "\t\t\tif ( 1 === strlen( (string) $part ) % 4 ) {\n\t\t\t\treturn false;", "\t\t\tif ( 1 === strlen( (string) $part ) % 4 ) {\n\t\t\t\t// any length", 'net', N_TOKENS)
+e('jwt-alg', 'jwt(): the header an object of JSON with alg', NT,
+  "return is_array( $head ) && array_key_exists( 'alg', $head );", "return is_array( $head );", 'net', N_TOKENS)
+e('jwt-object', 'jwt(): the header an object, not a string of JSON', NT,
+  "return is_array( $head ) && array_key_exists( 'alg', $head );", "return null !== $head;", 'net', N_TOKENS)
+e('jwt-base64url', 'jwt(): the header read as base64url (- and _)', NT,
+  "base64_decode( strtr( (string) $header, '-_', '+/' ), true );", "base64_decode( (string) $header, true );", 'net', N_TOKENS)
+e('placeholder-start', 'PLACEHOLDER: from the start of the value (never a part of a word, Codex round 3, A1)', NT,
+  "const PLACEHOLDER = '/^(?:", "const PLACEHOLDER = '/(?:", 'net', N_PLACE)
+e('placeholder-end', 'PLACEHOLDER: to the end of the value (never a part of a word, Codex round 3, A1)', NT,
+  "|\\[REDACTED\\])\\z/u';", "|\\[REDACTED\\])/u';", 'net', N_PLACE)
+e('placeholder-your', 'PLACEHOLDER: YOUR_ and capitals only', NT,
+  "|YOUR_[A-Z0-9_]*[A-Z0-9]|", "|YOUR_[A-Za-z0-9_]*|", 'net', N_PLACE)
+e('placeholder-x', 'PLACEHOLDER: x three times or more', NT,
+  "|[xX]{3,}(?:[ \\-][xX]{3,})*|", "|[xX]{2,}(?:[ \\-][xX]{2,})*|", 'net', N_PLACE)
+e('placeholder-x-groups', 'PLACEHOLDER: x in groups (xxxx xxxx)', NT,
+  "|[xX]{3,}(?:[ \\-][xX]{3,})*|", "|[xX]{3,}|", 'net', N_PLACE)
+e('placeholder-stars', 'PLACEHOLDER: * three times or more', NT,
+  "|\\*{3,}|", "|\\*{2,}|", 'net', N_PLACE)
+e('placeholder-dots', 'PLACEHOLDER: . three times or more', NT,
+  "|\\.{3,}|", "|\\.{2,}|", 'net', N_PLACE)
+e('placeholder-brackets', 'PLACEHOLDER: <…> with something in it', NT,
+  "'/^(?:<[^<>]+>|", "'/^(?:<[^<>]*>|", 'net', N_PLACE)
+e('placeholder-var', 'PLACEHOLDER: $VAR begins with a letter or _', NT,
+  "|\\$\\{?[A-Za-z_][A-Za-z0-9_]*\\}?|", "|\\$\\{?[A-Za-z0-9_]*\\}?|", 'net', N_PLACE)
+e('placeholder-call', 'placeholder(): exactly PLACEHOLDER', NT,
+  "return 1 === preg_match( self::PLACEHOLDER, (string) $value );", "return 0 !== preg_match( self::PLACEHOLDER, (string) $value );", 'net', N_PLACE)
+
 # ------------------------------------------- strings(): the references
 e('strings-keys', 'strings(): the keys of a structure counted for the references', NT,
   "\t\t\tif ( is_string( $key ) && '' !== $key ) {\n\t\t\t\t$out[] = $key;\n\t\t\t}\n", "", 'net', N_STRUCT)
