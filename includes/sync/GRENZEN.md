@@ -176,12 +176,14 @@ neu.
 
 - Tokens eines Dienstes nach Präfix und Form (`TOKENS`): `ghp_` und 36
   Buchstaben und Ziffern, `github_pat_` und 36 oder mehr, `sk_live_` und
-  `rk_live_` mit 24, `AKIA` und 16 Grossbuchstaben und Ziffern, `xoxb-` und
+  `rk_live_` mit 24, `AKIA` und 16 Grossbuchstaben und Ziffern (auch als
+  Anfang eines längeren Laufs: der ganze Lauf ist der Wert), `xoxb-` und
   `xoxp-` mit ihren Nummern, Mailchimp mit 32 Hex und `-us` mit der Nummer
   des Rechenzentrums (aufgenommen, weil zwei der zehn Tutorials seinen
   Schlüssel nennen, keines in dieser Form). Die Form entscheidet, kein Wort
-  darin: `…EXAMPLE` (das Beispiel von AWS), `fake`, `my_` im Token sperren
-  (Codex-Runde 3 zu 11b, A1).
+  darin: `…EXAMPLE`, `fake`, `my_` im Token sperren (Codex-Runde 3 zu 11b,
+  A1); frei ist nur ein dokumentiertes Beispiel als ganzer Wert (Liste
+  unten).
 - Ein JSON Web Token (`JWT`): drei Teile base64url, der Kopf `eyJ…` ein
   Objekt von JSON mit `alg`, Nutzlast und Signatur base64url. Gekürzt
   (`eyJhbGciOi…`) hat er keine zwei Punkte.
@@ -189,15 +191,31 @@ neu.
   oder `Basic` am Anfang einer Zeile oder eines Felds (`AUTHORIZATION`): am
   Textanfang, nach einem Zeilenumbruch, nach «;» (Zeile mit Headern), nach
   einem Anführungszeichen (`-H "…"`) oder nach dem «:» eines Header-Arrays.
-  `Bearer` sperrt mit jedem Token, der kein Platzhalter ist, auch kurz
-  (`abc123`, `TOKEN`, `your_api_token_goes_here`; Codex-Runde 1 zu 11b,
-  A1: `Accept: …; Authorization: Bearer REVIEW_ONLY`). `Basic` sperrt, wo
-  das Base64 zu `user:password` dekodiert und das Passwort kein Platzhalter
-  ist, auch `user:password` und das Beispiel `Aladdin:open sesame` von
-  RFC 7617; mit leerem Passwort entscheidet der Benutzer (ein Schlüssel als
-  Benutzer). Der Wert endet an «;» und «,»: ein Feld danach wird als eigenes
-  gelesen (Codex-Runde 3 zu 11b, A3). `"Authorization":` von JSON und
-  `Authorization=` oder `=>` zählen wie bisher nach dem Namen.
+  `Bearer` sperrt mit einem Wert in der Form eines Tokens: ab 20 Zeichen
+  aus dem Vorrat von b64token (RFC 6750), mit oder ohne Ziffer
+  (`TOKEN_LENGTH`; Steuerung nach Codex-Runde 4 zu 11b, wie nach Runde 2).
+  Frei bleiben ein exakter Platzhalter, ein gekürzter Wert («…» oder
+  «...» unmittelbar danach oder darin), ein Wert unter 20 Zeichen
+  (`abc123`, `TOKEN`, `REVIEW_ONLY`) und ein wortartiger Platzhalter: nur
+  Buchstaben in einer Schreibweise, in Gruppen aus mindestens zwei
+  Buchstaben, getrennt durch «_» oder «-», ohne Ziffer
+  (`WORD_PLACEHOLDER`: `your_api_token_goes_here`,
+  `YOUR-PERSONAL-ACCESS-TOKEN`); ohne Trennzeichen keine Ausnahme
+  (`abcdefghijklmnopqrstuvwx` sperrt). Codex-Runde 4 zu 11b, B: vorher
+  sperrte jeder Wert, auch die Beispiele der API-Anleitungen
+  («Authorization: bearer TOKEN» von GitHub, «Bearer abc123»).
+  `Basic` sperrt, wo das Base64 zu `user:password` dekodiert; frei bleibt
+  ein Passwort (bei leerem Passwort der Benutzer: ein Schlüssel als
+  Benutzer), das ein exakter Platzhalter ist oder als ganzer Wert in
+  beliebiger Schreibweise eines der Beispielwörter `password`, `passwort`,
+  `pass`, `secret`, `open sesame` (RFC 7617) und `opensesame` (MDN,
+  `aladdin:opensesame`; über die Liste der Steuerung hinaus aufgenommen,
+  weil die Seite von MDN dieses Paar zeigt). Kein Teilwort; Benutzer
+  gleich Passwort ist keine Ausnahme (`admin:admin`, `a:b` und
+  `review:Sommer2026` sperren). Der Wert endet an «;» und «,»: ein Feld
+  danach wird als eigenes gelesen (Codex-Runde 3 zu 11b, A3).
+  `"Authorization":` von JSON und `Authorization=` oder `=>` zählen wie
+  bisher nach dem Namen.
 - Ein privater Schlüssel in PEM (`PEM`: RSA, EC, OPENSSH, ENCRYPTED, PGP …
   PRIVATE KEY, bis zur END-Zeile derselben Bezeichnung): wo sein Körper
   ohne die Kopfzeilen eines verschlüsselten Schlüssels und ohne die
@@ -225,6 +243,41 @@ neu.
   `$VAR`, `${VAR}`, `YOUR_` mit Grossbuchstaben (`YOUR_TOKEN`,
   `YOUR_PASSWORD`), `xxx` (auch in Gruppen, `xxxx xxxx`), `***`, `...`,
   `…`, `[REDACTED]`; nie als Teil eines Worts (Codex-Runde 3 zu 11b, A1).
+- Öffentlich dokumentierte Beispielwerte (`EXAMPLES`, Steuerung nach
+  Codex-Runde 4 zu 11b) sind frei, nur als ganzer Wert und in jeder Form,
+  die das Netz nach dem Wert beurteilt: als Token eines Dienstes, als JWT,
+  nach Bearer, als Passwort im Basic-Paar (die Paare aus RFC 7617 und MDN
+  sind schon über ihre Beispielwörter frei). Ein Zeichen
+  mehr oder weniger sperrt (die Access Key ID der AWS-Doku mit einer 2
+  dahinter, ein echt gebildeter AKIA-Schlüssel mit `EXAMPLE`, ein
+  verändertes Token von jwt.io). Die
+  Liste steht als SHA-256 des genauen Werts im Code, nie als Wert, damit
+  der Push-Schutz von GitHub und andere Scanner nichts finden; die Tests
+  setzen jeden Wert aus Teilen zusammen und prüfen ihn gegen seinen Hash.
+  Gelesen an der Quelle am 09.11.2026:
+  - AWS IAM User Guide, «Manage access keys for IAM users»: die Access Key
+    ID des Beispiels (`AKIA` und 16 Zeichen, endet auf `EXAMPLE`) und der
+    Secret Access Key des Beispiels (40 Zeichen, endet auf `EXAMPLEKEY`);
+  - jwt.io: das Token des Debuggers vor 2024 (HS256, sub 1234567890, name
+    John Doe, iat 1516239022, Schlüssel `your-256-bit-secret`) und seit
+    2024 (dazu `admin: true`, Schlüssel
+    `a-string-secret-at-least-256-bits-long`); beide hier mit HMAC aus dem
+    dokumentierten Schlüssel nachgerechnet, die Seite zeigt das Token nur
+    als Bild;
+  - RFC 7617, Abschnitt 2: das Base64 von `Aladdin:open sesame`;
+  - MDN, «Authorization»: das Base64 von `aladdin:opensesame`;
+  - RFC 6750, Abschnitte 2.1 bis 2.3 und 4: das Access Token des
+    Beispiels (15 Zeichen, nach Bearer schon unter 20 frei);
+  - Slack, docs.slack.dev/authentication/tokens: die drei Beispiele von
+    Benutzer-Tokens mit den Nummern 111, 222 und 333 (kurz, vor August
+    2016, mit langem Geheimnis).
+  GitHub (Blog zu den Formaten der Tokens) und Stripe (Seite der
+  API-Schlüssel) zeigen kein vollständiges Token einer der Formen oben;
+  `sk_test_…` zählt nicht. Gezählt mit einer AWS-Anleitung mit beiden
+  Schlüsseln (Fliesstext und `aws configure`), zwei JWT-Anleitungen, dem
+  Beispiel aus RFC 6750, dem Block der Slack-Doku, dem Geheimschlüssel von
+  AWS nach Bearer und im Basic-Paar: auf `8df6146` frei, vor der Liste
+  gesperrt, mit ihr frei in allen sechzehn Formen der Vergleichstabelle.
 
 Grenzen (Gruppe C):
 
@@ -248,10 +301,25 @@ Grenzen (Gruppe C):
   nach dem Wert, und `Bearer` ohne `Authorization` davor nicht
   (`Bearer REVIEWONLY`, «This is a bearer instrument.»); ein Token einer
   festen Form darin sperrt.
-- Ein gekürzter Wert am Anfang einer Zeile (`Authorization: Bearer
-  eyJhbGciOi…`) sperrt: «…» im Wort ist kein Platzhalter. Ein Platzhalter
-  `<token>` unkodiert in einem Text sperrt in WordPress weiter als Tag
-  ausserhalb der kses-Liste (vorbestehend).
+- Ein Platzhalter `<token>` unkodiert in einem Text sperrt in WordPress
+  weiter als Tag ausserhalb der kses-Liste (vorbestehend).
+- Ein echtes Token nach Bearer unter 20 Zeichen geht durch, ebenso eines,
+  das wie ein wortartiger Platzhalter aussieht. Ein zufälliges b64token
+  ab 20 Zeichen ist so in weniger als einem von sieben Millionen: es
+  müsste nur aus kleinen Buchstaben, «_» und «-» bestehen oder nur aus
+  grossen und diesen, höchstens 2 · (28/64)^20 ≈ 1,3 · 10^-7, dazu Gruppen
+  aus mindestens zwei Buchstaben mit einem Trennzeichen; eines nur aus
+  Buchstaben und Ziffern (Base62, Hex, Base32) nie, es hat kein «_» oder
+  «-». Eine echte Form, die so aussieht: eine Passphrase aus Wörtern mit
+  «-» (Diceware, «correct-horse-battery-staple»), wo sie als Bearer-Token
+  dient.
+- Ein dokumentiertes Beispiel in einem Feld mit dem Namen eines
+  Zugangsdatums (`aws_secret_access_key = …`, `"password": "…"`) sperrt
+  weiter wie auf `8df6146`: dort sperrt die Zugangsprüfung
+  (`AB_MCP_Sync_Credentials::flat()`) nach dem Namen, vor dem Netz und ohne
+  den Wert anzusehen («Values are never looked at, only names»). Die Liste
+  dort gelten zu lassen, hiesse, diese Prüfung Werte vergleichen zu lassen;
+  das ist eine eigene Entscheidung, nicht Teil dieses Zweigs.
 - `define( 'DB_PASSWORD', '…' )` aus `wp-config.php` ist keine der Formen
   oben und bleibt frei wie auf `8df6146` (Tutorials zu `wp-config.php`
   zeigen `password_here`).

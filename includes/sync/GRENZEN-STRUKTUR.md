@@ -694,13 +694,21 @@ Position, die das Theme hier nicht registriert, in der Prüfung des Laufs
   Plugins) und drei echten Zugangsdaten (Code in einem Blatt, Base64 in
   einem Blatt und als Schlüssel): vorher zehn Sperren
   `*:unread_credential`, nachher nur die drei echten.
-- Die Klauseln stehen in der Mutationsliste `netz` (133 Einträge, 129 über
+- Die Klauseln stehen in der Mutationsliste `netz` (163 Einträge, 159 über
   Unit-Tests, 3 über `SyncStructureTest`, 1 über `SyncLocksTest`;
   geschrieben von `tests/mutation/gen/netz.py`), die Klauseln des Netzes
   aus Zweig 4 weiter in `kanon`. Die festen Formate (GRENZEN.md) brachten
   83 Einträge; auf dem Stand nach ihnen lief jeder davon einzeln, dazu die
   24 Einträge von `kanon` in `credentials()` und die 3 von `inventar` am
-  geänderten Prüffall von `SyncEnvTest`: alle 110 getötet. Lokal lief jeder Eintrag von `netz` und jeder Eintrag von
+  geänderten Prüffall von `SyncEnvTest`: alle 110 getötet. Die Behebung
+  nach Codex-Runde 4 (Bearer nach der Form eines Tokens, die
+  Beispielwörter von Basic, die Liste der dokumentierten Beispiele) brachte
+  32 Einträge, änderte 6 und strich 2 (`token-aws-after`: die Form von AKIA
+  endet nicht mehr nach 16 Zeichen; `bearer-empty`: aufgegangen in
+  `bearer-length`); danach liefen 147 einzeln (113 von `netz`, 29
+  von `kanon` in `credentials()`, 5 von `lauf` an der Anzeige des
+  Post-Writers): alle getötet, drei erst mit neuen Prüffällen
+  (`bearer-dot`, `bearer-start`, `token-aws-before`). Lokal lief jeder Eintrag von `netz` und jeder Eintrag von
   `kanon` und `struktur`, dessen Suchtext im geänderten Code liegt, einzeln
   (76 Einträge): 73 getötet; `b-widget-form`, `b-widget-form-it` und
   `b-reader` überlebten, weil das Netz des Exports jetzt jede Meta-Zeile
