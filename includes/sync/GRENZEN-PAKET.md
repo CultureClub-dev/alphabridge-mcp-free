@@ -367,7 +367,8 @@ mit Beispiel und Grund; wo eine Ablehnung entsteht, nennt sie den Weg.
   einfacher Wert, `post_content`, Meta, Option, Widget): Tokens von GitHub,
   Stripe, AWS, Slack und Mailchimp, JSON Web Tokens, `Authorization` mit
   Bearer (ein Wert in der Form eines Tokens, ab 20 Zeichen) oder Basic (ein
-  Paar, dessen Passwort kein Beispiel ist) am Anfang einer Zeile oder eines
+  Paar, das kein dokumentiertes Beispielpaar ist, dessen Passwort kein
+  Platzhalter ist) am Anfang einer Zeile oder eines
   Felds, private
   Schlüssel in PEM, der Wert eines Login-Cookies, Passwortfelder in Code-
   und Konfigurationsform (Zweig 11b, GRENZEN.md, Abschnitt «Zugangsdaten
@@ -378,7 +379,9 @@ mit Beispiel und Grund; wo eine Ablehnung entsteht, nennt sie den Weg.
   verweigert nur Meta-Schlüssel mit Namen eines Zugangsdatums; das Paket
   zeigt nichts, was das Lesewerkzeug nicht schon zeigt. Ebenso gehen die
   Beispiele der API-Anleitungen ins Paket (`Authorization: Bearer TOKEN`,
-  `Bearer abc123`, `Basic` mit `user:password`, Codex-Runde 4 zu 11b, B)
+  `Bearer abc123`, `Basic` mit `user:password` und den anderen
+  Beispielpaaren der Dokus, Codex-Runden 4 und 5 zu 11b; `admin:password`
+  hält das Objekt)
   und öffentlich dokumentierte Beispielwerte als ganzer Wert (die Schlüssel
   der AWS-Doku, die Tokens von jwt.io, RFC 6750 und 7617, die Beispiele
   der Slack-Doku; GRENZEN.md, `EXAMPLES`).

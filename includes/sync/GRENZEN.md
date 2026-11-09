@@ -177,7 +177,10 @@ neu.
 - Tokens eines Dienstes nach Präfix und Form (`TOKENS`): `ghp_` und 36
   Buchstaben und Ziffern, `github_pat_` und 36 oder mehr, `sk_live_` und
   `rk_live_` mit 24, `AKIA` und 16 Grossbuchstaben und Ziffern (auch als
-  Anfang eines längeren Laufs: der ganze Lauf ist der Wert), `xoxb-` und
+  Anfang eines längeren Laufs: der ganze Lauf ist der Wert; nie in Base64:
+  links kein Zeichen aus `[A-Za-z0-9+/]`, rechts nach dem Lauf kein kleiner
+  Buchstabe, `+`, `/` oder `=`, Codex-Runde 5 zu 11b, C1: «Binärdaten
+  (Base64): /AKIA…g==» bleibt frei), `xoxb-` und
   `xoxp-` mit ihren Nummern, Mailchimp mit 32 Hex und `-us` mit der Nummer
   des Rechenzentrums (aufgenommen, weil zwei der zehn Tutorials seinen
   Schlüssel nennen, keines in dieser Form). Die Form entscheidet, kein Wort
@@ -204,15 +207,25 @@ neu.
   (`abcdefghijklmnopqrstuvwx` sperrt). Codex-Runde 4 zu 11b, B: vorher
   sperrte jeder Wert, auch die Beispiele der API-Anleitungen
   («Authorization: bearer TOKEN» von GitHub, «Bearer abc123»).
-  `Basic` sperrt, wo das Base64 zu `user:password` dekodiert; frei bleibt
-  ein Passwort (bei leerem Passwort der Benutzer: ein Schlüssel als
-  Benutzer), das ein exakter Platzhalter ist oder als ganzer Wert in
-  beliebiger Schreibweise eines der Beispielwörter `password`, `passwort`,
-  `pass`, `secret`, `open sesame` (RFC 7617) und `opensesame` (MDN,
-  `aladdin:opensesame`; über die Liste der Steuerung hinaus aufgenommen,
-  weil die Seite von MDN dieses Paar zeigt). Kein Teilwort; Benutzer
-  gleich Passwort ist keine Ausnahme (`admin:admin`, `a:b` und
-  `review:Sommer2026` sperren). Der Wert endet an «;» und «,»: ein Feld
+  `Basic` sperrt, wo das Base64 zu `user:password` dekodiert; frei nur,
+  wo das Paar als Ganzes genau ein dokumentiertes Beispielpaar ist
+  (`EXAMPLE_PAIRS`) oder das Passwort (bei leerem Passwort der Benutzer:
+  ein Schlüssel als Benutzer) ein exakter Platzhalter. Codex-Runde 5 zu
+  11b, A4: ein Beispielwort allein gibt nichts frei, `admin:password`,
+  `admin:secret`, `secret:`, `admin:Passwort` und `api:SECRET` sperren wie
+  `admin:admin`, `a:b` und `review:Sommer2026`, weil sie funktionierende
+  schwache Zugänge sein können. Die Beispielpaare, gelesen am 09.11.2026:
+  - RFC 7617, Abschnitt 2: `Aladdin:open sesame`;
+  - MDN, «Authorization»: `aladdin:opensesame`; MDN, «HTTP
+    authentication»: `username:password` (in einer Adresse);
+  - curl, Handbuch (curl.se/docs/manpage.html): `user:password`
+    (`--location-trusted`, `--ntlm`), `name:password` (`--basic`,
+    `--digest`), `user:secret`, `me:pwd` (`--anyauth`), `key:secret`
+    (`--aws-sigv4`), bei `--proxy-user` `user:passwd` und `smith:secret`;
+  - das Tutorial T10 der Zählung: `user:password`.
+  Kein Tutorial und kein Text der Zählung zeigt ein Paar wie
+  `admin:password`; T1 zeigt `admin:` mit einem Platzhalter
+  (`xxxx xxxx …`), frei. Der Wert endet an «;» und «,»: ein Feld
   danach wird als eigenes gelesen (Codex-Runde 3 zu 11b, A3).
   `"Authorization":` von JSON und `Authorization=` oder `=>` zählen wie
   bisher nach dem Namen.
@@ -246,8 +259,11 @@ neu.
 - Öffentlich dokumentierte Beispielwerte (`EXAMPLES`, Steuerung nach
   Codex-Runde 4 zu 11b) sind frei, nur als ganzer Wert und in jeder Form,
   die das Netz nach dem Wert beurteilt: als Token eines Dienstes, als JWT,
-  nach Bearer, als Passwort im Basic-Paar (die Paare aus RFC 7617 und MDN
-  sind schon über ihre Beispielwörter frei). Ein Zeichen
+  nach Bearer (Basic nur mit seinen Beispielpaaren, oben; der
+  Geheimschlüssel von AWS als Passwort eines Paars sperrt). Höchstens ein
+  «.» am Ende fällt vor dem Vergleich weg, das Satzende (Codex-Runde 5 zu
+  11b, A5): der Geheimschlüssel von AWS mit «.» bleibt frei, mit «..»
+  sperrt er. Ein Zeichen
   mehr oder weniger sperrt (die Access Key ID der AWS-Doku mit einer 2
   dahinter, ein echt gebildeter AKIA-Schlüssel mit `EXAMPLE`, ein
   verändertes Token von jwt.io). Die
@@ -303,16 +319,51 @@ Grenzen (Gruppe C):
   festen Form darin sperrt.
 - Ein Platzhalter `<token>` unkodiert in einem Text sperrt in WordPress
   weiter als Tag ausserhalb der kses-Liste (vorbestehend).
-- Ein echtes Token nach Bearer unter 20 Zeichen geht durch, ebenso eines,
-  das wie ein wortartiger Platzhalter aussieht. Ein zufälliges b64token
-  ab 20 Zeichen ist so in weniger als einem von sieben Millionen: es
-  müsste nur aus kleinen Buchstaben, «_» und «-» bestehen oder nur aus
-  grossen und diesen, höchstens 2 · (28/64)^20 ≈ 1,3 · 10^-7, dazu Gruppen
-  aus mindestens zwei Buchstaben mit einem Trennzeichen; eines nur aus
-  Buchstaben und Ziffern (Base62, Hex, Base32) nie, es hat kein «_» oder
-  «-». Eine echte Form, die so aussieht: eine Passphrase aus Wörtern mit
-  «-» (Diceware, «correct-horse-battery-staple»), wo sie als Bearer-Token
-  dient.
+- Codex-Runde 5 zu 11b, A1 und A2: ein echter Wert nach `Authorization:
+  Bearer` bleibt frei, wo er kürzer als 20 Zeichen aus dem Vorrat von
+  b64token ist (A2: `R7v2K9m4Q6s8T3p5N1x`, 19 Zeichen; mit einem `Z`
+  dahinter sperrt er; ein einzelner Punkt am Ende zählt nicht mit, er
+  schliesst den Satz) oder wortartig: nur Buchstaben in einer
+  Schreibweise, in Gruppen aus mindestens zwei Buchstaben, getrennt durch
+  «_» oder «-», ohne Ziffer (A1: `birke-wolke-fluss-kiesel`;
+  `WORD_PLACEHOLDER`). Grund: Anleitungen und Platzhalter bleiben frei
+  (decisions.md, 09.11.2026 früh, Punkt 7 (b); Codex-Runde 4, B). Ein
+  zufälliges b64token ab 20 Zeichen ist wortartig höchstens mit
+  2 · (28/64)^20 ≈ 1,3 · 10^-7 (nur kleine Buchstaben, «_» und «-» oder nur
+  grosse und diese, dazu Gruppen aus mindestens zwei Buchstaben); eines
+  nur aus Buchstaben und Ziffern (Base62, Hex, Base32) nie, es hat kein
+  «_» oder «-». Eine echte Form, die so aussieht: eine Passphrase aus
+  Wörtern mit «-» (Diceware). Was das Restrisiko klein hält: ein Feld mit
+  dem Namen eines Zugangsdatums sperrt nach dem Namen, welcher Wert auch
+  darin steht. Die Zugangsprüfung (`AB_MCP_Sync_Credentials::flat()` und
+  `unit()`) sperrt so `name=…`, `"name": …`, `'name': …`, die Schlüssel
+  einer Struktur (auch JSON und serialisiert) und den Namen eines
+  Formularfelds; das Netz sperrt nach dem Namen `name']=…`, `=>`, `{name:`
+  im Code und `name: "…"` am Textanfang. Namen eines Zugangsdatums sind die
+  von `AB_MCP_Redactor::redacts_key()`: als letztes Wort `token`, `secret`,
+  `password`, `pass`, `pwd`, `passphrase`, `passcode`, `otp`,
+  `credential` (und ihre Mehrzahl), irgendwo im Namen `api_key`, `apikey`,
+  `api_token`, `api_secret`, `access_key`, `access_token`, `secret_key`,
+  `private_key`, `client_secret`, `refresh_token`, `auth_token`,
+  `license_key`, `oauth`, `_token`, `_secret`, `_password`, `passwd`, dazu
+  `authorization`, `auth`, `user_pass` (geprüft am 09.11.2026:
+  `github_token`, `webhook_secret`, `api_key`, `aws_secret_access_key`
+  sperren; `bearer`, `jwt`, `key`, `cookie`, `session_id`, `signature`,
+  `hmac`, `dsn`, `client_id` und `pin` sind keine solchen Namen). Prosa
+  zeigt `wp_get_post` ohnehin. Betroffen ist also nur ein solcher Wert in
+  einem Feld mit einem anderen Namen, in Prosa nach einem Doppelpunkt
+  (`github_token: …` ohne Anführungszeichen) oder im Text.
+- Codex-Runde 5 zu 11b, A3: ein Wert nach Bearer mit «...» darin, mit
+  «...» oder «…» unmittelbar danach, gilt als gekürzt und bleibt frei
+  (`R7v2K9m4...Q6s8T3p5N1xZ`). Die Schärfung der Steuerung (gekürzt nur,
+  wo ohne die Auslassung weniger als 20 Zeichen bleiben) ist nicht gebaut:
+  gezählt am 09.11.2026 sperrte sie das Tutorial T3 mit dem Header auf
+  eigener Zeile neu («<code>\nAuthorization: Bearer
+  eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOi…», auf `8df6146` und
+  `5312d68` frei, ein Fall von B in Codex-Runde 4), ebenso denselben
+  gekürzten JWT mit «...» und einen gekürzten Schlüssel von Stripe mit
+  14 Zeichen vor «...». Keine bekannte Tokenform enthält drei Punkte
+  hintereinander; ein JWT hat einzelne zwischen seinen Teilen.
 - Ein dokumentiertes Beispiel in einem Feld mit dem Namen eines
   Zugangsdatums (`aws_secret_access_key = …`, `"password": "…"`) sperrt
   weiter wie auf `8df6146`: dort sperrt die Zugangsprüfung
