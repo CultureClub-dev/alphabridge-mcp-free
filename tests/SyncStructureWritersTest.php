@@ -567,6 +567,15 @@ final class SyncStructureWritersTest extends TestCase {
 		}
 		$option = $line( 'option', array(), array( 'value' => $nested ) );
 		self::assertSame( $option, \AB_MCP_Sync_Export::checked_content( $option ), 'The value of an option: as it was.' );
+		// The instance of a widget goes to the check as area() checks it:
+		// unpacked as the row of the widget holds it, the base of the widget
+		// as its name (Codex round 4 of branch 11, B); since the net reads a
+		// meta value unpacked anyway, the form is held here, at the kind.
+		$settings = array( 'title' => 'Spielanleitung', 'text' => $prose );
+		self::assertSame( array( 'text', $settings ), \AB_MCP_Sync_Kind_Widget_Area::checked_meta( 'text-2', serialize( $settings ) ) );
+		self::assertSame( array( 'text-2', 'a:2:{s:5:"title";' ), \AB_MCP_Sync_Kind_Widget_Area::checked_meta( 'text-2', 'a:2:{s:5:"title";' ), 'Settings that do not unpack: as stored.' );
+		self::assertSame( array( 'search', '' ), \AB_MCP_Sync_Kind_Widget_Area::checked_meta( 'search', '' ), 'A widget without a number.' );
+		self::assertSame( array( 'note', $nested ), \AB_MCP_Sync_Db_Kind::checked_meta( 'note', $nested ), 'Any other kind: as stored.' );
 		self::assertSame( array( false, true ), array( \AB_MCP_Sync_Db_Kind::stored_column( 'value' ), \AB_MCP_Sync_Kind_Option::stored_column( 'value' ) ) );
 		// A column WordPress hands out as stored is read as stored: there the
 		// braces of a serialized text still read as code.

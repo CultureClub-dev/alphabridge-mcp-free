@@ -1,0 +1,302 @@
+<?php
+/**
+ * The clauses of Z8 branch 11b (heikel/z8-netz; Thomas, 08.11.2026): the
+ * net over the raw value counts the credentials of a meta value and of the
+ * value of an option unpacked, as WordPress hands them out (every key and
+ * every leaf on its own, nested serialized texts unpacked through
+ * AB_MCP_Sync_Canon::unserialized() within the depth and the layers of the
+ * readers, a text that does not serialize back read whole as well, one that
+ * does not unpack or holds an object locked), a structure the same way with
+ * its keys; the references stay counted over the raw text; the kinds and
+ * the export ask for that form alike.
+ *
+ * Written by tests/mutation/gen/netz.py from the source; change the entries
+ * there and run it again.
+ *
+ * Held by the unit suite (SyncNetTest, SyncStructureWritersTest) and, for
+ * the kinds on WordPress, by the integration suite (SyncStructureTest; the
+ * sites running, AB_IT_ROOT set). The clauses of the net it keeps from
+ * branch 4 are in kanon.php.
+ *
+ * @package AlphaBridge_MCP
+ */
+
+$unit = static fn( string $class, string $test ): array => array( 'vendor/bin/phpunit', '--no-progress', '--filter', '/[^A-Za-z0-9_]' . $class . '::' . $test . '( |$)/' );
+$it   = static fn( string $class, string $test ): array => array( 'vendor/bin/phpunit', '--no-progress', '-c', 'tests/integration/phpunit.xml.dist', '--filter', '/[^A-Za-z0-9_]' . $class . '::' . $test . '( |$)/' );
+
+$nt = 'includes/sync/class-sync-net.php';
+$dk = 'includes/sync/class-sync-db-kinds.php';
+$ex = 'includes/sync/class-sync-export.php';
+
+return array(
+	array(
+		'id'      => 'netz/apart-stored',
+		'clause'  => 'check(): a stored value that is serialized: its texts each on their own',
+		'file'    => $nt,
+		'search'  => "\t\tif ( is_array( \$raw ) || ( \$stored && is_string( \$raw ) && is_serialized( \$raw ) ) ) {",
+		'replace' => "\t\tif ( is_array( \$raw ) ) {",
+		'run'     => $unit( 'SyncNetTest', 'testProseInASerializedValueIsProseWhereTheValueIsReadUnpacked' ),
+		'expect'  => '/testProseInASerializedValueIsProseWhereTheValueIsReadUnpacked/',
+	),
+	array(
+		'id'      => 'netz/apart-structure',
+		'clause'  => 'check(): a structure: its texts each on their own',
+		'file'    => $nt,
+		'search'  => "\t\tif ( is_array( \$raw ) || ( \$stored && is_string( \$raw ) && is_serialized( \$raw ) ) ) {",
+		'replace' => "\t\tif ( \$stored && is_string( \$raw ) && is_serialized( \$raw ) ) {",
+		'run'     => $unit( 'SyncNetTest', 'testEachKeyAndLeafOfAStructureIsReadOnItsOwn' ),
+		'expect'  => '/testEachKeyAndLeafOfAStructureIsReadOnItsOwn/',
+	),
+	array(
+		'id'      => 'netz/apart-only-stored',
+		'clause'  => 'check(): a text WordPress hands out as stored (a column) read as its text',
+		'file'    => $nt,
+		'search'  => "\t\tif ( is_array( \$raw ) || ( \$stored && is_string( \$raw ) && is_serialized( \$raw ) ) ) {",
+		'replace' => "\t\tif ( true ) {",
+		'run'     => $unit( 'SyncNetTest', 'testProseInASerializedValueIsProseWhereTheValueIsReadUnpacked' ),
+		'expect'  => '/testProseInASerializedValueIsProseWhereTheValueIsReadUnpacked/',
+	),
+	array(
+		'id'      => 'netz/structure-layer',
+		'clause'  => 'check(): a structure is unpacked already, its layers counted from one as AB_MCP_Sync_Canon::structure() counts them',
+		'file'    => $nt,
+		'search'  => "\t\t\t\tis_array( \$raw ) ? 1 : 0,",
+		'replace' => "\t\t\t\t0,",
+		'run'     => $unit( 'SyncNetTest', 'testEachKeyAndLeafOfAStructureIsReadOnItsOwn' ),
+		'expect'  => '/testEachKeyAndLeafOfAStructureIsReadOnItsOwn/',
+	),
+	array(
+		'id'      => 'netz/place',
+		'clause'  => 'check(): the place of a text in the lock (positions, never a key or a value)',
+		'file'    => $nt,
+		'search'  => "\t\t\t\t\t\$place = \$at . ':net:' . ( '' === \$where ? '' : \$where . ':' );",
+		'replace' => "\t\t\t\t\t\$place = \$at . ':net:';",
+		'run'     => $unit( 'SyncNetTest', 'testACredentialInASerializedValueLocksWhereverItStands' ),
+		'expect'  => '/testACredentialInASerializedValueLocksWhereverItStands/',
+	),
+	array(
+		'id'      => 'netz/texts-each',
+		'clause'  => 'check(): the credentials counted in each text of the value',
+		'file'    => $nt,
+		'search'  => "\t\t\t\t\tself::count_credentials( \$acc, (string) \$kind, (string) \$at, \$place, self::layers( \$one ), \$named, \$extra, \$unreadable );\n",
+		'replace' => "/* removed */\n",
+		'run'     => $unit( 'SyncNetTest', 'testACredentialInASerializedValueLocksWhereverItStands' ),
+		'expect'  => '/testACredentialInASerializedValueLocksWhereverItStands/',
+	),
+	array(
+		'id'      => 'netz/raw-whole',
+		'clause'  => 'check(): the credentials of a text read as it is stored counted in its layers',
+		'file'    => $nt,
+		'search'  => "\t\t\tself::count_credentials( \$acc, (string) \$kind, (string) \$at, \$at . ':net:', \$layers, \$named, \$extra, \$unreadable );\n",
+		'replace' => "/* removed */\n",
+		'run'     => $unit( 'SyncNetTest', 'testTheNetLocksANameTheCheckDidNotNameAndNotesIt' ),
+		'expect'  => '/testTheNetLocksANameTheCheckDidNotNameAndNotesIt/',
+	),
+	array(
+		'id'      => 'netz/count-once',
+		'clause'  => 'count_credentials(): one lock and one note per unit, over its texts as well',
+		'file'    => $nt,
+		'search'  => "\t\t\tif ( \$unreadable ) {\n\t\t\t\treturn;\n\t\t\t}",
+		'replace' => "\t\t\tif ( false ) {\n\t\t\t\treturn;\n\t\t\t}",
+		'run'     => $unit( 'SyncNetTest', 'testACredentialInASerializedValueLocksWhereverItStands' ),
+		'expect'  => '/testACredentialInASerializedValueLocksWhereverItStands/',
+	),
+	array(
+		'id'      => 'netz/texts-depth',
+		'clause'  => 'texts(): deeper than the readers read: not read to its end',
+		'file'    => $nt,
+		'search'  => "\t\tif ( \$depth > AB_MCP_Sync_Canon::MAX_DEPTH ) {",
+		'replace' => "\t\tif ( false ) {",
+		'run'     => $unit( 'SyncNetTest', 'testAStoredValueThatDoesNotUnpackOrHoldsAnObjectIsNeverClean' ),
+		'expect'  => '/testAStoredValueThatDoesNotUnpackOrHoldsAnObjectIsNeverClean/',
+	),
+	array(
+		'id'      => 'netz/texts-depth-count',
+		'clause'  => 'texts(): the depth counted down the arrays',
+		'file'    => $nt,
+		'search'  => "\t\t\tself::texts( \$item, \$entry, \$layer, \$depth + 1, \$acc, \$kind, \$at, \$each );",
+		'replace' => "\t\t\tself::texts( \$item, \$entry, \$layer, \$depth, \$acc, \$kind, \$at, \$each );",
+		'run'     => $unit( 'SyncNetTest', 'testAStoredValueThatDoesNotUnpackOrHoldsAnObjectIsNeverClean' ),
+		'expect'  => '/testAStoredValueThatDoesNotUnpackOrHoldsAnObjectIsNeverClean/',
+	),
+	array(
+		'id'      => 'netz/texts-leaves',
+		'clause'  => 'texts(): every leaf of an array',
+		'file'    => $nt,
+		'search'  => "\t\t\tself::texts( \$item, \$entry, \$layer, \$depth + 1, \$acc, \$kind, \$at, \$each );\n",
+		'replace' => "/* removed */\n",
+		'run'     => $unit( 'SyncNetTest', 'testACredentialInASerializedValueLocksWhereverItStands' ),
+		'expect'  => '/testACredentialInASerializedValueLocksWhereverItStands/',
+	),
+	array(
+		'id'      => 'netz/texts-key',
+		'clause'  => 'texts(): every key of an array that is a text',
+		'file'    => $nt,
+		'search'  => "\t\t\t\t\$each( \$entry . '.key', \$key );\n",
+		'replace' => "/* removed */\n",
+		'run'     => $unit( 'SyncNetTest', 'testACredentialInASerializedValueLocksWhereverItStands' ),
+		'expect'  => '/testACredentialInASerializedValueLocksWhereverItStands/',
+	),
+	array(
+		'id'      => 'netz/texts-serialized',
+		'clause'  => 'texts(): a serialized text unpacked, not read as its text',
+		'file'    => $nt,
+		'search'  => "\t\t\tif ( ! is_serialized( \$value ) ) {\n\t\t\t\t\$each( \$where, \$value );",
+		'replace' => "\t\t\tif ( true ) {\n\t\t\t\t\$each( \$where, \$value );",
+		'run'     => $unit( 'SyncNetTest', 'testProseInASerializedValueIsProseWhereTheValueIsReadUnpacked' ),
+		'expect'  => '/testProseInASerializedValueIsProseWhereTheValueIsReadUnpacked/',
+	),
+	array(
+		'id'      => 'netz/texts-layers',
+		'clause'  => 'texts(): more serialized texts inside one another than the readers unpack: not read to its end',
+		'file'    => $nt,
+		'search'  => "\t\t\tif ( \$layer >= AB_MCP_Sync_Canon::MAX_LAYERS ) {",
+		'replace' => "\t\t\tif ( false ) {",
+		'run'     => $unit( 'SyncNetTest', 'testAStoredValueThatDoesNotUnpackOrHoldsAnObjectIsNeverClean' ),
+		'expect'  => '/testAStoredValueThatDoesNotUnpackOrHoldsAnObjectIsNeverClean/',
+	),
+	array(
+		'id'      => 'netz/texts-layer-count',
+		'clause'  => 'texts(): each unpacked text one layer more',
+		'file'    => $nt,
+		'search'  => "\t\t\tself::texts( \$read['value'], '' === \$where ? 'php' : \$where . '.php', \$layer + 1, \$depth, \$acc, \$kind, \$at, \$each );",
+		'replace' => "\t\t\tself::texts( \$read['value'], '' === \$where ? 'php' : \$where . '.php', \$layer, \$depth, \$acc, \$kind, \$at, \$each );",
+		'run'     => $unit( 'SyncNetTest', 'testAStoredValueThatDoesNotUnpackOrHoldsAnObjectIsNeverClean' ),
+		'expect'  => '/testAStoredValueThatDoesNotUnpackOrHoldsAnObjectIsNeverClean/',
+	),
+	array(
+		'id'      => 'netz/texts-gate',
+		'clause'  => 'texts(): unpacked only through AB_MCP_Sync_Canon::unserialized(), its check of the records first',
+		'file'    => $nt,
+		'search'  => "\t\t\t\$read = AB_MCP_Sync_Canon::unserialized( \$value );",
+		'replace' => "\t\t\t\$read = array( 'ok' => true, 'value' => @unserialize( trim( \$value ) ), 'why' => '' );",
+		'run'     => $unit( 'SyncNetTest', 'testAStoredValueThatDoesNotUnpackOrHoldsAnObjectIsNeverClean' ),
+		'expect'  => '/testAStoredValueThatDoesNotUnpackOrHoldsAnObjectIsNeverClean/',
+	),
+	array(
+		'id'      => 'netz/texts-unreadable',
+		'clause'  => 'texts(): a text that does not unpack or holds an object locks',
+		'file'    => $nt,
+		'search'  => "\t\t\t\tAB_MCP_Sync_Canon::lock( \$acc, \$kind, \$read['why'], \$here );\n",
+		'replace' => "/* removed */\n",
+		'run'     => $unit( 'SyncNetTest', 'testAStoredValueThatDoesNotUnpackOrHoldsAnObjectIsNeverClean' ),
+		'expect'  => '/testAStoredValueThatDoesNotUnpackOrHoldsAnObjectIsNeverClean/',
+	),
+	array(
+		'id'      => 'netz/texts-round-trip',
+		'clause'  => 'texts(): a text that does not serialize back from its value byte for byte read whole as well (a key twice, bytes after its end)',
+		'file'    => $nt,
+		'search'  => "\t\t\tif ( serialize( \$read['value'] ) !== trim( \$value ) ) {",
+		'replace' => "\t\t\tif ( false ) {",
+		'run'     => $unit( 'SyncNetTest', 'testACredentialInASerializedValueLocksWhereverItStands' ),
+		'expect'  => '/testACredentialInASerializedValueLocksWhereverItStands/',
+	),
+	array(
+		'id'      => 'netz/texts-round-trip-trim',
+		'clause'  => 'texts(): the round trip against the text as unserialize() reads it (trimmed)',
+		'file'    => $nt,
+		'search'  => "\t\t\tif ( serialize( \$read['value'] ) !== trim( \$value ) ) {",
+		'replace' => "\t\t\tif ( serialize( \$read['value'] ) !== \$value ) {",
+		'run'     => $unit( 'SyncNetTest', 'testProseInASerializedValueIsProseWhereTheValueIsReadUnpacked' ),
+		'expect'  => '/testProseInASerializedValueIsProseWhereTheValueIsReadUnpacked/',
+	),
+	array(
+		'id'      => 'netz/texts-object',
+		'clause'  => 'texts(): an object in a structure locks',
+		'file'    => $nt,
+		'search'  => "\t\t\tAB_MCP_Sync_Canon::lock( \$acc, \$kind, 'php_object', \$here );\n",
+		'replace' => "/* removed */\n",
+		'run'     => $unit( 'SyncNetTest', 'testEachKeyAndLeafOfAStructureIsReadOnItsOwn' ),
+		'expect'  => '/testEachKeyAndLeafOfAStructureIsReadOnItsOwn/',
+	),
+	array(
+		'id'      => 'netz/strings-keys',
+		'clause'  => 'strings(): the keys of a structure counted for the references',
+		'file'    => $nt,
+		'search'  => "\t\t\tif ( is_string( \$key ) && '' !== \$key ) {\n\t\t\t\t\$out[] = \$key;\n\t\t\t}\n",
+		'replace' => "/* removed */\n",
+		'run'     => $unit( 'SyncNetTest', 'testEachKeyAndLeafOfAStructureIsReadOnItsOwn' ),
+		'expect'  => '/testEachKeyAndLeafOfAStructureIsReadOnItsOwn/',
+	),
+	array(
+		'id'      => 'netz/strings-leaves',
+		'clause'  => 'strings(): the leaves of a structure counted for the references',
+		'file'    => $nt,
+		'search'  => "\t\t\t} elseif ( is_string( \$item ) && '' !== \$item ) {",
+		'replace' => "\t\t\t} elseif ( false ) {",
+		'run'     => $unit( 'SyncNetTest', 'testTheNetReadsTheTextsOfAStructureAndNothingOfAnEmptyValue' ),
+		'expect'  => '/testTheNetReadsTheTextsOfAStructureAndNothingOfAnEmptyValue/',
+	),
+	array(
+		'id'      => 'netz/strings-nested',
+		'clause'  => 'strings(): nested arrays of a structure as well',
+		'file'    => $nt,
+		'search'  => "\t\t\tif ( is_array( \$item ) ) {\n\t\t\t\tself::strings( \$item, \$out );",
+		'replace' => "\t\t\tif ( false ) {\n\t\t\t\tself::strings( \$item, \$out );",
+		'run'     => $unit( 'SyncNetTest', 'testTheNetReadsTheTextsOfAStructureAndNothingOfAnEmptyValue' ),
+		'expect'  => '/testTheNetReadsTheTextsOfAStructureAndNothingOfAnEmptyValue/',
+	),
+	array(
+		'id'      => 'netz/kinds-meta',
+		'clause'  => 'meta_form(): the net reads a meta value unpacked',
+		'file'    => $dk,
+		'search'  => "\t\t\tAB_MCP_Sync_Net::check( \$acc, \$mark, \$kind, \$at, \$row['value'], \$ctx, true, true );",
+		'replace' => "\t\t\tAB_MCP_Sync_Net::check( \$acc, \$mark, \$kind, \$at, \$row['value'], \$ctx, true, false );",
+		'run'     => $it( 'SyncStructureTest', 'testProseInASerializedValueOfMetaAndOfACoreOptionGoesThroughTheReportAndIntoThePackage' ),
+		'expect'  => '/testProseInASerializedValueOfMetaAndOfACoreOptionGoesThroughTheReportAndIntoThePackage/',
+	),
+	array(
+		'id'      => 'netz/kinds-option',
+		'clause'  => 'option(): the net reads the value of an option unpacked',
+		'file'    => $dk,
+		'search'  => "\t\tAB_MCP_Sync_Net::check( \$acc, \$mark, 'option', 'option_value', \$raw, \$source['ctx'], true, self::stored_column( 'value' ) );",
+		'replace' => "\t\tAB_MCP_Sync_Net::check( \$acc, \$mark, 'option', 'option_value', \$raw, \$source['ctx'], true, false );",
+		'run'     => $it( 'SyncStructureTest', 'testProseInASerializedValueOfMetaAndOfACoreOptionGoesThroughTheReportAndIntoThePackage' ),
+		'expect'  => '/testProseInASerializedValueOfMetaAndOfACoreOptionGoesThroughTheReportAndIntoThePackage/',
+	),
+	array(
+		'id'      => 'netz/kinds-option-column',
+		'clause'  => 'stored_column() of the option: its value is a stored value',
+		'file'    => $dk,
+		'search'  => "\t\treturn 'value' === (string) \$column;",
+		'replace' => "\t\treturn false;",
+		'run'     => $unit( 'SyncStructureWritersTest', 'testTheFinishedContentReadsSerializedMetaAndAnOptionUnpackedAsTheirKinds' ),
+		'expect'  => '/testTheFinishedContentReadsSerializedMetaAndAnOptionUnpackedAsTheirKinds/',
+	),
+	array(
+		'id'      => 'netz/kinds-column',
+		'clause'  => 'stored_column(): no column of the other kinds is one (WordPress hands them out as stored)',
+		'file'    => $dk,
+		'search'  => "\tpublic static function stored_column( \$column ) {\n\t\treturn false;",
+		'replace' => "\tpublic static function stored_column( \$column ) {\n\t\treturn true;",
+		'run'     => $unit( 'SyncStructureWritersTest', 'testTheFinishedContentReadsSerializedMetaAndAnOptionUnpackedAsTheirKinds' ),
+		'expect'  => '/testTheFinishedContentReadsSerializedMetaAndAnOptionUnpackedAsTheirKinds/',
+	),
+	array(
+		'id'      => 'netz/export-meta',
+		'clause'  => 'checked_content(): a meta value read unpacked, as the kinds read it',
+		'file'    => $ex,
+		'search'  => "\t\t\t\t\t\tif ( ! self::check_unit( \$acc, \$kind, 'meta:' . (string) \$pair[0], \$input, \$name, false, true ) ) {",
+		'replace' => "\t\t\t\t\t\tif ( ! self::check_unit( \$acc, \$kind, 'meta:' . (string) \$pair[0], \$input, \$name, false, false ) ) {",
+		'run'     => $unit( 'SyncStructureWritersTest', 'testTheFinishedContentReadsSerializedMetaAndAnOptionUnpackedAsTheirKinds' ),
+		'expect'  => '/testTheFinishedContentReadsSerializedMetaAndAnOptionUnpackedAsTheirKinds/',
+	),
+	array(
+		'id'      => 'netz/export-row',
+		'clause'  => 'checked_content(): a column the kind names as stored read unpacked',
+		'file'    => $ex,
+		'search'  => ", \$reader::stored_column( (string) \$column ) );",
+		'replace' => ", false );",
+		'run'     => $unit( 'SyncStructureWritersTest', 'testTheFinishedContentReadsSerializedMetaAndAnOptionUnpackedAsTheirKinds' ),
+		'expect'  => '/testTheFinishedContentReadsSerializedMetaAndAnOptionUnpackedAsTheirKinds/',
+	),
+	array(
+		'id'      => 'netz/export-net',
+		'clause'  => 'check_unit(): the form handed to the net',
+		'file'    => $ex,
+		'search'  => "\t\tAB_MCP_Sync_Net::check( \$acc, \$mark, \$kind, \$at, \$raw, array(), false, \$stored );",
+		'replace' => "\t\tAB_MCP_Sync_Net::check( \$acc, \$mark, \$kind, \$at, \$raw, array(), false, false );",
+		'run'     => $unit( 'SyncStructureWritersTest', 'testTheFinishedContentReadsSerializedMetaAndAnOptionUnpackedAsTheirKinds' ),
+		'expect'  => '/testTheFinishedContentReadsSerializedMetaAndAnOptionUnpackedAsTheirKinds/',
+	),
+);
