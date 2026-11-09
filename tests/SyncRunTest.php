@@ -975,7 +975,7 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( 'post:type_unregistered', self::lock_of( AB_MCP_Sync_Post_Writer::precheck( $unregistered, null, 1800000000 ) ) );
 		$parent = AB_MCP_Sync_Post_Writer::target_of( self::line( array( 'post_parent' => '8' ) ), self::item(), $ctx );
 		self::assertSame( 'post:reference_unmapped', self::lock_of( $parent ), 'A parent without a pair.' );
-		self::assertSame( 'post_parent 8 of the staging site', $parent->get_error_data()['lock']['at'], 'Named as the parent, not caught later as a missing reference of the text.' );
+		self::assertSame( 'The post_parent 8 of the staging site has no counterpart on this site.', $parent->get_error_data()['lock']['at'], 'Named as the parent, not caught later as a missing reference of the text.' );
 		// A parent the same run creates before this object is pending, not
 		// missing (B1): the check before the first write takes it as mapped;
 		// the boundary maps it by the pair its step made.
@@ -1194,7 +1194,7 @@ final class SyncRunTest extends TestCase {
 		self::assertContains( 'manage_categories:', $asked, 'The right to make the term of the format this site has no term of yet.' );
 		self::assertNotContains( 'assign_term:5', $asked, 'The tag goes away; no term is assigned.' );
 		$denied = array( 'manage_categories:' );
-		self::assertStringContainsString( 'make the term post-format-aside of post_format, which this site has no term of yet (manage_categories)', $refused( AB_MCP_Sync_Post_Writer::precheck( $prepared, 12, $ctx['now'] ) ) );
+		self::assertStringContainsString( 'This account may not make the term post-format-aside of post_format on this site, which has no term of it yet (manage_categories).', $refused( AB_MCP_Sync_Post_Writer::precheck( $prepared, 12, $ctx['now'] ) ) );
 		// With a term of the format here: assign_term by its id.
 		$GLOBALS['ab_test_terms_by_slug'] = array( 'post_format' => array( 'post-format-aside' => 21 ) );
 		$asked                            = array();
@@ -1202,15 +1202,15 @@ final class SyncRunTest extends TestCase {
 		self::assertContains( 'assign_term:21', $asked, 'The slug resolved to the term of this site.' );
 		self::assertNotContains( 'manage_categories:', $asked );
 		$denied = array( 'assign_term:21' );
-		self::assertStringContainsString( 'assign the term 21 of post_format (assign_term)', $refused( AB_MCP_Sync_Post_Writer::precheck( $prepared, 12, $ctx['now'] ) ) );
+		self::assertStringContainsString( 'This account may not assign the term 21 of post_format on this site (assign_term).', $refused( AB_MCP_Sync_Post_Writer::precheck( $prepared, 12, $ctx['now'] ) ) );
 		// A taxonomy only this site has, which the step clears.
 		$denied = array( 'assign_post_tags:' );
-		self::assertStringContainsString( 'assign the terms of post_tag (assign_post_tags)', $refused( AB_MCP_Sync_Post_Writer::precheck( $prepared, 12, $ctx['now'] ) ) );
+		self::assertStringContainsString( 'This account may not assign the terms of post_tag on this site (assign_post_tags).', $refused( AB_MCP_Sync_Post_Writer::precheck( $prepared, 12, $ctx['now'] ) ) );
 		// The right of a taxonomy of the target to assign its terms, and a term by its id.
 		$denied = array( 'edit_posts:' );
-		self::assertStringContainsString( 'assign the terms of category (edit_posts)', $refused( AB_MCP_Sync_Post_Writer::precheck( $prepared, 12, $ctx['now'] ) ) );
+		self::assertStringContainsString( 'This account may not assign the terms of category on this site (edit_posts).', $refused( AB_MCP_Sync_Post_Writer::precheck( $prepared, 12, $ctx['now'] ) ) );
 		$denied = array( 'assign_term:3' );
-		self::assertStringContainsString( 'assign the term 3 of category (assign_term)', $refused( AB_MCP_Sync_Post_Writer::precheck( $prepared, 12, $ctx['now'] ) ) );
+		self::assertStringContainsString( 'This account may not assign the term 3 of category on this site (assign_term).', $refused( AB_MCP_Sync_Post_Writer::precheck( $prepared, 12, $ctx['now'] ) ) );
 		$denied = array();
 		// A taxonomy only this site has that is not registered here: locked.
 		$db->relations[12][] = array( 'term_taxonomy_id' => 8, 'term_order' => 0, 'term_id' => 8, 'taxonomy' => 'product_cat', 'slug' => 'x' );
@@ -1252,9 +1252,9 @@ final class SyncRunTest extends TestCase {
 		$denied = array();
 		self::assertTrue( $right( 'row', array() ) );
 		$denied = array( 'edit_post:12' );
-		self::assertSame( 'edit the post 12 (edit_post)', $right( 'row', $denied ) );
+		self::assertSame( 'This account may not edit the post 12 on this site (edit_post).', $right( 'row', $denied ) );
 		$denied = array( 'publish_posts:' );
-		self::assertSame( 'publish a post (publish_posts)', $right( 'row', $denied ) );
+		self::assertSame( 'This account may not publish a post on this site (publish_posts).', $right( 'row', $denied ) );
 		$published = $now;
 		$published['row']['post_status'] = 'publish';
 		self::assertTrue( $right( 'row', $denied, null, $published ), 'Published already: no publishing.' );
@@ -1262,18 +1262,18 @@ final class SyncRunTest extends TestCase {
 		self::assertTrue( $right( 'row', $denied ), 'The account\'s own post.' );
 		$other = $backup;
 		$other['row']['post_author'] = '5';
-		self::assertSame( 'write a post of another author (edit_others_posts)', $right( 'row', $denied, $other ) );
+		self::assertSame( 'This account may not write a post of another author on this site (edit_others_posts).', $right( 'row', $denied, $other ) );
 		// Meta: edit where rows are written over, add where the backup holds
 		// more rows, delete where it holds fewer; the core key with edit_post.
 		$denied = array( 'edit_post_meta:12:note' );
-		self::assertSame( 'edit the meta key note of the post (edit_post_meta)', $right( 'meta:note', $denied ) );
+		self::assertSame( 'This account may not edit the meta key note of the post on this site (edit_post_meta).', $right( 'meta:note', $denied ) );
 		$denied = array( 'add_post_meta:12:note' );
 		self::assertTrue( $right( 'meta:note', $denied ), 'Both sides hold a row: written over, not added.' );
 		$gone = $now;
 		$gone['meta'] = array();
-		self::assertSame( 'add the meta key note to the post (add_post_meta)', $right( 'meta:note', $denied, null, $gone ) );
+		self::assertSame( 'This account may not add the meta key note to the post on this site (add_post_meta).', $right( 'meta:note', $denied, null, $gone ) );
 		$denied = array( 'delete_post_meta:12:extra' );
-		self::assertSame( 'remove the meta key extra of the post (delete_post_meta)', $right( 'meta:extra', $denied ) );
+		self::assertSame( 'This account may not remove the meta key extra of the post on this site (delete_post_meta).', $right( 'meta:extra', $denied ) );
 		$denied = array( 'edit_post_meta:12:_wp_page_template', 'add_post_meta:12:_wp_page_template' );
 		self::assertTrue( $right( 'meta:_wp_page_template', $denied ), 'The core key goes with edit_post.' );
 		// A key of a page builder: unfiltered_html besides, as forward and as
@@ -1284,21 +1284,21 @@ final class SyncRunTest extends TestCase {
 		$builder_now              = $now;
 		$builder_now['meta'][]    = array( 'meta_id' => 4, 'key' => 'panels_data', 'value' => 'new' );
 		$denied                   = array( 'unfiltered_html:' );
-		self::assertSame( 'write the page-builder meta key panels_data of the post (unfiltered_html)', $right( 'meta:panels_data', $denied, $builder_backup, $builder_now ) );
+		self::assertSame( 'This account may not write the page-builder meta key panels_data of the post on this site (unfiltered_html).', $right( 'meta:panels_data', $denied, $builder_backup, $builder_now ) );
 		self::assertTrue( $right( 'meta:note', $denied ), 'A plain key needs no unfiltered_html.' );
 		$denied = array();
 		self::assertTrue( $right( 'meta:panels_data', $denied, $builder_backup, $builder_now ), 'With the right: back.' );
 		// Every part is the post's: edit_post first, whatever the part (Codex
 		// round 18: assign_term and the meta rights ask nothing of the post).
 		$denied = array( 'edit_post:12' );
-		self::assertSame( 'edit the post 12 (edit_post, for the part meta:_wp_page_template)', $right( 'meta:_wp_page_template', $denied ) );
-		self::assertSame( 'edit the post 12 (edit_post, for the part meta:note)', $right( 'meta:note', $denied ) );
-		self::assertSame( 'edit the post 12 (edit_post, for the part terms:category)', $right( 'terms:category', $denied ), 'The terms of a post the account may not edit stay, whatever the rights of the taxonomy.' );
+		self::assertSame( 'This account may not edit the post 12 on this site (edit_post, for the part meta:_wp_page_template).', $right( 'meta:_wp_page_template', $denied ) );
+		self::assertSame( 'This account may not edit the post 12 on this site (edit_post, for the part meta:note).', $right( 'meta:note', $denied ) );
+		self::assertSame( 'This account may not edit the post 12 on this site (edit_post, for the part terms:category).', $right( 'terms:category', $denied ), 'The terms of a post the account may not edit stay, whatever the rights of the taxonomy.' );
 		// Terms: the taxonomy and each backed-up term; one not registered here.
 		$denied = array( 'assign_term:3' );
-		self::assertSame( 'assign the term 3 of category (assign_term)', $right( 'terms:category', $denied ) );
+		self::assertSame( 'This account may not assign the term 3 of category on this site (assign_term).', $right( 'terms:category', $denied ) );
 		$denied = array( 'edit_posts:' );
-		self::assertSame( 'assign the terms of category (edit_posts)', $right( 'terms:category', $denied ) );
+		self::assertSame( 'This account may not assign the terms of category on this site (edit_posts).', $right( 'terms:category', $denied ) );
 		$denied = array();
 		self::assertTrue( $right( 'terms:category', $denied ) );
 		self::assertStringContainsString( 'not registered', (string) $right( 'terms:product_cat', $denied ) );
@@ -1841,8 +1841,8 @@ final class SyncRunTest extends TestCase {
 		self::assertNull( AB_MCP_Sync_Engine::sample_finding( 200, '<h1>Hello & co</h1>', 'Hello & co' ), 'The title raw.' );
 		self::assertStringContainsString( 'did not show the title', (string) AB_MCP_Sync_Engine::sample_finding( 200, '<html><title>An old page from a cache</title></html>', 'Hello' ) );
 		self::assertStringContainsString( 'page cache', (string) AB_MCP_Sync_Engine::sample_finding( 200, '', 'Hello' ) );
-		self::assertSame( 'did not answer 200 (404).', AB_MCP_Sync_Engine::sample_finding( 404, 'Hello', 'Hello' ) );
-		self::assertSame( 'did not answer 200 (no answer).', AB_MCP_Sync_Engine::sample_finding( null, '', 'Hello' ) );
+		self::assertSame( 'The published post 0 did not answer 200 (404).', AB_MCP_Sync_Engine::sample_finding( 404, 'Hello', 'Hello' ) );
+		self::assertSame( 'The published post 0 did not answer 200 (no answer).', AB_MCP_Sync_Engine::sample_finding( null, '', 'Hello' ) );
 	}
 
 	public function testTheStepsOfAPhaseRunOnlyAfterThePhasesBeforeIt(): void {
@@ -2262,7 +2262,7 @@ final class SyncRunTest extends TestCase {
 				if ( $value === $part['value_before'] ) {
 					++$kept;
 				} else {
-					self::assertSame( AB_MCP_Sync_Run::VALUE_CUT, $part['value_before'] );
+					self::assertSame( AB_MCP_Sync_Run::value_cut(), $part['value_before'] );
 					++$cut;
 				}
 			}
@@ -2272,12 +2272,12 @@ final class SyncRunTest extends TestCase {
 		// The marks count against the budget as well (Codex round 8): past it
 		// even for a mark, the value is left out; the answer never carries
 		// more than ANSWER_VALUE_BYTES of values before.
-		self::assertSame( intdiv( 16384 - 16000, strlen( AB_MCP_Sync_Run::VALUE_CUT ) ), $cut );
+		self::assertSame( intdiv( 16384 - 16000, strlen( AB_MCP_Sync_Run::value_cut() ) ), $cut );
 		self::assertLessThanOrEqual( 16384, $bytes );
 		self::assertArrayNotHasKey( 'value_before', $capped[0]['parts']['parts'][0], 'The oldest values are left out past the budget.' );
 		self::assertSame( $value, $capped[19]['parts']['parts'][0]['value_before'], 'The newest step keeps its values.' );
 		self::assertSame( $value, $capped[12]['parts']['parts'][0]['value_before'] );
-		self::assertSame( AB_MCP_Sync_Run::VALUE_CUT, $capped[11]['parts']['parts'][0]['value_before'], 'The first past the budget say so.' );
+		self::assertSame( AB_MCP_Sync_Run::value_cut(), $capped[11]['parts']['parts'][0]['value_before'], 'The first past the budget say so.' );
 		self::assertArrayNotHasKey( 'value_before', $capped[0]['result']['parts'][0] );
 		self::assertSame( array(), AB_MCP_Sync_Run::cap_values( array() ) );
 		// Every value before is checked once more as it leaves (Codex round 9):
@@ -2718,7 +2718,7 @@ final class SyncRunTest extends TestCase {
 		$denied  = array( 'unfiltered_html' );
 		$refused = AB_MCP_Sync_Post_Writer::precheck( $builder, 12, $ctx['now'] );
 		self::assertSame( 'ab_mcp_sync_rights', $refused->get_error_code() );
-		self::assertStringContainsString( 'page-builder meta key panels_data (unfiltered_html)', $refused->get_error_message() );
+		self::assertStringContainsString( 'This account may not write the page-builder meta key panels_data on this site (unfiltered_html).', $refused->get_error_message() );
 		$denied = array();
 		self::assertTrue( AB_MCP_Sync_Post_Writer::precheck( $builder, 12, $ctx['now'] ) );
 		// Every written value through sanitize_meta() (decision 17).

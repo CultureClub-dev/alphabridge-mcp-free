@@ -29,8 +29,9 @@
  * Database rights and the criteria of a clone are those of Z9a; a run
  * writes no table of its own.
  *
- * Messages are English without gettext, as the other classes of the
- * takeover; each names the way.
+ * Refusals and errors are gettext texts in the language of the site, each
+ * naming the way; codes, states, kinds and parameters stay as the tools
+ * name them.
  *
  * @package AlphaBridge_MCP
  */
@@ -204,9 +205,10 @@ final class AB_MCP_Sync_Resources {
 		// Space on the disk of the store.
 		$free = $m['free'];
 		if ( null === $free ) {
-			$criteria[] = self::criterion( 'space', 'unknown', $needed, self::INSUFFICIENT, 'Let PHP ask the free space of the disk (disk_free_space()), which this server refuses.' );
+			$criteria[] = self::criterion( 'space', 'unknown', $needed, self::INSUFFICIENT, __( 'Let PHP ask the free space of the disk (disk_free_space()), which this server refuses.', 'alphabridge-mcp' ) );
 		} else {
-			$criteria[] = self::criterion( 'space', (int) $free, $needed + AB_MCP_Store_Budget::RESERVE, self::level( (float) $free, (float) ( $needed + AB_MCP_Store_Budget::RESERVE ) ), sprintf( 'Free at least %s on the disk of the site (%s free now).', self::human( $needed + AB_MCP_Store_Budget::RESERVE ), self::human( (int) $free ) ) );
+			/* translators: 1: space needed (such as 1.5 GB), 2: space free now. */
+			$criteria[] = self::criterion( 'space', (int) $free, $needed + AB_MCP_Store_Budget::RESERVE, self::level( (float) $free, (float) ( $needed + AB_MCP_Store_Budget::RESERVE ) ), sprintf( __( 'Free at least %1$s on the disk of the site (%2$s free now).', 'alphabridge-mcp' ), self::human( $needed + AB_MCP_Store_Budget::RESERVE ), self::human( (int) $free ) ) );
 		}
 
 		// Time per request.
@@ -219,7 +221,8 @@ final class AB_MCP_Sync_Resources {
 			if ( self::INSUFFICIENT === $level && $m['time_limit_settable'] ) {
 				$level = self::TIGHT_LEVEL;
 			}
-			$criteria[] = self::criterion( 'time', $limit, self::MIN_TIME, $level, sprintf( 'Raise the PHP time limit (max_execution_time) to at least %d s (today %d s); at Infomaniak under Advanced → PHP | Apache.', self::MIN_TIME, $limit ) );
+			/* translators: 1: seconds needed, 2: seconds of the limit today. */
+			$criteria[] = self::criterion( 'time', $limit, self::MIN_TIME, $level, sprintf( __( 'Raise the PHP time limit (max_execution_time) to at least %1$d s (today %2$d s); at Infomaniak under Advanced → PHP | Apache.', 'alphabridge-mcp' ), self::MIN_TIME, $limit ) );
 		}
 
 		// Memory.
@@ -227,7 +230,8 @@ final class AB_MCP_Sync_Resources {
 		if ( $memory < 0 ) {
 			$criteria[] = self::criterion( 'memory', -1, self::MIN_MEMORY, self::OK, '' );
 		} else {
-			$criteria[] = self::criterion( 'memory', $memory, self::MIN_MEMORY, self::level( (float) $memory, (float) self::MIN_MEMORY ), sprintf( 'Raise the PHP memory limit (memory_limit) to at least %s (today %s).', self::human( self::MIN_MEMORY ), self::human( $memory ) ) );
+			/* translators: 1: memory needed (such as 256 MB), 2: memory limit today. */
+			$criteria[] = self::criterion( 'memory', $memory, self::MIN_MEMORY, self::level( (float) $memory, (float) self::MIN_MEMORY ), sprintf( __( 'Raise the PHP memory limit (memory_limit) to at least %1$s (today %2$s).', 'alphabridge-mcp' ), self::human( self::MIN_MEMORY ), self::human( $memory ) ) );
 		}
 
 		// Tempo: the projected duration of the run's backups and reads.
@@ -236,7 +240,8 @@ final class AB_MCP_Sync_Resources {
 			$criteria[] = self::criterion( 'tempo', 0, self::TEMPO_MINUTES * 60, self::OK, '' );
 		} else {
 			$projected  = (int) ceil( $seconds * max( 1, (int) $bytes ) / self::TEMPO_BYTES ) + (int) ceil( (float) $m['rows_seconds'] );
-			$criteria[] = self::criterion( 'tempo', $projected, self::TEMPO_MINUTES * 60, $projected > self::TEMPO_MINUTES * 60 ? self::TIGHT_LEVEL : self::OK, sprintf( 'The run is projected to take %d s on this server; it goes on over several calls.', $projected ) );
+			/* translators: %d: seconds. */
+			$criteria[] = self::criterion( 'tempo', $projected, self::TEMPO_MINUTES * 60, $projected > self::TEMPO_MINUTES * 60 ? self::TIGHT_LEVEL : self::OK, sprintf( __( 'The run is projected to take %d s on this server; it goes on over several calls.', 'alphabridge-mcp' ), $projected ) );
 		}
 
 		$level = self::OK;
@@ -270,7 +275,8 @@ final class AB_MCP_Sync_Resources {
 		}
 		return new WP_Error(
 			'ab_mcp_sync_run_resources',
-			sprintf( 'Nothing began: the means of this site do not carry a takeover run to its end, and a run that stops halfway would leave the site in between. Two ways: 1. Set staging up with the host first: %s Then call wp_site_push again (action=plan). 2. Work directly on the live site with the protection as before (undo, confirmation): switch «Staging first» off for this site on the page AlphaBridge → Staging, or answer the question of «Staging first» with staging_acknowledged.', implode( ' ', $changes ) ),
+			/* translators: %s: the changes at the host, each a whole sentence. */
+			sprintf( __( 'Nothing began: the means of this site do not carry a takeover run to its end, and a run that stops halfway would leave the site in between. Two ways: 1. Set staging up with the host first: %s Then call wp_site_push again (action=plan). 2. Work directly on the live site with the protection as before (undo, confirmation): switch «Staging first» off for this site on the page AlphaBridge → Staging, or answer the question of «Staging first» with staging_acknowledged.', 'alphabridge-mcp' ), implode( ' ', $changes ) ),
 			array( 'resources' => $check )
 		);
 	}

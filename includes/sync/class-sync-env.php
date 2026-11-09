@@ -78,8 +78,11 @@
  * compared, with why (fail closed). No hash and no value of a file in an
  * entry; a held name by its SHA-256 with held.
  *
- * Messages are English without gettext, as the other classes of the
- * takeover.
+ * Refusals and errors are gettext texts in the language of the site, each
+ * naming the way; codes, states, kinds and parameters stay as the tools
+ * name them. The words of the report (reasons of a lock, the why of a
+ * decision, the words of the environment) stay English: they are compared
+ * across the two sites and go into the hashes of the report and the plan.
  *
  * @package AlphaBridge_MCP
  */
@@ -321,11 +324,11 @@ final class AB_MCP_Sync_Env {
 			try {
 				$walk = bin2hex( random_bytes( 16 ) );
 			} catch ( Throwable $e ) {
-				return new WP_Error( 'ab_mcp_sync_env_random', 'The environment was not read: PHP has no source of random bytes on this server. Ask the host to check the PHP installation, then call again.' );
+				return new WP_Error( 'ab_mcp_sync_env_random', __( 'The environment was not read: PHP has no source of random bytes on this server. Ask the host to check the PHP installation, then call again.', 'alphabridge-mcp' ) );
 			}
 			$state = self::fresh( $walk, 1 );
 		} elseif ( ! self::state_shaped( $state ) ) {
-			return new WP_Error( 'ab_mcp_sync_env_state', 'The place to go on from in the environment is not one this site wrote. Begin anew: call wp_site_export with purpose=env without a cursor, or wp_site_diff with the packages again.' );
+			return new WP_Error( 'ab_mcp_sync_env_state', __( 'The place to go on from in the environment is not one this site wrote. Begin anew: call wp_site_export with purpose=env without a cursor, or wp_site_diff with the packages again.', 'alphabridge-mcp' ) );
 		}
 		$deadline = self::now() + (float) $budget;
 		$max      = max( 2, (int) $max );
@@ -2008,7 +2011,8 @@ final class AB_MCP_Sync_Env {
 			case 'files':
 				if ( ! $s['complete'] || ! $l['complete'] ) {
 					$side = $s['complete'] ? $l : $s;
-					return array( 'not_compared', array(), sprintf( 'The %1$s could not be counted to its end on %2$s (%3$s).', $ref, $s['complete'] ? 'this site' : 'the staging site', self::why_files( (string) $side['why'] ) ) );
+					// One whole sentence a side, as AB_MCP_Sync_Said knows it.
+					return array( 'not_compared', array(), sprintf( $s['complete'] ? 'The %1$s could not be counted to its end on this site (%2$s).' : 'The %1$s could not be counted to its end on the staging site (%2$s).', $ref, self::why_files( (string) $side['why'] ) ) );
 				}
 				$fields = array( 'files', 'bytes' );
 				$same   = 'counted';

@@ -78,8 +78,9 @@
  * included) are locked (*:mutual_references, Z11c), and whatever needs a
  * locked or waiting target waits for it.
  *
- * Messages are English without gettext, as the other classes of the
- * takeover.
+ * Its words (the reason of a lock, the why of a decision, the words of the
+ * environment) stay English: they are compared across the two sites and go
+ * into the hashes of the report and the plan.
  *
  * @package AlphaBridge_MCP
  */

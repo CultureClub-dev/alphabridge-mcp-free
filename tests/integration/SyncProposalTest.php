@@ -761,7 +761,7 @@ final class SyncProposalTest extends TestCase {
 			'The same object is chosen twice'
 		);
 		$skip = self::refused( self::gated( $c( array( 'categories' => array( 'realign' ) ) ) ), 'ab_mcp_sync_pairs_nothing' );
-		self::assertStringContainsString( 'entry ' . $realign[0]['n'] . ': The object is not in the inventory of the staging site.', $skip );
+		self::assertStringContainsString( 'Entry ' . $realign[0]['n'] . ': The object is not in the inventory of the staging site.', $skip );
 		self::assertSame( array(), array_filter( self::pair_rows(), static fn( $r ) => 'proposal' === $r['base_origin'] ), 'Nothing was paired.' );
 
 		$done = self::confirmed(
@@ -2450,7 +2450,7 @@ final class SyncProposalTest extends TestCase {
 		);
 		$preview = self::gated( $args );
 		self::assertSame( array( 'made_active' => 1 ), $preview['preview']['counts'] );
-		self::assertSame( array( array( 'entry' => $realign['n'], 'reason' => 'pair ' . $pair['id'] . ' changed since the proposal' ) ), $preview['preview']['skipped'] );
+		self::assertSame( array( array( 'entry' => $realign['n'], 'reason' => 'Pair ' . $pair['id'] . ' changed since the proposal.' ) ), $preview['preview']['skipped'] );
 		$done = self::gated( $args + array( 'confirm_token' => $preview['confirm_token'] ) );
 		self::assertIsArray( $done );
 		self::assertSame( 'residual', AB_MCP_Sync_Pairs::get( $pair['id'] )['state'], 'Left as the other request wrote it.' );

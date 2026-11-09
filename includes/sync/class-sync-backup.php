@@ -19,8 +19,9 @@
  *
  * Nothing here reads a value of the site: the kinds hand the rows over.
  *
- * Messages are English without gettext, as the other classes of the
- * takeover; each names the way.
+ * Messages are in gettext, in the language of the site, as the other
+ * classes of the takeover; each names the way. Codes and machine values
+ * (kinds, purposes, parameters, fields) stay as the tools name them.
  *
  * @package AlphaBridge_MCP
  */
@@ -59,7 +60,7 @@ final class AB_MCP_Sync_Backup {
 	public static function group( $run_id ) {
 		$run_id = (int) $run_id;
 		if ( $run_id < 1 ) {
-			return new WP_Error( 'ab_mcp_sync_backup_run', 'A backup belongs to a run. Pass its run_id.' );
+			return new WP_Error( 'ab_mcp_sync_backup_run', __( 'A backup belongs to a run. Pass its run_id.', 'alphabridge-mcp' ) );
 		}
 		if ( isset( self::$groups[ $run_id ] ) ) {
 			return self::$groups[ $run_id ];
@@ -110,10 +111,11 @@ final class AB_MCP_Sync_Backup {
 			)
 		);
 		if ( '' === $text ) {
-			return new WP_Error( 'ab_mcp_sync_backup_encode', 'What the step replaces cannot be written as a backup (a value JSON cannot hold), so the step writes nothing. Use the editor in wp-admin to take this object over by hand.' );
+			return new WP_Error( 'ab_mcp_sync_backup_encode', __( 'What the step replaces cannot be written as a backup (a value JSON cannot hold), so the step writes nothing. Use the editor in wp-admin to take this object over by hand.', 'alphabridge-mcp' ) );
 		}
 		if ( strlen( $text ) > self::MAX_BYTES ) {
-			return new WP_Error( 'ab_mcp_sync_backup_too_large', sprintf( 'The backup of what the step replaces would hold %1$d bytes, and one backup holds at most %2$d, so the step writes nothing. Use the editor in wp-admin to take the object over by hand.', strlen( $text ), self::MAX_BYTES ) );
+			/* translators: 1: size of the backup in bytes, 2: the most bytes one backup holds. */
+			return new WP_Error( 'ab_mcp_sync_backup_too_large', sprintf( __( 'The backup of what the step replaces would hold %1$d bytes, and one backup holds at most %2$d, so the step writes nothing. Use the editor in wp-admin to take the object over by hand.', 'alphabridge-mcp' ), strlen( $text ), self::MAX_BYTES ) );
 		}
 		$put = AB_MCP_Protected_Store::put( 'backups', $gid, (string) $name, $text );
 		if ( is_wp_error( $put ) ) {
@@ -127,7 +129,7 @@ final class AB_MCP_Sync_Backup {
 		// Read back against the hash before anything is written to the site.
 		$back = AB_MCP_Protected_Store::get( 'backups', $gid, $ref['name'], $ref['sha256'] );
 		if ( ! is_string( $back ) || ! hash_equals( hash( 'sha256', $text ), hash( 'sha256', $back ) ) ) {
-			return new WP_Error( 'ab_mcp_sync_backup_readback', 'The backup of what the step replaces did not read back from the protected store as it was written, so the step writes nothing. Ask the host to check the disk of the protected store, then call again.' );
+			return new WP_Error( 'ab_mcp_sync_backup_readback', __( 'The backup of what the step replaces did not read back from the protected store as it was written, so the step writes nothing. Ask the host to check the disk of the protected store, then call again.', 'alphabridge-mcp' ) );
 		}
 		return $ref;
 	}
@@ -172,7 +174,8 @@ final class AB_MCP_Sync_Backup {
 			return $bookings;
 		}
 		if ( ! isset( $bookings[ $run_id ] ) ) {
-			return new WP_Error( 'ab_mcp_sync_backup_booking', sprintf( 'The run %d has no booking in the protected store, so no backup is written and nothing of the object. Plan the run again (its check before the first write books what the run needs).', $run_id ) );
+			/* translators: %d: run number. */
+			return new WP_Error( 'ab_mcp_sync_backup_booking', sprintf( __( 'The run %d has no booking in the protected store, so no backup is written and nothing of the object. Plan the run again (its check before the first write books what the run needs).', 'alphabridge-mcp' ), $run_id ) );
 		}
 		$booked = (int) $bookings[ $run_id ]['bytes'];
 		$used   = 0;
@@ -187,7 +190,8 @@ final class AB_MCP_Sync_Backup {
 			}
 		}
 		if ( $used + $bytes > $booked ) {
-			return new WP_Error( 'ab_mcp_sync_backup_budget', sprintf( 'The backup of this object would take %1$d bytes, and the run booked %2$d of which its backups hold %3$d already: it would pass the booking, so nothing is written for the object. Plan the run again (the plan reserves from the objects of this site as they are now), or choose fewer objects for one run.', $bytes, $booked, $used ), array( 'bytes' => $bytes, 'booked' => $booked, 'used' => $used ) );
+			/* translators: 1: size of the backup in bytes, 2: bytes the run booked, 3: bytes its backups hold already. */
+			return new WP_Error( 'ab_mcp_sync_backup_budget', sprintf( __( 'The backup of this object would take %1$d bytes, and the run booked %2$d of which its backups hold %3$d already: it would pass the booking, so nothing is written for the object. Plan the run again (the plan reserves from the objects of this site as they are now), or choose fewer objects for one run.', 'alphabridge-mcp' ), $bytes, $booked, $used ), array( 'bytes' => $bytes, 'booked' => $booked, 'used' => $used ) );
 		}
 		return true;
 	}
@@ -205,7 +209,7 @@ final class AB_MCP_Sync_Backup {
 			return $gid;
 		}
 		if ( ! isset( $ref['name'], $ref['sha256'] ) ) {
-			return new WP_Error( 'ab_mcp_sync_backup_ref', 'The journal names no backup for this part, so nothing of it is put back. Check the object in wp-admin.' );
+			return new WP_Error( 'ab_mcp_sync_backup_ref', __( 'The journal names no backup for this part, so nothing of it is put back. Check the object in wp-admin.', 'alphabridge-mcp' ) );
 		}
 		$text = AB_MCP_Protected_Store::get( 'backups', $gid, (string) $ref['name'], (string) $ref['sha256'] );
 		if ( is_wp_error( $text ) ) {
@@ -216,7 +220,7 @@ final class AB_MCP_Sync_Backup {
 		// what the row held, never the marker (GitHub Codex round 2, P2).
 		$data = AB_MCP_Sync_Canon::decode( $text, 64 );
 		if ( ! is_array( $data ) || self::FORMAT !== ( $data['format'] ?? null ) || (int) $run_id !== ( $data['run_id'] ?? null ) || ! isset( $data['data'] ) || ! is_array( $data['data'] ) ) {
-			return new WP_Error( 'ab_mcp_sync_backup_shape', 'The backup is not one this run wrote (or a value in it does not read back as it was written), so nothing of it is put back. Check the object in wp-admin.' );
+			return new WP_Error( 'ab_mcp_sync_backup_shape', __( 'The backup is not one this run wrote (or a value in it does not read back as it was written), so nothing of it is put back. Check the object in wp-admin.', 'alphabridge-mcp' ) );
 		}
 		return $data['data'];
 	}

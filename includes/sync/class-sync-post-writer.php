@@ -75,8 +75,10 @@
  * Reads for comparison come from the rows (AB_MCP_Sync_Rows); the writes and
  * the rights go through WordPress, named one by one in SyncSafeCallsTest.
  *
- * Messages are English without gettext, as the other classes of the
- * takeover; each names the way.
+ * Messages are in gettext, in the language of the site as they arise (a
+ * refusal, a note of the journal); each names the way. Codes, states,
+ * kinds and the other values the tools name stay as they are, and no
+ * translated text is compared, hashed or part of a print.
  *
  * @package AlphaBridge_MCP
  */
@@ -232,7 +234,8 @@ final class AB_MCP_Sync_Post_Writer {
 					'stage'  => (string) $answer['stage'],
 					'reason' => (string) $answer['reason'],
 				),
-				sprintf( 'post type %s', $type )
+				/* translators: %s: a post type. */
+				sprintf( __( 'Post type %s.', 'alphabridge-mcp' ), $type )
 			);
 		}
 		if ( ! in_array( $type, self::TYPES, true ) ) {
@@ -240,7 +243,8 @@ final class AB_MCP_Sync_Post_Writer {
 			// additional CSS) is never written by the engine of the kind post
 			// (post:other_kind); since branch 9b every core type of the kind
 			// post is one of TYPES.
-			return self::locked( 'post:other_kind', sprintf( 'post type %s', $type ) );
+			/* translators: %s: a post type. */
+			return self::locked( 'post:other_kind', sprintf( __( 'Post type %s.', 'alphabridge-mcp' ), $type ) );
 		}
 		// What the canonical form of the staging object found (a page builder
 		// that is not released, decision 31; a value it cannot read; a
@@ -250,7 +254,7 @@ final class AB_MCP_Sync_Post_Writer {
 			return $held;
 		}
 		if ( ! isset( $line['content']['row'], $line['content']['meta'], $line['content']['terms'], $line['form'] ) || ! is_array( $line['form'] ) ) {
-			return self::locked( 'post:content_missing', 'the package carries no content of the object (a row of it could not be read on the staging site)' );
+			return self::locked( 'post:content_missing', __( 'The package carries no content of the object (a row of it could not be read on the staging site).', 'alphabridge-mcp' ) );
 		}
 		$row = array();
 		foreach ( $line['content']['row'] as $column => $value ) {
@@ -258,11 +262,12 @@ final class AB_MCP_Sync_Post_Writer {
 		}
 		foreach ( self::WRITTEN_COLUMNS as $column ) {
 			if ( ! array_key_exists( $column, $row ) ) {
-				return self::locked( 'post:content_missing', sprintf( 'the package names no column %s', $column ) );
+				/* translators: %s: a column of the table posts. */
+				return self::locked( 'post:content_missing', sprintf( __( 'The package names no column %s.', 'alphabridge-mcp' ), $column ) );
 			}
 		}
 		if ( '' !== $row['post_password'] ) {
-			return self::locked( 'post:password_protected', 'post_password' );
+			return self::locked( 'post:password_protected', __( 'The object of the staging site has a password (post_password).', 'alphabridge-mcp' ) );
 		}
 		$status = 'create' === $item['op'] || 'update' === $item['op'] ? $row['post_status'] : '';
 		if ( ! in_array( $status, self::STATUSES, true ) ) {
@@ -270,7 +275,13 @@ final class AB_MCP_Sync_Post_Writer {
 			// auto-draft is no content, never taken over (post:auto_draft);
 			// any other status waits for its field rule (post:status_rule).
 			$key = 'trash' === $status ? 'post:in_trash' : ( 'auto-draft' === $status ? 'post:auto_draft' : 'post:status_rule' );
-			return self::locked( $key, sprintf( 'post status %s', '' === $status ? '(none)' : $status ) );
+			return self::locked(
+				$key,
+				'' === $status
+					? __( 'Post status (none).', 'alphabridge-mcp' )
+					/* translators: %s: a post status (trash, auto-draft, …). */
+					: sprintf( __( 'Post status %s.', 'alphabridge-mcp' ), $status )
+			);
 		}
 		if ( ! empty( $item['as_draft'] ) ) {
 			$status = 'draft';
@@ -291,7 +302,8 @@ final class AB_MCP_Sync_Post_Writer {
 				$mapped           = 0;
 			}
 			if ( null === $mapped ) {
-				return self::locked( 'post:reference_unmapped', sprintf( 'post_parent %d of the staging site', $parent ) );
+				/* translators: %d: post ID on the staging site. */
+				return self::locked( 'post:reference_unmapped', sprintf( __( 'The post_parent %d of the staging site has no counterpart on this site.', 'alphabridge-mcp' ), $parent ) );
 			}
 			$parent = $mapped;
 		}
@@ -301,7 +313,13 @@ final class AB_MCP_Sync_Post_Writer {
 			$login = self::login_of( $line, 'post_author' );
 			$user  = null === $login ? null : self::user_by_login( $login, $ctx );
 			if ( null === $user ) {
-				return self::locked( 'post:author_unknown', null === $login ? 'post_author' : sprintf( 'login %s', $login ) );
+				return self::locked(
+					'post:author_unknown',
+					null === $login
+						? __( 'The author of the object of the staging site has no login in the package (post_author).', 'alphabridge-mcp' )
+						/* translators: %s: a login name. */
+						: sprintf( __( 'This site has no account with the login %s.', 'alphabridge-mcp' ), $login )
+				);
 			}
 			$author = (int) $user;
 		}
@@ -342,7 +360,8 @@ final class AB_MCP_Sync_Post_Writer {
 				continue;
 			}
 			if ( 'create' === $item['op'] && ! self::new_meta_allowed( $key, $type ) ) {
-				return self::locked( 'post:create_with_object_meta', sprintf( 'meta key %s (protected, or a plugin answers its right at the object only)', $key ) );
+				/* translators: %s: meta key. */
+				return self::locked( 'post:create_with_object_meta', sprintf( __( 'Meta key %s (protected, or a plugin answers its right at the object only).', 'alphabridge-mcp' ), $key ) );
 			}
 			if ( '_thumbnail_id' === $key ) {
 				// The featured image: the attachment by its pair (decision 25);
@@ -356,7 +375,8 @@ final class AB_MCP_Sync_Post_Writer {
 					$mapped            = 0;
 				}
 				if ( null === $mapped || isset( $meta[ $key ] ) ) {
-					return self::locked( 'post:reference_unmapped', sprintf( 'the featured image %s of the staging site', $value ) );
+					/* translators: %s: post ID of the image on the staging site. */
+					return self::locked( 'post:reference_unmapped', sprintf( __( 'The featured image %s of the staging site.', 'alphabridge-mcp' ), $value ) );
 				}
 				$meta[ $key ][] = (string) (int) $mapped;
 				continue;
@@ -377,7 +397,8 @@ final class AB_MCP_Sync_Post_Writer {
 		foreach ( $line['content']['terms'] as $term ) {
 			$taxonomy = self::bytes( $term['taxonomy'] );
 			if ( ! in_array( $taxonomy, self::TAXONOMIES, true ) ) {
-				return self::locked( 'post:taxonomy_rule', sprintf( 'taxonomy %s', $taxonomy ) );
+				/* translators: %s: a taxonomy. */
+				return self::locked( 'post:taxonomy_rule', sprintf( __( 'Taxonomy %s.', 'alphabridge-mcp' ), $taxonomy ) );
 			}
 			// A relationship of the staging post with a term_order other than
 			// 0: the target carries the order (its canonical form, the hash
@@ -388,14 +409,16 @@ final class AB_MCP_Sync_Post_Writer {
 			// P2: before, the order was dropped here, the step wrote and the
 			// object deviated by its hash).
 			if ( isset( $term['term_order'] ) && 0 !== (int) $term['term_order'] ) {
-				return self::locked( 'post:term_order', sprintf( 'the term %1$s of %2$s on the post of the staging site carries the term_order %3$d', self::bytes( $term['slug'] ), $taxonomy, (int) $term['term_order'] ) );
+				/* translators: 1: term slug, 2: taxonomy, 3: the number term_order holds. */
+				return self::locked( 'post:term_order', sprintf( __( 'The term %1$s of %2$s on the post of the staging site carries the term_order %3$d.', 'alphabridge-mcp' ), self::bytes( $term['slug'] ), $taxonomy, (int) $term['term_order'] ) );
 			}
 			if ( in_array( $taxonomy, self::IDENTITY_TAXONOMIES, true ) ) {
 				// The theme and the area are read by the name of their term
 				// (NAMED_TAXONOMIES) and written by its slug: a term whose name
 				// is not its slug would read back as another theme or area here.
 				if ( in_array( $taxonomy, self::NAMED_TAXONOMIES, true ) && ( ! isset( $term['name'] ) || self::bytes( $term['name'] ) !== self::bytes( $term['slug'] ) ) ) {
-					return self::locked( 'post:taxonomy_rule', sprintf( 'the term %1$s of %2$s on the post of the staging site is named %3$s, and WordPress reads it by its name', self::bytes( $term['slug'] ), $taxonomy, isset( $term['name'] ) ? self::bytes( $term['name'] ) : '(none)' ) );
+					/* translators: 1: term slug, 2: taxonomy, 3: term name. */
+					return self::locked( 'post:taxonomy_rule', sprintf( __( 'The term %1$s of %2$s on the post of the staging site is named %3$s, and WordPress reads it by its name.', 'alphabridge-mcp' ), self::bytes( $term['slug'] ), $taxonomy, isset( $term['name'] ) ? self::bytes( $term['name'] ) : '(none)' ) );
 				}
 				$terms[ $taxonomy ][] = self::bytes( $term['slug'] );
 				continue;
@@ -411,7 +434,8 @@ final class AB_MCP_Sync_Post_Writer {
 				continue;
 			}
 			if ( null === $mapped ) {
-				return self::locked( 'post:reference_unmapped', sprintf( 'term %d of the taxonomy %s of the staging site', (int) $term['term_id'], $taxonomy ) );
+				/* translators: 1: term ID on the staging site, 2: taxonomy. */
+				return self::locked( 'post:reference_unmapped', sprintf( __( 'Term %1$d of the taxonomy %2$s of the staging site.', 'alphabridge-mcp' ), (int) $term['term_id'], $taxonomy ) );
 			}
 			$terms[ $taxonomy ][] = (int) $mapped;
 		}
@@ -499,26 +523,32 @@ final class AB_MCP_Sync_Post_Writer {
 		$type = $prepared['type'];
 		$pto  = get_post_type_object( $type );
 		if ( ! is_object( $pto ) || ! isset( $pto->cap ) ) {
-			return self::locked( 'post:type_unregistered', sprintf( 'the post type %s is not registered on this site', $type ) );
+			/* translators: %s: a post type. */
+			return self::locked( 'post:type_unregistered', sprintf( __( 'The post type %s is not registered on this site.', 'alphabridge-mcp' ), $type ) );
 		}
 		$live = null;
 		if ( null !== $live_id ) {
 			$live = AB_MCP_Sync_Rows::post( (int) $live_id );
 			if ( ! is_array( $live ) ) {
-				return new WP_Error( 'ab_mcp_sync_target_gone', sprintf( 'The post %d of this site is no longer there, so nothing is written for it. Make a new report (wp_site_diff) and plan again.', (int) $live_id ) );
+				/* translators: %d: post ID. */
+				return new WP_Error( 'ab_mcp_sync_target_gone', sprintf( __( 'The post %d of this site is no longer there, so nothing is written for it. Make a new report (wp_site_diff) and plan again.', 'alphabridge-mcp' ), (int) $live_id ) );
 			}
 			if ( ! current_user_can( 'edit_post', (int) $live_id ) ) {
-				return self::rights( sprintf( 'edit the %1$s %2$d (edit_post)', $type, (int) $live_id ) );
+				/* translators: 1: post type, 2: post ID. */
+				return self::rights( sprintf( __( 'This account may not edit the %1$s %2$d on this site (edit_post).', 'alphabridge-mcp' ), $type, (int) $live_id ) );
 			}
 		} elseif ( ! current_user_can( $pto->cap->create_posts ) ) {
-			return self::rights( sprintf( 'create a %1$s (%2$s)', $type, (string) $pto->cap->create_posts ) );
+			/* translators: 1: post type, 2: a capability of WordPress. */
+			return self::rights( sprintf( __( 'This account may not create a %1$s on this site (%2$s).', 'alphabridge-mcp' ), $type, (string) $pto->cap->create_posts ) );
 		}
 		$status = $prepared['status'];
 		if ( in_array( $status, array( 'publish', 'future', 'private' ), true ) && ( null === $live || $live['post_status'] !== $status ) && ! current_user_can( $pto->cap->publish_posts ) ) {
-			return self::rights( sprintf( 'publish a %1$s (%2$s)', $type, (string) $pto->cap->publish_posts ) );
+			/* translators: 1: post type, 2: a capability of WordPress. */
+			return self::rights( sprintf( __( 'This account may not publish a %1$s on this site (%2$s).', 'alphabridge-mcp' ), $type, (string) $pto->cap->publish_posts ) );
 		}
 		if ( (int) $prepared['postarr']['post_author'] !== (int) get_current_user_id() && ! current_user_can( $pto->cap->edit_others_posts ) ) {
-			return self::rights( sprintf( 'write a %1$s of another author (%2$s)', $type, (string) $pto->cap->edit_others_posts ) );
+			/* translators: 1: post type, 2: a capability of WordPress. */
+			return self::rights( sprintf( __( 'This account may not write a %1$s of another author on this site (%2$s).', 'alphabridge-mcp' ), $type, (string) $pto->cap->edit_others_posts ) );
 		}
 		$current = null;
 		if ( null !== $live_id ) {
@@ -584,11 +614,13 @@ final class AB_MCP_Sync_Post_Writer {
 			if ( is_array( $current ) ) {
 				$may = self::meta_right( (int) $live_id, $key, self::targets( $prepared, $key ), self::meta_values( $current, $key ) );
 				if ( true !== $may ) {
-					return self::locked( '*:meta_without_rule', sprintf( 'meta key %1$s of the post on this site: %2$s', $key, $may ) );
+					/* translators: 1: meta key, 2: the capability of WordPress refused (edit_post_meta, …). */
+					return self::locked( '*:meta_without_rule', sprintf( __( 'Meta key %1$s of the post on this site: %2$s refused.', 'alphabridge-mcp' ), $key, $may ) );
 				}
 			}
 			if ( null !== AB_MCP_Builders::markup_meta_refusal( $key ) ) {
-				return self::rights( sprintf( 'write the page-builder meta key %s (unfiltered_html)', $key ) );
+				/* translators: %s: meta key. */
+				return self::rights( sprintf( __( 'This account may not write the page-builder meta key %s on this site (unfiltered_html).', 'alphabridge-mcp' ), $key ) );
 			}
 		}
 		// The featured image (decision 28): set_post_thumbnail() keeps the id
@@ -598,7 +630,8 @@ final class AB_MCP_Sync_Post_Writer {
 		if ( in_array( '_thumbnail_id', $keys, true ) && isset( $prepared['meta']['_thumbnail_id'][0] ) && empty( $prepared['thumbnail_pending'] ) ) {
 			$image = (int) $prepared['meta']['_thumbnail_id'][0];
 			if ( 'attachment' !== AB_MCP_Sync_Rows::post_type_of( $image ) || '' === (string) wp_get_attachment_image( $image, 'thumbnail' ) ) {
-				return self::locked( 'post:thumbnail', sprintf( 'the attachment %d of this site the featured image names is no image WordPress shows', $image ) );
+				/* translators: %d: attachment ID. */
+				return self::locked( 'post:thumbnail', sprintf( __( 'The attachment %d of this site the featured image names is no image WordPress shows.', 'alphabridge-mcp' ), $image ) );
 			}
 		}
 		// Every written value through sanitize_meta() as update_metadata()
@@ -609,7 +642,8 @@ final class AB_MCP_Sync_Post_Writer {
 		foreach ( $keys as $key ) {
 			foreach ( isset( $prepared['meta'][ $key ] ) ? $prepared['meta'][ $key ] : array() as $value ) {
 				if ( self::db_form( sanitize_meta( (string) $key, $value, 'post', $type ) ) !== self::stored_form( $value ) ) {
-					return self::locked( 'post:sanitizer', sprintf( 'meta key %s (sanitize_meta() changes its value)', $key ) );
+					/* translators: %s: meta key. */
+					return self::locked( 'post:sanitizer', sprintf( __( 'Meta key %s (sanitize_meta() changes its value).', 'alphabridge-mcp' ), $key ) );
 				}
 			}
 		}
@@ -620,7 +654,8 @@ final class AB_MCP_Sync_Post_Writer {
 		// the boundary asks it with the template made).
 		if ( isset( $prepared['postarr']['page_template'] ) && 'default' !== $prepared['postarr']['page_template'] && empty( $prepared['template_pending'] ) ) {
 			if ( ! self::template_offered( (string) $prepared['postarr']['page_template'], $type ) ) {
-				return self::locked( 'post:page_template', sprintf( 'the template %1$s for a %2$s', $prepared['postarr']['page_template'], $type ) );
+				/* translators: 1: page template, 2: post type. */
+				return self::locked( 'post:page_template', sprintf( __( 'The template %1$s for a %2$s.', 'alphabridge-mcp' ), $prepared['postarr']['page_template'], $type ) );
 			}
 		}
 		// The right to set the terms of every taxonomy the step touches
@@ -636,7 +671,8 @@ final class AB_MCP_Sync_Post_Writer {
 		}
 		foreach ( array_unique( $taxonomies ) as $taxonomy ) {
 			if ( ! taxonomy_exists( $taxonomy ) ) {
-				return self::locked( 'post:taxonomy_rule', sprintf( 'the taxonomy %s is not registered on this site', $taxonomy ) );
+				/* translators: %s: a taxonomy. */
+				return self::locked( 'post:taxonomy_rule', sprintf( __( 'The taxonomy %s is not registered on this site.', 'alphabridge-mcp' ), $taxonomy ) );
 			}
 			$may = self::term_right( $taxonomy, isset( $prepared['terms'][ $taxonomy ] ) ? $prepared['terms'][ $taxonomy ] : array() );
 			if ( true !== $may ) {
@@ -673,7 +709,8 @@ final class AB_MCP_Sync_Post_Writer {
 		// 0, as the core writes it, nothing changes.
 		foreach ( is_array( $current ) ? $current['terms'] : array() as $term ) {
 			if ( 0 !== (int) $term['term_order'] ) {
-				return self::locked( 'post:term_order', sprintf( 'the term %1$s of %2$s on the post of this site carries the term_order %3$d', (string) $term['slug'], (string) $term['taxonomy'], (int) $term['term_order'] ) );
+				/* translators: 1: term slug, 2: taxonomy, 3: the number term_order holds. */
+				return self::locked( 'post:term_order', sprintf( __( 'The term %1$s of %2$s on the post of this site carries the term_order %3$d.', 'alphabridge-mcp' ), (string) $term['slug'], (string) $term['taxonomy'], (int) $term['term_order'] ) );
 			}
 		}
 		// The status WordPress would store, from the very data handed over
@@ -681,11 +718,13 @@ final class AB_MCP_Sync_Post_Writer {
 		$gmt   = $prepared['columns']['post_date_gmt'];
 		$saved = AB_MCP_Tools_Content::saved_status( $type, $status, $gmt, (int) $now );
 		if ( $saved !== $status ) {
-			return self::locked( 'post:status_date', sprintf( 'WordPress would store %1$s for the status %2$s dated %3$s UTC', $saved, $status, $gmt ) );
+			/* translators: 1: the post status WordPress would store, 2: the post status of the staging site, 3: a date (UTC). */
+			return self::locked( 'post:status_date', sprintf( __( 'WordPress would store %1$s for the status %2$s dated %3$s UTC.', 'alphabridge-mcp' ), $saved, $status, $gmt ) );
 		}
 		$refusal = AB_MCP_Tools_Content::status_date_refusal( $type, null === $live ? null : $live['post_status'], $status, $gmt, true, (int) $now );
 		if ( '' !== $refusal ) {
-			return self::locked( 'post:status_date', sprintf( '%1$s dated %2$s UTC: %3$s', $status, $gmt, $refusal ) );
+			/* translators: 1: a post status, 2: a date (UTC), 3: why WordPress refuses it, as the code names it (would_publish, too_close, …). */
+			return self::locked( 'post:status_date', sprintf( __( 'The status %1$s dated %2$s UTC is refused: %3$s.', 'alphabridge-mcp' ), $status, $gmt, $refusal ) );
 		}
 		// A page of the top level that would be published or scheduled while
 		// a menu adds pages by itself (decision 21): the choice «as draft».
@@ -693,7 +732,8 @@ final class AB_MCP_Sync_Post_Writer {
 		// level (pending; the boundary checks it with the parent mapped).
 		$top = 0 === (int) $prepared['postarr']['post_parent'] && empty( $prepared['pending'] );
 		if ( 'page' === $type && $top && in_array( $status, array( 'publish', 'future' ), true ) && self::menu_adds_pages() ) {
-			return self::locked( 'post:menu_automatic', sprintf( 'the page would be %s at the top level', $status ) );
+			/* translators: %s: a post status. */
+			return self::locked( 'post:menu_automatic', sprintf( __( 'The page would be %s at the top level.', 'alphabridge-mcp' ), $status ) );
 		}
 		// The slug (branch 9): what WordPress would store for it, as
 		// wp_insert_post() makes it (slug_refusal()); with a pending parent
@@ -713,7 +753,8 @@ final class AB_MCP_Sync_Post_Writer {
 		$sanitized = (array) sanitize_post( $slashed + array( 'post_type' => $type ), 'db' );
 		foreach ( $fields as $field ) {
 			if ( ! isset( $sanitized[ $field ] ) || (string) $sanitized[ $field ] !== (string) $slashed[ $field ] ) {
-				return self::locked( 'post:sanitizer', sprintf( 'field %s', $field ) );
+				/* translators: %s: a column of the table posts. */
+				return self::locked( 'post:sanitizer', sprintf( __( 'Field %s.', 'alphabridge-mcp' ), $field ) );
 			}
 		}
 		return true;
@@ -732,11 +773,13 @@ final class AB_MCP_Sync_Post_Writer {
 		foreach ( array_unique( array_map( 'strval', $keys ) ) as $key ) {
 			$rows = AB_MCP_Undo_Meta::rows( 'post', (int) $live_id, (string) $key );
 			if ( null === $rows ) {
-				return new WP_Error( 'ab_mcp_sync_rows_unread', sprintf( 'The meta rows of the key %s of the post could not be read, so nothing is written for it. Try again; if it keeps failing, the database error log names the cause.', $key ) );
+				/* translators: %s: meta key. */
+				return new WP_Error( 'ab_mcp_sync_rows_unread', sprintf( __( 'The meta rows of the key %s of the post could not be read, so nothing is written for it. Try again; if it keeps failing, the database error log names the cause.', 'alphabridge-mcp' ), $key ) );
 			}
 			foreach ( $rows as $row ) {
 				if ( $row['key'] !== (string) $key ) {
-					return self::locked( 'post:meta_spelling', sprintf( 'the keys %1$s and %2$s of the post on this site are one key to the database (its collation compares them alike), and a write of one would change the other', (string) $key, (string) $row['key'] ) );
+					/* translators: 1: meta key, 2: another meta key. */
+					return self::locked( 'post:meta_spelling', sprintf( __( 'The keys %1$s and %2$s of the post on this site are one key to the database (its collation compares them alike), and a write of one would change the other.', 'alphabridge-mcp' ), (string) $key, (string) $row['key'] ) );
 				}
 			}
 		}
@@ -763,10 +806,12 @@ final class AB_MCP_Sync_Post_Writer {
 		$taxonomy = (string) $taxonomy;
 		$object   = get_taxonomy( $taxonomy );
 		if ( ! is_object( $object ) || ! isset( $object->cap->assign_terms, $object->cap->edit_terms ) ) {
-			return sprintf( 'assign the terms of %s (the taxonomy is not registered on this site, or names no right to assign its terms)', $taxonomy );
+			/* translators: %s: a taxonomy. */
+			return sprintf( __( 'This account may not assign the terms of %s on this site (the taxonomy is not registered on this site, or names no right to assign its terms).', 'alphabridge-mcp' ), $taxonomy );
 		}
 		if ( ! current_user_can( (string) $object->cap->assign_terms ) ) {
-			return sprintf( 'assign the terms of %1$s (%2$s)', $taxonomy, (string) $object->cap->assign_terms );
+			/* translators: 1: a taxonomy, 2: a capability of WordPress. */
+			return sprintf( __( 'This account may not assign the terms of %1$s on this site (%2$s).', 'alphabridge-mcp' ), $taxonomy, (string) $object->cap->assign_terms );
 		}
 		foreach ( self::target_term_keys( $taxonomy, $keys ) as $key ) {
 			if ( is_int( $key ) ) {
@@ -775,14 +820,16 @@ final class AB_MCP_Sync_Post_Writer {
 				$found = get_term_by( 'slug', (string) $key, $taxonomy );
 				if ( ! is_object( $found ) || ! isset( $found->term_id ) ) {
 					if ( ! current_user_can( (string) $object->cap->edit_terms ) ) {
-						return sprintf( 'make the term %1$s of %2$s, which this site has no term of yet (%3$s)', (string) $key, $taxonomy, (string) $object->cap->edit_terms );
+						/* translators: 1: term slug, 2: taxonomy, 3: a capability of WordPress. */
+						return sprintf( __( 'This account may not make the term %1$s of %2$s on this site, which has no term of it yet (%3$s).', 'alphabridge-mcp' ), (string) $key, $taxonomy, (string) $object->cap->edit_terms );
 					}
 					continue;
 				}
 				$id = (int) $found->term_id;
 			}
 			if ( ! current_user_can( 'assign_term', $id ) ) {
-				return sprintf( 'assign the term %1$d of %2$s (assign_term)', $id, $taxonomy );
+				/* translators: 1: term ID, 2: taxonomy. */
+				return sprintf( __( 'This account may not assign the term %1$d of %2$s on this site (assign_term).', 'alphabridge-mcp' ), $id, $taxonomy );
 			}
 		}
 		return true;
@@ -808,7 +855,7 @@ final class AB_MCP_Sync_Post_Writer {
 	 * now, delete_post_meta where it holds fewer, each through map_meta_cap.
 	 * The terms of a taxonomy:
 	 * term_right() for the backed-up keys. True, or what the account may
-	 * not do.
+	 * not do, as a whole sentence («This account may not …»).
 	 *
 	 * @param string $part    Part (row, meta:<key>, terms:<taxonomy>).
 	 * @param int    $live_id Post.
@@ -820,20 +867,27 @@ final class AB_MCP_Sync_Post_Writer {
 		$part = (string) $part;
 		$id   = (int) $live_id;
 		if ( ! current_user_can( 'edit_post', $id ) ) {
-			return sprintf( 'edit the post %1$d (edit_post%2$s)', $id, 'row' === $part ? '' : ', for the part ' . $part );
+			return 'row' === $part
+				/* translators: %d: post ID. */
+				? sprintf( __( 'This account may not edit the post %d on this site (edit_post).', 'alphabridge-mcp' ), $id )
+				/* translators: 1: post ID, 2: the part, as the journal names it (meta:…, terms:…). */
+				: sprintf( __( 'This account may not edit the post %1$d on this site (edit_post, for the part %2$s).', 'alphabridge-mcp' ), $id, $part );
 		}
 		if ( 'row' === $part ) {
 			$type = isset( $backup['row']['post_type'] ) ? (string) $backup['row']['post_type'] : '';
 			$pto  = get_post_type_object( $type );
 			if ( ! is_object( $pto ) || ! isset( $pto->cap ) ) {
-				return sprintf( 'write a %s (the post type is not registered on this site)', $type );
+				/* translators: %s: a post type. */
+				return sprintf( __( 'This account may not write a %s on this site (the post type is not registered on this site).', 'alphabridge-mcp' ), $type );
 			}
 			$status = isset( $backup['row']['post_status'] ) ? (string) $backup['row']['post_status'] : '';
 			if ( in_array( $status, array( 'publish', 'future', 'private' ), true ) && ( ! isset( $now['row']['post_status'] ) || (string) $now['row']['post_status'] !== $status ) && ! current_user_can( (string) $pto->cap->publish_posts ) ) {
-				return sprintf( 'publish a %1$s (%2$s)', $type, (string) $pto->cap->publish_posts );
+				/* translators: 1: post type, 2: a capability of WordPress. */
+				return sprintf( __( 'This account may not publish a %1$s on this site (%2$s).', 'alphabridge-mcp' ), $type, (string) $pto->cap->publish_posts );
 			}
 			if ( isset( $backup['row']['post_author'] ) && (int) $backup['row']['post_author'] !== (int) get_current_user_id() && ! current_user_can( (string) $pto->cap->edit_others_posts ) ) {
-				return sprintf( 'write a %1$s of another author (%2$s)', $type, (string) $pto->cap->edit_others_posts );
+				/* translators: 1: post type, 2: a capability of WordPress. */
+				return sprintf( __( 'This account may not write a %1$s of another author on this site (%2$s).', 'alphabridge-mcp' ), $type, (string) $pto->cap->edit_others_posts );
 			}
 			return true;
 		}
@@ -849,24 +903,29 @@ final class AB_MCP_Sync_Post_Writer {
 			// wrote (DISALLOW_UNFILTERED_HTML; GitHub Codex round 1 on
 			// free#138, P2), and restore_meta() writes raw.
 			if ( null !== AB_MCP_Builders::markup_meta_refusal( $key ) ) {
-				return sprintf( 'write the page-builder meta key %s of the post (unfiltered_html)', $key );
+				/* translators: %s: meta key. */
+				return sprintf( __( 'This account may not write the page-builder meta key %s of the post on this site (unfiltered_html).', 'alphabridge-mcp' ), $key );
 			}
 			$was = count( self::meta_values( $backup, $key ) );
 			$has = count( self::meta_values( $now, $key ) );
 			if ( $was > 0 && $has > 0 && ! current_user_can( 'edit_post_meta', $id, $key ) ) {
-				return sprintf( 'edit the meta key %s of the post (edit_post_meta)', $key );
+				/* translators: %s: meta key. */
+				return sprintf( __( 'This account may not edit the meta key %s of the post on this site (edit_post_meta).', 'alphabridge-mcp' ), $key );
 			}
 			if ( $was > $has && ! current_user_can( 'add_post_meta', $id, $key ) ) {
-				return sprintf( 'add the meta key %s to the post (add_post_meta)', $key );
+				/* translators: %s: meta key. */
+				return sprintf( __( 'This account may not add the meta key %s to the post on this site (add_post_meta).', 'alphabridge-mcp' ), $key );
 			}
 			if ( $has > $was && ! current_user_can( 'delete_post_meta', $id, $key ) ) {
-				return sprintf( 'remove the meta key %s of the post (delete_post_meta)', $key );
+				/* translators: %s: meta key. */
+				return sprintf( __( 'This account may not remove the meta key %s of the post on this site (delete_post_meta).', 'alphabridge-mcp' ), $key );
 			}
 			return true;
 		}
 		$taxonomy = substr( $part, 6 );
 		if ( ! taxonomy_exists( $taxonomy ) ) {
-			return sprintf( 'assign the terms of %s (the taxonomy is not registered on this site)', $taxonomy );
+			/* translators: %s: a taxonomy. */
+			return sprintf( __( 'This account may not assign the terms of %s on this site (the taxonomy is not registered on this site).', 'alphabridge-mcp' ), $taxonomy );
 		}
 		return self::term_right( $taxonomy, self::term_keys( $backup, $taxonomy ) );
 	}
@@ -889,13 +948,14 @@ final class AB_MCP_Sync_Post_Writer {
 		// What the canonical form of the post here found (a page builder, a
 		// value it cannot read, a credential in a field; branch 9): the report
 		// holds the entry back on this side, the boundary checks it again.
-		$held = self::read_lock( self::live_read( (int) $live_id, $source ), 'the post of this site' );
+		$held = self::read_lock( self::live_read( (int) $live_id, $source ), __( 'The object is the post of this site.', 'alphabridge-mcp' ) );
 		if ( null !== $held ) {
 			return $held;
 		}
 		foreach ( $current['terms'] as $term ) {
 			if ( ! in_array( $term['taxonomy'], self::TAXONOMIES, true ) ) {
-				return self::locked( 'post:taxonomy_rule', sprintf( 'taxonomy %s of the post on this site', $term['taxonomy'] ) );
+				/* translators: %s: a taxonomy. */
+				return self::locked( 'post:taxonomy_rule', sprintf( __( 'Taxonomy %s of the post on this site.', 'alphabridge-mcp' ), $term['taxonomy'] ) );
 			}
 		}
 		return true;
@@ -1023,7 +1083,7 @@ final class AB_MCP_Sync_Post_Writer {
 	 * @param string   $key     Key.
 	 * @param string[] $to      The values to store.
 	 * @param string[] $from    The values stored now.
-	 * @return true|string What the account may not do.
+	 * @return true|string The first capability refused (ops_right()).
 	 */
 	public static function meta_right( $live_id, $key, array $to, array $from ) {
 		return self::ops_right( 'post', $live_id, $key, self::meta_ops( $to, $from ) );
@@ -1091,13 +1151,15 @@ final class AB_MCP_Sync_Post_Writer {
 	 * @param int      $live_id The object.
 	 * @param string   $key     Key.
 	 * @param string[] $ops     Of edit, add, delete.
-	 * @return true|string The first capability refused, as "<cap> refused".
+	 * @return true|string The first capability refused (its name, a machine
+	 *                     value: the callers write «<cap> refused» into their
+	 *                     own whole sentence).
 	 */
 	public static function ops_right( $type, $live_id, $key, array $ops ) {
 		foreach ( $ops as $op ) {
 			$cap = $op . '_' . ( 'term' === $type ? 'term' : 'post' ) . '_meta';
 			if ( ! current_user_can( $cap, (int) $live_id, $key ) ) {
-				return $cap . ' refused';
+				return $cap;
 			}
 		}
 		return true;
@@ -1206,16 +1268,19 @@ final class AB_MCP_Sync_Post_Writer {
 			$pto = get_post_type_object( $type );
 			$may = null === $live_id ? ( is_object( $pto ) && current_user_can( $pto->cap->publish_posts ) ) : current_user_can( 'publish_post', $id );
 			if ( ! $may ) {
-				return self::locked( 'post:slug_collision', sprintf( 'WordPress drops the slug %s of a pending post this account may not publish', $slug ) );
+				/* translators: %s: a slug. */
+				return self::locked( 'post:slug_collision', sprintf( __( 'WordPress drops the slug %s of a pending post this account may not publish.', 'alphabridge-mcp' ), $slug ) );
 			}
 		}
 		if ( '' === $slug ) {
-			return in_array( $status, $drafts, true ) ? null : self::locked( 'post:slug_collision', sprintf( 'the %s has no slug, and WordPress would make one from its title', $status ) );
+			/* translators: %s: a post status (pending, publish, …). */
+			return in_array( $status, $drafts, true ) ? null : self::locked( 'post:slug_collision', sprintf( __( 'The %s has no slug, and WordPress would make one from its title.', 'alphabridge-mcp' ), $status ) );
 		}
 		$check = sanitize_title( $slug, '', 'old-save' );
 		$made  = null !== $live_id && strtolower( urlencode( $slug ) ) === $check && $stored === $check ? $check : sanitize_title( $slug );
 		if ( $made !== $slug ) {
-			return self::locked( 'post:sanitizer', sprintf( 'field post_name (WordPress would store %s)', $made ) );
+			/* translators: %s: a slug. */
+			return self::locked( 'post:sanitizer', sprintf( __( 'Field post_name (WordPress would store %s).', 'alphabridge-mcp' ), $made ) );
 		}
 		// A post in the trash with the slug: wp_insert_post() renames it
 		// (__trashed) before wp_unique_post_slug(), for every post with a
@@ -1223,7 +1288,8 @@ final class AB_MCP_Sync_Post_Writer {
 		// on branch 9, C: the check was skipped for drafts).
 		$trashed = self::trashed_holder( $slug, $id );
 		if ( null === $trashed || 0 !== $trashed ) {
-			return self::locked( 'post:slug_collision', null === $trashed ? 'the posts of this site could not be read for the slug' : sprintf( 'the post %1$d of this site lies in the trash with the slug %2$s, and WordPress would rename it (__trashed)', $trashed, $slug ) );
+			/* translators: 1: post ID, 2: a slug. */
+			return self::locked( 'post:slug_collision', null === $trashed ? __( 'The posts of this site could not be read for the slug.', 'alphabridge-mcp' ) : sprintf( __( 'The post %1$d of this site lies in the trash with the slug %2$s, and WordPress would rename it (__trashed).', 'alphabridge-mcp' ), $trashed, $slug ) );
 		}
 		if ( in_array( $status, $drafts, true ) ) {
 			// WordPress keeps the slug of a draft as it is (wp_unique_post_slug()).
@@ -1231,7 +1297,8 @@ final class AB_MCP_Sync_Post_Writer {
 		}
 		$unique = wp_unique_post_slug( $slug, $id, $status, $type, $parent );
 		if ( (string) $unique !== $slug ) {
-			return self::locked( 'post:slug_collision', sprintf( 'WordPress would store the slug %1$s for %2$s', (string) $unique, $slug ) );
+			/* translators: 1: the slug WordPress would store, 2: the slug of the staging site. */
+			return self::locked( 'post:slug_collision', sprintf( __( 'WordPress would store the slug %1$s for %2$s.', 'alphabridge-mcp' ), (string) $unique, $slug ) );
 		}
 		return null;
 	}
@@ -1282,19 +1349,59 @@ final class AB_MCP_Sync_Post_Writer {
 	 */
 	private static function theme_refusal( array $prepared, $current ) {
 		$theme = isset( $prepared['identity']['theme'] ) && is_string( $prepared['identity']['theme'] ) ? $prepared['identity']['theme'] : '';
-		$what  = sprintf( 'the %1$s %2$s', (string) $prepared['type'], (string) $prepared['postarr']['post_name'] );
-		$other = self::inactive_theme( $theme );
+		$type  = (string) $prepared['type'];
+		$name  = (string) $prepared['postarr']['post_name'];
+		$other = self::inactive_theme_detail( $type, $name, $theme );
 		if ( null !== $other ) {
-			return self::locked( 'post:theme_mismatch', $what . ' ' . $other );
+			return self::locked( 'post:theme_mismatch', $other );
 		}
 		$targets = isset( $prepared['terms']['wp_theme'] ) ? $prepared['terms']['wp_theme'] : array();
 		if ( array( $theme ) !== array_values( $targets ) ) {
-			return self::locked( 'post:theme_mismatch', sprintf( '%1$s of the staging site names the themes %2$s, not the one theme %3$s', $what, implode( ', ', array_map( 'strval', $targets ) ), $theme ) );
+			/* translators: 1: post type, 2: its slug, 3: the themes it names, separated by commas, 4: the one theme. */
+			return self::locked( 'post:theme_mismatch', sprintf( __( 'The %1$s %2$s of the staging site names the themes %3$s, not the one theme %4$s.', 'alphabridge-mcp' ), $type, $name, implode( ', ', array_map( 'strval', $targets ) ), $theme ) );
 		}
 		if ( is_array( $current ) && array( $theme ) !== self::term_keys( $current, 'wp_theme' ) ) {
-			return self::locked( 'post:theme_mismatch', sprintf( '%1$s of this site names the themes %2$s, not the one theme %3$s', $what, implode( ', ', self::term_keys( $current, 'wp_theme' ) ), $theme ) );
+			/* translators: 1: post type, 2: its slug, 3: the themes it names, separated by commas, 4: the one theme. */
+			return self::locked( 'post:theme_mismatch', sprintf( __( 'The %1$s %2$s of this site names the themes %3$s, not the one theme %4$s.', 'alphabridge-mcp' ), $type, $name, implode( ', ', self::term_keys( $current, 'wp_theme' ) ), $theme ) );
 		}
 		return null;
+	}
+
+	/**
+	 * inactive_theme() for the refusal of the writer and the lock of the
+	 * plan (AB_MCP_Sync_Push::verdict()): the object and why its theme is not
+	 * the active one here, a whole sentence in the language of the site;
+	 * null where it is. The lock of the plan is a text for the person and
+	 * goes into no print of the plan (plan_hash and the state in
+	 * AB_MCP_Sync_Push hold the report hash, the selection, the objects and
+	 * the pairs, no lock).
+	 *
+	 * @param string $type  Post type.
+	 * @param string $name  Its slug.
+	 * @param string $theme The theme of the object.
+	 * @return string|null
+	 */
+	public static function inactive_theme_detail( $type, $name, $theme ) {
+		if ( null === self::inactive_theme( $theme ) ) {
+			return null;
+		}
+		if ( '' === (string) $theme ) {
+			/* translators: 1: post type, 2: its slug. */
+			return sprintf( __( 'The %1$s %2$s of the staging site belongs to no theme (no term of wp_theme).', 'alphabridge-mcp' ), $type, $name );
+		}
+		$active = (string) get_stylesheet();
+		$row    = AB_MCP_Sync_Rows::option( 'stylesheet' );
+		$stored = is_array( $row ) ? (string) $row['value'] : null;
+		if ( $active === $stored ) {
+			/* translators: 1: post type, 2: its slug, 3: its theme, 4: the active theme of this site. */
+			return sprintf( __( 'The %1$s %2$s belongs to the theme %3$s, and the active theme of this site is %4$s.', 'alphabridge-mcp' ), $type, $name, $theme, $active );
+		}
+		if ( null === $stored ) {
+			/* translators: 1: post type, 2: its slug, 3: its theme, 4: the active theme of this site. */
+			return sprintf( __( 'The %1$s %2$s belongs to the theme %3$s, and the active theme of this site is %4$s (the option holds none).', 'alphabridge-mcp' ), $type, $name, $theme, $active );
+		}
+		/* translators: 1: post type, 2: its slug, 3: its theme, 4: the active theme of this site, 5: the theme the option stylesheet holds. */
+		return sprintf( __( 'The %1$s %2$s belongs to the theme %3$s, and the active theme of this site is %4$s (the option holds %5$s).', 'alphabridge-mcp' ), $type, $name, $theme, $active, $stored );
 	}
 
 	/**
@@ -1302,7 +1409,8 @@ final class AB_MCP_Sync_Post_Writer {
 	 * null where it is (branch 9b): the active stylesheet as get_stylesheet()
 	 * gives it and as the option row holds it (a filter that shows another
 	 * theme in this request is no active theme). The one place theme_refusal()
-	 * and the plan (AB_MCP_Sync_Push::verdict()) ask it.
+	 * and the plan (AB_MCP_Sync_Push::verdict()) ask it, through
+	 * inactive_theme_detail(), which says it to the person.
 	 *
 	 * @param string $theme The theme of an object (the slug of its term of wp_theme).
 	 * @return string|null
@@ -1338,7 +1446,8 @@ final class AB_MCP_Sync_Post_Writer {
 			foreach ( isset( $prepared['terms'][ $taxonomy ] ) ? $prepared['terms'][ $taxonomy ] : array() as $slug ) {
 				$found = get_term_by( 'slug', (string) $slug, $taxonomy );
 				if ( is_object( $found ) && isset( $found->name ) && (string) $found->name !== (string) $slug ) {
-					return self::locked( 'post:taxonomy_rule', sprintf( 'the term %1$s of %2$s on this site is named %3$s, and WordPress reads it by its name', (string) $slug, $taxonomy, (string) $found->name ) );
+					/* translators: 1: term slug, 2: taxonomy, 3: term name. */
+					return self::locked( 'post:taxonomy_rule', sprintf( __( 'The term %1$s of %2$s on this site is named %3$s, and WordPress reads it by its name.', 'alphabridge-mcp' ), (string) $slug, $taxonomy, (string) $found->name ) );
 				}
 			}
 		}
@@ -1374,9 +1483,38 @@ final class AB_MCP_Sync_Post_Writer {
 		}
 		$data = json_decode( $content, true );
 		if ( ! is_array( $data ) ) {
-			return self::locked( 'post:css_markup', sprintf( 'the global styles are no JSON object the check of their CSS reads (%s)', JSON_ERROR_NONE === json_last_error() ? 'a value that is no object' : json_last_error_msg() ) );
+			return self::locked( 'post:css_markup', self::json_refusal( json_last_error() ) );
 		}
 		return self::css_walk( $data, '', 0 );
+	}
+
+	/**
+	 * Why the global styles are no JSON object the check of their CSS reads,
+	 * by the code of json_last_error(), a whole sentence in the language of
+	 * the site; the message of PHP only for a code this list does not know.
+	 *
+	 * @param int $code json_last_error().
+	 * @return string
+	 */
+	private static function json_refusal( $code ) {
+		switch ( (int) $code ) {
+			case JSON_ERROR_NONE:
+				return __( 'The global styles are no JSON object the check of their CSS reads (a value that is no object).', 'alphabridge-mcp' );
+			case JSON_ERROR_DEPTH:
+				return __( 'The global styles are no JSON object the check of their CSS reads: they are nested deeper than the parser reads.', 'alphabridge-mcp' );
+			case JSON_ERROR_STATE_MISMATCH:
+			case JSON_ERROR_SYNTAX:
+				return __( 'The global styles are no JSON object the check of their CSS reads: their JSON is not well formed.', 'alphabridge-mcp' );
+			case JSON_ERROR_CTRL_CHAR:
+				return __( 'The global styles are no JSON object the check of their CSS reads: they hold a control character where JSON allows none.', 'alphabridge-mcp' );
+			case JSON_ERROR_UTF8:
+			case JSON_ERROR_UTF16:
+				return __( 'The global styles are no JSON object the check of their CSS reads: they hold characters that are not valid UTF-8 or UTF-16.', 'alphabridge-mcp' );
+			case JSON_ERROR_INVALID_PROPERTY_NAME:
+				return __( 'The global styles are no JSON object the check of their CSS reads: a key of them is not one PHP can hold.', 'alphabridge-mcp' );
+		}
+		/* translators: %s: the error of the JSON parser of PHP, a technical value (English). */
+		return sprintf( __( 'The global styles are no JSON object the check of their CSS reads (%s).', 'alphabridge-mcp' ), json_last_error_msg() );
 	}
 
 	/**
@@ -1398,10 +1536,12 @@ final class AB_MCP_Sync_Post_Writer {
 			$at = '' === $path ? (string) $key : $path . '.' . $key;
 			if ( 'css' === (string) $key ) {
 				if ( ! is_string( $value ) ) {
-					return self::locked( 'post:css_markup', sprintf( 'the value of %s in the global styles is no text', $at ) );
+					/* translators: %s: a path in the global styles (styles.css, …). */
+					return self::locked( 'post:css_markup', sprintf( __( 'The value of %s in the global styles is no text.', 'alphabridge-mcp' ), $at ) );
 				}
 				if ( self::css_markup( $value ) ) {
-					return self::locked( 'post:css_markup', sprintf( 'the CSS of %s in the global styles holds </style or ends in a part of it', $at ) );
+					/* translators: %s: a path in the global styles (styles.css, …). */
+					return self::locked( 'post:css_markup', sprintf( __( 'The CSS of %s in the global styles holds </style or ends in a part of it.', 'alphabridge-mcp' ), $at ) );
 				}
 				continue;
 			}
@@ -1409,7 +1549,8 @@ final class AB_MCP_Sync_Post_Writer {
 				continue;
 			}
 			if ( $depth >= AB_MCP_Sync_Canon::MAX_DEPTH ) {
-				return self::locked( 'post:css_markup', sprintf( 'the global styles nest deeper than they are read, at %s', $at ) );
+				/* translators: %s: a path in the global styles (styles.css, …). */
+				return self::locked( 'post:css_markup', sprintf( __( 'The global styles nest deeper than they are read, at %s.', 'alphabridge-mcp' ), $at ) );
 			}
 			$held = self::css_walk( $value, $at, $depth + 1 );
 			if ( null !== $held ) {
@@ -1476,7 +1617,7 @@ final class AB_MCP_Sync_Post_Writer {
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- the rows, as the order of the core reads them.
 		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT ID, post_date FROM {$wpdb->posts} WHERE post_type = 'wp_navigation' AND post_status = 'publish' AND ID != %d ORDER BY post_date DESC, ID DESC LIMIT 2", (int) $id ), ARRAY_A );
 		if ( '' !== (string) $wpdb->last_error || ! is_array( $rows ) ) {
-			return 'the navigations of this site could not be read for the one WordPress shows without a menu of its own';
+			return __( 'The navigations of this site could not be read for the one WordPress shows without a menu of its own.', 'alphabridge-mcp' );
 		}
 		$shown = static function ( $date ) use ( $rows ) {
 			$top = isset( $rows[0] ) ? $rows[0] : null;
@@ -1499,15 +1640,63 @@ final class AB_MCP_Sync_Post_Writer {
 		$was = $shown( $before );
 		$is  = $shown( $after );
 		if ( 'tie' === $was || 'tie' === $is ) {
-			return 'the navigation would share the latest date of the published navigations of this site with another, and which of them WordPress shows in a navigation block without a menu of its own is not told';
+			return __( 'The navigation would share the latest date of the published navigations of this site with another, and which of them WordPress shows in a navigation block without a menu of its own is not told.', 'alphabridge-mcp' );
 		}
 		if ( $was !== $is ) {
-			$name = static function ( $who ) {
-				return 'self' === $who ? 'this navigation' : ( 'none' === $who ? 'none (WordPress would make one as a page is shown)' : ( 'others' === $who ? 'one of two navigations of the same date' : 'the navigation ' . substr( $who, 5 ) ) );
-			};
-			return sprintf( 'a navigation block without a menu of its own shows %1$s now and would show %2$s after the write', $name( $was ), $name( $is ) );
+			return self::fallback_sentence( $was, $is );
 		}
 		return null;
+	}
+
+	/**
+	 * Which navigation a navigation block without a menu of its own shows now
+	 * and after the write, as one whole sentence for each pair (no noun
+	 * phrase set into a sentence): self (this navigation), none (WordPress
+	 * would make one), others (one of two of the same date) or post <id>.
+	 *
+	 * @param string $was What it shows now.
+	 * @param string $is  What it would show after the write.
+	 * @return string
+	 */
+	private static function fallback_sentence( $was, $is ) {
+		$was_id = 0 === strpos( $was, 'post ' ) ? substr( $was, 5 ) : '';
+		$is_id  = 0 === strpos( $is, 'post ' ) ? substr( $is, 5 ) : '';
+		$was    = '' !== $was_id ? 'post' : $was;
+		$is     = '' !== $is_id ? 'post' : $is;
+		switch ( $was . '>' . $is ) {
+			case 'self>none':
+				return __( 'A navigation block without a menu of its own shows this navigation now and would show none (WordPress would make one as a page is shown) after the write.', 'alphabridge-mcp' );
+			case 'self>others':
+				return __( 'A navigation block without a menu of its own shows this navigation now and would show one of two navigations of the same date after the write.', 'alphabridge-mcp' );
+			case 'self>post':
+				/* translators: %s: post ID of a navigation. */
+				return sprintf( __( 'A navigation block without a menu of its own shows this navigation now and would show the navigation %s after the write.', 'alphabridge-mcp' ), $is_id );
+			case 'none>self':
+				return __( 'A navigation block without a menu of its own shows none (WordPress would make one as a page is shown) now and would show this navigation after the write.', 'alphabridge-mcp' );
+			case 'none>others':
+				return __( 'A navigation block without a menu of its own shows none (WordPress would make one as a page is shown) now and would show one of two navigations of the same date after the write.', 'alphabridge-mcp' );
+			case 'none>post':
+				/* translators: %s: post ID of a navigation. */
+				return sprintf( __( 'A navigation block without a menu of its own shows none (WordPress would make one as a page is shown) now and would show the navigation %s after the write.', 'alphabridge-mcp' ), $is_id );
+			case 'others>self':
+				return __( 'A navigation block without a menu of its own shows one of two navigations of the same date now and would show this navigation after the write.', 'alphabridge-mcp' );
+			case 'others>none':
+				return __( 'A navigation block without a menu of its own shows one of two navigations of the same date now and would show none (WordPress would make one as a page is shown) after the write.', 'alphabridge-mcp' );
+			case 'others>post':
+				/* translators: %s: post ID of a navigation. */
+				return sprintf( __( 'A navigation block without a menu of its own shows one of two navigations of the same date now and would show the navigation %s after the write.', 'alphabridge-mcp' ), $is_id );
+			case 'post>self':
+				/* translators: %s: post ID of a navigation. */
+				return sprintf( __( 'A navigation block without a menu of its own shows the navigation %s now and would show this navigation after the write.', 'alphabridge-mcp' ), $was_id );
+			case 'post>none':
+				/* translators: %s: post ID of a navigation. */
+				return sprintf( __( 'A navigation block without a menu of its own shows the navigation %s now and would show none (WordPress would make one as a page is shown) after the write.', 'alphabridge-mcp' ), $was_id );
+			case 'post>others':
+				/* translators: %s: post ID of a navigation. */
+				return sprintf( __( 'A navigation block without a menu of its own shows the navigation %s now and would show one of two navigations of the same date after the write.', 'alphabridge-mcp' ), $was_id );
+		}
+		/* translators: 1: post ID of the navigation shown now, 2: post ID of the one shown after the write. */
+		return sprintf( __( 'A navigation block without a menu of its own shows the navigation %1$s now and would show the navigation %2$s after the write.', 'alphabridge-mcp' ), $was_id, $is_id );
 	}
 
 	/**
@@ -1530,12 +1719,12 @@ final class AB_MCP_Sync_Post_Writer {
 			return null;
 		}
 		$shown = self::fallback_shown( $planned );
-		return null === $shown ? null : $moved . '; ' . $shown;
+		return null === $shown ? null : $moved . ' ' . $shown;
 	}
 
 	/**
 	 * Where this site shows a navigation block without a menu of its own
-	 * after the run, as a clause, or null where it shows none (branch 9b):
+	 * after the run, as a whole sentence, or null where it shows none (branch 9b):
 	 * a core/navigation block with neither ref nor navigationMenuId nor
 	 * blocks of its own (render_block_core_navigation(),
 	 * wp-includes/blocks/navigation.php:517-547: only then the fallback),
@@ -1592,12 +1781,14 @@ final class AB_MCP_Sync_Post_Writer {
 				continue;
 			}
 			if ( self::shows_fallback( (string) $template->content, 0, $state ) ) {
-				return sprintf( 'the template %s shows a navigation block without a menu of its own', (string) $template->id );
+				/* translators: %s: a template ID (theme//slug). */
+				return sprintf( __( 'The template %s shows a navigation block without a menu of its own.', 'alphabridge-mcp' ), (string) $template->id );
 			}
 		}
 		foreach ( $templates as $name => $one ) {
 			if ( $state['active'] === (string) ( $one['theme'] ?? '' ) && self::shows_fallback( (string) $one['content'], 0, $state ) ) {
-				return sprintf( 'the template %s the run writes shows a navigation block without a menu of its own', $name );
+				/* translators: %s: a template ID (theme//slug). */
+				return sprintf( __( 'The template %s the run writes shows a navigation block without a menu of its own.', 'alphabridge-mcp' ), $name );
 			}
 		}
 		// The posts that can show one, as the run leaves them.
@@ -1608,22 +1799,25 @@ final class AB_MCP_Sync_Post_Writer {
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- the rows, bounded: the posts a navigation block can stand in.
 		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT ID, post_type, post_status, post_content FROM {$wpdb->posts} WHERE post_status IN ( 'publish', 'private', 'future' ) AND post_type NOT IN ( 'revision', 'wp_template', 'wp_template_part', 'wp_global_styles', 'wp_navigation', 'nav_menu_item', 'attachment' ) AND ( post_content LIKE %s OR post_content LIKE %s OR post_content LIKE %s OR post_content LIKE %s ) ORDER BY ID ASC LIMIT %d", $like[0], $like[1], $like[2], $like[3], self::FALLBACK_POSTS + 1 ), ARRAY_A );
 		if ( '' !== (string) $wpdb->last_error || ! is_array( $rows ) ) {
-			return 'the posts of this site could not be read for navigation blocks without a menu of their own';
+			return __( 'The posts of this site could not be read for navigation blocks without a menu of their own.', 'alphabridge-mcp' );
 		}
 		if ( count( $rows ) > self::FALLBACK_POSTS ) {
-			return sprintf( 'more than %d posts of this site hold navigation blocks, patterns, reusable blocks or template parts, more than this check reads', self::FALLBACK_POSTS );
+			/* translators: %d: the most posts the check reads. */
+			return sprintf( __( 'More than %d posts of this site hold navigation blocks, patterns, reusable blocks or template parts, more than this check reads.', 'alphabridge-mcp' ), self::FALLBACK_POSTS );
 		}
 		foreach ( $rows as $row ) {
 			if ( isset( $replaced[ (int) $row['ID'] ] ) || ! self::shows_pages( (string) $row['post_type'], (string) $row['post_status'] ) ) {
 				continue;
 			}
 			if ( self::shows_fallback( (string) $row['post_content'], 0, $state ) ) {
-				return sprintf( 'the %1$s %2$d shows a navigation block without a menu of its own', (string) $row['post_type'], (int) $row['ID'] );
+				/* translators: 1: post type, 2: post ID. */
+				return sprintf( __( 'The %1$s %2$d shows a navigation block without a menu of its own.', 'alphabridge-mcp' ), (string) $row['post_type'], (int) $row['ID'] );
 			}
 		}
 		foreach ( $posts as $one ) {
 			if ( self::shows_pages( (string) $one['type'], (string) ( $one['status'] ?? '' ) ) && self::shows_fallback( (string) $one['content'], 0, $state ) ) {
-				return sprintf( 'the %1$s %2$s of the staging site the run writes shows a navigation block without a menu of its own', (string) $one['type'], (string) ( $one['staging_ref'] ?? '' ) );
+				/* translators: 1: post type, 2: post ID on the staging site. */
+				return sprintf( __( 'The %1$s %2$s of the staging site the run writes shows a navigation block without a menu of its own.', 'alphabridge-mcp' ), (string) $one['type'], (string) ( $one['staging_ref'] ?? '' ) );
 			}
 		}
 		return null;
@@ -1926,19 +2120,22 @@ final class AB_MCP_Sync_Post_Writer {
 			$theme = null === $ref['theme'] ? $active : (string) $ref['theme'];
 			$name  = $theme . '//' . (string) $ref['slug'];
 			if ( $theme !== $active ) {
-				return self::locked( 'post:reference_unmapped', sprintf( 'the template part %1$s, of a theme that is not the active one here (%2$s), which shows nothing', $name, $active ) );
+				/* translators: 1: template part (theme//slug), 2: the active theme. */
+				return self::locked( 'post:reference_unmapped', sprintf( __( 'The template part %1$s, of a theme that is not the active one here (%2$s), which shows nothing.', 'alphabridge-mcp' ), $name, $active ) );
 			}
 			if ( isset( $pending['wp_template_part'][ $name ] ) ) {
 				continue;
 			}
 			$here = self::part_here( $theme, (string) $ref['slug'] );
 			if ( null === $here ) {
-				return self::locked( 'post:reference_unmapped', sprintf( 'the template part %s, whose rows could not be read', $name ) );
+				/* translators: %s: template part (theme//slug). */
+				return self::locked( 'post:reference_unmapped', sprintf( __( 'The template part %s, whose rows could not be read.', 'alphabridge-mcp' ), $name ) );
 			}
 			if ( true === $here ) {
 				continue;
 			}
-			return self::locked( 'post:reference_unmapped', sprintf( 'the template part %s, which this site has neither as a template part nor as a file of its theme', $name ) );
+			/* translators: %s: template part (theme//slug). */
+			return self::locked( 'post:reference_unmapped', sprintf( __( 'The template part %s, which this site has neither as a template part nor as a file of its theme.', 'alphabridge-mcp' ), $name ) );
 		}
 		return null;
 	}
@@ -2001,7 +2198,11 @@ final class AB_MCP_Sync_Post_Writer {
 						return true;
 					}
 					$may = self::meta_right( (int) $live_id, $key, self::targets( $prepared, $key ), $from );
-					return true === $may ? true : new WP_Error( 'ab_mcp_sync_rights', sprintf( 'The meta %1$s of the post was not written: %2$s at the post. Connect with an account that may, or leave the object out of the plan.', $key, $may ) );
+					return true === $may ? true : new WP_Error(
+						'ab_mcp_sync_rights',
+						/* translators: 1: meta key, 2: the capability of WordPress refused at the post (edit_post_meta, …). */
+						sprintf( __( 'The meta %1$s of the post was not written; at the post: %2$s refused. Connect with an account that may, or leave the object out of the plan.', 'alphabridge-mcp' ), $key, $may )
+					);
 				},
 				static fn() => self::write_meta( $live_id, $key, $values, $from )
 			);
@@ -2015,7 +2216,8 @@ final class AB_MCP_Sync_Post_Writer {
 			// and its filter query (Codex round 4 of branch 11, item 4).
 			return AB_MCP_Sync_Write::forward( self::class, $live_id, $pre, static fn() => true, static fn() => self::write_terms( $live_id, $taxonomy, $terms ) );
 		}
-		return new WP_Error( 'ab_mcp_sync_write_failed', sprintf( 'The part %s is of a name this version does not write. Check the object in wp-admin.', $name ) );
+		/* translators: %s: the part, as the journal names it. */
+		return new WP_Error( 'ab_mcp_sync_write_failed', sprintf( __( 'The part %s is of a name this version does not write. Check the object in wp-admin.', 'alphabridge-mcp' ), $name ) );
 	}
 
 	/**
@@ -2095,7 +2297,8 @@ final class AB_MCP_Sync_Post_Writer {
 		$meta  = AB_MCP_Sync_Rows::meta( 'post', (int) $live_id );
 		$terms = AB_MCP_Sync_Rows::object_terms( (int) $live_id );
 		if ( null === $row || null === $meta || null === $terms ) {
-			return new WP_Error( 'ab_mcp_sync_rows_unread', sprintf( 'A row of the post %d could not be read, so nothing is written for it. Try again; if it keeps failing, the database error log names the cause.', (int) $live_id ) );
+			/* translators: %d: post ID. */
+			return new WP_Error( 'ab_mcp_sync_rows_unread', sprintf( __( 'A row of the post %d could not be read, so nothing is written for it. Try again; if it keeps failing, the database error log names the cause.', 'alphabridge-mcp' ), (int) $live_id ) );
 		}
 		$columns = array();
 		foreach ( self::WRITTEN_COLUMNS as $column ) {
@@ -2456,7 +2659,7 @@ final class AB_MCP_Sync_Post_Writer {
 			return $id;
 		}
 		if ( ! is_int( $id ) || $id < 1 ) {
-			return new WP_Error( 'ab_mcp_sync_write_failed', 'WordPress wrote no post (wp_insert_post() gave no id). Nothing more of the step is written.' );
+			return new WP_Error( 'ab_mcp_sync_write_failed', __( 'WordPress wrote no post (wp_insert_post() gave no id). Nothing more of the step is written.', 'alphabridge-mcp' ) );
 		}
 		return $id;
 	}
@@ -2519,7 +2722,8 @@ final class AB_MCP_Sync_Post_Writer {
 		if ( is_wp_error( $done ) ) {
 			return $done;
 		}
-		return is_array( $done ) ? true : new WP_Error( 'ab_mcp_sync_write_failed', sprintf( 'The terms of %s could not be set (wp_set_object_terms() gave no list).', $taxonomy ) );
+		/* translators: %s: a taxonomy. */
+		return is_array( $done ) ? true : new WP_Error( 'ab_mcp_sync_write_failed', sprintf( __( 'The terms of %s could not be set (wp_set_object_terms() gave no list).', 'alphabridge-mcp' ), $taxonomy ) );
 	}
 
 	/**
@@ -2589,7 +2793,7 @@ final class AB_MCP_Sync_Post_Writer {
 		if ( null === $current ) {
 			return array(
 				'state' => 'left',
-				'note'  => 'The post is no longer on this site.',
+				'note'  => __( 'The post is no longer on this site.', 'alphabridge-mcp' ),
 			);
 		}
 		$hash = self::row_hash( $current['row'] );
@@ -2599,7 +2803,7 @@ final class AB_MCP_Sync_Post_Writer {
 		if ( ! hash_equals( $written, $hash ) ) {
 			return array(
 				'state' => 'left',
-				'note'  => 'The row was changed since the step wrote it, so it is left as it is.',
+				'note'  => __( 'The row was changed since the step wrote it, so it is left as it is.', 'alphabridge-mcp' ),
 			);
 		}
 		$gmt   = $backup['post_date_gmt'];
@@ -2607,7 +2811,8 @@ final class AB_MCP_Sync_Post_Writer {
 		if ( $saved !== $backup['post_status'] || '' !== AB_MCP_Tools_Content::status_date_refusal( $backup['post_type'], $current['row']['post_status'], $backup['post_status'], $gmt, true, (int) $now ) ) {
 			return array(
 				'state' => 'check_needed',
-				'note'  => sprintf( 'Check needed: the backed-up status %1$s dated %2$s UTC would be stored as %3$s now (the scheduled date passed). Set the date anew in wp-admin.', $backup['post_status'], $gmt, $saved ),
+				/* translators: 1: the backed-up post status, 2: its date (UTC), 3: the post status WordPress would store now. */
+				'note'  => sprintf( __( 'Check needed: the backed-up status %1$s dated %2$s UTC would be stored as %3$s now (the scheduled date passed). Set the date anew in wp-admin.', 'alphabridge-mcp' ), $backup['post_status'], $gmt, $saved ),
 			);
 		}
 		// Putting a page of the top level back to publish or future while a
@@ -2617,7 +2822,8 @@ final class AB_MCP_Sync_Post_Writer {
 		if ( 'page' === $backup['post_type'] && 0 === (int) $backup['post_parent'] && in_array( $backup['post_status'], array( 'publish', 'future' ), true ) && $backup['post_status'] !== $current['row']['post_status'] && self::menu_adds_pages() ) {
 			return array(
 				'state' => 'check_needed',
-				'note'  => sprintf( 'Check needed: putting the page back to %s at the top level would make a menu of this site add it by itself (automatic page addition). Switch the automatic off under Appearance → Menus and plan the way back again, or set the status by hand in wp-admin.', $backup['post_status'] ),
+				/* translators: %s: the backed-up post status. */
+				'note'  => sprintf( __( 'Check needed: putting the page back to %s at the top level would make a menu of this site add it by itself (automatic page addition). Switch the automatic off under Appearance → Menus and plan the way back again, or set the status by hand in wp-admin.', 'alphabridge-mcp' ), $backup['post_status'] ),
 			);
 		}
 		// Putting a navigation back where that moves the one WordPress shows
@@ -2635,7 +2841,8 @@ final class AB_MCP_Sync_Post_Writer {
 			if ( null !== $moved ) {
 				return array(
 					'state' => 'check_needed',
-					'note'  => sprintf( 'Check needed: putting the navigation back would change which navigation WordPress shows where a navigation block has no menu of its own (%s). Set the navigation by hand in the site editor.', $moved ),
+					/* translators: %s: why, whole sentences in the language of the site. */
+					'note'  => sprintf( __( 'Check needed: putting the navigation back would change which navigation WordPress shows where a navigation block has no menu of its own. %s Set the navigation by hand in the site editor.', 'alphabridge-mcp' ), $moved ),
 				);
 			}
 		}
@@ -2651,7 +2858,10 @@ final class AB_MCP_Sync_Post_Writer {
 				$data = $held->get_error_data();
 				return array(
 					'state' => 'left',
-					'note'  => sprintf( 'Not put back: the backed-up global styles hold custom CSS the site editor refuses to save (post:css_markup: %s), so the row is left as it is; its value before stands beside it (value_before). Set the styles by hand in the site editor.', is_array( $data ) && isset( $data['lock']['at'] ) ? (string) $data['lock']['at'] : 'the CSS' ),
+					'note'  => is_array( $data ) && isset( $data['lock']['at'] ) && '' !== (string) $data['lock']['at']
+						/* translators: %s: what the check of the CSS found, a whole sentence in the language of the site. */
+						? sprintf( __( 'Not put back: the backed-up global styles hold custom CSS the site editor refuses to save (post:css_markup). %s So the row is left as it is; its value before stands beside it (value_before). Set the styles by hand in the site editor.', 'alphabridge-mcp' ), (string) $data['lock']['at'] )
+						: __( 'Not put back: the backed-up global styles hold custom CSS the site editor refuses to save (post:css_markup), so the row is left as it is; its value before stands beside it (value_before). Set the styles by hand in the site editor.', 'alphabridge-mcp' ),
 				);
 			}
 		}
@@ -2688,7 +2898,7 @@ final class AB_MCP_Sync_Post_Writer {
 					}
 				);
 			},
-			'The row changed as it was put back (a hook of this site), so it is left as it is.'
+			__( 'The row changed as it was put back (a hook of this site), so it is left as it is.', 'alphabridge-mcp' )
 		);
 		if ( is_wp_error( $id ) || is_array( $id ) ) {
 			return $id;
@@ -2697,7 +2907,7 @@ final class AB_MCP_Sync_Post_Writer {
 		if ( ! is_array( $after ) || ! hash_equals( $before, self::row_hash( $after['row'] ) ) ) {
 			return array(
 				'state' => 'unclear',
-				'note'  => 'The row was written back but does not read as the backup.',
+				'note'  => __( 'The row was written back but does not read as the backup.', 'alphabridge-mcp' ),
 			);
 		}
 		return array( 'state' => 'restored' );
@@ -2725,7 +2935,8 @@ final class AB_MCP_Sync_Post_Writer {
 		$table = 'term' === $type ? 'termmeta' : 'postmeta';
 		$col   = 'term' === $type ? 'term_id' : 'post_id';
 		if ( null === $now ) {
-			return new WP_Error( 'ab_mcp_sync_rows_unread', sprintf( 'The meta rows of %s could not be read, so nothing of them is put back. Try again; if it keeps failing, the database error log names the cause.', $key ) );
+			/* translators: %s: meta key. */
+			return new WP_Error( 'ab_mcp_sync_rows_unread', sprintf( __( 'The meta rows of %s could not be read, so nothing of them is put back. Try again; if it keeps failing, the database error log names the cause.', 'alphabridge-mcp' ), $key ) );
 		}
 		if ( self::meta_hash( $now ) === self::meta_hash( $backup ) ) {
 			return array( 'state' => 'unchanged' );
@@ -2733,13 +2944,15 @@ final class AB_MCP_Sync_Post_Writer {
 		if ( ! hash_equals( (string) $written, self::meta_hash( $now ) ) ) {
 			return array(
 				'state' => 'left',
-				'note'  => sprintf( 'The meta %s was changed since the step wrote it, so it is left as it is.', $key ),
+				/* translators: %s: meta key. */
+				'note'  => sprintf( __( 'The meta %s was changed since the step wrote it, so it is left as it is.', 'alphabridge-mcp' ), $key ),
 			);
 		}
 		global $wpdb;
 		$rows = AB_MCP_Sync_Rows::meta( $type, $id );
 		if ( null === $rows ) {
-			return new WP_Error( 'ab_mcp_sync_rows_unread', sprintf( 'The meta rows of %s could not be read, so nothing of them is put back. Try again; if it keeps failing, the database error log names the cause.', $key ) );
+			/* translators: %s: meta key. */
+			return new WP_Error( 'ab_mcp_sync_rows_unread', sprintf( __( 'The meta rows of %s could not be read, so nothing of them is put back. Try again; if it keeps failing, the database error log names the cause.', 'alphabridge-mcp' ), $key ) );
 		}
 		$own = array();
 		foreach ( $rows as $row ) {
@@ -2760,7 +2973,8 @@ final class AB_MCP_Sync_Post_Writer {
 				wp_cache_delete( $id, $type . '_meta' );
 				return array(
 					'state' => 'left',
-					'note'  => sprintf( 'A row of the meta %s changed while it was put back, so the rest is left as it is.', $key ),
+					/* translators: %s: meta key. */
+					'note'  => sprintf( __( 'A row of the meta %s changed while it was put back, so the rest is left as it is.', 'alphabridge-mcp' ), $key ),
 				);
 			}
 		}
@@ -2806,7 +3020,7 @@ final class AB_MCP_Sync_Post_Writer {
 		if ( is_wp_error( $current ) || null === $current ) {
 			return is_wp_error( $current ) ? $current : array(
 				'state' => 'left',
-				'note'  => 'The post is no longer on this site.',
+				'note'  => __( 'The post is no longer on this site.', 'alphabridge-mcp' ),
 			);
 		}
 		$before = self::terms_hash( self::term_entries( $backup, $taxonomy ) );
@@ -2817,7 +3031,8 @@ final class AB_MCP_Sync_Post_Writer {
 		if ( ! hash_equals( (string) $written, $now ) ) {
 			return array(
 				'state' => 'left',
-				'note'  => sprintf( 'The terms of %s were changed since the step wrote them, so they are left as they are.', $taxonomy ),
+				/* translators: %s: a taxonomy. */
+				'note'  => sprintf( __( 'The terms of %s were changed since the step wrote them, so they are left as they are.', 'alphabridge-mcp' ), $taxonomy ),
 			);
 		}
 		$done = wp_set_object_terms( (int) $live_id, self::target_term_keys( $taxonomy, self::term_keys( $backup, $taxonomy ) ), (string) $taxonomy, false );
@@ -2830,8 +3045,10 @@ final class AB_MCP_Sync_Post_Writer {
 			return array(
 				'state' => 'unclear',
 				'note'  => $orders
-					? sprintf( 'The terms of %s are back, but not their order (term_order): wp_set_object_terms() makes every relationship anew with the order 0. Set the order by hand (the plugin that sorts the terms).', $taxonomy )
-					: sprintf( 'The terms of %s were written back but do not read as the backup.', $taxonomy ),
+					/* translators: %s: a taxonomy. */
+					? sprintf( __( 'The terms of %s are back, but not their order (term_order): wp_set_object_terms() makes every relationship anew with the order 0. Set the order by hand (the plugin that sorts the terms).', 'alphabridge-mcp' ), $taxonomy )
+					/* translators: %s: a taxonomy. */
+					: sprintf( __( 'The terms of %s were written back but do not read as the backup.', 'alphabridge-mcp' ), $taxonomy ),
 			);
 		}
 		return array( 'state' => 'restored' );
@@ -2865,7 +3082,7 @@ final class AB_MCP_Sync_Post_Writer {
 	 */
 	public static function before_value( $part, $backup, $now, $live_id ) {
 		if ( ! is_array( $backup ) ) {
-			return 'none: the object was not on this site before the run.';
+			return __( 'none: the object was not on this site before the run.', 'alphabridge-mcp' );
 		}
 		$part = (string) $part;
 		if ( 'row' === $part ) {
@@ -2900,7 +3117,7 @@ final class AB_MCP_Sync_Post_Writer {
 		$out = array();
 		foreach ( $columns as $column => $was ) {
 			if ( 'post_password' === $column || AB_MCP_Sync_Credentials::names_credential( $column, AB_MCP_Redactor::extra_keys() ) ) {
-				$out[] = $column . ': ' . ( '' === $was ? '""' : '(a credential by its name, not shown)' );
+				$out[] = $column . ': ' . ( '' === $was ? '""' : __( '(a credential by its name, not shown)', 'alphabridge-mcp' ) );
 			} elseif ( in_array( $column, self::LONG_COLUMNS, true ) ) {
 				$out[] = $column . ': ' . self::long_before( $column, $was, $live_id );
 			} else {
@@ -2930,7 +3147,11 @@ final class AB_MCP_Sync_Post_Writer {
 			$found = AB_MCP_Sync_Rows::revision_with( (int) $live_id, $column, $was );
 			$held  = is_int( $found ) && $found > 0 ? $found : null;
 		}
-		return sprintf( '%1$d bytes (%2$s)', $bytes, null === $held ? 'no revision of the post holds it; the backup of the step does' : sprintf( 'revision %d of the post holds it, wp-admin → Revisions', $held ) );
+		return null === $held
+			/* translators: %d: number of bytes. */
+			? sprintf( _n( '%d byte (no revision of the post holds it; the backup of the step does)', '%d bytes (no revision of the post holds it; the backup of the step does)', $bytes, 'alphabridge-mcp' ), $bytes )
+			/* translators: 1: number of bytes, 2: ID of the revision. */
+			: sprintf( _n( '%1$d byte (revision %2$d of the post holds it, wp-admin → Revisions)', '%1$d bytes (revision %2$d of the post holds it, wp-admin → Revisions)', $bytes, 'alphabridge-mcp' ), $bytes, $held );
 	}
 
 	/**
@@ -2940,7 +3161,7 @@ final class AB_MCP_Sync_Post_Writer {
 	 */
 	public static function meta_before( $key, array $values ) {
 		if ( array() === $values ) {
-			return 'none (no row of the key)';
+			return __( 'none (no row of the key)', 'alphabridge-mcp' );
 		}
 		$out = array();
 		foreach ( $values as $value ) {
@@ -2964,7 +3185,7 @@ final class AB_MCP_Sync_Post_Writer {
 			// name changed since is no value before (Codex round 8).
 			$out[] = self::shown_value( '', (string) $term['slug'] );
 		}
-		return array() === $out ? 'none (no term of the taxonomy)' : implode( ', ', $out );
+		return array() === $out ? __( 'none (no term of the taxonomy)', 'alphabridge-mcp' ) : implode( ', ', $out );
 	}
 
 	/**
@@ -2981,13 +3202,13 @@ final class AB_MCP_Sync_Post_Writer {
 		if ( self::VALUE_RULES !== $rules ) {
 			// Composed by an earlier build, by rules this one does not vouch
 			// for (Codex round 9): never shown, fail closed.
-			return '(composed by an earlier build, not shown; the backup of the step in the protected store holds the value)';
+			return __( '(composed by an earlier build, not shown; the backup of the step in the protected store holds the value)', 'alphabridge-mcp' );
 		}
 		$text  = (string) $text;
 		$extra = AB_MCP_Redactor::extra_keys();
 		$check = AB_MCP_Sync_Credentials::unit( '', $text, $extra );
 		if ( 'clean' !== $check['state'] || in_array( AB_MCP_Sync_Net::over_name( $text, $extra ), array( 'credential', 'unreadable' ), true ) ) {
-			return '(holds a credential, not shown)';
+			return __( '(holds a credential, not shown)', 'alphabridge-mcp' );
 		}
 		return $text;
 	}
@@ -3010,19 +3231,20 @@ final class AB_MCP_Sync_Post_Writer {
 		$extra = AB_MCP_Redactor::extra_keys();
 		$check = AB_MCP_Sync_Credentials::unit( (string) $key, $value, $extra );
 		if ( 'clean' !== $check['state'] ) {
-			return 'b9' === $check['state'] ? '(a credential by its name, not shown)' : ( 'mixed' === $check['state'] ? '(holds a credential, not shown)' : '(not readable to its end, not shown)' );
+			return 'b9' === $check['state'] ? __( '(a credential by its name, not shown)', 'alphabridge-mcp' ) : ( 'mixed' === $check['state'] ? __( '(holds a credential, not shown)', 'alphabridge-mcp' ) : __( '(not readable to its end, not shown)', 'alphabridge-mcp' ) );
 		}
 		// The net over the raw value in every layer, as the package checks a
 		// name (AB_MCP_Sync_Import::held_code(); Codex round 8).
 		$net = AB_MCP_Sync_Net::over_name( $value, $extra );
 		if ( 'credential' === $net ) {
-			return '(holds a credential, not shown)';
+			return __( '(holds a credential, not shown)', 'alphabridge-mcp' );
 		}
 		if ( 'unreadable' === $net ) {
-			return '(not readable to its end, not shown)';
+			return __( '(not readable to its end, not shown)', 'alphabridge-mcp' );
 		}
 		if ( 1 !== preg_match( '//u', $value ) ) {
-			return sprintf( '(%d bytes, not UTF-8)', strlen( $value ) );
+			/* translators: %d: number of bytes. */
+			return sprintf( _n( '(%d byte, not UTF-8)', '(%d bytes, not UTF-8)', strlen( $value ), 'alphabridge-mcp' ), strlen( $value ) );
 		}
 		return '"' . self::cut( preg_replace( '/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', ' ', $value ), self::VALUE_CHARS ) . '"';
 	}
@@ -3035,12 +3257,14 @@ final class AB_MCP_Sync_Post_Writer {
 	public static function cut( $text, $max ) {
 		$text = (string) $text;
 		if ( 1 !== preg_match( '//u', $text ) ) {
-			return sprintf( '(%d bytes, not UTF-8)', strlen( $text ) );
+			/* translators: %d: number of bytes. */
+			return sprintf( _n( '(%d byte, not UTF-8)', '(%d bytes, not UTF-8)', strlen( $text ), 'alphabridge-mcp' ), strlen( $text ) );
 		}
 		if ( mb_strlen( $text, 'UTF-8' ) <= (int) $max ) {
 			return $text;
 		}
-		return mb_substr( $text, 0, (int) $max, 'UTF-8' ) . '…(cut)';
+		/* translators: %s: the start of a text, cut. */
+		return sprintf( __( '%s…(cut)', 'alphabridge-mcp' ), mb_substr( $text, 0, (int) $max, 'UTF-8' ) );
 	}
 
 	/* ----------------------------------------------------------- helpers */
@@ -3062,12 +3286,12 @@ final class AB_MCP_Sync_Post_Writer {
 		if ( is_serialized( $raw ) ) {
 			$read = AB_MCP_Sync_Canon::unserialized( $raw );
 			if ( ! $read['ok'] || ! is_array( $read['value'] ) ) {
-				return self::locked( $lock, 'a serialized value that is no array is not written through the metadata API as it is' );
+				return self::locked( $lock, __( 'A serialized value that is no array is not written through the metadata API as it is.', 'alphabridge-mcp' ) );
 			}
 			$text = AB_MCP_Sync_Refs::rewrite_value( $raw, $plan, $changed );
 			$read = AB_MCP_Sync_Canon::unserialized( $text );
 			if ( ! $read['ok'] || ! is_array( $read['value'] ) ) {
-				return self::locked( $lock, 'a serialized value that does not unpack after its addresses were rewritten' );
+				return self::locked( $lock, __( 'A serialized value that does not unpack after its addresses were rewritten.', 'alphabridge-mcp' ) );
 			}
 			// The metadata API stores serialize() of what it is handed: a
 			// value that does not serialize back to its own bytes (a float
@@ -3075,7 +3299,7 @@ final class AB_MCP_Sync_Post_Writer {
 			// read back other than its target. Locked before anything is
 			// written (decision 17, the sanitizers ahead; branch 9).
 			if ( serialize( $read['value'] ) !== $text ) { // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize -- as maybe_serialize() stores an array.
-				return self::locked( $lock, 'a serialized value whose bytes the metadata API would not store again as they are (serialize() of it differs)' );
+				return self::locked( $lock, __( 'A serialized value whose bytes the metadata API would not store again as they are (serialize() of it differs).', 'alphabridge-mcp' ) );
 			}
 			return $read['value'];
 		}
@@ -3222,7 +3446,8 @@ final class AB_MCP_Sync_Post_Writer {
 		foreach ( array_slice( $missing, 0, 5 ) as $m ) {
 			$out[] = (string) ( $m['space'] ?? '?' ) . ' ' . (int) ( $m['id'] ?? 0 );
 		}
-		return 'references without a counterpart on this site: ' . implode( ', ', $out );
+		/* translators: %s: the references (post 12, term 4, …), separated by commas. */
+		return sprintf( __( 'References without a counterpart on this site: %s.', 'alphabridge-mcp' ), implode( ', ', $out ) );
 	}
 
 	/**
@@ -3247,11 +3472,14 @@ final class AB_MCP_Sync_Post_Writer {
 						'stage'  => (string) $lock['stage'],
 						'reason' => (string) $lock['reason'],
 					),
-					sprintf( 'the object of the staging site, at %s', isset( $lock['at'] ) && is_string( $lock['at'] ) ? $lock['at'] : 'its form' )
+					isset( $lock['at'] ) && is_string( $lock['at'] )
+						/* translators: %s: where the lock lies in the object, as the canonical form names it (meta:…, post_content). */
+						? sprintf( __( 'The object of the staging site, at %s.', 'alphabridge-mcp' ), $lock['at'] )
+						: __( 'The object of the staging site, at its form.', 'alphabridge-mcp' )
 				);
 			}
 		}
-		return array() === $locks ? null : self::locked( 'post:lock_unread', 'the object of the staging site carries a lock this version does not read' );
+		return array() === $locks ? null : self::locked( 'post:lock_unread', __( 'The object of the staging site carries a lock this version does not read.', 'alphabridge-mcp' ) );
 	}
 
 	/**
@@ -3261,7 +3489,8 @@ final class AB_MCP_Sync_Post_Writer {
 	 * boundary as well.
 	 *
 	 * @param array|null $read The result of AB_MCP_Sync_Kind::canonical().
-	 * @param string     $what The object, for the detail (the post of this site).
+	 * @param string     $what The object, a whole sentence in the language of
+	 *                         the site («The object is the post 5 of this site.»).
 	 * @return WP_Error|null
 	 */
 	public static function read_lock( $read, $what ) {
@@ -3276,24 +3505,34 @@ final class AB_MCP_Sync_Post_Writer {
 						'stage'  => (string) $lock['stage'],
 						'reason' => (string) $lock['reason'],
 					),
-					sprintf( '%1$s, at %2$s', (string) $what, isset( $lock['at'] ) && is_string( $lock['at'] ) ? $lock['at'] : 'its form' )
+					isset( $lock['at'] ) && is_string( $lock['at'] )
+						/* translators: 1: the object, a whole sentence in the language of the site (The object is the menu 4 of this site.), 2: where the lock lies in it, as the canonical form names it (meta:…). */
+						? sprintf( __( '%1$s The lock lies at %2$s.', 'alphabridge-mcp' ), (string) $what, $lock['at'] )
+						/* translators: %s: the object, a whole sentence in the language of the site (The object is the menu 4 of this site.). */
+						: sprintf( __( '%s The lock lies at its form.', 'alphabridge-mcp' ), (string) $what )
 				);
 			}
 		}
-		return self::locked( 'post:lock_unread', sprintf( '%s carries a lock this version does not read', (string) $what ) );
+		/* translators: %s: the object, a whole sentence in the language of the site (The object is the menu 4 of this site.). */
+		return self::locked( 'post:lock_unread', sprintf( __( '%s It carries a lock this version does not read.', 'alphabridge-mcp' ), (string) $what ) );
 	}
 
 	/**
 	 * A refusal with a lock as the table or the canonical form names it.
 	 *
-	 * @param array  $lock   key, stage, reason.
-	 * @param string $detail What was found.
+	 * @param array  $lock   key, stage, reason (the reason as the table of
+	 *                       the locks names it: English, compared across
+	 *                       sites, AB_MCP_Sync_Import).
+	 * @param string $detail What was found, a whole sentence (or several) in
+	 *                       the language of the site, set in as it is. The
+	 *                       callers of locked() hand it over the same way.
 	 * @return WP_Error
 	 */
 	private static function refusal( array $lock, $detail ) {
 		return new WP_Error(
 			'ab_mcp_sync_locked',
-			sprintf( 'Not written (%1$s, from %2$s): %3$s %4$s Use the editor in wp-admin to take this object over by hand, or leave it out of the plan.', $lock['key'], $lock['stage'], $lock['reason'], ucfirst( (string) $detail ) . '.' ),
+			/* translators: 1: the key of the lock (post:…), 2: the stage that brings it (Z8d, …), 3: its reason, a whole sentence in the language of the site, 4: what was found, a whole sentence in the language of the site (The option blogname is not on this site.). */
+			sprintf( __( 'Not written (%1$s, from %2$s): %3$s %4$s Use the editor in wp-admin to take this object over by hand, or leave it out of the plan.', 'alphabridge-mcp' ), $lock['key'], $lock['stage'], AB_MCP_Sync_Said::text( $lock['reason'] ), (string) $detail ),
 			array( 'lock' => $lock + array( 'at' => (string) $detail ) )
 		);
 	}
@@ -3302,7 +3541,7 @@ final class AB_MCP_Sync_Post_Writer {
 	 * A refusal with the lock of its stage (AB_MCP_Sync_Kinds::LOCKS).
 	 *
 	 * @param string $key    Lock key (post:…).
-	 * @param string $detail What was found.
+	 * @param string $detail What was found, a whole sentence in the language of the site.
 	 * @return WP_Error
 	 */
 	public static function locked( $key, $detail ) {
@@ -3319,11 +3558,15 @@ final class AB_MCP_Sync_Post_Writer {
 	}
 
 	/**
-	 * @param string $what What the account may not do.
+	 * @param string $what What the account may not do, a whole sentence in
+	 *                     the language of the site, with the capability in
+	 *                     parentheses («This account may not change the
+	 *                     menus of this site (edit_theme_options).»).
 	 * @return WP_Error
 	 */
 	public static function rights( $what ) {
-		return new WP_Error( 'ab_mcp_sync_rights', sprintf( 'Not written: this account may not %s on this site. Connect with an account that may, or leave the object out of the plan.', $what ), array( 'needs' => $what ) );
+		/* translators: %s: what the account may not do, a whole sentence in the language of the site with the capability in parentheses (This account may not change the menus of this site (edit_theme_options).). */
+		return new WP_Error( 'ab_mcp_sync_rights', sprintf( __( 'Not written: %s Connect with an account that may, or leave the object out of the plan.', 'alphabridge-mcp' ), $what ), array( 'needs' => $what ) );
 	}
 
 	/**
@@ -3331,6 +3574,7 @@ final class AB_MCP_Sync_Post_Writer {
 	 * @return WP_Error
 	 */
 	public static function meta_refused( $key ) {
-		return new WP_Error( 'ab_mcp_sync_write_failed', sprintf( 'The meta %s was not written: a filter of this site refused it, or the database did. Nothing more of the step is written; ask the site administrator which plugin holds it.', $key ) );
+		/* translators: %s: meta key. */
+		return new WP_Error( 'ab_mcp_sync_write_failed', sprintf( __( 'The meta %s was not written: a filter of this site refused it, or the database did. Nothing more of the step is written; ask the site administrator which plugin holds it.', 'alphabridge-mcp' ), $key ) );
 	}
 }

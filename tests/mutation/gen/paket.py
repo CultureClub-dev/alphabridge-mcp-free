@@ -843,7 +843,7 @@ e('paket/export-chunk-relay', 'chunk(): no chunk over http where the site is pub
 REFUSE = 'testOnlyAConfirmedStagingSiteWithAPairAndAKeyMakesOrGivesOutAPackage'
 for name, search in (
     ('network', "\t\tif ( is_multisite() ) {\n\t\t\treturn self::multisite();"),
-    ('role', "\t\tif ( AB_MCP_Staging::ROLE_STAGING !== AB_MCP_Staging::role() ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_manifest_role', 'Only the confirmed staging site makes"),
+    ('role', "\t\tif ( AB_MCP_Staging::ROLE_STAGING !== AB_MCP_Staging::role() ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_manifest_role', __( 'Only the confirmed staging site makes"),
     ('pair', "\t\tif ( null === AB_MCP_Staging::record()['pair'] ) {"),
     ('key', "\t\tif ( null === AB_MCP_Sync_Key::current() ) {"),
 ):
@@ -1279,9 +1279,9 @@ e('paket/r6-confirm-current-retired', 'confirm(): a retired anchor is not confir
 
 # ------------------------------------------------------ Codex round 7
 e('paket/r7-renew-post-only', 'handle_staging_key_renew(): a POST only, nothing on a GET with the nonce (R1)', AD,
-  "\t\tif ( 'POST' !== $method ) {\n\t\t\twp_die( esc_html( 'Nothing was changed: «Renew the key»", "\t\tif ( false ) {\n\t\t\twp_die( esc_html( 'Nothing was changed: «Renew the key»", 'trust', R6['flow'])
+  "\t\tif ( 'POST' !== $method ) {\n\t\t\twp_die( esc_html__( 'Nothing was changed: «Renew the key»", "\t\tif ( false ) {\n\t\t\twp_die( esc_html__( 'Nothing was changed: «Renew the key»", 'trust', R6['flow'])
 e('paket/r8-renew-post-exact', 'handle_staging_key_renew(): the method exactly POST, not as normalised (R1)', AD,
-  "? wp_unslash( $_SERVER['REQUEST_METHOD'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- compared exactly with 'POST' below, never stored or shown.\n\t\tif ( 'POST' !== $method ) {\n\t\t\twp_die( esc_html( 'Nothing was changed: «Renew the key»", "? strtoupper( sanitize_key( wp_unslash( $_SERVER['REQUEST_METHOD'] ) ) ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- compared exactly with 'POST' below, never stored or shown.\n\t\tif ( 'POST' !== $method ) {\n\t\t\twp_die( esc_html( 'Nothing was changed: «Renew the key»", 'trust', R6['flow'])
+  "? wp_unslash( $_SERVER['REQUEST_METHOD'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- compared exactly with 'POST' below, never stored or shown.\n\t\tif ( 'POST' !== $method ) {\n\t\t\twp_die( esc_html__( 'Nothing was changed: «Renew the key»", "? strtoupper( sanitize_key( wp_unslash( $_SERVER['REQUEST_METHOD'] ) ) ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- compared exactly with 'POST' below, never stored or shown.\n\t\tif ( 'POST' !== $method ) {\n\t\t\twp_die( esc_html__( 'Nothing was changed: «Renew the key»", 'trust', R6['flow'])
 
 # ------------------------------------------- part 3 (decisions 9 and 8)
 T3 = {
@@ -1299,7 +1299,7 @@ T3 = {
 e('paket/t3-refusal-capability', 'refusal(): an account with manage_options (decision 9)', EX,
   "\t\tif ( ! current_user_can( 'manage_options' ) ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_export_capability'", "\t\tif ( false ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_export_capability'", 'package', T3['cond'])
 e('paket/t3-refusal-mode', 'refusal(): write access on, the access level Full (decision 9)', EX,
-  "\t\tif ( ! AB_MCP_Site_Mode::is_full() ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_export_mode'", "\t\tif ( false ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_export_mode'", 'package', T3['cond'])
+  "\t\tif ( ! AB_MCP_Site_Mode::is_full() ) {\n\t\t\t/* translators: %s: how to switch write access on, a whole sentence. */\n\t\t\treturn new WP_Error( 'ab_mcp_sync_export_mode'", "\t\tif ( false ) {\n\t\t\t/* translators: %s: how to switch write access on, a whole sentence. */\n\t\t\treturn new WP_Error( 'ab_mcp_sync_export_mode'", 'package', T3['cond'])
 e('paket/t3-deliver-mode', 'deliver(): nothing given out with write access off (two sites)', EX,
   "\t\t// With write access off, a staging site gives nothing out.\n\t\tif ( ! AB_MCP_Site_Mode::is_full() ) {", "\t\t// With write access off, a staging site gives nothing out.\n\t\tif ( false ) {", 'itpkg', T3['mode_it'])
 # What goes into it.
@@ -1320,7 +1320,7 @@ e('paket/t3-sort-held', 'sort(): objects a credential holds counted (two sites)'
 e('paket/t3-kinds-incomplete', 'kinds(): not complete where an object was withheld', EX,
   DONE, DONE.replace(" && ! isset( $incomplete[ $key ] )", ''), 'package', T3['kinds'])
 e('paket/t3-answer-way', 'answer(): the way only where something was withheld (two sites)', EX,
-  "( $report['withheld']['count'] > 0 ? array( 'way' => self::WITHHELD_WAY ) : array() )", "( $report['withheld']['count'] >= 0 ? array( 'way' => self::WITHHELD_WAY ) : array() )", 'itpkg', T3['package_it'])
+  "( $report['withheld']['count'] > 0 ? array( 'way' => self::withheld_way() ) : array() )", "( $report['withheld']['count'] >= 0 ? array( 'way' => self::withheld_way() ) : array() )", 'itpkg', T3['package_it'])
 e('paket/t3-record-report', 'store(): the record keeps what was withheld, for again() (two sites)', EX,
   "\t\t\t\t'report'    => $report,\n", "\t\t\t\t'report'    => array( 'credentials' => array( 'held' => 0, 'names' => 0, 'units' => 0 ), 'withheld' => array( 'count' => 0, 'objects' => array() ) ),\n", 'itpkg', T3['package_it'])
 # The rights of an object.

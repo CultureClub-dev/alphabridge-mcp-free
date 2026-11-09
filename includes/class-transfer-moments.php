@@ -37,12 +37,9 @@
  * page) come with Z9a; the retention they show is there since branch 8
  * (AB_MCP_Sync_Schema::backup_rows()).
  *
- * The texts are English without gettext, as the other texts of the
- * takeover: BundledTranslationsTest asks every text in a gettext call to
- * be translated in all nine bundled languages at once, so branch 13
- * (text/z8) wraps them in gettext calls with the text domain
- * alphabridge-mcp and translates them in one go (the decision of the
- * lead after Codex round 1 of branch 12, C).
+ * The texts are in gettext calls with the text domain alphabridge-mcp and
+ * translated in the nine bundled languages (branch 13, text/z8); the
+ * German ones follow the templates of the plan of the incentives.
  *
  * @package AlphaBridge_MCP
  */
@@ -95,7 +92,8 @@ final class AB_MCP_Transfer_Moments {
 	 * @return string|null
 	 */
 	public static function m1( $takeable ) {
-		return (int) $takeable >= self::THRESHOLD ? sprintf( '%d changes ready.', (int) $takeable ) : null;
+		/* translators: %d: object pairs the report can take over (10 or more). */
+		return (int) $takeable >= self::THRESHOLD ? sprintf( _n( '%d change ready.', '%d changes ready.', (int) $takeable, 'alphabridge-mcp' ), (int) $takeable ) : null;
 	}
 
 	/**
@@ -113,7 +111,8 @@ final class AB_MCP_Transfer_Moments {
 		if ( (int) ( $run['forward_closed_at'] ?? 0 ) <= 0 || (int) ( $run['closed'] ?? 0 ) <= 0 ) {
 			return null;
 		}
-		return sprintf( 'Run %1$d: %2$d steps, %3$d calls since the run was made, duration %4$s.', (int) $run['run_id'], (int) $steps, (int) $run['calls'], self::duration( (int) $run['closed'] - (int) $run['created'] ) );
+		/* translators: 1: run number, 2: its steps, 3: calls since the run was made, 4: duration in words (duration()). */
+		return sprintf( __( 'Run %1$d: %2$d steps, %3$d calls since the run was made, duration %4$s.', 'alphabridge-mcp' ), (int) $run['run_id'], (int) $steps, (int) $run['calls'], self::duration( (int) $run['closed'] - (int) $run['created'] ) );
 	}
 
 	/**
@@ -125,7 +124,8 @@ final class AB_MCP_Transfer_Moments {
 	 * @return string|null
 	 */
 	public static function m3( $run_id, $back ) {
-		return (int) $back >= self::PAIRS_BACK ? sprintf( 'You are taking run %d back pair by pair.', (int) $run_id ) : null;
+		/* translators: %d: run number. */
+		return (int) $back >= self::PAIRS_BACK ? sprintf( __( 'You are taking run %d back pair by pair.', 'alphabridge-mcp' ), (int) $run_id ) : null;
 	}
 
 	/**
@@ -138,13 +138,16 @@ final class AB_MCP_Transfer_Moments {
 	public static function duration( $seconds ) {
 		$seconds = max( 0, (int) $seconds );
 		if ( $seconds < 60 ) {
-			return 1 === $seconds ? '1 second' : $seconds . ' seconds';
+			/* translators: %d: seconds. */
+			return sprintf( _n( '%d second', '%d seconds', $seconds, 'alphabridge-mcp' ), $seconds );
 		}
 		$minutes = intdiv( $seconds, 60 );
 		if ( $minutes < 60 ) {
-			return 1 === $minutes ? '1 minute' : $minutes . ' minutes';
+			/* translators: %d: minutes. */
+			return sprintf( _n( '%d minute', '%d minutes', $minutes, 'alphabridge-mcp' ), $minutes );
 		}
-		return intdiv( $minutes, 60 ) . ' h ' . ( $minutes % 60 ) . ' min';
+		/* translators: 1: hours, 2: minutes (a duration, as in «3 h 10 min»). */
+		return sprintf( __( '%1$d h %2$d min', 'alphabridge-mcp' ), intdiv( $minutes, 60 ), $minutes % 60 );
 	}
 
 	/* --------------------------------------------------- edition parts */
@@ -159,23 +162,24 @@ final class AB_MCP_Transfer_Moments {
 	 */
 	public static function edition( $moment, $count = 0 ) {
 		$monthly = array(
-			'label' => 'Pro monthly, 9 USD',
+			'label' => __( 'Pro monthly, 9 USD', 'alphabridge-mcp' ),
 			'url'   => self::CHECKOUT . '?billing_cycle=monthly',
 		);
 		if ( 'm1' === $moment ) {
 			return array(
-				'text'  => sprintf( 'Free carries the takeover over step by step, each step a call of your AI of its own, with the lock and a check per step. Pro bundles many steps per call, holds the lock over the whole run and makes a restore point automatically before a bulk takeover. In both editions the lock does not cover every way of writing; a change made past it meanwhile can be lost. You can take all %d over one by one now.', (int) $count ),
+				/* translators: %d: object pairs the report can take over. */
+				'text'  => sprintf( __( 'Free carries the takeover over step by step, each step a call of your AI of its own, with the lock and a check per step. Pro bundles many steps per call, holds the lock over the whole run and makes a restore point automatically before a bulk takeover. In both editions the lock does not cover every way of writing; a change made past it meanwhile can be lost. You can take all %d over one by one now.', 'alphabridge-mcp' ), (int) $count ),
 				'links' => array(
 					$monthly,
 					array(
-						'label' => 'Try it for 7 days',
+						'label' => __( 'Try it for 7 days', 'alphabridge-mcp' ),
 						'url'   => self::CHECKOUT . '?trial=free&billing_cycle=monthly',
 					),
 				),
 			);
 		}
 		return array(
-			'text'  => 'Free works this way so that every object pair is checked. Pro takes the supported changes of a run back together. What was changed here since and what cannot be taken back stays as a finding in both editions.',
+			'text'  => __( 'Free works this way so that every object pair is checked. Pro takes the supported changes of a run back together. What was changed here since and what cannot be taken back stays as a finding in both editions.', 'alphabridge-mcp' ),
 			'links' => array( $monthly ),
 		);
 	}

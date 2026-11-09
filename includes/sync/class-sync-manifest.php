@@ -54,8 +54,9 @@
  * package. Then each chunk against its own hash before it is read
  * (chunk()), and the whole against the hash of the package (whole()).
  *
- * Messages are English without gettext, as the other classes of the
- * takeover; each names the way.
+ * Messages are in gettext, in the language of the site, as the other
+ * classes of the takeover; each names the way. Codes and machine values
+ * (kinds, purposes, parameters, fields) stay as the tools name them.
  *
  * @package AlphaBridge_MCP
  */
@@ -139,17 +140,17 @@ final class AB_MCP_Sync_Manifest {
 	 */
 	public static function sign( array $package, $now = null ) {
 		if ( AB_MCP_Staging::ROLE_STAGING !== AB_MCP_Staging::role() ) {
-			return new WP_Error( 'ab_mcp_sync_manifest_role', 'Only the confirmed staging site signs a package: confirm the role staging site on the page AlphaBridge → Staging of this site first.' );
+			return new WP_Error( 'ab_mcp_sync_manifest_role', __( 'Only the confirmed staging site signs a package: confirm the role staging site on the page AlphaBridge → Staging of this site first.', 'alphabridge-mcp' ) );
 		}
 		$pair = AB_MCP_Staging::record()['pair'];
 		// A stored pair of a staging site is always one with a production
 		// site (AB_MCP_Staging::record() reads no other).
 		if ( null === $pair ) {
-			return new WP_Error( 'ab_mcp_sync_manifest_pair', 'A package is signed for the production site this staging site is paired with, and it has none: enter the address of the production site on the page AlphaBridge → Staging of this site first.' );
+			return new WP_Error( 'ab_mcp_sync_manifest_pair', __( 'A package is signed for the production site this staging site is paired with, and it has none: enter the address of the production site on the page AlphaBridge → Staging of this site first.', 'alphabridge-mcp' ) );
 		}
 		$key = AB_MCP_Sync_Key::current();
 		if ( null === $key ) {
-			return new WP_Error( 'ab_mcp_sync_key_missing', 'This staging site has no usable key: make it on the page AlphaBridge → Staging under «Key of this staging site», confirm it on the production site, then call again.' );
+			return new WP_Error( 'ab_mcp_sync_key_missing', __( 'This staging site has no usable key: make it on the page AlphaBridge → Staging under «Key of this staging site», confirm it on the production site, then call again.', 'alphabridge-mcp' ) );
 		}
 		// Both addresses as the production site compares them
 		// (AB_MCP_Sync_Key::site_form()): an international domain name in its
@@ -157,7 +158,8 @@ final class AB_MCP_Sync_Manifest {
 		$source = AB_MCP_Sync_Key::site_form( home_url() );
 		$target = AB_MCP_Sync_Key::site_form( $pair['partner_url'] );
 		if ( '' === $source || '' === $target ) {
-			return new WP_Error( 'ab_mcp_sync_manifest_address', sprintf( 'No package is signed: the address of this site or of the production site (%s) cannot be read here, an international domain name this server cannot convert. Store the address in its xn-- form (Punycode) on the page AlphaBridge → Staging, and the address of this site under Settings → General.', $pair['partner_url'] ) );
+			/* translators: %s: address of the production site. */
+			return new WP_Error( 'ab_mcp_sync_manifest_address', sprintf( __( 'No package is signed: the address of this site or of the production site (%s) cannot be read here, an international domain name this server cannot convert. Store the address in its xn-- form (Punycode) on the page AlphaBridge → Staging, and the address of this site under Settings → General.', 'alphabridge-mcp' ), $pair['partner_url'] ) );
 		}
 		$fields = array_keys( $package );
 		sort( $fields );
@@ -215,7 +217,7 @@ final class AB_MCP_Sync_Manifest {
 		$keys = is_array( $signed ) ? array_keys( $signed ) : array();
 		sort( $keys );
 		if ( array( 'manifest', 'signature' ) !== $keys || ! is_string( $signed['manifest'] ) || '' === $signed['manifest'] || strlen( $signed['manifest'] ) > self::MAX_TEXT || ! is_string( $signed['signature'] ) ) {
-			return new WP_Error( 'ab_mcp_sync_manifest_envelope', 'The package carries no manifest this site can read: a manifest is its text and its signature, nothing else. Export the package again on the staging site (wp_site_export) and use what it gives.' );
+			return new WP_Error( 'ab_mcp_sync_manifest_envelope', __( 'The package carries no manifest this site can read: a manifest is its text and its signature, nothing else. Export the package again on the staging site (wp_site_export) and use what it gives.', 'alphabridge-mcp' ) );
 		}
 		$text      = $signed['manifest'];
 		$signature = AB_MCP_Sync_Key::from_base64( $signed['signature'], AB_MCP_Sync_Key::SIGNATURE_BYTES );
@@ -223,7 +225,7 @@ final class AB_MCP_Sync_Manifest {
 		// One spelling: the text AB_MCP_Sync_Canon::encode() writes for its data.
 		$manifest = json_decode( $text, true, 8 );
 		if ( ! is_array( $manifest ) || AB_MCP_Sync_Canon::encode( $manifest ) !== $text ) {
-			return new WP_Error( 'ab_mcp_sync_manifest_spelling', 'The manifest is not written the one way the staging site writes it, so it is not read: it was changed on the way. Export the package again on the staging site (wp_site_export) and use what it gives, unchanged.' );
+			return new WP_Error( 'ab_mcp_sync_manifest_spelling', __( 'The manifest is not written the one way the staging site writes it, so it is not read: it was changed on the way. Export the package again on the staging site (wp_site_export) and use what it gives, unchanged.', 'alphabridge-mcp' ) );
 		}
 
 		// Every field, the format and the version of the canonical form.
@@ -240,14 +242,15 @@ final class AB_MCP_Sync_Manifest {
 		$anchor = AB_MCP_Sync_Anchor::active();
 		if ( null === $anchor ) {
 			if ( null !== AB_MCP_Sync_Anchor::prepared() ) {
-				return new WP_Error( 'ab_mcp_sync_manifest_unconfirmed', 'The key of the staging site is prepared on this site but not confirmed, so no package is read. Ask the person to confirm it on the page AlphaBridge → Staging of this site, comparing its fingerprint with the one the staging site shows, then call again.' );
+				return new WP_Error( 'ab_mcp_sync_manifest_unconfirmed', __( 'The key of the staging site is prepared on this site but not confirmed, so no package is read. Ask the person to confirm it on the page AlphaBridge → Staging of this site, comparing its fingerprint with the one the staging site shows, then call again.', 'alphabridge-mcp' ) );
 			}
-			return new WP_Error( 'ab_mcp_sync_manifest_no_anchor', 'This site has no confirmed key of a staging site, so no package is read. Ask the person to fetch the key of the staging site, or enter its pairing code, and confirm it on the page AlphaBridge → Staging of this site; then call again.' );
+			return new WP_Error( 'ab_mcp_sync_manifest_no_anchor', __( 'This site has no confirmed key of a staging site, so no package is read. Ask the person to fetch the key of the staging site, or enter its pairing code, and confirm it on the page AlphaBridge → Staging of this site; then call again.', 'alphabridge-mcp' ) );
 		}
 		if ( $manifest['source_id'] !== $anchor['source_id'] || $manifest['key_id'] !== $anchor['key_id'] ) {
 			return new WP_Error(
 				'ab_mcp_sync_manifest_key',
-				sprintf( 'The package is signed with the key %1$s of the source %2$s, but the key confirmed here is %3$s of the source %4$s (the staging site made a new key when its role was confirmed again, or the package comes from another site). Ask the person to fetch the new key and confirm it on the page AlphaBridge → Staging of this site, then export the package again.', $manifest['key_id'], $manifest['source_id'], $anchor['key_id'], $anchor['source_id'] ),
+				/* translators: 1: key id of the package, 2: source id of the package, 3: key id confirmed here, 4: source id confirmed here. */
+				sprintf( __( 'The package is signed with the key %1$s of the source %2$s, but the key confirmed here is %3$s of the source %4$s (the staging site made a new key when its role was confirmed again, or the package comes from another site). Ask the person to fetch the new key and confirm it on the page AlphaBridge → Staging of this site, then export the package again.', 'alphabridge-mcp' ), $manifest['key_id'], $manifest['source_id'], $anchor['key_id'], $anchor['source_id'] ),
 				array(
 					'key_id'    => $manifest['key_id'],
 					'confirmed' => $anchor['key_id'],
@@ -263,7 +266,7 @@ final class AB_MCP_Sync_Manifest {
 			$valid = false;
 		}
 		if ( true !== $valid ) {
-			return new WP_Error( 'ab_mcp_sync_manifest_signature', 'The signature of the manifest does not match the confirmed key of the staging site: the manifest was changed on the way or signed by another key. Export the package again on the staging site (wp_site_export) and use what it gives, unchanged.' );
+			return new WP_Error( 'ab_mcp_sync_manifest_signature', __( 'The signature of the manifest does not match the confirmed key of the staging site: the manifest was changed on the way or signed by another key. Export the package again on the staging site (wp_site_export) and use what it gives, unchanged.', 'alphabridge-mcp' ) );
 		}
 
 		// For this site, from its staging site, exactly.
@@ -277,7 +280,8 @@ final class AB_MCP_Sync_Manifest {
 		if ( '' === $us || AB_MCP_Sync_Key::site_form( $manifest['target'] ) !== $us ) {
 			return new WP_Error(
 				'ab_mcp_sync_manifest_target',
-				sprintf( 'The package is for %1$s, and this site is %2$s: scheme, host, port and path must be the same. Check the address of the production site on the page AlphaBridge → Staging of the staging site, then export the package again.', $manifest['target'], $own ) . AB_MCP_Sync_Key::idn_hint( $manifest['target'], $own ),
+				/* translators: 1: address the package is for, 2: address of this site. */
+				sprintf( __( 'The package is for %1$s, and this site is %2$s: scheme, host, port and path must be the same. Check the address of the production site on the page AlphaBridge → Staging of the staging site, then export the package again.', 'alphabridge-mcp' ), $manifest['target'], $own ) . AB_MCP_Sync_Key::idn_hint( $manifest['target'], $own ),
 				array(
 					'target' => $manifest['target'],
 					'site'   => $own,
@@ -288,7 +292,8 @@ final class AB_MCP_Sync_Manifest {
 		if ( '' === $from || AB_MCP_Sync_Key::site_form( $anchor['partner_url'] ) !== $from ) {
 			return new WP_Error(
 				'ab_mcp_sync_manifest_source',
-				sprintf( 'The package comes from %1$s, and the staging site paired with this site is %2$s: scheme, host, port and path must be the same. Check the addresses on the page AlphaBridge → Staging of both sites, then export the package again.', $manifest['source'], $anchor['partner_url'] ) . AB_MCP_Sync_Key::idn_hint( $manifest['source'], $anchor['partner_url'] ),
+				/* translators: 1: address the package comes from, 2: address of the staging site paired here. */
+				sprintf( __( 'The package comes from %1$s, and the staging site paired with this site is %2$s: scheme, host, port and path must be the same. Check the addresses on the page AlphaBridge → Staging of both sites, then export the package again.', 'alphabridge-mcp' ), $manifest['source'], $anchor['partner_url'] ) . AB_MCP_Sync_Key::idn_hint( $manifest['source'], $anchor['partner_url'] ),
 				array(
 					'source'      => $manifest['source'],
 					'partner_url' => $anchor['partner_url'],
@@ -298,25 +303,26 @@ final class AB_MCP_Sync_Manifest {
 
 		// In time.
 		if ( $now >= $manifest['expires'] ) {
-			return new WP_Error( 'ab_mcp_sync_manifest_expired', 'The package expired: a package is read for 24 hours after the staging site made it. Export it again on the staging site (wp_site_export).', array( 'expires' => $manifest['expires'] ) );
+			return new WP_Error( 'ab_mcp_sync_manifest_expired', __( 'The package expired: a package is read for 24 hours after the staging site made it. Export it again on the staging site (wp_site_export).', 'alphabridge-mcp' ), array( 'expires' => $manifest['expires'] ) );
 		}
 		if ( $manifest['created'] > $now + self::SKEW ) {
-			return new WP_Error( 'ab_mcp_sync_manifest_future', 'The package says it was made later than the clock of this site says it is now, by more than five minutes, so the clock of one of the two sites is wrong. Ask the host of the site whose time is wrong to correct its clock, then export the package again.', array( 'created' => $manifest['created'] ) );
+			return new WP_Error( 'ab_mcp_sync_manifest_future', __( 'The package says it was made later than the clock of this site says it is now, by more than five minutes, so the clock of one of the two sites is wrong. Ask the host of the site whose time is wrong to correct its clock, then export the package again.', 'alphabridge-mcp' ), array( 'created' => $manifest['created'] ) );
 		}
 
 		// For what the caller reads it.
 		if ( ! isset( $expect['purpose'] ) || $expect['purpose'] !== $manifest['purpose'] ) {
 			return new WP_Error(
 				'ab_mcp_sync_manifest_purpose',
-				sprintf( 'The package is a package of %1$s and is read only as one. Use the package of the right kind, or export one on the staging site (wp_site_export).', $manifest['purpose'] ),
+				/* translators: 1: purpose of the package, as the tools name it (inventory, env, objects, media). */
+				sprintf( __( 'The package is a package of %1$s and is read only as one. Use the package of the right kind, or export one on the staging site (wp_site_export).', 'alphabridge-mcp' ), $manifest['purpose'] ),
 				array( 'purpose' => $manifest['purpose'] )
 			);
 		}
 		if ( in_array( $manifest['purpose'], self::FOR_REPORT, true ) && ( ! isset( $expect['report_hash'] ) || ! is_string( $expect['report_hash'] ) || ! hash_equals( $manifest['report_hash'], $expect['report_hash'] ) ) ) {
-			return new WP_Error( 'ab_mcp_sync_manifest_report', 'The package was made for another report than the one being taken over, and a package is used for its own report only. Export the package again on the staging site for the current report (wp_site_export), then call again.', array( 'report_hash' => $manifest['report_hash'] ) );
+			return new WP_Error( 'ab_mcp_sync_manifest_report', __( 'The package was made for another report than the one being taken over, and a package is used for its own report only. Export the package again on the staging site for the current report (wp_site_export), then call again.', 'alphabridge-mcp' ), array( 'report_hash' => $manifest['report_hash'] ) );
 		}
 		if ( isset( $expect['package_id'] ) && $expect['package_id'] !== $manifest['package_id'] ) {
-			return new WP_Error( 'ab_mcp_sync_manifest_package', 'The manifest is the one of another package than the one being read. Use the manifest that came with this package, or export the package again on the staging site (wp_site_export).', array( 'package_id' => $manifest['package_id'] ) );
+			return new WP_Error( 'ab_mcp_sync_manifest_package', __( 'The manifest is the one of another package than the one being read. Use the manifest that came with this package, or export the package again on the staging site (wp_site_export).', 'alphabridge-mcp' ), array( 'package_id' => $manifest['package_id'] ) );
 		}
 
 		return array(
@@ -336,10 +342,12 @@ final class AB_MCP_Sync_Manifest {
 	 */
 	public static function chunk( array $manifest, $index, $data ) {
 		if ( ! is_int( $index ) || ! isset( $manifest['chunks'][ $index ] ) ) {
-			return new WP_Error( 'ab_mcp_sync_chunk_index', sprintf( 'The package has no chunk %s: its manifest lists the chunks 0 to %d. Ask for a chunk of that list.', is_scalar( $index ) ? (string) $index : '?', count( $manifest['chunks'] ) - 1 ) );
+			/* translators: 1: the chunk that was asked for, 2: number of the last chunk. */
+			return new WP_Error( 'ab_mcp_sync_chunk_index', sprintf( __( 'The package has no chunk %1$s: its manifest lists the chunks 0 to %2$d. Ask for a chunk of that list.', 'alphabridge-mcp' ), is_scalar( $index ) ? (string) $index : '?', count( $manifest['chunks'] ) - 1 ) );
 		}
 		if ( ! is_string( $data ) || ! hash_equals( $manifest['chunks'][ $index ]['sha256'], hash( 'sha256', $data ) ) ) {
-			return new WP_Error( 'ab_mcp_sync_chunk_hash', sprintf( 'Chunk %d is not the chunk the manifest names (its SHA-256 differs), so it is not read. Fetch the chunk again from the staging site; if it differs again, export the package again there (wp_site_export).', $index ), array( 'chunk' => $index ) );
+			/* translators: %d: number of the chunk. */
+			return new WP_Error( 'ab_mcp_sync_chunk_hash', sprintf( __( 'Chunk %d is not the chunk the manifest names (its SHA-256 differs), so it is not read. Fetch the chunk again from the staging site; if it differs again, export the package again there (wp_site_export).', 'alphabridge-mcp' ), $index ), array( 'chunk' => $index ) );
 		}
 		return true;
 	}
@@ -353,7 +361,7 @@ final class AB_MCP_Sync_Manifest {
 	 */
 	public static function whole( array $manifest, $sha256 ) {
 		if ( ! is_string( $sha256 ) || ! hash_equals( $manifest['sha256'], $sha256 ) ) {
-			return new WP_Error( 'ab_mcp_sync_package_hash', 'The package put together from its chunks is not the package the manifest names (its SHA-256 differs), so it is not read. Fetch the package again from the staging site; if it differs again, export it again there (wp_site_export).' );
+			return new WP_Error( 'ab_mcp_sync_package_hash', __( 'The package put together from its chunks is not the package the manifest names (its SHA-256 differs), so it is not read. Fetch the package again from the staging site; if it differs again, export it again there (wp_site_export).', 'alphabridge-mcp' ) );
 		}
 		return true;
 	}
@@ -388,7 +396,8 @@ final class AB_MCP_Sync_Manifest {
 		if ( self::FORMAT !== $m['format'] ) {
 			return new WP_Error(
 				'ab_mcp_sync_manifest_format',
-				sprintf( 'The package is of the format %1$s, and this site reads %2$s. Update AlphaBridge MCP on both sites to the same version, then export the package again on the staging site (wp_site_export).', is_string( $m['format'] ) ? $m['format'] : 'unknown', self::FORMAT ),
+				/* translators: 1: format of the package (such as ab-sync/1), 2: format this site reads. */
+				sprintf( __( 'The package is of the format %1$s, and this site reads %2$s. Update AlphaBridge MCP on both sites to the same version, then export the package again on the staging site (wp_site_export).', 'alphabridge-mcp' ), is_string( $m['format'] ) ? $m['format'] : 'unknown', self::FORMAT ),
 				array( 'format' => is_string( $m['format'] ) ? $m['format'] : null )
 			);
 		}
@@ -473,7 +482,8 @@ final class AB_MCP_Sync_Manifest {
 	private static function shape_refusal( $field ) {
 		return new WP_Error(
 			'ab_mcp_sync_manifest_shape',
-			sprintf( 'The field %s of the manifest is missing, not allowed, or not as the format ab-sync/1 has it, so the package is not read. Update AlphaBridge MCP on both sites to the same version, then export the package again on the staging site (wp_site_export).', $field ),
+			/* translators: %s: name of the field of the manifest. */
+			sprintf( __( 'The field %s of the manifest is missing, not allowed, or not as the format ab-sync/1 has it, so the package is not read. Update AlphaBridge MCP on both sites to the same version, then export the package again on the staging site (wp_site_export).', 'alphabridge-mcp' ), $field ),
 			array( 'field' => $field )
 		);
 	}

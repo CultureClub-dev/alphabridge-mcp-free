@@ -79,7 +79,7 @@ e('means-settable', 'check(): a limit set_time_limit() raises is tight at most',
 e('means-time-level', 'check(): the time limit against MIN_TIME', RS,
   "\t\t\t$level = self::level( (float) $limit, (float) self::MIN_TIME );", "\t\t\t$level = self::OK;", 'unit', MEANS)
 e('means-memory', 'check(): the memory limit against MIN_MEMORY', RS,
-  "\t\t\t$criteria[] = self::criterion( 'memory', $memory, self::MIN_MEMORY, self::level( (float) $memory, (float) self::MIN_MEMORY ), sprintf( 'Raise the PHP memory limit (memory_limit) to at least %s (today %s).', self::human( self::MIN_MEMORY ), self::human( $memory ) ) );",
+  "\t\t\t$criteria[] = self::criterion( 'memory', $memory, self::MIN_MEMORY, self::level( (float) $memory, (float) self::MIN_MEMORY ), sprintf( __( 'Raise the PHP memory limit (memory_limit) to at least %1$s (today %2$s).', 'alphabridge-mcp' ), self::human( self::MIN_MEMORY ), self::human( $memory ) ) );",
   "\t\t\t$criteria[] = self::criterion( 'memory', $memory, self::MIN_MEMORY, self::OK, '' );", 'unit', MEANS)
 e('means-space-unknown', 'check(): free space PHP cannot ask is insufficient', RS,
   "\t\tif ( null === $free ) {\n\t\t\t$criteria[] = self::criterion( 'space', 'unknown', $needed, self::INSUFFICIENT,", "\t\tif ( null === $free ) {\n\t\t\t$criteria[] = self::criterion( 'space', 'unknown', $needed, self::OK,", 'unit', MEANS)
@@ -153,7 +153,7 @@ e('writer-password', 'target_of(): a password-protected post is refused (B9)', P
 e('writer-create-meta', 'target_of(): a new post with a key whose right only the object answers is locked (decision 28; branch 9)', PW,
   "\t\t\tif ( 'create' === $item['op'] && ! self::new_meta_allowed( $key, $type ) ) {", "\t\t\tif ( false ) {", 'unit', LOCKS)
 e('writer-parent-unmapped', 'target_of(): a parent without a pair is refused', PW,
-  "\t\t\tif ( null === $mapped ) {\n\t\t\t\treturn self::locked( 'post:reference_unmapped', sprintf( 'post_parent %d of the staging site', $parent ) );", "\t\t\tif ( false ) {\n\t\t\t\treturn self::locked( 'post:reference_unmapped', sprintf( 'post_parent %d of the staging site', $parent ) );", 'unit', LOCKS)
+  "\t\t\tif ( null === $mapped ) {\n\t\t\t\t/* translators: %d: post ID on the staging site. */\n\t\t\t\treturn self::locked( 'post:reference_unmapped', sprintf( ", "\t\t\tif ( false ) {\n\t\t\t\t/* translators: %d: post ID on the staging site. */\n\t\t\t\treturn self::locked( 'post:reference_unmapped', sprintf( ", 'unit', LOCKS)
 e('writer-type', 'target_of(): only posts and pages in this version', PW,
   "\t\tif ( ! in_array( $type, self::TYPES, true ) ) {", "\t\tif ( false ) {", 'unit', LOCKS)
 e('writer-status', 'target_of(): the trash and an auto-draft are no target', PW,
@@ -268,8 +268,8 @@ e('engine-line-hash', 'line_of(): the package holds what the report compared', E
 e('engine-line-held', 'line_of(): an object the credential check holds is not written', EN,
   "\t\tif ( isset( $lines['held'][ (string) $item['kind'] . \"\\0\" . $sha ] ) || ! isset( $line['hash'] ) ) {", "\t\tif ( ! isset( $line['hash'] ) ) {", 'unit', 'testTheLineOfAnItemIsCheckedAgainstTheReport')
 e('engine-check-target', 'check_item(): a target changed since the plan aborts the run (decision 16)', EN,
-  "\t\t\tif ( null === $hash || ! hash_equals( (string) $item['live_hash'], $hash ) ) {\n\t\t\t\treturn self::finding( $item, sprintf( 'The %1$s %2$s of this site changed since the plan (or cannot be read whole), so the %3$s is not written over it.'",
-  "\t\t\tif ( false ) {\n\t\t\t\treturn self::finding( $item, sprintf( 'The %1$s %2$s of this site changed since the plan (or cannot be read whole), so the %3$s is not written over it.'", 'it', 'testTheCheckBeforeTheFirstWriteAbortsOnADeviationAndWritesNothing')
+  "\t\t\tif ( null === $hash || ! hash_equals( (string) $item['live_hash'], $hash ) ) {\n\t\t\t\t/* translators: 1: kind of the object, as the tools name it (post, term, …), 2: its reference on this site, 3: the reference of the object of the staging site. */\n\t\t\t\treturn self::finding( $item, sprintf( ",
+  "\t\t\tif ( false ) {\n\t\t\t\t/* translators: 1: kind of the object, as the tools name it (post, term, …), 2: its reference on this site, 3: the reference of the object of the staging site. */\n\t\t\t\treturn self::finding( $item, sprintf( ", 'it', 'testTheCheckBeforeTheFirstWriteAbortsOnADeviationAndWritesNothing')
 e('engine-write-ahead', 'boundary(): the journal written ahead of the first part (decision 17)', EN,
   "\t\t$ahead            = AB_MCP_Sync_Run::update_step( $run_id, $seq, array( 'parts' => $journal ), 'begun' );", "\t\t$ahead            = true;", 'it', 'testARequestThatExitsInABoundaryLeavesTheRunInterruptedAndTheWayBackLeadsTheSameRun')
 e('engine-qualified', 'run_verify(): a qualified close only where every write step was written (decision 20)', EN,
@@ -332,7 +332,7 @@ e('writer-before-credential', 'shown_value(): a value the credential check names
 e('writer-before-net', 'shown_value(): a value the net names a credential in is a reference only, never in the clear (Codex round 8)', PW,
   "\t\tif ( 'credential' === $net ) {", "\t\tif ( false ) {", 'unit', 'testTheValueBeforeOfAPartLeftIsShortNeverACredentialAndCapped')
 e('run-cap-mark-counts', 'cap_values(): the mark of a value cut counts against the budget; past it the value is left out (Codex round 8)', RU,
-  "\t\t\t\t\tif ( strlen( self::VALUE_CUT ) <= $budget ) {", "\t\t\t\t\tif ( true ) {", 'unit', 'testAnAnswerCarriesAtMostSoManyBytesOfValuesBeforeNewestStepsFirst')
+  "\t\t\t\t\tif ( strlen( $cut ) <= $budget ) {", "\t\t\t\t\tif ( true ) {", 'unit', 'testAnAnswerCarriesAtMostSoManyBytesOfValuesBeforeNewestStepsFirst')
 e('engine-revert-foreign-mark', 'revert_boundary(): a part the journal marks as another hand\'s leaves the whole object on the way back, also where the step did not mark the object (Codex round 8)', EN,
   "\t\t} elseif ( empty( $object['deviated'] ) && self::marked_foreign( $journal ) ) {", "\t\t} elseif ( false ) {", 'it', 'testAJournalThatMarksAPartForeignLeavesTheWholeObjectOnTheWayBack')
 e('revert-will-foreign', 'plan(): the preview says left for an object whose journal marks a part as another hand\'s (Codex round 8)', RV,
@@ -352,8 +352,8 @@ e('engine-pre-call-terms', 'write_parts(): the state right before the terms call
 e('engine-revert-stops-besides', 'put_back(): whatever putting a part back changed besides it, named by the plan or not, stops the way back for the object (Codex round 16)', EN,
   "\t\t\t\t\t\tif ( $other_name !== $name && self::changed( $w::part_hash( $seen, $other_name ), $w::part_hash( $again, $other_name ) ) ) {", "\t\t\t\t\t\tif ( false ) {", 'it', 'testAKeyAHookAddsAsACategoryGoesBackStopsTheWayBackOfTheObject')
 e('engine-revert-stopped-left', 'put_back(): a part after the way back stopped is left, not put back (Codex round 16)', EN,
-  "\t\t\t\tif ( 'put_back' === $decided['state'] ) {\n\t\t\t\t\t$decided = array(\n\t\t\t\t\t\t'state' => 'left',\n\t\t\t\t\t\t'why'   => sprintf( 'The way back stopped for this object: %s; the part %s is left as it is, check it by hand.', $stopped, $name ),",
-  "\t\t\t\tif ( false ) {\n\t\t\t\t\t$decided = array(\n\t\t\t\t\t\t'state' => 'left',\n\t\t\t\t\t\t'why'   => sprintf( 'The way back stopped for this object: %s; the part %s is left as it is, check it by hand.', $stopped, $name ),", 'it', 'testAKeyAHookAddsAsACategoryGoesBackStopsTheWayBackOfTheObject')
+  "\t\t\t\tif ( 'put_back' === $decided['state'] ) {",
+  "\t\t\t\tif ( false ) {", 'it', 'testAKeyAHookAddsAsACategoryGoesBackStopsTheWayBackOfTheObject')
 e('writer-before-password', 'row_before(): post_password is a credential by its name, never shown', PW,
   "\t\t\tif ( 'post_password' === $column || AB_MCP_Sync_Credentials::names_credential( $column, AB_MCP_Redactor::extra_keys() ) ) {", "\t\t\tif ( false ) {", 'unit', 'testTheValueBeforeOfAPartLeftIsShortNeverACredentialAndCapped')
 e('writer-before-long', 'row_before(): a long text by its bytes and the revision that holds it, never whole', PW,
@@ -469,7 +469,7 @@ RIGHTS_UNIT = 'testTheWayBackAsksTheRightsAtTheObjectAsTheForwardWriteDoesBefore
 e('engine-put-back-rights', 'put_back(): a part the account may not write as the forward write asks is left with its value before (decision 28; P2)', EN,
   "\t\t\t\t$may = $w::restore_right( $name, $live_id, $backup, is_array( $seen ) ? $seen : array() );\n\t\t\t\tif ( true !== $may ) {", "\t\t\t\t$may = $w::restore_right( $name, $live_id, $backup, is_array( $seen ) ? $seen : array() );\n\t\t\t\tif ( false ) {", 'it', RIGHTS_BACK)
 e('writer-restore-right-edit', 'restore_right(): every part asks edit_post first, the terms too (Codex round 18)', PW,
-  "\t\tif ( ! current_user_can( 'edit_post', $id ) ) {\n\t\t\treturn sprintf( 'edit the post %1$d (edit_post%2$s)', $id, 'row' === $part ? '' : ', for the part ' . $part );", "\t\tif ( false ) {\n\t\t\treturn sprintf( 'edit the post %1$d (edit_post%2$s)', $id, 'row' === $part ? '' : ', for the part ' . $part );", 'it', 'testWithoutEditPostNothingOfThePostGoesBackNotEvenItsTerms')
+  "\t\tif ( ! current_user_can( 'edit_post', $id ) ) {", "\t\tif ( false ) {", 'it', 'testWithoutEditPostNothingOfThePostGoesBackNotEvenItsTerms')
 e('writer-restore-right-publish', 'restore_right(): a row put back to publish, future or private asks publish_posts', PW,
   "\t\t\tif ( in_array( $status, array( 'publish', 'future', 'private' ), true ) && ( ! isset( $now['row']['post_status'] ) || (string) $now['row']['post_status'] !== $status ) && ! current_user_can( (string) $pto->cap->publish_posts ) ) {", "\t\t\tif ( false ) {", 'unit', RIGHTS_UNIT)
 e('writer-restore-right-others', 'restore_right(): a row of another author asks edit_others_posts', PW,
@@ -525,7 +525,7 @@ RACE = 'testTheWayBackOfARunDoesNotBeginBesideAStepBeingWrittenNorOnAPlanTheRunH
 e('revert-begin-lock', 'begin(): the whole call under the lock of the write boundary; a step being written holds it, the way back does not begin beside it (P1; Variante A)', RV,
   "\t\treturn AB_MCP_Sync_Run::under_lock(\n\t\t\tstatic function () use ( $plan, $a ) {\n\t\t\t\treturn self::begin_locked( $plan, $a );", "\t\treturn call_user_func(\n\t\t\tstatic function () use ( $plan, $a ) {\n\t\t\t\treturn self::begin_locked( $plan, $a );", 'it', RACE)
 e('revert-begin-settle', 'begin_locked(): the run settled under the lock of the call; a step a request that ended left begun makes it interrupted, the plan confirmed for the open run is refused (Variante A)', RV,
-  "\t\t$fresh = AB_MCP_Sync_Run::settle( $fresh );\n\t\tif ( is_wp_error( $fresh ) ) {\n\t\t\treturn $fresh;\n\t\t}\n\t\tif ( (string) $fresh['state'] !== (string) $run['state'] ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_revert_changed'", "\t\tif ( (string) $fresh['state'] !== (string) $run['state'] ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_revert_changed'", 'it', RACE)
+  "\t\t$fresh = AB_MCP_Sync_Run::settle( $fresh );\n\t\tif ( is_wp_error( $fresh ) ) {\n\t\t\treturn $fresh;\n\t\t}\n\t\tif ( (string) $fresh['state'] !== (string) $run['state'] ) {\n\t\t\t/* translators: 1: run number, 2: its state when the way back was planned, 3: its state now, as the tools name them. */", "\t\tif ( (string) $fresh['state'] !== (string) $run['state'] ) {\n\t\t\t/* translators: 1: run number, 2: its state when the way back was planned, 3: its state now, as the tools name them. */", 'it', RACE)
 e('revert-begin-restate', 'begin_same_run(): the plan confirmed against the run as it is under the lock; a step that wrote in between refuses it (P1)', RV,
   "\t\tif ( ! hash_equals( (string) $plan['state'], (string) $again['state'] ) ) {", "\t\tif ( false ) {", 'it', RACE)
 TIME_UNIT = 'testTheTimeOfACallIsRaisedWhereItTakesAndTheWorkIsDerivedFromTheLimitItHas'
@@ -595,7 +595,7 @@ ORDER_UNIT = 'testARelationshipWithATermOrderLocksThePostAndIsPartOfTheHashOfIts
 ORDER_IT = 'testAPostWhoseTermHasAnOrderIsLockedBeforeTheFirstWriteAndOneWithoutGoesOverAndBack'
 CACHES = 'testTheCachesOfPhaseSevenAreEmptiedInPartsWithinTheWorkOfEachCallEachObjectOnce'
 e('writer-term-order-lock', 'precheck(): a relationship of the post here with a term_order other than 0 is locked before anything is written (P2)', PW,
-  "\t\t\tif ( 0 !== (int) $term['term_order'] ) {\n\t\t\t\treturn self::locked( 'post:term_order'", "\t\t\tif ( false ) {\n\t\t\t\treturn self::locked( 'post:term_order'", 'it', ORDER_IT)
+  "\t\t\tif ( 0 !== (int) $term['term_order'] ) {", "\t\t\tif ( false ) {", 'it', ORDER_IT)
 e('writer-term-entries-order', 'term_entries(): an order other than 0 is part of the entry, so the hash differs from the keys alone', PW,
   "\t\t\t$out[] = 0 !== $order ? $key . '#' . $order : $key;", "\t\t\t$out[] = $key;", 'unit', ORDER_UNIT)
 e('writer-restore-terms-entries', 'restore_terms(): read back as the backup by the entries, the order included; otherwise unclear', PW,
@@ -613,7 +613,7 @@ SPELL_UNIT = 'testTwoMetaKeysTheDatabaseComparesAlikeLockThePostBeforeTheFirstWr
 SPELL_IT = 'testTwoMetaKeysTheDatabaseComparesAlikeLockThePageBeforeTheFirstWriteAndAnOrdinaryPageRuns'
 BOOKING = 'testTheReservationCountsTheBackupsOfTheObjectsOfThisSiteAndTheWriterHoldsTheRunToIt'
 e('writer-meta-spelling-lock', 'precheck(): a key the database holds under another spelling as well locks the post before anything is written (P2)', PW,
-  "\t\t\t\tif ( $row['key'] !== (string) $key ) {\n\t\t\t\t\treturn self::locked( 'post:meta_spelling'", "\t\t\t\tif ( false ) {\n\t\t\t\t\treturn self::locked( 'post:meta_spelling'", 'it', SPELL_IT)
+  "\t\t\t\tif ( $row['key'] !== (string) $key ) {", "\t\t\t\tif ( false ) {", 'it', SPELL_IT)
 e('writer-meta-spelling-live-keys', 'differing(): the keys only this site has, which the step removes, are written keys (and asked for other spellings as well)', PW,
   "\t\tforeach ( $current['meta'] as $row ) {\n\t\t\t$keys[] = (string) $row['key'];\n\t\t}\n\t\t$out   = array();", "\t\tforeach ( array() as $row ) {\n\t\t\t$keys[] = (string) $row['key'];\n\t\t}\n\t\t$out   = array();", 'unit', SPELL_UNIT)
 e('push-plan-backup-bytes', 'plan(): the reservation counts the backup of each object of this site as its rows are (P2)', PU,
@@ -650,13 +650,13 @@ e('run-close-checked-settle', 'close_checked(): the run settled under the lock f
 e('engine-next-lock', 'next(): the whole call under the lock of the boundary', EN,
   "\t\treturn AB_MCP_Sync_Run::under_lock(\n\t\t\tstatic function () use ( $run, $named ) {", "\t\treturn call_user_func(\n\t\t\tstatic function () use ( $run, $named ) {", 'it', BUSY)
 e('engine-fresh-state', 'fresh(): the run read under the lock in the state the caller read it in; moved since, nothing is written (the one place of still())', EN,
-  "\t\tif ( (string) $now['state'] !== (string) $run['state'] ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_run_state', sprintf( 'Run %1$d was %2$s when this call read it", "\t\tif ( false ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_run_state', sprintf( 'Run %1$d was %2$s when this call read it", 'it', DELAYED)
+  "\t\tif ( (string) $now['state'] !== (string) $run['state'] ) {", "\t\tif ( false ) {", 'it', DELAYED)
 e('engine-fresh-settle', 'fresh(): the run settled under the lock; a step a request that ended left makes it interrupted and no other step begins', EN,
   "\t\t$now = AB_MCP_Sync_Run::settle( $now );\n\t\tif ( is_wp_error( $now ) ) {\n\t\t\treturn $now;\n\t\t}\n\t\treturn 'interrupted' === $now['state']", "\t\treturn 'interrupted' === $now['state']", 'it', OWN)
 e('engine-close-revert-open', 'close_revert(): not closed while a step of the way back is planned or begun (P1, engine:162)', EN,
-  "\t\t\tif ( in_array( $step['state'], array( 'planned', 'begun' ), true ) ) {\n\t\t\t\treturn new WP_Error( 'ab_mcp_sync_run_state', sprintf( 'The way back of run %1$d is not closed", "\t\t\tif ( false ) {\n\t\t\t\treturn new WP_Error( 'ab_mcp_sync_run_state', sprintf( 'The way back of run %1$d is not closed", 'it', BUSY)
+  "\t\t\tif ( in_array( $step['state'], array( 'planned', 'begun' ), true ) ) {", "\t\t\tif ( false ) {", 'it', BUSY)
 e('engine-closed-note', 'closed_note(): the close of a way back with findings names the steps that stayed', EN,
-  "\t\t\t\t$stayed[] = sprintf( 'step %1$d of the way back stayed as it is (%2$s)', (int) $step['seq'], (string) $step['state'] );", '', 'it', LEDON)
+  "\t\t\t\t$stayed[] = sprintf( __( 'Step %1$d of the way back stayed as it is (%2$s).', 'alphabridge-mcp' ), (int) $step['seq'], (string) $step['state'] );", '', 'it', LEDON)
 e('push-change-lock', 'call(): next, step and abort under the lock of the call from the first read of the run; busy changes nothing, not even the count of calls', PU,
   "\t\treturn AB_MCP_Sync_Run::under_lock(\n\t\t\tstatic function () use ( $a, $action ) {", "\t\treturn call_user_func(\n\t\t\tstatic function () use ( $a, $action ) {", 'it', BUSY)
 e('revert-next-lock', 'call(): next of the way back under the lock of the call from the first read of the run', RV,
@@ -666,13 +666,13 @@ e('revert-interrupted-one-way', 'plan(): every interrupted run goes to the one w
 e('revert-on-way-back', 'interrupted_plan(): a run whose way back had begun is led on, not planned anew', RV,
   "\t\tif ( ! AB_MCP_Sync_Run::on_way_back( $run, $steps ) ) {", "\t\tif ( true ) {", 'it', LEDON)
 e('revert-continue-no-steps', 'interrupted_plan(): steps is not taken where the way back is led on (no step is added)', RV,
-  "\t\tif ( isset( $a['steps'] ) ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_revert_steps', sprintf( 'Run %d is interrupted on its way back", "\t\tif ( false ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_revert_steps', sprintf( 'Run %d is interrupted on its way back", 'it', LEDON)
+  "\t\tif ( isset( $a['steps'] ) ) {\n\t\t\t/* translators: %d: run number. */\n\t\t\treturn new WP_Error( 'ab_mcp_sync_revert_steps', sprintf( ", "\t\tif ( false ) {\n\t\t\t/* translators: %d: run number. */\n\t\t\treturn new WP_Error( 'ab_mcp_sync_revert_steps', sprintf( ", 'it', LEDON)
 e('run-on-way-back-step', 'on_way_back(): a run of the type push with a step of the way back is on its way back', RU,
   "\t\t\tif ( 'revert' === $step['op'] ) {\n\t\t\t\treturn true;", "\t\t\tif ( false ) {\n\t\t\t\treturn true;", 'it', LEDON)
 e('run-ways-back', 'interrupted_ways(): the ways of a run on its way back by its steps, not by its type', RU,
   "\t\t$back  = 'revert' === $run['type'] || ( is_array( $steps ) && self::on_way_back( $run, $steps ) );", "\t\t$back  = 'revert' === $run['type'];", 'it', LEDON)
 e('run-interrupted-revert-way', 'interrupted_ways(): the way for a run on its way back leads it on, not a way back planned anew (P1)', RU,
-  "\t\t\t? 'wp_site_revert action=plan with this run_id leads it on (confirmed with its token): the interrupted step stays as it is (unclear, nothing of it is put back again), the steps of the way back still planned go back one by one (action=next), and no step is added'", "\t\t\t? 'wp_site_revert action=plan with this run_id begins its way back (confirmed with its token)'", 'it', LED)
+  "\t\t$ways = $back\n", "\t\t$ways = false\n", 'it', LED)
 
 # ------------------------------- GitHub Codex round 7 on free#137 (two P2)
 # A relationship of the staging post with a term_order other than 0 locks

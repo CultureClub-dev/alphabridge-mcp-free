@@ -53,8 +53,12 @@
  * changes none: it is not under the lock, and open_one keeps a second run
  * from being made (decision 15).
  *
- * Messages are English without gettext, as the other classes of the
- * takeover; each names the way.
+ * Messages are in gettext, in the language of the site as they arise (a
+ * refusal, a reason an entry is locked); each names the way. Codes, states,
+ * kinds and the other values the tools name stay as they are, and so do
+ * the hints for the assistant (next, effect) and what the report says (the
+ * reasons of its locks); no translated text is compared, hashed or part of
+ * a print.
  *
  * @package AlphaBridge_MCP
  */
@@ -177,7 +181,7 @@ final class AB_MCP_Sync_Push {
 			return is_wp_error( $plan ) ? $plan : self::begin( $plan );
 		}
 		if ( ! in_array( $action, self::ACTIONS, true ) ) {
-			return new WP_Error( 'ab_mcp_sync_push_action', 'wp_site_push takes action=plan (with report_id and the selection; the token in the same call), next, step (with run_id and seq), status or abort (with run_id). Pass one of them.' );
+			return new WP_Error( 'ab_mcp_sync_push_action', __( 'wp_site_push takes action=plan (with report_id and the selection; the token in the same call), next, step (with run_id and seq), status or abort (with run_id). Pass one of them.', 'alphabridge-mcp' ) );
 		}
 		$source = AB_MCP_Sync_Proposal::source_id();
 		if ( is_wp_error( $source ) ) {
@@ -211,7 +215,8 @@ final class AB_MCP_Sync_Push {
 			static function () use ( $a, $action ) {
 				return self::change( $a, $action );
 			},
-			'abort' === $action ? sprintf( 'Run %d is not aborted', $id ) : sprintf( 'Run %d takes no step', $id )
+			/* translators: %d: run number. */
+			'abort' === $action ? sprintf( __( 'Run %d is not aborted.', 'alphabridge-mcp' ), $id ) : sprintf( __( 'Run %d takes no step.', 'alphabridge-mcp' ), $id )
 		);
 	}
 
@@ -243,19 +248,20 @@ final class AB_MCP_Sync_Push {
 			if ( is_wp_error( $shown ) ) {
 				return $shown;
 			}
-			$shown['next'] = 'The run is closed as aborted. What its steps wrote stays as written (their pairs have the new bases); wp_site_revert with this run_id takes it back pair by pair.';
+			$shown['next'] = __( 'The run is closed as aborted. What its steps wrote stays as written (their pairs have the new bases).', 'alphabridge-mcp' ) . ' wp_site_revert with this run_id takes it back pair by pair.';
 			return $shown;
 		}
 		if ( 'interrupted' === $run['state'] ) {
 			return AB_MCP_Sync_Run::interrupted_refusal( $run );
 		}
 		if ( 'open' !== $run['state'] || 'push' !== $run['type'] ) {
-			return new WP_Error( 'ab_mcp_sync_run_state', sprintf( 'The run %1$d is %2$s (%3$s) and takes no step here: a run of the way back goes on with wp_site_revert, a closed run no more. Ask for its status.', (int) $run['run_id'], $run['state'], $run['type'] ) );
+			/* translators: 1: run number, 2: its state, as the tools name it (open, closed, …), 3: its type, as the tools name it (push, revert). */
+			return new WP_Error( 'ab_mcp_sync_run_state', sprintf( __( 'The run %1$d is %2$s (%3$s) and takes no step here: a run of the way back goes on with wp_site_revert, a closed run no more. Ask for its status.', 'alphabridge-mcp' ), (int) $run['run_id'], $run['state'], $run['type'] ) );
 		}
 		$seq = null;
 		if ( 'step' === $action ) {
 			if ( ! isset( $a['seq'] ) || ! is_numeric( $a['seq'] ) || (int) $a['seq'] < 1 ) {
-				return new WP_Error( 'ab_mcp_sync_push_seq', 'action=step takes seq, the number of the step to run (status lists them). Pass it, or use action=next.' );
+				return new WP_Error( 'ab_mcp_sync_push_seq', __( 'action=step takes seq, the number of the step to run (status lists them). Pass it, or use action=next.', 'alphabridge-mcp' ) );
 			}
 			$seq = (int) $a['seq'];
 		}
@@ -275,7 +281,7 @@ final class AB_MCP_Sync_Push {
 	public static function plan( array $a ) {
 		$action = isset( $a['action'] ) ? $a['action'] : null;
 		if ( 'plan' !== $action ) {
-			return new WP_Error( 'ab_mcp_sync_push_action', 'wp_site_push takes action=plan (with report_id and the selection; the token in the same call), next, step (with run_id and seq), status or abort (with run_id). Pass one of them.' );
+			return new WP_Error( 'ab_mcp_sync_push_action', __( 'wp_site_push takes action=plan (with report_id and the selection; the token in the same call), next, step (with run_id and seq), status or abort (with run_id). Pass one of them.', 'alphabridge-mcp' ) );
 		}
 		$source = AB_MCP_Sync_Proposal::source_id();
 		if ( is_wp_error( $source ) ) {
@@ -284,18 +290,19 @@ final class AB_MCP_Sync_Push {
 		$anchor = AB_MCP_Sync_Anchor::active();
 		$print  = AB_MCP_Sync_Anchor::pair_print();
 		if ( null === $anchor || null === $print ) {
-			return new WP_Error( 'ab_mcp_sync_pairs_no_anchor', 'This site has no confirmed key of a staging site, so no run is planned. Ask the person to confirm it on the page AlphaBridge → Staging of this site; then call again.' );
+			return new WP_Error( 'ab_mcp_sync_pairs_no_anchor', __( 'This site has no confirmed key of a staging site, so no run is planned. Ask the person to confirm it on the page AlphaBridge → Staging of this site; then call again.', 'alphabridge-mcp' ) );
 		}
 		$status = AB_MCP_Sync_Schema::status();
 		if ( ! $status['available'] ) {
-			return new WP_Error( 'ab_mcp_staging_unavailable', sprintf( 'The tables of the takeover are not available on this site (%s): no run begins. Deactivate and activate AlphaBridge in wp-admin so the tables are made, or ask the host to let the database user create tables.', (string) $status['reason'] ) );
+			/* translators: %s: why the tables are not there, as the schema names it (multisite, missing, …). */
+			return new WP_Error( 'ab_mcp_staging_unavailable', sprintf( __( 'The tables of the takeover are not available on this site (%s): no run begins. Deactivate and activate AlphaBridge in wp-admin so the tables are made, or ask the host to let the database user create tables.', 'alphabridge-mcp' ), (string) $status['reason'] ) );
 		}
 		$found = AB_MCP_Sync_Report::find( isset( $a['report_id'] ) ? $a['report_id'] : null, $source );
 		if ( is_wp_error( $found ) ) {
 			return $found;
 		}
 		if ( null === $found['index'] ) {
-			return new WP_Error( 'ab_mcp_sync_report_not_done', 'This report is not worked out yet: the inventory of this site is still being read. Call wp_site_diff with this report_id until it answers done true, then plan.' );
+			return new WP_Error( 'ab_mcp_sync_report_not_done', __( 'This report is not worked out yet: the inventory of this site is still being read. Call wp_site_diff with this report_id until it answers done true, then plan.', 'alphabridge-mcp' ) );
 		}
 		$report_hash = (string) $found['index']['report_hash'];
 		// The selection.
@@ -303,21 +310,21 @@ final class AB_MCP_Sync_Push {
 		$drafts = self::numbers( isset( $a['as_draft'] ) ? $a['as_draft'] : array() );
 		$all    = isset( $a['all'] ) && ( true === $a['all'] || 'true' === $a['all'] || 1 === $a['all'] );
 		if ( null === $select || null === $drafts ) {
-			return self::selection( 'select and as_draft are lists of entry numbers of the report.' );
+			return self::selection( __( 'select and as_draft are lists of entry numbers of the report.', 'alphabridge-mcp' ) );
 		}
 		$choices = array();
 		foreach ( isset( $a['choices'] ) && is_array( $a['choices'] ) ? $a['choices'] : array() as $choice ) {
 			if ( ! is_array( $choice ) || ! isset( $choice['entry'], $choice['choice'] ) || null === self::numbers( array( $choice['entry'] ) ) || ! in_array( $choice['choice'], self::CHOICES, true ) ) {
-				return self::selection( 'A choice is an object of entry (its number) and choice (staging_wins, keep_live or leave_open).' );
+				return self::selection( __( 'A choice is an object of entry (its number) and choice (staging_wins, keep_live or leave_open).', 'alphabridge-mcp' ) );
 			}
 			$choices[ (int) $choice['entry'] ] = (string) $choice['choice'];
 		}
 		if ( array() === $select && array() === $choices && ! $all ) {
-			return self::selection( 'Nothing is chosen: pass select (entry numbers), choices (for conflicts) or all=true.' );
+			return self::selection( __( 'Nothing is chosen: pass select (entry numbers), choices (for conflicts) or all=true.', 'alphabridge-mcp' ) );
 		}
 		$packages = isset( $a['packages'] ) ? $a['packages'] : array();
 		if ( ! is_array( $packages ) || ! array_is_list( $packages ) || array() === $packages || count( $packages ) > AB_MCP_Sync_Proposal::MAX_PACKAGES || array() !== array_filter( $packages, static fn( $id ) => ! is_string( $id ) || 1 !== preg_match( AB_MCP_Sync_Key::ID, $id ) ) ) {
-			return new WP_Error( 'ab_mcp_sync_push_packages', 'A run writes from packages of objects of the staging site: pass packages, the package_ids (32 hex each) this site took over with wp_site_import_chunk (purpose=objects, with this report_hash), made on the staging site with wp_site_export (purpose=objects, report_hash and the refs of the entries).' );
+			return new WP_Error( 'ab_mcp_sync_push_packages', __( 'A run writes from packages of objects of the staging site: pass packages, the package_ids (32 hex each) this site took over with wp_site_import_chunk (purpose=objects, with this report_hash), made on the staging site with wp_site_export (purpose=objects, report_hash and the refs of the entries).', 'alphabridge-mcp' ) );
 		}
 		// The selection in its one spelling, and the plan_hash it gives with
 		// the report (the key of the replay of decision 15).
@@ -364,7 +371,8 @@ final class AB_MCP_Sync_Push {
 			}
 			foreach ( $numbers as $n ) {
 				if ( ! isset( $entries[ $n ] ) ) {
-					return self::selection( sprintf( 'The report has no entry %d (it has %d).', $n, (int) $found['index']['total'] ) );
+					/* translators: 1: the entry number asked for, 2: the number of entries of the report. */
+					return self::selection( sprintf( __( 'The report has no entry %1$d (it has %2$d).', 'alphabridge-mcp' ), $n, (int) $found['index']['total'] ) );
 				}
 			}
 		} else {
@@ -374,13 +382,15 @@ final class AB_MCP_Sync_Push {
 			}
 			foreach ( $numbers as $n ) {
 				if ( ! isset( $entries[ $n ] ) ) {
-					return self::selection( sprintf( 'The report has no entry %d (it has %d).', $n, (int) $found['index']['total'] ) );
+					/* translators: 1: the entry number asked for, 2: the number of entries of the report. */
+					return self::selection( sprintf( __( 'The report has no entry %1$d (it has %2$d).', 'alphabridge-mcp' ), $n, (int) $found['index']['total'] ) );
 				}
 			}
 		}
 		foreach ( $drafts as $n ) {
 			if ( ! in_array( $n, $select, true ) && ! isset( $choices[ $n ] ) && ! $all ) {
-				return self::selection( sprintf( 'Entry %d is in as_draft but not chosen: name it in select as well.', $n ) );
+				/* translators: %d: entry number of the report. */
+				return self::selection( sprintf( __( 'Entry %d is in as_draft but not chosen: name it in select as well.', 'alphabridge-mcp' ), $n ) );
 			}
 		}
 		// The staging lines of the report (their hashes bind the packages of
@@ -432,7 +442,8 @@ final class AB_MCP_Sync_Push {
 			$item['source_id'] = $source;
 			$key               = $item['kind'] . "\0" . $item['staging_ref'];
 			if ( ! isset( $hashes[ $key ] ) ) {
-				return new WP_Error( 'ab_mcp_sync_push_report', sprintf( 'The report holds no staging line for the %1$s %2$s of entry %3$d (its packages of the inventory are gone or changed). Make a new report (wp_site_diff) and plan again.', $item['kind'], $item['staging_ref'], $n ) );
+				/* translators: 1: kind of the object, as the tools name it (post, term, …), 2: its reference on the staging site, 3: entry number of the report. */
+				return new WP_Error( 'ab_mcp_sync_push_report', sprintf( __( 'The report holds no staging line for the %1$s %2$s of entry %3$d (its packages of the inventory are gone or changed). Make a new report (wp_site_diff) and plan again.', 'alphabridge-mcp' ), $item['kind'], $item['staging_ref'], $n ) );
 			}
 			$item['staging_hash'] = $hashes[ $key ];
 			$line                 = AB_MCP_Sync_Engine::line_of( $item, $lines );
@@ -533,7 +544,8 @@ final class AB_MCP_Sync_Push {
 						'subtype' => (string) $items[ $n ]['subtype'],
 						'action'  => (string) $items[ $n ]['action'],
 						'result'  => '',
-						'reason'  => sprintf( '%1$s (attachment:shared_path) The file %2$s is named by another attachment of this plan as well.', (string) $held['reason'], (string) $path ),
+						/* translators: 1: the reason of the lock, a whole sentence in the language of the site, 2: the path of the file under the uploads. */
+						'reason'  => sprintf( __( '%1$s (attachment:shared_path) The file %2$s is named by another attachment of this plan as well.', 'alphabridge-mcp' ), AB_MCP_Sync_Said::text( (string) $held['reason'] ), (string) $path ),
 						'stage'   => (string) $held['stage'],
 					);
 					unset( $items[ $n ] );
@@ -568,7 +580,14 @@ final class AB_MCP_Sync_Push {
 			return $refused;
 		}
 		if ( array() === $items ) {
-			return new WP_Error( 'ab_mcp_sync_push_nothing', sprintf( 'Nothing of the selection is written in this version: %s Choose entries the report marks take_over or create (posts, pages and the other types the engine writes, terms, attachments, menus and their items, widget areas, the additional CSS and core options).', array() === $locked ? 'no entry a takeover writes was chosen.' : implode( ' ', array_map( static fn( $l ) => sprintf( 'Entry %1$d (%2$s %3$s): %4$s', $l['n'], $l['kind'], $l['subtype'], $l['reason'] ), array_slice( $locked, 0, 5 ) ) ) ), array( 'locked' => $locked ) );
+			return new WP_Error(
+				'ab_mcp_sync_push_nothing',
+				array() === $locked
+					? __( 'Nothing of the selection is written in this version: no entry a takeover writes was chosen. Choose entries the report marks take_over or create (posts, pages and the other types the engine writes, terms, attachments, menus and their items, widget areas, the additional CSS and core options).', 'alphabridge-mcp' )
+					/* translators: %s: the first locked entries, each with its number, kind, subtype and why it is locked. */
+					: sprintf( __( 'Nothing of the selection is written in this version: %s Choose entries the report marks take_over or create (posts, pages and the other types the engine writes, terms, attachments, menus and their items, widget areas, the additional CSS and core options).', 'alphabridge-mcp' ), self::locked_list( $locked ) ),
+				array( 'locked' => $locked )
+			);
 		}
 		// The objects of this site as they are now, and the pairs.
 		$asked = array();
@@ -614,18 +633,22 @@ final class AB_MCP_Sync_Push {
 			$key  = $item['kind'] . "\0" . $item['live_ref'];
 			$hash = $live[ $key ];
 			if ( 'gone' === $hash ) {
-				return new WP_Error( 'ab_mcp_sync_push_gone', sprintf( 'The %1$s %2$s of this site (entry %3$d) is gone since the report. Make a new report (wp_site_diff) and plan again.', $item['kind'], $item['live_ref'], $n ) );
+				/* translators: 1: kind of the object, as the tools name it (post, term, …), 2: its reference on this site, 3: entry number of the report. */
+				return new WP_Error( 'ab_mcp_sync_push_gone', sprintf( __( 'The %1$s %2$s of this site (entry %3$d) is gone since the report. Make a new report (wp_site_diff) and plan again.', 'alphabridge-mcp' ), $item['kind'], $item['live_ref'], $n ) );
 			}
 			if ( null === $existing && ( ! isset( $compared[ $key ] ) || ! hash_equals( $compared[ $key ], $hash ) ) ) {
-				return new WP_Error( 'ab_mcp_sync_push_changed', sprintf( 'The %1$s %2$s of this site (entry %3$d) changed since the report (or the report did not read it whole), so what the report says of it no longer holds and it is not written over. Make a new report (wp_site_diff), which compares it as it is now, and plan again.', $item['kind'], $item['live_ref'], $n ) );
+				/* translators: 1: kind of the object, as the tools name it (post, term, …), 2: its reference on this site, 3: entry number of the report. */
+				return new WP_Error( 'ab_mcp_sync_push_changed', sprintf( __( 'The %1$s %2$s of this site (entry %3$d) changed since the report (or the report did not read it whole), so what the report says of it no longer holds and it is not written over. Make a new report (wp_site_diff), which compares it as it is now, and plan again.', 'alphabridge-mcp' ), $item['kind'], $item['live_ref'], $n ) );
 			}
 			$items[ $n ]['live_hash'] = $hash;
 			$pair                     = AB_MCP_Sync_Pairs::get( (int) $item['pair_id'] );
 			if ( is_wp_error( $pair ) || null === $pair ) {
-				return new WP_Error( 'ab_mcp_sync_push_pair', sprintf( 'The pair %1$d of entry %2$d is no longer there. Make a new report (wp_site_diff) and plan again.', (int) $item['pair_id'], $n ) );
+				/* translators: 1: pair number, 2: entry number of the report. */
+				return new WP_Error( 'ab_mcp_sync_push_pair', sprintf( __( 'The pair %1$d of entry %2$d is no longer there. Make a new report (wp_site_diff) and plan again.', 'alphabridge-mcp' ), (int) $item['pair_id'], $n ) );
 			}
 			if ( 'active' !== $pair['state'] ) {
-				return new WP_Error( 'ab_mcp_sync_push_pair', sprintf( 'The pair %1$d of entry %2$d is %3$s since the report, and only an active pair is written over. Make a new report (wp_site_diff) and plan again.', (int) $item['pair_id'], $n, $pair['state'] ) );
+				/* translators: 1: pair number, 2: entry number of the report, 3: the state of the pair, as the tools name it (unclear, residual, …). */
+				return new WP_Error( 'ab_mcp_sync_push_pair', sprintf( __( 'The pair %1$d of entry %2$d is %3$s since the report, and only an active pair is written over. Make a new report (wp_site_diff) and plan again.', 'alphabridge-mcp' ), (int) $item['pair_id'], $n, $pair['state'] ) );
 			}
 			$items[ $n ]['pair_hash']       = AB_MCP_Sync_Pairs::snapshot_hash( AB_MCP_Sync_Pairs::snapshot( (int) $item['pair_id'] ) );
 			$pairs[ (int) $item['pair_id'] ] = $items[ $n ]['pair_hash'];
@@ -654,7 +677,8 @@ final class AB_MCP_Sync_Push {
 		if ( array() === $items ) {
 			// Each lock of the order with its reason (mutual references, an
 			// exchange of positions of menus: Codex round 1 of branch 11, B2).
-			return new WP_Error( 'ab_mcp_sync_push_nothing', sprintf( 'Nothing of the selection is written: the order of the run locks every object chosen. %s Choose objects that do not refer to each other, or follow the way each lock names.', implode( ' ', array_map( static fn( $l ) => sprintf( 'Entry %1$d (%2$s %3$s): %4$s', $l['n'], $l['kind'], $l['subtype'], $l['reason'] ), array_slice( $ordered['locked'], 0, 5 ) ) ) ), array( 'locked' => $locked ) );
+			/* translators: %s: the first locked entries, each with its number, kind, subtype and why it is locked. */
+			return new WP_Error( 'ab_mcp_sync_push_nothing', sprintf( __( 'Nothing of the selection is written: the order of the run locks every object chosen. %s Choose objects that do not refer to each other, or follow the way each lock names.', 'alphabridge-mcp' ), self::locked_list( $ordered['locked'] ) ), array( 'locked' => $locked ) );
 		}
 		// The steps.
 		$bytes = 0;
@@ -831,24 +855,26 @@ final class AB_MCP_Sync_Push {
 				if ( $all ) {
 					return null;
 				}
-				return $lock( 'A conflict (or an unclear pair): name the choice in choices (staging_wins, keep_live or leave_open).' );
+				return $lock( __( 'A conflict (or an unclear pair): name the choice in choices (staging_wins, keep_live or leave_open).', 'alphabridge-mcp' ) );
 			}
 			if ( 'staging_wins' !== $choice ) {
 				return null;
 			}
 			if ( 'unclear' === $entry['result'] ) {
-				return $lock( 'An unclear pair is written over only after a person confirms its bases (wp_site_pairs action=propose, then confirm).' );
+				return $lock( __( 'An unclear pair is written over only after a person confirms its bases (wp_site_pairs action=propose, then confirm).', 'alphabridge-mcp' ) );
 			}
 		} elseif ( null !== $choice ) {
-			return $lock( sprintf( 'Entry %d is no conflict; a choice applies to conflicts only.', $n ) );
+			/* translators: %d: entry number of the report. */
+			return $lock( sprintf( __( 'Entry %d is no conflict; a choice applies to conflicts only.', 'alphabridge-mcp' ), $n ) );
 		}
 		if ( in_array( $action, array( 'locked', 'waits' ), true ) ) {
 			$locks = isset( $entry['locks'] ) && is_array( $entry['locks'] ) ? $entry['locks'] : array();
 			$first = array() !== $locks ? $locks[0] : null;
 			return $lock(
 				'locked' === $action
-					? ( null === $first ? 'Locked in the report.' : (string) $first['reason'] )
-					: 'Waits in the report: ' . implode( ' ', array_map( static fn( $w ) => (string) ( $w['why'] ?? '' ), isset( $entry['waits_for'] ) && is_array( $entry['waits_for'] ) ? array_slice( $entry['waits_for'], 0, 3 ) : array() ) ),
+					? ( null === $first ? __( 'Locked in the report.', 'alphabridge-mcp' ) : AB_MCP_Sync_Said::text( (string) $first['reason'] ) )
+					/* translators: %s: what the entry waits for, whole sentences in the language of the site. */
+					: sprintf( __( 'Waits in the report: %s', 'alphabridge-mcp' ), implode( ' ', array_map( static fn( $w ) => AB_MCP_Sync_Said::text( (string) ( $w['why'] ?? '' ) ), isset( $entry['waits_for'] ) && is_array( $entry['waits_for'] ) ? array_slice( $entry['waits_for'], 0, 3 ) : array() ) ) ),
 				null === $first ? null : (string) $first['stage']
 			);
 		}
@@ -856,32 +882,37 @@ final class AB_MCP_Sync_Push {
 			if ( $all ) {
 				return null;
 			}
-			return $lock( sprintf( 'The report says %s for this entry: a takeover writes nothing for it.', $action ) );
+			/* translators: %s: the action of the entry, as the report names it (keep, …). */
+			return $lock( sprintf( __( 'The report says %s for this entry: a takeover writes nothing for it.', 'alphabridge-mcp' ), $action ) );
 		}
 		if ( 'term' === $entry['kind'] ) {
 			if ( ! in_array( (string) ( $entry['subtype'] ?? '' ), AB_MCP_Sync_Term_Writer::TAXONOMIES, true ) ) {
-				return $lock( sprintf( 'The engine of the kind term writes the terms of %1$s; the taxonomy %2$s waits for its classification.', implode( ', ', AB_MCP_Sync_Term_Writer::TAXONOMIES ), (string) ( $entry['subtype'] ?? '' ) ), 'Z8d' );
+				/* translators: 1: the taxonomies the engine writes, separated by commas, 2: the taxonomy of the entry. */
+				return $lock( sprintf( __( 'The engine of the kind term writes the terms of %1$s; the taxonomy %2$s waits for its classification.', 'alphabridge-mcp' ), implode( ', ', AB_MCP_Sync_Term_Writer::TAXONOMIES ), (string) ( $entry['subtype'] ?? '' ) ), 'Z8d' );
 			}
 		} elseif ( 'attachment' === $entry['kind'] ) {
 			// An attachment with its files (branch 10): no choice «as draft».
 			if ( $as_draft ) {
-				return $lock( 'An attachment has no status draft: leave it out of as_draft.' );
+				return $lock( __( 'An attachment has no status draft: leave it out of as_draft.', 'alphabridge-mcp' ) );
 			}
 		} elseif ( in_array( $entry['kind'], self::STRUCTURE, true ) ) {
 			// The structure of the site (branch 11): no choice «as draft»; a
 			// widget area or a core option is changed, never made by a run (the
 			// additional CSS is locked to be made in the report already).
 			if ( $as_draft ) {
-				return $lock( sprintf( 'A %s has no status draft: leave it out of as_draft.', (string) $entry['kind'] ) );
+				/* translators: %s: kind of the object, as the tools name it (menu, widget_area, option, …). */
+				return $lock( sprintf( __( 'A %s has no status draft: leave it out of as_draft.', 'alphabridge-mcp' ), (string) $entry['kind'] ) );
 			}
 			if ( 'create' === $action && in_array( $entry['kind'], array( 'widget_area', 'option', 'custom_css' ), true ) ) {
 				$held = AB_MCP_Sync_Kinds::lock( (string) $entry['kind'], 'create' );
-				return $lock( sprintf( '%1$s (%2$s)', (string) $held['reason'], (string) $held['key'] ), (string) $held['stage'] );
+				return $lock( sprintf( '%1$s (%2$s)', AB_MCP_Sync_Said::text( (string) $held['reason'] ), (string) $held['key'] ), (string) $held['stage'] );
 			}
 		} elseif ( 'post' !== $entry['kind'] ) {
-			return $lock( sprintf( 'The kind %s is not written by a run of this version.', (string) $entry['kind'] ), 'Z8d' );
+			/* translators: %s: kind of the object, as the tools name it. */
+			return $lock( sprintf( __( 'The kind %s is not written by a run of this version.', 'alphabridge-mcp' ), (string) $entry['kind'] ), 'Z8d' );
 		} elseif ( ! in_array( (string) ( $entry['subtype'] ?? '' ), AB_MCP_Sync_Post_Writer::TYPES, true ) ) {
-			return $lock( sprintf( 'The engine of the kind post writes the types %1$s; the type %2$s waits for its field schema.', implode( ', ', AB_MCP_Sync_Post_Writer::TYPES ), (string) ( $entry['subtype'] ?? '' ) ), 'Z8d' );
+			/* translators: 1: the post types the engine writes, separated by commas, 2: the post type of the entry. */
+			return $lock( sprintf( __( 'The engine of the kind post writes the types %1$s; the type %2$s waits for its field schema.', 'alphabridge-mcp' ), implode( ', ', AB_MCP_Sync_Post_Writer::TYPES ), (string) ( $entry['subtype'] ?? '' ) ), 'Z8d' );
 		} elseif ( in_array( (string) ( $entry['subtype'] ?? '' ), AB_MCP_Sync_Post_Writer::THEMED, true ) ) {
 			// A template, a template part or the global styles of a theme that
 			// is not the active one here (branch 9b): a staging site keeps the
@@ -890,19 +921,19 @@ final class AB_MCP_Sync_Push {
 			// first write ending the run for them; the check and the boundary
 			// ask it again (AB_MCP_Sync_Post_Writer::theme_refusal()).
 			$theme = isset( $entry['staging']['identity']['theme'] ) && is_string( $entry['staging']['identity']['theme'] ) ? $entry['staging']['identity']['theme'] : '';
-			$other = AB_MCP_Sync_Post_Writer::inactive_theme( $theme );
+			$other = AB_MCP_Sync_Post_Writer::inactive_theme_detail( (string) $entry['subtype'], (string) ( $entry['staging']['identity']['post_name'] ?? '' ), $theme );
 			if ( null !== $other ) {
 				$held = AB_MCP_Sync_Kinds::lock( 'post', 'theme_mismatch' );
-				return $lock( sprintf( '%1$s (post:theme_mismatch) The %2$s %3$s %4$s.', (string) $held['reason'], (string) $entry['subtype'], (string) ( $entry['staging']['identity']['post_name'] ?? '' ), $other ), (string) $held['stage'] );
+				return $lock( sprintf( '%1$s (post:theme_mismatch) %2$s', AB_MCP_Sync_Said::text( (string) $held['reason'] ), $other ), (string) $held['stage'] );
 			}
 		}
 		$staging = isset( $entry['staging']['ref'] ) ? (string) $entry['staging']['ref'] : '';
 		if ( '' === $staging ) {
-			return $lock( 'The staging side of this entry has no ref (held by a credential): nothing is written for it.' );
+			return $lock( __( 'The staging side of this entry has no ref (held by a credential): nothing is written for it.', 'alphabridge-mcp' ) );
 		}
 		$op = 'create' === $action ? 'create' : 'update';
 		if ( 'update' === $op && ( ! isset( $entry['pair']['id'] ) || ! isset( $entry['live']['ref'] ) ) ) {
-			return $lock( 'The entry names no pair or no object of this site to write over.' );
+			return $lock( __( 'The entry names no pair or no object of this site to write over.', 'alphabridge-mcp' ) );
 		}
 		return array(
 			'item' => array(
@@ -1028,7 +1059,7 @@ final class AB_MCP_Sync_Push {
 						'subtype' => $items[ $n ]['subtype'],
 						'action'  => $items[ $n ]['action'],
 						'result'  => '',
-						'reason'  => sprintf( '%1$s (%2$s)', (string) $lock['reason'], (string) $lock['key'] ),
+						'reason'  => sprintf( '%1$s (%2$s)', AB_MCP_Sync_Said::text( (string) $lock['reason'] ), (string) $lock['key'] ),
 						'stage'   => $lock['stage'],
 					);
 					unset( $items[ $n ] );
@@ -1045,7 +1076,7 @@ final class AB_MCP_Sync_Push {
 						'subtype' => $items[ $n ]['subtype'],
 						'action'  => $items[ $n ]['action'],
 						'result'  => '',
-						'reason'  => $lock['reason'],
+						'reason'  => AB_MCP_Sync_Said::text( (string) $lock['reason'] ),
 						'stage'   => $lock['stage'],
 					);
 					unset( $items[ $n ] );
@@ -1067,7 +1098,8 @@ final class AB_MCP_Sync_Push {
 							'subtype' => $item['subtype'],
 							'action'  => $item['action'],
 							'result'  => '',
-							'reason'  => sprintf( 'It refers to entry %d, which is locked.', (int) $m ),
+							/* translators: %d: entry number of the report. */
+							'reason'  => sprintf( __( 'It refers to entry %d, which is locked.', 'alphabridge-mcp' ), (int) $m ),
 							'stage'   => null,
 						);
 						unset( $items[ $n ] );
@@ -1140,7 +1172,7 @@ final class AB_MCP_Sync_Push {
 				}
 			}
 			if ( ! $progress ) {
-				return new WP_Error( 'ab_mcp_sync_push_order', 'The objects chosen cannot be ordered by their references (a cycle the lock did not catch). Choose fewer objects.' );
+				return new WP_Error( 'ab_mcp_sync_push_order', __( 'The objects chosen cannot be ordered by their references (a cycle the lock did not catch). Choose fewer objects.', 'alphabridge-mcp' ) );
 			}
 		}
 		return array(
@@ -1257,7 +1289,7 @@ final class AB_MCP_Sync_Push {
 					return $shown;
 				}
 				$shown['created_now'] = false;
-				$shown['next']        = 'This plan has its run already (the same report, selection, account and connection): go on with it, action=next with this run_id.';
+				$shown['next']        = __( 'This plan has its run already (the same report, selection, account and connection).', 'alphabridge-mcp' ) . ' Go on with it: action=next with this run_id.';
 				return $shown;
 			}
 		}
@@ -1293,7 +1325,8 @@ final class AB_MCP_Sync_Push {
 		$shown['created_now'] = true;
 		$shown['locked']      = $plan['locked'];
 		$shown['resources']   = $plan['resources']['level'];
-		$shown['next']        = sprintf( 'The run is made with %d step(s) and nothing is written yet. Call action=next with this run_id: the first step checks everything before the first write, each next one writes one object under the lock with its backup and journal, then the caches, then the check of the run closes it. Each step answers with its result; status shows the whole run.', count( $plan['steps'] ) );
+		/* translators: %d: number of steps of the run. */
+		$shown['next']        = sprintf( _n( 'The run is made with %d step and nothing is written yet.', 'The run is made with %d steps and nothing is written yet.', count( $plan['steps'] ), 'alphabridge-mcp' ), count( $plan['steps'] ) ) . ' Call action=next with this run_id: the first step checks everything before the first write, each next one writes one object under the lock with its backup and journal, then the caches, then the check of the run closes it. Each step answers with its result; status shows the whole run.';
 		return $shown;
 	}
 
@@ -1362,8 +1395,10 @@ final class AB_MCP_Sync_Push {
 			'locked'      => $plan['locked'],
 			'not_written' => $plan['skipped'],
 			'resources'   => $plan['resources'],
-			'environment' => $plan['environment'] ? 'compared' : 'not compared: the report was made without the packages of the environment; the run writes objects only, which this does not hold back',
-			'effect'      => 'Makes a run that writes these objects of the staging site onto this site, one per call (action=next), each under the lock of AlphaBridge with a backup and a journal, read back against its target; a new object stays on the way back (a rest); the pairs take new bases. Nothing is deleted. The way back is wp_site_revert, pair by pair, byte for byte conditional. A change of another user or process on a way the lock does not refuse (wp_publish_post() by the cron, terms on the classic way, SQL) between the check and the write can be lost without the read back seeing it.',
+			// The person sees the preview (AB_MCP_Confirm_Token): its words in
+			// the language of the site (Codex round 2 of branch 13, B1).
+			'environment' => $plan['environment'] ? _x( 'compared', 'the environment of the report, in the preview of a takeover', 'alphabridge-mcp' ) : __( 'not compared: the report was made without the packages of the environment; the run writes objects only, which this does not hold back', 'alphabridge-mcp' ),
+			'effect'      => __( 'Makes a run that writes these objects of the staging site onto this site, one per call (action=next), each under the lock of AlphaBridge with a backup and a journal, read back against its target; a new object stays on the way back (a rest); the pairs take new bases. Nothing is deleted. The way back is wp_site_revert, pair by pair, byte for byte conditional. A change of another user or process on a way the lock does not refuse (wp_publish_post() by the cron, terms on the classic way, SQL) between the check and the write can be lost without the read back seeing it.', 'alphabridge-mcp' ),
 		);
 		if ( isset( $plan['existing_run'] ) ) {
 			$out['existing_run'] = (int) $plan['existing_run'];
@@ -1406,7 +1441,10 @@ final class AB_MCP_Sync_Push {
 		$out = array(
 			'open' => null,
 			'runs' => $runs,
-			'next' => null === $open ? 'No run is open on this site. Plan one with action=plan (report_id, select or all, packages).' : sprintf( 'Run %1$d is %2$s. %3$s', (int) $open['run_id'], $open['state'], AB_MCP_Sync_Run::way( $open ) ),
+			'next' => null === $open
+				? __( 'No run is open on this site.', 'alphabridge-mcp' ) . ' Plan one with action=plan (report_id, select or all, packages).'
+				/* translators: 1: run number, 2: its state, as the tools name it (planned, running, …). */
+				: sprintf( __( 'Run %1$d is %2$s.', 'alphabridge-mcp' ), (int) $open['run_id'], $open['state'] ) . ' ' . AB_MCP_Sync_Run::way( $open ),
 		);
 		if ( null !== $open ) {
 			$out['open'] = array(
@@ -1427,7 +1465,7 @@ final class AB_MCP_Sync_Push {
 	 */
 	public static function own_run( array $a ) {
 		if ( ! isset( $a['run_id'] ) || ! is_numeric( $a['run_id'] ) || (int) $a['run_id'] < 1 ) {
-			return new WP_Error( 'ab_mcp_sync_push_run', 'Pass run_id, the number the answer of action=plan gave (action=status without run_id lists the runs).' );
+			return new WP_Error( 'ab_mcp_sync_push_run', __( 'Pass run_id, the number the answer of action=plan gave (action=status without run_id lists the runs).', 'alphabridge-mcp' ) );
 		}
 		$run = AB_MCP_Sync_Run::get( (int) $a['run_id'] );
 		if ( is_wp_error( $run ) ) {
@@ -1447,7 +1485,8 @@ final class AB_MCP_Sync_Push {
 	private static function another_open( array $open ) {
 		return new WP_Error(
 			'ab_mcp_sync_run_open',
-			sprintf( 'This site has a run that is not closed (run %1$d, %2$s, state %3$s), and at most one run per site is open at a time, so no new plan begins. Ask for its status (wp_site_push action=status). %4$s', (int) $open['run_id'], $open['type'], $open['state'], AB_MCP_Sync_Run::way( $open ) ),
+			/* translators: 1: run number, 2: its type, as the tools name it (push, revert), 3: its state, as the tools name it, 4: the way it goes on, as AB_MCP_Sync_Run::way() names it (whole sentences). */
+			sprintf( __( 'This site has a run that is not closed (run %1$d, %2$s, state %3$s), and at most one run per site is open at a time, so no new plan begins. Ask for its status (wp_site_push action=status). %4$s', 'alphabridge-mcp' ), (int) $open['run_id'], $open['type'], $open['state'], AB_MCP_Sync_Run::way( $open ) ),
 			array(
 				'run_id' => (int) $open['run_id'],
 				'state'  => $open['state'],
@@ -1477,11 +1516,30 @@ final class AB_MCP_Sync_Push {
 	}
 
 	/**
-	 * @param string $what What is wrong with the selection.
+	 * The first five locked entries, each with its number, kind, subtype
+	 * and why it is locked (a whole sentence, or a reason of the report).
+	 *
+	 * @param array[] $locked The locked entries of the plan.
+	 * @return string
+	 */
+	private static function locked_list( array $locked ) {
+		return implode(
+			' ',
+			array_map(
+				/* translators: 1: entry number of the report, 2: kind of the object, as the tools name it, 3: its subtype (post type, taxonomy, …), 4: why the entry is locked, a whole sentence. */
+				static fn( $l ) => sprintf( __( 'Entry %1$d (%2$s %3$s): %4$s', 'alphabridge-mcp' ), $l['n'], $l['kind'], $l['subtype'], $l['reason'] ),
+				array_slice( $locked, 0, 5 )
+			)
+		);
+	}
+
+	/**
+	 * @param string $what What is wrong with the selection, a whole sentence.
 	 * @return WP_Error
 	 */
 	private static function selection( $what ) {
-		return new WP_Error( 'ab_mcp_sync_push_selection', sprintf( 'The selection is not one a run takes: %s Pass select (entry numbers of the report of kind post or term with action take_over or create), choices (entry and choice for a conflict), as_draft (entry numbers taken over with the status draft) or all=true, and packages (the package_ids of the objects).', $what ) );
+		/* translators: %s: what is wrong with the selection, a whole sentence. */
+		return new WP_Error( 'ab_mcp_sync_push_selection', sprintf( __( 'The selection is not one a run takes: %s Pass select (entry numbers of the report of kind post or term with action take_over or create), choices (entry and choice for a conflict), as_draft (entry numbers taken over with the status draft) or all=true, and packages (the package_ids of the objects).', 'alphabridge-mcp' ), $what ) );
 	}
 
 	/**
@@ -1495,6 +1553,7 @@ final class AB_MCP_Sync_Push {
 		if ( (int) $count <= self::MAX_OBJECTS ) {
 			return null;
 		}
-		return self::selection( sprintf( 'One run writes at most %1$d objects; this selection has %2$d. Plan in parts: pass select with at most %1$d entry numbers of this report (instead of all=true), run that plan to its close (action=next until it is closed), then plan the next entries from the same report_id with the same packages; the entries a run wrote read equal in the next report.', self::MAX_OBJECTS, (int) $count ) );
+		/* translators: 1: the most objects one run writes, 2: the objects of this selection. */
+		return self::selection( sprintf( __( 'One run writes at most %1$d objects; this selection has %2$d. Plan in parts: pass select with at most %1$d entry numbers of this report (instead of all=true), run that plan to its close (action=next until it is closed), then plan the next entries from the same report_id with the same packages; the entries a run wrote read equal in the next report.', 'alphabridge-mcp' ), self::MAX_OBJECTS, (int) $count ) );
 	}
 }

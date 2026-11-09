@@ -51,8 +51,10 @@
  * wp_set_object_terms(). The three limits of the way back (concept section
  * 5) are in the preview.
  *
- * Messages are English without gettext, as the other classes of the
- * takeover; each names the way.
+ * Messages are in gettext, in the language of the site as they arise (a
+ * refusal, a note of the journal); each names the way. Codes, states,
+ * kinds and the other values the tools name stay as they are, and no
+ * translated text is compared, hashed or part of a print.
  *
  * @package AlphaBridge_MCP
  */
@@ -72,13 +74,21 @@ final class AB_MCP_Sync_Revert {
 	/** The actions. */
 	const ACTIONS = array( 'plan', 'next', 'status' );
 
-	/** The limits of the way back, named with every preview (concept section 5). */
-	const LIMITS = array(
-		'A new object the run made is not removed: it stays as a rest, its pair residual; remove it by hand in wp-admin where it should go.',
-		'A part changed on this site since the run wrote it is left as it is and named with its value before; its pair is unclear until a person confirms a new alignment (wp_site_pairs).',
-		'An object that deviated within its step (a hook of this site changed a part, a call was refused, a part read back other than written) is never put back by itself: every part of it is left as it is and named with its value before; check it by hand in wp-admin. The same for a part the step never read back (an interrupted step).',
-		'A backed-up scheduled post whose date has passed is not put back (WordPress would publish it); it is named as «check needed»: set its date anew in wp-admin.',
-	);
+	/**
+	 * The limits of the way back, named with every preview (concept section
+	 * 5), in the language of the site: the person sees the preview
+	 * (AB_MCP_Confirm_Token, Codex round 2 of branch 13, B1).
+	 *
+	 * @return string[]
+	 */
+	private static function limits() {
+		return array(
+			__( 'A new object the run made is not removed: it stays as a rest, its pair residual; remove it by hand in wp-admin where it should go.', 'alphabridge-mcp' ),
+			__( 'A part changed on this site since the run wrote it is left as it is and named with its value before; its pair is unclear until a person confirms a new alignment (wp_site_pairs).', 'alphabridge-mcp' ),
+			__( 'An object that deviated within its step (a hook of this site changed a part, a call was refused, a part read back other than written) is never put back by itself: every part of it is left as it is and named with its value before; check it by hand in wp-admin. The same for a part the step never read back (an interrupted step).', 'alphabridge-mcp' ),
+			__( 'A backed-up scheduled post whose date has passed is not put back (WordPress would publish it); it is named as «not put back, check needed»: set its date anew in wp-admin.', 'alphabridge-mcp' ),
+		);
+	}
 
 	/* ------------------------------------------------- the confirmation */
 
@@ -115,10 +125,10 @@ final class AB_MCP_Sync_Revert {
 			'run_state' => $plan['run']['state'],
 			'same_run'  => $plan['same_run'],
 			'steps'     => $plan['shown'],
-			'limits'    => self::LIMITS,
+			'limits'    => self::limits(),
 			'effect'    => $plan['same_run']
-				? 'Leads this run to reverting and takes its own parts back, one pair per call (action=next), under the lock; then it is closed as reverted, or with findings where rests or unclear parts remain.'
-				: 'Makes a run of the way back for these pairs of the closed run and takes their parts back, one pair per call (action=next), under the lock; then it is closed as reverted, or with findings where rests or unclear parts remain.',
+				? __( 'Leads this run to reverting and takes its own parts back, one pair per call (action=next), under the lock; then it is closed as reverted, or with findings where rests or unclear parts remain.', 'alphabridge-mcp' )
+				: __( 'Makes a run of the way back for these pairs of the closed run and takes their parts back, one pair per call (action=next), under the lock; then it is closed as reverted, or with findings where rests or unclear parts remain.', 'alphabridge-mcp' ),
 		);
 	}
 
@@ -137,7 +147,7 @@ final class AB_MCP_Sync_Revert {
 			return is_wp_error( $plan ) ? $plan : self::begin( $plan, $a );
 		}
 		if ( ! in_array( $action, self::ACTIONS, true ) ) {
-			return new WP_Error( 'ab_mcp_sync_revert_action', 'wp_site_revert takes action=plan (with run_id and steps; the token in the same call), next or status (with run_id). Pass one of them.' );
+			return new WP_Error( 'ab_mcp_sync_revert_action', __( 'wp_site_revert takes action=plan (with run_id and steps; the token in the same call), next or status (with run_id). Pass one of them.', 'alphabridge-mcp' ) );
 		}
 		$source = AB_MCP_Sync_Proposal::source_id();
 		if ( is_wp_error( $source ) ) {
@@ -179,11 +189,19 @@ final class AB_MCP_Sync_Revert {
 					return AB_MCP_Sync_Run::interrupted_refusal( $run );
 				}
 				if ( ! ( 'reverting' === $run['state'] || ( 'revert' === $run['type'] && 'open' === $run['state'] ) ) ) {
-					return new WP_Error( 'ab_mcp_sync_run_state', sprintf( 'The run %1$d is %2$s: no way back is running for it. Ask for its status (wp_site_push action=status); %3$s', (int) $run['run_id'], $run['state'], 'revert' === $run['type'] ? 'a closed run of the way back is not taken back.' : 'action=plan with this run_id plans one.' ) );
+					return new WP_Error(
+						'ab_mcp_sync_run_state',
+						'revert' === $run['type']
+							/* translators: 1: run number, 2: its state, as the tools name it. */
+							? sprintf( __( 'The run %1$d is %2$s: no way back is running for it. Ask for its status (wp_site_push action=status); a closed run of the way back is not taken back.', 'alphabridge-mcp' ), (int) $run['run_id'], $run['state'] )
+							/* translators: 1: run number, 2: its state, as the tools name it. */
+							: sprintf( __( 'The run %1$d is %2$s: no way back is running for it. Ask for its status (wp_site_push action=status); action=plan with this run_id plans one.', 'alphabridge-mcp' ), (int) $run['run_id'], $run['state'] )
+					);
 				}
 				return AB_MCP_Sync_Engine::next( $run, null );
 			},
-			sprintf( 'Run %d takes no step of its way back', isset( $a['run_id'] ) && is_numeric( $a['run_id'] ) ? (int) $a['run_id'] : 0 )
+			/* translators: %d: run number. */
+			sprintf( __( 'Run %d takes no step of its way back.', 'alphabridge-mcp' ), isset( $a['run_id'] ) && is_numeric( $a['run_id'] ) ? (int) $a['run_id'] : 0 )
 		);
 	}
 
@@ -205,7 +223,7 @@ final class AB_MCP_Sync_Revert {
 	public static function plan_for_person( array $a ) {
 		$run_id = isset( $a['run_id'] ) && is_numeric( $a['run_id'] ) ? (int) $a['run_id'] : 0;
 		if ( $run_id < 1 ) {
-			return new WP_Error( 'ab_mcp_sync_push_run', 'Pass run_id, the run whose pairs go back.' );
+			return new WP_Error( 'ab_mcp_sync_push_run', __( 'Pass run_id, the run whose pairs go back.', 'alphabridge-mcp' ) );
 		}
 		$run = AB_MCP_Sync_Run::get( $run_id );
 		if ( ! is_array( $run ) ) {
@@ -216,7 +234,8 @@ final class AB_MCP_Sync_Revert {
 			return $run;
 		}
 		if ( 'push' !== $run['type'] || ! in_array( $run['state'], AB_MCP_Sync_Schema::CLOSED, true ) ) {
-			return new WP_Error( 'ab_mcp_sync_revert_person', sprintf( 'Run %1$d is %2$s (%3$s): on the page AlphaBridge → Staging a person takes back the pairs of a closed run that wrote. An open run is aborted first (or goes back over the connection that made it, wp_site_revert), an interrupted one is closed as checked first, and a run of the way back is not taken back.', $run_id, $run['state'], $run['type'] ) );
+			/* translators: 1: run number, 2: its state, 3: its type (push or revert), both as the tools name them. */
+			return new WP_Error( 'ab_mcp_sync_revert_person', sprintf( __( 'Run %1$d is %2$s (%3$s): on the page AlphaBridge → Staging a person takes back the pairs of a closed run that wrote. An open run is aborted first (or goes back over the connection that made it, wp_site_revert), an interrupted one is closed as checked first, and a run of the way back is not taken back.', 'alphabridge-mcp' ), $run_id, $run['state'], $run['type'] ) );
 		}
 		$args = array(
 			'action' => 'plan',
@@ -244,14 +263,15 @@ final class AB_MCP_Sync_Revert {
 	 */
 	public static function begin_for_person( array $a, $state, $confirmed ) {
 		if ( true !== $confirmed ) {
-			return new WP_Error( 'ab_mcp_sync_run_unconfirmed', 'A way back begins on the page AlphaBridge → Staging only from its form: pass true only for a request whose nonce was checked there.' );
+			return new WP_Error( 'ab_mcp_sync_run_unconfirmed', __( 'A way back begins on the page AlphaBridge → Staging only from its form: pass true only for a request whose nonce was checked there.', 'alphabridge-mcp' ) );
 		}
 		$plan = self::plan_for_person( $a );
 		if ( is_wp_error( $plan ) ) {
 			return $plan;
 		}
 		if ( ! is_string( $state ) || ! hash_equals( (string) $plan['state'], $state ) ) {
-			return new WP_Error( 'ab_mcp_sync_revert_changed', sprintf( 'The way back of run %d does not begin: the run or an object of this site changed since the page was loaded, so what it showed is not the plan as it is now. Nothing was written. Load the page AlphaBridge → Staging again and look at the pair once more.', (int) $plan['run']['run_id'] ) );
+			/* translators: %d: run number. */
+			return new WP_Error( 'ab_mcp_sync_revert_changed', sprintf( __( 'The way back of run %d does not begin: the run or an object of this site changed since the page was loaded, so what it showed is not the plan as it is now. Nothing was written. Load the page AlphaBridge → Staging again and look at the pair once more.', 'alphabridge-mcp' ), (int) $plan['run']['run_id'] ) );
 		}
 		$args = array(
 			'action' => 'plan',
@@ -276,7 +296,7 @@ final class AB_MCP_Sync_Revert {
 	 */
 	public static function plan( array $a, $run = null ) {
 		if ( ! isset( $a['action'] ) || 'plan' !== $a['action'] ) {
-			return new WP_Error( 'ab_mcp_sync_revert_action', 'wp_site_revert takes action=plan (with run_id and steps; the token in the same call), next or status (with run_id). Pass one of them.' );
+			return new WP_Error( 'ab_mcp_sync_revert_action', __( 'wp_site_revert takes action=plan (with run_id and steps; the token in the same call), next or status (with run_id). Pass one of them.', 'alphabridge-mcp' ) );
 		}
 		$source = AB_MCP_Sync_Proposal::source_id();
 		if ( is_wp_error( $source ) ) {
@@ -284,7 +304,7 @@ final class AB_MCP_Sync_Revert {
 		}
 		$print = AB_MCP_Sync_Anchor::pair_print();
 		if ( null === $print ) {
-			return new WP_Error( 'ab_mcp_sync_pairs_no_anchor', 'This site has no confirmed key of a staging site, so no way back is planned. Ask the person to confirm it on the page AlphaBridge → Staging of this site; then call again.' );
+			return new WP_Error( 'ab_mcp_sync_pairs_no_anchor', __( 'This site has no confirmed key of a staging site, so no way back is planned. Ask the person to confirm it on the page AlphaBridge → Staging of this site; then call again.', 'alphabridge-mcp' ) );
 		}
 		if ( ! is_array( $run ) ) {
 			if ( isset( $a['run_id'] ) ) {
@@ -298,7 +318,7 @@ final class AB_MCP_Sync_Revert {
 					return $run;
 				}
 				if ( null === $run ) {
-					return new WP_Error( 'ab_mcp_sync_revert_run', 'No run is open on this site: pass run_id, the run whose pairs go back (wp_site_push action=status lists the runs).' );
+					return new WP_Error( 'ab_mcp_sync_revert_run', __( 'No run is open on this site: pass run_id, the run whose pairs go back (wp_site_push action=status lists the runs).', 'alphabridge-mcp' ) );
 				}
 				$foreign = AB_MCP_Sync_Run::owner_refusal( $run );
 				if ( null !== $foreign ) {
@@ -310,7 +330,8 @@ final class AB_MCP_Sync_Revert {
 				return $run;
 			}
 			if ( isset( $run['running'] ) ) {
-				return new WP_Error( 'ab_mcp_sync_run_busy', sprintf( 'Step %d of the run is being written right now (its lock is held); wait for its answer, then plan the way back.', (int) $run['running'] ) );
+				/* translators: %d: step. */
+				return new WP_Error( 'ab_mcp_sync_run_busy', sprintf( __( 'Step %d of the run is being written right now (its lock is held); wait for its answer, then plan the way back.', 'alphabridge-mcp' ), (int) $run['running'] ) );
 			}
 		}
 		if ( 'interrupted' === $run['state'] ) {
@@ -318,10 +339,18 @@ final class AB_MCP_Sync_Revert {
 			return self::interrupted_plan( $run, $a, $print, $source );
 		}
 		if ( 'revert' === $run['type'] ) {
-			return new WP_Error( 'ab_mcp_sync_revert_type', sprintf( 'Run %1$d is a run of the way back itself and is %2$s (wp_site_push action=status lists the runs): %3$s', (int) $run['run_id'], $run['state'], in_array( $run['state'], array( 'open', 'reverting' ), true ) ? 'go on with action=next.' : 'a run of the way back is not taken back; the way back is planned for a run that wrote.' ) );
+			return new WP_Error(
+				'ab_mcp_sync_revert_type',
+				in_array( $run['state'], array( 'open', 'reverting' ), true )
+					/* translators: 1: run number, 2: its state, as the tools name it. */
+					? sprintf( __( 'Run %1$d is a run of the way back itself and is %2$s (wp_site_push action=status lists the runs): go on with action=next.', 'alphabridge-mcp' ), (int) $run['run_id'], $run['state'] )
+					/* translators: 1: run number, 2: its state, as the tools name it. */
+					: sprintf( __( 'Run %1$d is a run of the way back itself and is %2$s (wp_site_push action=status lists the runs): a run of the way back is not taken back; the way back is planned for a run that wrote.', 'alphabridge-mcp' ), (int) $run['run_id'], $run['state'] )
+			);
 		}
 		if ( 'reverting' === $run['state'] ) {
-			return new WP_Error( 'ab_mcp_sync_revert_running', sprintf( 'The way back of run %d is running already: use action=next to go on.', (int) $run['run_id'] ) );
+			/* translators: %d: run number. */
+			return new WP_Error( 'ab_mcp_sync_revert_running', sprintf( __( 'The way back of run %d is running already: use action=next to go on.', 'alphabridge-mcp' ), (int) $run['run_id'] ) );
 		}
 		return self::way_back( $run, $a, $print, $source );
 	}
@@ -354,7 +383,8 @@ final class AB_MCP_Sync_Revert {
 			return self::way_back( $run, $a, $print, $source );
 		}
 		if ( isset( $a['steps'] ) ) {
-			return new WP_Error( 'ab_mcp_sync_revert_steps', sprintf( 'Run %d is interrupted on its way back: it goes on with the steps of the way back it has, so steps is not taken. Call again without steps.', (int) $run['run_id'] ) );
+			/* translators: %d: run number. */
+			return new WP_Error( 'ab_mcp_sync_revert_steps', sprintf( __( 'Run %d is interrupted on its way back: it goes on with the steps of the way back it has, so steps is not taken. Call again without steps.', 'alphabridge-mcp' ), (int) $run['run_id'] ) );
 		}
 		return self::continuation( $run, $steps, $print, $source );
 	}
@@ -382,7 +412,8 @@ final class AB_MCP_Sync_Revert {
 				return $open;
 			}
 			if ( null !== $open ) {
-				return new WP_Error( 'ab_mcp_sync_run_open', sprintf( 'This site has a run that is not closed (run %1$d, %2$s, state %3$s), and at most one run per site is open at a time, so no way back for the closed run %4$d begins. Ask for its status (wp_site_push action=status). %5$s', (int) $open['run_id'], $open['type'], $open['state'], (int) $run['run_id'], AB_MCP_Sync_Run::way( $open ) ) );
+				/* translators: 1: run number of the open run, 2: its type (push or revert), 3: its state, as the tools name them, 4: run number of the closed run, 5: a whole sentence or more with the way on. */
+				return new WP_Error( 'ab_mcp_sync_run_open', sprintf( __( 'This site has a run that is not closed (run %1$d, %2$s, state %3$s), and at most one run per site is open at a time, so no way back for the closed run %4$d begins. Ask for its status (wp_site_push action=status). %5$s', 'alphabridge-mcp' ), (int) $open['run_id'], $open['type'], $open['state'], (int) $run['run_id'], AB_MCP_Sync_Run::way( $open ) ) );
 			}
 		}
 		$steps = AB_MCP_Sync_Run::steps( (int) $run['run_id'] );
@@ -391,7 +422,7 @@ final class AB_MCP_Sync_Revert {
 		}
 		$wanted = isset( $a['steps'] ) ? $a['steps'] : null;
 		if ( null !== $wanted && ( ! is_array( $wanted ) || ! array_is_list( $wanted ) || array() !== array_filter( $wanted, static fn( $s ) => ! is_int( $s ) && ! ( is_string( $s ) && 1 === preg_match( '/^[1-9][0-9]*\z/', $s ) ) ) ) ) {
-			return new WP_Error( 'ab_mcp_sync_revert_steps', 'steps is a list of the seqs of the write steps of the run to take back; without it, every step that wrote. Use action=status to list them.' );
+			return new WP_Error( 'ab_mcp_sync_revert_steps', __( 'steps is a list of the seqs of the write steps of the run to take back; without it, every step that wrote. Use action=status to list them.', 'alphabridge-mcp' ) );
 		}
 		$wanted = null === $wanted ? null : array_map( 'intval', $wanted );
 		// A step goes back at most once: every step of the way back that
@@ -420,7 +451,8 @@ final class AB_MCP_Sync_Revert {
 				if ( isset( $step['parts']['forward_run'] ) && (int) $step['parts']['forward_run'] !== (int) $run['run_id'] ) {
 					continue;
 				}
-				$reverted[ (int) $step['parts']['forward_seq'] ] = (int) $way_id === (int) $run['run_id'] ? sprintf( 'step %d of this run', (int) $step['seq'] ) : sprintf( 'step %1$d of run %2$d', (int) $step['seq'], (int) $way_id );
+				// The step that took it back, and its run: named in the refusal.
+				$reverted[ (int) $step['parts']['forward_seq'] ] = array( (int) $step['seq'], (int) $way_id );
 			}
 		}
 		$items   = array();
@@ -438,7 +470,8 @@ final class AB_MCP_Sync_Revert {
 			// (AB_MCP_Sync_Run::records()): no way back is planned on it, fail
 			// closed and with the way, rather than leaving the step out unsaid.
 			if ( isset( $step['unread'] ) && in_array( 'parts', $step['unread'], true ) ) {
-				return new WP_Error( 'ab_mcp_sync_revert_unread', sprintf( 'The journal of step %1$d of run %2$d does not read back as it was written (a marker of its bytes that does not hold), so no way back is planned on it and nothing is taken back. Pass steps without %1$d to plan the way back of the other steps that wrote, and check its object by hand in wp-admin; its backup in the protected store holds the object as it was before the step.', (int) $step['seq'], (int) $run['run_id'] ) );
+				/* translators: 1: step, 2: run number. */
+				return new WP_Error( 'ab_mcp_sync_revert_unread', sprintf( __( 'The journal of step %1$d of run %2$d does not read back as it was written (a marker of its bytes that does not hold), so no way back is planned on it and nothing is taken back. Pass steps without %1$d to plan the way back of the other steps that wrote, and check its object by hand in wp-admin; its backup in the protected store holds the object as it was before the step.', 'alphabridge-mcp' ), (int) $step['seq'], (int) $run['run_id'] ) );
 			}
 			$journal = is_array( $step['parts'] ) && isset( $step['parts']['object'] ) ? $step['parts'] : null;
 			// Only a step with a journal and a backup wrote anything (decision
@@ -447,13 +480,22 @@ final class AB_MCP_Sync_Revert {
 			$wrote = null !== $journal && ! in_array( $step['state'], array( 'planned', 'skipped' ), true ) && is_array( $journal['backup'] ) && ( 'create' !== $journal['object']['op'] || null !== $journal['object']['live_ref'] );
 			if ( ! $wrote ) {
 				if ( null !== $wanted ) {
-					return new WP_Error( 'ab_mcp_sync_revert_steps', sprintf( 'Step %1$d is %2$s and wrote nothing: there is nothing to take back for it. Choose a step that wrote (action=status lists them).', (int) $step['seq'], $step['state'] ) );
+					/* translators: 1: step, 2: its state, as the tools name it. */
+					return new WP_Error( 'ab_mcp_sync_revert_steps', sprintf( __( 'Step %1$d is %2$s and wrote nothing: there is nothing to take back for it. Choose a step that wrote (action=status lists them).', 'alphabridge-mcp' ), (int) $step['seq'], $step['state'] ) );
 				}
 				continue;
 			}
 			if ( isset( $reverted[ (int) $step['seq'] ] ) ) {
 				if ( null !== $wanted ) {
-					return new WP_Error( 'ab_mcp_sync_revert_steps', sprintf( 'Step %1$d was taken back already (%2$s), and a step goes back once. Choose another step, or leave steps out.', (int) $step['seq'], $reverted[ (int) $step['seq'] ] ) );
+					list( $by_seq, $by_run ) = $reverted[ (int) $step['seq'] ];
+					return new WP_Error(
+						'ab_mcp_sync_revert_steps',
+						$by_run === (int) $run['run_id']
+							/* translators: 1: step, 2: the step of this run that took it back. */
+							? sprintf( __( 'Step %1$d was taken back already (step %2$d of this run), and a step goes back once. Choose another step, or leave steps out.', 'alphabridge-mcp' ), (int) $step['seq'], $by_seq )
+							/* translators: 1: step, 2: the step that took it back, 3: its run (a run of the way back). */
+							: sprintf( __( 'Step %1$d was taken back already (step %2$d of run %3$d), and a step goes back once. Choose another step, or leave steps out.', 'alphabridge-mcp' ), (int) $step['seq'], $by_seq, $by_run )
+					);
 				}
 				continue;
 			}
@@ -499,7 +541,8 @@ final class AB_MCP_Sync_Revert {
 		$items = array_reverse( $items );
 		$shown = array_reverse( $shown );
 		if ( array() === $items ) {
-			return new WP_Error( 'ab_mcp_sync_revert_nothing', sprintf( 'Run %d has no written step to take back (none wrote, or every one was taken back already). Use wp_site_push action=status to see its steps.', (int) $run['run_id'] ) );
+			/* translators: %d: run number. */
+			return new WP_Error( 'ab_mcp_sync_revert_nothing', sprintf( __( 'Run %d has no written step to take back (none wrote, or every one was taken back already). Use wp_site_push action=status to see its steps.', 'alphabridge-mcp' ), (int) $run['run_id'] ) );
 		}
 		// The room for the steps of the way back in the same run, asked here,
 		// before the run changes its state (B5): a run of wp_site_push writes
@@ -507,7 +550,8 @@ final class AB_MCP_Sync_Revert {
 		// AB_MCP_Sync_Run::MAX_RUN_STEPS, so it always has it (N4); this holds
 		// the rule where a run has more steps than that.
 		if ( $same && ! AB_MCP_Sync_Run::has_room( count( $steps ), count( $items ) ) ) {
-			return new WP_Error( 'ab_mcp_sync_revert_steps', sprintf( 'The way back of %1$d step(s) would take run %2$d past its %3$d steps, so it does not begin. Pass fewer steps (steps) for this way back and plan the rest once it is closed.', count( $items ), (int) $run['run_id'], AB_MCP_Sync_Run::MAX_RUN_STEPS ) );
+			/* translators: 1: number of steps of the way back, 2: run number, 3: the most steps a run has. */
+			return new WP_Error( 'ab_mcp_sync_revert_steps', sprintf( _n( 'The way back of %1$d step would take run %2$d past its %3$d steps, so it does not begin. Pass fewer steps (steps) for this way back and plan the rest once it is closed.', 'The way back of %1$d steps would take run %2$d past its %3$d steps, so it does not begin. Pass fewer steps (steps) for this way back and plan the rest once it is closed.', count( $items ), 'alphabridge-mcp' ), count( $items ), (int) $run['run_id'], AB_MCP_Sync_Run::MAX_RUN_STEPS ) );
 		}
 		ksort( $live );
 		$state = hash(
@@ -685,7 +729,8 @@ final class AB_MCP_Sync_Revert {
 			static function () use ( $plan, $a ) {
 				return self::begin_locked( $plan, $a );
 			},
-			sprintf( 'The way back of run %d does not begin', (int) $plan['run']['run_id'] )
+			/* translators: %d: run number. */
+			sprintf( __( 'The way back of run %d does not begin.', 'alphabridge-mcp' ), (int) $plan['run']['run_id'] )
 		);
 	}
 
@@ -715,14 +760,16 @@ final class AB_MCP_Sync_Revert {
 			return $fresh;
 		}
 		if ( (string) $fresh['state'] !== (string) $run['state'] ) {
-			return new WP_Error( 'ab_mcp_sync_revert_changed', sprintf( 'The way back of run %1$d does not begin: the run was %2$s when the way back was planned and is %3$s now. Plan the way back again (wp_site_revert action=plan).', $run_id, (string) $run['state'], (string) $fresh['state'] ) );
+			/* translators: 1: run number, 2: its state when the way back was planned, 3: its state now, as the tools name them. */
+			return new WP_Error( 'ab_mcp_sync_revert_changed', sprintf( __( 'The way back of run %1$d does not begin: the run was %2$s when the way back was planned and is %3$s now. Plan the way back again (wp_site_revert action=plan).', 'alphabridge-mcp' ), $run_id, (string) $run['state'], (string) $fresh['state'] ) );
 		}
 		$again = self::plan( $a, $fresh );
 		if ( is_wp_error( $again ) ) {
 			return $again;
 		}
 		if ( ! hash_equals( (string) $plan['state'], (string) $again['state'] ) ) {
-			return new WP_Error( 'ab_mcp_sync_revert_changed', sprintf( 'The way back of run %d does not begin: the run changed while it was planned (a step was written, an object of this site changed, or the run changed its state), so the plan confirmed is not the run as it is. Plan the way back again (wp_site_revert action=plan); the new plan takes every step that wrote back.', $run_id ) );
+			/* translators: %d: run number. */
+			return new WP_Error( 'ab_mcp_sync_revert_changed', sprintf( __( 'The way back of run %d does not begin: the run changed while it was planned (a step was written, an object of this site changed, or the run changed its state), so the plan confirmed is not the run as it is. Plan the way back again (wp_site_revert action=plan); the new plan takes every step that wrote back.', 'alphabridge-mcp' ), $run_id ) );
 		}
 		$plan  = $again;
 		$steps = array();
@@ -784,10 +831,14 @@ final class AB_MCP_Sync_Revert {
 			return $shown;
 		}
 		$shown['same_run'] = $plan['same_run'];
-		$shown['limits']   = self::LIMITS;
+		$shown['limits']   = self::limits();
 		$shown['next']     = array() === $steps && $plan['same_run']
-			? sprintf( 'The way back of run %1$d goes on: the step the interruption left begun stays as it is (unclear, its pair unclear; nothing of it is put back again), and %2$d step(s) of the way back are still to go, none added. Call wp_site_revert action=next with run_id %1$d: each call takes one pair back under the lock, byte for byte where the part is still what the run wrote; the call that finds none left closes the run with the findings.', (int) $now['run_id'], (int) $shown['counts']['planned'] )
-			: sprintf( 'The way back has %1$d step(s) and nothing is written yet. Call wp_site_revert action=next with run_id %2$d: each call takes one pair back under the lock, byte for byte where the part is still what the run wrote; the last one closes the run.', count( $steps ), (int) $now['run_id'] );
+			/* translators: 1: run number, 2: steps of the way back still to go. */
+			? sprintf( _n( 'The way back of run %1$d goes on: the step the interruption left begun stays as it is (unclear, its pair unclear; nothing of it is put back again), and %2$d step of the way back is still to go, none added.', 'The way back of run %1$d goes on: the step the interruption left begun stays as it is (unclear, its pair unclear; nothing of it is put back again), and %2$d steps of the way back are still to go, none added.', (int) $shown['counts']['planned'], 'alphabridge-mcp' ), (int) $now['run_id'], (int) $shown['counts']['planned'] )
+				. sprintf( ' Call wp_site_revert action=next with run_id %d: each call takes one pair back under the lock, byte for byte where the part is still what the run wrote; the call that finds none left closes the run with the findings.', (int) $now['run_id'] )
+			/* translators: %d: steps of the way back. */
+			: sprintf( _n( 'The way back has %d step and nothing is written yet.', 'The way back has %d steps and nothing is written yet.', count( $steps ), 'alphabridge-mcp' ), count( $steps ) )
+				. sprintf( ' Call wp_site_revert action=next with run_id %d: each call takes one pair back under the lock, byte for byte where the part is still what the run wrote; the last one closes the run.', (int) $now['run_id'] );
 		return $shown;
 	}
 
@@ -832,8 +883,8 @@ final class AB_MCP_Sync_Revert {
 								'state'  => 'unclear',
 								'result' => array(
 									'message' => 'revert' === $step['op']
-										? 'Interrupted: the request that put this step back ended before it finished; whatever it reached stays as it is, nothing of it is put back again (no put back is repeated). Check the object in wp-admin; the backup of the step that wrote holds its state before the run.'
-										: 'Interrupted: the request that wrote this step ended before it finished; the way back reads its journal.',
+										? __( 'Interrupted: the request that put this step back ended before it finished; whatever it reached stays as it is, nothing of it is put back again (no put back is repeated). Check the object in wp-admin; the backup of the step that wrote holds its state before the run.', 'alphabridge-mcp' )
+										: __( 'Interrupted: the request that wrote this step ended before it finished; the way back reads its journal.', 'alphabridge-mcp' ),
 								),
 							),
 							'begun'
@@ -851,7 +902,7 @@ final class AB_MCP_Sync_Revert {
 						// A forward step still planned is skipped: the run goes
 						// back. A step of the way back still planned stays: it goes
 						// back in its turn (an interrupted run of the way back led on).
-						$settled = AB_MCP_Sync_Run::update_step( $run_id, (int) $step['seq'], array( 'state' => 'skipped', 'result' => array( 'message' => 'Skipped: the run went to its way back before this step ran.' ) ), 'planned' );
+						$settled = AB_MCP_Sync_Run::update_step( $run_id, (int) $step['seq'], array( 'state' => 'skipped', 'result' => array( 'message' => __( 'Skipped: the run went to its way back before this step ran.', 'alphabridge-mcp' ) ) ), 'planned' );
 					}
 					if ( is_wp_error( $settled ) ) {
 						return $settled;
@@ -866,7 +917,8 @@ final class AB_MCP_Sync_Revert {
 			}
 			return new WP_Error(
 				$began->get_error_code(),
-				sprintf( '%1$s The run %2$d stays %3$s and nothing of its way back began: its steps are stored all at once or not at all. Plan the way back again (wp_site_revert action=plan with run_id %2$d); if it keeps failing, the database error log names the cause.', $began->get_error_message(), $run_id, $run['state'] ),
+				/* translators: 1: the message of the error (a whole sentence or more), 2: run number, 3: its state, as the tools name it. */
+				sprintf( __( '%1$s The run %2$d stays %3$s and nothing of its way back began: its steps are stored all at once or not at all. Plan the way back again (wp_site_revert action=plan with run_id %2$d); if it keeps failing, the database error log names the cause.', 'alphabridge-mcp' ), $began->get_error_message(), $run_id, $run['state'] ),
 				$began->get_error_data()
 			);
 		}

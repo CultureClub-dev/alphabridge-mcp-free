@@ -123,7 +123,7 @@ final class AB_MCP_Sync_Inventory {
 		if ( is_array( $cursor ) && isset( $cursor['kind'] ) ) {
 			$found = array_search( (string) $cursor['kind'], $names, true );
 			if ( false === $found ) {
-				return new WP_Error( 'ab_mcp_sync_cursor_invalid', 'The cursor names no kind of this inventory. Use the cursor of the answer before, or start again without one.' );
+				return new WP_Error( 'ab_mcp_sync_cursor_invalid', __( 'The cursor names no kind of this inventory. Use the cursor of the answer before, or start again without one.', 'alphabridge-mcp' ) );
 			}
 			$at = (int) $found;
 		}
@@ -267,7 +267,8 @@ final class AB_MCP_Sync_Inventory {
 	 * @return WP_Error
 	 */
 	public static function unreadable( $table ) {
-		return new WP_Error( 'ab_mcp_sync_unreadable', sprintf( 'The table %s could not be read, so the inventory stopped. Try again; if it keeps failing, the database error log names the cause.', $table ), array( 'table' => $table ) );
+		/* translators: %s: name of the database table. */
+		return new WP_Error( 'ab_mcp_sync_unreadable', sprintf( __( 'The table %s could not be read, so the inventory stopped. Try again; if it keeps failing, the database error log names the cause.', 'alphabridge-mcp' ), $table ), array( 'table' => $table ) );
 	}
 
 	/**

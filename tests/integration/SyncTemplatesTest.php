@@ -949,7 +949,7 @@ final class SyncTemplatesTest extends TestCase {
 		self::assertStringContainsString( 'The template part ' . self::THEME . '//promo, which this site has neither as a template part nor as a file of its theme', $message );
 		self::assertStringContainsString( 'The template part twentytwentyfour//header, of a theme that is not the active one here', $message );
 		self::assertStringContainsString( 'post:navigation_fallback', $message );
-		self::assertStringContainsString( 'A navigation block without a menu of its own shows none (WordPress would make one as a page is shown) now and would show this navigation after the write; the template ' . self::THEME . '//', $message );
+		self::assertStringContainsString( 'A navigation block without a menu of its own shows none (WordPress would make one as a page is shown) now and would show this navigation after the write. The template ' . self::THEME . '//', $message );
 		self::assertStringContainsString( 'shows a navigation block without a menu of its own', $message, 'The header of the theme (a file, its pattern) shows one: the move is seen.' );
 		self::assertStringContainsString( 'post:css_markup', $message );
 		self::assertStringContainsString( 'The CSS of styles.css in the global styles holds </style', $message );
@@ -1229,11 +1229,11 @@ final class SyncTemplatesTest extends TestCase {
 			self::assertStringContainsString( 'post:navigation_fallback', $message );
 			return $message;
 		};
-		self::assertStringContainsString( 'the page ', $locked( array( 'post:wp_navigation:zweites', 'post:page:mit-menue' ) ) );
+		self::assertStringContainsString( 'The page ', $locked( array( 'post:wp_navigation:zweites', 'post:page:mit-menue' ) ) );
 		self::rest_b( 'POST', '/wp/v2/templates/' . self::THEME . '//single', array( 'content' => '<!-- wp:navigation /-->' . self::para( 'Einzeln' ) ) );
-		self::assertStringContainsString( 'the template ' . self::THEME . '//single the run writes shows a navigation block without a menu of its own', $locked( array( 'post:wp_navigation:zweites', 'post:wp_template:single' ) ) );
+		self::assertStringContainsString( 'The template ' . self::THEME . '//single the run writes shows a navigation block without a menu of its own', $locked( array( 'post:wp_navigation:zweites', 'post:wp_template:single' ) ) );
 		$page_a = self::on_a( self::made( 'page', 'hier', '<!-- wp:group --><div class="wp-block-group"><!-- wp:navigation /--></div><!-- /wp:group -->' ) );
-		self::assertStringContainsString( 'the page ' . $page_a . ' shows a navigation block without a menu of its own', $locked( array( 'post:wp_navigation:zweites' ) ) );
+		self::assertStringContainsString( 'The page ' . $page_a . ' shows a navigation block without a menu of its own', $locked( array( 'post:wp_navigation:zweites' ) ) );
 	}
 
 	public function testATemplateANewPartAndWhatThePartNamesGoInTheOrderOfTheirReferences(): void {

@@ -21,8 +21,9 @@
  * version over the same way, from its bootstrap only; the shipped code knows
  * no other fetcher (no filter, no switch, ShippedCodeKnowsNoTestFetcherTest).
  *
- * Messages are English without gettext, as the other classes of the
- * takeover; each names the way.
+ * Refusals and errors are gettext texts in the language of the site, each
+ * naming the way; codes, states, kinds and parameters stay as the tools
+ * name them.
  *
  * @package AlphaBridge_MCP
  */
@@ -51,13 +52,13 @@ final class AB_MCP_Sync_Fetcher {
 	public function get( $url, array $args = array() ) {
 		$url = (string) $url;
 		if ( 0 !== strpos( $url, 'https://' ) ) {
-			return new WP_Error( 'ab_mcp_sync_not_https', 'The staging site is asked only over https, and this address is not: give the staging site an https:// address on the page AlphaBridge → Staging of both sites, or use the pairing code instead.', array( 'url' => $url ) );
+			return new WP_Error( 'ab_mcp_sync_not_https', __( 'The staging site is asked only over https, and this address is not: give the staging site an https:// address on the page AlphaBridge → Staging of both sites, or use the pairing code instead.', 'alphabridge-mcp' ), array( 'url' => $url ) );
 		}
 		// No stored staging site (a refusal of partner()) is no address, and
 		// '' . '/' begins no https:// address.
 		$base = AB_MCP_Sync_Key::site_form( AB_MCP_Sync_Anchor::partner() );
 		if ( 0 !== strpos( $url, $base . '/' ) ) {
-			return new WP_Error( 'ab_mcp_sync_not_partner', 'This site asks only the staging site stored on its page AlphaBridge → Staging, at that address, and this address is another one. Check the address of the staging site there.', array( 'url' => $url ) );
+			return new WP_Error( 'ab_mcp_sync_not_partner', __( 'This site asks only the staging site stored on its page AlphaBridge → Staging, at that address, and this address is another one. Check the address of the staging site there.', 'alphabridge-mcp' ), array( 'url' => $url ) );
 		}
 		// No segment . or .. in the path, also not written as %2e in either
 		// case or mixed: Requests resolves them, and /blog/../outside leaves
@@ -67,7 +68,7 @@ final class AB_MCP_Sync_Fetcher {
 		// unless the stored host is one, and then it is refused alike.
 		$path = substr( $url, 0, strcspn( $url, '?' ) );
 		if ( preg_match( '~/(?:\.|%2e){1,2}(?:/|\z)~i', $path ) ) {
-			return new WP_Error( 'ab_mcp_sync_dot_segment', 'This site asks the staging site only at an address whose path has no segment . or .. (nor one written as %2e), because such a segment leads out of the stored address, and this address has one. Check the address of the staging site on the page AlphaBridge → Staging and store it without such a segment.', array( 'url' => $url ) );
+			return new WP_Error( 'ab_mcp_sync_dot_segment', __( 'This site asks the staging site only at an address whose path has no segment . or .. (nor one written as %2e), because such a segment leads out of the stored address, and this address has one. Check the address of the staging site on the page AlphaBridge → Staging and store it without such a segment.', 'alphabridge-mcp' ), array( 'url' => $url ) );
 		}
 		$args['redirection'] = 0;
 		return AB_MCP_Outbound::get_partner( $url, $args );

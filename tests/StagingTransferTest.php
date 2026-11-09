@@ -568,7 +568,7 @@ final class StagingTransferTest extends TestCase {
 		self::assertLessThan( strpos( $text, 'Last report' ), strpos( $text, 'Run 4 is interrupted' ), 'First in the section.' );
 		$x = self::xpath( $html );
 		self::assertSame( array( '1', 'check', 'done', '', '' ), array_map( static fn( $td ) => trim( $td->textContent ), iterator_to_array( $x->query( '//table[contains(@class, "ab-staging-transfer__journal")]/tbody/tr[1]/td' ) ) ) );
-		self::assertSame( array( '2', 'write: post 12', 'begun', 'row written; meta:note planned', '' ), array_map( static fn( $td ) => trim( $td->textContent ), iterator_to_array( $x->query( '//table[contains(@class, "ab-staging-transfer__journal")]/tbody/tr[2]/td' ) ) ), 'Each part with its state.' );
+		self::assertSame( array( '2', 'write: post 12', 'begun', 'row: written, read back other than its target; meta:note: planned', '' ), array_map( static fn( $td ) => trim( $td->textContent ), iterator_to_array( $x->query( '//table[contains(@class, "ab-staging-transfer__journal")]/tbody/tr[2]/td' ) ) ), 'Each part with its state.' );
 		self::assertStringContainsString( 'Not run: step 3 (write: term 9).', $text, 'The rest, named.' );
 		self::assertStringContainsString( 'Left as a rest (made by the run; remove by hand in wp-admin where it should go): post 40.', $text );
 		$forms = self::forms( $html );
@@ -679,7 +679,7 @@ final class StagingTransferTest extends TestCase {
 		$html = AB_MCP_Transfer_View::html( self::view( 'production', array( 'run' => $view ) ) );
 		$x    = self::xpath( $html );
 		$tds  = array_map( static fn( $td ) => trim( $td->textContent ), iterator_to_array( $x->query( '//table[contains(@class, "ab-staging-transfer__journal")]/tbody/tr[1]/td' ) ) );
-		self::assertSame( array( '1', 'revert of step 2 of run 7: post 12', 'unclear', 'row left: changed here since the run wrote it (before: post_content: 12 bytes <b>x</b>)', 'The post 12 went back only in part.' ), $tds, 'Object, state of the part, why, the value before, the finding.' );
+		self::assertSame( array( '1', 'revert of step 2 of run 7: post 12', 'unclear', 'row: left as it is – changed here since the run wrote it (before: post_content: 12 bytes <b>x</b>)', 'The post 12 went back only in part.' ), $tds, 'Object, state of the part, why, the value before, the finding.' );
 		self::assertStringNotContainsString( '<b>x</b>', $html, 'Escaped.' );
 	}
 

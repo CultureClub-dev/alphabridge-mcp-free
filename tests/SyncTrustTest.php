@@ -1226,7 +1226,7 @@ final class SyncTrustTest extends TestCase {
 	}
 
 	public function testEveryNoticeOfTheFormsIsOneThePageShows(): void {
-		foreach ( AB_MCP_Admin::TRUST_NOTICES as $notice => $entry ) {
+		foreach ( AB_MCP_Admin::trust_notices() as $notice => $entry ) {
 			$_GET = array( 'ab_notice' => $notice );
 			ob_start();
 			( new ReflectionMethod( AB_MCP_Admin::class, 'notice' ) )->invoke( new AB_MCP_Admin() );
@@ -1237,7 +1237,7 @@ final class SyncTrustTest extends TestCase {
 		$_GET = array();
 		// Every refusal the forms can meet has its notice.
 		foreach ( array( 'sync_key_role', 'sync_key_failed', 'sync_anchor_role', 'sync_anchor_pair', 'sync_anchor_not_https', 'sync_anchor_unreached', 'sync_anchor_no_key', 'sync_key_answer', 'sync_key_code', 'sync_anchor_site', 'sync_anchor_nothing', 'sync_anchor_stale', 'sync_anchor_fingerprint', 'sync_anchor_retired', 'sync_anchor_retire_failed', 'sync_anchor_revoke_failed', 'sync_anchor_write_failed', 'sync_mac_failed' ) as $code ) {
-			self::assertArrayHasKey( 'staging_trust_' . $code, AB_MCP_Admin::TRUST_NOTICES, $code );
+			self::assertArrayHasKey( 'staging_trust_' . $code, AB_MCP_Admin::trust_notices(), $code );
 		}
 	}
 

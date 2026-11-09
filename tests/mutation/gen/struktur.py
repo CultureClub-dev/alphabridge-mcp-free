@@ -119,8 +119,8 @@ U_TERMROW = 'testTheRowOfATermIsWrittenThroughTheCoreAndAnIdWordPressGaveBackIsN
 
 # ------------------------------------------------------------ core options
 e('option-create', 'target_of(): an option is not made by a run', OW,
-  "\t\tif ( 'update' !== $item['op'] ) {\n\t\t\treturn AB_MCP_Sync_Post_Writer::locked( 'option:create',",
-  "\t\tif ( false ) {\n\t\t\treturn AB_MCP_Sync_Post_Writer::locked( 'option:create',", 'u', U_OPT)
+  "\t\tif ( 'update' !== $item['op'] ) {",
+  "\t\tif ( false ) {", 'u', U_OPT)
 e('option-own-name', 'target_of(): an option is written under its own name only', OW,
   "\t\tif ( (string) $item['live_ref'] !== $name ) {",
   "\t\tif ( false ) {", 'u', U_OPT)
@@ -131,17 +131,17 @@ e('option-content', 'target_of(): no value in the package locks', OW,
   "\t\tif ( ! isset( $line['content']['row']['value'], $line['form'] ) || ! is_array( $line['form'] ) ) {",
   "\t\tif ( ! is_array( $line['form'] ) ) {", 'u', U_OPT)
 e('option-refs', 'target_of(): an id without a counterpart locks', OW,
-  "\t\tif ( array() !== $missing ) {\n\t\t\treturn AB_MCP_Sync_Post_Writer::locked( 'option:reference_unmapped',",
-  "\t\tif ( false ) {\n\t\t\treturn AB_MCP_Sync_Post_Writer::locked( 'option:reference_unmapped',", 'u', U_OPT)
+  "\t\tif ( array() !== $missing ) {",
+  "\t\tif ( false ) {", 'u', U_OPT)
 e('option-refs-value', 'target_of(): a list of ids written as the list it unpacks to', OW,
   "\t\t\t$value = $read['value'];",
   "", 'u', U_OPT)
 e('option-right', 'precheck(): manage_options', OW,
-  "\t\tif ( ! current_user_can( 'manage_options' ) ) {\n\t\t\treturn AB_MCP_Sync_Post_Writer::rights( sprintf( 'change the option %s (manage_options)', $name ) );\n\t\t}\n\t\t$class",
-  "\t\tif ( false ) {\n\t\t\treturn AB_MCP_Sync_Post_Writer::rights( sprintf( 'change the option %s (manage_options)', $name ) );\n\t\t}\n\t\t$class", 'u', U_OPTCHK)
+  "\t\tif ( ! current_user_can( 'manage_options' ) ) {\n\t\t\treturn AB_MCP_Sync_Post_Writer::rights( self::may_not( $name ) );\n\t\t}\n\t\t$class",
+  "\t\tif ( false ) {\n\t\t\treturn AB_MCP_Sync_Post_Writer::rights( self::may_not( $name ) );\n\t\t}\n\t\t$class", 'u', U_OPTCHK)
 e('option-here', 'precheck(): an option not here is not made', OW,
-  "\t\tif ( null === $current ) {\n\t\t\treturn AB_MCP_Sync_Post_Writer::locked( 'option:create',",
-  "\t\tif ( false ) {\n\t\t\treturn AB_MCP_Sync_Post_Writer::locked( 'option:create',", 'u', U_OPTCHK)
+  "\t\tif ( null === $current ) {\n\t\t\t/* translators: %s: the name of the option (blogname, …). */\n\t\t\treturn AB_MCP_Sync_Post_Writer::locked( 'option:create',",
+  "\t\tif ( false ) {\n\t\t\t/* translators: %s: the name of the option (blogname, …). */\n\t\t\treturn AB_MCP_Sync_Post_Writer::locked( 'option:create',", 'u', U_OPTCHK)
 e('option-schema', 'precheck(): the value of staging keeps the schema', OW,
   "\t\tif ( ! AB_MCP_Sync_Option_Schema::fits( $prepared['schema'], $prepared['columns']['value'] ) ) {",
   "\t\tif ( false ) {", 'u', U_OPTCHK)
@@ -155,8 +155,8 @@ e('option-rewrite', 'post_write(): the rewrite rules built anew for the permalin
   "\t\t\tflush_rewrite_rules( false );",
   "", 'it', IT_OPTIONS)
 e('option-back-changed', 'restore_part(): an option changed since is left', OW,
-  "\t\tif ( ! hash_equals( (string) $hash, self::row_hash( $current['row'] ) ) ) {\n\t\t\treturn array(\n\t\t\t\t'state' => 'left',\n\t\t\t\t'note'  => sprintf( 'The option %s was changed since the step wrote it, so it is left as it is.', $option ),",
-  "\t\tif ( false ) {\n\t\t\treturn array(\n\t\t\t\t'state' => 'left',\n\t\t\t\t'note'  => sprintf( 'The option %s was changed since the step wrote it, so it is left as it is.', $option ),", 'u', U_OPTCHK)
+  "\t\tif ( ! hash_equals( (string) $hash, self::row_hash( $current['row'] ) ) ) {",
+  "\t\tif ( false ) {", 'u', U_OPTCHK)
 e('option-back-sanitizer', 'restore_part(): the value before only where sanitize_option() keeps it now', OW,
   " || ! $read['ok'] || null !== self::sanitizer_refusal( $option, $read['value'], $was ) ) {",
   " || ! $read['ok'] ) {", 'u', U_OPTCHK)
@@ -192,8 +192,8 @@ e('css-status', 'target_of(): CSS not published locks', CW,
   "\t\tif ( '' !== $row['preprocessed'] || 'publish' !== $row['post_status'] ) {",
   "\t\tif ( '' !== $row['preprocessed'] ) {", 'u', U_CSS)
 e('css-refs', 'target_of(): an address without a counterpart locks', CW,
-  "\t\tif ( array() !== $missing ) {\n\t\t\treturn AB_MCP_Sync_Post_Writer::locked( 'custom_css:reference_unmapped',",
-  "\t\tif ( false ) {\n\t\t\treturn AB_MCP_Sync_Post_Writer::locked( 'custom_css:reference_unmapped',", 'u', U_CSS)
+  "\t\tif ( array() !== $missing ) {",
+  "\t\tif ( false ) {", 'u', U_CSS)
 e('css-right', 'precheck(): edit_css', CW,
   "\t\t$stylesheet = (string) $prepared['stylesheet'];\n\t\tif ( ! current_user_can( 'edit_css' ) ) {",
   "\t\t$stylesheet = (string) $prepared['stylesheet'];\n\t\tif ( false ) {", 'u', U_CSS)
@@ -221,14 +221,14 @@ e('menu-taxonomy', 'target_of(): a menu is a term of nav_menu', MW,
   "\t\tif ( 'nav_menu' !== $row['taxonomy'] ) {",
   "\t\tif ( false ) {", 'u', U_MENU)
 e('menu-term-group', 'target_of(): no term_group', MW,
-  "\t\tif ( '0' !== $row['term_group'] ) {\n\t\t\treturn AB_MCP_Sync_Post_Writer::locked( 'term:term_group', sprintf( 'the menu of the staging site",
-  "\t\tif ( false ) {\n\t\t\treturn AB_MCP_Sync_Post_Writer::locked( 'term:term_group', sprintf( 'the menu of the staging site", 'u', U_MENU)
+  "\t\tif ( '0' !== $row['term_group'] ) {",
+  "\t\tif ( false ) {", 'u', U_MENU)
 e('menu-parent', 'target_of(): a menu has no parent', MW,
-  "\t\tif ( '0' !== $row['parent'] ) {\n\t\t\treturn AB_MCP_Sync_Post_Writer::locked( 'term:parent', sprintf( 'the menu of the staging site",
-  "\t\tif ( false ) {\n\t\t\treturn AB_MCP_Sync_Post_Writer::locked( 'term:parent', sprintf( 'the menu of the staging site", 'u', U_MENU)
+  "\t\tif ( '0' !== $row['parent'] ) {",
+  "\t\tif ( false ) {", 'u', U_MENU)
 e('menu-create-meta', 'target_of(): a new menu with meta locks', MW,
-  "\t\t\tif ( 'create' === $item['op'] ) {\n\t\t\t\treturn AB_MCP_Sync_Post_Writer::locked( 'term:create_with_meta', sprintf( 'meta key %s of the new menu', $key ) );",
-  "\t\t\tif ( false ) {\n\t\t\t\treturn AB_MCP_Sync_Post_Writer::locked( 'term:create_with_meta', sprintf( 'meta key %s of the new menu', $key ) );", 'u', U_MENU)
+  "\t\t\tif ( 'create' === $item['op'] ) {",
+  "\t\t\tif ( false ) {", 'u', U_MENU)
 e('menu-location-name', 'target_of(): a position is a name', MW,
   "\t\t\tif ( ! is_string( $location ) || '' === $location ) {",
   "\t\t\tif ( false ) {", 'u', U_MENU)
@@ -265,8 +265,8 @@ e('item-taxonomy', 'target_of(): an item is in menus of nav_menu only', MW,
   "\t\t\tif ( ! is_array( $term ) || 'nav_menu' !== AB_MCP_Sync_Post_Writer::bytes( $term['taxonomy'] ?? '' ) ) {",
   "\t\t\tif ( ! is_array( $term ) ) {", 'u', U_ITEM)
 e('item-type', 'target_of(): a post of nav_menu_item', MW,
-  "\t\tif ( 'nav_menu_item' !== $row['post_type'] ) {\n\t\t\treturn AB_MCP_Sync_Post_Writer::locked( 'menu:item_shape',",
-  "\t\tif ( false ) {\n\t\t\treturn AB_MCP_Sync_Post_Writer::locked( 'menu:item_shape',", 'u', U_ITEM)
+  "\t\tif ( 'nav_menu_item' !== $row['post_type'] ) {",
+  "\t\tif ( false ) {", 'u', U_ITEM)
 e('item-status', 'target_of(): publish or draft, as the core gives an item', MW,
   "\t\tif ( ! in_array( $row['post_status'], array( 'publish', 'draft' ), true ) ) {",
   "\t\tif ( false ) {", 'u', U_ITEM)
@@ -289,8 +289,8 @@ e('item-classes', 'target_of(): the classes a list of names', MW,
   "\t\tif ( ! $classes['ok'] || ! is_array( $classes['value'] ) || ! array_is_list( $classes['value'] ) || array() !== array_filter( $classes['value'], static fn( $c ) => ! is_string( $c ) ) ) {",
   "\t\tif ( ! $classes['ok'] || ! is_array( $classes['value'] ) ) {", 'u', U_ITEMSAN)
 e('item-right-theme', 'precheck(): edit_theme_options', MW,
-  "\t\tif ( ! current_user_can( 'edit_theme_options' ) ) {\n\t\t\treturn AB_MCP_Sync_Post_Writer::rights( 'change the menus of this site (edit_theme_options)' );\n\t\t}\n\t\t$current = null;",
-  "\t\tif ( false ) {\n\t\t\treturn AB_MCP_Sync_Post_Writer::rights( 'change the menus of this site (edit_theme_options)' );\n\t\t}\n\t\t$current = null;", 'u', U_ITEMSAN)
+  "\t\tif ( ! current_user_can( 'edit_theme_options' ) ) {\n\t\t\treturn AB_MCP_Sync_Post_Writer::rights( __( 'This account may not change the menus of this site (edit_theme_options).', 'alphabridge-mcp' ) );\n\t\t}\n\t\t$current = null;",
+  "\t\tif ( false ) {\n\t\t\treturn AB_MCP_Sync_Post_Writer::rights( __( 'This account may not change the menus of this site (edit_theme_options).', 'alphabridge-mcp' ) );\n\t\t}\n\t\t$current = null;", 'u', U_ITEMSAN)
 e('item-right-post', 'precheck(): edit_post on an item that is there', MW,
   "\t\t\tif ( ! current_user_can( 'edit_post', (int) $live_id ) ) {",
   "\t\t\tif ( false ) {", 'u', U_ITEMSAN)
@@ -325,8 +325,8 @@ e('item-slash', 'write_row(): the fields slashed, as the core unslashes them', M
   "\t\t\t$fields[ $field ] = wp_slash( (string) $fields[ $field ] );",
   "\t\t\t$fields[ $field ] = (string) $fields[ $field ];", 'u', U_ITEM)
 e('item-same-id', 'write_row(): the core wrote the item it was given', MW,
-  "\t\tif ( ! is_int( $id ) || $id < 1 || ( null !== $live_id && $id !== (int) $live_id ) ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_write_failed', 'WordPress wrote no menu item",
-  "\t\tif ( ! is_int( $id ) ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_write_failed', 'WordPress wrote no menu item", 'u', U_ITEM)
+  "\t\tif ( ! is_int( $id ) || $id < 1 || ( null !== $live_id && $id !== (int) $live_id ) ) {",
+  "\t\tif ( ! is_int( $id ) ) {", 'u', U_ITEM)
 
 # ------------------------------------------------------------ widget areas
 e('area-create', 'target_of(): an area is not made by a run', WA,
@@ -360,8 +360,8 @@ e('area-taken-number', 'counterpart(): a number taken here gives the next free o
   "\t\tif ( $number < 2 || isset( $used[ $number ] ) ) {",
   "\t\tif ( $number < 2 ) {", 'u', U_MAP)
 e('area-right', 'precheck(): edit_theme_options', WA,
-  "\t\tif ( ! current_user_can( 'edit_theme_options' ) ) {\n\t\t\treturn AB_MCP_Sync_Post_Writer::rights( 'change the widgets of this site (edit_theme_options)' );\n\t\t}\n\t\t$state",
-  "\t\tif ( false ) {\n\t\t\treturn AB_MCP_Sync_Post_Writer::rights( 'change the widgets of this site (edit_theme_options)' );\n\t\t}\n\t\t$state", 'u', U_AREACHK)
+  "\t\tif ( ! current_user_can( 'edit_theme_options' ) ) {\n\t\t\treturn AB_MCP_Sync_Post_Writer::rights( self::may_not() );\n\t\t}\n\t\t$state",
+  "\t\tif ( false ) {\n\t\t\treturn AB_MCP_Sync_Post_Writer::rights( self::may_not() );\n\t\t}\n\t\t$state", 'u', U_AREACHK)
 e('area-sanitizer', 'sanitizer_refusal(): the update() of the widget keeps the settings', WA,
   "\t\tif ( AB_MCP_Sync_Shared_Row::field( $clean ) !== AB_MCP_Sync_Shared_Row::field( $settings ) ) {",
   "\t\tif ( false ) {", 'u', U_AREACHK)
@@ -450,7 +450,7 @@ e('a4-menu-location-name', 'more(): the names of the positions of a menu through
   "", 'it', IT_CRED)
 # A5: the rights again right before each write.
 e('a5-widget-forward', 'write_part(): edit_theme_options again after the update() of the widget (A5)', WA,
-  "\t\t\tstatic fn() => current_user_can( 'edit_theme_options' ) ? true : AB_MCP_Sync_Post_Writer::rights( 'change the widgets of this site (edit_theme_options)' ),\n\t\t\tstatic function ( $value ) use ( $write, $clean ) {",
+  "\t\t\tstatic fn() => current_user_can( 'edit_theme_options' ) ? true : AB_MCP_Sync_Post_Writer::rights( self::may_not() ),\n\t\t\tstatic function ( $value ) use ( $write, $clean ) {",
   "\t\t\tstatic fn() => true,\n\t\t\tstatic function ( $value ) use ( $write, $clean ) {", 'u', U_AREACHK)
 e('a5-widget-back', 'right_now(): edit_theme_options again right before a field of an area goes back (A5)', WA,
   "\t\treturn current_user_can( 'edit_theme_options' ) ? null : array(",
@@ -467,7 +467,7 @@ e('a5-position-back', 'restore_part(): edit_theme_options again right before a p
   "\t\t$mods['nav_menu_locations'] = $locations;\n\t\tif ( ! current_user_can( 'edit_theme_options' ) ) {",
   "\t\t$mods['nav_menu_locations'] = $locations;\n\t\tif ( false ) {", 'u', U_POS)
 e('a5-css-back', 'restore_part(): edit_css again right before the CSS goes back (A5)', CW,
-  "\t\t\tstatic fn() => current_user_can( 'edit_css' ) ? true : sprintf( 'change the Additional CSS of %s (edit_css)', (string) $live_id ),",
+  "\t\t\tstatic fn() => current_user_can( 'edit_css' ) ? true : self::may_not( (string) $live_id ),",
   "\t\t\tstatic fn() => true,", 'u', U_CSS)
 # B1: a new menu at a position no menu holds yet.
 e('b1-free-position', 'with_row(): a new menu names the positions it sets that no menu holds yet (B1)', MW,
@@ -506,10 +506,10 @@ e('c1-new-rest', 'revert_boundary(): a new object whose pair did not become resi
 # core, forward and back: the rights, the last read, the comparison with the
 # state the engine expects, the call.
 e('a6-order', 'core(): the rights before the last read (A6)', SW,
-  "\t\t$may = $rights();\n\t\tif ( true !== $may ) {\n\t\t\treturn self::refusal( is_wp_error( $may ) ? $may : new WP_Error( 'ab_mcp_sync_rights', sprintf( 'Not written: this account may not %s. Connect with an account that may, or leave the object out of the plan.', (string) $may ) ) );\n\t\t}\n\t\t$now = $read();\n",
-  "\t\t$now = $read();\n\t\t$may = $rights();\n\t\tif ( true !== $may ) {\n\t\t\treturn self::refusal( is_wp_error( $may ) ? $may : new WP_Error( 'ab_mcp_sync_rights', sprintf( 'Not written: this account may not %s. Connect with an account that may, or leave the object out of the plan.', (string) $may ) ) );\n\t\t}\n", 'u', U_WRITE)
+  "\t\t$may = $rights();\n\t\tif ( true !== $may ) {\n\t\t\t// A WP_Error of the writer carries its whole sentence; a string is\n\t\t\t// the whole sentence of what this account may not do, set in here.\n\t\t\t/* translators: %s: what this account may not do, a whole sentence in the language of the site with the capability (This account may not change the menus of this site (edit_theme_options).). */\n\t\t\treturn self::refusal( is_wp_error( $may ) ? $may : new WP_Error( 'ab_mcp_sync_rights', sprintf( __( 'Not written: %s Connect with an account that may, or leave the object out of the plan.', 'alphabridge-mcp' ), (string) $may ) ) );\n\t\t}\n\t\t$now = $read();\n",
+  "\t\t$now = $read();\n\t\t$may = $rights();\n\t\tif ( true !== $may ) {\n\t\t\t// A WP_Error of the writer carries its whole sentence; a string is\n\t\t\t// the whole sentence of what this account may not do, set in here.\n\t\t\t/* translators: %s: what this account may not do, a whole sentence in the language of the site with the capability (This account may not change the menus of this site (edit_theme_options).). */\n\t\t\treturn self::refusal( is_wp_error( $may ) ? $may : new WP_Error( 'ab_mcp_sync_rights', sprintf( __( 'Not written: %s Connect with an account that may, or leave the object out of the plan.', 'alphabridge-mcp' ), (string) $may ) ) );\n\t\t}\n", 'u', U_WRITE)
 e('a6-rights', 'core(): a right missing, nothing read, nothing called (A6)', SW,
-  "\t\tif ( true !== $may ) {\n\t\t\treturn self::refusal(", "\t\tif ( false ) {\n\t\t\treturn self::refusal(", 'u', U_WRITE)
+  "\t\tif ( true !== $may ) {", "\t\tif ( false ) {", 'u', U_WRITE)
 e('a6-unread', 'core(): a last read that fails, nothing compared, nothing called (A6)', SW,
   "\t\tif ( is_wp_error( $now ) ) {\n\t\t\treturn self::refusal( $now );\n\t\t}\n", "", 'u', U_WRITE)
 e('a6-refusal-rights', 'core(): a right missing is a refusal of the helper, nothing of it owned (item 3 of round 4)', SW,
@@ -544,14 +544,14 @@ e('a6f-option', 'write_row(): the option through the helper (A6)', OW,
 e('a6f-css', 'write_row(): the CSS through the helper (A6)', CW,
   "\t\t\tself::class,\n\t\t\t$stylesheet,\n\t\t\t$pre,", "\t\t\tself::class,\n\t\t\tnull,\n\t\t\t$pre,", 'u', U_HOOK)
 e('a6f-menu', 'write_row(): the term of a menu through the helper (A6)', MW,
-  "\t\t\tnull === $live_id ? null : (int) $live_id,\n\t\t\t$pre,\n\t\t\tstatic fn() => current_user_can( 'edit_theme_options' ) ? true : AB_MCP_Sync_Post_Writer::rights( 'change the menus",
-  "\t\t\tnull,\n\t\t\t$pre,\n\t\t\tstatic fn() => current_user_can( 'edit_theme_options' ) ? true : AB_MCP_Sync_Post_Writer::rights( 'change the menus", 'u', U_HOOK)
+  "\t\t\tnull === $live_id ? null : (int) $live_id,\n\t\t\t$pre,\n\t\t\tstatic fn() => current_user_can( 'edit_theme_options' ) ? true : AB_MCP_Sync_Post_Writer::rights( __( 'This account may not change the menus of this site (edit_theme_options).', 'alphabridge-mcp' ) ),",
+  "\t\t\tnull,\n\t\t\t$pre,\n\t\t\tstatic fn() => current_user_can( 'edit_theme_options' ) ? true : AB_MCP_Sync_Post_Writer::rights( __( 'This account may not change the menus of this site (edit_theme_options).', 'alphabridge-mcp' ) ),", 'u', U_HOOK)
 e('a6f-position', 'write_part(): a position of a menu through the helper (A6)', MW,
   "\t\t\t(int) $live_id,\n\t\t\t$pre,\n\t\t\tstatic function () use ( $location, $set ) {",
   "\t\t\tnull,\n\t\t\t$pre,\n\t\t\tstatic function () use ( $location, $set ) {", 'u', U_HOOK)
 e('a6f-item', 'write_row(): the row of a menu item through the helper (A6)', MW,
-  "\t\t\tnull === $live_id ? null : (int) $live_id,\n\t\t\t$pre,\n\t\t\tstatic fn() => current_user_can( 'edit_theme_options' ) && current_user_can( 'assign_term', $menu )",
-  "\t\t\tnull,\n\t\t\t$pre,\n\t\t\tstatic fn() => current_user_can( 'edit_theme_options' ) && current_user_can( 'assign_term', $menu )", 'u', U_HOOK)
+  "\t\t\tself::class,\n\t\t\tnull === $live_id ? null : (int) $live_id,\n\t\t\t$pre,\n\t\t\t/* translators: %d: menu id on this site. */\n\t\t\tstatic fn() => current_user_can( 'edit_theme_options' ) && current_user_can( 'assign_term', $menu ) ",
+  "\t\t\tself::class,\n\t\t\tnull,\n\t\t\t$pre,\n\t\t\t/* translators: %d: menu id on this site. */\n\t\t\tstatic fn() => current_user_can( 'edit_theme_options' ) && current_user_can( 'assign_term', $menu ) ", 'u', U_HOOK)
 e('a6f-item-meta', 'write_part(): a meta key of a menu item through the helper (A6)', MW,
   "\t\t\t(int) $live_id,\n\t\t\t$pre,\n\t\t\tstatic function () use ( $live_id, $key, $prepared, $from ) {",
   "\t\t\tnull,\n\t\t\t$pre,\n\t\t\tstatic function () use ( $live_id, $key, $prepared, $from ) {", 'u', U_HOOK)
@@ -721,8 +721,8 @@ e('push-structure', 'verdict(): the kinds of the structure are items', PU,
   "\t\t} elseif ( in_array( $entry['kind'], self::STRUCTURE, true ) ) {",
   "\t\t} elseif ( false ) {", 'run', U_VERDICT)
 e('push-draft', 'verdict(): no structure as draft', PU,
-  "\t\t\tif ( $as_draft ) {\n\t\t\t\treturn $lock( sprintf( 'A %s has no status draft: leave it out of as_draft.', (string) $entry['kind'] ) );",
-  "\t\t\tif ( false ) {\n\t\t\t\treturn $lock( sprintf( 'A %s has no status draft: leave it out of as_draft.', (string) $entry['kind'] ) );", 'run', U_VERDICT)
+  "\t\t\tif ( $as_draft ) {\n\t\t\t\t/* translators: %s: kind of the object, as the tools name it (menu, widget_area, option, …). */\n\t\t\t\treturn $lock( sprintf( ",
+  "\t\t\tif ( false ) {\n\t\t\t\t/* translators: %s: kind of the object, as the tools name it (menu, widget_area, option, …). */\n\t\t\t\treturn $lock( sprintf( ", 'run', U_VERDICT)
 e('push-create', 'verdict(): a widget area, an option and the CSS are not made by a run', PU,
   "\t\t\tif ( 'create' === $action && in_array( $entry['kind'], array( 'widget_area', 'option', 'custom_css' ), true ) ) {",
   "\t\t\tif ( false ) {", 'run', U_VERDICT)

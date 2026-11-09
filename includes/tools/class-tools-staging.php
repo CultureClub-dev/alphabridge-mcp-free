@@ -589,7 +589,7 @@ class AB_MCP_Tools_Staging extends AB_MCP_Tools_Base {
 	 */
 	public static function pairs_preview( array $a ) {
 		require_once dirname( __DIR__ ) . '/sync/class-sync-pairs-tool.php';
-		return AB_MCP_Sync_Pairs_Tool::preview( $a );
+		return self::said( AB_MCP_Sync_Pairs_Tool::preview( $a ) );
 	}
 
 	/**
@@ -600,7 +600,7 @@ class AB_MCP_Tools_Staging extends AB_MCP_Tools_Base {
 	 */
 	public static function site_pairs( array $a ) {
 		require_once dirname( __DIR__ ) . '/sync/class-sync-pairs-tool.php';
-		return AB_MCP_Sync_Pairs_Tool::call( $a );
+		return self::said( AB_MCP_Sync_Pairs_Tool::call( $a ) );
 	}
 
 	/**
@@ -611,7 +611,7 @@ class AB_MCP_Tools_Staging extends AB_MCP_Tools_Base {
 	 */
 	public static function site_diff( array $a ) {
 		require_once dirname( __DIR__ ) . '/sync/class-sync-report.php';
-		return AB_MCP_Sync_Report::call( $a );
+		return self::said( AB_MCP_Sync_Report::call( $a ) );
 	}
 
 	/**
@@ -644,7 +644,7 @@ class AB_MCP_Tools_Staging extends AB_MCP_Tools_Base {
 	 */
 	public static function push_preview( array $a ) {
 		require_once dirname( __DIR__ ) . '/sync/class-sync-push.php';
-		return AB_MCP_Sync_Push::preview( $a );
+		return self::said( AB_MCP_Sync_Push::preview( $a ) );
 	}
 
 	/**
@@ -655,7 +655,7 @@ class AB_MCP_Tools_Staging extends AB_MCP_Tools_Base {
 	 */
 	public static function site_push( array $a ) {
 		require_once dirname( __DIR__ ) . '/sync/class-sync-push.php';
-		return AB_MCP_Sync_Push::call( $a );
+		return self::said( AB_MCP_Sync_Push::call( $a ) );
 	}
 
 	/**
@@ -688,7 +688,7 @@ class AB_MCP_Tools_Staging extends AB_MCP_Tools_Base {
 	 */
 	public static function revert_preview( array $a ) {
 		require_once dirname( __DIR__ ) . '/sync/class-sync-revert.php';
-		return AB_MCP_Sync_Revert::preview( $a );
+		return self::said( AB_MCP_Sync_Revert::preview( $a ) );
 	}
 
 	/**
@@ -699,7 +699,23 @@ class AB_MCP_Tools_Staging extends AB_MCP_Tools_Base {
 	 */
 	public static function site_revert( array $a ) {
 		require_once dirname( __DIR__ ) . '/sync/class-sync-revert.php';
-		return AB_MCP_Sync_Revert::call( $a );
+		return self::said( AB_MCP_Sync_Revert::call( $a ) );
+	}
+
+	/**
+	 * The answer of wp_site_pairs, wp_site_diff, wp_site_push or
+	 * wp_site_revert (or the preview of one) as the person reads it: its
+	 * stored English texts under the keys of AB_MCP_Sync_Said::PROSE in the
+	 * language of the site, at any depth, staging, live and environment
+	 * among them (Codex round 5 on branch 13). Only this copy, handed to the
+	 * answer and read by nothing after it; an error as it is.
+	 *
+	 * @param array|WP_Error $answer The answer.
+	 * @return array|WP_Error
+	 */
+	private static function said( $answer ) {
+		require_once dirname( __DIR__ ) . '/sync/class-sync-said.php';
+		return AB_MCP_Sync_Said::shown( $answer );
 	}
 
 	/**

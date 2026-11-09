@@ -27,8 +27,12 @@
  * taken back (discarded, or put back to its snapshot); what cannot be taken
  * back is named.
  *
- * Messages are English without gettext, as the other classes of the
- * takeover; each names the way.
+ * Messages are in gettext, in the language of the site as they arise (a
+ * refusal, why an entry is skipped); each names the way. Codes, states,
+ * kinds, what an operation did (made, aligned anew, ended) and the hints
+ * for the assistant (next, effect) stay as they are, and so do the reasons
+ * the proposal names; no translated text is compared, hashed or part of a
+ * print (the state a token binds holds the operations only).
  *
  * @package AlphaBridge_MCP
  */
@@ -36,6 +40,7 @@
 defined( 'ABSPATH' ) || exit;
 
 require_once __DIR__ . '/class-sync-proposal.php';
+require_once __DIR__ . '/class-sync-said.php';
 
 /**
  * Class AB_MCP_Sync_Pairs_Tool
@@ -90,9 +95,11 @@ final class AB_MCP_Sync_Pairs_Tool {
 		if ( isset( $plan['rest'] ) && null !== $plan['rest'] ) {
 			$out['more_after'] = $plan['rest'];
 		}
+		// The person sees the preview (AB_MCP_Confirm_Token): in the language
+		// of the site (Codex round 2 of branch 13, B1).
 		$out['effect'] = 'confirm' === $plan['action']
-			? 'Writes the table of object pairs of this site only: no content changes on either site. A pair made from an entry equal is active (both sides as its base); from differs, or a chosen pair of other content, it is unclear, and the report asks which side wins; realign makes the state of each side now its new base.'
-			: 'Removes these pairs from the table of object pairs of this site only: their objects stay as they are on both sites, each without a pair from then on (an object of this site then shows as only live, one of the staging site as only staging).';
+			? __( 'Writes the table of object pairs of this site only: no content changes on either site. A pair made from an entry equal is active (both sides as its base); from differs, or a chosen pair of other content, it is unclear, and the report asks which side wins; realign makes the state of each side now its new base.', 'alphabridge-mcp' )
+			: __( 'Removes these pairs from the table of object pairs of this site only: their objects stay as they are on both sites, each without a pair from then on (an object of this site then shows as only live, one of the staging site as only staging).', 'alphabridge-mcp' );
 		return $out;
 	}
 
@@ -144,7 +151,8 @@ final class AB_MCP_Sync_Pairs_Tool {
 		}
 		$ids = self::numbers( isset( $a['pair_ids'] ) ? $a['pair_ids'] : null );
 		if ( null === $ids || array() === $ids || count( $ids ) > self::MAX || count( array_unique( $ids ) ) !== count( $ids ) ) {
-			return self::selection( sprintf( 'discard takes pair_ids: the ids of the pairs to end (wp_site_pairs action=list names them), each once, at most %d.', self::MAX ) );
+			/* translators: %d: the most pairs one call ends. */
+			return self::selection( sprintf( __( 'discard takes pair_ids: the ids of the pairs to end (wp_site_pairs action=list names them), each once, at most %d.', 'alphabridge-mcp' ), self::MAX ) );
 		}
 		// One reading under the lock, compared with the print of the form,
 		// and the rows of that reading deleted byte for byte, nothing read in
@@ -162,9 +170,9 @@ final class AB_MCP_Sync_Pairs_Tool {
 				return self::discard_rows( $rows );
 			},
 			static function () {
-				return new WP_Error( 'ab_mcp_sync_pairs_changed', 'No pair was discarded: a pair changed since the page was loaded (a run took it over or back, or it was aligned anew). Look at it again on the page AlphaBridge → Staging and discard it then.' );
+				return new WP_Error( 'ab_mcp_sync_pairs_changed', __( 'No pair was discarded: a pair changed since the page was loaded (a run took it over or back, or it was aligned anew). Look at it again on the page AlphaBridge → Staging and discard it then.', 'alphabridge-mcp' ) );
 			},
-			'No pair is discarded'
+			__( 'No pair is discarded.', 'alphabridge-mcp' )
 		);
 	}
 
@@ -187,7 +195,8 @@ final class AB_MCP_Sync_Pairs_Tool {
 				return $row;
 			}
 			if ( null === $row || $source !== $row['source_id'] ) {
-				return self::selection( sprintf( 'There is no pair %d of the staging site whose key is confirmed here.', $id ) );
+				/* translators: %d: pair number. */
+				return self::selection( sprintf( __( 'There is no pair %d of the staging site whose key is confirmed here.', 'alphabridge-mcp' ), $id ) );
 			}
 			$rows[] = $row;
 		}
@@ -224,7 +233,8 @@ final class AB_MCP_Sync_Pairs_Tool {
 				foreach ( $rows as $row ) {
 					$result = AB_MCP_Sync_Pairs::discard_row( $row['raw'] );
 					if ( is_wp_error( $result ) ) {
-						return new WP_Error( 'ab_mcp_sync_pairs_changed', sprintf( 'Pair %1$d was not discarded: it is not the pair as read any more (%2$s), so nothing was ended; the database took back all of it. Look at it again on the page AlphaBridge → Staging and discard it then.', (int) $row['id'], $result->get_error_message() ) );
+						/* translators: 1: pair number, 2: why it is not the pair as read, a whole message. */
+						return new WP_Error( 'ab_mcp_sync_pairs_changed', sprintf( __( 'Pair %1$d was not discarded: it is not the pair as read any more (%2$s), so nothing was ended; the database took back all of it. Look at it again on the page AlphaBridge → Staging and discard it then.', 'alphabridge-mcp' ), (int) $row['id'], $result->get_error_message() ) );
 					}
 					$ops[] = self::discard_op( $row, (string) $row['snapshot_hash'] );
 				}
@@ -329,22 +339,22 @@ final class AB_MCP_Sync_Pairs_Tool {
 			return $found;
 		}
 		if ( null === $found['index'] ) {
-			return new WP_Error( 'ab_mcp_sync_pairs_not_done', 'This proposal is not worked out yet: the inventory of this site is still being read. Call wp_site_pairs with action=propose and this proposal_id until it answers done true, then confirm.' );
+			return new WP_Error( 'ab_mcp_sync_pairs_not_done', __( 'This proposal is not worked out yet: the inventory of this site is still being read. Call wp_site_pairs with action=propose and this proposal_id until it answers done true, then confirm.', 'alphabridge-mcp' ) );
 		}
 		$select     = self::numbers( isset( $a['select'] ) ? $a['select'] : array() );
 		$categories = isset( $a['categories'] ) ? $a['categories'] : array();
 		$choices    = isset( $a['choices'] ) ? $a['choices'] : array();
 		if ( null === $select || ! is_array( $categories ) || ! array_is_list( $categories ) || array() !== array_diff( $categories, self::BY_CATEGORY ) || ! is_array( $choices ) || ! array_is_list( $choices ) ) {
-			return self::selection( 'select is a list of entry numbers, categories a list of equal, differs and realign, choices a list of entry, staging_ref and live_ref.' );
+			return self::selection( __( 'select is a list of entry numbers, categories a list of equal, differs and realign, choices a list of entry, staging_ref and live_ref.', 'alphabridge-mcp' ) );
 		}
 		if ( array() === $select && array() === $categories && array() === $choices ) {
-			return self::selection( 'Nothing is chosen.' );
+			return self::selection( __( 'Nothing is chosen.', 'alphabridge-mcp' ) );
 		}
 		$after = isset( $a['after'] ) && is_numeric( $a['after'] ) ? max( 0, (int) $a['after'] ) : 0;
 		$want  = $select;
 		foreach ( $choices as $choice ) {
 			if ( ! is_array( $choice ) || ! isset( $choice['entry'], $choice['staging_ref'], $choice['live_ref'] ) || null === self::numbers( array( $choice['entry'] ) ) ) {
-				return self::selection( 'A choice is an object of entry (its number), staging_ref and live_ref, both refs among the candidates of that uncertain entry.' );
+				return self::selection( __( 'A choice is an object of entry (its number), staging_ref and live_ref, both refs among the candidates of that uncertain entry.', 'alphabridge-mcp' ) );
 			}
 			$want[] = (int) $choice['entry'];
 		}
@@ -354,7 +364,8 @@ final class AB_MCP_Sync_Pairs_Tool {
 		}
 		foreach ( $want as $n ) {
 			if ( ! isset( $entries[ $n ] ) ) {
-				return self::selection( sprintf( 'The proposal has no entry %d (it has %d).', $n, (int) $found['index']['total'] ) );
+				/* translators: 1: the entry number asked for, 2: the number of entries of the proposal. */
+				return self::selection( sprintf( __( 'The proposal has no entry %1$d (it has %2$d).', 'alphabridge-mcp' ), $n, (int) $found['index']['total'] ) );
 			}
 		}
 		$chosen  = array();
@@ -362,13 +373,21 @@ final class AB_MCP_Sync_Pairs_Tool {
 		foreach ( $select as $n ) {
 			$entry = $entries[ $n ];
 			if ( in_array( $entry['category'], AB_MCP_Sync_Proposal::BY_CHOICE, true ) ) {
-				return self::selection( sprintf( 'Entry %1$d is %2$s: it is paired only by the choice of a person. Name the pair the person chose in choices (entry, staging_ref, live_ref).', $n, $entry['category'] ) );
+				/* translators: 1: entry number of the proposal, 2: its category, as the tools name it (uncertain, …). */
+				return self::selection( sprintf( __( 'Entry %1$d is %2$s: it is paired only by the choice of a person. Name the pair the person chose in choices (entry, staging_ref, live_ref).', 'alphabridge-mcp' ), $n, $entry['category'] ) );
 			}
 			if ( ! in_array( $entry['category'], array( 'equal', 'differs', 'realign' ), true ) ) {
-				return self::selection( sprintf( 'Entry %1$d is %2$s and is not paired: %3$s', $n, $entry['category'], isset( $entry['reason'] ) ? $entry['reason'] : 'it has no counterpart to pair it with.' ) );
+				return self::selection(
+					isset( $entry['reason'] )
+						/* translators: 1: entry number of the proposal, 2: its category, as the tools name it (only_live, …), 3: the reason the proposal names, a whole sentence in the language of the site. */
+						? sprintf( __( 'Entry %1$d is %2$s and is not paired: %3$s', 'alphabridge-mcp' ), $n, $entry['category'], AB_MCP_Sync_Said::text( (string) $entry['reason'] ) )
+						/* translators: 1: entry number of the proposal, 2: its category, as the tools name it (only_live, …). */
+						: sprintf( __( 'Entry %1$d is %2$s and is not paired: it has no counterpart to pair it with.', 'alphabridge-mcp' ), $n, $entry['category'] )
+				);
 			}
 			if ( 'realign' === $entry['category'] && null === $entry['confirm'] ) {
-				return self::selection( sprintf( 'Entry %1$d cannot be aligned anew: %2$s', $n, $entry['reason'] ) );
+				/* translators: 1: entry number of the proposal, 2: the reason the proposal names, a whole sentence in the language of the site. */
+				return self::selection( sprintf( __( 'Entry %1$d cannot be aligned anew: %2$s', 'alphabridge-mcp' ), $n, AB_MCP_Sync_Said::text( (string) $entry['reason'] ) ) );
 			}
 			$chosen[ $n ] = $entry;
 		}
@@ -376,7 +395,8 @@ final class AB_MCP_Sync_Pairs_Tool {
 		if ( array() !== $categories ) {
 			$room = self::MAX - count( $chosen ) - count( $choices );
 			if ( $room < 1 ) {
-				return self::selection( sprintf( 'One confirmation makes at most %d pairs, and select and choices fill them already. Confirm the categories in a call of their own.', self::MAX ) );
+				/* translators: %d: the most pairs one confirmation makes. */
+				return self::selection( sprintf( __( 'One confirmation makes at most %d pairs, and select and choices fill them already. Confirm the categories in a call of their own.', 'alphabridge-mcp' ), self::MAX ) );
 			}
 			$more = AB_MCP_Sync_Proposal::of_categories( $found, $categories, $after, $room );
 			if ( is_wp_error( $more ) ) {
@@ -389,7 +409,7 @@ final class AB_MCP_Sync_Pairs_Tool {
 				if ( 'realign' === $entry['category'] && null === $entry['confirm'] ) {
 					$skipped[] = array(
 						'entry'  => $entry['n'],
-						'reason' => $entry['reason'],
+						'reason' => AB_MCP_Sync_Said::text( (string) $entry['reason'] ),
 					);
 					continue;
 				}
@@ -406,15 +426,18 @@ final class AB_MCP_Sync_Pairs_Tool {
 			$n     = (int) $choice['entry'];
 			$entry = $entries[ $n ];
 			if ( ! in_array( $entry['category'], AB_MCP_Sync_Proposal::BY_CHOICE, true ) ) {
-				return self::selection( sprintf( 'Entry %d is not uncertain; choose it with select.', $n ) );
+				/* translators: %d: entry number of the proposal. */
+				return self::selection( sprintf( __( 'Entry %d is not uncertain; choose it with select.', 'alphabridge-mcp' ), $n ) );
 			}
 			$s = self::candidate( $entry['candidates']['staging'], $choice['staging_ref'] );
 			$l = self::candidate( $entry['candidates']['live'], $choice['live_ref'] );
 			if ( null === $s || null === $l ) {
-				return self::selection( sprintf( 'The refs of a choice for entry %d are not among its candidates.', $n ) );
+				/* translators: %d: entry number of the proposal. */
+				return self::selection( sprintf( __( 'The refs of a choice for entry %d are not among its candidates.', 'alphabridge-mcp' ), $n ) );
 			}
 			if ( ! is_string( $s['hash'] ) || ! is_string( $l['hash'] ) ) {
-				return self::selection( sprintf( 'A candidate of entry %d is not compared (it has no hash), so it is not paired; take it over by hand.', $n ) );
+				/* translators: %d: entry number of the proposal. */
+				return self::selection( sprintf( __( 'A candidate of entry %d is not compared (it has no hash), so it is not paired; take it over by hand.', 'alphabridge-mcp' ), $n ) );
 			}
 			// The same once mapped (decision 10), each reference to the
 			// object of a pair naming its other object (Codex round 2 of
@@ -423,7 +446,8 @@ final class AB_MCP_Sync_Pairs_Tool {
 			$ops[] = self::create_op( $n, $entry['kind'], $s, $l, $equal ? 'active' : 'unclear' );
 		}
 		if ( count( $ops ) > self::MAX ) {
-			return self::selection( sprintf( 'One confirmation makes at most %d pairs. Confirm in parts: categories with after (the number of the last entry of the part before), or fewer numbers in select.', self::MAX ) );
+			/* translators: %d: the most pairs one confirmation makes. */
+			return self::selection( sprintf( __( 'One confirmation makes at most %d pairs. Confirm in parts: categories with after (the number of the last entry of the part before), or fewer numbers in select.', 'alphabridge-mcp' ), self::MAX ) );
 		}
 		foreach ( $ops as $op ) {
 			if ( 'create' !== $op['op'] ) {
@@ -432,7 +456,8 @@ final class AB_MCP_Sync_Pairs_Tool {
 			foreach ( array( 'live_ref', 'staging_ref' ) as $column ) {
 				$key = $op['kind'] . "\0" . $column . "\0" . $op[ $column ];
 				if ( isset( $used[ $key ] ) ) {
-					return self::selection( sprintf( 'The same object is chosen twice (entries %1$d and %2$d); each object has one pair.', $used[ $key ], $op['entry'] ) );
+					/* translators: 1: and 2: entry numbers of the proposal. */
+					return self::selection( sprintf( __( 'The same object is chosen twice (entries %1$d and %2$d); each object has one pair.', 'alphabridge-mcp' ), $used[ $key ], $op['entry'] ) );
 				}
 				$used[ $key ] = $op['entry'];
 			}
@@ -455,7 +480,7 @@ final class AB_MCP_Sync_Pairs_Tool {
 		$fresh = array();
 		foreach ( $ops as $op ) {
 			$op['live_now'] = $live[ $op['kind'] . "\0" . $op['live_ref'] ];
-			$now            = 'gone' === $op['live_now'] ? 'the object of this site is gone since the proposal' : self::now( $source, $op );
+			$now            = 'gone' === $op['live_now'] ? __( 'The object of this site is gone since the proposal.', 'alphabridge-mcp' ) : self::now( $source, $op );
 			if ( is_wp_error( $now ) ) {
 				return $now;
 			}
@@ -469,14 +494,21 @@ final class AB_MCP_Sync_Pairs_Tool {
 			$fresh[] = $op;
 		}
 		if ( array() === $fresh ) {
+			$list = implode(
+				' ',
+				array_map(
+					/* translators: 1: entry number of the proposal, 2: why it is skipped, a whole sentence in the language of the site. */
+					static fn( $s ) => sprintf( __( 'Entry %1$d: %2$s', 'alphabridge-mcp' ), (int) $s['entry'], (string) $s['reason'] ),
+					array_slice( $skipped, 0, 5 )
+				)
+			);
 			return new WP_Error(
 				'ab_mcp_sync_pairs_nothing',
-				sprintf(
-					'Nothing is left to confirm here: %1$d of the entries chosen are paired already, gone or changed since the proposal (%2$s). Propose again (wp_site_pairs action=propose) to see the pairs as they are%3$s.',
-					count( $skipped ),
-					implode( '; ', array_map( static fn( $s ) => 'entry ' . $s['entry'] . ': ' . $s['reason'], array_slice( $skipped, 0, 5 ) ) ),
-					null === $rest ? '' : sprintf( ', or go on with the same categories and after=%d, where more entries of them are left', $rest )
-				)
+				null === $rest
+					/* translators: 1: entries chosen that are skipped, 2: the first of them, each with why. */
+					? sprintf( _n( 'Nothing is left to confirm here: %1$d of the entries chosen is paired already, gone or changed since the proposal. %2$s Propose again (wp_site_pairs action=propose) to see the pairs as they are.', 'Nothing is left to confirm here: %1$d of the entries chosen are paired already, gone or changed since the proposal. %2$s Propose again (wp_site_pairs action=propose) to see the pairs as they are.', count( $skipped ), 'alphabridge-mcp' ), count( $skipped ), $list )
+					/* translators: 1: entries chosen that are skipped, 2: the first of them, each with why, 3: the number of the last entry of this part. */
+					: sprintf( _n( 'Nothing is left to confirm here: %1$d of the entries chosen is paired already, gone or changed since the proposal. %2$s Propose again (wp_site_pairs action=propose) to see the pairs as they are, or go on with the same categories and after=%3$d, where more entries of them are left.', 'Nothing is left to confirm here: %1$d of the entries chosen are paired already, gone or changed since the proposal. %2$s Propose again (wp_site_pairs action=propose) to see the pairs as they are, or go on with the same categories and after=%3$d, where more entries of them are left.', count( $skipped ), 'alphabridge-mcp' ), count( $skipped ), $list, $rest )
 			);
 		}
 		return array(
@@ -496,7 +528,8 @@ final class AB_MCP_Sync_Pairs_Tool {
 	private static function plan_discard( array $a, $source ) {
 		$ids = self::numbers( isset( $a['pair_ids'] ) ? $a['pair_ids'] : null );
 		if ( null === $ids || array() === $ids || count( $ids ) > self::MAX || count( array_unique( $ids ) ) !== count( $ids ) ) {
-			return self::selection( sprintf( 'discard takes pair_ids: the ids of the pairs to end (wp_site_pairs action=list names them), each once, at most %d.', self::MAX ) );
+			/* translators: %d: the most pairs one call ends. */
+			return self::selection( sprintf( __( 'discard takes pair_ids: the ids of the pairs to end (wp_site_pairs action=list names them), each once, at most %d.', 'alphabridge-mcp' ), self::MAX ) );
 		}
 		$ops = array();
 		foreach ( $ids as $id ) {
@@ -505,7 +538,8 @@ final class AB_MCP_Sync_Pairs_Tool {
 				return $pair;
 			}
 			if ( null === $pair || $source !== $pair['source_id'] ) {
-				return self::selection( sprintf( 'There is no pair %d of the staging site whose key is confirmed here.', $id ) );
+				/* translators: %d: pair number. */
+				return self::selection( sprintf( __( 'There is no pair %d of the staging site whose key is confirmed here.', 'alphabridge-mcp' ), $id ) );
 			}
 			$snapshot = AB_MCP_Sync_Pairs::snapshot( $id );
 			if ( is_wp_error( $snapshot ) ) {
@@ -614,16 +648,19 @@ final class AB_MCP_Sync_Pairs_Tool {
 					return $pair;
 				}
 				if ( null !== $pair ) {
-					return sprintf( 'paired meanwhile (pair %d)', (int) $pair['id'] );
+					/* translators: %d: pair number. */
+					return sprintf( __( 'It was paired meanwhile (pair %d).', 'alphabridge-mcp' ), (int) $pair['id'] );
 				}
 			}
 			return null;
 		}
 		$snapshot = AB_MCP_Sync_Pairs::snapshot( $op['pair_id'] );
 		if ( is_wp_error( $snapshot ) ) {
-			return 'ab_mcp_staging_pair_missing' === $snapshot->get_error_code() ? sprintf( 'pair %d is gone', $op['pair_id'] ) : $snapshot;
+			/* translators: %d: pair number. */
+			return 'ab_mcp_staging_pair_missing' === $snapshot->get_error_code() ? sprintf( __( 'Pair %d is gone.', 'alphabridge-mcp' ), $op['pair_id'] ) : $snapshot;
 		}
-		return hash_equals( $op['expected'], AB_MCP_Sync_Pairs::snapshot_hash( $snapshot ) ) ? null : sprintf( 'pair %d changed since the proposal', $op['pair_id'] );
+		/* translators: %d: pair number. */
+		return hash_equals( $op['expected'], AB_MCP_Sync_Pairs::snapshot_hash( $snapshot ) ) ? null : sprintf( __( 'Pair %d changed since the proposal.', 'alphabridge-mcp' ), $op['pair_id'] );
 	}
 
 	/**
@@ -688,7 +725,8 @@ final class AB_MCP_Sync_Pairs_Tool {
 					if ( is_wp_error( $pair ) ) {
 						return new WP_Error(
 							'ab_mcp_sync_pairs_confirm_failed',
-							sprintf( 'Entry %1$d could not be paired (%2$s), so the confirmation kept nothing: the database took back all of it. Propose again (wp_site_pairs action=propose) and confirm anew.', $op['entry'], $pair->get_error_message() ),
+							/* translators: 1: entry number of the proposal, 2: why, a whole message. */
+							sprintf( __( 'Entry %1$d could not be paired (%2$s), so the confirmation kept nothing: the database took back all of it. Propose again (wp_site_pairs action=propose) and confirm anew.', 'alphabridge-mcp' ), $op['entry'], $pair->get_error_message() ),
 							array( 'entry' => $op['entry'] )
 						);
 					}
@@ -716,10 +754,10 @@ final class AB_MCP_Sync_Pairs_Tool {
 		if ( array() !== $plan['skipped'] ) {
 			$answer['skipped'] = array_slice( $plan['skipped'], 0, self::NAMED );
 		}
-		$answer['next'] = 'The pairs are in the table of object pairs of this site; no content changed. wp_site_pairs action=list shows them; action=discard with pair_ids ends a pair.';
+		$answer['next'] = __( 'The pairs are in the table of object pairs of this site; no content changed.', 'alphabridge-mcp' ) . ' wp_site_pairs action=list shows them; action=discard with pair_ids ends a pair.';
 		if ( null !== $plan['rest'] ) {
 			$answer['more_after'] = $plan['rest'];
-			$answer['next']      .= sprintf( ' More entries of these categories are left: confirm them with the same categories and after=%d.', $plan['rest'] );
+			$answer['next']      .= ' ' . __( 'More entries of these categories are left.', 'alphabridge-mcp' ) . sprintf( ' Confirm them with the same categories and after=%d.', $plan['rest'] );
 		}
 		return $answer;
 	}
@@ -739,7 +777,8 @@ final class AB_MCP_Sync_Pairs_Tool {
 				foreach ( $plan['ops'] as $op ) {
 					$result = AB_MCP_Sync_Pairs::discard( $op['pair_id'], $op['expected'] );
 					if ( is_wp_error( $result ) ) {
-						return new WP_Error( 'ab_mcp_sync_pairs_discard_failed', sprintf( 'Pair %1$d could not be ended (%2$s), so the confirmation ended nothing: the database took back all of it. Read the pairs again (wp_site_pairs action=list) and discard them anew.', $op['pair_id'], $result->get_error_message() ) );
+						/* translators: 1: pair number, 2: why, a whole message. */
+						return new WP_Error( 'ab_mcp_sync_pairs_discard_failed', sprintf( __( 'Pair %1$d could not be ended (%2$s), so the confirmation ended nothing: the database took back all of it. Read the pairs again (wp_site_pairs action=list) and discard them anew.', 'alphabridge-mcp' ), $op['pair_id'], $result->get_error_message() ) );
 					}
 				}
 				return true;
@@ -774,7 +813,7 @@ final class AB_MCP_Sync_Pairs_Tool {
 				},
 				array_slice( $ops, 0, self::NAMED )
 			),
-			'next'   => 'The objects of these pairs are without a pair now; no content changed. Propose again (wp_site_pairs action=propose) to pair them anew.',
+			'next'   => __( 'The objects of these pairs are without a pair now; no content changed.', 'alphabridge-mcp' ) . ' Propose again (wp_site_pairs action=propose) to pair them anew.',
 		);
 	}
 
@@ -794,7 +833,8 @@ final class AB_MCP_Sync_Pairs_Tool {
 		$kind  = isset( $a['kind'] ) ? (string) $a['kind'] : null;
 		$state = isset( $a['state'] ) ? (string) $a['state'] : null;
 		if ( null !== $state && ! in_array( $state, AB_MCP_Sync_Pairs::STATES, true ) ) {
-			return self::selection( 'state is one of ' . implode( ', ', AB_MCP_Sync_Pairs::STATES ) . '.' );
+			/* translators: %s: the states of a pair, as the tools name them, separated by commas. */
+			return self::selection( sprintf( __( 'state is one of %s.', 'alphabridge-mcp' ), implode( ', ', AB_MCP_Sync_Pairs::STATES ) ) );
 		}
 		$page = AB_MCP_Sync_Pairs::page_source( $source, isset( $a['after'] ) && is_numeric( $a['after'] ) ? max( 0, (int) $a['after'] ) : 0 );
 		if ( is_wp_error( $page ) ) {
@@ -822,7 +862,7 @@ final class AB_MCP_Sync_Pairs_Tool {
 			'source_id'  => $source,
 			'pairs'      => $pairs,
 			'next_after' => $page['next'],
-			'next'       => null === $page['next'] ? 'These are all pairs of this page and after.' : 'More pairs: call wp_site_pairs again with action=list and after=' . $page['next'] . '.',
+			'next'       => null === $page['next'] ? __( 'These are all pairs of this page and after.', 'alphabridge-mcp' ) : __( 'More pairs follow.', 'alphabridge-mcp' ) . ' Call wp_site_pairs again with action=list and after=' . $page['next'] . '.',
 		);
 	}
 
@@ -879,17 +919,17 @@ final class AB_MCP_Sync_Pairs_Tool {
 	}
 
 	/**
-	 * @param string $what What is wrong with the selection.
+	 * @param string $what What is wrong with the selection, a whole sentence.
 	 * @return WP_Error
 	 */
 	private static function selection( $what ) {
-		return new WP_Error( 'ab_mcp_sync_pairs_selection', $what . ' Nothing was changed. Check the entries of the proposal (wp_site_pairs action=propose with the proposal_id) or the pairs (action=list), then call again.' );
+		return new WP_Error( 'ab_mcp_sync_pairs_selection', $what . ' ' . __( 'Nothing was changed. Check the entries of the proposal (wp_site_pairs action=propose with the proposal_id) or the pairs (action=list), then call again.', 'alphabridge-mcp' ) );
 	}
 
 	/**
 	 * @return WP_Error No action, or an unknown one.
 	 */
 	private static function no_action() {
-		return new WP_Error( 'ab_mcp_sync_pairs_action', 'wp_site_pairs needs action: propose, confirm, discard or list. Pass one of them and call again.' );
+		return new WP_Error( 'ab_mcp_sync_pairs_action', __( 'wp_site_pairs needs action: propose, confirm, discard or list. Pass one of them and call again.', 'alphabridge-mcp' ) );
 	}
 }

@@ -34,8 +34,9 @@
  * extract() reads a file from those chunks, each against its hash in the
  * manifest, into a file of its own and checks it again.
  *
- * Messages are English without gettext, as the other classes of the
- * takeover; each names the way.
+ * Messages are in gettext, in the language of the site, as the other
+ * classes of the takeover; each names the way. Codes and machine values
+ * (kinds, purposes, parameters, fields) stay as the tools name them.
  *
  * @package AlphaBridge_MCP
  */
@@ -180,14 +181,14 @@ final class AB_MCP_Sync_Media_Package {
 			$text     = AB_MCP_Sync_Import::inflate( $data, min( $declared, $limits['object_bytes'] ) );
 			unset( $data );
 			if ( ! is_string( $text ) ) {
-				return self::refusal( 'A chunk does not unpack within the package: it is no gzip, or it inflates to more than the manifest declares.' );
+				return self::refusal( __( 'A chunk does not unpack within the package: it is no gzip, or it inflates to more than the manifest declares.', 'alphabridge-mcp' ) );
 			}
 			$total += strlen( $text );
 			if ( '' === $text ) {
 				continue;
 			}
 			if ( "\n" !== substr( $text, -1 ) ) {
-				return self::refusal( 'A chunk does not end with a whole line.' );
+				return self::refusal( __( 'A chunk does not end with a whole line.', 'alphabridge-mcp' ) );
 			}
 			foreach ( explode( "\n", substr( $text, 0, -1 ) ) as $line ) {
 				++$count;
@@ -197,12 +198,12 @@ final class AB_MCP_Sync_Media_Package {
 				}
 				$piece = self::line( $line );
 				if ( null === $piece ) {
-					return self::refusal( 'A line is not one piece of a file as the staging site writes it: a field it has no place for or of another type, a path that is not a plain path under the uploads, data that is no base64, or a piece of another size than its number gives.' );
+					return self::refusal( __( 'A line is not one piece of a file as the staging site writes it: a field it has no place for or of another type, a path that is not a plain path under the uploads, data that is no base64, or a piece of another size than its number gives.', 'alphabridge-mcp' ) );
 				}
 				$key = $piece['ref'] . "\0" . $piece['path'];
 				if ( null === $current ) {
 					if ( 0 !== $piece['piece'] || isset( $seen[ $key ] ) ) {
-						return self::refusal( 'The pieces of a file are not consecutive lines in their order, or a file of an attachment is there twice.' );
+						return self::refusal( __( 'The pieces of a file are not consecutive lines in their order, or a file of an attachment is there twice.', 'alphabridge-mcp' ) );
 					}
 					$seen[ $key ] = true;
 					$current      = array(
@@ -216,7 +217,7 @@ final class AB_MCP_Sync_Media_Package {
 						'next'   => 0,
 					);
 				} elseif ( $key !== $current['ref'] . "\0" . $current['path'] || $piece['piece'] !== $current['next'] || $piece['sha256'] !== $current['sha256'] || $piece['size'] !== $current['size'] || $piece['pieces'] !== $current['pieces'] ) {
-					return self::refusal( 'The pieces of a file are not consecutive lines in their order, or a file of an attachment is there twice.' );
+					return self::refusal( __( 'The pieces of a file are not consecutive lines in their order, or a file of an attachment is there twice.', 'alphabridge-mcp' ) );
 				}
 				hash_update( $current['hash'], $piece['bytes'] );
 				if ( array() === $current['chunks'] || end( $current['chunks'] ) !== (int) $i ) {
@@ -225,7 +226,7 @@ final class AB_MCP_Sync_Media_Package {
 				++$current['next'];
 				if ( $current['next'] === $current['pieces'] ) {
 					if ( ! hash_equals( $current['sha256'], hash_final( $current['hash'] ) ) ) {
-						return self::refusal( 'A file of the package does not hash to the SHA-256 its lines name.' );
+						return self::refusal( __( 'A file of the package does not hash to the SHA-256 its lines name.', 'alphabridge-mcp' ) );
 					}
 					$files[] = array(
 						'chunks' => $current['chunks'],
@@ -241,10 +242,10 @@ final class AB_MCP_Sync_Media_Package {
 			unset( $text );
 		}
 		if ( null !== $current ) {
-			return self::refusal( 'The package ends within the pieces of a file.' );
+			return self::refusal( __( 'The package ends within the pieces of a file.', 'alphabridge-mcp' ) );
 		}
 		if ( $count !== $manifest['objects'] || $total !== $manifest['unpacked'] ) {
-			return self::refusal( 'The lines are not as many, or not as long, as the manifest declares.' );
+			return self::refusal( __( 'The lines are not as many, or not as long, as the manifest declares.', 'alphabridge-mcp' ) );
 		}
 		$text = AB_MCP_Sync_Canon::encode(
 			array(
@@ -279,11 +280,11 @@ final class AB_MCP_Sync_Media_Package {
 		// used).
 		$index = is_string( $text ) ? AB_MCP_Sync_Canon::decode( $text, 8 ) : null;
 		if ( ! is_array( $index ) || ! isset( $index['format'], $index['files'] ) || self::INDEX_FORMAT !== $index['format'] || ! is_array( $index['files'] ) || ! array_is_list( $index['files'] ) ) {
-			return new WP_Error( 'ab_mcp_sync_media_index', 'The package of media is marked complete, but its index does not read back (it was taken over by an older version, or the index was changed), so it is not used. Fetch the package anew: export the media again on the staging site (wp_site_export with purpose=media), then take it over here (wp_site_import_chunk).' );
+			return new WP_Error( 'ab_mcp_sync_media_index', __( 'The package of media is marked complete, but its index does not read back (it was taken over by an older version, or the index was changed), so it is not used. Fetch the package anew: export the media again on the staging site (wp_site_export with purpose=media), then take it over here (wp_site_import_chunk).', 'alphabridge-mcp' ) );
 		}
 		foreach ( $index['files'] as $file ) {
 			if ( ! is_array( $file ) || array( 'chunks', 'path', 'pieces', 'ref', 'sha256', 'size' ) !== self::sorted_keys( $file ) || ! is_string( $file['ref'] ) || ! is_string( $file['path'] ) || ! AB_MCP_Sync_Media::safe_path( $file['path'] ) || ! is_string( $file['sha256'] ) || ! is_int( $file['size'] ) || ! is_int( $file['pieces'] ) || ! is_array( $file['chunks'] ) || array() === $file['chunks'] ) {
-				return new WP_Error( 'ab_mcp_sync_media_index', 'The index of the package of media does not read as this version keeps it, so it is not used. Export the media again on the staging site (wp_site_export with purpose=media), then take it over here (wp_site_import_chunk).' );
+				return new WP_Error( 'ab_mcp_sync_media_index', __( 'The index of the package of media does not read as this version keeps it, so it is not used. Export the media again on the staging site (wp_site_export with purpose=media), then take it over here (wp_site_import_chunk).', 'alphabridge-mcp' ) );
 			}
 		}
 		return array(
@@ -307,7 +308,7 @@ final class AB_MCP_Sync_Media_Package {
 	public static function extract( array $taken, array $file, $to ) {
 		$out = @fopen( (string) $to, 'wb' ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- a temporary file of this request.
 		if ( false === $out ) {
-			return new WP_Error( 'ab_mcp_sync_media_temp', 'A temporary file for a file of the package could not be written, so nothing of the attachment was laid. Ask the host to check that PHP may write to its temporary folder (get_temp_dir()) and that the disk has free space, then call again.' );
+			return new WP_Error( 'ab_mcp_sync_media_temp', __( 'A temporary file for a file of the package could not be written, so nothing of the attachment was laid. Ask the host to check that PHP may write to its temporary folder (get_temp_dir()) and that the disk has free space, then call again.', 'alphabridge-mcp' ) );
 		}
 		$hash  = hash_init( 'sha256' );
 		$next  = 0;
@@ -337,7 +338,7 @@ final class AB_MCP_Sync_Media_Package {
 					hash_update( $hash, $piece['bytes'] );
 					$bytes += strlen( $piece['bytes'] );
 					if ( strlen( $piece['bytes'] ) !== (int) fwrite( $out, $piece['bytes'] ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite
-						return new WP_Error( 'ab_mcp_sync_media_temp', 'A temporary file for a file of the package could not be written whole, so nothing of the attachment was laid. Ask the host to check that the disk has free space, then call again.' );
+						return new WP_Error( 'ab_mcp_sync_media_temp', __( 'A temporary file for a file of the package could not be written whole, so nothing of the attachment was laid. Ask the host to check that the disk has free space, then call again.', 'alphabridge-mcp' ) );
 					}
 					++$next;
 				}
@@ -448,7 +449,8 @@ final class AB_MCP_Sync_Media_Package {
 	 * @return WP_Error A file that changed since its list was read.
 	 */
 	private static function changed( $path ) {
-		return new WP_Error( 'ab_mcp_sync_media_changed', sprintf( 'The file %s of an attachment changed, went or could not be read while it was packed, so no package of media was made. Call wp_site_export with purpose=media again; if it keeps failing, check the file in the uploads of this staging site.', (string) $path ) );
+		/* translators: %s: path of the file under the uploads. */
+		return new WP_Error( 'ab_mcp_sync_media_changed', sprintf( __( 'The file %s of an attachment changed, went or could not be read while it was packed, so no package of media was made. Call wp_site_export with purpose=media again; if it keeps failing, check the file in the uploads of this staging site.', 'alphabridge-mcp' ), (string) $path ) );
 	}
 
 	/**
@@ -456,7 +458,8 @@ final class AB_MCP_Sync_Media_Package {
 	 * @return WP_Error A file of the package that does not read whole.
 	 */
 	private static function unread( array $file ) {
-		return new WP_Error( 'ab_mcp_sync_media_unread', sprintf( 'The file %s of the package of media does not read whole (a piece is missing or out of its order, or it does not hash to its SHA-256), so nothing of the attachment was laid. Export the media again on the staging site (wp_site_export with purpose=media), take the package over here (wp_site_import_chunk) and plan again.', isset( $file['path'] ) ? (string) $file['path'] : '?' ) );
+		/* translators: %s: path of the file under the uploads. */
+		return new WP_Error( 'ab_mcp_sync_media_unread', sprintf( __( 'The file %s of the package of media does not read whole (a piece is missing or out of its order, or it does not hash to its SHA-256), so nothing of the attachment was laid. Export the media again on the staging site (wp_site_export with purpose=media), take the package over here (wp_site_import_chunk) and plan again.', 'alphabridge-mcp' ), isset( $file['path'] ) ? (string) $file['path'] : '?' ) );
 	}
 
 	/**
@@ -464,7 +467,7 @@ final class AB_MCP_Sync_Media_Package {
 	 * @return WP_Error
 	 */
 	private static function refusal( $what ) {
-		return new WP_Error( 'ab_mcp_sync_import_lines', $what . ' So the package of media is not used, and what arrived of it was removed. 1. Update AlphaBridge MCP on the staging site to the version of this site. 2. Export the media again there (wp_site_export with purpose=media). 3. Import it again with the new package_id and manifest.' );
+		return new WP_Error( 'ab_mcp_sync_import_lines', $what . ' ' . __( 'So the package of media is not used, and what arrived of it was removed. 1. Update AlphaBridge MCP on the staging site to the version of this site. 2. Export the media again there (wp_site_export with purpose=media). 3. Import it again with the new package_id and manifest.', 'alphabridge-mcp' ) );
 	}
 
 	/**

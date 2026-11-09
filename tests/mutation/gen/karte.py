@@ -249,8 +249,8 @@ e('person-closed', 'plan_for_person(): a closed run of the type push only', RV,
   "\t\tif ( 'push' !== $run['type'] || ! in_array( $run['state'], AB_MCP_Sync_Schema::CLOSED, true ) ) {",
   "\t\tif ( 'push' !== $run['type'] ) {", 'it', IT_NORMAL)
 e('person-confirmed', 'begin_for_person(): only behind the nonce', RV,
-  "\t\tif ( true !== $confirmed ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_run_unconfirmed', 'A way back begins",
-  "\t\tif ( false ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_run_unconfirmed', 'A way back begins", 'it', IT_NORMAL)
+  "\t\tif ( true !== $confirmed ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_run_unconfirmed', __( 'A way back begins",
+  "\t\tif ( false ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_run_unconfirmed', __( 'A way back begins", 'it', IT_NORMAL)
 e('person-state', 'begin_for_person(): only on the plan the page showed', RV,
   "\t\tif ( ! is_string( $state ) || ! hash_equals( (string) $plan['state'], $state ) ) {", "\t\tif ( false ) {", 'it', IT_NORMAL)
 e('person-steps', 'begin_for_person(): only the pair the form names', RV,
@@ -373,8 +373,8 @@ e('handler-hook', 'the handler of «Abort» hooked', AD,
 e('handler-guard', 'transfer_guard(): manage_options', AD,
   "\tprivate function transfer_guard( $what, $field ) {\n\t\t$this->guard();", "\tprivate function transfer_guard( $what, $field ) {", 'u', U_HANDLERS)
 e('handler-post', 'transfer_post_only(): a POST only', AD,
-  "\t\tif ( 'POST' !== $method ) {\n\t\t\twp_die( esc_html( 'Nothing was changed: the forms of the takeover",
-  "\t\tif ( false ) {\n\t\t\twp_die( esc_html( 'Nothing was changed: the forms of the takeover", 'u', U_HANDLERS)
+  "\t\tif ( 'POST' !== $method ) {\n\t\t\twp_die( esc_html__( 'Nothing was changed: the forms of the takeover",
+  "\t\tif ( false ) {\n\t\t\twp_die( esc_html__( 'Nothing was changed: the forms of the takeover", 'u', U_HANDLERS)
 e('handler-nonce-object', 'transfer_guard(): the nonce bound to the object of the form', AD,
   "\t\tcheck_admin_referer( 'ab_mcp_transfer_' . $what . '_' . $id );", "\t\tcheck_admin_referer( 'ab_mcp_transfer_' . $what . '_' . ( $id ? 8 : 0 ) );", 'u', U_HANDLERS)
 e('handler-back-nonce', 'handle_transfer_back(): the nonce bound to the run and the step', AD,

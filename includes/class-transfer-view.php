@@ -18,12 +18,12 @@
  * bound to its object (the run, the step, the pair), which AB_MCP_Admin
  * checks with manage_options before anything is done.
  *
- * The texts are English without gettext, as the other texts of the
- * takeover: BundledTranslationsTest asks every text in a gettext call to
- * be translated in all nine bundled languages at once, so branch 13
- * (text/z8) wraps them in gettext calls with the text domain
- * alphabridge-mcp and translates them in one go (the decision of the
- * lead after Codex round 1 of branch 12, C).
+ * The texts are in gettext calls with the text domain alphabridge-mcp and
+ * translated in the nine bundled languages (branch 13, text/z8), each a
+ * whole sentence with its placeholders. What the journal and the tables
+ * show of the tools themselves (the operation, the kind, the state of a
+ * step, a part or a pair, the references of objects) stays as the tools
+ * name it.
  *
  * @package AlphaBridge_MCP
  */
@@ -35,17 +35,137 @@ defined( 'ABSPATH' ) || exit;
  */
 final class AB_MCP_Transfer_View {
 
-	/** The words of the states of a run. */
-	const RUN_STATES = array(
-		'open'            => 'open',
-		'interrupted'     => 'interrupted',
-		'reverting'       => 'going back',
-		'closed_done'     => 'done',
-		'closed_findings' => 'closed with findings',
-		'closed_aborted'  => 'aborted',
-		'closed_checked'  => 'closed as checked',
-		'closed_reverted' => 'taken back',
-	);
+	/**
+	 * The word of the state of a run; an unknown state as it is.
+	 *
+	 * @param string $state The state (AB_MCP_Sync_Run).
+	 * @return string
+	 */
+	public static function run_state( $state ) {
+		switch ( (string) $state ) {
+			case 'open':
+				return _x( 'open', 'state of a run', 'alphabridge-mcp' );
+			case 'interrupted':
+				return _x( 'interrupted', 'state of a run', 'alphabridge-mcp' );
+			case 'reverting':
+				return _x( 'going back', 'state of a run', 'alphabridge-mcp' );
+			case 'closed_done':
+				return _x( 'done', 'state of a run', 'alphabridge-mcp' );
+			case 'closed_findings':
+				return _x( 'closed with findings', 'state of a run', 'alphabridge-mcp' );
+			case 'closed_aborted':
+				return _x( 'aborted', 'state of a run', 'alphabridge-mcp' );
+			case 'closed_checked':
+				return _x( 'closed as checked', 'state of a run', 'alphabridge-mcp' );
+			case 'closed_reverted':
+				return _x( 'taken back', 'state of a run', 'alphabridge-mcp' );
+		}
+		return (string) $state;
+	}
+
+	/**
+	 * The word of the state of a step (AB_MCP_Sync_Run::STEP_STATES); an
+	 * unknown state as it is. The stored code stays as it is: only the page
+	 * shows the word (Codex round 1 of branch 13, B).
+	 *
+	 * @param string $state The state of the step.
+	 * @return string
+	 */
+	public static function step_state( $state ) {
+		$words = array(
+			'planned' => _x( 'planned', 'state of a step', 'alphabridge-mcp' ),
+			'begun'   => _x( 'begun', 'state of a step', 'alphabridge-mcp' ),
+			'done'    => _x( 'done', 'state of a step', 'alphabridge-mcp' ),
+			'skipped' => _x( 'skipped', 'state of a step', 'alphabridge-mcp' ),
+			'failed'  => _x( 'failed', 'state of a step', 'alphabridge-mcp' ),
+			'unclear' => _x( 'unclear', 'state of a step', 'alphabridge-mcp' ),
+		);
+		return $words[ (string) $state ] ?? (string) $state;
+	}
+
+	/**
+	 * The word of the operation of a step (AB_MCP_Sync_Run::OPS); an unknown
+	 * one as it is.
+	 *
+	 * @param string $op The operation.
+	 * @return string
+	 */
+	public static function op( $op ) {
+		$words = array(
+			'check'  => _x( 'check', 'operation of a step', 'alphabridge-mcp' ),
+			'write'  => _x( 'write', 'operation of a step', 'alphabridge-mcp' ),
+			'post'   => _x( 'post-processing', 'operation of a step', 'alphabridge-mcp' ),
+			'verify' => _x( 'verification', 'operation of a step', 'alphabridge-mcp' ),
+			'revert' => _x( 'way back', 'operation of a step', 'alphabridge-mcp' ),
+		);
+		return $words[ (string) $op ] ?? (string) $op;
+	}
+
+	/**
+	 * The word of the kind of an object the takeover writes
+	 * (AB_MCP_Sync_Engine::writer()); an unknown kind as it is.
+	 *
+	 * @param string $kind The kind.
+	 * @return string
+	 */
+	public static function kind( $kind ) {
+		$words = array(
+			'post'        => _x( 'post', 'kind of an object', 'alphabridge-mcp' ),
+			'term'        => _x( 'term', 'kind of an object', 'alphabridge-mcp' ),
+			'attachment'  => _x( 'attachment', 'kind of an object', 'alphabridge-mcp' ),
+			'menu'        => _x( 'menu', 'kind of an object', 'alphabridge-mcp' ),
+			'menu_item'   => _x( 'menu item', 'kind of an object', 'alphabridge-mcp' ),
+			'widget_area' => _x( 'widget area', 'kind of an object', 'alphabridge-mcp' ),
+			'custom_css'  => _x( 'additional CSS', 'kind of an object', 'alphabridge-mcp' ),
+			'option'      => _x( 'option', 'kind of an object', 'alphabridge-mcp' ),
+		);
+		return $words[ (string) $kind ] ?? (string) $kind;
+	}
+
+	/**
+	 * The word of the state of a part of an object (its journal, its way
+	 * back, a file of an attachment); an unknown state as it is.
+	 *
+	 * @param string $state The state of the part.
+	 * @return string
+	 */
+	public static function part_state( $state ) {
+		$words = array(
+			'planned'      => _x( 'planned', 'state of a part', 'alphabridge-mcp' ),
+			'begun'        => _x( 'begun', 'state of a part', 'alphabridge-mcp' ),
+			'read'         => _x( 'written and read back', 'state of a part', 'alphabridge-mcp' ),
+			'written'      => _x( 'written, read back other than its target', 'state of a part', 'alphabridge-mcp' ),
+			'failed'       => _x( 'failed', 'state of a part', 'alphabridge-mcp' ),
+			'left'         => _x( 'left as it is', 'state of a part', 'alphabridge-mcp' ),
+			'not_reached'  => _x( 'not reached', 'state of a part', 'alphabridge-mcp' ),
+			'unclear'      => _x( 'unclear', 'state of a part', 'alphabridge-mcp' ),
+			'unchanged'    => _x( 'unchanged (as the backup)', 'state of a part', 'alphabridge-mcp' ),
+			'restored'     => _x( 'put back', 'state of a part', 'alphabridge-mcp' ),
+			'check_needed' => _x( 'not put back, check needed', 'state of a part', 'alphabridge-mcp' ),
+			'creating'     => _x( 'being made', 'state of a part', 'alphabridge-mcp' ),
+			'laid'         => _x( 'laid', 'state of a part', 'alphabridge-mcp' ),
+			'partial'      => _x( 'laid in part', 'state of a part', 'alphabridge-mcp' ),
+			'present'      => _x( 'present already', 'state of a part', 'alphabridge-mcp' ),
+		);
+		return $words[ (string) $state ] ?? (string) $state;
+	}
+
+	/**
+	 * The word of the state of an object pair (AB_MCP_Sync_Pairs::STATES);
+	 * an unknown state as it is.
+	 *
+	 * @param string $state The state of the pair.
+	 * @return string
+	 */
+	public static function pair_state( $state ) {
+		$words = array(
+			'active'   => _x( 'active', 'state of an object pair', 'alphabridge-mcp' ),
+			'deleted'  => _x( 'ended', 'state of an object pair', 'alphabridge-mcp' ),
+			'unclear'  => _x( 'unclear', 'state of an object pair', 'alphabridge-mcp' ),
+			'residual' => _x( 'rest', 'state of an object pair', 'alphabridge-mcp' ),
+		);
+		return $words[ (string) $state ] ?? (string) $state;
+	}
 
 	/**
 	 * The section.
@@ -55,8 +175,8 @@ final class AB_MCP_Transfer_View {
 	 */
 	public static function html( array $view ) {
 		$html  = '<section class="ab-card ab-staging-transfer" id="' . esc_attr( AB_MCP_Transfer::ANCHOR ) . '" aria-labelledby="ab-staging-transfer-title">';
-		$html .= '<p class="ab-eyebrow">' . esc_html( 'Takeover' ) . '</p>';
-		$html .= '<h2 class="ab-card__title" id="ab-staging-transfer-title">' . esc_html( 'Take changes over from the staging site' ) . '</h2>';
+		$html .= '<p class="ab-eyebrow">' . esc_html__( 'Takeover', 'alphabridge-mcp' ) . '</p>';
+		$html .= '<h2 class="ab-card__title" id="ab-staging-transfer-title">' . esc_html__( 'Take changes over from the staging site', 'alphabridge-mcp' ) . '</h2>';
 		if ( null !== $view['outcome'] ) {
 			$html .= '<div class="notice inline notice-' . ( $view['outcome']['ok'] ? 'success' : 'error' ) . ' ab-staging-transfer__outcome"><p>' . esc_html( $view['outcome']['text'] ) . '</p></div>';
 		}
@@ -68,7 +188,8 @@ final class AB_MCP_Transfer_View {
 		$active = 'production' === $view['side'] ? $view['status']['anchor']['active'] : null;
 		$runs   = array() !== $view['runs'] || array() !== ( $view['pinned'] ?? array() ) || null !== $view['interrupted'] || null !== $view['run'];
 		if ( null !== $active ) {
-			$html .= '<p class="ab-direct__status">' . esc_html( 'The key of the staging site is confirmed (fingerprint' ) . ' <code>' . esc_html( $active['fingerprint'] ) . '</code>' . esc_html( '): this site reads its packages and takes over what a person approves.' ) . '</p>';
+			/* translators: %s: the fingerprint of the key, as code. */
+			$html .= '<p class="ab-direct__status">' . sprintf( esc_html__( 'The key of the staging site is confirmed (fingerprint %s): this site reads its packages and takes over what a person approves.', 'alphabridge-mcp' ), '<code>' . esc_html( $active['fingerprint'] ) . '</code>' ) . '</p>';
 			$html .= self::store_html( $view['store'] );
 			if ( ! $view['status']['tables'] ) {
 				return $html . '<p class="ab-direct__status">' . esc_html( $view['status']['next'] ) . '</p></section>';
@@ -77,7 +198,7 @@ final class AB_MCP_Transfer_View {
 			$html .= '<p class="ab-direct__status">' . esc_html( $view['status']['next'] ) . '</p>';
 			$html .= self::store_html( $view['store'] );
 		} else {
-			$html .= '<p class="ab-note">' . esc_html( 'Shown here once this site is the confirmed production site paired with a staging site: the report of what differs, the runs that take changes over, and the way back pair by pair.' ) . '</p>';
+			$html .= '<p class="ab-note">' . esc_html__( 'Shown here once this site is the confirmed production site paired with a staging site: the report of what differs, the runs that take changes over, and the way back pair by pair.', 'alphabridge-mcp' ) . '</p>';
 		}
 		if ( null === $active && ! $runs ) {
 			return $html . '</section>';
@@ -85,7 +206,7 @@ final class AB_MCP_Transfer_View {
 		if ( null === $active ) {
 			// The runs stay without the key (Codex round 1 of branch 12, B);
 			// only what needs it is left out, and why.
-			$html .= '<p class="ab-note ab-staging-transfer__no-key">' . esc_html( 'The report, the object pairs, taking a pair back and going on with a way back need the confirmed key of the staging site, so they are not shown while there is none. The runs of this site stay: their journal, «Close as checked» and «Abort» need no key.' ) . '</p>';
+			$html .= '<p class="ab-note ab-staging-transfer__no-key">' . esc_html__( 'The report, the object pairs, taking a pair back and going on with a way back need the confirmed key of the staging site, so they are not shown while there is none. The runs of this site stay: their journal, «Close as checked» and «Abort» need no key.', 'alphabridge-mcp' ) . '</p>';
 		}
 		$html .= self::notice_html( $view['notice'], $view['notes'] );
 		if ( null !== $view['interrupted'] ) {
@@ -115,7 +236,8 @@ final class AB_MCP_Transfer_View {
 		if ( ! is_array( $open ) || 'interrupted' !== $open['state'] ) {
 			return '';
 		}
-		return '<div class="notice notice-warning inline ab-staging-transfer__alert"><p>' . esc_html( sprintf( 'Run %d is interrupted: no step runs and no new run begins until a person closes it as checked or the way back leads it on.', (int) $open['run_id'] ) ) . ' <a href="' . esc_url( self::url( array(), AB_MCP_Transfer::ANCHOR ) ) . '">' . esc_html( 'Read its journal' ) . '</a></p></div>';
+		/* translators: %d: run number. */
+		return '<div class="notice notice-warning inline ab-staging-transfer__alert"><p>' . esc_html( sprintf( __( 'Run %d is interrupted: no step runs and no new run begins until a person closes it as checked or the way back leads it on.', 'alphabridge-mcp' ), (int) $open['run_id'] ) ) . ' <a href="' . esc_url( self::url( array(), AB_MCP_Transfer::ANCHOR ) ) . '">' . esc_html__( 'Read its journal', 'alphabridge-mcp' ) . '</a></p></div>';
 	}
 
 	/* ---------------------------------------------------------- the parts */
@@ -130,12 +252,22 @@ final class AB_MCP_Transfer_View {
 		if ( ! is_array( $store ) ) {
 			return '';
 		}
-		$html = '<div class="ab-staging ab-staging-transfer__store"><h3 class="ab-setting__title">' . esc_html( 'Protected store' ) . '</h3>';
+		$html = '<div class="ab-staging ab-staging-transfer__store"><h3 class="ab-setting__title">' . esc_html__( 'Protected store', 'alphabridge-mcp' ) . '</h3>';
 		if ( ! $store['available'] ) {
 			return $html . '<p class="ab-direct__status">' . esc_html( (string) $store['message'] ) . '</p></div>';
 		}
-		$checked = $store['checked'] > 0 ? sprintf( ', checked on %s', self::when( $store['checked'] ) ) : '';
-		$html   .= '<p class="ab-direct__status">' . esc_html( 'outside' === $store['where'] ? 'Beside the WordPress folder, outside the web root: no web request reaches the packages, reports and backups' . $checked . '.' : 'In the uploads folder, closed to the web' . $checked . '.' ) . '</p>';
+		if ( 'outside' === $store['where'] ) {
+			$where = $store['checked'] > 0
+				/* translators: %s: date and time of the self-check. */
+				? sprintf( __( 'Beside the WordPress folder, outside the web root: no web request reaches the packages, reports and backups, checked on %s.', 'alphabridge-mcp' ), self::when( $store['checked'] ) )
+				: __( 'Beside the WordPress folder, outside the web root: no web request reaches the packages, reports and backups.', 'alphabridge-mcp' );
+		} else {
+			$where = $store['checked'] > 0
+				/* translators: %s: date and time of the self-check. */
+				? sprintf( __( 'In the uploads folder, closed to the web, checked on %s.', 'alphabridge-mcp' ), self::when( $store['checked'] ) )
+				: __( 'In the uploads folder, closed to the web.', 'alphabridge-mcp' );
+		}
+		$html .= '<p class="ab-direct__status">' . esc_html( $where ) . '</p>';
 		if ( null !== $store['rule'] ) {
 			$html .= '<p class="ab-note ab-staging-transfer__rule">' . esc_html( $store['rule'] ) . '</p>';
 		}
@@ -173,12 +305,13 @@ final class AB_MCP_Transfer_View {
 	 */
 	private static function interrupted_html( array $run ) {
 		$id   = (int) $run['run']['run_id'];
-		$html = '<div class="ab-staging ab-staging-transfer__interrupted"><h3 class="ab-setting__title">' . esc_html( sprintf( 'Run %d is interrupted', $id ) ) . '</h3>';
-		$html .= '<p class="ab-direct__status">' . esc_html( 'A step began and the request that ran it ended before it finished. Nothing more is written until a person decides: read the journal below, check the objects it names in wp-admin, then close the run as checked here (nothing is written; the pairs of its steps left begun become unclear), or let the connection that made it lead its way back (wp_site_revert action=plan with this run, confirmed with its token).' ) . '</p>';
+		/* translators: %d: run number. */
+		$html = '<div class="ab-staging ab-staging-transfer__interrupted"><h3 class="ab-setting__title">' . esc_html( sprintf( __( 'Run %d is interrupted', 'alphabridge-mcp' ), $id ) ) . '</h3>';
+		$html .= '<p class="ab-direct__status">' . esc_html__( 'A step began and the request that ran it ended before it finished. Nothing more is written until a person decides: read the journal below, check the objects it names in wp-admin, then close the run as checked here (nothing is written; the pairs of its steps left begun become unclear), or let the connection that made it lead its way back (wp_site_revert action=plan with this run, confirmed with its token).', 'alphabridge-mcp' ) . '</p>';
 		$html .= self::journal_html( $run );
 		$html .= '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">' . wp_nonce_field( 'ab_mcp_transfer_checked_' . $id, '_wpnonce', true, false );
 		$html .= '<input type="hidden" name="action" value="ab_mcp_transfer_checked"><input type="hidden" name="run_id" value="' . esc_attr( (string) $id ) . '"><input type="hidden" name="state" value="' . esc_attr( (string) $run['print'] ) . '">';
-		$html .= '<p><button class="ab-btn">' . esc_html( 'Close as checked' ) . '</button></p></form>';
+		$html .= '<p><button class="ab-btn">' . esc_html__( 'Close as checked', 'alphabridge-mcp' ) . '</button></p></form>';
 		return $html . '</div>';
 	}
 
@@ -192,7 +325,8 @@ final class AB_MCP_Transfer_View {
 	 */
 	private static function run_html( array $run, $notice ) {
 		$id   = (int) $run['run']['run_id'];
-		$html = '<div class="ab-staging ab-staging-transfer__run"><h3 class="ab-setting__title">' . esc_html( sprintf( 'Run %1$d (%2$s): its steps', $id, self::RUN_STATES[ $run['run']['state'] ] ?? $run['run']['state'] ) ) . '</h3>';
+		/* translators: 1: run number, 2: its state (open, done, …). */
+		$html = '<div class="ab-staging ab-staging-transfer__run"><h3 class="ab-setting__title">' . esc_html( sprintf( __( 'Run %1$d (%2$s): its steps', 'alphabridge-mcp' ), $id, self::run_state( $run['run']['state'] ) ) ) . '</h3>';
 		if ( null !== $run['m2'] ) {
 			$html .= '<p class="ab-note ab-staging-transfer__m2">' . esc_html( $run['m2'] ) . '</p>';
 		}
@@ -201,20 +335,20 @@ final class AB_MCP_Transfer_View {
 		}
 		$html .= self::journal_html( $run );
 		if ( array() !== $run['pairs'] ) {
-			$html .= '<h4>' . esc_html( 'The way back, pair by pair' ) . '</h4><p class="ab-note">' . esc_html( 'Each pair goes back on its own, byte for byte where a part is still what the run wrote. A part changed here since is left with its value before; an object the run made stays as a rest.' ) . '</p>';
-			$html .= '<div class="ab-table-wrap"><table class="ab-table ab-staging-transfer__back"><thead><tr><th scope="col">' . esc_html( 'Step' ) . '</th><th scope="col">' . esc_html( 'Object' ) . '</th><th scope="col">' . esc_html( 'The way back' ) . '</th><th scope="col"><span class="screen-reader-text">' . esc_html( 'Actions' ) . '</span></th></tr></thead><tbody>';
+			$html .= '<h4>' . esc_html__( 'The way back, pair by pair', 'alphabridge-mcp' ) . '</h4><p class="ab-note">' . esc_html__( 'Each pair goes back on its own, byte for byte where a part is still what the run wrote. A part changed here since is left with its value before; an object the run made stays as a rest.', 'alphabridge-mcp' ) . '</p>';
+			$html .= '<div class="ab-table-wrap"><table class="ab-table ab-staging-transfer__back"><thead><tr><th scope="col">' . esc_html__( 'Step', 'alphabridge-mcp' ) . '</th><th scope="col">' . esc_html__( 'Object', 'alphabridge-mcp' ) . '</th><th scope="col">' . esc_html__( 'The way back', 'alphabridge-mcp' ) . '</th><th scope="col"><span class="screen-reader-text">' . esc_html__( 'Actions', 'alphabridge-mcp' ) . '</span></th></tr></thead><tbody>';
 			$will  = array(
-				'back'           => 'goes back',
-				'back where own' => 'goes back where a part is still the run\'s',
-				'stays'          => 'stays as it is (it deviated within its step): check it by hand',
-				'rest'           => 'made by the run: stays as a rest',
+				'back'           => __( 'goes back', 'alphabridge-mcp' ),
+				'back where own' => __( 'goes back where a part is still the run\'s', 'alphabridge-mcp' ),
+				'stays'          => __( 'stays as it is (it deviated within its step): check it by hand', 'alphabridge-mcp' ),
+				'rest'           => __( 'made by the run: stays as a rest', 'alphabridge-mcp' ),
 			);
 			foreach ( $run['pairs'] as $pair ) {
-				$html .= '<tr><td>' . esc_html( (string) $pair['seq'] ) . '</td><td>' . esc_html( $pair['kind'] . ' ' . ( null !== $pair['live_ref'] ? $pair['live_ref'] : '' ) ) . '</td><td>' . esc_html( $will[ $pair['will'] ] ?? $pair['will'] ) . '</td><td>';
+				$html .= '<tr><td>' . esc_html( (string) $pair['seq'] ) . '</td><td>' . esc_html( self::kind( $pair['kind'] ) . ' ' . ( null !== $pair['live_ref'] ? $pair['live_ref'] : '' ) ) . '</td><td>' . esc_html( $will[ $pair['will'] ] ?? $pair['will'] ) . '</td><td>';
 				if ( null !== $pair['plan_state'] ) {
 					$html .= '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">' . wp_nonce_field( 'ab_mcp_transfer_back_' . $id . '_' . (int) $pair['seq'], '_wpnonce', true, false );
 					$html .= '<input type="hidden" name="action" value="ab_mcp_transfer_back"><input type="hidden" name="run_id" value="' . esc_attr( (string) $id ) . '"><input type="hidden" name="seq" value="' . esc_attr( (string) (int) $pair['seq'] ) . '"><input type="hidden" name="state" value="' . esc_attr( $pair['plan_state'] ) . '">';
-					$html .= '<button class="ab-btn ab-btn--ghost">' . esc_html( 'Take this pair back' ) . '</button></form>';
+					$html .= '<button class="ab-btn ab-btn--ghost">' . esc_html__( 'Take this pair back', 'alphabridge-mcp' ) . '</button></form>';
 				}
 				$html .= '</td></tr>';
 			}
@@ -237,18 +371,24 @@ final class AB_MCP_Transfer_View {
 		if ( null === $run['shown'] ) {
 			return '<p class="ab-direct__status">' . esc_html( (string) $run['error'] ) . '</p>';
 		}
-		$html = '<div class="ab-table-wrap"><table class="ab-table ab-staging-transfer__journal"><thead><tr><th scope="col">' . esc_html( 'Step' ) . '</th><th scope="col">' . esc_html( 'What' ) . '</th><th scope="col">' . esc_html( 'State' ) . '</th><th scope="col">' . esc_html( 'Parts' ) . '</th><th scope="col">' . esc_html( 'Finding' ) . '</th></tr></thead><tbody>';
+		$html = '<div class="ab-table-wrap"><table class="ab-table ab-staging-transfer__journal"><thead><tr><th scope="col">' . esc_html__( 'Step', 'alphabridge-mcp' ) . '</th><th scope="col">' . esc_html__( 'What', 'alphabridge-mcp' ) . '</th><th scope="col">' . esc_html__( 'State', 'alphabridge-mcp' ) . '</th><th scope="col">' . esc_html__( 'Parts', 'alphabridge-mcp' ) . '</th><th scope="col">' . esc_html__( 'Finding', 'alphabridge-mcp' ) . '</th></tr></thead><tbody>';
 		foreach ( $run['shown']['steps'] as $step ) {
 			$object = is_array( $step['parts'] ) && is_array( $step['parts']['object'] ?? null ) ? $step['parts']['object'] : null;
-			$what   = $step['op'] . ( null !== $object ? ': ' . ( $object['kind'] ?? '' ) . ' ' . ( isset( $object['live_ref'] ) && null !== $object['live_ref'] ? (string) $object['live_ref'] : (string) ( $object['staging_ref'] ?? '' ) ) : '' );
+			// A label, no sentence: the word of the operation, the word of
+			// the kind and the reference of the object.
+			$what   = self::op( $step['op'] ) . ( null !== $object ? ': ' . self::kind( (string) ( $object['kind'] ?? '' ) ) . ' ' . ( isset( $object['live_ref'] ) && null !== $object['live_ref'] ? (string) $object['live_ref'] : (string) ( $object['staging_ref'] ?? '' ) ) : '' );
 			$back   = $run['back_of'][ (int) $step['seq'] ] ?? null;
 			if ( null !== $back ) {
 				// A step of the way back: the step it takes back and its object.
-				$what = sprintf( 'revert of step %1$d%2$s: %3$s %4$s', $back['seq'], (int) $back['run'] !== (int) $run['run']['run_id'] ? ' of run ' . $back['run'] : '', $back['kind'], $back['live_ref'] );
+				$what = (int) $back['run'] !== (int) $run['run']['run_id']
+					/* translators: 1: step taken back, 2: its run, 3: kind of the object, 4: its reference on this site. */
+					? sprintf( __( 'revert of step %1$d of run %2$d: %3$s %4$s', 'alphabridge-mcp' ), $back['seq'], $back['run'], self::kind( $back['kind'] ), $back['live_ref'] )
+					/* translators: 1: step taken back, 2: kind of the object, 3: its reference on this site. */
+					: sprintf( __( 'revert of step %1$d: %2$s %3$s', 'alphabridge-mcp' ), $back['seq'], self::kind( $back['kind'] ), $back['live_ref'] );
 			}
 			$parts = array();
 			foreach ( is_array( $step['parts'] ) && isset( $step['parts']['parts'] ) && is_array( $step['parts']['parts'] ) ? $step['parts']['parts'] : array() as $part ) {
-				$parts[] = ( $part['part'] ?? '' ) . ' ' . ( $part['state'] ?? '' );
+				$parts[] = self::part_text( $part );
 			}
 			// The outcome of a step as the tool reports it (Codex round 1 of
 			// branch 12, B): each part with its state, why it was left and
@@ -259,25 +399,36 @@ final class AB_MCP_Transfer_View {
 				if ( ! is_array( $part ) ) {
 					continue;
 				}
-				$parts[] = trim( ( $part['part'] ?? '' ) . ' ' . ( $part['state'] ?? '' ) . ( isset( $part['note'] ) && '' !== (string) $part['note'] ? ': ' . (string) $part['note'] : '' ) . ( isset( $part['value_before'] ) && is_string( $part['value_before'] ) ? ' (before: ' . $part['value_before'] . ')' : '' ) );
+				$parts[] = self::part_text( $part );
 			}
 			$finding = isset( $result['message'] ) && is_string( $result['message'] ) ? $result['message'] : '';
-			$html   .= '<tr><td>' . esc_html( (string) $step['seq'] ) . '</td><td>' . esc_html( trim( $what ) ) . '</td><td>' . esc_html( (string) $step['state'] ) . '</td><td>' . esc_html( implode( '; ', $parts ) ) . '</td><td>' . esc_html( $finding ) . '</td></tr>';
+			$html   .= '<tr><td>' . esc_html( (string) $step['seq'] ) . '</td><td>' . esc_html( trim( $what ) ) . '</td><td>' . esc_html( self::step_state( $step['state'] ) ) . '</td><td>' . esc_html( implode( '; ', $parts ) ) . '</td><td>' . esc_html( $finding ) . '</td></tr>';
 		}
 		$html .= '</tbody></table></div>';
 		if ( array() !== $run['rest'] ) {
 			$left = array();
 			foreach ( $run['rest'] as $entry ) {
-				$left[] = sprintf( 'step %1$d (%2$s%3$s)', $entry['seq'], $entry['op'], isset( $entry['object'] ) ? ': ' . $entry['object']['kind'] . ' ' . (string) ( $entry['object']['live_ref'] ?? $entry['object']['staging_ref'] ) : ( isset( $entry['takes_back'] ) ? ', takes step ' . $entry['takes_back'] . ' back' : '' ) );
+				if ( isset( $entry['object'] ) ) {
+					/* translators: 1: step, 2: its operation, 3: the kind of its object, 4: its reference. */
+					$left[] = sprintf( __( 'step %1$d (%2$s: %3$s %4$s)', 'alphabridge-mcp' ), $entry['seq'], self::op( $entry['op'] ), self::kind( (string) $entry['object']['kind'] ), (string) ( $entry['object']['live_ref'] ?? $entry['object']['staging_ref'] ) );
+				} elseif ( isset( $entry['takes_back'] ) ) {
+					/* translators: 1: step, 2: its operation, 3: the step it takes back. */
+					$left[] = sprintf( __( 'step %1$d (%2$s, takes step %3$d back)', 'alphabridge-mcp' ), $entry['seq'], self::op( $entry['op'] ), $entry['takes_back'] );
+				} else {
+					/* translators: 1: step, 2: its operation. */
+					$left[] = sprintf( __( 'step %1$d (%2$s)', 'alphabridge-mcp' ), $entry['seq'], self::op( $entry['op'] ) );
+				}
 			}
-			$html .= '<p class="ab-note ab-staging-transfer__rest">' . esc_html( 'Not run: ' . implode( '; ', $left ) . '.' ) . '</p>';
+			/* translators: %s: the steps not run, separated by semicolons. */
+			$html .= '<p class="ab-note ab-staging-transfer__rest">' . esc_html( sprintf( __( 'Not run: %s.', 'alphabridge-mcp' ), implode( '; ', $left ) ) ) . '</p>';
 		}
 		if ( array() !== $run['shown']['rests'] ) {
 			$rests = array();
 			foreach ( $run['shown']['rests'] as $rest ) {
-				$rests[] = ( is_array( $rest ) ? (string) ( $rest['kind'] ?? '' ) . ' ' . (string) ( $rest['live_ref'] ?? '' ) : (string) $rest );
+				$rests[] = ( is_array( $rest ) ? self::kind( (string) ( $rest['kind'] ?? '' ) ) . ' ' . (string) ( $rest['live_ref'] ?? '' ) : (string) $rest );
 			}
-			$html .= '<p class="ab-note ab-staging-transfer__rests">' . esc_html( 'Left as a rest (made by the run; remove by hand in wp-admin where it should go): ' . implode( ', ', $rests ) . '.' ) . '</p>';
+			/* translators: %s: the objects left as a rest, separated by commas. */
+			$html .= '<p class="ab-note ab-staging-transfer__rests">' . esc_html( sprintf( __( 'Left as a rest (made by the run; remove by hand in wp-admin where it should go): %s.', 'alphabridge-mcp' ), implode( ', ', $rests ) ) ) . '</p>';
 		}
 		return $html;
 	}
@@ -290,18 +441,20 @@ final class AB_MCP_Transfer_View {
 	 * @return string
 	 */
 	private static function report_html( $report, $notice ) {
-		$html = '<div class="ab-staging ab-staging-transfer__report"><h3 class="ab-setting__title">' . esc_html( 'Last report' ) . '</h3>';
+		$html = '<div class="ab-staging ab-staging-transfer__report"><h3 class="ab-setting__title">' . esc_html__( 'Last report', 'alphabridge-mcp' ) . '</h3>';
 		if ( null === $report ) {
-			return $html . '<p class="ab-note">' . esc_html( 'No report is kept on this site (a report holds a day at most). An assistant makes one with wp_site_diff from the packages of the staging site.' ) . '</p></div>';
+			return $html . '<p class="ab-note">' . esc_html__( 'No report is kept on this site (a report holds a day at most). An assistant makes one with wp_site_diff from the packages of the staging site.', 'alphabridge-mcp' ) . '</p></div>';
 		}
 		if ( isset( $report['error'] ) ) {
 			return $html . '<p class="ab-direct__status">' . esc_html( $report['error'] ) . '</p></div>';
 		}
 		if ( ! $report['done'] ) {
-			return $html . '<p class="ab-direct__status">' . esc_html( sprintf( 'A report begun on %s is not done yet: the assistant goes on with it (wp_site_diff with its report_id).', self::when( $report['created'] ) ) ) . '</p></div>';
+			/* translators: %s: date and time the report was begun. */
+			return $html . '<p class="ab-direct__status">' . esc_html( sprintf( __( 'A report begun on %s is not done yet: the assistant goes on with it (wp_site_diff with its report_id).', 'alphabridge-mcp' ), self::when( $report['created'] ) ) ) . '</p></div>';
 		}
 		$a     = $report['actions'];
-		$html .= '<p class="ab-direct__status">' . esc_html( sprintf( 'Made on %1$s, holds until %2$s: %3$d entries; %4$d can be taken over (%5$d changed on the staging site, %6$d only there), %7$d wait for a choice, %8$d wait for another object, %9$d are locked.', self::when( $report['created'] ), self::when( $report['expires'] ), $report['total'], $report['takeable'], (int) ( $a['take_over'] ?? 0 ), (int) ( $a['create'] ?? 0 ), (int) ( $a['choose'] ?? 0 ), (int) ( $a['waits'] ?? 0 ), (int) ( $a['locked'] ?? 0 ) ) ) . '</p>';
+		/* translators: 1: date and time made, 2: date and time it holds until, 3: entries, 4: entries that can be taken over, 5: of them changed on the staging site, 6: of them only there, 7: entries waiting for a choice, 8: entries waiting for another object, 9: locked entries. */
+		$html .= '<p class="ab-direct__status">' . esc_html( sprintf( __( 'Made on %1$s, holds until %2$s: %3$d entries; %4$d can be taken over (%5$d changed on the staging site, %6$d only there), %7$d wait for a choice, %8$d wait for another object, %9$d are locked.', 'alphabridge-mcp' ), self::when( $report['created'] ), self::when( $report['expires'] ), $report['total'], $report['takeable'], (int) ( $a['take_over'] ?? 0 ), (int) ( $a['create'] ?? 0 ), (int) ( $a['choose'] ?? 0 ), (int) ( $a['waits'] ?? 0 ), (int) ( $a['locked'] ?? 0 ) ) ) . '</p>';
 		if ( null !== $report['m1'] && ! ( is_array( $notice ) && 'm1' === $notice['moment'] ) ) {
 			$html .= '<p class="ab-note ab-staging-transfer__m1">' . esc_html( $report['m1'] ) . '</p>';
 		}
@@ -322,24 +475,25 @@ final class AB_MCP_Transfer_View {
 	 * @return string
 	 */
 	private static function runs_html( array $runs, array $pinned = array(), $next = null, $more = 0 ) {
-		$html = '<div class="ab-staging ab-staging-transfer__runs"><h3 class="ab-setting__title">' . esc_html( 'Runs' ) . '</h3>';
+		$html = '<div class="ab-staging ab-staging-transfer__runs"><h3 class="ab-setting__title">' . esc_html__( 'Runs', 'alphabridge-mcp' ) . '</h3>';
 		if ( array() === $runs && array() === $pinned ) {
-			return $html . '<p class="ab-note">' . esc_html( 'No run yet. A run takes over what a person approved from a report, one step per call of the assistant (wp_site_push).' ) . '</p></div>';
+			return $html . '<p class="ab-note">' . esc_html__( 'No run yet. A run takes over what a person approved from a report, one step per call of the assistant (wp_site_push).', 'alphabridge-mcp' ) . '</p></div>';
 		}
 		if ( array() !== $pinned ) {
-			$html .= '<p class="ab-note">' . esc_html( 'To act on: a run that is not closed, or a takeover whose pairs can still be taken back.' ) . '</p>';
+			$html .= '<p class="ab-note">' . esc_html__( 'To act on: a run that is not closed, or a takeover whose pairs can still be taken back.', 'alphabridge-mcp' ) . '</p>';
 			$html .= self::runs_table( $pinned, 'ab-staging-transfer__pinned' );
 			if ( $more > 0 ) {
-				$html .= '<p class="ab-note ab-staging-transfer__more">' . esc_html( sprintf( 'At most %1$d runs to act on are listed here; %2$d further runs whose backups are kept were not looked at. They are in the list below (Older runs), and wp_staging_status names the run that is not closed.', AB_MCP_Transfer::PINNED, (int) $more ) ) . '</p>';
+				/* translators: 1: runs listed at most, 2: further runs not looked at. */
+				$html .= '<p class="ab-note ab-staging-transfer__more">' . esc_html( sprintf( __( 'At most %1$d runs to act on are listed here; %2$d further runs whose backups are kept were not looked at. They are in the list below (Older runs), and wp_staging_status names the run that is not closed.', 'alphabridge-mcp' ), AB_MCP_Transfer::PINNED, (int) $more ) ) . '</p>';
 			}
 		}
 		if ( array() !== $runs ) {
 			$html .= self::runs_table( $runs, 'ab-staging-transfer__list' );
 		}
 		if ( null !== $next ) {
-			$html .= '<p><a href="' . esc_url( self::url( array( 'runs_after' => (int) $next ), AB_MCP_Transfer::ANCHOR ) ) . '">' . esc_html( 'Older runs' ) . '</a></p>';
+			$html .= '<p><a href="' . esc_url( self::url( array( 'runs_after' => (int) $next ), AB_MCP_Transfer::ANCHOR ) ) . '">' . esc_html__( 'Older runs', 'alphabridge-mcp' ) . '</a></p>';
 		}
-		return $html . '<p class="ab-note">' . esc_html( 'Aborting closes an open run: what its steps wrote stays, and its pairs can be taken back one by one. The backups of the last three completed takeovers are kept without an age; others for the period their close got.' ) . '</p></div>';
+		return $html . '<p class="ab-note">' . esc_html__( 'Aborting closes an open run: what its steps wrote stays, and its pairs can be taken back one by one. The backups of the last three completed takeovers are kept without an age; others for the period their close got.', 'alphabridge-mcp' ) . '</p></div>';
 	}
 
 	/**
@@ -350,22 +504,27 @@ final class AB_MCP_Transfer_View {
 	 * @return string
 	 */
 	private static function runs_table( array $runs, $class ) {
-		$html = '<div class="ab-table-wrap"><table class="ab-table ' . esc_attr( $class ) . '"><thead><tr><th scope="col">' . esc_html( 'Run' ) . '</th><th scope="col">' . esc_html( 'State' ) . '</th><th scope="col">' . esc_html( 'Steps' ) . '</th><th scope="col">' . esc_html( 'Backups' ) . '</th><th scope="col"><span class="screen-reader-text">' . esc_html( 'Actions' ) . '</span></th></tr></thead><tbody>';
+		$html = '<div class="ab-table-wrap"><table class="ab-table ' . esc_attr( $class ) . '"><thead><tr><th scope="col">' . esc_html__( 'Run', 'alphabridge-mcp' ) . '</th><th scope="col">' . esc_html__( 'State', 'alphabridge-mcp' ) . '</th><th scope="col">' . esc_html__( 'Steps', 'alphabridge-mcp' ) . '</th><th scope="col">' . esc_html__( 'Backups', 'alphabridge-mcp' ) . '</th><th scope="col"><span class="screen-reader-text">' . esc_html__( 'Actions', 'alphabridge-mcp' ) . '</span></th></tr></thead><tbody>';
 		foreach ( $runs as $run ) {
 			$id    = (int) $run['run_id'];
-			$what  = sprintf( '%1$d, %2$s, %3$s', $id, 'revert' === $run['type'] ? 'way back' : 'takeover', self::when( $run['created'] ) );
-			$steps = sprintf( '%1$d of %2$d done', (int) $run['counts']['done'], (int) $run['steps'] );
-			$html .= '<tr><td>' . esc_html( $what ) . '</td><td>' . esc_html( self::RUN_STATES[ $run['state'] ] ?? $run['state'] ) . ( null !== $run['m2'] ? '<br><span class="ab-note ab-staging-transfer__m2">' . esc_html( $run['m2'] ) . '</span>' : '' ) . '</td><td>' . esc_html( $steps ) . '</td><td>' . esc_html( self::backups_text( $run['backups'] ) ) . '</td><td>';
-			$html .= '<a href="' . esc_url( self::url( array( 'run' => $id ), AB_MCP_Transfer::ANCHOR ) ) . '">' . esc_html( 'Steps' ) . '</a>';
+			$what  = 'revert' === $run['type']
+				/* translators: 1: run number, 2: date and time it was made. */
+				? sprintf( __( '%1$d, way back, %2$s', 'alphabridge-mcp' ), $id, self::when( $run['created'] ) )
+				/* translators: 1: run number, 2: date and time it was made. */
+				: sprintf( __( '%1$d, takeover, %2$s', 'alphabridge-mcp' ), $id, self::when( $run['created'] ) );
+			/* translators: 1: steps done, 2: steps of the run. */
+			$steps = sprintf( __( '%1$d of %2$d done', 'alphabridge-mcp' ), (int) $run['counts']['done'], (int) $run['steps'] );
+			$html .= '<tr><td>' . esc_html( $what ) . '</td><td>' . esc_html( self::run_state( $run['state'] ) ) . ( null !== $run['m2'] ? '<br><span class="ab-note ab-staging-transfer__m2">' . esc_html( $run['m2'] ) . '</span>' : '' ) . '</td><td>' . esc_html( $steps ) . '</td><td>' . esc_html( self::backups_text( $run['backups'] ) ) . '</td><td>';
+			$html .= '<a href="' . esc_url( self::url( array( 'run' => $id ), AB_MCP_Transfer::ANCHOR ) ) . '">' . esc_html__( 'Steps', 'alphabridge-mcp' ) . '</a>';
 			if ( $run['abort'] ) {
 				$html .= '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">' . wp_nonce_field( 'ab_mcp_transfer_abort_' . $id, '_wpnonce', true, false );
 				$html .= '<input type="hidden" name="action" value="ab_mcp_transfer_abort"><input type="hidden" name="run_id" value="' . esc_attr( (string) $id ) . '">';
-				$html .= '<button class="ab-btn ab-btn--ghost">' . esc_html( 'Abort' ) . '</button></form>';
+				$html .= '<button class="ab-btn ab-btn--ghost">' . esc_html__( 'Abort', 'alphabridge-mcp' ) . '</button></form>';
 			}
 			if ( $run['go_on'] ) {
 				$html .= '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">' . wp_nonce_field( 'ab_mcp_transfer_go_on_' . $id, '_wpnonce', true, false );
 				$html .= '<input type="hidden" name="action" value="ab_mcp_transfer_go_on"><input type="hidden" name="run_id" value="' . esc_attr( (string) $id ) . '">';
-				$html .= '<button class="ab-btn ab-btn--ghost">' . esc_html( 'Go on with the way back' ) . '</button></form>';
+				$html .= '<button class="ab-btn ab-btn--ghost">' . esc_html__( 'Go on with the way back', 'alphabridge-mcp' ) . '</button></form>';
 			}
 			$html .= '</td></tr>';
 		}
@@ -381,19 +540,20 @@ final class AB_MCP_Transfer_View {
 	public static function backups_text( array $backups ) {
 		switch ( $backups['state'] ) {
 			case 'open':
-				return 'kept while the run is not closed';
+				return __( 'kept while the run is not closed', 'alphabridge-mcp' );
 			case 'last_three':
-				return 'kept: one of the last three completed takeovers';
+				return __( 'kept: one of the last three completed takeovers', 'alphabridge-mcp' );
 			case 'until':
-				return 'kept until ' . self::when( $backups['until'] );
+				/* translators: %s: date and time. */
+				return sprintf( __( 'kept until %s', 'alphabridge-mcp' ), self::when( $backups['until'] ) );
 			case 'kept':
-				return 'kept (closed before periods were stored)';
+				return __( 'kept (closed before periods were stored)', 'alphabridge-mcp' );
 			case 'way_back':
-				return 'kept for a way back that is not closed';
+				return __( 'kept for a way back that is not closed', 'alphabridge-mcp' );
 			case 'gone':
-				return 'no longer kept';
+				return __( 'no longer kept', 'alphabridge-mcp' );
 		}
-		return 'kept (the runs could not be read)';
+		return __( 'kept (the runs could not be read)', 'alphabridge-mcp' );
 	}
 
 	/**
@@ -406,24 +566,25 @@ final class AB_MCP_Transfer_View {
 		if ( ! is_array( $pairs ) ) {
 			return '';
 		}
-		$html = '<div class="ab-staging ab-staging-transfer__pairs"><h3 class="ab-setting__title">' . esc_html( 'Object pairs' ) . '</h3>';
+		$html = '<div class="ab-staging ab-staging-transfer__pairs"><h3 class="ab-setting__title">' . esc_html__( 'Object pairs', 'alphabridge-mcp' ) . '</h3>';
 		if ( array() === $pairs['pairs'] ) {
-			return $html . '<p class="ab-note">' . esc_html( 'No pair of the staging site whose key is confirmed here' . ( $pairs['after'] > 0 ? ' after these.' : '. An assistant pairs objects with wp_site_pairs, or a run pairs what it takes over.' ) ) . '</p></div>';
+			return $html . '<p class="ab-note">' . ( $pairs['after'] > 0 ? esc_html__( 'No pair of the staging site whose key is confirmed here after these.', 'alphabridge-mcp' ) : esc_html__( 'No pair of the staging site whose key is confirmed here. An assistant pairs objects with wp_site_pairs, or a run pairs what it takes over.', 'alphabridge-mcp' ) ) . '</p></div>';
 		}
-		$html .= '<p class="ab-note">' . esc_html( 'Discarding a pair changes no content: its objects stay as they are on both sites, each without a pair from then on.' ) . '</p>';
-		$html .= '<div class="ab-table-wrap"><table class="ab-table ab-staging-transfer__pair-list"><thead><tr><th scope="col">' . esc_html( 'Pair' ) . '</th><th scope="col">' . esc_html( 'Kind' ) . '</th><th scope="col">' . esc_html( 'Here' ) . '</th><th scope="col">' . esc_html( 'On the staging site' ) . '</th><th scope="col">' . esc_html( 'State' ) . '</th><th scope="col"><span class="screen-reader-text">' . esc_html( 'Actions' ) . '</span></th></tr></thead><tbody>';
+		$html .= '<p class="ab-note">' . esc_html__( 'Discarding a pair changes no content: its objects stay as they are on both sites, each without a pair from then on.', 'alphabridge-mcp' ) . '</p>';
+		$html .= '<div class="ab-table-wrap"><table class="ab-table ab-staging-transfer__pair-list"><thead><tr><th scope="col">' . esc_html__( 'Pair', 'alphabridge-mcp' ) . '</th><th scope="col">' . esc_html__( 'Kind', 'alphabridge-mcp' ) . '</th><th scope="col">' . esc_html__( 'Here', 'alphabridge-mcp' ) . '</th><th scope="col">' . esc_html__( 'On the staging site', 'alphabridge-mcp' ) . '</th><th scope="col">' . esc_html__( 'State', 'alphabridge-mcp' ) . '</th><th scope="col"><span class="screen-reader-text">' . esc_html__( 'Actions', 'alphabridge-mcp' ) . '</span></th></tr></thead><tbody>';
 		foreach ( $pairs['pairs'] as $pair ) {
-			$html .= '<tr><td>' . esc_html( (string) $pair['id'] ) . '</td><td>' . esc_html( $pair['kind'] ) . '</td><td>' . esc_html( $pair['live_ref'] ) . '</td><td>' . esc_html( $pair['staging_ref'] ) . '</td><td>' . esc_html( $pair['state'] . ( null !== $pair['last_run'] ? ', run ' . $pair['last_run'] : '' ) ) . '</td><td>';
+			/* translators: 1: state of the pair (active, ended, …), 2: the run that last touched it. */
+			$html .= '<tr><td>' . esc_html( (string) $pair['id'] ) . '</td><td>' . esc_html( self::kind( $pair['kind'] ) ) . '</td><td>' . esc_html( $pair['live_ref'] ) . '</td><td>' . esc_html( $pair['staging_ref'] ) . '</td><td>' . esc_html( null !== $pair['last_run'] ? sprintf( __( '%1$s, run %2$d', 'alphabridge-mcp' ), self::pair_state( $pair['state'] ), $pair['last_run'] ) : self::pair_state( $pair['state'] ) ) . '</td><td>';
 			if ( null !== $pair['discard'] ) {
 				$html .= '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">' . wp_nonce_field( 'ab_mcp_transfer_discard_' . (int) $pair['id'], '_wpnonce', true, false );
 				$html .= '<input type="hidden" name="action" value="ab_mcp_transfer_discard"><input type="hidden" name="pair_id" value="' . esc_attr( (string) (int) $pair['id'] ) . '"><input type="hidden" name="state" value="' . esc_attr( $pair['discard'] ) . '">';
-				$html .= '<button class="ab-btn ab-btn--ghost">' . esc_html( 'Discard' ) . '</button></form>';
+				$html .= '<button class="ab-btn ab-btn--ghost">' . esc_html__( 'Discard', 'alphabridge-mcp' ) . '</button></form>';
 			}
 			$html .= '</td></tr>';
 		}
 		$html .= '</tbody></table></div>';
 		if ( null !== $pairs['next'] ) {
-			$html .= '<p><a href="' . esc_url( self::url( array( 'pairs_after' => (int) $pairs['next'] ), AB_MCP_Transfer::ANCHOR ) ) . '">' . esc_html( 'Next pairs' ) . '</a></p>';
+			$html .= '<p><a href="' . esc_url( self::url( array( 'pairs_after' => (int) $pairs['next'] ), AB_MCP_Transfer::ANCHOR ) ) . '">' . esc_html__( 'Next pairs', 'alphabridge-mcp' ) . '</a></p>';
 		}
 		return $html . '</div>';
 	}
@@ -441,10 +602,33 @@ final class AB_MCP_Transfer_View {
 		}
 		$html  = '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="ab-staging-transfer__notes">' . wp_nonce_field( 'ab_mcp_transfer_notes', '_wpnonce', true, false );
 		$html .= '<input type="hidden" name="action" value="ab_mcp_transfer_notes"><input type="hidden" name="hidden" value="' . ( $notes['hidden'] ? '0' : '1' ) . '">';
-		return $html . '<button class="ab-btn ab-btn--ghost">' . esc_html( $notes['hidden'] ? 'Show edition notes' : 'Hide edition notes' ) . '</button></form>';
+		return $html . '<button class="ab-btn ab-btn--ghost">' . ( $notes['hidden'] ? esc_html__( 'Show edition notes', 'alphabridge-mcp' ) : esc_html__( 'Hide edition notes', 'alphabridge-mcp' ) ) . '</button></form>';
 	}
 
 	/* ---------------------------------------------------------- helpers */
+
+	/**
+	 * One part of an object in the journal: its name (as the tools name it),
+	 * the word of its state, the note stored with it (a whole sentence,
+	 * written in the language of the site when the step ran) and the value
+	 * it held before, where the step left it.
+	 *
+	 * @param array $part A part of the journal or of the outcome of a step.
+	 * @return string
+	 */
+	private static function part_text( array $part ) {
+		$name  = (string) ( $part['part'] ?? '' );
+		$state = self::part_state( (string) ( $part['state'] ?? '' ) );
+		$note  = isset( $part['note'] ) && is_string( $part['note'] ) && '' !== $part['note'] ? $part['note'] : null;
+		// A label: the name, the word of the state and the note as a whole
+		// sentence beside it.
+		$text  = $name . ': ' . $state . ( null === $note ? '' : ' – ' . $note );
+		if ( isset( $part['value_before'] ) && is_string( $part['value_before'] ) ) {
+			/* translators: %s: the value a part held before. */
+			$text .= ' ' . sprintf( __( '(before: %s)', 'alphabridge-mcp' ), $part['value_before'] );
+		}
+		return $text;
+	}
 
 	/**
 	 * The page «Staging» with arguments, at an anchor.

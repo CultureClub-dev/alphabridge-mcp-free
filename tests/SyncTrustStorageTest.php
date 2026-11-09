@@ -375,7 +375,7 @@ final class SyncTrustStorageTest extends TestCase {
 			self::assertSame( 'https://example.test/wp-admin/admin.php?page=alphabridge-staging&ab_notice=staging_trust_sync_key_failed#ab-staging-trust', str_replace( 'https://staging.example.com', 'https://example.test', $exit->detail ) );
 		}
 		self::assertSame( AB_MCP_Staging::ROLE_UNCONFIRMED, AB_MCP_Staging::role(), 'The role was not saved.' );
-		self::assertArrayHasKey( 'staging_trust_sync_key_failed', AB_MCP_Admin::TRUST_NOTICES );
+		self::assertArrayHasKey( 'staging_trust_sync_key_failed', AB_MCP_Admin::trust_notices() );
 	}
 
 	public function testTheHubIsToldTheRoleWasNotConfirmed(): void {

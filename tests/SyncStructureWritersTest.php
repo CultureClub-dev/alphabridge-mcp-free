@@ -864,9 +864,9 @@ final class SyncStructureWritersTest extends TestCase {
 		self::assertSame( 'called', \AB_MCP_Sync_Write::core( $step( 'rights', true ), $step( 'read', 'now' ), $match( true ), $step( 'call', 'called' ) ) );
 		self::assertSame( array( 'rights', 'read', 'matches now', 'call' ), $seen, 'The rights, the last read, the comparison of that read, the call.' );
 		$seen    = array();
-		$refusal = \AB_MCP_Sync_Write::core( $step( 'rights', 'edit the CSS (edit_css)' ), $step( 'read', 'now' ), $match( true ), $step( 'call', 'called' ) );
+		$refusal = \AB_MCP_Sync_Write::core( $step( 'rights', 'This account may not edit the CSS (edit_css).' ), $step( 'read', 'now' ), $match( true ), $step( 'call', 'called' ) );
 		self::assertSame( array( 'ab_mcp_sync_rights', array( 'rights' ) ), array( $refusal->get_error_code(), $seen ), 'A right missing: nothing read, nothing called.' );
-		self::assertStringContainsString( 'may not edit the CSS (edit_css)', $refusal->get_error_message() );
+		self::assertStringContainsString( 'Not written: This account may not edit the CSS (edit_css). Connect', $refusal->get_error_message() );
 		$seen = array();
 		self::assertSame( 'own', \AB_MCP_Sync_Write::core( $step( 'rights', new WP_Error( 'own', 'x' ) ), $step( 'read', 'now' ), $match( true ), $step( 'call', 'called' ) )->get_error_code(), 'The refusal of a writer as it is.' );
 		$seen = array();
@@ -878,7 +878,7 @@ final class SyncStructureWritersTest extends TestCase {
 		// Every refusal of the helper is one (no call of the core made), an
 		// error the call answers none (Codex round 4 of branch 11, item 3).
 		$refusals = array(
-			'a right missing'  => \AB_MCP_Sync_Write::core( $step( 'rights', 'edit the CSS (edit_css)' ), $step( 'read', 'now' ), $match( true ), $step( 'call', 'called' ) ),
+			'a right missing'  => \AB_MCP_Sync_Write::core( $step( 'rights', 'This account may not edit the CSS (edit_css).' ), $step( 'read', 'now' ), $match( true ), $step( 'call', 'called' ) ),
 			'its own refusal'  => \AB_MCP_Sync_Write::core( $step( 'rights', new WP_Error( 'own', 'x' ) ), $step( 'read', 'now' ), $match( true ), $step( 'call', 'called' ) ),
 			'a read that fails' => \AB_MCP_Sync_Write::core( $step( 'rights', true ), $step( 'read', new WP_Error( 'unread', 'x' ) ), $match( true ), $step( 'call', 'called' ) ),
 			'another state'    => \AB_MCP_Sync_Write::core( $step( 'rights', true ), $step( 'read', 'now' ), $match( false ), $step( 'call', 'called' ) ),
@@ -930,9 +930,9 @@ final class SyncStructureWritersTest extends TestCase {
 		self::assertSame( array( 'rights', 'needs' ), $seen );
 		// Back: a refusal leaves the part as it is, with its note.
 		self::assertSame( array( 'state' => 'left', 'note' => 'Changed.' ), \AB_MCP_Sync_Write::back( $step( 'rights', true ), $step( 'read', 'now' ), $match( false ), $step( 'call', 'called' ), 'Changed.' ) );
-		$left = \AB_MCP_Sync_Write::back( $step( 'rights', 'edit the CSS (edit_css)' ), $step( 'read', 'now' ), $match( true ), $step( 'call', 'called' ), 'Changed.' );
+		$left = \AB_MCP_Sync_Write::back( $step( 'rights', 'This account may not edit the CSS (edit_css).' ), $step( 'read', 'now' ), $match( true ), $step( 'call', 'called' ), 'Changed.' );
 		self::assertSame( 'left', $left['state'] );
-		self::assertStringContainsString( 'may not edit the CSS (edit_css), asked again right before the write', $left['note'] );
+		self::assertStringContainsString( 'Not put back: This account may not edit the CSS (edit_css). It was asked again right before the write', $left['note'] );
 		self::assertSame( 'failed', \AB_MCP_Sync_Write::back( $step( 'rights', true ), $step( 'read', 'now' ), $match( true ), $step( 'call', new WP_Error( 'failed', 'x' ) ), 'Changed.' )->get_error_code(), 'An error of the call as it is.' );
 		// The same state, byte for byte: never two states that encode alike.
 		self::assertTrue( \AB_MCP_Sync_Write::same( array( 'a' => '1' ), array( 'a' => '1' ) ) );

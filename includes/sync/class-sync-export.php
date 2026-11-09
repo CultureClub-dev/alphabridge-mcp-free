@@ -75,8 +75,9 @@
  *    on the production site. Both refuse a request that did not come over
  *    https where the site has a public address (relay_refusal()).
  *
- * Messages are English without gettext, as the other classes of the
- * takeover; each names the way.
+ * Messages are in gettext, in the language of the site, as the other
+ * classes of the takeover; each names the way. Codes and machine values
+ * (kinds, purposes, parameters, fields) stay as the tools name them.
  *
  * @package AlphaBridge_MCP
  */
@@ -120,8 +121,6 @@ final class AB_MCP_Sync_Export {
 	/** Withheld objects an answer names at most (all are counted). */
 	const WITHHELD_LIST = 200;
 
-	/** The way an answer names for withheld objects. */
-	const WITHHELD_WAY = 'These objects are not in the package, because the account that made it may not read them (needs: the capability it lacks; gone: the object is no longer there), and their kinds and subtypes are not complete in it. To include them: 1. Make the package with an account that has the capability named, or give this account that capability. 2. Call wp_site_export again.';
 
 	/** The purposes this version makes packages for: the inventory, the environment (AB_MCP_Sync_Env), the objects of a report and the files of its attachments. */
 	const PURPOSES = array( 'inventory', 'env', 'objects', 'media' );
@@ -164,7 +163,7 @@ final class AB_MCP_Sync_Export {
 			return $refused;
 		}
 		if ( ! in_array( $purpose, self::PURPOSES, true ) ) {
-			return new WP_Error( 'ab_mcp_sync_export_purpose', 'This version makes packages of the inventory and of the environment of the staging site, packages of objects for a report and packages of the files of its attachments. Pass purpose=inventory, purpose=env, purpose=objects or purpose=media.' );
+			return new WP_Error( 'ab_mcp_sync_export_purpose', __( 'This version makes packages of the inventory and of the environment of the staging site, packages of objects for a report and packages of the files of its attachments. Pass purpose=inventory, purpose=env, purpose=objects or purpose=media.', 'alphabridge-mcp' ) );
 		}
 		if ( 'env' === $purpose ) {
 			return self::make_env( $cursor, null === $objects ? self::OBJECTS : (int) $objects );
@@ -180,7 +179,7 @@ final class AB_MCP_Sync_Export {
 		try {
 			$series = bin2hex( random_bytes( 16 ) );
 		} catch ( Throwable $e ) {
-			return new WP_Error( 'ab_mcp_sync_export_random', 'No package was made: PHP has no source of random bytes on this server. Ask the host to check the PHP installation, then call again.' );
+			return new WP_Error( 'ab_mcp_sync_export_random', __( 'No package was made: PHP has no source of random bytes on this server. Ask the host to check the PHP installation, then call again.', 'alphabridge-mcp' ) );
 		}
 		if ( null !== $cursor ) {
 			$follows = self::follows( $cursor, 'inventory' );
@@ -197,7 +196,7 @@ final class AB_MCP_Sync_Export {
 			foreach ( $index['parts'] as $part ) {
 				$slice = AB_MCP_Protected_Store::get( 'out', $index['gid'], $part['name'], $part['sha'] );
 				if ( is_wp_error( $slice ) ) {
-					return new WP_Error( 'ab_mcp_sync_export_index', 'The index of the identities this series of packages began with is no longer in the protected store of this site (it is kept with a package of the series, a day), so the series does not go on. Begin a new series: call wp_site_export without a cursor.' );
+					return new WP_Error( 'ab_mcp_sync_export_index', __( 'The index of the identities this series of packages began with is no longer in the protected store of this site (it is kept with a package of the series, a day), so the series does not go on. Begin a new series: call wp_site_export without a cursor.', 'alphabridge-mcp' ) );
 				}
 				$text .= $slice;
 			}
@@ -253,7 +252,7 @@ final class AB_MCP_Sync_Export {
 		try {
 			$series = bin2hex( random_bytes( 16 ) );
 		} catch ( Throwable $e ) {
-			return new WP_Error( 'ab_mcp_sync_export_random', 'No package was made: PHP has no source of random bytes on this server. Ask the host to check the PHP installation, then call again.' );
+			return new WP_Error( 'ab_mcp_sync_export_random', __( 'No package was made: PHP has no source of random bytes on this server. Ask the host to check the PHP installation, then call again.', 'alphabridge-mcp' ) );
 		}
 		if ( null !== $cursor ) {
 			$follows = self::follows( $cursor, 'env' );
@@ -310,23 +309,25 @@ final class AB_MCP_Sync_Export {
 	private static function make_objects( array $for ) {
 		$report_hash = isset( $for['report_hash'] ) ? $for['report_hash'] : null;
 		if ( ! is_string( $report_hash ) || 1 !== preg_match( '/^[0-9a-f]{64}\z/', $report_hash ) ) {
-			return new WP_Error( 'ab_mcp_sync_export_report', 'A package of objects is made for one report: pass report_hash, the 64 hex characters wp_site_diff gave on the production site, so the package is read for that report only.' );
+			return new WP_Error( 'ab_mcp_sync_export_report', __( 'A package of objects is made for one report: pass report_hash, the 64 hex characters wp_site_diff gave on the production site, so the package is read for that report only.', 'alphabridge-mcp' ) );
 		}
 		$refs = isset( $for['refs'] ) ? $for['refs'] : null;
 		if ( ! is_array( $refs ) || ! array_is_list( $refs ) || array() === $refs || count( $refs ) > self::MAX_REFS ) {
-			return new WP_Error( 'ab_mcp_sync_export_refs', sprintf( 'A package of objects takes refs: a list of 1 to %d objects of this staging site, each with kind and ref as the entries of the report name the staging side (staging.ref). Pass that list.', self::MAX_REFS ) );
+			/* translators: %d: the most objects one package takes. */
+			return new WP_Error( 'ab_mcp_sync_export_refs', sprintf( __( 'A package of objects takes refs: a list of 1 to %d objects of this staging site, each with kind and ref as the entries of the report name the staging side (staging.ref). Pass that list.', 'alphabridge-mcp' ), self::MAX_REFS ) );
 		}
 		$by_kind = array();
 		foreach ( $refs as $i => $one ) {
 			if ( ! is_array( $one ) || ! isset( $one['kind'], $one['ref'] ) || ! is_string( $one['kind'] ) || ! is_scalar( $one['ref'] ) || '' === (string) $one['ref'] ) {
-				return new WP_Error( 'ab_mcp_sync_export_refs', sprintf( 'refs[%d] is not an object of kind and ref. Pass each as the entries of the report name the staging side.', (int) $i ) );
+				/* translators: %d: position in the list refs. */
+				return new WP_Error( 'ab_mcp_sync_export_refs', sprintf( __( 'refs[%d] is not an object of kind and ref. Pass each as the entries of the report name the staging side.', 'alphabridge-mcp' ), (int) $i ) );
 			}
 			$by_kind[ $one['kind'] ][ (string) $one['ref'] ] = true;
 		}
 		try {
 			$series = bin2hex( random_bytes( 16 ) );
 		} catch ( Throwable $e ) {
-			return new WP_Error( 'ab_mcp_sync_export_random', 'No package was made: PHP has no source of random bytes on this server. Ask the host to check the PHP installation, then call again.' );
+			return new WP_Error( 'ab_mcp_sync_export_random', __( 'No package was made: PHP has no source of random bytes on this server. Ask the host to check the PHP installation, then call again.', 'alphabridge-mcp' ) );
 		}
 		$pair   = AB_MCP_Staging::record()['pair'];
 		$source = AB_MCP_Sync_Inventory::source( array( home_url(), $pair['partner_url'] ), AB_MCP_Sync_Inventory::BUDGET, null, null, null );
@@ -335,7 +336,8 @@ final class AB_MCP_Sync_Export {
 		foreach ( $by_kind as $kind_name => $list ) {
 			$kind = AB_MCP_Sync_Db_Kinds::for_pair( $kind_name );
 			if ( null === $kind ) {
-				return new WP_Error( 'ab_mcp_sync_export_kind', sprintf( 'The takeover knows no kind %s, so no package of objects of it is made. Use the kind as the report names it (post, term, attachment, menu, menu_item, widget_area, custom_css, option).', $kind_name ), array( 'kind' => $kind_name ) );
+				/* translators: %s: the kind that was passed, as the tools name it. */
+				return new WP_Error( 'ab_mcp_sync_export_kind', sprintf( __( 'The takeover knows no kind %s, so no package of objects of it is made. Use the kind as the report names it (post, term, attachment, menu, menu_item, widget_area, custom_css, option).', 'alphabridge-mcp' ), $kind_name ), array( 'kind' => $kind_name ) );
 			}
 			$asked = array();
 			foreach ( array_keys( $list ) as $ref ) {
@@ -427,23 +429,25 @@ final class AB_MCP_Sync_Export {
 	private static function make_media( array $for ) {
 		$report_hash = isset( $for['report_hash'] ) ? $for['report_hash'] : null;
 		if ( ! is_string( $report_hash ) || 1 !== preg_match( '/^[0-9a-f]{64}\z/', $report_hash ) ) {
-			return new WP_Error( 'ab_mcp_sync_export_report', 'A package of media is made for one report: pass report_hash, the 64 hex characters wp_site_diff gave on the production site, so the package is read for that report only.' );
+			return new WP_Error( 'ab_mcp_sync_export_report', __( 'A package of media is made for one report: pass report_hash, the 64 hex characters wp_site_diff gave on the production site, so the package is read for that report only.', 'alphabridge-mcp' ) );
 		}
 		$refs = isset( $for['refs'] ) ? $for['refs'] : null;
 		if ( ! is_array( $refs ) || ! array_is_list( $refs ) || array() === $refs || count( $refs ) > self::MAX_REFS ) {
-			return new WP_Error( 'ab_mcp_sync_export_refs', sprintf( 'A package of media takes refs: a list of 1 to %d attachments of this staging site, each with kind attachment and ref as the entries of the report name the staging side (staging.ref). Pass that list.', self::MAX_REFS ) );
+			/* translators: %d: the most attachments one package takes. */
+			return new WP_Error( 'ab_mcp_sync_export_refs', sprintf( __( 'A package of media takes refs: a list of 1 to %d attachments of this staging site, each with kind attachment and ref as the entries of the report name the staging side (staging.ref). Pass that list.', 'alphabridge-mcp' ), self::MAX_REFS ) );
 		}
 		$ids = array();
 		foreach ( $refs as $i => $one ) {
 			if ( ! is_array( $one ) || ! isset( $one['kind'], $one['ref'] ) || 'attachment' !== $one['kind'] || ! is_scalar( $one['ref'] ) || 1 !== preg_match( '/^[1-9][0-9]*\z/', (string) $one['ref'] ) ) {
-				return new WP_Error( 'ab_mcp_sync_export_refs', sprintf( 'refs[%d] is not an attachment of this staging site: a package of media holds the files of attachments only, each with kind attachment and its ref. Pass the other objects in a package of objects (purpose=objects).', (int) $i ) );
+				/* translators: %d: position in the list refs. */
+				return new WP_Error( 'ab_mcp_sync_export_refs', sprintf( __( 'refs[%d] is not an attachment of this staging site: a package of media holds the files of attachments only, each with kind attachment and its ref. Pass the other objects in a package of objects (purpose=objects).', 'alphabridge-mcp' ), (int) $i ) );
 			}
 			$ids[ (int) $one['ref'] ] = true;
 		}
 		try {
 			$series = bin2hex( random_bytes( 16 ) );
 		} catch ( Throwable $e ) {
-			return new WP_Error( 'ab_mcp_sync_export_random', 'No package was made: PHP has no source of random bytes on this server. Ask the host to check the PHP installation, then call again.' );
+			return new WP_Error( 'ab_mcp_sync_export_random', __( 'No package was made: PHP has no source of random bytes on this server. Ask the host to check the PHP installation, then call again.', 'alphabridge-mcp' ) );
 		}
 		$uploads = AB_MCP_Sync_Media::uploads();
 		$root    = '' === $uploads['problem'] ? realpath( $uploads['dir'] ) : false;
@@ -474,7 +478,7 @@ final class AB_MCP_Sync_Export {
 		$source = AB_MCP_Sync_Inventory::source( array( home_url(), $pair['partner_url'] ), AB_MCP_Sync_Inventory::BUDGET, null, null, null );
 		$kind   = AB_MCP_Sync_Db_Kinds::for_pair( 'attachment' );
 		if ( null === $kind ) {
-			return new WP_Error( 'ab_mcp_sync_export_kind', 'The takeover knows no kind attachment in this version, so no package of media is made. Update AlphaBridge MCP on both sites to the same version, then call again.' );
+			return new WP_Error( 'ab_mcp_sync_export_kind', __( 'The takeover knows no kind attachment in this version, so no package of media is made. Update AlphaBridge MCP on both sites to the same version, then call again.', 'alphabridge-mcp' ) );
 		}
 		$asked = array();
 		foreach ( array_keys( $ids ) as $id ) {
@@ -574,7 +578,7 @@ final class AB_MCP_Sync_Export {
 			$media['packed'][]  = (string) $id;
 		}
 		if ( array() === $take ) {
-			return new WP_Error( 'ab_mcp_sync_export_media_none', 'No file of the attachments named could be packed: each was withheld, does not read whole, or is too large for one package (see media). Check those attachments in the media library of this site, or pass others in refs.', array( 'media' => $media, 'withheld' => $told['withheld'] ) );
+			return new WP_Error( 'ab_mcp_sync_export_media_none', __( 'No file of the attachments named could be packed: each was withheld, does not read whole, or is too large for one package (see media). Check those attachments in the media library of this site, or pass others in refs.', 'alphabridge-mcp' ), array( 'media' => $media, 'withheld' => $told['withheld'] ) );
 		}
 		self::discard_stale(); // The packages of another binding go first, as before any package.
 		// The lines (base64, a third more than the bytes) and their gzip stay below this.
@@ -599,7 +603,7 @@ final class AB_MCP_Sync_Export {
 		$flush    = static function () use ( &$slice, &$list, &$bytes, $whole, $gid ) {
 			$gz = function_exists( 'gzencode' ) ? gzencode( $slice, 6 ) : false;
 			if ( ! is_string( $gz ) ) {
-				return new WP_Error( 'ab_mcp_sync_export_gzip', 'The package could not be compressed. Ask the host to enable the zlib extension of PHP, then call again.' );
+				return new WP_Error( 'ab_mcp_sync_export_gzip', __( 'The package could not be compressed. Ask the host to enable the zlib extension of PHP, then call again.', 'alphabridge-mcp' ) );
 			}
 			if ( count( $list ) >= AB_MCP_Sync_Manifest::MAX_LIST || $bytes + strlen( $gz ) > AB_MCP_Sync_Manifest::MAX_BYTES ) {
 				return self::too_large( count( $list ) >= AB_MCP_Sync_Manifest::MAX_LIST ? 'chunks' : 'bytes', count( $list ) >= AB_MCP_Sync_Manifest::MAX_LIST ? AB_MCP_Sync_Manifest::MAX_LIST : AB_MCP_Sync_Manifest::MAX_BYTES );
@@ -619,7 +623,7 @@ final class AB_MCP_Sync_Export {
 		};
 		$put_line = static function ( $line ) use ( &$slice, &$lines, &$unpacked, $flush ) {
 			if ( strlen( $line ) + 1 > self::SLICE ) {
-				return new WP_Error( 'ab_mcp_sync_export_object', 'A piece of a file cannot be written into a package. Update AlphaBridge MCP on both sites to the same version, then call again.' );
+				return new WP_Error( 'ab_mcp_sync_export_object', __( 'A piece of a file cannot be written into a package. Update AlphaBridge MCP on both sites to the same version, then call again.', 'alphabridge-mcp' ) );
 			}
 			if ( '' !== $slice && strlen( $slice ) + strlen( $line ) + 1 > self::SLICE ) {
 				$done = $flush();
@@ -693,7 +697,9 @@ final class AB_MCP_Sync_Export {
 		$answer = self::answer( json_decode( $signed['manifest'], true ), $signed, null, $told );
 		if ( is_array( $answer ) ) {
 			$answer['media'] = $media + array(
-				'way' => array() === $media['left'] && array() === $media['too_large'] && array() === $media['unread'] ? null : 'Attachments in left did not fit this package: export them in another one (wp_site_export with purpose=media and their refs). One in too_large is more than a package carries: upload its file by hand in the media library of the production site. One in unread has a file list that does not read whole on this site (a file missing, a link, a path out of the uploads): check it in the media library here.',
+				// Said to the person in the language of the site (Codex round 2
+				// of branch 13, B1).
+				'way' => array() === $media['left'] && array() === $media['too_large'] && array() === $media['unread'] ? null : __( 'Attachments in left did not fit this package: export them in another one (wp_site_export with purpose=media and their refs). One in too_large is more than a package carries: upload its file by hand in the media library of the production site. One in unread has a file list that does not read whole on this site (a file missing, a link, a path out of the uploads): check it in the media library here.', 'alphabridge-mcp' ),
 			);
 		}
 		return $answer;
@@ -973,7 +979,7 @@ final class AB_MCP_Sync_Export {
 	 * @return WP_Error The cursor is not one an answer gave.
 	 */
 	private static function cursor_refusal() {
-		return new WP_Error( 'ab_mcp_sync_cursor_invalid', 'The cursor is not one an answer of wp_site_export gave. Pass the cursor of the answer before as it is, or none to begin with the first package.' );
+		return new WP_Error( 'ab_mcp_sync_cursor_invalid', __( 'The cursor is not one an answer of wp_site_export gave. Pass the cursor of the answer before as it is, or none to begin with the first package.', 'alphabridge-mcp' ) );
 	}
 
 	/**
@@ -1096,7 +1102,7 @@ final class AB_MCP_Sync_Export {
 		foreach ( $objects as $object ) {
 			$line = AB_MCP_Sync_Canon::encode( $object );
 			if ( '' === $line || strlen( $line ) + 1 > $size ) {
-				return new WP_Error( 'ab_mcp_sync_export_object', 'An object of this site cannot be written into a package (it is larger than a chunk holds, or not encodable). Ask the person to check the object named in the inventory, or leave its kind out for now.', array( 'kind' => isset( $object['kind'] ) ? $object['kind'] : null, 'ref' => isset( $object['ref'] ) ? $object['ref'] : null ) );
+				return new WP_Error( 'ab_mcp_sync_export_object', __( 'An object of this site cannot be written into a package (it is larger than a chunk holds, or not encodable). Ask the person to check the object named in the inventory, or leave its kind out for now.', 'alphabridge-mcp' ), array( 'kind' => isset( $object['kind'] ) ? $object['kind'] : null, 'ref' => isset( $object['ref'] ) ? $object['ref'] : null ) );
 			}
 			if ( strlen( $slice ) + strlen( $line ) + 1 > $size ) {
 				$chunks[] = $slice;
@@ -1119,7 +1125,7 @@ final class AB_MCP_Sync_Export {
 			// block adds 5 bytes to 65535); zlib that fails gives no package.
 			$gz = function_exists( 'gzencode' ) ? gzencode( $lines, 6 ) : false;
 			if ( ! is_string( $gz ) ) {
-				return new WP_Error( 'ab_mcp_sync_export_gzip', 'The package could not be compressed. Ask the host to enable the zlib extension of PHP, then call again.' );
+				return new WP_Error( 'ab_mcp_sync_export_gzip', __( 'The package could not be compressed. Ask the host to enable the zlib extension of PHP, then call again.', 'alphabridge-mcp' ) );
 			}
 			$out[]  = $gz;
 			$bytes += strlen( $gz );
@@ -1143,14 +1149,18 @@ final class AB_MCP_Sync_Export {
 	 */
 	private static function too_large( $what, $limit ) {
 		$say = array(
-			'objects'  => 'objects',
-			'chunks'   => 'chunks',
-			'bytes'    => 'bytes in its chunks',
-			'unpacked' => 'bytes once unpacked',
+			/* translators: %d: the most objects one package holds. */
+			'objects'  => __( 'The objects read are more than one package holds: at most %d objects. Ask the person to check the largest objects of the inventory, then call again with the same cursor.', 'alphabridge-mcp' ),
+			/* translators: %d: the most chunks one package holds. */
+			'chunks'   => __( 'The objects read are more than one package holds: at most %d chunks. Ask the person to check the largest objects of the inventory, then call again with the same cursor.', 'alphabridge-mcp' ),
+			/* translators: %d: the most bytes the chunks of one package hold. */
+			'bytes'    => __( 'The objects read are more than one package holds: at most %d bytes in its chunks. Ask the person to check the largest objects of the inventory, then call again with the same cursor.', 'alphabridge-mcp' ),
+			/* translators: %d: the most bytes one package holds once unpacked. */
+			'unpacked' => __( 'The objects read are more than one package holds: at most %d bytes once unpacked. Ask the person to check the largest objects of the inventory, then call again with the same cursor.', 'alphabridge-mcp' ),
 		);
 		return new WP_Error(
 			'ab_mcp_sync_export_too_large',
-			sprintf( 'The objects read are more than one package holds: at most %1$d %2$s. Ask the person to check the largest objects of the inventory, then call again with the same cursor.', $limit, $say[ $what ] ),
+			sprintf( $say[ $what ], $limit ),
 			array(
 				'limit' => $what,
 				'max'   => $limit,
@@ -1253,7 +1263,8 @@ final class AB_MCP_Sync_Export {
 			return $found;
 		}
 		if ( ! is_int( $chunk ) || ! isset( $found['manifest']['chunks'][ $chunk ] ) ) {
-			return new WP_Error( 'ab_mcp_sync_chunk_index', sprintf( 'The package has no chunk %1$s: its manifest lists the chunks 0 to %2$d. Ask for a chunk of that list.', is_scalar( $chunk ) ? (string) $chunk : '?', count( $found['manifest']['chunks'] ) - 1 ) );
+			/* translators: 1: the chunk that was asked for, 2: number of the last chunk. */
+			return new WP_Error( 'ab_mcp_sync_chunk_index', sprintf( __( 'The package has no chunk %1$s: its manifest lists the chunks 0 to %2$d. Ask for a chunk of that list.', 'alphabridge-mcp' ), is_scalar( $chunk ) ? (string) $chunk : '?', count( $found['manifest']['chunks'] ) - 1 ) );
 		}
 		$sha  = $found['manifest']['chunks'][ $chunk ]['sha256'];
 		$data = AB_MCP_Protected_Store::get( 'out', $found['manifest']['package_id'], self::chunk_name( $chunk ), $sha );
@@ -1293,7 +1304,7 @@ final class AB_MCP_Sync_Export {
 		if ( 'local' === AB_MCP_Outbound::public_addresses( (string) wp_parse_url( home_url(), PHP_URL_HOST ) ) ) {
 			return null;
 		}
-		return new WP_Error( 'ab_mcp_sync_relay_http', 'This site has a public address and the request did not come over https, so no chunk of a package passes through it: the content of the site would cross the network unencrypted. Connect the client to the https:// address of this site, then call again.' );
+		return new WP_Error( 'ab_mcp_sync_relay_http', __( 'This site has a public address and the request did not come over https, so no chunk of a package passes through it: the content of the site would cross the network unencrypted. Connect the client to the https:// address of this site, then call again.', 'alphabridge-mcp' ) );
 	}
 
 	/* -------------------------------------------------------------- route */
@@ -1350,19 +1361,20 @@ final class AB_MCP_Sync_Export {
 			return self::multisite();
 		}
 		if ( ! current_user_can( 'manage_options' ) ) {
-			return new WP_Error( 'ab_mcp_sync_export_capability', 'This account may not make or read packages of this staging site: that takes manage_options. 1. Connect with an administrator account of this site, or ask an administrator to give this account that capability. 2. Call again.' );
+			return new WP_Error( 'ab_mcp_sync_export_capability', __( 'This account may not make or read packages of this staging site: that takes manage_options. 1. Connect with an administrator account of this site, or ask an administrator to give this account that capability. 2. Call again.', 'alphabridge-mcp' ) );
 		}
 		if ( ! AB_MCP_Site_Mode::is_full() ) {
-			return new WP_Error( 'ab_mcp_sync_export_mode', 'Write access is off on this staging site, so it makes and gives out no package (a package is kept in its protected store). 1. Switch write access on: ' . AB_MCP_Site_Mode::way_text() . ' 2. Call again.' );
+			/* translators: %s: how to switch write access on, a whole sentence. */
+			return new WP_Error( 'ab_mcp_sync_export_mode', sprintf( __( 'Write access is off on this staging site, so it makes and gives out no package (a package is kept in its protected store). 1. Switch write access on: %s 2. Call again.', 'alphabridge-mcp' ), AB_MCP_Site_Mode::way_text() ) );
 		}
 		if ( AB_MCP_Staging::ROLE_STAGING !== AB_MCP_Staging::role() ) {
-			return new WP_Error( 'ab_mcp_sync_manifest_role', 'Only the confirmed staging site makes and gives out packages: confirm the role staging site on the page AlphaBridge → Staging of this site first.' );
+			return new WP_Error( 'ab_mcp_sync_manifest_role', __( 'Only the confirmed staging site makes and gives out packages: confirm the role staging site on the page AlphaBridge → Staging of this site first.', 'alphabridge-mcp' ) );
 		}
 		if ( null === AB_MCP_Staging::record()['pair'] ) {
-			return new WP_Error( 'ab_mcp_sync_manifest_pair', 'A package is made for the production site this staging site is paired with, and it has none: enter the address of the production site on the page AlphaBridge → Staging of this site first.' );
+			return new WP_Error( 'ab_mcp_sync_manifest_pair', __( 'A package is made for the production site this staging site is paired with, and it has none: enter the address of the production site on the page AlphaBridge → Staging of this site first.', 'alphabridge-mcp' ) );
 		}
 		if ( null === AB_MCP_Sync_Key::current() ) {
-			return new WP_Error( 'ab_mcp_sync_key_missing', 'This staging site has no usable key: make it on the page AlphaBridge → Staging under «Key of this staging site», confirm it on the production site, then call again.' );
+			return new WP_Error( 'ab_mcp_sync_key_missing', __( 'This staging site has no usable key: make it on the page AlphaBridge → Staging under «Key of this staging site», confirm it on the production site, then call again.', 'alphabridge-mcp' ) );
 		}
 		// A key without the secret of its MACs gets one (a key stored before
 		// it, or one whose secret went); the way where it cannot be stored.
@@ -1372,7 +1384,7 @@ final class AB_MCP_Sync_Export {
 		// A record of the role and pair without the value a package binds to
 		// gets one; nothing made before was bound to it.
 		if ( null === AB_MCP_Staging::bind() && null === AB_MCP_Staging::new_bind() ) {
-			return new WP_Error( 'ab_mcp_sync_export_unbound', 'No package was made: the value a package of this staging site is bound to could not be stored with the role and pair in the options of this site (the database refused the write, or PHP has no random bytes). Ask the host to check that the database accepts writes to the options of this site and that PHP has random bytes, then call again.' );
+			return new WP_Error( 'ab_mcp_sync_export_unbound', __( 'No package was made: the value a package of this staging site is bound to could not be stored with the role and pair in the options of this site (the database refused the write, or PHP has no random bytes). Ask the host to check that the database accepts writes to the options of this site and that PHP has random bytes, then call again.', 'alphabridge-mcp' ) );
 		}
 		return null;
 	}
@@ -1383,7 +1395,7 @@ final class AB_MCP_Sync_Export {
 	 * @return WP_Error
 	 */
 	public static function multisite() {
-		return new WP_Error( 'ab_mcp_sync_multisite', 'The takeover from a staging site works between two single sites, and this site is part of a multisite network (where it keeps no tables of the takeover). Use a staging site and a production site that are single installations, or move content on the network with wp_export_content.' );
+		return new WP_Error( 'ab_mcp_sync_multisite', __( 'The takeover from a staging site works between two single sites, and this site is part of a multisite network (where it keeps no tables of the takeover). Use a staging site and a production site that are single installations, or move content on the network with wp_export_content.', 'alphabridge-mcp' ) );
 	}
 
 	/**
@@ -1516,7 +1528,7 @@ final class AB_MCP_Sync_Export {
 			'bytes'      => $manifest['bytes'],
 			'chunks'     => count( $manifest['chunks'] ),
 			'kinds'      => $manifest['kinds'],
-			'withheld'   => $report['withheld'] + ( $report['withheld']['count'] > 0 ? array( 'way' => self::WITHHELD_WAY ) : array() ),
+			'withheld'   => $report['withheld'] + ( $report['withheld']['count'] > 0 ? array( 'way' => self::withheld_way() ) : array() ),
 			'credentials' => $report['credentials'],
 			'expires'    => $manifest['expires'],
 			'manifest'   => $signed,
@@ -1543,10 +1555,10 @@ final class AB_MCP_Sync_Export {
 			return $found;
 		}
 		if ( null === $found || (int) $found['user_id'] !== (int) get_current_user_id() || $found['manifest']['expires'] <= ( null === $now ? time() : (int) $now ) ) {
-			return new WP_Error( 'ab_mcp_sync_export_unknown', 'This site keeps no package of that id made by this account: packages are kept a day, and each account reads its own. Make a new one with wp_site_export.' );
+			return new WP_Error( 'ab_mcp_sync_export_unknown', __( 'This site keeps no package of that id made by this account: packages are kept a day, and each account reads its own. Make a new one with wp_site_export.', 'alphabridge-mcp' ) );
 		}
 		if ( ! self::bound( $found ) ) {
-			return new WP_Error( 'ab_mcp_sync_export_stale', 'The package was made for another pair, with another key of this staging site or by an older version of this plugin: the pair or the role was confirmed again since, or the plugin was updated, so it was discarded. Make a new one with wp_site_export.' );
+			return new WP_Error( 'ab_mcp_sync_export_stale', __( 'The package was made for another pair, with another key of this staging site or by an older version of this plugin: the pair or the role was confirmed again since, or the plugin was updated, so it was discarded. Make a new one with wp_site_export.', 'alphabridge-mcp' ) );
 		}
 		return $found;
 	}
@@ -1598,6 +1610,16 @@ final class AB_MCP_Sync_Export {
 		}
 		AB_MCP_Protected_Store::remove( 'out', $found['manifest']['package_id'] );
 		return false;
+	}
+
+	/**
+	 * The way an answer names for withheld objects, in the language of the
+	 * site (Codex round 2 of branch 13, B1).
+	 *
+	 * @return string
+	 */
+	private static function withheld_way() {
+		return __( 'These objects are not in the package, because the account that made it may not read them (needs: the capability it lacks; gone: the object is no longer there), and their kinds and subtypes are not complete in it. To include them: 1. Make the package with an account that has the capability named, or give this account that capability. 2. Call wp_site_export again.', 'alphabridge-mcp' );
 	}
 
 	/**

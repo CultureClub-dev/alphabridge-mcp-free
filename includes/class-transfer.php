@@ -38,12 +38,13 @@
  * (AB_MCP_Sync_Run::settle()); a step begun whose request ended is named as
  * such, and the next call that changes the run takes it as interrupted.
  *
- * The texts are English without gettext, as the other texts of the
- * takeover: BundledTranslationsTest asks every text in a gettext call to
- * be translated in all nine bundled languages at once, so branch 13
- * (text/z8) wraps them in gettext calls with the text domain
- * alphabridge-mcp and translates them in one go (the decision of the
- * lead after Codex round 1 of branch 12, C).
+ * What a person reads on the page, and the way status() gives, is in
+ * gettext calls with the text domain alphabridge-mcp and translated in the
+ * nine bundled languages (branch 13, text/z8), as are the outcomes of the
+ * forms and the refusals of the page's own checks. The refusals of the
+ * tools a form goes through (AB_MCP_Sync_Run, AB_MCP_Sync_Engine,
+ * AB_MCP_Sync_Revert, AB_MCP_Sync_Pairs_Tool) are translated where they
+ * answer a person on this page; the deeper ones stay English for now.
  *
  * @package AlphaBridge_MCP
  */
@@ -135,8 +136,8 @@ final class AB_MCP_Transfer {
 				'side' => 'staging',
 				'key'  => null === $key ? null : array( 'fingerprint' => (string) $key['fingerprint'] ),
 				'next' => null === $key
-					? 'This staging site has no key yet: a person makes it on the page AlphaBridge → Staging of this site and confirms it on the production site; only then does the production site take anything over from here.'
-					: 'The production site takes changes over from this site: wp_site_export here makes its packages (purpose=inventory for the report, purpose=objects for a run), and the page AlphaBridge → Staging of the production site shows the report, the runs and the way back.',
+					? __( 'This staging site has no key yet: a person makes it on the page AlphaBridge → Staging of this site and confirms it on the production site; only then does the production site take anything over from here.', 'alphabridge-mcp' )
+					: __( 'The production site takes changes over from this site: wp_site_export here makes its packages (purpose=inventory for the report, purpose=objects for a run), and the page AlphaBridge → Staging of the production site shows the report, the runs and the way back.', 'alphabridge-mcp' ),
 			);
 		}
 		$partner = AB_MCP_Staging::ROLE_PRODUCTION === $role ? AB_MCP_Sync_Anchor::partner() : null;
@@ -144,7 +145,7 @@ final class AB_MCP_Transfer {
 			$out = array(
 				'side' => 'none',
 				'run'  => null,
-				'next' => 'The takeover runs on the confirmed production site paired with a staging site: a person confirms the role and the pair on the page AlphaBridge → Staging of both sites.',
+				'next' => __( 'The takeover runs on the confirmed production site paired with a staging site: a person confirms the role and the pair on the page AlphaBridge → Staging of both sites.', 'alphabridge-mcp' ),
 			);
 			// A run left from before the pair changed stays named, with its
 			// way (Codex round 1 of branch 12, B).
@@ -164,8 +165,8 @@ final class AB_MCP_Transfer {
 		);
 		if ( null === $out['anchor']['active'] ) {
 			$out['next'] = null === $out['anchor']['prepared']
-				? 'No key of the staging site is confirmed here: fetch it or enter its pairing code on the page AlphaBridge → Staging, compare the fingerprint with the one the staging site shows, and confirm it there. Until then nothing is taken over.'
-				: 'A key of the staging site is prepared but not confirmed: a person compares its fingerprint with the one the staging site shows on its page AlphaBridge → Staging, and confirms it on this site\'s page. Until then nothing is taken over.';
+				? __( 'No key of the staging site is confirmed here: fetch it or enter its pairing code on the page AlphaBridge → Staging, compare the fingerprint with the one the staging site shows, and confirm it there. Until then nothing is taken over.', 'alphabridge-mcp' )
+				: __( 'A key of the staging site is prepared but not confirmed: a person compares its fingerprint with the one the staging site shows on its page AlphaBridge → Staging, and confirms it on this site\'s page. Until then nothing is taken over.', 'alphabridge-mcp' );
 			// A run needs no key to be read, aborted or closed as checked.
 			$open = $out['tables'] ? self::open_or_null() : null;
 			if ( null !== $open ) {
@@ -175,7 +176,7 @@ final class AB_MCP_Transfer {
 			return $out;
 		}
 		if ( ! $out['tables'] ) {
-			$out['next'] = 'The tables of the takeover are not there: deactivate and activate AlphaBridge in wp-admin so they are made, or ask the host to let the database user create tables.';
+			$out['next'] = __( 'The tables of the takeover are not there: deactivate and activate AlphaBridge in wp-admin so they are made, or ask the host to let the database user create tables.', 'alphabridge-mcp' );
 			return $out;
 		}
 		$open = AB_MCP_Sync_Run::open_run();
@@ -184,7 +185,7 @@ final class AB_MCP_Transfer {
 			return $out;
 		}
 		if ( null === $open ) {
-			$out['next'] = 'No run is open. The way: the report (wp_site_diff from the packages of the staging site), the approval of the person, the takeover (wp_site_push), its check, and the way back pair by pair (wp_site_revert); the page AlphaBridge → Staging shows the last report and the runs.';
+			$out['next'] = __( 'No run is open. The way: the report (wp_site_diff from the packages of the staging site), the approval of the person, the takeover (wp_site_push), its check, and the way back pair by pair (wp_site_revert); the page AlphaBridge → Staging shows the last report and the runs.', 'alphabridge-mcp' );
 			return $out;
 		}
 		$out['run']  = self::run_status( $open );
@@ -243,7 +244,8 @@ final class AB_MCP_Transfer {
 			} else {
 				// Not settled here (status() writes nothing): named as what it is.
 				$out['begun']   = $begun;
-				$out['next']    = sprintf( 'Step %d of run %d was begun by a request that ended before it finished (the lock is no longer held): the next call that reads the run with the lock (wp_site_push action=status) marks it interrupted. %s', $begun, (int) $run['run_id'], 'Then a person closes it as checked on the page AlphaBridge → Staging, or wp_site_revert action=plan with its run_id leads its way back.' );
+				/* translators: 1: step, 2: run number. */
+				$out['next']    = sprintf( __( 'Step %1$d of run %2$d was begun by a request that ended before it finished (the lock is no longer held): the next call that reads the run with the lock (wp_site_push action=status) marks it interrupted. Then a person closes it as checked on the page AlphaBridge → Staging, or wp_site_revert action=plan with its run_id leads its way back.', 'alphabridge-mcp' ), $begun, (int) $run['run_id'] );
 				$interrupted    = true;
 			}
 		}
@@ -285,12 +287,15 @@ final class AB_MCP_Transfer {
 	public static function way_without_key( array $run, $interrupted ) {
 		$id = (int) $run['run_id'];
 		if ( $interrupted ) {
-			return sprintf( 'Run %d is interrupted, and no key of the staging site is confirmed here: a person reads its journal and closes it as checked on the page AlphaBridge → Staging (nothing is written). Leading its way back waits until the key is confirmed again there.', $id );
+			/* translators: %d: run number. */
+			return sprintf( __( 'Run %d is interrupted, and no key of the staging site is confirmed here: a person reads its journal and closes it as checked on the page AlphaBridge → Staging (nothing is written). Leading its way back waits until the key is confirmed again there.', 'alphabridge-mcp' ), $id );
 		}
 		if ( 'push' === $run['type'] && 'open' === $run['state'] ) {
-			return sprintf( 'Run %d is open, and no key of the staging site is confirmed here, so it takes no step: a person aborts it on the page AlphaBridge → Staging (what its steps wrote stays), or confirms the key again there.', $id );
+			/* translators: %d: run number. */
+			return sprintf( __( 'Run %d is open, and no key of the staging site is confirmed here, so it takes no step: a person aborts it on the page AlphaBridge → Staging (what its steps wrote stays), or confirms the key again there.', 'alphabridge-mcp' ), $id );
 		}
-		return sprintf( 'The way back of run %d waits: no key of the staging site is confirmed here. It goes on once a person confirms the key again on the page AlphaBridge → Staging.', $id );
+		/* translators: %d: run number. */
+		return sprintf( __( 'The way back of run %d waits: no key of the staging site is confirmed here. It goes on once a person confirms the key again on the page AlphaBridge → Staging.', 'alphabridge-mcp' ), $id );
 	}
 
 	/**
@@ -814,7 +819,7 @@ final class AB_MCP_Transfer {
 		$proof = AB_MCP_Protected_Store::proof();
 		$rule  = null;
 		if ( 'uploads' === $proof['where'] ) {
-			$rule = 'The store lies in the folder ab-mcp-store-… of the uploads folder, which its .htaccess (Apache, LiteSpeed) or web.config (IIS) closes to the web; the self-check found it closed. On nginx the web server reads neither: there the host adds a rule such as location ~ /ab-mcp-store- { deny all; }. The safe place is the folder ab-mcp-store beside the WordPress folder, outside the web root, where PHP may create it.';
+			$rule = __( 'The store lies in the folder ab-mcp-store-… of the uploads folder, which its .htaccess (Apache, LiteSpeed) or web.config (IIS) closes to the web; the self-check found it closed. On nginx the web server reads neither: there the host adds a rule such as location ~ /ab-mcp-store- { deny all; }. The safe place is the folder ab-mcp-store beside the WordPress folder, outside the web root, where PHP may create it.', 'alphabridge-mcp' );
 		}
 		return array(
 			'available' => (bool) $proof['available'],
@@ -842,13 +847,15 @@ final class AB_MCP_Transfer {
 			return is_wp_error( $run ) ? $run : AB_MCP_Sync_Run::unknown( (int) $run_id );
 		}
 		if ( 'push' !== $run['type'] ) {
-			return new WP_Error( 'ab_mcp_sync_run_state', sprintf( 'Run %d is a run of the way back: it is not aborted, it runs to its end. Go on with it with wp_site_revert action=next over the connection that began it, or with «Go on with the way back» on the page AlphaBridge → Staging where it was begun there.', (int) $run_id ) );
+			/* translators: %d: run number. */
+			return new WP_Error( 'ab_mcp_sync_run_state', sprintf( __( 'Run %d is a run of the way back: it is not aborted, it runs to its end. Go on with it with wp_site_revert action=next over the connection that began it, or with «Go on with the way back» on the page AlphaBridge → Staging where it was begun there.', 'alphabridge-mcp' ), (int) $run_id ) );
 		}
 		$closed = AB_MCP_Sync_Engine::abort( $run );
 		if ( is_wp_error( $closed ) ) {
 			return $closed;
 		}
-		return sprintf( 'Run %d is closed as aborted. What its steps wrote stays as written; its pairs can be taken back one by one below.', (int) $run_id );
+		/* translators: %d: run number. */
+		return sprintf( __( 'Run %d is closed as aborted. What its steps wrote stays as written; its pairs can be taken back one by one below.', 'alphabridge-mcp' ), (int) $run_id );
 	}
 
 	/**
@@ -868,7 +875,8 @@ final class AB_MCP_Transfer {
 		if ( is_wp_error( $closed ) ) {
 			return $closed;
 		}
-		return sprintf( 'Run %d is closed as checked. Nothing was written; the pairs of its steps left begun are unclear until a person aligns them (wp_site_pairs), and the site takes a new run again.', (int) $run_id );
+		/* translators: %d: run number. */
+		return sprintf( __( 'Run %d is closed as checked. Nothing was written; the pairs of its steps left begun are unclear until a person aligns them (wp_site_pairs), and the site takes a new run again.', 'alphabridge-mcp' ), (int) $run_id );
 	}
 
 	/**
@@ -925,12 +933,20 @@ final class AB_MCP_Transfer {
 			}
 		}
 		if ( ! is_array( $answer ) || ! in_array( (string) $answer['state'], AB_MCP_Sync_Schema::CLOSED, true ) ) {
-			return sprintf( 'The way back (run %d) goes on: it is not closed yet. Go on with it in the list of the runs.', (int) $run_id );
+			/* translators: %d: run number. */
+			return sprintf( __( 'The way back (run %d) goes on: it is not closed yet. Go on with it in the list of the runs.', 'alphabridge-mcp' ), (int) $run_id );
 		}
 		$rests = isset( $answer['rests'] ) && is_array( $answer['rests'] ) ? count( $answer['rests'] ) : 0;
-		return 'closed_reverted' === $answer['state']
-			? sprintf( 'Taken back (run %d of the way back): the pair is as it was before the run.', (int) $run_id )
-			: sprintf( 'The way back (run %1$d) is closed with findings: %2$s Its steps below say what was left and why.', (int) $run_id, $rests > 0 ? sprintf( '%d object(s) the run made stay as a rest; remove them by hand in wp-admin where they should go.', $rests ) : 'a part changed here since the run wrote it, or did not read back, was left with its value before.' );
+		if ( 'closed_reverted' === $answer['state'] ) {
+			/* translators: %d: run number of the way back. */
+			return sprintf( __( 'Taken back (run %d of the way back): the pair is as it was before the run.', 'alphabridge-mcp' ), (int) $run_id );
+		}
+		if ( $rests > 0 ) {
+			/* translators: 1: run number of the way back, 2: objects left as a rest. */
+			return sprintf( _n( 'The way back (run %1$d) is closed with findings: %2$d object the run made stays as a rest; remove it by hand in wp-admin where it should go. Its steps below say what was left and why.', 'The way back (run %1$d) is closed with findings: %2$d objects the run made stay as a rest; remove them by hand in wp-admin where they should go. Its steps below say what was left and why.', $rests, 'alphabridge-mcp' ), (int) $run_id, $rests );
+		}
+		/* translators: %d: run number of the way back. */
+		return sprintf( __( 'The way back (run %d) is closed with findings: a part changed here since the run wrote it, or did not read back, was left with its value before. Its steps below say what was left and why.', 'alphabridge-mcp' ), (int) $run_id );
 	}
 
 	/**
@@ -955,7 +971,8 @@ final class AB_MCP_Transfer {
 		if ( is_wp_error( $done ) ) {
 			return $done;
 		}
-		return sprintf( 'Pair %d is discarded: its objects stay as they are on both sites, each without a pair from now on.', (int) $pair_id );
+		/* translators: %d: pair. */
+		return sprintf( __( 'Pair %d is discarded: its objects stay as they are on both sites, each without a pair from now on.', 'alphabridge-mcp' ), (int) $pair_id );
 	}
 
 	/* ---------------------------------------------------------- outcome */

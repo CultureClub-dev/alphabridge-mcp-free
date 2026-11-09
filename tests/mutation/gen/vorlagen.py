@@ -125,20 +125,20 @@ e('css-nested', 'css_walk(): every key css at any depth of the JSON', PW,
   "\t\t\t$held = self::css_walk( $value, $at, $depth + 1 );",
   "\t\t\t$held = null;", 'unit', U_CSS)
 e('css-no-text', 'css_walk(): a value of a key css that is no text locks', PW,
-  "\t\t\t\tif ( ! is_string( $value ) ) {\n\t\t\t\t\treturn self::locked( 'post:css_markup',",
-  "\t\t\t\tif ( false ) {\n\t\t\t\t\treturn self::locked( 'post:css_markup',", 'unit', U_CSS)
+  "\t\t\t\tif ( ! is_string( $value ) ) {",
+  "\t\t\t\tif ( false ) {", 'unit', U_CSS)
 e('css-rule', 'css_walk(): the rule of the site editor is asked of each value', PW,
   "\t\t\t\tif ( self::css_markup( $value ) ) {",
   "\t\t\t\tif ( false ) {", 'unit', U_CSS)
 e('css-undecodable', 'css_refusal(): global styles that do not decode to an array are refused, fail closed (Codex on f2af61f..ce9b7bf)', PW,
-  "\t\t\treturn self::locked( 'post:css_markup', sprintf( 'the global styles are no JSON object the check of their CSS reads (%s)', JSON_ERROR_NONE === json_last_error() ? 'a value that is no object' : json_last_error_msg() ) );",
+  "\t\t\treturn self::locked( 'post:css_markup', self::json_refusal( json_last_error() ) );",
   "\t\t\treturn null;", 'unit', U_CSS)
 e('css-empty', 'css_refusal(): empty global styles hold nothing to ask', PW,
   "\t\tif ( '' === trim( $content ) ) {\n\t\t\treturn null;",
   "\t\tif ( false ) {\n\t\t\treturn null;", 'unit', U_CSS)
 e('css-each', 'css_walk(): each value as it is found, the walk goes on past a clean one (GitHub Codex round 1 on free#139, P2)', PW,
-  "\t\t\t\t\treturn self::locked( 'post:css_markup', sprintf( 'the CSS of %s in the global styles holds </style or ends in a part of it', $at ) );\n\t\t\t\t}\n\t\t\t\tcontinue;",
-  "\t\t\t\t\treturn self::locked( 'post:css_markup', sprintf( 'the CSS of %s in the global styles holds </style or ends in a part of it', $at ) );\n\t\t\t\t}\n\t\t\t\treturn null;", 'unit', U_CSS)
+  "\t\t\t\t\treturn self::locked( 'post:css_markup', sprintf( __( 'The CSS of %s in the global styles holds </style or ends in a part of it.', 'alphabridge-mcp' ), $at ) );\n\t\t\t\t}\n\t\t\t\tcontinue;",
+  "\t\t\t\t\treturn self::locked( 'post:css_markup', sprintf( __( 'The CSS of %s in the global styles holds </style or ends in a part of it.', 'alphabridge-mcp' ), $at ) );\n\t\t\t\t}\n\t\t\t\treturn null;", 'unit', U_CSS)
 e('css-deep', 'css_walk(): deeper than it is read locks (fail closed)', PW,
   "\t\t\tif ( $depth >= AB_MCP_Sync_Canon::MAX_DEPTH ) {",
   "\t\t\tif ( false ) {", 'unit', U_CSS)
@@ -178,7 +178,7 @@ e('css-back', 'restore_row(): the custom CSS of the global styles the way back w
 
 # ----------------------- the fallback navigation, where it is seen (round 1, B)
 e('seen-gate', 'fallback_refusal(): a move of the fallback locks only where a block without a menu shows it', PW,
-  "\t\treturn null === $shown ? null : $moved . '; ' . $shown;",
+  "\t\treturn null === $shown ? null : $moved . ' ' . $shown;",
   "\t\treturn $moved;", 'it', SEEN)
 e('seen-block', 'blocks_show_fallback(): a navigation block without ref and blocks of its own shows the fallback', PW,
   "\t\t\tif ( 'core/navigation' === $name && ! array_key_exists( 'ref', $attrs ) && ! array_key_exists( 'navigationMenuId', $attrs ) && array() === $inner ) {",

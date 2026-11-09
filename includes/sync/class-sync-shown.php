@@ -21,8 +21,10 @@
  * discard_as_shown(); AB_MCP_Transfer for the page); this class only holds
  * them to that order.
  *
- * Messages are English without gettext, as the other classes of the
- * takeover; each names the way.
+ * Messages are in gettext, in the language of the site as they arise (a
+ * refusal, a note of the journal); each names the way. Codes, states,
+ * kinds and the other values the tools name stay as they are, and no
+ * translated text is compared, hashed or part of a print.
  *
  * @package AlphaBridge_MCP
  */

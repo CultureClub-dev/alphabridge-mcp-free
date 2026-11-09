@@ -305,7 +305,7 @@ final class SyncTermWriterTest extends TestCase {
 			$refused                = AB_MCP_Sync_Term_Writer::precheck( $prepared, null, 0 );
 			self::assertInstanceOf( WP_Error::class, $refused, $cap );
 			self::assertSame( 'ab_mcp_sync_rights', $refused->get_error_code() );
-			self::assertStringContainsString( "make a term of category ($cap)", $refused->get_error_message() );
+			self::assertStringContainsString( "This account may not make a term of category on this site ($cap).", $refused->get_error_message() );
 		}
 		$GLOBALS['ab_test_can'] = static fn( string $cap, array $args ): bool => true;
 		// The slug: another term of the taxonomy holds it, or WordPress would store another.
@@ -324,7 +324,7 @@ final class SyncTermWriterTest extends TestCase {
 		$html = AB_MCP_Sync_Term_Writer::target_of( self::line( array( 'description' => 'Fresh <em>news</em>.' ) ), self::item( 'create' ), self::ctx() );
 		$san  = AB_MCP_Sync_Term_Writer::precheck( $html, null, 0 );
 		self::assertSame( 'term:sanitizer', self::lock_of( $san ) );
-		self::assertStringContainsString( 'Field description', $san->get_error_message() );
+		self::assertStringContainsString( 'the field description of the term', $san->get_error_message() );
 		remove_filter( 'pre_term_description', $strip );
 		self::assertSame( 'term:sanitizer', self::lock_of( AB_MCP_Sync_Term_Writer::precheck( AB_MCP_Sync_Term_Writer::target_of( self::line( array( 'name' => ' ' ) ), self::item( 'create' ), self::ctx() ), null, 0 ) ), 'An empty name.' );
 		// A taxonomy not registered here.
@@ -420,7 +420,7 @@ final class SyncTermWriterTest extends TestCase {
 		$GLOBALS['ab_test_can'] = static fn( string $cap, array $args ): bool => 'edit_term' !== $cap;
 		$refused                = AB_MCP_Sync_Term_Writer::precheck( $prepared, 34, 0 );
 		self::assertSame( 'ab_mcp_sync_rights', $refused->get_error_code() );
-		self::assertStringContainsString( 'edit the term 34 of category (edit_term)', $refused->get_error_message() );
+		self::assertStringContainsString( 'This account may not edit the term 34 of category on this site (edit_term).', $refused->get_error_message() );
 		// The right of the key that differs, through map_meta_cap (decision 28).
 		$GLOBALS['ab_test_can'] = static fn( string $cap, array $args ): bool => 'edit_term_meta' !== $cap;
 		$locked                 = AB_MCP_Sync_Term_Writer::precheck( $prepared, 34, 0 );

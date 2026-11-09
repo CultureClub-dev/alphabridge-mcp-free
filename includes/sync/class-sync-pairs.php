@@ -322,11 +322,13 @@ final class AB_MCP_Sync_Pairs {
 		}
 		$extra = array_diff( array_keys( $pair ), self::SNAPSHOT_COLUMNS );
 		if ( array() !== $extra ) {
-			return self::invalid( reset( $extra ), 'is not a field of a pair' );
+			/* translators: %s: the field of the pair (live_ref, base_extra, …), as the code names it. */
+			return self::invalid( reset( $extra ), sprintf( __( 'The field %s is not a field of a pair.', 'alphabridge-mcp' ), reset( $extra ) ) );
 		}
 		foreach ( array( 'source_id', 'kind', 'live_ref', 'staging_ref', 'canon', 'base_live', 'base_staging', 'base_origin' ) as $required ) {
 			if ( ! array_key_exists( $required, $pair ) ) {
-				return self::invalid( $required, 'is required' );
+				/* translators: %s: the field of the pair (live_ref, base_extra, …), as the code names it. */
+				return self::invalid( $required, sprintf( __( 'The field %s of the pair is required.', 'alphabridge-mcp' ), $required ) );
 			}
 		}
 		$pair += array(
@@ -402,7 +404,8 @@ final class AB_MCP_Sync_Pairs {
 		if ( 'active' !== $raw['state'] ) {
 			return new WP_Error(
 				'ab_mcp_staging_pair_not_active',
-				sprintf( 'Only an active pair takes new bases; a pair in the state %s keeps them until a person confirms a new alignment. Use realign() for that confirmation (wp_site_pairs confirm).', $raw['state'] ),
+				/* translators: %s: the state of the pair, as the tools name it (unclear, residual, …). */
+				sprintf( __( 'Only an active pair takes new bases; a pair in the state %s keeps them until a person confirms a new alignment. Use realign() for that confirmation (wp_site_pairs confirm).', 'alphabridge-mcp' ), $raw['state'] ),
 				array( 'state' => $raw['state'] )
 			);
 		}
@@ -426,7 +429,7 @@ final class AB_MCP_Sync_Pairs {
 	 */
 	public static function realign( $id, array $values, $expected, $confirmed ) {
 		if ( true !== $confirmed ) {
-			return new WP_Error( 'ab_mcp_staging_pair_unconfirmed', 'A new alignment of a pair needs the confirmation of a person: pass true only for a call that carries the token of that confirmation (wp_site_pairs confirm).' );
+			return new WP_Error( 'ab_mcp_staging_pair_unconfirmed', __( 'A new alignment of a pair needs the confirmation of a person: pass true only for a call that carries the token of that confirmation (wp_site_pairs confirm).', 'alphabridge-mcp' ) );
 		}
 		$raw = self::read_expected( $id, $expected );
 		if ( ! is_array( $raw ) ) {
@@ -491,7 +494,11 @@ final class AB_MCP_Sync_Pairs {
 		if ( ! is_string( $engine ) || 0 !== strcasecmp( $engine, 'InnoDB' ) ) {
 			return new WP_Error(
 				'ab_mcp_staging_pairs_engine',
-				sprintf( 'The table of the object pairs (%1$s) is stored with the engine %2$s, which keeps no transactions, so pairs are not written: a confirmation writes all of its pairs or none. Ask the host to convert the table to InnoDB (ALTER TABLE %1$s ENGINE=InnoDB), then call again.', $table, is_string( $engine ) ? $engine : 'unknown' ),
+				is_string( $engine )
+					/* translators: 1: the name of the table, 2: its storage engine (MyISAM, …). */
+					? sprintf( __( 'The table of the object pairs (%1$s) is stored with the engine %2$s, which keeps no transactions, so pairs are not written: a confirmation writes all of its pairs or none. Ask the host to convert the table to InnoDB (ALTER TABLE %1$s ENGINE=InnoDB), then call again.', 'alphabridge-mcp' ), $table, $engine )
+					/* translators: 1: the name of the table. */
+					: sprintf( __( 'The table of the object pairs (%1$s) is stored with an engine the database does not name, so pairs are not written: a confirmation writes all of its pairs or none, and only InnoDB keeps transactions. Ask the host to convert the table to InnoDB (ALTER TABLE %1$s ENGINE=InnoDB), then call again.', 'alphabridge-mcp' ), $table ),
 				array( 'engine' => is_string( $engine ) ? $engine : null )
 			);
 		}
@@ -553,7 +560,7 @@ final class AB_MCP_Sync_Pairs {
 	 */
 	public static function restore( $id, $before, $expected ) {
 		if ( null === $before || '' === $before ) {
-			return new WP_Error( 'ab_mcp_staging_pair_no_before', 'This pair did not exist before the step, so there is no state to put it back to, and the way back never removes a pair. Use set_state() to mark it residual.' );
+			return new WP_Error( 'ab_mcp_staging_pair_no_before', __( 'This pair did not exist before the step, so there is no state to put it back to, and the way back never removes a pair. Use set_state() to mark it residual.', 'alphabridge-mcp' ) );
 		}
 		$raw = self::read_expected( $id, $expected );
 		if ( ! is_array( $raw ) ) {
@@ -570,7 +577,8 @@ final class AB_MCP_Sync_Pairs {
 		}
 		foreach ( array( 'source_id', 'kind', 'live_ref', 'staging_ref' ) as $column ) {
 			if ( $set[ $column ] !== $raw[ $column ] ) {
-				return new WP_Error( 'ab_mcp_staging_pair_snapshot_foreign', sprintf( 'The snapshot is of another pair (%s differs); nothing was written. Pass the snapshot the step took of this pair.', $column ), array( 'column' => $column ) );
+				/* translators: %s: the column that differs (source_id, kind, live_ref, staging_ref). */
+				return new WP_Error( 'ab_mcp_staging_pair_snapshot_foreign', sprintf( __( 'The snapshot is of another pair (%s differs); nothing was written. Pass the snapshot the step took of this pair.', 'alphabridge-mcp' ), $column ), array( 'column' => $column ) );
 			}
 		}
 		return self::swap( $raw, $set );
@@ -638,11 +646,12 @@ final class AB_MCP_Sync_Pairs {
 	 */
 	public static function canon_outcome( $forms, $canon ) {
 		if ( ! is_array( $forms ) ) {
-			return self::invalid( 'forms', 'is not live, staging and target' );
+			return self::invalid( 'forms', __( 'The field forms of the pair is not live, staging and target.', 'alphabridge-mcp' ) );
 		}
 		foreach ( array( 'live', 'staging', 'target' ) as $side ) {
 			if ( ! array_key_exists( $side, $forms ) || ( null !== $forms[ $side ] && ! self::is_hash( $forms[ $side ] ) ) ) {
-				return self::invalid( 'forms', $side . ' is not a SHA-256 or null' );
+				/* translators: %s: the side in the field forms (live, staging, target). */
+				return self::invalid( 'forms', sprintf( __( 'In the field forms of the pair, %s is not a SHA-256 or null.', 'alphabridge-mcp' ), $side ) );
 			}
 		}
 		if ( null !== $forms['live'] && null !== $forms['staging'] && null !== $forms['target'] && hash_equals( $forms['target'], $forms['live'] ) ) {
@@ -679,8 +688,9 @@ final class AB_MCP_Sync_Pairs {
 			return true;
 		}
 		$message = 'multisite' === $status['reason']
-			? 'Object pairs are not available on a multisite installation: the takeover from a staging site works between single sites. Use a single site as the live site.'
-			: sprintf( 'The tables of the object pairs are not there (%s). Deactivate and Activate AlphaBridge in wp-admin to make them.', $status['reason'] );
+			? __( 'Object pairs are not available on a multisite installation: the takeover from a staging site works between single sites. Use a single site as the live site.', 'alphabridge-mcp' )
+			/* translators: %s: why the tables are not there, as the schema names it (missing, …). */
+			: sprintf( __( 'The tables of the object pairs are not there (%s). Deactivate and Activate AlphaBridge in wp-admin to make them.', 'alphabridge-mcp' ), $status['reason'] );
 		return new WP_Error( 'ab_mcp_staging_unavailable', $message, array( 'reason' => $status['reason'] ) );
 	}
 
@@ -713,7 +723,7 @@ final class AB_MCP_Sync_Pairs {
 	 */
 	private static function read_expected( $id, $expected ) {
 		if ( ! self::is_hash( $expected ) ) {
-			return self::invalid( 'expected', 'is not a snapshot hash' );
+			return self::invalid( 'expected', __( 'The field expected of the pair is not a snapshot hash.', 'alphabridge-mcp' ) );
 		}
 		$raw = self::raw( $id );
 		if ( ! is_array( $raw ) ) {
@@ -861,12 +871,11 @@ final class AB_MCP_Sync_Pairs {
 				if ( is_array( $found ) ) {
 					return new WP_Error(
 						'ab_mcp_staging_pair_conflict',
-						sprintf(
-							'There is a pair for this %1$s object of this source and kind already (pair %2$d%3$s); nothing was written. Use that pair, or discard it first (wp_site_pairs discard).',
-							'live_ref' === $column ? 'live' : 'staging',
-							(int) $found['id'],
-							$bytes ? '' : ', whose ref differs only in case, accents or trailing spaces, which the table takes for the same'
-						),
+						$bytes
+							/* translators: 1: the side of the object, as the tools name it (live, staging), 2: pair number. */
+							? sprintf( __( 'There is a pair for this %1$s object of this source and kind already (pair %2$d); nothing was written. Use that pair, or discard it first (wp_site_pairs discard).', 'alphabridge-mcp' ), 'live_ref' === $column ? 'live' : 'staging', (int) $found['id'] )
+							/* translators: 1: the side of the object, as the tools name it (live, staging), 2: pair number. */
+							: sprintf( __( 'There is a pair for this %1$s object of this source and kind already (pair %2$d, whose ref differs only in case, accents or trailing spaces, which the table takes for the same); nothing was written. Use that pair, or discard it first (wp_site_pairs discard).', 'alphabridge-mcp' ), 'live_ref' === $column ? 'live' : 'staging', (int) $found['id'] ),
 						array(
 							'key'  => $column,
 							'pair' => (int) $found['id'],
@@ -913,13 +922,15 @@ final class AB_MCP_Sync_Pairs {
 	private static function bases( array $values, array $required, array $optional ) {
 		$extra = array_diff( array_keys( $values ), $required, $optional );
 		if ( array() !== $extra ) {
-			return self::invalid( reset( $extra ), 'cannot be set here' );
+			/* translators: %s: the field of the pair (live_ref, base_extra, …), as the code names it. */
+			return self::invalid( reset( $extra ), sprintf( __( 'The field %s of the pair cannot be set here.', 'alphabridge-mcp' ), reset( $extra ) ) );
 		}
 		$set = array();
 		foreach ( array_merge( $required, $optional ) as $column ) {
 			if ( ! array_key_exists( $column, $values ) ) {
 				if ( in_array( $column, $required, true ) ) {
-					return self::invalid( $column, 'is required' );
+					/* translators: %s: the field of the pair (live_ref, base_extra, …), as the code names it. */
+					return self::invalid( $column, sprintf( __( 'The field %s of the pair is required.', 'alphabridge-mcp' ), $column ) );
 				}
 				continue;
 			}
@@ -949,11 +960,11 @@ final class AB_MCP_Sync_Pairs {
 	private static function parse_snapshot( $snapshot ) {
 		$data = is_string( $snapshot ) ? json_decode( $snapshot, true ) : null;
 		if ( ! is_array( $data ) || array( 'columns', 'format' ) !== array_keys( $data ) || self::SNAPSHOT_FORMAT !== $data['format'] || ! is_array( $data['columns'] ) ) {
-			return self::invalid( 'before', 'is not a snapshot of a pair' );
+			return self::invalid( 'before', __( 'The field before of the pair is not a snapshot of a pair.', 'alphabridge-mcp' ) );
 		}
 		$set = $data['columns'];
 		if ( self::SNAPSHOT_COLUMNS !== array_keys( $set ) ) {
-			return self::invalid( 'before', 'does not hold the columns of a pair' );
+			return self::invalid( 'before', __( 'The field before of the pair does not hold the columns of a pair.', 'alphabridge-mcp' ) );
 		}
 		foreach ( array( 'override', 'base_extra' ) as $column ) {
 			if ( null === $set[ $column ] ) {
@@ -961,7 +972,8 @@ final class AB_MCP_Sync_Pairs {
 			}
 			$again = is_string( $set[ $column ] ) ? self::encode_json( $column, json_decode( $set[ $column ], true ) ) : null;
 			if ( ! is_string( $again ) || $again !== $set[ $column ] ) {
-				return self::invalid( $column, 'is not stored JSON of a pair' );
+				/* translators: %s: the field of the pair (live_ref, base_extra, …), as the code names it. */
+				return self::invalid( $column, sprintf( __( 'The field %s of the pair is not stored JSON of a pair.', 'alphabridge-mcp' ), $column ) );
 			}
 		}
 		$bad = self::check_fields( $set );
@@ -990,7 +1002,7 @@ final class AB_MCP_Sync_Pairs {
 			),
 			JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
 		);
-		return false === $json ? self::invalid( 'pair', 'cannot be written as a snapshot' ) : $json;
+		return false === $json ? self::invalid( 'pair', __( 'The pair cannot be written as a snapshot.', 'alphabridge-mcp' ) ) : $json;
 	}
 
 	/**
@@ -1027,29 +1039,35 @@ final class AB_MCP_Sync_Pairs {
 			return null;
 		}
 		if ( ! is_array( $value ) || array() === $value ) {
-			return self::invalid( $column, 'is not a non-empty array' );
+			/* translators: %s: the field of the pair (live_ref, base_extra, …), as the code names it. */
+			return self::invalid( $column, sprintf( __( 'The field %s of the pair is not a non-empty array.', 'alphabridge-mcp' ), $column ) );
 		}
 		if ( 'override' === $column ) {
 			if ( array_is_list( $value ) ) {
-				return self::invalid( $column, 'is not an object of fields' );
+				/* translators: %s: the field of the pair (live_ref, base_extra, …), as the code names it. */
+				return self::invalid( $column, sprintf( __( 'The field %s of the pair is not an object of fields.', 'alphabridge-mcp' ), $column ) );
 			}
 			foreach ( $value as $key => $item ) {
 				if ( ! is_string( $key ) || ! preg_match( '/^[a-z_][a-z0-9_]{0,63}\z/', $key ) || ! ( null === $item || is_string( $item ) || is_int( $item ) || is_bool( $item ) ) ) {
-					return self::invalid( $column, 'holds something other than field names with plain values' );
+					/* translators: %s: the field of the pair (live_ref, base_extra, …), as the code names it. */
+					return self::invalid( $column, sprintf( __( 'The field %s of the pair holds something other than field names with plain values.', 'alphabridge-mcp' ), $column ) );
 				}
 			}
 		}
 		$sorted = self::sorted( $value, 1, 'override' === $column ? 1 : self::MAX_EXTRA_DEPTH );
 		if ( null === $sorted ) {
-			return self::invalid( $column, 'holds a float, an object or nests too deep' );
+			/* translators: %s: the field of the pair (live_ref, base_extra, …), as the code names it. */
+			return self::invalid( $column, sprintf( __( 'The field %s of the pair holds a float, an object or nests too deep.', 'alphabridge-mcp' ), $column ) );
 		}
 		$json = json_encode( $sorted, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
 		if ( false === $json ) {
-			return self::invalid( $column, 'is not valid UTF-8' );
+			/* translators: %s: the field of the pair (live_ref, base_extra, …), as the code names it. */
+			return self::invalid( $column, sprintf( __( 'The field %s of the pair is not valid UTF-8.', 'alphabridge-mcp' ), $column ) );
 		}
 		$max = 'override' === $column ? self::MAX_OVERRIDE : self::MAX_EXTRA;
 		if ( strlen( $json ) > $max ) {
-			return self::invalid( $column, 'is longer than ' . $max . ' bytes' );
+			/* translators: 1: the field of the pair, as the code names it, 2: the most bytes it holds. */
+			return self::invalid( $column, sprintf( __( 'The field %1$s of the pair is longer than %2$d bytes.', 'alphabridge-mcp' ), $column, $max ) );
 		}
 		return $json;
 	}
@@ -1106,7 +1124,7 @@ final class AB_MCP_Sync_Pairs {
 					break;
 				case 'state':
 					if ( 'deleted' === $value ) {
-						return new WP_Error( 'ab_mcp_staging_pair_deleted', 'No pair is taken over as deleted in this version: deletions follow with stage Z8d. Use active, unclear or residual.', array( 'stage' => 'Z8d' ) );
+						return new WP_Error( 'ab_mcp_staging_pair_deleted', __( 'No pair is taken over as deleted in this version: deletions follow with stage Z8d. Use active, unclear or residual.', 'alphabridge-mcp' ), array( 'stage' => 'Z8d' ) );
 					}
 					$ok = in_array( $value, self::STATES, true );
 					break;
@@ -1132,7 +1150,8 @@ final class AB_MCP_Sync_Pairs {
 					break;
 			}
 			if ( ! $ok ) {
-				return self::invalid( $column, 'is not valid' );
+				/* translators: %s: the field of the pair (live_ref, base_extra, …), as the code names it. */
+				return self::invalid( $column, sprintf( __( 'The field %s of the pair is not valid.', 'alphabridge-mcp' ), $column ) );
 			}
 		}
 		return null;
@@ -1160,11 +1179,11 @@ final class AB_MCP_Sync_Pairs {
 
 	/**
 	 * @param string $field   Field.
-	 * @param string $problem What is wrong.
+	 * @param string $problem What is wrong, a whole sentence that names the field.
 	 * @return WP_Error
 	 */
 	private static function invalid( $field, $problem ) {
-		return new WP_Error( 'ab_mcp_staging_pair_invalid', sprintf( 'The field %1$s of the pair %2$s; nothing was written. Check it against the head of AB_MCP_Sync_Pairs and call again.', $field, $problem ), array( 'field' => $field ) );
+		return new WP_Error( 'ab_mcp_staging_pair_invalid', $problem . ' ' . __( 'Nothing was written. Check it against the head of AB_MCP_Sync_Pairs and call again.', 'alphabridge-mcp' ), array( 'field' => $field ) );
 	}
 
 	/**
@@ -1174,8 +1193,10 @@ final class AB_MCP_Sync_Pairs {
 	 */
 	private static function transition_refused( $from, $to ) {
 		$message = 'residual' === $from || 'unclear' === $from
-			? sprintf( 'A pair in the state %s changes only through a confirmed new alignment: ask the person to confirm it (wp_site_pairs confirm), which gives both sides new bases.', $from )
-			: sprintf( 'A pair does not go from %1$s to %2$s; the changes it makes are AB_MCP_Sync_Pairs::TRANSITIONS. Check the state and call again.', $from, $to );
+			/* translators: %s: the state of the pair, as the tools name it (residual, unclear). */
+			? sprintf( __( 'A pair in the state %s changes only through a confirmed new alignment: ask the person to confirm it (wp_site_pairs confirm), which gives both sides new bases.', 'alphabridge-mcp' ), $from )
+			/* translators: 1: the state of the pair now, 2: the state or change asked for, as the tools name them. */
+			: sprintf( __( 'A pair does not go from %1$s to %2$s; the changes it makes are AB_MCP_Sync_Pairs::TRANSITIONS. Check the state and call again.', 'alphabridge-mcp' ), $from, $to );
 		return new WP_Error(
 			'ab_mcp_staging_pair_transition',
 			$message,
@@ -1190,7 +1211,7 @@ final class AB_MCP_Sync_Pairs {
 	 * @return WP_Error The pair changed since the caller read it.
 	 */
 	private static function changed() {
-		return new WP_Error( 'ab_mcp_staging_pair_changed', 'The pair changed since it was read; nothing was written. Read it again and call again with its new snapshot hash.' );
+		return new WP_Error( 'ab_mcp_staging_pair_changed', __( 'The pair changed since it was read; nothing was written. Read it again and call again with its new snapshot hash.', 'alphabridge-mcp' ) );
 	}
 
 	/**
@@ -1198,7 +1219,8 @@ final class AB_MCP_Sync_Pairs {
 	 * @return WP_Error
 	 */
 	private static function missing( $id ) {
-		return new WP_Error( 'ab_mcp_staging_pair_missing', sprintf( 'There is no pair %d; nothing was written. Check the id and call again.', (int) $id ), array( 'pair' => (int) $id ) );
+		/* translators: %d: pair number. */
+		return new WP_Error( 'ab_mcp_staging_pair_missing', sprintf( __( 'There is no pair %d; nothing was written. Check the id and call again.', 'alphabridge-mcp' ), (int) $id ), array( 'pair' => (int) $id ) );
 	}
 
 	/**
@@ -1206,6 +1228,6 @@ final class AB_MCP_Sync_Pairs {
 	 */
 	private static function db_error() {
 		global $wpdb;
-		return new WP_Error( 'ab_mcp_staging_db_error', 'The database refused the request on the table of the object pairs; nothing was written. Check the database log (wp_get_error_log) and try again.', array( 'error' => (string) $wpdb->last_error ) );
+		return new WP_Error( 'ab_mcp_staging_db_error', __( 'The database refused the request on the table of the object pairs; nothing was written. Check the database log (wp_get_error_log) and try again.', 'alphabridge-mcp' ), array( 'error' => (string) $wpdb->last_error ) );
 	}
 }

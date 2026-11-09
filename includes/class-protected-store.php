@@ -195,23 +195,28 @@ final class AB_MCP_Protected_Store {
 
 	/**
 	 * What each finding means, beside WordPress ("outside") and in the
-	 * uploads, for the message of proof().
+	 * uploads, for the message of proof(): one sentence each, in the
+	 * language of the site.
+	 *
+	 * @return array<string,array<string,string>> Place => finding => sentence.
 	 */
-	const FINDINGS = array(
-		'outside' => array(
-			'docroot'      => 'the folder ab-mcp-store beside the WordPress folder would lie inside the web root',
-			'not_writable' => 'the folder ab-mcp-store beside the WordPress folder cannot be created or written, or a part of it is a link',
-			'foreign'      => 'the folder for this installation there belongs to another installation',
-		),
-		'uploads' => array(
-			'no_uploads'       => 'there is no uploads folder',
-			'not_writable'     => 'the folder ab-mcp-store-… in it cannot be created or written, or a part of it is a link',
-			'foreign'          => 'the folder for this installation there belongs to another installation',
-			'self_unreachable' => 'this site cannot fetch its own files to check them (its address is local or private, or the request failed)',
-			'control'          => 'a test file beside the folder was not served at the address of the uploads folder, so the check would prove nothing',
-			'served'           => 'a test file in the folder was served: the web server does not honour its .htaccess or web.config',
-		),
-	);
+	public static function findings() {
+		return array(
+			'outside' => array(
+				'docroot'      => __( 'Beside WordPress: the folder ab-mcp-store beside the WordPress folder would lie inside the web root.', 'alphabridge-mcp' ),
+				'not_writable' => __( 'Beside WordPress: the folder ab-mcp-store beside the WordPress folder cannot be created or written, or a part of it is a link.', 'alphabridge-mcp' ),
+				'foreign'      => __( 'Beside WordPress: the folder for this installation there belongs to another installation.', 'alphabridge-mcp' ),
+			),
+			'uploads' => array(
+				'no_uploads'       => __( 'In the uploads folder: there is no uploads folder.', 'alphabridge-mcp' ),
+				'not_writable'     => __( 'In the uploads folder: the folder ab-mcp-store-… in it cannot be created or written, or a part of it is a link.', 'alphabridge-mcp' ),
+				'foreign'          => __( 'In the uploads folder: the folder for this installation there belongs to another installation.', 'alphabridge-mcp' ),
+				'self_unreachable' => __( 'In the uploads folder: this site cannot fetch its own files to check them (its address is local or private, or the request failed).', 'alphabridge-mcp' ),
+				'control'          => __( 'In the uploads folder: a test file beside the folder was not served at the address of the uploads folder, so the check would prove nothing.', 'alphabridge-mcp' ),
+				'served'           => __( 'In the uploads folder: a test file in the folder was served: the web server does not honour its .htaccess or web.config.', 'alphabridge-mcp' ),
+			),
+		);
+	}
 
 	/** @var string|null The id read in this request. */
 	private static $id = null;
@@ -245,7 +250,7 @@ final class AB_MCP_Protected_Store {
 	 * @return array{available:bool,where:string|null,checked:int,reason:string|null,findings:array<string,string>,detail:array,message:string|null}
 	 *         where 'outside' or 'uploads'; reason (without a store) 'no_id',
 	 *         'no_document_root' or 'none' with a finding per place
-	 *         (FINDINGS); detail the statuses or the error code of the
+	 *         (findings()); detail the statuses or the error code of the
 	 *         last self-check; message the reason and the way.
 	 */
 	public static function proof( $fetcher = null, $force = false ) {
@@ -1623,21 +1628,27 @@ final class AB_MCP_Protected_Store {
 	 */
 	public static function message( $reason, array $found ) {
 		if ( 'no_id' === $reason ) {
-			return 'There is no protected store, so nothing is exported, imported or taken over: the id of this installation (the option ab_mcp_install_id) could not be stored. Ask the host to check that the database user of WordPress may write to the options table, then try again.';
+			return __( 'There is no protected store, so nothing is exported, imported or taken over: the id of this installation (the option ab_mcp_install_id) could not be stored. Ask the host to check that the database user of WordPress may write to the options table, then try again.', 'alphabridge-mcp' );
 		}
 		if ( 'moved' === $reason ) {
-			return 'There is no protected store in this request, so nothing is exported, imported or taken over: another request moved the store just now. Call it again.';
+			return __( 'There is no protected store in this request, so nothing is exported, imported or taken over: another request moved the store just now. Call it again.', 'alphabridge-mcp' );
 		}
 		if ( 'no_document_root' === $reason ) {
-			return 'There is no protected store in this request, so nothing is exported, imported or taken over: the request does not know the document root of the web server, so it cannot check that the folder beside WordPress lies outside the web root, and no proof of a web request of the last 24 hours is there. Call it again over the web, through the MCP endpoint or in wp-admin.';
+			return __( 'There is no protected store in this request, so nothing is exported, imported or taken over: the request does not know the document root of the web server, so it cannot check that the folder beside WordPress lies outside the web root, and no proof of a web request of the last 24 hours is there. Call it again over the web, through the MCP endpoint or in wp-admin.', 'alphabridge-mcp' );
 		}
-		$parts = array();
-		foreach ( array( 'outside' => 'Beside WordPress', 'uploads' => 'In the uploads folder' ) as $where => $label ) {
+		$parts    = array();
+		$findings = self::findings();
+		$unusable = array(
+			'outside' => __( 'Beside WordPress: the folder cannot be used.', 'alphabridge-mcp' ),
+			'uploads' => __( 'In the uploads folder: the folder cannot be used.', 'alphabridge-mcp' ),
+		);
+		foreach ( array( 'outside', 'uploads' ) as $where ) {
 			if ( isset( $found[ $where ] ) ) {
-				$parts[] = $label . ' ' . ( isset( self::FINDINGS[ $where ][ $found[ $where ] ] ) ? self::FINDINGS[ $where ][ $found[ $where ] ] : 'the folder cannot be used' ) . '.';
+				$parts[] = $findings[ $where ][ $found[ $where ] ] ?? $unusable[ $where ];
 			}
 		}
-		return 'There is no protected store, so nothing is exported, imported or taken over. ' . implode( ' ', $parts ) . ' Ask the host to let PHP create the folder ab-mcp-store beside the WordPress folder, outside the web root (the safe place), or to make the web server refuse the folder ab-mcp-store-… in the uploads folder (Apache and LiteSpeed read the .htaccess in it, IIS its web.config; nginx needs a rule such as location ~ /ab-mcp-store- { deny all; }); then try again.';
+		/* translators: %s: what was found at each place, one sentence per place. */
+		return sprintf( __( 'There is no protected store, so nothing is exported, imported or taken over. %s Ask the host to let PHP create the folder ab-mcp-store beside the WordPress folder, outside the web root (the safe place), or to make the web server refuse the folder ab-mcp-store-… in the uploads folder (Apache and LiteSpeed read the .htaccess in it, IIS its web.config; nginx needs a rule such as location ~ /ab-mcp-store- { deny all; }); then try again.', 'alphabridge-mcp' ), implode( ' ', $parts ) );
 	}
 
 	/**

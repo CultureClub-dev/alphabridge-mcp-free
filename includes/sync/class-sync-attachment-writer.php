@@ -59,8 +59,10 @@
  *    (post:reference_unmapped).
  *  - THE STATUSES: inherit (the status of an upload) and private.
  *
- * Messages are English without gettext, as the other classes of the
- * takeover; each names the way.
+ * Messages and notes are in gettext, in the language of the site as they
+ * arise (a note is stored in the journal as it was written); error codes,
+ * states, kinds and the names of parts stay as the tools name them. Each
+ * names the way.
  *
  * @package AlphaBridge_MCP
  */
@@ -125,14 +127,15 @@ final class AB_MCP_Sync_Attachment_Writer {
 	public static function target_of( array $line, array $item, array $ctx ) {
 		$type = isset( $line['identity']['post_type'] ) ? (string) $line['identity']['post_type'] : '';
 		if ( self::TYPE !== $type ) {
-			return AB_MCP_Sync_Post_Writer::locked( 'post:other_kind', sprintf( 'post type %s in a step of the kind attachment', $type ) );
+			/* translators: %s: a post type, as WordPress names it. */
+			return AB_MCP_Sync_Post_Writer::locked( 'post:other_kind', sprintf( __( 'The object is of the post type %s, in a step of the kind attachment.', 'alphabridge-mcp' ), $type ) );
 		}
 		$held = AB_MCP_Sync_Post_Writer::line_lock( $line );
 		if ( null !== $held ) {
 			return $held;
 		}
 		if ( ! isset( $line['content']['row'], $line['content']['meta'], $line['content']['terms'], $line['form'], $line['form']['files'] ) || ! is_array( $line['form'] ) || ! is_array( $line['form']['files'] ) ) {
-			return AB_MCP_Sync_Post_Writer::locked( 'post:content_missing', 'the package carries no content or no file list of the attachment (a row of it could not be read on the staging site)' );
+			return AB_MCP_Sync_Post_Writer::locked( 'post:content_missing', __( 'The package carries no content or no file list of the attachment (a row of it could not be read on the staging site).', 'alphabridge-mcp' ) );
 		}
 		$row = array();
 		foreach ( $line['content']['row'] as $column => $value ) {
@@ -140,16 +143,23 @@ final class AB_MCP_Sync_Attachment_Writer {
 		}
 		foreach ( AB_MCP_Sync_Post_Writer::WRITTEN_COLUMNS as $column ) {
 			if ( ! array_key_exists( $column, $row ) ) {
-				return AB_MCP_Sync_Post_Writer::locked( 'post:content_missing', sprintf( 'the package names no column %s', $column ) );
+				/* translators: %s: a column of the posts table (post_title, …). */
+				return AB_MCP_Sync_Post_Writer::locked( 'post:content_missing', sprintf( __( 'The package names no column %s of the attachment.', 'alphabridge-mcp' ), $column ) );
 			}
 		}
 		if ( '' !== $row['post_password'] ) {
-			return AB_MCP_Sync_Post_Writer::locked( 'post:password_protected', 'post_password' );
+			return AB_MCP_Sync_Post_Writer::locked( 'post:password_protected', __( 'The attachment of the staging site has a password (post_password).', 'alphabridge-mcp' ) );
 		}
 		$status = $row['post_status'];
 		if ( ! in_array( $status, self::STATUSES, true ) ) {
 			$key = 'trash' === $status ? 'post:in_trash' : ( 'auto-draft' === $status ? 'post:auto_draft' : 'post:status_rule' );
-			return AB_MCP_Sync_Post_Writer::locked( $key, sprintf( 'attachment status %s', '' === $status ? '(none)' : $status ) );
+			return AB_MCP_Sync_Post_Writer::locked(
+				$key,
+				'' === $status
+					? __( 'The attachment of the staging site has no status.', 'alphabridge-mcp' )
+					/* translators: %s: a post status, as WordPress names it. */
+					: sprintf( __( 'The attachment of the staging site has the status %s.', 'alphabridge-mcp' ), $status )
+			);
 		}
 		$create  = 'create' === ( $item['op'] ?? '' );
 		$plan    = AB_MCP_Sync_Refs::plan( $ctx['map'], $ctx['addresses'], isset( $ctx['routes'] ) ? $ctx['routes'] : null );
@@ -173,7 +183,8 @@ final class AB_MCP_Sync_Attachment_Writer {
 				$mapped = 0;
 			}
 			if ( null === $mapped ) {
-				return AB_MCP_Sync_Post_Writer::locked( 'post:reference_unmapped', sprintf( 'the post %d of the staging site the attachment hangs under (post_parent): pair it, or take it over in the same run', $parent ) );
+				/* translators: %d: post id on the staging site. */
+				return AB_MCP_Sync_Post_Writer::locked( 'post:reference_unmapped', sprintf( __( 'The attachment hangs under the post %d of the staging site (post_parent), which has no counterpart on this site: pair it, or take it over in the same run.', 'alphabridge-mcp' ), $parent ) );
 			}
 			$parent = (int) $mapped;
 		}
@@ -182,21 +193,29 @@ final class AB_MCP_Sync_Attachment_Writer {
 			$login = AB_MCP_Sync_Post_Writer::login_of( $line, 'post_author' );
 			$user  = null === $login ? null : AB_MCP_Sync_Post_Writer::user_by_login( $login, $ctx );
 			if ( null === $user ) {
-				return AB_MCP_Sync_Post_Writer::locked( 'post:author_unknown', null === $login ? 'post_author' : sprintf( 'login %s', $login ) );
+				return AB_MCP_Sync_Post_Writer::locked(
+					'post:author_unknown',
+					null === $login
+						? __( 'The package names no login of the author of the attachment (post_author).', 'alphabridge-mcp' )
+						/* translators: %s: a user login. */
+						: sprintf( __( 'No account of this site has the login %s of the author of the attachment.', 'alphabridge-mcp' ), $login )
+				);
 			}
 			$author = (int) $user;
 		}
 		$content = AB_MCP_Sync_Refs::rewrite_content( $row['post_content'], $plan );
 		$missing = AB_MCP_Sync_Post_Writer::unresolved( $content['missing'], $pending );
 		if ( array() !== $missing ) {
-			return AB_MCP_Sync_Post_Writer::locked( 'post:reference_unmapped', AB_MCP_Sync_Post_Writer::missing_text( $missing ) );
+			/* translators: %s: the references, as the tools name them (post 12, term 4, …). */
+			return AB_MCP_Sync_Post_Writer::locked( 'post:reference_unmapped', sprintf( __( 'The attachment holds references without a counterpart on this site: %s.', 'alphabridge-mcp' ), self::missing_refs( $missing ) ) );
 		}
 		$texts = array();
 		foreach ( array( 'post_title', 'post_excerpt', 'post_content_filtered' ) as $column ) {
 			$texts[ $column ] = AB_MCP_Sync_Refs::rewrite_text( $row[ $column ], $plan, array(), $changed );
 			$missing          = AB_MCP_Sync_Post_Writer::unresolved( $plan['missing'], $pending );
 			if ( array() !== $missing ) {
-				return AB_MCP_Sync_Post_Writer::locked( 'post:reference_unmapped', AB_MCP_Sync_Post_Writer::missing_text( $missing ) );
+				/* translators: %s: the references, as the tools name them (post 12, term 4, …). */
+				return AB_MCP_Sync_Post_Writer::locked( 'post:reference_unmapped', sprintf( __( 'The attachment holds references without a counterpart on this site: %s.', 'alphabridge-mcp' ), self::missing_refs( $missing ) ) );
 			}
 		}
 		// The meta: the own keys with their rule, the poster of an audio or a
@@ -210,11 +229,13 @@ final class AB_MCP_Sync_Attachment_Writer {
 				continue;
 			}
 			if ( $create && ! in_array( $key, self::OWN_META, true ) && ! AB_MCP_Sync_Post_Writer::new_meta_allowed( $key, self::TYPE ) ) {
-				return AB_MCP_Sync_Post_Writer::locked( 'post:create_with_object_meta', sprintf( 'meta key %s of the attachment (protected, or a plugin answers its right at the object only)', $key ) );
+				/* translators: %s: a meta key. */
+				return AB_MCP_Sync_Post_Writer::locked( 'post:create_with_object_meta', sprintf( __( 'The new attachment carries the meta key %s, which is protected, or whose right a plugin answers at the object only.', 'alphabridge-mcp' ), $key ) );
 			}
 			if ( in_array( $key, self::OWN_META, true ) && isset( $meta[ $key ] ) ) {
 				// WordPress reads one value of each (get_post_meta() single).
-				return AB_MCP_Sync_Post_Writer::locked( 'post:meta_rule', sprintf( 'the meta key %s of the attachment has more than one row', $key ) );
+				/* translators: %s: a meta key. */
+				return AB_MCP_Sync_Post_Writer::locked( 'post:meta_rule', sprintf( __( 'The meta key %s of the attachment has more than one row.', 'alphabridge-mcp' ), $key ) );
 			}
 			if ( '_thumbnail_id' === $key ) {
 				$mapped          = 1 === preg_match( '/^[1-9][0-9]*\z/', $value ) ? AB_MCP_Sync_Refs::mapped_id( $plan, 'post', (int) $value ) : null;
@@ -223,7 +244,8 @@ final class AB_MCP_Sync_Attachment_Writer {
 					$mapped = 0;
 				}
 				if ( null === $mapped || isset( $meta[ $key ] ) ) {
-					return AB_MCP_Sync_Post_Writer::locked( 'post:reference_unmapped', sprintf( 'the image %s of the staging site the attachment shows (_thumbnail_id)', $value ) );
+					/* translators: %s: the id of the image on the staging site. */
+					return AB_MCP_Sync_Post_Writer::locked( 'post:reference_unmapped', sprintf( __( 'The image %s of the staging site the attachment shows (_thumbnail_id) has no counterpart on this site.', 'alphabridge-mcp' ), $value ) );
 				}
 				$meta[ $key ][] = (string) (int) $mapped;
 				continue;
@@ -234,7 +256,8 @@ final class AB_MCP_Sync_Attachment_Writer {
 			}
 			$missing = AB_MCP_Sync_Post_Writer::unresolved( $plan['missing'], $pending );
 			if ( array() !== $missing ) {
-				return AB_MCP_Sync_Post_Writer::locked( 'post:reference_unmapped', AB_MCP_Sync_Post_Writer::missing_text( $missing ) );
+				/* translators: %s: the references, as the tools name them (post 12, term 4, …). */
+				return AB_MCP_Sync_Post_Writer::locked( 'post:reference_unmapped', sprintf( __( 'The attachment holds references without a counterpart on this site: %s.', 'alphabridge-mcp' ), self::missing_refs( $missing ) ) );
 			}
 			$meta[ $key ][] = $written;
 		}
@@ -242,10 +265,12 @@ final class AB_MCP_Sync_Attachment_Writer {
 		foreach ( $line['content']['terms'] as $term ) {
 			$taxonomy = AB_MCP_Sync_Post_Writer::bytes( $term['taxonomy'] );
 			if ( ! in_array( $taxonomy, self::TAXONOMIES, true ) ) {
-				return AB_MCP_Sync_Post_Writer::locked( 'post:taxonomy_rule', sprintf( 'taxonomy %s on the attachment', $taxonomy ) );
+				/* translators: %s: a taxonomy, as WordPress names it. */
+				return AB_MCP_Sync_Post_Writer::locked( 'post:taxonomy_rule', sprintf( __( 'The attachment of the staging site carries a term of the taxonomy %s.', 'alphabridge-mcp' ), $taxonomy ) );
 			}
 			if ( isset( $term['term_order'] ) && 0 !== (int) $term['term_order'] ) {
-				return AB_MCP_Sync_Post_Writer::locked( 'post:term_order', sprintf( 'the term %1$s of %2$s on the attachment of the staging site carries the term_order %3$d', AB_MCP_Sync_Post_Writer::bytes( $term['slug'] ), $taxonomy, (int) $term['term_order'] ) );
+				/* translators: 1: the slug of a term, 2: its taxonomy, 3: the value of term_order. */
+				return AB_MCP_Sync_Post_Writer::locked( 'post:term_order', sprintf( __( 'The term %1$s of %2$s on the attachment of the staging site carries the term_order %3$d.', 'alphabridge-mcp' ), AB_MCP_Sync_Post_Writer::bytes( $term['slug'] ), $taxonomy, (int) $term['term_order'] ) );
 			}
 			$mapped = AB_MCP_Sync_Refs::mapped_id( $plan, 'term', (int) $term['term_id'] );
 			if ( null === $mapped && isset( $pending['term'][ (int) $term['term_id'] ] ) ) {
@@ -254,7 +279,8 @@ final class AB_MCP_Sync_Attachment_Writer {
 				continue;
 			}
 			if ( null === $mapped ) {
-				return AB_MCP_Sync_Post_Writer::locked( 'post:reference_unmapped', sprintf( 'term %d of the taxonomy %s of the staging site', (int) $term['term_id'], $taxonomy ) );
+				/* translators: 1: term id on the staging site, 2: its taxonomy, as WordPress names it. */
+				return AB_MCP_Sync_Post_Writer::locked( 'post:reference_unmapped', sprintf( __( 'The term %1$d of the taxonomy %2$s of the staging site has no counterpart on this site.', 'alphabridge-mcp' ), (int) $term['term_id'], $taxonomy ) );
 			}
 			$terms[ $taxonomy ][] = (int) $mapped;
 		}
@@ -266,11 +292,12 @@ final class AB_MCP_Sync_Attachment_Writer {
 		// the package holds another list than its meta names.
 		$files = self::files_of( $line['form']['files'] );
 		if ( null === $files ) {
-			return AB_MCP_Sync_Post_Writer::locked( 'post:content_missing', 'the file list of the package is not one the staging site writes' );
+			return AB_MCP_Sync_Post_Writer::locked( 'post:content_missing', __( 'The file list of the package is not one the staging site writes.', 'alphabridge-mcp' ) );
 		}
 		$uploads = AB_MCP_Sync_Media::uploads();
 		if ( '' !== $uploads['problem'] ) {
-			return AB_MCP_Sync_Post_Writer::locked( 'by_code' === $uploads['problem'] ? 'attachment:uploads_by_code' : 'attachment:unsafe_path', sprintf( 'the uploads of this site (%s)', $uploads['cause'] ) );
+			/* translators: %s: the cause, as the code names it (multisite, filter:…, upload_path, uploads). */
+			return AB_MCP_Sync_Post_Writer::locked( 'by_code' === $uploads['problem'] ? 'attachment:uploads_by_code' : 'attachment:unsafe_path', sprintf( __( 'The uploads of this site cannot be used for the files of the attachment (%s).', 'alphabridge-mcp' ), $uploads['cause'] ) );
 		}
 		$attached = isset( $meta['_wp_attached_file'][0] ) && is_string( $meta['_wp_attached_file'][0] ) ? $meta['_wp_attached_file'][0] : '';
 		$listed   = AB_MCP_Sync_Media::paths(
@@ -280,12 +307,13 @@ final class AB_MCP_Sync_Attachment_Writer {
 			$uploads['dir']
 		);
 		if ( array() !== $listed['problems'] ) {
-			return AB_MCP_Sync_Post_Writer::locked( 'attachment:unsafe_path', sprintf( 'the file list the meta of the attachment names on this site (%s)', (string) $listed['problems'][0]['problem'] ) );
+			/* translators: %s: the problem, as the code names it. */
+			return AB_MCP_Sync_Post_Writer::locked( 'attachment:unsafe_path', sprintf( __( 'The file list the meta of the attachment names on this site is not one of plain paths under the uploads (%s).', 'alphabridge-mcp' ), (string) $listed['problems'][0]['problem'] ) );
 		}
 		$named = array_column( $listed['files'], 'path' );
 		sort( $named, SORT_STRING );
 		if ( array_column( $files, 'path' ) !== $named ) {
-			return AB_MCP_Sync_Post_Writer::locked( 'post:content_missing', 'the file list of the package is not the one the meta of the attachment names' );
+			return AB_MCP_Sync_Post_Writer::locked( 'post:content_missing', __( 'The file list of the package is not the one the meta of the attachment names.', 'alphabridge-mcp' ) );
 		}
 		$postarr = array(
 			'post_author'           => $author,
@@ -373,30 +401,35 @@ final class AB_MCP_Sync_Attachment_Writer {
 		unset( $now );
 		$pto = get_post_type_object( self::TYPE );
 		if ( ! is_object( $pto ) || ! isset( $pto->cap ) ) {
-			return AB_MCP_Sync_Post_Writer::locked( 'post:type_unregistered', 'the post type attachment is not registered on this site' );
+			return AB_MCP_Sync_Post_Writer::locked( 'post:type_unregistered', __( 'The post type attachment is not registered on this site.', 'alphabridge-mcp' ) );
 		}
 		$live    = null;
 		$current = null;
 		if ( null !== $live_id ) {
 			$live = AB_MCP_Sync_Rows::post( (int) $live_id );
 			if ( ! is_array( $live ) || self::TYPE !== (string) $live['post_type'] ) {
-				return new WP_Error( 'ab_mcp_sync_target_gone', sprintf( 'The attachment %d of this site is no longer there, so nothing is written for it. Make a new report (wp_site_diff) and plan again.', (int) $live_id ) );
+				/* translators: %d: attachment id on this site. */
+				return new WP_Error( 'ab_mcp_sync_target_gone', sprintf( __( 'The attachment %d of this site is no longer there, so nothing is written for it. Make a new report (wp_site_diff) and plan again.', 'alphabridge-mcp' ), (int) $live_id ) );
 			}
 			if ( ! current_user_can( 'edit_post', (int) $live_id ) ) {
-				return AB_MCP_Sync_Post_Writer::rights( sprintf( 'edit the attachment %d (edit_post)', (int) $live_id ) );
+				/* translators: %d: attachment id on this site. */
+				return AB_MCP_Sync_Post_Writer::rights( sprintf( __( 'This account may not edit the attachment %d (edit_post).', 'alphabridge-mcp' ), (int) $live_id ) );
 			}
 			$current = AB_MCP_Sync_Post_Writer::current( (int) $live_id );
 			if ( is_wp_error( $current ) ) {
 				return $current;
 			}
 		} elseif ( ! current_user_can( (string) $pto->cap->create_posts ) ) {
-			return AB_MCP_Sync_Post_Writer::rights( sprintf( 'upload a file (%s)', (string) $pto->cap->create_posts ) );
+			/* translators: %s: the capability it lacks, as WordPress names it. */
+			return AB_MCP_Sync_Post_Writer::rights( sprintf( __( 'This account may not upload a file (%s).', 'alphabridge-mcp' ), (string) $pto->cap->create_posts ) );
 		}
 		if ( 'private' === $prepared['status'] && ( null === $live || 'private' !== (string) $live['post_status'] ) && ! current_user_can( (string) $pto->cap->publish_posts ) ) {
-			return AB_MCP_Sync_Post_Writer::rights( sprintf( 'make an attachment private (%s)', (string) $pto->cap->publish_posts ) );
+			/* translators: %s: the capability it lacks, as WordPress names it. */
+			return AB_MCP_Sync_Post_Writer::rights( sprintf( __( 'This account may not make an attachment private (%s).', 'alphabridge-mcp' ), (string) $pto->cap->publish_posts ) );
 		}
 		if ( (int) $prepared['postarr']['post_author'] !== (int) get_current_user_id() && ! current_user_can( (string) $pto->cap->edit_others_posts ) ) {
-			return AB_MCP_Sync_Post_Writer::rights( sprintf( 'write an attachment of another author (%s)', (string) $pto->cap->edit_others_posts ) );
+			/* translators: %s: the capability it lacks, as WordPress names it. */
+			return AB_MCP_Sync_Post_Writer::rights( sprintf( __( 'This account may not write an attachment of another author (%s).', 'alphabridge-mcp' ), (string) $pto->cap->edit_others_posts ) );
 		}
 		// The meta (decision 28): of an attachment here, each key whose values
 		// differ; of a new one, every key of the target.
@@ -404,7 +437,8 @@ final class AB_MCP_Sync_Attachment_Writer {
 		foreach ( $keys as $key ) {
 			$key = (string) $key;
 			if ( in_array( $key, self::FILE_META, true ) && null !== $live_id && ! current_user_can( 'upload_files' ) ) {
-				return AB_MCP_Sync_Post_Writer::rights( sprintf( 'change the files of the attachment %1$d (upload_files, for %2$s)', (int) $live_id, $key ) );
+				/* translators: 1: attachment id on this site, 2: a meta key that names files. */
+				return AB_MCP_Sync_Post_Writer::rights( sprintf( __( 'This account may not change the files of the attachment %1$d (upload_files, for %2$s).', 'alphabridge-mcp' ), (int) $live_id, $key ) );
 			}
 			if ( in_array( $key, self::OWN_META, true ) || '_thumbnail_id' === $key ) {
 				continue;
@@ -412,11 +446,13 @@ final class AB_MCP_Sync_Attachment_Writer {
 			if ( is_array( $current ) ) {
 				$may = AB_MCP_Sync_Post_Writer::meta_right( (int) $live_id, $key, AB_MCP_Sync_Post_Writer::targets( $prepared, $key ), AB_MCP_Sync_Post_Writer::meta_values( $current, $key ) );
 				if ( true !== $may ) {
-					return AB_MCP_Sync_Post_Writer::locked( '*:meta_without_rule', sprintf( 'meta key %1$s of the attachment on this site: %2$s', $key, $may ) );
+					/* translators: 1: a meta key, 2: the capability WordPress refused, as the code names it (add_post_meta, …). */
+					return AB_MCP_Sync_Post_Writer::locked( '*:meta_without_rule', sprintf( __( 'Meta key %1$s of the attachment on this site: %2$s refused.', 'alphabridge-mcp' ), $key, $may ) );
 				}
 			}
 			if ( null !== AB_MCP_Builders::markup_meta_refusal( $key ) ) {
-				return AB_MCP_Sync_Post_Writer::rights( sprintf( 'write the page-builder meta key %s (unfiltered_html)', $key ) );
+				/* translators: %s: a meta key. */
+				return AB_MCP_Sync_Post_Writer::rights( sprintf( __( 'This account may not write the page-builder meta key %s (unfiltered_html).', 'alphabridge-mcp' ), $key ) );
 			}
 		}
 		// The poster of an audio or a video: set_post_thumbnail() keeps an
@@ -424,14 +460,16 @@ final class AB_MCP_Sync_Attachment_Writer {
 		if ( in_array( '_thumbnail_id', $keys, true ) && isset( $prepared['meta']['_thumbnail_id'][0] ) && '0' !== (string) $prepared['meta']['_thumbnail_id'][0] ) {
 			$image = (int) $prepared['meta']['_thumbnail_id'][0];
 			if ( self::TYPE !== AB_MCP_Sync_Rows::post_type_of( $image ) || '' === (string) wp_get_attachment_image( $image, 'thumbnail' ) ) {
-				return AB_MCP_Sync_Post_Writer::locked( 'post:thumbnail', sprintf( 'the attachment %d of this site the attachment shows is no image WordPress shows', $image ) );
+				/* translators: %d: attachment id on this site. */
+				return AB_MCP_Sync_Post_Writer::locked( 'post:thumbnail', sprintf( __( 'The attachment %d of this site that the attachment shows is no image WordPress shows.', 'alphabridge-mcp' ), $image ) );
 			}
 		}
 		// Every written value through sanitize_meta(), by the bytes it stores.
 		foreach ( $keys as $key ) {
 			foreach ( isset( $prepared['meta'][ $key ] ) ? $prepared['meta'][ $key ] : array() as $value ) {
 				if ( AB_MCP_Sync_Post_Writer::db_form( sanitize_meta( (string) $key, $value, 'post', self::TYPE ) ) !== AB_MCP_Sync_Post_Writer::stored_form( $value ) ) {
-					return AB_MCP_Sync_Post_Writer::locked( 'post:sanitizer', sprintf( 'meta key %s (sanitize_meta() changes its value)', $key ) );
+					/* translators: %s: a meta key. */
+					return AB_MCP_Sync_Post_Writer::locked( 'post:sanitizer', sprintf( __( 'sanitize_meta() changes the value of the meta key %s of the attachment.', 'alphabridge-mcp' ), $key ) );
 				}
 			}
 		}
@@ -440,12 +478,14 @@ final class AB_MCP_Sync_Attachment_Writer {
 		foreach ( is_array( $current ) ? $current['terms'] : array() as $term ) {
 			$taxonomies[] = (string) $term['taxonomy'];
 			if ( 0 !== (int) $term['term_order'] ) {
-				return AB_MCP_Sync_Post_Writer::locked( 'post:term_order', sprintf( 'the term %1$s of %2$s on the attachment of this site carries the term_order %3$d', (string) $term['slug'], (string) $term['taxonomy'], (int) $term['term_order'] ) );
+				/* translators: 1: the slug of a term, 2: its taxonomy, 3: the value of term_order. */
+				return AB_MCP_Sync_Post_Writer::locked( 'post:term_order', sprintf( __( 'The term %1$s of %2$s on the attachment of this site carries the term_order %3$d.', 'alphabridge-mcp' ), (string) $term['slug'], (string) $term['taxonomy'], (int) $term['term_order'] ) );
 			}
 		}
 		foreach ( array_unique( $taxonomies ) as $taxonomy ) {
 			if ( ! in_array( $taxonomy, self::TAXONOMIES, true ) || ! taxonomy_exists( $taxonomy ) || ! is_object_in_taxonomy( self::TYPE, $taxonomy ) ) {
-				return AB_MCP_Sync_Post_Writer::locked( 'post:taxonomy_rule', sprintf( 'the taxonomy %s is not one this version writes for attachments on this site', $taxonomy ) );
+				/* translators: %s: a taxonomy, as WordPress names it. */
+				return AB_MCP_Sync_Post_Writer::locked( 'post:taxonomy_rule', sprintf( __( 'The taxonomy %s is not one this version writes for attachments on this site.', 'alphabridge-mcp' ), $taxonomy ) );
 			}
 			$may = AB_MCP_Sync_Post_Writer::term_right( $taxonomy, isset( $prepared['terms'][ $taxonomy ] ) ? $prepared['terms'][ $taxonomy ] : array() );
 			if ( true !== $may ) {
@@ -470,7 +510,8 @@ final class AB_MCP_Sync_Attachment_Writer {
 		$sanitized = (array) sanitize_post( $slashed + array( 'post_type' => self::TYPE ), 'db' );
 		foreach ( $fields as $field ) {
 			if ( ! isset( $sanitized[ $field ] ) || (string) $sanitized[ $field ] !== (string) $slashed[ $field ] ) {
-				return AB_MCP_Sync_Post_Writer::locked( 'post:sanitizer', sprintf( 'field %s', $field ) );
+				/* translators: %s: a column of the attachment (post_title, …). */
+				return AB_MCP_Sync_Post_Writer::locked( 'post:sanitizer', sprintf( __( 'Field %s.', 'alphabridge-mcp' ), $field ) );
 			}
 		}
 		$plan = self::files_plan( $prepared, $live_id );
@@ -498,7 +539,8 @@ final class AB_MCP_Sync_Attachment_Writer {
 	public static function files_plan( array $prepared, $live_id ) {
 		$uploads = AB_MCP_Sync_Media::uploads();
 		if ( '' !== $uploads['problem'] ) {
-			return AB_MCP_Sync_Post_Writer::locked( 'by_code' === $uploads['problem'] ? 'attachment:uploads_by_code' : 'attachment:unsafe_path', sprintf( 'the uploads of this site (%s)', $uploads['cause'] ) );
+			/* translators: %s: the cause, as the code names it (multisite, filter:…, upload_path, uploads). */
+			return AB_MCP_Sync_Post_Writer::locked( 'by_code' === $uploads['problem'] ? 'attachment:uploads_by_code' : 'attachment:unsafe_path', sprintf( __( 'The uploads of this site cannot be used for the files of the attachment (%s).', 'alphabridge-mcp' ), $uploads['cause'] ) );
 		}
 		$dir  = rtrim( (string) $uploads['dir'], '/' );
 		$root = realpath( $dir );
@@ -508,11 +550,11 @@ final class AB_MCP_Sync_Attachment_Writer {
 			// under a folder that is there and no link.
 			$parent = realpath( dirname( $dir ) );
 			if ( false === $parent || ! is_dir( $parent ) || is_link( $dir ) || file_exists( $dir ) ) {
-				return AB_MCP_Sync_Post_Writer::locked( 'attachment:unsafe_path', 'the uploads folder of this site is not there, and neither is the folder it would be made in' );
+				return AB_MCP_Sync_Post_Writer::locked( 'attachment:unsafe_path', __( 'The uploads folder of this site is not there, and neither is the folder it would be made in.', 'alphabridge-mcp' ) );
 			}
 			$root = $parent . '/' . basename( $dir );
 		} elseif ( ! is_dir( $root ) ) {
-			return AB_MCP_Sync_Post_Writer::locked( 'attachment:unsafe_path', 'the uploads folder of this site is no folder' );
+			return AB_MCP_Sync_Post_Writer::locked( 'attachment:unsafe_path', __( 'The uploads folder of this site is no folder.', 'alphabridge-mcp' ) );
 		}
 		$out   = array();
 		$lay   = 0;
@@ -525,10 +567,12 @@ final class AB_MCP_Sync_Attachment_Writer {
 				$state = is_string( $sha ) && hash_equals( (string) $file['sha256'], $sha ) && (int) @filesize( $root . '/' . $file['path'] ) === (int) $file['size'] ? 'present' : 'other'; // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 			}
 			if ( 'unsafe' === $state ) {
-				return AB_MCP_Sync_Post_Writer::locked( 'attachment:unsafe_path', sprintf( 'file %s: a link or no folder lies on the way to it on this site', $file['path'] ) );
+				/* translators: %s: the path of a file under the uploads. */
+				return AB_MCP_Sync_Post_Writer::locked( 'attachment:unsafe_path', sprintf( __( 'A link or no folder lies on the way to the file %s on this site.', 'alphabridge-mcp' ), $file['path'] ) );
 			}
 			if ( 'other' === $state ) {
-				return AB_MCP_Sync_Post_Writer::locked( 'attachment:replace_file', sprintf( 'file %s: this site has another file there (or a link, or a folder), which is never written over', $file['path'] ) );
+				/* translators: %s: the path of a file under the uploads. */
+				return AB_MCP_Sync_Post_Writer::locked( 'attachment:replace_file', sprintf( __( 'This site has another file at %s (or a link, or a folder), which is never written over.', 'alphabridge-mcp' ), $file['path'] ) );
 			}
 			$entry = array(
 				'path'   => $file['path'],
@@ -540,18 +584,21 @@ final class AB_MCP_Sync_Attachment_Writer {
 				$lay += (int) $file['size'];
 				$type = wp_check_filetype( self::base( $file['path'] ), $mimes );
 				if ( ( empty( $type['type'] ) || empty( $type['ext'] ) ) && ! $free ) {
-					return AB_MCP_Sync_Post_Writer::locked( 'attachment:file_type', sprintf( 'file %s: a type this account may not upload', $file['path'] ) );
+					/* translators: %s: the path of a file under the uploads. */
+					return AB_MCP_Sync_Post_Writer::locked( 'attachment:file_type', sprintf( __( 'The file %s is of a type this account may not upload.', 'alphabridge-mcp' ), $file['path'] ) );
 				}
 				$key = (string) $prepared['staging_ref'] . "\0" . $file['path'];
 				if ( ! is_array( $prepared['media'] ) || ! isset( $prepared['media'][ $key ] ) || ! hash_equals( (string) $file['sha256'], (string) $prepared['media'][ $key ]['sha256'] ) || (int) $file['size'] !== (int) $prepared['media'][ $key ]['size'] ) {
-					return new WP_Error( 'ab_mcp_sync_media_missing', sprintf( 'The packages of media of this run hold no file %1$s of the attachment %2$s of the staging site as the report compared it, and this site does not have it. Export the files there (wp_site_export with purpose=media, the report_hash and this attachment), take the package over here (wp_site_import_chunk with purpose=media) and plan again with it in packages.', $file['path'], (string) $prepared['staging_ref'] ) );
+					/* translators: 1: the path of a file under the uploads, 2: attachment id on the staging site. */
+					return new WP_Error( 'ab_mcp_sync_media_missing', sprintf( __( 'The packages of media of this run hold no file %1$s of the attachment %2$s of the staging site as the report compared it, and this site does not have it. Export the files there (wp_site_export with purpose=media, the report_hash and this attachment), take the package over here (wp_site_import_chunk with purpose=media) and plan again with it in packages.', 'alphabridge-mcp' ), $file['path'], (string) $prepared['staging_ref'] ) );
 				}
 				$entry['media'] = $prepared['media'][ $key ];
 			}
 			$out[] = $entry;
 		}
 		if ( $lay > self::MAX_BYTES ) {
-			return AB_MCP_Sync_Post_Writer::locked( 'attachment:file_too_large', sprintf( '%1$d bytes to lay, %2$d at most', $lay, self::MAX_BYTES ) );
+			/* translators: 1: bytes to lay, 2: the most bytes a step lays. */
+			return AB_MCP_Sync_Post_Writer::locked( 'attachment:file_too_large', sprintf( __( 'The files of the attachment have %1$d bytes to lay, %2$d at most.', 'alphabridge-mcp' ), $lay, self::MAX_BYTES ) );
 		}
 		// The types this account may upload hold for every file the step lays
 		// (above, and provide()) and for every file that lies here but is not
@@ -577,7 +624,17 @@ final class AB_MCP_Sync_Attachment_Writer {
 			}
 			$type = wp_check_filetype( self::base( $attached ), $main_own ? $known : $mimes );
 			if ( ! $free && (string) $type['type'] !== (string) $prepared['postarr']['post_mime_type'] ) {
-				return AB_MCP_Sync_Post_Writer::locked( 'attachment:file_type', sprintf( 'the file %1$s is %2$s by its name, the attachment says %3$s', $attached, '' === (string) $type['type'] ? ( $main_own ? 'of no type WordPress knows' : 'of no type this account may upload' ) : (string) $type['type'], (string) $prepared['postarr']['post_mime_type'] ) );
+				if ( '' !== (string) $type['type'] ) {
+					/* translators: 1: the path of a file under the uploads, 2: its type by its name (image/jpeg, …), 3: the type the attachment says. */
+					$why = sprintf( __( 'The file %1$s is %2$s by its name, the attachment says %3$s.', 'alphabridge-mcp' ), $attached, (string) $type['type'], (string) $prepared['postarr']['post_mime_type'] );
+				} elseif ( $main_own ) {
+					/* translators: 1: the path of a file under the uploads, 2: the type the attachment says (image/jpeg, …). */
+					$why = sprintf( __( 'By its name, the file %1$s is of no type WordPress knows; the attachment says %2$s.', 'alphabridge-mcp' ), $attached, (string) $prepared['postarr']['post_mime_type'] );
+				} else {
+					/* translators: 1: the path of a file under the uploads, 2: the type the attachment says (image/jpeg, …). */
+					$why = sprintf( __( 'By its name, the file %1$s is of no type this account may upload; the attachment says %2$s.', 'alphabridge-mcp' ), $attached, (string) $prepared['postarr']['post_mime_type'] );
+				}
+				return AB_MCP_Sync_Post_Writer::locked( 'attachment:file_type', $why );
 			}
 		}
 		// Every file of the list this site has already (present), which the
@@ -599,22 +656,25 @@ final class AB_MCP_Sync_Attachment_Writer {
 					continue;
 				}
 				$check = self::content_check( $root . '/' . $entry['path'], self::base( $entry['path'] ) );
-				$whose = 'than its name, or than the attachment says';
+				/* translators: %s: the path of a file under the uploads. */
+				$whose = __( 'By its content, the file %s of this site the attachment would name is of another type than its name, or than the attachment says.', 'alphabridge-mcp' );
 			} else {
 				$check = wp_check_filetype_and_ext( $root . '/' . $entry['path'], self::base( $entry['path'] ), $mimes );
-				$whose = 'than its name and the attachment say, or of a type this account may not upload (it lies here, but no list of this attachment names it: it counts as a file the step lays)';
+				/* translators: %s: the path of a file under the uploads. */
+				$whose = __( 'By its content, the file %s of this site the attachment would name is of another type than its name and the attachment say, or of a type this account may not upload (it lies here, but no list of this attachment names it: it counts as a file the step lays).', 'alphabridge-mcp' );
 			}
 			if ( ! empty( $check['proper_filename'] ) || ( ( empty( $check['type'] ) || empty( $check['ext'] ) || ( $main && (string) $check['type'] !== (string) $prepared['postarr']['post_mime_type'] ) ) && ! $free ) ) {
-				return AB_MCP_Sync_Post_Writer::locked( 'attachment:file_type', sprintf( 'the file %1$s of this site the attachment would name is by its content of another type %2$s', $entry['path'], $whose ) );
+				return AB_MCP_Sync_Post_Writer::locked( 'attachment:file_type', sprintf( $whose, $entry['path'] ) );
 			}
 		}
 		// Another attachment of this site that names a path of the list.
 		$named = AB_MCP_Sync_Media::named_by( array_column( $prepared['files'], 'path' ), null === $live_id ? 0 : (int) $live_id, self::SHARED_MAX );
 		if ( null === $named ) {
-			return AB_MCP_Sync_Post_Writer::locked( 'attachment:shared_path', 'the file lists of the other attachments of this site could not be read whole' );
+			return AB_MCP_Sync_Post_Writer::locked( 'attachment:shared_path', __( 'The file lists of the other attachments of this site could not be read whole.', 'alphabridge-mcp' ) );
 		}
 		foreach ( $named as $path => $ids ) {
-			return AB_MCP_Sync_Post_Writer::locked( 'attachment:shared_path', sprintf( 'file %1$s: the attachment %2$d of this site names it as well', (string) $path, (int) $ids[0] ) );
+			/* translators: 1: the path of a file under the uploads, 2: attachment id on this site. */
+			return AB_MCP_Sync_Post_Writer::locked( 'attachment:shared_path', sprintf( __( 'The attachment %2$d of this site names the file %1$s as well.', 'alphabridge-mcp' ), (string) $path, (int) $ids[0] ) );
 		}
 		return array(
 			'root'  => $root,
@@ -666,7 +726,7 @@ final class AB_MCP_Sync_Attachment_Writer {
 		if ( null !== $live_id ) {
 			$here = AB_MCP_Sync_Media::paths_of( (int) $live_id );
 			if ( null === $here ) {
-				return self::not_laid( $journal, 'the file list of the attachment on this site does not read whole, so its files cannot be compared as the step writes' );
+				return self::not_laid( $journal, __( 'The file list of the attachment on this site does not read whole, so its files cannot be compared as the step writes.', 'alphabridge-mcp' ) );
 			}
 			foreach ( $here as $path ) {
 				$watch[ (string) $path ] = true;
@@ -676,7 +736,7 @@ final class AB_MCP_Sync_Attachment_Writer {
 		sort( $watch, SORT_STRING );
 		$journal['watch'] = $watch;
 		if ( true !== $save( $journal ) ) {
-			return self::not_laid( $journal, 'the journal of the step could not be written ahead of its files, so none was laid' );
+			return self::not_laid( $journal, __( 'The journal of the step could not be written ahead of its files, so none was laid.', 'alphabridge-mcp' ) );
 		}
 		$temp = array();
 		try {
@@ -721,7 +781,8 @@ final class AB_MCP_Sync_Attachment_Writer {
 				$journal['files'][ $i ]['state'] = 'creating';
 				if ( true !== $save( $journal ) ) {
 					$journal['files'][ $i ]['state'] = 'planned';
-					return self::not_laid( $journal, sprintf( 'the journal of the step could not be saved before the file %s, so it was not laid', $file['path'] ) );
+					/* translators: %s: the path of a file under the uploads. */
+					return self::not_laid( $journal, sprintf( __( 'The journal of the step could not be saved before the file %s, so it was not laid.', 'alphabridge-mcp' ), $file['path'] ) );
 				}
 				// The folder, then the file, with no save of the journal in
 				// between (Codex round 1, A1).
@@ -743,7 +804,8 @@ final class AB_MCP_Sync_Attachment_Writer {
 					return self::not_laid( $journal, $laid['note'] );
 				}
 				if ( true !== $saved ) {
-					return self::not_laid( $journal, sprintf( 'the journal of the step could not be saved after the file %s, so no further file was laid', $file['path'] ) );
+					/* translators: %s: the path of a file under the uploads. */
+					return self::not_laid( $journal, sprintf( __( 'The journal of the step could not be saved after the file %s, so no further file was laid.', 'alphabridge-mcp' ), $file['path'] ) );
 				}
 				AB_MCP_Change_Lock::touch();
 			}
@@ -751,7 +813,7 @@ final class AB_MCP_Sync_Attachment_Writer {
 			// step are compared against (files_state()).
 			$journal['files_seen'] = self::files_state( $journal );
 			if ( true !== $save( $journal ) ) {
-				return self::not_laid( $journal, 'the journal of the step could not be saved after its files, so its row was not written' );
+				return self::not_laid( $journal, __( 'The journal of the step could not be saved after its files, so its row was not written.', 'alphabridge-mcp' ) );
 			}
 		} finally {
 			foreach ( $temp as $file ) {
@@ -867,20 +929,22 @@ final class AB_MCP_Sync_Attachment_Writer {
 	 *
 	 * @param int|null $live_id The attachment here, null for a new one.
 	 * @param array    $file    An entry of files_plan().
-	 * @return true|string Why not, as a clause.
+	 * @return true|string Why not, as a whole sentence.
 	 */
 	private static function may_lay( $live_id, array $file ) {
 		$pto = get_post_type_object( self::TYPE );
 		if ( ! is_object( $pto ) || ! isset( $pto->cap ) ) {
-			return 'the post type attachment is not registered on this site';
+			return __( 'The post type attachment is not registered on this site.', 'alphabridge-mcp' );
 		}
 		if ( null === $live_id ? ! current_user_can( (string) $pto->cap->create_posts ) : ( ! current_user_can( 'edit_post', (int) $live_id ) || ! current_user_can( 'upload_files' ) ) ) {
-			return sprintf( 'this account may not upload files here any more (%s), so the file %s was not laid', null === $live_id ? (string) $pto->cap->create_posts : 'edit_post, upload_files', (string) $file['path'] );
+			/* translators: 1: the capabilities it lacks, as WordPress names them, 2: the path of a file under the uploads. */
+			return sprintf( __( 'This account may not upload files here any more (%1$s), so the file %2$s was not laid.', 'alphabridge-mcp' ), null === $live_id ? (string) $pto->cap->create_posts : 'edit_post, upload_files', (string) $file['path'] );
 		}
 		if ( ! current_user_can( 'unfiltered_upload' ) ) {
 			$type = wp_check_filetype( self::base( $file['path'] ), get_allowed_mime_types( wp_get_current_user() ) );
 			if ( empty( $type['type'] ) || empty( $type['ext'] ) ) {
-				return sprintf( 'the file %s is of a type this account may not upload any more', (string) $file['path'] );
+				/* translators: %s: the path of a file under the uploads. */
+				return sprintf( __( 'The file %s is of a type this account may not upload any more.', 'alphabridge-mcp' ), (string) $file['path'] );
 			}
 		}
 		return true;
@@ -905,7 +969,8 @@ final class AB_MCP_Sync_Attachment_Writer {
 				$out[] = array(
 					'path'  => (string) $file['path'],
 					'state' => 'unclear',
-					'note'  => 'creating' === $state ? sprintf( 'The request ended as the file %s was being made: whether a file lies there, and whose, only the uploads of this site say. It is not the run\'s own; check it by hand.', (string) $file['path'] ) : (string) ( $file['note'] ?? '' ),
+					/* translators: %s: the path of a file under the uploads. */
+					'note'  => 'creating' === $state ? sprintf( __( 'The request ended as the file %s was being made: whether a file lies there, and whose, only the uploads of this site say. It is not the run\'s own; check it by hand.', 'alphabridge-mcp' ), (string) $file['path'] ) : (string) ( $file['note'] ?? '' ),
 				);
 			}
 		}
@@ -929,7 +994,7 @@ final class AB_MCP_Sync_Attachment_Writer {
 	private static function provide( array $taken, array $file, array $prepared ) {
 		$tmp = @tempnam( get_temp_dir(), 'abmcp' ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- a failure is answered.
 		if ( ! is_string( $tmp ) || '' === $tmp ) {
-			return new WP_Error( 'ab_mcp_sync_media_temp', 'No temporary file could be made for a file of the attachment, so nothing of it was laid. Ask the host to check that PHP may write to its temporary folder (get_temp_dir()), then call again.' );
+			return new WP_Error( 'ab_mcp_sync_media_temp', __( 'No temporary file could be made for a file of the attachment, so nothing of it was laid. Ask the host to check that PHP may write to its temporary folder (get_temp_dir()), then call again.', 'alphabridge-mcp' ) );
 		}
 		$index = null;
 		foreach ( $taken['files'] as $entry ) {
@@ -937,19 +1002,24 @@ final class AB_MCP_Sync_Attachment_Writer {
 				$index = $entry;
 			}
 		}
-		$done = null === $index ? new WP_Error( 'ab_mcp_sync_media_missing', sprintf( 'The package of media holds no file %s of the attachment any more. Export the files again (wp_site_export with purpose=media) and plan again.', $file['path'] ) ) : AB_MCP_Sync_Media_Package::extract( $taken, $index, $tmp );
+		/* translators: %s: the path of a file under the uploads. */
+		$done = null === $index ? new WP_Error( 'ab_mcp_sync_media_missing', sprintf( __( 'The package of media holds no file %s of the attachment any more. Export the files again (wp_site_export with purpose=media) and plan again.', 'alphabridge-mcp' ), $file['path'] ) ) : AB_MCP_Sync_Media_Package::extract( $taken, $index, $tmp );
 		if ( true === $done && ( ! hash_equals( (string) $file['sha256'], (string) $index['sha256'] ) || (int) $file['size'] !== (int) $index['size'] ) ) {
-			$done = new WP_Error( 'ab_mcp_sync_media_missing', sprintf( 'The package of media holds the file %s of the attachment other than the report compared it. Export the files again (wp_site_export with purpose=media) and plan again.', $file['path'] ) );
+			/* translators: %s: the path of a file under the uploads. */
+			$done = new WP_Error( 'ab_mcp_sync_media_missing', sprintf( __( 'The package of media holds the file %s of the attachment other than the report compared it. Export the files again (wp_site_export with purpose=media) and plan again.', 'alphabridge-mcp' ), $file['path'] ) );
 		}
 		if ( true === $done ) {
 			$check = wp_check_filetype_and_ext( $tmp, self::base( $file['path'] ), get_allowed_mime_types( wp_get_current_user() ) );
 			$main  = isset( $prepared['meta']['_wp_attached_file'][0] ) && (string) $prepared['meta']['_wp_attached_file'][0] === (string) $file['path'];
 			if ( ! empty( $check['proper_filename'] ) ) {
-				$done = AB_MCP_Sync_Post_Writer::locked( 'attachment:file_type', sprintf( 'file %1$s: its content is of another type than its name says (WordPress would store it as %2$s)', $file['path'], (string) $check['proper_filename'] ) );
+				/* translators: 1: the path of a file under the uploads, 2: the file name WordPress would give it. */
+				$done = AB_MCP_Sync_Post_Writer::locked( 'attachment:file_type', sprintf( __( 'By its content, the file %1$s is of another type than its name says (WordPress would store it as %2$s).', 'alphabridge-mcp' ), $file['path'], (string) $check['proper_filename'] ) );
 			} elseif ( ( empty( $check['type'] ) || empty( $check['ext'] ) ) && ! current_user_can( 'unfiltered_upload' ) ) {
-				$done = AB_MCP_Sync_Post_Writer::locked( 'attachment:file_type', sprintf( 'file %s: by its content a type this account may not upload', $file['path'] ) );
+				/* translators: %s: the path of a file under the uploads. */
+				$done = AB_MCP_Sync_Post_Writer::locked( 'attachment:file_type', sprintf( __( 'By its content, the file %s is of a type this account may not upload.', 'alphabridge-mcp' ), $file['path'] ) );
 			} elseif ( $main && ! current_user_can( 'unfiltered_upload' ) && (string) $check['type'] !== (string) $prepared['postarr']['post_mime_type'] ) {
-				$done = AB_MCP_Sync_Post_Writer::locked( 'attachment:file_type', sprintf( 'file %1$s: by its content %2$s, the attachment says %3$s', $file['path'], (string) $check['type'], (string) $prepared['postarr']['post_mime_type'] ) );
+				/* translators: 1: the path of a file under the uploads, 2: its type by its content (image/jpeg, …), 3: the type the attachment says. */
+				$done = AB_MCP_Sync_Post_Writer::locked( 'attachment:file_type', sprintf( __( 'By its content, the file %1$s is %2$s; the attachment says %3$s.', 'alphabridge-mcp' ), $file['path'], (string) $check['type'], (string) $prepared['postarr']['post_mime_type'] ) );
 			}
 		}
 		if ( true !== $done ) {
@@ -984,23 +1054,27 @@ final class AB_MCP_Sync_Attachment_Writer {
 			$at    = '' === $part ? $at : $at . '/' . $part;
 			clearstatcache( true );
 			if ( is_link( $at ) ) {
-				return AB_MCP_Sync_Post_Writer::locked( 'attachment:unsafe_path', sprintf( 'file %s: a link lies on the way to it', $path ) );
+				/* translators: %s: the path of a file under the uploads. */
+				return AB_MCP_Sync_Post_Writer::locked( 'attachment:unsafe_path', sprintf( __( 'A link lies on the way to the file %s.', 'alphabridge-mcp' ), $path ) );
 			}
 			if ( ! file_exists( $at ) ) {
 				// One level under a folder checked just before (its parent):
 				// wp_mkdir_p() makes only it, with the permissions of the folder
 				// above, as for an upload (decision 26).
 				if ( ! is_dir( $above ) || ! wp_mkdir_p( $at ) ) {
-					return new WP_Error( 'ab_mcp_sync_media_folder', sprintf( 'The folder of the file %s could not be made in the uploads of this site, so it was not laid. Ask the host to check that the uploads are writable, then call again.', $path ) );
+					/* translators: %s: the path of a file under the uploads. */
+					return new WP_Error( 'ab_mcp_sync_media_folder', sprintf( __( 'The folder of the file %s could not be made in the uploads of this site, so it was not laid. Ask the host to check that the uploads are writable, then call again.', 'alphabridge-mcp' ), $path ) );
 				}
 				clearstatcache( true );
 			}
 			if ( ! is_link( $at ) && file_exists( $at ) && ! is_dir( $at ) ) {
-				return AB_MCP_Sync_Post_Writer::locked( 'attachment:replace_file', sprintf( 'file %s: a file lies where its folder would be', $path ) );
+				/* translators: %s: the path of a file under the uploads. */
+				return AB_MCP_Sync_Post_Writer::locked( 'attachment:replace_file', sprintf( __( 'A file lies where the folder of the file %s would be.', 'alphabridge-mcp' ), $path ) );
 			}
 			$real = realpath( $at );
 			if ( is_link( $at ) || false === $real || $real !== $at || ! is_dir( $real ) ) {
-				return AB_MCP_Sync_Post_Writer::locked( 'attachment:unsafe_path', sprintf( 'file %s: its folder does not resolve to itself under the uploads', $path ) );
+				/* translators: %s: the path of a file under the uploads. */
+				return AB_MCP_Sync_Post_Writer::locked( 'attachment:unsafe_path', sprintf( __( 'The folder of the file %s does not resolve to itself under the uploads.', 'alphabridge-mcp' ), $path ) );
 			}
 		}
 		return true;
@@ -1032,7 +1106,8 @@ final class AB_MCP_Sync_Attachment_Writer {
 			return array(
 				'state' => 'failed',
 				'own'   => false,
-				'note'  => sprintf( 'The file %s was not laid: its folder does not resolve to itself under the uploads any more (another hand changed it since the check); nothing was written.', $file['path'] ),
+				/* translators: %s: the path of a file under the uploads. */
+				'note'  => sprintf( __( 'The file %s was not laid: its folder does not resolve to itself under the uploads any more (another hand changed it since the check); nothing was written.', 'alphabridge-mcp' ), $file['path'] ),
 			);
 		}
 		if ( is_callable( self::$probe ) ) {
@@ -1043,7 +1118,8 @@ final class AB_MCP_Sync_Attachment_Writer {
 			return array(
 				'state' => 'failed',
 				'own'   => false,
-				'note'  => sprintf( 'The file %s was not laid: the path is taken on this site since the check (another file, a link), or the folder is not writable; nothing there was written over.', $file['path'] ),
+				/* translators: %s: the path of a file under the uploads. */
+				'note'  => sprintf( __( 'The file %s was not laid: the path is taken on this site since the check (another file, a link), or the folder is not writable; nothing there was written over.', 'alphabridge-mcp' ), $file['path'] ),
 			);
 		}
 		$opened = fstat( $out );
@@ -1055,7 +1131,8 @@ final class AB_MCP_Sync_Attachment_Writer {
 			return array(
 				'state' => 'unclear',
 				'own'   => false,
-				'note'  => sprintf( 'A file was made for %s, but it is not provably the one at that path under the uploads (another hand changed a folder on the way as it was opened): nothing was written into it, it stays as it is, empty; check the uploads and the folders around them on this site by hand.', $file['path'] ),
+				/* translators: %s: the path of a file under the uploads. */
+				'note'  => sprintf( __( 'A file was made for %s, but it is not provably the one at that path under the uploads (another hand changed a folder on the way as it was opened): nothing was written into it, it stays as it is, empty; check the uploads and the folders around them on this site by hand.', 'alphabridge-mcp' ), $file['path'] ),
 			);
 		}
 		$in   = @fopen( (string) $from, 'rb' ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_fopen
@@ -1085,7 +1162,8 @@ final class AB_MCP_Sync_Attachment_Writer {
 			return array(
 				'state' => 'unclear',
 				'own'   => false,
-				'note'  => sprintf( 'The bytes of the file %s were written, but the file is not provably at its path under the uploads any more (another hand moved a folder on its way as it was written): the bytes of the attachment may lie outside the uploads now. Nothing more is laid; check the uploads and the folders around them on this site by hand.', $file['path'] ),
+				/* translators: %s: the path of a file under the uploads. */
+				'note'  => sprintf( __( 'The bytes of the file %s were written, but the file is not provably at its path under the uploads any more (another hand moved a folder on its way as it was written): the bytes of the attachment may lie outside the uploads now. Nothing more is laid; check the uploads and the folders around them on this site by hand.', 'alphabridge-mcp' ), $file['path'] ),
 			);
 		}
 		clearstatcache( true, (string) $full );
@@ -1094,7 +1172,8 @@ final class AB_MCP_Sync_Attachment_Writer {
 			return array(
 				'state' => 'partial',
 				'own'   => true,
-				'note'  => sprintf( 'The file %s was made by the run but does not read back whole (the disk, or a hook of this site); it stays as the run\'s own.', $file['path'] ),
+				/* translators: %s: the path of a file under the uploads. */
+				'note'  => sprintf( __( 'The file %s was made by the run but does not read back whole (the disk, or a hook of this site); it stays as the run\'s own.', 'alphabridge-mcp' ), $file['path'] ),
 			);
 		}
 		return array(
@@ -1108,18 +1187,45 @@ final class AB_MCP_Sync_Attachment_Writer {
 	 * The answer of lay_files() where a file was not laid.
 	 *
 	 * @param array  $journal Journal.
-	 * @param string $why     Why, as a clause or a sentence.
+	 * @param string $why     Why, as a whole sentence (a message of an error, a note).
 	 * @return array{ok:bool,journal:array,message:string}
 	 */
 	private static function not_laid( array $journal, $why ) {
 		$own     = self::own_files( $journal );
 		$unclear = self::unclear_files( $journal );
+		// Whole sentences one after the other: the files not laid whole, why,
+		// the files the run laid before, the files unclear.
+		$message = trim( __( 'The files of the attachment were not laid whole, and its row was not written.', 'alphabridge-mcp' ) . ' ' . (string) $why );
+		if ( array() !== $own ) {
+			/* translators: %d: number of files the run laid before. */
+			$message .= ' ' . sprintf( _n( 'The %d file the run laid before stays as its own (files, with its path): nothing is deleted, it is tidied with the manifest of the files (Z8b), or by hand.', 'The %d files the run laid before stay as its own (files, with their paths): nothing is deleted, they are tidied with the manifest of the files (Z8b), or by hand.', count( $own ), 'alphabridge-mcp' ), count( $own ) );
+		}
+		if ( array() !== $unclear ) {
+			/* translators: %d: number of files whose state is unclear. */
+			$message .= ' ' . sprintf( _n( '%d file is unclear (files_unclear, with its path): check it by hand.', '%d files are unclear (files_unclear, with their paths): check them by hand.', count( $unclear ), 'alphabridge-mcp' ), count( $unclear ) );
+		}
 		return array(
 			'ok'      => false,
 			'state'   => array() === $unclear ? 'failed' : 'unclear',
 			'journal' => $journal,
-			'message' => sprintf( 'The files of the attachment were not laid whole: %1$s. Its row was not written%2$s%3$s.', rtrim( (string) $why, '.' ), array() === $own ? '' : sprintf( '; the %d file(s) the run laid before stay as its own (files, with their paths): nothing is deleted, they are tidied with the manifest of the files (Z8b), or by hand', count( $own ) ), array() === $unclear ? '' : sprintf( '; %d file(s) are unclear (files_unclear, with their paths): check them by hand', count( $unclear ) ) ),
+			'message' => $message,
 		);
+	}
+
+	/**
+	 * The references of a field without a counterpart on this site, as the
+	 * tools name them (post 12, term 4; the first five), for a sentence of
+	 * the caller.
+	 *
+	 * @param array[] $missing The missing references (space, id).
+	 * @return string
+	 */
+	private static function missing_refs( array $missing ) {
+		$out = array();
+		foreach ( array_slice( $missing, 0, 5 ) as $m ) {
+			$out[] = (string) ( $m['space'] ?? '?' ) . ' ' . (int) ( $m['id'] ?? 0 );
+		}
+		return implode( ', ', $out );
 	}
 
 	/**
@@ -1207,10 +1313,12 @@ final class AB_MCP_Sync_Attachment_Writer {
 		}
 		$id = (int) $live_id;
 		if ( ! current_user_can( 'edit_post', $id ) ) {
-			return sprintf( 'edit the attachment %1$d (edit_post, for the part %2$s)', $id, $part );
+			/* translators: 1: attachment id on this site, 2: the name of a part, as the tools name it (meta:…). */
+			return sprintf( __( 'This account may not edit the attachment %1$d (edit_post, for the part %2$s).', 'alphabridge-mcp' ), $id, $part );
 		}
 		if ( in_array( $key, self::FILE_META, true ) && ! current_user_can( 'upload_files' ) ) {
-			return sprintf( 'change the files of the attachment %1$d (upload_files, for the part %2$s)', $id, $part );
+			/* translators: 1: attachment id on this site, 2: the name of a part, as the tools name it (meta:…). */
+			return sprintf( __( 'This account may not change the files of the attachment %1$d (upload_files, for the part %2$s).', 'alphabridge-mcp' ), $id, $part );
 		}
 		if ( in_array( $key, self::FILE_META, true ) ) {
 			$why = self::restore_files( $id, $backup );
@@ -1236,7 +1344,7 @@ final class AB_MCP_Sync_Attachment_Writer {
 	 *
 	 * @param int   $live_id Attachment.
 	 * @param array $backup  current() of the backup.
-	 * @return string|null Why not, as a clause; null where they may.
+	 * @return string|null Why not, as a whole sentence; null where they may.
 	 */
 	private static function restore_files( $live_id, array $backup ) {
 		$raw = array();
@@ -1254,11 +1362,11 @@ final class AB_MCP_Sync_Attachment_Writer {
 		$meta    = AB_MCP_Sync_Canon::unserialized( $raw['_wp_attachment_metadata'] );
 		$sizes   = AB_MCP_Sync_Canon::unserialized( $raw['_wp_attachment_backup_sizes'] );
 		if ( false === $root || ! $meta['ok'] || ! $sizes['ok'] || AB_MCP_Sync_Canon::holds_record( $raw['_wp_attached_file'] ) ) {
-			return 'name the files of the attachment again: the uploads of this site, or the values before, do not read whole';
+			return __( 'The files of the attachment cannot be named again: the uploads of this site, or the values before, do not read whole.', 'alphabridge-mcp' );
 		}
 		$list = AB_MCP_Sync_Media::paths( $raw['_wp_attached_file'], $meta['value'], $sizes['value'], $uploads['dir'] );
 		if ( array() !== $list['problems'] ) {
-			return 'name the files of the attachment again: a name in the values before is no plain path under the uploads';
+			return __( 'The files of the attachment cannot be named again: a name in the values before is no plain path under the uploads.', 'alphabridge-mcp' );
 		}
 		// The way back lays no file; it names again files that stood at the
 		// attachment before the run. As for a file this site has that the
@@ -1274,27 +1382,34 @@ final class AB_MCP_Sync_Attachment_Writer {
 		foreach ( $list['files'] as $entry ) {
 			$file = (string) $entry['path'];
 			if ( 'file' !== AB_MCP_Sync_Media::target_state( $root, $file ) ) {
-				return sprintf( 'name the file %s again: it is not a plain file under the uploads of this site any more', $file );
+				/* translators: %s: the path of a file under the uploads. */
+				return sprintf( __( 'The file %s cannot be named again: it is not a plain file under the uploads of this site any more.', 'alphabridge-mcp' ), $file );
 			}
 			$main    = in_array( 'file', $entry['roles'], true );
 			$by_name = wp_check_filetype( self::base( $file ), $known );
 			if ( $main && ! $free && (string) $by_name['type'] !== $mime ) {
-				return sprintf( 'name the file %1$s again (by its name %2$s, the attachment says %3$s)', $file, '' === (string) $by_name['type'] ? 'of no type WordPress knows' : (string) $by_name['type'], $mime );
+				return '' === (string) $by_name['type']
+					/* translators: 1: the path of a file under the uploads, 2: the type the attachment says (image/jpeg, …). */
+					? sprintf( __( 'The file %1$s cannot be named again: by its name it is of no type WordPress knows; the attachment says %2$s.', 'alphabridge-mcp' ), $file, $mime )
+					/* translators: 1: the path of a file under the uploads, 2: its type by its name (image/jpeg, …), 3: the type the attachment says. */
+					: sprintf( __( 'The file %1$s cannot be named again: by its name it is %2$s; the attachment says %3$s.', 'alphabridge-mcp' ), $file, (string) $by_name['type'], $mime );
 			}
 			if ( ! empty( $by_name['type'] ) ) {
 				$check = self::content_check( $root . '/' . $file, self::base( $file ) );
 				if ( ! empty( $check['proper_filename'] ) || ( ( empty( $check['type'] ) || empty( $check['ext'] ) || ( $main && (string) $check['type'] !== $mime ) ) && ! $free ) ) {
-					return sprintf( 'name the file %s again (its content is not what its name says, or than the attachment says)', $file );
+					/* translators: %s: the path of a file under the uploads. */
+					return sprintf( __( 'The file %s cannot be named again: its content is not what its name says, or not what the attachment says.', 'alphabridge-mcp' ), $file );
 				}
 			}
 			$paths[] = $file;
 		}
 		$named = array() === $paths ? array() : AB_MCP_Sync_Media::named_by( $paths, (int) $live_id, self::SHARED_MAX );
 		if ( null === $named ) {
-			return 'name the files of the attachment again: the file lists of the other attachments of this site could not be read whole';
+			return __( 'The files of the attachment cannot be named again: the file lists of the other attachments of this site could not be read whole.', 'alphabridge-mcp' );
 		}
 		foreach ( $named as $path => $ids ) {
-			return sprintf( 'name the file %1$s again: the attachment %2$d of this site names it as well', (string) $path, (int) $ids[0] );
+			/* translators: 1: the path of a file under the uploads, 2: attachment id on this site. */
+			return sprintf( __( 'The file %1$s cannot be named again: the attachment %2$d of this site names it as well.', 'alphabridge-mcp' ), (string) $path, (int) $ids[0] );
 		}
 		return null;
 	}
@@ -1313,13 +1428,15 @@ final class AB_MCP_Sync_Attachment_Writer {
 		if ( is_wp_error( $current ) || null === $current ) {
 			return is_wp_error( $current ) ? $current : true;
 		}
-		$held = AB_MCP_Sync_Post_Writer::read_lock( self::live_read( (int) $live_id, $source ), 'the attachment of this site' );
+		// The object for the detail of read_lock(), a whole sentence.
+		$held = AB_MCP_Sync_Post_Writer::read_lock( self::live_read( (int) $live_id, $source ), __( 'The object is the attachment of this site.', 'alphabridge-mcp' ) );
 		if ( null !== $held ) {
 			return $held;
 		}
 		foreach ( $current['terms'] as $term ) {
 			if ( ! in_array( $term['taxonomy'], self::TAXONOMIES, true ) ) {
-				return AB_MCP_Sync_Post_Writer::locked( 'post:taxonomy_rule', sprintf( 'taxonomy %s of the attachment on this site', $term['taxonomy'] ) );
+				/* translators: %s: a taxonomy, as WordPress names it. */
+				return AB_MCP_Sync_Post_Writer::locked( 'post:taxonomy_rule', sprintf( __( 'The attachment on this site carries a term of the taxonomy %s.', 'alphabridge-mcp' ), $term['taxonomy'] ) );
 			}
 		}
 		return true;
@@ -1385,7 +1502,7 @@ final class AB_MCP_Sync_Attachment_Writer {
 			return $id;
 		}
 		if ( ! is_int( $id ) || $id < 1 ) {
-			return new WP_Error( 'ab_mcp_sync_write_failed', 'WordPress wrote no attachment (it gave no id). Nothing more of the step is written; ask the site administrator which plugin holds it, then plan again.' );
+			return new WP_Error( 'ab_mcp_sync_write_failed', __( 'WordPress wrote no attachment (it gave no id). Nothing more of the step is written; ask the site administrator which plugin holds it, then plan again.', 'alphabridge-mcp' ) );
 		}
 		return $id;
 	}
@@ -1417,7 +1534,14 @@ final class AB_MCP_Sync_Attachment_Writer {
 			$pre,
 			static function () use ( $live_id, $key ) {
 				if ( ! current_user_can( 'edit_post', (int) $live_id ) || ( in_array( $key, self::FILE_META, true ) && ! current_user_can( 'upload_files' ) ) ) {
-					return new WP_Error( 'ab_mcp_sync_rights', sprintf( 'The meta %1$s of the attachment was not written: this account may not %2$s here. Connect with an account that may, or leave the object out of the plan.', $key, in_array( $key, self::FILE_META, true ) ? 'edit the attachment and upload files (edit_post, upload_files)' : 'edit the attachment (edit_post)' ) );
+					return new WP_Error(
+						'ab_mcp_sync_rights',
+						in_array( $key, self::FILE_META, true )
+							/* translators: %s: a meta key that names files. */
+							? sprintf( __( 'The meta %s of the attachment was not written: this account may not edit the attachment and upload files here (edit_post, upload_files). Connect with an account that may, or leave the object out of the plan.', 'alphabridge-mcp' ), $key )
+							/* translators: %s: a meta key. */
+							: sprintf( __( 'The meta %s of the attachment was not written: this account may not edit the attachment here (edit_post). Connect with an account that may, or leave the object out of the plan.', 'alphabridge-mcp' ), $key )
+					);
 				}
 				return true;
 			},

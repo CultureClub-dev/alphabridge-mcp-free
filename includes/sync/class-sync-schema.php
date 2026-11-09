@@ -234,7 +234,7 @@ final class AB_MCP_Sync_Schema {
 	public static function install() {
 		self::$status = null;
 		if ( is_multisite() ) {
-			return new WP_Error( 'ab_mcp_staging_multisite', 'The tables of the object pairs are not made on a multisite installation: the takeover from a staging site works between single sites. Use a single site as the live site.' );
+			return new WP_Error( 'ab_mcp_staging_multisite', __( 'The tables of the object pairs are not made on a multisite installation: the takeover from a staging site works between single sites. Use a single site as the live site.', 'alphabridge-mcp' ) );
 		}
 		if ( ! function_exists( 'dbDelta' ) ) {
 			require_once ABSPATH . 'wp-admin/includes/upgrade.php';
@@ -245,7 +245,8 @@ final class AB_MCP_Sync_Schema {
 			update_option( self::OPTION, 'failed:' . self::VERSION . ':' . time(), true );
 			return new WP_Error(
 				'ab_mcp_staging_tables_failed',
-				sprintf( 'The tables of the object pairs could not be made (%s). Ask the site administrator or the host to let the database user of WordPress create tables and indexes; then Deactivate and Activate AlphaBridge in wp-admin, or wait an hour for the next attempt.', implode( '; ', $problems ) ),
+				/* translators: %s: the problems found, separated by semicolons, as the database names them. */
+				sprintf( __( 'The tables of the object pairs could not be made (%s). Ask the site administrator or the host to let the database user of WordPress create tables and indexes; then Deactivate and Activate AlphaBridge in wp-admin, or wait an hour for the next attempt.', 'alphabridge-mcp' ), implode( '; ', $problems ) ),
 				array( 'problems' => $problems )
 			);
 		}

@@ -72,11 +72,11 @@ e('term-parent-pair', 'target_of(): the parent by its pair', TW,
 e('term-parent-pending', 'target_of(): a parent the run creates first is pending (Eltern zuerst)', TW,
   "\t\t\tif ( null === $mapped && isset( $pending['term'][ $parent ] ) ) {", "\t\t\tif ( false ) {", 'term', T_LOCKS)
 e('term-parent-unmapped', 'target_of(): a parent without a pair is refused', TW,
-  "\t\t\tif ( null === $mapped ) {\n\t\t\t\treturn self::locked( 'term:reference_unmapped'", "\t\t\tif ( false ) {\n\t\t\t\treturn self::locked( 'term:reference_unmapped'", 'term', T_LOCKS)
+  "\t\t\tif ( null === $mapped ) {", "\t\t\tif ( false ) {", 'term', T_LOCKS)
 e('term-texts-rewritten', 'target_of(): the name and the description with the addresses of this site', TW,
   "\t\t\t$texts[ $column ] = AB_MCP_Sync_Refs::rewrite_text( $row[ $column ], $plan, array(), $changed );", "\t\t\t$texts[ $column ] = $row[ $column ];", 'term', T_TARGET)
 e('term-create-meta', 'target_of(): a new term with meta is locked (decision 28)', TW,
-  "\t\t\tif ( 'create' === $item['op'] ) {\n\t\t\t\treturn self::locked( 'term:create_with_meta'", "\t\t\tif ( false ) {\n\t\t\t\treturn self::locked( 'term:create_with_meta'", 'term', T_LOCKS)
+  "\t\t\tif ( 'create' === $item['op'] ) {", "\t\t\tif ( false ) {", 'term', T_LOCKS)
 e('term-meta-rule', 'target_of(): a value the metadata API cannot store as it is locks with the lock of the term', TW,
   "$plan, $changed, 'term:meta_rule' );", "$plan, $changed );", 'term', T_LOCKS)
 e('term-taxonomy-here', 'precheck(): a taxonomy not registered here is refused', TW,
@@ -84,7 +84,7 @@ e('term-taxonomy-here', 'precheck(): a taxonomy not registered here is refused',
 e('term-here-gone', 'precheck(): a term of another taxonomy under this id is gone for the step', TW,
   "\t\t\tif ( ! is_array( $current ) || $current['row']['taxonomy'] !== $taxonomy ) {", "\t\t\tif ( ! is_array( $current ) ) {", 'term', T_HERE)
 e('term-edit-term', 'precheck(): the right edit_term at the term here', TW,
-  "\t\t\tif ( ! current_user_can( 'edit_term', (int) $live_id ) ) {\n\t\t\t\treturn self::rights(", "\t\t\tif ( false ) {\n\t\t\t\treturn self::rights(", 'term', T_HERE)
+  "\t\t\tif ( ! current_user_can( 'edit_term', (int) $live_id ) ) {", "\t\t\tif ( false ) {", 'term', T_HERE)
 e('term-group-here', 'precheck(): a term of this site in a group of aliases is locked', TW,
   "\t\t\tif ( '0' !== (string) $current['row']['term_group'] ) {", "\t\t\tif ( false ) {", 'term', T_HERE)
 e('term-create-rights', 'precheck(): a new term asks manage_terms, edit_terms and assign_terms of the taxonomy (decision 28)', TW,
@@ -92,9 +92,9 @@ e('term-create-rights', 'precheck(): a new term asks manage_terms, edit_terms an
 e('term-parent-hierarchical', 'precheck(): a parent in a taxonomy without parents is locked', TW,
   "\t\t\tif ( ! is_taxonomy_hierarchical( $taxonomy ) ) {", "\t\t\tif ( false ) {", 'term', T_HERE)
 e('term-parent-here', 'precheck(): the parent has to be a term of the taxonomy here', TW,
-  "\t\t\tif ( ! is_array( $found ) ) {\n\t\t\t\treturn self::locked( 'term:reference_unmapped'", "\t\t\tif ( false ) {\n\t\t\t\treturn self::locked( 'term:reference_unmapped'", 'term', T_HERE)
+  "\t\t\tif ( ! is_array( $found ) ) {", "\t\t\tif ( false ) {", 'term', T_HERE)
 e('term-parent-loop', 'precheck(): a parent that closes a loop is locked (wp_check_term_hierarchy_for_loops() would change other terms)', TW,
-  "\t\t\tif ( null !== $loop ) {\n\t\t\t\treturn self::locked( 'term:parent', sprintf( 'the parent %1$d would close a loop", "\t\t\tif ( false ) {\n\t\t\t\treturn self::locked( 'term:parent', sprintf( 'the parent %1$d would close a loop", 'term', T_HERE)
+  "\t\t\tif ( null !== $loop ) {", "\t\t\tif ( false ) {", 'term', T_HERE)
 e('term-slug-empty', 'precheck(): an empty slug is refused (WordPress would make one)', TW,
   "\t\tif ( '' === $slug ) {\n\t\t\treturn self::locked( 'term:sanitizer'", "\t\tif ( false ) {\n\t\t\treturn self::locked( 'term:sanitizer'", 'term', T_NEW)
 e('term-slug-holder', 'precheck(): a slug another term of the taxonomy holds is locked', TW,
@@ -102,13 +102,13 @@ e('term-slug-holder', 'precheck(): a slug another term of the taxonomy holds is 
 e('term-slug-unique', 'precheck(): a new term whose slug WordPress would make unique is locked', TW,
   "\t\t\tif ( (string) $unique !== $slug ) {", "\t\t\tif ( false ) {", 'term', T_NEW)
 e('term-sanitizer', 'precheck(): a field sanitize_term() would change is locked (decision 17)', TW,
-  "\t\tif ( null !== $refusal ) {\n\t\t\treturn self::locked( 'term:sanitizer', $refusal );", "\t\tif ( false ) {\n\t\t\treturn self::locked( 'term:sanitizer', $refusal );", 'term', T_NEW)
+  "\t\tif ( null !== $refusal ) {\n\t\t\treturn self::locked(", "\t\tif ( false ) {\n\t\t\treturn self::locked(", 'term', T_NEW)
 e('term-sanitizer-compare', 'sanitizer_refusal(): the fields compared with what sanitize_term() makes of them', TW,
-  "\t\t\tif ( ! isset( $sanitized[ $field ] ) || (string) $sanitized[ $field ] !== (string) $slashed[ $field ] ) {\n\t\t\t\treturn sprintf( 'field %s', $field );", "\t\t\tif ( false ) {\n\t\t\t\treturn sprintf( 'field %s', $field );", 'term', T_NEW)
+  "\t\t\tif ( ! isset( $sanitized[ $field ] ) || (string) $sanitized[ $field ] !== (string) $slashed[ $field ] ) {", "\t\t\tif ( false ) {", 'term', T_NEW)
 e('term-name-empty', 'sanitizer_refusal(): an empty name is refused (WordPress refuses it)', TW,
   "\t\tif ( '' === trim( (string) $args['name'] ) ) {", "\t\tif ( false ) {", 'term', T_NEW)
 e('term-meta-right', 'precheck(): a key that differs and that map_meta_cap refuses locks the term (decision 28)', TW,
-  "\t\t\t\tif ( true !== $may ) {\n\t\t\t\t\treturn self::locked( '*:meta_without_rule'", "\t\t\t\tif ( false ) {\n\t\t\t\t\treturn self::locked( '*:meta_without_rule'", 'term', T_HERE)
+  "\t\t\t\tif ( true !== $may ) {", "\t\t\t\tif ( false ) {", 'term', T_HERE)
 e('term-sanitize-meta', 'precheck(): each written value through sanitize_meta() (decision 17)', TW,
   "\t\t\t\t\tif ( AB_MCP_Sync_Post_Writer::db_form( sanitize_meta( $key, $value, 'term', $taxonomy ) ) !== AB_MCP_Sync_Post_Writer::stored_form( $value ) ) {", "\t\t\t\t\tif ( false ) {", 'term', T_HERE)
 e('term-meta-spelling', 'precheck(): two spellings of a key the database compares alike lock the term', TW,
@@ -134,9 +134,9 @@ e('term-write-split', 'write_row(): an update written under another id is refuse
 e('term-write-slashed', 'write_row(): the name slashed for wp_insert_term(), which unslashes it', TW,
   "\t\t$done = wp_insert_term( wp_slash( (string) $args['name'] ), $taxonomy, $fields );", "\t\t$done = wp_insert_term( (string) $args['name'], $taxonomy, $fields );", 'term', T_WRITE)
 e('term-write-part-right', 'write_part(): the right of a meta key asked at the term right before the call', TW,
-  "\t\t\t\treturn true === $may ? true : new WP_Error( 'ab_mcp_sync_rights', sprintf( 'The meta %1$s of the term", "\t\t\t\treturn true ? true : new WP_Error( 'ab_mcp_sync_rights', sprintf( 'The meta %1$s of the term", 'term', T_WRITE)
+  "\t\t\t\treturn true === $may ? true : new WP_Error( 'ab_mcp_sync_rights', sprintf( __( 'The meta %1$s of the term was not written", "\t\t\t\treturn true ? true : new WP_Error( 'ab_mcp_sync_rights', sprintf( __( 'The meta %1$s of the term was not written", 'term', T_WRITE)
 e('term-back-written', 'restore_row(): a row changed since the step wrote it is left', TW,
-  "\t\tif ( ! hash_equals( (string) $written, $hash ) ) {\n\t\t\treturn array(\n\t\t\t\t'state' => 'left',\n\t\t\t\t'note'  => 'The row of the term was changed", "\t\tif ( false ) {\n\t\t\treturn array(\n\t\t\t\t'state' => 'left',\n\t\t\t\t'note'  => 'The row of the term was changed", 'term', T_BACK)
+  "\t\tif ( ! hash_equals( (string) $written, $hash ) ) {", "\t\tif ( false ) {", 'term', T_BACK)
 e('term-back-slug', 'restore_row(): a backed-up slug another term holds now is left', TW,
   "\t\tif ( null === $holder || ( 0 !== $holder && $holder !== (int) $live_id ) ) {", "\t\tif ( false ) {", 'term', T_BACK)
 e('term-back-parent', 'restore_row(): a backed-up parent that is gone or closes a loop is left', TW,
@@ -144,7 +144,7 @@ e('term-back-parent', 'restore_row(): a backed-up parent that is gone or closes 
 e('term-back-sanitizer', 'restore_row(): a backed-up field the sanitizing would change is left', TW,
   "\t\t$refusal = self::sanitizer_refusal( $args, $taxonomy, (int) $live_id );\n\t\tif ( null !== $refusal ) {\n\t\t\treturn array(", "\t\t$refusal = self::sanitizer_refusal( $args, $taxonomy, (int) $live_id );\n\t\tif ( false ) {\n\t\t\treturn array(", 'term', T_BACK)
 e('term-back-read', 'restore_row(): a row that does not read as the backup after the call is unclear, never restored', TW,
-  "\t\tif ( ! is_array( $after ) || ! hash_equals( $before, self::row_hash( $after['row'] ) ) ) {\n\t\t\treturn array(\n\t\t\t\t'state' => 'unclear',\n\t\t\t\t'note'  => 'The row of the term was written back", "\t\tif ( false ) {\n\t\t\treturn array(\n\t\t\t\t'state' => 'unclear',\n\t\t\t\t'note'  => 'The row of the term was written back", 'term', T_BACK)
+  "\t\tif ( ! is_array( $after ) || ! hash_equals( $before, self::row_hash( $after['row'] ) ) ) {", "\t\tif ( false ) {", 'term', T_BACK)
 e('term-guard-taxonomy', 'guard_of(): the boundary of a term refuses new terms of its taxonomy (pre_insert_term)', TW,
   "\t\t\t'taxonomies' => array( (string) $taxonomy ),", "\t\t\t'taxonomies' => array(),", 'term', T_PARTS)
 e('term-guard-term', 'guard_of(): the boundary covers the term here', TW,
@@ -200,7 +200,7 @@ E_IT1 = 'testAChangedCategoryAndANewTagGoOverAndTheWayBackPutsTheChangedOneBackA
 e('engine-pending-terms', 'pending(): a new term is pending for the check of what refers to it (branch 9)', EN,
   "\t\t\tif ( null !== $space ) {\n\t\t\t\t$pending[ $space ][ (int) $one['staging_ref'] ] = true;", "\t\t\tif ( 'post' === $space ) {\n\t\t\t\t$pending[ $space ][ (int) $one['staging_ref'] ] = true;", 'unit', 'testTheEngineKnowsWhatItCreatesInBothSpacesAndNoStepWritesAKindWithoutAWriter')
 e('engine-check-no-writer', 'check_item(): no step writes a kind without a writer', EN,
-  "\t\tif ( null === $w ) {\n\t\t\treturn self::finding( $item, sprintf( 'No step of this version writes the kind %s.', $item['kind'] ) );", "\t\tif ( false ) {\n\t\t\treturn self::finding( $item, sprintf( 'No step of this version writes the kind %s.', $item['kind'] ) );", 'unit', 'testTheEngineKnowsWhatItCreatesInBothSpacesAndNoStepWritesAKindWithoutAWriter')
+  "\t\tif ( null === $w ) {\n\t\t\t/* translators: %s: kind of the object, as the tools name it (post, term, …). */\n\t\t\treturn self::finding( $item, sprintf( ", "\t\tif ( false ) {\n\t\t\t/* translators: %s: kind of the object, as the tools name it (post, term, …). */\n\t\t\treturn self::finding( $item, sprintf( ", 'unit', 'testTheEngineKnowsWhatItCreatesInBothSpacesAndNoStepWritesAKindWithoutAWriter')
 e('engine-guard-terms', 'boundary(): the lock of the boundary covers the term the step writes', EN,
   "\t\t$guard  = AB_MCP_Sync_Guard::begin( $run_id, $seq, $covers['posts'], $covers['taxonomies'], isset( $covers['options'] ) ? $covers['options'] : array(), $covers['terms'] );\n\t\tif ( is_wp_error( $guard ) ) {\n\t\t\treturn self::fail_step( $run_id, $seq, 'begun', $guard->get_error_message(), $journal );",
   "\t\t$guard  = AB_MCP_Sync_Guard::begin( $run_id, $seq, $covers['posts'], $covers['taxonomies'], isset( $covers['options'] ) ? $covers['options'] : array() );\n\t\tif ( is_wp_error( $guard ) ) {\n\t\t\treturn self::fail_step( $run_id, $seq, 'begun', $guard->get_error_message(), $journal );", 'it', 'testAnotherWriterOfATermIsRefusedWhileItsStepWrites')
@@ -235,9 +235,9 @@ e('post-type-lock', 'target_of(): a type the table locks (a changeset, decision 
 e('post-line-lock', 'target_of(): what the canonical form of the staging object locks (a page builder, decision 31) is refused with that lock', PW,
   "\t\t$held = self::line_lock( $line );\n\t\tif ( null !== $held ) {", "\t\t$held = self::line_lock( $line );\n\t\tif ( false ) {", 'unit', P_TYPES)
 e('post-line-lock-unread', 'line_lock(): a lock this version does not read refuses as well (fail closed)', PW,
-  "\t\treturn array() === $locks ? null : self::locked( 'post:lock_unread', 'the object of the staging site carries a lock this version does not read' );", "\t\treturn null;", 'unit', P_TYPES)
+  "\t\treturn array() === $locks ? null : self::locked( 'post:lock_unread', __( 'The object of the staging site carries a lock this version does not read.', 'alphabridge-mcp' ) );", "\t\treturn null;", 'unit', P_TYPES)
 e('post-live-lock', 'live_rule(): what the canonical form of the post here locks is refused', PW,
-  "\t\t$held = self::read_lock( self::live_read( (int) $live_id, $source ), 'the post of this site' );\n\t\tif ( null !== $held ) {", "\t\t$held = self::read_lock( self::live_read( (int) $live_id, $source ), 'the post of this site' );\n\t\tif ( false ) {", 'unit', P_TYPES)
+  "\t\t$held = self::read_lock( self::live_read( (int) $live_id, $source ), __( 'The object is the post of this site.', 'alphabridge-mcp' ) );\n\t\tif ( null !== $held ) {", "\t\t$held = self::read_lock( self::live_read( (int) $live_id, $source ), __( 'The object is the post of this site.', 'alphabridge-mcp' ) );\n\t\tif ( false ) {", 'unit', P_TYPES)
 e('post-target-skip', 'target_of(): what the comparison leaves out, and a credential, is no part of the target', PW,
   "\t\t\tif ( '' === $key || AB_MCP_Sync_Exclusions::post_meta( $key ) || AB_MCP_Sync_Credentials::names_credential( $key, $extra ) ) {", "\t\t\tif ( '' === $key ) {", 'unit', P_LOCKS)
 e('post-thumbnail-pair', 'target_of(): the featured image by the pair of its attachment', PW,
@@ -257,13 +257,13 @@ e('post-differing-equal', 'differing(): a key equal on both sides is no part (de
 e('post-differing-excluded', 'differing(): an excluded key and a credential are never written', PW,
   "\t\t\tif ( AB_MCP_Sync_Exclusions::post_meta( $key ) || AB_MCP_Sync_Credentials::names_credential( $key, $extra ) ) {\n\t\t\t\tcontinue;", "\t\t\tif ( false ) {\n\t\t\t\tcontinue;", 'unit', P_RULE)
 e('post-meta-refused', 'precheck(): a key that differs and that map_meta_cap refuses locks the post (*:meta_without_rule)', PW,
-  "\t\t\t\tif ( true !== $may ) {\n\t\t\t\t\treturn self::locked( '*:meta_without_rule', sprintf( 'meta key %1$s of the post", "\t\t\t\tif ( false ) {\n\t\t\t\t\treturn self::locked( '*:meta_without_rule', sprintf( 'meta key %1$s of the post", 'unit', P_DELETE)
+  "\t\t\t\tif ( true !== $may ) {", "\t\t\t\tif ( false ) {", 'unit', P_DELETE)
 e('post-meta-edit', 'meta_ops(): edit_post_meta where one row stays one row (update_metadata())', PW,
   "\t\t\treturn array( 'edit' );", "\t\t\treturn array();", 'unit', P_DELETE)
 e('post-meta-add', 'meta_ops(): add_post_meta where values are to be stored', PW,
   "\t\tif ( array() !== $to ) {\n\t\t\t$ops[] = 'add';", "\t\tif ( false ) {\n\t\t\t$ops[] = 'add';", 'unit', P_FIELD)
 e('post-builder-key', 'precheck(): a key of a page builder needs unfiltered_html', PW,
-  "\t\t\tif ( null !== AB_MCP_Builders::markup_meta_refusal( $key ) ) {\n\t\t\t\treturn self::rights(", "\t\t\tif ( false ) {\n\t\t\t\treturn self::rights(", 'unit', P_FIELD)
+  "\t\t\tif ( null !== AB_MCP_Builders::markup_meta_refusal( $key ) ) {\n\t\t\t\t/* translators: %s: meta key. */\n\t\t\t\treturn self::rights(", "\t\t\tif ( false ) {\n\t\t\t\t/* translators: %s: meta key. */\n\t\t\t\treturn self::rights(", 'unit', P_FIELD)
 e('post-sanitize-meta', 'precheck(): each written value through sanitize_meta() (decision 17)', PW,
   "\t\t\t\tif ( self::db_form( sanitize_meta( (string) $key, $value, 'post', $type ) ) !== self::stored_form( $value ) ) {", "\t\t\t\tif ( false ) {", 'unit', P_FIELD)
 e('post-sanitizer-fields', 'precheck(): the other fields of the row through sanitize_post() as well', PW,
@@ -275,11 +275,11 @@ e('post-thumbnail-image', 'precheck(): the featured image names an attachment Wo
 e('post-thumbnail-write', 'write_part(): the featured image through set_post_thumbnail()', PW,
   "\t\t\tif ( '_thumbnail_id' === $key ) {\n\t\t\t\t// No right of its own at the call", "\t\t\tif ( false ) {\n\t\t\t\t// No right of its own at the call", 'unit', P_IMAGE)
 e('post-write-part-right', 'write_part(): the right of a key asked at the post right before the call; refused at a new post, the object stays as a rest', PW,
-  "\t\t\t\t\treturn true === $may ? true : new WP_Error( 'ab_mcp_sync_rights', sprintf( 'The meta %1$s of the post was not written", "\t\t\t\t\treturn true ? true : new WP_Error( 'ab_mcp_sync_rights', sprintf( 'The meta %1$s of the post was not written", 'it', 'testANewPostWithAPlainKeyGoesAndOneWhoseRightTheNewPostRefusesStaysAsARest')
+  "\t\t\t\t\treturn true === $may ? true : new WP_Error(\n\t\t\t\t\t\t'ab_mcp_sync_rights',\n\t\t\t\t\t\t/* translators: 1: meta key, 2: the capability of WordPress refused at the post (edit_post_meta, …). */\n\t\t\t\t\t\tsprintf( __( 'The meta %1$s of the post was not written", "\t\t\t\t\treturn true ? true : new WP_Error(\n\t\t\t\t\t\t'ab_mcp_sync_rights',\n\t\t\t\t\t\t/* translators: 1: meta key, 2: the capability of WordPress refused at the post (edit_post_meta, …). */\n\t\t\t\t\t\tsprintf( __( 'The meta %1$s of the post was not written", 'it', 'testANewPostWithAPlainKeyGoesAndOneWhoseRightTheNewPostRefusesStaysAsARest')
 e('post-slug-pending', 'slug_refusal(): a pending post of an account that may not publish it loses its slug', PW,
-  "\t\t\tif ( ! $may ) {\n\t\t\t\treturn self::locked( 'post:slug_collision', sprintf( 'WordPress drops the slug", "\t\t\tif ( false ) {\n\t\t\t\treturn self::locked( 'post:slug_collision', sprintf( 'WordPress drops the slug", 'unit', P_SLUG)
+  "\t\t\tif ( ! $may ) {", "\t\t\tif ( false ) {", 'unit', P_SLUG)
 e('post-slug-empty', 'slug_refusal(): a published post without a slug gets one from its title', PW,
-  "\t\t\treturn in_array( $status, $drafts, true ) ? null : self::locked( 'post:slug_collision', sprintf( 'the %s has no slug", "\t\t\treturn null ? null : self::locked( 'post:slug_collision', sprintf( 'the %s has no slug", 'unit', P_SLUG)
+  "\t\t\treturn in_array( $status, $drafts, true ) ? null : self::locked( 'post:slug_collision', sprintf( __( 'The %s has no slug", "\t\t\treturn null ? null : self::locked( 'post:slug_collision', sprintf( __( 'The %s has no slug", 'unit', P_SLUG)
 e('post-slug-sanitize', 'slug_refusal(): the slug as sanitize_title() makes it', PW,
   "\t\tif ( $made !== $slug ) {", "\t\tif ( false ) {", 'unit', P_SLUG)
 e('post-slug-draft', 'slug_refusal(): WordPress keeps the slug of a draft as it is', PW,
@@ -358,7 +358,7 @@ e('post-slug-trashed-draft', 'slug_refusal(): a post in the trash with the slug 
 e('post-type-branch-9b', 'target_of(): the five core types of branch 9b have a target since branch 9b (post:engine_type gone)', PW,
   "\t\tif ( ! in_array( $type, self::TYPES, true ) ) {\n\t\t\t// A type of another kind", "\t\tif ( ! in_array( $type, array( 'post', 'page' ), true ) ) {\n\t\t\t// A type of another kind", 'unit', P_LOCKS)
 e('post-type-other-kind', 'target_of(): a type of another kind is never written by the engine of the kind post (post:other_kind)', PW,
-  "\t\t\treturn self::locked( 'post:other_kind', sprintf( 'post type %s', $type ) );", "\t\t\treturn self::locked( 'post:lock_unread', sprintf( 'post type %s', $type ) );", 'unit', P_LOCKS)
+  "\t\t\treturn self::locked( 'post:other_kind', sprintf( __( 'Post type %s.', 'alphabridge-mcp' ), $type ) );", "\t\t\treturn self::locked( 'post:lock_unread', sprintf( __( 'Post type %s.', 'alphabridge-mcp' ), $type ) );", 'unit', P_LOCKS)
 e('post-status-trash', 'target_of(): the trash is a deletion, with the deletions (post:in_trash, Z8d)', PW,
   "$key = 'trash' === $status ? 'post:in_trash' :", "$key = 'trash' === $status ? 'post:status_rule' :", 'unit', P_LOCKS)
 e('post-status-auto-draft', 'target_of(): an auto-draft is never taken over (post:auto_draft)', PW,
@@ -366,15 +366,15 @@ e('post-status-auto-draft', 'target_of(): an auto-draft is never taken over (pos
 e('post-status-rule', 'target_of(): any other status waits for its field rule (post:status_rule, Z8d)', PW,
   "( 'auto-draft' === $status ? 'post:auto_draft' : 'post:status_rule' )", "( 'auto-draft' === $status ? 'post:auto_draft' : 'post:auto_draft' )", 'unit', P_LOCKS)
 e('post-content-missing', 'target_of(): a package without the content of the object writes nothing (post:content_missing)', PW,
-  "\t\t\treturn self::locked( 'post:content_missing', 'the package carries no content of the object (a row of it could not be read on the staging site)' );", "\t\t\treturn self::locked( 'post:lock_unread', 'the package carries no content of the object (a row of it could not be read on the staging site)' );", 'unit', P_LOCKS)
+  "\t\t\treturn self::locked( 'post:content_missing', __( 'The package carries no content of the object (a row of it could not be read on the staging site).', 'alphabridge-mcp' ) );", "\t\t\treturn self::locked( 'post:lock_unread', __( 'The package carries no content of the object (a row of it could not be read on the staging site).', 'alphabridge-mcp' ) );", 'unit', P_LOCKS)
 e('post-type-unregistered', 'precheck(): a post type this site does not register is locked before anything is written (post:type_unregistered)', PW,
-  "\t\tif ( ! is_object( $pto ) || ! isset( $pto->cap ) ) {\n\t\t\treturn self::locked( 'post:type_unregistered',", "\t\tif ( false ) {\n\t\t\treturn self::locked( 'post:type_unregistered',", 'unit', P_LOCKS)
+  "\t\tif ( ! is_object( $pto ) || ! isset( $pto->cap ) ) {\n\t\t\t/* translators: %s: a post type. */\n\t\t\treturn self::locked( 'post:type_unregistered',", "\t\tif ( false ) {\n\t\t\t/* translators: %s: a post type. */\n\t\t\treturn self::locked( 'post:type_unregistered',", 'unit', P_LOCKS)
 e('post-read-lock-unread', 'read_lock(): a lock of the post of this site this version does not read locks as well (post:lock_unread)', PW,
-  "\t\treturn self::locked( 'post:lock_unread', sprintf( '%s carries a lock this version does not read', (string) $what ) );", "\t\treturn null;", 'unit', P_TYPES)
+  "\t\treturn self::locked( 'post:lock_unread', sprintf( __( '%s It carries a lock this version does not read.', 'alphabridge-mcp' ), (string) $what ) );", "\t\treturn null;", 'unit', P_TYPES)
 e('push-token-order', 'plan(): the state the token is bound to covers the order of the steps it confirms (Codex round 3, B)', PU,
   "\t\t\t\t\t'order'       => $order,\n", '', 'it', 'testATokenWhoseOrderOfStepsNoLongerHoldsIsStale')
 e('post-restore-markup', 'restore_right(): a key of a page builder goes back only with unfiltered_html, as forward (GitHub Codex round 1 on free#138, P2)', PW,
-  "\t\t\tif ( null !== AB_MCP_Builders::markup_meta_refusal( $key ) ) {\n\t\t\t\treturn sprintf( 'write the page-builder meta key %s of the post (unfiltered_html)', $key );", "\t\t\tif ( false ) {\n\t\t\t\treturn sprintf( 'write the page-builder meta key %s of the post (unfiltered_html)', $key );", 'unit', 'testTheWayBackAsksTheRightsAtTheObjectAsTheForwardWriteDoesBeforeAPartGoesBack')
+  "\t\t\tif ( null !== AB_MCP_Builders::markup_meta_refusal( $key ) ) {\n\t\t\t\t/* translators: %s: meta key. */\n\t\t\t\treturn sprintf( ", "\t\t\tif ( false ) {\n\t\t\t\t/* translators: %s: meta key. */\n\t\t\t\treturn sprintf( ", 'unit', 'testTheWayBackAsksTheRightsAtTheObjectAsTheForwardWriteDoesBeforeAPartGoesBack')
 
 def test_of(expect):
     return expect.split(' with data set "', 1)[0]

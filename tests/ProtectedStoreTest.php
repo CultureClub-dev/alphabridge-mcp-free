@@ -292,8 +292,8 @@ final class ProtectedStoreTest extends TestCase {
 	public function testEveryMessageOfAMissingStoreNamesTheWay(): void {
 		$way      = ( new ReflectionClassConstant( AnswerWayTest::class, 'WAY' ) )->getValue();
 		$messages = array( AB_MCP_Protected_Store::message( 'no_id', array() ), AB_MCP_Protected_Store::message( 'no_document_root', array() ) );
-		foreach ( AB_MCP_Protected_Store::FINDINGS['outside'] as $outside => $text ) {
-			foreach ( AB_MCP_Protected_Store::FINDINGS['uploads'] as $uploads => $text2 ) {
+		foreach ( AB_MCP_Protected_Store::findings()['outside'] as $outside => $text ) {
+			foreach ( AB_MCP_Protected_Store::findings()['uploads'] as $uploads => $text2 ) {
 				$message = AB_MCP_Protected_Store::message( 'none', array( 'outside' => $outside, 'uploads' => $uploads ) );
 				self::assertStringContainsString( $text, $message );
 				self::assertStringContainsString( $text2, $message );

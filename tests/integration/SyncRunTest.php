@@ -61,6 +61,7 @@ namespace AlphaBridge\Tests\Integration;
 
 use AB_MCP_IT_Sites;
 use AB_MCP_IT_Sync_Steps;
+use AB_MCP_Plugin;
 use AB_MCP_Protected_Store;
 use AB_MCP_REST_Controller;
 use AB_MCP_Staging;
@@ -73,6 +74,7 @@ use AB_MCP_Sync_Pairs;
 use AB_MCP_Sync_Report;
 use AB_MCP_Sync_Resources;
 use AB_MCP_Sync_Run;
+use AB_MCP_Sync_Said;
 use AB_MCP_Sync_Schema;
 use AB_MCP_Tool_Registry;
 use AB_MCP_Tools_Staging;
@@ -1186,7 +1188,7 @@ final class SyncRunTest extends TestCase {
 			self::assertCount( 1, $cleaned, 'One object emptied in the first call.' );
 			$per = (int) max( $cleaned );
 			self::assertGreaterThan( 0, $per, 'How often one emptying fires clean_post_cache.' );
-			self::assertStringContainsString( 'caches of 1 of 3 written object(s) were emptied within the work of this call', $one['next'] );
+			self::assertStringContainsString( 'caches of 1 of 3 written objects were emptied within the work of this call', $one['next'] );
 			$two = self::next( $run_id );
 			self::assertSame( 'planned', $two['step']['state'] );
 			self::assertSame( 2, $two['step']['result']['cursor'] );
@@ -1195,7 +1197,7 @@ final class SyncRunTest extends TestCase {
 			self::assertSame( 'done', $three['step']['state'] );
 			self::assertCount( 3, $three['step']['result']['objects'] );
 			self::assertArrayNotHasKey( 'cursor', $three['step']['result'] );
-			self::assertStringContainsString( 'caches of 3 written object(s) were emptied', $three['step']['result']['message'] );
+			self::assertStringContainsString( 'caches of 3 written objects were emptied', $three['step']['result']['message'] );
 		} finally {
 			remove_all_actions( 'clean_post_cache' );
 			AB_MCP_Sync_Engine::$clock   = null;
@@ -1239,7 +1241,7 @@ final class SyncRunTest extends TestCase {
 			self::assertSame( 'closed_findings', $closed['state'], json_encode( $closed ) );
 			$messages = array_column( $closed['step']['result']['findings'], 'message' );
 			self::assertCount( 1, $messages, json_encode( $messages ) );
-			self::assertStringContainsString( 'has 3 new line(s) since the check', $messages[0] );
+			self::assertStringContainsString( 'has 3 new lines since the check', $messages[0] );
 			// 2. The log rotated (smaller than at the check): a finding, said so.
 			$planned = self::planned( array( 'about' ) );
 			$run     = (int) self::begun( $planned['args'] )['run_id'];
@@ -1250,7 +1252,7 @@ final class SyncRunTest extends TestCase {
 			self::assertSame( 'closed_findings', $closed['state'], json_encode( $closed ) );
 			$messages = array_column( $closed['step']['result']['findings'], 'message' );
 			self::assertCount( 1, $messages, json_encode( $messages ) );
-			self::assertStringContainsString( 'smaller than at the check before the run (rotated or emptied in between); it holds 1 line(s) now', $messages[0] );
+			self::assertStringContainsString( 'smaller than at the check before the run (rotated or emptied in between); it holds 1 line now', $messages[0] );
 		} finally {
 			if ( file_exists( $log ) ) {
 				unlink( $log );
@@ -1267,7 +1269,7 @@ final class SyncRunTest extends TestCase {
 			file_put_contents( $log, "[07-Nov-2026 10:03:00 UTC] PHP Warning: made since\n" );
 			$closed = self::finish( $run );
 			self::assertSame( 'closed_findings', $closed['state'] );
-			self::assertStringContainsString( 'has 1 new line(s) since the check', array_column( $closed['step']['result']['findings'], 'message' )[0] );
+			self::assertStringContainsString( 'has 1 new line since the check', array_column( $closed['step']['result']['findings'], 'message' )[0] );
 		} finally {
 			if ( file_exists( $log ) ) {
 				unlink( $log );
@@ -1487,7 +1489,7 @@ final class SyncRunTest extends TestCase {
 		update_option( \AB_MCP_Change_Lock::OPTION, time() );
 		self::assertTrue( AB_MCP_Sync_Run::lock_fresh() );
 		$refused = $begin->invoke( null, $plan, $args );
-		self::assertStringContainsString( 'the lock of the write boundary is held', self::refused( $refused, 'ab_mcp_sync_run_busy' ) );
+		self::assertStringContainsString( 'The lock of the write boundary is held', self::refused( $refused, 'ab_mcp_sync_run_busy' ) );
 		self::assertSame( 'begun', AB_MCP_Sync_Run::step( $run_id, $third )['state'], 'The step being written is left to its writer.' );
 		$unchanged( 'busy' );
 		// 2. The lock given back, the step still begun (its request did not
@@ -1656,7 +1658,7 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( 'done', $third['step']['state'], 'The third object back.' );
 		self::assertSame( 'closed_findings', $third['state'], json_encode( $third ) );
 		self::assertSame( 1, $third['counts']['unclear'] );
-		self::assertStringContainsString( sprintf( 'step %d of the way back stayed as it is', $s2 ), $third['next'], 'The close names what stayed.' );
+		self::assertStringContainsString( sprintf( 'Step %d of the way back stayed as it is', $s2 ), $third['next'], 'The close names what stayed.' );
 		self::assertSame( $before[ $name_of[ $live( $s1 ) ] ], self::row_a( $live( $s1 ) )['post_content'] );
 		self::assertSame( $before[ $name_of[ $live( $s3 ) ] ], self::row_a( $live( $s3 ) )['post_content'] );
 		self::assertSame( $left, self::row_a( $live( $s2 ) )['post_content'], 'The interrupted step: as its request left it, nothing put back again.' );
@@ -1691,7 +1693,7 @@ final class SyncRunTest extends TestCase {
 			$was = self::untouched( $run_id, $pages );
 			foreach ( array( 'next' => array( 'wp_site_push', array( 'action' => 'next', 'run_id' => $run_id ) ), 'abort' => array( 'wp_site_push', array( 'action' => 'abort', 'run_id' => $run_id ) ) ) as $what => $call ) {
 				$text = self::refused( self::gated( $call[0], $call[1] ), 'ab_mcp_sync_run_busy' );
-				self::assertStringContainsString( 'the lock of the write boundary is held', $text, "$when: $what" );
+				self::assertStringContainsString( 'The lock of the write boundary is held', $text, "$when: $what" );
 				self::assertStringContainsString( 'Call again', $text, "$when: $what" );
 			}
 			// The engine takes the lock itself as well (a request that reached it).
@@ -1733,7 +1735,7 @@ final class SyncRunTest extends TestCase {
 		self::assertTrue( AB_MCP_Sync_Run::update_step( $run_id, $seq, array( 'state' => 'begun' ), 'planned' ) );
 		update_option( \AB_MCP_Change_Lock::OPTION, time() );
 		$was = self::untouched( $run_id, $pages );
-		self::assertStringContainsString( 'the lock of the write boundary is held', self::refused( AB_MCP_Sync_Engine::next( $read, null ), 'ab_mcp_sync_run_busy' ) );
+		self::assertStringContainsString( 'The lock of the write boundary is held', self::refused( AB_MCP_Sync_Engine::next( $read, null ), 'ab_mcp_sync_run_busy' ) );
 		self::refused( self::gated( 'wp_site_revert', array( 'action' => 'next', 'run_id' => $run_id ) ), 'ab_mcp_sync_run_busy' );
 		self::assertSame( $was, self::untouched( $run_id, $pages ), 'The close of the way back: nothing changed.' );
 		$status = self::gated( 'wp_site_revert', array( 'action' => 'status', 'run_id' => $run_id ) );
@@ -1841,7 +1843,7 @@ final class SyncRunTest extends TestCase {
 		$was = self::untouched( $run_id, array( (int) $a['contact'], (int) $a['about'] ) );
 		unset( $was['run'] );
 		$text = self::refused( self::next( $run_id ), 'ab_mcp_sync_run_unread' );
-		self::assertStringContainsString( 'its plan does not read back as it was written', $text );
+		self::assertStringContainsString( 'its record (plan) does not read back as it was written', $text );
 		$now = self::untouched( $run_id, array( (int) $a['contact'], (int) $a['about'] ) );
 		unset( $now['run'] );
 		self::assertSame( $was, $now, 'Nothing of the steps, the bookings, the backups or the pages changed.' );
@@ -2702,7 +2704,7 @@ final class SyncRunTest extends TestCase {
 		self::assertNull( $parts['terms:category']['post'] ?? null, 'The step made no terms call: it ended with the row.' );
 		self::assertStringContainsString( 'another hand', (string) $parts['terms:category']['note'] );
 		self::assertSame( 'terms:category', $write['step']['parts']['object']['deviated']['part'] );
-		self::assertStringContainsString( 'another hand changed the part terms:category', $write['step']['parts']['object']['deviated']['why'] );
+		self::assertStringContainsString( 'Another hand changed the part terms:category', $write['step']['parts']['object']['deviated']['why'] );
 		self::assertStringContainsString( 'though the part reads as its target now', $write['step']['parts']['object']['deviated']['why'] );
 		self::assertSame( '"news"', $parts['terms:category']['value_before'] );
 		self::assertStringContainsString( 'post_content: 8 bytes (', $parts['row']['value_before'] );
@@ -2940,7 +2942,7 @@ final class SyncRunTest extends TestCase {
 		}
 		self::assertIsArray( $write );
 		self::assertSame( 'unclear', $write['state'], json_encode( $write ) );
-		self::assertStringContainsString( 'another hand changed the part row within the step', (string) $write['parts']['object']['deviated']['why'] );
+		self::assertStringContainsString( 'Another hand changed the part row within the step', (string) $write['parts']['object']['deviated']['why'] );
 	}
 
 	public function testAHookAsTheJournalIsSavedBeforeTheCallOfTheTermsIsSeenAndNothingIsWritten(): void {
@@ -3004,7 +3006,7 @@ final class SyncRunTest extends TestCase {
 			}
 		}
 		self::assertIsArray( $write );
-		self::assertStringContainsString( 'the part terms:category was not written', (string) $write['parts']['object']['deviated']['why'], json_encode( $write ) );
+		self::assertStringContainsString( 'The part terms:category was not written', (string) $write['parts']['object']['deviated']['why'], json_encode( $write ) );
 	}
 
 	public function testTheDefaultCategoryOfTheRowGoingBackDoesNotTakeBackTermsAnotherHandChanged(): void {
@@ -3047,7 +3049,7 @@ final class SyncRunTest extends TestCase {
 		$outcome = array_column( $step['result']['parts'], null, 'part' );
 		self::assertSame( 'restored', $outcome['row']['state'] );
 		self::assertSame( 'left', $outcome['terms:category']['state'], json_encode( $step['result'] ) );
-		self::assertStringContainsString( 'putting the part row back changed the part terms:category besides it', (string) $outcome['terms:category']['note'], 'The halt of the way back for the object (Codex round 16) names the cause.' );
+		self::assertStringContainsString( 'Putting the part row back changed the part terms:category besides it', (string) $outcome['terms:category']['note'], 'The halt of the way back for the object (Codex round 16) names the cause.' );
 		self::assertSame( '"news"', $outcome['terms:category']['value_before'] );
 		self::assertSame( array( $default ), $slugs(), 'The default category the row gave stands; News is not written over the other hand\'s removal.' );
 		self::assertSame( 'unclear', $step['state'] );
@@ -3483,7 +3485,7 @@ final class SyncRunTest extends TestCase {
 		$outcome = array_column( $step['result']['parts'], null, 'part' );
 		self::assertSame( 'restored', $outcome['row']['state'] );
 		self::assertSame( 'left', $outcome['terms:category']['state'], 'The default category the row gave back is not the step\'s own: left.' );
-		self::assertStringContainsString( 'putting the part row back changed the part terms:category besides it', (string) $outcome['terms:category']['note'], 'The halt names the cause.' );
+		self::assertStringContainsString( 'Putting the part row back changed the part terms:category besides it', (string) $outcome['terms:category']['note'], 'The halt names the cause.' );
 		self::assertSame( '"news"', $outcome['terms:category']['value_before'] );
 		self::assertSame( 'unclear', $step['state'] );
 		$default = get_term( (int) get_option( 'default_category' ), 'category' );
@@ -3606,7 +3608,7 @@ final class SyncRunTest extends TestCase {
 		self::assertStringContainsString( 'another hand', (string) $parts['meta:note']['note'] );
 		self::assertNull( $parts['meta:note']['post'] ?? null, 'The step made no call for the note: it ended with the row.' );
 		self::assertSame( 'meta:note', $write['step']['parts']['object']['deviated']['part'] );
-		self::assertStringContainsString( 'another hand changed the part meta:note', $write['step']['parts']['object']['deviated']['why'] );
+		self::assertStringContainsString( 'Another hand changed the part meta:note', $write['step']['parts']['object']['deviated']['why'] );
 		self::assertSame( '"alt"', $parts['meta:note']['value_before'] );
 		self::assertSame( array( 'fremd' ), self::meta_a( $contact, 'note' ), 'The other hand\'s value stands; it is not put back to the backup.' );
 		self::assertSame( 'left', $parts['row']['state'], 'The row written before stays: nothing of a deviated object is put back.' );
@@ -3741,7 +3743,7 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( 'restored', $outcome['row'] );
 		self::assertSame( 'left', $outcome['terms:category'], 'Decided afresh after the row went back: the hook\'s category, not the step\'s own.' );
 		self::assertStringContainsString( 'changed since the step wrote it', (string) ( $notes['terms:category'] ?? '' ) );
-		self::assertStringContainsString( 'The way back stopped for this object: putting the part row back changed the part terms:category besides it', (string) ( $notes['terms:category'] ?? '' ), 'The halt names the cause (a hook of this site).' );
+		self::assertStringContainsString( 'The way back stopped for this object. Putting the part row back changed the part terms:category besides it', (string) ( $notes['terms:category'] ?? '' ), 'The halt names the cause (a hook of this site).' );
 		self::assertSame( 'unclear', $step['state'] );
 		self::assertSame( array( 'third' ), $slugs(), 'The hook\'s category stands; News is not written over it.' );
 		self::assertSame( $before, self::row_a( $story_a ) );
@@ -4104,7 +4106,7 @@ final class SyncRunTest extends TestCase {
 		$parts = array_column( $steps[ $contact ]['result']['parts'], null, 'part' );
 		self::assertSame( 'restored', $parts['row']['state'], json_encode( $parts ) );
 		self::assertSame( 'left', $parts['meta:note']['state'] );
-		self::assertStringContainsString( 'this account may not edit the meta key note of the post (edit_post_meta)', $parts['meta:note']['note'] );
+		self::assertStringContainsString( 'This account may not edit the meta key note of the post on this site (edit_post_meta)', $parts['meta:note']['note'] );
 		self::assertStringContainsString( 'wp-admin', $parts['meta:note']['note'], 'The way.' );
 		self::assertSame( '"abc"', $parts['meta:note']['value_before'] );
 		self::assertSame( 'unclear', $steps[ $contact ]['state'] );
@@ -4113,14 +4115,14 @@ final class SyncRunTest extends TestCase {
 		// about: the row left.
 		$parts = array_column( $steps[ $about ]['result']['parts'], null, 'part' );
 		self::assertSame( 'left', $parts['row']['state'], json_encode( $parts ) );
-		self::assertStringContainsString( sprintf( 'this account may not edit the post %d (edit_post)', $about ), $parts['row']['note'] );
+		self::assertStringContainsString( sprintf( 'This account may not edit the post %d on this site (edit_post)', $about ), $parts['row']['note'] );
 		self::assertStringContainsString( 'post_content: 9 bytes', $parts['row']['value_before'] );
 		self::assertSame( 'About us, on staging.', self::row_a( $about )['post_content'], 'Not written.' );
 		// story: the row back, the category left.
 		$parts = array_column( $steps[ $story_a ]['result']['parts'], null, 'part' );
 		self::assertSame( 'restored', $parts['row']['state'], json_encode( $parts ) );
 		self::assertSame( 'left', $parts['terms:category']['state'] );
-		self::assertStringContainsString( sprintf( 'this account may not assign the term %d of category (assign_term)', $news_id ), $parts['terms:category']['note'] );
+		self::assertStringContainsString( sprintf( 'This account may not assign the term %d of category on this site (assign_term)', $news_id ), $parts['terms:category']['note'] );
 		self::assertSame( '"news"', $parts['terms:category']['value_before'] );
 		self::assertSame( array( 'other' ), $slugs(), 'Not written.' );
 		self::assertSame( 'A story.', self::row_a( $story_a )['post_content'] );
@@ -4174,9 +4176,9 @@ final class SyncRunTest extends TestCase {
 		$step  = self::revert_step( $back );
 		$parts = array_column( $step['result']['parts'], null, 'part' );
 		self::assertSame( 'left', $parts['row']['state'], json_encode( $parts ) );
-		self::assertStringContainsString( sprintf( 'this account may not edit the post %d (edit_post)', $story_a ), $parts['row']['note'] );
+		self::assertStringContainsString( sprintf( 'This account may not edit the post %d on this site (edit_post)', $story_a ), $parts['row']['note'] );
 		self::assertSame( 'left', $parts['terms:category']['state'], 'The terms of a post the account may not edit stay as well.' );
-		self::assertStringContainsString( sprintf( 'this account may not edit the post %d (edit_post, for the part terms:category)', $story_a ), $parts['terms:category']['note'] );
+		self::assertStringContainsString( sprintf( 'This account may not edit the post %d on this site (edit_post, for the part terms:category)', $story_a ), $parts['terms:category']['note'] );
 		self::assertSame( '"news"', $parts['terms:category']['value_before'] );
 		self::assertSame( 'unclear', $step['state'] );
 		self::assertSame( array( 'other' ), $slugs(), 'Not written.' );
@@ -4303,7 +4305,7 @@ final class SyncRunTest extends TestCase {
 			$closed = self::finish( (int) $run['run_id'] );
 			self::assertSame( 'closed_aborted', $closed['state'], json_encode( $closed ) );
 			$check = self::step( $closed, 1 );
-			self::assertStringContainsString( 'this account may not ' . $needs, json_encode( $check['result'] ) );
+			self::assertStringContainsString( 'This account may not ' . $needs, json_encode( $check['result'] ) );
 			self::assertSame( 'A story.', self::row_a( $story_a )['post_content'], 'Nothing written.' );
 		};
 		// 1. This site has no term of the format yet: the right of post_format
@@ -4311,13 +4313,13 @@ final class SyncRunTest extends TestCase {
 		$planned = self::planned( array( 'story' ) );
 		$deny    = static fn( string $cap, array $args ): bool => 'manage_categories' === $cap;
 		self::assertFalse( current_user_can( 'manage_categories' ) );
-		$aborted( $planned['args'], 'make the term post-format-aside of post_format, which this site has no term of yet (manage_categories)' );
+		$aborted( $planned['args'], 'make the term post-format-aside of post_format on this site, which has no term of it yet (manage_categories)' );
 		// 2. This site has the term: assign_term for it, by the id its slug names.
 		$aside_a = wp_insert_term( 'post-format-aside', 'post_format' );
 		self::assertIsArray( $aside_a, is_wp_error( $aside_a ) ? $aside_a->get_error_message() : '' );
 		$aside_id = (int) $aside_a['term_id'];
 		$deny     = static fn( string $cap, array $args ): bool => 'assign_term' === $cap && isset( $args[0] ) && (int) $args[0] === $aside_id;
-		$aborted( $planned['args'], sprintf( 'assign the term %d of post_format (assign_term)', $aside_id ) );
+		$aborted( $planned['args'], sprintf( 'assign the term %d of post_format on this site (assign_term)', $aside_id ) );
 		// With the rights the run writes the format.
 		$deny = null;
 		$run  = self::begun( $planned['args'] );
@@ -4335,7 +4337,7 @@ final class SyncRunTest extends TestCase {
 		$run     = self::begun( $planned['args'] );
 		$closed  = self::finish( (int) $run['run_id'] );
 		self::assertSame( 'closed_aborted', $closed['state'], json_encode( $closed ) );
-		self::assertStringContainsString( 'this account may not assign the terms of post_format (edit_posts)', json_encode( self::step( $closed, 1 )['result'] ) );
+		self::assertStringContainsString( 'may not assign the terms of post_format on this site (edit_posts)', json_encode( self::step( $closed, 1 )['result'] ) );
 		self::assertSame( 'aside', $format(), 'Nothing written.' );
 		$deny = null;
 		$run  = self::begun( $planned['args'] );
@@ -4592,4 +4594,100 @@ final class SyncRunTest extends TestCase {
 		AB_MCP_Protected_Store::cleanup();
 		self::assertEqualsCanonicalizing( array( 6, 13, 14 ), $kept(), 'Rows without a stored period stay.' );
 	}
+
+	/**
+	 * Codex round 6 on branch 13: the four tools for an ordinary case on a
+	 * site in another language (de_CH, the bundled catalogue). Under reason,
+	 * why, words and note of every answer (the previews among them) no
+	 * English text of the source stays unsaid.
+	 */
+	public function testTheAnswersOfTheToolsSayTheirProseInTheLanguageOfTheSite(): void {
+		self::pair();
+		$a = self::pages_on_a( array( 'about' => 'About us.', 'contact' => 'Write to us.' ) );
+		$b = self::pages_on_b( array( 'about' => 'About us.', 'contact' => 'Write to us.' ) );
+		unset( $a );
+		$msgids = array();
+		foreach ( file( AB_MCP_DIR . 'languages/alphabridge-mcp-de_CH.po' ) as $line ) {
+			if ( 1 === preg_match( '/^msgid "(.+)"$/', rtrim( $line, "\n" ), $m ) ) {
+				$msgids[ stripcslashes( $m[1] ) ] = true;
+			}
+		}
+		$answers = array();
+		unload_textdomain( 'alphabridge-mcp' );
+		self::assertTrue( AB_MCP_Plugin::load_bundled_translations( 'de_CH' ) );
+		try {
+			// wp_site_pairs: propose, the preview of confirm, confirm.
+			$ids     = self::staged();
+			$propose = self::gated( 'wp_site_pairs', array( 'action' => 'propose', 'packages' => $ids ) );
+			while ( is_array( $propose ) && false === $propose['done'] ) {
+				$propose = self::gated( 'wp_site_pairs', array( 'action' => 'propose', 'proposal_id' => $propose['proposal_id'] ) );
+			}
+			self::assertIsArray( $propose, is_wp_error( $propose ) ? $propose->get_error_message() : '' );
+			$args      = array(
+				'action'      => 'confirm',
+				'proposal_id' => $propose['proposal_id'],
+				'categories'  => array( 'equal' ),
+			);
+			$preview   = self::gated( 'wp_site_pairs', $args );
+			$answers[] = $propose;
+			$answers[] = $preview;
+			$answers[] = self::gated( 'wp_site_pairs', $args + array( 'confirm_token' => $preview['confirm_token'] ) );
+			// wp_site_diff, without the environment: its why and the words of each entry.
+			self::change_on_b( $b['contact'], 'contact', 'Write to us on staging.' );
+			$ids  = self::staged();
+			$diff = self::gated( 'wp_site_diff', array( 'packages' => $ids ) );
+			while ( is_array( $diff ) && false === $diff['done'] ) {
+				$diff = self::gated( 'wp_site_diff', array( 'report_id' => $diff['report_id'] ) );
+			}
+			self::assertIsArray( $diff, is_wp_error( $diff ) ? $diff->get_error_message() : '' );
+			$answers[] = $diff;
+			// wp_site_push: the preview of the plan, the run to its close.
+			$planned   = self::planned( array( 'contact' ) );
+			$push      = self::gated( 'wp_site_push', $planned['args'] );
+			$answers[] = $push;
+			$run       = self::gated( 'wp_site_push', $planned['args'] + array( 'confirm_token' => $push['confirm_token'] ) );
+			$answers[] = $run;
+			self::probe_ok();
+			$answers[] = self::finish( (int) $run['run_id'] );
+			// wp_site_revert: the preview of the plan, the way back to its close.
+			$args      = array(
+				'action' => 'plan',
+				'run_id' => (int) $run['run_id'],
+			);
+			$back      = self::gated( 'wp_site_revert', $args );
+			$answers[] = $back;
+			$begun     = self::gated( 'wp_site_revert', $args + array( 'confirm_token' => $back['confirm_token'] ) );
+			$answers[] = $begun;
+			$answers[] = self::revert_all( (int) $begun['run_id'] );
+		} finally {
+			unload_textdomain( 'alphabridge-mcp' );
+			AB_MCP_Plugin::load_bundled_translations();
+		}
+		$prose = array();
+		$walk  = static function ( $value ) use ( &$walk, &$prose ) {
+			if ( ! is_array( $value ) ) {
+				return;
+			}
+			foreach ( $value as $key => $inner ) {
+				if ( is_string( $inner ) && in_array( $key, AB_MCP_Sync_Said::PROSE, true ) ) {
+					$prose[] = $inner;
+				} else {
+					$walk( $inner );
+				}
+			}
+		};
+		foreach ( $answers as $answer ) {
+			self::assertIsArray( $answer, is_wp_error( $answer ) ? $answer->get_error_message() : '' );
+			$walk( $answer );
+		}
+		self::assertGreaterThan( 5, count( $prose ), json_encode( $answers ) );
+		self::assertContains( 'Auf beiden Seiten gleich: nichts zu übernehmen.', $prose, 'The words of an equal entry, said.' );
+		foreach ( array_unique( $prose ) as $text ) {
+			self::assertArrayNotHasKey( $text, $msgids, 'An English text of the source, unsaid: ' . $text );
+			if ( '' !== $text ) {
+				self::assertFalse( AB_MCP_Sync_Said::knows( $text ), 'Known to Said, yet English: ' . $text );
+			}
+		}
+	}
+
 }
