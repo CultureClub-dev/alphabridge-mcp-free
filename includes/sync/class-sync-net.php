@@ -84,6 +84,21 @@
  * nested deeper than read) is never clean: there it adds nothing for the
  * credentials.
  *
+ * THE FORM (branch 11b; Thomas, 08.11.2026): the references are counted
+ * over the raw text of the unit (a structure: its keys and leaves, one per
+ * line). The credentials are counted over the raw text where it is the
+ * text WordPress hands out (a column of a row, a plain meta value); over
+ * the texts of a structure (a widget instance) and of a value WordPress
+ * unpacks as it reads it (a serialized meta value of a post, a term, a menu
+ * item, the value of an option: $stored), each on its own, every key and
+ * every leaf, nested serialized texts unpacked in their turn (texts():
+ * AB_MCP_Sync_Canon::unserialized() only, within the depth and the layers
+ * of the readers). The braces and quotes of the serialized text are no
+ * code there: prose in a leaf («Spieler: Anna, Token: drei») is prose. A
+ * text that does not serialize back from its value byte for byte (a key
+ * twice, bytes after its end) is read as a whole as well; one that does not
+ * unpack or holds an object locks the unit.
+ *
  * The net only locks. Rewriting stays with the structured readers, in the
  * spellings they read as the core reads them (the JSON of a data-*
  * attribute among them, by its round trip: AB_MCP_Sync_Urls::ids()).
@@ -105,7 +120,11 @@
  *   (base64, a data: address of any type, an SVG image, a script of an
  *   image, in another charset): locked;
  * - a body of a data: address of a text type in a charset it does not
- *   declare and that no BOM gives: not read, locked.
+ *   declare and that no BOM gives: not read, locked;
+ * - a serialized value that does not serialize back from its value byte for
+ *   byte although nothing was dropped (a float of 17 digits a PHP before 7.1
+ *   wrote, a key of digits as a text): read as a whole as well, so prose in
+ *   its braces («…, Token: drei») locks there as before branch 11b.
  * And what is neither read nor locked: a script of an image that builds the
  * name of a credential at run time (a template literal with ${…}, a
  * concatenation): only literal spellings are read, an image runs no
@@ -265,7 +284,7 @@ final class AB_MCP_Sync_Net {
 	 * @param string $kind Kind, for the locks.
 	 * @param string $at   The unit (meta:_key, post_content, option_value …).
 	 * @param mixed  $raw  The stored value: a text, or an unpacked structure
-	 *                     (a widget instance) whose texts are read.
+	 *                     (a widget instance) whose keys and leaves are read.
 	 * @param array  $ctx  AB_MCP_Sync_Canon::context().
 	 * @param bool   $references Whether the references of the layers are
 	 *                     counted against what the readers of the unit read;
@@ -275,9 +294,15 @@ final class AB_MCP_Sync_Net {
 	 *                     AB_MCP_Sync_Export::checked_content(); Codex round
 	 *                     3 of branch 11, A8). The count of credentials is
 	 *                     the same either way.
+	 * @param bool   $stored Whether the value is one WordPress unpacks as it
+	 *                     reads it (maybe_unserialize(): a meta value, the
+	 *                     value of an option; branch 11b): a serialized text
+	 *                     is then checked for credentials in its unpacked
+	 *                     form, as a structure is (texts()). The references
+	 *                     are counted over the raw text either way.
 	 * @return void
 	 */
-	public static function check( array &$acc, array $mark, $kind, $at, $raw, array $ctx, $references = true ) {
+	public static function check( array &$acc, array $mark, $kind, $at, $raw, array $ctx, $references = true, $stored = false ) {
 		$text = self::text( $raw );
 		// What the readers of the unit found: their locks (a reference in
 		// another spelling, noted for finish() or locked at once; a unit
@@ -323,12 +348,75 @@ final class AB_MCP_Sync_Net {
 					}
 				}
 			}
+		}
+		// The credentials: in the layers of the raw text; of a structure and
+		// of a stored value that unpacks (a serialized meta value or option),
+		// in the layers of each of its texts on its own, every key and every
+		// leaf as WordPress hands it out (texts(); branch 11b): the braces of
+		// the serialized text are no code, «Spieler: Anna, Token: drei» in a
+		// leaf is prose there as anywhere.
+		if ( is_array( $raw ) || ( $stored && is_string( $raw ) && is_serialized( $raw ) ) ) {
+			self::texts(
+				$raw,
+				'',
+				// A structure is unpacked already (AB_MCP_Sync_Canon::structure()).
+				is_array( $raw ) ? 1 : 0,
+				0,
+				$acc,
+				(string) $kind,
+				(string) $at,
+				static function ( $where, $one ) use ( &$acc, $kind, $at, $named, $extra, &$unreadable ) {
+					$place = $at . ':net:' . ( '' === $where ? '' : $where . ':' );
+					self::count_credentials( $acc, (string) $kind, (string) $at, $place, self::layers( $one ), $named, $extra, $unreadable );
+				}
+			);
+		} else {
+			self::count_credentials( $acc, (string) $kind, (string) $at, $at . ':net:', $layers, $named, $extra, $unreadable );
+		}
+		// What the layers of the raw text did not read to its end locks the
+		// unit, in every form: the raw text holds each text of the value as
+		// its bytes (a key, a leaf, a serialized text inside), so a body
+		// that is no text in UTF-8 in one of them is one in the raw text, and
+		// its layers reach at least as deep. A body that is no text in UTF-8:
+		// not read, never clean.
+		foreach ( $unread as $path ) {
+			AB_MCP_Sync_Canon::lock( $acc, (string) $kind, 'unreadable_value', $at . ':net:' . $path );
+			$acc['unread'][] = 'charset:' . $at . ':net:' . $path;
+		}
+		if ( $deep ) {
+			AB_MCP_Sync_Canon::too_deep( $acc, $at . ':net', (string) $kind );
+		}
+	}
+
+	/**
+	 * The count of credentials over the layers of one text of a unit
+	 * (check()): a name of a credential with a value beside it that the
+	 * readers did not name locks the unit (*:unread_credential), the name
+	 * noted among the credentials of the unit, never a value; braces of code
+	 * that cannot be counted lock it as not read to its end. Once a unit is
+	 * locked so, nothing more is counted for it ($unreadable): one lock and
+	 * one note per unit, from the first layer that names one.
+	 *
+	 * @param array  $acc        Accumulator.
+	 * @param string $kind       Kind.
+	 * @param string $unit       The unit (meta:_key, option_value …).
+	 * @param string $place      Where the layers stand, before the path of a
+	 *                           layer (<unit>:net:, <unit>:net:<where>:).
+	 * @param array  $layers     layers() of the text.
+	 * @param array  $named      The names the readers named, normalised.
+	 * @param array  $extra      AB_MCP_Redactor::extra_keys().
+	 * @param bool   $unreadable Set where the unit is locked so.
+	 * @return void
+	 */
+	private static function count_credentials( array &$acc, $kind, $unit, $place, array $layers, array $named, array $extra, &$unreadable ) {
+		foreach ( $layers as $layer ) {
 			if ( $unreadable ) {
-				continue;
+				return;
 			}
+			$path        = $layer[0];
 			$new         = array();
 			$undecidable = false;
-			foreach ( self::credentials( $one, $extra, $undecidable, '/code' === substr( $path, -5 ) ) as $name ) {
+			foreach ( self::credentials( $layer[1], $extra, $undecidable, '/code' === substr( $path, -5 ) ) as $name ) {
 				if ( ! isset( $named[ $name ] ) ) {
 					$new[ $name ] = '~' . $name;
 				}
@@ -336,26 +424,93 @@ final class AB_MCP_Sync_Net {
 			// The braces of code cannot be counted (a RegExp literal, more
 			// closed than opened; Codex, round 23, A-4): never clean.
 			if ( $undecidable ) {
-				AB_MCP_Sync_Canon::lock( $acc, (string) $kind, 'unreadable_value', $at . ':net:' . $path );
-				$acc['unread'][] = 'code:' . $at . ':net:' . $path;
+				AB_MCP_Sync_Canon::lock( $acc, $kind, 'unreadable_value', $place . $path );
+				$acc['unread'][] = 'code:' . $place . $path;
 				$unreadable      = true;
 			}
 			if ( array() !== $new ) {
 				$acc['credentials']['mixed'][] = array(
-					'unit'   => (string) $at,
+					'unit'   => $unit,
 					'fields' => array_values( $new ),
 				);
-				AB_MCP_Sync_Canon::lock( $acc, (string) $kind, 'unread_credential', $at . ':net:' . $path );
+				AB_MCP_Sync_Canon::lock( $acc, $kind, 'unread_credential', $place . $path );
 				$unreadable = true;
 			}
 		}
-		// A body that is no text in UTF-8: not read, never clean.
-		foreach ( $unread as $path ) {
-			AB_MCP_Sync_Canon::lock( $acc, (string) $kind, 'unreadable_value', $at . ':net:' . $path );
-			$acc['unread'][] = 'charset:' . $at . ':net:' . $path;
+	}
+
+	/**
+	 * The texts of a structure or of a stored value as WordPress reads it,
+	 * each handed to $each on its own as it is reached (branch 11b): every
+	 * key of an array that is a text, every leaf that is a text; a text that
+	 * is serialized unpacked in its turn (AB_MCP_Sync_Canon::unserialized(),
+	 * with its check of the records before unserialize(): no object, no
+	 * enum, no reference), nested serialized texts too, within the depth and
+	 * the layers its readers read (AB_MCP_Sync_Canon::MAX_DEPTH and
+	 * MAX_LAYERS; beyond: not read to its end, too_deep()). Nothing is lost
+	 * unread: where a serialized text does not serialize back from its value
+	 * byte for byte, unpacking dropped a part of it (a key twice, whose first
+	 * value the second replaces; bytes after its end), so the text itself is
+	 * handed on as well, as the net read it before. A text that does not
+	 * unpack, or that holds an object, locks the unit (*:unreadable_value,
+	 * *:php_object): what is not read is never clean.
+	 *
+	 * The place of a text names positions, never a key or a value (a key may
+	 * be a credential): php for a value unpacked, .<n> for the n-th entry of
+	 * an array (from 0), .<n>.key for its key; '' for the text of the value
+	 * itself.
+	 *
+	 * @param mixed    $value A value: a text, an array, a scalar.
+	 * @param string   $where Its place.
+	 * @param int      $layer Serialized texts unpacked above.
+	 * @param int      $depth How deep it stands in its arrays.
+	 * @param array    $acc   Accumulator.
+	 * @param string   $kind  Kind.
+	 * @param string   $at    The unit.
+	 * @param callable $each  function( string $where, string $text ).
+	 * @return void
+	 */
+	private static function texts( $value, $where, $layer, $depth, array &$acc, $kind, $at, callable $each ) {
+		$here = $at . ':net' . ( '' === $where ? '' : ':' . $where );
+		if ( $depth > AB_MCP_Sync_Canon::MAX_DEPTH ) {
+			AB_MCP_Sync_Canon::too_deep( $acc, $here, $kind );
+			return;
 		}
-		if ( $deep ) {
-			AB_MCP_Sync_Canon::too_deep( $acc, $at . ':net', (string) $kind );
+		if ( is_string( $value ) ) {
+			if ( ! is_serialized( $value ) ) {
+				$each( $where, $value );
+				return;
+			}
+			if ( $layer >= AB_MCP_Sync_Canon::MAX_LAYERS ) {
+				AB_MCP_Sync_Canon::too_deep( $acc, $here, $kind );
+				return;
+			}
+			$read = AB_MCP_Sync_Canon::unserialized( $value );
+			if ( ! $read['ok'] ) {
+				AB_MCP_Sync_Canon::lock( $acc, $kind, $read['why'], $here );
+				return;
+			}
+			if ( serialize( $read['value'] ) !== trim( $value ) ) { // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize -- the round trip of the text, compared.
+				$each( $where, $value );
+			}
+			self::texts( $read['value'], '' === $where ? 'php' : $where . '.php', $layer + 1, $depth, $acc, $kind, $at, $each );
+			return;
+		}
+		if ( is_object( $value ) ) {
+			AB_MCP_Sync_Canon::lock( $acc, $kind, 'php_object', $here );
+			return;
+		}
+		if ( ! is_array( $value ) ) {
+			return;
+		}
+		$n = 0;
+		foreach ( $value as $key => $item ) {
+			$entry = ( '' === $where ? '' : $where . '.' ) . $n;
+			if ( is_string( $key ) ) {
+				$each( $entry . '.key', $key );
+			}
+			self::texts( $item, $entry, $layer, $depth + 1, $acc, $kind, $at, $each );
+			++$n;
 		}
 	}
 
@@ -1156,8 +1311,10 @@ final class AB_MCP_Sync_Net {
 	}
 
 	/**
-	 * The text of a stored value: the value itself, or the texts of an
-	 * unpacked structure, one per line.
+	 * The text of a stored value, whose references are counted: the value
+	 * itself, or the texts of an unpacked structure, its keys and its leaves,
+	 * one per line (a key is no text a reader rewrites: an address with an
+	 * id in it is one no reader read).
 	 *
 	 * @param mixed $raw Value.
 	 * @return string
@@ -1170,15 +1327,28 @@ final class AB_MCP_Sync_Net {
 			return '';
 		}
 		$out = array();
-		array_walk_recursive(
-			$raw,
-			static function ( $leaf ) use ( &$out ) {
-				if ( is_string( $leaf ) && '' !== $leaf ) {
-					$out[] = $leaf;
-				}
-			}
-		);
+		self::strings( $raw, $out );
 		return implode( "\n", $out );
+	}
+
+	/**
+	 * The keys and leaves of a structure that are texts, not empty, in order.
+	 *
+	 * @param array    $value Structure.
+	 * @param string[] $out   The texts.
+	 * @return void
+	 */
+	private static function strings( array $value, array &$out ) {
+		foreach ( $value as $key => $item ) {
+			if ( is_string( $key ) && '' !== $key ) {
+				$out[] = $key;
+			}
+			if ( is_array( $item ) ) {
+				self::strings( $item, $out );
+			} elseif ( is_string( $item ) && '' !== $item ) {
+				$out[] = $item;
+			}
+		}
 	}
 
 	/* ------------------------------------------------------------- count */

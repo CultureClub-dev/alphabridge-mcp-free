@@ -900,6 +900,208 @@ final class SyncNetTest extends TestCase {
 		}
 	}
 
+	/* -------------------------------------------- the form (branch 11b) */
+
+	/**
+	 * A stored value (a meta value, an option) through the readers of its
+	 * kind and the net in its stored form, as meta_form() and option() run
+	 * it (Thomas, 08.11.2026: branch 11b); without readers ($readers false)
+	 * the net alone.
+	 */
+	private static function stored( string $raw, bool $readers = true ): array {
+		$ctx  = self::ctx();
+		$acc  = AB_MCP_Sync_Canon::acc();
+		$mark = AB_MCP_Sync_Net::mark( $acc );
+		if ( $readers ) {
+			\AB_MCP_Sync_Credentials::note( $acc, 'post', 'u', \AB_MCP_Sync_Credentials::unit( 'ab_note', $raw ) );
+			AB_MCP_Sync_Canon::value( $raw, $ctx, $acc, 'post', 'u' );
+		}
+		AB_MCP_Sync_Net::check( $acc, $mark, 'post', 'u', $raw, $ctx, true, true );
+		$locks = array();
+		foreach ( $acc['locks'] as $lock ) {
+			$locks[] = $lock['key'] . '@' . $lock['at'];
+		}
+		return array( $locks, $acc );
+	}
+
+	public function testProseInASerializedValueIsProseWhereTheValueIsReadUnpacked(): void {
+		// Branch 11b (Thomas, 08.11.2026; the find of branch 11): the net read
+		// a serialized meta value or option as its text, whose braces made it
+		// read prose as a field of code. Read unpacked, as WordPress hands it
+		// out, each key and leaf on its own: prose is prose there.
+		$prose = 'Spieler: Anna, Token: drei';
+		foreach ( array(
+			'an array'                  => serialize( array( 'text' => $prose ) ),
+			'nested'                    => serialize( array( 'text' => serialize( array( 'text' => $prose ) ) ) ),
+			'serialized twice'          => serialize( serialize( array( 'text' => $prose ) ) ),
+			'a list'                    => serialize( array( 'Felder: Name, Token: "abc"', $prose ) ),
+			'a leaf of CSS beside it'   => serialize( array( 'css' => '{{WRAPPER}} .x{color:red', 'text' => $prose ) ),
+			'deeper in arrays'          => serialize( array( 'a' => array( 'b' => array( 'c' => $prose ) ), 'n' => 3, 'f' => 0.5, 'on' => true ) ),
+			'a text serialized'         => serialize( $prose ),
+			'with white space around'   => "\n " . serialize( array( 'text' => $prose ) ) . "\n",
+		) as $case => $raw ) {
+			list( $locks, $acc ) = self::stored( $raw );
+			self::assertSame( array(), $locks, $case );
+			self::assertSame( array( array(), array() ), array( $acc['credentials']['mixed'], $acc['unread'] ), $case );
+		}
+		// A text read as it is stored (a column of a row, which WordPress
+		// hands out as stored): its braces as before.
+		list( $locks ) = self::check( serialize( array( 'text' => $prose ) ) );
+		self::assertSame( array( '*:unread_credential@u:net:raw' ), $locks, 'A column: the raw text.' );
+		// A meta value that is no serialized text: the raw text, as before.
+		list( $locks ) = self::stored( 'x = {a:1, token: "abc"}' );
+		self::assertSame( array( '*:unread_credential@u:net:raw' ), $locks );
+	}
+
+	public function testACredentialInASerializedValueLocksWhereverItStands(): void {
+		// The other way: a name of a credential with a value beside it in a
+		// key or a leaf, nested, encoded, still locks the unit; the place
+		// names positions, never a key or a value.
+		$b64 = base64_encode( 'password=demo-secret' );
+		foreach ( array(
+			'code in a leaf'      => array( serialize( array( 'cfg' => '{api_key:"demo-secret"}' ) ), 'php.0:raw' ),
+			'nested'              => array( serialize( array( 'x' => serialize( array( 'cfg' => '{api_key:"demo-secret"}' ) ) ) ), 'php.0.php.0:raw' ),
+			'base64 in a leaf'    => array( serialize( array( 'note' => $b64 ) ), 'php.0:raw/base64' ),
+			'base64 nested'       => array( serialize( array( 'a' => array( 'b' => serialize( array( 'note' => $b64 ) ) ) ) ), 'php.0.0.php.0:raw/base64' ),
+			'base64 as a key'     => array( serialize( array( 'title' => 'x', $b64 => 'frei' ) ), 'php.1.key:raw/base64' ),
+			'base64 as a key nested' => array( serialize( array( 'x' => serialize( array( $b64 => 'frei' ) ) ) ), 'php.0.php.0.key:raw/base64' ),
+			'data: in a leaf'     => array( serialize( array( 'img' => 'data:text/plain;base64,' . base64_encode( 'token=demo-secret' ) ) ), 'php.0:raw/data' ),
+			'a leaf of JSON in base64' => array( serialize( array( 'b' => base64_encode( '{"name":"token","value":"s"}' ) ) ), 'php.0:raw/base64' ),
+		) as $case => list( $raw, $place ) ) {
+			list( $locks, $acc ) = self::stored( $raw );
+			self::assertSame( array( '*:unread_credential@u:net:' . $place ), $locks, $case );
+			self::assertSame( 'u', $acc['credentials']['mixed'][0]['unit'], $case );
+			self::assertStringNotContainsString( 'demo-secret', (string) json_encode( array( $acc['locks'], $acc['credentials'], $acc['unread'] ) ), $case );
+			self::assertStringNotContainsString( $b64, (string) json_encode( array( $acc['locks'], $acc['credentials'], $acc['unread'] ) ), $case . ': no key in a place.' );
+		}
+		// What unpacking drops is read in the raw text: the first value of a
+		// key twice (the second replaces it), what follows the end of the
+		// value. The value does not serialize back to the text byte for byte.
+		$twice = 'a:2:{s:4:"note";s:' . strlen( $b64 ) . ':"' . $b64 . '";s:4:"note";s:4:"frei";}';
+		self::assertSame( array( 'note' => 'frei' ), unserialize( $twice ), 'The first value is gone unpacked.' );
+		foreach ( array(
+			'the first value of a key twice' => array( $twice, 'raw/base64' ),
+			'nested'                         => array( serialize( array( 'x' => $twice ) ), 'php.0:raw/base64' ),
+			'after the end of the value'     => array( serialize( array( 'note' => 'frei' ) ) . serialize( array( 'note' => $b64 ) ), 'raw/base64' ),
+		) as $case => list( $raw, $place ) ) {
+			list( $locks ) = self::stored( $raw );
+			self::assertSame( array( '*:unread_credential@u:net:' . $place ), $locks, $case );
+		}
+		// One lock and one note per unit, from the first text that names one.
+		list( $locks, $acc ) = self::stored( serialize( array( 'a' => base64_encode( 'token=demo-secret' ), 'b' => '{api_key:"demo-secret"}' ) ) );
+		self::assertSame( array( '*:unread_credential@u:net:php.0:raw/base64' ), $locks );
+		self::assertCount( 1, $acc['credentials']['mixed'] );
+		// A name the readers named already is free, in a leaf as in the raw text.
+		list( $locks, $acc ) = self::stored( serialize( array( 'cfg' => '{"api_key":"demo-secret"}' ) ) );
+		self::assertSame( array( '*:credential_field@u' ), $locks, 'The credential check named it: the net adds nothing.' );
+	}
+
+	public function testAStoredValueThatDoesNotUnpackOrHoldsAnObjectIsNeverClean(): void {
+		// The readers of the kinds lock such a value (the credential check,
+		// the canonical form), and the net adds nothing to it; the net alone
+		// fails closed as well. Unpacked only through
+		// AB_MCP_Sync_Canon::unserialized(): no object is made.
+		$object = 'a:1:{s:1:"x";O:24:"AB_Net_Test_Never_Woken":0:{}}';
+		foreach ( array(
+			'a count too high'   => array( 'a:2:{s:4:"text";s:4:"kurz";}', '*:unreadable_value@u' ),
+			'a length too high'  => array( 'a:1:{s:4:"text";s:9:"zu kurz";}', '*:php_object@u' ),
+			'an object'          => array( $object, '*:php_object@u' ),
+			'an enum'            => array( 'a:1:{s:1:"x";E:11:"Suit:Hearts";}', '*:php_object@u' ),
+		) as $case => list( $raw, $lock ) ) {
+			list( $locks ) = self::stored( $raw );
+			self::assertSame( array( $lock ), $locks, $case . ': the lock of the readers.' );
+			list( $locks ) = self::stored( $raw, false );
+			self::assertSame( array( $lock . ':net' ), $locks, $case . ': the net alone.' );
+		}
+		self::assertFalse( class_exists( 'AB_Net_Test_Never_Woken', false ), 'No class was asked for.' );
+		// Nested: the leaf that does not unpack, by its place.
+		list( $locks ) = self::stored( serialize( array( 'x' => $object ) ), false );
+		self::assertSame( array( '*:php_object@u:net:php.0' ), $locks );
+		list( $locks ) = self::stored( serialize( array( 'ok' => 'x', 'y' => 'a:2:{s:1:"z";s:4:"kurz";}' ) ), false );
+		self::assertSame( array( '*:unreadable_value@u:net:php.1' ), $locks );
+		// Beyond the layers and the depth of the readers: not read to its end.
+		$layers = 'Spieler: Anna, Token: drei';
+		for ( $i = 0; $i <= AB_MCP_Sync_Canon::MAX_LAYERS; $i++ ) {
+			$layers = serialize( $layers );
+		}
+		list( $locks, $acc ) = self::stored( $layers, false );
+		self::assertSame( array( '*:unreadable_value@u:net:' . implode( '.', array_fill( 0, AB_MCP_Sync_Canon::MAX_LAYERS, 'php' ) ) ), $locks );
+		self::assertSame( array( 'depth:u:net:' . implode( '.', array_fill( 0, AB_MCP_Sync_Canon::MAX_LAYERS, 'php' ) ) ), $acc['unread'] );
+		$deep = 'x';
+		for ( $i = 0; $i <= AB_MCP_Sync_Canon::MAX_DEPTH; $i++ ) {
+			$deep = array( $deep );
+		}
+		list( $locks, $acc ) = self::stored( serialize( $deep ), false );
+		self::assertSame( array( '*:unreadable_value' ), array_map( static fn( $l ) => explode( '@', $l )[0], $locks ) );
+		self::assertCount( 1, $acc['unread'] );
+		self::assertStringStartsWith( 'depth:u:net:php.0.0.0', $acc['unread'][0] );
+	}
+
+	public function testTheReferencesOfAStoredValueAreCountedOverItsRawText(): void {
+		// The count of branch 4 stays over the raw value: what the readers
+		// read in the leaves, the net counts in the raw text; a key, which no
+		// reader rewrites, counts as well.
+		list( $locks ) = self::stored( serialize( array( 'text' => 'siehe index.php?p=12' ) ) );
+		self::assertSame( array( '*:unread_reference@u:net:raw' ), $locks );
+		list( $locks, $acc ) = self::stored( serialize( array( 'url' => 'https://staging.test/?p=12', 'text' => 'siehe /?p=13' ) ) );
+		self::assertSame( array( array(), array( 'post:12', 'post:13' ) ), array( $locks, $acc['addressed'] ) );
+		list( $locks ) = self::stored( serialize( array( '/?p=12' => 'x' ) ) );
+		self::assertSame( array( '*:unread_reference@u:net:raw' ), $locks, 'An address with an id in a key.' );
+		list( $locks ) = self::stored( serialize( array( 'note' => base64_encode( '{"src":"/?p=12"}' ) ) ) );
+		self::assertSame( array( '*:unread_reference@u:net:raw/base64' ), $locks );
+	}
+
+	public function testEachKeyAndLeafOfAStructureIsReadOnItsOwn(): void {
+		// A widget instance (a structure): every key and every leaf a text of
+		// its own (branch 11b; before, the leaves joined and no key), its
+		// keys counted for the references too.
+		$ctx = self::ctx();
+		$net = static function ( array $settings ) use ( $ctx ): array {
+			$acc = AB_MCP_Sync_Canon::acc();
+			AB_MCP_Sync_Net::check( $acc, AB_MCP_Sync_Net::mark( $acc ), 'widget_area', 'w', $settings, $ctx );
+			return array_map( static fn( $l ) => $l['key'] . '@' . $l['at'], $acc['locks'] );
+		};
+		self::assertSame( array( '*:unread_credential@w:net:1.key:raw/base64' ), $net( array( 'title' => 'x', base64_encode( 'password=demo-secret' ) => 'frei' ) ) );
+		self::assertSame( array( '*:unread_credential@w:net:0.1:raw/base64' ), $net( array( 'items' => array( 'a', base64_encode( 'token=demo-secret' ) ) ) ) );
+		self::assertSame( array( '*:unread_reference@w:net:raw' ), $net( array( '/?p=12' => 'x' ) ), 'An address with an id in a key.' );
+		// A leaf with an open brace leaves the next one prose.
+		self::assertSame( array(), $net( array( 'css' => '.x{', 'text' => 'Felder: Name, Token: "abc"' ) ) );
+		// A leaf serialized in its turn: unpacked.
+		self::assertSame( array(), $net( array( 'text' => serialize( array( 'text' => 'Spieler: Anna, Token: drei' ) ) ) ) );
+		self::assertSame( array( '*:unread_credential@w:net:0.php.0:raw' ), $net( array( 'cfg' => serialize( array( 'x' => '{api_key:"demo-secret"}' ) ) ) ) );
+		// An object in a structure (none comes from AB_MCP_Sync_Canon::
+		// unserialized(), fail closed all the same).
+		self::assertSame( array( '*:php_object@w:net:1' ), $net( array( 'title' => 'x', 'o' => new \stdClass() ) ) );
+		// A structure is unpacked already, as AB_MCP_Sync_Canon::structure()
+		// counts it: a leaf serialized as often as the layers allow is not
+		// read to its end.
+		$leaf = 'Spieler: Anna, Token: drei';
+		for ( $i = 1; $i < AB_MCP_Sync_Canon::MAX_LAYERS; $i++ ) {
+			$leaf = serialize( $leaf );
+		}
+		self::assertSame( array(), $net( array( 'text' => $leaf ) ), 'Within the layers.' );
+		self::assertSame( array( '*:unreadable_value@w:net:0' . str_repeat( '.php', AB_MCP_Sync_Canon::MAX_LAYERS - 1 ) ), $net( array( 'text' => serialize( $leaf ) ) ), 'Beyond them.' );
+	}
+
+	public function testAValueThatDoesNotSerializeBackIsReadAsItsTextAsWell(): void {
+		// The limit of the form: a value whose text does not come back byte
+		// for byte from its value (a float written with another precision, a
+		// key of digits as a text) is read in its raw text as well, as the
+		// net read every serialized value before branch 11b; prose in braces
+		// there locks as it did then.
+		$prose = 'Spieler: Anna, Token: drei';
+		$float = 'a:2:{s:1:"f";d:0.10000000000000001;s:4:"text";s:' . strlen( $prose ) . ':"' . $prose . '";}';
+		self::assertNotSame( $float, serialize( unserialize( $float ) ) );
+		list( $locks ) = self::stored( $float );
+		self::assertSame( array( '*:unread_credential@u:net:raw' ), $locks );
+		$digits = 'a:1:{s:1:"5";s:' . strlen( $prose ) . ':"' . $prose . '";}';
+		list( $locks ) = self::stored( $digits );
+		self::assertSame( array( '*:unread_credential@u:net:raw' ), $locks );
+		// Without prose in braces, nothing.
+		list( $locks ) = self::stored( 'a:1:{s:1:"f";d:0.10000000000000001;}' );
+		self::assertSame( array(), $locks );
+	}
+
 	public function testBeyondTheDepthTheUnitIsNotReadToItsEnd(): void {
 		$text = '/?p=12';
 		for ( $i = 0; $i <= AB_MCP_Sync_Net::MAX_DEPTH; $i++ ) {
