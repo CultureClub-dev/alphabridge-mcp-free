@@ -843,7 +843,7 @@ e('paket/export-chunk-relay', 'chunk(): no chunk over http where the site is pub
 REFUSE = 'testOnlyAConfirmedStagingSiteWithAPairAndAKeyMakesOrGivesOutAPackage'
 for name, search in (
     ('network', "\t\tif ( is_multisite() ) {\n\t\t\treturn self::multisite();"),
-    ('role', "\t\tif ( AB_MCP_Staging::ROLE_STAGING !== AB_MCP_Staging::role() ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_manifest_role', 'Only the confirmed staging site makes"),
+    ('role', "\t\tif ( AB_MCP_Staging::ROLE_STAGING !== AB_MCP_Staging::role() ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_manifest_role', __( 'Only the confirmed staging site makes"),
     ('pair', "\t\tif ( null === AB_MCP_Staging::record()['pair'] ) {"),
     ('key', "\t\tif ( null === AB_MCP_Sync_Key::current() ) {"),
 ):
@@ -1299,7 +1299,7 @@ T3 = {
 e('paket/t3-refusal-capability', 'refusal(): an account with manage_options (decision 9)', EX,
   "\t\tif ( ! current_user_can( 'manage_options' ) ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_export_capability'", "\t\tif ( false ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_export_capability'", 'package', T3['cond'])
 e('paket/t3-refusal-mode', 'refusal(): write access on, the access level Full (decision 9)', EX,
-  "\t\tif ( ! AB_MCP_Site_Mode::is_full() ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_export_mode'", "\t\tif ( false ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_export_mode'", 'package', T3['cond'])
+  "\t\tif ( ! AB_MCP_Site_Mode::is_full() ) {\n\t\t\t/* translators: %s: how to switch write access on, a whole sentence. */\n\t\t\treturn new WP_Error( 'ab_mcp_sync_export_mode'", "\t\tif ( false ) {\n\t\t\t/* translators: %s: how to switch write access on, a whole sentence. */\n\t\t\treturn new WP_Error( 'ab_mcp_sync_export_mode'", 'package', T3['cond'])
 e('paket/t3-deliver-mode', 'deliver(): nothing given out with write access off (two sites)', EX,
   "\t\t// With write access off, a staging site gives nothing out.\n\t\tif ( ! AB_MCP_Site_Mode::is_full() ) {", "\t\t// With write access off, a staging site gives nothing out.\n\t\tif ( false ) {", 'itpkg', T3['mode_it'])
 # What goes into it.

@@ -358,7 +358,6 @@ final class SyncSafeCallsTest extends TestCase {
 		),
 		'class-sync-resources.php' => array(
 			'__' => array( 6, 'the refusals and errors the tools wp_site_* pass on, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares, hashes or parses (branch 13 text/z8, Codex round 1).' ),
-			'_n' => array( 1, 'The same texts where a count decides the form: the refusals and errors the tools wp_site_* pass on, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares, hashes or parses (branch 13 text/z8, Codex round 1).' ),
 			'AB_MCP_Protected_Store::root' => array( 1, 'measure(): the folder of the store, for the free space and the tempo of a write there (15.11).' ),
 		),
 		'class-sync-post-writer.php' => array(

@@ -628,7 +628,7 @@ e('sel-entry', 'plan_confirm(): an entry of the proposal', T,
 e('sel-category', 'plan_confirm(): only equal, differs and realign are paired', T,
   "\t\t\tif ( ! in_array( $entry['category'], array( 'equal', 'differs', 'realign' ), true ) ) {", "\t\t\tif ( false ) {", 'it', SEL)
 e('sel-realign-ready', 'plan_confirm(): a realign entry that cannot be aligned is refused', T,
-  "\t\t\tif ( 'realign' === $entry['category'] && null === $entry['confirm'] ) {\n\t\t\t\treturn self::selection(", "\t\t\tif ( false ) {\n\t\t\t\treturn self::selection(", 'it', SEL)
+  "\t\t\tif ( 'realign' === $entry['category'] && null === $entry['confirm'] ) {\n\t\t\t\t/* translators: 1: entry number of the proposal, 2: the reason the proposal names (English, a value of the proposal). */\n\t\t\t\treturn self::selection(", "\t\t\tif ( false ) {\n\t\t\t\t/* translators: 1: entry number of the proposal, 2: the reason the proposal names (English, a value of the proposal). */\n\t\t\t\treturn self::selection(", 'it', SEL)
 e('sel-realign-skip', 'plan_confirm(): by category, such a realign entry is skipped', T,
   "\t\t\t\tif ( 'realign' === $entry['category'] && null === $entry['confirm'] ) {\n\t\t\t\t\t$skipped[]", "\t\t\t\tif ( false ) {\n\t\t\t\t\t$skipped[]", 'it', SEL)
 e('sel-room', 'plan_confirm(): categories only where select and choices leave room', T,
@@ -646,9 +646,9 @@ e('sel-twice', 'plan_confirm(): an object chosen twice is refused', T,
 e('now-skip', 'plan_confirm(): an entry paired meanwhile is skipped', T,
   "\t\t\tif ( is_string( $now ) ) {", "\t\t\tif ( false ) {", 'it', 'testAProposalOfTheStagingInventoryIsConfirmedListedAndDiscardedOverMcp')
 e('now-paired', 'now(): a ref of a pair is paired meanwhile', T,
-  "\t\t\t\tif ( null !== $pair ) {\n\t\t\t\t\treturn sprintf( 'paired meanwhile", "\t\t\t\tif ( false ) {\n\t\t\t\t\treturn sprintf( 'paired meanwhile", 'it', 'testAProposalOfTheStagingInventoryIsConfirmedListedAndDiscardedOverMcp')
+  "\t\t\t\tif ( null !== $pair ) {", "\t\t\t\tif ( false ) {", 'it', 'testAProposalOfTheStagingInventoryIsConfirmedListedAndDiscardedOverMcp')
 e('now-changed', 'now(): a pair changed since the proposal is skipped', T,
-  "\t\treturn hash_equals( $op['expected'], AB_MCP_Sync_Pairs::snapshot_hash( $snapshot ) ) ? null : sprintf( 'pair %d changed since the proposal', $op['pair_id'] );", "\t\treturn null;", 'it', 'testAPairChangedSinceTheProposalIsSkippedNotOverwritten')
+  "\t\treturn hash_equals( $op['expected'], AB_MCP_Sync_Pairs::snapshot_hash( $snapshot ) ) ? null : sprintf( __( 'Pair %d changed since the proposal.', 'alphabridge-mcp' ), $op['pair_id'] );", "\t\treturn null;", 'it', 'testAPairChangedSinceTheProposalIsSkippedNotOverwritten')
 e('nothing-left', 'plan_confirm(): nothing left to confirm is refused', T,
   "\t\tif ( array() === $fresh ) {", "\t\tif ( false ) {", 'it', 'testAProposalOfTheStagingInventoryIsConfirmedListedAndDiscardedOverMcp')
 # plan_discard() by the line before (discard_as_shown() checks the same, branch 12).
@@ -660,7 +660,7 @@ e('discard-once', 'plan_discard(): each once', T, DI, DI.replace(' || count( arr
 e('discard-source', 'plan_discard(): a pair of this source only', T,
   "\t\t\tif ( null === $pair || $source !== $pair['source_id'] ) {", "\t\t\tif ( null === $pair ) {", 'it', 'testADiscardThatCannotEndAPairEndsNone')
 e('sel-by-choice', 'plan_confirm(): an ambiguous or uncertain entry needs a choice', T,
-  "\t\t\tif ( in_array( $entry['category'], AB_MCP_Sync_Proposal::BY_CHOICE, true ) ) {\n\t\t\t\treturn self::selection( sprintf( 'Entry %1$d is %2$s: it is paired only", "\t\t\tif ( false ) {\n\t\t\t\treturn self::selection( sprintf( 'Entry %1$d is %2$s: it is paired only", 'it', SEL)
+  "\t\t\tif ( in_array( $entry['category'], AB_MCP_Sync_Proposal::BY_CHOICE, true ) ) {", "\t\t\tif ( false ) {", 'it', SEL)
 e('sel-choice-by-choice', 'plan_confirm(): a choice for an ambiguous or uncertain entry only', T,
   "\t\t\tif ( ! in_array( $entry['category'], AB_MCP_Sync_Proposal::BY_CHOICE, true ) ) {", "\t\t\tif ( false ) {", 'it', SEL)
 CE = "\t\t\t$equal = AB_MCP_Sync_Proposal::alike( $s, $l );"
@@ -670,7 +670,7 @@ e('choice-refs', 'plan_confirm(): a chosen pair is active only where its referen
 e('live-bound', 'plan_confirm(): the state binds the objects of this site read fresh', T,
   "\t\t\t$op['live_now'] = $live[ $op['kind'] . \"\\0\" . $op['live_ref'] ];", "\t\t\t$op['live_now'] = 'x';", 'it', 'testTheTokenCoversTheObjectsOfThisSiteAsTheyAreWhenConfirmed')
 e('live-gone', 'plan_confirm(): an object gone since the proposal is skipped', T,
-  "$now            = 'gone' === $op['live_now'] ? 'the object of this site is gone since the proposal' : self::now( $source, $op );", "$now            = self::now( $source, $op );", 'it', 'testTheTokenCoversTheObjectsOfThisSiteAsTheyAreWhenConfirmed')
+  "$now            = 'gone' === $op['live_now'] ? __( 'The object of this site is gone since the proposal.', 'alphabridge-mcp' ) : self::now( $source, $op );", "$now            = self::now( $source, $op );", 'it', 'testTheTokenCoversTheObjectsOfThisSiteAsTheyAreWhenConfirmed')
 e('live-changed-shown', 'named(): the preview says an object changed since the proposal', T,
   "\t\t\t$op['changed_since_proposal'] = $op['live_now'] !== $op['base_live'];", "\t\t\t$op['changed_since_proposal'] = false;", 'it', 'testTheTokenCoversTheObjectsOfThisSiteAsTheyAreWhenConfirmed')
 e('state-connection', 'plan(): the state binds the connection', T,
@@ -711,14 +711,14 @@ e('gate-carry-over', 'CARRY_OVER: wp_site_pairs is not held by «Staging first»
 
 # ---------------------------------------------------------------- import
 e('taken-id', 'taken(): a package id is 32 hex', IM,
-  "\t\tif ( ! is_string( $package_id ) || ! preg_match( AB_MCP_Sync_Key::ID, $package_id ) ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_import_package', 'A package is named",
-  "\t\tif ( false ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_import_package', 'A package is named", 'tool', TOOL_IDS)
+  "\t\tif ( ! is_string( $package_id ) || ! preg_match( AB_MCP_Sync_Key::ID, $package_id ) ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_import_package', ",
+  "\t\tif ( false ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_import_package', ", 'tool', TOOL_IDS)
 e('taken-unknown', 'taken(): a package this account took over only', IM,
-  "\t\tif ( null === $found ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_import_unknown', sprintf(", "\t\tif ( false ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_import_unknown', sprintf(", 'it', 'testOnlyAPackageTakenOverCompletelyIsRead')
+  "\t\tif ( null === $found ) {\n\t\t\t/* translators: %s: id of the package (package_id). */\n\t\t\treturn new WP_Error( 'ab_mcp_sync_import_unknown', sprintf(", "\t\tif ( false ) {\n\t\t\t/* translators: %s: id of the package (package_id). */\n\t\t\treturn new WP_Error( 'ab_mcp_sync_import_unknown', sprintf(", 'it', 'testOnlyAPackageTakenOverCompletelyIsRead')
 e('taken-purpose', 'taken(): a package held for the purpose it is read for only', IM,
   "\t\tif ( ! is_array( $expect ) || ! isset( $expect['purpose'] ) || $purpose !== $expect['purpose'] ) {", "\t\tif ( ! is_array( $expect ) ) {", 'it', 'testTakenReadsOnlyAPackageOfTheInventoryWithItsChunksAsSigned')
 e('taken-bound', 'taken(): a package of the pair of sites as it is now', IM,
-  "\t\tif ( true !== self::bound( $found, AB_MCP_Sync_Anchor::pair_print() ) ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_import_pair_changed', sprintf(", "\t\tif ( false ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_import_pair_changed', sprintf(", 'it', 'testAProposalHoldsNoMoreOnceThePairOfSitesChangedOrItExpired')
+  "\t\tif ( true !== self::bound( $found, AB_MCP_Sync_Anchor::pair_print() ) ) {", "\t\tif ( false ) {", 'it', 'testAProposalHoldsNoMoreOnceThePairOfSitesChangedOrItExpired')
 e('taken-verify', 'taken(): its manifest checked again', IM,
   "\t\t$checked = AB_MCP_Sync_Manifest::verify( $found['signed'], $expect );\n\t\tif ( is_wp_error( $checked ) ) {\n\t\t\treturn $checked;\n\t\t}\n\t\t$manifest = $checked['manifest'];",
   "\t\t$checked = array( 'manifest' => $found['manifest'] );\n\t\t$manifest = $checked['manifest'];", 'it', 'testAPackageWhoseManifestExpiredIsNotRead')

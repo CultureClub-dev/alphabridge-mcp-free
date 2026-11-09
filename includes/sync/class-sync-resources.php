@@ -398,7 +398,6 @@ final class AB_MCP_Sync_Resources {
 		if ( $bytes >= 1048576 ) {
 			return sprintf( '%.0f MB', $bytes / 1048576 );
 		}
-		/* translators: %d: a number of bytes. */
-		return sprintf( _n( '%d byte', '%d bytes', $bytes, 'alphabridge-mcp' ), $bytes );
+		return sprintf( '%d bytes', $bytes );
 	}
 }

@@ -114,6 +114,7 @@ final class AB_MCP_Sync_Widget_Area_Writer {
 			return $held;
 		}
 		if ( ! isset( $line['content']['meta'], $line['form'] ) || ! is_array( $line['content']['meta'] ) || ! is_array( $line['form'] ) ) {
+			/* translators: %s: the id of the widget area (sidebar-1, …). */
 			return AB_MCP_Sync_Post_Writer::locked( 'post:content_missing', sprintf( __( 'The package carries no instances of the area %s.', 'alphabridge-mcp' ), $area ) );
 		}
 		$state = self::state( $area );

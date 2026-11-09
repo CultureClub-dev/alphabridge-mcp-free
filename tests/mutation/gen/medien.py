@@ -135,8 +135,8 @@ e('unpacked-hash', 'unpacked(): every file against its SHA-256', MP,
   "\t\t\t\t\tif ( ! hash_equals( $current['sha256'], hash_final( $current['hash'] ) ) ) {",
   "\t\t\t\t\tif ( false ) {", 'it', PACKAGE)
 e('unpacked-end', 'unpacked(): no package ends within a file', MP,
-  "\t\tif ( null !== $current ) {\n\t\t\treturn self::refusal( 'The package ends within the pieces of a file.' );",
-  "\t\tif ( false ) {\n\t\t\treturn self::refusal( 'The package ends within the pieces of a file.' );", 'it', PACKAGE)
+  "\t\tif ( null !== $current ) {",
+  "\t\tif ( false ) {", 'it', PACKAGE)
 e('unpacked-line', 'unpacked(): a line that is no piece of a file refuses', MP,
   "\t\t\t\tif ( null === $piece ) {\n\t\t\t\t\treturn self::refusal(",
   "\t\t\t\tif ( null === $piece ) {\n\t\t\t\t\tcontinue;\n\t\t\t\t\treturn self::refusal(", 'it', PACKAGE)
@@ -196,8 +196,8 @@ e('verdict-attachment', 'verdict(): an attachment is an item of its kind', PU,
   "\t\t} elseif ( 'attachment' === $entry['kind'] ) {\n\t\t\t// An attachment with its files (branch 10): no choice «as draft».\n\t\t\tif ( $as_draft ) {",
   "\t\t} elseif ( false ) {\n\t\t\t// An attachment with its files (branch 10): no choice «as draft».\n\t\t\tif ( $as_draft ) {", 'run', U_VERDICT)
 e('verdict-no-draft', 'verdict(): an attachment has no status draft', PU,
-  "\t\t\tif ( $as_draft ) {\n\t\t\t\treturn $lock( 'An attachment has no status draft: leave it out of as_draft.' );",
-  "\t\t\tif ( false ) {\n\t\t\t\treturn $lock( 'An attachment has no status draft: leave it out of as_draft.' );", 'run', U_VERDICT)
+  "\t\t\tif ( $as_draft ) {\n\t\t\t\treturn $lock( ",
+  "\t\t\tif ( false ) {\n\t\t\t\treturn $lock( ", 'run', U_VERDICT)
 e('plan-weak-parent', 'plan(): the weak parent of an attachment is read for its parent step', PU,
   "\t\t\t\t\t$item['weak_parent'] = (string) (int) $ref['id'];\n\t\t\t\t\tcontinue;",
   "\t\t\t\t\tcontinue;", 'it', NORMAL)
@@ -223,8 +223,8 @@ e('engine-media-lines', 'lines(): a package of media of the run by its index', E
   "\t\t\tif ( 'media' === AB_MCP_Sync_Import::purpose_of( $package_id ) ) {",
   "\t\t\tif ( false ) {", 'it', NORMAL)
 e('engine-media-report', 'lines(): a package of media of another report is refused', EN,
-  "\t\t\t\tif ( ! hash_equals( (string) $run['report_hash'], (string) $taken['manifest']['report_hash'] ) ) {\n\t\t\t\t\treturn new WP_Error( 'ab_mcp_sync_objects_report', sprintf( 'The package of media",
-  "\t\t\t\tif ( false ) {\n\t\t\t\t\treturn new WP_Error( 'ab_mcp_sync_objects_report', sprintf( 'The package of media", 'it', LOCKS)
+  "\t\t\t\tif ( ! hash_equals( (string) $run['report_hash'], (string) $taken['manifest']['report_hash'] ) ) {",
+  "\t\t\t\tif ( false ) {", 'it', LOCKS)
 e('engine-attach-item', 'boundary(): the parent step as an update of the attachment its step made', EN,
   "\t\t\t$item = self::attach_item( $run, $item );\n", "", 'it', NORMAL)
 e('engine-lay-files', 'boundary(): the files of an attachment before its row', EN,
@@ -232,11 +232,11 @@ e('engine-lay-files', 'boundary(): the files of an attachment before its row', E
 e('engine-lay-files-stop', 'boundary(): files not laid whole, no row', EN,
   "\t\t\tif ( true !== $laid['ok'] ) {", "\t\t\tif ( false ) {", 'it', RACE)
 e('engine-files-call', 'write_parts(): a call that changed a file of the attachment deviates the object (Codex round 1, A3)', EN,
-  "\t\t\t\tif ( null !== $moved ) {\n\t\t\t\t\treturn self::deviated( $journal, $i, sprintf( 'the call of the part %1$s changed the file",
-  "\t\t\t\tif ( false ) {\n\t\t\t\t\treturn self::deviated( $journal, $i, sprintf( 'the call of the part %1$s changed the file", 'it', FILEHOOK)
+  "\t\t\t\tif ( null !== $moved ) {\n\t\t\t\t\t/* translators: 1: name of the part, as the tools name it (row, meta:…), 2: path of the file under the uploads. */\n\t\t\t\t\treturn self::deviated( $journal, $i, sprintf( ",
+  "\t\t\t\tif ( false ) {\n\t\t\t\t\t/* translators: 1: name of the part, as the tools name it (row, meta:…), 2: path of the file under the uploads. */\n\t\t\t\t\treturn self::deviated( $journal, $i, sprintf( ", 'it', FILEHOOK)
 e('engine-files-back-start', 'put_back(): a file changed since the step read it last stops the way back before any part (Codex round 1, A3)', EN,
-  "\t\t\tif ( null !== $moved ) {\n\t\t\t\t$stopped = sprintf( 'the file %s of the attachment changed since",
-  "\t\t\tif ( false ) {\n\t\t\t\t$stopped = sprintf( 'the file %s of the attachment changed since", 'it', FILEHOOK)
+  "\t\t\tif ( null !== $moved ) {\n\t\t\t\t/* translators: %s: path of the file under the uploads. */\n\t\t\t\t$stopped = sprintf( ",
+  "\t\t\tif ( false ) {\n\t\t\t\t/* translators: %s: path of the file under the uploads. */\n\t\t\t\t$stopped = sprintf( ", 'it', FILEHOOK)
 e('engine-files-back-put', 'put_back(): a put back that changed a file stops the way back from there (Codex round 1, A3)', EN,
   "\t\t\t\t\tif ( null === $stopped && null !== $moved ) {", "\t\t\t\t\tif ( false ) {", 'it', FILEHOOK)
 e('writer-files-state', 'files_state(): a file by its SHA-256 and size (Codex round 1, A3)', AW,
@@ -273,8 +273,8 @@ e('writer-parent-later', 'target_of(): a new attachment made unattached where it
 e('writer-parent-pending', 'target_of(): a parent the run creates is pending for the check', AW,
   "\t\t\t} elseif ( null === $mapped && isset( $pending['post'][ $parent ] ) ) {", "\t\t\t} elseif ( false ) {", 'it', CHANGED)
 e('writer-parent-unmapped', 'target_of(): a parent without a pair the run does not create locks', AW,
-  "\t\t\tif ( null === $mapped ) {\n\t\t\t\treturn AB_MCP_Sync_Post_Writer::locked( 'post:reference_unmapped', sprintf( 'the post %d of the staging site the attachment hangs under",
-  "\t\t\tif ( false ) {\n\t\t\t\treturn AB_MCP_Sync_Post_Writer::locked( 'post:reference_unmapped', sprintf( 'the post %d of the staging site the attachment hangs under", 'it', LOCKS)
+  "\t\t\tif ( null === $mapped ) {\n\t\t\t\t/* translators: %d: post id on the staging site. */\n\t\t\t\treturn AB_MCP_Sync_Post_Writer::locked( 'post:reference_unmapped', sprintf( ",
+  "\t\t\tif ( false ) {\n\t\t\t\t/* translators: %d: post id on the staging site. */\n\t\t\t\treturn AB_MCP_Sync_Post_Writer::locked( 'post:reference_unmapped', sprintf( ", 'it', LOCKS)
 e('writer-interim-target', 'target_of(): the target of an attachment made unattached has no parent', AW,
   "\t\t\t$target['row']['post_parent'] = '0';\n", "", 'it', NORMAL)
 e('writer-own-meta-new', 'target_of(): the own keys of a new attachment by their rule', AW,
@@ -324,7 +324,7 @@ e('writer-media-missing', 'files_plan(): a file to lay the packages of media of 
   "\t\t\t\tif ( ! is_array( $prepared['media'] ) || ! isset( $prepared['media'][ $key ] ) || ",
   "\t\t\t\tif ( ! is_array( $prepared['media'] ) || ", 'it', LOCKS)
 e('writer-shared', 'files_plan(): a path another attachment of this site names locks', AW,
-  "\t\tforeach ( $named as $path => $ids ) {\n\t\t\treturn AB_MCP_Sync_Post_Writer::locked( 'attachment:shared_path'", "\t\tforeach ( array() as $path => $ids ) {\n\t\t\treturn AB_MCP_Sync_Post_Writer::locked( 'attachment:shared_path'", 'it', LOCKS)
+  "\t\tforeach ( $named as $path => $ids ) {\n\t\t\t/* translators: 1: the path of a file under the uploads, 2: attachment id on this site. */\n\t\t\treturn AB_MCP_Sync_Post_Writer::locked( 'attachment:shared_path'", "\t\tforeach ( array() as $path => $ids ) {\n\t\t\t/* translators: 1: the path of a file under the uploads, 2: attachment id on this site. */\n\t\t\treturn AB_MCP_Sync_Post_Writer::locked( 'attachment:shared_path'", 'it', LOCKS)
 e('media-named-absolute', 'named_by(): the list of a candidate read as the core reads it (Codex round 1, A6)', ME,
   "$backup['value'], $uploads['dir'], true );", "$backup['value'], $uploads['dir'], false );", 'it', LOCKS)
 e('media-paths-core-attached', 'paths() as the core: an absolute _wp_attached_file under the uploads (Codex round 1, A6)', ME,
@@ -341,8 +341,8 @@ e('writer-shared-exact', 'named_by(): a candidate names the path byte for byte',
   "\t\t\t\t\tif ( isset( $want[ $entry['path'] ] ) ) {\n\t\t\t\t\t\t$out[ $entry['path'] ][] = (int) $id;",
   "\t\t\t\t\tif ( true ) {\n\t\t\t\t\t\t$out[ $entry['path'] ][] = (int) $id;", 'it', CHANGED)
 e('writer-provide-name', 'provide(): a content of another type than its name refuses', AW,
-  "\t\t\tif ( ! empty( $check['proper_filename'] ) ) {\n\t\t\t\t$done = AB_MCP_Sync_Post_Writer::locked( 'attachment:file_type'",
-  "\t\t\tif ( false ) {\n\t\t\t\t$done = AB_MCP_Sync_Post_Writer::locked( 'attachment:file_type'", 'it', RACE)
+  "\t\t\tif ( ! empty( $check['proper_filename'] ) ) {",
+  "\t\t\tif ( false ) {", 'it', RACE)
 e('writer-provide-first', 'lay_files(): every file provided before the first is laid', AW,
   "\t\t\t\t$made = self::provide( $taken[ $package ], $file, $prepared );", "\t\t\t\t$made = $file['path'];", 'it', RACE)
 e('writer-lay-exclusive', 'lay(): a file laid exclusively (fopen xb)', AW,
@@ -357,8 +357,8 @@ e('writer-folder', 'folder(): the missing folders made under the uploads, one le
 e('writer-folder-root', 'folder(): the uploads folder itself made where it is missing (Codex round 1, B8)', AW,
   "\t\tforeach ( array_merge( array( '' ), $parts ) as $part ) {", "\t\tforeach ( $parts as $part ) {", 'pkg', U_FOLDER)
 e('writer-folder-file', 'folder(): a file where a folder goes locks', AW,
-  "\t\t\tif ( ! is_link( $at ) && file_exists( $at ) && ! is_dir( $at ) ) {\n\t\t\t\treturn AB_MCP_Sync_Post_Writer::locked( 'attachment:replace_file'",
-  "\t\t\tif ( false ) {\n\t\t\t\treturn AB_MCP_Sync_Post_Writer::locked( 'attachment:replace_file'", 'pkg', U_FOLDER)
+  "\t\t\tif ( ! is_link( $at ) && file_exists( $at ) && ! is_dir( $at ) ) {",
+  "\t\t\tif ( false ) {", 'pkg', U_FOLDER)
 e('writer-lay-dir-again', 'lay(): the folder of the file asked again right before the open (Codex round 1, A1)', AW,
   "\t\tif ( is_link( $dir ) || false === $real_dir || $real_dir !== $dir || ! is_dir( $real_dir ) || ( $dir !== $root && 0 !== strpos( $dir, $root . '/' ) ) ) {",
   "\t\tif ( false ) {", 'pkg', U_LAY)
@@ -394,11 +394,11 @@ e('writer-write-part-rights', 'write_part(): an own key with the right to the at
   "\t\tif ( ! current_user_can( 'edit_post', (int) $live_id ) || ( in_array( $key, self::FILE_META, true ) && ! current_user_can( 'upload_files' ) ) ) {",
   "\t\tif ( false ) {", 'pkg', U_RIGHTS)
 e('writer-restore-upload', 'restore_right(): a key that names files needs upload_files on the way back', AW,
-  "\t\tif ( in_array( $key, self::FILE_META, true ) && ! current_user_can( 'upload_files' ) ) {\n\t\t\treturn sprintf( 'change the files of the attachment %1$d (upload_files, for the part %2$s)', $id, $part );",
-  "\t\tif ( false ) {\n\t\t\treturn sprintf( 'change the files of the attachment %1$d (upload_files, for the part %2$s)', $id, $part );", 'pkg', U_RIGHTS)
+  "\t\tif ( in_array( $key, self::FILE_META, true ) && ! current_user_can( 'upload_files' ) ) {",
+  "\t\tif ( false ) {", 'pkg', U_RIGHTS)
 e('writer-restore-edit', 'restore_right(): an own key needs edit_post on the way back', AW,
-  "\t\tif ( ! current_user_can( 'edit_post', $id ) ) {\n\t\t\treturn sprintf( 'edit the attachment %1$d (edit_post, for the part %2$s)', $id, $part );",
-  "\t\tif ( false ) {\n\t\t\treturn sprintf( 'edit the attachment %1$d (edit_post, for the part %2$s)', $id, $part );", 'pkg', U_RIGHTS)
+  "\t\tif ( ! current_user_can( 'edit_post', $id ) ) {",
+  "\t\tif ( false ) {", 'pkg', U_RIGHTS)
 e('writer-restore-files', 'restore_right(): a key that names files goes back only where every file it names may (Codex round 1, A4)', AW,
   "\t\t\t$why = self::restore_files( $id, $backup );\n\t\t\tif ( null !== $why ) {",
   "\t\t\t$why = self::restore_files( $id, $backup );\n\t\t\tif ( false ) {", 'it', EDIT)
@@ -413,8 +413,8 @@ e('writer-restore-content-only', 'restore_files(): never the types this account 
   "\t\t\t\t$check = self::content_check( $root . '/' . $file, self::base( $file ) );",
   "\t\t\t\t$check = wp_check_filetype_and_ext( $root . '/' . $file, self::base( $file ), get_allowed_mime_types( wp_get_current_user() ) );", 'it', FILEHOOK)
 e('writer-restore-shared', 'restore_files(): no other attachment of this site names a file the value names (Codex round 1, A4)', AW,
-  "\t\tforeach ( $named as $path => $ids ) {\n\t\t\treturn sprintf( 'name the file %1$s again: the attachment",
-  "\t\tforeach ( array() as $path => $ids ) {\n\t\t\treturn sprintf( 'name the file %1$s again: the attachment", 'it', FILEHOOK)
+  "\t\tforeach ( $named as $path => $ids ) {\n\t\t\t/* translators: 1: the path of a file under the uploads, 2: attachment id on this site. */\n\t\t\treturn sprintf( ",
+  "\t\tforeach ( array() as $path => $ids ) {\n\t\t\t/* translators: 1: the path of a file under the uploads, 2: attachment id on this site. */\n\t\t\treturn sprintf( ", 'it', FILEHOOK)
 e('state-link-on-way', 'target_state(): a link on the way is unsafe', ME,
   "\t\t\tif ( is_link( $at ) ) {\n\t\t\t\treturn 'unsafe';", "\t\t\tif ( false ) {\n\t\t\t\treturn 'unsafe';", 'pkg', U_STATE)
 e('state-file-on-way', 'target_state(): a file on the way is unsafe', ME,
