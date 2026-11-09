@@ -187,6 +187,82 @@ final class AB_MCP_Sync_Revert {
 		);
 	}
 
+	/* -------------------------------------------- a person in wp-admin */
+
+	/**
+	 * The way back of a closed run as a person plans it on the page
+	 * «Staging» (Z8, decision 35 of the plan, branch 12: «Rückweg je Paar
+	 * mit Nonce»): the same plan() as the tool, for a run of the type push
+	 * that is closed, whoever made it (a closed run runs no more, and the
+	 * way back is a run of its own, made for the person: decision 15). The
+	 * run read and settled here, as plan() does for the tool; a run that is
+	 * not closed goes back over the connection that made it (wp_site_revert),
+	 * or is aborted first. steps as the tool takes it: one seq for one pair.
+	 *
+	 * @param array $a run_id; steps (optional).
+	 * @return array|WP_Error As plan() returns it.
+	 */
+	public static function plan_for_person( array $a ) {
+		$run_id = isset( $a['run_id'] ) && is_numeric( $a['run_id'] ) ? (int) $a['run_id'] : 0;
+		if ( $run_id < 1 ) {
+			return new WP_Error( 'ab_mcp_sync_push_run', 'Pass run_id, the run whose pairs go back.' );
+		}
+		$run = AB_MCP_Sync_Run::get( $run_id );
+		if ( ! is_array( $run ) ) {
+			return is_wp_error( $run ) ? $run : AB_MCP_Sync_Run::unknown( $run_id );
+		}
+		$run = AB_MCP_Sync_Run::settle( $run );
+		if ( is_wp_error( $run ) ) {
+			return $run;
+		}
+		if ( 'push' !== $run['type'] || ! in_array( $run['state'], AB_MCP_Sync_Schema::CLOSED, true ) ) {
+			return new WP_Error( 'ab_mcp_sync_revert_person', sprintf( 'Run %1$d is %2$s (%3$s): on the page AlphaBridge → Staging a person takes back the pairs of a closed run that wrote. An open run is aborted first (or goes back over the connection that made it, wp_site_revert), an interrupted one is closed as checked first, and a run of the way back is not taken back.', $run_id, $run['state'], $run['type'] ) );
+		}
+		$args = array(
+			'action' => 'plan',
+			'run_id' => $run_id,
+		);
+		if ( isset( $a['steps'] ) ) {
+			$args['steps'] = $a['steps'];
+		}
+		return self::plan( $args, $run );
+	}
+
+	/**
+	 * Begin the way back a person confirmed on the page «Staging»: the plan
+	 * computed again (plan_for_person()) and compared with the state the
+	 * page showed, as a token binds it for the tool; then begin(), the same
+	 * as the tool's, under the lock of the write boundary, which computes it
+	 * once more under the lock. The run of the way back belongs to the
+	 * person (their account, the connection of wp-admin), who goes on with
+	 * it as the tool does (call() with action=next).
+	 *
+	 * @param array  $a         run_id, steps.
+	 * @param string $state     The state of the plan the person saw.
+	 * @param bool   $confirmed True only after the nonce of the form was checked in wp-admin.
+	 * @return array|WP_Error As begin() returns it.
+	 */
+	public static function begin_for_person( array $a, $state, $confirmed ) {
+		if ( true !== $confirmed ) {
+			return new WP_Error( 'ab_mcp_sync_run_unconfirmed', 'A way back begins on the page AlphaBridge → Staging only from its form: pass true only for a request whose nonce was checked there.' );
+		}
+		$plan = self::plan_for_person( $a );
+		if ( is_wp_error( $plan ) ) {
+			return $plan;
+		}
+		if ( ! is_string( $state ) || ! hash_equals( (string) $plan['state'], $state ) ) {
+			return new WP_Error( 'ab_mcp_sync_revert_changed', sprintf( 'The way back of run %d does not begin: the run or an object of this site changed since the page was loaded, so what it showed is not the plan as it is now. Nothing was written. Load the page AlphaBridge → Staging again and look at the pair once more.', (int) $plan['run']['run_id'] ) );
+		}
+		$args = array(
+			'action' => 'plan',
+			'run_id' => (int) $plan['run']['run_id'],
+		);
+		if ( isset( $a['steps'] ) ) {
+			$args['steps'] = $a['steps'];
+		}
+		return self::begin( $plan, $args );
+	}
+
 	/* ------------------------------------------------------------ plan */
 
 	/**

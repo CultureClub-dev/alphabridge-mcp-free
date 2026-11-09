@@ -936,50 +936,99 @@ final class AB_MCP_Sync_Run {
 	 * page «Staging» of branch 12 (the nonce is checked there; this method
 	 * takes the result of that check); no tool calls it.
 	 *
-	 * @param int  $run_id    Run.
-	 * @param int  $user_id   The person.
-	 * @param bool $confirmed True only after a nonce of a person in wp-admin was checked.
+	 * The page passes the print of the interruption it showed
+	 * (interruption_print()): the run is closed only where, read under the
+	 * lock, it is still that interruption (Codex round 1 of branch 12, A:
+	 * a form shown for an interruption of the forward run must not close
+	 * the way back of the same run, begun and interrupted since).
+	 *
+	 * @param int         $run_id    Run.
+	 * @param int         $user_id   The person.
+	 * @param bool        $confirmed True only after a nonce of a person in wp-admin was checked.
+	 * @param string|null $expected  The print of the interruption the person read; null for none.
 	 * @return array|WP_Error The run as stored.
 	 */
-	public static function close_checked( $run_id, $user_id, $confirmed ) {
+	public static function close_checked( $run_id, $user_id, $confirmed, $expected = null ) {
 		if ( true !== $confirmed ) {
 			return new WP_Error( 'ab_mcp_sync_run_unconfirmed', 'Closing an interrupted run as checked takes a person in wp-admin (page AlphaBridge → Staging): pass true only for a request whose nonce was checked there.' );
 		}
-		// Under the lock of the call, as every change of a run (ONE LOCK PER
-		// CALL): the run read and settled under it, so a step a request that
-		// ended left begun makes it interrupted here, and no way back begins
-		// or goes on beside the close.
-		return self::under_lock(
-			static function () use ( $run_id, $user_id ) {
-				return self::close_checked_locked( (int) $run_id, (int) $user_id );
+		// One reading under the lock of the call (ONE LOCK PER CALL), the
+		// print compared with it and the close made on it
+		// (AB_MCP_Sync_Shown::done(); Codex rounds 1 and 2 of branch 12, A):
+		// the run and its steps read once, settled from that reading (a step
+		// a request that ended left begun makes it interrupted here), and
+		// nothing of them read again before the close.
+		require_once __DIR__ . '/class-sync-shown.php';
+		return AB_MCP_Sync_Shown::done(
+			static function () use ( $run_id ) {
+				return self::interruption_read( (int) $run_id );
+			},
+			static function ( array $read ) {
+				return self::interruption_print( $read['run'], $read['steps'] );
+			},
+			null === $expected ? null : (string) $expected,
+			static function ( array $read ) use ( $user_id ) {
+				return self::close_checked_on( $read['run'], $read['steps'], (int) $user_id );
+			},
+			static function ( array $read ) {
+				return new WP_Error( 'ab_mcp_sync_run_changed', sprintf( 'Run %d is not closed as checked: it is not the interruption the page showed any more (its way back began, or it went on and was interrupted again, since the page was loaded). Nothing was written. Load the page AlphaBridge → Staging again, read the journal as it is now, and close it then.', (int) $read['run']['run_id'] ) );
 			},
 			sprintf( 'Run %d is not closed as checked', (int) $run_id )
 		);
 	}
 
 	/**
-	 * close_checked() under the lock.
+	 * The one reading of an interrupted run under the lock of the call
+	 * (close_checked()): the run and its steps, read once; a run open or on
+	 * its way back with a step begun that this request did not begin is
+	 * moved to interrupted on the state read (as settle() under the lock),
+	 * from this reading. Refused unless the run is interrupted.
 	 *
-	 * @param int $run_id  Run.
-	 * @param int $user_id The person.
-	 * @return array|WP_Error The run as stored.
+	 * @param int $run_id Run.
+	 * @return array{run:array,steps:array[]}|WP_Error
 	 */
-	private static function close_checked_locked( $run_id, $user_id ) {
+	private static function interruption_read( $run_id ) {
 		$run = self::get( $run_id );
 		if ( is_wp_error( $run ) || null === $run ) {
 			return is_wp_error( $run ) ? $run : self::unknown( $run_id );
-		}
-		$run = self::settle( $run );
-		if ( is_wp_error( $run ) ) {
-			return $run;
-		}
-		if ( 'interrupted' !== $run['state'] ) {
-			return new WP_Error( 'ab_mcp_sync_run_not_interrupted', sprintf( 'Only an interrupted run is closed as checked; this run is %s. Use wp_site_revert for the way back of a run that is open or closed.', $run['state'] ) );
 		}
 		$steps = self::steps( $run_id );
 		if ( is_wp_error( $steps ) ) {
 			return $steps;
 		}
+		if ( in_array( $run['state'], array( 'open', 'reverting' ), true ) ) {
+			foreach ( $steps as $step ) {
+				if ( 'begun' === $step['state'] && ! isset( self::$own[ (int) $run_id ][ (int) $step['seq'] ] ) ) {
+					$moved = self::set_state( $run_id, $run['state'], 'interrupted' );
+					if ( is_wp_error( $moved ) ) {
+						return $moved;
+					}
+					$run['state'] = 'interrupted';
+					break;
+				}
+			}
+		}
+		if ( 'interrupted' !== $run['state'] ) {
+			return new WP_Error( 'ab_mcp_sync_run_not_interrupted', sprintf( 'Only an interrupted run is closed as checked; this run is %s. Use wp_site_revert for the way back of a run that is open or closed.', $run['state'] ) );
+		}
+		return array(
+			'run'   => $run,
+			'steps' => $steps,
+		);
+	}
+
+	/**
+	 * close_checked() on the one reading: each step left begun unclear (on
+	 * its state read, begun), the pair of each unclear, the run closed as
+	 * checked (on its state read, interrupted).
+	 *
+	 * @param array   $run     The run as read.
+	 * @param array[] $steps   Its steps as read.
+	 * @param int     $user_id The person.
+	 * @return array|WP_Error The run as stored.
+	 */
+	private static function close_checked_on( array $run, array $steps, $user_id ) {
+		$run_id = (int) $run['run_id'];
 		foreach ( $steps as $step ) {
 			if ( 'begun' !== $step['state'] ) {
 				continue;
@@ -1005,6 +1054,41 @@ final class AB_MCP_Sync_Run {
 		}
 		$closed = self::get( $run_id );
 		return is_array( $closed ) ? $closed : self::unknown( $run_id );
+	}
+
+	/**
+	 * The print of an interruption as a person reads it on the page
+	 * «Staging»: the run, its type, whether its way back had begun
+	 * (on_way_back()), its last step, and each step left begun with the time
+	 * it was begun (the time of the interruption). A way back begun since,
+	 * a step run or interrupted since, gives another print; a status asked
+	 * in between (touch()) does not.
+	 *
+	 * @param array   $run   Run.
+	 * @param array[] $steps Its steps (steps()).
+	 * @return string SHA-256.
+	 */
+	public static function interruption_print( array $run, array $steps ) {
+		$begun = array();
+		$last  = 0;
+		foreach ( $steps as $step ) {
+			$last = max( $last, (int) $step['seq'] );
+			if ( 'begun' === $step['state'] ) {
+				$begun[] = array( (int) $step['seq'], (string) $step['op'], (int) $step['time'] );
+			}
+		}
+		return hash(
+			'sha256',
+			AB_MCP_Sync_Canon::encode(
+				array(
+					'back'  => self::on_way_back( $run, $steps ),
+					'begun' => $begun,
+					'last'  => $last,
+					'run'   => (int) $run['run_id'],
+					'type'  => (string) $run['type'],
+				)
+			)
+		);
 	}
 
 	/**
@@ -1127,11 +1211,17 @@ final class AB_MCP_Sync_Run {
 	 * What a run shows of itself (status): the run without its plan, with
 	 * its steps, each with its journal, and the rests it left.
 	 *
-	 * @param array $run Run.
+	 * A caller that derives more from the same steps (the page «Staging»:
+	 * the journal and the print of the interruption of its form) passes the
+	 * steps it read, so that both come from one reading (Codex round 2 of
+	 * branch 12, A).
+	 *
+	 * @param array        $run   Run.
+	 * @param array[]|null $steps Its steps as read (steps()); null to read them here.
 	 * @return array|WP_Error
 	 */
-	public static function shown( array $run ) {
-		$steps = self::steps( (int) $run['run_id'] );
+	public static function shown( array $run, $steps = null ) {
+		$steps = is_array( $steps ) ? $steps : self::steps( (int) $run['run_id'] );
 		if ( is_wp_error( $steps ) ) {
 			return $steps;
 		}

@@ -148,6 +148,21 @@ final class GuidanceTest extends TestCase {
 		self::assertSame( array( 'wp_db_query', 'denied' ), array( $last['tool'], $last['status'] ), 'Logged like every refusal.' );
 	}
 
+	public function testTheTakeoverInBundledStepsIsNamedAsNotInThisEdition(): void {
+		// Z8, branch 12 (plan of the incentives, section 7, step 2): this
+		// plugin carries a run over with wp_site_push, one step per call; a
+		// call of wp_site_sync gets the edition, plainly, without a price,
+		// a request or a link.
+		$result = self::call( self::free_registry(), 'wp_site_sync' );
+		$text   = $result['content'][0]['text'];
+
+		self::assertTrue( $result['isError'] );
+		self::assertSame( 'pro', AB_MCP_Guidance::edition_of( 'wp_site_sync' ) );
+		self::assertSame( 'The tool "wp_site_sync" is not on this site: it belongs to AlphaBridge MCP Pro, a separate plugin that is not active here.', $text );
+		self::assertNoPromotion( $text );
+		self::assertDoesNotMatchRegularExpression( '/\$|USD|\d+\s*days|try|upgrade|buy/i', $text, 'No price and no request.' );
+	}
+
 	public function testAToolOfTheAgencyPlanSaysSo(): void {
 		$text = self::call( self::free_registry(), 'wp_deploy_push_zip' )['content'][0]['text'];
 
@@ -208,8 +223,9 @@ final class GuidanceTest extends TestCase {
 				self::assertMatchesRegularExpression( '/^wp_[a-z_]+$/', $name );
 			}
 		}
-		self::assertCount( 40, $pro, 'Pro 4.6.0 registers 103 tools of its own, 8 of them only with the Agency plan; 17 of them are free since 4.7.0, wp_seo_set since 4.8.0, 22 more since 4.9.0, 2 more since 4.10.0, 12 more since 4.11.0 and 2 more since 4.12.0, and they run here; Pro 4.17.0 adds wp_change_site_address.' );
+		self::assertCount( 41, $pro, 'Pro 4.6.0 registers 103 tools of its own, 8 of them only with the Agency plan; 17 of them are free since 4.7.0, wp_seo_set since 4.8.0, 22 more since 4.9.0, 2 more since 4.10.0, 12 more since 4.11.0 and 2 more since 4.12.0, and they run here; Pro 4.17.0 adds wp_change_site_address, and Z8 names wp_site_sync.' );
 		self::assertContains( 'wp_change_site_address', $pro, 'Changing the site address is a tool of Pro (4.17.0).' );
+		self::assertContains( 'wp_site_sync', $pro, 'The takeover in bundled steps is named as a tool of Pro (Z8, branch 12): a call of it gets the edition, not «Unknown tool».' );
 		self::assertSame( array( 'wp_blueprint_apply', 'wp_deploy_delete', 'wp_deploy_diff', 'wp_deploy_list', 'wp_deploy_push_file', 'wp_deploy_push_zip', 'wp_deploy_read', 'wp_deploy_test' ), $agcy, 'Applying a blueprint and Site Deploy.' );
 		self::assertContains( 'wp_blueprint_diff', $pro, 'Reading a blueprint stays in Pro.' );
 		self::assertNotContains( 'wp_seo_set', $pro, 'Setting SEO fields is free since 4.8.0.' );

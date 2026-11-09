@@ -832,7 +832,12 @@ final class StagingGateTest extends TestCase {
 		AB_MCP_Staging::save( AB_MCP_Staging::ROLE_STAGING, '', null, 7, AB_MCP_Staging::SOURCE_FORM );
 		self::assertStringNotContainsStringIgnoringCase( 'staging', $this->instructions(), 'The staging site itself.' );
 		AB_MCP_Staging::save( AB_MCP_Staging::ROLE_PRODUCTION, self::STAGING, null, 7, AB_MCP_Staging::SOURCE_FORM );
-		self::assertStringNotContainsStringIgnoringCase( 'staging', $this->instructions(), 'Paired.' );
+		// Paired: outside the gate, so neither question; since Z8 (decision
+		// 35, branch 12) the way of the takeover instead (StagingWorkflowTest).
+		$text = $this->instructions();
+		self::assertStringNotContainsString( self::ASK_SENTENCE, $text, 'Paired.' );
+		self::assertStringNotContainsString( self::REQUIRE_SENTENCE, $text, 'Paired.' );
+		self::assertStringContainsString( 'This site is the production site of a pair', $text, 'Paired: the way of the takeover.' );
 		AB_MCP_Staging::save( AB_MCP_Staging::ROLE_UNCONFIRMED, '', null, 7, AB_MCP_Staging::SOURCE_FORM );
 
 		self::scope( 'read' );

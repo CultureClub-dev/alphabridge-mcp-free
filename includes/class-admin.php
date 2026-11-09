@@ -8,6 +8,10 @@
 
 defined( 'ABSPATH' ) || exit;
 
+// The section «Takeover» of the page «Staging» (Z8, decision 35).
+require_once __DIR__ . '/class-transfer.php';
+require_once __DIR__ . '/class-transfer-view.php';
+
 /**
  * Class AB_MCP_Admin
  */
@@ -202,6 +206,14 @@ class AB_MCP_Admin {
 		add_action( 'admin_post_ab_mcp_staging_key', array( $this, 'handle_staging_key' ) );
 		add_action( 'admin_post_ab_mcp_staging_key_renew', array( $this, 'handle_staging_key_renew' ) );
 		add_action( 'admin_post_ab_mcp_staging_anchor', array( $this, 'handle_staging_anchor' ) );
+		// The section «Takeover» (Z8, decision 35, branch 12): each form a
+		// handler of its own, each with its nonce bound to its object.
+		add_action( 'admin_post_ab_mcp_transfer_abort', array( $this, 'handle_transfer_abort' ) );
+		add_action( 'admin_post_ab_mcp_transfer_checked', array( $this, 'handle_transfer_checked' ) );
+		add_action( 'admin_post_ab_mcp_transfer_back', array( $this, 'handle_transfer_back' ) );
+		add_action( 'admin_post_ab_mcp_transfer_go_on', array( $this, 'handle_transfer_go_on' ) );
+		add_action( 'admin_post_ab_mcp_transfer_discard', array( $this, 'handle_transfer_discard' ) );
+		add_action( 'admin_post_ab_mcp_transfer_notes', array( $this, 'handle_transfer_notes' ) );
 		// The card «Staging» folded or unfolded: the details element folds
 		// at once, and admin.js keeps the choice for this user over ajax.
 		add_action( 'wp_ajax_ab_mcp_staging_card', array( $this, 'ajax_staging_card' ) );
@@ -1043,6 +1055,118 @@ class AB_MCP_Admin {
 		$this->redirect( is_wp_error( $result ) ? self::trust_notice( $result ) : $done, self::STAGING_TRUST );
 	}
 
+	/* ------------------------------------------------- the takeover */
+
+	/**
+	 * Abort an open run (Z8, decision 15: a person with manage_options in
+	 * wp-admin), through AB_MCP_Transfer::abort().
+	 */
+	public function handle_transfer_abort() {
+		$run_id = $this->transfer_guard( 'abort', 'run_id' );
+		$this->transfer_done( AB_MCP_Transfer::abort( $run_id ) );
+	}
+
+	/**
+	 * Close an interrupted run as checked (Z8, decision 18, way a), through
+	 * AB_MCP_Transfer::close_checked(), on the interruption the page showed.
+	 */
+	public function handle_transfer_checked() {
+		$run_id = $this->transfer_guard( 'checked', 'run_id' );
+		$print  = isset( $_POST['state'] ) ? sanitize_text_field( wp_unslash( $_POST['state'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing -- checked in transfer_guard().
+		$this->transfer_done( AB_MCP_Transfer::close_checked( $run_id, $print, true ) );
+	}
+
+	/**
+	 * Take one pair of a closed run back (Z8, decision 35), on the plan the
+	 * page showed, through AB_MCP_Transfer::take_back().
+	 */
+	public function handle_transfer_back() {
+		$this->guard();
+		$this->transfer_post_only();
+		$run_id = isset( $_POST['run_id'] ) ? absint( wp_unslash( $_POST['run_id'] ) ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Missing -- the nonce is bound to it and checked right below.
+		$seq    = isset( $_POST['seq'] ) ? absint( wp_unslash( $_POST['seq'] ) ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Missing -- the nonce is bound to it and checked right below.
+		check_admin_referer( 'ab_mcp_transfer_back_' . $run_id . '_' . $seq );
+		$state = isset( $_POST['state'] ) ? sanitize_text_field( wp_unslash( $_POST['state'] ) ) : '';
+		$this->transfer_done( AB_MCP_Transfer::take_back( $run_id, $seq, $state, true ), $run_id );
+	}
+
+	/**
+	 * Go on with a way back this person began here, through
+	 * AB_MCP_Transfer::go_on().
+	 */
+	public function handle_transfer_go_on() {
+		$run_id = $this->transfer_guard( 'go_on', 'run_id' );
+		$this->transfer_done( AB_MCP_Transfer::go_on( $run_id ), $run_id );
+	}
+
+	/**
+	 * Discard a pair, on the state the page showed, through
+	 * AB_MCP_Transfer::discard().
+	 */
+	public function handle_transfer_discard() {
+		$pair_id = $this->transfer_guard( 'discard', 'pair_id' );
+		$state   = isset( $_POST['state'] ) ? sanitize_text_field( wp_unslash( $_POST['state'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing -- checked in transfer_guard().
+		$this->transfer_done( AB_MCP_Transfer::discard( $pair_id, $state ) );
+	}
+
+	/**
+	 * The switch «Hide edition notes» of the section «Takeover»
+	 * (AB_MCP_Transfer_Moments).
+	 */
+	public function handle_transfer_notes() {
+		$this->guard();
+		$this->transfer_post_only();
+		check_admin_referer( 'ab_mcp_transfer_notes' );
+		$hidden = isset( $_POST['hidden'] ) && '1' === (string) wp_unslash( $_POST['hidden'] ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- compared exactly with '1'.
+		AB_MCP_Transfer_Moments::set_hidden( $hidden );
+		$this->transfer_done( $hidden ? 'The edition notes are hidden on this site; what each moment says of this site stays.' : 'The edition notes show again on this site.' );
+	}
+
+	/**
+	 * The checks of a form of the section «Takeover»: manage_options, a POST
+	 * (admin-post.php also runs an action for a GET with the nonce in its
+	 * address, and nothing happens on that), and the nonce bound to the
+	 * object the form names.
+	 *
+	 * @param string $what  The form: abort, checked, go_on, discard.
+	 * @param string $field The field of its object.
+	 * @return int The object.
+	 */
+	private function transfer_guard( $what, $field ) {
+		$this->guard();
+		$this->transfer_post_only();
+		$id = isset( $_POST[ $field ] ) ? absint( wp_unslash( $_POST[ $field ] ) ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Missing -- the nonce is bound to it and checked right below.
+		check_admin_referer( 'ab_mcp_transfer_' . $what . '_' . $id );
+		return $id;
+	}
+
+	/**
+	 * A form of the section «Takeover» acts on a POST only.
+	 */
+	private function transfer_post_only() {
+		$method = isset( $_SERVER['REQUEST_METHOD'] ) && is_string( $_SERVER['REQUEST_METHOD'] ) ? wp_unslash( $_SERVER['REQUEST_METHOD'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- compared exactly with 'POST' below, never stored or shown.
+		if ( 'POST' !== $method ) {
+			wp_die( esc_html( 'Nothing was changed: the forms of the takeover work only from their buttons on the page AlphaBridge → Staging. Open that page and click it there.' ), '', array( 'response' => 405 ) );
+		}
+	}
+
+	/**
+	 * Keep the outcome of a form for the section and go back to it, with the
+	 * run it acted on where it names one.
+	 *
+	 * @param string|WP_Error $outcome Outcome.
+	 * @param int             $run_id  The run to show; 0 for none.
+	 */
+	private function transfer_done( $outcome, $run_id = 0 ) {
+		AB_MCP_Transfer::keep_outcome( $outcome );
+		$args = array( 'ab_notice' => 'transfer' );
+		if ( $run_id > 0 ) {
+			$args['run'] = (int) $run_id;
+		}
+		wp_safe_redirect( add_query_arg( $args, AB_MCP_Guidance::settings_url( '', 'staging' ) ) . '#' . AB_MCP_Transfer::ANCHOR );
+		exit;
+	}
+
 	/**
 	 * The notice of a refusal of the key or the anchor: staging_trust_ and
 	 * its code without ab_mcp_ (TRUST_NOTICES).
@@ -1338,10 +1462,11 @@ class AB_MCP_Admin {
 
 	/**
 	 * Render the page «Staging»: its heading and one sentence, the marker
-	 * WordPress puts admin notices after, the notice of a form, the card
-	 * «Staging» as it stood on the settings page (it folds per user here
-	 * too), and the boxes add-ons hang below it. One column, no side
-	 * column; nothing on it for what comes later.
+	 * WordPress puts admin notices after, the notice of a form, the line of
+	 * an interrupted run (Z8), the card «Staging» as it stood on the
+	 * settings page (it folds per user here too), the section «Takeover»
+	 * (Z8, decision 35; AB_MCP_Transfer, AB_MCP_Transfer_View), and the
+	 * boxes add-ons hang below them. One column, no side column.
 	 */
 	public function render_staging() {
 		$this->guard();
@@ -1351,8 +1476,21 @@ class AB_MCP_Admin {
 		echo '<p class="ab-lead">' . esc_html__( 'Try changes on a staging copy first: everything this site needs for that is set here.', 'alphabridge-mcp' ) . '</p>';
 		echo '<hr class="wp-header-end">';
 		$this->notice();
+		// The section «Takeover» (Z8, decision 35), read once for the page:
+		// an interrupted run shows first, above the card (decision 18).
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended -- which run, which page of the runs and of the pairs to show; nothing is changed.
+		$transfer = AB_MCP_Transfer::view(
+			array(
+				'run'         => isset( $_GET['run'] ) ? absint( wp_unslash( $_GET['run'] ) ) : 0,
+				'pairs_after' => isset( $_GET['pairs_after'] ) ? absint( wp_unslash( $_GET['pairs_after'] ) ) : 0,
+				'runs_after'  => isset( $_GET['runs_after'] ) ? absint( wp_unslash( $_GET['runs_after'] ) ) : 0,
+			)
+		);
+		// phpcs:enable WordPress.Security.NonceVerification.Recommended
+		echo AB_MCP_Transfer_View::interrupted_line( $transfer['open'] ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside interrupted_line().
 		echo '<div class="ab-main">';
 		echo $this->staging_card_html(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside staging_card_html().
+		echo AB_MCP_Transfer_View::html( $transfer ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside AB_MCP_Transfer_View::html().
 
 		/**
 		 * Add-ons render boxes on the page «Staging» here, below the card

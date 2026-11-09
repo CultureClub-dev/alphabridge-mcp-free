@@ -1245,7 +1245,9 @@ final class StagingStatusTest extends TestCase {
 		self::confirm( 'staging', 'https://example.com' );
 		AB_MCP_Preview_Protection::enable( 7, AB_MCP_Preview_Protection::SOURCE_FORM );
 		$out = AB_MCP_Staging::report( false );
-		self::assertSame( array( 'role', 'pair', 'partner_check', 'host', 'preview_protection', 'blog_public', 'checklist', 'next_step', 'warnings' ), array_keys( $out ) );
+		// transfer since Z8 (decision 35, branch 12): StagingTransferTest.
+		self::assertSame( array( 'role', 'pair', 'partner_check', 'host', 'preview_protection', 'blog_public', 'checklist', 'next_step', 'warnings', 'transfer' ), array_keys( $out ) );
+		self::assertSame( 'staging', $out['transfer']['side'] );
 		self::assertSame( 'staging', $out['role']['value'] );
 		self::assertSame( 'staging', $out['role']['suggestion']['role'] );
 		self::assertSame( array( 'domain', 'preview_protection' ), array_column( $out['role']['suggestion']['hints'], 'source' ) );

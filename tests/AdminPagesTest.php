@@ -269,8 +269,11 @@ final class AdminPagesTest extends TestCase {
 
 		$main = $x->query( '/html/body/div/div[@class="ab-main"]/*' );
 		self::assertSame( 'ab-staging-card', $main->item( 0 )->getAttribute( 'id' ), 'The card first in the column.' );
-		self::assertSame( 'addon-staging', $main->item( 1 )->getAttribute( 'id' ), 'Then the boxes of add-ons.' );
-		self::assertSame( 2, $main->length );
+		// The section «Takeover» since Z8 (decision 35, branch 12): below the
+		// card, above the boxes of add-ons (AB_MCP_Transfer_View).
+		self::assertSame( 'ab-staging-transfer', $main->item( 1 )->getAttribute( 'id' ), 'Then the section «Takeover».' );
+		self::assertSame( 'addon-staging', $main->item( 2 )->getAttribute( 'id' ), 'Then the boxes of add-ons.' );
+		self::assertSame( 3, $main->length );
 		self::assertSame( 1, $x->query( '//section[@id="ab-staging-card"]//details[contains(@class, "ab-staging-card__fold")]' )->length, 'The card folds here too.' );
 
 		foreach ( array( 'addon-old-main', 'addon-connection', 'addon-side', 'ab-mode', 'ab-connect', 'ab-fine', 'ab-caps', 'ab-connections', 'ab-log', 'ab-doctor' ) as $id ) {

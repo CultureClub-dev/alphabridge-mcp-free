@@ -29,7 +29,8 @@ G = 'includes/class-staging-gate.php'
 DK = 'includes/sync/class-sync-db-kinds.php'
 BK = 'includes/sync/class-sync-backup.php'
 CN = 'includes/sync/class-sync-canon.php'
-FILEVAR = {PU: '$pu', RV: '$rv', EN: '$en', PW: '$pw', GU: '$gu', RS: '$rs', RU: '$ru', SC: '$sc', TS: '$ts', G: '$g', DK: '$dk', BK: '$bk', CN: '$cn'}
+SH = 'includes/sync/class-sync-shown.php'
+FILEVAR = {SH: '$sh', PU: '$pu', RV: '$rv', EN: '$en', PW: '$pw', GU: '$gu', RS: '$rs', RU: '$ru', SC: '$sc', TS: '$ts', G: '$g', DK: '$dk', BK: '$bk', CN: '$cn'}
 
 RUNS = {
     'unit': ('unit', 'SyncRunTest'),
@@ -639,11 +640,13 @@ e('run-own-forget', 'under_lock(): the outermost call that gives the lock back f
 e('run-settle-held', 'settle(): under the lock of the call a step begun by another request is interrupted, not running', RU,
   "\t\tif ( AB_MCP_Change_Lock::held() ) {\n\t\t\treturn self::interrupt( $run );\n\t\t}", '', 'it', OWN)
 e('run-settle-own', 'begun(): a step this request began under the lock of its call is not interrupted', RU,
-  "\t\t\tif ( 'begun' === $step['state'] && ! isset( self::$own[ (int) $run_id ][ (int) $step['seq'] ] ) ) {", "\t\t\tif ( 'begun' === $step['state'] ) {", 'it', OWN)
-e('run-close-checked-lock', 'close_checked(): under the lock of the call; another request holding it refuses as busy', RU,
-  "\t\treturn self::under_lock(\n\t\t\tstatic function () use ( $run_id, $user_id ) {", "\t\treturn call_user_func(\n\t\t\tstatic function () use ( $run_id, $user_id ) {", 'it', OWN)
-e('run-close-checked-settle', 'close_checked(): the run settled under the lock, so a step a request that ended left makes it interrupted and it is closed', RU,
-  "\t\t$run = self::settle( $run );\n\t\tif ( is_wp_error( $run ) ) {\n\t\t\treturn $run;\n\t\t}\n\t\tif ( 'interrupted' !== $run['state'] ) {", "\t\tif ( 'interrupted' !== $run['state'] ) {", 'it', OWN)
+  "\t\t\tif ( 'begun' === $step['state'] && ! isset( self::$own[ (int) $run_id ][ (int) $step['seq'] ] ) ) {\n\t\t\t\treturn $step;", "\t\t\tif ( 'begun' === $step['state'] ) {\n\t\t\t\treturn $step;", 'it', OWN)
+# Since branch 12 close_checked() goes through AB_MCP_Sync_Shown::done(): its lock
+# is the lock of the helper, its settling the one reading (interruption_read()).
+e('run-close-checked-lock', 'close_checked(): under the lock of the call (AB_MCP_Sync_Shown::done()); another request holding it refuses as busy', SH,
+  "\t\treturn AB_MCP_Sync_Run::under_lock(\n\t\t\tstatic function () use ( $read, $print, $expected, $act, $refusal ) {", "\t\treturn call_user_func(\n\t\t\tstatic function () use ( $read, $print, $expected, $act, $refusal ) {", 'it', OWN)
+e('run-close-checked-settle', 'close_checked(): the run settled under the lock from its one reading (interruption_read()), so a step a request that ended left makes it interrupted and it is closed', RU,
+  "\t\t\t\tif ( 'begun' === $step['state'] && ! isset( self::$own[ (int) $run_id ][ (int) $step['seq'] ] ) ) {\n\t\t\t\t\t$moved = self::set_state( $run_id, $run['state'], 'interrupted' );", "\t\t\t\tif ( false ) {\n\t\t\t\t\t$moved = self::set_state( $run_id, $run['state'], 'interrupted' );", 'it', OWN)
 e('engine-next-lock', 'next(): the whole call under the lock of the boundary', EN,
   "\t\treturn AB_MCP_Sync_Run::under_lock(\n\t\t\tstatic function () use ( $run, $named ) {", "\t\treturn call_user_func(\n\t\t\tstatic function () use ( $run, $named ) {", 'it', BUSY)
 e('engine-fresh-state', 'fresh(): the run read under the lock in the state the caller read it in; moved since, nothing is written (the one place of still())', EN,
@@ -892,6 +895,7 @@ $g  = 'includes/class-staging-gate.php';
 $dk = 'includes/sync/class-sync-db-kinds.php';
 $bk = 'includes/sync/class-sync-backup.php';
 $cn = 'includes/sync/class-sync-canon.php';
+$sh = 'includes/sync/class-sync-shown.php';
 
 return array(''')
 for (id_, clause, file, search, replace, run, expect) in entries:
