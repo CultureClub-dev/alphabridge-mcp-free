@@ -4335,7 +4335,7 @@ final class SyncRunTest extends TestCase {
 		$run     = self::begun( $planned['args'] );
 		$closed  = self::finish( (int) $run['run_id'] );
 		self::assertSame( 'closed_aborted', $closed['state'], json_encode( $closed ) );
-		self::assertStringContainsString( 'this account may not assign the terms of post_format (edit_posts)', json_encode( self::step( $closed, 1 )['result'] ) );
+		self::assertStringContainsString( 'may not assign the terms of post_format on this site (edit_posts)', json_encode( self::step( $closed, 1 )['result'] ) );
 		self::assertSame( 'aside', $format(), 'Nothing written.' );
 		$deny = null;
 		$run  = self::begun( $planned['args'] );
