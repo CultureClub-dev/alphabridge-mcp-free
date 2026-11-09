@@ -73,7 +73,8 @@
  *   AWS, Slack, Mailchimp) and a JSON Web Token (JWT); at the start of a
  *   line or of a field the header Authorization with Bearer and a token, or
  *   Basic and the base64 of user:password (AUTHORIZATION); a private key
- *   in PEM by its frame and a body of base64 (PEM). A placeholder is
+ *   in PEM by its frame and a body of base64 (PEM); the value of a login
+ *   cookie of WordPress by its form (COOKIE). A placeholder is
  *   one only in its exact form as the whole value (PLACEHOLDER).
  *
  * COMPARE (check()): the structured readers of the unit noted every (space,
@@ -319,6 +320,19 @@ final class AB_MCP_Sync_Net {
 	 * never.
 	 */
 	const PEM = '/-----BEGIN ((?:[A-Z0-9]+ )*)PRIVATE KEY((?: BLOCK)?)-----(.*?)-----END \\1PRIVATE KEY\\2-----/s';
+
+	/**
+	 * The value of a login cookie of WordPress in the form
+	 * wp_generate_auth_cookie() writes it, user|expiration|token|hmac
+	 * (credentials(); the steering, 09.11.2026): from the first «|» on, the
+	 * expiration of ten digits, the token of 43 letters and digits
+	 * (WP_Session_Tokens::create()), the HMAC of 64 hex (SHA-256), each «|»
+	 * raw or URL-encoded (%7C). It counts (as auth_token) wherever it
+	 * stands, with the name of the cookie or without (a leaf of its own),
+	 * whatever the user is: with spaces in it raw, as «+» or as %20 (Codex
+	 * round 3 of branch 11b, A4).
+	 */
+	const COOKIE = '/(?:\\||%7[cC])\\d{10}(?:\\||%7[cC])[A-Za-z0-9]{43}(?:\\||%7[cC])[0-9a-f]{64}/';
 
 	/** The characters of a token of Bearer at the start of its value (b64token of RFC 6750). */
 	const BEARER_TOKEN = '#^[A-Za-z0-9\-._~+/]+=*#';
@@ -1696,6 +1710,12 @@ final class AB_MCP_Sync_Net {
 					break;
 				}
 			}
+		}
+		// A login cookie of WordPress by the form of its value (the steering,
+		// 09.11.2026): «wordpress_logged_in_[hash]», a value cut short («…»)
+		// are none.
+		if ( 1 === preg_match( self::COOKIE, $text ) ) {
+			$found[] = 'auth_token';
 		}
 		// The header Authorization with Bearer or Basic at the start of a
 		// line or of a field (Codex round 1 of branch 11b, A1; the steering,

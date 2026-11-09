@@ -322,6 +322,29 @@ e('pem-alphabet', 'pem(): a sentence is no body', NT,
 e('pem-length', 'pem(): a length of a multiple of four', NT,
   "return 1 === preg_match( '/^[A-Za-z0-9+\\/]+={0,2}\\z/', $base64 ) && 0 === strlen( $base64 ) % 4;", "return 1 === preg_match( '/^[A-Za-z0-9+\\/]+={0,2}\\z/', $base64 );", 'net', N_PEM)
 
+N_COOKIE = 'testTheValueOfALoginCookieCountsByTheFormWordPressGivesIt'
+COOKIE = "const COOKIE = '/(?:\\\\||%7[cC])\\\\d{10}(?:\\\\||%7[cC])[A-Za-z0-9]{43}(?:\\\\||%7[cC])[0-9a-f]{64}/';"
+e('cookie', 'credentials(): the value of a login cookie counts by its form, in any context', NT,
+  "\t\tif ( 1 === preg_match( self::COOKIE, $text ) ) {\n\t\t\t$found[] = 'auth_token';", "\t\tif ( 1 === preg_match( self::COOKIE, $text ) ) {\n\t\t\t// not counted", 'net', N_COOKIE)
+e('cookie-encoded', 'COOKIE: a «|» URL-encoded as well (%7C)', NT,
+  COOKIE, COOKIE.replace("'/(?:\\\\||%7[cC])\\\\d{10}", "'/\\\\|\\\\d{10}"), 'net', N_COOKIE)
+e('cookie-raw', 'COOKIE: a «|» raw as well', NT,
+  COOKIE, COOKIE.replace("'/(?:\\\\||%7[cC])\\\\d{10}", "'/%7[cC]\\\\d{10}"), 'net', N_COOKIE)
+e('cookie-lower', 'COOKIE: %7c in lower case as well', NT,
+  COOKIE, COOKIE.replace("[A-Za-z0-9]{43}(?:\\\\||%7[cC])", "[A-Za-z0-9]{43}(?:\\\\||%7C)"), 'net', N_COOKIE)
+e('cookie-expiration', 'COOKIE: the expiration of ten digits', NT,
+  COOKIE, COOKIE.replace("\\\\d{10}", "\\\\d{9,10}"), 'net', N_COOKIE)
+e('cookie-separator', 'COOKIE: the expiration and the token apart by a «|»', NT,
+  COOKIE, COOKIE.replace("\\\\d{10}(?:\\\\||%7[cC])", "\\\\d{10}(?:\\\\||%7[cC]|-)"), 'net', N_COOKIE)
+e('cookie-token', 'COOKIE: the token of 43 letters and digits', NT,
+  COOKIE, COOKIE.replace("[A-Za-z0-9]{43}", "[A-Za-z0-9]{42,43}"), 'net', N_COOKIE)
+e('cookie-hmac', 'COOKIE: the HMAC of 64 hex', NT,
+  COOKIE, COOKIE.replace("[0-9a-f]{64}", "[0-9a-f]{63}"), 'net', N_COOKIE)
+e('cookie-hex', 'COOKIE: the HMAC in the hex WordPress writes (lower case)', NT,
+  COOKIE, COOKIE.replace("[0-9a-f]{64}", "[0-9a-fA-F]{64}"), 'net', N_COOKIE)
+e('cookie-sep-hmac', 'COOKIE: the token and the HMAC apart by a «|»', NT,
+  COOKIE, COOKIE.replace("[A-Za-z0-9]{43}(?:\\\\||%7[cC])", "[A-Za-z0-9]{43}(?:\\\\||%7[cCdD])"), 'net', N_COOKIE)
+
 # ------------------------------------------- strings(): the references
 e('strings-keys', 'strings(): the keys of a structure counted for the references', NT,
   "\t\t\tif ( is_string( $key ) && '' !== $key ) {\n\t\t\t\t$out[] = $key;\n\t\t\t}\n", "", 'net', N_STRUCT)

@@ -837,6 +837,49 @@ final class SyncNetTest extends TestCase {
 		self::assertFalse( AB_MCP_Sync_Net::pem( 'MIIE=vQI' ) );
 	}
 
+	public function testTheValueOfALoginCookieCountsByTheFormWordPressGivesIt(): void {
+		// The steering, 09.11.2026: user|expiration|token|hmac as
+		// wp_generate_auth_cookie() writes it, raw or URL-encoded, with the
+		// name of the cookie or alone; a user with spaces raw, as «+» and as
+		// %20 (Codex round 3 of branch 11b, A4).
+		$t     = self::tokens();
+		$tail  = $t['cookie_tail'];
+		$alnum = $t['alnum'];
+		$hex   = $t['hex'];
+		$extra = array();
+		foreach ( array(
+			'wordpress_logged_in_5c3e2a91=admin|' . $tail,
+			'Cookie: wordpress_logged_in_5c3e2a91=' . rawurlencode( 'admin|' . $tail ) . '; wp-settings-1=x',
+			'wordpress_sec_5c3e2a91=Anna Muster|' . $tail,
+			'wordpress_sec_5c3e2a91=' . urlencode( 'Anna Muster|' . $tail ),
+			'wordpress_sec_5c3e2a91=' . rawurlencode( 'Anna Muster|' . $tail ),
+			'Anna Muster|' . $tail,
+			str_replace( '%7C', '%7c', rawurlencode( 'anna@example.test|' . $tail ) ),
+			'<p>admin|' . $tail . '</p>',
+			'{"c":"admin|' . $tail . '"}',
+			'|' . $tail,
+		) as $text ) {
+			self::assertSame( array( 'auth_token' ), AB_MCP_Sync_Net::credentials( $text, $extra ), $text );
+		}
+		$exp = '1762790400';
+		foreach ( array(
+			'Cookie: wordpress_logged_in_5c3e' . "\u{2026}" . '=admin%7C1700000000%7C' . "\u{2026}" . '%7C' . "\u{2026}",
+			'Cookie: wordpress_logged_in_5c3e=admin%7C1762700000%7Cabc%7Cdef; wp-settings-1=x',
+			'Set-Cookie: wordpress_logged_in_5c3e2a91=deleted; expires=Thu, 01-Jan-1970 00:00:01 GMT',
+			'Das Cookie wordpress_sec_[hash] hat den Wert benutzer|ablauf|token|hmac.',
+			'Cookie: wordpress_test_cookie=WP%20Cookie%20check',
+			'admin|176279040|' . $alnum( 'c', 43 ) . '|' . $hex( 'c', 64 ),
+			'admin|' . $exp . '|' . $alnum( 'c', 42 ) . '|' . $hex( 'c', 64 ),
+			'admin|' . $exp . '|' . $alnum( 'c', 43 ) . '|' . $hex( 'c', 63 ),
+			'admin|' . $exp . '|' . $alnum( 'c', 43 ) . '|' . strtoupper( $hex( 'c', 64 ) ),
+			'admin%7D' . $exp . '%7C' . $alnum( 'c', 43 ) . '%7C' . $hex( 'c', 64 ),
+			'admin|' . $exp . '-' . $alnum( 'c', 43 ) . '|' . $hex( 'c', 64 ),
+			'admin|' . $exp . '|' . $alnum( 'c', 43 ) . '%7D' . $hex( 'c', 64 ),
+		) as $text ) {
+			self::assertSame( array(), AB_MCP_Sync_Net::credentials( $text, $extra ), $text );
+		}
+	}
+
 	public function testAPlaceholderIsOneOnlyInItsExactFormAsTheWholeValue(): void {
 		// The steering, 09.11.2026; Codex round 3 of branch 11b, A1: never as a
 		// part of a word.
