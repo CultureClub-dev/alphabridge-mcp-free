@@ -1123,7 +1123,7 @@ final class SyncMediaTest extends TestCase {
 		}
 		self::assertSame( array( 'Alt' ), self::meta_a( $ids['erstes']['a'], '_wp_attachment_image_alt' ), 'The first stopped at its row: its alternative text was never written.' );
 		self::assertSame( array( 'Neu' ), self::meta_a( $ids['zweites']['a'], '_wp_attachment_image_alt' ) );
-		self::assertStringContainsString( 'the file 2026/10/zweites.jpg of the attachment changed since the step read it last', (string) json_encode( $steps[ $ids['zweites']['a'] ]['result'], JSON_UNESCAPED_SLASHES ) );
+		self::assertStringContainsString( 'The file 2026/10/zweites.jpg of the attachment changed since the step read it last', (string) json_encode( $steps[ $ids['zweites']['a'] ]['result'], JSON_UNESCAPED_SLASHES ) );
 		self::assertSame( 'Alt', self::row_a( $ids['drittes']['a'] )['post_title'], 'The row of the third went back before its file changed.' );
 		self::assertSame( array( 'Neu' ), self::meta_a( $ids['drittes']['a'], '_wp_attachment_image_alt' ), 'Then the way back stopped for it.' );
 		self::assertStringContainsString( 'changed the file 2026/10/drittes.jpg of the attachment', (string) json_encode( $steps[ $ids['drittes']['a'] ]['result'], JSON_UNESCAPED_SLASHES ) );
@@ -1136,7 +1136,7 @@ final class SyncMediaTest extends TestCase {
 		$fuenftes_parts = array_column( $steps[ $fuenftes['a'] ]['result']['parts'], null, 'part' );
 		foreach ( array( 'meta:_wp_attached_file', 'meta:_wp_attachment_metadata' ) as $key ) {
 			self::assertSame( 'left', $fuenftes_parts[ $key ]['state'] ?? null, $key . ': ' . json_encode( $fuenftes_parts ) );
-			self::assertStringContainsString( 'the part meta:_wp_attachment_backup_sizes, which names files of the attachment, changed since the step left it', (string) $fuenftes_parts[ $key ]['note'], $key );
+			self::assertStringContainsString( 'The part meta:_wp_attachment_backup_sizes, which names files of the attachment, changed since the step left it', (string) $fuenftes_parts[ $key ]['note'], $key );
 		}
 		self::assertSame( 'left', $fuenftes_parts['meta:_wp_attachment_backup_sizes']['state'] );
 		self::assertSame( array( '2026/10/fuenftes-e1700000002.jpg' ), self::meta_a( $fuenftes['a'], '_wp_attached_file' ), 'The fifth keeps the files of its edit, all three keys together.' );
@@ -1148,7 +1148,7 @@ final class SyncMediaTest extends TestCase {
 		self::assertSame( 'done', $steps[ $sechstes['a'] ]['state'] );
 		$herbst_parts = array_column( $steps[ $herbst['herbst']['a'] ]['result']['parts'], null, 'part' );
 		self::assertSame( 'left', $herbst_parts['meta:_wp_attachment_metadata']['state'], json_encode( $herbst_parts ) );
-		self::assertStringContainsString( 'the part meta:_wp_attached_file, which names files of the attachment, changed since the step left it', (string) $herbst_parts['meta:_wp_attachment_metadata']['note'] );
+		self::assertStringContainsString( 'The part meta:_wp_attached_file, which names files of the attachment, changed since the step left it', (string) $herbst_parts['meta:_wp_attachment_metadata']['note'] );
 		self::assertSame( 'Herbst im Garten', wp_get_attachment_metadata( $herbst['herbst']['a'] )['image_meta']['caption'] ?? null, 'Its metadata stays as the run wrote it.' );
 		$winter_parts = array_column( $steps[ $herbst['winter']['a'] ]['result']['parts'], null, 'part' );
 		self::assertSame( 'restored', $winter_parts['meta:_wp_attachment_metadata']['state'], json_encode( $winter_parts ) );
@@ -1435,13 +1435,13 @@ final class SyncMediaTest extends TestCase {
 		self::assertStringContainsString( 'attachment:file_type', $found[ (string) $pdf ] ?? '', json_encode( $found ) );
 		self::assertStringContainsString( 'post:reference_unmapped', $found[ (string) $waise ] ?? '', 'Its page is not in the plan: ' . json_encode( $found ) );
 		self::assertStringContainsString( 'attachment:file_type', $found[ (string) $typ ] ?? '', 'The main file of another type than the attachment says: ' . json_encode( $found ) );
-		self::assertStringContainsString( 'by its content of another type', $found[ (string) $hier ] ?? '', 'A file this site has, by its content: ' . json_encode( $found ) );
-		self::assertStringContainsString( 'skript-klein.php: a type this account may not upload', $found[ (string) $skript ] ?? '', 'A file of the list besides the main one, by its name: ' . json_encode( $found ) );
-		self::assertStringContainsString( 'the attachment ' . $alt . ' of this site names it as well', $found[ (string) $absolut ] ?? '', 'Its absolute path read as the core reads it: ' . json_encode( $found ) );
+		self::assertStringContainsString( 'of this site the attachment would name is of another type than its name', $found[ (string) $hier ] ?? '', 'A file this site has, by its content: ' . json_encode( $found ) );
+		self::assertStringContainsString( 'The file 2026/10/skript-klein.php is of a type this account may not upload', $found[ (string) $skript ] ?? '', 'A file of the list besides the main one, by its name: ' . json_encode( $found ) );
+		self::assertStringContainsString( 'The attachment ' . $alt . ' of this site names the file', $found[ (string) $absolut ] ?? '', 'Its absolute path read as the core reads it: ' . json_encode( $found ) );
 		self::assertStringContainsString( 'could not be read whole', $found[ (string) $unklar ] ?? '', 'A list of a candidate that does not read whole: ' . json_encode( $found ) );
-		self::assertStringContainsString( 'file ' . $rest_thumb . ' of this site the attachment would name is by its content of another type', $found[ (string) $rest ] ?? '', 'A size left over, by its content: ' . json_encode( $found, JSON_UNESCAPED_SLASHES ) );
+		self::assertStringContainsString( 'By its content, the file ' . $rest_thumb . ' of this site the attachment would name is of another type', $found[ (string) $rest ] ?? '', 'A size left over, by its content: ' . json_encode( $found, JSON_UNESCAPED_SLASHES ) );
 		self::assertStringContainsString( 'attachment:file_type', $found[ (string) $grafik ] ?? '', 'A left-over SVG no attachment here names, for an account that may not upload SVG: ' . json_encode( $found, JSON_UNESCAPED_SLASHES ) );
-		self::assertStringContainsString( 'grafik.svg is of no type this account may upload by its name', $found[ (string) $grafik ] ?? '' );
+		self::assertStringContainsString( 'grafik.svg is of no type this account may upload; the attachment says', $found[ (string) $grafik ] ?? '' );
 		self::assertStringContainsString( 'mitwaise-symbol.svg of this site the attachment would name', $found[ (string) $mitwaise ] ?? '', json_encode( $found, JSON_UNESCAPED_SLASHES ) );
 		self::assertStringContainsString( 'it counts as a file the step lays', $found[ (string) $mitwaise ] ?? '' );
 		// The same plan without the package of media: every file to lay is
@@ -1694,7 +1694,7 @@ final class SyncMediaTest extends TestCase {
 		self::assertStringContainsString( 'attachment:file_type', (string) $falsch['result']['message'] );
 		self::assertArrayNotHasKey( 'files', $falsch['result'], 'Nothing of the PNG was laid.' );
 		self::assertFileDoesNotExist( $uploads . '/2026/10/falsch.jpg' );
-		self::assertStringContainsString( 'its content is of another type than its name says', (string) $klein['result']['message'], 'The thumbnail, by its content.' );
+		self::assertStringContainsString( 'is of another type than its name says (WordPress would store it as', (string) $klein['result']['message'], 'The thumbnail, by its content.' );
 		self::assertArrayNotHasKey( 'files', $klein['result'], 'Nothing of the JPEG with the PNG thumbnail was laid.' );
 		self::assertFileDoesNotExist( $uploads . '/2026/10/klein.jpg' );
 		self::assertFileDoesNotExist( $uploads . '/' . $thumb );
@@ -1815,7 +1815,7 @@ final class SyncMediaTest extends TestCase {
 		foreach ( array( 'meta:_wp_attached_file', 'meta:_wp_attachment_backup_sizes' ) as $key ) {
 			self::assertSame( 'left', $parts[ $key ]['state'], $key . ': ' . json_encode( $parts ) );
 			self::assertStringContainsString( 'go back only together', $parts[ $key ]['note'], $key );
-			self::assertStringContainsString( 'name the file 2026/10/bild-150x150.jpg again (its content is not what its name says', $parts[ $key ]['note'], $key );
+			self::assertStringContainsString( 'The file 2026/10/bild-150x150.jpg cannot be named again: its content is not what its name says', $parts[ $key ]['note'], $key );
 		}
 		self::assertSame( 'left', $parts['meta:_wp_attachment_metadata']['state'] );
 		self::assertStringContainsString( 'The way back stopped for this object', $parts['meta:_wp_attachment_metadata']['note'] );

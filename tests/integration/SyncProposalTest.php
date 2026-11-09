@@ -761,7 +761,7 @@ final class SyncProposalTest extends TestCase {
 			'The same object is chosen twice'
 		);
 		$skip = self::refused( self::gated( $c( array( 'categories' => array( 'realign' ) ) ) ), 'ab_mcp_sync_pairs_nothing' );
-		self::assertStringContainsString( 'entry ' . $realign[0]['n'] . ': The object is not in the inventory of the staging site.', $skip );
+		self::assertStringContainsString( 'Entry ' . $realign[0]['n'] . ': The object is not in the inventory of the staging site.', $skip );
 		self::assertSame( array(), array_filter( self::pair_rows(), static fn( $r ) => 'proposal' === $r['base_origin'] ), 'Nothing was paired.' );
 
 		$done = self::confirmed(

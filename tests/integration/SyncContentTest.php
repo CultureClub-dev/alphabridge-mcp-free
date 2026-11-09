@@ -1190,7 +1190,7 @@ final class SyncContentTest extends TestCase {
 			}
 		}
 		self::assertSame( 'left', $parts['meta:hero_markup']['state'], json_encode( $parts ) );
-		self::assertStringContainsString( 'write the page-builder meta key hero_markup of the post (unfiltered_html)', $parts['meta:hero_markup']['note'] );
+		self::assertStringContainsString( 'write the page-builder meta key hero_markup of the post on this site (unfiltered_html)', $parts['meta:hero_markup']['note'] );
 		self::assertSame( '"grid one"', $parts['meta:hero_markup']['value_before'] );
 		self::assertSame( array( 'grid two' ), self::meta_a( 'post', $about_a, 'hero_markup' ), 'Nothing written without the right.' );
 	}

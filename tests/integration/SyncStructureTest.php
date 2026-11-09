@@ -1580,7 +1580,7 @@ final class SyncStructureTest extends TestCase {
 		self::assertSame( 'closed_findings', $closed['state'], json_encode( $closed ) );
 		$step = self::writes( self::run_status( (int) $run['run_id'] ) )[0];
 		self::assertSame( 'failed', $step['state'], json_encode( $step ) );
-		self::assertStringContainsString( 'the part instance:text-2 was not written: the part instance:text-3 changed right before the call', (string) $step['parts']['object']['deviated']['why'] );
+		self::assertStringContainsString( 'The part instance:text-2 was not written: the part instance:text-3 changed right before the call', (string) $step['parts']['object']['deviated']['why'] );
 		self::assertStringContainsString( 'Nothing was written: the part instance:text-3 changed right before the call of the part instance:text-2', (string) $step['result']['message'] );
 		self::assertStringContainsString( 'That change stays as it is', (string) $step['result']['message'] );
 		$parts = array_column( $step['parts']['parts'], null, 'part' );
@@ -1631,7 +1631,7 @@ final class SyncStructureTest extends TestCase {
 		self::assertSame( 'closed_findings', $closed['state'], json_encode( $closed ) );
 		$step = self::writes( self::run_status( (int) $run['run_id'] ) )[0];
 		self::assertSame( 'unclear', $step['state'], json_encode( $step ) );
-		self::assertStringContainsString( 'the part instance:text-2 was not written: the part instance:text-2 changed right before the call', (string) $step['parts']['object']['deviated']['why'] );
+		self::assertStringContainsString( 'The part instance:text-2 was not written: the part instance:text-2 changed right before the call', (string) $step['parts']['object']['deviated']['why'] );
 		$part = array_column( $step['parts']['parts'], null, 'part' )['instance:text-2'];
 		self::assertTrue( empty( $part['own'] ), 'Not the step\'s own: ' . json_encode( $part ) );
 		$stored = array_column( \AB_MCP_Sync_Run::step( (int) $run['run_id'], (int) $step['seq'] )['parts']['parts'], null, 'part' )['instance:text-2'];
@@ -1681,8 +1681,8 @@ final class SyncStructureTest extends TestCase {
 		self::assertSame( 'closed_findings', $closed['state'], json_encode( $closed ) );
 		$step = self::writes( self::run_status( (int) $run['run_id'] ) )[0];
 		self::assertSame( 'unclear', $step['state'], json_encode( $step ) );
-		self::assertStringContainsString( 'the part row was not written (Not written: this account may not change the option blogname', (string) $step['parts']['object']['deviated']['why'] );
-		self::assertStringContainsString( 'the part row changed right before it', (string) $step['parts']['object']['deviated']['why'] );
+		self::assertStringContainsString( 'The part row was not written (Not written: This account may not change the option blogname', (string) $step['parts']['object']['deviated']['why'] );
+		self::assertStringContainsString( 'The part row changed right before it', (string) $step['parts']['object']['deviated']['why'] );
 		$stored = array_column( \AB_MCP_Sync_Run::step( (int) $run['run_id'], (int) $step['seq'] )['parts']['parts'], null, 'part' )['row'];
 		self::assertTrue( empty( $stored['own'] ), 'No call of the core: nothing of it the step\'s own. ' . json_encode( $stored ) );
 		self::assertTrue( ! empty( $stored['foreign'] ), 'Another hand\'s.' );
@@ -1751,8 +1751,8 @@ final class SyncStructureTest extends TestCase {
 		self::assertSame( 'closed_findings', $closed['state'], json_encode( $closed ) );
 		$step = self::writes( self::run_status( (int) $run['run_id'] ) )[0];
 		self::assertSame( 'unclear', $step['state'], json_encode( $step ) );
-		self::assertStringContainsString( 'another writer tried to change the field 3 of the row widget_text as the step\'s own call wrote it (a hook or filter of this site) and was refused', (string) $step['parts']['object']['deviated']['why'] );
-		self::assertStringContainsString( 'find the plugin or theme that writes it', (string) $step['parts']['object']['deviated']['why'], 'With its way.' );
+		self::assertStringContainsString( 'Another writer tried to change widget_text (3) as the step\'s own call wrote it (a hook or filter of this site) and was refused', (string) $step['parts']['object']['deviated']['why'] );
+		self::assertStringContainsString( 'Find the plugin or theme that writes it', (string) $step['parts']['object']['deviated']['why'], 'With its way.' );
 		$stored = \AB_MCP_Sync_Run::step( (int) $run['run_id'], (int) $step['seq'] )['parts']['object'];
 		self::assertEquals( array( array( 'fields' => array( '3' ), 'option' => 'widget_text', 'part' => 'instance:text-2' ) ), $stored['refused_writes'], 'In the journal, with the part of the call.' );
 	}
@@ -1801,7 +1801,7 @@ final class SyncStructureTest extends TestCase {
 		self::assertSame( 'closed_findings', $closed['state'], json_encode( $closed ) );
 		$step = self::writes( self::run_status( (int) $run['run_id'] ) )[0];
 		self::assertSame( 'unclear', $step['state'], json_encode( $step ) );
-		self::assertStringContainsString( 'another writer tried to change the field nav_menu_locations.footer of the row theme_mods_twentytwentyfive', (string) $step['parts']['object']['deviated']['why'] );
+		self::assertStringContainsString( 'Another writer tried to change theme_mods_twentytwentyfive (nav_menu_locations.footer)', (string) $step['parts']['object']['deviated']['why'] );
 	}
 
 	public function testEveryRefusedWriteIsNamedWhicheverWayTheStepDeviates(): void {
@@ -1858,9 +1858,9 @@ final class SyncStructureTest extends TestCase {
 		self::assertSame( 'closed_findings', $closed['state'], json_encode( $closed ) );
 		$step = self::writes( self::run_status( (int) $run['run_id'] ) )[0];
 		$why  = (string) $step['parts']['object']['deviated']['why'];
-		self::assertStringContainsString( 'the row call changed the part instance:text-5 besides it', $why );
-		self::assertStringContainsString( 'another writer tried to change the field sidebar-2 of the row sidebars_widgets as the step\'s own call wrote it', $why, 'The refusal named in this answer too.' );
-		self::assertStringContainsString( 'another writer tried to change the field sidebar-2 of the row sidebars_widgets', (string) $step['result']['message'] );
+		self::assertStringContainsString( 'The row call changed the part instance:text-5 besides it', $why );
+		self::assertStringContainsString( 'Another writer tried to change sidebars_widgets (sidebar-2) as the step\'s own call wrote it', $why, 'The refusal named in this answer too.' );
+		self::assertStringContainsString( 'Another writer tried to change sidebars_widgets (sidebar-2)', (string) $step['result']['message'] );
 	}
 
 	public function testAFilterThatChangesTheOwnValueOfTheRowLeavesItAndTheAnswerSaysTheStepDidNotWrite(): void {
@@ -1890,7 +1890,7 @@ final class SyncStructureTest extends TestCase {
 		$step    = self::writes( self::run_status( (int) $run['run_id'] ) )[0];
 		$message = (string) $step['result']['message'];
 		self::assertSame( 'failed', $step['state'], json_encode( $step ) );
-		self::assertStringContainsString( 'a write to the row blogname was refused by the takeover lock as the step\'s own call ran, and the row does not hold what the step was to write', $message );
+		self::assertStringContainsString( 'A write to blogname was refused by the takeover lock as the step\'s own call ran, and the row does not hold what the step was to write', $message );
 		self::assertStringNotContainsString( 'the row holds what the step wrote', $message );
 	}
 
