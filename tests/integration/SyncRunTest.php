@@ -1841,7 +1841,7 @@ final class SyncRunTest extends TestCase {
 		$was = self::untouched( $run_id, array( (int) $a['contact'], (int) $a['about'] ) );
 		unset( $was['run'] );
 		$text = self::refused( self::next( $run_id ), 'ab_mcp_sync_run_unread' );
-		self::assertStringContainsString( 'its plan does not read back as it was written', $text );
+		self::assertStringContainsString( 'its record (plan) does not read back as it was written', $text );
 		$now = self::untouched( $run_id, array( (int) $a['contact'], (int) $a['about'] ) );
 		unset( $now['run'] );
 		self::assertSame( $was, $now, 'Nothing of the steps, the bookings, the backups or the pages changed.' );

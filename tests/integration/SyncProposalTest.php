@@ -2450,7 +2450,7 @@ final class SyncProposalTest extends TestCase {
 		);
 		$preview = self::gated( $args );
 		self::assertSame( array( 'made_active' => 1 ), $preview['preview']['counts'] );
-		self::assertSame( array( array( 'entry' => $realign['n'], 'reason' => 'pair ' . $pair['id'] . ' changed since the proposal' ) ), $preview['preview']['skipped'] );
+		self::assertSame( array( array( 'entry' => $realign['n'], 'reason' => 'Pair ' . $pair['id'] . ' changed since the proposal.' ) ), $preview['preview']['skipped'] );
 		$done = self::gated( $args + array( 'confirm_token' => $preview['confirm_token'] ) );
 		self::assertIsArray( $done );
 		self::assertSame( 'residual', AB_MCP_Sync_Pairs::get( $pair['id'] )['state'], 'Left as the other request wrote it.' );
