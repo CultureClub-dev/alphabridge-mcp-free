@@ -1370,9 +1370,12 @@ final class AB_MCP_Sync_Post_Writer {
 	/**
 	 * inactive_theme() for the refusal of the writer: the object and why its
 	 * theme is not the active one here, a whole sentence in the language of
-	 * the site; null where it is. inactive_theme() itself stays English: the
-	 * plan names it in its locks (AB_MCP_Sync_Push::verdict()), which go
-	 * into the print of the plan, so no translated text.
+	 * the site; null where it is. inactive_theme() itself is still the
+	 * English end of a sentence the plan sets into its lock
+	 * (AB_MCP_Sync_Push::verdict()); that lock is a text for the person and
+	 * goes into no print of the plan (plan_hash and the state in
+	 * AB_MCP_Sync_Push hold the report hash, the selection, the objects and
+	 * the pairs, no lock).
 	 *
 	 * @param string $type  Post type.
 	 * @param string $name  Its slug.
