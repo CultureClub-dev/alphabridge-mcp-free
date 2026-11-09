@@ -100,7 +100,8 @@
  * unpack or holds an object locks the unit, and so does what the layers of
  * one of its texts do not read to its end, as for a column (Codex round 1
  * of branch 11b, A2: the quotes of the serialized text end a data: address
- * elsewhere, so the raw text does not stand for it).
+ * elsewhere, so the raw text does not stand for it); a pair in a layer taken
+ * out of one of its texts (data:, base64) locks it as in the raw text.
  *
  * The net only locks. Rewriting stays with the structured readers, in the
  * spellings they read as the core reads them (the JSON of a data-*
@@ -368,11 +369,27 @@ final class AB_MCP_Sync_Net {
 				$acc,
 				(string) $kind,
 				(string) $at,
-				static function ( $where, $one ) use ( &$acc, $kind, $at, $named, $extra, &$unreadable ) {
+				static function ( $where, $one ) use ( &$acc, $kind, $at, $named, $extra, &$unreadable, &$locked, $ctx ) {
 					$deep   = false;
 					$unread = array();
 					$place  = $at . ':net:' . ( '' === $where ? '' : $where . ':' );
-					self::count_credentials( $acc, (string) $kind, (string) $at, $place, self::layers( $one, $deep, $unread ), $named, $extra, $unreadable );
+					$layers = self::layers( $one, $deep, $unread );
+					// A layer taken out of a text (data:, base64): every pair
+					// in it is unread, also where the raw text does not take
+					// it out alike (its quotes end a data: address elsewhere;
+					// a body in UTF-16 then is no layer of it). The pairs of
+					// the text itself and of its decodings are counted over
+					// the raw text, where the readers' count stands.
+					if ( ! $locked ) {
+						foreach ( $layers as $layer ) {
+							if ( $layer[2] && array() !== self::references( $layer[1], $ctx ) ) {
+								AB_MCP_Sync_Canon::lock( $acc, (string) $kind, 'unread_reference', $place . $layer[0] );
+								$locked = true;
+								break;
+							}
+						}
+					}
+					self::count_credentials( $acc, (string) $kind, (string) $at, $place, $layers, $named, $extra, $unreadable );
 					// What the layers of the text do not read to its end locks
 					// the unit, as for a column: the raw text does not stand
 					// for it, its quotes end a data: address elsewhere than

@@ -374,7 +374,11 @@ final class SyncLocksTest extends TestCase {
 		);
 		self::assertIsInt( $page );
 		add_post_meta( $page, 'acme_hidden', $hidden );
-		self::assertSame( array( 'meta:acme_hidden:net:raw/base64', 'post_content:net:raw/data', 'post_title:net:raw' ), $net( self::canon( 'post', $page ) ) );
+		// In a leaf of a serialized value, a data: address in UTF-16 the raw
+		// text does not take out (its quotes end the address after " x";
+		// Codex round 1 of branch 11b, the cause of A2): locked in the leaf.
+		add_post_meta( $page, 'acme_leaf', array( 'text' => 'data:text/plain;charset=utf-16le;base64,' . base64_encode( mb_convert_encoding( '<a href="/?p=12">Regeln</a>', 'UTF-16LE', 'UTF-8' ) ) . ' x' ) );
+		self::assertSame( array( 'meta:acme_hidden:net:raw/base64', 'meta:acme_leaf:net:php.0:raw/data', 'post_content:net:raw/data', 'post_title:net:raw' ), $net( self::canon( 'post', $page ) ) );
 
 		$term = wp_insert_term( 'Versteckt', 'category', array( 'description' => 'Hinweis ' . $hidden ) );
 		self::assertSame( array( 'description:net:raw/base64' ), $net( self::canon( 'term', $term['term_id'] ) ) );

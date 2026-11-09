@@ -625,7 +625,16 @@ Position, die das Theme hier nicht registriert, in der Prüfung des Laufs
   `SyncNetTest::testALeafTheNetDoesNotReadToItsEndLocksAsAColumnDoes` und
   zwei Fälle in
   `SyncStructureTest::testACredentialInASerializedValueOfMetaAndOfAnOptionStillHoldsItInTheReportAndThePackage`;
-  auf `8df6146` gingen beide durch.
+  auf `8df6146` gingen beide durch. Aus demselben Grund sperrt eine
+  Adresse mit Id in einer Schicht, die aus einem Text des Werts
+  herausgelöst ist (`data:`, Base64), auch wo der Rohwert sie nicht
+  herauslöst: etwa ein Körper in UTF-16LE mit Zeichensatz, dessen Adresse
+  im Rohwert erst am Anführungszeichen endet und dessen Base64 ohne BOM
+  dort keine Schicht ist (vorbestehend, gefunden bei A2). Die Adressen des
+  Texts selbst und seiner Dekodierungen zählt das Netz weiter über den
+  Rohwert, gegen das, was die Leser gelesen haben. Prüffälle
+  `SyncNetTest::testAReferenceInALayerTakenOutOfALeafLocks` und
+  `SyncLocksTest::testTheNetLocksAHiddenReferenceInEveryUnit`.
 - Ein echtes Zugangsdatum sperrt weiter: im Blatt als Code
   (`{api_key:"…"}`), verschachtelt, in Base64 in einem Blatt oder einem
   Schlüssel, im verdrängten ersten Wert eines doppelten Schlüssels, in

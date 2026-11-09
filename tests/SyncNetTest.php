@@ -1086,6 +1086,35 @@ final class SyncNetTest extends TestCase {
 		}
 	}
 
+	public function testAReferenceInALayerTakenOutOfALeafLocks(): void {
+		// The same cause as A2 (Codex round 1 of branch 11b): in the raw text
+		// the quotes of the serialized text end the data: address after " x",
+		// its body in UTF-16 does not decode there, and its span of base64 is
+		// no text without a BOM: the raw text holds no layer with the pair.
+		// Every pair in a layer taken out of a text of the value locks, as in
+		// a column.
+		$data = 'data:text/plain;charset=utf-16le;base64,' . base64_encode( mb_convert_encoding( '<a href="/?p=12">Regeln</a>', 'UTF-16LE', 'UTF-8' ) ) . ' x';
+		foreach ( array(
+			'plain'  => array( $data, 'u:net:raw/data' ),
+			'a leaf' => array( serialize( array( 'text' => $data ) ), 'u:net:php.0:raw/data' ),
+			'nested' => array( serialize( array( 'x' => serialize( array( 'text' => $data ) ) ) ), 'u:net:php.0.php.0:raw/data' ),
+		) as $case => list( $raw, $place ) ) {
+			list( $locks ) = self::stored( $raw );
+			self::assertSame( array( '*:unread_reference@' . $place ), $locks, $case );
+		}
+		// One lock of the references per unit.
+		list( $locks ) = self::stored( serialize( array( 'a' => $data, 'b' => $data ) ) );
+		self::assertSame( array( '*:unread_reference@u:net:php.0:raw/data' ), $locks );
+		// The readers locked the unit already (another spelling): nothing is added.
+		$spelled = 'https://staging.test/?p=1%32 ';
+		list( $locks, $acc ) = self::stored( serialize( array( 'a' => $spelled, 'text' => $data ) ) );
+		self::assertSame( array( array(), array( 'u.a?p' ) ), array( $locks, $acc['spelling'] ) );
+		// An address the readers read in a leaf stays free: only a layer taken
+		// out of a text counts every pair.
+		list( $locks ) = self::stored( serialize( array( 'url' => 'https://staging.test/?p=12', 'text' => 'siehe /?p=13' ) ) );
+		self::assertSame( array(), $locks );
+	}
+
 	public function testTheReferencesOfAStoredValueAreCountedOverItsRawText(): void {
 		// The count of branch 4 stays over the raw value: what the readers
 		// read in the leaves, the net counts in the raw text; a key, which no

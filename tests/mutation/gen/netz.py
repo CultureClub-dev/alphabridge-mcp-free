@@ -37,6 +37,7 @@ RUNS = {
     'net': ('unit', 'SyncNetTest'),
     'u': ('unit', 'SyncStructureWritersTest'),
     'it': ('it', 'SyncStructureTest'),
+    'itl': ('it', 'SyncLocksTest'),
 }
 
 entries = []
@@ -60,6 +61,8 @@ IT_PROSE = 'testProseInASerializedValueOfMetaAndOfACoreOptionGoesThroughTheRepor
 IT_CRED = 'testACredentialInASerializedValueOfMetaAndOfAnOptionStillHoldsItInTheReportAndThePackage'
 N_LEAFREAD = 'testALeafTheNetDoesNotReadToItsEndLocksAsAColumnDoes'
 N_DEPTH = 'testBeyondTheDepthTheUnitIsNotReadToItsEnd'
+N_REFLEAF = 'testAReferenceInALayerTakenOutOfALeafLocks'
+IT_HIDDEN = 'testTheNetLocksAHiddenReferenceInEveryUnit'
 
 # ------------------------------------------------------- check(): the form
 APART = "\t\tif ( is_array( $raw ) || ( $stored && is_string( $raw ) && is_serialized( $raw ) ) ) {"
@@ -75,7 +78,7 @@ e('place', 'check(): the place of a text in the lock (positions, never a key or 
   "\t\t\t\t\t$place  = $at . ':net:' . ( '' === $where ? '' : $where . ':' );",
   "\t\t\t\t\t$place  = $at . ':net:';", 'net', N_CRED)
 e('texts-each', 'check(): the credentials counted in each text of the value', NT,
-  "\t\t\t\t\tself::count_credentials( $acc, (string) $kind, (string) $at, $place, self::layers( $one, $deep, $unread ), $named, $extra, $unreadable );\n",
+  "\t\t\t\t\tself::count_credentials( $acc, (string) $kind, (string) $at, $place, $layers, $named, $extra, $unreadable );\n",
   "", 'net', N_CRED)
 e('raw-whole', 'check(): the credentials of a text read as it is stored counted in its layers', NT,
   "\t\t\tself::count_credentials( $acc, (string) $kind, (string) $at, $at . ':net:', $layers, $named, $extra, $unreadable );\n",
@@ -94,6 +97,20 @@ e('leaf-deep', 'check(): a text of the value read deeper than the net reads lock
   "null );", 'net', N_LEAFREAD)
 e('raw-not-read', 'check(): what the layers of the raw text do not read to its end locks the unit', NT,
   "\t\tself::not_read( $acc, (string) $kind, $at . ':net:', $unread, $deep ? $at . ':net' : null );\n", "", 'net', N_DEPTH)
+
+# The cause of A2 for the references: a pair in a layer taken out of a text.
+REF_GUARD = "\t\t\t\t\tif ( ! $locked ) {\n\t\t\t\t\t\tforeach ( $layers as $layer ) {"
+e('leaf-references', 'check(): a pair in a layer taken out of a text of the value locks (the cause of A2)', NT,
+  REF_GUARD, "\t\t\t\t\tif ( false ) {\n\t\t\t\t\t\tforeach ( $layers as $layer ) {", 'net', N_REFLEAF)
+e('leaf-references-it', 'check(): a pair in a layer taken out of a leaf locks on WordPress (the cause of A2)', NT,
+  REF_GUARD, "\t\t\t\t\tif ( false ) {\n\t\t\t\t\t\tforeach ( $layers as $layer ) {", 'itl', IT_HIDDEN)
+e('leaf-references-locked', 'check(): nothing added to the references where the readers locked the unit', NT,
+  REF_GUARD, "\t\t\t\t\tif ( true ) {\n\t\t\t\t\t\tforeach ( $layers as $layer ) {", 'net', N_REFLEAF)
+e('leaf-references-extracted', 'check(): only a layer taken out of a text counts every pair (the text and its decodings over the raw text)', NT,
+  "\t\t\t\t\t\t\tif ( $layer[2] && array() !== self::references( $layer[1], $ctx ) ) {",
+  "\t\t\t\t\t\t\tif ( array() !== self::references( $layer[1], $ctx ) ) {", 'net', N_REFLEAF)
+e('leaf-references-once', 'check(): one lock of the references per unit', NT,
+  "\t\t\t\t\t\t\t\t$locked = true;\n\t\t\t\t\t\t\t\tbreak;", "\t\t\t\t\t\t\t\tbreak;", 'net', N_REFLEAF)
 
 # ------------------------------------------------------------- texts()
 e('texts-depth', 'texts(): deeper than the readers read: not read to its end', NT,
