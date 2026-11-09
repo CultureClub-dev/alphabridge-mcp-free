@@ -973,8 +973,9 @@ class AB_MCP_Staging {
 	}
 
 	/**
-	 * Everything wp_staging_status reports. Reads only; the check of the
-	 * other site is made only with $check.
+	 * Everything wp_staging_status reports, since Z8 with transfer
+	 * (AB_MCP_Transfer::status()). Reads only; the check of the other site
+	 * is made only with $check.
 	 *
 	 * @param bool $check Whether to ask the other site.
 	 * @return array
@@ -1011,6 +1012,11 @@ class AB_MCP_Staging {
 		if ( self::ROLE_PRODUCTION === $out['role']['value'] && $protection['enabled'] ) {
 			$out['warnings'][] = __( 'The preview protection is on, but this site is confirmed as the production site: its visitors see the password page.', 'alphabridge-mcp' );
 		}
+		// The takeover (Z8, decision 35, branch 12): the key, the anchor,
+		// the run that is not closed, an interrupted one with its journal,
+		// its parts and its rest (decision 18). Reads only.
+		require_once __DIR__ . '/class-transfer.php';
+		$out['transfer'] = AB_MCP_Transfer::status();
 		return $out;
 	}
 

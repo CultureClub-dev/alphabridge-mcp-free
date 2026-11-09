@@ -66,6 +66,11 @@ final class UninstallTest extends TestCase {
 		// object changed right before the call (AB_MCP_Sync_Write::CHANGED,
 		// Z8 branch 11): no option.
 		'ab_mcp_sync_changed_before_write',
+		// The prefix of the transient that holds the outcome of a form of the
+		// section «Takeover» for its user for five minutes, until the page
+		// shows it (AB_MCP_Transfer::OUTCOME, Z8 branch 12): it expires by
+		// itself and names no option.
+		'ab_mcp_transfer_outcome_',
 	);
 
 	public static function setUpBeforeClass(): void {

@@ -159,6 +159,11 @@ class AB_MCP_Guidance {
 		'ab-staging-copy',
 		'ab-preview',
 		'ab-staging-first',
+		// The section «Takeover» below the card (Z8, decision 35,
+		// AB_MCP_Transfer::ANCHOR); its parts carry no id of their own, so
+		// every id stays on the page whatever the state of the site.
+		'ab-staging-transfer',
+		'ab-staging-transfer-title',
 	);
 
 	/**

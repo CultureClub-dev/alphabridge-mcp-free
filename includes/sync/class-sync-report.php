@@ -826,6 +826,56 @@ final class AB_MCP_Sync_Report {
 	}
 
 	/**
+	 * The youngest report of this site for this source and pair that has not
+	 * expired, of whichever account and connection made it, for the page
+	 * «Staging» (Z8, decision 35, branch 12: the last report): its id, when
+	 * it was made, until when it holds, and its index once it is done (null
+	 * while it is not). Reads only: no report is paged or gone on with here,
+	 * which stays with the connection that made it (find()). Null where
+	 * there is none; a group that does not read as a report, or holds for
+	 * another source, pair or version of the comparison data, is passed by.
+	 *
+	 * @param string $source The source of the confirmed key.
+	 * @return array{report_id:string,created:int,expires:int,index:array|null}|null|WP_Error
+	 */
+	public static function latest( $source ) {
+		$groups = AB_MCP_Protected_Store::groups( 'reports' );
+		if ( is_wp_error( $groups ) ) {
+			return $groups;
+		}
+		$print = (string) AB_MCP_Sync_Anchor::pair_print();
+		$best  = null;
+		foreach ( $groups as $group ) {
+			if ( self::LABEL !== $group['label'] ) {
+				continue;
+			}
+			$files = AB_MCP_Protected_Store::files( 'reports', $group['gid'] );
+			$head  = is_wp_error( $files ) ? null : AB_MCP_Sync_Proposal::read_one( $group['gid'], $files, 'h', self::concurrent() );
+			if ( ! is_array( $head ) || self::FORMAT !== ( $head['format'] ?? null ) ) {
+				continue;
+			}
+			if ( AB_MCP_Sync_Canon::VERSION !== ( $head['canon'] ?? null ) || $source !== ( $head['source_id'] ?? null ) || ! hash_equals( (string) ( $head['print'] ?? '' ), $print ) || self::now() >= (int) ( $head['expires'] ?? 0 ) ) {
+				continue;
+			}
+			if ( null === $best || (int) $head['created'] > $best['created'] ) {
+				$best = array(
+					'report_id' => (string) $group['gid'],
+					'created'   => (int) $head['created'],
+					'expires'   => (int) $head['expires'],
+					'files'     => $files,
+				);
+			}
+		}
+		if ( null === $best ) {
+			return null;
+		}
+		$index = AB_MCP_Sync_Proposal::read_one( $best['report_id'], $best['files'], 'x', self::concurrent() );
+		unset( $best['files'] );
+		$best['index'] = is_array( $index ) ? $index : null;
+		return $best;
+	}
+
+	/**
 	 * A connection works on one report: a new one removes the earlier ones
 	 * of this connection from the store (those of other connections stay).
 	 *

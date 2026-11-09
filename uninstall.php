@@ -79,6 +79,10 @@ $ab_mcp_options = array(
 	// and the mark of a site that has had a run (AB_MCP_Sync_Guard::MARK).
 	'ab_mcp_sync_boundary',
 	'ab_mcp_sync_guard',
+	// The moments of the takeover on the page «Staging» (Z8, branch 12;
+	// AB_MCP_Transfer_Moments::OPTION): which notice showed, the switch
+	// «Hide edition notes», the first report seen.
+	'ab_mcp_transfer_moments',
 );
 
 // The protected store of the takeover (Z8): the folders of this installation
