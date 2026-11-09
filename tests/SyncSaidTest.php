@@ -18,6 +18,7 @@ use AB_MCP_Sync_Env;
 use AB_MCP_Sync_Kinds;
 use AB_MCP_Sync_Option_Schema;
 use AB_MCP_Sync_Said;
+use AB_MCP_Tools_Staging;
 use AB_MCP_Transfer_View;
 use PHPUnit\Framework\TestCase;
 
@@ -26,6 +27,7 @@ require_once __DIR__ . '/../includes/sync/class-sync-kinds.php';
 require_once __DIR__ . '/../includes/sync/class-sync-option-schema.php';
 require_once __DIR__ . '/../includes/sync/class-sync-said.php';
 require_once __DIR__ . '/../includes/class-transfer-view.php';
+require_once __DIR__ . '/../includes/tools/class-tools-staging.php';
 
 final class SyncSaidTest extends TestCase {
 
@@ -129,6 +131,85 @@ final class SyncSaidTest extends TestCase {
 		self::assertSame( 1, $shown['entries'][0]['n'] );
 		self::assertNull( AB_MCP_Sync_Said::shown( null ) );
 		self::assertSame( 'x', AB_MCP_Sync_Said::shown( 'x' ) );
+	}
+
+	/**
+	 * Codex round 5 on branch 13 (B): words and note reach the person as
+	 * reason and why do, also under staging, live, incomplete and lock; a
+	 * code under such a key stays as it is.
+	 */
+	public function testAnAnswerSaysEveryKeyOfProseAtAnyDepth(): void {
+		$plugin                          = AB_MCP_Sync_Env::LOCKS['plugin']['reason'];
+		$GLOBALS['ab_test_translations'] = array( $plugin => 'Ein Plugin ist Code.' );
+		self::assertSame( array( 'reason', 'why', 'words', 'note' ), AB_MCP_Sync_Said::PROSE );
+		$stored = array(
+			'staging' => array( 'incomplete' => array( array( 'kind' => 'post', 'lock' => array( 'reason' => $plugin, 'key' => 'env:plugin' ) ) ) ),
+			'live'    => array( 'note' => $plugin ),
+			'entries' => array(
+				array(
+					'words'  => $plugin,
+					'note'   => $plugin,
+					'why'    => 'by_code',
+					'action' => $plugin,
+				),
+			),
+		);
+		$shown  = AB_MCP_Sync_Said::shown( $stored );
+		self::assertSame( 'Ein Plugin ist Code.', $shown['staging']['incomplete'][0]['lock']['reason'] );
+		self::assertSame( 'env:plugin', $shown['staging']['incomplete'][0]['lock']['key'] );
+		self::assertSame( 'Ein Plugin ist Code.', $shown['live']['note'] );
+		self::assertSame( 'Ein Plugin ist Code.', $shown['entries'][0]['words'] );
+		self::assertSame( 'Ein Plugin ist Code.', $shown['entries'][0]['note'] );
+		self::assertSame( 'by_code', $shown['entries'][0]['why'], 'A code under a key of prose stays.' );
+		self::assertSame( $plugin, $shown['entries'][0]['action'], 'Only the keys of prose.' );
+	}
+
+	/**
+	 * Sentences the list knows, one after another and separated by a space,
+	 * are said each in turn; one sentence it does not know leaves the whole
+	 * text as it is.
+	 */
+	public function testKnownSentencesOneAfterAnotherAreSaidEachInTurn(): void {
+		$plugin                          = AB_MCP_Sync_Env::LOCKS['plugin']['reason'];
+		$theme                           = AB_MCP_Sync_Env::LOCKS['theme']['reason'];
+		$GLOBALS['ab_test_translations'] = array(
+			$plugin => 'Ein Plugin ist Code.',
+			$theme  => 'Ein Theme ist Code.',
+		);
+		self::assertFalse( AB_MCP_Sync_Said::knows( $plugin . $theme ) );
+		self::assertTrue( AB_MCP_Sync_Said::knows( $plugin . ' ' . $theme ) );
+		self::assertSame( 'Ein Plugin ist Code. Ein Theme ist Code.', AB_MCP_Sync_Said::text( $plugin . ' ' . $theme ) );
+		self::assertSame( 'Ein Theme ist Code. Ein Plugin ist Code. Ein Theme ist Code.', AB_MCP_Sync_Said::text( $theme . ' ' . $plugin . ' ' . $theme ) );
+		$unknown = $plugin . ' Something else. ' . $theme;
+		self::assertFalse( AB_MCP_Sync_Said::knows( $unknown ) );
+		self::assertSame( $unknown, AB_MCP_Sync_Said::text( $unknown ) );
+	}
+
+	/**
+	 * The answers of wp_site_pairs, wp_site_diff, wp_site_push and
+	 * wp_site_revert and their previews go out through said(), the whole of
+	 * each; the state a token is bound to and the export do not (the state
+	 * is hashed, the manifest and cursor of the export are passed back
+	 * unchanged).
+	 */
+	public function testTheStagingToolsSayTheirWholeAnswer(): void {
+		$source = (string) file_get_contents( __DIR__ . '/../includes/tools/class-tools-staging.php' );
+		$body   = static function ( string $name ) use ( $source ): string {
+			self::assertSame( 1, preg_match( '/function ' . $name . '\( array \$a \) \{(.*?)\n\t\}/s', $source, $m ), $name );
+			return $m[1];
+		};
+		foreach ( array( 'pairs_preview', 'site_pairs', 'site_diff', 'push_preview', 'site_push', 'revert_preview', 'site_revert' ) as $name ) {
+			self::assertMatchesRegularExpression( '/return self::said\( AB_MCP_Sync_[A-Za-z_]+::(call|preview)\( \$a \) \);/', $body( $name ), $name );
+		}
+		foreach ( array( 'pairs_state', 'push_state', 'revert_state', 'site_export', 'site_export_chunk', 'site_import_chunk' ) as $name ) {
+			self::assertStringNotContainsString( 'said(', $body( $name ), $name );
+		}
+		$plugin                          = AB_MCP_Sync_Env::LOCKS['plugin']['reason'];
+		$GLOBALS['ab_test_translations'] = array( $plugin => 'Ein Plugin ist Code.' );
+		$said                            = new \ReflectionMethod( AB_MCP_Tools_Staging::class, 'said' );
+		self::assertSame( array( 'blocked' => array( array( 'reason' => 'Ein Plugin ist Code.' ) ) ), $said->invoke( null, array( 'blocked' => array( array( 'reason' => $plugin ) ) ) ) );
+		$error = new \WP_Error( 'x', $plugin );
+		self::assertSame( $error, $said->invoke( null, $error ), 'An error as it is.' );
 	}
 
 	public function testAKindReadsAsThePageStagingNamesIt(): void {

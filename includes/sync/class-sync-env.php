@@ -2011,7 +2011,8 @@ final class AB_MCP_Sync_Env {
 			case 'files':
 				if ( ! $s['complete'] || ! $l['complete'] ) {
 					$side = $s['complete'] ? $l : $s;
-					return array( 'not_compared', array(), sprintf( 'The %1$s could not be counted to its end on %2$s (%3$s).', $ref, $s['complete'] ? 'this site' : 'the staging site', self::why_files( (string) $side['why'] ) ) );
+					// One whole sentence a side, as AB_MCP_Sync_Said knows it.
+					return array( 'not_compared', array(), sprintf( $s['complete'] ? 'The %1$s could not be counted to its end on this site (%2$s).' : 'The %1$s could not be counted to its end on the staging site (%2$s).', $ref, self::why_files( (string) $side['why'] ) ) );
 				}
 				$fields = array( 'files', 'bytes' );
 				$same   = 'counted';

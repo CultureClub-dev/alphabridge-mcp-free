@@ -10,8 +10,10 @@
  * compared with a constant (AB_MCP_Outbound::UNBOUND). Only where such a
  * text is set into a refusal, an error or a note for a person does text()
  * give it in the language of the site: by the English text itself, which
- * is the stable key, to a literal gettext call. A text this list does not
- * know is given as it is.
+ * is the stable key, to a literal gettext call. The answers of the tools
+ * wp_site_pairs, wp_site_diff, wp_site_push and wp_site_revert say every
+ * such text under a key of PROSE in their copy (shown()). A text this list
+ * does not know is given as it is.
  *
  * The list holds every reason of the tables, those of the environment
  * (AB_MCP_Sync_Env::LOCKS) among them (SyncSaidTest holds it to them).
@@ -27,33 +29,44 @@ defined( 'ABSPATH' ) || exit;
 final class AB_MCP_Sync_Said {
 
 	/**
+	 * The keys of an answer whose text is said to the person: a reason, a
+	 * why, the words of a result and a note (Codex round 5 on branch 13).
+	 * Every other key (key, stage, result, action, kind, ref, report_hash,
+	 * cursor, n, …) carries a code or a reference and stays as it is.
+	 */
+	const PROSE = array( 'reason', 'why', 'words', 'note' );
+
+	/**
 	 * An English text of the report or the transport in the language of the
-	 * site; a text the list does not know as it is.
+	 * site; a text the list does not know as it is. Known are a text of the
+	 * list, a text of one of its forms (the values in it said again, where
+	 * the list knows them: the reason why a folder was not counted in the
+	 * sentence that names the folder) and a text of such sentences one after
+	 * another, separated by a space (the words of an entry of the
+	 * environment with what it adds).
 	 *
 	 * @param string $english The text as it is stored.
 	 * @return string
 	 */
 	public static function text( $english ) {
 		$english = (string) $english;
-		$words   = self::words();
-		if ( isset( $words[ $english ] ) ) {
-			return $words[ $english ];
+		$said    = self::said( $english );
+		if ( null !== $said ) {
+			return $said;
 		}
-		foreach ( self::forms() as $form => $said ) {
-			$args = self::args( $form, $english );
-			if ( null !== $args ) {
-				return vsprintf( $said, $args );
-			}
-		}
-		return $english;
+		$pieces = self::pieces( $english );
+		return null === $pieces ? $english : implode( ' ', array_map( array( __CLASS__, 'said' ), $pieces ) );
 	}
 
 	/**
-	 * A part of an answer of wp_site_diff or wp_site_pairs as the person reads
-	 * it: every reason and why in it in the language of the site (text()),
-	 * everything else as it is. Only the copy that goes into the answer:
-	 * the stored report and proposal, their parts and their hashes are not
-	 * touched, and no answer is read back.
+	 * A part of an answer of wp_site_diff, wp_site_pairs, wp_site_push or
+	 * wp_site_revert as the person reads it: the text under every key of
+	 * PROSE in it, at any depth, in the language of the site (text()),
+	 * everything else as it is. Only the copy that goes into the answer
+	 * (AB_MCP_Tools_Staging applies it to the whole answer of each of these
+	 * tools and of their previews): the stored report and proposal, their
+	 * parts and their hashes, the plan and the journal are not touched, and
+	 * no answer is read back.
 	 *
 	 * @param mixed $data A value of the answer.
 	 * @return mixed
@@ -63,7 +76,7 @@ final class AB_MCP_Sync_Said {
 			return $data;
 		}
 		foreach ( $data as $key => $value ) {
-			if ( ( 'reason' === $key || 'why' === $key ) && is_string( $value ) ) {
+			if ( is_string( $value ) && in_array( $key, self::PROSE, true ) ) {
 				$data[ $key ] = self::text( $value );
 			} elseif ( is_array( $value ) ) {
 				$data[ $key ] = self::shown( $value );
@@ -73,13 +86,48 @@ final class AB_MCP_Sync_Said {
 	}
 
 	/**
-	 * Whether the list knows a text (whole, or by one of its forms).
+	 * Whether the list knows a text (whole, by one of its forms, or as
+	 * sentences it knows one after another).
 	 *
 	 * @param string $english The text.
 	 * @return bool
 	 */
 	public static function knows( $english ) {
 		$english = (string) $english;
+		if ( self::known( $english ) ) {
+			return true;
+		}
+		return null !== self::pieces( $english );
+	}
+
+	/**
+	 * A text the list knows whole or by a form, said; null where it does not.
+	 *
+	 * @param string $english The text.
+	 * @return string|null
+	 */
+	private static function said( $english ) {
+		$words = self::words();
+		if ( isset( $words[ $english ] ) ) {
+			return $words[ $english ];
+		}
+		foreach ( self::forms() as $form => $said ) {
+			$args = self::args( $form, $english );
+			if ( null !== $args ) {
+				return vsprintf( $said, array_map( static fn( $value ) => is_string( $value ) && isset( $words[ $value ] ) ? $words[ $value ] : $value, $args ) );
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * Whether the list knows a text whole or by a form (a form itself
+	 * counts, as the scan of SyncSaidScanTest finds it in the code).
+	 *
+	 * @param string $english The text.
+	 * @return bool
+	 */
+	private static function known( $english ) {
 		if ( isset( self::words()[ $english ] ) ) {
 			return true;
 		}
@@ -89,6 +137,39 @@ final class AB_MCP_Sync_Said {
 			}
 		}
 		return false;
+	}
+
+	/**
+	 * A text as sentences the list knows, in their order, each ending before
+	 * a space that follows a full stop; null where it is not two or more of
+	 * them.
+	 *
+	 * @param string $english The text.
+	 * @return string[]|null
+	 */
+	private static function pieces( $english ) {
+		$ends = array( 0 );
+		$at   = 0;
+		while ( false !== ( $at = strpos( $english, '. ', $at ) ) ) {
+			$ends[] = $at + 2;
+			++$at;
+		}
+		$ends[] = strlen( $english ) + 1;
+		// The shortest way through the text, piece by known piece.
+		$way = array( 0 => array() );
+		foreach ( $ends as $i => $from ) {
+			if ( ! isset( $way[ $from ] ) ) {
+				continue;
+			}
+			foreach ( array_slice( $ends, $i + 1 ) as $to ) {
+				$piece = substr( $english, $from, $to - 1 - $from );
+				if ( ! isset( $way[ $to ] ) && '' !== $piece && self::known( $piece ) ) {
+					$way[ $to ] = array_merge( $way[ $from ], array( $piece ) );
+				}
+			}
+		}
+		$whole = $way[ strlen( $english ) + 1 ] ?? null;
+		return null !== $whole && count( $whole ) > 1 ? $whole : null;
 	}
 
 	/**
