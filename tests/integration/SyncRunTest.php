@@ -61,6 +61,7 @@ namespace AlphaBridge\Tests\Integration;
 
 use AB_MCP_IT_Sites;
 use AB_MCP_IT_Sync_Steps;
+use AB_MCP_Plugin;
 use AB_MCP_Protected_Store;
 use AB_MCP_REST_Controller;
 use AB_MCP_Staging;
@@ -73,6 +74,7 @@ use AB_MCP_Sync_Pairs;
 use AB_MCP_Sync_Report;
 use AB_MCP_Sync_Resources;
 use AB_MCP_Sync_Run;
+use AB_MCP_Sync_Said;
 use AB_MCP_Sync_Schema;
 use AB_MCP_Tool_Registry;
 use AB_MCP_Tools_Staging;
@@ -4592,4 +4594,100 @@ final class SyncRunTest extends TestCase {
 		AB_MCP_Protected_Store::cleanup();
 		self::assertEqualsCanonicalizing( array( 6, 13, 14 ), $kept(), 'Rows without a stored period stay.' );
 	}
+
+	/**
+	 * Codex round 6 on branch 13: the four tools for an ordinary case on a
+	 * site in another language (de_CH, the bundled catalogue). Under reason,
+	 * why, words and note of every answer (the previews among them) no
+	 * English text of the source stays unsaid.
+	 */
+	public function testTheAnswersOfTheToolsSayTheirProseInTheLanguageOfTheSite(): void {
+		self::pair();
+		$a = self::pages_on_a( array( 'about' => 'About us.', 'contact' => 'Write to us.' ) );
+		$b = self::pages_on_b( array( 'about' => 'About us.', 'contact' => 'Write to us.' ) );
+		unset( $a );
+		$msgids = array();
+		foreach ( file( AB_MCP_DIR . 'languages/alphabridge-mcp-de_CH.po' ) as $line ) {
+			if ( 1 === preg_match( '/^msgid "(.+)"$/', rtrim( $line, "\n" ), $m ) ) {
+				$msgids[ stripcslashes( $m[1] ) ] = true;
+			}
+		}
+		$answers = array();
+		unload_textdomain( 'alphabridge-mcp' );
+		self::assertTrue( AB_MCP_Plugin::load_bundled_translations( 'de_CH' ) );
+		try {
+			// wp_site_pairs: propose, the preview of confirm, confirm.
+			$ids     = self::staged();
+			$propose = self::gated( 'wp_site_pairs', array( 'action' => 'propose', 'packages' => $ids ) );
+			while ( is_array( $propose ) && false === $propose['done'] ) {
+				$propose = self::gated( 'wp_site_pairs', array( 'action' => 'propose', 'proposal_id' => $propose['proposal_id'] ) );
+			}
+			self::assertIsArray( $propose, is_wp_error( $propose ) ? $propose->get_error_message() : '' );
+			$args      = array(
+				'action'      => 'confirm',
+				'proposal_id' => $propose['proposal_id'],
+				'categories'  => array( 'equal' ),
+			);
+			$preview   = self::gated( 'wp_site_pairs', $args );
+			$answers[] = $propose;
+			$answers[] = $preview;
+			$answers[] = self::gated( 'wp_site_pairs', $args + array( 'confirm_token' => $preview['confirm_token'] ) );
+			// wp_site_diff, without the environment: its why and the words of each entry.
+			self::change_on_b( $b['contact'], 'contact', 'Write to us on staging.' );
+			$ids  = self::staged();
+			$diff = self::gated( 'wp_site_diff', array( 'packages' => $ids ) );
+			while ( is_array( $diff ) && false === $diff['done'] ) {
+				$diff = self::gated( 'wp_site_diff', array( 'report_id' => $diff['report_id'] ) );
+			}
+			self::assertIsArray( $diff, is_wp_error( $diff ) ? $diff->get_error_message() : '' );
+			$answers[] = $diff;
+			// wp_site_push: the preview of the plan, the run to its close.
+			$planned   = self::planned( array( 'contact' ) );
+			$push      = self::gated( 'wp_site_push', $planned['args'] );
+			$answers[] = $push;
+			$run       = self::gated( 'wp_site_push', $planned['args'] + array( 'confirm_token' => $push['confirm_token'] ) );
+			$answers[] = $run;
+			self::probe_ok();
+			$answers[] = self::finish( (int) $run['run_id'] );
+			// wp_site_revert: the preview of the plan, the way back to its close.
+			$args      = array(
+				'action' => 'plan',
+				'run_id' => (int) $run['run_id'],
+			);
+			$back      = self::gated( 'wp_site_revert', $args );
+			$answers[] = $back;
+			$begun     = self::gated( 'wp_site_revert', $args + array( 'confirm_token' => $back['confirm_token'] ) );
+			$answers[] = $begun;
+			$answers[] = self::revert_all( (int) $begun['run_id'] );
+		} finally {
+			unload_textdomain( 'alphabridge-mcp' );
+			AB_MCP_Plugin::load_bundled_translations();
+		}
+		$prose = array();
+		$walk  = static function ( $value ) use ( &$walk, &$prose ) {
+			if ( ! is_array( $value ) ) {
+				return;
+			}
+			foreach ( $value as $key => $inner ) {
+				if ( is_string( $inner ) && in_array( $key, AB_MCP_Sync_Said::PROSE, true ) ) {
+					$prose[] = $inner;
+				} else {
+					$walk( $inner );
+				}
+			}
+		};
+		foreach ( $answers as $answer ) {
+			self::assertIsArray( $answer, is_wp_error( $answer ) ? $answer->get_error_message() : '' );
+			$walk( $answer );
+		}
+		self::assertGreaterThan( 5, count( $prose ), json_encode( $answers ) );
+		self::assertContains( 'Auf beiden Seiten gleich: nichts zu übernehmen.', $prose, 'The words of an equal entry, said.' );
+		foreach ( array_unique( $prose ) as $text ) {
+			self::assertArrayNotHasKey( $text, $msgids, 'An English text of the source, unsaid: ' . $text );
+			if ( '' !== $text ) {
+				self::assertFalse( AB_MCP_Sync_Said::knows( $text ), 'Known to Said, yet English: ' . $text );
+			}
+		}
+	}
+
 }
