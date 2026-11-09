@@ -648,8 +648,12 @@ final class SyncEnvTest extends TestCase {
 		self::assertNull( \AB_MCP_Sync_Net::over_name( 'R&D notes.php', array(), true ) );
 		self::assertNull( AB_MCP_Sync_Env::held( 'vault;EXAMPLE_SECRET.php', array() ) );
 		self::assertSame( 'credential_field', AB_MCP_Sync_Env::held( 'vault;EXAMPLE_SECRET.php', array( 'vault' ) ), 'With the names of ab_mcp_redact_keys.' );
-		// The net over a name of the inventory keeps its rule.
-		self::assertNull( \AB_MCP_Sync_Net::over_name( 'a:1:{s:8:"password";s:14:"EXAMPLE_SECRET";}.php', array() ) );
+		// The net over a name of the inventory keeps its rule, the rule of a
+		// value: a sign after the name holds nothing there; a key of the
+		// serialized format with a value counts in a value since branch 11b
+		// (the steering, 09.11.2026), so in a name of the inventory as well.
+		self::assertNull( \AB_MCP_Sync_Net::over_name( 'password;EXAMPLE_SECRET.php', array() ) );
+		self::assertSame( 'credential', \AB_MCP_Sync_Net::over_name( 'a:1:{s:8:"password";s:14:"EXAMPLE_SECRET";}.php', array() ) );
 	}
 
 	public function testAPlaceHoldsNoNameOnlyTheSha256OfEachFolderAndOfTheWholePath(): void {

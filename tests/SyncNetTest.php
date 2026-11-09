@@ -880,6 +880,34 @@ final class SyncNetTest extends TestCase {
 		}
 	}
 
+	public function testAKeyOfTheSerializedFormatWithAValueCountsInATextThatIsNotUnpacked(): void {
+		// The steering, 09.11.2026: a field of a password in the forms of code
+		// and configuration (=, =>, "password": of JSON, an array of PHP, a
+		// key of the serialized format), the last in a column, a leaf, a
+		// fragment in prose.
+		$extra = array();
+		foreach ( array(
+			's:8:"password";s:10:"Sommer2026";'              => array( 'password' ),
+			'Export: a:1:{s:7:"api_key";s:3:"abc";} Ende'     => array( 'api_key' ),
+			's:6:"secret";i:1234;'                            => array( 'secret' ),
+			's:11:"db_password";d:1.5;'                       => array( 'db_password' ),
+			"\$cfg = array( 'db_password' => 'Sommer2026' );" => array( 'db_password' ),
+			'{"password": "Sommer2026"}'                      => array( 'password' ),
+		) as $text => $names ) {
+			self::assertSame( $names, AB_MCP_Sync_Net::credentials( $text, $extra ), $text );
+		}
+		foreach ( array(
+			's:8:"password";s:0:"";',
+			's:8:"password";N;',
+			's:8:"password";b:1;',
+			's:8:"password";a:0:{}',
+			's:5:"title";s:3:"abc";',
+			'x:"password";s:3:"abc";',
+		) as $text ) {
+			self::assertSame( array(), AB_MCP_Sync_Net::credentials( $text, $extra ), $text );
+		}
+	}
+
 	public function testAPlaceholderIsOneOnlyInItsExactFormAsTheWholeValue(): void {
 		// The steering, 09.11.2026; Codex round 3 of branch 11b, A1: never as a
 		// part of a word.

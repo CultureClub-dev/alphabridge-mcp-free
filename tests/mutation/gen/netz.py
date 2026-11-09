@@ -345,6 +345,17 @@ e('cookie-hex', 'COOKIE: the HMAC in the hex WordPress writes (lower case)', NT,
 e('cookie-sep-hmac', 'COOKIE: the token and the HMAC apart by a «|»', NT,
   COOKIE, COOKIE.replace("[A-Za-z0-9]{43}(?:\\\\||%7[cC])", "[A-Za-z0-9]{43}(?:\\\\||%7[cCdD])"), 'net', N_COOKIE)
 
+N_SERKEY = 'testAKeyOfTheSerializedFormatWithAValueCountsInATextThatIsNotUnpacked'
+SERKEY = "\t\t\t'/s:\\d+:\"(' . self::NAME . ')\";(?:s:[1-9]\\d*:\"|[id]:)/',"
+e('serialized-key', 'credentials(): a key of the serialized format with a value counts', NT,
+  SERKEY, "\t\t\t'/(?!)/',", 'net', N_SERKEY)
+e('serialized-key-format', 'credentials(): the key a string of the format (s:<n>:"…";)', NT,
+  SERKEY, SERKEY.replace("'/s:\\d+:\"(", "'/\"("), 'net', N_SERKEY)
+e('serialized-key-empty', 'credentials(): its value not an empty string', NT,
+  SERKEY, SERKEY.replace("s:[1-9]\\d*:", "s:\\d+:"), 'net', N_SERKEY)
+e('serialized-key-number', 'credentials(): its value a number as well', NT,
+  SERKEY, SERKEY.replace("|[id]:)", ")"), 'net', N_SERKEY)
+
 # ------------------------------------------- strings(): the references
 e('strings-keys', 'strings(): the keys of a structure counted for the references', NT,
   "\t\t\tif ( is_string( $key ) && '' !== $key ) {\n\t\t\t\t$out[] = $key;\n\t\t\t}\n", "", 'net', N_STRUCT)

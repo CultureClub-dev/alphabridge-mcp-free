@@ -74,7 +74,9 @@
  *   line or of a field the header Authorization with Bearer and a token, or
  *   Basic and the base64 of user:password (AUTHORIZATION); a private key
  *   in PEM by its frame and a body of base64 (PEM); the value of a login
- *   cookie of WordPress by its form (COOKIE). A placeholder is
+ *   cookie of WordPress by its form (COOKIE). A name of a credential
+ *   counts as a key of the serialized format with a value as well
+ *   (s:8:"password";s:…). A placeholder is
  *   one only in its exact form as the whole value (PLACEHOLDER).
  *
  * COMPARE (check()): the structured readers of the unit noted every (space,
@@ -1678,6 +1680,10 @@ final class AB_MCP_Sync_Net {
 		$found = array();
 		foreach ( array(
 			'/(?<![A-Za-z0-9_\-.\x80-\xFF])(' . self::NAME . ')["\'`]?\s*\]?\s*=(?!=)>?\s*' . self::VALUE . '/',
+			// A key of the serialized format with a value (the steering,
+			// 09.11.2026): s:8:"password";s:6:"…"; or i:… in a text that is
+			// not unpacked (a column, a leaf, a fragment in prose).
+			'/s:\d+:"(' . self::NAME . ')";(?:s:[1-9]\d*:"|[id]:)/',
 			'/["\'`](' . self::NAME . ')["\'`]\s*:\s*' . self::VALUE . '/',
 			'/\{\s*-{0,2}(' . self::NAME . ')\s*:\s*' . self::VALUE . '/',
 			'/^\s*(' . self::NAME . ')\s*:\s*["\'`]\s*[^"\'`\s]/',
