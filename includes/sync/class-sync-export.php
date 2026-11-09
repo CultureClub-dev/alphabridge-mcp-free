@@ -121,8 +121,6 @@ final class AB_MCP_Sync_Export {
 	/** Withheld objects an answer names at most (all are counted). */
 	const WITHHELD_LIST = 200;
 
-	/** The way an answer names for withheld objects. */
-	const WITHHELD_WAY = 'These objects are not in the package, because the account that made it may not read them (needs: the capability it lacks; gone: the object is no longer there), and their kinds and subtypes are not complete in it. To include them: 1. Make the package with an account that has the capability named, or give this account that capability. 2. Call wp_site_export again.';
 
 	/** The purposes this version makes packages for: the inventory, the environment (AB_MCP_Sync_Env), the objects of a report and the files of its attachments. */
 	const PURPOSES = array( 'inventory', 'env', 'objects', 'media' );
@@ -699,7 +697,9 @@ final class AB_MCP_Sync_Export {
 		$answer = self::answer( json_decode( $signed['manifest'], true ), $signed, null, $told );
 		if ( is_array( $answer ) ) {
 			$answer['media'] = $media + array(
-				'way' => array() === $media['left'] && array() === $media['too_large'] && array() === $media['unread'] ? null : 'Attachments in left did not fit this package: export them in another one (wp_site_export with purpose=media and their refs). One in too_large is more than a package carries: upload its file by hand in the media library of the production site. One in unread has a file list that does not read whole on this site (a file missing, a link, a path out of the uploads): check it in the media library here.',
+				// Said to the person in the language of the site (Codex round 2
+				// of branch 13, B1).
+				'way' => array() === $media['left'] && array() === $media['too_large'] && array() === $media['unread'] ? null : __( 'Attachments in left did not fit this package: export them in another one (wp_site_export with purpose=media and their refs). One in too_large is more than a package carries: upload its file by hand in the media library of the production site. One in unread has a file list that does not read whole on this site (a file missing, a link, a path out of the uploads): check it in the media library here.', 'alphabridge-mcp' ),
 			);
 		}
 		return $answer;
@@ -1528,7 +1528,7 @@ final class AB_MCP_Sync_Export {
 			'bytes'      => $manifest['bytes'],
 			'chunks'     => count( $manifest['chunks'] ),
 			'kinds'      => $manifest['kinds'],
-			'withheld'   => $report['withheld'] + ( $report['withheld']['count'] > 0 ? array( 'way' => self::WITHHELD_WAY ) : array() ),
+			'withheld'   => $report['withheld'] + ( $report['withheld']['count'] > 0 ? array( 'way' => self::withheld_way() ) : array() ),
 			'credentials' => $report['credentials'],
 			'expires'    => $manifest['expires'],
 			'manifest'   => $signed,
@@ -1610,6 +1610,16 @@ final class AB_MCP_Sync_Export {
 		}
 		AB_MCP_Protected_Store::remove( 'out', $found['manifest']['package_id'] );
 		return false;
+	}
+
+	/**
+	 * The way an answer names for withheld objects, in the language of the
+	 * site (Codex round 2 of branch 13, B1).
+	 *
+	 * @return string
+	 */
+	private static function withheld_way() {
+		return __( 'These objects are not in the package, because the account that made it may not read them (needs: the capability it lacks; gone: the object is no longer there), and their kinds and subtypes are not complete in it. To include them: 1. Make the package with an account that has the capability named, or give this account that capability. 2. Call wp_site_export again.', 'alphabridge-mcp' );
 	}
 
 	/**

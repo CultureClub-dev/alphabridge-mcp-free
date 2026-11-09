@@ -656,7 +656,7 @@ e('engine-fresh-settle', 'fresh(): the run settled under the lock; a step a requ
 e('engine-close-revert-open', 'close_revert(): not closed while a step of the way back is planned or begun (P1, engine:162)', EN,
   "\t\t\tif ( in_array( $step['state'], array( 'planned', 'begun' ), true ) ) {", "\t\t\tif ( false ) {", 'it', BUSY)
 e('engine-closed-note', 'closed_note(): the close of a way back with findings names the steps that stayed', EN,
-  "\t\t\t\t$stayed[] = sprintf( 'step %1$d of the way back stayed as it is (%2$s)', (int) $step['seq'], (string) $step['state'] );", '', 'it', LEDON)
+  "\t\t\t\t$stayed[] = sprintf( __( 'Step %1$d of the way back stayed as it is (%2$s).', 'alphabridge-mcp' ), (int) $step['seq'], (string) $step['state'] );", '', 'it', LEDON)
 e('push-change-lock', 'call(): next, step and abort under the lock of the call from the first read of the run; busy changes nothing, not even the count of calls', PU,
   "\t\treturn AB_MCP_Sync_Run::under_lock(\n\t\t\tstatic function () use ( $a, $action ) {", "\t\treturn call_user_func(\n\t\t\tstatic function () use ( $a, $action ) {", 'it', BUSY)
 e('revert-next-lock', 'call(): next of the way back under the lock of the call from the first read of the run', RV,

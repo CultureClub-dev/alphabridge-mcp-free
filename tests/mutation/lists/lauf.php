@@ -2090,7 +2090,7 @@ return array(
 		'id'      => 'lauf/engine-closed-note',
 		'clause'  => 'closed_note(): the close of a way back with findings names the steps that stayed',
 		'file'    => $en,
-		'search'  => "\t\t\t\t\$stayed[] = sprintf( 'step %1\$d of the way back stayed as it is (%2\$s)', (int) \$step['seq'], (string) \$step['state'] );",
+		'search'  => "\t\t\t\t\$stayed[] = sprintf( __( 'Step %1\$d of the way back stayed as it is (%2\$s).', 'alphabridge-mcp' ), (int) \$step['seq'], (string) \$step['state'] );",
 		'replace' => "/* removed */",
 		'run'     => $it( 'SyncRunTest', 'testAnInterruptedWayBackOfTheSameRunIsLedOnWithTheTokenAndTheSiteIsFreeAfterwards' ),
 		'expect'  => '/testAnInterruptedWayBackOfTheSameRunIsLedOnWithTheTokenAndTheSiteIsFreeAfterwards/',

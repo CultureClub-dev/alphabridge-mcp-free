@@ -422,7 +422,8 @@ final class AB_MCP_Sync_Report {
 					'parts' => $env['parts'],
 				),
 				'expires'     => (int) $found['head']['expires'],
-				'next'        => sprintf( 'The objects of this site are read; its environment (plugins, themes, files, tables, the host) is read as far as one call reaches (%d parts so far). Call wp_site_diff again with this report_id to go on.', $env['parts'] ),
+				/* translators: %d: parts of the environment read so far. */
+				'next'        => sprintf( _n( 'The objects of this site are read; its environment (plugins, themes, files, tables, the host) is read as far as one call reaches (%d part so far).', 'The objects of this site are read; its environment (plugins, themes, files, tables, the host) is read as far as one call reaches (%d parts so far).', (int) $env['parts'], 'alphabridge-mcp' ), $env['parts'] ) . ' Call wp_site_diff again with this report_id to go on.',
 			);
 		}
 		$read_so_far = array_sum( array_column( $found['parts'], 'objects' ) );
@@ -433,7 +434,8 @@ final class AB_MCP_Sync_Report {
 				'objects' => $read_so_far,
 			),
 			'expires'   => (int) $found['head']['expires'],
-			'next'      => sprintf( 'The inventory of this site is read as far as one call reaches (first the identities of its objects, then the objects: %d so far). Call wp_site_diff again with this report_id to go on.', $read_so_far ),
+			/* translators: %d: objects read so far. */
+			'next'      => sprintf( __( 'The inventory of this site is read as far as one call reaches (first the identities of its objects, then the objects: %d so far).', 'alphabridge-mcp' ), $read_so_far ) . ' Call wp_site_diff again with this report_id to go on.',
 		);
 	}
 

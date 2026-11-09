@@ -754,10 +754,10 @@ final class AB_MCP_Sync_Pairs_Tool {
 		if ( array() !== $plan['skipped'] ) {
 			$answer['skipped'] = array_slice( $plan['skipped'], 0, self::NAMED );
 		}
-		$answer['next'] = 'The pairs are in the table of object pairs of this site; no content changed. wp_site_pairs action=list shows them; action=discard with pair_ids ends a pair.';
+		$answer['next'] = __( 'The pairs are in the table of object pairs of this site; no content changed.', 'alphabridge-mcp' ) . ' wp_site_pairs action=list shows them; action=discard with pair_ids ends a pair.';
 		if ( null !== $plan['rest'] ) {
 			$answer['more_after'] = $plan['rest'];
-			$answer['next']      .= sprintf( ' More entries of these categories are left: confirm them with the same categories and after=%d.', $plan['rest'] );
+			$answer['next']      .= ' ' . __( 'More entries of these categories are left.', 'alphabridge-mcp' ) . sprintf( ' Confirm them with the same categories and after=%d.', $plan['rest'] );
 		}
 		return $answer;
 	}
@@ -813,7 +813,7 @@ final class AB_MCP_Sync_Pairs_Tool {
 				},
 				array_slice( $ops, 0, self::NAMED )
 			),
-			'next'   => 'The objects of these pairs are without a pair now; no content changed. Propose again (wp_site_pairs action=propose) to pair them anew.',
+			'next'   => __( 'The objects of these pairs are without a pair now; no content changed.', 'alphabridge-mcp' ) . ' Propose again (wp_site_pairs action=propose) to pair them anew.',
 		);
 	}
 
@@ -862,7 +862,7 @@ final class AB_MCP_Sync_Pairs_Tool {
 			'source_id'  => $source,
 			'pairs'      => $pairs,
 			'next_after' => $page['next'],
-			'next'       => null === $page['next'] ? 'These are all pairs of this page and after.' : 'More pairs: call wp_site_pairs again with action=list and after=' . $page['next'] . '.',
+			'next'       => null === $page['next'] ? __( 'These are all pairs of this page and after.', 'alphabridge-mcp' ) : __( 'More pairs follow.', 'alphabridge-mcp' ) . ' Call wp_site_pairs again with action=list and after=' . $page['next'] . '.',
 		);
 	}
 

@@ -248,7 +248,7 @@ final class AB_MCP_Sync_Push {
 			if ( is_wp_error( $shown ) ) {
 				return $shown;
 			}
-			$shown['next'] = 'The run is closed as aborted. What its steps wrote stays as written (their pairs have the new bases); wp_site_revert with this run_id takes it back pair by pair.';
+			$shown['next'] = __( 'The run is closed as aborted. What its steps wrote stays as written (their pairs have the new bases).', 'alphabridge-mcp' ) . ' wp_site_revert with this run_id takes it back pair by pair.';
 			return $shown;
 		}
 		if ( 'interrupted' === $run['state'] ) {
@@ -1059,7 +1059,7 @@ final class AB_MCP_Sync_Push {
 						'subtype' => $items[ $n ]['subtype'],
 						'action'  => $items[ $n ]['action'],
 						'result'  => '',
-						'reason'  => sprintf( '%1$s (%2$s)', (string) $lock['reason'], (string) $lock['key'] ),
+						'reason'  => sprintf( '%1$s (%2$s)', AB_MCP_Sync_Said::text( (string) $lock['reason'] ), (string) $lock['key'] ),
 						'stage'   => $lock['stage'],
 					);
 					unset( $items[ $n ] );
@@ -1289,7 +1289,7 @@ final class AB_MCP_Sync_Push {
 					return $shown;
 				}
 				$shown['created_now'] = false;
-				$shown['next']        = 'This plan has its run already (the same report, selection, account and connection): go on with it, action=next with this run_id.';
+				$shown['next']        = __( 'This plan has its run already (the same report, selection, account and connection).', 'alphabridge-mcp' ) . ' Go on with it: action=next with this run_id.';
 				return $shown;
 			}
 		}
@@ -1325,7 +1325,8 @@ final class AB_MCP_Sync_Push {
 		$shown['created_now'] = true;
 		$shown['locked']      = $plan['locked'];
 		$shown['resources']   = $plan['resources']['level'];
-		$shown['next']        = sprintf( 'The run is made with %d step(s) and nothing is written yet. Call action=next with this run_id: the first step checks everything before the first write, each next one writes one object under the lock with its backup and journal, then the caches, then the check of the run closes it. Each step answers with its result; status shows the whole run.', count( $plan['steps'] ) );
+		/* translators: %d: number of steps of the run. */
+		$shown['next']        = sprintf( _n( 'The run is made with %d step and nothing is written yet.', 'The run is made with %d steps and nothing is written yet.', count( $plan['steps'] ), 'alphabridge-mcp' ), count( $plan['steps'] ) ) . ' Call action=next with this run_id: the first step checks everything before the first write, each next one writes one object under the lock with its backup and journal, then the caches, then the check of the run closes it. Each step answers with its result; status shows the whole run.';
 		return $shown;
 	}
 
@@ -1440,7 +1441,10 @@ final class AB_MCP_Sync_Push {
 		$out = array(
 			'open' => null,
 			'runs' => $runs,
-			'next' => null === $open ? 'No run is open on this site. Plan one with action=plan (report_id, select or all, packages).' : sprintf( 'Run %1$d is %2$s. %3$s', (int) $open['run_id'], $open['state'], AB_MCP_Sync_Run::way( $open ) ),
+			'next' => null === $open
+				? __( 'No run is open on this site.', 'alphabridge-mcp' ) . ' Plan one with action=plan (report_id, select or all, packages).'
+				/* translators: 1: run number, 2: its state, as the tools name it (planned, running, …). */
+				: sprintf( __( 'Run %1$d is %2$s.', 'alphabridge-mcp' ), (int) $open['run_id'], $open['state'] ) . ' ' . AB_MCP_Sync_Run::way( $open ),
 		);
 		if ( null !== $open ) {
 			$out['open'] = array(

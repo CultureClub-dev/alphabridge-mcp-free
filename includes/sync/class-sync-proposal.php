@@ -596,7 +596,8 @@ final class AB_MCP_Sync_Proposal {
 				'objects' => $read_so_far,
 			),
 			'expires'     => (int) $found['head']['expires'],
-			'next'        => sprintf( 'The inventory of this site is read as far as one call reaches (first the identities of its objects, then the objects: %d so far). Call wp_site_pairs again with action=propose and this proposal_id to go on.', $read_so_far ),
+			/* translators: %d: objects read so far. */
+			'next'        => sprintf( __( 'The inventory of this site is read as far as one call reaches (first the identities of its objects, then the objects: %d so far).', 'alphabridge-mcp' ), $read_so_far ) . ' Call wp_site_pairs again with action=propose and this proposal_id to go on.',
 		);
 	}
 

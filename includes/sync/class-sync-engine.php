@@ -318,7 +318,7 @@ final class AB_MCP_Sync_Engine {
 				}
 				return self::answer( $closed, null, $started, self::closed_note( $closed ) );
 			}
-			return self::answer( $run, null, $started, 'No step is left to run: the run is closed, or every remaining step waits on one that was skipped or failed (see the steps in status).' );
+			return self::answer( $run, null, $started, __( 'No step is left to run: the run is closed, or every remaining step waits on one that was skipped or failed (see the steps in status).', 'alphabridge-mcp' ) );
 		}
 		// A write step and a step of the way back mutate under the lock, with
 		// their backup and journal: a request whose time limit does not carry
@@ -744,7 +744,8 @@ final class AB_MCP_Sync_Engine {
 				$result['findings'] = $findings;
 				AB_MCP_Sync_Run::update_step( (int) $run['run_id'], (int) $step['seq'], array( 'result' => $result ), 'planned' );
 				AB_MCP_Sync_Run::touch( (int) $run['run_id'] );
-				return array( 'next' => sprintf( 'The check went over %1$d of %2$d objects within the budget of this call; call action=next again to go on with it.', $i, $count ) );
+				/* translators: 1: objects checked so far, 2: all objects of the check. */
+				return array( 'next' => sprintf( _n( 'The check went over %1$d of %2$d object within the budget of this call.', 'The check went over %1$d of %2$d objects within the budget of this call.', $count, 'alphabridge-mcp' ), $i, $count ) . ' Call action=next again to go on with it.' );
 			}
 			$item    = $items[ $i ];
 			$finding = self::check_item( $item, $lines, $ctx );
@@ -763,7 +764,7 @@ final class AB_MCP_Sync_Engine {
 		$result['message'] = sprintf( _n( 'Checked %d object: the targets are as planned, the rights and the means suffice, the packages hold what the report compared.', 'Checked %d objects: the targets are as planned, the rights and the means suffice, the packages hold what the report compared.', $count, 'alphabridge-mcp' ), $count );
 		AB_MCP_Sync_Run::update_step( (int) $run['run_id'], (int) $step['seq'], array( 'state' => 'done', 'result' => $result ), 'planned' );
 		AB_MCP_Sync_Run::touch( (int) $run['run_id'] );
-		return array( 'next' => 'The check passed. Call action=next for the first write step; each call writes one object, under the lock, with its backup and journal.' );
+		return array( 'next' => __( 'The check passed.', 'alphabridge-mcp' ) . ' Call action=next for the first write step; each call writes one object, under the lock, with its backup and journal.' );
 	}
 
 	/**
@@ -1224,7 +1225,7 @@ final class AB_MCP_Sync_Engine {
 				);
 				$result = self::with_files( $result, $journal, $w );
 				$ended  = self::end_step( $run_id, $seq, array( 'state' => isset( $laid['state'] ) && 'unclear' === $laid['state'] ? 'unclear' : 'failed', 'parts' => self::settled( $journal ), 'result' => $result ) );
-				return is_wp_error( $ended ) ? $ended : array( 'next' => $laid['message'] . ' The run goes on with the next step (action=next); the steps that depend on this object are skipped.' );
+				return is_wp_error( $ended ) ? $ended : array( 'next' => $laid['message'] . ' ' . __( 'The steps that depend on this object are skipped.', 'alphabridge-mcp' ) . ' The run goes on with the next step (action=next).' );
 			}
 		}
 		// The writes, part by part, each read back under the lock.
@@ -1270,7 +1271,7 @@ final class AB_MCP_Sync_Engine {
 			if ( is_wp_error( $ended ) ) {
 				return $ended;
 			}
-			return array( 'next' => $outcome['message'] . ' The run goes on with the next step (action=next); the steps that depend on this object are skipped.' );
+			return array( 'next' => $outcome['message'] . ' ' . __( 'The steps that depend on this object are skipped.', 'alphabridge-mcp' ) . ' The run goes on with the next step (action=next).' );
 		}
 		// (7) The object as a whole against the target: a deviation like any
 		// other (deviated()), the parts left with their values before.
@@ -2561,7 +2562,8 @@ final class AB_MCP_Sync_Engine {
 				$result['cursor'] = $i;
 				AB_MCP_Sync_Run::update_step( (int) $run['run_id'], (int) $step['seq'], array( 'result' => $result ), 'planned' );
 				AB_MCP_Sync_Run::touch( (int) $run['run_id'] );
-				return array( 'next' => sprintf( 'The caches of %1$d of %2$d written object(s) were emptied within the work of this call; call action=next again to go on with them.', $i, $count ) );
+				/* translators: 1: written objects whose caches were emptied so far, 2: all written objects. */
+				return array( 'next' => sprintf( _n( 'The caches of %1$d of %2$d written object were emptied within the work of this call.', 'The caches of %1$d of %2$d written objects were emptied within the work of this call.', $count, 'alphabridge-mcp' ), $i, $count ) . ' Call action=next again to go on with them.' );
 			}
 			list( $kind, $id ) = $ids[ $i ];
 			$w                 = self::writer( $kind );
@@ -2638,7 +2640,8 @@ final class AB_MCP_Sync_Engine {
 			for ( $i = (int) $result['cursor']; $i < $count; $i++ ) {
 				if ( $worked && $left() <= 0 ) {
 					$result['cursor'] = $i;
-					return $save( $result, sprintf( 'The check of the run went over %1$d of %2$d written objects within the budget of this call; call action=next again to go on with it.', $i, $count ) );
+					/* translators: 1: written objects checked so far, 2: all written objects. */
+					return $save( $result, sprintf( _n( 'The check of the run went over %1$d of %2$d written object within the budget of this call.', 'The check of the run went over %1$d of %2$d written objects within the budget of this call.', $count, 'alphabridge-mcp' ), $i, $count ) . ' Call action=next again to go on with it.' );
 				}
 				$worked = true;
 				$one    = $writes[ $i ];
@@ -2687,7 +2690,7 @@ final class AB_MCP_Sync_Engine {
 		// The sample: a published object answers 200 and shows its title.
 		if ( 'sample' === $result['stage'] ) {
 			if ( $worked && $left() <= 0 ) {
-				return $save( $result, 'The hashes of the written objects were checked within the budget of this call; the sample, the PHP probe and the log follow: call action=next again.' );
+				return $save( $result, __( 'The hashes of the written objects were checked within the budget of this call; the sample, the PHP probe and the log follow.', 'alphabridge-mcp' ) . ' Call action=next again.' );
 			}
 			$worked = true;
 			if ( is_array( $result['sample'] ) ) {
@@ -2714,7 +2717,7 @@ final class AB_MCP_Sync_Engine {
 		// The PHP probe of the site: it has to pass whole.
 		if ( 'probe' === $result['stage'] ) {
 			if ( $worked && $left() <= self::RESERVE ) {
-				return $save( $result, 'The hashes and the sample were checked within the budget of this call; the PHP probe and the log follow: call action=next again.' );
+				return $save( $result, __( 'The hashes and the sample were checked within the budget of this call; the PHP probe and the log follow.', 'alphabridge-mcp' ) . ' Call action=next again.' );
 			}
 			$worked = true;
 			if ( class_exists( 'AB_MCP_Php_Probe' ) ) {
@@ -3109,7 +3112,7 @@ final class AB_MCP_Sync_Engine {
 	 */
 	private static function closed_note( array $run ) {
 		if ( 'closed_reverted' === $run['state'] ) {
-			return 'Every step of the way back ran and went back whole; the run is closed as reverted.';
+			return __( 'Every step of the way back ran and went back whole; the run is closed as reverted.', 'alphabridge-mcp' );
 		}
 		$stayed = array();
 		$rests  = 0;
@@ -3119,17 +3122,21 @@ final class AB_MCP_Sync_Engine {
 				continue;
 			}
 			if ( in_array( $step['state'], array( 'unclear', 'failed' ), true ) ) {
-				$stayed[] = sprintf( 'step %1$d of the way back stayed as it is (%2$s)', (int) $step['seq'], (string) $step['state'] );
+				/* translators: 1: step number, 2: its state, as the tools name it (unclear, failed). */
+				$stayed[] = sprintf( __( 'Step %1$d of the way back stayed as it is (%2$s).', 'alphabridge-mcp' ), (int) $step['seq'], (string) $step['state'] );
 			}
 			if ( is_array( $step['result'] ) && isset( $step['result']['rest'] ) ) {
 				++$rests;
 			}
 		}
-		return sprintf(
-			'Every step of the way back ran; the run is closed with findings: %1$s%2$s. Check those objects in wp-admin (each part left names its value before; their pairs are unclear until wp_site_pairs confirms a new alignment); remove a rest by hand where it should go.',
-			array() === $stayed ? 'no step stayed' : implode( '; ', $stayed ),
-			$rests > 0 ? sprintf( '; %d new object(s) stay as rests (named in rests)', $rests ) : ''
-		);
+		$out = array( __( 'Every step of the way back ran; the run is closed with findings.', 'alphabridge-mcp' ) );
+		$out = array_merge( $out, array() === $stayed ? array( __( 'No step of the way back stayed as it is.', 'alphabridge-mcp' ) ) : $stayed );
+		if ( $rests > 0 ) {
+			/* translators: %d: number of new objects that stay as rests. */
+			$out[] = sprintf( _n( '%d new object stays as a rest (named in rests).', '%d new objects stay as rests (named in rests).', $rests, 'alphabridge-mcp' ), $rests );
+		}
+		$out[] = __( 'Check those objects in wp-admin (each part left names its value before; their pairs are unclear until wp_site_pairs confirms a new alignment); remove a rest by hand where it should go.', 'alphabridge-mcp' );
+		return implode( ' ', $out );
 	}
 
 	/* ------------------------------------------------------------ helpers */
@@ -3455,7 +3462,7 @@ final class AB_MCP_Sync_Engine {
 			return $done;
 		}
 		AB_MCP_Sync_Run::touch( $run_id );
-		return array( 'next' => $why . ' The run goes on with the next step (action=next); the steps that depend on this object are skipped.' );
+		return array( 'next' => $why . ' ' . __( 'The steps that depend on this object are skipped.', 'alphabridge-mcp' ) . ' The run goes on with the next step (action=next).' );
 	}
 
 	/**

@@ -1186,7 +1186,7 @@ final class SyncRunTest extends TestCase {
 			self::assertCount( 1, $cleaned, 'One object emptied in the first call.' );
 			$per = (int) max( $cleaned );
 			self::assertGreaterThan( 0, $per, 'How often one emptying fires clean_post_cache.' );
-			self::assertStringContainsString( 'caches of 1 of 3 written object(s) were emptied within the work of this call', $one['next'] );
+			self::assertStringContainsString( 'caches of 1 of 3 written objects were emptied within the work of this call', $one['next'] );
 			$two = self::next( $run_id );
 			self::assertSame( 'planned', $two['step']['state'] );
 			self::assertSame( 2, $two['step']['result']['cursor'] );
@@ -1656,7 +1656,7 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( 'done', $third['step']['state'], 'The third object back.' );
 		self::assertSame( 'closed_findings', $third['state'], json_encode( $third ) );
 		self::assertSame( 1, $third['counts']['unclear'] );
-		self::assertStringContainsString( sprintf( 'step %d of the way back stayed as it is', $s2 ), $third['next'], 'The close names what stayed.' );
+		self::assertStringContainsString( sprintf( 'Step %d of the way back stayed as it is', $s2 ), $third['next'], 'The close names what stayed.' );
 		self::assertSame( $before[ $name_of[ $live( $s1 ) ] ], self::row_a( $live( $s1 ) )['post_content'] );
 		self::assertSame( $before[ $name_of[ $live( $s3 ) ] ], self::row_a( $live( $s3 ) )['post_content'] );
 		self::assertSame( $left, self::row_a( $live( $s2 ) )['post_content'], 'The interrupted step: as its request left it, nothing put back again.' );

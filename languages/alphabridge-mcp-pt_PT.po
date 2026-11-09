@@ -10476,3 +10476,120 @@ msgstr "O seu alvo, o %s do site de staging, ainda não tem par, mas há um obje
 #, php-format
 msgid "Its target, the %1$s of the staging site, has no pair and is not created here (%2$s)."
 msgstr "O seu alvo, o %1$s do site de staging, não tem par e não é criado aqui (%2$s)."
+
+msgid "No step is left to run: the run is closed, or every remaining step waits on one that was skipped or failed (see the steps in status)."
+msgstr "Não resta nenhum passo por executar: a execução está fechada, ou cada passo restante espera por um que foi ignorado ou falhou (ver os passos em status)."
+
+#, php-format
+msgid "The check went over %1$d of %2$d object within the budget of this call."
+msgid_plural "The check went over %1$d of %2$d objects within the budget of this call."
+msgstr[0] "A verificação percorreu %1$d de %2$d objeto dentro do orçamento desta chamada."
+msgstr[1] "A verificação percorreu %1$d de %2$d objetos dentro do orçamento desta chamada."
+
+msgid "The check passed."
+msgstr "A verificação passou."
+
+msgid "The steps that depend on this object are skipped."
+msgstr "Os passos que dependem deste objeto são ignorados."
+
+#, php-format
+msgid "The caches of %1$d of %2$d written object were emptied within the work of this call."
+msgid_plural "The caches of %1$d of %2$d written objects were emptied within the work of this call."
+msgstr[0] "As caches de %1$d de %2$d objeto escrito foram esvaziadas no âmbito desta chamada."
+msgstr[1] "As caches de %1$d de %2$d objetos escritos foram esvaziadas no âmbito desta chamada."
+
+#, php-format
+msgid "The check of the run went over %1$d of %2$d written object within the budget of this call."
+msgid_plural "The check of the run went over %1$d of %2$d written objects within the budget of this call."
+msgstr[0] "A verificação da execução percorreu %1$d de %2$d objeto escrito dentro do orçamento desta chamada."
+msgstr[1] "A verificação da execução percorreu %1$d de %2$d objetos escritos dentro do orçamento desta chamada."
+
+msgid "The hashes of the written objects were checked within the budget of this call; the sample, the PHP probe and the log follow."
+msgstr "Os hashes dos objetos escritos foram verificados dentro do orçamento desta chamada; seguem-se a amostra, a sonda PHP e o registo."
+
+msgid "The hashes and the sample were checked within the budget of this call; the PHP probe and the log follow."
+msgstr "Os hashes e a amostra foram verificados dentro do orçamento desta chamada; seguem-se a sonda PHP e o registo."
+
+msgid "Every step of the way back ran and went back whole; the run is closed as reverted."
+msgstr "Cada passo do caminho de volta foi executado e voltou atrás por completo; a execução está fechada como revertida."
+
+#, php-format
+msgid "Step %1$d of the way back stayed as it is (%2$s)."
+msgstr "O passo %1$d do caminho de volta ficou como está (%2$s)."
+
+msgid "Every step of the way back ran; the run is closed with findings."
+msgstr "Cada passo do caminho de volta foi executado; a execução está fechada com constatações."
+
+msgid "No step of the way back stayed as it is."
+msgstr "Nenhum passo do caminho de volta ficou como está."
+
+#, php-format
+msgid "%d new object stays as a rest (named in rests)."
+msgid_plural "%d new objects stay as rests (named in rests)."
+msgstr[0] "%d objeto novo fica como resto (indicado em rests)."
+msgstr[1] "%d objetos novos ficam como restos (indicados em rests)."
+
+msgid "Check those objects in wp-admin (each part left names its value before; their pairs are unclear until wp_site_pairs confirms a new alignment); remove a rest by hand where it should go."
+msgstr "Verifique esses objetos no wp-admin (cada parte deixada indica o seu valor anterior; os seus pares ficam incertos até que wp_site_pairs confirme um novo alinhamento); remova manualmente um resto onde ele deva desaparecer."
+
+msgid "Attachments in left did not fit this package: export them in another one (wp_site_export with purpose=media and their refs). One in too_large is more than a package carries: upload its file by hand in the media library of the production site. One in unread has a file list that does not read whole on this site (a file missing, a link, a path out of the uploads): check it in the media library here."
+msgstr "Os anexos em left não couberam neste pacote: exporte-os noutro (wp_site_export com purpose=media e os seus refs). Um em too_large é maior do que um pacote transporta: carregue o seu ficheiro manualmente na biblioteca multimédia do site de produção. Um em unread tem uma lista de ficheiros que não é lida por completo neste site (um ficheiro em falta, uma ligação, um caminho fora dos uploads): verifique-o aqui na biblioteca multimédia."
+
+msgid "These objects are not in the package, because the account that made it may not read them (needs: the capability it lacks; gone: the object is no longer there), and their kinds and subtypes are not complete in it. To include them: 1. Make the package with an account that has the capability named, or give this account that capability. 2. Call wp_site_export again."
+msgstr "Estes objetos não estão no pacote, porque a conta que o criou não os pode ler (needs: a capacidade que lhe falta; gone: o objeto já não existe), e os seus tipos e subtipos não estão completos nele. Para os incluir: 1. Crie o pacote com uma conta que tenha a capacidade indicada, ou dê essa capacidade a esta conta. 2. Chame novamente wp_site_export."
+
+msgid "The pairs are in the table of object pairs of this site; no content changed."
+msgstr "Os pares estão na tabela de pares de objetos deste site; nenhum conteúdo mudou."
+
+msgid "More entries of these categories are left."
+msgstr "Restam mais entradas destas categorias."
+
+msgid "The objects of these pairs are without a pair now; no content changed."
+msgstr "Os objetos destes pares estão agora sem par; nenhum conteúdo mudou."
+
+msgid "These are all pairs of this page and after."
+msgstr "Estes são todos os pares desta página e das seguintes."
+
+msgid "More pairs follow."
+msgstr "Seguem-se mais pares."
+
+#, php-format
+msgid "The inventory of this site is read as far as one call reaches (first the identities of its objects, then the objects: %d so far)."
+msgstr "O inventário deste site foi lido até onde uma chamada chega (primeiro as identidades dos seus objetos, depois os objetos: %d até agora)."
+
+msgid "The run is closed as aborted. What its steps wrote stays as written (their pairs have the new bases)."
+msgstr "A execução está fechada como cancelada. O que os seus passos escreveram mantém-se como foi escrito (os seus pares têm as novas bases)."
+
+msgid "This plan has its run already (the same report, selection, account and connection)."
+msgstr "Este plano já tem a sua execução (o mesmo relatório, a mesma seleção, a mesma conta e a mesma ligação)."
+
+#, php-format
+msgid "The run is made with %d step and nothing is written yet."
+msgid_plural "The run is made with %d steps and nothing is written yet."
+msgstr[0] "A execução foi criada com %d passo e ainda nada foi escrito."
+msgstr[1] "A execução foi criada com %d passos e ainda nada foi escrito."
+
+msgid "No run is open on this site."
+msgstr "Nenhuma execução está aberta neste site."
+
+#, php-format
+msgid "Run %1$d is %2$s."
+msgstr "A execução %1$d tem o estado %2$s."
+
+#, php-format
+msgid "The objects of this site are read; its environment (plugins, themes, files, tables, the host) is read as far as one call reaches (%d part so far)."
+msgid_plural "The objects of this site are read; its environment (plugins, themes, files, tables, the host) is read as far as one call reaches (%d parts so far)."
+msgstr[0] "Os objetos deste site foram lidos; o seu ambiente (plugins, temas, ficheiros, tabelas, o alojamento) foi lido até onde uma chamada chega (%d parte até agora)."
+msgstr[1] "Os objetos deste site foram lidos; o seu ambiente (plugins, temas, ficheiros, tabelas, o alojamento) foi lido até onde uma chamada chega (%d partes até agora)."
+
+#, php-format
+msgid "The way back of run %1$d goes on: the step the interruption left begun stays as it is (unclear, its pair unclear; nothing of it is put back again), and %2$d step of the way back is still to go, none added."
+msgid_plural "The way back of run %1$d goes on: the step the interruption left begun stays as it is (unclear, its pair unclear; nothing of it is put back again), and %2$d steps of the way back are still to go, none added."
+msgstr[0] "O caminho de volta da execução %1$d continua: o passo que a interrupção deixou iniciado fica como está (incerto, o seu par incerto; nada dele é reposto de novo), e falta ainda %2$d passo do caminho de volta, nenhum acrescentado."
+msgstr[1] "O caminho de volta da execução %1$d continua: o passo que a interrupção deixou iniciado fica como está (incerto, o seu par incerto; nada dele é reposto de novo), e faltam ainda %2$d passos do caminho de volta, nenhum acrescentado."
+
+#, php-format
+msgid "The way back has %d step and nothing is written yet."
+msgid_plural "The way back has %d steps and nothing is written yet."
+msgstr[0] "O caminho de volta tem %d passo e ainda nada foi escrito."
+msgstr[1] "O caminho de volta tem %d passos e ainda nada foi escrito."

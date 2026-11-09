@@ -1320,7 +1320,7 @@ e('paket/t3-sort-held', 'sort(): objects a credential holds counted (two sites)'
 e('paket/t3-kinds-incomplete', 'kinds(): not complete where an object was withheld', EX,
   DONE, DONE.replace(" && ! isset( $incomplete[ $key ] )", ''), 'package', T3['kinds'])
 e('paket/t3-answer-way', 'answer(): the way only where something was withheld (two sites)', EX,
-  "( $report['withheld']['count'] > 0 ? array( 'way' => self::WITHHELD_WAY ) : array() )", "( $report['withheld']['count'] >= 0 ? array( 'way' => self::WITHHELD_WAY ) : array() )", 'itpkg', T3['package_it'])
+  "( $report['withheld']['count'] > 0 ? array( 'way' => self::withheld_way() ) : array() )", "( $report['withheld']['count'] >= 0 ? array( 'way' => self::withheld_way() ) : array() )", 'itpkg', T3['package_it'])
 e('paket/t3-record-report', 'store(): the record keeps what was withheld, for again() (two sites)', EX,
   "\t\t\t\t'report'    => $report,\n", "\t\t\t\t'report'    => array( 'credentials' => array( 'held' => 0, 'names' => 0, 'units' => 0 ), 'withheld' => array( 'count' => 0, 'objects' => array() ) ),\n", 'itpkg', T3['package_it'])
 # The rights of an object.

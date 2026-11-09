@@ -833,8 +833,12 @@ final class AB_MCP_Sync_Revert {
 		$shown['same_run'] = $plan['same_run'];
 		$shown['limits']   = self::limits();
 		$shown['next']     = array() === $steps && $plan['same_run']
-			? sprintf( 'The way back of run %1$d goes on: the step the interruption left begun stays as it is (unclear, its pair unclear; nothing of it is put back again), and %2$d step(s) of the way back are still to go, none added. Call wp_site_revert action=next with run_id %1$d: each call takes one pair back under the lock, byte for byte where the part is still what the run wrote; the call that finds none left closes the run with the findings.', (int) $now['run_id'], (int) $shown['counts']['planned'] )
-			: sprintf( 'The way back has %1$d step(s) and nothing is written yet. Call wp_site_revert action=next with run_id %2$d: each call takes one pair back under the lock, byte for byte where the part is still what the run wrote; the last one closes the run.', count( $steps ), (int) $now['run_id'] );
+			/* translators: 1: run number, 2: steps of the way back still to go. */
+			? sprintf( _n( 'The way back of run %1$d goes on: the step the interruption left begun stays as it is (unclear, its pair unclear; nothing of it is put back again), and %2$d step of the way back is still to go, none added.', 'The way back of run %1$d goes on: the step the interruption left begun stays as it is (unclear, its pair unclear; nothing of it is put back again), and %2$d steps of the way back are still to go, none added.', (int) $shown['counts']['planned'], 'alphabridge-mcp' ), (int) $now['run_id'], (int) $shown['counts']['planned'] )
+				. sprintf( ' Call wp_site_revert action=next with run_id %d: each call takes one pair back under the lock, byte for byte where the part is still what the run wrote; the call that finds none left closes the run with the findings.', (int) $now['run_id'] )
+			/* translators: %d: steps of the way back. */
+			: sprintf( _n( 'The way back has %d step and nothing is written yet.', 'The way back has %d steps and nothing is written yet.', count( $steps ), 'alphabridge-mcp' ), count( $steps ) )
+				. sprintf( ' Call wp_site_revert action=next with run_id %d: each call takes one pair back under the lock, byte for byte where the part is still what the run wrote; the last one closes the run.', (int) $now['run_id'] );
 		return $shown;
 	}
 
