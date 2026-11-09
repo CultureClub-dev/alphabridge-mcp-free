@@ -222,6 +222,14 @@ AlphaBridge MCP sends no telemetry and calls no outside service on its own. Four
 
 == Changelog ==
 
+= 4.18.0 =
+* **Take changes over from a staging site.** On a confirmed pair of a staging site and its production site, the production site takes over what a person approved. `wp_site_export` makes the packages on the staging site (`wp_site_export_chunk` and `wp_site_import_chunk` carry large ones), `wp_site_diff` reports what differs, `wp_site_pairs` pairs the objects of both sites, `wp_site_push` takes them over one step per call, with a lock and a check per step, and `wp_site_revert` takes a takeover back pair by pair. The free plugin now has 107 tools.
+* **What it takes over.** Posts, pages and custom post types with their fields and meta, terms, templates, template parts, global styles, navigations and reusable blocks, media with their files, menus, widget areas, Additional CSS and core options. A takeover deletes no object and replaces no media file.
+* **A key the production site confirms.** A staging site makes its own key on AlphaBridge → Staging. The production site confirms it there by its fingerprint, fetched over https or entered as a pairing code, and reads only packages signed with it.
+* **A protected store.** Packages, reports and the backups of a run are kept beside the WordPress folder, outside the web root, or in a folder of the uploads closed to the web; the page shows where, and when it was checked.
+* **The takeover on AlphaBridge → Staging.** The section «Takeover» shows the last report, the runs with their steps and journal, the way back pair by pair and the object pairs. A person closes an interrupted run as checked there or aborts an open one. The backups of the last three completed takeovers are kept.
+* **In nine languages.** The page and its notices read in German (five variants), French, Italian, Spanish and Portuguese. `wp_staging_status` reports the takeover in `transfer`.
+
 = 4.17.0 =
 * **Protected options, hardened.** The six keys and salts WordPress reads from the options when `wp-config.php` does not define them (`secure_auth_key`, `secure_auth_salt`, `logged_in_key`, `logged_in_salt`, `nonce_key`, `nonce_salt`), every option whose name contains `_salt`, and `fs_accounts` (the licence keys of Freemius) are now protected like `auth_key`: no option tool writes or deletes them.
 * **A refusal names the way.** An option that is protected is refused with what to do instead, per group: the list of active plugins goes through `wp_activate_plugin` and `wp_deactivate_plugin`, the theme through `wp_activate_theme`, scheduled events, network plugins, the site address and the registration settings through their own tools where the site has them, otherwise the page in wp-admin that changes them; keys, passwords and the options of AlphaBridge itself stay closed.
@@ -520,6 +528,9 @@ AlphaBridge MCP sends no telemetry and calls no outside service on its own. Four
 * Initial development line: MCP endpoint, token auth, tool groups, security hardening (SSRF guards, path traversal guards, capability checks, rate limiting, audit log), 26 bundled translations.
 
 == Upgrade Notice ==
+
+= 4.18.0 =
+Takeover from a staging site: on a confirmed pair, the production site takes over the approved posts, terms, templates, media, menus, widgets, Additional CSS and core options step by step, with backups and a way back per pair (wp_site_diff, wp_site_push, wp_site_revert). Nothing is deleted.
 
 = 4.17.0 =
 More options are protected (the salts, fs_accounts), and a refusal names the way for each kind of option. wp_deactivate_plugin removes an entry whose plugin file is missing. An address change that did not finish is shown in wp_site_info and on the connection check. No setting changes.
