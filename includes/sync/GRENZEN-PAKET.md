@@ -382,7 +382,10 @@ mit Beispiel und Grund; wo eine Ablehnung entsteht, nennt sie den Weg.
   `Bearer abc123`, Codex-Runde 4 zu 11b). `Basic` im Header geht nach dem
   Ort (Thomas, 09.11.2026 vormittags, «A: nach Kontext», decisions.md): in
   `post_content` geht jedes Paar ins Paket, auch `admin:admin` (Grenze C,
-  Grund wie oben); in Meta, Optionen, Widgets, `post_excerpt` und der
+  Grund wie oben), ausser im CSS eines Themes, das als `post_content`
+  gespeichert ist: dort sperrt ein Basic-Header, auch in einem Kommentar
+  des CSS (Codex-Runde 8 zu 11b, C2); in Meta, Optionen, Widgets,
+  `post_excerpt` und der
   Beschreibung eines Terms hält jedes Paar das Objekt, auch
   `Aladdin:open sesame` und eine gespeicherte Liste von Headern
   (`{"headers":["Authorization: Basic …"]}`); eine Anleitung mit

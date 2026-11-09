@@ -408,6 +408,12 @@ final class AB_MCP_Sync_Net {
 		'7f75367e7881255134e1375e723d1dea8ad5f6a4fdb79d938df1f1754a830606' => 'jwt.io',
 		// jwt.io, the token of its debugger since 2024: the same with admin true, signed with a-string-secret-at-least-256-bits-long (recomputed by HMAC).
 		'c794fa6d20c64efb9adf980ae93af472a1679775862d421ffe55d4a57fad5b3e' => 'jwt.io admin',
+		// RFC 7617, section 2: the base64 of Aladdin:open sesame. It acts only
+		// after Bearer now (bearer()): Basic goes by its place, without a list.
+		'cf4d418ed3de92d71f767db5391d5a2dacd40e1ce49e75d1137e2ecf4982d844' => 'rfc 7617',
+		// MDN, «Authorization» (HTTP headers): the base64 of aladdin:opensesame;
+		// as the one of RFC 7617, after Bearer only.
+		'ad62d48d8b069026a2a0d0291f857a77e1975edf610aa3502e8bc71bd96f513a' => 'mdn basic',
 		// RFC 6750, sections 2.1 to 2.3 and 4: the access token of the example.
 		'b8e148545b13c78bc74da2f1a7275dd71e56ddece129d7d2f7b3ecc06f7994da' => 'rfc 6750',
 		// Slack, docs.slack.dev/authentication/tokens: the user token before August 2016, short.

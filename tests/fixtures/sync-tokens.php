@@ -44,6 +44,8 @@ return array(
 		'aws secret access key' => 'wJalrXUtnFEMI/K7MDENG/' . 'bPxRfiCY' . 'EXAMPLEKEY',
 		'jwt.io'                => $jwtio( '{"sub":"1234567890","name":"John Doe","iat":1516239022}', 'your-256-bit-secret' ),
 		'jwt.io admin'          => $jwtio( '{"sub":"1234567890","name":"John Doe","admin":true,"iat":1516239022}', 'a-string-secret-at-least-256-bits-long' ),
+		'rfc 7617'              => 'QWxhZGRpbjpvcGVuIHNlc2FtZQ' . '==',
+		'mdn basic'             => 'YWxhZGRpbjpvcGVu' . 'c2VzYW1l',
 		'rfc 6750'              => 'mF_9.' . 'B5f-4.1JqM',
 		'slack 1'               => 'xo' . 'xp-111-222-333-' . 'd6bc76',
 		'slack 2'               => 'xo' . 'xp-111-222-333-' . 'd6bc768412',

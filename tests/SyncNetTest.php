@@ -952,6 +952,17 @@ final class SyncNetTest extends TestCase {
 		self::assertSame( array(), AB_MCP_Sync_Net::credentials( $header, array(), $undecidable, false, false ) );
 		self::assertSame( array( 'authorization' ), AB_MCP_Sync_Net::credentials( 'Authorization: Bearer Qm9dXyT3kLz8wR2vNp6s', array(), $undecidable, false, false ), 'Bearer by its form wherever it stands.' );
 		self::assertSame( array( 'github_token' ), AB_MCP_Sync_Net::credentials( $header . "\n" . self::tokens()['ghp'], array(), $undecidable, false, false ) );
+		// The base64 of the pairs of RFC 7617 and MDN after Bearer: free as on
+		// d37bc83 (EXAMPLES, Codex round 8, C1), in post_content and in meta;
+		// the same pairs after Basic lock outside of post_content.
+		$e = self::tokens()['examples'];
+		foreach ( array( $e['rfc 7617'], $e['mdn basic'] ) as $value ) {
+			self::assertSame( base64_encode( 'rfc 7617' === array_search( $value, $e, true ) ? 'Aladdin:open sesame' : 'aladdin:opensesame' ), $value );
+			self::assertSame( array(), AB_MCP_Sync_Net::credentials( 'Authorization: Bearer ' . $value, array() ) );
+			self::assertSame( array(), AB_MCP_Sync_Net::credentials( 'Authorization: Bearer ' . $value, array(), $undecidable, false, false ) );
+			self::assertSame( array( 'authorization' ), AB_MCP_Sync_Net::credentials( 'Authorization: Basic ' . $value, array() ) );
+			self::assertSame( array(), AB_MCP_Sync_Net::credentials( 'Authorization: Basic ' . $value, array(), $undecidable, false, false ) );
+		}
 		self::assertTrue( AB_MCP_Sync_Net::prose_unit( 'post', 'post_content' ) );
 		self::assertTrue( AB_MCP_Sync_Net::prose_unit( 'attachment', 'post_content' ) );
 		self::assertTrue( AB_MCP_Sync_Net::prose_unit( 'post', 'content:post_content' ) );

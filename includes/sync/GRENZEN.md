@@ -288,9 +288,12 @@ neu.
     2016, mit langem Geheimnis).
   GitHub (Blog zu den Formaten der Tokens) und Stripe (Seite der
   API-Schlüssel) zeigen kein vollständiges Token einer der Formen oben;
-  `sk_test_…` zählt nicht. Die Base64-Werte aus RFC 7617 und MDN sind
-  gestrichen (09.11.2026 vormittags): ihre dokumentierte Form ist Basic,
-  und Basic fragt keine Liste mehr; nach Bearer zeigt sie keine Doku.
+  `sk_test_…` zählt nicht. Dazu die Base64-Werte aus RFC 7617
+  (`Aladdin:open sesame`) und MDN (`aladdin:opensesame`): sie wirken nur
+  noch nach Bearer (`Authorization: Bearer` mit einem davon bleibt frei,
+  auch in `post_content`, wie auf `d37bc83`); Basic fragt keine Liste
+  mehr und geht nach seinem Ort (Codex-Runde 8 zu 11b, C1: sie zu
+  streichen, hätte diesen Bearer-Fall neu gesperrt).
   Gezählt mit einer AWS-Anleitung mit beiden
   Schlüsseln (Fliesstext und `aws configure`), zwei JWT-Anleitungen, dem
   Beispiel aus RFC 6750, dem Block der Slack-Doku, dem Geheimschlüssel von
