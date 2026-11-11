@@ -54,6 +54,9 @@ final class AB_MCP_IT_Code {
 	/** @var array|null The list, once read. */
 	private static $katalog = null;
 
+	/** @var string[] The ZIPs this process built (removed at its end). */
+	private static $zips = array();
+
 	/**
 	 * The folder of the fixtures.
 	 *
@@ -368,7 +371,7 @@ final class AB_MCP_IT_Code {
 	/**
 	 * A ZIP of a version, as wordpress.org packs a plugin or theme: one
 	 * folder named after the slug. Built once per process in the temporary
-	 * directory, every entry with MTIME.
+	 * directory, every entry with MTIME, removed at the end of the process.
 	 *
 	 * @param string $type    plugin or theme.
 	 * @param string $slug    Slug.
@@ -401,6 +404,18 @@ final class AB_MCP_IT_Code {
 		if ( ! $archive->close() || ! rename( $tmp, $zip ) ) {
 			throw new RuntimeException( "Cannot write $zip." );
 		}
+		if ( array() === self::$zips ) {
+			register_shutdown_function(
+				static function () {
+					foreach ( self::$zips as $built ) {
+						if ( is_file( $built ) ) {
+							unlink( $built );
+						}
+					}
+				}
+			);
+		}
+		self::$zips[] = $zip;
 		return $zip;
 	}
 

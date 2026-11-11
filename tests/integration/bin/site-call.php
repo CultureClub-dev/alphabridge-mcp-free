@@ -20,6 +20,8 @@ if ( 'cli' !== PHP_SAPI || 3 !== count( $argv ) ) {
 
 require dirname( __DIR__ ) . '/support/class-it-sites.php';
 require dirname( __DIR__ ) . '/support/class-it-child.php';
+// For a plan that hooks the stand-in for wordpress.org (AB_MCP_Test_Wporg::hook_all).
+require dirname( __DIR__ ) . '/support/class-test-wporg.php';
 
 putenv( 'AB_IT_STATE=' . $argv[1] );
 $ab_it_key  = $argv[2];

@@ -138,6 +138,22 @@ final class WporgStandInTest extends TestCase {
 		self::assertInstanceOf( \WP_Error::class, $after, 'Unhooked: WordPress asks the network, which the test sites block.' );
 	}
 
+	public function testInAProcessOfASiteThroughAPlan(): void {
+		$done = \AB_MCP_IT_Process::calls(
+			'b',
+			array(
+				'calls' => array(
+					array( 'call' => 'AB_MCP_Test_Wporg::hook_all', 'expect' => 'result' ),
+					array( 'call' => 'download_url', 'args' => array( 'https://downloads.wordpress.org/plugin/ab-it-daten.1.0.0.zip' ), 'as' => 'file', 'expect' => 'result' ),
+				),
+			)
+		);
+		$file = $done['results']['file'];
+		self::assertIsString( $file );
+		$this->remove[] = $file;
+		self::assertFileEquals( AB_MCP_IT_Code::zip( 'plugin', 'ab-it-daten', '1.0.0' ), $file );
+	}
+
 	private static function assertWPErrorNotOurs( $answer ): void {
 		self::assertInstanceOf( \WP_Error::class, $answer, 'Another host passes the hook; the test site blocks it (WP_HTTP_BLOCK_EXTERNAL).' );
 		self::assertNotSame( 'ab_mcp_test_wporg_foreign', $answer->get_error_code() );

@@ -127,3 +127,16 @@ function ab_it_probe_marker( array $record ) {
 	file_put_contents( (string) $marker, json_encode( $record ) );
 	exit( 0 );
 }
+
+/**
+ * Write a marker as ab_it_probe_marker() does, then end by SIGKILL to the
+ * own PID: the signal of the mode without shutdown, with a marker that says
+ * a shutdown ran.
+ *
+ * @param array $record The marker.
+ */
+function ab_it_probe_marker_then_kill( array $record ) {
+	$marker = ( new ReflectionProperty( 'AB_MCP_Test_Abort', 'marker' ) )->getValue();
+	file_put_contents( (string) $marker, json_encode( $record ) );
+	posix_kill( getmypid(), 9 );
+}

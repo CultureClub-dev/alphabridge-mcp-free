@@ -125,7 +125,9 @@ final class TestAbortTest extends TestCase {
 	}
 
 	public function testAbortByTheTimeLimitIsPhpsFatalErrorWithShutdown(): void {
-		$abort = AB_MCP_IT_Process::abort( null, $this->plan( self::between( 'timeout' ) ) );
+		// 30 s: the abort takes about one second of CPU; a time limit that
+		// is not set leaves the loop running until the helper ends it.
+		$abort = AB_MCP_IT_Process::abort( null, $this->plan( self::between( 'timeout' ) ), 30 );
 		self::assertSame( 'timeout', $abort['marker']['mode'] );
 		self::assertTrue( $abort['marker']['shutdown_ran'] );
 		self::assertSame( E_ERROR, $abort['marker']['error']['type'] );
@@ -201,13 +203,13 @@ final class TestAbortTest extends TestCase {
 	/**
 	 * A marker alone, written without the abort, for each mode.
 	 *
-	 * @return array<string,array{0:string,1:array,2:string}>
+	 * @return array<string,array>
 	 */
 	public static function markers_without_proof(): array {
 		$base = array( 'fired' => true, 'point' => 'zwischen-den-umbenennungen' );
 		return array(
 			'no_shutdown without the signal' => array( 'no_shutdown', $base + array( 'mode' => 'no_shutdown' ), 'did not end by the signal 9' ),
-			'no_shutdown with shutdown'      => array( 'no_shutdown', $base + array( 'mode' => 'no_shutdown', 'shutdown_ran' => true ), 'did not end by the signal 9' ),
+			'no_shutdown with shutdown'      => array( 'no_shutdown', $base + array( 'mode' => 'no_shutdown', 'shutdown_ran' => true ), 'did not end by the signal 9 before any shutdown function', 'ab_it_probe_marker_then_kill' ),
 			'shutdown without its run'       => array( 'shutdown', $base + array( 'mode' => 'shutdown' ), 'did not run the shutdown functions' ),
 			'timeout without the fatal'      => array( 'timeout', $base + array( 'mode' => 'timeout', 'shutdown_ran' => true, 'error' => null ), 'fatal error of the time limit' ),
 			'timeout with another error'     => array( 'timeout', $base + array( 'mode' => 'timeout', 'shutdown_ran' => true, 'error' => array( 'type' => E_WARNING, 'message' => 'Maximum execution time of 1 second exceeded' ) ), 'fatal error of the time limit' ),
@@ -216,10 +218,10 @@ final class TestAbortTest extends TestCase {
 	}
 
 	#[\PHPUnit\Framework\Attributes\DataProvider( 'markers_without_proof' )]
-	public function testAMarkerWithoutTheProofOfItsModeIsAnError( string $mode, array $record, string $says ): void {
+	public function testAMarkerWithoutTheProofOfItsModeIsAnError( string $mode, array $record, string $says, string $probe = 'ab_it_probe_marker' ): void {
 		$this->expectException( RuntimeException::class );
 		$this->expectExceptionMessage( $says );
-		AB_MCP_IT_Process::abort( null, $this->plan( self::between( $mode ), array( array( 'call' => 'ab_it_probe_marker', 'args' => array( $record ) ) ) ) );
+		AB_MCP_IT_Process::abort( null, $this->plan( self::between( $mode ), array( array( 'call' => $probe, 'args' => array( $record ) ) ) ) );
 	}
 
 	public function testAPointThatNeverComesIsAnError(): void {
@@ -267,13 +269,13 @@ final class TestAbortTest extends TestCase {
 		$pid_file = $this->dir . '/pid';
 		$started  = microtime( true );
 		try {
-			AB_MCP_IT_Process::calls( null, $this->plan( array(), array( array( 'call' => 'ab_it_probe_pid_then_sleep', 'args' => array( $pid_file, 30 ) ) ) ), 2 );
-			self::fail( 'A child that sleeps 30 s finished within 2 s.' );
+			AB_MCP_IT_Process::calls( null, $this->plan( array(), array( array( 'call' => 'ab_it_probe_pid_then_sleep', 'args' => array( $pid_file, 10 ) ) ) ), 2 );
+			self::fail( 'A child that sleeps 10 s finished within 2 s.' );
 		} catch ( RuntimeException $e ) {
 			self::assertStringContainsString( 'longer than 2 s and was ended', $e->getMessage() );
 			self::assertStringContainsString( 'signal 9', $e->getMessage(), 'Ended by SIGKILL, not by waiting for it.' );
 		}
-		self::assertLessThan( 15, microtime( true ) - $started, 'The helper did not wait for the child to finish its sleep.' );
+		self::assertLessThan( 8, microtime( true ) - $started, 'The helper did not wait for the child to finish its sleep.' );
 		$pid = (int) file_get_contents( $pid_file );
 		self::assertGreaterThan( 0, $pid );
 		self::assertFalse( posix_kill( $pid, 0 ), 'The child is gone.' );
