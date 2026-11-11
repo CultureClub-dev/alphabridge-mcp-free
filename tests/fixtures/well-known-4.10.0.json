@@ -1,0 +1,237 @@
+{
+    "recorded_with": "includes/class-oauth.php of v4.10.0 (26375bca1409ecf4ad6817d0edb173b2ff3b55d4), tests/support/record-well-known-4100.php",
+    "own": {
+        "root: server metadata": {
+            "status": 200,
+            "headers": {
+                "access-control-allow-origin": "*",
+                "cache-control": "no-store",
+                "content-type": "application/json; charset=utf-8"
+            },
+            "body": "{\"issuer\":\"https:\\/\\/example.test\",\"authorization_endpoint\":\"https:\\/\\/example.test\\/?ab_mcp_oauth=authorize\",\"token_endpoint\":\"https:\\/\\/example.test\\/wp-json\\/alphabridge\\/v1\\/oauth\\/token\",\"registration_endpoint\":\"https:\\/\\/example.test\\/wp-json\\/alphabridge\\/v1\\/oauth\\/register\",\"revocation_endpoint\":\"https:\\/\\/example.test\\/wp-json\\/alphabridge\\/v1\\/oauth\\/revoke\",\"revocation_endpoint_auth_methods_supported\":[\"none\"],\"response_types_supported\":[\"code\"],\"grant_types_supported\":[\"authorization_code\"],\"code_challenge_methods_supported\":[\"S256\"],\"token_endpoint_auth_methods_supported\":[\"none\"],\"scopes_supported\":[\"read\",\"content\",\"full\"],\"authorization_response_iss_parameter_supported\":true,\"client_id_metadata_document_supported\":true}"
+        },
+        "root: server metadata, trailing slash": {
+            "status": 200,
+            "headers": {
+                "access-control-allow-origin": "*",
+                "cache-control": "no-store",
+                "content-type": "application/json; charset=utf-8"
+            },
+            "body": "{\"issuer\":\"https:\\/\\/example.test\",\"authorization_endpoint\":\"https:\\/\\/example.test\\/?ab_mcp_oauth=authorize\",\"token_endpoint\":\"https:\\/\\/example.test\\/wp-json\\/alphabridge\\/v1\\/oauth\\/token\",\"registration_endpoint\":\"https:\\/\\/example.test\\/wp-json\\/alphabridge\\/v1\\/oauth\\/register\",\"revocation_endpoint\":\"https:\\/\\/example.test\\/wp-json\\/alphabridge\\/v1\\/oauth\\/revoke\",\"revocation_endpoint_auth_methods_supported\":[\"none\"],\"response_types_supported\":[\"code\"],\"grant_types_supported\":[\"authorization_code\"],\"code_challenge_methods_supported\":[\"S256\"],\"token_endpoint_auth_methods_supported\":[\"none\"],\"scopes_supported\":[\"read\",\"content\",\"full\"],\"authorization_response_iss_parameter_supported\":true,\"client_id_metadata_document_supported\":true}"
+        },
+        "root: server metadata, with a query": {
+            "status": 200,
+            "headers": {
+                "access-control-allow-origin": "*",
+                "cache-control": "no-store",
+                "content-type": "application/json; charset=utf-8"
+            },
+            "body": "{\"issuer\":\"https:\\/\\/example.test\",\"authorization_endpoint\":\"https:\\/\\/example.test\\/?ab_mcp_oauth=authorize\",\"token_endpoint\":\"https:\\/\\/example.test\\/wp-json\\/alphabridge\\/v1\\/oauth\\/token\",\"registration_endpoint\":\"https:\\/\\/example.test\\/wp-json\\/alphabridge\\/v1\\/oauth\\/register\",\"revocation_endpoint\":\"https:\\/\\/example.test\\/wp-json\\/alphabridge\\/v1\\/oauth\\/revoke\",\"revocation_endpoint_auth_methods_supported\":[\"none\"],\"response_types_supported\":[\"code\"],\"grant_types_supported\":[\"authorization_code\"],\"code_challenge_methods_supported\":[\"S256\"],\"token_endpoint_auth_methods_supported\":[\"none\"],\"scopes_supported\":[\"read\",\"content\",\"full\"],\"authorization_response_iss_parameter_supported\":true,\"client_id_metadata_document_supported\":true}"
+        },
+        "root: server metadata after the MCP path (old SDK)": {
+            "status": 200,
+            "headers": {
+                "access-control-allow-origin": "*",
+                "cache-control": "no-store",
+                "content-type": "application/json; charset=utf-8"
+            },
+            "body": "{\"issuer\":\"https:\\/\\/example.test\",\"authorization_endpoint\":\"https:\\/\\/example.test\\/?ab_mcp_oauth=authorize\",\"token_endpoint\":\"https:\\/\\/example.test\\/wp-json\\/alphabridge\\/v1\\/oauth\\/token\",\"registration_endpoint\":\"https:\\/\\/example.test\\/wp-json\\/alphabridge\\/v1\\/oauth\\/register\",\"revocation_endpoint\":\"https:\\/\\/example.test\\/wp-json\\/alphabridge\\/v1\\/oauth\\/revoke\",\"revocation_endpoint_auth_methods_supported\":[\"none\"],\"response_types_supported\":[\"code\"],\"grant_types_supported\":[\"authorization_code\"],\"code_challenge_methods_supported\":[\"S256\"],\"token_endpoint_auth_methods_supported\":[\"none\"],\"scopes_supported\":[\"read\",\"content\",\"full\"],\"authorization_response_iss_parameter_supported\":true,\"client_id_metadata_document_supported\":true}"
+        },
+        "root: resource metadata": {
+            "status": 200,
+            "headers": {
+                "access-control-allow-origin": "*",
+                "cache-control": "no-store",
+                "content-type": "application/json; charset=utf-8"
+            },
+            "body": "{\"resource\":\"https:\\/\\/example.test\\/wp-json\\/alphabridge\\/v1\\/mcp\",\"authorization_servers\":[\"https:\\/\\/example.test\"],\"bearer_methods_supported\":[\"header\"],\"resource_name\":\"Example Site\"}"
+        },
+        "root: resource metadata, trailing slash": {
+            "status": 200,
+            "headers": {
+                "access-control-allow-origin": "*",
+                "cache-control": "no-store",
+                "content-type": "application/json; charset=utf-8"
+            },
+            "body": "{\"resource\":\"https:\\/\\/example.test\\/wp-json\\/alphabridge\\/v1\\/mcp\",\"authorization_servers\":[\"https:\\/\\/example.test\"],\"bearer_methods_supported\":[\"header\"],\"resource_name\":\"Example Site\"}"
+        },
+        "root: resource metadata of the MCP path": {
+            "status": 200,
+            "headers": {
+                "access-control-allow-origin": "*",
+                "cache-control": "no-store",
+                "content-type": "application/json; charset=utf-8"
+            },
+            "body": "{\"resource\":\"https:\\/\\/example.test\\/wp-json\\/alphabridge\\/v1\\/mcp\",\"authorization_servers\":[\"https:\\/\\/example.test\"],\"bearer_methods_supported\":[\"header\"],\"resource_name\":\"Example Site\"}"
+        },
+        "root: resource metadata of the MCP path, slash": {
+            "status": 200,
+            "headers": {
+                "access-control-allow-origin": "*",
+                "cache-control": "no-store",
+                "content-type": "application/json; charset=utf-8"
+            },
+            "body": "{\"resource\":\"https:\\/\\/example.test\\/wp-json\\/alphabridge\\/v1\\/mcp\",\"authorization_servers\":[\"https:\\/\\/example.test\"],\"bearer_methods_supported\":[\"header\"],\"resource_name\":\"Example Site\"}"
+        },
+        "root, plain permalinks: server metadata": {
+            "status": 200,
+            "headers": {
+                "access-control-allow-origin": "*",
+                "cache-control": "no-store",
+                "content-type": "application/json; charset=utf-8"
+            },
+            "body": "{\"issuer\":\"https:\\/\\/example.test\",\"authorization_endpoint\":\"https:\\/\\/example.test\\/?ab_mcp_oauth=authorize\",\"token_endpoint\":\"https:\\/\\/example.test\\/?rest_route=\\/alphabridge\\/v1\\/oauth\\/token\",\"registration_endpoint\":\"https:\\/\\/example.test\\/?rest_route=\\/alphabridge\\/v1\\/oauth\\/register\",\"revocation_endpoint\":\"https:\\/\\/example.test\\/?rest_route=\\/alphabridge\\/v1\\/oauth\\/revoke\",\"revocation_endpoint_auth_methods_supported\":[\"none\"],\"response_types_supported\":[\"code\"],\"grant_types_supported\":[\"authorization_code\"],\"code_challenge_methods_supported\":[\"S256\"],\"token_endpoint_auth_methods_supported\":[\"none\"],\"scopes_supported\":[\"read\",\"content\",\"full\"],\"authorization_response_iss_parameter_supported\":true,\"client_id_metadata_document_supported\":true}"
+        },
+        "root, plain permalinks: resource metadata, slash": {
+            "status": 200,
+            "headers": {
+                "access-control-allow-origin": "*",
+                "cache-control": "no-store",
+                "content-type": "application/json; charset=utf-8"
+            },
+            "body": "{\"resource\":\"https:\\/\\/example.test\\/?rest_route=\\/alphabridge\\/v1\\/mcp\",\"authorization_servers\":[\"https:\\/\\/example.test\"],\"bearer_methods_supported\":[\"header\"],\"resource_name\":\"Example Site\"}"
+        },
+        "subfolder: server metadata under home": {
+            "status": 200,
+            "headers": {
+                "access-control-allow-origin": "*",
+                "cache-control": "no-store",
+                "content-type": "application/json; charset=utf-8"
+            },
+            "body": "{\"issuer\":\"https:\\/\\/example.test\\/staging\\/123\",\"authorization_endpoint\":\"https:\\/\\/example.test\\/staging\\/123\\/?ab_mcp_oauth=authorize\",\"token_endpoint\":\"https:\\/\\/example.test\\/staging\\/123\\/wp-json\\/alphabridge\\/v1\\/oauth\\/token\",\"registration_endpoint\":\"https:\\/\\/example.test\\/staging\\/123\\/wp-json\\/alphabridge\\/v1\\/oauth\\/register\",\"revocation_endpoint\":\"https:\\/\\/example.test\\/staging\\/123\\/wp-json\\/alphabridge\\/v1\\/oauth\\/revoke\",\"revocation_endpoint_auth_methods_supported\":[\"none\"],\"response_types_supported\":[\"code\"],\"grant_types_supported\":[\"authorization_code\"],\"code_challenge_methods_supported\":[\"S256\"],\"token_endpoint_auth_methods_supported\":[\"none\"],\"scopes_supported\":[\"read\",\"content\",\"full\"],\"authorization_response_iss_parameter_supported\":true,\"client_id_metadata_document_supported\":true}"
+        },
+        "subfolder: server metadata under home, slash": {
+            "status": 200,
+            "headers": {
+                "access-control-allow-origin": "*",
+                "cache-control": "no-store",
+                "content-type": "application/json; charset=utf-8"
+            },
+            "body": "{\"issuer\":\"https:\\/\\/example.test\\/staging\\/123\",\"authorization_endpoint\":\"https:\\/\\/example.test\\/staging\\/123\\/?ab_mcp_oauth=authorize\",\"token_endpoint\":\"https:\\/\\/example.test\\/staging\\/123\\/wp-json\\/alphabridge\\/v1\\/oauth\\/token\",\"registration_endpoint\":\"https:\\/\\/example.test\\/staging\\/123\\/wp-json\\/alphabridge\\/v1\\/oauth\\/register\",\"revocation_endpoint\":\"https:\\/\\/example.test\\/staging\\/123\\/wp-json\\/alphabridge\\/v1\\/oauth\\/revoke\",\"revocation_endpoint_auth_methods_supported\":[\"none\"],\"response_types_supported\":[\"code\"],\"grant_types_supported\":[\"authorization_code\"],\"code_challenge_methods_supported\":[\"S256\"],\"token_endpoint_auth_methods_supported\":[\"none\"],\"scopes_supported\":[\"read\",\"content\",\"full\"],\"authorization_response_iss_parameter_supported\":true,\"client_id_metadata_document_supported\":true}"
+        },
+        "subfolder: server metadata after its own home path": {
+            "status": 200,
+            "headers": {
+                "access-control-allow-origin": "*",
+                "cache-control": "no-store",
+                "content-type": "application/json; charset=utf-8"
+            },
+            "body": "{\"issuer\":\"https:\\/\\/example.test\\/staging\\/123\",\"authorization_endpoint\":\"https:\\/\\/example.test\\/staging\\/123\\/?ab_mcp_oauth=authorize\",\"token_endpoint\":\"https:\\/\\/example.test\\/staging\\/123\\/wp-json\\/alphabridge\\/v1\\/oauth\\/token\",\"registration_endpoint\":\"https:\\/\\/example.test\\/staging\\/123\\/wp-json\\/alphabridge\\/v1\\/oauth\\/register\",\"revocation_endpoint\":\"https:\\/\\/example.test\\/staging\\/123\\/wp-json\\/alphabridge\\/v1\\/oauth\\/revoke\",\"revocation_endpoint_auth_methods_supported\":[\"none\"],\"response_types_supported\":[\"code\"],\"grant_types_supported\":[\"authorization_code\"],\"code_challenge_methods_supported\":[\"S256\"],\"token_endpoint_auth_methods_supported\":[\"none\"],\"scopes_supported\":[\"read\",\"content\",\"full\"],\"authorization_response_iss_parameter_supported\":true,\"client_id_metadata_document_supported\":true}"
+        },
+        "subfolder: resource metadata under home": {
+            "status": 200,
+            "headers": {
+                "access-control-allow-origin": "*",
+                "cache-control": "no-store",
+                "content-type": "application/json; charset=utf-8"
+            },
+            "body": "{\"resource\":\"https:\\/\\/example.test\\/staging\\/123\\/wp-json\\/alphabridge\\/v1\\/mcp\",\"authorization_servers\":[\"https:\\/\\/example.test\\/staging\\/123\"],\"bearer_methods_supported\":[\"header\"],\"resource_name\":\"Example Site\"}"
+        },
+        "subfolder: resource metadata of its MCP path": {
+            "status": 200,
+            "headers": {
+                "access-control-allow-origin": "*",
+                "cache-control": "no-store",
+                "content-type": "application/json; charset=utf-8"
+            },
+            "body": "{\"resource\":\"https:\\/\\/example.test\\/staging\\/123\\/wp-json\\/alphabridge\\/v1\\/mcp\",\"authorization_servers\":[\"https:\\/\\/example.test\\/staging\\/123\"],\"bearer_methods_supported\":[\"header\"],\"resource_name\":\"Example Site\"}"
+        },
+        "subfolder: resource metadata of its MCP path, slash": {
+            "status": 200,
+            "headers": {
+                "access-control-allow-origin": "*",
+                "cache-control": "no-store",
+                "content-type": "application/json; charset=utf-8"
+            },
+            "body": "{\"resource\":\"https:\\/\\/example.test\\/staging\\/123\\/wp-json\\/alphabridge\\/v1\\/mcp\",\"authorization_servers\":[\"https:\\/\\/example.test\\/staging\\/123\"],\"bearer_methods_supported\":[\"header\"],\"resource_name\":\"Example Site\"}"
+        },
+        "subfolder, plain permalinks: server metadata": {
+            "status": 200,
+            "headers": {
+                "access-control-allow-origin": "*",
+                "cache-control": "no-store",
+                "content-type": "application/json; charset=utf-8"
+            },
+            "body": "{\"issuer\":\"https:\\/\\/example.test\\/staging\\/123\",\"authorization_endpoint\":\"https:\\/\\/example.test\\/staging\\/123\\/?ab_mcp_oauth=authorize\",\"token_endpoint\":\"https:\\/\\/example.test\\/staging\\/123\\/?rest_route=\\/alphabridge\\/v1\\/oauth\\/token\",\"registration_endpoint\":\"https:\\/\\/example.test\\/staging\\/123\\/?rest_route=\\/alphabridge\\/v1\\/oauth\\/register\",\"revocation_endpoint\":\"https:\\/\\/example.test\\/staging\\/123\\/?rest_route=\\/alphabridge\\/v1\\/oauth\\/revoke\",\"revocation_endpoint_auth_methods_supported\":[\"none\"],\"response_types_supported\":[\"code\"],\"grant_types_supported\":[\"authorization_code\"],\"code_challenge_methods_supported\":[\"S256\"],\"token_endpoint_auth_methods_supported\":[\"none\"],\"scopes_supported\":[\"read\",\"content\",\"full\"],\"authorization_response_iss_parameter_supported\":true,\"client_id_metadata_document_supported\":true}"
+        },
+        "subfolder, plain permalinks: resource metadata": {
+            "status": 200,
+            "headers": {
+                "access-control-allow-origin": "*",
+                "cache-control": "no-store",
+                "content-type": "application/json; charset=utf-8"
+            },
+            "body": "{\"resource\":\"https:\\/\\/example.test\\/staging\\/123\\/?rest_route=\\/alphabridge\\/v1\\/mcp\",\"authorization_servers\":[\"https:\\/\\/example.test\\/staging\\/123\"],\"bearer_methods_supported\":[\"header\"],\"resource_name\":\"Example Site\"}"
+        }
+    },
+    "challenge": {
+        "root": {
+            "status": 401,
+            "headers": {
+                "cache-control": "no-store",
+                "referrer-policy": "no-referrer",
+                "www-authenticate": "Bearer resource_metadata=\"https://example.test/.well-known/oauth-protected-resource/wp-json/alphabridge/v1/mcp\""
+            },
+            "answer": {
+                "status": 200,
+                "headers": {
+                    "access-control-allow-origin": "*",
+                    "cache-control": "no-store",
+                    "content-type": "application/json; charset=utf-8"
+                },
+                "body": "{\"resource\":\"https:\\/\\/example.test\\/wp-json\\/alphabridge\\/v1\\/mcp\",\"authorization_servers\":[\"https:\\/\\/example.test\"],\"bearer_methods_supported\":[\"header\"],\"resource_name\":\"Example Site\"}"
+            }
+        },
+        "root, plain permalinks": {
+            "status": 401,
+            "headers": {
+                "cache-control": "no-store",
+                "referrer-policy": "no-referrer",
+                "www-authenticate": "Bearer resource_metadata=\"https://example.test/.well-known/oauth-protected-resource/\""
+            },
+            "answer": {
+                "status": 200,
+                "headers": {
+                    "access-control-allow-origin": "*",
+                    "cache-control": "no-store",
+                    "content-type": "application/json; charset=utf-8"
+                },
+                "body": "{\"resource\":\"https:\\/\\/example.test\\/?rest_route=\\/alphabridge\\/v1\\/mcp\",\"authorization_servers\":[\"https:\\/\\/example.test\"],\"bearer_methods_supported\":[\"header\"],\"resource_name\":\"Example Site\"}"
+            }
+        },
+        "subfolder": {
+            "status": 401,
+            "headers": {
+                "cache-control": "no-store",
+                "referrer-policy": "no-referrer",
+                "www-authenticate": "Bearer resource_metadata=\"https://example.test/staging/123/.well-known/oauth-protected-resource/staging/123/wp-json/alphabridge/v1/mcp\""
+            },
+            "answer": {
+                "status": 200,
+                "headers": {
+                    "access-control-allow-origin": "*",
+                    "cache-control": "no-store",
+                    "content-type": "application/json; charset=utf-8"
+                },
+                "body": "{\"resource\":\"https:\\/\\/example.test\\/staging\\/123\\/wp-json\\/alphabridge\\/v1\\/mcp\",\"authorization_servers\":[\"https:\\/\\/example.test\\/staging\\/123\"],\"bearer_methods_supported\":[\"header\"],\"resource_name\":\"Example Site\"}"
+            }
+        },
+        "subfolder, plain permalinks": {
+            "status": 401,
+            "headers": {
+                "cache-control": "no-store",
+                "referrer-policy": "no-referrer",
+                "www-authenticate": "Bearer resource_metadata=\"https://example.test/staging/123/.well-known/oauth-protected-resource/staging/123/\""
+            },
+            "answer": {
+                "status": 200,
+                "headers": {
+                    "access-control-allow-origin": "*",
+                    "cache-control": "no-store",
+                    "content-type": "application/json; charset=utf-8"
+                },
+                "body": "{\"resource\":\"https:\\/\\/example.test\\/staging\\/123\\/?rest_route=\\/alphabridge\\/v1\\/mcp\",\"authorization_servers\":[\"https:\\/\\/example.test\\/staging\\/123\"],\"bearer_methods_supported\":[\"header\"],\"resource_name\":\"Example Site\"}"
+            }
+        }
+    }
+}
