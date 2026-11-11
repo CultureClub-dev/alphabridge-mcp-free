@@ -98,3 +98,32 @@ function ab_it_probe_pid_then_sleep( $file, $seconds ) {
 	sleep( (int) $seconds );
 	return true;
 }
+
+/**
+ * A shutdown function that ends the process with a status of its own, after
+ * the result line of the child.
+ *
+ * @param int $code Status.
+ * @return bool
+ */
+function ab_it_probe_exit_code_in_shutdown( $code ) {
+	register_shutdown_function(
+		static function () use ( $code ) {
+			exit( (int) $code );
+		}
+	);
+	return true;
+}
+
+/**
+ * Write a marker as AB_MCP_Test_Abort would, without its abort, and end
+ * with status 0: for the proof of each mode, which must not take a marker
+ * alone for the abort.
+ *
+ * @param array $record The marker.
+ */
+function ab_it_probe_marker( array $record ) {
+	$marker = ( new ReflectionProperty( 'AB_MCP_Test_Abort', 'marker' ) )->getValue();
+	file_put_contents( (string) $marker, json_encode( $record ) );
+	exit( 0 );
+}
