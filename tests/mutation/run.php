@@ -27,7 +27,18 @@
  *                    // output of the red run, so that the failure is the test
  *                    // meant and not any failure
  *       'timeout' => 600,                                 // optional, seconds
+ *       'helper'  => true,                                // optional, see below
  *   )
+ *
+ * 'file' names a shipped file of the tree; files under tests/ and vendor/
+ * are refused. The one exception (Z8b branch 1, F-A): an entry with
+ * 'helper' => true names a helper of the integration suite that carries a
+ * promise of its own (a real exit never counts as a pass, say), a file
+ * under tests/integration/support/ or tests/integration/bin/ — named as it
+ * is, without a segment .., and no link (the path must be the file itself).
+ * Any other file under tests/, a link out of these folders and a helper
+ * flag on a shipped file are refused. Writing back and the check of the CI
+ * that the checkout is unchanged hold for helpers alike.
  *
  * 'run' is any command, started from the repo root with this environment:
  * the unit suite, or the integration suite (vendor/bin/phpunit -c
@@ -192,8 +203,13 @@ final class AB_Mutation_Run {
 				if ( $entry['search'] === $entry['replace'] ) {
 					throw new RuntimeException( "$list: {$entry['id']} changes nothing." );
 				}
+				if ( array_key_exists( 'helper', $entry ) && true !== $entry['helper'] ) {
+					throw new RuntimeException( "$list: {$entry['id']} has 'helper' other than true." );
+				}
 				$path = realpath( $this->root . '/' . $entry['file'] );
-				if ( false === $path || 0 !== strpos( $path, $this->root . '/' ) || preg_match( '#^(tests|vendor)/#', substr( $path, strlen( $this->root ) + 1 ) ) ) {
+				if ( isset( $entry['helper'] ) ) {
+					$path = $this->helper_path( $list, $entry );
+				} elseif ( false === $path || 0 !== strpos( $path, $this->root . '/' ) || preg_match( '#^(tests|vendor)/#', substr( $path, strlen( $this->root ) + 1 ) ) ) {
 					throw new RuntimeException( "$list: {$entry['id']} names no shipped file of this tree ({$entry['file']})." );
 				}
 				$entry['path']    = $path;
@@ -203,6 +219,29 @@ final class AB_Mutation_Run {
 			}
 		}
 		return $entries;
+	}
+
+	/**
+	 * The path of a helper entry ('helper' => true): a file under
+	 * tests/integration/support/ or tests/integration/bin/, named as it is.
+	 *
+	 * @param string $list  List file, for the message.
+	 * @param array  $entry Entry.
+	 * @return string Real path.
+	 */
+	private function helper_path( $list, array $entry ) {
+		$file = $entry['file'];
+		if ( preg_match( '#(^|/)\.\.?(/|$)#', $file ) ) {
+			throw new RuntimeException( "$list: {$entry['id']} is a helper entry with a segment . or .. in its path ({$file}); name the file as it is." );
+		}
+		if ( ! preg_match( '#^tests/integration/(?:support|bin)/[^/].*\.php$#D', $file ) ) {
+			throw new RuntimeException( "$list: {$entry['id']} is a helper entry outside tests/integration/support/ and tests/integration/bin/ ({$file}); only helpers there can be mutated." );
+		}
+		$path = realpath( $this->root . '/' . $file );
+		if ( false === $path || $path !== $this->root . '/' . $file ) {
+			throw new RuntimeException( "$list: {$entry['id']} names a helper that is missing or a link ({$file}); the path must be the file itself." );
+		}
+		return $path;
 	}
 
 	/**
@@ -333,6 +372,11 @@ final class AB_Mutation_Run {
 		$lines = explode( "\n", rtrim( $output ) );
 		return '    ' . implode( "\n    ", array_slice( $lines, -25 ) ) . "\n";
 	}
+}
+
+// Loaded by a test (MutationHelperEntriesTest) only the class is wanted.
+if ( realpath( (string) ( $_SERVER['SCRIPT_FILENAME'] ?? '' ) ) !== __FILE__ ) {
+	return;
 }
 
 $ab_root  = realpath( dirname( __DIR__, 2 ) );
