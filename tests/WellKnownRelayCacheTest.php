@@ -102,14 +102,138 @@ final class WellKnownRelayCacheTest extends TestCase {
 		self::assertSame( array(), $this->relayTtls() );
 	}
 
+	/* --------------------------------------------- identity in the cache key */
+
+	public function testAChangedRestPrefixIsFetchedAnewNotTakenFromTheCache(): void {
+		$first = AB_MCP_OAuth::well_known_answer( '/.well-known/oauth-protected-resource/staging/123/wp-json/alphabridge/v1/mcp' );
+		add_filter( 'rest_url_prefix', static fn(): string => 'api' );
+		$this->answerAsASite( 'api' );
+
+		$second = AB_MCP_OAuth::well_known_answer( '/.well-known/oauth-protected-resource/staging/123/api/alphabridge/v1/mcp' );
+
+		self::assertSame( 'https://example.test/staging/123/wp-json/alphabridge/v1/mcp', $first['document']['resource'] );
+		self::assertSame( 'document', $second['kind'] );
+		self::assertSame( 'https://example.test/staging/123/api/alphabridge/v1/mcp', $second['document']['resource'], 'Not the document kept for the old resource.' );
+		self::assertSame( 2, $this->fetches );
+	}
+
+	public function testAKeptDocumentIsCheckedAgainWhenRead(): void {
+		AB_MCP_OAuth::well_known_answer( self::AS_PATH );
+		foreach ( array_keys( $this->relayTtls() ) as $key ) {
+			$GLOBALS['ab_test_transients'][ $key ]['document']['issuer'] = 'https://example.test/staging/999';
+		}
+
+		self::assertSame( array( 'kind' => 'refused' ), AB_MCP_OAuth::well_known_answer( self::AS_PATH ) );
+		self::assertSame( 1, $this->fetches );
+	}
+
+	/* ------------------------------------------------ lock and site budget */
+
+	public function testWhileOneRequestFetchesAPathAnotherGetsA404WithoutFetching(): void {
+		$inner  = null;
+		$answer = $GLOBALS['ab_test_http_answer'];
+		$GLOBALS['ab_test_http_answer'] = function ( string $url, array $args ) use ( &$inner, $answer ) {
+			// A second request for the same path arrives while this fetch runs
+			// (once; without a lock it would fetch, and arrive again).
+			if ( null === $inner ) {
+				$inner = array();
+				$inner = AB_MCP_OAuth::well_known_answer( self::AS_PATH );
+			}
+			return $answer( $url, $args );
+		};
+
+		$outer = AB_MCP_OAuth::well_known_answer( self::AS_PATH );
+
+		self::assertSame( array( 'kind' => 'refused' ), $inner, 'The second request does not fetch the same path again.' );
+		self::assertSame( 'document', $outer['kind'] );
+		self::assertSame( 1, $this->fetches );
+		self::assertSame( array(), $this->locks(), 'The lock is gone after the fetch.' );
+	}
+
+	public function testALockIsReleasedAfterAFailedFetchToo(): void {
+		$GLOBALS['ab_test_http_answer'] = function () {
+			++$this->fetches;
+			return new \WP_Error( 'http_request_failed', 'cURL error 7: Failed to connect' );
+		};
+
+		AB_MCP_OAuth::well_known_answer( self::AS_PATH );
+
+		self::assertSame( array(), $this->locks() );
+	}
+
+	public function testAHeldLockMeansNoFetch(): void {
+		AB_MCP_OAuth::well_known_answer( self::AS_PATH );
+		$lock = 'ab_mcp_wk_lock_' . substr( (string) array_key_first( $this->relayTtls() ), strlen( 'ab_mcp_wk_' ) );
+		foreach ( array_keys( $this->relayTtls() ) as $key ) {
+			delete_transient( $key );
+		}
+		add_option( $lock, time() + 5 );
+
+		self::assertSame( array( 'kind' => 'refused' ), AB_MCP_OAuth::well_known_answer( self::AS_PATH ) );
+		self::assertSame( 1, $this->fetches, 'Another request holds the lock: no fetch.' );
+	}
+
+	public function testAnExpiredLockIsTakenOver(): void {
+		AB_MCP_OAuth::well_known_answer( self::AS_PATH );
+		$lock = 'ab_mcp_wk_lock_' . substr( (string) array_key_first( $this->relayTtls() ), strlen( 'ab_mcp_wk_' ) );
+		foreach ( array_keys( $this->relayTtls() ) as $key ) {
+			delete_transient( $key );
+		}
+		add_option( $lock, time() - 1 );
+
+		self::assertSame( 'document', AB_MCP_OAuth::well_known_answer( self::AS_PATH )['kind'], 'A request that died while fetching does not block the path.' );
+		self::assertSame( 2, $this->fetches );
+	}
+
+	public function testAThousandPathsCostAtMostThirtyFetches(): void {
+		for ( $i = 0; $i < 1000; $i++ ) {
+			AB_MCP_OAuth::well_known_answer( '/.well-known/oauth-authorization-server/p' . $i );
+		}
+
+		self::assertSame( 30, $this->fetches, 'At most 30 fetches in five minutes for the whole site.' );
+		self::assertCount( 30, $this->relayTtls(), 'Past the budget nothing is kept either.' );
+		self::assertSame( array(), $this->locks() );
+	}
+
+	public function testPastTheBudgetAKeptDocumentIsStillAnswered(): void {
+		AB_MCP_OAuth::well_known_answer( self::AS_PATH );
+		for ( $i = 0; $i < 40; $i++ ) {
+			AB_MCP_OAuth::well_known_answer( '/.well-known/oauth-authorization-server/p' . $i );
+		}
+
+		self::assertSame( 'document', AB_MCP_OAuth::well_known_answer( self::AS_PATH )['kind'] );
+		self::assertSame( 30, $this->fetches );
+	}
+
+	public function testTheBudgetStartsAgainAfterFiveMinutes(): void {
+		for ( $i = 0; $i < 31; $i++ ) {
+			AB_MCP_OAuth::well_known_answer( '/.well-known/oauth-authorization-server/p' . $i );
+		}
+		$GLOBALS['ab_test_transients']['ab_mcp_wk_budget']['since'] = time() - 301;
+
+		AB_MCP_OAuth::well_known_answer( '/.well-known/oauth-authorization-server/p31' );
+
+		self::assertSame( 31, $this->fetches );
+		self::assertSame( 1, $GLOBALS['ab_test_transients']['ab_mcp_wk_budget']['count'] );
+	}
+
+	/**
+	 * Lock options left behind.
+	 *
+	 * @return string[]
+	 */
+	private function locks(): array {
+		return array_values( array_filter( array_keys( $GLOBALS['ab_test_options'] ), static fn( $key ): bool => 0 === strpos( (string) $key, 'ab_mcp_wk_lock_' ) ) );
+	}
+
 	/** The other site answers as an AlphaBridge site whose home is the path before /.well-known/. */
-	private function answerAsASite(): void {
-		$GLOBALS['ab_test_http_answer'] = function ( string $url ) {
+	private function answerAsASite( string $rest_prefix = 'wp-json' ): void {
+		$GLOBALS['ab_test_http_answer'] = function ( string $url ) use ( $rest_prefix ) {
 			++$this->fetches;
 			preg_match( '#\A(https?://[^/]+)(.*)/\.well-known/(oauth-authorization-server|oauth-protected-resource)#', $url, $m );
 			$saved                        = array( $GLOBALS['ab_test_home_url'] ?? null, $GLOBALS['ab_test_rest_base'] ?? null );
 			$GLOBALS['ab_test_home_url']  = $m[1] . $m[2];
-			$GLOBALS['ab_test_rest_base'] = $m[1] . $m[2] . '/wp-json/';
+			$GLOBALS['ab_test_rest_base'] = $m[1] . $m[2] . '/' . $rest_prefix . '/';
 			$data                         = 'oauth-authorization-server' === $m[3] ? AB_MCP_OAuth::metadata() : AB_MCP_OAuth::resource_metadata();
 			if ( null === $saved[0] ) {
 				unset( $GLOBALS['ab_test_home_url'], $GLOBALS['ab_test_rest_base'] );
@@ -128,7 +252,7 @@ final class WellKnownRelayCacheTest extends TestCase {
 	private function relayTtls(): array {
 		return array_filter(
 			$GLOBALS['ab_test_transient_ttl'],
-			static fn( $key ): bool => 0 === strpos( (string) $key, 'ab_mcp_wk_' ),
+			static fn( $key ): bool => 0 === strpos( (string) $key, 'ab_mcp_wk_' ) && 'ab_mcp_wk_budget' !== $key,
 			ARRAY_FILTER_USE_KEY
 		);
 	}

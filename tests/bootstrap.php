@@ -155,6 +155,23 @@ function delete_option( $name ) {
 	return true;
 }
 
+if ( ! function_exists( 'add_option' ) ) {
+	/** As WordPress: an INSERT, false where the row is there already. */
+	function add_option( $name, $value = '', $deprecated = '', $autoload = null ) {
+		if ( array_key_exists( $name, $GLOBALS['ab_test_options'] ) ) {
+			return false;
+		}
+		$GLOBALS['ab_test_options'][ $name ]  = $value;
+		$GLOBALS['ab_test_autoload'][ $name ] = $autoload;
+		return true;
+	}
+}
+
+/** As WordPress: the REST prefix, wp-json unless the filter rest_url_prefix says otherwise. */
+function rest_get_url_prefix() {
+	return apply_filters( 'rest_url_prefix', 'wp-json' );
+}
+
 function get_transient( $key ) {
 	return array_key_exists( $key, $GLOBALS['ab_test_transients'] ) ? $GLOBALS['ab_test_transients'][ $key ] : false;
 }

@@ -114,6 +114,21 @@ function ab_well_known_test_answer( string $mode, string $url ) {
 		case 'foreign-endpoint':
 			$data['authorization_endpoint'] = 'https://elsewhere.example/authorize';
 			break;
+		case 'endpoint-dotdot':
+			$data['token_endpoint'] = $home . '/../../oauth/token';
+			break;
+		case 'endpoint-encoded-dotdot':
+			$data['token_endpoint'] = $home . '/%2e%2e/%2e%2e/oauth/token';
+			break;
+		case 'endpoint-dot-segment':
+			$data['registration_endpoint'] = $home . '/./wp-json/alphabridge/v1/oauth/register';
+			break;
+		case 'endpoint-empty-segment':
+			$data['authorization_endpoint'] = $home . '//?ab_mcp_oauth=authorize';
+			break;
+		case 'endpoint-fragment':
+			$data['token_endpoint'] = $home . '/wp-json/alphabridge/v1/oauth/token#x';
+			break;
 		case 'endpoint-outside-the-site':
 			$data['token_endpoint'] = substr( $home, 0, (int) strrpos( $home, '/' ) ) . '/wp-json/alphabridge/v1/oauth/token';
 			break;
