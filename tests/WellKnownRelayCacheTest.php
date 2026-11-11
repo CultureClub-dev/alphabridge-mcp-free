@@ -19,17 +19,28 @@ namespace AlphaBridge\Tests;
 use AB_MCP_OAuth;
 use PHPUnit\Framework\TestCase;
 
+require_once __DIR__ . '/support/wpdb-lock-fake.php';
+
 final class WellKnownRelayCacheTest extends TestCase {
 
 	private const AS_PATH = '/.well-known/oauth-authorization-server/staging/123';
 
 	/** @var int */
 	private int $fetches = 0;
+	/** @var mixed The $wpdb another test may have left. */
+	private $saved_wpdb = null;
 
 	protected function setUp(): void {
 		ab_test_reset();
-		$this->fetches = 0;
+		$this->fetches    = 0;
+		$this->saved_wpdb = $GLOBALS['wpdb'] ?? null;
+		// The lock is a row the database inserts atomically (support/wpdb-lock-fake.php).
+		$GLOBALS['wpdb'] = new \wpdb();
 		$this->answerAsASite();
+	}
+
+	protected function tearDown(): void {
+		$GLOBALS['wpdb'] = $this->saved_wpdb;
 	}
 
 	public function testAFetchedDocumentIsKeptFiveMinutes(): void {
@@ -167,7 +178,7 @@ final class WellKnownRelayCacheTest extends TestCase {
 		foreach ( array_keys( $this->relayTtls() ) as $key ) {
 			delete_transient( $key );
 		}
-		add_option( $lock, time() + 5 );
+		$GLOBALS['wpdb']->rows[ $lock ] = (string) ( time() + 5 );
 
 		self::assertSame( array( 'kind' => 'refused' ), AB_MCP_OAuth::well_known_answer( self::AS_PATH ) );
 		self::assertSame( 1, $this->fetches, 'Another request holds the lock: no fetch.' );
@@ -179,7 +190,7 @@ final class WellKnownRelayCacheTest extends TestCase {
 		foreach ( array_keys( $this->relayTtls() ) as $key ) {
 			delete_transient( $key );
 		}
-		add_option( $lock, time() - 1 );
+		$GLOBALS['wpdb']->rows[ $lock ] = (string) ( time() - 1 );
 
 		self::assertSame( 'document', AB_MCP_OAuth::well_known_answer( self::AS_PATH )['kind'], 'A request that died while fetching does not block the path.' );
 		self::assertSame( 2, $this->fetches );
@@ -217,13 +228,41 @@ final class WellKnownRelayCacheTest extends TestCase {
 		self::assertSame( 1, $GLOBALS['ab_test_transients']['ab_mcp_wk_budget']['count'] );
 	}
 
+	public function testTheLockIsOneAtomicInsertAndOneDelete(): void {
+		AB_MCP_OAuth::well_known_answer( self::AS_PATH );
+
+		self::assertCount( 1, $GLOBALS['wpdb']->queries, 'INSERT IGNORE, nothing that looks first and inserts after.' );
+		self::assertStringStartsWith( 'INSERT IGNORE INTO wp_options', $GLOBALS['wpdb']->queries[0] );
+		self::assertSame( array(), $this->locks() );
+		self::assertSame( array(), array_values( array_filter( array_keys( $GLOBALS['ab_test_options'] ), static fn( $key ): bool => 0 === strpos( (string) $key, 'ab_mcp_wk_lock_' ) ) ), 'Not through the options API.' );
+	}
+
+	public function testWithoutADatabaseAddOptionHoldsTheLock(): void {
+		$GLOBALS['wpdb'] = null;
+		$inner           = null;
+		$answer          = $GLOBALS['ab_test_http_answer'];
+		$GLOBALS['ab_test_http_answer'] = function ( string $url, array $args ) use ( &$inner, $answer ) {
+			if ( null === $inner ) {
+				$inner = array();
+				$inner = AB_MCP_OAuth::well_known_answer( self::AS_PATH );
+			}
+			return $answer( $url, $args );
+		};
+
+		self::assertSame( 'document', AB_MCP_OAuth::well_known_answer( self::AS_PATH )['kind'] );
+		self::assertSame( array( 'kind' => 'refused' ), $inner );
+		self::assertSame( 1, $this->fetches );
+		self::assertArrayNotHasKey( 'ab_mcp_wk_lock_' . substr( (string) array_key_first( $this->relayTtls() ), strlen( 'ab_mcp_wk_' ) ), $GLOBALS['ab_test_options'] );
+	}
+
 	/**
-	 * Lock options left behind.
+	 * Lock rows left behind.
 	 *
 	 * @return string[]
 	 */
 	private function locks(): array {
-		return array_values( array_filter( array_keys( $GLOBALS['ab_test_options'] ), static fn( $key ): bool => 0 === strpos( (string) $key, 'ab_mcp_wk_lock_' ) ) );
+		$rows = $GLOBALS['wpdb'] instanceof \wpdb ? array_keys( $GLOBALS['wpdb']->rows ) : array();
+		return array_values( array_filter( $rows, static fn( $key ): bool => 0 === strpos( (string) $key, 'ab_mcp_wk_lock_' ) ) );
 	}
 
 	/** The other site answers as an AlphaBridge site whose home is the path before /.well-known/. */

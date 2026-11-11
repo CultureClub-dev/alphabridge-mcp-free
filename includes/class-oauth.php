@@ -1614,8 +1614,10 @@ class AB_MCP_OAuth {
 	 * under the whole identity asked for (issuer, and resource), and checked
 	 * again when it is read. While one request fetches for a path, another
 	 * for the same path gets the 404 without fetching (a lock that expires
-	 * after the time limit); and the whole site fetches at most
-	 * WELL_KNOWN_MAX_FETCHES times in WELL_KNOWN_CACHE_TTL seconds.
+	 * after the time limit, see well_known_lock()); and the whole site
+	 * fetches at most WELL_KNOWN_MAX_FETCHES times in WELL_KNOWN_CACHE_TTL
+	 * seconds (counted in a transient: requests in the same instant may add
+	 * a few more).
 	 *
 	 * Limits, by design:
 	 * - The fetch goes to this site's own address and waits for the answer of
@@ -1706,29 +1708,56 @@ class AB_MCP_OAuth {
 			}
 		}
 		set_transient( $key, array( 'document' => $document ), self::WELL_KNOWN_CACHE_TTL );
-		delete_option( $lock );
+		self::well_known_unlock( $lock );
 		return $document;
 	}
 
 	/**
-	 * Take the lock for fetching one path: an option that add_option() adds
-	 * only where it does not exist yet, holding when it expires. An expired
-	 * lock (a request that died while fetching) is taken over once.
+	 * Take the lock for fetching one path: a row in the options table that
+	 * INSERT IGNORE adds only where it does not exist yet (atomic in the
+	 * database, unlike add_option(), which looks first and then inserts),
+	 * holding when it expires. An expired lock (a request that died while
+	 * fetching) is removed and taken once more. Without a database (the unit
+	 * tests) add_option() stands in. The row is never read through the
+	 * options API, so no option cache is involved.
 	 *
 	 * @param string $hash Identity of the path.
 	 * @return string The lock's option name, or '' while another request holds it.
 	 */
 	private static function well_known_lock( $hash ) {
+		global $wpdb;
 		$name  = 'ab_mcp_wk_lock_' . $hash;
 		$until = time() + self::WELL_KNOWN_TIMEOUT + 2;
-		if ( add_option( $name, $until, '', false ) ) {
+		if ( ! ( $wpdb instanceof wpdb ) ) {
+			if ( add_option( $name, $until, '', false ) ) {
+				return $name;
+			}
+			if ( (int) get_option( $name, 0 ) >= time() ) {
+				return '';
+			}
+			delete_option( $name );
+			return add_option( $name, $until, '', false ) ? $name : '';
+		}
+		$insert = $wpdb->prepare( "INSERT IGNORE INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, 'no')", $name, (string) $until ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from $wpdb.
+		if ( 1 === (int) $wpdb->query( $insert ) ) { // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery -- prepared above; an atomic insert is the point.
 			return $name;
 		}
-		if ( (int) get_option( $name, 0 ) >= time() ) {
-			return '';
+		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name = %s AND option_value < %d", $name, time() ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery -- table name from $wpdb.
+		return 1 === (int) $wpdb->query( $insert ) ? $name : ''; // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery -- prepared above.
+	}
+
+	/**
+	 * Give the lock of well_known_lock() back.
+	 *
+	 * @param string $name The lock's option name.
+	 */
+	private static function well_known_unlock( $name ) {
+		global $wpdb;
+		if ( $wpdb instanceof wpdb ) {
+			$wpdb->delete( $wpdb->options, array( 'option_name' => $name ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- the row of well_known_lock().
+			return;
 		}
 		delete_option( $name );
-		return add_option( $name, $until, '', false ) ? $name : '';
 	}
 
 	/**
