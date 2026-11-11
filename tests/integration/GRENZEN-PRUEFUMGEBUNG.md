@@ -132,8 +132,10 @@ die neue Hilfe macht es anders. Fundstellen am Stand von Free `9be07f7`. Testcod
   Klasse, etwa eine globale Closure, die mit `Closure::bind( …, null, Eigentümer::class )` an die Klasse gebunden wird
   und die Naht in einer der zwei erlaubten Formen schreibt oder liest, ordnet der Wächter diese Zeilen der Nahtklasse zu
   und meldet nichts.
-- **Warum kein Normalfall:** Die Nahtklassen der heiklen Zweige stehen je in einer eigenen Datei, eine Klasse je Datei
-  wie im übrigen Plugin; Code nach der Klasse in derselben Datei gibt es dort nicht, und die Codex-Runde jedes Zweigs
-  prüft den Durchsetzungsort. Nach der festen Endregel (Entscheid der Steuerung zu Behebung 2) öffnet ein Befund
-  ausserhalb des Normalfalls keine weitere Runde.
+- **Warum kein Normalfall:** Der ausgelieferte Baum enthält heute keine Naht; die Zweige 2–9 bringen sie. Code
+  ausserhalb jeder Klasse, der nach einer Nahtklasse in derselben Datei steht und die Klasse per `Closure::bind`
+  betritt, ist kein Muster des Plugins. In den Testdateien von heute folgt nach der Beispielnahtklasse kein Code.
+  Vorgabe für die Zweige 2–9: nach einer Nahtklasse kein Code ausserhalb einer Klasse in derselben Datei; die
+  Codex-Runde jedes Zweigs prüft den Durchsetzungsort. Nach der festen Endregel (Entscheid der Steuerung zu Behebung 2)
+  öffnet ein Befund ausserhalb des Normalfalls keine weitere Runde.
 - **Was die neue Hilfe tut:** Nichts darüber hinaus.
