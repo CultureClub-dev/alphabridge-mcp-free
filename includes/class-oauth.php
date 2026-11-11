@@ -160,6 +160,13 @@ class AB_MCP_OAuth {
 	const MARK_AUTHORIZE      = 'authorize';
 
 	/**
+	 * The longest path after a well-known name that is redirected to another
+	 * site on the same domain (well_known_answer()). Real issuer and resource
+	 * paths are far shorter; anything longer gets no answer.
+	 */
+	const WELL_KNOWN_MAX_SUFFIX = 512;
+
+	/**
 	 * Address ranges a metadata document is never fetched from: this machine,
 	 * private and shared networks, link-local (cloud metadata services live at
 	 * 169.254.169.254), documentation, benchmarking, multicast and reserved
@@ -1473,27 +1480,152 @@ class AB_MCP_OAuth {
 	 * Serve /.well-known/oauth-authorization-server and
 	 * /.well-known/oauth-protected-resource[/…] as JSON. These live at the site
 	 * root, outside the REST prefix, so they are intercepted on template_redirect
-	 * (before WordPress would render a 404 for the unknown URL).
+	 * (before WordPress would render a 404 for the unknown URL). What is
+	 * answered is decided in well_known_answer(); this only carries it out.
 	 */
 	public static function serve_well_known() {
-		if ( ! self::enabled() || ! isset( $_SERVER['REQUEST_URI'] ) ) {
+		if ( ! isset( $_SERVER['REQUEST_URI'] ) ) {
 			return;
 		}
-		$path = (string) wp_parse_url( (string) $_SERVER['REQUEST_URI'], PHP_URL_PATH ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- path is only matched, never echoed.
+		$answer = self::well_known_answer( (string) $_SERVER['REQUEST_URI'] ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- path is only matched; a redirect target is rebuilt from validated segments.
+
+		if ( 'document' === $answer['kind'] ) {
+			self::send_json( $answer['document'] );
+		}
+		if ( 'redirect' === $answer['kind'] ) {
+			// Public and the same for every visitor, like the documents; but
+			// it names another site's address, so no cache may keep it.
+			header( 'Cache-Control: no-store' );
+			header( 'Access-Control-Allow-Origin: *' );
+			if ( wp_redirect( $answer['location'], 307, 'AlphaBridge MCP' ) ) { // phpcs:ignore WordPress.Security.SafeRedirect.wp_redirect_wp_redirect -- same scheme and host as home_url(), path from validated segments.
+				exit;
+			}
+		}
+		if ( 'none' !== $answer['kind'] ) {
+			// Refused, or a redirect a filter emptied: WordPress answers with
+			// its 404. Not with a page it guesses from the last segment
+			// (redirect_guess_404_permalink()): a client would read that HTML
+			// as the document and stop instead of trying its next address.
+			add_filter( 'do_redirect_guess_404_permalink', '__return_false' );
+		}
+	}
+
+	/**
+	 * The one place that decides what this site answers at a well-known
+	 * address of its OAuth server. RFC 8414 and RFC 9728 put the path of the
+	 * issuer or the resource AFTER the well-known name
+	 * (/.well-known/oauth-authorization-server/staging/123), at the root of
+	 * the domain. On a domain with this site at the root and another
+	 * WordPress in a subfolder (a staging copy), such requests reach this
+	 * site although they are about the other one. Up to 4.10.0 this site
+	 * answered them with its own metadata, and a client signed in at the
+	 * wrong site.
+	 *
+	 * - The path after the name is this site's own (none, its home path, or
+	 *   the path of its MCP resource; a trailing slash does not count):
+	 *   the document, as before.
+	 * - It is another site's: a 307 to where that site answers itself, on
+	 *   this site's scheme and host. For the server metadata that is
+	 *   <path>/.well-known/oauth-authorization-server: every AlphaBridge site
+	 *   serves it under its home (for another server there it is no worse
+	 *   than this site's own metadata were). For the resource metadata the other site's
+	 *   home is not in the request; it is taken as what precedes the MCP
+	 *   route (/<rest prefix>/alphabridge/v1/mcp), and the target is the
+	 *   address that site names in its own 401 (resource_metadata_url()).
+	 * - Anything else (a resource path without the MCP route, a path that is
+	 *   not a clean path, a target equal to the request): no answer. Never a
+	 *   protocol-relative or foreign-host target.
+	 *
+	 * @param string $request_uri The request URI as received.
+	 * @return array{kind:string,document?:array,location?:string} kind
+	 *         'document' (with document), 'redirect' (with location),
+	 *         'refused' (a well-known name of ours, no answer) or 'none'.
+	 */
+	public static function well_known_answer( $request_uri ) {
+		$none = array( 'kind' => 'none' );
+		if ( ! self::enabled() ) {
+			return $none;
+		}
+		$path = (string) wp_parse_url( (string) $request_uri, PHP_URL_PATH );
 
 		// When WordPress lives in a subdirectory, .well-known sits under the
 		// HOME path — strip that prefix before matching.
 		$home_path = (string) wp_parse_url( home_url(), PHP_URL_PATH );
-		if ( '' !== $home_path && '/' !== $home_path && 0 === strpos( $path, $home_path ) ) {
-			$path = substr( $path, strlen( $home_path ) );
+		$local     = $path;
+		if ( '' !== $home_path && '/' !== $home_path && 0 === strpos( $local, $home_path ) ) {
+			$local = substr( $local, strlen( $home_path ) );
 		}
 
-		if ( preg_match( '#^/\.well-known/oauth-authorization-server(/|$)#', $path ) ) {
-			self::send_json( self::metadata() );
+		if ( ! preg_match( '#\A/\.well-known/(oauth-authorization-server|oauth-protected-resource)(/.*)?\z#s', $local, $m ) ) {
+			return $none;
 		}
-		if ( preg_match( '#^/\.well-known/oauth-protected-resource(/|$)#', $path ) ) {
-			self::send_json( self::resource_metadata() );
+		$name   = $m[1];
+		$suffix = rtrim( isset( $m[2] ) ? $m[2] : '', '/' );
+
+		$resource_path = rtrim( (string) wp_parse_url( self::resource(), PHP_URL_PATH ), '/' );
+		if ( in_array( $suffix, array( '', rtrim( $home_path, '/' ), $resource_path ), true ) ) {
+			return array(
+				'kind'     => 'document',
+				'document' => 'oauth-authorization-server' === $name ? self::metadata() : self::resource_metadata(),
+			);
 		}
+
+		$target = self::well_known_target( $name, $suffix );
+		if ( '' === $target || $target === $path ) {
+			return array( 'kind' => 'refused' );
+		}
+		$home = wp_parse_url( home_url() );
+		if ( ! is_array( $home ) || empty( $home['scheme'] ) || empty( $home['host'] ) ) {
+			return array( 'kind' => 'refused' );
+		}
+		return array(
+			'kind'     => 'redirect',
+			'location' => $home['scheme'] . '://' . $home['host'] . ( isset( $home['port'] ) ? ':' . $home['port'] : '' ) . $target,
+		);
+	}
+
+	/**
+	 * Where another site on this domain answers a well-known document, as a
+	 * path from the domain root; '' when that cannot be told or the path is
+	 * not clean. See well_known_answer().
+	 *
+	 * @param string $name   oauth-authorization-server or oauth-protected-resource.
+	 * @param string $suffix The path after the name, without trailing slash, not this site's own.
+	 * @return string
+	 */
+	private static function well_known_target( $name, $suffix ) {
+		if ( strlen( $suffix ) > self::WELL_KNOWN_MAX_SUFFIX ) {
+			return '';
+		}
+		// Segments of the characters wp_sanitize_redirect() keeps, without the
+		// ones that end a path (? #) or are not allowed in it ([ ]); no empty
+		// segment, so never // (a protocol-relative address).
+		if ( ! preg_match( '#\A(?:/[A-Za-z0-9\-~+_.=&;,:!*()@%]+)+\z#', $suffix ) ) {
+			return '';
+		}
+		$segments = explode( '/', substr( $suffix, 1 ) );
+		foreach ( $segments as $i => $segment ) {
+			if ( preg_match( '/%(?![0-9A-Fa-f]{2})/', $segment ) ) {
+				return '';
+			}
+			$decoded = rawurldecode( $segment );
+			if ( '.' === $decoded || '..' === $decoded || preg_match( '#[\x00-\x1F\x7F/\\\\]#', $decoded )
+				|| ( 0 === $i && '.well-known' === strtolower( $decoded ) ) ) {
+				return '';
+			}
+		}
+
+		if ( 'oauth-authorization-server' === $name ) {
+			return $suffix . '/.well-known/oauth-authorization-server';
+		}
+
+		$prefix = function_exists( 'rest_get_url_prefix' ) ? trim( (string) rest_get_url_prefix(), '/' ) : 'wp-json';
+		$route  = defined( 'AB_MCP_REST_ROUTE' ) ? AB_MCP_REST_ROUTE : '/mcp';
+		$tail   = '/' . $prefix . '/' . self::ns() . $route;
+		if ( strlen( $suffix ) < strlen( $tail ) || substr( $suffix, -strlen( $tail ) ) !== $tail ) {
+			return '';
+		}
+		return substr( $suffix, 0, -strlen( $tail ) ) . '/.well-known/oauth-protected-resource' . $suffix;
 	}
 
 	/**
