@@ -15,6 +15,7 @@ declare( strict_types = 1 );
 
 namespace AlphaBridge\Tests;
 
+use AB_MCP_IT_Child;
 use AB_MCP_IT_Process;
 use InvalidArgumentException;
 use PHPUnit\Framework\TestCase;
@@ -189,6 +190,13 @@ final class TestAbortTest extends TestCase {
 	}
 
 	public function testAResultLineFollowedByAnotherStatusIsNoPass(): void {
+		try {
+			AB_MCP_IT_Process::calls( null, $this->plan( array(), array( array( 'call' => 'ab_it_probe_exit_in_destructor', 'args' => array( 3 ) ) ) ) );
+			self::fail( 'A run with status 3 counted as a pass.' );
+		} catch ( RuntimeException $e ) {
+			self::assertStringContainsString( 'exit 3', $e->getMessage() );
+			self::assertStringContainsString( AB_MCP_IT_Child::RESULT_LINE, $e->getMessage(), 'The result line was there: only the status makes it red.' );
+		}
 		$this->expectException( RuntimeException::class );
 		$this->expectExceptionMessage( 'exit 3' );
 		AB_MCP_IT_Process::calls( null, $this->plan( array(), array( array( 'call' => 'ab_it_probe_exit_code_in_shutdown', 'args' => array( 3 ) ) ) ) );

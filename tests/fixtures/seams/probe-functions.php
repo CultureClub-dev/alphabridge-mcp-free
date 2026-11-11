@@ -172,3 +172,30 @@ function ab_it_probe_background_sleep( $file, $seconds ) {
 	exec( 'sleep ' . (int) $seconds . ' > /dev/null 2>&1 & echo $! > ' . escapeshellarg( $file ) );
 	return is_file( $file );
 }
+
+/**
+ * An object whose destructor ends the process with a status of its own:
+ * PHP destroys it after the shutdown functions, so after the result line
+ * of the child (the status clause of AB_MCP_IT_Process::calls()).
+ *
+ * @param int $code Status.
+ * @return bool
+ */
+function ab_it_probe_exit_in_destructor( $code ) {
+	$GLOBALS['ab_it_probe_late'] = new class( (int) $code ) {
+		/** @var int Status. */
+		private $code;
+
+		/**
+		 * @param int $code Status.
+		 */
+		public function __construct( $code ) {
+			$this->code = $code;
+		}
+
+		public function __destruct() {
+			exit( $this->code );
+		}
+	};
+	return true;
+}

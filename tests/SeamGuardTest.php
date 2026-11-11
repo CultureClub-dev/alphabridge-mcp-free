@@ -109,6 +109,8 @@ final class SeamGuardTest extends TestCase {
 			'arguments'               => array( array( 'with-args.php' ), $other ),
 			'variable class name'     => array( array( 'variable-new.php' ), $other ),
 			'two classes'             => array( array( 'two-classes.php' ), 'more than one class: Seam_Calls, Seam_Other_Calls' ),
+			'anonymous class'         => array( array( 'anonymous.php' ), $other ),
+			'reset in an expression'  => array( array( 'reset-expression.php' ), '$old = self::$calls = null;' ),
 			'outside'                 => array( array( 'outside-owner.php', 'outside-writer.php' ), 'is reached outside its class' ),
 			'variable owner'          => array( array( 'variable-owner.php' ), 'through a variable class' ),
 			'tag on a method'         => array( array( 'tag-on-method.php' ), 'stands on no property' ),

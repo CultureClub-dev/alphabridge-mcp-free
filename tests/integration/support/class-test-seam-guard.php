@@ -219,8 +219,10 @@ final class AB_MCP_Test_Seam_Guard {
 		$before = self::prev( $tokens, $self );
 		$after  = self::rhs( $tokens, $var );
 		if ( null !== $before && is_array( $tokens[ $before ] ) && T_RETURN === $tokens[ $before ][0] ) {
-			$start = self::prev( $tokens, $before );
-			if ( null !== $start && in_array( $tokens[ $start ], self::STATEMENT_START, true ) && 6 === count( $after ) && '??' === $after[0] && 'new' === strtolower( $after[1] ) && preg_match( '/^\\\\?[A-Za-z_][A-Za-z0-9_\\\\]*$/', $after[2] ) && array( '(', ')', ';' ) === array_slice( $after, 3 ) ) {
+			// return always begins a statement of its own; the shape after it
+			// is all there is to check (an anonymous class has the six tokens
+			// as well: new class { }).
+			if ( 6 === count( $after ) && '??' === $after[0] && 'new' === strtolower( $after[1] ) && preg_match( '/^\\\\?[A-Za-z_][A-Za-z0-9_\\\\]*$/', $after[2] ) && array( '(', ')', ';' ) === array_slice( $after, 3 ) ) {
 				return ltrim( $after[2], '\\' );
 			}
 			return null;
