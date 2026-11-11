@@ -166,7 +166,12 @@
     },
     "challenge": {
         "root": {
-            "www-authenticate": "Bearer resource_metadata=\"https://example.test/.well-known/oauth-protected-resource/wp-json/alphabridge/v1/mcp\"",
+            "status": 401,
+            "headers": {
+                "cache-control": "no-store",
+                "referrer-policy": "no-referrer",
+                "www-authenticate": "Bearer resource_metadata=\"https://example.test/.well-known/oauth-protected-resource/wp-json/alphabridge/v1/mcp\""
+            },
             "answer": {
                 "status": 200,
                 "headers": {
@@ -178,7 +183,12 @@
             }
         },
         "root, plain permalinks": {
-            "www-authenticate": "Bearer resource_metadata=\"https://example.test/.well-known/oauth-protected-resource/\"",
+            "status": 401,
+            "headers": {
+                "cache-control": "no-store",
+                "referrer-policy": "no-referrer",
+                "www-authenticate": "Bearer resource_metadata=\"https://example.test/.well-known/oauth-protected-resource/\""
+            },
             "answer": {
                 "status": 200,
                 "headers": {
@@ -190,7 +200,12 @@
             }
         },
         "subfolder": {
-            "www-authenticate": "Bearer resource_metadata=\"https://example.test/staging/123/.well-known/oauth-protected-resource/staging/123/wp-json/alphabridge/v1/mcp\"",
+            "status": 401,
+            "headers": {
+                "cache-control": "no-store",
+                "referrer-policy": "no-referrer",
+                "www-authenticate": "Bearer resource_metadata=\"https://example.test/staging/123/.well-known/oauth-protected-resource/staging/123/wp-json/alphabridge/v1/mcp\""
+            },
             "answer": {
                 "status": 200,
                 "headers": {
@@ -202,7 +217,12 @@
             }
         },
         "subfolder, plain permalinks": {
-            "www-authenticate": "Bearer resource_metadata=\"https://example.test/staging/123/.well-known/oauth-protected-resource/staging/123/\"",
+            "status": 401,
+            "headers": {
+                "cache-control": "no-store",
+                "referrer-policy": "no-referrer",
+                "www-authenticate": "Bearer resource_metadata=\"https://example.test/staging/123/.well-known/oauth-protected-resource/staging/123/\""
+            },
             "answer": {
                 "status": 200,
                 "headers": {

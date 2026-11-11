@@ -111,7 +111,7 @@ function ab_test_reset(): void {
 	$GLOBALS['ab_test_logged_in']   = false;
 	$GLOBALS['ab_test_routes']      = array();
 	$GLOBALS['ab_test_i18n']        = array();
-	unset( $GLOBALS['ab_test_home_url'], $GLOBALS['ab_test_rest_base'], $GLOBALS['ab_test_redirect_status'], $GLOBALS['ab_test_status'] );
+	unset( $GLOBALS['ab_test_home_url'], $GLOBALS['ab_test_rest_base'], $GLOBALS['ab_test_redirect_status'], $GLOBALS['ab_test_status'], $GLOBALS['ab_test_home_path'] );
 }
 
 function get_option( $name, $default = false ) {
@@ -165,6 +165,14 @@ if ( ! function_exists( 'add_option' ) ) {
 		$GLOBALS['ab_test_autoload'][ $name ] = $autoload;
 		return true;
 	}
+}
+
+/**
+ * The site's home directory: ABSPATH, or what a test sets in
+ * $GLOBALS['ab_test_home_path'] (a web directory with other sites under it).
+ */
+function get_home_path() {
+	return $GLOBALS['ab_test_home_path'] ?? ABSPATH;
 }
 
 /** As WordPress: the REST prefix, wp-json unless the filter rest_url_prefix says otherwise. */

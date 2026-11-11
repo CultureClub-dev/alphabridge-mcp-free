@@ -20,6 +20,7 @@ use AB_MCP_OAuth;
 use PHPUnit\Framework\TestCase;
 
 require_once __DIR__ . '/support/wpdb-lock-fake.php';
+require_once __DIR__ . '/support/well-known-docroot.php';
 
 final class WellKnownRelayCacheTest extends TestCase {
 
@@ -29,6 +30,8 @@ final class WellKnownRelayCacheTest extends TestCase {
 	private int $fetches = 0;
 	/** @var mixed The $wpdb another test may have left. */
 	private $saved_wpdb = null;
+	/** The web directory on disk, with a WordPress under /staging/123 and /staging/456. */
+	private string $docroot = '';
 
 	protected function setUp(): void {
 		ab_test_reset();
@@ -36,11 +39,14 @@ final class WellKnownRelayCacheTest extends TestCase {
 		$this->saved_wpdb = $GLOBALS['wpdb'] ?? null;
 		// The lock is a row the database inserts atomically (support/wpdb-lock-fake.php).
 		$GLOBALS['wpdb'] = new \wpdb();
+		$this->docroot   = ab_test_wk_dir( array( '/staging/123', '/staging/456' ) );
+		$GLOBALS['ab_test_home_path'] = $this->docroot . '/';
 		$this->answerAsASite();
 	}
 
 	protected function tearDown(): void {
 		$GLOBALS['wpdb'] = $this->saved_wpdb;
+		ab_test_wk_remove( $this->docroot );
 	}
 
 	public function testAFetchedDocumentIsKeptFiveMinutes(): void {
@@ -196,38 +202,6 @@ final class WellKnownRelayCacheTest extends TestCase {
 		self::assertSame( 2, $this->fetches );
 	}
 
-	public function testAThousandPathsCostAtMostThirtyFetches(): void {
-		for ( $i = 0; $i < 1000; $i++ ) {
-			AB_MCP_OAuth::well_known_answer( '/.well-known/oauth-authorization-server/p' . $i );
-		}
-
-		self::assertSame( 30, $this->fetches, 'At most 30 fetches in five minutes for the whole site.' );
-		self::assertCount( 30, $this->relayTtls(), 'Past the budget nothing is kept either.' );
-		self::assertSame( array(), $this->locks() );
-	}
-
-	public function testPastTheBudgetAKeptDocumentIsStillAnswered(): void {
-		AB_MCP_OAuth::well_known_answer( self::AS_PATH );
-		for ( $i = 0; $i < 40; $i++ ) {
-			AB_MCP_OAuth::well_known_answer( '/.well-known/oauth-authorization-server/p' . $i );
-		}
-
-		self::assertSame( 'document', AB_MCP_OAuth::well_known_answer( self::AS_PATH )['kind'] );
-		self::assertSame( 30, $this->fetches );
-	}
-
-	public function testTheBudgetStartsAgainAfterFiveMinutes(): void {
-		for ( $i = 0; $i < 31; $i++ ) {
-			AB_MCP_OAuth::well_known_answer( '/.well-known/oauth-authorization-server/p' . $i );
-		}
-		$GLOBALS['ab_test_transients']['ab_mcp_wk_budget']['since'] = time() - 301;
-
-		AB_MCP_OAuth::well_known_answer( '/.well-known/oauth-authorization-server/p31' );
-
-		self::assertSame( 31, $this->fetches );
-		self::assertSame( 1, $GLOBALS['ab_test_transients']['ab_mcp_wk_budget']['count'] );
-	}
-
 	public function testTheLockIsOneAtomicInsertAndOneDelete(): void {
 		AB_MCP_OAuth::well_known_answer( self::AS_PATH );
 
@@ -253,6 +227,124 @@ final class WellKnownRelayCacheTest extends TestCase {
 		self::assertSame( array( 'kind' => 'refused' ), $inner );
 		self::assertSame( 1, $this->fetches );
 		self::assertArrayNotHasKey( 'ab_mcp_wk_lock_' . substr( (string) array_key_first( $this->relayTtls() ), strlen( 'ab_mcp_wk_' ) ), $GLOBALS['ab_test_options'] );
+	}
+
+	/* ------------------------------------------------------ WordPress on disk */
+
+	public function testAThousandPathsWithoutAWordPressOnDiskFetchNothing(): void {
+		for ( $i = 0; $i < 1000; $i++ ) {
+			self::assertSame( array( 'kind' => 'refused' ), AB_MCP_OAuth::well_known_answer( '/.well-known/oauth-authorization-server/p' . $i ) );
+		}
+
+		self::assertSame( 0, $this->fetches, 'Random paths make the site fetch nothing.' );
+		self::assertSame( array(), $this->relayTtls(), 'Nor keep anything: not counted as a failed fetch.' );
+		self::assertSame( array(), $GLOBALS['wpdb']->queries, 'Nor touch the lock.' );
+	}
+
+	public function testADirectoryWithoutWpLoadIsNoWordPress(): void {
+		mkdir( $this->docroot . '/empty' );
+
+		self::assertSame( array( 'kind' => 'refused' ), AB_MCP_OAuth::well_known_answer( '/.well-known/oauth-authorization-server/empty' ) );
+		self::assertSame( 0, $this->fetches );
+	}
+
+	public function testASymlinkOutOfTheWebDirectoryIsNotRelayed(): void {
+		$outside = ab_test_wk_dir( array( '/site' ) );
+		symlink( $outside . '/site', $this->docroot . '/elsewhere' );
+
+		self::assertSame( array( 'kind' => 'refused' ), AB_MCP_OAuth::well_known_answer( '/.well-known/oauth-authorization-server/elsewhere' ) );
+		self::assertSame( 0, $this->fetches, 'A site whose files are outside the web directory is not relayed.' );
+		ab_test_wk_remove( $outside );
+	}
+
+	public function testASymlinkInsideTheWebDirectoryIsRelayed(): void {
+		symlink( $this->docroot . '/staging/123', $this->docroot . '/alias' );
+
+		$answer = AB_MCP_OAuth::well_known_answer( '/.well-known/oauth-authorization-server/alias' );
+
+		self::assertSame( 'https://example.test/alias', $answer['document']['issuer'] ?? null );
+		self::assertSame( 1, $this->fetches );
+	}
+
+	public function testAPathOutOfTheWebDirectoryIsNeverLookedFor(): void {
+		$sibling = ab_test_wk_dir( array( '/x' ) );
+		$name    = basename( $sibling );
+
+		foreach ( array( '/../' . $name . '/x', '/%2e%2e/' . $name . '/x', '/..%2f' . $name . '/x' ) as $path ) {
+			self::assertSame( array( 'kind' => 'refused' ), AB_MCP_OAuth::well_known_answer( '/.well-known/oauth-authorization-server' . $path ), $path );
+		}
+		self::assertSame( 0, $this->fetches );
+		ab_test_wk_remove( $sibling );
+	}
+
+	public function testOnASubfolderSiteTheWebDirectoryIsItsHomeDirectoryLessItsHomePath(): void {
+		ab_test_wk_site( $this->docroot, '/other' );
+		$GLOBALS['ab_test_home_url']  = 'https://example.test/staging/123';
+		$GLOBALS['ab_test_rest_base'] = 'https://example.test/staging/123/wp-json/';
+		$GLOBALS['ab_test_home_path'] = $this->docroot . '/staging/123/';
+
+		$answer = AB_MCP_OAuth::well_known_answer( '/staging/123/.well-known/oauth-authorization-server/other' );
+
+		self::assertSame( 'https://example.test/other', $answer['document']['issuer'] ?? null );
+	}
+
+	public function testAHomeDirectoryThatDoesNotEndInTheHomePathRelaysNothing(): void {
+		ab_test_wk_site( $this->docroot, '/other' );
+		$GLOBALS['ab_test_home_url']  = 'https://example.test/staging/123';
+		$GLOBALS['ab_test_rest_base'] = 'https://example.test/staging/123/wp-json/';
+		$GLOBALS['ab_test_home_path'] = $this->docroot . '/somewhere-else/';
+
+		self::assertSame( array( 'kind' => 'refused' ), AB_MCP_OAuth::well_known_answer( '/staging/123/.well-known/oauth-authorization-server/other' ) );
+		self::assertSame( 0, $this->fetches );
+	}
+
+	/**
+	 * open_basedir hides the web directory, or a site in it: no relay, and no
+	 * warning in the answer. Run in a PHP process of its own, since
+	 * open_basedir cannot be widened again.
+	 *
+	 * @return array<string,array{0:bool,1:string}> web directory visible, expected kind
+	 */
+	public static function openBasedirCases(): array {
+		return array(
+			'web directory outside open_basedir' => array( false, 'refused' ),
+			'web directory inside open_basedir'  => array( true, 'document' ),
+		);
+	}
+
+	#[\PHPUnit\Framework\Attributes\DataProvider( 'openBasedirCases' )]
+	public function testOpenBasedirHidingTheSiteMeansNoRelayAndNoWarning( bool $visible, string $kind ): void {
+		$allowed = dirname( __DIR__ ) . ( $visible ? PATH_SEPARATOR . realpath( $this->docroot ) : '' );
+		$pipes   = array();
+		$proc    = proc_open(
+			array( PHP_BINARY, '-d', 'open_basedir=' . $allowed, '-d', 'display_errors=stderr', '-d', 'error_reporting=-1', __DIR__ . '/support/well-known-disk-probe.php', $this->docroot ),
+			array( 1 => array( 'pipe', 'w' ), 2 => array( 'pipe', 'w' ) ),
+			$pipes
+		);
+		$out  = (string) stream_get_contents( $pipes[1] );
+		$err  = (string) stream_get_contents( $pipes[2] );
+		fclose( $pipes[1] );
+		fclose( $pipes[2] );
+		proc_close( $proc );
+
+		$result = json_decode( $out, true );
+		self::assertIsArray( $result, $out . $err );
+		self::assertSame( $kind, $result['kind'] );
+		self::assertSame( $visible ? 1 : 0, $result['fetches'] );
+		self::assertSame( '', $err, 'No warning: it would end up in front of the JSON.' );
+	}
+
+	/* ------------------------------------------------------- database errors */
+
+	public function testWhereTheDatabaseRefusesTheLockTheDocumentIsFetchedWithoutIt(): void {
+		$GLOBALS['wpdb']->fail = true;
+
+		$answer = AB_MCP_OAuth::well_known_answer( self::AS_PATH );
+
+		self::assertSame( 'document', $answer['kind'], 'Not a 404 because the lock could not be written.' );
+		self::assertSame( 1, $this->fetches );
+		self::assertCount( 1, $GLOBALS['wpdb']->queries, 'One try, no takeover of a lock that is not there.' );
+		self::assertFalse( $GLOBALS['wpdb']->suppressed, 'The error display is back as it was.' );
 	}
 
 	/**

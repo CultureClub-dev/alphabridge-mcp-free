@@ -10,6 +10,9 @@
  * - X-AB-Test-Rest:  its REST base (default <home>/wp-json/; with plain
  *                    permalinks <home>/?rest_route=/);
  * - X-AB-Test-OAuth: "off" switches OAuth sign-in off;
+ * - X-AB-Test-Docroot: the web directory on disk the site lies in (its home
+ *                    directory is that plus its home path); the plugin
+ *                    fetches only for paths with a wp-load.php under it;
  * - X-AB-Test-Fetch: how the other site on this host answers when the plugin
  *                    fetches a document from it (wp_safe_remote_get()):
  *                    "site" (default) as an AlphaBridge site whose home is the
@@ -39,6 +42,9 @@ if ( isset( $_SERVER['HTTP_X_AB_TEST_OAUTH'] ) && 'off' === $_SERVER['HTTP_X_AB_
 	AB_MCP_Settings::set( 'oauth_enabled', false );
 }
 $ab_mode = isset( $_SERVER['HTTP_X_AB_TEST_FETCH'] ) ? (string) $_SERVER['HTTP_X_AB_TEST_FETCH'] : 'site';
+if ( isset( $_SERVER['HTTP_X_AB_TEST_DOCROOT'] ) ) {
+	$GLOBALS['ab_test_home_path'] = rtrim( (string) $_SERVER['HTTP_X_AB_TEST_DOCROOT'], '/' ) . rtrim( (string) parse_url( $ab_home, PHP_URL_PATH ), '/' ) . '/';
+}
 
 /**
  * The document an AlphaBridge site with this home serves under this

@@ -3,7 +3,8 @@
  * Records what AlphaBridge 4.10.0 answered at its own well-known addresses,
  * for WellKnownHttpTest (tests/fixtures/well-known-4.10.0.json): status,
  * Content-Type, Cache-Control, CORS and body of each own path, and per site
- * the WWW-Authenticate of the 401 with the answer at the address it names.
+ * the 401 of the MCP endpoint (status, WWW-Authenticate, Cache-Control,
+ * Referrer-Policy) with the answer at the address it names.
  *
  * Run it only with the 4.10.0 code in place, from the repository root:
  *
@@ -23,6 +24,7 @@ $root = dirname( __DIR__, 2 );
 require $root . '/vendor/autoload.php';
 require $root . '/tests/bootstrap.php';
 require $root . '/tests/WellKnownHttpTest.php';
+require_once $root . '/tests/support/well-known-challenge.php';
 
 if ( method_exists( 'AB_MCP_OAuth', 'well_known_answer' ) ) {
 	fwrite( STDERR, "includes/class-oauth.php is not the code of 4.10.0; see the head of this file.\n" );
@@ -84,18 +86,13 @@ foreach ( AlphaBridge\Tests\WellKnownHttpTest::ownPaths() as $label => $case ) {
 	$out['own'][ $label ] = $request( $case[0], $case[1], $case[2] );
 }
 foreach ( AlphaBridge\Tests\WellKnownHttpTest::sites() as $label => $case ) {
-	ab_test_reset();
-	$GLOBALS['ab_test_home_url']  = $case[0];
-	$GLOBALS['ab_test_rest_base'] = $case[1] ?? $case[0] . '/wp-json/';
-	$rest_request                 = new WP_REST_Request();
-	$rest_request->set_route( '/alphabridge/v1/mcp' );
-	$response  = ( new AB_MCP_REST_Controller( new AB_MCP_Tool_Registry() ) )->add_security_headers( new WP_REST_Response( null, 401 ), null, $rest_request );
-	$challenge = (string) ( $response->get_headers()['WWW-Authenticate'] ?? '' );
-	ab_test_reset();
-	preg_match( '/resource_metadata="https:\/\/example\.test([^"]+)"/', $challenge, $m );
+	$challenge = ab_test_wk_challenge( $case[0], $case[1] );
+	ksort( $challenge['headers'] );
+	preg_match( '/resource_metadata="https:\/\/example\.test([^"]+)"/', $challenge['headers']['www-authenticate'] ?? '', $m );
 	$out['challenge'][ $label ] = array(
-		'www-authenticate' => $challenge,
-		'answer'           => $request( (string) ( $m[1] ?? '' ), $case[0], $case[1] ),
+		'status'  => $challenge['status'],
+		'headers' => $challenge['headers'],
+		'answer'  => $request( (string) ( $m[1] ?? '' ), $case[0], $case[1] ),
 	);
 }
 

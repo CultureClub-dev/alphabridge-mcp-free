@@ -43,6 +43,9 @@ use AB_MCP_OAuth;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
+require_once __DIR__ . '/support/well-known-docroot.php';
+require_once __DIR__ . '/support/well-known-challenge.php';
+
 final class WellKnownHttpTest extends TestCase {
 
 	private const ROUTER = __DIR__ . '/support/well-known-server.php';
@@ -56,8 +59,11 @@ final class WellKnownHttpTest extends TestCase {
 	/** @var array<int,resource> */
 	private static array $pipes = array();
 	private static int $port    = 0;
+	/** The web directory on disk: a WordPress under each path the tests fetch for. */
+	private static string $docroot = '';
 
 	public static function setUpBeforeClass(): void {
+		self::$docroot = ab_test_wk_dir( array( '/staging/123', '/staging/1234', '/Staging/123', '/~a/b-c/d_e/f.g', '/other' ) );
 		$probe = @stream_socket_server( 'tcp://127.0.0.1:0' );
 		if ( false === $probe ) {
 			return;
@@ -96,6 +102,7 @@ final class WellKnownHttpTest extends TestCase {
 		self::$proc  = null;
 		self::$pipes = array();
 		self::$port  = 0;
+		ab_test_wk_remove( self::$docroot );
 	}
 
 	protected function setUp(): void {
@@ -161,13 +168,21 @@ final class WellKnownHttpTest extends TestCase {
 	}
 
 	#[DataProvider( 'sites' )]
-	public function testTheChallengeOfThe401IsAsIn4100( string $home, ?string $rest ): void {
-		self::assertSame( self::recorded()['challenge'][ $this->dataName() ]['www-authenticate'] ?? null, $this->challenge( $home, $rest ) );
+	public function testThe401OfTheEndpointIsAsIn4100( string $home, ?string $rest ): void {
+		$recorded = self::recorded()['challenge'][ $this->dataName() ] ?? null;
+		self::assertNotNull( $recorded );
+
+		$answer = ab_test_wk_challenge( $home, $rest );
+
+		self::assertSame( 401, $answer['status'] );
+		self::assertSame( $recorded['status'], $answer['status'] );
+		ksort( $answer['headers'] );
+		self::assertSame( $recorded['headers'], $answer['headers'], 'WWW-Authenticate, Cache-Control and Referrer-Policy as 4.10.0 sent them.' );
 	}
 
 	#[DataProvider( 'sites' )]
 	public function testTheAddressInTheChallengeIsServedAsIn4100( string $home, ?string $rest ): void {
-		$header = $this->challenge( $home, $rest );
+		$header = ab_test_wk_challenge( $home, $rest )['headers']['www-authenticate'] ?? '';
 		self::assertSame( 1, preg_match( '/resource_metadata="([^"]+)"/', $header, $m ), $header );
 		self::assertStringStartsWith( self::ROOT . '/', $m[1] );
 
@@ -317,6 +332,9 @@ final class WellKnownHttpTest extends TestCase {
 			'character outside the set'                         => array( '/.well-known/oauth-authorization-server/a$b', self::ROOT, null ),
 			'encoded backslash'                                 => array( '/.well-known/oauth-authorization-server/a%5Cb', self::ROOT, null ),
 			'resource metadata of the root on a subfolder site' => array( '/staging/123/.well-known/oauth-protected-resource/wp-json/alphabridge/v1/mcp', self::SUB, null ),
+			'no WordPress on disk under the path'               => array( '/.well-known/oauth-authorization-server/nowp/9', self::ROOT, null ),
+			'no WordPress on disk, resource metadata'           => array( '/.well-known/oauth-protected-resource/nowp/9/wp-json/alphabridge/v1/mcp', self::ROOT, null ),
+			'a directory without wp-load.php'                   => array( '/.well-known/oauth-authorization-server/staging', self::ROOT, null ),
 			'its own home as the other site (plain permalinks)' => array( '/staging/123/.well-known/oauth-protected-resource/staging/123/wp-json/alphabridge/v1/mcp', self::SUB, $plain_sub ),
 		);
 	}
@@ -401,8 +419,9 @@ final class WellKnownHttpTest extends TestCase {
 	/**
 	 * What 4.10.0 answered, recorded with tests/support/record-well-known-4100.php
 	 * against includes/class-oauth.php of v4.10.0 (26375bc): status, the
-	 * headers that matter and the body of each own path, and the 401
-	 * challenge of each site with the answer at its address.
+	 * headers that matter and the body of each own path, and per site the
+	 * 401 of the MCP endpoint (support/well-known-challenge.php) with the
+	 * answer at the address its WWW-Authenticate names.
 	 *
 	 * @return array{own:array<string,array>,challenge:array<string,array>}
 	 */
@@ -427,16 +446,6 @@ final class WellKnownHttpTest extends TestCase {
 			self::assertSame( $recorded['headers'][ $header ] ?? null, $answer['headers'][ $header ] ?? null, $header );
 		}
 		self::assertSame( $recorded['body'], $answer['body'], 'Byte for byte the document of 4.10.0.' );
-	}
-
-	/** The WWW-Authenticate header the MCP endpoint sends with its 401 on this site. */
-	private function challenge( string $home, ?string $rest ): string {
-		$this->site( $home, $rest );
-		$request = new \WP_REST_Request();
-		$request->set_route( '/alphabridge/v1/mcp' );
-		$response = ( new \AB_MCP_REST_Controller( new \AB_MCP_Tool_Registry() ) )->add_security_headers( new \WP_REST_Response( null, 401 ), null, $request );
-		ab_test_reset();
-		return (string) ( $response->get_headers()['WWW-Authenticate'] ?? '' );
 	}
 
 	private function site( string $home, ?string $rest ): void {
@@ -466,6 +475,7 @@ final class WellKnownHttpTest extends TestCase {
 			'Host: example.test',
 			'X-AB-Test-Home: ' . $home,
 			'X-AB-Test-Fetch: ' . $fetch,
+			'X-AB-Test-Docroot: ' . self::$docroot,
 		);
 		if ( null !== $rest ) {
 			$lines[] = 'X-AB-Test-Rest: ' . $rest;
