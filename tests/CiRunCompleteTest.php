@@ -1,11 +1,20 @@
 <?php
 /**
- * A PHPUnit run in CI counts only when it reached its end (Z8b branch 1, V1).
+ * A PHPUnit run in CI counts only when it reached its end, accounted for
+ * every listed test and none failed (Z8b branch 1, V1; Codex round 1, A1
+ * and A4).
  *
- * The proof of the gap and of its close, on a suite whose second test ends
- * the process with a real exit (tests/fixtures/ci-lauf/abbruch.xml): the
- * step of 9be07f7 (PHPUnit, its status only) passes it with status 0; the
- * new step (tests/integration/bin/run-complete.php after a run with --log-junit) is red.
+ * The proofs, each on a suite of tests/fixtures/ci-lauf/:
+ * - abbruch.xml, a real exit in the second test: the step of 9be07f7
+ *   (PHPUnit, its status only) passes it with status 0, the new step
+ *   (tests/integration/bin/run-complete.php after a run with --log-junit and
+ *   --log-events-text) is red;
+ * - rot.xml, a red test whose status a shutdown function turns into 0: old
+ *   green, new red (A1);
+ * - klassenskip.xml, a class skipped in setUpBeforeClass() (no testcase in
+ *   the JUnit log): the count of 0f3be69 was red, the new step green (A4);
+ * - ganz.xml, data sets, skipped, incomplete, a skip by a requirement:
+ *   green.
  * Then each clause of AB_CI_Run_Complete, and that every PHPUnit run in
  * .github/workflows/ci.yml has that step with the same command.
  *
@@ -17,6 +26,7 @@ declare( strict_types = 1 );
 namespace AlphaBridge\Tests;
 
 use AB_CI_Run_Complete;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 require_once __DIR__ . '/integration/support/class-ci-run-complete.php';
@@ -64,7 +74,7 @@ final class CiRunCompleteTest extends TestCase {
 	}
 
 	private function temp( ?string $content = null ): string {
-		$file           = (string) tempnam( sys_get_temp_dir(), 'ab-ci-junit-' );
+		$file           = (string) tempnam( sys_get_temp_dir(), 'ab-ci-log-' );
 		$this->remove[] = $file;
 		if ( null === $content ) {
 			unlink( $file );
@@ -74,15 +84,32 @@ final class CiRunCompleteTest extends TestCase {
 		return $file;
 	}
 
-	private static function junit( int $cases, string $root = 'testsuites' ): string {
+	/**
+	 * A suite run as the job runs it, then the new step.
+	 *
+	 * @return array{phpunit:int,check:int,said:string}
+	 */
+	private function both_steps( string $config ): array {
+		$junit                 = $this->temp( '' );
+		$events                = $this->temp( '' );
+		list( $code, $output ) = self::command( array_merge( self::phpunit( $config ), array( '--testdox', '--log-junit', $junit, '--log-events-text', $events ) ) );
+		list( $check, $said )  = self::command( array_merge( array( PHP_BINARY, self::root() . '/tests/integration/bin/run-complete.php', $junit, $events ), self::phpunit( $config ) ) );
+		return array(
+			'phpunit' => $code,
+			'check'   => $check,
+			'said'    => $said . "\nPHPUnit said: " . $output,
+		);
+	}
+
+	private static function junit( int $cases, string $root = 'testsuites', string $inner = '' ): string {
 		$xml = '<?xml version="1.0" encoding="UTF-8"?><' . $root . '><testsuite name="s" tests="' . $cases . '">';
 		for ( $i = 0; $i < $cases; $i++ ) {
-			$xml .= '<testcase name="t' . $i . '"/>';
+			$xml .= '<testcase name="t' . $i . '">' . ( 0 === $i ? $inner : '' ) . '</testcase>';
 		}
 		return $xml . '</testsuite></' . $root . '>';
 	}
 
-	/* --------------------------------------------- the proof: old and new */
+	/* ------------------------------------------------ the proofs, old and new */
 
 	public function testTheStepOfTheOldStandPassesASuiteThatExitsInTheMiddle(): void {
 		list( $code, $output ) = self::command( self::phpunit( 'abbruch.xml' ) );
@@ -93,86 +120,123 @@ final class CiRunCompleteTest extends TestCase {
 	}
 
 	public function testTheNewStepIsRedForASuiteThatExitsInTheMiddle(): void {
-		$junit                 = $this->temp( '' );
-		list( $code, $output ) = self::command( array_merge( self::phpunit( 'abbruch.xml' ), array( '--testdox', '--log-junit', $junit ) ) );
-		self::assertSame( 0, $code, 'PHPUnit still ends with status 0. ' . $output );
-		list( $check, $said ) = self::command( array_merge( array( PHP_BINARY, self::root() . '/tests/integration/bin/run-complete.php', $junit ), self::phpunit( 'abbruch.xml' ) ) );
-		self::assertSame( 1, $check, $said );
-		self::assertStringContainsString( 'FAIL', $said );
-		self::assertStringContainsString( 'is empty', $said );
+		$run = $this->both_steps( 'abbruch.xml' );
+		self::assertSame( 0, $run['phpunit'], 'PHPUnit still ends with status 0.' );
+		self::assertSame( 1, $run['check'], $run['said'] );
+		self::assertStringContainsString( 'FAIL', $run['said'] );
+		self::assertStringContainsString( 'is empty', $run['said'] );
 	}
 
-	public function testTheNewStepPassesASuiteThatRunsToItsEndWithDataSetsSkippedAndIncompleteTests(): void {
-		$junit                 = $this->temp( '' );
-		list( $code, $output ) = self::command( array_merge( self::phpunit( 'ganz.xml' ), array( '--testdox', '--log-junit', $junit ) ) );
-		self::assertSame( 0, $code, $output );
-		list( $check, $said ) = self::command( array_merge( array( PHP_BINARY, self::root() . '/tests/integration/bin/run-complete.php', $junit ), self::phpunit( 'ganz.xml' ) ) );
-		self::assertSame( 0, $check, $said );
-		self::assertStringContainsString( '6 of 6 tests ran', $said, 'Three data sets, a skipped, an incomplete and a plain test, counted alike in the log and in the list.' );
+	public function testARedTestWhoseStatusAShutdownFunctionTurnsIntoZeroIsRed(): void {
+		list( $code ) = self::command( self::phpunit( 'rot.xml' ) );
+		self::assertSame( 0, $code, 'The status the old step reads: a pass.' );
+		$run = $this->both_steps( 'rot.xml' );
+		self::assertSame( 0, $run['phpunit'] );
+		self::assertSame( 1, $run['check'], $run['said'] );
+		self::assertStringContainsString( 'records 1 failed test(s)', $run['said'] );
 	}
 
-	public function testTheListCountsEachDataSetAsTheLogDoes(): void {
-		self::assertSame( 6, AB_CI_Run_Complete::expected( self::phpunit( 'ganz.xml' ), self::root() ) );
-		self::assertSame( 3, AB_CI_Run_Complete::expected( self::phpunit( 'abbruch.xml' ), self::root() ), 'Listed without running: test B does not end the listing.' );
+	public function testAClassSkippedInSetUpBeforeClassCountsAsSkipped(): void {
+		$run = $this->both_steps( 'klassenskip.xml' );
+		self::assertSame( 0, $run['phpunit'], $run['said'] );
+		self::assertSame( 0, $run['check'], $run['said'] );
+		self::assertStringContainsString( '9 of 9 listed tests ran or were skipped', $run['said'], 'Two of the skipped class, seven of GanzProbe.' );
 	}
 
-	public function testAListThatFailsIsNoNumber(): void {
-		$said = AB_CI_Run_Complete::expected( array( PHP_BINARY, '-r', 'exit( 3 );', '--' ), self::root() );
+	public function testDataSetsSkippedIncompleteAndARequirementAreAccountedFor(): void {
+		$run = $this->both_steps( 'ganz.xml' );
+		self::assertSame( 0, $run['phpunit'], $run['said'] );
+		self::assertSame( 0, $run['check'], $run['said'] );
+		self::assertStringContainsString( '7 of 7 listed tests ran or were skipped', $run['said'] );
+	}
+
+	public function testTheListGivesTheIdsTheEventLogUses(): void {
+		self::assertSame(
+			array( 'GanzProbe::testSet#eins', 'GanzProbe::testSet#zwei', 'GanzProbe::testSet#0', 'GanzProbe::testSkipped', 'GanzProbe::testIncomplete', 'GanzProbe::testPlain', 'GanzProbe::testRequirement' ),
+			AB_CI_Run_Complete::listed( self::phpunit( 'ganz.xml' ), self::root() )
+		);
+		self::assertCount( 3, AB_CI_Run_Complete::listed( self::phpunit( 'abbruch.xml' ), self::root() ), 'Listed without running: test B does not end the listing.' );
+	}
+
+	public function testAListThatFailsIsNoList(): void {
+		$said = AB_CI_Run_Complete::listed( array( PHP_BINARY, '-r', 'exit( 3 );', '--' ), self::root() );
 		self::assertIsString( $said );
 		self::assertStringContainsString( 'exit 3', $said );
-		$said = AB_CI_Run_Complete::expected( array( PHP_BINARY, '-r', 'exit( 0 );', '--' ), self::root() );
-		self::assertIsString( $said, 'A command that writes no list gives no number.' );
+		$said = AB_CI_Run_Complete::listed( array( PHP_BINARY, '-r', 'exit( 0 );', '--' ), self::root() );
+		self::assertIsString( $said, 'A command that writes no list gives none.' );
 		self::assertStringContainsString( 'no list', $said );
 	}
 
-	public function testTheScriptWithoutACommandSaysHowToCallIt(): void {
-		list( $code, $said ) = self::command( array( PHP_BINARY, self::root() . '/tests/integration/bin/run-complete.php', 'x.xml' ) );
+	public function testTheScriptWithoutBothLogsAndACommandSaysHowToCallIt(): void {
+		list( $code, $said ) = self::command( array( PHP_BINARY, self::root() . '/tests/integration/bin/run-complete.php', 'x.xml', 'vendor/bin/phpunit' ) );
 		self::assertSame( 2, $code );
 		self::assertStringContainsString( 'usage', $said );
 	}
 
-	/* --------------------------------------------------- clause by clause */
+	/* ------------------------------------------- the JUnit log, by clause */
 
-	public function testAMissingLogIsRed(): void {
-		$verdict = AB_CI_Run_Complete::verdict( $this->temp(), 3 );
-		self::assertFalse( $verdict['ok'] );
-		self::assertStringContainsString( 'missing', $verdict['message'] );
+	/**
+	 * @return array<string,array{0:string|null,1:string}>
+	 */
+	public static function junit_cases(): array {
+		return array(
+			'missing'      => array( null, 'missing' ),
+			'empty'        => array( "\n", 'is empty' ),
+			'no XML'       => array( '<testsuites><testsuite', 'no XML' ),
+			'another root' => array( self::junit( 2, 'testsuite' ), 'not testsuites' ),
+			'a failure'    => array( self::junit( 2, 'testsuites', '<failure>x</failure>' ), 'records 1 failed test(s)' ),
+			'an error'     => array( self::junit( 2, 'testsuites', '<error>x</error>' ), 'records 1 failed test(s)' ),
+		);
 	}
 
-	public function testAnEmptyLogIsRed(): void {
-		$verdict = AB_CI_Run_Complete::verdict( $this->temp( "\n" ), 3 );
-		self::assertFalse( $verdict['ok'] );
-		self::assertStringContainsString( 'empty', $verdict['message'] );
+	#[DataProvider( 'junit_cases' )]
+	public function testEachClauseOfTheJunitLog( ?string $content, string $says ): void {
+		$said = AB_CI_Run_Complete::junit( $this->temp( $content ) );
+		self::assertIsString( $said );
+		self::assertStringContainsString( $says, $said );
 	}
 
-	public function testALogThatIsNoXmlIsRed(): void {
-		$verdict = AB_CI_Run_Complete::verdict( $this->temp( '<testsuites><testsuite' ), 3 );
-		self::assertFalse( $verdict['ok'] );
-		self::assertStringContainsString( 'no XML', $verdict['message'] );
+	public function testAJunitLogWithoutFailureOrErrorPasses(): void {
+		self::assertNull( AB_CI_Run_Complete::junit( $this->temp( self::junit( 3, 'testsuites', '<skipped/>' ) ) ) );
 	}
 
-	public function testALogWithAnotherRootIsRed(): void {
-		$verdict = AB_CI_Run_Complete::verdict( $this->temp( self::junit( 3, 'testsuite' ) ), 3 );
-		self::assertFalse( $verdict['ok'] );
-		self::assertStringContainsString( 'not testsuites', $verdict['message'] );
+	/* ------------------------------------------- the event log, by clause */
+
+	private const DONE = "Test Finished (K::a)\nTest Skipped (K::b)\nTest Suite Started (S, 2 tests)\nTest Suite Skipped (S, why, with a comma)\nTest Finished (D::m#eins)\n";
+
+	/**
+	 * @return array<string,array{0:string|null,1:string[],2:string}>
+	 */
+	public static function event_cases(): array {
+		$end = AB_CI_Run_Complete::FINISHED . "\n";
+		$ids = array( 'K::a', 'K::b', 'S::x', 'S::y', 'D::m#eins' );
+		return array(
+			'missing'                  => array( null, $ids, 'is missing' ),
+			'no end'                   => array( self::DONE, $ids, 'does not end with' ),
+			'end with another code'    => array( self::DONE . "PHPUnit Finished (Shell Exit Code: 1)\n", $ids, 'does not end with' ),
+			'a failed test'            => array( "Test Failed (K::a)\n" . self::DONE . $end, $ids, 'records a failed test: K::a' ),
+			'an errored test'          => array( "Test Errored (K::a)\n" . self::DONE . $end, $ids, 'records a failed test: K::a' ),
+			'a test that never ran'    => array( self::DONE . $end, array_merge( $ids, array( 'K::c' ) ), 'never ran: K::c' ),
+			'a data set that never ran' => array( self::DONE . $end, array_merge( $ids, array( 'D::m#zwei' ) ), 'never ran: D::m#zwei' ),
+			'a skip of another class'  => array( self::DONE . $end, array_merge( $ids, array( 'SS::x' ) ), 'never ran: SS::x' ),
+			'no listed test'           => array( self::DONE . $end, array(), 'no test' ),
+		);
 	}
 
-	public function testFewerTestsThanListedIsRed(): void {
-		$verdict = AB_CI_Run_Complete::verdict( $this->temp( self::junit( 2 ) ), 3 );
+	/**
+	 * @param string[] $listed Ids.
+	 */
+	#[DataProvider( 'event_cases' )]
+	public function testEachClauseOfTheEventLog( ?string $content, array $listed, string $says ): void {
+		$verdict = AB_CI_Run_Complete::events( $this->temp( $content ), $listed );
 		self::assertFalse( $verdict['ok'] );
-		self::assertSame( 2, $verdict['ran'] );
-		self::assertStringContainsString( 'Only 2 of 3', $verdict['message'] );
+		self::assertStringContainsString( $says, $verdict['message'] );
 	}
 
-	public function testNoListedTestIsRed(): void {
-		$verdict = AB_CI_Run_Complete::verdict( $this->temp( self::junit( 0 ) ), 0 );
-		self::assertFalse( $verdict['ok'] );
-		self::assertStringContainsString( 'no test', $verdict['message'] );
-	}
-
-	public function testAsManyOrMoreTestsThanListedIsComplete(): void {
-		self::assertTrue( AB_CI_Run_Complete::verdict( $this->temp( self::junit( 3 ) ), 3 )['ok'] );
-		self::assertTrue( AB_CI_Run_Complete::verdict( $this->temp( self::junit( 4 ) ), 3 )['ok'], 'More is fine: a test added while running does not make a run incomplete.' );
+	public function testFinishedSkippedAndASkippedSuiteAccountForEveryListedTest(): void {
+		$verdict = AB_CI_Run_Complete::events( $this->temp( self::DONE . AB_CI_Run_Complete::FINISHED . "\n" ), array( 'K::a', 'K::b', 'S::x', 'S::y', 'S#0', 'D::m#eins' ) );
+		self::assertTrue( $verdict['ok'], $verdict['message'] );
+		self::assertSame( 6, $verdict['accounted'] );
 	}
 
 	/* ------------------------------------------------------ the workflow */
@@ -182,8 +246,8 @@ final class CiRunCompleteTest extends TestCase {
 		$runs  = array();
 		$check = array();
 		foreach ( explode( "\n", $yml ) as $line ) {
-			if ( preg_match( '#php tests/integration/bin/run-complete\.php "([^"]+)" (vendor/bin/phpunit.*?)\s*$#', $line, $m ) ) {
-				$check[ $m[1] ] = $m[2];
+			if ( preg_match( '#php tests/integration/bin/run-complete\.php "([^"]+)" "([^"]+)" (vendor/bin/phpunit.*?)\s*$#', $line, $m ) ) {
+				$check[ $m[1] . ' ' . $m[2] ] = $m[3];
 			} elseif ( preg_match( '#^\s*(?:run:\s*)?(vendor/bin/phpunit.*?)\s*$#', $line, $m ) ) {
 				$runs[] = $m[1];
 			}
@@ -191,10 +255,13 @@ final class CiRunCompleteTest extends TestCase {
 		self::assertCount( 2, $runs, 'The jobs unit and integration each run PHPUnit once: ' . implode( ' | ', $runs ) );
 		foreach ( $runs as $run ) {
 			self::assertMatchesRegularExpression( '#--log-junit "([^"]+)"#', $run, "$run writes no JUnit log." );
-			preg_match( '#--log-junit "([^"]+)"#', $run, $m );
-			self::assertArrayHasKey( $m[1], $check, "No check reads the log of: $run" );
-			$base = trim( (string) preg_replace( '#\s+#', ' ', str_replace( array( '--log-junit "' . $m[1] . '"', '--testdox' ), '', $run ) ) );
-			self::assertSame( $base, $check[ $m[1] ], 'The check lists the tests of the same command as the run.' );
+			self::assertMatchesRegularExpression( '#--log-events-text "([^"]+)"#', $run, "$run writes no event log." );
+			preg_match( '#--log-junit "([^"]+)"#', $run, $j );
+			preg_match( '#--log-events-text "([^"]+)"#', $run, $e );
+			$key = $j[1] . ' ' . $e[1];
+			self::assertArrayHasKey( $key, $check, "No check reads the logs of: $run" );
+			$base = trim( (string) preg_replace( '#\s+#', ' ', str_replace( array( '--log-junit "' . $j[1] . '"', '--log-events-text "' . $e[1] . '"', '--testdox' ), '', $run ) ) );
+			self::assertSame( $base, $check[ $key ], 'The check lists the tests of the same command as the run.' );
 		}
 		self::assertCount( count( $runs ), $check );
 	}

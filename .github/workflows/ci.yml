@@ -57,9 +57,10 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
-          # posix: the hard abort without shutdown sends a signal to its own
-          # process (tests/integration/support/class-test-abort.php).
-          extensions: posix
+          # posix and pcntl: the hard abort without shutdown sends a signal to
+          # its own process, and the helper of child processes starts each in
+          # a process group of its own (tests/integration/support/).
+          extensions: posix, pcntl
           coverage: none
           tools: composer:v2
 
@@ -79,16 +80,19 @@ jobs:
         run: composer update --no-interaction --no-progress --prefer-dist
 
       - name: PHPUnit
-        run: vendor/bin/phpunit --testdox --log-junit "$RUNNER_TEMP/junit-unit.xml"
+        run: vendor/bin/phpunit --testdox --log-junit "$RUNNER_TEMP/junit-unit.xml" --log-events-text "$RUNNER_TEMP/events-unit.txt"
 
       # A real exit or die in the test process ends PHPUnit with status 0 and
       # no summary; the tests after it never run, and the step above would
-      # pass (Z8b branch 1, V1). PHPUnit writes its JUnit log only at the end
-      # of a run: red when it is missing, empty, not testsuites, or holds
-      # fewer tests than PHPUnit lists for the same command
+      # pass (Z8b branch 1, V1). A shutdown function with exit(0) turns a red
+      # run into status 0 as well. PHPUnit writes both logs only at the end
+      # of a run: red when the JUnit log is missing, empty, not testsuites or
+      # records a failure or error, when the event log does not end with
+      # PHPUnit's own exit code 0 or records a failed test, or when a test
+      # PHPUnit lists for the same command neither ran nor was skipped
       # (tests/integration/bin/run-complete.php, CiRunCompleteTest).
       - name: PHPUnit ran every test
-        run: php tests/integration/bin/run-complete.php "$RUNNER_TEMP/junit-unit.xml" vendor/bin/phpunit
+        run: php tests/integration/bin/run-complete.php "$RUNNER_TEMP/junit-unit.xml" "$RUNNER_TEMP/events-unit.txt" vendor/bin/phpunit
 
   package:
     name: ZIP stays clean
@@ -219,10 +223,10 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.3'
-          # posix and zip for the helpers of Z8b branch 1: the hard abort
-          # without shutdown, the packages of the stand-in for
-          # downloads.wordpress.org.
-          extensions: mysqli, curl, sodium, posix, zip
+          # posix, pcntl and zip for the helpers of Z8b branch 1: the hard
+          # abort without shutdown, child processes in a process group of
+          # their own, the packages of the stand-in for downloads.wordpress.org.
+          extensions: mysqli, curl, sodium, posix, pcntl, zip
           coverage: none
           tools: composer:v2
 
@@ -250,11 +254,12 @@ jobs:
           bash tests/integration/bin/serve.sh start
 
       - name: Integration suite
-        run: vendor/bin/phpunit -c tests/integration/phpunit.xml.dist --testdox --log-junit "$RUNNER_TEMP/junit-integration.xml"
+        run: vendor/bin/phpunit -c tests/integration/phpunit.xml.dist --testdox --log-junit "$RUNNER_TEMP/junit-integration.xml" --log-events-text "$RUNNER_TEMP/events-integration.txt"
 
-      # As in the job unit: red unless the suite ran to its end.
+      # As in the job unit: red unless the suite ran to its end, every test
+      # accounted for, none failed.
       - name: The integration suite ran every test
-        run: php tests/integration/bin/run-complete.php "$RUNNER_TEMP/junit-integration.xml" vendor/bin/phpunit -c tests/integration/phpunit.xml.dist
+        run: php tests/integration/bin/run-complete.php "$RUNNER_TEMP/junit-integration.xml" "$RUNNER_TEMP/events-integration.txt" vendor/bin/phpunit -c tests/integration/phpunit.xml.dist
 
       # Also when the job is cut at its time limit (cancelled, not failed).
       - name: Logs of the sites

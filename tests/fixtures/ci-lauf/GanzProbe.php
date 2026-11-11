@@ -1,8 +1,9 @@
 <?php
 /**
- * Six tests that run to the end, through ganz.xml (CiRunCompleteTest): three
- * data sets of one test, a skipped one, an incomplete one and a plain one.
- * The JUnit log and --list-tests-xml must count them alike.
+ * Seven tests that run to the end, through ganz.xml and klassenskip.xml
+ * (CiRunCompleteTest): three data sets of one test, a skipped one, an
+ * incomplete one, a plain one, and one skipped by a requirement (PHPUnit
+ * writes «Test Skipped» for it, without «Test Finished»).
  *
  * @package AlphaBridge_MCP
  */
@@ -10,6 +11,7 @@
 declare( strict_types = 1 );
 
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\RequiresPhpExtension;
 use PHPUnit\Framework\TestCase;
 
 final class GanzProbe extends TestCase {
@@ -36,6 +38,11 @@ final class GanzProbe extends TestCase {
 	}
 
 	public function testPlain(): void {
+		self::assertTrue( true );
+	}
+
+	#[RequiresPhpExtension( 'ab_it_gibt_es_nicht' )]
+	public function testRequirement(): void {
 		self::assertTrue( true );
 	}
 }
