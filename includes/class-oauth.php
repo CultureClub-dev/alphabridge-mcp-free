@@ -160,11 +160,16 @@ class AB_MCP_OAuth {
 	const MARK_AUTHORIZE      = 'authorize';
 
 	/**
-	 * The longest path after a well-known name that is redirected to another
-	 * site on the same domain (well_known_answer()). Real issuer and resource
-	 * paths are far shorter; anything longer gets no answer.
+	 * Another WordPress on this domain, in a subfolder (a staging copy): what
+	 * this site relays of its well-known documents (well_known_answer()).
+	 * Its path has at most this many segments; the fetch ends after this many
+	 * seconds and this many bytes (a response that long counts as failed);
+	 * what came back, or that nothing usable did, is kept this many seconds.
 	 */
-	const WELL_KNOWN_MAX_SUFFIX = 512;
+	const WELL_KNOWN_MAX_SEGMENTS = 4;
+	const WELL_KNOWN_TIMEOUT      = 3;
+	const WELL_KNOWN_MAX_BYTES    = 65536;
+	const WELL_KNOWN_CACHE_TTL    = 300;
 
 	/**
 	 * Address ranges a metadata document is never fetched from: this machine,
@@ -1487,59 +1492,55 @@ class AB_MCP_OAuth {
 		if ( ! isset( $_SERVER['REQUEST_URI'] ) ) {
 			return;
 		}
-		$answer = self::well_known_answer( (string) $_SERVER['REQUEST_URI'] ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- path is only matched; a redirect target is rebuilt from validated segments.
+		$answer = self::well_known_answer( (string) $_SERVER['REQUEST_URI'] ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- path is only matched; what is fetched is rebuilt from validated segments.
 
 		if ( 'document' === $answer['kind'] ) {
 			self::send_json( $answer['document'] );
 		}
-		if ( 'redirect' === $answer['kind'] ) {
-			// Public and the same for every visitor, like the documents; but
-			// it names another site's address, so no cache may keep it.
-			header( 'Cache-Control: no-store' );
-			header( 'Access-Control-Allow-Origin: *' );
-			if ( wp_redirect( $answer['location'], 307, 'AlphaBridge MCP' ) ) { // phpcs:ignore WordPress.Security.SafeRedirect.wp_redirect_wp_redirect -- same scheme and host as home_url(), path from validated segments.
-				exit;
+		if ( 'refused' === $answer['kind'] ) {
+			// One of our two names with a path that is not ours and could not
+			// be answered for the site it names: a 404, and only a 404. Not a
+			// canonical redirect and not a permalink WordPress guesses from the
+			// last segment (redirect_guess_404_permalink()): a client would read
+			// that page, HTML with 200, as the document and give up instead of
+			// trying its next address.
+			global $wp_query;
+			if ( is_object( $wp_query ) && method_exists( $wp_query, 'set_404' ) ) {
+				$wp_query->set_404();
 			}
-		}
-		if ( 'none' !== $answer['kind'] ) {
-			// Refused, or a redirect a filter emptied: WordPress answers with
-			// its 404. Not with a page it guesses from the last segment
-			// (redirect_guess_404_permalink()): a client would read that HTML
-			// as the document and stop instead of trying its next address.
+			status_header( 404 );
+			nocache_headers();
+			add_filter( 'redirect_canonical', '__return_false' );
 			add_filter( 'do_redirect_guess_404_permalink', '__return_false' );
 		}
 	}
 
 	/**
 	 * The one place that decides what this site answers at a well-known
-	 * address of its OAuth server. RFC 8414 and RFC 9728 put the path of the
-	 * issuer or the resource AFTER the well-known name
-	 * (/.well-known/oauth-authorization-server/staging/123), at the root of
-	 * the domain. On a domain with this site at the root and another
-	 * WordPress in a subfolder (a staging copy), such requests reach this
-	 * site although they are about the other one. Up to 4.10.0 this site
-	 * answered them with its own metadata, and a client signed in at the
-	 * wrong site.
+	 * address of its OAuth server.
+	 *
+	 * RFC 8414 and RFC 9728 put the path of the issuer or the resource AFTER
+	 * the well-known name, at the root of the domain:
+	 * /.well-known/oauth-authorization-server/staging/123 is the server
+	 * metadata of the issuer https://<host>/staging/123. On a domain with this
+	 * site at the root and another WordPress in a subfolder (a staging copy),
+	 * such requests reach this site although they are about the other one.
+	 * Up to 4.10.0 this site answered them with its own metadata, and a client
+	 * signed in at the wrong site. A redirect to the other site does not help
+	 * every client: Claude's servers do not follow it.
 	 *
 	 * - The path after the name is this site's own (none, its home path, or
-	 *   the path of its MCP resource; a trailing slash does not count):
-	 *   the document, as before.
-	 * - It is another site's: a 307 to where that site answers itself, on
-	 *   this site's scheme and host. For the server metadata that is
-	 *   <path>/.well-known/oauth-authorization-server: every AlphaBridge site
-	 *   serves it under its home (for another server there it is no worse
-	 *   than this site's own metadata were). For the resource metadata the other site's
-	 *   home is not in the request; it is taken as what precedes the MCP
-	 *   route (/<rest prefix>/alphabridge/v1/mcp), and the target is the
-	 *   address that site names in its own 401 (resource_metadata_url()).
-	 * - Anything else (a resource path without the MCP route, a path that is
-	 *   not a clean path, a target equal to the request): no answer. Never a
-	 *   protocol-relative or foreign-host target.
+	 *   the path of its MCP resource; a trailing slash does not count): its
+	 *   own document, as before.
+	 * - It names another site on this host (well_known_from_other_site()):
+	 *   that site's document, fetched from it and relayed, if it is the
+	 *   document of exactly that issuer or resource.
+	 * - Otherwise: refused, a 404.
 	 *
 	 * @param string $request_uri The request URI as received.
-	 * @return array{kind:string,document?:array,location?:string} kind
-	 *         'document' (with document), 'redirect' (with location),
-	 *         'refused' (a well-known name of ours, no answer) or 'none'.
+	 * @return array{kind:string,document?:array} kind 'document' (with
+	 *         document), 'refused' (one of our names, answered with a 404) or
+	 *         'none' (not ours).
 	 */
 	public static function well_known_answer( $request_uri ) {
 		$none = array( 'kind' => 'none' );
@@ -1551,12 +1552,11 @@ class AB_MCP_OAuth {
 		// When WordPress lives in a subdirectory, .well-known sits under the
 		// HOME path — strip that prefix before matching.
 		$home_path = (string) wp_parse_url( home_url(), PHP_URL_PATH );
-		$local     = $path;
-		if ( '' !== $home_path && '/' !== $home_path && 0 === strpos( $local, $home_path ) ) {
-			$local = substr( $local, strlen( $home_path ) );
+		if ( '' !== $home_path && '/' !== $home_path && 0 === strpos( $path, $home_path ) ) {
+			$path = substr( $path, strlen( $home_path ) );
 		}
 
-		if ( ! preg_match( '#\A/\.well-known/(oauth-authorization-server|oauth-protected-resource)(/.*)?\z#s', $local, $m ) ) {
+		if ( ! preg_match( '#\A/\.well-known/(oauth-authorization-server|oauth-protected-resource)(/.*)?\z#s', $path, $m ) ) {
 			return $none;
 		}
 		$name   = $m[1];
@@ -1570,62 +1570,185 @@ class AB_MCP_OAuth {
 			);
 		}
 
-		$target = self::well_known_target( $name, $suffix );
-		if ( '' === $target || $target === $path ) {
-			return array( 'kind' => 'refused' );
-		}
-		$home = wp_parse_url( home_url() );
-		if ( ! is_array( $home ) || empty( $home['scheme'] ) || empty( $home['host'] ) ) {
-			return array( 'kind' => 'refused' );
-		}
-		return array(
-			'kind'     => 'redirect',
-			'location' => $home['scheme'] . '://' . $home['host'] . ( isset( $home['port'] ) ? ':' . $home['port'] : '' ) . $target,
+		$document = self::well_known_from_other_site( $name, $suffix, rtrim( $home_path, '/' ) );
+		return null === $document ? array( 'kind' => 'refused' ) : array(
+			'kind'     => 'document',
+			'document' => $document,
 		);
 	}
 
 	/**
-	 * Where another site on this domain answers a well-known document, as a
-	 * path from the domain root; '' when that cannot be told or the path is
-	 * not clean. See well_known_answer().
+	 * The well-known document of another site on this host, or null.
 	 *
-	 * @param string $name   oauth-authorization-server or oauth-protected-resource.
-	 * @param string $suffix The path after the name, without trailing slash, not this site's own.
-	 * @return string
+	 * The other site's path P comes from the request: for the server metadata
+	 * it is the path after the name; for the resource metadata it is what
+	 * precedes the MCP route (/<rest prefix>/alphabridge/v1/mcp) there, as an
+	 * AlphaBridge site names its resource. P is 1 to WELL_KNOWN_MAX_SEGMENTS
+	 * segments of [A-Za-z0-9._~-], none starting with a dot, no "..": never
+	 * this site's own path, never .well-known again (so a fetch never makes
+	 * this site fetch once more), never another host.
+	 *
+	 * The document is fetched from <scheme://host:port of home_url()>P/.well-
+	 * known/… (where every AlphaBridge site answers under its home), without
+	 * following redirects, within WELL_KNOWN_TIMEOUT seconds and
+	 * WELL_KNOWN_MAX_BYTES, as application/json. It is relayed only when it
+	 * is the document of exactly that issuer (https://host/P) or resource,
+	 * in the form AlphaBridge gives it, and only with the fields that form
+	 * has (relayable_server_metadata(), relayable_resource_metadata()).
+	 * Document or failure is kept WELL_KNOWN_CACHE_TTL seconds per site.
+	 *
+	 * @param string $name      oauth-authorization-server or oauth-protected-resource.
+	 * @param string $suffix    The path after the name, without trailing slash, not this site's own.
+	 * @param string $home_path This site's home path, without trailing slash.
+	 * @return array|null
 	 */
-	private static function well_known_target( $name, $suffix ) {
-		if ( strlen( $suffix ) > self::WELL_KNOWN_MAX_SUFFIX ) {
-			return '';
-		}
-		// Segments of the characters wp_sanitize_redirect() keeps, without the
-		// ones that end a path (? #) or are not allowed in it ([ ]); no empty
-		// segment, so never // (a protocol-relative address).
-		if ( ! preg_match( '#\A(?:/[A-Za-z0-9\-~+_.=&;,:!*()@%]+)+\z#', $suffix ) ) {
-			return '';
-		}
-		$segments = explode( '/', substr( $suffix, 1 ) );
-		foreach ( $segments as $i => $segment ) {
-			if ( preg_match( '/%(?![0-9A-Fa-f]{2})/', $segment ) ) {
-				return '';
+	private static function well_known_from_other_site( $name, $suffix, $home_path ) {
+		$site_path = $suffix;
+		if ( 'oauth-protected-resource' === $name ) {
+			$prefix = function_exists( 'rest_get_url_prefix' ) ? trim( (string) rest_get_url_prefix(), '/' ) : 'wp-json';
+			$route  = defined( 'AB_MCP_REST_ROUTE' ) ? AB_MCP_REST_ROUTE : '/mcp';
+			$tail   = '/' . $prefix . '/' . self::ns() . $route;
+			if ( strlen( $suffix ) <= strlen( $tail ) || substr( $suffix, -strlen( $tail ) ) !== $tail ) {
+				return null;
 			}
-			$decoded = rawurldecode( $segment );
-			if ( '.' === $decoded || '..' === $decoded || preg_match( '#[\x00-\x1F\x7F/\\\\]#', $decoded )
-				|| ( 0 === $i && '.well-known' === strtolower( $decoded ) ) ) {
-				return '';
-			}
+			$site_path = substr( $suffix, 0, -strlen( $tail ) );
+		}
+		if ( ! preg_match( '#\A(?:/[A-Za-z0-9_~-][A-Za-z0-9._~-]*){1,' . self::WELL_KNOWN_MAX_SEGMENTS . '}\z#', $site_path )
+			|| false !== strpos( $site_path, '..' ) || $site_path === $home_path ) {
+			return null;
 		}
 
-		if ( 'oauth-authorization-server' === $name ) {
-			return $suffix . '/.well-known/oauth-authorization-server';
+		$home = wp_parse_url( home_url() );
+		if ( ! is_array( $home ) || empty( $home['scheme'] ) || empty( $home['host'] ) ) {
+			return null;
+		}
+		$origin = $home['scheme'] . '://' . $home['host'] . ( isset( $home['port'] ) ? ':' . $home['port'] : '' );
+
+		$key    = 'ab_mcp_wk_' . md5( $origin . '|' . $name . '|' . $site_path );
+		$cached = get_transient( $key );
+		if ( is_array( $cached ) && array_key_exists( 'document', $cached ) ) {
+			return is_array( $cached['document'] ) ? $cached['document'] : null;
 		}
 
-		$prefix = function_exists( 'rest_get_url_prefix' ) ? trim( (string) rest_get_url_prefix(), '/' ) : 'wp-json';
-		$route  = defined( 'AB_MCP_REST_ROUTE' ) ? AB_MCP_REST_ROUTE : '/mcp';
-		$tail   = '/' . $prefix . '/' . self::ns() . $route;
-		if ( strlen( $suffix ) < strlen( $tail ) || substr( $suffix, -strlen( $tail ) ) !== $tail ) {
-			return '';
+		$url = $origin . $site_path . '/.well-known/' . $name . ( 'oauth-protected-resource' === $name ? $suffix : '' );
+
+		$document = null;
+		$response = wp_safe_remote_get(
+			$url,
+			array(
+				'timeout'             => self::WELL_KNOWN_TIMEOUT,
+				'redirection'         => 0,
+				'limit_response_size' => self::WELL_KNOWN_MAX_BYTES,
+				'headers'             => array( 'Accept' => 'application/json' ),
+			)
+		);
+		if ( ! is_wp_error( $response ) && 200 === (int) wp_remote_retrieve_response_code( $response ) ) {
+			$type = wp_remote_retrieve_header( $response, 'content-type' );
+			$body = (string) wp_remote_retrieve_body( $response );
+			$data = null;
+			if ( is_string( $type ) && 'application/json' === strtolower( trim( explode( ';', $type )[0] ) )
+				&& strlen( $body ) < self::WELL_KNOWN_MAX_BYTES ) {
+				$data = json_decode( $body, true );
+			}
+			if ( is_array( $data ) ) {
+				$document = 'oauth-authorization-server' === $name
+					? self::relayable_server_metadata( $data, $origin . $site_path )
+					: self::relayable_resource_metadata( $data, $origin . $suffix, $origin . $site_path );
+			}
 		}
-		return substr( $suffix, 0, -strlen( $tail ) ) . '/.well-known/oauth-protected-resource' . $suffix;
+		set_transient( $key, array( 'document' => $document ), self::WELL_KNOWN_CACHE_TTL );
+		return $document;
+	}
+
+	/**
+	 * Server metadata of another AlphaBridge site to relay: only when it names
+	 * exactly $issuer, its endpoints lie under that issuer and it offers the
+	 * code flow with PKCE S256; rebuilt from the fields metadata() has.
+	 *
+	 * @param array  $data   Decoded document.
+	 * @param string $issuer The issuer the request is about.
+	 * @return array|null
+	 */
+	private static function relayable_server_metadata( array $data, $issuer ) {
+		if ( ! isset( $data['issuer'] ) || $issuer !== $data['issuer'] ) {
+			return null;
+		}
+		$out = array( 'issuer' => $issuer );
+		foreach ( array( 'authorization_endpoint', 'token_endpoint', 'registration_endpoint', 'revocation_endpoint' ) as $key ) {
+			if ( ! isset( $data[ $key ] ) ) {
+				if ( 'revocation_endpoint' === $key ) {
+					continue;
+				}
+				return null;
+			}
+			if ( ! is_string( $data[ $key ] ) || 0 !== strpos( $data[ $key ], $issuer . '/' ) || preg_match( '/[\x00-\x20\x7F]/', $data[ $key ] ) ) {
+				return null;
+			}
+			$out[ $key ] = $data[ $key ];
+		}
+		$lists = array( 'revocation_endpoint_auth_methods_supported', 'response_types_supported', 'grant_types_supported', 'code_challenge_methods_supported', 'token_endpoint_auth_methods_supported', 'scopes_supported' );
+		foreach ( $lists as $key ) {
+			if ( isset( $data[ $key ] ) && self::is_string_list( $data[ $key ] ) ) {
+				$out[ $key ] = $data[ $key ];
+			}
+		}
+		if ( ! in_array( 'code', $out['response_types_supported'] ?? array(), true )
+			|| ! in_array( 'S256', $out['code_challenge_methods_supported'] ?? array(), true ) ) {
+			return null;
+		}
+		foreach ( array( 'authorization_response_iss_parameter_supported', 'client_id_metadata_document_supported' ) as $key ) {
+			if ( isset( $data[ $key ] ) && is_bool( $data[ $key ] ) ) {
+				$out[ $key ] = $data[ $key ];
+			}
+		}
+		// The order metadata() gives them.
+		return array_merge( array_intersect_key( array_flip( array( 'issuer', 'authorization_endpoint', 'token_endpoint', 'registration_endpoint', 'revocation_endpoint', 'revocation_endpoint_auth_methods_supported', 'response_types_supported', 'grant_types_supported', 'code_challenge_methods_supported', 'token_endpoint_auth_methods_supported', 'scopes_supported', 'authorization_response_iss_parameter_supported', 'client_id_metadata_document_supported' ) ), $out ), $out );
+	}
+
+	/**
+	 * Resource metadata of another AlphaBridge site to relay: only when it
+	 * names exactly $resource and $issuer as its one authorization server;
+	 * rebuilt from the fields resource_metadata() has.
+	 *
+	 * @param array  $data     Decoded document.
+	 * @param string $resource The resource the request is about.
+	 * @param string $issuer   That site's issuer.
+	 * @return array|null
+	 */
+	private static function relayable_resource_metadata( array $data, $resource, $issuer ) {
+		if ( ! isset( $data['resource'], $data['authorization_servers'] ) || $resource !== $data['resource']
+			|| array( $issuer ) !== $data['authorization_servers'] ) {
+			return null;
+		}
+		$out = array(
+			'resource'              => $resource,
+			'authorization_servers' => array( $issuer ),
+		);
+		if ( isset( $data['bearer_methods_supported'] ) && self::is_string_list( $data['bearer_methods_supported'] ) ) {
+			$out['bearer_methods_supported'] = $data['bearer_methods_supported'];
+		}
+		if ( isset( $data['resource_name'] ) && is_string( $data['resource_name'] ) ) {
+			$out['resource_name'] = $data['resource_name'];
+		}
+		return $out;
+	}
+
+	/**
+	 * A JSON list of strings.
+	 *
+	 * @param mixed $value Value.
+	 * @return bool
+	 */
+	private static function is_string_list( $value ) {
+		if ( ! is_array( $value ) || array_values( $value ) !== $value ) {
+			return false;
+		}
+		foreach ( $value as $item ) {
+			if ( ! is_string( $item ) ) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	/**
