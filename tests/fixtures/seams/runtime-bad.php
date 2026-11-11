@@ -8,15 +8,20 @@
 
 final class AB_MCP_Test_Bad_Public {
 	/** @var object|null Public: any code could set it. */
-	public static $calls = null;
+	public static $naht_bad_public = null;
 }
 
 final class AB_MCP_Test_Bad_Instance {
 	/** @var object|null Not static. */
-	private $calls = null;
+	private $naht_bad_instance = null;
 }
 
 final class AB_MCP_Test_Bad_Typed {
 	/** @var AB_MCP_Test_Example_Calls|null Typed: no stand-in fits. */
-	private static ?AB_MCP_Test_Example_Calls $calls = null;
+	private static ?AB_MCP_Test_Example_Calls $naht_bad_typed = null;
+}
+
+final class AB_MCP_Test_Bad_Unnamed {
+	/** @var object|null Private static, untyped, but without the prefix of seams. */
+	private static $calls = null;
 }

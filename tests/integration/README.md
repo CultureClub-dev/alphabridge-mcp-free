@@ -115,8 +115,9 @@ start` and the suite (or the mutation probes).
   modes: `support/class-it-child.php`, `support/class-test-abort.php`.
 - **Seams**: `AB_MCP_Test_Seam::install()` puts a stand-in with a fault plan
   into the `private static` seam of a class (`support/class-test-seam.php`).
-  A seam occurs in shipped code only as `return self::$x ?? new
-  <Class>();` and `self::$x = null;` (`SeamGuardTest`; an example in
+  The name of a seam begins with `naht_` and occurs in the shipped tree only
+  in its declaration, `return self::$naht_… ?? new <Class>();` and
+  `self::$naht_… = null;` (`SeamGuardTest`; an example in
   `tests/fixtures/seams/`).
 - **Manual way back**: `AB_MCP_IT_Handweg::run_point()` runs the commands of
   an abort point from an instruction in a shell (`support/HANDWEG.md`).

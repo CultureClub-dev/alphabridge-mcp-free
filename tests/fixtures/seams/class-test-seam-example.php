@@ -6,14 +6,16 @@
  * branch 5 will build it for real: journal, target to backup, staged to
  * target, journal done.
  *
- * The rules (SeamGuardTest holds them for every tagged property of the
- * shipped code; this file is its passing example):
- * - the property carries the tag in its doc comment, is private static, has
- *   no type and starts as null;
- * - it occurs in exactly two statements of its own class:
- *   «return self::$calls ?? new <the real calls class>();» (the accessor) and
- *   «self::$calls = null;»; nothing else reads or sets it, so no filter, no
- *   option, no constant, no variable chooses the object.
+ * The rules (SeamGuardTest holds them for every seam of the shipped code;
+ * this file is its passing example):
+ * - the name of the property begins with the prefix of seams
+ *   (AB_MCP_Test_Seam_Guard::PREFIX) and is used for nothing else in the
+ *   tree, not even in a comment;
+ * - it is private static, has no type and starts as null;
+ * - its name occurs in exactly two statements of its own class besides its
+ *   declaration: the accessor «return self::$… ?? new <the real calls
+ *   class>();» and «self::$… = null;»; nothing else reads or sets it, so no
+ *   filter, no option, no constant, no variable chooses the object.
  *
  * Test code: not shipped, not loaded by the plugin.
  *
@@ -57,8 +59,8 @@ final class AB_MCP_Test_Example_Calls {
  */
 final class AB_MCP_Test_Example_Swap {
 
-	/** @ab-mcp-seam The calls to the outside; only the tests put another object here. */
-	private static $calls = null;
+	/** The calls to the outside (the seam); only the tests put another object here. */
+	private static $naht_test_example_swap = null;
 
 	/**
 	 * The calls object: the stand-in of a test, else the real calls.
@@ -66,14 +68,14 @@ final class AB_MCP_Test_Example_Swap {
 	 * @return AB_MCP_Test_Example_Calls
 	 */
 	private static function calls() {
-		return self::$calls ?? new AB_MCP_Test_Example_Calls();
+		return self::$naht_test_example_swap ?? new AB_MCP_Test_Example_Calls();
 	}
 
 	/**
 	 * Back to the real calls (the second statement a seam may occur in).
 	 */
 	public static function forget() {
-		self::$calls = null;
+		self::$naht_test_example_swap = null;
 	}
 
 	/**

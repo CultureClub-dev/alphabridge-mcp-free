@@ -68,7 +68,7 @@ final class TestAbortTest extends TestCase {
 			'seams'   => array(
 				array(
 					'owner'    => 'AB_MCP_Test_Example_Swap',
-					'property' => 'calls',
+					'property' => 'naht_test_example_swap',
 					'real'     => 'AB_MCP_Test_Example_Calls',
 					'faults'   => $faults,
 				),
@@ -152,7 +152,7 @@ final class TestAbortTest extends TestCase {
 		$done = AB_MCP_IT_Process::calls( null, $this->plan( array() ) );
 		self::assertSame( 'swapped', $done['results']['swap'] );
 		self::assertSame( 0, $done['run']['exit'] );
-		self::assertCount( 4, $done['seams']['AB_MCP_Test_Example_Swap::$calls'] );
+		self::assertCount( 4, $done['seams']['AB_MCP_Test_Example_Swap::$naht_test_example_swap'] );
 	}
 
 	/**

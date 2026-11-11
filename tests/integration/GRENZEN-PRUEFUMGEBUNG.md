@@ -85,13 +85,14 @@ die neue Hilfe macht es anders. Fundstellen am Stand von Free `9be07f7`. Testcod
 ## G7 Der Wächter der Nähte sieht nur die Naht (Behebung 1, A5)
 
 - **Fundstelle:** `tests/integration/support/class-test-seam-guard.php`.
-- **Was nicht geht:** Der Wächter hält, dass eine Naht nur in den zwei erlaubten Anweisungen vorkommt und dass kein
-  ausgelieferter Code Reflection oder gebundene Closures braucht. Code, der die Naht gar nicht benutzt und die Aussenwelt
-  auf einem anderen Weg ruft (etwa ein zweites Objekt aus einem Filter), öffnet die Naht nicht und bleibt ihm verborgen.
+- **Was nicht geht:** Der Wächter hält, dass der Name einer Naht im ausgelieferten Baum nur in ihrer Deklaration und in
+  ihren zwei erlaubten Anweisungen vorkommt (Behebung 2) und dass kein ausgelieferter Code Eigenschaften über
+  Reflection aufzählt oder ohne Namen schreibt. Code, der die Naht gar nicht benutzt und die Aussenwelt auf einem
+  anderen Weg ruft (etwa ein zweites Objekt aus einem Filter), öffnet die Naht nicht und bleibt ihm verborgen.
 - **Warum kein Normalfall:** Jeder heikle Zweig ruft seine Aussenwelt über seine Naht; das prüft die Codex-Runde des
   Zweigs an seinem Durchsetzungsort (plan.md 3.1, `conventions.md`, «Heikle Zweige …»).
-- **Was die neue Hilfe tut:** Positive Regel statt Sperrliste: zwei Anweisungen, sonst nichts; dazu die Sperre aller
-  Wege an `private` vorbei im ganzen ausgelieferten Baum.
+- **Was die neue Hilfe tut:** Namensregel statt Sperrliste (Präfix `naht_`, ein Name je Naht, im ganzen Baum nur an
+  den erlaubten Stellen, in jeder Schreibweise, auch in Zeichenketten und Kommentaren).
 
 ## G8 Shutdown-Funktionen nach der Ergebniszeile sieht `calls()` nicht (Codex-Runde 1, A2; Behebung 2)
 
@@ -108,3 +109,17 @@ die neue Hilfe macht es anders. Fundstellen am Stand von Free `9be07f7`. Testcod
   Rettungen des Plugins registrieren ihre Shutdown-Funktion während des Requests) liegt vor dem Schreiber.
 - **Was die neue Hilfe tut:** Ergebniszeile erst aus der zuletzt registrierten Shutdown-Funktion, die sich beim Laufen
   noch einmal ans Ende stellt; dazu verlangt `calls()` Status 0.
+
+## G9 Zur Laufzeit zusammengesetzte Namen sieht der Wächter nicht (Behebung 2, feste Endregel)
+
+- **Fundstelle:** `tests/integration/support/class-test-seam-guard.php`, Regeln 3 bis 5; Beleg
+  `SeamGuardTest::testANameComposedWithoutThePrefixIsBeyondTheGuardG9`.
+- **Was nicht geht:** Ein Zugriff über einen Namen, der erst zur Laufzeit entsteht und dessen voller Name samt Präfix
+  `naht_` nirgends im Quelltext steht: Verkettung ohne das ausgeschriebene Präfix (`'na' . 'ht_x'`), `sprintf` mit
+  zerlegtem Präfix, `chr()`, `strrev()`, base64, eine Variablenvariable aus einem solchen Namen
+  (`Owner::$$name`). Der Wächter liest den Quelltext; was erst beim Laufen zusammenkommt, sieht er nicht.
+- **Warum kein Normalfall:** Niemand schreibt so, ohne die Naht absichtlich verstecken zu wollen; der Name und das
+  Präfix ausgeschrieben, in jeder Schreibweise, in Code, Zeichenketten und Kommentaren, sind gesperrt, ebenso
+  Reflection, die Eigenschaften ohne Namen aufzählt oder schreibt.
+- **Was die neue Hilfe tut:** Nichts darüber hinaus. Nach dem Entscheid der Steuerung (Behebung 2) ist das die feste
+  Endregel: Nur ein Befund im Normalfall öffnet eine weitere Runde.

@@ -125,7 +125,7 @@ final class AbortHelperTest extends TestCase {
 					'seams'   => array(
 						array(
 							'owner'    => 'AB_MCP_Test_Example_Swap',
-							'property' => 'calls',
+							'property' => 'naht_test_example_swap',
 							'real'     => 'AB_MCP_Test_Example_Calls',
 							'faults'   => array(
 								array(

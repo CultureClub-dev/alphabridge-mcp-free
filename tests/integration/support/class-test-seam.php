@@ -6,15 +6,19 @@
  * The pattern each heikel/ branch of Z8b follows: its calls to the outside
  * (rename(), writing a file, an option, an HTTP request …) go through one
  * object of a calls class, held by the class of the branch in a property
+ * whose name begins with naht_ and is used for nothing else in the tree:
  *
- *     /** @ab-mcp-seam *\/
- *     private static $calls = null;
+ *     private static $naht_sync_code_swap = null;
  *
- * that the product code fills with the real calls class only (`new
- * <Literal>()` or null; no filter, no option, no switch, no type, so that a
- * stand-in fits), read through an accessor of its own. Only the tests put
- * another object there, through Reflection: this helper. SeamGuardTest holds
- * the rules for every tagged property of the shipped code.
+ *     private static function calls() {
+ *         return self::$naht_sync_code_swap ?? new AB_MCP_Sync_Code_Swap_Calls();
+ *     }
+ *
+ * (and `self::$naht_sync_code_swap = null;` where it goes back to the real
+ * calls; no filter, no option, no switch, no type, so that a stand-in fits).
+ * Only the tests put another object there, through Reflection: this helper.
+ * SeamGuardTest holds the rules for every seam of the shipped code
+ * (AB_MCP_Test_Seam_Guard).
  *
  * A fault plan names a method of the calls object and, if wanted, which call
  * of it (nth, from 1; without nth every call), and one kind of fault, for the
@@ -74,6 +78,9 @@ final class AB_MCP_Test_Seam {
 		}
 		if ( $reflected->hasType() ) {
 			throw new LogicException( "The seam $owner::\$$property has a type; it must have none, so that the stand-in of the tests fits." );
+		}
+		if ( 0 !== strpos( $property, 'naht_' ) ) {
+			throw new LogicException( "The name of the seam $owner::\$$property must begin with naht_, a name used for nothing else in the tree (AB_MCP_Test_Seam_Guard)." );
 		}
 		// Reflection reaches a private property without setAccessible()
 		// since PHP 8.1; the tests run on 8.2 and later.

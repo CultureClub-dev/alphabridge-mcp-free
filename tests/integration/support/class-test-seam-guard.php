@@ -1,37 +1,43 @@
 <?php
 /**
  * The guard of the test seams (Z8b branch 1, point 5; F-C; Codex round 1,
- * A5): no shipped code reads or sets a seam through a filter, an option,
- * Reflection or anything but the one real calls class. Read from the tokens
- * of the files, nothing is loaded. SeamGuardTest runs it over the shipped
- * tree and over fixtures, one per rule and per way around.
+ * A5; Behebung 2): no shipped code reads or sets a seam on any way but its
+ * two statements. Read from the bytes and tokens of the files, nothing is
+ * loaded. SeamGuardTest runs it over the shipped tree and over fixtures,
+ * one per rule and per way around.
  *
- * A list of forbidden wrappers does not close (apply_filters,
- * apply_filters_ref_array, get_option, get_site_option, get_transient, a
- * constant, a variable, a function of the plugin that asks any of them …),
- * so the rule is a positive one. A seam is a property whose doc comment
- * carries @ab-mcp-seam. For each:
+ * Lists of ways around do not close: after filters, options and Reflection
+ * came a lower-case \reflectionproperty, a trait, a bound closure, a name in
+ * a string. So the rule is one about the name. A seam is a property whose
+ * name begins with PREFIX (`naht_` plus what its class is about, say
+ * `naht_sync_code_swap`), a name used for nothing else in the tree. For each:
  * 1. it is declared private static, without a type, with no default or null;
- * 2. it occurs in the shipped code in exactly two statements, both inside
- *    its own class and through self:: only:
- *      return self::$x ?? new <Class>();   (the accessor; one Class)
- *      self::$x = null;                     (back to the real calls)
- *    Any other occurrence (wrapped in a call, assigned from anything else,
- *    read into a variable, through static::, its class name or a variable
- *    class, outside its class) is a violation;
+ * 2. its name is one of a kind: declared once, and no seam name holds
+ *    another;
+ * 3. its name occurs nowhere in the bytes of the tree, in any case, in code,
+ *    strings or comments, except in its declaration and in two statements
+ *    inside its own class, through self:: only:
+ *      return self::$naht_x ?? new <Class>();   (the accessor; one Class)
+ *      self::$naht_x = null;                     (back to the real calls)
+ *    So every way that needs the name — Reflection in any case, a trait, a
+ *    closure bound to the class, $obj->{'…'}, self::${'…'}, a filter or an
+ *    option around it — shows it where it may not be;
+ * 4. the prefix itself occurs nowhere else either, so a name put together
+ *    from it ('naht_' . $x, sprintf( 'naht_%s', … )) is seen too;
  * and in the whole tree:
- * 3. no dynamic static property (`::$$name`, `::${…}`), which could name a
- *    seam without its name;
- * 4. none of the ways around private, which only the tests may take:
- *    ReflectionProperty, ReflectionObject, getProperty(), getProperties(),
- *    getStaticPropertyValue(), setStaticPropertyValue(),
- *    getStaticProperties(), setValue(), setAccessible(), Closure::bind(),
- *    bindTo() and ->call(). The plugin uses none of them (ReflectionClass
- *    and ReflectionFunction for getFileName() stay allowed).
+ * 5. no Reflection that reaches properties without naming them: the
+ *    methods getProperties(), getStaticProperties(), getStaticPropertyValue(),
+ *    setStaticPropertyValue() and setValue(), in any case. What stays of the
+ *    former list is only this: enumerating the properties of a class and
+ *    writing them needs no name at all, so rules 3 and 4 cannot see it. The
+ *    plugin uses none of them. ReflectionProperty, getProperty(),
+ *    setAccessible(), ReflectionObject, Closure::bind(), bindTo(), ->call()
+ *    and dynamic static properties went: each needs the name of the seam (or
+ *    a property of the bound class written out), which rule 3 sees.
  *
- * What the guard cannot see: code that leaves the seam unused and calls the
- * outside on another way; that is no opening of the seam, and the review of
- * each branch looks for it (GRENZEN-PRUEFUMGEBUNG.md, G7).
+ * What the guard cannot see (GRENZEN-PRUEFUMGEBUNG.md): a name put together
+ * at run time without the prefix written out ('na' . 'ht_x', chr(),
+ * strrev(), base64, G9), and code that leaves the seam unused (G7).
  *
  * @package AlphaBridge_MCP
  */
@@ -41,65 +47,53 @@
  */
 final class AB_MCP_Test_Seam_Guard {
 
-	/** The tag of a seam property. */
-	const TAG = '@ab-mcp-seam';
+	/** The prefix of the name of every seam. */
+	const PREFIX = 'naht_';
 
-	/** Names of classes and methods that reach past private. */
-	const AROUND = array( 'ReflectionProperty', 'ReflectionObject', 'getProperty', 'getProperties', 'getStaticPropertyValue', 'setStaticPropertyValue', 'getStaticProperties', 'setValue', 'setAccessible', 'bindTo' );
+	/** Methods that reach properties without naming them (lower case). */
+	const ENUMERATE = array( 'getproperties', 'getstaticproperties', 'getstaticpropertyvalue', 'setstaticpropertyvalue', 'setvalue' );
 
 	/** Tokens that end the statement before. */
 	const STATEMENT_START = array( '{', '}', ';' );
 
+	/** Keywords of a property declaration. */
+	const MODIFIERS = array( T_PRIVATE, T_PUBLIC, T_PROTECTED, T_STATIC, T_VAR, T_READONLY );
+
 	/**
-	 * The seams of some files.
+	 * The seams of some files: every property declared with a name that
+	 * begins with PREFIX.
 	 *
 	 * @param string[] $files Paths.
-	 * @return array[] { file, line, class, property, private, static, typed, default }
+	 * @return array[] { file, line, offset, class, property, private, static, typed, default }
 	 */
 	public static function seams( array $files ) {
 		$seams = array();
 		foreach ( $files as $file ) {
-			$tokens = self::tokens( $file );
-			$class  = null;
-			$count  = count( $tokens );
+			$tokens  = self::tokens( $file );
+			$offsets = self::offsets( $tokens );
+			$class   = null;
+			$count   = count( $tokens );
 			for ( $i = 0; $i < $count; $i++ ) {
 				$class = self::class_at( $tokens, $i, $class );
-				if ( ! is_array( $tokens[ $i ] ) || T_DOC_COMMENT !== $tokens[ $i ][0] || false === strpos( $tokens[ $i ][1], self::TAG ) ) {
+				$t     = $tokens[ $i ];
+				if ( ! is_array( $t ) || T_VARIABLE !== $t[0] || 0 !== stripos( substr( $t[1], 1 ), self::PREFIX ) ) {
 					continue;
 				}
-				$seam = array(
-					'file'     => $file,
-					'line'     => $tokens[ $i ][2],
-					'class'    => $class,
-					'property' => null,
-					'private'  => false,
-					'static'   => false,
-					'typed'    => false,
-					'default'  => 'none',
-				);
-				for ( $j = $i + 1; $j < $count; $j++ ) {
-					$t = $tokens[ $j ];
-					if ( is_array( $t ) && in_array( $t[0], array( T_WHITESPACE, T_COMMENT ), true ) ) {
-						continue;
-					}
-					if ( is_array( $t ) && T_VARIABLE === $t[0] ) {
-						$seam['property'] = substr( $t[1], 1 );
-						$seam['default']  = self::default_after( $tokens, $j );
-						break;
-					}
-					if ( is_array( $t ) && T_PRIVATE === $t[0] ) {
-						$seam['private'] = true;
-					} elseif ( is_array( $t ) && T_STATIC === $t[0] ) {
-						$seam['static'] = true;
-					} elseif ( is_array( $t ) && in_array( $t[0], array( T_PUBLIC, T_PROTECTED, T_VAR ), true ) ) {
-						continue;
-					} elseif ( ';' === $t || '{' === $t || ( is_array( $t ) && T_FUNCTION === $t[0] ) ) {
-						break;
-					} else {
-						$seam['typed'] = true;
-					}
+				$declaration = self::declaration( $tokens, $i );
+				if ( null === $declaration ) {
+					continue;
 				}
-				$seams[] = $seam;
+				$seams[] = array(
+					'file'     => $file,
+					'line'     => $t[2],
+					'offset'   => $offsets[ $i ] + 1,
+					'class'    => $class,
+					'property' => substr( $t[1], 1 ),
+					'private'  => in_array( T_PRIVATE, $declaration['modifiers'], true ),
+					'static'   => in_array( T_STATIC, $declaration['modifiers'], true ),
+					'typed'    => $declaration['typed'],
+					'default'  => self::default_after( $tokens, $i ),
+				);
 			}
 		}
 		return $seams;
@@ -112,16 +106,13 @@ final class AB_MCP_Test_Seam_Guard {
 	 * @return string[]
 	 */
 	public static function violations( array $files ) {
-		$out   = array();
-		$seams = self::seams( $files );
-		$by    = array();
+		$out     = array();
+		$seams   = self::seams( $files );
+		$allowed = array();
+		$names   = array();
 		foreach ( $seams as $seam ) {
 			$where = $seam['file'] . ':' . $seam['line'];
-			if ( null === $seam['property'] || null === $seam['class'] ) {
-				$out[] = "$where: the tag " . self::TAG . ' stands on no property of a class.';
-				continue;
-			}
-			$name = $seam['class'] . '::$' . $seam['property'];
+			$name  = $seam['class'] . '::$' . $seam['property'];
 			if ( ! $seam['private'] || ! $seam['static'] ) {
 				$out[] = "$where: the seam $name must be private static.";
 			}
@@ -131,75 +122,88 @@ final class AB_MCP_Test_Seam_Guard {
 			if ( ! in_array( $seam['default'], array( 'none', 'null' ), true ) ) {
 				$out[] = "$where: the seam $name starts as something other than null.";
 			}
-			$by[ $seam['property'] ][] = $seam;
+			$lower = strtolower( $seam['property'] );
+			if ( isset( $names[ $lower ] ) ) {
+				$out[] = "$where: the name {$seam['property']} of a seam is declared more than once; each seam needs a name of its own.";
+			}
+			$names[ $lower ]                                     = $seam;
+			$allowed[ $seam['file'] ][ $seam['offset'] ]         = true;
+		}
+		foreach ( array_keys( $names ) as $a ) {
+			foreach ( array_keys( $names ) as $b ) {
+				if ( $a !== $b && false !== strpos( $a, $b ) ) {
+					$out[] = "The name of the seam $a holds the name of the seam $b; each name must be one of a kind.";
+				}
+			}
 		}
 		$made = array();
-		foreach ( $files as $file ) {
-			$tokens = self::tokens( $file );
-			$class  = null;
-			$count  = count( $tokens );
-			for ( $i = 0; $i < $count; $i++ ) {
-				$class = self::class_at( $tokens, $i, $class );
-				$t     = $tokens[ $i ];
-				if ( is_array( $t ) && in_array( $t[0], array( T_STRING, T_NAME_QUALIFIED, T_NAME_FULLY_QUALIFIED ), true ) ) {
-					$around = self::around( $tokens, $i );
-					if ( null !== $around ) {
-						$out[] = $file . ':' . $t[2] . ": $around reaches past private; only the tests may do that.";
-					}
-				}
-				if ( ! is_array( $t ) || T_DOUBLE_COLON !== $t[0] ) {
-					continue;
-				}
-				$next = self::next( $tokens, $i );
-				if ( null === $next ) {
-					continue;
-				}
-				if ( '$' === $tokens[ $next ] ) {
-					$out[] = $file . ':' . $t[2] . ': a dynamic static property (::$$… or ::${…}) could name a seam without its name.';
-					continue;
-				}
-				if ( ! is_array( $tokens[ $next ] ) || T_VARIABLE !== $tokens[ $next ][0] ) {
-					continue;
-				}
-				$property = substr( $tokens[ $next ][1], 1 );
-				if ( ! isset( $by[ $property ] ) ) {
-					continue;
-				}
-				$left  = self::prev( $tokens, $i );
-				$owner = null === $left ? '' : ( is_array( $tokens[ $left ] ) ? ltrim( $tokens[ $left ][1], '\\' ) : $tokens[ $left ] );
-				$line  = $file . ':' . $t[2];
-				if ( null !== $left && is_array( $tokens[ $left ] ) && T_VARIABLE === $tokens[ $left ][0] ) {
-					$out[] = "$line: a seam property \$$property is reached through a variable class ($owner::\$$property).";
-					continue;
-				}
-				$target = in_array( strtolower( $owner ), array( 'self', 'static' ), true ) ? $class : $owner;
-				$seam   = null;
-				foreach ( $by[ $property ] as $candidate ) {
-					if ( strtolower( (string) $candidate['class'] ) === strtolower( (string) $target ) ) {
-						$seam = $candidate;
-					}
-				}
-				if ( null === $seam ) {
-					continue;
-				}
-				$name = $seam['class'] . '::$' . $property;
-				if ( $file !== $seam['file'] || strtolower( (string) $class ) !== strtolower( $seam['class'] ) ) {
-					$out[] = "$line: the seam $name is reached outside its class.";
-					continue;
-				}
-				$shape = 'self' === $owner ? self::shape( $tokens, $left, $next ) : null;
-				if ( null === $shape ) {
-					$out[] = "$line: the seam $name occurs other than as «return self::\$$property ?? new <Class>();» or «self::\$$property = null;»: " . self::statement( $tokens, $left ) . ' Nothing may read or set it on another way (a filter, an option, a variable).';
-					continue;
-				}
+		foreach ( $seams as $seam ) {
+			foreach ( self::statements( $seam ) as $offset => $shape ) {
+				$allowed[ $seam['file'] ][ $offset ] = true;
 				if ( 'null' !== $shape ) {
-					$made[ $name ][ $shape ] = $line;
+					$made[ $seam['class'] . '::$' . $seam['property'] ][ $shape ] = true;
 				}
 			}
 		}
 		foreach ( $made as $name => $classes ) {
 			if ( count( $classes ) > 1 ) {
 				$out[] = "The seam $name is made of more than one class: " . implode( ', ', array_keys( $classes ) ) . '.';
+			}
+		}
+		foreach ( $files as $file ) {
+			$code  = (string) file_get_contents( $file );
+			$lower = strtolower( $code );
+			// Rules 3 and 4: every occurrence of the prefix, in any case, must
+			// begin an allowed occurrence of a seam name.
+			for ( $at = strpos( $lower, self::PREFIX ); false !== $at; $at = strpos( $lower, self::PREFIX, $at + 1 ) ) {
+				if ( isset( $allowed[ $file ][ $at ] ) ) {
+					continue;
+				}
+				$seam  = self::seam_at( $lower, $at, $names );
+				$line  = substr_count( $code, "\n", 0, $at ) + 1;
+				$text  = trim( (string) strtok( substr( $code, (int) strrpos( substr( $code, 0, $at ), "\n" ) ), "\n" ) );
+				$out[] = null === $seam
+					? "$file:$line: the prefix " . self::PREFIX . " of the seams occurs outside a seam: «{$text}». It belongs to seam names alone."
+					: "$file:$line: the name {$seam['property']} of the seam {$seam['class']}::\${$seam['property']} occurs outside its declaration and its two statements «return self::\${$seam['property']} ?? new <Class>();» and «self::\${$seam['property']} = null;»: «{$text}». Nothing may read or set it on another way.";
+			}
+			// Rule 5.
+			$tokens = self::tokens( $file );
+			foreach ( $tokens as $t ) {
+				if ( is_array( $t ) && in_array( $t[0], array( T_STRING, T_NAME_QUALIFIED, T_NAME_FULLY_QUALIFIED ), true ) && in_array( strtolower( ltrim( $t[1], '\\' ) ), self::ENUMERATE, true ) ) {
+					$out[] = $file . ':' . $t[2] . ': ' . $t[1] . ' reaches properties without naming them; only the tests may do that.';
+				}
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * The allowed statements of a seam: the offsets of its name in them and
+	 * their shape (the class of the accessor, or 'null').
+	 *
+	 * @param array $seam Seam.
+	 * @return array<int,string>
+	 */
+	private static function statements( array $seam ) {
+		$out     = array();
+		$tokens  = self::tokens( $seam['file'] );
+		$offsets = self::offsets( $tokens );
+		$class   = null;
+		$count   = count( $tokens );
+		for ( $i = 0; $i < $count; $i++ ) {
+			$class = self::class_at( $tokens, $i, $class );
+			$t     = $tokens[ $i ];
+			if ( ! is_array( $t ) || T_VARIABLE !== $t[0] || '$' . $seam['property'] !== $t[1] || $class !== $seam['class'] ) {
+				continue;
+			}
+			$colon = self::prev( $tokens, $i );
+			$self  = null === $colon ? null : self::prev( $tokens, $colon );
+			if ( null === $self || ! is_array( $tokens[ $colon ] ) || T_DOUBLE_COLON !== $tokens[ $colon ][0] || ! is_array( $tokens[ $self ] ) || 'self' !== $tokens[ $self ][1] ) {
+				continue;
+			}
+			$shape = self::shape( $tokens, $self, $i );
+			if ( null !== $shape ) {
+				$out[ $offsets[ $i ] + 1 ] = $shape;
 			}
 		}
 		return $out;
@@ -234,48 +238,66 @@ final class AB_MCP_Test_Seam_Guard {
 	}
 
 	/**
-	 * Whether a name token is a way around private; its name, or null.
+	 * The declaration a variable token stands in, or null when it is none:
+	 * its modifiers and whether it has a type.
 	 *
 	 * @param array $tokens Tokens.
-	 * @param int   $i      Index of the name.
-	 * @return string|null
+	 * @param int   $i      Index of the variable.
+	 * @return array{modifiers:int[],typed:bool}|null
 	 */
-	private static function around( array $tokens, $i ) {
-		$bare = ltrim( $tokens[ $i ][1], '\\' );
-		if ( in_array( $bare, self::AROUND, true ) ) {
-			return $bare;
+	private static function declaration( array $tokens, $i ) {
+		$modifiers = array();
+		$typed     = false;
+		for ( $k = self::prev( $tokens, $i ); null !== $k; $k = self::prev( $tokens, $k ) ) {
+			$t = $tokens[ $k ];
+			if ( is_array( $t ) && in_array( $t[0], self::MODIFIERS, true ) ) {
+				$modifiers[] = $t[0];
+				continue;
+			}
+			if ( array() === $modifiers && ( ( is_array( $t ) && in_array( $t[0], array( T_STRING, T_NAME_QUALIFIED, T_NAME_FULLY_QUALIFIED, T_ARRAY, T_CALLABLE ), true ) ) || in_array( $t, array( '?', '|', '&', '(', ')' ), true ) ) ) {
+				$typed = true;
+				continue;
+			}
+			break;
 		}
-		$prev = self::prev( $tokens, $i );
-		if ( 'bind' === $bare && null !== $prev && is_array( $tokens[ $prev ] ) && T_DOUBLE_COLON === $tokens[ $prev ][0] && 'Closure' === self::before( $tokens, $i, 2 ) ) {
-			return 'Closure::bind';
-		}
-		$next = self::next( $tokens, $i );
-		if ( 'call' === $bare && null !== $prev && is_array( $tokens[ $prev ] ) && in_array( $tokens[ $prev ][0], array( T_OBJECT_OPERATOR, T_NULLSAFE_OBJECT_OPERATOR ), true ) && null !== $next && '(' === $tokens[ $next ] ) {
-			return '->call';
-		}
-		return null;
+		return array() === $modifiers ? null : array(
+			'modifiers' => $modifiers,
+			'typed'     => $typed,
+		);
 	}
 
 	/**
-	 * The statement around a token, for a message.
+	 * The seam whose name begins at an offset, or null.
 	 *
-	 * @param array $tokens Tokens.
-	 * @param int   $i      Index.
-	 * @return string
+	 * @param string $lower Lower-case code.
+	 * @param int    $at    Offset.
+	 * @param array  $names Seams by lower-case name.
+	 * @return array|null
 	 */
-	private static function statement( array $tokens, $i ) {
-		$from = $i;
-		while ( $from > 0 && ! in_array( $tokens[ $from - 1 ], self::STATEMENT_START, true ) ) {
-			--$from;
-		}
-		$text = '';
-		for ( $k = $from, $count = count( $tokens ); $k < $count; $k++ ) {
-			$text .= is_array( $tokens[ $k ] ) ? $tokens[ $k ][1] : $tokens[ $k ];
-			if ( ';' === $tokens[ $k ] || '{' === $tokens[ $k ] ) {
-				break;
+	private static function seam_at( $lower, $at, array $names ) {
+		$found = null;
+		foreach ( $names as $name => $seam ) {
+			if ( substr( $lower, $at, strlen( $name ) ) === $name && ( null === $found || strlen( $name ) > strlen( $found['property'] ) ) ) {
+				$found = $seam;
 			}
 		}
-		return '«' . trim( (string) preg_replace( '/\s+/', ' ', $text ) ) . '»';
+		return $found;
+	}
+
+	/**
+	 * The byte offset of each token.
+	 *
+	 * @param array $tokens Tokens.
+	 * @return int[]
+	 */
+	private static function offsets( array $tokens ) {
+		$out = array();
+		$at  = 0;
+		foreach ( $tokens as $i => $t ) {
+			$out[ $i ] = $at;
+			$at       += strlen( is_array( $t ) ? $t[1] : $t );
+		}
+		return $out;
 	}
 
 	/**
@@ -293,8 +315,9 @@ final class AB_MCP_Test_Seam_Guard {
 	}
 
 	/**
-	 * The class a token stands in (the last class keyword followed by a
-	 * name; enough for one class per file and the fixtures).
+	 * The class a token stands in: the last class, trait, interface or enum
+	 * keyword followed by a name (a trait or an anonymous class is never a
+	 * class of a seam).
 	 *
 	 * @param array       $tokens Tokens.
 	 * @param int         $i      Index.
@@ -302,11 +325,14 @@ final class AB_MCP_Test_Seam_Guard {
 	 * @return string|null
 	 */
 	private static function class_at( array $tokens, $i, $class ) {
-		if ( is_array( $tokens[ $i ] ) && T_CLASS === $tokens[ $i ][0] ) {
-			$next = self::next( $tokens, $i );
-			if ( null !== $next && is_array( $tokens[ $next ] ) && T_STRING === $tokens[ $next ][0] ) {
-				return $tokens[ $next ][1];
+		if ( is_array( $tokens[ $i ] ) && in_array( $tokens[ $i ][0], array( T_CLASS, T_TRAIT, T_INTERFACE, T_ENUM ), true ) ) {
+			$prev = self::prev( $tokens, $i );
+			if ( T_CLASS === $tokens[ $i ][0] && null !== $prev && is_array( $tokens[ $prev ] ) && in_array( $tokens[ $prev ][0], array( T_DOUBLE_COLON, T_NEW ), true ) ) {
+				return T_NEW === $tokens[ $prev ][0] ? '{anonymous}' : $class;
 			}
+			$next = self::next( $tokens, $i );
+			$name = null !== $next && is_array( $tokens[ $next ] ) && T_STRING === $tokens[ $next ][0] ? $tokens[ $next ][1] : '{anonymous}';
+			return T_CLASS === $tokens[ $i ][0] ? $name : '{' . $tokens[ $i ][1] . ' ' . $name . '}';
 		}
 		return $class;
 	}
@@ -382,24 +408,5 @@ final class AB_MCP_Test_Seam_Guard {
 			}
 		}
 		return null;
-	}
-
-	/**
-	 * The text of the token $back tokens before $i (no whitespace).
-	 *
-	 * @param array $tokens Tokens.
-	 * @param int   $i      From.
-	 * @param int   $back   How many back.
-	 * @return string
-	 */
-	private static function before( array $tokens, $i, $back ) {
-		$k = $i;
-		for ( $n = 0; $n < $back && null !== $k; $n++ ) {
-			$k = self::prev( $tokens, $k );
-		}
-		if ( null === $k ) {
-			return '';
-		}
-		return ltrim( is_array( $tokens[ $k ] ) ? $tokens[ $k ][1] : $tokens[ $k ], '\\' );
 	}
 }

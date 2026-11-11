@@ -64,11 +64,11 @@ final class TestSeamTest extends TestCase {
 	}
 
 	private function seam( array $faults ): \AB_MCP_Test_Seam_Proxy {
-		return AB_MCP_Test_Seam::install( AB_MCP_Test_Example_Swap::class, 'calls', AB_MCP_Test_Example_Calls::class, $faults );
+		return AB_MCP_Test_Seam::install( AB_MCP_Test_Example_Swap::class, 'naht_test_example_swap', AB_MCP_Test_Example_Calls::class, $faults );
 	}
 
 	private function value(): mixed {
-		return ( new ReflectionProperty( AB_MCP_Test_Example_Swap::class, 'calls' ) )->getValue();
+		return ( new ReflectionProperty( AB_MCP_Test_Example_Swap::class, 'naht_test_example_swap' ) )->getValue();
 	}
 
 	/* ---------------------------------------------- without a fault */
@@ -176,19 +176,20 @@ final class TestSeamTest extends TestCase {
 	public function testWithoutARealObjectOrClassTheSeamIsRefused(): void {
 		$this->expectException( LogicException::class );
 		$this->expectExceptionMessage( 'needs the real calls object' );
-		AB_MCP_Test_Seam::install( AB_MCP_Test_Example_Swap::class, 'calls' );
+		AB_MCP_Test_Seam::install( AB_MCP_Test_Example_Swap::class, 'naht_test_example_swap' );
 	}
 
-	public function testOnlyAPrivateStaticUntypedPropertyIsASeam(): void {
+	public function testOnlyAPrivateStaticUntypedPropertyWithThePrefixIsASeam(): void {
 		foreach (
 			array(
-				\AB_MCP_Test_Bad_Public::class   => 'must be private static',
-				\AB_MCP_Test_Bad_Instance::class => 'must be private static',
-				\AB_MCP_Test_Bad_Typed::class    => 'has a type',
-			) as $class => $says
+				\AB_MCP_Test_Bad_Public::class   => array( 'naht_bad_public', 'must be private static' ),
+				\AB_MCP_Test_Bad_Instance::class => array( 'naht_bad_instance', 'must be private static' ),
+				\AB_MCP_Test_Bad_Typed::class    => array( 'naht_bad_typed', 'has a type' ),
+				\AB_MCP_Test_Bad_Unnamed::class  => array( 'calls', 'must begin with naht_' ),
+			) as $class => list( $property, $says )
 		) {
 			try {
-				AB_MCP_Test_Seam::property( $class, 'calls' );
+				AB_MCP_Test_Seam::property( $class, $property );
 				self::fail( "$class passed as a seam." );
 			} catch ( LogicException $e ) {
 				self::assertStringContainsString( $says, $e->getMessage() );

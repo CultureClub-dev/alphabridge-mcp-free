@@ -1,14 +1,15 @@
 <?php
 /**
  * The guard of the test seams (Z8b branch 1, point 5; F-C; Codex round 1,
- * A5): no shipped code reads or sets a seam through a filter, an option,
- * Reflection or another way past the one real calls class
- * (AB_MCP_Test_Seam_Guard, a positive rule: two statements only). Over the
+ * A5; Behebung 2): the name of a seam occurs in the shipped tree only in its
+ * declaration and its two statements (AB_MCP_Test_Seam_Guard). Over the
  * shipped tree, then each rule and each way around on a fixture that breaks
- * only it (tests/fixtures/seams/bad/), and the examples that keep them all.
+ * only it (tests/fixtures/seams/bad/), the examples that keep them all, and
+ * the limit G9.
  *
  * Today the shipped tree has no seam; the heikel/ branches 2–9 of Z8b add
- * theirs with the tag @ab-mcp-seam, and this test holds them from then on.
+ * theirs, each with a name that begins with naht_, and this test holds them
+ * from then on.
  *
  * @package AlphaBridge_MCP
  */
@@ -69,7 +70,7 @@ final class SeamGuardTest extends TestCase {
 		$seams = AB_MCP_Test_Seam_Guard::seams( array( $file ) );
 		self::assertCount( 1, $seams );
 		self::assertSame( 'AB_MCP_Test_Example_Swap', $seams[0]['class'] );
-		self::assertSame( 'calls', $seams[0]['property'] );
+		self::assertSame( 'naht_test_example_swap', $seams[0]['property'] );
 		self::assertTrue( $seams[0]['private'] );
 		self::assertTrue( $seams[0]['static'] );
 		self::assertFalse( $seams[0]['typed'] );
@@ -87,33 +88,42 @@ final class SeamGuardTest extends TestCase {
 	 * @return array<string,array{0:string[],1:string}>
 	 */
 	public static function broken(): array {
-		$other = 'occurs other than as';
+		$outside = 'occurs outside its declaration and its two statements';
 		return array(
 			'public'                  => array( array( 'public.php' ), 'must be private static' ),
 			'not static'              => array( array( 'instance.php' ), 'must be private static' ),
 			'typed'                   => array( array( 'typed.php' ), 'must have no type' ),
 			'default'                 => array( array( 'default.php' ), 'starts as something other than null' ),
-			'filter returns it'       => array( array( 'filter-get.php' ), $other . ' «return self::$calls ?? new <Class>();» or «self::$calls = null;»: «return apply_filters(' ),
-			'filter by reference'     => array( array( 'filter-ref-array.php' ), 'apply_filters_ref_array' ),
-			'filter sets it'          => array( array( 'filter-set.php' ), 'self::$calls = apply_filters(' ),
-			'option'                  => array( array( 'option.php' ), 'get_option' ),
-			'site option'             => array( array( 'site-option.php' ), 'get_site_option' ),
-			'transient'               => array( array( 'transient.php' ), 'get_transient' ),
-			'reflection setter'       => array( array( 'reflection-setter.php' ), 'getProperty reaches past private' ),
-			'assigned a new object'   => array( array( 'assign-new.php' ), $other ),
-			'lazy ??='                => array( array( 'lazy.php' ), $other ),
-			'static::'                => array( array( 'static-form.php' ), $other ),
-			'class name'              => array( array( 'name-form.php' ), $other ),
-			'read into a variable'    => array( array( 'read-variable.php' ), '$c = self::$calls;' ),
-			'dynamic static property' => array( array( 'dynamic.php' ), 'dynamic static property' ),
-			'arguments'               => array( array( 'with-args.php' ), $other ),
-			'variable class name'     => array( array( 'variable-new.php' ), $other ),
+			'filter returns it'       => array( array( 'filter-get.php' ), $outside . ' «return self::$naht_bad_filter_get ?? new <Class>();» and «self::$naht_bad_filter_get = null;»: «final class Seam_Bad_Filter_Get' ),
+			'filter by reference'     => array( array( 'filter-ref-array.php' ), $outside ),
+			'filter sets it'          => array( array( 'filter-set.php' ), $outside ),
+			'option'                  => array( array( 'option.php' ), $outside ),
+			'site option'             => array( array( 'site-option.php' ), $outside ),
+			'transient'               => array( array( 'transient.php' ), $outside ),
+			'reflection setter'       => array( array( 'reflection-setter.php' ), 'the name naht_bad_reflection_setter of the seam Seam_Bad_Reflection_Setter::$naht_bad_reflection_setter ' . $outside ),
+			'assigned a new object'   => array( array( 'assign-new.php' ), $outside ),
+			'lazy ??='                => array( array( 'lazy.php' ), $outside ),
+			'static::'                => array( array( 'static-form.php' ), $outside ),
+			'class name'              => array( array( 'name-form.php' ), $outside ),
+			'read into a variable'    => array( array( 'read-variable.php' ), $outside ),
+			'dynamic static property' => array( array( 'dynamic.php' ), $outside ),
+			'arguments'               => array( array( 'with-args.php' ), $outside ),
+			'variable class name'     => array( array( 'variable-new.php' ), $outside ),
 			'two classes'             => array( array( 'two-classes.php' ), 'more than one class: Seam_Calls, Seam_Other_Calls' ),
-			'anonymous class'         => array( array( 'anonymous.php' ), $other ),
-			'reset in an expression'  => array( array( 'reset-expression.php' ), '$old = self::$calls = null;' ),
-			'outside'                 => array( array( 'outside-owner.php', 'outside-writer.php' ), 'is reached outside its class' ),
-			'variable owner'          => array( array( 'variable-owner.php' ), 'through a variable class' ),
-			'tag on a method'         => array( array( 'tag-on-method.php' ), 'stands on no property' ),
+			'anonymous class'         => array( array( 'anonymous.php' ), $outside ),
+			'reset in an expression'  => array( array( 'reset-expression.php' ), $outside ),
+			'outside'                 => array( array( 'outside-owner.php', 'outside-writer.php' ), 'outside-writer.php:3: the name naht_bad_outside' ),
+			'another class, same file' => array( array( 'neighbour.php' ), 'the name naht_bad_neighbour' ),
+			'variable owner'          => array( array( 'variable-owner.php' ), $outside ),
+			'declared twice'          => array( array( 'duplicate.php' ), 'is declared more than once' ),
+			'one name in another'     => array( array( 'nested-name.php' ), 'holds the name of the seam naht_bad_nested' ),
+			'name in a comment'       => array( array( 'comment.php' ), $outside ),
+			'prefix put together'     => array( array( 'prefix-composed.php' ), 'the prefix naht_ of the seams occurs outside a seam' ),
+			'lower-case reflection'   => array( array( 'reflection-lowercase.php' ), 'the name naht_bad_lower of the seam Seam_Bad_Lower::$naht_bad_lower ' . $outside ),
+			'a trait writes it'       => array( array( 'trait.php' ), 'the name naht_bad_trait of the seam Seam_Bad_Trait_Owner::$naht_bad_trait ' . $outside ),
+			'a bound closure'         => array( array( 'closure-owner.php', 'closure-bind.php' ), 'closure-bind.php:3: the name naht_bad_closure' ),
+			'a closure called'        => array( array( 'closure-owner.php', 'closure-call.php' ), 'closure-call.php:3: the name naht_bad_closure' ),
+			'the name as a string'    => array( array( 'string-access.php' ), 'the name naht_bad_string of the seam Seam_Bad_String::$naht_bad_string ' . $outside ),
 		);
 	}
 
@@ -128,15 +138,27 @@ final class SeamGuardTest extends TestCase {
 		self::assertStringContainsString( $says, implode( "\n", $violations ) );
 	}
 
-	public function testEveryWayPastPrivateIsNamed(): void {
-		$said = implode( "\n", AB_MCP_Test_Seam_Guard::violations( array( self::fixture( 'bad/reflection.php' ) ) ) );
-		foreach ( array( 'ReflectionProperty', 'setAccessible', 'setStaticPropertyValue', 'getStaticProperties', 'getStaticPropertyValue', 'ReflectionObject', 'getProperties', 'Closure::bind', 'bindTo', '->call' ) as $way ) {
-			self::assertStringContainsString( $way . ' reaches past private', $said );
+	public function testEveryAccessWithTheFullNameAsAStringIsSeen(): void {
+		$said = AB_MCP_Test_Seam_Guard::violations( array( self::fixture( 'bad/string-access.php' ) ) );
+		$name = array_filter( $said, static fn( $v ) => false !== strpos( $v, 'the name naht_bad_string' ) );
+		self::assertCount( 3, $name, 'The name in $object->{…}, in upper case in a lower-case Reflection call, in property_exists(): ' . implode( "\n", $said ) );
+	}
+
+	public function testReflectionThatNeedsNoNameIsNamedInAnyCase(): void {
+		$said = implode( "\n", AB_MCP_Test_Seam_Guard::violations( array( self::fixture( 'bad/enumerate.php' ) ) ) );
+		foreach ( array( 'getProperties', 'setValue', 'GetStaticProperties', 'setStaticPropertyValue', 'getstaticpropertyvalue' ) as $way ) {
+			self::assertStringContainsString( $way . ' reaches properties without naming them', $said );
 		}
-		self::assertStringNotContainsString( 'ReflectionClass reaches', $said, 'ReflectionClass alone (getFileName() in the plugin) is no way past private.' );
+	}
+
+	public function testANameComposedWithoutThePrefixIsBeyondTheGuardG9(): void {
+		// GRENZEN-PRUEFUMGEBUNG.md, G9: a name put together at run time
+		// without the prefix written out shows nothing the guard could see.
+		self::assertSame( array(), AB_MCP_Test_Seam_Guard::violations( array( self::fixture( 'beyond-runtime.php' ) ) ) );
 	}
 
 	public function testTheOwnerAloneIsNoViolation(): void {
 		self::assertSame( array(), AB_MCP_Test_Seam_Guard::violations( array( self::fixture( 'bad/outside-owner.php' ) ) ), 'Only the class that reaches in from outside breaks the rule.' );
+		self::assertSame( array(), AB_MCP_Test_Seam_Guard::violations( array( self::fixture( 'bad/closure-owner.php' ) ) ) );
 	}
 }
