@@ -123,3 +123,17 @@ die neue Hilfe macht es anders. Fundstellen am Stand von Free `9be07f7`. Testcod
   Reflection, die Eigenschaften ohne Namen aufzählt oder schreibt.
 - **Was die neue Hilfe tut:** Nichts darüber hinaus. Nach dem Entscheid der Steuerung (Behebung 2) ist das die feste
   Endregel: Nur ein Befund im Normalfall öffnet eine weitere Runde.
+
+## G10 Code nach dem Ende einer Klasse in derselben Datei gilt dem Wächter noch als ihr Code (Bestätigung Behebung 2)
+
+- **Fundstelle:** `tests/integration/support/class-test-seam-guard.php`, `class_at()` (merkt sich die zuletzt begonnene
+  Klasse, nicht ihr Ende) und die Freigabe der Fundstellen in der eigenen Klasse.
+- **Was nicht geht:** Steht in derselben Datei nach der schliessenden Klammer der Nahtklasse Code ausserhalb jeder
+  Klasse, etwa eine globale Closure, die mit `Closure::bind( …, null, Eigentümer::class )` an die Klasse gebunden wird
+  und die Naht in einer der zwei erlaubten Formen schreibt oder liest, ordnet der Wächter diese Zeilen der Nahtklasse zu
+  und meldet nichts.
+- **Warum kein Normalfall:** Die Nahtklassen der heiklen Zweige stehen je in einer eigenen Datei, eine Klasse je Datei
+  wie im übrigen Plugin; Code nach der Klasse in derselben Datei gibt es dort nicht, und die Codex-Runde jedes Zweigs
+  prüft den Durchsetzungsort. Nach der festen Endregel (Entscheid der Steuerung zu Behebung 2) öffnet ein Befund
+  ausserhalb des Normalfalls keine weitere Runde.
+- **Was die neue Hilfe tut:** Nichts darüber hinaus.
