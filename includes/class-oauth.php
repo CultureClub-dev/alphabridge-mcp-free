@@ -1649,7 +1649,7 @@ class AB_MCP_OAuth {
 		}
 		if ( ! preg_match( '#\A(?:/[A-Za-z0-9_~-][A-Za-z0-9._~-]*){1,' . self::WELL_KNOWN_MAX_SEGMENTS . '}\z#', $site_path )
 			|| false !== strpos( $site_path, '..' ) || $site_path === $home_path
-			|| ! self::wordpress_on_disk( $site_path, $home_path ) ) {
+			|| ! self::wordpress_on_disk( $site_path ) ) {
 			return null;
 		}
 
@@ -1710,8 +1710,8 @@ class AB_MCP_OAuth {
 	 * database, unlike add_option(), which looks first and then inserts),
 	 * holding when it expires. An expired lock (a request that died while
 	 * fetching) is removed and taken once more. Where the database refuses
-	 * the statement itself (an error, not an existing row), the fetch goes
-	 * ahead without a lock: null. Without a database (the unit tests)
+	 * a statement itself (an error, not an existing row; also when removing
+	 * an expired lock), the fetch goes ahead without a lock: null. Without a database (the unit tests)
 	 * add_option() stands in. The row is never read through the options
 	 * API, so no option cache is involved.
 	 *
@@ -1737,8 +1737,8 @@ class AB_MCP_OAuth {
 		$suppress = $wpdb->suppress_errors( true ); // No database message inside a JSON answer.
 		$added    = $wpdb->query( $insert ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery -- prepared above; an atomic insert is the point.
 		if ( 0 === $added ) {
-			$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name = %s AND option_value < %d", $name, time() ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery -- table name from $wpdb.
-			$added = $wpdb->query( $insert ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery -- prepared above.
+			$expired = $wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name = %s AND option_value < %d", $name, time() ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery -- table name from $wpdb.
+			$added   = false === $expired ? false : $wpdb->query( $insert ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery -- prepared above.
 		}
 		$wpdb->suppress_errors( $suppress );
 		if ( false === $added ) {
@@ -1750,28 +1750,24 @@ class AB_MCP_OAuth {
 	/**
 	 * Whether a WordPress is installed at this path of the domain, in this
 	 * site's web directory: <document root>P/wp-load.php exists and lies
-	 * inside the document root. The document root is this site's home
-	 * directory (get_home_path(), right also with WordPress' core in a
-	 * subfolder; ABSPATH without it) less this site's home path. P passed
-	 * the strict check of segments before. A symlink out of the document
-	 * root, a path open_basedir hides, a document root that does not end in
-	 * the home path: no (warnings suppressed).
+	 * inside the document root. The document root is ABSPATH less the path
+	 * of site_url(), which is where WordPress' core lies under it: right for
+	 * a site at the root, for a site in a folder and for the core in its own
+	 * folder (home /, site_url /wp). Where ABSPATH does not end in that path:
+	 * no. P passed the strict check of segments before. A symlink out of the
+	 * document root, a path open_basedir hides: no (warnings suppressed).
 	 *
 	 * @param string $site_path The other site's path P.
-	 * @param string $home_path This site's home path, without trailing slash.
 	 * @return bool
 	 */
-	private static function wordpress_on_disk( $site_path, $home_path ) {
-		if ( ! function_exists( 'get_home_path' ) && defined( 'ABSPATH' ) && @file_exists( ABSPATH . 'wp-admin/includes/file.php' ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- open_basedir may hide it.
-			require_once ABSPATH . 'wp-admin/includes/file.php';
-		}
-		$home_dir = function_exists( 'get_home_path' ) ? (string) get_home_path() : ( defined( 'ABSPATH' ) ? (string) ABSPATH : '' );
-		$root     = rtrim( str_replace( '\\', '/', $home_dir ), '/' );
-		if ( '' !== $home_path ) {
-			if ( substr( $root, -strlen( $home_path ) ) !== $home_path ) {
+	private static function wordpress_on_disk( $site_path ) {
+		$root = rtrim( str_replace( '\\', '/', (string) ABSPATH ), '/' );
+		$core = rtrim( (string) wp_parse_url( site_url(), PHP_URL_PATH ), '/' );
+		if ( '' !== $core ) {
+			if ( substr( $root, -strlen( $core ) ) !== $core ) {
 				return false;
 			}
-			$root = substr( $root, 0, -strlen( $home_path ) );
+			$root = substr( $root, 0, -strlen( $core ) );
 		}
 		if ( '' === $root ) {
 			return false;
@@ -1790,7 +1786,9 @@ class AB_MCP_OAuth {
 	private static function well_known_unlock( $name ) {
 		global $wpdb;
 		if ( $wpdb instanceof wpdb ) {
-			$wpdb->delete( $wpdb->options, array( 'option_name' => $name ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- the row of well_known_lock().
+			$suppress = $wpdb->suppress_errors( true ); // No database message inside a JSON answer.
+			$wpdb->delete( $wpdb->options, array( 'option_name' => $name ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- the row of well_known_lock(); one that stays expires.
+			$wpdb->suppress_errors( $suppress );
 			return;
 		}
 		delete_option( $name );
