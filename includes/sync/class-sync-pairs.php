@@ -466,8 +466,8 @@ final class AB_MCP_Sync_Pairs {
 	 * checked a part moves it on. Here such a pair takes new bases only for
 	 * the one part named, from the kind responsible for that part (contract
 	 * A: AB_MCP_Sync_Kinds::OWNERSHIP gives the key part:<kind>:<part> to it,
-	 * it is the very engine registered under its name, and it claims the key
-	 * in responsibility()), on the condition that the pair is still as the
+	 * and it is the very engine registered under its name, which the registry
+	 * takes only with that key in responsibility()), on the condition that the pair is still as the
 	 * step read it ($expected); the bases of every other part stay byte for
 	 * byte. Without a part, or with a part of a kind that has none, nothing
 	 * is written.
@@ -544,8 +544,9 @@ final class AB_MCP_Sync_Pairs {
 
 	/**
 	 * Whether an engine is responsible for a part of the pair of a unit
-	 * (contract A): it is the engine registered under its name, the table
-	 * gives it the key part:<kind>:<part> with no stage, and it claims it.
+	 * (contract A, responsibility()): the table gives the key
+	 * part:<kind>:<part> with no stage to its name, and it is the engine
+	 * registered under that name.
 	 *
 	 * @param mixed  $kind      The engine.
 	 * @param string $pair_kind The kind of the pair.
@@ -556,10 +557,12 @@ final class AB_MCP_Sync_Pairs {
 		if ( ! $kind instanceof AB_MCP_Sync_Kind ) {
 			return false;
 		}
+		// The registry took the engine only for exactly what the table gives
+		// it (AB_MCP_Sync_Kinds::register()), so being the engine registered
+		// under the name the table names is claiming the key.
 		$answer = AB_MCP_Sync_Kinds::part( $pair_kind . ':' . $part );
 		return 'z8' === $answer['status'] && $answer['kind'] === $kind->kind()
-			&& AB_MCP_Sync_Kinds::get( $kind->kind() ) === $kind
-			&& in_array( $answer['key'], (array) $kind->responsibility(), true );
+			&& AB_MCP_Sync_Kinds::get( $kind->kind() ) === $kind;
 	}
 
 	/**

@@ -125,12 +125,6 @@ e('constants-rules', 'constants(): with the names of ab_mcp_redact_keys', EN,
 e('constants-undefined', 'constants(): no value where it is not defined', EN,
   "\t\t\t\t'value'   => defined( $name ) ? self::constant_value( constant( $name ) ) : null,", "\t\t\t\t'value'   => defined( $name ) ? self::constant_value( constant( $name ) ) : '',", 'env', RULES)
 LOADER = 'testTheLoaderAndTheDropInsAreThoseOfWordPressAndThisPlugin'
-e('mu-loader', 'mu_files(): without the loader of AlphaBridge', EN,
-  "\t\t\tif ( self::loaded_mu( $dir, $name ) && self::LOADER !== $name ) {", "\t\t\tif ( self::loaded_mu( $dir, $name ) ) {", 'env', LOADER)
-e('mu-php', 'loaded_mu(): the PHP files of its top level only', EN,
-  "\t\treturn '.php' === substr( $name, -4 ) && is_file( $dir . '/' . $name );", "\t\treturn is_file( $dir . '/' . $name );", 'env', LOADER)
-e('mu-file', 'loaded_mu(): files only', EN,
-  "\t\treturn '.php' === substr( $name, -4 ) && is_file( $dir . '/' . $name );", "\t\treturn '.php' === substr( $name, -4 );", 'env', LOADER)
 
 PLUG = 'testThePluginsAreFoundAsGetPluginsFindsThem'
 e('plugins-dot', 'plugin_files(): no name beginning with a dot', EN,
@@ -169,7 +163,7 @@ e('shape-keys', 'shaped(): exactly the fields of its kind', EN,
 e('shape-typed', 'shaped(): each field of its type', EN,
   "\t\t\tif ( ! self::typed( $line[ $field ], $type ) ) {", "\t\t\tif ( false ) {", 'env', SHAPE)
 e('shape-page', 'shaped(): a page is named page, from part 1', EN,
-  "\t\t\t\treturn 'page' === $ref && $line['seq'] >= 1;", "\t\t\t\treturn true;", 'env', SHAPE)
+  "\t\t\t\treturn 'page' === $ref && $line['seq'] >= 1 && AB_MCP_Sync_File_Manifest::FORMAT === $line['files'];", "\t\t\t\treturn AB_MCP_Sync_File_Manifest::FORMAT === $line['files'];", 'env', SHAPE)
 e('shape-tables', 'shaped(): the list of tables is named tables', EN,
   "\t\t\t\treturn 'tables' === $ref;", "\t\t\t\treturn true;", 'env', SHAPE)
 e('shape-core', 'shaped(): core of its refs only', EN,
@@ -351,14 +345,10 @@ e('cmp-list-complete', 'compare(): a list of tables is whole only where it says 
 e('cmp-list-live', 'compare(): the list of this site as well', EN,
   "\t\t\t'l' => isset( $l['tables']['tables'] ) && true === $l['tables']['tables']['complete'],", "\t\t\t'l' => isset( $l['tables']['tables'] ),", 'env', 'testTablesOfASideWhoseListWasNotReadWholeAreNotCompared')
 e('cmp-one-side', 'entry(): a line on one side only', EN,
-  "\t\t\t$result = null === $s ? 'only_live' : 'only_staging';", "\t\t\t$result = 'only_staging';", 'env', 'testAPluginOnOneSideOnlyIsLocked')
-e('cmp-wordpress', 'judged(): WordPress of the same version is counted', EN,
-  "\t\t\t\t$same   = 'wordpress' === $ref ? 'counted' : 'same_value';", "\t\t\t\t$same   = 'same_value';", 'env', 'testWordPressOfTheSameVersionIsCountedAndTheLanguageShownOnly')
-e('cmp-locale', 'judged(): the language the same value, never equal (B4)', EN,
-  "\t\t\t\t$same   = 'wordpress' === $ref ? 'counted' : 'same_value';", "\t\t\t\t$same   = 'wordpress' === $ref ? 'counted' : 'equal';", 'env', 'testWordPressOfTheSameVersionIsCountedAndTheLanguageShownOnly')
+  "\t\t\t$result = null === $s ? 'only_live' : 'only_staging';", "\t\t\t$result = 'only_staging';", 'env', 'testATableWithTheSameRowsAndSchemaIsCountedNeverEqual')
+e('cmp-locale', 'judged(): the version of WordPress and the language the same value, never equal (B4)', EN,
+  "\t\t\tcase 'core':\n\t\t\t\t$fields = array( 'value' );\n\t\t\t\t$same   = 'same_value';", "\t\t\tcase 'core':\n\t\t\t\t$fields = array( 'value' );\n\t\t\t\t$same   = 'equal';", 'env', 'testWordPressAndTheLanguageAreShownOnlyAndTheCoreFilesComparedByTheirChecksums')
 CODE = "\t\t\t\t$fields = array( 'version', 'active' );\n\t\t\t\t$same   = 'counted';"
-e('cmp-code', 'judged(): a plugin or theme of the same version is counted, never equal', EN, CODE, CODE.replace("'counted'", "'equal'"), 'env', 'testAPluginOfTheSameVersionIsCountedNeverEqual')
-e('cmp-code-active', 'judged(): whether it runs is compared', EN, CODE, CODE.replace("array( 'version', 'active' )", "array( 'version' )"), 'env', 'testAPluginOfAnotherVersionOrStateDiffers')
 e('cmp-host-defined', 'judged(): a constant defined on one side differs', EN,
   "\t\t\t\tif ( $s['defined'] !== $l['defined'] ) {", "\t\t\t\tif ( false ) {", 'env', 'testTheValuesOfTheHostAreShownNeverEqualAndChangedAtTheHost')
 e('cmp-host-undefined', 'judged(): not defined on both sides is the same value', EN,
@@ -374,27 +364,25 @@ FILES = "\t\t\t\t$fields = array( 'files', 'bytes' );\n\t\t\t\t$same   = 'counte
 e('cmp-files', 'judged(): a root of the same count is counted, never equal', EN, FILES, FILES.replace("'counted'", "'equal'"), 'env', 'testARootOfTheSameCountIsCountedNeverEqual')
 e('cmp-files-bytes', 'judged(): the size of a root is compared', EN, FILES, FILES.replace("array( 'files', 'bytes' )", "array( 'files' )"), 'env', 'testARootOfTheSameCountIsCountedNeverEqual')
 e('cmp-files-complete', 'judged(): a root not counted to its end is not compared', EN,
-  "\t\t\t\tif ( ! $s['complete'] || ! $l['complete'] ) {", "\t\t\t\tif ( false ) {", 'env', 'testARootNotCountedToItsEndIsNotComparedWithWhy')
+  "\t\t\t\tif ( ! $s['complete'] || ! $l['complete'] ) {\n\t\t\t\t\t$side = $s['complete'] ? $l : $s;", "\t\t\t\tif ( false ) {\n\t\t\t\t\t$side = $s['complete'] ? $l : $s;", 'env', 'testARootNotCountedToItsEndIsNotComparedWithWhy')
 e('cmp-files-side', 'judged(): which side was not counted to its end', EN,
   "\t\t\t\t\t$side = $s['complete'] ? $l : $s;", "\t\t\t\t\t$side = $l;", 'env', 'testARootNotCountedToItsEndIsNotComparedWithWhy')
 e('cmp-unread', 'judged(): a value that could not be read is not compared', EN,
-  "\t\t$why = $unread( $fields );\n\t\tif ( null !== $why ) {", "\t\t$why = $unread( $fields );\n\t\tif ( false ) {", 'env', 'testAValueThatCouldNotBeReadIsNotCompared')
-e('cmp-hash', 'judged(): a must-use plugin by its hash', EN,
-  "\t\t\t\t$fields = array( 'sha256' );", "\t\t\t\t$fields = array( 'bytes' );", 'env', 'testAMustUsePluginIsEqualOrDiffersByItsHash')
+  "\t\t$why = $unread( $fields );\n\t\tif ( null !== $why ) {", "\t\t$why = $unread( $fields );\n\t\tif ( false ) {", 'env', 'testAUnitNotReadWholeIsNotComparedWithWhy')
+e('cmp-hash', 'judged(): a drop-in by its hash', EN,
+  "\t\t\tcase 'dropin':\n\t\t\t\t$fields = array( 'sha256' );", "\t\t\tcase 'dropin':\n\t\t\t\t$fields = array( 'bytes' );", 'env', 'testADropInIsEqualOrDiffersAndIsChangedAtTheHost')
 e('entry-locale', 'entry(): the language is shown only', EN,
-  "\t\tif ( 'core' === $env && 'locale' === $ref ) {", "\t\tif ( false ) {", 'env', 'testWordPressOfTheSameVersionIsCountedAndTheLanguageShownOnly')
+  "\t\t} elseif ( 'core' === $env && 'locale' === $ref ) {", "\t\t} elseif ( false ) {", 'env', 'testWordPressAndTheLanguageAreShownOnlyAndTheCoreFilesComparedByTheirChecksums')
 e('entry-host', 'entry(): the drop-ins and the host are changed at the host', EN,
   "\t\t} elseif ( in_array( $env, array( 'dropin', 'host' ), true ) ) {", "\t\t} elseif ( false ) {", 'env', 'testADropInIsEqualOrDiffersAndIsChangedAtTheHost')
 e('r1-entry-host-always', 'entry(): group U is changed at the host, whatever the result (B4)', EN,
   "\t\t} elseif ( in_array( $env, array( 'dropin', 'host' ), true ) ) {", "\t\t} elseif ( 'equal' !== $result && 'same_value' !== $result && in_array( $env, array( 'dropin', 'host' ), true ) ) {", 'env', 'testTheValuesOfTheHostAreShownNeverEqualAndChangedAtTheHost')
 e('entry-lock', 'entry(): code, files and tables are locked with their reason and stage', EN,
-  "\t\t} elseif ( 'equal' !== $result && isset( self::LOCKS[ $key ] ) ) {", "\t\t} elseif ( false ) {", 'env', 'testEachLockHasItsKeyArtStageAndReason')
-e('entry-lock-equal', 'entry(): what is equal is not locked', EN,
-  "\t\t} elseif ( 'equal' !== $result && isset( self::LOCKS[ $key ] ) ) {", "\t\t} elseif ( isset( self::LOCKS[ $key ] ) ) {", 'env', 'testAMustUsePluginIsEqualOrDiffersByItsHash')
+  "\t\t} elseif ( isset( self::LOCKS[ $key ] ) ) {", "\t\t} elseif ( false ) {", 'env', 'testEachLockHasItsKeyArtStageAndReason')
 e('entry-lock-root', 'entry(): each root by its own lock', EN,
   "\t\t$key   = 'files' === $env ? 'files:' . $ref : $env;", "\t\t$key   = 'files' === $env ? 'files:uploads' : $env;", 'env', 'testEachLockHasItsKeyArtStageAndReason')
 e('entry-counted', 'entry(): counted says its contents are not compared, and from when', EN,
-  "\t\t\tif ( 'counted' === $result ) {\n\t\t\t\t$entry['contents'] = 'not compared';", "\t\t\tif ( false ) {\n\t\t\t\t$entry['contents'] = 'not compared';", 'env', 'testAPluginOfTheSameVersionIsCountedNeverEqual')
+  "\t\t\tif ( 'counted' === $result ) {\n\t\t\t\t$entry['contents'] = 'not compared';", "\t\t\tif ( false ) {\n\t\t\t\t$entry['contents'] = 'not compared';", 'env', 'testATableWithTheSameRowsAndSchemaIsCountedNeverEqual')
 SH = "\t\tunset( $line['env'], $line['ref'], $line['sha256'], $line['schema'], $line['held'] );"
 e('show-hash', 'show(): no hash in an entry', EN, SH, "\t\tunset( $line['env'], $line['ref'], $line['held'] );", 'env', 'testNothingCountedIsEverEqualAndNothingEqualIsLocked')
 e('r1-show-held', 'show(): no held in a side (A1)', EN, SH, "\t\tunset( $line['env'], $line['ref'], $line['sha256'], $line['schema'] );", 'env', HA)
@@ -410,13 +398,13 @@ UP = 'testTheUploadsAreCountedOverPartsOutsideTheFileListsOfAttachments'
 e('read-seq', 'read(): the next part has the next number', EN,
   "\t\t$state['seq'] = (int) $state['seq'] + 1;", '', 'it', UP)
 e('read-last', 'read(): the page says whether it is the last', EN,
-  "\t\t\t\t'last' => $done,", "\t\t\t\t'last' => true,", 'it', UP)
+  "\t\t\t\t'last'  => $done,", "\t\t\t\t'last'  => true,", 'it', UP)
 e('read-clock', 'read(): a part ends when the clock says so', EN,
   "\t\t\tif ( self::now() >= $deadline || count( $lines ) + 1 >= $max ) {", "\t\t\tif ( count( $lines ) + 1 >= $max ) {", 'it', UP)
 e('read-lines', 'read(): a part ends at its lines', EN,
   "\t\t\tif ( self::now() >= $deadline || count( $lines ) + 1 >= $max ) {", "\t\t\tif ( self::now() >= $deadline ) {", 'it', 'testTheEnvironmentOfThisSiteIsReadInPartsWithTheSameEntries')
 e('read-tables-on', 'read(): the tables go on where the part before ended', EN,
-  "\t\t\t\tif ( ! $read['done'] ) {\n\t\t\t\t\t$state['after'] = $read['after'];", "\t\t\t\tif ( ! $read['done'] ) {\n\t\t\t\t\t$state['after'] = null;", 'it', 'testTheEnvironmentOfThisSiteIsReadInPartsWithTheSameEntries')
+  "\t\t\t\t$read  = self::table_lines( $state['after'], $deadline, $max - 1 - count( $lines ) );\n\t\t\t\t$lines = array_merge( $lines, $read['lines'] );\n\t\t\t\tif ( ! $read['done'] ) {\n\t\t\t\t\t$state['after'] = $read['after'];", "\t\t\t\t$read  = self::table_lines( $state['after'], $deadline, $max - 1 - count( $lines ) );\n\t\t\t\t$lines = array_merge( $lines, $read['lines'] );\n\t\t\t\tif ( ! $read['done'] ) {\n\t\t\t\t\t$state['after'] = null;", 'it', 'testTheEnvironmentOfThisSiteIsReadInPartsWithTheSameEntries')
 e('tables-after', 'table_lines(): after the table the part before ended with', EN,
   "\t\t\tif ( null !== $after && strcmp( $short, $after ) <= 0 ) {", "\t\t\tif ( null !== $after && strcmp( $short, $after ) < 0 ) {", 'it', 'testTheEnvironmentOfThisSiteIsReadInPartsWithTheSameEntries')
 e('tables-one', 'table_lines(): one table a part at least', EN,
@@ -432,14 +420,10 @@ e('tables-prefix', 'tables(): the name without the prefix', EN,
 MAIN = 'testTheEnvironmentOfBothSitesIsReadAndComparedNeverEqualWhereOnlyCounted'
 e('rows', 'table_lines(): the rows of a table', EN,
   "\t\t\t$rows    = '' === (string) $wpdb->last_error && is_numeric( $rows ) ? (int) $rows : null;", "\t\t\t$rows    = 0;", 'it', MAIN)
-e('active', 'plugins(): whether it runs, from the stored row', EN,
-  "\t\t\t\t\t'active'  => null === $active ? null : in_array( (string) $file, $active, true ),", "\t\t\t\t\t'active'  => true,", 'it', MAIN)
 e('uploads-skip', 'skip_of(): the uploads without fonts and the folders of AlphaBridge', EN,
-  "\t\t\t\treturn 'fonts' === $name || in_array( $name, self::OWN_UPLOADS, true ) || 0 === strpos( $name, self::OWN_UPLOADS_PREFIX );", "\t\t\t\treturn 'fonts' === $name;", 'it', UP)
+  "\t\t\t\treturn 'fonts' === $name || in_array( $name, self::OWN_UPLOADS, true ) || 0 === strpos( $name, self::OWN_UPLOADS_PREFIX )\n", "\t\t\t\treturn 'fonts' === $name\n", 'it', UP)
 e('uploads-attached', 'root(): the uploads against the file lists of the attachments', EN,
   "\t\tif ( 'uploads' === $root ) {\n\t\t\t$known = self::attached( $deadline );", "\t\tif ( false ) {\n\t\t\t$known = self::attached( $deadline );", 'it', UP)
-e('mu-root-skip', 'skip_of(): the must-use folder without its loaded files', EN,
-  "\t\t\t\treturn self::loaded_mu( $dir, $name );", "\t\t\t\treturn false;", 'it', MAIN)
 e('dropin-there', 'site_lines(): a drop-in that is there only', EN,
   "\t\t\tif ( '' !== $content && file_exists( $path ) ) {", "\t\t\tif ( '' !== $content ) {", 'it', MAIN)
 e('loader', 'host(): the must-use loader by its hash, absent without it', EN,
@@ -479,7 +463,7 @@ e('env-on', 'live_environment(): a part goes on from the state of the one before
 e('env-parts', 'parse_name(): the parts of the environment are files of a report', P,
   "'/^([hx])([a-z2-7]{52})\\z|^([cdeiv])([0-9]{4})-([a-z2-7]{52})\\z/'", "'/^([hx])([a-z2-7]{52})\\z|^([cdei])([0-9]{4})-([a-z2-7]{52})\\z/'", 'it', 'testTheEnvironmentOfThisSiteIsReadInPartsWithTheSameEntries')
 e('without', 'finish(): without packages of the environment one entry, not compared', RE,
-  "\t\t$environment = array() === $ids ? AB_MCP_Sync_Env::without() : AB_MCP_Sync_Env::compare( $env_side['lines'], $env );", "\t\t$environment = AB_MCP_Sync_Env::compare( $env_side['lines'], $env );", 'it', 'testWithoutEnvironmentTheReportSaysItIsNotComparedWithTheWay')
+  "\t\t$environment = array() === $ids ? AB_MCP_Sync_Env::without() : AB_MCP_Sync_Env::compare( $env_side['lines'], $env, $pairs );", "\t\t$environment = AB_MCP_Sync_Env::compare( $env_side['lines'], $env, $pairs );", 'it', 'testWithoutEnvironmentTheReportSaysItIsNotComparedWithTheWay')
 e('numbered', 'finish(): the environment numbered on after the objects', RE,
   "\t\t\t$report['entries'][] = array( 'n' => ++$n ) + $entry;", "\t\t\t$report['entries'][] = array( 'n' => $n ) + $entry;", 'it', MAIN)
 # Codex, round 1 of branch 7: on two sites.

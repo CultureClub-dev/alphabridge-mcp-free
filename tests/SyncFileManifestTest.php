@@ -340,6 +340,17 @@ final class SyncFileManifestTest extends TestCase {
 		self::assertTrue( $read['complete'], 'In time: read whole.' );
 	}
 
+	public function testTheTimeOfTheCallIsAskedWithinALargeFileToo(): void {
+		$this->file( 'plugins/big/big.bin', str_repeat( 'x', 3 * AB_MCP_Sync_File_Manifest::CHUNK ) );
+		$t                      = 100.0;
+		AB_MCP_Sync_Env::$clock = static function () use ( &$t ) {
+			$t += 1.0;
+			return $t;
+		};
+		$read = $this->read( 'big', 'live', 101.5, true );
+		self::assertSame( array( false, 'too_large' ), array( $read['complete'], $read['cause'] ), 'Within the file, not only after it.' );
+	}
+
 	public function testMoreFilesThanAManifestHoldsGiveNoHash(): void {
 		$this->shop();
 		self::assertSame( 100000, AB_MCP_Sync_File_Manifest::MAX_FILES );

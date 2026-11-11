@@ -169,8 +169,14 @@ final class AB_MCP_Sync_Env {
 	/** Files of a unit in one line of entries at most. */
 	const PER_LINE = 500;
 
-	/** Seconds a call must have had for a unit that does not end in it to be too large (a call with less leaves it to the next). */
-	const UNIT_BUDGET = 30;
+	/**
+	 * Seconds the first unit (and the check of the core) of a call has at
+	 * least, past the budget of the call: as much as a call of wp_site_diff
+	 * has for its work (AB_MCP_Sync_Inventory::BUDGET less
+	 * AB_MCP_Sync_Proposal::RESERVE). A unit that does not end in them is too
+	 * large for the hash of one call (F38).
+	 */
+	const UNIT_BUDGET = 45;
 
 	/** Names at the top of the uploads that are no unit (E1). */
 	const UPLOADS_TOP = array( '.htaccess', '.user.ini' );
@@ -443,16 +449,19 @@ final class AB_MCP_Sync_Env {
 		$deadline = self::now() + (float) $budget;
 		$max      = max( 2, (int) $max );
 		$lines    = array();
-		// The first unit of this call is too large where it does not end in
-		// it, if the call had a whole budget; else the next call reads it.
-		$first = (float) $budget >= self::UNIT_BUDGET;
+		// The first unit of a call is read to its end, with UNIT_BUDGET
+		// seconds of its own at least, so that every call moves on; one that
+		// does not end even so is too large.
+		$first = true;
 		while ( $state['step'] < count( self::STEPS ) ) {
 			$step = self::STEPS[ $state['step'] ];
 			if ( 'site' === $step ) {
 				$lines = array_merge( $lines, self::site_lines() );
 				$state = self::next( $state );
 			} elseif ( 'core' === $step ) {
-				$check = AB_MCP_Sync_Core_Compare::check( $deadline );
+				// The core is checked once a series, with UNIT_BUDGET seconds of
+				// its own at least, so that the step moves on.
+				$check = AB_MCP_Sync_Core_Compare::check( max( $deadline, self::now() + self::UNIT_BUDGET ) );
 				if ( null === $check ) {
 					break;
 				}
@@ -467,7 +476,7 @@ final class AB_MCP_Sync_Env {
 				}
 				$state = self::next( $state );
 			} elseif ( in_array( $step, self::UNITS, true ) || 'theme_root' === $step ) {
-				$read  = self::unit_step( $step, $state['after'], $deadline, $max - 1 - count( $lines ), $side, $first );
+				$read  = self::unit_step( $step, $state['after'], $deadline, $max - 1 - count( $lines ), $side, $first, array() === $lines );
 				$lines = array_merge( $lines, $read['lines'] );
 				if ( ! $read['done'] ) {
 					$state['after'] = $read['after'];
@@ -1002,14 +1011,15 @@ final class AB_MCP_Sync_Env {
 	 * @param float      $deadline Until when.
 	 * @param int        $room     Lines at most.
 	 * @param string     $side     live or staging.
-	 * @param bool       $first    No unit read yet in this call, with a whole budget (cleared here).
+	 * @param bool       $first    No unit read yet in this call (cleared here): it has UNIT_BUDGET seconds of its own at least.
+	 * @param bool       $empty    No line in this part yet: a unit whose lines do not fit even so is too large for a part.
 	 * @return array{lines:array[],done:bool,after:array|null}
 	 */
-	private static function unit_step( $kind, $place, $deadline, $room, $side, &$first ) {
+	private static function unit_step( $kind, $place, $deadline, $room, $side, &$first, $empty ) {
 		$alone = $first;
 		if ( 'theme_root' === $kind ) {
 			$lines = self::theme_roots();
-			if ( count( $lines ) > $room && ! $alone ) {
+			if ( count( $lines ) > $room && ! $empty ) {
 				return array(
 					'lines' => array(),
 					'done'  => false,
@@ -1049,16 +1059,16 @@ final class AB_MCP_Sync_Env {
 		$last  = $after;
 		foreach ( self::candidates( $kind, $dir, $after, $ctx ) as $candidate ) {
 			list( $name, $flag ) = $candidate;
-			if ( ( array() !== $lines || ! $alone ) && self::now() >= $deadline ) {
+			if ( ( ( array() !== $lines || ! $alone ) && self::now() >= $deadline ) || count( $lines ) >= $room ) {
 				return self::units_stop( $lines, $last );
 			}
-			$read = self::read_unit( $kind, $dir, $name, $flag, $side, $deadline, $first );
+			$read = self::read_unit( $kind, $dir, $name, $flag, $side, $alone ? max( (float) $deadline, self::now() + self::UNIT_BUDGET ) : $deadline, $alone );
 			if ( $read['stopped'] ) {
 				return self::units_stop( $lines, $last );
 			}
 			$of = self::unit_lines( $kind, $name, $read, $ctx );
 			if ( count( $lines ) + count( $of ) > $room ) {
-				if ( array() !== $lines || ! $alone ) {
+				if ( array() !== $lines || ! $empty ) {
 					return self::units_stop( $lines, $last );
 				}
 				// Alone in a part its lines do not fit: no entries, no hash.
@@ -1071,6 +1081,7 @@ final class AB_MCP_Sync_Env {
 			$last  = $name;
 			$first = false;
 			$alone = false;
+			$empty = false;
 		}
 		return self::units_done( $lines );
 	}
@@ -1223,20 +1234,20 @@ final class AB_MCP_Sync_Env {
 	 */
 	private static function nested( $base, $rel, $after, callable $pick ) {
 		$dir   = '' === $rel ? $base : $base . '/' . $rel;
-		$names = self::names( $dir );
-		if ( null === $names ) {
+		$list = self::names( $dir );
+		if ( null === $list ) {
 			if ( '' !== $rel && ( null === $after || self::order( $rel, $after ) > 0 ) ) {
 				yield array( $rel, 'unreadable' );
 			}
 			return;
 		}
-		foreach ( $names as $name ) {
+		foreach ( $list as $name ) {
 			$path = '' === $rel ? $name : $rel . '/' . $name;
 			$into = null;
 			if ( null !== $after ) {
-				if ( 0 === strpos( $after, $path . '/' ) ) {
+				if ( str_starts_with( $after, $path . '/' ) ) {
 					$into = $after;
-				} elseif ( self::order( $path, $after ) <= 0 ) {
+				} elseif ( 0 >= self::order( $path, $after ) ) {
 					continue;
 				}
 			}
@@ -2652,7 +2663,8 @@ final class AB_MCP_Sync_Env {
 			// the result.
 			$entry['action'] = 'host';
 			$words          .= ' ' . self::HOST_WORDS;
-		} elseif ( 'equal' !== $result && isset( self::LOCKS[ $key ] ) ) {
+		} elseif ( isset( self::LOCKS[ $key ] ) ) {
+			// What entry() decides is never equal (counted, a value shown).
 			$lock            = self::LOCKS[ $key ];
 			$entry['action'] = 'locked';
 			$entry['locks']  = array(

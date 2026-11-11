@@ -409,9 +409,6 @@ final class AB_MCP_Sync_File_Manifest {
 		$acc['entries'][] = array( (string) $rel, $read, hash_final( $ctx ), (int) $before['mtime'] );
 		++$acc['files'];
 		$acc['bytes'] += $read;
-		if ( self::now() >= $deadline ) {
-			return self::late( $acc, $first );
-		}
 		return 'done';
 	}
 
