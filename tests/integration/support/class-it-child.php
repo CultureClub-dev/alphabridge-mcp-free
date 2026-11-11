@@ -115,23 +115,25 @@ final class AB_MCP_IT_Child {
 			}
 			$results[ $name ] = $out;
 		}
-		$json = json_encode(
-			array(
-				'completed' => true,
-				'results'   => $results,
-				'seams'     => AB_MCP_Test_Seam::recorded(),
-			),
-			JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION
-		);
 		// The result line goes out only after the shutdown functions (Codex
 		// round 1, A2): from a shutdown function registered now, after
 		// every one the plan registered, which puts its writer once more at
 		// the end of the queue, after those registered while it ran. A
-		// shutdown function that exits or fails before leaves no line.
+		// shutdown function that exits or fails before leaves no line. The
+		// record of the seams is taken there too, so that it holds the calls
+		// the shutdown made (GitHub Codex on free#145).
 		register_shutdown_function(
-			static function () use ( $json ) {
+			static function () use ( $results ) {
 				register_shutdown_function(
-					static function () use ( $json ) {
+					static function () use ( $results ) {
+						$json = json_encode(
+							array(
+								'completed' => true,
+								'results'   => $results,
+								'seams'     => AB_MCP_Test_Seam::recorded(),
+							),
+							JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION
+						);
 						echo "\n" . self::RESULT_LINE . "\n" . $json . "\n";
 					}
 				);

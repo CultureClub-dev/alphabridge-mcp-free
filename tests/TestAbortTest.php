@@ -254,6 +254,18 @@ final class TestAbortTest extends TestCase {
 		return $plan;
 	}
 
+	public function testTheRecordOfTheSeamsIncludesTheCallsOfTheShutdown(): void {
+		// GitHub Codex on free#145: the record was taken before the
+		// shutdown functions ran, so a swap in a shutdown rescue left it
+		// empty although it ran through.
+		$done = AB_MCP_IT_Process::calls( null, $this->plan_in_shutdown( array() ) );
+		self::assertSame( 'done', file_get_contents( $this->dir . '/journal' ), 'The swap ran in the shutdown.' );
+		self::assertSame(
+			array( 'put#1', 'rename#1', 'rename#2', 'put#2' ),
+			array_map( static fn( $c ) => $c['method'] . '#' . $c['n'], $done['seams']['AB_MCP_Test_Example_Swap::$naht_test_example_swap'] )
+		);
+	}
+
 	public function testAPointReachedInAShutdownRescueIsNotTheAbortOfTheRequest(): void {
 		$this->expectException( RuntimeException::class );
 		$this->expectExceptionMessage( "came in the phase 'shutdown', not in the phase request" );
