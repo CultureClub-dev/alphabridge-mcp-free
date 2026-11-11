@@ -475,7 +475,8 @@ final class WellKnownHttpTest extends TestCase {
 			'Host: example.test',
 			'X-AB-Test-Home: ' . $home,
 			'X-AB-Test-Fetch: ' . $fetch,
-			'X-AB-Test-Docroot: ' . self::$docroot,
+			// The site's core lies at <web directory><home path>.
+			'X-AB-Test-Abspath: ' . self::$docroot . rtrim( (string) parse_url( $home, PHP_URL_PATH ), '/' ) . '/',
 		);
 		if ( null !== $rest ) {
 			$lines[] = 'X-AB-Test-Rest: ' . $rest;

@@ -26,7 +26,9 @@
 
 declare( strict_types = 1 );
 
-define( 'ABSPATH', __DIR__ . '/' );
+// A script that plays a site in a web directory of its own (the well-known
+// relay derives the document root from ABSPATH) defines it before this file.
+defined( 'ABSPATH' ) || define( 'ABSPATH', __DIR__ . '/' );
 
 /* ----------------------------------------------------------- option store */
 
@@ -111,7 +113,7 @@ function ab_test_reset(): void {
 	$GLOBALS['ab_test_logged_in']   = false;
 	$GLOBALS['ab_test_routes']      = array();
 	$GLOBALS['ab_test_i18n']        = array();
-	unset( $GLOBALS['ab_test_home_url'], $GLOBALS['ab_test_rest_base'], $GLOBALS['ab_test_redirect_status'], $GLOBALS['ab_test_status'], $GLOBALS['ab_test_home_path'] );
+	unset( $GLOBALS['ab_test_home_url'], $GLOBALS['ab_test_rest_base'], $GLOBALS['ab_test_redirect_status'], $GLOBALS['ab_test_status'], $GLOBALS['ab_test_site_url'] );
 }
 
 function get_option( $name, $default = false ) {
@@ -165,14 +167,6 @@ if ( ! function_exists( 'add_option' ) ) {
 		$GLOBALS['ab_test_autoload'][ $name ] = $autoload;
 		return true;
 	}
-}
-
-/**
- * The site's home directory: ABSPATH, or what a test sets in
- * $GLOBALS['ab_test_home_path'] (a web directory with other sites under it).
- */
-function get_home_path() {
-	return $GLOBALS['ab_test_home_path'] ?? ABSPATH;
 }
 
 /** As WordPress: the REST prefix, wp-json unless the filter rest_url_prefix says otherwise. */
@@ -352,8 +346,13 @@ function home_url( $path = '' ) {
 	return ( $GLOBALS['ab_test_home_url'] ?? 'https://example.test' ) . $path;
 }
 
+/**
+ * The address of WordPress' core: what a test sets in
+ * $GLOBALS['ab_test_site_url'] (the core in its own folder), else the home
+ * address.
+ */
 function site_url( $path = '' ) {
-	return 'https://example.test' . $path;
+	return ( $GLOBALS['ab_test_site_url'] ?? $GLOBALS['ab_test_home_url'] ?? 'https://example.test' ) . $path;
 }
 
 /**

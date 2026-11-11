@@ -6,3 +6,5 @@ node_modules/
 composer.lock
 .phpunit.cache/
 .phpunit.result.cache
+# Web directories the well-known relay tests make under tests/ (tests/support/well-known-docroot.php).
+/tests/ab-wk-*/

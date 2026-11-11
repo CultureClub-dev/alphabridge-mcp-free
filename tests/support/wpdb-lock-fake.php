@@ -27,8 +27,12 @@ if ( ! class_exists( 'wpdb', false ) ) {
 		public $queries = array();
 		/** @var bool When true, every statement fails as a database error does (query() returns false). */
 		public $fail = false;
+		/** @var bool When true, only the DELETE of an expired lock fails so. */
+		public $fail_delete = false;
 		/** @var bool */
 		public $suppressed = false;
+		/** @var bool[] Whether errors were suppressed at each delete(). */
+		public $suppressed_at_delete = array();
 
 		public function suppress_errors( $suppress = true ) {
 			$old              = $this->suppressed;
@@ -61,6 +65,9 @@ if ( ! class_exists( 'wpdb', false ) ) {
 				return 1;
 			}
 			if ( preg_match( "/\\ADELETE FROM wp_options WHERE option_name = '([^']*)' AND option_value < (\\d+)\\z/", $sql, $m ) ) {
+				if ( $this->fail_delete ) {
+					return false;
+				}
 				if ( array_key_exists( $m[1], $this->rows ) && (int) $this->rows[ $m[1] ] < (int) $m[2] ) {
 					unset( $this->rows[ $m[1] ] );
 					return 1;
@@ -71,6 +78,7 @@ if ( ! class_exists( 'wpdb', false ) ) {
 		}
 
 		public function delete( $table, array $where ) {
+			$this->suppressed_at_delete[] = $this->suppressed;
 			if ( 'wp_options' !== $table || array( 'option_name' ) !== array_keys( $where ) ) {
 				throw new RuntimeException( 'Unexpected delete: ' . $table . ' ' . json_encode( $where ) );
 			}

@@ -6,7 +6,8 @@
  *
  * Every directory gets a name of its own (process and random part) and is
  * removed again by the test, and at the latest when the process ends; the
- * removal stays under the temp directory and does not follow symlinks.
+ * removal stays under the temp directory or the tests folder (ab-wk-*,
+ * ignored by git) and does not follow symlinks.
  *
  * @package AlphaBridge_MCP
  */
@@ -14,13 +15,14 @@
 declare( strict_types = 1 );
 
 /**
- * A fresh directory under the temp directory, with a wp-load.php under each
- * of $sites (paths like /staging/123).
+ * A fresh directory under the temp directory (or under $base, the tests
+ * folder, where a test in this process needs the sites under ABSPATH), with
+ * a wp-load.php under each of $sites (paths like /staging/123).
  *
  * @param string[] $sites
  */
-function ab_test_wk_dir( array $sites = array() ): string {
-	$dir = rtrim( sys_get_temp_dir(), '/' ) . '/ab-wk-' . getmypid() . '-' . bin2hex( random_bytes( 4 ) );
+function ab_test_wk_dir( array $sites = array(), string $base = '' ): string {
+	$dir = rtrim( '' !== $base ? $base : sys_get_temp_dir(), '/' ) . '/ab-wk-' . getmypid() . '-' . bin2hex( random_bytes( 4 ) );
 	mkdir( $dir, 0700 );
 	register_shutdown_function( 'ab_test_wk_remove', $dir );
 	foreach ( $sites as $site ) {
@@ -39,9 +41,12 @@ function ab_test_wk_site( string $dir, string $site ): void {
 
 /** Remove a directory of ab_test_wk_dir(), not following symlinks. */
 function ab_test_wk_remove( string $dir ): void {
-	$tmp = rtrim( (string) realpath( sys_get_temp_dir() ), '/' ) . '/ab-wk-';
-	$abs = (string) realpath( $dir );
-	if ( '' === $abs || 0 !== strpos( $abs, $tmp ) || is_link( $dir ) ) {
+	$abs     = (string) realpath( $dir );
+	$allowed = array(
+		rtrim( (string) realpath( sys_get_temp_dir() ), '/' ) . '/ab-wk-',
+		rtrim( (string) realpath( dirname( __DIR__ ) ), '/' ) . '/ab-wk-',
+	);
+	if ( '' === $abs || is_link( $dir ) || ( 0 !== strpos( $abs, $allowed[0] ) && 0 !== strpos( $abs, $allowed[1] ) ) ) {
 		return;
 	}
 	$items = new RecursiveIteratorIterator( new RecursiveDirectoryIterator( $abs, FilesystemIterator::SKIP_DOTS ), RecursiveIteratorIterator::CHILD_FIRST );
