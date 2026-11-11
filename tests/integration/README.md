@@ -91,6 +91,34 @@ start` and the suite (or the mutation probes).
 - What these sites cannot show: DNS, TLS and streaming between two real
   servers. That is the live probe.
 
+## Code, aborts and seams (Z8b)
+
+- **Test plugins and themes** (`fixtures/code/`, listed with what each
+  version is for in `fixtures/code/katalog.php`): `AB_MCP_IT_Code::start()`
+  after `reset()` puts them on both sites as at the start (copies, never
+  links; activated in a process of the site), `put( $site, 'plugin', $slug,
+  $version )` another version, `counters()`, `theme_options()`,
+  `observed()` (the must-use observer of `switch_theme`), `mark()` (the
+  version that ran), `clear()` in `tearDown()`. The bootstrap clears both
+  sites before WordPress loads.
+- **wordpress.org**: `AB_MCP_Test_Wporg` answers downloads.wordpress.org and
+  api.wordpress.org from those fixtures, as an object with `get()` or through
+  `hook()` for WordPress's own requests; nothing else is asked.
+- **A plan in a process of the site** (`bin/site-call.php`):
+  `AB_MCP_IT_Process::calls( $site, $plan )` counts only a run that printed
+  its result and ended with status 0; `AB_MCP_IT_Process::abort( $site,
+  $plan )` a hard abort at a named point (a hook, or a call of a seam), in
+  the mode `shutdown`, `no_shutdown` (SIGKILL to itself) or `timeout`, only
+  with its marker and the proof of its mode. Plan and modes:
+  `support/class-it-child.php`, `support/class-test-abort.php`.
+- **Seams**: `AB_MCP_Test_Seam::install()` puts a stand-in with a fault plan
+  into the `private static` seam of a class (`support/class-test-seam.php`;
+  the rules, held by `SeamGuardTest`, and an example in
+  `tests/fixtures/seams/`).
+- **Manual way back**: `AB_MCP_IT_Handweg::run_point()` runs the commands of
+  an abort point from an instruction in a shell (`support/HANDWEG.md`).
+- Limits of these helpers: `GRENZEN-PRUEFUMGEBUNG.md`.
+
 `php -S` reads no `.htaccess`. While `AB_IT_ROOT/run/apache-site-a` (or
 `-site-b`) exists, `bin/router.php` answers 403 below a folder whose
 `.htaccess` denies everyone, as Apache would: the case in which the

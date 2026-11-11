@@ -180,6 +180,12 @@ final class TestAbortTest extends TestCase {
 		self::assertSame( 'alt', file_get_contents( $this->dir . '/target/plugin.php' ), 'The swap never began.' );
 	}
 
+	public function testAResultThatIsNoUtf8EndsTheRunAsAFailureNotAsNull(): void {
+		$this->expectException( RuntimeException::class );
+		$this->expectExceptionMessage( 'did not run its plan to the end' );
+		AB_MCP_IT_Process::calls( null, $this->plan( array(), array( array( 'call' => 'hex2bin', 'args' => array( 'ff' ) ) ) ) );
+	}
+
 	public function testAPointThatNeverComesIsAnError(): void {
 		$faults           = self::between( 'shutdown' );
 		$faults[0]['nth'] = 5;
