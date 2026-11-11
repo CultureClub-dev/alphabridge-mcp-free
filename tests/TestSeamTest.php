@@ -26,6 +26,7 @@ require_once __DIR__ . '/integration/support/class-test-abort.php';
 require_once __DIR__ . '/integration/support/class-test-seam.php';
 require_once __DIR__ . '/fixtures/seams/class-test-seam-example.php';
 require_once __DIR__ . '/fixtures/seams/runtime-bad.php';
+require_once __DIR__ . '/fixtures/seams/class-test-seam-writer.php';
 
 final class TestSeamTest extends TestCase {
 
@@ -124,6 +125,58 @@ final class TestSeamTest extends TestCase {
 		self::assertSame( 'second_rename_failed', $this->swap(), 'The real rename found the target taken.' );
 		self::assertSame( 'another writer', file_get_contents( $this->dir . '/target/fremd.txt' ) );
 		self::assertSame( 'before', $proxy->calls[2]['fault'] );
+	}
+
+	/**
+	 * Every form of a writer before the call (GitHub Codex on free#145): an
+	 * object method and a static method as array callables, a closure, a
+	 * function name, and a list of writer ops.
+	 *
+	 * @return array<string,array{0:string}>
+	 */
+	public static function writers(): array {
+		return array(
+			'object method'   => array( 'object' ),
+			'static method'   => array( 'static' ),
+			'closure'         => array( 'closure' ),
+			'list of ops'     => array( 'ops' ),
+		);
+	}
+
+	#[\PHPUnit\Framework\Attributes\DataProvider( 'writers' )]
+	public function testEveryFormOfAWriterRunsBeforeTheCall( string $form ): void {
+		$file = $this->dir . '/vorher';
+		switch ( $form ) {
+			case 'object':
+				$before = array( new \AB_MCP_Test_Seam_Writer( $file ), 'before' );
+				$wrote  = 'object before put';
+				break;
+			case 'static':
+				\AB_MCP_Test_Seam_Writer::$file = $file;
+				$before                         = array( \AB_MCP_Test_Seam_Writer::class, 'before_static' );
+				$wrote                          = 'static before put';
+				break;
+			case 'closure':
+				$before = static function ( $method ) use ( $file ) {
+					file_put_contents( $file, 'closure before ' . $method );
+				};
+				$wrote  = 'closure before put';
+				break;
+			default:
+				$before = array(
+					array( 'op' => 'put_file', 'path' => $file, 'bytes' => base64_encode( 'ops before' ) ),
+					array( 'op' => 'mkdir', 'path' => $this->dir . '/ordner' ),
+				);
+				$wrote  = 'ops before';
+		}
+		$proxy = $this->seam( array( array( 'method' => 'put', 'nth' => 1, 'kind' => 'before', 'before' => $before ) ) );
+		self::assertSame( 'swapped', $this->swap() );
+		self::assertSame( $wrote, file_get_contents( $file ) );
+		self::assertSame( 'before', $proxy->calls[0]['fault'] );
+		if ( 'ops' === $form ) {
+			self::assertDirectoryExists( $this->dir . '/ordner' );
+			rmdir( $this->dir . '/ordner' );
+		}
 	}
 
 	public function testAWriterAsAnOpOfAPlan(): void {

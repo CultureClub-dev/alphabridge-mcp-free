@@ -33,8 +33,10 @@
  *           no_shutdown, timeout; AB_MCP_Test_Abort), reached in 'phase'
  *           (request, default, or shutdown): «exit/Fatal» and «Zeitlimit»,
  *           in a process of its own only
- *   before  run 'before' first (a callable; in a plan for a child process an
- *           op, see run_op()), then the real call: «gleichzeitiger Schreiber»
+ *   before  run 'before' first (a callable of any form, also an array
+ *           callable; or a writer op or a list of them, see run_op(), as a
+ *           plan for a child process gives it), then the real call:
+ *           «gleichzeitiger Schreiber»
  *   half    with 'arg' (index): the real call with that argument cut to
  *           'keep' bytes, then give back 'value' (default false): «halb
  *           geschrieben»; without 'arg': the real call, its string result cut
@@ -279,7 +281,10 @@ final class AB_MCP_Test_Seam_Proxy {
 				AB_MCP_Test_Abort::fire( $fault['point'], $fault['mode'], $seconds );
 				return null; // Not reached.
 			case 'before':
-				if ( is_callable( $fault['before'] ) && ! is_array( $fault['before'] ) ) {
+				// A callable in any form (a closure, a function name, an array
+				// callable [$object, 'method'] or [Class::class, 'method']);
+				// a writer op or a list of them is an array, never callable.
+				if ( is_callable( $fault['before'] ) ) {
 					call_user_func( $fault['before'], $method, $args );
 				} else {
 					foreach ( isset( $fault['before']['op'] ) ? array( $fault['before'] ) : (array) $fault['before'] as $op ) {
