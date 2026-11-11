@@ -1,10 +1,11 @@
 <?php
 /**
- * The guard of the test seams (Z8b branch 1, point 5; F-C): no shipped code
- * opens a seam through a filter, an option or another way past the one real
- * calls class (AB_MCP_Test_Seam_Guard). Over the shipped tree, then each
- * rule on a fixture that breaks only it (tests/fixtures/seams/bad/), and the
- * example that keeps them all.
+ * The guard of the test seams (Z8b branch 1, point 5; F-C; Codex round 1,
+ * A5): no shipped code reads or sets a seam through a filter, an option,
+ * Reflection or another way past the one real calls class
+ * (AB_MCP_Test_Seam_Guard, a positive rule: two statements only). Over the
+ * shipped tree, then each rule and each way around on a fixture that breaks
+ * only it (tests/fixtures/seams/bad/), and the examples that keep them all.
  *
  * Today the shipped tree has no seam; the heikel/ branches 2–9 of Z8b add
  * theirs with the tag @ab-mcp-seam, and this test holds them from then on.
@@ -76,25 +77,41 @@ final class SeamGuardTest extends TestCase {
 		self::assertSame( array(), AB_MCP_Test_Seam_Guard::violations( array( $file ) ) );
 	}
 
+	public function testTheTwoAllowedStatementsAloneKeepEveryRule(): void {
+		self::assertSame( array(), AB_MCP_Test_Seam_Guard::violations( array( self::fixture( 'good-both-shapes.php' ) ) ) );
+	}
+
 	/**
-	 * One fixture per rule, and what the guard says about it.
+	 * One fixture per rule and per way around, and what the guard says.
 	 *
 	 * @return array<string,array{0:string[],1:string}>
 	 */
 	public static function broken(): array {
+		$other = 'occurs other than as';
 		return array(
-			'public'          => array( array( 'public.php' ), 'must be private static' ),
-			'not static'      => array( array( 'instance.php' ), 'must be private static' ),
-			'typed'           => array( array( 'typed.php' ), 'must have no type' ),
-			'default'         => array( array( 'default.php' ), 'starts as something other than null' ),
-			'filter'          => array( array( 'filter.php' ), 'apply_filters' ),
-			'option'          => array( array( 'option.php' ), 'get_option' ),
-			'variable class'  => array( array( 'variable-new.php' ), 'new $class ( ) ;' ),
-			'arguments'       => array( array( 'with-args.php' ), 'other than new <Class>() or null' ),
-			'two classes'     => array( array( 'two-classes.php' ), 'more than one class: Seam_Calls, Seam_Other_Calls' ),
-			'outside'         => array( array( 'outside-owner.php', 'outside-writer.php' ), 'is written outside its class' ),
-			'variable owner'  => array( array( 'variable-owner.php' ), 'written through a variable class' ),
-			'tag on a method' => array( array( 'tag-on-method.php' ), 'stands on no property' ),
+			'public'                  => array( array( 'public.php' ), 'must be private static' ),
+			'not static'              => array( array( 'instance.php' ), 'must be private static' ),
+			'typed'                   => array( array( 'typed.php' ), 'must have no type' ),
+			'default'                 => array( array( 'default.php' ), 'starts as something other than null' ),
+			'filter returns it'       => array( array( 'filter-get.php' ), $other . ' «return self::$calls ?? new <Class>();» or «self::$calls = null;»: «return apply_filters(' ),
+			'filter by reference'     => array( array( 'filter-ref-array.php' ), 'apply_filters_ref_array' ),
+			'filter sets it'          => array( array( 'filter-set.php' ), 'self::$calls = apply_filters(' ),
+			'option'                  => array( array( 'option.php' ), 'get_option' ),
+			'site option'             => array( array( 'site-option.php' ), 'get_site_option' ),
+			'transient'               => array( array( 'transient.php' ), 'get_transient' ),
+			'reflection setter'       => array( array( 'reflection-setter.php' ), 'getProperty reaches past private' ),
+			'assigned a new object'   => array( array( 'assign-new.php' ), $other ),
+			'lazy ??='                => array( array( 'lazy.php' ), $other ),
+			'static::'                => array( array( 'static-form.php' ), $other ),
+			'class name'              => array( array( 'name-form.php' ), $other ),
+			'read into a variable'    => array( array( 'read-variable.php' ), '$c = self::$calls;' ),
+			'dynamic static property' => array( array( 'dynamic.php' ), 'dynamic static property' ),
+			'arguments'               => array( array( 'with-args.php' ), $other ),
+			'variable class name'     => array( array( 'variable-new.php' ), $other ),
+			'two classes'             => array( array( 'two-classes.php' ), 'more than one class: Seam_Calls, Seam_Other_Calls' ),
+			'outside'                 => array( array( 'outside-owner.php', 'outside-writer.php' ), 'is reached outside its class' ),
+			'variable owner'          => array( array( 'variable-owner.php' ), 'through a variable class' ),
+			'tag on a method'         => array( array( 'tag-on-method.php' ), 'stands on no property' ),
 		);
 	}
 
@@ -111,13 +128,13 @@ final class SeamGuardTest extends TestCase {
 
 	public function testEveryWayPastPrivateIsNamed(): void {
 		$said = implode( "\n", AB_MCP_Test_Seam_Guard::violations( array( self::fixture( 'bad/reflection.php' ) ) ) );
-		foreach ( array( 'ReflectionProperty', 'setStaticPropertyValue', 'bind reaches', 'bindTo' ) as $way ) {
-			self::assertStringContainsString( $way, $said );
+		foreach ( array( 'ReflectionProperty', 'setAccessible', 'setStaticPropertyValue', 'getStaticProperties', 'getStaticPropertyValue', 'ReflectionObject', 'getProperties', 'Closure::bind', 'bindTo', '->call' ) as $way ) {
+			self::assertStringContainsString( $way . ' reaches past private', $said );
 		}
 		self::assertStringNotContainsString( 'ReflectionClass reaches', $said, 'ReflectionClass alone (getFileName() in the plugin) is no way past private.' );
 	}
 
 	public function testTheOwnerAloneIsNoViolation(): void {
-		self::assertSame( array(), AB_MCP_Test_Seam_Guard::violations( array( self::fixture( 'bad/outside-owner.php' ) ) ), 'Only the writer from outside breaks the rule.' );
+		self::assertSame( array(), AB_MCP_Test_Seam_Guard::violations( array( self::fixture( 'bad/outside-owner.php' ) ) ), 'Only the class that reaches in from outside breaks the rule.' );
 	}
 }

@@ -10,9 +10,10 @@
  * shipped code; this file is its passing example):
  * - the property carries the tag in its doc comment, is private static, has
  *   no type and starts as null;
- * - only its own class writes it, and only with new <the real calls class>()
- *   or null; it is read through one accessor;
- * - no filter, no option, no constant, no variable chooses the object.
+ * - it occurs in exactly two statements of its own class:
+ *   «return self::$calls ?? new <the real calls class>();» (the accessor) and
+ *   «self::$calls = null;»; nothing else reads or sets it, so no filter, no
+ *   option, no constant, no variable chooses the object.
  *
  * Test code: not shipped, not loaded by the plugin.
  *
@@ -60,15 +61,19 @@ final class AB_MCP_Test_Example_Swap {
 	private static $calls = null;
 
 	/**
-	 * The calls object.
+	 * The calls object: the stand-in of a test, else the real calls.
 	 *
 	 * @return AB_MCP_Test_Example_Calls
 	 */
 	private static function calls() {
-		if ( null === self::$calls ) {
-			self::$calls = new AB_MCP_Test_Example_Calls();
-		}
-		return self::$calls;
+		return self::$calls ?? new AB_MCP_Test_Example_Calls();
+	}
+
+	/**
+	 * Back to the real calls (the second statement a seam may occur in).
+	 */
+	public static function forget() {
+		self::$calls = null;
 	}
 
 	/**
