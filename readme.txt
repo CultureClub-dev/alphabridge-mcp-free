@@ -222,7 +222,7 @@ AlphaBridge MCP sends no telemetry and calls no outside service on its own. Thre
 == Changelog ==
 
 = 4.10.1 =
-* The main site now answers OAuth discovery requests for a site in a subfolder of the same domain (up to four levels deep, for example a staging copy) with that site's own metadata, fetched from it, so the subfolder site can connect to AI clients over OAuth when AlphaBridge on the main site is updated and the main site can reach it.
+* The main site now answers OAuth discovery requests for a site in a subfolder of the same domain (up to four levels deep, for example a staging copy) with that site's own metadata, fetched from it, so the subfolder site can connect to AI clients over OAuth when AlphaBridge on the main site is updated and the subfolder site lies in the main site's web directory and can be reached from it.
 
 = 4.10.0 =
 * **Page-builder texts and search and replace in the free plugin, 82 tools in all.** `wp_update_builder_element` and `wp_search_replace` came with AlphaBridge MCP Pro only; they work as they did there, with the same checks, and their messages come in the plugin's languages.
@@ -473,7 +473,7 @@ AlphaBridge MCP sends no telemetry and calls no outside service on its own. Thre
 == Upgrade Notice ==
 
 = 4.10.1 =
-Sites installed in a subfolder (up to four levels deep) of a domain where AlphaBridge also runs at the root, for example staging copies, can connect to AI clients over OAuth when AlphaBridge on the main site is updated and the main site can reach the subfolder site.
+Sites installed in a subfolder (up to four levels deep) of a domain where AlphaBridge also runs at the root, for example staging copies, can connect to AI clients over OAuth when AlphaBridge on the main site is updated and the subfolder site lies in its web directory and can be reached from it.
 
 = 4.10.0 =
 Page-builder texts and search and replace are free now, 82 tools in all, with undo for page-builder pages and options, post_ids and expected_count. No setting changes.
