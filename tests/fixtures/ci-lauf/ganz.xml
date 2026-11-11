@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- CiRunCompleteTest: a suite that runs to its end, with data sets, a skipped and an incomplete test. -->
+<phpunit bootstrap="../../../vendor/autoload.php" colors="false" cacheResult="false">
+    <testsuites>
+        <testsuite name="ganz">
+            <file>GanzProbe.php</file>
+        </testsuite>
+    </testsuites>
+</phpunit>

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- CiRunCompleteTest: a suite with a class skipped in setUpBeforeClass(), and one that runs to its end. -->
+<phpunit bootstrap="../../../vendor/autoload.php" colors="false" cacheResult="false">
+    <testsuites>
+        <testsuite name="klassenskip">
+            <file>KlassenSkipProbe.php</file>
+            <file>GanzProbe.php</file>
+        </testsuite>
+    </testsuites>
+</phpunit>

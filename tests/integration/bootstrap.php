@@ -13,6 +13,11 @@
  * The only code these tests add to what the sites run is
  * AB_MCP_Test_Sync_Fetcher, required below and nowhere else (Entscheid 34
  * of the Z8 plan): the product code takes no filter or switch for it.
+ * Z8b branch 1 adds, the same way: the stand-in for downloads.wordpress.org
+ * (AB_MCP_Test_Wporg), the test seams (AB_MCP_Test_Seam), the hard abort in
+ * a process of its own (AB_MCP_Test_Abort, AB_MCP_IT_Process) and the test
+ * plugins and themes (AB_MCP_IT_Code), which the sites get as copies only
+ * while a case asks for them.
  *
  * @package AlphaBridge_MCP
  */
@@ -30,6 +35,12 @@ try {
 	fwrite( STDERR, $e->getMessage() . "\n" );
 	exit( 1 );
 }
+
+// No test plugin, theme or must-use plugin of a run that ended early stays
+// on the sites: removed before WordPress loads (files only; the tables go
+// back with AB_MCP_IT_Sites::reset()).
+require_once __DIR__ . '/support/class-it-code.php';
+AB_MCP_IT_Code::clear();
 
 $_SERVER = array_merge( $_SERVER, AB_MCP_IT_Sites::server_vars( 'a' ) );
 define( 'WP_USE_THEMES', false );
@@ -49,5 +60,10 @@ require __DIR__ . '/support/class-test-sync-fetcher.php';
 // Steps on a site in a process of its own, for the canonical form (Z8
 // branch 4): each site computes it with its own WordPress.
 require __DIR__ . '/support/class-it-sync-steps.php';
+// Z8b branch 1: the stand-in for wordpress.org, the seams, the abort, the
+// shell run of a manual way back (class-it-code.php is loaded above).
+require_once __DIR__ . '/support/class-test-wporg.php';
+require_once __DIR__ . '/support/class-it-process.php';
+require_once __DIR__ . '/support/class-it-handweg.php';
 require_once AB_MCP_DIR . 'includes/sync/class-sync-db-kinds.php';
 require_once AB_MCP_DIR . 'includes/sync/class-sync-media.php';

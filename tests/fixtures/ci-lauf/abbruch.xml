@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- CiRunCompleteTest: a suite whose second test ends the process with a real exit. -->
+<phpunit bootstrap="../../../vendor/autoload.php" colors="false" cacheResult="false">
+    <testsuites>
+        <testsuite name="abbruch">
+            <file>AbbruchProbe.php</file>
+        </testsuite>
+    </testsuites>
+</phpunit>
