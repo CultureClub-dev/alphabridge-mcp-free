@@ -172,6 +172,12 @@ class AB_MCP_OAuth {
 	const WELL_KNOWN_CACHE_TTL    = 300;
 
 	/**
+	 * At most this many such fetches per WELL_KNOWN_CACHE_TTL seconds for the
+	 * whole site; past it, other paths get a 404 without a fetch.
+	 */
+	const WELL_KNOWN_MAX_FETCHES = 30;
+
+	/**
 	 * Address ranges a metadata document is never fetched from: this machine,
 	 * private and shared networks, link-local (cloud metadata services live at
 	 * 169.254.169.254), documentation, benchmarking, multicast and reserved
@@ -1560,7 +1566,16 @@ class AB_MCP_OAuth {
 			return $none;
 		}
 		$name   = $m[1];
-		$suffix = rtrim( isset( $m[2] ) ? $m[2] : '', '/' );
+		$suffix = isset( $m[2] ) ? $m[2] : '';
+		// At most one slash at the end, and no empty segment anywhere: a
+		// path with // is no path of this or any other site (4.10.0 answered
+		// /.well-known/oauth-authorization-server// with its own metadata).
+		if ( false !== strpos( $suffix, '//' ) ) {
+			return array( 'kind' => 'refused' );
+		}
+		if ( '/' === substr( $suffix, -1 ) ) {
+			$suffix = substr( $suffix, 0, -1 );
+		}
 
 		$resource_path = rtrim( (string) wp_parse_url( self::resource(), PHP_URL_PATH ), '/' );
 		if ( in_array( $suffix, array( '', rtrim( $home_path, '/' ), $resource_path ), true ) ) {
@@ -1595,7 +1610,23 @@ class AB_MCP_OAuth {
 	 * is the document of exactly that issuer (https://host/P) or resource,
 	 * in the form AlphaBridge gives it, and only with the fields that form
 	 * has (relayable_server_metadata(), relayable_resource_metadata()).
-	 * Document or failure is kept WELL_KNOWN_CACHE_TTL seconds per site.
+	 * Document or failure is kept WELL_KNOWN_CACHE_TTL seconds per site,
+	 * under the whole identity asked for (issuer, and resource), and checked
+	 * again when it is read. While one request fetches for a path, another
+	 * for the same path gets the 404 without fetching (a lock that expires
+	 * after the time limit); and the whole site fetches at most
+	 * WELL_KNOWN_MAX_FETCHES times in WELL_KNOWN_CACHE_TTL seconds.
+	 *
+	 * Limits, by design:
+	 * - The fetch goes to this site's own address and waits for the answer of
+	 *   the other site. Where both share one PHP worker (or every worker is
+	 *   busy), the other site cannot answer before this request ends: the
+	 *   fetch runs into the time limit and this request ends with the 404
+	 *   after WELL_KNOWN_TIMEOUT seconds, as for a site that cannot reach
+	 *   itself. The client then fails as with 4.10.0, but without a client
+	 *   registered at this site.
+	 * - A home_url() with an IPv6 literal as host is refused by WordPress'
+	 *   check of safe addresses (wp_http_validate_url()): no relay there.
 	 *
 	 * @param string $name      oauth-authorization-server or oauth-protected-resource.
 	 * @param string $suffix    The path after the name, without trailing slash, not this site's own.
@@ -1624,13 +1655,33 @@ class AB_MCP_OAuth {
 		}
 		$origin = $home['scheme'] . '://' . $home['host'] . ( isset( $home['port'] ) ? ':' . $home['port'] : '' );
 
-		$key    = 'ab_mcp_wk_' . md5( $origin . '|' . $name . '|' . $site_path );
-		$cached = get_transient( $key );
+		$issuer   = $origin . $site_path;
+		$resource = 'oauth-protected-resource' === $name ? $origin . $suffix : '';
+		$hash     = md5( $name . '|' . $issuer . '|' . $resource );
+		$key      = 'ab_mcp_wk_' . $hash;
+		$cached   = get_transient( $key );
 		if ( is_array( $cached ) && array_key_exists( 'document', $cached ) ) {
-			return is_array( $cached['document'] ) ? $cached['document'] : null;
+			return is_array( $cached['document'] ) ? self::relayable( $name, $cached['document'], $issuer, $resource ) : null;
 		}
 
-		$url = $origin . $site_path . '/.well-known/' . $name . ( 'oauth-protected-resource' === $name ? $suffix : '' );
+		$budget = get_transient( 'ab_mcp_wk_budget' );
+		if ( ! is_array( $budget ) || ! isset( $budget['since'], $budget['count'] ) || (int) $budget['since'] + self::WELL_KNOWN_CACHE_TTL <= time() ) {
+			$budget = array(
+				'since' => time(),
+				'count' => 0,
+			);
+		}
+		if ( (int) $budget['count'] >= self::WELL_KNOWN_MAX_FETCHES ) {
+			return null;
+		}
+		$lock = self::well_known_lock( $hash );
+		if ( '' === $lock ) {
+			return null;
+		}
+		$budget['count'] = (int) $budget['count'] + 1;
+		set_transient( 'ab_mcp_wk_budget', $budget, max( 1, (int) $budget['since'] + self::WELL_KNOWN_CACHE_TTL - time() ) );
+
+		$url = $issuer . '/.well-known/' . $name . ( 'oauth-protected-resource' === $name ? $suffix : '' );
 
 		$document = null;
 		$response = wp_safe_remote_get(
@@ -1651,13 +1702,48 @@ class AB_MCP_OAuth {
 				$data = json_decode( $body, true );
 			}
 			if ( is_array( $data ) ) {
-				$document = 'oauth-authorization-server' === $name
-					? self::relayable_server_metadata( $data, $origin . $site_path )
-					: self::relayable_resource_metadata( $data, $origin . $suffix, $origin . $site_path );
+				$document = self::relayable( $name, $data, $issuer, $resource );
 			}
 		}
 		set_transient( $key, array( 'document' => $document ), self::WELL_KNOWN_CACHE_TTL );
+		delete_option( $lock );
 		return $document;
+	}
+
+	/**
+	 * Take the lock for fetching one path: an option that add_option() adds
+	 * only where it does not exist yet, holding when it expires. An expired
+	 * lock (a request that died while fetching) is taken over once.
+	 *
+	 * @param string $hash Identity of the path.
+	 * @return string The lock's option name, or '' while another request holds it.
+	 */
+	private static function well_known_lock( $hash ) {
+		$name  = 'ab_mcp_wk_lock_' . $hash;
+		$until = time() + self::WELL_KNOWN_TIMEOUT + 2;
+		if ( add_option( $name, $until, '', false ) ) {
+			return $name;
+		}
+		if ( (int) get_option( $name, 0 ) >= time() ) {
+			return '';
+		}
+		delete_option( $name );
+		return add_option( $name, $until, '', false ) ? $name : '';
+	}
+
+	/**
+	 * The relayable form of a document of another site, or null.
+	 *
+	 * @param string $name     oauth-authorization-server or oauth-protected-resource.
+	 * @param array  $data     Decoded document.
+	 * @param string $issuer   The issuer asked for.
+	 * @param string $resource The resource asked for ('' for server metadata).
+	 * @return array|null
+	 */
+	private static function relayable( $name, array $data, $issuer, $resource ) {
+		return 'oauth-authorization-server' === $name
+			? self::relayable_server_metadata( $data, $issuer )
+			: self::relayable_resource_metadata( $data, $resource, $issuer );
 	}
 
 	/**
@@ -1681,7 +1767,7 @@ class AB_MCP_OAuth {
 				}
 				return null;
 			}
-			if ( ! is_string( $data[ $key ] ) || 0 !== strpos( $data[ $key ], $issuer . '/' ) || preg_match( '/[\x00-\x20\x7F]/', $data[ $key ] ) ) {
+			if ( ! self::is_under_issuer( $data[ $key ], $issuer ) ) {
 				return null;
 			}
 			$out[ $key ] = $data[ $key ];
@@ -1731,6 +1817,32 @@ class AB_MCP_OAuth {
 			$out['resource_name'] = $data['resource_name'];
 		}
 		return $out;
+	}
+
+	/**
+	 * Whether an endpoint lies under the issuer, also after the path is
+	 * normalised: the issuer, a slash, then a path without empty, "." or ".."
+	 * segments and without percent signs, backslashes, fragments, spaces or
+	 * control characters; a query after that is allowed (AlphaBridge's own
+	 * ?ab_mcp_oauth=… and, with plain permalinks, ?rest_route=…).
+	 *
+	 * @param mixed  $url    Endpoint.
+	 * @param string $issuer Issuer.
+	 * @return bool
+	 */
+	private static function is_under_issuer( $url, $issuer ) {
+		if ( ! is_string( $url ) || 0 !== strpos( $url, $issuer . '/' ) || preg_match( '/[\x00-\x20\x7F%#\\\\]/', $url ) ) {
+			return false;
+		}
+		$path     = (string) strtok( substr( $url, strlen( $issuer ) ), '?' );
+		$segments = explode( '/', substr( $path, 1 ) );
+		$last     = count( $segments ) - 1;
+		foreach ( $segments as $i => $segment ) {
+			if ( '.' === $segment || '..' === $segment || ( '' === $segment && $i < $last ) ) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	/**
