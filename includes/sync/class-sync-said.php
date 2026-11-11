@@ -455,6 +455,60 @@ final class AB_MCP_Sync_Said {
 			'the file lists of the attachments are too many to hold within one call' => __( 'the file lists of the attachments are too many to hold within one call', 'alphabridge-mcp' ),
 			'the file or folder the call before stopped at (kept by its SHA-256 only, never by its name) is gone since, so where to go on is not known' => __( 'the file or folder the call before stopped at (kept by its SHA-256 only, never by its name) is gone since, so where to go on is not known', 'alphabridge-mcp' ),
 			'not known why' => __( 'not known why', 'alphabridge-mcp' ),
+			// The words, reasons and whys of the units of code and files and of the core files (Z8b branch 2).
+			'A part of a unit that no kind of the code takes over in this version.' => __( 'A part of a unit that no kind of the code takes over in this version.', 'alphabridge-mcp' ),
+			'A file of the font library comes with the fonts of the font library.' => __( 'A file of the font library comes with the fonts of the font library.', 'alphabridge-mcp' ),
+			'A file of the font library is compared by its contents; it comes with the fonts of the font library.' => __( 'A file of the font library is compared by its contents; it comes with the fonts of the font library.', 'alphabridge-mcp' ),
+			'A file of the uploads outside the file lists of attachments is compared by its contents and taken over with the files of the site.' => __( 'A file of the uploads outside the file lists of attachments is compared by its contents and taken over with the files of the site.', 'alphabridge-mcp' ),
+			'A file of the uploads outside the file lists of attachments is taken over with the files of the site.' => __( 'A file of the uploads outside the file lists of attachments is taken over with the files of the site.', 'alphabridge-mcp' ),
+			'A language file is compared by its contents and taken over with the files of the site.' => __( 'A language file is compared by its contents and taken over with the files of the site.', 'alphabridge-mcp' ),
+			'A language file is taken over with the files of the site.' => __( 'A language file is taken over with the files of the site.', 'alphabridge-mcp' ),
+			'A must-use file or folder is compared by the contents of its files and taken over with the files of the site.' => __( 'A must-use file or folder is compared by the contents of its files and taken over with the files of the site.', 'alphabridge-mcp' ),
+			'A must-use file or folder is taken over with the files of the site.' => __( 'A must-use file or folder is taken over with the files of the site.', 'alphabridge-mcp' ),
+			'A path only on this site is not in the version of the staging site: a takeover puts the old folder whole into the backup, so the path leaves its place and comes back only through the way back.' => __( 'A path only on this site is not in the version of the staging site: a takeover puts the old folder whole into the backup, so the path leaves its place and comes back only through the way back.', 'alphabridge-mcp' ),
+			'A plugin is code: its files are compared by their contents and whether it runs by its main files; it is taken over with the code of the site.' => __( 'A plugin is code: its files are compared by their contents and whether it runs by its main files; it is taken over with the code of the site.', 'alphabridge-mcp' ),
+			'A theme is code: its files are compared by their contents; it is taken over with the code of the site.' => __( 'A theme is code: its files are compared by their contents; it is taken over with the code of the site.', 'alphabridge-mcp' ),
+			'AlphaBridge itself is shown, never taken over: bring both sites to the same version of AlphaBridge (wp-admin, Plugins → Update), then make a new report.' => __( 'AlphaBridge itself is shown, never taken over: bring both sites to the same version of AlphaBridge (wp-admin, Plugins → Update), then make a new report.', 'alphabridge-mcp' ),
+			'AlphaBridge itself, in another version on each side: shown by its version only, never taken over.' => __( 'AlphaBridge itself, in another version on each side: shown by its version only, never taken over.', 'alphabridge-mcp' ),
+			'AlphaBridge itself, the same version on both sides: shown by its version only, never taken over.' => __( 'AlphaBridge itself, the same version on both sides: shown by its version only, never taken over.', 'alphabridge-mcp' ),
+			'Changed on both sides alike since the base of its pair: nothing to take over.' => __( 'Changed on both sides alike since the base of its pair: nothing to take over.', 'alphabridge-mcp' ),
+			'Changed on both sides since the base of its pair, differently.' => __( 'Changed on both sides since the base of its pair, differently.', 'alphabridge-mcp' ),
+			'Changed on staging since the base of its pair, unchanged on this site.' => __( 'Changed on staging since the base of its pair, unchanged on this site.', 'alphabridge-mcp' ),
+			'Changed on this site since the base of its pair, unchanged on staging: kept and shown.' => __( 'Changed on this site since the base of its pair, unchanged on staging: kept and shown.', 'alphabridge-mcp' ),
+			'Differs between the sides, and it has no pair: which side changed is not known until a person confirms a common base for its pair.' => __( 'Differs between the sides, and it has no pair: which side changed is not known until a person confirms a common base for its pair.', 'alphabridge-mcp' ),
+			'Differs: core files of a site are not those api.wordpress.org gives for its version and language. WordPress itself is never taken over: install it anew at the host or in wp-admin (Dashboard → Updates → Re-install).' => __( 'Differs: core files of a site are not those api.wordpress.org gives for its version and language. WordPress itself is never taken over: install it anew at the host or in wp-admin (Dashboard → Updates → Re-install).', 'alphabridge-mcp' ),
+			'Equal on both sides: the core files of each site are those api.wordpress.org gives for its version and language.' => __( 'Equal on both sides: the core files of each site are those api.wordpress.org gives for its version and language.', 'alphabridge-mcp' ),
+			'Equal on both sides: the same files by their contents, and for a plugin the same main files running.' => __( 'Equal on both sides: the same files by their contents, and for a plugin the same main files running.', 'alphabridge-mcp' ),
+			'It differs in its files and in which of its main files run.' => __( 'It differs in its files and in which of its main files run.', 'alphabridge-mcp' ),
+			'It differs in its files.' => __( 'It differs in its files.', 'alphabridge-mcp' ),
+			'It differs in which of its main files run, or in which theme runs.' => __( 'It differs in which of its main files run, or in which theme runs.', 'alphabridge-mcp' ),
+			'Not compared: see why.' => __( 'Not compared: see why.', 'alphabridge-mcp' ),
+			'Nothing of it is taken over in this version.' => __( 'Nothing of it is taken over in this version.', 'alphabridge-mcp' ),
+			'Removed on staging since its pair was made.' => __( 'Removed on staging since its pair was made.', 'alphabridge-mcp' ),
+			'Removed on this site since its pair was made: nothing to do.' => __( 'Removed on this site since its pair was made: nothing to do.', 'alphabridge-mcp' ),
+			'Shown only: the language is the option WPLANG, compared with the options; its files are compared under languages.' => __( 'Shown only: the language is the option WPLANG, compared with the options; its files are compared under languages.', 'alphabridge-mcp' ),
+			'The files of the unit changed on this site since the base of its pair, and on the staging site as well: the files written on this site would leave their folder, so there is no choice «staging wins». Bring both sides to the same version (the same files), then make a new report. A plugin that keeps writing into its own folder (logs, caches, backups) changes again after every write: update it by hand in wp-admin (Plugins → Update) instead.' => __( 'The files of the unit changed on this site since the base of its pair, and on the staging site as well: the files written on this site would leave their folder, so there is no choice «staging wins». Bring both sides to the same version (the same files), then make a new report. A plugin that keeps writing into its own folder (logs, caches, backups) changes again after every write: update it by hand in wp-admin (Plugins → Update) instead.', 'alphabridge-mcp' ),
+			'The folders at the top of uploads other than the year folders (outside the file lists of attachments) are counted and summed, their contents not compared; they are classified with the files of the site.' => __( 'The folders at the top of uploads other than the year folders (outside the file lists of attachments) are counted and summed, their contents not compared; they are classified with the files of the site.', 'alphabridge-mcp' ),
+			'The theme lies in a further root of themes (register_theme_directory()), not in the folder of the themes: it is never taken over. Take it over by hand.' => __( 'The theme lies in a further root of themes (register_theme_directory()), not in the folder of the themes: it is never taken over. Take it over by hand.', 'alphabridge-mcp' ),
+			'The theme that runs could not be read on the staging site.' => __( 'The theme that runs could not be read on the staging site.', 'alphabridge-mcp' ),
+			'The theme that runs could not be read on this site.' => __( 'The theme that runs could not be read on this site.', 'alphabridge-mcp' ),
+			'The unit holds on the staging site what no manifest holds (a folder .git, .svn or .hg, a symbolic link, or something that is no regular file): it is never taken over. Remove it on the staging site (or take the unit over by hand), then make a new report.' => __( 'The unit holds on the staging site what no manifest holds (a folder .git, .svn or .hg, a symbolic link, or something that is no regular file): it is never taken over. Remove it on the staging site (or take the unit over by hand), then make a new report.', 'alphabridge-mcp' ),
+			'The unit holds on this site what no manifest holds (a folder .git, .svn or .hg, a symbolic link, or something that is no regular file): it is never taken over. Remove it on this site (or take the unit over by hand), then make a new report.' => __( 'The unit holds on this site what no manifest holds (a folder .git, .svn or .hg, a symbolic link, or something that is no regular file): it is never taken over. Remove it on this site (or take the unit over by hand), then make a new report.', 'alphabridge-mcp' ),
+			'Which main files run could not be read on the staging site.' => __( 'Which main files run could not be read on the staging site.', 'alphabridge-mcp' ),
+			'Which main files run could not be read on this site.' => __( 'Which main files run could not be read on this site.', 'alphabridge-mcp' ),
+			'Which theme runs is a phase of the code: it is taken over with the code of the site.' => __( 'Which theme runs is a phase of the code: it is taken over with the code of the site.', 'alphabridge-mcp' ),
+			'WordPress itself is never taken over: its files are compared with the checksums of api.wordpress.org, and it is installed anew at the host or in wp-admin.' => __( 'WordPress itself is never taken over: its files are compared with the checksums of api.wordpress.org, and it is installed anew at the host or in wp-admin.', 'alphabridge-mcp' ),
+			'WordPress itself is never taken over: where staging is newer, this site is updated first (wp_update_core).' => __( 'WordPress itself is never taken over: where staging is newer, this site is updated first (wp_update_core).', 'alphabridge-mcp' ),
+			'a file of it changed while it was read' => __( 'a file of it changed while it was read', 'alphabridge-mcp' ),
+			'a folder or file of it could not be read' => __( 'a folder or file of it could not be read', 'alphabridge-mcp' ),
+			'api.wordpress.org knows no checksums of its version and language' => __( 'api.wordpress.org knows no checksums of its version and language', 'alphabridge-mcp' ),
+			'api.wordpress.org was not reached' => __( 'api.wordpress.org was not reached', 'alphabridge-mcp' ),
+			'it could not be hashed within one call' => __( 'it could not be hashed within one call', 'alphabridge-mcp' ),
+			'it holds more files than one manifest holds' => __( 'it holds more files than one manifest holds', 'alphabridge-mcp' ),
+			'its files do not fit into one package' => __( 'its files do not fit into one package', 'alphabridge-mcp' ),
+			'its version of WordPress could not be read' => __( 'its version of WordPress could not be read', 'alphabridge-mcp' ),
+			'the answer of api.wordpress.org held no checksums' => __( 'the answer of api.wordpress.org held no checksums', 'alphabridge-mcp' ),
+			'the unit the call before stopped at (kept by its SHA-256 only) is gone since' => __( 'the unit the call before stopped at (kept by its SHA-256 only) is gone since', 'alphabridge-mcp' ),
 		);
 	}
 
@@ -466,6 +520,19 @@ final class AB_MCP_Sync_Said {
 	 */
 	private static function forms() {
 		return array(
+			// The whys of the units and of the core files (Z8b branch 2).
+			/* translators: 1: the staging site, or this site, 2: why, a part of a sentence. */
+			'It could not be read whole on %1$s (%2$s).' => __( 'It could not be read whole on %1$s (%2$s).', 'alphabridge-mcp' ),
+			/* translators: %s: the part of a unit (files, activation). */
+			'Its pair holds no base of the part %s.' => __( 'Its pair holds no base of the part %s.', 'alphabridge-mcp' ),
+			/* translators: %s: the state of the pair, as the tools name it (unclear, residual). */
+			'Its pair is %s: a person confirms a new alignment first (wp_site_pairs).' => __( 'Its pair is %s: a person confirms a new alignment first (wp_site_pairs).', 'alphabridge-mcp' ),
+			/* translators: 1: the version of the comparison data of the pair (canon/1, …), 2: the one this site reads. */
+			'The bases of its pair are of the version %1$s of the comparison data, this site reads %2$s.' => __( 'The bases of its pair are of the version %1$s of the comparison data, this site reads %2$s.', 'alphabridge-mcp' ),
+			/* translators: %s: why, a part of a sentence. */
+			'The core files could not be checked on the staging site (%s).' => __( 'The core files could not be checked on the staging site (%s).', 'alphabridge-mcp' ),
+			/* translators: %s: why, a part of a sentence. */
+			'The core files could not be checked on this site (%s).' => __( 'The core files could not be checked on this site (%s).', 'alphabridge-mcp' ),
 			// The reasons of AB_MCP_Sync_Option_Schema (REASON_TEXTS and the messages of settle()).
 			/* translators: %s: the name of the option row WordPress reads instead. */
 			'WordPress reads the row %s under this name, so this row is never read and is not taken over. An administrator changes it in wp-admin.' => __( 'WordPress reads the row %s under this name, so this row is never read and is not taken over. An administrator changes it in wp-admin.', 'alphabridge-mcp' ),

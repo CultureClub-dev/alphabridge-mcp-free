@@ -189,22 +189,22 @@ final class SyncSaidTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 6 (B1): a plugin counted on both sides whose name holds a
+	 * Codex round 6 (B1): a table counted on both sides whose name holds a
 	 * credential has three sentences in words. Each is said on its own; a
 	 * value of a form never reaches over the end of a sentence, so no English
 	 * sentence is swallowed into a said one.
 	 */
 	public function testTheSentencesOfAnEntryOfTheEnvironmentAreSaidEachWhole(): void {
 		$line  = array(
-			'env'     => 'plugin',
-			'ref'     => 'akismet/akismet.php',
-			'version' => '5.3',
-			'active'  => true,
-			'held'    => 'credential_field',
+			'env'    => 'table',
+			'ref'    => 'gf_form',
+			'rows'   => 3,
+			'schema' => str_repeat( 'c', 64 ),
+			'held'   => 'credential_field',
 		);
-		$entry = ( new \ReflectionMethod( AB_MCP_Sync_Env::class, 'entry' ) )->invoke( null, 'plugin', 'akismet/akismet.php', $line, $line, array( 's' => true, 'l' => true ) );
+		$entry = ( new \ReflectionMethod( AB_MCP_Sync_Env::class, 'entry' ) )->invoke( null, 'table', 'gf_form', $line, $line, array( 's' => true, 'l' => true ) );
 		self::assertSame( 'counted', $entry['result'] );
-		self::assertSame( 'Counted, contents not compared: the same version, rows or count on both sides says nothing about the contents. Their contents are compared from Z8b. Its name holds a credential by the rules of a site (held: credential_field), so it is shown by its SHA-256 only.', $entry['words'] );
+		self::assertSame( 'Counted, contents not compared: the same version, rows or count on both sides says nothing about the contents. Their contents are compared from Z8d. Its name holds a credential by the rules of a site (held: credential_field), so it is shown by its SHA-256 only.', $entry['words'] );
 		$GLOBALS['ab_test_translations'] = array(
 			'Counted, contents not compared: the same version, rows or count on both sides says nothing about the contents.' => 'Gezählt, Inhalt nicht verglichen: Dieselbe Version, Zeilenzahl oder Anzahl auf beiden Seiten sagt nichts über den Inhalt.',
 			'Their contents are compared from %s.' => 'Der Inhalt wird ab %s verglichen.',
@@ -212,7 +212,7 @@ final class SyncSaidTest extends TestCase {
 		);
 		self::assertTrue( AB_MCP_Sync_Said::knows( $entry['words'] ) );
 		$said = AB_MCP_Sync_Said::shown( $entry )['words'];
-		self::assertSame( 'Gezählt, Inhalt nicht verglichen: Dieselbe Version, Zeilenzahl oder Anzahl auf beiden Seiten sagt nichts über den Inhalt. Der Inhalt wird ab Z8b verglichen. Sein Name enthält nach den Regeln einer Website Zugangsdaten (zurückgehalten: credential_field), darum wird es nur über seinen SHA-256 gezeigt.', $said );
+		self::assertSame( 'Gezählt, Inhalt nicht verglichen: Dieselbe Version, Zeilenzahl oder Anzahl auf beiden Seiten sagt nichts über den Inhalt. Der Inhalt wird ab Z8d verglichen. Sein Name enthält nach den Regeln einer Website Zugangsdaten (zurückgehalten: credential_field), darum wird es nur über seinen SHA-256 gezeigt.', $said );
 		self::assertDoesNotMatchRegularExpression( '/\b(Its|name|holds|shown|only)\b/', $said, 'No English piece in a said sentence.' );
 		// A sentence the list does not know: whole and English, the others said.
 		$unknown = 'Counted, contents not compared: the same version, rows or count on both sides says nothing about the contents. Their contents are compared from Z8b. Something new is said here.';

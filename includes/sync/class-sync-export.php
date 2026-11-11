@@ -262,7 +262,7 @@ final class AB_MCP_Sync_Export {
 			$state  = $follows[0]['inner'];
 			$series = $follows[1];
 		}
-		$read = AB_MCP_Sync_Env::read( $state, AB_MCP_Sync_Inventory::BUDGET, $lines );
+		$read = AB_MCP_Sync_Env::read( $state, AB_MCP_Sync_Inventory::BUDGET, $lines, 'staging' );
 		if ( is_wp_error( $read ) ) {
 			return $read;
 		}

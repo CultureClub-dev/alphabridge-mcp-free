@@ -219,6 +219,46 @@ return array(
 			'why'  => 'Other files (code, languages, fonts, files under uploads without an attachment) are counted, their contents not compared: Z8b.',
 			'plan' => 'Entscheid 14 (gezählt, Inhalte nicht verglichen, Z8b)',
 		),
+		'part:plugin:files' => array(
+			'why'  => 'The files of a plugin are written by the swap of the code of the site (branch 5), which alone moves their base on.',
+			'plan' => 'Z8b Arbeitsplan Fassung 4h: E2, E18, 3.1 Z35 und Z38',
+		),
+		'part:plugin:activation' => array(
+			'why'  => 'Which main files of a plugin run is written by the activation (branch 6), which alone moves its base on.',
+			'plan' => 'Z8b Arbeitsplan Fassung 4h: E2, E18, 3.1 Z35 und Z38',
+		),
+		'part:theme:files' => array(
+			'why'  => 'The files of a theme are written by the swap of the code of the site (branch 5).',
+			'plan' => 'Z8b Arbeitsplan Fassung 4h: E2, E18, 3.1 Z35 und Z38',
+		),
+		'part:theme_choice:activation' => array(
+			'why'  => 'Which theme runs is written by the switch of the theme (branch 6).',
+			'plan' => 'Z8b Arbeitsplan Fassung 4h: E2, E18, 3.1 Z35 und Z38',
+		),
+		'part:mu_plugin:files' => array(
+			'why'  => 'Must-use files are taken over with the files of the site (branch 7); until then no kind moves their base on.',
+			'plan' => 'Z8b Arbeitsplan Fassung 4h: E2, E18, 3.1 Z35 und Z38',
+		),
+		'part:language:files' => array(
+			'why'  => 'Language files are taken over with the files of the site (branch 7).',
+			'plan' => 'Z8b Arbeitsplan Fassung 4h: E2, E18, 3.1 Z35 und Z38',
+		),
+		'part:font:files' => array(
+			'why'  => 'Font files come with the fonts of the font library (branch 8).',
+			'plan' => 'Z8b Arbeitsplan Fassung 4h: E2, E18, 3.1 Z35 und Z38',
+		),
+		'part:upload:files' => array(
+			'why'  => 'Files of the uploads outside the attachments are taken over with the files of the site (branch 7).',
+			'plan' => 'Z8b Arbeitsplan Fassung 4h: E2, E18, 3.1 Z35 und Z38',
+		),
+		'part:*' => array(
+			'why'  => 'A part the table does not name has no kind: fail closed.',
+			'plan' => 'Z8b Arbeitsplan Fassung 4h: E2, E18, 3.1 Z35 und Z38',
+		),
+		'core:*' => array(
+			'why'  => 'WordPress itself is never taken over (A17); its files are compared with the checksums of api.wordpress.org, so no kind may claim the core.',
+			'plan' => 'Z8b Arbeitsplan Fassung 4h: E2, E18, 3.1 Z35 und Z38',
+		),
 	),
 
 	/* ------------------------------------------------------------ locks */

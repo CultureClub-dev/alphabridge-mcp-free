@@ -45,11 +45,65 @@
 defined( 'ABSPATH' ) || exit;
 
 require_once __DIR__ . '/class-sync-schema.php';
+require_once __DIR__ . '/class-sync-kinds.php';
+
+/**
+ * The calls of the pairs to the database that read a pair and write its
+ * bases (Z8b branch 2, plan 8.3: the bases of the pairs): the real ones.
+ */
+final class AB_MCP_Sync_Pairs_Calls {
+
+	/**
+	 * One row.
+	 *
+	 * @param string $sql A SELECT built from prepared parts.
+	 * @return array|null|false The row, none, or false where the database answered with an error.
+	 */
+	public function row( $sql ) {
+		global $wpdb;
+		$row = $wpdb->get_row( $sql, ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery -- built from prepared parts by the caller.
+		if ( '' !== $wpdb->last_error ) {
+			return false;
+		}
+		return is_array( $row ) ? $row : null;
+	}
+
+	/**
+	 * One statement that writes.
+	 *
+	 * @param string $sql An UPDATE built from prepared parts.
+	 * @return int|false The rows it changed, or false.
+	 */
+	public function query( $sql ) {
+		global $wpdb;
+		$done = $wpdb->query( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery -- built from prepared parts by the caller.
+		return false === $done ? false : (int) $done;
+	}
+}
 
 /**
  * Class AB_MCP_Sync_Pairs
  */
 final class AB_MCP_Sync_Pairs {
+
+	/** The calls to the database that read a pair and write its bases (the seam); only the tests put another object here. */
+	private static $naht_sync_pairs = null;
+
+	/**
+	 * The calls object: the stand-in of a test, else the real calls.
+	 *
+	 * @return AB_MCP_Sync_Pairs_Calls
+	 */
+	private static function calls() {
+		return self::$naht_sync_pairs ?? new AB_MCP_Sync_Pairs_Calls();
+	}
+
+	/**
+	 * Back to the real calls.
+	 */
+	public static function forget() {
+		self::$naht_sync_pairs = null;
+	}
 
 	/** The states of a pair. */
 	const STATES = array( 'active', 'deleted', 'unclear', 'residual' );
@@ -92,6 +146,24 @@ final class AB_MCP_Sync_Pairs {
 
 	/** The columns that hold numbers. */
 	const INT_COLUMNS = array( 'id', 'base_time', 'last_run', 'updated' );
+
+	/**
+	 * The parts of the pair of a unit (Z8b, E2), by its kind: each part has
+	 * a base of its own and is moved on only by the step that wrote and
+	 * checked it (rebase() with the part, Z38). The first part keeps its
+	 * bases in base_live and base_staging, any further one in base_extra
+	 * (parts → part → live, staging). A kind not listed is an object of Z8
+	 * without parts.
+	 */
+	const PARTS = array(
+		'plugin'       => array( 'files', 'activation' ),
+		'theme'        => array( 'files' ),
+		'mu_plugin'    => array( 'files' ),
+		'language'     => array( 'files' ),
+		'font'         => array( 'files' ),
+		'upload'       => array( 'files' ),
+		'theme_choice' => array( 'activation' ),
+	);
 
 	/* ------------------------------------------------------------ read */
 
@@ -389,14 +461,29 @@ final class AB_MCP_Sync_Pairs {
 	 * New bases for an active pair: after a step that wrote it, or a canon
 	 * change. A residual or unclear pair keeps its bases until realign().
 	 *
-	 * @param int    $id       Pair id.
-	 * @param array  $values   canon, base_live, base_staging, base_origin;
-	 *                         optional override, base_extra, last_run (left
-	 *                         as they are when not given).
-	 * @param string $expected Snapshot hash of the pair as the caller read it.
+	 * THE PAIR OF A UNIT (Z8b, E2; plan 3.1, Z38, the one place): its parts
+	 * (PARTS) have bases of their own, and only the step that wrote and
+	 * checked a part moves it on. Here such a pair takes new bases only for
+	 * the one part named, from the kind responsible for that part (contract
+	 * A: AB_MCP_Sync_Kinds::OWNERSHIP gives the key part:<kind>:<part> to it,
+	 * it is the very engine registered under its name, and it claims the key
+	 * in responsibility()), on the condition that the pair is still as the
+	 * step read it ($expected); the bases of every other part stay byte for
+	 * byte. Without a part, or with a part of a kind that has none, nothing
+	 * is written.
+	 *
+	 * @param int                   $id       Pair id.
+	 * @param array                 $values   canon, base_live, base_staging, base_origin;
+	 *                                        optional override, base_extra, last_run (left
+	 *                                        as they are when not given). For the part of a
+	 *                                        unit: canon, base_live, base_staging,
+	 *                                        base_origin, optional last_run.
+	 * @param string                $expected Snapshot hash of the pair as the caller read it.
+	 * @param string|null           $part     The part of a unit (files, activation); null for an object.
+	 * @param AB_MCP_Sync_Kind|null $kind     The engine that wrote and checked the part.
 	 * @return array|WP_Error The pair as stored.
 	 */
-	public static function rebase( $id, array $values, $expected ) {
+	public static function rebase( $id, array $values, $expected, $part = null, $kind = null ) {
 		$raw = self::read_expected( $id, $expected );
 		if ( ! is_array( $raw ) ) {
 			return $raw;
@@ -409,8 +496,99 @@ final class AB_MCP_Sync_Pairs {
 				array( 'state' => $raw['state'] )
 			);
 		}
-		$set = self::bases( $values, array( 'canon', 'base_live', 'base_staging', 'base_origin' ), array( 'override', 'base_extra', 'last_run' ) );
-		return is_wp_error( $set ) ? $set : self::swap( $raw, $set );
+		$parts = self::PARTS[ $raw['kind'] ] ?? null;
+		if ( null === $parts && null === $part ) {
+			$set = self::bases( $values, array( 'canon', 'base_live', 'base_staging', 'base_origin' ), array( 'override', 'base_extra', 'last_run' ) );
+			return is_wp_error( $set ) ? $set : self::swap( $raw, $set );
+		}
+		if ( null === $parts || ! in_array( $part, $parts, true ) ) {
+			return new WP_Error(
+				'ab_mcp_staging_pair_part',
+				/* translators: 1: the part named (files, activation), 2: the kind of the pair. */
+				sprintf( __( 'The pair of kind %2$s has no part %1$s whose bases could be moved on: a unit takes new bases part by part (files, activation), an object of the takeover without a part. Nothing was written.', 'alphabridge-mcp' ), is_string( $part ) ? $part : '', $raw['kind'] ),
+				array( 'part' => $part )
+			);
+		}
+		if ( ! self::responsible( $kind, (string) $raw['kind'], (string) $part ) ) {
+			return new WP_Error(
+				'ab_mcp_staging_pair_part_owner',
+				/* translators: 1: the part (files, activation), 2: the kind of the pair. */
+				sprintf( __( 'Only the step that wrote and checked the part %1$s of a pair of kind %2$s moves its bases on: the kind responsible for it by AB_MCP_Sync_Kinds::OWNERSHIP, registered as such. Nothing was written.', 'alphabridge-mcp' ), (string) $part, $raw['kind'] ),
+				array( 'part' => $part )
+			);
+		}
+		$set = self::bases( $values, array( 'canon', 'base_live', 'base_staging', 'base_origin' ), array( 'last_run' ) );
+		if ( is_wp_error( $set ) ) {
+			return $set;
+		}
+		if ( $parts[0] !== $part ) {
+			// A further part: its bases in base_extra, the columns of the
+			// first part as they are.
+			$extra = null === $raw['base_extra'] ? array() : json_decode( (string) $raw['base_extra'], true );
+			if ( ! is_array( $extra ) ) {
+				return self::invalid( 'base_extra', __( 'The field base_extra of the pair is not stored JSON of a pair.', 'alphabridge-mcp' ) );
+			}
+			$extra['parts'][ $part ] = array(
+				'live'    => $set['base_live'],
+				'staging' => $set['base_staging'],
+			);
+			$json = self::encode_json( 'base_extra', $extra );
+			if ( is_wp_error( $json ) ) {
+				return $json;
+			}
+			unset( $set['base_live'], $set['base_staging'] );
+			$set['base_extra'] = $json;
+		}
+		return self::swap( $raw, $set );
+	}
+
+	/**
+	 * Whether an engine is responsible for a part of the pair of a unit
+	 * (contract A): it is the engine registered under its name, the table
+	 * gives it the key part:<kind>:<part> with no stage, and it claims it.
+	 *
+	 * @param mixed  $kind      The engine.
+	 * @param string $pair_kind The kind of the pair.
+	 * @param string $part      The part.
+	 * @return bool
+	 */
+	public static function responsible( $kind, $pair_kind, $part ) {
+		if ( ! $kind instanceof AB_MCP_Sync_Kind ) {
+			return false;
+		}
+		$answer = AB_MCP_Sync_Kinds::part( $pair_kind . ':' . $part );
+		return 'z8' === $answer['status'] && $answer['kind'] === $kind->kind()
+			&& AB_MCP_Sync_Kinds::get( $kind->kind() ) === $kind
+			&& in_array( $answer['key'], (array) $kind->responsibility(), true );
+	}
+
+	/**
+	 * The bases of a part of the pair of a unit (decoded, decode()): the
+	 * first part from base_live and base_staging, a further one from
+	 * base_extra; null where the pair has no such part or no base of it.
+	 *
+	 * @param array  $pair The pair, decoded.
+	 * @param string $part The part.
+	 * @return array{live:string,staging:string}|null
+	 */
+	public static function part_bases( array $pair, $part ) {
+		$parts = self::PARTS[ $pair['kind'] ?? '' ] ?? null;
+		if ( null === $parts || ! in_array( $part, $parts, true ) ) {
+			return null;
+		}
+		$base = $parts[0] === $part
+			? array(
+				'live'    => $pair['base_live'] ?? null,
+				'staging' => $pair['base_staging'] ?? null,
+			)
+			: ( $pair['base_extra']['parts'][ $part ] ?? null );
+		if ( ! is_array( $base ) || ! self::is_hash( $base['live'] ?? null ) || ! self::is_hash( $base['staging'] ?? null ) ) {
+			return null;
+		}
+		return array(
+			'live'    => (string) $base['live'],
+			'staging' => (string) $base['staging'],
+		);
 	}
 
 	/**
@@ -707,8 +885,8 @@ final class AB_MCP_Sync_Pairs {
 		}
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table name is ours; the value is prepared.
-		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . AB_MCP_Sync_Schema::table( 'pairs' ) . ' WHERE id = %d', (int) $id ), ARRAY_A );
-		if ( '' !== $wpdb->last_error ) {
+		$row = self::calls()->row( $wpdb->prepare( 'SELECT * FROM ' . AB_MCP_Sync_Schema::table( 'pairs' ) . ' WHERE id = %d', (int) $id ) );
+		if ( false === $row ) {
 			return self::db_error();
 		}
 		return is_array( $row ) ? $row : null;
@@ -758,12 +936,11 @@ final class AB_MCP_Sync_Pairs {
 				$parts[] = $wpdb->prepare( $column . ' = %s', (string) $value );
 			}
 		}
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared -- the table and column names are ours; the values are prepared above.
-		$done = $wpdb->query( 'UPDATE ' . AB_MCP_Sync_Schema::table( 'pairs' ) . ' SET ' . implode( ', ', $parts ) . ' WHERE ' . self::where_row( $raw ) );
+		$done = self::calls()->query( 'UPDATE ' . AB_MCP_Sync_Schema::table( 'pairs' ) . ' SET ' . implode( ', ', $parts ) . ' WHERE ' . self::where_row( $raw ) );
 		if ( false === $done ) {
 			return self::db_error();
 		}
-		if ( 1 !== (int) $done ) {
+		if ( 1 !== $done ) {
 			return self::changed();
 		}
 		return self::get( (int) $raw['id'] );
