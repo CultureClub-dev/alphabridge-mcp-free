@@ -34,6 +34,7 @@ $_SERVER   = array_merge( $_SERVER, AB_MCP_IT_Sites::server_vars( $ab_it_key ), 
 define( 'WP_USE_THEMES', false );
 require AB_MCP_IT_Sites::docroot( $ab_it_key ) . '/wp-load.php';
 require_once AB_MCP_DIR . 'includes/sync/class-sync-export.php';
+require_once AB_MCP_DIR . 'includes/sync/class-sync-report.php';
 
 /**
  * The trees: where, how many units, files a unit, and the sizes of the files
