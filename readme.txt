@@ -4,7 +4,7 @@ Tags: claude, chatgpt, mcp, mcp-server, ai-assistant
 Requires at least: 6.5
 Tested up to: 7.1
 Requires PHP: 8.0
-Stable tag: 4.10.0
+Stable tag: 4.10.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -220,6 +220,9 @@ AlphaBridge MCP sends no telemetry and calls no outside service on its own. Thre
 * **A file you name.** The tool wp_upload_media_from_url downloads the file at the URL you give it.
 
 == Changelog ==
+
+= 4.10.1 =
+* The main site no longer answers OAuth discovery requests meant for a site in a subfolder of the same domain (for example a staging copy) with its own metadata, so that site can connect over OAuth; update AlphaBridge on the main site.
 
 = 4.10.0 =
 * **Page-builder texts and search and replace in the free plugin, 82 tools in all.** `wp_update_builder_element` and `wp_search_replace` came with AlphaBridge MCP Pro only; they work as they did there, with the same checks, and their messages come in the plugin's languages.
@@ -468,6 +471,9 @@ AlphaBridge MCP sends no telemetry and calls no outside service on its own. Thre
 * Initial development line: MCP endpoint, token auth, tool groups, security hardening (SSRF guards, path traversal guards, capability checks, rate limiting, audit log), 26 bundled translations.
 
 == Upgrade Notice ==
+
+= 4.10.1 =
+Fixes OAuth sign-in for sites in a subfolder of a domain whose root also runs AlphaBridge, such as staging copies; update it on the main site.
 
 = 4.10.0 =
 Page-builder texts and search and replace are free now, 82 tools in all, with undo for page-builder pages and options, post_ids and expected_count. No setting changes.
