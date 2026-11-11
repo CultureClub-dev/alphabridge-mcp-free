@@ -104,16 +104,19 @@ start` and the suite (or the mutation probes).
 - **wordpress.org**: `AB_MCP_Test_Wporg` answers downloads.wordpress.org and
   api.wordpress.org from those fixtures, as an object with `get()` or through
   `hook()` for WordPress's own requests; nothing else is asked.
-- **A plan in a process of the site** (`bin/site-call.php`):
+- **A plan in a process of the site** (`bin/site-call.php`), in a process
+  group of its own that is ended as a whole when the child ends:
   `AB_MCP_IT_Process::calls( $site, $plan )` counts only a run that printed
-  its result and ended with status 0; `AB_MCP_IT_Process::abort( $site,
-  $plan )` a hard abort at a named point (a hook, or a call of a seam), in
-  the mode `shutdown`, `no_shutdown` (SIGKILL to itself) or `timeout`, only
-  with its marker and the proof of its mode. Plan and modes:
-  `support/class-it-child.php`, `support/class-test-abort.php`.
+  its result after every shutdown function and ended with status 0;
+  `AB_MCP_IT_Process::abort( $site, $plan )` a hard abort at a named point
+  (a hook, or a call of a seam), in the mode `shutdown`, `no_shutdown`
+  (SIGKILL to itself) or `timeout`, only with its marker, its phase
+  (request, or a declared shutdown) and the proof of its mode. Plan and
+  modes: `support/class-it-child.php`, `support/class-test-abort.php`.
 - **Seams**: `AB_MCP_Test_Seam::install()` puts a stand-in with a fault plan
-  into the `private static` seam of a class (`support/class-test-seam.php`;
-  the rules, held by `SeamGuardTest`, and an example in
+  into the `private static` seam of a class (`support/class-test-seam.php`).
+  A seam occurs in shipped code only as `return self::$x ?? new
+  <Class>();` and `self::$x = null;` (`SeamGuardTest`; an example in
   `tests/fixtures/seams/`).
 - **Manual way back**: `AB_MCP_IT_Handweg::run_point()` runs the commands of
   an abort point from an instruction in a shell (`support/HANDWEG.md`).

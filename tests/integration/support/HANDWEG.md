@@ -35,7 +35,8 @@ $ test -f wp-content/plugins/ab-it-aktiv/ab-it-aktiv.php
   Befehl eine Zeile. Der erste scheiternde Befehl beendet den Lauf (`-e`), eine unbekannte Variable ist ein Fehler
   (`-u`), ein Fehler in einer Pipe zählt (`pipefail`).
 - Arbeitsordner ist der Ordner, den der Test angibt (etwa die Wurzel der Site); die Umgebung ist die des Tests.
-- Zeitgrenze je Punkt (Vorgabe 60 s); danach beendet die Hilfe die Shell über ihre eigene PID.
+- Zeitgrenze je Punkt (Vorgabe 60 s). Die Shell läuft in einer eigenen Prozessgruppe; an der Zeitgrenze und an ihrem
+  Ende beendet die Hilfe die ganze Gruppe über ihre ID, also auch Befehle, die sie im Hintergrund gestartet hat.
 - Rückgabe: Status (`null` bei Signal oder Zeitgrenze), Signal, ob die Zeitgrenze griff, stdout, stderr und die
   ausgeführten Befehle. Der Test prüft danach den Zustand (Ordner am Ziel, Sicherung, Marke), nicht nur den Status.
 

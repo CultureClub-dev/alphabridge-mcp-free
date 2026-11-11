@@ -31,19 +31,26 @@ die neue Hilfe macht es anders. Fundstellen am Stand von Free `9be07f7`. Testcod
   Hänger ist ein Fehlerfall, kein Normalfall. Der Schritt «Logs of the sites» läuft seit Zweig 1 auch beim Abbruch durch
   die Jobgrenze (`if: failure() || cancelled()`).
 - **Was die neue Hilfe tut:** `AB_MCP_IT_Process::run()` liest stdout und stderr nebeneinander ohne Blockieren, mit
-  Zeitgrenze je Kindprozess, und beendet an der Grenze das Kind über seine eigene PID samt dem, was es gestartet hat
-  (`TestAbortTest::testAChildPastItsTimeLimitIsEndedByItsOwnPid`, `…testMuchOutputOnBothPipesDoesNotStallTheChild`).
+  Zeitgrenze je Kindprozess. Das Kind läuft in einer eigenen Prozessgruppe; an der Grenze, an seinem eigenen Ende und
+  nach seinem eigenen SIGKILL beendet die Hilfe die ganze Gruppe über ihre Gruppen-ID
+  (`TestAbortTest::testAChildPastItsTimeLimitIsEndedByItsOwnPid`, `…testWhatTheChildStartedEndsWithIt`,
+  `…testMuchOutputOnBothPipesDoesNotStallTheChild`).
 
-## G3 Der Mutationslauf beendet bei seiner Zeitgrenze nur PHPUnit (V4)
+## G3 Der Mutationslauf beendet bei seiner Zeitgrenze und bei Signalen nur PHPUnit (V4)
 
-- **Fundstelle:** `tests/mutation/run.php`, `exec()` (Zeitgrenze, `proc_terminate()` auf den direkten Kindprozess) und
-  `restore_pending()` (SIGTERM, SIGINT, SIGHUP).
-- **Was nicht geht:** Prozesse, die PHPUnit gestartet hat (`bin/sync-site.php`, `bin/site-call.php`), laufen nach dem
-  Ende von PHPUnit weiter und können Sperren oder Zeilen halten, die der nächste Eintrag antrifft.
-- **Warum kein Normalfall:** Es betrifft nur einen Eintrag, der seine Zeitgrenze (600 s) erreicht; der ist ohnehin
-  «TIMEOUT», also ohne Urteil, und die Liste braucht einen Blick.
-- **Was die neue Hilfe tut:** Kindprozesse über `AB_MCP_IT_Process` haben ihre eigene, kürzere Zeitgrenze und werden
-  samt ihren Nachkommen beendet, bevor die Grenze des Mutationslaufs greift.
+- **Fundstelle:** `tests/mutation/run.php`, `exec()` (Zeitgrenze je Eintrag, Vorgabe 600 s, `proc_terminate()` auf den
+  direkten Kindprozess) und `restore_pending()` (SIGINT, SIGTERM, SIGHUP: ebenso nur der direkte Kindprozess).
+- **Was nicht geht:** Prozesse, die PHPUnit gestartet hat (`bin/sync-site.php`, `bin/site-call.php`,
+  `bin/plain-call.php`), laufen nach dem Ende von PHPUnit weiter und können Sperren oder Zeilen halten, die der nächste
+  Eintrag antrifft. Die Zeitgrenzen der neuen Hilfe ändern daran nichts: Sie beginnen erst mit dem jeweiligen Kind, ein
+  spät gestartetes Kind kann über die Grenze des Mutationslaufs hinaus laufen, und wird PHPUnit vorher beendet (seine
+  Zeitgrenze, ein Signal), endet mit ihm auch die Überwachung des Kindes. Das Kind läuft dann in seiner eigenen
+  Prozessgruppe bis zu seinem eigenen Ende weiter.
+- **Warum kein Normalfall:** Es betrifft nur einen Eintrag, der seine Zeitgrenze erreicht (er ist dann «TIMEOUT», also
+  ohne Urteil, und die Liste braucht einen Blick), oder einen Lauf, den ein Signal beendet; die CI prüft danach, dass
+  der Checkout unverändert ist.
+- **Was die neue Hilfe tut:** Solange PHPUnit läuft, endet jedes ihrer Kinder mit seiner Prozessgruppe an seiner
+  eigenen Zeitgrenze oder an seinem Ende (G2). Was nach dem Ende von PHPUnit geschieht, hält sie nicht.
 
 ## G4 `serve.sh stop` beendet Worker ohne Prüfung der Befehlszeile (V6)
 
@@ -52,8 +59,8 @@ die neue Hilfe macht es anders. Fundstellen am Stand von Free `9be07f7`. Testcod
 - **Was nicht geht:** Wäre die PID eines Workers in diesem Fenster neu vergeben, träfe `kill` einen fremden Prozess.
 - **Warum kein Normalfall:** Die Worker enden mit ihrem Server; eine Neuvergabe derselben PID innerhalb weniger Sekunden
   ist praktisch ausgeschlossen (fortlaufende PIDs auf macOS und Linux).
-- **Was die neue Hilfe tut:** `AB_MCP_IT_Process` liest die Nachkommen erst im Moment des Beendens und nur unterhalb der
-  eigenen Kind-PID.
+- **Was die neue Hilfe tut:** `AB_MCP_IT_Process` beendet keine einzelnen PIDs, sondern die Prozessgruppe, die sie für
+  ihr Kind angelegt hat, über deren ID und nur, solange die Gruppe besteht (`posix_kill( -id, 0 )` vorher).
 
 ## G5 `sync-site.php` gibt Ergebnisse mit `JSON_PARTIAL_OUTPUT_ON_ERROR` aus (V7)
 
@@ -64,3 +71,24 @@ die neue Hilfe macht es anders. Fundstellen am Stand von Free `9be07f7`. Testcod
   speichert; Bytes geben die Schritte in base64 (`upload`, `put_file`).
 - **Was die neue Hilfe tut:** `AB_MCP_IT_Child` gibt sein Ergebnis mit `JSON_THROW_ON_ERROR` aus; ein Ergebnis, das kein
   gültiges UTF-8 ist, beendet den Lauf als Fehler.
+
+## G6 Ein Nachkomme, der die Prozessgruppe verlässt, bleibt (Behebung 1, A6)
+
+- **Fundstelle:** `tests/integration/support/class-it-process.php`, `kill_group()`.
+- **Was nicht geht:** Die Hilfe beendet die Prozessgruppe, die sie für das Kind angelegt hat. Ein Nachkomme, der eine
+  eigene Gruppe oder Sitzung anlegt (`setsid`, `setpgid`, eine Shell mit Jobsteuerung), liegt ausserhalb und bleibt.
+- **Warum kein Normalfall:** Die Kindprozesse der Suite (`bin/site-call.php`, `bin/plain-call.php`, die Shell eines
+  Handwegs) legen keine eigene Gruppe an; `bash -c` ohne `-m` hat keine Jobsteuerung.
+- **Was die neue Hilfe tut:** Sie beendet nur Gruppen, die sie selbst angelegt hat, über deren ID; kein `pkill`, kein
+  Muster, keine fremde PID.
+
+## G7 Der Wächter der Nähte sieht nur die Naht (Behebung 1, A5)
+
+- **Fundstelle:** `tests/integration/support/class-test-seam-guard.php`.
+- **Was nicht geht:** Der Wächter hält, dass eine Naht nur in den zwei erlaubten Anweisungen vorkommt und dass kein
+  ausgelieferter Code Reflection oder gebundene Closures braucht. Code, der die Naht gar nicht benutzt und die Aussenwelt
+  auf einem anderen Weg ruft (etwa ein zweites Objekt aus einem Filter), öffnet die Naht nicht und bleibt ihm verborgen.
+- **Warum kein Normalfall:** Jeder heikle Zweig ruft seine Aussenwelt über seine Naht; das prüft die Codex-Runde des
+  Zweigs an seinem Durchsetzungsort (plan.md 3.1, `conventions.md`, «Heikle Zweige …»).
+- **Was die neue Hilfe tut:** Positive Regel statt Sperrliste: zwei Anweisungen, sonst nichts; dazu die Sperre aller
+  Wege an `private` vorbei im ganzen ausgelieferten Baum.
