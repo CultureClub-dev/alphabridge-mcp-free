@@ -172,12 +172,6 @@ class AB_MCP_OAuth {
 	const WELL_KNOWN_CACHE_TTL    = 300;
 
 	/**
-	 * At most this many such fetches per WELL_KNOWN_CACHE_TTL seconds for the
-	 * whole site; past it, other paths get a 404 without a fetch.
-	 */
-	const WELL_KNOWN_MAX_FETCHES = 30;
-
-	/**
 	 * Address ranges a metadata document is never fetched from: this machine,
 	 * private and shared networks, link-local (cloud metadata services live at
 	 * 169.254.169.254), documentation, benchmarking, multicast and reserved
@@ -1614,10 +1608,11 @@ class AB_MCP_OAuth {
 	 * under the whole identity asked for (issuer, and resource), and checked
 	 * again when it is read. While one request fetches for a path, another
 	 * for the same path gets the 404 without fetching (a lock that expires
-	 * after the time limit, see well_known_lock()); and the whole site
-	 * fetches at most WELL_KNOWN_MAX_FETCHES times in WELL_KNOWN_CACHE_TTL
-	 * seconds (counted in a transient: requests in the same instant may add
-	 * a few more).
+	 * after the time limit, see well_known_lock()).
+	 *
+	 * Nothing is fetched unless a WordPress is installed under P in the same
+	 * web directory as this site (wordpress_on_disk()): a path that names no
+	 * site costs a look at the disk, no request and no stored entry.
 	 *
 	 * Limits, by design:
 	 * - The fetch goes to this site's own address and waits for the answer of
@@ -1629,6 +1624,12 @@ class AB_MCP_OAuth {
 	 *   registered at this site.
 	 * - A home_url() with an IPv6 literal as host is refused by WordPress'
 	 *   check of safe addresses (wp_http_validate_url()): no relay there.
+	 * - A site in the subfolder that is not installed under this site's web
+	 *   directory (its own virtual host, a symlink to elsewhere, another
+	 *   document root) is not relayed: the 404, as 4.10.0 without its own
+	 *   metadata.
+	 * - Where the database refuses the lock (no right to insert, another
+	 *   table layout), the document is fetched without it.
 	 *
 	 * @param string $name      oauth-authorization-server or oauth-protected-resource.
 	 * @param string $suffix    The path after the name, without trailing slash, not this site's own.
@@ -1647,7 +1648,8 @@ class AB_MCP_OAuth {
 			$site_path = substr( $suffix, 0, -strlen( $tail ) );
 		}
 		if ( ! preg_match( '#\A(?:/[A-Za-z0-9_~-][A-Za-z0-9._~-]*){1,' . self::WELL_KNOWN_MAX_SEGMENTS . '}\z#', $site_path )
-			|| false !== strpos( $site_path, '..' ) || $site_path === $home_path ) {
+			|| false !== strpos( $site_path, '..' ) || $site_path === $home_path
+			|| ! self::wordpress_on_disk( $site_path, $home_path ) ) {
 			return null;
 		}
 
@@ -1666,22 +1668,10 @@ class AB_MCP_OAuth {
 			return is_array( $cached['document'] ) ? self::relayable( $name, $cached['document'], $issuer, $resource ) : null;
 		}
 
-		$budget = get_transient( 'ab_mcp_wk_budget' );
-		if ( ! is_array( $budget ) || ! isset( $budget['since'], $budget['count'] ) || (int) $budget['since'] + self::WELL_KNOWN_CACHE_TTL <= time() ) {
-			$budget = array(
-				'since' => time(),
-				'count' => 0,
-			);
-		}
-		if ( (int) $budget['count'] >= self::WELL_KNOWN_MAX_FETCHES ) {
-			return null;
-		}
 		$lock = self::well_known_lock( $hash );
 		if ( '' === $lock ) {
 			return null;
 		}
-		$budget['count'] = (int) $budget['count'] + 1;
-		set_transient( 'ab_mcp_wk_budget', $budget, max( 1, (int) $budget['since'] + self::WELL_KNOWN_CACHE_TTL - time() ) );
 
 		$url = $issuer . '/.well-known/' . $name . ( 'oauth-protected-resource' === $name ? $suffix : '' );
 
@@ -1708,7 +1698,9 @@ class AB_MCP_OAuth {
 			}
 		}
 		set_transient( $key, array( 'document' => $document ), self::WELL_KNOWN_CACHE_TTL );
-		self::well_known_unlock( $lock );
+		if ( null !== $lock ) {
+			self::well_known_unlock( $lock );
+		}
 		return $document;
 	}
 
@@ -1717,12 +1709,15 @@ class AB_MCP_OAuth {
 	 * INSERT IGNORE adds only where it does not exist yet (atomic in the
 	 * database, unlike add_option(), which looks first and then inserts),
 	 * holding when it expires. An expired lock (a request that died while
-	 * fetching) is removed and taken once more. Without a database (the unit
-	 * tests) add_option() stands in. The row is never read through the
-	 * options API, so no option cache is involved.
+	 * fetching) is removed and taken once more. Where the database refuses
+	 * the statement itself (an error, not an existing row), the fetch goes
+	 * ahead without a lock: null. Without a database (the unit tests)
+	 * add_option() stands in. The row is never read through the options
+	 * API, so no option cache is involved.
 	 *
 	 * @param string $hash Identity of the path.
-	 * @return string The lock's option name, or '' while another request holds it.
+	 * @return string|null The lock's option name; '' while another request
+	 *                     holds it; null where the database gives no lock.
 	 */
 	private static function well_known_lock( $hash ) {
 		global $wpdb;
@@ -1738,12 +1733,53 @@ class AB_MCP_OAuth {
 			delete_option( $name );
 			return add_option( $name, $until, '', false ) ? $name : '';
 		}
-		$insert = $wpdb->prepare( "INSERT IGNORE INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, 'no')", $name, (string) $until ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from $wpdb.
-		if ( 1 === (int) $wpdb->query( $insert ) ) { // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery -- prepared above; an atomic insert is the point.
-			return $name;
+		$insert   = $wpdb->prepare( "INSERT IGNORE INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, 'no')", $name, (string) $until ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from $wpdb.
+		$suppress = $wpdb->suppress_errors( true ); // No database message inside a JSON answer.
+		$added    = $wpdb->query( $insert ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery -- prepared above; an atomic insert is the point.
+		if ( 0 === $added ) {
+			$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name = %s AND option_value < %d", $name, time() ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery -- table name from $wpdb.
+			$added = $wpdb->query( $insert ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery -- prepared above.
 		}
-		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name = %s AND option_value < %d", $name, time() ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery -- table name from $wpdb.
-		return 1 === (int) $wpdb->query( $insert ) ? $name : ''; // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery -- prepared above.
+		$wpdb->suppress_errors( $suppress );
+		if ( false === $added ) {
+			return null;
+		}
+		return 1 === (int) $added ? $name : '';
+	}
+
+	/**
+	 * Whether a WordPress is installed at this path of the domain, in this
+	 * site's web directory: <document root>P/wp-load.php exists and lies
+	 * inside the document root. The document root is this site's home
+	 * directory (get_home_path(), right also with WordPress' core in a
+	 * subfolder; ABSPATH without it) less this site's home path. P passed
+	 * the strict check of segments before. A symlink out of the document
+	 * root, a path open_basedir hides, a document root that does not end in
+	 * the home path: no (warnings suppressed).
+	 *
+	 * @param string $site_path The other site's path P.
+	 * @param string $home_path This site's home path, without trailing slash.
+	 * @return bool
+	 */
+	private static function wordpress_on_disk( $site_path, $home_path ) {
+		if ( ! function_exists( 'get_home_path' ) && defined( 'ABSPATH' ) && @file_exists( ABSPATH . 'wp-admin/includes/file.php' ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- open_basedir may hide it.
+			require_once ABSPATH . 'wp-admin/includes/file.php';
+		}
+		$home_dir = function_exists( 'get_home_path' ) ? (string) get_home_path() : ( defined( 'ABSPATH' ) ? (string) ABSPATH : '' );
+		$root     = rtrim( str_replace( '\\', '/', $home_dir ), '/' );
+		if ( '' !== $home_path ) {
+			if ( substr( $root, -strlen( $home_path ) ) !== $home_path ) {
+				return false;
+			}
+			$root = substr( $root, 0, -strlen( $home_path ) );
+		}
+		if ( '' === $root ) {
+			return false;
+		}
+		$real_root = @realpath( $root ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- open_basedir: no warning, just no.
+		$real_load = @realpath( $root . $site_path . '/wp-load.php' ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- as above.
+		return is_string( $real_root ) && is_string( $real_load )
+			&& 0 === strpos( str_replace( '\\', '/', $real_load ), rtrim( str_replace( '\\', '/', $real_root ), '/' ) . '/' );
 	}
 
 	/**
