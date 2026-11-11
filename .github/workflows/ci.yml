@@ -57,6 +57,9 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
+          # posix: the hard abort without shutdown sends a signal to its own
+          # process (tests/integration/support/class-test-abort.php).
+          extensions: posix
           coverage: none
           tools: composer:v2
 
@@ -76,7 +79,16 @@ jobs:
         run: composer update --no-interaction --no-progress --prefer-dist
 
       - name: PHPUnit
-        run: vendor/bin/phpunit --testdox
+        run: vendor/bin/phpunit --testdox --log-junit "$RUNNER_TEMP/junit-unit.xml"
+
+      # A real exit or die in the test process ends PHPUnit with status 0 and
+      # no summary; the tests after it never run, and the step above would
+      # pass (Z8b branch 1, V1). PHPUnit writes its JUnit log only at the end
+      # of a run: red when it is missing, empty, not testsuites, or holds
+      # fewer tests than PHPUnit lists for the same command
+      # (tests/integration/bin/run-complete.php, CiRunCompleteTest).
+      - name: PHPUnit ran every test
+        run: php tests/integration/bin/run-complete.php "$RUNNER_TEMP/junit-unit.xml" vendor/bin/phpunit
 
   package:
     name: ZIP stays clean
@@ -207,7 +219,10 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.3'
-          extensions: mysqli, curl, sodium
+          # posix and zip for the helpers of Z8b branch 1: the hard abort
+          # without shutdown, the packages of the stand-in for
+          # downloads.wordpress.org.
+          extensions: mysqli, curl, sodium, posix, zip
           coverage: none
           tools: composer:v2
 
@@ -235,11 +250,26 @@ jobs:
           bash tests/integration/bin/serve.sh start
 
       - name: Integration suite
-        run: vendor/bin/phpunit -c tests/integration/phpunit.xml.dist --testdox
+        run: vendor/bin/phpunit -c tests/integration/phpunit.xml.dist --testdox --log-junit "$RUNNER_TEMP/junit-integration.xml"
 
+      # As in the job unit: red unless the suite ran to its end.
+      - name: The integration suite ran every test
+        run: php tests/integration/bin/run-complete.php "$RUNNER_TEMP/junit-integration.xml" vendor/bin/phpunit -c tests/integration/phpunit.xml.dist
+
+      # Also when the job is cut at its time limit (cancelled, not failed).
       - name: Logs of the sites
-        if: failure()
+        if: failure() || cancelled()
         run: tail -n 200 "$AB_IT_ROOT"/log/* || true
+
+      # Both sites run the plugin through a link to this checkout: a test or
+      # a plugin that writes into its own folder would write here unseen
+      # (Z8b branch 1, V5). The test plugins are copies, never links.
+      - name: The checkout is unchanged
+        if: always()
+        run: |
+          set -e
+          git status --porcelain
+          test -z "$(git status --porcelain)"
 
   # Mutation probes, clause by clause (tests/mutation/run.php): each entry of
   # tests/mutation/lists/ takes one clause out and expects its tests to fail;
@@ -299,7 +329,7 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.3'
-          extensions: mysqli, curl, sodium, pcntl
+          extensions: mysqli, curl, sodium, pcntl, posix, zip
           coverage: none
           tools: composer:v2
 
