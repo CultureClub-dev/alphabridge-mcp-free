@@ -10,22 +10,27 @@
  * under /staging/123), the client asks the ROOT for the subfolder site's
  * server: /.well-known/oauth-authorization-server/staging/123. Up to 4.10.0
  * the root answered that with its own metadata, and the client signed in at
- * the wrong site.
+ * the wrong site. A redirect does not help every client (Claude's servers do
+ * not follow it), so the root fetches the other site's document and relays
+ * it, when it is exactly the document asked for.
  *
  * What must hold:
  *
  * - A path that belongs to the site (none, its home path, its resource path)
- *   gets the same document as before, byte for byte.
- * - A path that belongs to another site on the same domain gets a 307 to the
- *   address where that site serves the document itself, on this site's
- *   scheme and host, never on its own address.
- * - A path that cannot be mapped, or that is not a clean path, gets no
- *   answer from the plugin: WordPress goes on to its 404, without guessing a
- *   permalink.
- * - OAuth switched off: no answer, as before.
+ *   gets the same document as before, byte for byte, and nothing is fetched.
+ * - A path that names another site on the host gets that site's document:
+ *   fetched from <host><path>/.well-known/… with 3 s, no redirects, 64 KiB at
+ *   most, and relayed with the fields AlphaBridge gives it.
+ * - Every failure of that fetch, every document that is not exactly the one
+ *   asked for, and every path that is not clean: a 404 the plugin sets
+ *   itself, with canonical redirects and guessed permalinks switched off,
+ *   never the site's own metadata.
+ * - A fetch never makes the site fetch again.
+ * - OAuth switched off and other names: nothing changes.
  *
  * The site runs under PHP's built-in server with the test bootstrap
- * (support/well-known-server.php); without it the test is skipped and says so.
+ * (support/well-known-server.php); without it the test is skipped and says
+ * so. How fetched documents are kept is in WellKnownRelayCacheTest.
  *
  * @package AlphaBridge_MCP
  */
@@ -138,6 +143,7 @@ final class WellKnownHttpTest extends TestCase {
 
 		self::assertSame( 200, $answer['status'], $answer['raw'] );
 		self::assertSame( $this->document( $name, $home, $rest ), $answer['body'], 'Byte for byte the document of 4.10.0.' );
+		self::assertArrayNotHasKey( 'x-ab-test-fetches', $answer['headers'], 'Its own document is never fetched.' );
 	}
 
 	/**
@@ -168,86 +174,172 @@ final class WellKnownHttpTest extends TestCase {
 		self::assertSame( $this->document( self::PRM, $home, $rest ), $answer['body'] );
 	}
 
-	/* -------------------------------------------------------- foreign paths */
+	/* ------------------------------------------------- another site's paths */
 
 	/**
-	 * Paths of another site on the same domain: a 307 to where that site
-	 * answers itself.
+	 * Paths of another site on the same host: that site's document, fetched
+	 * from where it answers itself.
 	 *
-	 * @return array<string,array{0:string,1:string,2:?string,3:string}> path, home, REST base, Location
+	 * @return array<string,array{0:string,1:string,2:?string,3:string,4:string,5:string}> path, home, REST base, fetched URL, other site's home, document
 	 */
-	public static function foreignPaths(): array {
+	public static function otherSitePaths(): array {
 		$plain_root = self::ROOT . '/?rest_route=/';
+		$sub_as     = self::ROOT . '/staging/123/.well-known/oauth-authorization-server';
 		$sub_prm    = self::ROOT . '/staging/123/.well-known/oauth-protected-resource/staging/123/wp-json/alphabridge/v1/mcp';
 		return array(
-			'root: server metadata of the subfolder issuer'        => array( '/.well-known/oauth-authorization-server/staging/123', self::ROOT, null, self::ROOT . '/staging/123/.well-known/oauth-authorization-server' ),
-			'root: server metadata, trailing slash'                => array( '/.well-known/oauth-authorization-server/staging/123/', self::ROOT, null, self::ROOT . '/staging/123/.well-known/oauth-authorization-server' ),
-			'root: server metadata with a query (dropped)'         => array( '/.well-known/oauth-authorization-server/staging/123?x=1', self::ROOT, null, self::ROOT . '/staging/123/.well-known/oauth-authorization-server' ),
-			'root: path boundary, /staging/1234 is its own issuer' => array( '/.well-known/oauth-authorization-server/staging/1234', self::ROOT, null, self::ROOT . '/staging/1234/.well-known/oauth-authorization-server' ),
-			'root: upper case kept as sent'                        => array( '/.well-known/oauth-authorization-server/Staging/123', self::ROOT, null, self::ROOT . '/Staging/123/.well-known/oauth-authorization-server' ),
-			'root: resource metadata of the subfolder MCP path'    => array( '/.well-known/oauth-protected-resource/staging/123/wp-json/alphabridge/v1/mcp', self::ROOT, null, $sub_prm ),
-			'root: resource metadata, trailing slash'              => array( '/.well-known/oauth-protected-resource/staging/123/wp-json/alphabridge/v1/mcp/', self::ROOT, null, $sub_prm ),
-			'root, plain permalinks: server metadata'              => array( '/.well-known/oauth-authorization-server/staging/123', self::ROOT, $plain_root, self::ROOT . '/staging/123/.well-known/oauth-authorization-server' ),
-			'root, plain permalinks: resource metadata'            => array( '/.well-known/oauth-protected-resource/staging/123/wp-json/alphabridge/v1/mcp', self::ROOT, $plain_root, $sub_prm ),
-			'subfolder: server metadata of another issuer'         => array( '/staging/123/.well-known/oauth-authorization-server/other', self::SUB, null, self::ROOT . '/other/.well-known/oauth-authorization-server' ),
-			'subfolder: resource metadata of the root MCP path'    => array( '/staging/123/.well-known/oauth-protected-resource/wp-json/alphabridge/v1/mcp', self::SUB, null, self::ROOT . '/.well-known/oauth-protected-resource/wp-json/alphabridge/v1/mcp' ),
+			'root: server metadata of the subfolder issuer'           => array( '/.well-known/oauth-authorization-server/staging/123', self::ROOT, null, $sub_as, self::SUB, self::AS ),
+			'root: server metadata, trailing slash'                   => array( '/.well-known/oauth-authorization-server/staging/123/', self::ROOT, null, $sub_as, self::SUB, self::AS ),
+			'root: server metadata with a query (dropped)'            => array( '/.well-known/oauth-authorization-server/staging/123?x=1', self::ROOT, null, $sub_as, self::SUB, self::AS ),
+			'root: path boundary, /staging/1234 is its own issuer'    => array( '/.well-known/oauth-authorization-server/staging/1234', self::ROOT, null, self::ROOT . '/staging/1234/.well-known/oauth-authorization-server', self::ROOT . '/staging/1234', self::AS ),
+			'root: upper case kept as sent'                           => array( '/.well-known/oauth-authorization-server/Staging/123', self::ROOT, null, self::ROOT . '/Staging/123/.well-known/oauth-authorization-server', self::ROOT . '/Staging/123', self::AS ),
+			'root: four segments, ~ and -'                            => array( '/.well-known/oauth-authorization-server/~a/b-c/d_e/f.g', self::ROOT, null, self::ROOT . '/~a/b-c/d_e/f.g/.well-known/oauth-authorization-server', self::ROOT . '/~a/b-c/d_e/f.g', self::AS ),
+			'root: resource metadata of the subfolder MCP path'       => array( '/.well-known/oauth-protected-resource/staging/123/wp-json/alphabridge/v1/mcp', self::ROOT, null, $sub_prm, self::SUB, self::PRM ),
+			'root: resource metadata, trailing slash'                 => array( '/.well-known/oauth-protected-resource/staging/123/wp-json/alphabridge/v1/mcp/', self::ROOT, null, $sub_prm, self::SUB, self::PRM ),
+			'root, plain permalinks: server metadata'                 => array( '/.well-known/oauth-authorization-server/staging/123', self::ROOT, $plain_root, $sub_as, self::SUB, self::AS ),
+			'root, plain permalinks: resource metadata'               => array( '/.well-known/oauth-protected-resource/staging/123/wp-json/alphabridge/v1/mcp', self::ROOT, $plain_root, $sub_prm, self::SUB, self::PRM ),
+			'subfolder: server metadata of another issuer'            => array( '/staging/123/.well-known/oauth-authorization-server/other', self::SUB, null, self::ROOT . '/other/.well-known/oauth-authorization-server', self::ROOT . '/other', self::AS ),
+			'root with http: fetched with the scheme of home'         => array( '/.well-known/oauth-authorization-server/staging/123', 'http://example.test', null, 'http://example.test/staging/123/.well-known/oauth-authorization-server', 'http://example.test/staging/123', self::AS ),
+			'root on a port: fetched on that port'                    => array( '/.well-known/oauth-authorization-server/staging/123', 'http://localhost:8461', null, 'http://localhost:8461/staging/123/.well-known/oauth-authorization-server', 'http://localhost:8461/staging/123', self::AS ),
 		);
 	}
 
-	#[DataProvider( 'foreignPaths' )]
-	public function testAForeignPathIsRedirectedOnTheSameDomain( string $path, string $home, ?string $rest, string $location ): void {
+	#[DataProvider( 'otherSitePaths' )]
+	public function testAnotherSitesPathGetsThatSitesDocument( string $path, string $home, ?string $rest, string $url, string $other, string $name ): void {
 		$answer = $this->request( $path, $home, $rest );
 
-		self::assertSame( 307, $answer['status'], $answer['raw'] );
-		self::assertSame( $location, $answer['headers']['location'] ?? null, $answer['raw'] );
-		self::assertSame( 'no-store', $answer['headers']['cache-control'] ?? null, 'A redirect for one site must not be cached for another.' );
-		self::assertSame( '*', $answer['headers']['access-control-allow-origin'] ?? null, 'A browser-based client follows the redirect only with CORS.' );
+		self::assertSame( 200, $answer['status'], $answer['raw'] );
+		self::assertSame( $this->document( $name, $other, null ), $answer['body'], 'The other site\'s document, as it sends it.' );
+		self::assertSame( '1', $answer['headers']['x-ab-test-fetches'] ?? null, 'Fetched once: ' . $answer['raw'] );
+		self::assertSame( $url, $answer['headers']['x-ab-test-fetch-url'] ?? null );
+		self::assertSame(
+			array(
+				'timeout'             => 3,
+				'redirection'         => 0,
+				'limit_response_size' => 65536,
+				'headers'             => array( 'Accept' => 'application/json' ),
+			),
+			json_decode( $answer['headers']['x-ab-test-fetch-args'] ?? '', true ),
+			'3 s, no redirects, 64 KiB at most.'
+		);
 	}
 
-	#[DataProvider( 'foreignPaths' )]
-	public function testTheTargetDoesNotRedirectAgain( string $path, string $home, ?string $rest, string $location ): void {
-		$target = (string) wp_parse_url( $location, PHP_URL_PATH );
-		self::assertNotSame( (string) wp_parse_url( $path, PHP_URL_PATH ), $target );
+	public function testOnlyTheFieldsAlphaBridgeGivesAreRelayed(): void {
+		$answer = $this->request( '/.well-known/oauth-authorization-server/staging/123', self::ROOT, null, true, 'extra-field' );
 
-		$answer = $this->request( $target, $home, $rest );
+		self::assertSame( 200, $answer['status'], $answer['raw'] );
+		self::assertSame( $this->document( self::AS, self::SUB, null ), $answer['body'] );
+		self::assertStringNotContainsString( 'x_extra', $answer['body'] );
+	}
 
-		self::assertNotSame( 307, $answer['status'], 'No loop when the target lands on the same site: ' . $answer['raw'] );
+	public function testADocumentJustBelowTheLimitIsRelayedWithoutThePadding(): void {
+		$answer = $this->request( '/.well-known/oauth-authorization-server/staging/123', self::ROOT, null, true, 'below-limit' );
+
+		self::assertSame( 200, $answer['status'], substr( $answer['raw'], 0, 400 ) );
+		self::assertSame( $this->document( self::AS, self::SUB, null ), $answer['body'] );
+	}
+
+	/* ------------------------------------------------------ failed fetches */
+
+	/**
+	 * Every way the fetch can fail, and every document that is not exactly
+	 * the one asked for: a 404, never the site's own metadata.
+	 *
+	 * @return array<string,array{0:string,1:string}> path, how the other site answers
+	 */
+	public static function failedFetches(): array {
+		$as  = '/.well-known/oauth-authorization-server/staging/123';
+		$prm = '/.well-known/oauth-protected-resource/staging/123/wp-json/alphabridge/v1/mcp';
+		return array(
+			'request to itself blocked (host, firewall)'    => array( $as, 'blocked' ),
+			'time limit'                                    => array( $as, 'timeout' ),
+			'https home, the server cannot reach itself'    => array( $as, 'tls' ),
+			'no site there (404)'                           => array( $as, 'not-found' ),
+			'server error'                                  => array( $as, 'server-error' ),
+			'redirect, not followed'                        => array( $as, 'redirect' ),
+			'HTML with 200'                                 => array( $as, 'html' ),
+			'JSON not sent as application/json'             => array( $as, 'json-as-text' ),
+			'broken JSON'                                   => array( $as, 'broken-json' ),
+			'a JSON list'                                   => array( $as, 'json-list' ),
+			'very large answer (cut at the limit)'          => array( $as, 'too-big' ),
+			'an answer exactly at the limit'                => array( $as, 'at-limit' ),
+			'another issuer'                                => array( $as, 'foreign-issuer' ),
+			'the issuer with a trailing slash'              => array( $as, 'issuer-with-slash' ),
+			'an endpoint on another host'                   => array( $as, 'foreign-endpoint' ),
+			'an endpoint outside the issuer'                => array( $as, 'endpoint-outside-the-site' ),
+			'no registration endpoint (not AlphaBridge)'    => array( $as, 'no-registration' ),
+			'no PKCE S256'                                  => array( $as, 'no-pkce' ),
+			'resource metadata: request to itself blocked'  => array( $prm, 'blocked' ),
+			'resource metadata: another resource'           => array( $prm, 'foreign-resource' ),
+			'resource metadata: a second server'            => array( $prm, 'two-servers' ),
+			'resource metadata: HTML with 200'              => array( $prm, 'html' ),
+		);
+	}
+
+	#[DataProvider( 'failedFetches' )]
+	public function testAFailedFetchGetsA404( string $path, string $mode ): void {
+		$answer = $this->request( $path, self::ROOT, null, true, $mode );
+
+		$this->assertRefused( $answer );
+		self::assertSame( '1', $answer['headers']['x-ab-test-fetches'] ?? null, 'Fetched once, then refused: ' . $answer['raw'] );
 	}
 
 	/* ------------------------------------------------------- refused paths */
 
 	/**
-	 * Paths of another site that cannot be mapped, and paths that are not
-	 * clean: no answer from the plugin, WordPress' 404 without a guessed
-	 * permalink.
+	 * Paths that are not ours and cannot be fetched: no fetch at all.
 	 *
-	 * @return array<string,array{0:string,1:string}> path, home
+	 * @return array<string,array{0:string,1:string,2:?string}> path, home, REST base
 	 */
 	public static function refusedPaths(): array {
+		$plain_sub = self::SUB . '/?rest_route=/';
 		return array(
-			'resource metadata without a known resource path' => array( '/.well-known/oauth-protected-resource/staging/123', self::ROOT ),
-			'resource path in another case'                   => array( '/.well-known/oauth-protected-resource/staging/123/WP-JSON/alphabridge/v1/mcp', self::ROOT ),
-			'empty segment, never protocol-relative'          => array( '/.well-known/oauth-authorization-server//evil.example', self::ROOT ),
-			'encoded dot segment'                             => array( '/.well-known/oauth-authorization-server/%2e%2e/x', self::ROOT ),
-			'dot segment'                                     => array( '/.well-known/oauth-authorization-server/x/./y', self::ROOT ),
-			'encoded slash'                                   => array( '/.well-known/oauth-authorization-server/a%2Fb', self::ROOT ),
-			'encoded backslash'                               => array( '/.well-known/oauth-authorization-server/a%5Cb', self::ROOT ),
-			'encoded control character'                       => array( '/.well-known/oauth-authorization-server/a%00b', self::ROOT ),
-			'broken percent sign'                             => array( '/.well-known/oauth-authorization-server/a%zzb', self::ROOT ),
-			'character outside the redirect set'              => array( '/.well-known/oauth-authorization-server/a$b', self::ROOT ),
-			'another well-known name after the name'          => array( '/.well-known/oauth-authorization-server/.well-known/oauth-authorization-server', self::ROOT ),
-			'overlong path'                                   => array( '/.well-known/oauth-authorization-server/' . str_repeat( 'a', 600 ), self::ROOT ),
-			'subfolder: the root path on the subfolder site'  => array( '/.well-known/oauth-protected-resource/wp-json/alphabridge/v1/mcp', self::SUB ),
+			'resource metadata without a known resource path'   => array( '/.well-known/oauth-protected-resource/staging/123', self::ROOT, null ),
+			'resource path in another case'                     => array( '/.well-known/oauth-protected-resource/staging/123/WP-JSON/alphabridge/v1/mcp', self::ROOT, null ),
+			'empty segment, never protocol-relative'            => array( '/.well-known/oauth-authorization-server//evil.example', self::ROOT, null ),
+			'encoded dot segment'                               => array( '/.well-known/oauth-authorization-server/%2e%2e/x', self::ROOT, null ),
+			'any percent sign'                                  => array( '/.well-known/oauth-authorization-server/a%41b', self::ROOT, null ),
+			'dot segment'                                       => array( '/.well-known/oauth-authorization-server/x/./y', self::ROOT, null ),
+			'two dots inside a segment'                         => array( '/.well-known/oauth-authorization-server/a..b', self::ROOT, null ),
+			'a segment starting with a dot'                     => array( '/.well-known/oauth-authorization-server/.hidden', self::ROOT, null ),
+			'.well-known after the name: no fetch of a fetch'   => array( '/.well-known/oauth-authorization-server/.well-known/oauth-authorization-server/x', self::ROOT, null ),
+			'five segments'                                     => array( '/.well-known/oauth-authorization-server/a/b/c/d/e', self::ROOT, null ),
+			'character outside the set'                         => array( '/.well-known/oauth-authorization-server/a$b', self::ROOT, null ),
+			'encoded backslash'                                 => array( '/.well-known/oauth-authorization-server/a%5Cb', self::ROOT, null ),
+			'resource metadata of the root on a subfolder site' => array( '/staging/123/.well-known/oauth-protected-resource/wp-json/alphabridge/v1/mcp', self::SUB, null ),
+			'its own home as the other site (plain permalinks)' => array( '/staging/123/.well-known/oauth-protected-resource/staging/123/wp-json/alphabridge/v1/mcp', self::SUB, $plain_sub ),
 		);
 	}
 
 	#[DataProvider( 'refusedPaths' )]
-	public function testAPathThatCannotBeMappedGetsNoAnswer( string $path, string $home ): void {
-		$answer = $this->request( $path, $home, null );
+	public function testAPathThatCannotBeFetchedGetsA404WithoutAFetch( string $path, string $home, ?string $rest ): void {
+		$answer = $this->request( $path, $home, $rest );
 
-		self::assertSame( 404, $answer['status'], $answer['raw'] );
-		self::assertSame( 'wordpress-404', $answer['body'] );
-		self::assertSame( 'off', $answer['headers']['x-ab-test-guess'] ?? null, 'WordPress must not answer with a guessed page (HTML 200) instead of the 404.' );
+		$this->assertRefused( $answer );
+		self::assertArrayNotHasKey( 'x-ab-test-fetches', $answer['headers'], 'Nothing fetched: ' . $answer['raw'] );
+	}
+
+	/**
+	 * What the site fetches is never one of its well-known paths again: the
+	 * fetched address, requested from the site itself, does not make it fetch.
+	 *
+	 * @return array<string,array{0:string}>
+	 */
+	public static function fetchedAddresses(): array {
+		$out = array();
+		foreach ( self::otherSitePaths() as $label => $case ) {
+			if ( self::ROOT === $case[1] ) {
+				$out[ $label ] = array( $case[3] );
+			}
+		}
+		return $out;
+	}
+
+	#[DataProvider( 'fetchedAddresses' )]
+	public function testAFetchedAddressDoesNotFetchAgain( string $url ): void {
+		$answer = $this->request( substr( $url, strlen( self::ROOT ) ), self::ROOT, null );
+
+		self::assertArrayNotHasKey( 'x-ab-test-fetches', $answer['headers'], $answer['raw'] );
+		self::assertSame( 'wordpress', $answer['body'], 'Not a well-known address of this site: left to WordPress.' );
 	}
 
 	/* --------------------------------------------------- not ours, OAuth off */
@@ -272,12 +364,28 @@ final class WellKnownHttpTest extends TestCase {
 	public function testOtherPathsAreLeftToWordPress( string $path, string $home, bool $oauth ): void {
 		$answer = $this->request( $path, $home, null, $oauth );
 
-		self::assertSame( 404, $answer['status'], $answer['raw'] );
-		self::assertSame( 'wordpress-404', $answer['body'] );
+		self::assertSame( 'wordpress', $answer['body'], $answer['raw'] );
+		self::assertSame( 'unset', $answer['headers']['x-ab-test-status'] ?? null, 'The plugin sets no status.' );
+		self::assertSame( 'on', $answer['headers']['x-ab-test-canonical'] ?? null );
 		self::assertSame( 'on', $answer['headers']['x-ab-test-guess'] ?? null, 'Nothing changes for addresses the plugin does not serve.' );
+		self::assertArrayNotHasKey( 'x-ab-test-fetches', $answer['headers'] );
 	}
 
 	/* ------------------------------------------------------------- helpers */
+
+	/**
+	 * A refusal: the 404 set by the plugin, WordPress neither redirecting nor
+	 * guessing a permalink, and never the site's own metadata.
+	 *
+	 * @param array{status:int,headers:array<string,string>,body:string,raw:string} $answer
+	 */
+	private function assertRefused( array $answer ): void {
+		self::assertSame( 404, $answer['status'], $answer['raw'] );
+		self::assertSame( '404', $answer['headers']['x-ab-test-status'] ?? null, 'The plugin sets the 404 itself.' );
+		self::assertSame( 'off', $answer['headers']['x-ab-test-canonical'] ?? null, 'No canonical redirect for this request.' );
+		self::assertSame( 'off', $answer['headers']['x-ab-test-guess'] ?? null, 'No guessed permalink (HTML 200) instead of the 404.' );
+		self::assertSame( 'wordpress', $answer['body'], 'Not the site\'s own metadata.' );
+	}
 
 	private function site( string $home, ?string $rest ): void {
 		ab_test_reset();
@@ -285,7 +393,7 @@ final class WellKnownHttpTest extends TestCase {
 		$GLOBALS['ab_test_rest_base'] = $rest ?? $home . '/wp-json/';
 	}
 
-	/** The document as the site builds it, encoded as send_json() encodes it. */
+	/** The document as a site builds it, encoded as send_json() encodes it. */
 	private function document( string $name, string $home, ?string $rest ): string {
 		$this->site( $home, $rest );
 		$data = self::AS === $name ? AB_MCP_OAuth::metadata() : AB_MCP_OAuth::resource_metadata();
@@ -298,13 +406,14 @@ final class WellKnownHttpTest extends TestCase {
 	 *
 	 * @return array{status:int,headers:array<string,string>,body:string,raw:string}
 	 */
-	private function request( string $path, string $home, ?string $rest, bool $oauth = true ): array {
+	private function request( string $path, string $home, ?string $rest, bool $oauth = true, string $fetch = 'site' ): array {
 		$sock = fsockopen( '127.0.0.1', self::$port, $errno, $errstr, 5.0 );
 		self::assertNotFalse( $sock, $errstr );
 		$lines = array(
 			'GET ' . $path . ' HTTP/1.0',
 			'Host: example.test',
 			'X-AB-Test-Home: ' . $home,
+			'X-AB-Test-Fetch: ' . $fetch,
 		);
 		if ( null !== $rest ) {
 			$lines[] = 'X-AB-Test-Rest: ' . $rest;
@@ -333,7 +442,7 @@ final class WellKnownHttpTest extends TestCase {
 			'status'  => $status,
 			'headers' => $headers,
 			'body'    => $body,
-			'raw'     => $path . "\n" . $raw,
+			'raw'     => $path . "\n" . substr( $raw, 0, 2000 ),
 		);
 	}
 }

@@ -111,7 +111,7 @@ function ab_test_reset(): void {
 	$GLOBALS['ab_test_logged_in']   = false;
 	$GLOBALS['ab_test_routes']      = array();
 	$GLOBALS['ab_test_i18n']        = array();
-	unset( $GLOBALS['ab_test_home_url'], $GLOBALS['ab_test_rest_base'], $GLOBALS['ab_test_redirect_status'] );
+	unset( $GLOBALS['ab_test_home_url'], $GLOBALS['ab_test_rest_base'], $GLOBALS['ab_test_redirect_status'], $GLOBALS['ab_test_status'] );
 }
 
 function get_option( $name, $default = false ) {
@@ -1648,7 +1648,9 @@ function wp_die( $message = '', $title = '', $args = array() ) {
 	throw new AbTestExit( 'die', (string) $message );
 }
 
+/** Records the status, so a test can see what the code under test set. */
 function status_header( $code, $description = '' ) {
+	$GLOBALS['ab_test_status'] = (int) $code;
 }
 
 function nocache_headers() {
