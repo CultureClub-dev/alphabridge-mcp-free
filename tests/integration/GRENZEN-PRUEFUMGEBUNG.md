@@ -92,3 +92,19 @@ die neue Hilfe macht es anders. Fundstellen am Stand von Free `9be07f7`. Testcod
   Zweigs an seinem Durchsetzungsort (plan.md 3.1, `conventions.md`, «Heikle Zweige …»).
 - **Was die neue Hilfe tut:** Positive Regel statt Sperrliste: zwei Anweisungen, sonst nichts; dazu die Sperre aller
   Wege an `private` vorbei im ganzen ausgelieferten Baum.
+
+## G8 Shutdown-Funktionen nach der Ergebniszeile sieht `calls()` nicht (Codex-Runde 1, A2; Behebung 2)
+
+- **Fundstelle:** `tests/integration/support/class-it-child.php`, `run()` (Ergebniszeile aus einer Shutdown-Funktion, die
+  ihren Schreiber einmal ans Ende der Schlange stellt), `tests/integration/support/class-it-process.php`, `calls()`.
+- **Was `calls()` sieht:** einen `exit`, `die`, `wp_die()`, Fatal oder ein Signal im Request, also während der Plan
+  läuft (keine Ergebniszeile); jedes solche Ende in einer Shutdown-Funktion, die vor dem Schreiber der Ergebniszeile in
+  der Schlange steht (die Zeile kommt dann nicht); einen anderen Status als 0 nach der Zeile (etwa aus einem Destruktor).
+- **Was nicht geht:** Eine Shutdown-Funktion, die erst nach dem Schreiber registriert wird (eine Shutdown-Funktion, die
+  ihrerseits weitere registriert, nachdem der Schreiber sich ans Ende gestellt hat) und darin den Prozess mit Status 0
+  beendet, verhindert die Funktionen nach ihr, aber nicht die Ergebniszeile. `calls()` zählt den Lauf dann als Erfolg.
+- **Warum:** PHP hat keinen Haken «nach allen Shutdown-Funktionen». Jede Shutdown-Funktion kann weitere registrieren,
+  die ans Ende der Schlange kommen; ein Schreiber kann sich nur endlich oft dahinter stellen. Der Normalfall (die
+  Rettungen des Plugins registrieren ihre Shutdown-Funktion während des Requests) liegt vor dem Schreiber.
+- **Was die neue Hilfe tut:** Ergebniszeile erst aus der zuletzt registrierten Shutdown-Funktion, die sich beim Laufen
+  noch einmal ans Ende stellt; dazu verlangt `calls()` Status 0.
