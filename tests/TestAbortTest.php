@@ -206,7 +206,7 @@ final class TestAbortTest extends TestCase {
 	 * @return array<string,array>
 	 */
 	public static function markers_without_proof(): array {
-		$base = array( 'fired' => true, 'point' => 'zwischen-den-umbenennungen' );
+		$base = array( 'fired' => true, 'point' => 'zwischen-den-umbenennungen', 'phase' => 'request' );
 		return array(
 			'no_shutdown without the signal' => array( 'no_shutdown', $base + array( 'mode' => 'no_shutdown' ), 'did not end by the signal 9' ),
 			'no_shutdown with shutdown'      => array( 'no_shutdown', $base + array( 'mode' => 'no_shutdown', 'shutdown_ran' => true ), 'did not end by the signal 9 before any shutdown function', 'ab_it_probe_marker_then_kill' ),
@@ -222,6 +222,127 @@ final class TestAbortTest extends TestCase {
 		$this->expectException( RuntimeException::class );
 		$this->expectExceptionMessage( $says );
 		AB_MCP_IT_Process::abort( null, $this->plan( self::between( $mode ), array( array( 'call' => $probe, 'args' => array( $record ) ) ) ) );
+	}
+
+	public function testAnExitInAShutdownFunctionIsNoPass(): void {
+		$this->expectException( RuntimeException::class );
+		$this->expectExceptionMessage( 'did not run its plan to the end of its shutdown' );
+		AB_MCP_IT_Process::calls( null, $this->plan( array(), array( array( 'call' => 'ab_it_probe_exit_in_shutdown' ) ) ) );
+	}
+
+	private function swap_in_shutdown(): array {
+		return array( 'call' => 'ab_it_probe_swap_in_shutdown', 'args' => array( $this->dir . '/target', $this->dir . '/staged', $this->dir . '/backup', $this->dir . '/journal' ) );
+	}
+
+	/**
+	 * A plan whose only call registers the swap as a shutdown function.
+	 *
+	 * @param array $faults Faults.
+	 * @return array
+	 */
+	private function plan_in_shutdown( array $faults ): array {
+		$plan          = $this->plan( $faults );
+		$plan['calls'] = array( $this->swap_in_shutdown() );
+		return $plan;
+	}
+
+	public function testAPointReachedInAShutdownRescueIsNotTheAbortOfTheRequest(): void {
+		$this->expectException( RuntimeException::class );
+		$this->expectExceptionMessage( "came in the phase 'shutdown', not in the phase request" );
+		AB_MCP_IT_Process::abort( null, $this->plan_in_shutdown( self::between( 'no_shutdown' ) ) );
+	}
+
+	public function testAPointDeclaredInTheShutdownPhaseIsAbortedThere(): void {
+		$faults               = self::between( 'no_shutdown' );
+		$faults[0]['phase']   = 'shutdown';
+		$abort                = AB_MCP_IT_Process::abort( null, $this->plan_in_shutdown( $faults ) );
+		self::assertSame( 'shutdown', $abort['marker']['phase'] );
+		self::assertSame( 9, $abort['run']['signal'] );
+		$this->assertBetweenTheRenames();
+	}
+
+	public function testAPointDeclaredInTheShutdownPhaseButReachedInTheRequestIsAnError(): void {
+		$faults             = self::between( 'no_shutdown' );
+		$faults[0]['phase'] = 'shutdown';
+		$this->expectException( RuntimeException::class );
+		$this->expectExceptionMessage( "came in the phase 'request', not in the phase shutdown" );
+		AB_MCP_IT_Process::abort( null, $this->plan( $faults ) );
+	}
+
+	public function testOnlyTheAbortWithoutShutdownTakesTheShutdownPhase(): void {
+		foreach ( array( 'shutdown', 'timeout' ) as $mode ) {
+			$faults             = self::between( $mode );
+			$faults[0]['phase'] = 'shutdown';
+			try {
+				AB_MCP_IT_Process::abort( null, $this->plan( $faults ) );
+				self::fail( "The phase shutdown took the mode $mode." );
+			} catch ( InvalidArgumentException $e ) {
+				self::assertStringContainsString( 'takes the mode no_shutdown only', $e->getMessage() );
+			}
+		}
+		$faults             = self::between( 'no_shutdown' );
+		$faults[0]['phase'] = 'nachher';
+		$this->expectException( InvalidArgumentException::class );
+		$this->expectExceptionMessage( "No phase 'nachher'" );
+		AB_MCP_IT_Process::abort( null, $this->plan( $faults ) );
+	}
+
+	/**
+	 * @return array<string,array{0:string}>
+	 */
+	public static function ends_of_a_child(): array {
+		return array(
+			'its own end'              => array( 'end' ),
+			'its own SIGKILL'          => array( 'no_shutdown' ),
+			'the end of its shutdown'  => array( 'shutdown' ),
+		);
+	}
+
+	#[\PHPUnit\Framework\Attributes\DataProvider( 'ends_of_a_child' )]
+	public function testWhatTheChildStartedEndsWithIt( string $end ): void {
+		$pid_file = $this->dir . '/sleep.pid';
+		$before   = array( array( 'call' => 'ab_it_probe_background_sleep', 'args' => array( $pid_file, 20 ) ) );
+		if ( 'end' === $end ) {
+			AB_MCP_IT_Process::calls( null, $this->plan( array(), $before ) );
+		} else {
+			AB_MCP_IT_Process::abort( null, $this->plan( self::between( $end ), $before ) );
+		}
+		$sleep = (int) trim( (string) file_get_contents( $pid_file ) );
+		self::assertGreaterThan( 1, $sleep );
+		usleep( 100000 );
+		self::assertFalse( posix_kill( $sleep, 0 ), "The sleep the child started outlived it ($end)." );
+	}
+
+	/**
+	 * @return array<string,array{0:string|null}>
+	 */
+	public static function runs_with_a_package(): array {
+		return array(
+			'to its end'         => array( null ),
+			'without shutdown'   => array( 'no_shutdown' ),
+			'by the time limit'  => array( 'timeout' ),
+		);
+	}
+
+	#[\PHPUnit\Framework\Attributes\DataProvider( 'runs_with_a_package' )]
+	public function testThePackagesOfAChildGoWithTheFolderOfItsRun( ?string $mode ): void {
+		$before = (array) glob( sys_get_temp_dir() . '/ab-it-*' );
+		$build  = array(
+			array( 'call' => 'AB_MCP_IT_Code::zip', 'args' => array( 'plugin', 'ab-it-aktiv', '1.0.0' ), 'as' => 'zip' ),
+			array( 'call' => 'file_put_contents', 'args' => array( $this->dir . '/zip-path', '$zip' ) ),
+		);
+		$plan              = $this->plan( null === $mode ? array() : self::between( $mode ), $build );
+		$plan['require'][] = __DIR__ . '/integration/support/class-it-code.php';
+		if ( null === $mode ) {
+			$run = AB_MCP_IT_Process::calls( null, $plan )['run'];
+		} else {
+			$run = AB_MCP_IT_Process::abort( null, $plan, 30 )['run'];
+		}
+		$zip = (string) file_get_contents( $this->dir . '/zip-path' );
+		self::assertStringStartsWith( $run['tmp'] . '/', $zip, 'The child built its package in the folder of its run.' );
+		self::assertFileDoesNotExist( $zip );
+		self::assertDirectoryDoesNotExist( $run['tmp'] );
+		self::assertSame( $before, (array) glob( sys_get_temp_dir() . '/ab-it-*' ), 'Nothing of the run is left in the temporary directory.' );
 	}
 
 	public function testAPointThatNeverComesIsAnError(): void {
@@ -258,9 +379,10 @@ final class TestAbortTest extends TestCase {
 	}
 
 	public function testTheMarkerIsRemovedAfterwards(): void {
-		$before = (array) glob( sys_get_temp_dir() . '/ab-it-abort-' . getmypid() . '-*' );
-		AB_MCP_IT_Process::abort( null, $this->plan( self::between( 'no_shutdown' ) ) );
-		self::assertSame( $before, (array) glob( sys_get_temp_dir() . '/ab-it-abort-' . getmypid() . '-*' ) );
+		$before = (array) glob( sys_get_temp_dir() . '/ab-it-*' );
+		$abort  = AB_MCP_IT_Process::abort( null, $this->plan( self::between( 'no_shutdown' ) ) );
+		self::assertDirectoryDoesNotExist( $abort['run']['tmp'], 'The folder of the run with the marker in it.' );
+		self::assertSame( $before, (array) glob( sys_get_temp_dir() . '/ab-it-*' ) );
 	}
 
 	/* ------------------------------------------------ the process itself */

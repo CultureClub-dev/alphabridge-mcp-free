@@ -150,6 +150,14 @@ final class CiRunCompleteTest extends TestCase {
 		self::assertStringContainsString( '7 of 7 listed tests ran or were skipped', $run['said'] );
 	}
 
+	public function testTheScriptIsRedWhenOnlyTheEventLogFails(): void {
+		$junit                = $this->temp( self::junit( 7 ) );
+		$events               = $this->temp( "Test Finished (GanzProbe::testPlain)\n" );
+		list( $check, $said ) = self::command( array_merge( array( PHP_BINARY, self::root() . '/tests/integration/bin/run-complete.php', $junit, $events ), self::phpunit( 'ganz.xml' ) ) );
+		self::assertSame( 1, $check, $said );
+		self::assertStringContainsString( 'does not end with', $said );
+	}
+
 	public function testTheListGivesTheIdsTheEventLogUses(): void {
 		self::assertSame(
 			array( 'GanzProbe::testSet#eins', 'GanzProbe::testSet#zwei', 'GanzProbe::testSet#0', 'GanzProbe::testSkipped', 'GanzProbe::testIncomplete', 'GanzProbe::testPlain', 'GanzProbe::testRequirement' ),

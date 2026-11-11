@@ -26,8 +26,9 @@
  *           'message': «Throwable»
  *   abort   abort the process at this call, 'when' before (default) or
  *           after the real call, as 'point' in 'mode' (shutdown,
- *           no_shutdown, timeout; AB_MCP_Test_Abort): «exit/Fatal» and
- *           «Zeitlimit», in a process of its own only
+ *           no_shutdown, timeout; AB_MCP_Test_Abort), reached in 'phase'
+ *           (request, default, or shutdown): «exit/Fatal» and «Zeitlimit»,
+ *           in a process of its own only
  *   before  run 'before' first (a callable; in a plan for a child process an
  *           op, see run_op()), then the real call: «gleichzeitiger Schreiber»
  *   half    with 'arg' (index): the real call with that argument cut to
@@ -163,6 +164,7 @@ final class AB_MCP_Test_Seam {
 				if ( isset( $fault['when'] ) && ! in_array( $fault['when'], array( 'before', 'after' ), true ) ) {
 					throw new InvalidArgumentException( "Fault $i: when is before or after." );
 				}
+				AB_MCP_Test_Abort::check_phase( $fault['mode'], isset( $fault['phase'] ) ? $fault['phase'] : 'request' );
 			}
 			if ( 'before' === $fault['kind'] && ! isset( $fault['before'] ) ) {
 				throw new InvalidArgumentException( "Fault $i has no writer to run before the call." );

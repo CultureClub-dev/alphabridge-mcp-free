@@ -26,7 +26,13 @@
  * the abort at this point from any other end of the process (a wp_die(), an
  * exit elsewhere, a fatal error): without the marker the run is an error
  * (V2 of the pre-check; exit_at of bin/sync-site.php has no such proof,
- * GRENZEN-PRUEFUMGEBUNG.md).
+ * GRENZEN-PRUEFUMGEBUNG.md). The marker also names the phase the point was
+ * reached in (Codex round 1, A3): «request» while the plan runs, «shutdown»
+ * inside a shutdown function (read from the call stack: the outermost frame
+ * of a shutdown function is called by PHP itself and has no file). A point
+ * meant inside a shutdown rescue is declared so ('phase' => 'shutdown') and
+ * then takes the mode no_shutdown only: an exit there would end the other
+ * shutdown functions, the time limit would come after them.
  *
  * fire() works only after arm(), which only the child runners call
  * (AB_MCP_IT_Child): in the PHPUnit process an abort would end the whole
@@ -45,6 +51,9 @@ final class AB_MCP_Test_Abort {
 
 	/** Default seconds of the time limit in the mode timeout. */
 	const SECONDS = 1;
+
+	/** The phases a point can be reached in. */
+	const PHASES = array( 'request', 'shutdown' );
 
 	/** @var string|null Path of the marker file; null until arm(). */
 	private static $marker = null;
@@ -87,6 +96,34 @@ final class AB_MCP_Test_Abort {
 	}
 
 	/**
+	 * Check the phase declared for a point, with its mode.
+	 *
+	 * @param string $mode  Mode.
+	 * @param string $phase Phase.
+	 */
+	public static function check_phase( $mode, $phase ) {
+		if ( ! in_array( $phase, self::PHASES, true ) ) {
+			throw new InvalidArgumentException( "No phase '$phase': a point is reached in the request or in the shutdown." );
+		}
+		if ( 'shutdown' === $phase && 'no_shutdown' !== $mode ) {
+			throw new InvalidArgumentException( "An abort in the shutdown phase takes the mode no_shutdown only, not $mode." );
+		}
+	}
+
+	/**
+	 * The phase this process is in: «shutdown» when the outermost frame of
+	 * the call stack has no file (PHP itself called it, as it calls a
+	 * shutdown function), else «request».
+	 *
+	 * @return string
+	 */
+	public static function phase() {
+		$frames = debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS );
+		$outer  = end( $frames );
+		return is_array( $outer ) && isset( $outer['file'] ) ? 'request' : 'shutdown';
+	}
+
+	/**
 	 * Abort here. Never returns.
 	 *
 	 * @param string $point   Name of the point (as the test named it).
@@ -102,6 +139,7 @@ final class AB_MCP_Test_Abort {
 			'fired'    => true,
 			'point'    => (string) $point,
 			'mode'     => (string) $mode,
+			'phase'    => self::phase(),
 			'pid'      => getmypid(),
 			'fired_at' => microtime( true ),
 		);

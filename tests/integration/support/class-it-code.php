@@ -54,8 +54,8 @@ final class AB_MCP_IT_Code {
 	/** @var array|null The list, once read. */
 	private static $katalog = null;
 
-	/** @var string[] The ZIPs this process built (removed at its end). */
-	private static $zips = array();
+	/** @var string|null The folder of the ZIPs of the test process (removed at its end). */
+	private static $own_dir = null;
 
 	/**
 	 * The folder of the fixtures.
@@ -370,8 +370,8 @@ final class AB_MCP_IT_Code {
 
 	/**
 	 * A ZIP of a version, as wordpress.org packs a plugin or theme: one
-	 * folder named after the slug. Built once per process in the temporary
-	 * directory, every entry with MTIME, removed at the end of the process.
+	 * folder named after the slug. Built once per process in zip_dir(),
+	 * every entry with MTIME.
 	 *
 	 * @param string $type    plugin or theme.
 	 * @param string $slug    Slug.
@@ -386,7 +386,7 @@ final class AB_MCP_IT_Code {
 			throw new InvalidArgumentException( "$slug is a plugin of one file; wordpress.org packs folders." );
 		}
 		$source = self::source( $type, $slug, $fassung );
-		$zip    = sys_get_temp_dir() . '/ab-it-code-' . getmypid() . '-' . $type . '-' . $slug . '-' . $fassung . '.zip';
+		$zip    = self::zip_dir() . '/ab-it-code-' . $type . '-' . $slug . '-' . $fassung . '.zip';
 		if ( is_file( $zip ) ) {
 			return $zip;
 		}
@@ -404,19 +404,34 @@ final class AB_MCP_IT_Code {
 		if ( ! $archive->close() || ! rename( $tmp, $zip ) ) {
 			throw new RuntimeException( "Cannot write $zip." );
 		}
-		if ( array() === self::$zips ) {
+		return $zip;
+	}
+
+	/**
+	 * Where this process puts its ZIPs (Codex round 1, B7): in a child
+	 * process of AB_MCP_IT_Process the folder of its run (AB_IT_TMP), which
+	 * the parent removes after the child, however it ended; in the test
+	 * process a folder of its own, removed at its end.
+	 *
+	 * @return string
+	 */
+	public static function zip_dir() {
+		$run = (string) getenv( 'AB_IT_TMP' );
+		if ( '' !== $run && is_dir( $run ) ) {
+			return $run;
+		}
+		if ( null === self::$own_dir ) {
+			self::$own_dir = sys_get_temp_dir() . '/ab-it-code-' . getmypid() . '-' . bin2hex( random_bytes( 4 ) );
+			if ( ! mkdir( self::$own_dir, 0700 ) ) {
+				throw new RuntimeException( 'Cannot create ' . self::$own_dir . '.' );
+			}
 			register_shutdown_function(
 				static function () {
-					foreach ( self::$zips as $built ) {
-						if ( is_file( $built ) ) {
-							unlink( $built );
-						}
-					}
+					self::remove_path( self::$own_dir );
 				}
 			);
 		}
-		self::$zips[] = $zip;
-		return $zip;
+		return self::$own_dir;
 	}
 
 	/**

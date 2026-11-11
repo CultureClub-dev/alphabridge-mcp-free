@@ -20,7 +20,11 @@
  * "expect": "result" either ends the run with status 1. The output is one
  * line of JSON after the line RESULT_LINE: { completed: true, results,
  * seams }, written with JSON_THROW_ON_ERROR (no partial output: a result
- * that is not valid UTF-8 ends the run as a failure; give bytes in base64).
+ * that is not valid UTF-8 ends the run as a failure; give bytes in base64),
+ * and only at the end of the shutdown, after every shutdown function (A2).
+ *
+ * A hook of a plan may declare the phase its point is reached in ('phase':
+ * request, the default, or shutdown; AB_MCP_Test_Abort).
  *
  * @package AlphaBridge_MCP
  */
@@ -119,7 +123,20 @@ final class AB_MCP_IT_Child {
 			),
 			JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION
 		);
-		echo "\n" . self::RESULT_LINE . "\n" . $json . "\n";
+		// The result line goes out only after the shutdown functions (Codex
+		// round 1, A2): from a shutdown function registered now, after
+		// every one the plan registered, which puts its writer once more at
+		// the end of the queue, after those registered while it ran. A
+		// shutdown function that exits or fails before leaves no line.
+		register_shutdown_function(
+			static function () use ( $json ) {
+				register_shutdown_function(
+					static function () use ( $json ) {
+						echo "\n" . self::RESULT_LINE . "\n" . $json . "\n";
+					}
+				);
+			}
+		);
 	}
 
 	/**

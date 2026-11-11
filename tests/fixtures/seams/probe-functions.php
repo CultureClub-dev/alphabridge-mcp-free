@@ -140,3 +140,35 @@ function ab_it_probe_marker_then_kill( array $record ) {
 	file_put_contents( (string) $marker, json_encode( $record ) );
 	posix_kill( getmypid(), 9 );
 }
+
+/**
+ * The swap of the example run from a shutdown function, as a shutdown rescue
+ * would reach a call of the seam (Codex round 1, A3).
+ *
+ * @param string $target  Target.
+ * @param string $staged  Staged.
+ * @param string $backup  Backup.
+ * @param string $journal Journal.
+ * @return bool
+ */
+function ab_it_probe_swap_in_shutdown( $target, $staged, $backup, $journal ) {
+	register_shutdown_function(
+		static function () use ( $target, $staged, $backup, $journal ) {
+			AB_MCP_Test_Example_Swap::swap( $target, $staged, $backup, $journal );
+		}
+	);
+	return true;
+}
+
+/**
+ * A process in the background that outlives this one unless its group is
+ * ended (Codex round 1, A6): its PID into a file.
+ *
+ * @param string $file    File for the PID.
+ * @param int    $seconds Seconds it sleeps.
+ * @return bool
+ */
+function ab_it_probe_background_sleep( $file, $seconds ) {
+	exec( 'sleep ' . (int) $seconds . ' > /dev/null 2>&1 & echo $! > ' . escapeshellarg( $file ) );
+	return is_file( $file );
+}

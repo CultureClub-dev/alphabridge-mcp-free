@@ -1,23 +1,37 @@
 <?php
 /**
- * A child process for a test, and its verdict (Z8b branch 1, point 4).
+ * A child process for a test, and its verdict (Z8b branch 1, point 4;
+ * Codex round 1, A2, A3, A6, B7).
  *
- * run() starts a command with a time limit and reads stdout and stderr side
- * by side without blocking (V3 of the pre-check: AB_MCP_IT_Sync_Steps waits
- * for stdout before it reads stderr and has no limit; it is left as it is,
- * GRENZEN-PRUEFUMGEBUNG.md). At the limit it ends the child by its own PID
- * (proc_terminate with SIGKILL), and first what the child started (its
- * descendants, read with pgrep -P at that moment): no process of the suite
- * outlives its limit, and no other process is touched (V4 of the
- * pre-check concerns the mutation runner, which is left as it is).
+ * run() starts a command in a process group of its own, with a time limit,
+ * and reads stdout and stderr side by side without blocking (V3 of the
+ * pre-check: AB_MCP_IT_Sync_Steps waits for stdout before it reads stderr
+ * and has no limit; it is left as it is, GRENZEN-PRUEFUMGEBUNG.md). The
+ * group is made by a small launcher (PHP with posix and pcntl: setpgid(0, 0),
+ * then exec of the command), so the child is the leader and its PID the
+ * group's id. However the child ends, at its own end, at the time limit or
+ * by the SIGKILL it sends itself, the whole group is ended by that id
+ * (posix_kill( -pgid, SIGKILL )): whatever the child started and left
+ * behind (a shell's `sleep 20 &`) goes with it. No pkill, no pattern; a
+ * group id is only ever one this helper made. A process that leaves the
+ * group (a new session or group of its own) is out of reach
+ * (GRENZEN-PRUEFUMGEBUNG.md, G6).
+ *
+ * Each run has a folder of its own under the temporary directory, named to
+ * the child in AB_IT_TMP; the child puts what it builds there (the ZIPs of
+ * AB_MCP_IT_Code) and the parent removes the folder after the child, also
+ * after an abort without shutdown (B7).
  *
  * calls() runs a plan of AB_MCP_IT_Child and counts it only when the child
- * printed its result line and ended with status 0: an exit anywhere, a
- * wp_die(), a fatal error or a signal is never a pass.
+ * printed its result line, which it writes only after every shutdown
+ * function (A2), and ended with status 0: an exit anywhere, also in a
+ * shutdown function, a wp_die(), a fatal error or a signal is never a pass.
  *
  * abort() runs a plan with an abort and counts it only with the marker of
- * that point in that mode and the proof of the mode (AB_MCP_Test_Abort): a
- * run that ends anywhere else, or runs to its end, is an error.
+ * that point in that mode and phase and the proof of the mode
+ * (AB_MCP_Test_Abort): a run that ends anywhere else, runs to its end, or
+ * reaches the point in another phase (in a shutdown rescue where the plan
+ * did not declare it, A3) is an error.
  *
  * Both work for a site (bin/site-call.php, its WordPress) or in plain PHP
  * (bin/plain-call.php).
@@ -36,33 +50,87 @@ final class AB_MCP_IT_Process {
 	/** Default seconds a child may take. */
 	const TIMEOUT = 120;
 
+	/** The launcher: a process group of its own, then the command. */
+	const LAUNCHER = <<<'PHP'
+if ( ! function_exists( 'posix_setpgid' ) || ! function_exists( 'pcntl_exec' ) ) {
+	fwrite( STDERR, "launch: the helper needs the extensions posix and pcntl.\n" );
+	exit( 126 );
+}
+if ( ! posix_setpgid( 0, 0 ) ) {
+	fwrite( STDERR, "launch: no process group of its own.\n" );
+	exit( 126 );
+}
+$ab_it_cmd = (string) $argv[1];
+if ( false === strpos( $ab_it_cmd, '/' ) ) {
+	foreach ( explode( ':', (string) getenv( 'PATH' ) ) as $ab_it_dir ) {
+		if ( '' !== $ab_it_dir && is_file( $ab_it_dir . '/' . $ab_it_cmd ) && is_executable( $ab_it_dir . '/' . $ab_it_cmd ) ) {
+			$ab_it_cmd = $ab_it_dir . '/' . $ab_it_cmd;
+			break;
+		}
+	}
+}
+pcntl_exec( $ab_it_cmd, array_slice( $argv, 2 ) );
+fwrite( STDERR, "launch: cannot run {$argv[1]}.\n" );
+exit( 127 );
+PHP;
+
 	/**
-	 * Run a command.
+	 * Run a command in a process group of its own.
 	 *
 	 * @param string[]      $command Command (no shell).
 	 * @param string        $stdin   Bytes for its stdin.
-	 * @param int|float     $timeout Seconds; then the child is killed.
+	 * @param int|float     $timeout Seconds; then the group is killed.
 	 * @param string|null   $cwd     Directory.
 	 * @param string[]|null $env     Environment (null: this one).
-	 * @return array{exit:int|null,signal:int|null,timed_out:bool,stdout:string,stderr:string,seconds:float,pid:int}
+	 * @param string|null   $tmp     Folder for AB_IT_TMP that the caller
+	 *                               made and removes; null: one of this run,
+	 *                               removed at its end.
+	 * @return array{exit:int|null,signal:int|null,timed_out:bool,stdout:string,stderr:string,seconds:float,pid:int,tmp:string}
 	 */
-	public static function run( array $command, $stdin = '', $timeout = self::TIMEOUT, $cwd = null, $env = null ) {
+	public static function run( array $command, $stdin = '', $timeout = self::TIMEOUT, $cwd = null, $env = null, $tmp = null ) {
+		if ( ! function_exists( 'posix_kill' ) ) {
+			throw new RuntimeException( 'The helper of child processes needs the posix extension.' );
+		}
+		$own = null === $tmp;
+		$tmp = $own ? self::temp_dir() : (string) $tmp;
+		$env = array_merge( null === $env ? getenv() : $env, array( 'AB_IT_TMP' => $tmp ) );
+		try {
+			return self::run_in_group( $command, (string) $stdin, $timeout, $cwd, $env ) + array( 'tmp' => $tmp );
+		} finally {
+			if ( $own ) {
+				self::remove_tree( $tmp );
+			}
+		}
+	}
+
+	/**
+	 * run() without the folder.
+	 *
+	 * @param string[]  $command Command.
+	 * @param string    $stdin   Bytes.
+	 * @param int|float $timeout Seconds.
+	 * @param string    $cwd     Directory or null.
+	 * @param array     $env     Environment.
+	 * @return array
+	 */
+	private static function run_in_group( array $command, $stdin, $timeout, $cwd, array $env ) {
 		$started = microtime( true );
-		$process = proc_open( $command, array( 0 => array( 'pipe', 'r' ), 1 => array( 'pipe', 'w' ), 2 => array( 'pipe', 'w' ) ), $pipes, $cwd, $env );
+		$process = proc_open( array_merge( array( PHP_BINARY, '-r', self::LAUNCHER, '--' ), $command ), array( 0 => array( 'pipe', 'r' ), 1 => array( 'pipe', 'w' ), 2 => array( 'pipe', 'w' ) ), $pipes, $cwd, $env );
 		if ( ! is_resource( $process ) ) {
 			throw new RuntimeException( 'Could not start ' . implode( ' ', $command ) . '.' );
 		}
+		// The launcher becomes the leader of its group and then the
+		// command: its PID is the id of the group.
 		$pid = (int) proc_get_status( $process )['pid'];
 		foreach ( $pipes as $pipe ) {
 			stream_set_blocking( $pipe, false );
 		}
-		$stdin     = (string) $stdin;
-		$written   = 0;
-		$open      = array(
+		$written    = 0;
+		$open       = array(
 			1 => true,
 			2 => true,
 		);
-		$buffers   = array(
+		$buffers    = array(
 			1 => '',
 			2 => '',
 		);
@@ -107,12 +175,7 @@ final class AB_MCP_IT_Process {
 			}
 			if ( microtime( true ) - $started > $timeout ) {
 				$timed_out = true;
-				// The processes the child started go first (a shell's
-				// commands, say), found as its descendants at this moment;
-				// then the child itself, by its own PID.
-				foreach ( self::descendants( $pid ) as $descendant ) {
-					posix_kill( $descendant, 9 );
-				}
+				self::kill_group( $pid );
 				proc_terminate( $process, 9 );
 				for ( $i = 0; $i < 100; $i++ ) {
 					$state = proc_get_status( $process );
@@ -125,8 +188,10 @@ final class AB_MCP_IT_Process {
 				break;
 			}
 		}
-		// What the child wrote before it ended, without waiting on a pipe
-		// that something else might hold open.
+		// The child has ended (by itself, by its own signal or at the
+		// limit): what it left in its group goes now, before the pipes are
+		// read to their end, so nothing it started keeps them open.
+		self::kill_group( $pid );
 		$until = microtime( true ) + 2;
 		while ( ( $open[1] || $open[2] ) && microtime( true ) < $until ) {
 			$before = strlen( $buffers[1] ) + strlen( $buffers[2] );
@@ -157,35 +222,57 @@ final class AB_MCP_IT_Process {
 	}
 
 	/**
-	 * The processes below a PID (children, their children …), deepest first,
-	 * read with pgrep -P at this moment.
+	 * End every process of the group this helper made, by its id. A group
+	 * that no longer exists is left alone (posix_kill( -id, 0 ) fails).
 	 *
-	 * @param int $pid PID.
-	 * @return int[]
+	 * @param int $pgid Id of the group (the PID of its leader, the child).
 	 */
-	public static function descendants( $pid ) {
-		$out = array();
-		$run = proc_open( array( 'pgrep', '-P', (string) (int) $pid ), array( 0 => array( 'file', '/dev/null', 'r' ), 1 => array( 'pipe', 'w' ), 2 => array( 'file', '/dev/null', 'w' ) ), $pipes );
-		if ( ! is_resource( $run ) ) {
-			return $out;
+	private static function kill_group( $pgid ) {
+		if ( $pgid > 1 && @posix_kill( -$pgid, 0 ) ) {
+			@posix_kill( -$pgid, 9 );
 		}
-		$list = (string) stream_get_contents( $pipes[1] );
-		fclose( $pipes[1] );
-		proc_close( $run );
-		foreach ( preg_split( '/\s+/', trim( $list ) ) as $child ) {
-			if ( ctype_digit( (string) $child ) ) {
-				$out = array_merge( $out, self::descendants( (int) $child ), array( (int) $child ) );
+	}
+
+	/**
+	 * A new folder of this process under the temporary directory.
+	 *
+	 * @return string
+	 */
+	public static function temp_dir() {
+		$dir = sys_get_temp_dir() . '/ab-it-run-' . getmypid() . '-' . bin2hex( random_bytes( 6 ) );
+		if ( ! mkdir( $dir, 0700 ) ) {
+			throw new RuntimeException( "Cannot create $dir." );
+		}
+		return $dir;
+	}
+
+	/**
+	 * Remove a folder with what is in it; a link is removed, never followed.
+	 *
+	 * @param string $path Path.
+	 */
+	public static function remove_tree( $path ) {
+		if ( is_link( $path ) || is_file( $path ) ) {
+			unlink( $path );
+			return;
+		}
+		if ( ! is_dir( $path ) ) {
+			return;
+		}
+		foreach ( (array) scandir( $path ) as $name ) {
+			if ( '.' !== $name && '..' !== $name ) {
+				self::remove_tree( $path . '/' . $name );
 			}
 		}
-		return $out;
+		rmdir( $path );
 	}
 
 	/**
 	 * Read what the pipes hold now.
 	 *
-	 * @param resource[]         $pipes   Pipes.
-	 * @param array<int,bool>    $open    Open stdout/stderr.
-	 * @param array<int,string>  $buffers What was read.
+	 * @param resource[]        $pipes   Pipes.
+	 * @param array<int,bool>   $open    Open stdout/stderr.
+	 * @param array<int,string> $buffers What was read.
 	 */
 	private static function drain( array $pipes, array &$open, array &$buffers ) {
 		foreach ( array( 1, 2 ) as $i ) {
@@ -217,7 +304,7 @@ final class AB_MCP_IT_Process {
 	}
 
 	/**
-	 * Run a plan that must run to its end.
+	 * Run a plan that must run to its end, its shutdown included.
 	 *
 	 * @param string|null $site    Site, or null for plain PHP.
 	 * @param array       $plan    Plan of AB_MCP_IT_Child (without marker).
@@ -234,7 +321,7 @@ final class AB_MCP_IT_Process {
 			throw new RuntimeException( self::describe( 'The child took longer than ' . $timeout . ' s and was ended', $run ) );
 		}
 		if ( null === $result || 0 !== $run['exit'] ) {
-			throw new RuntimeException( self::describe( 'The child did not run its plan to the end (no result line, or not status 0): an exit, a wp_die(), a fatal error or a signal is no pass', $run ) );
+			throw new RuntimeException( self::describe( 'The child did not run its plan to the end of its shutdown (no result line, or not status 0): an exit, also in a shutdown function, a wp_die(), a fatal error or a signal is no pass', $run ) );
 		}
 		return array(
 			'results' => $result['results'],
@@ -244,13 +331,16 @@ final class AB_MCP_IT_Process {
 	}
 
 	/**
-	 * Run a plan with one abort, and require it at its point in its mode.
+	 * Run a plan with one abort, and require it at its point in its mode
+	 * and phase.
 	 *
 	 * @param string|null $site    Site, or null for plain PHP.
 	 * @param array       $plan    Plan with exactly one abort: a fault of
-	 *                             kind abort in a seam, or one hook.
+	 *                             kind abort in a seam, or one hook; its
+	 *                             'phase' (request, the default, or
+	 *                             shutdown) is where the point must come.
 	 * @param int         $timeout Seconds.
-	 * @return array{point:string,mode:string,marker:array,run:array}
+	 * @return array{point:string,mode:string,phase:string,marker:array,run:array}
 	 */
 	public static function abort( $site, array $plan, $timeout = self::TIMEOUT ) {
 		$aborts = array();
@@ -269,19 +359,17 @@ final class AB_MCP_IT_Process {
 		}
 		$point = (string) $aborts[0]['point'];
 		$mode  = (string) $aborts[0]['mode'];
+		$phase = isset( $aborts[0]['phase'] ) ? (string) $aborts[0]['phase'] : 'request';
 		AB_MCP_Test_Abort::check_mode( $mode );
-		$marker         = sys_get_temp_dir() . '/ab-it-abort-' . getmypid() . '-' . bin2hex( random_bytes( 8 ) ) . '.json';
+		AB_MCP_Test_Abort::check_phase( $mode, $phase );
+		$tmp            = self::temp_dir();
+		$marker         = $tmp . '/abort-marker.json';
 		$plan['marker'] = $marker;
 		try {
-			$run    = self::run( self::child_command( $site ), (string) json_encode( $plan ), $timeout );
+			$run    = self::run( self::child_command( $site ), (string) json_encode( $plan ), $timeout, null, null, $tmp );
 			$record = AB_MCP_Test_Abort::read( $marker );
 		} finally {
-			if ( is_file( $marker ) ) {
-				unlink( $marker );
-			}
-			foreach ( (array) glob( $marker . '.*.tmp' ) as $tmp ) {
-				unlink( (string) $tmp );
-			}
+			self::remove_tree( $tmp );
 		}
 		if ( $run['timed_out'] ) {
 			throw new RuntimeException( self::describe( "The abort at '$point' did not end the child within $timeout s", $run ) );
@@ -294,6 +382,9 @@ final class AB_MCP_IT_Process {
 		}
 		if ( $point !== $record['point'] || $mode !== $record['mode'] ) {
 			throw new RuntimeException( self::describe( "The marker names '{$record['point']}' ({$record['mode']}), not '$point' ($mode)", $run ) );
+		}
+		if ( ! isset( $record['phase'] ) || $phase !== $record['phase'] ) {
+			throw new RuntimeException( self::describe( "The point '$point' came in the phase " . var_export( isset( $record['phase'] ) ? $record['phase'] : null, true ) . ", not in the phase $phase the plan named (a point reached in a shutdown rescue is not the abort of the request)", $run ) );
 		}
 		$ran = ! empty( $record['shutdown_ran'] );
 		if ( 'no_shutdown' === $mode && ( 9 !== $run['signal'] || $ran ) ) {
@@ -311,6 +402,7 @@ final class AB_MCP_IT_Process {
 		return array(
 			'point'  => $point,
 			'mode'   => $mode,
+			'phase'  => $phase,
 			'marker' => $record,
 			'run'    => $run,
 		);
