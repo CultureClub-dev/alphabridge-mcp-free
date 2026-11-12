@@ -2323,7 +2323,47 @@ final class AB_MCP_Protected_Store {
 				return $path;
 			}
 		}
-		return new WP_Error( 'ab_mcp_store_write', 'A temp file could not be made in the protected store. Ask the host to check that the folder is writable and the disk has free space, then try again.' );
+		return new WP_Error( 'ab_mcp_store_write', __( 'A temp file could not be made in the protected store. Ask the host to check that the folder is writable and the disk has free space, then try again.', 'alphabridge-mcp' ) );
+	}
+
+	/**
+	 * A small file of the store read through the seam, by what can be said of
+	 * it (Behebung 1, the rule «unreadable is never empty»): 'absent' only
+	 * where its folder could be listed and lists it not; 'unreadable' where
+	 * it cannot be read, is a link or no plain file, or is larger than $max;
+	 * 'ok' with its bytes.
+	 *
+	 * @param string $root Folder of the store.
+	 * @param string $path The file, below $root.
+	 * @param int    $max  Bytes at most.
+	 * @return array{state:string,bytes:string|null}
+	 */
+	public static function read_small( $root, $path, $max ) {
+		$calls = self::calls();
+		$root  = rtrim( (string) $root, '/' );
+		$path  = (string) $path;
+		if ( 0 !== strpos( $path, $root . '/' ) || preg_match( '#(^|/)\.\.?(/|$)#', $path ) ) {
+			return array(
+				'state' => 'unreadable',
+				'bytes' => null,
+			);
+		}
+		$stat = $calls->lstat( $path );
+		if ( false === $stat ) {
+			$names = $calls->scandir( dirname( $path ) );
+			return array(
+				'state' => ( false !== $names && ! in_array( basename( $path ), $names, true ) ) ? 'absent' : 'unreadable',
+				'bytes' => null,
+			);
+		}
+		$bytes = $calls->read( $path, (int) $max );
+		return false === $bytes || ! is_string( $bytes ) ? array(
+			'state' => 'unreadable',
+			'bytes' => null,
+		) : array(
+			'state' => 'ok',
+			'bytes' => $bytes,
+		);
 	}
 
 	/**
