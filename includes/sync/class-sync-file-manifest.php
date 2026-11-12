@@ -36,7 +36,8 @@
  * THE CALLS TO THE OUTSIDE (plan 8.3, branch 2: reading and hashing files
  * and folders) go through AB_MCP_Sync_File_Manifest_Calls, held by the seam
  * of this class; only the tests put another object there (Z8b branch 1,
- * AB_MCP_Test_Seam). No filter and no option reaches this class.
+ * the seam helper of the integration suite). No filter and no option
+ * reaches this class.
  *
  * @package AlphaBridge_MCP
  */

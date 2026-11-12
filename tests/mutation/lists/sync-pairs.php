@@ -190,7 +190,7 @@ return array(
 		'id'      => 'sync/one-row-written',
 		'clause'  => 'swap(): a write that changed no row is the named error, not a success',
 		'file'    => 'includes/sync/class-sync-pairs.php',
-		'search'  => 'if ( 1 !== (int) $done ) {',
+		'search'  => 'if ( 1 !== $done ) {',
 		'replace' => 'if ( false ) {',
 		'run'     => $it_pairs,
 		'expect'  => '/testRestoreSeesAChangeBetweenItsReadAndItsWriteByTheBytes/',
