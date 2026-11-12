@@ -469,6 +469,45 @@ final class MutationPlanTest extends TestCase {
 		self::assertSame( count( $entries ), array_sum( array_column( $after, 'entries' ) ) );
 	}
 
+	public function testEightyNewEntriesOfANewIntegrationCommandStayUnderTheTimeLimit(): void {
+		// Codex round 1, B3: 80 new entries of one new integration command,
+		// beside the checked-in measures and lists. At 36 s for each new
+		// mutation and the new baseline, the longest shard stays under 43 min
+		// (45 min of the job, 2 min to set up); the estimate of the new ones
+		// is not below the longest measured of their kind.
+		$root     = dirname( __DIR__ );
+		$measures = AB_Mutation_Plan::load_measures( $root . '/tests/mutation/dauer.php' );
+		$lists    = glob( $root . '/tests/mutation/lists/*.php' );
+		sort( $lists );
+		$entries = AB_Mutation_Plan::list_entries( $lists );
+		$longest = 0;
+		foreach ( $entries as $entry ) {
+			if ( isset( $measures['mutation'][ $entry['id'] ] ) && 'integration' === AB_Mutation_Plan::kind( $entry['run'] ) ) {
+				$longest = max( $longest, $measures['mutation'][ $entry['id'] ] );
+			}
+		}
+		$new = self::it( 'NeuIntegrationTest' );
+		for ( $i = 0; $i < 80; $i++ ) {
+			$entries[] = array( 'id' => sprintf( 'neu/%02d', $i ), 'run' => $new );
+		}
+		$estimate = AB_Mutation_Plan::estimates( $entries, $measures );
+		foreach ( array_slice( $estimate['mutation'], -80 ) as $tenths ) {
+			self::assertSame( $longest, $tenths );
+		}
+		self::assertGreaterThan( 0, $longest );
+
+		$shards = AB_Mutation_Plan::assign( $entries, $measures, 12 );
+		self::assertGreaterThan( 1, count( array_unique( array_slice( $shards, -80 ) ) ), 'the new command is cut' );
+
+		$worst = $measures;
+		foreach ( array_slice( $entries, -80 ) as $entry ) {
+			$worst['mutation'][ $entry['id'] ] = 360;
+		}
+		$worst['grundlinie'][ AB_Mutation_Plan::key( $new ) ] = 360;
+		$costs = array_column( AB_Mutation_Plan::costs( $entries, $shards, $worst, 12 ), 'cost' );
+		self::assertLessThan( 43 * 600, max( $costs ) );
+	}
+
 	/* -------------------------------------------------------- measure file */
 
 	private function file( string $php ): string {
