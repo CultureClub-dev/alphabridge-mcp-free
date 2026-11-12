@@ -37,7 +37,10 @@ require_once __DIR__ . '/../includes/class-protected-store.php';
 
 /**
  * A stand-in of $wpdb for the table of the runs: the rows of the query of
- * backup_rows(), the plan of one run, the ids of open_runs().
+ * backup_rows(), the plan of one run, the ids of open_runs(). A query that
+ * fails answers as wpdb does: get_results() and get_col() with an empty
+ * array (wpdb::flush() empties last_result), get_var() with null, and only
+ * last_error says it failed ("an empty list is no error").
  */
 final class AbTestRunsWpdb {
 	public $prefix     = 'wp_';
@@ -68,7 +71,7 @@ final class AbTestRunsWpdb {
 
 	public function get_results( $query, $output = null ) {
 		$this->queries[] = (string) $query;
-		return $this->failing( 'rows' ) ? null : $this->rows;
+		return $this->failing( 'rows' ) ? array() : $this->rows;
 	}
 
 	public function get_var( $query ) {
@@ -82,7 +85,7 @@ final class AbTestRunsWpdb {
 	public function get_col( $query, $x = 0 ) {
 		$this->queries[] = (string) $query;
 		if ( $this->failing( 'ids' ) ) {
-			return null;
+			return array();
 		}
 		$out = array();
 		foreach ( $this->rows as $row ) {

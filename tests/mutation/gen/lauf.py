@@ -224,17 +224,17 @@ KEEP = 'testTheRetentionNamesTheRunsWhoseBackupsStay'
 e('schema-keep-last', 'backup_runs(): the last KEEP_LAST qualified closes (decision 20, rule 2)', SC,
   "\t\t\tif ( $n <= self::KEEP_LAST ) {", "\t\t\tif ( $n <= self::KEEP_LAST + 1 ) {", 'unit', KEEP)
 e('schema-keep-until', 'backup_runs(): a closed run until the keep_until its close stored (rules 3, 5, 6; A7)', SC,
-  "\t\t\tif ( 0 === (int) $row['keep_until'] || (int) $row['keep_until'] > $now ) {", "\t\t\tif ( 0 === (int) $row['keep_until'] ) {", 'unit', KEEP)
+  "\t\t\tif ( 0 === $until || $until > $now ) {", "\t\t\tif ( 0 === $until ) {", 'unit', KEEP)
 e('schema-v2-kept', 'backup_runs(): a row without a stored period (version 2, keep_until 0) is kept, fail closed (N1)', SC,
-  "\t\t\tif ( 0 === (int) $row['keep_until'] || (int) $row['keep_until'] > $now ) {", "\t\t\tif ( (int) $row['keep_until'] > $now ) {", 'unit', KEEP)
+  "\t\t\tif ( 0 === $until || $until > $now ) {", "\t\t\tif ( $until > $now ) {", 'unit', KEEP)
 e('schema-keep-until-qualified', 'keep_until(): a qualified close for the days of the filter, the close itself in Free, never 0 (rule 3; N1)', SC,
-  "\t\t\treturn (int) $now + $days * 86400;", "\t\t\treturn $days > 0 ? (int) $now + $days * 86400 : 0;", 'unit', KEEP)
+  "\t\t\treturn $now + $days * 86400;", "\t\t\treturn $days > 0 ? $now + $days * 86400 : 0;", 'unit', KEEP)
 e('schema-keep-until-unqualified', 'keep_until(): an unqualified close for UNQUALIFIED_DAYS, or the days of the filter where more (rule 5)', SC,
-  "\t\treturn (int) $now + max( self::UNQUALIFIED_DAYS, $days ) * 86400;", "\t\treturn (int) $now + self::UNQUALIFIED_DAYS * 86400;", 'unit', KEEP)
+  "\t\treturn $now + max( self::UNQUALIFIED_DAYS, $days ) * 86400;", "\t\treturn $now + self::UNQUALIFIED_DAYS * 86400;", 'unit', KEEP)
 e('schema-reverts', 'backup_runs(): the runs a way back that is not closed needs (rule 4)', SC,
-  "\t\t\t\t\t$keep[ (int) $needed ] = true;", '', 'unit', KEEP)
+  "\t\t\t\t\t$keep[ $needed ] = true;", '', 'unit', KEEP)
 e('schema-qualified-only', 'backup_runs(): only a qualified close counts among the last three', SC,
-  "\t\t\tif ( (int) $row['forward_closed_at'] > 0 ) {", "\t\t\tif ( true ) {", 'unit', KEEP)
+  "\t\t\tif ( $fwd > 0 ) {", "\t\t\tif ( true ) {", 'unit', KEEP)
 ROWS = 'testTheRetentionNamesEveryRowSoARunWithoutOneIsToldFromOneWhoseBackupsGo'
 e('schema-rows-named', 'backup_rows(): every row is named, false where its backups go, so the clean-up tells it from a run without a row', SC,
   "\t\t\tif ( ! array_key_exists( $id, $keep ) ) {\n\t\t\t\t$keep[ $id ] = false;\n\t\t\t}\n", '', 'unit', ROWS)
@@ -683,9 +683,9 @@ PLANS = 'testTheRetentionReadsThePlanOfARunThatIsNotClosedOnlyAndKeepsWhatItKept
 e('writer-staging-term-order-lock', 'target_of(): a relationship of the staging post with a term_order other than 0 is locked before anything is written (P2)', PW,
   "\t\t\tif ( isset( $term['term_order'] ) && 0 !== (int) $term['term_order'] ) {", "\t\t\tif ( false ) {", 'it', ORDER_STAGING)
 e('schema-plan-not-listed', 'backup_rows(): the rows of the retention are read without their plan (P2)', SC,
-  "SELECT run_id, type, state, closed, forward_closed_at, keep_until FROM `", "SELECT run_id, type, state, closed, forward_closed_at, keep_until, plan FROM `", 'unit', PLANS)
+  "SELECT run_id, type, state, forward_closed_at, keep_until FROM `", "SELECT run_id, type, state, forward_closed_at, keep_until, plan FROM `", 'unit', PLANS)
 e('schema-plan-per-run', 'backup_rows(): the plan of a run that is not closed, read for it alone, keeps the runs its way back needs', SC,
-  "\t\t\t\t$plan = is_string( $raw ) ? json_decode( $raw, true, 16 ) : null;", "\t\t\t\t$plan = null;", 'unit', PLANS)
+  "\t\t\t\t$plan = AB_MCP_Sync_Canon::decode( $raw, 64 );", "\t\t\t\t$plan = null;", 'unit', PLANS)
 
 # ------------------------------- GitHub Codex round 8 on free#137 (one P2)
 # The records of a run read through AB_MCP_Sync_Canon::decode(), bytes as
