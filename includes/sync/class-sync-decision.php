@@ -171,6 +171,7 @@ final class AB_MCP_Sync_Decision {
 		'conflict'           => 'Changed on both sides since the base of its pair, differently.',
 		'changed_alike'      => 'Changed on both sides alike since the base of its pair: nothing to take over.',
 		'kept_apart'         => 'Unchanged on both sides since the bases of its pair, which differ: the sides differ now as they did then, kept so; nothing to take over.',
+		'open'               => 'A part of its pair has no base yet: which side changed it is not known until a person confirms that part (wp_site_pairs, units); nothing of it is taken over.',
 		'deleted_on_staging' => 'Removed on staging since its pair was made.',
 		'deleted_live'       => 'Removed on this site since its pair was made: nothing to do.',
 		'deleted_against_changed_live' => 'Removed on staging since its pair was made, and changed on this site since its base: a conflict, kept on this site.',
@@ -1394,7 +1395,10 @@ final class AB_MCP_Sync_Decision {
 			foreach ( $parts as $part ) {
 				$base = AB_MCP_Sync_Pairs::part_bases( $pair, $part );
 				if ( null === $base ) {
-					return self::unit_entry( $entry, array(), 'Its pair holds no base of the part ' . $part . '.', $held );
+					// A part without a base yet (Z44): open, until a person
+					// confirms it; the other parts are judged by their own.
+					$states[ $part ] = 'open';
+					continue;
 				}
 				$ss = hash_equals( $base['staging'], $have[ $part ]['s'] ) ? 'unchanged' : 'changed';
 				$ls = hash_equals( $base['live'], $have[ $part ]['l'] ) ? 'unchanged' : 'changed';
@@ -1405,7 +1409,7 @@ final class AB_MCP_Sync_Decision {
 				$states[ $part ] = 1 === $row && in_array( $part, $differs, true ) ? 'kept_apart' : self::TABLE[ $row ][2];
 			}
 			$entry['parts'] = $states;
-			foreach ( array( 'conflict', 'changed_on_staging', 'changed_live', 'changed_alike', 'kept_apart', 'equal' ) as $result ) {
+			foreach ( array( 'conflict', 'changed_on_staging', 'changed_live', 'changed_alike', 'open', 'kept_apart', 'equal' ) as $result ) {
 				if ( in_array( $result, $states, true ) ) {
 					$entry['result'] = $result;
 					break;

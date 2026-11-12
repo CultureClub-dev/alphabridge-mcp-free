@@ -91,8 +91,8 @@ e('replace-own', 'replace_own(): a new proposal removes the earlier ones of its 
 e('replace-own-only', 'replace_own(): those of other connections stay', P,
   "\t\t\tif ( is_array( $head ) && isset( $head['connection'] ) && hash_equals( (string) $head['connection'], $mine ) ) {", "\t\t\tif ( is_array( $head ) ) {", 'it', 'testAProposalGoesOnOverCallsAndBelongsToItsAccountAndConnection')
 e('find-expires-min', 'propose(): it holds as long as its earliest package', P,
-  "\t\t\t'expires'    => min( $staging['expires'], self::now() + AB_MCP_Protected_Store::KEEP['reports'] ),",
-  "\t\t\t'expires'    => self::now() + AB_MCP_Protected_Store::KEEP['reports'],", 'it', 'testAProposalHoldsAsLongAsItsEarliestPackage')
+  "\t\t\t'expires'     => min( $staging['expires'], (int) $env['expires'], self::now() + AB_MCP_Protected_Store::KEEP['reports'] ),",
+  "\t\t\t'expires'     => self::now() + AB_MCP_Protected_Store::KEEP['reports'],", 'it', 'testAProposalHoldsAsLongAsItsEarliestPackage')
 e('source-multisite', 'source_id(): no pairs on a network', P,
   "\t\tif ( is_multisite() ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_multisite'", "\t\tif ( false ) {\n\t\t\treturn new WP_Error( 'ab_mcp_sync_multisite'", 'tool', 'testEveryActionNeedsAConfirmedKeyAndNoNetwork')
 e('source-anchor', 'source_id(): only with a confirmed key of a staging site', P,
@@ -122,9 +122,9 @@ e('step-b9', 'step(): an object whose name is a credential is counted, never lis
 e('step-held', 'step(): a line of this site a credential holds is reduced before it is stored', P,
   "\t\t\t$lines[] = null === $code ? $line : self::reduced( $line, $code );", "\t\t\t$lines[] = null === $code ? $line : array( 'held' => $code ) + $line;", 'it', 'testAHeldNameReachesNeitherTheStoreNorARealignAnswer')
 e('step-finish', 'step(): the inventory read to its end is worked out in the same call', P,
-  "\t\tif ( null === end( $found['parts'] )['cursor'] ) {\n\t\t\treturn self::finish( $found );", "\t\tif ( false ) {\n\t\t\treturn self::finish( $found );", 'it', 'testAProposalGoesOnOverCallsAndBelongsToItsAccountAndConnection')
+  "\t\tif ( null === end( $found['parts'] )['cursor'] ) {\n\t\t\tif ( array() === ( $found['head']['environment'] ?? array() ) ) {", "\t\tif ( false ) {\n\t\t\tif ( array() === ( $found['head']['environment'] ?? array() ) ) {", 'it', 'testAProposalGoesOnOverCallsAndBelongsToItsAccountAndConnection')
 e('step-read', 'step(): an inventory read to its end is not read again', P,
-  "\t\t\tif ( null === $cursor ) {\n\t\t\t\treturn self::finish( $found );", "\t\t\tif ( false ) {\n\t\t\t\treturn self::finish( $found );", 'it', 'testAProposalWhoseWorkingOutFailedIsWorkedOutByTheNextCall')
+  "\t\tif ( 0 === $seq || null !== $found['parts'][ $seq - 1 ]['cursor'] ) {\n\t\t\t$found = self::read_on( $found, self::FORMAT );", "\t\tif ( true ) {\n\t\t\t$found = self::read_on( $found, self::FORMAT );", 'it', 'testAProposalWhoseWorkingOutFailedIsWorkedOutByTheNextCall')
 e('parts-twice', 'parts(): two parts of one number void it', P,
   "\t\t\tif ( isset( $closes[ $parsed['seq'] ] ) ) {", "\t\t\tif ( false ) {", 'it', 'testAProposalNotDoneIsNotConfirmedAndTwoCallsAtOnceVoidIt')
 e('parts-gap', 'parts(): a gap voids it', P,
@@ -619,7 +619,7 @@ e('sel-select', 'plan_confirm(): select is a list of entry numbers', T, SH, SH.r
 e('sel-categories', 'plan_confirm(): categories of equal, differs and realign only', T, SH, SH.replace(' || array() !== array_diff( $categories, self::BY_CATEGORY )', ''), 'it', SEL)
 e('sel-choices', 'plan_confirm(): choices is a list', T, SH, SH.replace(' || ! is_array( $choices ) || ! array_is_list( $choices )', ''), 'it', SEL)
 e('sel-nothing', 'plan_confirm(): something is chosen', T,
-  "\t\tif ( array() === $select && array() === $categories && array() === $choices ) {", "\t\tif ( false ) {", 'it', SEL)
+  "\t\tif ( array() === $select && array() === $categories && array() === $choices && array() === $units ) {", "\t\tif ( false ) {", 'it', SEL)
 e('sel-choice-shape', 'plan_confirm(): a choice names entry, staging_ref and live_ref', T,
   "\t\t\tif ( ! is_array( $choice ) || ! isset( $choice['entry'], $choice['staging_ref'], $choice['live_ref'] ) || null === self::numbers( array( $choice['entry'] ) ) ) {",
   "\t\t\tif ( ! is_array( $choice ) ) {", 'it', SEL)
@@ -670,7 +670,7 @@ e('choice-refs', 'plan_confirm(): a chosen pair is active only where its referen
 e('live-bound', 'plan_confirm(): the state binds the objects of this site read fresh', T,
   "\t\t\t$op['live_now'] = $live[ $op['kind'] . \"\\0\" . $op['live_ref'] ];", "\t\t\t$op['live_now'] = 'x';", 'it', 'testTheTokenCoversTheObjectsOfThisSiteAsTheyAreWhenConfirmed')
 e('live-gone', 'plan_confirm(): an object gone since the proposal is skipped', T,
-  "$now            = 'gone' === $op['live_now'] ? __( 'The object of this site is gone since the proposal.', 'alphabridge-mcp' ) : self::now( $source, $op );", "$now            = self::now( $source, $op );", 'it', 'testTheTokenCoversTheObjectsOfThisSiteAsTheyAreWhenConfirmed')
+  "$now = 'unit' !== $op['op'] && 'gone' === $op['live_now'] ? __( 'The object of this site is gone since the proposal.', 'alphabridge-mcp' ) : self::now( $source, $op );", "$now = self::now( $source, $op );", 'it', 'testTheTokenCoversTheObjectsOfThisSiteAsTheyAreWhenConfirmed')
 e('live-changed-shown', 'named(): the preview says an object changed since the proposal', T,
   "\t\t\t$op['changed_since_proposal'] = $op['live_now'] !== $op['base_live'];", "\t\t\t$op['changed_since_proposal'] = false;", 'it', 'testTheTokenCoversTheObjectsOfThisSiteAsTheyAreWhenConfirmed')
 e('state-connection', 'plan(): the state binds the connection', T,
@@ -678,9 +678,9 @@ e('state-connection', 'plan(): the state binds the connection', T,
 e('state-print', 'plan(): the state binds the print of the pair of sites (state_of_ops(), since branch 12)', T,
   "\t\t\t'print'      => (string) AB_MCP_Sync_Anchor::pair_print(),\n\t\t);\n\t}", "\t\t);\n\t}", 'it', 'testEachPartOfTheStateOfADiscardBindsItsToken')
 e('confirm-transaction', 'confirm(): one transaction, nothing kept where a pair fails', T,
-  "\t\t$done = AB_MCP_Sync_Pairs::transaction(\n\t\t\tstatic function () use ( $plan, &$out ) {", "\t\t$done = call_user_func(\n\t\t\tstatic function () use ( $plan, &$out ) {", 'it', 'testAConfirmationThatCannotWriteAPairKeepsNothing')
+  "\t\t$done  = AB_MCP_Sync_Pairs::transaction(\n\t\t\tstatic function () use ( $plan, $proof, &$out ) {", "\t\t$done  = call_user_func(\n\t\t\tstatic function () use ( $plan, $proof, &$out ) {", 'it', 'testAConfirmationThatCannotWriteAPairKeepsNothing')
 e('confirm-transaction-read', 'confirm(): nothing kept where the read after an insert fails', T,
-  "\t\t$done = AB_MCP_Sync_Pairs::transaction(\n\t\t\tstatic function () use ( $plan, &$out ) {", "\t\t$done = call_user_func(\n\t\t\tstatic function () use ( $plan, &$out ) {", 'it', 'testAConfirmationWhoseReadBackFailsAfterItsInsertKeepsNothing')
+  "\t\t$done  = AB_MCP_Sync_Pairs::transaction(\n\t\t\tstatic function () use ( $plan, $proof, &$out ) {", "\t\t$done  = call_user_func(\n\t\t\tstatic function () use ( $plan, $proof, &$out ) {", 'it', 'testAConfirmationWhoseReadBackFailsAfterItsInsertKeepsNothing')
 e('discard-transaction', 'discard(): one transaction, nothing ended where a pair fails', T,
   "\t\t$done = AB_MCP_Sync_Pairs::transaction(\n\t\t\tstatic function () use ( $plan ) {", "\t\t$done = call_user_func(\n\t\t\tstatic function () use ( $plan ) {", 'it', 'testADiscardThatCannotEndAPairEndsNone')
 PA = 'includes/sync/class-sync-pairs.php'

@@ -22,6 +22,16 @@
  * - Ownership: a proposal goes on and is confirmed only by the account and
  *   connection that made it (AB_MCP_Sync_Proposal::find()).
  *
+ * - Units (Z8b branch 2b, Z44): a unit of the proposal takes a base for each
+ *   part chosen, part by part: select confirms its parts that are the same
+ *   (equal), units a part that differs with the mode a person chose for it
+ *   (live_base or keep_apart, Frage F); a part not chosen stays as it is
+ *   (open, or with an active pair the base it has, byte for byte), so a
+ *   decision is taken or changed alone. Through AB_MCP_Sync_Pairs::
+ *   set_unit_base(), with what confirms it made only where the token passed
+ *   its check against the state of this plan in this request
+ *   (AB_MCP_Sync_Unit_Proof::of_confirmation()).
+ *
  * One confirmation makes or aligns at most MAX pairs and does all or
  * nothing: a pair it cannot write ends it, and what it wrote before is
  * taken back (discarded, or put back to its snapshot); what cannot be taken
@@ -40,6 +50,7 @@
 defined( 'ABSPATH' ) || exit;
 
 require_once __DIR__ . '/class-sync-proposal.php';
+require_once __DIR__ . '/class-sync-decision.php';
 require_once __DIR__ . '/class-sync-said.php';
 
 /**
@@ -59,6 +70,19 @@ final class AB_MCP_Sync_Pairs_Tool {
 	/** Operations an answer names at most (all are counted). */
 	const NAMED = 200;
 
+	/**
+	 * The plan state() made last, with the print of its arguments: the plan
+	 * the gate checks the token against (AB_MCP_Confirm_Token::gate() asks
+	 * state() right before it runs the tool in the same request), which
+	 * call() then writes, taken once (checked()). Not a plan made anew
+	 * after the check (V1 of the pre-check of Z8b branch 2b: a pair ended in
+	 * between would otherwise let a second plan write what the token did not
+	 * cover).
+	 *
+	 * @var array|null
+	 */
+	private static $checked = null;
+
 	/* ------------------------------------------------- the confirmation */
 
 	/**
@@ -68,8 +92,39 @@ final class AB_MCP_Sync_Pairs_Tool {
 	 * @return string|WP_Error
 	 */
 	public static function state( array $a ) {
-		$plan = self::plan( $a );
-		return is_wp_error( $plan ) ? $plan : hash( 'sha256', AB_MCP_Sync_Canon::encode( $plan['state'] ) );
+		self::$checked = null;
+		$plan          = self::plan( $a );
+		if ( is_wp_error( $plan ) ) {
+			return $plan;
+		}
+		self::$checked = array(
+			'args' => self::args_print( $a ),
+			'plan' => $plan,
+		);
+		return hash( 'sha256', AB_MCP_Sync_Canon::encode( $plan['state'] ) );
+	}
+
+	/**
+	 * The plan state() made for these very arguments in this request, taken
+	 * once; null where it made none (then the call was not checked).
+	 *
+	 * @param array $a Arguments.
+	 * @return array|null
+	 */
+	private static function checked( array $a ) {
+		$checked       = self::$checked;
+		self::$checked = null;
+		return is_array( $checked ) && hash_equals( $checked['args'], self::args_print( $a ) ) ? $checked['plan'] : null;
+	}
+
+	/**
+	 * The print of the arguments of a call.
+	 *
+	 * @param array $a Arguments.
+	 * @return string
+	 */
+	private static function args_print( array $a ) {
+		return hash( 'sha256', serialize( $a ) );
 	}
 
 	/**
@@ -100,6 +155,9 @@ final class AB_MCP_Sync_Pairs_Tool {
 		$out['effect'] = 'confirm' === $plan['action']
 			? __( 'Writes the table of object pairs of this site only: no content changes on either site. A pair made from an entry equal is active (both sides as its base); from differs, or a chosen pair of other content, it is unclear, and the report asks which side wins; realign makes the state of each side now its new base.', 'alphabridge-mcp' )
 			: __( 'Removes these pairs from the table of object pairs of this site only: their objects stay as they are on both sites, each without a pair from then on (an object of this site then shows as only live, one of the staging site as only staging).', 'alphabridge-mcp' );
+		if ( array() !== array_filter( $ops, static fn( $op ) => 'unit' === $op['op'] ) ) {
+			$out['effect'] .= ' ' . __( 'A unit (a plugin, a theme, the theme that runs) takes a base for each part chosen, from what the proposal read of both sites whole: equal where the part is the same on both sides, else the mode the person chose for it (live_base or keep_apart, see the effect of the unit). A part not chosen stays as it is (open: without a base where it has none; unchanged: the base it has). No file and no plugin changes.', 'alphabridge-mcp' );
+		}
 		return $out;
 	}
 
@@ -120,11 +178,12 @@ final class AB_MCP_Sync_Pairs_Tool {
 				return self::listed( $a );
 			case 'confirm':
 			case 'discard':
-				$plan = self::plan( $a );
-				if ( is_wp_error( $plan ) ) {
-					return $plan;
+				// The plan the token was checked against, not one made anew.
+				$plan = self::checked( $a );
+				if ( null === $plan ) {
+					return new WP_Error( 'ab_mcp_sync_pairs_unchecked', __( 'Nothing was changed: confirm and discard run only right after the token of their preview was checked in the same call (wp_site_pairs with the same arguments and confirm_token).', 'alphabridge-mcp' ) );
 				}
-				return 'confirm' === $action ? self::confirm( $plan ) : self::discard( $plan );
+				return 'confirm' === $action ? self::confirm( $plan, $a ) : self::discard( $plan );
 		}
 		return self::no_action();
 	}
@@ -344,14 +403,18 @@ final class AB_MCP_Sync_Pairs_Tool {
 		$select     = self::numbers( isset( $a['select'] ) ? $a['select'] : array() );
 		$categories = isset( $a['categories'] ) ? $a['categories'] : array();
 		$choices    = isset( $a['choices'] ) ? $a['choices'] : array();
+		$units      = self::modes( isset( $a['units'] ) ? $a['units'] : array() );
 		if ( null === $select || ! is_array( $categories ) || ! array_is_list( $categories ) || array() !== array_diff( $categories, self::BY_CATEGORY ) || ! is_array( $choices ) || ! array_is_list( $choices ) ) {
 			return self::selection( __( 'select is a list of entry numbers, categories a list of equal, differs and realign, choices a list of entry, staging_ref and live_ref.', 'alphabridge-mcp' ) );
 		}
-		if ( array() === $select && array() === $categories && array() === $choices ) {
+		if ( null === $units ) {
+			return self::selection( __( 'units is a list of entry, part and mode: for a part of a unit that differs, the mode a person chose for that part (live_base or keep_apart), each part of an entry once.', 'alphabridge-mcp' ) );
+		}
+		if ( array() === $select && array() === $categories && array() === $choices && array() === $units ) {
 			return self::selection( __( 'Nothing is chosen.', 'alphabridge-mcp' ) );
 		}
 		$after = isset( $a['after'] ) && is_numeric( $a['after'] ) ? max( 0, (int) $a['after'] ) : 0;
-		$want  = $select;
+		$want  = array_merge( $select, array_keys( $units ) );
 		foreach ( $choices as $choice ) {
 			if ( ! is_array( $choice ) || ! isset( $choice['entry'], $choice['staging_ref'], $choice['live_ref'] ) || null === self::numbers( array( $choice['entry'] ) ) ) {
 				return self::selection( __( 'A choice is an object of entry (its number), staging_ref and live_ref, both refs among the candidates of that uncertain entry.', 'alphabridge-mcp' ) );
@@ -369,6 +432,7 @@ final class AB_MCP_Sync_Pairs_Tool {
 			}
 		}
 		$chosen  = array();
+		$picked  = array();
 		$skipped = array();
 		foreach ( $select as $n ) {
 			$entry = $entries[ $n ];
@@ -388,6 +452,25 @@ final class AB_MCP_Sync_Pairs_Tool {
 			if ( 'realign' === $entry['category'] && null === $entry['confirm'] ) {
 				/* translators: 1: entry number of the proposal, 2: the reason the proposal names, a whole sentence in the language of the site. */
 				return self::selection( sprintf( __( 'Entry %1$d cannot be aligned anew: %2$s', 'alphabridge-mcp' ), $n, AB_MCP_Sync_Said::text( (string) $entry['reason'] ) ) );
+			}
+			if ( self::is_unit( $entry ) && ! isset( $units[ $n ] ) && array() === self::selected( $entry ) ) {
+				/* translators: 1: entry number of the proposal, 2: the parts that differ, as the code names them (files, activation). */
+				return self::selection( sprintf( __( 'Entry %1$d has no part select confirms (its parts that differ: %2$s). Name in units the mode a person chose for a part that differs: live_base (the state of this site now is the base of both sides, so the difference is a change on staging) or keep_apart (the difference is kept as it is now; a later change counts again). A part not named stays as it is.', 'alphabridge-mcp' ), $n, implode( ', ', self::differing( $entry ) ) ) );
+			}
+			$chosen[ $n ] = $entry;
+			$picked[ $n ] = true;
+		}
+		foreach ( $units as $n => $modes ) {
+			$entry = $entries[ $n ];
+			if ( ! self::is_unit( $entry ) || ! in_array( $entry['category'], array( 'equal', 'differs', 'realign' ), true ) || null === $entry['confirm'] ) {
+				/* translators: %d: entry number of the proposal. */
+				return self::selection( sprintf( __( 'Entry %d is no unit that can be paired, so it takes no mode in units.', 'alphabridge-mcp' ), $n ) );
+			}
+			foreach ( $modes as $part => $mode ) {
+				if ( 'differs' !== ( $entry['parts'][ $part ] ?? null ) ) {
+					/* translators: 1: entry number of the proposal, 2: the part named (files, activation), 3: its mode. */
+					return self::selection( sprintf( __( 'Entry %1$d: the mode %3$s does not fit the part %2$s. live_base and keep_apart are for a part of the unit that differs now; a part that is the same is confirmed by select.', 'alphabridge-mcp' ), $n, (string) $part, $mode ) );
+				}
 			}
 			$chosen[ $n ] = $entry;
 		}
@@ -413,12 +496,27 @@ final class AB_MCP_Sync_Pairs_Tool {
 					);
 					continue;
 				}
-				$chosen[ $entry['n'] ] = $entry;
+				if ( self::is_unit( $entry ) && ! isset( $units[ $entry['n'] ] ) && ( array() !== self::differing( $entry ) || array() === self::selected( $entry ) ) ) {
+					$skipped[] = array(
+						'entry'  => $entry['n'],
+						/* translators: %s: the parts that differ, as the code names them (files, activation). */
+						'reason' => sprintf( __( 'A unit whose parts differ (%s) is confirmed only by entry: select for the parts that are the same, units for the mode a person chose for a part that differs; a part not chosen stays as it is.', 'alphabridge-mcp' ), implode( ', ', self::differing( $entry ) ) ),
+					);
+					continue;
+				}
+				$chosen[ $entry['n'] ]  = $entry;
+				$picked[ $entry['n'] ] = true;
 			}
 		}
 		ksort( $chosen );
 		$ops = array();
 		foreach ( $chosen as $n => $entry ) {
+			if ( self::is_unit( $entry ) ) {
+				// The parts named in units, and where the entry is chosen by
+				// select or its category, the parts select confirms.
+				$ops[] = self::unit_op( $source, $entry, ( $units[ $n ] ?? array() ) + ( isset( $picked[ $n ] ) ? array_fill_keys( self::selected( $entry ), 'equal' ) : array() ) );
+				continue;
+			}
 			$ops[] = 'realign' === $entry['category'] ? self::realign_op( $entry ) : self::create_op( $n, $entry['kind'], $entry['staging'], $entry['live'], $entry['confirm'] );
 		}
 		$used = array();
@@ -450,11 +548,11 @@ final class AB_MCP_Sync_Pairs_Tool {
 			return self::selection( sprintf( __( 'One confirmation makes at most %d pairs. Confirm in parts: categories with after (the number of the last entry of the part before), or fewer numbers in select.', 'alphabridge-mcp' ), self::MAX ) );
 		}
 		foreach ( $ops as $op ) {
-			if ( 'create' !== $op['op'] ) {
+			if ( ! in_array( $op['op'], array( 'create', 'unit' ), true ) || ( 'unit' === $op['op'] && null !== $op['pair_id'] ) ) {
 				continue;
 			}
 			foreach ( array( 'live_ref', 'staging_ref' ) as $column ) {
-				$key = $op['kind'] . "\0" . $column . "\0" . $op[ $column ];
+				$key = $op['kind'] . "\0" . $column . "\0" . ( 'unit' === $op['op'] ? $op['ref'] : $op[ $column ] );
 				if ( isset( $used[ $key ] ) ) {
 					/* translators: 1: and 2: entry numbers of the proposal. */
 					return self::selection( sprintf( __( 'The same object is chosen twice (entries %1$d and %2$d); each object has one pair.', 'alphabridge-mcp' ), $used[ $key ], $op['entry'] ) );
@@ -463,7 +561,12 @@ final class AB_MCP_Sync_Pairs_Tool {
 			}
 		}
 		// The objects of this site read fresh (Codex B3): the state binds them.
-		$live = AB_MCP_Sync_Proposal::live_now(
+		// A unit is bound by what the proposal read of both sides whole (its
+		// lines and the values of its parts): what changed on this site
+		// since, the report shows as changed here, which locks a takeover
+		// (Z3).
+		$objects = array_values( array_filter( $ops, static fn( $op ) => 'unit' !== $op['op'] ) );
+		$live    = AB_MCP_Sync_Proposal::live_now(
 			array_map(
 				static function ( $op ) {
 					return array(
@@ -471,7 +574,7 @@ final class AB_MCP_Sync_Pairs_Tool {
 						'ref'  => $op['live_ref'],
 					);
 				},
-				$ops
+				$objects
 			)
 		);
 		if ( is_wp_error( $live ) ) {
@@ -479,8 +582,10 @@ final class AB_MCP_Sync_Pairs_Tool {
 		}
 		$fresh = array();
 		foreach ( $ops as $op ) {
-			$op['live_now'] = $live[ $op['kind'] . "\0" . $op['live_ref'] ];
-			$now            = 'gone' === $op['live_now'] ? __( 'The object of this site is gone since the proposal.', 'alphabridge-mcp' ) : self::now( $source, $op );
+			if ( 'unit' !== $op['op'] ) {
+				$op['live_now'] = $live[ $op['kind'] . "\0" . $op['live_ref'] ];
+			}
+			$now = 'unit' !== $op['op'] && 'gone' === $op['live_now'] ? __( 'The object of this site is gone since the proposal.', 'alphabridge-mcp' ) : self::now( $source, $op );
 			if ( is_wp_error( $now ) ) {
 				return $now;
 			}
@@ -606,6 +711,151 @@ final class AB_MCP_Sync_Pairs_Tool {
 	}
 
 	/**
+	 * The modes a person chose for the parts of units that differ (units):
+	 * entry => part => mode, each part of an entry once; null where it is no
+	 * such list.
+	 *
+	 * @param mixed $list The argument units.
+	 * @return array<int,array<string,string>>|null
+	 */
+	private static function modes( $list ) {
+		if ( ! is_array( $list ) || ! array_is_list( $list ) ) {
+			return null;
+		}
+		$out = array();
+		foreach ( $list as $one ) {
+			if ( ! is_array( $one ) || ! isset( $one['entry'], $one['part'], $one['mode'] ) || null === self::numbers( array( $one['entry'] ) ) || ! is_string( $one['part'] ) || ! in_array( $one['mode'], array( 'live_base', 'keep_apart' ), true ) ) {
+				return null;
+			}
+			$n = (int) $one['entry'];
+			if ( isset( $out[ $n ][ $one['part'] ] ) ) {
+				return null;
+			}
+			$out[ $n ][ $one['part'] ] = $one['mode'];
+		}
+		return $out;
+	}
+
+	/**
+	 * Whether an entry of a proposal is one of a unit (AB_MCP_Sync_Unit_Proposal).
+	 *
+	 * @param array $entry Entry.
+	 * @return bool
+	 */
+	private static function is_unit( array $entry ) {
+		return ! empty( $entry['unit'] );
+	}
+
+	/**
+	 * The parts of the entry of a unit that differ between the sides now, in
+	 * the order of its parts.
+	 *
+	 * @param array $entry Entry of a unit.
+	 * @return string[]
+	 */
+	private static function differing( array $entry ) {
+		$out = array();
+		foreach ( AB_MCP_Sync_Pairs::PARTS[ (string) $entry['kind'] ] ?? array() as $part ) {
+			if ( 'differs' === ( $entry['parts'][ $part ] ?? null ) ) {
+				$out[] = $part;
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * The parts of the entry of a unit select confirms as equal: every part
+	 * that is the same on both sides now, of a new pair, an unclear one or a
+	 * rest; of an active pair only such a part that is open or changed alike
+	 * (a decision that waits), the others as they are.
+	 *
+	 * @param array $entry Entry of a unit.
+	 * @return string[]
+	 */
+	private static function selected( array $entry ) {
+		$out    = array();
+		$active = 'realign' === $entry['category'] && 'active' === ( $entry['pair']['state'] ?? null );
+		foreach ( AB_MCP_Sync_Pairs::PARTS[ (string) $entry['kind'] ] ?? array() as $part ) {
+			if ( 'equal' !== ( $entry['parts'][ $part ] ?? null ) ) {
+				continue;
+			}
+			if ( $active && ! in_array( $entry['states'][ $part ] ?? null, array( 'open', 'changed_alike' ), true ) ) {
+				continue;
+			}
+			$out[] = $part;
+		}
+		return $out;
+	}
+
+	/**
+	 * The operation that pairs parts of a unit (Z44, AB_MCP_Sync_Pairs::
+	 * set_unit_base()): its source, kind and name, each part chosen with its
+	 * mode and the values of its bases in that mode, and the lines of both
+	 * sides the proposal read whole; for an existing pair, the pair as the
+	 * proposal saw it. The parts not chosen stay as they are (an active
+	 * pair) or without a base. The token binds all of it.
+	 *
+	 * @param string $source The source.
+	 * @param array  $entry  The entry of the unit.
+	 * @param array  $modes  Part chosen => mode.
+	 * @return array
+	 */
+	private static function unit_op( $source, array $entry, array $modes ) {
+		$kind  = (string) $entry['kind'];
+		$parts = array();
+		foreach ( AB_MCP_Sync_Pairs::PARTS[ $kind ] as $part ) {
+			if ( ! isset( $modes[ $part ] ) ) {
+				continue;
+			}
+			$mode           = $modes[ $part ];
+			$s              = AB_MCP_Sync_Decision::part_hash( $kind, $part, $entry['lines']['staging'] );
+			$l              = AB_MCP_Sync_Decision::part_hash( $kind, $part, $entry['lines']['live'] );
+			$parts[ $part ] = array(
+				'base_live'    => $l,
+				'base_staging' => 'keep_apart' === $mode ? $s : $l,
+				'mode'         => $mode,
+			);
+		}
+		$realign = 'realign' === $entry['category'];
+		return array(
+			'op'       => 'unit',
+			'entry'    => (int) $entry['n'],
+			'source'   => (string) $source,
+			'kind'     => $kind,
+			'ref'      => (string) $entry['ref'],
+			'pair_id'  => $realign ? (int) $entry['pair']['id'] : null,
+			'from'     => $realign ? (string) $entry['pair']['state'] : null,
+			'expected' => $realign ? (string) $entry['pair']['snapshot'] : null,
+			'state'    => 'active',
+			'canon'    => AB_MCP_Sync_Canon::VERSION,
+			'parts'    => $parts,
+			'lines'    => array(
+				'staging' => $entry['lines']['staging'],
+				'live'    => $entry['lines']['live'],
+			),
+		);
+	}
+
+	/**
+	 * What a mode chosen for a part of a unit means, for the person (Frage
+	 * F, Thomas 12.11.: b and c), in the language of the site as it is made
+	 * (effect, as the preview says its own), or null for equal.
+	 *
+	 * @param string[] $modes The modes of the parts of a unit.
+	 * @return string|null
+	 */
+	private static function unit_effect( array $modes ) {
+		$out = array();
+		if ( in_array( 'live_base', $modes, true ) ) {
+			$out[] = __( 'live_base: the state of this site of that part now, read whole, is the common base of both sides, so the difference counts as a change on staging. This does not prove that the two sites ever had this version in common, and which side changed it before can no longer be told from these bases. What this site holds in the folder of the plugin or theme belongs to this base: a takeover may put it into the backup with the old folder or replace it with what staging has, as an update in wp-admin does. A later change on this site still locks a takeover (code:live_changed), no older version replaces a newer one, and every other condition of a takeover holds.', 'alphabridge-mcp' );
+		}
+		if ( in_array( 'keep_apart', $modes, true ) ) {
+			$out[] = __( 'keep_apart: the state of each side of that part now is its own base, so the difference as it is now is kept and not taken over: the report shows it as kept apart. A later change on either side counts again by the table of states (changed on staging, changed here, a conflict). To decide the part anew, confirm it again through wp_site_pairs (units); the other parts stay as they are.', 'alphabridge-mcp' );
+		}
+		return array() === $out ? null : implode( ' ', $out );
+	}
+
+	/**
 	 * The operation that aligns a pair anew.
 	 *
 	 * @param array $entry Entry realign.
@@ -641,9 +891,9 @@ final class AB_MCP_Sync_Pairs_Tool {
 	 * @return string|null|WP_Error
 	 */
 	private static function now( $source, array $op ) {
-		if ( 'create' === $op['op'] ) {
+		if ( 'create' === $op['op'] || ( 'unit' === $op['op'] && null === $op['pair_id'] ) ) {
 			foreach ( array( 'live_ref' => 'find_live', 'staging_ref' => 'find_staging' ) as $column => $find ) {
-				$pair = AB_MCP_Sync_Pairs::$find( $source, $op['kind'], $op[ $column ] );
+				$pair = AB_MCP_Sync_Pairs::$find( $source, $op['kind'], 'unit' === $op['op'] ? $op['ref'] : $op[ $column ] );
 				if ( is_wp_error( $pair ) ) {
 					return $pair;
 				}
@@ -686,14 +936,21 @@ final class AB_MCP_Sync_Pairs_Tool {
 	 * (Codex B2): all or nothing, also where the process ends in between.
 	 *
 	 * @param array $plan plan().
+	 * @param array $a    The arguments of the call, without the token.
 	 * @return array|WP_Error
 	 */
-	private static function confirm( array $plan ) {
-		$out  = array();
-		$done = AB_MCP_Sync_Pairs::transaction(
-			static function () use ( $plan, &$out ) {
+	private static function confirm( array $plan, array $a ) {
+		$out = array();
+		// The confirmation of the person: the operations of this plan, made
+		// only where the token passed its check against its state in this
+		// request (AB_MCP_Confirm_Token::passed()); none where it did not.
+		$proof = AB_MCP_Sync_Unit_Proof::of_confirmation( $a, $plan['state'] );
+		$done  = AB_MCP_Sync_Pairs::transaction(
+			static function () use ( $plan, $proof, &$out ) {
 				foreach ( $plan['ops'] as $op ) {
-					if ( 'create' === $op['op'] ) {
+					if ( 'unit' === $op['op'] ) {
+						$pair = AB_MCP_Sync_Pairs::set_unit_base( $plan['source'], $op, $proof );
+					} elseif ( 'create' === $op['op'] ) {
 						$pair = AB_MCP_Sync_Pairs::create(
 							array(
 								'source_id'    => $plan['source'],
@@ -730,15 +987,24 @@ final class AB_MCP_Sync_Pairs_Tool {
 							array( 'entry' => $op['entry'] )
 						);
 					}
-					$out[] = array(
+					$made = 'create' === $op['op'] || ( 'unit' === $op['op'] && null === $op['pair_id'] );
+					$one  = array(
 						'entry'       => $op['entry'],
 						'pair_id'     => (int) $pair['id'],
 						'kind'        => $pair['kind'],
 						'live_ref'    => $pair['live_ref'],
 						'staging_ref' => $pair['staging_ref'],
 						'state'       => $pair['state'],
-						'done'        => 'create' === $op['op'] ? 'made' : 'aligned anew',
+						'done'        => $made ? 'made' : 'aligned anew',
 					);
+					if ( 'unit' === $op['op'] ) {
+						$one['parts'] = array_map( static fn( $part ) => $part['mode'], $op['parts'] );
+						$effect       = self::unit_effect( $one['parts'] );
+						if ( null !== $effect ) {
+							$one['effect'] = $effect;
+						}
+					}
+					$out[] = $one;
 				}
 				return true;
 			}
@@ -877,7 +1143,8 @@ final class AB_MCP_Sync_Pairs_Tool {
 	private static function counts( array $ops ) {
 		$out = array();
 		foreach ( $ops as $op ) {
-			$key         = 'create' === $op['op'] ? 'made_' . $op['state'] : ( 'realign' === $op['op'] ? 'aligned' : 'discarded' );
+			$made        = 'create' === $op['op'] || ( 'unit' === $op['op'] && null === $op['pair_id'] );
+			$key         = $made ? 'made_' . $op['state'] : ( in_array( $op['op'], array( 'realign', 'unit' ), true ) ? 'aligned' : 'discarded' );
 			$out[ $key ] = ( $out[ $key ] ?? 0 ) + 1;
 		}
 		ksort( $out );
@@ -891,6 +1158,21 @@ final class AB_MCP_Sync_Pairs_Tool {
 	 * @return array
 	 */
 	private static function named( array $op ) {
+		if ( 'unit' === $op['op'] ) {
+			// A unit by its parts and their modes, and what the parts not
+			// chosen stay: no hash, no line.
+			$others = array_values( array_diff( AB_MCP_Sync_Pairs::PARTS[ $op['kind'] ], array_keys( $op['parts'] ) ) );
+			if ( array() !== $others ) {
+				$op[ 'active' === $op['from'] ? 'unchanged' : 'open' ] = $others;
+			}
+			$op['parts'] = array_map( static fn( $part ) => $part['mode'], $op['parts'] );
+			$effect      = self::unit_effect( $op['parts'] );
+			if ( null !== $effect ) {
+				$op['effect'] = $effect;
+			}
+			unset( $op['lines'], $op['expected'], $op['canon'] );
+			return $op;
+		}
 		if ( isset( $op['live_now'] ) ) {
 			$op['changed_since_proposal'] = $op['live_now'] !== $op['base_live'];
 		}

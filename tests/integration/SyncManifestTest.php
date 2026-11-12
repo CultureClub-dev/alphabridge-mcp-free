@@ -333,7 +333,7 @@ final class SyncManifestTest extends TestCase {
 	private static function pair_of( string $slug ): array {
 		$line = self::line_here( 'plugin', $slug );
 		$act  = AB_MCP_Sync_Decision::part_hash( 'plugin', 'activation', $line );
-		$pair = AB_MCP_Sync_Pairs::create(
+		$pair = \AB_MCP_IT_Pair_Rows::put(
 			array(
 				'source_id'    => AB_MCP_Sync_Anchor::active()['source_id'],
 				'kind'         => 'plugin',
@@ -556,7 +556,7 @@ final class SyncManifestTest extends TestCase {
 	}
 
 	private static function unit_pair(): array {
-		$pair = AB_MCP_Sync_Pairs::create(
+		$pair = \AB_MCP_IT_Pair_Rows::put(
 			array(
 				'source_id'    => 'src-z38',
 				'kind'         => 'plugin',
@@ -606,7 +606,8 @@ final class SyncManifestTest extends TestCase {
 		$done = AB_MCP_Sync_Pairs::rebase( (int) $pair['id'], self::values( 'f2-live', 'f2-staging' ), self::snap( $pair ), 'files', $code );
 		self::assertIsArray( $done, is_wp_error( $done ) ? $done->get_error_message() : '' );
 		self::assertSame( array( self::h( 'f2-live' ), self::h( 'f2-staging' ), 'push', 7 ), array( $done['base_live'], $done['base_staging'], $done['base_origin'], $done['last_run'] ) );
-		self::assertSame( $pair['base_extra'], $done['base_extra'], 'The base of the activation stays byte for byte.' );
+		self::assertSame( $pair['base_extra']['parts'], $done['base_extra']['parts'], 'The base of the activation stays byte for byte.' );
+		self::assertSame( array( 'files' => 'written' ), $done['base_extra']['modes'], 'B5: the part the step wrote and checked, so named.' );
 
 		$again = AB_MCP_Sync_Pairs::rebase( (int) $pair['id'], self::values( 'a2-live', 'a2-staging' ), self::snap( $done ), 'activation', $activation );
 		self::assertIsArray( $again );
@@ -648,6 +649,51 @@ final class SyncManifestTest extends TestCase {
 		$result = AB_MCP_Sync_Pairs::rebase( (int) $post['id'], self::values( 'x', 'y' ), self::snap( $post ), 'files', $code );
 		self::assertSame( 'ab_mcp_staging_pair_part', $result->get_error_code() );
 		self::assertIsArray( AB_MCP_Sync_Pairs::rebase( (int) $post['id'], self::values( 'x', 'y' ), self::snap( $post ) ), 'An object as before.' );
+	}
+
+	public function testRebaseGivesNoFirstBaseToAPartOfAUnit(): void {
+		// Behebung 1 of branch 2b, A4: an active pair is not a base of each of
+		// its parts; a part without one gets it from set_unit_base() only (Z44).
+		AB_MCP_Sync_Kinds::reset();
+		$code       = self::kind( 'code', array( 'part:plugin:files', 'part:theme:files' ) );
+		$activation = self::kind( 'activation', array( 'part:plugin:activation' ) );
+		self::assertTrue( AB_MCP_Sync_Kinds::register( $code ) );
+		self::assertTrue( AB_MCP_Sync_Kinds::register( $activation ) );
+		$fields = array(
+			'source_id'    => 'src-z38',
+			'kind'         => 'plugin',
+			'live_ref'     => 'cart',
+			'staging_ref'  => 'cart',
+			'canon'        => AB_MCP_Sync_Canon::VERSION,
+			'base_live'    => self::h( 'files-live' ),
+			'base_staging' => self::h( 'files-staging' ),
+			'base_origin'  => 'proposal',
+		);
+		// An active plugin pair without a base of its activation (red at 012ba9b).
+		$pair   = \AB_MCP_IT_Pair_Rows::put( $fields );
+		$before = AB_MCP_Sync_Pairs::snapshot( (int) $pair['id'] );
+		$result = AB_MCP_Sync_Pairs::rebase( (int) $pair['id'], self::values( 'a2-live', 'a2-staging' ), self::snap( $pair ), 'activation', $activation );
+		self::assertInstanceOf( WP_Error::class, $result, 'No first base of the activation by a step.' );
+		self::assertSame( array( 'ab_mcp_staging_pair_part_base', array( 'part' => 'activation' ) ), array( $result->get_error_code(), $result->get_error_data() ) );
+		self::assertSame( $before, AB_MCP_Sync_Pairs::snapshot( (int) $pair['id'] ), 'Nothing written.' );
+		self::assertIsArray( AB_MCP_Sync_Pairs::rebase( (int) $pair['id'], self::values( 'f2-live', 'f2-staging' ), self::snap( $pair ), 'files', $code ), 'The part with a base moves on.' );
+		// The files open (a confirmation of the activation alone, OPEN in the
+		// columns): no first base of the files by a step either.
+		$open   = \AB_MCP_IT_Pair_Rows::put(
+			array(
+				'live_ref'     => 'open',
+				'staging_ref'  => 'open',
+				'base_live'    => AB_MCP_Sync_Pairs::OPEN,
+				'base_staging' => AB_MCP_Sync_Pairs::OPEN,
+				'base_extra'   => array( 'parts' => array( 'activation' => array( 'live' => self::h( 'al' ), 'staging' => self::h( 'as' ) ) ) ),
+			) + $fields
+		);
+		$before = AB_MCP_Sync_Pairs::snapshot( (int) $open['id'] );
+		$result = AB_MCP_Sync_Pairs::rebase( (int) $open['id'], self::values( 'f2-live', 'f2-staging' ), self::snap( $open ), 'files', $code );
+		self::assertSame( 'ab_mcp_staging_pair_part_base', $result->get_error_code() );
+		self::assertSame( $before, AB_MCP_Sync_Pairs::snapshot( (int) $open['id'] ) );
+		self::assertNull( AB_MCP_Sync_Pairs::part_bases( $open, 'files' ) );
+		self::assertIsArray( AB_MCP_Sync_Pairs::rebase( (int) $open['id'], self::values( 'a2-live', 'a2-staging' ), self::snap( $open ), 'activation', $activation ) );
 	}
 
 	public function testAFaultOfTheDatabaseLeavesTheBasesAsTheyWere(): void {
@@ -747,7 +793,7 @@ final class SyncManifestTest extends TestCase {
 		// columns and the part beside them (one UPDATE of one row).
 		AB_MCP_IT_Process::abort( 'a', $plan( array( 'mode' => 'no_shutdown', 'when' => 'after' ), $first ) );
 		$now = AB_MCP_Sync_Pairs::get( $id );
-		self::assertSame( array( self::h( 'n-live' ), self::h( 'n-staging' ), 'push', 7, $pair['base_extra'] ), array( $now['base_live'], $now['base_staging'], $now['base_origin'], $now['last_run'], $now['base_extra'] ), 'Written whole: the files part new, the part activation as it was.' );
+		self::assertSame( array( self::h( 'n-live' ), self::h( 'n-staging' ), 'push', 7, $pair['base_extra']['parts'], array( 'files' => 'written' ) ), array( $now['base_live'], $now['base_staging'], $now['base_origin'], $now['last_run'], $now['base_extra']['parts'], $now['base_extra']['modes'] ), 'Written whole: the files part new with its mode, the part activation as it was.' );
 		$run = AB_MCP_IT_Process::calls( 'a', $plan( array( 'mode' => 'no_shutdown', 'nth' => 99 ), $first ) );
 		self::assertSame( 'ab_mcp_staging_pair_changed', $run['results']['call0'], 'The step that read the old state writes nothing on the new one.' );
 	}

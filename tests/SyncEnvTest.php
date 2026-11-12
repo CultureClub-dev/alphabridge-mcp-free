@@ -1113,6 +1113,64 @@ final class SyncEnvTest extends TestCase {
 		self::assertSame( 'Which main files run could not be read on the staging site.', self::judged( array( self::plugin( '2.0', null ) ), array(), $pair )['plugin:shop']['why'] );
 	}
 
+	public function testAPartOfAPairWithoutABaseIsOpenAndTheOtherPartsAreJudgedByTheirOwn(): void {
+		// Z8b branch 2b, Behebung 1, A1: a pair confirmed part by part; a part
+		// without a base yet is open (not known which side changed it, nothing
+		// of it taken over), and outranks a part kept apart or equal.
+		$open = self::shop_pair();
+		unset( $open['base_extra'] );
+		$e = self::judged( array( self::plugin( '2.0' ) ), array( self::plugin( '2.0' ) ), array( $open ) )['plugin:shop'];
+		self::assertSame( array( 'open', 'none', array( 'files' => 'equal', 'activation' => 'open' ) ), array( $e['result'], $e['action'], $e['parts'] ) );
+		self::assertStringContainsString( 'no base yet', $e['words'] );
+		$apart                 = $open;
+		$apart['base_staging'] = str_repeat( 'b', 64 );
+		$e                     = self::judged( array( self::plugin( '2.0', true, 'b' ) ), array( self::plugin( '2.0' ) ), array( $apart ) )['plugin:shop'];
+		self::assertSame( array( 'open', array( 'files' => 'kept_apart', 'activation' => 'open' ) ), array( $e['result'], $e['parts'] ), 'Open before kept apart.' );
+		$files                 = self::shop_pair();
+		$files['base_live']    = \AB_MCP_Sync_Pairs::OPEN;
+		$files['base_staging'] = \AB_MCP_Sync_Pairs::OPEN;
+		$e                     = self::judged( array( self::plugin( '2.0', true, 'b' ) ), array( self::plugin( '2.0' ) ), array( $files ) )['plugin:shop'];
+		self::assertSame( array( 'open', array( 'files' => 'open', 'activation' => 'equal' ) ), array( $e['result'], $e['parts'] ), 'The files open (OPEN in the columns): no base.' );
+	}
+
+	public function testAnActivePairOfAUnitIsProposedAgainWhereADecisionWaitsOrCanChange(): void {
+		// Z8b branch 2b, Behebung 1, A1: an active pair whose part waits for a
+		// decision of a person (open, kept apart, changed here, changed alike,
+		// a conflict) or holds one that can change (live_base, so changed on
+		// staging) is proposed again, part by part with the states of its
+		// parts; any other is counted as paired.
+		require_once dirname( __DIR__ ) . '/includes/sync/class-sync-unit-proposal.php';
+		$pair  = self::shop_pair();
+		$open  = $pair;
+		unset( $open['base_extra'] );
+		$apart                 = $pair;
+		$apart['base_staging'] = str_repeat( 'b', 64 );
+		$by_b                  = $pair + array();
+		$by_b['base_extra']['modes'] = array( 'files' => 'live_base' );
+		$by_eq                 = $pair;
+		$by_eq['base_extra']['modes'] = array( 'files' => 'equal' );
+		$cases = array(
+			'open'                      => array( $open, 'a', 'a', array( 'files' => 'equal', 'activation' => 'open' ) ),
+			'kept apart'                => array( $apart, 'b', 'a', array( 'files' => 'kept_apart', 'activation' => 'equal' ) ),
+			'a conflict'                => array( $pair, 'b', 'c', array( 'files' => 'conflict', 'activation' => 'equal' ) ),
+			'changed here'              => array( $pair, 'a', 'c', array( 'files' => 'changed_live', 'activation' => 'equal' ) ),
+			'changed alike'             => array( $pair, 'b', 'b', array( 'files' => 'changed_alike', 'activation' => 'equal' ) ),
+			'changed on staging by b'   => array( $by_b, 'b', 'a', array( 'files' => 'changed_on_staging', 'activation' => 'equal' ) ),
+			'changed on staging, equal' => array( $by_eq, 'b', 'a', null ),
+			'unchanged'                 => array( $pair, 'a', 'a', null ),
+		);
+		foreach ( $cases as $case => list( $p, $s, $l, $states ) ) {
+			$out = \AB_MCP_Sync_Unit_Proposal::entries( array( self::plugin( '2.0', true, $s ), self::whole() ), array( self::plugin( '2.0', true, $l ), self::whole() ), array( $p ) );
+			if ( null === $states ) {
+				self::assertSame( array( array(), 1 ), array( $out['entries'], $out['paired'] ), $case . ': paired, not proposed again.' );
+				continue;
+			}
+			self::assertSame( 0, $out['paired'], $case );
+			self::assertCount( 1, $out['entries'], $case );
+			self::assertSame( array( 'realign', 7, $states ), array( $out['entries'][0]['category'], $out['entries'][0]['pair']['id'], $out['entries'][0]['states'] ), $case );
+		}
+	}
+
 	public function testAUnitWhoseFolderTheOtherSideDidNotListWholeIsNotCompared(): void {
 		// Codex round 1, B4 (V1 of the pre-check): a folder of units a side
 		// could not list says so, and a unit the other side has there is not

@@ -65,6 +65,9 @@ final class AB_MCP_Confirm_Token {
 	/** Version prefix inside the MAC, so a later format cannot be confused with this one. */
 	const VERSION = 'v1';
 
+	/** The checks that passed in this request (passed()): key => true. */
+	private static $passed = array();
+
 	/**
 	 * Whether a tool definition asks for confirmation.
 	 *
@@ -248,7 +251,48 @@ final class AB_MCP_Confirm_Token {
 		if ( null === $mac || ! hash_equals( $mac, $m[2] ) ) {
 			return new WP_Error( 'ab_mcp_confirm_mismatch', __( 'Nothing was changed: the confirm_token does not match this call. The arguments differ from the preview, it was issued to another connection, or what it covers has changed since. Leave out confirm_token in the next call for a fresh preview, show it to the person, then confirm with the new token.', 'alphabridge-mcp' ) );
 		}
+		self::$passed[ self::passed_key( $tool, $args, $state ) ] = true;
 		return true;
+	}
+
+	/**
+	 * Whether a token passed its check in this request for this tool, these
+	 * arguments (without the token) and this state, for this user and scope
+	 * (Z8b branch 2b: what confirms the base of a unit, AB_MCP_Sync_Unit_Proof,
+	 * is made only from a confirmation the gate checked). Only check() records
+	 * one, on success.
+	 *
+	 * @param string $tool  Tool name.
+	 * @param array  $args  Arguments (a token in them is ignored).
+	 * @param string $state State fingerprint.
+	 * @return bool
+	 */
+	public static function passed( $tool, array $args, $state ) {
+		return isset( self::$passed[ self::passed_key( $tool, $args, $state ) ] );
+	}
+
+	/**
+	 * The key of a check that passed: tool, user, scope, arguments, state.
+	 *
+	 * @param string $tool  Tool name.
+	 * @param array  $args  Arguments.
+	 * @param string $state State fingerprint.
+	 * @return string
+	 */
+	private static function passed_key( $tool, array $args, $state ) {
+		return hash(
+			'sha256',
+			implode(
+				"\n",
+				array(
+					(string) $tool,
+					(string) get_current_user_id(),
+					class_exists( 'AB_MCP_Auth' ) ? AB_MCP_Auth::current_scope() : 'full',
+					(string) self::canonical( self::without_token( $args ) ),
+					hash( 'sha256', (string) $state ),
+				)
+			)
+		);
 	}
 
 	/**

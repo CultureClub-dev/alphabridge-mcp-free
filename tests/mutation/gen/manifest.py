@@ -239,7 +239,7 @@ e('kept-apart-row', 'unit_item(): kept apart only in row 1 (unchanged on both si
 e('kept-apart-differs', 'unit_item(): kept apart only where the part differs now', DE,
   "1 === $row && in_array( $part, $differs, true ) ? 'kept_apart'", "1 === $row ? 'kept_apart'", 'env', 'testThePartsOfAUnitWithAPairAreJudgedEachAgainstItsOwnBase')
 e('kept-apart-result', 'unit_item(): a part kept apart makes the result kept_apart, not equal', DE,
-  "'changed_alike', 'kept_apart', 'equal' ) as $result ) {", "'changed_alike', 'equal' ) as $result ) {", 'env', 'testAUnitUnchangedOnBothSidesSinceBasesThatDifferIsNeverEqual')
+  "'changed_alike', 'open', 'kept_apart', 'equal' ) as $result ) {", "'changed_alike', 'open', 'equal' ) as $result ) {", 'env', 'testAUnitUnchangedOnBothSidesSinceBasesThatDifferIsNeverEqual')
 e('unit-pair-no-object', 'report(): a pair of a unit is no object of the report (Codex, whole round, A)', DE,
   "\t\t\tif ( in_array( $pair['kind'], self::UNIT_KINDS, true ) ) {\n\t\t\t\tcontinue;\n\t\t\t}\n\t\t\t$s = self::lookup(", "\t\t\t$s = self::lookup(", 'rep', 'testAPairOfAUnitIsNoObjectOfTheReport')
 e('measure-total-files', 'measure-manifest: every file written counted in the generated files (Codex, whole round, C)', MS,
@@ -315,7 +315,7 @@ e('z38-bases-part', 'Z38 part_bases(): a further part from base_extra', PA,
 e('z38-db-write', 'Z38 swap(): a write that fails writes nothing and says so', PA,
   "\t\t$done = self::calls()->update_row( 'UPDATE ' . AB_MCP_Sync_Schema::table( 'pairs' ) . ' SET ' . implode( ', ', $parts ) . ' WHERE ' . self::where_row( $raw ) );\n\t\tif ( false === $done ) {\n\t\t\treturn self::db_error();", "\t\t$done = self::calls()->update_row( 'UPDATE ' . AB_MCP_Sync_Schema::table( 'pairs' ) . ' SET ' . implode( ', ', $parts ) . ' WHERE ' . self::where_row( $raw ) );\n\t\tif ( false ) {\n\t\t\treturn self::db_error();", 'it', 'testAFaultOfTheDatabaseLeavesTheBasesAsTheyWere')
 e('z38-db-read', 'Z38 raw(): a read that fails is an error', PA,
-  "\t\tif ( false === $row ) {\n\t\t\treturn self::db_error();", "\t\tif ( false ) {\n\t\t\treturn self::db_error();", 'it', 'testAFaultOfTheDatabaseLeavesTheBasesAsTheyWere')
+  "' WHERE id = %d', (int) $id ) );\n\t\tif ( false === $row ) {\n\t\t\treturn self::db_error();", "' WHERE id = %d', (int) $id ) );\n\t\tif ( false ) {\n\t\t\treturn self::db_error();", 'it', 'testAFaultOfTheDatabaseLeavesTheBasesAsTheyWere')
 
 # ---------------------------------------------------------------- write
 errors = []

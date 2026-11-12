@@ -36,6 +36,14 @@
  * the unique keys of the table during the insert. Refs are compared by
  * their bytes, not by the collation of the table.
  *
+ * THE PAIR OF A UNIT (Z8b; plan 3.1, Z38 and Z44): a plugin, a theme, the
+ * theme that runs and the further kinds of PARTS. Its first bases, and their
+ * confirmed new alignment, are set only by set_unit_base(): every part from
+ * the lines of both sides read whole, with its mode, and with what confirms
+ * it (the token of wp_site_pairs, or a step that made the unit here, origin
+ * push). create(), realign() and change_canon() refuse a unit; rebase() moves
+ * a part of an active pair on, the one way of the steps (Z38).
+ *
  * Nothing here works on a network or without the tables
  * (ab_mcp_staging_unavailable, AB_MCP_Sync_Schema::status()).
  *
@@ -46,6 +54,7 @@ defined( 'ABSPATH' ) || exit;
 
 require_once __DIR__ . '/class-sync-schema.php';
 require_once __DIR__ . '/class-sync-kinds.php';
+require_once __DIR__ . '/class-sync-canon.php';
 
 /**
  * The calls of the pairs to the database that read a pair and write its
@@ -80,6 +89,189 @@ final class AB_MCP_Sync_Pairs_Calls {
 		$done = $wpdb->query( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery -- built from prepared parts by the caller.
 		return false === $done ? false : (int) $done;
 	}
+
+	/**
+	 * One new row of a pair (Z8b branch 2b: the rows of the pairs a
+	 * confirmation makes).
+	 *
+	 * @param string $table   The table of the pairs.
+	 * @param array  $row     Column => value.
+	 * @param array  $formats The format of each column.
+	 * @return int|false The id of the row, or false where the database refused it.
+	 */
+	public function insert_row( $table, array $row, array $formats ) {
+		global $wpdb;
+		$suppress = $wpdb->suppress_errors( true );
+		$inserted = $wpdb->insert( $table, $row, $formats ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- the table of the pairs is ours.
+		$wpdb->suppress_errors( $suppress );
+		return false === $inserted ? false : (int) $wpdb->insert_id;
+	}
+}
+
+/**
+ * What confirms the base of a part of the pair of a unit (Z8b, plan 3.1,
+ * Z44), handed to AB_MCP_Sync_Pairs::set_unit_base(). It is made only from
+ * what happened, never from what a caller says:
+ *
+ * - of_confirmation(): the confirmation of a person, only where the token
+ *   of wp_site_pairs passed its check in this request for these very
+ *   arguments and the state of this very plan (AB_MCP_Confirm_Token::
+ *   passed(), recorded by check() on success only). It holds the operations
+ *   of that plan, each with its source, unit, parts, modes and values.
+ * - of_step(): a step of a run that made the unit on this site (origin
+ *   push), only from its journal (AB_MCP_Sync_Run::step()): the step done,
+ *   its run of a source, its result naming the unit, the parts it wrote and
+ *   checked (written), the parts it did not write (live_after_write) and the
+ *   hash of each of them as read after the write (checked). The engine
+ *   writes that result with branch 5.
+ *
+ * The constructor is private; a copy, an unserialized one or one put
+ * together otherwise is refused (__clone(), __wakeup(), __unserialize()).
+ */
+final class AB_MCP_Sync_Unit_Proof {
+
+	/** @var array origin (proposal, push) and what it holds. */
+	private $fields;
+
+	/**
+	 * @param array $fields origin and what it holds.
+	 */
+	private function __construct( array $fields ) {
+		$this->fields = $fields;
+	}
+
+	/** No copy of a proof. */
+	private function __clone() {
+	}
+
+	/**
+	 * No proof from a string.
+	 *
+	 * @throws LogicException Always.
+	 */
+	public function __wakeup() {
+		throw new LogicException( 'A proof of the base of a unit is never unserialized.' );
+	}
+
+	/**
+	 * No proof from a string.
+	 *
+	 * @param array $data Data.
+	 * @throws LogicException Always.
+	 */
+	public function __unserialize( array $data ) {
+		throw new LogicException( 'A proof of the base of a unit is never unserialized.' );
+	}
+
+	/**
+	 * The confirmation of a person: the operations of the plan whose state the
+	 * token of wp_site_pairs passed its check against in this request, with
+	 * these very arguments; null where no such check passed.
+	 *
+	 * @param array $args  The arguments of the call, without the token.
+	 * @param array $state The state of the plan (its connection, operations, print).
+	 * @return self|null
+	 */
+	public static function of_confirmation( array $args, array $state ) {
+		require_once dirname( __DIR__ ) . '/class-confirm-token.php';
+		if ( ! isset( $state['ops'] ) || ! is_array( $state['ops'] ) || ! AB_MCP_Confirm_Token::passed( 'wp_site_pairs', $args, hash( 'sha256', AB_MCP_Sync_Canon::encode( $state ) ) ) ) {
+			return null;
+		}
+		$ops = array();
+		foreach ( $state['ops'] as $op ) {
+			$ops[] = AB_MCP_Sync_Canon::encode( $op );
+		}
+		return new self(
+			array(
+				'origin' => 'proposal',
+				'ops'    => $ops,
+			)
+		);
+	}
+
+	/**
+	 * A step of a run that made the unit on this site, from its journal; null
+	 * where the step is not done, its run or its result is not one of a unit
+	 * made, or the journal cannot be read.
+	 *
+	 * @param int $run_id The run.
+	 * @param int $seq    The step.
+	 * @return self|null
+	 */
+	public static function of_step( $run_id, $seq ) {
+		require_once __DIR__ . '/class-sync-run.php';
+		$run  = AB_MCP_Sync_Run::get( (int) $run_id );
+		$step = AB_MCP_Sync_Run::step( (int) $run_id, (int) $seq );
+		if ( ! is_array( $run ) || ! is_array( $step ) || 'done' !== $step['state'] || ! is_array( $step['result'] ) ) {
+			return null;
+		}
+		$unit = $step['result']['unit'] ?? null;
+		if ( ! is_array( $unit ) || ! is_string( $unit['kind'] ?? null ) || ! is_string( $unit['ref'] ?? null ) || ! is_array( $unit['written'] ?? null ) || ! is_array( $unit['live_after_write'] ?? null ) || ! is_array( $unit['checked'] ?? null ) ) {
+			return null;
+		}
+		return new self(
+			array(
+				'origin'           => 'push',
+				'source'           => (string) $run['source_id'],
+				'run'              => (int) $run_id,
+				'kind'             => $unit['kind'],
+				'ref'              => $unit['ref'],
+				'written'          => array_values( array_map( 'strval', $unit['written'] ) ),
+				'live_after_write' => array_values( array_map( 'strval', $unit['live_after_write'] ) ),
+				'checked'          => $unit['checked'],
+			)
+		);
+	}
+
+	/**
+	 * @return string proposal or push.
+	 */
+	public function origin() {
+		return (string) $this->fields['origin'];
+	}
+
+	/**
+	 * Whether this confirmation holds this operation as it is, for this
+	 * source: the unit, its parts, modes and values, and the source in it.
+	 *
+	 * @param string $source_id The source the base is set for.
+	 * @param array  $op        The operation.
+	 * @return bool
+	 */
+	public function covers( $source_id, array $op ) {
+		return 'proposal' === $this->fields['origin'] && ( $op['source'] ?? null ) === $source_id && in_array( AB_MCP_Sync_Canon::encode( $op ), $this->fields['ops'], true );
+	}
+
+	/**
+	 * Whether the step made this unit of this source and did this to the part:
+	 * wrote and checked it (written), or left it as this site has it after the
+	 * write (live_after_write, never the one for the other), with this hash as
+	 * read after the write.
+	 *
+	 * @param string $source_id The source.
+	 * @param string $kind      Kind.
+	 * @param string $ref       Name.
+	 * @param string $part      Part.
+	 * @param string $mode      written or live_after_write.
+	 * @param string $hash      The hash of the part on this site.
+	 * @return bool
+	 */
+	public function step_holds( $source_id, $kind, $ref, $part, $mode, $hash ) {
+		$f = $this->fields;
+		if ( 'push' !== $f['origin'] || $f['source'] !== $source_id || $f['kind'] !== $kind || $f['ref'] !== $ref || ( $f['checked'][ $part ] ?? null ) !== $hash ) {
+			return false;
+		}
+		$written = in_array( $part, $f['written'], true );
+		$after   = in_array( $part, $f['live_after_write'], true );
+		return 'written' === $mode ? $written && ! $after : ( 'live_after_write' === $mode && $after && ! $written );
+	}
+
+	/**
+	 * @return int|null The run of a step.
+	 */
+	public function run() {
+		return $this->fields['run'] ?? null;
+	}
 }
 
 /**
@@ -105,6 +297,9 @@ final class AB_MCP_Sync_Pairs {
 	public static function forget() {
 		self::$naht_sync_pairs = null;
 	}
+
+	/** How deep the calls of transaction() are now (0: none open). */
+	private static $depth = 0;
 
 	/** The states of a pair. */
 	const STATES = array( 'active', 'deleted', 'unclear', 'residual' );
@@ -141,6 +336,36 @@ final class AB_MCP_Sync_Pairs {
 
 	/** The format of a snapshot. */
 	const SNAPSHOT_FORMAT = 1;
+
+	/**
+	 * How the base of a part of the pair of a unit is set (Z44), with the
+	 * origin each belongs to, kept with the bases (base_extra modes): equal
+	 * (the part is the same on both sides now, which is its base on both);
+	 * live_base (Frage F, b: the state of this site now, read whole, is the
+	 * base of both sides, so the difference is a change on staging);
+	 * keep_apart (Frage F, c: the state of each side now is its own base, the
+	 * difference kept); written (a step of a run made the unit on this site
+	 * and wrote and checked the part as staging has it); live_after_write (a
+	 * part such a step did not write: the state of this site after the write,
+	 * read whole, the base of both sides, decided by Thomas 12.11.; kept apart
+	 * from written in the proof and in the stored mode).
+	 */
+	const UNIT_MODES = array(
+		'equal'            => 'proposal',
+		'live_base'        => 'proposal',
+		'keep_apart'       => 'proposal',
+		'written'          => 'push',
+		'live_after_write' => 'push',
+	);
+
+	/**
+	 * The bases of the first part of the pair of a unit while that part has
+	 * no base yet (Z44, a confirmation of another part alone): a value no
+	 * manifest and no state of a part gives, the SHA-256 of
+	 * «ab-mcp:unit-part-open/1». part_bases() gives none for it; a reader of
+	 * the columns that does not know it finds a base no state equals.
+	 */
+	const OPEN = '8b62ecefee28a9d447f0a36d3877eaa5e45119bc7101910bbadc89172f9818ca';
 
 	/** The columns a snapshot holds: all but id and updated. */
 	const SNAPSHOT_COLUMNS = array( 'base_extra', 'base_live', 'base_origin', 'base_staging', 'base_time', 'canon', 'kind', 'last_run', 'live_ref', 'override', 'source_id', 'staging_ref', 'state' );
@@ -404,6 +629,11 @@ final class AB_MCP_Sync_Pairs {
 				return self::invalid( $required, sprintf( __( 'The field %s of the pair is required.', 'alphabridge-mcp' ), $required ) );
 			}
 		}
+		// The pair of a unit takes its first bases from set_unit_base()
+		// only (Z44): never from bases a caller names.
+		if ( self::is_unit( $pair['kind'] ) ) {
+			return self::unit_only( 'create' );
+		}
 		$pair += array(
 			'state'      => 'active',
 			'override'   => null,
@@ -411,6 +641,17 @@ final class AB_MCP_Sync_Pairs {
 			'base_time'  => time(),
 			'last_run'   => null,
 		);
+		return self::insert_pair( $pair );
+	}
+
+	/**
+	 * Write a new pair: its fields checked, no second pair on one of the
+	 * unique keys (by the lookup before and by the keys during the insert).
+	 *
+	 * @param array $pair Every field of a pair.
+	 * @return array|WP_Error The pair as stored.
+	 */
+	private static function insert_pair( array $pair ) {
 		$row = self::encode( $pair );
 		if ( is_wp_error( $row ) ) {
 			return $row;
@@ -419,21 +660,18 @@ final class AB_MCP_Sync_Pairs {
 		if ( null !== $conflict ) {
 			return $conflict;
 		}
-		global $wpdb;
 		$row['updated'] = time();
 		$formats        = array();
 		foreach ( array_keys( $row ) as $column ) {
 			$formats[] = in_array( $column, self::INT_COLUMNS, true ) ? '%d' : '%s';
 		}
-		$suppress = $wpdb->suppress_errors( true );
-		$inserted = $wpdb->insert( AB_MCP_Sync_Schema::table( 'pairs' ), $row, $formats );
-		$wpdb->suppress_errors( $suppress );
-		if ( false === $inserted ) {
+		$id = self::calls()->insert_row( AB_MCP_Sync_Schema::table( 'pairs' ), $row, $formats );
+		if ( false === $id ) {
 			// Written by another request in between: the unique keys refused it.
 			$conflict = self::conflict( $row );
 			return null !== $conflict ? $conflict : self::db_error();
 		}
-		return self::get( (int) $wpdb->insert_id );
+		return self::get( (int) $id );
 	}
 
 	/**
@@ -518,28 +756,40 @@ final class AB_MCP_Sync_Pairs {
 				array( 'part' => $part )
 			);
 		}
+		// Only a part with a base moves on (Z38): a part without one gets its
+		// first base from set_unit_base() only (Z44), never from a step.
+		if ( null === self::part_bases( self::decode( $raw ), (string) $part ) ) {
+			return new WP_Error(
+				'ab_mcp_staging_pair_part_base',
+				/* translators: 1: the part (files, activation), 2: the kind of the pair. */
+				sprintf( __( 'The part %1$s of this pair of kind %2$s has no base yet, so no step moves it on: its first base comes from a confirmation of a person (wp_site_pairs confirm with units). Nothing was written.', 'alphabridge-mcp' ), (string) $part, $raw['kind'] ),
+				array( 'part' => $part )
+			);
+		}
 		$set = self::bases( $values, array( 'canon', 'base_live', 'base_staging', 'base_origin' ), array( 'last_run' ) );
 		if ( is_wp_error( $set ) ) {
 			return $set;
 		}
+		$extra = null === $raw['base_extra'] ? array() : json_decode( (string) $raw['base_extra'], true );
+		if ( ! is_array( $extra ) ) {
+			return self::invalid( 'base_extra', __( 'The field base_extra of the pair is not stored JSON of a pair.', 'alphabridge-mcp' ) );
+		}
 		if ( $parts[0] !== $part ) {
 			// A further part: its bases in base_extra, the columns of the
 			// first part as they are.
-			$extra = null === $raw['base_extra'] ? array() : json_decode( (string) $raw['base_extra'], true );
-			if ( ! is_array( $extra ) ) {
-				return self::invalid( 'base_extra', __( 'The field base_extra of the pair is not stored JSON of a pair.', 'alphabridge-mcp' ) );
-			}
 			$extra['parts'][ $part ] = array(
 				'live'    => $set['base_live'],
 				'staging' => $set['base_staging'],
 			);
-			$json = self::encode_json( 'base_extra', $extra );
-			if ( is_wp_error( $json ) ) {
-				return $json;
-			}
 			unset( $set['base_live'], $set['base_staging'] );
-			$set['base_extra'] = $json;
 		}
+		// The step wrote and checked the part: its mode says so (B5).
+		$extra['modes'][ $part ] = 'written';
+		$json = self::encode_json( 'base_extra', $extra );
+		if ( is_wp_error( $json ) ) {
+			return $json;
+		}
+		$set['base_extra'] = $json;
 		return self::swap( $raw, $set );
 	}
 
@@ -586,7 +836,9 @@ final class AB_MCP_Sync_Pairs {
 				'staging' => $pair['base_staging'] ?? null,
 			)
 			: ( $pair['base_extra']['parts'][ $part ] ?? null );
-		if ( ! is_array( $base ) || ! self::is_hash( $base['live'] ?? null ) || ! self::is_hash( $base['staging'] ?? null ) ) {
+		// A part without a base yet (OPEN, Z44: a confirmation of another part
+		// alone) has none.
+		if ( ! is_array( $base ) || ! self::is_hash( $base['live'] ?? null ) || ! self::is_hash( $base['staging'] ?? null ) || self::OPEN === $base['live'] || self::OPEN === $base['staging'] ) {
 			return null;
 		}
 		return array(
@@ -617,6 +869,13 @@ final class AB_MCP_Sync_Pairs {
 		if ( ! is_array( $raw ) ) {
 			return $raw;
 		}
+		// A unit is aligned anew only part by part, each with its mode and
+		// from the lines of both sides read whole (set_unit_base(), Z44):
+		// never both columns of a caller with the further parts left as
+		// they were.
+		if ( self::is_unit( $raw['kind'] ) ) {
+			return self::unit_only( 'realign' );
+		}
 		if ( 'deleted' === $raw['state'] ) {
 			return self::transition_refused( 'deleted', 'active' );
 		}
@@ -627,6 +886,325 @@ final class AB_MCP_Sync_Pairs {
 		$set['state']       = 'active';
 		$set['base_origin'] = 'proposal';
 		return self::swap( $raw, $set );
+	}
+
+	/**
+	 * The bases of parts of the pair of a unit: its first ones, a confirmed
+	 * new alignment of chosen parts, or the parts of a unit a run made (Z8b,
+	 * plan 3.1, Z44: the one place that sets them). Each part named in the
+	 * operation, with its mode (UNIT_MODES), from the lines of the
+	 * environment of both sides:
+	 *  - the files only from a manifest read whole (complete, a folder or a
+	 *    file, its hash; no lock, no name held, not AlphaBridge itself), which
+	 *    main files run only from the whole set of them (the main files and
+	 *    active_plugins read), the theme that runs only from both its rows
+	 *    read: by AB_MCP_Sync_Decision::part_hash(), the hash the report
+	 *    compares (unit_part());
+	 *  - equal only where the part is the same on both sides, live_base and
+	 *    keep_apart only where it differs (Frage F, b and c), written only
+	 *    where this site has it as staging has it, live_after_write the state
+	 *    of this site after the write;
+	 *  - a line of each side, of this unit by its name: a unit without a
+	 *    counterpart gets no base made up for the side it is missing on;
+	 *  - the values the operation names are the ones the lines give in its
+	 *    modes, and what confirms it holds the operation for this source
+	 *    (AB_MCP_Sync_Unit_Proof): a confirmation the token passed, with the
+	 *    unit, its parts, modes and values; or the journal of the step, which
+	 *    names the unit, the source, each part written or left as after the
+	 *    write (never the one for the other) and its hash;
+	 *  - the same name on both sides (a unit renamed is another unit), one a
+	 *    pair holds (MAX_REF), never one held by its SHA-256;
+	 *  - only the parts named: any part of the kind, one or more, each once.
+	 *    A new pair keeps a part not named without a base (open: no column
+	 *    value is a base, OPEN, no further part in base_extra); an active pair
+	 *    keeps every part not named byte for byte, its base and its mode (a
+	 *    decision changed alone); a pair unclear or residual becomes active,
+	 *    the parts not named without a base (nothing of it counts as
+	 *    confirmed); the other keys of base_extra stay. push makes a pair
+	 *    only, with its files written.
+	 * The mode of each part is kept in base_extra (modes). create() and
+	 * realign() refuse a unit, change_canon() leaves it, rebase() moves on
+	 * only a part with a base (Z38), restore() puts back only the state
+	 * before of the step that wrote the pair.
+	 *
+	 * @param string                      $source_id The source.
+	 * @param array                       $op        kind, ref, source (a confirmation), parts (part => mode,
+	 *                                               base_live, base_staging), lines (staging, live),
+	 *                                               pair_id and expected (an existing pair; none: a new
+	 *                                               one), last_run (push).
+	 * @param AB_MCP_Sync_Unit_Proof|null $proof     What confirms it.
+	 * @return array|WP_Error The pair as stored.
+	 */
+	public static function set_unit_base( $source_id, array $op, $proof ) {
+		$ready = self::ready();
+		if ( true !== $ready ) {
+			return $ready;
+		}
+		$kind = $op['kind'] ?? null;
+		if ( ! self::is_unit( $kind ) ) {
+			/* translators: %s: the kind named, as the code names it. */
+			return self::unit_refused( 'kind', sprintf( __( 'There is no unit of the kind %s: set_unit_base() sets the bases of the pairs of units only (a plugin, a theme, the theme that runs, and the further kinds of AB_MCP_Sync_Pairs::PARTS).', 'alphabridge-mcp' ), is_string( $kind ) ? $kind : '' ) );
+		}
+		$ref = $op['ref'] ?? null;
+		if ( ! self::valid_ref( $ref ) || 1 === preg_match( '/^sha256:[0-9a-f]{64}\z/', (string) $ref ) ) {
+			return self::unit_refused( 'ref', __( 'The name of this unit cannot be held by a pair (longer than 191 characters, a control character, not UTF-8, or named by its SHA-256 only, because a credential holds it or it is no text a line holds), so it gets no pair. Take it over by hand, or rename it on both sites.', 'alphabridge-mcp' ) );
+		}
+		if ( ! $proof instanceof AB_MCP_Sync_Unit_Proof ) {
+			return self::unit_refused( 'proof', __( 'The base of a unit is set only with what confirms it: the confirmation of a person with the token of wp_site_pairs that holds this very operation, or the step of a run that made the unit on this site.', 'alphabridge-mcp' ) );
+		}
+		$origin = $proof->origin();
+		$all    = self::PARTS[ $kind ];
+		$parts  = $op['parts'] ?? null;
+		if ( ! is_array( $parts ) || array() === $parts || array() !== array_diff( array_keys( $parts ), $all ) ) {
+			/* translators: %s: the parts of the unit, as the code names them (files, activation). */
+			return self::unit_refused( 'parts', sprintf( __( 'A unit takes a base for one or more of its parts (%s), each once with its mode, and for no other part.', 'alphabridge-mcp' ), implode( ', ', $all ) ) );
+		}
+		$want = array_values( array_intersect( $all, array_keys( $parts ) ) );
+		foreach ( $want as $part ) {
+			$mode = is_array( $parts[ $part ] ) ? ( $parts[ $part ]['mode'] ?? null ) : null;
+			if ( ! is_string( $mode ) || ( self::UNIT_MODES[ $mode ] ?? null ) !== $origin ) {
+				/* translators: %s: the part (files, activation). */
+				return self::unit_refused( 'mode', sprintf( __( 'The part %s has no mode of this origin: a person confirms equal, live_base or keep_apart, a step of a run sets written or live_after_write.', 'alphabridge-mcp' ), $part ) );
+			}
+		}
+		$pair_id = $op['pair_id'] ?? null;
+		if ( 'proposal' === $origin && ! $proof->covers( $source_id, $op ) ) {
+			return self::unit_refused( 'proof', __( 'The confirmation does not hold this operation as it is for this source (the unit, a part, its mode or its values differ from what the person confirmed), so no base is set.', 'alphabridge-mcp' ) );
+		}
+		if ( 'push' === $origin && ( null !== $pair_id || 'written' !== ( $parts[ $all[0] ]['mode'] ?? null ) ) ) {
+			return self::unit_refused( 'written', __( 'A base with the origin push is set only for a unit a step of a run made on this site, without a pair before, once the step wrote and checked its files.', 'alphabridge-mcp' ) );
+		}
+		$lines = array(
+			'staging' => $op['lines']['staging'] ?? null,
+			'live'    => $op['lines']['live'] ?? null,
+		);
+		foreach ( $lines as $line ) {
+			if ( ! is_array( $line ) || $kind !== ( $line['env'] ?? null ) || $ref !== ( $line['ref'] ?? null ) ) {
+				return self::unit_refused( 'side', __( 'Each side needs its line of the environment, of this unit by its name: a unit on one side only gets no pair, and no base is made up for the side it is missing on.', 'alphabridge-mcp' ) );
+			}
+		}
+		$bases = array();
+		$modes = array();
+		foreach ( $want as $part ) {
+			$s = self::unit_part( $kind, $part, $lines['staging'] );
+			$l = self::unit_part( $kind, $part, $lines['live'] );
+			if ( null === $s || null === $l ) {
+				/* translators: %s: the part (files, activation). */
+				return self::unit_refused( 'whole', sprintf( __( 'The part %s is not read whole on both sides (its manifest not read to its end, a lock, a name held, AlphaBridge itself, or which main files run or which theme runs not read), so it takes no base.', 'alphabridge-mcp' ), $part ) );
+			}
+			$mode = $parts[ $part ]['mode'];
+			$same = hash_equals( $s, $l );
+			$fits = array(
+				'equal'            => $same,
+				'live_base'        => ! $same,
+				'keep_apart'       => ! $same,
+				'written'          => $same,
+				'live_after_write' => true,
+			);
+			if ( ! $fits[ $mode ] ) {
+				return self::unit_refused(
+					'state',
+					/* translators: 1: the part (files, activation), 2: its mode (equal, live_base, keep_apart, written, live_after_write). */
+					sprintf( __( 'The part %1$s does not fit the mode %2$s: equal is for a part that is the same on both sides now, live_base and keep_apart for one that differs, written for a part this site has as staging has it once the step wrote it.', 'alphabridge-mcp' ), $part, $mode )
+				);
+			}
+			if ( 'push' === $origin && ! $proof->step_holds( $source_id, $kind, $ref, $part, $mode, $l ) ) {
+				/* translators: %s: the part (files, activation). */
+				return self::unit_refused( 'step', sprintf( __( 'The journal of the step does not hold the part %s of this unit of this source as the operation names it (written and checked, or left as this site has it after the write, with this hash), so no base is set.', 'alphabridge-mcp' ), $part ) );
+			}
+			$bases[ $part ] = array(
+				'live'    => $l,
+				'staging' => 'keep_apart' === $mode ? $s : $l,
+			);
+			$modes[ $part ] = $mode;
+			if ( ( $parts[ $part ]['base_live'] ?? null ) !== $bases[ $part ]['live'] || ( $parts[ $part ]['base_staging'] ?? null ) !== $bases[ $part ]['staging'] ) {
+				/* translators: %s: the part (files, activation). */
+				return self::unit_refused( 'bound', sprintf( __( 'The values of the part %s are not the ones the lines of both sides give in its mode: the confirmation binds them.', 'alphabridge-mcp' ), $part ) );
+			}
+		}
+		// The write and the reading back in one transaction (V5 of the
+		// pre-check of branch 2b): a pair whose row cannot be read back after
+		// its insert is taken back, never left as one the caller was told is
+		// not there. Part of the confirmation where it runs in one.
+		return self::transaction(
+			static function () use ( $source_id, $kind, $ref, $bases, $modes, $origin, $pair_id, $op ) {
+				return self::write_unit_base( $source_id, $kind, $ref, $bases, $modes, $origin, $pair_id, $op );
+			}
+		);
+	}
+
+	/**
+	 * Write what set_unit_base() checked: a new pair with the parts named (the
+	 * others open), or the parts named of the pair of the unit as the person
+	 * saw it (the others of an active pair as they are, of an unclear one or a
+	 * rest open).
+	 *
+	 * @param string   $source_id The source.
+	 * @param string   $kind      Kind.
+	 * @param string   $ref       Its name.
+	 * @param array    $bases     Part named => live, staging.
+	 * @param array    $modes     Part named => its mode.
+	 * @param string   $origin    proposal or push.
+	 * @param int|null $pair_id   The pair; null for a new one.
+	 * @param array    $op        The operation (expected, last_run).
+	 * @return array|WP_Error The pair as stored.
+	 */
+	private static function write_unit_base( $source_id, $kind, $ref, array $bases, array $modes, $origin, $pair_id, array $op ) {
+		$first = self::PARTS[ $kind ][0];
+		if ( null === $pair_id ) {
+			return self::insert_pair(
+				array(
+					'source_id'    => $source_id,
+					'kind'         => $kind,
+					'live_ref'     => $ref,
+					'staging_ref'  => $ref,
+					'state'        => 'active',
+					'override'     => null,
+					'canon'        => AB_MCP_Sync_Canon::VERSION,
+					'base_live'    => $bases[ $first ]['live'] ?? self::OPEN,
+					'base_staging' => $bases[ $first ]['staging'] ?? self::OPEN,
+					'base_extra'   => self::unit_extra( array(), $kind, $bases, $modes, false ),
+					'base_time'    => time(),
+					'base_origin'  => $origin,
+					'last_run'     => 'push' === $origin ? ( $op['last_run'] ?? null ) : null,
+				)
+			);
+		}
+		$raw = self::read_expected( (int) $pair_id, $op['expected'] ?? null );
+		if ( ! is_array( $raw ) ) {
+			return $raw;
+		}
+		if ( $source_id !== $raw['source_id'] || $kind !== $raw['kind'] || $ref !== $raw['live_ref'] || $ref !== $raw['staging_ref'] ) {
+			/* translators: %d: pair number. */
+			return self::unit_refused( 'identity', sprintf( __( 'Pair %d is not the pair of this unit (another source, kind or name).', 'alphabridge-mcp' ), (int) $pair_id ) );
+		}
+		if ( ! in_array( $raw['state'], array( 'active', 'unclear', 'residual' ), true ) ) {
+			/* translators: 1: pair number, 2: its state, as the tools name it (deleted, …). */
+			return self::unit_refused( 'pair_state', sprintf( __( 'Pair %1$d is %2$s: only an active or unclear pair or a rest is aligned anew.', 'alphabridge-mcp' ), (int) $pair_id, $raw['state'] ) );
+		}
+		$extra = null === $raw['base_extra'] ? array() : json_decode( (string) $raw['base_extra'], true );
+		if ( ! is_array( $extra ) ) {
+			return self::invalid( 'base_extra', __( 'The field base_extra of the pair is not stored JSON of a pair.', 'alphabridge-mcp' ) );
+		}
+		// An active pair keeps every part not named as it is; an unclear pair
+		// or a rest keeps none of them as confirmed.
+		$keep = 'active' === $raw['state'];
+		$set  = array(
+			'state'       => 'active',
+			'canon'       => AB_MCP_Sync_Canon::VERSION,
+			'base_extra'  => self::unit_extra( $extra, $kind, $bases, $modes, $keep ),
+			'base_origin' => 'proposal',
+			'base_time'   => time(),
+		);
+		if ( isset( $bases[ $first ] ) ) {
+			$set['base_live']    = $bases[ $first ]['live'];
+			$set['base_staging'] = $bases[ $first ]['staging'];
+		} elseif ( ! $keep ) {
+			$set['base_live']    = self::OPEN;
+			$set['base_staging'] = self::OPEN;
+		}
+		$set['base_extra'] = self::encode_json( 'base_extra', $set['base_extra'] );
+		if ( is_wp_error( $set['base_extra'] ) ) {
+			return $set['base_extra'];
+		}
+		return self::swap( $raw, $set );
+	}
+
+	/**
+	 * base_extra of the pair of a unit with the parts named: the bases of the
+	 * further parts named (parts) and the mode of each part named (modes, so
+	 * never empty); a part not named as it was ($keep) or without a base and
+	 * a mode; the other keys as they were.
+	 *
+	 * @param array  $extra The base_extra as it was (decoded).
+	 * @param string $kind  Kind.
+	 * @param array  $bases Part named => live, staging.
+	 * @param array  $modes Part named => its mode.
+	 * @param bool   $keep  Keep the parts not named.
+	 * @return array
+	 */
+	private static function unit_extra( array $extra, $kind, array $bases, array $modes, $keep ) {
+		$parts = $keep && is_array( $extra['parts'] ?? null ) ? $extra['parts'] : array();
+		$known = $keep && is_array( $extra['modes'] ?? null ) ? $extra['modes'] : array();
+		foreach ( array_slice( self::PARTS[ $kind ], 1 ) as $part ) {
+			if ( isset( $bases[ $part ] ) ) {
+				$parts[ $part ] = $bases[ $part ];
+			}
+		}
+		foreach ( $modes as $part => $mode ) {
+			$known[ $part ] = $mode;
+		}
+		unset( $extra['parts'], $extra['modes'] );
+		if ( array() !== $parts ) {
+			$extra['parts'] = $parts;
+		}
+		$extra['modes'] = $known;
+		return $extra;
+	}
+
+	/**
+	 * Whether a kind is a kind of units (PARTS), whose bases only
+	 * set_unit_base() makes and only rebase() moves on.
+	 *
+	 * @param mixed $kind Kind.
+	 * @return bool
+	 */
+	public static function is_unit( $kind ) {
+		return is_string( $kind ) && isset( self::PARTS[ $kind ] );
+	}
+
+	/**
+	 * The hash of a part of a unit from its line, where the line holds it
+	 * whole; null where not (set_unit_base()).
+	 *
+	 * @param string $kind Kind.
+	 * @param string $part Part.
+	 * @param array  $line The line of the environment.
+	 * @return string|null
+	 */
+	private static function unit_part( $kind, $part, array $line ) {
+		if ( isset( $line['held'] ) || ! empty( $line['own'] ) || null !== ( $line['lock'] ?? null ) ) {
+			return null;
+		}
+		if ( 'files' === $part ) {
+			if ( true !== ( $line['complete'] ?? null ) || ! in_array( $line['form'] ?? null, array( 'folder', 'file' ), true ) ) {
+				return null;
+			}
+		} elseif ( 'theme_choice' !== $kind && ( ! is_array( $line['mains'] ?? null ) || ! is_array( $line['active'] ?? null ) ) ) {
+			return null;
+		}
+		require_once __DIR__ . '/class-sync-decision.php';
+		$hash = AB_MCP_Sync_Decision::part_hash( $kind, $part, $line );
+		return self::is_hash( $hash ) ? $hash : null;
+	}
+
+	/**
+	 * The refusal of a call that would set the bases of a unit past
+	 * set_unit_base() (Z44).
+	 *
+	 * @param string $call create, realign or change_canon.
+	 * @return WP_Error
+	 */
+	private static function unit_only( $call ) {
+		return new WP_Error(
+			'ab_mcp_staging_pair_unit',
+			__( 'The bases of the pair of a unit (a plugin, a theme, the theme that runs, …) are set only by set_unit_base(): part by part from the lines of both sides read whole, with the confirmation of a person (wp_site_pairs confirm) or as a step of a run wrote and checked them. Nothing was written.', 'alphabridge-mcp' ),
+			array(
+				'clause' => 'unit_only',
+				'call'   => (string) $call,
+			)
+		);
+	}
+
+	/**
+	 * A refusal of set_unit_base(), by the clause.
+	 *
+	 * @param string $why     The clause (kind, ref, proof, parts, mode, written, side, whole, state, bound, identity, pair_state), as data clause.
+	 * @param string $problem What is wrong, a whole sentence.
+	 * @return WP_Error
+	 */
+	private static function unit_refused( $why, $problem ) {
+		return new WP_Error( 'ab_mcp_staging_pair_unit', $problem . ' ' . __( 'Nothing was written. Check the operation against AB_MCP_Sync_Pairs::set_unit_base() (or confirm the unit anew through wp_site_pairs) and call again.', 'alphabridge-mcp' ), array( 'clause' => (string) $why ) );
 	}
 
 	/**
@@ -667,6 +1245,13 @@ final class AB_MCP_Sync_Pairs {
 		if ( true !== $ready ) {
 			return $ready;
 		}
+		// Within a transaction already (a confirmation that writes the base of
+		// a unit through set_unit_base()): $fn is part of it, and the one
+		// that began it commits or takes back (a second START TRANSACTION
+		// would commit the first).
+		if ( self::$depth > 0 ) {
+			return call_user_func( $fn );
+		}
 		global $wpdb;
 		$table  = AB_MCP_Sync_Schema::table( 'pairs' );
 		$engine = $wpdb->get_var( $wpdb->prepare( 'SELECT ENGINE FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s', $table ) );
@@ -687,11 +1272,14 @@ final class AB_MCP_Sync_Pairs {
 		if ( false === $wpdb->query( 'START TRANSACTION' ) ) {
 			return self::db_error();
 		}
+		++self::$depth;
 		try {
 			$result = call_user_func( $fn );
 		} catch ( Throwable $e ) {
 			$wpdb->query( 'ROLLBACK' );
 			throw $e;
+		} finally {
+			--self::$depth;
 		}
 		if ( is_wp_error( $result ) ) {
 			$wpdb->query( 'ROLLBACK' );
@@ -735,12 +1323,16 @@ final class AB_MCP_Sync_Pairs {
 	 * (rule 0 and decision 14: only a confirmed new alignment ends them). A pair a run made has no snapshot
 	 * before it and is never removed here: it becomes residual instead.
 	 *
+	 * The pair of a unit only to the state before the step its journal names
+	 * ($step, Z44).
+	 *
 	 * @param int         $id       Pair id.
 	 * @param string|null $before   Snapshot taken before the step.
 	 * @param string      $expected Snapshot hash of the state the step left.
+	 * @param array|null  $step     For the pair of a unit: run_id and seq of the step.
 	 * @return array|WP_Error The pair as stored.
 	 */
-	public static function restore( $id, $before, $expected ) {
+	public static function restore( $id, $before, $expected, $step = null ) {
 		if ( null === $before || '' === $before ) {
 			return new WP_Error( 'ab_mcp_staging_pair_no_before', __( 'This pair did not exist before the step, so there is no state to put it back to, and the way back never removes a pair. Use set_state() to mark it residual.', 'alphabridge-mcp' ) );
 		}
@@ -763,7 +1355,32 @@ final class AB_MCP_Sync_Pairs {
 				return new WP_Error( 'ab_mcp_staging_pair_snapshot_foreign', sprintf( __( 'The snapshot is of another pair (%s differs); nothing was written. Pass the snapshot the step took of this pair.', 'alphabridge-mcp' ), $column ), array( 'column' => $column ) );
 			}
 		}
+		// The pair of a unit goes back only to the state before the step its
+		// journal names (Z44): never to any snapshot of the same identity.
+		if ( self::is_unit( $raw['kind'] ) && ! self::step_before( (int) $id, (string) $raw['source_id'], (string) $before, $step ) ) {
+			return self::unit_refused( 'restore', __( 'The pair of a unit goes back only to the state its journal names as the one before the step of this pair (the run and the step that wrote it), never to another snapshot of it.', 'alphabridge-mcp' ) );
+		}
 		return self::swap( $raw, $set );
+	}
+
+	/**
+	 * Whether the journal of a step of a run of this source names this pair
+	 * and this very snapshot as its state before the step (restore()).
+	 *
+	 * @param int        $id     Pair id.
+	 * @param string     $source The source of the pair.
+	 * @param string     $before The snapshot.
+	 * @param array|null $step   run_id, seq.
+	 * @return bool
+	 */
+	private static function step_before( $id, $source, $before, $step ) {
+		if ( ! is_array( $step ) || ! isset( $step['run_id'], $step['seq'] ) ) {
+			return false;
+		}
+		require_once __DIR__ . '/class-sync-run.php';
+		$run  = AB_MCP_Sync_Run::get( (int) $step['run_id'] );
+		$read = AB_MCP_Sync_Run::step( (int) $step['run_id'], (int) $step['seq'] );
+		return is_array( $run ) && is_array( $read ) && $source === (string) $run['source_id'] && $id === $read['pair_id'] && is_string( $read['pair_before'] ) && hash_equals( $read['pair_before'], $before );
 	}
 
 	/* ---------------------------------------------------- canon change */
@@ -795,6 +1412,11 @@ final class AB_MCP_Sync_Pairs {
 		$raw = self::raw( $id );
 		if ( ! is_array( $raw ) ) {
 			return null === $raw ? self::missing( $id ) : $raw;
+		}
+		// The bases of a unit are the hashes of its manifest and of what runs,
+		// no canonical form of an object: never worked out anew here (Z44).
+		if ( self::is_unit( $raw['kind'] ) ) {
+			return self::unit_only( 'change_canon' );
 		}
 		if ( $raw['canon'] === $canon ) {
 			return 'current';
@@ -1028,9 +1650,8 @@ final class AB_MCP_Sync_Pairs {
 	private static function lookup( $source_id, $kind, $column, $ref, $bytes = true ) {
 		global $wpdb;
 		$where = self::exact( 'source_id', $source_id ) . ' AND ' . self::exact( 'kind', $kind ) . ' AND ' . ( $bytes ? self::exact( $column, $ref ) : $wpdb->prepare( "$column = %s", $ref ) );
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared -- the table and column names are ours; the values are prepared.
-		$row = $wpdb->get_row( 'SELECT * FROM ' . AB_MCP_Sync_Schema::table( 'pairs' ) . ' WHERE ' . $where . ' LIMIT 1', ARRAY_A );
-		if ( '' !== $wpdb->last_error ) {
+		$row = self::calls()->row( 'SELECT * FROM ' . AB_MCP_Sync_Schema::table( 'pairs' ) . ' WHERE ' . $where . ' LIMIT 1' );
+		if ( false === $row ) {
 			return self::db_error();
 		}
 		return is_array( $row ) ? $row : null;

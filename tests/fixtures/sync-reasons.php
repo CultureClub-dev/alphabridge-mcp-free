@@ -221,42 +221,42 @@ return array(
 		),
 		'part:plugin:files' => array(
 			'why'  => 'The files of a plugin are written by the swap of the code of the site (branch 5), which alone moves their base on.',
-			'plugin' => array( array( 'includes/sync/class-sync-pairs.php', 160, "'plugin'       => array( 'files', 'activation' )," ) ),
+			'plugin' => array( array( 'includes/sync/class-sync-pairs.php', 385, "'plugin'       => array( 'files', 'activation' )," ) ),
 			'plan' => 'Z8b Arbeitsplan Fassung 4h: E2, E18, 3.1 Z35 und Z38',
 		),
 		'part:plugin:activation' => array(
 			'why'  => 'Which main files of a plugin run is written by the activation (branch 6), which alone moves its base on.',
-			'plugin' => array( array( 'includes/sync/class-sync-pairs.php', 160, "'plugin'       => array( 'files', 'activation' )," ) ),
+			'plugin' => array( array( 'includes/sync/class-sync-pairs.php', 385, "'plugin'       => array( 'files', 'activation' )," ) ),
 			'plan' => 'Z8b Arbeitsplan Fassung 4h: E2, E18, 3.1 Z35 und Z38',
 		),
 		'part:theme:files' => array(
 			'why'  => 'The files of a theme are written by the swap of the code of the site (branch 5).',
-			'plugin' => array( array( 'includes/sync/class-sync-pairs.php', 161, "'theme'        => array( 'files' )," ) ),
+			'plugin' => array( array( 'includes/sync/class-sync-pairs.php', 386, "'theme'        => array( 'files' )," ) ),
 			'plan' => 'Z8b Arbeitsplan Fassung 4h: E2, E18, 3.1 Z35 und Z38',
 		),
 		'part:theme_choice:activation' => array(
 			'why'  => 'Which theme runs is written by the switch of the theme (branch 6).',
-			'plugin' => array( array( 'includes/sync/class-sync-pairs.php', 166, "'theme_choice' => array( 'activation' )," ) ),
+			'plugin' => array( array( 'includes/sync/class-sync-pairs.php', 391, "'theme_choice' => array( 'activation' )," ) ),
 			'plan' => 'Z8b Arbeitsplan Fassung 4h: E2, E18, 3.1 Z35 und Z38',
 		),
 		'part:mu_plugin:files' => array(
 			'why'  => 'Must-use files are taken over with the files of the site (branch 7); until then no kind moves their base on.',
-			'plugin' => array( array( 'includes/sync/class-sync-pairs.php', 162, "'mu_plugin'    => array( 'files' )," ) ),
+			'plugin' => array( array( 'includes/sync/class-sync-pairs.php', 387, "'mu_plugin'    => array( 'files' )," ) ),
 			'plan' => 'Z8b Arbeitsplan Fassung 4h: E2, E18, 3.1 Z35 und Z38',
 		),
 		'part:language:files' => array(
 			'why'  => 'Language files are taken over with the files of the site (branch 7).',
-			'plugin' => array( array( 'includes/sync/class-sync-pairs.php', 163, "'language'     => array( 'files' )," ) ),
+			'plugin' => array( array( 'includes/sync/class-sync-pairs.php', 388, "'language'     => array( 'files' )," ) ),
 			'plan' => 'Z8b Arbeitsplan Fassung 4h: E2, E18, 3.1 Z35 und Z38',
 		),
 		'part:font:files' => array(
 			'why'  => 'Font files come with the fonts of the font library (branch 8).',
-			'plugin' => array( array( 'includes/sync/class-sync-pairs.php', 164, "'font'         => array( 'files' )," ) ),
+			'plugin' => array( array( 'includes/sync/class-sync-pairs.php', 389, "'font'         => array( 'files' )," ) ),
 			'plan' => 'Z8b Arbeitsplan Fassung 4h: E2, E18, 3.1 Z35 und Z38',
 		),
 		'part:upload:files' => array(
 			'why'  => 'Files of the uploads outside the attachments are taken over with the files of the site (branch 7).',
-			'plugin' => array( array( 'includes/sync/class-sync-pairs.php', 165, "'upload'       => array( 'files' )," ) ),
+			'plugin' => array( array( 'includes/sync/class-sync-pairs.php', 390, "'upload'       => array( 'files' )," ) ),
 			'plan' => 'Z8b Arbeitsplan Fassung 4h: E2, E18, 3.1 Z35 und Z38',
 		),
 		'part:*' => array(
