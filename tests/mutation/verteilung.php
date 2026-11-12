@@ -494,15 +494,20 @@ final class AB_Mutation_Plan {
 			$shards[ $k ] = $job;
 
 			// The source: the checkout of the plugin, the commit itself or
-			// the merge of it a pull request runs.
+			// the merge of it a pull request runs. A push checks a branch out
+			// and names its commit by git log, the whole id on the next line.
 			$checked = false;
+			$before  = '';
 			foreach ( array_slice( $lines, 0, $start ) as $text ) {
 				if ( preg_match( '/^HEAD is now at [0-9a-f]{7,40} Merge ' . $source . ' into ([0-9a-f]{40})$/D', $text, $hm ) ) {
 					$merge_bases[ $hm[1] ] = true;
 					$checked               = true;
 				} elseif ( preg_match( '/^HEAD is now at ([0-9a-f]{7,40}) /', $text, $hm ) && 0 === strpos( $source, $hm[1] ) ) {
 					$checked = true;
+				} elseif ( $source === $text && preg_match( '#^\[command\]\S*git log -1 --format=%H$#D', $before ) ) {
+					$checked = true;
 				}
+				$before = $text;
 			}
 			if ( ! $checked ) {
 				throw new RuntimeException( "shard $k/$n did not check out the source $source" );

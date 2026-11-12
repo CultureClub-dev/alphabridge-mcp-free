@@ -573,6 +573,22 @@ final class MutationPlanTest extends TestCase {
 		self::assertSame( array(), AB_Mutation_Plan::import( self::log( $jobs ), self::expected(), self::SOURCE )['merge_bases'] );
 	}
 
+	public function testAPushNamesTheSourceByGitLog(): void {
+		$jobs = self::jobs();
+		foreach ( array( 1, 2 ) as $k ) {
+			$job                      = self::jobName( $k, 2 );
+			$jobs[ $job ][1]          = '[command]/usr/bin/git log -1 --format=%H';
+			$jobs[ $job ][2]          = self::SOURCE;
+		}
+		self::assertSame( array(), AB_Mutation_Plan::import( self::log( $jobs ), self::expected(), self::SOURCE )['merge_bases'] );
+
+		// The id alone, without the command of git log before it, is no proof.
+		$jobs[ self::jobName( 1, 2 ) ][1] = 'Switched to a new branch \'main\'';
+		$this->expectException( RuntimeException::class );
+		$this->expectExceptionMessage( 'shard 1/2 did not check out the source' );
+		AB_Mutation_Plan::import( self::log( $jobs ), self::expected(), self::SOURCE );
+	}
+
 	public function testAnEmptyShardEndsWithItsOwnLine(): void {
 		$jobs                       = self::jobs();
 		$jobs[ self::jobName( 3, 3 ) ] = self::job( 3, 3, array( 'shard 3/3 has no entry; the other shards run them all' ) );
