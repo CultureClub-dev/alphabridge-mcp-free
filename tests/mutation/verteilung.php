@@ -16,7 +16,8 @@
  * shard shorter (each part runs the baseline once more). Every order is
  * fixed by the costs and then by the command and the ids, never by the order
  * in which lists and entries were loaded, so the same entries and durations
- * give the same shards on every machine.
+ * give the same shards on every machine. What the measurement does not know
+ * is reckoned as the longest measured of its like (estimates()).
  *
  * A separate file so that its clauses can be mutated (the runner refuses
  * files under tests/ but this one and the helpers of the integration suite;
@@ -29,21 +30,26 @@
 final class AB_Mutation_Plan {
 
 	/**
-	 * Tenths of a second for the mutation of an entry the measurement does
-	 * not know (an entry added after it). 10 s: above the 95th percentile of
-	 * the run measured first (8.0 s; median 1.1 s, 3888 entries, run
-	 * 43211580790). New entries are mostly ones of the integration suite (2 to
-	 * 9 s); an estimate too low would heap them onto one shard and lengthen
-	 * the longest one, too high only leaves a shard a little short.
+	 * Tenths of a second for the mutation of an entry of a kind (unit,
+	 * integration) of which the measure file has no value at all; otherwise
+	 * estimates() takes the longest measured of its like. The longest of the
+	 * kind in run 43235297215 (main bf56447), rounded up to whole seconds:
+	 * unit 31.3 s, integration 32.0 s.
 	 */
-	const DEFAULT_MUTATION = 100;
+	const FALLBACK_MUTATION = array(
+		'unit'        => 320,
+		'integration' => 320,
+	);
 
 	/**
-	 * Tenths of a second for the baseline of a command the measurement does
-	 * not know. 10 s, for the same reason: above the 95th percentile (8.8 s;
-	 * median 1.1 s, 856 commands) of the run measured first.
+	 * Tenths of a second for the baseline of a new command of a kind of which
+	 * the measure file has no baseline at all. The longest of the kind in run
+	 * 43235297215, rounded up: unit 3.7 s, integration 23.6 s.
 	 */
-	const DEFAULT_BASELINE = 100;
+	const FALLBACK_BASELINE = array(
+		'unit'        => 40,
+		'integration' => 240,
+	);
 
 	/**
 	 * How several measurements of one baseline (one per shard that ran the
@@ -62,6 +68,67 @@ final class AB_Mutation_Plan {
 		return (string) json_encode( array_values( $run ), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
 	}
 
+	/**
+	 * The kind of a command: the integration suite (its configuration named)
+	 * or the unit suite (any other command).
+	 *
+	 * @param string[] $run Command.
+	 * @return string 'integration' or 'unit'.
+	 */
+	public static function kind( array $run ) {
+		return in_array( 'tests/integration/phpunit.xml.dist', $run, true ) ? 'integration' : 'unit';
+	}
+
+	/**
+	 * What each entry and each command is reckoned to cost. A measured one its
+	 * value; one added after the measurement the longest measured of its like,
+	 * so that nothing new is reckoned short (it costs a little evenness):
+	 * - the mutation of a new entry of a measured command: the longest
+	 *   measured mutation of that command;
+	 * - the mutation of an entry of a new command: the longest measured
+	 *   mutation of its kind;
+	 * - the baseline of a new command: the longest measured baseline of its
+	 *   kind;
+	 * - a kind of which the file has no value: FALLBACK_MUTATION,
+	 *   FALLBACK_BASELINE.
+	 * A measured mutation counts for the command and kind the lists give its
+	 * entry now.
+	 *
+	 * @param array[] $entries  Entries.
+	 * @param array   $measures Durations.
+	 * @return array{mutation:array<int,int>,baseline:array<string,int>} Index => tenths, command key => tenths.
+	 */
+	public static function estimates( array $entries, array $measures ) {
+		$entries    = array_values( $entries );
+		$by_command = array();
+		$by_kind    = array();
+		$base_kind  = array();
+		foreach ( $entries as $entry ) {
+			if ( isset( $measures['mutation'][ $entry['id'] ] ) ) {
+				$key                = self::key( $entry['run'] );
+				$kind               = self::kind( $entry['run'] );
+				$tenths             = $measures['mutation'][ $entry['id'] ];
+				$by_command[ $key ] = max( $by_command[ $key ] ?? 0, $tenths );
+				$by_kind[ $kind ]   = max( $by_kind[ $kind ] ?? 0, $tenths );
+			}
+		}
+		foreach ( $measures['grundlinie'] as $key => $tenths ) {
+			$kind               = self::kind( (array) json_decode( (string) $key, true ) );
+			$base_kind[ $kind ] = max( $base_kind[ $kind ] ?? 0, $tenths );
+		}
+		$out = array(
+			'mutation' => array(),
+			'baseline' => array(),
+		);
+		foreach ( $entries as $i => $entry ) {
+			$key                     = self::key( $entry['run'] );
+			$kind                    = self::kind( $entry['run'] );
+			$out['mutation'][ $i ]   = $measures['mutation'][ $entry['id'] ] ?? $by_command[ $key ] ?? $by_kind[ $kind ] ?? self::FALLBACK_MUTATION[ $kind ];
+			$out['baseline'][ $key ] = $measures['grundlinie'][ $key ] ?? $base_kind[ $kind ] ?? self::FALLBACK_BASELINE[ $kind ];
+		}
+		return $out;
+	}
+
 	/* ------------------------------------------------------------ sharing */
 
 	/**
@@ -73,21 +140,22 @@ final class AB_Mutation_Plan {
 	 * @return array<int,int> Index of the entry => shard 1..n.
 	 */
 	public static function assign( array $entries, array $measures, $n ) {
-		$entries = array_values( $entries );
-		$groups  = array();
-		$total   = 0;
-		$top     = 0;
+		$entries  = array_values( $entries );
+		$estimate = self::estimates( $entries, $measures );
+		$groups   = array();
+		$total    = 0;
+		$top      = 0;
 		foreach ( $entries as $i => $entry ) {
 			$key = self::key( $entry['run'] );
 			if ( ! isset( $groups[ $key ] ) ) {
 				$groups[ $key ] = array(
-					'baseline' => self::baseline( $measures, $key ),
+					'baseline' => $estimate['baseline'][ $key ],
 					'members'  => array(),
 					'sum'      => 0,
 				);
 				$total         += $groups[ $key ]['baseline'];
 			}
-			$cost                        = self::mutation( $measures, $entry['id'] );
+			$cost                        = $estimate['mutation'][ $i ];
 			$groups[ $key ]['members'][] = array( $i, $entry['id'], $cost );
 			$groups[ $key ]['sum']      += $cost;
 			$total                      += $cost;
@@ -216,9 +284,10 @@ final class AB_Mutation_Plan {
 	 * @return array<int,array{cost:int,baselines:int,entries:int}> Shard 1..n.
 	 */
 	public static function costs( array $entries, array $shards, array $measures, $n ) {
-		$entries = array_values( $entries );
-		$out     = array();
-		$seen    = array();
+		$entries  = array_values( $entries );
+		$estimate = self::estimates( $entries, $measures );
+		$out      = array();
+		$seen     = array();
 		for ( $k = 1; $k <= $n; $k++ ) {
 			$out[ $k ]  = array( 'cost' => 0, 'baselines' => 0, 'entries' => 0 );
 			$seen[ $k ] = array();
@@ -228,35 +297,13 @@ final class AB_Mutation_Plan {
 			$key = self::key( $entry['run'] );
 			if ( ! isset( $seen[ $k ][ $key ] ) ) {
 				$seen[ $k ][ $key ]      = true;
-				$out[ $k ]['cost']      += self::baseline( $measures, $key );
+				$out[ $k ]['cost']      += $estimate['baseline'][ $key ];
 				$out[ $k ]['baselines'] += 1;
 			}
-			$out[ $k ]['cost']    += self::mutation( $measures, $entry['id'] );
+			$out[ $k ]['cost']    += $estimate['mutation'][ $i ];
 			$out[ $k ]['entries'] += 1;
 		}
 		return $out;
-	}
-
-	/**
-	 * The mutation time of an entry, or the default for one measured later.
-	 *
-	 * @param array  $measures Durations.
-	 * @param string $id       Entry id.
-	 * @return int Tenths of a second.
-	 */
-	public static function mutation( array $measures, $id ) {
-		return $measures['mutation'][ $id ] ?? self::DEFAULT_MUTATION;
-	}
-
-	/**
-	 * The baseline time of a command, or the default for one measured later.
-	 *
-	 * @param array  $measures Durations.
-	 * @param string $key      Command key.
-	 * @return int Tenths of a second.
-	 */
-	public static function baseline( array $measures, $key ) {
-		return $measures['grundlinie'][ $key ] ?? self::DEFAULT_BASELINE;
 	}
 
 	/**

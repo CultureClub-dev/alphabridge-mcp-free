@@ -186,27 +186,92 @@ final class MutationPlanTest extends TestCase {
 		}
 	}
 
-	public function testAMissingDurationIsTheDefaultAndAMeasuredOneItsValue(): void {
+	/**
+	 * Measured: of the unit command UK 3.7, 1.2 and 0.0 s, of UO 9.0 s; of the
+	 * integration command IK 20.0 and 15.0 s. Baselines: UO 3.0, UK 1.2, IK
+	 * 7.0, IK2 5.0 s. The longer ones first, so that the last is not the
+	 * longest. Then the new ones.
+	 *
+	 * @return array{0:array[],1:array}
+	 */
+	private static function estimated(): array {
+		$entries  = array(
+			array( 'id' => 'u/c', 'run' => self::unit( 'UO' ) ),
+			array( 'id' => 'u/a', 'run' => self::unit( 'UK' ) ),
+			array( 'id' => 'u/b', 'run' => self::unit( 'UK' ) ),
+			array( 'id' => 'u/z', 'run' => self::unit( 'UK' ) ),
+			array( 'id' => 'i/a', 'run' => self::it( 'IK' ) ),
+			array( 'id' => 'i/b', 'run' => self::it( 'IK' ) ),
+			array( 'id' => 'u/new', 'run' => self::unit( 'UK' ) ),
+			array( 'id' => 'i/new', 'run' => self::it( 'IK' ) ),
+			array( 'id' => 'u/fresh', 'run' => self::unit( 'UN' ) ),
+			array( 'id' => 'i/fresh', 'run' => self::it( 'IN' ) ),
+		);
 		$measures = array(
-			'mutation'   => array( 'x/known' => 37, 'x/zero' => 0 ),
-			'grundlinie' => array( AB_Mutation_Plan::key( self::unit( 'Known' ) ) => 12 ),
+			'mutation'   => array( 'u/c' => 90, 'u/a' => 37, 'u/b' => 12, 'u/z' => 0, 'i/a' => 200, 'i/b' => 150, 'gone/x' => 999 ),
+			'grundlinie' => array(
+				AB_Mutation_Plan::key( self::unit( 'UO' ) ) => 30,
+				AB_Mutation_Plan::key( self::unit( 'UK' ) ) => 12,
+				AB_Mutation_Plan::key( self::it( 'IK' ) )   => 70,
+				AB_Mutation_Plan::key( self::it( 'IK2' ) )  => 50,
+			),
 		);
-		self::assertSame( 37, AB_Mutation_Plan::mutation( $measures, 'x/known' ) );
-		self::assertSame( 0, AB_Mutation_Plan::mutation( $measures, 'x/zero' ) );
-		self::assertSame( AB_Mutation_Plan::DEFAULT_MUTATION, AB_Mutation_Plan::mutation( $measures, 'x/new' ) );
-		self::assertSame( 12, AB_Mutation_Plan::baseline( $measures, AB_Mutation_Plan::key( self::unit( 'Known' ) ) ) );
-		self::assertSame( AB_Mutation_Plan::DEFAULT_BASELINE, AB_Mutation_Plan::baseline( $measures, AB_Mutation_Plan::key( self::unit( 'New' ) ) ) );
+		return array( $entries, $measures );
+	}
 
-		$entries = array(
-			array( 'id' => 'x/known', 'run' => self::unit( 'Known' ) ),
-			array( 'id' => 'x/new', 'run' => self::unit( 'Known' ) ),
-			array( 'id' => 'x/other', 'run' => self::unit( 'New' ) ),
+	public function testTheKindOfACommandIsTheIntegrationSuiteOrTheUnitSuite(): void {
+		self::assertSame( 'integration', AB_Mutation_Plan::kind( self::it( 'A' ) ) );
+		self::assertSame( 'unit', AB_Mutation_Plan::kind( self::unit( 'A' ) ) );
+		self::assertSame( 'unit', AB_Mutation_Plan::kind( array( PHP_BINARY, '-r', 'exit( 0 );' ) ) );
+	}
+
+	public function testAMeasuredDurationIsItsOwn(): void {
+		list( $entries, $measures ) = self::estimated();
+		$estimate                   = AB_Mutation_Plan::estimates( $entries, $measures );
+		self::assertSame( array( 90, 37, 12, 0, 200, 150 ), array_slice( $estimate['mutation'], 0, 6 ) );
+		self::assertSame( 12, $estimate['baseline'][ AB_Mutation_Plan::key( self::unit( 'UK' ) ) ] );
+		self::assertSame( 70, $estimate['baseline'][ AB_Mutation_Plan::key( self::it( 'IK' ) ) ] );
+	}
+
+	public function testANewEntryOfAMeasuredCommandIsTheLongestOfThatCommand(): void {
+		list( $entries, $measures ) = self::estimated();
+		$estimate                   = AB_Mutation_Plan::estimates( $entries, $measures );
+		self::assertSame( 37, $estimate['mutation'][6], 'UK: the longest of UK, not of the unit suite (9.0 s)' );
+		self::assertSame( 200, $estimate['mutation'][7] );
+	}
+
+	public function testANewCommandIsTheLongestOfItsKind(): void {
+		list( $entries, $measures ) = self::estimated();
+		$estimate                   = AB_Mutation_Plan::estimates( $entries, $measures );
+		self::assertSame( 90, $estimate['mutation'][8], 'a new unit command: the longest unit mutation' );
+		self::assertSame( 200, $estimate['mutation'][9], 'a new integration command: the longest integration mutation' );
+		self::assertSame( 30, $estimate['baseline'][ AB_Mutation_Plan::key( self::unit( 'UN' ) ) ], 'the longest unit baseline' );
+		self::assertSame( 70, $estimate['baseline'][ AB_Mutation_Plan::key( self::it( 'IN' ) ) ], 'the longest integration baseline' );
+
+		// The costs count the same: UN 3.0 + 9.0, IN 7.0 + 20.0.
+		$costs = AB_Mutation_Plan::costs( $entries, array( 2, 2, 2, 2, 2, 2, 2, 2, 1, 1 ), $measures, 2 );
+		self::assertSame( array( 'cost' => 30 + 90 + 70 + 200, 'baselines' => 2, 'entries' => 2 ), $costs[1] );
+	}
+
+	public function testAKindWithoutAMeasuredValueTakesTheFixedOne(): void {
+		$entries  = array(
+			array( 'id' => 'u/a', 'run' => self::unit( 'UK' ) ),
+			array( 'id' => 'i/new', 'run' => self::it( 'IN' ) ),
+			array( 'id' => 'u/new', 'run' => self::unit( 'UN' ) ),
 		);
-		$costs   = AB_Mutation_Plan::costs( $entries, array( 1, 1, 1 ), $measures, 1 );
-		self::assertSame(
-			array( 'cost' => 12 + 37 + AB_Mutation_Plan::DEFAULT_MUTATION + AB_Mutation_Plan::DEFAULT_BASELINE + AB_Mutation_Plan::DEFAULT_MUTATION, 'baselines' => 2, 'entries' => 3 ),
-			$costs[1]
+		$measures = array(
+			'mutation'   => array( 'u/a' => 37 ),
+			'grundlinie' => array( AB_Mutation_Plan::key( self::unit( 'UK' ) ) => 12 ),
 		);
+		$estimate = AB_Mutation_Plan::estimates( $entries, $measures );
+		self::assertSame( array( 37, AB_Mutation_Plan::FALLBACK_MUTATION['integration'], 37 ), $estimate['mutation'] );
+		self::assertSame( AB_Mutation_Plan::FALLBACK_BASELINE['integration'], $estimate['baseline'][ AB_Mutation_Plan::key( self::it( 'IN' ) ) ] );
+		self::assertSame( 12, $estimate['baseline'][ AB_Mutation_Plan::key( self::unit( 'UN' ) ) ] );
+
+		$none = AB_Mutation_Plan::estimates( $entries, array( 'mutation' => array(), 'grundlinie' => array() ) );
+		self::assertSame( array( AB_Mutation_Plan::FALLBACK_MUTATION['unit'], AB_Mutation_Plan::FALLBACK_MUTATION['integration'], AB_Mutation_Plan::FALLBACK_MUTATION['unit'] ), $none['mutation'] );
+		self::assertSame( AB_Mutation_Plan::FALLBACK_BASELINE['unit'], $none['baseline'][ AB_Mutation_Plan::key( self::unit( 'UK' ) ) ] );
+		self::assertNotSame( AB_Mutation_Plan::FALLBACK_BASELINE['unit'], AB_Mutation_Plan::FALLBACK_BASELINE['integration'] );
 	}
 
 	public function testTheUnitAndTheIntegrationRunOfOneFilterAreTwoCommands(): void {
@@ -795,10 +860,12 @@ final class MutationPlanTest extends TestCase {
 			self::assertSame( 0, $code, $out . $err );
 			$ran[ $k ] = self::killed( $out );
 		}
-		// Each its own command, every baseline the default (10 s): three (10 s,
-		// the default) 20 s first, then one (5 s) 15 s, two (1 s) 11 s beside
-		// one; in each shard in the order loaded.
-		self::assertSame( array( 1 => array( 'probe/three' ), 2 => array( 'probe/one', 'probe/two' ) ), $ran );
+		// Each its own command of the unit kind; no baseline measured, so the
+		// fixed one (4 s) each. three, not measured, the longest unit mutation
+		// (one, 5 s): one 9 s and three 9 s first, two (1 s) 5 s beside one;
+		// in each shard in the order loaded.
+		self::assertSame( AB_Mutation_Plan::FALLBACK_BASELINE['unit'], 40 );
+		self::assertSame( array( 1 => array( 'probe/one', 'probe/two' ), 2 => array( 'probe/three' ) ), $ran );
 	}
 
 	public function testOnlyWithShardRunsTheEntryInOneShard(): void {

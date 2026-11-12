@@ -149,8 +149,9 @@ Never commit while it runs.
 The CI runs the lists in twelve jobs, `--shard=k/12`. The shares follow
 the measured durations in `tests/mutation/dauer.php` (mutation per entry,
 baseline per command), so that the longest job is as short as may be
-(`tests/mutation/verteilung.php`); entries and commands added since get a
-fixed default. To measure anew after a green run on main:
+(`tests/mutation/verteilung.php`); entries and commands added since are
+reckoned as the longest measured of their command or kind (unit,
+integration). To measure anew after a green run on main:
 
 ```sh
 php tests/mutation/dauer-import.php --run=<run id> [--attempt=<n>]
