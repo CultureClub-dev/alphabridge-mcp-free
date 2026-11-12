@@ -1214,7 +1214,7 @@ e('paket/r5-import-purpose-removed', 'held(): a group for another purpose is end
   PUR + "\n\t\t\tAB_MCP_Protected_Store::remove( 'in', $found['gid'] );\n", PUR + "\n", 'itpkg', R5['purpose_it'])
 
 # B-4: writes that fail for real, a making stopped before its record.
-DIS = "\t\t\t} elseif ( null === $found && $group['created'] < time() - self::ABANDONED ) {"
+DIS = "\t\t\t} elseif ( null === $found && null !== $now && $group['created'] < $now - self::ABANDONED ) {"
 e('paket/r5-discard-abandoned', 'discard_stale(): a making stopped before its record goes after ABANDONED (B-4)', EX, DIS, "\t\t\t} elseif ( false ) {", 'itpkg', R5['abandoned'])
 e('paket/r5-discard-abandoned-age', 'discard_stale(): not before ABANDONED, it may still be written (B-4)', EX, DIS, "\t\t\t} elseif ( null === $found ) {", 'itpkg', R5['abandoned'])
 e('paket/r5-payload-tmp', 'write(): a failed write, also one that falls short, leaves no temp file (B-4)', PF,

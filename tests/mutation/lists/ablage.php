@@ -44,6 +44,11 @@
  * the runs (B2, B3), the refusals of fits(), book(), package_refusal()
  * and put() where held() cannot count, the stock read whole). ablage/input-rows-load-run is gone with the
  * require it held (backup_rows() reads the clock through the table).
+ * Behebung 5: the one checked clock, AB_MCP_Sync_Run::now(), for the age of
+ * a temp file (young()) and of a making whose record never came
+ * (discard_stale()); the qualification of a close through its row
+ * (period.qualified); the reason a removal was refused kept until it is
+ * counted (unswept(); ablage/c5-*, ablage/table-qualified).
  *
  * Not listed, with why: the Throwable caught around guard() and the walk in
  * delete_path() (a remover that throws keeps all, the case of each way
@@ -85,7 +90,12 @@
  * strict modes: the same as no qualified close, as the case reads it); the
  * trailer of a gzip file that opens but cannot be read in raw_size() (no
  * case makes fread() of an open file of the store fail; a file that cannot
- * be opened is ablage/c1-held-open).
+ * be opened is ablage/c1-held-open). Of Behebung 5: null === $now in
+ * young() and null !== $now in discard_stale() (PHP reads null as 0 in a
+ * difference: a temp file is then younger than TMP_AGE and no making older
+ * than ABANDONED, the same answer); true === $qualified in set_state()
+ * (after its row the qualification is true, false or null); the $unread of
+ * a guard() that throws in delete_path() (no case makes guard() throw).
  *
  * @package AlphaBridge_MCP
  */
@@ -102,6 +112,7 @@ $si = 'includes/class-store-inputs.php';
 $sh = 'includes/class-shape.php';
 $ru = 'includes/sync/class-sync-run.php';
 $en = 'includes/sync/class-sync-engine.php';
+$ex = 'includes/sync/class-sync-export.php';
 
 // The guard of the marks in delete_path(), taken out: nothing a mark names
 // is kept. One mutation, a red proof per way of removal (F53).
@@ -163,17 +174,17 @@ return array_merge(
 			'id'      => 'ablage/z37-tmp-prefix',
 			'clause'  => 'delete_path(): a temp file only with its prefix, never by its ending (the clean-up of temp files, :1830–1864)',
 			'file'    => $ps,
-			'search'  => "( dirname( \$p ) !== \$tmp_dir || 0 !== strpos( basename( \$p ), self::TMP_PREFIX ) || null === \$mtime || ( time() - \$mtime ) < self::TMP_AGE )",
-			'replace' => "( dirname( \$p ) !== \$tmp_dir || null === \$mtime || ( time() - \$mtime ) < self::TMP_AGE )",
+			'search'  => "( dirname( \$p ) !== \$tmp_dir || 0 !== strpos( basename( \$p ), self::TMP_PREFIX ) || self::young( \$mtime ) )",
+			'replace' => "( dirname( \$p ) !== \$tmp_dir || self::young( \$mtime ) )",
 			'run'     => $it( 'StoreRemoverTest', 'testTheRemoverTakesNothingOutsideTheStoreNorAForeignTempFile' ),
 			'expect'  => '/testTheRemoverTakesNothingOutsideTheStoreNorAForeignTempFile/',
 		),
 		array(
 			'id'      => 'ablage/z37-tmp-age',
-			'clause'  => 'delete_path(): a temp file of another request only after TMP_AGE',
+			'clause'  => 'Z37: a temp file of the store goes only after TMP_AGE (young())',
 			'file'    => $ps,
-			'search'  => "|| 0 !== strpos( basename( \$p ), self::TMP_PREFIX ) || null === \$mtime || ( time() - \$mtime ) < self::TMP_AGE )",
-			'replace' => "|| 0 !== strpos( basename( \$p ), self::TMP_PREFIX ) || null === \$mtime )",
+			'search'  => "\t\treturn null === \$now || ( \$now - \$mtime ) < self::TMP_AGE;",
+			'replace' => "\t\treturn null === \$now;",
 			'run'     => $it( 'StoreRemoverTest', 'testTheRemoverTakesNothingOutsideTheStoreNorAForeignTempFile' ),
 			'expect'  => '/testTheRemoverTakesNothingOutsideTheStoreNorAForeignTempFile/',
 		),
@@ -253,7 +264,7 @@ return array_merge(
 			'id'      => 'ablage/z37-guard-test-remover',
 			'clause'  => 'the guard: a removal past delete_path() is seen',
 			'file'    => $ps,
-			'search'  => "\t\treturn self::delete_path( \$root, \$dir . '/' . \$name, array( 'with' => \$dir . '/' . \$name . '.json' ) );",
+			'search'  => "\t\treturn self::delete_path( \$root, \$dir . '/' . \$name, array( 'with' => \$dir . '/' . \$name . '.json' ), \$unread );",
 			'replace' => "\t\treturn @unlink( \$dir . '/' . \$name . '.json' ) && self::delete_path( \$root, \$dir . '/' . \$name ); // phpcs:ignore",
 			'run'     => $unit( 'StoreRemoverGuardTest', 'testNothingRemovesInTheStoreButDeletePath' ),
 			'expect'  => '/testNothingRemovesInTheStoreButDeletePath/',
@@ -1800,7 +1811,7 @@ return array_merge(
 			'id'      => 'ablage/input-period-known',
 			'clause'  => 'keep_until(): no period made of days or a time that are not known: 0, kept (N1)',
 			'file'    => $sc,
-			'search'  => "\t\tif ( null === \$now || null === \$days ) {\n\t\t\treturn 0;\n\t\t}",
+			'search'  => "\t\tif ( null === \$now || null === \$qualified || null === \$days ) {\n\t\t\treturn 0;\n\t\t}",
 			'replace' => "\t\tif ( false ) {\n\t\t\treturn 0;\n\t\t}",
 			'run'     => $unit( 'RetentionInputsTest', 'testAPeriodIsStoredOnlyOfDaysAndATimeThatAreKnown' ),
 			'expect'  => '/testAPeriodIsStoredOnlyOfDaysAndATimeThatAreKnown/',
@@ -1836,7 +1847,7 @@ return array_merge(
 			'id'      => 'ablage/input-period-chain-it',
 			'clause'  => 'keep_until(): the chain filter, close, stored row, clean-up: days not known store 0 and the backups stay',
 			'file'    => $sc,
-			'search'  => "\t\tif ( null === \$now || null === \$days ) {\n\t\t\treturn 0;\n\t\t}",
+			'search'  => "\t\tif ( null === \$now || null === \$qualified || null === \$days ) {\n\t\t\treturn 0;\n\t\t}",
 			'replace' => "\t\tif ( false ) {\n\t\t\treturn 0;\n\t\t}",
 			'run'     => $it( 'StoreRemoverTest', 'testARunClosedWhileItsDaysAreNotKnownStoresNoPeriodAndItsBackupsStay' ),
 			'expect'  => '/testARunClosedWhileItsDaysAreNotKnownStoresNoPeriodAndItsBackupsStay/',
@@ -2296,8 +2307,8 @@ return array_merge(
 			'id'      => 'ablage/c1-sweep-guard-count',
 			'clause'  => 'unswept(): a group a mark that cannot be read keeps counts unknown (B1)',
 			'file'    => $ps,
-			'search'  => "\t\t\treturn self::guard( \$root )['unreadable'] ? 1 : 0;",
-			'replace' => "\t\t\treturn 0;",
+			'search'  => "\t\treturn in_array( \$area, self::TREE_AREAS, true ) && true === \$unread ? 1 : 0;",
+			'replace' => "\t\treturn 0;",
 			'run'     => $it( 'StoreRemoverTest', 'testWhileAMarkCannotBeReadNothingInStageBackupsAndMarksGoes' ),
 			'expect'  => '/testWhileAMarkCannotBeReadNothingInStageBackupsAndMarksGoes/',
 		),
@@ -2305,8 +2316,8 @@ return array_merge(
 			'id'      => 'ablage/c1-sweep-guard-count-it',
 			'clause'  => 'unswept(): a group a mark that cannot be read keeps counts unknown, each wrong form of a mark (B1)',
 			'file'    => $ps,
-			'search'  => "\t\t\treturn self::guard( \$root )['unreadable'] ? 1 : 0;",
-			'replace' => "\t\t\treturn 0;",
+			'search'  => "\t\treturn in_array( \$area, self::TREE_AREAS, true ) && true === \$unread ? 1 : 0;",
+			'replace' => "\t\treturn 0;",
 			'run'     => $it( 'StoreInputsTest', 'testEveryWrongFormOfARowReachesItsConsumerInTheStoreAsUnknown' ),
 			'expect'  => '/testEveryWrongFormOfARowReachesItsConsumerInTheStoreAsUnknown/',
 		),
@@ -2543,6 +2554,79 @@ return array_merge(
 			'replace' => "\t\tif ( false ) {\n\t\t\treturn new WP_Error( 'ab_mcp_store_declare', __( 'The bytes a group declares are a whole number of 0 or more. Pass them so, or none.', 'alphabridge-mcp' ) );",
 			'run'     => $it( 'StoreInputsTest', 'testOpenTakesTheDeclaredBytesOfAGroupOnlyInTheFormOfTheirRow' ),
 			'expect'  => '/testOpenTakesTheDeclaredBytesOfAGroupOnlyInTheFormOfTheirRow/',
+		),
+		/* --- Behebung 5: the one checked clock, the qualification, the reason of a refusal */
+		array(
+			'id'      => 'ablage/c5-unswept-reason',
+			'clause'  => 'unswept(): the reason of the refusal as delete_path() read it, not a second read of the marks (B4)',
+			'file'    => $ps,
+			'search'  => "\t\treturn in_array( \$area, self::TREE_AREAS, true ) && true === \$unread ? 1 : 0;",
+			'replace' => "\t\treturn in_array( \$area, self::TREE_AREAS, true ) && self::guard( \$root )['unreadable'] ? 1 : 0;",
+			'run'     => $it( 'StoreRemoverTest', 'testAMarkThatCannotBeReadOnceCountsTheGroupItKeptUnknown' ),
+			'expect'  => '/testAMarkThatCannotBeReadOnceCountsTheGroupItKeptUnknown/',
+		),
+		array(
+			'id'      => 'ablage/c5-delete-unread',
+			'clause'  => 'delete_path(): says whether the marks could not be read (B4)',
+			'file'    => $ps,
+			'search'  => "\t\t\$unread  = \$guard['unreadable'];",
+			'replace' => "\t\t\$unread  = false;",
+			'run'     => $it( 'StoreRemoverTest', 'testWhileAMarkCannotBeReadNothingInStageBackupsAndMarksGoes' ),
+			'expect'  => '/testWhileAMarkCannotBeReadNothingInStageBackupsAndMarksGoes/',
+		),
+		array(
+			'id'      => 'ablage/c5-temp-clock',
+			'clause'  => 'young(): a temp file is aged by the one checked clock, AB_MCP_Sync_Run::now() (B1)',
+			'file'    => $ps,
+			'search'  => "\t\t\$now = AB_MCP_Sync_Run::now();\n\t\treturn null === \$now",
+			'replace' => "\t\t\$now = time();\n\t\treturn null === \$now",
+			'run'     => $it( 'StoreInputsTest', 'testTheClockOfTheRunsAgesNoTempFileAndAbandonsNoMakingWithoutATime' ),
+			'expect'  => '/testTheClockOfTheRunsAgesNoTempFileAndAbandonsNoMakingWithoutATime/',
+		),
+		array(
+			'id'      => 'ablage/c5-temp-mtime',
+			'clause'  => 'young(): a temp file whose time is not known stays',
+			'file'    => $ps,
+			'search'  => "\t\tif ( null === \$mtime ) {\n\t\t\treturn true;\n\t\t}\n\t\trequire_once",
+			'replace' => "\t\tif ( false ) {\n\t\t\treturn true;\n\t\t}\n\t\trequire_once",
+			'run'     => $it( 'StoreInputsTest', 'testEveryWrongFormOfARowReachesItsConsumerInTheStoreAsUnknown' ),
+			'expect'  => '/testEveryWrongFormOfARowReachesItsConsumerInTheStoreAsUnknown/',
+		),
+		array(
+			'id'      => 'ablage/c5-discard-clock',
+			'clause'  => 'discard_stale(): a making is abandoned only by the one checked clock (B1)',
+			'file'    => $ex,
+			'search'  => "\t\t\$now = AB_MCP_Sync_Run::now();\n\t\tforeach ( is_array( \$groups ) ? \$groups : array() as \$group ) {",
+			'replace' => "\t\t\$now = time();\n\t\tforeach ( is_array( \$groups ) ? \$groups : array() as \$group ) {",
+			'run'     => $it( 'StoreInputsTest', 'testTheClockOfTheRunsAgesNoTempFileAndAbandonsNoMakingWithoutATime' ),
+			'expect'  => '/testTheClockOfTheRunsAgesNoTempFileAndAbandonsNoMakingWithoutATime/',
+		),
+		array(
+			'id'      => 'ablage/c5-qualified-keep',
+			'clause'  => 'keep_until(): the qualification in the form of its row, never cast (B3)',
+			'file'    => $sc,
+			'search'  => "\t\t\$qualified = AB_MCP_Store_Inputs::read( 'period.qualified', \$qualified );",
+			'replace' => "\t\t\$qualified = (bool) \$qualified;",
+			'run'     => $unit( 'StoreInputsTest', 'testEveryWrongFormOfARowReachesItsConsumerAsUnknownAndEveryValidOneAsAValue' ),
+			'expect'  => '/testEveryWrongFormOfARowReachesItsConsumerAsUnknownAndEveryValidOneAsAValue/',
+		),
+		array(
+			'id'      => 'ablage/c5-qualified-set',
+			'clause'  => 'set_state(): the qualification in the form of its row, never cast (B3)',
+			'file'    => $ru,
+			'search'  => "\t\t\t\$qualified         = AB_MCP_Store_Inputs::read( 'period.qualified', \$qualified );",
+			'replace' => "\t\t\t\$qualified         = (bool) \$qualified;",
+			'run'     => $it( 'StoreRemoverTest', 'testAClockThatGivesNoTimeStoresNoPeriodAtTheCloseAndTheBackupsStay' ),
+			'expect'  => '/testAClockThatGivesNoTimeStoresNoPeriodAtTheCloseAndTheBackupsStay/',
+		),
+		array(
+			'id'      => 'ablage/table-qualified',
+			'clause'  => 'period.qualified: the qualification is true or false, no number (the form of its row)',
+			'file'    => $si,
+			'search'  => "'field'    => 'whether a close qualifies (rule 2), as the caller gives it',\n\t\t\t'form'     => array( 'type' => 'bool' ),",
+			'replace' => "'field'    => 'whether a close qualifies (rule 2), as the caller gives it',\n\t\t\t'form'     => array( 'type' => 'int', 'digits' => true, 'min' => 0, 'max' => 1 ),",
+			'run'     => $unit( 'StoreInputsTest', 'testEveryWrongFormOfARowReachesItsConsumerAsUnknownAndEveryValidOneAsAValue' ),
+			'expect'  => '/testEveryWrongFormOfARowReachesItsConsumerAsUnknownAndEveryValidOneAsAValue/',
 		),
 	)
 );

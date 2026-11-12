@@ -514,7 +514,7 @@ return array(
 		'id'      => 'store/sweep-removes',
 		'clause'  => 'sweep(): a group past its time goes',
 		'file'    => 'includes/class-protected-store.php',
-		'search'  => "\t\tif ( self::delete_group( \$root, \$area, \$name ) ) {\n\t\t\treturn -1;",
+		'search'  => "\t\tif ( self::delete_group( \$root, \$area, \$name, \$unread ) ) {\n\t\t\treturn -1;",
 		'replace' => "\t\tif ( true ) {\n\t\t\treturn -1;",
 		'run'     => $it( 'testTwoInstallationsBesideEachOtherUseAndCleanOnlyTheirOwnFolder' ),
 		'expect'  => '/testTwoInstallationsBesideEachOtherUseAndCleanOnlyTheirOwnFolder/',

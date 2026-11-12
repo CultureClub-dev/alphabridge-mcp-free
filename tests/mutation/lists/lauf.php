@@ -695,7 +695,7 @@ return array(
 		'id'      => 'lauf/run-keep-until-stored',
 		'clause'  => 'set_state(): every close stores the period its backups are kept (decision 20; A7)',
 		'file'    => $ru,
-		'search'  => "\t\t\t\$set['keep_until'] = AB_MCP_Sync_Schema::keep_until( \$now, (bool) \$qualified, AB_MCP_Protected_Store::backup_days() );",
+		'search'  => "\t\t\t\$set['keep_until'] = AB_MCP_Sync_Schema::keep_until( \$now, \$qualified, AB_MCP_Protected_Store::backup_days() );",
 		'replace' => "/* removed */",
 		'run'     => $it( 'SyncRunTest', 'testTheRetentionKeepsTheLastThreeQualifiedClosesAndWhatAWayBackNeeds' ),
 		'expect'  => '/testTheRetentionKeepsTheLastThreeQualifiedClosesAndWhatAWayBackNeeds/',
