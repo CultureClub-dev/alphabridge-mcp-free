@@ -599,7 +599,12 @@ final class SyncEnvTest extends TestCase {
 			self::sql( $site, 'CREATE TABLE `{p}abenv_zz` ( id INT )' );
 		}
 		$answers = array();
-		$ids     = self::staged( 'env', 2, $answers, array( 'env_clock' => 15 ) );
+		// 14 s a look at the clock: each part stops within a few looks, and a
+		// unit of one file, which looks three times (before it is opened, in
+		// the final check, at the release of its hash; Z8b branch 2,
+		// Behebung 6), still ends within the 45 s its first unit has of its
+		// own (with 15 s the looks alone would use them up).
+		$ids     = self::staged( 'env', 2, $answers, array( 'env_clock' => 14 ) );
 		$cursors = array_column( array_filter( $answers, static fn( $a ) => isset( $a['cursor'] ) ), 'cursor' );
 		self::assertNotEmpty( array_filter( $cursors, static fn( $c ) => array( hash( 'sha256', 'abenv_password:' . $secret ) ) === $c['inner']['after'] ), 'A cursor at that table, by the SHA-256 of its name.' );
 		self::assertNotEmpty( array_filter( $cursors, static fn( $c ) => 'uploads' === AB_MCP_Sync_Env::STEPS[ $c['inner']['step'] ] && 3 === count( (array) $c['inner']['after'] ) ), 'A cursor below that folder, by SHA-256 only.' );
@@ -608,7 +613,7 @@ final class SyncEnvTest extends TestCase {
 		$inventory                     = self::staged( 'inventory' );
 		$now                           = 0.0;
 		AB_MCP_Sync_Env::$clock        = static function () use ( &$now ) {
-			$now += 15;
+			$now += 14;
 			return $now;
 		};
 		$answer = self::report(
