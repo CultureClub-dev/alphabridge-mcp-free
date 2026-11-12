@@ -2526,5 +2526,23 @@ return array_merge(
 			'run'     => $it( 'StoreInputsTest', 'testEveryWrongFormOfARowReachesItsConsumerInTheStoreAsUnknown' ),
 			'expect'  => '/testEveryWrongFormOfARowReachesItsConsumerInTheStoreAsUnknown/',
 		),
+		array(
+			'id'      => 'ablage/c1-release-run',
+			'clause'  => 'release(): a run not of its row (budget.book_run) releases no booking',
+			'file'    => $sb,
+			'search'  => "\t\t\$run_id = AB_MCP_Store_Inputs::read( 'budget.book_run', \$run_id );\n\t\tif ( null === \$run_id ) {\n\t\t\treturn new WP_Error( 'ab_mcp_store_booking', 'A booking names its run and the bytes the run needs, zero or more. Pass both.' );\n\t\t}\n\t\t\$root = AB_MCP_Protected_Store::root();\n\t\tif ( is_wp_error( \$root ) ) {\n\t\t\treturn \$root;\n\t\t}\n\t\treturn AB_MCP_Protected_Store::writing(\n\t\t\t\$root,\n\t\t\tstatic function () use ( \$root, \$run_id ) {",
+			'replace' => "\t\t\$run_id = AB_MCP_Store_Inputs::read( 'budget.book_run', \$run_id );\n\t\tif ( false ) {\n\t\t\treturn new WP_Error( 'ab_mcp_store_booking', 'A booking names its run and the bytes the run needs, zero or more. Pass both.' );\n\t\t}\n\t\t\$root = AB_MCP_Protected_Store::root();\n\t\tif ( is_wp_error( \$root ) ) {\n\t\t\treturn \$root;\n\t\t}\n\t\treturn AB_MCP_Protected_Store::writing(\n\t\t\t\$root,\n\t\t\tstatic function () use ( \$root, \$run_id ) {",
+			'run'     => $it( 'StoreInputsTest', 'testEveryWrongFormOfARowReachesItsConsumerInTheStoreAsUnknown' ),
+			'expect'  => '/testEveryWrongFormOfARowReachesItsConsumerInTheStoreAsUnknown/',
+		),
+		array(
+			'id'      => 'ablage/c1-open-declared',
+			'clause'  => 'open(): declared bytes not of their row (budget.declared) open no group',
+			'file'    => $ps,
+			'search'  => "\t\tif ( null === \$declared ) {\n\t\t\treturn new WP_Error( 'ab_mcp_store_declare', __( 'The bytes a group declares are a whole number of 0 or more. Pass them so, or none.', 'alphabridge-mcp' ) );",
+			'replace' => "\t\tif ( false ) {\n\t\t\treturn new WP_Error( 'ab_mcp_store_declare', __( 'The bytes a group declares are a whole number of 0 or more. Pass them so, or none.', 'alphabridge-mcp' ) );",
+			'run'     => $it( 'StoreInputsTest', 'testOpenTakesTheDeclaredBytesOfAGroupOnlyInTheFormOfTheirRow' ),
+			'expect'  => '/testOpenTakesTheDeclaredBytesOfAGroupOnlyInTheFormOfTheirRow/',
+		),
 	)
 );

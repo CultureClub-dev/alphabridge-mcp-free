@@ -88,6 +88,7 @@ require_once AB_MCP_DIR . 'includes/sync/class-sync-backup.php';
 require_once AB_MCP_DIR . 'includes/sync/class-sync-resources.php';
 require_once AB_MCP_DIR . 'includes/sync/class-sync-run.php';
 require_once AB_MCP_DIR . 'includes/sync/class-sync-engine.php';
+require_once dirname( __DIR__ ) . '/WrongForms.php';
 
 final class StoreRemoverTest extends TestCase {
 
@@ -2131,7 +2132,7 @@ final class StoreRemoverTest extends TestCase {
 			self::assertTrue( \AB_MCP_Sync_Run::set_state( 14, 'open', 'closed_done', true ) );
 			self::assertNull( \AB_MCP_Sync_Run::now(), 'No time of a clock that gives none.' );
 			// Where a time would be written, nothing is written.
-			$run = array(
+			$run_args = array(
 				'type'        => 'push',
 				'source_id'   => 's',
 				'key_id'      => 'k',
@@ -2141,7 +2142,7 @@ final class StoreRemoverTest extends TestCase {
 				'user_id'     => 1,
 				'connection'  => 'x',
 			);
-			self::assertSame( 'ab_mcp_sync_run_clock', \AB_MCP_Sync_Run::create( $run, array( array() ) )->get_error_code(), 'No run made.' );
+			self::assertSame( 'ab_mcp_sync_run_clock', \AB_MCP_Sync_Run::create( $run_args, array( array() ) )->get_error_code(), 'No run made.' );
 			self::assertSame( 'ab_mcp_sync_run_clock', \AB_MCP_Sync_Engine::context( array() )->get_error_code(), 'No step taken.' );
 			$restore = new ReflectionMethod( \AB_MCP_Sync_Engine::class, 'restore_part' );
 			self::assertSame( 'unclear', $restore->invoke( null, array( 'part' => 'row' ), 1, array(), str_repeat( 'd', 64 ), 'AB_MCP_Sync_Post_Writer' )['state'], 'Nothing put back.' );
@@ -2155,6 +2156,29 @@ final class StoreRemoverTest extends TestCase {
 		self::assertSame( 0, $run['forward_closed_at'], 'And no qualified close of it (0, not NULL).' );
 		AB_MCP_Protected_Store::cleanup( $now + 40 * 86400 );
 		self::assertSame( array( 'post-1' ), self::names( $backup['dir'] ), 'Weeks later its backup stays.' );
+		// Each wrong form of the clock's row (period.clock, WrongForms) at
+		// each of its consumers: a close stores no period and no qualified
+		// close, no run is made, no step taken, nothing put back.
+		$forms = \AlphaBridge\Tests\WrongForms::of( \AB_MCP_Store_Inputs::TABLE['period.clock']['form'], $now );
+		self::assertGreaterThan( 15, count( $forms ) );
+		$id = 200;
+		add_filter( AB_MCP_Protected_Store::BACKUP_DAYS_FILTER, $days );
+		foreach ( $forms as $what => $value ) {
+			self::run_planned( ++$id, 'push', 'open', null );
+			\AB_MCP_Sync_Run::$clock = static fn() => $value;
+			try {
+				self::assertNull( \AB_MCP_Sync_Run::now(), "$what: no time" );
+				self::assertTrue( \AB_MCP_Sync_Run::set_state( $id, 'open', 'closed_done', true ), $what );
+				self::assertSame( 'ab_mcp_sync_run_clock', \AB_MCP_Sync_Run::create( $run_args, array( array() ) )->get_error_code(), "$what: no run made" );
+				self::assertSame( 'ab_mcp_sync_run_clock', \AB_MCP_Sync_Engine::context( array() )->get_error_code(), "$what: no step taken" );
+				self::assertSame( 'unclear', $restore->invoke( null, array( 'part' => 'row' ), 1, array(), str_repeat( 'd', 64 ), 'AB_MCP_Sync_Post_Writer' )['state'], "$what: nothing put back" );
+			} finally {
+				\AB_MCP_Sync_Run::$clock = null;
+			}
+			$row = \AB_MCP_Sync_Run::get( $id );
+			self::assertSame( array( 0, 0 ), array( $row['keep_until'], $row['forward_closed_at'] ), "$what: no period, no qualified close" );
+		}
+		remove_filter( AB_MCP_Protected_Store::BACKUP_DAYS_FILTER, $days );
 	}
 
 	public function testTheCleanUpOfARequestThatLoadedNoRunReadsTheRetentionOfTheBackups(): void {
