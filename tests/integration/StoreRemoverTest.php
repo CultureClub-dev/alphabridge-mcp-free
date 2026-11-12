@@ -1207,10 +1207,13 @@ final class StoreRemoverTest extends TestCase {
 		$m = $this->marked( 4, 'closed' );
 		touch( $m['group'], time() - 2 * 86400 );
 		$calls = self::failing( array( 'lstat' => array( $m['side'] ) ) );
-		AB_MCP_Protected_Store::cleanup( time() );
+		$done  = AB_MCP_Protected_Store::cleanup( time() );
 		AB_MCP_Test_Seam::restore_all();
 		self::assertSame( $m['kept']['tree'], self::snapshot( $m['tree'] ) );
 		self::assertFileExists( $m['side'] );
+		// Behebung 3: a folder without its sidecar stays and counts unknown;
+		// this one has its sidecar, so nothing counts.
+		self::assertSame( 0, $done['unknown'] );
 	}
 
 	public function testAnAreaWhoseEntriesCannotBeStatedLosesNothing(): void {
@@ -1872,21 +1875,40 @@ final class StoreRemoverTest extends TestCase {
 	}
 
 	public function testATimeOfTheCleanUpThatIsNotKnownRemovesNoGroup(): void {
-		$report = self::aged_group( 'reports', 0, 30 * 86400 );
+		// A report of no run (by its age) and a backup of a run whose row
+		// lets it go (closed, past its period, no qualified close): neither
+		// goes by a time that is not known.
+		self::run_row( 10, 'closed_aborted', time() - 10 );
+		$report = self::aged_group( 'reports', 0, 0 );
+		$backup = self::aged_group( 'backups', 10, 0 );
+		self::age( $report, 30 * 86400 );
+		self::age( $backup, 30 * 86400 );
 		foreach ( array( 'abc', 0, -5, 1.5, '1800000000' ) as $at ) {
 			$done = AB_MCP_Protected_Store::cleanup( $at );
 			self::assertSame( array( 'post-1' ), self::names( $report['dir'] ), 'now ' . var_export( $at, true ) . ': the report stays.' );
-			self::assertSame( 1, $done['unknown'], 'now ' . var_export( $at, true ) . ': counted unknown.' );
+			self::assertSame( array( 'post-1' ), self::names( $backup['dir'] ), 'now ' . var_export( $at, true ) . ': the backup stays.' );
+			self::assertSame( 2, $done['unknown'], 'now ' . var_export( $at, true ) . ': both counted unknown.' );
 		}
 		AB_MCP_Protected_Store::cleanup( time() );
 		self::assertFileDoesNotExist( $report['dir'], 'The time known: it goes by its time.' );
+		self::assertFileDoesNotExist( $backup['dir'], 'The time known: it goes by the row of its run.' );
 	}
 
 	public function testWithoutTheTablesOfTheRunsTheGroupsOfARunStayAndThoseOfNoRunGoByTheirTime(): void {
-		$bound = self::aged_group( 'reports', 7, 0 );
-		$free  = self::aged_group( 'reports', 0, 0 );
+		$bound   = self::aged_group( 'reports', 7, 0 );
+		$free    = self::aged_group( 'reports', 0, 0 );
+		$foreign = self::aged_group( 'reports', 7, 0 );
 		self::age( $bound, 30 * 86400 );
 		self::age( $free, 30 * 86400 );
+		// Another installation's sidecar of a group of run 7, written two
+		// days ago: it goes only where the retention lets its group go.
+		self::sidecar_as(
+			$foreign['dir'] . '.json',
+			array(
+				'gid'     => str_repeat( 'f', 32 ),
+				'created' => time() - 30 * 86400,
+			)
+		);
 		$status = new \ReflectionProperty( AB_MCP_Sync_Schema::class, 'status' );
 		$status->setValue( null, array( 'available' => false, 'reason' => 'missing' ) );
 		try {
@@ -1895,7 +1917,8 @@ final class StoreRemoverTest extends TestCase {
 			AB_MCP_Sync_Schema::forget();
 		}
 		self::assertSame( array( 'post-1' ), self::names( $bound['dir'] ), 'A group of a run stays while the runs cannot be read.' );
-		self::assertSame( 1, $done['unknown'] );
+		self::assertSame( array( 'post-1' ), self::names( $foreign['dir'] ), 'Also the group of a foreign sidecar of a run.' );
+		self::assertSame( 2, $done['unknown'], 'Both counted unknown.' );
 		self::assertFileDoesNotExist( $free['dir'], 'A group of no run needs no runs: it goes by its time (Behebung 3, B4).' );
 	}
 
