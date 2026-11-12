@@ -3417,19 +3417,31 @@ final class AB_MCP_Protected_Store {
 		$backups = AB_MCP_Sync_Schema::backup_rows( $now );
 		$removed = 0;
 		$kept    = 0;
+		$calls   = self::calls();
 		foreach ( self::AREAS as $area ) {
-			$dir = self::way( $root, array( $area ) );
-			if ( null === $dir ) {
+			$dir   = self::way( $root, array( $area ) );
+			$names = null === $dir ? false : $calls->scandir( $dir );
+			if ( false === $names ) {
 				continue;
 			}
-			foreach ( (array) scandir( $dir ) as $file ) {
-				$file = (string) $file;
+			foreach ( $names as $file ) {
 				$path = $dir . '/' . $file;
 				if ( preg_match( '/^([0-9a-f]{40})\.json\z/', $file, $m ) && self::plain( $path, 'file' ) ) {
-					$entry = self::read_entry( $path, $area );
-					if ( null === $entry || self::group_name( $area, $entry['gid'], $id ) !== $m[1] ) {
-						// Not a sidecar this store wrote: gone after a day.
-						if ( ( $now - (int) @filemtime( $path ) ) >= 86400 ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+					$state = self::sidecar( $path, $area );
+					if ( 'unknown' === $state[0] ) {
+						// It cannot be read, or is no sidecar of the format:
+						// nothing says whose it is, so its group stays (A1).
+						continue;
+					}
+					$entry = $state[1];
+					if ( 'other' === $state[0] || self::group_name( $area, $entry['gid'], $id ) !== $m[1] ) {
+						// Read whole and of the format, but another area's or
+						// another installation's: after a day, and only where
+						// the retention lets its group go, asked with the time
+						// the entry names and with each area that is known of
+						// it, the one it names and the one it lies in.
+						$at = $calls->lstat( $path );
+						if ( false !== $at && ( $now - (int) $at['mtime'] ) >= 86400 && ! self::kept( $entry, $now, $open, $backups ) && ! self::kept( array( 'area' => $area ) + $entry, $now, $open, $backups ) ) {
 							self::delete_group( $root, $area, $m[1] );
 						}
 						continue;
@@ -3443,9 +3455,13 @@ final class AB_MCP_Protected_Store {
 					if ( self::delete_group( $root, $area, $m[1] ) ) {
 						++$removed;
 					}
-				} elseif ( preg_match( '/^[0-9a-f]{40}\z/', $file ) && self::plain( $path, 'dir' ) && false === @lstat( $path . '.json' ) && ( $now - (int) @filemtime( $path ) ) >= 86400 ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
-					// A folder without its sidecar (an interrupted removal).
-					self::delete_path( $root, $path );
+				} elseif ( preg_match( '/^[0-9a-f]{40}\z/', $file ) && ! in_array( $file . '.json', $names, true ) && self::plain( $path, 'dir' ) ) {
+					// A folder without its sidecar (an interrupted removal),
+					// absent by the listing of the area, after a day.
+					$at = $calls->lstat( $path );
+					if ( false !== $at && ( $now - (int) $at['mtime'] ) >= 86400 ) {
+						self::delete_path( $root, $path );
+					}
 				}
 			}
 		}
@@ -3468,7 +3484,8 @@ final class AB_MCP_Protected_Store {
 				continue;
 			}
 			$mark = self::read_mark( $root, $mid );
-			$old  = is_array( $mark ) ? ( 'closed' === $mark['state'] && ( $now - (int) $mark['closed'] ) >= self::KEEP['marks'] ) : ( null === $mark && ( $now - (int) @filemtime( $marks . '/' . $mid ) ) >= self::KEEP['marks'] ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			$at   = null === $mark ? self::calls()->lstat( $marks . '/' . $mid ) : false;
+			$old  = is_array( $mark ) ? ( 'closed' === $mark['state'] && ( $now - (int) $mark['closed'] ) >= self::KEEP['marks'] ) : ( false !== $at && ( $now - (int) $at['mtime'] ) >= self::KEEP['marks'] );
 			if ( $old ) {
 				self::delete_path( $root, $marks . '/' . $mid );
 			}
@@ -3589,25 +3606,46 @@ final class AB_MCP_Protected_Store {
 	 * @return array|null
 	 */
 	private static function read_entry( $side, $area ) {
-		if ( is_link( $side ) || ! is_file( $side ) || @filesize( $side ) > 4096 ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
-			return null;
-		}
-		$e = json_decode( (string) @file_get_contents( $side ), true ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
-		if ( ! is_array( $e ) || ! isset( $e['format'], $e['gid'], $e['area'], $e['created'] ) || self::FORMAT !== $e['format'] || $area !== $e['area'] || ! is_string( $e['gid'] ) || ! preg_match( '/^[0-9a-f]{32}\z/', $e['gid'] ) ) {
-			return null;
+		$state = self::sidecar( $side, $area );
+		return 'own' === $state[0] ? $state[1] : null;
+	}
+
+	/**
+	 * A sidecar read through the seam, by what can be said of it (Behebung 1,
+	 * A1): 'own' (an entry of the format for this area), 'other' (read whole
+	 * and of the format, but for another area of the store, named by itself),
+	 * or 'unknown' (it cannot be read, is a link or too large, is no JSON, or
+	 * a field kept() decides by is missing or not of its type: the area, the
+	 * time it was made, the run where named). No field is made up: what
+	 * cannot be said keeps its group. Whether an 'own' entry is this
+	 * installation's is sweep()'s question (group_name()). A sidecar that is
+	 * not there is not read here: sweep() reads only what its area lists.
+	 *
+	 * @param string $side File.
+	 * @param string $area Area it lies in.
+	 * @return array{0:string,1:array|null}
+	 */
+	private static function sidecar( $side, $area ) {
+		$raw = self::calls()->read( $side, 4096 );
+		$e   = false === $raw ? null : json_decode( (string) $raw, true );
+		if ( ! is_array( $e ) || ! isset( $e['format'], $e['gid'], $e['area'], $e['created'] ) || self::FORMAT !== $e['format'] || ! is_string( $e['gid'] ) || ! preg_match( '/^[0-9a-f]{32}\z/', $e['gid'] ) || ! in_array( $e['area'], self::AREAS, true ) || ! is_int( $e['created'] ) || ( isset( $e['run_id'] ) && ! is_int( $e['run_id'] ) ) ) {
+			return array( 'unknown', null );
 		}
 		return array(
-			'format'   => self::FORMAT,
-			'gid'      => $e['gid'],
-			'area'     => $area,
-			'created'  => (int) $e['created'],
-			'user_id'  => isset( $e['user_id'] ) ? (int) $e['user_id'] : 0,
-			'run_id'   => isset( $e['run_id'] ) ? max( 0, (int) $e['run_id'] ) : 0,
-			'declared' => isset( $e['declared'] ) ? max( 0, (int) $e['declared'] ) : 0,
-			'used'     => isset( $e['used'] ) ? max( 0, (int) $e['used'] ) : 0,
-			'label'    => isset( $e['label'] ) && is_string( $e['label'] ) ? $e['label'] : '',
-			'closed'   => isset( $e['closed'] ) && true === $e['closed'],
-			'binding'  => self::binding( isset( $e['binding'] ) ? $e['binding'] : '' ),
+			$area === $e['area'] ? 'own' : 'other',
+			array(
+				'format'   => self::FORMAT,
+				'gid'      => $e['gid'],
+				'area'     => $e['area'],
+				'created'  => $e['created'],
+				'user_id'  => isset( $e['user_id'] ) ? (int) $e['user_id'] : 0,
+				'run_id'   => isset( $e['run_id'] ) ? max( 0, $e['run_id'] ) : 0,
+				'declared' => isset( $e['declared'] ) ? max( 0, (int) $e['declared'] ) : 0,
+				'used'     => isset( $e['used'] ) ? max( 0, (int) $e['used'] ) : 0,
+				'label'    => isset( $e['label'] ) && is_string( $e['label'] ) ? $e['label'] : '',
+				'closed'   => isset( $e['closed'] ) && true === $e['closed'],
+				'binding'  => self::binding( isset( $e['binding'] ) ? $e['binding'] : '' ),
+			),
 		);
 	}
 
