@@ -506,7 +506,7 @@ final class AB_MCP_Sync_Said {
 			'api.wordpress.org knows no checksums of its version and language' => __( 'api.wordpress.org knows no checksums of its version and language', 'alphabridge-mcp' ),
 			'api.wordpress.org was not reached' => __( 'api.wordpress.org was not reached', 'alphabridge-mcp' ),
 			'it could not be hashed within one call' => __( 'it could not be hashed within one call', 'alphabridge-mcp' ),
-			'it holds more files than one manifest holds' => __( 'it holds more files than one manifest holds', 'alphabridge-mcp' ),
+			'it holds more files and folders than one manifest holds' => __( 'it holds more files and folders than one manifest holds', 'alphabridge-mcp' ),
 			'its files do not fit into one package' => __( 'its files do not fit into one package', 'alphabridge-mcp' ),
 			'its version of WordPress could not be read' => __( 'its version of WordPress could not be read', 'alphabridge-mcp' ),
 			'the answer of api.wordpress.org held no checksums' => __( 'the answer of api.wordpress.org held no checksums', 'alphabridge-mcp' ),
@@ -532,6 +532,8 @@ final class AB_MCP_Sync_Said {
 			'It could not be read whole on %1$s (%2$s).' => __( 'It could not be read whole on %1$s (%2$s).', 'alphabridge-mcp' ),
 			/* translators: %s: the part of a unit (files, activation). */
 			'Its pair holds no base of the part %s.' => __( 'Its pair holds no base of the part %s.', 'alphabridge-mcp' ),
+			/* translators: %s: the staging site, or this site. */
+			'The version of AlphaBridge itself could not be read on %s: it is not compared, and never taken over.' => __( 'The version of AlphaBridge itself could not be read on %s: it is not compared, and never taken over.', 'alphabridge-mcp' ),
 			/* translators: 1: the staging site, or this site, 2: why, a part of a sentence. */
 			'Whether it is on %1$s is not known: the folder it would lie in could not be read whole there (%2$s).' => __( 'Whether it is on %1$s is not known: the folder it would lie in could not be read whole there (%2$s).', 'alphabridge-mcp' ),
 			/* translators: %s: the state of the pair, as the tools name it (unclear, residual). */

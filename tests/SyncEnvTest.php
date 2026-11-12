@@ -1231,6 +1231,15 @@ final class SyncEnvTest extends TestCase {
 		$e = self::one( $own, null );
 		self::assertSame( array( 'only_staging', 'locked', array( 'code:own', 'Z8' ) ), array( $e['result'], $e['action'], self::lock_of( $e ) ), 'On staging only (Pro there, not here): never created here either.' );
 		self::assertCount( 1, $e['locks'], 'No lock of a takeover beside it.' );
+		// GitHub-Codex on ed1e512: a version not read is never the same.
+		$unknown = self::unit( 'mu_plugin', 'alphabridge-mcp', array( 'form' => 'own', 'own' => true, 'hash' => null, 'version' => null, 'files' => 0, 'bytes' => 0 ) );
+		$e       = self::one( $unknown, $unknown );
+		self::assertSame( array( 'not_compared', 'locked', array( 'code:own', 'Z8' ) ), array( $e['result'], $e['action'], self::lock_of( $e ) ), 'Both versions not read: not «the same».' );
+		self::assertSame( 'The version of AlphaBridge itself could not be read on the staging site: it is not compared, and never taken over.', $e['why'] );
+		$known = array( 'version' => '4.19.0' ) + $unknown;
+		self::assertSame( 'not_compared', self::one( $known, $unknown )['result'], 'One not read.' );
+		self::assertStringContainsString( 'on this site', self::one( $known, $unknown )['why'] );
+		self::assertSame( 'same_value', self::one( $known, $known )['result'], 'Both read, the same.' );
 	}
 
 	public function testThePathsOfAUnitWhoseFilesDifferAreShownNeverByMtime(): void {

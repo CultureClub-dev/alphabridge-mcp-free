@@ -434,6 +434,9 @@ final class SyncFileManifestTest extends TestCase {
 			}
 			private function other( $stat ) {
 				if ( is_array( $stat ) && ++$this->seen === $this->nth ) {
+					if ( '*' === $this->field ) {
+						return false;
+					}
 					$stat[ $this->field ] = (int) $stat[ $this->field ] + 1;
 				}
 				return $stat;
@@ -479,7 +482,7 @@ final class SyncFileManifestTest extends TestCase {
 				'lstat() before the opening' => array( 'lstat', 1 ),
 				'fstat() before the reading' => array( 'fstat', 1 ),
 				'fstat() after the reading'  => array( 'fstat', 2 ),
-				'lstat() after the reading'  => array( 'lstat', 2 ),
+				'lstat() once the unit is read' => array( 'lstat', 2 ),
 			);
 			foreach ( $moments as $moment => list( $method, $nth ) ) {
 				AB_MCP_Test_Seam::install( AB_MCP_Sync_File_Manifest::class, 'naht_sync_file_manifest', self::told( $method, $path, $nth, $field ) );
@@ -497,9 +500,10 @@ final class SyncFileManifestTest extends TestCase {
 		self::assertSame( array( false, 'unreadable', null, array() ), array( $read['complete'], $read['cause'], $read['hash'], $read['entries'] ), 'fstat() after the reading gave no answer.' );
 		self::assertSame( array( 'lstat', 'lstat', 'lstat', 'open', 'fstat', 'read', 'read', 'fstat', 'close' ), array_values( array_filter( array_column( $seam->calls, 'method' ), static fn( $m ) => 'names' !== $m && 'limit' !== $m ) ), 'Ended at that call: no lstat() of the path after it.' );
 		AB_MCP_Test_Seam::restore_all();
-		// The path gone after the reading: changed, never hashed.
-		$this->seam( array( array( 'method' => 'lstat', 'nth' => 4, 'kind' => 'return', 'value' => false ) ) );
-		self::assertSame( 'changed', $this->read()['cause'], 'The path names no file after the reading.' );
+		// The path gone once the unit is read: changed, never hashed.
+		AB_MCP_Test_Seam::install( AB_MCP_Sync_File_Manifest::class, 'naht_sync_file_manifest', self::told( 'lstat', $path, 2, '*' ) );
+		self::assertSame( 'changed', $this->read()['cause'], 'The path names no file once the unit is read.' );
+		AB_MCP_Test_Seam::restore_all();
 	}
 
 	public function testATimeLimitWithinAUnitStopsItOrMakesItTooLarge(): void {
@@ -526,7 +530,9 @@ final class SyncFileManifestTest extends TestCase {
 			$t += 1.0;
 			return $t;
 		};
-		$read = $this->read( 'big', 'live', 101.5, true );
+		// Before the entry and before the file the clock says 101 and 102;
+		// after the first part 103, after the second 104.
+		$read = $this->read( 'big', 'live', 103.5, true );
 		self::assertSame( array( false, 'too_large' ), array( $read['complete'], $read['cause'] ), 'Within the file, not only after it.' );
 	}
 
@@ -534,11 +540,94 @@ final class SyncFileManifestTest extends TestCase {
 		$this->shop();
 		self::assertSame( 100000, AB_MCP_Sync_File_Manifest::MAX_FILES );
 		self::assertSame( AB_MCP_Sync_File_Manifest::MAX_FILES, ( new AB_MCP_Sync_File_Manifest_Calls() )->limit() );
-		$this->seam( array( array( 'method' => 'limit', 'kind' => 'return', 'value' => 3 ) ) );
-		self::assertTrue( $this->read()['complete'], 'As many files as it holds.' );
+		// shop: the folder inc and three files, four entries.
+		$this->seam( array( array( 'method' => 'limit', 'kind' => 'return', 'value' => 4 ) ) );
+		self::assertTrue( $this->read()['complete'], 'As many files and folders as it holds.' );
 		AB_MCP_Test_Seam::restore_all();
-		$this->seam( array( array( 'method' => 'limit', 'kind' => 'return', 'value' => 2 ) ) );
+		$this->seam( array( array( 'method' => 'limit', 'kind' => 'return', 'value' => 3 ) ) );
 		$read = $this->read();
 		self::assertSame( array( false, 'too_many', null ), array( $read['complete'], $read['cause'], $read['hash'] ), 'One more: no hash.' );
+		AB_MCP_Test_Seam::restore_all();
+		// Folders count as well (GitHub-Codex on ed1e512, P2): empty ones only.
+		foreach ( array( 'a', 'b', 'c' ) as $empty ) {
+			mkdir( $this->dir . '/plugins/leer/' . $empty, 0755, true );
+		}
+		$this->seam( array( array( 'method' => 'limit', 'kind' => 'return', 'value' => 2 ) ) );
+		self::assertSame( array( false, 'too_many' ), array( $this->read( 'leer' )['complete'], $this->read( 'leer' )['cause'] ), 'Three empty folders past a limit of two.' );
 	}
+
+	public function testTheTimeOfTheCallIsAskedBeforeEachFolderAndFileAlsoEmptyOnes(): void {
+		// GitHub-Codex on ed1e512, P2: an empty folder and a file of 0 bytes,
+		// the time of the call over before the unit is read.
+		mkdir( $this->dir . '/plugins/leicht/leer', 0755, true );
+		$this->file( 'plugins/leicht/null.txt', '' );
+		$asked                  = 0;
+		AB_MCP_Sync_Env::$clock = static function () use ( &$asked ) {
+			++$asked;
+			return 200.0;
+		};
+		$read = $this->read( 'leicht', 'live', 100.0, true );
+		self::assertSame( array( false, 'too_large', null ), array( $read['complete'], $read['cause'], $read['hash'] ), 'Over before it was read: too large where it had a whole call.' );
+		self::assertGreaterThan( 0, $asked, 'The clock was asked.' );
+		$read = $this->read( 'leicht', 'live', 100.0, false );
+		self::assertSame( array( true, null ), array( $read['stopped'], $read['hash'] ), 'Begun late in a call: stopped.' );
+		// A unit of empty folders only.
+		foreach ( array( 'a', 'b' ) as $empty ) {
+			mkdir( $this->dir . '/plugins/nur-ordner/' . $empty, 0755, true );
+		}
+		self::assertSame( 'too_large', $this->read( 'nur-ordner', 'live', 100.0, true )['cause'], 'No file, only folders: the clock is asked all the same.' );
+		// A unit of one file of 0 bytes.
+		$this->file( 'plugins/null.php', '' );
+		self::assertSame( 'too_large', $this->read( 'null.php', 'live', 100.0, true )['cause'] );
+		// In time: whole.
+		AB_MCP_Sync_Env::$clock = static fn() => 50.0;
+		self::assertTrue( $this->read( 'leicht', 'live', 100.0, true )['complete'] );
+	}
+
+	public function testAFolderOrFileAddedRemovedOrReplacedWhileTheUnitIsReadGivesNoHash(): void {
+		// GitHub-Codex on ed1e512, P2 (Z1, gleichzeitiger Schreiber): what
+		// the listing of a folder did not see, or a file changed after it
+		// was hashed, before the unit is read whole.
+		$this->shop();
+		$plugins = $this->dir . '/plugins/shop';
+		$whole   = $this->read()['hash'];
+		$cases   = array(
+			'a file added to a folder after it was listed'  => static function () use ( $plugins ) {
+				file_put_contents( $plugins . '/inc/neu.php', '<?php // neu' );
+			},
+			'a folder added after it was listed'            => static function () use ( $plugins ) {
+				mkdir( $plugins . '/neu' );
+			},
+			'a file hashed before, removed'                 => static function () use ( $plugins ) {
+				unlink( $plugins . '/inc/a.php' );
+			},
+			'a file hashed before, replaced (same size and time)' => static function () use ( $plugins ) {
+				file_put_contents( $plugins . '/inc/a.neu', '<?php // b' );
+				touch( $plugins . '/inc/a.neu', 1700000000 );
+				rename( $plugins . '/inc/a.neu', $plugins . '/inc/a.php' );
+			},
+		);
+		foreach ( $cases as $case => $writer ) {
+			// The writer comes when the last file (shop.php) is opened: inc and
+			// its file are read already.
+			$this->seam( array( array( 'method' => 'open', 'nth' => 3, 'kind' => 'before', 'before' => $writer ) ) );
+			$read = $this->read();
+			AB_MCP_Test_Seam::restore_all();
+			self::assertSame( array( false, 'changed', null, array() ), array( $read['complete'], $read['cause'], $read['hash'], $read['entries'] ), $case );
+			self::remove( $plugins );
+			$this->shop();
+		}
+		self::assertSame( $whole, $this->read()['hash'], 'Read again as it is: whole, the same hash.' );
+		// A folder that cannot be listed again, or a call that throws then: unreadable.
+		$this->seam( array( array( 'method' => 'names', 'nth' => 3, 'kind' => 'return', 'value' => false ) ) );
+		self::assertSame( 'unreadable', $this->read()['cause'] );
+		AB_MCP_Test_Seam::restore_all();
+		foreach ( array( 'names' => 3, 'lstat' => 6 ) as $method => $nth ) {
+			$this->seam( array( array( 'method' => $method, 'nth' => $nth, 'kind' => 'throw', 'message' => 'gone' ) ) );
+			$read = $this->read();
+			AB_MCP_Test_Seam::restore_all();
+			self::assertSame( array( false, 'unreadable', null ), array( $read['complete'], $read['cause'], $read['hash'] ), "$method once the unit is read throws." );
+		}
+	}
+
 }

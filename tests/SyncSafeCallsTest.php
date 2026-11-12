@@ -358,7 +358,7 @@ final class SyncSafeCallsTest extends TestCase {
 			'wp_update_term'            => array( 2, 'write_row() and restore_row(): the way forward and back of the row of a term (decisions 17 and 23).' ),
 		),
 		'class-sync-said.php' => array(
-			'__' => array( 264, 'text(): the reasons of the report, the locks of the environment among them, of the proposal of the pairs, the words and notes of the results and of the environment and the messages of AB_MCP_Outbound, said to a person in the language of the site where they are set into a refusal or a note or the copy of an answer (shown()); the stored English text is only the key, and the locale of the site and its bundled translation are read, no value the takeover compares or hashes (branch 13 text/z8, Codex rounds 2, 3 and 5; SyncSaidScanTest finds every such text).' ),
+			'__' => array( 265, 'text(): the reasons of the report, the locks of the environment among them, of the proposal of the pairs, the words and notes of the results and of the environment and the messages of AB_MCP_Outbound, said to a person in the language of the site where they are set into a refusal or a note or the copy of an answer (shown()); the stored English text is only the key, and the locale of the site and its bundled translation are read, no value the takeover compares or hashes (branch 13 text/z8, Codex rounds 2, 3 and 5; SyncSaidScanTest finds every such text).' ),
 			'_x' => array( 8, 'kind(): the word of a kind of an object in a note of the journal, as the page «Staging» says it; the locale of the site and its bundled translation are read, no value the takeover compares or hashes (branch 13 text/z8, Codex round 2, B1).' ),
 		),
 		'class-sync-resources.php' => array(

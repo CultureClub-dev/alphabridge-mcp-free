@@ -32,9 +32,12 @@
  * unit: what a plugin writes into its own folder is part of it. A folder
  * or file that cannot be read, a file that changes while it is read (its
  * size, time or identity differ before and after, or fewer bytes came than
- * it has), a unit with more files than MAX_FILES or one that does not fit
- * into the time of a whole call leave it without a hash, with why: not
- * compared (fail closed). Nothing is kept between two readings: every
+ * it has), a folder or file of the unit that is added, removed or replaced
+ * before the reading of the unit ends (every folder listed again, every
+ * file asked again at its path, still()), a unit with more files and
+ * folders than MAX_FILES or one that does not fit into the time of a whole
+ * call (asked before each folder and file and within each file) leave it
+ * without a hash, with why: not compared (fail closed). Nothing is kept between two readings: every
  * reading hashes every byte anew.
  *
  * THE CALLS TO THE OUTSIDE (plan 8.3, branch 2: reading and hashing files
@@ -159,7 +162,7 @@ final class AB_MCP_Sync_File_Manifest {
 	/** Bytes read at a time while a file is hashed. */
 	const CHUNK = 1048576;
 
-	/** Files of one unit at most; a unit with more has no hash (too_many). */
+	/** Files and folders of one unit at most (each entry walked); a unit with more has no hash (too_many). */
 	const MAX_FILES = 100000;
 
 	/** Why a unit has no hash. */
@@ -221,6 +224,24 @@ final class AB_MCP_Sync_File_Manifest {
 	 *               entries: [path, size, sha256, mtime] by strcmp() of the path.
 	 */
 	public static function unit( $base, $name, $side, $deadline, $first, $kind ) {
+		$read = self::whole( $base, $name, $side, $deadline, $first, $kind );
+		unset( $read['walked'], $read['dirs'], $read['stats'] );
+		return $read;
+	}
+
+	/**
+	 * unit(), with what it keeps while it reads: the entries walked, the
+	 * names of each folder as listed, the identity of each file as hashed.
+	 *
+	 * @param string $base     See unit().
+	 * @param string $name     See unit().
+	 * @param string $side     See unit().
+	 * @param float  $deadline See unit().
+	 * @param bool   $first    See unit().
+	 * @param string $kind     See unit().
+	 * @return array
+	 */
+	private static function whole( $base, $name, $side, $deadline, $first, $kind ) {
 		$acc = array(
 			'form'     => 'other',
 			'complete' => false,
@@ -231,6 +252,9 @@ final class AB_MCP_Sync_File_Manifest {
 			'files'    => 0,
 			'bytes'    => 0,
 			'entries'  => array(),
+			'walked'   => 0,
+			'dirs'     => array(),
+			'stats'    => array(),
 		);
 		$path = rtrim( (string) $base, '/' ) . '/' . (string) $name;
 		try {
@@ -264,6 +288,16 @@ final class AB_MCP_Sync_File_Manifest {
 		}
 		if ( 'done' !== $went ) {
 			return $acc;
+		}
+		// Nothing added, removed or replaced while the unit was read; a call
+		// that throws here is no answer either (fail closed).
+		try {
+			$moved = self::still( $acc );
+		} catch ( Throwable $e ) {
+			$moved = 'unreadable';
+		}
+		if ( null !== $moved ) {
+			return self::ended( $acc, $moved );
 		}
 		usort(
 			$acc['entries'],
@@ -362,7 +396,12 @@ final class AB_MCP_Sync_File_Manifest {
 		}
 		$names = array_values( array_diff( array_map( 'strval', $names ), array( '.', '..' ) ) );
 		usort( $names, 'strcmp' );
+		$acc['dirs'][ $dir ] = $names;
 		foreach ( $names as $name ) {
+			// The time of the call, before each entry (also an empty folder).
+			if ( self::now() >= $deadline ) {
+				return self::late( $acc, $first );
+			}
 			$path = $dir . '/' . $name;
 			$in   = '' === $rel ? $name : $rel . '/' . $name;
 			$stat = self::calls()->lstat( $path );
@@ -377,6 +416,9 @@ final class AB_MCP_Sync_File_Manifest {
 			if ( 0040000 === $type ) {
 				if ( in_array( $name, self::VCS, true ) ) {
 					return self::locked( $acc, $side, 'vcs' );
+				}
+				if ( ++$acc['walked'] > (int) self::calls()->limit() ) {
+					return self::end( $acc, 'too_many' );
 				}
 				$went = self::folder( $path, $in, $side, $deadline, $first, $acc );
 				if ( 'done' !== $went ) {
@@ -398,14 +440,17 @@ final class AB_MCP_Sync_File_Manifest {
 	/**
 	 * One regular file of a unit: hashed in parts from one open handle. The
 	 * bytes hashed are those of the file the path names from before it is
-	 * opened until after it is read: lstat() of the path before, fstat() of
-	 * the handle before and after the reading, lstat() of the path again
-	 * after it, all four the same in device, inode, size, mtime and ctime
-	 * (IDENTITY), and as many bytes read as the size says; else it changed
-	 * (Z1). So a file replaced at its path before it is opened or after
-	 * (also by a rename over it, also where the file system gives the new
-	 * file the inode of the old one), or written while it is read, gives no
-	 * hash, on every file system the same.
+	 * opened until the unit is read whole: lstat() of the path before,
+	 * fstat() of the handle before and after the reading, and lstat() of the
+	 * path again once every entry of the unit is read (still()), all the same
+	 * in device, inode, size, mtime and ctime (IDENTITY), and as many bytes
+	 * read as the size says; else it changed (Z1). So a file replaced at its
+	 * path before it is opened or after (also by a rename over it, also
+	 * where the file system gives the new file the inode of the old one), or
+	 * written while it is read, gives no hash, on every file system the
+	 * same. The time of the call is asked before the file is opened (also
+	 * one of 0 bytes) and after each part read; each file counts towards
+	 * MAX_FILES.
 	 *
 	 * @param string $path     The file.
 	 * @param string $rel      Its path in the unit.
@@ -417,7 +462,10 @@ final class AB_MCP_Sync_File_Manifest {
 	 */
 	private static function file( $path, $rel, array $stat, $deadline, $first, array &$acc ) {
 		$calls = self::calls();
-		if ( $acc['files'] >= (int) $calls->limit() ) {
+		if ( self::now() >= $deadline ) {
+			return self::late( $acc, $first );
+		}
+		if ( ++$acc['walked'] > (int) $calls->limit() ) {
 			return self::end( $acc, 'too_many' );
 		}
 		$handle = $calls->open( $path );
@@ -452,16 +500,48 @@ final class AB_MCP_Sync_File_Manifest {
 		if ( false === $after ) {
 			return self::end( $acc, 'unreadable' );
 		}
-		// The same bytes from its start to its end, while nothing wrote it,
-		// and the path still names that very file (no rename over it).
-		$again = $calls->lstat( $path );
-		if ( $read !== (int) $before['size'] || ! self::same( $before, $after ) || ! self::same( $before, $again ) ) {
+		// The same bytes from its start to its end, while nothing wrote it;
+		// whether the path still names it is asked once the unit is read
+		// (still()).
+		if ( $read !== (int) $before['size'] || ! self::same( $before, $after ) ) {
 			return self::end( $acc, 'changed' );
 		}
-		$acc['entries'][] = array( (string) $rel, $read, hash_final( $ctx ), (int) $before['mtime'] );
+		$acc['stats'][ $path ] = $before;
+		$acc['entries'][]      = array( (string) $rel, $read, hash_final( $ctx ), (int) $before['mtime'] );
 		++$acc['files'];
 		$acc['bytes'] += $read;
 		return 'done';
+	}
+
+	/**
+	 * Whether the unit is still as it was read, once every entry of it is
+	 * read: each folder lists the same names again (none added or removed
+	 * since), and each file at its path is the one hashed (IDENTITY; none
+	 * replaced, written or removed since). Null where it is; else why not
+	 * (changed, or unreadable where a folder cannot be listed again).
+	 *
+	 * @param array $acc The reading.
+	 * @return string|null
+	 */
+	private static function still( array $acc ) {
+		$calls = self::calls();
+		foreach ( $acc['dirs'] as $dir => $names ) {
+			$now = $calls->names( $dir );
+			if ( false === $now ) {
+				return 'unreadable';
+			}
+			$now = array_values( array_diff( array_map( 'strval', $now ), array( '.', '..' ) ) );
+			usort( $now, 'strcmp' );
+			if ( $now !== $names ) {
+				return 'changed';
+			}
+		}
+		foreach ( $acc['stats'] as $file => $stat ) {
+			if ( ! self::same( $stat, $calls->lstat( $file ) ) ) {
+				return 'changed';
+			}
+		}
+		return null;
 	}
 
 	/**
@@ -541,6 +621,8 @@ final class AB_MCP_Sync_File_Manifest {
 		$acc['cause']    = (string) $why;
 		$acc['hash']     = null;
 		$acc['entries']  = array();
+		$acc['dirs']     = array();
+		$acc['stats']    = array();
 		return $acc;
 	}
 

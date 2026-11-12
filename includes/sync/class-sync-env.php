@@ -1398,12 +1398,41 @@ final class AB_MCP_Sync_Env {
 				'form'     => 'own',
 				'complete' => true,
 				'own'      => true,
+				'version'  => self::own_version( $dir . '/' . $name ),
 			) + $none;
 		}
 		if ( 'unreadable' === $flag ) {
 			return array( 'cause' => 'unreadable' ) + $none;
 		}
 		return array( 'own' => false ) + AB_MCP_Sync_File_Manifest::unit( $dir, $name, $side, $deadline, $first, $kind );
+	}
+
+	/**
+	 * The version of AlphaBridge itself at a path, from the head of its file
+	 * (Version), or of a folder from the first file at its top (by strcmp())
+	 * that names a plugin and its version; null where none says it (GitHub-
+	 * Codex on ed1e512: a version not known is never «the same»).
+	 *
+	 * @param string $path Path.
+	 * @return string|null
+	 */
+	private static function own_version( $path ) {
+		$files = array( (string) $path );
+		if ( is_dir( $path ) ) {
+			$files = array();
+			foreach ( (array) self::names( $path ) as $name ) {
+				if ( '.php' === substr( (string) $name, -4 ) ) {
+					$files[] = $path . '/' . $name;
+				}
+			}
+		}
+		foreach ( $files as $file ) {
+			$head = self::head( $file, array( 'Plugin Name', 'Version' ) );
+			if ( '' !== $head['Version'] && ( ! is_dir( $path ) || '' !== $head['Plugin Name'] ) ) {
+				return self::name( $head['Version'] );
+			}
+		}
+		return null;
 	}
 
 	/**
@@ -1469,6 +1498,8 @@ final class AB_MCP_Sync_Env {
 				}
 				$fields['active'] = $active;
 			}
+		} elseif ( 'mu_plugin' === $kind && ! empty( $read['own'] ) ) {
+			$fields['version'] = $read['version'] ?? null;
 		} elseif ( 'theme' === $kind ) {
 			foreach ( $ctx['versions'] as $stylesheet => $version ) {
 				if ( (string) $stylesheet === $name || 0 === strpos( (string) $stylesheet, $name . '/' ) ) {

@@ -43,9 +43,25 @@ e('z1-before-same', 'Z1 file(): the file opened is the one lstat() saw: device, 
 e('z1-read-size', 'Z1 file(): as many bytes as the file has (halb gelesen)', FM,
   "$read !== (int) $before['size'] || ! self::same( $before, $after )", "! self::same( $before, $after )", 'man', 'testAReadingCutShortGivesNoHash')
 e('z1-after-same', 'Z1 file(): fstat() after the reading the same as before (a writer)', FM,
-  "$read !== (int) $before['size'] || ! self::same( $before, $after ) || ! self::same( $before, $again )", "$read !== (int) $before['size'] || ! self::same( $before, $again )", 'man', 'testEachFieldOfTheIdentityBeforeWhileAndAfterTheReadingCounts')
-e('z1-again-same', 'Z1 file(): the path names the same file after the reading, and a file at all (no rename over it, not gone; GitHub-Codex P2)', FM,
-  "! self::same( $before, $after ) || ! self::same( $before, $again ) ) {", "! self::same( $before, $after ) ) {", 'man', 'testAWriterWhileTheFileIsReadGivesNoHash')
+  "$read !== (int) $before['size'] || ! self::same( $before, $after ) ) {", "$read !== (int) $before['size'] ) {", 'man', 'testEachFieldOfTheIdentityBeforeWhileAndAfterTheReadingCounts')
+e('z1-still', 'Z1 whole(): the unit as it was read, once every entry is read: nothing added, removed or replaced (GitHub-Codex on ed1e512)', FM,
+  "\t\t\t$moved = self::still( $acc );", "\t\t\t$moved = null;", 'man', 'testAFolderOrFileAddedRemovedOrReplacedWhileTheUnitIsReadGivesNoHash')
+e('z1-still-names', 'Z1 still(): each folder lists the same names again', FM,
+  "\t\t\tif ( $now !== $names ) {", "\t\t\tif ( false ) {", 'man', 'testAFolderOrFileAddedRemovedOrReplacedWhileTheUnitIsReadGivesNoHash')
+e('z1-still-files', 'Z1 still(): each file at its path is the one hashed (also after a rename over it; GitHub-Codex P2)', FM,
+  "\t\t\tif ( ! self::same( $stat, $calls->lstat( $file ) ) ) {", "\t\t\tif ( false ) {", 'man', 'testAFolderOrFileAddedRemovedOrReplacedWhileTheUnitIsReadGivesNoHash')
+e('z1-still-dirs-kept', 'Z1 folder(): the names of each folder kept for still()', FM,
+  "\t\t$acc['dirs'][ $dir ] = $names;", '', 'man', 'testAFolderOrFileAddedRemovedOrReplacedWhileTheUnitIsReadGivesNoHash')
+e('z1-still-stats-kept', 'Z1 file(): the identity of each file hashed kept for still()', FM,
+  "\t\t$acc['stats'][ $path ] = $before;", '', 'man', 'testAWriterWhileTheFileIsReadGivesNoHash')
+e('z1-still-throw', 'Z1 whole(): a call that throws in still() is no answer (unreadable), never a hash', FM,
+  "\t\t} catch ( Throwable $e ) {\n\t\t\t$moved = 'unreadable';", "\t\t} catch ( Throwable $e ) {\n\t\t\t$moved = null;", 'man', 'testAFolderOrFileAddedRemovedOrReplacedWhileTheUnitIsReadGivesNoHash')
+e('z1-clock-entry', 'Z1 folder(): the time of the call before each entry, also an empty folder (GitHub-Codex on ed1e512)', FM,
+  "\t\t\t// The time of the call, before each entry (also an empty folder).\n\t\t\tif ( self::now() >= $deadline ) {", "\t\t\t// The time of the call, before each entry (also an empty folder).\n\t\t\tif ( false ) {", 'man', 'testTheTimeOfTheCallIsAskedBeforeEachFolderAndFileAlsoEmptyOnes')
+e('z1-clock-file', 'Z1 file(): the time of the call before a file is opened, also one of 0 bytes', FM,
+  "\t\t$calls = self::calls();\n\t\tif ( self::now() >= $deadline ) {", "\t\t$calls = self::calls();\n\t\tif ( false ) {", 'man', 'testTheTimeOfTheCallIsAskedBeforeEachFolderAndFileAlsoEmptyOnes')
+e('z1-too-many-folder', 'Z1 folder(): each folder counts towards MAX_FILES (GitHub-Codex on ed1e512)', FM,
+  "\t\t\t\tif ( ++$acc['walked'] > (int) self::calls()->limit() ) {", "\t\t\t\tif ( false ) {", 'man', 'testMoreFilesThanAManifestHoldsGiveNoHash')
 for field in ('dev', 'ino', 'size', 'mtime', 'ctime'):
     e('z1-identity-' + field, 'Z1 IDENTITY: ' + field + ' counts in every comparison of the file (Behebung 2)', FM,
       "\tconst IDENTITY = array( 'dev', 'ino', 'size', 'mtime', 'ctime' );", "\tconst IDENTITY = array( " + ', '.join("'" + f + "'" for f in ('dev', 'ino', 'size', 'mtime', 'ctime') if f != field) + " );", 'man', 'testEachFieldOfTheIdentityBeforeWhileAndAfterTheReadingCounts')
@@ -61,8 +77,8 @@ e('z1-too-large', 'Z1 late(): too large where it had a whole call', FM,
   "\t\tif ( $first ) {\n\t\t\treturn self::end( $acc, 'too_large' );", "\t\tif ( false ) {\n\t\t\treturn self::end( $acc, 'too_large' );", 'man', 'testATimeLimitWithinAUnitStopsItOrMakesItTooLarge')
 e('z1-stopped', 'Z1 late(): begun late, stopped for the next call', FM,
   "\t\t$acc['stopped'] = true;", '', 'man', 'testATimeLimitWithinAUnitStopsItOrMakesItTooLarge')
-e('z1-too-many', 'Z1 file(): no more files than a manifest holds', FM,
-  "\t\tif ( $acc['files'] >= (int) $calls->limit() ) {", "\t\tif ( $acc['files'] > (int) $calls->limit() ) {", 'man', 'testMoreFilesThanAManifestHoldsGiveNoHash')
+e('z1-too-many', 'Z1 file(): no more files and folders than a manifest holds (a file counts)', FM,
+  "\t\tif ( ++$acc['walked'] > (int) $calls->limit() ) {", "\t\tif ( ++$acc['walked'] > 1 + (int) $calls->limit() ) {", 'man', 'testMoreFilesThanAManifestHoldsGiveNoHash')
 e('z1-paths-only-live', 'paths(): a path only on this site', FM,
   "\t\t\t\t$out['only_live'][] = (string) $path;", '', 'man', 'testThePathsOfTwoManifestsDifferOnlyByContentsNeverByMtime')
 e('z1-paths-differs', 'paths(): a path on both sides with other contents, never by mtime', FM,
@@ -171,6 +187,12 @@ e('removed-no-base', 'unit_item(): removed on one side, a part without its base:
   "\t\t\t\t\tif ( null === $base ) {\n\t\t\t\t\t\treturn self::unit_entry(", "\t\t\t\t\tif ( false ) {\n\t\t\t\t\t\treturn self::unit_entry(", 'env', 'testAUnitRemovedOnOneSideAndChangedOnTheOtherIsAConflictWithTheRemoval')
 e('removed-not-read', 'unit_item(): removed on one side, a part of the other not read: not compared', DE,
   "\t\t\t\t\tif ( null === $have ) {", "\t\t\t\t\tif ( false ) {", 'env', 'testAUnitRemovedOnOneSideAndChangedOnTheOtherIsAConflictWithTheRemoval')
+e('own-version-known', 'E12 unit_item(): AlphaBridge itself with a version not read is never the same (GitHub-Codex on ed1e512)', DE,
+  "\t\t\t\tif ( ! empty( $line['own'] ) && ! is_string( $line['version'] ?? null ) ) {", "\t\t\t\tif ( false ) {", 'env', 'testAlphaBridgeItselfIsShownByItsVersionNeverTakenOver')
+e('own-version-read', 'E12 read_unit(): the version of AlphaBridge itself read from its head', EN,
+  "\t\t\t\t'version'  => self::own_version( $dir . '/' . $name ),", "\t\t\t\t'version'  => null,", 'it', 'testAlphaBridgeItselfInTheMustUseFolderIsReadWithItsVersion')
+e('own-version-mu', 'E12 unit_lines(): the version of AlphaBridge itself in the must-use folder on its line', EN,
+  "\t\t\t$fields['version'] = $read['version'] ?? null;", '', 'it', 'testAlphaBridgeItselfInTheMustUseFolderIsReadWithItsVersion')
 # ------------------------------------------------ Z35: the core
 e('z35-https', 'Z35 checksums(): only https', CC,
   "\tconst API = 'https://api.wordpress.org/core/checksums/1.0/';", "\tconst API = 'http://api.wordpress.org/core/checksums/1.0/';", 'core', 'testTheChecksumsAreAskedOverHttpsThroughTheOutboundWithoutARedirect')
@@ -261,7 +283,9 @@ out = ['<?php', '/**', ' * The clauses of the manifests of code and files (Z8b b
        ' * folder (rtrim() of the empty text is no folder: locked either way). A',
        ' * read() that fails in file() is listed (z1-read-false): where the next',
        ' * read() gives bytes, the file would be hashed whole without the clause',
-       ' * (Codex round 1, B7, corrected). same() in file() takes no type, so that a',
+       ' * (Codex round 1, B7, corrected). The guard of names() in still() is not',
+       ' * listed either (its TypeError is caught as unreadable, the same answer).',
+       ' * same() in file() takes no type, so that a',
        ' * call that failed is not caught as a TypeError in place of its clause',
        ' * (Behebung 3, z1-fstat-after).', ' *',
        ' * @package AlphaBridge_MCP', ' */', '',

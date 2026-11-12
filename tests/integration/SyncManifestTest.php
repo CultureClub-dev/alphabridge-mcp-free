@@ -133,7 +133,7 @@ final class SyncManifestTest extends TestCase {
 		AB_MCP_Test_Seam::restore_all();
 		AB_MCP_Sync_Report::$page = null;
 		foreach ( $this->made as $path ) {
-			if ( is_file( $path ) ) {
+			if ( is_link( $path ) || is_file( $path ) ) {
 				unlink( $path );
 			}
 		}
@@ -964,6 +964,23 @@ final class SyncManifestTest extends TestCase {
 		}
 		self::assertArrayNotHasKey( 'upload:ab-it-oben.jpg', $lines, 'In the file list of an attachment: no unit, also at the top.' );
 		self::assertSame( array( 'file', true ), array( $lines['upload:ab-it-frei-oben.txt']['form'], $lines['upload:ab-it-frei-oben.txt']['complete'] ), 'Outside every file list: a unit.' );
+	}
+
+	public function testAlphaBridgeItselfInTheMustUseFolderIsReadWithItsVersion(): void {
+		// GitHub-Codex on ed1e512, P2: AlphaBridge itself as a must-use unit
+		// (here a link to this plugin, its identity) shows its version.
+		$mu = AB_MCP_IT_Sites::docroot( 'a' ) . '/wp-content/mu-plugins';
+		if ( ! is_dir( $mu ) ) {
+			mkdir( $mu );
+			$this->folders[] = $mu;
+		}
+		$link = $mu . '/ab-it-selbst';
+		self::assertFalse( file_exists( $link ) || is_link( $link ) );
+		$this->made[] = $link;
+		symlink( rtrim( AB_MCP_DIR, '/' ), $link );
+		self::assertSame( 1, preg_match( '/^\s*\*\s*Version:\s*(\S+)/m', (string) file_get_contents( AB_MCP_DIR . 'alphabridge-mcp.php' ), $m ) );
+		$line = self::read_with( array() )['mu_plugin:ab-it-selbst'];
+		self::assertSame( array( 'own', true, $m[1], null ), array( $line['form'], $line['own'], $line['version'], $line['hash'] ), 'Shown by its version, not hashed.' );
 	}
 
 	public function testAnEndOfTheProcessOrItsTimeLimitWhileTheSeriesReadsLeavesNothing(): void {

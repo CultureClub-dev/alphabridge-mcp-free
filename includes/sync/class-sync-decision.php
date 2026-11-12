@@ -1277,6 +1277,13 @@ final class AB_MCP_Sync_Decision {
 		// version, never hashed nor taken over, not even where it is on one
 		// side only.
 		if ( ! empty( $s['own'] ) || ! empty( $l['own'] ) ) {
+			// A version not read is never the same (GitHub-Codex on ed1e512).
+			foreach ( array( 's' => $s, 'l' => $l ) as $side => $line ) {
+				if ( ! empty( $line['own'] ) && ! is_string( $line['version'] ?? null ) ) {
+					$entry['action'] = 'locked';
+					return self::unit_entry( $entry, array( self::code_lock( 'code:own' ) ), sprintf( 'The version of AlphaBridge itself could not be read on %s: it is not compared, and never taken over.', 's' === $side ? 'the staging site' : 'this site' ), $held );
+				}
+			}
 			$same            = ! empty( $s['own'] ) && ! empty( $l['own'] ) && $s['version'] === $l['version'];
 			$entry['result'] = $same ? 'same_value' : ( null === $s || null === $l ? ( null === $s ? 'only_live' : 'only_staging' ) : 'own_differs' );
 			if ( ! $same ) {
@@ -1565,7 +1572,7 @@ final class AB_MCP_Sync_Decision {
 			'unreadable'             => 'a folder or file of it could not be read',
 			'changed'                => 'a file of it changed while it was read',
 			'too_large'              => 'it could not be hashed within one call',
-			'too_many'               => 'it holds more files than one manifest holds',
+			'too_many'               => 'it holds more files and folders than one manifest holds',
 			'too_many_lines'         => 'its files do not fit into one package',
 			'unknown'                => 'WordPress names no such folder',
 			'by_code'                => 'code decides where these files lie, a filter or a network of sites',

@@ -416,7 +416,7 @@ final class BundledTranslationsTest extends TestCase {
 		$pending = self::pending();
 		$texts   = self::gettext_texts();
 		self::assertSame( array_values( array_unique( $pending ) ), $pending, 'Each key once.' );
-		self::assertLessThanOrEqual( 74, count( $pending ), 'Z8b branch 2 left 74 texts to text/z8b (62, 5 with its Behebung 1, 7 with its Behebung 2); the list does not grow without its review.' );
+		self::assertLessThanOrEqual( 75, count( $pending ), 'Z8b branch 2 left 75 texts to text/z8b (62, 5 with its Behebung 1, 7 with its Behebung 2, 1 with its Behebung 4); the list does not grow without its review.' );
 		$mos = array();
 		foreach ( self::LOCALES as $locale ) {
 			$mos[ $locale ] = self::mo( self::file( $locale, 'mo' ) );
