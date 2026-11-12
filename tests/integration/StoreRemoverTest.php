@@ -28,7 +28,16 @@
  *   Free's uninstall.php and the call Pro makes (the store's uninstall()
  *   alone) do the same; with Pro there, Free's uninstall leaves all; a
  *   rename that fails or throws, and an end of the process between the two
- *   renames of the swap back, lose nothing.
+ *   renames of the swap back, lose nothing;
+ * - Behebung 1 (Codex round 1): unreadable is never empty, missing or
+ *   foreign. A sidecar that cannot be read, holds no entry of the format or
+ *   lacks what the retention needs keeps its group; a foreign one goes only
+ *   where the retention of each area known of it lets it go (A1); a path
+ *   whose lstat() fails is gone only where its folder lists it not, and
+ *   above a tree of an open mark never (A2); the uninstall asks for the lock
+ *   of each folder without waiting for its holder, about ten seconds in
+ *   all, and does nothing where it cannot take it (B3); the original goes
+ *   back by the hash of its manifest where the mark holds one (B5).
  *
  * The cases of F53 and F33 make their tree and mark on disk in the format
  * of put_mark(), the group through open(): they run on the base of branch 3
@@ -61,6 +70,7 @@ namespace AlphaBridge\Tests\Integration;
 
 use AB_MCP_IT_Process;
 use AB_MCP_IT_Sites;
+use AB_MCP_IT_Store_Calls;
 use AB_MCP_Payload_File;
 use AB_MCP_Protected_Store;
 use AB_MCP_Store_Budget;
@@ -70,6 +80,8 @@ use AB_MCP_Undo;
 use PHPUnit\Framework\TestCase;
 use ReflectionMethod;
 use RuntimeException;
+
+require_once __DIR__ . '/support/class-it-store-calls.php';
 
 final class StoreRemoverTest extends TestCase {
 
@@ -213,9 +225,12 @@ final class StoreRemoverTest extends TestCase {
 	 * @param string $target what lies at the target afterwards: 'other' (a
 	 *                       folder of its own), 'missing', 'new' (the new
 	 *                       version, renamed there from stage).
+	 * @param bool   $hash   Whether the mark holds the hash of the manifest
+	 *                       of the backup (Behebung 1, B5), as put_mark()
+	 *                       is given it by branch 5; else none.
 	 * @return array
 	 */
-	private function marked( int $run, string $state = 'open', string $target = 'other' ): array {
+	private function marked( int $run, string $state = 'open', string $target = 'other', bool $hash = false ): array {
 		$id     = AB_MCP_Protected_Store::install_id();
 		$root   = self::store();
 		$gid    = AB_MCP_Protected_Store::open( 'backups', array( 'run_id' => $run ) );
@@ -234,7 +249,7 @@ final class StoreRemoverTest extends TestCase {
 				'form' => 'folder',
 				'dev'  => (int) $orig['dev'],
 				'ino'  => (int) $orig['ino'],
-				'hash' => null,
+				'hash' => $hash ? self::hash_of( $tree ) : null,
 			),
 		);
 		$stage  = null;
@@ -303,6 +318,13 @@ final class StoreRemoverTest extends TestCase {
 		);
 	}
 
+	/** The hash of the manifest of a folder now, as the store reads a tree (read_tree()). */
+	private static function hash_of( string $path ): string {
+		$read = \AB_MCP_Sync_File_Manifest::unit( dirname( $path ), basename( $path ), 'live', microtime( true ) + 45, true, 'tree' );
+		self::assertTrue( $read['complete'] );
+		return (string) $read['hash'];
+	}
+
 	/** The tree with daten.tmp, the mark and the instruction byte for byte where they were. */
 	private static function assert_kept( array $m, string $why ): void {
 		self::assertSame( $m['kept']['tree'], self::snapshot( $m['tree'] ), "$why: the tree with daten.tmp stays byte for byte." );
@@ -319,9 +341,11 @@ final class StoreRemoverTest extends TestCase {
 	 * Watch every removal of the store through its seam (unlink, rmdir),
 	 * where the seam is there (it is from branch 3 on).
 	 *
-	 * @param array[] $faults Further faults of the plan.
+	 * @param array[]       $faults Further faults of the plan.
+	 * @param object|string $real   The real calls (AB_MCP_IT_Store_Calls for
+	 *                              a read error of one path).
 	 */
-	private static function watch( array $faults = array() ): void {
+	private static function watch( array $faults = array(), $real = 'AB_MCP_Protected_Store_Calls' ): void {
 		if ( ! property_exists( AB_MCP_Protected_Store::class, self::SEAM ) ) {
 			return;
 		}
@@ -331,7 +355,7 @@ final class StoreRemoverTest extends TestCase {
 		AB_MCP_Test_Seam::install(
 			AB_MCP_Protected_Store::class,
 			self::SEAM,
-			'AB_MCP_Protected_Store_Calls',
+			$real,
 			array_merge(
 				$faults,
 				array(
@@ -415,8 +439,16 @@ final class StoreRemoverTest extends TestCase {
 
 	public function testAForeignOrUnreadableSidecarDoesNotTakeATreeOfAnOpenMark(): void {
 		$m = $this->marked( 3 );
-		file_put_contents( $m['side'], '{"not":"a sidecar"' );
-		touch( $m['side'], time() - 2 * 86400 );
+		// Read whole, another installation's and past its retention: the
+		// way of a foreign sidecar to the removal of its group (one that
+		// cannot be read keeps its group before that, Behebung 1, A1).
+		self::sidecar_as(
+			$m['side'],
+			array(
+				'gid'     => str_repeat( 'f', 32 ),
+				'created' => time() - 30 * 86400,
+			)
+		);
 		self::watch();
 		AB_MCP_Protected_Store::cleanup( time() );
 		self::assert_kept( $m, 'foreign sidecar' );
@@ -602,16 +634,11 @@ final class StoreRemoverTest extends TestCase {
 		$entry['created'] = time() - 2 * 86400;
 		file_put_contents( $side_rep, json_encode( $entry ) );
 		$plain_dir = $m['root'] . '/backups/' . AB_MCP_Payload_File::name( 'group|backups|' . $plain, $id, '' );
-		// Nachgebildet: every read of a mark fails.
-		self::watch(
-			array(
-				array(
-					'method' => 'read',
-					'kind'   => 'return',
-					'value'  => false,
-				),
-			)
-		);
+		// Nachgebildet: the read of the mark fails (the read of the store's
+		// seam of that file alone: the sidecars are read through it too).
+		$calls       = new AB_MCP_IT_Store_Calls();
+		$calls->fail = array( 'read' => array( $m['marks'] . '/mark.json' ) );
+		self::watch( array(), $calls );
 		AB_MCP_Protected_Store::cleanup( time() );
 		self::assert_kept( $m, 'mark unreadable: clean-up' );
 		self::assertDirectoryExists( $plain_dir, 'A group of backups past its retention stays while a mark cannot be read.' );
@@ -1026,5 +1053,326 @@ final class StoreRemoverTest extends TestCase {
 		foreach ( array( $one, $two ) as $made ) {
 			unlink( $dir . '/' . $made['file'] );
 		}
+	}
+
+	/* ------------- Behebung 1: unreadable is never empty, missing or foreign */
+
+	/**
+	 * A sidecar changed as a case asks, a day and more old: bytes of its own,
+	 * or its entry with fields changed (null: the field taken out).
+	 *
+	 * @param string       $side   The sidecar.
+	 * @param string|array $change Bytes, or field => value.
+	 */
+	private static function sidecar_as( string $side, $change ): void {
+		if ( is_array( $change ) ) {
+			$entry = json_decode( (string) file_get_contents( $side ), true );
+			foreach ( $change as $key => $value ) {
+				if ( null === $value ) {
+					unset( $entry[ $key ] );
+				} else {
+					$entry[ $key ] = $value;
+				}
+			}
+			$change = (string) json_encode( $entry );
+		}
+		file_put_contents( $side, $change );
+		touch( $side, time() - 2 * 86400 );
+	}
+
+	/** The store's seam with read errors of the paths named (AB_MCP_IT_Store_Calls::$fail). */
+	private static function failing( array $fail ): AB_MCP_IT_Store_Calls {
+		$calls       = new AB_MCP_IT_Store_Calls();
+		$calls->fail = $fail;
+		AB_MCP_Test_Seam::install( AB_MCP_Protected_Store::class, self::SEAM, $calls );
+		return $calls;
+	}
+
+	public function testASidecarThatCannotBeReadOrSaysNotWhatTheRetentionNeedsKeepsABackupTheRetentionKeeps(): void {
+		// A1 (V2): run 4 is one of the last three qualified closes; its swaps
+		// are over (their marks closed), so its backups stay by the retention
+		// alone, whatever their age (decision 20).
+		$now = time();
+		self::run_row( 4, 'closed_done', $now - 10 * 86400, $now - 10 * 86400 );
+		$cases = array(
+			'no JSON'                                   => '{"format":',
+			'not of the format'                         => array( 'format' => 'ab-mcp-other/9' ),
+			'its time made no number'                   => array(
+				'run_id'  => 0,
+				'created' => 'yesterday',
+			),
+			'without the time it was made'              => array( 'created' => null ),
+			'its run no number'                         => array(
+				'run_id'  => 'vier',
+				'created' => $now - 30 * 86400,
+			),
+			'an area the store has not'                 => array( 'area' => 'elsewhere' ),
+			'another area, kept by the one it lies in'  => array(
+				'area'    => 'out',
+				'created' => $now - 30 * 86400,
+			),
+			'another installation, kept by its run'     => array( 'gid' => str_repeat( 'f', 32 ) ),
+		);
+		$made  = array();
+		foreach ( $cases as $label => $change ) {
+			$m = $this->marked( 4, 'closed' );
+			self::sidecar_as( $m['side'], $change );
+			$made[ $label ] = $m;
+		}
+		// A group of reports whose entry names a backup of run 4: kept by the
+		// area it names.
+		$rep_gid = AB_MCP_Protected_Store::open( 'reports', array( 'run_id' => 4 ) );
+		self::assertIsString( $rep_gid );
+		self::assertIsArray( AB_MCP_Protected_Store::put( 'reports', $rep_gid, 'post-1', 'eine Zeile' ) );
+		$rep_dir = $made['no JSON']['root'] . '/reports/' . AB_MCP_Payload_File::name( 'group|reports|' . $rep_gid, $made['no JSON']['id'], '' );
+		self::sidecar_as(
+			$rep_dir . '.json',
+			array(
+				'area'    => 'backups',
+				'created' => $now - 30 * 86400,
+			)
+		);
+		$unreadable = $this->marked( 4, 'closed' );
+		touch( $unreadable['side'], $now - 2 * 86400 );
+		$posix_root = function_exists( 'posix_geteuid' ) && 0 === posix_geteuid();
+		if ( ! $posix_root ) {
+			chmod( $unreadable['side'], 0000 );
+			$made['without read rights'] = $unreadable;
+		}
+		$bytes = array();
+		foreach ( $made as $label => $m ) {
+			$bytes[ $label ] = 'without read rights' === $label ? null : (string) file_get_contents( $m['side'] );
+		}
+		try {
+			AB_MCP_Protected_Store::cleanup( $now );
+		} finally {
+			chmod( $unreadable['side'], 0600 );
+		}
+		foreach ( $made as $label => $m ) {
+			self::assertSame( $m['kept']['tree'], self::snapshot( $m['tree'] ), "$label: the backup stays byte for byte." );
+			self::assertFileExists( $m['side'], "$label: its sidecar stays." );
+			if ( null !== $bytes[ $label ] ) {
+				self::assertSame( $bytes[ $label ], (string) file_get_contents( $m['side'] ), "$label: as it was." );
+			}
+		}
+		self::assertSame( array( 'post-1' ), self::names( $rep_dir ), 'another area, kept by the one it names: the group of reports stays.' );
+	}
+
+	public function testASidecarWhoseReadFailsKeepsItsGroup(): void {
+		// B5: the read of the store's seam fails for the sidecar alone; the
+		// retention of run 4 is over, so only the read error keeps it.
+		$now = time();
+		self::run_row( 4, 'closed_done', $now - 10 );
+		$m = $this->marked( 4, 'closed' );
+		touch( $m['side'], $now - 2 * 86400 );
+		$calls = self::failing( array( 'read' => array( $m['side'] ) ) );
+		AB_MCP_Protected_Store::cleanup( $now );
+		AB_MCP_Test_Seam::restore_all();
+		self::assertContains( array( 'read', $m['side'] ), $calls->failed, 'The read of the sidecar failed.' );
+		self::assertSame( $m['kept']['tree'], self::snapshot( $m['tree'] ) );
+		self::assertFileExists( $m['side'] );
+		// Read again, it goes by its retention.
+		AB_MCP_Protected_Store::cleanup( $now );
+		self::assertFileDoesNotExist( $m['group'] );
+	}
+
+	public function testAForeignSidecarTheRetentionLetsGoGoesWithItsGroupAfterADay(): void {
+		// The normal case beside A1: read whole, another installation's, of a
+		// run without a row and older than backups are kept by their age.
+		$now = time();
+		$old = $this->marked( 9, 'closed' );
+		self::sidecar_as(
+			$old['side'],
+			array(
+				'gid'     => str_repeat( 'f', 32 ),
+				'created' => $now - 30 * 86400,
+			)
+		);
+		$young = $this->marked( 9, 'closed' );
+		self::sidecar_as( $young['side'], array( 'gid' => str_repeat( 'e', 32 ) ) );
+		touch( $young['side'], $now - 3600 );
+		AB_MCP_Protected_Store::cleanup( $now );
+		self::assertFileDoesNotExist( $old['group'], 'Its group goes.' );
+		self::assertFileDoesNotExist( $old['side'], 'And its sidecar.' );
+		self::assertSame( $young['kept']['tree'], self::snapshot( $young['tree'] ), 'A foreign sidecar of today stays.' );
+	}
+
+	public function testAFolderWhoseSidecarIsListedIsNoFolderWithoutItsSidecarWhateverItsLstatSays(): void {
+		// A1: absent is only what the listing of the area lacks.
+		$m = $this->marked( 4, 'closed' );
+		touch( $m['group'], time() - 2 * 86400 );
+		$calls = self::failing( array( 'lstat' => array( $m['side'] ) ) );
+		AB_MCP_Protected_Store::cleanup( time() );
+		AB_MCP_Test_Seam::restore_all();
+		self::assertSame( $m['kept']['tree'], self::snapshot( $m['tree'] ) );
+		self::assertFileExists( $m['side'] );
+	}
+
+	public function testAnAreaWhoseEntriesCannotBeStatedLosesNothing(): void {
+		// B5: an lstat() outside the seam (plain()) that fails: the folder of
+		// the area is listed, its entries cannot be stated (no x right).
+		if ( function_exists( 'posix_geteuid' ) && 0 === posix_geteuid() ) {
+			self::markTestSkipped( 'The rights of a folder stop no process of root.' );
+		}
+		$m = $this->marked( 9, 'closed' );
+		self::sidecar_as( $m['side'], array( 'created' => time() - 30 * 86400 ) );
+		chmod( $m['root'] . '/backups', 0400 );
+		try {
+			AB_MCP_Protected_Store::cleanup( time() );
+		} finally {
+			chmod( $m['root'] . '/backups', 0700 );
+		}
+		self::assertSame( $m['kept']['tree'], self::snapshot( $m['tree'] ) );
+		self::assertFileExists( $m['side'] );
+	}
+
+	public function testAGroupWhoseFolderCannotBeStatedIsNotRemovedAndKeepsItsSidecar(): void {
+		// A2, the first counter-example of Codex round 1: the lstat() of the
+		// folder fails; with an open mark on its tree and without one.
+		foreach ( array( 'open', 'closed' ) as $state ) {
+			$m     = $this->marked( 3, $state );
+			$calls = new AB_MCP_IT_Store_Calls();
+			$calls->fail = array( 'lstat' => array( $m['group'] ) );
+			AB_MCP_Test_Seam::install( AB_MCP_Protected_Store::class, self::SEAM, $calls );
+			$gone = AB_MCP_Protected_Store::remove( 'backups', $m['gid'] );
+			AB_MCP_Test_Seam::restore_all();
+			self::assertFalse( $gone, "$state: not proved gone, so not removed." );
+			self::assertSame( $m['kept']['tree'], self::snapshot( $m['tree'] ), $state );
+			self::assertFileExists( $m['side'], "$state: the sidecar stays with its folder." );
+		}
+	}
+
+	public function testAGroupWhoseTreeAnOpenMarkNamesKeepsItsSidecarAlsoWhereItsFolderIsGone(): void {
+		// A2: the guard of the marks holds before a removal counts as done;
+		// the retention lets the group go, its folder was taken by hand.
+		self::run_row( 3, 'closed_done', time() - 10 );
+		$m = $this->marked( 3 );
+		self::remove_tree( $m['group'] );
+		AB_MCP_Protected_Store::cleanup( time() );
+		self::assertFileExists( $m['side'], 'The record of the group whose tree the mark names stays.' );
+		self::assertSame( $m['kept']['marks'], self::snapshot( $m['marks'] ) );
+	}
+
+	public function testAnUninstallThatCannotStateTheBackupsKeepsTheManifestAndTheLock(): void {
+		// A2, the second counter-example: the lstat() of backups fails; the
+		// uninstall runs in this process, with the read error.
+		$m      = $this->marked( 3, 'closed' );
+		$before = self::names( $m['root'] );
+		self::failing( array( 'lstat' => array( $m['root'] . '/backups' ) ) );
+		AB_MCP_Protected_Store::uninstall();
+		AB_MCP_Test_Seam::restore_all();
+		foreach ( array( 'owner.json', 'store.lock', '.htaccess', 'index.php', 'web.config', 'backups' ) as $name ) {
+			self::assertContains( $name, self::names( $m['root'] ), "$name stays: backups were not proved gone." );
+		}
+		self::assertSame( $m['kept']['tree'], self::snapshot( $m['tree'] ) );
+		self::assertNotEmpty( $before );
+	}
+
+	/* ------------------------- Behebung 1, B3: the lock of the uninstall */
+
+	/**
+	 * A process that holds the lock of a folder of the store, holding when
+	 * this returns, for $seconds.
+	 *
+	 * @return array{0:resource,1:array}
+	 */
+	private static function hold_lock( string $root, float $seconds ): array {
+		$code    = '$h = fopen( $argv[1], "c" ); if ( ! $h || ! flock( $h, LOCK_EX ) ) { exit( 3 ); } echo "held\n"; fflush( STDOUT ); usleep( (int) ( (float) $argv[2] * 1000000 ) ); exit( 0 );';
+		$process = proc_open( array( PHP_BINARY, '-r', $code, $root . '/store.lock', (string) $seconds ), array( 1 => array( 'pipe', 'w' ) ), $pipes );
+		self::assertIsResource( $process );
+		self::assertSame( "held\n", fgets( $pipes[1] ), 'The holder holds the lock.' );
+		return array( $process, $pipes );
+	}
+
+	/** End the holder (its own process, started by this case). */
+	private static function release( array $holder ): void {
+		$status = proc_get_status( $holder[0] );
+		if ( $status['running'] ) {
+			proc_terminate( $holder[0] );
+		}
+		fclose( $holder[1][1] );
+		proc_close( $holder[0] );
+	}
+
+	public function testTheUninstallWaitsForTheLockAndWorksOnceItIsFree(): void {
+		$m      = $this->marked( 3, 'open', 'missing' );
+		$orig   = $m['kept']['tree'];
+		$holder = self::hold_lock( $m['root'], 2.0 );
+		$start  = microtime( true );
+		try {
+			self::uninstall_free();
+		} finally {
+			self::release( $holder );
+		}
+		self::assertGreaterThan( 1.5, microtime( true ) - $start, 'It waited for the holder.' );
+		self::assertSame( $orig, self::snapshot( $m['target'] ), 'Under the lock: the original went back.' );
+		self::assertFileDoesNotExist( $m['root'], 'And the folder went.' );
+	}
+
+	public function testTheUninstallLeavesAFolderWhoseLockIsHeldPastItsTimeAsItIs(): void {
+		$m      = $this->marked( 3, 'open', 'missing' );
+		$before = self::snapshot( $m['root'] );
+		$holder = self::hold_lock( $m['root'], 15.0 );
+		$start  = microtime( true );
+		try {
+			self::uninstall_free();
+			$took = microtime( true ) - $start;
+		} finally {
+			self::release( $holder );
+		}
+		self::assertLessThan( 14.0, $took, 'It asked for the lock about ten seconds, not until the holder let go.' );
+		self::assertSame( $before, self::snapshot( $m['root'] ), 'Nothing went back and nothing went: marks, backups, instruction and manifest stay for the way back by hand.' );
+		self::assertFileDoesNotExist( $m['target'], 'The original was not put back without the lock.' );
+	}
+
+	public function testTheUninstallDoesNothingWhereTheLockCannotBeOpened(): void {
+		foreach ( array( 'a folder', 'a link' ) as $what ) {
+			$m    = $this->marked( 3, 'open', 'missing' );
+			$lock = $m['root'] . '/store.lock';
+			@unlink( $lock ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			if ( 'a folder' === $what ) {
+				mkdir( $lock, 0700 );
+			} else {
+				$aim = self::root() . '/run/ab-store-lock-aim';
+				file_put_contents( $aim, '' );
+				$this->made[] = $aim;
+				symlink( $aim, $lock );
+			}
+			$before = self::snapshot( $m['root'] );
+			$names  = self::names( $m['root'] );
+			self::uninstall_free();
+			self::assertSame( $names, self::names( $m['root'] ), "$what: every name of the folder stays." );
+			self::assertSame( $before, self::snapshot( $m['root'] ), "$what: nothing went back and nothing went without the lock." );
+			self::assertFileDoesNotExist( $m['target'], $what );
+			if ( 'a folder' === $what ) {
+				rmdir( $lock );
+			} else {
+				unlink( $lock );
+			}
+			self::wipe();
+			AB_MCP_Protected_Store::forget();
+			self::assertTrue( AB_MCP_Protected_Store::available() );
+		}
+	}
+
+	/* ---------------------------- Behebung 1, B5: the identity by its hash */
+
+	public function testTheUninstallPutsBackABackupWhoseHashIsTheMarksAndNoneWhoseFilesChanged(): void {
+		$m    = $this->marked( 3, 'open', 'missing', true );
+		$orig = $m['kept']['tree'];
+		self::uninstall_free();
+		self::assertSame( $orig, self::snapshot( $m['target'] ), 'Device, inode and hash as the mark says: put back.' );
+		self::remove_tree( $m['target'] );
+		self::wipe();
+		AB_MCP_Protected_Store::forget();
+		self::assertTrue( AB_MCP_Protected_Store::available() );
+		// The same folder (device, inode), a file in it changed.
+		$m = $this->marked( 3, 'open', 'missing', true );
+		file_put_contents( $m['tree'] . '/data/export.csv', "id;wert\n1;geaendert\n" );
+		$changed = self::snapshot( $m['tree'] );
+		self::uninstall_free();
+		self::assertFileDoesNotExist( $m['target'], 'Its files are not the ones the mark names: not put back.' );
+		self::assertSame( $changed, self::snapshot( $m['tree'] ), 'It stays where it is.' );
+		self::assertSame( $m['kept']['marks'], self::snapshot( $m['marks'] ), 'With its mark.' );
 	}
 }

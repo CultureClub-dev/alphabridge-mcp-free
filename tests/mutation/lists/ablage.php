@@ -14,15 +14,20 @@
  *
  * Held by the integration suite (StoreRemoverTest, StoreTreesTest,
  * ProtectedStoreTest; the sites running, AB_IT_ROOT set) and by the unit
- * suite (StoreRemoverGuardTest).
+ * suite (StoreRemoverGuardTest). Behebung 1 (Codex round 1 of branch 3):
+ * unreadable is never empty, missing or foreign (A1, A2, B2), the
+ * instruction of a new unit (A3), the names of trees (B1), the lock of the
+ * uninstall (B3), the texts (B4) and the clauses of their own of B5, each
+ * with its case (StoreBookingsTest, StoreTextsTest among them).
  *
  * Not listed, with why: the Throwable caught around guard() and the walk in
  * delete_path() (a remover that throws keeps all, the case of each way
  * with a fault sees nothing removed either way); the 'with' of a group
  * whose folder is gone whole (the sidecar of a group removed whole goes,
- * ProtectedStoreTest holds the groups that go); the modes of the folders of
- * a tree set at the end (held by the snapshot of the normal case through
- * the mutation of the copy of a file mode, store/z7-copy-mode).
+ * ProtectedStoreTest holds the groups that go); the age of a folder of a
+ * mark read through the seam (an lstat() that fails gives no age, and
+ * delete_path() removes nothing whose lstat() fails and that its folder
+ * still lists, ablage/a2-*).
  *
  * @package AlphaBridge_MCP
  */
@@ -533,6 +538,295 @@ return array_merge(
 			'replace' => "\t\t\t\$put     = array( ",
 			'run'     => $it( 'StoreTreesTest', 'testTheInstructionPutsTheOldStateBackByHandAtEachPoint' ),
 			'expect'  => '/testTheInstructionPutsTheOldStateBackByHandAtEachPoint/',
+		),
+
+		/* ------------------------- Behebung 1: Codex round 1, A1 to B5 */
+		array(
+			'id'      => 'ablage/a3-stage-free',
+			'clause'  => 'guide(): a new version at the target goes back only into a free place in the store',
+			'file'    => $ps,
+			'search'  => ' . (int) $new[\'ino\'] . \'" ]; then test ! -e \' . $q( $stage ) . \' && mv \' . $q( $target ) . \' \' . $q( $stage ) . \'; fi\', ',
+			'replace' => ' . (int) $new[\'ino\'] . \'" ]; then mv \' . $q( $target ) . \' \' . $q( $stage ) . \'; fi\', ',
+			'run'     => $it( 'StoreTreesTest', 'testTheInstructionOfANewUnitTakesItOutAgainByHandAtEachPoint' ),
+			'expect'  => '/testTheInstructionOfANewUnitTakesItOutAgainByHandAtEachPoint/',
+		),
+		array(
+			'id'      => 'ablage/a1-unknown-sidecar-stays',
+			'clause'  => 'sweep(): a sidecar that cannot be read or holds no entry of the format keeps its group (A1, V2)',
+			'file'    => $ps,
+			'search'  => '						// nothing says whose it is, so its group stays (A1).
+						continue;',
+			'replace' => '						$at = $calls->lstat( $path ); if ( false !== $at && ( $now - (int) $at[\'mtime\'] ) >= 86400 ) { self::delete_group( $root, $area, $m[1] ); }
+						continue;',
+			'run'     => $it( 'StoreRemoverTest', 'testASidecarThatCannotBeReadOrSaysNotWhatTheRetentionNeedsKeepsABackupTheRetentionKeeps' ),
+			'expect'  => '/testASidecarThatCannotBeReadOrSaysNotWhatTheRetentionNeedsKeepsABackupTheRetentionKeeps/',
+		),
+		array(
+			'id'      => 'ablage/a1-unknown-read-error',
+			'clause'  => 'sweep(): a sidecar whose read fails keeps its group (A1; B5, the read of the seam)',
+			'file'    => $ps,
+			'search'  => '						// nothing says whose it is, so its group stays (A1).
+						continue;',
+			'replace' => '						$at = $calls->lstat( $path ); if ( false !== $at && ( $now - (int) $at[\'mtime\'] ) >= 86400 ) { self::delete_group( $root, $area, $m[1] ); }
+						continue;',
+			'run'     => $it( 'StoreRemoverTest', 'testASidecarWhoseReadFailsKeepsItsGroup' ),
+			'expect'  => '/testASidecarWhoseReadFailsKeepsItsGroup/',
+		),
+		array(
+			'id'      => 'ablage/a1-created-belegt',
+			'clause'  => 'sidecar(): the time a group was made is a number the entry holds, never made up',
+			'file'    => $ps,
+			'search'  => '! in_array( $e[\'area\'], self::AREAS, true ) || ! is_int( $e[\'created\'] ) ||',
+			'replace' => '! in_array( $e[\'area\'], self::AREAS, true ) ||',
+			'run'     => $it( 'StoreRemoverTest', 'testASidecarThatCannotBeReadOrSaysNotWhatTheRetentionNeedsKeepsABackupTheRetentionKeeps' ),
+			'expect'  => '/testASidecarThatCannotBeReadOrSaysNotWhatTheRetentionNeedsKeepsABackupTheRetentionKeeps/',
+		),
+		array(
+			'id'      => 'ablage/a1-foreign-area-it-lies-in',
+			'clause'  => 'sweep(): a foreign sidecar goes only where the retention of the area it lies in lets it go too',
+			'file'    => $ps,
+			'search'  => ' && ! self::kept( array( \'area\' => $area ) + $entry, $now, $open, $backups ) ) {',
+			'replace' => ' ) {',
+			'run'     => $it( 'StoreRemoverTest', 'testASidecarThatCannotBeReadOrSaysNotWhatTheRetentionNeedsKeepsABackupTheRetentionKeeps' ),
+			'expect'  => '/testASidecarThatCannotBeReadOrSaysNotWhatTheRetentionNeedsKeepsABackupTheRetentionKeeps/',
+		),
+		array(
+			'id'      => 'ablage/a1-foreign-area-it-names',
+			'clause'  => 'sweep(): a foreign sidecar goes only where the retention of the area it names lets it go too',
+			'file'    => $ps,
+			'search'  => '( $now - (int) $at[\'mtime\'] ) >= 86400 && ! self::kept( $entry, $now, $open, $backups ) && ',
+			'replace' => '( $now - (int) $at[\'mtime\'] ) >= 86400 && ',
+			'run'     => $it( 'StoreRemoverTest', 'testASidecarThatCannotBeReadOrSaysNotWhatTheRetentionNeedsKeepsABackupTheRetentionKeeps' ),
+			'expect'  => '/testASidecarThatCannotBeReadOrSaysNotWhatTheRetentionNeedsKeepsABackupTheRetentionKeeps/',
+		),
+		array(
+			'id'      => 'ablage/a1-orphan-by-listing',
+			'clause'  => 'sweep(): a folder is without its sidecar only where the listing of its area lacks it (no lstat())',
+			'file'    => $ps,
+			'search'  => 'preg_match( \'/^[0-9a-f]{40}\\z/\', $file ) && ! in_array( $file . \'.json\', $names, true ) && self::plain( $path, \'dir\' )',
+			'replace' => 'preg_match( \'/^[0-9a-f]{40}\\z/\', $file ) && false === $calls->lstat( $path . \'.json\' ) && self::plain( $path, \'dir\' )',
+			'run'     => $it( 'StoreRemoverTest', 'testAFolderWhoseSidecarIsListedIsNoFolderWithoutItsSidecarWhateverItsLstatSays' ),
+			'expect'  => '/testAFolderWhoseSidecarIsListedIsNoFolderWithoutItsSidecarWhateverItsLstatSays/',
+		),
+		array(
+			'id'      => 'ablage/a2-group-not-stated',
+			'clause'  => 'delete_path(): a path whose lstat() fails is gone only where its folder lists it not (the group, counter-example 1 of Codex round 1)',
+			'file'    => $ps,
+			'search'  => '				return ! $holds && false !== $names && ! in_array( basename( $p ), $names, true );',
+			'replace' => '				return true;',
+			'run'     => $it( 'StoreRemoverTest', 'testAGroupWhoseFolderCannotBeStatedIsNotRemovedAndKeepsItsSidecar' ),
+			'expect'  => '/testAGroupWhoseFolderCannotBeStatedIsNotRemovedAndKeepsItsSidecar/',
+		),
+		array(
+			'id'      => 'ablage/a2-uninstall-backups-not-stated',
+			'clause'  => 'delete_path(): a path whose lstat() fails is gone only where its folder lists it not (the uninstall, counter-example 2)',
+			'file'    => $ps,
+			'search'  => '				return ! $holds && false !== $names && ! in_array( basename( $p ), $names, true );',
+			'replace' => '				return true;',
+			'run'     => $it( 'StoreRemoverTest', 'testAnUninstallThatCannotStateTheBackupsKeepsTheManifestAndTheLock' ),
+			'expect'  => '/testAnUninstallThatCannotStateTheBackupsKeepsTheManifestAndTheLock/',
+		),
+		array(
+			'id'      => 'ablage/a2-holds-before-gone',
+			'clause'  => 'delete_path(): a folder above a tree an open mark names never counts as gone',
+			'file'    => $ps,
+			'search'  => '				return ! $holds && false !== $names && ! in_array( basename( $p ), $names, true );',
+			'replace' => '				return false !== $names && ! in_array( basename( $p ), $names, true );',
+			'run'     => $it( 'StoreRemoverTest', 'testAGroupWhoseTreeAnOpenMarkNamesKeepsItsSidecarAlsoWhereItsFolderIsGone' ),
+			'expect'  => '/testAGroupWhoseTreeAnOpenMarkNamesKeepsItsSidecarAlsoWhereItsFolderIsGone/',
+		),
+		array(
+			'id'      => 'ablage/a3-new-unit-out',
+			'clause'  => 'guide(): a new unit in the site goes back into its place in the store',
+			'file'    => $ps,
+			'search'  => '$out     = array( $inode( $target, $new ), \'$ test ! -e \' . $q( $stage ), \'$ mv \' . $q( $target ) . \' \' . $q( $stage ), ',
+			'replace' => '$out     = array( $inode( $target, $new ), \'$ test ! -e \' . $q( $stage ), ',
+			'run'     => $it( 'StoreTreesTest', 'testTheInstructionOfANewUnitTakesItOutAgainByHandAtEachPoint' ),
+			'expect'  => '/testTheInstructionOfANewUnitTakesItOutAgainByHandAtEachPoint/',
+		),
+		array(
+			'id'      => 'ablage/a3-new-unit-back',
+			'clause'  => 'guide(): between the renames and during the way back a new version at the target goes back into the store',
+			'file'    => $ps,
+			'search'  => '$back    = array( \'$ if [ -e \' . $q( $target ) . \' ] && [ "$(ls -di \' . $q( $target ) . \' | awk \\\'{print $1}\\\')" = "\' . (int) $new[\'ino\'] . \'" ]; then test ! -e \' . $q( $stage ) . \' && mv \' . $q( $target ) . \' \' . $q( $stage ) . \'; fi\', ',
+			'replace' => '$back    = array( ',
+			'run'     => $it( 'StoreTreesTest', 'testTheInstructionOfANewUnitTakesItOutAgainByHandAtEachPoint' ),
+			'expect'  => '/testTheInstructionOfANewUnitTakesItOutAgainByHandAtEachPoint/',
+		),
+		array(
+			'id'      => 'ablage/b1-name-as-wordpress',
+			'clause'  => 'is_tree_name(): a tree keeps the name its unit has (validate_file()), not the rule of the store\'s own names',
+			'file'    => $ps,
+			'search'  => 'return function_exists( \'validate_file\' ) && 0 === validate_file( $name );',
+			'replace' => 'return self::valid_name( $name );',
+			'run'     => $it( 'StoreTreesTest', 'testATreeKeepsTheNameItsUnitHasInTheSite' ),
+			'expect'  => '/testATreeKeepsTheNameItsUnitHasInTheSite/',
+		),
+		array(
+			'id'      => 'ablage/b1-dangerous-refused',
+			'clause'  => 'is_tree_name(): a slash, a backslash, a control character or NUL is refused',
+			'file'    => $ps,
+			'search'  => ' || strlen( $name ) > 255 || preg_match( \'#[/\\\\\\\\\\x00-\\x1F\\x7F]#\', $name ) ) {',
+			'replace' => ' || strlen( $name ) > 255 ) {',
+			'run'     => $it( 'StoreTreesTest', 'testOnlyANameThatIsNoNameOfAFileIsRefused' ),
+			'expect'  => '/testOnlyANameThatIsNoNameOfAFileIsRefused/',
+		),
+		array(
+			'id'      => 'ablage/b1-length',
+			'clause'  => 'is_tree_name(): more than 255 bytes are refused',
+			'file'    => $ps,
+			'search'  => ' || strlen( $name ) > 255 || ',
+			'replace' => ' || ',
+			'run'     => $it( 'StoreTreesTest', 'testOnlyANameThatIsNoNameOfAFileIsRefused' ),
+			'expect'  => '/testOnlyANameThatIsNoNameOfAFileIsRefused/',
+		),
+		array(
+			'id'      => 'ablage/b1-mark-tree-name',
+			'clause'  => 'tree_rel(): a mark names a tree by the name its unit has',
+			'file'    => $ps,
+			'search'  => '! preg_match( \'/^[0-9a-f]{40}\\z/\', $parts[1] ) || ! self::is_tree_name( $parts[2] ) ) {',
+			'replace' => '! preg_match( \'/^[0-9a-f]{40}\\z/\', $parts[1] ) || ! self::valid_name( $parts[2] ) ) {',
+			'run'     => $it( 'StoreTreesTest', 'testATreeKeepsTheNameItsUnitHasInTheSite' ),
+			'expect'  => '/testATreeKeepsTheNameItsUnitHasInTheSite/',
+		),
+		array(
+			'id'      => 'ablage/b2-unread-not-empty',
+			'clause'  => 'read_bookings(): bookings that are no JSON object are a fault, never the empty stock (B2, V1)',
+			'file'    => $sb,
+			'search'  => '		if ( ! is_array( $data ) ) {
+			return self::unread();',
+			'replace' => '		if ( ! is_array( $data ) ) {
+			return array();',
+			'run'     => $it( 'StoreBookingsTest', 'testBookingsThatAreNoBookingsAreNeitherEmptyNorWrittenOver' ),
+			'expect'  => '/testBookingsThatAreNoBookingsAreNeitherEmptyNorWrittenOver/',
+		),
+		array(
+			'id'      => 'ablage/b2-entry-checked',
+			'clause'  => 'read_bookings(): an entry that is no booking is a fault, never left out',
+			'file'    => $sb,
+			'search'  => '				return self::unread();
+			}
+			$out[ $run_id ] = array(',
+			'replace' => '				continue;
+			}
+			$out[ $run_id ] = array(',
+			'run'     => $it( 'StoreBookingsTest', 'testBookingsThatAreNoBookingsAreNeitherEmptyNorWrittenOver' ),
+			'expect'  => '/testBookingsThatAreNoBookingsAreNeitherEmptyNorWrittenOver/',
+		),
+		array(
+			'id'      => 'ablage/b2-book-writes-nothing',
+			'clause'  => 'book(): bookings that cannot be read are not written anew',
+			'file'    => $sb,
+			'search'  => '				$book = self::read_bookings( $root );
+				if ( is_wp_error( $book ) ) {
+					return $book;
+				}
+				$book = self::without_closed( $book );',
+			'replace' => '				$book = self::read_bookings( $root );
+				if ( is_wp_error( $book ) ) {
+					$book = array();
+				}
+				$book = self::without_closed( $book );',
+			'run'     => $it( 'StoreBookingsTest', 'testBookingsThatCannotBeReadAreNeitherEmptyNorWrittenOver' ),
+			'expect'  => '/testBookingsThatCannotBeReadAreNeitherEmptyNorWrittenOver/',
+		),
+		array(
+			'id'      => 'ablage/b2-absent-by-listing',
+			'clause'  => 'read_small(): absent only where the folder lists the file not (an lstat() that fails is no proof)',
+			'file'    => $ps,
+			'search'  => '\'state\' => ( false !== $names && ! in_array( basename( $path ), $names, true ) ) ? \'absent\' : \'unreadable\',',
+			'replace' => '\'state\' => \'absent\',',
+			'run'     => $it( 'StoreBookingsTest', 'testBookingsWhoseReadFailsAreNeitherEmptyNorWrittenOver' ),
+			'expect'  => '/testBookingsWhoseReadFailsAreNeitherEmptyNorWrittenOver/',
+		),
+		array(
+			'id'      => 'ablage/b2-read-error',
+			'clause'  => 'read_small(): a read that fails is unreadable, never absent (B5, the read of the seam)',
+			'file'    => $ps,
+			'search'  => '		return false === $bytes || ! is_string( $bytes ) ? array(
+			\'state\' => \'unreadable\',',
+			'replace' => '		return false === $bytes || ! is_string( $bytes ) ? array(
+			\'state\' => \'absent\',',
+			'run'     => $it( 'StoreBookingsTest', 'testBookingsWhoseReadFailsAreNeitherEmptyNorWrittenOver' ),
+			'expect'  => '/testBookingsWhoseReadFailsAreNeitherEmptyNorWrittenOver/',
+		),
+		array(
+			'id'      => 'ablage/b3-no-work-without-lock',
+			'clause'  => 'uninstall(): without the lock of a folder nothing goes back and nothing goes (no $work() without it)',
+			'file'    => $ps,
+			'search'  => '			self::uninstall_locked( $root, $work, $until );',
+			'replace' => '			if ( ! self::uninstall_locked( $root, $work, $until ) ) { $work(); }',
+			'run'     => $it( 'StoreRemoverTest', 'testTheUninstallDoesNothingWhereTheLockCannotBeOpened' ),
+			'expect'  => '/testTheUninstallDoesNothingWhereTheLockCannotBeOpened/',
+		),
+		array(
+			'id'      => 'ablage/b3-deadline',
+			'clause'  => 'uninstall_locked(): it asks for the lock until the time of the uninstall ends, not until the holder lets go',
+			'file'    => $ps,
+			'search'  => '			if ( ! $busy || microtime( true ) >= $until ) {',
+			'replace' => '			if ( ! $busy ) {',
+			'run'     => $it( 'StoreRemoverTest', 'testTheUninstallLeavesAFolderWhoseLockIsHeldPastItsTimeAsItIs' ),
+			'expect'  => '/testTheUninstallLeavesAFolderWhoseLockIsHeldPastItsTimeAsItIs/',
+		),
+		array(
+			'id'      => 'ablage/b3-no-blocking',
+			'clause'  => 'uninstall_locked(): the lock is asked without waiting for the holder (LOCK_NB)',
+			'file'    => $ps,
+			'search'  => 'while ( ! flock( $handle, LOCK_EX | LOCK_NB, $busy ) ) {',
+			'replace' => 'while ( ! flock( $handle, LOCK_EX, $busy ) ) {',
+			'run'     => $it( 'StoreRemoverTest', 'testTheUninstallLeavesAFolderWhoseLockIsHeldPastItsTimeAsItIs' ),
+			'expect'  => '/testTheUninstallLeavesAFolderWhoseLockIsHeldPastItsTimeAsItIs/',
+		),
+		array(
+			'id'      => 'ablage/b4-gettext',
+			'clause'  => 'close_mark(): a refusal that reaches an answer goes through gettext (B4)',
+			'file'    => $ps,
+			'search'  => '__( \'There is no such mark in the protected store. Pass the id put_mark() returned.\', \'alphabridge-mcp\' )',
+			'replace' => '\'There is no such mark in the protected store. Pass the id put_mark() returned.\'',
+			'run'     => $unit( 'StoreTextsTest', 'testEveryMessageOfTheStoreIsTranslatedOrAnOldTextUnchanged' ),
+			'expect'  => '/testEveryMessageOfTheStoreIsTranslatedOrAnOldTextUnchanged/',
+		),
+		array(
+			'id'      => 'ablage/b5-hash-identity',
+			'clause'  => 'is_tree(): where the mark holds the hash of the manifest, the original goes back only with it',
+			'file'    => $ps,
+			'search'  => '		if ( null === $tree[\'hash\'] ) {
+			return true;
+		}
+		$read = self::read_tree( $path );',
+			'replace' => '		if ( true ) {
+			return true;
+		}
+		$read = self::read_tree( $path );',
+			'run'     => $it( 'StoreRemoverTest', 'testTheUninstallPutsBackABackupWhoseHashIsTheMarksAndNoneWhoseFilesChanged' ),
+			'expect'  => '/testTheUninstallPutsBackABackupWhoseHashIsTheMarksAndNoneWhoseFilesChanged/',
+		),
+		array(
+			'id'      => 'ablage/b5-file-compare',
+			'clause'  => 'put_tree(): a tree of one file stays only with the size and SHA-256 of the file read before',
+			'file'    => $ps,
+			'search'  => '&& hash_equals( (string) $read[\'entries\'][0][2], (string) $back[\'entries\'][0][2] )',
+			'replace' => '&& true',
+			'run'     => $it( 'StoreTreesTest', 'testAFileTreeWhoseSourceChangesWhileItIsCopiedIsNotKept' ),
+			'expect'  => '/testAFileTreeWhoseSourceChangesWhileItIsCopiedIsNotKept/',
+		),
+		array(
+			'id'      => 'ablage/b5-write-lock-built-tree',
+			'clause'  => 'write_file(): below a tree that is put whole nothing is written, not even a new file',
+			'file'    => $ps,
+			'search'  => '( count( $parts ) > 3 && ! isset( self::$building[',
+			'replace' => '( count( $parts ) > 3 && false && ! isset( self::$building[',
+			'run'     => $it( 'StoreTreesTest', 'testATreeIsNeverPutOverAnotherNorChangedInTheStore' ),
+			'expect'  => '/testATreeIsNeverPutOverAnotherNorChangedInTheStore/',
+		),
+		array(
+			'id'      => 'ablage/b5-folder-mode',
+			'clause'  => 'copy_tree(): a folder whose mode cannot be set leaves nothing of the tree (apart from the mode of a file)',
+			'file'    => $ps,
+			'search'  => '			if ( ! $calls->chmod( $dir[0], $dir[1] ) ) {',
+			'replace' => '			if ( ! $calls->chmod( $dir[0], $dir[1] ) && false ) {',
+			'run'     => $it( 'StoreTreesTest', 'testAFolderOfATreeWhoseModeCannotBeSetLeavesNothingOfTheTree' ),
+			'expect'  => '/testAFolderOfATreeWhoseModeCannotBeSetLeavesNothingOfTheTree/',
 		),
 	)
 );
