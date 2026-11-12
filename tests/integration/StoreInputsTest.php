@@ -9,7 +9,10 @@
  * The time of a file: the foreign sidecar stays and counts. A budget: the
  * call is refused with its reason. Valid values reach the consumer as values
  * (the group goes, the booking is made, the backup fits). A file holds only
- * texts, so its rows take the wrong forms that are texts.
+ * texts, so its rows take the wrong forms that are texts. Besides the forms
+ * made from the form in the code, each driver holds fixed wrong forms
+ * (more, "fixed: ..."): they stay wrong where the form in the code is
+ * loosened, and hold the form of each row.
  *
  * @package AlphaBridge_MCP
  */
@@ -144,6 +147,35 @@ final class StoreInputsTest extends TestCase {
 			$json      = 'sidecar.json' === $id;
 			$field     = $json ? null : self::FIELD[ substr( $id, 8 ) ];
 			$probe_gid = $probe['gid'];
+			$fixed     = array(
+				'json'   => array(
+					'fixed: a slash escaped' => str_replace( '/', '\\/', $text ),
+					'fixed: a blank after it' => $text . ' ',
+				),
+				'format' => array( 'fixed: another format' => 'ab-mcp-store/2' ),
+				'gid'    => array( 'fixed: in capitals' => strtoupper( (string) $entry['gid'] ) ),
+				'time'   => array(
+					'fixed: 0'                  => 0,
+					'fixed: its digits as text' => (string) $entry['created'],
+				),
+				'count'  => array(
+					'fixed: its digits as text' => (string) $entry['used'],
+					'fixed: negative'           => -1,
+				),
+				'run'    => array(
+					'fixed: run 0'              => 0,
+					'fixed: its digits as text' => '4',
+				),
+				'label'  => array(
+					'fixed: a blank'          => 'backup 4',
+					'fixed: 192 characters'   => str_repeat( 'a', 192 ),
+				),
+				'text'   => array( 'fixed: a number' => 5 ),
+				'bool'   => array(
+					'fixed: 1'       => 1,
+					'fixed: "false"' => 'false',
+				),
+			);
 			$run       = function ( $value ) use ( $json, $field, $data, $probe_gid ) {
 				$g = self::group( 'backups', 4 );
 				if ( $json ) {
@@ -165,7 +197,7 @@ final class StoreInputsTest extends TestCase {
 			};
 			return array(
 				'base'    => $json ? $text : $entry[ $field ],
-				'more'    => array(),
+				'more'    => $fixed[ $json ? 'json' : substr( $id, 8 ) ],
 				'valid'   => array( array( $json ? $text : $entry[ $field ], array( true, false, false ) ) ),
 				'run'     => $run,
 				'unknown' => static fn( $got ): bool => array( 'ab_mcp_store_stock_unknown', true, true ) === $got,
@@ -182,9 +214,23 @@ final class StoreInputsTest extends TestCase {
 			$probe = self::group( 'backups', 3 );
 			$text  = self::mark_text( $probe, str_repeat( 'c', 32 ) );
 			self::drop( $probe );
+			$mark  = json_decode( $text, true );
+			$as    = static fn( array $over, int $flags = AB_MCP_Store_Inputs::MARK_FLAGS ): string => (string) json_encode( array_replace( $mark, $over ), $flags );
+			$tree  = $mark['trees'][0];
+			$other = array_replace( $tree, array( 'path' => $tree['path'] . '-2' ) );
+			$third = array_replace( $tree, array( 'path' => $tree['path'] . '-3' ) );
 			return array(
 				'base'    => $text,
-				'more'    => array(),
+				'more'    => array(
+					'fixed: no tree'              => $as( array( 'trees' => array() ) ),
+					'fixed: three trees'          => $as( array( 'trees' => array( $tree, $other, $third ) ) ),
+					'fixed: a tree twice'         => $as( array( 'trees' => array( $tree, $tree ) ) ),
+					'fixed: a tree from key 1'    => $as( array( 'trees' => array( 1 => $tree ) ) ),
+					'fixed: a tree with more'     => $as( array( 'trees' => array( $tree + array( 'more' => 1 ) ) ) ),
+					'fixed: a slash escaped'      => $as( array(), AB_MCP_Store_Inputs::MARK_FLAGS & ~JSON_UNESCAPED_SLASHES ),
+					'fixed: closed as text'       => $as( array( 'closed' => '0' ) ),
+					'fixed: another state'        => $as( array( 'state' => 'opened' ) ),
+				),
 				'valid'   => array( array( 'valid', array( false, false ) ) ),
 				'run'     => function ( $value ) {
 					$g   = self::group( 'backups', 3 );
@@ -208,7 +254,10 @@ final class StoreInputsTest extends TestCase {
 			// goes a day after its file was written, by the time lstat() says.
 			return array(
 				'base'    => $now - 2 * 86400,
-				'more'    => array(),
+				'more'    => array(
+					'fixed: its digits as text' => (string) ( $now - 2 * 86400 ),
+					'fixed: negative'           => -1,
+				),
 				'valid'   => array( array( $now - 2 * 86400, array( false, false, false, false ) ) ),
 				'run'     => function ( $value ) use ( $now ) {
 					// Its three consumers: a foreign sidecar, a temp file of tmp/
@@ -246,7 +295,13 @@ final class StoreInputsTest extends TestCase {
 			$run = 'budget.book_run' === $id;
 			return array(
 				'base'    => $run ? 5 : 100,
-				'more'    => array(),
+				'more'    => $run ? array(
+					'fixed: run 0'              => 0,
+					'fixed: its digits as text' => '5',
+				) : array(
+					'fixed: negative'           => -1,
+					'fixed: its digits as text' => '100',
+				),
 				'valid'   => array( array( $run ? 5 : 100, 'booked' ) ),
 				'run'     => static fn( $value ) => $answer( $run ? AB_MCP_Store_Budget::book( $value, 100 ) : AB_MCP_Store_Budget::book( 5, $value ) ),
 				'unknown' => $refused( 'ab_mcp_store_booking' ),
@@ -257,7 +312,12 @@ final class StoreInputsTest extends TestCase {
 		if ( 'budget.free' === $id ) {
 			return array(
 				'base'    => 1e12,
-				'more'    => array(),
+				'more'    => array(
+					'fixed: negative'     => -1.0,
+					'fixed: infinite'     => INF,
+					'fixed: not a number' => NAN,
+					'fixed: a text'       => '1000000000000',
+				),
 				'valid'   => array( array( 1e12, 'booked' ), array( 1000000000000, 'booked' ) ),
 				'run'     => static function ( $value ) use ( $answer ) {
 					$calls       = new AB_MCP_IT_Store_Calls();
@@ -273,10 +333,16 @@ final class StoreInputsTest extends TestCase {
 			);
 		}
 		if ( 'budget.bookings' === $id ) {
-			$text = (string) json_encode( (object) array( 4 => array( 'bytes' => 1048576, 'booked' => $now, 'user_id' => 1 ) ) );
+			$book = array( 'bytes' => 1048576, 'booked' => $now, 'user_id' => 1 );
+			$text = (string) json_encode( (object) array( 4 => $book ) );
 			return array(
 				'base'    => $text,
-				'more'    => array(),
+				'more'    => array(
+					'fixed: run 0'            => (string) json_encode( (object) array( 0 => $book, 4 => $book ) ),
+					'fixed: bytes as text'    => (string) json_encode( (object) array( 4 => array_replace( $book, array( 'bytes' => '1048576' ) ) ) ),
+					'fixed: another field'    => (string) json_encode( (object) array( 4 => $book + array( 'more' => 1 ) ) ),
+					'fixed: a list at the root' => (string) json_encode( array( $book ) ),
+				),
 				'valid'   => array( array( $text, true ), array( '{}', 'ab_mcp_sync_backup_booking' ) ),
 				'run'     => static function ( $value ) use ( $data, $answer ) {
 					file_put_contents( self::store() . '/bookings.json', $value );
@@ -291,7 +357,10 @@ final class StoreInputsTest extends TestCase {
 		if ( 'backup.run' === $id ) {
 			return array(
 				'base'    => '4',
-				'more'    => array(),
+				'more'    => array(
+					'fixed: run 0'                => '0',
+					'fixed: digits with a suffix' => '4a',
+				),
 				'valid'   => array( array( '4', true ), array( 4, true ) ),
 				'run'     => static fn( $value ) => $answer( AB_MCP_Sync_Backup::fits( $value, $data ) ),
 				'unknown' => $refused( 'ab_mcp_sync_backup_run' ),
@@ -303,7 +372,10 @@ final class StoreInputsTest extends TestCase {
 			$fits = new ReflectionMethod( AB_MCP_Sync_Backup::class, 'fits_bytes' );
 			return array(
 				'base'    => 10,
-				'more'    => array(),
+				'more'    => array(
+					'fixed: negative'           => -1,
+					'fixed: its digits as text' => '10',
+				),
 				'valid'   => array( array( 10, true ), array( 0, true ) ),
 				'run'     => static fn( $value ) => $answer( $fits->invoke( null, 4, $value ) ),
 				'unknown' => $refused( 'ab_mcp_sync_backup_size' ),
@@ -316,7 +388,12 @@ final class StoreInputsTest extends TestCase {
 			$real = array_values( (array) scandir( $dir ) );
 			return array(
 				'base'    => $real,
-				'more'    => array( 'no listing (false)' => false ),
+				'more'    => array(
+					'no listing (false)'       => false,
+					'fixed: a name twice'      => array_merge( $real, array( $real[0] ) ),
+					'fixed: a list from key 1' => array_combine( range( 1, count( $real ) ), $real ),
+					'fixed: a number'          => array_merge( $real, array( 5 ) ),
+				),
 				'valid'   => array( array( $real, true ) ),
 				'run'     => static function ( $value ) use ( $dir, $data, $answer ) {
 					$calls        = new AB_MCP_IT_Store_Calls();

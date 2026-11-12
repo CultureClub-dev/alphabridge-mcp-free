@@ -1356,8 +1356,8 @@ return array_merge(
 			'file'    => $si,
 			'search'  => "'field'    => 'user_id, declared, used of a sidecar, run_id of out, in and reports',\n\t\t\t'form'     => self::COUNT,",
 			'replace' => "'field'    => 'user_id, declared, used of a sidecar, run_id of out, in and reports',\n\t\t\t'form'     => array( 'type' => 'int', 'digits' => true, 'min' => 0, 'max' => null ),",
-			'run'     => $it( 'StoreRemoverTest', 'testARunOfMinusOneOrAsAStringKeepsTheGroup' ),
-			'expect'  => '/testARunOfMinusOneOrAsAStringKeepsTheGroup/',
+			'run'     => $it( 'StoreInputsTest', 'testEveryWrongFormOfARowReachesItsConsumerInTheStoreAsUnknown' ),
+			'expect'  => '/testEveryWrongFormOfARowReachesItsConsumerInTheStoreAsUnknown/',
 		),
 		array(
 			'id'      => 'ablage/a1r-run-range',
@@ -2224,8 +2224,8 @@ return array_merge(
 			'file'    => $sh,
 			'search'  => "if ( ! is_array( \$value ) || ( array() !== \$value && self::is_list( \$value ) ) || ! is_array( \$form['fields'] ) ) {",
 			'replace' => "if ( ! is_array( \$value ) || ! is_array( \$form['fields'] ) ) {",
-			'run'     => $it( 'StoreInputsTest', 'testEveryWrongFormOfARowReachesItsConsumerInTheStoreAsUnknown' ),
-			'expect'  => '/testEveryWrongFormOfARowReachesItsConsumerInTheStoreAsUnknown/',
+			'run'     => $unit( 'ShapeTest', 'testAMapAndARecordReadEachKeyAndField' ),
+			'expect'  => '/testAMapAndARecordReadEachKeyAndField/',
 		),
 		array(
 			'id'      => 'ablage/shape-record-extra',
@@ -2323,8 +2323,8 @@ return array_merge(
 			'file'    => $ps,
 			'search'  => "( null !== \$at && ( \$now - \$at ) >= self::KEEP['marks'] )",
 			'replace' => "( ( \$now - \$at ) >= self::KEEP['marks'] )",
-			'run'     => $it( 'StoreRemoverTest', 'testATempFileOrAFolderOfAMarkWhoseLstatFailsStays' ),
-			'expect'  => '/testATempFileOrAFolderOfAMarkWhoseLstatFailsStays/',
+			'run'     => $it( 'StoreInputsTest', 'testEveryWrongFormOfARowReachesItsConsumerInTheStoreAsUnknown' ),
+			'expect'  => '/testEveryWrongFormOfARowReachesItsConsumerInTheStoreAsUnknown/',
 		),
 		array(
 			'id'      => 'ablage/c1-foreign-mtime',
@@ -2377,8 +2377,8 @@ return array_merge(
 			'file'    => $bk,
 			'search'  => "\t\treturn '' === \$json ? null : strlen( \$json );",
 			'replace' => "\t\treturn strlen( \$json );",
-			'run'     => $it( 'StoreInputsTest', 'testEveryWrongFormOfARowReachesItsConsumerInTheStoreAsUnknown' ),
-			'expect'  => '/testEveryWrongFormOfARowReachesItsConsumerInTheStoreAsUnknown/',
+			'run'     => $unit( 'StoreInputsTest', 'testABackupThatCannotBeWrittenAsJsonHasNoSizeNeverZero' ),
+			'expect'  => '/testABackupThatCannotBeWrittenAsJsonHasNoSizeNeverZero/',
 		),
 		array(
 			'id'      => 'ablage/c1-fits-stock',

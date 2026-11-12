@@ -11,7 +11,11 @@
  * (StoreInputsTest there, WrongForms::INTEGRATION).
  *
  * The test reads the table from the code: a new row gets its wrong forms
- * from its form, and is red here until a driver reaches its consumer.
+ * from its form, and is red here until a driver reaches its consumer. The
+ * generated forms follow the form in the code, so a form loosened there
+ * loosens them with it; the fixed wrong forms of each driver (more, named
+ * "fixed: ..." after the list of the order) do not: they are wrong whatever
+ * the code says, and hold the form of each row.
  *
  * @package AlphaBridge_MCP
  */
@@ -24,6 +28,8 @@ use AB_MCP_Protected_Store;
 use AB_MCP_Shape;
 use AB_MCP_Store_Budget;
 use AB_MCP_Store_Inputs;
+use AB_MCP_Sync_Backup;
+use AB_MCP_Sync_Canon;
 use AB_MCP_Sync_Run;
 use AB_MCP_Sync_Schema;
 use PHPUnit\Framework\TestCase;
@@ -32,6 +38,8 @@ use ReflectionProperty;
 require_once __DIR__ . '/sync-stubs.php';
 require_once __DIR__ . '/../includes/class-protected-store.php';
 require_once __DIR__ . '/../includes/sync/class-sync-run.php';
+require_once __DIR__ . '/../includes/sync/class-sync-canon.php';
+require_once __DIR__ . '/../includes/sync/class-sync-backup.php';
 
 /**
  * A stand-in of $wpdb for the runs: the rows of backup_rows(), the column
@@ -180,8 +188,26 @@ final class StoreInputsTest extends TestCase {
 				}
 			}
 		}
+		foreach ( self::drivers()['runs.plan']['more'] as $what => $text ) {
+			if ( 0 === strpos( $what, 'fixed: ' ) ) {
+				self::assertSame( $text, AB_MCP_Sync_Canon::encode( AB_MCP_Sync_Canon::decode( $text, 64 ) ), "$what: spelt as encode() writes it, so the form of the row decides." );
+			}
+		}
 		self::assertGreaterThan( 300, $count, 'Every row with its wrong forms.' );
 		self::assertSame( array(), $red, count( $red ) . ' of ' . $count . " wrong forms reached the consumer as a value:\n" . implode( "\n", $red ) );
+	}
+
+	public function testABackupThatCannotBeWrittenAsJsonHasNoSizeNeverZero(): void {
+		// The source of budget.payload: where encode() gives no text (nested
+		// past its depth), size_of() knows no size (null) and fits() refuses
+		// (Behebung 4; it was strlen( '' ), 0, which fit every booking).
+		$deep = array();
+		for ( $i = 0; $i < 5000; $i++ ) {
+			$deep = array( $deep );
+		}
+		self::assertNull( AB_MCP_Sync_Backup::size_of( array( 'rows' => $deep ) ) );
+		$data = array( 'a' => 1 );
+		self::assertSame( strlen( AB_MCP_Sync_Canon::encode( array( 'data' => $data, 'format' => AB_MCP_Sync_Backup::FORMAT, 'run_id' => PHP_INT_MAX ) ) ), AB_MCP_Sync_Backup::size_of( $data ) );
 	}
 
 	/* ------------------------------------------------------------ drivers */
@@ -250,28 +276,43 @@ final class StoreInputsTest extends TestCase {
 			/* -------------------------------------------- kept() itself */
 			'retention.now'            => array(
 				'base'    => $now,
-				'more'    => array(),
+				'more'    => array(
+					'fixed: 0'                    => 0,
+					'fixed: its digits as text'    => (string) $now,
+					'fixed: negative'              => -1,
+				),
 				'valid'   => array( array( $now, false ) ),
 				'run'     => static fn( $v ) => $kept( $entry( 'reports', 0, $now - 2 * $day ), array( 'now' => $v ) ),
 				'unknown' => $null,
 			),
 			'retention.open'           => array(
 				'base'    => array( 7 ),
-				'more'    => array(),
+				'more'    => array(
+					'fixed: a list from key 1' => array( 1 => 7 ),
+					'fixed: 7 twice'           => array( 7, 7 ),
+					'fixed: 7 as text'         => array( '7' ),
+					'fixed: run 0'             => array( 0 ),
+				),
 				'valid'   => array( array( array( 7 ), true ), array( array(), false ) ),
 				'run'     => static fn( $v ) => $kept( $entry( 'reports', 7, $now - 2 * $day ), array( 'open' => $v ) ),
 				'unknown' => $null,
 			),
 			'retention.backups'        => array(
 				'base'    => array( 7 => false ),
-				'more'    => array(),
+				'more'    => array(
+					'fixed: 1 for true' => array( 7 => 1 ),
+					'fixed: run 0'      => array( 0 => false, 7 => false ),
+				),
 				'valid'   => array( array( array( 7 => false ), false ), array( array(), true ) ),
 				'run'     => static fn( $v ) => $kept( $entry( 'backups', 7, $now - 100 ), array( 'backups' => $v ) ),
 				'unknown' => $null,
 			),
 			'retention.keep'           => array(
 				'base'    => $day,
-				'more'    => array(),
+				'more'    => array(
+					'fixed: its digits as text' => (string) $day,
+					'fixed: negative'           => -1,
+				),
 				'valid'   => array( array( $day, true ), array( 0, false ) ),
 				'run'     => static fn( $v ) => $kept( $entry( 'reports', 0, $now - 100 ), array( 'keep' => array( 'reports' => $v ) ) ),
 				'unknown' => $null,
@@ -279,7 +320,12 @@ final class StoreInputsTest extends TestCase {
 			/* -------------------- the rows of the runs, through the database */
 			'runs.open_ids'            => array(
 				'base'    => array( '7' ),
-				'more'    => array(),
+				'more'    => array(
+					'fixed: run 0'               => array( '0' ),
+					'fixed: 7 twice'             => array( '7', '7' ),
+					'fixed: a list from key 1'   => array( 1 => '7' ),
+					'fixed: digits with a suffix' => array( '7a' ),
+				),
 				'valid'   => array( array( array( '7' ), true ), array( array( 7 ), true ), array( array(), false ) ),
 				'run'     => static function ( $v ) use ( $db, $kept, $entry, $now, $day ) {
 					$db()->col = $v;
@@ -289,7 +335,13 @@ final class StoreInputsTest extends TestCase {
 			),
 			'runs.run_id'              => array(
 				'base'    => '10',
-				'more'    => array(),
+				'more'    => array(
+					'fixed: run 0'                  => '0',
+					'fixed: digits with a suffix'   => '10a',
+					'fixed: a blank before'         => ' 10',
+					'fixed: a leading zero'         => '010',
+					'fixed: PHP_INT_MAX+1 as text'  => '9223372036854775808',
+				),
 				'valid'   => array( array( '10', false ), array( 10, false ) ),
 				'run'     => static function ( $v ) use ( $db, $closed, $backup ) {
 					$db()->rows = array( $closed( array( 'run_id' => $v ) ) );
@@ -299,7 +351,10 @@ final class StoreInputsTest extends TestCase {
 			),
 			'runs.state'               => array(
 				'base'    => 'closed_aborted',
-				'more'    => array(),
+				'more'    => array(
+					'fixed: another state'  => 'closed',
+					'fixed: in other case'  => 'Closed_aborted',
+				),
 				'valid'   => array( array( 'closed_aborted', false ), array( 'open', true ) ),
 				'run'     => static function ( $v ) use ( $db, $closed, $backup ) {
 					$db()->rows = array( $closed( array( 'state' => $v ) ) );
@@ -309,7 +364,7 @@ final class StoreInputsTest extends TestCase {
 			),
 			'runs.type'                => array(
 				'base'    => 'push',
-				'more'    => array(),
+				'more'    => array( 'fixed: another type' => 'pull' ),
 				'valid'   => array( array( 'push', false ) ),
 				'run'     => static function ( $v ) use ( $db, $closed, $backup ) {
 					$db()->rows = array( $closed(), $closed( array( 'run_id' => '12', 'state' => 'open', 'type' => $v ) ) );
@@ -319,7 +374,10 @@ final class StoreInputsTest extends TestCase {
 			),
 			'runs.keep_until'          => array(
 				'base'    => (string) ( $now - 10 ),
-				'more'    => array(),
+				'more'    => array(
+					'fixed: negative'             => '-1',
+					'fixed: digits with a suffix' => '5a',
+				),
 				'valid'   => array( array( (string) ( $now - 10 ), false ), array( '0', true ), array( $now + 100, true ) ),
 				'run'     => static function ( $v ) use ( $db, $closed, $backup ) {
 					$db()->rows = array( $closed( array( 'keep_until' => $v ) ) );
@@ -329,7 +387,10 @@ final class StoreInputsTest extends TestCase {
 			),
 			'runs.forward_closed_at'   => array(
 				'base'    => '0',
-				'more'    => array(),
+				'more'    => array(
+					'fixed: negative'             => '-1',
+					'fixed: digits with a suffix' => '5a',
+				),
 				'valid'   => array( array( '0', false ), array( (string) ( $now - 20 ), true ) ),
 				'run'     => static function ( $v ) use ( $db, $closed, $backup ) {
 					$db()->rows = array( $closed( array( 'forward_closed_at' => $v ) ) );
@@ -344,6 +405,13 @@ final class StoreInputsTest extends TestCase {
 					'A1: reverts an object of a list key' => '{"reverts":{"0":11}}',
 					'A1: reverts an object'               => '{"reverts":{"k":11}}',
 					'A1: reverts twice'                   => '{"reverts":[10],"reverts":[11]}',
+					// Spelt as encode() writes them, so each reaches the form of its row.
+					'fixed: reverts empty'                => '{"items":[],"reverts":[]}',
+					'fixed: reverts run 0'                => '{"items":[],"reverts":[0]}',
+					'fixed: reverts a run as text'        => '{"items":[],"reverts":["10"]}',
+					'fixed: reverts a run twice'          => '{"items":[],"reverts":[10,10]}',
+					'fixed: reverts a negative run'       => '{"items":[],"reverts":[-10]}',
+					'fixed: reverts from key 1'           => '{"items":[],"reverts":{"1":10}}',
 				),
 				'valid'   => array( array( '{"items":[],"reverts":[10]}', true ), array( '{"items":[],"reverts":[11]}', false ) ),
 				'run'     => static function ( $v ) use ( $db, $closed, $backup ) {
@@ -356,7 +424,11 @@ final class StoreInputsTest extends TestCase {
 			/* ------------------------------------------------------ periods */
 			'period.days'              => array(
 				'base'    => 30,
-				'more'    => array(),
+				'more'    => array(
+					'fixed: above 3650'        => 3651,
+					'fixed: digits above 3650' => '3651',
+					'fixed: negative'          => -1,
+				),
 				'valid'   => array( array( 30, array( $now + 30 * $day, true ) ), array( '30', array( $now + 30 * $day, true ) ), array( 0, array( $now + 7 * $day, true ) ) ),
 				'run'     => static function ( $v ) use ( $kept, $entry, $now ) {
 					add_filter( AB_MCP_Protected_Store::BACKUP_DAYS_FILTER, static fn() => $v );
@@ -366,7 +438,11 @@ final class StoreInputsTest extends TestCase {
 			),
 			'period.clock'             => array(
 				'base'    => $now,
-				'more'    => array(),
+				'more'    => array(
+					'fixed: 0'                         => 0,
+					'fixed: its digits as text'        => (string) $now,
+					'fixed: digits with a suffix (B2)' => '1bad',
+				),
 				'valid'   => array( array( $now, array( $now + 30 * $day, $now ) ) ),
 				'run'     => static function ( $v ) {
 					AB_MCP_Sync_Run::$clock = static fn() => $v;
@@ -378,7 +454,11 @@ final class StoreInputsTest extends TestCase {
 			/* ------------------------------------------------------ budgets */
 			'budget.max_packages'      => array(
 				'base'    => 5,
-				'more'    => array(),
+				'more'    => array(
+					'fixed: negative'             => -1,
+					'fixed: digits with a suffix' => '5bad',
+					'fixed: a float'              => 5.0,
+				),
 				'valid'   => array( array( 5, null ), array( '5', null ) ),
 				'run'     => static function ( $v ) use ( $one ) {
 					add_filter( AB_MCP_Store_Budget::FILTER_PACKAGES, static fn() => $v );
@@ -388,7 +468,11 @@ final class StoreInputsTest extends TestCase {
 			),
 			'budget.max_bytes'         => array(
 				'base'    => 1000,
-				'more'    => array(),
+				'more'    => array(
+					'fixed: negative'             => -1,
+					'fixed: digits with a suffix' => '5bad',
+					'fixed: a float'              => 5.0,
+				),
 				'valid'   => array( array( 1000, null ), array( '1000', null ) ),
 				'run'     => static function ( $v ) use ( $one ) {
 					add_filter( AB_MCP_Store_Budget::FILTER_BYTES, static fn() => $v );
@@ -398,7 +482,11 @@ final class StoreInputsTest extends TestCase {
 			),
 			'budget.max_exports'       => array(
 				'base'    => 3,
-				'more'    => array(),
+				'more'    => array(
+					'fixed: negative'             => -1,
+					'fixed: digits with a suffix' => '5bad',
+					'fixed: a float'              => 5.0,
+				),
 				'valid'   => array( array( 3, null ), array( '3', null ) ),
 				'run'     => static function ( $v ) use ( $one ) {
 					add_filter( AB_MCP_Store_Budget::FILTER_EXPORTS, static fn() => $v );
@@ -408,7 +496,10 @@ final class StoreInputsTest extends TestCase {
 			),
 			'budget.declared'          => array(
 				'base'    => 10,
-				'more'    => array(),
+				'more'    => array(
+					'fixed: its digits as text' => '10',
+					'fixed: negative'           => -1,
+				),
 				'valid'   => array( array( 10, null ) ),
 				'run'     => static fn( $v ) => AB_MCP_Store_Budget::package_refusal( array(), 'in', 1, $v ),
 				'unknown' => $refused( 'ab_mcp_store_declare' ),

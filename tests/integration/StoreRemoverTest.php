@@ -2054,7 +2054,14 @@ final class StoreRemoverTest extends TestCase {
 		$report = self::aged_group( 'reports', 0, 30 * 86400 );
 		$calls  = self::failing( array( 'scandir' => array( self::store() . '/reports' ) ) );
 		$done   = AB_MCP_Protected_Store::cleanup( time() );
+		// Its groups and its stock: refused, never an empty area (Behebung 4).
+		$groups = AB_MCP_Protected_Store::groups( 'reports' );
+		$stock  = AB_MCP_Protected_Store::stock( 'reports' );
 		AB_MCP_Test_Seam::restore_all();
+		self::assertInstanceOf( \WP_Error::class, $groups );
+		self::assertSame( 'ab_mcp_store_unlisted', $groups->get_error_code(), 'groups() of an area not listed: refused, never empty.' );
+		self::assertInstanceOf( \WP_Error::class, $stock );
+		self::assertSame( 'ab_mcp_store_stock_unknown', $stock->get_error_code() );
 		self::assertContains( array( 'scandir', self::store() . '/reports' ), $calls->failed );
 		self::assertSame( array( 'post-1' ), self::names( $report['dir'] ) );
 		self::assertSame( 1, $done['unknown'] );
@@ -2120,8 +2127,8 @@ final class StoreRemoverTest extends TestCase {
 		}
 		$run = \AB_MCP_Sync_Run::get( 14 );
 		self::assertSame( 'closed_done', $run['state'] );
-		self::assertSame( 0, (int) $run['keep_until'], 'No period of a time not known: 0, kept (N1).' );
-		self::assertSame( 0, (int) $run['forward_closed_at'], 'And no qualified close of it.' );
+		self::assertSame( 0, $run['keep_until'], 'No period of a time not known: 0, kept (N1).' );
+		self::assertSame( 0, $run['forward_closed_at'], 'And no qualified close of it (0, not NULL).' );
 		AB_MCP_Protected_Store::cleanup( $now + 40 * 86400 );
 		self::assertSame( array( 'post-1' ), self::names( $backup['dir'] ), 'Weeks later its backup stays.' );
 	}
