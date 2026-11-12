@@ -78,6 +78,17 @@ final class WellKnownFaultTest extends TestCase {
 		self::assertSame( 1, $this->fetches );
 		self::assertSame( array(), $this->lockRows() );
 		self::assertFalse( $GLOBALS['wpdb']->suppressed, 'The error display as it was.' );
+		self::assertSame( 0, $this->seamCalls( 'delete' ), 'No lock, nothing to give back.' );
+	}
+
+	public function testWithoutADatabaseAnExpiredLockIsTakenOver(): void {
+		$GLOBALS['wpdb'] = null;
+		$this->seam( array() );
+		$GLOBALS['ab_test_options'][ $this->lock() ] = time() - 1;
+
+		self::assertSame( 'document', $this->answer()['kind'] );
+		self::assertSame( 1, $this->fetches );
+		self::assertArrayNotHasKey( $this->lock(), $GLOBALS['ab_test_options'], 'Given back.' );
 	}
 
 	public function testAnExpiredLockCannotBeRemovedSoTheDocumentIsFetchedWithoutIt(): void {
@@ -291,6 +302,14 @@ final class WellKnownFaultTest extends TestCase {
 		self::assertSame( array(), $this->relayKeys() );
 	}
 
+	public function testWpLoadInASiblingWithTheSameBeginningIsOutside(): void {
+		$root = rtrim( (string) realpath( rtrim( ABSPATH, '/' ) ), '/' );
+		$this->seam( array( array( 'method' => 'realpath', 'nth' => 2, 'kind' => 'return', 'value' => $root . 'X/staging/123/wp-load.php' ) ) );
+
+		self::assertSame( array( 'kind' => 'refused' ), $this->answer(), $root . 'X is not inside ' . $root . '.' );
+		self::assertSame( 0, $this->fetches );
+	}
+
 	public function testAThrowableFromTheDiskWritesNothing(): void {
 		$this->seam( array( array( 'method' => 'realpath', 'kind' => 'throw' ) ) );
 
@@ -419,6 +438,30 @@ final class WellKnownFaultTest extends TestCase {
 		$this->assertThrows();
 		self::assertSame( array(), $this->relayKeys() );
 		self::assertSame( array( $this->lock() ), $this->lockRows() );
+	}
+
+	/**
+	 * A home address without scheme or without host (a filter on home_url
+	 * that broke it), the core at the root of the host as before.
+	 *
+	 * @return array<string,array{0:string,1:string}> home, path before /.well-known/
+	 */
+	public static function brokenHomes(): array {
+		return array(
+			'no scheme' => array( '//example.test', '' ),
+			'no host'   => array( 'file:///srv', '/srv' ),
+		);
+	}
+
+	#[DataProvider( 'brokenHomes' )]
+	public function testAHomeAddressWithoutSchemeOrHostMeansNoFetch( string $home, string $before ): void {
+		$this->seam( array() );
+		$GLOBALS['ab_test_home']     = $home;
+		$GLOBALS['ab_test_site_url'] = 'https://example.test';
+
+		self::assertSame( array( 'kind' => 'refused' ), AB_MCP_OAuth::well_known_answer( $before . '/.well-known/oauth-authorization-server' . $this->p . '/staging/123' ) );
+		self::assertSame( array( 'realpath', 'realpath' ), $this->seamMethods(), 'The site is on disk; nothing after that.' );
+		self::assertSame( array(), $GLOBALS['wpdb']->queries );
 	}
 
 	public function testAHomeAddressAFilterBrokeMeansNoFetch(): void {

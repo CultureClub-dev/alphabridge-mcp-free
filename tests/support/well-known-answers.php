@@ -67,6 +67,12 @@ function ab_well_known_test_answer( string $mode, string $url ) {
 			return ab_test_http_response( 200, $doc, array( 'Content-Type' => 'text/plain' ) );
 		case 'no-type':
 			return ab_test_http_response( 200, $doc );
+		case 'json-404':
+			return ab_test_http_response( 404, $doc, $json );
+		case 'two-types':
+			return ab_test_http_response( 200, $doc, array( 'Content-Type' => array( 'application/json', 'text/html' ) ) );
+		case 'type-upper':
+			return ab_test_http_response( 200, $doc, array( 'Content-Type' => ' Application/JSON ; charset=utf-8' ) );
 		case 'broken-json':
 			return ab_test_http_response( 200, substr( $doc, 0, -5 ), $json );
 		case 'json-list':

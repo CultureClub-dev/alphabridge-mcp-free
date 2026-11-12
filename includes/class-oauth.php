@@ -1586,15 +1586,15 @@ class AB_MCP_OAuth {
 	 *   menus and sidebars the protection hides) and no later handler.
 	 * - Anything else ('none'): nothing; the request goes on as before.
 	 *
-	 * @param array $answer    What well_known_answer() decided.
+	 * @param array $answer    What well_known_answer() decided (kind, and the
+	 *                         document where it is one).
 	 * @param bool  $protected True from the preview protection, for a visitor.
 	 */
 	public static function respond_well_known( array $answer, $protected ) {
-		$kind = isset( $answer['kind'] ) ? $answer['kind'] : 'none';
-		if ( 'document' === $kind && isset( $answer['document'] ) && is_array( $answer['document'] ) ) {
+		if ( 'document' === $answer['kind'] ) {
 			self::send_json( $answer['document'] );
 		}
-		if ( 'refused' !== $kind ) {
+		if ( 'refused' !== $answer['kind'] ) {
 			return;
 		}
 		if ( $protected ) {

@@ -1286,7 +1286,7 @@ class AB_MCP_Preview_Protection {
 	 * @param string $reason The clause that decided.
 	 * @param array  $ctx    frontend_context() of the request.
 	 */
-	private static function serve( $reason, array $ctx = array() ) {
+	private static function serve( $reason, array $ctx ) {
 		if ( 'rest_route' === $reason ) {
 			if ( function_exists( 'rest_api_loaded' ) ) {
 				rest_api_loaded();
@@ -1302,7 +1302,7 @@ class AB_MCP_Preview_Protection {
 			return;
 		}
 		if ( 'well_known' === $reason ) {
-			AB_MCP_OAuth::respond_well_known( isset( $ctx['well_known_answer'] ) && is_array( $ctx['well_known_answer'] ) ? $ctx['well_known_answer'] : array( 'kind' => 'none' ), true );
+			AB_MCP_OAuth::respond_well_known( $ctx['well_known_answer'], true );
 		} elseif ( 'oauth_authorize' === $reason ) {
 			AB_MCP_OAuth::handle_authorize();
 		}

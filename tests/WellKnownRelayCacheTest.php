@@ -213,6 +213,7 @@ final class WellKnownRelayCacheTest extends TestCase {
 
 		self::assertCount( 1, $GLOBALS['wpdb']->queries, 'INSERT IGNORE, nothing that looks first and inserts after.' );
 		self::assertStringStartsWith( 'INSERT IGNORE INTO wp_options', $GLOBALS['wpdb']->queries[0] );
+		self::assertSame( array( true ), $GLOBALS['wpdb']->suppressed_at_query, 'No database message inside the JSON answer.' );
 		self::assertSame( array(), $this->locks() );
 		self::assertSame( array(), array_values( array_filter( array_keys( $GLOBALS['ab_test_options'] ), static fn( $key ): bool => 0 === strpos( (string) $key, 'ab_mcp_wk_lock_' ) ) ), 'Not through the options API.' );
 	}

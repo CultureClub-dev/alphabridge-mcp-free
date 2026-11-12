@@ -33,6 +33,8 @@ if ( ! class_exists( 'wpdb', false ) ) {
 		public $suppressed = false;
 		/** @var bool[] Whether errors were suppressed at each delete(). */
 		public $suppressed_at_delete = array();
+		/** @var bool[] Whether errors were suppressed at each query(). */
+		public $suppressed_at_query = array();
 
 		public function suppress_errors( $suppress = true ) {
 			$old              = $this->suppressed;
@@ -53,7 +55,8 @@ if ( ! class_exists( 'wpdb', false ) ) {
 		}
 
 		public function query( $sql ) {
-			$this->queries[] = $sql;
+			$this->queries[]             = $sql;
+			$this->suppressed_at_query[] = $this->suppressed;
 			if ( $this->fail ) {
 				return false;
 			}

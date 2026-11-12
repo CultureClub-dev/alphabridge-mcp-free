@@ -68,7 +68,9 @@ final class WellKnownHttpTest extends TestCase {
 	private static string $docroot = '';
 
 	public static function setUpBeforeClass(): void {
-		self::$docroot = ab_test_wk_dir( array( '/staging/123', '/staging/1234', '/Staging/123', '/~a/b-c/d_e/f.g', '/other' ) );
+		// The paths the segment rules refuse hold a WordPress too: the rules,
+		// not the look at the disk, refuse them.
+		self::$docroot = ab_test_wk_dir( array( '/staging/123', '/staging/1234', '/Staging/123', '/~a/b-c/d_e/f.g', '/other', '/.hidden', '/a..b', '/a/b/c/d/e', '/a$b', '/a%41b', '/a%5Cb' ) );
 		$probe = @stream_socket_server( 'tcp://127.0.0.1:0' );
 		if ( false === $probe ) {
 			return;
@@ -254,6 +256,13 @@ final class WellKnownHttpTest extends TestCase {
 		self::assertStringNotContainsString( 'x_extra', $answer['body'] );
 	}
 
+	public function testAJsonTypeInCapitalsWithParametersIsRelayed(): void {
+		$answer = $this->request( '/.well-known/oauth-authorization-server/staging/123', self::ROOT, null, true, 'type-upper' );
+
+		self::assertSame( 200, $answer['status'], $answer['raw'] );
+		self::assertSame( $this->document( self::AS, self::SUB, null ), $answer['body'] );
+	}
+
 	public function testADocumentJustBelowTheLimitIsRelayedWithoutThePadding(): void {
 		$answer = $this->request( '/.well-known/oauth-authorization-server/staging/123', self::ROOT, null, true, 'below-limit' );
 
@@ -278,6 +287,8 @@ final class WellKnownHttpTest extends TestCase {
 			'https home, the server cannot reach itself'    => array( $as, 'tls' ),
 			'no site there (404)'                           => array( $as, 'not-found' ),
 			'server error'                                  => array( $as, 'server-error' ),
+			'the JSON document with a 404'                  => array( $as, 'json-404' ),
+			'two Content-Type headers'                      => array( $as, 'two-types' ),
 			'redirect, not followed'                        => array( $as, 'redirect' ),
 			'HTML with 200'                                 => array( $as, 'html' ),
 			'JSON not sent as application/json'             => array( $as, 'json-as-text' ),
