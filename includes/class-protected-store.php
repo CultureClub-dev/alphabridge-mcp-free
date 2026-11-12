@@ -899,7 +899,7 @@ final class AB_MCP_Protected_Store {
 		// that declares none is refused by its budget).
 		$declared = array_key_exists( 'declared', $meta ) ? AB_MCP_Store_Inputs::read( 'budget.declared', $meta['declared'] ) : 0;
 		if ( null === $declared ) {
-			return new WP_Error( 'ab_mcp_store_declare', 'The bytes a group declares are a whole number of 0 or more. Pass them so, or none.' );
+			return new WP_Error( 'ab_mcp_store_declare', __( 'The bytes a group declares are a whole number of 0 or more. Pass them so, or none.', 'alphabridge-mcp' ) );
 		}
 		$root = self::root();
 		if ( is_wp_error( $root ) ) {
