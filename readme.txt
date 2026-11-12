@@ -281,6 +281,9 @@ AlphaBridge MCP sends no telemetry and calls no outside service on its own. Four
 * A 401 of the MCP endpoint now says in the header `X-AB-MCP-Auth` whether a token arrived (`rejected`) or not (`missing`), and nothing more.
 * On a multisite network, switching a plugin on or off for every site takes the network's own right (`manage_network_plugins`), as on WordPress's own screens: a site administrator who may manage plugins gets a refusal with the way to a network administrator. `wp_update_core` reports an update that could not reach the files as failed, and uninstalling puts packages that AlphaBridge took off WordPress's automatic updates after a failed update back on that list.
 
+= 4.10.1 =
+* The main site now answers OAuth discovery requests for a site in a subfolder of the same domain (up to four levels deep, for example a staging copy) with that site's own metadata, fetched from it, so the subfolder site can connect to AI clients over OAuth when AlphaBridge on the main site is updated and the subfolder site lies in the main site's web directory and can be reached from it.
+
 = 4.10.0 =
 * **Page-builder texts and search and replace in the free plugin, 82 tools in all.** `wp_update_builder_element` and `wp_search_replace` came with AlphaBridge MCP Pro only; they work as they did there, with the same checks, and their messages come in the plugin's languages.
 * **`wp_update_builder_element`** changes the text, link or image of one element on pages of the WordPress blocks, GenerateBlocks, Kadence Blocks, Spectra, Stackable, Pagelayer, Elementor, Beaver Builder, SiteOrigin Page Builder, SeedProd, WPBakery Page Builder, Divi 4, Avada, Flatsome and Enfold. It previews by default; applied, it records an undo point first, saves through the builder and reads the page back.
@@ -552,6 +555,9 @@ Pictures from the ChatGPT chat go straight into the media library, the same file
 
 = 4.11.0 =
 Installing, updating and activating plugins and themes are free now, 95 tools in all, with a connection check. Updating WordPress, ZIP installs and deletes run after a preview with a token. No setting changes.
+
+= 4.10.1 =
+Sites installed in a subfolder (up to four levels deep) of a domain where AlphaBridge also runs at the root, for example staging copies, can connect to AI clients over OAuth when AlphaBridge on the main site is updated and the subfolder site lies in its web directory and can be reached from it.
 
 = 4.10.0 =
 Page-builder texts and search and replace are free now, 82 tools in all, with undo for page-builder pages and options, post_ids and expected_count. No setting changes.
