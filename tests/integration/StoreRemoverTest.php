@@ -1116,6 +1116,7 @@ final class StoreRemoverTest extends TestCase {
 		self::run_row( 4, 'closed_done', $now - 10 * 86400, $now - 10 * 86400 );
 		$cases = array(
 			'no JSON'                                   => '{"format":',
+			'empty, as write_entry() writes it where json_encode() fails' => '',
 			'not of the format'                         => array( 'format' => 'ab-mcp-other/9' ),
 			'its time made no number'                   => array(
 				'run_id'  => 0,
@@ -1984,6 +1985,37 @@ final class StoreRemoverTest extends TestCase {
 		file_put_contents( $root . '/owner.json', $owner );
 	}
 
+	public function testASidecarOrAnAreaThatIsNoPlainFileOrFolderIsNotReadAndCountsUnknown(): void {
+		// The name of a sidecar on a link: never followed, so nothing says
+		// whose the group is; it stays and counts (Behebung 3).
+		$report = self::aged_group( 'reports', 0, 30 * 86400 );
+		$copy   = AB_MCP_IT_Sites::docroot( 'a' ) . '/wp-content/ab-it-sidecar-copy.json';
+		rename( $report['dir'] . '.json', $copy );
+		symlink( $copy, $report['dir'] . '.json' );
+		$done = AB_MCP_Protected_Store::cleanup( time() );
+		self::assertSame( array( 'post-1' ), self::names( $report['dir'] ), 'The group of a linked sidecar stays.' );
+		self::assertFileExists( $copy, 'What the link names is never touched.' );
+		self::assertSame( 1, $done['unknown'] );
+		unlink( $report['dir'] . '.json' );
+		rename( $copy, $report['dir'] . '.json' );
+		// An area that is a link to a folder outside the store: nothing in
+		// it is read or removed, and it counts.
+		$area    = self::store() . '/reports';
+		$outside = AB_MCP_IT_Sites::docroot( 'a' ) . '/wp-content/ab-it-linked-reports';
+		rename( $area, $outside );
+		symlink( $outside, $area );
+		try {
+			$done = AB_MCP_Protected_Store::cleanup( time() );
+		} finally {
+			unlink( $area );
+			rename( $outside, $area );
+		}
+		self::assertSame( array( 'post-1' ), self::names( $report['dir'] ), 'The group behind the linked area stays.' );
+		self::assertSame( 1, $done['unknown'] );
+		AB_MCP_Protected_Store::cleanup( time() );
+		self::assertFileDoesNotExist( $report['dir'], 'Plain again, the report goes by its time.' );
+	}
+
 	public function testAnAreaThatCannotBeListedLosesNothingAndIsCountedUnknown(): void {
 		$report = self::aged_group( 'reports', 0, 30 * 86400 );
 		$calls  = self::failing( array( 'scandir' => array( self::store() . '/reports' ) ) );
@@ -2004,6 +2036,12 @@ final class StoreRemoverTest extends TestCase {
 		$half = $root . '/marks/' . str_repeat( 'b', 32 );
 		mkdir( $half, 0700 );
 		touch( $half, time() - 3 * 86400 );
+		// Their folders cannot be listed: nothing in them goes.
+		self::failing( array( 'scandir' => array( $root . '/tmp', $root . '/marks' ) ) );
+		AB_MCP_Protected_Store::cleanup( time() );
+		AB_MCP_Test_Seam::restore_all();
+		self::assertFileExists( $temp, 'tmp/ not listed: the temp file stays.' );
+		self::assertDirectoryExists( $half, 'marks/ not listed: the folder of the mark stays.' );
 		self::failing( array( 'lstat' => array( $temp, $half ) ) );
 		AB_MCP_Protected_Store::cleanup( time() );
 		AB_MCP_Test_Seam::restore_all();
