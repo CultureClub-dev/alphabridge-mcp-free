@@ -2096,6 +2096,72 @@ final class SyncProposalTest extends TestCase {
 		self::assertStringContainsString( 'gone since the proposal', self::refused( self::gated( $args ), 'ab_mcp_sync_pairs_nothing' ) );
 	}
 
+	/**
+	 * V1 of the pre-check of Z8b branch 2b: the gate checks the token against
+	 * the state of a plan (state()) and then runs the tool in the same
+	 * request; the tool writes that very plan, not one made anew. A pair
+	 * ended in between (gleichzeitiger Schreiber) does not let an entry the
+	 * plan skipped («paired meanwhile») be paired without the token.
+	 */
+	public function testTheConfirmationWritesThePlanItsTokenWasCheckedAgainst(): void {
+		self::pair();
+		$a       = self::pages_on_a( array( 'contact' => 'C', 'about' => 'About us.' ) );
+		$b       = self::pages_on_b( array( 'contact' => 'C', 'about' => 'About us.' ) );
+		$answer  = self::proposal( self::staged() );
+		$made    = AB_MCP_Sync_Pairs::create(
+			array(
+				'source_id'    => AB_MCP_Sync_Anchor::active()['source_id'],
+				'kind'         => 'post',
+				'live_ref'     => $a['about'],
+				'staging_ref'  => $b['about'],
+				'canon'        => 'canon/1',
+				'base_live'    => hash( 'sha256', 'l' ),
+				'base_staging' => hash( 'sha256', 's' ),
+				'base_origin'  => 'push',
+			)
+		);
+		$args    = array(
+			'action'      => 'confirm',
+			'proposal_id' => $answer['proposal_id'],
+			'select'      => array( self::entry_of( $answer['all'], 'contact' )['n'], self::entry_of( $answer['all'], 'about' )['n'] ),
+		);
+		// What the gate does: the state of the plan, then (the token checked) the tool.
+		self::assertIsString( AB_MCP_Sync_Pairs_Tool::state( $args ) );
+		// Another request ends the pair of «about» in between.
+		self::assertTrue( AB_MCP_Sync_Pairs::discard( (int) $made['id'], AB_MCP_Sync_Pairs::snapshot_hash( AB_MCP_Sync_Pairs::snapshot( (int) $made['id'] ) ) ) );
+		$done = AB_MCP_Sync_Pairs_Tool::call( $args );
+		self::assertIsArray( $done, is_wp_error( $done ) ? $done->get_error_message() : '' );
+		self::assertSame( array( 'made_active' => 1 ), $done['counts'], 'The plan the token covered: «about» skipped there.' );
+		$rows = array_values( self::pair_rows() );
+		self::assertCount( 1, $rows );
+		self::assertSame( $a['contact'], $rows[0]['live_ref'], '«about» stays without a pair: the token did not cover it.' );
+	}
+
+	public function testAConfirmationNotCheckedInTheSameCallWritesNothing(): void {
+		self::pair();
+		self::pages_on_a( array( 'about' => 'About us.' ) );
+		self::pages_on_b( array( 'about' => 'About us.' ) );
+		$answer = self::proposal( self::staged() );
+		$args   = array(
+			'action'      => 'confirm',
+			'proposal_id' => $answer['proposal_id'],
+			'select'      => array( self::entry_of( $answer['all'], 'about' )['n'] ),
+		);
+		self::assertStringContainsString( 'right after the token of their preview was checked', self::refused( AB_MCP_Sync_Pairs_Tool::call( $args ), 'ab_mcp_sync_pairs_unchecked' ) );
+		// The state of other arguments checks no other call.
+		self::assertIsString( AB_MCP_Sync_Pairs_Tool::state( array( 'action' => 'confirm', 'proposal_id' => $answer['proposal_id'], 'categories' => array( 'equal' ) ) ) );
+		self::refused( AB_MCP_Sync_Pairs_Tool::call( $args ), 'ab_mcp_sync_pairs_unchecked' );
+		// Checked once, written once.
+		self::assertIsString( AB_MCP_Sync_Pairs_Tool::state( $args ) );
+		self::assertIsArray( AB_MCP_Sync_Pairs_Tool::call( $args ) );
+		self::refused( AB_MCP_Sync_Pairs_Tool::call( $args ), 'ab_mcp_sync_pairs_unchecked' );
+		self::assertCount( 1, self::pair_rows() );
+		// discard alike.
+		$id = (int) array_keys( self::pair_rows() )[0];
+		self::refused( AB_MCP_Sync_Pairs_Tool::call( array( 'action' => 'discard', 'pair_ids' => array( $id ) ) ), 'ab_mcp_sync_pairs_unchecked' );
+		self::assertCount( 1, self::pair_rows() );
+	}
+
 	public function testEachPartOfTheStateOfADiscardBindsItsToken(): void {
 		self::pair();
 		$a    = self::pages_on_a( array( 'about' => 'About us.' ) );

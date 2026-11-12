@@ -59,6 +59,19 @@ final class AB_MCP_Sync_Pairs_Tool {
 	/** Operations an answer names at most (all are counted). */
 	const NAMED = 200;
 
+	/**
+	 * The plan state() made last, with the print of its arguments: the plan
+	 * the gate checks the token against (AB_MCP_Confirm_Token::gate() asks
+	 * state() right before it runs the tool in the same request), which
+	 * call() then writes, taken once (checked()). Not a plan made anew
+	 * after the check (V1 of the pre-check of Z8b branch 2b: a pair ended in
+	 * between would otherwise let a second plan write what the token did not
+	 * cover).
+	 *
+	 * @var array|null
+	 */
+	private static $checked = null;
+
 	/* ------------------------------------------------- the confirmation */
 
 	/**
@@ -68,8 +81,39 @@ final class AB_MCP_Sync_Pairs_Tool {
 	 * @return string|WP_Error
 	 */
 	public static function state( array $a ) {
-		$plan = self::plan( $a );
-		return is_wp_error( $plan ) ? $plan : hash( 'sha256', AB_MCP_Sync_Canon::encode( $plan['state'] ) );
+		self::$checked = null;
+		$plan          = self::plan( $a );
+		if ( is_wp_error( $plan ) ) {
+			return $plan;
+		}
+		self::$checked = array(
+			'args' => self::args_print( $a ),
+			'plan' => $plan,
+		);
+		return hash( 'sha256', AB_MCP_Sync_Canon::encode( $plan['state'] ) );
+	}
+
+	/**
+	 * The plan state() made for these very arguments in this request, taken
+	 * once; null where it made none (then the call was not checked).
+	 *
+	 * @param array $a Arguments.
+	 * @return array|null
+	 */
+	private static function checked( array $a ) {
+		$checked       = self::$checked;
+		self::$checked = null;
+		return is_array( $checked ) && hash_equals( $checked['args'], self::args_print( $a ) ) ? $checked['plan'] : null;
+	}
+
+	/**
+	 * The print of the arguments of a call.
+	 *
+	 * @param array $a Arguments.
+	 * @return string
+	 */
+	private static function args_print( array $a ) {
+		return hash( 'sha256', serialize( $a ) );
 	}
 
 	/**
@@ -120,9 +164,10 @@ final class AB_MCP_Sync_Pairs_Tool {
 				return self::listed( $a );
 			case 'confirm':
 			case 'discard':
-				$plan = self::plan( $a );
-				if ( is_wp_error( $plan ) ) {
-					return $plan;
+				// The plan the token was checked against, not one made anew.
+				$plan = self::checked( $a );
+				if ( null === $plan ) {
+					return new WP_Error( 'ab_mcp_sync_pairs_unchecked', __( 'Nothing was changed: confirm and discard run only right after the token of their preview was checked in the same call (wp_site_pairs with the same arguments and confirm_token).', 'alphabridge-mcp' ) );
 				}
 				return 'confirm' === $action ? self::confirm( $plan ) : self::discard( $plan );
 		}

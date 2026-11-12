@@ -1,6 +1,6 @@
 <?php
 /**
- * The texts of Z8b branch 2 that wait for their translation: the order of
+ * The texts of Z8b branches 2 and 2b that wait for their translation: the order of
  * Z8b says «Texte englisch mit Textdomain; Übersetzungen erst mit
  * text/z8b». BundledTranslationsTest leaves these keys out of its check
  * of the nine languages and checks the list itself instead: every key is
@@ -22,6 +22,8 @@ return array(
 	'Only the step that wrote and checked the part %1$s of a pair of kind %2$s moves its bases on: the kind responsible for it by AB_MCP_Sync_Kinds::OWNERSHIP, registered as such. Nothing was written. Pass the kind registered for the part, and call again.',
 	'The field base_extra of the pair is not stored JSON of a pair.',
 	'The pair of kind %2$s has no part %1$s whose bases could be moved on: a unit takes new bases part by part (files, activation), an object of the takeover without a part. Nothing was written. Pass a part of the pair (AB_MCP_Sync_Pairs::PARTS), or none for an object, and call again.',
+	// includes/sync/class-sync-pairs-tool.php (Z8b branch 2b)
+	'Nothing was changed: confirm and discard run only right after the token of their preview was checked in the same call (wp_site_pairs with the same arguments and confirm_token).',
 	// includes/sync/class-sync-said.php
 	'A file of the font library comes with the fonts of the font library.',
 	'A file of the font library is compared by its contents; it comes with the fonts of the font library.',
