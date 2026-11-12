@@ -1610,6 +1610,12 @@ final class AB_MCP_Protected_Store {
 					);
 				}
 				$read = self::read_tree( null === $source ? $target : $source );
+				if ( $read['complete'] && 'file' === $read['form'] && basename( $target ) !== $name ) {
+					// The manifest of a file holds its name: a tree of one file
+					// is named as the file of its unit, so that it reads the
+					// same in the store and at the target.
+					return new WP_Error( 'ab_mcp_store_tree_name', __( 'A tree of one file is named as the file of its unit (the last part of its path in the site). Pass that name.', 'alphabridge-mcp' ) );
+				}
 				if ( ! $read['complete'] || null === $read['hash'] ) {
 					return new WP_Error(
 						'ab_mcp_store_tree_unread',
@@ -1662,8 +1668,14 @@ final class AB_MCP_Protected_Store {
 				unset( self::$building[ $place ] );
 				if ( true === $made ) {
 					$back = self::read_tree( $place );
-					if ( $back['complete'] && null !== $back['hash'] && hash_equals( $out['hash'], (string) $back['hash'] ) ) {
+					// A folder by its hash; a file by its size and SHA-256, its
+					// name in the store being the one of its unit.
+					$same = $back['complete'] && null !== $back['hash'] && ( 'file' === $out['form']
+						? isset( $back['entries'][0], $read['entries'][0] ) && 1 === count( $back['entries'] ) && $back['entries'][0][1] === $read['entries'][0][1] && hash_equals( (string) $read['entries'][0][2], (string) $back['entries'][0][2] )
+						: hash_equals( $out['hash'], (string) $back['hash'] ) );
+					if ( $same ) {
 						unset( self::$noted[ $place ] );
+						$out['hash']   = (string) $back['hash'];
 						$out['copied'] = true;
 						return $out;
 					}
@@ -2243,7 +2255,10 @@ final class AB_MCP_Protected_Store {
 		$dir   = $root . '/' . self::MARKS . '/' . $mid;
 		$names = $calls->scandir( $dir );
 		if ( false === $names ) {
-			return false;
+			// No such mark where the folder of the marks lists none of its
+			// name; else it cannot be read (fail closed).
+			$all = $calls->scandir( $root . '/' . self::MARKS );
+			return ( false !== $all && ! in_array( (string) $mid, $all, true ) ) ? null : false;
 		}
 		if ( ! in_array( self::MARK_FILE, $names, true ) ) {
 			return null;
