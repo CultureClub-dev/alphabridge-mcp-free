@@ -398,6 +398,9 @@ final class AB_MCP_Protected_Store {
 	/** The areas below which the self-check of the uploads asks a PHP file in a folder (E4). */
 	const PHP_PROBES = array( 'stage', 'backups' );
 
+	/** Seconds the whole uninstall asks for the locks of its folders at most (uninstall_locked(); B3 of Behebung 1). */
+	const UNINSTALL_WAIT = 10;
+
 	/** Seconds the reading of a tree may take (as a unit of the environment, AB_MCP_Sync_Env::UNIT_BUDGET). */
 	const TREE_BUDGET = 45;
 
@@ -1303,6 +1306,45 @@ final class AB_MCP_Protected_Store {
 	}
 
 	/**
+	 * The lock of a folder of the store for the uninstall alone (Z9; B3 of
+	 * Behebung 1): asked again and again without waiting for the holder
+	 * (LOCK_NB) until $until, the end of the time the whole uninstall gives
+	 * all its folders. Where the lock file cannot be opened (or is a link),
+	 * the lock fails for another reason than a holder, or the holder keeps it
+	 * until then, $fn does not run: nothing goes back and nothing goes, so
+	 * the folder keeps its ownership manifest, marks, backups and
+	 * instructions for the way back by hand. locked() waits for the holder
+	 * for every other call.
+	 *
+	 * @param string   $root  Folder of the store.
+	 * @param callable $fn    What runs under the lock.
+	 * @param float    $until Time (microtime()) after which it asks no more.
+	 * @return bool Whether $fn ran under the lock.
+	 */
+	private static function uninstall_locked( $root, callable $fn, $until ) {
+		$file   = $root . '/' . self::LOCK_FILE;
+		$handle = is_link( $file ) ? false : @fopen( $file, 'c' ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_fopen
+		if ( ! $handle ) {
+			return false;
+		}
+		$busy = 0;
+		while ( ! flock( $handle, LOCK_EX | LOCK_NB, $busy ) ) {
+			if ( ! $busy || microtime( true ) >= $until ) {
+				fclose( $handle ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
+				return false;
+			}
+			usleep( 100000 );
+		}
+		try {
+			$fn();
+			return true;
+		} finally {
+			flock( $handle, LOCK_UN );
+			fclose( $handle ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
+		}
+	}
+
+	/**
 	 * The lock of a folder of the store for a writer, and under it the record
 	 * of the proof read afresh from the table (admitted()): the proof this
 	 * request keeps is a hint only, never the release. A request that chose
@@ -1375,9 +1417,11 @@ final class AB_MCP_Protected_Store {
 	/**
 	 * Uninstall (Z9; Free uninstall.php and Pro's uninstall call this and
 	 * nothing else of the store): in each folder of this installation, only
-	 * where its ownership manifest is this installation's and under its lock,
-	 * first every original an open mark names goes back where its identity
-	 * is proved (put_back()); then the folder goes through delete_path()
+	 * where its ownership manifest is this installation's and only under its
+	 * lock (uninstall_locked(): where it cannot be taken within the
+	 * UNINSTALL_WAIT seconds of the whole uninstall, the folder stays as it
+	 * is, limit G-3-9), first every original an open mark names goes back
+	 * where its identity is proved (put_back()); then the folder goes through delete_path()
 	 * (Z37): what an open mark still names stays, the tree, every folder
 	 * above it, the mark and its instruction, and with them the ownership
 	 * manifest, the guard files and the lock, so the folder stays this
@@ -1386,7 +1430,8 @@ final class AB_MCP_Protected_Store {
 	 * The options go with the list of uninstall.php.
 	 */
 	public static function uninstall() {
-		$id = self::install_id( false );
+		$id    = self::install_id( false );
+		$until = microtime( true ) + self::UNINSTALL_WAIT;
 		foreach ( self::own_folders( $id ) as $root ) {
 			$work = static function () use ( $root ) {
 				try {
@@ -1404,11 +1449,11 @@ final class AB_MCP_Protected_Store {
 					)
 				);
 			};
-			// A folder whose lock cannot be taken goes all the same, as it
-			// always went: nothing could write there either.
-			if ( is_wp_error( self::locked( $root, $work ) ) ) {
-				$work();
-			}
+			// Without the lock nothing runs: a lock that cannot be taken
+			// proves no writer away, and another request may be writing
+			// there right now; the folder stays with its marks, backups and
+			// instructions for the way back by hand (limit G-3-9).
+			self::uninstall_locked( $root, $work, $until );
 		}
 		$parent = dirname( untrailingslashit( ABSPATH ) ) . '/' . self::PARENT;
 		if ( '' !== $id && is_dir( $parent ) && ! is_link( $parent ) ) {

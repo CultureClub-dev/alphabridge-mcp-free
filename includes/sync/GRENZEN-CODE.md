@@ -104,6 +104,26 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
 - **Trifft Normalfall:** nein nach Einschätzung (übliche Plugins und Themes haben wenige tausend Dateien); nicht
   gemessen.
 
+### G-3-9 Ordner der Ablage nach einer Deinstallation ohne Sperre
+
+- **Fundstelle:** `AB_MCP_Protected_Store::uninstall()` mit `uninstall_locked()` (Sperre mit `LOCK_NB`, erneut alle
+  0,1 s, `UNINSTALL_WAIT` = 10 s für die ganze Deinstallation, alle Ordner zusammen), `includes/class-protected-store.php`.
+- **Quelle:** Codex-Runde 1 von Zweig 3, B3; Behebung 1. Tests `StoreRemoverTest::
+  testTheUninstallLeavesAFolderWhoseLockIsHeldPastItsTimeAsItIs` und `testTheUninstallDoesNothingWhereTheLockCannotBeOpened`.
+- **Was:** Lässt sich die Sperre eines Ordners nicht öffnen (`store.lock` ist ein Ordner, eine Verknüpfung oder ohne
+  Rechte), scheitert sie aus einem anderen Grund als einem Halter, oder hält ein anderer Prozess sie über das Ende der
+  10 s hinaus, läuft für diesen Ordner nichts: kein Original geht zurück, nichts wird entfernt. Nach der Deinstallation
+  bleibt der Ordner mit Eigentumsdatei, Wachdateien, Marken, Sicherungen und Anleitungen (`WIEDERHERSTELLEN.txt`)
+  liegen, der Handweg bleibt möglich. Das Plugin ist danach weg, die tägliche Bereinigung auch; den Ordner entfernt
+  dann nur noch eine Person von Hand oder eine neue Installation mit erneuter Deinstallation. Die Optionen gehen wie
+  bisher mit `uninstall.php`.
+- **Trifft Normalfall:** nein, nach Einschätzung (nicht gemessen): WordPress deinstalliert nur ein deaktiviertes
+  Plugin; die Sperre hält dann höchstens eine Anfrage, die vor der Deaktivierung begann und noch schreibt (etwa
+  `put_tree()` eines grossen Baums, G-3-8), oder ein Hoster, der `flock()` oder die Rechte in dem Ordner verweigert.
+  Die Alternative, ohne Sperre weiterzumachen, nähme einem laufenden Schreiber die Dateien unter der Hand weg
+  (B3 der Codex-Runde 1); die Alternative, unbegrenzt zu warten, liesse die Deinstallation im Zeitlimit der Anfrage
+  enden.
+
 ## Übernommen aus Zweig 2 (`bericht-zweig-2.md`, Abschnitt Grenzkandidaten; G-M9 aus «Behebung 2»)
 
 ### G-M1 Ein Lesen über Teile ist kein Augenblick
