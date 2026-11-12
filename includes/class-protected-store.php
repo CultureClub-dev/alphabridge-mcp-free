@@ -1226,13 +1226,16 @@ final class AB_MCP_Protected_Store {
 
 	/**
 	 * The clean-up (also the daily CRON): in every folder of this installation,
-	 * under its lock, the groups past their time and not bound to a run that
-	 * is not closed, orphans and temp files of interrupted writes.
+	 * under its lock, the groups the retention lets go (sweep(), kept()), the
+	 * temp files of interrupted writes and closed marks.
 	 *
 	 * @param int|null $now Time (for tests); now when null.
 	 * @return array{removed:int,kept:int,unknown:int} Groups removed, groups
-	 *         kept for a run, groups kept because their sidecar cannot be read
-	 *         or is not as the table SIDECAR says.
+	 *         kept for a run beyond their age, and what stays because an
+	 *         input of the decision is not known: a sidecar that cannot be
+	 *         read or is not as the table SIDECAR says, a group whose
+	 *         inputs are not known, a folder without its sidecar, an area
+	 *         that cannot be listed (Behebung 3 of Z8b branch 3).
 	 */
 	public static function cleanup( $now = null ) {
 		// The time as given (a test) or now; one that is no whole number

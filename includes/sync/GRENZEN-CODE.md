@@ -145,6 +145,25 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
   (B3 der Codex-Runde 1); die Alternative, unbegrenzt zu warten, liesse die Deinstallation im Zeitlimit der Anfrage
   enden.
 
+### G-3-10 Neuer Direktzugriff ausserhalb der Liste der Eingänge
+
+- **Fundstelle:** `AB_MCP_Protected_Store::RETENTION_INPUTS` mit `kept()`, `inputs()` und `sweep()`, dazu
+  `delete_path()`, `guard()` und `read_mark()`, `includes/class-protected-store.php`.
+- **Quelle:** Behebung 3 von Zweig 3, Fassung 2a, Abschnitt 6.5 (Entscheid der Lead: kein Tokenizer-Wächter).
+- **Was:** `kept()` nimmt nur die Eingänge der Liste an, je geprüft ganz oder `null`, und ein Test wird rot, wenn ein
+  Eingang der Liste keinen Vertragsfall hat (`ProtectedStoreTest::testKeptTakesTheInputsOfItsListAndNoValueBeside`).
+  Was `sweep()` und `delete_path()` heute neben `kept()` selbst lesen (die Auflistung eines Bereichs, `lstat()` einer
+  fremden Begleitdatei, einer temporären Datei und eines Markenordners, die Marken über `guard()` und `read_mark()`),
+  steht mit seinem Fehlzustand und seinem Test in der Abdeckungstabelle des Berichts von Zweig 3 (Behebung 3).
+  Ein neuer Wert, der den Entscheid trägt und nicht über die Liste kommt, fällt dagegen durch keinen Test auf: etwa ein
+  neuer Dateizugriff in `sweep()` oder `delete_path()` (eine Zeit aus `stat()`, eine neue Auflistung), eine neue
+  Option oder ein neuer Filter. Ihn finden nur die Durchsicht und Codex. Ein Wächter über den PHP-Tokenizer hätte eine
+  Liste aller erlaubten Aufrufe in diesen Funktionen gebraucht und die Ein- und Ausgaben der Ablage über ein Objekt
+  geführt; die Liste der erlaubten Aufrufe wäre selbst die Lücke geworden («Wächterliste ist die Grenze»).
+- **Trifft Normalfall:** nein. Es ist eine Grenze der Prüfung, kein Fehlweg im Code: ein Zugriff dieser Art entsteht
+  nur mit einer künftigen Änderung. Die Durchsicht einer Änderung an diesen Funktionen prüft, ob jeder neue Wert des
+  Entscheids über `RETENTION_INPUTS` kommt.
+
 ## Übernommen aus Zweig 2 (`bericht-zweig-2.md`, Abschnitt Grenzkandidaten; G-M9 aus «Behebung 2»)
 
 ### G-M1 Ein Lesen über Teile ist kein Augenblick
