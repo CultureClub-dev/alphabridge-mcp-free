@@ -54,12 +54,24 @@ final class AB_MCP_Sync_Backup {
 	 * new one. The group is bound to the run (the clean-up keeps it while
 	 * the run is not closed) and labelled with its id.
 	 *
-	 * @param int $run_id Run.
+	 * The run is taken as it is given (Behebung 2 of Z8b branch 3): a whole
+	 * number of 1 or more, or the same written in decimal digits without a
+	 * leading zero or anything around them; anything else ("5.7", "5abc",
+	 * " 5", "05", a number past PHP_INT_MAX) is refused, never cast to a run
+	 * it does not name. The groups compared come from groups(), whose
+	 * sidecars are whole by AB_MCP_Protected_Store::SIDECAR (read_entry()):
+	 * a group whose sidecar is unknown is never used again.
+	 *
+	 * @param int|string $run_id Run.
 	 * @return string|WP_Error The id of the group.
 	 */
 	public static function group( $run_id ) {
-		$run_id = (int) $run_id;
-		if ( $run_id < 1 ) {
+		if ( is_string( $run_id ) && (string) (int) $run_id === $run_id ) {
+			// Only digits that are the run written out: no sign, no
+			// leading zero, no blank, no fraction, within PHP_INT_MAX.
+			$run_id = (int) $run_id;
+		}
+		if ( ! is_int( $run_id ) || $run_id < 1 ) {
 			return new WP_Error( 'ab_mcp_sync_backup_run', __( 'A backup belongs to a run. Pass its run_id.', 'alphabridge-mcp' ) );
 		}
 		if ( isset( self::$groups[ $run_id ] ) ) {

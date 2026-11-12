@@ -45,6 +45,7 @@ $unit = static fn( string $class, string $test ): array => array( 'vendor/bin/ph
 $ps = 'includes/class-protected-store.php';
 $sb = 'includes/class-store-budget.php';
 $sr = 'includes/sync/class-sync-resources.php';
+$bk = 'includes/sync/class-sync-backup.php';
 
 // The guard of the marks in delete_path(), taken out: nothing a mark names
 // is kept. One mutation, a red proof per way of removal (F53).
@@ -1519,6 +1520,52 @@ return array_merge(
 			'replace' => 'mb_strlen( $file, \'UTF-8\' ) > 1000',
 			'run'     => $it( 'StoreTreesTest', 'testAMarkNamesItsUnitAndMainFilesByTheCharactersAPairHolds' ),
 			'expect'  => '/testAMarkNamesItsUnitAndMainFilesByTheCharactersAPairHolds/',
+		),
+
+		/* ------- Behebung 2, the list of substitute values: the run of a backup */
+		array(
+			'id'      => 'ablage/b2r-backup-run-strict',
+			'clause'  => 'AB_MCP_Sync_Backup::group(): the run as given, never cast to a run it does not name',
+			'file'    => $bk,
+			'search'  => '		if ( is_string( $run_id ) && (string) (int) $run_id === $run_id ) {
+			// Only digits that are the run written out: no sign, no
+			// leading zero, no blank, no fraction, within PHP_INT_MAX.
+			$run_id = (int) $run_id;
+		}
+		if ( ! is_int( $run_id ) || $run_id < 1 ) {',
+			'replace' => '		$run_id = (int) $run_id;
+		if ( $run_id < 1 ) {',
+			'run'     => $it( 'StoreRemoverTest', 'testABackupGroupTakesItsRunAsGivenAndNeverAGroupWhoseSidecarIsUnknown' ),
+			'expect'  => '/testABackupGroupTakesItsRunAsGivenAndNeverAGroupWhoseSidecarIsUnknown/',
+		),
+		array(
+			'id'      => 'ablage/b2r-backup-run-digits',
+			'clause'  => 'AB_MCP_Sync_Backup::group(): only the decimal digits of the run, nothing around them',
+			'file'    => $bk,
+			'search'  => 'if ( is_string( $run_id ) && (string) (int) $run_id === $run_id ) {',
+			'replace' => 'if ( is_string( $run_id ) && is_numeric( $run_id ) ) {',
+			'run'     => $it( 'StoreRemoverTest', 'testABackupGroupTakesItsRunAsGivenAndNeverAGroupWhoseSidecarIsUnknown' ),
+			'expect'  => '/testABackupGroupTakesItsRunAsGivenAndNeverAGroupWhoseSidecarIsUnknown/',
+		),
+		array(
+			'id'      => 'ablage/b2r-backup-run-int',
+			'clause'  => 'AB_MCP_Sync_Backup::group(): a run of another type than a whole number is refused',
+			'file'    => $bk,
+			'search'  => 'if ( ! is_int( $run_id ) || $run_id < 1 ) {',
+			'replace' => 'if ( $run_id < 1 ) {',
+			'run'     => $it( 'StoreRemoverTest', 'testABackupGroupTakesItsRunAsGivenAndNeverAGroupWhoseSidecarIsUnknown' ),
+			'expect'  => '/testABackupGroupTakesItsRunAsGivenAndNeverAGroupWhoseSidecarIsUnknown/',
+		),
+		array(
+			'id'      => 'ablage/b2r-backup-unknown-not-reused',
+			'clause'  => 'AB_MCP_Sync_Backup::group(): a group whose sidecar is unknown is never used again (read_entry(), SIDECAR)',
+			'file'    => $ps,
+			'search'  => '		if ( ! self::whole( $e ) ) {
+			return array( \'unknown\', null );',
+			'replace' => '		if ( ! is_array( $e ) || ! isset( $e[\'area\'] ) || ! isset( self::SIDECAR[ $e[\'area\'] ] ) ) {
+			return array( \'unknown\', null );',
+			'run'     => $it( 'StoreRemoverTest', 'testABackupGroupTakesItsRunAsGivenAndNeverAGroupWhoseSidecarIsUnknown' ),
+			'expect'  => '/testABackupGroupTakesItsRunAsGivenAndNeverAGroupWhoseSidecarIsUnknown/',
 		),
 	)
 );

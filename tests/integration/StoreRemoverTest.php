@@ -1727,4 +1727,38 @@ final class StoreRemoverTest extends TestCase {
 		AB_MCP_Protected_Store::cleanup( time() );
 		self::assertFileDoesNotExist( $m['marks'], 'Closed two days ago: it goes.' );
 	}
+
+	public function testABackupGroupTakesItsRunAsGivenAndNeverAGroupWhoseSidecarIsUnknown(): void {
+		// Behebung 2, the list of substitute values: AB_MCP_Sync_Backup::group()
+		// takes a whole number of 1 or more, or its decimal digits alone;
+		// anything else is refused with its way, never cast to another run.
+		$cache = new \ReflectionProperty( \AB_MCP_Sync_Backup::class, 'groups' );
+		$cache->setValue( null, array() );
+		$given = \AB_MCP_Sync_Backup::group( 31 );
+		self::assertIsString( $given );
+		self::assertSame( $given, \AB_MCP_Sync_Backup::group( '31' ), 'The digits of the run name the same run.' );
+		$before = self::names( self::store() . '/backups' );
+		foreach ( array( 5.7, 31.0, '5abc', '31abc', ' 31', '31 ', '031', '05', '5.0', '+31', '-31', '0', '', '99999999999999999999', 0, -1, null, true, array( 31 ) ) as $run ) {
+			$res = \AB_MCP_Sync_Backup::group( $run );
+			self::assertInstanceOf( \WP_Error::class, $res, 'run ' . var_export( $run, true ) );
+			self::assertSame( 'ab_mcp_sync_backup_run', $res->get_error_code(), 'run ' . var_export( $run, true ) );
+			self::assertStringContainsString( 'Pass its run_id', $res->get_error_message() );
+		}
+		self::assertSame( $before, self::names( self::store() . '/backups' ), 'Nothing written for a run refused.' );
+		// A group of the run whose sidecar is unknown (a field missing) is
+		// not used again: groups() leaves it out (read_entry(), SIDECAR).
+		$cache->setValue( null, array() );
+		$side = self::store() . '/backups/' . AB_MCP_Payload_File::name( 'group|backups|' . $given, AB_MCP_Protected_Store::install_id(), '' ) . '.json';
+		$entry = json_decode( (string) file_get_contents( $side ), true );
+		self::assertSame( \AB_MCP_Sync_Backup::LABEL . '31', $entry['label'] );
+		unset( $entry['closed'] );
+		file_put_contents( $side, json_encode( $entry ) );
+		$bytes = (string) file_get_contents( $side );
+		self::assertNotContains( $given, array_column( (array) AB_MCP_Protected_Store::groups( 'backups' ), 'gid' ), 'groups() leaves the unknown group out.' );
+		$again = \AB_MCP_Sync_Backup::group( 31 );
+		self::assertIsString( $again );
+		self::assertNotSame( $given, $again, 'A new group of the run, not the unknown one.' );
+		self::assertSame( $bytes, (string) file_get_contents( $side ), 'The unknown group stays as it is.' );
+		$cache->setValue( null, array() );
+	}
 }
