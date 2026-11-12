@@ -1082,6 +1082,65 @@ final class SyncManifestTest extends TestCase {
 		}
 	}
 
+	public function testACoreTooSlowForAWholeCallIsNotComparedAndTheRestOfTheEnvironmentIsRead(): void {
+		// GitHub-Codex on ec0d088 (G-M7): a host where the core files take
+		// longer than UNIT_BUDGET (here 1 s a file). With the whole time of a
+		// call the line says not compared (too_slow) and the series goes on.
+		$body = (string) file_get_contents( dirname( __DIR__ ) . '/fixtures/core-checksums/7.1.3-en_US.json' );
+		$t    = 0.0;
+		AB_MCP_Sync_Env::$clock = static function () use ( &$t ) {
+			return $t;
+		};
+		$tick  = static function () use ( &$t ) {
+			$t += 1.0;
+		};
+		$calls = new class( $body, $tick ) {
+			private $body;
+			private $tick;
+			private $real;
+			public $md5 = 0;
+			public function __construct( $body, $tick ) {
+				$this->body = $body;
+				$this->tick = $tick;
+				$this->real = new AB_MCP_Sync_Core_Compare_Calls();
+			}
+			public function get( $url, array $args ) {
+				return array(
+					'headers'  => array(),
+					'body'     => $this->body,
+					'response' => array( 'code' => 200, 'message' => 'OK' ),
+				);
+			}
+			public function md5( $path ) {
+				++$this->md5;
+				( $this->tick )();
+				return $this->real->md5( $path );
+			}
+			public function exists( $path ) {
+				return $this->real->exists( $path );
+			}
+		};
+		AB_MCP_Test_Seam::install( AB_MCP_Sync_Core_Compare::class, 'naht_sync_core_compare', $calls );
+		$state = null;
+		$parts = 0;
+		$core  = array();
+		do {
+			$read = AB_MCP_Sync_Env::read( $state, 60, 4000, 'live' );
+			self::assertIsArray( $read );
+			foreach ( $read['lines'] as $line ) {
+				if ( 'core_files' === $line['env'] ) {
+					$core[] = $line;
+				}
+			}
+			$state = $read['state'];
+			++$parts;
+		} while ( null !== $state && $parts < 3 );
+		self::assertNull( $state, 'The environment read to its end within three calls, not held at the core.' );
+		self::assertCount( 1, $core, 'One line of the core files.' );
+		self::assertSame( array( 'too_slow', false ), array( $core[0]['cause'], $core[0]['complete'] ), 'Not compared, with why: never equal (Z35).' );
+		self::assertSame( 63, $calls->md5, 'The core hashed once, as far as its time reached; not again in every call.' );
+	}
+
 	/* ----------------------------------- exit in a process of its own */
 
 	public function testAnEndOfTheProcessWhileAUnitIsHashedLeavesNoHalfReading(): void {

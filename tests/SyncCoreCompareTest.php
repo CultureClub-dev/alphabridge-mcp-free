@@ -232,6 +232,18 @@ final class SyncCoreCompareTest extends TestCase {
 		$this->calls->answer    = self::answer( self::stored( '7.1.3-en_US.json' ) );
 		AB_MCP_Sync_Env::$clock = static fn() => 1000.0;
 		self::assertNull( AB_MCP_Sync_Core_Compare::check( 999.0 ), 'A later call checks again (Zeitlimit).' );
+		self::assertNull( AB_MCP_Sync_Core_Compare::check( 999.0, false ), 'Not the whole time of a call: a later call checks again.' );
+		// GitHub-Codex on ec0d088 (G-M7): with the whole time of a call and
+		// still not through, not compared with why, never equal (Z35).
+		$check = AB_MCP_Sync_Core_Compare::check( 999.0, true );
+		self::assertSame( array( 'too_slow', false, 0, 0 ), array( $check['cause'], $check['complete'], $check['differs'], $check['missing'] ) );
+		self::assertSame( 63, $check['checked'], 'Asked after every 64 files: the first 63 checked.' );
+		self::assertTrue( AB_MCP_Sync_Env::shaped( array( 'env' => 'core_files', 'ref' => 'files' ) + $check ), 'A line the import takes.' );
+		$line  = array( 'env' => 'core_files', 'ref' => 'files' ) + $check;
+		$whole = array( 'cause' => null, 'checked' => 3338, 'complete' => true, 'differs' => 0, 'missing' => 0, 'env' => 'core_files', 'ref' => 'files' );
+		$entry = array_values( array_filter( AB_MCP_Sync_Env::compare( array( $whole ), array( $line ) )['entries'], static fn( $e ) => 'core_files' === $e['subtype'] ) )[0];
+		self::assertSame( array( 'not_compared', 'host' ), array( $entry['result'], $entry['action'] ), 'Not compared, never equal.' );
+		self::assertStringContainsString( 'check them at the host (wp core verify-checksums), or make the report again (wp_site_diff)', $entry['why'], 'With the way.' );
 	}
 
 	/* ------------------------------------- no kind that writes the core */

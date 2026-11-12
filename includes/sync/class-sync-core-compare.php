@@ -90,7 +90,7 @@ final class AB_MCP_Sync_Core_Compare {
 	const NOT_CORE = 'wp-content/';
 
 	/** Why a side was not compared. */
-	const WHY = array( 'unreachable', 'answer', 'unknown_version', 'no_version' );
+	const WHY = array( 'unreachable', 'answer', 'unknown_version', 'no_version', 'too_slow' );
 
 	/** The calls to the outside (the seam); only the tests put another object here. */
 	private static $naht_sync_core_compare = null;
@@ -174,10 +174,16 @@ final class AB_MCP_Sync_Core_Compare {
 	 * md5, in the folder of WordPress.
 	 *
 	 * @param float $deadline Until when (seconds, the clock of AB_MCP_Sync_Env).
+	 * @param bool  $first    The check had the whole time a call gives it (the
+	 *                        first of the call): where it does not end in it,
+	 *                        not compared (too_slow), so that the rest of the
+	 *                        environment is read; else it stops for a later
+	 *                        call (GitHub-Codex on ec0d088, G-M7).
 	 * @return array{cause:string|null,checked:int,complete:bool,differs:int,missing:int}|null
-	 *               null: the time of the call ran out (a later call checks again).
+	 *               null: the time of the call ran out where it had not the
+	 *               whole time (a later call checks again).
 	 */
-	public static function check( $deadline ) {
+	public static function check( $deadline, $first = false ) {
 		$out     = array(
 			'cause'    => null,
 			'checked'  => 0,
@@ -204,6 +210,11 @@ final class AB_MCP_Sync_Core_Compare {
 				continue;
 			}
 			if ( 0 === ( ++$tick % 64 ) && self::now() >= (float) $deadline ) {
+				// Never «equal» without every file checked (Z35).
+				if ( $first ) {
+					$out['cause'] = 'too_slow';
+					return $out;
+				}
 				return null;
 			}
 			++$out['checked'];

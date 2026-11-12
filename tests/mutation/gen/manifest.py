@@ -234,6 +234,12 @@ e('core-clock', 'check(): the time of the call over, no line', CC,
   "\t\t\tif ( 0 === ( ++$tick % 64 ) && self::now() >= (float) $deadline ) {", "\t\t\tif ( false ) {", 'core', 'testTheTimeOfTheCallOverLeavesNoLine')
 e('core-locale', 'check(): the language of the package of WordPress', CC,
   "\t\t$locale = isset( $GLOBALS['wp_local_package'] ) && is_string( $GLOBALS['wp_local_package'] ) && '' !== $GLOBALS['wp_local_package'] ? $GLOBALS['wp_local_package'] : 'en_US';", "\t\t$locale = 'en_US';", 'core', 'testTheLanguageOfThePackageOfWordPressIsAsked')
+e('core-too-slow', 'check(): with the whole time of a call and not through: not compared (too_slow), never equal; the series goes on (GitHub-Codex on ec0d088, G-M7)', CC,
+  "\t\t\t\tif ( $first ) {\n\t\t\t\t\t$out['cause'] = 'too_slow';", "\t\t\t\tif ( false ) {\n\t\t\t\t\t$out['cause'] = 'too_slow';", 'core', 'testTheTimeOfTheCallOverLeavesNoLine')
+e('core-first-passed', 'read(): the check of the core told it has the whole time of the call (G-M7)', EN,
+  "AB_MCP_Sync_Core_Compare::check( max( $deadline, self::now() + self::UNIT_BUDGET ), $first );", "AB_MCP_Sync_Core_Compare::check( max( $deadline, self::now() + self::UNIT_BUDGET ) );", 'it', 'testACoreTooSlowForAWholeCallIsNotComparedAndTheRestOfTheEnvironmentIsRead')
+e('core-too-slow-way', 'why_core(): too_slow says why and names the way (G-M7)', EN,
+  "\t\t\t'too_slow'        => 'they could not all be checked within the time of one call; check them at the host (wp core verify-checksums), or make the report again (wp_site_diff)',", '', 'core', 'testTheTimeOfTheCallOverLeavesNoLine')
 # ------------------------------------------------ Z38: rebase() by its part
 e('z38-owner', 'Z38 rebase(): only the kind responsible for the part', PA,
   "\t\tif ( ! self::responsible( $kind, (string) $raw['kind'], (string) $part ) ) {", "\t\tif ( false ) {", 'it', 'testRebaseMovesOnOnlyThePartOfTheKindResponsibleForIt')

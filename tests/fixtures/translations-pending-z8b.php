@@ -89,5 +89,6 @@ return array(
 	'the answer of api.wordpress.org held no checksums',
 	'the staging site',
 	'the unit the call before stopped at (kept by its SHA-256 only) is gone since',
+	'they could not all be checked within the time of one call; check them at the host (wp core verify-checksums), or make the report again (wp_site_diff)',
 	'this site',
 );

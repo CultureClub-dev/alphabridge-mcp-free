@@ -514,8 +514,10 @@ final class AB_MCP_Sync_Env {
 				$state = self::next( $state );
 			} elseif ( 'core' === $step ) {
 				// The core is checked once a series, with UNIT_BUDGET seconds of
-				// its own at least, so that the step moves on.
-				$check = AB_MCP_Sync_Core_Compare::check( max( $deadline, self::now() + self::UNIT_BUDGET ) );
+				// its own at least, so that the step moves on: where it does not
+				// end in them, its line says so (too_slow) and the rest of the
+				// environment is read (GitHub-Codex on ec0d088, G-M7).
+				$check = AB_MCP_Sync_Core_Compare::check( max( $deadline, self::now() + self::UNIT_BUDGET ), $first );
 				if ( null === $check ) {
 					break;
 				}
@@ -2969,6 +2971,7 @@ final class AB_MCP_Sync_Env {
 			'answer'          => 'the answer of api.wordpress.org held no checksums',
 			'unknown_version' => 'api.wordpress.org knows no checksums of its version and language',
 			'no_version'      => 'its version of WordPress could not be read',
+			'too_slow'        => 'they could not all be checked within the time of one call; check them at the host (wp core verify-checksums), or make the report again (wp_site_diff)',
 		);
 		return $say[ $why ] ?? 'not known why';
 	}
