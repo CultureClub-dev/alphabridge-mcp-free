@@ -280,6 +280,107 @@ final class WellKnownAnswerTest extends TestCase {
 		}
 	}
 
+	/**
+	 * What binds a kept answer to its request: the start of the request in
+	 * full (as a float, compared exactly), the site (its id and home address)
+	 * and the address asked. No reset of the store in between: each change
+	 * alone must make a new decision (Codex, closed check of Behebung 1, A1).
+	 */
+	public function testTwoStartsAMicrosecondApartAreTwoRequests(): void {
+		$fetches   = $this->countFetches();
+		$precision = ini_get( 'precision' );
+		$saved     = $_SERVER['REQUEST_TIME_FLOAT'] ?? null;
+		try {
+			ini_set( 'precision', '14' );
+			$_SERVER['REQUEST_TIME_FLOAT'] = 1794480000.123451;
+			AB_MCP_OAuth::well_known_answer_of_request( $this->other() );
+			$GLOBALS['ab_test_transients'] = array();
+			$_SERVER['REQUEST_TIME_FLOAT'] = 1794480000.123452;
+			AB_MCP_OAuth::well_known_answer_of_request( $this->other() );
+
+			self::assertSame( 2, $fetches->count, 'One microsecond later is another request, at precision 14 too.' );
+		} finally {
+			ini_set( 'precision', (string) $precision );
+			$this->restoreStart( $saved );
+		}
+	}
+
+	public function testWithoutAStartNothingIsKept(): void {
+		$fetches = $this->countFetches();
+		$saved   = $_SERVER['REQUEST_TIME_FLOAT'] ?? null;
+		try {
+			unset( $_SERVER['REQUEST_TIME_FLOAT'] );
+			AB_MCP_OAuth::well_known_answer_of_request( $this->other() );
+			$GLOBALS['ab_test_transients'] = array();
+			AB_MCP_OAuth::well_known_answer_of_request( $this->other() );
+
+			self::assertSame( 2, $fetches->count, 'No HTTP request start: decided each time afresh.' );
+		} finally {
+			$this->restoreStart( $saved );
+		}
+	}
+
+	public function testAnotherHomeAddressInTheSameRequestIsDecidedAnew(): void {
+		$saved = $_SERVER['REQUEST_TIME_FLOAT'] ?? null;
+		try {
+			$_SERVER['REQUEST_TIME_FLOAT'] = 1794480001.5;
+			$GLOBALS['ab_test_home']       = 'https://first.example';
+			$first                         = AB_MCP_OAuth::well_known_answer_of_request( '/.well-known/oauth-authorization-server' );
+			$GLOBALS['ab_test_home']       = 'https://second.example';
+			$second                        = AB_MCP_OAuth::well_known_answer_of_request( '/.well-known/oauth-authorization-server' );
+
+			self::assertSame( 'https://first.example', $first['document']['issuer'] );
+			self::assertSame( 'https://second.example', $second['document']['issuer'], 'Not the answer kept for the other site.' );
+		} finally {
+			$this->restoreStart( $saved );
+		}
+	}
+
+	public function testAnotherSiteOfTheNetworkInTheSameRequestIsDecidedAnew(): void {
+		$fetches = $this->countFetches();
+		$saved   = $_SERVER['REQUEST_TIME_FLOAT'] ?? null;
+		try {
+			$_SERVER['REQUEST_TIME_FLOAT'] = 1794480002.5;
+			AB_MCP_OAuth::well_known_answer_of_request( $this->other() );
+			$GLOBALS['ab_test_transients'] = array();
+			$GLOBALS['ab_test_blog']       = 2;
+			AB_MCP_OAuth::well_known_answer_of_request( $this->other() );
+
+			self::assertSame( 2, $fetches->count, 'Another site id, the same home address and path: a decision of its own.' );
+		} finally {
+			$GLOBALS['ab_test_blog'] = 1;
+			$this->restoreStart( $saved );
+		}
+	}
+
+	/** The relayed address of the other site on disk. */
+	private function other(): string {
+		return '/.well-known/oauth-authorization-server' . $this->p . '/staging/123';
+	}
+
+	/** Counts the fetches of the other site from now on. */
+	private function countFetches(): object {
+		$counter = new class() {
+			/** @var int */
+			public $count = 0;
+		};
+		$site    = $GLOBALS['ab_test_http_answer'];
+		$GLOBALS['ab_test_http_answer'] = static function ( string $url ) use ( $counter, $site ) {
+			++$counter->count;
+			return $site( $url );
+		};
+		return $counter;
+	}
+
+	/** Put the start of the request back as the test process had it. */
+	private function restoreStart( $saved ): void {
+		if ( null === $saved ) {
+			unset( $_SERVER['REQUEST_TIME_FLOAT'] );
+		} else {
+			$_SERVER['REQUEST_TIME_FLOAT'] = $saved;
+		}
+	}
+
 	/* ------------------------------------------------------------ executor */
 
 	public function testTheHandlersRefusalIsThe404OfWordPressWithoutRedirectOrGuess(): void {

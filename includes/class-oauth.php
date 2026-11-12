@@ -259,7 +259,8 @@ class AB_MCP_OAuth {
 	/**
 	 * The answers of this request at the well-known addresses
 	 * (well_known_answer_of_request()): the start of the request they belong
-	 * to (REQUEST_TIME_FLOAT) and the answers by request URI.
+	 * to (REQUEST_TIME_FLOAT, a float) and the answers by site (its id and
+	 * home address) and request URI.
 	 */
 	private static $well_known_request = array(
 		'start'   => null,
@@ -1587,26 +1588,42 @@ class AB_MCP_OAuth {
 	 * carry out one answer, and the other site is fetched at most once per
 	 * request, whatever the persistent cache keeps (a cache that fails to
 	 * keep anything does not make the next asker fetch again, nor turn a
-	 * document that came back into a 404). Kept for the request that asked:
-	 * a request with another start (REQUEST_TIME_FLOAT, as a server that
-	 * keeps PHP running between requests gives each its own) starts afresh.
+	 * document that came back into a 404).
+	 *
+	 * Kept under the start of the request (REQUEST_TIME_FLOAT, the float
+	 * itself, compared exactly), the site (get_current_blog_id() and
+	 * home_url()) and the request URI: another start, another site of a
+	 * network or another home address, another address each get a decision
+	 * of their own. Without REQUEST_TIME_FLOAT nothing is kept and every call
+	 * decides afresh: every HTTP request has it, and the promise of at most
+	 * one fetch is one for HTTP requests.
+	 *
+	 * Limit: under PHP-FPM and mod_php every request starts with fresh static
+	 * values anyway. A PHP runtime that keeps state between requests (the
+	 * worker mode of FrankenPHP or RoadRunner, Swoole) is told one request
+	 * from the next by its start together with site and URI; two requests
+	 * that start in the same microsecond for the same site and URI count as
+	 * one.
 	 *
 	 * @param string $request_uri The request URI as received.
 	 * @return array{kind:string,document?:array} As well_known_answer().
 	 */
 	public static function well_known_answer_of_request( $request_uri ) {
-		$start = isset( $_SERVER['REQUEST_TIME_FLOAT'] ) ? (string) $_SERVER['REQUEST_TIME_FLOAT'] : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- compared only.
+		if ( ! isset( $_SERVER['REQUEST_TIME_FLOAT'] ) ) {
+			return self::well_known_answer( $request_uri );
+		}
+		$start = (float) $_SERVER['REQUEST_TIME_FLOAT']; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- a number, compared only.
 		if ( $start !== self::$well_known_request['start'] ) {
 			self::$well_known_request = array(
 				'start'   => $start,
 				'answers' => array(),
 			);
 		}
-		$request_uri = (string) $request_uri;
-		if ( ! array_key_exists( $request_uri, self::$well_known_request['answers'] ) ) {
-			self::$well_known_request['answers'][ $request_uri ] = self::well_known_answer( $request_uri );
+		$key = implode( "\n", array( get_current_blog_id(), home_url(), (string) $request_uri ) );
+		if ( ! array_key_exists( $key, self::$well_known_request['answers'] ) ) {
+			self::$well_known_request['answers'][ $key ] = self::well_known_answer( $request_uri );
 		}
-		return self::$well_known_request['answers'][ $request_uri ];
+		return self::$well_known_request['answers'][ $key ];
 	}
 
 	/**

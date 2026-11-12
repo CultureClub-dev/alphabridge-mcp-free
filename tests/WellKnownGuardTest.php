@@ -176,8 +176,11 @@ final class WellKnownGuardTest extends TestCase {
 				$requests[] = self::relative( $file );
 			}
 		}
-		self::assertSame( array( array( self::OAUTH, $decisions[0][1] ) ), $decisions, 'One call of the decision.' );
-		self::assertTrue( $decisions[0][1] >= $of_request[0] && $decisions[0][1] <= $of_request[1], 'In well_known_answer_of_request().' );
+		self::assertNotEmpty( $decisions );
+		foreach ( $decisions as $decision ) {
+			self::assertSame( self::OAUTH, $decision[0] );
+			self::assertTrue( $decision[1] >= $of_request[0] && $decision[1] <= $of_request[1], 'The decision is called in well_known_answer_of_request() only, line ' . $decision[1] . '.' );
+		}
 		sort( $requests );
 		self::assertSame( array( self::OAUTH, self::PREVIEW ), $requests, 'The handler and the protection, nobody else.' );
 	}
