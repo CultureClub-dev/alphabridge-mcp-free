@@ -217,9 +217,15 @@ final class AB_MCP_Store_Inputs {
 		),
 		'period.clock'             => array(
 			'consumer' => 'period',
-			'source'   => 'AB_MCP_Sync_Run::now()',
+			'source'   => 'AB_MCP_Sync_Run::now(): keep_until(), set_state(), create(), the steps, context(), restore_part(), the age of a temp file (delete_path()), AB_MCP_Sync_Export::discard_stale()',
 			'field'    => 'the clock of the runs (AB_MCP_Sync_Run::$clock, time() where none is set)',
 			'form'     => self::RUN,
+		),
+		'period.qualified'         => array(
+			'consumer' => 'period',
+			'source'   => 'AB_MCP_Sync_Run::set_state(), keep_until()',
+			'field'    => 'whether a close qualifies (rule 2), as the caller gives it',
+			'form'     => array( 'type' => 'bool' ),
 		),
 		/* ----------------------- a sidecar: retention, budget, owners */
 		'sidecar.json'             => array(

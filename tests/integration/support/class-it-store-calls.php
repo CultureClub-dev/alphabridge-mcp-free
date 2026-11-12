@@ -37,6 +37,9 @@ final class AB_MCP_IT_Store_Calls {
 	/** @var array<string,mixed> Path => the mtime lstat() answers for it (Behebung 4: a time of another form). */
 	public $mtime = array();
 
+	/** @var array<string,array<string,int>> Method => path => how many calls fail before the next ones answer (Behebung 5, B4). */
+	public $fail_once = array();
+
 	/** @var array<string,mixed> Path => the size lstat() answers for it (Behebung 4: a size of another form). */
 	public $size = array();
 
@@ -54,6 +57,11 @@ final class AB_MCP_IT_Store_Calls {
 	 * @return bool
 	 */
 	private function fails( $method, $path ) {
+		if ( isset( $this->fail_once[ $method ][ (string) $path ] ) && $this->fail_once[ $method ][ (string) $path ] > 0 ) {
+			--$this->fail_once[ $method ][ (string) $path ];
+			$this->failed[] = array( $method, (string) $path );
+			return true;
+		}
 		if ( isset( $this->fail[ $method ] ) && in_array( (string) $path, $this->fail[ $method ], true ) ) {
 			$this->failed[] = array( $method, (string) $path );
 			return true;

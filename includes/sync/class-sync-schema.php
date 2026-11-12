@@ -382,14 +382,17 @@ final class AB_MCP_Sync_Schema {
 	 * @param int      $now       The time of the close.
 	 * @param bool     $qualified Whether the close qualifies (forward_closed_at).
 	 * @param int|null $days      Days a qualified close is kept (AB_MCP_Protected_Store::backup_days()).
-	 * @return int Seconds, at least $now; 0 where $now or $days is not known.
+	 * @return int Seconds, at least $now; 0 where $now, $qualified or $days is not known.
 	 */
 	public static function keep_until( $now, $qualified, $days ) {
-		// The time and the days in the forms of their rows of
-		// AB_MCP_Store_Inputs::TABLE (period.clock, period.days).
-		$now  = AB_MCP_Store_Inputs::read( 'period.clock', $now );
-		$days = AB_MCP_Store_Inputs::read( 'period.days', $days );
-		if ( null === $now || null === $days ) {
+		// The time, the qualification and the days in the forms of their
+		// rows of AB_MCP_Store_Inputs::TABLE (period.clock,
+		// period.qualified, period.days; Behebung 5, B3: no cast of the
+		// qualification, 'false' gave a shorter period).
+		$now       = AB_MCP_Store_Inputs::read( 'period.clock', $now );
+		$qualified = AB_MCP_Store_Inputs::read( 'period.qualified', $qualified );
+		$days      = AB_MCP_Store_Inputs::read( 'period.days', $days );
+		if ( null === $now || null === $qualified || null === $days ) {
 			return 0;
 		}
 		if ( $qualified ) {

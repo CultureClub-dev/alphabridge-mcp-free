@@ -659,6 +659,24 @@ final class StoreRemoverTest extends TestCase {
 		self::assertTrue( AB_MCP_Protected_Store::remove( 'backups', $plain ), 'Once the mark reads, the group without a tree goes.' );
 	}
 
+	public function testAMarkThatCannotBeReadOnceCountsTheGroupItKeptUnknown(): void {
+		// Behebung 5, B4: the read of the marks that refused a removal is the
+		// one the clean-up counts. The first read of the mark fails, the
+		// next ones succeed: unswept() read the marks again and counted 0.
+		$m     = $this->marked( 3 );
+		$plain = AB_MCP_Protected_Store::open( 'backups', array( 'run_id' => 3 ) );
+		self::assertIsString( $plain );
+		self::run_row( 3, 'closed_done', time() - 10 );
+		$calls            = new AB_MCP_IT_Store_Calls();
+		$calls->fail_once = array( 'read' => array( $m['marks'] . '/mark.json' => 1 ) );
+		self::watch( array(), $calls );
+		$done = AB_MCP_Protected_Store::cleanup( time() );
+		AB_MCP_Test_Seam::restore_all();
+		self::assertSame( array( array( 'read', $m['marks'] . '/mark.json' ) ), $calls->failed, 'The first read of the mark failed, once.' );
+		self::assertSame( 1, $done['unknown'], 'The group that read kept counts unknown, though the next read of the mark succeeded.' );
+		self::assert_kept( $m, 'a mark that failed to read once' );
+	}
+
 	public function testAMarkWhoseFileCannotBeReadKeepsStageAndBackups(): void {
 		if ( function_exists( 'posix_geteuid' ) && 0 === posix_geteuid() ) {
 			self::markTestSkipped( 'The rights of a file stop no process of root.' );
@@ -2177,6 +2195,33 @@ final class StoreRemoverTest extends TestCase {
 			}
 			$row = \AB_MCP_Sync_Run::get( $id );
 			self::assertSame( array( 0, 0 ), array( $row['keep_until'], $row['forward_closed_at'] ), "$what: no period, no qualified close" );
+		}
+		// The other consumers of the clock in a run: its budget and its steps
+		// are not written, the lock of changes counts as held.
+		update_option( \AB_MCP_Change_Lock::OPTION, 1 );
+		foreach ( $forms as $what => $value ) {
+			\AB_MCP_Sync_Run::$clock = static fn() => $value;
+			try {
+				self::assertSame( 'ab_mcp_sync_run_clock', \AB_MCP_Sync_Run::set_budget( 14, array( 'bytes' => 1 ) )->get_error_code(), "$what: no budget written" );
+				self::assertSame( 'ab_mcp_sync_run_clock', \AB_MCP_Sync_Run::update_step( 14, 1, array( 'state' => 'done' ) )->get_error_code(), "$what: no step written" );
+				self::assertTrue( \AB_MCP_Sync_Run::lock_fresh(), "$what: the lock counts as held" );
+			} finally {
+				\AB_MCP_Sync_Run::$clock = null;
+			}
+		}
+		self::assertFalse( \AB_MCP_Sync_Run::lock_fresh(), 'With the time, a lock of long ago is stale.' );
+		delete_option( \AB_MCP_Change_Lock::OPTION );
+		// The qualification of a close (period.qualified, Behebung 5, B3):
+		// each wrong form stores no period and no qualified close.
+		$qualified = \AlphaBridge\Tests\WrongForms::of( \AB_MCP_Store_Inputs::TABLE['period.qualified']['form'], true ) + array(
+			'fixed: "false"' => 'false',
+			'fixed: 1'       => 1,
+		);
+		foreach ( $qualified as $what => $value ) {
+			self::run_planned( ++$id, 'push', 'open', null );
+			self::assertTrue( \AB_MCP_Sync_Run::set_state( $id, 'open', 'closed_done', $value ), (string) $what );
+			$row = \AB_MCP_Sync_Run::get( $id );
+			self::assertSame( array( 0, 0 ), array( $row['keep_until'], $row['forward_closed_at'] ), "qualified $what: no period, no qualified close" );
 		}
 		remove_filter( AB_MCP_Protected_Store::BACKUP_DAYS_FILTER, $days );
 	}

@@ -566,9 +566,13 @@ final class AB_MCP_Sync_Run {
 			if ( null !== $now ) {
 				$set['closed'] = $now;
 			}
+			// The qualification in the form of its row (period.qualified;
+			// Behebung 5, B3): one not known stores no period (0) and no
+			// qualified close.
+			$qualified         = AB_MCP_Store_Inputs::read( 'period.qualified', $qualified );
 			$set['open_one']   = null;
-			$set['keep_until'] = AB_MCP_Sync_Schema::keep_until( $now, (bool) $qualified, AB_MCP_Protected_Store::backup_days() );
-			if ( $qualified && null !== $now ) {
+			$set['keep_until'] = AB_MCP_Sync_Schema::keep_until( $now, $qualified, AB_MCP_Protected_Store::backup_days() );
+			if ( true === $qualified && null !== $now ) {
 				$set['forward_closed_at'] = $now;
 			}
 		}

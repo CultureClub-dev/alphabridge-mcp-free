@@ -197,6 +197,88 @@ final class StoreInputsTest extends TestCase {
 		self::assertSame( array(), $red, count( $red ) . ' of ' . $count . " wrong forms reached the consumer as a value:\n" . implode( "\n", $red ) );
 	}
 
+	public function testTheGeneratorMakesWrongValuesOfEveryFieldOfEveryRow(): void {
+		// Behebung 5, B2: from a value of each row's form, and from one whose
+		// fields that may be null are null, the generator makes at least one
+		// wrong value of every field at every depth (not only its absence).
+		// A field it leaves out is red here, in this table and any other.
+		$fields = 0;
+		foreach ( AB_MCP_Store_Inputs::TABLE as $id => $row ) {
+			$form = $row['form'];
+			$base = WrongForms::example( $form );
+			self::assertNotNull( $base, "$id: the generator finds a value of its form" );
+			self::assertNotNull( AB_MCP_Shape::read( $base, $form ), "$id: and it is of its form" );
+			$nulled = self::nulled( $form, $base );
+			self::assertNotNull( AB_MCP_Shape::read( $nulled, $form ), "$id: with its nullable fields null, of its form" );
+			foreach ( array( 'a value' => $base, 'its nullable fields null' => $nulled ) as $how => $value ) {
+				$keys = array_map( 'strval', array_keys( WrongForms::of( $form, $value ) ) );
+				self::assertNotSame( array(), $keys, "$id ($how): wrong forms" );
+				foreach ( self::paths( $form, '' ) as $path ) {
+					++$fields;
+					$hit = array_filter( $keys, static fn( string $key ): bool => 0 === strpos( $key, $path ) );
+					self::assertNotSame( array(), $hit, "$id ($how): no wrong value of the field «" . rtrim( $path, ': ' ) . '»' );
+				}
+			}
+		}
+		self::assertGreaterThan( 40, $fields, 'The fields of the records, lists, maps and JSON of the table.' );
+	}
+
+	/**
+	 * The prefixes the generator names the wrong values of each field with,
+	 * at every depth of a form.
+	 *
+	 * @return string[]
+	 */
+	private static function paths( array $form, string $prefix ): array {
+		switch ( $form['type'] ) {
+			case 'record':
+				$out = array();
+				foreach ( $form['fields'] as $name => $field ) {
+					$out[] = $prefix . $name . ': ';
+					$out   = array_merge( $out, self::paths( $field, $prefix . $name . ': ' ) );
+				}
+				return $out;
+			case 'list':
+				return array_merge( array( $prefix . 'an element: ' ), self::paths( $form['item'], $prefix . 'an element: ' ) );
+			case 'map':
+				return array_merge( array( $prefix . 'a key: ', $prefix . 'a value: ' ), self::paths( $form['value'], $prefix . 'a value: ' ) );
+			case 'json':
+				return self::paths( $form['value'], $prefix . 'as its writer writes it: ' );
+		}
+		return array();
+	}
+
+	/**
+	 * A value of a form with every field that may be null set to null, as
+	 * its writer writes it.
+	 *
+	 * @param mixed $value Value of the form.
+	 * @return mixed
+	 */
+	private static function nulled( array $form, $value ) {
+		switch ( $form['type'] ) {
+			case 'record':
+				foreach ( $form['fields'] as $name => $field ) {
+					$value[ $name ] = array_key_exists( 'nullable', $field ) ? null : self::nulled( $field, $value[ $name ] );
+				}
+				return $value;
+			case 'list':
+				return array_map( static fn( $item ) => self::nulled( $form['item'], $item ), $value );
+			case 'map':
+				foreach ( $value as $key => $item ) {
+					$value[ $key ] = self::nulled( $form['value'], $item );
+				}
+				return $value;
+			case 'json':
+				$inner = self::nulled( $form['value'], AB_MCP_Shape::read( $value, $form ) );
+				if ( 'json' !== $form['codec'] ) {
+					return $form['codec']::encode( $inner );
+				}
+				return (string) json_encode( $form['object'] && is_array( $inner ) ? (object) $inner : $inner, $form['flags'] );
+		}
+		return $value;
+	}
+
 	public function testABackupThatCannotBeWrittenAsJsonHasNoSizeNeverZero(): void {
 		// The source of budget.payload: where encode() gives no text (nested
 		// past its depth), size_of() knows no size (null) and fits() refuses
@@ -326,12 +408,19 @@ final class StoreInputsTest extends TestCase {
 					'fixed: a list from key 1'   => array( 1 => '7' ),
 					'fixed: digits with a suffix' => array( '7a' ),
 				),
-				'valid'   => array( array( array( '7' ), true ), array( array( 7 ), true ), array( array(), false ) ),
+				// Its consumers: kept(), and the bookings of the budget without
+				// those of closed runs (all of them kept while not known).
+				'valid'   => array( array( array( '7' ), array( true, array( 7 ) ) ), array( array( 7 ), array( true, array( 7 ) ) ), array( array(), array( false, array() ) ) ),
 				'run'     => static function ( $v ) use ( $db, $kept, $entry, $now, $day ) {
 					$db()->col = $v;
-					return $kept( $entry( 'reports', 7, $now - 2 * $day ), array( 'open' => AB_MCP_Sync_Schema::open_runs() ) );
+					$without   = new \ReflectionMethod( AB_MCP_Store_Budget::class, 'without_closed' );
+					$book      = array(
+						7 => array( 'bytes' => 1 ),
+						9 => array( 'bytes' => 1 ),
+					);
+					return array( $kept( $entry( 'reports', 7, $now - 2 * $day ), array( 'open' => AB_MCP_Sync_Schema::open_runs() ) ), array_keys( $without->invoke( null, $book ) ) );
 				},
-				'unknown' => $null,
+				'unknown' => static fn( $got ): bool => array( null, array( 7, 9 ) ) === $got,
 			),
 			'runs.run_id'              => array(
 				'base'    => '10',
@@ -450,6 +539,17 @@ final class StoreInputsTest extends TestCase {
 					return array( AB_MCP_Sync_Schema::keep_until( $at, false, 30 ), $at );
 				},
 				'unknown' => $zero,
+			),
+			'period.qualified'         => array(
+				'base'    => true,
+				'more'    => array(
+					'fixed: "false"' => 'false',
+					'fixed: 0'       => 0,
+					'fixed: 1'       => 1,
+				),
+				'valid'   => array( array( true, $now ), array( false, $now + 7 * $day ) ),
+				'run'     => static fn( $v ) => AB_MCP_Sync_Schema::keep_until( $now, $v, 0 ),
+				'unknown' => static fn( $got ): bool => 0 === $got,
 			),
 			/* ------------------------------------------------------ budgets */
 			'budget.max_packages'      => array(

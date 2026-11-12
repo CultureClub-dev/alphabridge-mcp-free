@@ -119,6 +119,80 @@ final class StoreInputsTest extends TestCase {
 		self::assertSame( array(), $red, count( $red ) . ' of ' . $count . " wrong forms reached the consumer as a value:\n" . implode( "\n", $red ) );
 	}
 
+	public function testATimeOfTheCleanUpNotOfItsFormRemovesNothing(): void {
+		// retention.now at sweep(), besides kept() (the unit suite drives
+		// that): with a time not of its form no group goes by its age, no
+		// foreign sidecar and no folder of a mark without one goes; the group
+		// counts. Each wrong form, and the fixed ones.
+		$now   = time();
+		$forms = WrongForms::of( AB_MCP_Store_Inputs::TABLE['retention.now']['form'], $now );
+		// cleanup( null ) is the clean-up now (its contract: the time of the
+		// clock where none is given), no wrong form.
+		unset( $forms['null'] );
+		$forms['fixed: 0']                  = 0;
+		$forms['fixed: its digits as text'] = (string) $now;
+		$forms['fixed: negative']           = -1;
+		foreach ( $forms + array( 'valid' => $now ) as $what => $value ) {
+			$this->fresh();
+			// Both groups first: open() sweeps the store with time().
+			$g     = self::group( 'reports', 0 );
+			$f     = self::group( 'reports', 0 );
+			$entry = json_decode( (string) file_get_contents( $g['side'] ), true );
+			$entry['created'] = $now - 30 * 86400;
+			file_put_contents( $g['side'], (string) json_encode( $entry, AB_MCP_Store_Inputs::SIDECAR_FLAGS ) );
+			$foreign        = json_decode( (string) file_get_contents( $f['side'] ), true );
+			$foreign['gid']     = str_repeat( 'f', 32 );
+			$foreign['created'] = $now - 30 * 86400;
+			file_put_contents( $f['side'], (string) json_encode( $foreign, AB_MCP_Store_Inputs::SIDECAR_FLAGS ) );
+			touch( $f['side'], $now - 3 * 86400 );
+			$half = self::store() . '/marks/' . str_repeat( 'b', 32 );
+			@mkdir( self::store() . '/marks', 0700 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			mkdir( $half, 0700 );
+			touch( $half, $now - 3 * 86400 );
+			$done = AB_MCP_Protected_Store::cleanup( $value );
+			$got  = array( is_dir( $g['dir'] ), is_file( $f['side'] ), is_dir( $half ), $done['unknown'] > 0 );
+			self::assertSame( 'valid' === $what ? array( false, false, false, false ) : array( true, true, true, true ), $got, $what );
+		}
+	}
+
+	public function testTheClockOfTheRunsAgesNoTempFileAndAbandonsNoMakingWithoutATime(): void {
+		// period.clock at its consumers in the store (Behebung 5, B1): the
+		// age of a temp file (delete_path()) and of a making whose record
+		// never came (AB_MCP_Sync_Export::discard_stale()) by the one checked
+		// clock, AB_MCP_Sync_Run::now(). A clock not of its form ages
+		// nothing: both stay. Each wrong form, and the fixed ones.
+		require_once AB_MCP_DIR . 'includes/sync/class-sync-export.php';
+		$now     = time();
+		$discard = new ReflectionMethod( \AB_MCP_Sync_Export::class, 'discard_stale' );
+		$forms   = WrongForms::of( AB_MCP_Store_Inputs::TABLE['period.clock']['form'], $now );
+		$forms['fixed: 0']                         = 0;
+		$forms['fixed: its digits as text']        = (string) $now;
+		$forms['fixed: digits with a suffix (B2)'] = '1bad';
+		foreach ( $forms + array( 'valid' => $now ) as $what => $value ) {
+			$this->fresh();
+			// The making first: open() sweeps the store with time().
+			$gid = AB_MCP_Protected_Store::open( 'out', array( 'declared' => 100, 'label' => 'series:abc' ) );
+			self::assertIsString( $gid, $what );
+			@mkdir( self::store() . '/tmp', 0700 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			$temp = self::store() . '/tmp/.ab-tmp-alt';
+			file_put_contents( $temp, 'x' );
+			touch( $temp, $now - 3 * 3600 );
+			$dir   = self::store() . '/out/' . AB_MCP_Payload_File::name( 'group|out|' . $gid, AB_MCP_Protected_Store::install_id(), '' );
+			$entry = json_decode( (string) file_get_contents( $dir . '.json' ), true );
+			$entry['created'] = $now - 2 * \AB_MCP_Sync_Export::ABANDONED;
+			file_put_contents( $dir . '.json', (string) json_encode( $entry, AB_MCP_Store_Inputs::SIDECAR_FLAGS ) );
+			\AB_MCP_Sync_Run::$clock = static fn() => $value;
+			try {
+				AB_MCP_Protected_Store::cleanup( $now );
+				$discard->invoke( null );
+			} finally {
+				\AB_MCP_Sync_Run::$clock = null;
+			}
+			$got = array( is_file( $temp ), is_dir( $dir ) );
+			self::assertSame( 'valid' === $what ? array( false, false ) : array( true, true ), $got, $what );
+		}
+	}
+
 	public function testOpenTakesTheDeclaredBytesOfAGroupOnlyInTheFormOfTheirRow(): void {
 		// budget.declared at its second consumer, open() of a group (the
 		// row is driven at package_refusal() in the unit suite): each wrong
@@ -213,18 +287,22 @@ final class StoreInputsTest extends TestCase {
 					$entry[ $field ] = $value;
 					file_put_contents( $g['side'], (string) json_encode( $entry, AB_MCP_Store_Inputs::SIDECAR_FLAGS ) );
 				}
-				$fits = AB_MCP_Sync_Backup::fits( 4, $data );
-				$done = AB_MCP_Protected_Store::cleanup( time() );
-				$out  = array( is_wp_error( $fits ) ? $fits->get_error_code() : $fits, is_dir( $g['dir'] ), $done['unknown'] > 0 );
+				$fits   = AB_MCP_Sync_Backup::fits( 4, $data );
+				$listed = AB_MCP_Protected_Store::groups( 'backups' );
+				$listed = is_array( $listed ) && in_array( $g['gid'], array_column( $listed, 'gid' ), true );
+				$done   = AB_MCP_Protected_Store::cleanup( time() );
+				$out    = array( is_wp_error( $fits ) ? $fits->get_error_code() : $fits, is_dir( $g['dir'] ), $done['unknown'] > 0, $listed );
 				self::drop( $g );
 				return $out;
 			};
 			return array(
 				'base'    => $json ? $text : $entry[ $field ],
 				'more'    => $fixed[ $json ? 'json' : substr( $id, 8 ) ],
-				'valid'   => array( array( $json ? $text : $entry[ $field ], array( true, false, false ) ) ),
+				// fits() refuses, the group stays and counts, groups() offers it
+				// to no owner.
+				'valid'   => array( array( $json ? $text : $entry[ $field ], array( true, false, false, true ) ) ),
 				'run'     => $run,
-				'unknown' => static fn( $got ): bool => array( 'ab_mcp_store_stock_unknown', true, true ) === $got,
+				'unknown' => static fn( $got ): bool => array( 'ab_mcp_store_stock_unknown', true, true, false ) === $got,
 				'texts'   => $json,
 				// 4.0 is written 4: a value its writer writes as the valid one is no wrong form in the file.
 				'written' => $json ? null : static fn( $v ): bool => json_decode( (string) json_encode( $v ), true ) === $entry[ $field ],
@@ -368,12 +446,18 @@ final class StoreInputsTest extends TestCase {
 					'fixed: another field'    => (string) json_encode( (object) array( 4 => $book + array( 'more' => 1 ) ) ),
 					'fixed: a list at the root' => (string) json_encode( array( $book ) ),
 				),
-				'valid'   => array( array( $text, true ), array( '{}', 'ab_mcp_sync_backup_booking' ) ),
+				// Its consumers: fits(), book() and release() (Behebung 5, B2).
+				'valid'   => array( array( $text, array( true, 'booked', true ) ), array( '{}', array( 'ab_mcp_sync_backup_booking', 'booked', true ) ) ),
 				'run'     => static function ( $value ) use ( $data, $answer ) {
-					file_put_contents( self::store() . '/bookings.json', $value );
-					return $answer( AB_MCP_Sync_Backup::fits( 4, $data ) );
+					$file = self::store() . '/bookings.json';
+					$out  = array();
+					foreach ( array( 'fits', 'book', 'release' ) as $call ) {
+						file_put_contents( $file, $value );
+						$out[] = $answer( 'fits' === $call ? AB_MCP_Sync_Backup::fits( 4, $data ) : ( 'book' === $call ? AB_MCP_Store_Budget::book( 5, 100 ) : AB_MCP_Store_Budget::release( 4 ) ) );
+					}
+					return $out;
 				},
-				'unknown' => $refused( 'ab_mcp_store_bookings_unread' ),
+				'unknown' => static fn( $got ): bool => array_fill( 0, 3, 'ab_mcp_store_bookings_unread' ) === $got,
 				'texts'   => true,
 				'written' => null,
 			);
@@ -423,16 +507,18 @@ final class StoreInputsTest extends TestCase {
 					'fixed: a list from key 1' => array_combine( range( 1, count( $real ) ), $real ),
 					'fixed: a number'          => array_merge( $real, array( 5 ) ),
 				),
-				'valid'   => array( array( $real, true ) ),
+				// Its consumers: the stock of fits(), and groups().
+				'valid'   => array( array( $real, array( true, 'listed' ) ) ),
 				'run'     => static function ( $value ) use ( $dir, $data, $answer ) {
 					$calls        = new AB_MCP_IT_Store_Calls();
 					$calls->names = array( $dir => $value );
 					AB_MCP_Test_Seam::install( AB_MCP_Protected_Store::class, self::SEAM, $calls );
-					$got = AB_MCP_Sync_Backup::fits( 4, $data );
+					$got    = AB_MCP_Sync_Backup::fits( 4, $data );
+					$listed = AB_MCP_Protected_Store::groups( 'backups' );
 					AB_MCP_Test_Seam::restore_all();
-					return $answer( $got );
+					return array( $answer( $got ), is_array( $listed ) ? 'listed' : $answer( $listed ) );
 				},
-				'unknown' => $refused( 'ab_mcp_store_stock_unknown' ),
+				'unknown' => static fn( $got ): bool => array( 'ab_mcp_store_stock_unknown', 'ab_mcp_store_unlisted' ) === $got,
 				'texts'   => false,
 				'written' => null,
 			);

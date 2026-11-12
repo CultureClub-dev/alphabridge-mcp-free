@@ -1321,12 +1321,13 @@ final class AB_MCP_Protected_Store {
 	 * @param string $name Name of the group on disk.
 	 * @return bool Whether it is gone.
 	 */
-	private static function delete_group( $root, $area, $name ) {
-		$dir = self::way( $root, array( $area ) );
+	private static function delete_group( $root, $area, $name, &$unread = null ) {
+		$unread = false;
+		$dir    = self::way( $root, array( $area ) );
 		if ( null === $dir ) {
 			return false;
 		}
-		return self::delete_path( $root, $dir . '/' . $name, array( 'with' => $dir . '/' . $name . '.json' ) );
+		return self::delete_path( $root, $dir . '/' . $name, array( 'with' => $dir . '/' . $name . '.json' ), $unread );
 	}
 
 	/**
@@ -2842,11 +2843,16 @@ final class AB_MCP_Protected_Store {
 	 * @param string $root Folder of the store (ensure(): its building folder;
 	 *                     uninstall(): the parent for 'empty').
 	 * @param string $path What to remove.
-	 * @param array  $how  'with' (a path removed after $path where $path went
-	 *                     whole), 'all_tmp', 'last' (names), 'empty'.
+	 * @param array  $how    'with' (a path removed after $path where $path went
+	 *                       whole), 'all_tmp', 'last' (names), 'empty'.
+	 * @param bool   $unread Set: whether the marks could not all be read
+	 *                       (guard()), so nothing in stage, backups and marks
+	 *                       went; the reason the caller counts (unswept(),
+	 *                       Behebung 5: a second read could say otherwise).
 	 * @return bool Whether it is gone (with 'with').
 	 */
-	public static function delete_path( $root, $path, array $how = array() ) {
+	public static function delete_path( $root, $path, array $how = array(), &$unread = null ) {
+		$unread = false;
 		$root = rtrim( (string) $root, '/' );
 		$path = rtrim( (string) $path, '/' );
 		if ( '' === $root || '' === $path || preg_match( '#(^|/)\.\.?(/|$)#', $path ) || preg_match( '#(^|/)\.\.?(/|$)#', $root ) ) {
@@ -2856,8 +2862,10 @@ final class AB_MCP_Protected_Store {
 		try {
 			$guard = self::guard( $root );
 		} catch ( Throwable $e ) {
+			$unread = true;
 			return false;
 		}
+		$unread  = $guard['unreadable'];
 		$tmp_dir = $root . '/' . self::TMP;
 		$under   = static function ( $p, $dir ) {
 			return $p === $dir || 0 === strpos( $p, $dir . '/' );
@@ -2885,9 +2893,10 @@ final class AB_MCP_Protected_Store {
 				return false;
 			}
 			// The age of a temp file only from its time in the form of its row
-			// of AB_MCP_Store_Inputs::TABLE (Behebung 4: no cast).
+			// of AB_MCP_Store_Inputs::TABLE (Behebung 4: no cast) and the one
+			// checked clock (young(), Behebung 5).
 			$mtime = AB_MCP_Store_Inputs::read( 'file.mtime', AB_MCP_Shape::field( $stat, 'mtime' ) );
-			if ( ! $noted && empty( $how['all_tmp'] ) && 0 === strpos( $p, $tmp_dir . '/' ) && ( dirname( $p ) !== $tmp_dir || 0 !== strpos( basename( $p ), self::TMP_PREFIX ) || null === $mtime || ( time() - $mtime ) < self::TMP_AGE ) ) {
+			if ( ! $noted && empty( $how['all_tmp'] ) && 0 === strpos( $p, $tmp_dir . '/' ) && ( dirname( $p ) !== $tmp_dir || 0 !== strpos( basename( $p ), self::TMP_PREFIX ) || self::young( $mtime ) ) ) {
 				return false;
 			}
 			if ( 0040000 === ( $stat['mode'] & 0170000 ) ) {
@@ -3971,9 +3980,10 @@ final class AB_MCP_Protected_Store {
 
 	/**
 	 * Remove a group the retention lets go (sweep()), and say how it went:
-	 * -1 removed; 1 kept because a mark cannot be read (guard(): nothing in
-	 * stage, backups and marks goes, the clean-up counts it as unknown;
-	 * Behebung 4, B1); 0 kept otherwise (an open mark names a tree of it, or
+	 * -1 removed; 1 kept because a mark cannot be read (guard() as
+	 * delete_path() read it: nothing in stage, backups and marks goes, the
+	 * clean-up counts it as unknown; Behebung 4, B1, and 5, B4); 0 kept
+	 * otherwise (an open mark names a tree of it, or
 	 * a removal that failed: delete_path() keeps what it cannot remove).
 	 *
 	 * @param string $root Folder.
@@ -3982,17 +3992,31 @@ final class AB_MCP_Protected_Store {
 	 * @return int
 	 */
 	private static function unswept( $root, $area, $name ) {
-		if ( self::delete_group( $root, $area, $name ) ) {
+		// The reason of the refusal as delete_path() read it, kept until it
+		// is counted (Behebung 5, B4: a second read of the marks could
+		// succeed where the first failed).
+		if ( self::delete_group( $root, $area, $name, $unread ) ) {
 			return -1;
 		}
-		if ( ! in_array( $area, self::TREE_AREAS, true ) ) {
-			return 0;
+		return in_array( $area, self::TREE_AREAS, true ) && true === $unread ? 1 : 0;
+	}
+
+	/**
+	 * Whether a temp file is younger than TMP_AGE, or its age is not known:
+	 * its time in the form of its row (file.mtime) and the one checked clock
+	 * of the plugin, AB_MCP_Sync_Run::now() (period.clock; Behebung 5, B1:
+	 * time() was read here directly). Either not known: young, it stays.
+	 *
+	 * @param int|null $mtime The time of the file, as read.
+	 * @return bool
+	 */
+	private static function young( $mtime ) {
+		if ( null === $mtime ) {
+			return true;
 		}
-		try {
-			return self::guard( $root )['unreadable'] ? 1 : 0;
-		} catch ( Throwable $e ) {
-			return 1;
-		}
+		require_once __DIR__ . '/sync/class-sync-run.php';
+		$now = AB_MCP_Sync_Run::now();
+		return null === $now || ( $now - $mtime ) < self::TMP_AGE;
 	}
 
 	/**

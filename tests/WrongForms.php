@@ -91,6 +91,60 @@ final class WrongForms {
 	}
 
 	/**
+	 * A valid value of a form other than null, made from the form alone, or
+	 * null where none is found (a pattern none of the candidates matches):
+	 * the base of the wrong forms of a field that is null in the value a
+	 * test gives. A list and a map hold one element, so each has a value to
+	 * make wrong forms of.
+	 *
+	 * @param array $form Form.
+	 * @return mixed|null
+	 */
+	public static function example( array $form ) {
+		switch ( $form['type'] ) {
+			case 'int':
+				return null !== $form['min'] ? $form['min'] : ( null !== $form['max'] && $form['max'] < 0 ? $form['max'] : 0 );
+			case 'number':
+				return null !== $form['min'] ? $form['min'] : 0;
+			case 'bool':
+				return true;
+			case 'string':
+				if ( array_key_exists( 'in', $form ) ) {
+					return $form['in'][0];
+				}
+				$candidates = array( 'a', 'A', '0', 'ab', 'a.b' );
+				for ( $n = 1; $n <= 256; $n++ ) {
+					$candidates[] = str_repeat( 'a', $n );
+					$candidates[] = str_repeat( '0', $n );
+				}
+				foreach ( $candidates as $text ) {
+					if ( ( null === $form['max_bytes'] || strlen( $text ) <= $form['max_bytes'] ) && ( ! array_key_exists( 'pattern', $form ) || 1 === preg_match( $form['pattern'], $text ) ) ) {
+						return $text;
+					}
+				}
+				return null;
+			case 'list':
+				$item = self::example( $form['item'] );
+				return null === $item ? null : array( $item );
+			case 'map':
+				$key   = self::example( $form['key'] );
+				$value = self::example( $form['value'] );
+				return null === $key || null === $value ? null : array( $key => $value );
+			case 'record':
+				$out = array();
+				foreach ( $form['fields'] as $name => $field ) {
+					$out[ $name ] = self::example( $field );
+					if ( null === $out[ $name ] ) {
+						return null;
+					}
+				}
+				return $out;
+		}
+		$value = self::example( $form['value'] );
+		return null === $value ? null : self::encode( $form, $value );
+	}
+
+	/**
 	 * @param array $form  Form.
 	 * @param int   $valid Value.
 	 * @return array<string,mixed>
@@ -261,10 +315,18 @@ final class WrongForms {
 			$without = $valid;
 			unset( $without[ $name ] );
 			$out[ "without $name" ] = $without;
-			if ( null === $valid[ $name ] ) {
+			// A field that may be null and is null in the value: its wrong
+			// forms from a valid value besides null (example()), so no field
+			// goes without its wrong values (Behebung 5, B2: they were all
+			// left out, the hash of a tree of a mark among them).
+			$base = array_key_exists( $name, $valid ) ? $valid[ $name ] : null;
+			if ( null === $base && array_key_exists( 'nullable', $field ) ) {
+				$base = self::example( $field );
+			}
+			if ( null === $base ) {
 				continue;
 			}
-			foreach ( self::of( $field, $valid[ $name ] ) as $what => $wrong ) {
+			foreach ( self::of( $field, $base ) as $what => $wrong ) {
 				if ( null === $wrong && array_key_exists( 'nullable', $field ) ) {
 					continue;
 				}
