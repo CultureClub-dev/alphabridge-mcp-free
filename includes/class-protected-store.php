@@ -2463,15 +2463,33 @@ final class AB_MCP_Protected_Store {
 					if ( false === $names ) {
 						return false;
 					}
-					$last = $top && isset( $how['last'] ) ? array_intersect( $names, (array) $how['last'] ) : array();
-					$all  = true;
-					foreach ( array_merge( array_diff( $names, $last, array( '.', '..' ) ), array( null ), $last ) as $entry ) {
-						if ( null === $entry ) {
-							if ( ! $all ) {
-								return false;
-							}
-							continue;
+					$names = array_values( array_diff( $names, array( '.', '..' ) ) );
+					$last  = $top && isset( $how['last'] ) ? array_values( array_intersect( $names, (array) $how['last'] ) ) : array();
+					$rest  = array_values( array_diff( $names, $last ) );
+					// A group's sidecar after its folder, and only where the
+					// folder went whole: a group with a tree a mark names
+					// keeps its sidecar.
+					$sides = array();
+					foreach ( $rest as $entry ) {
+						if ( '.json' === substr( $entry, -5 ) && in_array( substr( $entry, 0, -5 ), $rest, true ) ) {
+							$sides[] = $entry;
 						}
+					}
+					$all  = true;
+					$left = array();
+					foreach ( array_diff( $rest, $sides ) as $entry ) {
+						if ( ! $remove( $p . '/' . $entry, false ) ) {
+							$all             = false;
+							$left[ $entry ] = true;
+						}
+					}
+					foreach ( $sides as $entry ) {
+						$all = ! isset( $left[ substr( $entry, 0, -5 ) ] ) && $remove( $p . '/' . $entry, false ) && $all;
+					}
+					if ( ! $all ) {
+						return false;
+					}
+					foreach ( $last as $entry ) {
 						$all = $remove( $p . '/' . $entry, false ) && $all;
 					}
 					if ( ! $all ) {
@@ -3036,12 +3054,18 @@ final class AB_MCP_Protected_Store {
 		self::$noted[ $tmp ] = true;
 		$owner               = self::identity( $id );
 		$owner['created']    = (string) time();
-		// The areas and the guard files first, the manifest last: a building
-		// folder left by a request that died is never this installation's.
-		$made = self::complete( $tmp ) && true === self::write_file( $tmp, $tmp . '/' . self::OWNER, (string) json_encode( $owner, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) );
-		if ( $made && $calls->rename( $tmp, $path ) ) {
-			unset( self::$noted[ $tmp ] );
-			return 'ok';
+		try {
+			// The areas and the guard files first, the manifest last: a
+			// building folder left by a request that died is never this
+			// installation's.
+			$made = self::complete( $tmp ) && true === self::write_file( $tmp, $tmp . '/' . self::OWNER, (string) json_encode( $owner, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) );
+			if ( $made && $calls->rename( $tmp, $path ) ) {
+				unset( self::$noted[ $tmp ] );
+				return 'ok';
+			}
+		} catch ( Throwable $e ) {
+			// As a rename that fails: the building folder goes.
+			unset( $e );
 		}
 		self::delete_path( $tmp, $tmp, array( 'all_tmp' => true ) );
 		// Another request of this installation may have put it there first.
