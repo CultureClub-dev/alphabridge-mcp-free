@@ -537,6 +537,11 @@ final class SyncFileManifestTest extends TestCase {
 		AB_MCP_Test_Seam::restore_all();
 		self::assertSame( array( false, 'too_large' ), array( $read['complete'], $read['cause'] ), 'Within the file, not only after it.' );
 		self::assertCount( 2, array_filter( $seam->calls, static fn( $c ) => 'read' === $c['method'] ), 'Two parts read, then the time: not the third.' );
+		// A file of one part: the clock before it is opened and in the final
+		// check, not after its last part as well (Behebung 5).
+		$this->file( 'plugins/klein.php', '<?php // klein' );
+		$t = 100.0;
+		self::assertTrue( $this->read( 'klein.php', 'live', 102.5, true )['complete'], 'Two times asked (101, 102), in time.' );
 	}
 
 	public function testMoreFilesThanAManifestHoldsGiveNoHash(): void {

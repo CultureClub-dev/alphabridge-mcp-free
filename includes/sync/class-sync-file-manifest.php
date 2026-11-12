@@ -450,8 +450,8 @@ final class AB_MCP_Sync_File_Manifest {
 	 * where the file system gives the new file the inode of the old one), or
 	 * written while it is read, gives no hash, on every file system the
 	 * same. The time of the call is asked before the file is opened (also
-	 * one of 0 bytes) and after each part read; each file counts towards
-	 * MAX_FILES.
+	 * one of 0 bytes) and after each part read that is not its last; each
+	 * file counts towards MAX_FILES.
 	 *
 	 * @param string $path     The file.
 	 * @param string $rel      Its path in the unit.
@@ -491,7 +491,9 @@ final class AB_MCP_Sync_File_Manifest {
 			}
 			hash_update( $ctx, $bytes );
 			$read += strlen( $bytes );
-			if ( self::due( $acc, $deadline, $first ) ) {
+			// After each part with more to come; after the last one the final
+			// check asks (still()), so the clock is not asked twice for it.
+			if ( $read < (int) $before['size'] && self::due( $acc, $deadline, $first ) ) {
 				$calls->close( $handle );
 				return 'ended';
 			}

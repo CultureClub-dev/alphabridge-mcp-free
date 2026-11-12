@@ -80,7 +80,9 @@ e('z1-fstat-after', 'Z1 file(): fstat() after the reading that fails: no hash', 
 e('z1-read-false', 'Z1 file(): a read() that fails is no hash, also where the next read() gives bytes (Codex round 1, B7)', FM,
   "\t\t\tif ( false === $bytes ) {\n\t\t\t\t$calls->close( $handle );\n\t\t\t\treturn self::end( $acc, 'unreadable' );", "\t\t\tif ( false ) {\n\t\t\t\t$calls->close( $handle );\n\t\t\t\treturn self::end( $acc, 'unreadable' );", 'man', 'testAReadingThatFailsGivesNoHash')
 e('z1-chunk-clock', 'Z1 file(): the time asked after each part of a file', FM,
-  "\t\t\t$read += strlen( $bytes );\n\t\t\tif ( self::due( $acc, $deadline, $first ) ) {", "\t\t\t$read += strlen( $bytes );\n\t\t\tif ( false ) {", 'man', 'testTheTimeOfTheCallIsAskedWithinALargeFileToo')
+  "\t\t\tif ( $read < (int) $before['size'] && self::due( $acc, $deadline, $first ) ) {", "\t\t\tif ( false ) {", 'man', 'testTheTimeOfTheCallIsAskedWithinALargeFileToo')
+e('z1-chunk-not-last', 'Z1 file(): no clock after the last part of a file; the final check asks (Behebung 5)', FM,
+  "\t\t\tif ( $read < (int) $before['size'] && self::due( $acc, $deadline, $first ) ) {", "\t\t\tif ( self::due( $acc, $deadline, $first ) ) {", 'man', 'testTheTimeOfTheCallIsAskedWithinALargeFileToo')
 e('z1-too-large', 'Z1 late(): too large where it had a whole call', FM,
   "\t\tif ( $first ) {\n\t\t\treturn self::end( $acc, 'too_large' );", "\t\tif ( false ) {\n\t\t\treturn self::end( $acc, 'too_large' );", 'man', 'testATimeLimitWithinAUnitStopsItOrMakesItTooLarge')
 e('z1-stopped', 'Z1 late(): begun late, stopped for the next call', FM,
