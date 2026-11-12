@@ -169,7 +169,7 @@ final class AB_Mutation_Plan {
 		$whole = array();
 		$cut   = array();
 		foreach ( $groups as $key => $group ) {
-			$whole[] = array( $group['baseline'] + $group['sum'], (string) $key, $group['members'] );
+			$whole[] = array( $group['baseline'] + $group['sum'], (string) $key, 0, $group['members'] );
 			if ( $group['baseline'] + $group['sum'] <= $ideal ) {
 				$cut[] = end( $whole );
 				continue;
@@ -190,7 +190,7 @@ final class AB_Mutation_Plan {
 				$loads[ $at ]  += $member[2];
 			}
 			foreach ( $parts as $part => $those ) {
-				$cut[] = array( $group['baseline'] + $loads[ $part ], (string) $key, $those );
+				$cut[] = array( $group['baseline'] + $loads[ $part ], (string) $key, $part, $those );
 			}
 		}
 
@@ -207,7 +207,7 @@ final class AB_Mutation_Plan {
 	}
 
 	/**
-	 * Units (cost, command, members), longest first, each to the shard with
+	 * Units (cost, command, part, members), longest first, each to the shard with
 	 * the least so far.
 	 *
 	 * @param array[] $units Units.
@@ -215,12 +215,16 @@ final class AB_Mutation_Plan {
 	 * @return array<int,int> Index of the entry => shard 1..n.
 	 */
 	private static function place( array $units, $n ) {
-		// Longest first; of equal ones by the command. The parts of one
-		// command keep the order they were made in (usort is stable).
+		// Longest first; of equal ones by the command, then by the number of
+		// the part: an order of its own, whatever the sort does with equals.
 		usort(
 			$units,
 			static function ( $a, $b ) {
-				return $a[0] !== $b[0] ? $b[0] <=> $a[0] : strcmp( $a[1], $b[1] );
+				if ( $a[0] !== $b[0] ) {
+					return $b[0] <=> $a[0];
+				}
+				$by_command = strcmp( $a[1], $b[1] );
+				return 0 !== $by_command ? $by_command : $a[2] <=> $b[2];
 			}
 		);
 		$loads  = array_fill( 0, $n, 0 );
@@ -228,7 +232,7 @@ final class AB_Mutation_Plan {
 		foreach ( $units as $unit ) {
 			$at            = self::least( $loads );
 			$loads[ $at ] += $unit[0];
-			foreach ( $unit[2] as $member ) {
+			foreach ( $unit[3] as $member ) {
 				$shards[ $member[0] ] = $at + 1;
 			}
 		}

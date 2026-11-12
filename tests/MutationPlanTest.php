@@ -175,6 +175,33 @@ final class MutationPlanTest extends TestCase {
 		mt_srand();
 	}
 
+	public function testEqualPartsOfACutCommandGoAlikeInAnyOrder(): void {
+		// One command of 8 × 1.0 s (no baseline) and one entry of 2.0 s on
+		// three shards: the command is cut into parts of 3.0, 3.0 and 2.0 s,
+		// the first two equal; the entry of 2.0 s goes with the third.
+		$entries  = array();
+		$measures = array( 'mutation' => array( 'o/0' => 20 ), 'grundlinie' => array( AB_Mutation_Plan::key( self::unit( 'P' ) ) => 0, AB_Mutation_Plan::key( self::unit( 'O' ) ) => 0 ) );
+		for ( $i = 0; $i < 8; $i++ ) {
+			$entries[]                       = array( 'id' => "p/$i", 'run' => self::unit( 'P' ) );
+			$measures['mutation'][ "p/$i" ] = 10;
+		}
+		$entries[] = array( 'id' => 'o/0', 'run' => self::unit( 'O' ) );
+		$first     = self::by_id( $entries, AB_Mutation_Plan::assign( $entries, $measures, 3 ) );
+		self::assertSame( array( 1, 1, 2 ), array_column( AB_Mutation_Plan::costs( $entries, AB_Mutation_Plan::assign( $entries, $measures, 3 ), $measures, 3 ), 'baselines' ) );
+		self::assertSame( array( 30, 30, 40 ), array_column( AB_Mutation_Plan::costs( $entries, AB_Mutation_Plan::assign( $entries, $measures, 3 ), $measures, 3 ), 'cost' ) );
+		$orders = array( array_reverse( $entries ) );
+		foreach ( array( 5, 11, 2026 ) as $seed ) {
+			mt_srand( $seed );
+			$mixed = $entries;
+			shuffle( $mixed );
+			$orders[] = $mixed;
+		}
+		mt_srand();
+		foreach ( $orders as $order ) {
+			self::assertSame( $first, self::by_id( $order, AB_Mutation_Plan::assign( $order, $measures, 3 ) ) );
+		}
+	}
+
 	public function testWithinAShardTheEntriesKeepTheOrderLoaded(): void {
 		list( $a, $b ) = self::lists();
 		$entries       = array_merge( $a, $b );
