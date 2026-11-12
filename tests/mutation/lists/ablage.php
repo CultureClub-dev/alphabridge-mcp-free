@@ -49,6 +49,12 @@
  * (discard_stale()); the qualification of a close through its row
  * (period.qualified); the reason a removal was refused kept until it is
  * counted (unswept(); ablage/c5-*, ablage/table-qualified).
+ * Behebung 5b: the time of a new group, of a clean-up without a time
+ * given, of backup_rows() without one and of a mark that closes by the
+ * same clock (ablage/c5b-*); the guards of StoreClockAndReadersTest keep
+ * every other time() of these files named and every reader of a row
+ * driven. Not listed of 5b: the time the sweep of open() takes (open()
+ * refuses without a time before it sweeps).
  *
  * Not listed, with why: the Throwable caught around guard() and the walk in
  * delete_path() (a remover that throws keeps all, the case of each way
@@ -1667,8 +1673,8 @@ return array_merge(
 			'id'      => 'ablage/input-rows-now',
 			'clause'  => 'backup_rows(): a time that is no whole number above 0 makes the answer unknown',
 			'file'    => $sc,
-			'search'  => "\t\t\$now = AB_MCP_Store_Inputs::read( 'retention.now', null === \$now ? time() : \$now );\n\t\tif ( null === \$now ) {\n\t\t\treturn null;\n\t\t}",
-			'replace' => "\t\t\$now = null === \$now ? time() : \$now;",
+			'search'  => "\t\t\$now = AB_MCP_Store_Inputs::read( 'retention.now', \$now );\n\t\tif ( null === \$now ) {\n\t\t\treturn null;\n\t\t}",
+			'replace' => "",
 			'run'     => $unit( 'RetentionInputsTest', 'testADatabaseThatFailsOrATimeNotKnownMakesTheAnswerUnknown' ),
 			'expect'  => '/testADatabaseThatFailsOrATimeNotKnownMakesTheAnswerUnknown/',
 		),
@@ -2627,6 +2633,43 @@ return array_merge(
 			'replace' => "'field'    => 'whether a close qualifies (rule 2), as the caller gives it',\n\t\t\t'form'     => array( 'type' => 'int', 'digits' => true, 'min' => 0, 'max' => 1 ),",
 			'run'     => $unit( 'StoreInputsTest', 'testEveryWrongFormOfARowReachesItsConsumerAsUnknownAndEveryValidOneAsAValue' ),
 			'expect'  => '/testEveryWrongFormOfARowReachesItsConsumerAsUnknownAndEveryValidOneAsAValue/',
+		),
+		/* --- Behebung 5b: every time of the store and the runs by the one checked clock */
+		array(
+			'id'      => 'ablage/c5b-open-clock',
+			'clause'  => 'open(): no group without a time of the one checked clock (Behebung 5b)',
+			'file'    => $ps,
+			'search'  => "\t\t\$now = AB_MCP_Sync_Run::now();\n\t\tif ( null === \$now ) {\n\t\t\treturn self::clock_unknown();\n\t\t}\n\t\t\$entry = array(",
+			'replace' => "\t\t\$now = AB_MCP_Sync_Run::now();\n\t\tif ( false ) {\n\t\t\treturn self::clock_unknown();\n\t\t}\n\t\t\$entry = array(",
+			'run'     => $it( 'StoreInputsTest', 'testTheClockOfTheRunsAgesNoTempFileAndAbandonsNoMakingWithoutATime' ),
+			'expect'  => '/testTheClockOfTheRunsAgesNoTempFileAndAbandonsNoMakingWithoutATime/',
+		),
+		array(
+			'id'      => 'ablage/c5b-cleanup-clock',
+			'clause'  => 'cleanup(): the time of a clean-up without one given is the one checked clock (Behebung 5b)',
+			'file'    => $ps,
+			'search'  => "\t\tif ( null === \$now ) {\n\t\t\trequire_once __DIR__ . '/sync/class-sync-run.php';\n\t\t\t\$now = AB_MCP_Sync_Run::now();\n\t\t}",
+			'replace' => "\t\tif ( null === \$now ) {\n\t\t\trequire_once __DIR__ . '/sync/class-sync-run.php';\n\t\t\t\$now = time();\n\t\t}",
+			'run'     => $it( 'StoreInputsTest', 'testTheClockOfTheRunsAgesNoTempFileAndAbandonsNoMakingWithoutATime' ),
+			'expect'  => '/testTheClockOfTheRunsAgesNoTempFileAndAbandonsNoMakingWithoutATime/',
+		),
+		array(
+			'id'      => 'ablage/c5b-close-clock',
+			'clause'  => 'close_mark_in(): the time a mark closed by the one checked clock, 0 without one (Behebung 5b)',
+			'file'    => $ps,
+			'search'  => "\t\t\$now            = AB_MCP_Sync_Run::now();\n\t\t\$mark['state']  = 'closed';",
+			'replace' => "\t\t\$now            = time();\n\t\t\$mark['state']  = 'closed';",
+			'run'     => $it( 'StoreInputsTest', 'testTheClockOfTheRunsAgesNoTempFileAndAbandonsNoMakingWithoutATime' ),
+			'expect'  => '/testTheClockOfTheRunsAgesNoTempFileAndAbandonsNoMakingWithoutATime/',
+		),
+		array(
+			'id'      => 'ablage/c5b-rows-clock',
+			'clause'  => 'backup_rows(): the time without one given is the one checked clock (Behebung 5b)',
+			'file'    => $sc,
+			'search'  => "\t\t\trequire_once __DIR__ . '/class-sync-run.php';\n\t\t\t\$now = AB_MCP_Sync_Run::now();\n\t\t}\n\t\t\$now = AB_MCP_Store_Inputs::read( 'retention.now', \$now );",
+			'replace' => "\t\t\trequire_once __DIR__ . '/class-sync-run.php';\n\t\t\t\$now = time();\n\t\t}\n\t\t\$now = AB_MCP_Store_Inputs::read( 'retention.now', \$now );",
+			'run'     => $it( 'StoreInputsTest', 'testTheClockOfTheRunsAgesNoTempFileAndAbandonsNoMakingWithoutATime' ),
+			'expect'  => '/testTheClockOfTheRunsAgesNoTempFileAndAbandonsNoMakingWithoutATime/',
 		),
 	)
 );
