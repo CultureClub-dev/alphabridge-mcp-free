@@ -1,10 +1,11 @@
 <?php
 /**
- * The texts of Z8b branches 2 and 2b that wait for their translation: the order of
+ * The texts of Z8b branches 2, 2b and 3 that wait for their translation: the order of
  * Z8b says «Texte englisch mit Textdomain; Übersetzungen erst mit
  * text/z8b». BundledTranslationsTest leaves these keys out of its check
  * of the nine languages and checks the list itself instead: every key is
- * a text the code translates, under includes/sync/, and untranslated in
+ * a text the code translates, under includes/sync/ (or, of branch 3, in
+ * includes/class-protected-store.php), and untranslated in
  * all nine languages. A key text/z8b translates leaves the list in the
  * same change; the list ends empty and is removed with text/z8b.
  *
@@ -133,4 +134,32 @@ return array(
 	'A file of this proposal could not be written into the protected store, so nothing of it is kept as done. Call wp_site_pairs with action=propose and this proposal_id again; if it keeps failing, check the protected store on the page AlphaBridge → Staging.',
 	"The objects of this site are read; its environment (plugins, themes, the theme that runs) is read as far as one call reaches (%d part so far).\0The objects of this site are read; its environment (plugins, themes, the theme that runs) is read as far as one call reaches (%d parts so far).",
 	'environment names the package_ids of the environment of the staging site this site took over completely (wp_site_export with purpose=env there, wp_site_import_chunk with purpose=env here), each once, at most %d, in the order of their series, and none of the packages of the inventory. Pass them to propose the pairs of plugins and themes as well, or leave environment out.',
+	// includes/class-protected-store.php (Z8b branch 3: trees, their place, the instruction of a mark)
+	'A request to the page Plugins at the same time can still deactivate the plugin after the swap; the next report shows it then.',
+	'A tree lies in the area stage or backups of the protected store. Use one of them.',
+	'A tree names the folder of its unit and its source by an absolute path without "." or ".." in it. Pass such a path.',
+	'A tree of one file is named as the file of its unit (the last part of its path in the site). Pass that name.',
+	'After the activation: as after the renames. Swap back and check it:',
+	'AlphaBridge MCP: how to put the old state back by hand, without WordPress',
+	'Backup (the old version): %1$s (device %2$d, inode %3$d, hash %4$s)',
+	'Before the first rename nothing was moved. Check that the target is the old version:',
+	'Run %1$d, step %2$d, begun %3$s UTC.',
+	'Run the commands of the point where the swap stopped, one after the other; where a check (test …) fails, stop and ask before anything else is moved.',
+	'Stage (the new version): %1$s (device %2$d, inode %3$d, hash %4$s)',
+	'Target (the folder of the unit in the site): %s',
+	'The copy in the protected store is not what was read before it (the source changed while it was copied, or a file was not written whole), so nothing of it stays. Check that nothing writes into the source right now, then try again.',
+	'The folder %s of the protected store lies on another device (file system) than its folder tmp, or the device of one of them could not be read, so the file was not written: a rename between them would copy and delete instead of replacing it in one step. Ask the host to keep the folder of the store on one file system, then try again.',
+	'The folder or file for the tree could not be read whole (%s), so nothing of it went into the protected store. Check that it holds only plain files and folders (no link, no .git) and that nothing writes into it right now, then try again.',
+	'The hash is the one of the manifest of the unit as AlphaBridge reads it; in a shell the inode tells the right folder from another of the same name (ls -di shows it).',
+	'The new version is at the target, the old one in the backup. Swap back and check it:',
+	'The plugin %s was active when the swap began. Where it is inactive afterwards: way (a) with its approval in accept (it is switched on as by hand, its activation routine runs), or Plugins → Activate in wp-admin by hand.',
+	'The protected store lies in the uploads folder, and its self-check did not show that the web server answers a PHP file in a folder below stage and below backups with 403 or 404 without running it; so no plugin or theme goes into the store. Ask the host to let PHP create the folder ab-mcp-store beside the WordPress folder, outside the web root (or to deny every request below the folder ab-mcp-store-… in the uploads, PHP files included), then try again in a day, when the check is made anew; until then, update the plugin or theme by hand in wp-admin.',
+	'The protected store lies on another device (file system) than the folder %s, or the device of one of them could not be read, so nothing of this unit goes into the store: a rename between two devices copies and deletes instead of moving in one step. Ask the host to put the folder ab-mcp-store beside WordPress (or the uploads folder) on the file system of wp-content, then try again; until then, update the plugin or theme by hand in wp-admin.',
+	'The swap back stopped: the target holds the new version or is missing. Finish it and check it:',
+	'The target is missing; the old version lies whole in the backup. Put it back and check it:',
+	'The tree in the protected store is not what was put there (its manifest differs, or it could not be read whole), so it is not used. Make it again; if it keeps happening, ask the host whether something else writes into the folder of the store.',
+	'The tree is not in its group of the protected store: it was never put there, or its group was removed after its time. Use put_tree() to put it there again.',
+	'The unit holds a file that configures the web server or PHP (%s), and the protected store lies in the uploads folder, where such a file could open its folder to the web; so it does not go into the store. Ask the host to let PHP create the folder ab-mcp-store beside the WordPress folder, outside the web root, then try again; until then, update the plugin or theme by hand in wp-admin.',
+	'This group holds a tree or file of that name already, and a tree is never put over another. Use another name for it.',
+	'Unit: %1$s %2$s',
 );
