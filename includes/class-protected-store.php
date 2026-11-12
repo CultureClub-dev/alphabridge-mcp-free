@@ -1649,7 +1649,10 @@ final class AB_MCP_Protected_Store {
 	 *
 	 * @param string      $area   'stage' or 'backups'.
 	 * @param string      $gid    A group of that area (open()).
-	 * @param string      $name   Name of the tree in the group: a-z, 0-9, ".", "_", "-", up to 64.
+	 * @param string      $name   Name of the tree in the group: the name of the folder or
+	 *                            file of the unit in the site, up to 255 bytes, by the
+	 *                            rule of is_tree_name() (not valid_name(), which names
+	 *                            the store's own files).
 	 * @param string      $target The folder or file of the unit in the site (absolute; its folder exists).
 	 * @param string|null $source A folder or file to copy; null for the place only.
 	 * @return array{path:string,hash:string,form:string,files:int,bytes:int,where:string,copied:bool}|WP_Error
@@ -1791,7 +1794,7 @@ final class AB_MCP_Protected_Store {
 	 *
 	 * @param string $area Area ('stage' or 'backups').
 	 * @param string $gid  Group.
-	 * @param string $name Name of the tree.
+	 * @param string $name Name of the tree (is_tree_name(): up to 255 bytes).
 	 * @param string $hash The hash put_tree() gave.
 	 * @return array{path:string,hash:string,form:string,files:int,bytes:int}|WP_Error
 	 */
@@ -2056,13 +2059,15 @@ final class AB_MCP_Protected_Store {
 	 * its identity is proved (Z9).
 	 *
 	 * @param array $mark run_id, seq (int); op (a-z and "_"); unit
-	 *                    {kind, ref}; target (absolute path of the unit's
-	 *                    folder or file); trees (one or two:
-	 *                    {role: backup|stage, path (absolute, a tree of
-	 *                    stage or backups of this store), form: folder|file,
+	 *                    {kind, ref: its name, up to AB_MCP_Sync_Pairs::MAX_REF
+	 *                    (191) characters, as a pair holds it}; target
+	 *                    (absolute path of the unit's folder or file); trees
+	 *                    (one or two: {role: backup|stage, path (absolute, a
+	 *                    tree of stage or backups of this store, named by
+	 *                    is_tree_name(): up to 255 bytes), form: folder|file,
 	 *                    dev, ino, hash (64 hex, or null)}); active (the main
-	 *                    files of the unit active at the beginning); note
-	 *                    (optional).
+	 *                    files of the unit active at the beginning, each up to
+	 *                    MAX_REF characters); note (optional).
 	 * @return array{mid:string,mark:string,guide:string}|WP_Error
 	 */
 	public static function put_mark( array $mark ) {
