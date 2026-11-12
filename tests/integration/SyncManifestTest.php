@@ -1160,6 +1160,33 @@ final class SyncManifestTest extends TestCase {
 		self::assertSame( count( $units ), count( array_unique( $units ) ), 'No unit twice.' );
 	}
 
+	public function testAWalkPastItsTimeVisitsOneEntryFirstAndGoesOnAfterIt(): void {
+		// Codex on 7d0aeea (C of Behebung 9): the step of a root of files
+		// begun with the time of the call over (not the first unit of the
+		// call) visits one entry and goes on after it, a skipped one too; so
+		// every call moves on.
+		$uploads = AB_MCP_IT_Sites::docroot( 'a' ) . '/wp-content/uploads';
+		if ( ! is_dir( $uploads ) ) {
+			mkdir( $uploads );
+			$this->folders[] = $uploads;
+		}
+		$skipped = array();
+		foreach ( array( '001', '002', '003' ) as $n ) {
+			$skipped[] = $uploads . '/ab-it-cache-' . $n;
+			mkdir( end( $skipped ) );
+		}
+		$this->folders = array_merge( $skipped, $this->folders );
+		$names         = array_values( array_diff( (array) scandir( $uploads ), array( '.', '..' ) ) );
+		usort( $names, 'strcmp' );
+		AB_MCP_Sync_Env::$clock = static fn() => 1000.0;
+		$step                   = new \ReflectionMethod( AB_MCP_Sync_Env::class, 'unit_step' );
+		$first                  = false;
+		$read                   = $step->invokeArgs( null, array( 'upload', null, 10.0, 4000, 'live', &$first, false ) );
+		self::assertSame( array( array(), false ), array( $read['lines'], $read['done'] ), 'Not done, no unit read.' );
+		self::assertIsArray( $read['after'], 'A place to go on from.' );
+		self::assertSame( $names[0], AB_MCP_Sync_Env::found( $read['after'], static fn( $rel ) => '' === $rel ? $names : array() ), 'After the first entry, visited although the time was over.' );
+	}
+
 	public function testACoreTooSlowForAWholeCallIsNotComparedAndTheRestOfTheEnvironmentIsRead(): void {
 		// GitHub-Codex on ec0d088 (G-M7): a host where the core files take
 		// longer than UNIT_BUDGET (here 1 s a file). With the whole time of a

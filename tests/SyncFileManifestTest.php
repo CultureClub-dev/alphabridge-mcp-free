@@ -4,8 +4,9 @@
  * 3.1 Z1 and Z2, E1), the one place that gives the hash of a unit:
  *
  * - Z1: equal only by the whole manifest of every file (path, size,
- *   SHA-256, by strcmp(), ab-files/1); mtime never counts; one file more,
- *   less, other bytes, another name: another hash;
+ *   SHA-256, by strcmp(), with the form of the unit, ab-files/1); mtime
+ *   never counts; one file more, less, other bytes, another name, a file in
+ *   place of a folder: another hash;
  * - Z2: a folder .git, .svn or .hg anywhere (the folder of the unit itself
  *   included), a link (the unit itself included) or a file that is no
  *   regular file locks the unit (code:live_extra here, code:link on
@@ -122,8 +123,8 @@ final class SyncFileManifestTest extends TestCase {
 		self::assertSame( array( 'folder', true, null, null, 3 ), array( $read['form'], $read['complete'], $read['cause'], $read['lock'], $read['files'] ) );
 		$a    = '<?php // a';
 		$shop = "<?php\n/* Plugin Name: Shop */";
-		$text = '{"files":[["inc/a.php",' . strlen( $a ) . ',"' . hash( 'sha256', $a ) . '"],["readme.txt",4,"' . hash( 'sha256', 'Shop' ) . '"],["shop.php",' . strlen( $shop ) . ',"' . hash( 'sha256', $shop ) . '"]],"format":"ab-files/1"}';
-		self::assertSame( $text, AB_MCP_Sync_File_Manifest::text( $read['entries'] ), 'Path, size, SHA-256, by strcmp(), with the format, no mtime.' );
+		$text = '{"files":[["inc/a.php",' . strlen( $a ) . ',"' . hash( 'sha256', $a ) . '"],["readme.txt",4,"' . hash( 'sha256', 'Shop' ) . '"],["shop.php",' . strlen( $shop ) . ',"' . hash( 'sha256', $shop ) . '"]],"form":"folder","format":"ab-files/1"}';
+		self::assertSame( $text, AB_MCP_Sync_File_Manifest::text( $read['entries'], 'folder' ), 'Path, size, SHA-256, by strcmp(), with the form and the format, no mtime.' );
 		self::assertSame( hash( 'sha256', $text ), $read['hash'] );
 		self::assertSame( array( 'inc/a.php', 'readme.txt', 'shop.php' ), array_column( $read['entries'], 0 ) );
 		self::assertSame( strlen( $a ) + 4 + strlen( $shop ), $read['bytes'] );
@@ -183,7 +184,45 @@ final class SyncFileManifestTest extends TestCase {
 		$read = $this->read( 'hello.php' );
 		self::assertSame( array( 'file', true, 1 ), array( $read['form'], $read['complete'], $read['files'] ) );
 		self::assertSame( 'hello.php', $read['entries'][0][0] );
-		self::assertSame( hash( 'sha256', AB_MCP_Sync_File_Manifest::text( $read['entries'] ) ), $read['hash'] );
+		self::assertSame( hash( 'sha256', AB_MCP_Sync_File_Manifest::text( $read['entries'], 'file' ) ), $read['hash'] );
+	}
+
+	public function testAFileAndAFolderHoldingTheSameFileAreNeverTheSameUnit(): void {
+		// GitHub-Codex on 7d0aeea (Z1): mu-plugins/loader.php on one site, a
+		// folder loader.php/ holding the same loader.php on the other.
+		$bytes = "<?php\n// The loader.\n";
+		$this->file( 'plugins/loader.php', $bytes );
+		$this->file( 'other/plugins/loader.php/loader.php', $bytes );
+		$file   = $this->read( 'loader.php' );
+		$folder = AB_MCP_Sync_File_Manifest::unit( $this->dir . '/other/plugins', 'loader.php', 'staging', INF, true, 'mu_plugin' );
+		self::assertSame( array( 'file', 'folder' ), array( $file['form'], $folder['form'] ) );
+		self::assertSame( array_column( $file['entries'], 0 ), array_column( $folder['entries'], 0 ), 'The same paths, sizes and SHA-256.' );
+		self::assertNotSame( $file['hash'], $folder['hash'], 'Another form, another hash.' );
+		$line  = static function ( array $read ): array {
+			$line = array(
+				'active'   => null,
+				'bytes'    => $read['bytes'],
+				'cause'    => null,
+				'complete' => true,
+				'env'      => 'mu_plugin',
+				'files'    => $read['files'],
+				'form'     => $read['form'],
+				'hash'     => $read['hash'],
+				'lock'     => null,
+				'mains'    => null,
+				'mtime'    => null,
+				'own'      => false,
+				'ref'      => 'loader.php',
+				'sha256'   => null,
+				'version'  => null,
+			);
+			ksort( $line );
+			return $line;
+		};
+		$tables = array( 'complete' => true, 'count' => 0, 'env' => 'tables', 'ref' => 'tables' );
+		$entry  = array_values( array_filter( AB_MCP_Sync_Env::compare( array( $line( $folder ), $tables ), array( $line( $file ), $tables ) )['entries'], static fn( $e ) => 'mu_plugin' === $e['subtype'] ) )[0];
+		self::assertSame( array( 'differs', array( 'files' ) ), array( $entry['result'], $entry['differs'] ), 'unit_item(): not equal.' );
+		self::assertSame( array( 'folder', 'file' ), array( $entry['staging']['form'], $entry['live']['form'] ), 'Each side by its form.' );
 	}
 
 	public function testThePathsOfTwoManifestsDifferOnlyByContentsNeverByMtime(): void {

@@ -84,6 +84,15 @@ return array(
 		'expect'  => '/testMtimeNeverCountsForEquality/',
 	),
 	array(
+		'id'      => 'manifest/z1-form',
+		'clause'  => 'Z1 text(): the form of the unit (file or folder) in the hash (GitHub-Codex on 7d0aeea)',
+		'file'    => $fm,
+		'search'  => "\t\t\t\t'form'   => (string) \$form,",
+		'replace' => '/* removed */',
+		'run'     => $unit( 'SyncFileManifestTest', 'testAFileAndAFolderHoldingTheSameFileAreNeverTheSameUnit' ),
+		'expect'  => '/testAFileAndAFolderHoldingTheSameFileAreNeverTheSameUnit/',
+	),
+	array(
 		'id'      => 'manifest/z1-size',
 		'clause'  => 'Z1 text(): the size of each file in the hash',
 		'file'    => $fm,
@@ -892,6 +901,15 @@ return array(
 		'replace' => "\t\t\tif ( false ) {",
 		'run'     => $it( 'SyncManifestTest', 'testATreeOfEmptyFoldersIsWalkedOverPartsWithItsPlaceAndNoUnitLeftOut' ),
 		'expect'  => '/testATreeOfEmptyFoldersIsWalkedOverPartsWithItsPlaceAndNoUnitLeftOut/',
+	),
+	array(
+		'id'      => 'manifest/walk-visited-guard',
+		'clause'  => 'nested(): one entry visited before the time of the call is asked, so that every call moves on (Codex on 7d0aeea, C)',
+		'file'    => $en,
+		'search'  => "\t\t\tif ( \$walk['visited'] > 0 && self::now() >= \$walk['until'] ) {",
+		'replace' => "\t\t\tif ( self::now() >= \$walk['until'] ) {",
+		'run'     => $it( 'SyncManifestTest', 'testAWalkPastItsTimeVisitsOneEntryFirstAndGoesOnAfterIt' ),
+		'expect'  => '/testAWalkPastItsTimeVisitsOneEntryFirstAndGoesOnAfterIt/',
 	),
 	array(
 		'id'      => 'manifest/walk-last-skip',

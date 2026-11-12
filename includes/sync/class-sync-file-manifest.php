@@ -14,9 +14,11 @@
  * FORMAT ab-files/1: each file of the unit with its path relative to the
  * folder of the unit (a unit of one file: its own name), its size and its
  * SHA-256, sorted by strcmp() of the path, encoded with
- * AB_MCP_Sync_Canon::encode() together with the name of the format; the
- * hash of the unit is the SHA-256 of that text. The time a file was changed
- * (mtime) stands beside it and never counts for equality (Z1).
+ * AB_MCP_Sync_Canon::encode() together with the form of the unit (file or
+ * folder: a file and a folder holding a file of the same name and bytes
+ * are never the same unit) and the name of the format; the hash of the
+ * unit is the SHA-256 of that text. The time a file was changed (mtime)
+ * stands beside it and never counts for equality (Z1).
  *
  * THE ONE PLACE (plan 3.1, Z1 and Z2): unit() is the only function that
  * gives the hash of a unit. It gives one only where it listed and hashed
@@ -310,7 +312,7 @@ final class AB_MCP_Sync_File_Manifest {
 				return strcmp( $a[0], $b[0] );
 			}
 		);
-		$text = self::text( $acc['entries'] );
+		$text = self::text( $acc['entries'], $acc['form'] );
 		if ( '' === $text ) {
 			return self::ended( $acc, 'unreadable' );
 		}
@@ -327,14 +329,17 @@ final class AB_MCP_Sync_File_Manifest {
 	}
 
 	/**
-	 * The text of a manifest: the format and each file with its path, size
-	 * and SHA-256 (no mtime), by strcmp() of the path, in the one spelling of
-	 * AB_MCP_Sync_Canon::encode().
+	 * The text of a manifest: the format, the form of the unit (file or
+	 * folder) and each file with its path, size and SHA-256 (no mtime), by
+	 * strcmp() of the path, in the one spelling of AB_MCP_Sync_Canon::encode().
 	 *
 	 * @param array[] $entries [path, size, sha256, mtime], sorted.
+	 * @param string  $form    file or folder: the form of the unit (GitHub-
+	 *                         Codex on 7d0aeea: a file loader.php and a folder
+	 *                         loader.php/ holding the same loader.php are two).
 	 * @return string '' where it cannot be written.
 	 */
-	public static function text( array $entries ) {
+	public static function text( array $entries, $form ) {
 		$files = array();
 		foreach ( $entries as $entry ) {
 			$files[] = array( (string) $entry[0], (int) $entry[1], (string) $entry[2] );
@@ -342,6 +347,7 @@ final class AB_MCP_Sync_File_Manifest {
 		return AB_MCP_Sync_Canon::encode(
 			array(
 				'files'  => $files,
+				'form'   => (string) $form,
 				'format' => self::FORMAT,
 			)
 		);

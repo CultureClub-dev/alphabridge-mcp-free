@@ -36,6 +36,8 @@ e('z1-sort', 'Z1 unit(): the files by strcmp() of the whole path', FM,
   "\t\tusort(\n\t\t\t$acc['entries'],", "\t\tarray_reverse(\n\t\t\t$acc['entries'],", 'man', 'testTheOrderIsStrcmpOfTheWholePathNotTheOrderOfTheWalk')
 e('z1-no-mtime', 'Z1 text(): mtime never in the hash', FM,
   "\t\t\t$files[] = array( (string) $entry[0], (int) $entry[1], (string) $entry[2] );", "\t\t\t$files[] = array( (string) $entry[0], (int) $entry[1], (string) $entry[2], (int) $entry[3] );", 'man', 'testMtimeNeverCountsForEquality')
+e('z1-form', 'Z1 text(): the form of the unit (file or folder) in the hash (GitHub-Codex on 7d0aeea)', FM,
+  "\t\t\t\t'form'   => (string) $form,", '', 'man', 'testAFileAndAFolderHoldingTheSameFileAreNeverTheSameUnit')
 e('z1-size', 'Z1 text(): the size of each file in the hash', FM,
   "\t\t\t$files[] = array( (string) $entry[0], (int) $entry[1], (string) $entry[2] );", "\t\t\t$files[] = array( (string) $entry[0], (string) $entry[2] );", 'man', 'testTheHashIsTheSha256OfTheManifestOfEveryFileInTheFormatAbFiles1')
 e('z1-every-file', 'Z1 folder(): every file of every folder, a written log included (no list of names left out)', FM,
@@ -209,6 +211,8 @@ e('own-version-mu', 'E12 unit_lines(): the version of AlphaBridge itself in the 
   "\t\t\t$fields['version'] = $read['version'] ?? null;", '', 'it', 'testAlphaBridgeItselfInTheMustUseFolderIsReadWithItsVersion')
 e('walk-time', 'nested(): the time of the call asked while a root of files is walked, also where it gives no unit (GitHub-Codex on e9db02d)', EN,
   "\t\t\tif ( $walk['visited'] > 0 && self::now() >= $walk['until'] ) {", "\t\t\tif ( false ) {", 'it', 'testATreeOfEmptyFoldersIsWalkedOverPartsWithItsPlaceAndNoUnitLeftOut')
+e('walk-visited-guard', 'nested(): one entry visited before the time of the call is asked, so that every call moves on (Codex on 7d0aeea, C)', EN,
+  "\t\t\tif ( $walk['visited'] > 0 && self::now() >= $walk['until'] ) {", "\t\t\tif ( self::now() >= $walk['until'] ) {", 'it', 'testAWalkPastItsTimeVisitsOneEntryFirstAndGoesOnAfterIt')
 e('walk-last-skip', 'nested(): the place goes on over a skipped entry', EN,
   "\t\t\tif ( 'skip' === $what ) {\n\t\t\t\t$walk['last'] = $path;", "\t\t\tif ( 'skip' === $what ) {", 'it', 'testATreeOfEmptyFoldersIsWalkedOverPartsWithItsPlaceAndNoUnitLeftOut')
 e('walk-last-into', 'nested(): the place goes on over a folder walked', EN,

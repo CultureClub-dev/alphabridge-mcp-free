@@ -21,13 +21,13 @@
  *    fonts (font), a file of the uploads at their top level or under a year
  *    folder outside the file lists of the attachments (upload). Each is read
  *    whole by AB_MCP_Sync_File_Manifest::unit() (every file by its path,
- *    size and SHA-256, the hash of the unit over them, ab-files/1), with its
- *    version and main files and which of them run (a plugin), its version (a
- *    theme), whether it is AlphaBridge itself (own, E12: shown, never
- *    taken over, not hashed); the files of a folder follow in lines of their
- *    own (entries, PER_LINE files a line). A theme of a further root of
- *    themes (register_theme_directory()) is locked (code:theme_root), not
- *    read (theme_root, E2);
+ *    size and SHA-256, the hash of the unit over them and its form, file or
+ *    folder, ab-files/1), with its version and main files and which of them
+ *    run (a plugin), its version (a theme), whether it is AlphaBridge itself
+ *    (own, E12: shown, never taken over, not hashed); the files of a folder
+ *    follow in lines of their own (entries, PER_LINE files a line). A theme
+ *    of a further root of themes (register_theme_directory()) is locked
+ *    (code:theme_root), not read (theme_root, E2);
  *  - theme_choice: which theme runs (the stored rows of stylesheet and
  *    template), a unit of its own (E2);
  *  - dropin: each drop-in of a single site (DROPINS) that is there, with its
