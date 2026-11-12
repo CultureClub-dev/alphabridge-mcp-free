@@ -24,7 +24,7 @@
  * checks of sidecar(), kept(), open() and bind(), the age of a closed mark,
  * and the names of a unit and its main files in characters (B1). Behebung 3:
  * each input of the retention decision whole or unknown
- * (AB_MCP_Protected_Store::RETENTION_INPUTS; ablage/b3-*): whole_number(),
+ * (AB_MCP_Protected_Store::RETENTION_INPUTS; ablage/input-*): whole_number(),
  * open_runs(), backup_rows() with the plan of a way back, keep_until(),
  * backup_days(), kept(), inputs(), keeps(), keep(), what sweep() counts
  * unknown, and the run of a backup group without a memory of groups, each
@@ -1583,7 +1583,7 @@ return array_merge(
 		),
 		/* -- Behebung 3: each input of the retention decision whole or unknown */
 		array(
-			'id'      => 'ablage/b3-whole-digits',
+			'id'      => 'ablage/input-whole-digits',
 			'clause'  => 'whole_number(): a string is a whole number only as its decimal digits written out (no sign, leading zero, blank, fraction or overflow)',
 			'file'    => $sc,
 			'search'  => "\t\tif ( is_string( \$value ) && (string) (int) \$value === \$value ) {",
@@ -1592,7 +1592,7 @@ return array_merge(
 			'expect'  => '/testAWholeNumberIsReadWithoutLossOrNotAtAll/',
 		),
 		array(
-			'id'      => 'ablage/b3-whole-int',
+			'id'      => 'ablage/input-whole-int',
 			'clause'  => 'whole_number(): nothing but a whole number, never a value cast to one',
 			'file'    => $sc,
 			'search'  => "\t\treturn is_int( \$value ) && \$value >= \$min ? \$value : null;",
@@ -1601,7 +1601,7 @@ return array_merge(
 			'expect'  => '/testAWholeNumberIsReadWithoutLossOrNotAtAll/',
 		),
 		array(
-			'id'      => 'ablage/b3-whole-min',
+			'id'      => 'ablage/input-whole-min',
 			'clause'  => 'whole_number(): below its least value it is unknown',
 			'file'    => $sc,
 			'search'  => "\t\treturn is_int( \$value ) && \$value >= \$min ? \$value : null;",
@@ -1610,7 +1610,7 @@ return array_merge(
 			'expect'  => '/testAWholeNumberIsReadWithoutLossOrNotAtAll/',
 		),
 		array(
-			'id'      => 'ablage/b3-open-failed',
+			'id'      => 'ablage/input-open-failed',
 			'clause'  => 'open_runs(): a read that failed is unknown, never an empty list (wpdb answers an empty array and sets last_error)',
 			'file'    => $sc,
 			'search'  => "\t\tif ( '' !== \$wpdb->last_error || ! is_array( \$ids ) ) {",
@@ -1619,7 +1619,7 @@ return array_merge(
 			'expect'  => '/testADatabaseThatFailsOrATimeNotKnownMakesTheAnswerUnknown/',
 		),
 		array(
-			'id'      => 'ablage/b3-open-id',
+			'id'      => 'ablage/input-open-id',
 			'clause'  => 'open_runs(): a run id that is no whole number of 1 or more makes the list unknown, never 0',
 			'file'    => $sc,
 			'search'  => "\t\t\t\$id = self::whole_number( \$id, 1 );\n\t\t\tif ( null === \$id ) {",
@@ -1628,7 +1628,7 @@ return array_merge(
 			'expect'  => '/testTheOpenRunsAreTheirIdsWholeOrUnknown/',
 		),
 		array(
-			'id'      => 'ablage/b3-open-unknown-it',
+			'id'      => 'ablage/input-open-unknown-it',
 			'clause'  => 'kept(): while the open runs are unknown, a group of a run stays and counts unknown (sweep())',
 			'file'    => $ps,
 			'search'  => "\t\t\tif ( ! is_array( \$in['open'] ) ) {\n\t\t\t\treturn null;",
@@ -1637,7 +1637,7 @@ return array_merge(
 			'expect'  => '/testWithoutTheTablesOfTheRunsTheGroupsOfARunStayAndThoseOfNoRunGoByTheirTime/',
 		),
 		array(
-			'id'      => 'ablage/b3-inputs-open',
+			'id'      => 'ablage/input-inputs-open',
 			'clause'  => 'inputs(): the open runs as open_runs() reads them',
 			'file'    => $ps,
 			'search'  => "\t\t\t'open'    => AB_MCP_Sync_Schema::open_runs(),",
@@ -1646,7 +1646,7 @@ return array_merge(
 			'expect'  => '/testWithoutTheTablesOfTheRunsTheGroupsOfARunStayAndThoseOfNoRunGoByTheirTime/',
 		),
 		array(
-			'id'      => 'ablage/b3-rows-now',
+			'id'      => 'ablage/input-rows-now',
 			'clause'  => 'backup_rows(): a time that is no whole number above 0 makes the answer unknown',
 			'file'    => $sc,
 			'search'  => "\t\t\$now = null === \$now ? time() : \$now;\n\t\tif ( ! is_int( \$now ) || \$now < 1 ) {\n\t\t\treturn null;\n\t\t}\n\t\t// The states",
@@ -1655,7 +1655,7 @@ return array_merge(
 			'expect'  => '/testADatabaseThatFailsOrATimeNotKnownMakesTheAnswerUnknown/',
 		),
 		array(
-			'id'      => 'ablage/b3-rows-load-run',
+			'id'      => 'ablage/input-rows-load-run',
 			'clause'  => 'backup_rows(): loads AB_MCP_Sync_Run itself, so a clean-up of a request without it reads the retention (no Error)',
 			'file'    => $sc,
 			'search'  => "\t\trequire_once __DIR__ . '/class-sync-run.php';\n",
@@ -1664,7 +1664,7 @@ return array_merge(
 			'expect'  => '/testTheCleanUpOfARequestThatLoadedNoRunReadsTheRetentionOfTheBackups/',
 		),
 		array(
-			'id'      => 'ablage/b3-rows-failed',
+			'id'      => 'ablage/input-rows-failed',
 			'clause'  => 'backup_rows(): a read of the rows that failed is unknown, never an empty history',
 			'file'    => $sc,
 			'search'  => "\t\tif ( '' !== \$wpdb->last_error || ! is_array( \$rows ) ) {",
@@ -1673,7 +1673,7 @@ return array_merge(
 			'expect'  => '/testADatabaseThatFailsOrATimeNotKnownMakesTheAnswerUnknown/',
 		),
 		array(
-			'id'      => 'ablage/b3-rows-id',
+			'id'      => 'ablage/input-rows-id',
 			'clause'  => 'backup_rows(): a run id that is no whole number of 1 or more makes the answer unknown',
 			'file'    => $sc,
 			'search'  => "\$id    = is_array( \$row ) && array_key_exists( 'run_id', \$row ) ? self::whole_number( \$row['run_id'], 1 ) : null;",
@@ -1682,7 +1682,7 @@ return array_merge(
 			'expect'  => '/testARowWhoseFieldsAreNotWholeMakesTheAnswerUnknown/',
 		),
 		array(
-			'id'      => 'ablage/b3-rows-state',
+			'id'      => 'ablage/input-rows-state',
 			'clause'  => 'backup_rows(): a state outside OPEN_STATES and CLOSED makes the answer unknown',
 			'file'    => $sc,
 			'search'  => "if ( null === \$id || ! in_array( \$state, array_merge( AB_MCP_Sync_Run::OPEN_STATES, self::CLOSED ), true ) ) {",
@@ -1691,7 +1691,7 @@ return array_merge(
 			'expect'  => '/testARowWhoseFieldsAreNotWholeMakesTheAnswerUnknown/',
 		),
 		array(
-			'id'      => 'ablage/b3-rows-state-it',
+			'id'      => 'ablage/input-rows-state-it',
 			'clause'  => 'backup_rows(): with a run of a state the store does not know every backup stays (the clean-up)',
 			'file'    => $sc,
 			'search'  => "if ( null === \$id || ! in_array( \$state, array_merge( AB_MCP_Sync_Run::OPEN_STATES, self::CLOSED ), true ) ) {",
@@ -1700,7 +1700,7 @@ return array_merge(
 			'expect'  => '/testARunOfAStateTheStoreDoesNotKnowKeepsItsGroupsAndEveryBackup/',
 		),
 		array(
-			'id'      => 'ablage/b3-rows-type',
+			'id'      => 'ablage/input-rows-type',
 			'clause'  => 'backup_rows(): a run not closed of a type outside TYPES makes the answer unknown',
 			'file'    => $sc,
 			'search'  => "if ( ! in_array( \$type, AB_MCP_Sync_Run::TYPES, true ) ) {",
@@ -1709,7 +1709,7 @@ return array_merge(
 			'expect'  => '/testARowWhoseFieldsAreNotWholeMakesTheAnswerUnknown/',
 		),
 		array(
-			'id'      => 'ablage/b3-rows-revert-only',
+			'id'      => 'ablage/input-rows-revert-only',
 			'clause'  => 'backup_rows(): only a run of the type revert names runs; the plan of a push run is not needed',
 			'file'    => $sc,
 			'search'  => "\t\t\t\tif ( 'revert' !== \$type ) {\n\t\t\t\t\tcontinue;",
@@ -1718,7 +1718,7 @@ return array_merge(
 			'expect'  => '/testTheRunsOfANormalHistoryKeepWhatTheContractKeeps/',
 		),
 		array(
-			'id'      => 'ablage/b3-plan-string',
+			'id'      => 'ablage/input-plan-string',
 			'clause'  => 'backup_rows(): a plan that is no string (NULL, a failed read) makes the answer unknown',
 			'file'    => $sc,
 			'search'  => "if ( '' !== \$wpdb->last_error || ! is_string( \$raw ) ) {",
@@ -1727,7 +1727,7 @@ return array_merge(
 			'expect'  => '/testAWayBackWhosePlanIsNotWholeMakesTheAnswerUnknown/',
 		),
 		array(
-			'id'      => 'ablage/b3-plan-whole',
+			'id'      => 'ablage/input-plan-whole',
 			'clause'  => 'backup_rows(): a plan of a way back that is no JSON with a list reverts makes the answer unknown',
 			'file'    => $sc,
 			'search'  => "if ( ! is_array( \$plan ) || ! isset( \$plan['reverts'] ) || ! is_array( \$plan['reverts'] ) || array() === \$plan['reverts'] ) {",
@@ -1736,7 +1736,7 @@ return array_merge(
 			'expect'  => '/testAWayBackWhosePlanIsNotWholeMakesTheAnswerUnknown/',
 		),
 		array(
-			'id'      => 'ablage/b3-plan-whole-it',
+			'id'      => 'ablage/input-plan-whole-it',
 			'clause'  => 'backup_rows(): a way back whose plan is no JSON keeps the backups of every run (the case of the confirmation of the list)',
 			'file'    => $sc,
 			'search'  => "if ( ! is_array( \$plan ) || ! isset( \$plan['reverts'] ) || ! is_array( \$plan['reverts'] ) || array() === \$plan['reverts'] ) {",
@@ -1745,7 +1745,7 @@ return array_merge(
 			'expect'  => '/testAWayBackWhosePlanIsNotWholeKeepsTheBackupsOfEveryRun/',
 		),
 		array(
-			'id'      => 'ablage/b3-plan-reverts-list',
+			'id'      => 'ablage/input-plan-reverts-list',
 			'clause'  => 'backup_rows(): reverts that is no list makes the answer unknown',
 			'file'    => $sc,
 			'search'  => "if ( ! is_array( \$plan ) || ! isset( \$plan['reverts'] ) || ! is_array( \$plan['reverts'] ) || array() === \$plan['reverts'] ) {",
@@ -1754,7 +1754,7 @@ return array_merge(
 			'expect'  => '/testAWayBackWhosePlanIsNotWholeMakesTheAnswerUnknown/',
 		),
 		array(
-			'id'      => 'ablage/b3-plan-reverts-empty',
+			'id'      => 'ablage/input-plan-reverts-empty',
 			'clause'  => 'backup_rows(): an empty list reverts makes the answer unknown (every way back names a run)',
 			'file'    => $sc,
 			'search'  => "if ( ! is_array( \$plan ) || ! isset( \$plan['reverts'] ) || ! is_array( \$plan['reverts'] ) || array() === \$plan['reverts'] ) {",
@@ -1763,7 +1763,7 @@ return array_merge(
 			'expect'  => '/testAWayBackWhosePlanIsNotWholeMakesTheAnswerUnknown/',
 		),
 		array(
-			'id'      => 'ablage/b3-plan-needed',
+			'id'      => 'ablage/input-plan-needed',
 			'clause'  => 'backup_rows(): an entry of reverts that is no whole number of 1 or more makes the answer unknown',
 			'file'    => $sc,
 			'search'  => "if ( ! is_int( \$needed ) || \$needed < 1 ) {",
@@ -1772,7 +1772,7 @@ return array_merge(
 			'expect'  => '/testAWayBackWhosePlanIsNotWholeMakesTheAnswerUnknown/',
 		),
 		array(
-			'id'      => 'ablage/b3-plan-needed-int',
+			'id'      => 'ablage/input-plan-needed-int',
 			'clause'  => 'backup_rows(): an entry of reverts as a string is no run',
 			'file'    => $sc,
 			'search'  => "if ( ! is_int( \$needed ) || \$needed < 1 ) {",
@@ -1781,7 +1781,7 @@ return array_merge(
 			'expect'  => '/testAWayBackWhosePlanIsNotWholeMakesTheAnswerUnknown/',
 		),
 		array(
-			'id'      => 'ablage/b3-plan-needed-min',
+			'id'      => 'ablage/input-plan-needed-min',
 			'clause'  => 'backup_rows(): an entry of reverts below 1 is no run',
 			'file'    => $sc,
 			'search'  => "if ( ! is_int( \$needed ) || \$needed < 1 ) {",
@@ -1790,7 +1790,7 @@ return array_merge(
 			'expect'  => '/testAWayBackWhosePlanIsNotWholeMakesTheAnswerUnknown/',
 		),
 		array(
-			'id'      => 'ablage/b3-rows-closed',
+			'id'      => 'ablage/input-rows-closed',
 			'clause'  => 'backup_rows(): a closed row whose keep_until or forward_closed_at is no whole number of 0 or more makes the answer unknown',
 			'file'    => $sc,
 			'search'  => "\t\t\tif ( null === \$until || null === \$fwd ) {",
@@ -1799,7 +1799,7 @@ return array_merge(
 			'expect'  => '/testARowWhoseFieldsAreNotWholeMakesTheAnswerUnknown/',
 		),
 		array(
-			'id'      => 'ablage/b3-rows-until',
+			'id'      => 'ablage/input-rows-until',
 			'clause'  => 'backup_rows(): keep_until read without loss, never cast',
 			'file'    => $sc,
 			'search'  => "\$until = array_key_exists( 'keep_until', \$row ) ? self::whole_number( \$row['keep_until'], 0 ) : null;",
@@ -1808,7 +1808,7 @@ return array_merge(
 			'expect'  => '/testARowWhoseFieldsAreNotWholeMakesTheAnswerUnknown/',
 		),
 		array(
-			'id'      => 'ablage/b3-rows-fwd',
+			'id'      => 'ablage/input-rows-fwd',
 			'clause'  => 'backup_rows(): forward_closed_at read without loss, never cast',
 			'file'    => $sc,
 			'search'  => "\$fwd   = array_key_exists( 'forward_closed_at', \$row ) ? self::whole_number( \$row['forward_closed_at'], 0 ) : null;",
@@ -1817,7 +1817,7 @@ return array_merge(
 			'expect'  => '/testARowWhoseFieldsAreNotWholeMakesTheAnswerUnknown/',
 		),
 		array(
-			'id'      => 'ablage/b3-period-known',
+			'id'      => 'ablage/input-period-known',
 			'clause'  => 'keep_until(): no period made of days or a time that are not known: 0, kept (N1)',
 			'file'    => $sc,
 			'search'  => "\t\tif ( ! is_int( \$now ) || \$now < 1 || ! is_int( \$days ) || \$days < 0 || \$days > 3650 ) {",
@@ -1826,7 +1826,7 @@ return array_merge(
 			'expect'  => '/testAPeriodIsStoredOnlyOfDaysAndATimeThatAreKnown/',
 		),
 		array(
-			'id'      => 'ablage/b3-period-days',
+			'id'      => 'ablage/input-period-days',
 			'clause'  => 'keep_until(): days that are no whole number of 0 to 3650 store no period',
 			'file'    => $sc,
 			'search'  => "\t\tif ( ! is_int( \$now ) || \$now < 1 || ! is_int( \$days ) || \$days < 0 || \$days > 3650 ) {",
@@ -1835,7 +1835,7 @@ return array_merge(
 			'expect'  => '/testAPeriodIsStoredOnlyOfDaysAndATimeThatAreKnown/',
 		),
 		array(
-			'id'      => 'ablage/b3-period-now',
+			'id'      => 'ablage/input-period-now',
 			'clause'  => 'keep_until(): a time of the close that is no whole number above 0 stores no period',
 			'file'    => $sc,
 			'search'  => "\t\tif ( ! is_int( \$now ) || \$now < 1 || ! is_int( \$days ) || \$days < 0 || \$days > 3650 ) {",
@@ -1844,7 +1844,7 @@ return array_merge(
 			'expect'  => '/testAPeriodIsStoredOnlyOfDaysAndATimeThatAreKnown/',
 		),
 		array(
-			'id'      => 'ablage/b3-period-max',
+			'id'      => 'ablage/input-period-max',
 			'clause'  => 'keep_until(): days above 3650 store no period',
 			'file'    => $sc,
 			'search'  => "\t\tif ( ! is_int( \$now ) || \$now < 1 || ! is_int( \$days ) || \$days < 0 || \$days > 3650 ) {",
@@ -1853,7 +1853,7 @@ return array_merge(
 			'expect'  => '/testAPeriodIsStoredOnlyOfDaysAndATimeThatAreKnown/',
 		),
 		array(
-			'id'      => 'ablage/b3-period-chain-it',
+			'id'      => 'ablage/input-period-chain-it',
 			'clause'  => 'keep_until(): the chain filter, close, stored row, clean-up: days not known store 0 and the backups stay',
 			'file'    => $sc,
 			'search'  => "\t\tif ( ! is_int( \$now ) || \$now < 1 || ! is_int( \$days ) || \$days < 0 || \$days > 3650 ) {",
@@ -1862,7 +1862,7 @@ return array_merge(
 			'expect'  => '/testARunClosedWhileItsDaysAreNotKnownStoresNoPeriodAndItsBackupsStay/',
 		),
 		array(
-			'id'      => 'ablage/b3-days-filter',
+			'id'      => 'ablage/input-days-filter',
 			'clause'  => 'backup_days(): the days of the filter as a whole number, never cast',
 			'file'    => $ps,
 			'search'  => "\$days = AB_MCP_Sync_Schema::whole_number( apply_filters( self::BACKUP_DAYS_FILTER, self::BACKUP_DAYS ), 0 );",
@@ -1871,7 +1871,7 @@ return array_merge(
 			'expect'  => '/testTheCleanUpKeepsWhatAnOpenRunHoldsAndTheRestByItsTime/',
 		),
 		array(
-			'id'      => 'ablage/b3-days-filter-it',
+			'id'      => 'ablage/input-days-filter-it',
 			'clause'  => 'backup_days(): days of the filter that are not known make no period at the close (the chain)',
 			'file'    => $ps,
 			'search'  => "\$days = AB_MCP_Sync_Schema::whole_number( apply_filters( self::BACKUP_DAYS_FILTER, self::BACKUP_DAYS ), 0 );",
@@ -1880,7 +1880,7 @@ return array_merge(
 			'expect'  => '/testARunClosedWhileItsDaysAreNotKnownStoresNoPeriodAndItsBackupsStay/',
 		),
 		array(
-			'id'      => 'ablage/b3-days-max',
+			'id'      => 'ablage/input-days-max',
 			'clause'  => 'backup_days(): days above 3650 are not known',
 			'file'    => $ps,
 			'search'  => "\t\treturn null !== \$days && \$days <= 3650 ? \$days : null;",
@@ -1889,7 +1889,7 @@ return array_merge(
 			'expect'  => '/testTheCleanUpKeepsWhatAnOpenRunHoldsAndTheRestByItsTime/',
 		),
 		array(
-			'id'      => 'ablage/b3-run-retention-note',
+			'id'      => 'ablage/input-run-retention-note',
 			'clause'  => 'shown(): a closed run without a stored period says so in its status (A2)',
 			'file'    => 'includes/sync/class-sync-run.php',
 			'search'  => "0 === (int) \$run['keep_until']",
@@ -1898,7 +1898,7 @@ return array_merge(
 			'expect'  => '/testARunClosedWhileItsDaysAreNotKnownStoresNoPeriodAndItsBackupsStay/',
 		),
 		array(
-			'id'      => 'ablage/b3-kept-list',
+			'id'      => 'ablage/input-kept-list',
 			'clause'  => 'kept(): any other set of inputs than RETENTION_INPUTS is unknown',
 			'file'    => $ps,
 			'search'  => "\t\tif ( \$names !== \$list ) {",
@@ -1907,7 +1907,7 @@ return array_merge(
 			'expect'  => '/testKeptTakesTheInputsOfItsListAndNoValueBeside/',
 		),
 		array(
-			'id'      => 'ablage/b3-kept-backups',
+			'id'      => 'ablage/input-kept-backups',
 			'clause'  => 'kept(): while the retention of the backups is unknown, a backup of a run that is not open is unknown',
 			'file'    => $ps,
 			'search'  => "\t\t\t\tif ( ! is_array( \$in['backups'] ) ) {\n\t\t\t\t\treturn null;",
@@ -1916,7 +1916,7 @@ return array_merge(
 			'expect'  => '/testTheCleanUpKeepsWhatAnOpenRunHoldsAndTheRestByItsTime/',
 		),
 		array(
-			'id'      => 'ablage/b3-kept-backups-it',
+			'id'      => 'ablage/input-kept-backups-it',
 			'clause'  => 'kept(): a backup stays while the retention of the backups is unknown (the clean-up, a plan not whole)',
 			'file'    => $ps,
 			'search'  => "\t\t\t\tif ( ! is_array( \$in['backups'] ) ) {\n\t\t\t\t\treturn null;",
@@ -1925,7 +1925,7 @@ return array_merge(
 			'expect'  => '/testAWayBackWhosePlanIsNotWholeKeepsTheBackupsOfEveryRun/',
 		),
 		array(
-			'id'      => 'ablage/b3-kept-backups-bool',
+			'id'      => 'ablage/input-kept-backups-bool',
 			'clause'  => 'kept(): the retention of a run is a bool or unknown, never cast',
 			'file'    => $ps,
 			'search'  => "\t\t\t\t\treturn is_bool( \$in['backups'][ \$run ] ) ? \$in['backups'][ \$run ] : null;",
@@ -1934,7 +1934,7 @@ return array_merge(
 			'expect'  => '/testKeptTakesTheInputsOfItsListAndNoValueBeside/',
 		),
 		array(
-			'id'      => 'ablage/b3-kept-age-keep',
+			'id'      => 'ablage/input-kept-age-keep',
 			'clause'  => 'kept(): an age of the area that is not known decides nothing',
 			'file'    => $ps,
 			'search'  => "\t\tif ( ! is_int( \$keep ) || ! is_int( \$in['now'] ) || \$in['now'] < 1 ) {",
@@ -1943,7 +1943,7 @@ return array_merge(
 			'expect'  => '/testTheCleanUpKeepsWhatAnOpenRunHoldsAndTheRestByItsTime/',
 		),
 		array(
-			'id'      => 'ablage/b3-kept-age-now',
+			'id'      => 'ablage/input-kept-age-now',
 			'clause'  => 'kept(): a time that is not a whole number decides nothing',
 			'file'    => $ps,
 			'search'  => "\t\tif ( ! is_int( \$keep ) || ! is_int( \$in['now'] ) || \$in['now'] < 1 ) {",
@@ -1952,7 +1952,7 @@ return array_merge(
 			'expect'  => '/testKeptTakesTheInputsOfItsListAndNoValueBeside/',
 		),
 		array(
-			'id'      => 'ablage/b3-kept-age-min',
+			'id'      => 'ablage/input-kept-age-min',
 			'clause'  => 'kept(): a time of 0 or less decides nothing',
 			'file'    => $ps,
 			'search'  => "\t\tif ( ! is_int( \$keep ) || ! is_int( \$in['now'] ) || \$in['now'] < 1 ) {",
@@ -1961,7 +1961,7 @@ return array_merge(
 			'expect'  => '/testKeptTakesTheInputsOfItsListAndNoValueBeside/',
 		),
 		array(
-			'id'      => 'ablage/b3-inputs-now',
+			'id'      => 'ablage/input-inputs-now',
 			'clause'  => 'inputs(): a time of the clean-up that is no whole number above 0 is unknown, never cast',
 			'file'    => $ps,
 			'search'  => "\t\t\$now = is_int( \$now ) && \$now > 0 ? \$now : null;",
@@ -1970,7 +1970,7 @@ return array_merge(
 			'expect'  => '/testATimeOfTheCleanUpThatIsNotKnownRemovesNoGroup/',
 		),
 		array(
-			'id'      => 'ablage/b3-inputs-backups',
+			'id'      => 'ablage/input-inputs-backups',
 			'clause'  => 'inputs(): with the time unknown the retention of the backups is unknown too (no time() in its place)',
 			'file'    => $ps,
 			'search'  => "'backups' => null === \$now ? null : AB_MCP_Sync_Schema::backup_rows( \$now ),",
@@ -1979,7 +1979,7 @@ return array_merge(
 			'expect'  => '/testATimeOfTheCleanUpThatIsNotKnownRemovesNoGroup/',
 		),
 		array(
-			'id'      => 'ablage/b3-keeps',
+			'id'      => 'ablage/input-keeps',
 			'clause'  => 'keeps(): the age of each area of the table, as keep() gives it',
 			'file'    => $ps,
 			'search'  => "\t\tforeach ( array_keys( self::SIDECAR ) as \$area ) {\n\t\t\t\$out[ \$area ] = self::keep( \$area );",
@@ -1988,7 +1988,7 @@ return array_merge(
 			'expect'  => '/testATimeOfTheCleanUpThatIsNotKnownRemovesNoGroup/',
 		),
 		array(
-			'id'      => 'ablage/b3-keep-backups-unknown',
+			'id'      => 'ablage/input-keep-backups-unknown',
 			'clause'  => 'keep(): the age of backups is unknown while the days of the filter are',
 			'file'    => $ps,
 			'search'  => "return null === \$days ? null : max( AB_MCP_Sync_Schema::UNQUALIFIED_DAYS, \$days ) * 86400;",
@@ -1997,7 +1997,7 @@ return array_merge(
 			'expect'  => '/testTheCleanUpKeepsWhatAnOpenRunHoldsAndTheRestByItsTime/',
 		),
 		array(
-			'id'      => 'ablage/b3-keep-area',
+			'id'      => 'ablage/input-keep-area',
 			'clause'  => 'keep(): an area the store has not has no age',
 			'file'    => $ps,
 			'search'  => "return is_string( \$area ) && isset( self::KEEP[ \$area ] ) && in_array( \$area, self::AREAS, true ) ? self::KEEP[ \$area ] : null;",
@@ -2006,7 +2006,7 @@ return array_merge(
 			'expect'  => '/testTheCleanUpKeepsWhatAnOpenRunHoldsAndTheRestByItsTime/',
 		),
 		array(
-			'id'      => 'ablage/b3-sweep-kept-null',
+			'id'      => 'ablage/input-sweep-kept-null',
 			'clause'  => 'sweep(): a group whose inputs are not known stays (kept() null is no removal)',
 			'file'    => $ps,
 			'search'  => "\t\t\t\t\tif ( null === \$keep ) {\n\t\t\t\t\t\t// An input this group needs",
@@ -2015,7 +2015,7 @@ return array_merge(
 			'expect'  => '/testAWayBackWhosePlanIsNotWholeKeepsTheBackupsOfEveryRun/',
 		),
 		array(
-			'id'      => 'ablage/b3-sweep-kept-null-count',
+			'id'      => 'ablage/input-sweep-kept-null-count',
 			'clause'  => 'sweep(): a group whose inputs are not known counts unknown',
 			'file'    => $ps,
 			'search'  => "\t\t\t\t\t\t// and the clean-up counts it (Behebung 3).\n\t\t\t\t\t\t++\$unknown;",
@@ -2024,7 +2024,7 @@ return array_merge(
 			'expect'  => '/testATimeOfTheCleanUpThatIsNotKnownRemovesNoGroup/',
 		),
 		array(
-			'id'      => 'ablage/b3-sweep-foreign-count',
+			'id'      => 'ablage/input-sweep-foreign-count',
 			'clause'  => 'sweep(): a foreign sidecar whose inputs are not known counts unknown',
 			'file'    => $ps,
 			'search'  => "\t\t\t\t\t\tif ( null === \$named || null === \$lies ) {\n\t\t\t\t\t\t\t++\$unknown;",
@@ -2033,7 +2033,7 @@ return array_merge(
 			'expect'  => '/testWithoutTheTablesOfTheRunsTheGroupsOfARunStayAndThoseOfNoRunGoByTheirTime/',
 		),
 		array(
-			'id'      => 'ablage/b3-sweep-area-count',
+			'id'      => 'ablage/input-sweep-area-count',
 			'clause'  => 'sweep(): an area whose listing failed counts unknown',
 			'file'    => $ps,
 			'search'  => "\t\t\t\t// decided, and the clean-up counts it (Behebung 3).\n\t\t\t\t++\$unknown;",
@@ -2042,7 +2042,7 @@ return array_merge(
 			'expect'  => '/testAnAreaThatCannotBeListedLosesNothingAndIsCountedUnknown/',
 		),
 		array(
-			'id'      => 'ablage/b3-sweep-orphan-count',
+			'id'      => 'ablage/input-sweep-orphan-count',
 			'clause'  => 'sweep(): a folder without its sidecar stays and counts unknown',
 			'file'    => $ps,
 			'search'  => "\t\t\t\t\t// before, it went after a day, past kept()).\n\t\t\t\t\t++\$unknown;",
@@ -2051,7 +2051,7 @@ return array_merge(
 			'expect'  => '/testAFolderWithoutItsSidecarStaysAndIsCountedUnknown/',
 		),
 		array(
-			'id'      => 'ablage/b3-fits-run-strict',
+			'id'      => 'ablage/input-fits-run-strict',
 			'clause'  => 'AB_MCP_Sync_Backup::fits(): the run as group() takes it, never cast',
 			'file'    => $bk,
 			'search'  => "\t\t// The run as group() takes it (Behebung 3 of Z8b branch 3).\n\t\t\$run_id = AB_MCP_Sync_Schema::whole_number( \$run_id, 1 );\n\t\tif ( null === \$run_id ) {",
@@ -2060,7 +2060,7 @@ return array_merge(
 			'expect'  => '/testABackupGroupTakesItsRunAsGivenAndNeverAGroupWhoseSidecarIsUnknown/',
 		),
 		array(
-			'id'      => 'ablage/b3-group-no-memory',
+			'id'      => 'ablage/input-group-no-memory',
 			'clause'  => 'AB_MCP_Sync_Backup::group(): no memory of a group found before; a group whose sidecar turned unknown is never used again',
 			'file'    => $bk,
 			'search'  => "\t\t\$groups = AB_MCP_Protected_Store::groups( 'backups' );\n\t\tif ( is_wp_error( \$groups ) ) {\n\t\t\treturn \$groups;\n\t\t}\n\t\tforeach ( \$groups as \$entry ) {\n\t\t\tif ( self::LABEL . \$run_id === \$entry['label'] && \$entry['run_id'] === \$run_id ) {\n\t\t\t\treturn \$entry['gid'];\n\t\t\t}\n\t\t}\n",
