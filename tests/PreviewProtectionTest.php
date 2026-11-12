@@ -923,6 +923,9 @@ final class PreviewProtectionTest extends TestCase {
 		$_SERVER['REQUEST_URI'] = '/.well-known/oauth-authorization-server';
 		self::assertTrue( AB_MCP_Preview_Protection::frontend_context()['well_known'], 'The sign-in is on by default, and the handler serves this.' );
 		AB_MCP_Settings::set( 'oauth_enabled', false );
+		// The next request: within one, the answer at an address is kept
+		// (AB_MCP_OAuth::well_known_answer_of_request()).
+		ab_test_next_request();
 		self::assertFalse( AB_MCP_Preview_Protection::frontend_context()['well_known'] );
 	}
 

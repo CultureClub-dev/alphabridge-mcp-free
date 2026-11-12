@@ -137,6 +137,25 @@ function ab_test_reset(): void {
 	$GLOBALS['ab_test_environment'] = 'production';
 	unset( $GLOBALS['ab_test_rest_base'], $GLOBALS['ab_test_site_url'], $GLOBALS['ab_test_status'], $GLOBALS['ab_test_nocache_send'] );
 	$GLOBALS['ab_test_nocache'] = 0;
+	ab_test_next_request();
+}
+
+/**
+ * A new request: the answers AB_MCP_OAuth keeps for the request at the
+ * well-known addresses (well_known_answer_of_request()) are gone, as when
+ * PHP ends a request. Called by ab_test_reset(), and by a test that changes
+ * what a site answers between two requests in one test.
+ */
+function ab_test_next_request(): void {
+	if ( class_exists( 'AB_MCP_OAuth', false ) && property_exists( 'AB_MCP_OAuth', 'well_known_request' ) ) {
+		( new ReflectionProperty( 'AB_MCP_OAuth', 'well_known_request' ) )->setValue(
+			null,
+			array(
+				'start'   => null,
+				'answers' => array(),
+			)
+		);
+	}
 }
 
 function get_option( $name, $default = false ) {

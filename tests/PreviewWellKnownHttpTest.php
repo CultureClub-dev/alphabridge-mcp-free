@@ -271,6 +271,35 @@ final class PreviewWellKnownHttpTest extends TestCase {
 	}
 
 	/**
+	 * Signed-in users and cookie holders pass the gate on parse_request,
+	 * which has decided already; the handler on template_redirect and the
+	 * gate's second line ask again. They carry out the answer of this
+	 * request, not one decided anew: with the persistent cache failing
+	 * (every read and write gives false) and the other site answering only
+	 * the first fetch, the document of that one fetch is served, not a 404
+	 * (Codex round 1 of the port, B1).
+	 *
+	 * @return array<string,array{0:string,1:array<int,string>}> who, extra header lines
+	 */
+	public static function passingWithoutCache(): array {
+		return array(
+			'signed in'       => array( 'logged-in', array() ),
+			'with the cookie' => array( 'cookie', array() ),
+		);
+	}
+
+	#[DataProvider( 'passingWithoutCache' )]
+	public function testOnePassingRequestFetchesOnceAndServesThatDocumentWhenTheCacheFails( string $who, array $extra ): void {
+		$lines  = array_merge( self::lines( self::ROOT, $who, self::$docroot, 'once' ), array( 'X-AB-Test-Cache: off' ), $extra );
+		$answer = $this->request( self::AS . '/staging/123', $lines );
+
+		self::assertSame( 200, $answer['status'], $answer['raw'] );
+		self::assertSame( self::document( 'oauth-authorization-server', self::SUB ), $answer['body'] );
+		self::assertSame( '1', $answer['headers']['x-ab-test-fetches'] ?? null, 'One fetch for the request.' );
+		self::assertSame( '1', $answer['headers']['x-ab-test-reads'] ?? null, 'One decision that reached the relay.' );
+	}
+
+	/**
 	 * Without the protection: the handler alone, as in the hotfix 4.10.1.
 	 *
 	 * @return array<string,array{0:string,1:int,2:string}> path, status, body

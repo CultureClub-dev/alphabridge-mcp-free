@@ -23,14 +23,20 @@
  * - X-AB-Test-Visitor: "logged-in" or "cookie" (a valid cookie of the
  *   protection); default a visitor without either;
  * - X-AB-Test-No-Parse: present: no parse_request (a plugin filtered
- *   do_parse_request to false).
+ *   do_parse_request to false);
+ * - X-AB-Test-Cache: "off" makes the persistent cache of the relay fail
+ *   (the test seam: every read and write gives false);
+ * - X-AB-Test-Fetch: besides the modes of well-known-answers.php, "once":
+ *   the first fetch is answered as by the site, every later one is blocked.
  *
  * nocache_headers() and status_header() send what WordPress sends (the
  * bootstrap counts and records them, this script sends them): nocache with
  * the headers of wp_get_nocache_headers() in 7.1.3, the status when the
  * headers go out (header_register_callback), unless this script set one for
  * an end of the stubs (wp_die(), a redirect). Reported besides:
- * X-AB-Test-Fetches (fetches made), X-AB-Test-Status (status_header() of
+ * X-AB-Test-Fetches (fetches made), X-AB-Test-Reads (reads of the cache of
+ * the relay, one per decision that reached it; only with X-AB-Test-Cache),
+ * X-AB-Test-Status (status_header() of
  * the code under test), X-AB-Test-Canonical and X-AB-Test-Guess (whether a
  * refusal switched them off). The body is what was printed: the JSON of the
  * handler, the late handlers' content, THEME (the theme rendered the
@@ -48,6 +54,8 @@ require __DIR__ . '/../bootstrap.php';
 require_once __DIR__ . '/../../includes/class-page-cache.php';
 require_once __DIR__ . '/../../includes/class-preview-protection.php';
 require_once __DIR__ . '/well-known-answers.php';
+require_once __DIR__ . '/../integration/support/class-test-abort.php';
+require_once __DIR__ . '/../integration/support/class-test-seam.php';
 ab_test_reset();
 
 $ab_home = isset( $_SERVER['HTTP_X_AB_TEST_HOME'] ) ? (string) $_SERVER['HTTP_X_AB_TEST_HOME'] : 'https://example.test';
@@ -99,6 +107,9 @@ header_register_callback(
 			http_response_code( (int) $GLOBALS['ab_test_status'] );
 		}
 		header( 'X-AB-Test-Fetches: ' . count( $GLOBALS['ab_test_http'] ) );
+		foreach ( AB_MCP_Test_Seam::recorded() as $calls ) {
+			header( 'X-AB-Test-Reads: ' . count( array_filter( $calls, static fn( array $c ): bool => 'get_transient' === $c['method'] ) ) );
+		}
 		header( 'X-AB-Test-Status: ' . ( isset( $GLOBALS['ab_test_status'] ) ? (string) $GLOBALS['ab_test_status'] : 'unset' ) );
 		header( 'X-AB-Test-Canonical: ' . ( false === has_filter( 'redirect_canonical', '__return_false' ) ? 'on' : 'off' ) );
 		header( 'X-AB-Test-Guess: ' . ( false === has_filter( 'do_redirect_guess_404_permalink', '__return_false' ) ? 'on' : 'off' ) );
@@ -106,8 +117,30 @@ header_register_callback(
 );
 
 $GLOBALS['ab_test_http_answer'] = static function ( string $url, array $args ) use ( $ab_mode ) {
+	if ( 'once' === $ab_mode ) {
+		return ab_well_known_test_answer( 1 === count( $GLOBALS['ab_test_http'] ) ? 'site' : 'blocked', $url );
+	}
 	return ab_well_known_test_answer( $ab_mode, $url );
 };
+if ( isset( $_SERVER['HTTP_X_AB_TEST_CACHE'] ) && 'off' === $_SERVER['HTTP_X_AB_TEST_CACHE'] ) {
+	AB_MCP_Test_Seam::install(
+		AB_MCP_OAuth::class,
+		'naht_oauth_well_known',
+		'AB_MCP_OAuth_Well_Known_Calls',
+		array(
+			array(
+				'method' => 'get_transient',
+				'kind'   => 'return',
+				'value'  => false,
+			),
+			array(
+				'method' => 'set_transient',
+				'kind'   => 'return',
+				'value'  => false,
+			),
+		)
+	);
+}
 
 // The plugin's handlers on template_redirect at 0, then the late handlers.
 AB_MCP_OAuth::boot();

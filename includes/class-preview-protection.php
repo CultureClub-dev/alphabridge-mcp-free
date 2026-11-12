@@ -94,14 +94,16 @@
  *   an error page (each branch exits or wp_die()s). Should a handler
  *   return, the password page follows. Each clause asks the handler's own
  *   decision, so what the gate hands over is exactly what the handler
- *   serves: AB_MCP_OAuth::well_known_answer() and
+ *   serves: AB_MCP_OAuth::well_known_answer_of_request() and
  *   AB_MCP_OAuth::is_authorize_request() (?ab_mcp_oauth=0 on any page is
  *   nothing the handler serves, and is the password page; Codex,
  *   31.10.2026). The well-known answer (hotfix 4.10.1) is this site's own
  *   document, the document of another WordPress in a subfolder of the
  *   domain, fetched from it and relayed, a refusal, or none of the
- *   plugin's: the gate carries out the very answer of its context through
- *   AB_MCP_OAuth::respond_well_known(), the executor of the handler too.
+ *   plugin's, decided once per request (a request that passes the gate
+ *   gets the same answer from the handler): the gate carries out the very
+ *   answer of its context through AB_MCP_OAuth::respond_well_known(), the
+ *   executor of the handler too.
  *   Both documents are public (RFC 8414, RFC 9728) and end the request; a
  *   refusal ends a visitor's request with a 404 without content (no
  *   theme, no later handler); «none» (a double slash before the name, the
@@ -1091,9 +1093,10 @@ class AB_MCP_Preview_Protection {
 		$uri  = isset( $_SERVER['REQUEST_URI'] ) ? (string) $_SERVER['REQUEST_URI'] : '/'; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- matched and parsed, never echoed raw.
 		$path = self::strip_home( (string) wp_parse_url( $uri, PHP_URL_PATH ) );
 		$vars = ( is_object( $wp ) && isset( $wp->query_vars ) && is_array( $wp->query_vars ) ) ? $wp->query_vars : null;
-		// The OAuth handler's own decision, asked once: the clause well_known
-		// opens what it answers, and serve() carries out this very answer.
-		$well_known = class_exists( 'AB_MCP_OAuth' ) ? AB_MCP_OAuth::well_known_answer( $uri ) : array( 'kind' => 'none' );
+		// The OAuth handler's own decision, the answer of this request: the
+		// clause well_known opens what it answers, serve() carries out this
+		// very answer, and the handler, where the request passes, the same.
+		$well_known = class_exists( 'AB_MCP_OAuth' ) ? AB_MCP_OAuth::well_known_answer_of_request( $uri ) : array( 'kind' => 'none' );
 		return array(
 			'path'              => $path,
 			'request_uri'       => $uri,
@@ -1272,8 +1275,9 @@ class AB_MCP_Preview_Protection {
 	 * - robots: do_action( 'do_robots' ) and exit, as the template loader
 	 *   does for is_robots() (wp-includes/template-loader.php), so do_robots()
 	 *   and every plugin on the filter robots_txt answer as always.
-	 * - well_known: the answer AB_MCP_OAuth::well_known_answer() gave for
-	 *   this request (the context holds it), carried out by
+	 * - well_known: the answer of this request
+	 *   (AB_MCP_OAuth::well_known_answer_of_request(); the context holds it),
+	 *   carried out by
 	 *   AB_MCP_OAuth::respond_well_known() as for a visitor: a document is
 	 *   sent as JSON and the request ends; a refusal ends with a 404 without
 	 *   content, never the theme's 404 page or a later handler.

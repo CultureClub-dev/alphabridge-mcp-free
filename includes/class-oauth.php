@@ -257,6 +257,16 @@ class AB_MCP_OAuth {
 	private static $naht_oauth_well_known = null;
 
 	/**
+	 * The answers of this request at the well-known addresses
+	 * (well_known_answer_of_request()): the start of the request they belong
+	 * to (REQUEST_TIME_FLOAT) and the answers by request URI.
+	 */
+	private static $well_known_request = array(
+		'start'   => null,
+		'answers' => array(),
+	);
+
+	/**
 	 * Address ranges a metadata document is never fetched from: this machine,
 	 * private and shared networks, link-local (cloud metadata services live at
 	 * 169.254.169.254), documentation, benchmarking, multicast and reserved
@@ -1566,12 +1576,43 @@ class AB_MCP_OAuth {
 		if ( ! isset( $_SERVER['REQUEST_URI'] ) ) {
 			return;
 		}
-		self::respond_well_known( self::well_known_answer( (string) $_SERVER['REQUEST_URI'] ), false ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- path is only matched; what is fetched is rebuilt from validated segments.
+		self::respond_well_known( self::well_known_answer_of_request( (string) $_SERVER['REQUEST_URI'] ), false ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- path is only matched; what is fetched is rebuilt from validated segments.
 	}
 
 	/**
-	 * Carry out an answer of well_known_answer(): the one place that turns it
-	 * into a response, for this plugin's handler (serve_well_known()) and for
+	 * The answer of this request: well_known_answer() once per request URI,
+	 * then the same answer again for the rest of the request. The preview
+	 * protection asks on parse_request and, for a request that passed, once
+	 * more on template_redirect; the handler asks on template_redirect. They
+	 * carry out one answer, and the other site is fetched at most once per
+	 * request, whatever the persistent cache keeps (a cache that fails to
+	 * keep anything does not make the next asker fetch again, nor turn a
+	 * document that came back into a 404). Kept for the request that asked:
+	 * a request with another start (REQUEST_TIME_FLOAT, as a server that
+	 * keeps PHP running between requests gives each its own) starts afresh.
+	 *
+	 * @param string $request_uri The request URI as received.
+	 * @return array{kind:string,document?:array} As well_known_answer().
+	 */
+	public static function well_known_answer_of_request( $request_uri ) {
+		$start = isset( $_SERVER['REQUEST_TIME_FLOAT'] ) ? (string) $_SERVER['REQUEST_TIME_FLOAT'] : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- compared only.
+		if ( $start !== self::$well_known_request['start'] ) {
+			self::$well_known_request = array(
+				'start'   => $start,
+				'answers' => array(),
+			);
+		}
+		$request_uri = (string) $request_uri;
+		if ( ! array_key_exists( $request_uri, self::$well_known_request['answers'] ) ) {
+			self::$well_known_request['answers'][ $request_uri ] = self::well_known_answer( $request_uri );
+		}
+		return self::$well_known_request['answers'][ $request_uri ];
+	}
+
+	/**
+	 * Carry out an answer of well_known_answer() (through
+	 * well_known_answer_of_request()): the one place that turns it into a
+	 * response, for this plugin's handler (serve_well_known()) and for
 	 * the preview protection (AB_MCP_Preview_Protection, clause well_known),
 	 * so the two never disagree.
 	 *

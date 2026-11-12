@@ -17,6 +17,11 @@
  *   calls object of the relay, and its fetch() is called once, in
  *   well_known_from_other_site(). Scheme, host and port of every fetched
  *   address are those of home_url(), whatever host the request names.
+ * - Once per request, counted while the request runs (Codex round 1 of the
+ *   port, B1): whoever asks (a visitor, a signed-in user, a cookie holder),
+ *   with or without parse_request, with the protection on or off, and with
+ *   the persistent cache failing, one request reaches the relay at most once
+ *   and fetches at most once, and carries out the answer of that fetch.
  *
  * @package AlphaBridge_MCP
  */
@@ -36,6 +41,7 @@ use ReflectionMethod;
 require_once __DIR__ . '/../includes/class-page-cache.php';
 require_once __DIR__ . '/../includes/class-preview-protection.php';
 require_once __DIR__ . '/support/well-known-docroot.php';
+require_once __DIR__ . '/support/well-known-http.php';
 
 final class WellKnownGuardTest extends TestCase {
 
@@ -145,17 +151,35 @@ final class WellKnownGuardTest extends TestCase {
 		self::assertArrayHasKey( self::OAUTH, $by_file );
 		self::assertArrayHasKey( self::PREVIEW, $by_file );
 		self::assertTrue( $by_file[ self::OAUTH ][1] >= $handler[0] && $by_file[ self::OAUTH ][1] <= $handler[1], 'In serve_well_known().' );
-		self::assertStringStartsWith( 'self::well_known_answer(', $by_file[ self::OAUTH ][2], 'The handler carries out the answer of well_known_answer().' );
+		self::assertStringStartsWith( 'self::well_known_answer_of_request(', $by_file[ self::OAUTH ][2], 'The handler carries out the answer of this request.' );
 		self::assertSame( ', false', substr( $by_file[ self::OAUTH ][2], -7 ), 'For everyone: not the protection\'s end.' );
 		self::assertTrue( $by_file[ self::PREVIEW ][1] >= $serve[0] && $by_file[ self::PREVIEW ][1] <= $serve[1], 'In AB_MCP_Preview_Protection::serve().' );
 		self::assertSame( 'AB_MCP_OAuth::', $by_file[ self::PREVIEW ][3] );
 
-		// The context holds the answer of well_known_answer(), asked once.
+		// The context holds the answer of this request, asked once.
 		$context = self::lines( AB_MCP_Preview_Protection::class, 'frontend_context' );
-		$asked   = array_values( array_filter( self::calls( dirname( __DIR__ ) . '/' . self::PREVIEW, 'well_known_answer' ), static fn( array $c ): bool => 'AB_MCP_OAuth::' === $c['on'] ) );
+		$asked   = array_values( array_filter( self::calls( dirname( __DIR__ ) . '/' . self::PREVIEW, 'well_known_answer_of_request' ), static fn( array $c ): bool => 'AB_MCP_OAuth::' === $c['on'] ) );
 		self::assertCount( 1, $asked, 'The protection asks the decision once.' );
 		self::assertTrue( $asked[0]['line'] >= $context[0] && $asked[0]['line'] <= $context[1], 'In frontend_context().' );
 		self::assertSame( '$uri', $asked[0]['args'] );
+
+		// Both ask the answer of the request, never the decision itself: it
+		// is called in the shipped code only by well_known_answer_of_request().
+		$of_request = self::lines( AB_MCP_OAuth::class, 'well_known_answer_of_request' );
+		$decisions  = array();
+		$requests   = array();
+		foreach ( self::shipped() as $file ) {
+			foreach ( self::calls( $file, 'well_known_answer' ) as $call ) {
+				$decisions[] = array( self::relative( $file ), $call['line'] );
+			}
+			foreach ( self::calls( $file, 'well_known_answer_of_request' ) as $call ) {
+				$requests[] = self::relative( $file );
+			}
+		}
+		self::assertSame( array( array( self::OAUTH, $decisions[0][1] ) ), $decisions, 'One call of the decision.' );
+		self::assertTrue( $decisions[0][1] >= $of_request[0] && $decisions[0][1] <= $of_request[1], 'In well_known_answer_of_request().' );
+		sort( $requests );
+		self::assertSame( array( self::OAUTH, self::PREVIEW ), $requests, 'The handler and the protection, nobody else.' );
 	}
 
 	public function testTheProtectionsClauseFollowsTheAnswerForEveryAddress(): void {
@@ -201,6 +225,59 @@ final class WellKnownGuardTest extends TestCase {
 		}
 		ksort( $seen );
 		self::assertSame( array( 'document', 'none', 'refused' ), array_keys( $seen ), 'The matrix reaches every kind of answer.' );
+	}
+
+	public function testEveryRequestDecidesOnceAndFetchesAtMostOnce(): void {
+		$docroot = ab_test_wk_dir( array( '/staging/123' ) );
+		$server  = ab_test_wk_serve( __DIR__ . '/support/preview-well-known-server.php' );
+		if ( null === $server ) {
+			ab_test_wk_remove( $docroot );
+			self::markTestSkipped( '"' . PHP_BINARY . ' -S" could not serve the router on this machine.' );
+		}
+		$this->reset();
+		$GLOBALS['ab_test_home']      = 'https://example.test/staging/123';
+		$GLOBALS['ab_test_rest_base'] = 'https://example.test/staging/123/wp-json/';
+		$document                     = (string) wp_json_encode( AB_MCP_OAuth::metadata() );
+		$this->reset();
+		// path, how the other site answers, status, fetches and reads of the relay.
+		$cases = array(
+			'relayed'           => array( '/.well-known/oauth-authorization-server/staging/123', 'once', 200, 1 ),
+			'the fetch fails'   => array( '/.well-known/oauth-authorization-server/staging/123', 'blocked', 404, 1 ),
+			'no site on disk'   => array( '/.well-known/oauth-authorization-server/nowp/9', 'once', 404, 0 ),
+			'its own document'  => array( '/.well-known/oauth-authorization-server', 'once', 200, 0 ),
+		);
+		$seen = 0;
+		try {
+			foreach ( array( 'visitor', 'logged-in', 'cookie' ) as $who ) {
+				foreach ( array( true, false ) as $parse ) {
+					foreach ( array( true, false ) as $protected ) {
+						foreach ( $cases as $label => list( $path, $fetch, $status, $count ) ) {
+							$lines = array( 'X-AB-Test-Home: https://example.test', 'X-AB-Test-Visitor: ' . $who, 'X-AB-Test-Fetch: ' . $fetch, 'X-AB-Test-Abspath: ' . $docroot . '/', 'X-AB-Test-Cache: off' );
+							if ( ! $parse ) {
+								$lines[] = 'X-AB-Test-No-Parse: 1';
+							}
+							if ( ! $protected ) {
+								$lines[] = 'X-AB-Test-Protection: off';
+							}
+							$where  = "$label, $who, " . ( $parse ? 'parse_request' : 'no parse_request' ) . ', protection ' . ( $protected ? 'on' : 'off' );
+							$answer = ab_test_wk_get( $server['port'], $path, $lines );
+
+							self::assertSame( (string) $count, $answer['headers']['x-ab-test-fetches'] ?? null, 'Fetches of one request: ' . $where . "\n" . $answer['raw'] );
+							self::assertSame( (string) $count, $answer['headers']['x-ab-test-reads'] ?? null, 'Decisions that reached the relay: ' . $where );
+							self::assertSame( $status, $answer['status'], $where . "\n" . $answer['raw'] );
+							if ( 'relayed' === $label ) {
+								self::assertSame( $document, $answer['body'], 'The document of the one fetch: ' . $where );
+							}
+							++$seen;
+						}
+					}
+				}
+			}
+		} finally {
+			ab_test_wk_stop( $server );
+			ab_test_wk_remove( $docroot );
+		}
+		self::assertSame( 48, $seen );
 	}
 
 	/* ------------------------------------------------------------ one fetch */
