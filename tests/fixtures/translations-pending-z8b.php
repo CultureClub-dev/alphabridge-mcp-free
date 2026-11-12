@@ -200,4 +200,6 @@ return array(
 	'unit names its kind and its name',
 	// includes/class-store-budget.php (Z8b branch 3, Behebung 1, B2: bookings that cannot be read)
 	'The bookings of the protected store (the file bookings.json in its folder) could not be read, so no run books its space or gives it back, and nothing was written. Ask the host to check that file: its rights, or whether something else wrote into it; then try again.',
+	// includes/class-protected-store.php (Z8b branch 3, Behebung 2, A1: a run the table of the sidecar does not hold)
+	'The run of a group of the protected store is a whole number: 1 or more for the run it belongs to, or 0 for none, which only groups of out, in and reports may have; a group of backups or stage always belongs to its run. Nothing was written. Pass such a run_id.',
 );

@@ -12,7 +12,9 @@
  *   missing, and a failed one after RETRY;
  * - kept() keeps a group of a run that is not closed (and of every run
  *   while the runs cannot be read), the others by the time of their area,
- *   the backups by ab_mcp_staging_backup_days;
+ *   the backups by ab_mcp_staging_backup_days; an entry whose area, time
+ *   made or run is not as the table SIDECAR says is kept (Behebung 2 of
+ *   Z8b branch 3, A1);
  * - owns() takes a folder only with this installation's manifest, every
  *   field of it;
  * - without a store nothing is written, and every message names the way.
@@ -179,8 +181,29 @@ final class ProtectedStoreTest extends TestCase {
 		self::assertTrue( AB_MCP_Protected_Store::kept( $old( 'backups', 7 * $day - 1, 7 ), $now, array(), array( 3 => true ) ), 'A run without a row: kept by its age, not removed at once.' );
 		self::assertFalse( AB_MCP_Protected_Store::kept( $old( 'backups', 7 * $day, 7 ), $now, array(), array( 3 => true ) ), 'A run without a row: gone after the days of a close that does not qualify.' );
 		self::assertTrue( AB_MCP_Protected_Store::kept( $old( 'backups', 400 * $day, 7 ), $now, array(), null ), 'While the runs cannot be read, every run\'s backups stay.' );
-		self::assertTrue( AB_MCP_Protected_Store::kept( $old( 'backups', 7 * $day - 1 ), $now, array() ), 'Backups of no run: seven days.' );
-		self::assertFalse( AB_MCP_Protected_Store::kept( $old( 'backups', 7 * $day ), $now, array() ), 'Backups of no run: seven days.' );
+		// Behebung 2 of Z8b branch 3, A1: backups and stage know groups of a
+		// run only (AB_MCP_Protected_Store::SIDECAR), so an entry of no run
+		// there is unknown, and kept whatever its age; out, in and reports
+		// know groups of no run (above).
+		foreach ( array( 'backups', 'stage' ) as $area ) {
+			self::assertTrue( AB_MCP_Protected_Store::kept( $old( $area, 400 * $day ), $now, array(), array() ), "$area of no run: unknown, kept." );
+		}
+		// What kept() decides by, missing, null, of another type or outside
+		// its range: kept, never made up.
+		foreach ( array( 'out', 'in', 'reports', 'backups', 'stage' ) as $area ) {
+			$base = $old( $area, 400 * $day, 7 );
+			self::assertFalse( AB_MCP_Protected_Store::kept( $base, $now, array(), array( 7 => false ) ), "$area: whole and past its time, it goes." );
+			foreach ( array( 'run_id', 'created', 'area' ) as $field ) {
+				$without = $base;
+				unset( $without[ $field ] );
+				self::assertTrue( AB_MCP_Protected_Store::kept( $without, $now, array(), array( 7 => false ) ), "$area without $field." );
+				self::assertTrue( AB_MCP_Protected_Store::kept( array( $field => null ) + $base, $now, array(), array( 7 => false ) ), "$area, $field null." );
+				self::assertTrue( AB_MCP_Protected_Store::kept( array( $field => (string) $base[ $field ] . 'x' ) + $base, $now, array(), array( 7 => false ) ), "$area, $field of another type." );
+			}
+			self::assertTrue( AB_MCP_Protected_Store::kept( array( 'run_id' => -1 ) + $base, $now, array(), array( 7 => false ) ), "$area, run -1." );
+			self::assertTrue( AB_MCP_Protected_Store::kept( array( 'run_id' => '7' ) + $base, $now, array(), array( 7 => false ) ), "$area, run as a string." );
+			self::assertTrue( AB_MCP_Protected_Store::kept( array( 'created' => 0 ) + $base, $now, array(), array( 7 => false ) ), "$area, made at 0." );
+		}
 
 		add_filter( AB_MCP_Protected_Store::BACKUP_DAYS_FILTER, static fn(): int => 30 );
 		self::assertSame( 30, AB_MCP_Protected_Store::backup_days(), 'Pro sets 30 through the filter.' );
@@ -267,7 +290,7 @@ final class ProtectedStoreTest extends TestCase {
 			self::assertSame( 'ab_mcp_store_unavailable', $res->get_error_code(), "call $i" );
 			self::assertSame( $proof['message'], $res->get_error_message() );
 		}
-		self::assertSame( array( 'removed' => 0, 'kept' => 0 ), AB_MCP_Protected_Store::cleanup() );
+		self::assertSame( array( 'removed' => 0, 'kept' => 0, 'unknown' => 0 ), AB_MCP_Protected_Store::cleanup() );
 		self::assertFalse( AB_MCP_Protected_Store::remove( 'out', $gid ) );
 		$writes = array_filter( $GLOBALS['wpdb']->queries, static fn( string $q ): bool => 0 === strpos( $q, 'INSERT IGNORE' ) );
 		self::assertCount( 1, $writes, 'The id was asked for once, by INSERT IGNORE.' );
