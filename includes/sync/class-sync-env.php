@@ -1104,7 +1104,7 @@ final class AB_MCP_Sync_Env {
 					return array(
 						'lines' => $lines,
 						'done'  => false,
-						'after' => self::place( $last, false ),
+						'after' => self::place( (string) $last, false ),
 					);
 				}
 				$lines[] = $line;

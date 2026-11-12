@@ -1304,7 +1304,7 @@ final class AB_MCP_Sync_Decision {
 				// has it, each part against its own base, so that a change
 				// there is a conflict with the removal (TABLE, rows 7 and 9;
 				// GitHub-Codex on free#147, P2).
-				if ( AB_MCP_Sync_Canon::VERSION !== $pair['canon'] ) {
+				if ( $pair['canon'] !== AB_MCP_Sync_Canon::VERSION ) {
 					return self::unit_entry( $entry, array(), sprintf( 'The bases of its pair are of the version %1$s of the comparison data, this site reads %2$s.', (string) $pair['canon'], AB_MCP_Sync_Canon::VERSION ), $held );
 				}
 				$states  = array();
