@@ -197,7 +197,7 @@ e('writer-menu-automatic', 'precheck(): a page of the top level with the menu au
 # ----------------------------------------------------------- the run
 SHAPE = 'testTheShapeOfARunAndWhenItsLockIsFresh'
 e('run-lock-fresh', 'lock_fresh(): a row older than TIMEOUT is left behind (decision 18)', RU,
-  "\t\treturn $since > 0 && ( self::now() - $since ) < AB_MCP_Change_Lock::TIMEOUT;", "\t\treturn $since > 0;", 'unit', SHAPE)
+  "\t\treturn $since > 0 && ( null === $now || ( $now - $since ) < AB_MCP_Change_Lock::TIMEOUT );", "\t\treturn $since > 0;", 'unit', SHAPE)
 OWN = "\t\tif ( (int) $run['user_id'] !== (int) get_current_user_id() || ! hash_equals( (string) $run['connection'], self::connection() ) ) {"
 e('run-owner-connection', 'owner_refusal(): the same connection (decision 15)', RU, OWN, OWN.replace(" || ! hash_equals( (string) $run['connection'], self::connection() )", ''), 'unit', SHAPE)
 e('run-owner-user', 'owner_refusal(): the same account', RU, OWN, OWN.replace("(int) $run['user_id'] !== (int) get_current_user_id() || ", ''), 'unit', SHAPE)
@@ -685,7 +685,7 @@ e('writer-staging-term-order-lock', 'target_of(): a relationship of the staging 
 e('schema-plan-not-listed', 'backup_rows(): the rows of the retention are read without their plan (P2)', SC,
   "SELECT run_id, type, state, forward_closed_at, keep_until FROM `", "SELECT run_id, type, state, forward_closed_at, keep_until, plan FROM `", 'unit', PLANS)
 e('schema-plan-per-run', 'backup_rows(): the plan of a run that is not closed, read for it alone, keeps the runs its way back needs', SC,
-  "\t\t\t\t$plan = AB_MCP_Sync_Canon::decode( $raw, 64 );", "\t\t\t\t$plan = null;", 'unit', PLANS)
+  "\t\t\t\t$plan = '' === $wpdb->last_error ? AB_MCP_Store_Inputs::read( 'runs.plan', $raw ) : null;", "\t\t\t\t$plan = null;", 'unit', PLANS)
 
 # ------------------------------- GitHub Codex round 8 on free#137 (one P2)
 # The records of a run read through AB_MCP_Sync_Canon::decode(), bytes as
