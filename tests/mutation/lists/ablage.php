@@ -200,6 +200,25 @@ return array_merge(
 			'expect'  => '/testNothingOfTheStoreIsWrittenThroughThePayloadFileButTheControlFileBesideIt/',
 		),
 
+		array(
+			'id'      => 'ablage/z37-marks-closed-day',
+			'clause'  => 'sweep(): a closed mark goes a day after it closed, an open one never',
+			'file'    => $ps,
+			'search'  => "\$old  = is_array( \$mark ) ? ( 'closed' === \$mark['state'] && ( \$now - (int) \$mark['closed'] ) >= self::KEEP['marks'] ) :",
+			'replace' => "\$old  = is_array( \$mark ) ? false :",
+			'run'     => $it( 'StoreRemoverTest', 'testAClosedMarkGoesADayAfterItClosedAndAFolderWithoutItsMarkAfterADay' ),
+			'expect'  => '/testAClosedMarkGoesADayAfterItClosedAndAFolderWithoutItsMarkAfterADay/',
+		),
+		array(
+			'id'      => 'ablage/z8-guard-remove-backups',
+			'clause'  => 'the guard: no group of backups is removed by remove() (a backup goes by its retention only)',
+			'file'    => 'includes/sync/class-sync-report.php',
+			'search'  => "\t\t\tAB_MCP_Protected_Store::remove( 'reports', \$gid );",
+			'replace' => "\t\t\tAB_MCP_Protected_Store::remove( 'backups', \$gid );",
+			'run'     => $unit( 'StoreRemoverGuardTest', 'testTheRetentionOfABackupIsDecidedByKeptOnly' ),
+			'expect'  => '/testTheRetentionOfABackupIsDecidedByKeptOnly/',
+		),
+
 		/* ---------------------------------------------- Z37, F54: the writer */
 		array(
 			'id'      => 'ablage/f54-device',
