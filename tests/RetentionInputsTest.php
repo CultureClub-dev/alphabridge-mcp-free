@@ -28,6 +28,8 @@ declare( strict_types = 1 );
 
 namespace AlphaBridge\Tests;
 
+use AB_MCP_Shape;
+use AB_MCP_Store_Inputs;
 use AB_MCP_Sync_Schema;
 use PHPUnit\Framework\TestCase;
 use ReflectionProperty;
@@ -273,20 +275,28 @@ final class RetentionInputsTest extends TestCase {
 		self::assertSame( $now, AB_MCP_Sync_Schema::keep_until( $now, true, 0 ), 'Free: a qualified close ends at the close (the last three keep it).' );
 		self::assertSame( $now + 7 * 86400, AB_MCP_Sync_Schema::keep_until( $now, false, 0 ) );
 		self::assertSame( $now + 30 * 86400, AB_MCP_Sync_Schema::keep_until( $now, false, 30 ) );
-		foreach ( array( null, -1, 3651, '30', 30.0, true ) as $days ) {
+		foreach ( array( null, -1, 3651, '30 days', '030', 30.0, true ) as $days ) {
 			self::assertSame( 0, AB_MCP_Sync_Schema::keep_until( $now, false, $days ), 'days ' . var_export( $days, true ) . ': no period, kept (N1).' );
 		}
+		// The days as their row of AB_MCP_Store_Inputs::TABLE takes them
+		// (period.days, as the filter gives them): the digits of a whole
+		// number are the number, without loss (Behebung 4).
+		self::assertSame( $now + 30 * 86400, AB_MCP_Sync_Schema::keep_until( $now, false, '30' ) );
 		foreach ( array( 0, -1, '1800000000', null ) as $at ) {
 			self::assertSame( 0, AB_MCP_Sync_Schema::keep_until( $at, false, 30 ), 'time ' . var_export( $at, true ) . ': no period, kept (N1).' );
 		}
 	}
 
 	public function testAWholeNumberIsReadWithoutLossOrNotAtAll(): void {
-		foreach ( array( array( '7', 1, 7 ), array( 7, 1, 7 ), array( '0', 0, 0 ), array( (string) PHP_INT_MAX, 1, PHP_INT_MAX ) ) as $case ) {
-			self::assertSame( $case[2], AB_MCP_Sync_Schema::whole_number( $case[0], $case[1] ) );
+		// The form of a run of a column of the database (DB_RUN; Behebung 4:
+		// AB_MCP_Shape::read() in place of whole_number()).
+		$form = AB_MCP_Store_Inputs::DB_RUN;
+		$min0 = array_replace( $form, array( 'min' => 0 ) );
+		foreach ( array( array( '7', $form, 7 ), array( 7, $form, 7 ), array( '0', $min0, 0 ), array( (string) PHP_INT_MAX, $form, PHP_INT_MAX ) ) as $case ) {
+			self::assertSame( $case[2], AB_MCP_Shape::read( $case[0], $case[1] ) );
 		}
 		foreach ( array( '0', '-1', '05', ' 5', '5 ', '+5', '5.0', '5abc', '', '99999999999999999999', 5.0, true, null, array( 5 ) ) as $value ) {
-			self::assertNull( AB_MCP_Sync_Schema::whole_number( $value, 1 ), var_export( $value, true ) );
+			self::assertNull( AB_MCP_Shape::read( $value, $form ), var_export( $value, true ) );
 		}
 	}
 }

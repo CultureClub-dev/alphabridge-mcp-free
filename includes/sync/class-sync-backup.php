@@ -63,7 +63,7 @@ final class AB_MCP_Sync_Backup {
 	 * @return string|WP_Error The id of the group.
 	 */
 	public static function group( $run_id ) {
-		$run_id = AB_MCP_Sync_Schema::whole_number( $run_id, 1 );
+		$run_id = AB_MCP_Store_Inputs::read( 'backup.run', $run_id );
 		if ( null === $run_id ) {
 			return new WP_Error( 'ab_mcp_sync_backup_run', __( 'A backup belongs to a run. Pass its run_id.', 'alphabridge-mcp' ) );
 		}
@@ -142,18 +142,18 @@ final class AB_MCP_Sync_Backup {
 	 * staging side only, while the backup holds the rows of this site).
 	 *
 	 * @param array $data What is kept (the rows a part replaces, or the absence of the object).
-	 * @return int
+	 * @return int|null Null where it cannot be written as JSON (no size of
+	 *                  it is known; Behebung 4: it was 0).
 	 */
 	public static function size_of( array $data ) {
-		return strlen(
-			AB_MCP_Sync_Canon::encode(
-				array(
-					'data'   => $data,
-					'format' => self::FORMAT,
-					'run_id' => PHP_INT_MAX,
-				)
+		$json = AB_MCP_Sync_Canon::encode(
+			array(
+				'data'   => $data,
+				'format' => self::FORMAT,
+				'run_id' => PHP_INT_MAX,
 			)
 		);
+		return '' === $json ? null : strlen( $json );
 	}
 
 	/**
@@ -167,12 +167,28 @@ final class AB_MCP_Sync_Backup {
 	 * @return true|WP_Error
 	 */
 	public static function fits( $run_id, array $data ) {
-		// The run as group() takes it (Behebung 3 of Z8b branch 3).
-		$run_id = AB_MCP_Sync_Schema::whole_number( $run_id, 1 );
+		return self::fits_bytes( $run_id, self::size_of( $data ) );
+	}
+
+	/**
+	 * Whether a backup of this size fits the booking of its run (fits()):
+	 * the run, the size, the booking and the backups the run holds already,
+	 * each in the form of its row of AB_MCP_Store_Inputs::TABLE; one that is
+	 * not known refuses (Behebung 4).
+	 *
+	 * @param mixed $run_id Run.
+	 * @param mixed $size   Bytes of the backup as written (size_of()).
+	 * @return true|WP_Error
+	 */
+	private static function fits_bytes( $run_id, $size ) {
+		$run_id = AB_MCP_Store_Inputs::read( 'backup.run', $run_id );
 		if ( null === $run_id ) {
 			return new WP_Error( 'ab_mcp_sync_backup_run', __( 'A backup belongs to a run. Pass its run_id.', 'alphabridge-mcp' ) );
 		}
-		$bytes    = self::size_of( $data );
+		$bytes = AB_MCP_Store_Inputs::read( 'budget.payload', $size );
+		if ( null === $bytes ) {
+			return new WP_Error( 'ab_mcp_sync_backup_size', __( 'The backup of this object cannot be written as JSON (a value in it is nested too deep or is no value JSON holds), so its size is not known and nothing is written for the object. Check the object in wp-admin; leave it out of the run if it keeps failing.', 'alphabridge-mcp' ) );
+		}
 		$bookings = AB_MCP_Store_Budget::bookings();
 		if ( is_wp_error( $bookings ) ) {
 			return $bookings;
@@ -183,13 +199,14 @@ final class AB_MCP_Sync_Backup {
 		}
 		$booked = $bookings[ $run_id ]['bytes'];
 		$used   = 0;
-		$groups = AB_MCP_Protected_Store::groups( 'backups' );
+		$groups = AB_MCP_Protected_Store::stock( 'backups' );
 		if ( is_wp_error( $groups ) ) {
 			return $groups;
 		}
-		// Every group of the run counts: the fields of each are whole by
-		// AB_MCP_Protected_Store::SIDECAR (groups()), and no memory of this
-		// request picks one (Behebung 3: group() keeps none).
+		// Every group of the run counts: the area read whole (stock(): a
+		// sidecar that cannot be read, or a listing that failed, refuses;
+		// Behebung 4), the fields of each whole by AB_MCP_Protected_Store::
+		// SIDECAR, and no memory of this request picks one (Behebung 3).
 		foreach ( $groups as $entry ) {
 			if ( $entry['run_id'] === $run_id ) {
 				$used += $entry['used'];

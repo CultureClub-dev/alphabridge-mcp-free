@@ -145,6 +145,7 @@ defined( 'ABSPATH' ) || exit;
 require_once __DIR__ . '/class-payload-file.php';
 require_once __DIR__ . '/class-staging.php';
 require_once __DIR__ . '/class-store-budget.php';
+require_once __DIR__ . '/class-store-inputs.php';
 require_once __DIR__ . '/sync/class-sync-schema.php';
 require_once __DIR__ . '/sync/class-sync-file-manifest.php';
 
@@ -177,6 +178,16 @@ final class AB_MCP_Protected_Store_Calls {
 		clearstatcache( true, (string) $path );
 		$stat = @stat( (string) $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- gone or not readable: false.
 		return is_array( $stat ) ? $stat : false;
+	}
+
+	/**
+	 * The free bytes of the disk of a folder (disk_free_space()).
+	 *
+	 * @param string $dir Folder.
+	 * @return float|false
+	 */
+	public function free( $dir ) {
+		return function_exists( 'disk_free_space' ) ? @disk_free_space( (string) $dir ) : false; // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- not allowed or not known: false.
 	}
 
 	/**
@@ -553,6 +564,18 @@ final class AB_MCP_Protected_Store {
 	}
 
 	/**
+	 * The free bytes of the disk of the store, in the form of their row of
+	 * AB_MCP_Store_Inputs::TABLE, or null where they are not known
+	 * (AB_MCP_Store_Budget::book()).
+	 *
+	 * @param string $root Folder of the store.
+	 * @return int|float|null
+	 */
+	public static function free_space( $root ) {
+		return AB_MCP_Store_Inputs::read( 'budget.free', self::calls()->free( $root ) );
+	}
+
+	/**
 	 * Back to the real calls.
 	 */
 	public static function real_calls() {
@@ -870,6 +893,13 @@ final class AB_MCP_Protected_Store {
 		if ( ! preg_match( '/^[A-Za-z0-9._:-]{0,191}\z/', $label ) ) {
 			return new WP_Error( 'ab_mcp_store_label', 'The label of a group holds up to 191 of the characters A-Z, a-z, 0-9, ".", "_", ":" and "-". Pass one of those, or none.' );
 		}
+		// The bytes a package declares, in the form of their row of
+		// AB_MCP_Store_Inputs::TABLE; none given declares none (a package
+		// that declares none is refused by its budget).
+		$declared = array_key_exists( 'declared', $meta ) ? AB_MCP_Store_Inputs::read( 'budget.declared', $meta['declared'] ) : 0;
+		if ( null === $declared ) {
+			return new WP_Error( 'ab_mcp_store_declare', 'The bytes a group declares are a whole number of 0 or more. Pass them so, or none.' );
+		}
 		$root = self::root();
 		if ( is_wp_error( $root ) ) {
 			return $root;
@@ -884,7 +914,7 @@ final class AB_MCP_Protected_Store {
 			// as it is, and whole() below refuses one the table does not
 			// hold (Behebung 2, A1: never made 0).
 			'run_id'   => array_key_exists( 'run_id', $meta ) ? $meta['run_id'] : 0,
-			'declared' => isset( $meta['declared'] ) ? max( 0, (int) $meta['declared'] ) : 0,
+			'declared' => $declared,
 			'used'     => 0,
 			'label'    => $label,
 			'closed'   => false,
@@ -899,7 +929,19 @@ final class AB_MCP_Protected_Store {
 			static function () use ( $root, $id, $entry ) {
 				self::sweep( $root, $id, time() );
 				if ( in_array( $entry['area'], self::PACKAGES, true ) ) {
-					$refusal = AB_MCP_Store_Budget::package_refusal( array_merge( self::entries( $root, $id, 'out' ), self::entries( $root, $id, 'in' ) ), $entry['area'], $entry['user_id'], $entry['declared'], $entry['label'], $entry['binding'] );
+					// The packages counted only where both areas were read
+					// whole (Behebung 4: a sidecar that cannot be read was
+					// left out of the count); an area that is no plain
+					// folder is refused as such.
+					if ( null === self::way( $root, array( 'out' ) ) || null === self::way( $root, array( 'in' ) ) ) {
+						return self::unsafe();
+					}
+					$out = self::entries( $root, $id, 'out', $out_whole );
+					$in  = self::entries( $root, $id, 'in', $in_whole );
+					if ( true !== $out_whole || true !== $in_whole ) {
+						return self::unknown_stock( true !== $out_whole ? 'out' : 'in' );
+					}
+					$refusal = AB_MCP_Store_Budget::package_refusal( array_merge( $out, $in ), $entry['area'], $entry['user_id'], $entry['declared'], $entry['label'], $entry['binding'] );
 					if ( null !== $refusal ) {
 						return $refusal;
 					}
@@ -1056,14 +1098,70 @@ final class AB_MCP_Protected_Store {
 		if ( null === self::way( $root, array( $area ) ) ) {
 			return self::unsafe();
 		}
-		$out = array();
-		foreach ( self::entries( $root, self::install_id(), $area ) as $entry ) {
+		$out     = array();
+		$entries = self::entries( $root, self::install_id(), $area, $whole );
+		if ( null === $whole ) {
+			return self::unlisted( $area );
+		}
+		foreach ( $entries as $entry ) {
 			unset( $entry['format'] );
 			$keep             = self::keep( $area );
 			$entry['expires'] = null === $keep ? null : $entry['created'] + $keep;
 			$out[]            = $entry;
 		}
 		return $out;
+	}
+
+	/**
+	 * The groups of an area for a budget: only where the area was read whole
+	 * (entries()), else the refusal with the cause and the way (Behebung 4:
+	 * a sidecar that cannot be read, or a listing that failed, left a group
+	 * out of the count).
+	 *
+	 * @param string $area Area.
+	 * @return array[]|WP_Error Entries as the table SIDECAR holds them.
+	 */
+	public static function stock( $area ) {
+		$bad = self::bad_area( $area );
+		if ( null !== $bad ) {
+			return $bad;
+		}
+		$root = self::root();
+		if ( is_wp_error( $root ) ) {
+			return $root;
+		}
+		$admitted = self::admitted( $root );
+		if ( true !== $admitted ) {
+			return $admitted;
+		}
+		if ( null === self::way( $root, array( $area ) ) ) {
+			return self::unsafe();
+		}
+		$entries = self::entries( $root, self::install_id(), $area, $whole );
+		return true === $whole ? $entries : self::unknown_stock( $area );
+	}
+
+	/**
+	 * The refusal where an area cannot be listed.
+	 *
+	 * @param string $area Area.
+	 * @return WP_Error
+	 */
+	private static function unlisted( $area ) {
+		/* translators: %s: an area of the protected store (out, in, reports, backups or stage). */
+		return new WP_Error( 'ab_mcp_store_unlisted', sprintf( __( 'The area %s of the protected store could not be listed, so none of its groups is read and nothing was changed. Ask the host to check the rights of the folder of the store, then try again.', 'alphabridge-mcp' ), $area ) );
+	}
+
+	/**
+	 * The refusal where the groups of an area cannot all be read, for a
+	 * budget: what they hold is not known.
+	 *
+	 * @param string $area Area.
+	 * @return WP_Error
+	 */
+	private static function unknown_stock( $area ) {
+		/* translators: %s: an area of the protected store (out, in, reports, backups or stage). */
+		return new WP_Error( 'ab_mcp_store_stock_unknown', sprintf( __( 'The area %s of the protected store could not be read whole (it cannot be listed, or the sidecar of a group in it cannot be read), so what its groups hold is not known and nothing is counted against a budget or written. Ask the host to check the rights of the folder of the store and whether something else writes into it; the daily clean-up leaves such a group as it is.', 'alphabridge-mcp' ), $area ) );
 	}
 
 	/**
@@ -1305,28 +1403,33 @@ final class AB_MCP_Protected_Store {
 		if ( ! is_array( $entry ) || ! self::whole( $entry, array( 'area', 'created', 'run_id' ) ) ) {
 			return null;
 		}
+		// Each input in the form of its row of AB_MCP_Store_Inputs::TABLE,
+		// read where this group needs it (Behebung 4).
 		$run = $entry['run_id'];
 		if ( $run > 0 ) {
-			if ( ! is_array( $in['open'] ) ) {
+			$open = AB_MCP_Store_Inputs::read( 'retention.open', $in['open'] );
+			if ( null === $open ) {
 				return null;
 			}
-			if ( in_array( $run, $in['open'], true ) ) {
+			if ( in_array( $run, $open, true ) ) {
 				return true;
 			}
 			if ( 'backups' === $entry['area'] ) {
-				if ( ! is_array( $in['backups'] ) ) {
+				$backups = AB_MCP_Store_Inputs::read( 'retention.backups', $in['backups'] );
+				if ( null === $backups ) {
 					return null;
 				}
-				if ( array_key_exists( $run, $in['backups'] ) ) {
-					return is_bool( $in['backups'][ $run ] ) ? $in['backups'][ $run ] : null;
+				if ( array_key_exists( $run, $backups ) ) {
+					return $backups[ $run ];
 				}
 			}
 		}
-		$keep = is_array( $in['keep'] ) && array_key_exists( $entry['area'], $in['keep'] ) ? $in['keep'][ $entry['area'] ] : null;
-		if ( ! is_int( $keep ) || ! is_int( $in['now'] ) || $in['now'] < 1 ) {
+		$keep = AB_MCP_Store_Inputs::read( 'retention.keep', AB_MCP_Shape::field( $in['keep'], $entry['area'] ) );
+		$now  = AB_MCP_Store_Inputs::read( 'retention.now', $in['now'] );
+		if ( null === $keep || null === $now ) {
 			return null;
 		}
-		return ( $in['now'] - $entry['created'] ) < $keep;
+		return ( $now - $entry['created'] ) < $keep;
 	}
 
 	/**
@@ -1337,7 +1440,7 @@ final class AB_MCP_Protected_Store {
 	 * @return array{now:int|null,open:int[]|null,backups:array<int,bool>|null,keep:array<string,int|null>}
 	 */
 	private static function inputs( $now ) {
-		$now = is_int( $now ) && $now > 0 ? $now : null;
+		$now = AB_MCP_Store_Inputs::read( 'retention.now', $now );
 		return array(
 			'now'     => $now,
 			'open'    => AB_MCP_Sync_Schema::open_runs(),
@@ -1388,8 +1491,7 @@ final class AB_MCP_Protected_Store {
 	 * @return int|null
 	 */
 	public static function backup_days() {
-		$days = AB_MCP_Sync_Schema::whole_number( apply_filters( self::BACKUP_DAYS_FILTER, self::BACKUP_DAYS ), 0 );
-		return null !== $days && $days <= 3650 ? $days : null;
+		return AB_MCP_Store_Inputs::read( 'period.days', apply_filters( self::BACKUP_DAYS_FILTER, self::BACKUP_DAYS ) );
 	}
 
 	/**
@@ -2519,13 +2621,15 @@ final class AB_MCP_Protected_Store {
 		if ( ! in_array( self::MARK_FILE, $names, true ) ) {
 			return null;
 		}
-		$raw  = $calls->read( $dir . '/' . self::MARK_FILE, self::MARK_MAX );
-		$mark = false === $raw ? null : json_decode( $raw, true );
-		if ( ! is_array( $mark ) || ! isset( $mark['format'], $mark['mid'], $mark['state'], $mark['trees'], $mark['target'], $mark['closed'] ) || self::MARK_FORMAT !== $mark['format'] || $mid !== $mark['mid'] || ! in_array( $mark['state'], array( 'open', 'closed' ), true ) || ! is_array( $mark['trees'] ) || ! is_string( $mark['target'] ) ) {
+		// The mark in the form of its row of AB_MCP_Store_Inputs::TABLE, as
+		// put_mark() writes it (Behebung 4), of this folder, each tree in
+		// stage or backups of the store.
+		$mark = AB_MCP_Store_Inputs::read( 'mark.json', $calls->read( $dir . '/' . self::MARK_FILE, self::MARK_MAX ) );
+		if ( null === $mark || $mid !== $mark['mid'] ) {
 			return false;
 		}
 		foreach ( $mark['trees'] as $tree ) {
-			if ( ! is_array( $tree ) || ! isset( $tree['role'], $tree['path'], $tree['form'], $tree['dev'], $tree['ino'] ) || ! is_string( $tree['path'] ) || null === self::tree_rel( $tree['path'] ) || ! array_key_exists( 'hash', $tree ) ) {
+			if ( null === self::tree_rel( $tree['path'] ) ) {
 				return false;
 			}
 		}
@@ -2773,7 +2877,10 @@ final class AB_MCP_Protected_Store {
 			if ( ! $noted && ! $under( $p, $root ) ) {
 				return false;
 			}
-			if ( ! $noted && empty( $how['all_tmp'] ) && 0 === strpos( $p, $tmp_dir . '/' ) && ( dirname( $p ) !== $tmp_dir || 0 !== strpos( basename( $p ), self::TMP_PREFIX ) || ( time() - (int) $stat['mtime'] ) < self::TMP_AGE ) ) {
+			// The age of a temp file only from its time in the form of its row
+			// of AB_MCP_Store_Inputs::TABLE (Behebung 4: no cast).
+			$mtime = AB_MCP_Store_Inputs::read( 'file.mtime', AB_MCP_Shape::field( $stat, 'mtime' ) );
+			if ( ! $noted && empty( $how['all_tmp'] ) && 0 === strpos( $p, $tmp_dir . '/' ) && ( dirname( $p ) !== $tmp_dir || 0 !== strpos( basename( $p ), self::TMP_PREFIX ) || null === $mtime || ( time() - $mtime ) < self::TMP_AGE ) ) {
 				return false;
 			}
 			if ( 0040000 === ( $stat['mode'] & 0170000 ) ) {
@@ -3666,24 +3773,40 @@ final class AB_MCP_Protected_Store {
 	}
 
 	/**
-	 * The entries of an area, oldest first.
+	 * The entries of an area of this installation whose sidecars are whole,
+	 * oldest first. $whole says how the area was read: null where it could
+	 * not be listed (no plain folder, or a listing that failed or is not of
+	 * the form of its row), false where a sidecar of it cannot be read, true
+	 * where it was read whole.
 	 *
-	 * @param string $root Folder.
-	 * @param string $id   Id.
-	 * @param string $area Area.
+	 * @param string    $root  Folder.
+	 * @param string    $id    Id.
+	 * @param string    $area  Area.
+	 * @param bool|null $whole Set: how the area was read.
 	 * @return array[]
 	 */
-	private static function entries( $root, $id, $area ) {
-		$out = array();
-		$dir = self::way( $root, array( $area ) );
-		if ( null === $dir ) {
+	private static function entries( $root, $id, $area, &$whole = null ) {
+		// Read whole: a plain folder, its listing in the form of its row of
+		// AB_MCP_Store_Inputs::TABLE, and no sidecar of it that cannot be
+		// read; a budget counts only an area read whole (stock(), open();
+		// Behebung 4: a listing that failed was an empty one).
+		$out   = array();
+		$whole = null;
+		$dir   = self::way( $root, array( $area ) );
+		$names = null === $dir ? null : AB_MCP_Store_Inputs::read( 'budget.listing', self::calls()->scandir( $dir ) );
+		if ( null === $names ) {
 			return $out;
 		}
-		foreach ( (array) glob( $dir . '/*.json' ) as $side ) {
-			$name  = basename( (string) $side, '.json' );
-			$entry = preg_match( '/^[0-9a-f]{40}\z/', $name ) ? self::read_entry( (string) $side, $area ) : null;
-			if ( null !== $entry && self::group_name( $area, $entry['gid'], $id ) === $name ) {
-				$out[] = $entry;
+		$whole = true;
+		foreach ( $names as $file ) {
+			if ( ! preg_match( '/^([0-9a-f]{40})\.json\z/', $file, $m ) ) {
+				continue;
+			}
+			$state = self::plain( $dir . '/' . $file, 'file' ) ? self::sidecar( $dir . '/' . $file, $area ) : array( 'unknown', null );
+			if ( 'unknown' === $state[0] ) {
+				$whole = false;
+			} elseif ( 'own' === $state[0] && self::group_name( $area, $state[1]['gid'], $id ) === $m[1] ) {
+				$out[] = $state[1];
 			}
 		}
 		usort(
@@ -3765,9 +3888,11 @@ final class AB_MCP_Protected_Store {
 							++$unknown;
 							continue;
 						}
-						$at = $calls->lstat( $path );
-						if ( false === $named && false === $lies && false !== $at && null !== $now && ( $now - $at['mtime'] ) >= 86400 ) {
-							self::delete_group( $root, $area, $m[1] );
+						// Its time as lstat() gives it, in the form of its row
+						// of AB_MCP_Store_Inputs::TABLE (Behebung 4).
+						$at = AB_MCP_Store_Inputs::read( 'file.mtime', AB_MCP_Shape::field( $calls->lstat( $path ), 'mtime' ) );
+						if ( false === $named && false === $lies && null !== $now && ( null === $at || ( ( $now - $at ) >= 86400 && self::unswept( $root, $area, $m[1] ) > 0 ) ) ) {
+							++$unknown;
 						}
 						continue;
 					}
@@ -3784,9 +3909,9 @@ final class AB_MCP_Protected_Store {
 						}
 						continue;
 					}
-					if ( self::delete_group( $root, $area, $m[1] ) ) {
-						++$removed;
-					}
+					$left     = self::unswept( $root, $area, $m[1] );
+					$removed += -1 === $left ? 1 : 0;
+					$unknown += $left > 0 ? 1 : 0;
 				} elseif ( preg_match( '/^[0-9a-f]{40}\.json\z/', $file ) ) {
 					// The name of a sidecar on what is no plain file (a link,
 					// a folder): it is not read, so nothing says whose its
@@ -3822,10 +3947,10 @@ final class AB_MCP_Protected_Store {
 				continue;
 			}
 			$mark = self::read_mark( $root, $mid );
-			$at   = null === $mark ? self::calls()->lstat( $marks . '/' . $mid ) : false;
+			$at   = null === $mark ? AB_MCP_Store_Inputs::read( 'file.mtime', AB_MCP_Shape::field( self::calls()->lstat( $marks . '/' . $mid ), 'mtime' ) ) : null;
 			// The time a mark closed only as it holds it, a whole number
 			// above 0 (Behebung 2: never made up).
-			$old  = is_array( $mark ) ? ( 'closed' === $mark['state'] && is_int( $mark['closed'] ) && $mark['closed'] > 0 && ( $now - $mark['closed'] ) >= self::KEEP['marks'] ) : ( false !== $at && ( $now - $at['mtime'] ) >= self::KEEP['marks'] );
+			$old  = is_array( $mark ) ? ( 'closed' === $mark['state'] && $mark['closed'] > 0 && ( $now - $mark['closed'] ) >= self::KEEP['marks'] ) : ( null !== $at && ( $now - $at ) >= self::KEEP['marks'] );
 			if ( $old ) {
 				self::delete_path( $root, $marks . '/' . $mid );
 			}
@@ -3835,6 +3960,32 @@ final class AB_MCP_Protected_Store {
 			'kept'    => $kept,
 			'unknown' => $unknown,
 		);
+	}
+
+	/**
+	 * Remove a group the retention lets go (sweep()), and say how it went:
+	 * -1 removed; 1 kept because a mark cannot be read (guard(): nothing in
+	 * stage, backups and marks goes, the clean-up counts it as unknown;
+	 * Behebung 4, B1); 0 kept otherwise (an open mark names a tree of it, or
+	 * a removal that failed: delete_path() keeps what it cannot remove).
+	 *
+	 * @param string $root Folder.
+	 * @param string $area Area.
+	 * @param string $name Name of the group on disk.
+	 * @return int
+	 */
+	private static function unswept( $root, $area, $name ) {
+		if ( self::delete_group( $root, $area, $name ) ) {
+			return -1;
+		}
+		if ( ! in_array( $area, self::TREE_AREAS, true ) ) {
+			return 0;
+		}
+		try {
+			return self::guard( $root )['unreadable'] ? 1 : 0;
+		} catch ( Throwable $e ) {
+			return 1;
+		}
 	}
 
 	/**
@@ -3968,8 +4119,7 @@ final class AB_MCP_Protected_Store {
 	 * @return array{0:string,1:array|null}
 	 */
 	private static function sidecar( $side, $area ) {
-		$raw = self::calls()->read( $side, 4096 );
-		$e   = false === $raw ? null : json_decode( $raw, true );
+		$e = AB_MCP_Store_Inputs::read( 'sidecar.json', self::calls()->read( $side, 4096 ) );
 		if ( ! self::whole( $e ) ) {
 			return array( 'unknown', null );
 		}
@@ -4011,27 +4161,13 @@ final class AB_MCP_Protected_Store {
 	 * @return bool
 	 */
 	private static function in_range( $value, $type, $area ) {
-		switch ( $type ) {
-			case 'format':
-				return self::FORMAT === $value;
-			case 'gid':
-				return is_string( $value ) && 1 === preg_match( '/^[0-9a-f]{32}\z/', $value );
-			case 'area':
-				return $area === $value;
-			case 'time':
-				return is_int( $value ) && $value > 0;
-			case 'count':
-				return is_int( $value ) && $value >= 0;
-			case 'run':
-				return is_int( $value ) && $value >= 1;
-			case 'label':
-				return is_string( $value ) && 1 === preg_match( '/^[A-Za-z0-9._:-]{0,191}\z/', $value );
-			case 'text':
-				return is_string( $value );
-			case 'bool':
-				return is_bool( $value );
+		if ( 'area' === $type ) {
+			return $area === $value;
 		}
-		return false;
+		// Each type its row of AB_MCP_Store_Inputs::TABLE (Behebung 4); the
+		// value as it is, so none is changed on its way into an entry.
+		$read = AB_MCP_Store_Inputs::read( 'sidecar.' . $type, $value );
+		return null !== $read && $read === $value;
 	}
 
 	/**

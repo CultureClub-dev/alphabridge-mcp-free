@@ -433,6 +433,12 @@ final class AB_MCP_Sync_Engine {
 	 * @return array|WP_Error
 	 */
 	public static function context( array $run ) {
+		// The time of the step from the clock of the runs; one that gives no
+		// time writes nothing (Behebung 4 of Z8b branch 3, B2/B3).
+		$now = AB_MCP_Sync_Run::now();
+		if ( null === $now ) {
+			return AB_MCP_Sync_Run::clock_unknown();
+		}
 		$partner = AB_MCP_Sync_Anchor::partner();
 		if ( is_wp_error( $partner ) ) {
 			return $partner;
@@ -467,7 +473,7 @@ final class AB_MCP_Sync_Engine {
 			'addresses' => array( (string) $partner => (string) $home ),
 			'routes'    => AB_MCP_Sync_Urls::routes(),
 			'source'    => AB_MCP_Sync_Inventory::source( array( $home, $partner ), AB_MCP_Sync_Inventory::BUDGET ),
-			'now'       => AB_MCP_Sync_Run::now(),
+			'now'       => $now,
 			'users'     => array(),
 		);
 	}
@@ -2508,7 +2514,8 @@ final class AB_MCP_Sync_Engine {
 	 * @return array{state:string,note?:string}
 	 */
 	private static function restore_part( array $part, $live_id, array $backup, $hash, $w ) {
-		$put = $w::restore_part( (string) $part['part'], $live_id, $backup, (string) $hash, AB_MCP_Sync_Run::now() );
+		$now = AB_MCP_Sync_Run::now();
+		$put = null === $now ? AB_MCP_Sync_Run::clock_unknown() : $w::restore_part( (string) $part['part'], $live_id, $backup, (string) $hash, $now );
 		if ( is_wp_error( $put ) ) {
 			return array(
 				'state' => 'unclear',

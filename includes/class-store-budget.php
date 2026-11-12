@@ -40,6 +40,8 @@
 
 defined( 'ABSPATH' ) || exit;
 
+require_once __DIR__ . '/class-store-inputs.php';
+
 /**
  * Class AB_MCP_Store_Budget
  */
@@ -117,8 +119,11 @@ final class AB_MCP_Store_Budget {
 	 * @return WP_Error|null
 	 */
 	public static function package_refusal( array $packages, $area, $user_id, $declared, $label = '', $binding = '' ) {
-		$declared = (int) $declared;
-		if ( $declared < 1 ) {
+		// Every input in the form of its row of AB_MCP_Store_Inputs::TABLE
+		// (Behebung 4): the packages are entries read whole (stock), the
+		// limits as their filters give them; one that is not known refuses.
+		$declared = AB_MCP_Store_Inputs::read( 'budget.declared', $declared );
+		if ( null === $declared || $declared < 1 ) {
 			return new WP_Error( 'ab_mcp_store_declare', 'A package is opened with the number of bytes it will hold, and it never grows past them. Pass the size as declared when you open it.' );
 		}
 		// Each open package counts once, the packages of a series together.
@@ -126,26 +131,28 @@ final class AB_MCP_Store_Budget {
 		$exports = array();
 		$bytes   = 0;
 		foreach ( array_values( $packages ) as $i => $entry ) {
-			$bytes += max( 0, (int) $entry['declared'] );
-			if ( ! empty( $entry['closed'] ) ) {
+			$bytes += $entry['declared'];
+			if ( $entry['closed'] ) {
 				continue;
 			}
-			$other = isset( $entry['binding'] ) ? (string) $entry['binding'] : '';
-			if ( '' !== (string) $binding && '' !== $other && (string) $binding !== $other ) {
+			if ( '' !== $binding && '' !== $entry['binding'] && $binding !== $entry['binding'] ) {
 				continue;
 			}
-			$key          = isset( $entry['label'] ) && 1 === preg_match( self::SERIES, (string) $entry['label'] ) ? (string) $entry['label'] : $i;
+			$key          = 1 === preg_match( self::SERIES, $entry['label'] ) ? $entry['label'] : $i;
 			$open[ $key ] = true;
-			if ( 'out' === $entry['area'] && (int) $entry['user_id'] === (int) $user_id ) {
+			if ( 'out' === $entry['area'] && $entry['user_id'] === $user_id ) {
 				$exports[ $key ] = true;
 			}
 		}
-		$joins   = 1 === preg_match( self::SERIES, (string) $label );
+		$joins   = 1 === preg_match( self::SERIES, $label );
 		$exports = $joins && isset( $exports[ $label ] ) ? 0 : count( $exports );
 		$open    = $joins && isset( $open[ $label ] ) ? 0 : count( $open );
 		// The limits after the count, as Pro reads its own.
 		if ( 'out' === $area ) {
-			$max_exports = max( 0, (int) apply_filters( self::FILTER_EXPORTS, self::MAX_EXPORTS ) );
+			$max_exports = AB_MCP_Store_Inputs::read( 'budget.max_exports', apply_filters( self::FILTER_EXPORTS, self::MAX_EXPORTS ) );
+			if ( null === $max_exports ) {
+				return self::limit_unknown( self::FILTER_EXPORTS );
+			}
 			if ( $exports >= $max_exports ) {
 				return new WP_Error(
 					'ab_mcp_store_quota',
@@ -157,7 +164,10 @@ final class AB_MCP_Store_Budget {
 				);
 			}
 		}
-		$max_packages = max( 0, (int) apply_filters( self::FILTER_PACKAGES, self::MAX_PACKAGES ) );
+		$max_packages = AB_MCP_Store_Inputs::read( 'budget.max_packages', apply_filters( self::FILTER_PACKAGES, self::MAX_PACKAGES ) );
+		if ( null === $max_packages ) {
+			return self::limit_unknown( self::FILTER_PACKAGES );
+		}
 		if ( $open >= $max_packages ) {
 			return new WP_Error(
 				'ab_mcp_store_quota',
@@ -168,7 +178,10 @@ final class AB_MCP_Store_Budget {
 				)
 			);
 		}
-		$max_bytes = max( 0, (int) apply_filters( self::FILTER_BYTES, self::MAX_BYTES ) );
+		$max_bytes = AB_MCP_Store_Inputs::read( 'budget.max_bytes', apply_filters( self::FILTER_BYTES, self::MAX_BYTES ) );
+		if ( null === $max_bytes ) {
+			return self::limit_unknown( self::FILTER_BYTES );
+		}
 		if ( $bytes + $declared > $max_bytes ) {
 			return new WP_Error(
 				'ab_mcp_store_quota',
@@ -194,9 +207,9 @@ final class AB_MCP_Store_Budget {
 	 * @return array|WP_Error { run_id, bytes, free, others }.
 	 */
 	public static function book( $run_id, $bytes ) {
-		$run_id = (int) $run_id;
-		$bytes  = (int) $bytes;
-		if ( $run_id < 1 || $bytes < 0 ) {
+		$run_id = AB_MCP_Store_Inputs::read( 'budget.book_run', $run_id );
+		$bytes  = AB_MCP_Store_Inputs::read( 'budget.book_bytes', $bytes );
+		if ( null === $run_id || null === $bytes ) {
 			return new WP_Error( 'ab_mcp_store_booking', 'A booking names its run and the bytes the run needs, zero or more. Pass both.' );
 		}
 		$root = AB_MCP_Protected_Store::root();
@@ -214,10 +227,10 @@ final class AB_MCP_Store_Budget {
 				unset( $book[ $run_id ] );
 				$others = 0;
 				foreach ( $book as $entry ) {
-					$others += (int) $entry['bytes'];
+					$others += $entry['bytes'];
 				}
-				$free = function_exists( 'disk_free_space' ) ? @disk_free_space( $root ) : false; // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
-				if ( ! is_int( $free ) && ! is_float( $free ) ) {
+				$free = AB_MCP_Protected_Store::free_space( $root );
+				if ( null === $free ) {
 					return new WP_Error( 'ab_mcp_store_space_unknown', 'This site does not say how much space its disk has free (disk_free_space() gives no answer), so no run books its space and none starts. Ask the host to allow disk_free_space() for PHP, then try again.' );
 				}
 				if ( $others + $bytes + self::RESERVE > $free ) {
@@ -260,8 +273,11 @@ final class AB_MCP_Store_Budget {
 	 * @return true|WP_Error
 	 */
 	public static function release( $run_id ) {
-		$run_id = (int) $run_id;
-		$root   = AB_MCP_Protected_Store::root();
+		$run_id = AB_MCP_Store_Inputs::read( 'budget.book_run', $run_id );
+		if ( null === $run_id ) {
+			return new WP_Error( 'ab_mcp_store_booking', 'A booking names its run and the bytes the run needs, zero or more. Pass both.' );
+		}
+		$root = AB_MCP_Protected_Store::root();
 		if ( is_wp_error( $root ) ) {
 			return $root;
 		}
@@ -337,7 +353,7 @@ final class AB_MCP_Store_Budget {
 			return $book;
 		}
 		foreach ( array_keys( $book ) as $run_id ) {
-			if ( ! in_array( (int) $run_id, $open, true ) ) {
+			if ( ! in_array( $run_id, $open, true ) ) {
 				unset( $book[ $run_id ] );
 			}
 		}
@@ -385,22 +401,22 @@ final class AB_MCP_Store_Budget {
 		if ( 'absent' === $file['state'] ) {
 			return array();
 		}
-		$data = 'ok' === $file['state'] ? json_decode( (string) $file['bytes'], true ) : null;
-		if ( ! is_array( $data ) ) {
-			return self::unread();
-		}
-		$out = array();
-		foreach ( $data as $run_id => $entry ) {
-			if ( ! is_int( $run_id ) || $run_id < 1 || ! is_array( $entry ) || ! isset( $entry['bytes'] ) || ! is_numeric( $entry['bytes'] ) ) {
-				return self::unread();
-			}
-			$out[ $run_id ] = array(
-				'bytes'   => max( 0, (int) $entry['bytes'] ),
-				'booked'  => isset( $entry['booked'] ) ? (int) $entry['booked'] : 0,
-				'user_id' => isset( $entry['user_id'] ) ? (int) $entry['user_id'] : 0,
-			);
-		}
-		return $out;
+		// The file as write_bookings() writes it, every booking in the form
+		// of its row of AB_MCP_Store_Inputs::TABLE (Behebung 4: no cast, no
+		// field made up).
+		$book = 'ok' === $file['state'] ? AB_MCP_Store_Inputs::read( 'budget.bookings', $file['bytes'] ) : null;
+		return null === $book ? self::unread() : $book;
+	}
+
+	/**
+	 * The refusal where the filter of a limit gives no whole number of 0 or
+	 * more: the limit is not known, so nothing is opened.
+	 *
+	 * @param string $filter Filter.
+	 * @return WP_Error
+	 */
+	private static function limit_unknown( $filter ) {
+		return new WP_Error( 'ab_mcp_store_limit_unknown', sprintf( 'The limit of the filter %s is not a whole number of 0 or more, so it is not known and no package is opened. Check the code that hooks %s: it returns such a number.', $filter, $filter ) );
 	}
 
 	/**

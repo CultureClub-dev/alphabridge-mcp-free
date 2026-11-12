@@ -1886,7 +1886,7 @@ final class SyncPackageTest extends TestCase {
 			$entry = json_decode( (string) file_get_contents( $side ), true );
 			if ( is_array( $entry ) && $gid === ( $entry['gid'] ?? null ) ) {
 				$entry['created'] = time() - AB_MCP_Sync_Export::ABANDONED - 1;
-				file_put_contents( $side, (string) wp_json_encode( $entry ) );
+				file_put_contents( $side, (string) wp_json_encode( $entry, JSON_UNESCAPED_SLASHES ) );
 			}
 		}
 		AB_MCP_Protected_Store::forget();
