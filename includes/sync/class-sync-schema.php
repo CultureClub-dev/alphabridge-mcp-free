@@ -472,6 +472,10 @@ final class AB_MCP_Sync_Schema {
 		if ( ! is_int( $now ) || $now < 1 ) {
 			return null;
 		}
+		// The states and types of a run as AB_MCP_Sync_Run names them: the
+		// plugin loads that class only where a run is worked on, and the
+		// clean-up (a cron request, open()) may come without it.
+		require_once __DIR__ . '/class-sync-run.php';
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table name is ours.
 		$rows = $wpdb->get_results( 'SELECT run_id, type, state, forward_closed_at, keep_until FROM `' . self::table( 'runs' ) . '` ORDER BY run_id', ARRAY_A );
 		if ( '' !== $wpdb->last_error || ! is_array( $rows ) ) {

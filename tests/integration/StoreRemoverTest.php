@@ -82,6 +82,11 @@ use ReflectionMethod;
 use RuntimeException;
 
 require_once __DIR__ . '/support/class-it-store-calls.php';
+// The classes of a run these cases call, as the plugin loads them where a run
+// is worked on: never from an earlier case or class (each case alone).
+require_once AB_MCP_DIR . 'includes/sync/class-sync-backup.php';
+require_once AB_MCP_DIR . 'includes/sync/class-sync-resources.php';
+require_once AB_MCP_DIR . 'includes/sync/class-sync-run.php';
 
 final class StoreRemoverTest extends TestCase {
 
@@ -1763,5 +1768,237 @@ final class StoreRemoverTest extends TestCase {
 		$fits = \AB_MCP_Sync_Backup::fits( '31abc', array( 'x' => 1 ) );
 		self::assertInstanceOf( \WP_Error::class, $fits, 'fits() takes the run as group() does.' );
 		self::assertSame( 'ab_mcp_sync_backup_run', $fits->get_error_code() );
+	}
+
+	/* -------- Behebung 3: every input of the retention decision whole or unknown */
+
+	/** A run row of site A with its plan as stored (null: no plan), the fields as the writers set them. */
+	private static function run_planned( int $run, string $type, string $state, $plan, int $keep_until = 0, int $qualified = 0 ): void {
+		global $wpdb;
+		$wpdb->insert(
+			AB_MCP_Sync_Schema::table( 'runs' ),
+			array(
+				'run_id'            => $run,
+				'type'              => $type,
+				'state'             => $state,
+				'keep_until'        => $keep_until,
+				'forward_closed_at' => $qualified,
+				'plan'              => $plan,
+			)
+		);
+		AB_MCP_Sync_Schema::forget();
+	}
+
+	/** A group of an area with a file, of a run (0: none), made $age seconds ago; its folder. */
+	private static function aged_group( string $area, int $run, int $age, array $meta = array() ): array {
+		$meta += array(
+			'out'     => array( 'declared' => 100, 'label' => 'series:abc' ),
+			'in'      => array( 'declared' => 100, 'label' => 'import:abc', 'binding' => 'print' ),
+			'reports' => array( 'label' => 'report' ),
+			'backups' => array( 'label' => 'backup:' . $run ),
+			'stage'   => array(),
+		)[ $area ];
+		$gid = AB_MCP_Protected_Store::open( $area, array( 'run_id' => $run ) + $meta );
+		self::assertIsString( $gid, $area );
+		self::assertIsArray( AB_MCP_Protected_Store::put( $area, $gid, 'post-1', 'eine Zeile' ) );
+		$group = array(
+			'gid' => $gid,
+			'dir' => self::store() . '/' . $area . '/' . AB_MCP_Payload_File::name( 'group|' . $area . '|' . $gid, AB_MCP_Protected_Store::install_id(), '' ),
+		);
+		self::age( $group, $age );
+		return $group;
+	}
+
+	/** The time a group was made, set $age seconds back (its sidecar; open() sweeps, so after the last open()). */
+	private static function age( array $group, int $age ): void {
+		$entry            = json_decode( (string) file_get_contents( $group['dir'] . '.json' ), true );
+		$entry['created'] = time() - $age;
+		file_put_contents( $group['dir'] . '.json', json_encode( $entry ) );
+	}
+
+	public function testAWayBackWhosePlanIsNotWholeKeepsTheBackupsOfEveryRun(): void {
+		// The case of the confirmation of the list (Codex, 18:15): run 10 is
+		// closed and past its retention; the open way back 11 names it.
+		$now = time();
+		self::run_planned( 10, 'push', 'closed_aborted', null, $now - 10 );
+		self::run_planned( 11, 'revert', 'open', '{"reverts":[10],"items":[]}' );
+		$backup = self::aged_group( 'backups', 10, 30 * 86400 );
+		$done   = AB_MCP_Protected_Store::cleanup( $now );
+		self::assertSame( array( 'post-1' ), self::names( $backup['dir'] ), 'A plan whole: run 10 is needed, its backup stays.' );
+		self::assertSame( 0, $done['unknown'] );
+		global $wpdb;
+		foreach ( array( 'no JSON' => '{"reverts":', 'no plan' => null, 'a run as a string' => '{"reverts":["10"]}', 'no reverts' => '{"items":[]}' ) as $why => $plan ) {
+			$wpdb->update( AB_MCP_Sync_Schema::table( 'runs' ), array( 'plan' => $plan ), array( 'run_id' => 11 ) );
+			$done = AB_MCP_Protected_Store::cleanup( $now );
+			self::assertSame( array( 'post-1' ), self::names( $backup['dir'] ), "$why: the plan cannot say which runs the way back needs, so every backup stays." );
+			self::assertSame( 1, $done['unknown'] ?? null, "$why: counted unknown." );
+		}
+		// The way back closed: run 10 is no longer needed, its backup goes.
+		$wpdb->update( AB_MCP_Sync_Schema::table( 'runs' ), array( 'state' => 'closed_reverted', 'keep_until' => $now - 1 ), array( 'run_id' => 11 ) );
+		AB_MCP_Protected_Store::cleanup( $now );
+		self::assertFileDoesNotExist( $backup['dir'] );
+	}
+
+	public function testARunClosedWhileItsDaysAreNotKnownStoresNoPeriodAndItsBackupsStay(): void {
+		// The chain filter → close → stored row → later clean-up (Behebung 3,
+		// A2): days of the filter that are no whole number of 0 to 3650.
+		$now = time();
+		self::run_planned( 12, 'push', 'open', null );
+		$backup = self::aged_group( 'backups', 12, 0 );
+		$days   = static fn() => 'thirty';
+		add_filter( AB_MCP_Protected_Store::BACKUP_DAYS_FILTER, $days );
+		try {
+			self::assertTrue( \AB_MCP_Sync_Run::set_state( 12, 'open', 'closed_aborted' ) );
+		} finally {
+			remove_filter( AB_MCP_Protected_Store::BACKUP_DAYS_FILTER, $days );
+		}
+		$run = \AB_MCP_Sync_Run::get( 12 );
+		self::assertIsArray( $run );
+		self::assertSame( 0, (int) $run['keep_until'], 'No period made of days not known: 0, kept (N1).' );
+		$shown = \AB_MCP_Sync_Run::shown( $run );
+		self::assertIsArray( $shown );
+		self::assertStringContainsString( 'no stored period', $shown['retention'] ?? '', 'The status of the run says so.' );
+		AB_MCP_Protected_Store::cleanup( $now + 40 * 86400 );
+		self::assertSame( array( 'post-1' ), self::names( $backup['dir'] ), 'Weeks later its backup stays (before: 7 days made of the days not known).' );
+		// The normal case: days known, the period stored, the backup goes after it.
+		self::run_planned( 13, 'push', 'open', null );
+		$other = self::aged_group( 'backups', 13, 0 );
+		self::assertTrue( \AB_MCP_Sync_Run::set_state( 13, 'open', 'closed_aborted' ) );
+		self::assertGreaterThan( $now, (int) \AB_MCP_Sync_Run::get( 13 )['keep_until'] );
+		self::assertArrayNotHasKey( 'retention', \AB_MCP_Sync_Run::shown( \AB_MCP_Sync_Run::get( 13 ) ) );
+		AB_MCP_Protected_Store::cleanup( $now + 8 * 86400 );
+		self::assertFileDoesNotExist( $other['dir'], 'A close that does not qualify: after its 7 days.' );
+		self::assertSame( array( 'post-1' ), self::names( $backup['dir'] ) );
+	}
+
+	public function testATimeOfTheCleanUpThatIsNotKnownRemovesNoGroup(): void {
+		$report = self::aged_group( 'reports', 0, 30 * 86400 );
+		foreach ( array( 'abc', 0, -5, 1.5, '1800000000' ) as $at ) {
+			$done = AB_MCP_Protected_Store::cleanup( $at );
+			self::assertSame( array( 'post-1' ), self::names( $report['dir'] ), 'now ' . var_export( $at, true ) . ': the report stays.' );
+			self::assertSame( 1, $done['unknown'], 'now ' . var_export( $at, true ) . ': counted unknown.' );
+		}
+		AB_MCP_Protected_Store::cleanup( time() );
+		self::assertFileDoesNotExist( $report['dir'], 'The time known: it goes by its time.' );
+	}
+
+	public function testWithoutTheTablesOfTheRunsTheGroupsOfARunStayAndThoseOfNoRunGoByTheirTime(): void {
+		$bound = self::aged_group( 'reports', 7, 0 );
+		$free  = self::aged_group( 'reports', 0, 0 );
+		self::age( $bound, 30 * 86400 );
+		self::age( $free, 30 * 86400 );
+		$status = new \ReflectionProperty( AB_MCP_Sync_Schema::class, 'status' );
+		$status->setValue( null, array( 'available' => false, 'reason' => 'missing' ) );
+		try {
+			$done = AB_MCP_Protected_Store::cleanup( time() );
+		} finally {
+			AB_MCP_Sync_Schema::forget();
+		}
+		self::assertSame( array( 'post-1' ), self::names( $bound['dir'] ), 'A group of a run stays while the runs cannot be read.' );
+		self::assertSame( 1, $done['unknown'] );
+		self::assertFileDoesNotExist( $free['dir'], 'A group of no run needs no runs: it goes by its time (Behebung 3, B4).' );
+	}
+
+	public function testARunOfAStateTheStoreDoesNotKnowKeepsItsGroupsAndEveryBackup(): void {
+		$now = time();
+		self::run_planned( 13, 'push', 'weird', null );
+		self::run_planned( 10, 'push', 'closed_aborted', null, $now - 10 );
+		$weird  = self::aged_group( 'reports', 13, 30 * 86400 );
+		$backup = self::aged_group( 'backups', 10, 30 * 86400 );
+		$done   = AB_MCP_Protected_Store::cleanup( $now );
+		self::assertSame( array( 'post-1' ), self::names( $weird['dir'] ), 'Counted as a run that is not closed (open_runs()): its group stays.' );
+		self::assertSame( array( 'post-1' ), self::names( $backup['dir'] ), 'The retention of the backups is unknown (backup_rows()): every backup stays.' );
+		self::assertSame( 1, $done['unknown'] );
+	}
+
+	public function testAFolderWithoutItsSidecarStaysAndIsCountedUnknown(): void {
+		// Before Behebung 3 it went after a day, past kept(): a backup of a
+		// run the retention keeps may lie in it.
+		self::run_row( 4, 'closed_done', time() - 10 * 86400, time() - 10 * 86400 );
+		$group = self::aged_group( 'backups', 4, 0 );
+		unlink( $group['dir'] . '.json' );
+		touch( $group['dir'], time() - 30 * 86400 );
+		$done = AB_MCP_Protected_Store::cleanup( time() );
+		self::assertSame( array( 'post-1' ), self::names( $group['dir'] ) );
+		self::assertSame( 1, $done['unknown'] );
+	}
+
+	public function testWithoutTheIdOfTheInstallationOrWithAForeignManifestNoFolderIsSwept(): void {
+		$report = self::aged_group( 'reports', 0, 30 * 86400 );
+		$root   = self::store();
+		update_option( AB_MCP_Protected_Store::OPTION_ID, 'no id', false );
+		AB_MCP_Protected_Store::forget();
+		self::assertSame( array( 'removed' => 0, 'kept' => 0, 'unknown' => 0 ), AB_MCP_Protected_Store::cleanup( time() ), 'No id: no folder of its own, nothing read or removed.' );
+		self::assertSame( array( 'post-1' ), self::names( $report['dir'] ) );
+		AB_MCP_IT_Sites::reset( 'a' );
+		AB_MCP_Protected_Store::forget();
+		$owner = (string) file_get_contents( $root . '/owner.json' );
+		file_put_contents( $root . '/owner.json', '{' );
+		self::assertSame( array( 'removed' => 0, 'kept' => 0, 'unknown' => 0 ), AB_MCP_Protected_Store::cleanup( time() ), 'A manifest that cannot be read: not this installation\'s folder, nothing removed.' );
+		self::assertSame( array( 'post-1' ), self::names( $report['dir'] ) );
+		file_put_contents( $root . '/owner.json', $owner );
+	}
+
+	public function testAnAreaThatCannotBeListedLosesNothingAndIsCountedUnknown(): void {
+		$report = self::aged_group( 'reports', 0, 30 * 86400 );
+		$calls  = self::failing( array( 'scandir' => array( self::store() . '/reports' ) ) );
+		$done   = AB_MCP_Protected_Store::cleanup( time() );
+		AB_MCP_Test_Seam::restore_all();
+		self::assertContains( array( 'scandir', self::store() . '/reports' ), $calls->failed );
+		self::assertSame( array( 'post-1' ), self::names( $report['dir'] ) );
+		self::assertSame( 1, $done['unknown'] );
+	}
+
+	public function testATempFileOrAFolderOfAMarkWhoseLstatFailsStays(): void {
+		$root = self::store();
+		@mkdir( $root . '/tmp', 0700 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		$temp = $root . '/tmp/.ab-tmp-alt';
+		file_put_contents( $temp, 'x' );
+		touch( $temp, time() - 3 * 3600 );
+		@mkdir( $root . '/marks', 0700 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		$half = $root . '/marks/' . str_repeat( 'b', 32 );
+		mkdir( $half, 0700 );
+		touch( $half, time() - 3 * 86400 );
+		self::failing( array( 'lstat' => array( $temp, $half ) ) );
+		AB_MCP_Protected_Store::cleanup( time() );
+		AB_MCP_Test_Seam::restore_all();
+		self::assertFileExists( $temp, 'No age read: the temp file stays.' );
+		self::assertDirectoryExists( $half, 'No age read: the folder of the mark stays.' );
+		AB_MCP_Protected_Store::cleanup( time() );
+		self::assertFileDoesNotExist( $temp, 'Read again, it goes by its age.' );
+		self::assertFileDoesNotExist( $half );
+	}
+
+	public function testTheCleanUpOfARequestThatLoadedNoRunReadsTheRetentionOfTheBackups(): void {
+		// In a request of its own (a cron request, an open()), the plugin has
+		// not loaded AB_MCP_Sync_Run; backup_rows() names its states and
+		// types (Behebung 3) and loads it itself. Without that the clean-up
+		// ended with an error and removed nothing at all.
+		$now = time();
+		self::run_planned( 10, 'push', 'closed_aborted', null, $now - 10 );
+		self::run_planned( 11, 'revert', 'open', '{"reverts":[10],"items":[]}' );
+		$backup = self::aged_group( 'backups', 10, 30 * 86400 );
+		$report = self::aged_group( 'reports', 0, 30 * 86400 );
+		$done   = AB_MCP_IT_Process::calls(
+			'a',
+			array(
+				'calls' => array(
+					array(
+						'call' => 'class_exists',
+						'args' => array( 'AB_MCP_Sync_Run', false ),
+						'as'   => 'before',
+					),
+					array(
+						'call' => 'AB_MCP_Protected_Store::cleanup',
+						'args' => array( $now ),
+						'as'   => 'cleanup',
+					),
+				),
+			)
+		)['results'];
+		self::assertFalse( $done['before'], 'The case needs a request without the class: the plugin loads it at its start now, so this case shows nothing any more.' );
+		self::assertSame( array( 'removed' => 1, 'kept' => 1, 'unknown' => 0 ), $done['cleanup'], 'The report removed; the backup of run 10 kept beyond its age by its run.' );
+		self::assertSame( array( 'post-1' ), self::names( $backup['dir'] ), 'The way back 11 needs run 10: its backup stays.' );
+		self::assertFileDoesNotExist( $report['dir'], 'The report of no run goes by its time.' );
 	}
 }
