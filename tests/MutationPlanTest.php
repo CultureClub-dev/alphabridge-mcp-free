@@ -570,8 +570,16 @@ final class MutationPlanTest extends TestCase {
 		return array_merge(
 			array(
 				'##[group]Run actions/checkout@v4',
+				'with:',
+				'  path: plugin',
+				'##[endgroup]',
 				'' !== $head ? $head : 'HEAD is now at 3cac19c Merge ' . self::SOURCE . ' into ' . self::BASE,
+				'##[group]Run actions/checkout@v4',
+				'  repository: WordPress/WordPress',
+				'  path: wp-core',
 				'HEAD is now at fc9832b Tag 7.1.3 Built from https://develop.svn.wordpress.org/tags/7.1.3@64157',
+				'[command]/usr/bin/git log -1 --format=%H',
+				'fc9832bef919c2a08541248db23af90d14ffb082',
 				"##[group]Run php tests/mutation/run.php --shard=$k/$n",
 				"\e[36;1mphp tests/mutation/run.php --shard=$k/$n\e[0m",
 				'##[endgroup]',
@@ -633,32 +641,86 @@ final class MutationPlanTest extends TestCase {
 	public function testTheCommitItselfCheckedOutCountsAndNamesNoMerge(): void {
 		$jobs = self::jobs();
 		foreach ( array( 1, 2 ) as $k ) {
-			$jobs[ self::jobName( $k, 2 ) ][1] = 'HEAD is now at 78708fb Z8b Zweig 2b: erster Ausgangsstand';
+			$jobs[ self::jobName( $k, 2 ) ][4] = 'HEAD is now at 78708fb Z8b Zweig 2b: erster Ausgangsstand';
 		}
 		self::assertSame( array(), AB_Mutation_Plan::import( self::log( $jobs ), self::expected(), self::SOURCE )['merge_bases'] );
 	}
 
-	public function testAPushNamesTheSourceByGitLog(): void {
+	/**
+	 * A good log of a push to main: the plugin's step checks the branch out
+	 * and names the commit by git log, as in run 43235297215.
+	 *
+	 * @return array<string,string[]>
+	 */
+	private static function pushed(): array {
 		$jobs = self::jobs();
 		foreach ( array( 1, 2 ) as $k ) {
-			$job                      = self::jobName( $k, 2 );
-			$jobs[ $job ][1]          = '[command]/usr/bin/git log -1 --format=%H';
-			$jobs[ $job ][2]          = self::SOURCE;
+			$job = self::jobName( $k, 2 );
+			array_splice(
+				$jobs[ $job ],
+				4,
+				1,
+				array(
+					'[command]/usr/bin/git checkout --progress --force -B main refs/remotes/origin/main',
+					"Switched to a new branch 'main'",
+					"branch 'main' set up to track 'origin/main'.",
+					'##[endgroup]',
+					'[command]/usr/bin/git log -1 --format=%H',
+					self::SOURCE,
+				)
+			);
 		}
-		self::assertSame( array(), AB_Mutation_Plan::import( self::log( $jobs ), self::expected(), self::SOURCE )['merge_bases'] );
+		return $jobs;
+	}
 
-		// The id alone, without the command of git log before it, is no proof.
-		$jobs[ self::jobName( 1, 2 ) ][1] = 'Switched to a new branch \'main\'';
+	public function testAPushToMainNamesTheSourceByGitLogInThePluginsCheckout(): void {
+		$found = AB_Mutation_Plan::import( self::log( self::pushed() ), self::expected(), self::SOURCE );
+		self::assertSame( array(), $found['merge_bases'] );
+		self::assertSame( array( 'l/one' => 14, 'l/three' => 120, 'l/two' => 0 ), $found['mutation'] );
+	}
+
+	public function testTheIdWithoutTheCommandOfGitLogIsNoProof(): void {
+		$jobs = self::pushed();
+		$job  = self::jobName( 1, 2 );
+		$jobs[ $job ][8] = 'git log of something else';
 		$this->expectException( RuntimeException::class );
 		$this->expectExceptionMessage( 'shard 1/2 did not check out the source' );
+		AB_Mutation_Plan::import( self::log( $jobs ), self::expected(), self::SOURCE );
+	}
+
+	public function testTheSourceOnlyInAnotherCheckoutIsNoProof(): void {
+		$jobs = self::pushed();
+		$job  = self::jobName( 1, 2 );
+		$jobs[ $job ][9] = '40a282c68cabd478828578ec3bcb435fb75f73ce';
+		// The id of the source after git log, but in the step of wp-core.
+		$at                = array_search( 'fc9832bef919c2a08541248db23af90d14ffb082', $jobs[ $job ], true );
+		$jobs[ $job ][ $at ] = self::SOURCE;
+		$this->expectException( RuntimeException::class );
+		$this->expectExceptionMessage( 'shard 1/2 did not check out the source' );
+		AB_Mutation_Plan::import( self::log( $jobs ), self::expected(), self::SOURCE );
+	}
+
+	public static function pluginSteps(): array {
+		return array(
+			'none' => array( static function ( array $lines ): array { return array_values( array_diff( $lines, array( '  path: plugin' ) ) ); }, '0 checkout steps of the plugin' ),
+			'two'  => array( static function ( array $lines ): array { return array_merge( array_slice( $lines, 0, 5 ), array_slice( $lines, 0, 5 ), array_slice( $lines, 5 ) ); }, '2 checkout steps of the plugin' ),
+		);
+	}
+
+	#[DataProvider( 'pluginSteps' )]
+	public function testExactlyOneCheckoutStepOfThePlugin( callable $change, string $says ): void {
+		$jobs                            = self::jobs();
+		$jobs[ self::jobName( 1, 2 ) ] = $change( $jobs[ self::jobName( 1, 2 ) ] );
+		$this->expectException( RuntimeException::class );
+		$this->expectExceptionMessage( $says );
 		AB_Mutation_Plan::import( self::log( $jobs ), self::expected(), self::SOURCE );
 	}
 
 	public function testAnEmptyShardEndsWithItsOwnLine(): void {
 		$jobs                       = self::jobs();
 		$jobs[ self::jobName( 3, 3 ) ] = self::job( 3, 3, array( 'shard 3/3 has no entry; the other shards run them all' ) );
-		$jobs[ self::jobName( 1, 3 ) ] = self::job( 1, 3, array_slice( $jobs[ self::jobName( 1, 2 ) ], 6, 5 ) );
-		$jobs[ self::jobName( 2, 3 ) ] = self::job( 2, 3, array_slice( $jobs[ self::jobName( 2, 2 ) ], 6, 3 ) );
+		$jobs[ self::jobName( 1, 3 ) ] = self::job( 1, 3, array_slice( $jobs[ self::jobName( 1, 2 ) ], 14, 5 ) );
+		$jobs[ self::jobName( 2, 3 ) ] = self::job( 2, 3, array_slice( $jobs[ self::jobName( 2, 2 ) ], 14, 3 ) );
 		unset( $jobs[ self::jobName( 1, 2 ) ], $jobs[ self::jobName( 2, 2 ) ] );
 		self::assertSame( 3, AB_Mutation_Plan::import( self::log( $jobs ), self::expected(), self::SOURCE )['shards'] );
 	}
@@ -675,25 +737,25 @@ final class MutationPlanTest extends TestCase {
 			'a shard missing'                  => array( static function ( &$j ) use ( $two ) { unset( $j[ $two ] ); }, 'shard 2/2 is missing' ),
 			'no mutation job'                  => array( static function ( &$j ) use ( $one, $two ) { unset( $j[ $one ], $j[ $two ] ); }, 'no mutation job' ),
 			'a shard twice'                    => array( static function ( &$j ) use ( $two ) { $j['again'] = $j[ $two ]; }, 'shard 2/2 is in the log twice' ),
-			'shards of another count'          => array( static function ( &$j ) use ( $two ) { $j[ $two ][3] = '##[group]Run php tests/mutation/run.php --shard=2/3'; }, 'share into' ),
-			'no last line'                     => array( static function ( &$j ) use ( $two ) { unset( $j[ $two ][8] ); }, 'shard 2/2 did not reach its end (no last line)' ),
-			'a last line of another count'     => array( static function ( &$j ) use ( $one ) { $j[ $one ][10] = 'all 3 mutations killed; every file is back byte for byte'; }, '3 counted, 2 killed lines' ),
+			'shards of another count'          => array( static function ( &$j ) use ( $two ) { $j[ $two ][11] = '##[group]Run php tests/mutation/run.php --shard=2/3'; }, 'share into' ),
+			'no last line'                     => array( static function ( &$j ) use ( $two ) { unset( $j[ $two ][16] ); }, 'shard 2/2 did not reach its end (no last line)' ),
+			'a last line of another count'     => array( static function ( &$j ) use ( $one ) { $j[ $one ][18] = 'all 3 mutations killed; every file is back byte for byte'; }, '3 counted, 2 killed lines' ),
 			'a killed line after the step'     => array( static function ( &$j ) use ( $two ) { $j[ $two ][] = 'killed      1.0 s  l/four — late (exit 1)'; }, '' ),
-			'an entry not measured'            => array( static function ( &$j ) use ( $two ) { unset( $j[ $two ][7] ); $j[ $two ][8] = 'all 0 mutations killed; every file is back byte for byte'; }, '1 entries of the source have no measurement: l/two' ),
-			'an entry measured twice'          => array( static function ( &$j ) use ( $one, $two ) { $j[ $two ][7] = 'killed      0.0 s  l/one — a clause (exit 1)'; }, 'l/one is measured twice' ),
-			'an entry the source does not have' => array( static function ( &$j ) use ( $two ) { $j[ $two ][7] = 'killed      0.0 s  l/four — a clause (exit 1)'; }, 'measured l/four, which the lists at the source do not have' ),
-			'a mutation that survived'         => array( static function ( &$j ) use ( $two ) { $j[ $two ][7] = 'SURVIVED    0.4 s  l/two — a clause (the tests pass without the clause)'; }, 'is not green' ),
-			'a mutation out of time'           => array( static function ( &$j ) use ( $two ) { $j[ $two ][7] = 'TIMEOUT   600.0 s  l/two — a clause (no verdict within 600 s)'; }, 'is not green' ),
-			'a time that is no number'         => array( static function ( &$j ) use ( $two ) { $j[ $two ][7] = 'killed      nan s  l/two — a clause (exit 1)'; }, "the time 'nan' is no valid duration" ),
-			'a time of two decimals'           => array( static function ( &$j ) use ( $two ) { $j[ $two ][7] = 'killed     1.25 s  l/two — a clause (exit 1)'; }, "the time '1.25' is no valid duration" ),
-			'a negative baseline'              => array( static function ( &$j ) use ( $two ) { $j[ $two ][6] = 'baseline  green   -1.0 s  vendor/bin/phpunit --no-progress --filter A'; }, "the time '-1.0' is no valid duration" ),
-			'a killed line out of form'        => array( static function ( &$j ) use ( $two ) { $j[ $two ][7] = 'killed      0.0 s  l/two'; }, 'a mutation line out of form' ),
-			'a baseline line out of form'      => array( static function ( &$j ) use ( $two ) { $j[ $two ][6] = 'baseline  red    3.0 s  vendor/bin/phpunit --no-progress --filter A'; }, 'a baseline line out of form' ),
-			'a baseline the lists lack'        => array( static function ( &$j ) use ( $two ) { $j[ $two ][6] = 'baseline  green    3.0 s  vendor/bin/phpunit --no-progress --filter B'; }, 'ran a baseline the lists do not have' ),
-			'a command without baseline'       => array( static function ( &$j ) use ( $one ) { unset( $j[ $one ][7] ); }, 'the baseline of vendor/bin/phpunit --no-progress -c tests/integration/phpunit.xml.dist --filter A has no measurement' ),
-			'another commit checked out'       => array( static function ( &$j ) use ( $one ) { $j[ $one ][1] = 'HEAD is now at 40a282c Z8b Zweig 2b'; }, 'shard 1/2 did not check out the source' ),
-			'a merge of another commit'        => array( static function ( &$j ) use ( $one ) { $j[ $one ][1] = 'HEAD is now at 3cac19c Merge 40a282c68cabd478828578ec3bcb435fb75f73ce into ' . self::BASE; }, 'shard 1/2 did not check out the source' ),
-			'the checkout after the run'       => array( static function ( &$j ) use ( $one ) { $j[ $one ][] = $j[ $one ][1]; $j[ $one ][1] = 'HEAD is now at 40a282c Z8b'; }, 'shard 1/2 did not check out the source' ),
+			'an entry not measured'            => array( static function ( &$j ) use ( $two ) { unset( $j[ $two ][15] ); $j[ $two ][16] = 'all 0 mutations killed; every file is back byte for byte'; }, '1 entries of the source have no measurement: l/two' ),
+			'an entry measured twice'          => array( static function ( &$j ) use ( $one, $two ) { $j[ $two ][15] = 'killed      0.0 s  l/one — a clause (exit 1)'; }, 'l/one is measured twice' ),
+			'an entry the source does not have' => array( static function ( &$j ) use ( $two ) { $j[ $two ][15] = 'killed      0.0 s  l/four — a clause (exit 1)'; }, 'measured l/four, which the lists at the source do not have' ),
+			'a mutation that survived'         => array( static function ( &$j ) use ( $two ) { $j[ $two ][15] = 'SURVIVED    0.4 s  l/two — a clause (the tests pass without the clause)'; }, 'is not green' ),
+			'a mutation out of time'           => array( static function ( &$j ) use ( $two ) { $j[ $two ][15] = 'TIMEOUT   600.0 s  l/two — a clause (no verdict within 600 s)'; }, 'is not green' ),
+			'a time that is no number'         => array( static function ( &$j ) use ( $two ) { $j[ $two ][15] = 'killed      nan s  l/two — a clause (exit 1)'; }, "the time 'nan' is no valid duration" ),
+			'a time of two decimals'           => array( static function ( &$j ) use ( $two ) { $j[ $two ][15] = 'killed     1.25 s  l/two — a clause (exit 1)'; }, "the time '1.25' is no valid duration" ),
+			'a negative baseline'              => array( static function ( &$j ) use ( $two ) { $j[ $two ][14] = 'baseline  green   -1.0 s  vendor/bin/phpunit --no-progress --filter A'; }, "the time '-1.0' is no valid duration" ),
+			'a killed line out of form'        => array( static function ( &$j ) use ( $two ) { $j[ $two ][15] = 'killed      0.0 s  l/two'; }, 'a mutation line out of form' ),
+			'a baseline line out of form'      => array( static function ( &$j ) use ( $two ) { $j[ $two ][14] = 'baseline  red    3.0 s  vendor/bin/phpunit --no-progress --filter A'; }, 'a baseline line out of form' ),
+			'a baseline the lists lack'        => array( static function ( &$j ) use ( $two ) { $j[ $two ][14] = 'baseline  green    3.0 s  vendor/bin/phpunit --no-progress --filter B'; }, 'ran a baseline the lists do not have' ),
+			'a command without baseline'       => array( static function ( &$j ) use ( $one ) { unset( $j[ $one ][15] ); }, 'the baseline of vendor/bin/phpunit --no-progress -c tests/integration/phpunit.xml.dist --filter A has no measurement' ),
+			'another commit checked out'       => array( static function ( &$j ) use ( $one ) { $j[ $one ][4] = 'HEAD is now at 40a282c Z8b Zweig 2b'; }, 'shard 1/2 did not check out the source' ),
+			'a merge of another commit'        => array( static function ( &$j ) use ( $one ) { $j[ $one ][4] = 'HEAD is now at 3cac19c Merge 40a282c68cabd478828578ec3bcb435fb75f73ce into ' . self::BASE; }, 'shard 1/2 did not check out the source' ),
+			'the checkout after the run'       => array( static function ( &$j ) use ( $one ) { $j[ $one ] = array_merge( array_slice( $j[ $one ], 5 ), array_slice( $j[ $one ], 0, 5 ) ); }, 'shard 1/2 has 0 checkout steps of the plugin' ),
 		);
 	}
 

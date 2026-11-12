@@ -540,12 +540,26 @@ final class AB_Mutation_Plan {
 			}
 			$shards[ $k ] = $job;
 
-			// The source: the checkout of the plugin, the commit itself or
-			// the merge of it a pull request runs. A push checks a branch out
-			// and names its commit by git log, the whole id on the next line.
+			// The source, in the one checkout step of the plugin (path:
+			// plugin, .github/workflows/ci.yml): the commit itself, the merge
+			// of it a pull request runs, or, where a push checks a branch
+			// out, the whole id git log names on the line after its command.
+			$steps = array();
+			foreach ( array_slice( $lines, 0, $start ) as $text ) {
+				if ( 0 === strpos( $text, '##[group]Run ' ) ) {
+					$steps[] = array();
+				}
+				if ( array() !== $steps ) {
+					$steps[ count( $steps ) - 1 ][] = $text;
+				}
+			}
+			$plugin = array_values( array_filter( $steps, static fn( $step ) => in_array( '  path: plugin', $step, true ) ) );
+			if ( 1 !== count( $plugin ) ) {
+				throw new RuntimeException( "shard $k/$n has " . count( $plugin ) . ' checkout steps of the plugin (path: plugin); one is wanted' );
+			}
 			$checked = false;
 			$before  = '';
-			foreach ( array_slice( $lines, 0, $start ) as $text ) {
+			foreach ( $plugin[0] as $text ) {
 				if ( preg_match( '/^HEAD is now at [0-9a-f]{7,40} Merge ' . $source . ' into ([0-9a-f]{40})$/D', $text, $hm ) ) {
 					$merge_bases[ $hm[1] ] = true;
 					$checked               = true;
