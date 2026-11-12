@@ -145,3 +145,17 @@ Each entry of a list takes one clause out of a shipped file, runs its tests
 byte for byte; the format is in the head of `tests/mutation/run.php`.
 Lists that run the integration suite need the sites up (`local.sh up`).
 Never commit while it runs.
+
+The CI runs the lists in twelve jobs, `--shard=k/12`. The shares follow
+the measured durations in `tests/mutation/dauer.php` (mutation per entry,
+baseline per command), so that the longest job is as short as may be
+(`tests/mutation/verteilung.php`); entries and commands added since get a
+fixed default. To measure anew after a green run on main:
+
+```sh
+php tests/mutation/dauer-import.php --run=<run id> [--attempt=<n>]
+```
+
+It reads the run and its log with `gh` and the lists of its commit with
+`git`, writes nothing on any gap (a shard missing or not ended, an entry
+not measured), and prints the longest and shortest shard before and after.
