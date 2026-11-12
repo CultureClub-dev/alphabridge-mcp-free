@@ -395,7 +395,12 @@ final class AB_MCP_IT_Code {
 		if ( true !== $archive->open( $tmp, ZipArchive::CREATE | ZipArchive::EXCL ) ) {
 			throw new RuntimeException( "Cannot write $tmp." );
 		}
-		$archive->addEmptyDir( $slug );
+		// The folder with MTIME as well (under its name as ZipArchive keeps it,
+		// with a slash), so that a ZIP built again is the same byte for byte
+		// (Z8b branch 2, Behebung 8: two builds in other seconds differed).
+		if ( ! $archive->addEmptyDir( $slug ) || ! $archive->setMtimeName( $slug . '/', self::MTIME ) ) {
+			throw new RuntimeException( "Cannot write the folder $slug into $tmp." );
+		}
 		foreach ( self::files( $source ) as $relative ) {
 			$name = $slug . '/' . $relative;
 			$archive->addFromString( $name, (string) file_get_contents( $source . '/' . $relative ) );

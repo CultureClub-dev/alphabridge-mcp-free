@@ -815,6 +815,16 @@ return array(
 		'helper'  => true,
 	),
 	array(
+		'id'      => "pruef/code-zip-ordnerzeit",
+		'clause'  => "zip(): the folder of a ZIP with MTIME as well, so that a ZIP built again is the same byte for byte (Z8b branch 2, Behebung 8)",
+		'file'    => "tests/integration/support/class-it-code.php",
+		'search'  => "if ( ! \$archive->addEmptyDir( \$slug ) || ! \$archive->setMtimeName( \$slug . '/', self::MTIME ) ) {",
+		'replace' => "if ( ! \$archive->addEmptyDir( \$slug ) ) {",
+		'run'     => array( "vendor/bin/phpunit", "--no-progress", "-c", "tests/integration/phpunit.xml.dist", "--filter", "CodeFixturesTest::testAZipOfAVersionIsTheSameByteForByteWhenItIsBuiltAgain" ),
+		'expect'  => "/testAZipOfAVersionIsTheSameByteForByteWhenItIsBuiltAgain/",
+		'helper'  => true,
+	),
+	array(
 		'id'      => "pruef/wporg-fremd",
 		'clause'  => "get(): any other host or scheme is refused before anything is asked",
 		'file'    => "tests/integration/support/class-test-wporg.php",

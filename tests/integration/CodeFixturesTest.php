@@ -100,6 +100,23 @@ final class CodeFixturesTest extends TestCase {
 		self::assertSame( '1.0.0', AB_MCP_IT_Code::mark( 'a', 'ab-it-kind' ) );
 	}
 
+	public function testAZipOfAVersionIsTheSameByteForByteWhenItIsBuiltAgain(): void {
+		// Z8b branch 2, Behebung 8: every entry of the ZIP with MTIME, the
+		// folder too, so that two builds in other seconds are the same.
+		$zip   = AB_MCP_IT_Code::zip( 'plugin', 'ab-it-daten', '1.0.0' );
+		$bytes = (string) file_get_contents( $zip );
+		unlink( $zip );
+		// The time of an entry of a ZIP counts in steps of two seconds (DOS).
+		sleep( 2 );
+		self::assertSame( $zip, AB_MCP_IT_Code::zip( 'plugin', 'ab-it-daten', '1.0.0' ), 'Built anew at the same place.' );
+		self::assertSame( hash( 'sha256', $bytes ), hash_file( 'sha256', $zip ), 'The same bytes, the entry of the folder included.' );
+		$archive = new \ZipArchive();
+		self::assertTrue( $archive->open( $zip ) );
+		self::assertSame( 'ab-it-daten/', $archive->getNameIndex( 0 ) );
+		self::assertSame( AB_MCP_IT_Code::MTIME, $archive->statIndex( 0 )['mtime'], 'The folder with MTIME.' );
+		$archive->close();
+	}
+
 	public function testEveryUnitIsACopyWithTheSameTimeStampNeverALink(): void {
 		$repo = (string) realpath( dirname( __DIR__, 2 ) );
 		foreach ( array( 'plugins', 'themes', 'mu-plugins' ) as $folder ) {
