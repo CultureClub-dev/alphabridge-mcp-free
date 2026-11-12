@@ -156,23 +156,29 @@ final class StoreInputsTest extends TestCase {
 	}
 
 	public function testTheClockOfTheRunsAgesNoTempFileAndAbandonsNoMakingWithoutATime(): void {
-		// period.clock at its consumers in the store (Behebung 5, B1): the
-		// age of a temp file (delete_path()) and of a making whose record
-		// never came (AB_MCP_Sync_Export::discard_stale()) by the one checked
-		// clock, AB_MCP_Sync_Run::now(). A clock not of its form ages
-		// nothing: both stay. Each wrong form, and the fixed ones.
+		// period.clock at its consumers in the store (Behebung 5, B1, and
+		// 5b): the age of a temp file (delete_path()), of a making whose
+		// record never came (AB_MCP_Sync_Export::discard_stale()) and of a
+		// group at a clean-up without a time given (cleanup(),
+		// backup_rows()), the time of a new group (open()) and of a mark that
+		// closes (close_mark_in()), each by the one checked clock,
+		// AB_MCP_Sync_Run::now(). A clock not of its form ages nothing, makes
+		// no group and closes a mark with 0 (never old). Each wrong form, and
+		// the fixed ones.
 		require_once AB_MCP_DIR . 'includes/sync/class-sync-export.php';
 		$now     = time();
 		$discard = new ReflectionMethod( \AB_MCP_Sync_Export::class, 'discard_stale' );
+		$close   = new ReflectionMethod( AB_MCP_Protected_Store::class, 'close_mark_in' );
 		$forms   = WrongForms::of( AB_MCP_Store_Inputs::TABLE['period.clock']['form'], $now );
 		$forms['fixed: 0']                         = 0;
 		$forms['fixed: its digits as text']        = (string) $now;
 		$forms['fixed: digits with a suffix (B2)'] = '1bad';
 		foreach ( $forms + array( 'valid' => $now ) as $what => $value ) {
 			$this->fresh();
-			// The making first: open() sweeps the store with time().
+			// The groups first: open() sweeps the store.
 			$gid = AB_MCP_Protected_Store::open( 'out', array( 'declared' => 100, 'label' => 'series:abc' ) );
 			self::assertIsString( $gid, $what );
+			$old = self::group( 'reports', 0 );
 			@mkdir( self::store() . '/tmp', 0700 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 			$temp = self::store() . '/tmp/.ab-tmp-alt';
 			file_put_contents( $temp, 'x' );
@@ -181,15 +187,29 @@ final class StoreInputsTest extends TestCase {
 			$entry = json_decode( (string) file_get_contents( $dir . '.json' ), true );
 			$entry['created'] = $now - 2 * \AB_MCP_Sync_Export::ABANDONED;
 			file_put_contents( $dir . '.json', (string) json_encode( $entry, AB_MCP_Store_Inputs::SIDECAR_FLAGS ) );
+			// A report a month old, and an open mark to close.
+			$side  = json_decode( (string) file_get_contents( $old['side'] ), true );
+			$side['created'] = $now - 30 * 86400;
+			file_put_contents( $old['side'], (string) json_encode( $side, AB_MCP_Store_Inputs::SIDECAR_FLAGS ) );
+			$mid  = str_repeat( 'c', 32 );
+			$mark = self::store() . '/marks/' . $mid;
+			@mkdir( self::store() . '/marks', 0700 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			mkdir( $mark, 0700 );
+			file_put_contents( $mark . '/mark.json', self::mark_text( $old, $mid ) );
 			\AB_MCP_Sync_Run::$clock = static fn() => $value;
 			try {
-				AB_MCP_Protected_Store::cleanup( $now );
+				AB_MCP_Protected_Store::cleanup();
 				$discard->invoke( null );
+				$made   = AB_MCP_Protected_Store::open( 'reports', array( 'label' => 'report' ) );
+				$rows   = AB_MCP_Sync_Schema::backup_rows();
+				$closed = $close->invoke( null, self::store(), $mid, json_decode( (string) file_get_contents( $mark . '/mark.json' ), true ) );
 			} finally {
 				\AB_MCP_Sync_Run::$clock = null;
 			}
-			$got = array( is_file( $temp ), is_dir( $dir ) );
-			self::assertSame( 'valid' === $what ? array( false, false ) : array( true, true ), $got, $what );
+			$after = json_decode( (string) file_get_contents( $mark . '/mark.json' ), true );
+			$got   = array( is_file( $temp ), is_dir( $dir ), is_dir( $old['dir'] ), is_wp_error( $made ) ? $made->get_error_code() : 'made', null === $rows, $closed, 'closed' === $after['state'] && 0 === $after['closed'] );
+			self::assertSame( 'valid' === $what ? array( false, false, false, 'made', false, true, false ) : array( true, true, true, 'ab_mcp_store_clock', true, true, true ), $got, (string) $what );
+			self::remove_tree( $mark );
 		}
 	}
 

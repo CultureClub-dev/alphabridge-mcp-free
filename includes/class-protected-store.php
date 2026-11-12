@@ -905,11 +905,20 @@ final class AB_MCP_Protected_Store {
 		if ( is_wp_error( $root ) ) {
 			return $root;
 		}
+		// The time of the group, later the age the retention reads
+		// (sidecar.time), and of the clean-up that comes with it: the one
+		// checked clock (Behebung 5b); where it gives no time, no group is
+		// made.
+		require_once __DIR__ . '/sync/class-sync-run.php';
+		$now = AB_MCP_Sync_Run::now();
+		if ( null === $now ) {
+			return self::clock_unknown();
+		}
 		$entry = array(
 			'format'   => self::FORMAT,
 			'gid'      => bin2hex( AB_MCP_Payload_File::random_bytes( 16 ) ),
 			'area'     => (string) $area,
-			'created'  => time(),
+			'created'  => $now,
 			'user_id'  => (int) get_current_user_id(),
 			// No run given: 0, a group without a run; a run given is taken
 			// as it is, and whole() below refuses one the table does not
@@ -927,8 +936,8 @@ final class AB_MCP_Protected_Store {
 		$id     = self::install_id();
 		$result = self::writing(
 			$root,
-			static function () use ( $root, $id, $entry ) {
-				self::sweep( $root, $id, time() );
+			static function () use ( $root, $id, $entry, $now ) {
+				self::sweep( $root, $id, $now );
 				if ( in_array( $entry['area'], self::PACKAGES, true ) ) {
 					// The packages counted only where both areas were read
 					// whole (Behebung 4: a sidecar that cannot be read was
@@ -1345,10 +1354,13 @@ final class AB_MCP_Protected_Store {
 	 *         (Behebung 3 of Z8b branch 3).
 	 */
 	public static function cleanup( $now = null ) {
-		// The time as given (a test) or now; one that is no whole number
-		// above 0 is unknown, and the clean-up removes no group by it
-		// (inputs(), Behebung 3).
-		$now = null === $now ? time() : $now;
+		// The time as given (a test) or the one checked clock (Behebung 5b);
+		// one that is no whole number above 0 is unknown, and the clean-up
+		// removes no group by it (inputs(), Behebung 3).
+		if ( null === $now ) {
+			require_once __DIR__ . '/sync/class-sync-run.php';
+			$now = AB_MCP_Sync_Run::now();
+		}
 		$id  = self::install_id( false );
 		$sum = array(
 			'removed' => 0,
@@ -2657,8 +2669,14 @@ final class AB_MCP_Protected_Store {
 		if ( 'closed' === $mark['state'] ) {
 			return true;
 		}
+		// The time it closed by the one checked clock (Behebung 5b), the
+		// age after which the clean-up removes the mark; where the clock
+		// gives no time, 0: the mark is closed and never old (sweep() takes
+		// only a time above 0), as keep_until 0 keeps a run's backups.
+		require_once __DIR__ . '/sync/class-sync-run.php';
+		$now            = AB_MCP_Sync_Run::now();
 		$mark['state']  = 'closed';
-		$mark['closed'] = time();
+		$mark['closed'] = null === $now ? 0 : $now;
 		$path           = $root . '/' . self::MARKS . '/' . $mid . '/' . self::MARK_FILE;
 		$text           = (string) json_encode( $mark, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
 		$written        = self::write_file( $root, $path, $text );
@@ -4141,6 +4159,15 @@ final class AB_MCP_Protected_Store {
 		}
 		fclose( $handle ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
 		return $raw;
+	}
+
+	/**
+	 * The refusal where the clock of the plugin gives no time.
+	 *
+	 * @return WP_Error
+	 */
+	private static function clock_unknown() {
+		return new WP_Error( 'ab_mcp_store_clock', __( 'The clock of the plugin gives no time (a whole number of seconds), so no group of the protected store was made. Try again; if it keeps failing, check the code that sets the clock of AB_MCP_Sync_Run.', 'alphabridge-mcp' ) );
 	}
 
 	/**

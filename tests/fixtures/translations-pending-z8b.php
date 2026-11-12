@@ -214,6 +214,8 @@ return array(
 	'The files the group holds in the protected store could not all be counted (its folder could not be listed, or the size of a file in it could not be read), so what it holds is not known and nothing was written. Ask the host to check the rights of the folder of the store, then try again.',
 	// includes/sync/class-sync-backup.php (Z8b branch 3, Behebung 4: a backup whose size is not known)
 	'The backup of this object cannot be written as JSON (a value in it is nested too deep or is no value JSON holds), so its size is not known and nothing is written for the object. Check the object in wp-admin; leave it out of the run if it keeps failing.',
+	// includes/class-protected-store.php (Z8b branch 3, Behebung 5b: the clock of the plugin gives no time for a new group)
+	'The clock of the plugin gives no time (a whole number of seconds), so no group of the protected store was made. Try again; if it keeps failing, check the code that sets the clock of AB_MCP_Sync_Run.',
 	// includes/sync/class-sync-run.php (Z8b branch 3, Behebung 4, B2/B3: a clock that gives no time)
 	'The clock of the takeover gives no time (a whole number of seconds), so nothing of the run was written. Try again; if it keeps failing, check the code that sets the clock of AB_MCP_Sync_Run.',
 );

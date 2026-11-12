@@ -453,7 +453,12 @@ final class AB_MCP_Sync_Schema {
 		if ( ! self::available() ) {
 			return null;
 		}
-		$now = AB_MCP_Store_Inputs::read( 'retention.now', null === $now ? time() : $now );
+		// The time as given or the one checked clock (Behebung 5b).
+		if ( null === $now ) {
+			require_once __DIR__ . '/class-sync-run.php';
+			$now = AB_MCP_Sync_Run::now();
+		}
+		$now = AB_MCP_Store_Inputs::read( 'retention.now', $now );
 		if ( null === $now ) {
 			return null;
 		}

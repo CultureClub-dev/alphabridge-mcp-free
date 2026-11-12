@@ -2204,12 +2204,17 @@ final class StoreRemoverTest extends TestCase {
 			try {
 				self::assertSame( 'ab_mcp_sync_run_clock', \AB_MCP_Sync_Run::set_budget( 14, array( 'bytes' => 1 ) )->get_error_code(), "$what: no budget written" );
 				self::assertSame( 'ab_mcp_sync_run_clock', \AB_MCP_Sync_Run::update_step( 14, 1, array( 'state' => 'done' ) )->get_error_code(), "$what: no step written" );
+				self::assertSame( 'ab_mcp_sync_run_clock', \AB_MCP_Sync_Run::append_steps( 14, array( array( 'op' => 'check' ) ) )->get_error_code(), "$what: no step added" );
 				self::assertTrue( \AB_MCP_Sync_Run::lock_fresh(), "$what: the lock counts as held" );
+				\AB_MCP_Sync_Run::touch( 14, true );
+				self::assertSame( array( 0, 0 ), array( \AB_MCP_Sync_Run::get( 14 )['heartbeat'], \AB_MCP_Sync_Run::get( 14 )['calls'] ), "$what: no sign of life written" );
 			} finally {
 				\AB_MCP_Sync_Run::$clock = null;
 			}
 		}
 		self::assertFalse( \AB_MCP_Sync_Run::lock_fresh(), 'With the time, a lock of long ago is stale.' );
+		\AB_MCP_Sync_Run::touch( 14, true );
+		self::assertGreaterThan( 0, \AB_MCP_Sync_Run::get( 14 )['heartbeat'], 'With the time, a sign of life is written.' );
 		delete_option( \AB_MCP_Change_Lock::OPTION );
 		// The qualification of a close (period.qualified, Behebung 5, B3):
 		// each wrong form stores no period and no qualified close.
