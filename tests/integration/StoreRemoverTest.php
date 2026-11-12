@@ -1382,7 +1382,22 @@ final class StoreRemoverTest extends TestCase {
 	private const MISSING = "\0missing";
 
 	/**
-	 * The values of a field of a type of AB_MCP_Protected_Store::SIDECAR a
+	 * The table of the sidecar as Behebung 2 describes it, written out here
+	 * and not read from the store, so the cases do not follow a change of
+	 * AB_MCP_Protected_Store::SIDECAR: every field open() writes, in every
+	 * area; run_id 0 or more in out, in and reports, 1 or more in backups
+	 * and stage.
+	 */
+	private const ROWS = array(
+		'out'     => array( 'format' => 'format', 'gid' => 'gid', 'area' => 'area', 'created' => 'time', 'user_id' => 'count', 'run_id' => 'count', 'declared' => 'count', 'used' => 'count', 'label' => 'label', 'closed' => 'bool', 'binding' => 'text' ),
+		'in'      => array( 'format' => 'format', 'gid' => 'gid', 'area' => 'area', 'created' => 'time', 'user_id' => 'count', 'run_id' => 'count', 'declared' => 'count', 'used' => 'count', 'label' => 'label', 'closed' => 'bool', 'binding' => 'text' ),
+		'reports' => array( 'format' => 'format', 'gid' => 'gid', 'area' => 'area', 'created' => 'time', 'user_id' => 'count', 'run_id' => 'count', 'declared' => 'count', 'used' => 'count', 'label' => 'label', 'closed' => 'bool', 'binding' => 'text' ),
+		'backups' => array( 'format' => 'format', 'gid' => 'gid', 'area' => 'area', 'created' => 'time', 'user_id' => 'count', 'run_id' => 'run', 'declared' => 'count', 'used' => 'count', 'label' => 'label', 'closed' => 'bool', 'binding' => 'text' ),
+		'stage'   => array( 'format' => 'format', 'gid' => 'gid', 'area' => 'area', 'created' => 'time', 'user_id' => 'count', 'run_id' => 'run', 'declared' => 'count', 'used' => 'count', 'label' => 'label', 'closed' => 'bool', 'binding' => 'text' ),
+	);
+
+	/**
+	 * The values of a field of a type of the table (ROWS) a
 	 * sidecar must not hold: missing, null, of another type, and outside its
 	 * range where the type has one.
 	 *
@@ -1443,7 +1458,7 @@ final class StoreRemoverTest extends TestCase {
 
 	/** Every field of the area's row there, of its type and in its range. */
 	private static function assert_row( array $entry, string $area, string $why ): void {
-		foreach ( AB_MCP_Protected_Store::SIDECAR[ $area ] as $field => $type ) {
+		foreach ( self::ROWS[ $area ] as $field => $type ) {
 			self::assertArrayHasKey( $field, $entry, "$why: $field is set." );
 			self::assertTrue( self::of_type( $entry[ $field ], $type, $area ), "$why: $field is $type." );
 		}
@@ -1500,7 +1515,7 @@ final class StoreRemoverTest extends TestCase {
 			$out[ $area ]     = $entry;
 			self::assertTrue( AB_MCP_Protected_Store::remove( $area, $gid ) );
 		}
-		self::assertSame( array_keys( AB_MCP_Protected_Store::SIDECAR ), array_keys( $out ), 'A template for every area of the table.' );
+		self::assertSame( array_keys( self::ROWS ), array_keys( $out ), 'A template for every area of the table.' );
 		return $out;
 	}
 
@@ -1512,7 +1527,7 @@ final class StoreRemoverTest extends TestCase {
 		$template = self::templates( $now );
 		$cases    = array();
 		$controls = array();
-		foreach ( AB_MCP_Protected_Store::SIDECAR as $area => $row ) {
+		foreach ( self::ROWS as $area => $row ) {
 			$controls[ $area ] = self::group_as( $area, $template[ $area ] );
 			foreach ( $row as $field => $type ) {
 				foreach ( self::bad_values( $type ) as $case => $value ) {
@@ -1538,6 +1553,7 @@ final class StoreRemoverTest extends TestCase {
 		self::assertGreaterThan( 200, count( $cases ) );
 		self::assertSame( count( $cases ), $done['unknown'], 'The clean-up names the groups it kept for their sidecar.' );
 		self::assertSame( count( $controls ), $done['removed'] );
+		self::assertSame( self::ROWS, AB_MCP_Protected_Store::SIDECAR, 'The table of the store is the one these cases check.' );
 	}
 
 	public function testABackupWhoseSidecarLacksItsRunStaysAlsoPastItsAge(): void {
@@ -1618,7 +1634,7 @@ final class StoreRemoverTest extends TestCase {
 
 		// A run the table does not hold is refused, never made 0; nothing is written.
 		$before = array();
-		foreach ( array_keys( AB_MCP_Protected_Store::SIDECAR ) as $area ) {
+		foreach ( array_keys( self::ROWS ) as $area ) {
 			$before[ $area ] = self::names( self::store() . '/' . $area );
 		}
 		foreach ( array(
@@ -1644,7 +1660,7 @@ final class StoreRemoverTest extends TestCase {
 			self::assertInstanceOf( \WP_Error::class, $res, "bind $what" );
 			self::assertSame( 'ab_mcp_store_run', $res->get_error_code(), "bind $what" );
 		}
-		foreach ( array_keys( AB_MCP_Protected_Store::SIDECAR ) as $area ) {
+		foreach ( array_keys( self::ROWS ) as $area ) {
 			self::assertSame( $before[ $area ], self::names( self::store() . '/' . $area ), "$area: nothing written for a run refused." );
 		}
 		self::assertSame( 8, self::sidecar_of( 'backups', $backup )['run_id'], 'The backup keeps its run.' );
