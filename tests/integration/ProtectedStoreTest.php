@@ -498,7 +498,7 @@ final class ProtectedStoreTest extends TestCase {
 
 		// Its clean-up and its uninstall see no folder of theirs: A's
 		// manifest is not B's.
-		self::assertSame( array( 'removed' => 0, 'kept' => 0 ), self::probe( 'b', array( 'action' => 'cleanup', 'now' => time() + 30 * DAY_IN_SECONDS ) )['ok'] );
+		self::assertSame( array( 'removed' => 0, 'kept' => 0, 'unknown' => 0 ), self::probe( 'b', array( 'action' => 'cleanup', 'now' => time() + 30 * DAY_IN_SECONDS ) )['ok'] );
 		self::assertSame( $tree, self::tree( self::outside( $id_a ) ) );
 
 		// Its first proof gives it an id and a folder of its own.
@@ -1245,7 +1245,7 @@ final class ProtectedStoreTest extends TestCase {
 		// reached goes, however young; the one of the run without a row stays.
 		$swept = AB_MCP_Protected_Store::cleanup( $now );
 		self::assertSame( array( $no_row ), $present() );
-		self::assertSame( array( 'removed' => 1, 'kept' => 0 ), $swept );
+		self::assertSame( array( 'removed' => 1, 'kept' => 0, 'unknown' => 0 ), $swept );
 
 		// Within the seven days of a close that does not qualify it stays,
 		// past them it goes; with the days of the filter (Pro: 30) it stays

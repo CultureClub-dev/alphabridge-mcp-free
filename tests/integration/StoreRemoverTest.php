@@ -1375,4 +1375,340 @@ final class StoreRemoverTest extends TestCase {
 		self::assertSame( $changed, self::snapshot( $m['tree'] ), 'It stays where it is.' );
 		self::assertSame( $m['kept']['marks'], self::snapshot( $m['marks'] ), 'With its mark.' );
 	}
+
+	/* -------------- Behebung 2: the table of the sidecar, no value made up */
+
+	/** A field taken out of a sidecar (bad_values()). */
+	private const MISSING = "\0missing";
+
+	/**
+	 * The values of a field of a type of AB_MCP_Protected_Store::SIDECAR a
+	 * sidecar must not hold: missing, null, of another type, and outside its
+	 * range where the type has one.
+	 *
+	 * @return array<string,mixed>
+	 */
+	private static function bad_values( string $type ): array {
+		$out = array(
+			'missing'      => self::MISSING,
+			'null'         => null,
+			'another type' => in_array( $type, array( 'time', 'count', 'run' ), true ) ? '5' : ( 'bool' === $type ? 1 : 7 ),
+		);
+		$range = array(
+			'format' => array( 'ab-mcp-store/9' ),
+			'gid'    => array( str_repeat( 'g', 32 ) ),
+			'area'   => array( 'elsewhere' ),
+			'time'   => array( 0, -5 ),
+			'count'  => array( -1 ),
+			'run'    => array( 0, -1 ),
+			'label'  => array( 'ein Etikett?' ),
+		);
+		foreach ( $range[ $type ] ?? array() as $n => $value ) {
+			$out[ 'outside its range ' . ( $n + 1 ) ] = $value;
+		}
+		return $out;
+	}
+
+	/** Whether a value is of a type of the table, by its description (independent of the store's own check). */
+	private static function of_type( $value, string $type, string $area ): bool {
+		switch ( $type ) {
+			case 'format':
+				return 'ab-mcp-store/1' === $value;
+			case 'gid':
+				return is_string( $value ) && 1 === preg_match( '/^[0-9a-f]{32}$/D', $value );
+			case 'area':
+				return $area === $value;
+			case 'time':
+				return is_int( $value ) && $value > 0;
+			case 'count':
+				return is_int( $value ) && $value >= 0;
+			case 'run':
+				return is_int( $value ) && $value >= 1;
+			case 'label':
+				return is_string( $value ) && 1 === preg_match( '/^[A-Za-z0-9._:-]{0,191}$/D', $value );
+			case 'text':
+				return is_string( $value );
+			case 'bool':
+				return is_bool( $value );
+		}
+		return false;
+	}
+
+	/** The sidecar of a group of this installation, as it lies on disk. */
+	private static function sidecar_of( string $area, string $gid ): array {
+		$side = self::store() . '/' . $area . '/' . AB_MCP_Payload_File::name( 'group|' . $area . '|' . $gid, AB_MCP_Protected_Store::install_id(), '' ) . '.json';
+		self::assertFileExists( $side );
+		return (array) json_decode( (string) file_get_contents( $side ), true );
+	}
+
+	/** Every field of the area's row there, of its type and in its range. */
+	private static function assert_row( array $entry, string $area, string $why ): void {
+		foreach ( AB_MCP_Protected_Store::SIDECAR[ $area ] as $field => $type ) {
+			self::assertArrayHasKey( $field, $entry, "$why: $field is set." );
+			self::assertTrue( self::of_type( $entry[ $field ], $type, $area ), "$why: $field is $type." );
+		}
+	}
+
+	/**
+	 * A group made by hand as open() makes it, with a file in it: a folder
+	 * of the name of a new gid and its sidecar, the entry as given.
+	 *
+	 * @return array{dir:string,side:string,bytes:string}
+	 */
+	private static function group_as( string $area, array $entry ): array {
+		$gid  = bin2hex( random_bytes( 16 ) );
+		$dir  = self::store() . '/' . $area . '/' . AB_MCP_Payload_File::name( 'group|' . $area . '|' . $gid, AB_MCP_Protected_Store::install_id(), '' );
+		$keep = array_key_exists( 'gid', $entry ) && is_string( $entry['gid'] ) && 1 === preg_match( '/^[0-9a-f]{32}$/D', $entry['gid'] );
+		if ( $keep ) {
+			$entry['gid'] = $gid;
+		}
+		mkdir( $dir, 0700 );
+		file_put_contents( $dir . '/post-1', 'eine Zeile' );
+		$bytes = (string) json_encode( $entry );
+		file_put_contents( $dir . '.json', $bytes );
+		touch( $dir . '.json', time() - 2 * 86400 );
+		return array(
+			'dir'   => $dir,
+			'side'  => $dir . '.json',
+			'bytes' => $bytes,
+		);
+	}
+
+	/**
+	 * For each area its sidecar as open() writes it, made 30 days ago: of
+	 * run 9, closed and past its retention (not kept by its run), where the
+	 * area knows groups of a run only; of no run elsewhere.
+	 *
+	 * @return array<string,array>
+	 */
+	private static function templates( int $now ): array {
+		self::run_row( 9, 'closed_done', $now - 10 );
+		$meta = array(
+			'out'     => array( 'declared' => 100, 'label' => 'series:abc' ),
+			'in'      => array( 'declared' => 100, 'label' => 'import:abc', 'binding' => 'print' ),
+			'reports' => array( 'label' => 'report' ),
+			'backups' => array( 'run_id' => 9, 'label' => 'backup:9' ),
+			'stage'   => array( 'run_id' => 9 ),
+		);
+		$out  = array();
+		foreach ( $meta as $area => $m ) {
+			$gid = AB_MCP_Protected_Store::open( $area, $m );
+			self::assertIsString( $gid, $area );
+			$entry = self::sidecar_of( $area, $gid );
+			self::assert_row( $entry, $area, "open() in $area" );
+			$entry['created'] = $now - 30 * 86400;
+			$out[ $area ]     = $entry;
+			self::assertTrue( AB_MCP_Protected_Store::remove( $area, $gid ) );
+		}
+		self::assertSame( array_keys( AB_MCP_Protected_Store::SIDECAR ), array_keys( $out ), 'A template for every area of the table.' );
+		return $out;
+	}
+
+	public function testASidecarThatLacksAFieldOfItsRowOrHoldsItNullOrOfAnotherTypeOrRangeKeepsItsGroup(): void {
+		// Behebung 2, A1: for every field of every area's row the cases
+		// missing, null, another type and outside its range; each group
+		// would go if its sidecar were whole (the control per area).
+		$now      = time();
+		$template = self::templates( $now );
+		$cases    = array();
+		$controls = array();
+		foreach ( AB_MCP_Protected_Store::SIDECAR as $area => $row ) {
+			$controls[ $area ] = self::group_as( $area, $template[ $area ] );
+			foreach ( $row as $field => $type ) {
+				foreach ( self::bad_values( $type ) as $case => $value ) {
+					$entry = $template[ $area ];
+					if ( self::MISSING === $value ) {
+						unset( $entry[ $field ] );
+					} else {
+						$entry[ $field ] = $value;
+					}
+					$cases[ "$area: $field $case" ] = self::group_as( $area, $entry );
+				}
+			}
+		}
+		$done = AB_MCP_Protected_Store::cleanup( $now );
+		foreach ( $controls as $area => $group ) {
+			self::assertFileDoesNotExist( $group['dir'], "$area: whole and past its time, the control goes." );
+			self::assertFileDoesNotExist( $group['side'], "$area: with its sidecar." );
+		}
+		foreach ( $cases as $label => $group ) {
+			self::assertSame( array( 'post-1' ), self::names( $group['dir'] ), "$label: the group stays." );
+			self::assertSame( $group['bytes'], (string) file_get_contents( $group['side'] ), "$label: its sidecar as it was." );
+		}
+		self::assertGreaterThan( 200, count( $cases ) );
+		self::assertSame( count( $cases ), $done['unknown'], 'The clean-up names the groups it kept for their sidecar.' );
+		self::assertSame( count( $controls ), $done['removed'] );
+	}
+
+	public function testABackupWhoseSidecarLacksItsRunStaysAlsoPastItsAge(): void {
+		// The case of the confirmation of Behebung 1: a closed mark, a backup
+		// of one of the last three qualified closes, its sidecar without
+		// run_id, made 30 days ago.
+		$now = time();
+		self::run_row( 4, 'closed_done', $now - 10 * 86400, $now - 10 * 86400 );
+		$m = $this->marked( 4, 'closed' );
+		self::sidecar_as(
+			$m['side'],
+			array(
+				'run_id'  => null,
+				'created' => $now - 30 * 86400,
+			)
+		);
+		$bytes = (string) file_get_contents( $m['side'] );
+		$done  = AB_MCP_Protected_Store::cleanup( $now );
+		self::assertSame( $m['kept']['tree'], self::snapshot( $m['tree'] ), 'The backup stays byte for byte.' );
+		self::assertSame( $bytes, (string) file_get_contents( $m['side'] ) );
+		self::assertSame( 1, $done['unknown'] ?? null );
+	}
+
+	public function testARunOfMinusOneOrAsAStringKeepsTheGroup(): void {
+		// Behebung 2, point 3: a run outside its range is unknown, never 0.
+		$now = time();
+		self::run_row( 4, 'closed_done', $now - 10 * 86400, $now - 10 * 86400 );
+		$groups = array();
+		foreach ( array( 'minus one' => -1, 'a string' => '4' ) as $what => $run ) {
+			$m = $this->marked( 4, 'closed' );
+			self::sidecar_as(
+				$m['side'],
+				array(
+					'run_id'  => $run,
+					'created' => $now - 30 * 86400,
+				)
+			);
+			$groups[ "backups, $what" ] = array( $m['group'], $m['side'] );
+			$in = AB_MCP_Protected_Store::open( 'in', array( 'declared' => 10 ) );
+			self::assertIsString( $in );
+			$dir = $m['root'] . '/in/' . AB_MCP_Payload_File::name( 'group|in|' . $in, $m['id'], '' );
+			self::sidecar_as(
+				$dir . '.json',
+				array(
+					'run_id'  => $run,
+					'created' => $now - 30 * 86400,
+				)
+			);
+			$groups[ "in, $what" ] = array( $dir, $dir . '.json' );
+		}
+		AB_MCP_Protected_Store::cleanup( $now );
+		foreach ( $groups as $label => $paths ) {
+			self::assertDirectoryExists( $paths[0], "$label: the group stays." );
+			self::assertFileExists( $paths[1], $label );
+		}
+	}
+
+	public function testEveryWriterOfASidecarSetsItsRowAndARunOnlyWhereTheTableHoldsIt(): void {
+		// The writers of sidecars: open() as the shipped callers call it in
+		// each area, put(), bind() and close() (they write the entry they
+		// read with one field changed), and AB_MCP_Sync_Backup::group().
+		$gids = self::templates_kept();
+		self::assertIsArray( AB_MCP_Protected_Store::put( 'out', $gids['out'], 'chunk-1', 'x' ) );
+		self::assert_row( self::sidecar_of( 'out', $gids['out'] ), 'out', 'put()' );
+		self::assertTrue( AB_MCP_Protected_Store::bind( 'in', $gids['in'], 7 ) );
+		$bound = self::sidecar_of( 'in', $gids['in'] );
+		self::assert_row( $bound, 'in', 'bind()' );
+		self::assertSame( 7, $bound['run_id'], 'bound later' );
+		self::assertTrue( AB_MCP_Protected_Store::bind( 'in', $gids['in'], 0 ), 'Unbound again: in knows groups of no run.' );
+		self::assertSame( 0, self::sidecar_of( 'in', $gids['in'] )['run_id'] );
+		self::assertTrue( AB_MCP_Protected_Store::close( 'in', $gids['in'] ) );
+		self::assert_row( self::sidecar_of( 'in', $gids['in'] ), 'in', 'close()' );
+		$backup = \AB_MCP_Sync_Backup::group( 8 );
+		self::assertIsString( $backup );
+		$entry = self::sidecar_of( 'backups', $backup );
+		self::assert_row( $entry, 'backups', 'AB_MCP_Sync_Backup::group()' );
+		self::assertSame( 8, $entry['run_id'] );
+
+		// A run the table does not hold is refused, never made 0; nothing is written.
+		$before = array();
+		foreach ( array_keys( AB_MCP_Protected_Store::SIDECAR ) as $area ) {
+			$before[ $area ] = self::names( self::store() . '/' . $area );
+		}
+		foreach ( array(
+			'backups without a run' => array( 'backups', array() ),
+			'backups of run 0'      => array( 'backups', array( 'run_id' => 0 ) ),
+			'stage without a run'   => array( 'stage', array() ),
+			'out of run -1'         => array( 'out', array( 'run_id' => -1, 'declared' => 10 ) ),
+			'in of run "7"'         => array( 'in', array( 'run_id' => '7', 'declared' => 10 ) ),
+			'in of run null'        => array( 'in', array( 'run_id' => null, 'declared' => 10 ) ),
+			'reports of run 1.5'    => array( 'reports', array( 'run_id' => 1.5 ) ),
+		) as $what => $call ) {
+			$res = AB_MCP_Protected_Store::open( $call[0], $call[1] );
+			self::assertInstanceOf( \WP_Error::class, $res, $what );
+			self::assertSame( 'ab_mcp_store_run', $res->get_error_code(), $what );
+		}
+		foreach ( array(
+			'in, -1'      => array( 'in', $gids['in'], -1 ),
+			'in, "7"'     => array( 'in', $gids['in'], '7' ),
+			'backups, 0'  => array( 'backups', $backup, 0 ),
+			'backups, -3' => array( 'backups', $backup, -3 ),
+		) as $what => $call ) {
+			$res = AB_MCP_Protected_Store::bind( $call[0], $call[1], $call[2] );
+			self::assertInstanceOf( \WP_Error::class, $res, "bind $what" );
+			self::assertSame( 'ab_mcp_store_run', $res->get_error_code(), "bind $what" );
+		}
+		foreach ( array_keys( AB_MCP_Protected_Store::SIDECAR ) as $area ) {
+			self::assertSame( $before[ $area ], self::names( self::store() . '/' . $area ), "$area: nothing written for a run refused." );
+		}
+		self::assertSame( 8, self::sidecar_of( 'backups', $backup )['run_id'], 'The backup keeps its run.' );
+		self::assertSame( 0, self::sidecar_of( 'in', $gids['in'] )['run_id'] );
+	}
+
+	/** The groups of the writers, as the shipped callers open them, kept by their age. */
+	private static function templates_kept(): array {
+		$out = array();
+		foreach ( array(
+			'out'     => array( 'declared' => 100, 'label' => 'series:abc' ),
+			'in'      => array( 'declared' => 100, 'label' => 'import:abc', 'binding' => 'print' ),
+			'reports' => array( 'label' => 'report' ),
+			'backups' => array( 'run_id' => 7, 'label' => 'backup:7' ),
+			'stage'   => array( 'run_id' => 7 ),
+		) as $area => $meta ) {
+			$gid = AB_MCP_Protected_Store::open( $area, $meta );
+			self::assertIsString( $gid, $area );
+			$entry = self::sidecar_of( $area, $gid );
+			self::assert_row( $entry, $area, "open() in $area" );
+			self::assertSame( $meta['run_id'] ?? 0, $entry['run_id'], "$area: the run as given, 0 where none." );
+			$out[ $area ] = $gid;
+		}
+		return $out;
+	}
+
+	public function testGroupsOfNoRunGoByTheirTimeAndAPackageBoundLaterStaysWhileItsRunIsOpen(): void {
+		// Behebung 2, point 4: run_id 0 is valid where the table knows groups
+		// of no run; no group of them is held by the table.
+		$now = time();
+		self::run_row( 7, 'open' );
+		$gids = self::templates_kept();
+		$bound = AB_MCP_Protected_Store::open( 'in', array( 'declared' => 10 ) );
+		self::assertIsString( $bound );
+		self::assertTrue( AB_MCP_Protected_Store::bind( 'in', $bound, 7 ) );
+		$done = AB_MCP_Protected_Store::cleanup( $now + 2 * 86400 );
+		self::assertSame( 0, $done['unknown'], 'No sidecar the writers wrote is unknown.' );
+		foreach ( array( 'out', 'in', 'reports' ) as $area ) {
+			self::assertFalse( self::group_there( $area, $gids[ $area ] ), "$area of no run: gone after a day." );
+		}
+		self::assertTrue( self::group_there( 'in', $bound ), 'The package bound later stays while its run is open.' );
+		self::assertTrue( self::group_there( 'backups', $gids['backups'] ), 'A backup of the open run stays.' );
+		self::assertTrue( self::group_there( 'stage', $gids['stage'] ), 'The stage of the open run stays.' );
+	}
+
+	/** Whether the folder of a group of this installation is there. */
+	private static function group_there( string $area, string $gid ): bool {
+		return is_dir( self::store() . '/' . $area . '/' . AB_MCP_Payload_File::name( 'group|' . $area . '|' . $gid, AB_MCP_Protected_Store::install_id(), '' ) );
+	}
+
+	public function testAClosedMarkWhoseTimeOfClosingIsNoNumberStays(): void {
+		// Behebung 2, the enumeration of sweep(): the age of a closed mark
+		// only from a time it holds as a whole number above 0.
+		$m    = $this->marked( 3, 'closed' );
+		$mark = json_decode( (string) file_get_contents( $m['marks'] . '/mark.json' ), true );
+		foreach ( array( 'gestern', null, 0 ) as $closed ) {
+			$mark['closed'] = $closed;
+			file_put_contents( $m['marks'] . '/mark.json', json_encode( $mark, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) );
+			AB_MCP_Protected_Store::cleanup( time() );
+			self::assertDirectoryExists( $m['marks'], 'closed ' . json_encode( $closed ) . ': the mark stays.' );
+		}
+		$mark['closed'] = time() - 2 * 86400;
+		file_put_contents( $m['marks'] . '/mark.json', json_encode( $mark, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) );
+		AB_MCP_Protected_Store::cleanup( time() );
+		self::assertFileDoesNotExist( $m['marks'], 'Closed two days ago: it goes.' );
+	}
 }

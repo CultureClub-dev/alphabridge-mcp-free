@@ -36,6 +36,7 @@ declare( strict_types = 1 );
 
 namespace AlphaBridge\Tests;
 
+use AB_MCP_Protected_Store;
 use PHPUnit\Framework\TestCase;
 
 final class StoreRemoverGuardTest extends TestCase {
@@ -286,5 +287,83 @@ final class StoreRemoverGuardTest extends TestCase {
 		self::assertSame( array(), $others, 'And nothing else of the store.' );
 		self::assertSame( array( 'uninstall.php' ), self::holding( 'AB_MCP_Protected_Store::uninstall(' ), 'No shipped code but uninstall.php calls it (Pro calls it from its own uninstall).' );
 		self::assertNotContains( 'uninstall.php', self::holding( 'ab-mcp-store' ), 'uninstall.php names no folder of the store.' );
+	}
+
+	/**
+	 * Every call of AB_MCP_Protected_Store::open() in shipped code, comments
+	 * left out (and the calls of the proposal through its seam, ->open()):
+	 * file, area and the meta as written.
+	 *
+	 * @return array<int,array{file:string,area:string,meta:string}>
+	 */
+	private static function opens(): array {
+		$out = array();
+		foreach ( self::shipped() as $file ) {
+			$code = '';
+			foreach ( token_get_all( (string) file_get_contents( dirname( __DIR__ ) . '/' . $file ) ) as $t ) {
+				if ( ! ( is_array( $t ) && in_array( $t[0], array( T_COMMENT, T_DOC_COMMENT ), true ) ) ) {
+					$code .= is_array( $t ) ? $t[1] : $t;
+				}
+			}
+			if ( ! preg_match_all( '/(?:AB_MCP_Protected_Store::|calls\(\)->)open\(/', $code, $m, PREG_OFFSET_CAPTURE ) ) {
+				continue;
+			}
+			foreach ( $m[0] as $hit ) {
+				$at    = $hit[1] + strlen( $hit[0] );
+				$depth = 1;
+				$args  = '';
+				for ( $i = $at; $i < strlen( $code ) && $depth > 0; $i++ ) {
+					$c = $code[ $i ];
+					$depth += '(' === $c ? 1 : ( ')' === $c ? -1 : 0 );
+					if ( $depth > 0 ) {
+						$args .= $c;
+					}
+				}
+				$first = trim( (string) strtok( $args, ',' ) );
+				$out[] = array(
+					'file' => $file,
+					'area' => $first,
+					'meta' => trim( substr( $args, strlen( (string) strtok( $args, ',' ) ) + 1 ) ),
+				);
+			}
+		}
+		return $out;
+	}
+
+	public function testTheShippedWritersOfAnAreaOfRunsOnlyGiveTheirRun(): void {
+		// Behebung 2 of Z8b branch 3, A1: the table SIDECAR says per area
+		// whether it knows groups of no run (run_id 'count') or of a run only
+		// ('run'); open() refuses a group the table does not hold, and every
+		// shipped writer of an area of runs only gives the run.
+		$runs_only = array_keys( array_filter( AB_MCP_Protected_Store::SIDECAR, static fn( array $row ): bool => 'run' === $row['run_id'] ) );
+		self::assertSame( array( 'backups', 'stage' ), $runs_only );
+		self::assertSame( array( 'out', 'in', 'reports' ), array_keys( array_filter( AB_MCP_Protected_Store::SIDECAR, static fn( array $row ): bool => 'count' === $row['run_id'] ) ) );
+		foreach ( AB_MCP_Protected_Store::SIDECAR as $area => $row ) {
+			self::assertSame( array( 'format', 'gid', 'area', 'created', 'user_id', 'run_id', 'declared', 'used', 'label', 'closed', 'binding' ), array_keys( $row ), "$area: every field open() writes is a field of its row." );
+		}
+		$seen = array();
+		foreach ( self::opens() as $call ) {
+			if ( 'includes/class-protected-store.php' === $call['file'] ) {
+				continue;
+			}
+			$area = trim( $call['area'], "'" );
+			$seen[ $call['file'] . ' ' . $call['area'] ] = true;
+			if ( in_array( $area, $runs_only, true ) ) {
+				self::assertStringContainsString( "'run_id'", $call['meta'], $call['file'] . ': a writer of ' . $area . ' gives the run.' );
+			}
+		}
+		ksort( $seen );
+		self::assertSame(
+			array(
+				"includes/sync/class-sync-backup.php 'backups'",
+				"includes/sync/class-sync-export.php 'out'",
+				"includes/sync/class-sync-import.php 'in'",
+				'includes/sync/class-sync-proposal.php $area',
+				"includes/sync/class-sync-proposal.php 'reports'",
+				"includes/sync/class-sync-report.php 'reports'",
+			),
+			array_keys( $seen ),
+			'The writers of sidecars: one area each, the proposal through its seam (reports); stage has no shipped writer yet (branch 5 adds one, with its run).'
+		);
 	}
 }
