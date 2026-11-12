@@ -532,8 +532,11 @@ final class SyncFileManifestTest extends TestCase {
 		};
 		// Before the entry and before the file the clock says 101 and 102;
 		// after the first part 103, after the second 104.
+		$seam = $this->seam( array() );
 		$read = $this->read( 'big', 'live', 103.5, true );
+		AB_MCP_Test_Seam::restore_all();
 		self::assertSame( array( false, 'too_large' ), array( $read['complete'], $read['cause'] ), 'Within the file, not only after it.' );
+		self::assertCount( 2, array_filter( $seam->calls, static fn( $c ) => 'read' === $c['method'] ), 'Two parts read, then the time: not the third.' );
 	}
 
 	public function testMoreFilesThanAManifestHoldsGiveNoHash(): void {
@@ -566,8 +569,11 @@ final class SyncFileManifestTest extends TestCase {
 			++$asked;
 			return 200.0;
 		};
+		$seam = $this->seam( array() );
 		$read = $this->read( 'leicht', 'live', 100.0, true );
+		AB_MCP_Test_Seam::restore_all();
 		self::assertSame( array( false, 'too_large', null ), array( $read['complete'], $read['cause'], $read['hash'] ), 'Over before it was read: too large where it had a whole call.' );
+		self::assertSame( array( 'lstat', 'names' ), array_column( $seam->calls, 'method' ), 'Stopped before the first entry of the folder: none of them asked.' );
 		self::assertGreaterThan( 0, $asked, 'The clock was asked.' );
 		$read = $this->read( 'leicht', 'live', 100.0, false );
 		self::assertSame( array( true, null ), array( $read['stopped'], $read['hash'] ), 'Begun late in a call: stopped.' );
@@ -578,7 +584,10 @@ final class SyncFileManifestTest extends TestCase {
 		self::assertSame( 'too_large', $this->read( 'nur-ordner', 'live', 100.0, true )['cause'], 'No file, only folders: the clock is asked all the same.' );
 		// A unit of one file of 0 bytes.
 		$this->file( 'plugins/null.php', '' );
+		$seam = $this->seam( array() );
 		self::assertSame( 'too_large', $this->read( 'null.php', 'live', 100.0, true )['cause'] );
+		AB_MCP_Test_Seam::restore_all();
+		self::assertSame( array( 'lstat' ), array_column( $seam->calls, 'method' ), 'Stopped before the file is opened.' );
 		// In time: whole.
 		AB_MCP_Sync_Env::$clock = static fn() => 50.0;
 		self::assertTrue( $this->read( 'leicht', 'live', 100.0, true )['complete'] );
@@ -602,10 +611,11 @@ final class SyncFileManifestTest extends TestCase {
 		);
 		foreach ( $moments as $moment => $fault ) {
 			foreach ( array( true, false ) as $first ) {
-				$t = 50.0;
-				$this->seam( array( $fault + array( 'kind' => 'before', 'before' => $late ) ) );
+				$t    = 50.0;
+				$seam = $this->seam( array( $fault + array( 'kind' => 'before', 'before' => $late ) ) );
 				$read = $this->read( 'shop', 'live', 100.0, $first );
 				AB_MCP_Test_Seam::restore_all();
+				self::assertCount( $fault['nth'], array_filter( $seam->calls, static fn( $c ) => $fault['method'] === $c['method'] ), "Stopped at the next folder or path $moment: no {$fault['method']}() after the time." );
 				$want = $first ? array( false, 'too_large', false, null, array() ) : array( false, null, true, null, array() );
 				self::assertSame( $want, array( $read['complete'], $read['cause'], $read['stopped'], $read['hash'], $read['entries'] ), "Past its time $moment (" . ( $first ? 'a whole call: too large' : 'begun late: stopped' ) . ').' );
 			}
