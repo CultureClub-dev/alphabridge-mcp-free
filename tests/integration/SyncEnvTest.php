@@ -928,10 +928,18 @@ final class SyncEnvTest extends TestCase {
 	public function testTheEnvironmentOfThisSiteIsReadInPartsWithTheSameEntries(): void {
 		self::pair();
 		self::differ();
+		// More tables here than one part of six lines holds: the tables go on
+		// over parts.
+		for ( $i = 0; $i < 12; $i++ ) {
+			self::sql( 'a', sprintf( 'CREATE TABLE `{p}abenv_t%02d` ( id INT )', $i ) );
+		}
 		$args  = array(
 			'packages'    => self::staged( 'inventory' ),
 			'environment' => self::staged( 'env' ),
 		);
+		$first = AB_MCP_Sync_Env::read( null, 60, 6 );
+		self::assertIsArray( $first );
+		self::assertSame( array(), array_values( array_diff( array_unique( array_column( $first['lines'], 'env' ) ), array( 'page', 'core', 'theme_choice', 'dropin', 'host' ) ) ), 'A part ends at its lines: the lines of the site fill the first part, nothing after them.' );
 		$calls = 0;
 		$whole = self::report( $args, $calls );
 		self::assertSame( 1, $calls, 'A small site in one call.' );

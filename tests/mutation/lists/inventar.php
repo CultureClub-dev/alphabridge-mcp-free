@@ -1664,8 +1664,8 @@ return array(
 		'file'    => $en,
 		'search'  => "\t\t\tif ( null !== \$after && strcmp( \$short, \$after ) <= 0 ) {",
 		'replace' => "\t\t\tif ( null !== \$after && strcmp( \$short, \$after ) < 0 ) {",
-		'run'     => $it( 'SyncEnvTest', 'testTheEnvironmentOfThisSiteIsReadInPartsWithTheSameEntries' ),
-		'expect'  => '/testTheEnvironmentOfThisSiteIsReadInPartsWithTheSameEntries/',
+		'run'     => $it( 'SyncEnvTest', 'testTheDropInsAndTheTablesAreThoseOfWordPress' ),
+		'expect'  => '/testTheDropInsAndTheTablesAreThoseOfWordPress/',
 	),
 	array(
 		'id'      => 'inventar/tables-one',

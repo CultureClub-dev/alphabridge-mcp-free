@@ -406,7 +406,7 @@ e('read-lines', 'read(): a part ends at its lines', EN,
 e('read-tables-on', 'read(): the tables go on where the part before ended', EN,
   "\t\t\t\t$read  = self::table_lines( $state['after'], $deadline, $max - 1 - count( $lines ) );\n\t\t\t\t$lines = array_merge( $lines, $read['lines'] );\n\t\t\t\tif ( ! $read['done'] ) {\n\t\t\t\t\t$state['after'] = $read['after'];", "\t\t\t\t$read  = self::table_lines( $state['after'], $deadline, $max - 1 - count( $lines ) );\n\t\t\t\t$lines = array_merge( $lines, $read['lines'] );\n\t\t\t\tif ( ! $read['done'] ) {\n\t\t\t\t\t$state['after'] = null;", 'it', 'testTheEnvironmentOfThisSiteIsReadInPartsWithTheSameEntries')
 e('tables-after', 'table_lines(): after the table the part before ended with', EN,
-  "\t\t\tif ( null !== $after && strcmp( $short, $after ) <= 0 ) {", "\t\t\tif ( null !== $after && strcmp( $short, $after ) < 0 ) {", 'it', 'testTheEnvironmentOfThisSiteIsReadInPartsWithTheSameEntries')
+  "\t\t\tif ( null !== $after && strcmp( $short, $after ) <= 0 ) {", "\t\t\tif ( null !== $after && strcmp( $short, $after ) < 0 ) {", 'it', 'testTheDropInsAndTheTablesAreThoseOfWordPress')
 e('tables-one', 'table_lines(): one table a part at least', EN,
   "\t\t\tif ( array() !== $lines && ( count( $lines ) >= (int) $room - 1 || self::now() >= $deadline ) ) {", "\t\t\tif ( count( $lines ) >= (int) $room - 1 || self::now() >= $deadline ) {", 'it', 'testTheEnvironmentOfThisSiteIsReadInPartsWithTheSameEntries')
 e('tables-room', 'table_lines(): a part ends at its room', EN,
