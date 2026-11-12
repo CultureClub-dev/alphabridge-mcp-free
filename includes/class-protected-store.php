@@ -1600,12 +1600,9 @@ final class AB_MCP_Protected_Store {
 	 * @return array{path:string,hash:string,form:string,files:int,bytes:int,where:string,copied:bool}|WP_Error
 	 */
 	public static function put_tree( $area, $gid, $name, $target, $source = null ) {
-		$bad = self::bad_ref( $area, $gid, $name );
+		$bad = self::bad_tree_ref( $area, $gid, $name );
 		if ( null !== $bad ) {
 			return $bad;
-		}
-		if ( ! in_array( $area, self::TREE_AREAS, true ) ) {
-			return new WP_Error( 'ab_mcp_store_area', __( 'A tree lies in the area stage or backups of the protected store. Use one of them.', 'alphabridge-mcp' ) );
 		}
 		$target = (string) $target;
 		$source = null === $source ? null : (string) $source;
@@ -1744,12 +1741,9 @@ final class AB_MCP_Protected_Store {
 	 * @return array{path:string,hash:string,form:string,files:int,bytes:int}|WP_Error
 	 */
 	public static function tree( $area, $gid, $name, $hash ) {
-		$bad = self::bad_ref( $area, $gid, $name );
+		$bad = self::bad_tree_ref( $area, $gid, $name );
 		if ( null !== $bad ) {
 			return $bad;
-		}
-		if ( ! in_array( $area, self::TREE_AREAS, true ) ) {
-			return new WP_Error( 'ab_mcp_store_area', __( 'A tree lies in the area stage or backups of the protected store. Use one of them.', 'alphabridge-mcp' ) );
 		}
 		$root = self::root();
 		if ( is_wp_error( $root ) ) {
@@ -1782,6 +1776,50 @@ final class AB_MCP_Protected_Store {
 			'files' => (int) $read['files'],
 			'bytes' => (int) $read['bytes'],
 		);
+	}
+
+	/**
+	 * Whether a name may name a tree in its group, the folder or file of a
+	 * unit, under its own name (Behebung 1, B1): what WordPress itself takes
+	 * as the name of a file (validate_file()), with only the dangerous left
+	 * out: an empty name, a part of a path ("." and ".."), a slash or
+	 * backslash, a control character or NUL, and more than the 255 bytes a
+	 * file system gives a name. A unit keeps its name as the site has it
+	 * (upper case, dots, "_", "-", blanks, umlauts in UTF-8; a language file,
+	 * a plugin of one file); server_config() is a rule of its own. The names
+	 * of the store's own files keep valid_name().
+	 *
+	 * @param mixed $name Name.
+	 * @return bool
+	 */
+	private static function is_tree_name( $name ) {
+		if ( ! is_string( $name ) || '' === $name || '.' === $name || '..' === $name || strlen( $name ) > 255 || preg_match( '#[/\\\\\x00-\x1F\x7F]#', $name ) ) {
+			return false;
+		}
+		return function_exists( 'validate_file' ) && 0 === validate_file( $name );
+	}
+
+	/**
+	 * The references of a tree, checked before anything: its area (stage or
+	 * backups), its group and its name (is_tree_name()).
+	 *
+	 * @param mixed $area Area.
+	 * @param mixed $gid  Group.
+	 * @param mixed $name Name of the tree.
+	 * @return WP_Error|null
+	 */
+	private static function bad_tree_ref( $area, $gid, $name ) {
+		$bad = self::bad_ref( $area, $gid, 'x' );
+		if ( null !== $bad ) {
+			return $bad;
+		}
+		if ( ! in_array( $area, self::TREE_AREAS, true ) ) {
+			return new WP_Error( 'ab_mcp_store_area', __( 'A tree lies in the area stage or backups of the protected store. Use one of them.', 'alphabridge-mcp' ) );
+		}
+		if ( ! self::is_tree_name( $name ) ) {
+			return new WP_Error( 'ab_mcp_store_tree_bad_name', __( 'A tree is named as the folder or file of its unit in the site: not empty, not "." or "..", of 255 bytes at most, without a slash, a backslash or a control character. Pass the name the unit has in the site.', 'alphabridge-mcp' ) );
+		}
+		return null;
 	}
 
 	/**
@@ -2280,7 +2318,7 @@ final class AB_MCP_Protected_Store {
 	 */
 	private static function tree_rel( $rel ) {
 		$parts = explode( '/', (string) $rel );
-		if ( 3 !== count( $parts ) || ! in_array( $parts[0], self::TREE_AREAS, true ) || ! preg_match( '/^[0-9a-f]{40}\z/', $parts[1] ) || ! self::valid_name( $parts[2] ) ) {
+		if ( 3 !== count( $parts ) || ! in_array( $parts[0], self::TREE_AREAS, true ) || ! preg_match( '/^[0-9a-f]{40}\z/', $parts[1] ) || ! self::is_tree_name( $parts[2] ) ) {
 			return null;
 		}
 		return (string) $rel;
