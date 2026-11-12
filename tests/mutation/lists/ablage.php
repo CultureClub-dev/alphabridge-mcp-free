@@ -58,7 +58,9 @@
  * $in['keep'] in kept() (a missing key reads as null, which is unknown);
  * ! is_string( $raw ) of the plan of a way back (AB_MCP_Sync_Canon::decode()
  * reads a value that is no string as its string, and NULL as '', no JSON,
- * so the plan is null and the answer unknown all the same).
+ * so the plan is null and the answer unknown all the same); the listing of
+ * marks/ in sweep() (a listing that fails there fails in guard() too, which
+ * then keeps marks/ whole; the case holds the outcome).
  *
  * @package AlphaBridge_MCP
  */
@@ -2088,6 +2090,51 @@ return array_merge(
 			'replace' => "''",
 			'run'     => $unit( 'ProtectedStoreTest', 'testAFolderIsOursOnlyWithOurManifestInEveryField' ),
 			'expect'  => '/testAFolderIsOursOnlyWithOurManifestInEveryField/',
+		),
+		array(
+			'id'      => 'ablage/input-owner-id',
+			'clause'  => 'identity(): the id of the installation belongs to the manifest; a substitute in its place (none) would make the folder of another id ours',
+			'file'    => $ps,
+			'search'  => "'install_id' => (string) \$id,",
+			'replace' => "'install_id' => '',",
+			'run'     => $unit( 'ProtectedStoreTest', 'testAFolderIsOursOnlyWithOurManifestInEveryField' ),
+			'expect'  => '/testAFolderIsOursOnlyWithOurManifestInEveryField/',
+		),
+		array(
+			'id'      => 'ablage/input-engine-run',
+			'clause'  => 'boundary(): the run of a step as its row holds it is the run of its backup group; a substitute 0 is refused (no group of no run)',
+			'file'    => 'includes/sync/class-sync-engine.php',
+			'search'  => "\tprivate static function boundary( array \$run, array \$step, array \$item, array \$ctx ) {\n\t\t\$run_id  = (int) \$run['run_id'];",
+			'replace' => "\tprivate static function boundary( array \$run, array \$step, array \$item, array \$ctx ) {\n\t\t\$run_id  = 0;",
+			'run'     => $it( 'SyncRunTest', 'testTheReservationCountsTheBackupsOfTheObjectsOfThisSiteAndTheWriterHoldsTheRunToIt' ),
+			'expect'  => '/testTheReservationCountsTheBackupsOfTheObjectsOfThisSiteAndTheWriterHoldsTheRunToIt/',
+		),
+		array(
+			'id'      => 'ablage/input-sweep-link-count',
+			'clause'  => 'sweep(): the name of a sidecar on what is no plain file counts unknown',
+			'file'    => $ps,
+			'search'  => "\t\t\t\t\t// (Behebung 3).\n\t\t\t\t\t++\$unknown;\n\t\t\t\t} elseif ( preg_match( '/^[0-9a-f]{40}\\z/', \$file )",
+			'replace' => "\t\t\t\t\t// (Behebung 3).\n\t\t\t\t} elseif ( preg_match( '/^[0-9a-f]{40}\\z/', \$file )",
+			'run'     => $it( 'StoreRemoverTest', 'testASidecarOrAnAreaThatIsNoPlainFileOrFolderIsNotReadAndCountsUnknown' ),
+			'expect'  => '/testASidecarOrAnAreaThatIsNoPlainFileOrFolderIsNotReadAndCountsUnknown/',
+		),
+		array(
+			'id'      => 'ablage/input-sweep-area-link-count',
+			'clause'  => 'sweep(): an area that is no plain folder but something in its place counts unknown',
+			'file'    => $ps,
+			'search'  => "\t\t\t\tif ( false !== \$calls->lstat( \$root . '/' . \$area ) ) {\n\t\t\t\t\t++\$unknown;",
+			'replace' => "\t\t\t\tif ( false !== \$calls->lstat( \$root . '/' . \$area ) ) {\n\t\t\t\t\t\$unknown += 0;",
+			'run'     => $it( 'StoreRemoverTest', 'testASidecarOrAnAreaThatIsNoPlainFileOrFolderIsNotReadAndCountsUnknown' ),
+			'expect'  => '/testASidecarOrAnAreaThatIsNoPlainFileOrFolderIsNotReadAndCountsUnknown/',
+		),
+		array(
+			'id'      => 'ablage/input-tmp-listed',
+			'clause'  => 'sweep(): temp files only from a listing of tmp/ that succeeded',
+			'file'    => $ps,
+			'search'  => "\t\tforeach ( false === \$temps ? array() : \$temps as \$file ) {",
+			'replace' => "\t\tforeach ( false === \$temps ? array_diff( (array) scandir( \$tmp ), array( '.', '..' ) ) : \$temps as \$file ) {",
+			'run'     => $it( 'StoreRemoverTest', 'testATempFileOrAFolderOfAMarkWhoseLstatFailsStays' ),
+			'expect'  => '/testATempFileOrAFolderOfAMarkWhoseLstatFailsStays/',
 		),
 	)
 );
