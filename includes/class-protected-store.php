@@ -2321,7 +2321,11 @@ final class AB_MCP_Protected_Store {
 	/**
 	 * The fields of a mark, checked: every path one of this store or the
 	 * site's absolute, each tree a tree of stage or backups, stored relative
-	 * to the store.
+	 * to the store. The name of the unit and each main file of active hold
+	 * at most the characters (not bytes) a pair holds of a name
+	 * (AB_MCP_Sync_Pairs::MAX_REF, the column varchar(191) of utf8mb4;
+	 * Behebung 2, B1): a unit of a longer name gets no pair, so no swap and
+	 * no mark (AB_MCP_Sync_Pairs::set_unit_base() refuses it with its way).
 	 *
 	 * @param array  $mark See put_mark().
 	 * @param string $root Folder of the store.
@@ -2340,7 +2344,7 @@ final class AB_MCP_Protected_Store {
 		if ( ! isset( $mark['op'] ) || ! is_string( $mark['op'] ) || ! preg_match( '/^[a-z_]{1,32}\z/', $mark['op'] ) ) {
 			return $refuse( __( 'op is a word of a-z and "_"', 'alphabridge-mcp' ) );
 		}
-		if ( ! isset( $mark['unit']['kind'], $mark['unit']['ref'] ) || ! is_string( $mark['unit']['kind'] ) || ! preg_match( '/^[a-z_]{1,32}\z/', $mark['unit']['kind'] ) || ! is_string( $mark['unit']['ref'] ) || '' === $mark['unit']['ref'] || strlen( $mark['unit']['ref'] ) > 191 || preg_match( '/[\x00-\x1f]/', $mark['unit']['ref'] ) ) {
+		if ( ! isset( $mark['unit']['kind'], $mark['unit']['ref'] ) || ! is_string( $mark['unit']['kind'] ) || ! preg_match( '/^[a-z_]{1,32}\z/', $mark['unit']['kind'] ) || ! is_string( $mark['unit']['ref'] ) || '' === $mark['unit']['ref'] || mb_strlen( $mark['unit']['ref'], 'UTF-8' ) > AB_MCP_Sync_Pairs::MAX_REF || preg_match( '/[\x00-\x1f]/', $mark['unit']['ref'] ) ) {
 			return $refuse( __( 'unit names its kind and its name', 'alphabridge-mcp' ) );
 		}
 		if ( ! isset( $mark['target'] ) || ! self::absolute( (string) $mark['target'] ) ) {
@@ -2372,7 +2376,7 @@ final class AB_MCP_Protected_Store {
 			return $refuse( __( 'active is a list of main files', 'alphabridge-mcp' ) );
 		}
 		foreach ( $active as $file ) {
-			if ( ! is_string( $file ) || '' === $file || strlen( $file ) > 191 || preg_match( '/[\x00-\x1f]/', $file ) ) {
+			if ( ! is_string( $file ) || '' === $file || mb_strlen( $file, 'UTF-8' ) > AB_MCP_Sync_Pairs::MAX_REF || preg_match( '/[\x00-\x1f]/', $file ) ) {
 				return $refuse( __( 'active is a list of main files', 'alphabridge-mcp' ) );
 			}
 		}
