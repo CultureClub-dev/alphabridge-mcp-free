@@ -47,9 +47,9 @@ $f53           = array(
 	'uninstall-identity'    => array( 'uninstall(): a backup whose identity is not the mark\'s stays', 'testTheUninstallMovesNoBackupWhoseIdentityIsNotTheMarks' ),
 );
 
-$entries = array();
+$z37_ways = array();
 foreach ( $f53 as $id => $what ) {
-	$entries[] = array(
+	$z37_ways[] = array(
 		'id'      => 'ablage/z37-guard-' . $id,
 		'clause'  => 'delete_path(): what an open mark names stays, on the way ' . $what[0],
 		'file'    => $ps,
@@ -61,7 +61,7 @@ foreach ( $f53 as $id => $what ) {
 }
 
 return array_merge(
-	$entries,
+	$z37_ways,
 	array(
 		/* ------------------------------------------- Z37: the remover */
 		array(
@@ -97,8 +97,8 @@ return array_merge(
 			'file'    => $ps,
 			'search'  => "( dirname( \$p ) !== \$tmp_dir || 0 !== strpos( basename( \$p ), self::TMP_PREFIX ) || ( time() - (int) \$stat['mtime'] ) < self::TMP_AGE )",
 			'replace' => "( dirname( \$p ) !== \$tmp_dir || ( time() - (int) \$stat['mtime'] ) < self::TMP_AGE )",
-			'run'     => $it( 'StoreRemoverTest', 'testTheCleanUpOfTempFilesTakesOnlyOwnOnesAndNeverATreeOfAnOpenMark' ),
-			'expect'  => '/testTheCleanUpOfTempFilesTakesOnlyOwnOnesAndNeverATreeOfAnOpenMark/',
+			'run'     => $it( 'StoreRemoverTest', 'testTheRemoverTakesNothingOutsideTheStoreNorAForeignTempFile' ),
+			'expect'  => '/testTheRemoverTakesNothingOutsideTheStoreNorAForeignTempFile/',
 		),
 		array(
 			'id'      => 'ablage/z37-tmp-age',
