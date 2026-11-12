@@ -1139,7 +1139,15 @@ final class AB_MCP_Sync_Env {
 		}
 		$lines = array();
 		$last  = $after;
-		foreach ( self::candidates( $kind, $dir, $after, $ctx ) as $candidate ) {
+		// The walk of a root of files: with UNIT_BUDGET of its own as the
+		// first unit of a call has it, then the time of the call; where it
+		// stops, after the last entry it visited (nested()).
+		$walk = array(
+			'until'   => $alone ? max( (float) $deadline, self::now() + self::UNIT_BUDGET ) : (float) $deadline,
+			'visited' => 0,
+			'last'    => null,
+		);
+		foreach ( self::candidates( $kind, $dir, $after, $ctx, $walk ) as $candidate ) {
 			list( $name, $flag ) = $candidate;
 			if ( 'root' === $flag ) {
 				// The folder of the kind could not be listed: its line says so,
@@ -1147,17 +1155,23 @@ final class AB_MCP_Sync_Env {
 				$lines[] = self::root_unit( $kind, 'unreadable' );
 				return self::units_done( $lines );
 			}
+			// Where to go on: after the last entry the walk visited before
+			// this one (a skipped one too), else after the last unit read.
+			$at = null !== $walk['last'] ? $walk['last'] : $last;
+			if ( 'time' === $flag ) {
+				return self::units_stop( $lines, $at );
+			}
 			if ( ( ( array() !== $lines || ! $alone ) && self::now() >= $deadline ) || count( $lines ) >= $room ) {
-				return self::units_stop( $lines, $last );
+				return self::units_stop( $lines, $at );
 			}
 			$read = self::read_unit( $kind, $dir, $name, $flag, $side, $alone ? max( (float) $deadline, self::now() + self::UNIT_BUDGET ) : $deadline, $alone );
 			if ( $read['stopped'] ) {
-				return self::units_stop( $lines, $last );
+				return self::units_stop( $lines, $at );
 			}
 			$of = self::unit_lines( $kind, $name, $read, $ctx );
 			if ( count( $lines ) + count( $of ) > $room ) {
 				if ( array() !== $lines || ! $empty ) {
-					return self::units_stop( $lines, $last );
+					return self::units_stop( $lines, $at );
 				}
 				// Alone in a part its lines do not fit: no entries, no hash.
 				$read['complete'] = false;
@@ -1170,6 +1184,8 @@ final class AB_MCP_Sync_Env {
 			$first = false;
 			$alone = false;
 			$empty = false;
+			// After the first unit, the time of the call bounds the walk too.
+			$walk['until'] = (float) $deadline;
 		}
 		return self::units_done( $lines );
 	}
@@ -1267,9 +1283,11 @@ final class AB_MCP_Sync_Env {
 	 * @param string      $dir   Its folder.
 	 * @param string|null $after The last unit the part before read.
 	 * @param array       $ctx   unit_context().
+	 * @param array       $walk  The walk of a root of files (nested()): until
+	 *                           when, how many entries visited, the last one.
 	 * @return Generator<array{0:string,1:string}>
 	 */
-	private static function candidates( $kind, $dir, $after, array $ctx ) {
+	private static function candidates( $kind, $dir, $after, array $ctx, array &$walk ) {
 		if ( in_array( $kind, array( 'plugin', 'theme', 'mu_plugin' ), true ) ) {
 			$names = self::names( $dir );
 			if ( null === $names ) {
@@ -1320,20 +1338,26 @@ final class AB_MCP_Sync_Env {
 			$path = '' === $rel ? $name : $rel . '/' . $name;
 			return 'upload' === $kind && isset( $ctx['attached'][ $path ] ) ? 'skip' : 'unit';
 		};
-		yield from self::nested( $dir, '', $after, $pick );
+		yield from self::nested( $dir, '', $after, $pick, $walk );
 	}
 
 	/**
 	 * The units below one folder of a root of files, depth first in order(),
-	 * after a path.
+	 * after a path. The time of the call is asked before each entry once one
+	 * is visited (so that every call moves on): where it is over, the walk
+	 * ends with time and the last entry visited, a folder, a skipped entry or
+	 * a unit, so that the next call goes on after it; a tree of empty folders
+	 * or of files of attachments, which gives no unit, is walked over parts
+	 * as well (GitHub-Codex on e9db02d).
 	 *
 	 * @param string      $base  The root.
 	 * @param string      $rel   This folder ('' the root).
 	 * @param string|null $after The last unit the part before read.
 	 * @param callable    $pick  function( $rel, $name, $full ): unit, into or skip.
+	 * @param array       $walk  until, visited, last (candidates()).
 	 * @return Generator<array{0:string,1:string}>
 	 */
-	private static function nested( $base, $rel, $after, callable $pick ) {
+	private static function nested( $base, $rel, $after, callable $pick, array &$walk ) {
 		$dir   = '' === $rel ? $base : $base . '/' . $rel;
 		$list = self::names( $dir );
 		if ( null === $list ) {
@@ -1355,15 +1379,23 @@ final class AB_MCP_Sync_Env {
 					continue;
 				}
 			}
+			if ( $walk['visited'] > 0 && self::now() >= $walk['until'] ) {
+				yield array( (string) $walk['last'], 'time' );
+				return;
+			}
+			++$walk['visited'];
 			$what = $pick( $rel, $name, $base . '/' . $path );
 			if ( 'skip' === $what ) {
+				$walk['last'] = $path;
 				continue;
 			}
 			if ( 'into' === $what ) {
-				yield from self::nested( $base, $path, $into, $pick );
+				yield from self::nested( $base, $path, $into, $pick, $walk );
+				$walk['last'] = $path;
 				continue;
 			}
 			yield array( $path, $what );
+			$walk['last'] = $path;
 		}
 	}
 

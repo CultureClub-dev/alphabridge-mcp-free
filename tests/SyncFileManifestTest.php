@@ -506,6 +506,39 @@ final class SyncFileManifestTest extends TestCase {
 		AB_MCP_Test_Seam::restore_all();
 	}
 
+	public function testAFileThatGrowsWhileItIsReadIsChangedAtOnce(): void {
+		// GitHub-Codex on e9db02d: a file of 1 byte that a writer keeps
+		// growing; read past its size it is changed at once, not read on to
+		// its end without the clock (the time of the call is over after the
+		// first part: 10 s a part, 5 s left).
+		$this->file( 'plugins/wachsend.txt', 'x' );
+		$path                   = $this->dir . '/plugins/wachsend.txt';
+		$t                      = 100.0;
+		AB_MCP_Sync_Env::$clock = static function () use ( &$t ) {
+			return $t;
+		};
+		$grown = 0;
+		$seam  = $this->seam(
+			array(
+				array(
+					'method' => 'read',
+					'kind'   => 'before',
+					'before' => static function () use ( $path, &$grown, &$t ) {
+						$t += 10.0;
+						if ( $grown < 10 ) {
+							++$grown;
+							file_put_contents( $path, str_repeat( 'y', 10 ), FILE_APPEND );
+						}
+					},
+				),
+			)
+		);
+		$read = $this->read( 'wachsend.txt', 'live', 105.0, true );
+		AB_MCP_Test_Seam::restore_all();
+		self::assertSame( array( false, 'changed', null ), array( $read['complete'], $read['cause'], $read['hash'] ) );
+		self::assertCount( 1, array_filter( $seam->calls, static fn( $c ) => 'read' === $c['method'] ), 'One part read, past the size it had: changed, no more parts.' );
+	}
+
 	public function testATimeLimitWithinAUnitStopsItOrMakesItTooLarge(): void {
 		$this->shop();
 		$t                      = 100.0;

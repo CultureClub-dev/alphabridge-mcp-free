@@ -1082,6 +1082,84 @@ final class SyncManifestTest extends TestCase {
 		}
 	}
 
+	public function testATreeOfEmptyFoldersIsWalkedOverPartsWithItsPlaceAndNoUnitLeftOut(): void {
+		// GitHub-Codex on e9db02d: a tree of language files with many empty
+		// folders (and so a large media library with many files of
+		// attachments) gives no unit for a long walk; the time of the call
+		// ends it there too, with the place of the last entry, and the next
+		// call goes on after it. The clock: a second a look.
+		$lang = rtrim( (string) WP_LANG_DIR, '/' );
+		if ( ! is_dir( $lang ) ) {
+			mkdir( $lang );
+			$made_lang = true;
+		}
+		$tree = $lang . '/ab-it-leer';
+		self::assertFalse( file_exists( $tree ) );
+		mkdir( $tree );
+		$folders = array();
+		for ( $i = 1; $i <= 150; $i++ ) {
+			$folders[] = sprintf( '%s/%03d', $tree, $i );
+			mkdir( end( $folders ) );
+		}
+		$this->made[]  = $tree . '/zz.mo';
+		file_put_contents( end( $this->made ), 'mo' );
+		// And at the top of the uploads many folders that are no year folder
+		// (each skipped: counted with the root, no unit), then a free file.
+		$uploads = AB_MCP_IT_Sites::docroot( 'a' ) . '/wp-content/uploads';
+		if ( ! is_dir( $uploads ) ) {
+			mkdir( $uploads );
+			$made_uploads = true;
+		}
+		$skipped = array();
+		for ( $i = 1; $i <= 150; $i++ ) {
+			$skipped[] = sprintf( '%s/ab-it-cache-%03d', $uploads, $i );
+			mkdir( end( $skipped ) );
+		}
+		$this->made[]  = $uploads . '/zz-ab-it-frei.txt';
+		file_put_contents( end( $this->made ), 'frei' );
+		$this->folders = array_merge( array_reverse( $folders ), array( $tree ), empty( $made_lang ) ? array() : array( $lang ), $skipped, empty( $made_uploads ) ? array() : array( $uploads ) );
+		$t                      = 0.0;
+		AB_MCP_Sync_Env::$clock = static function () use ( &$t ) {
+			return ++$t;
+		};
+		$steps  = array(
+			'language' => array_search( 'language', AB_MCP_Sync_Env::STEPS, true ),
+			'upload'   => array_search( 'upload', AB_MCP_Sync_Env::STEPS, true ),
+		);
+		$state  = null;
+		$parts  = 0;
+		$walked = array(
+			'language' => 0,
+			'upload'   => 0,
+		);
+		$units  = array();
+		do {
+			$read = AB_MCP_Sync_Env::read( $state, 5, 4000, 'live' );
+			self::assertIsArray( $read );
+			$kinds = array();
+			foreach ( $read['lines'] as $line ) {
+				if ( isset( $steps[ $line['env'] ] ) ) {
+					$units[]                = $line['env'] . ':' . $line['ref'];
+					$kinds[ $line['env'] ] = true;
+				}
+			}
+			$state = $read['state'];
+			foreach ( $steps as $kind => $index ) {
+				if ( null !== $state && $index === $state['step'] && is_array( $state['after'] ) && ! isset( $kinds[ $kind ] ) ) {
+					++$walked[ $kind ];
+				}
+			}
+			++$parts;
+		} while ( null !== $state && $parts < 300 );
+		self::assertNull( $state, 'Read to its end.' );
+		self::assertGreaterThan( 0, $walked['language'], 'Parts that ended within the walk of the empty folders, with its place, no unit yet.' );
+		self::assertGreaterThan( 0, $walked['upload'], 'Parts that ended within the walk of the skipped folders of the uploads, with its place.' );
+		foreach ( array( 'language:ab-it-leer/zz.mo', 'upload:zz-ab-it-frei.txt' ) as $unit ) {
+			self::assertSame( 1, count( array_keys( $units, $unit, true ) ), "$unit after them read once: none left out, none twice." );
+		}
+		self::assertSame( count( $units ), count( array_unique( $units ) ), 'No unit twice.' );
+	}
+
 	public function testACoreTooSlowForAWholeCallIsNotComparedAndTheRestOfTheEnvironmentIsRead(): void {
 		// GitHub-Codex on ec0d088 (G-M7): a host where the core files take
 		// longer than UNIT_BUDGET (here 1 s a file). With the whole time of a

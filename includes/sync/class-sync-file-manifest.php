@@ -502,6 +502,13 @@ final class AB_MCP_Sync_File_Manifest {
 			}
 			hash_update( $ctx, $bytes );
 			$read += strlen( $bytes );
+			// More bytes than the file had when it was opened: it grows while
+			// it is read, changed at once (its size must stay the same); no
+			// reading on to its end (GitHub-Codex on e9db02d).
+			if ( $read > (int) $before['size'] ) {
+				$calls->close( $handle );
+				return self::end( $acc, 'changed' );
+			}
 			// After each part with more to come; after the last one the final
 			// check asks (still()), so the clock is not asked twice for it.
 			if ( $read < (int) $before['size'] && self::due( $acc, $deadline, $first ) ) {

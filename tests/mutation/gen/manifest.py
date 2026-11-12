@@ -58,6 +58,8 @@ e('z1-still-clock-files', 'Z1 still(): the time of the call before each path is 
   "\t\tforeach ( $acc['stats'] as $file => $stat ) {\n\t\t\tif ( self::due( $acc, $deadline, $first ) ) {", "\t\tforeach ( $acc['stats'] as $file => $stat ) {\n\t\t\tif ( false ) {", 'man', 'testTheTimeOfTheCallIsAskedInTheFinalCheckOfTheUnitToo')
 e('z1-release-due', 'Z1 whole(): no hash past the time of the call, asked at its release after the sorting and the hashing (Behebung 6)', FM,
   "\t\tif ( self::due( $acc, $deadline, $first ) ) {\n\t\t\treturn $acc;\n\t\t}\n\t\t$acc['complete'] = true;", "\t\tif ( false ) {\n\t\t\treturn $acc;\n\t\t}\n\t\t$acc['complete'] = true;", 'man', 'testNoHashOnceTheTimeOfTheCallIsOverAlsoAfterTheLastQueryOfTheFinalCheck')
+e('z1-grows', 'Z1 file(): a file read past the size it had when opened is changed at once, not read on to its end (GitHub-Codex on e9db02d)', FM,
+  "\t\t\tif ( $read > (int) $before['size'] ) {", "\t\t\tif ( false ) {", 'man', 'testAFileThatGrowsWhileItIsReadIsChangedAtOnce')
 e('z1-due', 'Z1 due(): the one place the clock is asked while a unit is read (Behebung 5)', FM,
   "\t\tif ( self::now() < (float) $deadline ) {\n\t\t\treturn false;", "\t\tif ( true ) {\n\t\t\treturn false;", 'man', 'testTheTimeOfTheCallIsAskedInTheFinalCheckOfTheUnitToo')
 e('z1-still-dirs-kept', 'Z1 folder(): the names of each folder kept for still()', FM,
@@ -205,6 +207,16 @@ e('own-version-read', 'E12 read_unit(): the version of AlphaBridge itself read f
   "\t\t\t\t'version'  => self::own_version( $dir . '/' . $name ),", "\t\t\t\t'version'  => null,", 'it', 'testAlphaBridgeItselfInTheMustUseFolderIsReadWithItsVersion')
 e('own-version-mu', 'E12 unit_lines(): the version of AlphaBridge itself in the must-use folder on its line', EN,
   "\t\t\t$fields['version'] = $read['version'] ?? null;", '', 'it', 'testAlphaBridgeItselfInTheMustUseFolderIsReadWithItsVersion')
+e('walk-time', 'nested(): the time of the call asked while a root of files is walked, also where it gives no unit (GitHub-Codex on e9db02d)', EN,
+  "\t\t\tif ( $walk['visited'] > 0 && self::now() >= $walk['until'] ) {", "\t\t\tif ( false ) {", 'it', 'testATreeOfEmptyFoldersIsWalkedOverPartsWithItsPlaceAndNoUnitLeftOut')
+e('walk-last-skip', 'nested(): the place goes on over a skipped entry', EN,
+  "\t\t\tif ( 'skip' === $what ) {\n\t\t\t\t$walk['last'] = $path;", "\t\t\tif ( 'skip' === $what ) {", 'it', 'testATreeOfEmptyFoldersIsWalkedOverPartsWithItsPlaceAndNoUnitLeftOut')
+e('walk-last-into', 'nested(): the place goes on over a folder walked', EN,
+  "\t\t\t\tyield from self::nested( $base, $path, $into, $pick, $walk );\n\t\t\t\t$walk['last'] = $path;", "\t\t\t\tyield from self::nested( $base, $path, $into, $pick, $walk );", 'it', 'testATreeOfEmptyFoldersIsWalkedOverPartsWithItsPlaceAndNoUnitLeftOut')
+e('walk-step-time', 'unit_step(): a walk out of time ends the step, to go on (never done)', EN,
+  "\t\t\tif ( 'time' === $flag ) {\n\t\t\t\treturn self::units_stop( $lines, $at );", "\t\t\tif ( false ) {\n\t\t\t\treturn self::units_stop( $lines, $at );", 'it', 'testATreeOfEmptyFoldersIsWalkedOverPartsWithItsPlaceAndNoUnitLeftOut')
+e('walk-step-at', 'unit_step(): the next call goes on after the last entry walked, not only after the last unit', EN,
+  "\t\t\t$at = null !== $walk['last'] ? $walk['last'] : $last;", "\t\t\t$at = $last;", 'it', 'testATreeOfEmptyFoldersIsWalkedOverPartsWithItsPlaceAndNoUnitLeftOut')
 # ------------------------------------------------ Z35: the core
 e('z35-https', 'Z35 checksums(): only https', CC,
   "\tconst API = 'https://api.wordpress.org/core/checksums/1.0/';", "\tconst API = 'http://api.wordpress.org/core/checksums/1.0/';", 'core', 'testTheChecksumsAreAskedOverHttpsThroughTheOutboundWithoutARedirect')
