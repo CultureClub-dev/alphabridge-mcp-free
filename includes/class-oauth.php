@@ -44,6 +44,85 @@ defined( 'ABSPATH' ) || exit;
 require_once __DIR__ . '/class-outbound.php';
 
 /**
+ * The calls of the well-known relay to the outside (AB_MCP_OAuth::
+ * well_known_from_other_site() and its lock): the fetch, the cache, the disk
+ * and the two statements of the lock row. Each passes straight on to
+ * WordPress or PHP. Only the tests put another object in their place, to
+ * inject faults (AB_MCP_OAuth::well_known_calls(); conventions «Heikle
+ * Zweige», point 2).
+ */
+final class AB_MCP_OAuth_Well_Known_Calls {
+
+	/**
+	 * GET an address of this site's own host (wp_safe_remote_get()).
+	 *
+	 * @param string $url  Address.
+	 * @param array  $args Request arguments.
+	 * @return array|WP_Error
+	 */
+	public function fetch( $url, array $args ) {
+		return wp_safe_remote_get( $url, $args );
+	}
+
+	/**
+	 * Read a kept answer.
+	 *
+	 * @param string $key Transient.
+	 * @return mixed
+	 */
+	public function get_transient( $key ) {
+		return get_transient( $key );
+	}
+
+	/**
+	 * Keep an answer.
+	 *
+	 * @param string $key   Transient.
+	 * @param mixed  $value Value.
+	 * @param int    $ttl   Seconds.
+	 * @return bool
+	 */
+	public function set_transient( $key, $value, $ttl ) {
+		return set_transient( $key, $value, $ttl );
+	}
+
+	/**
+	 * The canonical path of a file or directory, false where there is none
+	 * or open_basedir hides it (no warning).
+	 *
+	 * @param string $path Path.
+	 * @return string|false
+	 */
+	public function realpath( $path ) {
+		return @realpath( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- open_basedir: no warning, just no.
+	}
+
+	/**
+	 * One statement on the database (the INSERT IGNORE of the lock, the
+	 * DELETE of an expired one).
+	 *
+	 * @param string $sql Prepared statement.
+	 * @return int|bool
+	 */
+	public function query( $sql ) {
+		global $wpdb;
+		return $wpdb->query( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery -- prepared by the caller; an atomic insert is the point.
+	}
+
+	/**
+	 * Remove a row (the lock, given back).
+	 *
+	 * @param string $table Table.
+	 * @param array  $where Column => value.
+	 * @return int|false
+	 */
+	public function delete( $table, array $where ) {
+		global $wpdb;
+		return $wpdb->delete( $table, $where ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- the row of the lock; one that stays expires.
+	}
+}
+
+/**
  * Class AB_MCP_OAuth
  */
 class AB_MCP_OAuth {
@@ -161,6 +240,21 @@ class AB_MCP_OAuth {
 	const FIREWALL_USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
 	const MARK_HEADER         = 'X-AB-MCP';
 	const MARK_AUTHORIZE      = 'authorize';
+
+	/**
+	 * Another WordPress on this domain, in a subfolder (a staging copy): what
+	 * this site relays of its well-known documents (well_known_answer()).
+	 * Its path has at most this many segments; the fetch ends after this many
+	 * seconds and this many bytes (a response that long counts as failed);
+	 * what came back, or that nothing usable did, is kept this many seconds.
+	 */
+	const WELL_KNOWN_MAX_SEGMENTS = 4;
+	const WELL_KNOWN_TIMEOUT      = 3;
+	const WELL_KNOWN_MAX_BYTES    = 65536;
+	const WELL_KNOWN_CACHE_TTL    = 300;
+
+	/** The calls of the well-known relay to the outside (the seam); only the tests put another object here. */
+	private static $naht_oauth_well_known = null;
 
 	/**
 	 * Address ranges a metadata document is never fetched from: this machine,
@@ -1464,34 +1558,95 @@ class AB_MCP_OAuth {
 	 * Serve /.well-known/oauth-authorization-server and
 	 * /.well-known/oauth-protected-resource[/…] as JSON. These live at the site
 	 * root, outside the REST prefix, so they are intercepted on template_redirect
-	 * (before WordPress would render a 404 for the unknown URL).
+	 * (before WordPress would render a 404 for the unknown URL). What is
+	 * answered is decided in well_known_answer(); respond_well_known() carries
+	 * it out, as for the preview protection.
 	 */
 	public static function serve_well_known() {
-		if ( ! self::enabled() || ! isset( $_SERVER['REQUEST_URI'] ) ) {
+		if ( ! isset( $_SERVER['REQUEST_URI'] ) ) {
 			return;
 		}
-		$document = self::well_known_document( (string) $_SERVER['REQUEST_URI'] ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- path is only matched, never echoed.
-		if ( 'authorization-server' === $document ) {
-			self::send_json( self::metadata() );
-		}
-		if ( 'protected-resource' === $document ) {
-			self::send_json( self::resource_metadata() );
-		}
+		self::respond_well_known( self::well_known_answer( (string) $_SERVER['REQUEST_URI'] ), false ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- path is only matched; what is fetched is rebuilt from validated segments.
 	}
 
 	/**
-	 * Which of the two documents below /.well-known/ a request URI asks for,
-	 * exactly as serve_well_known() decides it: the path as sent, the home
-	 * path of a WordPress in a sub-directory taken off the front, the
-	 * document name followed by a slash or the end, nothing normalised (a
-	 * double slash is not served). The preview protection asks the same
-	 * question (AB_MCP_Preview_Protection), so the two never disagree about
-	 * what is served and what WordPress would answer with its 404 page.
+	 * Carry out an answer of well_known_answer(): the one place that turns it
+	 * into a response, for this plugin's handler (serve_well_known()) and for
+	 * the preview protection (AB_MCP_Preview_Protection, clause well_known),
+	 * so the two never disagree.
 	 *
-	 * @param string $request_uri REQUEST_URI.
-	 * @return string 'authorization-server', 'protected-resource' or ''.
+	 * - A document: sent as JSON, and the request ends (send_json()).
+	 * - A refusal: a 404. For the handler, and only a 404: not a canonical
+	 *   redirect and not a permalink WordPress guesses from the last segment
+	 *   (redirect_guess_404_permalink()); a client would read that page, HTML
+	 *   with 200, as the document and give up instead of trying its next
+	 *   address. WordPress then renders its 404 page. For a visitor of a site
+	 *   behind the preview protection ($protected), the 404 alone, without
+	 *   content, and the request ends here: no theme (its 404 page has the
+	 *   menus and sidebars the protection hides) and no later handler.
+	 * - Anything else ('none'): nothing; the request goes on as before.
+	 *
+	 * @param array $answer    What well_known_answer() decided.
+	 * @param bool  $protected True from the preview protection, for a visitor.
 	 */
-	public static function well_known_document( $request_uri ) {
+	public static function respond_well_known( array $answer, $protected ) {
+		$kind = isset( $answer['kind'] ) ? $answer['kind'] : 'none';
+		if ( 'document' === $kind && isset( $answer['document'] ) && is_array( $answer['document'] ) ) {
+			self::send_json( $answer['document'] );
+		}
+		if ( 'refused' !== $kind ) {
+			return;
+		}
+		if ( $protected ) {
+			status_header( 404 );
+			exit;
+		}
+		global $wp_query;
+		if ( is_object( $wp_query ) && method_exists( $wp_query, 'set_404' ) ) {
+			$wp_query->set_404();
+		}
+		status_header( 404 );
+		nocache_headers();
+		add_filter( 'redirect_canonical', '__return_false' );
+		add_filter( 'do_redirect_guess_404_permalink', '__return_false' );
+	}
+
+	/**
+	 * The one place that decides what this site answers at a well-known
+	 * address of its OAuth server.
+	 *
+	 * RFC 8414 and RFC 9728 put the path of the issuer or the resource AFTER
+	 * the well-known name, at the root of the domain:
+	 * /.well-known/oauth-authorization-server/staging/123 is the server
+	 * metadata of the issuer https://<host>/staging/123. On a domain with this
+	 * site at the root and another WordPress in a subfolder (a staging copy),
+	 * such requests reach this site although they are about the other one.
+	 * Up to 4.10.0, and on this line of development until the hotfix 4.10.1
+	 * was carried into it, this site answered them with its own metadata,
+	 * and a client signed in at the wrong site. A redirect to the other site
+	 * does not help every client: Claude's servers do not follow it.
+	 *
+	 * The path as sent, the home path of a WordPress in a sub-directory taken
+	 * off the front, nothing normalised (//.well-known/… is none of ours):
+	 *
+	 * - The path after the name is this site's own (none, its home path, or
+	 *   the path of its MCP resource; a trailing slash does not count): its
+	 *   own document, as before.
+	 * - It names another site on this host (well_known_from_other_site()):
+	 *   that site's document, fetched from it and relayed, if it is the
+	 *   document of exactly that issuer or resource.
+	 * - Otherwise: refused, a 404.
+	 *
+	 * @param string $request_uri The request URI as received.
+	 * @return array{kind:string,document?:array} kind 'document' (with
+	 *         document), 'refused' (one of our names, answered with a 404) or
+	 *         'none' (not ours).
+	 */
+	public static function well_known_answer( $request_uri ) {
+		$none = array( 'kind' => 'none' );
+		if ( ! self::enabled() ) {
+			return $none;
+		}
 		$path = (string) wp_parse_url( (string) $request_uri, PHP_URL_PATH );
 
 		// When WordPress lives in a subdirectory, .well-known sits under the
@@ -1501,13 +1656,404 @@ class AB_MCP_OAuth {
 			$path = substr( $path, strlen( $home_path ) );
 		}
 
-		if ( preg_match( '#^/\.well-known/oauth-authorization-server(/|$)#', $path ) ) {
-			return 'authorization-server';
+		if ( ! preg_match( '#\A/\.well-known/(oauth-authorization-server|oauth-protected-resource)(/.*)?\z#s', $path, $m ) ) {
+			return $none;
 		}
-		if ( preg_match( '#^/\.well-known/oauth-protected-resource(/|$)#', $path ) ) {
-			return 'protected-resource';
+		$name   = $m[1];
+		$suffix = isset( $m[2] ) ? $m[2] : '';
+		// At most one slash at the end, and no empty segment anywhere: a
+		// path with // is no path of this or any other site (4.10.0 and main
+		// before the hotfix answered /.well-known/oauth-authorization-server//
+		// with the own metadata).
+		if ( false !== strpos( $suffix, '//' ) ) {
+			return array( 'kind' => 'refused' );
 		}
-		return '';
+		if ( '/' === substr( $suffix, -1 ) ) {
+			$suffix = substr( $suffix, 0, -1 );
+		}
+
+		$resource_path = rtrim( (string) wp_parse_url( self::resource(), PHP_URL_PATH ), '/' );
+		if ( in_array( $suffix, array( '', rtrim( $home_path, '/' ), $resource_path ), true ) ) {
+			return array(
+				'kind'     => 'document',
+				'document' => 'oauth-authorization-server' === $name ? self::metadata() : self::resource_metadata(),
+			);
+		}
+
+		$document = self::well_known_from_other_site( $name, $suffix, rtrim( $home_path, '/' ) );
+		return null === $document ? array( 'kind' => 'refused' ) : array(
+			'kind'     => 'document',
+			'document' => $document,
+		);
+	}
+
+	/**
+	 * The calls object of the relay: the stand-in of a test, else the real
+	 * calls.
+	 *
+	 * @return AB_MCP_OAuth_Well_Known_Calls
+	 */
+	private static function well_known_calls() {
+		return self::$naht_oauth_well_known ?? new AB_MCP_OAuth_Well_Known_Calls();
+	}
+
+	/**
+	 * The well-known document of another site on this host, or null.
+	 *
+	 * The other site's path P comes from the request: for the server metadata
+	 * it is the path after the name; for the resource metadata it is what
+	 * precedes the MCP route (/<rest prefix>/alphabridge/v1/mcp) there, as an
+	 * AlphaBridge site names its resource. P is 1 to WELL_KNOWN_MAX_SEGMENTS
+	 * segments of [A-Za-z0-9._~-], none starting with a dot, no "..": never
+	 * this site's own path, never .well-known again (so a fetch never makes
+	 * this site fetch once more), never another host.
+	 *
+	 * The document is fetched from <scheme://host:port of home_url()>P/.well-
+	 * known/… (where every AlphaBridge site answers under its home), without
+	 * following redirects, within WELL_KNOWN_TIMEOUT seconds and
+	 * WELL_KNOWN_MAX_BYTES, as application/json. It is relayed only when it
+	 * is the document of exactly that issuer (https://host/P) or resource,
+	 * in the form AlphaBridge gives it, and only with the fields that form
+	 * has (relayable_server_metadata(), relayable_resource_metadata()).
+	 * Document or failure is kept WELL_KNOWN_CACHE_TTL seconds per site,
+	 * under the whole identity asked for (issuer, and resource), and checked
+	 * again when it is read. While one request fetches for a path, another
+	 * for the same path gets the 404 without fetching (a lock that expires
+	 * after the time limit, see well_known_lock()).
+	 *
+	 * The fetch goes to this site's own address with wp_safe_remote_get(),
+	 * not through AB_MCP_Outbound, which ties requests to OTHER hosts to the
+	 * addresses it checked (DNS rebinding): scheme, host and port come from
+	 * home_url() alone, from the request only the path, checked strictly; a
+	 * rebinding of this site's own name needs control over how that name
+	 * resolves. WordPress lets a request to the site's own host through even
+	 * where it resolves to an internal address (wp_http_validate_url()), as
+	 * for the other requests of the site to itself.
+	 *
+	 * Nothing is fetched unless a WordPress is installed under P in the same
+	 * web directory as this site (wordpress_on_disk()): a path that names no
+	 * site costs a look at the disk, no request and no stored entry.
+	 *
+	 * Limits, by design:
+	 * - The fetch goes to this site's own address and waits for the answer of
+	 *   the other site. Where both share one PHP worker (or every worker is
+	 *   busy), the other site cannot answer before this request ends: the
+	 *   fetch runs into the time limit and this request ends with the 404
+	 *   after WELL_KNOWN_TIMEOUT seconds, as for a site that cannot reach
+	 *   itself. The client then fails as with 4.10.0, but without a client
+	 *   registered at this site.
+	 * - A home_url() with an IPv6 literal as host is refused by WordPress'
+	 *   check of safe addresses (wp_http_validate_url()): no relay there.
+	 *   Nor where a filter makes home_url() name another host than the
+	 *   stored home: WordPress' exception for the site's own host may then
+	 *   not apply.
+	 * - A site in the subfolder that is not installed under this site's web
+	 *   directory (its own virtual host, a symlink to elsewhere, another
+	 *   document root) is not relayed: the 404, as 4.10.0 without its own
+	 *   metadata.
+	 * - Where the database refuses the lock (no right to insert, another
+	 *   table layout), the document is fetched without it.
+	 * - A request that dies while it holds the lock (a fatal error, the time
+	 *   limit of PHP, a Throwable of a foreign hook) leaves the lock row; the
+	 *   path is refused without a fetch until it expires
+	 *   (WELL_KNOWN_TIMEOUT + 2 seconds), then taken over.
+	 *
+	 * @param string $name      oauth-authorization-server or oauth-protected-resource.
+	 * @param string $suffix    The path after the name, without trailing slash, not this site's own.
+	 * @param string $home_path This site's home path, without trailing slash.
+	 * @return array|null
+	 */
+	private static function well_known_from_other_site( $name, $suffix, $home_path ) {
+		$site_path = $suffix;
+		if ( 'oauth-protected-resource' === $name ) {
+			$prefix = function_exists( 'rest_get_url_prefix' ) ? trim( (string) rest_get_url_prefix(), '/' ) : 'wp-json';
+			$route  = defined( 'AB_MCP_REST_ROUTE' ) ? AB_MCP_REST_ROUTE : '/mcp';
+			$tail   = '/' . $prefix . '/' . self::ns() . $route;
+			if ( strlen( $suffix ) <= strlen( $tail ) || substr( $suffix, -strlen( $tail ) ) !== $tail ) {
+				return null;
+			}
+			$site_path = substr( $suffix, 0, -strlen( $tail ) );
+		}
+		if ( ! preg_match( '#\A(?:/[A-Za-z0-9_~-][A-Za-z0-9._~-]*){1,' . self::WELL_KNOWN_MAX_SEGMENTS . '}\z#', $site_path )
+			|| false !== strpos( $site_path, '..' ) || $site_path === $home_path
+			|| ! self::wordpress_on_disk( $site_path ) ) {
+			return null;
+		}
+
+		$home = wp_parse_url( home_url() );
+		if ( ! is_array( $home ) || empty( $home['scheme'] ) || empty( $home['host'] ) ) {
+			return null;
+		}
+		$origin = $home['scheme'] . '://' . $home['host'] . ( isset( $home['port'] ) ? ':' . $home['port'] : '' );
+
+		$calls    = self::well_known_calls();
+		$issuer   = $origin . $site_path;
+		$resource = 'oauth-protected-resource' === $name ? $origin . $suffix : '';
+		$hash     = md5( $name . '|' . $issuer . '|' . $resource );
+		$key      = 'ab_mcp_wk_' . $hash;
+		$cached   = $calls->get_transient( $key );
+		if ( is_array( $cached ) && array_key_exists( 'document', $cached ) ) {
+			return is_array( $cached['document'] ) ? self::relayable( $name, $cached['document'], $issuer, $resource ) : null;
+		}
+
+		$lock = self::well_known_lock( $hash );
+		if ( '' === $lock ) {
+			return null;
+		}
+
+		$url = $issuer . '/.well-known/' . $name . ( 'oauth-protected-resource' === $name ? $suffix : '' );
+
+		$document = null;
+		$response = $calls->fetch(
+			$url,
+			array(
+				'timeout'             => self::WELL_KNOWN_TIMEOUT,
+				'redirection'         => 0,
+				'limit_response_size' => self::WELL_KNOWN_MAX_BYTES,
+				'headers'             => array( 'Accept' => 'application/json' ),
+			)
+		);
+		if ( ! is_wp_error( $response ) && 200 === (int) wp_remote_retrieve_response_code( $response ) ) {
+			$type = wp_remote_retrieve_header( $response, 'content-type' );
+			$body = (string) wp_remote_retrieve_body( $response );
+			$data = null;
+			if ( is_string( $type ) && 'application/json' === strtolower( trim( explode( ';', $type )[0] ) )
+				&& strlen( $body ) < self::WELL_KNOWN_MAX_BYTES ) {
+				$data = json_decode( $body, true );
+			}
+			if ( is_array( $data ) ) {
+				$document = self::relayable( $name, $data, $issuer, $resource );
+			}
+		}
+		$calls->set_transient( $key, array( 'document' => $document ), self::WELL_KNOWN_CACHE_TTL );
+		if ( null !== $lock ) {
+			self::well_known_unlock( $lock );
+		}
+		return $document;
+	}
+
+	/**
+	 * Take the lock for fetching one path: a row in the options table that
+	 * INSERT IGNORE adds only where it does not exist yet (atomic in the
+	 * database, unlike add_option(), which looks first and then inserts),
+	 * holding when it expires. An expired lock (a request that died while
+	 * fetching) is removed and taken once more. Where the database refuses
+	 * a statement itself (an error, not an existing row; also when removing
+	 * an expired lock), the fetch goes ahead without a lock: null. Without a
+	 * database (the unit tests) add_option() stands in. The row is never read
+	 * through the options API, so no option cache is involved.
+	 *
+	 * @param string $hash Identity of the path.
+	 * @return string|null The lock's option name; '' while another request
+	 *                     holds it; null where the database gives no lock.
+	 */
+	private static function well_known_lock( $hash ) {
+		global $wpdb;
+		$name  = 'ab_mcp_wk_lock_' . $hash;
+		$until = time() + self::WELL_KNOWN_TIMEOUT + 2;
+		if ( ! ( $wpdb instanceof wpdb ) ) {
+			if ( add_option( $name, $until, '', false ) ) {
+				return $name;
+			}
+			if ( (int) get_option( $name, 0 ) >= time() ) {
+				return '';
+			}
+			delete_option( $name );
+			return add_option( $name, $until, '', false ) ? $name : '';
+		}
+		$calls    = self::well_known_calls();
+		$insert   = $wpdb->prepare( "INSERT IGNORE INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, 'no')", $name, (string) $until ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from $wpdb.
+		$suppress = $wpdb->suppress_errors( true ); // No database message inside a JSON answer.
+		$added    = $calls->query( $insert );
+		if ( 0 === $added ) {
+			$expired = $calls->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name = %s AND option_value < %d", $name, time() ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from $wpdb.
+			$added   = false === $expired ? false : $calls->query( $insert );
+		}
+		$wpdb->suppress_errors( $suppress );
+		if ( false === $added ) {
+			return null;
+		}
+		return 1 === (int) $added ? $name : '';
+	}
+
+	/**
+	 * Whether a WordPress is installed at this path of the domain, in this
+	 * site's web directory: <document root>P/wp-load.php exists and lies
+	 * inside the document root. The document root is ABSPATH less the path
+	 * of site_url(), which is where WordPress' core lies under it: right for
+	 * a site at the root, for a site in a folder and for the core in its own
+	 * folder (home /, site_url /wp). Where ABSPATH does not end in that path:
+	 * no. P passed the strict check of segments before. A symlink out of the
+	 * document root, a path open_basedir hides: no (warnings suppressed).
+	 *
+	 * @param string $site_path The other site's path P.
+	 * @return bool
+	 */
+	private static function wordpress_on_disk( $site_path ) {
+		$root = rtrim( str_replace( '\\', '/', (string) ABSPATH ), '/' );
+		$core = rtrim( (string) wp_parse_url( site_url(), PHP_URL_PATH ), '/' );
+		if ( '' !== $core ) {
+			if ( substr( $root, -strlen( $core ) ) !== $core ) {
+				return false;
+			}
+			$root = substr( $root, 0, -strlen( $core ) );
+		}
+		if ( '' === $root ) {
+			return false;
+		}
+		$calls     = self::well_known_calls();
+		$real_root = $calls->realpath( $root );
+		$real_load = $calls->realpath( $root . $site_path . '/wp-load.php' );
+		return is_string( $real_root ) && is_string( $real_load )
+			&& 0 === strpos( str_replace( '\\', '/', $real_load ), rtrim( str_replace( '\\', '/', $real_root ), '/' ) . '/' );
+	}
+
+	/**
+	 * Give the lock of well_known_lock() back.
+	 *
+	 * @param string $name The lock's option name.
+	 */
+	private static function well_known_unlock( $name ) {
+		global $wpdb;
+		if ( $wpdb instanceof wpdb ) {
+			$suppress = $wpdb->suppress_errors( true ); // No database message inside a JSON answer.
+			self::well_known_calls()->delete( $wpdb->options, array( 'option_name' => $name ) );
+			$wpdb->suppress_errors( $suppress );
+			return;
+		}
+		delete_option( $name );
+	}
+
+	/**
+	 * The relayable form of a document of another site, or null.
+	 *
+	 * @param string $name     oauth-authorization-server or oauth-protected-resource.
+	 * @param array  $data     Decoded document.
+	 * @param string $issuer   The issuer asked for.
+	 * @param string $resource The resource asked for ('' for server metadata).
+	 * @return array|null
+	 */
+	private static function relayable( $name, array $data, $issuer, $resource ) {
+		return 'oauth-authorization-server' === $name
+			? self::relayable_server_metadata( $data, $issuer )
+			: self::relayable_resource_metadata( $data, $resource, $issuer );
+	}
+
+	/**
+	 * Server metadata of another AlphaBridge site to relay: only when it names
+	 * exactly $issuer, its endpoints lie under that issuer and it offers the
+	 * code flow with PKCE S256; rebuilt from the fields metadata() has.
+	 *
+	 * @param array  $data   Decoded document.
+	 * @param string $issuer The issuer the request is about.
+	 * @return array|null
+	 */
+	private static function relayable_server_metadata( array $data, $issuer ) {
+		if ( ! isset( $data['issuer'] ) || $issuer !== $data['issuer'] ) {
+			return null;
+		}
+		$out = array( 'issuer' => $issuer );
+		foreach ( array( 'authorization_endpoint', 'token_endpoint', 'registration_endpoint', 'revocation_endpoint' ) as $key ) {
+			if ( ! isset( $data[ $key ] ) ) {
+				if ( 'revocation_endpoint' === $key ) {
+					continue;
+				}
+				return null;
+			}
+			if ( ! self::is_under_issuer( $data[ $key ], $issuer ) ) {
+				return null;
+			}
+			$out[ $key ] = $data[ $key ];
+		}
+		$lists = array( 'revocation_endpoint_auth_methods_supported', 'response_types_supported', 'grant_types_supported', 'code_challenge_methods_supported', 'token_endpoint_auth_methods_supported', 'scopes_supported' );
+		foreach ( $lists as $key ) {
+			if ( isset( $data[ $key ] ) && self::is_string_list( $data[ $key ] ) ) {
+				$out[ $key ] = $data[ $key ];
+			}
+		}
+		if ( ! in_array( 'code', $out['response_types_supported'] ?? array(), true )
+			|| ! in_array( 'S256', $out['code_challenge_methods_supported'] ?? array(), true ) ) {
+			return null;
+		}
+		foreach ( array( 'authorization_response_iss_parameter_supported', 'client_id_metadata_document_supported' ) as $key ) {
+			if ( isset( $data[ $key ] ) && is_bool( $data[ $key ] ) ) {
+				$out[ $key ] = $data[ $key ];
+			}
+		}
+		// The order metadata() gives them.
+		return array_merge( array_intersect_key( array_flip( array( 'issuer', 'authorization_endpoint', 'token_endpoint', 'registration_endpoint', 'revocation_endpoint', 'revocation_endpoint_auth_methods_supported', 'response_types_supported', 'grant_types_supported', 'code_challenge_methods_supported', 'token_endpoint_auth_methods_supported', 'scopes_supported', 'authorization_response_iss_parameter_supported', 'client_id_metadata_document_supported' ) ), $out ), $out );
+	}
+
+	/**
+	 * Resource metadata of another AlphaBridge site to relay: only when it
+	 * names exactly $resource and $issuer as its one authorization server;
+	 * rebuilt from the fields resource_metadata() has.
+	 *
+	 * @param array  $data     Decoded document.
+	 * @param string $resource The resource the request is about.
+	 * @param string $issuer   That site's issuer.
+	 * @return array|null
+	 */
+	private static function relayable_resource_metadata( array $data, $resource, $issuer ) {
+		if ( ! isset( $data['resource'], $data['authorization_servers'] ) || $resource !== $data['resource']
+			|| array( $issuer ) !== $data['authorization_servers'] ) {
+			return null;
+		}
+		$out = array(
+			'resource'              => $resource,
+			'authorization_servers' => array( $issuer ),
+		);
+		if ( isset( $data['bearer_methods_supported'] ) && self::is_string_list( $data['bearer_methods_supported'] ) ) {
+			$out['bearer_methods_supported'] = $data['bearer_methods_supported'];
+		}
+		if ( isset( $data['resource_name'] ) && is_string( $data['resource_name'] ) ) {
+			$out['resource_name'] = $data['resource_name'];
+		}
+		return $out;
+	}
+
+	/**
+	 * Whether an endpoint lies under the issuer, also after the path is
+	 * normalised: the issuer, a slash, then a path without empty, "." or ".."
+	 * segments and without percent signs, backslashes, fragments, spaces or
+	 * control characters; a query after that is allowed (AlphaBridge's own
+	 * ?ab_mcp_oauth=… and, with plain permalinks, ?rest_route=…).
+	 *
+	 * @param mixed  $url    Endpoint.
+	 * @param string $issuer Issuer.
+	 * @return bool
+	 */
+	private static function is_under_issuer( $url, $issuer ) {
+		if ( ! is_string( $url ) || 0 !== strpos( $url, $issuer . '/' ) || preg_match( '/[\x00-\x20\x7F%#\\\\]/', $url ) ) {
+			return false;
+		}
+		$path     = (string) strtok( substr( $url, strlen( $issuer ) ), '?' );
+		$segments = explode( '/', substr( $path, 1 ) );
+		$last     = count( $segments ) - 1;
+		foreach ( $segments as $i => $segment ) {
+			if ( '.' === $segment || '..' === $segment || ( '' === $segment && $i < $last ) ) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * A JSON list of strings.
+	 *
+	 * @param mixed $value Value.
+	 * @return bool
+	 */
+	private static function is_string_list( $value ) {
+		if ( ! is_array( $value ) || array_values( $value ) !== $value ) {
+			return false;
+		}
+		foreach ( $value as $item ) {
+			if ( ! is_string( $item ) ) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	/**

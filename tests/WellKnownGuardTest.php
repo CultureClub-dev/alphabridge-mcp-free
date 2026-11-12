@@ -27,6 +27,7 @@ namespace AlphaBridge\Tests;
 
 use AB_MCP_OAuth;
 use AB_MCP_Preview_Protection;
+use AB_MCP_Settings;
 use PHPUnit\Framework\TestCase;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;

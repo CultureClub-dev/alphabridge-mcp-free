@@ -655,20 +655,22 @@ final class PreviewProtectionTest extends TestCase {
 	}
 
 	public function testTheWellKnownClauseAsksTheHandlerSoADoubleSlashIsNotOpen(): void {
-		// AB_MCP_OAuth::serve_well_known() takes the home path off the front
+		// AB_MCP_OAuth::well_known_answer() takes the home path off the front
 		// and matches the rest as sent; it normalises nothing, so with a
-		// double slash it serves nothing, and WordPress would answer the
-		// theme's 404 page. The gate asks the same function.
-		self::assertSame( 'authorization-server', AB_MCP_OAuth::well_known_document( '/.well-known/oauth-authorization-server' ) );
-		self::assertSame( 'protected-resource', AB_MCP_OAuth::well_known_document( '/.well-known/oauth-protected-resource/wp-json/alphabridge/v1/mcp?x=1' ) );
-		self::assertSame( '', AB_MCP_OAuth::well_known_document( '//.well-known/oauth-authorization-server' ) );
-		self::assertSame( '', AB_MCP_OAuth::well_known_document( '/.well-known//oauth-authorization-server' ) );
-		self::assertSame( '', AB_MCP_OAuth::well_known_document( '/.well-known/oauth-authorization-server-x' ) );
-		self::assertSame( '', AB_MCP_OAuth::well_known_document( '/.well-known/alphabridge.json' ) );
+		// double slash before the name it answers nothing, and WordPress
+		// would answer the theme's 404 page. The gate asks the same function
+		// (WellKnownGuardTest holds that for a whole matrix of addresses).
+		$kind = static fn( string $uri ): string => AB_MCP_OAuth::well_known_answer( $uri )['kind'];
+		self::assertSame( AB_MCP_OAuth::metadata(), AB_MCP_OAuth::well_known_answer( '/.well-known/oauth-authorization-server' )['document'] );
+		self::assertSame( AB_MCP_OAuth::resource_metadata(), AB_MCP_OAuth::well_known_answer( '/.well-known/oauth-protected-resource/wp-json/alphabridge/v1/mcp?x=1' )['document'] );
+		self::assertSame( 'none', $kind( '//.well-known/oauth-authorization-server' ) );
+		self::assertSame( 'none', $kind( '/.well-known//oauth-authorization-server' ) );
+		self::assertSame( 'none', $kind( '/.well-known/oauth-authorization-server-x' ) );
+		self::assertSame( 'none', $kind( '/.well-known/alphabridge.json' ) );
 
 		$GLOBALS['ab_test_home'] = 'https://example.test/staging';
-		self::assertSame( 'authorization-server', AB_MCP_OAuth::well_known_document( '/staging/.well-known/oauth-authorization-server' ) );
-		self::assertSame( '', AB_MCP_OAuth::well_known_document( '/staging//.well-known/oauth-authorization-server' ), 'The handler does not serve this.' );
+		self::assertSame( 'document', $kind( '/staging/.well-known/oauth-authorization-server' ) );
+		self::assertSame( 'none', $kind( '/staging//.well-known/oauth-authorization-server' ), 'The handler does not serve this.' );
 		$this->on();
 		$state                  = AB_MCP_Preview_Protection::state();
 		$_SERVER['REQUEST_URI'] = '/staging//.well-known/oauth-authorization-server';
@@ -2194,7 +2196,7 @@ final class PreviewProtectionTest extends TestCase {
 			}
 			// The two documents below /.well-known/: the gate hands them to
 			// the handler that serves them.
-			$ctx = $this->visitor( array( 'path' => $path, 'request_uri' => $url, 'well_known' => AB_MCP_OAuth::enabled() && '' !== AB_MCP_OAuth::well_known_document( $url ) ) );
+			$ctx = $this->visitor( array( 'path' => $path, 'request_uri' => $url, 'well_known' => 'none' !== AB_MCP_OAuth::well_known_answer( $url )['kind'] ) );
 			self::assertSame( array( 'action' => 'serve', 'reason' => 'well_known' ), AB_MCP_Preview_Protection::frontend_decision( $ctx, $state, time() ), $url );
 		}
 	}

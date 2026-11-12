@@ -34,6 +34,15 @@
  * redirects) and the client metadata document of an app that signs in
  * (AB_MCP_OAuth::cimd_fetch(), no redirect).
  *
+ * Not for the site's own address: what the site asks of itself goes to the
+ * scheme, host and port of its own home_url() directly through WordPress,
+ * which lets the site's own host through even where it resolves to an
+ * internal address. That is the connection check, the firewall and PHP
+ * probes, the sample of the takeover, and the well-known document of
+ * another WordPress in a subfolder of the same domain that
+ * AB_MCP_OAuth::well_known_answer() relays (wp_safe_remote_get(), no
+ * redirect; from the request only the path, checked strictly).
+ *
  * get_bound() is a second mode, for an address whose name may not point
  * anywhere yet: the request that proves this server serves a new site
  * address before the DNS changes (wp_change_site_address of the Pro

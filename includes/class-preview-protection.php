@@ -81,24 +81,31 @@
  *   final query_vars; nothing else of the core hangs on parse_request), it
  *   dies after serving, and gate_rest() decides inside it on
  *   rest_authentication_errors as for every REST request.
- * - The two OAuth metadata documents below /.well-known/ and the consent
+ * - The OAuth metadata documents below /.well-known/ and the consent
  *   page /?ab_mcp_oauth=authorize, which AB_MCP_OAuth serves on
  *   template_redirect at priority 0 (serve_well_known() while the sign-in
  *   is on, handle_authorize()). The gate does not pass them and wait for
  *   that: between parse_request and template_redirect the plugins above
  *   answer, and /.well-known/oauth-authorization-server?sitemap=1 or
  *   /?ab_mcp_oauth=authorize&sitemap=1 would be their sitemap, not the
- *   document. It calls the handler itself (decision serve, serve()), and the
- *   handler ends every request it serves: send_json() exits;
- *   handle_authorize() ends with the consent screen, the redirect to the
- *   login, the redirect back to the client or an error page (each branch
- *   exits or wp_die()s). Should a handler return, the password page follows.
- *   Each clause asks the handler's own routing decision, so what the gate
- *   hands over is exactly what the handler serves:
- *   AB_MCP_OAuth::well_known_document() (a double slash is neither
- *   document) and AB_MCP_OAuth::is_authorize_request() (?ab_mcp_oauth=0 on
- *   any page is nothing the handler serves, and is the password page; Codex,
- *   31.10.2026). The consent clause holds with themes only, where the
+ *   document. It answers them itself (decision serve, serve()), and every
+ *   such answer ends the request: handle_authorize() ends with the consent
+ *   screen, the redirect to the login, the redirect back to the client or
+ *   an error page (each branch exits or wp_die()s). Should a handler
+ *   return, the password page follows. Each clause asks the handler's own
+ *   decision, so what the gate hands over is exactly what the handler
+ *   serves: AB_MCP_OAuth::well_known_answer() and
+ *   AB_MCP_OAuth::is_authorize_request() (?ab_mcp_oauth=0 on any page is
+ *   nothing the handler serves, and is the password page; Codex,
+ *   31.10.2026). The well-known answer (hotfix 4.10.1) is this site's own
+ *   document, the document of another WordPress in a subfolder of the
+ *   domain, fetched from it and relayed, a refusal, or none of the
+ *   plugin's: the gate carries out the very answer of its context through
+ *   AB_MCP_OAuth::respond_well_known(), the executor of the handler too.
+ *   Both documents are public (RFC 8414, RFC 9728) and end the request; a
+ *   refusal ends a visitor's request with a 404 without content (no
+ *   theme, no later handler); «none» (a double slash before the name, the
+ *   sign-in off) is the password page. The consent clause holds with themes only, where the
  *   handler would run on template_redirect; on wp-signup.php the password
  *   page as before. On template_redirect the handlers at 0 have answered
  *   already, so the clauses there are for the case that order changes.
@@ -1084,38 +1091,42 @@ class AB_MCP_Preview_Protection {
 		$uri  = isset( $_SERVER['REQUEST_URI'] ) ? (string) $_SERVER['REQUEST_URI'] : '/'; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- matched and parsed, never echoed raw.
 		$path = self::strip_home( (string) wp_parse_url( $uri, PHP_URL_PATH ) );
 		$vars = ( is_object( $wp ) && isset( $wp->query_vars ) && is_array( $wp->query_vars ) ) ? $wp->query_vars : null;
+		// The OAuth handler's own decision, asked once: the clause well_known
+		// opens what it answers, and serve() carries out this very answer.
+		$well_known = class_exists( 'AB_MCP_OAuth' ) ? AB_MCP_OAuth::well_known_answer( $uri ) : array( 'kind' => 'none' );
 		return array(
-			'path'            => $path,
-			'request_uri'     => $uri,
-			'method'          => isset( $_SERVER['REQUEST_METHOD'] ) ? strtoupper( (string) $_SERVER['REQUEST_METHOD'] ) : 'GET',
-			'well_known'      => class_exists( 'AB_MCP_OAuth' ) && AB_MCP_OAuth::enabled() && '' !== AB_MCP_OAuth::well_known_document( $uri ),
+			'path'              => $path,
+			'request_uri'       => $uri,
+			'method'            => isset( $_SERVER['REQUEST_METHOD'] ) ? strtoupper( (string) $_SERVER['REQUEST_METHOD'] ) : 'GET',
+			'well_known'        => 'none' !== $well_known['kind'],
+			'well_known_answer' => $well_known,
 			// With themes only: the handler runs on template_redirect, which
 			// the entry points without themes never reach.
-			'oauth_authorize' => (bool) $with_themes && class_exists( 'AB_MCP_OAuth' ) && AB_MCP_OAuth::is_authorize_request(),
-			'password'        => isset( $_POST[ self::FIELD ] ) && is_string( $_POST[ self::FIELD ] ) ? (string) wp_unslash( $_POST[ self::FIELD ] ) : null, // phpcs:ignore WordPress.Security.NonceVerification.Missing -- the password is the credential checked here.
-			'cookie'          => self::cookie_sent(),
-			'logged_in'       => is_user_logged_in(),
-			'admin'           => is_admin(),
+			'oauth_authorize'   => (bool) $with_themes && class_exists( 'AB_MCP_OAuth' ) && AB_MCP_OAuth::is_authorize_request(),
+			'password'          => isset( $_POST[ self::FIELD ] ) && is_string( $_POST[ self::FIELD ] ) ? (string) wp_unslash( $_POST[ self::FIELD ] ) : null, // phpcs:ignore WordPress.Security.NonceVerification.Missing -- the password is the credential checked here.
+			'cookie'            => self::cookie_sent(),
+			'logged_in'         => is_user_logged_in(),
+			'admin'             => is_admin(),
 			// No clause for DOING_AJAX: admin-ajax.php runs no wp(), so the
 			// front-end gates never see it (it has gate_admin()), and a plugin
 			// may define the constant on a front-end request (WooCommerce on
 			// init for ?wc-ajax=), which then is a front-end request like any
 			// other, sitemap variables included (Codex, 31.10.2026).
-			'cron'            => defined( 'DOING_CRON' ) && DOING_CRON,
-			'xmlrpc'          => defined( 'XMLRPC_REQUEST' ) && XMLRPC_REQUEST,
+			'cron'              => defined( 'DOING_CRON' ) && DOING_CRON,
+			'xmlrpc'            => defined( 'XMLRPC_REQUEST' ) && XMLRPC_REQUEST,
 			// No clause for REST_REQUEST: rest_api_loaded() defines it and
 			// never returns, so on the front end only a plugin could have
 			// defined it, and that proves nothing (the rule in the header).
 			// The condition of rest_api_loaded() (wp-includes/rest-api.php),
 			// which serves the request on parse_request at priority 10: the
 			// variable WordPress parsed, never the path.
-			'rest_route'      => null !== $vars && ! empty( $vars['rest_route'] ),
-			'cli'             => defined( 'WP_CLI' ) && WP_CLI,
+			'rest_route'        => null !== $vars && ! empty( $vars['rest_route'] ),
+			'cli'               => defined( 'WP_CLI' ) && WP_CLI,
 			// Only with themes: without them the template loader prints
 			// robots.txt and returns to the script, which renders on. After
 			// the query is_robots() decides; on parse_request the parsed
 			// variable, as WP_Query will read it ('' !== $qv['robots']).
-			'robots'          => (bool) $with_themes && ( null === $vars ? function_exists( 'is_robots' ) && is_robots() : isset( $vars['robots'] ) && '' !== $vars['robots'] ),
+			'robots'            => (bool) $with_themes && ( null === $vars ? function_exists( 'is_robots' ) && is_robots() : isset( $vars['robots'] ) && '' !== $vars['robots'] ),
 		);
 	}
 
@@ -1224,7 +1235,7 @@ class AB_MCP_Preview_Protection {
 		if ( 'serve' === $decision['action'] ) {
 			// The handler ends every request it serves; one that returns
 			// served nothing, and the password page follows.
-			self::serve( $decision['reason'] );
+			self::serve( $decision['reason'], $ctx );
 		}
 		if ( 'accept' === $decision['action'] ) {
 			$expires = time() + self::COOKIE_DAYS * DAY_IN_SECONDS;
@@ -1261,16 +1272,21 @@ class AB_MCP_Preview_Protection {
 	 * - robots: do_action( 'do_robots' ) and exit, as the template loader
 	 *   does for is_robots() (wp-includes/template-loader.php), so do_robots()
 	 *   and every plugin on the filter robots_txt answer as always.
-	 * - well_known: AB_MCP_OAuth::serve_well_known(), which exits after the
-	 *   JSON; oauth_authorize: AB_MCP_OAuth::handle_authorize(), whose every
-	 *   branch exits or wp_die()s.
+	 * - well_known: the answer AB_MCP_OAuth::well_known_answer() gave for
+	 *   this request (the context holds it), carried out by
+	 *   AB_MCP_OAuth::respond_well_known() as for a visitor: a document is
+	 *   sent as JSON and the request ends; a refusal ends with a 404 without
+	 *   content, never the theme's 404 page or a later handler.
+	 * - oauth_authorize: AB_MCP_OAuth::handle_authorize(), whose every branch
+	 *   exits or wp_die()s.
 	 *
 	 * Nothing else is served here; a reason this does not know, or a handler
 	 * that returns, leaves the gate to show the password page.
 	 *
 	 * @param string $reason The clause that decided.
+	 * @param array  $ctx    frontend_context() of the request.
 	 */
-	private static function serve( $reason ) {
+	private static function serve( $reason, array $ctx = array() ) {
 		if ( 'rest_route' === $reason ) {
 			if ( function_exists( 'rest_api_loaded' ) ) {
 				rest_api_loaded();
@@ -1286,7 +1302,7 @@ class AB_MCP_Preview_Protection {
 			return;
 		}
 		if ( 'well_known' === $reason ) {
-			AB_MCP_OAuth::serve_well_known();
+			AB_MCP_OAuth::respond_well_known( isset( $ctx['well_known_answer'] ) && is_array( $ctx['well_known_answer'] ) ? $ctx['well_known_answer'] : array( 'kind' => 'none' ), true );
 		} elseif ( 'oauth_authorize' === $reason ) {
 			AB_MCP_OAuth::handle_authorize();
 		}
