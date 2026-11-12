@@ -170,6 +170,7 @@ final class AB_MCP_Sync_Decision {
 		'changed_live'       => 'Changed on this site since the base of its pair, unchanged on staging: kept and shown.',
 		'conflict'           => 'Changed on both sides since the base of its pair, differently.',
 		'changed_alike'      => 'Changed on both sides alike since the base of its pair: nothing to take over.',
+		'kept_apart'         => 'Unchanged on both sides since the bases of its pair, which differ: the sides differ now as they did then, kept so; nothing to take over.',
 		'deleted_on_staging' => 'Removed on staging since its pair was made.',
 		'deleted_live'       => 'Removed on this site since its pair was made: nothing to do.',
 		'deleted_against_changed_live' => 'Removed on staging since its pair was made, and changed on this site since its base: a conflict, kept on this site.',
@@ -199,7 +200,10 @@ final class AB_MCP_Sync_Decision {
 	 *
 	 * @param array[]  $staging  Lines of the staging site (a held one reduced).
 	 * @param array[]  $live     Lines of this site (likewise).
-	 * @param array[]  $pairs    The pairs of the source (AB_MCP_Sync_Pairs::decode()).
+	 * @param array[]  $pairs    The pairs of the source (AB_MCP_Sync_Pairs::decode());
+	 *                           a pair of a unit (UNIT_KINDS) is counted in
+	 *                           pairs only, its entry is that of the
+	 *                           environment (AB_MCP_Sync_Env::compare()).
 	 * @param callable $complete function( string $kind, ?string $subtype ): bool,
 	 *                           whether the staging side holds every object of
 	 *                           a kind and subtype (null: of every subtype).
@@ -219,6 +223,13 @@ final class AB_MCP_Sync_Decision {
 			'l' => array(),
 		);
 		foreach ( $pairs as $pair ) {
+			// A pair of a unit is decided with the environment only
+			// (unit_item()), never as an object: no second entry, no choice
+			// of an object, no name of it a line of the environment holds
+			// (Codex, whole round over 4c66939..f25da74, A).
+			if ( in_array( $pair['kind'], self::UNIT_KINDS, true ) ) {
+				continue;
+			}
 			$s = self::lookup( $by['s'], $pair['kind'], $pair['staging_ref'] );
 			$l = self::lookup( $by['l'], $pair['kind'], $pair['live_ref'] );
 			if ( null !== $s ) {
@@ -1388,10 +1399,13 @@ final class AB_MCP_Sync_Decision {
 				$ss = hash_equals( $base['staging'], $have[ $part ]['s'] ) ? 'unchanged' : 'changed';
 				$ls = hash_equals( $base['live'], $have[ $part ]['l'] ) ? 'unchanged' : 'changed';
 				$row = self::row( $ss, $ls, ! in_array( $part, $differs, true ) );
-				$states[ $part ] = self::TABLE[ $row ][2];
+				// Unchanged on both sides since bases that differ: the part
+				// differs now, kept so (Frage F, c), never equal (Codex,
+				// whole round over 4c66939..f25da74, A).
+				$states[ $part ] = 1 === $row && in_array( $part, $differs, true ) ? 'kept_apart' : self::TABLE[ $row ][2];
 			}
 			$entry['parts'] = $states;
-			foreach ( array( 'conflict', 'changed_on_staging', 'changed_live', 'changed_alike', 'equal' ) as $result ) {
+			foreach ( array( 'conflict', 'changed_on_staging', 'changed_live', 'changed_alike', 'kept_apart', 'equal' ) as $result ) {
 				if ( in_array( $result, $states, true ) ) {
 					$entry['result'] = $result;
 					break;

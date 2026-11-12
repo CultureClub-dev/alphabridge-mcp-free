@@ -961,6 +961,51 @@ final class SyncManifestTest extends TestCase {
 		self::assertSame( array( 'theme', 'ab-it-sammlung/zwei', 'code:theme_root', 'theme_root', null, '2.0' ), array( $zwei['env'], $zwei['ref'], $zwei['lock'], $zwei['cause'], $zwei['hash'], $zwei['version'] ) );
 	}
 
+	public function testTheMeasurementCountsEveryFileItWritesAndNoSeriesPastItsParts(): void {
+		// Codex, whole round over 4c66939..f25da74 (C): the main files of the
+		// plugins and style.css of the themes were missing from the generated
+		// files; a series that ended only in the part after the last a report
+		// takes ended with status 0.
+		$uploads = AB_MCP_IT_Sites::docroot( 'a' ) . '/wp-content/uploads';
+		if ( ! is_dir( $uploads ) ) {
+			// The measurement leaves the folder of the uploads it made.
+			$this->folders[] = $uploads;
+		}
+		$run = static function ( array $env ): array {
+			$cmd  = array( PHP_BINARY, dirname( __DIR__ ) . '/integration/bin/measure-manifest.php', AB_MCP_IT_Sites::state_file(), 'a' );
+			$proc = proc_open( $cmd, array( 1 => array( 'pipe', 'w' ), 2 => array( 'pipe', 'w' ) ), $pipes, null, array_merge( getenv(), array( 'AB_MEASURE_SCALE' => '0.001', 'AB_MEASURE_LINES' => '40' ), $env ) );
+			self::assertIsResource( $proc );
+			$out = (string) stream_get_contents( $pipes[1] ) . (string) stream_get_contents( $pipes[2] );
+			fclose( $pipes[1] );
+			fclose( $pipes[2] );
+			return array( proc_close( $proc ), $out );
+		};
+		list( $status, $out ) = $run( array() );
+		self::assertSame( 0, $status, $out );
+		// One file of the shapes in each unit, and the main file of each of
+		// the 30 plugins and style.css of each of the 3 themes.
+		$heads = 0;
+		for ( $u = 1; $u <= 30; $u++ ) {
+			$heads += strlen( "<?php\n/* Plugin Name: Measure $u\n * Version: 1.0.0 */\n" );
+		}
+		for ( $u = 1; $u <= 3; $u++ ) {
+			$heads += strlen( "/*\nTheme Name: Measure $u\nVersion: 1.0.0\n*/\n" );
+		}
+		self::assertMatchesRegularExpression( '/generated files +67 \(' . ( 30 * 512 + 3 * 1024 + 20480 + $heads ) . ' bytes, /', $out );
+		self::assertMatchesRegularExpression( '/generated units read whole +34 of 34\n/', $out );
+		self::assertSame( 1, preg_match( '/parts \(packages of the series\) +(\d+)\n/', $out, $m ), $out );
+		$parts = (int) $m[1];
+		self::assertGreaterThan( 1, $parts, 'A series of more than one part (40 lines a part), so that a lower cap ends it.' );
+		// The series ends in the part after the cap: not reportable.
+		list( $status, $out ) = $run( array( 'AB_MEASURE_MAX_PARTS' => (string) ( $parts - 1 ) ) );
+		self::assertSame( 1, $status, $out );
+		self::assertStringContainsString( 'NOT REPORTABLE: the series did not end within ' . ( $parts - 1 ) . ' parts', $out );
+		self::assertMatchesRegularExpression( '/parts \(packages of the series\) +' . $parts . '\n/', $out, 'It ended in the part after the cap.' );
+		// At the cap: reportable.
+		list( $status, $out ) = $run( array( 'AB_MEASURE_MAX_PARTS' => (string) $parts ) );
+		self::assertSame( 0, $status, $out );
+	}
+
 	public function testAFileOfAnAttachmentAtTheTopOfTheUploadsIsNoUnit(): void {
 		// GitHub-Codex on free#147, P2: a site without year and month folders
 		// keeps the files of its attachments at the top of the uploads.

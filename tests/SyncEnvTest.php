@@ -1387,6 +1387,39 @@ final class SyncEnvTest extends TestCase {
 		self::assertSame( 'equal', $unclear['result'] );
 	}
 
+	public function testAUnitUnchangedOnBothSidesSinceBasesThatDifferIsNeverEqual(): void {
+		// Codex, whole round over 4c66939..f25da74 (A): each side its own
+		// base, each unchanged since, the files differ now: kept apart
+		// (Frage F, c), never «equal», nothing to take over.
+		$act  = \AB_MCP_Sync_Decision::part_hash( 'plugin', 'activation', self::plugin( '2.0', true ) );
+		$pair = array(
+			'id'           => 8,
+			'kind'         => 'plugin',
+			'staging_ref'  => 'shop',
+			'live_ref'     => 'shop',
+			'state'        => 'active',
+			'canon'        => \AB_MCP_Sync_Canon::VERSION,
+			'base_live'    => str_repeat( 'a', 64 ),
+			'base_staging' => str_repeat( 'b', 64 ),
+			'base_extra'   => array( 'parts' => array( 'activation' => array( 'live' => $act, 'staging' => $act ) ) ),
+		);
+		$judge = static function ( array $s, array $l ) use ( $pair ): array {
+			return AB_MCP_Sync_Env::compare( array( $s, self::whole() ), array( $l, self::whole() ), array( $pair ) )['entries'][0];
+		};
+		$e = $judge( self::plugin( '1.1.0', true, 'b' ), self::plugin( '1.0.0', true, 'a' ) );
+		self::assertSame( array( 'kept_apart', 'none', array( 'files' => 'kept_apart', 'activation' => 'equal' ), array( 'files' ) ), array( $e['result'], $e['action'], $e['parts'], $e['differs'] ) );
+		self::assertArrayNotHasKey( 'locks', $e );
+		self::assertStringStartsWith( 'Unchanged on both sides since the bases of its pair, which differ', $e['words'] );
+		self::assertStringNotContainsString( 'Equal', $e['words'] );
+		// Changed on staging since: changed_on_staging, as before.
+		self::assertSame( 'changed_on_staging', $judge( self::plugin( '1.2.0', true, 'c' ), self::plugin( '1.0.0', true, 'a' ) )['result'] );
+		// Both changed since, to the same files: changed alike, as before.
+		self::assertSame( 'changed_alike', $judge( self::plugin( '1.2.0', true, 'c' ), self::plugin( '1.2.0', true, 'c' ) )['result'] );
+		// One part kept apart, another changed on staging: the change leads.
+		$e = $judge( self::plugin( '1.1.0', false, 'b' ), self::plugin( '1.0.0', true, 'a' ) );
+		self::assertSame( array( 'changed_on_staging', array( 'files' => 'kept_apart', 'activation' => 'changed_on_staging' ) ), array( $e['result'], $e['parts'] ) );
+	}
+
 	public function testTheThemeThatRunsIsAUnitOfItsOwn(): void {
 		$choice = array( 'env' => 'theme_choice', 'ref' => 'theme_choice', 'stylesheet' => 'child', 'template' => 'parent' );
 		$e      = self::one( $choice, $choice );

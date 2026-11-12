@@ -19,7 +19,13 @@
  * gives no rate and ends with status 1 (Codex round 1, C2). The rate is the
  * bytes of the units read whole over the time of the series.
  * AB_MEASURE_SCALE (a number, default 1) scales the number of files, for a
- * short try of the script. The CI runs it in the job
+ * short try of the script; AB_MEASURE_LINES (default and at most
+ * AB_MCP_Sync_Export::OBJECTS) lowers the lines a part, and
+ * AB_MEASURE_MAX_PARTS (default and at most
+ * AB_MCP_Sync_Report::MAX_ENVIRONMENT) the parts a series may take, for a
+ * test of its end. A series that does not end within them, or
+ * takes more parts than wp_site_diff takes, is no measurement of a report
+ * and ends with status 1. The CI runs it in the job
  * integration (step «Measure the manifests»); its numbers are read from the
  * log of that step. Development only: /tests ships with no release.
  *
@@ -80,6 +86,18 @@ try {
 	);
 	// Each generated unit with the files and bytes it must come back with.
 	$want = array();
+	// Every file the measurement writes, of the shapes or the main file of a
+	// plugin or style.css of a theme, counted once in the totals and in its
+	// unit (Codex, whole round over 4c66939..f25da74, C).
+	$put = static function ( $path, $bytes, $key ) use ( &$total, &$want ) {
+		file_put_contents( $path, $bytes );
+		$total['files'] += 1;
+		$total['bytes'] += strlen( $bytes );
+		$want[ $key ]    = array(
+			'files' => ( $want[ $key ]['files'] ?? 0 ) + 1,
+			'bytes' => ( $want[ $key ]['bytes'] ?? 0 ) + strlen( $bytes ),
+		);
+	};
 	foreach ( AB_MEASURE_SHAPES as $root => $shape ) {
 		for ( $u = 1; $u <= $shape['units']; $u++ ) {
 			$dir = 'uploads' === $root ? $year . '/01' : sprintf( '%s/%s/ab-measure-%02d', $content, $root, $u );
@@ -93,14 +111,7 @@ try {
 					mkdir( dirname( $path ), 0755, true );
 				}
 				$size = $shape['sizes'][ $f % count( $shape['sizes'] ) ];
-				file_put_contents( $path, str_repeat( chr( mt_rand( 65, 90 ) ), $size ) );
-				$total['files'] += 1;
-				$total['bytes'] += $size;
-				$key             = 'uploads' === $root ? 'upload:2099/01/' . basename( $path ) : ( 'plugins' === $root ? 'plugin:' : 'theme:' ) . basename( $dir );
-				$want[ $key ]    = array(
-					'files' => ( $want[ $key ]['files'] ?? 0 ) + 1,
-					'bytes' => ( $want[ $key ]['bytes'] ?? 0 ) + $size,
-				);
+				$put( $path, str_repeat( chr( mt_rand( 65, 90 ) ), $size ), 'uploads' === $root ? 'upload:2099/01/' . basename( $path ) : ( 'plugins' === $root ? 'plugin:' : 'theme:' ) . basename( $dir ) );
 			}
 			$head = null;
 			if ( 'plugins' === $root ) {
@@ -109,15 +120,19 @@ try {
 				$head = array( $dir . '/style.css', "/*\nTheme Name: Measure $u\nVersion: 1.0.0\n*/\n" );
 			}
 			if ( null !== $head ) {
-				file_put_contents( $head[0], $head[1] );
-				$key                   = ( 'plugins' === $root ? 'plugin:' : 'theme:' ) . basename( $dir );
-				$want[ $key ]['files'] = ( $want[ $key ]['files'] ?? 0 ) + 1;
-				$want[ $key ]['bytes'] = ( $want[ $key ]['bytes'] ?? 0 ) + strlen( $head[1] );
+				$put( $head[0], $head[1], ( 'plugins' === $root ? 'plugin:' : 'theme:' ) . basename( $dir ) );
 			}
 		}
 	}
 
-	// The series as wp_site_export reads it: 60 s and OBJECTS lines a part.
+	// The series as wp_site_export reads it: 60 s and OBJECTS lines a part,
+	// one part more than a report takes, to see a series that takes more.
+	$lower = static function ( $name, $most ) {
+		$value = getenv( $name );
+		return is_numeric( $value ) && (int) $value >= 1 ? min( $most, (int) $value ) : $most;
+	};
+	$max   = $lower( 'AB_MEASURE_MAX_PARTS', AB_MCP_Sync_Report::MAX_ENVIRONMENT );
+	$room  = $lower( 'AB_MEASURE_LINES', AB_MCP_Sync_Export::OBJECTS );
 	$parts    = 0;
 	$lines    = 0;
 	$bytes    = 0;
@@ -131,7 +146,7 @@ try {
 	$slowest  = 0.0;
 	do {
 		$t    = microtime( true );
-		$read = AB_MCP_Sync_Env::read( $state, AB_MCP_Sync_Inventory::BUDGET, AB_MCP_Sync_Export::OBJECTS, 'staging' );
+		$read = AB_MCP_Sync_Env::read( $state, AB_MCP_Sync_Inventory::BUDGET, $room, 'staging' );
 		if ( is_wp_error( $read ) ) {
 			throw new RuntimeException( $read->get_error_message() );
 		}
@@ -154,7 +169,7 @@ try {
 		$bytes  += $part;
 		$largest = max( $largest, $part );
 		$state   = $read['state'];
-	} while ( null !== $state && $parts < AB_MCP_Sync_Report::MAX_ENVIRONMENT + 1 );
+	} while ( null !== $state && $parts <= $max );
 	$seconds = microtime( true ) - $started;
 
 	// Each generated unit read whole, with its files and bytes.
@@ -172,7 +187,7 @@ try {
 
 	$mib = static fn( $b ) => sprintf( '%.1f MiB', $b / 1048576 );
 	$out = array(
-		'generated files'                      => $total['files'] . ' (' . $mib( $total['bytes'] ) . ')',
+		'generated files'                      => $total['files'] . ' (' . $total['bytes'] . ' bytes, ' . $mib( $total['bytes'] ) . ')',
 		'generated units read whole'           => ( count( $want ) - count( $missed ) ) . ' of ' . count( $want ),
 		'units read'                           => (string) json_encode( $units ),
 		'files hashed (whole units)'           => (string) $hashed,
@@ -184,17 +199,20 @@ try {
 		'lines of the series'                  => (string) $lines,
 		'bytes of the lines (canonical JSON)'  => $mib( $bytes ) . ', ' . sprintf( '%.0f', $bytes / max( 1, $lines ) ) . ' bytes a line',
 		'largest part'                         => $mib( $largest ),
-		'lines a part at most'                 => (string) AB_MCP_Sync_Export::OBJECTS,
+		'lines a part at most'                 => (string) $room,
 		'files a line of entries'              => (string) AB_MCP_Sync_Env::PER_LINE,
-		'parts a series at most'               => (string) AB_MCP_Sync_Report::MAX_ENVIRONMENT,
+		'parts a series at most'               => (string) $max,
 		'php'                                  => PHP_VERSION,
 	);
 	echo "measure-manifest: Z8b branch 2, the manifests of code and files\n";
 	foreach ( $out as $what => $value ) {
 		printf( "measure-manifest: %-40s %s\n", $what, $value );
 	}
-	if ( null !== $state ) {
-		echo "measure-manifest: the series did not end within MAX_ENVIRONMENT parts\n";
+	// A report takes at most $max parts: a series that did not end within
+	// them, or ended only in the part after them, is not one a report reads
+	// (Codex, whole round over 4c66939..f25da74, C).
+	if ( null !== $state || $parts > $max ) {
+		echo "measure-manifest: NOT REPORTABLE: the series did not end within $max parts (wp_site_diff takes at most so many)\n";
 		$status = 1;
 	}
 	if ( array() !== $missed ) {

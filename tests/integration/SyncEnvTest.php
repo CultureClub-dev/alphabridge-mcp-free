@@ -431,6 +431,69 @@ final class SyncEnvTest extends TestCase {
 		return hash( 'sha256', (string) json_encode( $wpdb->get_results( "SELECT option_name, option_value FROM {$wpdb->options} WHERE option_name NOT LIKE '\\_transient%' AND option_name NOT LIKE '\\_site\\_transient%' AND option_name NOT LIKE 'ab\\_mcp\\_%' AND option_name NOT IN ( 'cron' ) ORDER BY option_name", ARRAY_A ) ) ); // phpcs:ignore WordPress.DB
 	}
 
+	public function testAPairOfAUnitIsInTheWholeReportOnceAsAUnitWithoutAChoiceOrItsHeldName(): void {
+		// Codex, whole round over 4c66939..f25da74 (A): the pairs of units
+		// went through the decision of objects as well: a second entry (not
+		// compared beside equal), the choice staging_wins for an unclear one,
+		// and the name of a held must-use plugin in that entry. The whole
+		// report, its entries of objects too.
+		self::pair();
+		$secret = 'EXAMPLE_SECRET';
+		$held   = 'password=' . $secret . '.php';
+		foreach ( array( 'a', 'b' ) as $site ) {
+			self::write( $site, 'plugins/ab-it-env-same/ab-it-env-same.php', self::plugin( 'Env same', '1.0' ) );
+			self::write( $site, 'plugins/ab-it-env-version/ab-it-env-version.php', self::plugin( 'Env version', '1.0' ) );
+			self::write( $site, 'mu-plugins/' . $held, "<?php\n// The same on both.\n" );
+		}
+		wp_cache_delete( 'plugins', 'plugins' );
+		$read = AB_MCP_Sync_Env::read( null, 60, 4000, 'live' );
+		self::assertIsArray( $read );
+		self::assertNull( $read['state'] );
+		$here = array();
+		foreach ( $read['lines'] as $line ) {
+			$here[ $line['env'] . ':' . $line['ref'] ] = $line;
+		}
+		$source = AB_MCP_Sync_Anchor::active()['source_id'];
+		$made   = static function ( string $kind, string $ref, array $line, string $state ) use ( $source ): array {
+			$act  = 'plugin' === $kind ? \AB_MCP_Sync_Decision::part_hash( 'plugin', 'activation', $line ) : null;
+			$pair = \AB_MCP_Sync_Pairs::create(
+				array(
+					'source_id'    => $source,
+					'kind'         => $kind,
+					'live_ref'     => $ref,
+					'staging_ref'  => $ref,
+					'state'        => $state,
+					'canon'        => \AB_MCP_Sync_Canon::VERSION,
+					'base_live'    => $line['hash'],
+					'base_staging' => $line['hash'],
+					'base_origin'  => 'proposal',
+					'base_extra'   => null === $act ? null : array( 'parts' => array( 'activation' => array( 'live' => $act, 'staging' => $act ) ) ),
+				)
+			);
+			self::assertIsArray( $pair, is_wp_error( $pair ) ? $pair->get_error_message() : '' );
+			return $pair;
+		};
+		$same    = $made( 'plugin', 'ab-it-env-same', $here['plugin:ab-it-env-same'], 'active' );
+		$unclear = $made( 'plugin', 'ab-it-env-version', $here['plugin:ab-it-env-version'], 'unclear' );
+		$made( 'mu_plugin', $held, $here[ 'mu_plugin:' . AB_MCP_Sync_Env::hashed( $held ) ], 'active' );
+		$answer = self::report(
+			array(
+				'packages'    => self::staged( 'inventory' ),
+				'environment' => self::staged( 'env' ),
+			)
+		);
+		$all = $answer['all'];
+		self::assertSame( array(), array_values( array_filter( $all, static fn( $e ) => in_array( $e['kind'], \AB_MCP_Sync_Decision::UNIT_KINDS, true ) ) ), 'No entry of an object for a pair of a unit.' );
+		foreach ( array( $same, $unclear ) as $pair ) {
+			self::assertCount( 1, array_filter( $all, static fn( $e ) => (int) ( $e['pair']['id'] ?? 0 ) === (int) $pair['id'] ), 'Its pair in one entry: ' . $pair['live_ref'] );
+		}
+		$env = self::env( $all );
+		self::assertSame( array( 'equal', 'none', null ), self::said( $env['plugin:ab-it-env-same'] ), 'Unchanged with its active pair: equal.' );
+		self::assertSame( 'not_compared', $env['plugin:ab-it-env-version']['result'], 'An unclear pair: not compared, a person confirms first.' );
+		self::assertSame( array(), array_values( array_filter( $all, static fn( $e ) => isset( $e['choices'] ) ) ), 'No choice in the whole report.' );
+		self::assertStringNotContainsString( $secret, (string) json_encode( $all ), 'The held name in no entry.' );
+	}
+
 	public function testNoConstantThatHoldsASecretIsInTheAnswerOrInAnyFileOfTheStore(): void {
 		self::pair();
 		$answer   = self::report(

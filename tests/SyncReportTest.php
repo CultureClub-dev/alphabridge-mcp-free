@@ -248,6 +248,23 @@ final class SyncReportTest extends TestCase {
 		self::assertSame( array( 'keep', array( '*:delete' ) ), array( $entry['action'], self::keys( $entry ) ) );
 	}
 
+	public function testAPairOfAUnitIsNoObjectOfTheReport(): void {
+		// Codex, whole round over 4c66939..f25da74 (A): a pair of a unit is
+		// decided with the environment only; as an object it gave a second
+		// entry, the choices of an object where it is unclear, and its name.
+		$pairs  = array(
+			self::pair( 1, 'plugin', 'shop', 'shop' ),
+			self::pair( 2, 'plugin', 'cart', 'cart', 'unclear' ),
+			self::pair( 3, 'mu_plugin', 'password=EXAMPLE_SECRET.php', 'password=EXAMPLE_SECRET.php' ),
+			self::pair( 4, 'theme_choice', 'theme_choice', 'theme_choice' ),
+		);
+		$report = self::report( array(), array(), $pairs );
+		self::assertSame( array(), $report['entries'], 'No entry of an object for a pair of a unit.' );
+		self::assertSame( 3, $report['pairs']['active'], 'Counted as pairs of the source still.' );
+		self::assertSame( 1, $report['pairs']['unclear'] );
+		self::assertStringNotContainsString( 'EXAMPLE_SECRET', (string) json_encode( $report ) );
+	}
+
 	public function testAConflictOffersItsThreeChoices(): void {
 		$entry = self::decided( array( self::page( '34', 'about', 's1' ) ), array( self::page( '12', 'about', 'l1' ) ), self::pair( 7, 'post', '12', '34' ) );
 		self::assertSame( array( 'staging_wins', 'keep_live', 'leave_open' ), $entry['choices'] );
