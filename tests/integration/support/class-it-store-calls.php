@@ -6,7 +6,11 @@
  * store makes by itself (put_tree() for a proof without php) takes no
  * fetcher. A test puts it into the seam of the store as its real calls
  * (AB_MCP_Test_Seam::install(), in a child process by its class name);
- * every other call is the real one. Test code only.
+ * every other call is the real one. Behebung 1 of Z8b branch 3: a read of
+ * one path can be made to fail ($fail: method => paths, each answered with
+ * false), for the read errors the fault plan of the seam cannot aim at one
+ * path (lstat(), scandir() and read() are called for many paths; chmod()
+ * for the files and the folders of a tree). Test code only.
  *
  * @package AlphaBridge_MCP
  */
@@ -24,6 +28,27 @@ final class AB_MCP_IT_Store_Calls {
 	/** @var AB_MCP_Test_Sync_Fetcher The fetcher of the requests (its calls for the assertions). */
 	public $fetcher;
 
+	/** @var array<string,string[]> Method => paths whose call gives false (a read error of that path). */
+	public $fail = array();
+
+	/** @var array<int,array{0:string,1:string}> The calls answered with false: method and path. */
+	public $failed = array();
+
+	/**
+	 * Whether a call of a method for a path is to fail.
+	 *
+	 * @param string $method Method.
+	 * @param string $path   Path.
+	 * @return bool
+	 */
+	private function fails( $method, $path ) {
+		if ( isset( $this->fail[ $method ] ) && in_array( (string) $path, $this->fail[ $method ], true ) ) {
+			$this->failed[] = array( $method, (string) $path );
+			return true;
+		}
+		return false;
+	}
+
 	/**
 	 * @param AB_MCP_Test_Sync_Fetcher|null $fetcher The fetcher; one for the integration sites where none.
 	 */
@@ -33,15 +58,15 @@ final class AB_MCP_IT_Store_Calls {
 	}
 
 	public function lstat( $path ) {
-		return $this->real->lstat( $path );
+		return $this->fails( 'lstat', $path ) ? false : $this->real->lstat( $path );
 	}
 
 	public function stat( $path ) {
-		return $this->real->stat( $path );
+		return $this->fails( 'stat', $path ) ? false : $this->real->stat( $path );
 	}
 
 	public function scandir( $dir ) {
-		return $this->real->scandir( $dir );
+		return $this->fails( 'scandir', $dir ) ? false : $this->real->scandir( $dir );
 	}
 
 	public function mkdir( $path, $mode ) {
@@ -61,7 +86,7 @@ final class AB_MCP_IT_Store_Calls {
 	}
 
 	public function chmod( $path, $mode ) {
-		return $this->real->chmod( $path, $mode );
+		return $this->fails( 'chmod', $path ) ? false : $this->real->chmod( $path, $mode );
 	}
 
 	public function create( $path ) {
@@ -77,7 +102,7 @@ final class AB_MCP_IT_Store_Calls {
 	}
 
 	public function read( $path, $max ) {
-		return $this->real->read( $path, $max );
+		return $this->fails( 'read', $path ) ? false : $this->real->read( $path, $max );
 	}
 
 	/**

@@ -255,7 +255,7 @@ final class StoreRemoverGuardTest extends TestCase {
 
 	public function testTheRetentionOfABackupIsDecidedByKeptOnly(): void {
 		$store = self::FILES[0];
-		self::assertSame( array( 'AB_MCP_Protected_Store::sweep' ), self::places( $store, 'static', 'kept', 'self' ), 'The clean-up asks kept() before it lets a group of this store go by its time (Z8).' );
+		self::assertSame( array( 'AB_MCP_Protected_Store::sweep', 'AB_MCP_Protected_Store::sweep', 'AB_MCP_Protected_Store::sweep' ), self::places( $store, 'static', 'kept', 'self' ), 'The clean-up asks kept() before it lets a group of this store go by its time (Z8), and for a sidecar read whole but not this area\'s or installation\'s, with the area it names and the one it lies in (Behebung 1, A1).' );
 		self::assertSame( array( 'AB_MCP_Protected_Store::remove', 'AB_MCP_Protected_Store::sweep', 'AB_MCP_Protected_Store::sweep' ), self::places( $store, 'static', 'delete_group', 'self' ), 'A group goes in remove() and the clean-up only.' );
 		// remove() is the way of the owner of a package or a report: no
 		// shipped code removes a group of backups or stage by it (a backup

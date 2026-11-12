@@ -30,6 +30,15 @@
  *   checked, closed; the commands of each point of the instruction put the
  *   old state back in a shell (AB_MCP_IT_Handweg), a check that fails stops
  *   them; the text names the plugin active at the beginning and the race;
+ *   for a unit the site did not have, the commands take the new unit out
+ *   again at each point (Behebung 1, A3);
+ * - the names of trees (Behebung 1, B1): every name of a file or folder of
+ *   a unit WordPress loads goes through put_tree(), tree() and put_mark()
+ *   (the test plugins of branch 1, the language files by the patterns of
+ *   the core, upper case, blanks, umlauts, more than 64 characters); only
+ *   what is no name of a file is refused;
+ * - Behebung 1, B5: a tree of one file whose source changes while it is
+ *   copied, a folder of a tree whose mode cannot be set;
  * - HTTP of the self-check (the PHP files below stage and backups): an
  *   answer 200, one that holds the content, a request that throws or fails
  *   (a time limit), each leaves the proof without php; an end of the process
@@ -816,6 +825,280 @@ final class StoreTreesTest extends TestCase {
 			AB_MCP_Test_Seam::restore_all();
 			self::assertSame( 'rename' === $fault['method'] ? 'ab_mcp_store_write' : 'ab_mcp_store_mark_read', $res->get_error_code(), $fault['method'] );
 		}
+	}
+
+	/* -------------------------- Behebung 1, A3: a unit the site did not have */
+
+	/** The putting in of a new unit (branch 5) at its points, made by hand: the new version in stage, and the mark of the stage tree alone. */
+	private function install_with_mark(): array {
+		$target = self::plugins() . '/' . self::UNIT;
+		self::remove_tree( $target );
+		list( $sgid ) = self::group( 'stage', 6 );
+		$new = AB_MCP_Protected_Store::put_tree( 'stage', $sgid, self::UNIT, $target, self::source( self::src(), '2.0.0' ) );
+		self::assertIsArray( $new, is_wp_error( $new ) ? $new->get_error_message() : '' );
+		$sstat = stat( $new['path'] );
+		$mark  = AB_MCP_Protected_Store::put_mark(
+			array(
+				'run_id' => 6,
+				'seq'    => 2,
+				'op'     => 'install',
+				'unit'   => array(
+					'kind' => 'plugin',
+					'ref'  => self::UNIT,
+				),
+				'target' => $target,
+				'trees'  => array(
+					array(
+						'role' => 'stage',
+						'path' => $new['path'],
+						'form' => 'folder',
+						'dev'  => (int) $sstat['dev'],
+						'ino'  => (int) $sstat['ino'],
+						'hash' => $new['hash'],
+					),
+				),
+			)
+		);
+		self::assertIsArray( $mark, is_wp_error( $mark ) ? $mark->get_error_message() : '' );
+		return array(
+			'target' => $target,
+			'stage'  => $new['path'],
+			'new'    => self::snapshot( $new['path'] ),
+			'mark'   => $mark,
+		);
+	}
+
+	public function testTheInstructionOfANewUnitTakesItOutAgainByHandAtEachPoint(): void {
+		// The point, and whether the new version lies at the target there.
+		$points = array(
+			'vor-den-umbenennungen'                     => false,
+			'zwischen-den-umbenennungen (not yet in)'   => false,
+			'zwischen-den-umbenennungen (in)'           => true,
+			'nach-den-umbenennungen'                    => true,
+			'waehrend-des-ruecktauschs (still in)'      => true,
+			'waehrend-des-ruecktauschs (already out)'   => false,
+			'nach-der-aktivierung'                      => true,
+		);
+		foreach ( $points as $label => $in ) {
+			$point = explode( ' ', $label )[0];
+			$s     = $this->install_with_mark();
+			if ( $in ) {
+				self::assertTrue( rename( $s['stage'], $s['target'] ), $label );
+			}
+			$run = AB_MCP_IT_Handweg::run_point( $s['mark']['guide'], $point, self::root() );
+			self::assertSame( 0, $run['status'], $label . ': ' . $run['stderr'] . $run['output'] );
+			self::assertFileDoesNotExist( $s['target'], $label . ': the site is as before, without the unit.' );
+			self::assertSame( $s['new'], self::snapshot( $s['stage'] ), $label . ': the new version back in its place in the store.' );
+			self::wipe();
+			AB_MCP_Protected_Store::forget();
+		}
+		// A check that fails stops the commands: another folder at the
+		// target is not the new version, so nothing is moved.
+		$s = $this->install_with_mark();
+		self::source( $s['target'], '9.9.9' );
+		$other = self::snapshot( $s['target'] );
+		foreach ( array( 'zwischen-den-umbenennungen', 'nach-den-umbenennungen', 'waehrend-des-ruecktauschs' ) as $point ) {
+			$run = AB_MCP_IT_Handweg::run_point( $s['mark']['guide'], $point, self::root() );
+			self::assertNotSame( 0, $run['status'], $point );
+			self::assertSame( $other, self::snapshot( $s['target'] ), $point . ': the other folder stays.' );
+			self::assertSame( $s['new'], self::snapshot( $s['stage'] ), $point . ': the new version stays in the store.' );
+		}
+		// The new version at the target, and something at its place in the
+		// store: it is not moved into that.
+		self::remove_tree( $s['target'] );
+		self::assertTrue( rename( $s['stage'], $s['target'] ) );
+		mkdir( $s['stage'], 0700 );
+		foreach ( array( 'zwischen-den-umbenennungen', 'waehrend-des-ruecktauschs' ) as $point ) {
+			$run = AB_MCP_IT_Handweg::run_point( $s['mark']['guide'], $point, self::root() );
+			self::assertNotSame( 0, $run['status'], $point );
+			self::assertSame( $s['new'], self::snapshot( $s['target'] ), $point . ': the new version stays at the target.' );
+			self::assertSame( array(), self::names( $s['stage'] ), $point . ': nothing moved into the folder at its place.' );
+		}
+		$text = (string) file_get_contents( $s['mark']['guide'] );
+		self::assertStringContainsString( 'The unit was not in the site before', $text );
+		self::assertStringNotContainsString( 'Backup (the old version)', $text );
+	}
+
+	/* ---------------------- Behebung 1, B1: the names of trees as WordPress has them */
+
+	/**
+	 * The names of files and folders of units as WordPress loads them: every
+	 * name of the test plugins and themes of branch 1, the language files by
+	 * the patterns of the core for the nine languages AlphaBridge ships (the
+	 * files of the core, of the admin, the network admin and the time
+	 * zones; of a plugin or theme by its text domain; the JSON files of
+	 * scripts by the MD5 of the script), and names in upper case, with
+	 * blanks, umlauts and more than 64 characters.
+	 *
+	 * @return string[]
+	 */
+	private static function names_of_units(): array {
+		$names = array();
+		$code  = dirname( __DIR__ ) . '/integration/fixtures/code';
+		$it    = new \RecursiveIteratorIterator( new \RecursiveDirectoryIterator( $code, \FilesystemIterator::SKIP_DOTS ), \RecursiveIteratorIterator::SELF_FIRST );
+		foreach ( $it as $file ) {
+			$names[] = $file->getFilename();
+		}
+		self::assertGreaterThan( 40, count( array_unique( $names ) ), 'The names of the test plugins of branch 1 are read.' );
+		// The nine languages AlphaBridge ships (BundledTranslationsTest::
+		// LOCALES), and a language without a region and one more region.
+		foreach ( array( 'de_DE', 'de_DE_formal', 'de_AT', 'de_CH', 'de_CH_informal', 'fr_FR', 'it_IT', 'es_ES', 'pt_PT', 'ja', 'pt_BR' ) as $locale ) {
+			foreach ( array( '', 'admin-', 'admin-network-', 'continents-cities-' ) as $prefix ) {
+				foreach ( array( '.mo', '.po', '.l10n.php' ) as $ext ) {
+					$names[] = $prefix . $locale . $ext;
+				}
+			}
+			foreach ( array( 'alphabridge-mcp', 'MyPlugin' ) as $domain ) {
+				foreach ( array( '.mo', '.po', '.l10n.php' ) as $ext ) {
+					$names[] = $domain . '-' . $locale . $ext;
+				}
+				$names[] = $domain . '-' . $locale . '-' . md5( 'build/index.js' ) . '.json';
+			}
+		}
+		$names[] = 'MyPlugin.php';
+		$names[] = 'Hello Dolly.php';
+		$names[] = 'grüsse-für-die-website.php';
+		$names[] = 'Ünïcödé Plugin';
+		$names[] = str_repeat( 'langer-name-', 8 ) . 'plugin.php';
+		$names[] = str_repeat( 'a', 251 ) . '.php';
+		$names[] = '.well-known';
+		return array_values( array_unique( $names ) );
+	}
+
+	public function testATreeKeepsTheNameItsUnitHasInTheSite(): void {
+		$names = self::names_of_units();
+		$root  = (string) AB_MCP_Protected_Store::root();
+		list( $gid, $dir ) = self::group( 'stage', 6 );
+		mkdir( self::src(), 0755, true );
+		$failed = array();
+		foreach ( $names as $n => $name ) {
+			$source = self::src() . '/' . $name;
+			file_put_contents( $source, "<?php // $n\n" );
+			$put = AB_MCP_Protected_Store::put_tree( 'stage', $gid, $name, self::plugins() . '/' . $name, $source );
+			if ( ! is_array( $put ) ) {
+				$failed[] = "put_tree $name: " . $put->get_error_code();
+				continue;
+			}
+			$back = AB_MCP_Protected_Store::tree( 'stage', $gid, $name, $put['hash'] );
+			if ( ! is_array( $back ) || $dir . '/' . $name !== $back['path'] ) {
+				$failed[] = "tree $name";
+			}
+			$stat = stat( $put['path'] );
+			$mark = AB_MCP_Protected_Store::put_mark(
+				array(
+					'run_id' => 6,
+					'seq'    => $n,
+					'op'     => 'swap',
+					'unit'   => array(
+						'kind' => 'plugin',
+						'ref'  => self::UNIT,
+					),
+					'target' => self::plugins() . '/' . $name,
+					'trees'  => array(
+						array(
+							'role' => 'stage',
+							'path' => $put['path'],
+							'form' => 'file',
+							'dev'  => (int) $stat['dev'],
+							'ino'  => (int) $stat['ino'],
+							'hash' => $put['hash'],
+						),
+					),
+				)
+			);
+			if ( ! is_array( $mark ) ) {
+				$failed[] = "put_mark $name: " . $mark->get_error_code();
+			}
+		}
+		self::assertSame( array(), $failed, 'No name a unit has in the site is refused.' );
+		$read = AB_MCP_Protected_Store::marks();
+		self::assertSame( array(), $read['unreadable'], 'Each mark reads back with its tree.' );
+		self::assertCount( count( $names ), $read['marks'] );
+		self::assertSame( array(), self::names( $root . '/tmp' ) );
+	}
+
+	public function testOnlyANameThatIsNoNameOfAFileIsRefused(): void {
+		$refused = array( '', '.', '..', 'a/b', '../a', 'a\\b', "a\0b", "a\nb", "a\tb", "a\x7Fb", str_repeat( 'a', 252 ) . '.php', 'C:plugin' );
+		list( $gid, $dir ) = self::group( 'stage', 6 );
+		$root = (string) AB_MCP_Protected_Store::root();
+		$src  = self::source( self::src(), '2.0.0' );
+		foreach ( $refused as $name ) {
+			$shown = json_encode( $name );
+			self::assertSame( 'ab_mcp_store_tree_bad_name', AB_MCP_Protected_Store::put_tree( 'stage', $gid, $name, self::plugins() . '/x', $src )->get_error_code(), "put_tree $shown" );
+			self::assertSame( 'ab_mcp_store_tree_bad_name', AB_MCP_Protected_Store::tree( 'stage', $gid, $name, str_repeat( 'a', 64 ) )->get_error_code(), "tree $shown" );
+			$mark = AB_MCP_Protected_Store::put_mark(
+				array(
+					'run_id' => 6,
+					'seq'    => 1,
+					'op'     => 'swap',
+					'unit'   => array(
+						'kind' => 'plugin',
+						'ref'  => 'x',
+					),
+					'target' => self::plugins() . '/x',
+					'trees'  => array(
+						array(
+							'role' => 'stage',
+							'path' => $root . '/stage/' . str_repeat( 'a', 40 ) . '/' . $name,
+							'form' => 'file',
+							'dev'  => 1,
+							'ino'  => 2,
+							'hash' => null,
+						),
+					),
+				)
+			);
+			self::assertSame( 'ab_mcp_store_mark', $mark->get_error_code(), "put_mark $shown" );
+		}
+		self::assertSame( array(), self::names( $dir ) );
+		self::assertSame( array(), self::names( $root . '/marks' ) );
+	}
+
+	/* -------------------------------- Behebung 1, B5: clauses of their own */
+
+	public function testAFileTreeWhoseSourceChangesWhileItIsCopiedIsNotKept(): void {
+		// The comparison of a tree of one file: its size and SHA-256.
+		list( $gid, $dir ) = self::group( 'stage', 6 );
+		mkdir( self::src(), 0755, true );
+		$src = self::src() . '/einzeln.php';
+		file_put_contents( $src, "<?php // eins\n" );
+		AB_MCP_Test_Seam::install(
+			AB_MCP_Protected_Store::class,
+			self::SEAM,
+			AB_MCP_Protected_Store_Calls::class,
+			array(
+				array(
+					'method' => 'copy_into',
+					'nth'    => 1,
+					'kind'   => 'before',
+					'before' => array(
+						array(
+							'op'    => 'put_file',
+							'path'  => $src,
+							'bytes' => base64_encode( "<?php // zwei\n" ),
+						),
+					),
+				),
+			)
+		);
+		$res = AB_MCP_Protected_Store::put_tree( 'stage', $gid, 'einzeln.php', self::plugins() . '/einzeln.php', $src );
+		AB_MCP_Test_Seam::restore_all();
+		self::assertSame( 'ab_mcp_store_tree_changed', $res->get_error_code(), 'The same size, other bytes: not the file read before.' );
+		self::assertSame( array(), self::names( $dir ) );
+	}
+
+	public function testAFolderOfATreeWhoseModeCannotBeSetLeavesNothingOfTheTree(): void {
+		// chmod() of a folder, apart from the one of a file.
+		list( $gid, $dir ) = self::group( 'stage', 6 );
+		$src   = self::source( self::src(), '2.0.0' );
+		$calls = new AB_MCP_IT_Store_Calls();
+		$calls->fail = array( 'chmod' => array( $dir . '/' . self::UNIT . '/inc' ) );
+		AB_MCP_Test_Seam::install( AB_MCP_Protected_Store::class, self::SEAM, $calls );
+		$res = AB_MCP_Protected_Store::put_tree( 'stage', $gid, self::UNIT, self::plugins() . '/' . self::UNIT, $src );
+		AB_MCP_Test_Seam::restore_all();
+		self::assertContains( array( 'chmod', $dir . '/' . self::UNIT . '/inc' ), $calls->failed, 'The mode of the folder inc was refused.' );
+		self::assertSame( 'ab_mcp_store_write', $res->get_error_code() );
+		self::assertSame( array(), self::names( $dir ), 'Nothing of the tree stays.' );
 	}
 
 	/* ------------------------------------- rows: the bookings, HTTP: exit */
