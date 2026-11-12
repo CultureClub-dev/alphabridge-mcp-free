@@ -120,6 +120,14 @@ final class ShapeTest extends TestCase {
 		foreach ( array( array( 'run' => 3 ), array( 'run' => null, 'hash' => 'x' ), array( 'run' => 3, 'hash' => 'x', 'more' => 1 ), array( 3, 'x' ) ) as $value ) {
 			self::assertNull( AB_MCP_Shape::read( $value, $record ), var_export( $value, true ) );
 		}
+		$any = array(
+			'type'   => 'record',
+			'fields' => array(),
+			'extra'  => true,
+		);
+		self::assertSame( array( 'a' => 1 ), AB_MCP_Shape::read( array( 'a' => 1 ), $any ) );
+		self::assertSame( array(), AB_MCP_Shape::read( array(), $any ), 'Empty: no field it lacks.' );
+		self::assertNull( AB_MCP_Shape::read( array( 'x' ), $any ), 'A list is no record, also where no field is asked for.' );
 		$extra = array_replace( $record, array( 'extra' => true ) );
 		self::assertSame( array( 'run' => 3, 'hash' => 'x', 'more' => 1 ), AB_MCP_Shape::read( array( 'run' => 3, 'hash' => 'x', 'more' => 1 ), $extra ), 'Other keys kept as they are where extra.' );
 	}

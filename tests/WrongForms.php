@@ -177,16 +177,20 @@ final class WrongForms {
 	 */
 	private static function of_list( array $form, $valid ): array {
 		$item = $valid[0];
+		// Two elements where the value has them, so a list of its form that
+		// takes no element twice does not refuse the gap for the twice.
+		$next = count( $valid ) > 1 ? $valid[1] : $item;
 		$out  = array(
 			'an object'         => array( 'k' => $item ),
 			'a list with a gap' => array(
 				0 => $item,
-				2 => $item,
+				2 => $next,
 			),
 			'keys in another order' => array(
 				1 => $item,
-				0 => $item,
+				0 => $next,
 			),
+			'a list from key 1' => array( 1 => $item ),
 			'a nested list'     => array( array( $item ) ),
 			'an element alone'  => $item,
 			'null'              => null,
