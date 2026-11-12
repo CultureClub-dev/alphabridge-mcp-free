@@ -712,14 +712,16 @@ final class StoreTreesTest extends TestCase {
 			self::wipe();
 			AB_MCP_Protected_Store::forget();
 		}
-		// A check that fails stops the commands: the target is there, so
-		// «between the renames» moves nothing.
-		$s   = $this->swap_with_mark();
+		// A check that fails stops the commands: the swap stopped after the
+		// renames, the target holds the new version, so «between the
+		// renames» moves nothing.
+		$s = $this->swap_with_mark();
+		rename( $s['target'], $s['backup'] );
+		rename( $s['stage'], $s['target'] );
 		$run = AB_MCP_IT_Handweg::run_point( $s['mark']['guide'], 'zwischen-den-umbenennungen', self::root() );
 		self::assertNotSame( 0, $run['status'] );
-		self::assertSame( $s['old'], self::snapshot( $s['target'] ) );
-		self::assertFileDoesNotExist( $s['backup'] );
-		self::assertSame( $s['new'], self::snapshot( $s['stage'] ) );
+		self::assertSame( $s['new'], self::snapshot( $s['target'] ), 'The new version stays at the target.' );
+		self::assertSame( $s['old'], self::snapshot( $s['backup'] ), 'The old one in the backup.' );
 	}
 
 	public function testTheInstructionNamesWhatMovedAndForAnActivePluginTheWayAndTheRace(): void {

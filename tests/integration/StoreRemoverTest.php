@@ -570,6 +570,14 @@ final class StoreRemoverTest extends TestCase {
 		self::assert_kept( $m, 'backup of another identity' );
 	}
 
+	public function testAnEmptyFolderAtTheTargetIsThereSoTheUninstallMovesNothing(): void {
+		$m = $this->marked( 3, 'open', 'missing' );
+		mkdir( $m['target'], 0755 );
+		self::uninstall_as_pro();
+		self::assertSame( array(), self::names( $m['target'] ), 'The folder at the target is left as it is.' );
+		self::assert_kept( $m, 'an empty folder at the target' );
+	}
+
 	public function testTheUninstallKeepsATreeOfAnOpenMarkWhoseOriginalIsNotProvedAndTakesTheRest(): void {
 		$m       = $this->marked( 3 );
 		$reports = AB_MCP_Protected_Store::open( 'reports' );
@@ -628,6 +636,15 @@ final class StoreRemoverTest extends TestCase {
 			chmod( $m['marks'] . '/mark.json', 0600 );
 		}
 		self::assert_kept( $m, 'mark without read rights' );
+		// The folder of the marks itself cannot be listed.
+		chmod( $m['root'] . '/marks', 0000 );
+		try {
+			AB_MCP_Protected_Store::cleanup( time() );
+			self::assertFalse( AB_MCP_Protected_Store::remove( 'backups', $m['gid'] ) );
+		} finally {
+			chmod( $m['root'] . '/marks', 0700 );
+		}
+		self::assert_kept( $m, 'folder of the marks without read rights' );
 	}
 
 	public function testWithoutAnOpenMarkTheWaysRemoveWhatTheyRemovedBefore(): void {
