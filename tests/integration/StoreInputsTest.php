@@ -209,23 +209,35 @@ final class StoreInputsTest extends TestCase {
 			return array(
 				'base'    => $now - 2 * 86400,
 				'more'    => array(),
-				'valid'   => array( array( $now - 2 * 86400, array( false, false ) ) ),
+				'valid'   => array( array( $now - 2 * 86400, array( false, false, false, false ) ) ),
 				'run'     => function ( $value ) use ( $now ) {
+					// Its three consumers: a foreign sidecar, a temp file of tmp/
+					// and a folder of a mark that holds none, each with the time.
 					$g     = self::group( 'reports', 0 );
 					$entry = json_decode( (string) file_get_contents( $g['side'] ), true );
 					$entry['gid']     = str_repeat( 'f', 32 );
 					$entry['created'] = $now - 30 * 86400;
 					file_put_contents( $g['side'], (string) json_encode( $entry, AB_MCP_Store_Inputs::SIDECAR_FLAGS ) );
+					$temp = self::store() . '/tmp/.ab-tmp-alt';
+					file_put_contents( $temp, 'x' );
+					$half = self::store() . '/marks/' . str_repeat( 'b', 32 );
+					mkdir( $half, 0700 );
 					$calls        = new AB_MCP_IT_Store_Calls();
-					$calls->mtime = array( $g['side'] => $value );
+					$calls->mtime = array(
+						$g['side'] => $value,
+						$temp      => $value,
+						$half      => $value,
+					);
 					AB_MCP_Test_Seam::install( AB_MCP_Protected_Store::class, self::SEAM, $calls );
 					$done = AB_MCP_Protected_Store::cleanup( time() );
 					AB_MCP_Test_Seam::restore_all();
-					$out = array( is_file( $g['side'] ), $done['unknown'] > 0 );
+					$out = array( is_file( $g['side'] ), $done['unknown'] > 0, is_file( $temp ), is_dir( $half ) );
 					self::drop( $g );
+					self::remove_tree( $temp );
+					self::remove_tree( $half );
 					return $out;
 				},
-				'unknown' => static fn( $got ): bool => array( true, true ) === $got,
+				'unknown' => static fn( $got ): bool => array( true, true, true, true ) === $got,
 				'texts'   => false,
 				'written' => null,
 			);
