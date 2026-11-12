@@ -1953,6 +1953,13 @@ final class StoreRemoverTest extends TestCase {
 		AB_MCP_Protected_Store::forget();
 		self::assertSame( array( 'removed' => 0, 'kept' => 0, 'unknown' => 0 ), AB_MCP_Protected_Store::cleanup( time() ), 'No id: no folder of its own, nothing read or removed.' );
 		self::assertSame( array( 'post-1' ), self::names( $report['dir'] ) );
+		// No row of the id (read_id() null): the clean-up makes none
+		// (install_id( false )) and sweeps nothing.
+		delete_option( AB_MCP_Protected_Store::OPTION_ID );
+		AB_MCP_Protected_Store::forget();
+		self::assertSame( array( 'removed' => 0, 'kept' => 0, 'unknown' => 0 ), AB_MCP_Protected_Store::cleanup( time() ), 'No row of the id: nothing read or removed.' );
+		self::assertSame( array( 'post-1' ), self::names( $report['dir'] ) );
+		self::assertFalse( get_option( AB_MCP_Protected_Store::OPTION_ID ), 'And no id made by the clean-up.' );
 		AB_MCP_IT_Sites::reset( 'a' );
 		AB_MCP_Protected_Store::forget();
 		$owner = (string) file_get_contents( $root . '/owner.json' );
