@@ -250,6 +250,11 @@ final class ProtectedStoreTest extends TestCase {
 		add_filter( AB_MCP_Protected_Store::BACKUP_DAYS_FILTER, static fn(): string => '30' );
 		self::assertSame( 30, AB_MCP_Protected_Store::backup_days(), 'The digits of a whole number are the number.' );
 		remove_all_filters_for( AB_MCP_Protected_Store::BACKUP_DAYS_FILTER );
+		// keep() names the age of an area of groups only: the marks keep a
+		// closed mark a day by KEEP['marks'] in sweep(), and are no area.
+		foreach ( array( 'marks', 'tmp', 'elsewhere', 5, null ) as $area ) {
+			self::assertNull( AB_MCP_Protected_Store::keep( $area ), var_export( $area, true ) . ': no area of groups, no age.' );
+		}
 	}
 
 	public function testKeptTakesTheInputsOfItsListAndNoValueBeside(): void {

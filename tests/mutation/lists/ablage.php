@@ -55,7 +55,10 @@
  * difference, so no mark is old: the guards say it plainly, they change
  * nothing); the count of groups kept beyond their age where the age of the
  * area is not known (a number of the answer, no removal); the guard of
- * $in['keep'] in kept() (a missing key reads as null, which is unknown).
+ * $in['keep'] in kept() (a missing key reads as null, which is unknown);
+ * ! is_string( $raw ) of the plan of a way back (AB_MCP_Sync_Canon::decode()
+ * reads a value that is no string as its string, and NULL as '', no JSON,
+ * so the plan is null and the answer unknown all the same).
  *
  * @package AlphaBridge_MCP
  */
@@ -1718,15 +1721,6 @@ return array_merge(
 			'expect'  => '/testTheRunsOfANormalHistoryKeepWhatTheContractKeeps/',
 		),
 		array(
-			'id'      => 'ablage/input-plan-string',
-			'clause'  => 'backup_rows(): a plan that is no string (NULL, a failed read) makes the answer unknown',
-			'file'    => $sc,
-			'search'  => "if ( '' !== \$wpdb->last_error || ! is_string( \$raw ) ) {",
-			'replace' => "if ( '' !== \$wpdb->last_error ) {",
-			'run'     => $unit( 'RetentionInputsTest', 'testAWayBackWhosePlanIsNotWholeMakesTheAnswerUnknown' ),
-			'expect'  => '/testAWayBackWhosePlanIsNotWholeMakesTheAnswerUnknown/',
-		),
-		array(
 			'id'      => 'ablage/input-plan-whole',
 			'clause'  => 'backup_rows(): a plan of a way back that is no JSON with a list reverts makes the answer unknown',
 			'file'    => $sc,
@@ -2067,6 +2061,15 @@ return array_merge(
 			'replace' => "\t\tstatic \$seen = array();\n\t\tif ( isset( \$seen[ \$run_id ] ) ) {\n\t\t\treturn \$seen[ \$run_id ];\n\t\t}\n\t\t\$groups = AB_MCP_Protected_Store::groups( 'backups' );\n\t\tif ( is_wp_error( \$groups ) ) {\n\t\t\treturn \$groups;\n\t\t}\n\t\tforeach ( \$groups as \$entry ) {\n\t\t\tif ( self::LABEL . \$run_id === \$entry['label'] && \$entry['run_id'] === \$run_id ) {\n\t\t\t\treturn \$seen[ \$run_id ] = \$entry['gid'];\n\t\t\t}\n\t\t}\n",
 			'run'     => $it( 'StoreRemoverTest', 'testABackupGroupTakesItsRunAsGivenAndNeverAGroupWhoseSidecarIsUnknown' ),
 			'expect'  => '/testABackupGroupTakesItsRunAsGivenAndNeverAGroupWhoseSidecarIsUnknown/',
+		),
+		array(
+			'id'      => 'ablage/input-owner-address',
+			'clause'  => 'comparable(): the address of the manifest compared as it is; a substitute on both sides (an empty address) would make a folder of another address ours',
+			'file'    => $ps,
+			'search'  => "return 'address' === \$key ? (string) preg_replace( '#^https?://#', '', \$value ) : \$value;",
+			'replace' => "return 'address' === \$key ? '' : \$value;",
+			'run'     => $unit( 'ProtectedStoreTest', 'testAFolderIsOursOnlyWithOurManifestInEveryField' ),
+			'expect'  => '/testAFolderIsOursOnlyWithOurManifestInEveryField/',
 		),
 	)
 );
