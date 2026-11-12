@@ -644,8 +644,11 @@ final class StoreRemoverTest extends TestCase {
 		$calls       = new AB_MCP_IT_Store_Calls();
 		$calls->fail = array( 'read' => array( $m['marks'] . '/mark.json' ) );
 		self::watch( array(), $calls );
-		AB_MCP_Protected_Store::cleanup( time() );
+		$done = AB_MCP_Protected_Store::cleanup( time() );
 		self::assert_kept( $m, 'mark unreadable: clean-up' );
+		// Behebung 4, B1: the groups past their retention that the mark kept
+		// (the group of the tree and the plain one) count as unknown.
+		self::assertSame( 2, $done['unknown'], 'Kept by a mark that cannot be read: counted unknown.' );
 		self::assertDirectoryExists( $plain_dir, 'A group of backups past its retention stays while a mark cannot be read.' );
 		self::assertSame( array(), self::names( $m['root'] . '/reports' ), 'A report past its time goes all the same.' );
 		self::assertFalse( AB_MCP_Protected_Store::remove( 'backups', $plain ) );
@@ -2064,6 +2067,31 @@ final class StoreRemoverTest extends TestCase {
 		AB_MCP_Protected_Store::cleanup( time() );
 		self::assertFileDoesNotExist( $temp, 'Read again, it goes by its age.' );
 		self::assertFileDoesNotExist( $half );
+	}
+
+	public function testAClockThatGivesNoTimeStoresNoPeriodAtTheCloseAndTheBackupsStay(): void {
+		// Behebung 4, B2/B3 of the confirmation of Behebung 3: the clock of
+		// the runs gave '1bad', the cast made it 1, and a qualified close
+		// stored the period 1 + 30 days, long past: its backups went.
+		$now = time();
+		self::run_planned( 14, 'push', 'open', null );
+		$backup = self::aged_group( 'backups', 14, 0 );
+		$days   = static fn() => 30;
+		add_filter( AB_MCP_Protected_Store::BACKUP_DAYS_FILTER, $days );
+		\AB_MCP_Sync_Run::$clock = static fn() => '1bad';
+		try {
+			self::assertTrue( \AB_MCP_Sync_Run::set_state( 14, 'open', 'closed_done', true ) );
+			self::assertNull( \AB_MCP_Sync_Run::now(), 'No time of a clock that gives none.' );
+		} finally {
+			\AB_MCP_Sync_Run::$clock = null;
+			remove_filter( AB_MCP_Protected_Store::BACKUP_DAYS_FILTER, $days );
+		}
+		$run = \AB_MCP_Sync_Run::get( 14 );
+		self::assertSame( 'closed_done', $run['state'] );
+		self::assertSame( 0, (int) $run['keep_until'], 'No period of a time not known: 0, kept (N1).' );
+		self::assertSame( 0, (int) $run['forward_closed_at'], 'And no qualified close of it.' );
+		AB_MCP_Protected_Store::cleanup( $now + 40 * 86400 );
+		self::assertSame( array( 'post-1' ), self::names( $backup['dir'] ), 'Weeks later its backup stays.' );
 	}
 
 	public function testTheCleanUpOfARequestThatLoadedNoRunReadsTheRetentionOfTheBackups(): void {
