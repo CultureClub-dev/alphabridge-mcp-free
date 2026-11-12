@@ -8,19 +8,25 @@
  * test): two sites alike → wp_site_pairs propose with the environment of
  * both sides → confirm with the token → a plugin updated on staging → the
  * report says «changed on staging, unchanged here». Then the units that
- * differ already (Frage F: b live_base, c keep_apart, a without a mode), a
- * unit on one side only (no pair, «only live» apart from a removal on
- * staging), the units that are not paired (not read whole, locked, held, a
- * name too long), every clause of AB_MCP_Sync_Pairs::set_unit_base() (Z44),
- * no way past it, and the base with origin push (F5, the contract only, by
- * the seam; branches 5 and 6 bring the writing).
+ * differ already, confirmed part by part (Frage F: b live_base, c
+ * keep_apart, a a part without a mode stays open; Behebung 1, A1: a second
+ * part later alone, one decision changed alone, every other base byte for
+ * byte), a unit on one side only (no pair, «only live» apart from a removal
+ * on staging), the units that are not paired (not read whole, locked, held,
+ * a name too long), every clause of AB_MCP_Sync_Pairs::set_unit_base()
+ * (Z44), what confirms a base made only from what happened (A2), no way past
+ * it, a unit back only to the state its journal names (A3; a step that gives
+ * no first base: SyncManifestTest, A4), and the base with origin push (F5,
+ * the contract only, by the journal of a step; B5: a part not written kept
+ * apart from one written and checked; branches 5 and 6 bring the writing).
  *
  * WIRKUNGEN NACH AUSSEN × FEHLERARTEN (plan 8.3, branch 2b):
  * Rows of the pairs (seam naht_sync_pairs: row, update_row, insert_row):
  * - return false at the insert, a read that fails (Lesefehler) and no row
  *   changed at the new alignment, Throwable at the insert, a writer in
  *   between (gleichzeitiger Schreiber, before the insert and before the
- *   update): testAFaultOfTheRowsOfThePairsWhileUnitsAreConfirmedKeepsNothing;
+ *   update): testAFaultOfTheRowsOfThePairsWhileUnitsAreConfirmedKeepsNothing,
+ *   testAPairOfAUnitWhoseRowCannotBeReadBackAfterItsInsertIsTakenBack;
  * - exit/Fatal and the time limit of PHP at the insert, before and after it,
  *   in a process of its own: testAnEndOfTheProcessOrItsTimeLimitAtTheBaseOfAUnitKeepsNothingHalf;
  * - halb geschrieben: does not apply, a pair is one INSERT or one UPDATE of
@@ -28,13 +34,18 @@
  * The files of the proposals and the reading of the environment of both
  * sides (seam naht_sync_proposal: put, get, files, groups, open, remove,
  * environment, live_environment):
- * - return false and an error at a write, a read that fails or gives other
- *   bytes (Lesefehler, halb gelesen), Throwable, the series of the staging
- *   site refused, the environment of this site not read to its end in one
- *   call (Zeitlimit of the budget):
+ * - return false and Throwable at a write (the head, and the first file of
+ *   the call that stores the entries), a file of its name claimed there
+ *   that does not read back against its SHA-256, an error at a read, a read
+ *   that fails or gives other bytes (Lesefehler, halb gelesen), Throwable,
+ *   the series of the staging site refused, the environment of this site
+ *   not read to its end in one call (Zeitlimit of the budget):
  *   testAFaultOfTheFilesOfAProposalOrOfTheReadingOfTheEnvironmentPairsNoUnit;
  * - exit/Fatal and the time limit of PHP while the proposal stores its
- *   entries, in a process of its own: the next call works it out again:
+ *   entries, in a process of its own, before its first file, after it, and
+ *   before and after its index (Abbruch nach schon abgelegten Teilen): the
+ *   next call works it out again, meets a file there by its name and
+ *   SHA-256, goes on and comes to the same proposal:
  *   testAnEndOfTheProcessWhileTheProposalOfUnitsIsStoredLeavesItToTheNextCall;
  * - gleichzeitiger Schreiber: a unit changed between the proposal and the
  *   confirmation (the report shows it changed here, Z3 locks; the bases are
@@ -47,10 +58,15 @@
  *   above, halb gelesen).
  * The token (AB_MCP_Confirm_Token; no call to the outside of its own):
  * - another mode, part or unit than the preview, a pair made in between, a
- *   Throwable while the state is worked out:
- *   testTheTokenBindsTheUnitItsPartsTheirModesAndValues; the plan written is
- *   the one the token was checked against (V1):
+ *   Throwable while the state is worked out, the tool past the gate without
+ *   a check (A2): testTheTokenBindsTheUnitItsPartsTheirModesAndValues; the
+ *   plan written is the one the token was checked against (V1):
  *   SyncProposalTest::testTheConfirmationWritesThePlanItsTokenWasCheckedAgainst.
+ * The journal of a step (the proof of origin push, the state a unit goes
+ * back to): read only; a step not done, of another run, pair or source, or
+ * without a unit proves nothing: testWhatConfirmsABaseIsMadeOnlyFromWhatHappened,
+ * testAUnitGoesBackOnlyToTheStateItsJournalNames. Its faults come with
+ * branch 5, which writes it.
  * Hooks of others: none new (plan 8.3).
  *
  * @package AlphaBridge_MCP
@@ -60,6 +76,7 @@ declare( strict_types = 1 );
 
 namespace AlphaBridge\Tests\Integration;
 
+use AB_MCP_Confirm_Token;
 use AB_MCP_IT_Code;
 use AB_MCP_IT_Process;
 use AB_MCP_IT_Sites;
@@ -471,7 +488,8 @@ final class SyncUnitPairsTest extends TestCase {
 		}
 		self::assertSame( array( 'files' => 'equal', 'activation' => 'equal' ), $ops['plugin:ab-it-aktiv']['parts'], 'The preview names each part with its mode.' );
 		self::assertArrayNotHasKey( 'lines', $ops['plugin:ab-it-aktiv'] );
-		self::assertStringContainsString( 'A unit (a plugin, a theme, the theme that runs) is paired', $preview['preview']['effect'] );
+		self::assertStringContainsString( 'A unit (a plugin, a theme, the theme that runs) takes a base for each part chosen', $preview['preview']['effect'] );
+		self::assertArrayNotHasKey( 'open', $ops['plugin:ab-it-aktiv'], 'Every part chosen.' );
 		self::assertIsArray( $done, is_wp_error( $done ) ? $done->get_error_message() : '' );
 		self::assertTrue( $done['done'] );
 
@@ -481,6 +499,7 @@ final class SyncUnitPairsTest extends TestCase {
 		$act = AB_MCP_Sync_Decision::part_hash( 'plugin', 'activation', $here['plugin:ab-it-aktiv'] );
 		self::assertSame( array( $here['plugin:ab-it-aktiv']['hash'], $here['plugin:ab-it-aktiv']['hash'] ), array( $pair['base_live'], $pair['base_staging'] ), 'The files of the manifests read whole.' );
 		self::assertSame( array( 'live' => $act, 'staging' => $act ), $pair['base_extra']['parts']['activation'], 'Which main files run.' );
+		self::assertSame( array( 'activation' => 'equal', 'files' => 'equal' ), $pair['base_extra']['modes'] );
 		self::assertArrayHasKey( 'theme_choice:theme_choice', $pairs );
 		self::assertArrayNotHasKey( 'plugin:ab-it-schreiber', $pairs, 'A unit that differs is not paired by its category.' );
 
@@ -504,7 +523,7 @@ final class SyncUnitPairsTest extends TestCase {
 
 	/* ------------------------------------------ Frage F: units that differ */
 
-	public function testAUnitThatDiffersAlreadyIsPairedOnlyWithTheModeChosenForEachPartThatDiffers(): void {
+	public function testAUnitThatDiffersIsConfirmedPartByPartWithTheModeChosenForEachPartThatDiffers(): void {
 		self::pair();
 		AB_MCP_IT_Code::start();
 		// Updated on staging before the first proposal (the files differ).
@@ -526,36 +545,43 @@ final class SyncUnitPairsTest extends TestCase {
 		self::assertSame( array( 'activation' ), $basis['differs'] );
 		self::assertArrayHasKey( 'paths', $inakt, 'The differences are shown before a mode is chosen.' );
 		self::assertStringContainsString( 'live_base', $inakt['note'] );
+		self::assertStringContainsString( 'part by part', $inakt['note'] );
+		// C8: each list of paths with how many it holds, and the way to all.
+		self::assertGreaterThanOrEqual( count( $inakt['paths']['differs'] ), $inakt['paths']['differs_count'] );
+		self::assertGreaterThan( 0, $inakt['paths']['differs_count'] );
+		self::assertStringContainsString( 'wp_site_diff with environment) shows every path', $inakt['paths']['note'] );
 
 		$c = static fn( array $more ): array => array(
 			'action'      => 'confirm',
 			'proposal_id' => $answer['proposal_id'],
 		) + $more;
 
-		// a: without a mode, a unit that differs stays unclear.
-		self::assertStringContainsString( 'in units', self::refused( self::gated( $c( array( 'select' => array( $inakt['n'] ) ) ) ), 'ab_mcp_sync_pairs_selection' ) );
+		// a: a part that differs takes no base without a mode; an entry whose
+		// every part differs gives select nothing to confirm.
+		self::assertStringContainsString( 'Name in units', self::refused( self::gated( $c( array( 'select' => array( $einz['n'] ) ) ) ), 'ab_mcp_sync_pairs_selection' ) );
 		// By the category, the objects of other content come, a unit not.
 		$by_category = self::gated( $c( array( 'categories' => array( 'differs' ) ) ) );
 		self::assertSame( array(), array_values( array_filter( $by_category['preview']['pairs'], static fn( $op ) => 'unit' === $op['op'] ) ) );
 		$skipped = array_column( $by_category['preview']['skipped'], 'reason', 'entry' );
 		foreach ( array( $inakt, $einz, $basis ) as $unit ) {
-			self::assertStringContainsString( 'paired only with the mode a person chose', $skipped[ $unit['n'] ], $unit['ref'] );
+			self::assertStringContainsString( 'is confirmed only by entry', $skipped[ $unit['n'] ], $unit['ref'] );
 		}
-		// A mode for a part that is equal, or one part of two left out.
-		self::assertStringContainsString( 'for each part that differs and for no other', self::refused( self::gated( $c( array( 'units' => array( array( 'entry' => $inakt['n'], 'part' => 'activation', 'mode' => 'live_base' ) ) ) ) ), 'ab_mcp_sync_pairs_selection' ) );
-		self::assertStringContainsString( 'for each part that differs and for no other', self::refused( self::gated( $c( array( 'units' => array( array( 'entry' => $einz['n'], 'part' => 'files', 'mode' => 'keep_apart' ) ) ) ) ), 'ab_mcp_sync_pairs_selection' ) );
+		// A mode for a part that is the same, equal named as a mode, a part twice.
+		self::assertStringContainsString( 'does not fit the part activation', self::refused( self::gated( $c( array( 'units' => array( array( 'entry' => $inakt['n'], 'part' => 'activation', 'mode' => 'live_base' ) ) ) ) ), 'ab_mcp_sync_pairs_selection' ) );
+		self::assertStringContainsString( 'does not fit the part files', self::refused( self::gated( $c( array( 'units' => array( array( 'entry' => $units['plugin:ab-it-zwei']['n'], 'part' => 'files', 'mode' => 'live_base' ) ) ) ) ), 'ab_mcp_sync_pairs_selection' ), 'A unit that is equal takes no mode.' );
 		self::assertSame( 'ab_mcp_sync_pairs_selection', self::gated( $c( array( 'units' => array( array( 'entry' => $inakt['n'], 'part' => 'files', 'mode' => 'equal' ) ) ) ) )->get_error_code(), 'equal is no mode a person chooses.' );
-		self::assertStringContainsString( 'is no unit whose parts differ', self::refused( self::gated( $c( array( 'units' => array( array( 'entry' => $units['plugin:ab-it-zwei']['n'], 'part' => 'files', 'mode' => 'live_base' ) ) ) ) ), 'ab_mcp_sync_pairs_selection' ), 'A unit that is equal takes no mode.' );
 		self::assertSame( 'ab_mcp_sync_pairs_selection', self::gated( $c( array( 'units' => array( array( 'entry' => $inakt['n'], 'part' => 'files', 'mode' => 'live_base' ), array( 'entry' => $inakt['n'], 'part' => 'files', 'mode' => 'keep_apart' ) ) ) ) )->get_error_code(), 'Each part of an entry once.' );
 		self::assertSame( array(), self::pairs(), 'Nothing paired.' );
 
-		// b and c, part by part, after the preview names what each means.
+		// A1, first: the parts the person decides now; of einz and inakt their
+		// files only, zwei (equal) whole.
+		$zwei                   = $units['plugin:ab-it-zwei'];
 		$args                   = $c(
 			array(
-				'units' => array(
+				'select' => array( $basis['n'], $zwei['n'] ),
+				'units'  => array(
 					array( 'entry' => $inakt['n'], 'part' => 'files', 'mode' => 'live_base' ),
 					array( 'entry' => $einz['n'], 'part' => 'files', 'mode' => 'keep_apart' ),
-					array( 'entry' => $einz['n'], 'part' => 'activation', 'mode' => 'live_base' ),
 					array( 'entry' => $basis['n'], 'part' => 'activation', 'mode' => 'keep_apart' ),
 				),
 			)
@@ -565,13 +591,17 @@ final class SyncUnitPairsTest extends TestCase {
 		foreach ( $preview['preview']['pairs'] as $op ) {
 			$named[ $op['ref'] ] = $op;
 		}
-		self::assertSame( array( 'files' => 'live_base', 'activation' => 'equal' ), $named['ab-it-inaktiv']['parts'] );
+		self::assertSame( array( array( 'files' => 'live_base' ), array( 'activation' ) ), array( $named['ab-it-inaktiv']['parts'], $named['ab-it-inaktiv']['open'] ), 'A part the same, not chosen: open as well.' );
+		self::assertSame( array( array( 'files' => 'keep_apart' ), array( 'activation' ) ), array( $named['ab-it-einzeln.php']['parts'], $named['ab-it-einzeln.php']['open'] ), 'The part not chosen named as open.' );
+		self::assertSame( array( 'files' => 'equal', 'activation' => 'equal' ), $named['ab-it-zwei']['parts'] );
+		self::assertSame( array( 'files' => 'equal', 'activation' => 'keep_apart' ), $named['ab-it-basis']['parts'] );
 		foreach ( array( 'does not prove that the two sites ever had this version in common', 'can no longer be told from these bases', 'belongs to this base', 'put it into the backup with the old folder or replace it with what staging has', 'still locks a takeover (code:live_changed)', 'no older version replaces a newer one' ) as $said ) {
 			self::assertStringContainsString( $said, $named['ab-it-inaktiv']['effect'], 'Frage F, b: ' . $said );
 		}
-		self::assertStringContainsString( 'never taken over', $named['ab-it-einzeln.php']['effect'], 'Frage F, c.' );
+		self::assertStringContainsString( 'A later change on either side counts again', $named['ab-it-einzeln.php']['effect'], 'Frage F, c.' );
+		self::assertStringContainsString( 'A part not chosen stays as it is', $preview['preview']['effect'] );
 		self::assertIsArray( $done, is_wp_error( $done ) ? $done->get_error_message() : '' );
-		self::assertStringContainsString( 'does not prove', ( $done['pairs'][0]['effect'] ?? '' ) . ( $done['pairs'][1]['effect'] ?? '' ), 'The answer says it again.' );
+		self::assertStringContainsString( 'does not prove', implode( ' ', array_column( $done['pairs'], 'effect' ) ), 'The answer says it again.' );
 
 		$here  = self::lines_here();
 		$there = self::lines_there();
@@ -580,14 +610,102 @@ final class SyncUnitPairsTest extends TestCase {
 		self::assertSame( array( $here['plugin:ab-it-inaktiv']['hash'], $here['plugin:ab-it-inaktiv']['hash'] ), array( $p['base_live'], $p['base_staging'] ), 'b: the state of this site is the base of both sides.' );
 		$p = $pairs['plugin:ab-it-einzeln.php'];
 		self::assertSame( array( $here['plugin:ab-it-einzeln.php']['hash'], $there['plugin:ab-it-einzeln.php']['hash'] ), array( $p['base_live'], $p['base_staging'] ), 'c: each side its own base.' );
-		$act = AB_MCP_Sync_Decision::part_hash( 'plugin', 'activation', $here['plugin:ab-it-einzeln.php'] );
-		self::assertSame( array( 'live' => $act, 'staging' => $act ), $p['base_extra']['parts']['activation'], 'b for the other part of the same unit.' );
+		self::assertNull( AB_MCP_Sync_Pairs::part_bases( $p, 'activation' ), 'a: the activation not chosen, without a base.' );
+		self::assertSame( array( 'files' => 'keep_apart' ), $p['base_extra']['modes'] );
+		$act_here  = static fn( string $key ): string => AB_MCP_Sync_Decision::part_hash( 'plugin', 'activation', $here[ $key ] );
+		$act_there = AB_MCP_Sync_Decision::part_hash( 'plugin', 'activation', $there['plugin:ab-it-basis'] );
+		self::assertSame( array( 'live' => $act_here( 'plugin:ab-it-basis' ), 'staging' => $act_there ), $pairs['plugin:ab-it-basis']['base_extra']['parts']['activation'], 'c for the other part of a unit.' );
 
 		$env = self::report();
-		self::assertSame( array( 'changed_on_staging', array( 'activation' => 'equal', 'files' => 'changed_on_staging' ) ), array( $env['plugin:ab-it-inaktiv']['result'], $env['plugin:ab-it-inaktiv']['parts'] ), 'b: the difference is a change on staging.' );
-		self::assertSame( array( 'activation' => 'changed_on_staging', 'files' => 'kept_apart' ), $env['plugin:ab-it-einzeln.php']['parts'] );
+		self::assertSame( array( 'changed_on_staging', array( 'activation' => 'open', 'files' => 'changed_on_staging' ) ), array( $env['plugin:ab-it-inaktiv']['result'], $env['plugin:ab-it-inaktiv']['parts'] ), 'b: the difference is a change on staging.' );
+		self::assertSame( array( 'open', array( 'activation' => 'open', 'files' => 'kept_apart' ), 'none' ), array( $env['plugin:ab-it-einzeln.php']['result'], $env['plugin:ab-it-einzeln.php']['parts'], $env['plugin:ab-it-einzeln.php']['action'] ), 'a: open, nothing taken over.' );
+		self::assertStringContainsString( 'no base yet', $env['plugin:ab-it-einzeln.php']['words'] );
 		self::assertSame( array( 'kept_apart', array( 'activation' => 'kept_apart', 'files' => 'equal' ) ), array( $env['plugin:ab-it-basis']['result'], $env['plugin:ab-it-basis']['parts'] ), 'c: kept apart, nothing to take over.' );
 		self::assertSame( 'none', $env['plugin:ab-it-basis']['action'] );
+
+		// A1, second: the other part of einz, later and alone; the files of it
+		// and every other pair as they are, byte for byte.
+		$again = self::proposal();
+		$e     = $again['units']['plugin:ab-it-einzeln.php'];
+		self::assertSame( array( 'realign', 'modes', (int) $p['id'], array( 'activation' => 'open', 'files' => 'kept_apart' ) ), array( $e['category'], $e['confirm'], $e['pair']['id'], $e['states'] ) );
+		$i     = $again['units']['plugin:ab-it-inaktiv'];
+		self::assertSame( array( 'realign', array( 'activation' => 'open', 'files' => 'changed_on_staging' ) ), array( $i['category'], $i['states'] ), 'Its open part waits; live_base can change.' );
+		$snap   = static fn( string $key ): string => (string) AB_MCP_Sync_Pairs::snapshot( (int) self::pairs()[ $key ]['id'] );
+		$before = array(
+			'basis' => $snap( 'plugin:ab-it-basis' ),
+			'zwei'  => $snap( 'plugin:ab-it-zwei' ),
+		);
+		$inakt_before           = self::pairs()['plugin:ab-it-inaktiv'];
+		list( $preview, $done ) = self::confirmed(
+			array(
+				'action'      => 'confirm',
+				'proposal_id' => $again['proposal_id'],
+				'select'      => array( $i['n'] ),
+				'units'       => array( array( 'entry' => $e['n'], 'part' => 'activation', 'mode' => 'live_base' ) ),
+			)
+		);
+		$named = array();
+		foreach ( $preview['preview']['pairs'] as $op ) {
+			$named[ $op['ref'] ] = $op;
+		}
+		self::assertSame( array( array( 'activation' => 'live_base' ), array( 'files' ) ), array( $named['ab-it-einzeln.php']['parts'], $named['ab-it-einzeln.php']['unchanged'] ), 'The other part named as unchanged.' );
+		self::assertSame( array( array( 'activation' => 'equal' ), array( 'files' ) ), array( $named['ab-it-inaktiv']['parts'], $named['ab-it-inaktiv']['unchanged'] ), 'select: the open part that is the same, the decision on the files untouched.' );
+		self::assertIsArray( $done, is_wp_error( $done ) ? $done->get_error_message() : '' );
+		$inakt_now = self::pairs()['plugin:ab-it-inaktiv'];
+		self::assertSame( array( $inakt_before['base_live'], $inakt_before['base_staging'] ), array( $inakt_now['base_live'], $inakt_now['base_staging'] ) );
+		self::assertSame( array( 'live' => $act_here( 'plugin:ab-it-inaktiv' ), 'staging' => $act_here( 'plugin:ab-it-inaktiv' ) ), $inakt_now['base_extra']['parts']['activation'] );
+		self::assertSame( array( 'activation' => 'equal', 'files' => 'live_base' ), $inakt_now['base_extra']['modes'] );
+		$now = self::pairs()['plugin:ab-it-einzeln.php'];
+		self::assertSame( array( $p['base_live'], $p['base_staging'] ), array( $now['base_live'], $now['base_staging'] ), 'The files as they were.' );
+		self::assertSame( array( 'live' => $act_here( 'plugin:ab-it-einzeln.php' ), 'staging' => $act_here( 'plugin:ab-it-einzeln.php' ) ), $now['base_extra']['parts']['activation'] );
+		self::assertSame( array( 'activation' => 'live_base', 'files' => 'keep_apart' ), $now['base_extra']['modes'] );
+		self::assertSame( $before, array( 'basis' => $snap( 'plugin:ab-it-basis' ), 'zwei' => $snap( 'plugin:ab-it-zwei' ) ), 'The other pairs untouched.' );
+		$env = self::report();
+		self::assertSame( array( 'activation' => 'changed_on_staging', 'files' => 'kept_apart' ), $env['plugin:ab-it-einzeln.php']['parts'] );
+
+		// A1, third: one decision changed alone, the activation of basis from
+		// keep_apart to live_base; the base of its files byte for byte. And zwei
+		// updated alike on both sides: its files changed alike, confirmed by
+		// select, its activation as it is.
+		AB_MCP_IT_Code::put( 'a', 'plugin', 'ab-it-zwei', '1.1.0' );
+		AB_MCP_IT_Code::put( 'b', 'plugin', 'ab-it-zwei', '1.1.0' );
+		$third = self::proposal();
+		$b     = $third['units']['plugin:ab-it-basis'];
+		self::assertSame( array( 'realign', array( 'activation' => 'kept_apart', 'files' => 'equal' ) ), array( $b['category'], $b['states'] ) );
+		$z = $third['units']['plugin:ab-it-zwei'];
+		self::assertSame( array( 'realign', array( 'activation' => 'equal', 'files' => 'changed_alike' ) ), array( $z['category'], $z['states'] ) );
+		$c3 = static fn( array $more ): array => array(
+			'action'      => 'confirm',
+			'proposal_id' => $third['proposal_id'],
+		) + $more;
+		self::assertStringContainsString( 'has no part select confirms', self::refused( self::gated( $c3( array( 'select' => array( $b['n'] ) ) ) ), 'ab_mcp_sync_pairs_selection' ), 'select does not touch a decision taken.' );
+		$old      = self::pairs()['plugin:ab-it-basis'];
+		$old_zwei = self::pairs()['plugin:ab-it-zwei'];
+		$other    = array(
+			'inakt' => $snap( 'plugin:ab-it-inaktiv' ),
+			'einz'  => $snap( 'plugin:ab-it-einzeln.php' ),
+		);
+		list( , $done ) = self::confirmed(
+			$c3(
+				array(
+					'select' => array( $z['n'] ),
+					'units'  => array( array( 'entry' => $b['n'], 'part' => 'activation', 'mode' => 'live_base' ) ),
+				)
+			)
+		);
+		self::assertIsArray( $done, is_wp_error( $done ) ? $done->get_error_message() : '' );
+		$here     = self::lines_here();
+		$new_zwei = self::pairs()['plugin:ab-it-zwei'];
+		self::assertSame( array( $here['plugin:ab-it-zwei']['hash'], $here['plugin:ab-it-zwei']['hash'] ), array( $new_zwei['base_live'], $new_zwei['base_staging'] ), 'Changed alike: the state now, the base of both sides.' );
+		self::assertNotSame( $old_zwei['base_live'], $new_zwei['base_live'] );
+		self::assertSame( $old_zwei['base_extra']['parts'], $new_zwei['base_extra']['parts'], 'Its activation as it was.' );
+		$new = self::pairs()['plugin:ab-it-basis'];
+		self::assertSame( array( $old['base_live'], $old['base_staging'] ), array( $new['base_live'], $new['base_staging'] ), 'The files of basis as they were.' );
+		self::assertSame( array( 'live' => $act_here( 'plugin:ab-it-basis' ), 'staging' => $act_here( 'plugin:ab-it-basis' ) ), $new['base_extra']['parts']['activation'] );
+		self::assertSame( array( 'activation' => 'live_base', 'files' => 'equal' ), $new['base_extra']['modes'] );
+		self::assertSame( $other, array( 'inakt' => $snap( 'plugin:ab-it-inaktiv' ), 'einz' => $snap( 'plugin:ab-it-einzeln.php' ) ) );
+		$env = self::report();
+		self::assertSame( array( 'activation' => 'changed_on_staging', 'files' => 'equal' ), $env['plugin:ab-it-basis']['parts'], 'The decision changed: a change on staging now.' );
 	}
 
 	/* -------------------------------------------- one side, not paired */
@@ -603,6 +721,7 @@ final class SyncUnitPairsTest extends TestCase {
 		self::assertSame( 'staging_only', $units['plugin:ab-it-nur-dort.php']['category'] );
 		foreach ( array( 'plugin:ab-it-nur-hier.php', 'plugin:ab-it-nur-dort.php' ) as $key ) {
 			self::assertStringContainsString( 'is not paired', self::refused( self::gated( array( 'action' => 'confirm', 'proposal_id' => $answer['proposal_id'], 'select' => array( $units[ $key ]['n'] ) ) ), 'ab_mcp_sync_pairs_selection' ), $key );
+			self::assertStringContainsString( 'is no unit that can be paired', self::refused( self::gated( array( 'action' => 'confirm', 'proposal_id' => $answer['proposal_id'], 'units' => array( array( 'entry' => $units[ $key ]['n'], 'part' => 'files', 'mode' => 'live_base' ) ) ) ), 'ab_mcp_sync_pairs_selection' ), $key . ': takes no mode.' );
 		}
 		// The unit on both sides, paired, then removed on staging.
 		list( , $done ) = self::confirmed( array( 'action' => 'confirm', 'proposal_id' => $answer['proposal_id'], 'select' => array( $units['plugin:ab-it-zwei']['n'] ) ) );
@@ -617,9 +736,9 @@ final class SyncUnitPairsTest extends TestCase {
 		// No base made up for the missing side.
 		$here = self::lines_here();
 		$line = $here['plugin:ab-it-nur-hier.php'];
-		$op   = self::op( 'plugin', 'ab-it-nur-hier.php', array( 'files' => 'equal', 'activation' => 'equal' ), $line, $line );
+		$op   = self::op( 'plugin', 'ab-it-nur-hier.php', array( 'files' => 'equal', 'activation' => 'equal' ), $line, $line, array( 'source' => self::source() ) );
 		$op['lines']['staging'] = null;
-		self::assertSame( 'side', self::why( AB_MCP_Sync_Pairs::set_unit_base( self::source(), $op, AB_MCP_Sync_Unit_Proof::confirmed( array( $op ) ) ) ) );
+		self::assertSame( 'side', self::why( self::set( $op ) ) );
 	}
 
 	public function testAUnitNotReadWholeLockedHeldOrNamedTooLongIsNotPairedButNamedWithWhy(): void {
@@ -702,7 +821,7 @@ final class SyncUnitPairsTest extends TestCase {
 		);
 	}
 
-	/** An operation of set_unit_base() with the values its lines give in its modes. */
+	/** An operation of set_unit_base() with the values its lines give in its modes, of the source src-2b unless $more names another. */
 	private static function op( string $kind, string $ref, array $modes, ?array $s, ?array $l, array $more = array() ): array {
 		$parts = array();
 		foreach ( $modes as $part => $mode ) {
@@ -717,6 +836,7 @@ final class SyncUnitPairsTest extends TestCase {
 		return array_merge(
 			array(
 				'op'       => 'unit',
+				'source'   => 'src-2b',
 				'kind'     => $kind,
 				'ref'      => $ref,
 				'pair_id'  => null,
@@ -731,9 +851,60 @@ final class SyncUnitPairsTest extends TestCase {
 		);
 	}
 
-	/** set_unit_base() of an operation with a confirmation that holds it. */
+	/**
+	 * What confirms operations as the gate makes it: a token of
+	 * wp_site_pairs checked in this request against a state that holds them
+	 * (AB_MCP_Confirm_Token::check(), as gate() calls it), then
+	 * AB_MCP_Sync_Unit_Proof::of_confirmation() with the same arguments and
+	 * state.
+	 */
+	private static function confirmation( array $ops, string $tag = 'clause' ): ?AB_MCP_Sync_Unit_Proof {
+		$args  = array(
+			'action' => 'confirm',
+			'tag'    => $tag,
+		);
+		$state = array( 'ops' => $ops );
+		$hash  = hash( 'sha256', AB_MCP_Sync_Canon::encode( $state ) );
+		self::assertTrue( AB_MCP_Confirm_Token::check( 'wp_site_pairs', $args, $hash, AB_MCP_Confirm_Token::issue( 'wp_site_pairs', $args, $hash, time() ), time() ) );
+		return AB_MCP_Sync_Unit_Proof::of_confirmation( $args, $state );
+	}
+
+	/** set_unit_base() of an operation with a confirmation that holds it, for the source it names. */
 	private static function set( array $op ) {
-		return AB_MCP_Sync_Pairs::set_unit_base( 'src-2b', $op, AB_MCP_Sync_Unit_Proof::confirmed( array( $op ) ) );
+		return AB_MCP_Sync_Pairs::set_unit_base( (string) $op['source'], $op, self::confirmation( array( $op ) ) );
+	}
+
+	/**
+	 * The proof of a step whose journal holds the unit (a closed run of the
+	 * source with one step done): the parts it wrote and checked, the parts
+	 * it left as this site has them after the write, and the hash of each.
+	 */
+	private static function step_proof( string $source, string $kind, string $ref, array $written, array $after, array $checked, string $state = 'done' ): ?AB_MCP_Sync_Unit_Proof {
+		$step = \AB_MCP_IT_Pair_Rows::journal(
+			$source,
+			array(
+				'unit' => array(
+					'kind'             => $kind,
+					'ref'              => $ref,
+					'written'          => $written,
+					'live_after_write' => $after,
+					'checked'          => $checked,
+				),
+			),
+			null,
+			null,
+			$state
+		);
+		return AB_MCP_Sync_Unit_Proof::of_step( $step['run_id'], $step['seq'] );
+	}
+
+	/** The hash of each part of a unit on a line (checked). */
+	private static function checked( string $kind, array $line ): array {
+		$out = array();
+		foreach ( AB_MCP_Sync_Pairs::PARTS[ $kind ] as $part ) {
+			$out[ $part ] = AB_MCP_Sync_Decision::part_hash( $kind, $part, $line );
+		}
+		return $out;
 	}
 
 	public function testSetUnitBaseHoldsEachClauseOfZ44(): void {
@@ -747,10 +918,11 @@ final class SyncUnitPairsTest extends TestCase {
 			'kind'          => array( self::op( 'post', 'shop', array( 'files' => 'equal' ), $s, $l ), 'kind' ),
 			'ref too long'  => array( self::op( 'plugin', str_repeat( 's', 192 ), array( 'files' => 'live_base', 'activation' => 'equal' ), self::line( 'plugin', str_repeat( 's', 192 ) ), self::line( 'plugin', str_repeat( 's', 192 ), array( 'hash' => hash( 'sha256', 'x' ) ) ) ), 'ref' ),
 			'ref held'      => array( self::op( 'plugin', 'sha256:' . hash( 'sha256', 'p' ), array( 'files' => 'equal', 'activation' => 'equal' ), self::line( 'plugin', 'sha256:' . hash( 'sha256', 'p' ) ), self::line( 'plugin', 'sha256:' . hash( 'sha256', 'p' ) ) ), 'ref' ),
-			'a part alone'  => array( self::op( 'plugin', 'shop', array( 'files' => 'live_base' ), $s, $l ), 'parts' ),
+			'no part'       => array( array_replace( $good, array( 'parts' => array() ) ), 'parts' ),
 			'a part more'   => array( self::op( 'theme', 'shop', array( 'files' => 'live_base', 'activation' => 'equal' ), self::line( 'theme', 'shop', array( 'hash' => hash( 'sha256', 'v2' ) ) ), self::line( 'theme', 'shop' ) ), 'parts' ),
 			'another part'  => array( array_replace( $good, array( 'parts' => array( 'files' => $good['parts']['files'], 'other' => $good['parts']['activation'] ) ) ), 'parts' ),
-			'mode of push'  => array( self::op( 'plugin', 'shop', array( 'files' => 'push', 'activation' => 'equal' ), $s, $l ), 'mode' ),
+			'mode of push'  => array( self::op( 'plugin', 'shop', array( 'files' => 'written', 'activation' => 'equal' ), $s, $l ), 'mode' ),
+			'after write'   => array( self::op( 'plugin', 'shop', array( 'files' => 'live_base', 'activation' => 'live_after_write' ), $s, $l ), 'mode' ),
 			'no mode'       => array( array_replace_recursive( $good, array( 'parts' => array( 'files' => array( 'mode' => 'other' ) ) ) ), 'mode' ),
 			'no line'       => array( self::op( 'plugin', 'shop', array( 'files' => 'live_base', 'activation' => 'equal' ), $s, null ), 'side' ),
 			'other name'    => array( self::op( 'plugin', 'shop', array( 'files' => 'live_base', 'activation' => 'equal' ), self::line( 'plugin', 'shop-2', array( 'hash' => hash( 'sha256', 'v2' ) ) ), $l ), 'side' ),
@@ -774,43 +946,83 @@ final class SyncUnitPairsTest extends TestCase {
 			self::assertSame( $why, self::why( self::set( $op ) ), $case );
 			self::assertSame( 0, $rows(), $case . ': nothing written.' );
 		}
-		// The confirmation holds the very operation; none, or one of another.
+		// What confirms it holds the very operation, for this source: none, a
+		// confirmation of another, of another source, or a step.
 		self::assertSame( 'proof', self::why( AB_MCP_Sync_Pairs::set_unit_base( 'src-2b', $good, null ) ) );
-		self::assertSame( 'proof', self::why( AB_MCP_Sync_Pairs::set_unit_base( 'src-2b', $good, AB_MCP_Sync_Unit_Proof::confirmed( array( self::op( 'plugin', 'shop', array( 'files' => 'keep_apart', 'activation' => 'equal' ), $s, $l ) ) ) ) ) );
-		self::assertSame( 'mode', self::why( AB_MCP_Sync_Pairs::set_unit_base( 'src-2b', $good, AB_MCP_Sync_Unit_Proof::pushed( array( 'files' ) ) ) ), 'A confirmation of a person is no step.' );
+		self::assertSame( 'proof', self::why( AB_MCP_Sync_Pairs::set_unit_base( 'src-2b', $good, self::confirmation( array( self::op( 'plugin', 'shop', array( 'files' => 'keep_apart', 'activation' => 'equal' ), $s, $l ) ) ) ) ) );
+		self::assertSame( 'proof', self::why( AB_MCP_Sync_Pairs::set_unit_base( 'src-other', $good, self::confirmation( array( $good ) ) ) ), 'A2: the confirmation of one source is none for another.' );
+		$moved = array( 'source' => 'src-other' ) + $good;
+		self::assertSame( 'proof', self::why( AB_MCP_Sync_Pairs::set_unit_base( 'src-other', $moved, self::confirmation( array( $good ) ) ) ), 'A2: nor with the source of the operation changed.' );
+		self::assertSame( 'mode', self::why( AB_MCP_Sync_Pairs::set_unit_base( 'src-2b', $good, self::step_proof( 'src-2b', 'plugin', 'shop', array( 'files' ), array( 'activation' ), self::checked( 'plugin', $l ) ) ) ), 'A confirmation of a person is no step.' );
 		self::assertSame( 0, $rows() );
+
+		// A pair of one part: the other stays without a base (open; A1).
+		$files = self::set( self::op( 'plugin', 'shop', array( 'files' => 'live_base' ), $s, $l ) );
+		self::assertIsArray( $files, is_wp_error( $files ) ? $files->get_error_message() : '' );
+		self::assertSame( array( $l['hash'], $l['hash'], array( 'modes' => array( 'files' => 'live_base' ) ) ), array( $files['base_live'], $files['base_staging'], $files['base_extra'] ) );
+		self::assertNull( AB_MCP_Sync_Pairs::part_bases( $files, 'activation' ), 'The activation open.' );
+		$act_only = self::set( self::op( 'plugin', 'cart', array( 'activation' => 'equal' ), self::line( 'plugin', 'cart' ), self::line( 'plugin', 'cart' ) ) );
+		self::assertIsArray( $act_only );
+		self::assertSame( array( AB_MCP_Sync_Pairs::OPEN, AB_MCP_Sync_Pairs::OPEN ), array( $act_only['base_live'], $act_only['base_staging'] ), 'The files open: no column value is a base.' );
+		self::assertNull( AB_MCP_Sync_Pairs::part_bases( $act_only, 'files' ) );
+		self::assertNotNull( AB_MCP_Sync_Pairs::part_bases( $act_only, 'activation' ) );
+		global $wpdb;
+		$wpdb->query( 'DELETE FROM ' . AB_MCP_Sync_Schema::table( 'pairs' ) ); // phpcs:ignore WordPress.DB
 
 		// The pair, each part as its mode says.
 		$pair = self::set( $good );
 		self::assertIsArray( $pair, is_wp_error( $pair ) ? $pair->get_error_message() : '' );
 		$act = AB_MCP_Sync_Decision::part_hash( 'plugin', 'activation', $l );
 		self::assertSame( array( 'active', 'proposal', 'shop', 'shop', $l['hash'], $l['hash'] ), array( $pair['state'], $pair['base_origin'], $pair['live_ref'], $pair['staging_ref'], $pair['base_live'], $pair['base_staging'] ) );
-		self::assertSame( array( 'parts' => array( 'activation' => array( 'live' => $act, 'staging' => $act ) ) ), $pair['base_extra'] );
+		self::assertSame(
+			array(
+				'modes' => array( 'activation' => 'equal', 'files' => 'live_base' ),
+				'parts' => array( 'activation' => array( 'live' => $act, 'staging' => $act ) ),
+			),
+			$pair['base_extra'],
+			'B5: the mode of each part kept with its base.'
+		);
 		self::assertSame( 'ab_mcp_staging_pair_conflict', self::set( $good )->get_error_code(), 'One pair a unit.' );
 		$c = self::set( self::op( 'theme', 'look', array( 'files' => 'keep_apart' ), self::line( 'theme', 'look', array( 'hash' => hash( 'sha256', 'st' ) ) ), self::line( 'theme', 'look' ) ) );
-		self::assertSame( array( hash( 'sha256', 'files-look' ), hash( 'sha256', 'st' ), null ), array( $c['base_live'], $c['base_staging'], $c['base_extra'] ), 'c: each side its own base; a theme has one part.' );
+		self::assertSame( array( hash( 'sha256', 'files-look' ), hash( 'sha256', 'st' ), array( 'modes' => array( 'files' => 'keep_apart' ) ) ), array( $c['base_live'], $c['base_staging'], $c['base_extra'] ), 'c: each side its own base; a theme has one part.' );
 		$t = self::set( self::op( 'theme_choice', 'theme_choice', array( 'activation' => 'live_base' ), self::line( 'theme_choice', 'theme_choice', array( 'stylesheet' => 'other' ) ), self::line( 'theme_choice', 'theme_choice' ) ) );
 		$h = AB_MCP_Sync_Canon::hash( array( 'stylesheet' => 'kind', 'template' => 'eltern' ) );
 		self::assertSame( array( $h, $h ), array( $t['base_live'], $t['base_staging'] ), 'The theme that runs, from both its rows.' );
 
-		// A new alignment: only of a pair unclear or residual, of this very
-		// unit, as the person saw it; every part anew, the rest of base_extra kept.
+		// A new alignment of an active pair: the part named anew, every other
+		// part as it is, byte for byte (A1).
 		$expected = static fn( array $p ): string => AB_MCP_Sync_Pairs::snapshot_hash( AB_MCP_Sync_Pairs::snapshot( (int) $p['id'] ) );
-		$realign  = self::op( 'plugin', 'shop', array( 'files' => 'keep_apart', 'activation' => 'equal' ), $s, $l, array( 'pair_id' => (int) $pair['id'], 'expected' => $expected( $pair ) ) );
-		self::assertSame( 'pair_state', self::why( self::set( $realign ) ), 'An active pair moves on part by part only (rebase()).' );
-		global $wpdb;
-		$wpdb->update( AB_MCP_Sync_Schema::table( 'pairs' ), array( 'state' => 'unclear', 'base_extra' => '{"other":1,"parts":{"activation":{"live":"' . str_repeat( 'a', 64 ) . '","staging":"' . str_repeat( 'b', 64 ) . '"}}}' ), array( 'id' => (int) $pair['id'] ) ); // phpcs:ignore WordPress.DB
-		$unclear  = AB_MCP_Sync_Pairs::get( (int) $pair['id'] );
-		$realign  = self::op( 'plugin', 'shop', array( 'files' => 'keep_apart', 'activation' => 'equal' ), $s, $l, array( 'pair_id' => (int) $pair['id'], 'expected' => hash( 'sha256', 'old' ) ) );
+		$realign  = self::op( 'plugin', 'shop', array( 'files' => 'keep_apart' ), $s, $l, array( 'pair_id' => (int) $pair['id'], 'expected' => hash( 'sha256', 'old' ) ) );
 		self::assertSame( 'ab_mcp_staging_pair_changed', self::set( $realign )->get_error_code(), 'As the person saw it.' );
-		$other    = self::op( 'theme', 'look', array( 'files' => 'equal' ), self::line( 'theme', 'look' ), self::line( 'theme', 'look' ), array( 'pair_id' => (int) $pair['id'], 'expected' => $expected( $unclear ) ) );
+		$other = self::op( 'theme', 'look', array( 'files' => 'equal' ), self::line( 'theme', 'look' ), self::line( 'theme', 'look' ), array( 'pair_id' => (int) $pair['id'], 'expected' => $expected( $pair ) ) );
 		self::assertSame( 'identity', self::why( self::set( $other ) ) );
-		$realign  = self::op( 'plugin', 'shop', array( 'files' => 'keep_apart', 'activation' => 'equal' ), $s, $l, array( 'pair_id' => (int) $pair['id'], 'expected' => $expected( $unclear ) ) );
-		$now      = self::set( $realign );
+		$realign = self::op( 'plugin', 'shop', array( 'files' => 'keep_apart' ), $s, $l, array( 'pair_id' => (int) $pair['id'], 'expected' => $expected( $pair ) ) );
+		$now     = self::set( $realign );
 		self::assertIsArray( $now, is_wp_error( $now ) ? $now->get_error_message() : '' );
 		self::assertSame( array( 'active', 'proposal', $l['hash'], $s['hash'] ), array( $now['state'], $now['base_origin'], $now['base_live'], $now['base_staging'] ) );
-		self::assertSame( array( 'other' => 1, 'parts' => array( 'activation' => array( 'live' => $act, 'staging' => $act ) ) ), $now['base_extra'], 'Every part anew, the other keys kept.' );
-		self::assertSame( 'written', self::why( AB_MCP_Sync_Pairs::set_unit_base( 'src-2b', self::op( 'plugin', 'shop', array( 'files' => 'push', 'activation' => 'push' ), $s, $s, array( 'pair_id' => (int) $pair['id'], 'expected' => $expected( $now ) ) ), AB_MCP_Sync_Unit_Proof::pushed( array( 'files' ) ) ) ), 'push makes a pair, never aligns one.' );
+		self::assertSame( $pair['base_extra']['parts'], $now['base_extra']['parts'], 'The base of the activation as it was.' );
+		self::assertSame( array( 'activation' => 'equal', 'files' => 'keep_apart' ), $now['base_extra']['modes'] );
+		$again = self::set( self::op( 'plugin', 'shop', array( 'activation' => 'equal' ), $s, $l, array( 'pair_id' => (int) $pair['id'], 'expected' => $expected( $now ) ) ) );
+		self::assertSame( array( $now['base_live'], $now['base_staging'] ), array( $again['base_live'], $again['base_staging'] ), 'The files as they were: the other part named alone.' );
+
+		// A pair unclear or a rest: active again; the parts not named without a
+		// base (nothing of it counts as confirmed), the other keys kept.
+		$wpdb->update( AB_MCP_Sync_Schema::table( 'pairs' ), array( 'state' => 'unclear', 'canon' => 'canon/0', 'base_extra' => '{"modes":{"activation":"equal","files":"live_base"},"other":1,"parts":{"activation":{"live":"' . str_repeat( 'a', 64 ) . '","staging":"' . str_repeat( 'b', 64 ) . '"}}}' ), array( 'id' => (int) $pair['id'] ) ); // phpcs:ignore WordPress.DB
+		$unclear = AB_MCP_Sync_Pairs::get( (int) $pair['id'] );
+		$now     = self::set( self::op( 'plugin', 'shop', array( 'files' => 'keep_apart' ), $s, $l, array( 'pair_id' => (int) $pair['id'], 'expected' => $expected( $unclear ) ) ) );
+		self::assertIsArray( $now, is_wp_error( $now ) ? $now->get_error_message() : '' );
+		self::assertSame( array( 'active', 'proposal', $l['hash'], $s['hash'], AB_MCP_Sync_Canon::VERSION ), array( $now['state'], $now['base_origin'], $now['base_live'], $now['base_staging'], $now['canon'] ), 'Active, in the version of the comparison data of now.' );
+		self::assertSame( array( 'modes' => array( 'files' => 'keep_apart' ), 'other' => 1 ), $now['base_extra'], 'The activation open, its base and mode gone, the other keys kept.' );
+		$wpdb->update( AB_MCP_Sync_Schema::table( 'pairs' ), array( 'state' => 'residual' ), array( 'id' => (int) $pair['id'] ) ); // phpcs:ignore WordPress.DB
+		$rest = AB_MCP_Sync_Pairs::get( (int) $pair['id'] );
+		$now  = self::set( self::op( 'plugin', 'shop', array( 'activation' => 'equal' ), $s, $l, array( 'pair_id' => (int) $pair['id'], 'expected' => $expected( $rest ) ) ) );
+		self::assertSame( array( 'active', AB_MCP_Sync_Pairs::OPEN, AB_MCP_Sync_Pairs::OPEN ), array( $now['state'], $now['base_live'], $now['base_staging'] ), 'A rest: the files not named, without a base.' );
+		self::assertSame( array( 'modes' => array( 'activation' => 'equal' ), 'other' => 1, 'parts' => array( 'activation' => array( 'live' => $act, 'staging' => $act ) ) ), $now['base_extra'] );
+		$wpdb->update( AB_MCP_Sync_Schema::table( 'pairs' ), array( 'state' => 'deleted' ), array( 'id' => (int) $pair['id'] ) ); // phpcs:ignore WordPress.DB
+		$gone = AB_MCP_Sync_Pairs::get( (int) $pair['id'] );
+		self::assertSame( 'pair_state', self::why( self::set( self::op( 'plugin', 'shop', array( 'files' => 'keep_apart' ), $s, $l, array( 'pair_id' => (int) $pair['id'], 'expected' => $expected( $gone ) ) ) ) ) );
+		$push = self::op( 'plugin', 'shop', array( 'files' => 'written', 'activation' => 'written' ), $s, $s, array( 'pair_id' => (int) $pair['id'], 'expected' => $expected( $gone ) ) );
+		self::assertSame( 'written', self::why( AB_MCP_Sync_Pairs::set_unit_base( 'src-2b', $push, self::step_proof( 'src-2b', 'plugin', 'shop', array( 'files', 'activation' ), array(), self::checked( 'plugin', $s ) ) ) ), 'push makes a pair, never aligns one.' );
 	}
 
 	/* ---------------------------------------------- no way past it, Z44 */
@@ -853,6 +1065,154 @@ final class SyncUnitPairsTest extends TestCase {
 		self::assertSame( 'ab_mcp_staging_pair_snapshot_foreign', $put->get_error_code(), 'restore() puts back only the pair its snapshot is of.' );
 	}
 
+	/* ------------------------------ what confirms a base (Behebung 1, A2) */
+
+	public function testWhatConfirmsABaseIsMadeOnlyFromWhatHappened(): void {
+		$s    = self::line( 'plugin', 'shop', array( 'hash' => hash( 'sha256', 'v2' ) ) );
+		$l    = self::line( 'plugin', 'shop', array( 'hash' => hash( 'sha256', 'v1' ) ) );
+		$good = self::op( 'plugin', 'shop', array( 'files' => 'live_base', 'activation' => 'equal' ), $s, $l );
+		$rows = static fn(): int => count( AB_MCP_IT_Sites::rows( 'a', 'ab_mcp_staging_pairs' ) );
+
+		// No maker that takes what a caller says.
+		foreach ( array( 'confirmed', 'pushed' ) as $maker ) {
+			self::assertFalse( method_exists( AB_MCP_Sync_Unit_Proof::class, $maker ), 'A2: no proof from operations a caller names (' . $maker . ').' );
+		}
+		try {
+			$made = new AB_MCP_Sync_Unit_Proof( array( 'origin' => 'proposal', 'ops' => array( AB_MCP_Sync_Canon::encode( $good ) ) ) ); // @phpstan-ignore-line
+			self::fail( 'No proof by new.' );
+		} catch ( \Error $e ) {
+			self::assertStringContainsString( 'private', $e->getMessage() );
+		}
+		$real = self::confirmation( array( $good ) );
+		self::assertInstanceOf( AB_MCP_Sync_Unit_Proof::class, $real );
+		try {
+			$copy = clone $real;
+			self::fail( 'No copy of a proof.' );
+		} catch ( \Error $e ) {
+			self::assertStringContainsString( 'private', $e->getMessage() );
+		}
+		foreach ( array( serialize( $real ), 'O:22:"AB_MCP_Sync_Unit_Proof":1:{s:30:"' . "\0" . 'AB_MCP_Sync_Unit_Proof' . "\0" . 'fields";a:2:{s:6:"origin";s:8:"proposal";s:3:"ops";a:0:{}}}' ) as $text ) {
+			try {
+				unserialize( $text ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions
+				self::fail( 'A proof is never unserialized.' );
+			} catch ( \LogicException $e ) {
+				self::assertStringContainsString( 'never unserialized', $e->getMessage() );
+			}
+		}
+
+		// A confirmation only where the token passed its check in this request,
+		// for these arguments, this state and this account.
+		$args  = array(
+			'action' => 'confirm',
+			'tag'    => 'unchecked',
+		);
+		$state = array( 'ops' => array( $good ) );
+		self::assertNull( AB_MCP_Sync_Unit_Proof::of_confirmation( $args, $state ), 'Self-issued: no check passed.' );
+		$hash = hash( 'sha256', AB_MCP_Sync_Canon::encode( $state ) );
+		self::assertNotTrue( AB_MCP_Confirm_Token::check( 'wp_site_pairs', $args, $hash, AB_MCP_Confirm_Token::issue( 'wp_site_pairs', array( 'tag' => 'other' ) + $args, $hash, time() ), time() ), 'A token of other arguments does not pass.' );
+		self::assertNull( AB_MCP_Sync_Unit_Proof::of_confirmation( $args, $state ), 'A check that did not pass records nothing.' );
+		self::assertTrue( AB_MCP_Confirm_Token::check( 'wp_site_pairs', $args, $hash, AB_MCP_Confirm_Token::issue( 'wp_site_pairs', $args, $hash, time() ), time() ) );
+		self::assertInstanceOf( AB_MCP_Sync_Unit_Proof::class, AB_MCP_Sync_Unit_Proof::of_confirmation( $args, $state ) );
+		self::assertNull( AB_MCP_Sync_Unit_Proof::of_confirmation( array( 'tag' => 'other' ) + $args, $state ), 'Other arguments.' );
+		$wider = array( 'ops' => array( $good, self::op( 'theme', 'look', array( 'files' => 'equal' ), self::line( 'theme', 'look' ), self::line( 'theme', 'look' ) ) ) );
+		self::assertNull( AB_MCP_Sync_Unit_Proof::of_confirmation( $args, $wider ), 'Another state: an operation added after the check.' );
+		self::assertNull( AB_MCP_Sync_Unit_Proof::of_confirmation( array( 'action' => 'discard' ) + $args, $state ) );
+		self::assertNull( AB_MCP_Sync_Unit_Proof::of_confirmation( $args + array( 'confirm_token' => 'x' ), array( 'print' => 'p' ) + $state ) );
+		wp_set_current_user( 0 );
+		self::assertNull( AB_MCP_Sync_Unit_Proof::of_confirmation( $args, $state ), 'Another account.' );
+		wp_set_current_user( self::admin() );
+		$scope = new \ReflectionProperty( \AB_MCP_Auth::class, 'current_scope' );
+		$was   = $scope->getValue();
+		$scope->setValue( null, 'content' === $was ? 'full' : 'content' );
+		try {
+			self::assertNull( AB_MCP_Sync_Unit_Proof::of_confirmation( $args, $state ), 'Another access level.' );
+		} finally {
+			$scope->setValue( null, $was );
+		}
+		self::assertInstanceOf( AB_MCP_Sync_Unit_Proof::class, AB_MCP_Sync_Unit_Proof::of_confirmation( $args, $state ), 'The same once more.' );
+		$tool = array( 'tag' => 'tool' ) + $args;
+		self::assertTrue( AB_MCP_Confirm_Token::check( 'wp_site_revert', $tool, $hash, AB_MCP_Confirm_Token::issue( 'wp_site_revert', $tool, $hash, time() ), time() ) );
+		self::assertNull( AB_MCP_Sync_Unit_Proof::of_confirmation( $tool, $state ), 'A token of another tool.' );
+
+		// The proof of a step only from a step done whose journal names a unit.
+		self::assertNull( self::step_proof( 'src-2b', 'plugin', 'shop', array( 'files' ), array( 'activation' ), self::checked( 'plugin', $l ), 'planned' ), 'A step not done.' );
+		$none = \AB_MCP_IT_Pair_Rows::journal( 'src-2b', array( 'note' => 'no unit' ) );
+		self::assertNull( AB_MCP_Sync_Unit_Proof::of_step( $none['run_id'], $none['seq'] ), 'A result without a unit.' );
+		self::assertNull( AB_MCP_Sync_Unit_Proof::of_step( 999999, 1 ), 'No such run.' );
+		// A proof of one source is none for another (A2), and holds its unit only.
+		$w     = self::line( 'plugin', 'shop' );
+		$push  = self::op( 'plugin', 'shop', array( 'files' => 'written', 'activation' => 'written' ), $w, $w, array( 'source' => null ) );
+		$proof = self::step_proof( 'src-2b', 'plugin', 'shop', array( 'files', 'activation' ), array(), self::checked( 'plugin', $w ) );
+		self::assertSame( 'step', self::why( AB_MCP_Sync_Pairs::set_unit_base( 'src-other', $push, $proof ) ) );
+		$cart = self::line( 'plugin', 'cart', array( 'hash' => $w['hash'] ) );
+		self::assertSame( 'step', self::why( AB_MCP_Sync_Pairs::set_unit_base( 'src-2b', self::op( 'plugin', 'cart', array( 'files' => 'written', 'activation' => 'written' ), $cart, $cart ), $proof ) ), 'Another unit.' );
+		$look = self::line( 'theme', 'shop', array( 'hash' => $w['hash'] ) );
+		self::assertSame( 'step', self::why( AB_MCP_Sync_Pairs::set_unit_base( 'src-2b', self::op( 'theme', 'shop', array( 'files' => 'written' ), $look, $look ), $proof ) ), 'A unit of another kind of the same name.' );
+		self::assertSame( 'proof', self::why( AB_MCP_Sync_Pairs::set_unit_base( 'src-other', $good, $real ) ) );
+		self::assertSame( 0, $rows() );
+		// The same proofs for their own source and unit: written.
+		self::assertIsArray( AB_MCP_Sync_Pairs::set_unit_base( 'src-2b', $good, $real ) );
+		global $wpdb;
+		$wpdb->query( 'DELETE FROM ' . AB_MCP_Sync_Schema::table( 'pairs' ) ); // phpcs:ignore WordPress.DB
+		self::assertIsArray( AB_MCP_Sync_Pairs::set_unit_base( 'src-2b', $push, $proof ) );
+	}
+
+	/* -------------------------- the way back of a unit (Behebung 1, A3) */
+
+	public function testAUnitGoesBackOnlyToTheStateItsJournalNames(): void {
+		$fields = array(
+			'source_id'    => 'src-2b',
+			'kind'         => 'plugin',
+			'live_ref'     => 'shop',
+			'staging_ref'  => 'shop',
+			'canon'        => AB_MCP_Sync_Canon::VERSION,
+			'base_live'    => hash( 'sha256', 'l' ),
+			'base_staging' => hash( 'sha256', 's' ),
+			'base_origin'  => 'push',
+			'base_extra'   => array( 'parts' => array( 'activation' => array( 'live' => hash( 'sha256', 'al' ), 'staging' => hash( 'sha256', 'as' ) ) ) ),
+		);
+		$pair   = \AB_MCP_IT_Pair_Rows::put( $fields );
+		$id     = (int) $pair['id'];
+		$before = AB_MCP_Sync_Pairs::snapshot( $id );
+		$now    = static fn(): string => AB_MCP_Sync_Pairs::snapshot_hash( AB_MCP_Sync_Pairs::snapshot( $id ) );
+		// The step moved the files on; its journal names the state before.
+		global $wpdb;
+		$wpdb->update( AB_MCP_Sync_Schema::table( 'pairs' ), array( 'base_live' => hash( 'sha256', 'l2' ), 'base_staging' => hash( 'sha256', 'l2' ) ), array( 'id' => $id ) ); // phpcs:ignore WordPress.DB
+		$after = AB_MCP_Sync_Pairs::snapshot( $id );
+		$step  = \AB_MCP_IT_Pair_Rows::journal( 'src-2b', null, $id, $before );
+
+		// A snapshot of the same identity with other bases: never (red at 012ba9b).
+		$forged                            = json_decode( $before, true );
+		$forged['columns']['base_live']    = hash( 'sha256', 'made up' );
+		$forged['columns']['base_staging'] = hash( 'sha256', 'made up' );
+		$forged                            = (string) json_encode( $forged );
+		$cases                             = array(
+			'other bases, no step'         => array( $forged, null ),
+			'other bases, with its step'   => array( $forged, $step ),
+			'its snapshot, no step'        => array( $before, null ),
+			'its snapshot, a step of none' => array( $before, array( 'run_id' => 999999, 'seq' => 1 ) ),
+			'of another pair'              => array( $before, \AB_MCP_IT_Pair_Rows::journal( 'src-2b', null, $id + 1000, $before ) ),
+			'of another source'            => array( $before, \AB_MCP_IT_Pair_Rows::journal( 'src-other', null, $id, $before ) ),
+			'the step names another state' => array( $before, \AB_MCP_IT_Pair_Rows::journal( 'src-2b', null, $id, $after ) ),
+		);
+		foreach ( $cases as $case => list( $snapshot, $by ) ) {
+			$result = AB_MCP_Sync_Pairs::restore( $id, $snapshot, $now(), $by );
+			self::assertInstanceOf( WP_Error::class, $result, $case );
+			self::assertSame( array( 'ab_mcp_staging_pair_unit', 'restore' ), array( $result->get_error_code(), $result->get_error_data()['clause'] ?? null ), $case );
+			self::assertSame( $after, AB_MCP_Sync_Pairs::snapshot( $id ), $case . ': nothing written.' );
+		}
+		// The state its journal names: back.
+		$back = AB_MCP_Sync_Pairs::restore( $id, $before, $now(), $step );
+		self::assertIsArray( $back, is_wp_error( $back ) ? $back->get_error_message() : '' );
+		self::assertSame( $before, AB_MCP_Sync_Pairs::snapshot( $id ) );
+		// An object goes back to its snapshot as before, without a step.
+		$post = AB_MCP_Sync_Pairs::create( array( 'kind' => 'post', 'live_ref' => '5', 'staging_ref' => '9', 'base_origin' => 'proposal' ) + array_diff_key( $fields, array( 'kind' => 1, 'live_ref' => 1, 'staging_ref' => 1, 'base_origin' => 1, 'base_extra' => 1 ) ) );
+		$post_before = AB_MCP_Sync_Pairs::snapshot( (int) $post['id'] );
+		$wpdb->update( AB_MCP_Sync_Schema::table( 'pairs' ), array( 'base_live' => hash( 'sha256', 'p2' ) ), array( 'id' => (int) $post['id'] ) ); // phpcs:ignore WordPress.DB
+		self::assertIsArray( AB_MCP_Sync_Pairs::restore( (int) $post['id'], $post_before, AB_MCP_Sync_Pairs::snapshot_hash( AB_MCP_Sync_Pairs::snapshot( (int) $post['id'] ) ) ) );
+		self::assertSame( $post_before, AB_MCP_Sync_Pairs::snapshot( (int) $post['id'] ) );
+	}
+
 	/* ------------------------------------------- origin push (F5), contract */
 
 	public function testAUnitMadeOnThisSiteTakesABaseWithOriginPushOnlyWithItsFilesWrittenAndChecked(): void {
@@ -864,32 +1224,63 @@ final class SyncUnitPairsTest extends TestCase {
 		$there  = self::lines_there();
 		$s      = $there['plugin:ab-it-inaktiv'];
 		$source = self::source();
-		$pushed = static fn( array $written, array $l, array $more = array() ) => AB_MCP_Sync_Pairs::set_unit_base( $source, self::op( 'plugin', 'ab-it-inaktiv', array( 'files' => 'push', 'activation' => 'push' ), $s, $l, $more ), AB_MCP_Sync_Unit_Proof::pushed( $written ) );
+		$modes  = array( 'files' => 'written', 'activation' => 'live_after_write' );
+		$pushed = static fn( array $l, array $written, array $after, ?array $checked = null, array $more = array(), ?array $as = null ) => AB_MCP_Sync_Pairs::set_unit_base( $source, self::op( 'plugin', 'ab-it-inaktiv', $as ?? $modes, $s, $l, array( 'source' => null ) + $more ), self::step_proof( $source, 'plugin', 'ab-it-inaktiv', $written, $after, $checked ?? self::checked( 'plugin', $l ) ) );
 
 		// Not written yet, or written with another version: no base.
 		AB_MCP_IT_Code::put( 'a', 'plugin', 'ab-it-inaktiv', '1.0.0' );
 		$other = self::lines_here()['plugin:ab-it-inaktiv'];
-		self::assertSame( 'state', self::why( $pushed( array( 'files' ), $other ) ), 'Written, but not as staging has it: checked, no base.' );
+		self::assertSame( 'state', self::why( $pushed( $other, array( 'files' ), array( 'activation' ) ) ), 'Written, but not as staging has it: checked, no base.' );
 		AB_MCP_IT_Code::put( 'a', 'plugin', 'ab-it-inaktiv', '1.1.0' );
 		$l = self::lines_here()['plugin:ab-it-inaktiv'];
-		self::assertSame( 'written', self::why( $pushed( array(), $l ) ), 'Nothing written.' );
-		self::assertSame( 'written', self::why( $pushed( array( 'activation' ), $l ) ), 'The files not written.' );
-		self::assertSame( 'written', self::why( $pushed( array( 'files', 'other' ), $l ) ) );
-		self::assertSame( 'whole', self::why( $pushed( array( 'files' ), array( 'complete' => false, 'hash' => null ) + $l ) ), 'Not checked: the line after the write not read whole.' );
-		self::assertSame( 'side', self::why( AB_MCP_Sync_Pairs::set_unit_base( $source, self::op( 'plugin', 'ab-it-inaktiv', array( 'files' => 'push', 'activation' => 'push' ), $s, null ), AB_MCP_Sync_Unit_Proof::pushed( array( 'files' ) ) ) ), 'No line after the write: unchecked.' );
+		self::assertSame( 'step', self::why( $pushed( $l, array(), array( 'activation' ) ) ), 'The journal: the files not written.' );
+		self::assertSame( 'step', self::why( $pushed( $l, array( 'files' ), array( 'activation' ), array( 'files' => hash( 'sha256', 'other' ) ) + self::checked( 'plugin', $l ) ) ), 'Checked with another hash.' );
+		self::assertSame( 'written', self::why( $pushed( $l, array( 'files' ), array( 'activation' ), null, array(), array( 'files' => 'live_after_write', 'activation' => 'live_after_write' ) ) ), 'The files written, or no base of origin push.' );
+		self::assertSame( 'whole', self::why( $pushed( array( 'complete' => false, 'hash' => null ) + $l, array( 'files' ), array( 'activation' ) ) ), 'Not checked: the line after the write not read whole.' );
+		self::assertSame( 'side', self::why( AB_MCP_Sync_Pairs::set_unit_base( $source, self::op( 'plugin', 'ab-it-inaktiv', $modes, $s, null, array( 'source' => null ) ), self::step_proof( $source, 'plugin', 'ab-it-inaktiv', array( 'files' ), array( 'activation' ), self::checked( 'plugin', $l ) ) ) ), 'No line after the write: unchecked.' );
 		self::assertSame( array(), self::pairs() );
 
 		// Written and checked: the files as staging has them, the activation
 		// where this site stands after it (made inactive), so the activation on
 		// staging is a change on staging, which the activation step takes over.
-		$pair = $pushed( array( 'files' ), $l, array( 'last_run' => 7 ) );
+		$pair = $pushed( $l, array( 'files' ), array( 'activation' ), null, array( 'last_run' => 7 ) );
 		self::assertIsArray( $pair, is_wp_error( $pair ) ? $pair->get_error_message() : '' );
 		$act = AB_MCP_Sync_Decision::part_hash( 'plugin', 'activation', $l );
 		self::assertSame( array( 'push', 7, $s['hash'], $s['hash'] ), array( $pair['base_origin'], $pair['last_run'], $pair['base_live'], $pair['base_staging'] ) );
 		self::assertSame( array( 'live' => $act, 'staging' => $act ), $pair['base_extra']['parts']['activation'] );
-		self::assertSame( 'written', self::why( $pushed( array( 'files' ), $l, array( 'pair_id' => (int) $pair['id'] ) ) ), 'Only for a unit without a pair.' );
+		self::assertSame( array( 'activation' => 'live_after_write', 'files' => 'written' ), $pair['base_extra']['modes'], 'B5: what was written and checked, and what is as this site has it after the write.' );
+		self::assertSame( 'written', self::why( $pushed( $l, array( 'files' ), array( 'activation' ), null, array( 'pair_id' => (int) $pair['id'] ) ) ), 'Only for a unit without a pair.' );
 		$env = self::report();
 		self::assertSame( array( 'activation' => 'changed_on_staging', 'files' => 'equal' ), $env['plugin:ab-it-inaktiv']['parts'], 'F5: the activation follows as a change on staging.' );
+	}
+
+	public function testAPartAStepDidNotWriteIsKeptApartFromOneItWroteAndChecked(): void {
+		// B5 (Lesart der Lead, noch von der Steuerung zu bestätigen): a part
+		// the step did not write takes the state of this site after the write
+		// as its base (live_after_write), never as written and checked; the
+		// journal names which, and the proof of one does not cover the other.
+		$s     = self::line( 'plugin', 'shop' );
+		$off   = self::line( 'plugin', 'shop', array( 'active' => array() ) );
+		$cases = array(
+			'the activation said written, the journal left it'  => array( $s, array( 'files' => 'written', 'activation' => 'written' ), array( 'files' ), array( 'activation' ), 'step' ),
+			'the activation said left, the journal wrote it'    => array( $s, array( 'files' => 'written', 'activation' => 'live_after_write' ), array( 'files', 'activation' ), array(), 'step' ),
+			'named in both lists of the journal'                => array( $s, array( 'files' => 'written', 'activation' => 'live_after_write' ), array( 'files', 'activation' ), array( 'activation' ), 'step' ),
+			'written, but not as staging has it'                => array( $off, array( 'files' => 'written', 'activation' => 'written' ), array( 'files', 'activation' ), array(), 'state' ),
+			'the files left, not written'                       => array( $s, array( 'files' => 'live_after_write', 'activation' => 'written' ), array( 'activation' ), array( 'files' ), 'written' ),
+			'said written, named in both lists'                 => array( $s, array( 'files' => 'written', 'activation' => 'written' ), array( 'files', 'activation' ), array( 'activation' ), 'step' ),
+			'said written, in neither list'                     => array( $s, array( 'files' => 'written', 'activation' => 'written' ), array( 'files' ), array(), 'step' ),
+			'said left, in neither list'                        => array( $s, array( 'files' => 'written', 'activation' => 'live_after_write' ), array( 'files' ), array(), 'step' ),
+		);
+		foreach ( $cases as $case => list( $l, $modes, $written, $after, $why ) ) {
+			$proof = self::step_proof( 'src-2b', 'plugin', 'shop', $written, $after, self::checked( 'plugin', $l ) );
+			self::assertSame( $why, self::why( AB_MCP_Sync_Pairs::set_unit_base( 'src-2b', self::op( 'plugin', 'shop', $modes, $s, $l ), $proof ) ), $case );
+		}
+		self::assertSame( array(), AB_MCP_IT_Sites::rows( 'a', 'ab_mcp_staging_pairs' ) );
+		$left = AB_MCP_Sync_Pairs::set_unit_base( 'src-2b', self::op( 'plugin', 'shop', array( 'files' => 'written', 'activation' => 'live_after_write' ), $s, $off ), self::step_proof( 'src-2b', 'plugin', 'shop', array( 'files' ), array( 'activation' ), self::checked( 'plugin', $off ) ) );
+		self::assertIsArray( $left, is_wp_error( $left ) ? $left->get_error_message() : '' );
+		$act = AB_MCP_Sync_Decision::part_hash( 'plugin', 'activation', $off );
+		self::assertSame( array( 'live' => $act, 'staging' => $act ), $left['base_extra']['parts']['activation'], 'The state of this site after the write, the base of both sides.' );
+		self::assertSame( array( 'activation' => 'live_after_write', 'files' => 'written' ), $left['base_extra']['modes'], 'Stored apart from written.' );
 	}
 
 	/* ------------------------------------- faults of the rows of the pairs */
@@ -987,23 +1378,24 @@ final class SyncUnitPairsTest extends TestCase {
 	}
 
 	public function testAPairOfAUnitWhoseRowCannotBeReadBackAfterItsInsertIsTakenBack(): void {
-		$line = self::line( 'plugin', 'shop' );
-		$op   = self::op( 'plugin', 'shop', array( 'files' => 'push', 'activation' => 'push' ), $line, $line );
-		$rows = static fn(): int => count( AB_MCP_IT_Sites::rows( 'a', 'ab_mcp_staging_pairs' ) );
+		$line  = self::line( 'plugin', 'shop' );
+		$op    = self::op( 'plugin', 'shop', array( 'files' => 'written', 'activation' => 'written' ), $line, $line );
+		$rows  = static fn(): int => count( AB_MCP_IT_Sites::rows( 'a', 'ab_mcp_staging_pairs' ) );
+		$proof = self::step_proof( 'src-2b', 'plugin', 'shop', array( 'files', 'activation' ), array(), self::checked( 'plugin', $line ) );
 		// V5 for units: the insert and the reading back in one transaction.
 		AB_MCP_Test_Seam::install( AB_MCP_Sync_Pairs::class, 'naht_sync_pairs', self::read_back_fails() );
-		$result = AB_MCP_Sync_Pairs::set_unit_base( 'src-2b', $op, AB_MCP_Sync_Unit_Proof::pushed( array( 'files' ) ) );
+		$result = AB_MCP_Sync_Pairs::set_unit_base( 'src-2b', $op, $proof );
 		AB_MCP_Test_Seam::restore_all();
 		self::refused( $result, 'ab_mcp_staging_db_error' );
 		self::assertSame( 0, $rows(), 'Taken back: no pair the caller was told is not there.' );
 		// A reading of the unique keys that fails (Lesefehler) writes nothing.
 		AB_MCP_Test_Seam::install( AB_MCP_Sync_Pairs::class, 'naht_sync_pairs', AB_MCP_Sync_Pairs_Calls::class, array( array( 'method' => 'row', 'nth' => 1, 'kind' => 'return', 'value' => false ) ) );
-		$result = AB_MCP_Sync_Pairs::set_unit_base( 'src-2b', $op, AB_MCP_Sync_Unit_Proof::pushed( array( 'files' ) ) );
+		$result = AB_MCP_Sync_Pairs::set_unit_base( 'src-2b', $op, $proof );
 		AB_MCP_Test_Seam::restore_all();
 		self::refused( $result, 'ab_mcp_staging_db_error' );
 		self::assertSame( 0, $rows() );
 		// A new alignment whose row changed in between (no row changed).
-		self::assertIsArray( AB_MCP_Sync_Pairs::set_unit_base( 'src-2b', $op, AB_MCP_Sync_Unit_Proof::pushed( array( 'files' ) ) ) );
+		self::assertIsArray( AB_MCP_Sync_Pairs::set_unit_base( 'src-2b', $op, $proof ) );
 		global $wpdb;
 		$wpdb->query( "UPDATE " . AB_MCP_Sync_Schema::table( 'pairs' ) . " SET state = 'unclear'" ); // phpcs:ignore WordPress.DB
 		$pair    = AB_MCP_Sync_Pairs::page_source( 'src-2b' )['pairs'][0];
@@ -1016,9 +1408,22 @@ final class SyncUnitPairsTest extends TestCase {
 
 	public function testAnEndOfTheProcessOrItsTimeLimitAtTheBaseOfAUnitKeepsNothingHalf(): void {
 		$line  = self::line( 'plugin', 'shop' );
-		$op    = self::op( 'plugin', 'shop', array( 'files' => 'push', 'activation' => 'push' ), $line, $line );
+		$op    = self::op( 'plugin', 'shop', array( 'files' => 'written', 'activation' => 'written' ), $line, $line );
 		$probe = __DIR__ . '/support/unit-base-probe.php';
-		$plan  = static function ( array $fault ) use ( $op, $probe ): array {
+		// The journal of the step, committed before the process of its own reads it.
+		$step  = \AB_MCP_IT_Pair_Rows::journal(
+			'src-2b',
+			array(
+				'unit' => array(
+					'kind'             => 'plugin',
+					'ref'              => 'shop',
+					'written'          => array( 'files', 'activation' ),
+					'live_after_write' => array(),
+					'checked'          => self::checked( 'plugin', $line ),
+				),
+			)
+		);
+		$plan  = static function ( array $fault ) use ( $op, $probe, $step ): array {
 			return array(
 				'require' => array( $probe ),
 				'seams'   => array(
@@ -1032,7 +1437,7 @@ final class SyncUnitPairsTest extends TestCase {
 				'calls'   => array(
 					array(
 						'call' => 'ab_it_unit_base_probe',
-						'args' => array( 'src-2b', $op, array( 'files' ) ),
+						'args' => array( 'src-2b', $op, $step['run_id'], $step['seq'] ),
 					),
 				),
 			);
@@ -1119,10 +1524,18 @@ final class SyncUnitPairsTest extends TestCase {
 		} catch ( RuntimeException $e ) {
 			self::assertSame( 'packages gone', $e->getMessage() );
 		}
-		// The head not written (Rückgabe false): nothing kept as done.
+		// The head not written (Rückgabe false, Throwable): nothing kept as done.
 		$seam( array( array( 'method' => 'put', 'nth' => 1, 'kind' => 'return', 'value' => false ) ) );
 		self::refused( self::here( $begin ), 'ab_mcp_sync_pairs_unwritten' );
+		$seam( array( array( 'method' => 'put', 'nth' => 1, 'kind' => 'throw', 'message' => 'head gone' ) ) );
+		try {
+			self::here( $begin );
+			self::fail( 'The Throwable leaves the call.' );
+		} catch ( RuntimeException $e ) {
+			self::assertSame( 'head gone', $e->getMessage() );
+		}
 		AB_MCP_Test_Seam::restore_all();
+		self::assertSame( array(), array_values( array_filter( AB_MCP_Protected_Store::groups( 'reports' ), static fn( $g ) => 'proposal' === $g['label'] ) ), 'No group without its head left behind.' );
 		// The environment of this site throws in a call: the next call goes on.
 		$seam( array( array( 'method' => 'live_environment', 'nth' => 1, 'kind' => 'throw', 'message' => 'env gone' ) ) );
 		$first = null;
@@ -1157,8 +1570,29 @@ final class SyncUnitPairsTest extends TestCase {
 		$slow = self::here( $begin );
 		AB_MCP_Sync_Env::$clock = null;
 		self::assertSame( array( false, 0 ), array( $slow['done'], $slow['environment']['parts'] ), 'Not read: no time left in the call.' );
-		$done = self::here( array( 'action' => 'propose', 'proposal_id' => $slow['proposal_id'] ) );
+		// B6: the first file the next call stores not written (Rückgabe false,
+		// Throwable), or a file of its name claimed there that does not read
+		// back against its SHA-256: refused, no proposal made of it; the call
+		// after goes on.
+		$go_on = array(
+			'action'      => 'propose',
+			'proposal_id' => $slow['proposal_id'],
+		);
+		$seam( array( array( 'method' => 'put', 'nth' => 1, 'kind' => 'return', 'value' => false ) ) );
+		self::refused( self::here( $go_on ), 'ab_mcp_sync_pairs_unwritten' );
+		$seam( array( array( 'method' => 'put', 'nth' => 1, 'kind' => 'return', 'value' => new WP_Error( 'ab_mcp_store_exists', 'There is a file of this name.' ) ) ) );
+		self::refused( self::here( $go_on ), 'ab_mcp_store_exists' );
+		$seam( array( array( 'method' => 'put', 'nth' => 1, 'kind' => 'throw', 'message' => 'entries gone' ) ) );
+		try {
+			self::here( $go_on );
+			self::fail( 'The Throwable leaves the call.' );
+		} catch ( RuntimeException $e ) {
+			self::assertSame( 'entries gone', $e->getMessage() );
+		}
+		AB_MCP_Test_Seam::restore_all();
+		$done = self::here( $go_on );
 		self::assertTrue( $done['done'] );
+		self::assertGreaterThan( 0, $done['units']['entries'] );
 		// A unit of the staging site not read whole there (its line cut):
 		// not compared, never proposed.
 		AB_MCP_Test_Seam::install(
@@ -1186,24 +1620,48 @@ final class SyncUnitPairsTest extends TestCase {
 		self::assertSame( 'equal', $cut['units']['plugin:ab-it-inaktiv']['category'] );
 	}
 
+	/**
+	 * What a proposal says of its units, each by its category, confirmation,
+	 * parts and reason: equal for the same environment of both sides (the
+	 * objects of the site may change between two proposals of a case: the
+	 * processes of its own write options of the site). Its entries numbered
+	 * without a gap, as many as its counts say.
+	 */
+	private static function said_of( array $answer ): array {
+		self::assertSame( range( 1, count( $answer['all'] ) ), array_map( static fn( $e ) => (int) $e['n'], $answer['all'] ), 'Every entry once, in order.' );
+		self::assertSame( array_sum( $answer['counts'] ), count( $answer['all'] ) );
+		$units = array();
+		foreach ( $answer['units'] as $key => $entry ) {
+			$units[ $key ] = array( $entry['category'], $entry['confirm'] ?? null, $entry['parts'] ?? null, $entry['reason'] ?? null );
+		}
+		ksort( $units );
+		return $units;
+	}
+
 	public function testAnEndOfTheProcessWhileTheProposalOfUnitsIsStoredLeavesItToTheNextCall(): void {
 		self::pair();
 		AB_MCP_IT_Code::start();
-		$t                      = 0.0;
-		AB_MCP_Sync_Env::$clock = static function () use ( &$t ) {
-			$t += 1000.0;
-			return $t;
+		$packages    = self::staged( 'inventory' );
+		$environment = self::staged( 'env' );
+		// A proposal begun: the inventory read, the environment of this site not yet.
+		$begin = static function () use ( $packages, $environment ): string {
+			$t                      = 0.0;
+			AB_MCP_Sync_Env::$clock = static function () use ( &$t ) {
+				$t += 1000.0;
+				return $t;
+			};
+			$begun                  = self::here(
+				array(
+					'action'      => 'propose',
+					'packages'    => $packages,
+					'environment' => $environment,
+				)
+			);
+			AB_MCP_Sync_Env::$clock = null;
+			self::assertFalse( $begun['done'], 'The inventory read, the environment of this site not yet.' );
+			return (string) $begun['proposal_id'];
 		};
-		$begun = self::here(
-			array(
-				'action'      => 'propose',
-				'packages'    => self::staged( 'inventory' ),
-				'environment' => self::staged( 'env' ),
-			)
-		);
-		AB_MCP_Sync_Env::$clock = null;
-		self::assertFalse( $begun['done'], 'The inventory read, the environment of this site not yet.' );
-		$plan = static function ( array $fault ) use ( $begun ): array {
+		$plan  = static function ( array $fault, string $id ): array {
 			return array(
 				'require' => array( AB_MCP_DIR . 'includes/sync/class-sync-proposal.php' ),
 				'seams'   => array(
@@ -1211,8 +1669,8 @@ final class SyncUnitPairsTest extends TestCase {
 						'owner'    => 'AB_MCP_Sync_Proposal',
 						'property' => 'naht_sync_proposal',
 						'real'     => 'AB_MCP_Sync_Proposal_Calls',
-						// The first file this call writes through the proposal:
-						// its entries, after the environment of this site.
+						// A file this call writes through the proposal: its
+						// entries (the first), then its index.
 						'faults'   => array( array( 'method' => 'put', 'nth' => 1, 'kind' => 'abort', 'point' => 'store-entries' ) + $fault ),
 					),
 				),
@@ -1220,19 +1678,101 @@ final class SyncUnitPairsTest extends TestCase {
 					array( 'call' => 'wp_set_current_user', 'args' => array( self::admin() ) ),
 					array(
 						'call' => 'AB_MCP_Sync_Proposal::propose',
-						'args' => array( array( 'proposal_id' => $begun['proposal_id'] ) ),
+						'args' => array( array( 'proposal_id' => $id ) ),
 					),
 				),
 			);
 		};
+		$finish = static function ( string $id ): array {
+			$answer = self::here( array( 'action' => 'propose', 'proposal_id' => $id ) );
+			for ( $i = 0; is_array( $answer ) && false === $answer['done'] && $i < 50; $i++ ) {
+				$answer = self::here( array( 'action' => 'propose', 'proposal_id' => $id ) );
+			}
+			self::assertIsArray( $answer, is_wp_error( $answer ) ? $answer->get_error_message() : '' );
+			self::assertTrue( $answer['done'], 'Worked out by the next call.' );
+			return self::proposal_units( $answer );
+		};
+		$id = $begin();
 		foreach ( array( 'no_shutdown', 'shutdown', 'timeout' ) as $mode ) {
-			AB_MCP_IT_Process::abort( 'a', $plan( array( 'mode' => $mode ) ) );
+			AB_MCP_IT_Process::abort( 'a', $plan( array( 'mode' => $mode ), $id ) );
 		}
-		$answer = self::here( array( 'action' => 'propose', 'proposal_id' => $begun['proposal_id'] ) );
-		self::assertIsArray( $answer, is_wp_error( $answer ) ? $answer->get_error_message() : '' );
-		self::assertTrue( $answer['done'], 'Worked out by the next call.' );
-		self::assertGreaterThan( 0, $answer['units']['entries'] );
+		$want = self::said_of( $finish( $id ) );
+		self::assertNotSame( array(), $want );
+		// B6: an end after a file of the proposal is stored, or between its
+		// entries and its index: the next call works it out again and meets
+		// the file there (named by its SHA-256, read against it), goes on with
+		// it and comes to the same proposal, never another one.
+		// B6: an end of the first call right after it stored the slice of the
+		// identity index of this site, before the part that names it: the
+		// next call reads that part again, meets the slice there by its name
+		// and SHA-256, and goes on to the same proposal.
+		AB_MCP_IT_Process::abort(
+			'a',
+			array(
+				'require' => array( AB_MCP_DIR . 'includes/sync/class-sync-proposal.php' ),
+				'seams'   => array(
+					array(
+						'owner'    => 'AB_MCP_Sync_Proposal',
+						'property' => 'naht_sync_proposal',
+						'real'     => 'AB_MCP_Sync_Proposal_Calls',
+						// The head first, then the slice.
+						'faults'   => array( array( 'method' => 'put', 'nth' => 2, 'kind' => 'abort', 'point' => 'store-index-slice', 'mode' => 'no_shutdown', 'when' => 'after' ) ),
+					),
+				),
+				'calls'   => array(
+					array( 'call' => 'wp_set_current_user', 'args' => array( self::admin() ) ),
+					array(
+						'call' => 'AB_MCP_Sync_Proposal::propose',
+						'args' => array(
+							array(
+								'packages'    => $packages,
+								'environment' => $environment,
+							),
+						),
+					),
+				),
+			)
+		);
+		$groups = array_values( array_filter( AB_MCP_Protected_Store::groups( 'reports' ), static fn( $g ) => 'proposal' === $g['label'] ) );
+		self::assertCount( 1, $groups );
+		$names = array_keys( AB_MCP_Protected_Store::files( 'reports', $groups[0]['gid'] ) );
+		self::assertSame( array( 'h', 'i' ), array_values( array_unique( array_map( static fn( $n ) => $n[0], $names ) ) ), 'The head and the slice, no part yet.' );
+		self::assertSame( $want, self::said_of( $finish( $groups[0]['gid'] ) ), 'after the slice of the index is stored' );
+		foreach ( array(
+			'after the entries are stored'    => array( 'when' => 'after' ),
+			'before the index is stored'      => array( 'nth' => 2 ),
+			'after the index is stored'       => array( 'nth' => 2, 'when' => 'after' ),
+		) as $case => $at ) {
+			$id = $begin();
+			AB_MCP_IT_Process::abort( 'a', $plan( $at + array( 'mode' => 'no_shutdown' ), $id ) );
+			self::assertSame( $want, self::said_of( $finish( $id ) ), $case );
+		}
 		self::assertSame( array(), self::pairs() );
+	}
+
+	/** The answer of a proposal with its entries of units by kind:ref (all pages). */
+	private static function proposal_units( array $answer ): array {
+		$all  = $answer['entries'];
+		$page = $answer;
+		while ( null !== $page['next_after'] ) {
+			$page = self::here(
+				array(
+					'action'      => 'propose',
+					'proposal_id' => $answer['proposal_id'],
+					'after'       => $page['next_after'],
+				)
+			);
+			self::assertIsArray( $page );
+			$all = array_merge( $all, $page['entries'] );
+		}
+		$answer['all']   = $all;
+		$answer['units'] = array();
+		foreach ( $all as $entry ) {
+			if ( ! empty( $entry['unit'] ) ) {
+				$answer['units'][ $entry['kind'] . ':' . $entry['ref'] ] = $entry;
+			}
+		}
+		return $answer;
 	}
 
 	/* ------------------------------------------------------------- token */
@@ -1248,6 +1788,12 @@ final class SyncUnitPairsTest extends TestCase {
 			'proposal_id' => $answer['proposal_id'],
 			'units'       => array( array( 'entry' => $n, 'part' => 'files', 'mode' => $mode ) ),
 		);
+		// A2: the tool past the gate, its plan made (state()) but no token
+		// checked: what confirms the unit is not made, nothing written.
+		self::assertIsString( AB_MCP_Sync_Pairs_Tool::state( $args( 'live_base' ) ) );
+		$past = AB_MCP_Sync_Pairs_Tool::call( $args( 'live_base' ) );
+		self::assertStringContainsString( 'only with what confirms it', self::refused( $past, 'ab_mcp_sync_pairs_confirm_failed' ) );
+		self::assertSame( array(), self::pairs(), 'A2: no pair without the check of the token.' );
 		$preview = self::gated( $args( 'live_base' ) );
 		$token   = array( 'confirm_token' => $preview['confirm_token'] );
 		// Another mode than the preview: refused.
@@ -1347,11 +1893,13 @@ final class SyncUnitPairsTest extends TestCase {
 			'proposal_id' => $answer['proposal_id'],
 		) + $more;
 		self::assertStringContainsString( 'cannot be aligned anew', self::refused( self::gated( $c( array( 'select' => array( $realign[ (int) $gone['id'] ]['n'] ) ) ) ), 'ab_mcp_sync_pairs_selection' ) );
-		self::assertStringContainsString( 'in units', self::refused( self::gated( $c( array( 'select' => array( $realign[ (int) $diff['id'] ]['n'] ) ) ) ), 'ab_mcp_sync_pairs_selection' ) );
+		// select alone: the part that is the same; the one that differs open.
+		$alone_part = self::gated( $c( array( 'select' => array( $realign[ (int) $diff['id'] ]['n'] ) ) ) );
+		self::assertSame( array( array( 'activation' => 'equal' ), array( 'files' ) ), array( $alone_part['preview']['pairs'][0]['parts'], $alone_part['preview']['pairs'][0]['open'] ) );
 		list( $preview, $done ) = self::confirmed(
 			$c(
 				array(
-					'select' => array( $realign[ (int) $same['id'] ]['n'] ),
+					'select' => array( $realign[ (int) $same['id'] ]['n'], $realign[ (int) $diff['id'] ]['n'] ),
 					'units'  => array( array( 'entry' => $realign[ (int) $diff['id'] ]['n'], 'part' => 'files', 'mode' => 'live_base' ) ),
 				)
 			)
@@ -1364,7 +1912,15 @@ final class SyncUnitPairsTest extends TestCase {
 			$pair = $pairs[ $key ];
 			$act  = AB_MCP_Sync_Decision::part_hash( 'plugin', 'activation', $here[ $key ] );
 			self::assertSame( array( 'active', 'proposal', $here[ $key ]['hash'], $here[ $key ]['hash'] ), array( $pair['state'], $pair['base_origin'], $pair['base_live'], $pair['base_staging'] ), $key );
-			self::assertSame( array( 'kept' => 1, 'parts' => array( 'activation' => array( 'live' => $act, 'staging' => $act ) ) ), $pair['base_extra'], $key . ': every part anew, the rest kept.' );
+			self::assertSame(
+				array(
+					'kept'  => 1,
+					'modes' => array( 'activation' => 'equal', 'files' => 'plugin:ab-it-zwei' === $key ? 'equal' : 'live_base' ),
+					'parts' => array( 'activation' => array( 'live' => $act, 'staging' => $act ) ),
+				),
+				$pair['base_extra'],
+				$key . ': every part anew, the rest kept.'
+			);
 		}
 		self::assertSame( 'unclear', $pairs['plugin:ab-it-weg']['state'] );
 		$env = self::report();

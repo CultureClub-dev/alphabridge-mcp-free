@@ -31,6 +31,11 @@ namespace AlphaBridge\Tests;
 
 use PHPUnit\Framework\TestCase;
 
+// testTheWriteSideOfAKindIsAClassOfTheTakeover() reads the writers of the
+// engine: loaded here, so the file runs on its own too (Z8b branch 2b,
+// Behebung 1, C7).
+require_once dirname( __DIR__ ) . '/includes/sync/class-sync-engine.php';
+
 final class SyncSafeCallsTest extends TestCase {
 
 	/**
@@ -359,7 +364,7 @@ final class SyncSafeCallsTest extends TestCase {
 			'wp_update_term'            => array( 2, 'write_row() and restore_row(): the way forward and back of the row of a term (decisions 17 and 23).' ),
 		),
 		'class-sync-said.php' => array(
-			'__' => array( 273, 'text(): the reasons of the report, the locks of the environment among them, of the proposal of the pairs, the words and notes of the results and of the environment and the messages of AB_MCP_Outbound, said to a person in the language of the site where they are set into a refusal or a note or the copy of an answer (shown()); the stored English text is only the key, and the locale of the site and its bundled translation are read, no value the takeover compares or hashes (branch 13 text/z8, Codex rounds 2, 3 and 5; SyncSaidScanTest finds every such text).' ),
+			'__' => array( 275, 'text(): the reasons of the report, the locks of the environment among them, of the proposal of the pairs, the words and notes of the results and of the environment and the messages of AB_MCP_Outbound, said to a person in the language of the site where they are set into a refusal or a note or the copy of an answer (shown()); the stored English text is only the key, and the locale of the site and its bundled translation are read, no value the takeover compares or hashes (branch 13 text/z8, Codex rounds 2, 3 and 5; SyncSaidScanTest finds every such text).' ),
 			'_x' => array( 8, 'kind(): the word of a kind of an object in a note of the journal, as the page «Staging» says it; the locale of the site and its bundled translation are read, no value the takeover compares or hashes (branch 13 text/z8, Codex round 2, B1).' ),
 		),
 		'class-sync-resources.php' => array(
@@ -470,7 +475,9 @@ final class SyncSafeCallsTest extends TestCase {
 			'__' => array( 15, 'the refusals and errors the tools wp_site_* pass on, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2).' ),
 		),
 		'class-sync-pairs.php' => array(
-			'__' => array( 54, 'the refusals and errors the tools wp_site_* pass on, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2).' ),
+			'AB_MCP_Confirm_Token::passed' => array( 1, 'AB_MCP_Sync_Unit_Proof::of_confirmation(): whether the token of wp_site_pairs passed its check in this request against these arguments and this state (Z8b branch 2b, Behebung 1, A2); reads a record of this request, writes nothing.' ),
+			'new LogicException'           => array( 2, 'AB_MCP_Sync_Unit_Proof::__wakeup() and __unserialize(): a proof of the base of a unit is never unserialized (Z8b branch 2b, Behebung 1, A2); refuses, writes nothing.' ),
+			'__' => array( 57, 'the refusals and errors the tools wp_site_* pass on, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2).' ),
 		),
 		'class-sync-write.php' => array(
 			'__' => array( 3, 'the refusals and errors the tools wp_site_* pass on, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2).' ),

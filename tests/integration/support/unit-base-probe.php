@@ -12,14 +12,16 @@
 require_once AB_MCP_DIR . 'includes/sync/class-sync-pairs.php';
 
 /**
- * set_unit_base() of an operation with origin push.
+ * set_unit_base() of an operation with origin push, with the proof of the
+ * step its journal holds (AB_MCP_Sync_Unit_Proof::of_step()).
  *
- * @param string   $source  The source.
- * @param array    $op      The operation.
- * @param string[] $written The parts the step wrote and checked.
+ * @param string $source The source.
+ * @param array  $op     The operation.
+ * @param int    $run_id The run of the step.
+ * @param int    $seq    The step.
  * @return string written, or the code of the error.
  */
-function ab_it_unit_base_probe( $source, array $op, array $written ) {
-	$done = AB_MCP_Sync_Pairs::set_unit_base( (string) $source, $op, AB_MCP_Sync_Unit_Proof::pushed( $written ) );
+function ab_it_unit_base_probe( $source, array $op, $run_id, $seq ) {
+	$done = AB_MCP_Sync_Pairs::set_unit_base( (string) $source, $op, AB_MCP_Sync_Unit_Proof::of_step( (int) $run_id, (int) $seq ) );
 	return is_wp_error( $done ) ? $done->get_error_code() : 'written';
 }

@@ -121,9 +121,9 @@ final class SyncManifestGuardTest extends TestCase {
 		}
 		self::assertSame( array( 'includes/sync/class-sync-pairs.php' ), $writers );
 		$pairs = self::shipped()['includes/sync/class-sync-pairs.php'];
-		// responsible(), part_bases() and unit_part() (Z8b branch 2b) read a
-		// part; they write nothing.
-		self::assertSame( 1, preg_match_all( '/function\\s+\\w+\\([^)]*\\$part\\b/', $pairs ) - preg_match_all( '/function\\s+(responsible|part_bases|unit_part)\\(/', $pairs ), 'rebase() the one writer that takes a part.' );
+		// responsible(), part_bases(), unit_part() and the step_holds() of a
+		// proof (Z8b branch 2b) read a part; they write nothing.
+		self::assertSame( 1, preg_match_all( '/function\\s+\\w+\\([^)]*\\$part\\b/', $pairs ) - preg_match_all( '/function\\s+(responsible|part_bases|unit_part|step_holds)\\(/', $pairs ), 'rebase() the one writer that takes a part.' );
 		self::assertSame( 1, substr_count( $pairs, "self::calls()->insert_row( AB_MCP_Sync_Schema::table( 'pairs' )" ), 'One insert of a pair, in insert_pair().' );
 		self::assertSame( 1, substr_count( $pairs, "\$extra['parts'][ \$part ] = array(" ), 'The base of a further part written in one place.' );
 	}

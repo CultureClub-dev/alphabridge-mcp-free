@@ -56,4 +56,63 @@ final class AB_MCP_IT_Pair_Rows {
 		}
 		return $pair;
 	}
+
+	/**
+	 * Put a closed run of a source with one step, as its journal holds it
+	 * (Behebung 1 of branch 2b, A2 and A3: the proof of a step that made a
+	 * unit, AB_MCP_Sync_Unit_Proof::of_step(), and the state before a step a
+	 * unit goes back to, AB_MCP_Sync_Pairs::restore()). The engine writes
+	 * such a step with branch 5; here the row is put as it is.
+	 *
+	 * @param string      $source      The source of the run.
+	 * @param array|null  $result      The result of the step (unit: kind, ref, written, live_after_write, checked).
+	 * @param int|null    $pair_id     The pair of the step.
+	 * @param string|null $pair_before The snapshot of the pair before the step.
+	 * @param string      $state       The state of the step.
+	 * @return array{run_id:int,seq:int}
+	 */
+	public static function journal( $source, $result, $pair_id = null, $pair_before = null, $state = 'done' ) {
+		global $wpdb;
+		$now  = time();
+		$done = $wpdb->insert( // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- test code.
+			AB_MCP_Sync_Schema::table( 'runs' ),
+			array(
+				'type'      => 'push',
+				'source_id' => (string) $source,
+				'state'     => 'closed_done',
+				'created'   => $now,
+				'updated'   => $now,
+				'closed'    => $now,
+				'heartbeat' => $now,
+			)
+		);
+		if ( false === $done ) {
+			throw new RuntimeException( 'The run was not written: ' . $wpdb->last_error );
+		}
+		$run_id = (int) $wpdb->insert_id;
+		$row    = array(
+			'run_id'  => $run_id,
+			'seq'     => 1,
+			'op'      => 'write',
+			'depends' => '[]',
+			'state'   => (string) $state,
+			'time'    => $now,
+		);
+		if ( null !== $pair_id ) {
+			$row['pair_id'] = (int) $pair_id;
+		}
+		if ( null !== $pair_before ) {
+			$row['pair_before'] = (string) $pair_before;
+		}
+		if ( null !== $result ) {
+			$row['result'] = AB_MCP_Sync_Canon::encode( $result );
+		}
+		if ( false === $wpdb->insert( AB_MCP_Sync_Schema::table( 'steps' ), $row ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- test code.
+			throw new RuntimeException( 'The step was not written: ' . $wpdb->last_error );
+		}
+		return array(
+			'run_id' => $run_id,
+			'seq'    => 1,
+		);
+	}
 }

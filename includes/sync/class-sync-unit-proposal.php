@@ -15,17 +15,21 @@
  *
  * THE ENTRIES, by the categories of the proposal: equal (the same name and
  * every part the same: confirmed as active, each part equal); differs (the
- * same name, a part other: paired only with the mode a person chooses for
- * each part that differs, after the differences are shown, Frage F: b
- * live_base, c keep_apart; without it, the unit stays unclear, a); realign
- * (a pair of a unit in the state unclear or residual: every part anew, the
- * same way); staging_only and live_only (on one side only: no pair, no base
- * made up for the other side); not_compared (a side not read whole, a lock
- * of what no manifest shows or of a further root of themes, Z2, AlphaBridge
- * itself, a name a pair cannot hold, with why); held (a name a credential
- * holds, by its SHA-256 only). A unit with an active pair is not proposed
- * again. Only plugin, theme and theme_choice are proposed; the further kinds
- * of units get their pairs with their branches.
+ * same name, a part other: a part that differs takes a base only with the
+ * mode a person chooses for it, after the differences are shown, Frage F: b
+ * live_base, c keep_apart; part by part, the parts that are the same by
+ * select; a part not chosen stays without a base, open, a); realign (a pair
+ * of a unit in the state unclear or residual, every part anew the same way;
+ * or an active pair with a part whose decision waits or can change: open,
+ * kept apart, changed here, changed alike, in conflict, or changed on staging
+ * by the base live_base set, with the states of its parts: a part chosen
+ * anew, the others as they are); staging_only and live_only (on one side
+ * only: no pair, no base made up for the other side); not_compared (a side
+ * not read whole, a lock of what no manifest shows or of a further root of
+ * themes, Z2, AlphaBridge itself, a name a pair cannot hold, with why); held
+ * (a name a credential holds, by its SHA-256 only). Any other unit with an
+ * active pair is not proposed again. Only plugin, theme and theme_choice are
+ * proposed; the further kinds of units get their pairs with their branches.
  *
  * Each entry keeps the lines of both sides (lines, never shown), from which
  * the confirmation sets the bases (AB_MCP_Sync_Pairs::set_unit_base()), and
@@ -54,7 +58,13 @@ final class AB_MCP_Sync_Unit_Proposal {
 	const PATHS = 10;
 
 	/** What a person chooses for a unit whose parts differ (stored, said in an answer). */
-	const CHOOSE = 'Paired only with the mode a person chooses for each part that differs (wp_site_pairs action=confirm with units): live_base makes the state of this site of that part now the base of both sides, so the difference counts as a change on staging; keep_apart keeps the difference, never taken over. Without it, the unit stays unclear.';
+	const CHOOSE = 'A part that differs is confirmed only with the mode a person chooses for it (wp_site_pairs action=confirm with units), part by part or together: live_base makes the state of this site of that part now the base of both sides, so the difference counts as a change on staging; keep_apart keeps the difference as it is now, and a later change counts again. A part not chosen stays as it is, without a base where it has none (unclear).';
+
+	/** Where every path is (stored, said in an answer). */
+	const ALL_PATHS = 'Each list of paths shows its first 10 here, with how many it holds; the report (wp_site_diff with environment) shows every path.';
+
+	/** The states of a part with an active pair at which a decision of a person waits or can change. */
+	const PENDING = array( 'open', 'kept_apart', 'conflict', 'changed_live', 'changed_alike' );
 
 	/** Why a name is not paired (the words of the proposal of objects). */
 	const NO_REF = 'Its name cannot be held by a pair (longer than 191 characters, a control character, or not UTF-8), so it is not paired. Take it over by hand.';
@@ -95,6 +105,16 @@ final class AB_MCP_Sync_Unit_Proposal {
 			's' => self::by_ref( $staging ),
 			'l' => self::by_ref( $live ),
 		);
+		// The units with an active pair as the report judges them, part by part.
+		$active = array_values( array_filter( $pairs, static fn( $p ) => in_array( $p['kind'], self::KINDS, true ) && 'active' === $p['state'] ) );
+		$judged = array();
+		if ( array() !== $active ) {
+			foreach ( AB_MCP_Sync_Env::compare( $staging, $live, $active )['entries'] as $one ) {
+				if ( 'environment' === $one['kind'] && 'more_paths' !== $one['result'] && isset( $one['pair'] ) ) {
+					$judged[ (int) $one['pair']['id'] ] = $one;
+				}
+			}
+		}
 		$seen   = array();
 		$out    = array();
 		$paired = 0;
@@ -112,7 +132,16 @@ final class AB_MCP_Sync_Unit_Proposal {
 				if ( in_array( $pair['state'], array( 'unclear', 'residual' ), true ) ) {
 					$out[] = self::realign( $kind, $ref, $said, $s, $l, $pair );
 				} elseif ( 'active' === $pair['state'] ) {
-					++$paired;
+					// A decision of a person waits or can change (a part open,
+					// kept apart, changed here, changed alike, a conflict, or
+					// the difference live_base made a change on staging):
+					// offered part by part; else not proposed again.
+					$states = $judged[ (int) $pair['id'] ]['parts'] ?? array();
+					if ( self::waits( $states, $pair ) ) {
+						$out[] = self::realign( $kind, $ref, $said, $s, $l, $pair ) + array( 'states' => $states );
+					} else {
+						++$paired;
+					}
 				}
 				continue;
 			}
@@ -131,6 +160,25 @@ final class AB_MCP_Sync_Unit_Proposal {
 			'entries' => $out,
 			'paired'  => $paired,
 		);
+	}
+
+	/**
+	 * Whether a part of an active pair waits for a decision of a person or
+	 * holds one that can change (PENDING, or changed on staging by the base
+	 * live_base set).
+	 *
+	 * @param array $states Part => its state in the report.
+	 * @param array $pair   The pair (decoded).
+	 * @return bool
+	 */
+	private static function waits( array $states, array $pair ) {
+		$modes = $pair['base_extra']['modes'] ?? array();
+		foreach ( $states as $part => $state ) {
+			if ( in_array( $state, self::PENDING, true ) || ( 'changed_on_staging' === $state && is_array( $modes ) && 'live_base' === ( $modes[ $part ] ?? null ) ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -270,7 +318,9 @@ final class AB_MCP_Sync_Unit_Proposal {
 				$paths[ $list ]            = array_slice( (array) ( $said['paths'][ $list ] ?? array() ), 0, self::PATHS );
 				$paths[ $list . '_count' ] = (int) ( $said['paths'][ $list . '_count' ] ?? 0 );
 			}
-			$out['paths'] = $paths;
+			// Every path, with its count, in the report (more_paths).
+			$paths['note'] = self::ALL_PATHS;
+			$out['paths']  = $paths;
 		}
 		return $out;
 	}

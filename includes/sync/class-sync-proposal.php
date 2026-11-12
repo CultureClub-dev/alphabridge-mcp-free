@@ -388,7 +388,15 @@ final class AB_MCP_Sync_Proposal {
 			'print'       => (string) AB_MCP_Sync_Anchor::pair_print(),
 			'source_id'   => $source,
 		);
-		$put  = self::put( $gid, 'h', null, $head );
+		try {
+			$put = self::put( $gid, 'h', null, $head );
+		} catch ( Throwable $e ) {
+			// A group without its head is no proposal and nobody's (replace_own()
+			// knows a proposal by its head): removed with it (Z8b branch 2b,
+			// Behebung 1, B6).
+			self::calls()->remove( 'reports', $gid );
+			throw $e;
+		}
 		if ( is_wp_error( $put ) ) {
 			self::calls()->remove( 'reports', $gid );
 			return $put;
@@ -836,9 +844,9 @@ final class AB_MCP_Sync_Proposal {
 			for ( $at = 0; $at < strlen( $read['index'] ); $at += AB_MCP_Sync_Identity::slice() ) {
 				$slice = (string) substr( $read['index'], $at, AB_MCP_Sync_Identity::slice() );
 				$sha   = hash( 'sha256', $slice );
-				$put   = self::calls()->put( 'reports', $found['gid'], self::name( 'i', $seq + 1, $sha ), $slice );
-				if ( ! is_array( $put ) ) {
-					return is_wp_error( $put ) ? $put : self::unwritten();
+				$put   = self::stored( $found['gid'], self::name( 'i', $seq + 1, $sha ), $sha, $slice );
+				if ( is_wp_error( $put ) ) {
+					return $put;
 				}
 				$index[] = array(
 					'name' => self::name( 'i', $seq + 1, $sha ),
@@ -1206,7 +1214,7 @@ final class AB_MCP_Sync_Proposal {
 			'units'       => $index['units'] ?? null,
 			'entries'     => $entries,
 			'next_after'  => $page['more'] ? $last : null,
-			'next'        => __( 'Nothing is paired yet.', 'alphabridge-mcp' ) . ' Show the entries to the person. To pair, call wp_site_pairs with action=confirm, this proposal_id and the entries the person chose: select (entry numbers), categories (all equal, differs or realign entries, after the number in after) or choices (for an uncertain entry: the staging_ref and live_ref the person chose; these are never paired otherwise). equal is paired as active, differs and a chosen pair of other content as unclear (the report then asks which side wins), realign makes the states of both sides now the new bases.' . ( empty( $index['units']['entries'] ) ? '' : ' Entries of units (kind plugin, theme or theme_choice, with unit true): equal is paired as active, each part equal. For a unit whose parts differ (differs, or realign with differs), show the person the differences (parts, differs, paths) and the note, and name in units the mode the person chose for each part that differs: live_base (the state of this site of that part is the base of both sides, so the difference is a change on staging) or keep_apart (the difference is kept, never taken over); without it, the unit stays unclear. A unit on one side only, not read whole, locked or held is not paired.' ) . ( $page['more'] ? ' More entries: call again with action=propose, this proposal_id and after=' . $last . '.' : '' ),
+			'next'        => __( 'Nothing is paired yet.', 'alphabridge-mcp' ) . ' Show the entries to the person. To pair, call wp_site_pairs with action=confirm, this proposal_id and the entries the person chose: select (entry numbers), categories (all equal, differs or realign entries, after the number in after) or choices (for an uncertain entry: the staging_ref and live_ref the person chose; these are never paired otherwise). equal is paired as active, differs and a chosen pair of other content as unclear (the report then asks which side wins), realign makes the states of both sides now the new bases.' . ( empty( $index['units']['entries'] ) ? '' : ' Entries of units (kind plugin, theme or theme_choice, with unit true): equal is paired as active, each part equal. For a unit whose parts differ (differs, or realign with differs; a realign of an active pair names the states of its parts), show the person the differences (parts, differs, paths) and the note, and name in units the mode the person chose for a part that differs: live_base (the state of this site of that part is the base of both sides, so the difference is a change on staging) or keep_apart (the difference as it is now is kept, not taken over; a later change counts again). Part by part: select confirms the parts that are the same, a part not named stays as it is (without a base where it has none). A unit on one side only, not read whole, locked or held is not paired.' ) . ( $page['more'] ? ' More entries: call again with action=propose, this proposal_id and after=' . $last . '.' : '' ),
 		);
 	}
 
@@ -2368,16 +2376,35 @@ final class AB_MCP_Sync_Proposal {
 		$text = AB_MCP_Sync_Canon::encode( $data );
 		$sha  = hash( 'sha256', $text );
 		$name = self::name( $prefix, $seq, $sha );
-		$put  = self::calls()->put( 'reports', $gid, $name, $text );
-		if ( ! is_array( $put ) ) {
-			// A write that says neither what it stored nor why not stored
-			// nothing (fail closed).
-			return is_wp_error( $put ) ? $put : self::unwritten();
-		}
-		return array(
+		$put  = self::stored( $gid, $name, $sha, $text );
+		return is_wp_error( $put ) ? $put : array(
 			'name' => $name,
 			'sha'  => $sha,
 		);
+	}
+
+	/**
+	 * Write a file of a group once, named by its SHA-256: a file of that name
+	 * there already, read against that SHA-256, is this very file (a call that
+	 * ended after it wrote it and before the file that closes its part:
+	 * the next call goes on). A write that says neither what it stored nor
+	 * why stored nothing (fail closed).
+	 *
+	 * @param string $gid  Group.
+	 * @param string $name Name.
+	 * @param string $sha  SHA-256 of the text.
+	 * @param string $text Text.
+	 * @return true|WP_Error
+	 */
+	private static function stored( $gid, $name, $sha, $text ) {
+		$put = self::calls()->put( 'reports', $gid, $name, $text );
+		if ( is_array( $put ) ) {
+			return true;
+		}
+		if ( is_wp_error( $put ) && 'ab_mcp_store_exists' === $put->get_error_code() && is_string( self::calls()->get( 'reports', $gid, $name, $sha ) ) ) {
+			return true;
+		}
+		return is_wp_error( $put ) ? $put : self::unwritten();
 	}
 
 	/**
