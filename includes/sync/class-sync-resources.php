@@ -307,17 +307,22 @@ final class AB_MCP_Sync_Resources {
 		if ( ! is_wp_error( $root ) ) {
 			$free        = function_exists( 'disk_free_space' ) ? @disk_free_space( $root ) : false; // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 			$out['free'] = is_int( $free ) || is_float( $free ) ? (int) $free : null;
-			$path        = $root . '/resources-' . getmypid() . '.tmp';
-			$data        = str_repeat( 'x', self::TEMPO_BYTES );
-			$start       = microtime( true );
-			$written     = @file_put_contents( $path, $data, LOCK_EX ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
+			// A temp file of the store (Z37): made in its area tmp/, written
+			// through write_file(), removed through delete_path() as made by
+			// this request.
+			$path                 = AB_MCP_Protected_Store::temp_file( $root );
+			$data                 = str_repeat( 'x', self::TEMPO_BYTES );
+			$start                = microtime( true );
+			$written              = ! is_wp_error( $path ) && true === AB_MCP_Protected_Store::write_file( $root, $path, $data );
 			$out['write_seconds'] = microtime( true ) - $start;
-			if ( false !== $written ) {
+			if ( $written ) {
 				$start = microtime( true );
 				@file_get_contents( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
 				$out['read_seconds'] = microtime( true ) - $start;
 			}
-			@unlink( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink
+			if ( ! is_wp_error( $path ) ) {
+				AB_MCP_Protected_Store::delete_path( $root, $path );
+			}
 		}
 		// The limit raised where set_time_limit() takes (raise(), as every
 		// executing call does; GitHub Codex round 3 on free#137): what is

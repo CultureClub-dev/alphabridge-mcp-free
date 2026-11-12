@@ -68,7 +68,11 @@ final class SyncManifestGuardTest extends TestCase {
 	public function testOnlyTheManifestWritesTheTextOfAManifestAndHashesAUnit(): void {
 		self::assertSame( array( 'includes/sync/class-sync-file-manifest.php' ), self::holding( 'ab-files/1' ), 'The format named in one file only.' );
 		self::assertSame( array(), self::holding( 'AB_MCP_Sync_File_Manifest::text(' ), 'No other file makes the text of a manifest.' );
-		self::assertSame( array( 'includes/sync/class-sync-env.php' ), self::holding( 'AB_MCP_Sync_File_Manifest::unit(' ), 'The units read in the reading of the environment only.' );
+		self::assertSame( array( 'includes/class-protected-store.php', 'includes/sync/class-sync-env.php' ), self::holding( 'AB_MCP_Sync_File_Manifest::unit(' ), 'The units read in the reading of the environment, and the trees of the protected store (Z8b branch 3, Z7: what goes in comes back byte for byte, by the manifest unit() gives).' );
+		$store = self::shipped()['includes/class-protected-store.php'];
+		self::assertSame( 1, substr_count( $store, 'AB_MCP_Sync_File_Manifest::unit(' ), 'The store reads a tree in one place (read_tree()).' );
+		self::assertSame( 1, preg_match( "/function read_tree\\([^{]*\\{[^}]*AB_MCP_Sync_File_Manifest::unit\\([^;]*'tree'\\s*\\);/s", $store ), 'read_tree() tells unit() the kind tree: never a theme of a further root.' );
+		self::assertSame( 0, preg_match( '/hash_init|hash_file\\(/', $store ), 'The store hashes no tree beside unit().' );
 		$env = self::shipped()['includes/sync/class-sync-env.php'];
 		self::assertSame( 1, substr_count( $env, "'hash'     => \$read['hash']," ), 'The line of a unit takes the hash unit() gave.' );
 		self::assertSame( 0, preg_match( "/'hash'\\s*=>\\s*+(?!\\\$read\\['hash'\\]|null|'hash\\?')/", $env ), 'No other hash of a unit in the reading.' );
