@@ -96,7 +96,13 @@ final class SyncManifestGuardTest extends TestCase {
 		// read and the unit checked once more, all through due().
 		$code = self::shipped()['includes/sync/class-sync-file-manifest.php'];
 		self::assertSame( 1, substr_count( $code, 'self::now()' ), 'The clock asked in due() only.' );
-		self::assertSame( 5, substr_count( $code, 'self::due( $acc, $deadline, $first )' ), 'Before each entry, before a file, after each part of it, before each folder and each path of still().' );
+		self::assertSame( 6, substr_count( $code, 'self::due( $acc, $deadline, $first )' ), 'Before each entry, before a file, after each part of it, before each folder and each path of still(), and at the release of the hash.' );
+		// Behebung 6: the promise «no hash past the time of the call» where the
+		// hash is given: one due() between the hash and its release, nothing else.
+		self::assertSame( 1, preg_match( '/\$hash = hash\( \'sha256\', \$text \);(.*?)\$acc\[\'hash\'\]\s*= \$hash;/s', $code, $m ), 'The hash computed apart, then given.' );
+		self::assertSame( 1, substr_count( $m[1], 'self::due( $acc, $deadline, $first )' ), 'Exactly one due() between the hash and its release.' );
+		self::assertSame( 1, substr_count( $m[1], 'complete' ), 'complete set after it, with the hash.' );
+		self::assertSame( 1, substr_count( $code, "\$acc['hash']     = \$hash;" ), 'The hash given in one place.' );
 		self::assertSame( 1, preg_match( '/function still\\( array &\\$acc, \\$deadline, \\$first \\)/', $code ), 'still() is told the time of the call.' );
 	}
 

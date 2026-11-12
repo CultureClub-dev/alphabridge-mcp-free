@@ -209,7 +209,11 @@ final class AB_MCP_Sync_File_Manifest {
 
 	/**
 	 * Read one unit whole: list and hash every file of it, as ab-files/1.
-	 * The one place that gives the hash of a unit (Z1, Z2).
+	 * The one place that gives the hash of a unit (Z1, Z2). The promise «no
+	 * hash past the time of the call» is enforced where the hash is given:
+	 * whole() asks due() once more after the sorting and the hashing, right
+	 * before it sets complete and the hash; the other calls of due() only
+	 * end a reading early.
 	 *
 	 * @param string $base     The folder the unit lies in (a root).
 	 * @param string $name     The unit, relative to $base.
@@ -310,8 +314,15 @@ final class AB_MCP_Sync_File_Manifest {
 		if ( '' === $text ) {
 			return self::ended( $acc, 'unreadable' );
 		}
+		$hash = hash( 'sha256', $text );
+		// No hash past the time of the call, asked here last, at the one
+		// place that gives the hash: after the sorting and the hashing, so
+		// that neither of them opens the gap again (Behebung 6).
+		if ( self::due( $acc, $deadline, $first ) ) {
+			return $acc;
+		}
 		$acc['complete'] = true;
-		$acc['hash']     = hash( 'sha256', $text );
+		$acc['hash']     = $hash;
 		return $acc;
 	}
 
@@ -597,10 +608,13 @@ final class AB_MCP_Sync_File_Manifest {
 
 	/**
 	 * Whether the time of the call is over; where it is, $acc says so
-	 * (late()). The one place the clock is asked while a unit is read:
-	 * before each entry of a folder, before a file is opened, after each part
-	 * of a file read, and in still() before each folder is listed again and
-	 * each path asked again (SyncManifestGuardTest).
+	 * (late()). The one place the clock is asked while a unit is read. Where
+	 * the promise «no hash past the time of the call» is enforced: its call
+	 * in whole() between the hash and the moment it is given (complete,
+	 * hash). Its calls before each entry of a folder, before a file is
+	 * opened, after each part of a file read that is not its last, and in
+	 * still() before each folder is listed again and each path asked again
+	 * only end a reading early (SyncManifestGuardTest).
 	 *
 	 * @param array $acc      The reading so far.
 	 * @param float $deadline Until when.

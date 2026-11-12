@@ -174,6 +174,15 @@ return array(
 		'expect'  => '/testTheTimeOfTheCallIsAskedInTheFinalCheckOfTheUnitToo/',
 	),
 	array(
+		'id'      => 'manifest/z1-release-due',
+		'clause'  => 'Z1 whole(): no hash past the time of the call, asked at its release after the sorting and the hashing (Behebung 6)',
+		'file'    => $fm,
+		'search'  => "\t\tif ( self::due( \$acc, \$deadline, \$first ) ) {\n\t\t\treturn \$acc;\n\t\t}\n\t\t\$acc['complete'] = true;",
+		'replace' => "\t\tif ( false ) {\n\t\t\treturn \$acc;\n\t\t}\n\t\t\$acc['complete'] = true;",
+		'run'     => $unit( 'SyncFileManifestTest', 'testNoHashOnceTheTimeOfTheCallIsOverAlsoAfterTheLastQueryOfTheFinalCheck' ),
+		'expect'  => '/testNoHashOnceTheTimeOfTheCallIsOverAlsoAfterTheLastQueryOfTheFinalCheck/',
+	),
+	array(
 		'id'      => 'manifest/z1-due',
 		'clause'  => 'Z1 due(): the one place the clock is asked while a unit is read (Behebung 5)',
 		'file'    => $fm,

@@ -541,7 +541,7 @@ final class SyncFileManifestTest extends TestCase {
 		// check, not after its last part as well (Behebung 5).
 		$this->file( 'plugins/klein.php', '<?php // klein' );
 		$t = 100.0;
-		self::assertTrue( $this->read( 'klein.php', 'live', 102.5, true )['complete'], 'Two times asked (101, 102), in time.' );
+		self::assertTrue( $this->read( 'klein.php', 'live', 103.5, true )['complete'], 'Three times asked (before it, the final check, the release: 101, 102, 103), in time.' );
 	}
 
 	public function testMoreFilesThanAManifestHoldsGiveNoHash(): void {
@@ -627,6 +627,96 @@ final class SyncFileManifestTest extends TestCase {
 		}
 		$t = 50.0;
 		self::assertTrue( $this->read( 'shop', 'live', 100.0, true )['complete'], 'In time: whole.' );
+	}
+
+	/** A stand-in of the calls that runs $then right after the nth real call of $method (lstat() of $path where given), the rest real. */
+	private static function after( string $method, int $nth, callable $then, ?string $path = null ): object {
+		return new class( $method, $nth, $then, $path ) {
+			private $method;
+			private $nth;
+			private $then;
+			private $path;
+			private $seen = 0;
+			private $real;
+			public function __construct( $method, $nth, $then, $path ) {
+				$this->method = $method;
+				$this->nth    = $nth;
+				$this->then   = $then;
+				$this->path   = $path;
+				$this->real   = new AB_MCP_Sync_File_Manifest_Calls();
+			}
+			private function then( $name, $arg, $out ) {
+				if ( $name === $this->method && ( null === $this->path || $arg === $this->path ) && ++$this->seen === $this->nth ) {
+					( $this->then )();
+				}
+				return $out;
+			}
+			public function names( $dir ) {
+				return $this->then( 'names', $dir, $this->real->names( $dir ) );
+			}
+			public function lstat( $path ) {
+				return $this->then( 'lstat', $path, $this->real->lstat( $path ) );
+			}
+			public function open( $path ) {
+				return $this->real->open( $path );
+			}
+			public function fstat( $handle ) {
+				return $this->real->fstat( $handle );
+			}
+			public function read( $handle, $length ) {
+				return $this->real->read( $handle, $length );
+			}
+			public function theme_root() {
+				return $this->real->theme_root();
+			}
+			public function limit() {
+				return $this->real->limit();
+			}
+			public function close( $handle ) {
+				$this->real->close( $handle );
+			}
+		};
+	}
+
+	public function testNoHashOnceTheTimeOfTheCallIsOverAlsoAfterTheLastQueryOfTheFinalCheck(): void {
+		// Behebung 6: the time runs out with the last call of still() or right
+		// after it, while the manifest is sorted and hashed. The clock is asked
+		// once more where the hash is given; no hash, whatever comes last.
+		$this->shop();
+		mkdir( $this->dir . '/plugins/leer' );
+		$t                      = 50.0;
+		AB_MCP_Sync_Env::$clock = static function () use ( &$t ) {
+			return $t;
+		};
+		$late  = static function () use ( &$t ) {
+			$t = 200.0;
+		};
+		$cases = array(
+			// (a) During the last lstat() of still() (shop.php asked again).
+			'during the last lstat() of the final check' => array( 'shop', array( 'method' => 'lstat', 'nth' => 8, 'kind' => 'before', 'before' => $late ) ),
+			// (b) During the final listing of an empty folder (the unit itself).
+			'during the final listing of an empty folder' => array( 'leer', array( 'method' => 'names', 'nth' => 2, 'kind' => 'before', 'before' => $late ) ),
+			// (c) After the last call of still(): while it is sorted and hashed.
+			'between the hash and its release'            => array( 'shop', 'after' ),
+		);
+		foreach ( $cases as $case => list( $unit, $fault ) ) {
+			foreach ( array( true, false ) as $first ) {
+				$t = 50.0;
+				if ( 'after' === $fault ) {
+					// Right after shop.php is asked again, the last call of still().
+					AB_MCP_Test_Seam::install( AB_MCP_Sync_File_Manifest::class, 'naht_sync_file_manifest', self::after( 'lstat', 2, $late, $this->dir . '/plugins/shop/shop.php' ) );
+				} else {
+					$this->seam( array( $fault ) );
+				}
+				$read = $this->read( $unit, 'live', 100.0, $first );
+				AB_MCP_Test_Seam::restore_all();
+				self::assertSame( 200.0, $t, "$case: the time ran out." );
+				$want = $first ? array( false, 'too_large', false, null, array() ) : array( false, null, true, null, array() );
+				self::assertSame( $want, array( $read['complete'], $read['cause'], $read['stopped'], $read['hash'], $read['entries'] ), "$case (" . ( $first ? 'a whole call: too large' : 'begun late: stopped' ) . '): no hash.' );
+			}
+		}
+		$t = 50.0;
+		self::assertNotNull( $this->read( 'leer' )['hash'], 'In time: an empty folder has its hash.' );
 	}
 
 	public function testAFolderOrFileAddedRemovedOrReplacedWhileTheUnitIsReadGivesNoHash(): void {

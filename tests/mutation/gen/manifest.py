@@ -56,6 +56,8 @@ e('z1-still-clock-names', 'Z1 still(): the time of the call before each folder i
   "\t\tforeach ( $acc['dirs'] as $dir => $names ) {\n\t\t\tif ( self::due( $acc, $deadline, $first ) ) {", "\t\tforeach ( $acc['dirs'] as $dir => $names ) {\n\t\t\tif ( false ) {", 'man', 'testTheTimeOfTheCallIsAskedInTheFinalCheckOfTheUnitToo')
 e('z1-still-clock-files', 'Z1 still(): the time of the call before each path is asked again (Behebung 5)', FM,
   "\t\tforeach ( $acc['stats'] as $file => $stat ) {\n\t\t\tif ( self::due( $acc, $deadline, $first ) ) {", "\t\tforeach ( $acc['stats'] as $file => $stat ) {\n\t\t\tif ( false ) {", 'man', 'testTheTimeOfTheCallIsAskedInTheFinalCheckOfTheUnitToo')
+e('z1-release-due', 'Z1 whole(): no hash past the time of the call, asked at its release after the sorting and the hashing (Behebung 6)', FM,
+  "\t\tif ( self::due( $acc, $deadline, $first ) ) {\n\t\t\treturn $acc;\n\t\t}\n\t\t$acc['complete'] = true;", "\t\tif ( false ) {\n\t\t\treturn $acc;\n\t\t}\n\t\t$acc['complete'] = true;", 'man', 'testNoHashOnceTheTimeOfTheCallIsOverAlsoAfterTheLastQueryOfTheFinalCheck')
 e('z1-due', 'Z1 due(): the one place the clock is asked while a unit is read (Behebung 5)', FM,
   "\t\tif ( self::now() < (float) $deadline ) {\n\t\t\treturn false;", "\t\tif ( true ) {\n\t\t\treturn false;", 'man', 'testTheTimeOfTheCallIsAskedInTheFinalCheckOfTheUnitToo')
 e('z1-still-dirs-kept', 'Z1 folder(): the names of each folder kept for still()', FM,
