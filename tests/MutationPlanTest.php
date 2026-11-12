@@ -480,11 +480,42 @@ final class MutationPlanTest extends TestCase {
 	}
 
 	private static function valid(): array {
-		return array(
-			'herkunft'   => array( 'quelle' => self::SOURCE, 'lauf' => 43211580790, 'versuch' => 1 ),
-			'mutation'   => array( 'a/one' => 1.4, 'a/zero' => 0.0 ),
-			'grundlinie' => array( '["vendor/bin/phpunit","--filter","A"]' => 2.0 ),
+		return self::withInventory(
+			array(
+				'herkunft'   => array( 'quelle' => self::SOURCE, 'lauf' => 43211580790, 'versuch' => 1 ),
+				'mutation'   => array( 'a/one' => 1.4, 'a/zero' => 0.0 ),
+				'grundlinie' => array( '["vendor/bin/phpunit","--filter","A"]' => 2.0 ),
+			)
 		);
+	}
+
+	/**
+	 * The data of a measure file with the inventory of its values.
+	 *
+	 * @param array $data Herkunft and seconds.
+	 * @return array
+	 */
+	private static function withInventory( array $data ): array {
+		$tenths           = array(
+			'mutation'   => array_map( static fn( $s ) => (int) round( $s * 10 ), $data['mutation'] ),
+			'grundlinie' => array_map( static fn( $s ) => (int) round( $s * 10 ), $data['grundlinie'] ),
+		);
+		$data['herkunft'] = array_merge( $data['herkunft'], AB_Mutation_Plan::inventory( $tenths ) );
+		return $data;
+	}
+
+	public function testTheInventoryCountsAndHashesIdsCommandsAndValuesInAnyOrder(): void {
+		$expected = array(
+			'eintraege'  => 2,
+			'befehle'    => 1,
+			// sha256 of [{"a/one":14,"a/zero":0},{"[\"vendor/bin/phpunit\",\"--filter\",\"A\"]":20}]
+			'pruefsumme' => '557f3eba169fb2834c13993ff3754c21c34b09eeffa363545597179f335977bf',
+		);
+		$grundlinie = array( '["vendor/bin/phpunit","--filter","A"]' => 20 );
+		self::assertSame( $expected, AB_Mutation_Plan::inventory( array( 'mutation' => array( 'a/one' => 14, 'a/zero' => 0 ), 'grundlinie' => $grundlinie ) ) );
+		self::assertSame( $expected, AB_Mutation_Plan::inventory( array( 'mutation' => array( 'a/zero' => 0, 'a/one' => 14 ), 'grundlinie' => $grundlinie ) ) );
+		self::assertNotSame( $expected['pruefsumme'], AB_Mutation_Plan::inventory( array( 'mutation' => array( 'a/one' => 15, 'a/zero' => 0 ), 'grundlinie' => $grundlinie ) )['pruefsumme'] );
+		self::assertNotSame( $expected['pruefsumme'], AB_Mutation_Plan::inventory( array( 'mutation' => array( 'a/one' => 14, 'a/zero' => 0 ), 'grundlinie' => array( '["x"]' => 20 ) ) )['pruefsumme'] );
 	}
 
 	public function testAMissingMeasureFileIsAnError(): void {
@@ -511,6 +542,13 @@ final class MutationPlanTest extends TestCase {
 			'a time that is no number' => array( array( 'grundlinie' => array( '["x"]' => NAN ) ), 'no valid duration' ),
 			'a number as id'         => array( array( 'mutation' => array( 7 => 1.0 ) ), 'is no name' ),
 			'an empty id'            => array( array( 'mutation' => array( '' => 1.0 ) ), 'is no name' ),
+			'an entry of the source lost'      => array( array( 'mutation' => array( 'a/one' => 1.4 ) ), 'does not hold the inventory of its source (herkunft.eintraege 2, its values give 1)' ),
+			'a command of the source lost'     => array( array( 'grundlinie' => array() ), 'does not hold the inventory of its source (herkunft.befehle 1, its values give 0)' ),
+			'both tables emptied'              => array( array( 'mutation' => array(), 'grundlinie' => array() ), 'herkunft.eintraege 2, its values give 0' ),
+			'a value changed'                  => array( array( 'mutation' => array( 'a/one' => 1.5, 'a/zero' => 0.0 ) ), 'herkunft.pruefsumme' ),
+			'an entry swapped for another'     => array( array( 'mutation' => array( 'a/one' => 1.4, 'a/neu' => 0.0 ) ), 'herkunft.pruefsumme' ),
+			'an entry lost, the count changed' => array( array( 'mutation' => array( 'a/one' => 1.4 ), 'herkunft' => array( 'eintraege' => 1 ) + $v['herkunft'] ), 'herkunft.pruefsumme' ),
+			'no inventory'                     => array( array( 'herkunft' => array( 'quelle' => self::SOURCE, 'lauf' => 1, 'versuch' => 1 ) ), 'herkunft.eintraege NULL' ),
 			'a baseline of no array' => array( array( 'grundlinie' => array( 'vendor/bin/phpunit --filter A' => 1.0 ) ), 'no command array' ),
 		);
 		foreach ( $cut as $name => list( $over, $says ) ) {
@@ -534,6 +572,7 @@ final class MutationPlanTest extends TestCase {
 	public function testAValidMeasureFileLoadsInTenthsAndExportsAlikeAndSorted(): void {
 		$valid                         = self::valid();
 		$valid['mutation']             = array( 'b/last' => 12.5 ) + $valid['mutation'];
+		$valid                         = self::withInventory( $valid );
 		$file                          = $this->file( '<?php return ' . var_export( $valid, true ) . ';' );
 		$measures                      = AB_Mutation_Plan::load_measures( $file );
 		self::assertSame( array( 'b/last' => 125, 'a/one' => 14, 'a/zero' => 0 ), $measures['mutation'] );
@@ -897,13 +936,21 @@ final class MutationPlanTest extends TestCase {
 	}
 
 	private static function measureFile(): string {
-		return AB_Mutation_Plan::export(
-			array(
-				'herkunft'   => array( 'quelle' => self::SOURCE, 'lauf' => 1, 'versuch' => 1 ),
-				'mutation'   => array( 'probe/one' => 50, 'probe/two' => 10 ),
-				'grundlinie' => array(),
-			)
+		$measures             = array(
+			'mutation'   => array( 'probe/one' => 50, 'probe/two' => 10 ),
+			'grundlinie' => array(),
 		);
+		$measures['herkunft'] = array( 'quelle' => self::SOURCE, 'lauf' => 1, 'versuch' => 1 ) + AB_Mutation_Plan::inventory( $measures );
+		return AB_Mutation_Plan::export( $measures );
+	}
+
+	public function testShardWithAMeasureFileThatLostAValueOfItsSourceStops(): void {
+		$text = str_replace( "\t\t'probe/two' => 1.0,\n", '', self::measureFile() );
+		self::assertStringNotContainsString( 'probe/two', $text );
+		list( $code, $out, $err ) = self::runner( $this->tree( $text ), array( '--shard=1/2' ) );
+		self::assertSame( 2, $code, $out . $err );
+		self::assertSame( '', $out );
+		self::assertStringContainsString( 'does not hold the inventory of its source (herkunft.eintraege 2, its values give 1)', $err );
 	}
 
 	/**

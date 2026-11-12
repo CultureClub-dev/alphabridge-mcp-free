@@ -340,8 +340,10 @@ final class AB_Mutation_Plan {
 	/* ------------------------------------------------------- measure file */
 
 	/**
-	 * The measure file, checked. Missing or broken is an error: the runner
-	 * stops rather than share out without durations.
+	 * The measure file, checked. Missing or broken is an error, and so is one
+	 * that lost a value of its source or changed one (inventory()): the
+	 * runner stops rather than share out with defaults in place of
+	 * measurements. Defaults stand only for entries and commands added after.
 	 *
 	 * @param string $file File.
 	 * @return array{herkunft:array,mutation:array<string,int>,grundlinie:array<string,int>}
@@ -394,7 +396,35 @@ final class AB_Mutation_Plan {
 				$out[ $part ][ $key ] = (int) round( $seconds * 10 );
 			}
 		}
+
+		// The inventory of the source: an entry or a command lost, a value
+		// changed, and the defaults would stand in for a measurement.
+		foreach ( self::inventory( $out ) as $field => $value ) {
+			if ( ! isset( $from[ $field ] ) || $from[ $field ] !== $value ) {
+				throw new RuntimeException( "the measure file $file does not hold the inventory of its source (herkunft.$field " . var_export( $from[ $field ] ?? null, true ) . ', its values give ' . var_export( $value, true ) . ')' );
+			}
+		}
 		return $out;
+	}
+
+	/**
+	 * The inventory of the source in a measure file: how many entries and
+	 * commands it measured, and a SHA-256 over every id, command and value
+	 * (sorted, so the order of the file does not count).
+	 *
+	 * @param array $measures Durations in tenths (mutation, grundlinie).
+	 * @return array{eintraege:int,befehle:int,pruefsumme:string}
+	 */
+	public static function inventory( array $measures ) {
+		$mutation   = $measures['mutation'];
+		$grundlinie = $measures['grundlinie'];
+		ksort( $mutation, SORT_STRING );
+		ksort( $grundlinie, SORT_STRING );
+		return array(
+			'eintraege'  => count( $mutation ),
+			'befehle'    => count( $grundlinie ),
+			'pruefsumme' => hash( 'sha256', (string) json_encode( array( $mutation, $grundlinie ), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) ),
+		);
 	}
 
 	/**

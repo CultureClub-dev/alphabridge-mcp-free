@@ -176,7 +176,7 @@ $ab_measures = array(
 		'ausgecheckt' => array() === $ab_found['merge_bases'] ? 'the source itself' : 'merge of the source into ' . implode( ', ', $ab_found['merge_bases'] ) . ' (an ancestor of it: the same tree)',
 		'scheiben'    => $ab_found['shards'],
 		'regel'       => AB_Mutation_Plan::RULE,
-	),
+	) + AB_Mutation_Plan::inventory( $ab_found ),
 	'mutation'   => $ab_found['mutation'],
 	'grundlinie' => $ab_found['grundlinie'],
 );

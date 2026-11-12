@@ -17,6 +17,9 @@ return array(
 		'ausgecheckt' => 'the source itself',
 		'scheiben' => 12,
 		'regel' => 'median; of an even number the mean of the middle two, rounded up to 0.1 s',
+		'eintraege' => 4011,
+		'befehle' => 900,
+		'pruefsumme' => '78f4edc94430210721f9b5426dd2ca9312b195c7423afa7ba8ad3fbcca10e5e7',
 	),
 	'mutation'   => array(
 		'auth/token-hash' => 1.1,
