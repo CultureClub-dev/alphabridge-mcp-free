@@ -5,7 +5,7 @@
  * text/z8b». BundledTranslationsTest leaves these keys out of its check
  * of the nine languages and checks the list itself instead: every key is
  * a text the code translates, under includes/sync/ (or, of branch 3, in
- * includes/class-protected-store.php), and untranslated in
+ * includes/class-protected-store.php and includes/class-store-budget.php), and untranslated in
  * all nine languages. A key text/z8b translates leaves the list in the
  * same change; the list ends empty and is removed with text/z8b.
  *
@@ -162,4 +162,42 @@ return array(
 	'The unit holds a file that configures the web server or PHP (%s), and the protected store lies in the uploads folder, where such a file could open its folder to the web; so it does not go into the store. Ask the host to let PHP create the folder ab-mcp-store beside the WordPress folder, outside the web root, then try again; until then, update the plugin or theme by hand in wp-admin.',
 	'This group holds a tree or file of that name already, and a tree is never put over another. Use another name for it.',
 	'Unit: %1$s %2$s',
+	// includes/class-protected-store.php (Z8b branch 3, Behebung 1: the instruction of a new unit (A3), the names of trees (B1), the texts of the store that reach an answer (B4))
+	'A file of the protected store is written only below its folder, by a plain path. Pass such a path.',
+	'A file of the source of the tree could not be read. Check its rights, then try again.',
+	'A folder of the source of the tree could not be read. Check its rights, then try again.',
+	'A folder of the tree could not be made in the protected store. Ask the host to check that the folder is writable and the disk has free space, then try again.',
+	'A mark of the protected store is named by the 32 hex characters put_mark() returned. Pass that id.',
+	'A temp file could not be made in the protected store. Ask the host to check that the folder is writable and the disk has free space, then try again.',
+	'A tree is named as the folder or file of its unit in the site: not empty, not "." or "..", of 255 bytes at most, without a slash, a backslash or a control character. Pass the name the unit has in the site.',
+	'A tree of the protected store is never changed: a file of a group or a tree in stage and backups is written once, and into a tree only while it is put there. Use put_tree() for a new tree instead.',
+	'After the activation: as after the renames. What the activation routine wrote stays; moving the files back does not take it back.',
+	'The closed mark did not read back as written. Ask the host whether something else writes into the folder of the protected store, then try again.',
+	'The folder tmp of the protected store is missing or is a link, so nothing is written there. Ask the host to check the folder of the store, then try again.',
+	'The mark could not be read, so it stays open and what it names stays. Ask the host to check the rights of the folder of the protected store, then try again.',
+	'The mark could not be written to the protected store. Ask the host to check that the folder is writable and the disk has free space, then try again.',
+	'The mark is not written: %s. Pass the fields as put_mark() names them.',
+	'The mark or its instruction did not read back as written, so the swap must not begin. Ask the host whether something else writes into the folder of the protected store, then try again.',
+	'The marks of the protected store could not be read. Ask the host to check the rights of the folder of the store, then try again.',
+	'The mode of a folder of the tree could not be set in the protected store. Ask the host to check the rights of the folder, then try again.',
+	'The new unit is in the site. Take it out again into its place in the store and check that the target is missing:',
+	'The protected store has the areas out, in, reports, backups and stage. Use one of them.',
+	'The request of the self-check failed. Call it again.',
+	'The source of the tree is gone. Check that nothing removes it right now, then try again.',
+	'The tree could not be written to the protected store. Ask the host to check that the folder is writable and the disk has free space, then try again.',
+	'The unit was not in the site before. Where the new version is at the target, it goes back into the store; check that the target is missing then:',
+	'The unit was not in the site before; nothing was moved yet. Check that the target is missing and the new version lies in the store:',
+	'The way back stopped. Where the new version is still at the target, it goes back into the store; check that the target is missing then:',
+	'There is a file of that name in the protected store already, and it is written once. Use another name for it.',
+	'There is no such mark in the protected store. Pass the id put_mark() returned.',
+	'active is a list of main files',
+	'each tree names its role (backup or stage, once each), its form, device and inode, a hash or none, and its place in stage or backups of the store',
+	'note is a text of 1000 bytes at most',
+	'op is a word of a-z and "_"',
+	'run_id and seq are whole numbers of 0 or more',
+	'target is the absolute path of the unit',
+	'trees names one or two trees',
+	'unit names its kind and its name',
+	// includes/class-store-budget.php (Z8b branch 3, Behebung 1, B2: bookings that cannot be read)
+	'The bookings of the protected store (the file bookings.json in its folder) could not be read, so no run books its space or gives it back, and nothing was written. Ask the host to check that file: its rights, or whether something else wrote into it; then try again.',
 );

@@ -1705,7 +1705,7 @@ final class AB_MCP_Protected_Store {
 				try {
 					$made = self::copy_tree( $root, $source, $place );
 				} catch ( Throwable $e ) {
-					$made = new WP_Error( 'ab_mcp_store_write', 'The tree could not be written to the protected store. Ask the host to check that the folder is writable and the disk has free space, then try again.' );
+					$made = new WP_Error( 'ab_mcp_store_write', __( 'The tree could not be written to the protected store. Ask the host to check that the folder is writable and the disk has free space, then try again.', 'alphabridge-mcp' ) );
 				}
 				unset( self::$building[ $place ] );
 				if ( true === $made ) {
@@ -1839,7 +1839,7 @@ final class AB_MCP_Protected_Store {
 		$calls = self::calls();
 		$stat  = $calls->lstat( $source );
 		if ( false === $stat ) {
-			return new WP_Error( 'ab_mcp_store_tree_unread', 'The source of the tree is gone. Check that nothing removes it right now, then try again.' );
+			return new WP_Error( 'ab_mcp_store_tree_unread', __( 'The source of the tree is gone. Check that nothing removes it right now, then try again.', 'alphabridge-mcp' ) );
 		}
 		$type = $stat['mode'] & 0170000;
 		if ( 0100000 === $type ) {
@@ -1861,13 +1861,13 @@ final class AB_MCP_Protected_Store {
 		$dirs  = array( array( $place, $stat['mode'] & 0777 ) );
 		$queue = array( array( $source, $place ) );
 		if ( ! $calls->mkdir( $place, 0700 ) ) {
-			return new WP_Error( 'ab_mcp_store_write', 'A folder of the tree could not be made in the protected store. Ask the host to check that the folder is writable and the disk has free space, then try again.' );
+			return new WP_Error( 'ab_mcp_store_write', __( 'A folder of the tree could not be made in the protected store. Ask the host to check that the folder is writable and the disk has free space, then try again.', 'alphabridge-mcp' ) );
 		}
 		while ( array() !== $queue ) {
 			list( $from, $to ) = array_shift( $queue );
 			$names             = $calls->scandir( $from );
 			if ( false === $names ) {
-				return new WP_Error( 'ab_mcp_store_tree_unread', 'A folder of the source of the tree could not be read. Check its rights, then try again.' );
+				return new WP_Error( 'ab_mcp_store_tree_unread', __( 'A folder of the source of the tree could not be read. Check its rights, then try again.', 'alphabridge-mcp' ) );
 			}
 			foreach ( $names as $entry ) {
 				if ( '.' === $entry || '..' === $entry ) {
@@ -1875,12 +1875,12 @@ final class AB_MCP_Protected_Store {
 				}
 				$at = $calls->lstat( $from . '/' . $entry );
 				if ( false === $at ) {
-					return new WP_Error( 'ab_mcp_store_tree_unread', 'A file of the source of the tree could not be read. Check its rights, then try again.' );
+					return new WP_Error( 'ab_mcp_store_tree_unread', __( 'A file of the source of the tree could not be read. Check its rights, then try again.', 'alphabridge-mcp' ) );
 				}
 				$kind = $at['mode'] & 0170000;
 				if ( 0040000 === $kind ) {
 					if ( ! $calls->mkdir( $to . '/' . $entry, 0700 ) ) {
-						return new WP_Error( 'ab_mcp_store_write', 'A folder of the tree could not be made in the protected store. Ask the host to check that the folder is writable and the disk has free space, then try again.' );
+						return new WP_Error( 'ab_mcp_store_write', __( 'A folder of the tree could not be made in the protected store. Ask the host to check that the folder is writable and the disk has free space, then try again.', 'alphabridge-mcp' ) );
 					}
 					$dirs[]  = array( $to . '/' . $entry, $at['mode'] & 0777 );
 					$queue[] = array( $from . '/' . $entry, $to . '/' . $entry );
@@ -1906,7 +1906,7 @@ final class AB_MCP_Protected_Store {
 		}
 		foreach ( array_reverse( $dirs ) as $dir ) {
 			if ( ! $calls->chmod( $dir[0], $dir[1] ) ) {
-				return new WP_Error( 'ab_mcp_store_write', 'The mode of a folder of the tree could not be set in the protected store. Ask the host to check the rights of the folder, then try again.' );
+				return new WP_Error( 'ab_mcp_store_write', __( 'The mode of a folder of the tree could not be set in the protected store. Ask the host to check the rights of the folder, then try again.', 'alphabridge-mcp' ) );
 			}
 		}
 		return true;
@@ -2038,7 +2038,7 @@ final class AB_MCP_Protected_Store {
 					'where'  => (string) array_search( $root, self::candidates( $id ), true ),
 				) + $fields;
 				if ( ! self::calls()->mkdir( $dir . '/' . $mid, 0700 ) ) {
-					return new WP_Error( 'ab_mcp_store_write', 'The mark could not be written to the protected store. Ask the host to check that the folder is writable and the disk has free space, then try again.' );
+					return new WP_Error( 'ab_mcp_store_write', __( 'The mark could not be written to the protected store. Ask the host to check that the folder is writable and the disk has free space, then try again.', 'alphabridge-mcp' ) );
 				}
 				$text  = (string) json_encode( $mark, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
 				$guide = self::guide( $mark );
@@ -2049,7 +2049,7 @@ final class AB_MCP_Protected_Store {
 						return $written;
 					}
 					if ( self::calls()->read( $path, self::MARK_MAX ) !== $bytes ) {
-						return new WP_Error( 'ab_mcp_store_mark_read', 'The mark or its instruction did not read back as written, so the swap must not begin. Ask the host whether something else writes into the folder of the protected store, then try again.' );
+						return new WP_Error( 'ab_mcp_store_mark_read', __( 'The mark or its instruction did not read back as written, so the swap must not begin. Ask the host whether something else writes into the folder of the protected store, then try again.', 'alphabridge-mcp' ) );
 					}
 				}
 				return array(
@@ -2071,7 +2071,7 @@ final class AB_MCP_Protected_Store {
 	 */
 	public static function close_mark( $mid ) {
 		if ( ! is_string( $mid ) || ! preg_match( '/^[0-9a-f]{32}\z/', $mid ) ) {
-			return new WP_Error( 'ab_mcp_store_no_mark', 'A mark of the protected store is named by the 32 hex characters put_mark() returned. Pass that id.' );
+			return new WP_Error( 'ab_mcp_store_no_mark', __( 'A mark of the protected store is named by the 32 hex characters put_mark() returned. Pass that id.', 'alphabridge-mcp' ) );
 		}
 		$root = self::root();
 		if ( is_wp_error( $root ) ) {
@@ -2083,8 +2083,8 @@ final class AB_MCP_Protected_Store {
 				$mark = self::read_mark( $root, $mid );
 				if ( ! is_array( $mark ) ) {
 					return null === $mark
-						? new WP_Error( 'ab_mcp_store_no_mark', 'There is no such mark in the protected store. Pass the id put_mark() returned.' )
-						: new WP_Error( 'ab_mcp_store_mark_read', 'The mark could not be read, so it stays open and what it names stays. Ask the host to check the rights of the folder of the protected store, then try again.' );
+						? new WP_Error( 'ab_mcp_store_no_mark', __( 'There is no such mark in the protected store. Pass the id put_mark() returned.', 'alphabridge-mcp' ) )
+						: new WP_Error( 'ab_mcp_store_mark_read', __( 'The mark could not be read, so it stays open and what it names stays. Ask the host to check the rights of the folder of the protected store, then try again.', 'alphabridge-mcp' ) );
 				}
 				return self::close_mark_in( $root, $mid, $mark );
 			}
@@ -2113,7 +2113,7 @@ final class AB_MCP_Protected_Store {
 		);
 		$names = self::calls()->scandir( $root . '/' . self::MARKS );
 		if ( false === $names ) {
-			return new WP_Error( 'ab_mcp_store_mark_read', 'The marks of the protected store could not be read. Ask the host to check the rights of the folder of the store, then try again.' );
+			return new WP_Error( 'ab_mcp_store_mark_read', __( 'The marks of the protected store could not be read. Ask the host to check the rights of the folder of the store, then try again.', 'alphabridge-mcp' ) );
 		}
 		foreach ( $names as $mid ) {
 			if ( ! preg_match( '/^[0-9a-f]{32}\z/', $mid ) ) {
@@ -2274,24 +2274,25 @@ final class AB_MCP_Protected_Store {
 	 */
 	private static function mark_fields( array $mark, $root ) {
 		$refuse = static function ( $what ) {
-			return new WP_Error( 'ab_mcp_store_mark', sprintf( 'The mark is not written: %s. Pass the fields as put_mark() names them.', $what ) );
+			/* translators: %s: what a field of the mark must be, as "op is a word of a-z and _". */
+			return new WP_Error( 'ab_mcp_store_mark', sprintf( __( 'The mark is not written: %s. Pass the fields as put_mark() names them.', 'alphabridge-mcp' ), $what ) );
 		};
 		foreach ( array( 'run_id', 'seq' ) as $key ) {
 			if ( ! isset( $mark[ $key ] ) || ! is_int( $mark[ $key ] ) || $mark[ $key ] < 0 ) {
-				return $refuse( $key . ' is a whole number of 0 or more' );
+				return $refuse( __( 'run_id and seq are whole numbers of 0 or more', 'alphabridge-mcp' ) );
 			}
 		}
 		if ( ! isset( $mark['op'] ) || ! is_string( $mark['op'] ) || ! preg_match( '/^[a-z_]{1,32}\z/', $mark['op'] ) ) {
-			return $refuse( 'op is a word of a-z and "_"' );
+			return $refuse( __( 'op is a word of a-z and "_"', 'alphabridge-mcp' ) );
 		}
 		if ( ! isset( $mark['unit']['kind'], $mark['unit']['ref'] ) || ! is_string( $mark['unit']['kind'] ) || ! preg_match( '/^[a-z_]{1,32}\z/', $mark['unit']['kind'] ) || ! is_string( $mark['unit']['ref'] ) || '' === $mark['unit']['ref'] || strlen( $mark['unit']['ref'] ) > 191 || preg_match( '/[\x00-\x1f]/', $mark['unit']['ref'] ) ) {
-			return $refuse( 'unit names its kind and its name' );
+			return $refuse( __( 'unit names its kind and its name', 'alphabridge-mcp' ) );
 		}
 		if ( ! isset( $mark['target'] ) || ! self::absolute( (string) $mark['target'] ) ) {
-			return $refuse( 'target is the absolute path of the unit' );
+			return $refuse( __( 'target is the absolute path of the unit', 'alphabridge-mcp' ) );
 		}
 		if ( ! isset( $mark['trees'] ) || ! is_array( $mark['trees'] ) || array() === $mark['trees'] || count( $mark['trees'] ) > count( self::MARK_ROLES ) ) {
-			return $refuse( 'trees names one or two trees' );
+			return $refuse( __( 'trees names one or two trees', 'alphabridge-mcp' ) );
 		}
 		$trees = array();
 		$roles = array();
@@ -2299,7 +2300,7 @@ final class AB_MCP_Protected_Store {
 			$path = is_array( $tree ) && isset( $tree['path'] ) && is_string( $tree['path'] ) ? $tree['path'] : '';
 			$rel  = 0 === strpos( $path, $root . '/' ) ? substr( $path, strlen( $root ) + 1 ) : '';
 			if ( ! is_array( $tree ) || ! isset( $tree['role'], $tree['form'], $tree['dev'], $tree['ino'] ) || ! in_array( $tree['role'], self::MARK_ROLES, true ) || isset( $roles[ $tree['role'] ] ) || ! in_array( $tree['form'], array( 'folder', 'file' ), true ) || ! is_int( $tree['dev'] ) || ! is_int( $tree['ino'] ) || null === self::tree_rel( $rel ) || ( isset( $tree['hash'] ) && ! ( is_string( $tree['hash'] ) && preg_match( '/^[0-9a-f]{64}\z/', $tree['hash'] ) ) ) ) {
-				return $refuse( 'each tree names its role (backup or stage, once each), its form, device and inode, a hash or none, and its place in stage or backups of the store' );
+				return $refuse( __( 'each tree names its role (backup or stage, once each), its form, device and inode, a hash or none, and its place in stage or backups of the store', 'alphabridge-mcp' ) );
 			}
 			$roles[ $tree['role'] ] = true;
 			$trees[]                = array(
@@ -2313,16 +2314,16 @@ final class AB_MCP_Protected_Store {
 		}
 		$active = isset( $mark['active'] ) ? $mark['active'] : array();
 		if ( ! is_array( $active ) ) {
-			return $refuse( 'active is a list of main files' );
+			return $refuse( __( 'active is a list of main files', 'alphabridge-mcp' ) );
 		}
 		foreach ( $active as $file ) {
 			if ( ! is_string( $file ) || '' === $file || strlen( $file ) > 191 || preg_match( '/[\x00-\x1f]/', $file ) ) {
-				return $refuse( 'active is a list of main files' );
+				return $refuse( __( 'active is a list of main files', 'alphabridge-mcp' ) );
 			}
 		}
 		$note = isset( $mark['note'] ) ? $mark['note'] : '';
 		if ( ! is_string( $note ) || strlen( $note ) > 1000 ) {
-			return $refuse( 'note is a text of 1000 bytes at most' );
+			return $refuse( __( 'note is a text of 1000 bytes at most', 'alphabridge-mcp' ) );
 		}
 		return array(
 			'run_id' => $mark['run_id'],
@@ -2410,7 +2411,7 @@ final class AB_MCP_Protected_Store {
 		if ( true !== $written ) {
 			return $written;
 		}
-		return self::calls()->read( $path, self::MARK_MAX ) === $text ? true : new WP_Error( 'ab_mcp_store_mark_read', 'The closed mark did not read back as written. Ask the host whether something else writes into the folder of the protected store, then try again.' );
+		return self::calls()->read( $path, self::MARK_MAX ) === $text ? true : new WP_Error( 'ab_mcp_store_mark_read', __( 'The closed mark did not read back as written. Ask the host whether something else writes into the folder of the protected store, then try again.', 'alphabridge-mcp' ) );
 	}
 
 	/* ------------------------------------------------- the writer, the remover */
@@ -2427,7 +2428,7 @@ final class AB_MCP_Protected_Store {
 	public static function temp_file( $root ) {
 		$root = rtrim( (string) $root, '/' );
 		if ( null === self::way( $root, array( self::TMP ) ) ) {
-			return new WP_Error( 'ab_mcp_store_tmp', 'The folder tmp of the protected store is missing or is a link, so nothing is written there. Ask the host to check the folder of the store, then try again.' );
+			return new WP_Error( 'ab_mcp_store_tmp', __( 'The folder tmp of the protected store is missing or is a link, so nothing is written there. Ask the host to check the folder of the store, then try again.', 'alphabridge-mcp' ) );
 		}
 		for ( $attempt = 0; $attempt < 3; $attempt++ ) {
 			$path = $root . '/' . self::TMP . '/' . self::TMP_PREFIX . bin2hex( AB_MCP_Payload_File::random_bytes( 8 ) );
@@ -2506,11 +2507,11 @@ final class AB_MCP_Protected_Store {
 		$rel   = 0 === strpos( $path, $root . '/' ) ? substr( $path, strlen( $root ) + 1 ) : '';
 		$parts = '' === $rel ? array() : explode( '/', $rel );
 		if ( array() === $parts || in_array( '', $parts, true ) || in_array( '.', $parts, true ) || in_array( '..', $parts, true ) ) {
-			return new WP_Error( 'ab_mcp_store_path', 'A file of the protected store is written only below its folder, by a plain path. Pass such a path.' );
+			return new WP_Error( 'ab_mcp_store_path', __( 'A file of the protected store is written only below its folder, by a plain path. Pass such a path.', 'alphabridge-mcp' ) );
 		}
 		$exclusive = ! empty( $how['exclusive'] );
 		if ( in_array( $parts[0], self::TREE_AREAS, true ) && count( $parts ) >= 3 && ( ! $exclusive || ( count( $parts ) > 3 && ! isset( self::$building[ $root . '/' . implode( '/', array_slice( $parts, 0, 3 ) ) ] ) ) ) ) {
-			return new WP_Error( 'ab_mcp_store_tree', 'A tree of the protected store is never changed: a file of a group or a tree in stage and backups is written once, and into a tree only while it is put there. Use put_tree() for a new tree instead.' );
+			return new WP_Error( 'ab_mcp_store_tree', __( 'A tree of the protected store is never changed: a file of a group or a tree in stage and backups is written once, and into a tree only while it is put there. Use put_tree() for a new tree instead.', 'alphabridge-mcp' ) );
 		}
 		$dir = self::way( $root, array_slice( $parts, 0, -1 ) );
 		if ( null === $dir ) {
@@ -2552,7 +2553,7 @@ final class AB_MCP_Protected_Store {
 			}
 			if ( $exclusive && false !== $calls->lstat( $path ) ) {
 				self::delete_path( $root, $tmp );
-				return new WP_Error( 'ab_mcp_store_exists', 'There is a file of that name in the protected store already, and it is written once. Use another name for it.' );
+				return new WP_Error( 'ab_mcp_store_exists', __( 'There is a file of that name in the protected store already, and it is written once. Use another name for it.', 'alphabridge-mcp' ) );
 			}
 			if ( ! $calls->rename( $tmp, $path ) ) {
 				self::delete_path( $root, $tmp );
@@ -3192,7 +3193,7 @@ final class AB_MCP_Protected_Store {
 			return self::calls()->ask( $url, $args, $fetcher );
 		} catch ( Throwable $e ) {
 			// A request that throws proves nothing (fail closed).
-			return new WP_Error( 'ab_mcp_store_probe_failed', 'The request of the self-check failed. Call it again.' );
+			return new WP_Error( 'ab_mcp_store_probe_failed', __( 'The request of the self-check failed. Call it again.', 'alphabridge-mcp' ) );
 		}
 	}
 
@@ -3843,7 +3844,7 @@ final class AB_MCP_Protected_Store {
 	 * @return WP_Error|null
 	 */
 	private static function bad_area( $area ) {
-		return in_array( $area, self::AREAS, true ) ? null : new WP_Error( 'ab_mcp_store_area', 'The protected store has the areas out, in, reports, backups and stage. Use one of them.' );
+		return in_array( $area, self::AREAS, true ) ? null : new WP_Error( 'ab_mcp_store_area', __( 'The protected store has the areas out, in, reports, backups and stage. Use one of them.', 'alphabridge-mcp' ) );
 	}
 
 	/**
