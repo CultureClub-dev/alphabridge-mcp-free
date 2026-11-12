@@ -91,6 +91,15 @@ final class SyncManifestGuardTest extends TestCase {
 		self::assertSame( 1, preg_match( "/if \\( 'theme' === \\\$kind && \\( null === self::theme_root\\(\\)/", $manifest_code ), 'unit() takes a theme from the folder of the themes only.' );
 	}
 
+	public function testTheClockIsAskedInOnePlaceWhileAUnitIsRead(): void {
+		// Behebung 5: the time of the call while a unit is walked, its files
+		// read and the unit checked once more, all through due().
+		$code = self::shipped()['includes/sync/class-sync-file-manifest.php'];
+		self::assertSame( 1, substr_count( $code, 'self::now()' ), 'The clock asked in due() only.' );
+		self::assertSame( 5, substr_count( $code, 'self::due( $acc, $deadline, $first )' ), 'Before each entry, before a file, after each part of it, before each folder and each path of still().' );
+		self::assertSame( 1, preg_match( '/function still\\( array &\\$acc, \\$deadline, \\$first \\)/', $code ), 'still() is told the time of the call.' );
+	}
+
 	public function testOnlyTheComparisonOfTheCoreAsksForItsChecksums(): void {
 		self::assertSame( array(), self::holding( 'get_core_checksums(' ), 'Never through the core (http again).' );
 		self::assertSame( array( 'includes/sync/class-sync-core-compare.php' ), self::holding( 'core/checksums' ) );

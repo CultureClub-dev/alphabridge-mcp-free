@@ -584,6 +584,36 @@ final class SyncFileManifestTest extends TestCase {
 		self::assertTrue( $this->read( 'leicht', 'live', 100.0, true )['complete'] );
 	}
 
+	public function testTheTimeOfTheCallIsAskedInTheFinalCheckOfTheUnitToo(): void {
+		// Behebung 5 (closed Codex confirmation of 216596c): a tree that does
+		// not change, on slow storage, past its time while the folders are
+		// listed again or the paths asked again: no hash, as while it is walked.
+		$this->shop();
+		$t                      = 50.0;
+		AB_MCP_Sync_Env::$clock = static function () use ( &$t ) {
+			return $t;
+		};
+		$late    = static function () use ( &$t ) {
+			$t = 200.0;
+		};
+		$moments = array(
+			'while the folders are listed again' => array( 'method' => 'names', 'nth' => 3 ),
+			'while the paths are asked again'    => array( 'method' => 'lstat', 'nth' => 6 ),
+		);
+		foreach ( $moments as $moment => $fault ) {
+			foreach ( array( true, false ) as $first ) {
+				$t = 50.0;
+				$this->seam( array( $fault + array( 'kind' => 'before', 'before' => $late ) ) );
+				$read = $this->read( 'shop', 'live', 100.0, $first );
+				AB_MCP_Test_Seam::restore_all();
+				$want = $first ? array( false, 'too_large', false, null, array() ) : array( false, null, true, null, array() );
+				self::assertSame( $want, array( $read['complete'], $read['cause'], $read['stopped'], $read['hash'], $read['entries'] ), "Past its time $moment (" . ( $first ? 'a whole call: too large' : 'begun late: stopped' ) . ').' );
+			}
+		}
+		$t = 50.0;
+		self::assertTrue( $this->read( 'shop', 'live', 100.0, true )['complete'], 'In time: whole.' );
+	}
+
 	public function testAFolderOrFileAddedRemovedOrReplacedWhileTheUnitIsReadGivesNoHash(): void {
 		// GitHub-Codex on ed1e512, P2 (Z1, gleichzeitiger Schreiber): what
 		// the listing of a folder did not see, or a file changed after it

@@ -289,15 +289,16 @@ final class AB_MCP_Sync_File_Manifest {
 		if ( 'done' !== $went ) {
 			return $acc;
 		}
-		// Nothing added, removed or replaced while the unit was read; a call
-		// that throws here is no answer either (fail closed).
+		// Nothing added, removed or replaced while the unit was read, within
+		// the time of the call; a call that throws here is no answer either
+		// (fail closed).
 		try {
-			$moved = self::still( $acc );
+			$went = self::still( $acc, (float) $deadline, (bool) $first );
 		} catch ( Throwable $e ) {
-			$moved = 'unreadable';
+			return self::ended( $acc, 'unreadable' );
 		}
-		if ( null !== $moved ) {
-			return self::ended( $acc, $moved );
+		if ( 'done' !== $went ) {
+			return $acc;
 		}
 		usort(
 			$acc['entries'],
@@ -399,8 +400,8 @@ final class AB_MCP_Sync_File_Manifest {
 		$acc['dirs'][ $dir ] = $names;
 		foreach ( $names as $name ) {
 			// The time of the call, before each entry (also an empty folder).
-			if ( self::now() >= $deadline ) {
-				return self::late( $acc, $first );
+			if ( self::due( $acc, $deadline, $first ) ) {
+				return 'ended';
 			}
 			$path = $dir . '/' . $name;
 			$in   = '' === $rel ? $name : $rel . '/' . $name;
@@ -462,8 +463,8 @@ final class AB_MCP_Sync_File_Manifest {
 	 */
 	private static function file( $path, $rel, array $stat, $deadline, $first, array &$acc ) {
 		$calls = self::calls();
-		if ( self::now() >= $deadline ) {
-			return self::late( $acc, $first );
+		if ( self::due( $acc, $deadline, $first ) ) {
+			return 'ended';
 		}
 		if ( ++$acc['walked'] > (int) $calls->limit() ) {
 			return self::end( $acc, 'too_many' );
@@ -490,9 +491,9 @@ final class AB_MCP_Sync_File_Manifest {
 			}
 			hash_update( $ctx, $bytes );
 			$read += strlen( $bytes );
-			if ( self::now() >= $deadline ) {
+			if ( self::due( $acc, $deadline, $first ) ) {
 				$calls->close( $handle );
-				return self::late( $acc, $first );
+				return 'ended';
 			}
 		}
 		$after = $calls->fstat( $handle );
@@ -517,31 +518,41 @@ final class AB_MCP_Sync_File_Manifest {
 	 * Whether the unit is still as it was read, once every entry of it is
 	 * read: each folder lists the same names again (none added or removed
 	 * since), and each file at its path is the one hashed (IDENTITY; none
-	 * replaced, written or removed since). Null where it is; else why not
-	 * (changed, or unreadable where a folder cannot be listed again).
+	 * replaced, written or removed since); else changed, or unreadable where
+	 * a folder cannot be listed again. The time of the call is asked before
+	 * each folder is listed again and before each path is asked again
+	 * (due(), as while the unit is walked).
 	 *
-	 * @param array $acc The reading.
-	 * @return string|null
+	 * @param array $acc      The reading.
+	 * @param float $deadline Until when.
+	 * @param bool  $first    See unit().
+	 * @return string done, or ended ($acc says why).
 	 */
-	private static function still( array $acc ) {
+	private static function still( array &$acc, $deadline, $first ) {
 		$calls = self::calls();
 		foreach ( $acc['dirs'] as $dir => $names ) {
+			if ( self::due( $acc, $deadline, $first ) ) {
+				return 'ended';
+			}
 			$now = $calls->names( $dir );
 			if ( false === $now ) {
-				return 'unreadable';
+				return self::end( $acc, 'unreadable' );
 			}
 			$now = array_values( array_diff( array_map( 'strval', $now ), array( '.', '..' ) ) );
 			usort( $now, 'strcmp' );
 			if ( $now !== $names ) {
-				return 'changed';
+				return self::end( $acc, 'changed' );
 			}
 		}
 		foreach ( $acc['stats'] as $file => $stat ) {
+			if ( self::due( $acc, $deadline, $first ) ) {
+				return 'ended';
+			}
 			if ( ! self::same( $stat, $calls->lstat( $file ) ) ) {
-				return 'changed';
+				return self::end( $acc, 'changed' );
 			}
 		}
-		return null;
+		return 'done';
 	}
 
 	/**
@@ -580,6 +591,26 @@ final class AB_MCP_Sync_File_Manifest {
 		$acc['hash']     = null;
 		$acc['entries']  = array();
 		return 'ended';
+	}
+
+	/**
+	 * Whether the time of the call is over; where it is, $acc says so
+	 * (late()). The one place the clock is asked while a unit is read:
+	 * before each entry of a folder, before a file is opened, after each part
+	 * of a file read, and in still() before each folder is listed again and
+	 * each path asked again (SyncManifestGuardTest).
+	 *
+	 * @param array $acc      The reading so far.
+	 * @param float $deadline Until when.
+	 * @param bool  $first    See unit().
+	 * @return bool
+	 */
+	private static function due( array &$acc, $deadline, $first ) {
+		if ( self::now() < (float) $deadline ) {
+			return false;
+		}
+		self::late( $acc, $first );
+		return true;
 	}
 
 	/**

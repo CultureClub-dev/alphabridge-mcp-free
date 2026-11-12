@@ -27,7 +27,9 @@ def e(id_, clause, file, search, replace, run, expect):
 T = "\t"
 # ------------------------------------------------ Z1: unit(), the one place
 e('z1-only-whole', 'Z1 unit(): no hash where the reading ended before every file', FM,
-  "\t\tif ( 'done' !== $went ) {\n\t\t\treturn $acc;\n\t\t}", "\t\tif ( false ) {\n\t\t\treturn $acc;\n\t\t}", 'man', 'testAReadingThatFailsGivesNoHash')
+  "\t\tif ( 'done' !== $went ) {\n\t\t\treturn $acc;\n\t\t}\n\t\t// Nothing added", "\t\tif ( false ) {\n\t\t\treturn $acc;\n\t\t}\n\t\t// Nothing added", 'man', 'testAReadingThatFailsGivesNoHash')
+e('z1-still-ended', 'Z1 whole(): no hash where still() ended the reading (changed, unreadable, the time)', FM,
+  "\t\tif ( 'done' !== $went ) {\n\t\t\treturn $acc;\n\t\t}\n\t\tusort(", "\t\tif ( false ) {\n\t\t\treturn $acc;\n\t\t}\n\t\tusort(", 'man', 'testAFolderOrFileAddedRemovedOrReplacedWhileTheUnitIsReadGivesNoHash')
 e('z1-format', 'Z1 text(): the name of the format in the text of the manifest', FM,
   "\t\t\t\t'format' => self::FORMAT,", '', 'man', 'testTheHashIsTheSha256OfTheManifestOfEveryFileInTheFormatAbFiles1')
 e('z1-sort', 'Z1 unit(): the files by strcmp() of the whole path', FM,
@@ -45,21 +47,27 @@ e('z1-read-size', 'Z1 file(): as many bytes as the file has (halb gelesen)', FM,
 e('z1-after-same', 'Z1 file(): fstat() after the reading the same as before (a writer)', FM,
   "$read !== (int) $before['size'] || ! self::same( $before, $after ) ) {", "$read !== (int) $before['size'] ) {", 'man', 'testEachFieldOfTheIdentityBeforeWhileAndAfterTheReadingCounts')
 e('z1-still', 'Z1 whole(): the unit as it was read, once every entry is read: nothing added, removed or replaced (GitHub-Codex on ed1e512)', FM,
-  "\t\t\t$moved = self::still( $acc );", "\t\t\t$moved = null;", 'man', 'testAFolderOrFileAddedRemovedOrReplacedWhileTheUnitIsReadGivesNoHash')
+  "\t\t\t$went = self::still( $acc, (float) $deadline, (bool) $first );", "\t\t\t$went = 'done';", 'man', 'testAFolderOrFileAddedRemovedOrReplacedWhileTheUnitIsReadGivesNoHash')
 e('z1-still-names', 'Z1 still(): each folder lists the same names again', FM,
   "\t\t\tif ( $now !== $names ) {", "\t\t\tif ( false ) {", 'man', 'testAFolderOrFileAddedRemovedOrReplacedWhileTheUnitIsReadGivesNoHash')
 e('z1-still-files', 'Z1 still(): each file at its path is the one hashed (also after a rename over it; GitHub-Codex P2)', FM,
   "\t\t\tif ( ! self::same( $stat, $calls->lstat( $file ) ) ) {", "\t\t\tif ( false ) {", 'man', 'testAFolderOrFileAddedRemovedOrReplacedWhileTheUnitIsReadGivesNoHash')
+e('z1-still-clock-names', 'Z1 still(): the time of the call before each folder is listed again (Behebung 5)', FM,
+  "\t\tforeach ( $acc['dirs'] as $dir => $names ) {\n\t\t\tif ( self::due( $acc, $deadline, $first ) ) {", "\t\tforeach ( $acc['dirs'] as $dir => $names ) {\n\t\t\tif ( false ) {", 'man', 'testTheTimeOfTheCallIsAskedInTheFinalCheckOfTheUnitToo')
+e('z1-still-clock-files', 'Z1 still(): the time of the call before each path is asked again (Behebung 5)', FM,
+  "\t\tforeach ( $acc['stats'] as $file => $stat ) {\n\t\t\tif ( self::due( $acc, $deadline, $first ) ) {", "\t\tforeach ( $acc['stats'] as $file => $stat ) {\n\t\t\tif ( false ) {", 'man', 'testTheTimeOfTheCallIsAskedInTheFinalCheckOfTheUnitToo')
+e('z1-due', 'Z1 due(): the one place the clock is asked while a unit is read (Behebung 5)', FM,
+  "\t\tif ( self::now() < (float) $deadline ) {\n\t\t\treturn false;", "\t\tif ( true ) {\n\t\t\treturn false;", 'man', 'testTheTimeOfTheCallIsAskedInTheFinalCheckOfTheUnitToo')
 e('z1-still-dirs-kept', 'Z1 folder(): the names of each folder kept for still()', FM,
   "\t\t$acc['dirs'][ $dir ] = $names;", '', 'man', 'testAFolderOrFileAddedRemovedOrReplacedWhileTheUnitIsReadGivesNoHash')
 e('z1-still-stats-kept', 'Z1 file(): the identity of each file hashed kept for still()', FM,
   "\t\t$acc['stats'][ $path ] = $before;", '', 'man', 'testAWriterWhileTheFileIsReadGivesNoHash')
 e('z1-still-throw', 'Z1 whole(): a call that throws in still() is no answer (unreadable), never a hash', FM,
-  "\t\t} catch ( Throwable $e ) {\n\t\t\t$moved = 'unreadable';", "\t\t} catch ( Throwable $e ) {\n\t\t\t$moved = null;", 'man', 'testAFolderOrFileAddedRemovedOrReplacedWhileTheUnitIsReadGivesNoHash')
+  "\t\t} catch ( Throwable $e ) {\n\t\t\treturn self::ended( $acc, 'unreadable' );\n\t\t}\n\t\tif ( 'done' !== $went ) {\n\t\t\treturn $acc;\n\t\t}\n\t\tusort(", "\t\t} catch ( Throwable $e ) {\n\t\t\t$went = 'done';\n\t\t}\n\t\tif ( 'done' !== $went ) {\n\t\t\treturn $acc;\n\t\t}\n\t\tusort(", 'man', 'testAFolderOrFileAddedRemovedOrReplacedWhileTheUnitIsReadGivesNoHash')
 e('z1-clock-entry', 'Z1 folder(): the time of the call before each entry, also an empty folder (GitHub-Codex on ed1e512)', FM,
-  "\t\t\t// The time of the call, before each entry (also an empty folder).\n\t\t\tif ( self::now() >= $deadline ) {", "\t\t\t// The time of the call, before each entry (also an empty folder).\n\t\t\tif ( false ) {", 'man', 'testTheTimeOfTheCallIsAskedBeforeEachFolderAndFileAlsoEmptyOnes')
+  "\t\t\t// The time of the call, before each entry (also an empty folder).\n\t\t\tif ( self::due( $acc, $deadline, $first ) ) {", "\t\t\t// The time of the call, before each entry (also an empty folder).\n\t\t\tif ( false ) {", 'man', 'testTheTimeOfTheCallIsAskedBeforeEachFolderAndFileAlsoEmptyOnes')
 e('z1-clock-file', 'Z1 file(): the time of the call before a file is opened, also one of 0 bytes', FM,
-  "\t\t$calls = self::calls();\n\t\tif ( self::now() >= $deadline ) {", "\t\t$calls = self::calls();\n\t\tif ( false ) {", 'man', 'testTheTimeOfTheCallIsAskedBeforeEachFolderAndFileAlsoEmptyOnes')
+  "\t\t$calls = self::calls();\n\t\tif ( self::due( $acc, $deadline, $first ) ) {", "\t\t$calls = self::calls();\n\t\tif ( false ) {", 'man', 'testTheTimeOfTheCallIsAskedBeforeEachFolderAndFileAlsoEmptyOnes')
 e('z1-too-many-folder', 'Z1 folder(): each folder counts towards MAX_FILES (GitHub-Codex on ed1e512)', FM,
   "\t\t\t\tif ( ++$acc['walked'] > (int) self::calls()->limit() ) {", "\t\t\t\tif ( false ) {", 'man', 'testMoreFilesThanAManifestHoldsGiveNoHash')
 for field in ('dev', 'ino', 'size', 'mtime', 'ctime'):
@@ -72,7 +80,7 @@ e('z1-fstat-after', 'Z1 file(): fstat() after the reading that fails: no hash', 
 e('z1-read-false', 'Z1 file(): a read() that fails is no hash, also where the next read() gives bytes (Codex round 1, B7)', FM,
   "\t\t\tif ( false === $bytes ) {\n\t\t\t\t$calls->close( $handle );\n\t\t\t\treturn self::end( $acc, 'unreadable' );", "\t\t\tif ( false ) {\n\t\t\t\t$calls->close( $handle );\n\t\t\t\treturn self::end( $acc, 'unreadable' );", 'man', 'testAReadingThatFailsGivesNoHash')
 e('z1-chunk-clock', 'Z1 file(): the time asked after each part of a file', FM,
-  "\t\t\tif ( self::now() >= $deadline ) {\n\t\t\t\t$calls->close( $handle );\n\t\t\t\treturn self::late( $acc, $first );", "\t\t\tif ( false ) {\n\t\t\t\t$calls->close( $handle );\n\t\t\t\treturn self::late( $acc, $first );", 'man', 'testTheTimeOfTheCallIsAskedWithinALargeFileToo')
+  "\t\t\t$read += strlen( $bytes );\n\t\t\tif ( self::due( $acc, $deadline, $first ) ) {", "\t\t\t$read += strlen( $bytes );\n\t\t\tif ( false ) {", 'man', 'testTheTimeOfTheCallIsAskedWithinALargeFileToo')
 e('z1-too-large', 'Z1 late(): too large where it had a whole call', FM,
   "\t\tif ( $first ) {\n\t\t\treturn self::end( $acc, 'too_large' );", "\t\tif ( false ) {\n\t\t\treturn self::end( $acc, 'too_large' );", 'man', 'testATimeLimitWithinAUnitStopsItOrMakesItTooLarge')
 e('z1-stopped', 'Z1 late(): begun late, stopped for the next call', FM,
