@@ -72,6 +72,7 @@ return array(
 	'The unit holds on the staging site what no manifest holds (a folder .git, .svn or .hg, a symbolic link, or something that is no regular file): it is never taken over. Remove it on the staging site (or take the unit over by hand), then make a new report.',
 	'The unit holds on this site what no manifest holds (a folder .git, .svn or .hg, a symbolic link, or something that is no regular file): it is never taken over. Remove it on this site (or take the unit over by hand), then make a new report.',
 	'The version of AlphaBridge itself could not be read on %s: it is not compared, and never taken over.',
+	'Unchanged on both sides since the bases of its pair, which differ: the sides differ now as they did then, kept so; nothing to take over.',
 	'Whether it is on %1$s is not known: the folder it would lie in could not be read whole there (%2$s).',
 	'Which main files run could not be read on the staging site.',
 	'Which main files run could not be read on this site.',
