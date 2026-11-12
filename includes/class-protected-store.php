@@ -443,6 +443,23 @@ final class AB_MCP_Protected_Store {
 		'stage'   => array( 'format' => 'format', 'gid' => 'gid', 'area' => 'area', 'created' => 'time', 'user_id' => 'count', 'run_id' => 'run', 'declared' => 'count', 'used' => 'count', 'label' => 'label', 'closed' => 'bool', 'binding' => 'text' ),
 	);
 
+	/**
+	 * The inputs of the retention decision (Behebung 3 of Z8b branch 3): the
+	 * one list of what kept() decides by. Each input gives its value as read
+	 * and checked whole, or null where it cannot be read, is missing or is
+	 * not valid ("unknown"); none makes a value up for such a case. kept()
+	 * takes exactly these, keyed so, and keeps a group
+	 * where one this group needs is null; sweep() reads them through
+	 * inputs() and sidecar(). Each entry names its source.
+	 */
+	const RETENTION_INPUTS = array(
+		'entry'   => 'AB_MCP_Protected_Store::sidecar',
+		'now'     => 'AB_MCP_Protected_Store::cleanup',
+		'open'    => 'AB_MCP_Sync_Schema::open_runs',
+		'backups' => 'AB_MCP_Sync_Schema::backup_rows',
+		'keep'    => 'AB_MCP_Protected_Store::keeps',
+	);
+
 	/** Seconds after which a proof is made again. */
 	const RECHECK = 86400;
 
@@ -1041,7 +1058,8 @@ final class AB_MCP_Protected_Store {
 		$out = array();
 		foreach ( self::entries( $root, self::install_id(), $area ) as $entry ) {
 			unset( $entry['format'] );
-			$entry['expires'] = $entry['created'] + self::keep( $area );
+			$keep             = self::keep( $area );
+			$entry['expires'] = null === $keep ? null : $entry['created'] + $keep;
 			$out[]            = $entry;
 		}
 		return $out;
@@ -1216,7 +1234,10 @@ final class AB_MCP_Protected_Store {
 	 *         or is not as the table SIDECAR says.
 	 */
 	public static function cleanup( $now = null ) {
-		$now = null === $now ? time() : (int) $now;
+		// The time as given (a test) or now; one that is no whole number
+		// above 0 is unknown, and the clean-up removes no group by it
+		// (inputs(), Behebung 3).
+		$now = null === $now ? time() : $now;
 		$id  = self::install_id( false );
 		$sum = array(
 			'removed' => 0,
@@ -1240,16 +1261,13 @@ final class AB_MCP_Protected_Store {
 	}
 
 	/**
-	 * Whether the clean-up keeps a group: bound to a run that is not closed
-	 * (or to any run while the runs cannot be read), or younger than its
-	 * area keeps groups. The backups of a run whose row is there follow the
-	 * retention contract as the row holds it (decision 20; AB_MCP_Sync_Schema
-	 * ::backup_rows(): kept, or gone whatever their age; every run while
-	 * the runs cannot be read). The backups of a run without a row (a run
-	 * that was never made, a row gone with a database put back from an
-	 * older copy) are kept by their age, as a close that does not qualify
-	 * (keep()): a backup whose run cannot be read is not removed at once,
-	 * fail closed.
+	 * Whether the clean-up keeps a group: bound to a run that is not closed,
+	 * or younger than its area keeps groups. The backups of a run whose row
+	 * is there follow the retention contract as the row holds it (decision
+	 * 20; AB_MCP_Sync_Schema::backup_rows(): kept, or gone whatever their
+	 * age). The backups of a run without a row (a run that was never made, a
+	 * row gone with a database put back from an older copy) are kept by
+	 * their age, as a close that does not qualify (keep()).
 	 *
 	 * Trees count as rows (Z8, plan E4 and section 6): a tree lies in a
 	 * group (stage or backups) and lives as long as its group, so a backup
@@ -1259,59 +1277,114 @@ final class AB_MCP_Protected_Store {
 	 * That an open mark keeps a tree beyond this is Z37 (delete_path()), not
 	 * this function.
 	 *
-	 * An entry whose area, time made or run is not as the table SIDECAR says
-	 * (missing, null, another type, outside its range, or 0 in an area of
-	 * groups of a run only) is kept: nothing is made up (Behebung 2, A1).
+	 * The inputs (Behebung 3 of Z8b branch 3): exactly those of
+	 * RETENTION_INPUTS, each as read and checked whole or null (unknown).
+	 * Where one this group needs is null, the group stays and the answer is
+	 * null (the clean-up counts it as unknown); one it does not need decides
+	 * nothing: a group of no run needs no runs, a group outside backups not
+	 * the retention of backups. Any other set of inputs is unknown too, so
+	 * no value reaches the decision but through the list.
 	 *
-	 * @param array                $entry       Entry of the group.
-	 * @param int                  $now         Time.
-	 * @param int[]|null           $open_runs   AB_MCP_Sync_Schema::open_runs().
-	 * @param array<int,bool>|null $backup_runs AB_MCP_Sync_Schema::backup_rows(); null where not read.
-	 * @return bool
+	 * @param array $in The inputs, keyed as RETENTION_INPUTS.
+	 * @return bool|null True: kept; false: it goes; null: unknown, kept.
 	 */
-	public static function kept( array $entry, $now, $open_runs, $backup_runs = null ) {
-		if ( ! self::whole( $entry, array( 'area', 'created', 'run_id' ) ) ) {
-			// What the retention decides by is not there as the table says
-			// (Behebung 2, A1): nothing is made up, the group stays.
-			return true;
+	public static function kept( array $in ) {
+		$names = array_keys( $in );
+		$list  = array_keys( self::RETENTION_INPUTS );
+		sort( $names );
+		sort( $list );
+		if ( $names !== $list ) {
+			return null;
+		}
+		$entry = $in['entry'];
+		if ( ! is_array( $entry ) || ! self::whole( $entry, array( 'area', 'created', 'run_id' ) ) ) {
+			return null;
 		}
 		$run = $entry['run_id'];
-		if ( $run > 0 && ( null === $open_runs || in_array( $run, $open_runs, true ) ) ) {
-			return true;
-		}
-		if ( 'backups' === $entry['area'] && $run > 0 ) {
-			if ( null === $backup_runs ) {
+		if ( $run > 0 ) {
+			if ( ! is_array( $in['open'] ) ) {
+				return null;
+			}
+			if ( in_array( $run, $in['open'], true ) ) {
 				return true;
 			}
-			if ( array_key_exists( $run, $backup_runs ) ) {
-				return (bool) $backup_runs[ $run ];
+			if ( 'backups' === $entry['area'] ) {
+				if ( ! is_array( $in['backups'] ) ) {
+					return null;
+				}
+				if ( array_key_exists( $run, $in['backups'] ) ) {
+					return is_bool( $in['backups'][ $run ] ) ? $in['backups'][ $run ] : null;
+				}
 			}
 		}
-		return ( (int) $now - $entry['created'] ) < self::keep( $entry['area'] );
+		$keep = is_array( $in['keep'] ) && array_key_exists( $entry['area'], $in['keep'] ) ? $in['keep'][ $entry['area'] ] : null;
+		if ( ! is_int( $keep ) || ! is_int( $in['now'] ) || $in['now'] < 1 ) {
+			return null;
+		}
+		return ( $in['now'] - $entry['created'] ) < $keep;
+	}
+
+	/**
+	 * The inputs of the clean-up of one folder (RETENTION_INPUTS but the
+	 * entry of a group, which sweep() reads per group), each read once.
+	 *
+	 * @param mixed $now The time of the clean-up.
+	 * @return array{now:int|null,open:int[]|null,backups:array<int,bool>|null,keep:array<string,int|null>}
+	 */
+	private static function inputs( $now ) {
+		$now = is_int( $now ) && $now > 0 ? $now : null;
+		return array(
+			'now'     => $now,
+			'open'    => AB_MCP_Sync_Schema::open_runs(),
+			'backups' => null === $now ? null : AB_MCP_Sync_Schema::backup_rows( $now ),
+			'keep'    => self::keeps(),
+		);
+	}
+
+	/**
+	 * Seconds each area keeps a group (keep()), by area of the table SIDECAR.
+	 *
+	 * @return array<string,int|null>
+	 */
+	private static function keeps() {
+		$out = array();
+		foreach ( array_keys( self::SIDECAR ) as $area ) {
+			$out[ $area ] = self::keep( $area );
+		}
+		return $out;
 	}
 
 	/**
 	 * Seconds an area keeps a group of no run, and a backup whose run has
 	 * no row (kept()): a backup as a close that does not qualify,
 	 * UNQUALIFIED_DAYS or the days of the filter where more (decision 20,
-	 * rule 5, as AB_MCP_Sync_Schema::keep_until() stores them).
+	 * rule 5, as AB_MCP_Sync_Schema::keep_until() stores them). Null for an
+	 * area the store has not, and for backups where the days of the filter
+	 * are not known (backup_days()).
 	 *
 	 * @param string $area Area.
-	 * @return int
+	 * @return int|null
 	 */
 	public static function keep( $area ) {
-		return 'backups' === $area ? max( AB_MCP_Sync_Schema::UNQUALIFIED_DAYS, self::backup_days() ) * 86400 : ( isset( self::KEEP[ $area ] ) ? self::KEEP[ $area ] : 86400 );
+		if ( 'backups' === $area ) {
+			$days = self::backup_days();
+			return null === $days ? null : max( AB_MCP_Sync_Schema::UNQUALIFIED_DAYS, $days ) * 86400;
+		}
+		return is_string( $area ) && isset( self::KEEP[ $area ] ) && in_array( $area, self::AREAS, true ) ? self::KEEP[ $area ] : null;
 	}
 
 	/**
 	 * Days a qualified close keeps its backups besides the last three
 	 * (decision 20, rule 3): BACKUP_DAYS, or what the filter
-	 * ab_mcp_staging_backup_days says (0 to 3650; Pro sets 30).
+	 * ab_mcp_staging_backup_days says, a whole number of 0 to 3650 (Pro sets
+	 * 30). Null where the filter gives anything else: the days are not known,
+	 * and no period is made up from them (Behebung 3 of Z8b branch 3, A2).
 	 *
-	 * @return int
+	 * @return int|null
 	 */
 	public static function backup_days() {
-		return max( 0, min( 3650, (int) apply_filters( self::BACKUP_DAYS_FILTER, self::BACKUP_DAYS ) ) );
+		$days = AB_MCP_Sync_Schema::whole_number( apply_filters( self::BACKUP_DAYS_FILTER, self::BACKUP_DAYS ), 0 );
+		return null !== $days && $days <= 3650 ? $days : null;
 	}
 
 	/**
@@ -3631,8 +3704,10 @@ final class AB_MCP_Protected_Store {
 	 * @return array{removed:int,kept:int,unknown:int}
 	 */
 	private static function sweep( $root, $id, $now ) {
-		$open    = AB_MCP_Sync_Schema::open_runs();
-		$backups = AB_MCP_Sync_Schema::backup_rows( $now );
+		// The inputs of the retention decision, each whole or null
+		// (RETENTION_INPUTS; Behebung 3 of Z8b branch 3).
+		$in      = self::inputs( $now );
+		$now     = $in['now'];
 		$removed = 0;
 		$kept    = 0;
 		$unknown = 0;
@@ -3661,14 +3736,27 @@ final class AB_MCP_Protected_Store {
 						// the retention lets its group go, asked with the time
 						// the entry names and with each area that is known of
 						// it, the one it names and the one it lies in.
+						$named = self::kept( array( 'entry' => $entry ) + $in );
+						$lies  = self::kept( array( 'entry' => array( 'area' => $area ) + $entry ) + $in );
+						if ( null === $named || null === $lies ) {
+							++$unknown;
+							continue;
+						}
 						$at = $calls->lstat( $path );
-						if ( false !== $at && ( $now - (int) $at['mtime'] ) >= 86400 && ! self::kept( $entry, $now, $open, $backups ) && ! self::kept( array( 'area' => $area ) + $entry, $now, $open, $backups ) ) {
+						if ( false === $named && false === $lies && false !== $at && null !== $now && ( $now - $at['mtime'] ) >= 86400 ) {
 							self::delete_group( $root, $area, $m[1] );
 						}
 						continue;
 					}
-					if ( self::kept( $entry, $now, $open, $backups ) ) {
-						if ( $entry['run_id'] > 0 && ( $now - $entry['created'] ) >= self::keep( $area ) ) {
+					$keep = self::kept( array( 'entry' => $entry ) + $in );
+					if ( null === $keep ) {
+						// An input this group needs is not known: it stays,
+						// and the clean-up counts it (Behebung 3).
+						++$unknown;
+						continue;
+					}
+					if ( true === $keep ) {
+						if ( $entry['run_id'] > 0 && is_int( $in['keep'][ $area ] ) && ( $now - $entry['created'] ) >= $in['keep'][ $area ] ) {
 							++$kept;
 						}
 						continue;
@@ -3677,12 +3765,12 @@ final class AB_MCP_Protected_Store {
 						++$removed;
 					}
 				} elseif ( preg_match( '/^[0-9a-f]{40}\z/', $file ) && ! in_array( $file . '.json', $names, true ) && self::plain( $path, 'dir' ) ) {
-					// A folder without its sidecar (an interrupted removal),
-					// absent by the listing of the area, after a day.
-					$at = $calls->lstat( $path );
-					if ( false !== $at && ( $now - (int) $at['mtime'] ) >= 86400 ) {
-						self::delete_path( $root, $path );
-					}
+					// A folder without its sidecar, absent by the listing of
+					// the area: nothing says whose it is or how long its
+					// retention keeps it (a backup of a run kept may lie in
+					// it), so it stays and the clean-up counts it (Behebung 3:
+					// before, it went after a day, past kept()).
+					++$unknown;
 				}
 			}
 		}
@@ -3691,16 +3779,16 @@ final class AB_MCP_Protected_Store {
 		$tmp   = self::way( $root, array( self::TMP ) );
 		$temps = null === $tmp ? false : self::calls()->scandir( $tmp );
 		foreach ( false === $temps ? array() : $temps as $file ) {
-			if ( 0 === strpos( (string) $file, self::TMP_PREFIX ) ) {
+			if ( 0 === strpos( $file, self::TMP_PREFIX ) ) {
 				self::delete_path( $root, $tmp . '/' . $file );
 			}
 		}
 		// Marks closed for a day, and a folder of a mark that holds none (a
-		// request that died before it wrote it) after a day.
-		$marks = self::way( $root, array( self::MARKS ) );
+		// request that died before it wrote it) after a day; none while the
+		// time of the clean-up is not known.
+		$marks = null === $now ? null : self::way( $root, array( self::MARKS ) );
 		$mids  = null === $marks ? false : self::calls()->scandir( $marks );
 		foreach ( false === $mids ? array() : $mids as $mid ) {
-			$mid = (string) $mid;
 			if ( ! preg_match( '/^[0-9a-f]{32}\z/', $mid ) ) {
 				continue;
 			}
@@ -3708,7 +3796,7 @@ final class AB_MCP_Protected_Store {
 			$at   = null === $mark ? self::calls()->lstat( $marks . '/' . $mid ) : false;
 			// The time a mark closed only as it holds it, a whole number
 			// above 0 (Behebung 2: never made up).
-			$old  = is_array( $mark ) ? ( 'closed' === $mark['state'] && is_int( $mark['closed'] ) && $mark['closed'] > 0 && ( $now - $mark['closed'] ) >= self::KEEP['marks'] ) : ( false !== $at && ( $now - (int) $at['mtime'] ) >= self::KEEP['marks'] );
+			$old  = is_array( $mark ) ? ( 'closed' === $mark['state'] && is_int( $mark['closed'] ) && $mark['closed'] > 0 && ( $now - $mark['closed'] ) >= self::KEEP['marks'] ) : ( false !== $at && ( $now - $at['mtime'] ) >= self::KEEP['marks'] );
 			if ( $old ) {
 				self::delete_path( $root, $marks . '/' . $mid );
 			}
