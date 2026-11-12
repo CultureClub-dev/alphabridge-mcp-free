@@ -1391,8 +1391,8 @@ return array_merge(
 			'clause'  => 'sweep(): the clean-up names the groups it kept for their sidecar',
 			'file'    => $ps,
 			'search'  => '						++$unknown;
-',
-			'replace' => '',
+						continue;',
+			'replace' => '						continue;',
 			'run'     => $it( 'StoreRemoverTest', 'testASidecarThatLacksAFieldOfItsRowOrHoldsItNullOrOfAnotherTypeOrRangeKeepsItsGroup' ),
 			'expect'  => '/testASidecarThatLacksAFieldOfItsRowOrHoldsItNullOrOfAnotherTypeOrRangeKeepsItsGroup/',
 		),
