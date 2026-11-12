@@ -46,9 +46,6 @@ final class AB_MCP_Sync_Backup {
 	/** Bytes one backup holds at most (one file of the store, AB_MCP_Protected_Store::FILE_MAX). */
 	const MAX_BYTES = 16777216;
 
-	/** @var array<int,string> The group of each run this request found or made. */
-	private static $groups = array();
-
 	/**
 	 * The group of a run in the area backups: the one bound to the run, or a
 	 * new one. The group is bound to the run (the clean-up keeps it while
@@ -66,25 +63,20 @@ final class AB_MCP_Sync_Backup {
 	 * @return string|WP_Error The id of the group.
 	 */
 	public static function group( $run_id ) {
-		if ( is_string( $run_id ) && (string) (int) $run_id === $run_id ) {
-			// Only digits that are the run written out: no sign, no
-			// leading zero, no blank, no fraction, within PHP_INT_MAX.
-			$run_id = (int) $run_id;
-		}
-		if ( ! is_int( $run_id ) || $run_id < 1 ) {
+		$run_id = AB_MCP_Sync_Schema::whole_number( $run_id, 1 );
+		if ( null === $run_id ) {
 			return new WP_Error( 'ab_mcp_sync_backup_run', __( 'A backup belongs to a run. Pass its run_id.', 'alphabridge-mcp' ) );
 		}
-		if ( isset( self::$groups[ $run_id ] ) ) {
-			return self::$groups[ $run_id ];
-		}
+		// No memory of a group found before: each call asks groups() anew, so
+		// a group whose sidecar turned unknown since is never used again
+		// (Behebung 3 of Z8b branch 3; a cache returned it unchecked).
 		$groups = AB_MCP_Protected_Store::groups( 'backups' );
 		if ( is_wp_error( $groups ) ) {
 			return $groups;
 		}
 		foreach ( $groups as $entry ) {
-			if ( self::LABEL . $run_id === (string) $entry['label'] && (int) $entry['run_id'] === $run_id ) {
-				self::$groups[ $run_id ] = (string) $entry['gid'];
-				return self::$groups[ $run_id ];
+			if ( self::LABEL . $run_id === $entry['label'] && $entry['run_id'] === $run_id ) {
+				return $entry['gid'];
 			}
 		}
 		$gid = AB_MCP_Protected_Store::open(
@@ -94,11 +86,7 @@ final class AB_MCP_Sync_Backup {
 				'label'  => self::LABEL . $run_id,
 			)
 		);
-		if ( is_wp_error( $gid ) ) {
-			return $gid;
-		}
-		self::$groups[ $run_id ] = (string) $gid;
-		return self::$groups[ $run_id ];
+		return $gid;
 	}
 
 	/**
@@ -170,7 +158,7 @@ final class AB_MCP_Sync_Backup {
 
 	/**
 	 * Whether a backup of this data fits what the run booked, beside the
-	 * backups the run holds already (the used bytes of its group): asked
+	 * backups the run holds already (the used bytes of its groups): asked
 	 * right before the backup is written, before the mutation. A run whose
 	 * booking the store does not know fails closed.
 	 *
@@ -179,7 +167,11 @@ final class AB_MCP_Sync_Backup {
 	 * @return true|WP_Error
 	 */
 	public static function fits( $run_id, array $data ) {
-		$run_id   = (int) $run_id;
+		// The run as group() takes it (Behebung 3 of Z8b branch 3).
+		$run_id = AB_MCP_Sync_Schema::whole_number( $run_id, 1 );
+		if ( null === $run_id ) {
+			return new WP_Error( 'ab_mcp_sync_backup_run', __( 'A backup belongs to a run. Pass its run_id.', 'alphabridge-mcp' ) );
+		}
 		$bytes    = self::size_of( $data );
 		$bookings = AB_MCP_Store_Budget::bookings();
 		if ( is_wp_error( $bookings ) ) {
@@ -189,16 +181,18 @@ final class AB_MCP_Sync_Backup {
 			/* translators: %d: run number. */
 			return new WP_Error( 'ab_mcp_sync_backup_booking', sprintf( __( 'The run %d has no booking in the protected store, so no backup is written and nothing of the object. Plan the run again (its check before the first write books what the run needs).', 'alphabridge-mcp' ), $run_id ) );
 		}
-		$booked = (int) $bookings[ $run_id ]['bytes'];
+		$booked = $bookings[ $run_id ]['bytes'];
 		$used   = 0;
-		$gid    = isset( self::$groups[ $run_id ] ) ? self::$groups[ $run_id ] : null;
 		$groups = AB_MCP_Protected_Store::groups( 'backups' );
 		if ( is_wp_error( $groups ) ) {
 			return $groups;
 		}
+		// Every group of the run counts: the fields of each are whole by
+		// AB_MCP_Protected_Store::SIDECAR (groups()), and no memory of this
+		// request picks one (Behebung 3: group() keeps none).
 		foreach ( $groups as $entry ) {
-			if ( (int) $entry['run_id'] === $run_id && ( null === $gid || (string) $entry['gid'] === (string) $gid ) ) {
-				$used += (int) $entry['used'];
+			if ( $entry['run_id'] === $run_id ) {
+				$used += $entry['used'];
 			}
 		}
 		if ( $used + $bytes > $booked ) {
