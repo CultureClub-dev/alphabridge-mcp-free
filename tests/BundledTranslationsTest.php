@@ -416,14 +416,14 @@ final class BundledTranslationsTest extends TestCase {
 		$pending = self::pending();
 		$texts   = self::gettext_texts();
 		self::assertSame( array_values( array_unique( $pending ) ), $pending, 'Each key once.' );
-		self::assertLessThanOrEqual( 115, count( $pending ), 'Z8b branch 2 left 77 texts to text/z8b (62, 5 with its Behebung 1, 7 with its Behebung 2, 1 with its Behebung 4, 1 with its Behebung 7, 1 with its Behebung 12), branch 2b 38 (1 with V1 of its pre-check, 32 with Z44 and the proposal of units, 5 more with its Behebung 1: 18 texts for 13 it replaced); the list does not grow without its review.' );
+		self::assertLessThanOrEqual( 142, count( $pending ), 'Z8b branch 2 left 77 texts to text/z8b (62, 5 with its Behebung 1, 7 with its Behebung 2, 1 with its Behebung 4, 1 with its Behebung 7, 1 with its Behebung 12), branch 2b 38 (1 with V1 of its pre-check, 32 with Z44 and the proposal of units, 5 more with its Behebung 1: 18 texts for 13 it replaced), branch 3 27 (the trees of the store and their place, 15 refusals and 12 lines of the instruction WIEDERHERSTELLEN.txt); the list does not grow without its review.' );
 		$mos = array();
 		foreach ( self::LOCALES as $locale ) {
 			$mos[ $locale ] = self::mo( self::file( $locale, 'mo' ) );
 		}
 		foreach ( $pending as $key ) {
 			self::assertArrayHasKey( $key, $texts, 'A text the code translates: ' . $key );
-			self::assertStringStartsWith( 'includes/sync/', $texts[ $key ], 'Only texts of the takeover wait: ' . $key );
+			self::assertMatchesRegularExpression( '#^includes/(sync/|class-protected-store\.php:)#', $texts[ $key ], 'Only texts of the takeover wait (its store among them, Z8b branch 3): ' . $key );
 			foreach ( $mos as $locale => $mo ) {
 				self::assertFalse( isset( $mo[ $key ] ) && '' !== str_replace( "\0", '', $mo[ $key ] ), $locale . ' translates it; it leaves the list: ' . $key );
 			}
