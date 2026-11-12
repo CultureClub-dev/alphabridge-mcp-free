@@ -358,7 +358,7 @@ final class SyncSafeCallsTest extends TestCase {
 			'wp_update_term'            => array( 2, 'write_row() and restore_row(): the way forward and back of the row of a term (decisions 17 and 23).' ),
 		),
 		'class-sync-said.php' => array(
-			'__' => array( 198, 'text(): the reasons of the report, the locks of the environment among them, of the proposal of the pairs, the words and notes of the results and of the environment and the messages of AB_MCP_Outbound, said to a person in the language of the site where they are set into a refusal or a note or the copy of an answer (shown()); the stored English text is only the key, and the locale of the site and its bundled translation are read, no value the takeover compares or hashes (branch 13 text/z8, Codex rounds 2, 3 and 5; SyncSaidScanTest finds every such text).' ),
+			'__' => array( 264, 'text(): the reasons of the report, the locks of the environment among them, of the proposal of the pairs, the words and notes of the results and of the environment and the messages of AB_MCP_Outbound, said to a person in the language of the site where they are set into a refusal or a note or the copy of an answer (shown()); the stored English text is only the key, and the locale of the site and its bundled translation are read, no value the takeover compares or hashes (branch 13 text/z8, Codex rounds 2, 3 and 5; SyncSaidScanTest finds every such text).' ),
 			'_x' => array( 8, 'kind(): the word of a kind of an object in a note of the journal, as the page «Staging» says it; the locale of the site and its bundled translation are read, no value the takeover compares or hashes (branch 13 text/z8, Codex round 2, B1).' ),
 		),
 		'class-sync-resources.php' => array(
@@ -448,7 +448,13 @@ final class SyncSafeCallsTest extends TestCase {
 			'AB_MCP_Protected_Store::under_lock' => array( 1, 'begin(): a way back for a closed run is made under the lock of the store, against the clean-up (decision 20, rule 4; A6).' ),
 		),
 		'class-sync-env.php' => array(
+			'AB_MCP_Own_Files::own_file_refusal' => array( 1, 'own(): whether a unit of plugins or must-use plugins is AlphaBridge itself (Free, Pro, the owner drop-in) by the identity of its path (constants of the plugin, realpath() and stat()), shown by its version and never hashed (Z8b branch 2, E12); no stored value.' ),
 			'__' => array( 2, 'the refusals and errors the tools wp_site_* pass on, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2).' ),
+		),
+		// The comparison of the core (Z8b branch 2, Z35, E18).
+		'class-sync-core-compare.php' => array(
+			'AB_MCP_Outbound::get' => array( 1, 'checksums(): the checksums of the core of this version and language from api.wordpress.org, only over https, no redirect followed, tied to the checked addresses (Z35, never get_core_checksums()); the answer is checked as data, no stored value of this site is read (GitHub-Codex and CI of free#147, Behebung 2).' ),
+			'__'                   => array( 6, 'checksums(): its errors, each with the way, in the language of the site as they are made; check() keeps only their codes as the cause of a line, no value the takeover compares or hashes (Behebung 2).' ),
 		),
 		'class-sync-fetcher.php' => array(
 			'__' => array( 3, 'the refusals and errors the tools wp_site_* pass on, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2).' ),
@@ -463,7 +469,7 @@ final class SyncSafeCallsTest extends TestCase {
 			'__' => array( 15, 'the refusals and errors the tools wp_site_* pass on, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2).' ),
 		),
 		'class-sync-pairs.php' => array(
-			'__' => array( 35, 'the refusals and errors the tools wp_site_* pass on, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2).' ),
+			'__' => array( 38, 'the refusals and errors the tools wp_site_* pass on, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2).' ),
 		),
 		'class-sync-write.php' => array(
 			'__' => array( 3, 'the refusals and errors the tools wp_site_* pass on, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2).' ),

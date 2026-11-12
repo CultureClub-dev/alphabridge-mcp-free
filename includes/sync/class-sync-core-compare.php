@@ -140,28 +140,28 @@ final class AB_MCP_Sync_Core_Compare {
 			)
 		);
 		if ( is_wp_error( $response ) || ! is_array( $response ) ) {
-			return new WP_Error( 'ab_mcp_sync_core_unreachable', 'api.wordpress.org was not reached.' );
+			return new WP_Error( 'ab_mcp_sync_core_unreachable', __( 'api.wordpress.org was not reached. Check that the host lets this site ask api.wordpress.org over https, then make the report again (wp_site_diff).', 'alphabridge-mcp' ) );
 		}
 		$status = (int) wp_remote_retrieve_response_code( $response );
 		$body   = wp_remote_retrieve_body( $response );
 		if ( 200 !== $status || ! is_string( $body ) || '' === $body || strlen( $body ) > self::MAX_BODY ) {
-			return new WP_Error( 'ab_mcp_sync_core_unreachable', 'api.wordpress.org did not answer with the checksums.' );
+			return new WP_Error( 'ab_mcp_sync_core_unreachable', __( 'api.wordpress.org did not answer with the checksums. Try again later: make the report again (wp_site_diff).', 'alphabridge-mcp' ) );
 		}
 		$data = json_decode( $body, true, 8 );
 		if ( ! is_array( $data ) || ! array_key_exists( 'checksums', $data ) ) {
-			return new WP_Error( 'ab_mcp_sync_core_answer', 'The answer of api.wordpress.org holds no checksums.' );
+			return new WP_Error( 'ab_mcp_sync_core_answer', __( 'The answer of api.wordpress.org holds no checksums. Try again later: make the report again (wp_site_diff).', 'alphabridge-mcp' ) );
 		}
 		if ( false === $data['checksums'] ) {
-			return new WP_Error( 'ab_mcp_sync_core_unknown_version', 'api.wordpress.org knows no checksums of this version and language.' );
+			return new WP_Error( 'ab_mcp_sync_core_unknown_version', __( 'api.wordpress.org knows no checksums of this version and language. Update WordPress to a released version (wp_update_core), then make the report again (wp_site_diff).', 'alphabridge-mcp' ) );
 		}
 		if ( ! is_array( $data['checksums'] ) || array() === $data['checksums'] ) {
-			return new WP_Error( 'ab_mcp_sync_core_answer', 'The answer of api.wordpress.org holds no checksums.' );
+			return new WP_Error( 'ab_mcp_sync_core_answer', __( 'The answer of api.wordpress.org holds no checksums. Try again later: make the report again (wp_site_diff).', 'alphabridge-mcp' ) );
 		}
 		$out = array();
 		foreach ( $data['checksums'] as $path => $md5 ) {
 			// A relative path of the folder of WordPress, and an md5.
 			if ( ! is_string( $path ) || ! self::relative( $path ) || ! is_string( $md5 ) || 1 !== preg_match( '/^[0-9a-f]{32}\z/', $md5 ) ) {
-				return new WP_Error( 'ab_mcp_sync_core_answer', 'The answer of api.wordpress.org holds an entry that is no path with its md5.' );
+				return new WP_Error( 'ab_mcp_sync_core_answer', __( 'The answer of api.wordpress.org holds an entry that is no path with its md5. Try again later: make the report again (wp_site_diff).', 'alphabridge-mcp' ) );
 			}
 			$out[ $path ] = $md5;
 		}

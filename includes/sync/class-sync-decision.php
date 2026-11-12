@@ -172,6 +172,8 @@ final class AB_MCP_Sync_Decision {
 		'changed_alike'      => 'Changed on both sides alike since the base of its pair: nothing to take over.',
 		'deleted_on_staging' => 'Removed on staging since its pair was made.',
 		'deleted_live'       => 'Removed on this site since its pair was made: nothing to do.',
+		'deleted_against_changed_live' => 'Removed on staging since its pair was made, and changed on this site since its base: a conflict, kept on this site.',
+		'deleted_live_changed_staging' => 'Removed on this site since its pair was made, and changed on staging since its base: a conflict, the removal holds here; nothing of staging is brought back in this version.',
 	);
 
 	/** What differs in a unit, in words, by its parts. */
@@ -1298,8 +1300,31 @@ final class AB_MCP_Sync_Decision {
 			} elseif ( null !== $missing ) {
 				return self::unit_entry( $entry, array(), sprintf( 'Whether it is on %1$s is not known: the folder it would lie in could not be read whole there (%2$s).', null === $s ? 'the staging site' : 'this site', self::cause_said( $missing ) ), $held );
 			} elseif ( null !== $pair && 'active' === $pair['state'] ) {
-				$entry['result'] = null === $s ? 'deleted_on_staging' : 'deleted_live';
-				$entry['action'] = null === $s ? 'locked' : 'none';
+				// Removed on one side since its pair was made: the side that
+				// has it, each part against its own base, so that a change
+				// there is a conflict with the removal (TABLE, rows 7 and 9;
+				// GitHub-Codex on free#147, P2).
+				if ( AB_MCP_Sync_Canon::VERSION !== $pair['canon'] ) {
+					return self::unit_entry( $entry, array(), sprintf( 'The bases of its pair are of the version %1$s of the comparison data, this site reads %2$s.', (string) $pair['canon'], AB_MCP_Sync_Canon::VERSION ), $held );
+				}
+				$states  = array();
+				$changed = false;
+				foreach ( AB_MCP_Sync_Pairs::PARTS[ $kind ] as $part ) {
+					$have = self::part_hash( $kind, $part, $there );
+					$base = AB_MCP_Sync_Pairs::part_bases( $pair, $part );
+					if ( null === $have ) {
+						return self::unit_entry( $entry, array(), 'theme_choice' === $kind ? 'The theme that runs could not be read on ' . ( null === $s ? 'this site' : 'the staging site' ) . '.' : 'Which main files run could not be read on ' . ( null === $s ? 'this site' : 'the staging site' ) . '.', $held );
+					}
+					if ( null === $base ) {
+						return self::unit_entry( $entry, array(), 'Its pair holds no base of the part ' . $part . '.', $held );
+					}
+					$moved            = ! hash_equals( (string) $base[ null === $s ? 'live' : 'staging' ], $have );
+					$changed          = $changed || $moved;
+					$states[ $part ]  = self::TABLE[ null === $s ? ( $moved ? 7 : 3 ) : ( $moved ? 9 : 8 ) ][2];
+				}
+				$entry['parts']  = $states;
+				$entry['result'] = self::TABLE[ null === $s ? ( $changed ? 7 : 3 ) : ( $changed ? 9 : 8 ) ][2];
+				$entry['action'] = null === $s ? ( $changed ? 'keep' : 'locked' ) : ( $changed ? 'keep' : 'none' );
 			} else {
 				$entry['result'] = null === $s ? 'only_live' : 'only_staging';
 				$entry['action'] = null === $s ? 'keep' : 'locked';

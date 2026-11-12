@@ -12,10 +12,16 @@
  */
 
 return array(
+	// includes/sync/class-sync-core-compare.php
+	'The answer of api.wordpress.org holds an entry that is no path with its md5. Try again later: make the report again (wp_site_diff).',
+	'The answer of api.wordpress.org holds no checksums. Try again later: make the report again (wp_site_diff).',
+	'api.wordpress.org did not answer with the checksums. Try again later: make the report again (wp_site_diff).',
+	'api.wordpress.org knows no checksums of this version and language. Update WordPress to a released version (wp_update_core), then make the report again (wp_site_diff).',
+	'api.wordpress.org was not reached. Check that the host lets this site ask api.wordpress.org over https, then make the report again (wp_site_diff).',
 	// includes/sync/class-sync-pairs.php
-	'Only the step that wrote and checked the part %1$s of a pair of kind %2$s moves its bases on: the kind responsible for it by AB_MCP_Sync_Kinds::OWNERSHIP, registered as such. Nothing was written.',
+	'Only the step that wrote and checked the part %1$s of a pair of kind %2$s moves its bases on: the kind responsible for it by AB_MCP_Sync_Kinds::OWNERSHIP, registered as such. Nothing was written. Pass the kind registered for the part, and call again.',
 	'The field base_extra of the pair is not stored JSON of a pair.',
-	'The pair of kind %2$s has no part %1$s whose bases could be moved on: a unit takes new bases part by part (files, activation), an object of the takeover without a part. Nothing was written.',
+	'The pair of kind %2$s has no part %1$s whose bases could be moved on: a unit takes new bases part by part (files, activation), an object of the takeover without a part. Nothing was written. Pass a part of the pair (AB_MCP_Sync_Pairs::PARTS), or none for an object, and call again.',
 	// includes/sync/class-sync-said.php
 	'A file of the font library comes with the fonts of the font library.',
 	'A file of the font library is compared by its contents; it comes with the fonts of the font library.',
@@ -50,7 +56,9 @@ return array(
 	'Its pair is %s: a person confirms a new alignment first (wp_site_pairs).',
 	'Not compared: see why.',
 	'Nothing of it is taken over in this version.',
+	'Removed on staging since its pair was made, and changed on this site since its base: a conflict, kept on this site.',
 	'Removed on staging since its pair was made.',
+	'Removed on this site since its pair was made, and changed on staging since its base: a conflict, the removal holds here; nothing of staging is brought back in this version.',
 	'Removed on this site since its pair was made: nothing to do.',
 	'Shown only: the language is the option WPLANG, compared with the options; its files are compared under languages.',
 	'The bases of its pair are of the version %1$s of the comparison data, this site reads %2$s.',

@@ -23,7 +23,13 @@
  * - Throwable: any call;
  * - half (halb gelesen): read() gives fewer bytes;
  * - before (gleichzeitiger Schreiber): a writer between lstat() and open()
- *   (another file at the path), and between the reads (the size changes);
+ *   (another file at the path, or the same file written anew in place), a
+ *   rename over the path after the file was opened, and between the reads
+ *   (the size or the time changes); each of device, inode, size, mtime and
+ *   ctime that differs between lstat() before, fstat() before and after and
+ *   lstat() after the reading, by a stand-in of the calls, so that every
+ *   file system checks the same, whatever inode it gives a new file
+ *   (Behebung 2: the CI reused the inode of a file removed and written anew);
  * - Zeitlimit: the clock past the deadline within a unit (too large where it
  *   had a whole call, else stopped for the next call);
  * - exit/Fatal: the reading writes nothing, so an end of the process leaves
@@ -336,8 +342,45 @@ final class SyncFileManifestTest extends TestCase {
 			)
 		);
 		$read = $this->read();
-		self::assertSame( array( false, 'changed', null ), array( $read['complete'], $read['cause'], $read['hash'] ), 'Not the file lstat() saw (inode).' );
+		self::assertSame( array( false, 'changed', null ), array( $read['complete'], $read['cause'], $read['hash'] ), 'Not the file lstat() saw (whichever inode the file system gives the new one).' );
 		AB_MCP_Test_Seam::restore_all();
+		// Between lstat() and open(): written anew in place, the same inode.
+		$this->file( 'plugins/shop/inc/a.php', '<?php // a' );
+		$this->seam(
+			array(
+				array(
+					'method' => 'open',
+					'nth'    => 1,
+					'kind'   => 'before',
+					'before' => static function () use ( $path ) {
+						file_put_contents( $path, '<?php // b' );
+					},
+				),
+			)
+		);
+		self::assertSame( 'changed', $this->read()['cause'], 'Written anew between lstat() and open(): its time is no longer the one lstat() saw.' );
+		AB_MCP_Test_Seam::restore_all();
+		// After it was opened and read: another file renamed over the path
+		// (its old inode still open), the same size and time (GitHub-Codex, P2).
+		$this->file( 'plugins/shop/inc/a.php', '<?php // a' );
+		$this->seam(
+			array(
+				array(
+					'method' => 'fstat',
+					'nth'    => 2,
+					'kind'   => 'before',
+					'before' => static function () use ( $path ) {
+						file_put_contents( $path . '.neu', '<?php // b' );
+						touch( $path . '.neu', 1700000000 );
+						rename( $path . '.neu', $path );
+					},
+				),
+			)
+		);
+		$read = $this->read();
+		self::assertSame( array( false, 'changed', null ), array( $read['complete'], $read['cause'], $read['hash'] ), 'Renamed over the path while it was read: the path names another file.' );
+		AB_MCP_Test_Seam::restore_all();
+		$this->file( 'plugins/shop/inc/a.php', '<?php // a' );
 		// While it is read: it grows.
 		$this->seam(
 			array(
@@ -368,6 +411,87 @@ final class SyncFileManifestTest extends TestCase {
 			)
 		);
 		self::assertSame( 'changed', $this->read()['cause'], 'Its time changed while it was read.' );
+	}
+
+	/**
+	 * A stand-in of the calls whose lstat() of one path (its nth call) or
+	 * fstat() (its nth call) says one field otherwise, the rest real.
+	 */
+	private static function told( string $method, string $path, int $nth, string $field ): object {
+		return new class( $method, $path, $nth, $field ) {
+			private $method;
+			private $path;
+			private $nth;
+			private $field;
+			private $seen = 0;
+			private $real;
+			public function __construct( $method, $path, $nth, $field ) {
+				$this->method = $method;
+				$this->path   = $path;
+				$this->nth    = $nth;
+				$this->field  = $field;
+				$this->real   = new AB_MCP_Sync_File_Manifest_Calls();
+			}
+			private function other( $stat ) {
+				if ( is_array( $stat ) && ++$this->seen === $this->nth ) {
+					$stat[ $this->field ] = (int) $stat[ $this->field ] + 1;
+				}
+				return $stat;
+			}
+			public function names( $dir ) {
+				return $this->real->names( $dir );
+			}
+			public function lstat( $path ) {
+				$stat = $this->real->lstat( $path );
+				return 'lstat' === $this->method && $path === $this->path ? $this->other( $stat ) : $stat;
+			}
+			public function open( $path ) {
+				return $this->real->open( $path );
+			}
+			public function fstat( $handle ) {
+				$stat = $this->real->fstat( $handle );
+				return 'fstat' === $this->method ? $this->other( $stat ) : $stat;
+			}
+			public function read( $handle, $length ) {
+				return $this->real->read( $handle, $length );
+			}
+			public function theme_root() {
+				return $this->real->theme_root();
+			}
+			public function limit() {
+				return $this->real->limit();
+			}
+			public function close( $handle ) {
+				$this->real->close( $handle );
+			}
+		};
+	}
+
+	public function testEachFieldOfTheIdentityBeforeWhileAndAfterTheReadingCounts(): void {
+		// One contract on every file system (Behebung 2): device, inode, size,
+		// mtime and ctime the same in lstat() before, fstat() before and after
+		// and lstat() after the reading; one field otherwise is no hash.
+		$this->shop();
+		$path  = $this->dir . '/plugins/shop/inc/a.php';
+		$whole = $this->read()['hash'];
+		foreach ( array( 'dev', 'ino', 'size', 'mtime', 'ctime' ) as $field ) {
+			$moments = array(
+				'lstat() before the opening' => array( 'lstat', 1 ),
+				'fstat() before the reading' => array( 'fstat', 1 ),
+				'fstat() after the reading'  => array( 'fstat', 2 ),
+				'lstat() after the reading'  => array( 'lstat', 2 ),
+			);
+			foreach ( $moments as $moment => list( $method, $nth ) ) {
+				AB_MCP_Test_Seam::install( AB_MCP_Sync_File_Manifest::class, 'naht_sync_file_manifest', self::told( $method, $path, $nth, $field ) );
+				$read = $this->read();
+				AB_MCP_Test_Seam::restore_all();
+				self::assertSame( array( false, 'changed', null ), array( $read['complete'], $read['cause'], $read['hash'] ), "$field otherwise in $moment." );
+			}
+		}
+		self::assertSame( $whole, $this->read()['hash'], 'Read as it is: the same hash.' );
+		// The path gone after the reading: changed, never hashed.
+		$this->seam( array( array( 'method' => 'lstat', 'nth' => 4, 'kind' => 'return', 'value' => false ) ) );
+		self::assertSame( 'changed', $this->read()['cause'], 'The path names no file after the reading.' );
 	}
 
 	public function testATimeLimitWithinAUnitStopsItOrMakesItTooLarge(): void {

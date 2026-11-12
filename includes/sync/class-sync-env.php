@@ -1079,19 +1079,38 @@ final class AB_MCP_Sync_Env {
 	private static function unit_step( $kind, $place, $deadline, $room, $side, &$first, $empty ) {
 		$alone = $first;
 		if ( 'theme_root' === $kind ) {
-			$lines = self::theme_roots( $side, $deadline );
-			if ( count( $lines ) > $room && ! $empty ) {
-				return array(
-					'lines' => array(),
-					'done'  => false,
-					'after' => $place,
-				);
-			}
-			return array(
-				'lines' => array_slice( $lines, 0, max( 0, (int) $room ) ),
-				'done'  => true,
-				'after' => null,
+			// The themes of the further roots page by page, by strcmp() of
+			// their stylesheets, after the one the part before ended with
+			// (by its SHA-256): none left out where they do not fit into one
+			// part (GitHub-Codex on free#147, P2).
+			$themes = self::theme_roots( $side, $deadline );
+			$names  = array_map( 'strval', array_keys( $themes ) );
+			$after  = null === $place ? null : self::found(
+				$place,
+				static function ( $rel ) use ( $names ) {
+					return '' === $rel ? $names : array();
+				}
 			);
+			if ( null !== $place && null === $after ) {
+				return self::units_done( array( self::root_unit( 'theme', 'moved' ) ) );
+			}
+			$lines = array();
+			$last  = $after;
+			foreach ( $themes as $name => $line ) {
+				if ( null !== $after && strcmp( (string) $name, $after ) <= 0 ) {
+					continue;
+				}
+				if ( count( $lines ) >= $room ) {
+					return array(
+						'lines' => $lines,
+						'done'  => false,
+						'after' => self::place( $last, false ),
+					);
+				}
+				$lines[] = $line;
+				$last    = (string) $name;
+			}
+			return self::units_done( $lines );
 		}
 		$base = self::unit_base( $kind );
 		if ( '' !== $base['why'] ) {
@@ -1287,7 +1306,10 @@ final class AB_MCP_Sync_Env {
 					// The year folders hold units; the other folders are counted (uploads).
 					return 1 === preg_match( '/^[0-9]{4}\z/', $name ) ? 'into' : 'skip';
 				}
-				return 'unit';
+				// A file at the top: a unit only outside the file lists of the
+				// attachments, as below a year folder (a site without year and
+				// month folders; GitHub-Codex on free#147, P2).
+				return isset( $ctx['attached'][ $name ] ) ? 'skip' : 'unit';
 			}
 			if ( is_dir( $full ) && ! is_link( $full ) ) {
 				// A folder of version control is a unit, which unit() locks.
@@ -1517,7 +1539,7 @@ final class AB_MCP_Sync_Env {
 	 *
 	 * @param string $side     live or staging.
 	 * @param float  $deadline Until when.
-	 * @return array[]
+	 * @return array<string,array> Stylesheet => its line, by strcmp().
 	 */
 	private static function theme_roots( $side, $deadline ) {
 		$standard = self::unit_base( 'theme' );
@@ -1544,10 +1566,11 @@ final class AB_MCP_Sync_Env {
 				}
 				$seen[ (string) $stylesheet ] = true;
 				$read                         = array( 'own' => false ) + AB_MCP_Sync_File_Manifest::unit( $root, (string) $stylesheet, $side, $deadline, false, 'theme' );
-				$lines[]                      = self::unit_lines( 'theme', (string) $stylesheet, $read, array( 'versions' => $versions ) )[0];
+				$lines[ (string) $stylesheet ] = self::unit_lines( 'theme', (string) $stylesheet, $read, array( 'versions' => $versions ) )[0];
 			}
 		}
-		return self::sorted( $lines );
+		uksort( $lines, 'strcmp' );
+		return $lines;
 	}
 
 	/**
@@ -2213,8 +2236,9 @@ final class AB_MCP_Sync_Env {
 
 	/**
 	 * The names inside lines held by a rule (the paths of entries, the themes
-	 * of the theme that runs): each such name by its SHA-256, and no entries
-	 * of a unit whose line is held (its paths would name it again).
+	 * of the theme that runs, the main files of a plugin and those that run):
+	 * each such name by its SHA-256, and no entries of a unit whose line is
+	 * held (its paths would name it again).
 	 *
 	 * @param array[]  $lines Lines.
 	 * @param callable $held  function( string $name ): bool, whether a rule holds a name.
@@ -2247,6 +2271,13 @@ final class AB_MCP_Sync_Env {
 						$line[ $field ] = $hash( $line[ $field ] );
 					}
 				}
+			} elseif ( is_array( $line ) && 'plugin' === ( $line['env'] ?? null ) ) {
+				// The main files of a plugin and those that run (GitHub-Codex, P1).
+				foreach ( array( 'mains', 'active' ) as $field ) {
+					if ( is_array( $line[ $field ] ?? null ) ) {
+						$line[ $field ] = array_map( $hash, $line[ $field ] );
+					}
+				}
 			}
 			$out[] = $line;
 		}
@@ -2268,13 +2299,15 @@ final class AB_MCP_Sync_Env {
 			if ( is_array( $line ) && isset( $line['env'], $line['ref'], $line['held'] ) && in_array( $line['env'], self::NAMED, true ) && 1 === preg_match( self::HASHED, (string) $line['ref'] ) ) {
 				$out[ (string) $line['ref'] ] = (string) $line['held'];
 			}
-			// A path of entries or a theme of the theme that runs the staging
-			// site holds by its SHA-256.
+			// A path of entries, a theme of the theme that runs or a main file
+			// of a plugin the staging site holds by its SHA-256.
 			$inside = array();
 			if ( is_array( $line ) && 'entries' === ( $line['env'] ?? null ) && is_array( $line['entries'] ?? null ) ) {
 				$inside = array_column( $line['entries'], 0 );
 			} elseif ( is_array( $line ) && 'theme_choice' === ( $line['env'] ?? null ) ) {
 				$inside = array( $line['stylesheet'] ?? null, $line['template'] ?? null );
+			} elseif ( is_array( $line ) && 'plugin' === ( $line['env'] ?? null ) ) {
+				$inside = array_merge( is_array( $line['mains'] ?? null ) ? $line['mains'] : array(), is_array( $line['active'] ?? null ) ? $line['active'] : array() );
 			}
 			foreach ( $inside as $name ) {
 				if ( is_string( $name ) && 1 === preg_match( self::HASHED, $name ) && ! isset( $out[ $name ] ) ) {

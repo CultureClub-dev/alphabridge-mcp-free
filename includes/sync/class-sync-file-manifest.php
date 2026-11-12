@@ -153,6 +153,9 @@ final class AB_MCP_Sync_File_Manifest {
 	/** Folders of version control: anywhere in a unit, they lock it. */
 	const VCS = array( '.git', '.svn', '.hg' );
 
+	/** What says a file is the same before, while and after it is read (lstat() of the path, fstat() of the handle). */
+	const IDENTITY = array( 'dev', 'ino', 'size', 'mtime', 'ctime' );
+
 	/** Bytes read at a time while a file is hashed. */
 	const CHUNK = 1048576;
 
@@ -393,9 +396,16 @@ final class AB_MCP_Sync_File_Manifest {
 	}
 
 	/**
-	 * One regular file of a unit: hashed in parts from one open handle, its
-	 * size and time from that handle before and after, the same file as
-	 * lstat() saw (device and inode).
+	 * One regular file of a unit: hashed in parts from one open handle. The
+	 * bytes hashed are those of the file the path names from before it is
+	 * opened until after it is read: lstat() of the path before, fstat() of
+	 * the handle before and after the reading, lstat() of the path again
+	 * after it, all four the same in device, inode, size, mtime and ctime
+	 * (IDENTITY), and as many bytes read as the size says; else it changed
+	 * (Z1). So a file replaced at its path before it is opened or after
+	 * (also by a rename over it, also where the file system gives the new
+	 * file the inode of the old one), or written while it is read, gives no
+	 * hash, on every file system the same.
 	 *
 	 * @param string $path     The file.
 	 * @param string $rel      Its path in the unit.
@@ -415,7 +425,7 @@ final class AB_MCP_Sync_File_Manifest {
 			return self::end( $acc, 'unreadable' );
 		}
 		$before = $calls->fstat( $handle );
-		if ( false === $before || (int) $before['dev'] !== (int) $stat['dev'] || (int) $before['ino'] !== (int) $stat['ino'] ) {
+		if ( false === $before || ! self::same( $stat, $before ) ) {
 			$calls->close( $handle );
 			return self::end( $acc, false === $before ? 'unreadable' : 'changed' );
 		}
@@ -442,14 +452,33 @@ final class AB_MCP_Sync_File_Manifest {
 		if ( false === $after ) {
 			return self::end( $acc, 'unreadable' );
 		}
-		// The same bytes from its start to its end, while nothing wrote it.
-		if ( $read !== (int) $before['size'] || (int) $after['size'] !== (int) $before['size'] || (int) $after['mtime'] !== (int) $before['mtime'] ) {
+		// The same bytes from its start to its end, while nothing wrote it,
+		// and the path still names that very file (no rename over it).
+		$again = $calls->lstat( $path );
+		if ( $read !== (int) $before['size'] || ! self::same( $before, $after ) || false === $again || ! self::same( $before, $again ) ) {
 			return self::end( $acc, 'changed' );
 		}
 		$acc['entries'][] = array( (string) $rel, $read, hash_final( $ctx ), (int) $before['mtime'] );
 		++$acc['files'];
 		$acc['bytes'] += $read;
 		return 'done';
+	}
+
+	/**
+	 * Whether two of lstat() and fstat() say the same of a file: its device,
+	 * inode, size, mtime and ctime (IDENTITY).
+	 *
+	 * @param array $a One.
+	 * @param array $b The other.
+	 * @return bool
+	 */
+	private static function same( array $a, array $b ) {
+		foreach ( self::IDENTITY as $field ) {
+			if ( ! isset( $a[ $field ], $b[ $field ] ) || (int) $a[ $field ] !== (int) $b[ $field ] ) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	/**

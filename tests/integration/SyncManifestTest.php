@@ -661,9 +661,9 @@ final class SyncManifestTest extends TestCase {
 			AB_MCP_Test_Seam::install( AB_MCP_Sync_Pairs::class, 'naht_sync_pairs', AB_MCP_Sync_Pairs_Calls::class, $faults );
 		};
 		$cases = array(
-			'the write fails (Rückgabe false)'  => array( array( 'method' => 'query', 'kind' => 'return', 'value' => false ), 'ab_mcp_staging_db_error' ),
+			'the write fails (Rückgabe false)'  => array( array( 'method' => 'update_row', 'kind' => 'return', 'value' => false ), 'ab_mcp_staging_db_error' ),
 			'the read fails (Lesefehler)'       => array( array( 'method' => 'row', 'kind' => 'return', 'value' => false ), 'ab_mcp_staging_db_error' ),
-			'no row changed (Rückgabe 0)'       => array( array( 'method' => 'query', 'kind' => 'return', 'value' => 0 ), 'ab_mcp_staging_pair_changed' ),
+			'no row changed (Rückgabe 0)'       => array( array( 'method' => 'update_row', 'kind' => 'return', 'value' => 0 ), 'ab_mcp_staging_pair_changed' ),
 		);
 		$expected = self::snap( $pair );
 		foreach ( $cases as $case => list( $fault, $code_of ) ) {
@@ -680,7 +680,7 @@ final class SyncManifestTest extends TestCase {
 		$seam(
 			array(
 				array(
-					'method' => 'query',
+					'method' => 'update_row',
 					'kind'   => 'before',
 					'before' => static function () use ( $id ) {
 						global $wpdb;
@@ -696,7 +696,7 @@ final class SyncManifestTest extends TestCase {
 		self::assertSame( array( 99, $pair['base_live'], $pair['base_staging'] ), array( $now['last_run'], $now['base_live'], $now['base_staging'] ), 'The other write stands, the bases are not written.' );
 		// A Throwable of the write: nothing written.
 		$now_hash = self::snap( $now );
-		$seam( array( array( 'method' => 'query', 'kind' => 'throw', 'message' => 'gone' ) ) );
+		$seam( array( array( 'method' => 'update_row', 'kind' => 'throw', 'message' => 'gone' ) ) );
 		try {
 			AB_MCP_Sync_Pairs::rebase( $id, self::values( 'x', 'y' ), $now_hash, 'files', $code );
 			self::fail( 'The Throwable leaves the call.' );
@@ -721,7 +721,7 @@ final class SyncManifestTest extends TestCase {
 						'owner'    => 'AB_MCP_Sync_Pairs',
 						'property' => 'naht_sync_pairs',
 						'real'     => 'AB_MCP_Sync_Pairs_Calls',
-						'faults'   => array( array( 'method' => 'query', 'kind' => 'abort', 'point' => 'write-bases' ) + $fault ),
+						'faults'   => array( array( 'method' => 'update_row', 'kind' => 'abort', 'point' => 'write-bases' ) + $fault ),
 					),
 				),
 				'calls'   => array(
@@ -877,6 +877,89 @@ final class SyncManifestTest extends TestCase {
 		} finally {
 			AB_MCP_Test_Seam::restore_all();
 		}
+	}
+
+	/** Every line of this site, read in parts of at most $max lines, by kind:ref, and the number of parts. */
+	private static function read_in_parts( int $max ): array {
+		$state = null;
+		$parts = 0;
+		$out   = array();
+		do {
+			$read = AB_MCP_Sync_Env::read( $state, 60, $max, 'live' );
+			self::assertIsArray( $read );
+			if ( $parts > 0 ) {
+				// The first part holds the lines of the site at once (read()).
+				self::assertLessThanOrEqual( $max, count( $read['lines'] ), 'A part holds at most its lines.' );
+			}
+			foreach ( $read['lines'] as $line ) {
+				if ( 'page' !== $line['env'] ) {
+					self::assertArrayNotHasKey( $line['env'] . ':' . $line['ref'], $out, 'No line twice.' );
+					$out[ $line['env'] . ':' . $line['ref'] ] = $line;
+				}
+			}
+			$state = $read['state'];
+			++$parts;
+		} while ( null !== $state && $parts < 500 );
+		self::assertNull( $state );
+		return array( $out, $parts );
+	}
+
+	public function testTheThemesOfAFurtherRootAreReadPageByPageNoneLeftOut(): void {
+		// GitHub-Codex on free#147, P2: more themes of further roots than one
+		// part holds go on in the next part, each with its lock.
+		$root = AB_MCP_IT_Sites::docroot( 'a' ) . '/wp-content/ab-it-weitere-themes';
+		self::assertFalse( file_exists( $root ) );
+		$this->folders[] = $root;
+		mkdir( $root );
+		$names = array();
+		for ( $i = 1; $i <= 5; $i++ ) {
+			$name    = sprintf( 'ab-it-weit-%d', $i );
+			$names[] = $name;
+			mkdir( $root . '/' . $name );
+			$this->made[] = $root . '/' . $name . '/style.css';
+			file_put_contents( end( $this->made ), "/*\nTheme Name: Weit $i\nVersion: 1.$i\n*/\n" );
+			array_splice( $this->folders, count( $this->folders ) - 1, 0, array( $root . '/' . $name ) );
+		}
+		$before                           = $GLOBALS['wp_theme_directories'];
+		$GLOBALS['wp_theme_directories'][] = $root;
+		try {
+			list( $lines, $parts ) = self::read_in_parts( 3 );
+		} finally {
+			$GLOBALS['wp_theme_directories'] = $before;
+		}
+		self::assertGreaterThan( 3, $parts, 'Read over parts of three lines.' );
+		foreach ( $names as $i => $name ) {
+			self::assertArrayHasKey( 'theme:' . $name, $lines, $name . ': not left out.' );
+			self::assertSame( array( 'code:theme_root', 'theme_root', null, '1.' . ( $i + 1 ) ), array( $lines[ 'theme:' . $name ]['lock'], $lines[ 'theme:' . $name ]['cause'], $lines[ 'theme:' . $name ]['hash'], $lines[ 'theme:' . $name ]['version'] ) );
+		}
+	}
+
+	public function testAFileOfAnAttachmentAtTheTopOfTheUploadsIsNoUnit(): void {
+		// GitHub-Codex on free#147, P2: a site without year and month folders
+		// keeps the files of its attachments at the top of the uploads.
+		$uploads = AB_MCP_IT_Sites::docroot( 'a' ) . '/wp-content/uploads';
+		foreach ( array( 'ab-it-oben.jpg', 'ab-it-frei-oben.txt' ) as $file ) {
+			self::assertFalse( file_exists( $uploads . '/' . $file ) );
+			$this->made[] = $uploads . '/' . $file;
+			file_put_contents( end( $this->made ), 'bytes of ' . $file );
+		}
+		$id = wp_insert_attachment(
+			array(
+				'post_mime_type' => 'image/jpeg',
+				'post_title'     => 'Oben',
+				'post_status'    => 'inherit',
+			),
+			$uploads . '/ab-it-oben.jpg'
+		);
+		self::assertGreaterThan( 0, $id );
+		try {
+			self::assertSame( 'ab-it-oben.jpg', get_post_meta( $id, '_wp_attached_file', true ) );
+			$lines = self::read_with( array() );
+		} finally {
+			wp_delete_post( $id, true );
+		}
+		self::assertArrayNotHasKey( 'upload:ab-it-oben.jpg', $lines, 'In the file list of an attachment: no unit, also at the top.' );
+		self::assertSame( array( 'file', true ), array( $lines['upload:ab-it-frei-oben.txt']['form'], $lines['upload:ab-it-frei-oben.txt']['complete'] ), 'Outside every file list: a unit.' );
 	}
 
 	public function testAnEndOfTheProcessOrItsTimeLimitWhileTheSeriesReadsLeavesNothing(): void {

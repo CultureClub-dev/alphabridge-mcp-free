@@ -69,12 +69,13 @@ final class AB_MCP_Sync_Pairs_Calls {
 	}
 
 	/**
-	 * One statement that writes.
+	 * One statement that writes the row of a pair (named apart from
+	 * $wpdb->query(), which SyncSafeCallsTest counts as a call of its own).
 	 *
 	 * @param string $sql An UPDATE built from prepared parts.
 	 * @return int|false The rows it changed, or false.
 	 */
-	public function query( $sql ) {
+	public function update_row( $sql ) {
 		global $wpdb;
 		$done = $wpdb->query( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery -- built from prepared parts by the caller.
 		return false === $done ? false : (int) $done;
@@ -505,7 +506,7 @@ final class AB_MCP_Sync_Pairs {
 			return new WP_Error(
 				'ab_mcp_staging_pair_part',
 				/* translators: 1: the part named (files, activation), 2: the kind of the pair. */
-				sprintf( __( 'The pair of kind %2$s has no part %1$s whose bases could be moved on: a unit takes new bases part by part (files, activation), an object of the takeover without a part. Nothing was written.', 'alphabridge-mcp' ), is_string( $part ) ? $part : '', $raw['kind'] ),
+				sprintf( __( 'The pair of kind %2$s has no part %1$s whose bases could be moved on: a unit takes new bases part by part (files, activation), an object of the takeover without a part. Nothing was written. Pass a part of the pair (AB_MCP_Sync_Pairs::PARTS), or none for an object, and call again.', 'alphabridge-mcp' ), is_string( $part ) ? $part : '', $raw['kind'] ),
 				array( 'part' => $part )
 			);
 		}
@@ -513,7 +514,7 @@ final class AB_MCP_Sync_Pairs {
 			return new WP_Error(
 				'ab_mcp_staging_pair_part_owner',
 				/* translators: 1: the part (files, activation), 2: the kind of the pair. */
-				sprintf( __( 'Only the step that wrote and checked the part %1$s of a pair of kind %2$s moves its bases on: the kind responsible for it by AB_MCP_Sync_Kinds::OWNERSHIP, registered as such. Nothing was written.', 'alphabridge-mcp' ), (string) $part, $raw['kind'] ),
+				sprintf( __( 'Only the step that wrote and checked the part %1$s of a pair of kind %2$s moves its bases on: the kind responsible for it by AB_MCP_Sync_Kinds::OWNERSHIP, registered as such. Nothing was written. Pass the kind registered for the part, and call again.', 'alphabridge-mcp' ), (string) $part, $raw['kind'] ),
 				array( 'part' => $part )
 			);
 		}
@@ -939,7 +940,7 @@ final class AB_MCP_Sync_Pairs {
 				$parts[] = $wpdb->prepare( $column . ' = %s', (string) $value );
 			}
 		}
-		$done = self::calls()->query( 'UPDATE ' . AB_MCP_Sync_Schema::table( 'pairs' ) . ' SET ' . implode( ', ', $parts ) . ' WHERE ' . self::where_row( $raw ) );
+		$done = self::calls()->update_row( 'UPDATE ' . AB_MCP_Sync_Schema::table( 'pairs' ) . ' SET ' . implode( ', ', $parts ) . ' WHERE ' . self::where_row( $raw ) );
 		if ( false === $done ) {
 			return self::db_error();
 		}

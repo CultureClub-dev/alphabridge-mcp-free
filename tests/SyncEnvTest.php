@@ -844,6 +844,27 @@ final class SyncEnvTest extends TestCase {
 		self::assertSame( "dir/\xffname.txt", AB_MCP_Sync_Env::found( $round['after'], static fn( string $p ): array => '' === $p ? array( 'dir' ) : array( "\xffname.txt" ) ) );
 	}
 
+	public function testTheMainFilesOfAPluginAreHeldByTheRulesOfBothSites(): void {
+		// GitHub-Codex on free#147, P1: the main files of a plugin and those
+		// that run, held as the paths of entries and the theme that runs are.
+		$name  = 'deploy_marker=EXAMPLE_SECRET.php';
+		$line  = self::unit( 'plugin', 'shop', array( 'mains' => array( $name, 'main.php' ), 'active' => array( $name ) ) );
+		self::assertSame( array( $line ), AB_MCP_Sync_Env::held_here( array( $line ), array(), array() ), 'Without the rule of this site, as it is.' );
+		$here = AB_MCP_Sync_Env::held_here( array( $line ), array(), array( 'deploy_marker' ) );
+		self::assertSame( array( AB_MCP_Sync_Env::hashed( $name ), 'main.php' ), $here[0]['mains'], 'The rule of this site holds a main file.' );
+		self::assertSame( array( AB_MCP_Sync_Env::hashed( $name ) ), $here[0]['active'] );
+		self::assertTrue( AB_MCP_Sync_Env::shaped( $here[0] ) );
+		$entry = AB_MCP_Sync_Env::compare( array( $here[0], self::whole() ), array( $here[0], self::whole() ) )['entries'][0];
+		self::assertSame( 'equal', $entry['result'] );
+		self::assertStringNotContainsString( 'EXAMPLE_SECRET', (string) json_encode( $entry ), 'Not in the report.' );
+		// A main file the staging site holds: held on this site before it is stored.
+		$held = AB_MCP_Sync_Env::held_names( array( $here[0] ) );
+		self::assertSame( array( AB_MCP_Sync_Env::hashed( $name ) => 'credential_field' ), $held );
+		$there = AB_MCP_Sync_Env::held_there( array( $line ), $held );
+		self::assertSame( array( array( AB_MCP_Sync_Env::hashed( $name ), 'main.php' ), array( AB_MCP_Sync_Env::hashed( $name ) ) ), array( $there[0]['mains'], $there[0]['active'] ) );
+		self::assertStringNotContainsString( 'EXAMPLE_SECRET', (string) json_encode( $there ) );
+	}
+
 	public function testALineOfThisSiteWhoseNameTheStagingSiteHoldsIsHeldBeforeItIsStored(): void {
 		$name    = 'vault=EXAMPLE_SECRET.php';
 		$table   = 'abenv_vault=EXAMPLE_SECRET';
@@ -1061,6 +1082,29 @@ final class SyncEnvTest extends TestCase {
 		self::assertSame( array( 'deleted_live', 'none' ), array( $whole['result'], $whole['action'] ), 'Read whole without a lock: removed here, as before.' );
 		$whole = self::judged( array(), array( self::plugin( '2.0' ) ) )['plugin:shop'];
 		self::assertSame( array( 'only_live', 'keep' ), array( $whole['result'], $whole['action'] ) );
+	}
+
+	public function testAUnitRemovedOnOneSideAndChangedOnTheOtherIsAConflictWithTheRemoval(): void {
+		// GitHub-Codex on free#147, P2: the side that has it against its own
+		// bases before «removed» (TABLE, rows 3, 7, 8 and 9).
+		$pair = array( self::shop_pair() );
+		$e    = self::judged( array( self::plugin( '2.1', true, 'b' ) ), array(), $pair )['plugin:shop'];
+		self::assertSame( array( 'deleted_live_changed_staging', 'keep', array( 'files' => 'deleted_live_changed_staging', 'activation' => 'deleted_live' ) ), array( $e['result'], $e['action'], $e['parts'] ), 'Removed here, its files changed on staging (row 9).' );
+		self::assertStringContainsString( 'a conflict', $e['words'] );
+		$e = self::judged( array(), array( self::plugin( '2.0', false ) ), $pair )['plugin:shop'];
+		self::assertSame( array( 'deleted_against_changed_live', 'keep', array( 'files' => 'deleted_on_staging', 'activation' => 'deleted_against_changed_live' ) ), array( $e['result'], $e['action'], $e['parts'] ), 'Removed on staging, deactivated here (row 7).' );
+		self::assertArrayNotHasKey( 'locks', $e );
+		$e = self::judged( array(), array( self::plugin( '2.0' ) ), $pair )['plugin:shop'];
+		self::assertSame( array( 'deleted_on_staging', 'locked', array( 'env:plugin' ) ), array( $e['result'], $e['action'], array_column( $e['locks'], 'key' ) ), 'Removed on staging, unchanged here (row 3).' );
+		$e = self::judged( array( self::plugin( '2.0' ) ), array(), $pair )['plugin:shop'];
+		self::assertSame( array( 'deleted_live', 'none' ), array( $e['result'], $e['action'] ), 'Removed here, unchanged on staging (row 8).' );
+		$old            = $pair;
+		$old[0]['canon'] = 'canon/0';
+		self::assertStringContainsString( 'version canon/0', self::judged( array( self::plugin( '2.0' ) ), array(), $old )['plugin:shop']['why'], 'Bases of another version: not compared.' );
+		$none = $pair;
+		unset( $none[0]['base_extra'] );
+		self::assertSame( 'Its pair holds no base of the part activation.', self::judged( array( self::plugin( '2.0' ) ), array(), $none )['plugin:shop']['why'] );
+		self::assertSame( 'Which main files run could not be read on the staging site.', self::judged( array( self::plugin( '2.0', null ) ), array(), $pair )['plugin:shop']['why'] );
 	}
 
 	public function testAUnitWhoseFolderTheOtherSideDidNotListWholeIsNotCompared(): void {
