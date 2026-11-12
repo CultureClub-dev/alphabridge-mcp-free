@@ -76,7 +76,6 @@ final class SyncStructureTest extends TestCase {
 		$_SERVER['DOCUMENT_ROOT'] = AB_MCP_IT_Sites::docroot( 'a' );
 		AB_MCP_Protected_Store::forget();
 		AB_MCP_Sync_Schema::forget();
-		AB_MCP_Sync_Backup::forget();
 		AB_MCP_Sync_Guard::disarm();
 		delete_option( AB_MCP_Sync_Guard::OPTION );
 		delete_option( \AB_MCP_Change_Lock::OPTION );
@@ -103,7 +102,6 @@ final class SyncStructureTest extends TestCase {
 			$_SERVER['DOCUMENT_ROOT'] = $this->docroot_before;
 		}
 		AB_MCP_Protected_Store::forget();
-		AB_MCP_Sync_Backup::forget();
 		AB_MCP_Sync_Guard::disarm();
 		AB_MCP_Sync_Engine::$probe    = null;
 		AB_MCP_Sync_Resources::$probe = null;

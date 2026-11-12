@@ -230,11 +230,4 @@ final class AB_MCP_Sync_Backup {
 		}
 		return $data['data'];
 	}
-
-	/**
-	 * Forget the groups this request found (tests, a reset of the store).
-	 */
-	public static function forget() {
-		self::$groups = array();
-	}
 }

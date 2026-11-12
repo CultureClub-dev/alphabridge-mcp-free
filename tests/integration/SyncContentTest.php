@@ -79,7 +79,6 @@ final class SyncContentTest extends TestCase {
 		$_SERVER['DOCUMENT_ROOT'] = AB_MCP_IT_Sites::docroot( 'a' );
 		AB_MCP_Protected_Store::forget();
 		AB_MCP_Sync_Schema::forget();
-		AB_MCP_Sync_Backup::forget();
 		AB_MCP_Sync_Guard::disarm();
 		delete_option( AB_MCP_Sync_Guard::OPTION );
 		delete_option( \AB_MCP_Change_Lock::OPTION );
@@ -95,7 +94,6 @@ final class SyncContentTest extends TestCase {
 			$_SERVER['DOCUMENT_ROOT'] = $this->docroot_before;
 		}
 		AB_MCP_Protected_Store::forget();
-		AB_MCP_Sync_Backup::forget();
 		AB_MCP_Sync_Guard::disarm();
 		AB_MCP_Sync_Engine::$probe    = null;
 		AB_MCP_Sync_Resources::$probe = null;
@@ -1128,7 +1126,6 @@ final class SyncContentTest extends TestCase {
 			self::assertStringContainsString( 'gave no JSON', $e->getMessage() );
 		}
 		AB_MCP_Protected_Store::forget();
-		AB_MCP_Sync_Backup::forget();
 		wp_cache_flush();
 		self::assertSame( array( 'hooked' ), self::meta_a( 'post', $about_a, 'note' ), 'The hook changed the note with the row.' );
 		self::assertSame( 'About us, new', AB_MCP_IT_Sites::rows( 'a', 'posts', array( 'ID' => (string) $about_a ) )[0]['post_title'] );
