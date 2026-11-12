@@ -13,7 +13,9 @@
  * given). Mutants without an entry are equivalent, each with its reason:
  *
  * - well_known_answer(): '' !== $home_path (strpos() with an empty needle
- *   gives 0, substr() then keeps the path); the early refusal of // in the
+ *   gives 0, substr() then keeps the path); \z instead of $ and the flag s
+ *   of the pattern (wp_parse_url() makes every control character of the
+ *   path an underscore, so no line break reaches the pattern); the early refusal of // in the
  *   suffix (every path with an empty segment fails the segment rule of the
  *   relay as well, and no own suffix has one); rtrim() of the resource path
  *   (resource() has no slash at the end) and of the home path in the list
@@ -207,15 +209,6 @@ return array(
 		'expect'  => '/testWhichRequestIsOneOfOurs.*the name not at the start of the path/s',
 	),
 	array(
-		'id'      => 'well-known/answer-end',
-		'clause'  => 'well_known_answer(): the name or the path below it at the very end',
-		'file'    => $o,
-		'search'  => "'#\\A/\\.well-known/(oauth-authorization-server|oauth-protected-resource)(/.*)?\\z#s'",
-		'replace' => "'#\\A/\\.well-known/(oauth-authorization-server|oauth-protected-resource)(/.*)?\$#s'",
-		'run'     => $answer( 'testWhichRequestIsOneOfOurs' ),
-		'expect'  => '/testWhichRequestIsOneOfOurs.*a line break after the name/s',
-	),
-	array(
 		'id'      => 'well-known/answer-name-end',
 		'clause'  => 'well_known_answer(): after the name only a path below it (no longer name)',
 		'file'    => $o,
@@ -223,15 +216,6 @@ return array(
 		'replace' => "'#\\A/\\.well-known/(oauth-authorization-server|oauth-protected-resource)(.*)?\\z#s'",
 		'run'     => $http( 'testOtherPathsAreLeftToWordPress' ),
 		'expect'  => '/testOtherPathsAreLeftToWordPress.*a longer name/s',
-	),
-	array(
-		'id'      => 'well-known/answer-any-character',
-		'clause'  => 'well_known_answer(): a path of any characters is one of ours (then refused), not none',
-		'file'    => $o,
-		'search'  => "'#\\A/\\.well-known/(oauth-authorization-server|oauth-protected-resource)(/.*)?\\z#s'",
-		'replace' => "'#\\A/\\.well-known/(oauth-authorization-server|oauth-protected-resource)(/.*)?\\z#'",
-		'run'     => $answer( 'testWhichRequestIsOneOfOurs' ),
-		'expect'  => '/testWhichRequestIsOneOfOurs.*a line break in the path after the name/s',
 	),
 	array(
 		'id'      => 'well-known/answer-suffix-missing',
@@ -469,7 +453,7 @@ return array(
 		'clause'  => 'well_known_from_other_site(): no fetch while another request holds the lock',
 		'file'    => $o,
 		'search'  => "\t\tif ( '' === \$lock ) {\n\t\t\treturn null;\n\t\t}\n",
-		'replace' => "",
+		'replace' => "\n",
 		'run'     => $cache( 'testWhileOneRequestFetchesAPathAnotherGetsA404WithoutFetching' ),
 		'expect'  => '/testWhileOneRequestFetchesAPathAnotherGetsA404WithoutFetching/',
 	),
@@ -595,7 +579,7 @@ return array(
 		'clause'  => 'well_known_from_other_site(): the lock is given back after the fetch',
 		'file'    => $o,
 		'search'  => "\t\tif ( null !== \$lock ) {\n\t\t\tself::well_known_unlock( \$lock );\n\t\t}",
-		'replace' => "",
+		'replace' => "\n",
 		'run'     => $cache( 'testALockIsReleasedAfterAFailedFetchToo' ),
 		'expect'  => '/testALockIsReleasedAfterAFailedFetchToo/',
 	),
@@ -678,7 +662,7 @@ return array(
 		'clause'  => 'well_known_lock(): a database error is no lock, not held',
 		'file'    => $o,
 		'search'  => "\t\tif ( false === \$added ) {\n\t\t\treturn null;\n\t\t}\n",
-		'replace' => "",
+		'replace' => "\n",
 		'run'     => $cache( 'testWhereTheDatabaseRefusesTheLockTheDocumentIsFetchedWithoutIt' ),
 		'expect'  => '/testWhereTheDatabaseRefusesTheLockTheDocumentIsFetchedWithoutIt/',
 	),
@@ -725,16 +709,16 @@ return array(
 		'clause'  => 'wordpress_on_disk(): ABSPATH must end in the path of site_url()',
 		'file'    => $o,
 		'search'  => "\t\t\tif ( substr( \$root, -strlen( \$core ) ) !== \$core ) {\n\t\t\t\treturn false;\n\t\t\t}\n",
-		'replace' => "",
+		'replace' => "\n",
 		'run'     => $docroot( 'testTheOtherSiteIsLookedForUnderTheDocumentRoot' ),
-		'expect'  => '/testTheOtherSiteIsLookedForUnderTheDocumentRoot.*ABSPATH does not end in the path of site_url/s',
+		'expect'  => '/testTheOtherSiteIsLookedForUnderTheDocumentRoot.*ABSPATH ends in the letters of it, not the folder/s',
 	),
 	array(
 		'id'      => 'well-known/disk-core-off',
 		'clause'  => 'wordpress_on_disk(): the document root is ABSPATH less the path of site_url()',
 		'file'    => $o,
 		'search'  => "\t\t\t\$root = substr( \$root, 0, -strlen( \$core ) );\n",
-		'replace' => "",
+		'replace' => "\n",
 		'run'     => $docroot( 'testTheOtherSiteIsLookedForUnderTheDocumentRoot' ),
 		'expect'  => '/testTheOtherSiteIsLookedForUnderTheDocumentRoot.*core in \/wp, home at the root/s',
 	),

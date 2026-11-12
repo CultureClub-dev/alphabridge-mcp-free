@@ -71,6 +71,7 @@ final class WellKnownAnswerTest extends TestCase {
 			'home with a slash at the end: its own document'       => array( 'https://example.test/', $as, 'document' ),
 			'subfolder site, a request outside its home path'     => array( 'https://example.test/staging/123', $as, 'document' ),
 			'the name not at the start of the path'               => array( 'https://example.test', '/foo' . $as, 'none' ),
+			// wp_parse_url() makes a control character an underscore.
 			'a line break after the name'                         => array( 'https://example.test', $as . "\n", 'none' ),
 			'a line break in the path after the name'             => array( 'https://example.test', $as . "/a\nb", 'refused' ),
 		);
@@ -130,7 +131,7 @@ final class WellKnownAnswerTest extends TestCase {
 					$data['token_endpoint'] = array( $home . '/wp-json/alphabridge/v1/oauth/token' );
 					break;
 				case 'endpoint-sibling':
-					$data['token_endpoint'] = $home . '4/wp-json/alphabridge/v1/oauth/token';
+					$data['token_endpoint'] = $home . '44/oauth/token';
 					break;
 			}
 			return $data;

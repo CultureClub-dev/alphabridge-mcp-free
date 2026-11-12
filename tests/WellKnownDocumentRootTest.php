@@ -54,6 +54,7 @@ final class WellKnownDocumentRootTest extends TestCase {
 			'the other site under the home of the main'    => array( '/blog', self::H . '/blog', self::H . '/blog', '/blog' . $as . '/blog/staging', array( '/blog/staging' ), self::H . '/blog/staging' ),
 			'home in /blog, core in /blog/wp'              => array( '/blog/wp', self::H . '/blog', self::H . '/blog/wp', '/blog' . $as . '/staging/123', array( '/staging/123', '/blog/wp' ), self::H . '/staging/123' ),
 			'ABSPATH does not end in the path of site_url' => array( '/elsewhere', self::H, self::H . '/wp', $as . '/staging/123', array( '/staging/123', '/elsewhere' ), null ),
+			'ABSPATH ends in the letters of it, not the folder' => array( '/xwp', self::H, self::H . '/wp', $as . '/staging/123', array( '/staging/123', '/xwp' ), null ),
 			'a directory without wp-load.php'              => array( '', self::H, self::H, $as . '/staging', array( '/staging/123' ), null ),
 		);
 	}
