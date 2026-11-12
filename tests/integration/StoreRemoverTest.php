@@ -662,14 +662,30 @@ final class StoreRemoverTest extends TestCase {
 		$done = AB_MCP_Protected_Store::cleanup( time() );
 		self::assertSame( 1, $done['removed'] );
 		self::assertFileDoesNotExist( $dir );
-		// The closed mark goes a day after it closed.
-		self::assertFileDoesNotExist( $m['marks'], 'A mark closed two days ago went with the clean-up.' );
-		AB_MCP_Test_Seam::restore_all();
+		if ( class_exists( AB_MCP_Test_Seam::class ) ) {
+			AB_MCP_Test_Seam::restore_all();
+		}
 		// The uninstall takes the whole folder.
 		$this->marked( 5, 'closed' );
 		self::uninstall_free();
 		self::assertFileDoesNotExist( $m['root'] );
 		self::assertFileDoesNotExist( self::root() . '/ab-mcp-store', 'With the last folder its parent.' );
+	}
+
+	public function testAClosedMarkGoesADayAfterItClosedAndAFolderWithoutItsMarkAfterADay(): void {
+		$m    = $this->marked( 3, 'closed' );
+		$open = $this->marked( 4 );
+		$half = $m['root'] . '/marks/' . str_repeat( 'b', 32 );
+		mkdir( $half, 0700 );
+		touch( $half, time() - 2 * 86400 );
+		$young = $m['root'] . '/marks/' . str_repeat( 'c', 32 );
+		mkdir( $young, 0700 );
+		AB_MCP_Protected_Store::cleanup( time() );
+		self::assertFileDoesNotExist( $m['marks'], 'A mark closed two days ago went with the clean-up.' );
+		self::assertFileDoesNotExist( $half, 'A folder of a mark that holds none, after a day.' );
+		self::assertDirectoryExists( $young, 'One of today stays: its mark may be written right now.' );
+		self::assert_kept( $open, 'an open mark' );
+		self::assertSame( $m['kept']['tree'], self::snapshot( $m['tree'] ), 'Its tree is a matter of its group (kept()), not of the mark.' );
 	}
 
 	/* ---------------------------------------- F33, P6: Z9, the uninstall */

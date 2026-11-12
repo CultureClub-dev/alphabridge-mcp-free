@@ -253,6 +253,28 @@ final class StoreRemoverGuardTest extends TestCase {
 		self::assertSame( array( 'AB_MCP_Protected_Store::complete', 'AB_MCP_Protected_Store::copy_tree', 'AB_MCP_Protected_Store::copy_tree', 'AB_MCP_Protected_Store::ensure', 'AB_MCP_Protected_Store::open', 'AB_MCP_Protected_Store::put_mark', 'AB_MCP_Protected_Store::self_check' ), self::places( $store, 'method', 'mkdir' ), 'The folders of a tree in copy_tree() only.' );
 	}
 
+	public function testTheRetentionOfABackupIsDecidedByKeptOnly(): void {
+		$store = self::FILES[0];
+		self::assertSame( array( 'AB_MCP_Protected_Store::sweep' ), self::places( $store, 'static', 'kept', 'self' ), 'The clean-up asks kept() before it lets a group of this store go by its time (Z8).' );
+		self::assertSame( array( 'AB_MCP_Protected_Store::remove', 'AB_MCP_Protected_Store::sweep', 'AB_MCP_Protected_Store::sweep' ), self::places( $store, 'static', 'delete_group', 'self' ), 'A group goes in remove() and the clean-up only.' );
+		// remove() is the way of the owner of a package or a report: no
+		// shipped code removes a group of backups or stage by it (a backup
+		// goes by its retention only, Z8).
+		$areas = array();
+		foreach ( self::shipped() as $file ) {
+			foreach ( self::calls( $file ) as $call ) {
+				if ( 'remove' === $call['name'] && ( ( 'static' === $call['kind'] && 'AB_MCP_Protected_Store' === $call['of'] ) || ( 'method' === $call['kind'] && 'includes/sync/class-sync-proposal.php' === $file ) ) ) {
+					$areas[ trim( $call['args'] ) ] = true;
+				}
+			}
+		}
+		ksort( $areas );
+		self::assertSame( array( '$area', "'in'", "'out'", "'reports'" ), array_keys( $areas ), 'The areas remove() is called with.' );
+		$proposal = (string) file_get_contents( dirname( __DIR__ ) . '/includes/sync/class-sync-proposal.php' );
+		self::assertSame( 1, substr_count( $proposal, 'return AB_MCP_Protected_Store::remove( $area, $gid );' ), 'The one call with an area named by a variable: the calls of the proposal, which pass reports.' );
+		self::assertSame( 0, preg_match( "/->remove\\(\\s*'(?!reports')/", $proposal ) );
+	}
+
 	public function testTheUninstallReachesTheStoreOnlyThroughItsOneFunction(): void {
 		self::assertSame( array( 'uninstall.php::' ), self::places( 'uninstall.php', 'static', 'uninstall', 'AB_MCP_Protected_Store' ), 'uninstall.php calls it.' );
 		$others = array();
