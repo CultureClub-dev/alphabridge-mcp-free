@@ -1732,8 +1732,6 @@ final class StoreRemoverTest extends TestCase {
 		// Behebung 2, the list of substitute values: AB_MCP_Sync_Backup::group()
 		// takes a whole number of 1 or more, or its decimal digits alone;
 		// anything else is refused with its way, never cast to another run.
-		$cache = new \ReflectionProperty( \AB_MCP_Sync_Backup::class, 'groups' );
-		$cache->setValue( null, array() );
 		$given = \AB_MCP_Sync_Backup::group( 31 );
 		self::assertIsString( $given );
 		self::assertSame( $given, \AB_MCP_Sync_Backup::group( '31' ), 'The digits of the run name the same run.' );
@@ -1746,8 +1744,10 @@ final class StoreRemoverTest extends TestCase {
 		}
 		self::assertSame( $before, self::names( self::store() . '/backups' ), 'Nothing written for a run refused.' );
 		// A group of the run whose sidecar is unknown (a field missing) is
-		// not used again: groups() leaves it out (read_entry(), SIDECAR).
-		$cache->setValue( null, array() );
+		// not used again: groups() leaves it out (read_entry(), SIDECAR), and
+		// group() keeps no memory of it from the calls above in this request
+		// (Behebung 3: before, a cache returned it unchecked).
+		self::assertSame( $given, \AB_MCP_Sync_Backup::group( 31 ), 'Asked again in the same request: the same group.' );
 		$side = self::store() . '/backups/' . AB_MCP_Payload_File::name( 'group|backups|' . $given, AB_MCP_Protected_Store::install_id(), '' ) . '.json';
 		$entry = json_decode( (string) file_get_contents( $side ), true );
 		self::assertSame( \AB_MCP_Sync_Backup::LABEL . '31', $entry['label'] );
@@ -1759,6 +1759,9 @@ final class StoreRemoverTest extends TestCase {
 		self::assertIsString( $again );
 		self::assertNotSame( $given, $again, 'A new group of the run, not the unknown one.' );
 		self::assertSame( $bytes, (string) file_get_contents( $side ), 'The unknown group stays as it is.' );
-		$cache->setValue( null, array() );
+		self::assertSame( $again, \AB_MCP_Sync_Backup::group( 31 ), 'And the new one is the group of the run from now on.' );
+		$fits = \AB_MCP_Sync_Backup::fits( '31abc', array( 'x' => 1 ) );
+		self::assertInstanceOf( \WP_Error::class, $fits, 'fits() takes the run as group() does.' );
+		self::assertSame( 'ab_mcp_sync_backup_run', $fits->get_error_code() );
 	}
 }

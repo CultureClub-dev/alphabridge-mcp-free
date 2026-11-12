@@ -234,7 +234,7 @@ final class SyncSafeCallsTest extends TestCase {
 			'wp_set_sidebars_widgets'        => array( 1, 'write_row(): the list of the area, with the row as stored (decision 17).' ),
 		),
 		'class-sync-backup.php' => array(
-			'__' => array( 8, 'the refusals and errors the tools wp_site_* pass on, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2).' ),
+			'__' => array( 9, 'the refusals and errors the tools wp_site_* pass on, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2).' ),
 			'AB_MCP_Store_Budget::bookings' => array( 1, 'fits(): the booking of the run, which a backup has to fit beside the backups the run holds (GitHub Codex round 6 on free#137).' ),
 		),
 		'class-sync-canon.php'  => array(
@@ -325,7 +325,7 @@ final class SyncSafeCallsTest extends TestCase {
 		// WordPress besides are the rights of the account, the lock, the store
 		// and the probes of the check.
 		'class-sync-run.php'    => array(
-			'__' => array( 39, 'the refusals of the run (the lock, an interrupted run and its two ways, a state that changed), what stands for a value before cut from an answer, and the refusals a person reads on the page «Staging» after «Close as checked» or «Abort», in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2).' ),
+			'__' => array( 40, 'the refusals of the run (the lock, an interrupted run and its two ways, a state that changed), what stands for a value before cut from an answer, the note of a run closed without a stored period for its backups (Behebung 3 of Z8b branch 3), and the refusals a person reads on the page «Staging» after «Close as checked» or «Abort», in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2).' ),
 			'AB_MCP_Change_Lock::held'        => array( 4, 'under_lock(), settle(), update_step() and lock_fresh(): whether this request holds the lock of the write boundary (one lock per call, the decision of 07.11.2026 evening, Variante A).' ),
 			'AB_MCP_Change_Lock::release'     => array( 2, 'under_lock() and settle(): the lock of the write boundary given back at the end of the call, and after the decision of a reading call (decision 18; Variante A).' ),
 			'AB_MCP_Change_Lock::take'        => array( 2, 'under_lock(): the lock of the write boundary for the whole call that can change a run; settle(): for the decision of a reading call where a step is begun (decision 18; Variante A).' ),

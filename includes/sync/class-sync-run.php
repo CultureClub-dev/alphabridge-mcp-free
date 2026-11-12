@@ -1276,6 +1276,13 @@ final class AB_MCP_Sync_Run {
 			'rests'             => array(),
 			'unclear'           => array(),
 		);
+		if ( in_array( $run['state'], AB_MCP_Sync_Schema::CLOSED, true ) && 0 === (int) $run['keep_until'] ) {
+			// No period stored at the close (the days of the filter or the
+			// time of the close were not known, AB_MCP_Sync_Schema::
+			// keep_until(); or a row of before the periods): the clean-up
+			// keeps its backups as long as the run is there (Behebung 3).
+			$out['retention'] = __( 'This run has no stored period for its backups: the days of the filter ab_mcp_staging_backup_days (a whole number from 0 to 3650) or the time of its close could not be read when it closed, or it closed before such periods were stored. So the clean-up keeps its backups as long as the run is there. Check that the code that hooks ab_mcp_staging_backup_days returns a whole number of days from 0 to 3650.', 'alphabridge-mcp' );
+		}
 		foreach ( $steps as $step ) {
 			// A state of an earlier build (restored) counts under its own name.
 			if ( ! isset( $out['counts'][ $step['state'] ] ) ) {

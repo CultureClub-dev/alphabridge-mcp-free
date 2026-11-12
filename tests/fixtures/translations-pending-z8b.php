@@ -202,4 +202,6 @@ return array(
 	'The bookings of the protected store (the file bookings.json in its folder) could not be read, so no run books its space or gives it back, and nothing was written. Ask the host to check that file: its rights, or whether something else wrote into it; then try again.',
 	// includes/class-protected-store.php (Z8b branch 3, Behebung 2, A1: a run the table of the sidecar does not hold)
 	'The run of a group of the protected store is a whole number: 1 or more for the run it belongs to, or 0 for none, which only groups of out, in and reports may have; a group of backups or stage always belongs to its run. Nothing was written. Pass such a run_id.',
+	// includes/sync/class-sync-run.php (Z8b branch 3, Behebung 3, A2: a run closed without a stored period)
+	'This run has no stored period for its backups: the days of the filter ab_mcp_staging_backup_days (a whole number from 0 to 3650) or the time of its close could not be read when it closed, or it closed before such periods were stored. So the clean-up keeps its backups as long as the run is there. Check that the code that hooks ab_mcp_staging_backup_days returns a whole number of days from 0 to 3650.',
 );
