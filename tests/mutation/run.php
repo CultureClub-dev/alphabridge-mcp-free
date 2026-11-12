@@ -6,9 +6,13 @@
  *
  *   php tests/mutation/run.php [<list.php> ...] [--only=<id>] [--shard=<k>/<n>] [--show]
  *
- * --shard=k/n runs every n-th entry, starting with the k-th (1 <= k <= n), so
+ * --shard=k/n runs the k-th of n shares of the entries (1 <= k <= n), so
  * that n jobs together run each entry exactly once (the CI splits the lists
- * this way to stay inside its time limit).
+ * this way to stay inside its time limit). The shares follow the measured
+ * durations in tests/mutation/dauer.php, so that the longest job is as short
+ * as may be (tests/mutation/verteilung.php); without that file, or with a
+ * broken one, --shard stops with status 2 and runs nothing. Without --shard
+ * the file is not read.
  *
  * --show prints the end of every red run as well, to see that a mutation
  * was killed for the reason the list names.
@@ -34,10 +38,12 @@
  * are refused. The one exception (Z8b branch 1, F-A): an entry with
  * 'helper' => true names a helper of the integration suite that carries a
  * promise of its own (a real exit never counts as a pass, say), a file
- * under tests/integration/support/ or tests/integration/bin/ — named as it
- * is, without a segment .., and no link (the path must be the file itself).
- * Any other file under tests/, a link out of these folders and a helper
- * flag on a shipped file are refused. Writing back and the check of the CI
+ * under tests/integration/support/ or tests/integration/bin/, or the one
+ * file that shares the entries out, tests/mutation/verteilung.php — named
+ * as it is, without a segment .., and no link (the path must be the file
+ * itself). Any other file under tests/ (this runner, the lists, the measure
+ * file), a link out of these folders and a helper flag on a shipped file
+ * are refused. Writing back and the check of the CI
  * that the checkout is unchanged hold for helpers alike.
  *
  * 'run' is any command, started from the repo root with this environment:
@@ -68,6 +74,8 @@
 if ( 'cli' !== PHP_SAPI ) {
 	exit( 2 );
 }
+
+require_once __DIR__ . '/verteilung.php';
 
 final class AB_Mutation_Run {
 
@@ -223,7 +231,8 @@ final class AB_Mutation_Run {
 
 	/**
 	 * The path of a helper entry ('helper' => true): a file under
-	 * tests/integration/support/ or tests/integration/bin/, named as it is.
+	 * tests/integration/support/ or tests/integration/bin/, or
+	 * tests/mutation/verteilung.php, named as it is.
 	 *
 	 * @param string $list  List file, for the message.
 	 * @param array  $entry Entry.
@@ -234,8 +243,8 @@ final class AB_Mutation_Run {
 		if ( preg_match( '#(^|/)\.\.?(/|$)#', $file ) ) {
 			throw new RuntimeException( "$list: {$entry['id']} is a helper entry with a segment . or .. in its path ({$file}); name the file as it is." );
 		}
-		if ( ! preg_match( '#^tests/integration/(?:support|bin)/[^/].*\.php$#D', $file ) ) {
-			throw new RuntimeException( "$list: {$entry['id']} is a helper entry outside tests/integration/support/ and tests/integration/bin/ ({$file}); only helpers there can be mutated." );
+		if ( ! preg_match( '#^(?:tests/integration/(?:support|bin)/[^/].*\.php|tests/mutation/verteilung\.php)$#D', $file ) ) {
+			throw new RuntimeException( "$list: {$entry['id']} is a helper entry outside tests/integration/support/ and tests/integration/bin/ and not tests/mutation/verteilung.php ({$file}); only these helpers can be mutated." );
 		}
 		$path = realpath( $this->root . '/' . $file );
 		if ( false === $path || $path !== $this->root . '/' . $file ) {
@@ -438,13 +447,13 @@ if ( array() === $ab_entries ) {
 	exit( 2 );
 }
 if ( null !== $ab_shard ) {
-	$ab_entries = array_values(
-		array_filter(
-			$ab_entries,
-			static fn( $i ) => $ab_shard[0] - 1 === $i % $ab_shard[1],
-			ARRAY_FILTER_USE_KEY
-		)
-	);
+	try {
+		$ab_measures = AB_Mutation_Plan::load_measures( __DIR__ . '/dauer.php' );
+	} catch ( RuntimeException $e ) {
+		fwrite( STDERR, 'mutation: --shard shares the entries out by their measured durations, but ' . $e->getMessage() . "; import them anew (tests/mutation/dauer-import.php). Nothing ran.\n" );
+		exit( 2 );
+	}
+	$ab_entries = AB_Mutation_Plan::shard( $ab_entries, $ab_measures, $ab_shard[0], $ab_shard[1] );
 	// Fewer entries than shards leaves this one empty: the others run them all.
 	if ( array() === $ab_entries ) {
 		echo "shard {$ab_shard[0]}/{$ab_shard[1]} has no entry; the other shards run them all\n";

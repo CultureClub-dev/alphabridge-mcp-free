@@ -3,9 +3,11 @@
  * Mutation entries for helpers of the integration suite (Z8b branch 1,
  * F-A): tests/mutation/run.php mutates a file under tests/ only for an entry
  * with 'helper' => true, and only under tests/integration/support/ or
- * tests/integration/bin/, named as it is. One test per path rule, on a tree
- * of its own in the temporary directory; then a whole run of such an entry:
- * baseline green, mutation red, the helper back byte for byte.
+ * tests/integration/bin/, or the one file that shares the entries out among
+ * the shards, tests/mutation/verteilung.php — named as it is. One test per
+ * path rule, on a tree of its own in the temporary directory; then a whole
+ * run of such an entry: baseline green, mutation red, the helper back byte
+ * for byte.
  *
  * @package AlphaBridge_MCP
  */
@@ -30,7 +32,7 @@ final class MutationHelperEntriesTest extends TestCase {
 		$base          = (string) realpath( sys_get_temp_dir() );
 		$this->root    = $base . '/ab-mutation-root-' . bin2hex( random_bytes( 6 ) );
 		$this->outside = $base . '/ab-mutation-outside-' . bin2hex( random_bytes( 6 ) );
-		foreach ( array( 'includes', 'tests/integration/support/tief', 'tests/integration/bin', 'tests/other', 'lists' ) as $dir ) {
+		foreach ( array( 'includes', 'tests/integration/support/tief', 'tests/integration/bin', 'tests/other', 'tests/mutation/lists', 'tests/mutation/sub', 'lists' ) as $dir ) {
 			mkdir( $this->root . '/' . $dir, 0700, true );
 		}
 		mkdir( $this->outside, 0700 );
@@ -41,6 +43,12 @@ final class MutationHelperEntriesTest extends TestCase {
 			'tests/integration/bin/skript.php'         => "<?php\nreturn 'skript';\n",
 			'tests/integration/SomeTest.php'           => "<?php\n",
 			'tests/other/x.php'                        => "<?php\n",
+			'tests/mutation/verteilung.php'            => "<?php\nreturn 'PLAN';\n",
+			'tests/mutation/run.php'                   => "<?php\nreturn 'PLAN';\n",
+			'tests/mutation/dauer.php'                 => "<?php\nreturn 'PLAN';\n",
+			'tests/mutation/lists/verteilung.php'      => "<?php\nreturn 'PLAN';\n",
+			'tests/mutation/sub/verteilung.php'        => "<?php\nreturn 'PLAN';\n",
+			'tests/mutation/verteilung.php.php'        => "<?php\nreturn 'PLAN';\n",
 		);
 		foreach ( $files as $file => $bytes ) {
 			file_put_contents( $this->root . '/' . $file, $bytes );
@@ -120,7 +128,29 @@ final class MutationHelperEntriesTest extends TestCase {
 		self::assertSame( $this->root . '/tests/integration/support/tief/hilfe.php', $this->entries( array( 'file' => 'tests/integration/support/tief/hilfe.php' ) )[0]['path'] );
 	}
 
+	public function testTheFileThatSharesTheEntriesOutIsAccepted(): void {
+		$entries = $this->entries( array( 'file' => 'tests/mutation/verteilung.php', 'search' => "'PLAN'" ) );
+		self::assertSame( $this->root . '/tests/mutation/verteilung.php', $entries[0]['path'] );
+	}
+
 	/* --------------------------------------------------------- refused */
+
+	public function testEveryOtherFileUnderTestsMutationIsRefusedAsHelper(): void {
+		foreach ( array( 'tests/mutation/run.php', 'tests/mutation/dauer.php', 'tests/mutation/lists/verteilung.php', 'tests/mutation/sub/verteilung.php', 'tests/mutation/verteilung.php.php' ) as $file ) {
+			$this->refused( array( 'file' => $file, 'search' => "'PLAN'" ), 'not tests/mutation/verteilung.php' );
+		}
+		$this->refused( array( 'file' => 'tests/mutation/../mutation/verteilung.php', 'search' => "'PLAN'" ), 'segment . or ..' );
+	}
+
+	public function testTheFileThatSharesTheEntriesOutAsALinkIsRefused(): void {
+		unlink( $this->root . '/tests/mutation/verteilung.php' );
+		symlink( $this->root . '/tests/other/x.php', $this->root . '/tests/mutation/verteilung.php' );
+		$this->refused( array( 'file' => 'tests/mutation/verteilung.php', 'search' => "'PLAN'" ), 'missing or a link' );
+	}
+
+	public function testWithoutTheFlagTheFileThatSharesTheEntriesOutIsRefused(): void {
+		$this->refused( array( 'file' => 'tests/mutation/verteilung.php', 'search' => "'PLAN'", 'helper' => null ), 'names no shipped file' );
+	}
 
 	public function testAnotherFileUnderTestsIsRefusedAsHelper(): void {
 		$this->refused( array( 'file' => 'tests/other/x.php' ), 'outside tests/integration/support/ and tests/integration/bin/' );
