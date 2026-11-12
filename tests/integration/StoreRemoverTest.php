@@ -87,6 +87,7 @@ require_once __DIR__ . '/support/class-it-store-calls.php';
 require_once AB_MCP_DIR . 'includes/sync/class-sync-backup.php';
 require_once AB_MCP_DIR . 'includes/sync/class-sync-resources.php';
 require_once AB_MCP_DIR . 'includes/sync/class-sync-run.php';
+require_once AB_MCP_DIR . 'includes/sync/class-sync-engine.php';
 
 final class StoreRemoverTest extends TestCase {
 
@@ -2033,6 +2034,22 @@ final class StoreRemoverTest extends TestCase {
 		self::assertFileDoesNotExist( $report['dir'], 'Plain again, the report goes by its time.' );
 	}
 
+	public function testAPackageIsNotOpenedWhileASidecarOfThePackagesCannotBeRead(): void {
+		// Behebung 4: the budget of the packages counts every open package;
+		// one whose sidecar cannot be read is not left out of the count, the
+		// count is not known and no package is opened.
+		$out = AB_MCP_Protected_Store::open( 'out', array( 'declared' => 10, 'label' => 'series:' . str_repeat( 'a', 32 ) ) );
+		self::assertIsString( $out );
+		$side = self::store() . '/out/' . AB_MCP_Payload_File::name( 'group|out|' . $out, AB_MCP_Protected_Store::install_id(), '' ) . '.json';
+		file_put_contents( $side, '{"format":' );
+		$in = AB_MCP_Protected_Store::open( 'in', array( 'declared' => 10 ) );
+		self::assertInstanceOf( \WP_Error::class, $in );
+		self::assertSame( 'ab_mcp_store_stock_unknown', $in->get_error_code() );
+		self::assertIsString( AB_MCP_Protected_Store::open( 'reports', array() ), 'A group of no package is opened all the same.' );
+		unlink( $side );
+		self::assertIsString( AB_MCP_Protected_Store::open( 'in', array( 'declared' => 10 ) ), 'Whole again: it is opened.' );
+	}
+
 	public function testAnAreaThatCannotBeListedLosesNothingAndIsCountedUnknown(): void {
 		$report = self::aged_group( 'reports', 0, 30 * 86400 );
 		$calls  = self::failing( array( 'scandir' => array( self::store() . '/reports' ) ) );
@@ -2082,6 +2099,21 @@ final class StoreRemoverTest extends TestCase {
 		try {
 			self::assertTrue( \AB_MCP_Sync_Run::set_state( 14, 'open', 'closed_done', true ) );
 			self::assertNull( \AB_MCP_Sync_Run::now(), 'No time of a clock that gives none.' );
+			// Where a time would be written, nothing is written.
+			$run = array(
+				'type'        => 'push',
+				'source_id'   => 's',
+				'key_id'      => 'k',
+				'pair_print'  => str_repeat( 'a', 64 ),
+				'report_hash' => str_repeat( 'b', 64 ),
+				'plan_hash'   => str_repeat( 'c', 64 ),
+				'user_id'     => 1,
+				'connection'  => 'x',
+			);
+			self::assertSame( 'ab_mcp_sync_run_clock', \AB_MCP_Sync_Run::create( $run, array( array() ) )->get_error_code(), 'No run made.' );
+			self::assertSame( 'ab_mcp_sync_run_clock', \AB_MCP_Sync_Engine::context( array() )->get_error_code(), 'No step taken.' );
+			$restore = new ReflectionMethod( \AB_MCP_Sync_Engine::class, 'restore_part' );
+			self::assertSame( 'unclear', $restore->invoke( null, array( 'part' => 'row' ), 1, array(), str_repeat( 'd', 64 ), 'AB_MCP_Sync_Post_Writer' )['state'], 'Nothing put back.' );
 		} finally {
 			\AB_MCP_Sync_Run::$clock = null;
 			remove_filter( AB_MCP_Protected_Store::BACKUP_DAYS_FILTER, $days );
