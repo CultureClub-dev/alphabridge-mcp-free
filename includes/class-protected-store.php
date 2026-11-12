@@ -3443,8 +3443,9 @@ final class AB_MCP_Protected_Store {
 		}
 		// The temp files of writes that were cut off: own ones only, by
 		// delete_path()'s rule (tmp/, the prefix, older than TMP_AGE).
-		$tmp = self::way( $root, array( self::TMP ) );
-		foreach ( null === $tmp ? array() : (array) scandir( $tmp ) as $file ) {
+		$tmp   = self::way( $root, array( self::TMP ) );
+		$temps = null === $tmp ? false : self::calls()->scandir( $tmp );
+		foreach ( false === $temps ? array() : $temps as $file ) {
 			if ( 0 === strpos( (string) $file, self::TMP_PREFIX ) ) {
 				self::delete_path( $root, $tmp . '/' . $file );
 			}
@@ -3452,7 +3453,8 @@ final class AB_MCP_Protected_Store {
 		// Marks closed for a day, and a folder of a mark that holds none (a
 		// request that died before it wrote it) after a day.
 		$marks = self::way( $root, array( self::MARKS ) );
-		foreach ( null === $marks ? array() : (array) scandir( $marks ) as $mid ) {
+		$mids  = null === $marks ? false : self::calls()->scandir( $marks );
+		foreach ( false === $mids ? array() : $mids as $mid ) {
 			$mid = (string) $mid;
 			if ( ! preg_match( '/^[0-9a-f]{32}\z/', $mid ) ) {
 				continue;
