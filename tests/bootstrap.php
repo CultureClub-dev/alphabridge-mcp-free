@@ -26,7 +26,9 @@
 
 declare( strict_types = 1 );
 
-define( 'ABSPATH', __DIR__ . '/' );
+// A script that plays a site in a web directory of its own (the well-known
+// relay derives the document root from ABSPATH) defines it before this file.
+defined( 'ABSPATH' ) || define( 'ABSPATH', __DIR__ . '/' );
 
 /* ----------------------------------------------------------- option store */
 
@@ -133,6 +135,8 @@ function ab_test_reset(): void {
 	$GLOBALS['ab_test_routes']      = array();
 	$GLOBALS['ab_test_i18n']        = array();
 	$GLOBALS['ab_test_environment'] = 'production';
+	unset( $GLOBALS['ab_test_rest_base'], $GLOBALS['ab_test_site_url'], $GLOBALS['ab_test_status'], $GLOBALS['ab_test_nocache_send'] );
+	$GLOBALS['ab_test_nocache'] = 0;
 }
 
 function get_option( $name, $default = false ) {
@@ -357,8 +361,13 @@ function home_url( $path = '' ) {
 	return ( $GLOBALS['ab_test_home'] ?? 'https://example.test' ) . $path;
 }
 
+/**
+ * The address of WordPress' core: what a test sets in
+ * $GLOBALS['ab_test_site_url'] (the core in its own folder), else the home
+ * address.
+ */
 function site_url( $path = '' ) {
-	return ( $GLOBALS['ab_test_home'] ?? 'https://example.test' ) . $path;
+	return ( $GLOBALS['ab_test_site_url'] ?? $GLOBALS['ab_test_home'] ?? 'https://example.test' ) . $path;
 }
 
 /**
@@ -378,8 +387,14 @@ function wp_set_current_user( $id ) {
 	$GLOBALS['ab_test_current_user'] = (int) $id;
 }
 
+/**
+ * As WordPress: the REST base with the route appended. The base is
+ * https://example.test/wp-json/, or what a test sets in
+ * $GLOBALS['ab_test_rest_base'] (a site in a subfolder; with plain
+ * permalinks WordPress builds <home>/?rest_route=/<route>).
+ */
 function rest_url( $path = '' ) {
-	return 'https://example.test/wp-json/' . ltrim( (string) $path, '/' );
+	return ( $GLOBALS['ab_test_rest_base'] ?? 'https://example.test/wp-json/' ) . ltrim( (string) $path, '/' );
 }
 
 function untrailingslashit( $value ) {
@@ -1965,8 +1980,24 @@ function wp_mkdir_p( $target ) {
 	return is_dir( $target ) || @mkdir( $target, 0777, true ); // phpcs:ignore
 }
 
+/** As WordPress: the REST prefix, wp-json unless the filter rest_url_prefix says otherwise. */
 function rest_get_url_prefix() {
-	return 'wp-json';
+	return apply_filters( 'rest_url_prefix', 'wp-json' );
+}
+
+if ( ! function_exists( 'add_option' ) ) {
+	/**
+	 * As WordPress: an INSERT, false where the row is there already (the
+	 * same as in tests/undo-stubs.php, whose guarded copy then stands back).
+	 */
+	function add_option( $name, $value = '', $deprecated = '', $autoload = null ) {
+		if ( array_key_exists( $name, $GLOBALS['ab_test_options'] ) ) {
+			return false;
+		}
+		$GLOBALS['ab_test_options'][ $name ]  = $value;
+		$GLOBALS['ab_test_autoload'][ $name ] = $autoload;
+		return true;
+	}
 }
 
 function wp_login_url( $redirect = '' ) {
@@ -2014,10 +2045,21 @@ function wp_die( $message = '', $title = '', $args = array() ) {
 	throw new AbTestExit( 'die', (string) $message );
 }
 
+/** Records the status, so a test can see what the code under test set. */
 function status_header( $code, $description = '' ) {
+	$GLOBALS['ab_test_status'] = (int) $code;
 }
 
+/**
+ * Counts the calls; a server script for tests over HTTP sets
+ * $GLOBALS['ab_test_nocache_send'] to send the headers WordPress sends
+ * here (tests/support/preview-well-known-server.php).
+ */
 function nocache_headers() {
+	$GLOBALS['ab_test_nocache'] = ( $GLOBALS['ab_test_nocache'] ?? 0 ) + 1;
+	if ( isset( $GLOBALS['ab_test_nocache_send'] ) && is_callable( $GLOBALS['ab_test_nocache_send'] ) ) {
+		( $GLOBALS['ab_test_nocache_send'] )();
+	}
 }
 
 /** Like WordPress: the nonce made for an action (see wp_nonce_field()) verifies for that action only. */
