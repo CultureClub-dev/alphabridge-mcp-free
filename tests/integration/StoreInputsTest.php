@@ -119,6 +119,30 @@ final class StoreInputsTest extends TestCase {
 		self::assertSame( array(), $red, count( $red ) . ' of ' . $count . " wrong forms reached the consumer as a value:\n" . implode( "\n", $red ) );
 	}
 
+	public function testOpenTakesTheDeclaredBytesOfAGroupOnlyInTheFormOfTheirRow(): void {
+		// budget.declared at its second consumer, open() of a group (the
+		// row is driven at package_refusal() in the unit suite): each wrong
+		// form, and the fixed ones, is refused before anything is made.
+		$forms = WrongForms::of( AB_MCP_Store_Inputs::TABLE['budget.declared']['form'], 10 );
+		$forms['fixed: its digits as text'] = '10';
+		$forms['fixed: negative']           = -1;
+		$areas = array(
+			'in'      => array(
+				'label'   => 'import:abc',
+				'binding' => 'print',
+			),
+			'reports' => array( 'label' => 'report' ),
+		);
+		foreach ( $areas as $area => $meta ) {
+			foreach ( $forms as $what => $value ) {
+				$got = AB_MCP_Protected_Store::open( $area, array( 'declared' => $value ) + $meta );
+				self::assertInstanceOf( \WP_Error::class, $got, "$area, $what" );
+				self::assertSame( 'ab_mcp_store_declare', $got->get_error_code(), "$area, $what" );
+			}
+			self::assertIsString( AB_MCP_Protected_Store::open( $area, array( 'declared' => 10 ) + $meta ), "$area: 10 bytes, opened" );
+		}
+	}
+
 	/* ------------------------------------------------------------ drivers */
 
 	/**
@@ -302,9 +326,10 @@ final class StoreInputsTest extends TestCase {
 					'fixed: negative'           => -1,
 					'fixed: its digits as text' => '100',
 				),
-				'valid'   => array( array( $run ? 5 : 100, 'booked' ) ),
-				'run'     => static fn( $value ) => $answer( $run ? AB_MCP_Store_Budget::book( $value, 100 ) : AB_MCP_Store_Budget::book( 5, $value ) ),
-				'unknown' => $refused( 'ab_mcp_store_booking' ),
+				// The run of a booking: book() and release() read it.
+				'valid'   => array( array( $run ? 5 : 100, $run ? array( 'booked', true ) : 'booked' ) ),
+				'run'     => static fn( $value ) => $run ? array( $answer( AB_MCP_Store_Budget::book( $value, 100 ) ), $answer( AB_MCP_Store_Budget::release( $value ) ) ) : $answer( AB_MCP_Store_Budget::book( 5, $value ) ),
+				'unknown' => $run ? static fn( $got ): bool => array( 'ab_mcp_store_booking', 'ab_mcp_store_booking' ) === $got : $refused( 'ab_mcp_store_booking' ),
 				'texts'   => false,
 				'written' => null,
 			);
@@ -361,9 +386,13 @@ final class StoreInputsTest extends TestCase {
 					'fixed: run 0'                => '0',
 					'fixed: digits with a suffix' => '4a',
 				),
-				'valid'   => array( array( '4', true ), array( 4, true ) ),
-				'run'     => static fn( $value ) => $answer( AB_MCP_Sync_Backup::fits( $value, $data ) ),
-				'unknown' => $refused( 'ab_mcp_sync_backup_run' ),
+				// The run of a backup: fits() and group() read it.
+				'valid'   => array( array( '4', array( true, 'group' ) ), array( 4, array( true, 'group' ) ) ),
+				'run'     => static function ( $value ) use ( $answer, $data ) {
+					$group = AB_MCP_Sync_Backup::group( $value );
+					return array( $answer( AB_MCP_Sync_Backup::fits( $value, $data ) ), is_string( $group ) ? 'group' : $answer( $group ) );
+				},
+				'unknown' => static fn( $got ): bool => array( 'ab_mcp_sync_backup_run', 'ab_mcp_sync_backup_run' ) === $got,
 				'texts'   => false,
 				'written' => null,
 			);
