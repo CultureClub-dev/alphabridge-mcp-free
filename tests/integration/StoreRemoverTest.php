@@ -637,7 +637,7 @@ final class StoreRemoverTest extends TestCase {
 		$side_rep         = $m['root'] . '/reports/' . AB_MCP_Payload_File::name( 'group|reports|' . $reports, $id, '' ) . '.json';
 		$entry            = json_decode( (string) file_get_contents( $side_rep ), true );
 		$entry['created'] = time() - 2 * 86400;
-		file_put_contents( $side_rep, json_encode( $entry ) );
+		file_put_contents( $side_rep, json_encode( $entry, JSON_UNESCAPED_SLASHES ) );
 		$plain_dir = $m['root'] . '/backups/' . AB_MCP_Payload_File::name( 'group|backups|' . $plain, $id, '' );
 		// Nachgebildet: the read of the mark fails (the read of the store's
 		// seam of that file alone: the sidecars are read through it too).
@@ -1094,7 +1094,7 @@ final class StoreRemoverTest extends TestCase {
 					$entry[ $key ] = $value;
 				}
 			}
-			$change = (string) json_encode( $entry );
+			$change = (string) json_encode( $entry, JSON_UNESCAPED_SLASHES );
 		}
 		file_put_contents( $side, $change );
 		touch( $side, time() - 2 * 86400 );
@@ -1503,7 +1503,7 @@ final class StoreRemoverTest extends TestCase {
 		}
 		mkdir( $dir, 0700 );
 		file_put_contents( $dir . '/post-1', 'eine Zeile' );
-		$bytes = (string) json_encode( $entry );
+		$bytes = (string) json_encode( $entry, JSON_UNESCAPED_SLASHES );
 		file_put_contents( $dir . '.json', $bytes );
 		touch( $dir . '.json', time() - 2 * 86400 );
 		return array(
@@ -1606,27 +1606,28 @@ final class StoreRemoverTest extends TestCase {
 		$now = time();
 		self::run_row( 4, 'closed_done', $now - 10 * 86400, $now - 10 * 86400 );
 		$groups = array();
+		$made   = array();
+		// Every group made first: a package is not opened while a sidecar of
+		// out or in cannot be read (Behebung 4: its budget is not known).
 		foreach ( array( 'minus one' => -1, 'a string' => '4' ) as $what => $run ) {
-			$m = $this->marked( 4, 'closed' );
-			self::sidecar_as(
-				$m['side'],
-				array(
-					'run_id'  => $run,
-					'created' => $now - 30 * 86400,
-				)
-			);
-			$groups[ "backups, $what" ] = array( $m['group'], $m['side'] );
+			$m  = $this->marked( 4, 'closed' );
 			$in = AB_MCP_Protected_Store::open( 'in', array( 'declared' => 10 ) );
 			self::assertIsString( $in );
-			$dir = $m['root'] . '/in/' . AB_MCP_Payload_File::name( 'group|in|' . $in, $m['id'], '' );
-			self::sidecar_as(
-				$dir . '.json',
-				array(
-					'run_id'  => $run,
-					'created' => $now - 30 * 86400,
-				)
-			);
-			$groups[ "in, $what" ] = array( $dir, $dir . '.json' );
+			$dir             = $m['root'] . '/in/' . AB_MCP_Payload_File::name( 'group|in|' . $in, $m['id'], '' );
+			$made[ $what ]   = array( $run, $m, $dir );
+		}
+		foreach ( $made as $what => list( $run, $m, $dir ) ) {
+			foreach ( array( $m['side'], $dir . '.json' ) as $side ) {
+				self::sidecar_as(
+					$side,
+					array(
+						'run_id'  => $run,
+						'created' => $now - 30 * 86400,
+					)
+				);
+			}
+			$groups[ "backups, $what" ] = array( $m['group'], $m['side'] );
+			$groups[ "in, $what" ]      = array( $dir, $dir . '.json' );
 		}
 		AB_MCP_Protected_Store::cleanup( $now );
 		foreach ( $groups as $label => $paths ) {
@@ -1776,7 +1777,7 @@ final class StoreRemoverTest extends TestCase {
 		$entry = json_decode( (string) file_get_contents( $side ), true );
 		self::assertSame( \AB_MCP_Sync_Backup::LABEL . '31', $entry['label'] );
 		unset( $entry['closed'] );
-		file_put_contents( $side, json_encode( $entry ) );
+		file_put_contents( $side, json_encode( $entry, JSON_UNESCAPED_SLASHES ) );
 		$bytes = (string) file_get_contents( $side );
 		self::assertNotContains( $given, array_column( (array) AB_MCP_Protected_Store::groups( 'backups' ), 'gid' ), 'groups() leaves the unknown group out.' );
 		$again = \AB_MCP_Sync_Backup::group( 31 );
@@ -1832,7 +1833,7 @@ final class StoreRemoverTest extends TestCase {
 	private static function age( array $group, int $age ): void {
 		$entry            = json_decode( (string) file_get_contents( $group['dir'] . '.json' ), true );
 		$entry['created'] = time() - $age;
-		file_put_contents( $group['dir'] . '.json', json_encode( $entry ) );
+		file_put_contents( $group['dir'] . '.json', json_encode( $entry, JSON_UNESCAPED_SLASHES ) );
 	}
 
 	public function testAWayBackWhosePlanIsNotWholeKeepsTheBackupsOfEveryRun(): void {
@@ -1840,13 +1841,26 @@ final class StoreRemoverTest extends TestCase {
 		// closed and past its retention; the open way back 11 names it.
 		$now = time();
 		self::run_planned( 10, 'push', 'closed_aborted', null, $now - 10 );
-		self::run_planned( 11, 'revert', 'open', '{"reverts":[10],"items":[]}' );
+		// The plan as AB_MCP_Sync_Canon::encode() writes it (keys sorted).
+		self::run_planned( 11, 'revert', 'open', '{"items":[],"reverts":[10]}' );
 		$backup = self::aged_group( 'backups', 10, 30 * 86400 );
 		$done   = AB_MCP_Protected_Store::cleanup( $now );
 		self::assertSame( array( 'post-1' ), self::names( $backup['dir'] ), 'A plan whole: run 10 is needed, its backup stays.' );
 		self::assertSame( 0, $done['unknown'] );
 		global $wpdb;
-		foreach ( array( 'no JSON' => '{"reverts":', 'no plan' => null, 'a run as a string' => '{"reverts":["10"]}', 'no reverts' => '{"items":[]}' ) as $why => $plan ) {
+		$cases = array(
+			'no JSON'                         => '{"reverts":',
+			'no plan'                         => null,
+			'a run as a string'               => '{"reverts":["10"]}',
+			'no reverts'                      => '{"items":[]}',
+			// Behebung 4, A1 of the confirmation of Behebung 3: an object
+			// where the list is, and a key twice.
+			'reverts an object of a list key' => '{"reverts":{"0":11}}',
+			'reverts an object'               => '{"reverts":{"k":11}}',
+			'reverts twice'                   => '{"reverts":[10],"reverts":[11]}',
+			'keys not as encode() sorts them' => '{"reverts":[10],"items":[]}',
+		);
+		foreach ( $cases as $why => $plan ) {
 			$wpdb->update( AB_MCP_Sync_Schema::table( 'runs' ), array( 'plan' => $plan ), array( 'run_id' => 11 ) );
 			$done = AB_MCP_Protected_Store::cleanup( $now );
 			self::assertSame( array( 'post-1' ), self::names( $backup['dir'] ), "$why: the plan cannot say which runs the way back needs, so every backup stays." );
@@ -2059,7 +2073,7 @@ final class StoreRemoverTest extends TestCase {
 		// ended with an error and removed nothing at all.
 		$now = time();
 		self::run_planned( 10, 'push', 'closed_aborted', null, $now - 10 );
-		self::run_planned( 11, 'revert', 'open', '{"reverts":[10],"items":[]}' );
+		self::run_planned( 11, 'revert', 'open', '{"items":[],"reverts":[10]}' );
 		$backup = self::aged_group( 'backups', 10, 30 * 86400 );
 		$report = self::aged_group( 'reports', 0, 30 * 86400 );
 		$done   = AB_MCP_IT_Process::calls(

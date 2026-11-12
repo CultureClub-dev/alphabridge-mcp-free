@@ -204,4 +204,11 @@ return array(
 	'The run of a group of the protected store is a whole number: 1 or more for the run it belongs to, or 0 for none, which only groups of out, in and reports may have; a group of backups or stage always belongs to its run. Nothing was written. Pass such a run_id.',
 	// includes/sync/class-sync-run.php (Z8b branch 3, Behebung 3, A2: a run closed without a stored period)
 	'This run has no stored period for its backups: the days of the filter ab_mcp_staging_backup_days (a whole number from 0 to 3650) or the time of its close could not be read when it closed, or it closed before such periods were stored. So the clean-up keeps its backups as long as the run is there. Check that the code that hooks ab_mcp_staging_backup_days returns a whole number of days from 0 to 3650.',
+	// includes/class-protected-store.php (Z8b branch 3, Behebung 4: an area that cannot be listed, a stock not read whole for a budget)
+	'The area %s of the protected store could not be listed, so none of its groups is read and nothing was changed. Ask the host to check the rights of the folder of the store, then try again.',
+	'The area %s of the protected store could not be read whole (it cannot be listed, or the sidecar of a group in it cannot be read), so what its groups hold is not known and nothing is counted against a budget or written. Ask the host to check the rights of the folder of the store and whether something else writes into it; the daily clean-up leaves such a group as it is.',
+	// includes/sync/class-sync-backup.php (Z8b branch 3, Behebung 4: a backup whose size is not known)
+	'The backup of this object cannot be written as JSON (a value in it is nested too deep or is no value JSON holds), so its size is not known and nothing is written for the object. Check the object in wp-admin; leave it out of the run if it keeps failing.',
+	// includes/sync/class-sync-run.php (Z8b branch 3, Behebung 4, B2/B3: a clock that gives no time)
+	'The clock of the takeover gives no time (a whole number of seconds), so nothing of the run was written. Try again; if it keeps failing, check the code that sets the clock of AB_MCP_Sync_Run.',
 );
