@@ -938,10 +938,14 @@ final class SyncManifestTest extends TestCase {
 		// GitHub-Codex on free#147, P2: a site without year and month folders
 		// keeps the files of its attachments at the top of the uploads.
 		$uploads = AB_MCP_IT_Sites::docroot( 'a' ) . '/wp-content/uploads';
+		if ( ! is_dir( $uploads ) ) {
+			mkdir( $uploads );
+			$this->folders[] = $uploads;
+		}
 		foreach ( array( 'ab-it-oben.jpg', 'ab-it-frei-oben.txt' ) as $file ) {
 			self::assertFalse( file_exists( $uploads . '/' . $file ) );
 			$this->made[] = $uploads . '/' . $file;
-			file_put_contents( end( $this->made ), 'bytes of ' . $file );
+			self::assertNotFalse( file_put_contents( end( $this->made ), 'bytes of ' . $file ) );
 		}
 		$id = wp_insert_attachment(
 			array(
