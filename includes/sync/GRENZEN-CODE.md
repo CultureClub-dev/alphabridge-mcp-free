@@ -167,7 +167,13 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
   («Wächterliste ist die Grenze»). Zweitens folgen die erzeugten falschen Formen der Form im Code: wer eine Form
   lockert, lockert sie mit. Dagegen halten die festen falschen Formen je Treiber («fixed: ...» nach der Liste des
   Auftrags), die gültigen Werte je Zeile und die Mutationseinträge der Formen (`ablage/table-*`, `ablage/a1r-*`,
-  `ablage/input-*`); eine gelockerte Form, gegen die kein fester Fall steht, bleibt unbemerkt.
+  `ablage/input-*`); eine gelockerte Form, gegen die kein fester Fall steht, bleibt unbemerkt. Seit Behebung 5b halten
+  zwei Wächter über die Tokens des Quelltexts (`StoreClockAndReadersTest`, `token_get_all()`): in den Dateien seiner
+  Liste (die berührten des Zweigs und `class-sync-export.php`) kein `time()` ausser der Uhr `AB_MCP_Sync_Run::now()`
+  und den benannten Ausnahmen, und jede Methode in `includes/`, die eine Zeile der Tabelle oder die Uhr liest, hat
+  ihren Treiber oder ihren Grund. Ihre Reichweite ist die Grenze: ein `time()` in einer anderen Datei, ein Leser einer
+  Funktion, die einen gelesenen Wert weitergibt (etwa `open_runs()`, `stock()`, `groups()`), und eine Zeitquelle,
+  die nicht `time()` heisst (`microtime()`, `date()`, `$_SERVER['REQUEST_TIME']`), fallen ihnen nicht auf.
 - **Trifft Normalfall:** nein. Es ist eine Grenze der Prüfung, kein Fehlweg im Code: ein Zugriff dieser Art entsteht
   nur mit einer künftigen Änderung. Die Durchsicht einer Änderung an diesen Funktionen prüft, ob jeder neue Wert eines
   Entscheids als Zeile der Tabelle kommt und ob eine geänderte Form ihren festen Fall hat.
