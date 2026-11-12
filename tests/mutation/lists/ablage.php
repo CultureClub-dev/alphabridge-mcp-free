@@ -593,8 +593,8 @@ return array_merge(
 				return is_int( $value ) && $value > 0;',
 			'replace' => '			case \'time\':
 				return true;',
-			'run'     => $it( 'StoreRemoverTest', 'testASidecarThatCannotBeReadOrSaysNotWhatTheRetentionNeedsKeepsABackupTheRetentionKeeps' ),
-			'expect'  => '/testASidecarThatCannotBeReadOrSaysNotWhatTheRetentionNeedsKeepsABackupTheRetentionKeeps/',
+			'run'     => $it( 'StoreRemoverTest', 'testASidecarThatLacksAFieldOfItsRowOrHoldsItNullOrOfAnotherTypeOrRangeKeepsItsGroup' ),
+			'expect'  => '/testASidecarThatLacksAFieldOfItsRowOrHoldsItNullOrOfAnotherTypeOrRangeKeepsItsGroup/',
 		),
 		array(
 			'id'      => 'ablage/a1-foreign-area-it-lies-in',
