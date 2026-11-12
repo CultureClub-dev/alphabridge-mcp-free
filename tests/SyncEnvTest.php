@@ -1098,6 +1098,12 @@ final class SyncEnvTest extends TestCase {
 		self::assertSame( array( 'deleted_on_staging', 'locked', array( 'env:plugin' ) ), array( $e['result'], $e['action'], array_column( $e['locks'], 'key' ) ), 'Removed on staging, unchanged here (row 3).' );
 		$e = self::judged( array( self::plugin( '2.0' ) ), array(), $pair )['plugin:shop'];
 		self::assertSame( array( 'deleted_live', 'none' ), array( $e['result'], $e['action'] ), 'Removed here, unchanged on staging (row 8).' );
+		// Each side against the base of that side: bases that differ by side.
+		$apart                    = $pair;
+		$apart[0]['base_live']    = str_repeat( 'c', 64 );
+		$apart[0]['base_staging'] = str_repeat( 'a', 64 );
+		self::assertSame( 'deleted_live', self::judged( array( self::plugin( '2.0', true, 'a' ) ), array(), $apart )['plugin:shop']['result'], 'Staging as its own base: unchanged.' );
+		self::assertSame( 'deleted_on_staging', self::judged( array(), array( self::plugin( '2.0', true, 'c' ) ), $apart )['plugin:shop']['result'], 'This site as its own base: unchanged.' );
 		$old            = $pair;
 		$old[0]['canon'] = 'canon/0';
 		self::assertStringContainsString( 'version canon/0', self::judged( array( self::plugin( '2.0' ) ), array(), $old )['plugin:shop']['why'], 'Bases of another version: not compared.' );

@@ -665,7 +665,13 @@ final class StagingTransferTest extends TestCase {
 		self::pair();
 		$p     = self::same_pages( array( 'contact' => 'Write to us.', 'about' => 'About us.' ) );
 		$pairs = self::all_pairs();
-		self::assertCount( 2, $pairs, 'The two pages, among the pairs of every kind.' );
+		// The two pages, among the pairs of every kind. Not «only these two»:
+		// where both sites were installed within the same second, the posts
+		// WordPress makes at the installation (Hello world!, Sample Page,
+		// Privacy Policy) are the same on both and paired as equal as well
+		// (CI of free#147, Behebung 2).
+		self::assertArrayHasKey( (string) $p['contact'][0], $pairs, 'The two pages, among the pairs of every kind.' );
+		self::assertArrayHasKey( (string) $p['about'][0], $pairs );
 		self::assertNotNull( AB_MCP_Transfer::view()['pairs']['next'], 'Every object of the site is paired: the list goes in pages.' );
 		$contact = $pairs[ (string) $p['contact'][0] ];
 		$about   = $pairs[ (string) $p['about'][0] ];

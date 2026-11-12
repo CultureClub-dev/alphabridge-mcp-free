@@ -38,14 +38,19 @@ e('z1-size', 'Z1 text(): the size of each file in the hash', FM,
   "\t\t\t$files[] = array( (string) $entry[0], (int) $entry[1], (string) $entry[2] );", "\t\t\t$files[] = array( (string) $entry[0], (string) $entry[2] );", 'man', 'testTheHashIsTheSha256OfTheManifestOfEveryFileInTheFormatAbFiles1')
 e('z1-every-file', 'Z1 folder(): every file of every folder, a written log included (no list of names left out)', FM,
   "\t\t\t\t$went = self::folder( $path, $in, $side, $deadline, $first, $acc );", "\t\t\t\t$went = 'done';", 'man', 'testEveryFileCountsOneMoreLessOtherBytesOrAnotherNameIsAnotherHash')
-e('z1-inode', 'Z1 file(): the file hashed is the one lstat() saw (device and inode)', FM,
-  "\t\tif ( false === $before || (int) $before['dev'] !== (int) $stat['dev'] || (int) $before['ino'] !== (int) $stat['ino'] ) {", "\t\tif ( false === $before ) {", 'man', 'testAWriterWhileTheFileIsReadGivesNoHash')
+e('z1-before-same', 'Z1 file(): the file opened is the one lstat() saw: device, inode, size, mtime, ctime (Behebung 2)', FM,
+  "\t\tif ( false === $before || ! self::same( $stat, $before ) ) {", "\t\tif ( false === $before ) {", 'man', 'testEachFieldOfTheIdentityBeforeWhileAndAfterTheReadingCounts')
 e('z1-read-size', 'Z1 file(): as many bytes as the file has (halb gelesen)', FM,
-  "\t\tif ( $read !== (int) $before['size'] || (int) $after['size'] !== (int) $before['size'] || (int) $after['mtime'] !== (int) $before['mtime'] ) {", "\t\tif ( (int) $after['size'] !== (int) $before['size'] || (int) $after['mtime'] !== (int) $before['mtime'] ) {", 'man', 'testAReadingCutShortGivesNoHash')
-e('z1-after-size', 'Z1 file(): the size after the reading the size before (a writer)', FM,
-  "\t\tif ( $read !== (int) $before['size'] || (int) $after['size'] !== (int) $before['size'] || (int) $after['mtime'] !== (int) $before['mtime'] ) {", "\t\tif ( $read !== (int) $before['size'] || (int) $after['mtime'] !== (int) $before['mtime'] ) {", 'man', 'testAWriterWhileTheFileIsReadGivesNoHash')
-e('z1-after-mtime', 'Z1 file(): the time after the reading the time before (a writer)', FM,
-  "\t\tif ( $read !== (int) $before['size'] || (int) $after['size'] !== (int) $before['size'] || (int) $after['mtime'] !== (int) $before['mtime'] ) {", "\t\tif ( $read !== (int) $before['size'] || (int) $after['size'] !== (int) $before['size'] ) {", 'man', 'testAWriterWhileTheFileIsReadGivesNoHash')
+  "$read !== (int) $before['size'] || ! self::same( $before, $after )", "! self::same( $before, $after )", 'man', 'testAReadingCutShortGivesNoHash')
+e('z1-after-same', 'Z1 file(): fstat() after the reading the same as before (a writer)', FM,
+  "$read !== (int) $before['size'] || ! self::same( $before, $after ) || false === $again", "$read !== (int) $before['size'] || false === $again", 'man', 'testEachFieldOfTheIdentityBeforeWhileAndAfterTheReadingCounts')
+e('z1-again-same', 'Z1 file(): the path names the same file after the reading (no rename over it; GitHub-Codex P2)', FM,
+  "false === $again || ! self::same( $before, $again ) ) {", "false === $again ) {", 'man', 'testAWriterWhileTheFileIsReadGivesNoHash')
+e('z1-again-gone', 'Z1 file(): the path gone after the reading is changed, never hashed', FM,
+  "false === $again || ! self::same( $before, $again ) ) {", "! self::same( $before, $again ) ) {", 'man', 'testEachFieldOfTheIdentityBeforeWhileAndAfterTheReadingCounts')
+for field in ('dev', 'ino', 'size', 'mtime', 'ctime'):
+    e('z1-identity-' + field, 'Z1 IDENTITY: ' + field + ' counts in every comparison of the file (Behebung 2)', FM,
+      "\tconst IDENTITY = array( 'dev', 'ino', 'size', 'mtime', 'ctime' );", "\tconst IDENTITY = array( " + ', '.join("'" + f + "'" for f in ('dev', 'ino', 'size', 'mtime', 'ctime') if f != field) + " );", 'man', 'testEachFieldOfTheIdentityBeforeWhileAndAfterTheReadingCounts')
 e('z1-lstat-gone', 'Z1 folder(): an entry gone or unreadable since the listing: no hash', FM,
   "\t\t\tif ( false === $stat ) {\n\t\t\t\t// Gone since the folder was listed, or not readable.", "\t\t\tif ( false ) {\n\t\t\t\t// Gone since the folder was listed, or not readable.", 'man', 'testAReadingThatFailsGivesNoHash')
 e('z1-fstat-after', 'Z1 file(): fstat() after the reading that fails: no hash', FM,
@@ -107,7 +112,7 @@ e('unit-activation', 'unit_item(): which main files run is a part of a plugin (E
 e('unit-live-changed', 'E1 unit_item(): the files changed on both sides: code:live_changed, no choice', DE,
   "\t\tif ( isset( $states['files'] ) && 'conflict' === $states['files'] ) {", "\t\tif ( false ) {", 'env', 'testThePartsOfAUnitWithAPairAreJudgedEachAgainstItsOwnBase')
 e('unit-part-base', 'E2 unit_item(): each part against its own base', DE,
-  "\t\t\t\t$base = AB_MCP_Sync_Pairs::part_bases( $pair, $part );", "\t\t\t\t$base = AB_MCP_Sync_Pairs::part_bases( $pair, 'files' );", 'env', 'testThePartsOfAUnitWithAPairAreJudgedEachAgainstItsOwnBase')
+  "\n\t\t\t\t$base = AB_MCP_Sync_Pairs::part_bases( $pair, $part );", "\n\t\t\t\t$base = AB_MCP_Sync_Pairs::part_bases( $pair, 'files' );", 'env', 'testThePartsOfAUnitWithAPairAreJudgedEachAgainstItsOwnBase')
 e('unit-paths', 'unit_item(): the paths where the files differ', DE,
   "\t\tif ( in_array( 'files', $differs, true ) ) {", "\t\tif ( false ) {", 'env', 'testThePathsOfAUnitWhoseFilesDifferAreShownNeverByMtime')
 e('unit-pairs', 'compare(): a unit with its pair', EN,
@@ -146,6 +151,28 @@ e('paths-from', 'paged(): the number of the first path of an entry of further pa
   "\t\t\t\t\t\t'from'  => self::MAX_PATHS * ( $i + 1 ) + 1,", "\t\t\t\t\t\t'from'  => 1,", 'env', 'testEveryPathOfAUnitIsInTheReportInPagesOfAHundred')
 e('series-theme-again', 'theme_choice(): the theme switched while it is read is not read (Codex round 1, B6)', EN,
   "\t\t$same = $read['again'] === $read['stylesheet'];", "\t\t$same = true;", 'it', 'testTheRowsOfTheSeriesThatFailOrChangeWhileReadAreNeverComparedHalf')
+e('held-mains', 'names_held(): the main files of a plugin and those that run by the rules of both sites (GitHub-Codex P1)', EN,
+  "\t\t\t} elseif ( is_array( $line ) && 'plugin' === ( $line['env'] ?? null ) ) {\n\t\t\t\t// The main files of a plugin and those that run (GitHub-Codex, P1).", "\t\t\t} elseif ( false ) {\n\t\t\t\t// The main files of a plugin and those that run (GitHub-Codex, P1).", 'env', 'testTheMainFilesOfAPluginAreHeldByTheRulesOfBothSites')
+e('held-names-mains', 'held_names(): a main file the staging site holds (GitHub-Codex P1)', EN,
+  "\t\t\t} elseif ( is_array( $line ) && 'plugin' === ( $line['env'] ?? null ) ) {\n\t\t\t\t$inside = array_merge(", "\t\t\t} elseif ( false ) {\n\t\t\t\t$inside = array_merge(", 'env', 'testTheMainFilesOfAPluginAreHeldByTheRulesOfBothSites')
+e('theme-roots-page', 'unit_step(): the themes of further roots end a part where it is full and go on in the next (GitHub-Codex P2)', EN,
+  "\t\t\t\tif ( count( $lines ) >= $room ) {\n\t\t\t\t\treturn array(\n\t\t\t\t\t\t'lines' => $lines,\n\t\t\t\t\t\t'done'  => false,\n\t\t\t\t\t\t'after' => self::place( (string) $last, false ),", "\t\t\t\tif ( false ) {\n\t\t\t\t\treturn array(\n\t\t\t\t\t\t'lines' => $lines,\n\t\t\t\t\t\t'done'  => false,\n\t\t\t\t\t\t'after' => self::place( (string) $last, false ),", 'it', 'testTheThemesOfAFurtherRootAreReadPageByPageNoneLeftOut')
+e('theme-roots-after', 'unit_step(): the themes of further roots after the one the part before ended with', EN,
+  "\t\t\t\tif ( null !== $after && strcmp( (string) $name, $after ) <= 0 ) {", "\t\t\t\tif ( false ) {", 'it', 'testTheThemesOfAFurtherRootAreReadPageByPageNoneLeftOut')
+e('upload-top-attached', 'candidates(): a file at the top of the uploads in a file list of an attachment is no unit (GitHub-Codex P2)', EN,
+  "\t\t\t\treturn isset( $ctx['attached'][ $name ] ) ? 'skip' : 'unit';", "\t\t\t\treturn 'unit';", 'it', 'testAFileOfAnAttachmentAtTheTopOfTheUploadsIsNoUnit')
+e('removed-changed', 'unit_item(): removed on one side, the other side against its base (TABLE rows 7 and 9; GitHub-Codex P2)', DE,
+  "\t\t\t\t\t$moved            = ! hash_equals( (string) $base[ null === $s ? 'live' : 'staging' ], $have );", "\t\t\t\t\t$moved            = false;", 'env', 'testAUnitRemovedOnOneSideAndChangedOnTheOtherIsAConflictWithTheRemoval')
+e('removed-side', 'unit_item(): removed on one side, the base of the side that has it', DE,
+  "\t\t\t\t\t$moved            = ! hash_equals( (string) $base[ null === $s ? 'live' : 'staging' ], $have );", "\t\t\t\t\t$moved            = ! hash_equals( (string) $base[ null === $s ? 'staging' : 'live' ], $have );", 'env', 'testAUnitRemovedOnOneSideAndChangedOnTheOtherIsAConflictWithTheRemoval')
+e('removed-action', 'unit_item(): a removal against a change is kept, not locked or nothing to do', DE,
+  "\t\t\t\t$entry['action'] = null === $s ? ( $changed ? 'keep' : 'locked' ) : ( $changed ? 'keep' : 'none' );", "\t\t\t\t$entry['action'] = null === $s ? 'locked' : 'none';", 'env', 'testAUnitRemovedOnOneSideAndChangedOnTheOtherIsAConflictWithTheRemoval')
+e('removed-canon', 'unit_item(): removed on one side, bases of another version: not compared', DE,
+  "\t\t\t\tif ( $pair['canon'] !== AB_MCP_Sync_Canon::VERSION ) {\n\t\t\t\t\treturn self::unit_entry( $entry, array(), sprintf( 'The bases of its pair", "\t\t\t\tif ( false ) {\n\t\t\t\t\treturn self::unit_entry( $entry, array(), sprintf( 'The bases of its pair", 'env', 'testAUnitRemovedOnOneSideAndChangedOnTheOtherIsAConflictWithTheRemoval')
+e('removed-no-base', 'unit_item(): removed on one side, a part without its base: not compared', DE,
+  "\t\t\t\t\tif ( null === $base ) {\n\t\t\t\t\t\treturn self::unit_entry(", "\t\t\t\t\tif ( false ) {\n\t\t\t\t\t\treturn self::unit_entry(", 'env', 'testAUnitRemovedOnOneSideAndChangedOnTheOtherIsAConflictWithTheRemoval')
+e('removed-not-read', 'unit_item(): removed on one side, a part of the other not read: not compared', DE,
+  "\t\t\t\t\tif ( null === $have ) {", "\t\t\t\t\tif ( false ) {", 'env', 'testAUnitRemovedOnOneSideAndChangedOnTheOtherIsAConflictWithTheRemoval')
 # ------------------------------------------------ Z35: the core
 e('z35-https', 'Z35 checksums(): only https', CC,
   "\tconst API = 'https://api.wordpress.org/core/checksums/1.0/';", "\tconst API = 'http://api.wordpress.org/core/checksums/1.0/';", 'core', 'testTheChecksumsAreAskedOverHttpsThroughTheOutboundWithoutARedirect')
@@ -193,7 +220,7 @@ e('z38-keep-columns', 'Z38 rebase(): the bases of the first part stay for a furt
 e('z38-bases-part', 'Z38 part_bases(): a further part from base_extra', PA,
   "\t\t\t: ( $pair['base_extra']['parts'][ $part ] ?? null );", "\t\t\t: array( 'live' => $pair['base_live'] ?? null, 'staging' => $pair['base_staging'] ?? null );", 'it', 'testRebaseMovesOnOnlyThePartOfTheKindResponsibleForIt')
 e('z38-db-write', 'Z38 swap(): a write that fails writes nothing and says so', PA,
-  "\t\t$done = self::calls()->query( 'UPDATE ' . AB_MCP_Sync_Schema::table( 'pairs' ) . ' SET ' . implode( ', ', $parts ) . ' WHERE ' . self::where_row( $raw ) );\n\t\tif ( false === $done ) {\n\t\t\treturn self::db_error();", "\t\t$done = self::calls()->query( 'UPDATE ' . AB_MCP_Sync_Schema::table( 'pairs' ) . ' SET ' . implode( ', ', $parts ) . ' WHERE ' . self::where_row( $raw ) );\n\t\tif ( false ) {\n\t\t\treturn self::db_error();", 'it', 'testAFaultOfTheDatabaseLeavesTheBasesAsTheyWere')
+  "\t\t$done = self::calls()->update_row( 'UPDATE ' . AB_MCP_Sync_Schema::table( 'pairs' ) . ' SET ' . implode( ', ', $parts ) . ' WHERE ' . self::where_row( $raw ) );\n\t\tif ( false === $done ) {\n\t\t\treturn self::db_error();", "\t\t$done = self::calls()->update_row( 'UPDATE ' . AB_MCP_Sync_Schema::table( 'pairs' ) . ' SET ' . implode( ', ', $parts ) . ' WHERE ' . self::where_row( $raw ) );\n\t\tif ( false ) {\n\t\t\treturn self::db_error();", 'it', 'testAFaultOfTheDatabaseLeavesTheBasesAsTheyWere')
 e('z38-db-read', 'Z38 raw(): a read that fails is an error', PA,
   "\t\tif ( false === $row ) {\n\t\t\treturn self::db_error();", "\t\tif ( false ) {\n\t\t\treturn self::db_error();", 'it', 'testAFaultOfTheDatabaseLeavesTheBasesAsTheyWere')
 
