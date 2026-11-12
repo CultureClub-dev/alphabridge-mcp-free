@@ -416,7 +416,8 @@ final class AB_MCP_Store_Budget {
 	 * @return WP_Error
 	 */
 	private static function limit_unknown( $filter ) {
-		return new WP_Error( 'ab_mcp_store_limit_unknown', sprintf( 'The limit of the filter %s is not a whole number of 0 or more, so it is not known and no package is opened. Check the code that hooks %s: it returns such a number.', $filter, $filter ) );
+		/* translators: %1$s: the name of a filter (ab_mcp_store_max_packages, ab_mcp_store_max_bytes or ab_mcp_store_max_exports). */
+		return new WP_Error( 'ab_mcp_store_limit_unknown', sprintf( __( 'The limit of the filter %1$s is not a whole number of 0 or more, so it is not known and no package is opened. Check the code that hooks %1$s: it returns such a number.', 'alphabridge-mcp' ), $filter ) );
 	}
 
 	/**

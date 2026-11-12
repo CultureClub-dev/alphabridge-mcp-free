@@ -207,6 +207,9 @@ return array(
 	// includes/class-protected-store.php (Z8b branch 3, Behebung 4: an area that cannot be listed, a stock not read whole for a budget)
 	'The area %s of the protected store could not be listed, so none of its groups is read and nothing was changed. Ask the host to check the rights of the folder of the store, then try again.',
 	'The area %s of the protected store could not be read whole (it cannot be listed, or the sidecar of a group in it cannot be read), so what its groups hold is not known and nothing is counted against a budget or written. Ask the host to check the rights of the folder of the store and whether something else writes into it; the daily clean-up leaves such a group as it is.',
+	// includes/class-protected-store.php, includes/class-store-budget.php (Z8b branch 3, Behebung 4: a declared size that is no whole number, a limit of a filter not known)
+	'The bytes a group declares are a whole number of 0 or more. Pass them so, or none.',
+	'The limit of the filter %1$s is not a whole number of 0 or more, so it is not known and no package is opened. Check the code that hooks %1$s: it returns such a number.',
 	// includes/class-protected-store.php (Z8b branch 3, Behebung 4: the files of a group that cannot all be counted)
 	'The files the group holds in the protected store could not all be counted (its folder could not be listed, or the size of a file in it could not be read), so what it holds is not known and nothing was written. Ask the host to check the rights of the folder of the store, then try again.',
 	// includes/sync/class-sync-backup.php (Z8b branch 3, Behebung 4: a backup whose size is not known)
