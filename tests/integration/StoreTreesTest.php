@@ -966,11 +966,17 @@ final class StoreTreesTest extends TestCase {
 	}
 
 	public function testATreeKeepsTheNameItsUnitHasInTheSite(): void {
-		$names = self::names_of_units();
-		$root  = (string) AB_MCP_Protected_Store::root();
+		// Two limits apart (Behebung 2, point 6): the name of a file, 255
+		// bytes (put_tree(), tree()), and the name of a unit as a pair holds
+		// it, AB_MCP_Sync_Pairs::MAX_REF characters (put_mark(), the name
+		// itself as unit.ref): a longer one is refused there, with its way.
+		$names   = self::names_of_units();
+		$root    = (string) AB_MCP_Protected_Store::root();
 		list( $gid, $dir ) = self::group( 'stage', 6 );
 		mkdir( self::src(), 0755, true );
-		$failed = array();
+		$failed  = array();
+		$marked  = 0;
+		$refused = array();
 		foreach ( $names as $n => $name ) {
 			$source = self::src() . '/' . $name;
 			file_put_contents( $source, "<?php // $n\n" );
@@ -991,7 +997,7 @@ final class StoreTreesTest extends TestCase {
 					'op'     => 'swap',
 					'unit'   => array(
 						'kind' => 'plugin',
-						'ref'  => self::UNIT,
+						'ref'  => $name,
 					),
 					'target' => self::plugins() . '/' . $name,
 					'trees'  => array(
@@ -1006,15 +1012,72 @@ final class StoreTreesTest extends TestCase {
 					),
 				)
 			);
-			if ( ! is_array( $mark ) ) {
+			if ( mb_strlen( $name, 'UTF-8' ) > \AB_MCP_Sync_Pairs::MAX_REF ) {
+				$refused[] = $name;
+				if ( ! is_wp_error( $mark ) || 'ab_mcp_store_mark' !== $mark->get_error_code() ) {
+					$failed[] = "put_mark $name: a name no pair holds is not refused";
+				}
+			} elseif ( ! is_array( $mark ) ) {
 				$failed[] = "put_mark $name: " . $mark->get_error_code();
+			} else {
+				++$marked;
 			}
 		}
-		self::assertSame( array(), $failed, 'No name a unit has in the site is refused.' );
+		self::assertSame( array(), $failed, 'No name a unit has in the site is refused as the name of a file, nor as its name in a mark within what a pair holds.' );
+		self::assertSame( array( str_repeat( 'a', 251 ) . '.php' ), $refused, 'The one name of 255 bytes here is a name of a file, but no name of a unit a pair holds.' );
 		$read = AB_MCP_Protected_Store::marks();
 		self::assertSame( array(), $read['unreadable'], 'Each mark reads back with its tree.' );
-		self::assertCount( count( $names ), $read['marks'] );
+		self::assertCount( $marked, $read['marks'] );
+		self::assertSame( count( $names ) - 1, $marked );
 		self::assertSame( array(), self::names( $root . '/tmp' ) );
+	}
+
+	public function testAMarkNamesItsUnitAndMainFilesByTheCharactersAPairHolds(): void {
+		// Behebung 2, B1: unit.ref and each main file of active hold at most
+		// AB_MCP_Sync_Pairs::MAX_REF characters (the column varchar(191) of
+		// utf8mb4), counted as characters, not bytes, in the WordPress of the
+		// site (mb_strlen(), which WordPress gives also without mbstring).
+		$root  = (string) AB_MCP_Protected_Store::root();
+		$max   = \AB_MCP_Sync_Pairs::MAX_REF;
+		$mark  = static function ( string $ref, array $active ) use ( $root ): array {
+			return array(
+				'run_id' => 6,
+				'seq'    => 1,
+				'op'     => 'swap',
+				'unit'   => array(
+					'kind' => 'plugin',
+					'ref'  => $ref,
+				),
+				'target' => self::plugins() . '/x',
+				'trees'  => array(
+					array(
+						'role' => 'stage',
+						'path' => $root . '/stage/' . str_repeat( 'a', 40 ) . '/x',
+						'form' => 'folder',
+						'dev'  => 1,
+						'ino'  => 2,
+						'hash' => null,
+					),
+				),
+				'active' => $active,
+			);
+		};
+		self::assertTrue( function_exists( 'mb_strlen' ) );
+		$long = str_repeat( 'ü', $max );
+		self::assertSame( 2 * $max, strlen( $long ), 'Two bytes each.' );
+		$ok = AB_MCP_Protected_Store::put_mark( $mark( $long, array() ) );
+		self::assertIsArray( $ok, $max . ' characters of two bytes each: ' . ( is_wp_error( $ok ) ? $ok->get_error_message() : '' ) );
+		self::assertSame( $long, json_decode( (string) file_get_contents( $ok['mark'] ), true )['unit']['ref'], 'Held as given.' );
+		self::assertIsArray( AB_MCP_Protected_Store::put_mark( $mark( str_repeat( 'a', $max ), array() ) ), $max . ' characters of one byte.' );
+		foreach ( array( str_repeat( 'ü', $max + 1 ), str_repeat( 'a', $max + 1 ) ) as $ref ) {
+			self::assertSame( 'ab_mcp_store_mark', AB_MCP_Protected_Store::put_mark( $mark( $ref, array() ) )->get_error_code(), ( $max + 1 ) . ' characters, ' . strlen( $ref ) . ' bytes.' );
+		}
+		// The main files of active by the same rule: a long name of two bytes
+		// a character goes through with a long unit name.
+		$file = str_repeat( 'ä', $max - 8 ) . '/ä-x.php';
+		self::assertSame( $max, mb_strlen( $file, 'UTF-8' ) );
+		self::assertIsArray( AB_MCP_Protected_Store::put_mark( $mark( $long, array( $file ) ) ), 'A main file of ' . $max . ' characters, ' . strlen( $file ) . ' bytes.' );
+		self::assertSame( 'ab_mcp_store_mark', AB_MCP_Protected_Store::put_mark( $mark( 'x', array( 'ä' . $file ) ) )->get_error_code(), 'One character more.' );
 	}
 
 	public function testOnlyANameThatIsNoNameOfAFileIsRefused(): void {
