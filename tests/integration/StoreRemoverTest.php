@@ -456,6 +456,7 @@ final class StoreRemoverTest extends TestCase {
 
 	public function testAWriteThatFailsInTheGroupOfATreeOfAnOpenMarkLeavesTheTree(): void {
 		$m = $this->marked( 3 );
+		self::assertIsArray( AB_MCP_Protected_Store::put( 'backups', $m['gid'], 'post-0', 'a row before' ) );
 		// The file goes in, its sidecar cannot be written: the file goes again.
 		self::watch(
 			array(
@@ -470,6 +471,7 @@ final class StoreRemoverTest extends TestCase {
 		$res = AB_MCP_Protected_Store::put( 'backups', $m['gid'], 'post-1', 'a row' );
 		self::assertSame( 'ab_mcp_store_write', $res->get_error_code() );
 		self::assertFileDoesNotExist( $m['group'] . '/post-1' );
+		self::assertFileExists( $m['group'] . '/post-0', 'Only what it wrote goes.' );
 		self::assert_kept( $m, 'put() whose sidecar fails' );
 		AB_MCP_Test_Seam::restore_all();
 		// The file itself cannot be written; then it throws.
@@ -498,6 +500,74 @@ final class StoreRemoverTest extends TestCase {
 		self::assert_kept( $m, 'write_entry() half' );
 		self::assertSame( 3, json_decode( (string) file_get_contents( $m['side'] ), true )['run_id'], 'The sidecar as it was.' );
 		self::assertSame( array(), self::names( $m['root'] . '/tmp' ) );
+	}
+
+	public function testAGroupThatCannotBeMadeLeavesNoSidecarAndTouchesNoTree(): void {
+		$m    = $this->marked( 3 );
+		$area = $m['root'] . '/backups';
+		$was  = self::names( $area );
+		foreach ( array( array( 'kind' => 'return', 'value' => false ), array( 'kind' => 'throw' ) ) as $fault ) {
+			self::watch( array( array( 'method' => 'mkdir', 'nth' => 1 ) + $fault ) );
+			try {
+				$res = AB_MCP_Protected_Store::open( 'backups', array( 'run_id' => 3 ) );
+				self::assertSame( 'ab_mcp_store_write', $res->get_error_code(), $fault['kind'] );
+			} catch ( RuntimeException $e ) {
+				self::assertSame( 'throw', $fault['kind'], $e->getMessage() );
+			}
+			AB_MCP_Test_Seam::restore_all();
+			if ( 'return' === $fault['kind'] ) {
+				self::assertSame( $was, self::names( $area ), 'The sidecar written first went again.' );
+			}
+			self::assert_kept( $m, 'open() whose folder fails: ' . $fault['kind'] );
+		}
+	}
+
+	public function testTheRemoverTakesNothingOutsideTheStoreNorAForeignTempFile(): void {
+		$root    = self::store();
+		$outside = self::root() . '/run/ab-store-outside.txt';
+		file_put_contents( $outside, 'not the store\'s' );
+		self::assertFalse( AB_MCP_Protected_Store::delete_path( $root, $outside ), 'Outside the store only what this request made and noted.' );
+		self::assertFileExists( $outside );
+		self::assertFalse( AB_MCP_Protected_Store::delete_path( $root, $root . '/tmp/../owner.json' ) );
+		self::assertFileExists( $root . '/owner.json' );
+		$tmp = $root . '/tmp';
+		foreach ( array( 'daten.tmp', '.ab-tmp-jung' ) as $name ) {
+			file_put_contents( $tmp . '/' . $name, 'x' );
+			self::assertFalse( AB_MCP_Protected_Store::delete_path( $root, $tmp . '/' . $name ), $name );
+			self::assertFileExists( $tmp . '/' . $name );
+		}
+		touch( $tmp . '/daten.tmp', time() - AB_MCP_Protected_Store::TMP_AGE - 10 );
+		self::assertFalse( AB_MCP_Protected_Store::delete_path( $root, $tmp . '/daten.tmp' ), 'Old, but not with the prefix: not by its ending.' );
+		touch( $tmp . '/.ab-tmp-jung', time() - AB_MCP_Protected_Store::TMP_AGE - 10 );
+		self::assertTrue( AB_MCP_Protected_Store::delete_path( $root, $tmp . '/.ab-tmp-jung' ), 'Own and old: it goes.' );
+		$made = AB_MCP_Protected_Store::temp_file( $root );
+		self::assertIsString( $made );
+		self::assertTrue( AB_MCP_Protected_Store::delete_path( $root, $made ), 'Made and noted by this request: it goes at once.' );
+		unlink( $outside );
+	}
+
+	public function testTheMeasurementOfTheResourcesLeavesNoFileInTheStore(): void {
+		$root   = self::store();
+		$before = self::names( $root );
+		$m      = \AB_MCP_Sync_Resources::measure();
+		self::assertGreaterThan( 0.0, $m['write_seconds'] );
+		self::assertSame( $before, self::names( $root ), 'Nothing beside the files of the store.' );
+		self::assertSame( array(), self::names( $root . '/tmp' ), 'Its temp file went.' );
+	}
+
+	public function testTheUninstallMovesNoBackupWhoseIdentityIsNotTheMarks(): void {
+		$m = $this->marked( 3, 'open', 'missing' );
+		// The backup replaced by a copy of it: the same bytes, another inode.
+		rename( $m['tree'], $m['tree'] . '-alt' );
+		mkdir( $m['tree'] . '/data', 0755, true );
+		foreach ( array( self::UNIT . '.php', 'data/export.csv', 'daten.tmp' ) as $file ) {
+			copy( $m['tree'] . '-alt/' . $file, $m['tree'] . '/' . $file );
+		}
+		touch( $m['tree'] . '/daten.tmp', time() - 3600 - 60 );
+		self::remove_tree( $m['tree'] . '-alt' );
+		self::uninstall_as_pro();
+		self::assertFileDoesNotExist( $m['target'], 'Not proved: not put back.' );
+		self::assert_kept( $m, 'backup of another identity' );
 	}
 
 	public function testTheUninstallKeepsATreeOfAnOpenMarkWhoseOriginalIsNotProvedAndTakesTheRest(): void {
