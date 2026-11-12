@@ -6,10 +6,12 @@
  * - Z1: equal only by the whole manifest of every file (path, size,
  *   SHA-256, by strcmp(), ab-files/1); mtime never counts; one file more,
  *   less, other bytes, another name: another hash;
- * - Z2: a folder .git, .svn or .hg anywhere, a link (the unit itself
- *   included) or a file that is no regular file locks the unit
- *   (code:live_extra here, code:link on staging) without a hash; no name
- *   is left out within a unit;
+ * - Z2: a folder .git, .svn or .hg anywhere (the folder of the unit itself
+ *   included), a link (the unit itself included) or a file that is no
+ *   regular file locks the unit (code:live_extra here, code:link on
+ *   staging) without a hash; no name is left out within a unit; a theme
+ *   outside the folder of the themes is locked (code:theme_root) and not
+ *   read, unit() told its kind;
  * - the faults of its calls to the outside (plan 8.3, through the seam
  *   naht_sync_file_manifest), each with the promise at its place: a
  *   reading that fails, throws, is cut, sees a writer or runs out of time
@@ -17,6 +19,7 @@
  *
  * Kinds of fault and where they apply to reading a unit:
  * - return false (Lesefehler): names(), lstat(), open(), fstat(), read();
+ *   theme_root() without a folder of the themes (every theme locked);
  * - Throwable: any call;
  * - half (halb gelesen): read() gives fewer bytes;
  * - before (gleichzeitiger Schreiber): a writer between lstat() and open()
@@ -98,7 +101,7 @@ final class SyncFileManifestTest extends TestCase {
 	}
 
 	private function read( string $name = 'shop', string $side = 'live', float $deadline = INF, bool $first = true ): array {
-		return AB_MCP_Sync_File_Manifest::unit( $this->dir . '/plugins', $name, $side, $deadline, $first );
+		return AB_MCP_Sync_File_Manifest::unit( $this->dir . '/plugins', $name, $side, $deadline, $first, 'plugin' );
 	}
 
 	private function seam( array $faults ): \AB_MCP_Test_Seam_Proxy {
@@ -165,7 +168,7 @@ final class SyncFileManifestTest extends TestCase {
 		$this->file( 'other/plugins/shop/shop.php', "<?php\n/* Plugin Name: Shop */", 1600000000 );
 		$this->file( 'other/plugins/shop/inc/a.php', '<?php // a' );
 		$this->file( 'other/plugins/shop/readme.txt', 'Shop' );
-		$there = AB_MCP_Sync_File_Manifest::unit( $this->dir . '/other/plugins', 'shop', 'staging', INF, true );
+		$there = AB_MCP_Sync_File_Manifest::unit( $this->dir . '/other/plugins', 'shop', 'staging', INF, true, 'plugin' );
 		self::assertSame( $here, $there['hash'], 'Paths relative to the unit: the place of the site plays no part (F41).' );
 	}
 
@@ -207,6 +210,50 @@ final class SyncFileManifestTest extends TestCase {
 			}
 			self::remove( $this->dir . '/plugins/shop' );
 		}
+	}
+
+	public function testTheFolderOfTheUnitItselfOfVersionControlLocksIt(): void {
+		// A folder .git, .svn or .hg at the top of the must-use folder is a
+		// unit of its own: no hash, the lock of its side (Codex round 1, A1).
+		foreach ( AB_MCP_Sync_File_Manifest::VCS as $vcs ) {
+			$this->file( 'plugins/' . $vcs . '/HEAD', 'ref' );
+			foreach ( array( 'live' => 'code:live_extra', 'staging' => 'code:link' ) as $side => $lock ) {
+				$read = AB_MCP_Sync_File_Manifest::unit( $this->dir . '/plugins', $vcs, $side, INF, true, 'mu_plugin' );
+				self::assertSame( array( 'folder', $lock, 'vcs', null, true, array() ), array( $read['form'], $read['lock'], $read['cause'], $read['hash'], $read['complete'], $read['entries'] ), "$vcs $side" );
+			}
+			$nested = AB_MCP_Sync_File_Manifest::unit( $this->dir, 'plugins/' . $vcs, 'live', INF, true, 'upload' );
+			self::assertSame( array( 'code:live_extra', 'vcs', null ), array( $nested['lock'], $nested['cause'], $nested['hash'] ), "$vcs below a root of files" );
+			self::remove( $this->dir . '/plugins/' . $vcs );
+		}
+		$this->file( 'plugins/.github/x.yml', 'on: push' );
+		self::assertNotNull( AB_MCP_Sync_File_Manifest::unit( $this->dir . '/plugins', '.github', 'live', INF, true, 'mu_plugin' )['hash'], 'Only those three names.' );
+	}
+
+	public function testAThemeIsReadOnlyFromTheFolderOfTheThemes(): void {
+		$this->file( 'themes/eins/style.css', '/* Theme Name: Eins */' );
+		$this->file( 'more/zwei/style.css', '/* Theme Name: Zwei */' );
+		$seam = $this->seam( array( array( 'method' => 'theme_root', 'kind' => 'return', 'value' => $this->dir . '/themes/' ) ) );
+		$home = AB_MCP_Sync_File_Manifest::unit( $this->dir . '/themes', 'eins', 'live', INF, true, 'theme' );
+		self::assertSame( array( 'folder', true, null, 1 ), array( $home['form'], $home['complete'], $home['lock'], $home['files'] ), 'The folder of the themes, also spelled with a slash.' );
+		self::assertNotNull( $home['hash'] );
+		$calls = count( $seam->calls );
+		foreach ( array( 'live', 'staging' ) as $side ) {
+			$other = AB_MCP_Sync_File_Manifest::unit( $this->dir . '/more', 'zwei', $side, INF, true, 'theme' );
+			self::assertSame( array( 'other', true, 'code:theme_root', 'theme_root', null, 0, array() ), array( $other['form'], $other['complete'], $other['lock'], $other['cause'], $other['hash'], $other['files'], $other['entries'] ), "A further root of themes: locked on either side ($side)." );
+		}
+		self::assertSame( array( 'theme_root' ), array_values( array_unique( array_column( array_slice( $seam->calls, $calls ), 'method' ) ) ), 'Not read: no file of it listed or opened.' );
+		self::assertNotNull( AB_MCP_Sync_File_Manifest::unit( $this->dir . '/more', 'zwei', 'live', INF, true, 'plugin' )['hash'], 'The lock is that of a theme only.' );
+		AB_MCP_Test_Seam::restore_all();
+		// Without a folder of the themes (no WP_CONTENT_DIR): every theme
+		// locked, none read.
+		$this->seam( array( array( 'method' => 'theme_root', 'kind' => 'return', 'value' => null ) ) );
+		self::assertNull( AB_MCP_Sync_File_Manifest::theme_root() );
+		self::assertSame( 'code:theme_root', AB_MCP_Sync_File_Manifest::unit( $this->dir . '/themes', 'eins', 'live', INF, true, 'theme' )['lock'] );
+		AB_MCP_Test_Seam::restore_all();
+		self::assertSame( rtrim( (string) WP_CONTENT_DIR, '/' ) . '/themes', AB_MCP_Sync_File_Manifest::theme_root(), 'The real calls: the folder of the themes of WP_CONTENT_DIR, no filter.' );
+		$this->seam( array( array( 'method' => 'theme_root', 'kind' => 'throw', 'message' => 'gone' ) ) );
+		$read = AB_MCP_Sync_File_Manifest::unit( $this->dir . '/themes', 'eins', 'live', INF, true, 'theme' );
+		self::assertSame( array( false, 'unreadable', null, null ), array( $read['complete'], $read['cause'], $read['lock'], $read['hash'] ), 'A Throwable of theme_root(): not read, no hash.' );
 	}
 
 	public function testALinkInTheUnitOrTheUnitAsALinkLocksIt(): void {

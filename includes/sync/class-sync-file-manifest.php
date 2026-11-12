@@ -9,7 +9,7 @@
  * folder, a language file, a file of the fonts, a file of the uploads
  * outside the file lists of the attachments. AB_MCP_Sync_Env finds them and
  * reads them one by one, each whole within one call, over the parts of the
- * series of the environment; this class reads one.
+ * series of the environment; this class reads one, told its kind.
  *
  * FORMAT ab-files/1: each file of the unit with its path relative to the
  * folder of the unit (a unit of one file: its own name), its size and its
@@ -21,10 +21,14 @@
  * THE ONE PLACE (plan 3.1, Z1 and Z2): unit() is the only function that
  * gives the hash of a unit. It gives one only where it listed and hashed
  * every file of the unit in this very call and found nothing a manifest
- * cannot hold: a folder .git, .svn or .hg anywhere in it, a symbolic link
- * (the unit itself included) or anything that is no regular file locks the
- * unit (code:live_extra on the production site, code:link on the staging
- * site), and it has no hash. There is no list of names left out within a
+ * cannot hold: a folder .git, .svn or .hg anywhere in it (the folder of the
+ * unit itself included), a symbolic link (the unit itself included) or
+ * anything that is no regular file locks the unit (code:live_extra on the
+ * production site, code:link on the staging site), and it has no hash. A
+ * theme outside the folder of the themes (a further root of themes,
+ * register_theme_directory()) is locked as such (code:theme_root, E2) and
+ * not read: unit() is told the kind and the folder the unit lies in, and
+ * takes a theme only from the standard root (theme_root()). There is no list of names left out within a
  * unit: what a plugin writes into its own folder is part of it. A folder
  * or file that cannot be read, a file that changes while it is read (its
  * size, time or identity differ before and after, or fewer bytes came than
@@ -110,6 +114,16 @@ final class AB_MCP_Sync_File_Manifest_Calls {
 	}
 
 	/**
+	 * The folder of the themes (the standard root of themes, never a further
+	 * one), as WordPress names it without a filter; null without one.
+	 *
+	 * @return string|null
+	 */
+	public function theme_root() {
+		return defined( 'WP_CONTENT_DIR' ) ? rtrim( (string) WP_CONTENT_DIR, '/' ) . '/themes' : null;
+	}
+
+	/**
 	 * Files of one unit at most (the memory of one call holds them).
 	 *
 	 * @return int
@@ -146,7 +160,10 @@ final class AB_MCP_Sync_File_Manifest {
 	const MAX_FILES = 100000;
 
 	/** Why a unit has no hash. */
-	const WHY = array( 'unreadable', 'changed', 'too_large', 'too_many', 'link', 'vcs', 'nonfile' );
+	const WHY = array( 'unreadable', 'changed', 'too_large', 'too_many', 'link', 'vcs', 'nonfile', 'theme_root' );
+
+	/** The lock of a theme outside the folder of the themes (E2): never read, never taken over. */
+	const THEME_ROOT_LOCK = 'code:theme_root';
 
 	/** What locks a unit, by the side that read it (E1). */
 	const LOCK_BY_SIDE = array(
@@ -174,6 +191,17 @@ final class AB_MCP_Sync_File_Manifest {
 	}
 
 	/**
+	 * The folder of the themes: the one root a theme is read from (E2); null
+	 * where WordPress names none.
+	 *
+	 * @return string|null
+	 */
+	public static function theme_root() {
+		$root = self::calls()->theme_root();
+		return is_string( $root ) && '' !== $root ? $root : null;
+	}
+
+	/**
 	 * Read one unit whole: list and hash every file of it, as ab-files/1.
 	 * The one place that gives the hash of a unit (Z1, Z2).
 	 *
@@ -184,10 +212,12 @@ final class AB_MCP_Sync_File_Manifest {
 	 * @param bool   $first    The unit had a whole call to itself: where it
 	 *                         does not end in time it is too_large, else it
 	 *                         stops and a later call reads it anew.
+	 * @param string $kind     Its kind (AB_MCP_Sync_Env::UNITS): a theme is
+	 *                         read only from the folder of the themes.
 	 * @return array{form:string,complete:bool,stopped:bool,cause:string|null,lock:string|null,hash:string|null,files:int,bytes:int,entries:array[]}
 	 *               entries: [path, size, sha256, mtime] by strcmp() of the path.
 	 */
-	public static function unit( $base, $name, $side, $deadline, $first ) {
+	public static function unit( $base, $name, $side, $deadline, $first, $kind ) {
 		$acc = array(
 			'form'     => 'other',
 			'complete' => false,
@@ -201,6 +231,13 @@ final class AB_MCP_Sync_File_Manifest {
 		);
 		$path = rtrim( (string) $base, '/' ) . '/' . (string) $name;
 		try {
+			// A theme outside the folder of the themes: locked, not read (E2).
+			if ( 'theme' === $kind && ( null === self::theme_root() || rtrim( (string) $base, '/' ) !== rtrim( (string) self::theme_root(), '/' ) ) ) {
+				$acc['lock']     = self::THEME_ROOT_LOCK;
+				$acc['cause']    = 'theme_root';
+				$acc['complete'] = true;
+				return $acc;
+			}
 			$stat = self::calls()->lstat( $path );
 			if ( false === $stat ) {
 				return self::ended( $acc, 'unreadable' );
@@ -208,7 +245,9 @@ final class AB_MCP_Sync_File_Manifest {
 			$type = (int) $stat['mode'] & 0170000;
 			if ( 0040000 === $type ) {
 				$acc['form'] = 'folder';
-				$went        = self::folder( $path, '', $side, (float) $deadline, (bool) $first, $acc );
+				// The folder of the unit itself one of version control (a
+				// folder .git at the top of the must-use folder): locked.
+				$went = in_array( basename( (string) $name ), self::VCS, true ) ? self::locked( $acc, $side, 'vcs' ) : self::folder( $path, '', $side, (float) $deadline, (bool) $first, $acc );
 			} elseif ( 0100000 === $type ) {
 				$acc['form'] = 'file';
 				$went        = self::file( $path, basename( (string) $name ), $stat, (float) $deadline, (bool) $first, $acc );

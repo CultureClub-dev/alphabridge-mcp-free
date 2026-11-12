@@ -1014,6 +1014,133 @@ final class SyncEnvTest extends TestCase {
 		self::assertArrayNotHasKey( 'locks', $e );
 	}
 
+	/** The pair of the plugin shop, active, with bases (E2). */
+	private static function shop_pair(): array {
+		$act = \AB_MCP_Sync_Decision::part_hash( 'plugin', 'activation', self::plugin( '2.0', true ) );
+		return array(
+			'id'           => 7,
+			'kind'         => 'plugin',
+			'staging_ref'  => 'shop',
+			'live_ref'     => 'shop',
+			'state'        => 'active',
+			'canon'        => \AB_MCP_Sync_Canon::VERSION,
+			'base_live'    => str_repeat( 'a', 64 ),
+			'base_staging' => str_repeat( 'a', 64 ),
+			'base_extra'   => array( 'parts' => array( 'activation' => array( 'live' => $act, 'staging' => $act ) ) ),
+		);
+	}
+
+	/** The entries of a comparison by subtype:ref, the lists of tables whole on both sides. */
+	private static function judged( array $staging, array $live, array $pairs = array() ): array {
+		$out = array();
+		foreach ( AB_MCP_Sync_Env::compare( array_merge( $staging, array( self::whole() ) ), array_merge( $live, array( self::whole() ) ), $pairs )['entries'] as $entry ) {
+			$out[ $entry['subtype'] . ':' . $entry['ref'] ] = $entry;
+		}
+		return $out;
+	}
+
+	public function testAUnitOnOneSideIsOnlyThereOnlyWhereThatSideReadItWholeWithoutALock(): void {
+		// Codex round 1, B3: the side that has it, read whole and not locked,
+		// before «only there» or «removed».
+		$unread = array( 'complete' => false, 'hash' => null, 'cause' => 'unreadable', 'files' => 0, 'bytes' => 0 ) + self::plugin( '2.0' );
+		$linked = array( 'hash' => null, 'lock' => 'code:link', 'cause' => 'link', 'files' => 0, 'bytes' => 0 ) + self::plugin( '2.0' );
+		$extra  = array( 'hash' => null, 'lock' => 'code:live_extra', 'cause' => 'vcs', 'files' => 0, 'bytes' => 0 ) + self::plugin( '2.0' );
+		foreach ( array( 'without a pair' => array(), 'with an active pair' => array( self::shop_pair() ) ) as $case => $pairs ) {
+			$e = self::judged( array( $unread ), array(), $pairs )['plugin:shop'];
+			self::assertSame( array( 'not_compared', 'none', array() ), array( $e['result'], $e['action'], array_column( $e['locks'] ?? array(), 'key' ) ), "Not read whole on staging, $case." );
+			self::assertSame( 'It could not be read whole on the staging site (a folder or file of it could not be read).', $e['why'] );
+			$e = self::judged( array(), array( $unread ), $pairs )['plugin:shop'];
+			self::assertSame( array( 'not_compared', 'none' ), array( $e['result'], $e['action'] ), "Not read whole here, $case." );
+			self::assertStringContainsString( 'on this site', $e['why'] );
+			$e = self::judged( array( $linked ), array(), $pairs )['plugin:shop'];
+			self::assertSame( array( 'not_compared', 'locked', array( 'code:link' ) ), array( $e['result'], $e['action'], array_column( $e['locks'], 'key' ) ), "A link on staging, $case: its lock, never «only on staging» or removed." );
+			$e = self::judged( array(), array( $extra ), $pairs )['plugin:shop'];
+			self::assertSame( array( 'not_compared', 'locked', array( 'code:live_extra' ) ), array( $e['result'], $e['action'], array_column( $e['locks'], 'key' ) ), "A folder .git here, $case." );
+		}
+		$whole = self::judged( array( self::plugin( '2.0' ) ), array(), array( self::shop_pair() ) )['plugin:shop'];
+		self::assertSame( array( 'deleted_live', 'none' ), array( $whole['result'], $whole['action'] ), 'Read whole without a lock: removed here, as before.' );
+		$whole = self::judged( array(), array( self::plugin( '2.0' ) ) )['plugin:shop'];
+		self::assertSame( array( 'only_live', 'keep' ), array( $whole['result'], $whole['action'] ) );
+	}
+
+	public function testAUnitWhoseFolderTheOtherSideDidNotListWholeIsNotCompared(): void {
+		// Codex round 1, B4 (V1 of the pre-check): a folder of units a side
+		// could not list says so, and a unit the other side has there is not
+		// taken as only there, nor as removed.
+		$root = self::unit( 'plugin', '*', array( 'form' => 'root', 'complete' => false, 'hash' => null, 'files' => 0, 'bytes' => 0, 'mains' => null, 'active' => null, 'version' => null, 'cause' => 'unreadable' ) );
+		foreach ( array( 'without a pair' => array(), 'with an active pair' => array( self::shop_pair() ) ) as $case => $pairs ) {
+			$all = self::judged( array( $root ), array( self::plugin( '2.0' ) ), $pairs );
+			self::assertSame( array( 'not_compared', 'none' ), array( $all['plugin:shop']['result'], $all['plugin:shop']['action'] ), "The plugins of staging not listed, $case." );
+			self::assertSame( 'Whether it is on the staging site is not known: the folder it would lie in could not be read whole there (a folder or file of it could not be read).', $all['plugin:shop']['why'] );
+			self::assertSame( 'not_compared', $all['plugin:*']['result'], 'The folder itself says so.' );
+			$all = self::judged( array( self::plugin( '2.0' ) ), array( $root ), $pairs );
+			self::assertSame( array( 'not_compared', 'none' ), array( $all['plugin:shop']['result'], $all['plugin:shop']['action'] ), "The plugins here not listed, $case." );
+			self::assertStringContainsString( 'on this site is not known', $all['plugin:shop']['why'] );
+		}
+		$moved = array( 'cause' => 'moved' ) + $root;
+		self::assertStringContainsString( 'is gone since', self::judged( array( $moved ), array( self::plugin( '2.0' ) ) )['plugin:shop']['why'], 'Not listed to its end: the same.' );
+		// A folder below a root of files that could not be read: the units
+		// below it, and only those.
+		$folder = self::unit( 'upload', '2024/05', array( 'form' => 'other', 'complete' => false, 'hash' => null, 'files' => 0, 'bytes' => 0, 'cause' => 'unreadable' ) );
+		$all    = self::judged( array( $folder ), array( self::file_unit( 'upload', '2024/05/a.jpg' ), self::file_unit( 'upload', '2024/055.jpg' ), self::file_unit( 'upload', '2025/01/b.jpg' ), self::file_unit( 'upload', '2026/2024/05/c.jpg' ) ) );
+		self::assertSame( 'not_compared', $all['upload:2024/05/a.jpg']['result'] );
+		self::assertSame( array( 'only_live', 'only_live', 'only_live' ), array( $all['upload:2024/055.jpg']['result'], $all['upload:2025/01/b.jpg']['result'], $all['upload:2026/2024/05/c.jpg']['result'] ), 'Beside the folder, or its name further down: listed whole.' );
+		self::assertSame( array( 'not_compared', 'none' ), array( $all['upload:2024/05']['result'], $all['upload:2024/05']['action'] ), 'The folder itself: not only on staging (B3).' );
+	}
+
+	public function testEveryPathOfAUnitIsInTheReportInPagesOfAHundred(): void {
+		// Codex round 1, B5: past MAX_PATHS a list goes on in entries of their
+		// own right after the entry, every path in its order.
+		$c       = str_repeat( 'c', 64 );
+		$d       = str_repeat( 'd', 64 );
+		$s_files = array( array( 'main.php', 3, $c, 1 ) );
+		$l_files = array( array( 'main.php', 3, $d, 1 ) );
+		for ( $i = 1; $i <= 250; $i++ ) {
+			$s_files[] = array( sprintf( 'new/%03d.php', $i ), 3, $c, 1 );
+		}
+		for ( $i = 1; $i <= 101; $i++ ) {
+			$l_files[] = array( sprintf( 'data/%03d.csv', $i ), 3, $c, 1 );
+		}
+		usort( $s_files, static fn( $a, $b ) => strcmp( $a[0], $b[0] ) );
+		usort( $l_files, static fn( $a, $b ) => strcmp( $a[0], $b[0] ) );
+		$lines = static function ( array $line, array $files ): array {
+			$line['files'] = count( $files );
+			$out           = array( $line );
+			foreach ( array_chunk( $files, AB_MCP_Sync_Env::PER_LINE ) as $i => $chunk ) {
+				$out[] = array( 'entries' => $chunk, 'env' => 'entries', 'ref' => 'plugin:shop#' . ( $i + 1 ), 'seq' => $i + 1, 'unit' => 'plugin:shop' );
+			}
+			return $out;
+		};
+		$out = AB_MCP_Sync_Env::compare(
+			array_merge( $lines( self::plugin( '2.0', true, 'a' ), $s_files ), array( self::whole() ) ),
+			array_merge( $lines( self::plugin( '2.0', true, 'b' ), $l_files ), array( self::whole() ) )
+		);
+		$e = $out['entries'][0];
+		self::assertSame( array( 'differs', 'locked' ), array( $e['result'], $e['action'] ) );
+		self::assertSame( array( 250, 101, 1, 3 ), array( $e['paths']['only_staging_count'], $e['paths']['only_live_count'], $e['paths']['differs_count'], $e['paths']['more'] ) );
+		self::assertSame( array( 100, 100, 1 ), array( count( $e['paths']['only_staging'] ), count( $e['paths']['only_live'] ), count( $e['paths']['differs'] ) ), 'A hundred a list in the entry.' );
+		self::assertStringContainsString( 'in the entries right after this one', $e['words'] );
+		self::assertCount( 4, $out['entries'], 'The entry and its three entries of further paths.' );
+		$more = array_slice( $out['entries'], 1 );
+		self::assertSame( array( array( 'only_live', 101, 1 ), array( 'only_staging', 101, 100 ), array( 'only_staging', 201, 50 ) ), array_map( static fn( $m ) => array( $m['paths']['list'], $m['paths']['from'], count( $m['paths']['paths'] ) ), $more ) );
+		foreach ( $more as $m ) {
+			self::assertSame( array( 'environment', 'plugin', 'shop', 'more_paths', 'none' ), array( $m['kind'], $m['subtype'], $m['ref'], $m['result'], $m['action'] ) );
+			self::assertArrayNotHasKey( 'locks', $m );
+		}
+		$every = array_merge( $e['paths']['only_staging'], $more[1]['paths']['paths'], $more[2]['paths']['paths'] );
+		self::assertSame( array_values( array_filter( array_column( $s_files, 0 ), static fn( $p ) => 0 === strpos( $p, 'new/' ) ) ), $every, 'Every path only on staging, in its order, none twice.' );
+		self::assertSame( array_column( array_slice( $l_files, 0, 101 ), 0 ), array_merge( $e['paths']['only_live'], $more[0]['paths']['paths'] ) );
+		self::assertSame( array( 'differs' => 1, 'more_paths' => 3 ), $out['counts']['results'] );
+		// At the limit: no entry of further paths.
+		$out = AB_MCP_Sync_Env::compare(
+			array_merge( $lines( self::plugin( '2.0', true, 'a' ), array_slice( $s_files, 0, 101 ) ), array( self::whole() ) ),
+			array_merge( $lines( self::plugin( '2.0', true, 'b' ), array( array( 'main.php', 3, $d, 1 ) ) ), array( self::whole() ) )
+		);
+		self::assertCount( 1, $out['entries'] );
+		self::assertArrayNotHasKey( 'more', $out['entries'][0]['paths'] );
+		self::assertSame( 100, count( $out['entries'][0]['paths']['only_staging'] ) );
+	}
+
 	public function testAUnitNotReadWholeIsNotComparedWithWhy(): void {
 		$e = self::one( self::plugin( '2.0', null ), self::plugin( '2.0' ) );
 		self::assertSame( 'not_compared', $e['result'] );

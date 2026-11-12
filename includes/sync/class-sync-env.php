@@ -113,6 +113,13 @@
  * decision, the words of the environment) stay English: they are compared
  * across the two sites and go into the hashes of the report and the plan.
  *
+ * THE CALLS TO THE OUTSIDE of the series (plan 8.3, branch 2: the rows of
+ * the options the lines take, the file lists of the attachments) go through
+ * AB_MCP_Sync_Env_Calls, held by the seam of this class; only the tests put
+ * another object there. No filter and no option reaches it. The files of
+ * the units go through the seam of AB_MCP_Sync_File_Manifest, the
+ * checksums of the core through that of AB_MCP_Sync_Core_Compare.
+ *
  * @package AlphaBridge_MCP
  */
 
@@ -130,9 +137,56 @@ require_once __DIR__ . '/class-sync-core-compare.php';
 require_once dirname( __DIR__ ) . '/class-redactor.php';
 
 /**
+ * The calls of the series of the environment to the rows of the site: the
+ * real ones.
+ */
+final class AB_MCP_Sync_Env_Calls {
+
+	/**
+	 * A stored option row as it is, past every filter.
+	 *
+	 * @param string $name Option.
+	 * @return array|false|null The row; false where there is none; null where it cannot be read.
+	 */
+	public function option( $name ) {
+		return AB_MCP_Sync_Rows::option( (string) $name );
+	}
+
+	/**
+	 * A page of the paths the file lists of the attachments name.
+	 *
+	 * @param int|null $after The attachment the page before ended with.
+	 * @param int      $limit Attachments at most.
+	 * @return array|null AB_MCP_Sync_Media::reverse().
+	 */
+	public function attached( $after, $limit ) {
+		return AB_MCP_Sync_Media::reverse( $after, $limit );
+	}
+}
+
+/**
  * Class AB_MCP_Sync_Env
  */
 final class AB_MCP_Sync_Env {
+
+	/** The calls to the rows of the site (the seam); only the tests put another object here. */
+	private static $naht_sync_env = null;
+
+	/**
+	 * The calls object: the stand-in of a test, else the real calls.
+	 *
+	 * @return AB_MCP_Sync_Env_Calls
+	 */
+	private static function calls() {
+		return self::$naht_sync_env ?? new AB_MCP_Sync_Env_Calls();
+	}
+
+	/**
+	 * Back to the real calls.
+	 */
+	public static function forget() {
+		self::$naht_sync_env = null;
+	}
 
 	/** The steps of a reading, in order. */
 	const STEPS = array( 'site', 'core', 'tables', 'plugin', 'theme', 'theme_root', 'mu_plugin', 'language', 'font', 'upload', 'uploads' );
@@ -697,7 +751,7 @@ final class AB_MCP_Sync_Env {
 	 * @return string|null
 	 */
 	public static function locale() {
-		$row = AB_MCP_Sync_Rows::option( 'WPLANG' );
+		$row = self::calls()->option( 'WPLANG' );
 		if ( null === $row ) {
 			return null;
 		}
@@ -804,7 +858,7 @@ final class AB_MCP_Sync_Env {
 	 * @return string[]|null
 	 */
 	private static function stored_list( $name ) {
-		$row = AB_MCP_Sync_Rows::option( $name );
+		$row = self::calls()->option( $name );
 		if ( false === $row ) {
 			return array();
 		}
@@ -877,7 +931,7 @@ final class AB_MCP_Sync_Env {
 	public static function htaccess() {
 		$paths = array();
 		foreach ( array( 'home', 'siteurl' ) as $option ) {
-			$row = AB_MCP_Sync_Rows::option( $option );
+			$row = self::calls()->option( $option );
 			if ( ! is_array( $row ) ) {
 				return null;
 			}
@@ -984,16 +1038,23 @@ final class AB_MCP_Sync_Env {
 	 * The line of the theme that runs (E2: a unit of its own): the stored
 	 * rows of stylesheet and template, each a name of the site (by its
 	 * SHA-256 where a credential holds it, held()); null where a row cannot
-	 * be read or holds none.
+	 * be read or holds none. The stylesheet is read again after the
+	 * template: where it changed in between (a switch of the theme while it
+	 * is read), both are null, so that no pair of rows that never stood
+	 * together is compared.
 	 *
 	 * @return array
 	 */
 	public static function theme_choice() {
-		$out = array();
+		$read = array();
+		foreach ( array( 'stylesheet', 'template', 'again' ) as $option ) {
+			$row             = self::calls()->option( 'again' === $option ? 'stylesheet' : $option );
+			$read[ $option ] = is_array( $row ) && is_string( $row['value'] ) && '' !== $row['value'] ? $row['value'] : null;
+		}
+		$same = $read['again'] === $read['stylesheet'];
+		$out  = array();
 		foreach ( array( 'stylesheet', 'template' ) as $option ) {
-			$row            = AB_MCP_Sync_Rows::option( $option );
-			$value          = is_array( $row ) && is_string( $row['value'] ) && '' !== $row['value'] ? $row['value'] : null;
-			$out[ $option ] = null === $value ? null : self::path_name( $value );
+			$out[ $option ] = null === $read[ $option ] || ! $same ? null : self::path_name( $read[ $option ] );
 		}
 		return self::line( 'theme_choice', 'theme_choice', $out );
 	}
@@ -1018,7 +1079,7 @@ final class AB_MCP_Sync_Env {
 	private static function unit_step( $kind, $place, $deadline, $room, $side, &$first, $empty ) {
 		$alone = $first;
 		if ( 'theme_root' === $kind ) {
-			$lines = self::theme_roots();
+			$lines = self::theme_roots( $side, $deadline );
 			if ( count( $lines ) > $room && ! $empty ) {
 				return array(
 					'lines' => array(),
@@ -1059,6 +1120,12 @@ final class AB_MCP_Sync_Env {
 		$last  = $after;
 		foreach ( self::candidates( $kind, $dir, $after, $ctx ) as $candidate ) {
 			list( $name, $flag ) = $candidate;
+			if ( 'root' === $flag ) {
+				// The folder of the kind could not be listed: its line says so,
+				// so that no unit of the other side is taken as only there.
+				$lines[] = self::root_unit( $kind, 'unreadable' );
+				return self::units_done( $lines );
+			}
 			if ( ( ( array() !== $lines || ! $alone ) && self::now() >= $deadline ) || count( $lines ) >= $room ) {
 				return self::units_stop( $lines, $last );
 			}
@@ -1128,7 +1195,9 @@ final class AB_MCP_Sync_Env {
 			return defined( $constant[ $kind ] ) ? array( 'dir' => rtrim( (string) constant( $constant[ $kind ] ), '/' ), 'why' => '' ) : array( 'dir' => '', 'why' => 'unknown' );
 		}
 		if ( 'theme' === $kind ) {
-			return defined( 'WP_CONTENT_DIR' ) ? array( 'dir' => rtrim( (string) WP_CONTENT_DIR, '/' ) . '/themes', 'why' => '' ) : array( 'dir' => '', 'why' => 'unknown' );
+			// The one root a theme is read from, as the manifest takes it (E2).
+			$root = AB_MCP_Sync_File_Manifest::theme_root();
+			return null !== $root ? array( 'dir' => rtrim( $root, '/' ), 'why' => '' ) : array( 'dir' => '', 'why' => 'unknown' );
 		}
 		$root = array(
 			'language' => 'languages',
@@ -1168,8 +1237,10 @@ final class AB_MCP_Sync_Env {
 
 	/**
 	 * The units of a kind in the order of the walk (order()), after a path:
-	 * each with what it is (unit, unreadable: a folder below the root that
-	 * cannot be read, vcs: a folder of version control below a root of files).
+	 * each with what it is (unit; unreadable: a folder below the root that
+	 * cannot be read; root: the folder of the kind itself cannot be listed,
+	 * so what is not there is not known). A folder of version control is a
+	 * unit, which unit() locks.
 	 *
 	 * @param string      $kind  Kind.
 	 * @param string      $dir   Its folder.
@@ -1179,7 +1250,12 @@ final class AB_MCP_Sync_Env {
 	 */
 	private static function candidates( $kind, $dir, $after, array $ctx ) {
 		if ( in_array( $kind, array( 'plugin', 'theme', 'mu_plugin' ), true ) ) {
-			foreach ( (array) self::names( $dir ) as $name ) {
+			$names = self::names( $dir );
+			if ( null === $names ) {
+				yield array( '', 'root' );
+				return;
+			}
+			foreach ( $names as $name ) {
 				if ( null !== $after && strcmp( $name, $after ) <= 0 ) {
 					continue;
 				}
@@ -1196,7 +1272,7 @@ final class AB_MCP_Sync_Env {
 				if ( '.' === $name[0] ) {
 					continue;
 				}
-				if ( is_link( $full ) || is_dir( $full ) || ( 'plugin' === $kind && isset( $ctx['mains'][ $name ] ) ) ) {
+				if ( is_link( $full ) || is_dir( $full ) || ( 'plugin' === $kind && array_key_exists( $name, $ctx['mains'] ) ) ) {
 					yield array( $name, 'unit' );
 				}
 			}
@@ -1214,7 +1290,8 @@ final class AB_MCP_Sync_Env {
 				return 'unit';
 			}
 			if ( is_dir( $full ) && ! is_link( $full ) ) {
-				return in_array( $name, AB_MCP_Sync_File_Manifest::VCS, true ) ? 'vcs' : 'into';
+				// A folder of version control is a unit, which unit() locks.
+				return in_array( $name, AB_MCP_Sync_File_Manifest::VCS, true ) ? 'unit' : 'into';
 			}
 			$path = '' === $rel ? $name : $rel . '/' . $name;
 			return 'upload' === $kind && isset( $ctx['attached'][ $path ] ) ? 'skip' : 'unit';
@@ -1229,14 +1306,17 @@ final class AB_MCP_Sync_Env {
 	 * @param string      $base  The root.
 	 * @param string      $rel   This folder ('' the root).
 	 * @param string|null $after The last unit the part before read.
-	 * @param callable    $pick  function( $rel, $name, $full ): unit, into, vcs or skip.
+	 * @param callable    $pick  function( $rel, $name, $full ): unit, into or skip.
 	 * @return Generator<array{0:string,1:string}>
 	 */
 	private static function nested( $base, $rel, $after, callable $pick ) {
 		$dir   = '' === $rel ? $base : $base . '/' . $rel;
 		$list = self::names( $dir );
 		if ( null === $list ) {
-			if ( '' !== $rel && ( null === $after || self::order( $rel, $after ) > 0 ) ) {
+			if ( '' === $rel ) {
+				// The root itself: what is not there is not known.
+				yield array( '', 'root' );
+			} elseif ( null === $after || self::order( $rel, $after ) > 0 ) {
 				yield array( $rel, 'unreadable' );
 			}
 			return;
@@ -1265,8 +1345,9 @@ final class AB_MCP_Sync_Env {
 
 	/**
 	 * Read one unit: AlphaBridge itself shown, not hashed (own, E12); a folder
-	 * below a root that cannot be read, or one of version control there,
-	 * without a hash; any other through AB_MCP_Sync_File_Manifest::unit().
+	 * below a root that cannot be read without a hash; any other through
+	 * AB_MCP_Sync_File_Manifest::unit(), which also locks what no manifest
+	 * holds.
 	 *
 	 * @param string $kind     Kind.
 	 * @param string $dir      Its folder.
@@ -1300,14 +1381,7 @@ final class AB_MCP_Sync_Env {
 		if ( 'unreadable' === $flag ) {
 			return array( 'cause' => 'unreadable' ) + $none;
 		}
-		if ( 'vcs' === $flag ) {
-			return array(
-				'complete' => true,
-				'lock'     => AB_MCP_Sync_File_Manifest::LOCK_BY_SIDE[ 'live' === $side ? 'live' : 'staging' ],
-				'cause'    => 'vcs',
-			) + $none;
-		}
-		return array( 'own' => false ) + AB_MCP_Sync_File_Manifest::unit( $dir, $name, $side, $deadline, $first );
+		return array( 'own' => false ) + AB_MCP_Sync_File_Manifest::unit( $dir, $name, $side, $deadline, $first, $kind );
 	}
 
 	/**
@@ -1437,12 +1511,15 @@ final class AB_MCP_Sync_Env {
 	/**
 	 * The lines of the themes of the further roots of themes
 	 * (register_theme_directory(), $GLOBALS['wp_theme_directories'] besides
-	 * the standard root), each locked (code:theme_root, E2), not read; one
-	 * whose stylesheet the standard root has as well is that one.
+	 * the standard root), each through AB_MCP_Sync_File_Manifest::unit(),
+	 * which locks it (code:theme_root, E2) and reads nothing; one whose
+	 * stylesheet the standard root has as well is that one.
 	 *
+	 * @param string $side     live or staging.
+	 * @param float  $deadline Until when.
 	 * @return array[]
 	 */
-	private static function theme_roots() {
+	private static function theme_roots( $side, $deadline ) {
 		$standard = self::unit_base( 'theme' );
 		if ( '' !== $standard['why'] || ! isset( $GLOBALS['wp_theme_directories'] ) || ! is_array( $GLOBALS['wp_theme_directories'] ) ) {
 			return array();
@@ -1457,30 +1534,18 @@ final class AB_MCP_Sync_Env {
 			}
 		}
 		$lines = array();
-		foreach ( self::theme_dirs( $others ) as $stylesheet => $version ) {
-			$top = explode( '/', (string) $stylesheet )[0];
-			if ( file_exists( $standard['dir'] . '/' . $top ) ) {
-				continue;
+		$seen  = array();
+		foreach ( $others as $root ) {
+			$versions = self::theme_dirs( array( $root ) );
+			foreach ( $versions as $stylesheet => $version ) {
+				$top = explode( '/', (string) $stylesheet )[0];
+				if ( file_exists( $standard['dir'] . '/' . $top ) || isset( $seen[ (string) $stylesheet ] ) ) {
+					continue;
+				}
+				$seen[ (string) $stylesheet ] = true;
+				$read                         = array( 'own' => false ) + AB_MCP_Sync_File_Manifest::unit( $root, (string) $stylesheet, $side, $deadline, false, 'theme' );
+				$lines[]                      = self::unit_lines( 'theme', (string) $stylesheet, $read, array( 'versions' => $versions ) )[0];
 			}
-			$lines[] = self::named(
-				'theme',
-				(string) $stylesheet,
-				array(
-					'active'   => null,
-					'bytes'    => 0,
-					'complete' => true,
-					'files'    => 0,
-					'form'     => 'other',
-					'hash'     => null,
-					'lock'     => 'code:theme_root',
-					'mains'    => null,
-					'mtime'    => null,
-					'own'      => false,
-					'sha256'   => null,
-					'version'  => $version,
-					'cause'    => 'theme_root',
-				)
-			);
 		}
 		return self::sorted( $lines );
 	}
@@ -1810,7 +1875,7 @@ final class AB_MCP_Sync_Env {
 		$paths = array();
 		$after = 0;
 		do {
-			$page = AB_MCP_Sync_Media::reverse( $after, AB_MCP_Sync_Rows::MAX_PAGE );
+			$page = self::calls()->attached( $after, AB_MCP_Sync_Rows::MAX_PAGE );
 			if ( null === $page || ! $page['complete'] ) {
 				return 'attachments_unreadable';
 			}
@@ -2420,6 +2485,12 @@ final class AB_MCP_Sync_Env {
 			's' => self::entries_of( $staging, $s ),
 			'l' => self::entries_of( $live, $l ),
 		);
+		// The folders of units a side did not list whole: a unit the other
+		// side has there is not only on that side, it is not compared.
+		$unread  = array(
+			's' => self::unread( $s ),
+			'l' => self::unread( $l ),
+		);
 		$by_pair = array();
 		foreach ( $pairs as $pair ) {
 			if ( in_array( $pair['kind'], AB_MCP_Sync_Decision::UNIT_KINDS, true ) ) {
@@ -2441,7 +2512,7 @@ final class AB_MCP_Sync_Env {
 			usort( $refs, 'strcmp' );
 			foreach ( $refs as $ref ) {
 				if ( in_array( $env, self::UNITS, true ) || 'theme_choice' === $env ) {
-					$entries[] = AB_MCP_Sync_Decision::unit_item(
+					$item = AB_MCP_Sync_Decision::unit_item(
 						$env,
 						$ref,
 						$s[ $env ][ $ref ] ?? null,
@@ -2450,14 +2521,63 @@ final class AB_MCP_Sync_Env {
 						array(
 							's' => $files['s'][ $env . ':' . $ref ] ?? null,
 							'l' => $files['l'][ $env . ':' . $ref ] ?? null,
+						),
+						array(
+							's' => isset( $s[ $env ][ $ref ] ) ? null : self::unread_at( $unread['s'][ $env ] ?? array(), $ref ),
+							'l' => isset( $l[ $env ][ $ref ] ) ? null : self::unread_at( $unread['l'][ $env ] ?? array(), $ref ),
 						)
 					);
+					foreach ( AB_MCP_Sync_Decision::paged( $item ) as $one ) {
+						$entries[] = $one;
+					}
 					continue;
 				}
 				$entries[] = self::entry( $env, $ref, $s[ $env ][ $ref ] ?? null, $l[ $env ][ $ref ] ?? null, $whole );
 			}
 		}
 		return self::counted( $entries );
+	}
+
+	/**
+	 * The folders of units a side did not list whole, by kind: the folder of
+	 * the kind itself (its line of form root, '' for every unit of it), and a
+	 * folder below a root of files that could not be read (the path of its
+	 * line and a slash, for the units below it), each with why.
+	 *
+	 * @param array<string,array<string,array>> $by Lines of a side by kind and ref (by_ref()).
+	 * @return array<string,array<string,string>> Kind => prefix => a code of UNIT_WHY.
+	 */
+	private static function unread( array $by ) {
+		$out = array();
+		foreach ( self::UNITS as $env ) {
+			foreach ( $by[ $env ] ?? array() as $ref => $line ) {
+				if ( isset( $line['held'] ) || ! empty( $line['complete'] ) ) {
+					continue;
+				}
+				if ( 'root' === ( $line['form'] ?? null ) ) {
+					$out[ $env ][''] = (string) $line['cause'];
+				} elseif ( 'unreadable' === ( $line['cause'] ?? null ) ) {
+					$out[ $env ][ (string) $ref . '/' ] = 'unreadable';
+				}
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * Why the folder a unit would lie in was not listed whole, or null.
+	 *
+	 * @param array<string,string> $prefixes Prefix => why (unread()).
+	 * @param string               $ref      The unit.
+	 * @return string|null
+	 */
+	private static function unread_at( array $prefixes, $ref ) {
+		foreach ( $prefixes as $prefix => $why ) {
+			if ( '' === (string) $prefix || 0 === strpos( (string) $ref, (string) $prefix ) ) {
+				return $why;
+			}
+		}
+		return null;
 	}
 
 	/**

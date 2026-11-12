@@ -181,8 +181,14 @@ final class AB_MCP_Sync_Decision {
 		'files activation' => 'It differs in its files and in which of its main files run.',
 	);
 
-	/** Paths of an entry of a unit shown at most per list (the counts say how many there are). */
+	/** Paths of an entry of a unit shown at most per list; the others follow in entries of their own (paged()), the counts say how many there are. */
 	const MAX_PATHS = 100;
+
+	/** The words of an entry that carries further paths of the unit of the entry before it (paged()). */
+	const MORE_PATHS = 'Further paths of the unit of the entry before: the list they belong to (only_staging, only_live or differs), the number of the first of them in that list, and up to 100 paths in their order.';
+
+	/** Said in the entry of a unit whose paths go on in the entries after it. */
+	const PATHS_GO_ON = 'Each list of paths shows its first 100 here; the others follow, in their order, in the entries right after this one (result more_paths).';
 
 	/* ------------------------------------------------------------ report */
 
@@ -1225,11 +1231,16 @@ final class AB_MCP_Sync_Decision {
 	 * (code:live_changed, with the way «update by hand» for a plugin that
 	 * keeps writing into its folder). What could not be read, a lock of a
 	 * line (code:live_extra, code:link, code:theme_root) and AlphaBridge
-	 * itself (code:own) are never compared by their files. Nothing is taken
-	 * over in this version: the rest is locked with the lock of its kind
-	 * (AB_MCP_Sync_Env::LOCKS). Where the files differ and both sides read
-	 * them whole, the paths: only on staging, only here, other contents
-	 * (never by mtime), at most MAX_PATHS each, with their counts.
+	 * itself (code:own) are never compared by their files. A unit on one
+	 * side only is only there (or removed, with an active pair) only where
+	 * that side read it whole and holds no lock, and where the other side
+	 * listed the folder it would lie in whole ($unread); else it is not
+	 * compared, or locked by its lock. Nothing is taken over in this version:
+	 * the rest is locked with the lock of its kind (AB_MCP_Sync_Env::LOCKS).
+	 * Where the files differ and both sides read them whole, the paths: only
+	 * on staging, only here, other contents (never by mtime), every one of
+	 * them with their counts (paged() shows MAX_PATHS a list in the entry and
+	 * the others in entries after it).
 	 *
 	 * @param string     $kind  A kind of UNIT_KINDS.
 	 * @param string     $ref   Its ref (the name of the unit).
@@ -1237,9 +1248,10 @@ final class AB_MCP_Sync_Decision {
 	 * @param array|null $l     The line of this site.
 	 * @param array|null $pair  Its pair (by kind and staging_ref), or null.
 	 * @param array      $files 's' and 'l': the entries of each side (AB_MCP_Sync_Env::entries_of()), or null.
+	 * @param array      $unread 's' and 'l': for the side without a line, why the folder it would lie in was not listed whole there (a code of AB_MCP_Sync_Env::UNIT_WHY), or null.
 	 * @return array An entry of the environment.
 	 */
-	public static function unit_item( $kind, $ref, $s, $l, $pair, array $files ) {
+	public static function unit_item( $kind, $ref, $s, $l, $pair, array $files, array $unread = array() ) {
 		$entry = array(
 			'kind'    => 'environment',
 			'subtype' => (string) $kind,
@@ -1272,9 +1284,19 @@ final class AB_MCP_Sync_Decision {
 			return self::unit_entry( $entry, $locks, null, $held );
 		}
 		if ( null === $s || null === $l ) {
-			$there = null === $s ? $l : $s;
+			$there   = null === $s ? $l : $s;
+			$missing = $unread[ null === $s ? 's' : 'l' ] ?? null;
 			if ( 'root' === ( $there['form'] ?? null ) ) {
 				$why = self::unit_why( $there, null === $s ? 'this site' : 'the staging site' );
+			} elseif ( isset( $there['lock'] ) && is_string( $there['lock'] ) ) {
+				// Locked by what it holds on the side that has it: never only
+				// there, never removed.
+				$entry['action'] = 'locked';
+				return self::unit_entry( $entry, array( self::code_lock( $there['lock'] ) ), null, $held );
+			} elseif ( 'theme_choice' !== $kind && ( empty( $there['complete'] ) || null === ( $there['hash'] ?? null ) ) ) {
+				return self::unit_entry( $entry, array(), self::unit_why( $there, null === $s ? 'this site' : 'the staging site' ), $held );
+			} elseif ( null !== $missing ) {
+				return self::unit_entry( $entry, array(), sprintf( 'Whether it is on %1$s is not known: the folder it would lie in could not be read whole there (%2$s).', null === $s ? 'the staging site' : 'this site', self::cause_said( $missing ) ), $held );
 			} elseif ( null !== $pair && 'active' === $pair['state'] ) {
 				$entry['result'] = null === $s ? 'deleted_on_staging' : 'deleted_live';
 				$entry['action'] = null === $s ? 'locked' : 'none';
@@ -1458,8 +1480,9 @@ final class AB_MCP_Sync_Decision {
 	/**
 	 * The paths in which the files of a unit differ between the sides
 	 * (AB_MCP_Sync_File_Manifest::paths()), a path one side holds by its
-	 * SHA-256 by that SHA-256 on the other side too; at most MAX_PATHS a
-	 * list, with the count of each. Null where a side has no entries.
+	 * SHA-256 by that SHA-256 on the other side too; every path of each list,
+	 * with the count of each (paged() shows them in parts). Null where a side
+	 * has no entries.
 	 *
 	 * @param array[]|null $s Entries of the staging side.
 	 * @param array[]|null $l Entries of this side.
@@ -1487,7 +1510,7 @@ final class AB_MCP_Sync_Decision {
 		$paths = AB_MCP_Sync_File_Manifest::paths( $alike( $s ), $alike( $l ) );
 		$out   = array();
 		foreach ( $paths as $key => $list ) {
-			$out[ $key ]           = array_slice( $list, 0, self::MAX_PATHS );
+			$out[ $key ]            = $list;
 			$out[ $key . '_count' ] = count( $list );
 		}
 		ksort( $out );
@@ -1502,6 +1525,17 @@ final class AB_MCP_Sync_Decision {
 	 * @return string
 	 */
 	private static function unit_why( array $line, $where ) {
+		return sprintf( 'It could not be read whole on %1$s (%2$s).', $where, self::cause_said( (string) ( $line['cause'] ?? '' ) ) );
+	}
+
+	/**
+	 * Why a unit or a folder of units was not read whole, as a part of a
+	 * sentence.
+	 *
+	 * @param string $code A code of AB_MCP_Sync_Env::UNIT_WHY.
+	 * @return string
+	 */
+	private static function cause_said( $code ) {
 		$say = array(
 			'unreadable'             => 'a folder or file of it could not be read',
 			'changed'                => 'a file of it changed while it was read',
@@ -1515,8 +1549,55 @@ final class AB_MCP_Sync_Decision {
 			'attachments_too_many'   => 'the file lists of the attachments are too many to hold within one call',
 			'moved'                  => 'the unit the call before stopped at (kept by its SHA-256 only) is gone since',
 		);
-		$code = (string) ( $line['cause'] ?? '' );
-		return sprintf( 'It could not be read whole on %1$s (%2$s).', $where, $say[ $code ] ?? 'not known why' );
+		return $say[ (string) $code ] ?? 'not known why';
+	}
+
+	/**
+	 * The entry of a unit as the report holds it: each list of its paths with
+	 * its first MAX_PATHS in the entry, the others in entries of their own
+	 * right after it (result more_paths, action none, MAX_PATHS paths each,
+	 * with the list and the number of the first), so that every path is in
+	 * the report and a page of it stays small (the cursor of wp_site_diff
+	 * reaches them like any entry). An entry without paths as it is.
+	 *
+	 * @param array $entry An entry of unit_item().
+	 * @return array[] The entry, then the entries of its further paths.
+	 */
+	public static function paged( array $entry ) {
+		if ( ! isset( $entry['paths'] ) ) {
+			return array( $entry );
+		}
+		$more = array();
+		foreach ( array( 'differs', 'only_live', 'only_staging' ) as $list ) {
+			foreach ( array_chunk( array_slice( $entry['paths'][ $list ], self::MAX_PATHS ), self::MAX_PATHS ) as $i => $chunk ) {
+				$one = array(
+					'kind'    => 'environment',
+					'subtype' => $entry['subtype'],
+					'ref'     => $entry['ref'],
+					'result'  => 'more_paths',
+					'action'  => 'none',
+					'staging' => null,
+					'live'    => null,
+					'paths'   => array(
+						'from'  => self::MAX_PATHS * ( $i + 1 ) + 1,
+						'list'  => $list,
+						'paths' => $chunk,
+					),
+					'words'   => self::MORE_PATHS,
+				);
+				if ( isset( $entry['held'] ) ) {
+					$one['held'] = $entry['held'];
+				}
+				$more[] = $one;
+			}
+			$entry['paths'][ $list ] = array_slice( $entry['paths'][ $list ], 0, self::MAX_PATHS );
+		}
+		if ( array() !== $more ) {
+			$entry['paths']['more'] = count( $more );
+			ksort( $entry['paths'] );
+			$entry['words'] .= ' ' . self::PATHS_GO_ON;
+		}
+		return array_merge( array( $entry ), $more );
 	}
 
 	/**

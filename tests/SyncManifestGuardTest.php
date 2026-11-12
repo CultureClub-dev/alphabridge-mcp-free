@@ -7,6 +7,9 @@
  *   unit(): no other shipped file writes the text of a manifest (text(),
  *   the format ab-files/1) or hashes a unit, and the reading of the
  *   environment puts into the line of a unit only the hash unit() gave;
+ *   the locks of what no manifest holds (code:live_extra, code:link) and of
+ *   a theme outside the folder of the themes (code:theme_root) are set in
+ *   unit() only, which is told the kind of each unit (Codex round 1, B1);
  * - Z35: the checksums of the core only through AB_MCP_Sync_Core_Compare::
  *   checksums() (no other file asks api.wordpress.org for them, none calls
  *   get_core_checksums());
@@ -70,6 +73,22 @@ final class SyncManifestGuardTest extends TestCase {
 		self::assertSame( 1, substr_count( $env, "'hash'     => \$read['hash']," ), 'The line of a unit takes the hash unit() gave.' );
 		self::assertSame( 0, preg_match( "/'hash'\\s*=>\\s*+(?!\\\$read\\['hash'\\]|null|'hash\\?')/", $env ), 'No other hash of a unit in the reading.' );
 		self::assertSame( 0, preg_match( '/hash_init|hash_file\\(\\s*\'sha256\'\\s*,\\s*\\$(?!path\\b)/', $env ), 'No hash of the files of a unit beside unit().' );
+	}
+
+	public function testTheLocksOfWhatNoManifestHoldsAndOfAFurtherRootOfThemesAreSetInUnitOnly(): void {
+		$manifest = array( 'includes/sync/class-sync-file-manifest.php' );
+		self::assertSame( $manifest, self::holding( 'LOCK_BY_SIDE' ), 'The locks of a side named and set in the manifest only.' );
+		self::assertSame( $manifest, self::holding( 'THEME_ROOT_LOCK' ) );
+		foreach ( array( 'code:live_extra', 'code:link', 'code:theme_root' ) as $lock ) {
+			self::assertSame( array( 'includes/sync/class-sync-env.php', 'includes/sync/class-sync-file-manifest.php' ), self::holding( "'$lock'" ), $lock . ': its value in the manifest, its reason and stage in CODE_LOCKS.' );
+			self::assertSame( 1, substr_count( self::shipped()['includes/sync/class-sync-env.php'], "'$lock'" ), $lock . ': in the environment the key of CODE_LOCKS only, never set on a line.' );
+		}
+		$env = self::shipped()['includes/sync/class-sync-env.php'];
+		self::assertSame( 2, substr_count( $env, 'AB_MCP_Sync_File_Manifest::unit(' ), 'The units and the themes of a further root, both through unit().' );
+		self::assertSame( 2, preg_match_all( "/AB_MCP_Sync_File_Manifest::unit\\([^;]*,\\s*(\\\$kind|'theme')\\s*\\)/", $env ), 'Each call tells unit() the kind.' );
+		self::assertSame( 1, preg_match_all( "/'lock'\\s*=>\\s*\\\$read\\['lock'\\]/", $env ), 'The line of a unit takes the lock unit() gave.' );
+		$manifest_code = self::shipped()['includes/sync/class-sync-file-manifest.php'];
+		self::assertSame( 1, preg_match( "/if \\( 'theme' === \\\$kind && \\( null === self::theme_root\\(\\)/", $manifest_code ), 'unit() takes a theme from the folder of the themes only.' );
 	}
 
 	public function testOnlyTheComparisonOfTheCoreAsksForItsChecksums(): void {

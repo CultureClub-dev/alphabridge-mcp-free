@@ -15,8 +15,10 @@
  * as missing or differing, never as equal), the time limit (no line, a
  * later call checks again). «Gleichzeitiger Schreiber» and «halb
  * geschrieben» do not apply: nothing is written, and a core file changed
- * while it is read differs from its checksum. exit/Fatal: nothing written,
- * the reading of the environment begins the step anew in the next call.
+ * while it is read differs from its checksum. exit/Fatal and the time
+ * limit of PHP at the request, in a process of its own: the integration
+ * case SyncManifestTest::testAnEndOfTheProcessOrItsTimeLimitWhileTheSeriesReadsLeavesNothing
+ * (nothing left in the store, the next reading whole).
  *
  * @package AlphaBridge_MCP
  */

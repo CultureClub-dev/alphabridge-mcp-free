@@ -24,6 +24,49 @@
  * - exit/Fatal in a process of its own while a unit is hashed: nothing is
  *   left, the next reading is whole.
  *
+ * Codex round 1 (Behebung 1): a plugin of one file without a version is a
+ * unit up to the report (B2); a folder of plugins the staging site cannot
+ * list leaves the plugins here not compared (B4); every path of a unit is
+ * in the report, the paths past a hundred in entries the cursor reaches
+ * (B5); and the matrix of plan 8.3 (B6) below.
+ *
+ * THE MATRIX OF PLAN 8.3, branch 2: each effect to the outside with each kind
+ * of fault that applies, where it is tested, or why it does not apply.
+ *
+ * Files (reading the units; seam naht_sync_file_manifest):
+ * - return false, Lesefehler, Throwable, halb gelesen, gleichzeitiger
+ *   Schreiber, Zeitlimit: SyncFileManifestTest (each call of the seam);
+ * - exit/Fatal: testAnEndOfTheProcessWhileAUnitIsHashedLeavesNoHalfReading;
+ * - halb geschrieben: does not apply, the reading writes no file.
+ * Rows and options of the series (seam naht_sync_env: the option rows the
+ * lines take, the file lists of the attachments):
+ * - return false/null (Lesefehler), Throwable, gleichzeitiger Schreiber
+ *   (the theme switched while it is read):
+ *   testTheRowsOfTheSeriesThatFailOrChangeWhileReadAreNeverComparedHalf;
+ * - exit/Fatal and Zeitlimit (the time limit of PHP) in a process of its
+ *   own: testAnEndOfTheProcessOrItsTimeLimitWhileTheSeriesReadsLeavesNothing;
+ *   the budget of a call (the clock of a part): SyncEnvTest of both suites;
+ * - halb geschrieben: does not apply to the rows, the series reads them
+ *   only; the parts it gives are written by the export and the report into
+ *   the protected store, one file at a time through a rename
+ *   (ProtectedStoreTest, testAFileIsWrittenOnceThroughARenameAndReadOnlyWithItsHash).
+ * Rows of the pairs and their bases by part (seam naht_sync_pairs):
+ * - return false, Lesefehler, no row changed, gleichzeitiger Schreiber,
+ *   Throwable: testAFaultOfTheDatabaseLeavesTheBasesAsTheyWere;
+ * - exit/Fatal and Zeitlimit before and after the write, in a process of
+ *   its own: testAnEndOfTheProcessOrItsTimeLimitAtTheWriteOfTheBasesLeavesThemWhole;
+ * - halb geschrieben: does not apply, the bases of a part are written by one
+ *   UPDATE of one row (all columns or none; the end after it leaves them
+ *   whole and new, the test above).
+ * HTTP (the checksums of api.wordpress.org; seam naht_sync_core_compare):
+ * - return false, Throwable, halb gelesen (an answer cut), another answer,
+ *   Zeitlimit of the budget: SyncCoreCompareTest;
+ * - exit/Fatal and the time limit of PHP at the request, in a process of
+ *   its own: testAnEndOfTheProcessOrItsTimeLimitWhileTheSeriesReadsLeavesNothing;
+ * - gleichzeitiger Schreiber, halb geschrieben: do not apply, the request
+ *   writes nothing, and a core file changed while it is checked differs.
+ * Hooks of others: none (plan 8.3), the series calls no filter.
+ *
  * @package AlphaBridge_MCP
  */
 
@@ -43,6 +86,7 @@ use AB_MCP_Sync_Core_Compare;
 use AB_MCP_Sync_Core_Compare_Calls;
 use AB_MCP_Sync_Decision;
 use AB_MCP_Sync_Env;
+use AB_MCP_Sync_Env_Calls;
 use AB_MCP_Sync_Import;
 use AB_MCP_Sync_Kinds;
 use AB_MCP_Sync_Pairs;
@@ -66,6 +110,12 @@ final class SyncManifestTest extends TestCase {
 	/** @var array The kinds registered before the case. */
 	private $kinds = array();
 
+	/** @var string[] Files a case put on a site, removed after it. */
+	private $made = array();
+
+	/** @var string[] Folders a case made on a site (empty after its files), removed after it in this order. */
+	private $folders = array();
+
 	protected function setUp(): void {
 		AB_MCP_IT_Sites::reset( 'a' );
 		AB_MCP_IT_Sites::reset( 'b' );
@@ -81,6 +131,19 @@ final class SyncManifestTest extends TestCase {
 
 	protected function tearDown(): void {
 		AB_MCP_Test_Seam::restore_all();
+		AB_MCP_Sync_Report::$page = null;
+		foreach ( $this->made as $path ) {
+			if ( is_file( $path ) ) {
+				unlink( $path );
+			}
+		}
+		$this->made = array();
+		foreach ( $this->folders as $path ) {
+			if ( is_dir( $path ) ) {
+				rmdir( $path );
+			}
+		}
+		$this->folders = array();
 		AB_MCP_Sync_Kinds::reset();
 		foreach ( $this->kinds as $kind ) {
 			AB_MCP_Sync_Kinds::register( $kind );
@@ -92,6 +155,7 @@ final class SyncManifestTest extends TestCase {
 		}
 		AB_MCP_Protected_Store::forget();
 		AB_MCP_Sync_Env::$clock = null;
+		AB_MCP_Sync_Env::forget();
 		AB_MCP_IT_Code::clear();
 	}
 
@@ -240,7 +304,9 @@ final class SyncManifestTest extends TestCase {
 		$out = array();
 		foreach ( $all as $entry ) {
 			if ( 'environment' === $entry['kind'] ) {
-				$out[ $entry['subtype'] . ':' . $entry['ref'] ] = $entry;
+				// The further paths of a unit by their list and first number.
+				$more = 'more_paths' === $entry['result'] ? '#' . $entry['paths']['list'] . '@' . $entry['paths']['from'] : '';
+				$out[ $entry['subtype'] . ':' . $entry['ref'] . $more ] = $entry;
 			}
 		}
 		return $out;
@@ -307,11 +373,24 @@ final class SyncManifestTest extends TestCase {
 		mkdir( AB_MCP_IT_Code::path( 'a', 'plugin', 'ab-it-inaktiv' ) . '/.git' );
 		file_put_contents( AB_MCP_IT_Code::path( 'a', 'plugin', 'ab-it-inaktiv' ) . '/.git/HEAD', 'ref' );
 		symlink( '/etc/hosts', AB_MCP_IT_Code::path( 'b', 'plugin', 'ab-it-routinen' ) . '/hosts' );
+		// B2: a plugin of one file without a version, the same on both sites.
+		foreach ( array( 'a', 'b' ) as $site ) {
+			$this->made[] = AB_MCP_IT_Sites::docroot( $site ) . '/wp-content/plugins/ab-it-ohne-version.php';
+			file_put_contents( end( $this->made ), "<?php\n/*\n * Plugin Name: Ohne Version\n */\n" );
+		}
+		// B5: a new version on staging with 150 files more (a larger update):
+		// every path in the report, past a hundred through the cursor.
+		$daten = AB_MCP_IT_Code::path( 'b', 'plugin', 'ab-it-daten' );
+		mkdir( $daten . '/viele' );
+		for ( $i = 1; $i <= 150; $i++ ) {
+			file_put_contents( sprintf( '%s/viele/%03d.php', $daten, $i ), '<?php // ' . $i );
+		}
+		AB_MCP_Sync_Report::$page = 5;
 
 		$env = self::report();
 		$katalog = AB_MCP_IT_Code::katalog();
 		foreach ( array_keys( $katalog['plugins'] ) as $slug ) {
-			if ( in_array( $slug, array( 'ab-it-basis', 'ab-it-allein', 'ab-it-inaktiv', 'ab-it-routinen', 'ab-it-schreiber' ), true ) ) {
+			if ( in_array( $slug, array( 'ab-it-basis', 'ab-it-allein', 'ab-it-inaktiv', 'ab-it-routinen', 'ab-it-schreiber', 'ab-it-daten' ), true ) ) {
 				continue;
 			}
 			$key = 'plugin:' . ( empty( $katalog['plugins'][ $slug ]['single'] ) ? $slug : $slug . '.php' );
@@ -338,6 +417,68 @@ final class SyncManifestTest extends TestCase {
 		self::assertSame( array( 'not_compared', 'locked', array( 'code:live_extra' ) ), self::said( $env['plugin:ab-it-inaktiv'] ), 'F22: .git here.' );
 		self::assertSame( array( 'not_compared', 'locked', array( 'code:link' ) ), self::said( $env['plugin:ab-it-routinen'] ), 'F22: a link on staging.' );
 		self::assertStringNotContainsString( '/etc/hosts', (string) json_encode( $env ) );
+
+		self::assertArrayHasKey( 'plugin:ab-it-ohne-version.php', $env, 'B2: a plugin of one file without a version is a unit.' );
+		$e = $env['plugin:ab-it-ohne-version.php'];
+		self::assertSame( array( 'equal', 'none', array() ), self::said( $e ) );
+		self::assertSame( array( null, null, array( 'ab-it-ohne-version.php' ), 'file' ), array( $e['staging']['version'], $e['live']['version'], $e['live']['mains'], $e['live']['form'] ) );
+
+		$e = $env['plugin:ab-it-daten'];
+		self::assertSame( array( 'differs', array( 'files' ) ), array( $e['result'], $e['differs'] ), 'B5: the larger update.' );
+		self::assertSame( array( 150, 100, 1 ), array( $e['paths']['only_staging_count'], count( $e['paths']['only_staging'] ), $e['paths']['more'] ) );
+		$more = $env['plugin:ab-it-daten#only_staging@101'];
+		self::assertSame( array( 'more_paths', 'none', 50 ), array( $more['result'], $more['action'], count( $more['paths']['paths'] ) ) );
+		$every = array();
+		for ( $i = 1; $i <= 150; $i++ ) {
+			$every[] = sprintf( 'viele/%03d.php', $i );
+		}
+		self::assertSame( $every, array_merge( $e['paths']['only_staging'], $more['paths']['paths'] ), 'Every path, in its order, through the cursor (5 entries a page).' );
+	}
+
+	/* ------------------------------------------------ B4: not listed */
+
+	public function testAFolderOfPluginsTheStagingSiteCannotListLeavesThePluginsHereNotCompared(): void {
+		self::pair();
+		AB_MCP_IT_Code::start();
+		// A file of the uploads here, outside the file lists of attachments.
+		$year = AB_MCP_IT_Sites::docroot( 'a' ) . '/wp-content/uploads/2098';
+		self::assertFalse( file_exists( $year ) );
+		mkdir( $year . '/01', 0755, true );
+		$this->made[]  = $year . '/01/frei.txt';
+		$this->folders = array( $year . '/01', $year );
+		file_put_contents( end( $this->made ), 'frei' );
+		$uploads = AB_MCP_IT_Sites::docroot( 'b' ) . '/wp-content/uploads';
+		if ( ! is_dir( $uploads ) ) {
+			mkdir( $uploads );
+			$this->folders[] = $uploads;
+		}
+		$plugins = AB_MCP_IT_Sites::docroot( 'b' ) . '/wp-content/plugins';
+		$before  = array(
+			$plugins => fileperms( $plugins ) & 0777,
+			$uploads => fileperms( $uploads ) & 0777,
+		);
+		// Listed by nobody, their files still loaded by their paths.
+		foreach ( $before as $folder => $mode ) {
+			chmod( $folder, 0311 );
+		}
+		try {
+			self::assertFalse( @scandir( $plugins ), 'The folder of the plugins of the staging site cannot be listed.' );
+			$env = self::report();
+		} finally {
+			foreach ( $before as $folder => $mode ) {
+				chmod( $folder, $mode );
+			}
+		}
+		self::assertSame( 'not_compared', $env['plugin:*']['result'], 'The folder says so.' );
+		self::assertStringContainsString( 'on the staging site', $env['plugin:*']['why'] );
+		$e = $env['plugin:ab-it-basis'];
+		self::assertSame( array( 'not_compared', 'none', array() ), self::said( $e ), 'Not only on this site (V1, Codex round 1 B4).' );
+		self::assertStringContainsString( 'Whether it is on the staging site is not known', $e['why'] );
+		self::assertSame( array( 'equal', 'none', array() ), self::said( $env['theme:ab-it-eltern'] ), 'The themes are listed whole.' );
+		$e = $env['upload:2098/01/frei.txt'];
+		self::assertSame( array( 'not_compared', 'none', array() ), self::said( $e ), 'The root of the uploads of staging not listed: a file here not only here.' );
+		self::assertStringContainsString( 'Whether it is on the staging site is not known', $e['why'] );
+		self::assertSame( 'not_compared', $env['upload:*']['result'] );
 	}
 
 	/* ---------------------------------------------------- with pairs */
@@ -564,6 +705,222 @@ final class SyncManifestTest extends TestCase {
 		}
 		AB_MCP_Test_Seam::restore_all();
 		self::assertSame( $pair['base_live'], AB_MCP_Sync_Pairs::get( $id )['base_live'] );
+	}
+
+	/* ---------------------------------- B6: the rows of the pairs, ends */
+
+	public function testAnEndOfTheProcessOrItsTimeLimitAtTheWriteOfTheBasesLeavesThemWhole(): void {
+		$pair     = self::unit_pair();
+		$id       = (int) $pair['id'];
+		$probe    = dirname( __DIR__ ) . '/integration/support/rebase-probe.php';
+		$plan     = static function ( array $fault, string $expected ) use ( $id, $probe ): array {
+			return array(
+				'require' => array( $probe ),
+				'seams'   => array(
+					array(
+						'owner'    => 'AB_MCP_Sync_Pairs',
+						'property' => 'naht_sync_pairs',
+						'real'     => 'AB_MCP_Sync_Pairs_Calls',
+						'faults'   => array( array( 'method' => 'query', 'kind' => 'abort', 'point' => 'write-bases' ) + $fault ),
+					),
+				),
+				'calls'   => array(
+					array(
+						'call' => 'ab_it_rebase_probe',
+						'args' => array( $id, self::values( 'n-live', 'n-staging' ), $expected ),
+					),
+				),
+			);
+		};
+		$first = self::snap( $pair );
+		$cases = array(
+			'exit before the write (no shutdown)' => array( 'mode' => 'no_shutdown' ),
+			'exit before the write (shutdown)'    => array( 'mode' => 'shutdown' ),
+			'the time limit of PHP at the write'  => array( 'mode' => 'timeout' ),
+		);
+		foreach ( $cases as $case => $fault ) {
+			$before = AB_MCP_Sync_Pairs::snapshot( $id );
+			AB_MCP_IT_Process::abort( 'a', $plan( $fault, $first ) );
+			self::assertSame( $before, AB_MCP_Sync_Pairs::snapshot( $id ), $case . ': the bases as they were.' );
+		}
+		// The end right after the one write: the bases whole and new, both
+		// columns and the part beside them (one UPDATE of one row).
+		AB_MCP_IT_Process::abort( 'a', $plan( array( 'mode' => 'no_shutdown', 'when' => 'after' ), $first ) );
+		$now = AB_MCP_Sync_Pairs::get( $id );
+		self::assertSame( array( self::h( 'n-live' ), self::h( 'n-staging' ), 'push', 7, $pair['base_extra'] ), array( $now['base_live'], $now['base_staging'], $now['base_origin'], $now['last_run'], $now['base_extra'] ), 'Written whole: the files part new, the part activation as it was.' );
+		$run = AB_MCP_IT_Process::calls( 'a', $plan( array( 'mode' => 'no_shutdown', 'nth' => 99 ), $first ) );
+		self::assertSame( 'ab_mcp_staging_pair_changed', $run['results']['call0'], 'The step that read the old state writes nothing on the new one.' );
+	}
+
+	/* -------------------------------- B6: the rows of the series, ends */
+
+	/**
+	 * A stand-in of the calls of the series: each option by its name as the
+	 * case says (null: not readable; a Throwable; a callable run before the
+	 * real call), the rest real.
+	 */
+	private static function rows( array $plan ): object {
+		return new class( $plan ) {
+			private $plan;
+			private $real;
+			public function __construct( array $plan ) {
+				$this->plan = $plan;
+				$this->real = new AB_MCP_Sync_Env_Calls();
+			}
+			public function option( $name ) {
+				$what = $this->plan[ $name ] ?? 'real';
+				if ( 'null' === $what ) {
+					return null;
+				}
+				if ( 'throw' === $what ) {
+					throw new RuntimeException( 'rows gone' );
+				}
+				if ( is_callable( $what ) ) {
+					$what();
+				}
+				return $this->real->option( $name );
+			}
+			public function attached( $after, $limit ) {
+				return 'null' === ( $this->plan['attached'] ?? 'real' ) ? null : $this->real->attached( $after, $limit );
+			}
+		};
+	}
+
+	/** The lines of this site read whole through a stand-in of the rows, by kind:ref. */
+	private static function read_with( array $plan ): array {
+		AB_MCP_Test_Seam::install( AB_MCP_Sync_Env::class, 'naht_sync_env', self::rows( $plan ) );
+		try {
+			$read = AB_MCP_Sync_Env::read( null, 60, 4000, 'live' );
+		} finally {
+			AB_MCP_Test_Seam::restore_all();
+		}
+		self::assertIsArray( $read );
+		self::assertNull( $read['state'] );
+		$out = array();
+		foreach ( $read['lines'] as $line ) {
+			$out[ $line['env'] . ':' . $line['ref'] ] = $line;
+		}
+		return $out;
+	}
+
+	public function testTheRowsOfTheSeriesThatFailOrChangeWhileReadAreNeverComparedHalf(): void {
+		AB_MCP_IT_Code::start( array( 'a' ) );
+		// A file of the uploads outside the file lists of the attachments.
+		$uploads = AB_MCP_IT_Sites::docroot( 'a' ) . '/wp-content/uploads';
+		$year    = $uploads . '/2098';
+		self::assertFalse( file_exists( $year ) );
+		mkdir( $year . '/01', 0755, true );
+		$this->made[] = $year . '/01/frei.txt';
+		file_put_contents( end( $this->made ), 'frei' );
+		// A folder of version control below the uploads and at the top of the
+		// must-use folder: each a unit, locked by unit() (A1).
+		$mu   = AB_MCP_IT_Sites::docroot( 'a' ) . '/wp-content/mu-plugins';
+		$made = ! is_dir( $mu );
+		self::assertFalse( file_exists( $mu . '/.git' ) );
+		mkdir( $year . '/.git' );
+		mkdir( $mu . '/.git', 0755, true );
+		$this->made[]  = $year . '/.git/HEAD';
+		$this->made[]  = $mu . '/.git/HEAD';
+		file_put_contents( $year . '/.git/HEAD', 'ref' );
+		file_put_contents( $mu . '/.git/HEAD', 'ref' );
+		$this->folders = array_merge( array( $year . '/01', $year . '/.git', $year, $mu . '/.git' ), $made ? array( $mu ) : array() );
+		$whole = self::read_with( array() );
+		self::assertSame( array( 'ab-it-allein.php' ), $whole['plugin:ab-it-allein']['active'], 'As it is, the main file running.' );
+		foreach ( array( 'upload:2098/.git', 'mu_plugin:.git' ) as $key ) {
+			self::assertSame( array( 'code:live_extra', 'vcs', null ), array( $whole[ $key ]['lock'], $whole[ $key ]['cause'], $whole[ $key ]['hash'] ), $key . ': locked, not read.' );
+		}
+		self::assertArrayNotHasKey( 'upload:2098/.git/HEAD', $whole, 'Nothing of it a unit of its own.' );
+		self::assertIsString( $whole['theme_choice:theme_choice']['stylesheet'] );
+
+		// Lesefehler: the row of the plugins that run cannot be read.
+		$lines = self::read_with( array( 'active_plugins' => 'null' ) );
+		self::assertNull( $lines['plugin:ab-it-allein']['active'], 'Not known which run: not «none runs».' );
+		$e = AB_MCP_Sync_Env::compare( array( $whole['plugin:ab-it-allein'] ), array( $lines['plugin:ab-it-allein'] ) )['entries'];
+		$e = array_values( array_filter( $e, static fn( $entry ) => 'plugin' === $entry['subtype'] ) )[0];
+		self::assertSame( array( 'not_compared', 'Which main files run could not be read on this site.' ), array( $e['result'], $e['why'] ), 'Compared: not compared, with why.' );
+		// The rows of the theme that runs: one cannot be read.
+		$lines = self::read_with( array( 'stylesheet' => 'null' ) );
+		self::assertNull( $lines['theme_choice:theme_choice']['stylesheet'] );
+		// A switch of the theme while it is read (gleichzeitiger Schreiber):
+		// no pair of rows that never stood together.
+		$stylesheet = (string) $whole['theme_choice:theme_choice']['stylesheet'];
+		$switched   = false;
+		$lines      = self::read_with(
+			array(
+				'template' => static function () use ( &$switched ) {
+					if ( ! $switched ) {
+						$switched = true;
+						global $wpdb;
+						$wpdb->update( $wpdb->options, array( 'option_value' => 'ab-it-anders' ), array( 'option_name' => 'stylesheet' ) ); // phpcs:ignore WordPress.DB
+					}
+				},
+			)
+		);
+		global $wpdb;
+		$wpdb->update( $wpdb->options, array( 'option_value' => $stylesheet ), array( 'option_name' => 'stylesheet' ) ); // phpcs:ignore WordPress.DB
+		self::assertTrue( $switched );
+		self::assertSame( array( null, null ), array( $lines['theme_choice:theme_choice']['stylesheet'], $lines['theme_choice:theme_choice']['template'] ), 'Read while it changed: not read.' );
+		self::assertSame( $whole['theme_choice:theme_choice'], self::read_with( array() )['theme_choice:theme_choice'], 'Read again after the switch back: as before.' );
+		// The file lists of the attachments cannot be read: no file of the
+		// uploads is taken as outside them.
+		self::assertSame( array( 'file', true ), array( $whole['upload:2098/01/frei.txt']['form'], $whole['upload:2098/01/frei.txt']['complete'] ) );
+		$lines = self::read_with( array( 'attached' => 'null' ) );
+		self::assertArrayNotHasKey( 'upload:2098/01/frei.txt', $lines );
+		self::assertSame( array( 'root', false, 'attachments_unreadable' ), array( $lines['upload:*']['form'], $lines['upload:*']['complete'], $lines['upload:*']['cause'] ) );
+		// A Throwable of a row: the call ends with it, no line of a half reading.
+		AB_MCP_Test_Seam::install( AB_MCP_Sync_Env::class, 'naht_sync_env', self::rows( array( 'stylesheet' => 'throw' ) ) );
+		try {
+			AB_MCP_Sync_Env::read( null, 60, 4000, 'live' );
+			self::fail( 'The Throwable leaves the reading.' );
+		} catch ( RuntimeException $e ) {
+			self::assertSame( 'rows gone', $e->getMessage() );
+		} finally {
+			AB_MCP_Test_Seam::restore_all();
+		}
+	}
+
+	public function testAnEndOfTheProcessOrItsTimeLimitWhileTheSeriesReadsLeavesNothing(): void {
+		self::pair();
+		AB_MCP_IT_Code::start();
+		$plan = static function ( string $owner, string $property, string $real, string $method, string $mode ): array {
+			return array(
+				'require' => array( AB_MCP_DIR . 'includes/sync/class-sync-export.php' ),
+				'seams'   => array(
+					array(
+						'owner'    => $owner,
+						'property' => $property,
+						'real'     => $real,
+						'faults'   => array(
+							array(
+								'method' => $method,
+								'nth'    => 1,
+								'kind'   => 'abort',
+								'point'  => $method,
+								'mode'   => $mode,
+							),
+						),
+					),
+				),
+				'calls'   => array(
+					array(
+						'call' => 'AB_MCP_Sync_Export::make',
+						'args' => array( 'env' ),
+					),
+				),
+			);
+		};
+		$before = self::store_files();
+		foreach ( array( 'no_shutdown', 'timeout' ) as $mode ) {
+			// A row of the series (the language, the first row it reads).
+			AB_MCP_IT_Process::abort( 'b', $plan( 'AB_MCP_Sync_Env', 'naht_sync_env', 'AB_MCP_Sync_Env_Calls', 'option', $mode ) );
+			self::assertSame( $before, self::store_files(), "A row of the series, $mode: nothing left in the store of the staging site." );
+			// The request for the checksums of the core (HTTP).
+			AB_MCP_IT_Process::abort( 'b', $plan( 'AB_MCP_Sync_Core_Compare', 'naht_sync_core_compare', 'AB_MCP_Sync_Core_Compare_Calls', 'get', $mode ) );
+			self::assertSame( $before, self::store_files(), "The request of the checksums, $mode: nothing left." );
+		}
+		$env = self::report();
+		self::assertSame( array( 'equal', 'none', array() ), self::said( $env['plugin:ab-it-basis'] ), 'The next reading is whole.' );
+		self::assertSame( array( 'equal', 'none', array() ), self::said( $env['theme_choice:theme_choice'] ) );
 	}
 
 	/** Every file of the protected stores of both sites (beside their folders), by path. */

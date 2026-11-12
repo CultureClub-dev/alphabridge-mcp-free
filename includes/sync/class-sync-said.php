@@ -509,6 +509,11 @@ final class AB_MCP_Sync_Said {
 			'its version of WordPress could not be read' => __( 'its version of WordPress could not be read', 'alphabridge-mcp' ),
 			'the answer of api.wordpress.org held no checksums' => __( 'the answer of api.wordpress.org held no checksums', 'alphabridge-mcp' ),
 			'the unit the call before stopped at (kept by its SHA-256 only) is gone since' => __( 'the unit the call before stopped at (kept by its SHA-256 only) is gone since', 'alphabridge-mcp' ),
+			'Further paths of the unit of the entry before: the list they belong to (only_staging, only_live or differs), the number of the first of them in that list, and up to 100 paths in their order.' => __( 'Further paths of the unit of the entry before: the list they belong to (only_staging, only_live or differs), the number of the first of them in that list, and up to 100 paths in their order.', 'alphabridge-mcp' ),
+			'Each list of paths shows its first 100 here; the others follow, in their order, in the entries right after this one (result more_paths).' => __( 'Each list of paths shows its first 100 here; the others follow, in their order, in the entries right after this one (result more_paths).', 'alphabridge-mcp' ),
+			// A side, as a value of a form of the units («… on %1$s …»).
+			'the staging site' => __( 'the staging site', 'alphabridge-mcp' ),
+			'this site' => __( 'this site', 'alphabridge-mcp' ),
 		);
 	}
 
@@ -525,6 +530,8 @@ final class AB_MCP_Sync_Said {
 			'It could not be read whole on %1$s (%2$s).' => __( 'It could not be read whole on %1$s (%2$s).', 'alphabridge-mcp' ),
 			/* translators: %s: the part of a unit (files, activation). */
 			'Its pair holds no base of the part %s.' => __( 'Its pair holds no base of the part %s.', 'alphabridge-mcp' ),
+			/* translators: 1: the staging site, or this site, 2: why, a part of a sentence. */
+			'Whether it is on %1$s is not known: the folder it would lie in could not be read whole there (%2$s).' => __( 'Whether it is on %1$s is not known: the folder it would lie in could not be read whole there (%2$s).', 'alphabridge-mcp' ),
 			/* translators: %s: the state of the pair, as the tools name it (unclear, residual). */
 			'Its pair is %s: a person confirms a new alignment first (wp_site_pairs).' => __( 'Its pair is %s: a person confirms a new alignment first (wp_site_pairs).', 'alphabridge-mcp' ),
 			/* translators: 1: the version of the comparison data of the pair (canon/1, …), 2: the one this site reads. */
