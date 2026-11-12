@@ -71,6 +71,9 @@ final class AB_MCP_Store_Budget {
 	/** The file of the bookings, in the folder of the store. */
 	const BOOKINGS = 'bookings.json';
 
+	/** Bytes of the file of the bookings at most (one entry is under 100 bytes). */
+	const BOOKINGS_MAX = 1048576;
+
 	/**
 	 * The limits of unpacking a package (decision 8): the raw size of one
 	 * object, the depth of a value, the number of objects, the unpacked size
@@ -203,7 +206,11 @@ final class AB_MCP_Store_Budget {
 		return AB_MCP_Protected_Store::writing(
 			$root,
 			static function () use ( $root, $run_id, $bytes ) {
-				$book = self::without_closed( self::read_bookings( $root ) );
+				$book = self::read_bookings( $root );
+				if ( is_wp_error( $book ) ) {
+					return $book;
+				}
+				$book = self::without_closed( $book );
 				unset( $book[ $run_id ] );
 				$others = 0;
 				foreach ( $book as $entry ) {
@@ -262,6 +269,9 @@ final class AB_MCP_Store_Budget {
 			$root,
 			static function () use ( $root, $run_id ) {
 				$book = self::read_bookings( $root );
+				if ( is_wp_error( $book ) ) {
+					return $book;
+				}
 				if ( ! isset( $book[ $run_id ] ) ) {
 					return true;
 				}
@@ -361,26 +371,45 @@ final class AB_MCP_Store_Budget {
 	}
 
 	/**
+	 * The bookings of the store (Behebung 1, B2: unreadable is never empty).
+	 * A file absent by the listing of the folder is the empty first stock;
+	 * a file that cannot be read, is a link, is no JSON object or holds an
+	 * entry that is no booking is a fault, and no call writes the bookings
+	 * anew over it (book(), release()).
+	 *
 	 * @param string $root Folder of the store.
-	 * @return array<int,array{bytes:int,booked:int,user_id:int}>
+	 * @return array<int,array{bytes:int,booked:int,user_id:int}>|WP_Error
 	 */
 	private static function read_bookings( $root ) {
-		$file = $root . '/' . self::BOOKINGS;
-		if ( is_link( $file ) || ! is_file( $file ) ) {
+		$file = AB_MCP_Protected_Store::read_small( $root, $root . '/' . self::BOOKINGS, self::BOOKINGS_MAX );
+		if ( 'absent' === $file['state'] ) {
 			return array();
 		}
-		$data = json_decode( (string) @file_get_contents( $file ), true ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
-		$out  = array();
-		foreach ( is_array( $data ) ? $data : array() as $run_id => $entry ) {
-			if ( (int) $run_id > 0 && is_array( $entry ) && isset( $entry['bytes'] ) ) {
-				$out[ (int) $run_id ] = array(
-					'bytes'   => max( 0, (int) $entry['bytes'] ),
-					'booked'  => isset( $entry['booked'] ) ? (int) $entry['booked'] : 0,
-					'user_id' => isset( $entry['user_id'] ) ? (int) $entry['user_id'] : 0,
-				);
+		$data = 'ok' === $file['state'] ? json_decode( (string) $file['bytes'], true ) : null;
+		if ( ! is_array( $data ) ) {
+			return self::unread();
+		}
+		$out = array();
+		foreach ( $data as $run_id => $entry ) {
+			if ( ! is_int( $run_id ) || $run_id < 1 || ! is_array( $entry ) || ! isset( $entry['bytes'] ) || ! is_numeric( $entry['bytes'] ) ) {
+				return self::unread();
 			}
+			$out[ $run_id ] = array(
+				'bytes'   => max( 0, (int) $entry['bytes'] ),
+				'booked'  => isset( $entry['booked'] ) ? (int) $entry['booked'] : 0,
+				'user_id' => isset( $entry['user_id'] ) ? (int) $entry['user_id'] : 0,
+			);
 		}
 		return $out;
+	}
+
+	/**
+	 * The refusal where the bookings cannot be read.
+	 *
+	 * @return WP_Error
+	 */
+	private static function unread() {
+		return new WP_Error( 'ab_mcp_store_bookings_unread', __( 'The bookings of the protected store (the file bookings.json in its folder) could not be read, so no run books its space or gives it back, and nothing was written. Ask the host to check that file: its rights, or whether something else wrote into it; then try again.', 'alphabridge-mcp' ) );
 	}
 
 	/**
