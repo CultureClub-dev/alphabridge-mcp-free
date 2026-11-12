@@ -102,6 +102,18 @@ final class WellKnownAnswerTest extends TestCase {
 			'no code flow'                             => array( 'no-code', null ),
 			'an endpoint that is a list'               => array( 'endpoint-list', null ),
 			'an endpoint beside the issuer'            => array( 'endpoint-sibling', null ),
+			'scopes as a word: relayed without'        => array( 'scopes-word', 'scopes_supported' ),
+			'no grant types: relayed without'          => array( 'no-grant-types', 'grant_types_supported' ),
+			'no metadata-document flag: relayed without' => array( 'no-cimd-flag', 'client_id_metadata_document_supported' ),
+			'no response types'                        => array( 'no-response-types', null ),
+			'no code challenge methods'                => array( 'no-challenge-methods', null ),
+			'no registration endpoint'                 => array( 'no-registration', null ),
+			'an endpoint with a space'                 => array( 'endpoint-space', null ),
+			'an endpoint with a control character'     => array( 'endpoint-control', null ),
+			'an endpoint with DEL'                     => array( 'endpoint-del', null ),
+			'an endpoint with a backslash'             => array( 'endpoint-backslash', null ),
+			'an endpoint with a percent sign'          => array( 'endpoint-percent', null ),
+			'an endpoint with a fragment'              => array( 'endpoint-hash', null ),
 		);
 	}
 
@@ -133,6 +145,42 @@ final class WellKnownAnswerTest extends TestCase {
 				case 'endpoint-sibling':
 					$data['token_endpoint'] = $home . '44/oauth/token';
 					break;
+				case 'scopes-word':
+					$data['scopes_supported'] = 'read';
+					break;
+				case 'no-grant-types':
+					unset( $data['grant_types_supported'] );
+					break;
+				case 'no-cimd-flag':
+					unset( $data['client_id_metadata_document_supported'] );
+					break;
+				case 'no-response-types':
+					unset( $data['response_types_supported'] );
+					break;
+				case 'no-challenge-methods':
+					unset( $data['code_challenge_methods_supported'] );
+					break;
+				case 'no-registration':
+					unset( $data['registration_endpoint'] );
+					break;
+				case 'endpoint-space':
+					$data['token_endpoint'] = $home . '/wp-json/alphabridge/v1/oauth/to ken';
+					break;
+				case 'endpoint-control':
+					$data['token_endpoint'] = $home . "/wp-json/alphabridge/v1/oauth/to\x01ken";
+					break;
+				case 'endpoint-del':
+					$data['token_endpoint'] = $home . "/wp-json/alphabridge/v1/oauth/to\x7Fken";
+					break;
+				case 'endpoint-backslash':
+					$data['token_endpoint'] = $home . '/wp-json/alphabridge/v1/oauth/to\\ken';
+					break;
+				case 'endpoint-percent':
+					$data['token_endpoint'] = $home . '/wp-json/alphabridge/v1/oauth/to%6Ben';
+					break;
+				case 'endpoint-hash':
+					$data['token_endpoint'] = $home . '/wp-json/alphabridge/v1/oauth/token#x';
+					break;
 			}
 			return $data;
 		};
@@ -157,6 +205,8 @@ final class WellKnownAnswerTest extends TestCase {
 			'no resource'                             => array( 'no-resource', null ),
 			'bearer methods not strings: without'     => array( 'bearer-numbers', 'bearer_methods_supported' ),
 			'a name that is no text: without'         => array( 'name-number', 'resource_name' ),
+			'no bearer methods: without'              => array( 'no-bearer', 'bearer_methods_supported' ),
+			'no name: without'                        => array( 'no-name', 'resource_name' ),
 		);
 	}
 
@@ -176,6 +226,12 @@ final class WellKnownAnswerTest extends TestCase {
 				case 'name-number':
 					$data['resource_name'] = 5;
 					break;
+				case 'no-bearer':
+					unset( $data['bearer_methods_supported'] );
+					break;
+				case 'no-name':
+					unset( $data['resource_name'] );
+					break;
 			}
 			return $data;
 		};
@@ -188,6 +244,40 @@ final class WellKnownAnswerTest extends TestCase {
 		}
 		self::assertSame( 'document', $answer['kind'] );
 		self::assertArrayNotHasKey( $missing, $answer['document'] );
+	}
+
+	/* ------------------------------------------------- the answer of a request */
+
+	public function testOneRequestKeepsItsAnswerAndTheNextStartsAfresh(): void {
+		$fetches = 0;
+		$site    = $GLOBALS['ab_test_http_answer'];
+		$GLOBALS['ab_test_http_answer'] = static function ( string $url ) use ( &$fetches, $site ) {
+			++$fetches;
+			return $site( $url );
+		};
+		$other = '/.well-known/oauth-authorization-server' . $this->p . '/staging/123';
+		$own   = '/.well-known/oauth-authorization-server';
+		$saved = $_SERVER['REQUEST_TIME_FLOAT'] ?? null;
+		try {
+			$_SERVER['REQUEST_TIME_FLOAT'] = 1000.5;
+			$first = AB_MCP_OAuth::well_known_answer_of_request( $other );
+			$GLOBALS['ab_test_transients'] = array();
+			self::assertSame( $first, AB_MCP_OAuth::well_known_answer_of_request( $other ), 'The same request: the same answer.' );
+			self::assertSame( 1, $fetches, 'Without the persistent cache, too.' );
+			self::assertSame( AB_MCP_OAuth::metadata(), AB_MCP_OAuth::well_known_answer_of_request( $own )['document'], 'Another address in the same request: its own answer.' );
+			self::assertSame( 'https://example.test' . $this->p . '/staging/123', AB_MCP_OAuth::well_known_answer_of_request( $other )['document']['issuer'] );
+
+			$_SERVER['REQUEST_TIME_FLOAT'] = 1000.75;
+			$GLOBALS['ab_test_transients'] = array();
+			AB_MCP_OAuth::well_known_answer_of_request( $other );
+			self::assertSame( 2, $fetches, 'The next request decides anew.' );
+		} finally {
+			if ( null === $saved ) {
+				unset( $_SERVER['REQUEST_TIME_FLOAT'] );
+			} else {
+				$_SERVER['REQUEST_TIME_FLOAT'] = $saved;
+			}
+		}
 	}
 
 	/* ------------------------------------------------------------ executor */
