@@ -388,8 +388,46 @@ final class BundledTranslationsTest extends TestCase {
 
 	#[DataProvider( 'locales' )]
 	public function testEveryTextTheCodeTranslatesIsTranslated( string $locale ): void {
-		$texts = self::gettext_texts();
+		$texts = self::texts_due();
 		self::assertSame( array(), self::gaps( $texts, self::mo( self::file( $locale, 'mo' ) ), self::language( $locale ) ), $locale );
+	}
+
+	/**
+	 * The texts of Z8b that wait for text/z8b (tests/fixtures/
+	 * translations-pending-z8b.php): the order of Z8b brings its texts in
+	 * English with the text domain and their translations with text/z8b.
+	 *
+	 * @return string[] Keys like mo().
+	 */
+	private static function pending(): array {
+		return require __DIR__ . '/fixtures/translations-pending-z8b.php';
+	}
+
+	/**
+	 * Every text the code translates, without those that wait for text/z8b.
+	 *
+	 * @return array<string,string> Key => where it is (file:line).
+	 */
+	private static function texts_due(): array {
+		return array_diff_key( self::gettext_texts(), array_flip( self::pending() ) );
+	}
+
+	public function testTheTextsThatWaitForTheirTranslationAreBoundedAndLeaveTheListWhenTranslated(): void {
+		$pending = self::pending();
+		$texts   = self::gettext_texts();
+		self::assertSame( array_values( array_unique( $pending ) ), $pending, 'Each key once.' );
+		self::assertLessThanOrEqual( 62, count( $pending ), 'Z8b branch 2 left 62 texts to text/z8b; the list does not grow without its review.' );
+		$mos = array();
+		foreach ( self::LOCALES as $locale ) {
+			$mos[ $locale ] = self::mo( self::file( $locale, 'mo' ) );
+		}
+		foreach ( $pending as $key ) {
+			self::assertArrayHasKey( $key, $texts, 'A text the code translates: ' . $key );
+			self::assertStringStartsWith( 'includes/sync/', $texts[ $key ], 'Only texts of the takeover wait: ' . $key );
+			foreach ( $mos as $locale => $mo ) {
+				self::assertFalse( isset( $mo[ $key ] ) && '' !== str_replace( "\0", '', $mo[ $key ] ), $locale . ' translates it; it leaves the list: ' . $key );
+			}
+		}
 	}
 
 	/** The language of a locale: de for de_CH_informal. */
@@ -398,7 +436,7 @@ final class BundledTranslationsTest extends TestCase {
 	}
 
 	public function testTheCheckFindsEveryGettextCallAndWhatIsMissing(): void {
-		$texts = self::gettext_texts();
+		$texts = self::texts_due();
 		self::assertGreaterThan( 600, count( $texts ), 'The scan finds the texts.' );
 		// Some of every kind of place a person reads: the settings page, the
 		// consent screen, the log, a refusal, a tool error, the plugin list.
@@ -441,7 +479,7 @@ final class BundledTranslationsTest extends TestCase {
 	}
 
 	public function testAnExceptionOfOneLanguageDoesNotHoldForAnother(): void {
-		$texts = self::gettext_texts();
+		$texts = self::texts_due();
 		$fr    = self::mo( self::file( 'fr_FR', 'mo' ) );
 		self::assertSame( array(), self::gaps( $texts, $fr, 'fr' ) );
 		// German keeps Status, Undo and Export; French back in English is a gap.
