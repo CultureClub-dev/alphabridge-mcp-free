@@ -1674,7 +1674,7 @@ return array_merge(
 			'clause'  => 'backup_rows(): a time that is no whole number above 0 makes the answer unknown',
 			'file'    => $sc,
 			'search'  => "\t\t\$now = AB_MCP_Store_Inputs::read( 'retention.now', \$now );\n\t\tif ( null === \$now ) {\n\t\t\treturn null;\n\t\t}",
-			'replace' => "",
+			'replace' => "\t\t// The time taken as it came, not read through retention.now.",
 			'run'     => $unit( 'RetentionInputsTest', 'testADatabaseThatFailsOrATimeNotKnownMakesTheAnswerUnknown' ),
 			'expect'  => '/testADatabaseThatFailsOrATimeNotKnownMakesTheAnswerUnknown/',
 		),
