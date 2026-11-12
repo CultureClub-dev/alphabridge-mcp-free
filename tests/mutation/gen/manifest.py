@@ -71,8 +71,8 @@ e('z2-link-inside', 'Z2 folder(): a link in the unit locks it', FM,
   "\t\t\tif ( 0120000 === $type ) {\n\t\t\t\treturn self::locked( $acc, $side, 'link' );", "\t\t\tif ( false ) {\n\t\t\t\treturn self::locked( $acc, $side, 'link' );", 'man', 'testALinkInTheUnitOrTheUnitAsALinkLocksIt')
 e('z2-link-unit', 'Z2 unit(): the unit itself a link is not followed', FM,
   "\t\t\tif ( 0040000 === $type ) {\n\t\t\t\t$acc['form'] = 'folder';", "\t\t\tif ( 0040000 === $type || 0120000 === $type ) {\n\t\t\t\t$acc['form'] = 'folder';", 'man', 'testALinkInTheUnitOrTheUnitAsALinkLocksIt')
-e('z2-nonfile', 'Z2 folder(): what is no regular file locks the unit', FM,
-  "\t\t\tif ( 0100000 !== $type ) {\n\t\t\t\treturn self::locked( $acc, $side, 'nonfile' );", "\t\t\tif ( false ) {\n\t\t\t\treturn self::locked( $acc, $side, 'nonfile' );", 'man', 'testSomethingThatIsNoRegularFileLocksIt')
+e('z2-nonfile', 'Z2 folder(): what is no regular file locks the unit (the lock, not only no hash; a FIFO is never opened)', FM,
+  "\t\t\tif ( 0100000 !== $type ) {\n\t\t\t\treturn self::locked( $acc, $side, 'nonfile' );", "\t\t\tif ( 0100000 !== $type ) {\n\t\t\t\treturn self::end( $acc, 'unreadable' );", 'man', 'testSomethingThatIsNoRegularFileLocksIt')
 e('z2-side', 'Z2 locked(): code:live_extra on the production site, code:link on staging', FM,
   "\t\t$acc['lock'] = self::LOCK_BY_SIDE[ 'live' === $side ? 'live' : 'staging' ];", "\t\t$acc['lock'] = self::LOCK_BY_SIDE['staging'];", 'man', 'testAFolderOfVersionControlAnywhereLocksTheUnitWithoutAHash')
 e('z2-decision-lock', 'Z2 unit_item(): a line locked by what it holds is locked, never compared', DE,

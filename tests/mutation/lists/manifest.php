@@ -230,10 +230,10 @@ return array(
 	),
 	array(
 		'id'      => 'manifest/z2-nonfile',
-		'clause'  => 'Z2 folder(): what is no regular file locks the unit',
+		'clause'  => 'Z2 folder(): what is no regular file locks the unit (the lock, not only no hash; a FIFO is never opened)',
 		'file'    => $fm,
 		'search'  => "\t\t\tif ( 0100000 !== \$type ) {\n\t\t\t\treturn self::locked( \$acc, \$side, 'nonfile' );",
-		'replace' => "\t\t\tif ( false ) {\n\t\t\t\treturn self::locked( \$acc, \$side, 'nonfile' );",
+		'replace' => "\t\t\tif ( 0100000 !== \$type ) {\n\t\t\t\treturn self::end( \$acc, 'unreadable' );",
 		'run'     => $unit( 'SyncFileManifestTest', 'testSomethingThatIsNoRegularFileLocksIt' ),
 		'expect'  => '/testSomethingThatIsNoRegularFileLocksIt/',
 	),

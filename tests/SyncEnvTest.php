@@ -1072,7 +1072,10 @@ final class SyncEnvTest extends TestCase {
 		);
 		self::assertStringContainsString( 'into the backup', $e['words'], 'A path not in the new version (F47).' );
 		$l['files'] = 4;
-		$out        = AB_MCP_Sync_Env::compare( array( $s, self::whole() ), array( $l, $entries( 'l', array( array( 'a', 1, $c, 1 ) ) ), self::whole() ) );
+		$out        = AB_MCP_Sync_Env::compare(
+			array( $s, $entries( 's', array( array( 'main.php', 3, $c, 1 ), array( 'new.php', 3, $c, 1 ), array( 'same.php', 3, $c, 1 ) ) ), self::whole() ),
+			array( $l, $entries( 'l', array( array( 'data/export.csv', 3, $c, 9 ), array( 'main.php', 3, $d, 1 ), array( 'same.php', 3, $c, 9 ) ) ), self::whole() )
+		);
 		self::assertArrayNotHasKey( 'paths', $out['entries'][0], 'Not every file of a side at hand: no paths (fail closed).' );
 	}
 
