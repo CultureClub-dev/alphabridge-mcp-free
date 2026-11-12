@@ -97,12 +97,33 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
 
 - **Fundstelle:** `AB_MCP_Protected_Store::put_tree()`: Lesen der Quelle und der Kopie mit `TREE_BUDGET` (45 s je
   Lesung, wie eine Einheit der Umgebung), das Kopieren selbst ohne eigene Zeitgrenze.
-- **Quelle:** Bau von Zweig 3.
-- **Was:** Ein Baum wird in einem Aufruf kopiert und zweimal gelesen. Ein Baum, der dafür nicht in die Zeit eines
-  Aufrufs passt, wird nicht gelesen (`too_large`, nichts kopiert) oder endet wie G-3-4. Zweig 4 entscheidet, ob die
-  Bereitstellung über mehrere Aufrufe gebaut wird; dann bleibt `put_tree()` der eine Eingang.
-- **Trifft Normalfall:** nein nach Einschätzung (übliche Plugins und Themes haben wenige tausend Dateien); nicht
-  gemessen.
+- **Quelle:** Bau von Zweig 3; Codex-Runde 1, C1; gemessen in Behebung 1.
+- **Was:** Ein Baum wird in einem Aufruf kopiert und zweimal gelesen (Manifest mit SHA-256 jeder Datei vor und nach
+  der Kopie). Ein Baum, der dafür nicht in die Zeit eines Aufrufs passt, wird nicht gelesen (`too_large`, nichts
+  kopiert) oder endet wie G-3-4. Zweig 4 entscheidet, ob die Bereitstellung über mehrere Aufrufe gebaut wird; dann
+  bleibt `put_tree()` der eine Eingang.
+- **Lokale Messwerte** (12.11.2026, Mac mit Apple M1, 8 Kerne, 8 GB, APFS auf SSD, PHP 8.5.10, Integrationsumgebung
+  der Ablage neben WordPress; synthetische Bäume ohne Downloads: 80 % PHP-Dateien von 1 bis 12 KB Text, 20 % Bilder als
+  Zufallsbytes bis zur Gesamtgrösse, Ordner zu 40 Dateien in zwei Ebenen; je drei Läufe, Median, in Klammern Spanne;
+  die Quelle war unmittelbar vorher geschrieben, der Seitencache nicht geleert):
+  - 3001 Dateien, 30,1 MB: eine Lesung mit Hashes 0,28 s; `put_tree()` mit Lesen, Kopie und Rücklesen **1,53 s**
+    (1,48–1,60 s);
+  - 8001 Dateien, 79,9 MB: eine Lesung 0,75 s; `put_tree()` **3,91 s** (3,81–4,35 s).
+- **Hochrechnung (Annahme, nicht gemessen):** mit dem Faktor 2 für langsamere Hosts rund 3,1 s und 7,8 s. Ein Host
+  ohne Seitencache für die Quelle, mit langsamem Netzwerkspeicher oder mit vielen kleineren Dateien kann davon
+  abweichen; dafür gibt es keine Messung.
+- **Zeitbudget einer Anfrage: unbelegt.** Übliche Grenzen (`max_execution_time` 30 s, Zeitgrenzen von Proxy und
+  Webserver) sind für die Hosts der Nutzer nicht gemessen.
+- **Trifft Normalfall:** nein (Entscheid der Lead 12.11.2026 nach Messung). «Normalfall nein» trägt, weil die Zeit
+  reicht und der Fehlweg sicher ist, nicht weil grosse Bäume selten wären: 8000 Dateien sind nicht selten;
+  WooCommerce und Builder-Pakete liegen in dieser Grössenordnung. Begründung:
+  - Gemessen sind 3,91 s für 8001 Dateien und 79,9 MB, lokal.
+  - Mit dem angenommenen Faktor 2 sind es rund 7,8 s, also etwa ein Viertel der üblichen `max_execution_time` von 30 s.
+  - Ein Host mit langsamem Netzwerkspeicher kann davon abweichen; das ist nicht gemessen.
+  - Der Fehlweg bleibt sicher: `too_large` ohne Kopie, oder G-3-4 mit halbem Baum, ohne Verlust des Originals.
+  - Es ist ein reiner Zeitbefund und darf nach der Merge-Regel heikel (12.11. 07:26) Grenze bleiben.
+  - Zweig 4 misst `put_tree()` mit einem echten grossen Plugin auf einem gehosteten Server. Liegt das mit Faktor 2
+    über 10 s, baut Zweig 4 die Bereitstellung über mehrere Aufrufe.
 
 ### G-3-9 Ordner der Ablage nach einer Deinstallation ohne Sperre
 
