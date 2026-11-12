@@ -34,6 +34,15 @@ final class AB_MCP_IT_Store_Calls {
 	/** @var array<int,array{0:string,1:string}> The calls answered with false: method and path. */
 	public $failed = array();
 
+	/** @var array<string,mixed> Path => the mtime lstat() answers for it (Behebung 4: a time of another form). */
+	public $mtime = array();
+
+	/** @var array<string,mixed> Folder => what scandir() answers for it (Behebung 4: a listing of another form). */
+	public $names = array();
+
+	/** @var array{0:bool,1:mixed} Whether free() answers the value given, and the value (Behebung 4). */
+	public $free = array( false, null );
+
 	/**
 	 * Whether a call of a method for a path is to fail.
 	 *
@@ -58,7 +67,19 @@ final class AB_MCP_IT_Store_Calls {
 	}
 
 	public function lstat( $path ) {
-		return $this->fails( 'lstat', $path ) ? false : $this->real->lstat( $path );
+		if ( $this->fails( 'lstat', $path ) ) {
+			return false;
+		}
+		$stat = $this->real->lstat( $path );
+		if ( is_array( $stat ) && array_key_exists( (string) $path, $this->mtime ) ) {
+			$stat['mtime'] = $this->mtime[ (string) $path ];
+			$stat[9]       = $this->mtime[ (string) $path ];
+		}
+		return $stat;
+	}
+
+	public function free( $dir ) {
+		return $this->free[0] ? $this->free[1] : $this->real->free( $dir );
 	}
 
 	public function stat( $path ) {
@@ -66,6 +87,9 @@ final class AB_MCP_IT_Store_Calls {
 	}
 
 	public function scandir( $dir ) {
+		if ( array_key_exists( (string) $dir, $this->names ) ) {
+			return $this->names[ (string) $dir ];
+		}
 		return $this->fails( 'scandir', $dir ) ? false : $this->real->scandir( $dir );
 	}
 

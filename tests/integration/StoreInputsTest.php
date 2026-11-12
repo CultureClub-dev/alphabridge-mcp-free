@@ -1,0 +1,443 @@
+<?php
+/**
+ * The rows of AB_MCP_Store_Inputs::TABLE whose consumer needs the folder of
+ * the store (Z8b branch 3, Behebung 4, Option C1; WrongForms::INTEGRATION):
+ * every wrong form of each row's form (WrongForms) at its consumer, in the
+ * store of site A. A sidecar: the clean-up keeps its group and counts it as
+ * unknown, and fits() refuses (the stock of its area is not known). A mark:
+ * nothing in backups goes, the clean-up counts the group as unknown (B1).
+ * The time of a file: the foreign sidecar stays and counts. A budget: the
+ * call is refused with its reason. Valid values reach the consumer as values
+ * (the group goes, the booking is made, the backup fits). A file holds only
+ * texts, so its rows take the wrong forms that are texts.
+ *
+ * @package AlphaBridge_MCP
+ */
+
+declare( strict_types = 1 );
+
+namespace AlphaBridge\Tests\Integration;
+
+use AB_MCP_IT_Sites;
+use AB_MCP_IT_Store_Calls;
+use AB_MCP_Payload_File;
+use AB_MCP_Protected_Store;
+use AB_MCP_Store_Budget;
+use AB_MCP_Store_Inputs;
+use AB_MCP_Sync_Backup;
+use AB_MCP_Sync_Schema;
+use AB_MCP_Test_Seam;
+use AlphaBridge\Tests\WrongForms;
+use PHPUnit\Framework\TestCase;
+use ReflectionMethod;
+use RuntimeException;
+
+require_once __DIR__ . '/support/class-it-store-calls.php';
+require_once AB_MCP_DIR . 'includes/sync/class-sync-backup.php';
+require_once AB_MCP_DIR . 'includes/sync/class-sync-run.php';
+require_once dirname( __DIR__ ) . '/WrongForms.php';
+
+final class StoreInputsTest extends TestCase {
+
+	/** The seam of the store. */
+	private const SEAM = 'naht_protected_store';
+
+	/** The field of a sidecar of each type (AB_MCP_Protected_Store::SIDECAR, backups). */
+	private const FIELD = array(
+		'format' => 'format',
+		'gid'    => 'gid',
+		'time'   => 'created',
+		'count'  => 'used',
+		'run'    => 'run_id',
+		'label'  => 'label',
+		'text'   => 'binding',
+		'bool'   => 'closed',
+	);
+
+	/** @var string|null DOCUMENT_ROOT before the case. */
+	private $docroot_before;
+
+	protected function setUp(): void {
+		$this->docroot_before     = $_SERVER['DOCUMENT_ROOT'] ?? null;
+		$_SERVER['DOCUMENT_ROOT'] = AB_MCP_IT_Sites::docroot( 'a' );
+		$this->fresh();
+	}
+
+	protected function tearDown(): void {
+		AB_MCP_Test_Seam::restore_all();
+		if ( null === $this->docroot_before ) {
+			unset( $_SERVER['DOCUMENT_ROOT'] );
+		} else {
+			$_SERVER['DOCUMENT_ROOT'] = $this->docroot_before;
+		}
+		self::wipe();
+		AB_MCP_Protected_Store::forget();
+		AB_MCP_IT_Sites::reset( 'a' );
+	}
+
+	/** A site A of its snapshot and an empty store, for each row. */
+	private function fresh(): void {
+		AB_MCP_Test_Seam::restore_all();
+		AB_MCP_IT_Sites::reset( 'a' );
+		self::wipe();
+		AB_MCP_Protected_Store::forget();
+		AB_MCP_Sync_Schema::forget();
+		wp_set_current_user( (int) AB_MCP_IT_Sites::site( 'a' )['admin']['user_id'] );
+		self::assertTrue( AB_MCP_Protected_Store::available(), 'The store beside WordPress is there.' );
+	}
+
+	public function testEveryWrongFormOfARowReachesItsConsumerInTheStoreAsUnknown(): void {
+		$red   = array();
+		$count = 0;
+		foreach ( WrongForms::INTEGRATION as $id ) {
+			self::assertArrayHasKey( $id, AB_MCP_Store_Inputs::TABLE );
+			$this->fresh();
+			$driver = $this->driver( $id );
+			$form   = AB_MCP_Store_Inputs::TABLE[ $id ]['form'];
+			$wrong  = WrongForms::of( $form, $driver['base'] ) + $driver['more'];
+			foreach ( $driver['valid'] as $i => $case ) {
+				$got = ( $driver['run'] )( $case[0] );
+				if ( $got !== $case[1] ) {
+					$red[] = "$id, valid #$i: " . var_export( $got, true );
+				}
+			}
+			foreach ( $wrong as $what => $value ) {
+				if ( ( $driver['texts'] && ! is_string( $value ) ) || ( null !== $driver['written'] && ( $driver['written'] )( $value ) ) ) {
+					continue;
+				}
+				++$count;
+				$got = ( $driver['run'] )( $value );
+				if ( ! ( $driver['unknown'] )( $got ) ) {
+					$red[] = "$id, $what: " . var_export( $got, true );
+				}
+			}
+		}
+		self::assertGreaterThan( 400, $count, 'Every row with its wrong forms.' );
+		self::assertSame( array(), $red, count( $red ) . ' of ' . $count . " wrong forms reached the consumer as a value:\n" . implode( "\n", $red ) );
+	}
+
+	/* ------------------------------------------------------------ drivers */
+
+	/**
+	 * The driver of a row: the value its wrong forms are made of (base),
+	 * more wrong forms, the valid values with what the consumer gives, how
+	 * the consumer is reached with a value, what it gives for a value not
+	 * known, and whether the row is a file (only texts).
+	 *
+	 * @param string $id Row.
+	 * @return array{base:mixed,more:array,valid:array,run:callable,unknown:callable,texts:bool,written:callable|null}
+	 */
+	private function driver( string $id ): array {
+		$now     = time();
+		$data    = array( 'row' => 'eine Zeile' );
+		$refused = static fn( string $code ): callable => static fn( $got ): bool => is_string( $got ) && $code === $got;
+		$answer  = static fn( $got ) => is_wp_error( $got ) ? $got->get_error_code() : ( is_array( $got ) ? 'booked' : $got );
+		if ( 0 === strpos( $id, 'sidecar.' ) ) {
+			// A backup of run 4, closed and past its period: it goes where its
+			// sidecar is whole, and fits() counts the stock of backups.
+			self::run_row( 4, 'closed_done', $now - 10 );
+			self::assertIsArray( AB_MCP_Store_Budget::book( 4, 1048576 ) );
+			$probe = self::group( 'backups', 4 );
+			$entry = json_decode( (string) file_get_contents( $probe['side'] ), true );
+			$text  = (string) file_get_contents( $probe['side'] );
+			self::drop( $probe );
+			$json      = 'sidecar.json' === $id;
+			$field     = $json ? null : self::FIELD[ substr( $id, 8 ) ];
+			$probe_gid = $probe['gid'];
+			$run       = function ( $value ) use ( $json, $field, $data, $probe_gid ) {
+				$g = self::group( 'backups', 4 );
+				if ( $json ) {
+					// The text of the probe, of this group's gid.
+					file_put_contents( $g['side'], str_replace( $probe_gid, $g['gid'], $value ) );
+				} else {
+					$entry = json_decode( (string) file_get_contents( $g['side'] ), true );
+					if ( 'gid' === $field && is_string( $value ) && 1 === preg_match( '/^[0-9a-f]{32}\z/', $value ) ) {
+						$value = $entry['gid'];
+					}
+					$entry[ $field ] = $value;
+					file_put_contents( $g['side'], (string) json_encode( $entry, AB_MCP_Store_Inputs::SIDECAR_FLAGS ) );
+				}
+				$fits = AB_MCP_Sync_Backup::fits( 4, $data );
+				$done = AB_MCP_Protected_Store::cleanup( time() );
+				$out  = array( is_wp_error( $fits ) ? $fits->get_error_code() : $fits, is_dir( $g['dir'] ), $done['unknown'] > 0 );
+				self::drop( $g );
+				return $out;
+			};
+			return array(
+				'base'    => $json ? $text : $entry[ $field ],
+				'more'    => array(),
+				'valid'   => array( array( $json ? $text : $entry[ $field ], array( true, false, false ) ) ),
+				'run'     => $run,
+				'unknown' => static fn( $got ): bool => array( 'ab_mcp_store_stock_unknown', true, true ) === $got,
+				'texts'   => $json,
+				// 4.0 is written 4: a value its writer writes as the valid one is no wrong form in the file.
+				'written' => $json ? null : static fn( $v ): bool => json_decode( (string) json_encode( $v ), true ) === $entry[ $field ],
+			);
+		}
+		if ( 'mark.json' === $id ) {
+			// An open mark names a tree in a backup of run 3, closed and past
+			// its period: the rest of the group goes where the mark is read;
+			// where it is not, nothing in backups goes and it counts (B1).
+			self::run_row( 3, 'closed_done', $now - 10 );
+			$probe = self::group( 'backups', 3 );
+			$text  = self::mark_text( $probe, str_repeat( 'c', 32 ) );
+			self::drop( $probe );
+			return array(
+				'base'    => $text,
+				'more'    => array(),
+				'valid'   => array( array( 'valid', array( false, false ) ) ),
+				'run'     => function ( $value ) {
+					$g   = self::group( 'backups', 3 );
+					$mid = str_repeat( 'c', 32 );
+					$dir = self::store() . '/marks/' . $mid;
+					mkdir( $dir, 0700 );
+					file_put_contents( $dir . '/mark.json', 'valid' === $value ? self::mark_text( $g, $mid ) : $value );
+					$done = AB_MCP_Protected_Store::cleanup( time() );
+					$out  = array( is_file( $g['dir'] . '/post-1' ), $done['unknown'] > 0 );
+					self::drop( $g );
+					self::remove_tree( $dir );
+					return $out;
+				},
+				'unknown' => static fn( $got ): bool => array( true, true ) === $got,
+				'texts'   => true,
+				'written' => null,
+			);
+		}
+		if ( 'file.mtime' === $id ) {
+			// Another installation's sidecar of a report, past its time: it
+			// goes a day after its file was written, by the time lstat() says.
+			return array(
+				'base'    => $now - 2 * 86400,
+				'more'    => array(),
+				'valid'   => array( array( $now - 2 * 86400, array( false, false ) ) ),
+				'run'     => function ( $value ) use ( $now ) {
+					$g     = self::group( 'reports', 0 );
+					$entry = json_decode( (string) file_get_contents( $g['side'] ), true );
+					$entry['gid']     = str_repeat( 'f', 32 );
+					$entry['created'] = $now - 30 * 86400;
+					file_put_contents( $g['side'], (string) json_encode( $entry, AB_MCP_Store_Inputs::SIDECAR_FLAGS ) );
+					$calls        = new AB_MCP_IT_Store_Calls();
+					$calls->mtime = array( $g['side'] => $value );
+					AB_MCP_Test_Seam::install( AB_MCP_Protected_Store::class, self::SEAM, $calls );
+					$done = AB_MCP_Protected_Store::cleanup( time() );
+					AB_MCP_Test_Seam::restore_all();
+					$out = array( is_file( $g['side'] ), $done['unknown'] > 0 );
+					self::drop( $g );
+					return $out;
+				},
+				'unknown' => static fn( $got ): bool => array( true, true ) === $got,
+				'texts'   => false,
+				'written' => null,
+			);
+		}
+		if ( 'budget.book_run' === $id || 'budget.book_bytes' === $id ) {
+			$run = 'budget.book_run' === $id;
+			return array(
+				'base'    => $run ? 5 : 100,
+				'more'    => array(),
+				'valid'   => array( array( $run ? 5 : 100, 'booked' ) ),
+				'run'     => static fn( $value ) => $answer( $run ? AB_MCP_Store_Budget::book( $value, 100 ) : AB_MCP_Store_Budget::book( 5, $value ) ),
+				'unknown' => $refused( 'ab_mcp_store_booking' ),
+				'texts'   => false,
+				'written' => null,
+			);
+		}
+		if ( 'budget.free' === $id ) {
+			return array(
+				'base'    => 1e12,
+				'more'    => array(),
+				'valid'   => array( array( 1e12, 'booked' ), array( 1000000000000, 'booked' ) ),
+				'run'     => static function ( $value ) use ( $answer ) {
+					$calls       = new AB_MCP_IT_Store_Calls();
+					$calls->free = array( true, $value );
+					AB_MCP_Test_Seam::install( AB_MCP_Protected_Store::class, self::SEAM, $calls );
+					$got = AB_MCP_Store_Budget::book( 5, 100 );
+					AB_MCP_Test_Seam::restore_all();
+					return $answer( $got );
+				},
+				'unknown' => $refused( 'ab_mcp_store_space_unknown' ),
+				'texts'   => false,
+				'written' => null,
+			);
+		}
+		if ( 'budget.bookings' === $id ) {
+			$text = (string) json_encode( (object) array( 4 => array( 'bytes' => 1048576, 'booked' => $now, 'user_id' => 1 ) ) );
+			return array(
+				'base'    => $text,
+				'more'    => array(),
+				'valid'   => array( array( $text, true ), array( '{}', 'ab_mcp_sync_backup_booking' ) ),
+				'run'     => static function ( $value ) use ( $data, $answer ) {
+					file_put_contents( self::store() . '/bookings.json', $value );
+					return $answer( AB_MCP_Sync_Backup::fits( 4, $data ) );
+				},
+				'unknown' => $refused( 'ab_mcp_store_bookings_unread' ),
+				'texts'   => true,
+				'written' => null,
+			);
+		}
+		self::assertIsArray( AB_MCP_Store_Budget::book( 4, 1048576 ) );
+		if ( 'backup.run' === $id ) {
+			return array(
+				'base'    => '4',
+				'more'    => array(),
+				'valid'   => array( array( '4', true ), array( 4, true ) ),
+				'run'     => static fn( $value ) => $answer( AB_MCP_Sync_Backup::fits( $value, $data ) ),
+				'unknown' => $refused( 'ab_mcp_sync_backup_run' ),
+				'texts'   => false,
+				'written' => null,
+			);
+		}
+		if ( 'budget.payload' === $id ) {
+			$fits = new ReflectionMethod( AB_MCP_Sync_Backup::class, 'fits_bytes' );
+			return array(
+				'base'    => 10,
+				'more'    => array(),
+				'valid'   => array( array( 10, true ), array( 0, true ) ),
+				'run'     => static fn( $value ) => $answer( $fits->invoke( null, 4, $value ) ),
+				'unknown' => $refused( 'ab_mcp_sync_backup_size' ),
+				'texts'   => false,
+				'written' => null,
+			);
+		}
+		if ( 'budget.listing' === $id ) {
+			$dir  = self::store() . '/backups';
+			$real = array_values( (array) scandir( $dir ) );
+			return array(
+				'base'    => $real,
+				'more'    => array( 'no listing (false)' => false ),
+				'valid'   => array( array( $real, true ) ),
+				'run'     => static function ( $value ) use ( $dir, $data, $answer ) {
+					$calls        = new AB_MCP_IT_Store_Calls();
+					$calls->names = array( $dir => $value );
+					AB_MCP_Test_Seam::install( AB_MCP_Protected_Store::class, self::SEAM, $calls );
+					$got = AB_MCP_Sync_Backup::fits( 4, $data );
+					AB_MCP_Test_Seam::restore_all();
+					return $answer( $got );
+				},
+				'unknown' => $refused( 'ab_mcp_store_stock_unknown' ),
+				'texts'   => false,
+				'written' => null,
+			);
+		}
+		throw new RuntimeException( "The row $id has no driver in this test." );
+	}
+
+	/* ------------------------------------------------------------ helpers */
+
+	private static function root(): string {
+		return (string) AB_MCP_IT_Sites::state()['root'];
+	}
+
+	private static function store(): string {
+		$root = AB_MCP_Protected_Store::root();
+		self::assertIsString( $root );
+		return $root;
+	}
+
+	/** A run row of site A. */
+	private static function run_row( int $run, string $state, int $keep_until = 0, int $qualified = 0 ): void {
+		global $wpdb;
+		$wpdb->insert(
+			AB_MCP_Sync_Schema::table( 'runs' ),
+			array(
+				'run_id'            => $run,
+				'type'              => 'push',
+				'state'             => $state,
+				'keep_until'        => $keep_until,
+				'forward_closed_at' => $qualified,
+			)
+		);
+		AB_MCP_Sync_Schema::forget();
+	}
+
+	/**
+	 * A group of an area with a file, of a run (0: none).
+	 *
+	 * @return array{gid:string,dir:string,side:string}
+	 */
+	private static function group( string $area, int $run ): array {
+		$meta = 'backups' === $area ? array( 'label' => 'backup:' . $run ) : array( 'label' => 'report' );
+		$gid  = AB_MCP_Protected_Store::open( $area, array( 'run_id' => $run ) + $meta );
+		self::assertIsString( $gid, $area );
+		self::assertIsArray( AB_MCP_Protected_Store::put( $area, $gid, 'post-1', 'eine Zeile' ) );
+		$dir = self::store() . '/' . $area . '/' . AB_MCP_Payload_File::name( 'group|' . $area . '|' . $gid, AB_MCP_Protected_Store::install_id(), '' );
+		return array(
+			'gid'  => $gid,
+			'dir'  => $dir,
+			'side' => $dir . '.json',
+		);
+	}
+
+	/** A group taken out by hand, whatever is left of it. */
+	private static function drop( array $group ): void {
+		self::remove_tree( $group['dir'] );
+		self::remove_tree( $group['side'] );
+	}
+
+	/** The text of an open mark naming a tree in a group, as put_mark() writes it. */
+	private static function mark_text( array $group, string $mid ): string {
+		return (string) json_encode(
+			array(
+				'format' => AB_MCP_Protected_Store::MARK_FORMAT,
+				'mid'    => $mid,
+				'state'  => 'open',
+				'begun'  => time(),
+				'closed' => 0,
+				'store'  => self::store(),
+				'where'  => 'outside',
+				'run_id' => 3,
+				'seq'    => 1,
+				'op'     => 'replace',
+				'unit'   => array(
+					'kind' => 'plugin',
+					'ref'  => 'ab-it-baum',
+				),
+				'target' => AB_MCP_IT_Sites::docroot( 'a' ) . '/wp-content/plugins/ab-it-baum',
+				'trees'  => array(
+					array(
+						'role' => 'backup',
+						'path' => 'backups/' . basename( $group['dir'] ) . '/ab-it-baum',
+						'form' => 'folder',
+						'dev'  => 1,
+						'ino'  => 2,
+						'hash' => null,
+					),
+				),
+				'active' => array(),
+				'note'   => '',
+			),
+			AB_MCP_Store_Inputs::MARK_FLAGS
+		);
+	}
+
+	/** Remove what the store made beside WordPress and in the uploads of site A. */
+	private static function wipe(): void {
+		$paths   = array( self::root() . '/ab-mcp-store' );
+		$uploads = AB_MCP_IT_Sites::docroot( 'a' ) . '/wp-content/uploads';
+		foreach ( array_merge( (array) glob( $uploads . '/ab-mcp-store-*' ), (array) glob( $uploads . '/.ab-tmp-*' ), (array) glob( $uploads . '/ab-mcp-probe-*' ), (array) glob( self::root() . '/run/ab-store-*' ) ) as $path ) {
+			$paths[] = (string) $path;
+		}
+		foreach ( $paths as $path ) {
+			if ( 0 !== strpos( $path, self::root() . '/' ) ) {
+				throw new RuntimeException( "Will not remove $path: it is not in AB_IT_ROOT." );
+			}
+			self::remove_tree( $path );
+		}
+	}
+
+	private static function remove_tree( string $path ): void {
+		if ( is_link( $path ) || is_file( $path ) ) {
+			@chmod( $path, 0600 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			unlink( $path );
+			return;
+		}
+		if ( ! is_dir( $path ) ) {
+			return;
+		}
+		chmod( $path, 0700 );
+		foreach ( array_diff( (array) scandir( $path ), array( '.', '..' ) ) as $entry ) {
+			self::remove_tree( $path . '/' . $entry );
+		}
+		rmdir( $path );
+	}
+}
