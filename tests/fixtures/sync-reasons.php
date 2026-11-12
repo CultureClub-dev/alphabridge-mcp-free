@@ -750,7 +750,7 @@ return array(
 		),
 		'option_prefix:ab_mcp_'                  => array(
 			'why'  => 'The options of this plugin: connections, tokens, the undo index, the staging pair, these tables (B6).',
-			'plugin' => array( array( 'includes/class-settings.php', 15, "const OPT_OPTIONS   = 'ab_mcp_options';" ), array( 'includes/sync/class-sync-schema.php', 46, "const OPTION = 'ab_mcp_staging_db_version';" ) ),
+			'plugin' => array( array( 'includes/class-settings.php', 15, "const OPT_OPTIONS   = 'ab_mcp_options';" ), array( 'includes/sync/class-sync-schema.php', 49, "const OPTION = 'ab_mcp_staging_db_version';" ) ),
 			'plan' => 'Konzept 3; Konzept 2 (B6)',
 		),
 		'option_suffix:.lock'                    => array(
