@@ -48,7 +48,7 @@ e('z44-push-files', 'Z44 set_unit_base(): push only with the files written and c
 e('z44-push-parts', 'Z44 set_unit_base(): push names parts of the unit only', PA,
   "( null !== $pair_id || ! in_array( $want[0], $proof->written(), true ) || array() !== array_diff( $proof->written(), $want ) )", "( null !== $pair_id || ! in_array( $want[0], $proof->written(), true ) )", 'it', 'testAUnitMadeOnThisSiteTakesABaseWithOriginPushOnlyWithItsFilesWrittenAndChecked')
 e('z44-side-line', 'Z44 set_unit_base(): a line of each side, no base made up for a missing side', PA,
-  "\t\t\tif ( ! is_array( $line ) || $kind !== ( $line['env'] ?? null ) || $ref !== ( $line['ref'] ?? null ) ) {", "\t\t\tif ( ! is_array( $line ) && ( $kind !== ( $line['env'] ?? null ) || $ref !== ( $line['ref'] ?? null ) ) ) {", 'it', 'testAUnitOnOneSideOnlyGetsNoPairAndOnlyLiveStaysApartFromARemovalOnStaging')
+  "\t\t\tif ( ! is_array( $line ) || $kind !== ( $line['env'] ?? null ) || $ref !== ( $line['ref'] ?? null ) ) {", "\t\t\tif ( false ) {", 'it', 'testAUnitOnOneSideOnlyGetsNoPairAndOnlyLiveStaysApartFromARemovalOnStaging')
 e('z44-side-kind', 'Z44 set_unit_base(): the line of the unit of this kind', PA,
   "\t\t\tif ( ! is_array( $line ) || $kind !== ( $line['env'] ?? null ) || $ref !== ( $line['ref'] ?? null ) ) {", "\t\t\tif ( ! is_array( $line ) || $ref !== ( $line['ref'] ?? null ) ) {", 'it', Z)
 e('z44-side-name', 'Z44 set_unit_base(): the same name on both sides (renamed is another unit)', PA,
@@ -67,8 +67,6 @@ e('z44-part-form', 'Z44 unit_part(): the files only of a folder or a file', PA,
   "\t\t\tif ( true !== ( $line['complete'] ?? null ) || ! in_array( $line['form'] ?? null, array( 'folder', 'file' ), true ) ) {", "\t\t\tif ( true !== ( $line['complete'] ?? null ) ) {", 'it', Z)
 e('z44-part-mains', 'Z44 unit_part(): which main files run only from the main files read', PA,
   "( ! is_array( $line['mains'] ?? null ) || ! is_array( $line['active'] ?? null ) )", "( ! is_array( $line['active'] ?? null ) )", 'it', Z)
-e('z44-part-active', 'Z44 unit_part(): which main files run only from active_plugins read', PA,
-  "( ! is_array( $line['mains'] ?? null ) || ! is_array( $line['active'] ?? null ) )", "( ! is_array( $line['mains'] ?? null ) )", 'it', Z)
 e('z44-part-hash', 'Z44 unit_part(): a part only by its hash (the theme that runs from both rows)', PA,
   "\t\treturn self::is_hash( $hash ) ? $hash : null;", "\t\treturn self::is_hash( $hash ) ? $hash : hash( 'sha256', '' );", 'it', Z)
 e('z44-fit-equal', 'Z44 set_unit_base(): equal only for a part the same on both sides', PA,
@@ -135,8 +133,6 @@ e('units-once', 'modes(): each part of an entry once', PT,
   "\t\t\tif ( isset( $out[ $n ][ $one['part'] ] ) ) {\n\t\t\t\treturn null;", "\t\t\tif ( false ) {\n\t\t\t\treturn null;", 'it', 'testAUnitThatDiffersAlreadyIsPairedOnlyWithTheModeChosenForEachPartThatDiffers')
 e('units-op-c', 'unit_op(): keep_apart names the state of staging as its base', PT,
   "\t\t\t\t'base_staging' => 'keep_apart' === $mode ? $s : $l,", "\t\t\t\t'base_staging' => $l,", 'it', 'testAUnitThatDiffersAlreadyIsPairedOnlyWithTheModeChosenForEachPartThatDiffers')
-e('units-op-equal', 'unit_op(): a part that is the same is equal', PT,
-  "\t\t\t$mode           = 'differs' === ( $entry['parts'][ $part ] ?? null ) ? $modes[ $part ] : 'equal';", "\t\t\t$mode           = $modes[ $part ] ?? 'equal';", 'it', 'testAnUnclearPairOfAUnitIsAlignedAnewThroughTheProposalPartByPart')
 e('units-now', 'now(): a unit paired meanwhile is skipped', PT,
   "\t\tif ( 'create' === $op['op'] || ( 'unit' === $op['op'] && null === $op['pair_id'] ) ) {", "\t\tif ( 'create' === $op['op'] ) {", 'it', 'testTheTokenBindsTheUnitItsPartsTheirModesAndValues')
 e('units-effect-b', 'unit_effect(): the answer says what live_base means (Frage F, b)', PT,
@@ -205,7 +201,12 @@ out = ['<?php', '/**', ' * The clauses of the pairs of units (Z8b branch 2b: pla
        ' * source; change the entries there and run it again.', ' *',
        ' * Held by the integration suite (SyncUnitPairsTest, SyncProposalTest; the',
        ' * sites running, AB_IT_ROOT set) and by the unit suite (SyncUnitBaseGuardTest).', ' *',
-       ' * Not listed, with why (bericht-zweig-2b.md): unset() of the parts in a new',
+       ' * Not listed, with why (bericht-zweig-2b.md), equivalent: in unit_part() the',
+       ' * check of active_plugins read (part_hash() gives no hash without a list',
+       ' * active), in unit_op() the mode equal of a part that is the same (units',
+       ' * names modes only for the parts that differ, units-each-part), in',
+       ' * set_unit_base() is_array() of a line alone (a value no array has neither',
+       ' * env nor ref, the clauses after it refuse it); and unset() of the parts in a new',
        ' * alignment (they are set anew after it; for a kind of one part the stale key',
        ' * changes nothing a report reads), the guard of null lines in unpaired()',
        ' * (compare() gives equal or differs only with both lines), and the',

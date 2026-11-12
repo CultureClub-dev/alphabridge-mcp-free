@@ -9,7 +9,12 @@
  * Held by the integration suite (SyncUnitPairsTest, SyncProposalTest; the
  * sites running, AB_IT_ROOT set) and by the unit suite (SyncUnitBaseGuardTest).
  *
- * Not listed, with why (bericht-zweig-2b.md): unset() of the parts in a new
+ * Not listed, with why (bericht-zweig-2b.md), equivalent: in unit_part() the
+ * check of active_plugins read (part_hash() gives no hash without a list
+ * active), in unit_op() the mode equal of a part that is the same (units
+ * names modes only for the parts that differ, units-each-part), in
+ * set_unit_base() is_array() of a line alone (a value no array has neither
+ * env nor ref, the clauses after it refuse it); and unset() of the parts in a new
  * alignment (they are set anew after it; for a kind of one part the stale key
  * changes nothing a report reads), the guard of null lines in unpaired()
  * (compare() gives equal or differs only with both lines), and the
@@ -131,7 +136,7 @@ return array(
 		'clause'  => 'Z44 set_unit_base(): a line of each side, no base made up for a missing side',
 		'file'    => $pa,
 		'search'  => "\t\t\tif ( ! is_array( \$line ) || \$kind !== ( \$line['env'] ?? null ) || \$ref !== ( \$line['ref'] ?? null ) ) {",
-		'replace' => "\t\t\tif ( ! is_array( \$line ) && ( \$kind !== ( \$line['env'] ?? null ) || \$ref !== ( \$line['ref'] ?? null ) ) ) {",
+		'replace' => "\t\t\tif ( false ) {",
 		'run'     => $it( 'SyncUnitPairsTest', 'testAUnitOnOneSideOnlyGetsNoPairAndOnlyLiveStaysApartFromARemovalOnStaging' ),
 		'expect'  => '/testAUnitOnOneSideOnlyGetsNoPairAndOnlyLiveStaysApartFromARemovalOnStaging/',
 	),
@@ -213,15 +218,6 @@ return array(
 		'file'    => $pa,
 		'search'  => '( ! is_array( $line[\'mains\'] ?? null ) || ! is_array( $line[\'active\'] ?? null ) )',
 		'replace' => '( ! is_array( $line[\'active\'] ?? null ) )',
-		'run'     => $it( 'SyncUnitPairsTest', 'testSetUnitBaseHoldsEachClauseOfZ44' ),
-		'expect'  => '/testSetUnitBaseHoldsEachClauseOfZ44/',
-	),
-	array(
-		'id'      => 'einheitenpaare/z44-part-active',
-		'clause'  => 'Z44 unit_part(): which main files run only from active_plugins read',
-		'file'    => $pa,
-		'search'  => '( ! is_array( $line[\'mains\'] ?? null ) || ! is_array( $line[\'active\'] ?? null ) )',
-		'replace' => '( ! is_array( $line[\'mains\'] ?? null ) )',
 		'run'     => $it( 'SyncUnitPairsTest', 'testSetUnitBaseHoldsEachClauseOfZ44' ),
 		'expect'  => '/testSetUnitBaseHoldsEachClauseOfZ44/',
 	),
@@ -512,15 +508,6 @@ return array(
 		'replace' => "\t\t\t\t'base_staging' => \$l,",
 		'run'     => $it( 'SyncUnitPairsTest', 'testAUnitThatDiffersAlreadyIsPairedOnlyWithTheModeChosenForEachPartThatDiffers' ),
 		'expect'  => '/testAUnitThatDiffersAlreadyIsPairedOnlyWithTheModeChosenForEachPartThatDiffers/',
-	),
-	array(
-		'id'      => 'einheitenpaare/units-op-equal',
-		'clause'  => 'unit_op(): a part that is the same is equal',
-		'file'    => $pt,
-		'search'  => "\t\t\t\$mode           = 'differs' === ( \$entry['parts'][ \$part ] ?? null ) ? \$modes[ \$part ] : 'equal';",
-		'replace' => "\t\t\t\$mode           = \$modes[ \$part ] ?? 'equal';",
-		'run'     => $it( 'SyncUnitPairsTest', 'testAnUnclearPairOfAUnitIsAlignedAnewThroughTheProposalPartByPart' ),
-		'expect'  => '/testAnUnclearPairOfAUnitIsAlignedAnewThroughTheProposalPartByPart/',
 	),
 	array(
 		'id'      => 'einheitenpaare/units-now',

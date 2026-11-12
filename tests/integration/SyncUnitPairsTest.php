@@ -749,6 +749,7 @@ final class SyncUnitPairsTest extends TestCase {
 			'ref held'      => array( self::op( 'plugin', 'sha256:' . hash( 'sha256', 'p' ), array( 'files' => 'equal', 'activation' => 'equal' ), self::line( 'plugin', 'sha256:' . hash( 'sha256', 'p' ) ), self::line( 'plugin', 'sha256:' . hash( 'sha256', 'p' ) ) ), 'ref' ),
 			'a part alone'  => array( self::op( 'plugin', 'shop', array( 'files' => 'live_base' ), $s, $l ), 'parts' ),
 			'a part more'   => array( self::op( 'theme', 'shop', array( 'files' => 'live_base', 'activation' => 'equal' ), self::line( 'theme', 'shop', array( 'hash' => hash( 'sha256', 'v2' ) ) ), self::line( 'theme', 'shop' ) ), 'parts' ),
+			'another part'  => array( array_replace( $good, array( 'parts' => array( 'files' => $good['parts']['files'], 'other' => $good['parts']['activation'] ) ) ), 'parts' ),
 			'mode of push'  => array( self::op( 'plugin', 'shop', array( 'files' => 'push', 'activation' => 'equal' ), $s, $l ), 'mode' ),
 			'no mode'       => array( array_replace_recursive( $good, array( 'parts' => array( 'files' => array( 'mode' => 'other' ) ) ) ), 'mode' ),
 			'no line'       => array( self::op( 'plugin', 'shop', array( 'files' => 'live_base', 'activation' => 'equal' ), $s, null ), 'side' ),
@@ -1317,15 +1318,23 @@ final class SyncUnitPairsTest extends TestCase {
 		$same  = \AB_MCP_IT_Pair_Rows::put( array( 'state' => 'unclear', 'live_ref' => 'ab-it-zwei', 'staging_ref' => 'ab-it-zwei' ) + $fields );
 		$diff  = \AB_MCP_IT_Pair_Rows::put( array( 'state' => 'residual', 'live_ref' => 'ab-it-inaktiv', 'staging_ref' => 'ab-it-inaktiv' ) + $fields );
 		$gone  = \AB_MCP_IT_Pair_Rows::put( array( 'state' => 'unclear', 'live_ref' => 'ab-it-weg', 'staging_ref' => 'ab-it-weg' ) + $fields );
-		$answer = self::proposal();
+		// A unit on this site only, whose pair a run left unclear.
+		$this->own_plugin( 'a', 'ab-it-nur-hier.php' );
+		$alone = \AB_MCP_IT_Pair_Rows::put( array( 'state' => 'unclear', 'live_ref' => 'ab-it-nur-hier.php', 'staging_ref' => 'ab-it-nur-hier.php' ) + $fields );
+		$answer  = self::proposal();
 		$realign = array();
+		$count   = array();
 		foreach ( $answer['all'] as $entry ) {
 			if ( 'realign' === $entry['category'] ) {
 				$realign[ $entry['pair']['id'] ] = $entry;
+				$count[ $entry['pair']['id'] ]   = ( $count[ $entry['pair']['id'] ] ?? 0 ) + 1;
 			}
 		}
 		ksort( $realign );
-		self::assertSame( array( (int) $same['id'], (int) $diff['id'], (int) $gone['id'] ), array_keys( $realign ), 'One entry each, never as an object of the proposal (V4).' );
+		ksort( $count );
+		self::assertSame( array( (int) $same['id'] => 1, (int) $diff['id'] => 1, (int) $gone['id'] => 1, (int) $alone['id'] => 1 ), $count, 'One entry each, never also as an object of the proposal (V4).' );
+		self::assertSame( array(), array_values( array_filter( $answer['all'], static fn( $e ) => in_array( $e['kind'], AB_MCP_Sync_Decision::UNIT_KINDS, true ) && empty( $e['unit'] ) ) ), 'No entry of a unit kind as an object.' );
+		self::assertSame( array( null, 'A new alignment needs both sides of the unit read whole, each part of it. To end the pair, call wp_site_pairs with action=discard and its pair id.' ), array( $realign[ (int) $alone['id'] ]['confirm'], $realign[ (int) $alone['id'] ]['reason'] ), 'On one side only: not aligned anew.' );
 		foreach ( $realign as $entry ) {
 			self::assertTrue( $entry['unit'] );
 		}
