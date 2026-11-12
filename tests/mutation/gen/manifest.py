@@ -50,6 +50,8 @@ e('z1-lstat-gone', 'Z1 folder(): an entry gone or unreadable since the listing: 
   "\t\t\tif ( false === $stat ) {\n\t\t\t\t// Gone since the folder was listed, or not readable.", "\t\t\tif ( false ) {\n\t\t\t\t// Gone since the folder was listed, or not readable.", 'man', 'testAReadingThatFailsGivesNoHash')
 e('z1-fstat-after', 'Z1 file(): fstat() after the reading that fails: no hash', FM,
   "\t\tif ( false === $after ) {\n\t\t\treturn self::end( $acc, 'unreadable' );", "\t\tif ( false ) {\n\t\t\treturn self::end( $acc, 'unreadable' );", 'man', 'testAReadingThatFailsGivesNoHash')
+e('z1-read-false', 'Z1 file(): a read() that fails is no hash, also where the next read() gives bytes (Codex round 1, B7)', FM,
+  "\t\t\tif ( false === $bytes ) {\n\t\t\t\t$calls->close( $handle );\n\t\t\t\treturn self::end( $acc, 'unreadable' );", "\t\t\tif ( false ) {\n\t\t\t\t$calls->close( $handle );\n\t\t\t\treturn self::end( $acc, 'unreadable' );", 'man', 'testAReadingThatFailsGivesNoHash')
 e('z1-chunk-clock', 'Z1 file(): the time asked after each part of a file', FM,
   "\t\t\tif ( self::now() >= $deadline ) {\n\t\t\t\t$calls->close( $handle );\n\t\t\t\treturn self::late( $acc, $first );", "\t\t\tif ( false ) {\n\t\t\t\t$calls->close( $handle );\n\t\t\t\treturn self::late( $acc, $first );", 'man', 'testTheTimeOfTheCallIsAskedWithinALargeFileToo')
 e('z1-too-large', 'Z1 late(): too large where it had a whole call', FM,
@@ -75,6 +77,20 @@ e('z2-nonfile', 'Z2 folder(): what is no regular file locks the unit (the lock, 
   "\t\t\tif ( 0100000 !== $type ) {\n\t\t\t\treturn self::locked( $acc, $side, 'nonfile' );", "\t\t\tif ( 0100000 !== $type ) {\n\t\t\t\treturn self::end( $acc, 'unreadable' );", 'man', 'testSomethingThatIsNoRegularFileLocksIt')
 e('z2-side', 'Z2 locked(): code:live_extra on the production site, code:link on staging', FM,
   "\t\t$acc['lock'] = self::LOCK_BY_SIDE[ 'live' === $side ? 'live' : 'staging' ];", "\t\t$acc['lock'] = self::LOCK_BY_SIDE['staging'];", 'man', 'testAFolderOfVersionControlAnywhereLocksTheUnitWithoutAHash')
+VCS_SELF = "\t\t\t\t$went = in_array( basename( (string) $name ), self::VCS, true ) ? self::locked( $acc, $side, 'vcs' ) : self::folder( $path, '', $side, (float) $deadline, (bool) $first, $acc );"
+e('z2-vcs-self', 'Z2 unit(): the folder of the unit itself of version control locks it (Codex round 1, A1)', FM,
+  VCS_SELF, "\t\t\t\t$went = self::folder( $path, '', $side, (float) $deadline, (bool) $first, $acc );", 'man', 'testTheFolderOfTheUnitItselfOfVersionControlLocksIt')
+for vcs in ('.git', '.svn', '.hg'):
+    e('z2-vcs-self' + vcs.replace('.', '-'), 'Z2 unit(): the folder of the unit itself named ' + vcs + ' locks it (A1)', FM,
+      VCS_SELF, VCS_SELF.replace('in_array( basename( (string) $name ), self::VCS, true )', "in_array( basename( (string) $name ), array_diff( self::VCS, array( '" + vcs + "' ) ), true )"), 'man', 'testTheFolderOfTheUnitItselfOfVersionControlLocksIt')
+e('z2-vcs-nested', 'Z2 candidates(): a folder of version control below a root of files is a unit, which unit() locks (A1)', EN,
+  "\t\t\t\treturn in_array( $name, AB_MCP_Sync_File_Manifest::VCS, true ) ? 'unit' : 'into';", "\t\t\t\treturn 'into';", 'it', 'testTheRowsOfTheSeriesThatFailOrChangeWhileReadAreNeverComparedHalf')
+e('z2-theme-root', 'Z2 unit(): a theme only from the folder of the themes, else code:theme_root and not read (Codex round 1, B1)', FM,
+  "\t\t\tif ( 'theme' === $kind && ( null === self::theme_root() || rtrim( (string) $base, '/' ) !== rtrim( (string) self::theme_root(), '/' ) ) ) {", "\t\t\tif ( false ) {", 'man', 'testAThemeIsReadOnlyFromTheFolderOfTheThemes')
+e('z2-theme-root-kind', 'Z2 theme_roots(): the themes of a further root go through unit() as themes (B1)', EN,
+  "AB_MCP_Sync_File_Manifest::unit( $root, (string) $stylesheet, $side, $deadline, false, 'theme' );", "AB_MCP_Sync_File_Manifest::unit( $root, (string) $stylesheet, $side, $deadline, false, 'plugin' );", 'guard', 'testTheLocksOfWhatNoManifestHoldsAndOfAFurtherRootOfThemesAreSetInUnitOnly')
+e('z2-lock-from-unit', 'Z2 unit_lines(): the line of a unit takes the lock unit() gave (B1)', EN,
+  "\t\t\t'lock'     => $read['lock'],", "\t\t\t'lock'     => null,", 'guard', 'testTheLocksOfWhatNoManifestHoldsAndOfAFurtherRootOfThemesAreSetInUnitOnly')
 e('z2-decision-lock', 'Z2 unit_item(): a line locked by what it holds is locked, never compared', DE,
   "\t\tif ( array() !== $locks ) {\n\t\t\t$entry['action'] = 'locked';\n\t\t\treturn self::unit_entry( $entry, $locks, null, $held );", "\t\tif ( false ) {\n\t\t\t$entry['action'] = 'locked';\n\t\t\treturn self::unit_entry( $entry, $locks, null, $held );", 'env', 'testAUnitThatHoldsWhatNoManifestHoldsIsLockedNeverCompared')
 e('z2-shape-hash', 'Z2 unit_shaped(): a line with a lock or not read whole carries no hash', EN,
@@ -100,6 +116,36 @@ e('unit-entries-whole', 'entries_of(): the paths only where every file of a side
   "\t\t\t$out[ $unit ] = null !== $files && is_array( $line ) && ! isset( $line['held'] ) && count( $files ) === (int) $line['files'] ? $files : null;", "\t\t\t$out[ $unit ] = null !== $files && is_array( $line ) && ! isset( $line['held'] ) ? $files : null;", 'env', 'testThePathsOfAUnitWhoseFilesDifferAreShownNeverByMtime')
 e('unit-first-time', 'read(): the first unit of a call has time of its own (every call moves on)', EN,
   "\t\t\t$read = self::read_unit( $kind, $dir, $name, $flag, $side, $alone ? max( (float) $deadline, self::now() + self::UNIT_BUDGET ) : $deadline, $alone );", "\t\t\t$read = self::read_unit( $kind, $dir, $name, $flag, $side, $deadline, $alone );", 'itenv', 'testTheUploadsAreCountedOverPartsOutsideTheFileListsOfAttachments')
+e('unit-plugin-no-version', 'candidates(): a plugin of one file without a version is a unit (Codex round 1, B2)', EN,
+  "( 'plugin' === $kind && array_key_exists( $name, $ctx['mains'] ) )", "( 'plugin' === $kind && isset( $ctx['mains'][ $name ] ) )", 'it', 'testAReportBetweenTwoUsualSitesShowsCodeAsEqualOrDifferent')
+e('unit-one-side-lock', 'unit_item(): on one side only, a lock of that side first (Codex round 1, B3)', DE,
+  "\t\t\t} elseif ( isset( $there['lock'] ) && is_string( $there['lock'] ) ) {", "\t\t\t} elseif ( false ) {", 'env', 'testAUnitOnOneSideIsOnlyThereOnlyWhereThatSideReadItWholeWithoutALock')
+e('unit-one-side-whole', 'unit_item(): on one side only, read whole on that side first (B3)', DE,
+  "\t\t\t} elseif ( 'theme_choice' !== $kind && ( empty( $there['complete'] ) || null === ( $there['hash'] ?? null ) ) ) {", "\t\t\t} elseif ( false ) {", 'env', 'testAUnitOnOneSideIsOnlyThereOnlyWhereThatSideReadItWholeWithoutALock')
+e('unread-missing', 'unit_item(): not on a side whose folder was not listed whole: not compared (Codex round 1, B4)', DE,
+  "\t\t\t} elseif ( null !== $missing ) {", "\t\t\t} elseif ( false ) {", 'env', 'testAUnitWhoseFolderTheOtherSideDidNotListWholeIsNotCompared')
+e('unread-at', 'compare(): the folder a unit would lie in, not listed whole on the other side (B4)', EN,
+  "\t\t\t\treturn $why;", "\t\t\t\treturn null;", 'env', 'testAUnitWhoseFolderTheOtherSideDidNotListWholeIsNotCompared')
+e('unread-prefix', 'unread_at(): only below the folder, by the beginning of the path (B4)', EN,
+  "0 === strpos( (string) $ref, (string) $prefix )", "false !== strpos( (string) $ref, (string) $prefix )", 'env', 'testAUnitWhoseFolderTheOtherSideDidNotListWholeIsNotCompared')
+e('unread-nested', 'unread(): a folder below a root of files that could not be read (B4)', EN,
+  "\t\t\t\t\t$out[ $env ][ (string) $ref . '/' ] = 'unreadable';", '', 'env', 'testAUnitWhoseFolderTheOtherSideDidNotListWholeIsNotCompared')
+e('unread-root-list', 'candidates(): a folder of plugins, themes or must-use plugins that cannot be listed gives its line (B4, V1)', EN,
+  "\t\t\tif ( null === $names ) {\n\t\t\t\tyield array( '', 'root' );", "\t\t\tif ( false ) {\n\t\t\t\tyield array( '', 'root' );", 'it', 'testAFolderOfPluginsTheStagingSiteCannotListLeavesThePluginsHereNotCompared')
+e('unread-root-nested', 'nested(): the root of a kind of files that cannot be listed gives its line (B4)', EN,
+  "\t\t\tif ( '' === $rel ) {\n\t\t\t\t// The root itself: what is not there is not known.", "\t\t\tif ( false ) {\n\t\t\t\t// The root itself: what is not there is not known.", 'it', 'testAFolderOfPluginsTheStagingSiteCannotListLeavesThePluginsHereNotCompared')
+e('paths-every', 'unit_paths(): every path of each list (Codex round 1, B5)', DE,
+  "\t\t\t$out[ $key ]            = $list;", "\t\t\t$out[ $key ]            = array_slice( $list, 0, self::MAX_PATHS );", 'env', 'testEveryPathOfAUnitIsInTheReportInPagesOfAHundred')
+e('paths-paged', 'compare(): the entry of a unit with its further paths after it (B5)', EN,
+  "\t\t\t\t\tforeach ( AB_MCP_Sync_Decision::paged( $item ) as $one ) {", "\t\t\t\t\tforeach ( array( $item ) as $one ) {", 'env', 'testEveryPathOfAUnitIsInTheReportInPagesOfAHundred')
+e('paths-first-hundred', 'paged(): a hundred paths a list in the entry (B5)', DE,
+  "\t\t\t$entry['paths'][ $list ] = array_slice( $entry['paths'][ $list ], 0, self::MAX_PATHS );", '', 'env', 'testEveryPathOfAUnitIsInTheReportInPagesOfAHundred')
+e('paths-rest', 'paged(): the paths past a hundred, each once (B5)', DE,
+  "\t\t\tforeach ( array_chunk( array_slice( $entry['paths'][ $list ], self::MAX_PATHS ), self::MAX_PATHS ) as $i => $chunk ) {", "\t\t\tforeach ( array_chunk( $entry['paths'][ $list ], self::MAX_PATHS ) as $i => $chunk ) {", 'env', 'testEveryPathOfAUnitIsInTheReportInPagesOfAHundred')
+e('paths-from', 'paged(): the number of the first path of an entry of further paths (B5)', DE,
+  "\t\t\t\t\t\t'from'  => self::MAX_PATHS * ( $i + 1 ) + 1,", "\t\t\t\t\t\t'from'  => 1,", 'env', 'testEveryPathOfAUnitIsInTheReportInPagesOfAHundred')
+e('series-theme-again', 'theme_choice(): the theme switched while it is read is not read (Codex round 1, B6)', EN,
+  "\t\t$same = $read['again'] === $read['stylesheet'];", "\t\t$same = true;", 'it', 'testTheRowsOfTheSeriesThatFailOrChangeWhileReadAreNeverComparedHalf')
 # ------------------------------------------------ Z35: the core
 e('z35-https', 'Z35 checksums(): only https', CC,
   "\tconst API = 'https://api.wordpress.org/core/checksums/1.0/';", "\tconst API = 'http://api.wordpress.org/core/checksums/1.0/';", 'core', 'testTheChecksumsAreAskedOverHttpsThroughTheOutboundWithoutARedirect')
@@ -184,9 +230,13 @@ out = ['<?php', '/**', ' * The clauses of the manifests of code and files (Z8b b
        ' * the sites running, AB_IT_ROOT set).', ' *',
        ' * Not listed, with why (bericht-zweig-2.md): the guard of an empty text of a',
        ' * manifest in unit() (no input makes AB_MCP_Sync_Canon::encode() fail on a',
-       " * list of paths, sizes and hashes), the guards of names() and open() and of a",
-       ' * read() that fails in file() (a Throwable of the next call, caught by unit(),',
-       ' * gives the same answer: unreadable, no hash).', ' *',
+       " * list of paths, sizes and hashes), the guards of names() and open() (the",
+       ' * next call with false throws a TypeError, caught by unit(): the same answer,',
+       ' * unreadable, no hash), and in unit() a theme_root() of null beside another',
+       ' * folder (rtrim() of the empty text is no folder: locked either way). A',
+       ' * read() that fails in file() is listed (z1-read-false): where the next',
+       ' * read() gives bytes, the file would be hashed whole without the clause',
+       ' * (Codex round 1, B7, corrected).', ' *',
        ' * @package AlphaBridge_MCP', ' */', '',
        "$unit = static fn( string $class, string $test ): array => array( 'vendor/bin/phpunit', '--no-progress', '--filter', '/[^A-Za-z0-9_]' . $class . '::' . $test . '( |$)/' );",
        "$it   = static fn( string $class, string $test ): array => array( 'vendor/bin/phpunit', '--no-progress', '-c', 'tests/integration/phpunit.xml.dist', '--filter', '/[^A-Za-z0-9_]' . $class . '::' . $test . '( |$)/' );",
