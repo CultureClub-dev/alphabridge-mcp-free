@@ -553,7 +553,7 @@ final class AB_MCP_Sync_Run {
 		global $wpdb;
 		$now = self::now();
 		$set = array(
-			'state'   => (string) $to,
+			'state'   => $to,
 			'updated' => $now,
 		);
 		if ( in_array( $to, AB_MCP_Sync_Schema::CLOSED, true ) ) {

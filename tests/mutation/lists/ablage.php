@@ -2071,5 +2071,23 @@ return array_merge(
 			'run'     => $unit( 'ProtectedStoreTest', 'testAFolderIsOursOnlyWithOurManifestInEveryField' ),
 			'expect'  => '/testAFolderIsOursOnlyWithOurManifestInEveryField/',
 		),
+		array(
+			'id'      => 'ablage/input-mark-listed',
+			'clause'  => 'read_mark(): a mark is absent only where the folder of the marks lists none of its name; a listed mark whose folder cannot be listed cannot be read and keeps stage and backups',
+			'file'    => $ps,
+			'search'  => "return ( false !== \$all && ! in_array( (string) \$mid, \$all, true ) ) ? null : false;",
+			'replace' => "return ( false !== \$all ) ? null : false;",
+			'run'     => $it( 'StoreRemoverTest', 'testAMarkWhoseFolderIsListedButCannotBeReadKeepsStageAndBackups' ),
+			'expect'  => '/testAMarkWhoseFolderIsListedButCannotBeReadKeepsStageAndBackups/',
+		),
+		array(
+			'id'      => 'ablage/input-owner-prefix',
+			'clause'  => 'identity(): the table prefix belongs to the manifest; a substitute in its place (none) would make the folder of another installation in the same database ours',
+			'file'    => $ps,
+			'search'  => "( isset( \$wpdb->prefix ) ? (string) \$wpdb->prefix : '' )",
+			'replace' => "''",
+			'run'     => $unit( 'ProtectedStoreTest', 'testAFolderIsOursOnlyWithOurManifestInEveryField' ),
+			'expect'  => '/testAFolderIsOursOnlyWithOurManifestInEveryField/',
+		),
 	)
 );
