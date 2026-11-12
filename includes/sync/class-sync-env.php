@@ -1510,14 +1510,23 @@ final class AB_MCP_Sync_Env {
 			'cause'    => $read['cause'],
 		);
 		if ( 'plugin' === $kind ) {
+			// Each main file by its name in the unit, with its full reference
+			// as active_plugins holds it (a folder loader.php with a main file
+			// loader.php: loader.php/loader.php, never loader.php alone;
+			// GitHub-Codex on f25da74).
 			$mains = array();
+			$refs  = array();
 			foreach ( $ctx['mains'] as $rel => $version ) {
 				$rel = (string) $rel;
 				if ( $rel === $name ) {
-					$mains[ $rel ] = $version;
+					$main = $rel;
 				} elseif ( 0 === strpos( $rel, $name . '/' ) ) {
-					$mains[ (string) substr( $rel, strlen( $name ) + 1 ) ] = $version;
+					$main = (string) substr( $rel, strlen( $name ) + 1 );
+				} else {
+					continue;
 				}
+				$mains[ $main ] = $version;
+				$refs[ $main ]  = $rel;
 			}
 			ksort( $mains, SORT_STRING );
 			$fields['mains']   = array_map( array( __CLASS__, 'path_name' ), array_map( 'strval', array_keys( $mains ) ) );
@@ -1525,8 +1534,7 @@ final class AB_MCP_Sync_Env {
 			if ( null !== $ctx['active'] ) {
 				$active = array();
 				foreach ( array_keys( $mains ) as $main ) {
-					$file_of = (string) $main === $name ? $name : $name . '/' . $main;
-					if ( in_array( $file_of, $ctx['active'], true ) ) {
+					if ( in_array( $refs[ $main ], $ctx['active'], true ) ) {
 						$active[] = self::path_name( (string) $main );
 					}
 				}
@@ -1600,7 +1608,10 @@ final class AB_MCP_Sync_Env {
 	 * (register_theme_directory(), $GLOBALS['wp_theme_directories'] besides
 	 * the standard root), each through AB_MCP_Sync_File_Manifest::unit(),
 	 * which locks it (code:theme_root, E2) and reads nothing; one whose
-	 * stylesheet the standard root has as well is that one.
+	 * stylesheet the standard root has as well is that one. Only that very
+	 * stylesheet: an external collection/two beside collection/one of the
+	 * standard root is a theme of its own, with its lock (GitHub-Codex on
+	 * f25da74).
 	 *
 	 * @param string $side     live or staging.
 	 * @param float  $deadline Until when.
@@ -1622,11 +1633,11 @@ final class AB_MCP_Sync_Env {
 		}
 		$lines = array();
 		$seen  = array();
+		$here  = self::theme_dirs( array( $standard['dir'] ) );
 		foreach ( $others as $root ) {
 			$versions = self::theme_dirs( array( $root ) );
 			foreach ( $versions as $stylesheet => $version ) {
-				$top = explode( '/', (string) $stylesheet )[0];
-				if ( file_exists( $standard['dir'] . '/' . $top ) || isset( $seen[ (string) $stylesheet ] ) ) {
+				if ( array_key_exists( (string) $stylesheet, $here ) || isset( $seen[ (string) $stylesheet ] ) ) {
 					continue;
 				}
 				$seen[ (string) $stylesheet ] = true;
@@ -2683,7 +2694,11 @@ final class AB_MCP_Sync_Env {
 	 * in their order: kind:name => [path, size, SHA-256, mtime], only where
 	 * every line of entries of the unit is there (seq 1 to n without a gap,
 	 * as many files as its line says), else null for that unit (its paths
-	 * not shown, fail closed).
+	 * not shown, fail closed). A folder read whole without a file, not
+	 * locked nor held, has no line of entries: its manifest is empty, so
+	 * that the files of the other side show as only there (GitHub-Codex on
+	 * f25da74); a line of entries of it after all makes the count differ
+	 * (null).
 	 *
 	 * @param array[]                           $lines Lines of a side.
 	 * @param array<string,array<string,array>> $by    Its lines by kind and ref (by_ref(), held_alike()).
@@ -2697,6 +2712,13 @@ final class AB_MCP_Sync_Env {
 			}
 		}
 		$out = array();
+		foreach ( self::UNITS as $kind ) {
+			foreach ( $by[ $kind ] ?? array() as $ref => $line ) {
+				if ( 'folder' === ( $line['form'] ?? null ) && true === ( $line['complete'] ?? null ) && is_string( $line['hash'] ?? null ) && null === ( $line['lock'] ?? null ) && ! isset( $line['held'] ) && 0 === ( $line['files'] ?? null ) ) {
+					$out[ $kind . ':' . $ref ] = array();
+				}
+			}
+		}
 		foreach ( $parts as $unit => $seqs ) {
 			list( $kind, $name ) = array_pad( explode( ':', $unit, 2 ), 2, '' );
 			$line                = $by[ $kind ][ $name ] ?? null;

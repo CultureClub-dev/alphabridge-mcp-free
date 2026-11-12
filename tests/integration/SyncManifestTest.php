@@ -934,6 +934,33 @@ final class SyncManifestTest extends TestCase {
 		}
 	}
 
+	public function testAThemeOfAFurtherRootBesideOneOfTheSameCollectionHereKeepsItsLock(): void {
+		// GitHub-Codex on f25da74: ab-it-sammlung/eins in the standard root,
+		// ab-it-sammlung/eins and ab-it-sammlung/zwei in a further root: zwei
+		// is a theme of its own (its files are in no unit here), with its
+		// lock; eins is that of the standard root.
+		$themes = AB_MCP_IT_Sites::docroot( 'a' ) . '/wp-content/themes/ab-it-sammlung';
+		$root   = AB_MCP_IT_Sites::docroot( 'a' ) . '/wp-content/ab-it-weitere-sammlung';
+		self::assertFalse( file_exists( $themes ) );
+		self::assertFalse( file_exists( $root ) );
+		foreach ( array( $themes . '/eins', $root . '/ab-it-sammlung/eins', $root . '/ab-it-sammlung/zwei' ) as $theme ) {
+			mkdir( $theme, 0755, true );
+			$this->made[] = $theme . '/style.css';
+			file_put_contents( end( $this->made ), "/*\nTheme Name: " . basename( $theme ) . "\nVersion: 2.0\n*/\n" );
+		}
+		$this->folders = array_merge( array( $themes . '/eins', $themes, $root . '/ab-it-sammlung/eins', $root . '/ab-it-sammlung/zwei', $root . '/ab-it-sammlung', $root ), $this->folders );
+		$before                            = $GLOBALS['wp_theme_directories'];
+		$GLOBALS['wp_theme_directories'][] = $root;
+		try {
+			$lines = ( new \ReflectionMethod( AB_MCP_Sync_Env::class, 'theme_roots' ) )->invoke( null, 'live', microtime( true ) + 60 );
+		} finally {
+			$GLOBALS['wp_theme_directories'] = $before;
+		}
+		self::assertSame( array( 'ab-it-sammlung/zwei' ), array_keys( $lines ), 'zwei of the further root; eins is that of the standard root.' );
+		$zwei = $lines['ab-it-sammlung/zwei'];
+		self::assertSame( array( 'theme', 'ab-it-sammlung/zwei', 'code:theme_root', 'theme_root', null, '2.0' ), array( $zwei['env'], $zwei['ref'], $zwei['lock'], $zwei['cause'], $zwei['hash'], $zwei['version'] ) );
+	}
+
 	public function testAFileOfAnAttachmentAtTheTopOfTheUploadsIsNoUnit(): void {
 		// GitHub-Codex on free#147, P2: a site without year and month folders
 		// keeps the files of its attachments at the top of the uploads.
@@ -1164,27 +1191,32 @@ final class SyncManifestTest extends TestCase {
 		// Codex on 7d0aeea (C of Behebung 9): the step of a root of files
 		// begun with the time of the call over (not the first unit of the
 		// call) visits one entry and goes on after it, a skipped one too; so
-		// every call moves on.
-		$uploads = AB_MCP_IT_Sites::docroot( 'a' ) . '/wp-content/uploads';
-		if ( ! is_dir( $uploads ) ) {
-			mkdir( $uploads );
-			$this->folders[] = $uploads;
-		}
+		// every call moves on. Uploads of their own (upload_path), holding
+		// only the three skipped folders: nothing else in the uploads of the
+		// site (a year folder of other tests, CI on f25da74) comes first.
+		$uploads = AB_MCP_IT_Sites::docroot( 'a' ) . '/wp-content/ab-it-walk-uploads';
+		self::assertFalse( file_exists( $uploads ) );
+		mkdir( $uploads );
 		$skipped = array();
 		foreach ( array( '001', '002', '003' ) as $n ) {
 			$skipped[] = $uploads . '/ab-it-cache-' . $n;
 			mkdir( end( $skipped ) );
 		}
-		$this->folders = array_merge( $skipped, $this->folders );
-		$names         = array_values( array_diff( (array) scandir( $uploads ), array( '.', '..' ) ) );
-		usort( $names, 'strcmp' );
-		AB_MCP_Sync_Env::$clock = static fn() => 1000.0;
-		$step                   = new \ReflectionMethod( AB_MCP_Sync_Env::class, 'unit_step' );
-		$first                  = false;
-		$read                   = $step->invokeArgs( null, array( 'upload', null, 10.0, 4000, 'live', &$first, false ) );
+		$this->folders = array_merge( $skipped, array( $uploads ), $this->folders );
+		$before        = get_option( 'upload_path' );
+		update_option( 'upload_path', $uploads );
+		try {
+			self::assertSame( $uploads, AB_MCP_Sync_Env::root_dir( 'uploads' )['dir'], 'The uploads of this test.' );
+			AB_MCP_Sync_Env::$clock = static fn() => 1000.0;
+			$step                   = new \ReflectionMethod( AB_MCP_Sync_Env::class, 'unit_step' );
+			$first                  = false;
+			$read                   = $step->invokeArgs( null, array( 'upload', null, 10.0, 4000, 'live', &$first, false ) );
+		} finally {
+			false === $before ? delete_option( 'upload_path' ) : update_option( 'upload_path', $before );
+		}
 		self::assertSame( array( array(), false ), array( $read['lines'], $read['done'] ), 'Not done, no unit read.' );
 		self::assertIsArray( $read['after'], 'A place to go on from.' );
-		self::assertSame( $names[0], AB_MCP_Sync_Env::found( $read['after'], static fn( $rel ) => '' === $rel ? $names : array() ), 'After the first entry, visited although the time was over.' );
+		self::assertSame( 'ab-it-cache-001', AB_MCP_Sync_Env::found( $read['after'], static fn( $rel ) => '' === $rel ? array( 'ab-it-cache-001', 'ab-it-cache-002', 'ab-it-cache-003' ) : array() ), 'After the first entry, visited although the time was over.' );
 	}
 
 	public function testACoreTooSlowForAWholeCallIsNotComparedAndTheRestOfTheEnvironmentIsRead(): void {

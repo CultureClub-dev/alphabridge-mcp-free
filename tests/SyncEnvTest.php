@@ -1242,6 +1242,73 @@ final class SyncEnvTest extends TestCase {
 		self::assertSame( 'same_value', self::one( $known, $known )['result'], 'Both read, the same.' );
 	}
 
+	public function testAFolderPluginWhoseMainFileHasItsNameRunsByItsFullReference(): void {
+		// GitHub-Codex on f25da74: a folder loader.php with its main file
+		// loader.php runs as loader.php/loader.php in active_plugins; a plugin
+		// of one file by its own name.
+		$this->file( 'plugins/loader.php/loader.php', "<?php\n/*\n * Plugin Name: Loader\n * Version: 1.0\n */\n" );
+		$this->file( 'plugins/solo.php', "<?php\n/*\n * Plugin Name: Solo\n */\n" );
+		$dir   = $this->dir . '/plugins';
+		$lines = new \ReflectionMethod( AB_MCP_Sync_Env::class, 'unit_lines' );
+		$line  = static function ( string $name, array $active ) use ( $dir, $lines ): array {
+			$read = array( 'own' => false ) + \AB_MCP_Sync_File_Manifest::unit( $dir, $name, 'live', INF, true, 'plugin' );
+			return $lines->invoke( null, 'plugin', $name, $read, array( 'mains' => AB_MCP_Sync_Env::plugin_files( $dir ), 'active' => $active ) )[0];
+		};
+		$runs = $line( 'loader.php', array( 'solo.php', 'loader.php/loader.php' ) );
+		self::assertSame( array( 'folder', array( 'loader.php' ), array( 'loader.php' ), '1.0' ), array( $runs['form'], $runs['mains'], $runs['active'], $runs['version'] ), 'Its main file runs.' );
+		$off = $line( 'loader.php', array( 'loader.php' ) );
+		self::assertSame( array(), $off['active'], 'loader.php alone is no file of this folder.' );
+		self::assertSame( array( array( 'solo.php' ), array( 'solo.php' ) ), array( $line( 'solo.php', array( 'solo.php' ) )['active'], $line( 'solo.php', array( 'solo.php' ) )['mains'] ), 'A plugin of one file by its own name.' );
+		self::assertSame( array(), $line( 'solo.php', array( 'loader.php/loader.php' ) )['active'] );
+		$e = self::one( $runs, $off );
+		self::assertSame( array( 'differs', array( 'activation' ) ), array( $e['result'], $e['differs'] ), 'Running on one site, not on the other: never equal.' );
+	}
+
+	public function testAFolderReadWholeWithoutAFileShowsTheFilesOfTheOtherSideAsOnlyThere(): void {
+		// GitHub-Codex on f25da74: a must-use folder empty on staging, with
+		// removed.php here: the report names the file, not only «differs».
+		$c     = str_repeat( 'c', 64 );
+		$empty = self::unit( 'mu_plugin', 'tools', array( 'files' => 0, 'bytes' => 0, 'hash' => str_repeat( 'e', 64 ) ) );
+		$full  = self::unit( 'mu_plugin', 'tools', array( 'files' => 1, 'bytes' => 3, 'hash' => str_repeat( 'f', 64 ) ) );
+		$of    = array( 'entries' => array( array( 'removed.php', 3, $c, 1 ) ), 'env' => 'entries', 'ref' => 'mu_plugin:tools#1', 'seq' => 1, 'unit' => 'mu_plugin:tools' );
+		$e     = self::one( $empty, $full, array(), array( $of ) );
+		self::assertSame( array( 'differs', array( 'files' ) ), array( $e['result'], $e['differs'] ) );
+		self::assertSame(
+			array(
+				'differs'            => array(),
+				'differs_count'      => 0,
+				'only_live'          => array( 'removed.php' ),
+				'only_live_count'    => 1,
+				'only_staging'       => array(),
+				'only_staging_count' => 0,
+			),
+			$e['paths'],
+			'Only here, by its name and count.'
+		);
+		$e = self::one( $full, $empty, array( $of ) );
+		self::assertSame( array( array( 'removed.php' ), 1 ), array( $e['paths']['only_staging'], $e['paths']['only_staging_count'] ), 'Only on staging, the other way round.' );
+		// Only a folder read whole without a file, not locked nor held, has
+		// an empty manifest; a line of entries of it after all is no manifest.
+		$entries = new \ReflectionMethod( AB_MCP_Sync_Env::class, 'entries_of' );
+		$files   = static function ( array $line, array $more = array() ) use ( $entries ): ?array {
+			return $entries->invoke( null, array_merge( array( $line ), $more ), array( 'mu_plugin' => array( 'tools' => $line ) ) )['mu_plugin:tools'] ?? null;
+		};
+		self::assertSame( array(), $files( $empty ), 'Empty, read whole.' );
+		foreach (
+			array(
+				'a file'          => array( 'form' => 'file' ),
+				'not read whole'  => array( 'complete' => false ),
+				'without a hash'  => array( 'hash' => null ),
+				'locked'          => array( 'lock' => 'code:live_extra' ),
+				'held'            => array( 'held' => 'credential' ),
+				'with files'      => array( 'files' => 2 ),
+			) as $why => $over
+		) {
+			self::assertNull( $files( array_replace( $empty, $over ) ), $why . ': no manifest.' );
+		}
+		self::assertNull( $files( $empty, array( $of ) ), 'A line of entries of it after all: no manifest (fail closed).' );
+	}
+
 	public function testThePathsOfAUnitWhoseFilesDifferAreShownNeverByMtime(): void {
 		$s = self::plugin( '2.0', true, 'a' );
 		$l = self::plugin( '2.0', true, 'b' );
