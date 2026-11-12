@@ -910,8 +910,9 @@ final class AB_MCP_Protected_Store {
 				}
 				$name = self::group_name( $entry['area'], $entry['gid'], $id );
 				$side = $area_dir . '/' . $name . '.json';
-				// The sidecar first: a folder without one is an orphan the
-				// clean-up removes, a sidecar without a folder is an empty group.
+				// The sidecar first: a folder without one stays (the clean-up
+				// counts it unknown), a sidecar without a folder is an empty
+				// group.
 				if ( true !== self::write_entry( $root, $side, $entry ) || ! self::calls()->mkdir( $area_dir . '/' . $name, 0700 ) ) {
 					self::delete_path( $root, $side );
 					return new WP_Error( 'ab_mcp_store_write', 'The group could not be made in the protected store. Ask the host to check that the folder is writable and the disk has free space, then try again.' );
@@ -3694,9 +3695,13 @@ final class AB_MCP_Protected_Store {
 	 * The clean-up of one folder, under its lock (cleanup(), open()). Every
 	 * removal goes through delete_path() (Z37): what an open mark names stays.
 	 * Groups the retention lets go (kept()), sidecars this store did not write
-	 * and folders without their sidecar after a day, the own temp files of
-	 * writes that were cut off (tmp/, the prefix, older than TMP_AGE; never a
-	 * file by its ending), closed marks a day after they closed.
+	 * after a day where the retention lets their group go, the own temp files
+	 * of writes that were cut off (tmp/, the prefix, older than TMP_AGE; never
+	 * a file by its ending), closed marks a day after they closed. What an
+	 * input of the decision does not say stays and counts as unknown: a
+	 * sidecar that cannot be read, a group whose inputs are not known
+	 * (kept() null), a folder without its sidecar, an area whose listing
+	 * failed (Behebung 3 of Z8b branch 3).
 	 *
 	 * @param string $root Folder.
 	 * @param string $id   Id.
@@ -3713,9 +3718,16 @@ final class AB_MCP_Protected_Store {
 		$unknown = 0;
 		$calls   = self::calls();
 		foreach ( self::AREAS as $area ) {
-			$dir   = self::way( $root, array( $area ) );
-			$names = null === $dir ? false : $calls->scandir( $dir );
+			$dir = self::way( $root, array( $area ) );
+			if ( null === $dir ) {
+				// No plain folder of the area: no group of it to decide.
+				continue;
+			}
+			$names = $calls->scandir( $dir );
 			if ( false === $names ) {
+				// The listing of the area failed: none of its groups is
+				// decided, and the clean-up counts it (Behebung 3).
+				++$unknown;
 				continue;
 			}
 			foreach ( $names as $file ) {
