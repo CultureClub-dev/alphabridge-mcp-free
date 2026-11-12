@@ -472,7 +472,7 @@ final class AB_MCP_Sync_Report {
 					'parts' => count( $parts ),
 				);
 			}
-			$read = AB_MCP_Sync_Env::read( false === $last ? null : $last['state'], $left, null === self::$env_lines ? AB_MCP_Sync_Export::OBJECTS : (int) self::$env_lines );
+			$read = AB_MCP_Sync_Env::read( false === $last ? null : $last['state'], $left, null === self::$env_lines ? AB_MCP_Sync_Export::OBJECTS : (int) self::$env_lines, 'live' );
 			if ( is_wp_error( $read ) ) {
 				return $read;
 			}
@@ -564,7 +564,6 @@ final class AB_MCP_Sync_Report {
 		if ( is_wp_error( $env_side ) ) {
 			return $env_side;
 		}
-		$environment = array() === $ids ? AB_MCP_Sync_Env::without() : AB_MCP_Sync_Env::compare( $env_side['lines'], $env );
 		$live = AB_MCP_Sync_Proposal::live( $found, self::concurrent() );
 		if ( is_wp_error( $live ) ) {
 			return $live;
@@ -573,6 +572,8 @@ final class AB_MCP_Sync_Report {
 		if ( is_wp_error( $pairs ) ) {
 			return $pairs;
 		}
+		// The units with their pairs (Z8b, E2).
+		$environment = array() === $ids ? AB_MCP_Sync_Env::without() : AB_MCP_Sync_Env::compare( $env_side['lines'], $env, $pairs );
 		$report = AB_MCP_Sync_Decision::report(
 			$staging['lines'],
 			$live['lines'],

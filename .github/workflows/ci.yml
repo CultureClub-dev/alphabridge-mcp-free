@@ -261,6 +261,14 @@ jobs:
       - name: The integration suite ran every test
         run: php tests/integration/bin/run-complete.php "$RUNNER_TEMP/junit-integration.xml" "$RUNNER_TEMP/events-integration.txt" vendor/bin/phpunit -c tests/integration/phpunit.xml.dist
 
+      # Z8b branch 2 (plan section 13): how long the full hash of trees of
+      # plugins, themes and uploads takes, with the number and size of their
+      # files, and how large the series of the environment grows (lines,
+      # bytes, parts). The numbers are read from the log of this step; the
+      # trees are generated on site a and removed again.
+      - name: Measure the manifests
+        run: php tests/integration/bin/measure-manifest.php "$AB_IT_ROOT/state.json" a
+
       # Also when the job is cut at its time limit (cancelled, not failed).
       - name: Logs of the sites
         if: failure() || cancelled()

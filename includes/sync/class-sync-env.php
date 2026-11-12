@@ -9,12 +9,29 @@
  *
  *  - core: the version of WordPress, the language of the site (the stored
  *    row of WPLANG, past the filter of get_locale());
- *  - plugin and theme: each by its file or stylesheet, with its version and
- *    whether it runs (the stored rows of active_plugins, stylesheet and
- *    template, unpacked without classes);
- *  - mu_plugin: each PHP file WordPress loads from the must-use folder
- *    (its top level, as wp_get_mu_plugins()), with its SHA-256 and size;
- *  - dropin: each drop-in of a single site (DROPINS) that is there, the same;
+ *  - core_files (Z8b, E18): the core files of this site checked against the
+ *    checksums of api.wordpress.org for its version and language
+ *    (AB_MCP_Sync_Core_Compare): how many were checked, differ, are missing,
+ *    or why not compared;
+ *  - the units of code and files (Z8b, E1; UNITS, each a kind of line): a
+ *    folder or a plugin of one file under the folder of the plugins
+ *    (plugin), a folder of the standard root of the themes (theme), a file
+ *    or folder at the top of the must-use folder (mu_plugin; the loader of
+ *    AlphaBridge is group U), a language file (language), a file of the
+ *    fonts (font), a file of the uploads at their top level or under a year
+ *    folder outside the file lists of the attachments (upload). Each is read
+ *    whole by AB_MCP_Sync_File_Manifest::unit() (every file by its path,
+ *    size and SHA-256, the hash of the unit over them and its form, file or
+ *    folder, ab-files/1), with its version and main files and which of them
+ *    run (a plugin), its version (a theme), whether it is AlphaBridge itself
+ *    (own, E12: shown, never taken over, not hashed); the files of a folder
+ *    follow in lines of their own (entries, PER_LINE files a line). A theme
+ *    of a further root of themes (register_theme_directory()) is locked
+ *    (code:theme_root), not read (theme_root, E2);
+ *  - theme_choice: which theme runs (the stored rows of stylesheet and
+ *    template), a unit of its own (E2);
+ *  - dropin: each drop-in of a single site (DROPINS) that is there, with its
+ *    SHA-256 and size;
  *  - host (group U of the concept): the versions of PHP and of the database,
  *    whether an external object cache runs, the WordPress block of the
  *    .htaccess by its SHA-256, the must-use loader of AlphaBridge by its
@@ -31,21 +48,30 @@
  *    (schema()); tables
  *    (one line) says whether the list was read whole. Nothing else of a
  *    table is read;
- *  - files: the roots of ROOTS, each counted and summed (files, bytes),
- *    never read: languages (WP_LANG_DIR), fonts (the fonts folder of the
- *    uploads), mu-plugins (what of the must-use folder is no line of its own)
- *    and uploads (the files of the uploads outside the file lists of the
- *    attachments, AB_MCP_Sync_Media; fonts and the folders of AlphaBridge
- *    left out). A link is not followed and counted as skipped; a folder that
- *    cannot be read makes its root incomplete (fail closed).
+ *  - files: the root of ROOTS, counted and summed (files, bytes), never
+ *    read: uploads, what of them is no unit (the folders at their top level
+ *    other than the year folders, the files of the attachments counted
+ *    apart; fonts and the folders of AlphaBridge left out). A link is not
+ *    followed and counted as skipped; a folder that cannot be read makes its
+ *    root incomplete (fail closed).
+ *
+ * Left out of the units (E1), as no unit: the .htaccess and .user.ini of the
+ * top of the uploads, the fonts (a root of their own), the folders of
+ * AlphaBridge in the uploads (the store, undo); everything else under a root
+ * of units is a unit or in one, with no list of names left out within a
+ * unit.
  *
  * IN PARTS. read() goes on from a state within a budget of seconds and lines:
- * the lines of the site at once, then the tables one by one, then each root
- * file by file, in one order (order(): the folders of a root depth first, the
- * names of a folder by strcmp()), so the next call goes on after the last
- * path it counted. Each part begins with a line page (walk: one random id
- * for all parts of one reading, seq, last), by which the production site
- * holds the packages of the staging site to one whole series.
+ * the lines of the site at once, then the check of the core, the tables one
+ * by one, the units of each kind one by one (each whole within one call:
+ * a unit that does not end in time is read anew by the next call, and is too
+ * large only where it had a whole call, UNIT_BUDGET), then the root file by
+ * file, in one order (order(): the folders of a root depth first, the names
+ * of a folder by strcmp()), so the next call goes on after the last unit or
+ * path it read. Each part begins with a line page (walk: one random id
+ * for all parts of one reading, seq, last, files: the format of the
+ * manifests), by which the production site holds the packages of the
+ * staging site to one whole series.
  *
  * NAMES. A name of the site (a plugin, a theme, a must-use plugin, a
  * table: NAMED) goes, whole, through the check the import runs over the
@@ -63,26 +89,36 @@
  * where it lies (found()); one gone since leaves its root not counted to its
  * end, the tables not read whole (Codex, round 2 of branch 7, A1).
  *
- * WHAT IT SAYS (compare()): an entry per line of either side. Only a
- * must-use plugin and a drop-in are equal or differ by what was read (the
- * SHA-256 of the file); a value of group U and the language show both
- * values, same_value where they are the same (what lies behind a value is
- * not compared), else differs; what is only counted or summed (plugins and
- * themes of the same version, WordPress of the same version, tables with
- * the same rows and schema, the roots with the same count and size) is
+ * WHAT IT SAYS (compare()): an entry per line of either side. A unit (and
+ * the theme that runs) is decided by AB_MCP_Sync_Decision::unit_item() from
+ * its lines and its pair: equal, differs with the paths, only on one side,
+ * not compared, the states of a pair by its parts (E2), code:live_changed;
+ * a drop-in is equal or differs by its SHA-256; the core files equal where
+ * both sides are as shipped, else they differ by how many files; a value of
+ * group U, the version of WordPress and the language show both values,
+ * same_value where they are the same (what lies behind a value is not
+ * compared), else differs; what is only counted or summed (tables with the
+ * same rows and schema, the root with the same count and size) is
  * «counted, contents not compared», with the stage of the comparison of
- * their contents (Z8b for files and code, Z8d for tables), never equal.
- * Nothing of it is taken over: code, files and tables are locked with their
- * reason and stage (LOCKS), group U and the drop-ins are changed at the host
- * (action host, whatever the result). What could not be read is not
- * compared, with why (fail closed). No hash and no value of a file in an
- * entry; a held name by its SHA-256 with held.
+ * their contents, never equal. Nothing of it is taken over in this version:
+ * code, files and tables are locked with their reason and stage (LOCKS),
+ * group U, the drop-ins and the core are changed at the host (action host,
+ * whatever the result). What could not be read is not compared, with why
+ * (fail closed). No hash and no value of a file in an entry; a held name by
+ * its SHA-256 with held.
  *
  * Refusals and errors are gettext texts in the language of the site, each
  * naming the way; codes, states, kinds and parameters stay as the tools
  * name them. The words of the report (reasons of a lock, the why of a
  * decision, the words of the environment) stay English: they are compared
  * across the two sites and go into the hashes of the report and the plan.
+ *
+ * THE CALLS TO THE OUTSIDE of the series (plan 8.3, branch 2: the rows of
+ * the options the lines take, the file lists of the attachments) go through
+ * AB_MCP_Sync_Env_Calls, held by the seam of this class; only the tests put
+ * another object there. No filter and no option reaches it. The files of
+ * the units go through the seam of AB_MCP_Sync_File_Manifest, the
+ * checksums of the core through that of AB_MCP_Sync_Core_Compare.
  *
  * @package AlphaBridge_MCP
  */
@@ -96,43 +132,145 @@ require_once __DIR__ . '/class-sync-schema.php';
 require_once __DIR__ . '/class-sync-manifest.php';
 require_once __DIR__ . '/class-sync-credentials.php';
 require_once __DIR__ . '/class-sync-net.php';
+require_once __DIR__ . '/class-sync-file-manifest.php';
+require_once __DIR__ . '/class-sync-core-compare.php';
 require_once dirname( __DIR__ ) . '/class-redactor.php';
+
+/**
+ * The calls of the series of the environment to the rows of the site: the
+ * real ones.
+ */
+final class AB_MCP_Sync_Env_Calls {
+
+	/**
+	 * A stored option row as it is, past every filter.
+	 *
+	 * @param string $name Option.
+	 * @return array|false|null The row; false where there is none; null where it cannot be read.
+	 */
+	public function option( $name ) {
+		return AB_MCP_Sync_Rows::option( (string) $name );
+	}
+
+	/**
+	 * A page of the paths the file lists of the attachments name.
+	 *
+	 * @param int|null $after The attachment the page before ended with.
+	 * @param int      $limit Attachments at most.
+	 * @return array|null AB_MCP_Sync_Media::reverse().
+	 */
+	public function attached( $after, $limit ) {
+		return AB_MCP_Sync_Media::reverse( $after, $limit );
+	}
+}
 
 /**
  * Class AB_MCP_Sync_Env
  */
 final class AB_MCP_Sync_Env {
 
+	/** The calls to the rows of the site (the seam); only the tests put another object here. */
+	private static $naht_sync_env = null;
+
+	/**
+	 * The calls object: the stand-in of a test, else the real calls.
+	 *
+	 * @return AB_MCP_Sync_Env_Calls
+	 */
+	private static function calls() {
+		return self::$naht_sync_env ?? new AB_MCP_Sync_Env_Calls();
+	}
+
+	/**
+	 * Back to the real calls.
+	 */
+	public static function forget() {
+		self::$naht_sync_env = null;
+	}
+
 	/** The steps of a reading, in order. */
-	const STEPS = array( 'site', 'tables', 'languages', 'fonts', 'mu-plugins', 'uploads' );
+	const STEPS = array( 'site', 'core', 'tables', 'plugin', 'theme', 'theme_root', 'mu_plugin', 'language', 'font', 'upload', 'uploads' );
 
 	/** The roots of files, counted and summed. */
-	const ROOTS = array( 'languages', 'fonts', 'mu-plugins', 'uploads' );
+	const ROOTS = array( 'uploads' );
+
+	/** The kinds of units (E1), each a kind of line and the kind of its pair. */
+	const UNITS = array( 'plugin', 'theme', 'mu_plugin', 'language', 'font', 'upload' );
+
+	/** The fields of the line of a unit. */
+	const UNIT = array(
+		'active'   => 'list?',
+		'bytes'    => 'count',
+		'complete' => 'bool',
+		'files'    => 'count',
+		'form'     => 'text',
+		'hash'     => 'hash?',
+		'lock'     => 'text?',
+		'mains'    => 'list?',
+		'mtime'    => 'count?',
+		'own'      => 'bool',
+		'sha256'   => 'hash?',
+		'version'  => 'text?',
+		'cause'    => 'text?',
+	);
+
+	/** The forms of a unit: a folder, a file, what is neither (locked), AlphaBridge itself, a root not read. */
+	const FORMS = array( 'folder', 'file', 'other', 'own', 'root' );
+
+	/** Why a unit was not read whole (AB_MCP_Sync_File_Manifest::WHY and the root). */
+	const UNIT_WHY = array( 'unreadable', 'changed', 'too_large', 'too_many', 'link', 'vcs', 'nonfile', 'theme_root', 'too_many_lines', 'unknown', 'by_code', 'not_a_folder', 'attachments_unreadable', 'attachments_too_many', 'moved' );
+
+	/** Files of a unit in one line of entries at most. */
+	const PER_LINE = 500;
+
+	/**
+	 * Seconds the first unit (and the check of the core) of a call has at
+	 * least, past the budget of the call: as much as a call of wp_site_diff
+	 * has for its work (AB_MCP_Sync_Inventory::BUDGET less
+	 * AB_MCP_Sync_Proposal::RESERVE). A unit that does not end in them is too
+	 * large for the hash of one call (F38).
+	 */
+	const UNIT_BUDGET = 45;
+
+	/** Names at the top of the uploads that are no unit (E1). */
+	const UPLOADS_TOP = array( '.htaccess', '.user.ini' );
 
 	/**
 	 * The fields of each kind of line besides env and ref, with their types:
 	 * text (any text), text? (or null), bool, bool?, count (a whole number
 	 * from 0), count?, hash? (64 hex or null), hex32, scalar? (text, whole
-	 * number, bool or null).
+	 * number, bool or null), list? (a list of texts, or null), entries (a
+	 * list of files: path, size, SHA-256, mtime).
 	 */
 	const LINES = array(
-		'page'      => array(
-			'last' => 'bool',
-			'seq'  => 'count',
-			'walk' => 'hex32',
+		'page'       => array(
+			'files' => 'text',
+			'last'  => 'bool',
+			'seq'   => 'count',
+			'walk'  => 'hex32',
 		),
-		'core'      => array( 'value' => 'text?' ),
-		'plugin'    => array(
-			'active'  => 'bool?',
-			'version' => 'text?',
+		'core'       => array( 'value' => 'text?' ),
+		'core_files' => array(
+			'cause'    => 'text?',
+			'checked'  => 'count',
+			'complete' => 'bool',
+			'differs'  => 'count',
+			'missing'  => 'count',
 		),
-		'theme'     => array(
-			'active'  => 'bool?',
-			'version' => 'text?',
+		'plugin'     => self::UNIT,
+		'theme'      => self::UNIT,
+		'mu_plugin'  => self::UNIT,
+		'language'   => self::UNIT,
+		'font'       => self::UNIT,
+		'upload'     => self::UNIT,
+		'entries'    => array(
+			'entries' => 'entries',
+			'seq'     => 'count',
+			'unit'    => 'text',
 		),
-		'mu_plugin' => array(
-			'bytes'  => 'count?',
-			'sha256' => 'hash?',
+		'theme_choice' => array(
+			'stylesheet' => 'text?',
+			'template'   => 'text?',
 		),
 		'dropin'    => array(
 			'bytes'  => 'count?',
@@ -167,7 +305,7 @@ final class AB_MCP_Sync_Env {
 	 * The kinds of lines whose ref is a name of the site (a file, a folder,
 	 * a table): checked for a credential (held()), held by its SHA-256 then.
 	 */
-	const NAMED = array( 'plugin', 'theme', 'mu_plugin', 'table' );
+	const NAMED = array( 'plugin', 'theme', 'mu_plugin', 'language', 'font', 'upload', 'table' );
 
 	/**
 	 * Why a name is held (held(); the codes of AB_MCP_Sync_Import for a name
@@ -236,25 +374,43 @@ final class AB_MCP_Sync_Env {
 			'key'    => 'env:plugin',
 			'art'    => 'A11',
 			'stage'  => 'Z8b',
-			'reason' => 'A plugin is code: its files and whether it runs are compared and taken over with the code of the site.',
+			'reason' => 'A plugin is code: its files are compared by their contents and whether it runs by its main files; it is taken over with the code of the site.',
 		),
 		'theme'           => array(
 			'key'    => 'env:theme',
 			'art'    => 'A11',
 			'stage'  => 'Z8b',
-			'reason' => 'A theme is code: its files and which theme runs are compared and taken over with the code of the site.',
+			'reason' => 'A theme is code: its files are compared by their contents; it is taken over with the code of the site.',
 		),
-		'core'            => array(
-			'key'    => 'env:wordpress',
-			'art'    => 'A17',
+		'theme_choice'    => array(
+			'key'    => 'env:theme_choice',
+			'art'    => 'A9',
 			'stage'  => 'Z8b',
-			'reason' => 'WordPress itself is never taken over: where staging is newer, this site is updated first (wp_update_core); its files are compared with the code of the site.',
+			'reason' => 'Which theme runs is a phase of the code: it is taken over with the code of the site.',
 		),
 		'mu_plugin'       => array(
 			'key'    => 'env:mu_plugin',
 			'art'    => 'A21',
 			'stage'  => 'Z8b',
-			'reason' => 'A must-use plugin is a file: compared by its SHA-256, taken over with the files of the site.',
+			'reason' => 'A must-use file or folder is compared by the contents of its files and taken over with the files of the site.',
+		),
+		'language'        => array(
+			'key'    => 'env:languages',
+			'art'    => 'A21',
+			'stage'  => 'Z8b',
+			'reason' => 'A language file is compared by its contents and taken over with the files of the site.',
+		),
+		'font'            => array(
+			'key'    => 'env:fonts',
+			'art'    => 'A20',
+			'stage'  => 'Z8b',
+			'reason' => 'A file of the font library is compared by its contents; it comes with the fonts of the font library.',
+		),
+		'upload'          => array(
+			'key'    => 'env:upload_files',
+			'art'    => 'A22',
+			'stage'  => 'Z8b',
+			'reason' => 'A file of the uploads outside the file lists of attachments is compared by its contents and taken over with the files of the site.',
 		),
 		'table'           => array(
 			'key'    => 'env:table',
@@ -262,35 +418,46 @@ final class AB_MCP_Sync_Env {
 			'stage'  => 'Z8d',
 			'reason' => 'A table of a plugin without an adapter: shown by its rows and schema, its rows are not read; taken over only through an adapter, or as a whole on a confirmation per table.',
 		),
-		'files:languages' => array(
-			'key'    => 'env:languages',
-			'art'    => 'A21',
-			'stage'  => 'Z8b',
-			'reason' => 'The language files are counted and summed, their contents not compared; they are compared and taken over with the files of the site.',
-		),
-		'files:fonts'     => array(
-			'key'    => 'env:fonts',
-			'art'    => 'A20',
-			'stage'  => 'Z8b',
-			'reason' => 'The files of the font library are counted and summed, their contents not compared; they come with the fonts of the font library.',
-		),
-		'files:mu-plugins' => array(
-			'key'    => 'env:mu_files',
-			'art'    => 'A21',
-			'stage'  => 'Z8b',
-			'reason' => 'The files of the must-use folder WordPress does not load itself (in its subfolders) are counted and summed, their contents not compared.',
-		),
 		'files:uploads'   => array(
 			'key'    => 'env:uploads',
 			'art'    => 'A22',
 			'stage'  => 'Z8b',
-			'reason' => 'Files under uploads outside the file lists of attachments are counted and summed, their contents not compared.',
+			'reason' => 'The folders at the top of uploads other than the year folders (outside the file lists of attachments) are counted and summed, their contents not compared; they are classified with the files of the site.',
+		),
+	);
+
+	/**
+	 * Locks of a unit that no stage lifts (stage Z8: a person resolves them),
+	 * each with its way.
+	 */
+	const CODE_LOCKS = array(
+		'code:live_extra'  => array(
+			'stage'  => 'Z8',
+			'reason' => 'The unit holds on this site what no manifest holds (a folder .git, .svn or .hg, a symbolic link, or something that is no regular file): it is never taken over. Remove it on this site (or take the unit over by hand), then make a new report.',
+		),
+		'code:link'        => array(
+			'stage'  => 'Z8',
+			'reason' => 'The unit holds on the staging site what no manifest holds (a folder .git, .svn or .hg, a symbolic link, or something that is no regular file): it is never taken over. Remove it on the staging site (or take the unit over by hand), then make a new report.',
+		),
+		'code:theme_root'  => array(
+			'stage'  => 'Z8',
+			'reason' => 'The theme lies in a further root of themes (register_theme_directory()), not in the folder of the themes: it is never taken over. Take it over by hand.',
+		),
+		'code:own'         => array(
+			'stage'  => 'Z8',
+			'reason' => 'AlphaBridge itself is shown, never taken over: bring both sites to the same version of AlphaBridge (wp-admin, Plugins → Update), then make a new report.',
+		),
+		'code:live_changed' => array(
+			'stage'  => 'Z8',
+			'reason' => 'The files of the unit changed on this site since the base of its pair, and on the staging site as well: the files written on this site would leave their folder, so there is no choice «staging wins». Bring both sides to the same version (the same files), then make a new report. A plugin that keeps writing into its own folder (logs, caches, backups) changes again after every write: update it by hand in wp-admin (Plugins → Update) instead.',
 		),
 	);
 
 	/** What each result says. */
 	const WORDS = array(
 		'equal'        => 'Equal on both sides, by the SHA-256 of the file.',
+		'core_equal'   => 'Equal on both sides: the core files of each site are those api.wordpress.org gives for its version and language.',
+		'core_differs' => 'Differs: core files of a site are not those api.wordpress.org gives for its version and language. WordPress itself is never taken over: install it anew at the host or in wp-admin (Dashboard → Updates → Re-install).',
 		'same_value'   => 'The same value on both sides, shown only: what lies behind it (how the host builds and sets up PHP, the database or the server) is not compared.',
 		'differs'      => 'Differs between the sides.',
 		'counted'      => 'Counted, contents not compared: the same version, rows or count on both sides says nothing about the contents.',
@@ -303,7 +470,7 @@ final class AB_MCP_Sync_Env {
 	const HOST_WORDS = 'Change at the host: nothing of this is taken over.';
 
 	/** The order of the kinds of entries. */
-	const ORDER = array( 'environment', 'core', 'plugin', 'theme', 'mu_plugin', 'dropin', 'host', 'table', 'files' );
+	const ORDER = array( 'environment', 'core', 'core_files', 'plugin', 'theme', 'mu_plugin', 'language', 'font', 'upload', 'theme_choice', 'dropin', 'host', 'table', 'files' );
 
 	/** The clock of the budget; a callable returning seconds, null for microtime(). Set by tests only. */
 	public static $clock = null;
@@ -314,12 +481,15 @@ final class AB_MCP_Sync_Env {
 	 * Read the environment of this site from a state, as far as a budget of
 	 * seconds and lines reaches. The first line is the page.
 	 *
-	 * @param array|null $state The state of the part before (null: begin).
+	 * @param array|null $state  The state of the part before (null: begin).
 	 * @param int|float  $budget Seconds.
 	 * @param int        $max    Lines at most (the page and one more at least).
+	 * @param string     $side   live (this is the production site: wp_site_diff)
+	 *                           or staging (wp_site_export): which lock a unit
+	 *                           that holds what no manifest holds gets (E1).
 	 * @return array{lines:array[],state:array|null}|WP_Error state null: done.
 	 */
-	public static function read( $state, $budget, $max = 4000 ) {
+	public static function read( $state, $budget, $max = 4000, $side = 'live' ) {
 		if ( null === $state ) {
 			try {
 				$walk = bin2hex( random_bytes( 16 ) );
@@ -333,13 +503,36 @@ final class AB_MCP_Sync_Env {
 		$deadline = self::now() + (float) $budget;
 		$max      = max( 2, (int) $max );
 		$lines    = array();
+		// The first unit of a call is read to its end, with UNIT_BUDGET
+		// seconds of its own at least, so that every call moves on; one that
+		// does not end even so is too large.
+		$first = true;
 		while ( $state['step'] < count( self::STEPS ) ) {
 			$step = self::STEPS[ $state['step'] ];
 			if ( 'site' === $step ) {
 				$lines = array_merge( $lines, self::site_lines() );
 				$state = self::next( $state );
+			} elseif ( 'core' === $step ) {
+				// The core is checked once a series, with UNIT_BUDGET seconds of
+				// its own at least, so that the step moves on: where it does not
+				// end in them, its line says so (too_slow) and the rest of the
+				// environment is read (GitHub-Codex on ec0d088, G-M7).
+				$check = AB_MCP_Sync_Core_Compare::check( max( $deadline, self::now() + self::UNIT_BUDGET ), $first );
+				if ( null === $check ) {
+					break;
+				}
+				$lines[] = self::line( 'core_files', 'files', $check );
+				$state   = self::next( $state );
 			} elseif ( 'tables' === $step ) {
 				$read  = self::table_lines( $state['after'], $deadline, $max - 1 - count( $lines ) );
+				$lines = array_merge( $lines, $read['lines'] );
+				if ( ! $read['done'] ) {
+					$state['after'] = $read['after'];
+					break;
+				}
+				$state = self::next( $state );
+			} elseif ( in_array( $step, self::UNITS, true ) || 'theme_root' === $step ) {
+				$read  = self::unit_step( $step, $state['after'], $deadline, $max - 1 - count( $lines ), $side, $first, array() === $lines );
 				$lines = array_merge( $lines, $read['lines'] );
 				if ( ! $read['done'] ) {
 					$state['after'] = $read['after'];
@@ -363,11 +556,12 @@ final class AB_MCP_Sync_Env {
 		array_unshift(
 			$lines,
 			array(
-				'env'  => 'page',
-				'last' => $done,
-				'ref'  => 'page',
-				'seq'  => (int) $state['seq'],
-				'walk' => (string) $state['walk'],
+				'env'   => 'page',
+				'files' => AB_MCP_Sync_File_Manifest::FORMAT,
+				'last'  => $done,
+				'ref'   => 'page',
+				'seq'   => (int) $state['seq'],
+				'walk'  => (string) $state['walk'],
 			)
 		);
 		if ( $done ) {
@@ -528,16 +722,7 @@ final class AB_MCP_Sync_Env {
 		$wordpress = AB_MCP_Sync_Manifest::wordpress();
 		$lines[]   = self::line( 'core', 'wordpress', array( 'value' => '' === $wordpress ? null : $wordpress ) );
 		$lines[] = self::line( 'core', 'locale', array( 'value' => self::locale() ) );
-		foreach ( self::plugins() as $line ) {
-			$lines[] = $line;
-		}
-		foreach ( self::themes() as $line ) {
-			$lines[] = $line;
-		}
-		$mu = defined( 'WPMU_PLUGIN_DIR' ) ? (string) WPMU_PLUGIN_DIR : '';
-		foreach ( self::mu_files( $mu ) as $name ) {
-			$lines[] = self::named( 'mu_plugin', $name, self::file_hash( $mu . '/' . $name ) );
-		}
+		$lines[] = self::theme_choice();
 		$content = defined( 'WP_CONTENT_DIR' ) ? (string) WP_CONTENT_DIR : '';
 		foreach ( self::DROPINS as $name ) {
 			$path = $content . '/' . $name;
@@ -568,37 +753,12 @@ final class AB_MCP_Sync_Env {
 	 * @return string|null
 	 */
 	public static function locale() {
-		$row = AB_MCP_Sync_Rows::option( 'WPLANG' );
+		$row = self::calls()->option( 'WPLANG' );
 		if ( null === $row ) {
 			return null;
 		}
 		$value = false === $row ? '' : $row['value'];
 		return '' === $value ? 'en_US' : self::text( $value, null );
-	}
-
-	/**
-	 * The lines of the plugins: each by its file, its version, whether it
-	 * runs on this site (the stored row of active_plugins). The files as
-	 * get_plugins() finds them (plugin_files()), read here: get_plugins()
-	 * keeps its answer in the object cache, which an external cache fills
-	 * from stored values.
-	 *
-	 * @return array[]
-	 */
-	private static function plugins() {
-		$active = self::stored_list( 'active_plugins' );
-		$lines  = array();
-		foreach ( self::plugin_files( defined( 'WP_PLUGIN_DIR' ) ? (string) WP_PLUGIN_DIR : '' ) as $file => $version ) {
-			$lines[] = self::named(
-				'plugin',
-				(string) $file,
-				array(
-					'active'  => null === $active ? null : in_array( (string) $file, $active, true ),
-					'version' => $version,
-				)
-			);
-		}
-		return self::sorted( $lines );
 	}
 
 	/**
@@ -633,39 +793,6 @@ final class AB_MCP_Sync_Env {
 			}
 		}
 		return $out;
-	}
-
-	/**
-	 * The lines of the themes: each by its stylesheet, its version, whether
-	 * it runs (the stored rows of stylesheet and template). The folders as
-	 * search_theme_directories() finds them (theme_dirs()), read here:
-	 * wp_get_themes() keeps the roots of the themes in a site transient.
-	 *
-	 * @return array[]
-	 */
-	private static function themes() {
-		$names = array();
-		foreach ( array( 'stylesheet', 'template' ) as $option ) {
-			$row = AB_MCP_Sync_Rows::option( $option );
-			if ( ! is_array( $row ) ) {
-				$names = null;
-				break;
-			}
-			$names[] = $row['value'];
-		}
-		$roots = isset( $GLOBALS['wp_theme_directories'] ) && is_array( $GLOBALS['wp_theme_directories'] ) && array() !== $GLOBALS['wp_theme_directories'] ? $GLOBALS['wp_theme_directories'] : ( defined( 'WP_CONTENT_DIR' ) ? array( WP_CONTENT_DIR . '/themes' ) : array() );
-		$lines = array();
-		foreach ( self::theme_dirs( array_map( 'strval', $roots ) ) as $stylesheet => $version ) {
-			$lines[] = self::named(
-				'theme',
-				(string) $stylesheet,
-				array(
-					'active'  => null === $names ? null : in_array( (string) $stylesheet, $names, true ),
-					'version' => $version,
-				)
-			);
-		}
-		return self::sorted( $lines );
 	}
 
 	/**
@@ -733,7 +860,7 @@ final class AB_MCP_Sync_Env {
 	 * @return string[]|null
 	 */
 	private static function stored_list( $name ) {
-		$row = AB_MCP_Sync_Rows::option( $name );
+		$row = self::calls()->option( $name );
 		if ( false === $row ) {
 			return array();
 		}
@@ -751,38 +878,6 @@ final class AB_MCP_Sync_Env {
 			return null;
 		}
 		return array_values( array_map( 'strval', array_filter( $read['value'], 'is_scalar' ) ) );
-	}
-
-	/**
-	 * The files of the must-use folder WordPress loads (its top level, *.php,
-	 * as wp_get_mu_plugins()), without the loader of AlphaBridge, by strcmp().
-	 *
-	 * @param string $dir The must-use folder.
-	 * @return string[]
-	 */
-	public static function mu_files( $dir ) {
-		$out = array();
-		if ( '' === $dir || ! is_dir( $dir ) ) {
-			return $out;
-		}
-		foreach ( self::names( $dir ) as $name ) {
-			if ( self::loaded_mu( $dir, $name ) && self::LOADER !== $name ) {
-				$out[] = $name;
-			}
-		}
-		return $out;
-	}
-
-	/**
-	 * Whether a name at the top level of the must-use folder is a file
-	 * WordPress loads (or the loader of AlphaBridge).
-	 *
-	 * @param string $dir  The must-use folder.
-	 * @param string $name Name.
-	 * @return bool
-	 */
-	private static function loaded_mu( $dir, $name ) {
-		return '.php' === substr( $name, -4 ) && is_file( $dir . '/' . $name );
 	}
 
 	/**
@@ -838,7 +933,7 @@ final class AB_MCP_Sync_Env {
 	public static function htaccess() {
 		$paths = array();
 		foreach ( array( 'home', 'siteurl' ) as $option ) {
-			$row = AB_MCP_Sync_Rows::option( $option );
+			$row = self::calls()->option( $option );
 			if ( ! is_array( $row ) ) {
 				return null;
 			}
@@ -937,6 +1032,634 @@ final class AB_MCP_Sync_Env {
 			return $value;
 		}
 		return 'sha256:' . hash( 'sha256', is_string( $value ) ? $value : AB_MCP_Sync_Canon::encode( $value ) );
+	}
+
+	/* ----------------------------------------------------------- units */
+
+	/**
+	 * The line of the theme that runs (E2: a unit of its own): the stored
+	 * rows of stylesheet and template, each a name of the site (by its
+	 * SHA-256 where a credential holds it, held()); null where a row cannot
+	 * be read or holds none. The stylesheet is read again after the
+	 * template: where it changed in between (a switch of the theme while it
+	 * is read), both are null, so that no pair of rows that never stood
+	 * together is compared.
+	 *
+	 * @return array
+	 */
+	public static function theme_choice() {
+		$read = array();
+		foreach ( array( 'stylesheet', 'template', 'again' ) as $option ) {
+			$row             = self::calls()->option( 'again' === $option ? 'stylesheet' : $option );
+			$read[ $option ] = is_array( $row ) && is_string( $row['value'] ) && '' !== $row['value'] ? $row['value'] : null;
+		}
+		$same = $read['again'] === $read['stylesheet'];
+		$out  = array();
+		foreach ( array( 'stylesheet', 'template' ) as $option ) {
+			$out[ $option ] = null === $read[ $option ] || ! $same ? null : self::path_name( $read[ $option ] );
+		}
+		return self::line( 'theme_choice', 'theme_choice', $out );
+	}
+
+	/**
+	 * One step of units (UNITS, and theme_root): the units of a kind one by
+	 * one after the place the part before ended at, each read whole
+	 * (read_unit()), with its line and the lines of its entries, as far as the
+	 * clock and the room reach. A unit that does not end in time, or whose
+	 * lines do not fit, is read anew by the next call (where it had the call
+	 * to itself: too large).
+	 *
+	 * @param string     $kind     A kind of UNITS, or theme_root.
+	 * @param array|null $place    Where the part before ended (place()).
+	 * @param float      $deadline Until when.
+	 * @param int        $room     Lines at most.
+	 * @param string     $side     live or staging.
+	 * @param bool       $first    No unit read yet in this call (cleared here): it has UNIT_BUDGET seconds of its own at least.
+	 * @param bool       $empty    No line in this part yet: a unit whose lines do not fit even so is too large for a part.
+	 * @return array{lines:array[],done:bool,after:array|null}
+	 */
+	private static function unit_step( $kind, $place, $deadline, $room, $side, &$first, $empty ) {
+		$alone = $first;
+		if ( 'theme_root' === $kind ) {
+			// The themes of the further roots page by page, by strcmp() of
+			// their stylesheets, after the one the part before ended with
+			// (by its SHA-256): none left out where they do not fit into one
+			// part (GitHub-Codex on free#147, P2).
+			$themes = self::theme_roots( $side, $deadline );
+			$names  = array_map( 'strval', array_keys( $themes ) );
+			$after  = null === $place ? null : self::found(
+				$place,
+				static function ( $rel ) use ( $names ) {
+					return '' === $rel ? $names : array();
+				}
+			);
+			if ( null !== $place && null === $after ) {
+				return self::units_done( array( self::root_unit( 'theme', 'moved' ) ) );
+			}
+			$lines = array();
+			$last  = $after;
+			foreach ( $themes as $name => $line ) {
+				if ( null !== $after && strcmp( (string) $name, $after ) <= 0 ) {
+					continue;
+				}
+				if ( count( $lines ) >= $room ) {
+					return array(
+						'lines' => $lines,
+						'done'  => false,
+						'after' => self::place( (string) $last, false ),
+					);
+				}
+				$lines[] = $line;
+				$last    = (string) $name;
+			}
+			return self::units_done( $lines );
+		}
+		$base = self::unit_base( $kind );
+		if ( '' !== $base['why'] ) {
+			return self::units_done( array( self::root_unit( $kind, $base['why'] ) ) );
+		}
+		$dir = $base['dir'];
+		if ( ! is_dir( $dir ) ) {
+			// No folder of this kind on this site: no units (a site without a
+			// must-use folder), or its place is no folder.
+			return self::units_done( file_exists( $dir ) || is_link( $dir ) ? array( self::root_unit( $kind, 'not_a_folder' ) ) : array() );
+		}
+		$after = null === $place ? null : self::found(
+			$place,
+			static function ( $rel ) use ( $dir ) {
+				return self::names( '' === $rel ? $dir : $dir . '/' . $rel );
+			}
+		);
+		if ( null !== $place && null === $after ) {
+			return self::units_done( array( self::root_unit( $kind, 'moved' ) ) );
+		}
+		$ctx = self::unit_context( $kind, $dir, $deadline );
+		if ( is_string( $ctx ) ) {
+			return self::units_done( array( self::root_unit( $kind, $ctx ) ) );
+		}
+		$lines = array();
+		$last  = $after;
+		// The walk of a root of files: with UNIT_BUDGET of its own as the
+		// first unit of a call has it, then the time of the call; where it
+		// stops, after the last entry it visited (nested()).
+		$walk = array(
+			'until'   => $alone ? max( (float) $deadline, self::now() + self::UNIT_BUDGET ) : (float) $deadline,
+			'visited' => 0,
+			'last'    => null,
+		);
+		foreach ( self::candidates( $kind, $dir, $after, $ctx, $walk ) as $candidate ) {
+			list( $name, $flag ) = $candidate;
+			if ( 'root' === $flag ) {
+				// The folder of the kind could not be listed: its line says so,
+				// so that no unit of the other side is taken as only there.
+				$lines[] = self::root_unit( $kind, 'unreadable' );
+				return self::units_done( $lines );
+			}
+			// Where to go on: after the last entry the walk visited before
+			// this one (a skipped one too), else after the last unit read.
+			$at = null !== $walk['last'] ? $walk['last'] : $last;
+			if ( 'time' === $flag ) {
+				return self::units_stop( $lines, $at );
+			}
+			if ( ( ( array() !== $lines || ! $alone ) && self::now() >= $deadline ) || count( $lines ) >= $room ) {
+				return self::units_stop( $lines, $at );
+			}
+			$read = self::read_unit( $kind, $dir, $name, $flag, $side, $alone ? max( (float) $deadline, self::now() + self::UNIT_BUDGET ) : $deadline, $alone );
+			if ( $read['stopped'] ) {
+				return self::units_stop( $lines, $at );
+			}
+			$of = self::unit_lines( $kind, $name, $read, $ctx );
+			if ( count( $lines ) + count( $of ) > $room ) {
+				if ( array() !== $lines || ! $empty ) {
+					return self::units_stop( $lines, $at );
+				}
+				// Alone in a part its lines do not fit: no entries, no hash.
+				$read['complete'] = false;
+				$read['hash']     = null;
+				$read['cause']    = 'too_many_lines';
+				$of               = array_slice( self::unit_lines( $kind, $name, $read, $ctx ), 0, 1 );
+			}
+			$lines = array_merge( $lines, $of );
+			$last  = $name;
+			$first = false;
+			$alone = false;
+			$empty = false;
+			// After the first unit, the time of the call bounds the walk too.
+			$walk['until'] = (float) $deadline;
+		}
+		return self::units_done( $lines );
+	}
+
+	/**
+	 * @param array[] $lines Lines.
+	 * @return array{lines:array[],done:bool,after:null} A step of units read to its end.
+	 */
+	private static function units_done( array $lines ) {
+		return array(
+			'lines' => $lines,
+			'done'  => true,
+			'after' => null,
+		);
+	}
+
+	/**
+	 * @param array[]     $lines Lines.
+	 * @param string|null $last  The last unit read.
+	 * @return array{lines:array[],done:bool,after:array|null} A step of units that goes on after $last.
+	 */
+	private static function units_stop( array $lines, $last ) {
+		return array(
+			'lines' => $lines,
+			'done'  => false,
+			'after' => self::place( $last ),
+		);
+	}
+
+	/**
+	 * The folder of a kind of units, or why it is not read: the folder of
+	 * the plugins, the standard root of the themes, the must-use folder, the
+	 * languages, the fonts, the uploads (root_dir()).
+	 *
+	 * @param string $kind A kind of UNITS.
+	 * @return array{dir:string,why:string}
+	 */
+	public static function unit_base( $kind ) {
+		$constant = array(
+			'plugin'    => 'WP_PLUGIN_DIR',
+			'mu_plugin' => 'WPMU_PLUGIN_DIR',
+		);
+		if ( isset( $constant[ $kind ] ) ) {
+			return defined( $constant[ $kind ] ) ? array( 'dir' => rtrim( (string) constant( $constant[ $kind ] ), '/' ), 'why' => '' ) : array( 'dir' => '', 'why' => 'unknown' );
+		}
+		if ( 'theme' === $kind ) {
+			// The one root a theme is read from, as the manifest takes it (E2).
+			$root = AB_MCP_Sync_File_Manifest::theme_root();
+			return null !== $root ? array( 'dir' => rtrim( $root, '/' ), 'why' => '' ) : array( 'dir' => '', 'why' => 'unknown' );
+		}
+		$root = array(
+			'language' => 'languages',
+			'font'     => 'fonts',
+			'upload'   => 'uploads',
+		);
+		return self::root_dir( $root[ $kind ] );
+	}
+
+	/**
+	 * What the units of a kind need besides their files, read once a step:
+	 * the main files of the plugins with their versions and which run; the
+	 * versions of the themes; the paths of the file lists of the attachments
+	 * (the uploads). A text where it cannot be read (why).
+	 *
+	 * @param string $kind     Kind.
+	 * @param string $dir      Its folder.
+	 * @param float  $deadline Until when.
+	 * @return array|string
+	 */
+	private static function unit_context( $kind, $dir, $deadline ) {
+		if ( 'plugin' === $kind ) {
+			return array(
+				'mains'  => self::plugin_files( $dir ),
+				'active' => self::stored_list( 'active_plugins' ),
+			);
+		}
+		if ( 'theme' === $kind ) {
+			return array( 'versions' => self::theme_dirs( array( $dir ) ) );
+		}
+		if ( 'upload' === $kind ) {
+			$known = self::attached( $deadline );
+			return is_string( $known ) ? $known : array( 'attached' => $known );
+		}
+		return array();
+	}
+
+	/**
+	 * The units of a kind in the order of the walk (order()), after a path:
+	 * each with what it is (unit; unreadable: a folder below the root that
+	 * cannot be read; root: the folder of the kind itself cannot be listed,
+	 * so what is not there is not known). A folder of version control is a
+	 * unit, which unit() locks.
+	 *
+	 * @param string      $kind  Kind.
+	 * @param string      $dir   Its folder.
+	 * @param string|null $after The last unit the part before read.
+	 * @param array       $ctx   unit_context().
+	 * @param array       $walk  The walk of a root of files (nested()): until
+	 *                           when, how many entries visited, the last one.
+	 * @return Generator<array{0:string,1:string}>
+	 */
+	private static function candidates( $kind, $dir, $after, array $ctx, array &$walk ) {
+		if ( in_array( $kind, array( 'plugin', 'theme', 'mu_plugin' ), true ) ) {
+			$names = self::names( $dir );
+			if ( null === $names ) {
+				yield array( '', 'root' );
+				return;
+			}
+			foreach ( $names as $name ) {
+				if ( null !== $after && strcmp( $name, $after ) <= 0 ) {
+					continue;
+				}
+				$full = $dir . '/' . $name;
+				if ( 'mu_plugin' === $kind ) {
+					if ( self::LOADER !== $name ) {
+						yield array( $name, 'unit' );
+					}
+					continue;
+				}
+				// Plugins and themes as WordPress finds them: no name beginning
+				// with a dot; a folder (or a link); a plugin of one file by the
+				// head that names it.
+				if ( '.' === $name[0] ) {
+					continue;
+				}
+				if ( is_link( $full ) || is_dir( $full ) || ( 'plugin' === $kind && array_key_exists( $name, $ctx['mains'] ) ) ) {
+					yield array( $name, 'unit' );
+				}
+			}
+			return;
+		}
+		$pick = static function ( $rel, $name, $full ) use ( $kind, $ctx ) {
+			if ( 'upload' === $kind && '' === $rel ) {
+				if ( in_array( $name, self::UPLOADS_TOP, true ) || 'fonts' === $name || in_array( $name, self::OWN_UPLOADS, true ) || 0 === strpos( $name, self::OWN_UPLOADS_PREFIX ) ) {
+					return 'skip';
+				}
+				if ( is_dir( $full ) && ! is_link( $full ) ) {
+					// The year folders hold units; the other folders are counted (uploads).
+					return 1 === preg_match( '/^[0-9]{4}\z/', $name ) ? 'into' : 'skip';
+				}
+				// A file at the top: a unit only outside the file lists of the
+				// attachments, as below a year folder (a site without year and
+				// month folders; GitHub-Codex on free#147, P2).
+				return isset( $ctx['attached'][ $name ] ) ? 'skip' : 'unit';
+			}
+			if ( is_dir( $full ) && ! is_link( $full ) ) {
+				// A folder of version control is a unit, which unit() locks.
+				return in_array( $name, AB_MCP_Sync_File_Manifest::VCS, true ) ? 'unit' : 'into';
+			}
+			$path = '' === $rel ? $name : $rel . '/' . $name;
+			return 'upload' === $kind && isset( $ctx['attached'][ $path ] ) ? 'skip' : 'unit';
+		};
+		yield from self::nested( $dir, '', $after, $pick, $walk );
+	}
+
+	/**
+	 * The units below one folder of a root of files, depth first in order(),
+	 * after a path. The time of the call is asked before each entry once one
+	 * is visited (so that every call moves on): where it is over, the walk
+	 * ends with time and the last entry visited, a folder, a skipped entry or
+	 * a unit, so that the next call goes on after it; a tree of empty folders
+	 * or of files of attachments, which gives no unit, is walked over parts
+	 * as well (GitHub-Codex on e9db02d).
+	 *
+	 * @param string      $base  The root.
+	 * @param string      $rel   This folder ('' the root).
+	 * @param string|null $after The last unit the part before read.
+	 * @param callable    $pick  function( $rel, $name, $full ): unit, into or skip.
+	 * @param array       $walk  until, visited, last (candidates()).
+	 * @return Generator<array{0:string,1:string}>
+	 */
+	private static function nested( $base, $rel, $after, callable $pick, array &$walk ) {
+		$dir   = '' === $rel ? $base : $base . '/' . $rel;
+		$list = self::names( $dir );
+		if ( null === $list ) {
+			if ( '' === $rel ) {
+				// The root itself: what is not there is not known.
+				yield array( '', 'root' );
+			} elseif ( null === $after || self::order( $rel, $after ) > 0 ) {
+				yield array( $rel, 'unreadable' );
+			}
+			return;
+		}
+		foreach ( $list as $name ) {
+			$path = '' === $rel ? $name : $rel . '/' . $name;
+			$into = null;
+			if ( null !== $after ) {
+				if ( str_starts_with( $after, $path . '/' ) ) {
+					$into = $after;
+				} elseif ( 0 >= self::order( $path, $after ) ) {
+					continue;
+				}
+			}
+			if ( $walk['visited'] > 0 && self::now() >= $walk['until'] ) {
+				yield array( (string) $walk['last'], 'time' );
+				return;
+			}
+			++$walk['visited'];
+			$what = $pick( $rel, $name, $base . '/' . $path );
+			if ( 'skip' === $what ) {
+				$walk['last'] = $path;
+				continue;
+			}
+			if ( 'into' === $what ) {
+				yield from self::nested( $base, $path, $into, $pick, $walk );
+				$walk['last'] = $path;
+				continue;
+			}
+			yield array( $path, $what );
+			$walk['last'] = $path;
+		}
+	}
+
+	/**
+	 * Read one unit: AlphaBridge itself shown, not hashed (own, E12); a folder
+	 * below a root that cannot be read without a hash; any other through
+	 * AB_MCP_Sync_File_Manifest::unit(), which also locks what no manifest
+	 * holds.
+	 *
+	 * @param string $kind     Kind.
+	 * @param string $dir      Its folder.
+	 * @param string $name     The unit.
+	 * @param string $flag     What candidates() said of it.
+	 * @param string $side     live or staging.
+	 * @param float  $deadline Until when.
+	 * @param bool   $first    See unit_step().
+	 * @return array As AB_MCP_Sync_File_Manifest::unit(), with own.
+	 */
+	private static function read_unit( $kind, $dir, $name, $flag, $side, $deadline, $first ) {
+		$none = array(
+			'form'     => 'other',
+			'complete' => false,
+			'stopped'  => false,
+			'cause'    => null,
+			'lock'     => null,
+			'hash'     => null,
+			'files'    => 0,
+			'bytes'    => 0,
+			'entries'  => array(),
+			'own'      => false,
+		);
+		if ( in_array( $kind, array( 'plugin', 'mu_plugin' ), true ) && self::own( $dir . '/' . $name ) ) {
+			return array(
+				'form'     => 'own',
+				'complete' => true,
+				'own'      => true,
+				'version'  => self::own_version( $dir . '/' . $name ),
+			) + $none;
+		}
+		if ( 'unreadable' === $flag ) {
+			return array( 'cause' => 'unreadable' ) + $none;
+		}
+		return array( 'own' => false ) + AB_MCP_Sync_File_Manifest::unit( $dir, $name, $side, $deadline, $first, $kind );
+	}
+
+	/**
+	 * The version of AlphaBridge itself at a path, from the head of its file
+	 * (Version), or of a folder from the first file at its top (by strcmp())
+	 * that names a plugin and its version; null where none says it (GitHub-
+	 * Codex on ed1e512: a version not known is never «the same»).
+	 *
+	 * @param string $path Path.
+	 * @return string|null
+	 */
+	private static function own_version( $path ) {
+		$files = array( (string) $path );
+		if ( is_dir( $path ) ) {
+			$files = array();
+			foreach ( (array) self::names( $path ) as $name ) {
+				if ( '.php' === substr( (string) $name, -4 ) ) {
+					$files[] = $path . '/' . $name;
+				}
+			}
+		}
+		foreach ( $files as $file ) {
+			$head = self::head( $file, array( 'Plugin Name', 'Version' ) );
+			if ( '' !== $head['Version'] && ( ! is_dir( $path ) || '' !== $head['Plugin Name'] ) ) {
+				return self::name( $head['Version'] );
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * Whether a path is AlphaBridge itself (Free, Pro, the owner drop-in), by
+	 * its identity (AB_MCP_Own_Files::own_file_refusal(), E12).
+	 *
+	 * @param string $path Path.
+	 * @return bool
+	 */
+	private static function own( $path ) {
+		return class_exists( 'AB_MCP_Own_Files' ) && is_wp_error( AB_MCP_Own_Files::own_file_refusal( (string) $path ) );
+	}
+
+	/**
+	 * The lines of a unit: its line (named(): by its SHA-256 where its name
+	 * holds a credential), then, for a folder read whole under a name a line
+	 * holds as it is, its files PER_LINE a line (entries), each path by its
+	 * SHA-256 where a credential holds it.
+	 *
+	 * @param string $kind Kind.
+	 * @param string $name The unit.
+	 * @param array  $read read_unit().
+	 * @param array  $ctx  unit_context().
+	 * @return array[]
+	 */
+	private static function unit_lines( $kind, $name, array $read, array $ctx ) {
+		$file   = 'file' === $read['form'] && $read['complete'] && null !== $read['hash'] && isset( $read['entries'][0] ) ? $read['entries'][0] : null;
+		$fields = array(
+			'active'   => null,
+			'bytes'    => (int) $read['bytes'],
+			'complete' => (bool) $read['complete'],
+			'files'    => (int) $read['files'],
+			'form'     => (string) $read['form'],
+			'hash'     => $read['hash'],
+			'lock'     => $read['lock'],
+			'mains'    => null,
+			'mtime'    => null === $file ? null : (int) $file[3],
+			'own'      => (bool) $read['own'],
+			'sha256'   => null === $file ? null : (string) $file[2],
+			'version'  => null,
+			'cause'    => $read['cause'],
+		);
+		if ( 'plugin' === $kind ) {
+			// Each main file by its name in the unit, with its full reference
+			// as active_plugins holds it (a folder loader.php with a main file
+			// loader.php: loader.php/loader.php, never loader.php alone;
+			// GitHub-Codex on f25da74).
+			$mains = array();
+			$refs  = array();
+			foreach ( $ctx['mains'] as $rel => $version ) {
+				$rel = (string) $rel;
+				if ( $rel === $name ) {
+					$main = $rel;
+				} elseif ( 0 === strpos( $rel, $name . '/' ) ) {
+					$main = (string) substr( $rel, strlen( $name ) + 1 );
+				} else {
+					continue;
+				}
+				$mains[ $main ] = $version;
+				$refs[ $main ]  = $rel;
+			}
+			ksort( $mains, SORT_STRING );
+			$fields['mains']   = array_map( array( __CLASS__, 'path_name' ), array_map( 'strval', array_keys( $mains ) ) );
+			$fields['version'] = array() === $mains ? null : reset( $mains );
+			if ( null !== $ctx['active'] ) {
+				$active = array();
+				foreach ( array_keys( $mains ) as $main ) {
+					if ( in_array( $refs[ $main ], $ctx['active'], true ) ) {
+						$active[] = self::path_name( (string) $main );
+					}
+				}
+				$fields['active'] = $active;
+			}
+		} elseif ( 'mu_plugin' === $kind && ! empty( $read['own'] ) ) {
+			$fields['version'] = $read['version'] ?? null;
+		} elseif ( 'theme' === $kind ) {
+			foreach ( $ctx['versions'] as $stylesheet => $version ) {
+				if ( (string) $stylesheet === $name || 0 === strpos( (string) $stylesheet, $name . '/' ) ) {
+					$fields['version'] = $version;
+					break;
+				}
+			}
+		}
+		$unit  = self::named( $kind, $name, $fields );
+		$lines = array( $unit );
+		if ( isset( $unit['held'] ) || $unit['ref'] !== $name || 'folder' !== $read['form'] || ! $read['complete'] || null === $read['hash'] ) {
+			return $lines;
+		}
+		foreach ( array_chunk( $read['entries'], self::PER_LINE ) as $i => $chunk ) {
+			$entries = array();
+			foreach ( $chunk as $entry ) {
+				$entries[] = array( self::path_name( (string) $entry[0] ), (int) $entry[1], (string) $entry[2], (int) $entry[3] );
+			}
+			$lines[] = self::line(
+				'entries',
+				$kind . ':' . $name . '#' . ( $i + 1 ),
+				array(
+					'entries' => $entries,
+					'seq'     => $i + 1,
+					'unit'    => $kind . ':' . $name,
+				)
+			);
+		}
+		return $lines;
+	}
+
+	/**
+	 * The line of a kind of units whose folder was not read (form root, ref
+	 * *), with why: so that what was not read shows (fail closed).
+	 *
+	 * @param string $kind Kind.
+	 * @param string $why  A code of UNIT_WHY.
+	 * @return array
+	 */
+	private static function root_unit( $kind, $why ) {
+		return self::line(
+			$kind,
+			'*',
+			array(
+				'active'   => null,
+				'bytes'    => 0,
+				'complete' => false,
+				'files'    => 0,
+				'form'     => 'root',
+				'hash'     => null,
+				'lock'     => null,
+				'mains'    => null,
+				'mtime'    => null,
+				'own'      => false,
+				'sha256'   => null,
+				'version'  => null,
+				'cause'    => (string) $why,
+			)
+		);
+	}
+
+	/**
+	 * The lines of the themes of the further roots of themes
+	 * (register_theme_directory(), $GLOBALS['wp_theme_directories'] besides
+	 * the standard root), each through AB_MCP_Sync_File_Manifest::unit(),
+	 * which locks it (code:theme_root, E2) and reads nothing; one whose
+	 * stylesheet the standard root has as well is that one. Only that very
+	 * stylesheet: an external collection/two beside collection/one of the
+	 * standard root is a theme of its own, with its lock (GitHub-Codex on
+	 * f25da74).
+	 *
+	 * @param string $side     live or staging.
+	 * @param float  $deadline Until when.
+	 * @return array<string,array> Stylesheet => its line, by strcmp().
+	 */
+	private static function theme_roots( $side, $deadline ) {
+		$standard = self::unit_base( 'theme' );
+		if ( '' !== $standard['why'] || ! isset( $GLOBALS['wp_theme_directories'] ) || ! is_array( $GLOBALS['wp_theme_directories'] ) ) {
+			return array();
+		}
+		$home   = realpath( $standard['dir'] );
+		$others = array();
+		foreach ( $GLOBALS['wp_theme_directories'] as $root ) {
+			$root = rtrim( (string) $root, '/' );
+			$real = realpath( $root );
+			if ( false !== $real && $real !== $home ) {
+				$others[] = $root;
+			}
+		}
+		$lines = array();
+		$seen  = array();
+		$here  = self::theme_dirs( array( $standard['dir'] ) );
+		foreach ( $others as $root ) {
+			$versions = self::theme_dirs( array( $root ) );
+			foreach ( $versions as $stylesheet => $version ) {
+				if ( array_key_exists( (string) $stylesheet, $here ) || isset( $seen[ (string) $stylesheet ] ) ) {
+					continue;
+				}
+				$seen[ (string) $stylesheet ] = true;
+				$read                         = array( 'own' => false ) + AB_MCP_Sync_File_Manifest::unit( $root, (string) $stylesheet, $side, $deadline, false, 'theme' );
+				$lines[ (string) $stylesheet ] = self::unit_lines( 'theme', (string) $stylesheet, $read, array( 'versions' => $versions ) )[0];
+			}
+		}
+		uksort( $lines, 'strcmp' );
+		return $lines;
+	}
+
+	/**
+	 * A name of the site in a field or an entry: as it is, or by its SHA-256
+	 * where a credential holds it (held()) or a line does not hold it as it
+	 * is (name()).
+	 *
+	 * @param string $name Name.
+	 * @return string
+	 */
+	public static function path_name( $name ) {
+		$name = (string) $name;
+		return null === self::held( $name ) && self::name( $name ) === $name && 1 !== preg_match( self::HASHED, $name ) ? $name : self::hashed( $name );
 	}
 
 	/* ---------------------------------------------------------- tables */
@@ -1215,9 +1938,9 @@ final class AB_MCP_Sync_Env {
 
 	/**
 	 * What of the top level of a root is not counted in it: in the uploads
-	 * the fonts (a root of their own) and the folders of AlphaBridge, in the
-	 * must-use folder its files WordPress loads (lines of their own) and the
-	 * loader.
+	 * the fonts (a root of their own), the folders of AlphaBridge, and the
+	 * units (each file and link at the top, the year folders) with what E1
+	 * leaves out there (UPLOADS_TOP).
 	 *
 	 * @param string $root Root.
 	 * @return callable(string $dir, string $name): bool
@@ -1225,12 +1948,9 @@ final class AB_MCP_Sync_Env {
 	private static function skip_of( $root ) {
 		if ( 'uploads' === $root ) {
 			return static function ( $dir, $name ) {
-				return 'fonts' === $name || in_array( $name, self::OWN_UPLOADS, true ) || 0 === strpos( $name, self::OWN_UPLOADS_PREFIX );
-			};
-		}
-		if ( 'mu-plugins' === $root ) {
-			return static function ( $dir, $name ) {
-				return self::loaded_mu( $dir, $name );
+				$full = $dir . '/' . $name;
+				return 'fonts' === $name || in_array( $name, self::OWN_UPLOADS, true ) || 0 === strpos( $name, self::OWN_UPLOADS_PREFIX )
+					|| is_link( $full ) || ! is_dir( $full ) || 1 === preg_match( '/^[0-9]{4}\z/', $name );
 			};
 		}
 		return static function () {
@@ -1254,7 +1974,7 @@ final class AB_MCP_Sync_Env {
 		$paths = array();
 		$after = 0;
 		do {
-			$page = AB_MCP_Sync_Media::reverse( $after, AB_MCP_Sync_Rows::MAX_PAGE );
+			$page = self::calls()->attached( $after, AB_MCP_Sync_Rows::MAX_PAGE );
 			if ( null === $page || ! $page['complete'] ) {
 				return 'attachments_unreadable';
 			}
@@ -1587,6 +2307,56 @@ final class AB_MCP_Sync_Env {
 			}
 			$out[] = null !== $key && ! isset( $line['held'] ) && isset( $codes[ $key ] ) && in_array( $line['env'], self::NAMED, true ) ? self::reduced( $line, $codes[ $key ] ) : $line;
 		}
+		return self::names_held( $out, static fn( $name ) => null !== self::held( $name, $extra ) );
+	}
+
+	/**
+	 * The names inside lines held by a rule (the paths of entries, the themes
+	 * of the theme that runs, the main files of a plugin and those that run):
+	 * each such name by its SHA-256, and no entries of a unit whose line is
+	 * held (its paths would name it again).
+	 *
+	 * @param array[]  $lines Lines.
+	 * @param callable $held  function( string $name ): bool, whether a rule holds a name.
+	 * @return array[]
+	 */
+	private static function names_held( array $lines, callable $held ) {
+		$units = array();
+		foreach ( $lines as $line ) {
+			if ( is_array( $line ) && isset( $line['env'], $line['held'] ) && in_array( $line['env'], self::UNITS, true ) ) {
+				$units[ (string) $line['ref'] ] = $line['env'];
+			}
+		}
+		$hash = static function ( $name ) use ( $held ) {
+			$name = (string) $name;
+			return 1 !== preg_match( self::HASHED, $name ) && $held( $name ) ? self::hashed( $name ) : $name;
+		};
+		$out = array();
+		foreach ( $lines as $line ) {
+			if ( is_array( $line ) && 'entries' === ( $line['env'] ?? null ) && is_array( $line['entries'] ?? null ) ) {
+				$unit = explode( ':', (string) $line['unit'], 2 );
+				if ( 2 === count( $unit ) && ( $held( $unit[1] ) || isset( $units[ self::hashed( $unit[1] ) ] ) ) ) {
+					continue;
+				}
+				foreach ( $line['entries'] as $i => $entry ) {
+					$line['entries'][ $i ][0] = $hash( $entry[0] );
+				}
+			} elseif ( is_array( $line ) && 'theme_choice' === ( $line['env'] ?? null ) ) {
+				foreach ( array( 'stylesheet', 'template' ) as $field ) {
+					if ( is_string( $line[ $field ] ?? null ) ) {
+						$line[ $field ] = $hash( $line[ $field ] );
+					}
+				}
+			} elseif ( is_array( $line ) && 'plugin' === ( $line['env'] ?? null ) ) {
+				// The main files of a plugin and those that run (GitHub-Codex, P1).
+				foreach ( array( 'mains', 'active' ) as $field ) {
+					if ( is_array( $line[ $field ] ?? null ) ) {
+						$line[ $field ] = array_map( $hash, $line[ $field ] );
+					}
+				}
+			}
+			$out[] = $line;
+		}
 		return $out;
 	}
 
@@ -1604,6 +2374,21 @@ final class AB_MCP_Sync_Env {
 		foreach ( $lines as $line ) {
 			if ( is_array( $line ) && isset( $line['env'], $line['ref'], $line['held'] ) && in_array( $line['env'], self::NAMED, true ) && 1 === preg_match( self::HASHED, (string) $line['ref'] ) ) {
 				$out[ (string) $line['ref'] ] = (string) $line['held'];
+			}
+			// A path of entries, a theme of the theme that runs or a main file
+			// of a plugin the staging site holds by its SHA-256.
+			$inside = array();
+			if ( is_array( $line ) && 'entries' === ( $line['env'] ?? null ) && is_array( $line['entries'] ?? null ) ) {
+				$inside = array_column( $line['entries'], 0 );
+			} elseif ( is_array( $line ) && 'theme_choice' === ( $line['env'] ?? null ) ) {
+				$inside = array( $line['stylesheet'] ?? null, $line['template'] ?? null );
+			} elseif ( is_array( $line ) && 'plugin' === ( $line['env'] ?? null ) ) {
+				$inside = array_merge( is_array( $line['mains'] ?? null ) ? $line['mains'] : array(), is_array( $line['active'] ?? null ) ? $line['active'] : array() );
+			}
+			foreach ( $inside as $name ) {
+				if ( is_string( $name ) && 1 === preg_match( self::HASHED, $name ) && ! isset( $out[ $name ] ) ) {
+					$out[ $name ] = 'credential_field';
+				}
 			}
 		}
 		ksort( $out, SORT_STRING );
@@ -1632,7 +2417,7 @@ final class AB_MCP_Sync_Env {
 				$lines[ $i ] = self::reduced( $line, (string) $names[ $hashed ] );
 			}
 		}
-		return $lines;
+		return self::names_held( $lines, static fn( $name ) => isset( $names[ self::hashed( $name ) ] ) );
 	}
 
 	/**
@@ -1679,9 +2464,19 @@ final class AB_MCP_Sync_Env {
 			}
 		}
 		$ref = $line['ref'];
+		if ( in_array( $line['env'], self::UNITS, true ) ) {
+			return self::unit_shaped( $line );
+		}
 		switch ( $line['env'] ) {
 			case 'page':
-				return 'page' === $ref && $line['seq'] >= 1;
+				return 'page' === $ref && $line['seq'] >= 1 && AB_MCP_Sync_File_Manifest::FORMAT === $line['files'];
+			case 'entries':
+				$unit = explode( ':', (string) $line['unit'], 2 );
+				return $line['seq'] >= 1 && $ref === $line['unit'] . '#' . $line['seq'] && 2 === count( $unit ) && in_array( $unit[0], self::UNITS, true ) && '' !== $unit[1];
+			case 'theme_choice':
+				return 'theme_choice' === $ref;
+			case 'core_files':
+				return 'files' === $ref && ( null === $line['cause'] ) === $line['complete'] && ( null === $line['cause'] || in_array( $line['cause'], AB_MCP_Sync_Core_Compare::WHY, true ) );
 			case 'tables':
 				return 'tables' === $ref;
 			case 'core':
@@ -1722,22 +2517,69 @@ final class AB_MCP_Sync_Env {
 				return is_string( $value ) && 1 === preg_match( '/^[0-9a-f]{32}\z/', $value );
 			case 'scalar':
 				return is_bool( $value ) || is_int( $value ) || ( is_string( $value ) && self::name( $value ) === $value );
+			case 'list':
+				if ( ! is_array( $value ) || ! array_is_list( $value ) ) {
+					return false;
+				}
+				foreach ( $value as $item ) {
+					if ( ! is_string( $item ) || '' === $item || self::name( $item ) !== $item ) {
+						return false;
+					}
+				}
+				return true;
+			case 'entries':
+				if ( ! is_array( $value ) || ! array_is_list( $value ) || array() === $value || count( $value ) > self::PER_LINE ) {
+					return false;
+				}
+				foreach ( $value as $entry ) {
+					if ( ! is_array( $entry ) || ! array_is_list( $entry ) || 4 !== count( $entry ) || ! self::typed( $entry[0], 'text' ) || '' === $entry[0] || ! self::typed( $entry[1], 'count' ) || ! self::typed( $entry[2], 'hash' ) || ! self::typed( $entry[3], 'count' ) ) {
+						return false;
+					}
+				}
+				return true;
 		}
 		return false;
+	}
+
+	/**
+	 * Whether the line of a unit has the structure unit_lines() writes: a
+	 * form of FORMS, the ref * for a root not read and only there, why and
+	 * lock of their lists, a hash only for a folder or file read whole and
+	 * not locked, the SHA-256 and mtime of its file only for a file.
+	 *
+	 * @param array $line Line, its fields typed.
+	 * @return bool
+	 */
+	private static function unit_shaped( array $line ) {
+		if ( ! in_array( $line['form'], self::FORMS, true ) || ( '*' === $line['ref'] ) !== ( 'root' === $line['form'] ) ) {
+			return false;
+		}
+		if ( null !== $line['cause'] && ! in_array( $line['cause'], self::UNIT_WHY, true ) ) {
+			return false;
+		}
+		if ( null !== $line['lock'] && ! isset( self::CODE_LOCKS[ $line['lock'] ] ) ) {
+			return false;
+		}
+		if ( null !== $line['hash'] && ( ! $line['complete'] || null !== $line['lock'] || ! in_array( $line['form'], array( 'folder', 'file' ), true ) ) ) {
+			return false;
+		}
+		return ( null === $line['sha256'] && null === $line['mtime'] ) || ( 'file' === $line['form'] && null !== $line['hash'] );
 	}
 
 	/* ------------------------------------------------------------ compare */
 
 	/**
 	 * The entries of the environment: one per line of either side (the
-	 * pages left out), in ORDER, then by ref; with their counts and what is
-	 * locked.
+	 * pages and the entries of the units left out), in ORDER, then by ref;
+	 * with their counts and what is locked. A unit and the theme that runs
+	 * are decided with their pairs (AB_MCP_Sync_Decision::unit_item()).
 	 *
 	 * @param array[] $staging The lines of the staging site.
 	 * @param array[] $live    The lines of this site.
+	 * @param array[] $pairs   The pairs of the source (AB_MCP_Sync_Pairs::decode()).
 	 * @return array{entries:array[],counts:array,blocked:array[]}
 	 */
-	public static function compare( array $staging, array $live ) {
+	public static function compare( array $staging, array $live, array $pairs = array() ) {
 		$s = self::by_ref( $staging );
 		$l = self::by_ref( $live );
 		// A name one site holds by its rules and the other not: by its
@@ -1748,6 +2590,22 @@ final class AB_MCP_Sync_Env {
 			's' => isset( $s['tables']['tables'] ) && true === $s['tables']['tables']['complete'],
 			'l' => isset( $l['tables']['tables'] ) && true === $l['tables']['tables']['complete'],
 		);
+		$files = array(
+			's' => self::entries_of( $staging, $s ),
+			'l' => self::entries_of( $live, $l ),
+		);
+		// The folders of units a side did not list whole: a unit the other
+		// side has there is not only on that side, it is not compared.
+		$unread  = array(
+			's' => self::unread( $s ),
+			'l' => self::unread( $l ),
+		);
+		$by_pair = array();
+		foreach ( $pairs as $pair ) {
+			if ( in_array( $pair['kind'], AB_MCP_Sync_Decision::UNIT_KINDS, true ) ) {
+				$by_pair[ $pair['kind'] ][ (string) $pair['staging_ref'] ] = $pair;
+			}
+		}
 		$entries = array();
 		foreach ( self::ORDER as $env ) {
 			if ( 'environment' === $env ) {
@@ -1762,10 +2620,124 @@ final class AB_MCP_Sync_Env {
 			$refs = array_map( 'strval', $refs );
 			usort( $refs, 'strcmp' );
 			foreach ( $refs as $ref ) {
+				if ( in_array( $env, self::UNITS, true ) || 'theme_choice' === $env ) {
+					$item = AB_MCP_Sync_Decision::unit_item(
+						$env,
+						$ref,
+						$s[ $env ][ $ref ] ?? null,
+						$l[ $env ][ $ref ] ?? null,
+						$by_pair[ $env ][ $ref ] ?? null,
+						array(
+							's' => $files['s'][ $env . ':' . $ref ] ?? null,
+							'l' => $files['l'][ $env . ':' . $ref ] ?? null,
+						),
+						array(
+							's' => isset( $s[ $env ][ $ref ] ) ? null : self::unread_at( $unread['s'][ $env ] ?? array(), $ref ),
+							'l' => isset( $l[ $env ][ $ref ] ) ? null : self::unread_at( $unread['l'][ $env ] ?? array(), $ref ),
+						)
+					);
+					foreach ( AB_MCP_Sync_Decision::paged( $item ) as $one ) {
+						$entries[] = $one;
+					}
+					continue;
+				}
 				$entries[] = self::entry( $env, $ref, $s[ $env ][ $ref ] ?? null, $l[ $env ][ $ref ] ?? null, $whole );
 			}
 		}
 		return self::counted( $entries );
+	}
+
+	/**
+	 * The folders of units a side did not list whole, by kind: the folder of
+	 * the kind itself (its line of form root, '' for every unit of it), and a
+	 * folder below a root of files that could not be read (the path of its
+	 * line and a slash, for the units below it), each with why.
+	 *
+	 * @param array<string,array<string,array>> $by Lines of a side by kind and ref (by_ref()).
+	 * @return array<string,array<string,string>> Kind => prefix => a code of UNIT_WHY.
+	 */
+	private static function unread( array $by ) {
+		$out = array();
+		foreach ( self::UNITS as $env ) {
+			foreach ( $by[ $env ] ?? array() as $ref => $line ) {
+				if ( isset( $line['held'] ) || ! empty( $line['complete'] ) ) {
+					continue;
+				}
+				if ( 'root' === ( $line['form'] ?? null ) ) {
+					$out[ $env ][''] = (string) $line['cause'];
+				} elseif ( 'unreadable' === ( $line['cause'] ?? null ) ) {
+					$out[ $env ][ (string) $ref . '/' ] = 'unreadable';
+				}
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * Why the folder a unit would lie in was not listed whole, or null.
+	 *
+	 * @param array<string,string> $prefixes Prefix => why (unread()).
+	 * @param string               $ref      The unit.
+	 * @return string|null
+	 */
+	private static function unread_at( array $prefixes, $ref ) {
+		foreach ( $prefixes as $prefix => $why ) {
+			if ( '' === (string) $prefix || 0 === strpos( (string) $ref, (string) $prefix ) ) {
+				return $why;
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * The files of each unit of a side read whole, from its lines of entries
+	 * in their order: kind:name => [path, size, SHA-256, mtime], only where
+	 * every line of entries of the unit is there (seq 1 to n without a gap,
+	 * as many files as its line says), else null for that unit (its paths
+	 * not shown, fail closed). A folder read whole without a file, not
+	 * locked nor held, has no line of entries: its manifest is empty, so
+	 * that the files of the other side show as only there (GitHub-Codex on
+	 * f25da74); a line of entries of it after all makes the count differ
+	 * (null).
+	 *
+	 * @param array[]                           $lines Lines of a side.
+	 * @param array<string,array<string,array>> $by    Its lines by kind and ref (by_ref(), held_alike()).
+	 * @return array<string,array[]|null>
+	 */
+	private static function entries_of( array $lines, array $by ) {
+		$parts = array();
+		foreach ( $lines as $line ) {
+			if ( is_array( $line ) && 'entries' === ( $line['env'] ?? null ) && is_array( $line['entries'] ?? null ) ) {
+				$parts[ (string) $line['unit'] ][ (int) $line['seq'] ] = $line['entries'];
+			}
+		}
+		$out = array();
+		foreach ( self::UNITS as $kind ) {
+			foreach ( $by[ $kind ] ?? array() as $ref => $line ) {
+				if ( 'folder' === ( $line['form'] ?? null ) && true === ( $line['complete'] ?? null ) && is_string( $line['hash'] ?? null ) && null === ( $line['lock'] ?? null ) && ! isset( $line['held'] ) && 0 === ( $line['files'] ?? null ) ) {
+					$out[ $kind . ':' . $ref ] = array();
+				}
+			}
+		}
+		foreach ( $parts as $unit => $seqs ) {
+			list( $kind, $name ) = array_pad( explode( ':', $unit, 2 ), 2, '' );
+			$line                = $by[ $kind ][ $name ] ?? null;
+			ksort( $seqs );
+			$files = array();
+			$want  = 1;
+			foreach ( $seqs as $seq => $list ) {
+				if ( $seq !== $want ) {
+					$files = null;
+					break;
+				}
+				++$want;
+				foreach ( $list as $entry ) {
+					$files[] = $entry;
+				}
+			}
+			$out[ $unit ] = null !== $files && is_array( $line ) && ! isset( $line['held'] ) && count( $files ) === (int) $line['files'] ? $files : null;
+		}
+		return $out;
 	}
 
 	/**
@@ -1836,7 +2808,7 @@ final class AB_MCP_Sync_Env {
 	private static function by_ref( array $lines ) {
 		$out = array();
 		foreach ( $lines as $line ) {
-			if ( ! is_array( $line ) || ! isset( $line['env'], $line['ref'] ) ) {
+			if ( ! is_array( $line ) || ! isset( $line['env'], $line['ref'] ) || 'entries' === $line['env'] ) {
 				continue;
 			}
 			$out[ (string) $line['env'] ][ (string) $line['ref'] ] = $line;
@@ -1917,14 +2889,22 @@ final class AB_MCP_Sync_Env {
 			$entry['held'] = $held;
 		}
 		$words = self::WORDS[ $result ];
-		if ( 'core' === $env && 'locale' === $ref ) {
-			$words .= ' Shown only: the language is the option WPLANG, compared with the options; its files are counted under languages.';
+		if ( 'core_files' === $env ) {
+			$words = self::WORDS[ 'equal' === $result ? 'core_equal' : ( 'differs' === $result ? 'core_differs' : $result ) ];
+			$entry['action'] = 'host';
+		} elseif ( 'core' === $env && 'locale' === $ref ) {
+			$words .= ' Shown only: the language is the option WPLANG, compared with the options; its files are compared under languages.';
+		} elseif ( 'core' === $env ) {
+			// WordPress itself is never taken over (A17): changed at the host.
+			$entry['action'] = 'host';
+			$words          .= ' WordPress itself is never taken over: where staging is newer, this site is updated first (wp_update_core).';
 		} elseif ( in_array( $env, array( 'dropin', 'host' ), true ) ) {
 			// Group U (the drop-ins with it): changed at the host, whatever
 			// the result.
 			$entry['action'] = 'host';
 			$words          .= ' ' . self::HOST_WORDS;
-		} elseif ( 'equal' !== $result && isset( self::LOCKS[ $key ] ) ) {
+		} elseif ( isset( self::LOCKS[ $key ] ) ) {
+			// What entry() decides is never equal (counted, a value shown).
 			$lock            = self::LOCKS[ $key ];
 			$entry['action'] = 'locked';
 			$entry['locks']  = array(
@@ -1982,14 +2962,19 @@ final class AB_MCP_Sync_Env {
 		switch ( $env ) {
 			case 'core':
 				$fields = array( 'value' );
-				$same   = 'wordpress' === $ref ? 'counted' : 'same_value';
+				$same   = 'same_value';
 				break;
-			case 'plugin':
-			case 'theme':
-				$fields = array( 'version', 'active' );
-				$same   = 'counted';
-				break;
-			case 'mu_plugin':
+			case 'core_files':
+				if ( ! $s['complete'] || ! $l['complete'] ) {
+					return array( 'not_compared', array(), sprintf( $s['complete'] ? 'The core files could not be checked on this site (%s).' : 'The core files could not be checked on the staging site (%s).', self::why_core( (string) ( $s['complete'] ? $l['cause'] : $s['cause'] ) ) ) );
+				}
+				$differs = array();
+				foreach ( array( 'differs', 'missing' ) as $field ) {
+					if ( 0 !== $s[ $field ] || 0 !== $l[ $field ] ) {
+						$differs[] = $field;
+					}
+				}
+				return array( array() === $differs ? 'equal' : 'differs', $differs, null );
 			case 'dropin':
 				$fields = array( 'sha256' );
 				$same   = 'equal';
@@ -2026,6 +3011,23 @@ final class AB_MCP_Sync_Env {
 		}
 		$differs = $differ( $fields );
 		return array( array() === $differs ? $same : 'differs', array_map( static fn( $f ) => 'sha256' === $f ? 'contents' : $f, $differs ), null );
+	}
+
+	/**
+	 * Why the core files of a side were not checked, in words.
+	 *
+	 * @param string $why A code of AB_MCP_Sync_Core_Compare::WHY.
+	 * @return string
+	 */
+	private static function why_core( $why ) {
+		$say = array(
+			'unreachable'     => 'api.wordpress.org was not reached',
+			'answer'          => 'the answer of api.wordpress.org held no checksums',
+			'unknown_version' => 'api.wordpress.org knows no checksums of its version and language',
+			'no_version'      => 'its version of WordPress could not be read',
+			'too_slow'        => 'they could not all be checked within the time of one call; check them at the host (wp core verify-checksums), or make the report again (wp_site_diff)',
+		);
+		return $say[ $why ] ?? 'not known why';
 	}
 
 	/**

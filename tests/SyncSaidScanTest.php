@@ -30,6 +30,7 @@ final class SyncSaidScanTest extends TestCase {
 		'class-sync-decision.php'      => array(
 			'result'       => 5,
 			'table_result' => 3,
+			'unit_entry'   => 2,
 		),
 		'class-sync-proposal.php'      => array(
 			'alone'        => 2,
@@ -48,6 +49,7 @@ final class SyncSaidScanTest extends TestCase {
 		'class-sync-decision.php'      => array(
 			'target'     => null,
 			'side_state' => 1,
+			'unit_why'   => null,
 		),
 		'class-sync-proposal.php'      => array(
 			'why_no_hash' => null,
@@ -58,6 +60,7 @@ final class SyncSaidScanTest extends TestCase {
 		'class-sync-env.php'           => array(
 			'judged'    => 2,
 			'why_files' => null,
+			'why_core'  => null,
 		),
 		'class-sync-engine.php'        => array(
 			'not_own_why'   => null,

@@ -176,6 +176,52 @@ final class AB_MCP_Sync_Kinds {
 			'reason' => 'set_theme_mod() skips the sanitizers and capabilities of the Customizer settings; theme mods follow through those.',
 		),
 
+		// The parts of the pair of a unit (Z8b, E2, Z38): which kind moves
+		// the base of a part on (AB_MCP_Sync_Pairs::rebase()). Those without
+		// a kind wait for the stage of their kind.
+		'part:plugin:files'             => array( 'kind' => 'code', 'art' => 'A11' ),
+		'part:plugin:activation'        => array( 'kind' => 'activation', 'art' => 'A11' ),
+		'part:theme:files'              => array( 'kind' => 'code', 'art' => 'A11' ),
+		'part:theme_choice:activation'  => array( 'kind' => 'theme_choice', 'art' => 'A9' ),
+		'part:mu_plugin:files'          => array(
+			'kind'   => null,
+			'art'    => 'A21',
+			'stage'  => 'Z8b',
+			'reason' => 'A must-use file or folder is taken over with the files of the site.',
+		),
+		'part:language:files'           => array(
+			'kind'   => null,
+			'art'    => 'A21',
+			'stage'  => 'Z8b',
+			'reason' => 'A language file is taken over with the files of the site.',
+		),
+		'part:font:files'               => array(
+			'kind'   => null,
+			'art'    => 'A20',
+			'stage'  => 'Z8b',
+			'reason' => 'A file of the font library comes with the fonts of the font library.',
+		),
+		'part:upload:files'             => array(
+			'kind'   => null,
+			'art'    => 'A22',
+			'stage'  => 'Z8b',
+			'reason' => 'A file of the uploads outside the file lists of attachments is taken over with the files of the site.',
+		),
+		'part:*'                        => array(
+			'kind'   => null,
+			'art'    => 'A11',
+			'stage'  => 'Z8b',
+			'reason' => 'A part of a unit that no kind of the code takes over in this version.',
+		),
+		// WordPress itself (Z8b, E18, Z35): compared, never taken over; no
+		// kind can claim it.
+		'core:*'                        => array(
+			'kind'   => null,
+			'art'    => 'A17',
+			'stage'  => 'Z8',
+			'reason' => 'WordPress itself is never taken over: its files are compared with the checksums of api.wordpress.org, and it is installed anew at the host or in wp-admin.',
+		),
+
 		// Files (decision 26).
 		'files:attachment'              => array( 'kind' => 'attachment', 'art' => 'A3' ),
 		'files:*'                       => array(
@@ -667,6 +713,27 @@ final class AB_MCP_Sync_Kinds {
 	 */
 	public static function files( $area ) {
 		return self::answer( 'files:' . $area, 'files:*' );
+	}
+
+	/**
+	 * The part of the pair of a unit (Z8b, E2): which kind moves its base on
+	 * (AB_MCP_Sync_Pairs::rebase()).
+	 *
+	 * @param string $asked The kind of the pair and the part, such as plugin:files.
+	 * @return array The answer of answer().
+	 */
+	public static function part( $asked ) {
+		return self::answer( 'part:' . $asked, 'part:*' );
+	}
+
+	/**
+	 * The core of WordPress (Z8b, E18): never a kind.
+	 *
+	 * @param string $asked What of the core, such as files.
+	 * @return array The answer of answer().
+	 */
+	public static function core( $asked ) {
+		return self::answer( 'core:' . $asked, 'core:*' );
 	}
 
 	/**

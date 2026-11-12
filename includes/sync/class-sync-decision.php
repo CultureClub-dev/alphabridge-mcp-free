@@ -154,6 +154,45 @@ final class AB_MCP_Sync_Decision {
 	/** The pair kinds whose objects are in the ID space of posts, and of terms. */
 	const SPACES = AB_MCP_Sync_Proposal::SPACES;
 
+	/** The kinds of units and of the theme that runs (Z8b, E1, E2): lines of the environment with pairs. */
+	const UNIT_KINDS = array( 'plugin', 'theme', 'mu_plugin', 'language', 'font', 'upload', 'theme_choice' );
+
+	/** The results of a unit, by its parts and its pair (Z8b, E1, E2), and what each says. */
+	const UNIT_WORDS = array(
+		'equal'              => 'Equal on both sides: the same files by their contents, and for a plugin the same main files running.',
+		'differs'            => 'Differs between the sides, and it has no pair: which side changed is not known until a person confirms a common base for its pair.',
+		'same_value'         => 'AlphaBridge itself, the same version on both sides: shown by its version only, never taken over.',
+		'own_differs'        => 'AlphaBridge itself, in another version on each side: shown by its version only, never taken over.',
+		'only_staging'       => 'Only on staging.',
+		'only_live'          => 'Only on this site.',
+		'not_compared'       => 'Not compared: see why.',
+		'changed_on_staging' => 'Changed on staging since the base of its pair, unchanged on this site.',
+		'changed_live'       => 'Changed on this site since the base of its pair, unchanged on staging: kept and shown.',
+		'conflict'           => 'Changed on both sides since the base of its pair, differently.',
+		'changed_alike'      => 'Changed on both sides alike since the base of its pair: nothing to take over.',
+		'kept_apart'         => 'Unchanged on both sides since the bases of its pair, which differ: the sides differ now as they did then, kept so; nothing to take over.',
+		'deleted_on_staging' => 'Removed on staging since its pair was made.',
+		'deleted_live'       => 'Removed on this site since its pair was made: nothing to do.',
+		'deleted_against_changed_live' => 'Removed on staging since its pair was made, and changed on this site since its base: a conflict, kept on this site.',
+		'deleted_live_changed_staging' => 'Removed on this site since its pair was made, and changed on staging since its base: a conflict, the removal holds here; nothing of staging is brought back in this version.',
+	);
+
+	/** What differs in a unit, in words, by its parts. */
+	const DIFFERS_IN = array(
+		'files'            => 'It differs in its files.',
+		'activation'       => 'It differs in which of its main files run, or in which theme runs.',
+		'files activation' => 'It differs in its files and in which of its main files run.',
+	);
+
+	/** Paths of an entry of a unit shown at most per list; the others follow in entries of their own (paged()), the counts say how many there are. */
+	const MAX_PATHS = 100;
+
+	/** The words of an entry that carries further paths of the unit of the entry before it (paged()). */
+	const MORE_PATHS = 'Further paths of the unit of the entry before: the list they belong to (only_staging, only_live or differs), the number of the first of them in that list, and up to 100 paths in their order.';
+
+	/** Said in the entry of a unit whose paths go on in the entries after it. */
+	const PATHS_GO_ON = 'Each list of paths shows its first 100 here; the others follow, in their order, in the entries right after this one (result more_paths).';
+
 	/* ------------------------------------------------------------ report */
 
 	/**
@@ -161,7 +200,10 @@ final class AB_MCP_Sync_Decision {
 	 *
 	 * @param array[]  $staging  Lines of the staging site (a held one reduced).
 	 * @param array[]  $live     Lines of this site (likewise).
-	 * @param array[]  $pairs    The pairs of the source (AB_MCP_Sync_Pairs::decode()).
+	 * @param array[]  $pairs    The pairs of the source (AB_MCP_Sync_Pairs::decode());
+	 *                           a pair of a unit (UNIT_KINDS) is counted in
+	 *                           pairs only, its entry is that of the
+	 *                           environment (AB_MCP_Sync_Env::compare()).
 	 * @param callable $complete function( string $kind, ?string $subtype ): bool,
 	 *                           whether the staging side holds every object of
 	 *                           a kind and subtype (null: of every subtype).
@@ -181,6 +223,13 @@ final class AB_MCP_Sync_Decision {
 			'l' => array(),
 		);
 		foreach ( $pairs as $pair ) {
+			// A pair of a unit is decided with the environment only
+			// (unit_item()), never as an object: no second entry, no choice
+			// of an object, no name of it a line of the environment holds
+			// (Codex, whole round over 4c66939..f25da74, A).
+			if ( in_array( $pair['kind'], self::UNIT_KINDS, true ) ) {
+				continue;
+			}
 			$s = self::lookup( $by['s'], $pair['kind'], $pair['staging_ref'] );
 			$l = self::lookup( $by['l'], $pair['kind'], $pair['live_ref'] );
 			if ( null !== $s ) {
@@ -1179,6 +1228,438 @@ final class AB_MCP_Sync_Decision {
 		}
 		unset( $side['hash'], $side['mapped'], $side['mapped_possible'], $side['complete'], $side['locks'], $side['places'] );
 		return $side;
+	}
+
+	/* ------------------------------------------------------------ units */
+
+	/**
+	 * The entry of a unit (or of the theme that runs) from its two lines of
+	 * the environment and its pair (Z8b, E1, E2): equal only where every part
+	 * is the same on both sides (the files by the hash of their manifest,
+	 * AB_MCP_Sync_File_Manifest::unit(); the main files that run; the theme
+	 * that runs); without a pair a difference is not attributed to a side;
+	 * with an active pair each part against its own base (its own column or
+	 * base_extra, AB_MCP_Sync_Pairs::part_bases()), by the table of a pair;
+	 * the files changed on both sides are locked without a choice
+	 * (code:live_changed, with the way «update by hand» for a plugin that
+	 * keeps writing into its folder). What could not be read, a lock of a
+	 * line (code:live_extra, code:link, code:theme_root) and AlphaBridge
+	 * itself (code:own) are never compared by their files. A unit on one
+	 * side only is only there (or removed, with an active pair) only where
+	 * that side read it whole and holds no lock, and where the other side
+	 * listed the folder it would lie in whole ($unread); else it is not
+	 * compared, or locked by its lock. Nothing is taken over in this version:
+	 * the rest is locked with the lock of its kind (AB_MCP_Sync_Env::LOCKS).
+	 * Where the files differ and both sides read them whole, the paths: only
+	 * on staging, only here, other contents (never by mtime), every one of
+	 * them with their counts (paged() shows MAX_PATHS a list in the entry and
+	 * the others in entries after it).
+	 *
+	 * @param string     $kind  A kind of UNIT_KINDS.
+	 * @param string     $ref   Its ref (the name of the unit).
+	 * @param array|null $s     The line of the staging site.
+	 * @param array|null $l     The line of this site.
+	 * @param array|null $pair  Its pair (by kind and staging_ref), or null.
+	 * @param array      $files 's' and 'l': the entries of each side (AB_MCP_Sync_Env::entries_of()), or null.
+	 * @param array      $unread 's' and 'l': for the side without a line, why the folder it would lie in was not listed whole there (a code of AB_MCP_Sync_Env::UNIT_WHY), or null.
+	 * @return array An entry of the environment.
+	 */
+	public static function unit_item( $kind, $ref, $s, $l, $pair, array $files, array $unread = array() ) {
+		$entry = array(
+			'kind'    => 'environment',
+			'subtype' => (string) $kind,
+			'ref'     => (string) $ref,
+			'result'  => 'not_compared',
+			'action'  => 'none',
+			'staging' => null === $s ? null : self::unit_shown( $s ),
+			'live'    => null === $l ? null : self::unit_shown( $l ),
+		);
+		$locks = array();
+		$why   = null;
+		$held  = $s['held'] ?? ( $l['held'] ?? null );
+		$lock  = AB_MCP_Sync_Env::LOCKS[ $kind ] ?? null;
+		if ( null !== $pair ) {
+			$entry['pair'] = array(
+				'id'    => (int) $pair['id'],
+				'state' => (string) $pair['state'],
+			);
+		}
+		// AlphaBridge itself (E12), on either side or both: shown by its
+		// version, never hashed nor taken over, not even where it is on one
+		// side only.
+		if ( ! empty( $s['own'] ) || ! empty( $l['own'] ) ) {
+			// A version not read is never the same (GitHub-Codex on ed1e512).
+			foreach ( array( 's' => $s, 'l' => $l ) as $side => $line ) {
+				if ( ! empty( $line['own'] ) && ! is_string( $line['version'] ?? null ) ) {
+					$entry['action'] = 'locked';
+					return self::unit_entry( $entry, array( self::code_lock( 'code:own' ) ), sprintf( 'The version of AlphaBridge itself could not be read on %s: it is not compared, and never taken over.', 's' === $side ? 'the staging site' : 'this site' ), $held );
+				}
+			}
+			$same            = ! empty( $s['own'] ) && ! empty( $l['own'] ) && $s['version'] === $l['version'];
+			$entry['result'] = $same ? 'same_value' : ( null === $s || null === $l ? ( null === $s ? 'only_live' : 'only_staging' ) : 'own_differs' );
+			if ( ! $same ) {
+				$entry['action'] = 'locked';
+				$locks[]         = self::code_lock( 'code:own' );
+			}
+			return self::unit_entry( $entry, $locks, null, $held );
+		}
+		if ( null === $s || null === $l ) {
+			$there   = null === $s ? $l : $s;
+			$missing = $unread[ null === $s ? 's' : 'l' ] ?? null;
+			if ( 'root' === ( $there['form'] ?? null ) ) {
+				$why = self::unit_why( $there, null === $s ? 'this site' : 'the staging site' );
+			} elseif ( isset( $there['lock'] ) && is_string( $there['lock'] ) ) {
+				// Locked by what it holds on the side that has it: never only
+				// there, never removed.
+				$entry['action'] = 'locked';
+				return self::unit_entry( $entry, array( self::code_lock( $there['lock'] ) ), null, $held );
+			} elseif ( 'theme_choice' !== $kind && ( empty( $there['complete'] ) || null === ( $there['hash'] ?? null ) ) ) {
+				return self::unit_entry( $entry, array(), self::unit_why( $there, null === $s ? 'this site' : 'the staging site' ), $held );
+			} elseif ( null !== $missing ) {
+				return self::unit_entry( $entry, array(), sprintf( 'Whether it is on %1$s is not known: the folder it would lie in could not be read whole there (%2$s).', null === $s ? 'the staging site' : 'this site', self::cause_said( $missing ) ), $held );
+			} elseif ( null !== $pair && 'active' === $pair['state'] ) {
+				// Removed on one side since its pair was made: the side that
+				// has it, each part against its own base, so that a change
+				// there is a conflict with the removal (TABLE, rows 7 and 9;
+				// GitHub-Codex on free#147, P2).
+				if ( $pair['canon'] !== AB_MCP_Sync_Canon::VERSION ) {
+					return self::unit_entry( $entry, array(), sprintf( 'The bases of its pair are of the version %1$s of the comparison data, this site reads %2$s.', (string) $pair['canon'], AB_MCP_Sync_Canon::VERSION ), $held );
+				}
+				$states  = array();
+				$changed = false;
+				foreach ( AB_MCP_Sync_Pairs::PARTS[ $kind ] as $part ) {
+					$have = self::part_hash( $kind, $part, $there );
+					$base = AB_MCP_Sync_Pairs::part_bases( $pair, $part );
+					if ( null === $have ) {
+						return self::unit_entry( $entry, array(), 'theme_choice' === $kind ? 'The theme that runs could not be read on ' . ( null === $s ? 'this site' : 'the staging site' ) . '.' : 'Which main files run could not be read on ' . ( null === $s ? 'this site' : 'the staging site' ) . '.', $held );
+					}
+					if ( null === $base ) {
+						return self::unit_entry( $entry, array(), 'Its pair holds no base of the part ' . $part . '.', $held );
+					}
+					$moved            = ! hash_equals( (string) $base[ null === $s ? 'live' : 'staging' ], $have );
+					$changed          = $changed || $moved;
+					$states[ $part ]  = self::TABLE[ null === $s ? ( $moved ? 7 : 3 ) : ( $moved ? 9 : 8 ) ][2];
+				}
+				$entry['parts']  = $states;
+				$entry['result'] = self::TABLE[ null === $s ? ( $changed ? 7 : 3 ) : ( $changed ? 9 : 8 ) ][2];
+				$entry['action'] = null === $s ? ( $changed ? 'keep' : 'locked' ) : ( $changed ? 'keep' : 'none' );
+			} else {
+				$entry['result'] = null === $s ? 'only_live' : 'only_staging';
+				$entry['action'] = null === $s ? 'keep' : 'locked';
+			}
+			if ( 'locked' === $entry['action'] && null !== $lock ) {
+				$locks[] = $lock;
+			}
+			return self::unit_entry( $entry, $locks, $why, $held );
+		}
+		// A line locked by what it holds: never compared by its files.
+		foreach ( array( $s, $l ) as $line ) {
+			if ( isset( $line['lock'] ) && is_string( $line['lock'] ) ) {
+				$locks[] = self::code_lock( $line['lock'] );
+			}
+		}
+		if ( array() !== $locks ) {
+			$entry['action'] = 'locked';
+			return self::unit_entry( $entry, $locks, null, $held );
+		}
+		foreach ( array( 's' => $s, 'l' => $l ) as $side => $line ) {
+			if ( 'theme_choice' !== $kind && ( empty( $line['complete'] ) || null === ( $line['hash'] ?? null ) ) ) {
+				return self::unit_entry( $entry, array(), self::unit_why( $line, 's' === $side ? 'the staging site' : 'this site' ), $held );
+			}
+		}
+		$parts = AB_MCP_Sync_Pairs::PARTS[ $kind ];
+		$have  = array();
+		foreach ( $parts as $part ) {
+			$have[ $part ] = array(
+				's' => self::part_hash( $kind, $part, $s ),
+				'l' => self::part_hash( $kind, $part, $l ),
+			);
+			if ( null === $have[ $part ]['s'] || null === $have[ $part ]['l'] ) {
+				return self::unit_entry( $entry, array(), 'theme_choice' === $kind ? 'The theme that runs could not be read on ' . ( null === $have[ $part ]['s'] ? 'the staging site' : 'this site' ) . '.' : 'Which main files run could not be read on ' . ( null === $have[ $part ]['s'] ? 'the staging site' : 'this site' ) . '.', $held );
+			}
+		}
+		$differs = array();
+		foreach ( $parts as $part ) {
+			if ( ! hash_equals( $have[ $part ]['s'], $have[ $part ]['l'] ) ) {
+				$differs[] = $part;
+			}
+		}
+		$states = null;
+		if ( null === $pair ) {
+			$entry['result'] = array() === $differs ? 'equal' : 'differs';
+		} elseif ( 'active' !== $pair['state'] || AB_MCP_Sync_Canon::VERSION !== $pair['canon'] ) {
+			return self::unit_entry( $entry, array(), 'active' !== $pair['state'] ? sprintf( 'Its pair is %s: a person confirms a new alignment first (wp_site_pairs).', (string) $pair['state'] ) : sprintf( 'The bases of its pair are of the version %1$s of the comparison data, this site reads %2$s.', (string) $pair['canon'], AB_MCP_Sync_Canon::VERSION ), $held );
+		} else {
+			$states = array();
+			foreach ( $parts as $part ) {
+				$base = AB_MCP_Sync_Pairs::part_bases( $pair, $part );
+				if ( null === $base ) {
+					return self::unit_entry( $entry, array(), 'Its pair holds no base of the part ' . $part . '.', $held );
+				}
+				$ss = hash_equals( $base['staging'], $have[ $part ]['s'] ) ? 'unchanged' : 'changed';
+				$ls = hash_equals( $base['live'], $have[ $part ]['l'] ) ? 'unchanged' : 'changed';
+				$row = self::row( $ss, $ls, ! in_array( $part, $differs, true ) );
+				// Unchanged on both sides since bases that differ: the part
+				// differs now, kept so (Frage F, c), never equal (Codex,
+				// whole round over 4c66939..f25da74, A).
+				$states[ $part ] = 1 === $row && in_array( $part, $differs, true ) ? 'kept_apart' : self::TABLE[ $row ][2];
+			}
+			$entry['parts'] = $states;
+			foreach ( array( 'conflict', 'changed_on_staging', 'changed_live', 'changed_alike', 'kept_apart', 'equal' ) as $result ) {
+				if ( in_array( $result, $states, true ) ) {
+					$entry['result'] = $result;
+					break;
+				}
+			}
+		}
+		if ( array() !== $differs ) {
+			$entry['differs'] = $differs;
+		}
+		if ( in_array( 'files', $differs, true ) ) {
+			$paths = self::unit_paths( $files['s'] ?? null, $files['l'] ?? null );
+			if ( null !== $paths ) {
+				$entry['paths'] = $paths;
+			}
+		}
+		if ( isset( $states['files'] ) && 'conflict' === $states['files'] ) {
+			$locks[] = self::code_lock( 'code:live_changed' );
+		}
+		if ( in_array( $entry['result'], array( 'differs', 'changed_on_staging', 'conflict' ), true ) && null !== $lock ) {
+			$locks[] = $lock;
+		}
+		if ( array() !== $locks ) {
+			$entry['action'] = 'locked';
+		} elseif ( 'changed_live' === $entry['result'] ) {
+			$entry['action'] = 'keep';
+		}
+		return self::unit_entry( $entry, $locks, null, $held );
+	}
+
+	/**
+	 * An entry of a unit with its locks, its why, a held name and its words.
+	 *
+	 * @param array       $entry Entry.
+	 * @param array[]     $locks Locks (key, stage, reason; art for those of the kinds).
+	 * @param string|null $why   Why not compared.
+	 * @param string|null $held  Why a name is held.
+	 * @return array
+	 */
+	private static function unit_entry( array $entry, array $locks, $why, $held ) {
+		$keyed = array();
+		foreach ( $locks as $lock ) {
+			$keyed[ $lock['key'] ] = array(
+				'key'    => (string) $lock['key'],
+				'stage'  => (string) $lock['stage'],
+				'reason' => (string) $lock['reason'],
+			);
+		}
+		ksort( $keyed );
+		if ( array() !== $keyed ) {
+			$entry['locks'] = array_values( $keyed );
+		}
+		if ( null !== $why ) {
+			$entry['why'] = $why;
+		}
+		if ( null !== $held ) {
+			$entry['held'] = (string) $held;
+		}
+		$words = self::UNIT_WORDS[ $entry['result'] ];
+		if ( isset( $entry['differs'] ) ) {
+			$words .= ' ' . self::DIFFERS_IN[ implode( ' ', $entry['differs'] ) ];
+		}
+		if ( ! empty( $entry['paths']['only_live'] ) ) {
+			$words .= ' A path only on this site is not in the version of the staging site: a takeover puts the old folder whole into the backup, so the path leaves its place and comes back only through the way back.';
+		}
+		if ( 'locked' === $entry['action'] ) {
+			$words .= ' Nothing of it is taken over in this version.';
+		}
+		if ( null !== $held ) {
+			$words .= sprintf( ' Its name holds a credential by the rules of a site (held: %s), so it is shown by its SHA-256 only.', $held );
+		}
+		$entry['words'] = $words;
+		return $entry;
+	}
+
+	/**
+	 * A lock of a unit that no stage lifts (AB_MCP_Sync_Env::CODE_LOCKS).
+	 *
+	 * @param string $key Key.
+	 * @return array
+	 */
+	private static function code_lock( $key ) {
+		return array( 'key' => (string) $key ) + AB_MCP_Sync_Env::CODE_LOCKS[ $key ];
+	}
+
+	/**
+	 * The hash of a part of a unit as its line says it: the files by the hash
+	 * of the manifest; the main files of a plugin that run, and the theme that
+	 * runs, by the SHA-256 of their canonical form; null where it is not read.
+	 *
+	 * @param string $kind Kind.
+	 * @param string $part files or activation.
+	 * @param array  $line Line.
+	 * @return string|null
+	 */
+	public static function part_hash( $kind, $part, array $line ) {
+		if ( 'files' === $part ) {
+			return isset( $line['hash'] ) && is_string( $line['hash'] ) ? $line['hash'] : null;
+		}
+		if ( 'theme_choice' === $kind ) {
+			if ( ! is_string( $line['stylesheet'] ?? null ) || ! is_string( $line['template'] ?? null ) ) {
+				return null;
+			}
+			return AB_MCP_Sync_Canon::hash(
+				array(
+					'stylesheet' => $line['stylesheet'],
+					'template'   => $line['template'],
+				)
+			);
+		}
+		if ( ! isset( $line['active'] ) || ! is_array( $line['active'] ) ) {
+			return null;
+		}
+		$active = array_map( 'strval', $line['active'] );
+		usort( $active, 'strcmp' );
+		return AB_MCP_Sync_Canon::hash( array( 'active' => $active ) );
+	}
+
+	/**
+	 * The paths in which the files of a unit differ between the sides
+	 * (AB_MCP_Sync_File_Manifest::paths()), a path one side holds by its
+	 * SHA-256 by that SHA-256 on the other side too; every path of each list,
+	 * with the count of each (paged() shows them in parts). Null where a side
+	 * has no entries.
+	 *
+	 * @param array[]|null $s Entries of the staging side.
+	 * @param array[]|null $l Entries of this side.
+	 * @return array|null
+	 */
+	private static function unit_paths( $s, $l ) {
+		if ( ! is_array( $s ) || ! is_array( $l ) ) {
+			return null;
+		}
+		$hashed = array();
+		foreach ( array_merge( $s, $l ) as $entry ) {
+			if ( 1 === preg_match( AB_MCP_Sync_Env::HASHED, (string) $entry[0] ) ) {
+				$hashed[ (string) $entry[0] ] = true;
+			}
+		}
+		$alike = static function ( array $entries ) use ( $hashed ) {
+			foreach ( $entries as $i => $entry ) {
+				$sha = AB_MCP_Sync_Env::hashed( (string) $entry[0] );
+				if ( isset( $hashed[ $sha ] ) ) {
+					$entries[ $i ][0] = $sha;
+				}
+			}
+			return $entries;
+		};
+		$paths = AB_MCP_Sync_File_Manifest::paths( $alike( $s ), $alike( $l ) );
+		$out   = array();
+		foreach ( $paths as $key => $list ) {
+			$out[ $key ]            = $list;
+			$out[ $key . '_count' ] = count( $list );
+		}
+		ksort( $out );
+		return $out;
+	}
+
+	/**
+	 * Why a line of a unit was not compared, in words.
+	 *
+	 * @param array  $line  Line.
+	 * @param string $where the staging site, or this site.
+	 * @return string
+	 */
+	private static function unit_why( array $line, $where ) {
+		return sprintf( 'It could not be read whole on %1$s (%2$s).', $where, self::cause_said( (string) ( $line['cause'] ?? '' ) ) );
+	}
+
+	/**
+	 * Why a unit or a folder of units was not read whole, as a part of a
+	 * sentence.
+	 *
+	 * @param string $code A code of AB_MCP_Sync_Env::UNIT_WHY.
+	 * @return string
+	 */
+	private static function cause_said( $code ) {
+		$say = array(
+			'unreadable'             => 'a folder or file of it could not be read',
+			'changed'                => 'a file of it changed while it was read',
+			'too_large'              => 'it could not be hashed within one call',
+			'too_many'               => 'it holds more files and folders than one manifest holds',
+			'too_many_lines'         => 'its files do not fit into one package',
+			'unknown'                => 'WordPress names no such folder',
+			'by_code'                => 'code decides where these files lie, a filter or a network of sites',
+			'not_a_folder'           => 'its place is no folder',
+			'attachments_unreadable' => 'the file list of an attachment could not be read whole',
+			'attachments_too_many'   => 'the file lists of the attachments are too many to hold within one call',
+			'moved'                  => 'the unit the call before stopped at (kept by its SHA-256 only) is gone since',
+		);
+		return $say[ (string) $code ] ?? 'not known why';
+	}
+
+	/**
+	 * The entry of a unit as the report holds it: each list of its paths with
+	 * its first MAX_PATHS in the entry, the others in entries of their own
+	 * right after it (result more_paths, action none, MAX_PATHS paths each,
+	 * with the list and the number of the first), so that every path is in
+	 * the report and a page of it stays small (the cursor of wp_site_diff
+	 * reaches them like any entry). An entry without paths as it is.
+	 *
+	 * @param array $entry An entry of unit_item().
+	 * @return array[] The entry, then the entries of its further paths.
+	 */
+	public static function paged( array $entry ) {
+		if ( ! isset( $entry['paths'] ) ) {
+			return array( $entry );
+		}
+		$more = array();
+		foreach ( array( 'differs', 'only_live', 'only_staging' ) as $list ) {
+			foreach ( array_chunk( array_slice( $entry['paths'][ $list ], self::MAX_PATHS ), self::MAX_PATHS ) as $i => $chunk ) {
+				$one = array(
+					'kind'    => 'environment',
+					'subtype' => $entry['subtype'],
+					'ref'     => $entry['ref'],
+					'result'  => 'more_paths',
+					'action'  => 'none',
+					'staging' => null,
+					'live'    => null,
+					'paths'   => array(
+						'from'  => self::MAX_PATHS * ( $i + 1 ) + 1,
+						'list'  => $list,
+						'paths' => $chunk,
+					),
+					'words'   => self::MORE_PATHS,
+				);
+				if ( isset( $entry['held'] ) ) {
+					$one['held'] = $entry['held'];
+				}
+				$more[] = $one;
+			}
+			$entry['paths'][ $list ] = array_slice( $entry['paths'][ $list ], 0, self::MAX_PATHS );
+		}
+		if ( array() !== $more ) {
+			$entry['paths']['more'] = count( $more );
+			ksort( $entry['paths'] );
+			$entry['words'] .= ' ' . self::PATHS_GO_ON;
+		}
+		return array_merge( array( $entry ), $more );
+	}
+
+	/**
+	 * A side of a unit as the report shows it: no hash, no SHA-256, no mtime.
+	 *
+	 * @param array $line Line.
+	 * @return array
+	 */
+	private static function unit_shown( array $line ) {
+		unset( $line['env'], $line['ref'], $line['hash'], $line['sha256'], $line['mtime'], $line['held'] );
+		foreach ( $line as $field => $value ) {
+			if ( is_string( $value ) && 0 === strpos( $value, 'sha256:' ) ) {
+				$line[ $field ] = 'not shown';
+			}
+		}
+		return $line;
 	}
 
 	/* ---------------------------------------------------------- helpers */

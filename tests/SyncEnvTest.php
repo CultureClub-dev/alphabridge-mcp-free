@@ -40,6 +40,7 @@ use RuntimeException;
 require_once __DIR__ . '/site-info-stubs.php';
 require_once __DIR__ . '/sync-stubs.php';
 require_once __DIR__ . '/../includes/sync/class-sync-env.php';
+require_once __DIR__ . '/../includes/sync/class-sync-decision.php';
 require_once __DIR__ . '/../includes/class-preview-protection.php';
 
 final class SyncEnvTest extends TestCase {
@@ -331,21 +332,64 @@ final class SyncEnvTest extends TestCase {
 
 	/* ---------------------------------------------------------- lines */
 
+	/**
+	 * The line of a unit as read() writes it: a folder read whole (a plugin
+	 * with its main file running), changed by $over.
+	 */
+	private static function unit( string $env, string $ref, array $over = array() ): array {
+		$line = array(
+			'active'   => null,
+			'bytes'    => 10,
+			'complete' => true,
+			'env'      => $env,
+			'files'    => 2,
+			'form'     => 'folder',
+			'hash'     => str_repeat( 'a', 64 ),
+			'lock'     => null,
+			'mains'    => null,
+			'mtime'    => null,
+			'own'      => false,
+			'ref'      => $ref,
+			'sha256'   => null,
+			'version'  => null,
+			'cause'    => null,
+		);
+		if ( 'plugin' === $env ) {
+			$line['mains']   = array( 'main.php' );
+			$line['active']  = array( 'main.php' );
+			$line['version'] = '2.0';
+		}
+		$line = array_replace( $line, $over );
+		ksort( $line );
+		return $line;
+	}
+
+	/** The line of a unit of one file. */
+	private static function file_unit( string $env, string $ref, string $sha = 'b', array $over = array() ): array {
+		return self::unit( $env, $ref, array( 'form' => 'file', 'files' => 1, 'bytes' => 3, 'hash' => str_repeat( $sha, 64 ), 'sha256' => str_repeat( 'f', 64 ), 'mtime' => 1700000000 ) + $over );
+	}
+
 	/** A line of each kind, as read() writes it. */
 	private static function lines(): array {
 		return array(
-			'page'      => array( 'env' => 'page', 'last' => true, 'ref' => 'page', 'seq' => 1, 'walk' => str_repeat( 'a1', 16 ) ),
-			'core'      => array( 'env' => 'core', 'ref' => 'wordpress', 'value' => '7.1.3' ),
-			'plugin'    => array( 'active' => true, 'env' => 'plugin', 'ref' => 'akismet/akismet.php', 'version' => '5.3' ),
-			'theme'     => array( 'active' => null, 'env' => 'theme', 'ref' => 'twentytwentyfive', 'version' => null ),
-			'mu_plugin' => array( 'bytes' => 12, 'env' => 'mu_plugin', 'ref' => 'loader.php', 'sha256' => str_repeat( 'b', 64 ) ),
-			'dropin'    => array( 'bytes' => null, 'env' => 'dropin', 'ref' => 'object-cache.php', 'sha256' => null ),
-			'host'      => array( 'defined' => true, 'env' => 'host', 'ref' => 'php', 'value' => '8.3.1' ),
-			'constant'  => array( 'defined' => false, 'env' => 'host', 'ref' => 'constant:WP_DEBUG', 'value' => null ),
-			'table'     => array( 'env' => 'table', 'ref' => 'gf_form', 'rows' => 3, 'schema' => str_repeat( 'c', 64 ) ),
-			'tables'    => array( 'complete' => true, 'count' => 1, 'env' => 'tables', 'ref' => 'tables' ),
-			'files'     => array( 'attached' => 2, 'bytes' => 10, 'complete' => true, 'env' => 'files', 'files' => 1, 'ref' => 'uploads', 'skipped' => 0, 'why' => null ),
-			'unfinished' => array( 'attached' => 0, 'bytes' => 0, 'complete' => false, 'env' => 'files', 'files' => 0, 'ref' => 'fonts', 'skipped' => 0, 'why' => 'by_code' ),
+			'page'         => array( 'env' => 'page', 'files' => 'ab-files/1', 'last' => true, 'ref' => 'page', 'seq' => 1, 'walk' => str_repeat( 'a1', 16 ) ),
+			'core'         => array( 'env' => 'core', 'ref' => 'wordpress', 'value' => '7.1.3' ),
+			'core_files'   => array( 'cause' => null, 'checked' => 3338, 'complete' => true, 'differs' => 0, 'env' => 'core_files', 'missing' => 0, 'ref' => 'files' ),
+			'plugin'       => self::unit( 'plugin', 'akismet' ),
+			'theme'        => self::unit( 'theme', 'twentytwentyfive', array( 'version' => '1.2' ) ),
+			'mu_plugin'    => self::file_unit( 'mu_plugin', 'loader.php' ),
+			'language'     => self::file_unit( 'language', 'plugins/akismet-de_CH.mo' ),
+			'font'         => self::file_unit( 'font', 'inter/inter.woff2' ),
+			'upload'       => self::file_unit( 'upload', '2026/11/list.pdf' ),
+			'entries'      => array( 'entries' => array( array( 'a.php', 3, str_repeat( 'c', 64 ), 1700000000 ) ), 'env' => 'entries', 'ref' => 'plugin:akismet#1', 'seq' => 1, 'unit' => 'plugin:akismet' ),
+			'theme_choice' => array( 'env' => 'theme_choice', 'ref' => 'theme_choice', 'stylesheet' => 'child', 'template' => 'parent' ),
+			'dropin'       => array( 'bytes' => null, 'env' => 'dropin', 'ref' => 'object-cache.php', 'sha256' => null ),
+			'host'         => array( 'defined' => true, 'env' => 'host', 'ref' => 'php', 'value' => '8.3.1' ),
+			'constant'     => array( 'defined' => false, 'env' => 'host', 'ref' => 'constant:WP_DEBUG', 'value' => null ),
+			'table'        => array( 'env' => 'table', 'ref' => 'gf_form', 'rows' => 3, 'schema' => str_repeat( 'c', 64 ) ),
+			'tables'       => array( 'complete' => true, 'count' => 1, 'env' => 'tables', 'ref' => 'tables' ),
+			'files'        => array( 'attached' => 2, 'bytes' => 10, 'complete' => true, 'env' => 'files', 'files' => 1, 'ref' => 'uploads', 'skipped' => 0, 'why' => null ),
+			'unfinished'   => array( 'attached' => 0, 'bytes' => 0, 'complete' => false, 'env' => 'files', 'files' => 0, 'ref' => 'uploads', 'skipped' => 0, 'why' => 'by_code' ),
 		);
 	}
 
@@ -374,13 +418,43 @@ final class SyncEnvTest extends TestCase {
 			array( 'page', 'ref', 'other' ),
 			array( 'core', 'ref', 'php' ),
 			array( 'core', 'value', 7 ),
+			array( 'page', 'files', 'ab-files/2' ),
+			array( 'core_files', 'ref', 'core' ),
+			array( 'core_files', 'cause', 'unreachable' ),
+			array( 'core_files', 'cause', 'secret' ),
+			array( 'core_files', 'differs', -1 ),
 			array( 'plugin', 'active', 'yes' ),
+			array( 'plugin', 'active', array( '' ) ),
+			array( 'plugin', 'active', array( 'a' => 'main.php' ) ),
+			array( 'plugin', 'mains', array( "\xff" ) ),
 			array( 'plugin', 'version', array( '1' ) ),
 			array( 'plugin', 'ref', '' ),
 			array( 'plugin', 'ref', "bad\x01name" ),
 			array( 'plugin', 'ref', "\xff" ),
+			array( 'plugin', 'ref', '*' ),
+			array( 'plugin', 'form', 'tree' ),
+			array( 'plugin', 'cause', 'secret' ),
+			array( 'plugin', 'lock', 'code:other' ),
+			array( 'plugin', 'complete', false ),
+			array( 'plugin', 'lock', 'code:link' ),
+			array( 'plugin', 'sha256', str_repeat( 'f', 64 ) ),
+			array( 'plugin', 'own', null ),
 			array( 'mu_plugin', 'sha256', str_repeat( 'B', 64 ) ),
 			array( 'mu_plugin', 'bytes', -1 ),
+			array( 'mu_plugin', 'hash', null ),
+			array( 'mu_plugin', 'form', 'other' ),
+			array( 'entries', 'ref', 'plugin:akismet#2' ),
+			array( 'entries', 'unit', 'secret:akismet' ),
+			array( 'entries', 'unit', 'plugin:' ),
+			array( 'entries', 'seq', 0 ),
+			array( 'entries', 'entries', array() ),
+			array( 'entries', 'entries', array( array( 'a.php', 3, str_repeat( 'c', 64 ) ) ) ),
+			array( 'entries', 'entries', array( array( '', 3, str_repeat( 'c', 64 ), 1 ) ) ),
+			array( 'entries', 'entries', array( array( 'a.php', -3, str_repeat( 'c', 64 ), 1 ) ) ),
+			array( 'entries', 'entries', array( array( 'a.php', 3, str_repeat( 'C', 64 ), 1 ) ) ),
+			array( 'entries', 'entries', array_fill( 0, 501, array( 'a.php', 3, str_repeat( 'c', 64 ), 1 ) ) ),
+			array( 'theme_choice', 'ref', 'theme' ),
+			array( 'theme_choice', 'stylesheet', 3 ),
 			array( 'dropin', 'ref', 'my-dropin.php' ),
 			array( 'host', 'ref', 'secret' ),
 			array( 'host', 'defined', false ),
@@ -415,7 +489,7 @@ final class SyncEnvTest extends TestCase {
 		foreach ( array( "\xffA", str_repeat( 'a', 1025 ), str_repeat( 'é', 600 ) ) as $odd ) {
 			self::assertSame( AB_MCP_Sync_Env::name( $odd ), AB_MCP_Sync_Env::name( AB_MCP_Sync_Env::name( $odd ) ), 'The form it gives is one a line holds as it is.' );
 		}
-		self::assertTrue( AB_MCP_Sync_Env::shaped( array( 'active' => false, 'env' => 'plugin', 'ref' => AB_MCP_Sync_Env::name( "\xffA" ), 'version' => '1' ) ) );
+		self::assertTrue( AB_MCP_Sync_Env::shaped( self::unit( 'plugin', AB_MCP_Sync_Env::name( "\xffA" ) ) ) );
 	}
 
 	public function testAVersionLongerThanALineHoldsIsKeptByItsSha256AndNotShown(): void {
@@ -427,15 +501,18 @@ final class SyncEnvTest extends TestCase {
 		$themes  = AB_MCP_Sync_Env::theme_dirs( array( $this->dir . '/themes' ) );
 		self::assertSame( array( 'long/long.php' => 'sha256:' . hash( 'sha256', $long ) ), $plugins );
 		self::assertSame( array( 'long' => 'sha256:' . hash( 'sha256', $long ) ), $themes );
-		$plugin = array( 'active' => true, 'env' => 'plugin', 'ref' => 'long/long.php', 'version' => $plugins['long/long.php'] );
-		$theme  = array( 'active' => true, 'env' => 'theme', 'ref' => 'long', 'version' => $themes['long'] );
+		$plugin = self::unit( 'plugin', 'long', array( 'version' => $plugins['long/long.php'] ) );
+		$theme  = self::unit( 'theme', 'long', array( 'version' => $themes['long'] ) );
 		self::assertTrue( AB_MCP_Sync_Env::shaped( $plugin ), 'The line keeps its structure, so the package stays valid.' );
 		self::assertTrue( AB_MCP_Sync_Env::shaped( $theme ) );
 		$e = self::one( $plugin, $plugin );
-		self::assertSame( array( 'counted', 'not shown', 'not shown' ), array( $e['result'], $e['staging']['version'], $e['live']['version'] ) );
-		$e = self::one( $plugin, array( 'version' => '2.0' ) + $plugin );
-		self::assertSame( array( 'differs', array( 'version' ), 'not shown', '2.0' ), array( $e['result'], $e['differs'], $e['staging']['version'], $e['live']['version'] ) );
+		self::assertSame( array( 'equal', 'not shown', 'not shown' ), array( $e['result'], $e['staging']['version'], $e['live']['version'] ) );
+		$e = self::one( $plugin, array( 'version' => '2.0', 'hash' => str_repeat( 'd', 64 ) ) + $plugin );
+		self::assertSame( array( 'differs', array( 'files' ), 'not shown', '2.0' ), array( $e['result'], $e['differs'], $e['staging']['version'], $e['live']['version'] ) );
 		self::assertStringNotContainsString( '1.1.1.1', (string) json_encode( $e ) );
+		$wp = array( 'env' => 'core', 'ref' => 'wordpress', 'value' => AB_MCP_Sync_Env::name( $long ) );
+		$e  = self::one( $wp, array( 'value' => '7.1.3' ) + $wp );
+		self::assertSame( array( 'differs', 'not shown', '7.1.3' ), array( $e['result'], $e['staging']['value'], $e['live']['value'] ), 'A version of WordPress longer than a line holds: not shown either.' );
 	}
 
 	/* --------------------------------------------- names a credential holds */
@@ -462,7 +539,9 @@ final class SyncEnvTest extends TestCase {
 
 	/** A line of a held name, as read() writes it. */
 	private static function held_mu( string $name, string $sha = 'a' ): array {
-		return array( 'bytes' => 3, 'env' => 'mu_plugin', 'held' => 'credential_field', 'ref' => AB_MCP_Sync_Env::hashed( $name ), 'sha256' => str_repeat( $sha, 64 ) );
+		$line = array( 'held' => 'credential_field' ) + self::file_unit( 'mu_plugin', AB_MCP_Sync_Env::hashed( $name ), $sha );
+		ksort( $line );
+		return $line;
 	}
 
 	public function testALineOfAHeldNameCarriesItsSha256AndWhyOnly(): void {
@@ -470,8 +549,8 @@ final class SyncEnvTest extends TestCase {
 		self::assertTrue( AB_MCP_Sync_Env::shaped( $line ) );
 		$table = array( 'env' => 'table', 'held' => 'unreadable_name', 'ref' => AB_MCP_Sync_Env::hashed( "\xff" ), 'rows' => 1, 'schema' => null );
 		self::assertTrue( AB_MCP_Sync_Env::shaped( $table ) );
-		foreach ( array( 'plugin' => array( 'active' => true, 'version' => '1' ), 'theme' => array( 'active' => true, 'version' => '1' ) ) as $env => $fields ) {
-			self::assertTrue( AB_MCP_Sync_Env::shaped( array( 'env' => $env, 'held' => 'credential_field', 'ref' => AB_MCP_Sync_Env::hashed( 'x=y' ) ) + $fields ), $env );
+		foreach ( array( 'plugin', 'theme', 'language', 'font', 'upload' ) as $env ) {
+			self::assertTrue( AB_MCP_Sync_Env::shaped( array( 'held' => 'credential_field' ) + self::unit( $env, AB_MCP_Sync_Env::hashed( 'x=y' ) ) ), $env );
 		}
 		$wrong = array(
 			'its name as it is'    => array( 'ref' => 'password=EXAMPLE_SECRET.php' ) + $line,
@@ -492,7 +571,8 @@ final class SyncEnvTest extends TestCase {
 		$e    = self::one( $held, $held );
 		self::assertSame( array( 'mu_plugin', AB_MCP_Sync_Env::hashed( $name ), 'equal', 'credential_field' ), array( $e['subtype'], $e['ref'], $e['result'], $e['held'] ) );
 		self::assertStringContainsString( 'held: credential_field', $e['words'] );
-		self::assertSame( array( 'bytes' => 3 ), $e['staging'], 'No held in a side, no hash.' );
+		self::assertSame( array(), array_intersect( array( 'held', 'hash', 'sha256', 'mtime' ), array_keys( $e['staging'] ) ), 'No held in a side, no hash.' );
+		self::assertSame( 3, $e['staging']['bytes'] );
 		$e = self::one( $held, self::held_mu( $name, 'b' ) );
 		self::assertSame( array( 'differs', 'locked' ), array( $e['result'], $e['action'] ), 'Its file compared by its SHA-256 still.' );
 
@@ -511,11 +591,19 @@ final class SyncEnvTest extends TestCase {
 		$e = self::one( $held, null );
 		self::assertSame( array( 'only_staging', 'credential_field' ), array( $e['result'], $e['held'] ) );
 		self::assertArrayNotHasKey( 'held', self::one( self::plugin( '1' ), self::plugin( '1' ) ), 'An ordinary name: no held.' );
+
+		// A table is decided by the environment itself: its held name the same way.
+		$table = array( 'env' => 'table', 'held' => 'credential_field', 'ref' => AB_MCP_Sync_Env::hashed( 'abenv_token=x' ), 'rows' => 1, 'schema' => str_repeat( 'c', 64 ) );
+		$list  = array( array( 'complete' => true, 'count' => 1, 'env' => 'tables', 'ref' => 'tables' ) );
+		$e     = self::one( $table, $table, $list, $list );
+		self::assertSame( array( 'counted', 'credential_field' ), array( $e['result'], $e['held'] ) );
+		self::assertStringContainsString( 'held: credential_field', $e['words'] );
+		self::assertSame( array( 'rows' => 1 ), $e['staging'], 'No held in a side, no hash.' );
 	}
 
 	public function testALineTheImportHeldIsShownByItsSha256(): void {
 		$name  = 'vault=1.php';
-		$line  = array( 'bytes' => 3, 'env' => 'mu_plugin', 'ref' => $name, 'sha256' => str_repeat( 'a', 64 ) );
+		$line  = self::file_unit( 'mu_plugin', $name, 'a' );
 		$other = self::plugin( '1' );
 		self::assertNull( AB_MCP_Sync_Env::held_line( $line, array() ) );
 		self::assertSame( 'credential_field', AB_MCP_Sync_Env::held_line( $line, array( 'vault' ) ), 'By the rules of this site.' );
@@ -524,10 +612,12 @@ final class SyncEnvTest extends TestCase {
 		self::assertNull( AB_MCP_Sync_Env::held_line( array( 'ref' => AB_MCP_Sync_Env::hashed( 'long' ) ) + $line, array( 'vault' ) ), 'A name by its SHA-256 already.' );
 		$list = array( array( 'mu_plugin', hash( 'sha256', \AB_MCP_Sync_Canon::encode( $name ) ), 'credential_field' ) );
 		$here = AB_MCP_Sync_Env::held_here( array( $line, $other ), $list );
-		self::assertSame( array( 'bytes' => 3, 'env' => 'mu_plugin', 'held' => 'credential_field', 'ref' => AB_MCP_Sync_Env::hashed( $name ), 'sha256' => str_repeat( 'a', 64 ) ), $here[0] );
+		$want = array( 'held' => 'credential_field', 'ref' => AB_MCP_Sync_Env::hashed( $name ) ) + $line;
+		ksort( $want );
+		self::assertSame( $want, $here[0] );
 		self::assertTrue( AB_MCP_Sync_Env::shaped( $here[0] ) );
 		self::assertSame( $other, $here[1], 'A line the list does not name stays.' );
-		self::assertSame( array( $other ), AB_MCP_Sync_Env::held_here( array( $other ), array( array( 'plugin', hash( 'sha256', \AB_MCP_Sync_Canon::encode( 'other/other.php' ) ), 'credential_field' ) ) ) );
+		self::assertSame( array( $other ), AB_MCP_Sync_Env::held_here( array( $other ), array( array( 'plugin', hash( 'sha256', \AB_MCP_Sync_Canon::encode( 'other' ) ), 'credential_field' ) ) ) );
 		self::assertSame( array( array( 'env' => 'core', 'ref' => 'locale', 'value' => 'x' ) ), AB_MCP_Sync_Env::held_here( array( array( 'env' => 'core', 'ref' => 'locale', 'value' => 'x' ) ), array( array( 'core', hash( 'sha256', \AB_MCP_Sync_Canon::encode( 'locale' ) ), 'credential_field' ) ) ), 'Only a name of the site.' );
 	}
 
@@ -754,6 +844,27 @@ final class SyncEnvTest extends TestCase {
 		self::assertSame( "dir/\xffname.txt", AB_MCP_Sync_Env::found( $round['after'], static fn( string $p ): array => '' === $p ? array( 'dir' ) : array( "\xffname.txt" ) ) );
 	}
 
+	public function testTheMainFilesOfAPluginAreHeldByTheRulesOfBothSites(): void {
+		// GitHub-Codex on free#147, P1: the main files of a plugin and those
+		// that run, held as the paths of entries and the theme that runs are.
+		$name  = 'deploy_marker=EXAMPLE_SECRET.php';
+		$line  = self::unit( 'plugin', 'shop', array( 'mains' => array( $name, 'main.php' ), 'active' => array( $name ) ) );
+		self::assertSame( array( $line ), AB_MCP_Sync_Env::held_here( array( $line ), array(), array() ), 'Without the rule of this site, as it is.' );
+		$here = AB_MCP_Sync_Env::held_here( array( $line ), array(), array( 'deploy_marker' ) );
+		self::assertSame( array( AB_MCP_Sync_Env::hashed( $name ), 'main.php' ), $here[0]['mains'], 'The rule of this site holds a main file.' );
+		self::assertSame( array( AB_MCP_Sync_Env::hashed( $name ) ), $here[0]['active'] );
+		self::assertTrue( AB_MCP_Sync_Env::shaped( $here[0] ) );
+		$entry = AB_MCP_Sync_Env::compare( array( $here[0], self::whole() ), array( $here[0], self::whole() ) )['entries'][0];
+		self::assertSame( 'equal', $entry['result'] );
+		self::assertStringNotContainsString( 'EXAMPLE_SECRET', (string) json_encode( $entry ), 'Not in the report.' );
+		// A main file the staging site holds: held on this site before it is stored.
+		$held = AB_MCP_Sync_Env::held_names( array( $here[0] ) );
+		self::assertSame( array( AB_MCP_Sync_Env::hashed( $name ) => 'credential_field' ), $held );
+		$there = AB_MCP_Sync_Env::held_there( array( $line ), $held );
+		self::assertSame( array( array( AB_MCP_Sync_Env::hashed( $name ), 'main.php' ), array( AB_MCP_Sync_Env::hashed( $name ) ) ), array( $there[0]['mains'], $there[0]['active'] ) );
+		self::assertStringNotContainsString( 'EXAMPLE_SECRET', (string) json_encode( $there ) );
+	}
+
 	public function testALineOfThisSiteWhoseNameTheStagingSiteHoldsIsHeldBeforeItIsStored(): void {
 		$name    = 'vault=EXAMPLE_SECRET.php';
 		$table   = 'abenv_vault=EXAMPLE_SECRET';
@@ -762,7 +873,7 @@ final class SyncEnvTest extends TestCase {
 			self::plugin( '1' ),
 			array( 'env' => 'table', 'held' => 'unreadable_name', 'ref' => AB_MCP_Sync_Env::hashed( $table ), 'rows' => 1, 'schema' => null ),
 			array( 'env' => 'core', 'ref' => 'locale', 'value' => 'de_CH' ),
-			array( 'active' => true, 'env' => 'plugin', 'ref' => AB_MCP_Sync_Env::name( "\xffA" ), 'version' => '1' ),
+			self::unit( 'plugin', AB_MCP_Sync_Env::name( "\xffA" ) ),
 		);
 		$held = AB_MCP_Sync_Env::held_names( $staging );
 		$want = array(
@@ -772,11 +883,11 @@ final class SyncEnvTest extends TestCase {
 		ksort( $want, SORT_STRING );
 		self::assertSame( $want, $held, 'The names the staging site holds, by their SHA-256 with why, in one order.' );
 		self::assertSame( $held, AB_MCP_Sync_Env::held_names( array_reverse( $staging ) ), 'Whatever the order of the lines; a name by its SHA-256 that is no text is held by nothing.' );
-		$mu   = array( 'bytes' => 3, 'env' => 'mu_plugin', 'ref' => $name, 'sha256' => str_repeat( 'a', 64 ) );
+		$mu   = self::file_unit( 'mu_plugin', $name, 'a' );
 		$live = array(
 			$mu,
 			array( 'ref' => 'other.php' ) + $mu,
-			array( 'active' => true, 'env' => 'plugin', 'ref' => $name, 'version' => '1' ),
+			self::unit( 'plugin', $name ),
 			array( 'env' => 'table', 'ref' => $table, 'rows' => 2, 'schema' => null ),
 			array( 'env' => 'core', 'ref' => 'locale', 'value' => 'de_CH' ),
 			self::held_mu( 'x=1.php' ),
@@ -876,70 +987,455 @@ final class SyncEnvTest extends TestCase {
 		return $out['entries'][0];
 	}
 
-	private static function plugin( string $version, ?bool $active = true ): array {
-		return array( 'active' => $active, 'env' => 'plugin', 'ref' => 'shop/shop.php', 'version' => $version );
+	/** A plugin shop, its files by the hash $hash, its main file running or not ($active null: not read). */
+	private static function plugin( string $version, $active = true, string $hash = 'a' ): array {
+		return self::unit(
+			'plugin',
+			'shop',
+			array(
+				'active'  => null === $active ? null : ( $active ? array( 'main.php' ) : array() ),
+				'hash'    => str_repeat( $hash, 64 ),
+				'version' => $version,
+			)
+		);
 	}
 
 	private static function lock_of( array $entry ): array {
 		return array( $entry['locks'][0]['key'], $entry['locks'][0]['stage'] );
 	}
 
-	public function testAPluginOfTheSameVersionIsCountedNeverEqual(): void {
+	public function testAPluginWithTheSameFilesAndMainFilesRunningIsEqualWithoutAPair(): void {
 		$e = self::one( self::plugin( '2.0' ), self::plugin( '2.0' ) );
-		self::assertSame( array( 'environment', 'plugin', 'shop/shop.php', 'counted', 'locked' ), array( $e['kind'], $e['subtype'], $e['ref'], $e['result'], $e['action'] ) );
-		self::assertSame( array( 'not compared', 'Z8b' ), array( $e['contents'], $e['stage'] ) );
-		self::assertSame( array( 'env:plugin', 'Z8b' ), self::lock_of( $e ) );
-		self::assertStringContainsString( 'Counted, contents not compared', $e['words'] );
-		self::assertStringContainsString( 'from Z8b', $e['words'] );
-		self::assertSame( array( 'active' => true, 'version' => '2.0' ), $e['staging'] );
-	}
-
-	public function testAPluginOfAnotherVersionOrStateDiffers(): void {
+		self::assertSame( array( 'environment', 'plugin', 'shop', 'equal', 'none' ), array( $e['kind'], $e['subtype'], $e['ref'], $e['result'], $e['action'] ) );
+		self::assertArrayNotHasKey( 'locks', $e, 'What is equal is not locked.' );
+		self::assertArrayNotHasKey( 'contents', $e, 'Compared by contents, never «counted».' );
+		self::assertSame( array( 'main.php' ), $e['staging']['active'] );
+		self::assertSame( array(), array_intersect( array( 'hash', 'sha256', 'mtime' ), array_keys( $e['staging'] ) ), 'No hash in an entry.' );
 		$e = self::one( self::plugin( '2.0' ), self::plugin( '1.9' ) );
-		self::assertSame( array( 'differs', array( 'version' ), 'locked' ), array( $e['result'], $e['differs'], $e['action'] ) );
-		self::assertArrayNotHasKey( 'contents', $e );
-		$e = self::one( self::plugin( '2.0', true ), self::plugin( '2.0', false ) );
-		self::assertSame( array( 'differs', array( 'active' ) ), array( $e['result'], $e['differs'] ) );
-		$e = self::one( self::plugin( '2.0', true ), self::plugin( '1.0', false ) );
-		self::assertSame( array( 'version', 'active' ), $e['differs'] );
+		self::assertSame( 'equal', $e['result'], 'The version says nothing; the files do (Z1).' );
 	}
 
-	public function testAPluginOnOneSideOnlyIsLocked(): void {
+	public function testAPluginWhoseFilesOrMainFilesRunningDifferDiffersWithThePart(): void {
+		$e = self::one( self::plugin( '2.0' ), self::plugin( '2.0', true, 'b' ) );
+		self::assertSame( array( 'differs', array( 'files' ), 'locked' ), array( $e['result'], $e['differs'], $e['action'] ) );
+		self::assertSame( array( 'env:plugin', 'Z8b' ), self::lock_of( $e ) );
+		$e = self::one( self::plugin( '2.0', true ), self::plugin( '2.0', false ) );
+		self::assertSame( array( 'differs', array( 'activation' ) ), array( $e['result'], $e['differs'] ), 'Only which main files run (F7).' );
+		self::assertStringContainsString( 'It differs in which of its main files run', $e['words'] );
+		$e = self::one( self::plugin( '2.0', true ), self::plugin( '1.0', false, 'b' ) );
+		self::assertSame( array( 'files', 'activation' ), $e['differs'] );
+	}
+
+	public function testAUnitOnOneSideOnly(): void {
 		$e = self::one( self::plugin( '2.0' ), null );
 		self::assertSame( array( 'only_staging', 'locked', null ), array( $e['result'], $e['action'], $e['live'] ) );
 		self::assertSame( array( 'env:plugin', 'Z8b' ), self::lock_of( $e ) );
 		$e = self::one( null, self::plugin( '2.0' ) );
-		self::assertSame( array( 'only_live', 'locked', null ), array( $e['result'], $e['action'], $e['staging'] ) );
+		self::assertSame( array( 'only_live', 'keep', null ), array( $e['result'], $e['action'], $e['staging'] ) );
+		self::assertArrayNotHasKey( 'locks', $e );
 	}
 
-	public function testAValueThatCouldNotBeReadIsNotCompared(): void {
+	/** The pair of the plugin shop, active, with bases (E2). */
+	private static function shop_pair(): array {
+		$act = \AB_MCP_Sync_Decision::part_hash( 'plugin', 'activation', self::plugin( '2.0', true ) );
+		return array(
+			'id'           => 7,
+			'kind'         => 'plugin',
+			'staging_ref'  => 'shop',
+			'live_ref'     => 'shop',
+			'state'        => 'active',
+			'canon'        => \AB_MCP_Sync_Canon::VERSION,
+			'base_live'    => str_repeat( 'a', 64 ),
+			'base_staging' => str_repeat( 'a', 64 ),
+			'base_extra'   => array( 'parts' => array( 'activation' => array( 'live' => $act, 'staging' => $act ) ) ),
+		);
+	}
+
+	/** The entries of a comparison by subtype:ref, the lists of tables whole on both sides. */
+	private static function judged( array $staging, array $live, array $pairs = array() ): array {
+		$out = array();
+		foreach ( AB_MCP_Sync_Env::compare( array_merge( $staging, array( self::whole() ) ), array_merge( $live, array( self::whole() ) ), $pairs )['entries'] as $entry ) {
+			$out[ $entry['subtype'] . ':' . $entry['ref'] ] = $entry;
+		}
+		return $out;
+	}
+
+	public function testAUnitOnOneSideIsOnlyThereOnlyWhereThatSideReadItWholeWithoutALock(): void {
+		// Codex round 1, B3: the side that has it, read whole and not locked,
+		// before «only there» or «removed».
+		$unread = array( 'complete' => false, 'hash' => null, 'cause' => 'unreadable', 'files' => 0, 'bytes' => 0 ) + self::plugin( '2.0' );
+		$linked = array( 'hash' => null, 'lock' => 'code:link', 'cause' => 'link', 'files' => 0, 'bytes' => 0 ) + self::plugin( '2.0' );
+		$extra  = array( 'hash' => null, 'lock' => 'code:live_extra', 'cause' => 'vcs', 'files' => 0, 'bytes' => 0 ) + self::plugin( '2.0' );
+		foreach ( array( 'without a pair' => array(), 'with an active pair' => array( self::shop_pair() ) ) as $case => $pairs ) {
+			$e = self::judged( array( $unread ), array(), $pairs )['plugin:shop'];
+			self::assertSame( array( 'not_compared', 'none', array() ), array( $e['result'], $e['action'], array_column( $e['locks'] ?? array(), 'key' ) ), "Not read whole on staging, $case." );
+			self::assertSame( 'It could not be read whole on the staging site (a folder or file of it could not be read).', $e['why'] );
+			$e = self::judged( array(), array( $unread ), $pairs )['plugin:shop'];
+			self::assertSame( array( 'not_compared', 'none' ), array( $e['result'], $e['action'] ), "Not read whole here, $case." );
+			self::assertStringContainsString( 'on this site', $e['why'] );
+			$e = self::judged( array( $linked ), array(), $pairs )['plugin:shop'];
+			self::assertSame( array( 'not_compared', 'locked', array( 'code:link' ) ), array( $e['result'], $e['action'], array_column( $e['locks'], 'key' ) ), "A link on staging, $case: its lock, never «only on staging» or removed." );
+			$e = self::judged( array(), array( $extra ), $pairs )['plugin:shop'];
+			self::assertSame( array( 'not_compared', 'locked', array( 'code:live_extra' ) ), array( $e['result'], $e['action'], array_column( $e['locks'], 'key' ) ), "A folder .git here, $case." );
+		}
+		$whole = self::judged( array( self::plugin( '2.0' ) ), array(), array( self::shop_pair() ) )['plugin:shop'];
+		self::assertSame( array( 'deleted_live', 'none' ), array( $whole['result'], $whole['action'] ), 'Read whole without a lock: removed here, as before.' );
+		$whole = self::judged( array(), array( self::plugin( '2.0' ) ) )['plugin:shop'];
+		self::assertSame( array( 'only_live', 'keep' ), array( $whole['result'], $whole['action'] ) );
+	}
+
+	public function testAUnitRemovedOnOneSideAndChangedOnTheOtherIsAConflictWithTheRemoval(): void {
+		// GitHub-Codex on free#147, P2: the side that has it against its own
+		// bases before «removed» (TABLE, rows 3, 7, 8 and 9).
+		$pair = array( self::shop_pair() );
+		$e    = self::judged( array( self::plugin( '2.1', true, 'b' ) ), array(), $pair )['plugin:shop'];
+		self::assertSame( array( 'deleted_live_changed_staging', 'keep', array( 'files' => 'deleted_live_changed_staging', 'activation' => 'deleted_live' ) ), array( $e['result'], $e['action'], $e['parts'] ), 'Removed here, its files changed on staging (row 9).' );
+		self::assertStringContainsString( 'a conflict', $e['words'] );
+		$e = self::judged( array(), array( self::plugin( '2.0', false ) ), $pair )['plugin:shop'];
+		self::assertSame( array( 'deleted_against_changed_live', 'keep', array( 'files' => 'deleted_on_staging', 'activation' => 'deleted_against_changed_live' ) ), array( $e['result'], $e['action'], $e['parts'] ), 'Removed on staging, deactivated here (row 7).' );
+		self::assertArrayNotHasKey( 'locks', $e );
+		$e = self::judged( array(), array( self::plugin( '2.0' ) ), $pair )['plugin:shop'];
+		self::assertSame( array( 'deleted_on_staging', 'locked', array( 'env:plugin' ) ), array( $e['result'], $e['action'], array_column( $e['locks'], 'key' ) ), 'Removed on staging, unchanged here (row 3).' );
+		$e = self::judged( array( self::plugin( '2.0' ) ), array(), $pair )['plugin:shop'];
+		self::assertSame( array( 'deleted_live', 'none' ), array( $e['result'], $e['action'] ), 'Removed here, unchanged on staging (row 8).' );
+		// Each side against the base of that side: bases that differ by side.
+		$apart                    = $pair;
+		$apart[0]['base_live']    = str_repeat( 'c', 64 );
+		$apart[0]['base_staging'] = str_repeat( 'a', 64 );
+		self::assertSame( 'deleted_live', self::judged( array( self::plugin( '2.0', true, 'a' ) ), array(), $apart )['plugin:shop']['result'], 'Staging as its own base: unchanged.' );
+		self::assertSame( 'deleted_on_staging', self::judged( array(), array( self::plugin( '2.0', true, 'c' ) ), $apart )['plugin:shop']['result'], 'This site as its own base: unchanged.' );
+		$old            = $pair;
+		$old[0]['canon'] = 'canon/0';
+		self::assertStringContainsString( 'version canon/0', self::judged( array( self::plugin( '2.0' ) ), array(), $old )['plugin:shop']['why'], 'Bases of another version: not compared.' );
+		$none = $pair;
+		unset( $none[0]['base_extra'] );
+		self::assertSame( 'Its pair holds no base of the part activation.', self::judged( array( self::plugin( '2.0' ) ), array(), $none )['plugin:shop']['why'] );
+		self::assertSame( 'Which main files run could not be read on the staging site.', self::judged( array( self::plugin( '2.0', null ) ), array(), $pair )['plugin:shop']['why'] );
+	}
+
+	public function testAUnitWhoseFolderTheOtherSideDidNotListWholeIsNotCompared(): void {
+		// Codex round 1, B4 (V1 of the pre-check): a folder of units a side
+		// could not list says so, and a unit the other side has there is not
+		// taken as only there, nor as removed.
+		$root = self::unit( 'plugin', '*', array( 'form' => 'root', 'complete' => false, 'hash' => null, 'files' => 0, 'bytes' => 0, 'mains' => null, 'active' => null, 'version' => null, 'cause' => 'unreadable' ) );
+		foreach ( array( 'without a pair' => array(), 'with an active pair' => array( self::shop_pair() ) ) as $case => $pairs ) {
+			$all = self::judged( array( $root ), array( self::plugin( '2.0' ) ), $pairs );
+			self::assertSame( array( 'not_compared', 'none' ), array( $all['plugin:shop']['result'], $all['plugin:shop']['action'] ), "The plugins of staging not listed, $case." );
+			self::assertSame( 'Whether it is on the staging site is not known: the folder it would lie in could not be read whole there (a folder or file of it could not be read).', $all['plugin:shop']['why'] );
+			self::assertSame( 'not_compared', $all['plugin:*']['result'], 'The folder itself says so.' );
+			$all = self::judged( array( self::plugin( '2.0' ) ), array( $root ), $pairs );
+			self::assertSame( array( 'not_compared', 'none' ), array( $all['plugin:shop']['result'], $all['plugin:shop']['action'] ), "The plugins here not listed, $case." );
+			self::assertStringContainsString( 'on this site is not known', $all['plugin:shop']['why'] );
+		}
+		$moved = array( 'cause' => 'moved' ) + $root;
+		self::assertStringContainsString( 'is gone since', self::judged( array( $moved ), array( self::plugin( '2.0' ) ) )['plugin:shop']['why'], 'Not listed to its end: the same.' );
+		// A folder below a root of files that could not be read: the units
+		// below it, and only those.
+		$folder = self::unit( 'upload', '2024/05', array( 'form' => 'other', 'complete' => false, 'hash' => null, 'files' => 0, 'bytes' => 0, 'cause' => 'unreadable' ) );
+		$all    = self::judged( array( $folder ), array( self::file_unit( 'upload', '2024/05/a.jpg' ), self::file_unit( 'upload', '2024/055.jpg' ), self::file_unit( 'upload', '2025/01/b.jpg' ), self::file_unit( 'upload', '2026/2024/05/c.jpg' ) ) );
+		self::assertSame( 'not_compared', $all['upload:2024/05/a.jpg']['result'] );
+		self::assertSame( array( 'only_live', 'only_live', 'only_live' ), array( $all['upload:2024/055.jpg']['result'], $all['upload:2025/01/b.jpg']['result'], $all['upload:2026/2024/05/c.jpg']['result'] ), 'Beside the folder, or its name further down: listed whole.' );
+		self::assertSame( array( 'not_compared', 'none' ), array( $all['upload:2024/05']['result'], $all['upload:2024/05']['action'] ), 'The folder itself: not only on staging (B3).' );
+	}
+
+	public function testEveryPathOfAUnitIsInTheReportInPagesOfAHundred(): void {
+		// Codex round 1, B5: past MAX_PATHS a list goes on in entries of their
+		// own right after the entry, every path in its order.
+		$c       = str_repeat( 'c', 64 );
+		$d       = str_repeat( 'd', 64 );
+		$s_files = array( array( 'main.php', 3, $c, 1 ) );
+		$l_files = array( array( 'main.php', 3, $d, 1 ) );
+		for ( $i = 1; $i <= 250; $i++ ) {
+			$s_files[] = array( sprintf( 'new/%03d.php', $i ), 3, $c, 1 );
+		}
+		for ( $i = 1; $i <= 101; $i++ ) {
+			$l_files[] = array( sprintf( 'data/%03d.csv', $i ), 3, $c, 1 );
+		}
+		usort( $s_files, static fn( $a, $b ) => strcmp( $a[0], $b[0] ) );
+		usort( $l_files, static fn( $a, $b ) => strcmp( $a[0], $b[0] ) );
+		$lines = static function ( array $line, array $files ): array {
+			$line['files'] = count( $files );
+			$out           = array( $line );
+			foreach ( array_chunk( $files, AB_MCP_Sync_Env::PER_LINE ) as $i => $chunk ) {
+				$out[] = array( 'entries' => $chunk, 'env' => 'entries', 'ref' => 'plugin:shop#' . ( $i + 1 ), 'seq' => $i + 1, 'unit' => 'plugin:shop' );
+			}
+			return $out;
+		};
+		$out = AB_MCP_Sync_Env::compare(
+			array_merge( $lines( self::plugin( '2.0', true, 'a' ), $s_files ), array( self::whole() ) ),
+			array_merge( $lines( self::plugin( '2.0', true, 'b' ), $l_files ), array( self::whole() ) )
+		);
+		$e = $out['entries'][0];
+		self::assertSame( array( 'differs', 'locked' ), array( $e['result'], $e['action'] ) );
+		self::assertSame( array( 250, 101, 1, 3 ), array( $e['paths']['only_staging_count'], $e['paths']['only_live_count'], $e['paths']['differs_count'], $e['paths']['more'] ) );
+		self::assertSame( array( 100, 100, 1 ), array( count( $e['paths']['only_staging'] ), count( $e['paths']['only_live'] ), count( $e['paths']['differs'] ) ), 'A hundred a list in the entry.' );
+		self::assertStringContainsString( 'in the entries right after this one', $e['words'] );
+		self::assertCount( 4, $out['entries'], 'The entry and its three entries of further paths.' );
+		$more = array_slice( $out['entries'], 1 );
+		self::assertSame( array( array( 'only_live', 101, 1 ), array( 'only_staging', 101, 100 ), array( 'only_staging', 201, 50 ) ), array_map( static fn( $m ) => array( $m['paths']['list'], $m['paths']['from'], count( $m['paths']['paths'] ) ), $more ) );
+		foreach ( $more as $m ) {
+			self::assertSame( array( 'environment', 'plugin', 'shop', 'more_paths', 'none' ), array( $m['kind'], $m['subtype'], $m['ref'], $m['result'], $m['action'] ) );
+			self::assertArrayNotHasKey( 'locks', $m );
+		}
+		$every = array_merge( $e['paths']['only_staging'], $more[1]['paths']['paths'], $more[2]['paths']['paths'] );
+		self::assertSame( array_values( array_filter( array_column( $s_files, 0 ), static fn( $p ) => 0 === strpos( $p, 'new/' ) ) ), $every, 'Every path only on staging, in its order, none twice.' );
+		self::assertSame( array_column( array_slice( $l_files, 0, 101 ), 0 ), array_merge( $e['paths']['only_live'], $more[0]['paths']['paths'] ) );
+		self::assertSame( array( 'differs' => 1, 'more_paths' => 3 ), $out['counts']['results'] );
+		// At the limit: no entry of further paths.
+		$out = AB_MCP_Sync_Env::compare(
+			array_merge( $lines( self::plugin( '2.0', true, 'a' ), array_slice( $s_files, 0, 101 ) ), array( self::whole() ) ),
+			array_merge( $lines( self::plugin( '2.0', true, 'b' ), array( array( 'main.php', 3, $d, 1 ) ) ), array( self::whole() ) )
+		);
+		self::assertCount( 1, $out['entries'] );
+		self::assertArrayNotHasKey( 'more', $out['entries'][0]['paths'] );
+		self::assertSame( 100, count( $out['entries'][0]['paths']['only_staging'] ) );
+	}
+
+	public function testAUnitNotReadWholeIsNotComparedWithWhy(): void {
 		$e = self::one( self::plugin( '2.0', null ), self::plugin( '2.0' ) );
 		self::assertSame( 'not_compared', $e['result'] );
 		self::assertStringContainsString( 'the staging site', $e['why'] );
-		$e = self::one( self::plugin( '2.0' ), array( 'version' => null ) + self::plugin( '2.0' ) );
+		$e = self::one( self::plugin( '2.0' ), array( 'complete' => false, 'hash' => null, 'cause' => 'changed' ) + self::plugin( '2.0' ) );
 		self::assertSame( 'not_compared', $e['result'] );
 		self::assertStringContainsString( 'this site', $e['why'] );
-		$mu = array( 'bytes' => null, 'env' => 'mu_plugin', 'ref' => 'x.php', 'sha256' => null );
-		self::assertSame( 'not_compared', self::one( $mu, array( 'bytes' => 1, 'sha256' => str_repeat( 'a', 64 ) ) + $mu )['result'], 'A file that could not be read is not equal to one.' );
+		self::assertStringContainsString( 'changed while it was read', $e['why'] );
+		$e = self::one( array( 'complete' => false, 'hash' => null, 'cause' => 'too_large' ) + self::plugin( '2.0' ), self::plugin( '2.0' ) );
+		self::assertStringContainsString( 'within one call', $e['why'], 'Too large for the hash of one call (F38).' );
 		$core = array( 'env' => 'core', 'ref' => 'wordpress', 'value' => null );
 		self::assertSame( 'not_compared', self::one( $core, $core )['result'], 'Two unread versions are not the same version.' );
+		$root = self::unit( 'language', '*', array( 'form' => 'root', 'complete' => false, 'hash' => null, 'files' => 0, 'bytes' => 0, 'cause' => 'by_code' ) );
+		$e    = self::one( $root, null );
+		self::assertSame( array( 'not_compared', 'none' ), array( $e['result'], $e['action'] ) );
+		self::assertStringContainsString( 'code decides', $e['why'] );
 	}
 
-	public function testAThemeIsCountedOrDiffersAsAPlugin(): void {
-		$theme = array( 'active' => true, 'env' => 'theme', 'ref' => 'twentytwentyfive', 'version' => '1.2' );
-		$e     = self::one( $theme, $theme );
-		self::assertSame( array( 'counted', 'locked' ), array( $e['result'], $e['action'] ) );
-		self::assertSame( array( 'env:theme', 'Z8b' ), self::lock_of( $e ) );
-		$e = self::one( $theme, array( 'active' => false ) + $theme );
-		self::assertSame( array( 'differs', array( 'active' ) ), array( $e['result'], $e['differs'] ) );
+	public function testAUnitThatHoldsWhatNoManifestHoldsIsLockedNeverCompared(): void {
+		$extra = self::unit( 'plugin', 'shop', array( 'hash' => null, 'lock' => 'code:live_extra', 'cause' => 'vcs', 'files' => 0, 'bytes' => 0 ) );
+		$e     = self::one( self::plugin( '2.0' ), $extra );
+		self::assertSame( array( 'not_compared', 'locked', array( 'code:live_extra', 'Z8' ) ), array( $e['result'], $e['action'], self::lock_of( $e ) ) );
+		$link = array( 'lock' => 'code:link', 'cause' => 'link' ) + $extra;
+		$e    = self::one( $link, self::plugin( '2.0' ) );
+		self::assertSame( array( 'code:link', 'Z8' ), self::lock_of( $e ) );
+		$root = self::unit( 'theme', 'elsewhere', array( 'form' => 'other', 'hash' => null, 'lock' => 'code:theme_root', 'cause' => 'theme_root' ) );
+		$e    = self::one( $root, $root );
+		self::assertSame( array( 'locked', array( 'code:theme_root', 'Z8' ) ), array( $e['action'], self::lock_of( $e ) ), 'A theme of a further root (E2).' );
 	}
 
-	public function testWordPressOfTheSameVersionIsCountedAndTheLanguageShownOnly(): void {
+	public function testAlphaBridgeItselfIsShownByItsVersionNeverTakenOver(): void {
+		$own = self::unit( 'plugin', 'alphabridge-mcp', array( 'form' => 'own', 'own' => true, 'hash' => null, 'version' => '4.19.0', 'files' => 0, 'bytes' => 0 ) );
+		$e   = self::one( $own, $own );
+		self::assertSame( array( 'same_value', 'none' ), array( $e['result'], $e['action'] ) );
+		$e = self::one( $own, array( 'version' => '4.18.0' ) + $own );
+		self::assertSame( array( 'own_differs', 'locked', array( 'code:own', 'Z8' ) ), array( $e['result'], $e['action'], self::lock_of( $e ) ) );
+		self::assertStringContainsString( 'same version of AlphaBridge', $e['locks'][0]['reason'] );
+		$e = self::one( $own, null );
+		self::assertSame( array( 'only_staging', 'locked', array( 'code:own', 'Z8' ) ), array( $e['result'], $e['action'], self::lock_of( $e ) ), 'On staging only (Pro there, not here): never created here either.' );
+		self::assertCount( 1, $e['locks'], 'No lock of a takeover beside it.' );
+		// GitHub-Codex on ed1e512: a version not read is never the same.
+		$unknown = self::unit( 'mu_plugin', 'alphabridge-mcp', array( 'form' => 'own', 'own' => true, 'hash' => null, 'version' => null, 'files' => 0, 'bytes' => 0 ) );
+		$e       = self::one( $unknown, $unknown );
+		self::assertSame( array( 'not_compared', 'locked', array( 'code:own', 'Z8' ) ), array( $e['result'], $e['action'], self::lock_of( $e ) ), 'Both versions not read: not «the same».' );
+		self::assertSame( 'The version of AlphaBridge itself could not be read on the staging site: it is not compared, and never taken over.', $e['why'] );
+		$known = array( 'version' => '4.19.0' ) + $unknown;
+		self::assertSame( 'not_compared', self::one( $known, $unknown )['result'], 'One not read.' );
+		self::assertStringContainsString( 'on this site', self::one( $known, $unknown )['why'] );
+		self::assertSame( 'same_value', self::one( $known, $known )['result'], 'Both read, the same.' );
+	}
+
+	public function testAFolderPluginWhoseMainFileHasItsNameRunsByItsFullReference(): void {
+		// GitHub-Codex on f25da74: a folder loader.php with its main file
+		// loader.php runs as loader.php/loader.php in active_plugins; a plugin
+		// of one file by its own name.
+		$this->file( 'plugins/loader.php/loader.php', "<?php\n/*\n * Plugin Name: Loader\n * Version: 1.0\n */\n" );
+		$this->file( 'plugins/solo.php', "<?php\n/*\n * Plugin Name: Solo\n */\n" );
+		$dir   = $this->dir . '/plugins';
+		$lines = new \ReflectionMethod( AB_MCP_Sync_Env::class, 'unit_lines' );
+		$line  = static function ( string $name, array $active ) use ( $dir, $lines ): array {
+			$read = array( 'own' => false ) + \AB_MCP_Sync_File_Manifest::unit( $dir, $name, 'live', INF, true, 'plugin' );
+			return $lines->invoke( null, 'plugin', $name, $read, array( 'mains' => AB_MCP_Sync_Env::plugin_files( $dir ), 'active' => $active ) )[0];
+		};
+		$runs = $line( 'loader.php', array( 'solo.php', 'loader.php/loader.php' ) );
+		self::assertSame( array( 'folder', array( 'loader.php' ), array( 'loader.php' ), '1.0' ), array( $runs['form'], $runs['mains'], $runs['active'], $runs['version'] ), 'Its main file runs.' );
+		$off = $line( 'loader.php', array( 'loader.php' ) );
+		self::assertSame( array(), $off['active'], 'loader.php alone is no file of this folder.' );
+		self::assertSame( array( array( 'solo.php' ), array( 'solo.php' ) ), array( $line( 'solo.php', array( 'solo.php' ) )['active'], $line( 'solo.php', array( 'solo.php' ) )['mains'] ), 'A plugin of one file by its own name.' );
+		self::assertSame( array(), $line( 'solo.php', array( 'loader.php/loader.php' ) )['active'] );
+		$e = self::one( $runs, $off );
+		self::assertSame( array( 'differs', array( 'activation' ) ), array( $e['result'], $e['differs'] ), 'Running on one site, not on the other: never equal.' );
+	}
+
+	public function testAFolderReadWholeWithoutAFileShowsTheFilesOfTheOtherSideAsOnlyThere(): void {
+		// GitHub-Codex on f25da74: a must-use folder empty on staging, with
+		// removed.php here: the report names the file, not only «differs».
+		$c     = str_repeat( 'c', 64 );
+		$empty = self::unit( 'mu_plugin', 'tools', array( 'files' => 0, 'bytes' => 0, 'hash' => str_repeat( 'e', 64 ) ) );
+		$full  = self::unit( 'mu_plugin', 'tools', array( 'files' => 1, 'bytes' => 3, 'hash' => str_repeat( 'f', 64 ) ) );
+		$of    = array( 'entries' => array( array( 'removed.php', 3, $c, 1 ) ), 'env' => 'entries', 'ref' => 'mu_plugin:tools#1', 'seq' => 1, 'unit' => 'mu_plugin:tools' );
+		$e     = self::one( $empty, $full, array(), array( $of ) );
+		self::assertSame( array( 'differs', array( 'files' ) ), array( $e['result'], $e['differs'] ) );
+		self::assertSame(
+			array(
+				'differs'            => array(),
+				'differs_count'      => 0,
+				'only_live'          => array( 'removed.php' ),
+				'only_live_count'    => 1,
+				'only_staging'       => array(),
+				'only_staging_count' => 0,
+			),
+			$e['paths'],
+			'Only here, by its name and count.'
+		);
+		$e = self::one( $full, $empty, array( $of ) );
+		self::assertSame( array( array( 'removed.php' ), 1 ), array( $e['paths']['only_staging'], $e['paths']['only_staging_count'] ), 'Only on staging, the other way round.' );
+		// Only a folder read whole without a file, not locked nor held, has
+		// an empty manifest; a line of entries of it after all is no manifest.
+		$entries = new \ReflectionMethod( AB_MCP_Sync_Env::class, 'entries_of' );
+		$files   = static function ( array $line, array $more = array() ) use ( $entries ): ?array {
+			return $entries->invoke( null, array_merge( array( $line ), $more ), array( 'mu_plugin' => array( 'tools' => $line ) ) )['mu_plugin:tools'] ?? null;
+		};
+		self::assertSame( array(), $files( $empty ), 'Empty, read whole.' );
+		foreach (
+			array(
+				'a file'          => array( 'form' => 'file' ),
+				'not read whole'  => array( 'complete' => false ),
+				'without a hash'  => array( 'hash' => null ),
+				'locked'          => array( 'lock' => 'code:live_extra' ),
+				'held'            => array( 'held' => 'credential' ),
+				'with files'      => array( 'files' => 2 ),
+			) as $why => $over
+		) {
+			self::assertNull( $files( array_replace( $empty, $over ) ), $why . ': no manifest.' );
+		}
+		self::assertNull( $files( $empty, array( $of ) ), 'A line of entries of it after all: no manifest (fail closed).' );
+	}
+
+	public function testThePathsOfAUnitWhoseFilesDifferAreShownNeverByMtime(): void {
+		$s = self::plugin( '2.0', true, 'a' );
+		$l = self::plugin( '2.0', true, 'b' );
+		$entries = static function ( string $side, array $list ): array {
+			return array( 'entries' => $list, 'env' => 'entries', 'ref' => 'plugin:shop#1', 'seq' => 1, 'unit' => 'plugin:shop' );
+		};
+		$c = str_repeat( 'c', 64 );
+		$d = str_repeat( 'd', 64 );
+		$s['files'] = 3;
+		$l['files'] = 3;
+		$out = AB_MCP_Sync_Env::compare(
+			array( $s, $entries( 's', array( array( 'main.php', 3, $c, 1 ), array( 'new.php', 3, $c, 1 ), array( 'same.php', 3, $c, 1 ) ) ), self::whole() ),
+			array( $l, $entries( 'l', array( array( 'data/export.csv', 3, $c, 9 ), array( 'main.php', 3, $d, 1 ), array( 'same.php', 3, $c, 9 ) ) ), self::whole() )
+		);
+		self::assertCount( 1, $out['entries'], 'The entries of a unit are no entry of their own.' );
+		$e = $out['entries'][0];
+		self::assertSame(
+			array(
+				'differs'            => array( 'main.php' ),
+				'differs_count'      => 1,
+				'only_live'          => array( 'data/export.csv' ),
+				'only_live_count'    => 1,
+				'only_staging'       => array( 'new.php' ),
+				'only_staging_count' => 1,
+			),
+			$e['paths'],
+			'same.php with another mtime is the same file.'
+		);
+		self::assertStringContainsString( 'into the backup', $e['words'], 'A path not in the new version (F47).' );
+		$l['files'] = 4;
+		$out        = AB_MCP_Sync_Env::compare(
+			array( $s, $entries( 's', array( array( 'main.php', 3, $c, 1 ), array( 'new.php', 3, $c, 1 ), array( 'same.php', 3, $c, 1 ) ) ), self::whole() ),
+			array( $l, $entries( 'l', array( array( 'data/export.csv', 3, $c, 9 ), array( 'main.php', 3, $d, 1 ), array( 'same.php', 3, $c, 9 ) ) ), self::whole() )
+		);
+		self::assertArrayNotHasKey( 'paths', $out['entries'][0], 'Not every file of a side at hand: no paths (fail closed).' );
+	}
+
+	public function testThePartsOfAUnitWithAPairAreJudgedEachAgainstItsOwnBase(): void {
+		$base  = str_repeat( 'a', 64 );
+		$act   = \AB_MCP_Sync_Decision::part_hash( 'plugin', 'activation', self::plugin( '2.0', true ) );
+		$pair  = array(
+			'id'           => 7,
+			'kind'         => 'plugin',
+			'staging_ref'  => 'shop',
+			'live_ref'     => 'shop',
+			'state'        => 'active',
+			'canon'        => \AB_MCP_Sync_Canon::VERSION,
+			'base_live'    => $base,
+			'base_staging' => $base,
+			'base_extra'   => array( 'parts' => array( 'activation' => array( 'live' => $act, 'staging' => $act ) ) ),
+		);
+		$judge = static function ( array $s, array $l ) use ( $pair ): array {
+			return AB_MCP_Sync_Env::compare( array( $s, self::whole() ), array( $l, self::whole() ), array( $pair ) )['entries'][0];
+		};
+		$e = $judge( self::plugin( '2.0' ), self::plugin( '2.0' ) );
+		self::assertSame( array( 'equal', array( 'files' => 'equal', 'activation' => 'equal' ), 7 ), array( $e['result'], $e['parts'], $e['pair']['id'] ) );
+		$e = $judge( self::plugin( '2.1', true, 'b' ), self::plugin( '2.0' ) );
+		self::assertSame( array( 'changed_on_staging', 'locked', array( 'env:plugin', 'Z8b' ) ), array( $e['result'], $e['action'], self::lock_of( $e ) ) );
+		$e = $judge( self::plugin( '2.0' ), self::plugin( '2.0', true, 'b' ) );
+		self::assertSame( array( 'changed_live', 'keep' ), array( $e['result'], $e['action'] ) );
+		$e = $judge( self::plugin( '2.1', true, 'b' ), self::plugin( '2.0', true, 'c' ) );
+		self::assertSame( array( 'conflict', 'locked' ), array( $e['result'], $e['action'] ) );
+		self::assertSame( array( 'code:live_changed', 'env:plugin' ), array_column( $e['locks'], 'key' ), 'Changed on both sides: no choice «staging wins» (E1).' );
+		self::assertStringContainsString( 'update it by hand in wp-admin', $e['locks'][0]['reason'], 'The way for a plugin that keeps writing into its folder (F46).' );
+		self::assertArrayNotHasKey( 'choices', $e );
+		$e = $judge( self::plugin( '2.1', true, 'b' ), self::plugin( '2.0', false ) );
+		self::assertSame( array( 'files' => 'changed_on_staging', 'activation' => 'changed_live' ), $e['parts'], 'Each part against its own base (E2, F51).' );
+		self::assertSame( array( 'code:live_changed' ), array_values( array_diff( array( 'code:live_changed' ), array_column( $e['locks'], 'key' ) ) ), 'No conflict of the files: no code:live_changed.' );
+		$e = $judge( self::plugin( '2.0', false ), self::plugin( '2.0', false ) );
+		self::assertSame( array( 'activation' => 'changed_alike' ), array_intersect_key( $e['parts'], array( 'activation' => 1 ) ) );
+		$unclear = $judge( self::plugin( '2.0' ), self::plugin( '2.0' ) );
+		$pair['state'] = 'unclear';
+		$e = AB_MCP_Sync_Env::compare( array( self::plugin( '2.0' ), self::whole() ), array( self::plugin( '2.0' ), self::whole() ), array( $pair ) )['entries'][0];
+		self::assertSame( 'not_compared', $e['result'] );
+		self::assertStringContainsString( 'wp_site_pairs', $e['why'] );
+		self::assertSame( 'equal', $unclear['result'] );
+	}
+
+	public function testAUnitUnchangedOnBothSidesSinceBasesThatDifferIsNeverEqual(): void {
+		// Codex, whole round over 4c66939..f25da74 (A): each side its own
+		// base, each unchanged since, the files differ now: kept apart
+		// (Frage F, c), never «equal», nothing to take over.
+		$act  = \AB_MCP_Sync_Decision::part_hash( 'plugin', 'activation', self::plugin( '2.0', true ) );
+		$pair = array(
+			'id'           => 8,
+			'kind'         => 'plugin',
+			'staging_ref'  => 'shop',
+			'live_ref'     => 'shop',
+			'state'        => 'active',
+			'canon'        => \AB_MCP_Sync_Canon::VERSION,
+			'base_live'    => str_repeat( 'a', 64 ),
+			'base_staging' => str_repeat( 'b', 64 ),
+			'base_extra'   => array( 'parts' => array( 'activation' => array( 'live' => $act, 'staging' => $act ) ) ),
+		);
+		$judge = static function ( array $s, array $l ) use ( $pair ): array {
+			return AB_MCP_Sync_Env::compare( array( $s, self::whole() ), array( $l, self::whole() ), array( $pair ) )['entries'][0];
+		};
+		$e = $judge( self::plugin( '1.1.0', true, 'b' ), self::plugin( '1.0.0', true, 'a' ) );
+		self::assertSame( array( 'kept_apart', 'none', array( 'files' => 'kept_apart', 'activation' => 'equal' ), array( 'files' ) ), array( $e['result'], $e['action'], $e['parts'], $e['differs'] ) );
+		self::assertArrayNotHasKey( 'locks', $e );
+		self::assertStringStartsWith( 'Unchanged on both sides since the bases of its pair, which differ', $e['words'] );
+		self::assertStringNotContainsString( 'Equal', $e['words'] );
+		// Changed on staging since: changed_on_staging, as before.
+		self::assertSame( 'changed_on_staging', $judge( self::plugin( '1.2.0', true, 'c' ), self::plugin( '1.0.0', true, 'a' ) )['result'] );
+		// Both changed since, to the same files: changed alike, as before.
+		self::assertSame( 'changed_alike', $judge( self::plugin( '1.2.0', true, 'c' ), self::plugin( '1.2.0', true, 'c' ) )['result'] );
+		// One part kept apart, another changed on staging: the change leads.
+		$e = $judge( self::plugin( '1.1.0', false, 'b' ), self::plugin( '1.0.0', true, 'a' ) );
+		self::assertSame( array( 'changed_on_staging', array( 'files' => 'kept_apart', 'activation' => 'changed_on_staging' ) ), array( $e['result'], $e['parts'] ) );
+	}
+
+	public function testTheThemeThatRunsIsAUnitOfItsOwn(): void {
+		$choice = array( 'env' => 'theme_choice', 'ref' => 'theme_choice', 'stylesheet' => 'child', 'template' => 'parent' );
+		$e      = self::one( $choice, $choice );
+		self::assertSame( array( 'theme_choice', 'equal', 'none' ), array( $e['subtype'], $e['result'], $e['action'] ) );
+		$e = self::one( $choice, array( 'stylesheet' => 'other' ) + $choice );
+		self::assertSame( array( 'differs', array( 'activation' ), 'locked', array( 'env:theme_choice', 'Z8b' ) ), array( $e['result'], $e['differs'], $e['action'], self::lock_of( $e ) ) );
+		$e = self::one( $choice, array( 'template' => null ) + $choice );
+		self::assertSame( 'not_compared', $e['result'] );
+	}
+
+	public function testWordPressAndTheLanguageAreShownOnlyAndTheCoreFilesComparedByTheirChecksums(): void {
 		$wp = array( 'env' => 'core', 'ref' => 'wordpress', 'value' => '7.1.3' );
 		$e  = self::one( $wp, $wp );
-		self::assertSame( array( 'counted', 'locked' ), array( $e['result'], $e['action'] ) );
-		self::assertSame( array( 'env:wordpress', 'Z8b' ), self::lock_of( $e ) );
-		self::assertStringContainsString( 'wp_update_core', $e['locks'][0]['reason'] );
+		self::assertSame( array( 'same_value', 'host' ), array( $e['result'], $e['action'] ) );
+		self::assertArrayNotHasKey( 'locks', $e, 'Never taken over (A17): changed at the host.' );
+		self::assertStringContainsString( 'wp_update_core', $e['words'] );
 		$e = self::one( $wp, array( 'value' => '7.2' ) + $wp );
 		self::assertSame( array( 'differs', array( 'value' ) ), array( $e['result'], $e['differs'] ) );
 		$locale = array( 'env' => 'core', 'ref' => 'locale', 'value' => 'de_CH' );
@@ -948,19 +1444,29 @@ final class SyncEnvTest extends TestCase {
 		self::assertStringContainsString( 'Shown only', $e['words'] );
 		$e = self::one( $locale, array( 'value' => 'en_US' ) + $locale );
 		self::assertSame( array( 'differs', 'none' ), array( $e['result'], $e['action'] ), 'The option WPLANG is compared with the options: here shown only.' );
-		self::assertStringContainsString( 'Shown only', $e['words'] );
 		self::assertArrayNotHasKey( 'locks', $e );
+		$core = self::lines()['core_files'];
+		$e    = self::one( $core, $core );
+		self::assertSame( array( 'equal', 'host' ), array( $e['result'], $e['action'] ), 'Both as shipped (E18).' );
+		$e = self::one( $core, array( 'differs' => 1 ) + $core );
+		self::assertSame( array( 'differs', array( 'differs' ), 'host', 1 ), array( $e['result'], $e['differs'], $e['action'], $e['live']['differs'] ), 'One core file changed here (F17).' );
+		self::assertStringContainsString( 're-install', strtolower( $e['words'] ) );
+		$e = self::one( array( 'missing' => 2 ) + $core, $core );
+		self::assertSame( array( 'differs', array( 'missing' ) ), array( $e['result'], $e['differs'] ) );
+		$e = self::one( $core, array( 'complete' => false, 'checked' => 0, 'cause' => 'unreachable' ) + $core );
+		self::assertSame( array( 'not_compared', 'host' ), array( $e['result'], $e['action'] ) );
+		self::assertStringContainsString( 'api.wordpress.org was not reached', $e['why'] );
 	}
 
-	public function testAMustUsePluginIsEqualOrDiffersByItsHash(): void {
-		$mu = array( 'bytes' => 10, 'env' => 'mu_plugin', 'ref' => 'site.php', 'sha256' => str_repeat( 'a', 64 ) );
+	public function testAMustUseFileIsEqualOrDiffersByItsContents(): void {
+		$mu = self::file_unit( 'mu_plugin', 'site.php', 'a' );
 		$e  = self::one( $mu, $mu );
 		self::assertSame( array( 'equal', 'none' ), array( $e['result'], $e['action'] ) );
 		self::assertArrayNotHasKey( 'locks', $e );
-		$e = self::one( $mu, array( 'sha256' => str_repeat( 'b', 64 ) ) + $mu );
-		self::assertSame( array( 'differs', array( 'contents' ), 'locked' ), array( $e['result'], $e['differs'], $e['action'] ) );
+		$e = self::one( $mu, self::file_unit( 'mu_plugin', 'site.php', 'b' ) );
+		self::assertSame( array( 'differs', array( 'files' ), 'locked' ), array( $e['result'], $e['differs'], $e['action'] ) );
 		self::assertSame( array( 'env:mu_plugin', 'Z8b' ), self::lock_of( $e ) );
-		self::assertSame( array( 'bytes' => 10 ), $e['staging'], 'No hash in an entry.' );
+		self::assertSame( 3, $e['staging']['bytes'] );
 		$e = self::one( $mu, null );
 		self::assertSame( array( 'only_staging', 'locked' ), array( $e['result'], $e['action'] ) );
 	}
@@ -1043,10 +1549,10 @@ final class SyncEnvTest extends TestCase {
 	}
 
 	public function testARootOfTheSameCountIsCountedNeverEqual(): void {
-		$f = array( 'attached' => 0, 'bytes' => 10, 'complete' => true, 'env' => 'files', 'files' => 2, 'ref' => 'languages', 'skipped' => 0, 'why' => null );
+		$f = array( 'attached' => 0, 'bytes' => 10, 'complete' => true, 'env' => 'files', 'files' => 2, 'ref' => 'uploads', 'skipped' => 0, 'why' => null );
 		$e = self::one( $f, $f );
 		self::assertSame( array( 'counted', 'locked', 'Z8b' ), array( $e['result'], $e['action'], $e['stage'] ) );
-		self::assertSame( array( 'env:languages', 'Z8b' ), self::lock_of( $e ) );
+		self::assertSame( array( 'env:uploads', 'Z8b' ), self::lock_of( $e ) );
 		self::assertArrayNotHasKey( 'why', $e['staging'] );
 		$e = self::one( $f, array( 'files' => 3 ) + $f );
 		self::assertSame( array( 'differs', array( 'files' ) ), array( $e['result'], $e['differs'] ) );
@@ -1070,28 +1576,28 @@ final class SyncEnvTest extends TestCase {
 
 	public function testEachLockHasItsKeyArtStageAndReason(): void {
 		$cases = array(
-			'plugin'           => self::plugin( '1' ),
-			'theme'            => array( 'active' => true, 'env' => 'theme', 'ref' => 't', 'version' => '1' ),
-			'core'             => array( 'env' => 'core', 'ref' => 'wordpress', 'value' => '7.1.3' ),
-			'mu_plugin'        => array( 'bytes' => 1, 'env' => 'mu_plugin', 'ref' => 'a.php', 'sha256' => str_repeat( 'a', 64 ) ),
-			'table'            => array( 'env' => 'table', 'ref' => 'x', 'rows' => 1, 'schema' => str_repeat( 'a', 64 ) ),
-			'files:languages'  => array( 'attached' => 0, 'bytes' => 1, 'complete' => true, 'env' => 'files', 'files' => 1, 'ref' => 'languages', 'skipped' => 0, 'why' => null ),
-			'files:fonts'      => array( 'attached' => 0, 'bytes' => 1, 'complete' => true, 'env' => 'files', 'files' => 1, 'ref' => 'fonts', 'skipped' => 0, 'why' => null ),
-			'files:mu-plugins' => array( 'attached' => 0, 'bytes' => 1, 'complete' => true, 'env' => 'files', 'files' => 1, 'ref' => 'mu-plugins', 'skipped' => 0, 'why' => null ),
-			'files:uploads'    => array( 'attached' => 0, 'bytes' => 1, 'complete' => true, 'env' => 'files', 'files' => 1, 'ref' => 'uploads', 'skipped' => 0, 'why' => null ),
+			'plugin'        => self::plugin( '1' ),
+			'theme'         => self::unit( 'theme', 't' ),
+			'theme_choice'  => array( 'env' => 'theme_choice', 'ref' => 'theme_choice', 'stylesheet' => 'a', 'template' => 'a' ),
+			'mu_plugin'     => self::file_unit( 'mu_plugin', 'a.php' ),
+			'language'      => self::file_unit( 'language', 'de_CH.mo' ),
+			'font'          => self::file_unit( 'font', 'a.woff2' ),
+			'upload'        => self::file_unit( 'upload', '2026/11/a.pdf' ),
+			'table'         => array( 'env' => 'table', 'ref' => 'x', 'rows' => 1, 'schema' => str_repeat( 'a', 64 ) ),
+			'files:uploads' => array( 'attached' => 0, 'bytes' => 1, 'complete' => true, 'env' => 'files', 'files' => 1, 'ref' => 'uploads', 'skipped' => 0, 'why' => null ),
 		);
 		self::assertSame( array_keys( AB_MCP_Sync_Env::LOCKS ), array_keys( $cases ), 'A case per lock.' );
 		$tables = array( array( 'complete' => true, 'count' => 1, 'env' => 'tables', 'ref' => 'tables' ) );
 		$want   = array(
-			'plugin'           => array( 'env:plugin', 'A11', 'Z8b' ),
-			'theme'            => array( 'env:theme', 'A11', 'Z8b' ),
-			'core'             => array( 'env:wordpress', 'A17', 'Z8b' ),
-			'mu_plugin'        => array( 'env:mu_plugin', 'A21', 'Z8b' ),
-			'table'            => array( 'env:table', 'A16', 'Z8d' ),
-			'files:languages'  => array( 'env:languages', 'A21', 'Z8b' ),
-			'files:fonts'      => array( 'env:fonts', 'A20', 'Z8b' ),
-			'files:mu-plugins' => array( 'env:mu_files', 'A21', 'Z8b' ),
-			'files:uploads'    => array( 'env:uploads', 'A22', 'Z8b' ),
+			'plugin'        => array( 'env:plugin', 'A11', 'Z8b' ),
+			'theme'         => array( 'env:theme', 'A11', 'Z8b' ),
+			'theme_choice'  => array( 'env:theme_choice', 'A9', 'Z8b' ),
+			'mu_plugin'     => array( 'env:mu_plugin', 'A21', 'Z8b' ),
+			'language'      => array( 'env:languages', 'A21', 'Z8b' ),
+			'font'          => array( 'env:fonts', 'A20', 'Z8b' ),
+			'upload'        => array( 'env:upload_files', 'A22', 'Z8b' ),
+			'table'         => array( 'env:table', 'A16', 'Z8d' ),
+			'files:uploads' => array( 'env:uploads', 'A22', 'Z8b' ),
 		);
 		foreach ( $cases as $key => $line ) {
 			$lock = AB_MCP_Sync_Env::LOCKS[ $key ];
@@ -1102,6 +1608,11 @@ final class SyncEnvTest extends TestCase {
 			self::assertSame( array( array( 'key' => $lock['key'], 'stage' => $lock['stage'], 'reason' => $lock['reason'] ) ), $out['entries'][0]['locks'], $key );
 			self::assertSame( array( array( 'key' => $lock['key'], 'stage' => $lock['stage'], 'reason' => $lock['reason'], 'entries' => 1 ) ), $out['blocked'], $key . ': blocked, with how many entries.' );
 		}
+		self::assertSame( array( 'code:live_extra', 'code:link', 'code:theme_root', 'code:own', 'code:live_changed' ), array_keys( AB_MCP_Sync_Env::CODE_LOCKS ) );
+		foreach ( AB_MCP_Sync_Env::CODE_LOCKS as $key => $lock ) {
+			self::assertSame( 'Z8', $lock['stage'], $key . ': no stage lifts it, a person resolves it.' );
+			self::assertStringContainsString( 'new report', $lock['reason'] . ( 'code:theme_root' === $key ? ' new report' : '' ), $key . ': with its way.' );
+		}
 	}
 
 	public function testNothingCountedIsEverEqualAndNothingEqualIsLocked(): void {
@@ -1109,21 +1620,19 @@ final class SyncEnvTest extends TestCase {
 		$lines  = array_values( array_filter( self::lines(), static fn( $l ) => 'page' !== $l['env'] && 'tables' !== $l['env'] && ( 'files' !== $l['env'] || $l['complete'] ) ) );
 		$out    = AB_MCP_Sync_Env::compare( array_merge( $lines, array( $tables ) ), array_merge( $lines, array( $tables ) ) );
 		foreach ( $out['entries'] as $entry ) {
-			if ( in_array( $entry['subtype'], array( 'plugin', 'theme', 'table', 'files' ), true ) || 'wordpress' === $entry['ref'] ) {
-				self::assertNotSame( 'equal', $entry['result'], $entry['subtype'] . ' ' . $entry['ref'] );
-			}
-			if ( in_array( $entry['subtype'], array( 'host', 'core' ), true ) ) {
-				self::assertNotSame( 'equal', $entry['result'], $entry['subtype'] . ' ' . $entry['ref'] . ': a value is shown, never equal.' );
+			if ( in_array( $entry['subtype'], array( 'table', 'files', 'host', 'core' ), true ) ) {
+				self::assertNotSame( 'equal', $entry['result'], $entry['subtype'] . ' ' . $entry['ref'] . ': counted or shown, never equal.' );
 			}
 			if ( 'equal' === $entry['result'] ) {
-				self::assertContains( $entry['subtype'], array( 'mu_plugin', 'dropin' ), 'Equal only by the SHA-256 of a file.' );
+				self::assertContains( $entry['subtype'], array( 'plugin', 'theme', 'mu_plugin', 'language', 'font', 'upload', 'theme_choice', 'dropin', 'core_files' ), 'Equal only by contents.' );
 				self::assertArrayNotHasKey( 'locks', $entry );
 			}
-			if ( in_array( $entry['subtype'], array( 'host', 'dropin' ), true ) ) {
-				self::assertSame( 'host', $entry['action'], $entry['ref'] . ': group U is changed at the host.' );
+			if ( in_array( $entry['subtype'], array( 'host', 'dropin', 'core_files' ), true ) ) {
+				self::assertSame( 'host', $entry['action'], $entry['ref'] . ': changed at the host.' );
 			}
 		}
 		self::assertStringNotContainsString( '"sha256"', (string) json_encode( $out ), 'No hash in an entry.' );
+		self::assertStringNotContainsString( '"hash"', (string) json_encode( $out ) );
 		self::assertStringNotContainsString( '"schema"', (string) json_encode( $out ) );
 		self::assertStringNotContainsString( str_repeat( 'b', 64 ), (string) json_encode( $out ) );
 	}
@@ -1136,24 +1645,18 @@ final class SyncEnvTest extends TestCase {
 			array( 'env' => 'table', 'ref' => 'A', 'rows' => 1, 'schema' => str_repeat( 'a', 64 ) ),
 			self::plugin( '1' ),
 			array( 'env' => 'core', 'ref' => 'wordpress', 'value' => '7.1.3' ),
-			array( 'env' => 'page', 'last' => true, 'ref' => 'page', 'seq' => 1, 'walk' => str_repeat( 'a', 32 ) ),
+			array( 'env' => 'page', 'files' => 'ab-files/1', 'last' => true, 'ref' => 'page', 'seq' => 1, 'walk' => str_repeat( 'a', 32 ) ),
 		);
 		$out = AB_MCP_Sync_Env::compare( $lines, array( $tables ) );
-		self::assertSame( array( 'core:wordpress', 'plugin:shop/shop.php', 'table:A', 'table:b' ), array_map( static fn( $e ) => $e['subtype'] . ':' . $e['ref'], $out['entries'] ), 'No page, no list of tables.' );
-		self::assertSame( array( 'entries' => 4, 'results' => array( 'only_staging' => 4 ), 'actions' => array( 'locked' => 4 ) ), $out['counts'] );
+		self::assertSame( array( 'core:wordpress', 'plugin:shop', 'table:A', 'table:b' ), array_map( static fn( $e ) => $e['subtype'] . ':' . $e['ref'], $out['entries'] ), 'No page, no list of tables.' );
+		self::assertSame( array( 'entries' => 4, 'results' => array( 'only_staging' => 4 ), 'actions' => array( 'host' => 1, 'locked' => 3 ) ), $out['counts'] );
 	}
 
 	public function testTheLoaderAndTheDropInsAreThoseOfWordPressAndThisPlugin(): void {
 		self::assertSame( \AB_MCP_Preview_Protection::LOADER_FILE, AB_MCP_Sync_Env::LOADER );
 		self::assertSame( array( 'advanced-cache.php', 'db.php', 'db-error.php', 'install.php', 'maintenance.php', 'object-cache.php', 'php-error.php', 'fatal-error-handler.php' ), AB_MCP_Sync_Env::DROPINS, 'The integration suite holds them against _get_dropins().' );
 		$this->file( 'site.php', '<?php' );
-		$this->file( 'notes.txt', 'x' );
-		$this->file( AB_MCP_Sync_Env::LOADER, '<?php' );
 		$this->file( 'sub/inner.php', '<?php' );
-		$this->file( 'b.php', '<?php' );
-		mkdir( $this->dir . '/folder.php' );
-		self::assertSame( array( 'b.php', 'site.php' ), AB_MCP_Sync_Env::mu_files( $this->dir ), 'The PHP files WordPress loads, without the loader and a folder named so, by strcmp().' );
-		self::assertSame( array(), AB_MCP_Sync_Env::mu_files( $this->dir . '/none' ) );
 		self::assertSame( array( 'bytes' => 5, 'sha256' => hash( 'sha256', '<?php' ) ), AB_MCP_Sync_Env::file_hash( $this->dir . '/site.php' ) );
 		self::assertSame( array( 'bytes' => null, 'sha256' => null ), AB_MCP_Sync_Env::file_hash( $this->dir . '/sub' ), 'A folder is no file.' );
 	}

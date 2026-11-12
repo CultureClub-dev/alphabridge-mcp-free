@@ -194,8 +194,27 @@ final class SyncKindsTest extends TestCase {
 			// Files.
 			'files:attachment'               => array( 'files', 'attachment', 'z8', 'attachment', null ),
 			'files:*'                        => array( 'files', 'languages', 'locked', null, 'Z8b' ),
+
+			// The parts of the pairs of units and the core (Z8b branch 2).
+			'part:plugin:files'              => array( 'part', 'plugin:files', 'z8', 'code', null ),
+			'part:plugin:activation'         => array( 'part', 'plugin:activation', 'z8', 'activation', null ),
+			'part:theme:files'               => array( 'part', 'theme:files', 'z8', 'code', null ),
+			'part:theme_choice:activation'   => array( 'part', 'theme_choice:activation', 'z8', 'theme_choice', null ),
+			'part:mu_plugin:files'           => array( 'part', 'mu_plugin:files', 'locked', null, 'Z8b' ),
+			'part:language:files'            => array( 'part', 'language:files', 'locked', null, 'Z8b' ),
+			'part:font:files'                => array( 'part', 'font:files', 'locked', null, 'Z8b' ),
+			'part:upload:files'              => array( 'part', 'upload:files', 'locked', null, 'Z8b' ),
+			'part:*'                         => array( 'part', 'theme:activation', 'locked', null, 'Z8b' ),
+			'core:*'                         => array( 'core', 'files', 'locked', null, 'Z8' ),
 		);
 	}
+
+	/**
+	 * The kinds the table gives the parts of the pairs of units (Z8b, E2,
+	 * Z38), whose engines come with the code of the site (branches 5 and 6):
+	 * not registered in this version.
+	 */
+	private const LATER = array( 'code', 'activation', 'theme_choice' );
 
 	#[DataProvider( 'ownership' )]
 	public function testEachObjectTypeHasTheOwnerTheTableGivesIt( string $resolver, string $asked, string $status, ?string $kind, ?string $stage ): void {
@@ -499,7 +518,7 @@ final class SyncKindsTest extends TestCase {
 		// Every entry without a stage that names a kind is one of these.
 		$table = array();
 		foreach ( AB_MCP_Sync_Kinds::OWNERSHIP as $key => $entry ) {
-			if ( null !== $entry['kind'] && ! isset( $entry['stage'] ) ) {
+			if ( null !== $entry['kind'] && ! isset( $entry['stage'] ) && ! in_array( $entry['kind'], self::LATER, true ) ) {
 				$table[ $entry['kind'] ][] = $key;
 			}
 		}

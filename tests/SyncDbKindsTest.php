@@ -53,7 +53,9 @@ final class SyncDbKindsTest extends TestCase {
 			}
 		}
 		foreach ( AB_MCP_Sync_Kinds::OWNERSHIP as $key => $entry ) {
-			if ( isset( $entry['stage'] ) || null === $entry['kind'] ) {
+			// The parts of the pairs of units belong to the kinds of the code
+			// of the site (Z8b branches 5 and 6), no kind of the database.
+			if ( isset( $entry['stage'] ) || null === $entry['kind'] || 0 === strpos( $key, 'part:' ) ) {
 				continue;
 			}
 			self::assertSame( $entry['kind'], $claims[ $key ] ?? null, "$key belongs to a kind of this branch." );
