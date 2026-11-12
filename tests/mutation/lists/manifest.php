@@ -18,7 +18,9 @@
  * folder (rtrim() of the empty text is no folder: locked either way). A
  * read() that fails in file() is listed (z1-read-false): where the next
  * read() gives bytes, the file would be hashed whole without the clause
- * (Codex round 1, B7, corrected).
+ * (Codex round 1, B7, corrected). same() in file() takes no type, so that a
+ * call that failed is not caught as a TypeError in place of its clause
+ * (Behebung 3, z1-fstat-after).
  *
  * @package AlphaBridge_MCP
  */
@@ -110,28 +112,19 @@ return array(
 		'id'      => 'manifest/z1-after-same',
 		'clause'  => 'Z1 file(): fstat() after the reading the same as before (a writer)',
 		'file'    => $fm,
-		'search'  => '$read !== (int) $before[\'size\'] || ! self::same( $before, $after ) || false === $again',
-		'replace' => '$read !== (int) $before[\'size\'] || false === $again',
+		'search'  => '$read !== (int) $before[\'size\'] || ! self::same( $before, $after ) || ! self::same( $before, $again )',
+		'replace' => '$read !== (int) $before[\'size\'] || ! self::same( $before, $again )',
 		'run'     => $unit( 'SyncFileManifestTest', 'testEachFieldOfTheIdentityBeforeWhileAndAfterTheReadingCounts' ),
 		'expect'  => '/testEachFieldOfTheIdentityBeforeWhileAndAfterTheReadingCounts/',
 	),
 	array(
 		'id'      => 'manifest/z1-again-same',
-		'clause'  => 'Z1 file(): the path names the same file after the reading (no rename over it; GitHub-Codex P2)',
+		'clause'  => 'Z1 file(): the path names the same file after the reading, and a file at all (no rename over it, not gone; GitHub-Codex P2)',
 		'file'    => $fm,
-		'search'  => 'false === $again || ! self::same( $before, $again ) ) {',
-		'replace' => 'false === $again ) {',
+		'search'  => '! self::same( $before, $after ) || ! self::same( $before, $again ) ) {',
+		'replace' => '! self::same( $before, $after ) ) {',
 		'run'     => $unit( 'SyncFileManifestTest', 'testAWriterWhileTheFileIsReadGivesNoHash' ),
 		'expect'  => '/testAWriterWhileTheFileIsReadGivesNoHash/',
-	),
-	array(
-		'id'      => 'manifest/z1-again-gone',
-		'clause'  => 'Z1 file(): the path gone after the reading is changed, never hashed',
-		'file'    => $fm,
-		'search'  => 'false === $again || ! self::same( $before, $again ) ) {',
-		'replace' => '! self::same( $before, $again ) ) {',
-		'run'     => $unit( 'SyncFileManifestTest', 'testEachFieldOfTheIdentityBeforeWhileAndAfterTheReadingCounts' ),
-		'expect'  => '/testEachFieldOfTheIdentityBeforeWhileAndAfterTheReadingCounts/',
 	),
 	array(
 		'id'      => 'manifest/z1-identity-dev',

@@ -43,11 +43,9 @@ e('z1-before-same', 'Z1 file(): the file opened is the one lstat() saw: device, 
 e('z1-read-size', 'Z1 file(): as many bytes as the file has (halb gelesen)', FM,
   "$read !== (int) $before['size'] || ! self::same( $before, $after )", "! self::same( $before, $after )", 'man', 'testAReadingCutShortGivesNoHash')
 e('z1-after-same', 'Z1 file(): fstat() after the reading the same as before (a writer)', FM,
-  "$read !== (int) $before['size'] || ! self::same( $before, $after ) || false === $again", "$read !== (int) $before['size'] || false === $again", 'man', 'testEachFieldOfTheIdentityBeforeWhileAndAfterTheReadingCounts')
-e('z1-again-same', 'Z1 file(): the path names the same file after the reading (no rename over it; GitHub-Codex P2)', FM,
-  "false === $again || ! self::same( $before, $again ) ) {", "false === $again ) {", 'man', 'testAWriterWhileTheFileIsReadGivesNoHash')
-e('z1-again-gone', 'Z1 file(): the path gone after the reading is changed, never hashed', FM,
-  "false === $again || ! self::same( $before, $again ) ) {", "! self::same( $before, $again ) ) {", 'man', 'testEachFieldOfTheIdentityBeforeWhileAndAfterTheReadingCounts')
+  "$read !== (int) $before['size'] || ! self::same( $before, $after ) || ! self::same( $before, $again )", "$read !== (int) $before['size'] || ! self::same( $before, $again )", 'man', 'testEachFieldOfTheIdentityBeforeWhileAndAfterTheReadingCounts')
+e('z1-again-same', 'Z1 file(): the path names the same file after the reading, and a file at all (no rename over it, not gone; GitHub-Codex P2)', FM,
+  "! self::same( $before, $after ) || ! self::same( $before, $again ) ) {", "! self::same( $before, $after ) ) {", 'man', 'testAWriterWhileTheFileIsReadGivesNoHash')
 for field in ('dev', 'ino', 'size', 'mtime', 'ctime'):
     e('z1-identity-' + field, 'Z1 IDENTITY: ' + field + ' counts in every comparison of the file (Behebung 2)', FM,
       "\tconst IDENTITY = array( 'dev', 'ino', 'size', 'mtime', 'ctime' );", "\tconst IDENTITY = array( " + ', '.join("'" + f + "'" for f in ('dev', 'ino', 'size', 'mtime', 'ctime') if f != field) + " );", 'man', 'testEachFieldOfTheIdentityBeforeWhileAndAfterTheReadingCounts')
@@ -263,7 +261,9 @@ out = ['<?php', '/**', ' * The clauses of the manifests of code and files (Z8b b
        ' * folder (rtrim() of the empty text is no folder: locked either way). A',
        ' * read() that fails in file() is listed (z1-read-false): where the next',
        ' * read() gives bytes, the file would be hashed whole without the clause',
-       ' * (Codex round 1, B7, corrected).', ' *',
+       ' * (Codex round 1, B7, corrected). same() in file() takes no type, so that a',
+       ' * call that failed is not caught as a TypeError in place of its clause',
+       ' * (Behebung 3, z1-fstat-after).', ' *',
        ' * @package AlphaBridge_MCP', ' */', '',
        "$unit = static fn( string $class, string $test ): array => array( 'vendor/bin/phpunit', '--no-progress', '--filter', '/[^A-Za-z0-9_]' . $class . '::' . $test . '( |$)/' );",
        "$it   = static fn( string $class, string $test ): array => array( 'vendor/bin/phpunit', '--no-progress', '-c', 'tests/integration/phpunit.xml.dist', '--filter', '/[^A-Za-z0-9_]' . $class . '::' . $test . '( |$)/' );",

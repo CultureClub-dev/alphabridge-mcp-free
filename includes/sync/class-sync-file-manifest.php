@@ -455,7 +455,7 @@ final class AB_MCP_Sync_File_Manifest {
 		// The same bytes from its start to its end, while nothing wrote it,
 		// and the path still names that very file (no rename over it).
 		$again = $calls->lstat( $path );
-		if ( $read !== (int) $before['size'] || ! self::same( $before, $after ) || false === $again || ! self::same( $before, $again ) ) {
+		if ( $read !== (int) $before['size'] || ! self::same( $before, $after ) || ! self::same( $before, $again ) ) {
 			return self::end( $acc, 'changed' );
 		}
 		$acc['entries'][] = array( (string) $rel, $read, hash_final( $ctx ), (int) $before['mtime'] );
