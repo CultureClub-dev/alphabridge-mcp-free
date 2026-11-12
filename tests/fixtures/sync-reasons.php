@@ -654,7 +654,7 @@ return array(
 		'option:blog_public'                     => array(
 			'why'  => 'The search engine visibility; the preview protection of a staging site sets it to 0 (B6).',
 			'core' => array( array( 'wp-admin/includes/schema.php', 474, "'blog_public'" ) ),
-			'plugin' => array( array( 'includes/class-preview-protection.php', 452, "update_option( 'blog_public', 0 );" ) ),
+			'plugin' => array( array( 'includes/class-preview-protection.php', 461, "update_option( 'blog_public', 0 );" ) ),
 			'plan' => 'Konzept 3',
 		),
 		'option:admin_email'                     => array(
