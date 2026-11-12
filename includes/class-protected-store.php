@@ -2456,14 +2456,22 @@ final class AB_MCP_Protected_Store {
 			return $p === $dir || 0 === strpos( $p, $dir . '/' );
 		};
 		$remove  = static function ( $p, $top ) use ( &$remove, $root, $guard, $calls, $tmp_dir, $how, $under ) {
-			$stat = $calls->lstat( $p );
-			if ( false === $stat ) {
-				return true;
-			}
+			// What a mark names stays, and every folder above it stays as a
+			// folder (its other entries may go): asked before anything is
+			// said of the path, so nothing named counts as removed.
+			$holds = false;
 			foreach ( $guard['named'] as $named ) {
 				if ( $under( $p, $named ) ) {
 					return false;
 				}
+				$holds = $holds || $under( $named, $p );
+			}
+			$stat = $calls->lstat( $p );
+			if ( false === $stat ) {
+				// Gone only where its folder lists it not; a path that
+				// cannot be read is no proof of absence (fail closed).
+				$names = $calls->scandir( dirname( $p ) );
+				return ! $holds && false !== $names && ! in_array( basename( $p ), $names, true );
 			}
 			$noted = isset( self::$noted[ $p ] );
 			if ( ! $noted && ! $under( $p, $root ) ) {
@@ -2511,7 +2519,7 @@ final class AB_MCP_Protected_Store {
 						return false;
 					}
 				}
-				$gone = $calls->rmdir( $p );
+				$gone = ! $holds && $calls->rmdir( $p );
 			} else {
 				$gone = $calls->unlink( $p );
 			}
