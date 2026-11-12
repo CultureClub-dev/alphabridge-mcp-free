@@ -145,24 +145,32 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
   (B3 der Codex-Runde 1); die Alternative, unbegrenzt zu warten, liesse die Deinstallation im Zeitlimit der Anfrage
   enden.
 
-### G-3-10 Neuer Direktzugriff ausserhalb der Liste der Eingänge
+### G-3-10 Neuer Direktzugriff ausserhalb der Tabelle der Eingänge
 
-- **Fundstelle:** `AB_MCP_Protected_Store::RETENTION_INPUTS` mit `kept()`, `inputs()` und `sweep()`, dazu
-  `delete_path()`, `guard()` und `read_mark()`, `includes/class-protected-store.php`.
-- **Quelle:** Behebung 3 von Zweig 3, Fassung 2a, Abschnitt 6.5 (Entscheid der Lead: kein Tokenizer-Wächter).
-- **Was:** `kept()` nimmt nur die Eingänge der Liste an, je geprüft ganz oder `null`, und ein Test wird rot, wenn ein
-  Eingang der Liste keinen Vertragsfall hat (`ProtectedStoreTest::testKeptTakesTheInputsOfItsListAndNoValueBeside`).
-  Was `sweep()` und `delete_path()` heute neben `kept()` selbst lesen (die Auflistung eines Bereichs, `lstat()` einer
-  fremden Begleitdatei, einer temporären Datei und eines Markenordners, die Marken über `guard()` und `read_mark()`),
-  steht mit seinem Fehlzustand und seinem Test in der Abdeckungstabelle des Berichts von Zweig 3 (Behebung 3).
-  Ein neuer Wert, der den Entscheid trägt und nicht über die Liste kommt, fällt dagegen durch keinen Test auf: etwa ein
-  neuer Dateizugriff in `sweep()` oder `delete_path()` (eine Zeit aus `stat()`, eine neue Auflistung), eine neue
-  Option oder ein neuer Filter. Ihn finden nur die Durchsicht und Codex. Ein Wächter über den PHP-Tokenizer hätte eine
-  Liste aller erlaubten Aufrufe in diesen Funktionen gebraucht und die Ein- und Ausgaben der Ablage über ein Objekt
-  geführt; die Liste der erlaubten Aufrufe wäre selbst die Lücke geworden («Wächterliste ist die Grenze»).
+- **Fundstelle:** `AB_MCP_Store_Inputs::TABLE` (`includes/class-store-inputs.php`) mit der Formlesestelle
+  `AB_MCP_Shape::read()` (`includes/class-shape.php`); die Verbraucher in `includes/class-protected-store.php`
+  (`kept()`, `inputs()`, `sweep()`, `delete_path()`, `guard()`, `read_mark()`, `sidecar()`, `entries()`, `stock()`,
+  `open()`, `put()` mit `held()`), `includes/class-store-budget.php` (`book()`, `release()`, `package_refusal()`,
+  `bookings()`), `includes/sync/class-sync-backup.php` (`group()`, `fits()`), `includes/sync/class-sync-schema.php`
+  (`open_runs()`, `backup_rows()`, `keep_until()`) und `AB_MCP_Sync_Run::now()`.
+- **Quelle:** Behebung 3 von Zweig 3, Fassung 2a, Abschnitt 6.5 (Entscheid der Lead: kein Tokenizer-Wächter);
+  Behebung 4 (Option C1, Entscheid Thomas 12.11.): die Tabelle ersetzt die Liste `RETENTION_INPUTS` als Ort aller
+  Eingänge von Aufbewahrung, Schutz, Dateizeiten, Budget und Uhr der Läufe.
+- **Was:** Jeder dieser Eingänge steht als Zeile (Verbraucher, Quelle, Feld, Form) in der Tabelle und wird über
+  `AB_MCP_Store_Inputs::read()` gelesen: Wert in seiner Form oder `null`, ohne Cast und ohne Ersatzwert. Der erzeugte
+  Gegentest (`StoreInputsTest`, Unit und Integration) liest die Tabelle aus dem Code, verlangt für jede Zeile einen
+  Treiber bis zu ihrem Verbraucher und führt jede falsche Form ihrer Form dorthin; eine neue Zeile ist rot, bis ein
+  Treiber sie erreicht. Zwei Grenzen bleiben. Erstens fällt ein neuer Wert, der einen Entscheid trägt und nicht über
+  die Tabelle kommt, durch keinen Test auf: ein neuer Dateizugriff in `sweep()`, `delete_path()` oder `held()`, eine
+  neue Option, ein neuer Filter, ein Cast an einer Entscheidstelle. Ihn finden nur die Durchsicht und Codex. Ein Wächter
+  über den PHP-Tokenizer hätte eine Liste aller erlaubten Aufrufe gebraucht, die selbst die Lücke geworden wäre
+  («Wächterliste ist die Grenze»). Zweitens folgen die erzeugten falschen Formen der Form im Code: wer eine Form
+  lockert, lockert sie mit. Dagegen halten die festen falschen Formen je Treiber («fixed: ...» nach der Liste des
+  Auftrags), die gültigen Werte je Zeile und die Mutationseinträge der Formen (`ablage/table-*`, `ablage/a1r-*`,
+  `ablage/input-*`); eine gelockerte Form, gegen die kein fester Fall steht, bleibt unbemerkt.
 - **Trifft Normalfall:** nein. Es ist eine Grenze der Prüfung, kein Fehlweg im Code: ein Zugriff dieser Art entsteht
-  nur mit einer künftigen Änderung. Die Durchsicht einer Änderung an diesen Funktionen prüft, ob jeder neue Wert des
-  Entscheids über `RETENTION_INPUTS` kommt.
+  nur mit einer künftigen Änderung. Die Durchsicht einer Änderung an diesen Funktionen prüft, ob jeder neue Wert eines
+  Entscheids als Zeile der Tabelle kommt und ob eine geänderte Form ihren festen Fall hat.
 
 ## Übernommen aus Zweig 2 (`bericht-zweig-2.md`, Abschnitt Grenzkandidaten; G-M9 aus «Behebung 2»)
 

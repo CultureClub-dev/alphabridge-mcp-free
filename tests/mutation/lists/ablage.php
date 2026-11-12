@@ -41,8 +41,8 @@
  * finite, the keys of a map, a record, extra, nullable, the round trip),
  * forms of rows (ablage/table-*) and their consumers (ablage/c1-*: the
  * count of the groups a mark that cannot be read keeps (B1), the clock of
- * the runs (B2, B3), the refusals of fits(), book() and package_refusal(),
- * the stock read whole). ablage/input-rows-load-run is gone with the
+ * the runs (B2, B3), the refusals of fits(), book(), package_refusal()
+ * and put() where held() cannot count, the stock read whole). ablage/input-rows-load-run is gone with the
  * require it held (backup_rows() reads the clock through the table).
  *
  * Not listed, with why: the Throwable caught around guard() and the walk in
@@ -74,7 +74,18 @@
  * its string, and NULL as '', no JSON, so the round trip fails and the
  * answer is unknown all the same); the listing of
  * marks/ in sweep() (a listing that fails there fails in guard() too, which
- * then keeps marks/ whole; the case holds the outcome).
+ * then keeps marks/ whole; the case holds the outcome). Of Behebung 4: the
+ * digits of the row sidecar.count (in_range() takes a field of a sidecar
+ * only as the very value read, === $value, so a row of the sidecar that took
+ * digits would change no entry); the least of an element of reverts (the
+ * runs of reverts become keys of retention.backups, whose key form refuses
+ * 0 and below, so the answer stays unknown); null !== $now in the qualified
+ * close of set_state() (the column forward_closed_at is NOT NULL, and a NULL
+ * written there is 0 in the database WordPress runs with, which drops the
+ * strict modes: the same as no qualified close, as the case reads it); the
+ * trailer of a gzip file that opens but cannot be read in raw_size() (no
+ * case makes fread() of an open file of the store fail; a file that cannot
+ * be opened is ablage/c1-held-open).
  *
  * @package AlphaBridge_MCP
  */
@@ -1351,15 +1362,6 @@ return array_merge(
 			'expect'  => '/testASidecarThatLacksAFieldOfItsRowOrHoldsItNullOrOfAnotherTypeOrRangeKeepsItsGroup/',
 		),
 		array(
-			'id'      => 'ablage/a1r-count-type',
-			'clause'  => 'sidecar.count: a count is a whole number, never a string of digits (the form of its row)',
-			'file'    => $si,
-			'search'  => "'field'    => 'user_id, declared, used of a sidecar, run_id of out, in and reports',\n\t\t\t'form'     => self::COUNT,",
-			'replace' => "'field'    => 'user_id, declared, used of a sidecar, run_id of out, in and reports',\n\t\t\t'form'     => array( 'type' => 'int', 'digits' => true, 'min' => 0, 'max' => null ),",
-			'run'     => $it( 'StoreInputsTest', 'testEveryWrongFormOfARowReachesItsConsumerInTheStoreAsUnknown' ),
-			'expect'  => '/testEveryWrongFormOfARowReachesItsConsumerInTheStoreAsUnknown/',
-		),
-		array(
 			'id'      => 'ablage/a1r-run-range',
 			'clause'  => 'sidecar.run: an area of runs only takes a run of 1 or more (the form of its row)',
 			'file'    => $si,
@@ -1764,15 +1766,6 @@ return array_merge(
 			'file'    => $si,
 			'search'  => "\t\t\t\t\t\t\t'empty'     => false,\n\t\t\t\t\t\t\t'item'      => self::RUN,\n\t\t\t\t\t\t\t'unique'    => true,",
 			'replace' => "\t\t\t\t\t\t\t'empty'     => false,\n\t\t\t\t\t\t\t'item'      => self::DB_RUN,\n\t\t\t\t\t\t\t'unique'    => true,",
-			'run'     => $unit( 'StoreInputsTest', 'testEveryWrongFormOfARowReachesItsConsumerAsUnknownAndEveryValidOneAsAValue' ),
-			'expect'  => '/testEveryWrongFormOfARowReachesItsConsumerAsUnknownAndEveryValidOneAsAValue/',
-		),
-		array(
-			'id'      => 'ablage/input-plan-needed-min',
-			'clause'  => 'runs.plan: an entry of reverts below 1 is no run (the form of its row)',
-			'file'    => $si,
-			'search'  => "\t\t\t\t\t\t\t'empty'     => false,\n\t\t\t\t\t\t\t'item'      => self::RUN,\n\t\t\t\t\t\t\t'unique'    => true,",
-			'replace' => "\t\t\t\t\t\t\t'empty'     => false,\n\t\t\t\t\t\t\t'item'      => array( 'type' => 'int', 'digits' => false, 'min' => null, 'max' => null ),\n\t\t\t\t\t\t\t'unique'    => true,",
 			'run'     => $unit( 'StoreInputsTest', 'testEveryWrongFormOfARowReachesItsConsumerAsUnknownAndEveryValidOneAsAValue' ),
 			'expect'  => '/testEveryWrongFormOfARowReachesItsConsumerAsUnknownAndEveryValidOneAsAValue/',
 		),
@@ -2444,15 +2437,6 @@ return array_merge(
 			'expect'  => '/testEveryWrongFormOfARowReachesItsConsumerAsUnknownAndEveryValidOneAsAValue/',
 		),
 		array(
-			'id'      => 'ablage/c1-clock-qualified',
-			'clause'  => 'set_state(): no qualified close of a time not known',
-			'file'    => $ru,
-			'search'  => "if ( \$qualified && null !== \$now ) {",
-			'replace' => "if ( \$qualified ) {",
-			'run'     => $it( 'StoreRemoverTest', 'testAClockThatGivesNoTimeStoresNoPeriodAtTheCloseAndTheBackupsStay' ),
-			'expect'  => '/testAClockThatGivesNoTimeStoresNoPeriodAtTheCloseAndTheBackupsStay/',
-		),
-		array(
 			'id'      => 'ablage/c1-clock-create',
 			'clause'  => 'create(): no run made with a clock that gives no time',
 			'file'    => $ru,
@@ -2487,6 +2471,60 @@ return array_merge(
 			'replace' => "\t\t\t\tif ( false !== \$calls->lstat( \$root . '/' . \$area ) ) {\n\t\t\t\t\t\$unknown += 0;",
 			'run'     => $it( 'StoreRemoverTest', 'testASidecarOrAnAreaThatIsNoPlainFileOrFolderIsNotReadAndCountsUnknown' ),
 			'expect'  => '/testASidecarOrAnAreaThatIsNoPlainFileOrFolderIsNotReadAndCountsUnknown/',
+		),
+		array(
+			'id'      => 'ablage/c1-held-names',
+			'clause'  => 'held(): a folder of a group that cannot be listed counts nothing known, never 0 (budget.held_names)',
+			'file'    => $ps,
+			'search'  => "\t\t\$names = AB_MCP_Store_Inputs::read( 'budget.held_names', \$calls->scandir( \$dir ) );\n\t\tif ( null === \$names ) {\n\t\t\treturn null;\n\t\t}",
+			'replace' => "\t\t\$names = AB_MCP_Store_Inputs::read( 'budget.held_names', \$calls->scandir( \$dir ) );\n\t\tif ( null === \$names ) {\n\t\t\treturn 0;\n\t\t}",
+			'run'     => $it( 'StoreInputsTest', 'testEveryWrongFormOfARowReachesItsConsumerInTheStoreAsUnknown' ),
+			'expect'  => '/testEveryWrongFormOfARowReachesItsConsumerInTheStoreAsUnknown/',
+		),
+		array(
+			'id'      => 'ablage/c1-held-size',
+			'clause'  => 'held(): a file whose size is not of its form counts nothing known, never 0 (budget.file_size)',
+			'file'    => $ps,
+			'search'  => "\$raw  = null === \$size ? null : self::raw_size( \$path, \$size );",
+			'replace' => "\$raw  = null === \$size ? 0 : self::raw_size( \$path, \$size );",
+			'run'     => $it( 'StoreInputsTest', 'testEveryWrongFormOfARowReachesItsConsumerInTheStoreAsUnknown' ),
+			'expect'  => '/testEveryWrongFormOfARowReachesItsConsumerInTheStoreAsUnknown/',
+		),
+		array(
+			'id'      => 'ablage/c1-held-open',
+			'clause'  => 'raw_size(): a file that cannot be opened has no raw size, never its size on disk',
+			'file'    => $ps,
+			'search'  => "\t\tif ( false === \$handle ) {\n\t\t\treturn null;\n\t\t}",
+			'replace' => "\t\tif ( false === \$handle ) {\n\t\t\treturn \$size;\n\t\t}",
+			'run'     => $it( 'StoreRemoverTest', 'testAGroupWhoseFilesCannotAllBeCountedTakesNoFile' ),
+			'expect'  => '/testAGroupWhoseFilesCannotAllBeCountedTakesNoFile/',
+		),
+		array(
+			'id'      => 'ablage/c1-put-used-unknown',
+			'clause'  => 'put(): where the files of a group cannot all be counted, nothing is written',
+			'file'    => $ps,
+			'search'  => "\t\t\t\tif ( null === \$held ) {\n\t\t\t\t\treturn self::used_unknown();",
+			'replace' => "\t\t\t\tif ( false ) {\n\t\t\t\t\treturn self::used_unknown();",
+			'run'     => $it( 'StoreRemoverTest', 'testAGroupWhoseFilesCannotAllBeCountedTakesNoFile' ),
+			'expect'  => '/testAGroupWhoseFilesCannotAllBeCountedTakesNoFile/',
+		),
+		array(
+			'id'      => 'ablage/c1-put-used-unknown-it',
+			'clause'  => 'put(): where the files of a group cannot all be counted, nothing is written (each wrong form of the listing and the sizes)',
+			'file'    => $ps,
+			'search'  => "\t\t\t\tif ( null === \$held ) {\n\t\t\t\t\treturn self::used_unknown();",
+			'replace' => "\t\t\t\tif ( false ) {\n\t\t\t\t\treturn self::used_unknown();",
+			'run'     => $it( 'StoreInputsTest', 'testEveryWrongFormOfARowReachesItsConsumerInTheStoreAsUnknown' ),
+			'expect'  => '/testEveryWrongFormOfARowReachesItsConsumerInTheStoreAsUnknown/',
+		),
+		array(
+			'id'      => 'ablage/table-file-size',
+			'clause'  => 'budget.file_size: a size below 0 is no size (the form of its row)',
+			'file'    => $si,
+			'search'  => "'field'    => 'the bytes of a file of a group: its size, of a gzip file the raw size its trailer names (ISIZE)',\n\t\t\t'form'     => self::COUNT,",
+			'replace' => "'field'    => 'the bytes of a file of a group: its size, of a gzip file the raw size its trailer names (ISIZE)',\n\t\t\t'form'     => array( 'type' => 'int', 'digits' => false, 'min' => null, 'max' => null ),",
+			'run'     => $it( 'StoreInputsTest', 'testEveryWrongFormOfARowReachesItsConsumerInTheStoreAsUnknown' ),
+			'expect'  => '/testEveryWrongFormOfARowReachesItsConsumerInTheStoreAsUnknown/',
 		),
 	)
 );

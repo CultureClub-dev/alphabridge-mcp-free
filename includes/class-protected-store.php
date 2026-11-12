@@ -79,7 +79,8 @@
  * folder by device and inode, so neither a linked area nor a linked group
  * reaches outside it. What a package holds is counted from the files that
  * are there as well (held()), so a file left by a request that died before
- * it was counted still counts.
+ * it was counted still counts; where they cannot all be counted, no file is
+ * written (Behebung 4 of Z8b branch 3: a count that fails is no 0).
  * Packages and reports are kept a day; a group bound to a run that is not
  * closed is not cleaned while it is not (AB_MCP_Sync_Schema::open_runs()).
  * The backups of a run follow the retention contract of decision 20
@@ -973,7 +974,9 @@ final class AB_MCP_Protected_Store {
 	 * renamed into place, under the lock. A package takes no more than it
 	 * declared, counted as the larger of what its sidecar booked and what its
 	 * files hold (held()): a file a request put in place before it died,
-	 * without counting it, still counts.
+	 * without counting it, still counts. Where the files cannot all be
+	 * counted (held() null), nothing is written: what the group holds is not
+	 * known, for the package's declared bytes nor for the backups of a run.
 	 *
 	 * @param string $area    Area.
 	 * @param string $gid     Group.
@@ -1008,7 +1011,11 @@ final class AB_MCP_Protected_Store {
 					return new WP_Error( 'ab_mcp_store_exists', 'This group holds a file of that name already, and a file of the protected store is written once. Use another name for it.' );
 				}
 				$bytes = strlen( $payload );
-				$used  = max( $entry['used'], self::held( $dir ) );
+				$held  = self::held( $dir );
+				if ( null === $held ) {
+					return self::used_unknown();
+				}
+				$used = max( $entry['used'], $held );
 				if ( in_array( $area, self::PACKAGES, true ) && $used + $bytes > $entry['declared'] ) {
 					return new WP_Error( 'ab_mcp_store_over_declared', sprintf( 'The package was opened for %1$d bytes and holds %2$d; this file (%3$d bytes) would take it past them. Use a package opened with the size it needs.', $entry['declared'], $used, $bytes ) );
 				}
@@ -4058,31 +4065,67 @@ final class AB_MCP_Protected_Store {
 	/**
 	 * The raw bytes the files of a group hold: of a gzip file the size its
 	 * trailer names (ISIZE: exact below 4 GiB, and a file holds at most
-	 * FILE_MAX), of another file its size.
+	 * FILE_MAX), of another file its size. Null where they cannot all be
+	 * counted: the folder not listed, a size or a trailer not read, each in
+	 * the form of its row of AB_MCP_Store_Inputs::TABLE (Behebung 4: a
+	 * listing that failed was no file, a size that failed 0).
 	 *
 	 * @param string $dir Folder of the group.
-	 * @return int
+	 * @return int|null
 	 */
 	private static function held( $dir ) {
+		$calls = self::calls();
+		$names = AB_MCP_Store_Inputs::read( 'budget.held_names', $calls->scandir( $dir ) );
+		if ( null === $names ) {
+			return null;
+		}
 		$sum = 0;
-		foreach ( (array) scandir( $dir ) as $file ) {
+		foreach ( $names as $file ) {
 			$path = $dir . '/' . $file;
-			if ( ! self::valid_name( (string) $file ) || ! self::plain( $path, 'file' ) ) {
+			if ( ! self::valid_name( $file ) || ! self::plain( $path, 'file' ) ) {
 				continue;
 			}
-			$size   = (int) @filesize( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
-			$raw    = $size;
-			$handle = @fopen( $path, 'rb' ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_fopen
-			if ( $handle ) {
-				if ( $size >= 18 && "\x1f\x8b" === fread( $handle, 2 ) && 0 === fseek( $handle, -4, SEEK_END ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fread
-					$isize = unpack( 'V', (string) fread( $handle, 4 ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fread
-					$raw   = is_array( $isize ) ? (int) $isize[1] : $size;
-				}
-				fclose( $handle ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
+			$size = AB_MCP_Store_Inputs::read( 'budget.file_size', AB_MCP_Shape::field( $calls->lstat( $path ), 'size' ) );
+			$raw  = null === $size ? null : self::raw_size( $path, $size );
+			if ( null === $raw ) {
+				return null;
 			}
 			$sum += $raw;
 		}
 		return $sum;
+	}
+
+	/**
+	 * The raw bytes of one file of a group: of a gzip file the size its
+	 * trailer names, of another file its size; null where the file cannot be
+	 * opened or its trailer read.
+	 *
+	 * @param string $path Path.
+	 * @param int    $size Its size on disk.
+	 * @return int|null
+	 */
+	private static function raw_size( $path, $size ) {
+		$handle = @fopen( $path, 'rb' ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_fopen
+		if ( false === $handle ) {
+			return null;
+		}
+		$raw = $size;
+		if ( $size >= 18 && "\x1f\x8b" === fread( $handle, 2 ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fread
+			$tail = 0 === fseek( $handle, -4, SEEK_END ) ? fread( $handle, 4 ) : false; // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fread
+			$isize = is_string( $tail ) && 4 === strlen( $tail ) ? unpack( 'V', $tail ) : false;
+			$raw   = AB_MCP_Store_Inputs::read( 'budget.file_size', AB_MCP_Shape::field( $isize, 1 ) );
+		}
+		fclose( $handle ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
+		return $raw;
+	}
+
+	/**
+	 * The refusal where the files of a group cannot all be counted.
+	 *
+	 * @return WP_Error
+	 */
+	private static function used_unknown() {
+		return new WP_Error( 'ab_mcp_store_used_unknown', __( 'The files the group holds in the protected store could not all be counted (its folder could not be listed, or the size of a file in it could not be read), so what it holds is not known and nothing was written. Ask the host to check the rights of the folder of the store, then try again.', 'alphabridge-mcp' ) );
 	}
 
 	/** @return WP_Error */
