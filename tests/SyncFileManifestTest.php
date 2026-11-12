@@ -489,6 +489,14 @@ final class SyncFileManifestTest extends TestCase {
 			}
 		}
 		self::assertSame( $whole, $this->read()['hash'], 'Read as it is: the same hash.' );
+		// fstat() after the reading fails: no hash, not whole, unreadable
+		// (not «changed»), and the path is not asked again (Behebung 3: the
+		// clause of its own, z1-fstat-after).
+		$seam = $this->seam( array( array( 'method' => 'fstat', 'nth' => 2, 'kind' => 'return', 'value' => false ) ) );
+		$read = $this->read();
+		self::assertSame( array( false, 'unreadable', null, array() ), array( $read['complete'], $read['cause'], $read['hash'], $read['entries'] ), 'fstat() after the reading gave no answer.' );
+		self::assertSame( array( 'lstat', 'lstat', 'lstat', 'open', 'fstat', 'read', 'read', 'fstat', 'close' ), array_values( array_filter( array_column( $seam->calls, 'method' ), static fn( $m ) => 'names' !== $m && 'limit' !== $m ) ), 'Ended at that call: no lstat() of the path after it.' );
+		AB_MCP_Test_Seam::restore_all();
 		// The path gone after the reading: changed, never hashed.
 		$this->seam( array( array( 'method' => 'lstat', 'nth' => 4, 'kind' => 'return', 'value' => false ) ) );
 		self::assertSame( 'changed', $this->read()['cause'], 'The path names no file after the reading.' );

@@ -466,13 +466,17 @@ final class AB_MCP_Sync_File_Manifest {
 
 	/**
 	 * Whether two of lstat() and fstat() say the same of a file: its device,
-	 * inode, size, mtime and ctime (IDENTITY).
+	 * inode, size, mtime and ctime (IDENTITY). Not the same where one of them
+	 * is no answer (false): no type of the parameters, so that this says
+	 * «not the same» rather than throw (a Throwable would be caught by
+	 * unit() as unreadable and so stand in for the clauses of file() that
+	 * name a call that failed; Behebung 3).
 	 *
-	 * @param array $a One.
-	 * @param array $b The other.
+	 * @param array|false $a One.
+	 * @param array|false $b The other.
 	 * @return bool
 	 */
-	private static function same( array $a, array $b ) {
+	private static function same( $a, $b ) {
 		foreach ( self::IDENTITY as $field ) {
 			if ( ! isset( $a[ $field ], $b[ $field ] ) || (int) $a[ $field ] !== (int) $b[ $field ] ) {
 				return false;
