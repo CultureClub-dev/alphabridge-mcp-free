@@ -595,7 +595,7 @@ return array(
 		'search'  => "} elseif ( \$source === \$text && preg_match( '#^\\[command\\]\\S*git log -1 --format=%H\$#D', \$before ) ) {",
 		'replace' => "} elseif ( false ) {",
 		'run'     => $test,
-		'expect'  => "/testAPushNamesTheSourceByGitLog/",
+		'expect'  => "/testAPushToMainNamesTheSourceByGitLogInThePluginsCheckout/",
 		'helper'  => true,
 	),
 	array(
@@ -605,7 +605,7 @@ return array(
 		'search'  => "} elseif ( \$source === \$text && preg_match( '#^\\[command\\]\\S*git log -1 --format=%H\$#D', \$before ) ) {",
 		'replace' => "} elseif ( \$source === \$text ) {",
 		'run'     => $test,
-		'expect'  => "/testAPushNamesTheSourceByGitLog/",
+		'expect'  => "/testTheIdWithoutTheCommandOfGitLogIsNoProof/",
 		'helper'  => true,
 	),
 	array(
