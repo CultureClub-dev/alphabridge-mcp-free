@@ -413,6 +413,36 @@ final class AB_MCP_Protected_Store {
 		'marks'   => 86400,
 	);
 
+	/**
+	 * What a sidecar holds, per area (Behebung 2 of Z8b branch 3, A1): the one
+	 * table of its fields, each with its type and the range of its values,
+	 * read by sidecar() and kept() and checked by open() and bind() before
+	 * they write (whole()). Every writer sets every field of its area's row:
+	 * open() writes all of them, put(), bind() and close() the entry they
+	 * read with one field changed. A sidecar that lacks a field, holds null
+	 * there or a value of another type or outside its range is 'unknown',
+	 * and its group stays: nothing is made up.
+	 *
+	 * The types: 'format' (FORMAT), 'gid' (32 hex), 'area' (the area of the
+	 * row), 'time' (a whole number above 0), 'count' (a whole number of 0 or
+	 * more), 'run' (a whole number of 1 or more), 'label' (the rule of
+	 * open()), 'text' (a string), 'bool'. The run of a group: open() writes
+	 * run_id in every area, 0 where no run is given, a group without a run.
+	 * An area whose row says 'count' knows such groups: out and reports (a
+	 * package, a report of no run), in (a package bound to its run later,
+	 * AB_MCP_Sync_Push::bind_package()). An area whose row says 'run' knows
+	 * groups of a run only, so 0 is 'unknown' there: backups (a backup
+	 * belongs to its run, AB_MCP_Sync_Backup::group()) and stage (the stage
+	 * of a run, plan E4).
+	 */
+	const SIDECAR = array(
+		'out'     => array( 'format' => 'format', 'gid' => 'gid', 'area' => 'area', 'created' => 'time', 'user_id' => 'count', 'run_id' => 'count', 'declared' => 'count', 'used' => 'count', 'label' => 'label', 'closed' => 'bool', 'binding' => 'text' ),
+		'in'      => array( 'format' => 'format', 'gid' => 'gid', 'area' => 'area', 'created' => 'time', 'user_id' => 'count', 'run_id' => 'count', 'declared' => 'count', 'used' => 'count', 'label' => 'label', 'closed' => 'bool', 'binding' => 'text' ),
+		'reports' => array( 'format' => 'format', 'gid' => 'gid', 'area' => 'area', 'created' => 'time', 'user_id' => 'count', 'run_id' => 'count', 'declared' => 'count', 'used' => 'count', 'label' => 'label', 'closed' => 'bool', 'binding' => 'text' ),
+		'backups' => array( 'format' => 'format', 'gid' => 'gid', 'area' => 'area', 'created' => 'time', 'user_id' => 'count', 'run_id' => 'run', 'declared' => 'count', 'used' => 'count', 'label' => 'label', 'closed' => 'bool', 'binding' => 'text' ),
+		'stage'   => array( 'format' => 'format', 'gid' => 'gid', 'area' => 'area', 'created' => 'time', 'user_id' => 'count', 'run_id' => 'run', 'declared' => 'count', 'used' => 'count', 'label' => 'label', 'closed' => 'bool', 'binding' => 'text' ),
+	);
+
 	/** Seconds after which a proof is made again. */
 	const RECHECK = 86400;
 
@@ -833,13 +863,19 @@ final class AB_MCP_Protected_Store {
 			'area'     => (string) $area,
 			'created'  => time(),
 			'user_id'  => (int) get_current_user_id(),
-			'run_id'   => isset( $meta['run_id'] ) ? max( 0, (int) $meta['run_id'] ) : 0,
+			// No run given: 0, a group without a run; a run given is taken
+			// as it is, and whole() below refuses one the table does not
+			// hold (Behebung 2, A1: never made 0).
+			'run_id'   => array_key_exists( 'run_id', $meta ) ? $meta['run_id'] : 0,
 			'declared' => isset( $meta['declared'] ) ? max( 0, (int) $meta['declared'] ) : 0,
 			'used'     => 0,
 			'label'    => $label,
 			'closed'   => false,
 			'binding'  => self::binding( isset( $meta['binding'] ) ? $meta['binding'] : '' ),
 		);
+		if ( ! self::whole( $entry ) ) {
+			return self::bad_run();
+		}
 		$id     = self::install_id();
 		$result = self::writing(
 			$root,
@@ -1053,7 +1089,8 @@ final class AB_MCP_Protected_Store {
 	 *
 	 * @param string $area   Area.
 	 * @param string $gid    Group.
-	 * @param int    $run_id Run (0 to unbind).
+	 * @param int    $run_id Run: a whole number of 1 or more, or 0 to unbind
+	 *                       where the area knows groups without a run (SIDECAR).
 	 * @return true|WP_Error
 	 */
 	public static function bind( $area, $gid, $run_id ) {
@@ -1074,7 +1111,12 @@ final class AB_MCP_Protected_Store {
 					return $found;
 				}
 				list( $side, , $entry ) = $found;
-				$entry['run_id'] = max( 0, (int) $run_id );
+				$entry['run_id'] = $run_id;
+				if ( ! self::whole( $entry ) ) {
+					// A run the table does not hold for the area: refused,
+					// never made 0 (Behebung 2, A1).
+					return self::bad_run();
+				}
 				return true === self::write_entry( $root, $side, $entry ) ? true : new WP_Error( 'ab_mcp_store_write', 'The group could not be bound to its run in the protected store. Ask the host to check that the folder is writable, then try again.' );
 			}
 		);
@@ -1169,7 +1211,9 @@ final class AB_MCP_Protected_Store {
 	 * is not closed, orphans and temp files of interrupted writes.
 	 *
 	 * @param int|null $now Time (for tests); now when null.
-	 * @return array{removed:int,kept:int} Groups removed, groups kept for a run.
+	 * @return array{removed:int,kept:int,unknown:int} Groups removed, groups
+	 *         kept for a run, groups kept because their sidecar cannot be read
+	 *         or is not as the table SIDECAR says.
 	 */
 	public static function cleanup( $now = null ) {
 		$now = null === $now ? time() : (int) $now;
@@ -1177,6 +1221,7 @@ final class AB_MCP_Protected_Store {
 		$sum = array(
 			'removed' => 0,
 			'kept'    => 0,
+			'unknown' => 0,
 		);
 		foreach ( self::own_folders( $id ) as $root ) {
 			$done = self::locked(
@@ -1188,6 +1233,7 @@ final class AB_MCP_Protected_Store {
 			if ( is_array( $done ) ) {
 				$sum['removed'] += $done['removed'];
 				$sum['kept']    += $done['kept'];
+				$sum['unknown'] += $done['unknown'];
 			}
 		}
 		return $sum;
@@ -1213,6 +1259,10 @@ final class AB_MCP_Protected_Store {
 	 * That an open mark keeps a tree beyond this is Z37 (delete_path()), not
 	 * this function.
 	 *
+	 * An entry whose area, time made or run is not as the table SIDECAR says
+	 * (missing, null, another type, outside its range, or 0 in an area of
+	 * groups of a run only) is kept: nothing is made up (Behebung 2, A1).
+	 *
 	 * @param array                $entry       Entry of the group.
 	 * @param int                  $now         Time.
 	 * @param int[]|null           $open_runs   AB_MCP_Sync_Schema::open_runs().
@@ -1220,11 +1270,16 @@ final class AB_MCP_Protected_Store {
 	 * @return bool
 	 */
 	public static function kept( array $entry, $now, $open_runs, $backup_runs = null ) {
-		$run = isset( $entry['run_id'] ) ? (int) $entry['run_id'] : 0;
+		if ( ! self::whole( $entry, array( 'area', 'created', 'run_id' ) ) ) {
+			// What the retention decides by is not there as the table says
+			// (Behebung 2, A1): nothing is made up, the group stays.
+			return true;
+		}
+		$run = $entry['run_id'];
 		if ( $run > 0 && ( null === $open_runs || in_array( $run, $open_runs, true ) ) ) {
 			return true;
 		}
-		if ( 'backups' === (string) $entry['area'] && $run > 0 ) {
+		if ( 'backups' === $entry['area'] && $run > 0 ) {
 			if ( null === $backup_runs ) {
 				return true;
 			}
@@ -1232,7 +1287,7 @@ final class AB_MCP_Protected_Store {
 				return (bool) $backup_runs[ $run ];
 			}
 		}
-		return ( (int) $now - (int) $entry['created'] ) < self::keep( (string) $entry['area'] );
+		return ( (int) $now - $entry['created'] ) < self::keep( $entry['area'] );
 	}
 
 	/**
@@ -3564,13 +3619,14 @@ final class AB_MCP_Protected_Store {
 	 * @param string $root Folder.
 	 * @param string $id   Id.
 	 * @param int    $now  Time.
-	 * @return array{removed:int,kept:int}
+	 * @return array{removed:int,kept:int,unknown:int}
 	 */
 	private static function sweep( $root, $id, $now ) {
 		$open    = AB_MCP_Sync_Schema::open_runs();
 		$backups = AB_MCP_Sync_Schema::backup_rows( $now );
 		$removed = 0;
 		$kept    = 0;
+		$unknown = 0;
 		$calls   = self::calls();
 		foreach ( self::AREAS as $area ) {
 			$dir   = self::way( $root, array( $area ) );
@@ -3583,8 +3639,10 @@ final class AB_MCP_Protected_Store {
 				if ( preg_match( '/^([0-9a-f]{40})\.json\z/', $file, $m ) && self::plain( $path, 'file' ) ) {
 					$state = self::sidecar( $path, $area );
 					if ( 'unknown' === $state[0] ) {
-						// It cannot be read, or is no sidecar of the format:
-						// nothing says whose it is, so its group stays (A1).
+						// It cannot be read, or is no sidecar of the table:
+						// nothing says whose it is or how long it is kept, so
+						// its group stays, and the clean-up counts it (A1).
+						++$unknown;
 						continue;
 					}
 					$entry = $state[1];
@@ -3639,7 +3697,9 @@ final class AB_MCP_Protected_Store {
 			}
 			$mark = self::read_mark( $root, $mid );
 			$at   = null === $mark ? self::calls()->lstat( $marks . '/' . $mid ) : false;
-			$old  = is_array( $mark ) ? ( 'closed' === $mark['state'] && ( $now - (int) $mark['closed'] ) >= self::KEEP['marks'] ) : ( false !== $at && ( $now - (int) $at['mtime'] ) >= self::KEEP['marks'] );
+			// The time a mark closed only as it holds it, a whole number
+			// above 0 (Behebung 2: never made up).
+			$old  = is_array( $mark ) ? ( 'closed' === $mark['state'] && is_int( $mark['closed'] ) && $mark['closed'] > 0 && ( $now - $mark['closed'] ) >= self::KEEP['marks'] ) : ( false !== $at && ( $now - (int) $at['mtime'] ) >= self::KEEP['marks'] );
 			if ( $old ) {
 				self::delete_path( $root, $marks . '/' . $mid );
 			}
@@ -3647,6 +3707,7 @@ final class AB_MCP_Protected_Store {
 		return array(
 			'removed' => $removed,
 			'kept'    => $kept,
+			'unknown' => $unknown,
 		);
 	}
 
@@ -3765,12 +3826,13 @@ final class AB_MCP_Protected_Store {
 	}
 
 	/**
-	 * A sidecar read through the seam, by what can be said of it (Behebung 1,
-	 * A1): 'own' (an entry of the format for this area), 'other' (read whole
-	 * and of the format, but for another area of the store, named by itself),
-	 * or 'unknown' (it cannot be read, is a link or too large, is no JSON, or
-	 * a field kept() decides by is missing or not of its type: the area, the
-	 * time it was made, the run where named). No field is made up: what
+	 * A sidecar read through the seam, by what can be said of it (Behebung 1
+	 * and 2, A1): 'own' (an entry of its area, every field of its row of
+	 * SIDECAR there and in its range), 'other' (such an entry, but of another
+	 * area of the store, named by itself), or 'unknown' (it cannot be read,
+	 * is a link or too large, is no JSON, or a field of its row is missing,
+	 * null, of another type or outside its range: whole()). The entry is the
+	 * fields of its row as the file holds them: no field is made up, and what
 	 * cannot be said keeps its group. Whether an 'own' entry is this
 	 * installation's is sweep()'s question (group_name()). A sidecar that is
 	 * not there is not read here: sweep() reads only what its area lists.
@@ -3781,26 +3843,79 @@ final class AB_MCP_Protected_Store {
 	 */
 	private static function sidecar( $side, $area ) {
 		$raw = self::calls()->read( $side, 4096 );
-		$e   = false === $raw ? null : json_decode( (string) $raw, true );
-		if ( ! is_array( $e ) || ! isset( $e['format'], $e['gid'], $e['area'], $e['created'] ) || self::FORMAT !== $e['format'] || ! is_string( $e['gid'] ) || ! preg_match( '/^[0-9a-f]{32}\z/', $e['gid'] ) || ! in_array( $e['area'], self::AREAS, true ) || ! is_int( $e['created'] ) || ( isset( $e['run_id'] ) && ! is_int( $e['run_id'] ) ) ) {
+		$e   = false === $raw ? null : json_decode( $raw, true );
+		if ( ! self::whole( $e ) ) {
 			return array( 'unknown', null );
 		}
-		return array(
-			$area === $e['area'] ? 'own' : 'other',
-			array(
-				'format'   => self::FORMAT,
-				'gid'      => $e['gid'],
-				'area'     => $e['area'],
-				'created'  => $e['created'],
-				'user_id'  => isset( $e['user_id'] ) ? (int) $e['user_id'] : 0,
-				'run_id'   => isset( $e['run_id'] ) ? max( 0, $e['run_id'] ) : 0,
-				'declared' => isset( $e['declared'] ) ? max( 0, (int) $e['declared'] ) : 0,
-				'used'     => isset( $e['used'] ) ? max( 0, (int) $e['used'] ) : 0,
-				'label'    => isset( $e['label'] ) && is_string( $e['label'] ) ? $e['label'] : '',
-				'closed'   => isset( $e['closed'] ) && true === $e['closed'],
-				'binding'  => self::binding( isset( $e['binding'] ) ? $e['binding'] : '' ),
-			),
-		);
+		return array( $area === $e['area'] ? 'own' : 'other', array_intersect_key( $e, self::SIDECAR[ $e['area'] ] ) );
+	}
+
+	/**
+	 * Whether an entry holds the fields of its area's row of SIDECAR, each of
+	 * its type and in its range (Behebung 2, A1): false where the area is not
+	 * one of the table, or a field is missing, null, of another type or
+	 * outside its range.
+	 *
+	 * @param mixed         $e    Entry.
+	 * @param string[]|null $only Only these fields of the row (kept(): what it
+	 *                            decides by); null: every field.
+	 * @return bool
+	 */
+	private static function whole( $e, $only = null ) {
+		if ( ! is_array( $e ) || ! isset( $e['area'] ) || ! is_string( $e['area'] ) || ! isset( self::SIDECAR[ $e['area'] ] ) ) {
+			return false;
+		}
+		foreach ( self::SIDECAR[ $e['area'] ] as $field => $type ) {
+			if ( null !== $only && ! in_array( $field, $only, true ) ) {
+				continue;
+			}
+			if ( ! array_key_exists( $field, $e ) || ! self::in_range( $e[ $field ], $type, $e['area'] ) ) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * Whether a value is of a type of SIDECAR and in its range.
+	 *
+	 * @param mixed  $value Value.
+	 * @param string $type  Type.
+	 * @param string $area  Area of the row.
+	 * @return bool
+	 */
+	private static function in_range( $value, $type, $area ) {
+		switch ( $type ) {
+			case 'format':
+				return self::FORMAT === $value;
+			case 'gid':
+				return is_string( $value ) && 1 === preg_match( '/^[0-9a-f]{32}\z/', $value );
+			case 'area':
+				return $area === $value;
+			case 'time':
+				return is_int( $value ) && $value > 0;
+			case 'count':
+				return is_int( $value ) && $value >= 0;
+			case 'run':
+				return is_int( $value ) && $value >= 1;
+			case 'label':
+				return is_string( $value ) && 1 === preg_match( '/^[A-Za-z0-9._:-]{0,191}\z/', $value );
+			case 'text':
+				return is_string( $value );
+			case 'bool':
+				return is_bool( $value );
+		}
+		return false;
+	}
+
+	/**
+	 * The refusal of a run the table SIDECAR does not hold for the area of a
+	 * group (open(), bind()).
+	 *
+	 * @return WP_Error
+	 */
+	private static function bad_run() {
+		return new WP_Error( 'ab_mcp_store_run', __( 'The run of a group of the protected store is a whole number: 1 or more for the run it belongs to, or 0 for none, which only groups of out, in and reports may have; a group of backups or stage always belongs to its run. Nothing was written. Pass such a run_id.', 'alphabridge-mcp' ) );
 	}
 
 	/**
