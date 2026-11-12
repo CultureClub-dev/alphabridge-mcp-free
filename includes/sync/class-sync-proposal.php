@@ -82,6 +82,13 @@
  * makes it unclear. A pair whose object an inventory does not hold waits as
  * it is (waiting).
  *
+ * THE UNITS (Z8b branch 2b): with environment, the packages of the
+ * environment of the staging site, this site reads its own environment as
+ * well once its inventory is read, and the proposal holds the units of both
+ * sides (AB_MCP_Sync_Unit_Proposal: plugins, themes, the theme that runs).
+ * The pairs of units go through it only, never through the match of the
+ * objects nor the canon change.
+ *
  * WHERE IT LIES. A group of the area reports of the protected store
  * (AB_MCP_Protected_Store, kept a day), made by the account that proposes,
  * one per connection (a new proposal removes the earlier ones of its
@@ -113,14 +120,136 @@ require_once __DIR__ . '/class-sync-pairs.php';
 require_once __DIR__ . '/class-sync-db-kinds.php';
 require_once __DIR__ . '/class-sync-option-schema.php';
 require_once __DIR__ . '/class-sync-said.php';
+require_once __DIR__ . '/class-sync-unit-proposal.php';
+
+/**
+ * The calls of a proposal to the outside (Z8b branch 2b, plan 8.3: the files
+ * of the proposals in the protected store, the reading of the environment of
+ * both sides): the real ones.
+ */
+final class AB_MCP_Sync_Proposal_Calls {
+
+	/**
+	 * A new group of the area reports.
+	 *
+	 * @param string $area Area.
+	 * @param array  $meta label.
+	 * @return string|WP_Error
+	 */
+	public function open( $area, array $meta ) {
+		return AB_MCP_Protected_Store::open( $area, $meta );
+	}
+
+	/**
+	 * Remove a group.
+	 *
+	 * @param string $area Area.
+	 * @param string $gid  Group.
+	 * @return mixed
+	 */
+	public function remove( $area, $gid ) {
+		return AB_MCP_Protected_Store::remove( $area, $gid );
+	}
+
+	/**
+	 * The groups of an area.
+	 *
+	 * @param string $area Area.
+	 * @return array[]|WP_Error
+	 */
+	public function groups( $area ) {
+		return AB_MCP_Protected_Store::groups( $area );
+	}
+
+	/**
+	 * The files of a group.
+	 *
+	 * @param string $area Area.
+	 * @param string $gid  Group.
+	 * @return array|WP_Error
+	 */
+	public function files( $area, $gid ) {
+		return AB_MCP_Protected_Store::files( $area, $gid );
+	}
+
+	/**
+	 * A file of a group, read against its SHA-256.
+	 *
+	 * @param string $area Area.
+	 * @param string $gid  Group.
+	 * @param string $name Name.
+	 * @param string $sha  SHA-256.
+	 * @return string|WP_Error
+	 */
+	public function get( $area, $gid, $name, $sha ) {
+		return AB_MCP_Protected_Store::get( $area, $gid, $name, $sha );
+	}
+
+	/**
+	 * Write a file of a group.
+	 *
+	 * @param string $area Area.
+	 * @param string $gid  Group.
+	 * @param string $name Name.
+	 * @param string $text Text.
+	 * @return mixed|WP_Error
+	 */
+	public function put( $area, $gid, $name, $text ) {
+		return AB_MCP_Protected_Store::put( $area, $gid, $name, $text );
+	}
+
+	/**
+	 * The environment of the staging site from its packages, one whole
+	 * series, each manifest checked again.
+	 *
+	 * @param string[] $ids Package ids, in the order of their series.
+	 * @return array|WP_Error
+	 */
+	public function environment( array $ids ) {
+		require_once __DIR__ . '/class-sync-report.php';
+		return AB_MCP_Sync_Report::environment( $ids );
+	}
+
+	/**
+	 * The environment of this site, the next part in the group.
+	 *
+	 * @param array    $found      The group.
+	 * @param float    $start      When the call began.
+	 * @param WP_Error $concurrent The refusal where its files are not as one call after the other wrote them.
+	 * @return array|WP_Error
+	 */
+	public function live_environment( array $found, $start, WP_Error $concurrent ) {
+		require_once __DIR__ . '/class-sync-report.php';
+		return AB_MCP_Sync_Report::live_environment( $found, $start, $concurrent );
+	}
+}
 
 /**
  * Class AB_MCP_Sync_Proposal
  */
 final class AB_MCP_Sync_Proposal {
 
-	/** The format of the files of a proposal. */
-	const FORMAT = 'ab-sync-proposal/1';
+	/** The calls to the outside (the seam); only the tests put another object here. */
+	private static $naht_sync_proposal = null;
+
+	/**
+	 * The calls object: the stand-in of a test, else the real calls.
+	 *
+	 * @return AB_MCP_Sync_Proposal_Calls
+	 */
+	private static function calls() {
+		return self::$naht_sync_proposal ?? new AB_MCP_Sync_Proposal_Calls();
+	}
+
+	/**
+	 * Back to the real calls.
+	 */
+	public static function forget() {
+		self::$naht_sync_proposal = null;
+	}
+
+	/** The format of the files of a proposal (2: with the environment of both sides and the entries of units, Z8b branch 2b). */
+	const FORMAT = 'ab-sync-proposal/2';
 
 	/** The label of its group in the area reports. */
 	const LABEL = 'proposal';
@@ -148,6 +277,9 @@ final class AB_MCP_Sync_Proposal {
 
 	/** Packages of one proposal at most. */
 	const MAX_PACKAGES = 100;
+
+	/** Packages of the environment of the staging site at most (one series, as AB_MCP_Sync_Report::MAX_ENVIRONMENT). */
+	const MAX_ENVIRONMENT = 50;
 
 	/** Bytes of one file of lines at most. */
 	const SLICE = 8388608;
@@ -186,7 +318,13 @@ final class AB_MCP_Sync_Proposal {
 	 * wp_site_pairs action propose: begin a proposal from the packages, go on
 	 * with one, or give a page of one that is done.
 	 *
-	 * @param array $a packages (to begin) or proposal_id (to go on or page); after.
+	 * With environment (the packages of the environment of the staging site,
+	 * wp_site_export with purpose=env, one whole series in its order), this
+	 * site reads its own environment as well, once its inventory is read, and
+	 * the proposal holds the units of both sides (AB_MCP_Sync_Unit_Proposal,
+	 * Z8b branch 2b).
+	 *
+	 * @param array $a packages (to begin), environment (with it), or proposal_id (to go on or page); after.
 	 * @return array|WP_Error
 	 */
 	public static function propose( array $a ) {
@@ -209,31 +347,50 @@ final class AB_MCP_Sync_Proposal {
 			/* translators: %d: the most packages a proposal takes. */
 			return new WP_Error( 'ab_mcp_sync_pairs_packages', sprintf( __( 'A proposal begins with packages: the package_ids of the inventory of the staging site this site took over completely with wp_site_import_chunk, each once, at most %d. Pass them, or proposal_id to go on with a proposal.', 'alphabridge-mcp' ), self::MAX_PACKAGES ) );
 		}
+		$environment = isset( $a['environment'] ) ? $a['environment'] : array();
+		if ( ! is_array( $environment ) || ! array_is_list( $environment ) || count( $environment ) > self::MAX_ENVIRONMENT || count( array_unique( array_map( 'strval', $environment ) ) ) !== count( $environment ) || array() !== array_intersect( array_map( 'strval', $environment ), array_map( 'strval', $packages ) ) ) {
+			/* translators: %d: the most packages of the environment a proposal takes. */
+			return new WP_Error( 'ab_mcp_sync_pairs_environment', sprintf( __( 'environment names the package_ids of the environment of the staging site this site took over completely (wp_site_export with purpose=env there, wp_site_import_chunk with purpose=env here), each once, at most %d, in the order of their series, and none of the packages of the inventory. Pass them to propose the pairs of plugins and themes as well, or leave environment out.', 'alphabridge-mcp' ), self::MAX_ENVIRONMENT ) );
+		}
 		$staging = self::staging( $packages );
 		if ( is_wp_error( $staging ) ) {
 			return $staging;
+		}
+		$env = array(
+			'lines'   => array(),
+			'expires' => PHP_INT_MAX,
+		);
+		if ( array() !== $environment ) {
+			$env = self::calls()->environment( array_values( array_map( 'strval', $environment ) ) );
+			if ( is_wp_error( $env ) ) {
+				return $env;
+			}
 		}
 		$gone = self::replace_own();
 		if ( is_wp_error( $gone ) ) {
 			return $gone;
 		}
-		$gid = AB_MCP_Protected_Store::open( 'reports', array( 'label' => self::LABEL ) );
+		$gid = self::calls()->open( 'reports', array( 'label' => self::LABEL ) );
 		if ( is_wp_error( $gid ) ) {
 			return $gid;
 		}
 		$head = array(
-			'canon'      => AB_MCP_Sync_Canon::VERSION,
-			'connection' => self::connection(),
-			'created'    => self::now(),
-			'expires'    => min( $staging['expires'], self::now() + AB_MCP_Protected_Store::KEEP['reports'] ),
-			'format'     => self::FORMAT,
-			'packages'   => array_values( array_map( 'strval', $packages ) ),
-			'print'      => (string) AB_MCP_Sync_Anchor::pair_print(),
-			'source_id'  => $source,
+			'canon'       => AB_MCP_Sync_Canon::VERSION,
+			'connection'  => self::connection(),
+			'created'     => self::now(),
+			'environment' => array_values( array_map( 'strval', $environment ) ),
+			'expires'     => min( $staging['expires'], (int) $env['expires'], self::now() + AB_MCP_Protected_Store::KEEP['reports'] ),
+			'format'      => self::FORMAT,
+			// The names the staging site holds, by their SHA-256, before this
+			// site reads its own environment (as a report keeps them).
+			'held'        => AB_MCP_Sync_Env::held_names( $env['lines'] ),
+			'packages'    => array_values( array_map( 'strval', $packages ) ),
+			'print'       => (string) AB_MCP_Sync_Anchor::pair_print(),
+			'source_id'   => $source,
 		);
 		$put  = self::put( $gid, 'h', null, $head );
 		if ( is_wp_error( $put ) ) {
-			AB_MCP_Protected_Store::remove( 'reports', $gid );
+			self::calls()->remove( 'reports', $gid );
 			return $put;
 		}
 		return self::step(
@@ -254,7 +411,7 @@ final class AB_MCP_Sync_Proposal {
 	 * @return true|WP_Error
 	 */
 	private static function replace_own() {
-		$groups = AB_MCP_Protected_Store::groups( 'reports' );
+		$groups = self::calls()->groups( 'reports' );
 		if ( is_wp_error( $groups ) ) {
 			return $groups;
 		}
@@ -263,10 +420,10 @@ final class AB_MCP_Sync_Proposal {
 			if ( self::LABEL !== $group['label'] ) {
 				continue;
 			}
-			$files = AB_MCP_Protected_Store::files( 'reports', $group['gid'] );
+			$files = self::calls()->files( 'reports', $group['gid'] );
 			$head  = is_wp_error( $files ) ? null : self::read_one( $group['gid'], $files, 'h' );
 			if ( is_array( $head ) && isset( $head['connection'] ) && hash_equals( (string) $head['connection'], $mine ) ) {
-				AB_MCP_Protected_Store::remove( 'reports', $group['gid'] );
+				self::calls()->remove( 'reports', $group['gid'] );
 			}
 		}
 		return true;
@@ -285,7 +442,7 @@ final class AB_MCP_Sync_Proposal {
 		if ( ! is_string( $proposal_id ) || 1 !== preg_match( '/^[0-9a-f]{32}\z/', $proposal_id ) ) {
 			return self::unknown();
 		}
-		$groups = AB_MCP_Protected_Store::groups( 'reports' );
+		$groups = self::calls()->groups( 'reports' );
 		if ( is_wp_error( $groups ) ) {
 			return $groups;
 		}
@@ -298,7 +455,7 @@ final class AB_MCP_Sync_Proposal {
 		if ( null === $group ) {
 			return self::unknown();
 		}
-		$files = AB_MCP_Protected_Store::files( 'reports', $proposal_id );
+		$files = self::calls()->files( 'reports', $proposal_id );
 		if ( is_wp_error( $files ) ) {
 			return $files;
 		}
@@ -575,19 +732,40 @@ final class AB_MCP_Sync_Proposal {
 	 * @return array|WP_Error
 	 */
 	private static function step( array $found ) {
-		$seq = count( $found['parts'] );
-		if ( $seq > 0 ) {
-			$cursor = $found['parts'][ $seq - 1 ]['cursor'];
-			if ( null === $cursor ) {
-				return self::finish( $found );
+		$start = null !== AB_MCP_Sync_Env::$clock ? (float) call_user_func( AB_MCP_Sync_Env::$clock ) : microtime( true );
+		$seq   = count( $found['parts'] );
+		if ( 0 === $seq || null !== $found['parts'][ $seq - 1 ]['cursor'] ) {
+			$found = self::read_on( $found, self::FORMAT );
+			if ( is_wp_error( $found ) ) {
+				return $found;
 			}
 		}
-		$found = self::read_on( $found, self::FORMAT );
-		if ( is_wp_error( $found ) ) {
-			return $found;
-		}
 		if ( null === end( $found['parts'] )['cursor'] ) {
-			return self::finish( $found );
+			if ( array() === ( $found['head']['environment'] ?? array() ) ) {
+				return self::finish( $found );
+			}
+			// The environment of this site, in parts of the group, read to
+			// its end (as a report reads it), then the proposal.
+			$env = self::calls()->live_environment( $found, $start, self::concurrent() );
+			if ( is_wp_error( $env ) ) {
+				return $env;
+			}
+			if ( null !== $env['lines'] ) {
+				return self::finish( $found, $env['lines'] );
+			}
+			return array(
+				'proposal_id' => $found['gid'],
+				'done'        => false,
+				'live'        => array(
+					'objects' => array_sum( array_column( $found['parts'], 'objects' ) ),
+				),
+				'environment' => array(
+					'parts' => $env['parts'],
+				),
+				'expires'     => (int) $found['head']['expires'],
+				/* translators: %d: parts of the environment read so far. */
+				'next'        => sprintf( _n( 'The objects of this site are read; its environment (plugins, themes, the theme that runs) is read as far as one call reaches (%d part so far).', 'The objects of this site are read; its environment (plugins, themes, the theme that runs) is read as far as one call reaches (%d parts so far).', (int) $env['parts'], 'alphabridge-mcp' ), $env['parts'] ) . ' Call wp_site_pairs again with action=propose and this proposal_id to go on.',
+			);
 		}
 		$read_so_far = array_sum( array_column( $found['parts'], 'objects' ) );
 		return array(
@@ -635,7 +813,7 @@ final class AB_MCP_Sync_Proposal {
 		if ( is_array( $index ) ) {
 			$text = '';
 			foreach ( $index as $file ) {
-				$slice = is_array( $file ) ? AB_MCP_Protected_Store::get( 'reports', $found['gid'], (string) ( $file['name'] ?? '' ), (string) ( $file['sha'] ?? '' ) ) : null;
+				$slice = is_array( $file ) ? self::calls()->get( 'reports', $found['gid'], (string) ( $file['name'] ?? '' ), (string) ( $file['sha'] ?? '' ) ) : null;
 				if ( ! is_string( $slice ) ) {
 					return null === $concurrent ? self::concurrent() : $concurrent;
 				}
@@ -658,9 +836,9 @@ final class AB_MCP_Sync_Proposal {
 			for ( $at = 0; $at < strlen( $read['index'] ); $at += AB_MCP_Sync_Identity::slice() ) {
 				$slice = (string) substr( $read['index'], $at, AB_MCP_Sync_Identity::slice() );
 				$sha   = hash( 'sha256', $slice );
-				$put   = AB_MCP_Protected_Store::put( 'reports', $found['gid'], self::name( 'i', $seq + 1, $sha ), $slice );
-				if ( is_wp_error( $put ) ) {
-					return $put;
+				$put   = self::calls()->put( 'reports', $found['gid'], self::name( 'i', $seq + 1, $sha ), $slice );
+				if ( ! is_array( $put ) ) {
+					return is_wp_error( $put ) ? $put : self::unwritten();
 				}
 				$index[] = array(
 					'name' => self::name( 'i', $seq + 1, $sha ),
@@ -831,7 +1009,7 @@ final class AB_MCP_Sync_Proposal {
 			if ( $seq !== $at ) {
 				return $refused;
 			}
-			$text  = AB_MCP_Protected_Store::get( 'reports', $gid, $parsed['name'], $parsed['sha'] );
+			$text  = self::calls()->get( 'reports', $gid, $parsed['name'], $parsed['sha'] );
 			$close = is_string( $text ) ? json_decode( $text, true, 64 ) : null;
 			if ( ! is_array( $close ) || $format !== ( $close['format'] ?? null ) || $seq !== ( $close['seq'] ?? null ) ) {
 				return $refused;
@@ -862,7 +1040,7 @@ final class AB_MCP_Sync_Proposal {
 				}
 			}
 			foreach ( $part['files'] as $file ) {
-				$text = AB_MCP_Protected_Store::get( 'reports', $found['gid'], $file['name'], $file['sha'] );
+				$text = self::calls()->get( 'reports', $found['gid'], $file['name'], $file['sha'] );
 				if ( is_wp_error( $text ) ) {
 					return $text;
 				}
@@ -889,41 +1067,64 @@ final class AB_MCP_Sync_Proposal {
 	 * to its end: the staging packages read again, the canon of the active
 	 * pairs, the match, the entries stored.
 	 *
-	 * @param array $found find().
+	 * With the environment of both sides (Z8b branch 2b), the units as well
+	 * (AB_MCP_Sync_Unit_Proposal), the environment of the staging site read
+	 * again from its packages. The pairs of units go through the units only,
+	 * never through the match of the objects nor the canon change (V4 of the
+	 * pre-check of branch 2b).
+	 *
+	 * @param array   $found find().
+	 * @param array[] $env   The lines of the environment of this site (none without environment).
 	 * @return array|WP_Error The first page.
 	 */
-	private static function finish( array $found ) {
+	private static function finish( array $found, array $env = array() ) {
 		$head    = $found['head'];
 		$staging = self::staging( $head['packages'] );
 		if ( is_wp_error( $staging ) ) {
 			return $staging;
 		}
+		$ids      = $head['environment'] ?? array();
+		$env_side = null;
+		if ( array() !== $ids ) {
+			$env_side = self::calls()->environment( $ids );
+			if ( is_wp_error( $env_side ) ) {
+				return $env_side;
+			}
+		}
 		$live = self::live( $found );
 		if ( is_wp_error( $live ) ) {
 			return $live;
 		}
-		$pairs = self::pairs( $head['source_id'] );
-		if ( is_wp_error( $pairs ) ) {
-			return $pairs;
+		$all = self::pairs( $head['source_id'] );
+		if ( is_wp_error( $all ) ) {
+			return $all;
 		}
+		$pairs = self::objects( $all );
 		$canon = self::canon( $pairs, $staging['lines'], $live['lines'] );
 		if ( is_wp_error( $canon ) ) {
 			return $canon;
 		}
 		if ( $canon['rebased'] + $canon['unclear'] > 0 ) {
-			$pairs = self::pairs( $head['source_id'] );
-			if ( is_wp_error( $pairs ) ) {
-				return $pairs;
+			$all = self::pairs( $head['source_id'] );
+			if ( is_wp_error( $all ) ) {
+				return $all;
 			}
+			$pairs = self::objects( $all );
 		}
+		$units  = null === $env_side ? array(
+			'entries' => array(),
+			'paired'  => 0,
+		) : AB_MCP_Sync_Unit_Proposal::entries( $env_side['lines'], $env, $all );
 		$result = self::match(
 			$staging['lines'],
 			$live['lines'],
 			$pairs,
 			static function ( $kind, $subtype ) use ( $staging ) {
 				return self::complete( $staging, $kind, $subtype );
-			}
+			},
+			$units['entries']
 		);
+		$result['paired'] += $units['paired'];
 		$parts  = array();
 		foreach ( array_chunk( $result['entries'], self::PART ) as $i => $chunk ) {
 			$put = self::put( $found['gid'], 'e', $i + 1, $chunk );
@@ -956,6 +1157,10 @@ final class AB_MCP_Sync_Proposal {
 			),
 			'paired'  => $result['paired'],
 			'parts'   => $parts,
+			'units'   => array(
+				'environment' => count( $ids ),
+				'entries'     => count( $units['entries'] ),
+			),
 			'staging' => array(
 				'packages'   => count( $head['packages'] ),
 				'objects'    => $staging['objects'],
@@ -998,9 +1203,10 @@ final class AB_MCP_Sync_Proposal {
 			'canon'       => $index['canon'],
 			'staging'     => $index['staging'],
 			'live'        => $index['live'],
+			'units'       => $index['units'] ?? null,
 			'entries'     => $entries,
 			'next_after'  => $page['more'] ? $last : null,
-			'next'        => __( 'Nothing is paired yet.', 'alphabridge-mcp' ) . ' Show the entries to the person. To pair, call wp_site_pairs with action=confirm, this proposal_id and the entries the person chose: select (entry numbers), categories (all equal, differs or realign entries, after the number in after) or choices (for an uncertain entry: the staging_ref and live_ref the person chose; these are never paired otherwise). equal is paired as active, differs and a chosen pair of other content as unclear (the report then asks which side wins), realign makes the states of both sides now the new bases.' . ( $page['more'] ? ' More entries: call again with action=propose, this proposal_id and after=' . $last . '.' : '' ),
+			'next'        => __( 'Nothing is paired yet.', 'alphabridge-mcp' ) . ' Show the entries to the person. To pair, call wp_site_pairs with action=confirm, this proposal_id and the entries the person chose: select (entry numbers), categories (all equal, differs or realign entries, after the number in after) or choices (for an uncertain entry: the staging_ref and live_ref the person chose; these are never paired otherwise). equal is paired as active, differs and a chosen pair of other content as unclear (the report then asks which side wins), realign makes the states of both sides now the new bases.' . ( empty( $index['units']['entries'] ) ? '' : ' Entries of units (kind plugin, theme or theme_choice, with unit true): equal is paired as active, each part equal. For a unit whose parts differ (differs, or realign with differs), show the person the differences (parts, differs, paths) and the note, and name in units the mode the person chose for each part that differs: live_base (the state of this site of that part is the base of both sides, so the difference is a change on staging) or keep_apart (the difference is kept, never taken over); without it, the unit stays unclear. A unit on one side only, not read whole, locked or held is not paired.' ) . ( $page['more'] ? ' More entries: call again with action=propose, this proposal_id and after=' . $last . '.' : '' ),
 		);
 	}
 
@@ -1012,6 +1218,8 @@ final class AB_MCP_Sync_Proposal {
 	 * @return array
 	 */
 	public static function shown( array $entry ) {
+		// The lines of a unit (with their hashes) only for the confirmation.
+		unset( $entry['lines'] );
 		foreach ( array( 'staging', 'live' ) as $side ) {
 			if ( isset( $entry[ $side ] ) && is_array( $entry[ $side ] ) ) {
 				unset( $entry[ $side ]['hash'], $entry[ $side ]['mapped'], $entry[ $side ]['mapped_possible'], $entry[ $side ]['places'] );
@@ -1028,6 +1236,17 @@ final class AB_MCP_Sync_Proposal {
 			unset( $entry['pair']['snapshot'] );
 		}
 		return $entry;
+	}
+
+	/**
+	 * The pairs of objects among pairs: no pair of a unit
+	 * (AB_MCP_Sync_Pairs::is_unit()).
+	 *
+	 * @param array[] $pairs Pairs.
+	 * @return array[]
+	 */
+	private static function objects( array $pairs ) {
+		return array_values( array_filter( $pairs, static fn( $pair ) => ! AB_MCP_Sync_Pairs::is_unit( $pair['kind'] ) ) );
 	}
 
 	/**
@@ -1153,9 +1372,10 @@ final class AB_MCP_Sync_Proposal {
 	 * @param array[]  $live     Lines of the production side (likewise).
 	 * @param array[]  $pairs    The pairs of the source (AB_MCP_Sync_Pairs::decode()).
 	 * @param callable $complete function( kind, subtype ): bool, whether the staging side is complete.
+	 * @param array[]  $more     Entries of units with their sort (AB_MCP_Sync_Unit_Proposal), ordered and numbered with the others.
 	 * @return array entries (numbered), counts, paired, held (staging, live), subtypes.
 	 */
-	public static function match( array $staging, array $live, array $pairs, callable $complete ) {
+	public static function match( array $staging, array $live, array $pairs, callable $complete, array $more = array() ) {
 		$paired = self::paired( $pairs );
 		$sides  = array(
 			's' => self::items( $staging, 's', $paired['s'] ),
@@ -1217,6 +1437,9 @@ final class AB_MCP_Sync_Proposal {
 			foreach ( self::resolve( isset( $group['s'] ) ? $group['s'] : array(), isset( $group['l'] ) ? $group['l'] : array(), $complete ) as $entry ) {
 				$entries[] = $entry;
 			}
+		}
+		foreach ( $more as $entry ) {
+			$entries[] = $entry;
 		}
 		$order = array_flip( self::CATEGORIES );
 		usort(
@@ -2145,9 +2368,11 @@ final class AB_MCP_Sync_Proposal {
 		$text = AB_MCP_Sync_Canon::encode( $data );
 		$sha  = hash( 'sha256', $text );
 		$name = self::name( $prefix, $seq, $sha );
-		$put  = AB_MCP_Protected_Store::put( 'reports', $gid, $name, $text );
-		if ( is_wp_error( $put ) ) {
-			return $put;
+		$put  = self::calls()->put( 'reports', $gid, $name, $text );
+		if ( ! is_array( $put ) ) {
+			// A write that says neither what it stored nor why not stored
+			// nothing (fail closed).
+			return is_wp_error( $put ) ? $put : self::unwritten();
 		}
 		return array(
 			'name' => $name,
@@ -2179,7 +2404,7 @@ final class AB_MCP_Sync_Proposal {
 		if ( count( $found ) > 1 ) {
 			return null === $concurrent ? self::concurrent() : $concurrent;
 		}
-		$text = AB_MCP_Protected_Store::get( 'reports', $gid, $found[0]['name'], $found[0]['sha'] );
+		$text = self::calls()->get( 'reports', $gid, $found[0]['name'], $found[0]['sha'] );
 		if ( is_wp_error( $text ) ) {
 			return $text;
 		}
@@ -2196,7 +2421,7 @@ final class AB_MCP_Sync_Proposal {
 	 * @return array[]|WP_Error
 	 */
 	public static function read_part( $gid, array $part, $concurrent = null ) {
-		$text = AB_MCP_Protected_Store::get( 'reports', $gid, $part['name'], $part['sha'] );
+		$text = self::calls()->get( 'reports', $gid, $part['name'], $part['sha'] );
 		if ( is_wp_error( $text ) ) {
 			return $text;
 		}
@@ -2285,6 +2510,13 @@ final class AB_MCP_Sync_Proposal {
 	 */
 	private static function mixed() {
 		return new WP_Error( 'ab_mcp_sync_pairs_series', __( 'The packages are not of one inventory: an object is in two of them, or a kind read whole in one package has objects in another (packages of two exports). Pass the packages of one series only: the first wp_site_export without a cursor and each one after with the cursor of the one before, all taken over here; then call again.', 'alphabridge-mcp' ) );
+	}
+
+	/**
+	 * @return WP_Error A file of a proposal was not written.
+	 */
+	private static function unwritten() {
+		return new WP_Error( 'ab_mcp_sync_pairs_unwritten', __( 'A file of this proposal could not be written into the protected store, so nothing of it is kept as done. Call wp_site_pairs with action=propose and this proposal_id again; if it keeps failing, check the protected store on the page AlphaBridge → Staging.', 'alphabridge-mcp' ) );
 	}
 
 	/**

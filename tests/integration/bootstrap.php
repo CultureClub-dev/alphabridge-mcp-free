@@ -65,5 +65,7 @@ require __DIR__ . '/support/class-it-sync-steps.php';
 require_once __DIR__ . '/support/class-test-wporg.php';
 require_once __DIR__ . '/support/class-it-process.php';
 require_once __DIR__ . '/support/class-it-handweg.php';
+// Z8b branch 2b: a row of a pair of a unit put as it is (the bases a case judges against).
+require_once __DIR__ . '/support/class-it-pair-rows.php';
 require_once AB_MCP_DIR . 'includes/sync/class-sync-db-kinds.php';
 require_once AB_MCP_DIR . 'includes/sync/class-sync-media.php';

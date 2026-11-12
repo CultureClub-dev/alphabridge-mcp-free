@@ -448,18 +448,25 @@ final class AB_MCP_Sync_Report {
 	 * them. A part is stored with the rules of both sites: a name the
 	 * staging site holds (held in the head) by its SHA-256 only.
 	 *
-	 * @param array $found find().
-	 * @param float $start When the call began.
+	 * Also the environment of this site for a proposal of pairs of units
+	 * (AB_MCP_Sync_Proposal, Z8b branch 2b), in its group, with its refusal
+	 * where the files are not as one call after the other wrote them.
+	 *
+	 * @param array         $found      find().
+	 * @param float         $start      When the call began.
+	 * @param WP_Error|null $concurrent The refusal where its files are not as
+	 *                                  one call after the other wrote them;
+	 *                                  that of a report when null.
 	 * @return array{lines:array[]|null,parts:int}|WP_Error lines null: not read to its end yet.
 	 */
-	private static function live_environment( array $found, $start ) {
+	public static function live_environment( array $found, $start, $concurrent = null ) {
 		if ( array() === ( $found['head']['environment'] ?? array() ) ) {
 			return array(
 				'lines' => array(),
 				'parts' => 0,
 			);
 		}
-		$parts = self::env_parts( $found['gid'] );
+		$parts = self::env_parts( $found['gid'], null === $concurrent ? self::concurrent() : $concurrent );
 		if ( is_wp_error( $parts ) ) {
 			return $parts;
 		}
@@ -512,10 +519,11 @@ final class AB_MCP_Sync_Report {
 	 * per number, without a gap, each read against its SHA-256 and of the
 	 * walk of the first.
 	 *
-	 * @param string $gid Group.
+	 * @param string   $gid        Group.
+	 * @param WP_Error $concurrent The refusal where they are not so.
 	 * @return array[]|WP_Error
 	 */
-	private static function env_parts( $gid ) {
+	private static function env_parts( $gid, WP_Error $concurrent ) {
 		$files = AB_MCP_Protected_Store::files( 'reports', $gid );
 		if ( is_wp_error( $files ) ) {
 			return $files;
@@ -527,7 +535,7 @@ final class AB_MCP_Sync_Report {
 				continue;
 			}
 			if ( isset( $found[ $parsed['seq'] ] ) ) {
-				return self::concurrent();
+				return $concurrent;
 			}
 			$found[ $parsed['seq'] ] = $parsed;
 		}
@@ -537,7 +545,7 @@ final class AB_MCP_Sync_Report {
 			$text = AB_MCP_Protected_Store::get( 'reports', $gid, $parsed['name'], $parsed['sha'] );
 			$part = is_string( $text ) ? json_decode( $text, true, 64 ) : null;
 			if ( count( $out ) + 1 !== $seq || ! is_array( $part ) || self::ENV_FORMAT !== ( $part['format'] ?? null ) || $seq !== ( $part['seq'] ?? null ) || ! is_array( $part['lines'] ?? null ) || ( isset( $out[0] ) && $out[0]['lines'][0]['walk'] !== ( $part['lines'][0]['walk'] ?? null ) ) ) {
-				return self::concurrent();
+				return $concurrent;
 			}
 			$out[] = $part;
 		}

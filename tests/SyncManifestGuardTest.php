@@ -115,13 +115,16 @@ final class SyncManifestGuardTest extends TestCase {
 	public function testOnlyThePairsWriteTheTableOfThePairsAndOnlyRebaseTakesAPart(): void {
 		$writers = array();
 		foreach ( self::shipped() as $file => $code ) {
-			if ( preg_match( "/(UPDATE|INSERT\\s+INTO|DELETE\\s+FROM|REPLACE\\s+INTO)[^;]*table\\(\\s*'pairs'\\s*\\)/is", $code ) || preg_match( "/->(update|insert|delete|replace)\\(\\s*AB_MCP_Sync_Schema::table\\(\\s*'pairs'/i", $code ) ) {
+			if ( preg_match( "/(UPDATE|INSERT\\s+INTO|DELETE\\s+FROM|REPLACE\\s+INTO)[^;]*table\\(\\s*'pairs'\\s*\\)/is", $code ) || preg_match( "/->(update|insert|insert_row|delete|replace)\\(\\s*AB_MCP_Sync_Schema::table\\(\\s*'pairs'/i", $code ) ) {
 				$writers[] = $file;
 			}
 		}
 		self::assertSame( array( 'includes/sync/class-sync-pairs.php' ), $writers );
 		$pairs = self::shipped()['includes/sync/class-sync-pairs.php'];
-		self::assertSame( 1, preg_match_all( '/function\\s+\\w+\\([^)]*\\$part\\b/', $pairs ) - preg_match_all( '/function\\s+(responsible|part_bases)\\(/', $pairs ), 'rebase() the one writer that takes a part.' );
+		// responsible(), part_bases() and unit_part() (Z8b branch 2b) read a
+		// part; they write nothing.
+		self::assertSame( 1, preg_match_all( '/function\\s+\\w+\\([^)]*\\$part\\b/', $pairs ) - preg_match_all( '/function\\s+(responsible|part_bases|unit_part)\\(/', $pairs ), 'rebase() the one writer that takes a part.' );
+		self::assertSame( 1, substr_count( $pairs, "self::calls()->insert_row( AB_MCP_Sync_Schema::table( 'pairs' )" ), 'One insert of a pair, in insert_pair().' );
 		self::assertSame( 1, substr_count( $pairs, "\$extra['parts'][ \$part ] = array(" ), 'The base of a further part written in one place.' );
 	}
 }

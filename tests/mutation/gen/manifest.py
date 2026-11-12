@@ -315,7 +315,7 @@ e('z38-bases-part', 'Z38 part_bases(): a further part from base_extra', PA,
 e('z38-db-write', 'Z38 swap(): a write that fails writes nothing and says so', PA,
   "\t\t$done = self::calls()->update_row( 'UPDATE ' . AB_MCP_Sync_Schema::table( 'pairs' ) . ' SET ' . implode( ', ', $parts ) . ' WHERE ' . self::where_row( $raw ) );\n\t\tif ( false === $done ) {\n\t\t\treturn self::db_error();", "\t\t$done = self::calls()->update_row( 'UPDATE ' . AB_MCP_Sync_Schema::table( 'pairs' ) . ' SET ' . implode( ', ', $parts ) . ' WHERE ' . self::where_row( $raw ) );\n\t\tif ( false ) {\n\t\t\treturn self::db_error();", 'it', 'testAFaultOfTheDatabaseLeavesTheBasesAsTheyWere')
 e('z38-db-read', 'Z38 raw(): a read that fails is an error', PA,
-  "\t\tif ( false === $row ) {\n\t\t\treturn self::db_error();", "\t\tif ( false ) {\n\t\t\treturn self::db_error();", 'it', 'testAFaultOfTheDatabaseLeavesTheBasesAsTheyWere')
+  "' WHERE id = %d', (int) $id ) );\n\t\tif ( false === $row ) {\n\t\t\treturn self::db_error();", "' WHERE id = %d', (int) $id ) );\n\t\tif ( false ) {\n\t\t\treturn self::db_error();", 'it', 'testAFaultOfTheDatabaseLeavesTheBasesAsTheyWere')
 
 # ---------------------------------------------------------------- write
 errors = []

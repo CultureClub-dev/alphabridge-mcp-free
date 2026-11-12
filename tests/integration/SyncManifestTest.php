@@ -333,7 +333,7 @@ final class SyncManifestTest extends TestCase {
 	private static function pair_of( string $slug ): array {
 		$line = self::line_here( 'plugin', $slug );
 		$act  = AB_MCP_Sync_Decision::part_hash( 'plugin', 'activation', $line );
-		$pair = AB_MCP_Sync_Pairs::create(
+		$pair = \AB_MCP_IT_Pair_Rows::put(
 			array(
 				'source_id'    => AB_MCP_Sync_Anchor::active()['source_id'],
 				'kind'         => 'plugin',
@@ -556,7 +556,7 @@ final class SyncManifestTest extends TestCase {
 	}
 
 	private static function unit_pair(): array {
-		$pair = AB_MCP_Sync_Pairs::create(
+		$pair = \AB_MCP_IT_Pair_Rows::put(
 			array(
 				'source_id'    => 'src-z38',
 				'kind'         => 'plugin',

@@ -456,7 +456,7 @@ final class SyncEnvTest extends TestCase {
 		$source = AB_MCP_Sync_Anchor::active()['source_id'];
 		$made   = static function ( string $kind, string $ref, array $line, string $state ) use ( $source ): array {
 			$act  = 'plugin' === $kind ? \AB_MCP_Sync_Decision::part_hash( 'plugin', 'activation', $line ) : null;
-			$pair = \AB_MCP_Sync_Pairs::create(
+			$pair = \AB_MCP_IT_Pair_Rows::put(
 				array(
 					'source_id'    => $source,
 					'kind'         => $kind,
