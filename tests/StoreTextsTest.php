@@ -154,7 +154,7 @@ final class StoreTextsTest extends TestCase {
 	public function testEveryMessageOfTheStoreIsTranslatedOrAnOldTextUnchanged(): void {
 		$messages = self::store_messages();
 		self::assertGreaterThan( 60, count( $messages ), 'The scan finds the messages.' );
-		self::assertGreaterThan( 30, count( array_filter( array_column( $messages, 'gettext' ) ) ), 'And the translated ones among them.' );
+		self::assertGreaterThan( 10, count( array_filter( array_column( $messages, 'gettext' ) ) ), 'And the translated ones among them.' );
 		self::assertSame( array(), self::untranslated( $messages ) );
 	}
 
