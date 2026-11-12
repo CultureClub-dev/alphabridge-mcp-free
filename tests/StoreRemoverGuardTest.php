@@ -39,6 +39,11 @@ namespace AlphaBridge\Tests;
 use AB_MCP_Protected_Store;
 use PHPUnit\Framework\TestCase;
 
+// The class whose table the cases read, loaded here: never from an earlier
+// class of the suite (the class alone).
+require_once __DIR__ . '/sync-stubs.php';
+require_once __DIR__ . '/../includes/class-protected-store.php';
+
 final class StoreRemoverGuardTest extends TestCase {
 
 	/** The three files of Z37 (plan 3.1). */
