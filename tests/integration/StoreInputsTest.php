@@ -408,6 +408,43 @@ final class StoreInputsTest extends TestCase {
 				'written' => null,
 			);
 		}
+		if ( 'budget.held_names' === $id || 'budget.file_size' === $id ) {
+			// put() counts what a group holds from its files (held()): where
+			// they cannot all be counted it writes nothing (Behebung 4).
+			$names = 'budget.held_names' === $id;
+			$g     = self::group( 'backups', 4 );
+			$file  = $g['dir'] . '/post-1';
+			$real  = $names ? array_values( (array) scandir( $g['dir'] ) ) : (int) filesize( $file );
+			$n     = 0;
+			return array(
+				'base'    => $real,
+				'more'    => $names ? array(
+					'no listing (false)'       => false,
+					'fixed: a name twice'      => array_merge( $real, array( $real[0] ) ),
+					'fixed: a list from key 1' => array_combine( range( 1, count( $real ) ), $real ),
+				) : array(
+					'no size (false)'           => false,
+					'fixed: negative'           => -1,
+					'fixed: its digits as text' => (string) $real,
+				),
+				'valid'   => array( array( $real, 'written' ) ),
+				'run'     => static function ( $value ) use ( $names, $g, $file, &$n ) {
+					$calls = new AB_MCP_IT_Store_Calls();
+					if ( $names ) {
+						$calls->names = array( $g['dir'] => $value );
+					} else {
+						$calls->size = array( $file => $value );
+					}
+					AB_MCP_Test_Seam::install( AB_MCP_Protected_Store::class, self::SEAM, $calls );
+					$got = AB_MCP_Protected_Store::put( 'backups', $g['gid'], 'more-' . ( ++$n ), 'x' );
+					AB_MCP_Test_Seam::restore_all();
+					return is_wp_error( $got ) ? $got->get_error_code() : ( is_array( $got ) ? 'written' : $got );
+				},
+				'unknown' => $refused( 'ab_mcp_store_used_unknown' ),
+				'texts'   => false,
+				'written' => null,
+			);
+		}
 		throw new RuntimeException( "The row $id has no driver in this test." );
 	}
 

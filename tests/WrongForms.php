@@ -43,6 +43,8 @@ final class WrongForms {
 		'backup.run',
 		'budget.payload',
 		'budget.listing',
+		'budget.held_names',
+		'budget.file_size',
 	);
 
 	/**

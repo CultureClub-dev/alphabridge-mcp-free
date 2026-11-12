@@ -65,6 +65,19 @@ final class AB_MCP_Store_Inputs {
 		'max'    => null,
 	);
 
+	/** The names in a folder, as scandir() gives them: texts, none twice. */
+	const NAMES = array(
+		'type'      => 'list',
+		'empty'     => true,
+		'item'      => array(
+			'type'      => 'string',
+			'empty'     => false,
+			'max_bytes' => null,
+		),
+		'unique'    => true,
+		'max_items' => null,
+	);
+
 	/** The flags json_encode() writes a sidecar with (write_entry()). */
 	const SIDECAR_FLAGS = JSON_UNESCAPED_SLASHES;
 
@@ -485,17 +498,19 @@ final class AB_MCP_Store_Inputs {
 			'consumer' => 'budget',
 			'source'   => 'AB_MCP_Protected_Store::stock()',
 			'field'    => 'the names in an area, as its stock of groups is read for a budget',
-			'form'     => array(
-				'type'      => 'list',
-				'empty'     => true,
-				'item'      => array(
-					'type'      => 'string',
-					'empty'     => false,
-					'max_bytes' => null,
-				),
-				'unique'    => true,
-				'max_items' => null,
-			),
+			'form'     => self::NAMES,
+		),
+		'budget.held_names'        => array(
+			'consumer' => 'budget',
+			'source'   => 'AB_MCP_Protected_Store::held(), by scandir() of the seam',
+			'field'    => 'the names in the folder of a group, as put() counts what it holds',
+			'form'     => self::NAMES,
+		),
+		'budget.file_size'         => array(
+			'consumer' => 'budget',
+			'source'   => 'AB_MCP_Protected_Store::held(), by lstat() of the seam and the trailer of a gzip file',
+			'field'    => 'the bytes of a file of a group: its size, of a gzip file the raw size its trailer names (ISIZE)',
+			'form'     => self::COUNT,
 		),
 	);
 

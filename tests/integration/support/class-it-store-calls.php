@@ -37,6 +37,9 @@ final class AB_MCP_IT_Store_Calls {
 	/** @var array<string,mixed> Path => the mtime lstat() answers for it (Behebung 4: a time of another form). */
 	public $mtime = array();
 
+	/** @var array<string,mixed> Path => the size lstat() answers for it (Behebung 4: a size of another form). */
+	public $size = array();
+
 	/** @var array<string,mixed> Folder => what scandir() answers for it (Behebung 4: a listing of another form). */
 	public $names = array();
 
@@ -74,6 +77,10 @@ final class AB_MCP_IT_Store_Calls {
 		if ( is_array( $stat ) && array_key_exists( (string) $path, $this->mtime ) ) {
 			$stat['mtime'] = $this->mtime[ (string) $path ];
 			$stat[9]       = $this->mtime[ (string) $path ];
+		}
+		if ( is_array( $stat ) && array_key_exists( (string) $path, $this->size ) ) {
+			$stat['size'] = $this->size[ (string) $path ];
+			$stat[7]      = $this->size[ (string) $path ];
 		}
 		return $stat;
 	}

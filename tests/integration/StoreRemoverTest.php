@@ -2067,6 +2067,30 @@ final class StoreRemoverTest extends TestCase {
 		self::assertSame( 1, $done['unknown'] );
 	}
 
+	public function testAGroupWhoseFilesCannotAllBeCountedTakesNoFile(): void {
+		// Behebung 4: put() counts what a group holds from its files
+		// (held()). A gzip file whose trailer cannot be read counted its
+		// size on disk, a folder that could not be listed nothing: now
+		// nothing is written (the listing and the sizes in the form of their
+		// rows: StoreInputsTest, budget.held_names and budget.file_size).
+		$gid = AB_MCP_Protected_Store::open( 'in', array( 'declared' => 1000 ) );
+		self::assertIsString( $gid );
+		self::assertIsArray( AB_MCP_Protected_Store::put( 'in', $gid, 'part-1', str_repeat( 'x', 100 ) ) );
+		$dir  = self::store() . '/in/' . AB_MCP_Payload_File::name( 'group|in|' . $gid, AB_MCP_Protected_Store::install_id(), '' );
+		$file = $dir . '/part-1';
+		self::assertGreaterThanOrEqual( 18, filesize( $file ), 'A gzip file with its trailer.' );
+		chmod( $file, 0000 );
+		try {
+			$got = AB_MCP_Protected_Store::put( 'in', $gid, 'part-2', 'y' );
+		} finally {
+			chmod( $file, 0600 );
+		}
+		self::assertInstanceOf( \WP_Error::class, $got );
+		self::assertSame( 'ab_mcp_store_used_unknown', $got->get_error_code() );
+		self::assertFileDoesNotExist( $dir . '/part-2', 'Nothing written.' );
+		self::assertIsArray( AB_MCP_Protected_Store::put( 'in', $gid, 'part-2', 'y' ), 'Read again, it counts and writes.' );
+	}
+
 	public function testATempFileOrAFolderOfAMarkWhoseLstatFailsStays(): void {
 		$root = self::store();
 		@mkdir( $root . '/tmp', 0700 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged

@@ -207,6 +207,8 @@ return array(
 	// includes/class-protected-store.php (Z8b branch 3, Behebung 4: an area that cannot be listed, a stock not read whole for a budget)
 	'The area %s of the protected store could not be listed, so none of its groups is read and nothing was changed. Ask the host to check the rights of the folder of the store, then try again.',
 	'The area %s of the protected store could not be read whole (it cannot be listed, or the sidecar of a group in it cannot be read), so what its groups hold is not known and nothing is counted against a budget or written. Ask the host to check the rights of the folder of the store and whether something else writes into it; the daily clean-up leaves such a group as it is.',
+	// includes/class-protected-store.php (Z8b branch 3, Behebung 4: the files of a group that cannot all be counted)
+	'The files the group holds in the protected store could not all be counted (its folder could not be listed, or the size of a file in it could not be read), so what it holds is not known and nothing was written. Ask the host to check the rights of the folder of the store, then try again.',
 	// includes/sync/class-sync-backup.php (Z8b branch 3, Behebung 4: a backup whose size is not known)
 	'The backup of this object cannot be written as JSON (a value in it is nested too deep or is no value JSON holds), so its size is not known and nothing is written for the object. Check the object in wp-admin; leave it out of the run if it keeps failing.',
 	// includes/sync/class-sync-run.php (Z8b branch 3, Behebung 4, B2/B3: a clock that gives no time)
