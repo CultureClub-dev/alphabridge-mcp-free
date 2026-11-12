@@ -1233,9 +1233,10 @@ final class AB_MCP_Protected_Store {
 	 * @return array{removed:int,kept:int,unknown:int} Groups removed, groups
 	 *         kept for a run beyond their age, and what stays because an
 	 *         input of the decision is not known: a sidecar that cannot be
-	 *         read or is not as the table SIDECAR says, a group whose
-	 *         inputs are not known, a folder without its sidecar, an area
-	 *         that cannot be listed (Behebung 3 of Z8b branch 3).
+	 *         read, is no plain file or is not as the table SIDECAR says, a
+	 *         group whose inputs are not known, a folder without its
+	 *         sidecar, an area that cannot be listed or is no plain folder
+	 *         (Behebung 3 of Z8b branch 3).
 	 */
 	public static function cleanup( $now = null ) {
 		// The time as given (a test) or now; one that is no whole number
@@ -3702,9 +3703,10 @@ final class AB_MCP_Protected_Store {
 	 * of writes that were cut off (tmp/, the prefix, older than TMP_AGE; never
 	 * a file by its ending), closed marks a day after they closed. What an
 	 * input of the decision does not say stays and counts as unknown: a
-	 * sidecar that cannot be read, a group whose inputs are not known
-	 * (kept() null), a folder without its sidecar, an area whose listing
-	 * failed (Behebung 3 of Z8b branch 3).
+	 * sidecar that cannot be read or is no plain file, a group whose inputs
+	 * are not known (kept() null), a folder without its sidecar, an area
+	 * whose listing failed or that is no plain folder (Behebung 3 of Z8b
+	 * branch 3).
 	 *
 	 * @param string $root Folder.
 	 * @param string $id   Id.
@@ -3723,7 +3725,13 @@ final class AB_MCP_Protected_Store {
 		foreach ( self::AREAS as $area ) {
 			$dir = self::way( $root, array( $area ) );
 			if ( null === $dir ) {
-				// No plain folder of the area: no group of it to decide.
+				// No plain folder of the area: where something else lies in
+				// its place (a link, a file), what it holds is not read and
+				// counts as unknown; where nothing lies there, it holds no
+				// group (Behebung 3).
+				if ( false !== $calls->lstat( $root . '/' . $area ) ) {
+					++$unknown;
+				}
 				continue;
 			}
 			$names = $calls->scandir( $dir );
@@ -3779,6 +3787,12 @@ final class AB_MCP_Protected_Store {
 					if ( self::delete_group( $root, $area, $m[1] ) ) {
 						++$removed;
 					}
+				} elseif ( preg_match( '/^[0-9a-f]{40}\.json\z/', $file ) ) {
+					// The name of a sidecar on what is no plain file (a link,
+					// a folder): it is not read, so nothing says whose its
+					// group is; the group stays, and the clean-up counts it
+					// (Behebung 3).
+					++$unknown;
 				} elseif ( preg_match( '/^[0-9a-f]{40}\z/', $file ) && ! in_array( $file . '.json', $names, true ) && self::plain( $path, 'dir' ) ) {
 					// A folder without its sidecar, absent by the listing of
 					// the area: nothing says whose it is or how long its
