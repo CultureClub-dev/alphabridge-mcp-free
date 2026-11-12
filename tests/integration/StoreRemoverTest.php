@@ -679,6 +679,21 @@ final class StoreRemoverTest extends TestCase {
 		self::assert_kept( $m, 'folder of the marks without read rights' );
 	}
 
+	public function testAMarkWhoseFolderIsListedButCannotBeReadKeepsStageAndBackups(): void {
+		// read_mark(): a mark is absent only where the folder of the marks
+		// lists none of its name; one that is listed and whose own folder
+		// cannot be listed cannot be read, and nothing it may name goes
+		// (Behebung 3, the Gegenprobe of the list of substitute values).
+		$m = $this->marked( 3 );
+		self::run_row( 3, 'closed_done', time() - 10 );
+		$calls = self::failing( array( 'scandir' => array( $m['marks'] ) ) );
+		AB_MCP_Protected_Store::cleanup( time() );
+		self::assertFalse( AB_MCP_Protected_Store::remove( 'backups', $m['gid'] ) );
+		AB_MCP_Test_Seam::restore_all();
+		self::assertContains( array( 'scandir', $m['marks'] ), $calls->failed );
+		self::assert_kept( $m, 'folder of a mark that cannot be listed' );
+	}
+
 	public function testWithoutAnOpenMarkTheWaysRemoveWhatTheyRemovedBefore(): void {
 		// A closed mark names nothing that stays.
 		$m = $this->marked( 3, 'closed' );
