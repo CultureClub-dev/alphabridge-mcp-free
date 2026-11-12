@@ -400,7 +400,7 @@ e('read-seq', 'read(): the next part has the next number', EN,
 e('read-last', 'read(): the page says whether it is the last', EN,
   "\t\t\t\t'last'  => $done,", "\t\t\t\t'last'  => true,", 'it', UP)
 e('read-clock', 'read(): a part ends when the clock says so', EN,
-  "\t\t\tif ( self::now() >= $deadline || count( $lines ) + 1 >= $max ) {", "\t\t\tif ( count( $lines ) + 1 >= $max ) {", 'it', UP)
+  "\t\t\tif ( self::now() >= $deadline || count( $lines ) + 1 >= $max ) {", "\t\t\tif ( count( $lines ) + 1 >= $max ) {", 'it', 'testTheDropInsAndTheTablesAreThoseOfWordPress')
 e('read-lines', 'read(): a part ends at its lines', EN,
   "\t\t\tif ( self::now() >= $deadline || count( $lines ) + 1 >= $max ) {", "\t\t\tif ( self::now() >= $deadline ) {", 'it', 'testTheEnvironmentOfThisSiteIsReadInPartsWithTheSameEntries')
 e('read-tables-on', 'read(): the tables go on where the part before ended', EN,
@@ -408,7 +408,7 @@ e('read-tables-on', 'read(): the tables go on where the part before ended', EN,
 e('tables-after', 'table_lines(): after the table the part before ended with', EN,
   "\t\t\tif ( null !== $after && strcmp( $short, $after ) <= 0 ) {", "\t\t\tif ( null !== $after && strcmp( $short, $after ) < 0 ) {", 'it', 'testTheDropInsAndTheTablesAreThoseOfWordPress')
 e('tables-one', 'table_lines(): one table a part at least', EN,
-  "\t\t\tif ( array() !== $lines && ( count( $lines ) >= (int) $room - 1 || self::now() >= $deadline ) ) {", "\t\t\tif ( count( $lines ) >= (int) $room - 1 || self::now() >= $deadline ) {", 'it', 'testTheEnvironmentOfThisSiteIsReadInPartsWithTheSameEntries')
+  "\t\t\tif ( array() !== $lines && ( count( $lines ) >= (int) $room - 1 || self::now() >= $deadline ) ) {", "\t\t\tif ( count( $lines ) >= (int) $room - 1 || self::now() >= $deadline ) {", 'it', 'testTheDropInsAndTheTablesAreThoseOfWordPress')
 e('tables-room', 'table_lines(): a part ends at its room', EN,
   "\t\t\tif ( array() !== $lines && ( count( $lines ) >= (int) $room - 1 || self::now() >= $deadline ) ) {", "\t\t\tif ( array() !== $lines && ( self::now() >= $deadline ) ) {", 'it', 'testTheDropInsAndTheTablesAreThoseOfWordPress')
 e('tables-core', 'tables(): no table of the core', EN,

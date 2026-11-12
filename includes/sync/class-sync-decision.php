@@ -1259,6 +1259,18 @@ final class AB_MCP_Sync_Decision {
 				'state' => (string) $pair['state'],
 			);
 		}
+		// AlphaBridge itself (E12), on either side or both: shown by its
+		// version, never hashed nor taken over, not even where it is on one
+		// side only.
+		if ( ! empty( $s['own'] ) || ! empty( $l['own'] ) ) {
+			$same            = ! empty( $s['own'] ) && ! empty( $l['own'] ) && $s['version'] === $l['version'];
+			$entry['result'] = $same ? 'same_value' : ( null === $s || null === $l ? ( null === $s ? 'only_live' : 'only_staging' ) : 'own_differs' );
+			if ( ! $same ) {
+				$entry['action'] = 'locked';
+				$locks[]         = self::code_lock( 'code:own' );
+			}
+			return self::unit_entry( $entry, $locks, null, $held );
+		}
 		if ( null === $s || null === $l ) {
 			$there = null === $s ? $l : $s;
 			if ( 'root' === ( $there['form'] ?? null ) ) {
@@ -1274,16 +1286,6 @@ final class AB_MCP_Sync_Decision {
 				$locks[] = $lock;
 			}
 			return self::unit_entry( $entry, $locks, $why, $held );
-		}
-		// AlphaBridge itself (E12): shown by its version, never hashed nor taken over.
-		if ( ! empty( $s['own'] ) || ! empty( $l['own'] ) ) {
-			$same            = ! empty( $s['own'] ) && ! empty( $l['own'] ) && $s['version'] === $l['version'];
-			$entry['result'] = $same ? 'same_value' : 'own_differs';
-			if ( ! $same ) {
-				$entry['action'] = 'locked';
-				$locks[]         = self::code_lock( 'code:own' );
-			}
-			return self::unit_entry( $entry, $locks, null, $held );
 		}
 		// A line locked by what it holds: never compared by its files.
 		foreach ( array( $s, $l ) as $line ) {

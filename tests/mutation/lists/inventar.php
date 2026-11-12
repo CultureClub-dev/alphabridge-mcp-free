@@ -1637,8 +1637,8 @@ return array(
 		'file'    => $en,
 		'search'  => "\t\t\tif ( self::now() >= \$deadline || count( \$lines ) + 1 >= \$max ) {",
 		'replace' => "\t\t\tif ( count( \$lines ) + 1 >= \$max ) {",
-		'run'     => $it( 'SyncEnvTest', 'testTheUploadsAreCountedOverPartsOutsideTheFileListsOfAttachments' ),
-		'expect'  => '/testTheUploadsAreCountedOverPartsOutsideTheFileListsOfAttachments/',
+		'run'     => $it( 'SyncEnvTest', 'testTheDropInsAndTheTablesAreThoseOfWordPress' ),
+		'expect'  => '/testTheDropInsAndTheTablesAreThoseOfWordPress/',
 	),
 	array(
 		'id'      => 'inventar/read-lines',
@@ -1673,8 +1673,8 @@ return array(
 		'file'    => $en,
 		'search'  => "\t\t\tif ( array() !== \$lines && ( count( \$lines ) >= (int) \$room - 1 || self::now() >= \$deadline ) ) {",
 		'replace' => "\t\t\tif ( count( \$lines ) >= (int) \$room - 1 || self::now() >= \$deadline ) {",
-		'run'     => $it( 'SyncEnvTest', 'testTheEnvironmentOfThisSiteIsReadInPartsWithTheSameEntries' ),
-		'expect'  => '/testTheEnvironmentOfThisSiteIsReadInPartsWithTheSameEntries/',
+		'run'     => $it( 'SyncEnvTest', 'testTheDropInsAndTheTablesAreThoseOfWordPress' ),
+		'expect'  => '/testTheDropInsAndTheTablesAreThoseOfWordPress/',
 	),
 	array(
 		'id'      => 'inventar/tables-room',

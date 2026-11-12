@@ -1040,6 +1040,9 @@ final class SyncEnvTest extends TestCase {
 		$e = self::one( $own, array( 'version' => '4.18.0' ) + $own );
 		self::assertSame( array( 'own_differs', 'locked', array( 'code:own', 'Z8' ) ), array( $e['result'], $e['action'], self::lock_of( $e ) ) );
 		self::assertStringContainsString( 'same version of AlphaBridge', $e['locks'][0]['reason'] );
+		$e = self::one( $own, null );
+		self::assertSame( array( 'only_staging', 'locked', array( 'code:own', 'Z8' ) ), array( $e['result'], $e['action'], self::lock_of( $e ) ), 'On staging only (Pro there, not here): never created here either.' );
+		self::assertCount( 1, $e['locks'], 'No lock of a takeover beside it.' );
 	}
 
 	public function testThePathsOfAUnitWhoseFilesDifferAreShownNeverByMtime(): void {

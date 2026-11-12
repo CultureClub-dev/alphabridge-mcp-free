@@ -984,13 +984,19 @@ final class SyncEnvTest extends TestCase {
 		self::write( 'a', 'uploads/ab-mcp-undo/x.json', '{}' );
 		self::write( 'a', 'uploads/ab-mcp-store-0123/x', 'x' );
 
+		self::write( 'a', 'uploads/loose-media/scan.jpg', 'scan' );
+		$scan = wp_insert_attachment( array( 'post_title' => 'Scan', 'post_mime_type' => 'image/jpeg', 'post_status' => 'inherit' ), $uploads . '/loose-media/scan.jpg' );
+		self::assertIsInt( $scan );
+		update_post_meta( $scan, '_wp_attachment_metadata', array( 'file' => 'loose-media/scan.jpg' ) );
+		update_post_meta( $scan, '_wp_attached_file', 'loose-media/scan.jpg' );
 		self::write( 'a', 'uploads/2026/10/report.pdf', 'pdf' );
 		self::write( 'a', 'uploads/top.txt', 'top' );
 		self::write( 'a', 'uploads/.htaccess', 'deny' );
 
 		// The year folders and the top hold units; the attachments are no unit;
-		// the other folders are counted (Z8b, E1).
-		$want = array( 'attached' => 0, 'bytes' => $bytes, 'complete' => true, 'env' => 'files', 'files' => 150, 'ref' => 'uploads', 'skipped' => 0, 'why' => null );
+		// the other folders are counted (Z8b, E1), a file of an attachment
+		// there apart.
+		$want = array( 'attached' => 1, 'bytes' => $bytes, 'complete' => true, 'env' => 'files', 'files' => 150, 'ref' => 'uploads', 'skipped' => 0, 'why' => null );
 		$read = AB_MCP_Sync_Env::read( null, 60 );
 		self::assertIsArray( $read );
 		self::assertNull( $read['state'] );
@@ -1077,6 +1083,17 @@ final class SyncEnvTest extends TestCase {
 			'step'     => array_search( 'tables', AB_MCP_Sync_Env::STEPS, true ),
 			'walk'     => str_repeat( 'ab', 16 ),
 		);
+		// A part whose time ran out after a step begins no further one: the
+		// check of the core, then no table.
+		$t                      = 0.0;
+		AB_MCP_Sync_Env::$clock = static function () use ( &$t ) {
+			return ++$t;
+		};
+		$core = AB_MCP_Sync_Env::read( array( 'step' => array_search( 'core', AB_MCP_Sync_Env::STEPS, true ) ) + $state, 0.5 );
+		AB_MCP_Sync_Env::$clock = null;
+		self::assertIsArray( $core );
+		self::assertSame( array( 'page', 'core_files' ), array_column( $core['lines'], 'env' ), 'The time ran out: no table after the check of the core.' );
+		self::assertSame( 'tables', AB_MCP_Sync_Env::STEPS[ $core['state']['step'] ] );
 		$seen  = array();
 		$parts = 0;
 		do {
