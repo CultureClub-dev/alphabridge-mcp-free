@@ -22,7 +22,9 @@
  *
  * Held by the unit suite (SyncEnvTest) and, for what two WordPress sites
  * show, by the integration suite (SyncEnvTest; the sites running,
- * AB_IT_ROOT set). Not listed: is_file() before hash_file() in file_hash()
+ * AB_IT_ROOT set). Not listed: the lock of a root by its own name in entry()
+ * (since Z8b branch 2 uploads is the only root counted, so the mutation is
+ * the same code), is_file() before hash_file() in file_hash()
  * (without it a FIFO in the place of a drop-in would block the call, so a
  * test of it ends in the time limit of the runner, not red), the guards
  * against a stored part of the
@@ -1547,15 +1549,6 @@ return array(
 		'file'    => $en,
 		'search'  => "\t\t} elseif ( isset( self::LOCKS[ \$key ] ) ) {",
 		'replace' => "\t\t} elseif ( false ) {",
-		'run'     => $unit( 'SyncEnvTest', 'testEachLockHasItsKeyArtStageAndReason' ),
-		'expect'  => '/testEachLockHasItsKeyArtStageAndReason/',
-	),
-	array(
-		'id'      => 'inventar/entry-lock-root',
-		'clause'  => 'entry(): each root by its own lock',
-		'file'    => $en,
-		'search'  => "\t\t\$key   = 'files' === \$env ? 'files:' . \$ref : \$env;",
-		'replace' => "\t\t\$key   = 'files' === \$env ? 'files:uploads' : \$env;",
 		'run'     => $unit( 'SyncEnvTest', 'testEachLockHasItsKeyArtStageAndReason' ),
 		'expect'  => '/testEachLockHasItsKeyArtStageAndReason/',
 	),

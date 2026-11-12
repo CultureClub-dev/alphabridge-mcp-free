@@ -510,6 +510,9 @@ final class SyncEnvTest extends TestCase {
 		$e = self::one( $plugin, array( 'version' => '2.0', 'hash' => str_repeat( 'd', 64 ) ) + $plugin );
 		self::assertSame( array( 'differs', array( 'files' ), 'not shown', '2.0' ), array( $e['result'], $e['differs'], $e['staging']['version'], $e['live']['version'] ) );
 		self::assertStringNotContainsString( '1.1.1.1', (string) json_encode( $e ) );
+		$wp = array( 'env' => 'core', 'ref' => 'wordpress', 'value' => AB_MCP_Sync_Env::name( $long ) );
+		$e  = self::one( $wp, array( 'value' => '7.1.3' ) + $wp );
+		self::assertSame( array( 'differs', 'not shown', '7.1.3' ), array( $e['result'], $e['staging']['value'], $e['live']['value'] ), 'A version of WordPress longer than a line holds: not shown either.' );
 	}
 
 	/* --------------------------------------------- names a credential holds */
@@ -588,6 +591,14 @@ final class SyncEnvTest extends TestCase {
 		$e = self::one( $held, null );
 		self::assertSame( array( 'only_staging', 'credential_field' ), array( $e['result'], $e['held'] ) );
 		self::assertArrayNotHasKey( 'held', self::one( self::plugin( '1' ), self::plugin( '1' ) ), 'An ordinary name: no held.' );
+
+		// A table is decided by the environment itself: its held name the same way.
+		$table = array( 'env' => 'table', 'held' => 'credential_field', 'ref' => AB_MCP_Sync_Env::hashed( 'abenv_token=x' ), 'rows' => 1, 'schema' => str_repeat( 'c', 64 ) );
+		$list  = array( array( 'complete' => true, 'count' => 1, 'env' => 'tables', 'ref' => 'tables' ) );
+		$e     = self::one( $table, $table, $list, $list );
+		self::assertSame( array( 'counted', 'credential_field' ), array( $e['result'], $e['held'] ) );
+		self::assertStringContainsString( 'held: credential_field', $e['words'] );
+		self::assertSame( array( 'rows' => 1 ), $e['staging'], 'No held in a side, no hash.' );
 	}
 
 	public function testALineTheImportHeldIsShownByItsSha256(): void {

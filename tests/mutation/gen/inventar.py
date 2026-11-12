@@ -379,8 +379,6 @@ e('r1-entry-host-always', 'entry(): group U is changed at the host, whatever the
   "\t\t} elseif ( in_array( $env, array( 'dropin', 'host' ), true ) ) {", "\t\t} elseif ( 'equal' !== $result && 'same_value' !== $result && in_array( $env, array( 'dropin', 'host' ), true ) ) {", 'env', 'testTheValuesOfTheHostAreShownNeverEqualAndChangedAtTheHost')
 e('entry-lock', 'entry(): code, files and tables are locked with their reason and stage', EN,
   "\t\t} elseif ( isset( self::LOCKS[ $key ] ) ) {", "\t\t} elseif ( false ) {", 'env', 'testEachLockHasItsKeyArtStageAndReason')
-e('entry-lock-root', 'entry(): each root by its own lock', EN,
-  "\t\t$key   = 'files' === $env ? 'files:' . $ref : $env;", "\t\t$key   = 'files' === $env ? 'files:uploads' : $env;", 'env', 'testEachLockHasItsKeyArtStageAndReason')
 e('entry-counted', 'entry(): counted says its contents are not compared, and from when', EN,
   "\t\t\tif ( 'counted' === $result ) {\n\t\t\t\t$entry['contents'] = 'not compared';", "\t\t\tif ( false ) {\n\t\t\t\t$entry['contents'] = 'not compared';", 'env', 'testATableWithTheSameRowsAndSchemaIsCountedNeverEqual')
 SH = "\t\tunset( $line['env'], $line['ref'], $line['sha256'], $line['schema'], $line['held'] );"
@@ -570,7 +568,9 @@ out.append('''<?php
  *
  * Held by the unit suite (SyncEnvTest) and, for what two WordPress sites
  * show, by the integration suite (SyncEnvTest; the sites running,
- * AB_IT_ROOT set). Not listed: is_file() before hash_file() in file_hash()
+ * AB_IT_ROOT set). Not listed: the lock of a root by its own name in entry()
+ * (since Z8b branch 2 uploads is the only root counted, so the mutation is
+ * the same code), is_file() before hash_file() in file_hash()
  * (without it a FIFO in the place of a drop-in would block the call, so a
  * test of it ends in the time limit of the runner, not red), the guards
  * against a stored part of the
