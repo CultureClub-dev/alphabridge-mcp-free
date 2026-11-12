@@ -348,10 +348,38 @@ final class AB_MCP_Sync_Schema {
 		$closed = implode( ', ', array_fill( 0, count( self::CLOSED ), '%s' ) );
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table name is ours, the states are placeholders.
 		$ids = $wpdb->get_col( $wpdb->prepare( 'SELECT run_id FROM `' . self::table( 'runs' ) . "` WHERE state NOT IN ( $closed ) ORDER BY run_id", self::CLOSED ) );
-		if ( '' !== (string) $wpdb->last_error || ! is_array( $ids ) ) {
+		if ( '' !== $wpdb->last_error || ! is_array( $ids ) ) {
 			return null;
 		}
-		return array_values( array_map( 'intval', $ids ) );
+		$out = array();
+		foreach ( $ids as $id ) {
+			$id = self::whole_number( $id, 1 );
+			if ( null === $id ) {
+				// A run of no id the column holds: unknown, never made 0
+				// (Behebung 3 of Z8b branch 3).
+				return null;
+			}
+			$out[] = $id;
+		}
+		return $out;
+	}
+
+	/**
+	 * A whole number as the database gives it (a string of decimal digits, or
+	 * an integer where the driver gives one), checked and turned into an int
+	 * without loss: only digits that are the number written out, from $min up
+	 * to PHP_INT_MAX; null for anything else (Behebung 3 of Z8b branch 3: an
+	 * input of the retention decision is read whole or unknown, never cast).
+	 *
+	 * @param mixed $value Value.
+	 * @param int   $min   Least value.
+	 * @return int|null
+	 */
+	public static function whole_number( $value, $min ) {
+		if ( is_string( $value ) && (string) (int) $value === $value ) {
+			$value = (int) $value;
+		}
+		return is_int( $value ) && $value >= $min ? $value : null;
 	}
 
 	/**
@@ -367,17 +395,25 @@ final class AB_MCP_Sync_Schema {
 	 * closed before the period was stored (version 2), which the clean-up
 	 * keeps (backup_runs(); Codex round 2 of branch 8, N1).
 	 *
-	 * @param int  $now       The time of the close.
-	 * @param bool $qualified Whether the close qualifies (forward_closed_at).
-	 * @param int  $days      Days a qualified close is kept (AB_MCP_Protected_Store::backup_days()).
-	 * @return int Seconds, at least $now.
+	 * Where the time of the close or the days are not known (a filter that
+	 * gives no whole number of 0 to 3650, AB_MCP_Protected_Store::
+	 * backup_days() null), no period is made up: 0 is stored, the mark the
+	 * clean-up keeps a run by as long as its row is there (N1), and
+	 * AB_MCP_Sync_Run::set_state() says so (Behebung 3 of Z8b branch 3, A2).
+	 *
+	 * @param int      $now       The time of the close.
+	 * @param bool     $qualified Whether the close qualifies (forward_closed_at).
+	 * @param int|null $days      Days a qualified close is kept (AB_MCP_Protected_Store::backup_days()).
+	 * @return int Seconds, at least $now; 0 where $now or $days is not known.
 	 */
 	public static function keep_until( $now, $qualified, $days ) {
-		$days = max( 0, (int) $days );
-		if ( $qualified ) {
-			return (int) $now + $days * 86400;
+		if ( ! is_int( $now ) || $now < 1 || ! is_int( $days ) || $days < 0 || $days > 3650 ) {
+			return 0;
 		}
-		return (int) $now + max( self::UNQUALIFIED_DAYS, $days ) * 86400;
+		if ( $qualified ) {
+			return $now + $days * 86400;
+		}
+		return $now + max( self::UNQUALIFIED_DAYS, $days ) * 86400;
 	}
 
 	/**
@@ -432,44 +468,77 @@ final class AB_MCP_Sync_Schema {
 		if ( ! self::available() ) {
 			return null;
 		}
-		$now = null === $now ? time() : (int) $now;
+		$now = null === $now ? time() : $now;
+		if ( ! is_int( $now ) || $now < 1 ) {
+			return null;
+		}
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table name is ours.
-		$rows = $wpdb->get_results( 'SELECT run_id, type, state, closed, forward_closed_at, keep_until FROM `' . self::table( 'runs' ) . '` ORDER BY run_id', ARRAY_A );
-		if ( '' !== (string) $wpdb->last_error || ! is_array( $rows ) ) {
+		$rows = $wpdb->get_results( 'SELECT run_id, type, state, forward_closed_at, keep_until FROM `' . self::table( 'runs' ) . '` ORDER BY run_id', ARRAY_A );
+		if ( '' !== $wpdb->last_error || ! is_array( $rows ) ) {
 			return null;
 		}
 		$keep      = array();
 		$qualified = array();
 		foreach ( $rows as $row ) {
-			$id = (int) $row['run_id'];
+			// Every field this row is judged by, as the table holds it
+			// (Behebung 3 of Z8b branch 3, the table of ROWS): one that is
+			// not makes the whole answer unknown, never a value made up.
+			$id    = is_array( $row ) && array_key_exists( 'run_id', $row ) ? self::whole_number( $row['run_id'], 1 ) : null;
+			$state = is_array( $row ) && array_key_exists( 'state', $row ) ? $row['state'] : null;
+			if ( null === $id || ! in_array( $state, array_merge( AB_MCP_Sync_Run::OPEN_STATES, self::CLOSED ), true ) ) {
+				return null;
+			}
 			// Every row is named: false until a rule keeps it (a way back
 			// read before may have named it already).
 			if ( ! array_key_exists( $id, $keep ) ) {
 				$keep[ $id ] = false;
 			}
-			if ( ! in_array( (string) $row['state'], self::CLOSED, true ) ) {
+			if ( ! in_array( $state, self::CLOSED, true ) ) {
 				$keep[ $id ] = true;
 				// The runs a way back that is not closed needs (rule 4), from
-				// its plan, read for this run alone; a read that fails keeps
-				// everything (null), as a table that cannot be read.
-				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table name is ours.
-				$raw = $wpdb->get_var( $wpdb->prepare( 'SELECT plan FROM `' . self::table( 'runs' ) . '` WHERE run_id = %d', $id ) );
-				if ( '' !== (string) $wpdb->last_error ) {
+				// its plan, read for this run alone. Only a run of the type
+				// revert names runs (AB_MCP_Sync_Revert writes reverts, a list
+				// of whole numbers of 1 or more, into every plan of its runs);
+				// a push run names none (AB_MCP_Sync_Push), so its plan is not
+				// needed. A read that fails, a plan that is no JSON of the
+				// spelling of AB_MCP_Sync_Canon, or a plan of a way back
+				// without such a list keeps everything (null).
+				$type = array_key_exists( 'type', $row ) ? $row['type'] : null;
+				if ( ! in_array( $type, AB_MCP_Sync_Run::TYPES, true ) ) {
 					return null;
 				}
-				$plan = is_string( $raw ) ? json_decode( $raw, true, 16 ) : null;
-				foreach ( is_array( $plan ) && isset( $plan['reverts'] ) && is_array( $plan['reverts'] ) ? $plan['reverts'] : array() as $needed ) {
-					$keep[ (int) $needed ] = true;
+				if ( 'revert' !== $type ) {
+					continue;
+				}
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table name is ours.
+				$raw = $wpdb->get_var( $wpdb->prepare( 'SELECT plan FROM `' . self::table( 'runs' ) . '` WHERE run_id = %d', $id ) );
+				if ( '' !== $wpdb->last_error || ! is_string( $raw ) ) {
+					return null;
+				}
+				$plan = AB_MCP_Sync_Canon::decode( $raw, 64 );
+				if ( ! is_array( $plan ) || ! isset( $plan['reverts'] ) || ! is_array( $plan['reverts'] ) || array() === $plan['reverts'] ) {
+					return null;
+				}
+				foreach ( $plan['reverts'] as $needed ) {
+					if ( ! is_int( $needed ) || $needed < 1 ) {
+						return null;
+					}
+					$keep[ $needed ] = true;
 				}
 				continue;
 			}
 			// The period the close got (rules 3, 5, 6); a row without one is
 			// kept (N1).
-			if ( 0 === (int) $row['keep_until'] || (int) $row['keep_until'] > $now ) {
+			$until = array_key_exists( 'keep_until', $row ) ? self::whole_number( $row['keep_until'], 0 ) : null;
+			$fwd   = array_key_exists( 'forward_closed_at', $row ) ? self::whole_number( $row['forward_closed_at'], 0 ) : null;
+			if ( null === $until || null === $fwd ) {
+				return null;
+			}
+			if ( 0 === $until || $until > $now ) {
 				$keep[ $id ] = true;
 			}
-			if ( (int) $row['forward_closed_at'] > 0 ) {
-				$qualified[ $id ] = (int) $row['forward_closed_at'];
+			if ( $fwd > 0 ) {
+				$qualified[ $id ] = $fwd;
 			}
 		}
 		// The last KEEP_LAST qualified closes, by the time they closed, the
