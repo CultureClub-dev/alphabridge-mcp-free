@@ -335,19 +335,25 @@ final class AB_MCP_Store_Budget {
 	}
 
 	/**
-	 * Write TEST_WRITE random bytes beside the store's files and remove them
-	 * again (random, so a file system that compresses cannot store them in
-	 * less than they are).
+	 * Write TEST_WRITE random bytes into a temp file of the store and remove
+	 * it again (random, so a file system that compresses cannot store them
+	 * in less than they are): a temp file of the area tmp/
+	 * (AB_MCP_Protected_Store::temp_file()), written through write_file()
+	 * and removed through delete_path() as made by this request (Z37).
 	 *
 	 * @param string $root Folder of the store.
 	 * @return true|WP_Error
 	 */
 	private static function test_write( $root ) {
-		$path    = $root . '/.ab-test-write-' . bin2hex( AB_MCP_Payload_File::random_bytes( 8 ) ) . '.tmp';
-		$written = @file_put_contents( $path, AB_MCP_Payload_File::random_bytes( self::TEST_WRITE ) ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
-		clearstatcache( true, $path );
-		$ok = self::TEST_WRITE === $written && self::TEST_WRITE === @filesize( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
-		@unlink( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink
+		$path = AB_MCP_Protected_Store::temp_file( $root );
+		$ok   = ! is_wp_error( $path ) && true === AB_MCP_Protected_Store::write_file( $root, $path, AB_MCP_Payload_File::random_bytes( self::TEST_WRITE ) );
+		if ( $ok ) {
+			clearstatcache( true, $path );
+			$ok = self::TEST_WRITE === @filesize( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		}
+		if ( ! is_wp_error( $path ) ) {
+			AB_MCP_Protected_Store::delete_path( $root, $path );
+		}
 		if ( ! $ok ) {
 			return new WP_Error( 'ab_mcp_store_test_write', 'A test write of 1 MB to the protected store failed, so the run does not start: its backups could not be written either. Ask the host to check the free space and the rights of the folder, then try again.' );
 		}
@@ -378,11 +384,14 @@ final class AB_MCP_Store_Budget {
 	}
 
 	/**
+	 * The bookings, through write_file() (a temp file of tmp/ renamed into
+	 * place, Z37).
+	 *
 	 * @param string $root Folder of the store.
 	 * @param array  $book Bookings.
 	 * @return bool
 	 */
 	private static function write_bookings( $root, array $book ) {
-		return AB_MCP_Payload_File::write( $root . '/' . self::BOOKINGS, (string) json_encode( (object) $book ) );
+		return true === AB_MCP_Protected_Store::write_file( $root, $root . '/' . self::BOOKINGS, (string) json_encode( (object) $book ) );
 	}
 }

@@ -370,6 +370,9 @@ final class SyncSafeCallsTest extends TestCase {
 		'class-sync-resources.php' => array(
 			'__' => array( 6, 'the refusals and errors the tools wp_site_* pass on, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2).' ),
 			'AB_MCP_Protected_Store::root' => array( 1, 'measure(): the folder of the store, for the free space and the tempo of a write there (15.11).' ),
+			'AB_MCP_Protected_Store::temp_file'   => array( 1, 'measure(): a temp file of the store in its area tmp/ for the tempo of a write (Z8b branch 3, Z37); a file, no stored value.' ),
+			'AB_MCP_Protected_Store::write_file'  => array( 1, 'measure(): the write whose tempo is measured, through a temp file renamed into place (Z37); no stored value.' ),
+			'AB_MCP_Protected_Store::delete_path' => array( 1, 'measure(): the temp file goes again through the one remover of the store (Z37); no stored value.' ),
 		),
 		'class-sync-post-writer.php' => array(
 			'__' => array( 145, 'the refusals of the writer and the notes of its parts and of its way back in the journal, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2).' ),

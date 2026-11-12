@@ -394,7 +394,10 @@ final class ProtectedStoreTest extends TestCase {
 		self::assertTrue( $proof['available'], (string) $proof['message'] );
 		self::assertSame( 'uploads', $proof['where'] );
 		self::assertSame( array( 'outside' => 'docroot' ), $proof['findings'] );
-		self::assertCount( 4, $fetcher->calls );
+		// The control file, three test files and, as they prove the folder,
+		// a PHP file below stage and below backups (Z8b branch 3, E4).
+		self::assertCount( 6, $fetcher->calls );
+		self::assertTrue( $proof['php'], 'The server refuses the PHP files below stage and backups too.' );
 		$id = AB_MCP_Protected_Store::install_id();
 		self::assertSame( self::in_uploads( 'a', $id ), AB_MCP_Protected_Store::root() );
 		$gid = AB_MCP_Protected_Store::open( 'reports' );
@@ -403,18 +406,18 @@ final class ProtectedStoreTest extends TestCase {
 		// A day is not over: the record holds, nothing is asked.
 		self::age_record( AB_MCP_Protected_Store::RECHECK - 60 );
 		self::assertTrue( AB_MCP_Protected_Store::proof( $fetcher )['available'] );
-		self::assertCount( 4, $fetcher->calls );
+		self::assertCount( 6, $fetcher->calls );
 
 		// A day later the check is made again.
 		self::age_record( 120 );
 		self::assertTrue( AB_MCP_Protected_Store::proof( $fetcher )['available'] );
-		self::assertCount( 8, $fetcher->calls );
+		self::assertCount( 12, $fetcher->calls );
 
 		// A missing guard is written again and the check made again.
 		unlink( self::in_uploads( 'a', $id ) . '/.htaccess' );
 		AB_MCP_Protected_Store::forget();
 		self::assertTrue( AB_MCP_Protected_Store::proof( $fetcher )['available'] );
-		self::assertCount( 12, $fetcher->calls );
+		self::assertCount( 18, $fetcher->calls );
 		self::assertStringEqualsFile( self::in_uploads( 'a', $id ) . '/.htaccess', AB_MCP_Protected_Store::GUARDS['.htaccess'] );
 
 		// The server stops refusing it: after a missing guard the check fails.
@@ -424,7 +427,7 @@ final class ProtectedStoreTest extends TestCase {
 		$proof = AB_MCP_Protected_Store::proof( $fetcher );
 		self::assertFalse( $proof['available'] );
 		self::assertSame( 'served', $proof['findings']['uploads'] );
-		self::assertCount( 16, $fetcher->calls );
+		self::assertCount( 22, $fetcher->calls, 'A check that fails at the test files asks no PHP file.' );
 		self::assertSame( 'ab_mcp_store_unavailable', AB_MCP_Protected_Store::open( 'reports' )->get_error_code() );
 	}
 
@@ -886,7 +889,7 @@ final class ProtectedStoreTest extends TestCase {
 		AB_MCP_Protected_Store::forget();
 		$calls = count( $fetcher->calls );
 		$proof = AB_MCP_Protected_Store::proof( $fetcher, true );
-		self::assertSame( $calls + 4, count( $fetcher->calls ), 'A made its check, and passed it.' );
+		self::assertSame( $calls + 6, count( $fetcher->calls ), 'A made its check, and passed it (with the PHP files below stage and backups).' );
 		self::assertFalse( $proof['available'], 'A success that began before the failure ended counts for nothing.' );
 		self::assertSame( 'served', $proof['findings']['uploads'] );
 		$stored = self::stored_proof();
@@ -985,17 +988,32 @@ final class ProtectedStoreTest extends TestCase {
 		self::assertSame( $tree, self::tree( $uploads ), 'Nothing written.' );
 	}
 
-	public function testTheCleanUpTakesOldTempFilesAlsoOutOfAGroupItKeeps(): void {
-		$id  = AB_MCP_Protected_Store::install_id();
-		$gid = AB_MCP_Protected_Store::open( 'backups', array( 'run_id' => 3 ) );
+	public function testTheCleanUpTakesOnlyItsOwnOldTempFilesNeverAFileByItsEnding(): void {
+		$id   = AB_MCP_Protected_Store::install_id();
+		$gid  = AB_MCP_Protected_Store::open( 'backups', array( 'run_id' => 3 ) );
+		$root = (string) AB_MCP_Protected_Store::root();
 		self::assertIsArray( AB_MCP_Protected_Store::put( 'backups', $gid, 'post-1', 'kept' ) );
-		$dir = self::group_dir( (string) AB_MCP_Protected_Store::root(), 'backups', $gid, $id );
-		// What a write cut off leaves: its temp file, which held() does not count.
-		file_put_contents( $dir . '/post-2.0a1b2c3d.tmp', 'half a backup' );
+		$dir = self::group_dir( $root, 'backups', $gid, $id );
+		// A file that ends in .tmp in a group is no temp file of the store
+		// (Z37: those lie in tmp/ only): it stays, old or young, as one in
+		// the folder of the store does (before Z8b branch 3 the clean-up took
+		// every old file of that ending).
+		file_put_contents( $dir . '/post-2.0a1b2c3d.tmp', 'not a temp file of the store' );
 		touch( $dir . '/post-2.0a1b2c3d.tmp', time() - AB_MCP_Protected_Store::TMP_AGE - 10 );
-		file_put_contents( $dir . '/post-3.0a1b2c3d.tmp', 'being written now' );
+		file_put_contents( $root . '/resources-1.tmp', 'not one either' );
+		touch( $root . '/resources-1.tmp', time() - AB_MCP_Protected_Store::TMP_AGE - 10 );
+		// In tmp/: an own old one goes, a young one and one without the
+		// prefix stay.
+		$tmp = $root . '/' . AB_MCP_Protected_Store::TMP;
+		file_put_contents( $tmp . '/' . AB_MCP_Protected_Store::TMP_PREFIX . 'old', 'cut off' );
+		touch( $tmp . '/' . AB_MCP_Protected_Store::TMP_PREFIX . 'old', time() - AB_MCP_Protected_Store::TMP_AGE - 10 );
+		file_put_contents( $tmp . '/' . AB_MCP_Protected_Store::TMP_PREFIX . 'young', 'being written now' );
+		file_put_contents( $tmp . '/daten.tmp', 'no prefix' );
+		touch( $tmp . '/daten.tmp', time() - AB_MCP_Protected_Store::TMP_AGE - 10 );
 		AB_MCP_Protected_Store::cleanup();
-		self::assertSame( array( 'post-1', 'post-3.0a1b2c3d.tmp' ), self::tree( $dir ), 'The old temp file went, the group, its file and a fresh temp file stay.' );
+		self::assertSame( array( 'post-1', 'post-2.0a1b2c3d.tmp' ), self::tree( $dir ), 'The group, its file and the file ending in .tmp stay.' );
+		self::assertFileExists( $root . '/resources-1.tmp' );
+		self::assertSame( array( AB_MCP_Protected_Store::TMP_PREFIX . 'young', 'daten.tmp' ), self::tree( $tmp ), 'Only the own old temp file went.' );
 		self::assertSame( array( $gid ), array_column( AB_MCP_Protected_Store::groups( 'backups' ), 'gid' ) );
 	}
 
@@ -1261,6 +1279,7 @@ final class ProtectedStoreTest extends TestCase {
 		self::assertSame( array( 7 ), array_keys( AB_MCP_Store_Budget::bookings() ) );
 		$root = (string) AB_MCP_Protected_Store::root();
 		self::assertSame( array(), (array) glob( $root . '/.ab-test-write-*' ), 'The test write is gone again.' );
+		self::assertSame( array(), array_diff( (array) scandir( $root . '/' . AB_MCP_Protected_Store::TMP ), array( '.', '..' ) ), 'No temp file of the test write or of the bookings stays in tmp/.' );
 
 		$free = (int) disk_free_space( $root );
 		$res  = AB_MCP_Store_Budget::book( 9, $free );
@@ -1281,11 +1300,12 @@ final class ProtectedStoreTest extends TestCase {
 		if ( function_exists( 'posix_geteuid' ) && 0 === posix_geteuid() ) {
 			return;
 		}
-		chmod( $root, 0500 );
+		// The test write is a temp file of the area tmp/ (Z37).
+		chmod( $root . '/' . AB_MCP_Protected_Store::TMP, 0500 );
 		try {
 			$res = AB_MCP_Store_Budget::book( 9, 10 );
 		} finally {
-			chmod( $root, 0700 );
+			chmod( $root . '/' . AB_MCP_Protected_Store::TMP, 0700 );
 		}
 		self::assertSame( 'ab_mcp_store_test_write', $res->get_error_code() );
 		self::assertSame( array(), AB_MCP_Store_Budget::bookings() );
