@@ -2190,8 +2190,16 @@ final class AB_MCP_Protected_Store {
 		$lines[] = '';
 
 		$lines[] = '[vor-den-umbenennungen]';
-		$lines[] = __( 'Before the first rename nothing was moved. Check that the target is the old version:', 'alphabridge-mcp' );
-		$lines[] = null === $old ? '$ test -e ' . $q( $target ) : $inode( $target, $old );
+		if ( null === $old && null !== $new ) {
+			// A unit the site did not have (Behebung 1, A3): the old state is
+			// «the target is missing».
+			$lines[] = __( 'The unit was not in the site before; nothing was moved yet. Check that the target is missing and the new version lies in the store:', 'alphabridge-mcp' );
+			$lines[] = '$ test ! -e ' . $q( $target );
+			$lines[] = $inode( $root . '/' . $new['path'], $new );
+		} else {
+			$lines[] = __( 'Before the first rename nothing was moved. Check that the target is the old version:', 'alphabridge-mcp' );
+			$lines[] = null === $old ? '$ test -e ' . $q( $target ) : $inode( $target, $old );
+		}
 		$lines[] = '';
 
 		if ( null !== $old ) {
@@ -2215,7 +2223,7 @@ final class AB_MCP_Protected_Store {
 			$lines[] = '[waehrend-des-ruecktauschs]';
 			$lines[] = __( 'The swap back stopped: the target holds the new version or is missing. Finish it and check it:', 'alphabridge-mcp' );
 			if ( null !== $new ) {
-				$lines[] = '$ if [ -e ' . $q( $target ) . ' ] && [ "$(ls -di ' . $q( $target ) . ' | awk \'{print $1}\')" = "' . (int) $new['ino'] . '" ]; then mv ' . $q( $target ) . ' ' . $q( $root . '/' . $new['path'] ) . '; fi';
+				$lines[] = '$ if [ -e ' . $q( $target ) . ' ] && [ "$(ls -di ' . $q( $target ) . ' | awk \'{print $1}\')" = "' . (int) $new['ino'] . '" ]; then test ! -e ' . $q( $root . '/' . $new['path'] ) . ' && mv ' . $q( $target ) . ' ' . $q( $root . '/' . $new['path'] ) . '; fi';
 			}
 			$lines[] = '$ if [ ! -e ' . $q( $target ) . ' ]; then mv ' . $q( $back ) . ' ' . $q( $target ) . '; fi';
 			$lines[] = $inode( $target, $old );
@@ -2223,6 +2231,28 @@ final class AB_MCP_Protected_Store {
 			$lines[] = '[nach-der-aktivierung]';
 			$lines[] = __( 'After the activation: as after the renames. Swap back and check it:', 'alphabridge-mcp' );
 			$lines   = array_merge( $lines, $swap );
+			$lines[] = '';
+		} elseif ( null !== $new ) {
+			// The new unit goes back into its place in the store: the site is
+			// then as before, without the unit.
+			$stage   = $root . '/' . $new['path'];
+			$back    = array( '$ if [ -e ' . $q( $target ) . ' ] && [ "$(ls -di ' . $q( $target ) . ' | awk \'{print $1}\')" = "' . (int) $new['ino'] . '" ]; then test ! -e ' . $q( $stage ) . ' && mv ' . $q( $target ) . ' ' . $q( $stage ) . '; fi', '$ test ! -e ' . $q( $target ), $inode( $stage, $new ) );
+			$out     = array( $inode( $target, $new ), '$ test ! -e ' . $q( $stage ), '$ mv ' . $q( $target ) . ' ' . $q( $stage ), '$ test ! -e ' . $q( $target ), $inode( $stage, $new ) );
+			$lines[] = '[zwischen-den-umbenennungen]';
+			$lines[] = __( 'The unit was not in the site before. Where the new version is at the target, it goes back into the store; check that the target is missing then:', 'alphabridge-mcp' );
+			$lines   = array_merge( $lines, $back );
+			$lines[] = '';
+			$lines[] = '[nach-den-umbenennungen]';
+			$lines[] = __( 'The new unit is in the site. Take it out again into its place in the store and check that the target is missing:', 'alphabridge-mcp' );
+			$lines   = array_merge( $lines, $out );
+			$lines[] = '';
+			$lines[] = '[waehrend-des-ruecktauschs]';
+			$lines[] = __( 'The way back stopped. Where the new version is still at the target, it goes back into the store; check that the target is missing then:', 'alphabridge-mcp' );
+			$lines   = array_merge( $lines, $back );
+			$lines[] = '';
+			$lines[] = '[nach-der-aktivierung]';
+			$lines[] = __( 'After the activation: as after the renames. What the activation routine wrote stays; moving the files back does not take it back.', 'alphabridge-mcp' );
+			$lines   = array_merge( $lines, $out );
 			$lines[] = '';
 		}
 		foreach ( (array) $mark['active'] as $file ) {
