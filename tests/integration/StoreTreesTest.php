@@ -41,7 +41,19 @@
  *   the store; a writer outside AlphaBridge is a limit (GRENZEN-CODE.md);
  * - «halb gelesen» of the reading of a tree is AB_MCP_Sync_File_Manifest's
  *   (SyncFileManifestTest): a tree read in part has no hash, so tree() and
- *   put_tree() refuse it.
+ *   put_tree() refuse it;
+ * - HTTP of the self-check, «halb geschrieben»: the request writes nothing;
+ *   a body cut short holds no content and counts by its status alone,
+ *   as a 403 or 404 without the content does (judge());
+ * - HTTP, a concurrent writer: the files of a check are made and noted by
+ *   the request that asks them, under names of its own; another check
+ *   asks its own files.
+ * The rows of the bookings: false, a Throwable and «halb geschrieben» here
+ * (testABookingThatCannotBeWritten…); an end of the process in the write of
+ * the bookings is the end of one write_file(), StoreRemoverTest::
+ * testAWriteOfTheStoreThatIsCutOffLeavesItsTempFileInTmpOnly; the run rows
+ * that cannot be read keep every group of a run (ProtectedStoreTest), and
+ * $wpdb gives no Throwable.
  *
  * @package AlphaBridge_MCP
  */
