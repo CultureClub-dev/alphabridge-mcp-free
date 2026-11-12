@@ -155,6 +155,14 @@ final class AB_MCP_Test_Abort {
 			static function () use ( $record ) {
 				$record['shutdown_ran'] = true;
 				$record['error']        = error_get_last();
+				// PHP 8.5 gives a fatal error its backtrace with the arguments
+				// of each frame (fatal_error_backtraces); one that is no UTF-8
+				// (the gzip bytes of a payload, Z8b branch 3) or a resource
+				// left json_encode() without a result and the marker empty.
+				// The parent reads type and message only.
+				if ( is_array( $record['error'] ) ) {
+					unset( $record['error']['trace'] );
+				}
 				self::write( $record );
 			}
 		);
@@ -175,7 +183,7 @@ final class AB_MCP_Test_Abort {
 	 */
 	private static function write( array $record ) {
 		$tmp = self::$marker . '.' . getmypid() . '.tmp';
-		if ( false === file_put_contents( $tmp, json_encode( $record, JSON_UNESCAPED_SLASHES ) ) || ! rename( $tmp, self::$marker ) ) {
+		if ( false === file_put_contents( $tmp, (string) json_encode( $record, JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE ) ) || ! rename( $tmp, self::$marker ) ) {
 			fwrite( STDERR, 'abort: the marker ' . self::$marker . " could not be written.\n" );
 		}
 	}
