@@ -1255,8 +1255,8 @@ final class SyncUnitPairsTest extends TestCase {
 	}
 
 	public function testAPartAStepDidNotWriteIsKeptApartFromOneItWroteAndChecked(): void {
-		// B5 (Lesart der Lead, noch von der Steuerung zu bestätigen): a part
-		// the step did not write takes the state of this site after the write
+		// B5 (Entscheid Thomas 12.11. 11:34): a part the step did not write
+		// (a unit made anew) takes the state of this site after the write
 		// as its base (live_after_write), never as written and checked; the
 		// journal names which, and the proof of one does not cover the other.
 		$s     = self::line( 'plugin', 'shop' );

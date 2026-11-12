@@ -347,8 +347,8 @@ final class AB_MCP_Sync_Pairs {
 	 * difference kept); written (a step of a run made the unit on this site
 	 * and wrote and checked the part as staging has it); live_after_write (a
 	 * part such a step did not write: the state of this site after the write,
-	 * read whole, the base of both sides, Lesart of the Lead, kept apart from
-	 * written in the proof and in the stored mode).
+	 * read whole, the base of both sides, decided by Thomas 12.11.; kept apart
+	 * from written in the proof and in the stored mode).
 	 */
 	const UNIT_MODES = array(
 		'equal'            => 'proposal',
