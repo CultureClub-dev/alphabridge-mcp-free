@@ -479,9 +479,10 @@ final class AB_Mutation_Plan {
 	 * The contract: every mutation job of the run is there (shards 1..n, each
 	 * once) and reached its end (the runner's last line, and as many killed
 	 * lines as it counts); each of them checked the source out; every
-	 * expected id has exactly one mutation time, every expected command at
-	 * least one baseline time; nothing in the log is not expected; a time
-	 * that is no number is an error of its own (0.0 is one: the rounding).
+	 * expected id has exactly one mutation time; each shard has exactly one
+	 * baseline time for each command its entries ran, and none else; nothing
+	 * in the log is not expected; a time that is no number is an error of
+	 * its own (0.0 is one: the rounding).
 	 * A missing measurement is an error here, never a default.
 	 *
 	 * @param string  $log     Log text.
@@ -498,8 +499,8 @@ final class AB_Mutation_Plan {
 		$expected = array();
 		$commands = array();
 		foreach ( $entries as $entry ) {
-			$expected[ $entry['id'] ] = true;
 			$key                      = self::key( $entry['run'] );
+			$expected[ $entry['id'] ] = $key;
 			$printed                  = implode( ' ', $entry['run'] );
 			if ( isset( $commands[ $printed ] ) && $commands[ $printed ] !== $key ) {
 				throw new RuntimeException( "two commands are printed alike ($printed); their baselines cannot be told apart" );
@@ -580,6 +581,8 @@ final class AB_Mutation_Plan {
 
 			$killed = 0;
 			$end    = null;
+			$ran    = array();
+			$needed = array();
 			foreach ( array_slice( $lines, $start + 1 ) as $text ) {
 				if ( 0 === strpos( $text, '##[group]' ) ) {
 					break;
@@ -593,6 +596,7 @@ final class AB_Mutation_Plan {
 						throw new RuntimeException( "shard $k/$n ran a baseline the lists do not have: {$bm[2]}" );
 					}
 					$baselines[ $commands[ $bm[2] ] ][] = $tenths;
+					$ran[ $commands[ $bm[2] ] ]         = ( $ran[ $commands[ $bm[2] ] ] ?? 0 ) + 1;
 				} elseif ( preg_match( '/^(killed|SURVIVED|OTHER|TIMEOUT|INVALID)\b/', $text, $vm ) ) {
 					if ( 'killed' !== $vm[1] ) {
 						throw new RuntimeException( "shard $k/$n is not green: $text" );
@@ -607,7 +611,8 @@ final class AB_Mutation_Plan {
 					if ( isset( $mutation[ $km[2] ] ) ) {
 						throw new RuntimeException( "{$km[2]} is measured twice" );
 					}
-					$mutation[ $km[2] ] = $tenths;
+					$mutation[ $km[2] ]             = $tenths;
+					$needed[ $expected[ $km[2] ] ] = true;
 					++$killed;
 				} elseif ( preg_match( '/^all ([0-9]+) mutations killed; every file is back byte for byte$/D', $text, $em ) ) {
 					$end = (int) $em[1];
@@ -617,6 +622,22 @@ final class AB_Mutation_Plan {
 			}
 			if ( $end !== $killed ) {
 				throw new RuntimeException( "shard $k/$n did not reach its end (" . ( null === $end ? 'no last line' : "$end counted, $killed killed lines" ) . ')' );
+			}
+
+			// Exactly one baseline for each command the entries of the shard
+			// ran, and none for another: the runner runs each once.
+			foreach ( $ran as $key => $times ) {
+				if ( ! isset( $needed[ $key ] ) ) {
+					throw new RuntimeException( "shard $k/$n ran the baseline of $key, which none of its entries needs" );
+				}
+				if ( 1 !== $times ) {
+					throw new RuntimeException( "shard $k/$n ran the baseline of $key $times times" );
+				}
+			}
+			foreach ( array_keys( $needed ) as $key ) {
+				if ( ! isset( $ran[ $key ] ) ) {
+					throw new RuntimeException( "shard $k/$n has no baseline of $key, which its entries need" );
+				}
 			}
 		}
 
@@ -633,11 +654,10 @@ final class AB_Mutation_Plan {
 			throw new RuntimeException( count( $missing ) . ' entries of the source have no measurement: ' . implode( ', ', array_slice( $missing, 0, 5 ) ) . ( count( $missing ) > 5 ? ', …' : '' ) );
 		}
 		$grundlinie = array();
-		foreach ( array_unique( $commands ) as $printed => $key ) {
-			if ( ! isset( $baselines[ $key ] ) ) {
-				throw new RuntimeException( "the baseline of $printed has no measurement" );
-			}
-			$grundlinie[ $key ] = self::median( $baselines[ $key ] );
+		// Every command has an entry, every entry is measured, and each
+		// shard that measured one ran the baseline of its command.
+		foreach ( $baselines as $key => $values ) {
+			$grundlinie[ $key ] = self::median( $values );
 		}
 		ksort( $mutation, SORT_STRING );
 		ksort( $grundlinie, SORT_STRING );
