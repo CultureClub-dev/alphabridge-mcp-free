@@ -344,7 +344,9 @@ final class StoreTreesTest extends TestCase {
 		self::assertSame( array(), self::names( $root . '/tmp' ) );
 		// Changed by hand: not used.
 		file_put_contents( $put['path'] . '/inc/teil.php', '<?php // anders' );
-		self::assertSame( 'ab_mcp_store_tree_changed', AB_MCP_Protected_Store::tree( 'stage', $gid, self::UNIT, $put['hash'] )->get_error_code() );
+		$changed = AB_MCP_Protected_Store::tree( 'stage', $gid, self::UNIT, $put['hash'] );
+		self::assertSame( 'ab_mcp_store_tree_changed', $changed->get_error_code() );
+		self::unconfirmed_tree( $changed->get_error_message(), 'a tree changed by hand' );
 		self::assertSame( 'ab_mcp_store_tree_missing', AB_MCP_Protected_Store::tree( 'stage', $gid, 'fehlt', $put['hash'] )->get_error_code() );
 		self::assertSame( 'ab_mcp_store_area', AB_MCP_Protected_Store::put_tree( 'out', $gid, self::UNIT, self::plugins() . '/' . self::UNIT, $src )->get_error_code() );
 		self::assertSame( 'ab_mcp_store_tree_path', AB_MCP_Protected_Store::put_tree( 'stage', $gid, 'b', 'wp-content/plugins/b', $src )->get_error_code() );
@@ -599,6 +601,48 @@ final class StoreTreesTest extends TestCase {
 		$put = AB_MCP_Protected_Store::put_tree( 'stage', $gid, self::UNIT, self::plugins() . '/' . self::UNIT, $src );
 		self::assertIsArray( $put, is_wp_error( $put ) ? $put->get_error_message() : '' );
 		self::assertTrue( $put['copied'] );
+	}
+
+	/**
+	 * The text of a tree tree() does not give out (K4g, A2): it claims no
+	 * difference where the tree may only not have been read whole, and no
+	 * way that does not go for every tree (a backup is not made again).
+	 */
+	private static function unconfirmed_tree( string $message, string $what ): void {
+		self::assertSame( 'The tree in the protected store could not be confirmed against the hash it was asked with: its manifest differs, or it could not be read whole (as when the time of the call runs out). So it is not given out. Try again; if it keeps failing, ask the host whether something else writes into the folder of the store or whether its disk is slow.', $message, $what );
+		foreach ( array( 'is not what was put there', 'Make it again' ) as $gone ) {
+			self::assertStringNotContainsString( $gone, $message, "$what: not said any more (K4g): $gone" );
+		}
+		self::assertMatchesRegularExpression( '/\\bTry again\\b.*\\bask the host\\b/', $message, "$what: a way." );
+	}
+
+	public function testATreeNotReadWithinItsTimeIsNotGivenOutAndComesBackOnTheNextCall(): void {
+		// K4g, A2: the tree is as it was put; its reading runs out of its
+		// time. Not given out, not called changed, and the way the text
+		// names (try again) goes.
+		require_once dirname( __DIR__, 2 ) . '/includes/sync/class-sync-env.php';
+		list( $gid ) = self::group( 'stage', 6 );
+		$src = self::source( self::src(), '2.0.0' );
+		$put = AB_MCP_Protected_Store::put_tree( 'stage', $gid, self::UNIT, self::plugins() . '/' . self::UNIT, $src );
+		self::assertIsArray( $put, is_wp_error( $put ) ? $put->get_error_message() : '' );
+		$kept = self::snapshot( $put['path'] );
+		$now  = 1000.0;
+		\AB_MCP_Sync_Env::$clock = static function () use ( &$now ) {
+			$now += 50.0;
+			return $now;
+		};
+		try {
+			$late = AB_MCP_Protected_Store::tree( 'stage', $gid, self::UNIT, $put['hash'] );
+		} finally {
+			\AB_MCP_Sync_Env::$clock = null;
+		}
+		self::assertInstanceOf( \WP_Error::class, $late );
+		self::assertSame( 'ab_mcp_store_tree_changed', $late->get_error_code() );
+		self::unconfirmed_tree( $late->get_error_message(), 'a tree not read in time' );
+		self::assertSame( $kept, self::snapshot( $put['path'] ), 'Nothing of it was changed.' );
+		$back = AB_MCP_Protected_Store::tree( 'stage', $gid, self::UNIT, $put['hash'] );
+		self::assertIsArray( $back, is_wp_error( $back ) ? $back->get_error_message() : '' );
+		self::assertSame( $put['hash'], $back['hash'], 'Tried again: the same tree.' );
 	}
 
 	public function testAnEndOfTheProcessInTheMiddleOfACopyLeavesAHalfTreeThatIsNeverUsed(): void {

@@ -2239,7 +2239,7 @@ final class AB_MCP_Protected_Store {
 		}
 		$read = self::read_tree( $place );
 		if ( ! $read['complete'] || null === $read['hash'] || ! hash_equals( (string) $hash, (string) $read['hash'] ) ) {
-			return new WP_Error( 'ab_mcp_store_tree_changed', __( 'The tree in the protected store is not what was put there (its manifest differs, or it could not be read whole), so it is not used. Make it again; if it keeps happening, ask the host whether something else writes into the folder of the store.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_store_tree_changed', __( 'The tree in the protected store could not be confirmed against the hash it was asked with: its manifest differs, or it could not be read whole (as when the time of the call runs out). So it is not given out. Try again; if it keeps failing, ask the host whether something else writes into the folder of the store or whether its disk is slow.', 'alphabridge-mcp' ) );
 		}
 		return array(
 			'path'  => $place,
