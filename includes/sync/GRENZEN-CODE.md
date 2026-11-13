@@ -284,7 +284,9 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
 - **Quelle:** gezielte Codex-Nachfrage zu `f24115a` (1 A), geschlossene Codex-Prüfung von K4 (2 A an derselben
   Stelle, Stoppfall), Entscheid Thomas vom 13.11.2026 16:04 («D: Eine ehrliche Meldung», Teil K4d), geschlossene
   Codex-Prüfung von K4d (1 A: der Satz über die Wirkung des Aufrufs), Entscheid der Steuerung in Thomas' Auftrag vom
-  13.11.2026 16:28 (Teil K4e).
+  13.11.2026 16:28 (Teil K4e), geschlossene Codex-Bestätigung von K4e (1 A: die Klammer über die Aufbewahrung),
+  Entscheid der Steuerung in Thomas' Auftrag vom 13.11.2026 16:43 und Fable-Prüfstelle 5 (Teil K4f: die Klammer ist
+  gestrichen, die Meldung nennt keine Aufbewahrungsfristen mehr).
 - **Was:** Gibt der Sidecar der Gruppe einer Stufe dauerhaft keinen Eintrag seiner Gruppe (nicht lesbar, keine Datei,
   nicht in der Form, ein Eintrag einer anderen Gruppe, oder er fehlt), lehnt `group()` mit `ab_mcp_store_no_group` ab.
   Die Meldung nennt beide Möglichkeiten (die Gruppe ist nicht da: nie geöffnet oder entfernt; oder sie ist da, und ihr
@@ -301,6 +303,17 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
     `write_state()` → `put()`), gibt `AB_MCP_Sync_Code_Stage::stage()` den Fehler zurück, und
     `AB_MCP_Sync_Code_Ops::stage()` beendet den Schritt über `not_staged()` mit `failed`. Der schon geschriebene Baum
     bleibt in der Gruppe: `take_in()` entfernt nichts. Nach dem Code gelesen, ohne eigenen Test.
+    In diesem Fall rät die Meldung des Stores «try again», der Schritt ist aber beendet (`failed`), und die Meldung
+    des Schritts führt zum nächsten Schritt (`action=next`): ein neuer Versuch für diese Einheit geht dann nur über
+    einen neuen Lauf. Die Meldung sagt das nicht (Befund K4e Nr. 2, nach dem Code gelesen, ohne eigenen Test;
+    Folgeposten der Fehlerweg-Prüfung des Teils).
+  - B (kein Normalfall, keine Kernzusage): `read_entry()` gibt auch für einen formgerechten Eintrag eines anderen
+    Bereichs null (`sidecar()`, Zustand `other`: der Eintrag nennt selbst einen anderen Bereich als den, in dem er
+    liegt), und `group()` lehnt dann ebenso mit `ab_mcp_store_no_group` ab. Die Aufzählung der Meldung («is missing, is
+    no plain file, cannot be read, is not of its form or names another group») nennt diesen Fall nicht wörtlich.
+    Nötig ist ein fremder Schreiber oder ein Schaden auf der Platte; der Weg der Meldung («ask the host to check the
+    folder of the protected store») gilt auch dafür. Die Tests erwarten den Teilsatz wörtlich
+    (`ProtectedStoreTest`, `SyncCodeRunTest`), darum Vermerk statt Textänderung.
   Die genaue Trennung «fehlt / beschädigt / dauerhaft» (und damit ein `failed` für einen dauerhaft formwidrigen
   Sidecar) ist Folgeposten der Fehlerweg-Prüfung des Teils, zusammen mit `sidecar()`.
 - **Trifft Normalfall:** nein. Der eigene Code schreibt einen Sidecar nur ganz (`write_entry()` über eine Temp-Datei,
