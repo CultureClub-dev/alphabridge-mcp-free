@@ -23,10 +23,13 @@
  *   (PHPUnit sends it only for those).
  * A test that sets a limit of its own keeps it while it runs. Between two
  * classes (tearDownAfterClass(), setUpBeforeClass()) a limit set by the
- * last test's setUp() without a tearDown() stays until the next test
- * begins. Child processes (AB_MCP_IT_Process, AB_MCP_Test_Abort) are not
- * touched: each starts with its own limit. Registered in phpunit.xml.dist of
- * this suite; bootstrap.php requires this file. Test code only.
+ * last test's setUp() that skipped or threw before preparation completed
+ * (anything but a failed assertion, after which PHPUnit counts the test as
+ * prepared and sends Finished), with no after-hook of its own (tearDown()
+ * or an #[After] method), stays until the next test begins. Child
+ * processes (AB_MCP_IT_Process, AB_MCP_Test_Abort) are not touched: each
+ * starts with its own limit. Registered in phpunit.xml.dist of this suite;
+ * bootstrap.php requires this file. Test code only.
  *
  * @package AlphaBridge_MCP
  */

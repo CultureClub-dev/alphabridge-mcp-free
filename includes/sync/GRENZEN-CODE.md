@@ -429,11 +429,14 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
 - **Wirkung:** Die erste Gruppe mit ihrem Baum bleibt liegen; dieser Schritt und der nächste Aufruf entfernen sie
   nicht. Wann sie geht, regeln die Aufbewahrung des Bereichs `stage` (`KEEP` ein Tag,
   `includes/class-protected-store.php:424`) und `kept()` (`:1452`); nicht nachgestellt. Nach Fable zählt sie bis
-  dahin im Budget (nicht nachgeprüft). An der Site wird nichts geschrieben, nichts Falsches gelöscht oder freigegeben:
-  ein Tausch nimmt nur die Stufe, die das Journal nennt.
+  dahin im Budget (nicht nachgeprüft). Am geprüften Kopf wird der noch nicht implementierte Tausch abgelehnt
+  (`class-sync-code-ops.php:107`–`:112`, `ab_mcp_sync_code_swap_not_built`); durch die Bereitstellung wurde nichts an
+  der Site geschrieben.
 - **Trifft Normalfall:** nein (braucht einen Fehler der Datenbank beim Speichern oder ein Ende der Anfrage genau
   zwischen `stage()` und `update_step()`).
-- **Folgeposten:** Test mit einem Fehler an `update_step()` in der Fehlerweg-Prüfung des Teils.
+- **Folgeposten:** Test mit einem Fehler an `update_step()` in der Fehlerweg-Prüfung des Teils. Anforderung an Teil 2
+  (am Kopf nicht gebaut): der Tausch nimmt nur die Stufe, die das Journal seines Schritts nennt, nie eine verwaiste
+  Gruppe.
 
 ### G-5-5 Doppelfehler beim Binden der Pakete und beim Abbruch des neuen Laufs
 
@@ -441,23 +444,30 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
 - **Quelle:** Fable-Prüfstelle 2, C1; Entscheid der Lead vom 13.11.2026 18:51.
 - **Fall:** `AB_MCP_Sync_Code_Plan::bind()` gibt einen Fehler, und das folgende `AB_MCP_Sync_Engine::abort()` gibt
   ebenfalls einen.
-- **Wirkung:** Zurück kommt nur der Fehler von `abort()` (`:1390`, `:1392`); die Meldung nennt weder den Fehler der
-  Bindung noch die Nummer des Laufs. In welchem Zustand der Lauf und seine Pakete dann bleiben, hängt daran, wo
+- **Wirkung:** Zurück kommt nur der Fehler von `abort()` (`:1390`, `:1392`); der Bindungsfehler wird nicht ergänzt.
+  Ob die Meldung die Laufnummer nennt, hängt vom Abbruchfehler ab (die Ablehnung, weil ein anderer Aufruf die Sperre
+  hält, nennt sie: «Run %d is not aborted.», `class-sync-engine.php:422`, über `AB_MCP_Sync_Run::under_lock()`,
+  `class-sync-run.php:752`–`:754`). In welchem Zustand der Lauf und seine Pakete dann bleiben, hängt daran, wo
   `abort()` scheitert; nicht nachgeprüft. An der Site ist bis dahin nichts geschrieben (der Lauf ist eben erst
   geplant).
 - **Trifft Normalfall:** nein (zwei Fehler hintereinander).
 
-### G-5-6 Eine formwidrige Gruppe im Bereich `in` sperrt jeden Code-Lauf
+### G-5-6 `by_label()` lehnt eine formwidrige Gruppe aus `groups( 'in' )` ab (am Kopf nicht erreichbar)
 
 - **Fundstelle:** `AB_MCP_Sync_Code_Plan::by_label()` (`includes/sync/class-sync-code-plan.php:734`), gerufen über alle
   Gruppen von `AB_MCP_Protected_Store::groups( 'in' )` (`:704`, `:708`).
 - **Quelle:** Fable-Prüfstelle 2, C2; Entscheid der Lead vom 13.11.2026 18:51.
-- **Fall:** Eine einzige Gruppe des Bereichs `in`, deren Eintrag nicht in der Form `GROUP` liest (keine lesbare `gid`
-  oder kein `label`).
-- **Wirkung:** `by_label()` lehnt mit `ab_mcp_sync_code_bind` ab, die Bindung jedes Code-Laufs scheitert, und der neue
-  Lauf wird wieder geschlossen (G-5-5 ohne den zweiten Fehler). Fail-closed: die Meldung nennt den Weg «Ask the host to
-  check the folder of the protected store». Nichts an der Site geschrieben.
-- **Trifft Normalfall:** nein (braucht eine Gruppe, die der eigene Code so nicht schreibt).
+- **Fall:** Eine Gruppe aus `groups( 'in' )`, deren Eintrag nicht in der Form `GROUP` liest (keine gültige `gid` oder
+  kein gültiges `label`).
+- **Wirkung:** `by_label()` lehnt eine hypothetisch formwidrige Rückgabe von `groups('in')` defensiv ab. Beschädigte
+  Sidecars werden aktuell bereits beim Auflisten ausgelassen: `sidecar()` erkennt einen Sidecar ohne gültige `gid` oder
+  `label` über `whole()` als `unknown` (`includes/class-protected-store.php:4432`–`:4434`, `:4454`–`:4459`; `GROUP`
+  nimmt dieselben Formen `sidecar.gid` und `sidecar.label`, `class-sync-code-plan.php:98`–`:105`), `entries()` lässt
+  ihn aus (`:4052`–`:4056`), `groups()` liefert die übrigen (`:1118`–`:1126`). Fehlt dadurch ein benötigtes Paket,
+  lehnt `bind()` dessen Bindung ab (`class-sync-code-plan.php:720`), und der neue Lauf wird wieder geschlossen (G-5-5
+  ohne den zweiten Fehler). Am Kopf bleibt damit kein Fall, in dem `by_label()` jeden Code-Lauf sperrt. Nichts an der
+  Site geschrieben.
+- **Trifft Normalfall:** nein (die Rückgabe von `groups()` dieser Fassung liest immer in der Form `GROUP`).
 
 ## Übernommen aus Zweig 2 (`bericht-zweig-2.md`, Abschnitt Grenzkandidaten; G-M9 aus «Behebung 2»)
 
