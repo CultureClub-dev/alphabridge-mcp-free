@@ -783,7 +783,8 @@ final class SyncCodeRunTest extends TestCase {
 			chmod( $file, 0644 );
 		}
 		self::assertStringContainsString( '(code:paths_unread)', $message );
-		self::assertStringContainsString( 'then make a new report (wp_site_diff) and plan again', $message, 'With the way.' );
+		self::assertStringContainsString( 'Where the time of this call did not suffice, plan again (wp_site_push action=plan)', $message, 'With the way of each cause.' );
+		self::assertStringContainsString( 'cannot be read: make it readable, then plan again', $message, 'With the way of each cause.' );
 		self::assertNull( AB_MCP_Sync_Run::open_run() );
 	}
 

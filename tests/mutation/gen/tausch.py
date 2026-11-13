@@ -249,6 +249,10 @@ e('k1b-signed-lacks', 'to_backup(): only a path whose name the signed manifest l
   "\t\t\tif ( ! isset( $there[ AB_MCP_Sync_Env::hashed( $path ) ] ) ) {", "\t\t\tif ( true ) {", 'ops', TOB)
 e('k1b-here-key', 'to_backup(): a path read here is compared by its SHA-256 (A1)', CP,
   "\t\t\t\t$now[ AB_MCP_Sync_Env::hashed( $path ) ] = true;", "\t\t\t\t$now[ $path ] = true;", 'ops', TOB)
+e('k1b-here-hash-name', 'to_backup(): a path read here is hashed even where its name is of the form of a hash, as the report names it (A1)', CP,
+  "\t\t\t\t$now[ AB_MCP_Sync_Env::hashed( $path ) ] = true;", "\t\t\t\t$now[ self::name_key( $path ) ] = true;", 'ops', TOB)
+e('k1b-there-hash-name', 'to_backup(): a path read here whose name is of the form of a hash is found in the signed manifest by its SHA-256 (A1)', CP,
+  "\t\t\tif ( ! isset( $there[ AB_MCP_Sync_Env::hashed( $path ) ] ) ) {", "\t\t\tif ( ! isset( $there[ self::name_key( $path ) ] ) ) {", 'ops', TOB)
 e('k1b-sort-now', 'to_backup(): the paths read here compared in the order of their names, not of the reading (A1)', CP,
   "\t\tksort( $now, SORT_STRING );\n", '', 'ops', TOB)
 e('k1b-sort-then', 'to_backup(): the paths of the report compared in the order of their names, not of the report (A1)', CP,

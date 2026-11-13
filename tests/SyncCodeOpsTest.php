@@ -297,10 +297,21 @@ final class SyncCodeOpsTest extends TestCase {
 		$here = array_merge( array( 'shop.php', 'key=1.txt' ), $two );
 		self::assertSame( $said, $to->invoke( null, array(), 7, $entry( $said ), $signed, $here ), 'The normal case: named as the report names them, a name held on either side alike.' );
 		self::assertSame( array(), $to->invoke( null, array(), 7, $entry( array() ), $signed, array( 'shop.php', 'key=1.txt' ) ), 'None here that the new version lacks.' );
+		// A file named like a hash (sha256: and 64 hex digits) is a name the
+		// report holds by its SHA-256 (AB_MCP_Sync_Env::path_name()), here and
+		// in the signed manifest alike: a path read here is always hashed.
+		$like = 'sha256:' . str_repeat( 'c', 64 );
+		$only = 'sha256:' . str_repeat( 'd', 64 );
+		$both = array_merge( $signed, array( array( $h( $like ), 4, str_repeat( 'e', 64 ) ) ) );
+		self::assertSame( array( $h( $only ) ), $to->invoke( null, array(), 7, $entry( array( $h( $only ) ) ), $both, array( 'shop.php', 'key=1.txt', $like, $only ) ), 'A name like a hash, on both sides and only here.' );
 		$code  = static function ( $got ): string {
 			self::assertInstanceOf( WP_Error::class, $got );
 			return $got->get_error_code();
 		};
+		$way   = array(
+			'code:paths_changed' => array( 'Make a new report (wp_site_diff), then plan again' ),
+			'code:paths_unread'  => array( 'Where the time of this call did not suffice, plan again (wp_site_push action=plan)', 'cannot be read: make it readable, then plan again', 'where the unit is no longer on this site, make a new report (wp_site_diff)' ),
+		);
 		$cases = array(
 			'a path added here'                  => array( $said, array_merge( $here, array( 'neu.txt' ) ), 'code:paths_changed' ),
 			'a path of the report gone here'     => array( $said, array( 'shop.php', 'key=1.txt', 'alt.txt' ), 'code:paths_changed' ),
@@ -312,7 +323,9 @@ final class SyncCodeOpsTest extends TestCase {
 			$got = $to->invoke( null, array(), 7, $entry( $only ), $signed, $read );
 			self::assertSame( $want, $code( $got ), $what );
 			self::assertStringContainsString( '(' . $want . ')', $got->get_error_message(), $what );
-			self::assertStringContainsString( 'make a new report (wp_site_diff)', strtolower( $got->get_error_message() ), "$what: with the way." );
+			foreach ( $way[ $want ] as $said_way ) {
+				self::assertStringContainsString( $said_way, $got->get_error_message(), "$what: with the way of each cause." );
+			}
 		}
 		$unknown = $to->invoke( null, array(), 7, array( 'subtype' => 'plugin', 'ref' => 'shop' ), $signed, $here );
 		self::assertSame( 'code:paths_unknown', $code( $unknown ), 'The report does not hold them whole: before anything is read.' );

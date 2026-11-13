@@ -484,7 +484,7 @@ final class AB_MCP_Sync_Code_Plan {
 			return self::refused( 'code:paths_unknown', __( 'The report does not hold every path of this unit that lies on this site and is not in the version of the staging site (its list only_live and the entries more_paths after it do not read whole), and the preview names each of them before a swap, so it is not taken over (code:paths_unknown). Make a new report (wp_site_diff) and plan again.', 'alphabridge-mcp' ) );
 		}
 		if ( null === $here ) {
-			return self::refused( 'code:paths_unread', __( 'The files of this unit on this site could not be read whole now (a file or folder not readable, the unit gone, or the time of the call spent), and the preview names each path of it that is not in the version of the staging site before a swap, so it is not taken over (code:paths_unread). Check that every file of the plugin or theme here can be read, then make a new report (wp_site_diff) and plan again.', 'alphabridge-mcp' ) );
+			return self::refused( 'code:paths_unread', __( 'The files of this unit on this site could not be read whole now, and the preview names each path of it that is not in the version of the staging site before a swap, so it is not taken over (code:paths_unread). Where the time of this call did not suffice, plan again (wp_site_push action=plan). Where the lock stays, a file or folder of the plugin or theme here cannot be read: make it readable, then plan again; where the unit is no longer on this site, make a new report (wp_site_diff).', 'alphabridge-mcp' ) );
 		}
 		$there = array();
 		foreach ( $signed as $one ) {
