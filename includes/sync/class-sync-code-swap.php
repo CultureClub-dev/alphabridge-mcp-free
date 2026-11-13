@@ -635,6 +635,10 @@ final class AB_MCP_Sync_Code_Swap {
 		if ( is_wp_error( $now ) ) {
 			return $now;
 		}
+		// The readings after the test requests keep the time the rest of the
+		// swap needs (A1): what stays of the call less twice the test
+		// requests and the reserve.
+		$in['keep'] = 2 * $probe['took'] + self::RESERVE;
 		return self::checked( $in, $target, $now, $runs, $probe );
 	}
 
@@ -682,8 +686,15 @@ final class AB_MCP_Sync_Code_Swap {
 			/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name. */
 			return self::refusal( 'code:store_device', sprintf( __( 'The protected store and the folder of the %1$s %2$s are not read as lying on one device of this server now, so it is not swapped: a unit is swapped only by renaming, which works on one device only. Ask the host to put the protected store on the device of wp-content, or update the unit by hand in wp-admin.', 'alphabridge-mcp' ), $kind, $ref ) );
 		}
-		if ( ! self::lock_held() ) {
+		if ( ! self::lock_held() || true !== self::calls()->core_held( self::$held['core'] ) ) {
 			return self::lock_unknown();
+		}
+		// After every check before the mutation (A1 of the Codex round on
+		// 4881c0d): the time for the swap, its test after it and a swap back
+		// with its test, asked again.
+		$end = self::time_left( $kind, $ref, $in['until'], 2 * $probe['took'] + self::RESERVE, $probe['took'] );
+		if ( is_wp_error( $end ) ) {
+			return $end;
 		}
 		return array(
 			'target'  => $target,
@@ -831,7 +842,7 @@ final class AB_MCP_Sync_Code_Swap {
 			/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name. */
 			return self::refusal( 'code:pair', sprintf( __( 'The pair of the %1$s %2$s could not be read now, or is no longer the active pair the plan was made with, so the base of its files is not known and it is not swapped. Abort the run (wp_site_push action=abort), make a new report (wp_site_diff) and plan again.', 'alphabridge-mcp' ), $unit['kind'], $unit['ref'] ) );
 		}
-		$read = AB_MCP_Sync_File_Manifest::unit( dirname( $target ), $unit['ref'], 'live', min( $in['until'], $now + AB_MCP_Sync_Env::UNIT_BUDGET ), true, $unit['kind'] );
+		$read = AB_MCP_Sync_File_Manifest::unit( dirname( $target ), $unit['ref'], 'live', min( $in['until'] - $in['keep'], $now + AB_MCP_Sync_Env::UNIT_BUDGET ), true, $unit['kind'] );
 		if ( ! is_array( $read ) || true !== $read['complete'] || ! is_string( $read['hash'] ) ) {
 			/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name. */
 			return self::refusal( 'code:live_unknown', sprintf( __( 'The %1$s %2$s on this site could not be read whole now (a file or folder not read, or the time of the call ran out), so whether it is still the version its pair is based on is not known and it is not swapped. Call action=next again; where it keeps failing, update it by hand in wp-admin.', 'alphabridge-mcp' ), $unit['kind'], $unit['ref'] ) );
