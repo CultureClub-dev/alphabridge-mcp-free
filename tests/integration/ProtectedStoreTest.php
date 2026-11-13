@@ -601,7 +601,7 @@ final class ProtectedStoreTest extends TestCase {
 		self::assertSame( 'ab_mcp_store_no_group', AB_MCP_Protected_Store::put( 'reports', $gid, 'x', 'y' )->get_error_code(), 'A group belongs to its area.' );
 	}
 
-	public function testASidecarThatIsThereButGivesNoEntryOfItsGroupIsNotAGroupThatIsGone(): void {
+	public function testAGroupWhoseSidecarOrFolderCannotBeReadIsRefusedByEveryCallWithOneTextThatClaimsNeitherGoneNorThere(): void {
 		// K4 and K4d of Z8b branch 5 (Thomas, 13.11.2026: one honest message):
 		// group() does not tell a sidecar that is not there from one that is
 		// there but is no plain file, does not read, is not of its form or

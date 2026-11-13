@@ -306,7 +306,7 @@ e('k2-store-entry-gid', 'entry(): a sidecar holding the entry of another group i
   SIDE, SIDE.replace(" || $gid !== $read[1]['gid']", ''), 'coderun', OTHER_ENTRY)
 
 # ------------------------------------------- a group that group() does not give (K4, K4d)
-NOGROUP = 'testASidecarThatIsThereButGivesNoEntryOfItsGroupIsNotAGroupThatIsGone'
+NOGROUP = 'testAGroupWhoseSidecarOrFolderCannotBeReadIsRefusedByEveryCallWithOneTextThatClaimsNeitherGoneNorThere'
 GRP = "\t\tif ( null === $entry || $gid !== $entry['gid'] ) {"
 e('k4d-group-null', 'group(): a sidecar that gives no entry is no group, read without a warning (K4d)', PS,
   GRP, GRP.replace("null === $entry || ", ''), 'store', NOGROUP)

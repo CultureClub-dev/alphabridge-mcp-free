@@ -939,8 +939,8 @@ return array(
 		'file'    => $ps,
 		'search'  => "\t\tif ( null === \$entry || \$gid !== \$entry['gid'] ) {",
 		'replace' => "\t\tif ( \$gid !== \$entry['gid'] ) {",
-		'run'     => $it( 'ProtectedStoreTest', 'testASidecarThatIsThereButGivesNoEntryOfItsGroupIsNotAGroupThatIsGone' ),
-		'expect'  => '/testASidecarThatIsThereButGivesNoEntryOfItsGroupIsNotAGroupThatIsGone/',
+		'run'     => $it( 'ProtectedStoreTest', 'testAGroupWhoseSidecarOrFolderCannotBeReadIsRefusedByEveryCallWithOneTextThatClaimsNeitherGoneNorThere' ),
+		'expect'  => '/testAGroupWhoseSidecarOrFolderCannotBeReadIsRefusedByEveryCallWithOneTextThatClaimsNeitherGoneNorThere/',
 	),
 	array(
 		'id'      => 'tausch/k4d-group-gid',
@@ -948,8 +948,8 @@ return array(
 		'file'    => $ps,
 		'search'  => "\t\tif ( null === \$entry || \$gid !== \$entry['gid'] ) {",
 		'replace' => "\t\tif ( null === \$entry ) {",
-		'run'     => $it( 'ProtectedStoreTest', 'testASidecarThatIsThereButGivesNoEntryOfItsGroupIsNotAGroupThatIsGone' ),
-		'expect'  => '/testASidecarThatIsThereButGivesNoEntryOfItsGroupIsNotAGroupThatIsGone/',
+		'run'     => $it( 'ProtectedStoreTest', 'testAGroupWhoseSidecarOrFolderCannotBeReadIsRefusedByEveryCallWithOneTextThatClaimsNeitherGoneNorThere' ),
+		'expect'  => '/testAGroupWhoseSidecarOrFolderCannotBeReadIsRefusedByEveryCallWithOneTextThatClaimsNeitherGoneNorThere/',
 	),
 	array(
 		'id'      => 'tausch/k4d-group-folder',
@@ -957,7 +957,7 @@ return array(
 		'file'    => $ps,
 		'search'  => '? self::unsafe() : self::no_group();',
 		'replace' => '? self::unsafe() : self::unsafe();',
-		'run'     => $it( 'ProtectedStoreTest', 'testASidecarThatIsThereButGivesNoEntryOfItsGroupIsNotAGroupThatIsGone' ),
-		'expect'  => '/testASidecarThatIsThereButGivesNoEntryOfItsGroupIsNotAGroupThatIsGone/',
+		'run'     => $it( 'ProtectedStoreTest', 'testAGroupWhoseSidecarOrFolderCannotBeReadIsRefusedByEveryCallWithOneTextThatClaimsNeitherGoneNorThere' ),
+		'expect'  => '/testAGroupWhoseSidecarOrFolderCannotBeReadIsRefusedByEveryCallWithOneTextThatClaimsNeitherGoneNorThere/',
 	),
 );
