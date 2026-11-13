@@ -276,6 +276,30 @@ final class SyncCodeOpsTest extends TestCase {
 		}
 	}
 
+	public function testAStepOfARunNotOfItsFormOrWithFieldsNotReadStagesNothing(): void {
+		// stage(): the run of a step comes in the form of runs.run_id (digits
+		// of a column of the database are its form), and a
+		// step with fields not read (unread) is not known; neither stages
+		// nor checks anything, the step stays as it is (V19).
+		$item  = array(
+			'unit'     => self::unit(),
+			'env'      => self::code()['env'],
+			'packages' => array(),
+		);
+		$cases = array(
+			'run_id a word'    => array( array( 'run_id' => '7x' ), array( 'parts' => null ) ),
+			'run_id 0'         => array( array( 'run_id' => 0 ), array( 'parts' => null ) ),
+			'run_id null'      => array( array( 'run_id' => null ), array( 'parts' => null ) ),
+			'run_id a float'   => array( array( 'run_id' => 7.0 ), array( 'parts' => null ) ),
+			'a field not read' => array( array( 'run_id' => 7 ), array( 'parts' => null, 'unread' => array( 'parts' ) ) ),
+		);
+		foreach ( $cases as $what => $case ) {
+			$got = AB_MCP_Sync_Code_Ops::run( $case[0], $case[1], $item );
+			self::assertInstanceOf( WP_Error::class, $got, $what );
+			self::assertSame( 'ab_mcp_sync_code_journal', $got->get_error_code(), $what );
+		}
+	}
+
 	public function testTheStageOfAStepComesFromItsJournalInItsFormOrIsNotKnown(): void {
 		$read = AB_MCP_Sync_Code_Ops::staged( self::journal() );
 		self::assertSame( array( str_repeat( 'c', 32 ), 'shop', str_repeat( 'd', 64 ) ), array( $read['stage']['gid'], $read['stage']['name'], $read['stage']['hash'] ) );

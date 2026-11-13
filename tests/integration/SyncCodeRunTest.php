@@ -680,6 +680,14 @@ final class SyncCodeRunTest extends TestCase {
 		self::refused( self::gated( 'wp_site_push', $args + array( 'all' => true ) ), 'ab_mcp_sync_push_code_mix' );
 		self::refused( self::gated( 'wp_site_push', $args + array( 'as_draft' => array( $n ) ) ), 'ab_mcp_sync_push_code_mix' );
 		self::refused( self::gated( 'wp_site_push', $args + array( 'choices' => array( array( 'entry' => $other, 'choice' => 'keep_live' ) ) ) ), 'ab_mcp_sync_push_code_mix' );
+		// A choice or a draft for the entry of the unit itself: no step of the
+		// contents either.
+		self::refused( self::gated( 'wp_site_push', $args + array( 'choices' => array( array( 'entry' => $n, 'choice' => 'keep_live' ) ) ) ), 'ab_mcp_sync_push_code_mix' );
+		// accept without a unit of code chosen (Z41): refused with the way,
+		// never a plan of the contents.
+		$message = self::refused( self::gated( 'wp_site_push', array( 'select' => array( $other ), 'accept' => array( $other ) ) + $args ), 'ab_mcp_sync_push_selection' );
+		self::assertStringContainsString( 'accept names entries, but the selection names no plugin and no theme', $message );
+		self::assertStringContainsString( 'Leave accept out, or select the unit', $message, 'With the way.' );
 		self::assertNull( AB_MCP_Sync_Run::open_run() );
 		// The unit alone: a plan of the code, every step of phase 2 or of the frame.
 		$preview = self::gated( 'wp_site_push', $args );
@@ -687,6 +695,92 @@ final class SyncCodeRunTest extends TestCase {
 		self::assertNotContains( 5, array_column( $preview['preview']['steps'], 'phase' ) );
 		// A plan of the contents without its packages is refused as ever.
 		self::refused( self::gated( 'wp_site_push', array( 'select' => array( $other ) ) + $args ), 'ab_mcp_sync_push_packages' );
+	}
+
+	public function testPathsThatGoIntoTheBackupNotKnownLockTheUnit(): void {
+		// Reading 4: where the report does not hold every path of the unit
+		// here that the new version lacks, the unit is locked with its own
+		// reason (code:paths_unknown), never planned with fewer paths.
+		list( , $entry, $env ) = self::changed( 'ab-it-inaktiv', '1.1.0' );
+		self::wporg();
+		$unit      = new \ReflectionMethod( AB_MCP_Sync_Code_Plan::class, 'unit' );
+		$pair      = \AB_MCP_Sync_Pairs::get( $entry['pair']['id'] );
+		$with      = array( 'source' => $pair['source_id'] );
+		$selection = array(
+			'accept'   => array(),
+			'packages' => array(),
+		);
+		$planned   = $unit->invoke( null, array(), $entry['n'], $entry, $env, $selection, $with );
+		self::assertArrayHasKey( 'item', $planned, 'The entry as the report holds it is planned.' );
+		foreach ( array( 'only_live_count', 'only_live' ) as $field ) {
+			$broken = $entry;
+			unset( $broken['paths'][ $field ] );
+			$got = $unit->invoke( null, array(), $entry['n'], $broken, $env, $selection, $with );
+			self::assertArrayHasKey( 'locked', $got, $field );
+			self::assertStringContainsString( '(code:paths_unknown)', $got['locked']['reason'], $field );
+			self::assertStringContainsString( 'Make a new report (wp_site_diff) and plan again', $got['locked']['reason'], "$field: with the way." );
+		}
+	}
+
+	public function testAStageStillCheckingSaysSoAndTheStepStays(): void {
+		// The check of a stage over calls: the budget of a call spent, the
+		// stage is still checking, the step stays planned and says so; the
+		// next call goes on. Nothing of the site changed.
+		// ab-it-zwei: two PHP files to check (its two main files).
+		list( $args, $entry ) = self::changed( 'ab-it-zwei', '1.1.0' );
+		$calls                = self::wporg();
+		list( , $run )        = self::begun( $args + array( 'accept' => array( (int) $entry['n'] ) ) );
+		$run_id               = (int) $run['run_id'];
+		$before               = self::live_bytes( 'ab-it-zwei' );
+		self::assertSame( 'done', self::next( $run_id )['step']['state'] );
+		self::assertSame( 'planned', self::next( $run_id )['step']['state'], 'Staged.' );
+		// The time of the call is over once the parser had its first file
+		// (as CodeStageTest does it: the stage compares with times of its own
+		// reading, so the clock goes on from the real one and jumps by 1000
+		// seconds, far past the budget of 20).
+		$calls->parsed                 = 0;
+		AB_MCP_Sync_Code_Stage::$clock = static fn(): float => microtime( true ) + ( $calls->parsed >= 1 ? 1000.0 : 0.0 );
+		try {
+			$checking = self::next( $run_id );
+		} finally {
+			AB_MCP_Sync_Code_Stage::$clock = null;
+		}
+		self::assertIsArray( $checking, is_wp_error( $checking ) ? $checking->get_error_code() . ': ' . $checking->get_error_message() : '' );
+		self::assertStringContainsString( 'is being checked', (string) wp_json_encode( $checking ) );
+		self::assertSame( 'planned', self::step( $run_id, 2 )['state'], 'Still checking: the step stays.' );
+		self::assertSame( 'done', self::next( $run_id )['step']['state'], 'Checked in the next call.' );
+		self::assertSame( $before, self::live_bytes( 'ab-it-zwei' ) );
+	}
+
+	public function testAStageTheCheckRefusesIsNotStagedAndItsSwapIsSkipped(): void {
+		// The check refuses the stage (here: its PHP files could not be listed
+		// within the time of one call, code:syntax_unchecked, by a clock of
+		// its own that jumps 100 seconds at each reading): the step fails with
+		// the reason and the way, it is never ready, nothing of the site
+		// changed.
+		list( $args ) = self::changed( 'ab-it-inaktiv', '1.1.0' );
+		self::wporg();
+		list( , $run ) = self::begun( $args );
+		$run_id = (int) $run['run_id'];
+		$before = self::live_bytes( 'ab-it-inaktiv' );
+		self::assertSame( 'done', self::next( $run_id )['step']['state'] );
+		self::assertSame( 'planned', self::next( $run_id )['step']['state'], 'Staged.' );
+		$time                          = 1000.0;
+		AB_MCP_Sync_Code_Stage::$clock = static function () use ( &$time ): float {
+			$time += 100.0;
+			return $time;
+		};
+		try {
+			$refused = self::next( $run_id );
+		} finally {
+			AB_MCP_Sync_Code_Stage::$clock = null;
+		}
+		self::assertIsArray( $refused, is_wp_error( $refused ) ? $refused->get_error_code() . ': ' . $refused->get_error_message() : '' );
+		$step = self::step( $run_id, 2 );
+		self::assertSame( array( 'failed', 'code:syntax_unchecked' ), array( $step['state'], $step['result']['code'] ) );
+		self::assertStringContainsString( 'is not staged (code:syntax_unchecked), so it is not swapped; nothing of this site changed', $step['result']['message'] );
+		self::assertStringContainsString( 'Stage the unit again', $step['result']['message'], 'With the way.' );
+		self::assertSame( $before, self::live_bytes( 'ab-it-inaktiv' ) );
 	}
 
 	/* ------------------------------------------- what does not read */
@@ -814,6 +908,9 @@ final class SyncCodeRunStageCalls {
 	/** @var AB_MCP_Test_Wporg */
 	public $wporg;
 
+	/** @var int The files the parser had, for a clock that ends a call after the first. */
+	public $parsed = 0;
+
 	/** @var AB_MCP_Sync_Code_Stage_Calls */
 	private $real;
 
@@ -874,6 +971,7 @@ final class SyncCodeRunStageCalls {
 	}
 
 	public function parse_php( $code ) {
+		++$this->parsed;
 		return $this->real->parse_php( $code );
 	}
 

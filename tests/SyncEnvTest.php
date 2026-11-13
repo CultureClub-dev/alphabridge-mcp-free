@@ -1804,4 +1804,24 @@ final class SyncEnvTest extends TestCase {
 		self::assertStringContainsString( 'environment', $e['why'] );
 		self::assertSame( array(), $out['blocked'] );
 	}
+
+	public function testOnlyAUnitOfAKindTheSwapWritesIsTakenOverEvenWhereItsKindHasNoLock(): void {
+		// unit_way(): the takeover is the swap of the code, which writes a
+		// plugin or a theme only (SWAPPED). A unit of another kind is never
+		// taken over, also where no lock of its kind would hold it (every
+		// kind of UNIT_KINDS has one today; the clause holds without it).
+		$way   = new \ReflectionMethod( \AB_MCP_Sync_Decision::class, 'unit_way' );
+		$entry = array(
+			'kind'    => 'environment',
+			'result'  => 'changed_on_staging',
+			'action'  => 'none',
+		);
+		foreach ( array( 'mu_plugin', 'language', 'font', 'upload', 'theme_choice', 'dropin' ) as $kind ) {
+			list( $got, $locks ) = $way->invoke( null, array( 'subtype' => $kind ) + $entry, $kind, array( 'files' => 'changed_on_staging' ), null );
+			self::assertNotSame( 'take_over', $got['action'], $kind );
+			self::assertSame( array(), $locks, $kind );
+		}
+		list( $got ) = $way->invoke( null, array( 'subtype' => 'plugin' ) + $entry, 'plugin', array( 'files' => 'changed_on_staging' ), null );
+		self::assertSame( 'take_over', $got['action'], 'A plugin is taken over.' );
+	}
 }
