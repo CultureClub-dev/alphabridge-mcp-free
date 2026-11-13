@@ -496,7 +496,7 @@ final class MutationPlanTest extends TestCase {
 		}
 		self::assertGreaterThan( 0, $longest );
 
-		$shards = AB_Mutation_Plan::assign( $entries, $measures, 12 );
+		$shards = AB_Mutation_Plan::assign( $entries, $measures, 13 );
 		self::assertGreaterThan( 1, count( array_unique( array_slice( $shards, -80 ) ) ), 'the new command is cut' );
 
 		$worst = $measures;
@@ -504,7 +504,7 @@ final class MutationPlanTest extends TestCase {
 			$worst['mutation'][ $entry['id'] ] = 360;
 		}
 		$worst['grundlinie'][ AB_Mutation_Plan::key( $new ) ] = 360;
-		$costs = array_column( AB_Mutation_Plan::costs( $entries, $shards, $worst, 12 ), 'cost' );
+		$costs = array_column( AB_Mutation_Plan::costs( $entries, $shards, $worst, 13 ), 'cost' );
 		self::assertLessThan( 43 * 600, max( $costs ) );
 	}
 
