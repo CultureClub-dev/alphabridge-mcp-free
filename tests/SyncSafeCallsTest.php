@@ -491,6 +491,13 @@ final class SyncSafeCallsTest extends TestCase {
 		'class-sync-inventory.php' => array(
 			'__' => array( 2, 'the refusals and errors the tools wp_site_* pass on, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2).' ),
 		),
+		// The kind code (Z8b branch 5, E10): the rights of a step of the code.
+		'class-sync-code-kind.php' => array(
+			'__'                     => array( 4, 'rights(): its refusals, each with the way, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes.' ),
+			'current_user_can'       => array( 1, 'Calls::can(): the capabilities of E10 a step of the code asks of the account of the request (install_, upload_, update_, edit_ of plugins and themes), through the hooks of the core as every check of a right; only a strict true counts, no stored value is compared.' ),
+			'get_filesystem_method'  => array( 1, 'Calls::method(): the way WordPress writes files here (FS_METHOD, the filter filesystem_method and a test file in wp-content); only direct is taken, a method not named refuses (E10); no stored value.' ),
+			'wp_is_file_mod_allowed' => array( 1, 'Calls::mods_allowed(): DISALLOW_FILE_MODS and the filter file_mod_allowed; only a strict true lets a step of the code through (E10, F20); no stored value.' ),
+		),
 		// The package and the stage of code (Z8b branch 4).
 		'class-sync-code-package.php' => array(
 			'__' => array( 12, 'the refusals and errors the tools wp_site_* pass on, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2).' ),
