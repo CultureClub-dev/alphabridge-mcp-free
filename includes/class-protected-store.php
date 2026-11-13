@@ -4056,7 +4056,10 @@ final class AB_MCP_Protected_Store {
 		$tmp   = self::way( $root, array( self::TMP ) );
 		$temps = null === $tmp ? false : self::calls()->scandir( $tmp );
 		foreach ( false === $temps ? array() : $temps as $file ) {
-			if ( 0 === strpos( $file, self::TMP_PREFIX ) ) {
+			// Not what this request made and still uses (a building folder of
+			// build_dir() while a unit is built in it; Z8b branch 4, D4): its
+			// request removes it.
+			if ( 0 === strpos( $file, self::TMP_PREFIX ) && ! isset( self::$noted[ $tmp . '/' . $file ] ) ) {
 				self::delete_path( $root, $tmp . '/' . $file );
 			}
 		}
