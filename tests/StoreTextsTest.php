@@ -36,7 +36,6 @@ final class StoreTextsTest extends TestCase {
 		'The booking could not be written to the protected store. Ask the host to check that the folder is writable and the disk has free space, then try again.',
 		'The file could not be recorded in the protected store, so it was taken out again. Ask the host to check that the folder is writable and the disk has free space, then try again.',
 		'The file could not be written to the protected store. Ask the host to check that the folder is writable and the disk has free space, then try again.',
-		'The file is not in the protected store: it was never written, or its group was removed (packages and reports are kept a day, backups as many days as the filter ab_mcp_staging_backup_days says). Make it again.',
 		'The file of the protected store could not be read. Try again; if it keeps failing, ask the host to check the rights of the folder.',
 		'The file of the protected store failed its check against its SHA-256, so it is not used. Make it again; if it keeps failing, ask the host whether something else writes into the folder.',
 		'The group could not be bound to its run in the protected store. Ask the host to check that the folder is writable, then try again.',

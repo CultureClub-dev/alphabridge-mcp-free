@@ -583,7 +583,11 @@ final class ProtectedStoreTest extends TestCase {
 		self::assertSame( 'ab_mcp_store_corrupt', AB_MCP_Protected_Store::get( 'backups', $gid, 'post-12', hash( 'sha256', 'other' ) )->get_error_code() );
 		file_put_contents( $dir . '/post-12', gzencode( 'changed by someone else' ) );
 		self::assertSame( 'ab_mcp_store_corrupt', AB_MCP_Protected_Store::get( 'backups', $gid, 'post-12', $put['sha256'] )->get_error_code(), 'A changed file is not used.' );
-		self::assertSame( 'ab_mcp_store_missing', AB_MCP_Protected_Store::get( 'backups', $gid, 'post-13', $put['sha256'] )->get_error_code() );
+		$missing = AB_MCP_Protected_Store::get( 'backups', $gid, 'post-13', $put['sha256'] );
+		self::assertSame( 'ab_mcp_store_missing', $missing->get_error_code() );
+		self::assertStringContainsString( 'The file is not in the protected store: it was never written, or its group was removed. Make it again.', $missing->get_error_message(), 'A file the group does not hold.' );
+		self::assertStringNotContainsString( 'kept a day', $missing->get_error_message(), 'Nothing on how long a group is kept (K4f).' );
+		self::assertStringNotContainsString( 'as many days', $missing->get_error_message(), 'Nothing on how long a group is kept (K4f).' );
 
 		self::assertSame( 'ab_mcp_store_exists', AB_MCP_Protected_Store::put( 'backups', $gid, 'post-12', 'again' )->get_error_code(), 'Written once.' );
 		self::assertSame( 'gzip of changed by someone else', 'gzip of ' . gzdecode( (string) file_get_contents( $dir . '/post-12' ) ), 'Not written over.' );
