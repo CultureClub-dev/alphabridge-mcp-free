@@ -259,6 +259,63 @@ final class SyncCodeStageTest extends TestCase {
 		AB_MCP_Sync_Code_Stage::from_org( self::signed( array( 'kind' => 'theme', 'ref' => 'twentyx' ) ), $this->dir );
 		self::assertSame( 'https://downloads.wordpress.org/theme/twentyx.1.1.0.zip', $calls->asked[1][0] );
 	}
+
+	public function testAZipOfWordpressOrgIsUnpackedOnlyWithinItsSizeAndByUnzipFile(): void {
+		$calls       = new SyncCodeStageCalls();
+		$calls->body = "PK\x03\x04" . str_repeat( 'z', 96 );
+		self::seam( $calls );
+		$calls->unpacked = AB_MCP_Sync_Code_Stage::UNPACKED_MAX + 1;
+		self::assertSame( 'code:org_too_large', AB_MCP_Sync_Code_Stage::from_org( self::signed(), $this->dir )->get_error_code() );
+		self::assertSame( 0, $calls->unzipped, 'Not unpacked.' );
+		$calls->unpacked = null;
+		self::assertSame( 'code:org_too_large', AB_MCP_Sync_Code_Stage::from_org( self::signed(), $this->dir )->get_error_code(), 'A ZIP whose directory does not read.' );
+		$calls->unpacked = AB_MCP_Sync_Code_Stage::UNPACKED_MAX;
+		self::assertSame( 'code:org_unzip', AB_MCP_Sync_Code_Stage::from_org( self::signed(), $this->dir )->get_error_code(), 'unzip_file() refused it (here: the stand-in).' );
+		self::assertSame( 1, $calls->unzipped );
+	}
+
+	public function testALineOfAUnitOfAVersionBeforeHasNoHostOfUpdatesAndFetchesNothing(): void {
+		// D1: a line of the environment without update_uri (AlphaBridge before
+		// branch 4 on the staging site) is taken, and its host is unknown.
+		$line = array(
+			'env'      => 'plugin',
+			'ref'      => 'ab-it-code',
+			'active'   => array(),
+			'bytes'    => 3,
+			'complete' => true,
+			'files'    => 1,
+			'form'     => 'folder',
+			'hash'     => str_repeat( 'b', 64 ),
+			'lock'     => null,
+			'mains'    => array( 'ab-it-code.php' ),
+			'mtime'    => null,
+			'own'      => false,
+			'sha256'   => null,
+			'version'  => '1.1.0',
+			'cause'    => null,
+		);
+		self::assertTrue( \AB_MCP_Sync_Env::shaped( $line ), 'A line of a version before is taken.' );
+		self::assertNull( AB_MCP_Sync_Code_Stage::update_host( $line ) );
+		self::assertTrue( \AB_MCP_Sync_Env::shaped( $line + array( 'update_uri' => '' ) ) );
+		self::assertSame( '', AB_MCP_Sync_Code_Stage::update_host( $line + array( 'update_uri' => '' ) ) );
+		self::assertFalse( \AB_MCP_Sync_Env::shaped( $line + array( 'update_uri' => 5 ) ), 'Of its type, where it is there.' );
+		self::assertFalse( \AB_MCP_Sync_Env::shaped( array( 'update_uri' => '' ) + array_diff_key( $line, array( 'cause' => true ) ) ), 'Only update_uri may be missing.' );
+	}
+
+	public function testTheHostOfAUnitIsAnotherOneWhereAnyMainFileNamesOne(): void {
+		$dir = $this->dir . '/unit';
+		file_put_contents( $dir . '/a.php', "<?php\n/**\n * Plugin Name: A\n * Update URI: https://wordpress.org/plugins/a/\n */\n" );
+		file_put_contents( $dir . '/b.php', "<?php\n/**\n * Plugin Name: B\n * Update URI: https://Updates.Example.com/b?key=geheim\n */\n" );
+		file_put_contents( $dir . '/c.php', "<?php\n/**\n * Plugin Name: C\n */\n" );
+		$hosts = \AB_MCP_Sync_Env::update_hosts( $dir, array( 'a.php', 'b.php', 'c.php' ) );
+		self::assertSame( '', $hosts['c.php'] );
+		self::assertStringNotContainsString( 'geheim', implode( ' ', $hosts ), 'No more than the host goes into a line (a key of a licence stays out).' );
+		$of = new \ReflectionMethod( \AB_MCP_Sync_Env::class, 'update_host_of' );
+		self::assertSame( '', $of->invoke( null, array( '', '' ) ) );
+		self::assertSame( 'wordpress.org', $of->invoke( null, array( 'wordpress.org', '' ) ) );
+		self::assertSame( 'updates.example.com', $of->invoke( null, array( 'wordpress.org', 'updates.example.com' ) ), 'Another host of any main file is the host of the unit.' );
+		self::assertSame( 'updates.example.com', $of->invoke( null, array( 'updates.example.com', 'w.org' ) ) );
+	}
 }
 
 /**
@@ -286,6 +343,21 @@ final class SyncCodeStageCalls {
 
 	/** @var array[] url, args */
 	public $asked = array();
+
+	/** @var int|null */
+	public $unpacked = 0;
+
+	/** @var int */
+	public $unzipped = 0;
+
+	public function unpacked_size( $zip ) {
+		return $this->unpacked;
+	}
+
+	public function unzip( $zip, $to ) {
+		++$this->unzipped;
+		return new WP_Error( 'incompatible_archive', 'Incompatible Archive.' );
+	}
 
 	public function tokenizer(): bool {
 		return $this->tokenizer;

@@ -24,10 +24,14 @@
  *   Schreiber of the building folder: none, it is made and used by one
  *   request under its own name.
  * - Rows of the state of packages and relay (the index of a package of code,
- *   the state of a stage): a package whose index is not of its form, a
- *   chunk relayed twice, a package of another unit
- *   (testAPackageOfCodeIsTakenOnlyAsItsIndexAndTheSignedManifestSay); a state
- *   not of its form (above).
+ *   the state of a stage): every wrong form of the rows code.index and
+ *   stage.state reaches its consumer as unknown (StoreInputsTest, unit); a
+ *   chunk that does not inflate when a package is read is refused
+ *   (testAChunkThatDoesNotInflateWhenAPackageIsReadIsRefusedNeverReadAsNoLines,
+ *   V4); a package without the files a stage needs stages nothing
+ *   (testOneUnitOverSeveralPackagesIsStagedOnlyWithAllOfThem). The relay
+ *   itself (a chunk twice, a chunk of another hash) is the import of Z8,
+ *   unchanged (tests/integration/SyncPackageTest.php).
  *
  * @package AlphaBridge_MCP
  */
@@ -317,6 +321,9 @@ final class CodeStageTest extends TestCase {
 		self::assertIsArray( $stage, is_wp_error( $stage ) ? $stage->get_error_code() . ': ' . $stage->get_error_message() : '' );
 		self::assertSame( 'packages', $stage['source'] );
 		self::assertSame( 'ready', self::checked( $stage, $env )['state'] );
+		// A path the unit on the staging site does not hold: nothing packed.
+		$none = self::b( array( array( 'op' => 'export', 'purpose' => 'code', 'report_hash' => self::REPORT, 'refs' => array( array( 'kind' => 'plugin', 'ref' => 'ab-it-daten', 'paths' => array( 'gibt-es-nicht.php' ) ) ), 'expect' => 'error', 'as' => 'x' ) ) )['x'];
+		self::assertSame( 'ab_mcp_sync_export_code_none', $none['code'] );
 		// Without the package: the files it lacks are named, nothing staged.
 		$missing = AB_MCP_Sync_Code_Stage::stage( self::RUN, $env, 'plugin', 'ab-it-daten', array( 'f' . substr( $id, 1 ) ) );
 		self::assertInstanceOf( \WP_Error::class, $missing );
@@ -365,6 +372,12 @@ final class CodeStageTest extends TestCase {
 		self::assertSame( 2, $state['refusal']['line'] );
 		self::assertNull( AB_MCP_Sync_Code_Stage::ready( $stage['gid'], $stage['name'], $stage['hash'] ) );
 		self::assertSame( 'refused', AB_MCP_Sync_Code_Stage::complete( $stage['gid'], $stage['name'], $stage['hash'], $env )['state'], 'A stage refused stays refused.' );
+		// The parser alone, where no command line is there: the same refusal.
+		$calls       = self::wporg( array() );
+		$calls->lint = false;
+		$alone       = self::checked( AB_MCP_Sync_Code_Stage::stage( self::RUN, $env, 'plugin', 'ab-it-daten', array( $id ) ), $env );
+		self::assertSame( 'code:syntax', $alone['refusal']['code'] );
+		self::assertStringContainsString( 'does not parse', $alone['refusal']['message'] );
 	}
 
 	public function testAFileTheParserPassesButPhpRefusesToCompileIsRefused(): void {
@@ -436,6 +449,12 @@ final class CodeStageTest extends TestCase {
 		self::assertStringContainsString( 'updates.example.com', $got->get_error_message() );
 		self::assertSame( array(), $calls->wporg->calls );
 		self::assertSame( array(), glob( self::root() . '/ab-mcp-store/*/tmp/.ab-tmp-*' ), 'No building folder stays.' );
+		// Two main files, one with wordpress.org and one with another host: the
+		// unit names another host (D1).
+		$zwei = AB_MCP_IT_Code::path( 'b', 'plugin', 'ab-it-zwei' );
+		file_put_contents( $zwei . '/ab-it-zwei-eins.php', str_replace( 'Version:', "Update URI: w.org/plugin/ab-it-zwei\n * Version:", (string) file_get_contents( $zwei . '/ab-it-zwei-eins.php' ) ) );
+		file_put_contents( $zwei . '/ab-it-zwei-zwei.php', str_replace( 'Version:', "Update URI: https://zwei.example.com/u\n * Version:", (string) file_get_contents( $zwei . '/ab-it-zwei-zwei.php' ) ) );
+		self::assertSame( 'zwei.example.com', AB_MCP_Sync_Code_Stage::signed( self::environment(), 'plugin', 'ab-it-zwei' )['update_uri'] );
 	}
 
 	public function testAStageWhoseTreeOrStateChangedIsNeverReady(): void {
@@ -448,6 +467,15 @@ final class CodeStageTest extends TestCase {
 		self::assertIsArray( $stage );
 		$other = AB_MCP_Sync_Code_Stage::complete( $stage['gid'], $stage['name'], str_repeat( 'a', 64 ), $env );
 		self::assertSame( 'code:stage_unknown', $other->get_error_code() );
+		// Z4 early: the staging site changed the unit since; with the report
+		// of now the stage is not its unit, and never ready.
+		file_put_contents( AB_MCP_IT_Code::path( 'b', 'plugin', 'ab-it-inaktiv' ) . '/neu.php', "<?php // neu\n" );
+		$changed = AB_MCP_Sync_Code_Stage::complete( $stage['gid'], $stage['name'], $stage['hash'], self::environment() );
+		self::assertSame( 'refused', $changed['state'] );
+		self::assertSame( 'code:stage_mismatch', $changed['refusal']['code'] );
+		self::assertNull( AB_MCP_Sync_Code_Stage::ready( $stage['gid'], $stage['name'], $stage['hash'] ) );
+		$stage = AB_MCP_Sync_Code_Stage::stage( self::RUN, $env, 'plugin', 'ab-it-inaktiv' );
+		self::assertIsArray( $stage );
 		$tree = AB_MCP_Protected_Store::tree( 'stage', $stage['gid'], $stage['name'], $stage['hash'] );
 		file_put_contents( $tree['path'] . '/ab-it-inaktiv.php', "<?php // anders\n", FILE_APPEND );
 		$got = AB_MCP_Sync_Code_Stage::complete( $stage['gid'], $stage['name'], $stage['hash'], $env );
@@ -544,6 +572,60 @@ final class CodeStageTest extends TestCase {
 		while ( ob_get_level() > $level ) {
 			ob_end_clean();
 		}
+	}
+
+	public function testAChunkThatDoesNotInflateWhenAPackageIsReadIsRefusedNeverReadAsNoLines(): void {
+		// V4 of Z8b branch 4: taken() reads the lines of a package of the
+		// environment chunk by chunk; a chunk that does not inflate any more
+		// (here: bytes that are no gzip under their SHA-256, the mark of
+		// completion written as the import writes it) is refused, never read
+		// as no lines.
+		$bytes  = 'no gzip at all';
+		$signed = self::b(
+			array(
+				array(
+					'op'      => 'sign_manifest',
+					'package' => array(
+						'bytes'       => strlen( $bytes ),
+						'chunks'      => array(
+							array(
+								'bytes'  => strlen( $bytes ),
+								'sha256' => hash( 'sha256', $bytes ),
+							),
+						),
+						'kinds'       => array(),
+						'objects'     => 1,
+						'package_id'  => str_repeat( 'c', 32 ),
+						'purpose'     => 'env',
+						'report_hash' => null,
+						'sha256'      => hash( 'sha256', $bytes ),
+						'unpacked'    => 10,
+					),
+					'as'      => 'm',
+				),
+			)
+		)['m'];
+		$began = AB_MCP_Sync_Import::call(
+			array(
+				'package_id' => str_repeat( 'c', 32 ),
+				'manifest'   => $signed,
+				'purpose'    => 'env',
+			)
+		);
+		self::assertIsArray( $began, is_wp_error( $began ) ? $began->get_error_message() : '' );
+		$gid = null;
+		foreach ( AB_MCP_Protected_Store::groups( 'in' ) as $group ) {
+			if ( 'package-' . str_repeat( 'c', 32 ) === $group['label'] ) {
+				$gid = $group['gid'];
+			}
+		}
+		self::assertNotNull( $gid );
+		self::assertIsArray( AB_MCP_Protected_Store::put( 'in', $gid, \AB_MCP_Sync_Export::chunk_name( 0 ), $bytes ) );
+		self::assertIsArray( AB_MCP_Protected_Store::put( 'in', $gid, 'held-' . substr( AB_MCP_Sync_Import::held_name( hash( 'sha256', '{"format":"ab-sync-held/3","objects":[]}' ) ), 5 ), '{"format":"ab-sync-held/3","objects":[]}' ) );
+		self::assertIsArray( AB_MCP_Protected_Store::put( 'in', $gid, AB_MCP_Sync_Import::COMPLETE, hash( 'sha256', $bytes ) ) );
+		$taken = AB_MCP_Sync_Import::taken( str_repeat( 'c', 32 ), 'env' );
+		self::assertInstanceOf( \WP_Error::class, $taken );
+		self::assertSame( 'ab_mcp_sync_import_unread', $taken->get_error_code() );
 	}
 
 	public function testABuildingFolderGoesOnlyByItsAgeOrByItsOwnRequest(): void {
@@ -649,7 +731,13 @@ final class CodeStageWporgCalls {
 		return $this->real->memory();
 	}
 
+	/** @var bool False: no command line here. */
+	public $lint = true;
+
 	public function lint( $file, $label ) {
-		return $this->real->lint( $file, $label );
+		return $this->lint ? $this->real->lint( $file, $label ) : array(
+			'status' => 'unavailable',
+			'note'   => 'no command line in this test.',
+		);
 	}
 }

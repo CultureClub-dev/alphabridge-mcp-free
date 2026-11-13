@@ -809,8 +809,9 @@ final class AB_MCP_Sync_Env {
 	 * D1), as WordPress reads it to choose the source of updates
 	 * (wp_update_plugins(), wp_update_themes(): the host of the address,
 	 * sanitize_url() first): '' where the head names none; the host in lower
-	 * case, or the address itself where it has none. Only the host goes into
-	 * a line: an address may carry a key of a licence.
+	 * case, or what stands before the first "/", "?" or "#" where none is
+	 * read. Only the host goes into a line: an address may carry a key of a
+	 * licence.
 	 *
 	 * @param string   $dir   The folder the files lie in.
 	 * @param string[] $files The files, relative to it.
@@ -824,8 +825,11 @@ final class AB_MCP_Sync_Env {
 				$out[ (string) $file ] = '';
 				continue;
 			}
-			$host                  = function_exists( 'sanitize_url' ) ? wp_parse_url( sanitize_url( $uri ), PHP_URL_HOST ) : null;
-			$out[ (string) $file ] = self::name( strtolower( is_string( $host ) && '' !== $host ? $host : $uri ) );
+			$host = wp_parse_url( function_exists( 'sanitize_url' ) ? sanitize_url( $uri ) : $uri, PHP_URL_HOST );
+			// No host read: what stands before its first "/", "?" or "#"
+			// (w.org/plugin/x), never the whole address.
+			$host                  = is_string( $host ) && '' !== $host ? $host : (string) strtok( $uri, '/?#' );
+			$out[ (string) $file ] = self::name( strtolower( $host ) );
 		}
 		return $out;
 	}
