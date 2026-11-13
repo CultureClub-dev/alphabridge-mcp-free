@@ -1,6 +1,6 @@
 <?php
 /**
- * The texts of Z8b branches 2, 2b, 3 and 4 that wait for their translation: the order of
+ * The texts of Z8b branches 2, 2b, 3, 4 and 5 that wait for their translation: the order of
  * Z8b says «Texte englisch mit Textdomain; Übersetzungen erst mit
  * text/z8b». BundledTranslationsTest leaves these keys out of its check
  * of the nine languages and checks the list itself instead: every key is
@@ -286,4 +286,8 @@ return array(
 	'The head of %s in the new version could not be read whole, so what it requires is not known and it is not swapped. Stage the unit again.',
 	// includes/sync/class-sync-code-stage.php (Z8b branch 4, Behebung 2: no time to measure a call by)
 	'The time of this call could not be measured, so nothing of the unit was read or taken. Call again.',
+	// includes/sync/class-sync-engine.php (Z8b branch 5, V12 of its pre-check: the way back of a step whose pair was discarded since, or cannot be read)
+	'The %1$s %2$s went back to its state before the run: every part the run wrote was still its own and was put back, and every part reads as the backup after that. Its pair was discarded since the run, so no bases were put back: the object has no pair now. Pair it anew before the next takeover of it (wp_site_pairs action=propose, then confirm).',
+	'The %1$s %2$s went back only in part: the object deviated within its step and is left whole, or a part was changed since the run wrote it, was never read back, or needs a check, and is left as it is, or reads other than the backup after the parts went back (see parts; a part left names its value before). Its pair was discarded since the run, so no bases were put back and there is no pair to mark unclear: check the object in wp-admin, then pair it anew (wp_site_pairs action=propose, then confirm).',
+	'The parts of the %1$s %2$s were put back as far as they say (see parts), but its pair could not be read, so nothing of the pair was written and this step is not done: the pair keeps the bases the run gave it. List the pairs (wp_site_pairs action=list); once the pair reads again, align it anew (wp_site_pairs action=propose, then confirm) before the next takeover of this object. %3$s',
 );

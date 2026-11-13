@@ -3019,6 +3019,8 @@ final class AB_MCP_Sync_Engine {
 		$w::post_write( $live_id );
 		// The pair: back to its snapshot where everything went back; unclear otherwise.
 		$pair_note = '';
+		$said      = null;
+		$extra     = array();
 		$made      = self::made_in( $w, $journal, $live_id );
 		if ( null !== $pair_id && array() !== $made ) {
 			// A part of the unit the run made stays (a widget instance; decision
@@ -3036,27 +3038,17 @@ final class AB_MCP_Sync_Engine {
 				$pair_note .= ' ' . self::unit_rest_failed( $set );
 			}
 		} elseif ( null !== $pair_id ) {
-			$now_hash = AB_MCP_Sync_Pairs::snapshot_hash( AB_MCP_Sync_Pairs::snapshot( $pair_id ) );
-			if ( $all_back && null !== $forward['pair_before'] ) {
-				$restored = AB_MCP_Sync_Pairs::restore( $pair_id, (string) $forward['pair_before'], $now_hash );
-				if ( is_wp_error( $restored ) ) {
-					/* translators: %s: the error of the object pairs (one or more whole sentences). */
-					$pair_note = ' ' . sprintf( __( 'The pair did not go back to its state before. %s', 'alphabridge-mcp' ), $restored->get_error_message() );
-					$all_back  = false;
-				}
-			} else {
-				AB_MCP_Sync_Pairs::set_state( $pair_id, 'unclear', $now_hash );
-			}
+			list( $all_back, $pair_note, $said, $extra ) = self::pair_back( $pair_id, $forward, $all_back, (string) $object['kind'], $live_id );
 		}
 		$result = array(
-			'message'  => ( $all_back
+			'message'  => ( $said ?? ( $all_back
 				/* translators: 1: kind of the object, as the tools name it (post, term, …), 2: its reference on this site. */
 				? sprintf( __( 'The %1$s %2$s went back to its state before the run: every part the run wrote was still its own and was put back, and every part reads as the backup after that; the pair has its bases of before.', 'alphabridge-mcp' ), $object['kind'], $live_id )
 				/* translators: 1: kind of the object, as the tools name it (post, term, …), 2: its reference on this site. */
-				: sprintf( __( 'The %1$s %2$s went back only in part: the object deviated within its step and is left whole, or a part was changed since the run wrote it, was never read back, or needs a check, and is left as it is, or reads other than the backup after the parts went back (see parts; a part left names its value before); the pair is unclear until a person confirms a new alignment (wp_site_pairs).', 'alphabridge-mcp' ), $object['kind'], $live_id ) ) . $pair_note,
+				: sprintf( __( 'The %1$s %2$s went back only in part: the object deviated within its step and is left whole, or a part was changed since the run wrote it, was never read back, or needs a check, and is left as it is, or reads other than the backup after the parts went back (see parts; a part left names its value before); the pair is unclear until a person confirms a new alignment (wp_site_pairs).', 'alphabridge-mcp' ), $object['kind'], $live_id ) ) ) . $pair_note,
 			'live_ref' => (string) $live_id,
 			'parts'    => $outcomes,
-		);
+		) + $extra;
 		if ( array() !== $made ) {
 			$result['rest'] = self::rest( array( 'kind' => $object['kind'], 'staging_ref' => $object['staging_ref'] ), $live_id ) + array( 'made' => $made );
 		}
@@ -3065,6 +3057,67 @@ final class AB_MCP_Sync_Engine {
 		$result = self::with_files( $result, $journal, $w );
 		$ended  = self::end_step( $run_id, $seq, array( 'state' => $all_back ? 'done' : 'unclear', 'result' => $result, 'pair_id' => $pair_id ) );
 		return is_wp_error( $ended ) ? $ended : array( 'next' => $result['message'] );
+	}
+
+	/**
+	 * The pair of a step taken back whose unit the run made nothing in
+	 * (revert_boundary()): back to its snapshot before the step where every
+	 * part went back, unclear otherwise. The pair is read and its snapshot
+	 * checked before it is hashed (the pre-check of Z8b branch 5, V12:
+	 * before, the answer of snapshot() was hashed as it came; for a pair
+	 * discarded since the run that is an error, the hash threw after the
+	 * parts had gone back, and the step stayed begun):
+	 * - a pair that is no longer there (read, and no row: discarded since,
+	 *   wp_site_pairs) is a state, no error: the parts decide the step,
+	 *   nothing of a pair is written, and the answer says that no bases went
+	 *   back, with the way (pair gone);
+	 * - a pair that cannot be read is not known: nothing of it is written,
+	 *   and the step is not done, whatever went back (pair unknown).
+	 *
+	 * @param int             $pair_id  The pair.
+	 * @param array           $forward  The step taken back.
+	 * @param bool            $all_back Whether every part went back.
+	 * @param string          $kind     The kind of the object, as the tools name it.
+	 * @param int|string|null $live_id  The object here.
+	 * @return array all_back, the note of the pair, the whole message where the
+	 *               pair is gone or not known (else null), and what the result
+	 *               holds besides (pair: gone or unknown).
+	 */
+	private static function pair_back( $pair_id, array $forward, $all_back, $kind, $live_id ) {
+		$pair = AB_MCP_Sync_Pairs::get( $pair_id );
+		if ( null === $pair ) {
+			return array(
+				$all_back,
+				'',
+				$all_back
+					/* translators: 1: kind of the object, as the tools name it (post, term, …), 2: its reference on this site. */
+					? sprintf( __( 'The %1$s %2$s went back to its state before the run: every part the run wrote was still its own and was put back, and every part reads as the backup after that. Its pair was discarded since the run, so no bases were put back: the object has no pair now. Pair it anew before the next takeover of it (wp_site_pairs action=propose, then confirm).', 'alphabridge-mcp' ), $kind, $live_id )
+					/* translators: 1: kind of the object, as the tools name it (post, term, …), 2: its reference on this site. */
+					: sprintf( __( 'The %1$s %2$s went back only in part: the object deviated within its step and is left whole, or a part was changed since the run wrote it, was never read back, or needs a check, and is left as it is, or reads other than the backup after the parts went back (see parts; a part left names its value before). Its pair was discarded since the run, so no bases were put back and there is no pair to mark unclear: check the object in wp-admin, then pair it anew (wp_site_pairs action=propose, then confirm).', 'alphabridge-mcp' ), $kind, $live_id ),
+				array( 'pair' => 'gone' ),
+			);
+		}
+		$snapshot = is_array( $pair ) ? AB_MCP_Sync_Pairs::snapshot( $pair_id ) : $pair;
+		if ( ! is_string( $snapshot ) ) {
+			return array(
+				false,
+				'',
+				/* translators: 1: kind of the object, as the tools name it (post, term, …), 2: its reference on this site, 3: the error of the object pairs (one or more whole sentences), or nothing. */
+				trim( sprintf( __( 'The parts of the %1$s %2$s were put back as far as they say (see parts), but its pair could not be read, so nothing of the pair was written and this step is not done: the pair keeps the bases the run gave it. List the pairs (wp_site_pairs action=list); once the pair reads again, align it anew (wp_site_pairs action=propose, then confirm) before the next takeover of this object. %3$s', 'alphabridge-mcp' ), $kind, $live_id, is_wp_error( $snapshot ) ? $snapshot->get_error_message() : '' ) ),
+				array( 'pair' => 'unknown' ),
+			);
+		}
+		$now_hash = AB_MCP_Sync_Pairs::snapshot_hash( $snapshot );
+		if ( ! $all_back || null === $forward['pair_before'] ) {
+			AB_MCP_Sync_Pairs::set_state( $pair_id, 'unclear', $now_hash );
+			return array( $all_back, '', null, array() );
+		}
+		$restored = AB_MCP_Sync_Pairs::restore( $pair_id, (string) $forward['pair_before'], $now_hash );
+		if ( is_wp_error( $restored ) ) {
+			/* translators: %s: the error of the object pairs (one or more whole sentences). */
+			return array( false, ' ' . sprintf( __( 'The pair did not go back to its state before. %s', 'alphabridge-mcp' ), $restored->get_error_message() ), null, array() );
+		}
+		return array( true, '', null, array() );
 	}
 
 	/**
