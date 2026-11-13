@@ -408,6 +408,24 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
 - **Trifft Normalfall:** A3 bis A10 nach Codex ja (gewöhnliche Bedienfolgen), Kernzusage nein: sie werden in dem
   genannten Zweig behoben und sind bis dahin als Grenze geführt, nicht als hingenommen. B8: nein.
 
+### G-5-4 Verwaiste Gruppe der Stufe, wenn das Journal nach `stage()` nicht gespeichert wird
+
+- **Fundstelle:** `AB_MCP_Sync_Code_Ops::stage()` (`includes/sync/class-sync-code-ops.php:152`–`:186`):
+  `AB_MCP_Sync_Code_Stage::stage()` (`:153`), Prüfung des Journals (`:179`), `AB_MCP_Sync_Run::update_step()` (`:182`).
+- **Quelle:** Fable-Prüfstelle 2 über `90ab733..d1e0c77`, B2; Entscheid der Lead vom 13.11.2026 18:51 (Teil 1a-4d).
+- **Fall:** `stage()` hat eine Gruppe im Bereich `stage` geöffnet und den Baum abgelegt; danach gibt `update_step()`
+  einen Fehler (`:183`–`:184` gibt ihn zurück) oder die Anfrage endet vor dem Speichern (Zeitgrenze). Der Schritt
+  bleibt `planned` ohne Journal (`parts` null); der nächste Aufruf stellt die Einheit noch einmal bereit, in einer
+  neuen Gruppe (`stage()` öffnet je Aufruf eine, `class-sync-code-stage.php:752`).
+- **Wirkung:** Die erste Gruppe mit ihrem Baum bleibt liegen; dieser Schritt und der nächste Aufruf entfernen sie
+  nicht. Wann sie geht, regeln die Aufbewahrung des Bereichs `stage` (`KEEP` ein Tag,
+  `includes/class-protected-store.php:424`) und `kept()` (`:1452`); nicht nachgestellt. Nach Fable zählt sie bis
+  dahin im Budget (nicht nachgeprüft). An der Site wird nichts geschrieben, nichts Falsches gelöscht oder freigegeben:
+  ein Tausch nimmt nur die Stufe, die das Journal nennt.
+- **Trifft Normalfall:** nein (braucht einen Fehler der Datenbank beim Speichern oder ein Ende der Anfrage genau
+  zwischen `stage()` und `update_step()`).
+- **Folgeposten:** Test mit einem Fehler an `update_step()` in der Fehlerweg-Prüfung des Teils.
+
 ## Übernommen aus Zweig 2 (`bericht-zweig-2.md`, Abschnitt Grenzkandidaten; G-M9 aus «Behebung 2»)
 
 ### G-M1 Ein Lesen über Teile ist kein Augenblick
