@@ -1347,6 +1347,47 @@ final class SyncCodeRunTest extends TestCase {
 		self::assertSame( $before, self::live_bytes( 'ab-it-inaktiv' ) );
 	}
 
+	public function testAStageWhoseAnswerDoesNotReadAsAJournalFailsTheStepAndSavesNoJournal(): void {
+		// B1 of the Codex check of 75d6a84 (entry c of B1 of the Fable check 2
+		// on d1e0c77): only a journal that reads back in its form is saved
+		// (AB_MCP_Sync_Code_Ops::stage(), the check before update_step()).
+		// The answer of the stage comes here through the seam of the stage:
+		// web_ready() gives back what stage() then answers unchanged (any
+		// answer but true), here one whose fields are all there but its group
+		// is no id of a group. The step fails with code:stage_unknown and the
+		// way, no journal is saved, nothing is fetched or staged, nothing of
+		// the site changed.
+		list( $args )  = self::changed( 'ab-it-inaktiv', '1.1.0' );
+		list( , $run ) = self::begun( $args );
+		$run_id        = (int) $run['run_id'];
+		$before        = self::live_bytes( 'ab-it-inaktiv' );
+		self::assertSame( 'done', self::next( $run_id )['step']['state'], 'The check of the run.' );
+		$wporg  = new AB_MCP_Test_Wporg();
+		$answer = array(
+			'gid'    => 'x',
+			'name'   => 'ab-it-inaktiv',
+			'hash'   => str_repeat( 'a', 64 ),
+			'source' => 'wordpress.org',
+			'files'  => 1,
+			'bytes'  => 1,
+			'state'  => AB_MCP_Sync_Code_Stage::CHECKING,
+		);
+		$seam   = AB_MCP_Test_Seam::install( AB_MCP_Sync_Code_Stage::class, 'naht_sync_code_stage', new SyncCodeRunStageCalls( $wporg ), array( array( 'method' => 'web_ready', 'kind' => 'return', 'value' => $answer ) ) );
+		$failed = self::next( $run_id );
+		self::assertSame( array( array( 'method' => 'web_ready', 'n' => 1, 'fault' => 'return' ) ), $seam->calls, 'The stage asked the store once, and got the answer of the seam.' );
+		self::assertIsArray( $failed, is_wp_error( $failed ) ? $failed->get_error_code() . ': ' . $failed->get_error_message() : '' );
+		self::assertSame( array( 2, 'failed' ), array( $failed['step']['seq'], $failed['step']['state'] ) );
+		$step = self::step( $run_id, 2 );
+		self::assertSame( array( 'failed', 'code:stage_unknown', null ), array( $step['state'], $step['result']['code'], $step['parts'] ), 'Failed, and no journal saved.' );
+		self::assertStringContainsString( 'is not staged (code:stage_unknown), so it is not swapped; nothing of this site changed', $step['result']['message'] );
+		self::assertStringContainsString( 'The stage did not answer in the form a step of the code takes (its group, tree and hash).', $step['result']['message'] );
+		self::assertStringContainsString( 'The run goes on with the next step (action=next).', $failed['next'], 'With the way.' );
+		self::assertSame( 'planned', self::step( $run_id, 3 )['state'], 'The swap did not run.' );
+		self::assertSame( array(), $wporg->calls, 'Nothing fetched.' );
+		self::assertSame( array(), self::stages_of( $run_id ), 'Nothing staged.' );
+		self::assertSame( $before, self::live_bytes( 'ab-it-inaktiv' ), 'Nothing of the site changed.' );
+	}
+
 	/** Of every step of a run: its number, its state, its journal and its result. */
 	private static function steps_of( int $run_id ): array {
 		$steps = AB_MCP_Sync_Run::steps( $run_id );

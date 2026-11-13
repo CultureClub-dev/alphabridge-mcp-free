@@ -15,10 +15,6 @@
  * Not listed, with why (bericht-zweig-5.md), equivalent: in rights() the
  * count of the two halves of a unit beside the kind of unit (a ref without a
  * colon has one half, whose kind is then the whole ref and no kind of UNITS).
- * In stage() of AB_MCP_Sync_Code_Ops the check of the journal before it is
- * saved (null === self::staged( $journal )): AB_MCP_Sync_Code_Stage::stage()
- * of this version answers only in the form of step.stage, so no test reaches
- * it (1a-4e).
  *
  * @package AlphaBridge_MCP
  */
@@ -999,5 +995,14 @@ return array(
 		'replace' => 'array( \'state\' => $state, \'result\' => $result ), null );',
 		'run'     => $it( 'SyncCodeRunTest', 'testAStepAnotherCallMovedBetweenItsReadingAndItsWritingIsNeverWrittenOver' ),
 		'expect'  => '/testAStepAnotherCallMovedBetweenItsReadingAndItsWritingIsNeverWrittenOver/',
+	),
+	array(
+		'id'      => 'tausch/ops-journal-checked',
+		'clause'  => 'stage(): only a journal that reads back in its form is saved, an answer of the stage not of it fails the step (Fable check 2, B1)',
+		'file'    => $co,
+		'search'  => "\t\t\tif ( null === self::staged( \$journal ) ) {",
+		'replace' => "\t\t\tif ( false ) {",
+		'run'     => $it( 'SyncCodeRunTest', 'testAStageWhoseAnswerDoesNotReadAsAJournalFailsTheStepAndSavesNoJournal' ),
+		'expect'  => '/testAStageWhoseAnswerDoesNotReadAsAJournalFailsTheStepAndSavesNoJournal/',
 	),
 );

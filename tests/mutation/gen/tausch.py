@@ -327,6 +327,9 @@ e('ops-journal-planned', 'stage(): the journal of a stage is saved only on the s
   "array( 'parts' => $journal ), 'planned' );", "array( 'parts' => $journal ), null );", 'coderun', MOVED)
 e('ops-ended-planned', 'ended(): a step ends only from planned, never over the state another call wrote (Fable check 2, B1)', CO,
   "array( 'state' => $state, 'result' => $result ), 'planned' );", "array( 'state' => $state, 'result' => $result ), null );", 'coderun', MOVED)
+# Through the seam of the stage (B1 of the Codex check of 75d6a84): web_ready() gives back the answer stage() passes on.
+e('ops-journal-checked', 'stage(): only a journal that reads back in its form is saved, an answer of the stage not of it fails the step (Fable check 2, B1)', CO,
+  "\t\t\tif ( null === self::staged( $journal ) ) {", "\t\t\tif ( false ) {", 'coderun', 'testAStageWhoseAnswerDoesNotReadAsAJournalFailsTheStepAndSavesNoJournal')
 
 # ------------------------------------------------ check and write
 src = {f: open(os.path.join(ROOT, f)).read() for f in VAR}
@@ -366,10 +369,6 @@ out = ['<?php', '/**', ' * The clauses of the swap of the code of the site (Z8b 
        ' * Not listed, with why (bericht-zweig-5.md), equivalent: in rights() the',
        ' * count of the two halves of a unit beside the kind of unit (a ref without a',
        ' * colon has one half, whose kind is then the whole ref and no kind of UNITS).',
-       ' * In stage() of AB_MCP_Sync_Code_Ops the check of the journal before it is',
-       ' * saved (null === self::staged( $journal )): AB_MCP_Sync_Code_Stage::stage()',
-       ' * of this version answers only in the form of step.stage, so no test reaches',
-       ' * it (1a-4e).',
        ' *', ' * @package AlphaBridge_MCP', ' */', '',
        "$unit = static fn( string $class, string $test ): array => array( 'vendor/bin/phpunit', '--no-progress', '--filter', '/[^A-Za-z0-9_]' . $class . '::' . $test . '( |$)/' );",
        "$it   = static fn( string $class, string $test ): array => array( 'vendor/bin/phpunit', '--no-progress', '-c', 'tests/integration/phpunit.xml.dist', '--filter', '/[^A-Za-z0-9_]' . $class . '::' . $test . '( |$)/' );",
