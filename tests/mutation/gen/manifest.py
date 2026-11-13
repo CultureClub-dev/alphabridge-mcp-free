@@ -64,7 +64,7 @@ e('z1-release-due', 'Z1 whole(): no hash past the time of the call, asked at its
 e('z1-grows', 'Z1 file(): a file read past the size it had when opened is changed at once, not read on to its end (GitHub-Codex on e9db02d)', FM,
   "\t\t\tif ( $read > (int) $before['size'] ) {", "\t\t\tif ( false ) {", 'man', 'testAFileThatGrowsWhileItIsReadIsChangedAtOnce')
 e('z1-due', 'Z1 due(): the one place the clock is asked while a unit is read (Behebung 5)', FM,
-  "\t\tif ( self::now() < (float) $deadline ) {\n\t\t\treturn false;", "\t\tif ( true ) {\n\t\t\treturn false;", 'man', 'testTheTimeOfTheCallIsAskedInTheFinalCheckOfTheUnitToo')
+  "\t\tif ( null !== $now && ( is_int( $deadline ) || ( is_float( $deadline ) && ( is_finite( $deadline ) || INF === $deadline ) ) ) && $now < $deadline ) {\n\t\t\treturn false;", "\t\tif ( true ) {\n\t\t\treturn false;", 'man', 'testTheTimeOfTheCallIsAskedInTheFinalCheckOfTheUnitToo')
 e('z1-still-dirs-kept', 'Z1 folder(): the names of each folder kept for still()', FM,
   "\t\t$acc['dirs'][ $dir ] = $names;", '', 'man', 'testAFolderOrFileAddedRemovedOrReplacedWhileTheUnitIsReadGivesNoHash')
 e('z1-still-stats-kept', 'Z1 file(): the identity of each file hashed kept for still()', FM,
