@@ -1019,7 +1019,7 @@ final class AB_MCP_Sync_Engine {
 		// A step of a run of the code (Z8b branch 5): its one entrance
 		// (AB_MCP_Sync_Code_Ops::run(), Z24), by the unit the plan names for
 		// it; a plan of the code that names none refuses (never an object).
-		$unit = AB_MCP_Sync_Code_Ops::item( $plan, (int) $step['seq'] );
+		$unit = AB_MCP_Sync_Code_Ops::item( $plan, $step['seq'] );
 		if ( null !== $unit ) {
 			return is_wp_error( $unit ) ? $unit : AB_MCP_Sync_Code_Ops::run( $run, $step, $unit );
 		}
@@ -2893,7 +2893,7 @@ final class AB_MCP_Sync_Engine {
 	 * @return array The object here (0 for none), and the finding or null.
 	 */
 	private static function written( array $run, array $one, array $last, array $ctx ) {
-		$unit = AB_MCP_Sync_Code_Ops::item( is_array( $run['plan'] ) ? $run['plan'] : array(), (int) $one['seq'] );
+		$unit = AB_MCP_Sync_Code_Ops::item( is_array( $run['plan'] ) ? $run['plan'] : array(), $one['seq'] );
 		if ( null !== $unit ) {
 			$found = is_wp_error( $unit ) ? $unit->get_error_message() : AB_MCP_Sync_Code_Ops::finding( $one, $unit );
 			return array( 0, null === $found ? null : array( 'seq' => (int) $one['seq'], 'message' => $found ) );

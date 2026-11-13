@@ -65,6 +65,35 @@ final class AB_MCP_Sync_Code_Plan {
 	const JOURNAL_BYTES = 65536;
 
 	/**
+	 * The fields of the entry of a unit the plan decides on, in the form
+	 * AB_MCP_Sync_Decision writes them: the kind of the unit, its folder or
+	 * file, what the report does with it. Other fields are read where they
+	 * are used.
+	 */
+	const ENTRY = array(
+		'type'   => 'record',
+		'fields' => array(
+			'subtype' => array(
+				'type'      => 'string',
+				'empty'     => false,
+				'max_bytes' => null,
+				'in'        => AB_MCP_Sync_Decision::SWAPPED,
+			),
+			'ref'     => array(
+				'type'      => 'string',
+				'empty'     => false,
+				'max_bytes' => null,
+			),
+			'action'  => array(
+				'type'      => 'string',
+				'empty'     => false,
+				'max_bytes' => null,
+			),
+		),
+		'extra'  => true,
+	);
+
+	/**
 	 * The plan of a run of the code, where the selection names a unit of
 	 * code (a plugin or a theme of the report) by its number; null where it
 	 * names none: the caller plans the contents.
@@ -216,9 +245,16 @@ final class AB_MCP_Sync_Code_Plan {
 	 * @return array|WP_Error item, shown, bytes; or locked.
 	 */
 	private static function unit( array $found, $n, array $entry, array $env, array $selection, array $with ) {
-		$kind   = (string) $entry['subtype'];
-		$ref    = (string) $entry['ref'];
-		$action = (string) $entry['action'];
+		// Which unit and what the report does with it decide the step: read
+		// in the form a report of this version writes them, never cast.
+		$read = AB_MCP_Shape::read( $entry, self::ENTRY );
+		if ( null === $read ) {
+			/* translators: %d: entry number of the report. */
+			return self::refused( 'ab_mcp_sync_push_report', sprintf( __( 'Entry %d of the report does not read in the form a report of this version writes (its subtype, ref or action), so no unit of it is planned and nothing of this site changed. Make a new report (wp_site_diff) and plan again.', 'alphabridge-mcp' ), $n ) );
+		}
+		$kind   = $read['subtype'];
+		$ref    = $read['ref'];
+		$action = $read['action'];
 		$lock   = static function ( $reason, $stage = null ) use ( $entry, $n ) {
 			return array(
 				'locked' => array(

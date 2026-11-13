@@ -23,12 +23,15 @@ declare( strict_types = 1 );
 
 namespace AlphaBridge\Tests;
 
+use AB_MCP_Shape;
 use AB_MCP_Sync_Code_Ops;
+use AB_MCP_Sync_Code_Plan;
 use AB_MCP_Sync_Code_Swap;
 use PHPUnit\Framework\TestCase;
 use WP_Error;
 
 require_once dirname( __DIR__ ) . '/includes/sync/class-sync-code-ops.php';
+require_once dirname( __DIR__ ) . '/includes/sync/class-sync-code-plan.php';
 
 final class SyncCodeOpsTest extends TestCase {
 
@@ -143,6 +146,42 @@ final class SyncCodeOpsTest extends TestCase {
 			$bad = AB_MCP_Sync_Code_Ops::item( array( 'code' => $code ), 2 );
 			self::assertInstanceOf( WP_Error::class, $bad, "#$i" );
 			self::assertSame( 'ab_mcp_sync_code_plan', $bad->get_error_code(), "#$i" );
+		}
+	}
+
+	public function testAnEntryOfAUnitWhoseFieldsDoNotReadInTheirFormPlansNothing(): void {
+		// The fields of the entry the plan of the code decides on (which unit,
+		// what the report does with it) are read in their form, never cast
+		// (Entscheidstellen): a wrong form refuses the plan with the way,
+		// before a pair, a package or a row of this site is read.
+		self::assertTrue( AB_MCP_Shape::valid_form( AB_MCP_Sync_Code_Plan::ENTRY ) );
+		$unit  = new \ReflectionMethod( AB_MCP_Sync_Code_Plan::class, 'unit' );
+		$entry = array(
+			'kind'    => 'environment',
+			'subtype' => 'plugin',
+			'ref'     => 'shop',
+			'action'  => 'take_over',
+			'result'  => 'changed_on_staging',
+		);
+		$wrong = array(
+			'subtype' => array( 5, 'mu_plugin', '', null, array( 'plugin' ) ),
+			'ref'     => array( 5, '', null, true, array( 'shop' ) ),
+			'action'  => array( 1, '', null, false, array( 'take_over' ) ),
+		);
+		foreach ( $wrong as $field => $values ) {
+			$less = $entry;
+			unset( $less[ $field ] );
+			$cases = array( 'absent' => $less );
+			foreach ( $values as $i => $value ) {
+				$cases[ "#$i" ] = array( $field => $value ) + $entry;
+			}
+			foreach ( $cases as $what => $one ) {
+				$got = $unit->invoke( null, array(), 7, $one, array(), array( 'accept' => array(), 'packages' => array() ), array() );
+				self::assertInstanceOf( WP_Error::class, $got, "$field $what" );
+				self::assertSame( 'ab_mcp_sync_push_report', $got->get_error_code(), "$field $what" );
+				self::assertStringContainsString( 'Entry 7 of the report does not read in the form a report of this version writes', $got->get_error_message(), "$field $what" );
+				self::assertStringContainsString( 'Make a new report (wp_site_diff) and plan again', $got->get_error_message(), "$field $what: with the way." );
+			}
 		}
 	}
 
