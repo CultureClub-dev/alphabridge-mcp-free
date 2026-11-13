@@ -1129,6 +1129,44 @@ final class AB_MCP_Protected_Store {
 	}
 
 	/**
+	 * The entry of one group of an area, as its sidecar holds it (gid, area,
+	 * created, user_id, run_id, declared, used, label, closed), read whole,
+	 * or the refusal: a sidecar that cannot be read, is not there or is not
+	 * an entry of its area whole (sidecar()) is an error of its own, never
+	 * left out as a group not listed (Z8b branch 5, K2: the stage reads the
+	 * run its group is bound to, AB_MCP_Sync_Code_Stage::complete()).
+	 *
+	 * @param string $area Area.
+	 * @param string $gid  Group.
+	 * @return array|WP_Error
+	 */
+	public static function entry( $area, $gid ) {
+		$bad = self::bad_ref( $area, $gid, 'x' );
+		if ( null !== $bad ) {
+			return $bad;
+		}
+		$root = self::root();
+		if ( is_wp_error( $root ) ) {
+			return $root;
+		}
+		$admitted = self::admitted( $root );
+		if ( true !== $admitted ) {
+			return $admitted;
+		}
+		$area_dir = self::way( $root, array( $area ) );
+		if ( null === $area_dir ) {
+			return self::unsafe();
+		}
+		$read = self::sidecar( $area_dir . '/' . self::group_name( $area, $gid, self::install_id() ) . '.json', $area );
+		if ( 'own' !== $read[0] || $gid !== $read[1]['gid'] ) {
+			return new WP_Error( 'ab_mcp_store_entry', __( 'The entry of the group could not be read whole in the protected store (its sidecar cannot be read, is not there, or is not of its form), so what the group is bound to is not known. Try again; if it keeps failing, ask the host to check the rights of the folder.', 'alphabridge-mcp' ) );
+		}
+		$entry = $read[1];
+		unset( $entry['format'] );
+		return $entry;
+	}
+
+	/**
 	 * The groups of an area for a budget: only where the area was read whole
 	 * (entries()), else the refusal with the cause and the way (Behebung 4:
 	 * a sidecar that cannot be read, or a listing that failed, left a group

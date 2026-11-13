@@ -729,10 +729,17 @@ final class StoreInputsTest extends TestCase {
 					$name = AB_MCP_Sync_Code_Stage::STATE . '0001-' . substr( AB_MCP_Sync_Import::held_name( hash( 'sha256', $value ) ), strlen( AB_MCP_Sync_Import::HELD ) );
 					self::assertIsArray( AB_MCP_Protected_Store::put( 'stage', $gid, $name, $value ) );
 					$hash     = str_repeat( 'b', 64 );
-					$complete = AB_MCP_Sync_Code_Stage::complete( $gid, 'ab-it-code', $hash, array() );
+					// The binding of the base state: run 7, its unit and its signed hash.
+					$bound    = array(
+						'run_id' => 7,
+						'kind'   => 'plugin',
+						'ref'    => 'ab-it-code',
+						'signed' => str_repeat( 'b', 64 ),
+					);
+					$complete = AB_MCP_Sync_Code_Stage::complete( $gid, 'ab-it-code', $hash, array(), $bound );
 					$out      = array(
 						null !== AB_MCP_Sync_Code_Stage::state_of( $value ),
-						null !== AB_MCP_Sync_Code_Stage::ready( $gid, 'ab-it-code', $hash ),
+						null !== AB_MCP_Sync_Code_Stage::ready( $gid, 'ab-it-code', $hash, $bound ),
 						is_wp_error( $complete ) ? $complete->get_error_code() : $complete['state'],
 					);
 					AB_MCP_Protected_Store::remove( 'stage', $gid );
@@ -758,7 +765,18 @@ final class StoreInputsTest extends TestCase {
 				$got = AB_MCP_Sync_Code_Ops::run( array( 'run_id' => 7 ), array( 'parts' => $value ), $item );
 				return is_wp_error( $got ) ? $got->get_error_code() : $got;
 			};
-			$check = AB_MCP_Sync_Code_Stage::complete( SyncCodeOpsTest::journal()['stage']['gid'], SyncCodeOpsTest::journal()['stage']['name'], SyncCodeOpsTest::journal()['stage']['hash'], $item['env'] );
+			$check = AB_MCP_Sync_Code_Stage::complete(
+				SyncCodeOpsTest::journal()['stage']['gid'],
+				SyncCodeOpsTest::journal()['stage']['name'],
+				SyncCodeOpsTest::journal()['stage']['hash'],
+				$item['env'],
+				array(
+					'run_id' => 7,
+					'kind'   => $item['unit']['kind'],
+					'ref'    => $item['unit']['ref'],
+					'signed' => $item['unit']['staging_hash'],
+				)
+			);
 			self::assertInstanceOf( WP_Error::class, $check, 'No stage of this group: the check of a journal of its form ends at the stage.' );
 			self::assertNotSame( 'ab_mcp_sync_code_journal', $check->get_error_code() );
 			return array(

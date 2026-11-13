@@ -21,7 +21,8 @@ CO = 'includes/sync/class-sync-code-ops.php'
 CS = 'includes/sync/class-sync-code-swap.php'
 EN = 'includes/sync/class-sync-engine.php'
 ST = 'includes/sync/class-sync-code-stage.php'
-VAR = {CK: '$ck', DE: '$de', PU: '$pu', CP: '$cp', CO: '$co', CS: '$cs', EN: '$en', ST: '$st'}
+PS = 'includes/class-protected-store.php'
+VAR = {CK: '$ck', DE: '$de', PU: '$pu', CP: '$cp', CO: '$co', CS: '$cs', EN: '$en', ST: '$st', PS: '$ps'}
 CLASSES = {'kind': ('unit', 'SyncCodeKindTest'), 'env': ('unit', 'SyncEnvTest'), 'run': ('unit', 'SyncRunTest'),
            'ops': ('unit', 'SyncCodeOpsTest'), 'coderun': ('it', 'SyncCodeRunTest')}
 entries = []
@@ -210,26 +211,11 @@ BYL = 'testTheGroupsOfThePackagesAreReadInTheirFormBeforeAPackageIsBound'
 e('k1a-permanent-ends', 'stage(): a refusal of the stage no later call changes ends the step failed (A3)', CO,
   "\t\t\tif ( in_array( $state->get_error_code(), AB_MCP_Sync_Code_Stage::PERMANENT, true ) ) {", "\t\t\tif ( false ) {", 'coderun', A3T)
 e('k1a-permanent-other', 'PERMANENT: the stage that is not the one of its group (A3)', ST,
-  "\tconst PERMANENT = array( 'code:stage_other', 'code:unsigned' );", "\tconst PERMANENT = array( 'code:unsigned' );", 'coderun', A3T)
+  "\tconst PERMANENT = array( 'code:stage_other', 'code:unsigned', 'code:stage_foreign' );", "\tconst PERMANENT = array( 'code:unsigned', 'code:stage_foreign' );", 'coderun', A3T)
 e('k1a-permanent-unsigned', 'PERMANENT: the unit not signed in the environment (A3)', ST,
-  "\tconst PERMANENT = array( 'code:stage_other', 'code:unsigned' );", "\tconst PERMANENT = array( 'code:stage_other' );", 'coderun', A3T)
+  "\tconst PERMANENT = array( 'code:stage_other', 'code:unsigned', 'code:stage_foreign' );", "\tconst PERMANENT = array( 'code:stage_other', 'code:stage_foreign' );", 'coderun', A3T)
 e('k1a-stage-other-code', 'complete(): the stage not of its group is a refusal of its own (A3)', ST,
   "\t\t\treturn self::refusal( 'code:stage_other', __( 'The stage named is not the one its group holds.", "\t\t\treturn self::refusal( 'code:stage_unknown', __( 'The stage named is not the one its group holds.", 'coderun', A3T)
-e('k1a-foreign-refuses', 'stage(): a ready stage not bound to the step never makes it done (A2)', CO,
-  "\t\tif ( null !== $foreign ) {", "\t\tif ( false ) {", 'coderun', A2T)
-e('k1a-foreign-kind', 'foreign(): the stage of another kind of unit is not bound to the step (A2)', CO,
-  "if ( null === $read || $unit['kind'] !== $read['unit']['kind'] || $unit['ref'] !== $read['unit']['ref'] || ! hash_equals( $unit['staging_hash'], $read['signed'] ) ) {",
-  "if ( null === $read || $unit['ref'] !== $read['unit']['ref'] || ! hash_equals( $unit['staging_hash'], $read['signed'] ) ) {", 'coderun', A2T)
-e('k1a-foreign-ref', 'foreign(): the stage of another unit is not bound to the step (A2)', CO,
-  "if ( null === $read || $unit['kind'] !== $read['unit']['kind'] || $unit['ref'] !== $read['unit']['ref'] || ! hash_equals( $unit['staging_hash'], $read['signed'] ) ) {",
-  "if ( null === $read || $unit['kind'] !== $read['unit']['kind'] || ! hash_equals( $unit['staging_hash'], $read['signed'] ) ) {", 'coderun', A2T)
-e('k1a-foreign-hash', 'foreign(): the stage of another version of the staging site is not bound to the step (A2)', CO,
-  "if ( null === $read || $unit['kind'] !== $read['unit']['kind'] || $unit['ref'] !== $read['unit']['ref'] || ! hash_equals( $unit['staging_hash'], $read['signed'] ) ) {",
-  "if ( null === $read || $unit['kind'] !== $read['unit']['kind'] || $unit['ref'] !== $read['unit']['ref'] ) {", 'coderun', A2T)
-e('k1a-foreign-run', 'foreign(): the group of the stage bound to another run is not bound to the step (A2)', CO,
-  "\t\t\t\treturn $run_id === $one['run_id'] ? null : $why;", "\t\t\t\treturn null;", 'coderun', A2T)
-e('k1a-answer-binding', 'answer(): complete() names the unit and its signed hash, the binding read before done (A2)', ST,
-  "\t\t\t'unit'    => $state['unit'],\n", '', 'coderun', A2T)
 e('k1a-bind-group-form', 'by_label(): a group of the packages not of its form refuses, never cast', CP,
   "\t\t\tif ( null === $read ) {\n\t\t\t\treturn self::refused( 'ab_mcp_sync_code_bind', __( 'A group", "\t\t\tif ( false ) {\n\t\t\t\treturn self::refused( 'ab_mcp_sync_code_bind', __( 'A group", 'ops', BYL)
 e('k1a-bind-label-known', 'bind(): a package without its group is not bound and refuses (V20)', CP,
@@ -267,6 +253,34 @@ e('k1b-here-null', 'need(): a live unit not read whole has no paths here, null, 
   "\t\t$here = null;\n\t\tif ( null !== $live ) {", "\t\t$here = array();\n\t\tif ( null !== $live ) {", 'coderun', UNREADT)
 e('k1b-here-read', 'need(): the paths here are those of the live unit as read now (A1)', ST,
   "\t\t\t$here = array_column( $live['entries'], 0 );", "\t\t\t$here = array();", 'coderun', A1T)
+
+# ------------------------------------------- K2: the binding held by the stage (A2, option A of Thomas 13.11. 14:22)
+CHK = 'testAStageStillCheckingNotBoundToThisStepIsNeverWrittenAndTheStepFails'
+ENT = 'testTheEntryOfTheGroupOfAStageNotReadLeavesTheStepPlannedNeverFailed'
+NORM = 'testAnInactivePluginUpdatedOnStagingIsPlannedAloneStagedOverCallsAndReadyWithoutAChangeOfTheSite'
+FOREIGN = "if ( $want['run_id'] !== $group['run_id'] || $want['kind'] !== $state['unit']['kind'] || $want['ref'] !== $state['unit']['ref'] || ! hash_equals( $want['signed'], $state['signed'] ) ) {"
+e('k2-permanent-foreign', 'PERMANENT: the stage not bound to the step (A2, K2)', ST,
+  "\tconst PERMANENT = array( 'code:stage_other', 'code:unsigned', 'code:stage_foreign' );", "\tconst PERMANENT = array( 'code:stage_other', 'code:unsigned' );", 'coderun', CHK)
+e('k2-complete-foreign', 'complete(): a stage not bound to the step is refused before anything is written (A2, K2)', ST,
+  "\t\t$foreign = self::foreign( $gid, $state, $bound );\n\t\tif ( null !== $foreign ) {", "\t\t$foreign = self::foreign( $gid, $state, $bound );\n\t\tif ( false ) {", 'coderun', CHK)
+e('k2-ready-foreign', 'ready(): ready only for the step the stage is bound to (A2, K2)', ST,
+  "\t\treturn null === self::foreign( $gid, $state, $bound ) ? $state : null;", "\t\treturn $state;", 'coderun', NORM)
+e('k2-bound-form', 'foreign(): a binding not of its form is not known, never taken (K2)', ST,
+  "\t\tif ( null === $want ) {", "\t\tif ( false ) {", 'coderun', CHK)
+e('k2-entry-unread', 'foreign(): the entry of the group not read is not known, never foreign (A2, K2)', ST,
+  "\t\tif ( is_wp_error( $entry ) ) {\n\t\t\treturn $entry;", "\t\tif ( false ) {\n\t\t\treturn $entry;", 'coderun', ENT)
+e('k2-foreign-run', 'foreign(): the group bound to another run is not bound to the step (A2, K2)', ST,
+  FOREIGN, FOREIGN.replace("$want['run_id'] !== $group['run_id'] || ", ''), 'coderun', CHK)
+e('k2-foreign-kind', 'foreign(): the stage of another kind of unit is not bound to the step (A2, K2)', ST,
+  FOREIGN, FOREIGN.replace("$want['kind'] !== $state['unit']['kind'] || ", ''), 'coderun', CHK)
+e('k2-foreign-ref', 'foreign(): the stage of another unit is not bound to the step (A2, K2)', ST,
+  FOREIGN, FOREIGN.replace("$want['ref'] !== $state['unit']['ref'] || ", ''), 'coderun', CHK)
+e('k2-foreign-signed', 'foreign(): the stage of another version of the staging site is not bound to the step (A2, K2)', ST,
+  FOREIGN, FOREIGN.replace(" || ! hash_equals( $want['signed'], $state['signed'] )", ''), 'coderun', CHK)
+e('k2-ops-bound-run', 'stage(): the step expects its stage bound to its own run (A2, K2)', CO,
+  "\t\t\t'run_id' => $run_id,\n\t\t\t'kind'   => $unit['kind'],", "\t\t\t'run_id' => $run_id + 1,\n\t\t\t'kind'   => $unit['kind'],", 'coderun', NORM)
+e('k2-store-entry-unread', 'entry(): a sidecar not read whole is the error of its own, never an entry (K2)', PS,
+  "\t\tif ( 'own' !== $read[0] || $gid !== $read[1]['gid'] ) {", "\t\tif ( false ) {", 'coderun', ENT)
 
 # ------------------------------------------------ check and write
 src = {f: open(os.path.join(ROOT, f)).read() for f in VAR}

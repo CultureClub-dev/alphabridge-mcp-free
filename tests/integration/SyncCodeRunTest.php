@@ -62,6 +62,7 @@ require_once AB_MCP_DIR . 'includes/sync/class-sync-push.php';
 require_once AB_MCP_DIR . 'includes/sync/class-sync-code-stage.php';
 require_once AB_MCP_DIR . 'includes/tools/class-tools-staging.php';
 require_once __DIR__ . '/support/class-test-wporg.php';
+require_once __DIR__ . '/support/class-it-store-calls.php';
 
 final class SyncCodeRunTest extends TestCase {
 
@@ -431,7 +432,16 @@ final class SyncCodeRunTest extends TestCase {
 		self::assertIsArray( $journal, 'The journal of the step reads in its form.' );
 		self::assertSame( array( 'plugin', 'ab-it-inaktiv', 'stage' ), array_values( $journal['unit'] ) );
 		self::assertSame( 'wordpress.org', $journal['stage']['source'] );
-		self::assertNull( AB_MCP_Sync_Code_Stage::ready( $journal['stage']['gid'], $journal['stage']['name'], $journal['stage']['hash'] ), 'Staged is not ready.' );
+		// The binding the step expects of its stage: this run, the unit and
+		// the staging_hash of the plan (A2, K2).
+		$unit  = AB_MCP_Sync_Code_Ops::item( AB_MCP_Sync_Run::get( $run_id )['plan'], 2 )['unit'];
+		$bound = array(
+			'run_id' => $run_id,
+			'kind'   => $unit['kind'],
+			'ref'    => $unit['ref'],
+			'signed' => $unit['staging_hash'],
+		);
+		self::assertNull( AB_MCP_Sync_Code_Stage::ready( $journal['stage']['gid'], $journal['stage']['name'], $journal['stage']['hash'], $bound ), 'Staged is not ready.' );
 		$stage_groups = array_values( array_filter( AB_MCP_Protected_Store::groups( 'stage' ), static fn( $g ) => (int) $g['run_id'] === $run_id ) );
 		self::assertCount( 1, $stage_groups, 'The stage belongs to the run.' );
 		// Step 2, the calls after: its check, until it is done; never a second stage.
@@ -447,7 +457,10 @@ final class SyncCodeRunTest extends TestCase {
 		self::assertSame( array( 'kind' => 'plugin', 'ref' => 'ab-it-inaktiv' ), $done['step']['result']['staged'] );
 		self::assertFalse( $done['step']['result']['same'] );
 		self::assertGreaterThan( 0, $done['step']['result']['checked'] );
-		self::assertIsArray( AB_MCP_Sync_Code_Stage::ready( $journal['stage']['gid'], $journal['stage']['name'], $journal['stage']['hash'] ), 'Ready, by complete() alone.' );
+		self::assertIsArray( AB_MCP_Sync_Code_Stage::ready( $journal['stage']['gid'], $journal['stage']['name'], $journal['stage']['hash'], $bound ), 'Ready, by complete() alone.' );
+		foreach ( array( 'run_id' => $run_id + 1, 'kind' => 'theme', 'ref' => 'ab-it-aktiv', 'signed' => str_repeat( 'e', 64 ) ) as $field => $other ) {
+			self::assertNull( AB_MCP_Sync_Code_Stage::ready( $journal['stage']['gid'], $journal['stage']['name'], $journal['stage']['hash'], array( $field => $other ) + $bound ), "Ready only for the step it is bound to: another $field." );
+		}
 		self::assertCount( 1, $calls->wporg->calls, 'Fetched once.' );
 		self::assertCount( 1, array_filter( AB_MCP_Protected_Store::groups( 'stage' ), static fn( $g ) => (int) $g['run_id'] === $run_id ), 'Staged once.' );
 		self::assertSame( $before, self::live_bytes( 'ab-it-inaktiv' ), 'Nothing of the live unit changed.' );
@@ -885,11 +898,26 @@ final class SyncCodeRunTest extends TestCase {
 		// never planned for ever; a reading that failed stays planned
 		// (reading 5, the test of what does not read).
 		list( $run_id, $journal, $before ) = self::staged_run();
-		// The unit not signed in the environment the check is given (the one
-		// entrance called directly, with an environment that names no unit).
-		$item = AB_MCP_Sync_Code_Ops::item( AB_MCP_Sync_Run::get( $run_id )['plan'], 2 );
-		self::assertIsArray( $item );
-		AB_MCP_Sync_Code_Ops::run( AB_MCP_Sync_Run::get( $run_id ), self::step( $run_id, 2 ), array( 'env' => array() ) + $item );
+		// The unit not signed in the environment the plan of the run names,
+		// through the public way (B of the Codex confirmation on d4a0a56):
+		// the environment of the staging site taken over anew without the
+		// unit, and the plan of the run naming it (its row written as a
+		// plan that reads); the stage is the one of the step.
+		global $wpdb;
+		$runs = AB_MCP_Sync_Schema::table( 'runs' );
+		$row  = $wpdb->get_var( $wpdb->prepare( "SELECT plan FROM `$runs` WHERE run_id = %d", $run_id ) ); // phpcs:ignore WordPress.DB
+		self::assertIsString( $row );
+		AB_MCP_IT_Code::remove( 'b', 'plugin', 'ab-it-inaktiv' );
+		self::clear_b();
+		$plan                = AB_MCP_Sync_Run::get( $run_id )['plan'];
+		$plan['code']['env'] = self::staged( 'env' );
+		$wpdb->update( $runs, array( 'plan' => wp_json_encode( $plan ) ), array( 'run_id' => $run_id ) ); // phpcs:ignore WordPress.DB
+		try {
+			$answer = self::next( $run_id );
+		} finally {
+			$wpdb->update( $runs, array( 'plan' => $row ), array( 'run_id' => $run_id ) ); // phpcs:ignore WordPress.DB
+		}
+		self::assertIsArray( $answer, is_wp_error( $answer ) ? $answer->get_error_code() . ': ' . $answer->get_error_message() : '' );
 		$step = self::stage_failed( $run_id, 'code:unsigned', $before );
 		self::assertStringContainsString( 'Take the environment of the staging site over anew', $step['result']['message'], 'With the way.' );
 		// The hash of the tree not the one its group holds, through the public way.
@@ -922,6 +950,9 @@ final class SyncCodeRunTest extends TestCase {
 		$gid  = $journal['stage']['gid'];
 		$item = AB_MCP_Sync_Code_Ops::item( AB_MCP_Sync_Run::get( $run_id )['plan'], 2 );
 		self::assertIsArray( $item );
+		// The stage checked and ready, the step planned again on it.
+		self::assertSame( 'done', self::next( $run_id )['step']['state'] );
+		self::replan( $run_id, $journal );
 		$foreign = static function ( string $what ) use ( $run_id, $before ): void {
 			$step = self::stage_failed( $run_id, 'code:stage_foreign', $before );
 			self::assertStringContainsString( 'is not bound to this run, this unit and the version of the staging site the plan names', $step['result']['message'], $what );
@@ -955,6 +986,114 @@ final class SyncCodeRunTest extends TestCase {
 		// Bound as the plan names it: done.
 		self::replan( $run_id, $journal );
 		self::assertSame( 'done', self::next( $run_id )['step']['state'] );
+	}
+
+	/** The folder of the group of a stage (AB_MCP_Protected_Store::group_name(): its area, its id and the id of the installation). */
+	private static function stage_folder( string $gid ): string {
+		$named = new \ReflectionMethod( AB_MCP_Protected_Store::class, 'group_name' );
+		return (string) $named->invoke( null, 'stage', $gid, AB_MCP_Protected_Store::install_id( false ) );
+	}
+
+	/** Every file of the folder of a group of the stage by its SHA-256. */
+	private static function stage_bytes( string $gid ): array {
+		$out = array();
+		$dir = AB_MCP_Protected_Store::root() . '/stage/' . self::stage_folder( $gid );
+		$it  = new \RecursiveIteratorIterator( new \RecursiveDirectoryIterator( $dir, \FilesystemIterator::SKIP_DOTS ) );
+		foreach ( $it as $file ) {
+			$out[ substr( $file->getPathname(), strlen( $dir ) ) ] = hash_file( 'sha256', $file->getPathname() );
+		}
+		ksort( $out );
+		return $out;
+	}
+
+	public function testAStageStillCheckingNotBoundToThisStepIsNeverWrittenAndTheStepFails(): void {
+		// A2 of the Codex confirmation on d4a0a56 (option A of the decision of
+		// Thomas, 13.11. 14:22, K2): the stage holds the binding before it
+		// writes anything. A journal of its form may name a stage still
+		// checking of another run, another unit or another version of the
+		// staging site: the step fails with its reason and way, and the stage
+		// is never written, neither refused nor checked further (its state
+		// and its check stay byte for byte).
+		list( $run_id, $journal, $before ) = self::staged_run();
+		$gid  = $journal['stage']['gid'];
+		$item = AB_MCP_Sync_Code_Ops::item( AB_MCP_Sync_Run::get( $run_id )['plan'], 2 );
+		self::assertIsArray( $item );
+		$untouched = self::stage_bytes( $gid );
+		self::assertCount( 1, preg_grep( '#^/' . AB_MCP_Sync_Code_Stage::STATE . '#', array_keys( $untouched ) ), 'Staged and still checking: its first state alone.' );
+		$foreign = static function ( string $what ) use ( $run_id, $gid, $before, $untouched ): void {
+			$step = self::stage_failed( $run_id, 'code:stage_foreign', $before );
+			self::assertStringContainsString( 'is not bound to this run, this unit and the version of the staging site the plan names', $step['result']['message'], $what );
+			self::assertSame( $untouched, self::stage_bytes( $gid ), "$what: the stage is not written." );
+		};
+		// The group bound to another run, through the public way; with an
+		// environment of the step that would refuse the stage as well.
+		self::assertTrue( AB_MCP_Protected_Store::bind( 'stage', $gid, $run_id + 1 ) );
+		try {
+			$answer = self::next( $run_id );
+		} finally {
+			self::assertTrue( AB_MCP_Protected_Store::bind( 'stage', $gid, $run_id ) );
+		}
+		self::assertIsArray( $answer, is_wp_error( $answer ) ? $answer->get_error_code() . ': ' . $answer->get_error_message() : '' );
+		$foreign( 'another run' );
+		self::replan( $run_id, $journal );
+		self::assertTrue( AB_MCP_Protected_Store::bind( 'stage', $gid, $run_id + 1 ) );
+		try {
+			AB_MCP_Sync_Code_Ops::run( AB_MCP_Sync_Run::get( $run_id ), self::step( $run_id, 2 ), array( 'env' => array() ) + $item );
+		} finally {
+			self::assertTrue( AB_MCP_Protected_Store::bind( 'stage', $gid, $run_id ) );
+		}
+		$foreign( 'another run, an environment without the unit' );
+		// Another version of the staging site, another unit, another kind.
+		$cases = array(
+			'another staging_hash' => array( array( 'staging_hash' => str_repeat( 'e', 64 ) ), array() ),
+			'another unit'         => array( array( 'ref' => 'ab-it-aktiv' ), array( 'ref' => 'ab-it-aktiv' ) ),
+			'another kind'         => array( array( 'kind' => 'theme' ), array( 'kind' => 'theme' ) ),
+		);
+		foreach ( $cases as $what => list( $unit, $of ) ) {
+			$named         = $journal;
+			$named['unit'] = $of + $journal['unit'];
+			self::replan( $run_id, $named );
+			AB_MCP_Sync_Code_Ops::run( AB_MCP_Sync_Run::get( $run_id ), self::step( $run_id, 2 ), array( 'unit' => $unit + $item['unit'] ) + $item );
+			$foreign( $what );
+		}
+		// A binding not of its form (a staging_hash that is no SHA-256): not
+		// known, the step stays planned and the stage is not written.
+		self::replan( $run_id, $journal );
+		$got = AB_MCP_Sync_Code_Ops::run( AB_MCP_Sync_Run::get( $run_id ), self::step( $run_id, 2 ), array( 'unit' => array( 'staging_hash' => 'not-a-hash' ) + $item['unit'] ) + $item );
+		self::assertStringContainsString( 'does not read in its form, so the stage is neither checked nor taken', self::refused( $got, 'code:stage_bound' ) );
+		self::assertSame( 'planned', self::step( $run_id, 2 )['state'] );
+		self::assertSame( $untouched, self::stage_bytes( $gid ), 'A binding not of its form: the stage is not written.' );
+		// Bound as the plan names it: checked and done, its state written.
+		self::assertSame( 'done', self::next( $run_id )['step']['state'] );
+		self::assertNotSame( $untouched, self::stage_bytes( $gid ), 'The stage of the step is checked.' );
+	}
+
+	public function testTheEntryOfTheGroupOfAStageNotReadLeavesTheStepPlannedNeverFailed(): void {
+		// A2 of the Codex confirmation on d4a0a56 (K2): the run a group of the
+		// stage is bound to is read from its entry by its id; an entry that
+		// does not read is not known, never «not bound» (a group left out of
+		// a listing): the step stays planned with the error and the way, and
+		// the next call goes on. The read fails through the seam of the store
+		// (naht_protected_store) for the sidecar of the group, wherever it is
+		// read for anything but the state of the stage.
+		list( $run_id, $journal, $before ) = self::staged_run();
+		self::assertSame( 'done', self::next( $run_id )['step']['state'], 'Checked and ready.' );
+		self::replan( $run_id, $journal );
+		$calls = new SyncCodeRunEntryCalls( '/stage/' . self::stage_folder( $journal['stage']['gid'] ) . '.json' );
+		AB_MCP_Test_Seam::install( AB_MCP_Protected_Store::class, 'naht_protected_store', $calls );
+		try {
+			$error = self::next( $run_id );
+		} finally {
+			AB_MCP_Test_Seam::restore_all();
+		}
+		self::assertGreaterThan( 0, $calls->failed, 'The entry of the group was read beside the state, and did not read.' );
+		$message = self::refused( $error, 'ab_mcp_store_entry' );
+		self::assertStringContainsString( 'so what the group is bound to is not known', $message, 'The error.' );
+		self::assertStringContainsString( 'Step 2 stays planned', $message );
+		self::assertStringContainsString( 'Call action=next again', $message, 'The way.' );
+		self::assertSame( array( 'planned', 'planned' ), array( self::step( $run_id, 2 )['state'], self::step( $run_id, 3 )['state'] ) );
+		self::assertSame( 'done', self::next( $run_id )['step']['state'], 'Read again: done.' );
+		self::assertSame( $before, self::live_bytes( 'ab-it-inaktiv' ) );
 	}
 
 	/* ------------------------------------------- what does not read */
@@ -1155,5 +1294,98 @@ final class SyncCodeRunStageCalls {
 
 	public function lint( $file, $label ) {
 		return $this->real->lint( $file, $label );
+	}
+}
+
+/**
+ * The calls of the protected store for SyncCodeRunTest: each the one of
+ * AB_MCP_IT_Store_Calls, but the read of one sidecar (a path ending so)
+ * gives false wherever it is not read for the state of a stage
+ * (AB_MCP_Sync_Code_Stage::state()): the entry of the group read for
+ * anything else does not read.
+ */
+final class SyncCodeRunEntryCalls {
+
+	/** @var \AB_MCP_IT_Store_Calls */
+	private $real;
+
+	/** @var string The end of the path of the sidecar. */
+	private $side;
+
+	/** @var int The reads that gave false. */
+	public $failed = 0;
+
+	public function __construct( string $side ) {
+		$this->real = new \AB_MCP_IT_Store_Calls();
+		$this->side = $side;
+	}
+
+	public function read( $path, $max ) {
+		if ( substr( (string) $path, -strlen( $this->side ) ) === $this->side && ! self::for_state() ) {
+			++$this->failed;
+			return false;
+		}
+		return $this->real->read( $path, $max );
+	}
+
+	private static function for_state(): bool {
+		foreach ( debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS ) as $frame ) {
+			if ( isset( $frame['class'] ) && AB_MCP_Sync_Code_Stage::class === $frame['class'] && 'state' === $frame['function'] ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	public function lstat( $path ) {
+		return $this->real->lstat( $path );
+	}
+
+	public function stat( $path ) {
+		return $this->real->stat( $path );
+	}
+
+	public function free( $dir ) {
+		return $this->real->free( $dir );
+	}
+
+	public function scandir( $dir ) {
+		return $this->real->scandir( $dir );
+	}
+
+	public function mkdir( $path, $mode ) {
+		return $this->real->mkdir( $path, $mode );
+	}
+
+	public function rmdir( $path ) {
+		return $this->real->rmdir( $path );
+	}
+
+	public function unlink( $path ) {
+		return $this->real->unlink( $path );
+	}
+
+	public function rename( $from, $to ) {
+		return $this->real->rename( $from, $to );
+	}
+
+	public function chmod( $path, $mode ) {
+		return $this->real->chmod( $path, $mode );
+	}
+
+	public function create( $path ) {
+		return $this->real->create( $path );
+	}
+
+	public function put( $path, $bytes ) {
+		return $this->real->put( $path, $bytes );
+	}
+
+	public function copy_into( $from, $to ) {
+		return $this->real->copy_into( $from, $to );
+	}
+
+	public function ask( $url, array $args, $fetcher ) {
+		return $this->real->ask( $url, $args, $fetcher );
 	}
 }
