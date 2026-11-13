@@ -555,6 +555,32 @@ ok( $since === get_option( 'auto_updater.lock' ) && array() === ab_events_like( 
 AB_MCP_Update_Log::clear_running();
 delete_option( 'auto_updater.lock' );
 
+// SW1 (Z8b branch 5, part 2a; decision D1 a): the lock of a swap. An update
+// refused while a swap holds WordPress's lock names the swap in both cases of
+// the time of busy() (a lock seconds old, one older than ten seconds), never
+// background updates; a time of the lock not read is not free.
+echo "SW1 the lock of a swap\n";
+$nonce = AB_MCP_Update_Guard::take_swap_lock( 'plugin', 'shop' );
+$note  = AB_MCP_Update_Log::running();
+ok( is_string( $nonce ) && 'swap' === $note['type'] && $nonce === $note['nonce'] && ! isset( $note['item'] ), 'SW1 taken, with the note of the swap and no item' );
+ok( 'ab_mcp_update_busy' === ab_code( AB_MCP_Update_Guard::take_swap_lock( 'plugin', 'other' ) ), 'SW1 a second swap is refused' );
+$GLOBALS['ab_events'] = array();
+$r = AB_Test_Update_Guard::update( ab_plugin_job( $f12 ) );
+ok( 'ab_mcp_update_busy' === ab_code( $r ) && false !== strpos( ab_msg( $r ), 'a swap of the plugin shop from the staging site' ) && false === strpos( ab_msg( $r ), 'background updates' ) && false === strpos( ab_msg( $r ), 'a moment ago' ), 'SW1 a lock seconds old: the swap is named: ' . ab_msg( $r ) );
+update_option( 'auto_updater.lock', time() - 60 );
+AB_MCP_Update_Log::set_running( array( 'started' => time() - 60 ) + $note );
+$r = AB_Test_Update_Guard::update( ab_plugin_job( $f12 ) );
+ok( 'ab_mcp_update_busy' === ab_code( $r ) && false !== strpos( ab_msg( $r ), 'a swap of the plugin shop from the staging site' ) && false === strpos( ab_msg( $r ), 'background updates' ), 'SW1 a lock older than ten seconds: the swap is named: ' . ab_msg( $r ) );
+ok( array() === ab_events_like( 'bulk_upgrade' ) && array() === ab_events_like( 'lock:release' ), 'SW1 nothing ran, the lock stays' );
+ok( false === AB_MCP_Update_Guard::free_swap_lock( 'not-ours' ) && null !== AB_MCP_Update_Log::running(), 'SW1 another nonce frees nothing' );
+update_option( 'auto_updater.lock', 'not a time' );
+ok( false === AB_MCP_Update_Guard::free_swap_lock( $nonce ) && 'not a time' === get_option( 'auto_updater.lock' ) && null === AB_MCP_Update_Log::running(), 'SW1 a time of the lock not read is not free: the note goes, the lock stays' );
+update_option( 'auto_updater.lock', time() - 60 );
+AB_MCP_Update_Log::set_running( array( 'started' => time() - 60 ) + $note );
+ok( true === AB_MCP_Update_Guard::free_swap_lock( $nonce ) && false === get_option( 'auto_updater.lock' ) && null === AB_MCP_Update_Log::running(), 'SW1 given back: note and lock' );
+AB_MCP_Update_Log::clear_running();
+delete_option( 'auto_updater.lock' );
+
 /* ========================================== F15 an exception inside */
 
 echo "F15 the upgrader throws\n";

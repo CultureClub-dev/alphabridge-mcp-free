@@ -977,6 +977,63 @@ final class AB_MCP_Store_Inputs {
 				'pattern'   => '/^[0-9][0-9A-Za-z.+_-]*\z/',
 			),
 		),
+		/* ------------------------------ the swap of a unit (Z8b branch 5) */
+		'swap.opcache'             => array(
+			'consumer' => 'code',
+			'source'   => 'AB_MCP_Sync_Code_Swap::invalidate(), the answer of AB_MCP_Own_Files::invalidate_opcache()',
+			'field'    => 'whether a PHP file was taken out of OPcache: only invalidated or not_active let a swap of running code go on (Z13)',
+			'form'     => array(
+				'type'      => 'string',
+				'empty'     => false,
+				'max_bytes' => null,
+				'in'        => array( 'invalidated', 'not_active', 'not_possible' ),
+			),
+		),
+		'swap.probe'               => array(
+			'consumer' => 'code',
+			'source'   => 'AB_MCP_Sync_Code_Swap::reached(), the answer of AB_MCP_Php_Probe::run() before a swap',
+			'field'    => 'the rows of the test requests, each with its target and result: which targets were reached before a swap (Z14)',
+			'form'     => array(
+				'type'   => 'record',
+				'fields' => array(
+					'targets' => array(
+						'type'      => 'list',
+						'empty'     => false,
+						'item'      => array(
+							'type'   => 'record',
+							'fields' => array(
+								'target' => array(
+									'type'      => 'string',
+									'empty'     => false,
+									'max_bytes' => null,
+								),
+								'result' => array(
+									'type'      => 'string',
+									'empty'     => false,
+									'max_bytes' => null,
+									'in'        => array( 'ok', 'fatal', 'stopped', 'unreachable', 'not_probed' ),
+								),
+							),
+							'extra'  => true,
+						),
+						'unique'    => false,
+						'max_items' => null,
+					),
+				),
+				'extra'  => true,
+			),
+		),
+		'swap.lock'                => array(
+			'consumer' => 'code',
+			'source'   => 'AB_MCP_Sync_Code_Swap::lock_held(), the row of the option of AB_MCP_Change_Lock',
+			'field'    => 'the time the lock for changes of the code was taken, as WordPress writes it: whether the lock a swap holds has its row (V7)',
+			'form'     => array(
+				'type'   => 'int',
+				'digits' => true,
+				'min'    => 1,
+				'max'    => null,
+			),
+		),
 	);
 
 	/**

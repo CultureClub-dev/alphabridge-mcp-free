@@ -33,6 +33,7 @@ use AB_MCP_Sync_Canon;
 use AB_MCP_Sync_Code_Ops;
 use AB_MCP_Sync_Code_Package;
 use AB_MCP_Sync_Code_Stage;
+use AB_MCP_Sync_Code_Swap;
 use AB_MCP_Test_Seam;
 use AB_MCP_Sync_Run;
 use AB_MCP_Sync_Schema;
@@ -47,6 +48,7 @@ require_once __DIR__ . '/../includes/sync/class-sync-backup.php';
 require_once __DIR__ . '/../includes/sync/class-sync-import.php';
 require_once __DIR__ . '/../includes/sync/class-sync-code-package.php';
 require_once __DIR__ . '/../includes/sync/class-sync-code-stage.php';
+require_once __DIR__ . '/../includes/sync/class-sync-code-swap.php';
 require_once __DIR__ . '/integration/support/class-test-seam.php';
 
 /**
@@ -687,6 +689,71 @@ final class StoreInputsTest extends TestCase {
 				'run'     => static fn( $v ) => AB_MCP_Sync_Code_Ops::item( array( 'code' => $v ), SyncCodeOpsTest::code()['units'][0]['seq'] ),
 				'unknown' => $refused( 'ab_mcp_sync_code_plan' ),
 			),
+			/* ------------------------------------- the swap (Z8b branch 5, 2a) */
+			'swap.opcache'             => array(
+				'base'    => 'invalidated',
+				'more'    => array(
+					'fixed: none'                          => null,
+					'fixed: true, as wp_opcache_invalidate()' => true,
+				),
+				// Its consumer invalidate(), the one wrapper of OPcache in the
+				// swap (Z13): only invalidated and not_active go on.
+				'valid'   => array( array( 'invalidated', true ), array( 'not_active', true ), array( 'not_possible', 'code:opcache' ) ),
+				'run'     => static function ( $v ) {
+					AB_MCP_Test_Seam::install( AB_MCP_Sync_Code_Swap::class, 'naht_sync_code_swap', new StoreInputsSwapCalls( $v, false ) );
+					try {
+						$got = AB_MCP_Sync_Code_Swap::invalidate( '/site/wp-content/plugins/shop/shop.php' );
+					} finally {
+						AB_MCP_Test_Seam::restore_all();
+					}
+					return is_wp_error( $got ) ? $got->get_error_code() : $got;
+				},
+				'unknown' => static fn( $got ): bool => 'code:opcache_unknown' === $got,
+			),
+			'swap.probe'               => array(
+				'base'    => array(
+					'result'  => 'passed',
+					'targets' => array(
+						array(
+							'target' => 'home',
+							'url'    => 'https://site.test/',
+							'result' => 'ok',
+						),
+					),
+				),
+				'more'    => array(
+					'fixed: none'       => null,
+					'fixed: no targets' => array( 'targets' => array() ),
+				),
+				// Its consumer reached() (Z14): a target counts as reached only
+				// where every row of it is.
+				'valid'   => array(
+					array( array( 'targets' => array( array( 'target' => 'home', 'result' => 'stopped' ), array( 'target' => 'mcp', 'result' => 'not_probed' ) ) ), array( 'home' => true, 'mcp' => false ) ),
+					array( array( 'targets' => array( array( 'target' => 'home', 'result' => 'ok' ), array( 'target' => 'home', 'result' => 'unreachable' ) ) ), array( 'home' => false ) ),
+				),
+				'run'     => static fn( $v ) => AB_MCP_Sync_Code_Swap::reached( $v ),
+				'unknown' => $null,
+			),
+			'swap.lock'                => array(
+				'base'    => '1700000000',
+				'more'    => array(
+					'fixed: zero'           => '0',
+					'fixed: a leading zero' => '017',
+					'fixed: none'           => null,
+				),
+				// Its consumer lock_held() (V7): the row of the lock for changes
+				// is a time as WordPress writes it, or the lock is not held.
+				'valid'   => array( array( '1700000000', true ), array( 1700000000, true ) ),
+				'run'     => static function ( $v ) {
+					AB_MCP_Test_Seam::install( AB_MCP_Sync_Code_Swap::class, 'naht_sync_code_swap', new StoreInputsSwapCalls( null, array( 'value' => $v ) ) );
+					try {
+						return AB_MCP_Sync_Code_Swap::lock_held();
+					} finally {
+						AB_MCP_Test_Seam::restore_all();
+					}
+				},
+				'unknown' => static fn( $got ): bool => false === $got,
+			),
 			/* ------------------------------------------------------ budgets */
 			'budget.max_packages'      => array(
 				'base'    => 5,
@@ -749,5 +816,34 @@ final class StoreInputsCodeCalls {
 
 	public function method(): string {
 		return 'ftpext';
+	}
+}
+
+/** The calls of the swap for the drivers of swap.opcache and swap.lock: the answer of OPcache and the row of the lock, nothing else. */
+final class StoreInputsSwapCalls {
+
+	/** @var mixed */
+	private $opcache;
+
+	/** @var mixed */
+	private $row;
+
+	/**
+	 * @param mixed $opcache What OPcache answers.
+	 * @param mixed $row     The row of the lock for changes.
+	 */
+	public function __construct( $opcache, $row ) {
+		$this->opcache = $opcache;
+		$this->row     = $row;
+	}
+
+	/** @return mixed */
+	public function opcache( $path ) {
+		return $this->opcache;
+	}
+
+	/** @return mixed */
+	public function lock_row() {
+		return $this->row;
 	}
 }

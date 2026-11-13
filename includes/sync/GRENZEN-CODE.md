@@ -430,7 +430,7 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
   nicht. Wann sie geht, regeln die Aufbewahrung des Bereichs `stage` (`KEEP` ein Tag,
   `includes/class-protected-store.php:424`) und `kept()` (`:1452`); nicht nachgestellt. Nach Fable zählt sie bis
   dahin im Budget (nicht nachgeprüft). Am geprüften Kopf wird der noch nicht implementierte Tausch abgelehnt
-  (`class-sync-code-ops.php:107`–`:112`, `ab_mcp_sync_code_swap_not_built`); durch die Bereitstellung wurde nichts an
+  (`class-sync-code-ops.php:108`–`:120`, `ab_mcp_sync_code_swap_not_built`, nach der frischen Prüfung von Z24 in `released()`); durch die Bereitstellung wurde nichts an
   der Site geschrieben.
 - **Trifft Normalfall:** nein (braucht einen Fehler der Datenbank beim Speichern oder ein Ende der Anfrage genau
   zwischen `stage()` und `update_step()`).

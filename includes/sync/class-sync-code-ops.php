@@ -16,7 +16,9 @@
  *   how far the check is stands in the state of the stage alone
  *   (AB_MCP_Store_Inputs: stage.state), in no second copy;
  * - swap («tauschen», E5): the staged unit put in the place of the one this
- *   site has (AB_MCP_Sync_Code_Swap).
+ *   site has (AB_MCP_Sync_Code_Swap). At this commit the entrance asks the
+ *   release of its code (released(), Z24) and refuses the step: the swap
+ *   mechanics are not connected to the run yet.
  *
  * WHAT A STEP READS (the pre-check of branch 5, V18 and V19): the unit of a
  * step comes from the plan of its run in the form of its row plan.code, by
@@ -107,9 +109,39 @@ final class AB_MCP_Sync_Code_Ops {
 		if ( 'stage' === $item['unit']['op'] ) {
 			return self::stage( $run, $step, $item );
 		}
-		// Part 2 of branch 5 brings the swap (AB_MCP_Sync_Code_Swap): until
-		// then the step does not run and stays planned, nothing is changed.
-		return new WP_Error( 'ab_mcp_sync_code_swap_not_built', 'The swap of a unit of code is not built at this commit of Z8b branch 5 (it follows with the swap mechanics): the step stays planned and nothing of this site changed. Abort the run (wp_site_push action=abort).' );
+		// The swap runs code of the unit (Z24): released or not, read now.
+		$released = self::released( $item['unit'] );
+		if ( is_wp_error( $released ) ) {
+			return $released;
+		}
+		// The swap mechanics (AB_MCP_Sync_Code_Swap::prepare()) are not
+		// connected to the run at this commit: the step stays planned.
+		return new WP_Error( 'ab_mcp_sync_code_swap_not_built', __( 'The swap of a unit of code is not connected to the run at this commit. The step stays planned. Abort the run (wp_site_push action=abort).', 'alphabridge-mcp' ) );
+	}
+
+	/**
+	 * Z24, the one rule of the release (E8): an operation that runs code of
+	 * a unit runs only where that code does not run on this site now, or
+	 * where the plan holds the release of the person (accept). Whether it
+	 * runs is read now (AB_MCP_Sync_Code_Swap::runs()); not known is no
+	 * state the release covers. The entrance (run()) asks it, and the swap
+	 * asks it again under its locks (AB_MCP_Sync_Code_Swap::prepare()), each
+	 * by this function alone.
+	 *
+	 * @param array $unit The unit of the step, in the form of its row plan.code (kind, ref, accept).
+	 * @return bool|WP_Error Whether code of the unit runs now; the refusal where that is not known, or it runs without its release.
+	 */
+	public static function released( array $unit ) {
+		$runs = AB_MCP_Sync_Code_Swap::runs( $unit['kind'], $unit['ref'] );
+		if ( null === $runs ) {
+			/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name. */
+			return new WP_Error( 'ab_mcp_sync_code_runs_unknown', sprintf( __( 'Whether code of the %1$s %2$s runs on this site could not be read now (the options active_plugins, stylesheet and template do not read in the form WordPress writes them, or the theme was switched while they were read), so it is not swapped. Check the plugins and the theme of this site in wp-admin (deactivating and activating a plugin makes WordPress write the option anew), then call action=next again; or abort the run (wp_site_push action=abort).', 'alphabridge-mcp' ), $unit['kind'], $unit['ref'] ) );
+		}
+		if ( $runs && true !== $unit['accept'] ) {
+			/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name. */
+			return new WP_Error( 'ab_mcp_sync_code_not_released', sprintf( __( 'Code of the %1$s %2$s runs on this site now, and the plan of this run does not release it (its number was not in accept), so it is not swapped. Deactivate it in wp-admin (or switch to another theme) and call action=next again; or abort the run (wp_site_push action=abort), make a new report (wp_site_diff) and plan again with its number in accept.', 'alphabridge-mcp' ), $unit['kind'], $unit['ref'] ) );
+		}
+		return $runs;
 	}
 
 	/**

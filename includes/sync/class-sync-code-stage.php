@@ -1515,13 +1515,14 @@ final class AB_MCP_Sync_Code_Stage {
 	/* ------------------------------------------------------------ helpers */
 
 	/**
-	 * The folder or file of a unit in this site.
+	 * The folder or file of a unit in this site (the stage reads the live
+	 * unit there; the swap puts the stage there, AB_MCP_Sync_Code_Swap).
 	 *
 	 * @param string $kind plugin or theme.
 	 * @param string $ref  Unit.
 	 * @return string|null
 	 */
-	private static function target( $kind, $ref ) {
+	public static function target( $kind, $ref ) {
 		$base = 'theme' === $kind ? AB_MCP_Sync_File_Manifest::theme_root() : ( defined( 'WP_PLUGIN_DIR' ) && is_string( WP_PLUGIN_DIR ) ? rtrim( WP_PLUGIN_DIR, '/' ) : null );
 		return null === $base ? null : $base . '/' . $ref;
 	}

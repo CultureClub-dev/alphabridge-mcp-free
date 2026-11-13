@@ -20,9 +20,59 @@ defined( 'ABSPATH' ) || exit;
 require_once __DIR__ . '/class-php-probe.php';
 
 /**
+ * The calls of the identities of AlphaBridge's own files to the file system:
+ * the real ones (realpath(), stat(), scandir(); an error answers false).
+ */
+final class AB_MCP_Own_Files_Calls {
+
+	/**
+	 * @param string $path Path.
+	 * @return string|false
+	 */
+	public function realpath( $path ) {
+		return @realpath( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- a path not there is answered.
+	}
+
+	/**
+	 * @param string $path Path.
+	 * @return array|false
+	 */
+	public function stat( $path ) {
+		return @stat( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- a path not there is answered.
+	}
+
+	/**
+	 * @param string $dir Folder.
+	 * @return string[]|false
+	 */
+	public function scandir( $dir ) {
+		return @scandir( $dir ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- a missing mu-plugins folder is normal.
+	}
+}
+
+/**
  * Class AB_MCP_Own_Files
  */
 class AB_MCP_Own_Files {
+
+	/** The calls to the file system for the identities (the seam); only the tests put another object here. */
+	private static $naht_own_files = null;
+
+	/**
+	 * The calls object: the stand-in of a test, else the real calls.
+	 *
+	 * @return AB_MCP_Own_Files_Calls
+	 */
+	private static function calls() {
+		return self::$naht_own_files ?? new AB_MCP_Own_Files_Calls();
+	}
+
+	/**
+	 * Back to the real calls.
+	 */
+	public static function forget() {
+		self::$naht_own_files = null;
+	}
 
 	/**
 	 * Does the previous file fail the same way? The same fatal error (file,
@@ -130,24 +180,65 @@ class AB_MCP_Own_Files {
 	 * @return true|WP_Error
 	 */
 	public static function own_file_refusal( $path ) {
-		$chain = self::identity_chain( (string) $path );
-		$own   = self::own_identities();
+		return true === self::judge( (string) $path, false ) ? self::own_file_error() : true;
+	}
+
+	/**
+	 * Whether a path is AlphaBridge's own, strictly (Z8b branch 5, Z11 of
+	 * the swap; decision V6): true own, false not own, null where a place on
+	 * the way could not be read (realpath() or stat() of a place there, or
+	 * scandir() of a plugin folder that is there): unknown, never «not own».
+	 * The same places and the same rule as own_file_refusal() (judge()),
+	 * which the file tools keep.
+	 *
+	 * @param string $path Absolute path (need not exist yet).
+	 * @return bool|null
+	 */
+	public static function own_state( $path ) {
+		return is_string( $path ) && '' !== $path ? self::judge( $path, true ) : null;
+	}
+
+	/**
+	 * The one rule of AlphaBridge's own files: the identities of the path and
+	 * of every directory above it against those of everything that is
+	 * AlphaBridge's; a drop-in that does not exist yet has no identity and is
+	 * judged by name in the two folders WordPress loads single plugin files
+	 * from. Lenient (own_file_refusal()): what is not read has no identity.
+	 * Strict (own_state()): what is not read makes the answer null.
+	 *
+	 * @param string $path   Path.
+	 * @param bool   $strict Strict.
+	 * @return bool|null Own; null only where strict.
+	 */
+	private static function judge( $path, $strict ) {
+		$chain = self::identity_chain( $path, $strict );
+		$own   = self::own_identities( $strict );
+		if ( null === $chain || null === $own ) {
+			return null;
+		}
 		foreach ( $chain as $id ) {
 			if ( isset( $own[ $id ] ) ) {
-				return self::own_file_error();
+				return true;
 			}
 		}
-		// A drop-in that does not exist yet has no identity: judged by name in
-		// the two folders WordPress loads single plugin files from.
-		$parent = self::identity( dirname( (string) $path ) );
-		if ( '' !== $parent && preg_match( '/^alphabridge-mcp/i', basename( (string) $path ) ) ) {
-			foreach ( self::loader_dirs() as $dir ) {
-				if ( self::identity( $dir ) === $parent ) {
-					return self::own_file_error();
-				}
+		$parent = self::identity( dirname( $path ), $strict );
+		if ( null === $parent ) {
+			return null;
+		}
+		if ( '' === $parent || ! preg_match( '/^alphabridge-mcp/i', basename( $path ) ) ) {
+			return false;
+		}
+		foreach ( self::loader_dirs() as $dir ) {
+			// A loader folder that is not there (mu-plugins) has no identity.
+			$id = self::identity( $dir, $strict && file_exists( $dir ) );
+			if ( null === $id ) {
+				return null;
+			}
+			if ( $id === $parent ) {
+				return true;
 			}
 		}
-		return true;
+		return false;
 	}
 
 	/**
@@ -182,12 +273,20 @@ class AB_MCP_Own_Files {
 	 * every folder or single file named alphabridge-mcp… in the plugin
 	 * folders — an inactive copy of the free plugin, the owner drop-in.
 	 *
-	 * @return array<string,true>
+	 * @param bool $strict Null where a place is not read (judge()).
+	 * @return array<string,true>|null
 	 */
-	private static function own_identities() {
+	private static function own_identities( $strict = false ) {
+		$paths = self::own_paths( $strict );
+		if ( null === $paths ) {
+			return null;
+		}
 		$out = array();
-		foreach ( self::own_paths() as $p ) {
-			$id = self::identity( $p );
+		foreach ( $paths as $p ) {
+			$id = self::identity( $p, $strict );
+			if ( null === $id ) {
+				return null;
+			}
 			if ( '' !== $id ) {
 				$out[ $id ] = true;
 			}
@@ -201,9 +300,10 @@ class AB_MCP_Own_Files {
 	 * folder or single file named alphabridge-mcp… in the plugin folders — an
 	 * inactive copy of the free plugin, the owner drop-in.
 	 *
-	 * @return string[]
+	 * @param bool $strict Null where a plugin folder that is there is not listed (judge()).
+	 * @return string[]|null
 	 */
-	private static function own_paths() {
+	private static function own_paths( $strict = false ) {
 		$paths = array();
 		foreach ( array( 'AB_MCP_PRO_DIR', 'AB_MCP_DIR' ) as $const ) {
 			if ( defined( $const ) && '' !== (string) constant( $const ) ) {
@@ -211,7 +311,10 @@ class AB_MCP_Own_Files {
 			}
 		}
 		foreach ( self::loader_dirs() as $dir ) {
-			$entries = @scandir( $dir ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- a missing mu-plugins folder is normal.
+			$entries = self::calls()->scandir( $dir );
+			if ( $strict && false === $entries && file_exists( $dir ) ) {
+				return null;
+			}
 			foreach ( (array) $entries as $entry ) {
 				if ( is_string( $entry ) && preg_match( '/^alphabridge-mcp(?:[-_.].*)?$/i', $entry ) ) {
 					$paths[] = rtrim( $dir, '/\\' ) . DIRECTORY_SEPARATOR . $entry;
@@ -225,10 +328,11 @@ class AB_MCP_Own_Files {
 	 * Identities of a path and every directory above it. A path that does not
 	 * exist yet starts at its deepest existing ancestor.
 	 *
-	 * @param string $path Path.
-	 * @return string[]
+	 * @param string $path   Path.
+	 * @param bool   $strict Null where a place is not read (judge()).
+	 * @return string[]|null
 	 */
-	private static function identity_chain( $path ) {
+	private static function identity_chain( $path, $strict = false ) {
 		$probe = $path;
 		while ( '' !== $probe && ! file_exists( $probe ) ) {
 			$parent = dirname( $probe );
@@ -237,13 +341,16 @@ class AB_MCP_Own_Files {
 			}
 			$probe = $parent;
 		}
-		$real = @realpath( $probe ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		$real = self::calls()->realpath( $probe );
 		if ( false === $real ) {
-			return array();
+			return $strict ? null : array();
 		}
 		$chain = array();
 		for ( $i = 0; $i < 64; $i++ ) {
-			$id = self::identity( $real );
+			$id = self::identity( $real, $strict );
+			if ( null === $id ) {
+				return null;
+			}
 			if ( '' !== $id ) {
 				$chain[] = $id;
 			}
@@ -261,15 +368,21 @@ class AB_MCP_Own_Files {
 	 * them (case and symlinks do not matter then), else the resolved path,
 	 * folded to lower case on Windows. '' when it does not exist.
 	 *
-	 * @param string $path Path.
-	 * @return string
+	 * Strict: null where the place is not read (judge()).
+	 *
+	 * @param string $path   Path.
+	 * @param bool   $strict Strict.
+	 * @return string|null
 	 */
-	private static function identity( $path ) {
-		$real = @realpath( (string) $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+	private static function identity( $path, $strict = false ) {
+		$real = self::calls()->realpath( (string) $path );
 		if ( false === $real ) {
-			return '';
+			return $strict ? null : '';
 		}
-		$st = @stat( $real ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		$st = self::calls()->stat( $real );
+		if ( $strict && ! is_array( $st ) ) {
+			return null;
+		}
 		if ( is_array( $st ) && ! empty( $st['ino'] ) ) {
 			return 'ino:' . $st['dev'] . ':' . $st['ino'];
 		}

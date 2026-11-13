@@ -541,6 +541,86 @@ final class SyncCodeOpsTest extends TestCase {
 		self::assertNull( AB_MCP_Sync_Code_Swap::runs( 'mu_plugin', 'lake' ), 'A kind that is neither: not known.' );
 	}
 
+	public function testTheSwapStepAsksTheReleaseOfItsCodeNowAndRefusesWhereItIsNotKnownOrNotReleased(): void {
+		// Z24 (Frage 7 of part 2a): released() is the one rule; run() asks it
+		// for the step swap, read now through the seam, before it refuses the
+		// step that is not connected yet. Red at 2108f7d: run() refused every
+		// swap with not_built, whatever ran.
+		$item  = static fn( array $over ): array => array(
+			'unit'     => self::unit( array( 'seq' => 3, 'op' => 'swap', 'stage_seq' => 2 ) + $over ),
+			'env'      => array( str_repeat( 'e', 32 ) ),
+			'packages' => array(),
+		);
+		$shop  = serialize( array( 'shop/shop.php' ) );
+		$other = serialize( array( 'gallery/gallery.php' ) );
+		$cases = array(
+			'not known'                 => array( array( 'active_plugins' => 'a:1:{broken' ), array( 'accept' => true ), 'ab_mcp_sync_code_runs_unknown', 'could not be read now' ),
+			'runs, not released'        => array( array( 'active_plugins' => $shop ), array( 'accept' => false ), 'ab_mcp_sync_code_not_released', 'does not release it' ),
+			'runs, released'            => array( array( 'active_plugins' => $shop ), array( 'accept' => true ), 'ab_mcp_sync_code_swap_not_built', 'is not connected to the run at this commit' ),
+			'does not run, no release' => array( array( 'active_plugins' => $other ), array( 'accept' => false ), 'ab_mcp_sync_code_swap_not_built', 'The step stays planned.' ),
+		);
+		foreach ( $cases as $what => list( $rows, $over, $code, $says ) ) {
+			$calls = self::rows( $rows );
+			$got   = AB_MCP_Sync_Code_Ops::run( array( 'run_id' => 1 ), array( 'seq' => 3 ), $item( $over ) );
+			self::assertInstanceOf( WP_Error::class, $got, $what );
+			self::assertSame( $code, $got->get_error_code(), $what . ': ' . $got->get_error_message() );
+			self::assertStringContainsString( $says, $got->get_error_message(), $what );
+			self::assertSame( array( 'active_plugins' ), $calls->read, $what . ': read now, once.' );
+		}
+		self::assertStringNotContainsString( 'nothing of this site changed', AB_MCP_Sync_Code_Ops::run( array( 'run_id' => 1 ), array( 'seq' => 3 ), $item( array() ) )->get_error_message(), 'The sentence of 2a claims nothing of the site.' );
+		self::rows( array( 'active_plugins' => $other ) );
+		self::assertFalse( AB_MCP_Sync_Code_Ops::released( self::unit( array( 'accept' => false ) ) ), 'Not running: false, no refusal.' );
+		self::rows( array( 'active_plugins' => $shop ) );
+		self::assertTrue( AB_MCP_Sync_Code_Ops::released( self::unit() ), 'Running and released: true.' );
+	}
+
+	public function testOPcacheIsAskedInTheSwapOnlyThroughInvalidateAndAlphaBridgeOnlyStrictly(): void {
+		// Z13: no call of OPcache under includes/sync/ but the one method of the
+		// seam of the swap, and that method called only from invalidate(). V6:
+		// the swap asks AlphaBridge itself only through own_state(), never the
+		// lenient own_file_refusal(). Each rule with its counter-sample.
+		$rule  = static function ( array $files ): array {
+			$bad = array();
+			foreach ( $files as $name => $text ) {
+				$want = 'class-sync-code-swap.php' === $name ? 1 : 0;
+				foreach ( array( 'invalidate_opcache(', 'opcache_invalidate(', 'wp_opcache_invalidate(' ) as $call ) {
+					if ( substr_count( $text, $call ) !== ( 'invalidate_opcache(' === $call ? $want : 0 ) ) {
+						$bad[] = "$name: $call";
+					}
+				}
+				if ( 1 === $want ) {
+					preg_match_all( '/function (\w+)\(|->opcache\(/', $text, $m, PREG_SET_ORDER );
+					$in = '';
+					foreach ( $m as $hit ) {
+						if ( isset( $hit[1] ) && '' !== $hit[1] ) {
+							$in = $hit[1];
+						} elseif ( 'invalidate' !== $in ) {
+							$bad[] = "$name: ->opcache( in $in()";
+						}
+					}
+					if ( false !== strpos( $text, 'own_file_refusal' ) || 1 !== substr_count( $text, 'own_state(' ) ) {
+						$bad[] = "$name: AlphaBridge itself not only through own_state()";
+					}
+				}
+			}
+			return $bad;
+		};
+		$files = array();
+		foreach ( glob( dirname( __DIR__ ) . '/includes/sync/*.php' ) as $file ) {
+			// The code without its comments, which name the calls they explain.
+			$code = '';
+			foreach ( token_get_all( (string) file_get_contents( $file ) ) as $token ) {
+				$code .= is_array( $token ) ? ( in_array( $token[0], array( T_COMMENT, T_DOC_COMMENT ), true ) ? '' : $token[1] ) : $token;
+			}
+			$files[ basename( $file ) ] = $code;
+		}
+		self::assertSame( array(), $rule( $files ) );
+		$swap = $files['class-sync-code-swap.php'];
+		self::assertNotSame( array(), $rule( array( 'class-sync-code-run.php' => '<?php wp_opcache_invalidate( $f );' ) + $files ), 'Counter-sample: OPcache elsewhere.' );
+		self::assertNotSame( array(), $rule( array( 'class-sync-code-swap.php' => str_replace( 'private static function php_file(', 'private static function php_file() { self::calls()->opcache( 1 ); } private static function php_file2(', $swap ) ) + $files ), 'Counter-sample: ->opcache( outside invalidate().' );
+		self::assertNotSame( array(), $rule( array( 'class-sync-code-swap.php' => str_replace( 'own_state(', 'own_file_refusal(', $swap ) ) + $files ), 'Counter-sample: the lenient check.' );
+	}
+
 	public function testTwoVersionsAreOrderedOnlyWhereBothAreVersionsElseTheOrderIsNotKnown(): void {
 		self::assertSame( 'newer', AB_MCP_Sync_Code_Ops::order( '2.1', '2.0' ) );
 		self::assertSame( 'newer', AB_MCP_Sync_Code_Ops::order( '2.10', '2.9' ), 'By its parts, never as a text.' );

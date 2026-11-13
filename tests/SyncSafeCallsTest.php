@@ -473,6 +473,7 @@ final class SyncSafeCallsTest extends TestCase {
 			'AB_MCP_Protected_Store::under_lock' => array( 1, 'begin(): a way back for a closed run is made under the lock of the store, against the clean-up (decision 20, rule 4; A6).' ),
 		),
 		'class-sync-env.php' => array(
+			'->tables' => array( 1, 'tables(): the names of the tables of the core ($wpdb->tables( \'all\', true ), its list in PHP), left out of the tables of other plugins; no stored value. Seen since part 2a of branch 5: before, the static AB_MCP_Sync_Env::tables() of the same name hid it from the scan.' ),
 			'AB_MCP_Own_Files::own_file_refusal' => array( 1, 'own(): whether a unit of plugins or must-use plugins is AlphaBridge itself (Free, Pro, the owner drop-in) by the identity of its path (constants of the plugin, realpath() and stat()), shown by its version and never hashed (Z8b branch 2, E12); no stored value.' ),
 			'sanitize_url'                       => array( 1, 'update_hosts(): the Update URI of a head cleaned as wp_update_plugins() cleans it before it reads the host (esc_url() without display: the address and the protocols WordPress allows); no stored value (Z8b branch 4, D1).' ),
 			'__' => array( 2, 'the refusals and errors the tools wp_site_* pass on, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2).' ),
@@ -500,7 +501,24 @@ final class SyncSafeCallsTest extends TestCase {
 		),
 		// The plan and the steps of a run of the code (Z8b branch 5).
 		'class-sync-code-ops.php' => array(
-			'__' => array( 10, 'the answers and refusals of a step of the code (staged, checked, ready, not staged, not checked this call, a journal or a plan not of its form), in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes.' ),
+			'__' => array( 13, 'the answers and refusals of a step of the code (staged, checked, ready, not staged, not checked this call, a journal or a plan not of its form), in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes.' ),
+		),
+		// The swap of a unit (Z8b branch 5, part 2a: prepare(), invalidate()).
+		'class-sync-code-swap.php' => array(
+			'__'                                   => array( 23, 'the refusals of prepare() and invalidate(), each with the way, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the swap compares or hashes.' ),
+			'AB_MCP_Change_Lock::take'             => array( 1, 'Calls::take_lock(): the lock for changes of the code (E5 1, Z10), nested under the lock of the call of the run; its refusal is passed on.' ),
+			'AB_MCP_Change_Lock::release'          => array( 1, 'Calls::release_lock(): the lock for changes given back once (release()).' ),
+			'AB_MCP_Update_Guard::take_swap_lock'  => array( 1, 'Calls::core_lock(): WordPress\'s lock for updates with the note of the swap (E5 1, Z10; decision D1 a); the note is read back there, strictly.' ),
+			'AB_MCP_Update_Guard::free_swap_lock'  => array( 1, 'Calls::free_core_lock(): that lock given back where the note is ours and its time is read strictly.' ),
+			'AB_MCP_Own_Files::invalidate_opcache' => array( 1, 'Calls::opcache(): the one call of the swap to OPcache (Z13), only through invalidate(); its answer is read in the form of its row swap.opcache.' ),
+			'AB_MCP_Own_Files::own_state'          => array( 1, 'Calls::own(): AlphaBridge itself, strictly three-valued (Z11; decision V6): unknown is no swap.' ),
+			'AB_MCP_Php_Probe::enabled'            => array( 1, 'Calls::probe_enabled(): whether the test requests may run (the filter ab_mcp_php_probe_enabled); only a strict true lets running code be swapped (E5 2).' ),
+			'AB_MCP_Php_Probe::run'                => array( 1, 'Calls::probe(): the test requests before a swap (E5 4, Z14); the answer is read in the form of its row swap.probe.' ),
+			'AB_MCP_Shape::read'                   => array( 1, 'prepare(): its arguments read in the form PREPARE before anything is taken (no cast, no default).' ),
+			'is_main_site'                         => array( 1, 'Calls::lock_row(): the row of the lock for changes lies on the main site of a network, as AB_MCP_Change_Lock takes it there; no stored value.' ),
+			'get_main_site_id'                     => array( 1, 'Calls::lock_row(): the main site of a network for the row of the lock; no stored value.' ),
+			'switch_to_blog'                       => array( 1, 'Calls::lock_row(): to the main site for the row of the lock, back in finally; no stored value.' ),
+			'restore_current_blog'                 => array( 1, 'Calls::lock_row(): back from the main site after the row of the lock is read.' ),
 		),
 		'class-sync-code-plan.php' => array(
 			'__'                           => array( 31, 'the refusals, the locks and the preview of a plan of the code, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes.' ),
@@ -565,6 +583,7 @@ final class SyncSafeCallsTest extends TestCase {
 		$files    = glob( dirname( __DIR__ ) . '/includes/sync/*.php' );
 		$declared = array();
 		$methods  = array();
+		$instance = array();
 		$parents  = array();
 		foreach ( $files as $file ) {
 			$tokens = token_get_all( (string) file_get_contents( $file ) );
@@ -584,6 +603,13 @@ final class SyncSafeCallsTest extends TestCase {
 					// A method or function by its name; a closure (function () use
 					// (…) {) declares none, and the first name inside it is a call.
 					$methods[ self::next_name( $tokens, $i ) ] = true;
+					// Called with -> only where it is not static: a static
+					// method named like one of another object (prepare() of the
+					// swap, $wpdb->prepare()) hides no call through ->.
+					$modifier = self::before( $tokens, $i );
+					if ( ! is_array( $modifier ) || T_STATIC !== $modifier[0] ) {
+						$instance[ self::next_name( $tokens, $i ) ] = true;
+					}
 				}
 			}
 		}
@@ -610,7 +636,7 @@ final class SyncSafeCallsTest extends TestCase {
 				if ( is_array( $prev ) && T_NEW === $prev[0] ) {
 					$call = isset( $declared[ $name ] ) || 'self' === $name ? '' : 'new ' . $name;
 				} elseif ( is_array( $prev ) && in_array( $prev[0], array( T_OBJECT_OPERATOR, T_NULLSAFE_OBJECT_OPERATOR ), true ) ) {
-					$call = isset( $methods[ $name ] ) ? '' : '->' . $name;
+					$call = isset( $instance[ $name ] ) ? '' : '->' . $name;
 				} elseif ( is_array( $prev ) && T_DOUBLE_COLON === $prev[0] ) {
 					$class = self::before( $tokens, self::index_before( $tokens, $i ) );
 					$class = is_array( $class ) ? ltrim( $class[1], '\\' ) : '';

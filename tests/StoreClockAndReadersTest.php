@@ -93,7 +93,10 @@ final class StoreClockAndReadersTest extends TestCase {
 		'includes/sync/class-sync-code-kind.php'    => array(),
 		'includes/sync/class-sync-code-ops.php'     => array(),
 		'includes/sync/class-sync-code-plan.php'    => array(),
-		'includes/sync/class-sync-code-swap.php'    => array(),
+		'includes/sync/class-sync-code-swap.php'    => array(
+			'AB_MCP_Sync_Code_Swap::clock'        => 'the budget of a swap within one call (prepare(): the time left, twice the test requests before and the reserve, E5 2), with its seam $clock for tests; checked: no finite number is unknown (code:clock), nothing is swapped',
+			'AB_MCP_Sync_Code_Swap::probe_before' => 'the deadline of the test requests before a swap (AB_MCP_Php_Probe::run(), until) from the time left of the same call less the reserve; never stored',
+		),
 		'includes/sync/class-sync-push.php'         => array(),
 		'includes/sync/class-sync-engine.php'       => array(
 			'AB_MCP_Sync_Engine::now'        => 'the budget of work of one call (self::$work: when a call stops writing, checking or verifying and the seconds its answer names to wait), with its seam $clock for tests; measured within one call, never stored or read by a later call',
@@ -153,6 +156,9 @@ final class StoreClockAndReadersTest extends TestCase {
 		'AB_MCP_Sync_Code_Plan::of'             => array( array( 'plan.code' ), array( self::UNIT ), 'the plan made is read back in the form of its row before it is returned; a plan not of it makes no run (the same row item() reads at every step)' ),
 		'AB_MCP_Sync_Code_Swap::active_plugins' => array( array( 'site.active_plugins' ), array( self::IT ) ),
 		'AB_MCP_Sync_Code_Swap::theme'          => array( array( 'site.theme' ), array( self::IT ) ),
+		'AB_MCP_Sync_Code_Swap::invalidate'     => array( array( 'swap.opcache' ), array( self::UNIT ) ),
+		'AB_MCP_Sync_Code_Swap::lock_held'      => array( array( 'swap.lock' ), array( self::UNIT ) ),
+		'AB_MCP_Sync_Code_Swap::reached'        => array( array( 'swap.probe' ), array( self::UNIT ) ),
 		'AB_MCP_Sync_Code_Stage::from_org'      => array( array( 'stage.version' ), array( self::UNIT ) ),
 		'AB_MCP_Sync_Code_Stage::head_refusal'  => array( array( 'stage.head' ), array( self::UNIT ) ),
 		'AB_MCP_Sync_Code_Stage::state_of'      => array( array( 'stage.state' ), array( self::IT ) ),

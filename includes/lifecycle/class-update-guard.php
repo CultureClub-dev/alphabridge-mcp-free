@@ -44,6 +44,7 @@ require_once __DIR__ . '/class-php-probe.php';
 require_once __DIR__ . '/class-own-files.php';
 require_once __DIR__ . '/class-update-log.php';
 require_once __DIR__ . '/class-change-lock.php';
+require_once dirname( __DIR__ ) . '/class-shape.php';
 
 /**
  * Class AB_MCP_Update_Guard
@@ -1140,6 +1141,18 @@ class AB_MCP_Update_Guard {
 	private static function busy() {
 		$note  = AB_MCP_Update_Log::running();
 		$since = (int) self::on_main_site( 'get_option', self::LOCK . '.lock', 0 );
+		if ( self::swap_holds( $note ) ) {
+			return new WP_Error(
+				'ab_mcp_update_busy',
+				sprintf(
+					/* translators: 1: kind of the unit (plugin, theme), 2: its name, 3: seconds */
+					__( 'Not started: a swap of the %1$s %2$s from the staging site through AlphaBridge has held WordPress\'s lock for updates on this site for %3$d s. Updates and swaps of one site run one after the other. Nothing was changed; call again when the swap has answered (wp_site_push action=status shows its run).', 'alphabridge-mcp' ),
+					$note['kind'],
+					$note['ref'],
+					max( 0, time() - $note['started'] )
+				)
+			);
+		}
 		if ( self::note_holds_lock( $note ) && isset( $note['item'] ) ) {
 			return new WP_Error(
 				'ab_mcp_update_busy',
@@ -1165,6 +1178,127 @@ class AB_MCP_Update_Guard {
 				$since > 0 ? gmdate( 'H:i', $since ) : '?'
 			)
 		);
+	}
+
+	/* --------------------------------------- the lock of a swap (Z8b) */
+
+	/** The time a lock of WordPress holds (its option NAME.lock), read strictly: a whole number of seconds. */
+	const LOCK_TIME = array(
+		'type'   => 'int',
+		'digits' => true,
+		'min'    => 1,
+		'max'    => null,
+	);
+
+	/** The note of a swap on the lock (take_swap_lock()), read strictly. */
+	const SWAP_NOTE = array(
+		'type'   => 'record',
+		'fields' => array(
+			'type'    => array(
+				'type'      => 'string',
+				'empty'     => false,
+				'max_bytes' => null,
+				'in'        => array( 'swap' ),
+			),
+			'kind'    => array(
+				'type'      => 'string',
+				'empty'     => false,
+				'max_bytes' => null,
+				'in'        => array( 'plugin', 'theme' ),
+			),
+			'ref'     => array(
+				'type'      => 'string',
+				'empty'     => false,
+				'max_bytes' => 1024,
+			),
+			'started' => array(
+				'type'   => 'int',
+				'digits' => false,
+				'min'    => 1,
+				'max'    => null,
+			),
+			'nonce'   => array(
+				'type'      => 'string',
+				'empty'     => false,
+				'max_bytes' => 64,
+			),
+		),
+		'extra'  => false,
+	);
+
+	/**
+	 * Take WordPress's lock for updates for the swap of a unit of code (Z8b
+	 * branch 5, E5 1, Z10; decision D1 a): as an update takes it, on the main
+	 * site of a network, with a note of the type swap beside it, so that an
+	 * update refused meanwhile names the swap (busy()). The note has no item:
+	 * AB_MCP_Change_Lock names no update for it. The note is read back; only
+	 * where it reads as written is the lock held, else it is given back. No
+	 * lock is taken over here: one another request holds refuses.
+	 *
+	 * @param string $kind plugin or theme.
+	 * @param string $ref  The unit.
+	 * @return string|WP_Error Our nonce, for free_swap_lock().
+	 */
+	public static function take_swap_lock( $kind, $ref ) {
+		if ( ! class_exists( 'WP_Upgrader' ) && defined( 'ABSPATH' ) && is_readable( ABSPATH . 'wp-admin/includes/class-wp-upgrader.php' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
+		}
+		if ( ! class_exists( 'WP_Upgrader' ) ) {
+			return new WP_Error( 'ab_mcp_update_upgrader', __( 'WordPress\'s upgrader (wp-admin/includes/class-wp-upgrader.php) could not be loaded on this site, so its lock for updates is not taken and nothing is swapped. Re-install WordPress in wp-admin (Dashboard, Updates), then call again.', 'alphabridge-mcp' ) );
+		}
+		if ( true !== self::on_main_site( array( 'WP_Upgrader', 'create_lock' ), self::LOCK ) ) {
+			return self::busy();
+		}
+		$note = array(
+			'type'    => 'swap',
+			'kind'    => $kind,
+			'ref'     => $ref,
+			'started' => time(),
+			'nonce'   => bin2hex( random_bytes( 8 ) ),
+		);
+		AB_MCP_Update_Log::set_running( $note );
+		if ( AB_MCP_Shape::read( AB_MCP_Update_Log::running(), self::SWAP_NOTE ) !== $note ) {
+			self::on_main_site( array( 'WP_Upgrader', 'release_lock' ), self::LOCK );
+			return new WP_Error( 'ab_mcp_update_note', __( 'The note of AlphaBridge beside WordPress\'s lock for updates could not be written and read back on this site, so the lock is given back and nothing is swapped. Call again; where it keeps failing, check that the database of this site accepts writes.', 'alphabridge-mcp' ) );
+		}
+		return $note['nonce'];
+	}
+
+	/**
+	 * Give back the lock of a swap: our note first, then the lock, as
+	 * finish() does; the lock only where our note holds it, its time read
+	 * strictly (swap_holds()). A time not read is not free: the lock stays
+	 * until WordPress lets it go.
+	 *
+	 * @param string $nonce Our nonce (take_swap_lock()).
+	 * @return bool Whether the lock was given back.
+	 */
+	public static function free_swap_lock( $nonce ) {
+		$note = AB_MCP_Update_Log::running();
+		if ( ! is_string( $nonce ) || null === AB_MCP_Shape::read( $note, self::SWAP_NOTE ) || ! hash_equals( $note['nonce'], $nonce ) ) {
+			return false;
+		}
+		$holds = self::swap_holds( $note );
+		AB_MCP_Update_Log::clear_running();
+		if ( ! $holds ) {
+			return false;
+		}
+		self::on_main_site( array( 'WP_Upgrader', 'release_lock' ), self::LOCK );
+		return true;
+	}
+
+	/**
+	 * Whether a note of a swap holds WordPress's lock for updates: the note
+	 * of its form, and the time of the lock read strictly, taken no later
+	 * than the note (as note_holds_lock(), without a value made up).
+	 *
+	 * @param mixed $note The note (AB_MCP_Update_Log::running()).
+	 * @return bool
+	 */
+	private static function swap_holds( $note ) {
+		$read = AB_MCP_Shape::read( $note, self::SWAP_NOTE );
+		$time = AB_MCP_Shape::read( self::on_main_site( 'get_option', self::LOCK . '.lock' ), self::LOCK_TIME );
+		return null !== $read && null !== $time && $time <= $read['started'] + 5;
 	}
 
 	/**
