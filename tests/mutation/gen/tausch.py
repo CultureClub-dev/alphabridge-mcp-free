@@ -315,6 +315,19 @@ e('k4d-group-gid', 'group(): a sidecar that holds the entry of another group is 
 e('k4d-group-folder', 'group(): a group whose folder is not there is refused with the one reason of a group not given, not as unsafe (K4d)', PS,
   "? self::unsafe() : self::no_group();", "? self::unsafe() : self::unsafe();", 'store', NOGROUP)
 
+# ------------------------------------------- 1a-4e: the clauses of a step of the code B1 of the Fable check 2 on d1e0c77 named
+SAME = 'testAUnitThisSiteHasAsTheStagingSiteHasItAtItsStepIsDoneWithSameAndNothingIsStagedOrChanged'
+MOVED = 'testAStepAnotherCallMovedBetweenItsReadingAndItsWritingIsNeverWrittenOver'
+CHECKED = 'testTheAnswerOfTheCheckOfAStageIsTakenOnlyInItsFormAndReadyOnlyWithoutARefusal'
+e('ops-same-done', 'stage(): a unit this site has as the staging site has it is done with same, nothing staged (Fable check 2, B1)', CO,
+  "\t\t\tif ( array_key_exists( 'same', $staged ) ) {", "\t\t\tif ( false ) {", 'coderun', SAME)
+e('ops-checked-ready', 'checked(): ready only without a refusal, refused only with one (Fable check 2, B1)', CO,
+  "\t\tif ( ( AB_MCP_Sync_Code_Stage::REFUSED === $state['state'] ) !== ( null !== $refusal ) ) {", "\t\tif ( false ) {", 'ops', CHECKED)
+e('ops-journal-planned', 'stage(): the journal of a stage is saved only on the step still planned, never over another call (Fable check 2, B1)', CO,
+  "array( 'parts' => $journal ), 'planned' );", "array( 'parts' => $journal ), null );", 'coderun', MOVED)
+e('ops-ended-planned', 'ended(): a step ends only from planned, never over the state another call wrote (Fable check 2, B1)', CO,
+  "array( 'state' => $state, 'result' => $result ), 'planned' );", "array( 'state' => $state, 'result' => $result ), null );", 'coderun', MOVED)
+
 # ------------------------------------------------ check and write
 src = {f: open(os.path.join(ROOT, f)).read() for f in VAR}
 errors = []
@@ -353,6 +366,10 @@ out = ['<?php', '/**', ' * The clauses of the swap of the code of the site (Z8b 
        ' * Not listed, with why (bericht-zweig-5.md), equivalent: in rights() the',
        ' * count of the two halves of a unit beside the kind of unit (a ref without a',
        ' * colon has one half, whose kind is then the whole ref and no kind of UNITS).',
+       ' * In stage() of AB_MCP_Sync_Code_Ops the check of the journal before it is',
+       ' * saved (null === self::staged( $journal )): AB_MCP_Sync_Code_Stage::stage()',
+       ' * of this version answers only in the form of step.stage, so no test reaches',
+       ' * it (1a-4e).',
        ' *', ' * @package AlphaBridge_MCP', ' */', '',
        "$unit = static fn( string $class, string $test ): array => array( 'vendor/bin/phpunit', '--no-progress', '--filter', '/[^A-Za-z0-9_]' . $class . '::' . $test . '( |$)/' );",
        "$it   = static fn( string $class, string $test ): array => array( 'vendor/bin/phpunit', '--no-progress', '-c', 'tests/integration/phpunit.xml.dist', '--filter', '/[^A-Za-z0-9_]' . $class . '::' . $test . '( |$)/' );",

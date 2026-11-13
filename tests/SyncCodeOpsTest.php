@@ -3,7 +3,8 @@
  * What a step of the code reads before it does anything (Z8b branch 5; plan
  * E8, E9, 3.1 Z24; the pre-check of branch 5, V18 and V19): its unit from
  * the plan of its run (AB_MCP_Sync_Code_Ops::item()), its stage from its
- * journal (staged()), whether code of a unit runs on this site
+ * journal (staged()), the answer of the check of its stage (checked(),
+ * ready only without a refusal), whether code of a unit runs on this site
  * (AB_MCP_Sync_Code_Swap::runs(), from the rows of the options through the
  * seam of the swap), and how two versions stand to each other (order()).
  * Each of them in the form of its row of AB_MCP_Store_Inputs::TABLE; what is
@@ -26,6 +27,7 @@ namespace AlphaBridge\Tests;
 use AB_MCP_Shape;
 use AB_MCP_Sync_Code_Ops;
 use AB_MCP_Sync_Code_Plan;
+use AB_MCP_Sync_Code_Stage;
 use AB_MCP_Sync_Code_Swap;
 use PHPUnit\Framework\TestCase;
 use WP_Error;
@@ -400,6 +402,66 @@ final class SyncCodeOpsTest extends TestCase {
 		self::assertSame( 'packages', AB_MCP_Sync_Code_Ops::staged( self::journal( array( 'source' => 'packages' ) ) )['stage']['source'] );
 		foreach ( array( null, array(), 'x', self::journal( array( 'gid' => 'c' ) ), self::journal( array( 'hash' => str_repeat( 'D', 64 ) ) ), self::journal( array( 'name' => 'a/b' ) ), self::journal( array( 'name' => '' ) ), self::journal( array( 'source' => 'elsewhere' ) ), self::journal( array( 'files' => '3' ) ), self::journal( array(), array( 'op' => 'swap' ) ), self::journal( array(), array( 'kind' => 'language' ) ), array( 'object' => array( 'kind' => 'post' ) ) + self::journal() ) as $i => $journal ) {
 			self::assertNull( AB_MCP_Sync_Code_Ops::staged( $journal ), "#$i" );
+		}
+	}
+
+	public function testTheAnswerOfTheCheckOfAStageIsTakenOnlyInItsFormAndReadyOnlyWithoutARefusal(): void {
+		// checked() (B1 of the Fable check 2 on d1e0c77): the answer of
+		// AB_MCP_Sync_Code_Stage::complete() as the step takes it; anything
+		// else is null, and the step decides nothing on it. complete() of this
+		// version gives no other answer (its state reads through state_of(),
+		// which holds the same rule), so the step's own reading is driven here
+		// directly: ready only without a refusal, refused only with one.
+		$checked  = new \ReflectionMethod( AB_MCP_Sync_Code_Ops::class, 'checked' );
+		$refusal  = array(
+			'code'    => 'code:syntax',
+			'message' => 'A syntax error.',
+			'path'    => 'shop.php',
+			'line'    => 3,
+		);
+		$ready    = array(
+			'state'   => AB_MCP_Sync_Code_Stage::READY,
+			'checked' => 2,
+			'files'   => 2,
+			'notes'   => array(),
+			'refusal' => null,
+		);
+		$refused  = array(
+			'state'   => AB_MCP_Sync_Code_Stage::REFUSED,
+			'refusal' => $refusal,
+		) + $ready;
+		$checking = array(
+			'state'   => AB_MCP_Sync_Code_Stage::CHECKING,
+			'checked' => 1,
+		) + $ready;
+		$unnamed  = array(
+			'refusal' => array(
+				'path' => null,
+				'line' => null,
+			) + $refusal,
+		) + $refused;
+		foreach ( array( $ready, $refused, $checking, $unnamed ) as $i => $state ) {
+			self::assertSame( $state, $checked->invoke( null, $state ), "#$i" );
+		}
+		$wrong = array(
+			'ready with a refusal'       => array( 'refusal' => $refusal ) + $ready,
+			'refused without one'        => array( 'refusal' => null ) + $refused,
+			'checking with a refusal'    => array( 'refusal' => $refusal ) + $checking,
+			'no array'                   => 'ready',
+			'a state of no kind'         => array( 'state' => 'done' ) + $ready,
+			'checked as digits'          => array( 'checked' => '2' ) + $ready,
+			'files missing'              => array_diff_key( $ready, array( 'files' => true ) ),
+			'notes no list'              => array( 'notes' => 'none' ) + $ready,
+			'refusal missing'            => array_diff_key( $ready, array( 'refusal' => true ) ),
+			'refusal no array'           => array( 'refusal' => 'code:syntax' ) + $refused,
+			'refusal without its line'   => array( 'refusal' => array_diff_key( $refusal, array( 'line' => true ) ) ) + $refused,
+			'refusal code no text'       => array( 'refusal' => array( 'code' => 5 ) + $refusal ) + $refused,
+			'refusal path no text'       => array( 'refusal' => array( 'path' => 5 ) + $refusal ) + $refused,
+			'refusal line as digits'     => array( 'refusal' => array( 'line' => '3' ) + $refusal ) + $refused,
+			'refusal message missing'    => array( 'refusal' => array_diff_key( $refusal, array( 'message' => true ) ) ) + $refused,
+		);
+		foreach ( $wrong as $what => $state ) {
+			self::assertNull( $checked->invoke( null, $state ), $what );
 		}
 	}
 

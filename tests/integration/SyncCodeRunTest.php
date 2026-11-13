@@ -14,7 +14,8 @@
  * - rows (the run, its steps and their journal; the options active_plugins,
  *   stylesheet and template read): a journal, a plan, a run or a row of an
  *   option not of its form (read error, half written) does nothing or counts
- *   as code that runs; a step whose save fails stays planned;
+ *   as code that runs; a step whose save fails stays planned; a step another
+ *   call moved between its reading and its writing is never written over;
  * - files (the stage in the protected store, the packages bound to the
  *   run): a package that is gone binds nothing and leaves no run open;
  * - HTTP (wordpress.org, through the stand-in of the stage): a download that
@@ -474,6 +475,43 @@ final class SyncCodeRunTest extends TestCase {
 		$closed = self::gated( 'wp_site_push', array( 'action' => 'abort', 'run_id' => $run_id ) );
 		self::assertIsArray( $closed, is_wp_error( $closed ) ? $closed->get_error_message() : '' );
 		self::assertNull( AB_MCP_Sync_Run::open_run(), 'The site is free.' );
+	}
+
+	public function testAUnitThisSiteHasAsTheStagingSiteHasItAtItsStepIsDoneWithSameAndNothingIsStagedOrChanged(): void {
+		// B1 of the Fable check 2 on d1e0c77: the unit was changed on the
+		// staging site when the report was made, and between the plan and its
+		// step this site got the same files (here: the version of the staging
+		// site put on A after the check of the run). The step of the stage is
+		// done with same: true and the sentence of the way; nothing is fetched
+		// or staged (no group of the stage, no journal), and the step changes
+		// nothing of the site.
+		list( $args )  = self::changed( 'ab-it-inaktiv', '1.1.0' );
+		$calls         = self::wporg();
+		list( , $run ) = self::begun( $args );
+		$run_id        = (int) $run['run_id'];
+		self::assertSame( 'done', self::next( $run_id )['step']['state'], 'The check of the run.' );
+		AB_MCP_IT_Code::put( 'a', 'plugin', 'ab-it-inaktiv', '1.1.0' );
+		self::assertSame( '1.1.0', AB_MCP_IT_Code::fassung( 'a', 'plugin', 'ab-it-inaktiv' ), 'This site has the files of the staging site now.' );
+		$before = self::live_bytes( 'ab-it-inaktiv' );
+
+		$same = self::next( $run_id );
+		self::assertIsArray( $same, is_wp_error( $same ) ? $same->get_error_code() . ': ' . $same->get_error_message() : '' );
+		self::assertSame( array( 2, 'write', 'done' ), array( $same['step']['seq'], $same['step']['op'], $same['step']['state'] ) );
+		self::assertStringContainsString( 'This site already has the plugin ab-it-inaktiv as the staging site has it (the same files), so nothing is staged and nothing of it is swapped.', $same['next'] );
+		self::assertStringContainsString( 'confirm its pair anew (wp_site_pairs)', $same['next'], 'With the way.' );
+		$step = self::step( $run_id, 2 );
+		self::assertSame( array( 'done', null ), array( $step['state'], $step['parts'] ), 'Done, with no journal of a stage.' );
+		self::assertSame( array( 'kind' => 'plugin', 'ref' => 'ab-it-inaktiv' ), $step['result']['staged'] );
+		self::assertTrue( $step['result']['same'] );
+		self::assertStringContainsString( 'so nothing is staged and nothing of it is swapped', $step['result']['message'] );
+		self::assertSame( array(), $calls->wporg->calls, 'Nothing fetched.' );
+		self::assertSame( array(), AB_MCP_Protected_Store::groups( 'stage' ), 'No group of the stage.' );
+		self::assertSame( $before, self::live_bytes( 'ab-it-inaktiv' ), 'Nothing of the site changed.' );
+		self::assertSame( '1.1.0', AB_MCP_IT_Code::fassung( 'a', 'plugin', 'ab-it-inaktiv' ) );
+		$closed = self::gated( 'wp_site_push', array( 'action' => 'abort', 'run_id' => $run_id ) );
+		self::assertIsArray( $closed, is_wp_error( $closed ) ? $closed->get_error_message() : '' );
+		self::assertNull( AB_MCP_Sync_Run::open_run(), 'The site is free.' );
+		self::assertSame( $before, self::live_bytes( 'ab-it-inaktiv' ) );
 	}
 
 	public function testAUnitFromAPackageOfCodePassesTheCheckOfTheRunAndIsStagedFromIt(): void {
@@ -1257,6 +1295,56 @@ final class SyncCodeRunTest extends TestCase {
 		self::assertIsArray( $answer, is_wp_error( $answer ) ? $answer->get_error_code() : '' );
 		self::assertSame( 2, $answer['step']['seq'] );
 		self::assertSame( $before, self::live_bytes( 'ab-it-inaktiv' ), 'Nothing of the site changed in any of these.' );
+	}
+
+	public function testAStepAnotherCallMovedBetweenItsReadingAndItsWritingIsNeverWrittenOver(): void {
+		// B1 of the Fable check 2 on d1e0c77, rows with a writer in between: a
+		// step of the code writes the journal of its stage and its end only on
+		// the step in the state it read it in, planned
+		// (AB_MCP_Sync_Run::update_step() with that state). Where another call
+		// moved it in between (here: ended it failed after this call read it),
+		// neither is written over that: the answer is the move
+		// (ab_mcp_sync_run_changed), the step stays as the other call left
+		// it. (The stage made before its journal is refused stays a group of
+		// the run without a journal, G-5-4.)
+		list( $args )  = self::changed( 'ab-it-inaktiv', '1.1.0' );
+		self::wporg();
+		list( , $run ) = self::begun( $args );
+		$run_id        = (int) $run['run_id'];
+		self::assertSame( 'done', self::next( $run_id )['step']['state'], 'The check of the run.' );
+		$item = AB_MCP_Sync_Code_Ops::item( AB_MCP_Sync_Run::get( $run_id )['plan'], 2 );
+		self::assertIsArray( $item );
+		// (Its keys in the order the row gives them back: sorted.)
+		$other = array(
+			'code'    => 'code:other_call',
+			'message' => 'Ended by another call.',
+		);
+		// The step read planned, without a journal; another call ends it;
+		// then the call that read it goes on with what it read.
+		$moved = static function () use ( $run_id, $item, $other ): void {
+			$read = self::step( $run_id, 2 );
+			self::assertSame( array( 'planned', null ), array( $read['state'], $read['parts'] ) );
+			self::assertTrue( AB_MCP_Sync_Run::update_step( $run_id, 2, array( 'state' => 'failed', 'result' => $other ), 'planned' ) );
+			$after   = self::steps_of( $run_id );
+			$message = self::refused( AB_MCP_Sync_Code_Ops::run( AB_MCP_Sync_Run::get( $run_id ), $read, $item ), 'ab_mcp_sync_run_changed' );
+			self::assertStringContainsString( 'Step 2 of run ' . $run_id . ' is no longer in the state this call read it in (planned; it is failed now)', $message );
+			self::assertSame( $after, self::steps_of( $run_id ), 'Nothing is written over the step another call moved.' );
+			$step = self::step( $run_id, 2 );
+			self::assertSame( array( 'failed', null, $other ), array( $step['state'], $step['parts'], $step['result'] ) );
+		};
+		// The journal of the stage (:182): the unit is staged in this call.
+		$before = self::live_bytes( 'ab-it-inaktiv' );
+		$moved();
+		self::assertSame( $before, self::live_bytes( 'ab-it-inaktiv' ) );
+		// The end of the step (ended()): the unit is the same here as on the
+		// staging site, so the step would be done at once.
+		global $wpdb;
+		$steps = AB_MCP_Sync_Schema::table( 'steps' );
+		$wpdb->query( $wpdb->prepare( "UPDATE `$steps` SET state = 'planned', parts = NULL, result = NULL WHERE run_id = %d AND seq = 2", $run_id ) ); // phpcs:ignore WordPress.DB
+		AB_MCP_IT_Code::put( 'a', 'plugin', 'ab-it-inaktiv', '1.1.0' );
+		$before = self::live_bytes( 'ab-it-inaktiv' );
+		$moved();
+		self::assertSame( $before, self::live_bytes( 'ab-it-inaktiv' ) );
 	}
 
 	/** Of every step of a run: its number, its state, its journal and its result. */
