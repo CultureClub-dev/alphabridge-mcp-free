@@ -648,7 +648,13 @@ final class StoreInputsTest extends TestCase {
 				),
 				'valid'   => array( array( $index, array( 'value', 'taken' ) ) ),
 				'run'     => function ( $value ) {
-					$gid = AB_MCP_Protected_Store::open( 'in', array( 'label' => 'report' ) );
+					$gid = AB_MCP_Protected_Store::open(
+						'in',
+						array(
+							'declared' => 1048576,
+							'label'    => 'report',
+						)
+					);
 					self::assertIsString( $gid );
 					self::assertIsArray( AB_MCP_Protected_Store::put( 'in', $gid, AB_MCP_Sync_Code_Package::index_name( hash( 'sha256', $value ) ), $value ) );
 					$taken = AB_MCP_Sync_Code_Package::taken( $gid, array( 'purpose' => 'code' ), AB_MCP_Protected_Store::files( 'in', $gid ) );
@@ -698,6 +704,7 @@ final class StoreInputsTest extends TestCase {
 				'more'    => array(
 					'fixed: done past the files' => str_replace( '"done":1', '"done":2', $state ),
 					'fixed: ready with a why'    => str_replace( '"refusal":null', '"refusal":{"code":"code:syntax","line":null,"message":"x","path":null}', $state ),
+					'fixed: refused without why' => str_replace( '"state":"ready"', '"state":"refused"', $state ),
 					'fixed: a unit of no code'   => str_replace( '"kind":"plugin"', '"kind":"attachment"', $state ),
 					'fixed: a ref with a slash'  => str_replace( '"ref":"ab-it-code"', '"ref":"a/b"', $state ),
 					'fixed: ready as text 1'     => str_replace( '"state":"ready"', '"state":1', $state ),

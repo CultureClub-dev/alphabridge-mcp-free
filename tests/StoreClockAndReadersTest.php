@@ -85,6 +85,9 @@ final class StoreClockAndReadersTest extends TestCase {
 			'AB_MCP_Sync_Code_Stage_Calls::run' => 'the time limit of php -l within one call (LINT_TIMEOUT); an end of it is unavailable, never passed',
 		),
 		'includes/sync/class-sync-code-package.php' => array(),
+		'includes/sync/class-sync-file-manifest.php' => array(
+			'AB_MCP_Sync_File_Manifest::now' => 'the budget of a reading of a unit within one call (its deadline, due()), which branch 4 uses for the live unit, the unit built and the tree to check; checked: no finite number is unknown, the reading ends as at the end of its time (Codex confirmation 1, B-3)',
+		),
 		'includes/sync/class-sync-export.php'       => array(
 			'AB_MCP_Sync_Export::code_unit' => 'the budget of the reading of a unit for a package of code within one call (UNIT_BUDGET); checked: no finite number reads nothing (unreadable)',
 		),

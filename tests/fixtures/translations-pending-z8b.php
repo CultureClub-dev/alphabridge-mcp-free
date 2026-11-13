@@ -285,4 +285,6 @@ return array(
 	'A stage belongs to a run of the takeover: pass its run_id, a whole number of 1 or more. Nothing was fetched or written.',
 	'%s did not read whole as the manifest of the stage names it (its size and SHA-256), so it is not checked and the stage is never ready. Stage the unit again.',
 	'The head of %s in the new version could not be read whole, so what it requires is not known and it is not swapped. Stage the unit again.',
+	// includes/sync/class-sync-code-stage.php (Z8b branch 4, Behebung 2: no time to measure a call by)
+	'The time of this call could not be measured, so nothing of the unit was read or taken. Call again.',
 );

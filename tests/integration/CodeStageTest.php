@@ -821,6 +821,17 @@ final class CodeStageTest extends TestCase {
 		$stage       = AB_MCP_Sync_Code_Stage::stage( self::RUN, $env, 'plugin', 'ab-it-daten', array( $id ) );
 		self::assertIsArray( $stage, is_wp_error( $stage ) ? $stage->get_error_code() . ': ' . $stage->get_error_message() : '' );
 		$calls->lint = false;
+		// No time to measure by when the live unit is read for the files to
+		// check (Codex confirmation 1, B-2): the call ends without progress,
+		// never with the live unit taken as none.
+		$asked                         = 0;
+		AB_MCP_Sync_Code_Stage::$clock = static function () use ( &$asked ): float {
+			return 3 === ++$asked ? NAN : microtime( true );
+		};
+		$nothing                       = AB_MCP_Sync_Code_Stage::complete( $stage['gid'], $stage['name'], $stage['hash'], $env );
+		AB_MCP_Sync_Code_Stage::$clock = null;
+		self::assertSame( array( 'checking', 0, 0 ), array( $nothing['state'], $nothing['checked'], $nothing['files'] ), 'No list of files made from an unknown time.' );
+		self::assertSame( 0, $calls->parsed );
 		// The time of the call is over once the parser had its first file.
 		AB_MCP_Sync_Code_Stage::$clock = static fn(): float => microtime( true ) + ( $calls->parsed >= 1 ? 1000.0 : 0.0 );
 		$first                         = AB_MCP_Sync_Code_Stage::complete( $stage['gid'], $stage['name'], $stage['hash'], $env );

@@ -509,6 +509,17 @@ final class SyncCodeStageTest extends TestCase {
 		self::assertSame( 'code:update_uri_unknown', AB_MCP_Sync_Code_Stage::from_org( self::signed( array( 'update_uri' => null ) ), $this->dir )->get_error_code() );
 	}
 
+	public function testAStageWithoutItsRunIsRefusedBeforeAnythingElse(): void {
+		// stage() (Codex round 1, B1): the run a whole number of 1 or more,
+		// asked first: nothing is read, fetched or written before it.
+		$calls = new SyncCodeStageCalls();
+		self::seam( $calls );
+		foreach ( array( null, 0, '1', -3, 1.0 ) as $run ) {
+			self::assertSame( 'code:run', AB_MCP_Sync_Code_Stage::stage( $run, array(), 'plugin', 'ab-it-code' )->get_error_code(), var_export( $run, true ) );
+		}
+		self::assertSame( array( array(), array() ), array( $calls->asked, $calls->web ), 'Nothing asked of wordpress.org or the store.' );
+	}
+
 	public function testTheClockOfABudgetIsOnlyAFiniteNumber(): void {
 		// clock() (Codex round 1, B4): the time of a budget within one call is
 		// a finite float or unknown (null), never cast: the slice ends there.

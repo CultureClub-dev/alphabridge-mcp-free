@@ -207,7 +207,7 @@ return array(
 		'id'      => 'manifest/z1-due',
 		'clause'  => 'Z1 due(): the one place the clock is asked while a unit is read (Behebung 5)',
 		'file'    => $fm,
-		'search'  => "\t\tif ( self::now() < (float) \$deadline ) {\n\t\t\treturn false;",
+		'search'  => "\t\tif ( null !== \$now && ( is_int( \$deadline ) || ( is_float( \$deadline ) && ( is_finite( \$deadline ) || INF === \$deadline ) ) ) && \$now < \$deadline ) {\n\t\t\treturn false;",
 		'replace' => "\t\tif ( true ) {\n\t\t\treturn false;",
 		'run'     => $unit( 'SyncFileManifestTest', 'testTheTimeOfTheCallIsAskedInTheFinalCheckOfTheUnitToo' ),
 		'expect'  => '/testTheTimeOfTheCallIsAskedInTheFinalCheckOfTheUnitToo/',

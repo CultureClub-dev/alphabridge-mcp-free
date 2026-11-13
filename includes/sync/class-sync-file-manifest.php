@@ -635,7 +635,12 @@ final class AB_MCP_Sync_File_Manifest {
 	 * @return bool
 	 */
 	private static function due( array &$acc, $deadline, $first ) {
-		if ( self::now() < (float) $deadline ) {
+		// Only a finite number is a time; the deadline a number, INF for no
+		// deadline (no cast; Z8b branch 4, Codex confirmation 1, B-3): an
+		// unknown one ends the reading as the end of its time does, never a
+		// reading without end.
+		$now = self::now();
+		if ( null !== $now && ( is_int( $deadline ) || ( is_float( $deadline ) && ( is_finite( $deadline ) || INF === $deadline ) ) ) && $now < $deadline ) {
 			return false;
 		}
 		self::late( $acc, $first );
@@ -687,9 +692,15 @@ final class AB_MCP_Sync_File_Manifest {
 	}
 
 	/**
-	 * @return float Seconds (the clock of AB_MCP_Sync_Env, which tests set).
+	 * The time within one call, for the budget of a reading only (a named
+	 * clock of a budget of the time() guard): microtime( true ), or the clock
+	 * of AB_MCP_Sync_Env, which tests set; a value that is no finite number
+	 * is unknown (null).
+	 *
+	 * @return int|float|null Seconds.
 	 */
 	private static function now() {
-		return class_exists( 'AB_MCP_Sync_Env', false ) && null !== AB_MCP_Sync_Env::$clock ? (float) call_user_func( AB_MCP_Sync_Env::$clock ) : microtime( true );
+		$now = class_exists( 'AB_MCP_Sync_Env', false ) && null !== AB_MCP_Sync_Env::$clock ? call_user_func( AB_MCP_Sync_Env::$clock ) : microtime( true );
+		return is_int( $now ) || ( is_float( $now ) && is_finite( $now ) ) ? $now : null;
 	}
 }

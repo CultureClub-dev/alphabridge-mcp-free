@@ -614,8 +614,11 @@ final class AB_MCP_Sync_Code_Stage {
 		if ( is_wp_error( $signed ) ) {
 			return $signed;
 		}
-		$live  = self::live( $kind, $ref );
-		$have  = array();
+		$live = self::live( $kind, $ref );
+		if ( is_wp_error( $live ) ) {
+			return $live;
+		}
+		$have = array();
 		foreach ( null === $live ? array() : $live['entries'] as $entry ) {
 			$have[ $entry[2] ] = true;
 		}
@@ -674,6 +677,9 @@ final class AB_MCP_Sync_Code_Stage {
 			return self::refusal( 'code:own', __( 'This is AlphaBridge itself, which is shown, never swapped. Bring both sites to the same version of it by hand.', 'alphabridge-mcp' ) );
 		}
 		$live = self::live( $kind, $ref );
+		if ( is_wp_error( $live ) ) {
+			return $live;
+		}
 		if ( null !== $live && hash_equals( $signed['hash'], $live['hash'] ) ) {
 			return array(
 				'same' => true,
@@ -764,6 +770,9 @@ final class AB_MCP_Sync_Code_Stage {
 			return self::refusal( 'code:org_unzip', __( 'The package of wordpress.org could not be unpacked here (unzip_file() refused it: no ZipArchive, no room, or a broken archive). Try again later, or send the unit as a package of code (wp_site_export with purpose=code).', 'alphabridge-mcp' ) );
 		}
 		$read = self::read_built( $build . '/org', $signed['ref'] );
+		if ( null === $read ) {
+			return self::clock_refusal();
+		}
 		if ( ! $read['complete'] || null === $read['hash'] || ! hash_equals( $signed['hash'], $read['hash'] ) ) {
 			return self::refusal( 'code:org_mismatch', __( 'The package of wordpress.org in this version is not the unit of the staging site (another file, a file more or less), so it is not used. Send the unit as a package of code (wp_site_export with purpose=code).', 'alphabridge-mcp' ) );
 		}
@@ -871,8 +880,11 @@ final class AB_MCP_Sync_Code_Stage {
 		foreach ( $plan as $step ) {
 			$made = $made && self::calls()->mkdir( dirname( $step[0] ) ) && ( null !== $step[1] ? true === self::calls()->extract( $step[1][0], $step[1][1], $step[0] ) : self::calls()->copy( $step[2], $step[0] ) );
 		}
-		$read = $made ? self::read_built( $build . '/unit', $signed['ref'] ) : null;
-		if ( null === $read || ! $read['complete'] || null === $read['hash'] || ! hash_equals( $signed['hash'], $read['hash'] ) ) {
+		$read = $made ? self::read_built( $build . '/unit', $signed['ref'] ) : false;
+		if ( null === $read ) {
+			return self::clock_refusal();
+		}
+		if ( false === $read || ! $read['complete'] || null === $read['hash'] || ! hash_equals( $signed['hash'], $read['hash'] ) ) {
 			return self::refusal( 'code:stage_mismatch', __( 'The unit built from the packages of code and the live unit is not the unit of the staging site (a file could not be written, or one changed while it was copied), so it is not staged. Stage it again; if it keeps failing, export the whole unit on the staging site (wp_site_export with purpose=code, this unit without paths).', 'alphabridge-mcp' ) );
 		}
 		return $unit;
@@ -978,6 +990,9 @@ final class AB_MCP_Sync_Code_Stage {
 		$until = $start + self::CHECK_BUDGET;
 		if ( 1 === $state['seq'] && 0 === $state['done'] ) {
 			$todo = self::to_check( $tree['path'], $tree['hash'], $state['unit']['kind'], $state['unit']['ref'] );
+			if ( false === $todo ) {
+				return self::answer( $state );
+			}
 			if ( null === $todo ) {
 				return self::answer( self::refuse( $gid, $state, 'code:syntax_unchecked', __( 'The stage could not be read whole within one call to list its PHP files, so they are not checked and it is never ready. Stage the unit again; if it keeps failing, update the plugin or theme by hand in wp-admin.', 'alphabridge-mcp' ) ) );
 			}
@@ -1032,14 +1047,20 @@ final class AB_MCP_Sync_Code_Stage {
 	 * @param string $hash Its hash (tree()).
 	 * @param string $kind Kind.
 	 * @param string $ref  Unit.
-	 * @return array[]|null Each path in the unit with its size and SHA-256 by the manifest of the tree (the bytes the check takes are bound to them, Codex round 1, A3); null where the tree does not read whole as that hash (unknown: nothing is passed over).
+	 * @return array[]|null|false Each path in the unit with its size and SHA-256 by the manifest of the tree (the bytes the check takes are bound to them, Codex round 1, A3); null where the tree does not read whole as that hash (unknown: nothing is passed over); false where the time of the call could not be measured (the call ends without progress, Codex confirmation 1, B-2).
 	 */
 	private static function to_check( $path, $hash, $kind, $ref ) {
 		$tree = self::read_built( dirname( $path ), basename( $path ) );
+		if ( null === $tree ) {
+			return false;
+		}
 		if ( ! $tree['complete'] || null === $tree['hash'] || ! hash_equals( $hash, $tree['hash'] ) ) {
 			return null;
 		}
 		$live = self::live( $kind, $ref );
+		if ( is_wp_error( $live ) ) {
+			return false;
+		}
 		$have = array();
 		foreach ( null === $live ? array() : $live['entries'] as $entry ) {
 			$have[ $entry[0] . "\0" . $entry[2] ] = true;
@@ -1367,17 +1388,22 @@ final class AB_MCP_Sync_Code_Stage {
 	}
 
 	/**
-	 * The live unit read whole, or null (not there, or not read whole).
+	 * The live unit read whole, or null (not there, or not read whole); the
+	 * refusal where the time of the call could not be measured: unknown,
+	 * never taken as a site without the unit (Codex confirmation 1, B-2).
 	 *
 	 * @param string $kind plugin or theme.
 	 * @param string $ref  Unit.
-	 * @return array|null form, hash, entries, path.
+	 * @return array|null|WP_Error form, hash, entries, path.
 	 */
 	private static function live( $kind, $ref ) {
 		$target = self::target( $kind, $ref );
-		$now    = self::clock();
-		if ( null === $target || null === $now ) {
+		if ( null === $target ) {
 			return null;
+		}
+		$now = self::clock();
+		if ( null === $now ) {
+			return self::clock_refusal();
 		}
 		$read = AB_MCP_Sync_File_Manifest::unit( dirname( $target ), $ref, 'live', $now + AB_MCP_Sync_Env::UNIT_BUDGET, true, $kind );
 		return $read['complete'] && null !== $read['hash'] ? array(
@@ -1395,17 +1421,13 @@ final class AB_MCP_Sync_Code_Stage {
 	 *
 	 * @param string $base The folder it lies in.
 	 * @param string $name The unit.
-	 * @return array As AB_MCP_Sync_File_Manifest::unit().
+	 * @return array|null As AB_MCP_Sync_File_Manifest::unit(); null where the time of the call could not be measured.
 	 */
 	private static function read_built( $base, $name ) {
 		$now = self::clock();
 		if ( null === $now ) {
-			// No time for the budget of the reading: not read whole.
-			return array(
-				'complete' => false,
-				'hash'     => null,
-				'entries'  => array(),
-			);
+			// No time for the budget of the reading: unknown, nothing read.
+			return null;
 		}
 		return AB_MCP_Sync_File_Manifest::unit( $base, $name, 'staging', $now + AB_MCP_Sync_Env::UNIT_BUDGET, true, 'plugin' );
 	}
@@ -1439,6 +1461,13 @@ final class AB_MCP_Sync_Code_Stage {
 	private static function clock() {
 		$now = null !== self::$clock ? call_user_func( self::$clock ) : microtime( true );
 		return is_float( $now ) && is_finite( $now ) ? $now : null;
+	}
+
+	/**
+	 * @return WP_Error The time of the call could not be measured: nothing is read or taken.
+	 */
+	private static function clock_refusal() {
+		return self::refusal( 'code:clock', __( 'The time of this call could not be measured, so nothing of the unit was read or taken. Call again.', 'alphabridge-mcp' ) );
 	}
 
 	/**
