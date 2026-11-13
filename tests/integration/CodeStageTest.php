@@ -297,8 +297,12 @@ final class CodeStageTest extends TestCase {
 	public function testAnOwnPluginComesAsAPackageOfCodeWithOnlyTheFilesTheLiveUnitLacks(): void {
 		// F3 and F4, the part of this branch: an own plugin (no source on
 		// wordpress.org), three files changed in the same version: the package
-		// holds exactly those three, the rest comes from the live unit.
+		// holds exactly those three, the rest (a file the same on both sites)
+		// comes from the live unit.
 		$b = AB_MCP_IT_Code::put( 'b', 'plugin', 'ab-it-daten', '1.0.0' );
+		foreach ( array( AB_MCP_IT_Code::path( 'a', 'plugin', 'ab-it-daten' ), $b ) as $dir ) {
+			file_put_contents( $dir . '/bleibt.txt', "auf beiden Seiten gleich\n" );
+		}
 		foreach ( array( 'ab-it-daten.php', 'data/export.csv', 'neu/eins.php' ) as $i => $rel ) {
 			if ( ! is_dir( dirname( $b . '/' . $rel ) ) ) {
 				mkdir( dirname( $b . '/' . $rel ), 0755, true );
@@ -321,8 +325,10 @@ final class CodeStageTest extends TestCase {
 		self::assertIsArray( $stage, is_wp_error( $stage ) ? $stage->get_error_code() . ': ' . $stage->get_error_message() : '' );
 		self::assertSame( 'packages', $stage['source'] );
 		self::assertSame( 'ready', self::checked( $stage, $env )['state'] );
-		// A path the unit on the staging site does not hold: nothing packed.
-		$none = self::b( array( array( 'op' => 'export', 'purpose' => 'code', 'report_hash' => self::REPORT, 'refs' => array( array( 'kind' => 'plugin', 'ref' => 'ab-it-daten', 'paths' => array( 'gibt-es-nicht.php' ) ) ), 'expect' => 'error', 'as' => 'x' ) ) )['x'];
+		self::assertSame( "auf beiden Seiten gleich\n", file_get_contents( AB_MCP_Protected_Store::tree( 'stage', $stage['gid'], $stage['name'], $stage['hash'] )['path'] . '/bleibt.txt' ), 'The file the package does not hold comes from the live unit.' );
+		// A path the unit on the staging site does not hold, beside one it
+		// holds: nothing of the unit is packed.
+		$none = self::b( array( array( 'op' => 'export', 'purpose' => 'code', 'report_hash' => self::REPORT, 'refs' => array( array( 'kind' => 'plugin', 'ref' => 'ab-it-daten', 'paths' => array( 'ab-it-daten.php', 'gibt-es-nicht.php' ) ) ), 'expect' => 'error', 'as' => 'x' ) ) )['x'];
 		self::assertSame( 'ab_mcp_sync_export_code_none', $none['code'] );
 		// Without the package: the files it lacks are named, nothing staged.
 		$missing = AB_MCP_Sync_Code_Stage::stage( self::RUN, $env, 'plugin', 'ab-it-daten', array( 'f' . substr( $id, 1 ) ) );
@@ -352,6 +358,25 @@ final class CodeStageTest extends TestCase {
 		$stage = AB_MCP_Sync_Code_Stage::stage( self::RUN, $env, 'plugin', 'ab-it-allein', array( $first, $second ) );
 		self::assertIsArray( $stage, is_wp_error( $stage ) ? $stage->get_error_message() : '' );
 		self::assertSame( 'ready', self::checked( $stage, $env )['state'] );
+	}
+
+	public function testAUnitBuiltFromPackagesThatIsNotTheSignedOneIsNotStaged(): void {
+		// from_packages(), the one place for this source: the unit built from
+		// the packages and the live unit counts only where its manifest is
+		// the signed one; a file of the live unit that comes out otherwise
+		// while it is copied stages nothing.
+		$b = AB_MCP_IT_Code::put( 'b', 'plugin', 'ab-it-daten', '1.0.0' );
+		file_put_contents( $b . '/neu.php', "<?php\n// neu\n" );
+		$env   = self::environment();
+		$calls = self::wporg( array() );
+		list( $id ) = self::code( array( array( 'kind' => 'plugin', 'ref' => 'ab-it-daten', 'paths' => array( 'neu.php' ) ) ) );
+		$calls->corrupt = true;
+		$stage          = AB_MCP_Sync_Code_Stage::stage( self::RUN, $env, 'plugin', 'ab-it-daten', array( $id ) );
+		self::assertInstanceOf( \WP_Error::class, $stage );
+		self::assertSame( 'code:stage_mismatch', $stage->get_error_code() );
+		self::assertSame( array(), AB_MCP_Protected_Store::groups( 'stage' ), 'Nothing went into the area stage.' );
+		$calls->corrupt = false;
+		self::assertIsArray( AB_MCP_Sync_Code_Stage::stage( self::RUN, $env, 'plugin', 'ab-it-daten', array( $id ) ), 'The same packages stage where the copy is whole.' );
 	}
 
 	/* ---------------------------------------------------- refusals (F19, F20) */
@@ -628,6 +653,24 @@ final class CodeStageTest extends TestCase {
 		self::assertSame( 'ab_mcp_sync_import_unread', $taken->get_error_code() );
 	}
 
+	public function testAStageThatDoesNotReadWholeForItsCheckIsNeverReady(): void {
+		// complete(): the PHP files to check only from the tree read whole as
+		// its hash; a reading that ends within its time passes no file over
+		// (unknown: code:syntax_unchecked, never ready).
+		AB_MCP_IT_Code::put( 'b', 'plugin', 'ab-it-inaktiv', '1.1.0' );
+		$env = self::environment();
+		self::wporg();
+		$stage = AB_MCP_Sync_Code_Stage::stage( self::RUN, $env, 'plugin', 'ab-it-inaktiv' );
+		self::assertIsArray( $stage, is_wp_error( $stage ) ? $stage->get_error_code() . ': ' . $stage->get_error_message() : '' );
+		// The time of a reading is over before it begins.
+		AB_MCP_Sync_Code_Stage::$clock = static fn(): float => microtime( true ) - 1000.0;
+		$state                         = AB_MCP_Sync_Code_Stage::complete( $stage['gid'], $stage['name'], $stage['hash'], $env );
+		self::assertIsArray( $state, is_wp_error( $state ) ? $state->get_error_code() . ': ' . $state->get_error_message() : '' );
+		self::assertSame( 'refused', $state['state'], var_export( $state, true ) );
+		self::assertSame( 'code:syntax_unchecked', $state['refusal']['code'] );
+		self::assertNull( AB_MCP_Sync_Code_Stage::ready( $stage['gid'], $stage['name'], $stage['hash'] ) );
+	}
+
 	public function testABuildingFolderGoesOnlyByItsAgeOrByItsOwnRequest(): void {
 		// D4: build_dir() the one way a building folder is made; it goes by
 		// delete_path() only, with what is in it: by its request, or past
@@ -711,8 +754,15 @@ final class CodeStageWporgCalls {
 		return $this->real->extract( $taken, $file, $to );
 	}
 
+	/** @var bool True: a file of the live unit comes out otherwise when it is copied. */
+	public $corrupt = false;
+
 	public function copy( $from, $to ) {
-		return $this->real->copy( $from, $to );
+		$done = $this->real->copy( $from, $to );
+		if ( $done && $this->corrupt ) {
+			file_put_contents( $to, 'x', FILE_APPEND );
+		}
+		return $done;
 	}
 
 	public function mkdir( $path ) {
@@ -723,8 +773,8 @@ final class CodeStageWporgCalls {
 		return $this->real->read( $path );
 	}
 
-	public function parse( $code ) {
-		$this->real->parse( $code );
+	public function parse_php( $code ) {
+		$this->real->parse_php( $code );
 	}
 
 	public function memory() {

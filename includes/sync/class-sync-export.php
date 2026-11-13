@@ -874,7 +874,7 @@ final class AB_MCP_Sync_Export {
 	 * @return array|string kind, ref, form, path, files (path, size, sha256); or why not.
 	 */
 	private static function code_unit( array $one ) {
-		$base = 'theme' === $one['kind'] ? AB_MCP_Sync_File_Manifest::theme_root() : ( defined( 'WP_PLUGIN_DIR' ) ? rtrim( (string) WP_PLUGIN_DIR, '/' ) : null );
+		$base = 'theme' === $one['kind'] ? AB_MCP_Sync_File_Manifest::theme_root() : ( defined( 'WP_PLUGIN_DIR' ) && is_string( WP_PLUGIN_DIR ) ? rtrim( WP_PLUGIN_DIR, '/' ) : null );
 		if ( null === $base ) {
 			return 'unreadable';
 		}
@@ -890,18 +890,21 @@ final class AB_MCP_Sync_Export {
 		$files = array();
 		$found = array();
 		foreach ( $read['entries'] as $entry ) {
-			$named = AB_MCP_Sync_Env::path_name( (string) $entry[0] );
+			if ( ! is_string( $entry[0] ) || ! is_string( $entry[2] ) ) {
+				return 'unreadable';
+			}
+			$named = AB_MCP_Sync_Env::path_name( $entry[0] );
 			if ( null !== $one['paths'] && ! isset( $one['paths'][ $named ] ) ) {
 				continue;
 			}
-			if ( null !== AB_MCP_Sync_Env::held( (string) $entry[0] ) ) {
+			if ( null !== AB_MCP_Sync_Env::held( $entry[0] ) ) {
 				return 'held_path';
 			}
 			$found[ $named ] = true;
 			$files[]         = array(
-				'path'   => (string) $entry[0],
+				'path'   => $entry[0],
 				'size'   => $entry[1],
-				'sha256' => (string) $entry[2],
+				'sha256' => $entry[2],
 			);
 		}
 		if ( null !== $one['paths'] && count( $found ) !== count( $one['paths'] ) ) {
@@ -910,7 +913,7 @@ final class AB_MCP_Sync_Export {
 		return array(
 			'kind'  => $one['kind'],
 			'ref'   => $one['ref'],
-			'form'  => (string) $read['form'],
+			'form'  => $read['form'],
 			'path'  => $path,
 			'files' => $files,
 		);

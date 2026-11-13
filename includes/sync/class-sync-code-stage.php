@@ -93,13 +93,15 @@ final class AB_MCP_Sync_Code_Stage_Calls {
 	}
 
 	/**
-	 * The file system method WordPress would use here.
+	 * The file system method WordPress would use here; null where it names
+	 * none (unknown: from_org() refuses).
 	 *
-	 * @return string
+	 * @return string|null
 	 */
 	public function method() {
 		require_once ABSPATH . 'wp-admin/includes/file.php';
-		return (string) get_filesystem_method();
+		$method = get_filesystem_method();
+		return is_string( $method ) ? $method : null;
 	}
 
 	/**
@@ -112,9 +114,9 @@ final class AB_MCP_Sync_Code_Stage_Calls {
 	public function unzip( $zip, $to ) {
 		require_once ABSPATH . 'wp-admin/includes/file.php';
 		if ( ! WP_Filesystem() ) {
-			return new WP_Error( 'ab_mcp_code_filesystem', 'The file system of WordPress could not be set up.' );
+			return new WP_Error( 'ab_mcp_code_filesystem', 'The file system of WordPress could not be set up. Ask the host to give PHP write access to wp-content, then try again.' );
 		}
-		return unzip_file( (string) $zip, (string) $to );
+		return unzip_file( $zip, $to );
 	}
 
 	/**
@@ -129,13 +131,13 @@ final class AB_MCP_Sync_Code_Stage_Calls {
 			return null;
 		}
 		$z = new ZipArchive();
-		if ( true !== $z->open( (string) $zip, ZipArchive::RDONLY ) ) {
+		if ( ! is_string( $zip ) || true !== $z->open( $zip, ZipArchive::RDONLY ) ) {
 			return null;
 		}
 		$sum = 0;
 		for ( $i = 0; $i < $z->numFiles; $i++ ) {
 			$stat = $z->statIndex( $i );
-			if ( ! is_array( $stat ) ) {
+			if ( ! is_array( $stat ) || ! is_int( $stat['size'] ) || $stat['size'] < 0 ) {
 				$z->close();
 				return null;
 			}
@@ -175,7 +177,7 @@ final class AB_MCP_Sync_Code_Stage_Calls {
 	 * @return bool
 	 */
 	public function copy( $from, $to ) {
-		return file_exists( (string) $to ) ? false : @copy( (string) $from, (string) $to ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		return is_string( $from ) && is_string( $to ) && ! file_exists( $to ) && @copy( $from, $to ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 	}
 
 	/**
@@ -185,7 +187,7 @@ final class AB_MCP_Sync_Code_Stage_Calls {
 	 * @return bool
 	 */
 	public function mkdir( $path ) {
-		return is_dir( (string) $path ) || @mkdir( (string) $path, 0700, true ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_mkdir
+		return is_string( $path ) && ( is_dir( $path ) || @mkdir( $path, 0700, true ) ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_mkdir
 	}
 
 	/**
@@ -195,7 +197,7 @@ final class AB_MCP_Sync_Code_Stage_Calls {
 	 * @return string|false
 	 */
 	public function read( $path ) {
-		return @file_get_contents( (string) $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+		return is_string( $path ) ? @file_get_contents( $path ) : false; // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
 	}
 
 	/**
@@ -213,17 +215,19 @@ final class AB_MCP_Sync_Code_Stage_Calls {
 	 *
 	 * @param string $code Bytes.
 	 */
-	public function parse( $code ) {
-		token_get_all( (string) $code, TOKEN_PARSE );
+	public function parse_php( $code ) {
+		token_get_all( $code, TOKEN_PARSE );
 	}
 
 	/**
-	 * memory_limit in bytes (-1 for none) and the memory PHP has taken.
+	 * memory_limit in bytes (-1 for none; null where PHP gives none to read)
+	 * and the memory PHP has taken.
 	 *
-	 * @return array{0:int,1:int}
+	 * @return array{0:int|null,1:int}
 	 */
 	public function memory() {
-		return array( (int) wp_convert_hr_to_bytes( (string) ini_get( 'memory_limit' ) ), memory_get_usage( true ) );
+		$limit = ini_get( 'memory_limit' );
+		return array( is_string( $limit ) && '' !== trim( $limit ) ? wp_convert_hr_to_bytes( $limit ) : null, memory_get_usage( true ) );
 	}
 
 	/**
@@ -243,14 +247,22 @@ final class AB_MCP_Sync_Code_Stage_Calls {
 			/* translators: %s: PHP version. */
 			return $this->unavailable( sprintf( __( 'no PHP %s command line was found next to the PHP that runs this site, or this server does not allow PHP to start processes.', 'alphabridge-mcp' ), PHP_MAJOR_VERSION . '.' . PHP_MINOR_VERSION ) );
 		}
-		$limit = (int) wp_convert_hr_to_bytes( (string) ini_get( 'memory_limit' ) );
-		$run   = $this->run( array( $cli, '-n', '-d', 'display_errors=stderr', '-d', 'log_errors=0', '-d', 'short_open_tag=' . ( in_array( strtolower( trim( (string) ini_get( 'short_open_tag' ) ) ), array( '1', 'on', 'yes', 'true' ), true ) ? '1' : '0' ), '-d', 'memory_limit=' . ( $limit < 0 ? '-1' : (string) max( $limit, 134217728 ) ), '-l', (string) $file ), self::LINT_TIMEOUT );
+		// The settings of this site the file is read with, never a guess.
+		$limit = $this->memory()[0];
+		$short = ini_get( 'short_open_tag' );
+		if ( null === $limit || ! is_string( $short ) ) {
+			return $this->unavailable( __( 'memory_limit or short_open_tag of this PHP could not be read, so php -l would not read the file as this site does.', 'alphabridge-mcp' ) );
+		}
+		$run = $this->run( array( $cli, '-n', '-d', 'display_errors=stderr', '-d', 'log_errors=0', '-d', 'short_open_tag=' . ( in_array( strtolower( trim( $short ) ), array( '1', 'on', 'yes', 'true' ), true ) ? '1' : '0' ), '-d', 'memory_limit=' . ( $limit < 0 ? '-1' : (string) max( $limit, 134217728 ) ), '-l', $file ), self::LINT_TIMEOUT );
 		if ( null === $run ) {
 			return $this->unavailable( __( 'php -l could not be started.', 'alphabridge-mcp' ) );
 		}
 		if ( $run['timed_out'] ) {
 			/* translators: %d: seconds */
 			return $this->unavailable( sprintf( __( 'php -l did not finish within %d seconds.', 'alphabridge-mcp' ), self::LINT_TIMEOUT ) );
+		}
+		if ( null === $run['exit'] ) {
+			return $this->unavailable( __( 'php -l ended without an exit code PHP could read.', 'alphabridge-mcp' ) );
 		}
 		if ( 0 === $run['exit'] ) {
 			return array( 'status' => 'passed' );
@@ -259,8 +271,8 @@ final class AB_MCP_Sync_Code_Stage_Calls {
 		if ( preg_match( '/^(?:PHP )?Fatal error:\s*(?:Allowed memory size of \d+ bytes exhausted|Out of memory)/', ltrim( $run['stderr'] ) ) || ( 137 === $run['exit'] && preg_match( '/^Hard memory limit of \d+ bytes exhausted/', $first ) ) ) {
 			return $this->unavailable( __( 'php -l ran out of memory before it finished.', 'alphabridge-mcp' ) );
 		}
-		$text = str_replace( (string) $file, (string) $label, $run['stderr'] . "\n" . $run['stdout'] );
-		if ( preg_match( '/(?:Parse|Fatal) error:\s*(.+) in ' . preg_quote( (string) $label, '/' ) . ' on line (\d+)/', $text, $m ) ) {
+		$text = str_replace( $file, $label, $run['stderr'] . "\n" . $run['stdout'] );
+		if ( preg_match( '/(?:Parse|Fatal) error:\s*(.+) in ' . preg_quote( $label, '/' ) . ' on line (\d+)/', $text, $m ) ) {
 			return array(
 				'status'  => 'failed',
 				'line'    => (int) $m[2],
@@ -335,7 +347,7 @@ final class AB_MCP_Sync_Code_Stage_Calls {
 	 *
 	 * @param string[] $cmd     Binary and arguments.
 	 * @param int      $timeout Seconds.
-	 * @return array|null exit, stdout, stderr, timed_out; null where it did not start.
+	 * @return array|null exit (null where PHP gives none), stdout, stderr, timed_out; null where it did not start.
 	 */
 	private function run( array $cmd, $timeout ) {
 		$pipes = array();
@@ -355,8 +367,8 @@ final class AB_MCP_Sync_Code_Stage_Calls {
 			$status = proc_get_status( $proc );
 			$out    = substr( $out . (string) stream_get_contents( $pipes[1] ), 0, 65536 );
 			$err    = substr( $err . (string) stream_get_contents( $pipes[2] ), 0, 65536 );
-			if ( ! $status['running'] ) {
-				$exit = (int) $status['exitcode'];
+			if ( ! is_array( $status ) || ! $status['running'] ) {
+				$exit = is_array( $status ) && is_int( $status['exitcode'] ) && -1 !== $status['exitcode'] ? $status['exitcode'] : null;
 				break;
 			}
 			if ( microtime( true ) > $deadline ) {
@@ -374,8 +386,8 @@ final class AB_MCP_Sync_Code_Stage_Calls {
 		fclose( $pipes[1] ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
 		fclose( $pipes[2] ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
 		$closed = proc_close( $proc );
-		if ( null === $exit || -1 === $exit ) {
-			$exit = (int) $closed;
+		if ( null === $exit ) {
+			$exit = is_int( $closed ) && -1 !== $closed ? $closed : null;
 		}
 		return array(
 			'exit'      => $exit,
@@ -695,16 +707,16 @@ final class AB_MCP_Sync_Code_Stage {
 	 * @return true|WP_Error
 	 */
 	public static function fetch_zip( $url, $to, $max ) {
-		if ( 0 !== strpos( (string) $url, 'https://' ) || ! is_int( $max ) || $max < 1 ) {
+		if ( ! is_string( $url ) || ! is_string( $to ) || 0 !== strpos( $url, 'https://' ) || ! is_int( $max ) || $max < 1 ) {
 			return self::refusal( 'code:org_address', __( 'A package is fetched only over https, with a limit of its size.', 'alphabridge-mcp' ) );
 		}
 		$answer = self::calls()->get(
-			(string) $url,
+			$url,
 			array(
 				'timeout'             => self::ORG_TIMEOUT,
 				'redirection'         => 0,
 				'stream'              => true,
-				'filename'            => (string) $to,
+				'filename'            => $to,
 				'limit_response_size' => $max + 1,
 			)
 		);
@@ -717,13 +729,13 @@ final class AB_MCP_Sync_Code_Stage {
 			/* translators: %s: HTTP status. */
 			return self::refusal( 'code:org_fetch', sprintf( __( 'wordpress.org answered %s for the package in this version (it does not keep it, or it redirects). Send the unit as a package of code (wp_site_export with purpose=code).', 'alphabridge-mcp' ), is_scalar( $status ) ? (string) $status : '?' ), array( 'status' => $status ) );
 		}
-		clearstatcache( true, (string) $to );
-		$size = @filesize( (string) $to ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- no file is answered.
+		clearstatcache( true, $to );
+		$size = @filesize( $to ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- no file is answered.
 		if ( ! is_int( $size ) || $size < 1 || $size > $max ) {
 			/* translators: %d: the most bytes a package may have. */
 			return self::refusal( 'code:org_too_large', sprintf( __( 'The package is empty or larger than %d bytes, so it is not used. Update the plugin or theme by hand in wp-admin.', 'alphabridge-mcp' ), $max ), array( 'max' => $max ) );
 		}
-		$head = @file_get_contents( (string) $to, false, null, 0, 4 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- the magic bytes.
+		$head = @file_get_contents( $to, false, null, 0, 4 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- the magic bytes.
 		if ( "PK\x03\x04" !== $head && "PK\x05\x06" !== $head ) {
 			return self::refusal( 'code:org_fetch', __( 'The answer is no ZIP archive, so it is not used. Try again later, or send the unit as a package of code (wp_site_export with purpose=code).', 'alphabridge-mcp' ) );
 		}
@@ -812,11 +824,9 @@ final class AB_MCP_Sync_Code_Stage {
 		if ( is_wp_error( $gid ) ) {
 			return $gid;
 		}
+		// The built unit is the signed one (from_org(), from_packages()); that
+		// the tree in the store is too, complete() checks (Z4, early).
 		$put = AB_MCP_Protected_Store::put_tree( 'stage', $gid, $signed['ref'], $target, $source );
-		// Z4, the early refusal: the tree is the signed unit (the swap checks it again).
-		if ( ! is_wp_error( $put ) && ! hash_equals( $signed['hash'], $put['hash'] ) ) {
-			$put = self::refusal( 'code:stage_mismatch', __( 'The stage in the protected store is not the unit of the staging site, so it is not used. Stage it again.', 'alphabridge-mcp' ) );
-		}
 		$state = is_wp_error( $put ) ? $put : self::write_state(
 			$gid,
 			array(
@@ -894,7 +904,11 @@ final class AB_MCP_Sync_Code_Stage {
 		}
 		$until = self::clock() + self::CHECK_BUDGET;
 		if ( 1 === $state['seq'] && 0 === $state['done'] ) {
-			$state['todo'] = self::to_check( $tree['path'], $state['unit']['kind'], $state['unit']['ref'] );
+			$todo = self::to_check( $tree['path'], $tree['hash'], $state['unit']['kind'], $state['unit']['ref'] );
+			if ( null === $todo ) {
+				return self::answer( self::refuse( $gid, $state, 'code:syntax_unchecked', __( 'The stage could not be read whole within one call to list its PHP files, so they are not checked and it is never ready. Stage the unit again; if it keeps failing, update the plugin or theme by hand in wp-admin.', 'alphabridge-mcp' ) ) );
+			}
+			$state['todo'] = $todo;
 		}
 		$base = 'file' === $tree['form'] ? dirname( $tree['path'] ) : $tree['path'];
 		while ( $state['done'] < count( $state['todo'] ) ) {
@@ -941,12 +955,16 @@ final class AB_MCP_Sync_Code_Stage {
 	 * of the manifest.
 	 *
 	 * @param string $path The tree.
+	 * @param string $hash Its hash (tree()).
 	 * @param string $kind Kind.
 	 * @param string $ref  Unit.
-	 * @return string[] Paths in the unit.
+	 * @return string[]|null Paths in the unit; null where the tree does not read whole as that hash (unknown: nothing is passed over).
 	 */
-	private static function to_check( $path, $kind, $ref ) {
+	private static function to_check( $path, $hash, $kind, $ref ) {
 		$tree = self::read_built( dirname( $path ), basename( $path ) );
+		if ( ! $tree['complete'] || null === $tree['hash'] || ! hash_equals( $hash, $tree['hash'] ) ) {
+			return null;
+		}
 		$live = self::live( $kind, $ref );
 		$have = array();
 		foreach ( null === $live ? array() : $live['entries'] as $entry ) {
@@ -1016,7 +1034,13 @@ final class AB_MCP_Sync_Code_Stage {
 		if ( ! $calls->tokenizer() ) {
 			return array( 'status' => 'unavailable' );
 		}
-		$size = strlen( (string) $code );
+		if ( ! is_string( $code ) ) {
+			return array(
+				'status' => 'skipped',
+				'why'    => __( 'its bytes could not be read', 'alphabridge-mcp' ),
+			);
+		}
+		$size = strlen( $code );
 		if ( $size > self::PARSE_MAX_BYTES ) {
 			return array(
 				'status' => 'skipped',
@@ -1025,6 +1049,12 @@ final class AB_MCP_Sync_Code_Stage {
 			);
 		}
 		$memory = $calls->memory();
+		if ( null === $memory[0] ) {
+			return array(
+				'status' => 'skipped',
+				'why'    => __( 'memory_limit of this PHP could not be read', 'alphabridge-mcp' ),
+			);
+		}
 		if ( $memory[0] > 0 && $memory[0] - $memory[1] < $size * self::PARSE_MEMORY_FACTOR ) {
 			return array(
 				'status' => 'skipped',
@@ -1039,7 +1069,7 @@ final class AB_MCP_Sync_Code_Stage {
 			}
 		);
 		try {
-			$calls->parse( (string) $code );
+			$calls->parse_php( $code );
 		} catch ( CompileError $e ) {
 			// ParseError is a CompileError; both mean the file cannot load.
 			return array(
@@ -1075,7 +1105,7 @@ final class AB_MCP_Sync_Code_Stage {
 			}
 			foreach ( $names as $n ) {
 				$file = 'file' === $form ? $path : $path . '/' . $n;
-				if ( '.php' !== substr( (string) $n, -4 ) || ! is_file( $file ) ) {
+				if ( ! is_string( $n ) || '.php' !== substr( $n, -4 ) || ! is_file( $file ) ) {
 					continue;
 				}
 				$head = AB_MCP_Sync_Env::head( $file, array( 'Plugin Name', 'Requires at least', 'Requires PHP' ) );
@@ -1109,8 +1139,8 @@ final class AB_MCP_Sync_Code_Stage {
 		}
 		$last = null;
 		foreach ( array_keys( $files ) as $file ) {
-			if ( 1 === preg_match( '/^' . self::STATE . '(\d{4})-([a-z2-7]{52})\z/', (string) $file, $m ) && ( null === $last || $m[1] > $last[0] ) ) {
-				$last = array( $m[1], (string) $file, $m[2] );
+			if ( is_string( $file ) && 1 === preg_match( '/^' . self::STATE . '(\d{4})-([a-z2-7]{52})\z/', $file, $m ) && ( null === $last || $m[1] > $last[0] ) ) {
+				$last = array( $m[1], $file, $m[2] );
 			}
 		}
 		$sha  = null === $last ? null : AB_MCP_Sync_Import::held_sha( AB_MCP_Sync_Import::HELD . $last[2] );
@@ -1219,7 +1249,7 @@ final class AB_MCP_Sync_Code_Stage {
 	 * @return string|null
 	 */
 	private static function target( $kind, $ref ) {
-		$base = 'theme' === $kind ? AB_MCP_Sync_File_Manifest::theme_root() : ( defined( 'WP_PLUGIN_DIR' ) ? rtrim( (string) WP_PLUGIN_DIR, '/' ) : null );
+		$base = 'theme' === $kind ? AB_MCP_Sync_File_Manifest::theme_root() : ( defined( 'WP_PLUGIN_DIR' ) && is_string( WP_PLUGIN_DIR ) ? rtrim( WP_PLUGIN_DIR, '/' ) : null );
 		return null === $base ? null : $base . '/' . $ref;
 	}
 
@@ -1258,13 +1288,17 @@ final class AB_MCP_Sync_Code_Stage {
 	}
 
 	/**
-	 * Does PHP run a file of this name (Pro: is_php_name())?
+	 * Does PHP run a file of this name (Pro: is_php_name())? A name that is
+	 * no text counts as one (it is checked, never passed over).
 	 *
 	 * @param string $name Path.
 	 * @return bool
 	 */
 	public static function is_php( $name ) {
-		$base = strtolower( rtrim( basename( str_replace( '\\', '/', (string) $name ) ), ". \t" ) );
+		if ( ! is_string( $name ) ) {
+			return true;
+		}
+		$base = strtolower( rtrim( basename( str_replace( '\\', '/', $name ) ), ". \t" ) );
 		$dot  = strrpos( $base, '.' );
 		return false !== $dot && in_array( substr( $base, $dot + 1 ), self::PHP_EXTENSIONS, true );
 	}

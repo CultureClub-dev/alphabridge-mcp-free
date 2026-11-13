@@ -810,8 +810,9 @@ final class AB_MCP_Sync_Env {
 	 * (wp_update_plugins(), wp_update_themes(): the host of the address,
 	 * sanitize_url() first): '' where the head names none; the host in lower
 	 * case, or what stands before the first "/", "?" or "#" where none is
-	 * read. Only the host goes into a line: an address may carry a key of a
-	 * licence.
+	 * read (an address of those signs only: itself, the host of none). Only
+	 * the host goes into a line: an address may carry a key of a licence.
+	 * A file that is no name is left out (its unit is unknown, unit_host()).
 	 *
 	 * @param string   $dir   The folder the files lie in.
 	 * @param string[] $files The files, relative to it.
@@ -820,18 +821,40 @@ final class AB_MCP_Sync_Env {
 	public static function update_hosts( $dir, array $files ) {
 		$out = array();
 		foreach ( $files as $file ) {
-			$uri = self::head( rtrim( (string) $dir, '/' ) . '/' . $file, array( 'Update URI' ) )['Update URI'];
+			if ( ! is_string( $dir ) || ! is_string( $file ) ) {
+				continue;
+			}
+			$uri = self::head( rtrim( $dir, '/' ) . '/' . $file, array( 'Update URI' ) )['Update URI'];
 			if ( '' === $uri ) {
-				$out[ (string) $file ] = '';
+				$out[ $file ] = '';
 				continue;
 			}
 			$host = wp_parse_url( function_exists( 'sanitize_url' ) ? sanitize_url( $uri ) : $uri, PHP_URL_HOST );
-			// No host read: what stands before its first "/", "?" or "#"
-			// (w.org/plugin/x), never the whole address.
-			$host                  = is_string( $host ) && '' !== $host ? $host : (string) strtok( $uri, '/?#' );
-			$out[ (string) $file ] = self::name( strtolower( $host ) );
+			if ( ! is_string( $host ) || '' === $host ) {
+				// No host read: what stands before its first "/", "?" or "#"
+				// (w.org/plugin/x), never the whole address.
+				$first = strtok( $uri, '/?#' );
+				$host  = false === $first ? $uri : $first;
+			}
+			$out[ $file ] = self::name( strtolower( $host ) );
 		}
 		return $out;
+	}
+
+	/**
+	 * The host of updates of one unit (unit_lines()): update_host_of() over
+	 * the heads of its main files (a plugin) or of its style.css (a theme);
+	 * null where a head of them was not read (unknown: from_org() refuses).
+	 *
+	 * @param array    $ctx   unit_context().
+	 * @param string[] $files Its main files or style.css, as unit_context() names them.
+	 * @return string|null
+	 */
+	private static function unit_host( array $ctx, array $files ) {
+		if ( ! isset( $ctx['uris'] ) || array() !== array_diff_key( array_flip( $files ), $ctx['uris'] ) ) {
+			return null;
+		}
+		return self::update_host_of( array_values( array_intersect_key( $ctx['uris'], array_flip( $files ) ) ) );
 	}
 
 	/**
@@ -843,7 +866,7 @@ final class AB_MCP_Sync_Env {
 	 * @return string
 	 */
 	private static function update_host_of( array $hosts ) {
-		$named = array_values( array_filter( array_map( 'strval', $hosts ), static fn( $host ) => '' !== $host ) );
+		$named = array_values( array_filter( $hosts, static fn( $host ) => '' !== $host ) );
 		foreach ( $named as $host ) {
 			if ( ! in_array( $host, self::WPORG_HOSTS, true ) ) {
 				return $host;
@@ -1602,7 +1625,7 @@ final class AB_MCP_Sync_Env {
 			ksort( $mains, SORT_STRING );
 			$fields['mains']      = array_map( array( __CLASS__, 'path_name' ), array_map( 'strval', array_keys( $mains ) ) );
 			$fields['version']    = array() === $mains ? null : reset( $mains );
-			$fields['update_uri'] = isset( $ctx['uris'] ) ? self::update_host_of( array_values( array_intersect_key( $ctx['uris'], $refs ? array_flip( $refs ) : array() ) ) ) : null;
+			$fields['update_uri'] = self::unit_host( $ctx, array_values( $refs ) );
 			if ( null !== $ctx['active'] ) {
 				$active = array();
 				foreach ( array_keys( $mains ) as $main ) {
@@ -1618,9 +1641,7 @@ final class AB_MCP_Sync_Env {
 			foreach ( $ctx['versions'] as $stylesheet => $version ) {
 				if ( (string) $stylesheet === $name || 0 === strpos( (string) $stylesheet, $name . '/' ) ) {
 					$fields['version'] = $version;
-					if ( isset( $ctx['uris'] ) ) {
-						$fields['update_uri'] = self::update_host_of( array_key_exists( $stylesheet . '/style.css', $ctx['uris'] ) ? array( $ctx['uris'][ $stylesheet . '/style.css' ] ) : array() );
-					}
+					$fields['update_uri'] = self::unit_host( $ctx, array( $stylesheet . '/style.css' ) );
 					break;
 				}
 			}

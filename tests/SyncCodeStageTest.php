@@ -152,6 +152,20 @@ final class SyncCodeStageTest extends TestCase {
 		self::assertSame( 'passed', AB_MCP_Sync_Code_Stage::parse_check( $code )['status'], 'No limit: no skip.' );
 	}
 
+	public function testWithoutAMemoryLimitToReadOrBytesToReadTheParserPassesNothing(): void {
+		// Unknown is never passed: no memory_limit to read, or no bytes, is
+		// skipped (code:syntax_unchecked), never parsed as if it were known.
+		$calls         = new SyncCodeStageCalls();
+		$calls->memory = array( null, 0 );
+		self::seam( $calls );
+		$read = AB_MCP_Sync_Code_Stage::parse_check( "<?php\n\$a = 1;\n" );
+		self::assertSame( 'skipped', $read['status'] );
+		self::assertStringContainsString( 'memory_limit', $read['why'] );
+		$calls->memory = array( -1, 0 );
+		self::assertSame( 'skipped', AB_MCP_Sync_Code_Stage::parse_check( false )['status'] );
+		self::assertSame( 'passed', AB_MCP_Sync_Code_Stage::parse_check( "<?php\n\$a = 1;\n" )['status'] );
+	}
+
 	public function testTheParserFindsASyntaxErrorAndNamesWhereNoTokenizerIs(): void {
 		$calls = new SyncCodeStageCalls();
 		self::seam( $calls );
@@ -307,14 +321,25 @@ final class SyncCodeStageTest extends TestCase {
 		file_put_contents( $dir . '/a.php', "<?php\n/**\n * Plugin Name: A\n * Update URI: https://wordpress.org/plugins/a/\n */\n" );
 		file_put_contents( $dir . '/b.php', "<?php\n/**\n * Plugin Name: B\n * Update URI: https://Updates.Example.com/b?key=geheim\n */\n" );
 		file_put_contents( $dir . '/c.php', "<?php\n/**\n * Plugin Name: C\n */\n" );
-		$hosts = \AB_MCP_Sync_Env::update_hosts( $dir, array( 'a.php', 'b.php', 'c.php' ) );
+		file_put_contents( $dir . '/d.php', "<?php\n/**\n * Plugin Name: D\n * Update URI: w.org/plugin/d\n */\n" );
+		file_put_contents( $dir . '/e.php', "<?php\n/**\n * Plugin Name: E\n * Update URI: ///\n */\n" );
+		$hosts = \AB_MCP_Sync_Env::update_hosts( $dir, array( 'a.php', 'b.php', 'c.php', 'd.php', 'e.php' ) );
 		self::assertSame( '', $hosts['c.php'] );
+		self::assertSame( 'w.org', $hosts['d.php'], 'No host read: what stands before the first "/".' );
+		self::assertSame( '///', $hosts['e.php'], 'An address of signs only names no host of wordpress.org, never none.' );
 		self::assertStringNotContainsString( 'geheim', implode( ' ', $hosts ), 'No more than the host goes into a line (a key of a licence stays out).' );
 		$of = new \ReflectionMethod( \AB_MCP_Sync_Env::class, 'update_host_of' );
 		self::assertSame( '', $of->invoke( null, array( '', '' ) ) );
 		self::assertSame( 'wordpress.org', $of->invoke( null, array( 'wordpress.org', '' ) ) );
 		self::assertSame( 'updates.example.com', $of->invoke( null, array( 'wordpress.org', 'updates.example.com' ) ), 'Another host of any main file is the host of the unit.' );
 		self::assertSame( 'updates.example.com', $of->invoke( null, array( 'updates.example.com', 'w.org' ) ) );
+		// The host of a unit only from the heads of all its main files: one
+		// not read is unknown (null: from_org() refuses), never none.
+		$unit = new \ReflectionMethod( \AB_MCP_Sync_Env::class, 'unit_host' );
+		self::assertNull( $unit->invoke( null, array(), array( 'a.php' ) ) );
+		self::assertNull( $unit->invoke( null, array( 'uris' => array( 'a.php' => 'wordpress.org' ) ), array( 'a.php', 'c.php' ) ) );
+		self::assertSame( 'wordpress.org', $unit->invoke( null, array( 'uris' => $hosts ), array( 'a.php', 'c.php' ) ) );
+		self::assertSame( 'updates.example.com', $unit->invoke( null, array( 'uris' => $hosts ), array( 'a.php', 'b.php' ) ) );
 	}
 }
 
@@ -326,7 +351,7 @@ final class SyncCodeStageCalls {
 	/** @var bool */
 	public $tokenizer = true;
 
-	/** @var array{0:int,1:int} */
+	/** @var array{0:int|null,1:int} */
 	public $memory = array( -1, 0 );
 
 	/** @var string */
@@ -363,7 +388,7 @@ final class SyncCodeStageCalls {
 		return $this->tokenizer;
 	}
 
-	public function parse( $code ): void {
+	public function parse_php( $code ): void {
 		token_get_all( (string) $code, TOKEN_PARSE );
 	}
 

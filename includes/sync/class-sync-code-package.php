@@ -127,12 +127,15 @@ final class AB_MCP_Sync_Code_Package {
 	 * @return true|WP_Error
 	 */
 	public static function lines_of( $unit, $form, $kind, $ref, array $file, callable $put ) {
-		$path   = (string) $file['path'];
-		$size   = $file['size'];
-		$sha    = (string) $file['sha256'];
+		$path = $file['path'];
+		$size = $file['size'];
+		$sha  = $file['sha256'];
+		if ( ! is_string( $unit ) || ! is_string( $path ) || ! is_string( $sha ) || ! is_int( $size ) || ! self::unit_ok( $kind, $ref ) || ! self::path_ok( $path ) ) {
+			return self::changed( $path );
+		}
 		$pieces = AB_MCP_Sync_Media_Package::pieces( $size );
-		$full   = 'file' === $form ? (string) $unit : rtrim( (string) $unit, '/' ) . '/' . $path;
-		if ( ! is_int( $size ) || ! self::path_ok( $path ) || ( 'file' === $form && basename( (string) $unit ) !== $path ) || 'file' !== @filetype( $full ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- a file that went is answered below.
+		$full   = 'file' === $form ? $unit : rtrim( $unit, '/' ) . '/' . $path;
+		if ( ( 'file' === $form && basename( $unit ) !== $path ) || 'file' !== @filetype( $full ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- a file that went is answered below.
 			return self::changed( $path );
 		}
 		$handle = @fopen( $full, 'rb' ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- read only, a piece at a time.
@@ -144,7 +147,10 @@ final class AB_MCP_Sync_Code_Package {
 		try {
 			for ( $i = 0; $i < $pieces; $i++ ) {
 				$want  = min( self::PIECE, $size - $read );
-				$bytes = $want > 0 ? (string) fread( $handle, $want ) : ''; // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fread
+				$bytes = $want > 0 ? fread( $handle, $want ) : ''; // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fread
+				if ( ! is_string( $bytes ) ) {
+					return self::changed( $path );
+				}
 				while ( strlen( $bytes ) < $want && ! feof( $handle ) ) {
 					$more = fread( $handle, $want - strlen( $bytes ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fread
 					if ( false === $more || '' === $more ) {
@@ -161,11 +167,11 @@ final class AB_MCP_Sync_Code_Package {
 					AB_MCP_Sync_Canon::encode(
 						array(
 							'data'   => base64_encode( $bytes ), // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- the bytes of a file in a line of JSON.
-							'kind'   => (string) $kind,
+							'kind'   => $kind,
 							'path'   => $path,
 							'piece'  => $i,
 							'pieces' => $pieces,
-							'ref'    => (string) $ref,
+							'ref'    => $ref,
 							'sha256' => $sha,
 							'size'   => $size,
 						)
@@ -177,7 +183,7 @@ final class AB_MCP_Sync_Code_Package {
 				}
 			}
 			// Nothing after the size the manifest measured, and the bytes it hashed.
-			if ( '' !== (string) fread( $handle, 1 ) || ! hash_equals( $sha, hash_final( $hash ) ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fread
+			if ( '' !== fread( $handle, 1 ) || ! hash_equals( $sha, hash_final( $hash ) ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fread
 				return self::changed( $path );
 			}
 		} finally {
@@ -194,8 +200,8 @@ final class AB_MCP_Sync_Code_Package {
 	 * @return array{kind:string,ref:string,path:string,piece:int,pieces:int,sha256:string,size:int,bytes:string}|null
 	 */
 	public static function line( $line ) {
-		$object = json_decode( (string) $line, true, 4 );
-		if ( ! is_array( $object ) || AB_MCP_Sync_Canon::encode( $object ) !== (string) $line || self::FIELDS !== self::sorted_keys( $object ) ) {
+		$object = is_string( $line ) ? json_decode( $line, true, 4 ) : null;
+		if ( ! is_array( $object ) || AB_MCP_Sync_Canon::encode( $object ) !== $line || self::FIELDS !== self::sorted_keys( $object ) ) {
 			return null;
 		}
 		$path = AB_MCP_Sync_Import::bytes( $object['path'] );
@@ -277,7 +283,7 @@ final class AB_MCP_Sync_Code_Package {
 				if ( null === $piece || ! isset( $named[ $piece['kind'] . "\0" . $piece['ref'] ] ) ) {
 					return self::refusal( __( 'A line is not one piece of a file of a unit as the staging site writes it: a field it has no place for or of another type, a unit the manifest does not name, a path that is not a plain path in a unit, data that is no base64, or a piece of another size than its number gives.', 'alphabridge-mcp' ) );
 				}
-				$current = self::piece_into( $current, $piece, (int) $i, $seen );
+				$current = self::piece_into( $current, $piece, $i, $seen );
 				if ( is_wp_error( $current ) ) {
 					return $current;
 				}
@@ -392,7 +398,7 @@ final class AB_MCP_Sync_Code_Package {
 			return new WP_Error( 'ab_mcp_sync_code_index', __( 'The package of code is marked complete, but its index does not read back as this version keeps it, so it is not used. Export the code again on the staging site (wp_site_export with purpose=code), then take it over here (wp_site_import_chunk).', 'alphabridge-mcp' ) );
 		}
 		return array(
-			'gid'      => (string) $gid,
+			'gid'      => $gid,
 			'manifest' => $manifest,
 			'files'    => $files,
 		);
@@ -410,7 +416,7 @@ final class AB_MCP_Sync_Code_Package {
 	 * @return true|WP_Error
 	 */
 	public static function extract( array $taken, array $file, $to ) {
-		$out = @fopen( (string) $to, 'xb' ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- a file of a building folder of the store, made new.
+		$out = is_string( $to ) ? @fopen( $to, 'xb' ) : false; // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- a file of a building folder of the store, made new.
 		if ( false === $out ) {
 			return self::unread( $file );
 		}
@@ -441,7 +447,7 @@ final class AB_MCP_Sync_Code_Package {
 					}
 					hash_update( $hash, $piece['bytes'] );
 					$bytes += strlen( $piece['bytes'] );
-					if ( strlen( $piece['bytes'] ) !== (int) fwrite( $out, $piece['bytes'] ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite
+					if ( strlen( $piece['bytes'] ) !== fwrite( $out, $piece['bytes'] ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite
 						return self::unread( $file );
 					}
 					++$next;
@@ -455,7 +461,7 @@ final class AB_MCP_Sync_Code_Package {
 			return self::unread( $file );
 		}
 		// Read back from the disk, as it will be put into the store.
-		$written = @hash_file( 'sha256', (string) $to ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- a failed read is answered.
+		$written = @hash_file( 'sha256', $to ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- a failed read is answered.
 		return is_string( $written ) && hash_equals( $file['sha256'], $written ) ? true : self::unread( $file );
 	}
 
@@ -477,10 +483,10 @@ final class AB_MCP_Sync_Code_Package {
 	 * @return string|null
 	 */
 	public static function index_sha( $name ) {
-		if ( 1 !== preg_match( '/^' . self::INDEX . '[a-z2-7]{52}\z/', (string) $name ) ) {
+		if ( ! is_string( $name ) || 1 !== preg_match( '/^' . self::INDEX . '[a-z2-7]{52}\z/', $name ) ) {
 			return null;
 		}
-		return AB_MCP_Sync_Import::held_sha( AB_MCP_Sync_Import::HELD . substr( (string) $name, strlen( self::INDEX ) ) );
+		return AB_MCP_Sync_Import::held_sha( AB_MCP_Sync_Import::HELD . substr( $name, strlen( self::INDEX ) ) );
 	}
 
 	/* ------------------------------------------------------------ private */
