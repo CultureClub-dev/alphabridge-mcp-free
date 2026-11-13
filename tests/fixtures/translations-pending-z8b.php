@@ -257,7 +257,6 @@ return array(
 	'The stage named is not the one its group holds. Stage the unit again.',
 	'The stage is not the unit the report names on the staging site (the staging site changed it since, or the stage is another), so it is never ready. Make the report again, then stage the unit anew.',
 	'The stage could not be read whole within one call to list its PHP files, so they are not checked and it is never ready. Stage the unit again; if it keeps failing, update the plugin or theme by hand in wp-admin.',
-	'A file of the stage could not be read, so the stage is never ready. Stage the unit again.',
 	'%1$s does not parse with the PHP of this site — line %2$d: %3$s (PHP %4$s). Nothing is swapped; fix the code on the staging site and take it over again.',
 	'This server has no PHP tokenizer, so no PHP file of a plugin or theme can be checked before a swap, and none is swapped. Ask the host to enable the PHP extension tokenizer, then stage again.',
 	'%1$s could not be checked with the parser of this site (%2$s), and nothing shows that the same bytes ran on the staging site, so it is not swapped. Update the plugin or theme by hand in wp-admin.',

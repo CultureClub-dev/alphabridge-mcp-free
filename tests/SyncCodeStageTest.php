@@ -472,6 +472,47 @@ final class SyncCodeStageTest extends TestCase {
 		self::assertSame( 'code:syntax_unchecked', $check->invoke( null, $file, $item, false )['refusal'][0], 'Bytes of the same size, other ones.' );
 	}
 
+	public function testAFileIsReadOnlyAfterItsSizeAndTheMemoryLeftAndOnlyUpToItsSize(): void {
+		// check_file() (GitHub-Codex on free#153, P2; the Steuerung 05:54):
+		// size, then memory, then the read. By the size the manifest names, a
+		// file over PARSE_MAX_BYTES, or with less memory left than the parser
+		// needs for it, or without a memory_limit to read, is skipped
+		// (code:syntax_unchecked) and never read; a file that fits is read
+		// once, at most its size and one byte more; a read that fails is
+		// code:syntax_unchecked with why (complete() writes it, and the next
+		// call does not read it again: CodeStageTest).
+		$file  = $this->dir . '/unit/a.php';
+		$bytes = "<?php\n\$a = 1;\n";
+		file_put_contents( $file, $bytes );
+		$item  = array(
+			'path'   => 'a.php',
+			'sha256' => hash( 'sha256', $bytes ),
+			'size'   => strlen( $bytes ),
+		);
+		$check = new \ReflectionMethod( AB_MCP_Sync_Code_Stage::class, 'check_file' );
+		$calls = new SyncCodeStageCalls();
+		self::seam( $calls );
+		$over = $check->invoke( null, $file, array( 'size' => AB_MCP_Sync_Code_Stage::PARSE_MAX_BYTES + 1 ) + $item, false );
+		self::assertSame( 'code:syntax_unchecked', $over['refusal'][0] );
+		self::assertStringContainsString( (string) ( AB_MCP_Sync_Code_Stage::PARSE_MAX_BYTES + 1 ), $over['refusal'][1] );
+		self::assertSame( array(), $calls->reads, 'Over the limit by its size: not read.' );
+		$calls->memory = array( 1000000, 1000000 - 100 * $item['size'] + 1 );
+		$short         = $check->invoke( null, $file, $item, false );
+		self::assertSame( 'code:syntax_unchecked', $short['refusal'][0] );
+		self::assertStringContainsString( 'memory', $short['refusal'][1] );
+		self::assertSame( array(), $calls->reads, 'Less memory left than the parser needs for its size: not read.' );
+		$calls->memory = array( null, 0 );
+		self::assertSame( 'code:syntax_unchecked', $check->invoke( null, $file, $item, false )['refusal'][0] );
+		self::assertSame( array(), $calls->reads, 'No memory_limit to read: not read.' );
+		$calls->memory = array( 1000000, 1000000 - 100 * $item['size'] );
+		self::assertSame( array(), $check->invoke( null, $file, $item, false ), 'Room for it: read and checked, passed.' );
+		self::assertSame( array( array( $file, $item['size'] + 1 ) ), $calls->reads, 'Read once, at most its size and one byte more.' );
+		$calls->read = false;
+		$failed      = $check->invoke( null, $file, $item, false );
+		self::assertSame( 'code:syntax_unchecked', $failed['refusal'][0], 'A read that fails: unchecked, kept.' );
+		self::assertStringContainsString( 'a.php', $failed['refusal'][1] );
+	}
+
 	public function testAHeadThatDoesNotReadWholeIsUnknownNeverOneWithoutRequirements(): void {
 		// requirements() (Codex round 1, A4): a head of the new version not
 		// read whole refuses; a PHP file of a plugin without Plugin Name, or a
@@ -618,8 +659,11 @@ final class SyncCodeStageCalls {
 	/** @var array[] The paths web_ready() was asked for. */
 	public $web = array();
 
-	/** @var string|null A text read() gives instead of the file (a read that ends short), or null. */
+	/** @var string|false|null A text read() gives instead of the file (a read that ends short), false (a read that fails), or null. */
 	public $read = null;
+
+	/** @var array[] Each read: the file and the bytes asked at most. */
+	public $reads = array();
 
 	/** The names of the ZIP: its unit's files under the folder of the unit. */
 	public function zip_names( $zip ): array {
@@ -637,8 +681,9 @@ final class SyncCodeStageCalls {
 		return true;
 	}
 
-	public function read( $path ) {
-		return null === $this->read ? file_get_contents( $path ) : $this->read;
+	public function read( $path, $max ) {
+		$this->reads[] = array( $path, $max );
+		return null === $this->read ? file_get_contents( $path, false, null, 0, $max ) : $this->read;
 	}
 
 	/** @var array taken(): the files of the packages. */

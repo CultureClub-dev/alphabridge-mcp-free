@@ -201,8 +201,10 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
 
 ### G-4-2 PHP-Dateien über 1 MiB in der Parserprüfung
 
-- **Fundstelle:** `AB_MCP_Sync_Code_Stage::parse_check()` (`PARSE_MAX_BYTES` = 1 MiB, Speicherprüfung
-  `PARSE_MEMORY_FACTOR` × Grösse gegen `memory_limit`), `check_file()`.
+- **Fundstelle:** `AB_MCP_Sync_Code_Stage::parse_room()` und `parse_check()` (`PARSE_MAX_BYTES` = 1 MiB,
+  Speicherprüfung `PARSE_MEMORY_FACTOR` × Grösse gegen `memory_limit`), `check_file()`: geprüft nach der Grösse, die das
+  Manifest nennt, bevor die Datei gelesen wird (Behebung 5, GitHub-Codex auf free#153, P2); gelesen wird höchstens
+  diese Grösse und ein Byte mehr.
 - **Quelle:** Entscheid der Steuerung 13.11.2026 01:44 (O1); D6 (01:43).
 - **Was:** Eine Datei über 1 MiB, oder eine, für die der Speicher nicht reicht, ist `skipped` und damit
   `code:syntax_unchecked`: Dass dieselben Bytes auf Staging liefen, belegt nichts (D6). Gemessen (Zentralverzeichnis der
@@ -223,6 +225,10 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
   (5452 Dateien, 56'489'851 B): `put_tree()` 2,367 / 2,024 / 2,092 s, eine Lesung 0,156–0,166 s, Spitzenspeicher 82 MB;
   mit Faktor 2 rund 4,7 s, unter den 5 s des Auftrags. Hosts, die mehr als doppelt so langsam sind, sind nicht gemessen;
   dort kann ein grosser Baum die Zeit eines Aufrufs überschreiten und endet wie G-3-4 (halber Baum, nie benutzt).
+  Der Aufbau aus Codepaketen (`from_packages()`, ein Durchgang je Paket über seine Chunks seit Behebung 5) ist lokal
+  gemessen (Apple M1, PHP 8.5.10, 13.11.2026): WooCommerce 11.3.0 aus zwei Paketen (5452 Dateien, 16 Chunks)
+  2,97 s, Spitzenspeicher 95,2 MiB (Zuwachs 32,2 MiB); `stage()` ganz mit `put_tree()` 6,46 s. Der Weg davor (ein
+  Durchgang je Datei) brauchte für dieselben Pakete 220,2 s.
 - **Trifft Normalfall:** nein (Messung auf dem Hoster der Live-Sites).
 
 ### G-4-4 Ein Aufbau, der länger als TMP_AGE läuft

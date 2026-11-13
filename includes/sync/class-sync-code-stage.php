@@ -40,7 +40,8 @@
  * (parse_check(), a port of Pro's, without its filters): failed is
  * code:syntax with file and line, unavailable (no tokenizer) is
  * code:syntax_unavailable, skipped (over PARSE_MAX_BYTES, or too little
- * memory) is code:syntax_unchecked (E11 allows a skip only where the same
+ * memory, both by the size the manifest names before a byte of the file is
+ * read) is code:syntax_unchecked (E11 allows a skip only where the same
  * bytes ran on the staging site, which nothing proves here: D6); where this
  * host has a PHP command line of the same version, php -l
  * (compile_check(), a port of Pro's): failed is code:syntax, unavailable
@@ -198,15 +199,15 @@ final class AB_MCP_Sync_Code_Stage_Calls {
 	}
 
 	/**
-	 * One file of a package of code into a file of its own.
+	 * Files of a package of code, each into a file of its own, in one pass
+	 * over the chunks that hold them.
 	 *
-	 * @param array  $taken taken().
-	 * @param array  $file  An entry of its index.
-	 * @param string $to    The file to make.
-	 * @return true|WP_Error
+	 * @param array $taken taken().
+	 * @param array $jobs  Each a list of an entry of its index and the file to make.
+	 * @return array|WP_Error chunks and lines read, or the refusal.
 	 */
-	public function extract( array $taken, array $file, $to ) {
-		return AB_MCP_Sync_Code_Package::extract( $taken, $file, $to );
+	public function extract( array $taken, array $jobs ) {
+		return AB_MCP_Sync_Code_Package::extract( $taken, $jobs );
 	}
 
 	/**
@@ -231,13 +232,14 @@ final class AB_MCP_Sync_Code_Stage_Calls {
 	}
 
 	/**
-	 * The bytes of a file of a tree (for the parser).
+	 * The bytes of a file of a tree (for the parser), at most $max of them.
 	 *
 	 * @param string $path File.
+	 * @param int    $max  Bytes at most (the size the manifest names and one more).
 	 * @return string|false
 	 */
-	public function read( $path ) {
-		return is_string( $path ) ? @file_get_contents( $path ) : false; // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+	public function read( $path, $max ) {
+		return is_string( $path ) && is_int( $max ) && $max > 0 ? @file_get_contents( $path, false, null, 0, $max ) : false; // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
 	}
 
 	/**
@@ -877,8 +879,17 @@ final class AB_MCP_Sync_Code_Stage {
 			return self::refusal( 'code:stage_incomplete', sprintf( __( 'The packages of code and the live unit do not hold %d files of the unit as the staging site has them, so it is not staged. Export them on the staging site (wp_site_export with purpose=code, this unit and the paths named here), take the package over here, then stage again with every package of it.', 'alphabridge-mcp' ), count( $missing ) ), array( 'paths' => array_slice( $missing, 0, 2000 ) ) );
 		}
 		$made = self::calls()->mkdir( 'file' === $signed['form'] ? $build . '/unit' : $unit );
+		$jobs = array();
 		foreach ( $plan as $step ) {
-			$made = $made && self::calls()->mkdir( dirname( $step[0] ) ) && ( null !== $step[1] ? true === self::calls()->extract( $step[1][0], $step[1][1], $step[0] ) : self::calls()->copy( $step[2], $step[0] ) );
+			$made = $made && self::calls()->mkdir( dirname( $step[0] ) ) && ( null !== $step[1] || self::calls()->copy( $step[2], $step[0] ) );
+			if ( null !== $step[1] ) {
+				// The files of a package all in one pass over its chunks (P2 on free#153).
+				$jobs[ $step[1][0]['gid'] ]['taken']  = $step[1][0];
+				$jobs[ $step[1][0]['gid'] ]['jobs'][] = array( $step[1][1], $step[0] );
+			}
+		}
+		foreach ( $jobs as $package ) {
+			$made = $made && is_array( self::calls()->extract( $package['taken'], $package['jobs'] ) );
 		}
 		$read = $made ? self::read_built( $build . '/unit', $signed['ref'] ) : false;
 		if ( null === $read ) {
@@ -1081,7 +1092,16 @@ final class AB_MCP_Sync_Code_Stage {
 	/**
 	 * One PHP file of a stage through both checks, only with the bytes the
 	 * manifest of the tree names for it (its size and SHA-256 from the state,
-	 * the row stage.state): a read that ends short or differs checks nothing.
+	 * the row stage.state): a read that fails, ends short or differs checks
+	 * nothing and is kept as code:syntax_unchecked (the state is written, the
+	 * next call does not read it again).
+	 *
+	 * Size, then memory, then the read (GitHub-Codex on free#153, P2): the
+	 * size the manifest names goes through the limits of the parser before
+	 * a byte is read (parse_room()), so a file the parser would skip is never
+	 * read, and no file larger than the memory left ends the request before
+	 * its refusal is written; the read takes at most that size and one byte
+	 * more.
 	 *
 	 * @param string $file The file in the tree.
 	 * @param array  $item path (in the unit), size, sha256.
@@ -1090,16 +1110,16 @@ final class AB_MCP_Sync_Code_Stage {
 	 */
 	private static function check_file( $file, array $item, $lint ) {
 		$label = $item['path'];
-		$code  = self::calls()->read( $file );
-		if ( ! is_string( $code ) ) {
-			return array( 'refusal' => array( 'code:stage_mismatch', __( 'A file of the stage could not be read, so the stage is never ready. Stage the unit again.', 'alphabridge-mcp' ), null ) );
+		$parse = self::parse_room( $item['size'] );
+		if ( null === $parse ) {
+			$code = self::calls()->read( $file, $item['size'] + 1 );
+			if ( ! is_string( $code ) || strlen( $code ) !== $item['size'] || ! hash_equals( $item['sha256'], hash( 'sha256', $code ) ) ) {
+				/* translators: %s: file. */
+				return array( 'refusal' => array( 'code:syntax_unchecked', sprintf( __( '%s did not read whole as the manifest of the stage names it (its size and SHA-256), so it is not checked and the stage is never ready. Stage the unit again.', 'alphabridge-mcp' ), $label ), null ) );
+			}
+			$parse = self::parse_check( $code );
+			unset( $code );
 		}
-		if ( strlen( $code ) !== $item['size'] || ! hash_equals( $item['sha256'], hash( 'sha256', $code ) ) ) {
-			/* translators: %s: file. */
-			return array( 'refusal' => array( 'code:syntax_unchecked', sprintf( __( '%s did not read whole as the manifest of the stage names it (its size and SHA-256), so it is not checked and the stage is never ready. Stage the unit again.', 'alphabridge-mcp' ), $label ), null ) );
-		}
-		$parse = self::parse_check( $code );
-		unset( $code );
 		if ( 'failed' === $parse['status'] ) {
 			/* translators: 1: file, 2: line, 3: PHP's message, 4: PHP version. */
 			return array( 'refusal' => array( 'code:syntax', sprintf( __( '%1$s does not parse with the PHP of this site — line %2$d: %3$s (PHP %4$s). Nothing is swapped; fix the code on the staging site and take it over again.', 'alphabridge-mcp' ), $label, $parse['line'], $parse['message'], PHP_MAJOR_VERSION . '.' . PHP_MINOR_VERSION ), $parse['line'] ) );
@@ -1136,17 +1156,51 @@ final class AB_MCP_Sync_Code_Stage {
 	 * @return array{status:string,line?:int,message?:string,why?:string}
 	 */
 	public static function parse_check( $code ) {
+		$room = self::parse_room( is_string( $code ) ? strlen( $code ) : null );
+		if ( null !== $room ) {
+			return $room;
+		}
+		// Warnings the lexer raises on odd but valid code stay out of the answer.
+		set_error_handler( // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_set_error_handler
+			static function () {
+				return true;
+			}
+		);
+		try {
+			self::calls()->parse_php( $code );
+		} catch ( CompileError $e ) {
+			// ParseError is a CompileError; both mean the file cannot load.
+			return array(
+				'status'  => 'failed',
+				'line'    => $e->getLine(),
+				'message' => $e->getMessage(),
+			);
+		} finally {
+			restore_error_handler();
+		}
+		return array( 'status' => 'passed' );
+	}
+
+	/**
+	 * Whether the parser takes a file of this size in this request, before
+	 * its bytes are read: unavailable (no tokenizer), skipped (no size,
+	 * over PARSE_MAX_BYTES, no memory_limit to read, or less memory left than
+	 * PARSE_MEMORY_FACTOR times the size) with why, or null (it does).
+	 *
+	 * @param int|null $size Bytes, or null where they could not be read.
+	 * @return array{status:string,why?:string}|null
+	 */
+	private static function parse_room( $size ) {
 		$calls = self::calls();
 		if ( ! $calls->tokenizer() ) {
 			return array( 'status' => 'unavailable' );
 		}
-		if ( ! is_string( $code ) ) {
+		if ( ! is_int( $size ) ) {
 			return array(
 				'status' => 'skipped',
 				'why'    => __( 'its bytes could not be read', 'alphabridge-mcp' ),
 			);
 		}
-		$size = strlen( $code );
 		if ( $size > self::PARSE_MAX_BYTES ) {
 			return array(
 				'status' => 'skipped',
@@ -1168,25 +1222,7 @@ final class AB_MCP_Sync_Code_Stage {
 				'why'    => sprintf( __( 'only %d bytes of memory are left in this request (memory_limit)', 'alphabridge-mcp' ), max( 0, $memory[0] - $memory[1] ) ),
 			);
 		}
-		// Warnings the lexer raises on odd but valid code stay out of the answer.
-		set_error_handler( // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_set_error_handler
-			static function () {
-				return true;
-			}
-		);
-		try {
-			$calls->parse_php( $code );
-		} catch ( CompileError $e ) {
-			// ParseError is a CompileError; both mean the file cannot load.
-			return array(
-				'status'  => 'failed',
-				'line'    => $e->getLine(),
-				'message' => $e->getMessage(),
-			);
-		} finally {
-			restore_error_handler();
-		}
-		return array( 'status' => 'passed' );
+		return null;
 	}
 
 	/**

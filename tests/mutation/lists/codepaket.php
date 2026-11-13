@@ -597,7 +597,7 @@ return array(
 		'id'      => 'codepaket/st-parse-unread',
 		'clause'  => 'parse_check(): no bytes to read is skipped, never parsed as none',
 		'file'    => 'includes/sync/class-sync-code-stage.php',
-		'search'  => '		if ( ! is_string( $code ) ) {
+		'search'  => '		if ( ! is_int( $size ) ) {
 			return array(
 				\'status\' => \'skipped\',',
 		'replace' => '		if ( false ) {
@@ -713,10 +713,89 @@ return array(
 		'id'      => 'codepaket/a3-bytes',
 		'clause'  => 'check_file(): only the bytes the manifest of the tree names, by size and SHA-256 (Codex round 1, A3)',
 		'file'    => 'includes/sync/class-sync-code-stage.php',
-		'search'  => '		if ( strlen( $code ) !== $item[\'size\'] || ! hash_equals( $item[\'sha256\'], hash( \'sha256\', $code ) ) ) {',
-		'replace' => '		if ( false ) {',
+		'search'  => '			if ( ! is_string( $code ) || strlen( $code ) !== $item[\'size\'] || ! hash_equals( $item[\'sha256\'], hash( \'sha256\', $code ) ) ) {',
+		'replace' => '			if ( false ) {',
 		'run'     => $unit( 'SyncCodeStageTest', 'testOnlyTheBytesTheManifestNamesAreChecked' ),
 		'expect'  => '/testOnlyTheBytesTheManifestNamesAreChecked/',
+	),
+	array(
+		'id'      => 'codepaket/p2-size-before-read',
+		'clause'  => 'check_file(): size, then memory, then the read; a file the parser would skip is never read (GitHub-Codex on free#153, P2)',
+		'file'    => 'includes/sync/class-sync-code-stage.php',
+		'search'  => '		$parse = self::parse_room( $item[\'size\'] );
+		if ( null === $parse ) {',
+		'replace' => '		$parse = null;
+		if ( null === $parse ) {',
+		'run'     => $unit( 'SyncCodeStageTest', 'testAFileIsReadOnlyAfterItsSizeAndTheMemoryLeftAndOnlyUpToItsSize' ),
+		'expect'  => '/testAFileIsReadOnlyAfterItsSizeAndTheMemoryLeftAndOnlyUpToItsSize/',
+	),
+	array(
+		'id'      => 'codepaket/p2-no-fatal',
+		'clause'  => 'check_file(): a file larger than the memory left is never read, its refusal written (no fatal error, no loop of calls; P2 on free#153)',
+		'file'    => 'includes/sync/class-sync-code-stage.php',
+		'search'  => '		$parse = self::parse_room( $item[\'size\'] );
+		if ( null === $parse ) {',
+		'replace' => '		$parse = null;
+		if ( null === $parse ) {',
+		'run'     => $it( 'CodeStageTest', 'testAPhpFileLargerThanTheMemoryLeftIsNeverReadAndItsRefusalIsKept' ),
+		'expect'  => '/testAPhpFileLargerThanTheMemoryLeftIsNeverReadAndItsRefusalIsKept/',
+	),
+	array(
+		'id'      => 'codepaket/p2-read-bounded',
+		'clause'  => 'check_file(): the read takes at most the size the manifest names and one byte more (P2 on free#153)',
+		'file'    => 'includes/sync/class-sync-code-stage.php',
+		'search'  => '$code = self::calls()->read( $file, $item[\'size\'] + 1 );',
+		'replace' => '$code = self::calls()->read( $file, PHP_INT_MAX );',
+		'run'     => $unit( 'SyncCodeStageTest', 'testAFileIsReadOnlyAfterItsSizeAndTheMemoryLeftAndOnlyUpToItsSize' ),
+		'expect'  => '/testAFileIsReadOnlyAfterItsSizeAndTheMemoryLeftAndOnlyUpToItsSize/',
+	),
+	array(
+		'id'      => 'codepaket/p2-refusal-kept',
+		'clause'  => 'complete(): the refusal of a file is written, the next call does not check it again (the Steuerung 05:54)',
+		'file'    => 'includes/sync/class-sync-code-stage.php',
+		'search'  => '				return self::answer( self::refuse( $gid, $state, $found[\'refusal\'][0], $found[\'refusal\'][1], $item[\'path\'], $found[\'refusal\'][2] ) );',
+		'replace' => '				return self::answer( $state );',
+		'run'     => $it( 'CodeStageTest', 'testAFileWhoseReadFailsIsKeptUncheckedAndNotReadAgain' ),
+		'expect'  => '/testAFileWhoseReadFailsIsKeptUncheckedAndNotReadAgain/',
+	),
+	array(
+		'id'      => 'codepaket/p2-extract-one-pass',
+		'clause'  => 'extract(): one pass over the chunks for all files asked, each line decoded once (P2 on free#153)',
+		'file'    => 'includes/sync/class-sync-code-package.php',
+		'search'  => '		$lines = 0;
+		try {
+			foreach ( $chunks as $i => $holds ) {',
+		'replace' => '		$lines = 0;
+		$each  = array();
+		foreach ( $chunks as $i => $holds ) {
+			foreach ( $holds as $n => $yes ) {
+				$each[] = array( $i, array( $n => true ) );
+			}
+		}
+		try {
+			foreach ( $each as list( $i, $holds ) ) {',
+		'run'     => $it( 'CodeStageTest', 'testTheFilesOfAPackageComeOutInOnePassOverItsLines' ),
+		'expect'  => '/testTheFilesOfAPackageComeOutInOnePassOverItsLines/',
+	),
+	array(
+		'id'      => 'codepaket/p2-extract-chunk-order',
+		'clause'  => 'extract(): the chunks of a file each once and in their order, else none',
+		'file'    => 'includes/sync/class-sync-code-package.php',
+		'search'  => '				if ( $i <= $last || ! isset( $taken[\'manifest\'][\'chunks\'][ $i ] ) ) {',
+		'replace' => '				if ( $i < $last || ! isset( $taken[\'manifest\'][\'chunks\'][ $i ] ) ) {',
+		'run'     => $it( 'CodeStageTest', 'testTheFilesOfAPackageComeOutInOnePassOverItsLines' ),
+		'expect'  => '/testTheFilesOfAPackageComeOutInOnePassOverItsLines/',
+	),
+	array(
+		'id'      => 'codepaket/p2-from-packages-one-call',
+		'clause'  => 'from_packages(): the files of a package in one call of extract() (P2 on free#153)',
+		'file'    => 'includes/sync/class-sync-code-stage.php',
+		'search'  => '				$jobs[ $step[1][0][\'gid\'] ][\'taken\']  = $step[1][0];
+				$jobs[ $step[1][0][\'gid\'] ][\'jobs\'][] = array( $step[1][1], $step[0] );',
+		'replace' => '				$jobs[ $step[0] ][\'taken\']  = $step[1][0];
+				$jobs[ $step[0] ][\'jobs\'][] = array( $step[1][1], $step[0] );',
+		'run'     => $it( 'CodeStageTest', 'testTheFilesOfAPackageComeOutInOnePassOverItsLines' ),
+		'expect'  => '/testTheFilesOfAPackageComeOutInOnePassOverItsLines/',
 	),
 	array(
 		'id'      => 'codepaket/a4-head-unknown',

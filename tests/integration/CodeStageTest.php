@@ -27,6 +27,14 @@
  *   is never ready (testAStageThatDoesNotReadWholeForItsCheckIsNeverReady).
  *   A gleichzeitiger Schreiber of the building folder: none, it is made and
  *   used by one request under its own name.
+ * - The check of a file (Behebung 5, GitHub-Codex on free#153, P2): a PHP
+ *   file larger than the memory left, in a process of its own, is never
+ *   read and its refusal is kept, no fatal error
+ *   (testAPhpFileLargerThanTheMemoryLeftIsNeverReadAndItsRefusalIsKept); a
+ *   read that fails is kept unchecked and not read again
+ *   (testAFileWhoseReadFailsIsKeptUncheckedAndNotReadAgain).
+ * - The files of a package come out in one pass over its lines, counted:
+ *   twice the files, twice the lines (testTheFilesOfAPackageComeOutInOnePassOverItsLines).
  * - Rows of the state of packages and relay (the index of a package of code,
  *   the state of a stage): every wrong form of the rows code.index and
  *   stage.state reaches its consumer as unknown (StoreInputsTest, unit); a
@@ -437,6 +445,72 @@ final class CodeStageTest extends TestCase {
 		self::assertSame( 'ready', self::checked( $stage, $env )['state'] );
 	}
 
+	public function testTheFilesOfAPackageComeOutInOnePassOverItsLines(): void {
+		// extract() and from_packages() (GitHub-Codex on free#153, P2; the
+		// Steuerung 05:54): the files of a package come out in one pass over
+		// its chunks, each line decoded once. Counted, not timed: 200 and 400
+		// files in one chunk each, every file taken out; twice the files read
+		// twice the lines (a pass for each file would read the square). The
+		// unit with the 400 files is staged with one pass over its package and
+		// is ready. A list of chunks twice or out of their order is none.
+		$b = AB_MCP_IT_Code::put( 'b', 'plugin', 'ab-it-daten', '1.0.0' );
+		mkdir( $b . '/viele', 0755 );
+		$paths = array();
+		for ( $i = 0; $i < 400; $i++ ) {
+			$paths[] = sprintf( 'viele/f%03d.txt', $i );
+			file_put_contents( $b . '/' . $paths[ $i ], str_repeat( chr( 97 + $i % 26 ), 1024 ) . $i );
+		}
+		$env   = self::environment();
+		$calls = self::wporg( array() );
+		$lines = array();
+		$id    = null;
+		foreach ( array( 200, 400 ) as $n ) {
+			list( $id, $package ) = self::code( array( array( 'kind' => 'plugin', 'ref' => 'ab-it-daten', 'paths' => array_slice( $paths, 0, $n ) ) ) );
+			self::assertSame( array( 1, $n ), array( $package['chunks'], $package['objects'] ), 'Every file in one chunk, one line each.' );
+			$taken = AB_MCP_Sync_Import::taken( $id, 'code' );
+			$dir   = self::root() . '/auszug-' . $n;
+			if ( file_exists( $dir ) ) {
+				self::remove_tree( $dir );
+			}
+			mkdir( $dir );
+			try {
+				$jobs = array();
+				foreach ( $taken['files'] as $k => $file ) {
+					$jobs[] = array( $file, $dir . '/' . $k );
+				}
+				$got = \AB_MCP_Sync_Code_Package::extract( $taken, $jobs );
+				self::assertSame( array( 'chunks' => 1, 'lines' => $n ), $got, 'Each line of the chunk decoded once.' );
+				foreach ( $taken['files'] as $k => $file ) {
+					self::assertSame( file_get_contents( $b . '/' . $file['path'] ), file_get_contents( $dir . '/' . $k ), $file['path'] );
+				}
+				if ( 400 === $n ) {
+					$twice = $taken['files'][0];
+					foreach ( array( array( 0, 0 ), array( 1, 0 ) ) as $list ) {
+						$twice['chunks'] = $list;
+						self::assertSame( 'ab_mcp_sync_code_unread', \AB_MCP_Sync_Code_Package::extract( $taken, array( array( $twice, $dir . '/twice-' . $list[0] ) ) )->get_error_code(), 'Chunks ' . implode( ',', $list ) . ': none.' );
+					}
+				}
+			} finally {
+				self::remove_tree( $dir );
+			}
+			$lines[ $n ] = $got['lines'];
+		}
+		self::assertLessThanOrEqual( 2 * $lines[200], $lines[400], 'Twice the files, at most twice the lines read.' );
+		$stage = AB_MCP_Sync_Code_Stage::stage( self::RUN, $env, 'plugin', 'ab-it-daten', array( $id ) );
+		self::assertIsArray( $stage, is_wp_error( $stage ) ? $stage->get_error_code() . ': ' . $stage->get_error_message() : '' );
+		self::assertSame(
+			array(
+				array(
+					'chunks' => 1,
+					'lines'  => 400,
+				),
+			),
+			$calls->extracted,
+			'One pass over the package for the stage.'
+		);
+		self::assertSame( 'ready', self::checked( $stage, $env )['state'] );
+	}
+
 	public function testAUnitBuiltFromPackagesThatIsNotTheSignedOneIsNotStaged(): void {
 		// from_packages(), the one place for this source: the unit built from
 		// the packages and the live unit counts only where its manifest is
@@ -505,16 +579,92 @@ final class CodeStageTest extends TestCase {
 		// code:syntax_unchecked (nothing shows the same bytes ran on staging, D6).
 		$b = AB_MCP_IT_Code::put( 'b', 'plugin', 'ab-it-daten', '1.0.0' );
 		file_put_contents( $b . '/gross.php', "<?php\n// " . str_repeat( 'x', AB_MCP_Sync_Code_Stage::PARSE_MAX_BYTES ) . "\n" );
-		$env = self::environment();
-		self::wporg( array() );
+		$env   = self::environment();
+		$calls = self::wporg( array() );
 		list( $id ) = self::code( array( array( 'kind' => 'plugin', 'ref' => 'ab-it-daten', 'paths' => array( 'gross.php' ) ) ) );
 		$stage = AB_MCP_Sync_Code_Stage::stage( self::RUN, $env, 'plugin', 'ab-it-daten', array( $id ) );
 		$state = self::checked( $stage, $env );
 		self::assertSame( 'code:syntax_unchecked', $state['refusal']['code'] );
+		self::assertSame( 'gross.php', $state['refusal']['path'] );
+		self::assertSame( array(), $calls->reads, 'Over the limit by the size its manifest names: never read (P2 on free#153).' );
 		$calls            = self::wporg( array() );
 		$calls->tokenizer = false;
 		$again            = AB_MCP_Sync_Code_Stage::stage( self::RUN, $env, 'plugin', 'ab-it-daten', array( $id ) );
 		self::assertSame( 'code:syntax_unavailable', self::checked( $again, $env )['refusal']['code'] );
+	}
+
+	public function testAPhpFileLargerThanTheMemoryLeftIsNeverReadAndItsRefusalIsKept(): void {
+		// check_file() (GitHub-Codex on free#153, P2; the Steuerung 05:54):
+		// size, then memory, then the read. A PHP file of 16 MiB, checked in a
+		// process of its own with 8 MiB of memory left: by the size its
+		// manifest names it is over PARSE_MAX_BYTES, so it is never read (read
+		// whole, it would end the request with a fatal error before anything
+		// is kept, and every next call would try it again); the refusal
+		// (code:syntax_unchecked) is written, and the next call answers it and
+		// reads nothing.
+		$b = AB_MCP_IT_Code::put( 'b', 'plugin', 'ab-it-daten', '1.0.0' );
+		file_put_contents( $b . '/riesig.php', "<?php\n// " . str_repeat( 'x', 16 * 1048576 ) . "\n" );
+		$env = self::environment();
+		self::wporg( array() );
+		list( $id ) = self::code( array( array( 'kind' => 'plugin', 'ref' => 'ab-it-daten', 'paths' => array( 'riesig.php' ) ) ) );
+		$stage = AB_MCP_Sync_Code_Stage::stage( self::RUN, $env, 'plugin', 'ab-it-daten', array( $id ) );
+		self::assertIsArray( $stage, is_wp_error( $stage ) ? $stage->get_error_code() . ': ' . $stage->get_error_message() : '' );
+		$run   = AB_MCP_IT_Process::calls(
+			'a',
+			array(
+				'require' => array( AB_MCP_DIR . 'includes/sync/class-sync-code-stage.php', __DIR__ . '/support/memory-room.php' ),
+				'calls'   => array(
+					array(
+						'call' => 'ab_it_memory_room',
+						'args' => array( 8 * 1048576 ),
+						'as'   => 'limit',
+					),
+					array(
+						'call'   => 'AB_MCP_Sync_Code_Stage::complete',
+						'args'   => array( $stage['gid'], $stage['name'], $stage['hash'], $env ),
+						'as'     => 'state',
+						'expect' => 'result',
+					),
+				),
+			)
+		);
+		self::assertIsInt( $run['results']['limit'], 'The child ran with 8 MiB of memory left.' );
+		$state = $run['results']['state'];
+		self::assertSame( 'refused', $state['state'], var_export( $state, true ) );
+		self::assertSame( 'code:syntax_unchecked', $state['refusal']['code'] );
+		self::assertSame( 'riesig.php', $state['refusal']['path'] );
+		$calls = self::wporg( array() );
+		$again = AB_MCP_Sync_Code_Stage::complete( $stage['gid'], $stage['name'], $stage['hash'], $env );
+		self::assertSame( array( 'refused', 'code:syntax_unchecked' ), array( $again['state'], $again['refusal']['code'] ), 'The refusal is kept.' );
+		self::assertSame( array(), $calls->reads, 'The next call reads nothing.' );
+		self::assertNull( AB_MCP_Sync_Code_Stage::ready( $stage['gid'], $stage['name'], $stage['hash'] ) );
+	}
+
+	public function testAFileWhoseReadFailsIsKeptUncheckedAndNotReadAgain(): void {
+		// check_file() and complete() (the Steuerung 05:54): a PHP file whose
+		// read fails is kept as code:syntax_unchecked with why, the state
+		// written; the next call answers it and reads nothing (no loop of
+		// calls that each try the same file again).
+		$b     = AB_MCP_IT_Code::put( 'b', 'plugin', 'ab-it-daten', '1.0.0' );
+		$bytes = "<?php\n// neu\n";
+		file_put_contents( $b . '/neu.php', $bytes );
+		$env   = self::environment();
+		$calls = self::wporg( array() );
+		list( $id ) = self::code( array( array( 'kind' => 'plugin', 'ref' => 'ab-it-daten', 'paths' => array( 'neu.php' ) ) ) );
+		$stage = AB_MCP_Sync_Code_Stage::stage( self::RUN, $env, 'plugin', 'ab-it-daten', array( $id ) );
+		self::assertIsArray( $stage, is_wp_error( $stage ) ? $stage->get_error_code() . ': ' . $stage->get_error_message() : '' );
+		$calls->unreadable = true;
+		$state             = AB_MCP_Sync_Code_Stage::complete( $stage['gid'], $stage['name'], $stage['hash'], $env );
+		self::assertSame( 'refused', $state['state'], var_export( $state, true ) );
+		self::assertSame( 'code:syntax_unchecked', $state['refusal']['code'] );
+		self::assertSame( 'neu.php', $state['refusal']['path'] );
+		self::assertStringContainsString( 'did not read whole', $state['refusal']['message'] );
+		self::assertSame( array( array( 'neu.php', strlen( $bytes ) + 1 ) ), $calls->reads, 'Read once, at most its size and one byte more.' );
+		$calls->unreadable = false;
+		$again             = AB_MCP_Sync_Code_Stage::complete( $stage['gid'], $stage['name'], $stage['hash'], $env );
+		self::assertSame( array( 'refused', 'code:syntax_unchecked' ), array( $again['state'], $again['refusal']['code'] ) );
+		self::assertCount( 1, $calls->reads, 'Not read again.' );
+		self::assertNull( AB_MCP_Sync_Code_Stage::ready( $stage['gid'], $stage['name'], $stage['hash'] ) );
 	}
 
 	public function testANewVersionThatNeedsANewerPhpIsRefused(): void {
@@ -1049,8 +1199,13 @@ final class CodeStageWporgCalls {
 		return $this->real->taken( $package_id );
 	}
 
-	public function extract( array $taken, array $file, $to ) {
-		return $this->real->extract( $taken, $file, $to );
+	/** @var array[] What each extract() gave (chunks and lines read), in order. */
+	public $extracted = array();
+
+	public function extract( array $taken, array $jobs ) {
+		$got               = $this->real->extract( $taken, $jobs );
+		$this->extracted[] = $got;
+		return $got;
 	}
 
 	/** @var bool True: a file of the live unit comes out otherwise when it is copied. */
@@ -1068,8 +1223,15 @@ final class CodeStageWporgCalls {
 		return $this->real->mkdir( $path );
 	}
 
-	public function read( $path ) {
-		return $this->real->read( $path );
+	/** @var array[] Each read of a file of a stage: its name and the bytes asked at most. */
+	public $reads = array();
+
+	/** @var bool True: a read of a file of a stage fails. */
+	public $unreadable = false;
+
+	public function read( $path, $max ) {
+		$this->reads[] = array( basename( $path ), $max );
+		return $this->unreadable ? false : $this->real->read( $path, $max );
 	}
 
 	/** @var int The files the parser was given. */

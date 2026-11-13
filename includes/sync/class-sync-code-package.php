@@ -33,8 +33,9 @@
  * size of every file against its line, as many lines and bytes as the
  * manifest declares. Then it keeps an index (INDEX; read back only in the
  * form of its row code.index of AB_MCP_Store_Inputs::TABLE); extract()
- * reads a file from the chunks that hold it, each against its hash in the
- * manifest, into a file of its own and checks it again.
+ * reads the files a stage asks for in one pass over the chunks that hold
+ * them, each chunk against its hash in the manifest and each line decoded
+ * once, each file into a file of its own, and checks it again.
  *
  * Messages are in gettext, in the language of the site; their translations
  * come with text/z8b. Codes and machine values stay as the tools name them.
@@ -405,29 +406,45 @@ final class AB_MCP_Sync_Code_Package {
 	}
 
 	/**
-	 * One file of a package of code into a file of its own: the chunks the
-	 * index names for it, each read against its hash in the manifest, its
-	 * pieces written in their order, the whole checked against its size and
-	 * SHA-256 (fail closed: a file that does not read whole is none).
+	 * Files of a package of code, each into a file of its own, in one pass
+	 * over the chunks that hold them (GitHub-Codex on free#153, P2: a pass
+	 * for each file decoded every line of a shared chunk again, the work grew
+	 * with the square of the files): each chunk the index names for a file
+	 * read once against its hash in the manifest, each of its lines decoded
+	 * once (line()), the pieces of a file written in their order into its
+	 * file, made new when its first piece comes; a piece counts for a file
+	 * only in a chunk the index names for it, the chunks of a file in their
+	 * order. Each file then checked against its size and SHA-256 and read
+	 * back from the disk (fail closed: a file that does not read whole is
+	 * none, and so is the whole call).
 	 *
-	 * @param array  $taken taken().
-	 * @param array  $file  An entry of the index.
-	 * @param string $to    The file to write (it is made new).
-	 * @return true|WP_Error
+	 * @param array $taken taken().
+	 * @param array $jobs  Each a list of an entry of the index and the file to write (made new).
+	 * @return array|WP_Error chunks (read) and lines (decoded), or the refusal.
 	 */
-	public static function extract( array $taken, array $file, $to ) {
-		$out = is_string( $to ) ? @fopen( $to, 'xb' ) : false; // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- a file of a building folder of the store, made new.
-		if ( false === $out ) {
-			return self::unread( $file );
-		}
-		$hash  = hash_init( 'sha256' );
-		$next  = 0;
-		$bytes = 0;
-		try {
+	public static function extract( array $taken, array $jobs ) {
+		$keys   = array();
+		$chunks = array();
+		foreach ( $jobs as $n => $job ) {
+			$file = $job[0];
+			$last = -1;
 			foreach ( $file['chunks'] as $i ) {
-				if ( ! isset( $taken['manifest']['chunks'][ $i ] ) ) {
+				if ( $i <= $last || ! isset( $taken['manifest']['chunks'][ $i ] ) ) {
 					return self::unread( $file );
 				}
+				$chunks[ $i ][ $n ] = true;
+				$last               = $i;
+			}
+			$keys[ $file['kind'] . "\0" . $file['ref'] . "\0" . $file['path'] ][] = $n;
+		}
+		ksort( $chunks );
+		$out   = array();
+		$hash  = array();
+		$next  = array_fill_keys( array_keys( $jobs ), 0 );
+		$bytes = $next;
+		$lines = 0;
+		try {
+			foreach ( $chunks as $i => $holds ) {
 				$data = AB_MCP_Protected_Store::get( 'in', $taken['gid'], AB_MCP_Sync_Export::chunk_name( $i ), $taken['manifest']['chunks'][ $i ]['sha256'] );
 				if ( is_wp_error( $data ) ) {
 					return $data;
@@ -435,34 +452,60 @@ final class AB_MCP_Sync_Code_Package {
 				$text = AB_MCP_Sync_Import::inflate( $data, AB_MCP_Store_Budget::UNPACK['object_bytes'] );
 				unset( $data );
 				if ( ! is_string( $text ) || ( '' !== $text && "\n" !== substr( $text, -1 ) ) ) {
-					return self::unread( $file );
+					return self::unread( $jobs[ array_key_first( $holds ) ][0] );
 				}
 				foreach ( '' === $text ? array() : explode( "\n", substr( $text, 0, -1 ) ) as $line ) {
 					$piece = self::line( $line );
-					if ( null === $piece || $piece['kind'] !== $file['kind'] || $piece['ref'] !== $file['ref'] || $piece['path'] !== $file['path'] ) {
-						continue;
+					++$lines;
+					$key = null === $piece ? null : $piece['kind'] . "\0" . $piece['ref'] . "\0" . $piece['path'];
+					foreach ( null !== $key && isset( $keys[ $key ] ) ? $keys[ $key ] : array() as $n ) {
+						if ( ! isset( $holds[ $n ] ) ) {
+							continue;
+						}
+						$file = $jobs[ $n ][0];
+						if ( $piece['piece'] !== $next[ $n ] || $piece['sha256'] !== $file['sha256'] || $piece['size'] !== $file['size'] ) {
+							return self::unread( $file );
+						}
+						if ( ! isset( $out[ $n ] ) ) {
+							$out[ $n ]  = is_string( $jobs[ $n ][1] ) ? @fopen( $jobs[ $n ][1], 'xb' ) : false; // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- a file of a building folder of the store, made new.
+							$hash[ $n ] = hash_init( 'sha256' );
+						}
+						if ( false === $out[ $n ] || strlen( $piece['bytes'] ) !== fwrite( $out[ $n ], $piece['bytes'] ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite
+							return self::unread( $file );
+						}
+						hash_update( $hash[ $n ], $piece['bytes'] );
+						$bytes[ $n ] += strlen( $piece['bytes'] );
+						if ( ++$next[ $n ] === $file['pieces'] ) {
+							// Its last piece: the file is closed, so no more files are open than are begun and not ended.
+							fclose( $out[ $n ] ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
+							$out[ $n ] = true;
+						}
 					}
-					if ( $piece['piece'] !== $next || $piece['sha256'] !== $file['sha256'] || $piece['size'] !== $file['size'] ) {
-						return self::unread( $file );
-					}
-					hash_update( $hash, $piece['bytes'] );
-					$bytes += strlen( $piece['bytes'] );
-					if ( strlen( $piece['bytes'] ) !== fwrite( $out, $piece['bytes'] ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite
-						return self::unread( $file );
-					}
-					++$next;
 				}
 				unset( $text );
 			}
 		} finally {
-			fclose( $out ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
+			foreach ( $out as $handle ) {
+				if ( is_resource( $handle ) ) {
+					fclose( $handle ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
+				}
+			}
 		}
-		if ( $next !== $file['pieces'] || $bytes !== $file['size'] || ! hash_equals( $file['sha256'], hash_final( $hash ) ) ) {
-			return self::unread( $file );
+		foreach ( $jobs as $n => $job ) {
+			$file = $job[0];
+			if ( true !== ( isset( $out[ $n ] ) ? $out[ $n ] : null ) || $next[ $n ] !== $file['pieces'] || $bytes[ $n ] !== $file['size'] || ! hash_equals( $file['sha256'], hash_final( $hash[ $n ] ) ) ) {
+				return self::unread( $file );
+			}
+			// Read back from the disk, as it will be put into the store.
+			$written = @hash_file( 'sha256', $job[1] ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- a failed read is answered.
+			if ( ! is_string( $written ) || ! hash_equals( $file['sha256'], $written ) ) {
+				return self::unread( $file );
+			}
 		}
-		// Read back from the disk, as it will be put into the store.
-		$written = @hash_file( 'sha256', $to ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- a failed read is answered.
-		return is_string( $written ) && hash_equals( $file['sha256'], $written ) ? true : self::unread( $file );
+		return array(
+			'chunks' => count( $chunks ),
+			'lines'  => $lines,
+		);
 	}
 
 	/**
