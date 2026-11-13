@@ -4570,7 +4570,7 @@ final class AB_MCP_Protected_Store {
 	 * @return WP_Error
 	 */
 	private static function no_group() {
-		return new WP_Error( 'ab_mcp_store_no_group', __( 'The group could not be read in the protected store, and the store does not tell which of these is why. It is not there: it was never opened here (a group belongs to the area it was opened in), or it was removed (packages and reports are kept a day, backups as many days as the filter ab_mcp_staging_backup_days says). Or it is still there, but its entry (its sidecar) is missing, is no plain file, cannot be read, is not of its form or names another group, or its folder is missing or cannot be reached. Where it is gone, open a new one with open(). Where it should still be there, try again; if it keeps failing, ask the host to check the folder of the protected store and the rights on it.', 'alphabridge-mcp' ) );
+		return new WP_Error( 'ab_mcp_store_no_group', __( 'The group could not be read in the protected store, and the store does not tell which of these is why. It is not there: it was never opened here (a group belongs to the area it was opened in), or it was removed. Or it is still there, but its entry (its sidecar) is missing, is no plain file, cannot be read, is not of its form or names another group, or its folder is missing or cannot be reached. Where it is gone, open a new one with open(). Where it should still be there, try again; if it keeps failing, ask the host to check the folder of the protected store and the rights on it.', 'alphabridge-mcp' ) );
 	}
 
 	/**

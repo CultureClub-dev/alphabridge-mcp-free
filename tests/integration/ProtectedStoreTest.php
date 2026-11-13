@@ -637,6 +637,8 @@ final class ProtectedStoreTest extends TestCase {
 			self::assertStringContainsString( 'Or it is still there, but its entry (its sidecar) is missing, is no plain file, cannot be read, is not of its form or names another group, or its folder is missing or cannot be reached', $message, "$what: or there and not read." );
 			self::assertStringNotContainsString( 'This call changed nothing of the group', $message, "$what: nothing on what the call did before (K4e)." );
 			self::assertStringNotContainsString( 'changed nothing', $message, "$what: nothing on what the call did before (K4e)." );
+			self::assertStringNotContainsString( 'kept a day', $message, "$what: nothing on how long a group is kept (K4f)." );
+			self::assertStringNotContainsString( 'as many days', $message, "$what: nothing on how long a group is kept (K4f)." );
 			self::assertStringContainsString( 'Where it is gone, open a new one with open()', $message, "$what: the way of a group that is gone." );
 			self::assertStringContainsString( 'Where it should still be there, try again; if it keeps failing, ask the host to check the folder of the protected store and the rights on it', $message, "$what: the way of a group that is there." );
 			self::assertStringNotContainsString( 'The group is not in the protected store', $message, "$what: never the claim that it is gone." );

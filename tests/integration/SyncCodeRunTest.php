@@ -1164,6 +1164,8 @@ final class SyncCodeRunTest extends TestCase {
 			self::assertStringContainsString( 'Where it should still be there, try again', $message, "$what: the way of a group that is there." );
 			self::assertStringNotContainsString( 'The group is not in the protected store', $message, "$what: never the claim that it is gone." );
 			self::assertStringNotContainsString( 'The group is in the protected store', $message, "$what: never the claim that it is there." );
+			self::assertStringNotContainsString( 'kept a day', $message, "$what: nothing on how long a group is kept (K4f)." );
+			self::assertStringNotContainsString( 'as many days', $message, "$what: nothing on how long a group is kept (K4f)." );
 			self::assertStringContainsString( 'Step 2 stays planned', $message, $what );
 			self::assertStringContainsString( 'where it keeps failing, abort the run (wp_site_push action=abort)', $message, "$what: the way." );
 			self::assertSame( array( 'planned', 'planned' ), array( self::step( $run_id, 2 )['state'], self::step( $run_id, 3 )['state'] ), "$what: planned, never failed." );
