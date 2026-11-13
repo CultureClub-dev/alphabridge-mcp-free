@@ -2893,10 +2893,17 @@ final class AB_MCP_Sync_Engine {
 	 * @return array The object here (0 for none), and the finding or null.
 	 */
 	private static function written( array $run, array $one, array $last, array $ctx ) {
-		$unit = AB_MCP_Sync_Code_Ops::item( is_array( $run['plan'] ) ? $run['plan'] : array(), $one['seq'] );
+		// A plan that does not read back is neither a plan of the code nor
+		// one of the contents: the step is judged as neither, never taken
+		// over (Z8b branch 5, the decision of the lead of 13.11. on 1a-2).
+		if ( ! is_array( $run['plan'] ) ) {
+			/* translators: %d: step number. */
+			return array( 0, array( 'seq' => $one['seq'], 'message' => sprintf( __( 'The plan of this run does not read back, so step %d is judged neither as a step of the code nor as an object, and nothing of it counts as taken over. Check the site as it is in wp-admin; where the run is still open, abort it (wp_site_push action=abort).', 'alphabridge-mcp' ), $one['seq'] ) ) );
+		}
+		$unit = AB_MCP_Sync_Code_Ops::item( $run['plan'], $one['seq'] );
 		if ( null !== $unit ) {
 			$found = is_wp_error( $unit ) ? $unit->get_error_message() : AB_MCP_Sync_Code_Ops::finding( $one, $unit );
-			return array( 0, null === $found ? null : array( 'seq' => (int) $one['seq'], 'message' => $found ) );
+			return array( 0, null === $found ? null : array( 'seq' => $one['seq'], 'message' => $found ) );
 		}
 		$target  = isset( $one['parts']['object']['target'] ) ? (string) $one['parts']['object']['target'] : '';
 		$w       = self::writer( isset( $one['parts']['object']['kind'] ) ? (string) $one['parts']['object']['kind'] : 'post' );

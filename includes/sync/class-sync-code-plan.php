@@ -93,6 +93,26 @@ final class AB_MCP_Sync_Code_Plan {
 		'extra'  => true,
 	);
 
+	/** The pair the entry of a unit that is taken over names: its id, 1 or more. */
+	const PAIR = array(
+		'type'   => 'record',
+		'fields' => array(
+			'pair' => array(
+				'type'   => 'record',
+				'fields' => array(
+					'id' => array(
+						'type'   => 'int',
+						'digits' => false,
+						'min'    => 1,
+						'max'    => null,
+					),
+				),
+				'extra'  => true,
+			),
+		),
+		'extra'  => true,
+	);
+
 	/**
 	 * The plan of a run of the code, where the selection names a unit of
 	 * code (a plugin or a theme of the report) by its number; null where it
@@ -276,41 +296,24 @@ final class AB_MCP_Sync_Code_Plan {
 		$pair_id   = null;
 		$pair_hash = null;
 		if ( 'take_over' === $action ) {
-			$pair_id = isset( $entry['pair']['id'] ) && is_int( $entry['pair']['id'] ) ? $entry['pair']['id'] : 0;
-			$pair    = AB_MCP_Sync_Pairs::get( $pair_id );
-			if ( is_wp_error( $pair ) || null === $pair ) {
-				/* translators: 1: pair number, 2: entry number of the report. */
-				return new WP_Error( 'ab_mcp_sync_push_pair', sprintf( __( 'The pair %1$d of entry %2$d is no longer there. Make a new report (wp_site_diff) and plan again.', 'alphabridge-mcp' ), $pair_id, $n ) );
+			$pair = self::pair_of( $entry, $n, $kind, $ref, $with );
+			if ( is_wp_error( $pair ) ) {
+				return $pair;
 			}
-			if ( 'active' !== $pair['state'] || $kind !== $pair['kind'] || $ref !== $pair['live_ref'] || $with['source'] !== $pair['source_id'] ) {
-				/* translators: 1: pair number, 2: entry number of the report, 3: the state of the pair, as the tools name it (unclear, residual, …). */
-				return new WP_Error( 'ab_mcp_sync_push_pair', sprintf( __( 'The pair %1$d of entry %2$d is %3$s since the report, and only an active pair is written over. Make a new report (wp_site_diff) and plan again.', 'alphabridge-mcp' ), $pair_id, $n, (string) $pair['state'] ) );
-			}
-			$snapshot = AB_MCP_Sync_Pairs::snapshot( $pair_id );
-			if ( ! is_string( $snapshot ) ) {
-				return is_wp_error( $snapshot ) ? $snapshot : new WP_Error( 'ab_mcp_sync_push_pair', sprintf( __( 'The pair %1$d of entry %2$d is no longer there. Make a new report (wp_site_diff) and plan again.', 'alphabridge-mcp' ), $pair_id, $n ) );
-			}
-			$pair_hash = AB_MCP_Sync_Pairs::snapshot_hash( $snapshot );
+			list( $pair_id, $pair_hash ) = $pair;
 		}
 		$signed = AB_MCP_Sync_Code_Stage::signed( $env, $kind, $ref );
 		if ( is_wp_error( $signed ) ) {
 			return $lock( $signed->get_error_message() );
 		}
-		$here    = isset( $entry['live'] ) && is_array( $entry['live'] ) && array_key_exists( 'version', $entry['live'] ) ? $entry['live']['version'] : null;
+		$here    = null;
 		$unit_op = 'create';
 		if ( 'take_over' === $action ) {
-			// Two versions known and alike are the same version; a version not
-			// known on either side, none on both sides too, locks (E9, Z12; the
-			// decision of the lead on reading 2, 13.11.).
-			$order = AB_MCP_Sync_Code_Ops::order( $signed['version'], $here );
-			if ( null === $order ) {
-				return $lock( __( 'The version of this unit is not known on this site, on the staging site or on both (its head names none, or names one that is no version), so whether the staging site has an older version is not known and it is not taken over (code:version_unknown). Give the plugin or theme a Version in its head on both sites, make a new report (wp_site_diff) and plan again; or update it by hand in wp-admin.', 'alphabridge-mcp' ) );
+			$unit_op = self::version_op( $signed['version'], $entry );
+			if ( is_wp_error( $unit_op ) ) {
+				return $lock( $unit_op->get_error_message() );
 			}
-			if ( 'older' === $order ) {
-				/* translators: 1: the version on the staging site, 2: the version on this site. */
-				return $lock( sprintf( __( 'The staging site has an older version of this unit (%1$s) than this site (%2$s), and a takeover never goes down a version (code:downgrade). Update it on the staging site, take its environment over anew, make a new report (wp_site_diff) and plan again.', 'alphabridge-mcp' ), (string) $signed['version'], (string) $here ) );
-			}
-			$unit_op = 'same' === $order ? 'edit' : 'update';
+			$here = $entry['live']['version'];
 		}
 		// Whether code of the unit runs here, read fresh, for a unit made too
 		// (a row of active_plugins can name a plugin whose folder is gone, and
@@ -453,24 +456,55 @@ final class AB_MCP_Sync_Code_Plan {
 	 * @return string[]|null
 	 */
 	private static function gone( array $found, $n, array $entry ) {
-		$paths = isset( $entry['paths'] ) && is_array( $entry['paths'] ) ? $entry['paths'] : array();
+		if ( ! isset( $entry['paths'] ) || ! is_array( $entry['paths'] ) ) {
+			return null;
+		}
+		$paths = $entry['paths'];
 		if ( ! isset( $paths['only_live'], $paths['only_live_count'] ) || ! is_array( $paths['only_live'] ) || ! is_int( $paths['only_live_count'] ) ) {
 			return null;
 		}
-		$more = array_key_exists( 'more', $paths ) ? $paths['more'] : 0;
-		if ( ! is_int( $more ) || $more < 0 ) {
-			return null;
-		}
 		$gone = array_values( $paths['only_live'] );
-		$next = array();
-		if ( $more > 0 ) {
-			$next = AB_MCP_Sync_Proposal::entries( $found, range( $n + 1, $n + $more ) );
-			if ( is_wp_error( $next ) ) {
+		// more names the entries more_paths right after the unit, a whole
+		// number of 1 or more, and is there only where there are such entries
+		// (AB_MCP_Sync_Decision::paged()); without it the lists of the entry
+		// are whole, which the count below checks. Another value is no form.
+		if ( array_key_exists( 'more', $paths ) ) {
+			if ( ! is_int( $paths['more'] ) || $paths['more'] < 1 ) {
+				return null;
+			}
+			$gone = self::gone_after( $found, $n, $entry, $paths['more'], $gone );
+			if ( null === $gone ) {
 				return null;
 			}
 		}
+		if ( count( $gone ) !== $paths['only_live_count'] || array() !== array_filter( $gone, static fn( $path ) => ! is_string( $path ) || '' === $path ) ) {
+			return null;
+		}
+		return $gone;
+	}
+
+	/**
+	 * The paths of the list only_live in the entries more_paths after the
+	 * entry of a unit, appended to those of the entry in their order; null
+	 * where an entry is missing, of another unit or leaves a gap.
+	 *
+	 * @param array    $found The report.
+	 * @param int      $n     The entry of the unit.
+	 * @param array    $entry The entry.
+	 * @param int      $more  The entries after it (1 or more).
+	 * @param string[] $gone  The paths of the entry.
+	 * @return array|null
+	 */
+	private static function gone_after( array $found, $n, array $entry, $more, array $gone ) {
+		$next = AB_MCP_Sync_Proposal::entries( $found, range( $n + 1, $n + $more ) );
+		if ( is_wp_error( $next ) ) {
+			return null;
+		}
 		for ( $i = $n + 1; $i <= $n + $more; $i++ ) {
-			$one = isset( $next[ $i ] ) && is_array( $next[ $i ] ) ? $next[ $i ] : array();
+			if ( ! isset( $next[ $i ] ) || ! is_array( $next[ $i ] ) ) {
+				return null;
+			}
+			$one = $next[ $i ];
 			if ( ! isset( $one['result'], $one['subtype'], $one['ref'], $one['paths']['list'], $one['paths']['from'], $one['paths']['paths'] ) || 'more_paths' !== $one['result'] || $entry['subtype'] !== $one['subtype'] || $entry['ref'] !== $one['ref'] || ! is_array( $one['paths']['paths'] ) ) {
 				return null;
 			}
@@ -484,10 +518,72 @@ final class AB_MCP_Sync_Code_Plan {
 				$gone[] = $path;
 			}
 		}
-		if ( count( $gone ) !== $paths['only_live_count'] || array() !== array_filter( $gone, static fn( $path ) => ! is_string( $path ) || '' === $path ) ) {
-			return null;
-		}
 		return $gone;
+	}
+
+	/**
+	 * The operation of a takeover of a unit by its two versions (E9, Z12):
+	 * the same version on both sides is an edit, a newer one on the staging
+	 * site an update. A version not known on either side (none, empty or
+	 * not of the row unit.version, the decision of the lead on reading 2,
+	 * 13.11.) and an older one on the staging site lock the unit.
+	 *
+	 * @param mixed $staging The version of the signed line of the staging site.
+	 * @param array $entry   The entry of the report: live.version, the version here.
+	 * @return string|WP_Error edit or update; the reason of the lock (code:version_unknown, code:downgrade).
+	 */
+	public static function version_op( $staging, array $entry ) {
+		if ( isset( $entry['live'] ) && is_array( $entry['live'] ) && array_key_exists( 'version', $entry['live'] ) ) {
+			$order = AB_MCP_Sync_Code_Ops::order( $staging, $entry['live']['version'] );
+			if ( 'same' === $order ) {
+				return 'edit';
+			}
+			if ( 'newer' === $order ) {
+				return 'update';
+			}
+			if ( 'older' === $order ) {
+				/* translators: 1: the version on the staging site, 2: the version on this site. */
+				return new WP_Error( 'code:downgrade', sprintf( __( 'The staging site has an older version of this unit (%1$s) than this site (%2$s), and a takeover never goes down a version (code:downgrade). Update it on the staging site, take its environment over anew, make a new report (wp_site_diff) and plan again.', 'alphabridge-mcp' ), $staging, $entry['live']['version'] ) );
+			}
+		}
+		return new WP_Error( 'code:version_unknown', __( 'The version of this unit is not known on this site, on the staging site or on both (its head names none, or names one that is no version), so whether the staging site has an older version is not known and it is not taken over (code:version_unknown). Give the plugin or theme a Version in its head on both sites, make a new report (wp_site_diff) and plan again; or update it by hand in wp-admin.', 'alphabridge-mcp' ) );
+	}
+
+	/**
+	 * The pair of a unit that is taken over, as the plan binds it: the pair
+	 * the entry names (its id in the form of PAIR), active and of this unit
+	 * and source, with the hash of its snapshot; the refusal of the plan with
+	 * the way where the entry names none in its form or the pair is gone or
+	 * changed (as for an object).
+	 *
+	 * @param array  $entry The entry of the report.
+	 * @param int    $n     Its number.
+	 * @param string $kind  plugin or theme.
+	 * @param string $ref   The unit.
+	 * @param array  $with  As of().
+	 * @return array|WP_Error pair_id, pair_hash.
+	 */
+	private static function pair_of( array $entry, $n, $kind, $ref, array $with ) {
+		$read = AB_MCP_Shape::read( $entry, self::PAIR );
+		if ( null === $read ) {
+			/* translators: %d: entry number of the report. */
+			return new WP_Error( 'ab_mcp_sync_push_pair', sprintf( __( 'Entry %d of the report names no pair in the form a report of this version writes it (a whole number of 1 or more), so its unit is not taken over and nothing of this site changed. Make a new report (wp_site_diff) and plan again.', 'alphabridge-mcp' ), $n ) );
+		}
+		$pair_id = $read['pair']['id'];
+		$pair    = AB_MCP_Sync_Pairs::get( $pair_id );
+		if ( is_wp_error( $pair ) || null === $pair ) {
+			/* translators: 1: pair number, 2: entry number of the report. */
+			return new WP_Error( 'ab_mcp_sync_push_pair', sprintf( __( 'The pair %1$d of entry %2$d is no longer there. Make a new report (wp_site_diff) and plan again.', 'alphabridge-mcp' ), $pair_id, $n ) );
+		}
+		if ( 'active' !== $pair['state'] || $kind !== $pair['kind'] || $ref !== $pair['live_ref'] || $with['source'] !== $pair['source_id'] ) {
+			/* translators: 1: pair number, 2: entry number of the report, 3: the state of the pair, as the tools name it (unclear, residual, …). */
+			return new WP_Error( 'ab_mcp_sync_push_pair', sprintf( __( 'The pair %1$d of entry %2$d is %3$s since the report, and only an active pair is written over. Make a new report (wp_site_diff) and plan again.', 'alphabridge-mcp' ), $pair_id, $n, (string) $pair['state'] ) );
+		}
+		$snapshot = AB_MCP_Sync_Pairs::snapshot( $pair_id );
+		if ( ! is_string( $snapshot ) ) {
+			return is_wp_error( $snapshot ) ? $snapshot : new WP_Error( 'ab_mcp_sync_push_pair', sprintf( __( 'The pair %1$d of entry %2$d is no longer there. Make a new report (wp_site_diff) and plan again.', 'alphabridge-mcp' ), $pair_id, $n ) );
+		}
+		return array( $pair_id, AB_MCP_Sync_Pairs::snapshot_hash( $snapshot ) );
 	}
 
 	/**

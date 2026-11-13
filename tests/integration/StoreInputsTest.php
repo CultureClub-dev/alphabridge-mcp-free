@@ -31,6 +31,7 @@ use AB_MCP_Sync_Backup;
 use AB_MCP_Sync_Canon;
 use AB_MCP_Sync_Code_Ops;
 use AB_MCP_Sync_Code_Package;
+use AB_MCP_Sync_Code_Plan;
 use AB_MCP_Sync_Code_Stage;
 use AB_MCP_Sync_Code_Swap;
 use AB_MCP_Sync_Import;
@@ -843,11 +844,14 @@ final class StoreInputsTest extends TestCase {
 		}
 		if ( 'unit.version' === $id ) {
 			// A version of a unit on either site (Z8b branch 5, E9, Z12): its
-			// consumer is the plan of the code (AB_MCP_Sync_Code_Plan::unit()),
-			// which locks a unit on order() null at once (code:version_unknown;
-			// SyncCodeRunTest::testTwoVersionsThatAreNoneAreNotKnownAndLockTheUnit).
-			// A version not of its form is not known on either side, never
-			// the same, newer or older.
+			// consumer is the operation of the takeover in the plan of the code
+			// (AB_MCP_Sync_Code_Plan::version_op(), which unit() locks on). A
+			// version not of its form is not known on either side: never the
+			// same, newer or older, the unit is locked.
+			$op = static function ( $staging, $here ) {
+				$got = AB_MCP_Sync_Code_Plan::version_op( $staging, array( 'live' => array( 'version' => $here ) ) );
+				return is_wp_error( $got ) ? $got->get_error_code() : $got;
+			};
 			return array(
 				'base'    => '1.2.0',
 				'more'    => array(
@@ -855,9 +859,9 @@ final class StoreInputsTest extends TestCase {
 					'fixed: none'     => null,
 					'fixed: a word'   => 'beta',
 				),
-				'valid'   => array( array( '1.2.0', array( 'same', 'same' ) ), array( '1.10', array( 'newer', 'older' ) ) ),
-				'run'     => static fn( $value ) => array( AB_MCP_Sync_Code_Ops::order( $value, '1.2.0' ), AB_MCP_Sync_Code_Ops::order( '1.2.0', $value ) ),
-				'unknown' => static fn( $got ): bool => array( null, null ) === $got,
+				'valid'   => array( array( '1.2.0', array( 'edit', 'edit' ) ), array( '1.10', array( 'update', 'code:downgrade' ) ) ),
+				'run'     => static fn( $value ) => array( $op( $value, '1.2.0' ), $op( '1.2.0', $value ) ),
+				'unknown' => static fn( $got ): bool => array( 'code:version_unknown', 'code:version_unknown' ) === $got,
 				'texts'   => false,
 				'written' => null,
 			);

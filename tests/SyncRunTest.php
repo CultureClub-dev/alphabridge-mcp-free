@@ -3027,4 +3027,19 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( array( 1 => 2, 2 => 1, 3 => 0 ), $depths->invoke( null, $new, $mapped ), 'Under 6, which goes under A 11, a root here; 8 has no pair.' );
 		unset( $GLOBALS['ab_test_parents'] );
 	}
+
+	public function testAStepOfARunWhosePlanDoesNotReadBackIsJudgedAsNeitherCodeNorObject(): void {
+		// The decision of the lead of 13.11. (1a-2, point 2): in the check of
+		// a run, a plan that does not read back is neither a plan of the code
+		// nor one of the contents; the step has a finding with the way and is
+		// never judged as an object.
+		$written = new ReflectionMethod( AB_MCP_Sync_Engine::class, 'written' );
+		foreach ( array( 'none' => null, 'false' => false, 'a text' => 'plan', 'a number' => 5 ) as $what => $plan ) {
+			$got = $written->invoke( null, array( 'plan' => $plan ), array( 'seq' => 4 ), array(), array() );
+			self::assertSame( 0, $got[0], $what );
+			self::assertSame( 4, $got[1]['seq'], $what );
+			self::assertStringContainsString( 'The plan of this run does not read back, so step 4 is judged neither as a step of the code nor as an object', $got[1]['message'], $what );
+			self::assertStringContainsString( 'abort it (wp_site_push action=abort)', $got[1]['message'], "$what: with the way." );
+		}
+	}
 }

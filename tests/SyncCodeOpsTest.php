@@ -185,6 +185,97 @@ final class SyncCodeOpsTest extends TestCase {
 		}
 	}
 
+	public function testTheVersionsOfATakeoverAreReadInTheirFormAndAVersionNotKnownOnEitherSideLocks(): void {
+		// Reading 2 as the lead decided it (13.11.): two versions known and
+		// alike are the same version, a newer one on the staging site an
+		// update; none, empty or not of the row unit.version on either side,
+		// on both sides too, is not known and locks; an older one locks.
+		$live = static fn( $version ): array => array( 'live' => array( 'version' => $version ) );
+		self::assertSame( 'edit', AB_MCP_Sync_Code_Plan::version_op( '1.2.0', $live( '1.2.0' ) ) );
+		self::assertSame( 'update', AB_MCP_Sync_Code_Plan::version_op( '1.10', $live( '1.2.0' ) ) );
+		$older = AB_MCP_Sync_Code_Plan::version_op( '1.0', $live( '1.2.0' ) );
+		self::assertInstanceOf( WP_Error::class, $older );
+		self::assertSame( 'code:downgrade', $older->get_error_code() );
+		self::assertStringContainsString( 'an older version of this unit (1.0) than this site (1.2.0)', $older->get_error_message() );
+		$unknown = array(
+			"'' on both sides"   => array( '', $live( '' ) ),
+			'none on both sides' => array( null, $live( null ) ),
+			"'' here"            => array( '1.2.0', $live( '' ) ),
+			"'' on staging"      => array( '', $live( '1.2.0' ) ),
+			'none here'          => array( '1.2.0', $live( null ) ),
+			'none on staging'    => array( null, $live( '1.2.0' ) ),
+			'a number'           => array( 1.2, $live( '1.2.0' ) ),
+			'a word here'        => array( '1.2.0', $live( 'beta' ) ),
+			'a list here'        => array( '1.2.0', $live( array( '1.2.0' ) ) ),
+			'no live line'       => array( '1.2.0', array() ),
+			'a live line text'   => array( '1.2.0', array( 'live' => '1.2.0' ) ),
+			'no version in it'   => array( '1.2.0', array( 'live' => array() ) ),
+		);
+		foreach ( $unknown as $what => $case ) {
+			$got = AB_MCP_Sync_Code_Plan::version_op( $case[0], $case[1] );
+			self::assertInstanceOf( WP_Error::class, $got, $what );
+			self::assertSame( 'code:version_unknown', $got->get_error_code(), $what );
+			self::assertStringContainsString( 'Give the plugin or theme a Version in its head on both sites', $got->get_error_message(), "$what: with the way." );
+		}
+	}
+
+	public function testThePairOfATakeoverIsReadInItsFormAndAPairNotNamedSoLocksWithItsOwnReason(): void {
+		// The decision of the lead of 13.11. (1a-2, point 4): the pair an entry
+		// names is a whole number of 1 or more; none or another form refuses
+		// the plan with its own reason, never as a pair 0 that is gone.
+		$pair = new \ReflectionMethod( AB_MCP_Sync_Code_Plan::class, 'pair_of' );
+		self::assertTrue( AB_MCP_Shape::valid_form( AB_MCP_Sync_Code_Plan::PAIR ) );
+		$cases = array(
+			'no pair'          => array(),
+			'pair null'        => array( 'pair' => null ),
+			'pair a number'    => array( 'pair' => 3 ),
+			'no id'            => array( 'pair' => array() ),
+			'id 0'             => array( 'pair' => array( 'id' => 0 ) ),
+			'id negative'      => array( 'pair' => array( 'id' => -1 ) ),
+			'id as text'       => array( 'pair' => array( 'id' => '3' ) ),
+			'id a float'       => array( 'pair' => array( 'id' => 3.0 ) ),
+			'id null'          => array( 'pair' => array( 'id' => null ) ),
+			'id true'          => array( 'pair' => array( 'id' => true ) ),
+		);
+		foreach ( $cases as $what => $entry ) {
+			$got = $pair->invoke( null, $entry + array( 'subtype' => 'plugin', 'ref' => 'shop' ), 7, 'plugin', 'shop', array( 'source' => 'b' ) );
+			self::assertInstanceOf( WP_Error::class, $got, $what );
+			self::assertSame( 'ab_mcp_sync_push_pair', $got->get_error_code(), $what );
+			self::assertStringContainsString( 'Entry 7 of the report names no pair in the form a report of this version writes it', $got->get_error_message(), $what );
+			self::assertStringContainsString( 'Make a new report (wp_site_diff) and plan again', $got->get_error_message(), "$what: with the way." );
+			self::assertStringNotContainsString( 'no longer there', $got->get_error_message(), "$what: not a pair that is gone." );
+		}
+	}
+
+	public function testThePathsThatGoIntoTheBackupReadInTheirFormAndMoreIsNeverMadeUp(): void {
+		// Reading 4 and the decision of the lead of 13.11. (1a-2, point 5): the
+		// list only_live of the entry is whole where more is not there; more,
+		// where it is, is a whole number of 1 or more; any other value and a
+		// list that is not whole without it are not known (null: locked).
+		$gone  = new \ReflectionMethod( AB_MCP_Sync_Code_Plan::class, 'gone' );
+		$entry = static fn( array $paths ): array => array( 'subtype' => 'plugin', 'ref' => 'shop', 'paths' => $paths );
+		$whole = array( 'only_live' => array( 'a.txt', 'b.txt' ), 'only_live_count' => 2 );
+		self::assertSame( array( 'a.txt', 'b.txt' ), $gone->invoke( null, array(), 7, $entry( $whole ) ), 'Whole without more: the normal case.' );
+		self::assertSame( array(), $gone->invoke( null, array(), 7, $entry( array( 'only_live' => array(), 'only_live_count' => 0 ) ) ) );
+		$cases = array(
+			'not whole without more' => $entry( array( 'only_live_count' => 3 ) + $whole ),
+			'more 0'                 => $entry( $whole + array( 'more' => 0 ) ),
+			'more negative'          => $entry( $whole + array( 'more' => -1 ) ),
+			'more as text'           => $entry( $whole + array( 'more' => '1' ) ),
+			'more a float'           => $entry( $whole + array( 'more' => 1.0 ) ),
+			'more null'              => $entry( $whole + array( 'more' => null ) ),
+			'more true'              => $entry( $whole + array( 'more' => true ) ),
+			'no paths'               => array( 'subtype' => 'plugin', 'ref' => 'shop' ),
+			'paths a text'           => array( 'subtype' => 'plugin', 'ref' => 'shop', 'paths' => 'a.txt' ),
+			'no count'               => $entry( array( 'only_live' => array( 'a.txt' ) ) ),
+			'a count as text'        => $entry( array( 'only_live_count' => '2' ) + $whole ),
+			'an empty path'          => $entry( array( 'only_live' => array( 'a.txt', '' ) ) + $whole ),
+		);
+		foreach ( $cases as $what => $one ) {
+			self::assertNull( $gone->invoke( null, array(), 7, $one ), $what );
+		}
+	}
+
 	public function testTheStageOfAStepComesFromItsJournalInItsFormOrIsNotKnown(): void {
 		$read = AB_MCP_Sync_Code_Ops::staged( self::journal() );
 		self::assertSame( array( str_repeat( 'c', 32 ), 'shop', str_repeat( 'd', 64 ) ), array( $read['stage']['gid'], $read['stage']['name'], $read['stage']['hash'] ) );

@@ -334,4 +334,7 @@ return array(
 	'accept is a list of entry numbers of the report: the plugins and themes chosen in select whose code runs on this site and whose swap the person releases.',
 	'%1$s Run %2$d was made for this plan and closed again as aborted at once: nothing was staged or written. Call wp_site_push action=plan again once the packages are there.',
 	'Makes a run of the code: each plugin or theme named is staged in the protected store first (nothing of this site changes), then swapped in one call under the lock of AlphaBridge, with a probe of the site before and after and the old version kept whole in the backup; a swap whose probe fails afterwards is swapped back in the same call. The run holds no step of the contents: make a new report (wp_site_diff) after it. Nothing is written by this call; the confirmed call makes the run.',
+	// includes/sync/class-sync-code-plan.php, includes/sync/class-sync-engine.php (Z8b branch 5, 1a-3: a pair not named in its form, a plan of a run that does not read back in its check)
+	'Entry %d of the report names no pair in the form a report of this version writes it (a whole number of 1 or more), so its unit is not taken over and nothing of this site changed. Make a new report (wp_site_diff) and plan again.',
+	'The plan of this run does not read back, so step %d is judged neither as a step of the code nor as an object, and nothing of it counts as taken over. Check the site as it is in wp-admin; where the run is still open, abort it (wp_site_push action=abort).',
 );
