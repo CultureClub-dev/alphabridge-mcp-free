@@ -722,7 +722,11 @@ final class SyncCodeRunTest extends TestCase {
 		// it, 13.11.): complete() gives an error, the step stays planned, its
 		// swap does not run, and the answer names the error and the way.
 		self::assertTrue( AB_MCP_Sync_Run::update_step( $run_id, 2, array( 'parts' => $journal ), 'planned' ) );
-		$states = glob( AB_MCP_Protected_Store::root() . '/stage/' . $journal['stage']['gid'] . '/st-*' );
+		// The folder of a group is named by its area, its id and the id of
+		// the installation (AB_MCP_Protected_Store::group_name()).
+		$named  = new \ReflectionMethod( AB_MCP_Protected_Store::class, 'group_name' );
+		$folder = $named->invoke( null, 'stage', $journal['stage']['gid'], AB_MCP_Protected_Store::install_id( false ) );
+		$states = glob( AB_MCP_Protected_Store::root() . '/stage/' . $folder . '/' . AB_MCP_Sync_Code_Stage::STATE . '*' );
 		self::assertCount( 1, $states );
 		rename( $states[0], $states[0] . '.weg' );
 		try {
