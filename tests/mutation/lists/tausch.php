@@ -9,7 +9,8 @@
  * the plan of a run of the code, a step of the code in a run and what runs
  * here, three-valued (part 1).
  * Held by the unit suite (SyncCodeKindTest, SyncEnvTest, SyncRunTest,
- * SyncCodeOpsTest) and the integration suite (SyncCodeRunTest).
+ * SyncCodeOpsTest) and the integration suite (SyncCodeRunTest,
+ * ProtectedStoreTest).
  *
  * Not listed, with why (bericht-zweig-5.md), equivalent: in rights() the
  * count of the two halves of a unit beside the kind of unit (a ref without a
@@ -931,5 +932,23 @@ return array(
 		'replace' => "\t\tif ( 'own' !== \$read[0] ) {",
 		'run'     => $it( 'SyncCodeRunTest', 'testASidecarOfTheGroupOfAStageHoldingAnotherEntryLeavesTheStepPlannedAndTheStageUnwritten' ),
 		'expect'  => '/testASidecarOfTheGroupOfAStageHoldingAnotherEntryLeavesTheStepPlannedAndTheStageUnwritten/',
+	),
+	array(
+		'id'      => 'tausch/k4-group-entry',
+		'clause'  => 'group(): a sidecar that gives no entry of its group is refused by why, never as a group that is gone (K4)',
+		'file'    => $ps,
+		'search'  => "\t\t\treturn self::no_entry( \$side );",
+		'replace' => "\t\t\treturn self::no_group();",
+		'run'     => $it( 'ProtectedStoreTest', 'testASidecarThatIsThereButGivesNoEntryOfItsGroupIsNotAGroupThatIsGone' ),
+		'expect'  => '/testASidecarThatIsThereButGivesNoEntryOfItsGroupIsNotAGroupThatIsGone/',
+	),
+	array(
+		'id'      => 'tausch/k4-group-gone',
+		'clause'  => 'no_entry(): only a sidecar that is not there at all is a group not in the store (K4)',
+		'file'    => $ps,
+		'search'  => "\t\tif ( false === @lstat( \$side ) ) {",
+		'replace' => "\t\tif ( false ) {",
+		'run'     => $it( 'ProtectedStoreTest', 'testASidecarThatIsThereButGivesNoEntryOfItsGroupIsNotAGroupThatIsGone' ),
+		'expect'  => '/testASidecarThatIsThereButGivesNoEntryOfItsGroupIsNotAGroupThatIsGone/',
 	),
 );

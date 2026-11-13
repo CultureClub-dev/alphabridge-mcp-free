@@ -273,6 +273,32 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
   (`StoreClockAndReadersTest::BUDGET`).
 - **Trifft Normalfall:** nein (der Weg ist sicher: ohne Lesung kein Paket).
 
+## Der Tausch (Zweig 5)
+
+### G-5-1 Dauerhaft beschädigter Sidecar der Stufe lässt den Schritt «bereitstellen» geplant
+
+- **Fundstelle:** `AB_MCP_Protected_Store::group()` mit `no_entry()` und `group_unread()`
+  (`includes/class-protected-store.php:4310`/`:4311`, `:4330`–`:4335`, `:4591`/`:4592`); `sidecar()` (`:4445`–`:4451`,
+  fasst «nicht lesbar», Link, zu gross, kein JSON und «Feld fehlt» zu `'unknown'`); `AB_MCP_Sync_Code_Stage::state()`
+  (`includes/sync/class-sync-code-stage.php:1408`) → `files()` → `group()`; `AB_MCP_Sync_Code_Ops::not_checked()`
+  (`includes/sync/class-sync-code-ops.php:324`); `PERMANENT` in `AB_MCP_Sync_Code_Stage` (`:513`).
+- **Quelle:** gezielte Codex-Nachfrage zu `f24115a` (1 A), Fable-Prüfstelle 5 (`fable-zweig-5-a-group.md`), Entscheid
+  der Lead vom 13.11.2026 15:15 (Weg (b), kleine Fassung, Teil K4).
+- **Was:** Ist der Sidecar der Gruppe einer Stufe da, aber dauerhaft beschädigt (nicht lesbar, keine Datei, nicht in
+  der Form, ein Eintrag einer anderen Gruppe), meldet `group()` seit K4 den wahren Grund
+  (`ab_mcp_store_group_unread`: die Gruppe ist da, ihr Eintrag liest nicht ganz; nichts von ihr gelesen oder
+  geändert) statt `ab_mcp_store_no_group` («nie geöffnet oder entfernt»). Der Fehler bleibt vorübergehend (nicht in
+  `PERMANENT`): der Store trennt «vorübergehend nicht lesbar» nicht von «dauerhaft formwidrig», `sidecar()` fasst
+  beides als `'unknown'`. Bleibt der Schaden, bleibt der Schritt bei jedem `wp_site_push action=next` `planned`, nie
+  `failed`; an der Stufe und an der Site wird nichts geschrieben. Den Ausweg nennt die Meldung des Schritts:
+  `wp_site_push action=abort` schliesst den Lauf auch mit dem beschädigten Sidecar (belegt in
+  `SyncCodeRunTest::testADamagedSidecarOfTheStageLeavesTheStepPlannedWithItsReasonUntilItIsBackOrTheRunIsAborted`).
+  Die Trennung in `sidecar()` (und damit ein `failed` für einen dauerhaft formwidrigen Sidecar) ist Folgeposten der
+  Fehlerweg-Prüfung des Teils.
+- **Trifft Normalfall:** nein. Der eigene Code schreibt einen Sidecar nur ganz (`write_entry()` über eine Temp-Datei,
+  `bind()` prüft `whole()` vorher); nötig ist ein Schaden auf der Platte oder ein fremder Schreiber nach dem
+  Bereitstellen. Der Weg bleibt fail-closed: kein Tausch ohne als bereit gelesene Stufe.
+
 ## Übernommen aus Zweig 2 (`bericht-zweig-2.md`, Abschnitt Grenzkandidaten; G-M9 aus «Behebung 2»)
 
 ### G-M1 Ein Lesen über Teile ist kein Augenblick

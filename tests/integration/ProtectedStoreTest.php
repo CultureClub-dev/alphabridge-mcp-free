@@ -591,6 +591,91 @@ final class ProtectedStoreTest extends TestCase {
 		self::assertSame( 'ab_mcp_store_no_group', AB_MCP_Protected_Store::put( 'reports', $gid, 'x', 'y' )->get_error_code(), 'A group belongs to its area.' );
 	}
 
+	public function testASidecarThatIsThereButGivesNoEntryOfItsGroupIsNotAGroupThatIsGone(): void {
+		// K4 of Z8b branch 5 (the A of the Codex question on f24115a): group()
+		// tells a sidecar that is not there (the group is not in the store,
+		// ab_mcp_store_no_group) from one that is there but is no plain file,
+		// does not read, is not of its form or names another group
+		// (ab_mcp_store_group_unread): every function that opens the group
+		// says so, nothing of the group is read, changed or removed.
+		$id    = AB_MCP_Protected_Store::install_id();
+		$gid   = AB_MCP_Protected_Store::open( 'backups', array( 'run_id' => 4 ) );
+		$put   = AB_MCP_Protected_Store::put( 'backups', $gid, 'post-12', 'content' );
+		self::assertIsArray( $put );
+		$side  = self::side( self::outside( $id ), 'backups', $gid, $id );
+		$dir   = self::group_dir( self::outside( $id ), 'backups', $gid, $id );
+		$real  = (string) file_get_contents( $side );
+		$mode  = fileperms( $side ) & 0777;
+		$entry = json_decode( $real, true );
+		self::assertSame( $real, (string) json_encode( $entry, JSON_UNESCAPED_SLASHES ), 'The sidecar as the store writes it.' );
+		$held  = static function () use ( $dir ): array {
+			return array_map( static fn( $f ) => hash_file( 'sha256', $dir . '/' . $f ), array_combine( self::tree( $dir ), self::tree( $dir ) ) );
+		};
+		$files = $held();
+		$each  = static function ( string $code, string $what ) use ( $gid, $put ): void {
+			$got = array(
+				'put'      => AB_MCP_Protected_Store::put( 'backups', $gid, 'post-13', 'more' ),
+				'get'      => AB_MCP_Protected_Store::get( 'backups', $gid, 'post-12', $put['sha256'] ),
+				'files'    => AB_MCP_Protected_Store::files( 'backups', $gid ),
+				'bind'     => AB_MCP_Protected_Store::bind( 'backups', $gid, 5 ),
+				'close'    => AB_MCP_Protected_Store::close( 'backups', $gid ),
+				'put_tree' => AB_MCP_Protected_Store::put_tree( 'backups', $gid, 'shop', self::root() ),
+				'tree'     => AB_MCP_Protected_Store::tree( 'backups', $gid, 'shop', str_repeat( 'a', 64 ) ),
+			);
+			foreach ( $got as $call => $answer ) {
+				self::assertInstanceOf( \WP_Error::class, $answer, "$what: $call" );
+				self::assertSame( $code, $answer->get_error_code(), "$what: $call" );
+			}
+			self::assertFalse( AB_MCP_Protected_Store::remove( 'backups', $gid ), "$what: remove() removes nothing." );
+		};
+		$damaged = array(
+			'not JSON'                  => '{',
+			'an entry not of its form'  => (string) json_encode( array_replace( $entry, array( 'run_id' => 0 ) ), JSON_UNESCAPED_SLASHES ),
+			'an entry of another group' => (string) json_encode( array_replace( $entry, array( 'gid' => str_repeat( 'a' === $gid[0] ? 'b' : 'a', 32 ) ) ), JSON_UNESCAPED_SLASHES ),
+			'not readable'              => null,
+			'a folder in its place'     => false,
+		);
+		foreach ( $damaged as $what => $bytes ) {
+			if ( is_string( $bytes ) ) {
+				file_put_contents( $side, $bytes );
+			} elseif ( null === $bytes ) {
+				chmod( $side, 0 );
+			} else {
+				unlink( $side );
+				mkdir( $side );
+			}
+			try {
+				$each( 'ab_mcp_store_group_unread', $what );
+				$message = AB_MCP_Protected_Store::files( 'backups', $gid )->get_error_message();
+				self::assertStringContainsString( 'The group is in the protected store, but its entry (its sidecar) could not be read whole', $message, $what );
+				self::assertStringContainsString( 'Nothing of the group was read or changed', $message, $what );
+				self::assertStringContainsString( 'Try again; if it keeps failing, ask the host to check the folder of the protected store', $message, "$what: the way." );
+				self::assertStringNotContainsString( 'never opened here', $message, "$what: never the reason of a group that is gone." );
+				self::assertSame( $files, $held(), "$what: nothing of the group changed." );
+				self::assertTrue( false !== @lstat( $side ), "$what: the sidecar is left where it is." ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			} finally {
+				if ( is_dir( $side ) ) {
+					rmdir( $side );
+				} else {
+					chmod( $side, $mode );
+				}
+				file_put_contents( $side, $real );
+				chmod( $side, $mode );
+			}
+		}
+		self::assertSame( array( 'post-12' => $put['stored'] ), AB_MCP_Protected_Store::files( 'backups', $gid ), 'The sidecar back: the group reads.' );
+		// No sidecar at all, the folder still there: the group is not in the store.
+		unlink( $side );
+		try {
+			$each( 'ab_mcp_store_no_group', 'no sidecar' );
+			self::assertSame( $files, $held(), 'No sidecar: nothing of the group changed.' );
+		} finally {
+			file_put_contents( $side, $real );
+			chmod( $side, $mode );
+		}
+		self::assertIsArray( AB_MCP_Protected_Store::put( 'backups', $gid, 'post-13', 'more' ), 'The sidecar back: written again.' );
+	}
+
 	public function testAPackageTakesNoMoreThanItDeclared(): void {
 		$gid = AB_MCP_Protected_Store::open( 'in', array( 'declared' => 10 ) );
 		self::assertIsString( $gid );

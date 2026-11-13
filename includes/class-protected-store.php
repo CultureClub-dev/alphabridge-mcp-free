@@ -4308,13 +4308,30 @@ final class AB_MCP_Protected_Store {
 		$side  = $area_dir . '/' . $name . '.json';
 		$entry = self::plain( $side, 'file' ) ? self::read_entry( $side, $area ) : null;
 		if ( null === $entry || $gid !== $entry['gid'] ) {
-			return self::no_group();
+			return self::no_entry( $side );
 		}
 		$dir = self::way( $root, array( $area, $name ) );
 		if ( null === $dir ) {
 			return false !== @lstat( $area_dir . '/' . $name ) ? self::unsafe() : self::no_group(); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 		}
 		return array( $side, $dir, $entry );
+	}
+
+	/**
+	 * Why a group whose sidecar gives no entry of it is refused (Z8b branch
+	 * 5, K4): a sidecar that is not there at all is a group not in the store
+	 * (no_group()); one that is there but is no plain file, cannot be read,
+	 * is not of its form or names another group is an entry not read
+	 * (group_unread()), never «never opened here, or removed».
+	 *
+	 * @param string $side The sidecar.
+	 * @return WP_Error
+	 */
+	private static function no_entry( $side ) {
+		if ( false === @lstat( $side ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			return self::no_group();
+		}
+		return self::group_unread();
 	}
 
 	/**
@@ -4562,6 +4579,17 @@ final class AB_MCP_Protected_Store {
 	/** @return WP_Error */
 	private static function no_group() {
 		return new WP_Error( 'ab_mcp_store_no_group', 'The group is not in the protected store: it was never opened here, or it was removed (packages and reports are kept a day, backups as many days as the filter ab_mcp_staging_backup_days says). Open a new one with open().' );
+	}
+
+	/**
+	 * The refusal of a group whose sidecar is there but gives no entry of it
+	 * (no_entry()): the group is there, so it is not «gone»; nothing of it
+	 * is read or changed. It may pass: a later call may read it.
+	 *
+	 * @return WP_Error
+	 */
+	private static function group_unread() {
+		return new WP_Error( 'ab_mcp_store_group_unread', __( 'The group is in the protected store, but its entry (its sidecar) could not be read whole: it is no plain file, cannot be read, is not of its form or names another group. Nothing of the group was read or changed. Try again; if it keeps failing, ask the host to check the folder of the protected store and the rights on it.', 'alphabridge-mcp' ) );
 	}
 
 	/**

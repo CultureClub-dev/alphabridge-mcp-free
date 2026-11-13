@@ -1141,6 +1141,62 @@ final class SyncCodeRunTest extends TestCase {
 		self::assertSame( $before, self::live_bytes( 'ab-it-inaktiv' ) );
 	}
 
+	public function testADamagedSidecarOfTheStageLeavesTheStepPlannedWithItsReasonUntilItIsBackOrTheRunIsAborted(): void {
+		// K4 (the A of the Codex question on f24115a): the sidecar of the
+		// group of the stage, there but damaged on disk (not JSON, the entry
+		// of another group) while the unit is staged: wp_site_push action=next
+		// refuses with the reason of the store (the entry is there and not
+		// read, never «never opened here, or removed») and the way; the step
+		// stays planned, call after call, and the stage is not written. The
+		// sidecar back: the step goes on. Damaged again: abort closes the run.
+		list( $run_id, $journal, $before ) = self::staged_run();
+		$gid   = $journal['stage']['gid'];
+		$side  = AB_MCP_Protected_Store::root() . '/stage/' . self::stage_folder( $gid ) . '.json';
+		$real  = (string) file_get_contents( $side );
+		$entry = json_decode( $real, true );
+		self::assertSame( $real, (string) json_encode( $entry, JSON_UNESCAPED_SLASHES ), 'The sidecar as the store writes it.' );
+		$unread = static function ( string $what, array $untouched ) use ( $run_id, $journal, $before ): void {
+			$message = self::refused( self::next( $run_id ), 'ab_mcp_store_group_unread' );
+			self::assertStringContainsString( 'The group is in the protected store, but its entry (its sidecar) could not be read whole', $message, $what );
+			self::assertStringNotContainsString( 'never opened here', $message, "$what: never the reason of a group that is gone." );
+			self::assertStringContainsString( 'Step 2 stays planned', $message, $what );
+			self::assertStringContainsString( 'where it keeps failing, abort the run (wp_site_push action=abort)', $message, "$what: the way." );
+			self::assertSame( array( 'planned', 'planned' ), array( self::step( $run_id, 2 )['state'], self::step( $run_id, 3 )['state'] ), "$what: planned, never failed." );
+			self::assertSame( $journal, self::step( $run_id, 2 )['parts'], "$what: the journal stays." );
+			self::assertSame( $untouched, self::stage_bytes( $journal['stage']['gid'] ), "$what: the stage is not written." );
+			self::assertSame( $before, self::live_bytes( 'ab-it-inaktiv' ), "$what: nothing of the site changed." );
+		};
+		$untouched = self::stage_bytes( $gid );
+		$damaged   = array(
+			'not JSON'                   => '{',
+			'the entry of another group' => (string) json_encode( array_replace( $entry, array( 'gid' => str_repeat( 'a' === $gid[0] ? 'b' : 'a', 32 ) ) ), JSON_UNESCAPED_SLASHES ),
+		);
+		foreach ( $damaged as $what => $bytes ) {
+			file_put_contents( $side, $bytes );
+			try {
+				$unread( $what, $untouched );
+				$unread( "$what, the next call", $untouched );
+			} finally {
+				file_put_contents( $side, $real );
+			}
+		}
+		self::assertSame( 'done', self::next( $run_id )['step']['state'], 'The sidecar back: checked and done.' );
+		// The step planned again on its stage, the sidecar damaged: abort.
+		self::replan( $run_id, $journal );
+		$checked = self::stage_bytes( $gid );
+		file_put_contents( $side, '{' );
+		try {
+			$unread( 'before the abort', $checked );
+			$closed = self::gated( 'wp_site_push', array( 'action' => 'abort', 'run_id' => $run_id ) );
+		} finally {
+			file_put_contents( $side, $real );
+		}
+		self::assertIsArray( $closed, is_wp_error( $closed ) ? $closed->get_error_code() . ': ' . $closed->get_error_message() : '' );
+		self::assertSame( 'closed_aborted', AB_MCP_Sync_Run::get( $run_id )['state'], 'The way the answer names closes the run.' );
+		self::assertNull( AB_MCP_Sync_Run::open_run(), 'The site is free.' );
+		self::assertSame( $before, self::live_bytes( 'ab-it-inaktiv' ) );
+	}
+
 	/* ------------------------------------------- what does not read */
 
 	public function testAStepOfTheCodeWhoseRunPlanOrJournalDoesNotReadInItsFormDoesNothing(): void {

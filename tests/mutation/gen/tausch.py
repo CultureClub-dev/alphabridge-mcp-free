@@ -24,7 +24,7 @@ ST = 'includes/sync/class-sync-code-stage.php'
 PS = 'includes/class-protected-store.php'
 VAR = {CK: '$ck', DE: '$de', PU: '$pu', CP: '$cp', CO: '$co', CS: '$cs', EN: '$en', ST: '$st', PS: '$ps'}
 CLASSES = {'kind': ('unit', 'SyncCodeKindTest'), 'env': ('unit', 'SyncEnvTest'), 'run': ('unit', 'SyncRunTest'),
-           'ops': ('unit', 'SyncCodeOpsTest'), 'coderun': ('it', 'SyncCodeRunTest')}
+           'ops': ('unit', 'SyncCodeOpsTest'), 'coderun': ('it', 'SyncCodeRunTest'), 'store': ('it', 'ProtectedStoreTest')}
 entries = []
 
 
@@ -305,6 +305,13 @@ e('k2-store-entry-own', 'entry(): a sidecar not read whole or holding an entry o
 e('k2-store-entry-gid', 'entry(): a sidecar holding the entry of another group is the error of its own, never the entry of this one (K3, Codex confirmation on K2)', PS,
   SIDE, SIDE.replace(" || $gid !== $read[1]['gid']", ''), 'coderun', OTHER_ENTRY)
 
+# ------------------------------------------- a group whose sidecar gives no entry of it (K4)
+NOENTRY = 'testASidecarThatIsThereButGivesNoEntryOfItsGroupIsNotAGroupThatIsGone'
+e('k4-group-entry', 'group(): a sidecar that gives no entry of its group is refused by why, never as a group that is gone (K4)', PS,
+  "\t\t\treturn self::no_entry( $side );", "\t\t\treturn self::no_group();", 'store', NOENTRY)
+e('k4-group-gone', 'no_entry(): only a sidecar that is not there at all is a group not in the store (K4)', PS,
+  "\t\tif ( false === @lstat( $side ) ) {", "\t\tif ( false ) {", 'store', NOENTRY)
+
 # ------------------------------------------------ check and write
 src = {f: open(os.path.join(ROOT, f)).read() for f in VAR}
 errors = []
@@ -338,7 +345,8 @@ out = ['<?php', '/**', ' * The clauses of the swap of the code of the site (Z8b 
        ' * the plan of a run of the code, a step of the code in a run and what runs',
        ' * here, three-valued (part 1).',
        ' * Held by the unit suite (SyncCodeKindTest, SyncEnvTest, SyncRunTest,',
-       ' * SyncCodeOpsTest) and the integration suite (SyncCodeRunTest).', ' *',
+       ' * SyncCodeOpsTest) and the integration suite (SyncCodeRunTest,',
+       ' * ProtectedStoreTest).', ' *',
        ' * Not listed, with why (bericht-zweig-5.md), equivalent: in rights() the',
        ' * count of the two halves of a unit beside the kind of unit (a ref without a',
        ' * colon has one half, whose kind is then the whole ref and no kind of UNITS).',

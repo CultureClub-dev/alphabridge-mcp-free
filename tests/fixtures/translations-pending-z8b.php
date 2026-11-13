@@ -348,4 +348,6 @@ return array(
 	'The entry of the group of the stage does not read in its form (its id or the run it is bound to), so what the stage is bound to is not known and it is neither checked nor taken. Call action=next again; where it keeps failing, abort the run (wp_site_push action=abort).',
 	// includes/class-protected-store.php (Z8b branch 5, K2: the entry of a group read by its id, AB_MCP_Protected_Store::entry()).
 	'The entry of the group could not be read whole in the protected store (its sidecar cannot be read, is not there, or is not of its form), so what the group is bound to is not known. Try again; if it keeps failing, ask the host to check the rights of the folder.',
+	// includes/class-protected-store.php (Z8b branch 5, K4: a group whose sidecar is there but gives no entry of it, AB_MCP_Protected_Store::group_unread()).
+	'The group is in the protected store, but its entry (its sidecar) could not be read whole: it is no plain file, cannot be read, is not of its form or names another group. Nothing of the group was read or changed. Try again; if it keeps failing, ask the host to check the folder of the protected store and the rights on it.',
 );
