@@ -1928,17 +1928,25 @@ final class AB_MCP_Sync_Export {
 	}
 
 	/**
-	 * Whether a package is bound as this site is now; one that is not is
-	 * discarded here.
+	 * Whether a package is bound as this site is now; one bound otherwise is
+	 * discarded here, one whose binding of now cannot be read is kept.
 	 *
 	 * @param array       $found   find().
 	 * @param string|null $binding binding(), where the caller has it.
 	 * @return bool
 	 */
 	private static function bound( array $found, $binding = null ) {
+		$now = null === $binding ? self::binding() : $binding;
 		// A record of an older version, without its report, is none either.
-		if ( null !== $found['report'] && $found['binding'] === ( null === $binding ? self::binding() : $binding ) ) {
+		if ( null !== $found['report'] && null !== $now && $found['binding'] === $now ) {
 			return true;
+		}
+		// A binding of this site that cannot be read now (no key, no pair, or
+		// an option that does not read) is no other binding: the package is
+		// not given out, and it stays until its retention (V3 of Z8b branch 4,
+		// «Abwesenheit als Löschsignal»: unknown is not different).
+		if ( null === $now ) {
+			return false;
 		}
 		AB_MCP_Protected_Store::remove( 'out', $found['manifest']['package_id'] );
 		return false;

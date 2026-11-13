@@ -1091,6 +1091,30 @@ final class SyncPackageTest extends TestCase {
 		self::assertSame( array( $next['package_id'] ), array_column( AB_MCP_Protected_Store::groups( 'out' ), 'gid' ), 'Only the new package: ' . $first['package_id'] . ' is gone.' );
 	}
 
+	public function testAPackageWhoseBindingOfNowCannotBeReadIsKeptAndNotGivenOut(): void {
+		// V3 of Z8b branch 4 («Abwesenheit als Löschsignal»): a binding of this
+		// site that cannot be read (the key gone for a while) is no other
+		// binding: the package is not given out, and not discarded.
+		\AB_MCP_Settings::set( \AB_MCP_Site_Mode::KEY, \AB_MCP_Site_Mode::FULL );
+		self::assertIsArray( AB_MCP_Staging::save( 'staging', AB_MCP_IT_Sites::url( 'b' ), 'production', self::admin(), 'form' ) );
+		$package = AB_MCP_Sync_Export::make( 'inventory' );
+		self::assertIsArray( $package, is_wp_error( $package ) ? $package->get_error_message() : '' );
+		$request = new \WP_REST_Request( 'GET', '/alphabridge/v1/staging-package' );
+		$request->set_query_params( self::query( $package['package_id'], $package['fetch'][0] ) );
+		$keep = array();
+		foreach ( array( \AB_MCP_Sync_Key::OPTION_SECRET, \AB_MCP_Sync_Key::OPTION_SOURCE, \AB_MCP_Sync_Key::OPTION_MAC ) as $option ) {
+			$keep[ $option ] = get_option( $option );
+		}
+		\AB_MCP_Sync_Key::forget();
+		self::assertNull( AB_MCP_Sync_Export::binding() );
+		self::assertNull( AB_MCP_Sync_Export::deliver( array( 'package' => $package['package_id'], 'chunk' => 0 ), time() ), 'Not given out.' );
+		self::assertSame( array( $package['package_id'] ), array_column( AB_MCP_Protected_Store::groups( 'out' ), 'gid' ), 'Not discarded.' );
+		foreach ( $keep as $option => $value ) {
+			update_option( $option, $value );
+		}
+		self::assertIsString( AB_MCP_Sync_Export::requested( $request, time() ), 'Given out again with its binding.' );
+	}
+
 	public function testAPairThatGoesAndComesBackGivesNoPackageOfBeforeOut(): void {
 		self::pair();
 		$package = self::export();
