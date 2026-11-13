@@ -385,7 +385,11 @@ final class CodeStageTest extends TestCase {
 		$none = self::b( array( array( 'op' => 'export', 'purpose' => 'code', 'report_hash' => self::REPORT, 'refs' => array( array( 'kind' => 'plugin', 'ref' => 'ab-it-daten', 'paths' => array( 'ab-it-daten.php', 'gibt-es-nicht.php' ) ) ), 'expect' => 'error', 'as' => 'x' ) ) )['x'];
 		self::assertSame( 'ab_mcp_sync_export_code_none', $none['code'] );
 		// Without the package: the files it lacks are named, nothing staged.
-		$missing = AB_MCP_Sync_Code_Stage::stage( self::RUN, $env, 'plugin', 'ab-it-daten', array( 'f' . substr( $id, 1 ) ) );
+		// Another id of the same form: its first character changed (an id is 32 hex characters, so 'f' alone was the
+		// same package in one run of 16).
+		$other = ( 'f' === $id[0] ? 'e' : 'f' ) . substr( $id, 1 );
+		self::assertNotSame( $id, $other );
+		$missing = AB_MCP_Sync_Code_Stage::stage( self::RUN, $env, 'plugin', 'ab-it-daten', array( $other ) );
 		self::assertInstanceOf( \WP_Error::class, $missing );
 	}
 
