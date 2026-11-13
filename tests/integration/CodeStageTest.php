@@ -64,6 +64,7 @@ use RuntimeException;
 require_once AB_MCP_DIR . 'includes/sync/class-sync-import.php';
 require_once AB_MCP_DIR . 'includes/sync/class-sync-code-stage.php';
 require_once __DIR__ . '/support/class-test-wporg.php';
+require_once __DIR__ . '/support/class-it-store-calls.php';
 
 final class CodeStageTest extends TestCase {
 
@@ -245,12 +246,32 @@ final class CodeStageTest extends TestCase {
 		}
 	}
 
-	/** Site A's store in its uploads, with the PHP proof (Apache) or without it. */
+	/**
+	 * Site A's store in its uploads, proved by the router as Apache; with the
+	 * PHP proof, or without it (a PHP file below stage served, as in
+	 * StoreTreesTest::testInTheUploadsWithoutThePhpProofNoTreeGoesIn).
+	 */
 	private static function uploads_store( bool $proved ): void {
 		$_SERVER['DOCUMENT_ROOT'] = self::root();
-		self::apache( $proved );
+		self::apache( true );
+		$fetcher = \AB_MCP_Test_Sync_Fetcher::for_sites();
+		if ( ! $proved ) {
+			$served = array(
+				'response' => array(
+					'code'    => 200,
+					'message' => 'OK',
+				),
+				'headers'  => array(),
+				'body'     => 'ab-mcp-ran-',
+				'cookies'  => array(),
+			);
+			AB_MCP_Test_Seam::install( AB_MCP_Protected_Store::class, 'naht_protected_store', new \AB_MCP_IT_Store_Calls( $fetcher ), array( array( 'method' => 'ask', 'nth' => 5, 'kind' => 'return', 'value' => $served ) ) );
+		}
 		AB_MCP_Protected_Store::forget();
-		$proof = AB_MCP_Protected_Store::proof( \AB_MCP_Test_Sync_Fetcher::for_sites(), true );
+		$proof = AB_MCP_Protected_Store::proof( $fetcher, true );
+		if ( ! $proved ) {
+			AB_MCP_Test_Seam::restore_all();
+		}
 		self::assertSame( 'uploads', $proof['where'], (string) $proof['message'] );
 		self::assertSame( $proved, $proof['php'] );
 	}
@@ -787,10 +808,17 @@ final class CodeStageTest extends TestCase {
 		// file; the next call goes on where it ended; a Throwable of the
 		// parser and a state that cannot be written end a call, never with
 		// ready, and the next call goes on.
-		AB_MCP_IT_Code::put( 'b', 'plugin', 'ab-it-inaktiv', '1.1.0' );
-		$env   = self::environment();
-		$calls = self::wporg();
-		$stage = AB_MCP_Sync_Code_Stage::stage( self::RUN, $env, 'plugin', 'ab-it-inaktiv' );
+		$b = AB_MCP_IT_Code::put( 'b', 'plugin', 'ab-it-daten', '1.0.0' );
+		foreach ( array( 'neu/eins.php', 'neu/zwei.php', 'neu/drei.php' ) as $rel ) {
+			if ( ! is_dir( dirname( $b . '/' . $rel ) ) ) {
+				mkdir( dirname( $b . '/' . $rel ), 0755, true );
+			}
+			file_put_contents( $b . '/' . $rel, "<?php\n// " . $rel . "\n" );
+		}
+		$env         = self::environment();
+		$calls       = self::wporg( array() );
+		list( $id )  = self::code( array( array( 'kind' => 'plugin', 'ref' => 'ab-it-daten', 'paths' => array( 'neu/eins.php', 'neu/zwei.php', 'neu/drei.php' ) ) ) );
+		$stage       = AB_MCP_Sync_Code_Stage::stage( self::RUN, $env, 'plugin', 'ab-it-daten', array( $id ) );
 		self::assertIsArray( $stage, is_wp_error( $stage ) ? $stage->get_error_code() . ': ' . $stage->get_error_message() : '' );
 		$calls->lint = false;
 		// The time of the call is over once the parser had its first file.
