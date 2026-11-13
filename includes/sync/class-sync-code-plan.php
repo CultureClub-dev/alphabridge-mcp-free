@@ -49,6 +49,7 @@ require_once __DIR__ . '/class-sync-canon.php';
 require_once __DIR__ . '/class-sync-decision.php';
 require_once __DIR__ . '/class-sync-import.php';
 require_once __DIR__ . '/class-sync-pairs.php';
+require_once __DIR__ . '/class-sync-proposal.php';
 require_once __DIR__ . '/class-sync-resources.php';
 require_once __DIR__ . '/class-sync-said.php';
 require_once __DIR__ . '/class-sync-code-ops.php';
@@ -62,9 +63,6 @@ final class AB_MCP_Sync_Code_Plan {
 
 	/** Bytes reserved for the journal of a step of the code. */
 	const JOURNAL_BYTES = 65536;
-
-	/** Paths a preview names of one list at most; the report holds every one. */
-	const NAMED = 100;
 
 	/**
 	 * The plan of a run of the code, where the selection names a unit of
@@ -88,7 +86,7 @@ final class AB_MCP_Sync_Code_Plan {
 		if ( array() === $units ) {
 			return array() === $selection['accept'] ? null : self::refused( 'ab_mcp_sync_push_selection', __( 'accept names entries, but the selection names no plugin and no theme: accept releases the swap of a unit of code whose code runs on this site, by the number of its entry in select. Leave accept out, or select the unit.', 'alphabridge-mcp' ) );
 		}
-		if ( $selection['all'] || $others > 0 ) {
+		if ( $selection['all'] || $others > 0 || array() !== $selection['choices'] || array() !== $selection['as_draft'] ) {
 			return self::refused( 'ab_mcp_sync_push_code_mix', __( 'A run of the code holds no step of the contents: code can change what the contents are compared by (the theme, the types a plugin registers). Plan the plugins and themes alone (their numbers in select, without all, choices and as_draft), run that plan to its end, make a new report (wp_site_diff), then plan the contents.', 'alphabridge-mcp' ) );
 		}
 		foreach ( $selection['accept'] as $n ) {
@@ -113,7 +111,7 @@ final class AB_MCP_Sync_Code_Plan {
 		$bytes  = 0;
 		$seq    = 1;
 		foreach ( $units as $n => $entry ) {
-			$made = self::unit( (int) $n, $entry, $env, $selection, $with );
+			$made = self::unit( $found, $n, $entry, $env, $selection, $with );
 			if ( is_wp_error( $made ) ) {
 				return $made;
 			}
@@ -166,7 +164,11 @@ final class AB_MCP_Sync_Code_Plan {
 			'key_id'      => (string) $with['anchor']['key_id'],
 			'pair_print'  => $with['print'],
 			'selection'   => $selection,
-			'packages'    => $selection['packages'],
+			// The packages of objects and media of the run: none. Its packages
+			// of code are in code (code.packages), read by the stage alone, so
+			// the check of the run (AB_MCP_Sync_Engine::lines()) never takes
+			// one for a package of objects (S1 of the handover of branch 5).
+			'packages'    => array(),
 			'objects'     => array(),
 			'code'        => $code,
 			'code_shown'  => $shown,
@@ -205,6 +207,7 @@ final class AB_MCP_Sync_Code_Plan {
 	 * (locked); the refusal of the whole plan where its pair is gone or not
 	 * active any more (as for an object).
 	 *
+	 * @param array    $found     The report.
 	 * @param int      $n         Its entry.
 	 * @param array    $entry     The entry of the report.
 	 * @param string[] $env       The packages of the environment of the report.
@@ -212,7 +215,7 @@ final class AB_MCP_Sync_Code_Plan {
 	 * @param array    $with      As of().
 	 * @return array|WP_Error item, shown, bytes; or locked.
 	 */
-	private static function unit( $n, array $entry, array $env, array $selection, array $with ) {
+	private static function unit( array $found, $n, array $entry, array $env, array $selection, array $with ) {
 		$kind   = (string) $entry['subtype'];
 		$ref    = (string) $entry['ref'];
 		$action = (string) $entry['action'];
@@ -263,9 +266,12 @@ final class AB_MCP_Sync_Code_Plan {
 		$here    = isset( $entry['live'] ) && is_array( $entry['live'] ) && array_key_exists( 'version', $entry['live'] ) ? $entry['live']['version'] : null;
 		$unit_op = 'create';
 		if ( 'take_over' === $action ) {
-			$order = '' === $signed['version'] && '' === $here ? 'same' : AB_MCP_Sync_Code_Ops::order( $signed['version'], $here );
+			// Two versions known and alike are the same version; a version not
+			// known on either side, none on both sides too, locks (E9, Z12; the
+			// decision of the lead on reading 2, 13.11.).
+			$order = AB_MCP_Sync_Code_Ops::order( $signed['version'], $here );
 			if ( null === $order ) {
-				return $lock( __( 'The version of this unit is not known on one of the two sites (its head names none on one side only, or names one that is no version), so whether the staging site has an older version is not known and it is not taken over (code:version_unknown). Give the plugin or theme a Version in its head on both sites, make a new report (wp_site_diff) and plan again; or update it by hand in wp-admin.', 'alphabridge-mcp' ) );
+				return $lock( __( 'The version of this unit is not known on this site, on the staging site or on both (its head names none, or names one that is no version), so whether the staging site has an older version is not known and it is not taken over (code:version_unknown). Give the plugin or theme a Version in its head on both sites, make a new report (wp_site_diff) and plan again; or update it by hand in wp-admin.', 'alphabridge-mcp' ) );
 			}
 			if ( 'older' === $order ) {
 				/* translators: 1: the version on the staging site, 2: the version on this site. */
@@ -273,17 +279,29 @@ final class AB_MCP_Sync_Code_Plan {
 			}
 			$unit_op = 'same' === $order ? 'edit' : 'update';
 		}
-		// Whether code of the unit runs here, read fresh; not known counts as
-		// running (never taken over unreleased on a row that did not read).
-		$runs     = 'create' === $unit_op ? false : AB_MCP_Sync_Code_Swap::runs( $kind, $ref );
-		$released = in_array( $n, $selection['accept'], true );
-		if ( false !== $runs && ! $released ) {
+		// Whether code of the unit runs here, read fresh, for a unit made too
+		// (a row of active_plugins can name a plugin whose folder is gone, and
+		// it runs once the folder is there again). Not known is no state
+		// accept releases: the unit is locked with its own reason and way
+		// (the decision of the lead on reading 3, 13.11.).
+		$runs = AB_MCP_Sync_Code_Swap::runs( $kind, $ref );
+		if ( null === $runs ) {
 			return $lock(
 				'theme' === $kind
 					/* translators: 1: entry number of the report, 2: the folder of the theme. */
-					? sprintf( __( 'Entry %1$d swaps code this site runs: the theme %2$s is the theme that runs or its parent (or whether it runs could not be read). It is taken over only with its number in accept, by which the person releases code of it to run in the swap, its new version too; files come back through the way back, what its routines change in the database does not. Pass accept with this number, or leave the entry out.', 'alphabridge-mcp' ), $n, $ref )
+					? sprintf( __( 'Whether the theme %2$s of entry %1$d runs on this site could not be read (the options stylesheet and template do not read in the form WordPress writes them, or the theme was switched while they were read), so it is not taken over, with accept or without (code:runs_unknown): accept releases code that is read to run, never a state not read. Check the theme of this site in wp-admin (Appearance), then make a new report (wp_site_diff) and plan again.', 'alphabridge-mcp' ), $n, $ref )
 					/* translators: 1: entry number of the report, 2: the folder or file of the plugin. */
-					: sprintf( __( 'Entry %1$d swaps code this site runs: the plugin %2$s is active (or whether it is could not be read). It is taken over only with its number in accept, by which the person releases code of it to run in the swap, its new version too; files come back through the way back, what its routines change in the database does not. Pass accept with this number, or leave the entry out.', 'alphabridge-mcp' ), $n, $ref )
+					: sprintf( __( 'Whether the plugin %2$s of entry %1$d runs on this site could not be read (the option active_plugins does not read in the form WordPress writes it), so it is not taken over, with accept or without (code:runs_unknown): accept releases code that is read to run, never a state not read. Check the plugins of this site in wp-admin (deactivating and activating one makes WordPress write the option anew), then make a new report (wp_site_diff) and plan again.', 'alphabridge-mcp' ), $n, $ref )
+			);
+		}
+		$released = in_array( $n, $selection['accept'], true );
+		if ( $runs && ! $released ) {
+			return $lock(
+				'theme' === $kind
+					/* translators: 1: entry number of the report, 2: the folder of the theme. */
+					? sprintf( __( 'Entry %1$d swaps code this site runs: the theme %2$s is the theme that runs or its parent. It is taken over only with its number in accept, by which the person releases code of it to run in the swap, its new version too; files come back through the way back, what its routines change in the database does not. Pass accept with this number, or leave the entry out.', 'alphabridge-mcp' ), $n, $ref )
+					/* translators: 1: entry number of the report, 2: the folder or file of the plugin. */
+					: sprintf( __( 'Entry %1$d swaps code this site runs: the plugin %2$s is active. It is taken over only with its number in accept, by which the person releases code of it to run in the swap, its new version too; files come back through the way back, what its routines change in the database does not. Pass accept with this number, or leave the entry out.', 'alphabridge-mcp' ), $n, $ref )
 			);
 		}
 		$need = AB_MCP_Sync_Code_Stage::need( $env, $kind, $ref );
@@ -293,8 +311,13 @@ final class AB_MCP_Sync_Code_Plan {
 		if ( true === $need['same'] ) {
 			return $lock( __( 'This site already has the unit as the staging site has it (the same files), so nothing of it is taken over. Make a new report (wp_site_diff): where it still shows the unit as changed, confirm its pair anew (wp_site_pairs).', 'alphabridge-mcp' ) );
 		}
-		$gone  = isset( $entry['paths']['only_live'] ) && is_array( $entry['paths']['only_live'] ) ? array_values( array_filter( $entry['paths']['only_live'], 'is_string' ) ) : array();
-		$count = isset( $entry['paths']['only_live_count'] ) && is_int( $entry['paths']['only_live_count'] ) ? $entry['paths']['only_live_count'] : count( $gone );
+		// Every path of the unit here that the new version lacks, named in the
+		// preview (Z42, E1, F47; the decision of the lead on reading 4,
+		// 13.11.): none where the unit is made, else from the report whole.
+		$gone = 'create' === $unit_op ? array() : self::gone( $found, $n, $entry );
+		if ( null === $gone ) {
+			return $lock( __( 'The report does not hold every path of this unit that lies on this site and is not in the version of the staging site (its list only_live and the entries more_paths after it do not read whole), and the preview names each of them before a swap, so it is not taken over (code:paths_unknown). Make a new report (wp_site_diff) and plan again.', 'alphabridge-mcp' ) );
+		}
 		return array(
 			'item'  => array(
 				'n'            => $n,
@@ -308,29 +331,29 @@ final class AB_MCP_Sync_Code_Plan {
 					'staging' => $signed['version'],
 					'live'    => $here,
 				),
-				'runs'         => false !== $runs,
+				'runs'         => $runs,
 				'accept'       => $released,
 			),
 			'shown' => array(
 				'entry'     => $n,
 				'kind'      => $kind,
 				'ref'       => $ref,
-				'operation' => 'create' === $unit_op ? 'create' : ( false !== $runs ? 'swap_running_code' : 'swap' ),
+				'operation' => 'create' === $unit_op ? 'create' : ( $runs ? 'swap_running_code' : 'swap' ),
 				'version'   => array(
 					'here'    => $here,
 					'staging' => $signed['version'],
 				),
-				'runs'      => false !== $runs,
+				'runs'      => $runs,
 				'accept'    => $released,
 				'source'    => array() === $selection['packages'] ? 'wordpress.org' : 'packages',
 				'need'      => array(
 					'files' => count( $need['paths'] ),
 					'bytes' => $need['bytes'],
-					'paths' => array_slice( $need['paths'], 0, self::NAMED ),
+					'paths' => $need['paths'],
 				),
 				'to_backup' => array(
-					'count' => $count,
-					'paths' => array_slice( $gone, 0, self::NAMED ),
+					'count' => count( $gone ),
+					'paths' => $gone,
 				),
 			),
 			'bytes' => $signed['bytes'],
@@ -354,13 +377,65 @@ final class AB_MCP_Sync_Code_Plan {
 			$unit['says']               = __( 'Files come back through the way back; what the routines of the new version change in the database does not.', 'alphabridge-mcp' );
 			$unit['to_backup']['says'] = 0 === $unit['to_backup']['count']
 				? __( 'Every path of this unit on this site is in the new version as well.', 'alphabridge-mcp' )
-				: __( 'These paths lie on this site and are not in the new version: after the swap each of them lies in the backup, back through the way back. The report lists every one of them (the entry of the unit and the entries after it).', 'alphabridge-mcp' );
+				: __( 'These paths lie on this site and are not in the new version: after the swap each of them lies in the backup, back through the way back.', 'alphabridge-mcp' );
 			$unit['need']['says']      = 'wordpress.org' === $unit['source']
 				? __( 'No package of code was passed: the unit comes from wordpress.org in the exact version of the staging site, taken only where it is the unit the report compared. Where it is not from wordpress.org, export these paths on the staging site (wp_site_export with purpose=code, this unit and its paths; without paths every file), take the package over here and pass it in packages.', 'alphabridge-mcp' )
 				: __( 'The unit is built from the packages of code passed and from the files this site has already; the stage needs these paths from a package.', 'alphabridge-mcp' );
 			$out[]                      = $unit;
 		}
 		return $out;
+	}
+
+	/**
+	 * Every path of the unit of an entry that lies on this site and is not in
+	 * the version of the staging site (Z42), in the order of the report: its
+	 * list only_live, the first ones in the entry, the others in the entries
+	 * of result more_paths right after it (AB_MCP_Sync_Decision::paged()),
+	 * as many as only_live_count names. Null where the report does not hold
+	 * them so (no list, an entry after it missing or of another unit, a gap):
+	 * not known, never «none».
+	 *
+	 * @param array $found The report.
+	 * @param int   $n     The entry of the unit.
+	 * @param array $entry The entry.
+	 * @return string[]|null
+	 */
+	private static function gone( array $found, $n, array $entry ) {
+		$paths = isset( $entry['paths'] ) && is_array( $entry['paths'] ) ? $entry['paths'] : array();
+		if ( ! isset( $paths['only_live'], $paths['only_live_count'] ) || ! is_array( $paths['only_live'] ) || ! is_int( $paths['only_live_count'] ) ) {
+			return null;
+		}
+		$more = array_key_exists( 'more', $paths ) ? $paths['more'] : 0;
+		if ( ! is_int( $more ) || $more < 0 ) {
+			return null;
+		}
+		$gone = array_values( $paths['only_live'] );
+		$next = array();
+		if ( $more > 0 ) {
+			$next = AB_MCP_Sync_Proposal::entries( $found, range( $n + 1, $n + $more ) );
+			if ( is_wp_error( $next ) ) {
+				return null;
+			}
+		}
+		for ( $i = $n + 1; $i <= $n + $more; $i++ ) {
+			$one = isset( $next[ $i ] ) && is_array( $next[ $i ] ) ? $next[ $i ] : array();
+			if ( ! isset( $one['result'], $one['subtype'], $one['ref'], $one['paths']['list'], $one['paths']['from'], $one['paths']['paths'] ) || 'more_paths' !== $one['result'] || $entry['subtype'] !== $one['subtype'] || $entry['ref'] !== $one['ref'] || ! is_array( $one['paths']['paths'] ) ) {
+				return null;
+			}
+			if ( 'only_live' !== $one['paths']['list'] ) {
+				continue;
+			}
+			if ( count( $gone ) + 1 !== $one['paths']['from'] ) {
+				return null;
+			}
+			foreach ( $one['paths']['paths'] as $path ) {
+				$gone[] = $path;
+			}
+		}
+		if ( count( $gone ) !== $paths['only_live_count'] || array() !== array_filter( $gone, static fn( $path ) => ! is_string( $path ) || '' === $path ) ) {
+			return null;
+		}
+		return $gone;
 	}
 
 	/**

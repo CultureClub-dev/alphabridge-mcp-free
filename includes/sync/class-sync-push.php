@@ -1393,7 +1393,7 @@ final class AB_MCP_Sync_Push {
 			}
 		}
 		// The packages of objects are bound to the run: kept while it is not closed.
-		foreach ( isset( $plan['code'] ) ? array() : $plan['packages'] as $package_id ) {
+		foreach ( $plan['packages'] as $package_id ) {
 			self::bind_package( $package_id, (int) $run['run_id'] );
 		}
 		$shown = AB_MCP_Sync_Run::shown( $run );

@@ -395,7 +395,7 @@ final class SyncCodeRunTest extends TestCase {
 		self::assertGreaterThan( 0, $unit['need']['files'] );
 		self::assertSame( $unit['need']['files'], count( $unit['need']['paths'] ) );
 		self::assertStringContainsString( 'Files come back through the way back', $unit['says'] );
-		self::assertStringContainsString( 'A run of the code', $shown['effect'] );
+		self::assertStringContainsString( 'Makes a run of the code', $shown['effect'] );
 		self::assertSame( $before, self::live_bytes( 'ab-it-inaktiv' ), 'Making the run changes nothing.' );
 		self::assertSame( array(), $calls->wporg->calls, 'And fetches nothing.' );
 
@@ -463,13 +463,65 @@ final class SyncCodeRunTest extends TestCase {
 		self::assertNull( AB_MCP_Sync_Run::open_run(), 'The site is free.' );
 	}
 
+	public function testAUnitFromAPackageOfCodePassesTheCheckOfTheRunAndIsStagedFromIt(): void {
+		// The normal way of a plugin that is not on wordpress.org (E3 (b)):
+		// its files exported on the staging site as a package of code, taken
+		// over here and passed in packages. The check of the run reads no
+		// package of code as one of objects (S1 of the handover of branch 5),
+		// the package is bound to the run, and the stage takes the unit from
+		// it; wordpress.org is never asked.
+		list( $args, $entry, , , $report ) = self::changed( 'ab-it-inaktiv', '1.1.0' );
+		$before = self::live_bytes( 'ab-it-inaktiv' );
+		$calls  = self::wporg( array() );
+		self::clear_b();
+		list( $code ) = self::relayed(
+			array(
+				'purpose'     => 'code',
+				'report_hash' => $report['report_hash'],
+				'refs'        => array(
+					array(
+						'kind' => 'plugin',
+						'ref'  => 'ab-it-inaktiv',
+					),
+				),
+			)
+		);
+		list( $preview, $run ) = self::begun( $args + array( 'packages' => array( $code ) ) );
+		self::assertSame( array( (int) $entry['n'], 'packages' ), array( $preview['preview']['units'][0]['entry'], $preview['preview']['units'][0]['source'] ) );
+		$run_id = (int) $run['run_id'];
+		$bound  = array();
+		foreach ( AB_MCP_Protected_Store::groups( 'in' ) as $group ) {
+			$bound[ substr( (string) $group['label'], strlen( AB_MCP_Sync_Import::LABEL ) ) ] = (int) $group['run_id'];
+		}
+		self::assertSame( $run_id, $bound[ $code ], 'The package of code is kept for the run.' );
+		$check = self::next( $run_id );
+		self::assertIsArray( $check, is_wp_error( $check ) ? $check->get_error_code() . ': ' . $check->get_error_message() : '' );
+		self::assertSame( array( 1, 'check', 'done' ), array( $check['step']['seq'], $check['step']['op'], $check['step']['state'] ), 'The check of the run passes with a package of code: ' . (string) json_encode( $check['step']['result'] ) );
+		$staged = self::next( $run_id );
+		self::assertIsArray( $staged, is_wp_error( $staged ) ? $staged->get_error_code() . ': ' . $staged->get_error_message() : '' );
+		self::assertSame( array( 2, 'planned' ), array( $staged['step']['seq'], $staged['step']['state'] ) );
+		self::assertStringContainsString( 'from packages', $staged['next'] );
+		$done = null;
+		for ( $i = 0; $i < 20 && null === $done; $i++ ) {
+			$answer = self::next( $run_id );
+			self::assertIsArray( $answer, is_wp_error( $answer ) ? $answer->get_error_code() . ': ' . $answer->get_error_message() : '' );
+			$done = 'done' === $answer['step']['state'] ? $answer : null;
+		}
+		self::assertIsArray( $done, 'The check of the stage ended.' );
+		self::assertStringContainsString( 'ready for its swap', $done['next'] );
+		self::assertSame( array(), $calls->wporg->calls, 'wordpress.org is not asked where packages are passed.' );
+		self::assertSame( $before, self::live_bytes( 'ab-it-inaktiv' ), 'Nothing of the live unit changed.' );
+	}
+
 	/* ------------------------------------------- the release and the plan */
 
 	public function testTheSwapOfCodeThatRunsIsPlannedOnlyWithItsNumberInAcceptAndTheTokenBindsIt(): void {
 		// F2 and F21, the part of the plan (Z24, the early refusal; Z41): an
 		// active plugin is planned only with its number in accept.
-		list( $args, $entry ) = self::changed( 'ab-it-aktiv', '2.0.0' );
+		AB_MCP_IT_Code::put( 'b', 'plugin', 'ab-it-inaktiv', '1.1.0' );
+		list( $args, $entry, , $units ) = self::changed( 'ab-it-aktiv', '2.0.0' );
 		$n = (int) $entry['n'];
+		$m = (int) $units['plugin:ab-it-inaktiv']['n'];
 		self::wporg();
 		$message = self::refused( self::gated( 'wp_site_push', $args ), 'ab_mcp_sync_push_nothing' );
 		self::assertStringContainsString( "Entry $n swaps code this site runs", $message, 'Locked with the operation.' );
@@ -477,7 +529,7 @@ final class SyncCodeRunTest extends TestCase {
 		self::assertStringContainsString( 'Pass accept with this number', $message, 'With the way.' );
 		// accept that names no unit chosen: refused before anything is planned.
 		self::assertStringContainsString( 'is in accept but is no plugin or theme chosen', self::refused( self::gated( 'wp_site_push', $args + array( 'accept' => array( $n + 1000 ) ) ), 'ab_mcp_sync_push_selection' ) );
-		self::assertStringContainsString( 'accept is a list of entry numbers', self::refused( self::gated( 'wp_site_push', $args + array( 'accept' => 'all' ) ), 'ab_mcp_sync_push_selection' ) );
+		self::assertStringContainsString( 'accept is a list of entry numbers', self::refused( self::gated( 'wp_site_push', $args + array( 'accept' => array( 'all' ) ) ), 'ab_mcp_sync_push_selection' ) );
 		// With its number: planned as a swap of running code, released.
 		$released = $args + array( 'accept' => array( $n ) );
 		$preview  = self::gated( 'wp_site_push', $released );
@@ -486,10 +538,16 @@ final class SyncCodeRunTest extends TestCase {
 		self::assertSame( array( 'swap_running_code', true, true ), array( $unit['operation'], $unit['runs'], $unit['accept'] ) );
 		self::assertSame( array( 'here' => '1.0.0', 'staging' => '2.0.0' ), $unit['version'] );
 		// Z41: the token of the preview is bound to accept as to every
-		// argument; the call without it, or with another, is not confirmed.
+		// argument. Without accept the call is no plan of this unit at all;
+		// with accept naming a further unit chosen (the inactive plugin of
+		// $m, a plan of its own) the token of the first plan confirms nothing.
 		$token = $preview['confirm_token'];
-		self::refused( self::gated( 'wp_site_push', $args + array( 'confirm_token' => $token ) ), 'ab_mcp_confirm_mismatch' );
-		self::refused( self::gated( 'wp_site_push', $args + array( 'accept' => array( $n, $n + 1 ), 'confirm_token' => $token ) ), 'ab_mcp_confirm_mismatch' );
+		self::refused( self::gated( 'wp_site_push', $args + array( 'confirm_token' => $token ) ), 'ab_mcp_sync_push_nothing' );
+		$both = array( 'select' => array( $n, $m ) ) + $released;
+		$one  = self::gated( 'wp_site_push', $both );
+		self::assertIsArray( $one, is_wp_error( $one ) ? $one->get_error_code() . ': ' . $one->get_error_message() : '' );
+		self::refused( self::gated( 'wp_site_push', array( 'accept' => array( $n, $m ) ) + $both + array( 'confirm_token' => $one['confirm_token'] ) ), 'ab_mcp_confirm_mismatch' );
+		self::refused( self::gated( 'wp_site_push', $both + array( 'confirm_token' => $token ) ), 'ab_mcp_confirm_mismatch' );
 		self::assertNull( AB_MCP_Sync_Run::open_run(), 'No run was made.' );
 		$run = self::gated( 'wp_site_push', $released + array( 'confirm_token' => $token ) );
 		self::assertIsArray( $run, is_wp_error( $run ) ? $run->get_error_code() . ': ' . $run->get_error_message() : '' );
@@ -502,26 +560,104 @@ final class SyncCodeRunTest extends TestCase {
 		self::assertSame( array( (int) $run['run_id'], false ), array( (int) $again['run_id'], $again['created_now'] ) );
 	}
 
-	public function testWhetherCodeRunsNotKnownCountsAsRunningAndAnInactivePluginNeedsNoRelease(): void {
+	public function testWhetherCodeRunsNotKnownLocksTheUnitWithAcceptOrWithoutAndAnInactivePluginNeedsNoRelease(): void {
+		// Reading 3 as the lead decided it (13.11.), over the public way (S9):
+		// a row of active_plugins that does not read is no state, neither
+		// «does not run» nor «runs»: the unit is locked with its own reason
+		// and way, and accept releases nothing on it.
 		list( $args, $entry ) = self::changed( 'ab-it-inaktiv', '1.1.0' );
 		$n = (int) $entry['n'];
 		self::wporg();
 		self::assertIsArray( self::gated( 'wp_site_push', $args ), 'Inactive: planned without a release.' );
-		// The row of active_plugins does not read: never «does not run».
 		global $wpdb;
 		$row = $wpdb->get_var( "SELECT option_value FROM {$wpdb->options} WHERE option_name = 'active_plugins'" );
 		foreach ( array( 'half written' => substr( (string) $row, 0, 12 ), 'a text' => 'none', 'keys that are texts' => serialize( array( 'x' => 'a/a.php' ) ) ) as $what => $value ) {
 			$wpdb->update( $wpdb->options, array( 'option_value' => $value ), array( 'option_name' => 'active_plugins' ) );
 			try {
-				$got = self::gated( 'wp_site_push', $args );
+				$got      = self::gated( 'wp_site_push', $args );
+				$released = self::gated( 'wp_site_push', $args + array( 'accept' => array( $n ) ) );
 			} finally {
 				$wpdb->update( $wpdb->options, array( 'option_value' => $row ), array( 'option_name' => 'active_plugins' ) );
 			}
-			$message = self::refused( $got, 'ab_mcp_sync_push_nothing' );
-			self::assertStringContainsString( "Entry $n swaps code this site runs", $message, $what );
-			self::assertStringContainsString( 'or whether it is could not be read', $message, $what );
+			foreach ( array( 'without accept' => $got, 'with accept' => $released ) as $how => $answer ) {
+				$message = self::refused( $answer, 'ab_mcp_sync_push_nothing' );
+				self::assertStringContainsString( "Whether the plugin ab-it-inaktiv of entry $n runs on this site could not be read", $message, "$what, $how" );
+				self::assertStringContainsString( '(code:runs_unknown)', $message, "$what, $how: its own reason." );
+				self::assertStringContainsString( 'Check the plugins of this site in wp-admin', $message, "$what, $how: with the way." );
+				self::assertStringNotContainsString( 'swaps code this site runs', $message, "$what, $how: not planned as running." );
+			}
 		}
 		self::assertIsArray( self::gated( 'wp_site_push', $args ), 'Read again as it is: planned.' );
+	}
+
+	public function testTwoVersionsThatAreNoneAreNotKnownAndLockTheUnit(): void {
+		// Reading 2 as the lead decided it (13.11.): a head that names no
+		// version on either site is no version known, so it is no «same
+		// version» (edit) but code:version_unknown, as any version not known.
+		$main = static fn( string $site ): string => AB_MCP_IT_Code::path( $site, 'plugin', 'ab-it-inaktiv' ) . '/ab-it-inaktiv.php';
+		foreach ( array( 'a', 'b' ) as $site ) {
+			$text = (string) file_get_contents( $main( $site ) );
+			self::assertStringContainsString( " * Version: 1.0.0\n", $text );
+			file_put_contents( $main( $site ), str_replace( " * Version: 1.0.0\n", '', $text ) );
+		}
+		self::paired();
+		file_put_contents( AB_MCP_IT_Code::path( 'b', 'plugin', 'ab-it-inaktiv' ) . '/readme.txt', "Changed on staging.\n", FILE_APPEND );
+		list( $report, $units ) = self::report();
+		$entry = $units['plugin:ab-it-inaktiv'];
+		self::assertSame( array( 'changed_on_staging', 'take_over' ), array( $entry['result'], $entry['action'] ) );
+		self::wporg();
+		$message = self::refused(
+			self::gated(
+				'wp_site_push',
+				array(
+					'action'    => 'plan',
+					'report_id' => $report['report_id'],
+					'select'    => array( (int) $entry['n'] ),
+				)
+			),
+			'ab_mcp_sync_push_nothing'
+		);
+		self::assertStringContainsString( '(code:version_unknown)', $message );
+		self::assertStringContainsString( 'Give the plugin or theme a Version in its head on both sites', $message, 'With the way.' );
+	}
+
+	public function testThePreviewNamesEveryPathThatGoesIntoTheBackup(): void {
+		// Reading 4 as the lead decided it (13.11.; Z42, E1, F47): every path
+		// that lies here and that the new version lacks is named, more than
+		// the 100 a page of the report shows in the entry of the unit too.
+		$extra = array();
+		for ( $i = 1; $i <= 150; $i++ ) {
+			$extra[] = sprintf( 'alt/datei-%03d.txt', $i );
+		}
+		foreach ( array( 'a', 'b' ) as $site ) {
+			$dir = AB_MCP_IT_Code::path( $site, 'plugin', 'ab-it-inaktiv' );
+			mkdir( $dir . '/alt' );
+			foreach ( $extra as $path ) {
+				file_put_contents( $dir . '/' . $path, $path . "\n" );
+			}
+		}
+		self::paired();
+		AB_MCP_IT_Code::put( 'b', 'plugin', 'ab-it-inaktiv', '1.1.0' );
+		list( $report, $units ) = self::report();
+		$entry = $units['plugin:ab-it-inaktiv'];
+		self::assertSame( 'take_over', $entry['action'] );
+		self::assertSame( array( 150, 100 ), array( $entry['paths']['only_live_count'], count( $entry['paths']['only_live'] ) ), 'The report shows 100 in the entry, the others after it.' );
+		self::wporg();
+		$preview = self::gated(
+			'wp_site_push',
+			array(
+				'action'    => 'plan',
+				'report_id' => $report['report_id'],
+				'select'    => array( (int) $entry['n'] ),
+			)
+		);
+		self::assertIsArray( $preview, is_wp_error( $preview ) ? $preview->get_error_code() . ': ' . $preview->get_error_message() : '' );
+		$backup = $preview['preview']['units'][0]['to_backup'];
+		$named  = $backup['paths'];
+		sort( $named );
+		self::assertSame( $extra, $named, 'Every path, none cut off.' );
+		self::assertSame( 150, $backup['count'] );
+		self::assertStringContainsString( 'after the swap each of them lies in the backup, back through the way back', $backup['says'] );
 	}
 
 	public function testARunOfTheCodeHoldsNoStepOfTheContents(): void {
@@ -542,7 +678,7 @@ final class SyncCodeRunTest extends TestCase {
 		self::assertStringContainsString( 'A run of the code holds no step of the contents', $message );
 		self::assertStringContainsString( 'make a new report (wp_site_diff), then plan the contents', $message, 'With the way.' );
 		self::refused( self::gated( 'wp_site_push', $args + array( 'all' => true ) ), 'ab_mcp_sync_push_code_mix' );
-		self::refused( self::gated( 'wp_site_push', $args + array( 'as_draft' => array( $other ) ) ), 'ab_mcp_sync_push_code_mix' );
+		self::refused( self::gated( 'wp_site_push', $args + array( 'as_draft' => array( $n ) ) ), 'ab_mcp_sync_push_code_mix' );
 		self::refused( self::gated( 'wp_site_push', $args + array( 'choices' => array( array( 'entry' => $other, 'choice' => 'keep_live' ) ) ) ), 'ab_mcp_sync_push_code_mix' );
 		self::assertNull( AB_MCP_Sync_Run::open_run() );
 		// The unit alone: a plan of the code, every step of phase 2 or of the frame.
@@ -582,8 +718,24 @@ final class SyncCodeRunTest extends TestCase {
 		$wrong['unit']['ref'] = 'ab-it-aktiv';
 		self::assertTrue( AB_MCP_Sync_Run::update_step( $run_id, 2, array( 'parts' => $wrong ), 'planned' ) );
 		self::refused( self::next( $run_id ), 'ab_mcp_sync_code_journal' );
-		// The journal as it was: the check goes on.
+		// The state of the stage does not read (reading 5 as the lead decided
+		// it, 13.11.): complete() gives an error, the step stays planned, its
+		// swap does not run, and the answer names the error and the way.
 		self::assertTrue( AB_MCP_Sync_Run::update_step( $run_id, 2, array( 'parts' => $journal ), 'planned' ) );
+		$states = glob( AB_MCP_Protected_Store::root() . '/stage/' . $journal['stage']['gid'] . '/st-*' );
+		self::assertCount( 1, $states );
+		rename( $states[0], $states[0] . '.weg' );
+		try {
+			$error = self::next( $run_id );
+		} finally {
+			rename( $states[0] . '.weg', $states[0] );
+		}
+		$message = self::refused( $error, 'code:stage_unknown' );
+		self::assertStringContainsString( 'The state of the stage does not read back', $message, 'The error.' );
+		self::assertStringContainsString( 'Step 2 stays planned, and no unit is swapped without a stage read as ready', $message );
+		self::assertStringContainsString( 'Call action=next again; where it keeps failing, abort the run (wp_site_push action=abort)', $message, 'The way.' );
+		self::assertSame( array( 'planned', 'planned' ), array( self::step( $run_id, 2 )['state'], self::step( $run_id, 3 )['state'] ) );
+		// The journal as it was: the check goes on.
 		$answer = self::next( $run_id );
 		self::assertIsArray( $answer, is_wp_error( $answer ) ? $answer->get_error_code() : '' );
 		self::assertSame( 2, $answer['step']['seq'] );
@@ -670,7 +822,62 @@ final class SyncCodeRunStageCalls {
 		return $this->wporg->get( $url, $args );
 	}
 
-	public function __call( $method, array $args ) {
-		return $this->real->$method( ...$args );
+	// Every other call of the seam goes to the real calls, each by its name
+	// (AB_MCP_Test_Seam asks the stand-in for every method the product calls).
+
+	public function method() {
+		return $this->real->method();
+	}
+
+	public function unzip( $zip, $to ) {
+		return $this->real->unzip( $zip, $to );
+	}
+
+	public function unpacked_size( $zip ) {
+		return $this->real->unpacked_size( $zip );
+	}
+
+	public function web_ready( array $paths ) {
+		return $this->real->web_ready( $paths );
+	}
+
+	public function zip_names( $zip ) {
+		return $this->real->zip_names( $zip );
+	}
+
+	public function taken( $package_id ) {
+		return $this->real->taken( $package_id );
+	}
+
+	public function extract( array $taken, array $jobs ) {
+		return $this->real->extract( $taken, $jobs );
+	}
+
+	public function copy( $from, $to ) {
+		return $this->real->copy( $from, $to );
+	}
+
+	public function mkdir( $path ) {
+		return $this->real->mkdir( $path );
+	}
+
+	public function read( $path, $max ) {
+		return $this->real->read( $path, $max );
+	}
+
+	public function tokenizer() {
+		return $this->real->tokenizer();
+	}
+
+	public function parse_php( $code ) {
+		return $this->real->parse_php( $code );
+	}
+
+	public function memory() {
+		return $this->real->memory();
+	}
+
+	public function lint( $file, $label ) {
+		return $this->real->lint( $file, $label );
 	}
 }

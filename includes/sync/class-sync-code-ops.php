@@ -193,9 +193,11 @@ final class AB_MCP_Sync_Code_Ops {
 		}
 		$state = AB_MCP_Sync_Code_Stage::complete( $journal['stage']['gid'], $journal['stage']['name'], $journal['stage']['hash'], $item['env'] );
 		if ( is_wp_error( $state ) ) {
-			// Not known (a package or the tree did not read): the step stays
-			// planned, never ready and never refused on what was not read.
-			return $state;
+			// Not known (a package, the tree or the state of the stage did not
+			// read): the step stays planned, never ready and never refused on
+			// what was not read; the answer names the error and the way (the
+			// decision of the lead on reading 5, 13.11.).
+			return self::not_checked( $seq, $state );
 		}
 		$checked = self::checked( $state );
 		if ( null === $checked ) {
@@ -292,6 +294,20 @@ final class AB_MCP_Sync_Code_Ops {
 		/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name, 3: the code of the refusal, as the tools name it (code:syntax, …), 4: the refusal (one or more whole sentences). */
 		$message = sprintf( __( 'The %1$s %2$s is not staged (%3$s), so it is not swapped; nothing of this site changed. %4$s', 'alphabridge-mcp' ), $unit['kind'], $unit['ref'], $code, $why );
 		return self::ended( $run_id, $seq, 'failed', array( 'message' => $message, 'code' => $code ), $message . ' ' . __( 'The run goes on with the next step (action=next).', 'alphabridge-mcp' ) );
+	}
+
+	/**
+	 * A check of a stage that gave no state this call (complete() refused
+	 * with an error): the step stays planned and its swap does not run, for
+	 * no swap goes on without a stage read as ready; the error with the way.
+	 *
+	 * @param int      $seq   Step.
+	 * @param WP_Error $error The error of complete().
+	 * @return WP_Error
+	 */
+	private static function not_checked( $seq, WP_Error $error ) {
+		/* translators: 1: the error (one or more whole sentences), 2: step number. */
+		return new WP_Error( $error->get_error_code(), sprintf( __( '%1$s Step %2$d stays planned, and no unit is swapped without a stage read as ready; nothing of this site changed. Call action=next again; where it keeps failing, abort the run (wp_site_push action=abort).', 'alphabridge-mcp' ), $error->get_error_message(), $seq ) );
 	}
 
 	/**
