@@ -37,13 +37,16 @@ final class StoreBudgetTest extends TestCase {
 		}
 	}
 
-	/** @return array[] Open packages: area, user, declared bytes. */
+	/** @return array[] Open packages: area, user, declared bytes; the other fields of their entries as open() writes them. */
 	private static function packages( array ...$list ): array {
 		return array_map(
 			static fn( array $p ): array => array(
 				'area'     => $p[0],
 				'user_id'  => $p[1],
 				'declared' => $p[2],
+				'label'    => '',
+				'closed'   => false,
+				'binding'  => '',
 			),
 			$list
 		);
@@ -99,7 +102,7 @@ final class StoreBudgetTest extends TestCase {
 	public function testAnOpenPackageOfAnotherBindingCountsAsOpenNoMore(): void {
 		$old   = str_repeat( 'a', 64 );
 		$now   = str_repeat( 'b', 64 );
-		$bound = static fn( string $binding, int $n ): array => array_map( static fn( array $p ): array => $p + array( 'binding' => $binding ), self::packages( ...array_fill( 0, $n, array( 'in', 1, 10 ) ) ) );
+		$bound = static fn( string $binding, int $n ): array => array_map( static fn( array $p ): array => array_replace( $p, array( 'binding' => $binding ) ), self::packages( ...array_fill( 0, $n, array( 'in', 1, 10 ) ) ) );
 		// Five imports of a pair of before: none of them counts for one of now.
 		self::assertNull( AB_MCP_Store_Budget::package_refusal( $bound( $old, 5 ), 'in', 1, 10, '', $now ) );
 		// Of the same binding they count, the limit stays.
@@ -123,6 +126,7 @@ final class StoreBudgetTest extends TestCase {
 				'declared' => $p[2],
 				'label'    => $p[3],
 				'closed'   => $p[4] ?? false,
+				'binding'  => '',
 			),
 			$list
 		);

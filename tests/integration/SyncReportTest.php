@@ -481,6 +481,10 @@ final class SyncReportTest extends TestCase {
 		self::assertSame( range( 1, $answer['total'] ), array_column( $here['all'], 'n' ) );
 		self::assertSame( 3, $here['cursor'] );
 		self::assertNotSame( $answer['report_hash'], '', 'The report of this process is its own.' );
+		// A new report removes the earlier ones of its own connection only
+		// (replace_own()): the report over MCP stays.
+		$groups = array_values( array_filter( AB_MCP_Protected_Store::groups( 'reports' ), static fn( $g ) => 'report' === $g['label'] ) );
+		self::assertContains( $answer['report_id'], array_column( $groups, 'gid' ), 'The report of the other connection stays.' );
 	}
 
 	public function testWordPressNewerOnStagingIsRefusedWithTheWayOfAnUpdate(): void {

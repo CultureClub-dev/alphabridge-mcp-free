@@ -197,7 +197,7 @@ e('writer-menu-automatic', 'precheck(): a page of the top level with the menu au
 # ----------------------------------------------------------- the run
 SHAPE = 'testTheShapeOfARunAndWhenItsLockIsFresh'
 e('run-lock-fresh', 'lock_fresh(): a row older than TIMEOUT is left behind (decision 18)', RU,
-  "\t\treturn $since > 0 && ( self::now() - $since ) < AB_MCP_Change_Lock::TIMEOUT;", "\t\treturn $since > 0;", 'unit', SHAPE)
+  "\t\treturn $since > 0 && ( null === $now || ( $now - $since ) < AB_MCP_Change_Lock::TIMEOUT );", "\t\treturn $since > 0;", 'unit', SHAPE)
 OWN = "\t\tif ( (int) $run['user_id'] !== (int) get_current_user_id() || ! hash_equals( (string) $run['connection'], self::connection() ) ) {"
 e('run-owner-connection', 'owner_refusal(): the same connection (decision 15)', RU, OWN, OWN.replace(" || ! hash_equals( (string) $run['connection'], self::connection() )", ''), 'unit', SHAPE)
 e('run-owner-user', 'owner_refusal(): the same account', RU, OWN, OWN.replace("(int) $run['user_id'] !== (int) get_current_user_id() || ", ''), 'unit', SHAPE)
@@ -213,7 +213,7 @@ e('run-has-room', 'has_room(): the steps of a run with its way back within MAX_R
 e('run-max-run-steps', 'MAX_RUN_STEPS: the forward plan and one step of the way back per object (N4)', RU,
   "\tconst MAX_RUN_STEPS = 2 * self::MAX_STEPS - self::FRAME;", "\tconst MAX_RUN_STEPS = self::MAX_STEPS;", 'unit', ROOM)
 e('run-keep-until-stored', 'set_state(): every close stores the period its backups are kept (decision 20; A7)', RU,
-  "\t\t\t$set['keep_until'] = AB_MCP_Sync_Schema::keep_until( $now, (bool) $qualified, AB_MCP_Protected_Store::backup_days() );", '', 'it', 'testTheRetentionKeepsTheLastThreeQualifiedClosesAndWhatAWayBackNeeds')
+  "\t\t\t$set['keep_until'] = AB_MCP_Sync_Schema::keep_until( $now, $qualified, AB_MCP_Protected_Store::backup_days() );", '', 'it', 'testTheRetentionKeepsTheLastThreeQualifiedClosesAndWhatAWayBackNeeds')
 e('plan-max-objects', 'MAX_OBJECTS: the objects of a plan within MAX_STEPS beside the frame (B5, N4)', PU,
   "\tconst MAX_OBJECTS = AB_MCP_Sync_Run::MAX_STEPS - AB_MCP_Sync_Run::FRAME;", "\tconst MAX_OBJECTS = AB_MCP_Sync_Run::MAX_STEPS;", 'unit', ROOM)
 e('plan-in-parts', 'too_many(): a selection past MAX_OBJECTS is refused with the way in parts (N4)', PU,
@@ -224,17 +224,17 @@ KEEP = 'testTheRetentionNamesTheRunsWhoseBackupsStay'
 e('schema-keep-last', 'backup_runs(): the last KEEP_LAST qualified closes (decision 20, rule 2)', SC,
   "\t\t\tif ( $n <= self::KEEP_LAST ) {", "\t\t\tif ( $n <= self::KEEP_LAST + 1 ) {", 'unit', KEEP)
 e('schema-keep-until', 'backup_runs(): a closed run until the keep_until its close stored (rules 3, 5, 6; A7)', SC,
-  "\t\t\tif ( 0 === (int) $row['keep_until'] || (int) $row['keep_until'] > $now ) {", "\t\t\tif ( 0 === (int) $row['keep_until'] ) {", 'unit', KEEP)
+  "\t\t\tif ( 0 === $until || $until > $now ) {", "\t\t\tif ( 0 === $until ) {", 'unit', KEEP)
 e('schema-v2-kept', 'backup_runs(): a row without a stored period (version 2, keep_until 0) is kept, fail closed (N1)', SC,
-  "\t\t\tif ( 0 === (int) $row['keep_until'] || (int) $row['keep_until'] > $now ) {", "\t\t\tif ( (int) $row['keep_until'] > $now ) {", 'unit', KEEP)
+  "\t\t\tif ( 0 === $until || $until > $now ) {", "\t\t\tif ( $until > $now ) {", 'unit', KEEP)
 e('schema-keep-until-qualified', 'keep_until(): a qualified close for the days of the filter, the close itself in Free, never 0 (rule 3; N1)', SC,
-  "\t\t\treturn (int) $now + $days * 86400;", "\t\t\treturn $days > 0 ? (int) $now + $days * 86400 : 0;", 'unit', KEEP)
+  "\t\t\treturn $now + $days * 86400;", "\t\t\treturn $days > 0 ? $now + $days * 86400 : 0;", 'unit', KEEP)
 e('schema-keep-until-unqualified', 'keep_until(): an unqualified close for UNQUALIFIED_DAYS, or the days of the filter where more (rule 5)', SC,
-  "\t\treturn (int) $now + max( self::UNQUALIFIED_DAYS, $days ) * 86400;", "\t\treturn (int) $now + self::UNQUALIFIED_DAYS * 86400;", 'unit', KEEP)
+  "\t\treturn $now + max( self::UNQUALIFIED_DAYS, $days ) * 86400;", "\t\treturn $now + self::UNQUALIFIED_DAYS * 86400;", 'unit', KEEP)
 e('schema-reverts', 'backup_runs(): the runs a way back that is not closed needs (rule 4)', SC,
-  "\t\t\t\t\t$keep[ (int) $needed ] = true;", '', 'unit', KEEP)
+  "\t\t\t\t\t$keep[ $needed ] = true;", '', 'unit', KEEP)
 e('schema-qualified-only', 'backup_runs(): only a qualified close counts among the last three', SC,
-  "\t\t\tif ( (int) $row['forward_closed_at'] > 0 ) {", "\t\t\tif ( true ) {", 'unit', KEEP)
+  "\t\t\tif ( $fwd > 0 ) {", "\t\t\tif ( true ) {", 'unit', KEEP)
 ROWS = 'testTheRetentionNamesEveryRowSoARunWithoutOneIsToldFromOneWhoseBackupsGo'
 e('schema-rows-named', 'backup_rows(): every row is named, false where its backups go, so the clean-up tells it from a run without a row', SC,
   "\t\t\tif ( ! array_key_exists( $id, $keep ) ) {\n\t\t\t\t$keep[ $id ] = false;\n\t\t\t}\n", '', 'unit', ROWS)
@@ -683,9 +683,9 @@ PLANS = 'testTheRetentionReadsThePlanOfARunThatIsNotClosedOnlyAndKeepsWhatItKept
 e('writer-staging-term-order-lock', 'target_of(): a relationship of the staging post with a term_order other than 0 is locked before anything is written (P2)', PW,
   "\t\t\tif ( isset( $term['term_order'] ) && 0 !== (int) $term['term_order'] ) {", "\t\t\tif ( false ) {", 'it', ORDER_STAGING)
 e('schema-plan-not-listed', 'backup_rows(): the rows of the retention are read without their plan (P2)', SC,
-  "SELECT run_id, type, state, closed, forward_closed_at, keep_until FROM `", "SELECT run_id, type, state, closed, forward_closed_at, keep_until, plan FROM `", 'unit', PLANS)
+  "SELECT run_id, type, state, forward_closed_at, keep_until FROM `", "SELECT run_id, type, state, forward_closed_at, keep_until, plan FROM `", 'unit', PLANS)
 e('schema-plan-per-run', 'backup_rows(): the plan of a run that is not closed, read for it alone, keeps the runs its way back needs', SC,
-  "\t\t\t\t$plan = is_string( $raw ) ? json_decode( $raw, true, 16 ) : null;", "\t\t\t\t$plan = null;", 'unit', PLANS)
+  "\t\t\t\t$plan = '' === $wpdb->last_error ? AB_MCP_Store_Inputs::read( 'runs.plan', $raw ) : null;", "\t\t\t\t$plan = null;", 'unit', PLANS)
 
 # ------------------------------- GitHub Codex round 8 on free#137 (one P2)
 # The records of a run read through AB_MCP_Sync_Canon::decode(), bytes as

@@ -1631,11 +1631,15 @@ final class AB_MCP_Sync_Export {
 	private static function discard_stale() {
 		$groups  = AB_MCP_Protected_Store::groups( 'out' );
 		$binding = self::binding();
+		// The one checked clock (AB_MCP_Sync_Run::now(), period.clock;
+		// Behebung 5, B1): where it gives no time, no making is abandoned.
+		require_once __DIR__ . '/class-sync-run.php';
+		$now = AB_MCP_Sync_Run::now();
 		foreach ( is_array( $groups ) ? $groups : array() as $group ) {
 			$found = self::find( $group['gid'] );
 			if ( is_array( $found ) ) {
 				self::bound( $found, $binding );
-			} elseif ( null === $found && $group['created'] < time() - self::ABANDONED ) {
+			} elseif ( null === $found && null !== $now && $group['created'] < $now - self::ABANDONED ) {
 				// A making that ended between its chunks and its record (the
 				// process stopped): never given out, and no longer counted.
 				AB_MCP_Protected_Store::remove( 'out', $group['gid'] );

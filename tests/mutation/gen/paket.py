@@ -1044,18 +1044,18 @@ BU = 'StoreBudget'
 SERIES_T = 'testThePackagesOfASeriesCountAsOneExportAndOnePackage'
 CLOSED_T = 'testAClosedPackageCountsAsOpenNoMoreButItsBytesDo'
 e('paket/budget-series', 'package_refusal(): the packages of a series count once', BUD,
-  "$key          = isset( $entry['label'] ) && 1 === preg_match( self::SERIES, (string) $entry['label'] ) ? (string) $entry['label'] : $i;", "$key          = $i;", 'budget', SERIES_T)
+  "$key          = 1 === preg_match( self::SERIES, $entry['label'] ) ? $entry['label'] : $i;", "$key          = $i;", 'budget', SERIES_T)
 e('paket/budget-closed', 'package_refusal(): a closed package counts as open no more', BUD,
-  "\t\t\tif ( ! empty( $entry['closed'] ) ) {\n\t\t\t\tcontinue;\n\t\t\t}\n", "", 'budget', CLOSED_T)
+  "\t\t\tif ( $entry['closed'] ) {\n\t\t\t\tcontinue;\n\t\t\t}\n", "", 'budget', CLOSED_T)
 e('paket/budget-closed-bytes', 'package_refusal(): the bytes of a closed package count', BUD,
-  "\t\t\t$bytes += max( 0, (int) $entry['declared'] );\n\t\t\tif ( ! empty( $entry['closed'] ) ) {", "\t\t\tif ( ! empty( $entry['closed'] ) ) {", 'budget', CLOSED_T)
+  "\t\t\t$bytes += $entry['declared'];\n\t\t\tif ( $entry['closed'] ) {", "\t\t\tif ( $entry['closed'] ) {", 'budget', CLOSED_T)
 e('paket/budget-join-export', 'package_refusal(): the next package of an open series is no new export', BUD,
   "$exports = $joins && isset( $exports[ $label ] ) ? 0 : count( $exports );", "$exports = count( $exports );", 'budget', SERIES_T)
 e('paket/budget-join-open', 'package_refusal(): the next package of an open series is no new package', BUD,
   "$open    = $joins && isset( $open[ $label ] ) ? 0 : count( $open );", "$open    = count( $open );", 'budget', SERIES_T)
 e('paket/it-store-close', 'close(): the group closed (two sites)', ST, "\t\t\t\t$entry['closed'] = true;", "\t\t\t\t$entry['closed'] = false;", 'itpkg', PKG_IT['import_write'])
-e('paket/it-store-read-closed', 'read_entry(): closed as written (two sites)', ST,
-  "\t\t\t'closed'   => isset( $e['closed'] ) && true === $e['closed'],", "\t\t\t'closed'   => false,", 'itpkg', PKG_IT['import_write'])
+e('paket/it-store-read-closed', 'read_entry(): closed as written (two sites; sidecar(), Behebung 2 of Z8b branch 3: the fields as the file holds them)', ST,
+  "\t\treturn array( $area === $e['area'] ? 'own' : 'other', array_intersect_key( $e, self::SIDECAR[ $e['area'] ] ) );", "\t\treturn array( $area === $e['area'] ? 'own' : 'other', array( 'closed' => false ) + array_intersect_key( $e, self::SIDECAR[ $e['area'] ] ) );", 'itpkg', PKG_IT['import_write'])
 e('paket/it-store-open-label', 'open(): the budget sees the label (two sites)', ST,
   "$entry['declared'], $entry['label'], $entry['binding'] );", "$entry['declared'], '', $entry['binding'] );", 'itpkg', PKG_IT['cursor'])
 e('paket/it-import-close', 'state(): a package checked whole is closed (two sites)', IM,
@@ -1214,7 +1214,7 @@ e('paket/r5-import-purpose-removed', 'held(): a group for another purpose is end
   PUR + "\n\t\t\tAB_MCP_Protected_Store::remove( 'in', $found['gid'] );\n", PUR + "\n", 'itpkg', R5['purpose_it'])
 
 # B-4: writes that fail for real, a making stopped before its record.
-DIS = "\t\t\t} elseif ( null === $found && $group['created'] < time() - self::ABANDONED ) {"
+DIS = "\t\t\t} elseif ( null === $found && null !== $now && $group['created'] < $now - self::ABANDONED ) {"
 e('paket/r5-discard-abandoned', 'discard_stale(): a making stopped before its record goes after ABANDONED (B-4)', EX, DIS, "\t\t\t} elseif ( false ) {", 'itpkg', R5['abandoned'])
 e('paket/r5-discard-abandoned-age', 'discard_stale(): not before ABANDONED, it may still be written (B-4)', EX, DIS, "\t\t\t} elseif ( null === $found ) {", 'itpkg', R5['abandoned'])
 e('paket/r5-payload-tmp', 'write(): a failed write, also one that falls short, leaves no temp file (B-4)', PF,
@@ -1608,18 +1608,18 @@ e('paket/p7-open-binding', 'open(): the binding kept in the sidecar (two sites)'
   "\t\t\t'binding'  => self::binding( isset( $meta['binding'] ) ? $meta['binding'] : '' ),\n", "\t\t\t'binding'  => '',\n", 'itpkg', P5_IT)
 e('paket/p7-open-binding-count', 'open(): the binding of the package counted with (two sites)', ST,
   ", $entry['label'], $entry['binding'] );", ", $entry['label'] );", 'itpkg', P5_IT)
-e('paket/p7-read-binding', 'read_entry(): the binding read back (two sites)', ST,
-  "\t\t\t'binding'  => self::binding( isset( $e['binding'] ) ? $e['binding'] : '' ),\n", "\t\t\t'binding'  => '',\n", 'itpkg', P5_IT)
+e('paket/p7-read-binding', 'read_entry(): the binding read back (two sites; sidecar(), Behebung 2 of Z8b branch 3: the fields as the file holds them)', ST,
+  "\t\treturn array( $area === $e['area'] ? 'own' : 'other', array_intersect_key( $e, self::SIDECAR[ $e['area'] ] ) );", "\t\treturn array( $area === $e['area'] ? 'own' : 'other', array( 'binding' => '' ) + array_intersect_key( $e, self::SIDECAR[ $e['area'] ] ) );", 'itpkg', P5_IT)
 e('paket/p7-race-own-end', 'held(): the next call of a package begun with a pair of before ends its own group, the other account keeps its own (two sites)', IM,
   PRN, "\t\tif ( false ) {", 'itpkg', 'testAPackageBegunWhileThePairChangesRemovesNoPackageOfTheNewPair')
 P7_UNIT = 'testAnOpenPackageOfAnotherBindingCountsAsOpenNoMore'
-SK = "\t\t\tif ( '' !== (string) $binding && '' !== $other && (string) $binding !== $other ) {"
+SK = "\t\t\tif ( '' !== $binding && '' !== $entry['binding'] && $binding !== $entry['binding'] ) {"
 e('paket/p7-count-skip', 'package_refusal(): an open package of another binding counts as open no more', BUD, SK, "\t\t\tif ( false ) {", 'budget', P7_UNIT)
-e('paket/p7-count-same', 'package_refusal(): one of the same binding counts', BUD, SK, SK.replace(" && (string) $binding !== $other", ''), 'budget', P7_UNIT)
-e('paket/p7-count-unbound', 'package_refusal(): one without a binding counts', BUD, SK, SK.replace(" && '' !== $other", ''), 'budget', P7_UNIT)
-e('paket/p7-count-opened-unbound', 'package_refusal(): one opened without a binding counts every package', BUD, SK, SK.replace("'' !== (string) $binding && ", ''), 'budget', P7_UNIT)
+e('paket/p7-count-same', 'package_refusal(): one of the same binding counts', BUD, SK, SK.replace(" && $binding !== $entry['binding']", ''), 'budget', P7_UNIT)
+e('paket/p7-count-unbound', 'package_refusal(): one without a binding counts', BUD, SK, SK.replace(" && '' !== $entry['binding']", ''), 'budget', P7_UNIT)
+e('paket/p7-count-opened-unbound', 'package_refusal(): one opened without a binding counts every package', BUD, SK, SK.replace("'' !== $binding && ", ''), 'budget', P7_UNIT)
 e('paket/p7-count-bytes', 'package_refusal(): its bytes count until it is removed', BUD,
-  SK + "\n\t\t\t\tcontinue;", SK + "\n\t\t\t\t$bytes -= max( 0, (int) $entry['declared'] );\n\t\t\t\tcontinue;", 'budget', P7_UNIT)
+  SK + "\n\t\t\t\tcontinue;", SK + "\n\t\t\t\t$bytes -= $entry['declared'];\n\t\t\t\tcontinue;", 'budget', P7_UNIT)
 
 # ----------------------------------------------------------------- check
 # Each run: its suite and the test class it names; an entry runs the test

@@ -40,6 +40,8 @@
 
 defined( 'ABSPATH' ) || exit;
 
+require_once __DIR__ . '/class-store-inputs.php';
+
 /**
  * Class AB_MCP_Store_Budget
  */
@@ -70,6 +72,9 @@ final class AB_MCP_Store_Budget {
 
 	/** The file of the bookings, in the folder of the store. */
 	const BOOKINGS = 'bookings.json';
+
+	/** Bytes of the file of the bookings at most (one entry is under 100 bytes). */
+	const BOOKINGS_MAX = 1048576;
 
 	/**
 	 * The limits of unpacking a package (decision 8): the raw size of one
@@ -114,8 +119,11 @@ final class AB_MCP_Store_Budget {
 	 * @return WP_Error|null
 	 */
 	public static function package_refusal( array $packages, $area, $user_id, $declared, $label = '', $binding = '' ) {
-		$declared = (int) $declared;
-		if ( $declared < 1 ) {
+		// Every input in the form of its row of AB_MCP_Store_Inputs::TABLE
+		// (Behebung 4): the packages are entries read whole (stock), the
+		// limits as their filters give them; one that is not known refuses.
+		$declared = AB_MCP_Store_Inputs::read( 'budget.declared', $declared );
+		if ( null === $declared || $declared < 1 ) {
 			return new WP_Error( 'ab_mcp_store_declare', 'A package is opened with the number of bytes it will hold, and it never grows past them. Pass the size as declared when you open it.' );
 		}
 		// Each open package counts once, the packages of a series together.
@@ -123,26 +131,28 @@ final class AB_MCP_Store_Budget {
 		$exports = array();
 		$bytes   = 0;
 		foreach ( array_values( $packages ) as $i => $entry ) {
-			$bytes += max( 0, (int) $entry['declared'] );
-			if ( ! empty( $entry['closed'] ) ) {
+			$bytes += $entry['declared'];
+			if ( $entry['closed'] ) {
 				continue;
 			}
-			$other = isset( $entry['binding'] ) ? (string) $entry['binding'] : '';
-			if ( '' !== (string) $binding && '' !== $other && (string) $binding !== $other ) {
+			if ( '' !== $binding && '' !== $entry['binding'] && $binding !== $entry['binding'] ) {
 				continue;
 			}
-			$key          = isset( $entry['label'] ) && 1 === preg_match( self::SERIES, (string) $entry['label'] ) ? (string) $entry['label'] : $i;
+			$key          = 1 === preg_match( self::SERIES, $entry['label'] ) ? $entry['label'] : $i;
 			$open[ $key ] = true;
-			if ( 'out' === $entry['area'] && (int) $entry['user_id'] === (int) $user_id ) {
+			if ( 'out' === $entry['area'] && $entry['user_id'] === $user_id ) {
 				$exports[ $key ] = true;
 			}
 		}
-		$joins   = 1 === preg_match( self::SERIES, (string) $label );
+		$joins   = 1 === preg_match( self::SERIES, $label );
 		$exports = $joins && isset( $exports[ $label ] ) ? 0 : count( $exports );
 		$open    = $joins && isset( $open[ $label ] ) ? 0 : count( $open );
 		// The limits after the count, as Pro reads its own.
 		if ( 'out' === $area ) {
-			$max_exports = max( 0, (int) apply_filters( self::FILTER_EXPORTS, self::MAX_EXPORTS ) );
+			$max_exports = AB_MCP_Store_Inputs::read( 'budget.max_exports', apply_filters( self::FILTER_EXPORTS, self::MAX_EXPORTS ) );
+			if ( null === $max_exports ) {
+				return self::limit_unknown( self::FILTER_EXPORTS );
+			}
 			if ( $exports >= $max_exports ) {
 				return new WP_Error(
 					'ab_mcp_store_quota',
@@ -154,7 +164,10 @@ final class AB_MCP_Store_Budget {
 				);
 			}
 		}
-		$max_packages = max( 0, (int) apply_filters( self::FILTER_PACKAGES, self::MAX_PACKAGES ) );
+		$max_packages = AB_MCP_Store_Inputs::read( 'budget.max_packages', apply_filters( self::FILTER_PACKAGES, self::MAX_PACKAGES ) );
+		if ( null === $max_packages ) {
+			return self::limit_unknown( self::FILTER_PACKAGES );
+		}
 		if ( $open >= $max_packages ) {
 			return new WP_Error(
 				'ab_mcp_store_quota',
@@ -165,7 +178,10 @@ final class AB_MCP_Store_Budget {
 				)
 			);
 		}
-		$max_bytes = max( 0, (int) apply_filters( self::FILTER_BYTES, self::MAX_BYTES ) );
+		$max_bytes = AB_MCP_Store_Inputs::read( 'budget.max_bytes', apply_filters( self::FILTER_BYTES, self::MAX_BYTES ) );
+		if ( null === $max_bytes ) {
+			return self::limit_unknown( self::FILTER_BYTES );
+		}
 		if ( $bytes + $declared > $max_bytes ) {
 			return new WP_Error(
 				'ab_mcp_store_quota',
@@ -191,9 +207,9 @@ final class AB_MCP_Store_Budget {
 	 * @return array|WP_Error { run_id, bytes, free, others }.
 	 */
 	public static function book( $run_id, $bytes ) {
-		$run_id = (int) $run_id;
-		$bytes  = (int) $bytes;
-		if ( $run_id < 1 || $bytes < 0 ) {
+		$run_id = AB_MCP_Store_Inputs::read( 'budget.book_run', $run_id );
+		$bytes  = AB_MCP_Store_Inputs::read( 'budget.book_bytes', $bytes );
+		if ( null === $run_id || null === $bytes ) {
 			return new WP_Error( 'ab_mcp_store_booking', 'A booking names its run and the bytes the run needs, zero or more. Pass both.' );
 		}
 		$root = AB_MCP_Protected_Store::root();
@@ -203,14 +219,18 @@ final class AB_MCP_Store_Budget {
 		return AB_MCP_Protected_Store::writing(
 			$root,
 			static function () use ( $root, $run_id, $bytes ) {
-				$book = self::without_closed( self::read_bookings( $root ) );
+				$book = self::read_bookings( $root );
+				if ( is_wp_error( $book ) ) {
+					return $book;
+				}
+				$book = self::without_closed( $book );
 				unset( $book[ $run_id ] );
 				$others = 0;
 				foreach ( $book as $entry ) {
-					$others += (int) $entry['bytes'];
+					$others += $entry['bytes'];
 				}
-				$free = function_exists( 'disk_free_space' ) ? @disk_free_space( $root ) : false; // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
-				if ( ! is_int( $free ) && ! is_float( $free ) ) {
+				$free = AB_MCP_Protected_Store::free_space( $root );
+				if ( null === $free ) {
 					return new WP_Error( 'ab_mcp_store_space_unknown', 'This site does not say how much space its disk has free (disk_free_space() gives no answer), so no run books its space and none starts. Ask the host to allow disk_free_space() for PHP, then try again.' );
 				}
 				if ( $others + $bytes + self::RESERVE > $free ) {
@@ -253,8 +273,11 @@ final class AB_MCP_Store_Budget {
 	 * @return true|WP_Error
 	 */
 	public static function release( $run_id ) {
-		$run_id = (int) $run_id;
-		$root   = AB_MCP_Protected_Store::root();
+		$run_id = AB_MCP_Store_Inputs::read( 'budget.book_run', $run_id );
+		if ( null === $run_id ) {
+			return new WP_Error( 'ab_mcp_store_booking', 'A booking names its run and the bytes the run needs, zero or more. Pass both.' );
+		}
+		$root = AB_MCP_Protected_Store::root();
 		if ( is_wp_error( $root ) ) {
 			return $root;
 		}
@@ -262,6 +285,9 @@ final class AB_MCP_Store_Budget {
 			$root,
 			static function () use ( $root, $run_id ) {
 				$book = self::read_bookings( $root );
+				if ( is_wp_error( $book ) ) {
+					return $book;
+				}
 				if ( ! isset( $book[ $run_id ] ) ) {
 					return true;
 				}
@@ -327,7 +353,7 @@ final class AB_MCP_Store_Budget {
 			return $book;
 		}
 		foreach ( array_keys( $book ) as $run_id ) {
-			if ( ! in_array( (int) $run_id, $open, true ) ) {
+			if ( ! in_array( $run_id, $open, true ) ) {
 				unset( $book[ $run_id ] );
 			}
 		}
@@ -335,19 +361,25 @@ final class AB_MCP_Store_Budget {
 	}
 
 	/**
-	 * Write TEST_WRITE random bytes beside the store's files and remove them
-	 * again (random, so a file system that compresses cannot store them in
-	 * less than they are).
+	 * Write TEST_WRITE random bytes into a temp file of the store and remove
+	 * it again (random, so a file system that compresses cannot store them
+	 * in less than they are): a temp file of the area tmp/
+	 * (AB_MCP_Protected_Store::temp_file()), written through write_file()
+	 * and removed through delete_path() as made by this request (Z37).
 	 *
 	 * @param string $root Folder of the store.
 	 * @return true|WP_Error
 	 */
 	private static function test_write( $root ) {
-		$path    = $root . '/.ab-test-write-' . bin2hex( AB_MCP_Payload_File::random_bytes( 8 ) ) . '.tmp';
-		$written = @file_put_contents( $path, AB_MCP_Payload_File::random_bytes( self::TEST_WRITE ) ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
-		clearstatcache( true, $path );
-		$ok = self::TEST_WRITE === $written && self::TEST_WRITE === @filesize( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
-		@unlink( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink
+		$path = AB_MCP_Protected_Store::temp_file( $root );
+		$ok   = ! is_wp_error( $path ) && true === AB_MCP_Protected_Store::write_file( $root, $path, AB_MCP_Payload_File::random_bytes( self::TEST_WRITE ) );
+		if ( $ok ) {
+			clearstatcache( true, $path );
+			$ok = self::TEST_WRITE === @filesize( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		}
+		if ( ! is_wp_error( $path ) ) {
+			AB_MCP_Protected_Store::delete_path( $root, $path );
+		}
 		if ( ! $ok ) {
 			return new WP_Error( 'ab_mcp_store_test_write', 'A test write of 1 MB to the protected store failed, so the run does not start: its backups could not be written either. Ask the host to check the free space and the rights of the folder, then try again.' );
 		}
@@ -355,34 +387,57 @@ final class AB_MCP_Store_Budget {
 	}
 
 	/**
+	 * The bookings of the store (Behebung 1, B2: unreadable is never empty).
+	 * A file absent by the listing of the folder is the empty first stock;
+	 * a file that cannot be read, is a link, is no JSON object or holds an
+	 * entry that is no booking is a fault, and no call writes the bookings
+	 * anew over it (book(), release()).
+	 *
 	 * @param string $root Folder of the store.
-	 * @return array<int,array{bytes:int,booked:int,user_id:int}>
+	 * @return array<int,array{bytes:int,booked:int,user_id:int}>|WP_Error
 	 */
 	private static function read_bookings( $root ) {
-		$file = $root . '/' . self::BOOKINGS;
-		if ( is_link( $file ) || ! is_file( $file ) ) {
+		$file = AB_MCP_Protected_Store::read_small( $root, $root . '/' . self::BOOKINGS, self::BOOKINGS_MAX );
+		if ( 'absent' === $file['state'] ) {
 			return array();
 		}
-		$data = json_decode( (string) @file_get_contents( $file ), true ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
-		$out  = array();
-		foreach ( is_array( $data ) ? $data : array() as $run_id => $entry ) {
-			if ( (int) $run_id > 0 && is_array( $entry ) && isset( $entry['bytes'] ) ) {
-				$out[ (int) $run_id ] = array(
-					'bytes'   => max( 0, (int) $entry['bytes'] ),
-					'booked'  => isset( $entry['booked'] ) ? (int) $entry['booked'] : 0,
-					'user_id' => isset( $entry['user_id'] ) ? (int) $entry['user_id'] : 0,
-				);
-			}
-		}
-		return $out;
+		// The file as write_bookings() writes it, every booking in the form
+		// of its row of AB_MCP_Store_Inputs::TABLE (Behebung 4: no cast, no
+		// field made up).
+		$book = 'ok' === $file['state'] ? AB_MCP_Store_Inputs::read( 'budget.bookings', $file['bytes'] ) : null;
+		return null === $book ? self::unread() : $book;
 	}
 
 	/**
+	 * The refusal where the filter of a limit gives no whole number of 0 or
+	 * more: the limit is not known, so nothing is opened.
+	 *
+	 * @param string $filter Filter.
+	 * @return WP_Error
+	 */
+	private static function limit_unknown( $filter ) {
+		/* translators: %1$s: the name of a filter (ab_mcp_store_max_packages, ab_mcp_store_max_bytes or ab_mcp_store_max_exports). */
+		return new WP_Error( 'ab_mcp_store_limit_unknown', sprintf( __( 'The limit of the filter %1$s is not a whole number of 0 or more, so it is not known and no package is opened. Check the code that hooks %1$s: it returns such a number.', 'alphabridge-mcp' ), $filter ) );
+	}
+
+	/**
+	 * The refusal where the bookings cannot be read.
+	 *
+	 * @return WP_Error
+	 */
+	private static function unread() {
+		return new WP_Error( 'ab_mcp_store_bookings_unread', __( 'The bookings of the protected store (the file bookings.json in its folder) could not be read, so no run books its space or gives it back, and nothing was written. Ask the host to check that file: its rights, or whether something else wrote into it; then try again.', 'alphabridge-mcp' ) );
+	}
+
+	/**
+	 * The bookings, through write_file() (a temp file of tmp/ renamed into
+	 * place, Z37).
+	 *
 	 * @param string $root Folder of the store.
 	 * @param array  $book Bookings.
 	 * @return bool
 	 */
 	private static function write_bookings( $root, array $book ) {
-		return AB_MCP_Payload_File::write( $root . '/' . self::BOOKINGS, (string) json_encode( (object) $book ) );
+		return true === AB_MCP_Protected_Store::write_file( $root, $root . '/' . self::BOOKINGS, (string) json_encode( (object) $book ) );
 	}
 }

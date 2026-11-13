@@ -353,6 +353,9 @@ final class AB_MCP_Sync_Run {
 		AB_MCP_Sync_Guard::mark();
 		global $wpdb;
 		$now = self::now();
+		if ( null === $now ) {
+			return self::clock_unknown();
+		}
 		$row = array(
 			'type'              => (string) $run['type'],
 			'source_id'         => (string) $run['source_id'],
@@ -551,16 +554,25 @@ final class AB_MCP_Sync_Run {
 			return new WP_Error( 'ab_mcp_sync_run_invalid', sprintf( __( 'A run has no state %s. Use one of the states of AB_MCP_Sync_Run.', 'alphabridge-mcp' ), (string) $to ) );
 		}
 		global $wpdb;
+		// A clock that gives no time (now() null, a seam of the tests) writes
+		// no time: a close stores keep_until 0, the mark that keeps its
+		// backups, and no qualified close (Behebung 4, B2/B3).
 		$now = self::now();
-		$set = array(
-			'state'   => (string) $to,
-			'updated' => $now,
-		);
+		$set = array( 'state' => $to );
+		if ( null !== $now ) {
+			$set['updated'] = $now;
+		}
 		if ( in_array( $to, AB_MCP_Sync_Schema::CLOSED, true ) ) {
-			$set['closed']     = $now;
+			if ( null !== $now ) {
+				$set['closed'] = $now;
+			}
+			// The qualification in the form of its row (period.qualified;
+			// Behebung 5, B3): one not known stores no period (0) and no
+			// qualified close.
+			$qualified         = AB_MCP_Store_Inputs::read( 'period.qualified', $qualified );
 			$set['open_one']   = null;
-			$set['keep_until'] = AB_MCP_Sync_Schema::keep_until( $now, (bool) $qualified, AB_MCP_Protected_Store::backup_days() );
-			if ( $qualified ) {
+			$set['keep_until'] = AB_MCP_Sync_Schema::keep_until( $now, $qualified, AB_MCP_Protected_Store::backup_days() );
+			if ( true === $qualified && null !== $now ) {
 				$set['forward_closed_at'] = $now;
 			}
 		}
@@ -597,6 +609,9 @@ final class AB_MCP_Sync_Run {
 		}
 		global $wpdb;
 		$now = self::now();
+		if ( null === $now ) {
+			return;
+		}
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table name is ours.
 		$wpdb->query( $wpdb->prepare( 'UPDATE `' . AB_MCP_Sync_Schema::table( 'runs' ) . '` SET heartbeat = %d, updated = %d' . ( $call ? ', calls = calls + 1' : '' ) . ' WHERE run_id = %d', $now, $now, (int) $run_id ) );
 	}
@@ -618,8 +633,12 @@ final class AB_MCP_Sync_Run {
 			return $json;
 		}
 		global $wpdb;
+		$now = self::now();
+		if ( null === $now ) {
+			return self::clock_unknown();
+		}
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table name is ours.
-		$done = $wpdb->query( $wpdb->prepare( 'UPDATE `' . AB_MCP_Sync_Schema::table( 'runs' ) . '` SET budget = %s, updated = %d WHERE run_id = %d', $json, self::now(), (int) $run_id ) );
+		$done = $wpdb->query( $wpdb->prepare( 'UPDATE `' . AB_MCP_Sync_Schema::table( 'runs' ) . '` SET budget = %s, updated = %d WHERE run_id = %d', $json, $now, (int) $run_id ) );
 		return false === $done || '' !== (string) $wpdb->last_error ? self::db_error() : true;
 	}
 
@@ -639,7 +658,11 @@ final class AB_MCP_Sync_Run {
 			return $ready;
 		}
 		global $wpdb;
-		$sets = array( $wpdb->prepare( 'time = %d', self::now() ) );
+		$now = self::now();
+		if ( null === $now ) {
+			return self::clock_unknown();
+		}
+		$sets = array( $wpdb->prepare( 'time = %d', $now ) );
 		foreach ( $set as $column => $value ) {
 			switch ( $column ) {
 				case 'state':
@@ -728,7 +751,7 @@ final class AB_MCP_Sync_Run {
 					/* translators: 1: a whole sentence saying what does not happen (Run 7 takes no step.), 2: a time of day (UTC). */
 					__( '%1$s The lock of the write boundary is held by another request right now (a step of a run being written, or an activation, a deploy or an update of the code of this site through AlphaBridge), and a call that changes a run runs only while no other one does. Nothing was read or changed. Call again when that request has answered; a lock left behind by a request that ended early is taken over from %2$s UTC.', 'alphabridge-mcp' ),
 					(string) $what,
-					gmdate( 'H:i', ( $since > 0 ? $since : self::now() ) + AB_MCP_Change_Lock::TIMEOUT )
+					self::time_of_day( $since > 0 ? $since : self::now() )
 				)
 			);
 		}
@@ -849,7 +872,10 @@ final class AB_MCP_Sync_Run {
 			return true;
 		}
 		$since = self::lock_since();
-		return $since > 0 && ( self::now() - $since ) < AB_MCP_Change_Lock::TIMEOUT;
+		// A clock that gives no time counts the lock as held: never taken
+		// over by a time not known.
+		$now = self::now();
+		return $since > 0 && ( null === $now || ( $now - $since ) < AB_MCP_Change_Lock::TIMEOUT );
 	}
 
 	/**
@@ -1268,7 +1294,7 @@ final class AB_MCP_Sync_Run {
 			'closed'            => (int) $run['closed'],
 			'heartbeat'         => (int) $run['heartbeat'],
 			'calls'             => (int) $run['calls'],
-			'duration'          => ( (int) $run['closed'] > 0 ? (int) $run['closed'] : self::now() ) - (int) $run['created'],
+			'duration'          => self::duration( $run ),
 			'forward_closed_at' => (int) $run['forward_closed_at'],
 			'keep_until'        => (int) $run['keep_until'],
 			'steps'             => array(),
@@ -1276,6 +1302,13 @@ final class AB_MCP_Sync_Run {
 			'rests'             => array(),
 			'unclear'           => array(),
 		);
+		if ( in_array( $run['state'], AB_MCP_Sync_Schema::CLOSED, true ) && 0 === (int) $run['keep_until'] ) {
+			// No period stored at the close (the days of the filter or the
+			// time of the close were not known, AB_MCP_Sync_Schema::
+			// keep_until(); or a row of before the periods): the clean-up
+			// keeps its backups as long as the run is there (Behebung 3).
+			$out['retention'] = __( 'This run has no stored period for its backups: the days of the filter ab_mcp_staging_backup_days (a whole number from 0 to 3650) or the time of its close could not be read when it closed, or it closed before such periods were stored. So the clean-up keeps its backups as long as the run is there. Check that the code that hooks ab_mcp_staging_backup_days returns a whole number of days from 0 to 3650.', 'alphabridge-mcp' );
+		}
 		foreach ( $steps as $step ) {
 			// A state of an earlier build (restored) counts under its own name.
 			if ( ! isset( $out['counts'][ $step['state'] ] ) ) {
@@ -1420,6 +1453,9 @@ final class AB_MCP_Sync_Run {
 			'result'      => $result,
 			'time'        => self::now(),
 		);
+		if ( null === $row['time'] ) {
+			return self::clock_unknown();
+		}
 		$formats = array( '%d', '%d', null === $row['pair_id'] ? null : '%d', '%s', '%d', '%s', '%s', null === $parts ? null : '%s', null, null === $result ? null : '%s', '%d' );
 		$done    = $wpdb->insert( AB_MCP_Sync_Schema::table( 'steps' ), $row, $formats );
 		return false === $done ? self::db_error() : true;
@@ -1495,9 +1531,46 @@ final class AB_MCP_Sync_Run {
 	}
 
 	/**
-	 * @return int Seconds.
+	 * The time of the runs, in the form of its row of AB_MCP_Store_Inputs::
+	 * TABLE (period.clock): what the clock of the tests gives, time()
+	 * otherwise; null where the clock gives no whole number of 1 or more
+	 * (Behebung 4, B2/B3: no cast, so no period is made of a time that is
+	 * not known).
+	 *
+	 * @return int|null Seconds.
 	 */
 	public static function now() {
-		return null !== self::$clock ? (int) call_user_func( self::$clock ) : time();
+		return AB_MCP_Store_Inputs::read( 'period.clock', null !== self::$clock ? call_user_func( self::$clock ) : time() );
+	}
+
+	/**
+	 * The refusal where the clock gives no time: nothing is written.
+	 *
+	 * @return WP_Error
+	 */
+	public static function clock_unknown() {
+		return new WP_Error( 'ab_mcp_sync_run_clock', __( 'The clock of the takeover gives no time (a whole number of seconds), so nothing of the run was written. Try again; if it keeps failing, check the code that sets the clock of AB_MCP_Sync_Run.', 'alphabridge-mcp' ) );
+	}
+
+	/**
+	 * Seconds a run took or takes so far, null where the clock gives no time.
+	 *
+	 * @param array $run Run.
+	 * @return int|null
+	 */
+	private static function duration( array $run ) {
+		$end = (int) $run['closed'] > 0 ? (int) $run['closed'] : self::now();
+		return null === $end ? null : $end - (int) $run['created'];
+	}
+
+	/**
+	 * The time of day (UTC) a lock taken at $at times out, as a message shows
+	 * it; "--:--" where the time is not known.
+	 *
+	 * @param int|null $at Time.
+	 * @return string
+	 */
+	private static function time_of_day( $at ) {
+		return null === $at ? '--:--' : gmdate( 'H:i', $at + AB_MCP_Change_Lock::TIMEOUT );
 	}
 }

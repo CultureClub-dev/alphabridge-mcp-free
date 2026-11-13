@@ -12,7 +12,9 @@
  *   missing, and a failed one after RETRY;
  * - kept() keeps a group of a run that is not closed (and of every run
  *   while the runs cannot be read), the others by the time of their area,
- *   the backups by ab_mcp_staging_backup_days;
+ *   the backups by ab_mcp_staging_backup_days; an entry whose area, time
+ *   made or run is not as the table SIDECAR says is kept (Behebung 2 of
+ *   Z8b branch 3, A1);
  * - owns() takes a folder only with this installation's manifest, every
  *   field of it;
  * - without a store nothing is written, and every message names the way.
@@ -151,21 +153,45 @@ final class ProtectedStoreTest extends TestCase {
 
 	/* ---------------------------------------------------------- clean-up */
 
+	/**
+	 * The inputs of kept() as the clean-up gives them (RETENTION_INPUTS):
+	 * the entry of the group, the time, the runs that are not closed, what
+	 * the retention says of each run's backups, the seconds of each area.
+	 */
+	private static function inputs( array $entry, $now, $open, $backups, $keep = null ): array {
+		if ( null === $keep ) {
+			$keep = array();
+			foreach ( array_keys( AB_MCP_Protected_Store::SIDECAR ) as $area ) {
+				$keep[ $area ] = AB_MCP_Protected_Store::keep( $area );
+			}
+		}
+		return array(
+			'entry'   => $entry,
+			'now'     => $now,
+			'open'    => $open,
+			'backups' => $backups,
+			'keep'    => $keep,
+		);
+	}
+
 	public function testTheCleanUpKeepsWhatAnOpenRunHoldsAndTheRestByItsTime(): void {
-		$now = 1800000000;
-		$day = 86400;
-		$old = static fn( string $area, int $age, int $run = 0 ): array => array(
+		$now  = 1800000000;
+		$day  = 86400;
+		$old  = static fn( string $area, int $age, int $run = 0 ): array => array(
 			'area'    => $area,
 			'created' => $now - $age,
 			'run_id'  => $run,
 		);
+		$kept = static fn( array $entry, $open, $backups = array(), $at = null, $keep = null ) => AB_MCP_Protected_Store::kept( self::inputs( $entry, $at ?? $now, $open, $backups, $keep ) );
 		foreach ( array( 'out', 'in', 'reports' ) as $area ) {
-			self::assertTrue( AB_MCP_Protected_Store::kept( $old( $area, $day - 1 ), $now, array() ), "$area: younger than a day." );
-			self::assertFalse( AB_MCP_Protected_Store::kept( $old( $area, $day ), $now, array() ), "$area: a day old." );
-			self::assertTrue( AB_MCP_Protected_Store::kept( $old( $area, 30 * $day, 7 ), $now, array( 3, 7 ) ), "$area: a run that is not closed holds it." );
-			self::assertFalse( AB_MCP_Protected_Store::kept( $old( $area, 30 * $day, 7 ), $now, array( 3 ) ), "$area: a closed run does not." );
-			self::assertTrue( AB_MCP_Protected_Store::kept( $old( $area, 30 * $day, 7 ), $now, null ), "$area: while the runs cannot be read, a run's group stays." );
-			self::assertFalse( AB_MCP_Protected_Store::kept( $old( $area, 30 * $day ), $now, null ), "$area: one of no run goes by its time." );
+			self::assertTrue( $kept( $old( $area, $day - 1 ), array() ), "$area: younger than a day." );
+			self::assertFalse( $kept( $old( $area, $day ), array() ), "$area: a day old." );
+			self::assertTrue( $kept( $old( $area, 30 * $day, 7 ), array( 3, 7 ) ), "$area: a run that is not closed holds it." );
+			self::assertFalse( $kept( $old( $area, 30 * $day, 7 ), array( 3 ) ), "$area: a closed run does not." );
+			self::assertNull( $kept( $old( $area, 30 * $day, 7 ), null ), "$area: while the runs cannot be read, a run's group stays, unknown." );
+			// A group of no run needs no runs (Behebung 3, B4): it goes by its
+			// time also while the runs cannot be read.
+			self::assertFalse( $kept( $old( $area, 30 * $day ), null, null ), "$area: one of no run goes by its time." );
 		}
 		// The backups of a run with a row follow the retention contract as the
 		// row holds it (decision 20; branch 8; AB_MCP_Sync_Schema::backup_rows():
@@ -174,22 +200,112 @@ final class ProtectedStoreTest extends TestCase {
 		// its row gone with a database put back) are kept by their age, as a
 		// close that does not qualify: never removed at once.
 		self::assertSame( 0, AB_MCP_Protected_Store::backup_days(), 'Free keeps no qualified close by its age, the last three only.' );
-		self::assertTrue( AB_MCP_Protected_Store::kept( $old( 'backups', 400 * $day, 7 ), $now, array(), array( 7 => true ) ) );
-		self::assertFalse( AB_MCP_Protected_Store::kept( $old( 'backups', 1, 7 ), $now, array(), array( 3 => true, 7 => false ) ), 'A run whose row says its backups go: they go, whatever their age.' );
-		self::assertTrue( AB_MCP_Protected_Store::kept( $old( 'backups', 7 * $day - 1, 7 ), $now, array(), array( 3 => true ) ), 'A run without a row: kept by its age, not removed at once.' );
-		self::assertFalse( AB_MCP_Protected_Store::kept( $old( 'backups', 7 * $day, 7 ), $now, array(), array( 3 => true ) ), 'A run without a row: gone after the days of a close that does not qualify.' );
-		self::assertTrue( AB_MCP_Protected_Store::kept( $old( 'backups', 400 * $day, 7 ), $now, array(), null ), 'While the runs cannot be read, every run\'s backups stay.' );
-		self::assertTrue( AB_MCP_Protected_Store::kept( $old( 'backups', 7 * $day - 1 ), $now, array() ), 'Backups of no run: seven days.' );
-		self::assertFalse( AB_MCP_Protected_Store::kept( $old( 'backups', 7 * $day ), $now, array() ), 'Backups of no run: seven days.' );
+		self::assertTrue( $kept( $old( 'backups', 400 * $day, 7 ), array(), array( 7 => true ) ) );
+		self::assertFalse( $kept( $old( 'backups', 1, 7 ), array(), array( 3 => true, 7 => false ) ), 'A run whose row says its backups go: they go, whatever their age.' );
+		self::assertTrue( $kept( $old( 'backups', 7 * $day - 1, 7 ), array(), array( 3 => true ) ), 'A run without a row: kept by its age, not removed at once.' );
+		self::assertFalse( $kept( $old( 'backups', 7 * $day, 7 ), array(), array( 3 => true ) ), 'A run without a row: gone after the days of a close that does not qualify.' );
+		self::assertNull( $kept( $old( 'backups', 400 * $day, 7 ), array(), null ), 'While the retention of the runs cannot be read, every run\'s backups stay, unknown.' );
+		self::assertFalse( $kept( $old( 'stage', 400 * $day, 7 ), array(), null ), 'A group outside backups needs no retention of backups (Behebung 3, B4).' );
+		// Behebung 2 of Z8b branch 3, A1: backups and stage know groups of a
+		// run only (AB_MCP_Protected_Store::SIDECAR), so an entry of no run
+		// there is unknown, and kept whatever its age; out, in and reports
+		// know groups of no run (above).
+		foreach ( array( 'backups', 'stage' ) as $area ) {
+			self::assertNull( $kept( $old( $area, 400 * $day ), array(), array() ), "$area of no run: unknown, kept." );
+		}
+		// What kept() decides by, missing, null, of another type or outside
+		// its range: kept as unknown, never made up.
+		foreach ( array( 'out', 'in', 'reports', 'backups', 'stage' ) as $area ) {
+			$base = $old( $area, 400 * $day, 7 );
+			self::assertFalse( $kept( $base, array(), array( 7 => false ) ), "$area: whole and past its time, it goes." );
+			foreach ( array( 'run_id', 'created', 'area' ) as $field ) {
+				$without = $base;
+				unset( $without[ $field ] );
+				self::assertNull( $kept( $without, array(), array( 7 => false ) ), "$area without $field." );
+				self::assertNull( $kept( array( $field => null ) + $base, array(), array( 7 => false ) ), "$area, $field null." );
+				self::assertNull( $kept( array( $field => (string) $base[ $field ] . 'x' ) + $base, array(), array( 7 => false ) ), "$area, $field of another type." );
+			}
+			self::assertNull( $kept( array( 'run_id' => -1 ) + $base, array(), array( 7 => false ) ), "$area, run -1." );
+			self::assertNull( $kept( array( 'run_id' => '7' ) + $base, array(), array( 7 => false ) ), "$area, run as a string." );
+			self::assertNull( $kept( array( 'created' => 0 ) + $base, array(), array( 7 => false ) ), "$area, made at 0." );
+		}
 
 		add_filter( AB_MCP_Protected_Store::BACKUP_DAYS_FILTER, static fn(): int => 30 );
 		self::assertSame( 30, AB_MCP_Protected_Store::backup_days(), 'Pro sets 30 through the filter.' );
-		self::assertTrue( AB_MCP_Protected_Store::kept( $old( 'backups', 30 * $day - 1, 7 ), $now, array(), array( 3 => true ) ), 'Pro: a run without a row is kept the days of the filter.' );
-		self::assertFalse( AB_MCP_Protected_Store::kept( $old( 'backups', 30 * $day, 7 ), $now, array(), array( 3 => true ) ), 'Pro: and goes after them.' );
-		self::assertFalse( AB_MCP_Protected_Store::kept( $old( 'backups', 1, 7 ), $now, array(), array( 7 => false ) ), 'Pro: a row that says its backups go is not kept by the days of the filter.' );
+		self::assertTrue( $kept( $old( 'backups', 30 * $day - 1, 7 ), array(), array( 3 => true ) ), 'Pro: a run without a row is kept the days of the filter.' );
+		self::assertFalse( $kept( $old( 'backups', 30 * $day, 7 ), array(), array( 3 => true ) ), 'Pro: and goes after them.' );
+		self::assertFalse( $kept( $old( 'backups', 1, 7 ), array(), array( 7 => false ) ), 'Pro: a row that says its backups go is not kept by the days of the filter.' );
+		// Days of the filter that are no whole number of 0 to 3650 are not
+		// known (Behebung 3, A2): no period is made of them.
+		foreach ( array( -5, 3651, '30 days', 30.5, null, '030', true ) as $days ) {
+			remove_all_filters_for( AB_MCP_Protected_Store::BACKUP_DAYS_FILTER );
+			add_filter( AB_MCP_Protected_Store::BACKUP_DAYS_FILTER, static fn() => $days );
+			$shown = var_export( $days, true );
+			self::assertNull( AB_MCP_Protected_Store::backup_days(), "days $shown: not known." );
+			self::assertNull( AB_MCP_Protected_Store::keep( 'backups' ), "days $shown: backups keep no period made up." );
+			self::assertNull( $kept( $old( 'backups', 400 * $day, 7 ), array(), array( 3 => true ) ), "days $shown: a backup of a run without a row stays, unknown." );
+			self::assertFalse( $kept( $old( 'reports', 400 * $day ), array() ), "days $shown: a report goes by its own time." );
+		}
 		remove_all_filters_for( AB_MCP_Protected_Store::BACKUP_DAYS_FILTER );
-		add_filter( AB_MCP_Protected_Store::BACKUP_DAYS_FILTER, static fn(): int => -5 );
-		self::assertSame( 0, AB_MCP_Protected_Store::backup_days(), 'Never below none.' );
+		add_filter( AB_MCP_Protected_Store::BACKUP_DAYS_FILTER, static fn(): string => '30' );
+		self::assertSame( 30, AB_MCP_Protected_Store::backup_days(), 'The digits of a whole number are the number.' );
+		remove_all_filters_for( AB_MCP_Protected_Store::BACKUP_DAYS_FILTER );
+		// keep() names the age of an area of groups only: the marks keep a
+		// closed mark a day by KEEP['marks'] in sweep(), and are no area.
+		foreach ( array( 'marks', 'tmp', 'elsewhere', 5, null ) as $area ) {
+			self::assertNull( AB_MCP_Protected_Store::keep( $area ), var_export( $area, true ) . ': no area of groups, no age.' );
+		}
+	}
+
+	public function testKeptTakesTheInputsOfItsListAndNoValueBeside(): void {
+		// Behebung 3 of Z8b branch 3: the one list of the inputs of the
+		// retention decision; kept() takes exactly these, each needed one
+		// that is null keeps the group as unknown.
+		self::assertSame( array( 'entry', 'now', 'open', 'backups', 'keep' ), array_keys( AB_MCP_Protected_Store::RETENTION_INPUTS ) );
+		foreach ( AB_MCP_Protected_Store::RETENTION_INPUTS as $name => $source ) {
+			list( $class, $method ) = explode( '::', $source );
+			self::assertTrue( method_exists( $class, $method ), "$name: its source $source is there." );
+		}
+		$now  = 1800000000;
+		$goes = array(
+			'area'    => 'backups',
+			'created' => $now - 400 * 86400,
+			'run_id'  => 7,
+		);
+		$in   = self::inputs( $goes, $now, array( 3 ), array( 7 => false ) );
+		self::assertFalse( AB_MCP_Protected_Store::kept( $in ), 'The base: it goes.' );
+		$less = $in;
+		unset( $less['keep'] );
+		self::assertNull( AB_MCP_Protected_Store::kept( $less ), 'An input missing: unknown.' );
+		self::assertNull( AB_MCP_Protected_Store::kept( $in + array( 'more' => 1 ) ), 'An input not on the list: unknown, never read.' );
+		self::assertFalse( AB_MCP_Protected_Store::kept( array_reverse( $in, true ) ), 'The same inputs in another order decide the same.' );
+		// Each input of the list, null where the group needs it: a backup of a
+		// closed run whose row the retention names needs the entry, the runs
+		// and the retention; one whose run has no row is kept by its age and
+		// needs the time and the seconds of its area.
+		$by_age = array_replace( $in, array( 'backups' => array( 3 => true ) ) );
+		self::assertFalse( AB_MCP_Protected_Store::kept( $by_age ), 'The base by age: it goes.' );
+		$needs  = array(
+			'entry'   => $in,
+			'now'     => $by_age,
+			'open'    => $in,
+			'backups' => $in,
+			'keep'    => $by_age,
+		);
+		self::assertSame( array_keys( AB_MCP_Protected_Store::RETENTION_INPUTS ), array_keys( $needs ), 'Every input of the list has its case here: a new one without is red.' );
+		foreach ( $needs as $name => $base ) {
+			self::assertNull( AB_MCP_Protected_Store::kept( array_replace( $base, array( $name => null ) ) ), "$name null where this group needs it: unknown, kept." );
+		}
+		self::assertFalse( AB_MCP_Protected_Store::kept( array_replace( $in, array( 'now' => null, 'keep' => null ) ) ), 'Not needed by this group (its run decides): time and seconds decide nothing.' );
+		foreach ( array( 0, -1, '1800000000', 1.8e9 ) as $at ) {
+			self::assertNull( AB_MCP_Protected_Store::kept( array_replace( $by_age, array( 'now' => $at ) ) ), 'now ' . var_export( $at, true ) . ': unknown.' );
+		}
+		$keep            = $in['keep'];
+		$keep['backups'] = null;
+		self::assertNull( AB_MCP_Protected_Store::kept( array_replace( $in, array( 'keep' => $keep, 'backups' => array() ) ) ), 'The seconds of the area not known: unknown.' );
+		self::assertSame( true, AB_MCP_Protected_Store::kept( array_replace( $in, array( 'backups' => array( 7 => true ) ) ) ), 'A run the retention keeps.' );
+		self::assertNull( AB_MCP_Protected_Store::kept( array_replace( $in, array( 'backups' => array( 7 => 1 ) ) ) ), 'A retention of no bool: unknown, neither kept nor freed by a cast.' );
+		self::assertNull( AB_MCP_Protected_Store::kept( array_replace( $in, array( 'open' => 'none' ) ) ), 'Runs that are no list: unknown.' );
 	}
 
 	public function testTheRunsAreNotReadWithoutTheirTable(): void {
@@ -267,7 +383,7 @@ final class ProtectedStoreTest extends TestCase {
 			self::assertSame( 'ab_mcp_store_unavailable', $res->get_error_code(), "call $i" );
 			self::assertSame( $proof['message'], $res->get_error_message() );
 		}
-		self::assertSame( array( 'removed' => 0, 'kept' => 0 ), AB_MCP_Protected_Store::cleanup() );
+		self::assertSame( array( 'removed' => 0, 'kept' => 0, 'unknown' => 0 ), AB_MCP_Protected_Store::cleanup() );
 		self::assertFalse( AB_MCP_Protected_Store::remove( 'out', $gid ) );
 		$writes = array_filter( $GLOBALS['wpdb']->queries, static fn( string $q ): bool => 0 === strpos( $q, 'INSERT IGNORE' ) );
 		self::assertCount( 1, $writes, 'The id was asked for once, by INSERT IGNORE.' );

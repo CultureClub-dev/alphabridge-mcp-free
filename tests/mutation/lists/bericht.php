@@ -4264,6 +4264,15 @@ return array(
 		'expect'  => '/testTheInventoryOfThisSiteIsReadInPartsAndGivesTheSameReport/',
 	),
 	array(
+		'id'      => 'bericht/rep-replace-own-only',
+		'clause'  => 'replace_own(): the reports of other connections stay (the list of substitute values of Z8b branch 3, Behebung 3)',
+		'file'    => $re,
+		'search'  => "\t\t\tif ( is_array( \$head ) && isset( \$head['connection'] ) && hash_equals( (string) \$head['connection'], \$mine ) ) {",
+		'replace' => "\t\t\tif ( is_array( \$head ) ) {",
+		'run'     => $it( 'SyncReportTest', 'testAReportOverMcpDecidesEachObjectAndWritesNothingButTheReport' ),
+		'expect'  => '/testAReportOverMcpDecidesEachObjectAndWritesNothingButTheReport/',
+	),
+	array(
 		'id'      => 'bericht/rep-step-read',
 		'clause'  => 'step(): an inventory read to its end is not read again',
 		'file'    => $re,

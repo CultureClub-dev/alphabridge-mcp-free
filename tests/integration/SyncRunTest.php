@@ -105,7 +105,6 @@ final class SyncRunTest extends TestCase {
 		$_SERVER['DOCUMENT_ROOT'] = AB_MCP_IT_Sites::docroot( 'a' );
 		AB_MCP_Protected_Store::forget();
 		AB_MCP_Sync_Schema::forget();
-		AB_MCP_Sync_Backup::forget();
 		AB_MCP_Sync_Guard::disarm();
 		delete_option( AB_MCP_Sync_Guard::OPTION );
 		delete_option( \AB_MCP_Change_Lock::OPTION );
@@ -120,7 +119,6 @@ final class SyncRunTest extends TestCase {
 			$_SERVER['DOCUMENT_ROOT'] = $this->docroot_before;
 		}
 		AB_MCP_Protected_Store::forget();
-		AB_MCP_Sync_Backup::forget();
 		AB_MCP_Sync_Guard::disarm();
 		AB_MCP_Sync_Run::$clock       = null;
 		AB_MCP_Sync_Engine::$clock    = null;
@@ -771,7 +769,6 @@ final class SyncRunTest extends TestCase {
 			self::assertStringContainsString( 'gave no JSON', $e->getMessage() );
 		}
 		AB_MCP_Protected_Store::forget();
-		AB_MCP_Sync_Backup::forget();
 		self::assertSame( 'Write to us on staging.', self::row_a( (int) $a['contact'] )['post_content'], 'The row was written before the exit.' );
 		$step = AB_MCP_Sync_Run::step( $run_id, 2 );
 		self::assertSame( 'begun', $step['state'] );
@@ -1617,7 +1614,6 @@ final class SyncRunTest extends TestCase {
 			self::assertStringContainsString( 'gave no JSON', $e->getMessage() );
 		}
 		AB_MCP_Protected_Store::forget();
-		AB_MCP_Sync_Backup::forget();
 		self::assertSame( 'begun', AB_MCP_Sync_Run::step( $run_id, $s2 )['state'] );
 		self::assertSame( 'reverting', AB_MCP_Sync_Run::get( $run_id )['state'], 'Nothing has settled it yet.' );
 		self::assertFalse( AB_MCP_Sync_Run::lock_fresh(), 'The shutdown of the process gave the lock back.' );
@@ -2874,7 +2870,6 @@ final class SyncRunTest extends TestCase {
 			self::assertStringContainsString( 'gave no JSON', $e->getMessage() );
 		}
 		AB_MCP_Protected_Store::forget();
-		AB_MCP_Sync_Backup::forget();
 		wp_cache_flush();
 		self::assertSame( array( 'def' ), self::meta_a( (int) $a['contact'], 'note' ), 'The meta call wrote the note before the exit.' );
 		$parts = array_column( AB_MCP_Sync_Run::step( $run_id, 2 )['parts']['parts'], null, 'part' );
