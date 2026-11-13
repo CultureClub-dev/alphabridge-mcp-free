@@ -316,6 +316,110 @@ final class SyncCodeStageTest extends TestCase {
 		self::assertFalse( \AB_MCP_Sync_Env::shaped( array( 'update_uri' => '' ) + array_diff_key( $line, array( 'cause' => true ) ) ), 'Only update_uri may be missing.' );
 	}
 
+	public function testTheFilesOfAUnitFitAPackageByBytesAndByLinesAndTheRestIsLeft(): void {
+		// F43, the decision of make_code(): a file goes into the package where
+		// it fits beside what is there, by bytes and by lines; one larger than
+		// a whole package is too large; the rest is left for the next package,
+		// and the unit is complete in this one only without either.
+		$fit  = new \ReflectionMethod( \AB_MCP_Sync_Export::class, 'code_fit' );
+		$max  = AB_MCP_Sync_Code_Package::MAX_BYTES;
+		$file = static fn( string $path, int $size ): array => array(
+			'path'   => $path,
+			'size'   => $size,
+			'sha256' => str_repeat( 'a', 64 ),
+		);
+		$got  = $fit->invoke( null, array( $file( 'a.php', 10 ), $file( 'gross.bin', $max + 1 ), $file( 'b.bin', $max - 5 ), $file( 'c.php', 5 ) ), 0, 0 );
+		self::assertSame( array( 'a.php', 'c.php' ), array_column( $got['files'], 'path' ) );
+		self::assertSame( array( 'b.bin' ), $got['left'], 'It does not fit beside a.php: the next package.' );
+		self::assertSame( array( array( 'gross.bin', $max + 1 ) ), $got['too_large'] );
+		self::assertFalse( $got['complete'] );
+		self::assertSame( 15, $got['total'] );
+		self::assertSame( 2, $got['lines'] );
+		// By lines: one line short of a whole package, a file of two pieces is left.
+		$two = $fit->invoke( null, array( $file( 'd.bin', AB_MCP_Sync_Code_Package::PIECE + 1 ) ), 0, \AB_MCP_Sync_Manifest::MAX_OBJECTS - 1 );
+		self::assertSame( array( 'd.bin' ), $two['left'] );
+		self::assertFalse( $two['complete'] );
+		$all = $fit->invoke( null, array( $file( 'a.php', 10 ), $file( 'c.php', 5 ) ), 0, 0 );
+		self::assertSame( array(), $all['left'] );
+		self::assertTrue( $all['complete'], 'Everything fits: complete.' );
+	}
+
+	public function testAFileNeitherLiveNorInAPackageBuildsNothing(): void {
+		// from_packages(): every file of the signed manifest comes from the
+		// live unit or a package; one in neither is named, nothing is built.
+		$calls        = new SyncCodeStageCalls();
+		$calls->taken = array(
+			'files' => array(
+				array(
+					'kind'   => 'plugin',
+					'ref'    => 'ab-it-code',
+					'path'   => 'b.php',
+					'sha256' => str_repeat( 'a', 64 ),
+				),
+			),
+		);
+		self::seam( $calls );
+		$got = AB_MCP_Sync_Code_Stage::from_packages( self::signed(), null, array( 'p1' ), $this->dir );
+		self::assertInstanceOf( WP_Error::class, $got );
+		self::assertSame( 'code:stage_incomplete', $got->get_error_code() );
+		self::assertSame( array( 'paths' => array( 'a.php' ) ), $got->get_error_data() );
+		self::assertFileDoesNotExist( $this->dir . '/unit/ab-it-code' );
+	}
+
+	public function testAUnitBuiltThatIsNotTheSignedOneIsNotUsed(): void {
+		// from_packages() and from_org(), each the one place of its source:
+		// the unit built counts only where its manifest is the signed one.
+		$live = $this->dir . '/live/ab-it-code';
+		mkdir( $live, 0777, true );
+		file_put_contents( $live . '/a.php', '<?php' );
+		$read   = \AB_MCP_Sync_File_Manifest::unit( $this->dir . '/live', 'ab-it-code', 'staging', microtime( true ) + 60, true, 'plugin' );
+		$signed = self::signed(
+			array(
+				'hash'    => $read['hash'],
+				'entries' => array( array( 'a.php', 5, hash( 'sha256', '<?php' ) ) ),
+			)
+		);
+		$from   = array(
+			'form'    => 'folder',
+			'hash'    => $read['hash'],
+			'entries' => $read['entries'],
+			'path'    => $live,
+		);
+		$calls  = new SyncCodeStageCalls();
+		self::seam( $calls );
+		foreach ( array( 'b1', 'b2', 'b3', 'b4' ) as $build ) {
+			mkdir( $this->dir . '/' . $build );
+		}
+		self::assertSame( $this->dir . '/b1/unit/ab-it-code', AB_MCP_Sync_Code_Stage::from_packages( $signed, $from, array( 'p1' ), $this->dir . '/b1' ), 'Built from the live unit, the signed one.' );
+		$calls->corrupt = true;
+		self::assertSame( 'code:stage_mismatch', AB_MCP_Sync_Code_Stage::from_packages( $signed, $from, array( 'p1' ), $this->dir . '/b2' )->get_error_code(), 'A file that comes out otherwise when it is copied.' );
+		// From wordpress.org likewise: a ZIP of the signed unit, and one of another.
+		$calls->body      = "PK\x03\x04" . str_repeat( 'z', 96 );
+		$calls->zip_files = array( 'a.php' => '<?php' );
+		self::assertSame( $this->dir . '/b3/org/ab-it-code', AB_MCP_Sync_Code_Stage::from_org( $signed, $this->dir . '/b3' ) );
+		$calls->zip_files = array( 'a.php' => '<?php ' );
+		self::assertSame( 'code:org_mismatch', AB_MCP_Sync_Code_Stage::from_org( $signed, $this->dir . '/b4' )->get_error_code() );
+	}
+
+	public function testTheFilesToCheckComeOnlyFromATreeReadWhole(): void {
+		// to_check(): the PHP files of a stage only from its tree read whole as
+		// its hash; another hash, or a reading that ends within its time, is
+		// unknown (complete(): code:syntax_unchecked), never fewer files.
+		$tree = $this->dir . '/tree/ab-it-code';
+		mkdir( $tree, 0777, true );
+		file_put_contents( $tree . '/a.php', '<?php' );
+		$read     = \AB_MCP_Sync_File_Manifest::unit( $this->dir . '/tree', 'ab-it-code', 'staging', microtime( true ) + 60, true, 'plugin' );
+		$to_check = new \ReflectionMethod( AB_MCP_Sync_Code_Stage::class, 'to_check' );
+		self::assertSame( array( 'a.php' ), $to_check->invoke( null, $tree, $read['hash'], 'plugin', 'ab-it-code' ) );
+		self::assertNull( $to_check->invoke( null, $tree, str_repeat( 'c', 64 ), 'plugin', 'ab-it-code' ), 'Another hash.' );
+		AB_MCP_Sync_Code_Stage::$clock = static fn(): float => microtime( true ) - 1000.0;
+		try {
+			self::assertNull( $to_check->invoke( null, $tree, $read['hash'], 'plugin', 'ab-it-code' ), 'The time of the reading is over before it begins.' );
+		} finally {
+			AB_MCP_Sync_Code_Stage::$clock = null;
+		}
+	}
+
 	public function testTheHostOfAUnitIsAnotherOneWhereAnyMainFileNamesOne(): void {
 		$dir = $this->dir . '/unit';
 		file_put_contents( $dir . '/a.php', "<?php\n/**\n * Plugin Name: A\n * Update URI: https://wordpress.org/plugins/a/\n */\n" );
@@ -379,9 +483,37 @@ final class SyncCodeStageCalls {
 		return $this->unpacked;
 	}
 
+	/** @var array<string,string>|null The files a ZIP holds for the unit ab-it-code (path => bytes), or null: unzip_file() refuses. */
+	public $zip_files = null;
+
 	public function unzip( $zip, $to ) {
 		++$this->unzipped;
-		return new WP_Error( 'incompatible_archive', 'Incompatible Archive.' );
+		if ( null === $this->zip_files ) {
+			return new WP_Error( 'incompatible_archive', 'Incompatible Archive.' );
+		}
+		foreach ( $this->zip_files as $path => $bytes ) {
+			@mkdir( dirname( $to . '/ab-it-code/' . $path ), 0777, true );
+			file_put_contents( $to . '/ab-it-code/' . $path, $bytes );
+		}
+		return true;
+	}
+
+	/** @var array taken(): the files of the packages. */
+	public $taken = array( 'files' => array() );
+
+	/** @var bool True: a file of the live unit comes out otherwise when it is copied. */
+	public $corrupt = false;
+
+	public function taken( $package_id ) {
+		return $this->taken;
+	}
+
+	public function mkdir( $path ): bool {
+		return is_dir( $path ) || mkdir( $path, 0777, true );
+	}
+
+	public function copy( $from, $to ): bool {
+		return ! file_exists( $to ) && copy( $from, $to ) && ( ! $this->corrupt || false !== file_put_contents( $to, 'x', FILE_APPEND ) );
 	}
 
 	public function tokenizer(): bool {

@@ -769,43 +769,33 @@ final class AB_MCP_Sync_Export {
 				);
 				continue;
 			}
-			$files = array();
-			$left  = array();
-			$whole = true;
-			foreach ( $unit['files'] as $file ) {
-				$pieces = AB_MCP_Sync_Media_Package::pieces( $file['size'] );
-				if ( $file['size'] > AB_MCP_Sync_Code_Package::MAX_BYTES || $pieces > AB_MCP_Sync_Manifest::MAX_OBJECTS ) {
-					$whole               = false;
-					$code['too_large'][] = array(
-						'kind'  => $one['kind'],
-						'ref'   => $one['ref'],
-						'path'  => AB_MCP_Sync_Env::path_name( $file['path'] ),
-						'bytes' => $file['size'],
-					);
-				} elseif ( $total + $file['size'] > AB_MCP_Sync_Code_Package::MAX_BYTES || $lines + $pieces > AB_MCP_Sync_Manifest::MAX_OBJECTS ) {
-					$left[] = AB_MCP_Sync_Env::path_name( $file['path'] );
-				} else {
-					$total  += $file['size'];
-					$lines  += $pieces;
-					$files[] = $file;
-				}
+			$fit   = self::code_fit( $unit['files'], $total, $lines );
+			$total = $fit['total'];
+			$lines = $fit['lines'];
+			foreach ( $fit['too_large'] as $big ) {
+				$code['too_large'][] = array(
+					'kind'  => $one['kind'],
+					'ref'   => $one['ref'],
+					'path'  => $big[0],
+					'bytes' => $big[1],
+				);
 			}
-			if ( array() !== $left ) {
+			if ( array() !== $fit['left'] ) {
 				$code['left'][] = array(
 					'kind'  => $one['kind'],
 					'ref'   => $one['ref'],
-					'paths' => $left,
+					'paths' => $fit['left'],
 				);
 			}
-			if ( array() !== $files ) {
-				$take[]           = array( $unit, $files );
+			if ( array() !== $fit['files'] ) {
+				$take[]           = array( $unit, $fit['files'] );
 				$code['packed'][] = array(
 					'kind'  => $one['kind'],
 					'ref'   => $one['ref'],
-					'files' => count( $files ),
+					'files' => count( $fit['files'] ),
 				);
 				$kinds[]          = array(
-					'complete' => $whole && array() === $left,
+					'complete' => $fit['complete'],
 					'kind'     => $one['kind'],
 					'subtype'  => $one['ref'],
 				);
@@ -829,6 +819,44 @@ final class AB_MCP_Sync_Export {
 			);
 		}
 		return $answer;
+	}
+
+	/**
+	 * The files of one unit that go into a package of code (make_code()):
+	 * each, in the order of its manifest, where it fits beside what the
+	 * package holds already, by bytes (AB_MCP_Sync_Code_Package::MAX_BYTES)
+	 * and by lines (AB_MCP_Sync_Manifest::MAX_OBJECTS); a file larger than a
+	 * whole package is too large, any other that does not fit is left for
+	 * the next package (F43). The unit is complete in this package only
+	 * where nothing is left and nothing is too large.
+	 *
+	 * @param array[] $files The files of the unit (path, size, sha256).
+	 * @param int     $total Bytes of files in the package so far.
+	 * @param int     $lines Lines in the package so far.
+	 * @return array{files:array[],left:string[],too_large:array[],complete:bool,total:int,lines:int}
+	 */
+	private static function code_fit( array $files, $total, $lines ) {
+		$out = array(
+			'files'     => array(),
+			'left'      => array(),
+			'too_large' => array(),
+		);
+		foreach ( $files as $file ) {
+			$pieces = AB_MCP_Sync_Media_Package::pieces( $file['size'] );
+			if ( $file['size'] > AB_MCP_Sync_Code_Package::MAX_BYTES || $pieces > AB_MCP_Sync_Manifest::MAX_OBJECTS ) {
+				$out['too_large'][] = array( AB_MCP_Sync_Env::path_name( $file['path'] ), $file['size'] );
+			} elseif ( $total + $file['size'] > AB_MCP_Sync_Code_Package::MAX_BYTES || $lines + $pieces > AB_MCP_Sync_Manifest::MAX_OBJECTS ) {
+				$out['left'][] = AB_MCP_Sync_Env::path_name( $file['path'] );
+			} else {
+				$total         += $file['size'];
+				$lines         += $pieces;
+				$out['files'][] = $file;
+			}
+		}
+		$out['complete'] = array() === $out['too_large'] && array() === $out['left'];
+		$out['total']    = $total;
+		$out['lines']    = $lines;
+		return $out;
 	}
 
 	/**
