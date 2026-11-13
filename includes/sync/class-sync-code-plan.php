@@ -245,12 +245,9 @@ final class AB_MCP_Sync_Code_Plan {
 	 * @return array|WP_Error item, shown, bytes; or locked.
 	 */
 	private static function unit( array $found, $n, array $entry, array $env, array $selection, array $with ) {
-		// Which unit and what the report does with it decide the step: read
-		// in the form a report of this version writes them, never cast.
-		$read = AB_MCP_Shape::read( $entry, self::ENTRY );
-		if ( null === $read ) {
-			/* translators: %d: entry number of the report. */
-			return self::refused( 'ab_mcp_sync_push_report', sprintf( __( 'Entry %d of the report does not read in the form a report of this version writes (its subtype, ref or action), so no unit of it is planned and nothing of this site changed. Make a new report (wp_site_diff) and plan again.', 'alphabridge-mcp' ), $n ) );
+		$read = self::entry_of( $entry, $n );
+		if ( is_wp_error( $read ) ) {
+			return $read;
 		}
 		$kind   = $read['subtype'];
 		$ref    = $read['ref'];
@@ -420,6 +417,25 @@ final class AB_MCP_Sync_Code_Plan {
 			$out[]                      = $unit;
 		}
 		return $out;
+	}
+
+	/**
+	 * The fields of the entry of a unit that decide its step (which unit,
+	 * what the report does with it), read in the form a report of this
+	 * version writes them (ENTRY), never cast; the refusal of the plan with
+	 * the way where they do not read so.
+	 *
+	 * @param array $entry The entry.
+	 * @param int   $n     Its number.
+	 * @return array|WP_Error subtype, ref, action (and the other fields as they are).
+	 */
+	private static function entry_of( array $entry, $n ) {
+		$read = AB_MCP_Shape::read( $entry, self::ENTRY );
+		if ( null === $read ) {
+			/* translators: %d: entry number of the report. */
+			return self::refused( 'ab_mcp_sync_push_report', sprintf( __( 'Entry %d of the report does not read in the form a report of this version writes (its subtype, ref or action), so no unit of it is planned and nothing of this site changed. Make a new report (wp_site_diff) and plan again.', 'alphabridge-mcp' ), $n ) );
+		}
+		return $read;
 	}
 
 	/**
