@@ -398,6 +398,13 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
   - B8, `close_mark()`, `ab_mcp_store_mark_read`, `includes/class-protected-store.php:2561`: «so it stays open»; nach
     Codex kann die Marke auf der Platte schon `closed` sein. Am Stand von K4g ruft unter `includes/` nichts
     `close_mark()` (`git grep`), der Fall liegt nicht auf dem Weg von Zweig 5.
+  - Befund des Teils K4h (Entscheid der Lead: in diesen Zweig), `ab_mcp_store_tree_exists`,
+    `includes/class-protected-store.php:1939`: «Use another name for it», ebenso G-3-4 («einen anderen Namen oder eine
+    neue Gruppe»); für einen Baum aus einer Datei geht ein anderer Name nicht, `put_tree()` lehnt ihn mit
+    `ab_mcp_store_tree_name` ab (`:1954`), gangbar ist nur eine neue Gruppe. Über `wp_site_push` nicht erreichbar: der
+    einzige Aufrufer im Produkt, `AB_MCP_Sync_Code_Stage::take_in()` (`includes/sync/class-sync-code-stage.php:974`),
+    legt in eine Gruppe, die `stage()` je Aufruf neu öffnet (`:752`). Am Code von K4h gelesen, nicht nachgestellt.
+    **Trifft Normalfall:** nein (braucht einen liegen gebliebenen Baum).
 - **Trifft Normalfall:** A3 bis A10 nach Codex ja (gewöhnliche Bedienfolgen), Kernzusage nein: sie werden in dem
   genannten Zweig behoben und sind bis dahin als Grenze geführt, nicht als hingenommen. B8: nein.
 
