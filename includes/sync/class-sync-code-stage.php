@@ -502,6 +502,15 @@ final class AB_MCP_Sync_Code_Stage {
 	/** The clock of the budget of complete(); a callable returning seconds, null for microtime(). Set by tests only. */
 	public static $clock = null;
 
+	/**
+	 * The refusals of complete() that no later call changes (A3 of the
+	 * Codex round 1 on the code): the tree or its hash not the one its group
+	 * holds, the unit not signed in the environment. A step of the code ends
+	 * failed on them; a reading that failed is none of them and is tried
+	 * again (reading 5).
+	 */
+	const PERMANENT = array( 'code:stage_other', 'code:unsigned' );
+
 	/** The calls to the outside (the seam); only the tests put another object here. */
 	private static $naht_sync_code_stage = null;
 
@@ -979,7 +988,7 @@ final class AB_MCP_Sync_Code_Stage {
 			return $state;
 		}
 		if ( $name !== $state['tree']['name'] || ! is_string( $hash ) || ! hash_equals( $state['tree']['hash'], $hash ) ) {
-			return self::refusal( 'code:stage_unknown', __( 'The stage named is not the one its group holds. Stage the unit again.', 'alphabridge-mcp' ) );
+			return self::refusal( 'code:stage_other', __( 'The stage named is not the one its group holds. Stage the unit again.', 'alphabridge-mcp' ) );
 		}
 		if ( self::CHECKING !== $state['state'] ) {
 			return self::answer( $state );
@@ -1401,6 +1410,8 @@ final class AB_MCP_Sync_Code_Stage {
 			return $state;
 		}
 		return array(
+			'unit'    => $state['unit'],
+			'signed'  => $state['signed'],
 			'state'   => $state['state'],
 			'checked' => $state['done'],
 			'files'   => count( $state['todo'] ),

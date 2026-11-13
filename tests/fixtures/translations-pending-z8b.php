@@ -337,4 +337,7 @@ return array(
 	// includes/sync/class-sync-code-plan.php, includes/sync/class-sync-engine.php (Z8b branch 5, 1a-3: a pair not named in its form, a plan of a run that does not read back in its check)
 	'Entry %d of the report names no pair in the form a report of this version writes it (a whole number of 1 or more), so its unit is not taken over and nothing of this site changed. Make a new report (wp_site_diff) and plan again.',
 	'The plan of this run does not read back, so step %d is judged neither as a step of the code nor as an object, and nothing of it counts as taken over. Check the site as it is in wp-admin; where the run is still open, abort it (wp_site_push action=abort).',
+	// includes/sync/class-sync-code-ops.php, includes/sync/class-sync-code-plan.php (Z8b branch 5, K1a: a ready stage not bound to its step (A2), a group of the packages not of its form)
+	'The stage the journal of this step names is not bound to this run, this unit and the version of the staging site the plan names, so this step is not done on it. Abort the run (wp_site_push action=abort), make a new report (wp_site_diff) and plan again.',
+	'A group of the packages taken over does not read in the form of the protected store (its id or its label), so the packages of this plan are not bound to the run and no run is made. Ask the host to check the folder of the protected store; then make a new report (wp_site_diff) and plan again.',
 );

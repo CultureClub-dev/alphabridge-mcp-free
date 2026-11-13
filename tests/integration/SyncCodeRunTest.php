@@ -783,6 +783,108 @@ final class SyncCodeRunTest extends TestCase {
 		self::assertSame( $before, self::live_bytes( 'ab-it-inaktiv' ) );
 	}
 
+	/** A run of ab-it-inaktiv with its unit staged: the run, the staged journal and the files of the site before. */
+	private static function staged_run(): array {
+		list( $args ) = self::changed( 'ab-it-inaktiv', '1.1.0' );
+		self::wporg();
+		list( , $run ) = self::begun( $args );
+		$run_id = (int) $run['run_id'];
+		$before = self::live_bytes( 'ab-it-inaktiv' );
+		self::assertSame( 'done', self::next( $run_id )['step']['state'] );
+		self::assertSame( 'planned', self::next( $run_id )['step']['state'], 'Staged.' );
+		return array( $run_id, self::step( $run_id, 2 )['parts'], $before );
+	}
+
+	/** Step 2 planned again with this journal, as the next call finds it. */
+	private static function replan( int $run_id, array $journal ): void {
+		global $wpdb;
+		$steps = AB_MCP_Sync_Schema::table( 'steps' );
+		$wpdb->query( $wpdb->prepare( "UPDATE `$steps` SET state = 'planned', result = NULL WHERE run_id = %d AND seq = 2", $run_id ) ); // phpcs:ignore WordPress.DB
+		self::assertTrue( AB_MCP_Sync_Run::update_step( $run_id, 2, array( 'parts' => $journal ), 'planned' ) );
+	}
+
+	/** The step of the stage ended failed with this code, its swap not run, nothing of the site changed. */
+	private static function stage_failed( int $run_id, string $code, array $before ): array {
+		$step = self::step( $run_id, 2 );
+		self::assertSame( array( 'failed', $code ), array( $step['state'], $step['result']['code'] ?? null ), (string) wp_json_encode( $step['result'] ) );
+		self::assertStringContainsString( "is not staged ($code), so it is not swapped; nothing of this site changed", $step['result']['message'] );
+		self::assertSame( 'planned', self::step( $run_id, 3 )['state'], 'The swap did not run.' );
+		self::assertSame( $before, self::live_bytes( 'ab-it-inaktiv' ) );
+		return $step;
+	}
+
+	public function testAStageThatIsNotTheOneOfItsGroupOrNotSignedFailsItsStepAndItsSwapIsSkipped(): void {
+		// A3 of the Codex round 1 on the code: a refusal of the stage that no
+		// later call can change ends the step failed and its swap is skipped,
+		// never planned for ever; a reading that failed stays planned
+		// (reading 5, the test of what does not read).
+		list( $run_id, $journal, $before ) = self::staged_run();
+		// The unit not signed in the environment the check is given (the one
+		// entrance called directly, with an environment that names no unit).
+		$item = AB_MCP_Sync_Code_Ops::item( AB_MCP_Sync_Run::get( $run_id )['plan'], 2 );
+		self::assertIsArray( $item );
+		AB_MCP_Sync_Code_Ops::run( AB_MCP_Sync_Run::get( $run_id ), self::step( $run_id, 2 ), array( 'env' => array() ) + $item );
+		$step = self::stage_failed( $run_id, 'code:unsigned', $before );
+		self::assertStringContainsString( 'Take the environment of the staging site over anew', $step['result']['message'], 'With the way.' );
+		// The hash of the tree not the one its group holds, through the public way.
+		$wrong                   = $journal;
+		$wrong['stage']['hash']  = str_repeat( 'f', 64 );
+		self::replan( $run_id, $wrong );
+		$failed = self::next( $run_id );
+		self::assertIsArray( $failed, is_wp_error( $failed ) ? $failed->get_error_code() . ': ' . $failed->get_error_message() : '' );
+		$step = self::stage_failed( $run_id, 'code:stage_other', $before );
+		self::assertStringContainsString( 'Stage the unit again', $step['result']['message'], 'With the way.' );
+		// The run goes on: the swap is skipped, the run closes with the finding.
+		$closed = null;
+		for ( $i = 0; $i < 6 && null === $closed; $i++ ) {
+			$answer = self::next( $run_id );
+			self::assertIsArray( $answer, is_wp_error( $answer ) ? $answer->get_error_code() . ': ' . $answer->get_error_message() : '' );
+			$closed = in_array( $answer['state'], AB_MCP_Sync_Schema::CLOSED, true ) ? $answer : null;
+		}
+		self::assertIsArray( $closed, 'The run closed.' );
+		self::assertSame( 'skipped', self::step( $run_id, 3 )['state'], 'The swap of a unit whose stage failed never runs.' );
+		self::assertSame( $before, self::live_bytes( 'ab-it-inaktiv' ) );
+	}
+
+	public function testAReadyStageNotBoundToThisRunThisUnitAndItsStagingHashNeverMakesTheStepDone(): void {
+		// A2 of the Codex round 1 on the code: a journal of its form may name a
+		// ready stage of another run, another unit or another version of the
+		// staging site; the step is done only on the stage bound to this run,
+		// this unit and the staging_hash of the plan, else it fails with its
+		// reason and way.
+		list( $run_id, $journal, $before ) = self::staged_run();
+		$gid  = $journal['stage']['gid'];
+		$item = AB_MCP_Sync_Code_Ops::item( AB_MCP_Sync_Run::get( $run_id )['plan'], 2 );
+		self::assertIsArray( $item );
+		$foreign = static function ( string $what ) use ( $run_id, $before ): void {
+			$step = self::stage_failed( $run_id, 'code:stage_foreign', $before );
+			self::assertStringContainsString( 'is not bound to this run, this unit and the version of the staging site the plan names', $step['result']['message'], $what );
+			self::assertStringContainsString( 'wp_site_push action=abort', $step['result']['message'], "$what: with the way." );
+		};
+		// The group bound to another run.
+		self::assertTrue( AB_MCP_Protected_Store::bind( 'stage', $gid, $run_id + 1 ) );
+		try {
+			$answer = self::next( $run_id );
+		} finally {
+			self::assertTrue( AB_MCP_Protected_Store::bind( 'stage', $gid, $run_id ) );
+		}
+		self::assertIsArray( $answer, is_wp_error( $answer ) ? $answer->get_error_code() . ': ' . $answer->get_error_message() : '' );
+		$foreign( 'another run' );
+		// Another version of the staging site than the plan names.
+		self::replan( $run_id, $journal );
+		AB_MCP_Sync_Code_Ops::run( AB_MCP_Sync_Run::get( $run_id ), self::step( $run_id, 2 ), array( 'unit' => array( 'staging_hash' => str_repeat( 'e', 64 ) ) + $item['unit'] ) + $item );
+		$foreign( 'another staging_hash' );
+		// Another unit than the stage holds (its journal of that unit too).
+		$other                 = $journal;
+		$other['unit']['ref']  = 'ab-it-aktiv';
+		self::replan( $run_id, $other );
+		AB_MCP_Sync_Code_Ops::run( AB_MCP_Sync_Run::get( $run_id ), self::step( $run_id, 2 ), array( 'unit' => array( 'ref' => 'ab-it-aktiv' ) + $item['unit'] ) + $item );
+		$foreign( 'another unit' );
+		// Bound as the plan names it: done.
+		self::replan( $run_id, $journal );
+		self::assertSame( 'done', self::next( $run_id )['step']['state'] );
+	}
+
 	/* ------------------------------------------- what does not read */
 
 	public function testAStepOfTheCodeWhoseRunPlanOrJournalDoesNotReadInItsFormDoesNothing(): void {

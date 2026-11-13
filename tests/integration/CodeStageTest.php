@@ -724,7 +724,8 @@ final class CodeStageTest extends TestCase {
 		$stage = AB_MCP_Sync_Code_Stage::stage( self::RUN, $env, 'plugin', 'ab-it-inaktiv' );
 		self::assertIsArray( $stage );
 		$other = AB_MCP_Sync_Code_Stage::complete( $stage['gid'], $stage['name'], str_repeat( 'a', 64 ), $env );
-		self::assertSame( 'code:stage_unknown', $other->get_error_code() );
+		self::assertSame( 'code:stage_other', $other->get_error_code(), 'A3 of the Codex round 1 on the code: a refusal of its own, for good.' );
+		self::assertContains( 'code:stage_other', AB_MCP_Sync_Code_Stage::PERMANENT );
 		// Z4 early: the staging site changed the unit since; with the report
 		// of now the stage is not its unit, and never ready.
 		file_put_contents( AB_MCP_IT_Code::path( 'b', 'plugin', 'ab-it-inaktiv' ) . '/neu.php', "<?php // neu\n" );

@@ -93,6 +93,16 @@ final class AB_MCP_Sync_Code_Plan {
 		'extra'  => true,
 	);
 
+	/** A group of the area in as the store lists it: its id and its label, the packages of a plan are found by. */
+	const GROUP = array(
+		'type'   => 'record',
+		'fields' => array(
+			'gid'   => AB_MCP_Store_Inputs::TABLE['sidecar.gid']['form'],
+			'label' => AB_MCP_Store_Inputs::TABLE['sidecar.label']['form'],
+		),
+		'extra'  => true,
+	);
+
 	/** The pair the entry of a unit that is taken over names: its id, 1 or more. */
 	const PAIR = array(
 		'type'   => 'record',
@@ -622,19 +632,42 @@ final class AB_MCP_Sync_Code_Plan {
 		if ( is_wp_error( $groups ) ) {
 			return $groups;
 		}
-		$by_label = array();
-		foreach ( $groups as $group ) {
-			$by_label[ (string) $group['label'] ] = (string) $group['gid'];
+		$by_label = self::by_label( $groups );
+		if ( is_wp_error( $by_label ) ) {
+			return $by_label;
 		}
 		foreach ( array_merge( $plan['code']['env'], $plan['code']['packages'] ) as $id ) {
 			$label = AB_MCP_Sync_Import::LABEL . $id;
-			$bound = isset( $by_label[ $label ] ) ? AB_MCP_Protected_Store::bind( 'in', $by_label[ $label ], $run_id ) : null;
+			$bound = null;
+			if ( array_key_exists( $label, $by_label ) ) {
+				$bound = AB_MCP_Protected_Store::bind( 'in', $by_label[ $label ], $run_id );
+			}
 			if ( true !== $bound ) {
 				/* translators: %s: id of a package. */
 				return is_wp_error( $bound ) ? $bound : self::refused( 'ab_mcp_sync_code_bind', sprintf( __( 'The package %s of this plan is no longer in the protected store, so the run of the code cannot keep it until its swaps. Take the environment (and the packages of code) of the staging site over anew, make a new report (wp_site_diff) and plan again.', 'alphabridge-mcp' ), $id ) );
 			}
 		}
 		return true;
+	}
+
+	/**
+	 * The groups of the area in by their label, each read in the form of
+	 * GROUP (its id and its label), never cast (the decision of the lead of
+	 * 13.11. on 1a-3, question 2); the refusal where one does not read so.
+	 *
+	 * @param array[] $groups The groups (AB_MCP_Protected_Store::groups()).
+	 * @return array<string,string>|WP_Error Label => gid.
+	 */
+	private static function by_label( array $groups ) {
+		$by_label = array();
+		foreach ( $groups as $group ) {
+			$read = AB_MCP_Shape::read( $group, self::GROUP );
+			if ( null === $read ) {
+				return self::refused( 'ab_mcp_sync_code_bind', __( 'A group of the packages taken over does not read in the form of the protected store (its id or its label), so the packages of this plan are not bound to the run and no run is made. Ask the host to check the folder of the protected store; then make a new report (wp_site_diff) and plan again.', 'alphabridge-mcp' ) );
+			}
+			$by_label[ $read['label'] ] = $read['gid'];
+		}
+		return $by_label;
 	}
 
 	/**

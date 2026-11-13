@@ -300,6 +300,31 @@ final class SyncCodeOpsTest extends TestCase {
 		}
 	}
 
+	public function testTheGroupsOfThePackagesAreReadInTheirFormBeforeAPackageIsBound(): void {
+		// bind(): the id and the label of each group of the area in in their
+		// form, never cast; one not of it refuses with its own reason and way.
+		$by_label = new \ReflectionMethod( AB_MCP_Sync_Code_Plan::class, 'by_label' );
+		self::assertTrue( AB_MCP_Shape::valid_form( AB_MCP_Sync_Code_Plan::GROUP ) );
+		$good = array( 'gid' => str_repeat( 'a', 32 ), 'label' => 'pkg:' . str_repeat( 'b', 32 ), 'run_id' => null );
+		self::assertSame( array( 'pkg:' . str_repeat( 'b', 32 ) => str_repeat( 'a', 32 ) ), $by_label->invoke( null, array( $good ) ) );
+		$cases = array(
+			'gid a number'      => array( 'gid' => 5 ) + $good,
+			'gid not hex'       => array( 'gid' => str_repeat( 'g', 32 ) ) + $good,
+			'gid missing'       => array( 'label' => $good['label'] ),
+			'label a number'    => array( 'label' => 5 ) + $good,
+			'label null'        => array( 'label' => null ) + $good,
+			'label with spaces' => array( 'label' => 'pkg: b' ) + $good,
+			'label missing'     => array( 'gid' => $good['gid'] ),
+		);
+		foreach ( $cases as $what => $group ) {
+			$got = $by_label->invoke( null, array( $good, $group ) );
+			self::assertInstanceOf( WP_Error::class, $got, $what );
+			self::assertSame( 'ab_mcp_sync_code_bind', $got->get_error_code(), $what );
+			self::assertStringContainsString( 'does not read in the form of the protected store (its id or its label)', $got->get_error_message(), $what );
+			self::assertStringContainsString( 'make a new report (wp_site_diff) and plan again', $got->get_error_message(), "$what: with the way." );
+		}
+	}
+
 	public function testTheStageOfAStepComesFromItsJournalInItsFormOrIsNotKnown(): void {
 		$read = AB_MCP_Sync_Code_Ops::staged( self::journal() );
 		self::assertSame( array( str_repeat( 'c', 32 ), 'shop', str_repeat( 'd', 64 ) ), array( $read['stage']['gid'], $read['stage']['name'], $read['stage']['hash'] ) );

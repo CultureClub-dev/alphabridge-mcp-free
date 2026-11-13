@@ -193,10 +193,15 @@ final class AB_MCP_Sync_Code_Ops {
 		}
 		$state = AB_MCP_Sync_Code_Stage::complete( $journal['stage']['gid'], $journal['stage']['name'], $journal['stage']['hash'], $item['env'] );
 		if ( is_wp_error( $state ) ) {
-			// Not known (a package, the tree or the state of the stage did not
-			// read): the step stays planned, never ready and never refused on
-			// what was not read; the answer names the error and the way (the
-			// decision of the lead on reading 5, 13.11.).
+			// A refusal no later call changes (the stage is not the one its
+			// group holds, the unit not signed; A3 of the Codex round 1 on the
+			// code) ends the step failed, its swap is skipped. Not known (a
+			// package, the tree or the state of the stage did not read): the
+			// step stays planned, the answer names the error and the way
+			// (reading 5).
+			if ( in_array( $state->get_error_code(), AB_MCP_Sync_Code_Stage::PERMANENT, true ) ) {
+				return self::not_staged( $run_id, $seq, $unit, $state->get_error_code(), $state->get_error_message() );
+			}
 			return self::not_checked( $seq, $state );
 		}
 		$checked = self::checked( $state );
@@ -211,6 +216,13 @@ final class AB_MCP_Sync_Code_Ops {
 		if ( AB_MCP_Sync_Code_Stage::REFUSED === $checked['state'] ) {
 			$refusal = $checked['refusal'];
 			return self::not_staged( $run_id, $seq, $unit, $refusal['code'], $refusal['message'] . ( null === $refusal['path'] ? '' : ' (' . $refusal['path'] . ( null === $refusal['line'] ? '' : ':' . $refusal['line'] ) . ')' ) );
+		}
+		$foreign = self::foreign( $run_id, $journal['stage']['gid'], $unit, $checked );
+		if ( is_wp_error( $foreign ) ) {
+			return self::not_checked( $seq, $foreign );
+		}
+		if ( null !== $foreign ) {
+			return self::not_staged( $run_id, $seq, $unit, 'code:stage_foreign', $foreign );
 		}
 		/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name, 3: number of PHP files checked. */
 		$message = sprintf( __( 'The %1$s %2$s of the staging site is staged and checked (%3$d PHP files): it is ready for its swap, the next step. Nothing of this site changed.', 'alphabridge-mcp' ), $unit['kind'], $unit['ref'], $checked['checked'] );
@@ -294,6 +306,72 @@ final class AB_MCP_Sync_Code_Ops {
 		/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name, 3: the code of the refusal, as the tools name it (code:syntax, …), 4: the refusal (one or more whole sentences). */
 		$message = sprintf( __( 'The %1$s %2$s is not staged (%3$s), so it is not swapped; nothing of this site changed. %4$s', 'alphabridge-mcp' ), $unit['kind'], $unit['ref'], $code, $why );
 		return self::ended( $run_id, $seq, 'failed', array( 'message' => $message, 'code' => $code ), $message . ' ' . __( 'The run goes on with the next step (action=next).', 'alphabridge-mcp' ) );
+	}
+
+	/** The binding of a ready stage as complete() answers it: its unit and the hash of its unit on the staging site. */
+	const BINDING = array(
+		'type'   => 'record',
+		'fields' => array(
+			'unit'   => array(
+				'type'   => 'record',
+				'fields' => array(
+					'kind' => array(
+						'type'      => 'string',
+						'empty'     => false,
+						'max_bytes' => null,
+					),
+					'ref'  => array(
+						'type'      => 'string',
+						'empty'     => false,
+						'max_bytes' => null,
+					),
+				),
+				'extra'  => false,
+			),
+			'signed' => AB_MCP_Store_Inputs::SHA256,
+		),
+		'extra'  => true,
+	);
+
+	/** A group of the area stage as the store lists it: its id and the run it is bound to. */
+	const GROUP = array(
+		'type'   => 'record',
+		'fields' => array(
+			'gid'    => AB_MCP_Store_Inputs::TABLE['sidecar.gid']['form'],
+			'run_id' => AB_MCP_Store_Inputs::RUN,
+		),
+		'extra'  => true,
+	);
+
+	/**
+	 * Whether the ready stage a journal names is the one of this step (A2
+	 * of the Codex round 1 on the code): its group bound to this run, its
+	 * state of the unit of the step and of the staging_hash of the plan,
+	 * each read in its form. A journal of its form may name another group.
+	 *
+	 * @param int    $run_id  The run.
+	 * @param string $gid     The group the journal names.
+	 * @param array  $unit    The unit of the step (plan.code).
+	 * @param array  $checked The answer of complete().
+	 * @return string|WP_Error|null null where bound; the reason with the way where not; the error where the groups did not read.
+	 */
+	private static function foreign( $run_id, $gid, array $unit, array $checked ) {
+		$why  = __( 'The stage the journal of this step names is not bound to this run, this unit and the version of the staging site the plan names, so this step is not done on it. Abort the run (wp_site_push action=abort), make a new report (wp_site_diff) and plan again.', 'alphabridge-mcp' );
+		$read = AB_MCP_Shape::read( $checked, self::BINDING );
+		if ( null === $read || $unit['kind'] !== $read['unit']['kind'] || $unit['ref'] !== $read['unit']['ref'] || ! hash_equals( $unit['staging_hash'], $read['signed'] ) ) {
+			return $why;
+		}
+		$groups = AB_MCP_Protected_Store::groups( 'stage' );
+		if ( is_wp_error( $groups ) ) {
+			return $groups;
+		}
+		foreach ( $groups as $group ) {
+			$one = AB_MCP_Shape::read( $group, self::GROUP );
+			if ( null !== $one && $gid === $one['gid'] ) {
+				return $run_id === $one['run_id'] ? null : $why;
+			}
+		}
+		return $why;
 	}
 
 	/**
