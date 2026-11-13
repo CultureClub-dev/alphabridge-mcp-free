@@ -1133,14 +1133,14 @@ class AB_MCP_Update_Guard {
 	}
 
 	/**
-	 * Why the lock is taken: by AlphaBridge, by WordPress's background
-	 * updates, or by someone who has just started.
+	 * Why the lock is taken, as far as a note read says: a swap of AlphaBridge
+	 * (its note of the type swap holds the lock), an update of AlphaBridge
+	 * (its note holds the lock); else only that it is held, whoever holds it.
 	 *
 	 * @return WP_Error
 	 */
 	private static function busy() {
-		$note  = AB_MCP_Update_Log::running();
-		$since = (int) self::on_main_site( 'get_option', self::LOCK . '.lock', 0 );
+		$note = AB_MCP_Update_Log::running();
 		if ( self::swap_holds( $note ) ) {
 			return new WP_Error(
 				'ab_mcp_update_busy',
@@ -1164,19 +1164,12 @@ class AB_MCP_Update_Guard {
 				)
 			);
 		}
-		if ( $since > 0 && ( time() - $since ) <= 10 ) {
-			return new WP_Error(
-				'ab_mcp_update_busy',
-				__( 'Not started: another update began on this site a moment ago (through AlphaBridge, or WordPress\'s own background updates). Nothing was changed; try again when it has finished.', 'alphabridge-mcp' )
-			);
-		}
+		// No note read names the holder (decision of the lead on V8/D1 and
+		// finding 3 of part 2a, Leitsatz D): only that the lock is held, the
+		// holders that can hold it as examples, and the way.
 		return new WP_Error(
 			'ab_mcp_update_busy',
-			sprintf(
-				/* translators: %s: time in UTC */
-				__( 'Not started: WordPress\'s own background updates are running on this site (their lock was taken at %s UTC and expires after 60 minutes). Nothing was changed; try again when they have finished.', 'alphabridge-mcp' ),
-				$since > 0 ? gmdate( 'H:i', $since ) : '?'
-			)
+			__( 'Not started: WordPress\'s lock for updates on this site is held, and no note of AlphaBridge names who holds it, so that cannot be told here (it can be, for example, WordPress\'s own background updates, an update by another plugin, or an update of AlphaBridge that is just starting). Nothing was changed; call again in a few minutes.', 'alphabridge-mcp' )
 		);
 	}
 

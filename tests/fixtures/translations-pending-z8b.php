@@ -5,7 +5,8 @@
  * text/z8b». BundledTranslationsTest leaves these keys out of its check
  * of the nine languages and checks the list itself instead: every key is
  * a text the code translates, under includes/sync/ (or, of branch 3, in
- * includes/class-protected-store.php and includes/class-store-budget.php), and untranslated in
+ * includes/class-protected-store.php and includes/class-store-budget.php; of branch 5, in
+ * includes/lifecycle/class-update-guard.php and class-change-lock.php), and untranslated in
  * all nine languages. A key text/z8b translates leaves the list in the
  * same change; the list ends empty and is removed with text/z8b.
  *
@@ -384,4 +385,8 @@ return array(
 	'Not started: a swap of the %1$s %2$s from the staging site through AlphaBridge has held WordPress\'s lock for updates on this site for %3$d s. Updates and swaps of one site run one after the other. Nothing was changed; call again when the swap has answered (wp_site_push action=status shows its run).',
 	'WordPress\'s upgrader (wp-admin/includes/class-wp-upgrader.php) could not be loaded on this site, so its lock for updates is not taken and nothing is swapped. Re-install WordPress in wp-admin (Dashboard, Updates), then call again.',
 	'The note of AlphaBridge beside WordPress\'s lock for updates could not be written and read back on this site, so the lock is given back and nothing is swapped. Call again; where it keeps failing, check that the database of this site accepts writes.',
+	// includes/lifecycle/class-update-guard.php (Z8b branch 5, part 2a, decision of the lead on finding 3: the lock held without a note read that names its holder; it replaces the two texts that named WordPress's background updates).
+	'Not started: WordPress\'s lock for updates on this site is held, and no note of AlphaBridge names who holds it, so that cannot be told here (it can be, for example, WordPress\'s own background updates, an update by another plugin, or an update of AlphaBridge that is just starting). Nothing was changed; call again in a few minutes.',
+	// includes/lifecycle/class-change-lock.php (Z8b branch 5, part 2a, decision of the lead on finding 4: the swap among the changes that hold the lock; it replaces the text without it).
+	'Not started: another change of the code this site runs through AlphaBridge (an activation, a deploy, a swap of a plugin or theme from the staging site, or a PHP file or snippet written or undone) has been running for %1$d s. Changes to the code the site runs go one after the other, so that the way back of one cannot undo the other. Nothing was changed; call again when the other one has answered. If none is running, a request that ended early left the lock behind; from %2$s UTC the next call takes it over.',
 );

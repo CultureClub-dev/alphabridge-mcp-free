@@ -4038,10 +4038,6 @@ msgid "the plugin %s (network-wide)"
 msgstr "o plugin %s (em toda a rede)"
 
 #, php-format
-msgid "Not started: another change of the code this site runs through AlphaBridge (an activation, a deploy, or a PHP file or snippet written or undone) has been running for %1$d s. Changes to the code the site runs go one after the other, so that the way back of one cannot undo the other. Nothing was changed; call again when the other one has answered. If none is running, a request that ended early left the lock behind; from %2$s UTC the next call takes it over."
-msgstr "Não iniciado: outra alteração do código que este site executa através do AlphaBridge (uma ativação, uma implementação ou um ficheiro PHP ou snippet escrito ou anulado) está em curso há %1$d s. As alterações ao código que o site executa são feitas uma de cada vez, para que o caminho de volta de uma não possa anular a outra. Nada foi alterado; chame novamente quando a outra tiver respondido. Se nenhuma estiver em curso, um pedido que terminou antes do tempo deixou o bloqueio para trás; a partir de %2$s UTC, a próxima chamada assume-o."
-
-#, php-format
 msgid "Not started: an update of %s through AlphaBridge is running on this site. Changes to the code the site runs go one after the other, so that the way back of one cannot undo the other. Nothing was changed; call again when that update has answered."
 msgstr "Não iniciado: está em curso neste site uma atualização de %s através do AlphaBridge. As alterações ao código que o site executa são feitas uma de cada vez, para que o caminho de volta de uma não possa anular a outra. Nada foi alterado; chame novamente quando essa atualização tiver respondido."
 
@@ -4156,13 +4152,6 @@ msgstr "O painel respondia antes da alteração, mas não foi verificado depois 
 #, php-format
 msgid "Not started: an update of %1$s through AlphaBridge has been running for %2$d s on this site. Updates of one site run one after the other: call the next one when this one has answered. After a call that timed out, wait a minute before calling it again: if that update was kept, nothing is offered any more and the answer names its result."
 msgstr "Não iniciado: uma atualização de %1$s através do AlphaBridge está em curso neste site há %2$d s. As atualizações de um site são feitas uma de cada vez: chame a seguinte quando esta tiver respondido. Depois de uma chamada que excedeu o tempo, aguarde um minuto antes de a chamar novamente: se essa atualização tiver sido mantida, já não é oferecido nada e a resposta indica o seu resultado."
-
-msgid "Not started: another update began on this site a moment ago (through AlphaBridge, or WordPress's own background updates). Nothing was changed; try again when it has finished."
-msgstr "Não iniciado: outra atualização começou neste site há instantes (através do AlphaBridge ou das próprias atualizações em segundo plano do WordPress). Nada foi alterado; tente novamente quando tiver terminado."
-
-#, php-format
-msgid "Not started: WordPress's own background updates are running on this site (their lock was taken at %s UTC and expires after 60 minutes). Nothing was changed; try again when they have finished."
-msgstr "Não iniciado: as próprias atualizações em segundo plano do WordPress estão em curso neste site (o respetivo bloqueio foi obtido às %s UTC e expira ao fim de 60 minutos). Nada foi alterado; tente novamente quando tiverem terminado."
 
 msgid "WordPress's file access is not available."
 msgstr "O acesso aos ficheiros do WordPress não está disponível."

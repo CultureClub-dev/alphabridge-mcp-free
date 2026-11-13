@@ -170,7 +170,7 @@ class AB_MCP_Change_Lock {
 				'ab_mcp_change_busy',
 				sprintf(
 					/* translators: 1: seconds, 2: time in UTC */
-					__( 'Not started: another change of the code this site runs through AlphaBridge (an activation, a deploy, or a PHP file or snippet written or undone) has been running for %1$d s. Changes to the code the site runs go one after the other, so that the way back of one cannot undo the other. Nothing was changed; call again when the other one has answered. If none is running, a request that ended early left the lock behind; from %2$s UTC the next call takes it over.', 'alphabridge-mcp' ),
+					__( 'Not started: another change of the code this site runs through AlphaBridge (an activation, a deploy, a swap of a plugin or theme from the staging site, or a PHP file or snippet written or undone) has been running for %1$d s. Changes to the code the site runs go one after the other, so that the way back of one cannot undo the other. Nothing was changed; call again when the other one has answered. If none is running, a request that ended early left the lock behind; from %2$s UTC the next call takes it over.', 'alphabridge-mcp' ),
 					$since > 0 ? max( 0, time() - $since ) : 0,
 					gmdate( 'H:i', ( $since > 0 ? $since : time() ) + self::TIMEOUT )
 				)

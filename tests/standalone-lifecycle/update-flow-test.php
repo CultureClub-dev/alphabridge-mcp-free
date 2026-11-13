@@ -533,10 +533,15 @@ ok( array() === ab_events_like( 'bulk_upgrade' ) && 'abc' === AB_MCP_Update_Log:
 AB_MCP_Update_Log::clear_running();
 update_option( 'auto_updater.lock', time() - 300 );
 $r = AB_Test_Update_Guard::update( ab_plugin_job( $f12 ) );
-ok( 'ab_mcp_update_busy' === ab_code( $r ) && false !== strpos( ab_msg( $r ), 'background updates' ), 'F13 without our note: WordPress\'s background updates' );
+// Without a note read that holds the lock its holder is not known (decision
+// of the lead on finding 3 of Z8b branch 5, part 2a; Leitsatz D): the answer
+// says the lock is held, names holders as examples only, and the way, in
+// both cases of the time of the lock (older than ten seconds, a moment old).
+$ab_unknown = 'WordPress\'s lock for updates on this site is held, and no note of AlphaBridge names who holds it, so that cannot be told here (it can be, for example,';
+ok( 'ab_mcp_update_busy' === ab_code( $r ) && false !== strpos( ab_msg( $r ), $ab_unknown ) && false !== strpos( ab_msg( $r ), 'call again in a few minutes' ) && false === strpos( ab_msg( $r ), 'are running on this site' ) && false === strpos( ab_msg( $r ), 'expires after' ), 'F13 without our note, a lock older than ten seconds: held, holder not claimed: ' . ab_msg( $r ) );
 update_option( 'auto_updater.lock', time() - 2 );
 $r = AB_Test_Update_Guard::update( ab_plugin_job( $f12 ) );
-ok( 'ab_mcp_update_busy' === ab_code( $r ) && false !== strpos( ab_msg( $r ), 'a moment ago' ), 'F13 a lock seconds old without a note: no guess who' );
+ok( 'ab_mcp_update_busy' === ab_code( $r ) && false !== strpos( ab_msg( $r ), $ab_unknown ) && false === strpos( ab_msg( $r ), 'a moment ago' ) && false === strpos( ab_msg( $r ), 'are running on this site' ), 'F13 a lock seconds old without a note: no guess who: ' . ab_msg( $r ) );
 update_option( 'auto_updater.lock', time() - 700 + 3600 - 3600 );
 update_option( 'auto_updater.lock', time() - 700 );
 AB_MCP_Update_Log::set_running( array( 'type' => 'plugin', 'item' => 'other/other.php', 'started' => time() - 700, 'nonce' => 'old' ) );
@@ -550,7 +555,7 @@ update_option( 'auto_updater.lock', $since );
 AB_MCP_Update_Log::set_running( array( 'type' => 'plugin', 'item' => 'other/other.php', 'started' => time() - 4000, 'nonce' => 'dead' ) );
 $GLOBALS['ab_events'] = array();
 $r = AB_Test_Update_Guard::update( ab_plugin_job( $f12 ) );
-ok( 'ab_mcp_update_busy' === ab_code( $r ) && false !== strpos( ab_msg( $r ), 'background updates are running' ), 'F14 a lock taken after our old note is not ours: busy, core\'s background updates: ' . ab_msg( $r ) );
+ok( 'ab_mcp_update_busy' === ab_code( $r ) && false !== strpos( ab_msg( $r ), $ab_unknown ) && false === strpos( ab_msg( $r ), 'other/other.php' ), 'F14 a lock taken after our old note is not ours: busy, its holder not claimed: ' . ab_msg( $r ) );
 ok( $since === get_option( 'auto_updater.lock' ) && array() === ab_events_like( 'lock:release' ) && array() === ab_events_like( 'bulk_upgrade' ), 'F14 their lock stays, nothing ran' );
 AB_MCP_Update_Log::clear_running();
 delete_option( 'auto_updater.lock' );
@@ -1011,7 +1016,7 @@ ab_offer( 'plugin', $f37, '1.0.0', '2.0.0', ab_package_plugin( 'good', '2.0.0' )
 $t = time() - 4;
 update_option( AB_MCP_Change_Lock::OPTION, $t );
 $r = AB_Test_Update_Guard::update( ab_plugin_job( $f37 ) );
-ok( 'ab_mcp_change_busy' === ab_code( $r ) && false !== strpos( ab_msg( $r ), 'another change of the code this site runs through AlphaBridge (an activation, a deploy, or a PHP file or snippet written or undone) has been running for 4 s' ), 'F37 refused while another change runs: ' . ab_msg( $r ) );
+ok( 'ab_mcp_change_busy' === ab_code( $r ) && false !== strpos( ab_msg( $r ), 'another change of the code this site runs through AlphaBridge (an activation, a deploy, a swap of a plugin or theme from the staging site, or a PHP file or snippet written or undone) has been running for 4 s' ), 'F37 refused while another change runs: ' . ab_msg( $r ) );
 ok( '1.0.0' === ab_installed_version( 'plugin', $f37 ) && array() === ab_events_like( 'bulk_upgrade' ) && array() === ab_events_like( 'probe:' ), 'F37 nothing updated, no test request' );
 ok( false === get_option( 'auto_updater.lock' ) && null === AB_MCP_Update_Log::running(), 'F37 the update lock and our note are freed again' );
 ok( $t === (int) get_option( AB_MCP_Change_Lock::OPTION ) && ! AB_MCP_Change_Lock::held(), 'F37 the other request\'s lock stays as it was' );

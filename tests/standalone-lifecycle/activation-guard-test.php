@@ -1692,7 +1692,7 @@ $c1 = ab_new_plugin( 'broken', 'AB_FATAL_LOAD' );
 $t  = time() - 5;
 update_option( $lock, $t );
 $r = AB_MCP_Tools_Plugins_Themes_Manage::activate_plugin( array( 'plugin' => $c1 ) );
-ok( 'ab_mcp_change_busy' === ab_code( $r ) && ab_has( ab_msg( $r ), 'another change of the code this site runs through AlphaBridge (an activation, a deploy, or a PHP file or snippet written or undone) has been running for 5 s', 'Nothing was changed' ), 'C1 another request holds the lock: refused, with how long it has run: ' . ab_msg( $r ) );
+ok( 'ab_mcp_change_busy' === ab_code( $r ) && ab_has( ab_msg( $r ), 'another change of the code this site runs through AlphaBridge (an activation, a deploy, a swap of a plugin or theme from the staging site, or a PHP file or snippet written or undone) has been running for 5 s', 'Nothing was changed' ), 'C1 another request holds the lock: refused, with how long it has run: ' . ab_msg( $r ) );
 ok( ! is_plugin_active( $c1 ) && array() === $GLOBALS['ab_requests'] && array() === ab_events_like( 'activate_plugin:' ), 'C1 nothing switched on, no test request sent' );
 ok( $t === (int) get_option( $lock ) && ! AB_MCP_Change_Lock::held(), 'C1 the other request\'s lock stays as it was' );
 ok( ab_has( ab_msg( $r ), 'If none is running, a request that ended early left the lock behind; from ' . gmdate( 'H:i', $t + AB_MCP_Change_Lock::TIMEOUT ) . ' UTC the next call takes it over' ), 'C1 the answer says from when a lock left behind is taken over' );
