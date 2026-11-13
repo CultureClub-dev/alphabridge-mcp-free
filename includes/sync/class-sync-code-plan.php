@@ -47,6 +47,7 @@ require_once dirname( __DIR__ ) . '/class-store-inputs.php';
 require_once dirname( __DIR__ ) . '/class-protected-store.php';
 require_once __DIR__ . '/class-sync-canon.php';
 require_once __DIR__ . '/class-sync-decision.php';
+require_once __DIR__ . '/class-sync-env.php';
 require_once __DIR__ . '/class-sync-import.php';
 require_once __DIR__ . '/class-sync-pairs.php';
 require_once __DIR__ . '/class-sync-proposal.php';
@@ -358,11 +359,11 @@ final class AB_MCP_Sync_Code_Plan {
 			return $lock( __( 'This site already has the unit as the staging site has it (the same files), so nothing of it is taken over. Make a new report (wp_site_diff): where it still shows the unit as changed, confirm its pair anew (wp_site_pairs).', 'alphabridge-mcp' ) );
 		}
 		// Every path of the unit here that the new version lacks, named in the
-		// preview (Z42, E1, F47; the decision of the lead on reading 4,
-		// 13.11.): none where the unit is made, else from the report whole.
-		$gone = 'create' === $unit_op ? array() : self::gone( $found, $n, $entry );
-		if ( null === $gone ) {
-			return $lock( __( 'The report does not hold every path of this unit that lies on this site and is not in the version of the staging site (its list only_live and the entries more_paths after it do not read whole), and the preview names each of them before a swap, so it is not taken over (code:paths_unknown). Make a new report (wp_site_diff) and plan again.', 'alphabridge-mcp' ) );
+		// preview (Z42, E1, F47; reading 4; A1 of Codex round 1 on the code):
+		// none where the unit is made, else read now and those of the report.
+		$gone = 'create' === $unit_op ? array() : self::to_backup( $found, $n, $entry, $signed['entries'], $need['here'] );
+		if ( is_wp_error( $gone ) ) {
+			return $lock( $gone->get_error_message() );
 		}
 		return array(
 			'item'  => array(
@@ -449,6 +450,78 @@ final class AB_MCP_Sync_Code_Plan {
 			return self::refused( 'ab_mcp_sync_push_report', sprintf( __( 'Entry %d of the report does not read in the form a report of this version writes (its subtype, ref or action), so no unit of it is planned and nothing of this site changed. Make a new report (wp_site_diff) and plan again.', 'alphabridge-mcp' ), $n ) );
 		}
 		return $read;
+	}
+
+	/**
+	 * The paths of the unit of an entry that lie on this site and are not in
+	 * the version of the staging site, as the preview names them before a
+	 * swap (Z42, reading 4; A1 of Codex round 1 on the code of branch 5, the
+	 * decision of the lead of 13.11.): read now from the files of the unit
+	 * here (AB_MCP_Sync_Code_Stage::need(), the reading of the stage), each
+	 * path whose name the signed manifest of the staging site lacks, and
+	 * named only where they are the paths of the report (gone()), name by
+	 * name. Names are compared by their SHA-256 (name_key()): a path read
+	 * here is a name the report holds as it is or, where a rule holds it,
+	 * by its SHA-256 (AB_MCP_Sync_Env::path_name()). Named then as the
+	 * report names them, a name a rule holds by its SHA-256.
+	 *
+	 * Locked with its own reason where the report does not hold them whole
+	 * (code:paths_unknown), where the files here are not read whole
+	 * (code:paths_unread: not known, never «none»), and where they are not
+	 * the paths of the report, one added here or gone since
+	 * (code:paths_changed).
+	 *
+	 * @param array         $found  The report.
+	 * @param int           $n      The entry of the unit.
+	 * @param array         $entry  The entry.
+	 * @param array[]       $signed The entries of the signed manifest of the unit (AB_MCP_Sync_Code_Stage::signed()).
+	 * @param string[]|null $here   The paths of the unit here as read now (AB_MCP_Sync_Code_Stage::need()), null where not read whole.
+	 * @return string[]|WP_Error
+	 */
+	private static function to_backup( array $found, $n, array $entry, array $signed, $here ) {
+		$said = self::gone( $found, $n, $entry );
+		if ( null === $said ) {
+			return self::refused( 'code:paths_unknown', __( 'The report does not hold every path of this unit that lies on this site and is not in the version of the staging site (its list only_live and the entries more_paths after it do not read whole), and the preview names each of them before a swap, so it is not taken over (code:paths_unknown). Make a new report (wp_site_diff) and plan again.', 'alphabridge-mcp' ) );
+		}
+		if ( null === $here ) {
+			return self::refused( 'code:paths_unread', __( 'The files of this unit on this site could not be read whole now (a file or folder not readable, the unit gone, or the time of the call spent), and the preview names each path of it that is not in the version of the staging site before a swap, so it is not taken over (code:paths_unread). Check that every file of the plugin or theme here can be read, then make a new report (wp_site_diff) and plan again.', 'alphabridge-mcp' ) );
+		}
+		$there = array();
+		foreach ( $signed as $one ) {
+			$there[ self::name_key( $one[0] ) ] = true;
+		}
+		$now = array();
+		foreach ( $here as $path ) {
+			if ( ! isset( $there[ AB_MCP_Sync_Env::hashed( $path ) ] ) ) {
+				$now[ AB_MCP_Sync_Env::hashed( $path ) ] = true;
+			}
+		}
+		$then = array();
+		foreach ( $said as $path ) {
+			$then[ self::name_key( $path ) ] = true;
+		}
+		ksort( $now, SORT_STRING );
+		ksort( $then, SORT_STRING );
+		if ( $now !== $then ) {
+			return self::refused( 'code:paths_changed', __( 'The paths of this unit on this site that are not in the version of the staging site are not those of the report any more (a file was added here or removed since the report was made), and the preview names each of them before a swap, so it is not taken over (code:paths_changed). Make a new report (wp_site_diff), then plan again.', 'alphabridge-mcp' ) );
+		}
+		return $said;
+	}
+
+	/**
+	 * A name of a path as a line holds it, by its SHA-256: a name of the form
+	 * of a hash is one already (AB_MCP_Sync_Env::path_name() writes a name a
+	 * rule holds so, and never leaves a name of that form as it is), another
+	 * one is hashed. Both spellings of one path have the same.
+	 *
+	 * @param string $name A path as a line names it.
+	 * @return string
+	 */
+	private static function name_key( $name ) {
+		if ( 1 === preg_match( AB_MCP_Sync_Env::HASHED, $name ) ) {
+			return $name;
+		}
+		return AB_MCP_Sync_Env::hashed( $name );
 	}
 
 	/**

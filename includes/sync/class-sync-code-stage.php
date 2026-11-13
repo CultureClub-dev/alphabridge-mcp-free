@@ -613,12 +613,17 @@ final class AB_MCP_Sync_Code_Stage {
 	 * What the stage of a unit needs from a package of code: the files of the
 	 * signed manifest whose SHA-256 the live unit lacks (E3 (b)), by their
 	 * paths as the lines name them; same where the live unit is the signed
-	 * one already (no source needed).
+	 * one already (no source needed). With it, from the same reading, the
+	 * path of every file of the live unit as read now (here), for the paths
+	 * the preview names before a swap (AB_MCP_Sync_Code_Plan; A1 of Codex
+	 * round 1 on the code of branch 5): null where the live unit is not read
+	 * whole (not there, a file or folder not read, the budget of the call
+	 * spent), not known, never «no paths».
 	 *
 	 * @param string[] $env  The packages of the environment of the report.
 	 * @param string   $kind plugin or theme.
 	 * @param string   $ref  The unit.
-	 * @return array|WP_Error kind, ref, same, paths, bytes.
+	 * @return array|WP_Error kind, ref, same, paths, bytes, here (string[]|null).
 	 */
 	public static function need( array $env, $kind, $ref ) {
 		$signed = self::signed( $env, $kind, $ref );
@@ -628,6 +633,10 @@ final class AB_MCP_Sync_Code_Stage {
 		$live = self::live( $kind, $ref );
 		if ( is_wp_error( $live ) ) {
 			return $live;
+		}
+		$here = null;
+		if ( null !== $live ) {
+			$here = array_column( $live['entries'], 0 );
 		}
 		$have = array();
 		foreach ( null === $live ? array() : $live['entries'] as $entry ) {
@@ -647,6 +656,7 @@ final class AB_MCP_Sync_Code_Stage {
 			'same'  => null !== $live && hash_equals( $signed['hash'], $live['hash'] ),
 			'paths' => $paths,
 			'bytes' => $bytes,
+			'here'  => $here,
 		);
 	}
 

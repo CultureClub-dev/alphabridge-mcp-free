@@ -123,8 +123,8 @@ e('plan-runs-unknown', 'unit(): whether code runs not known locks the unit, with
   "\t\tif ( null === $runs ) {", "\t\tif ( false ) {", 'coderun', RUNSU)
 e('plan-paths-whole', 'unit(): the preview names every path that goes into the backup (reading 4, Z42)', CP,
   "\t\t\t\t\t'count' => count( $gone ),\n\t\t\t\t\t'paths' => $gone,", "\t\t\t\t\t'count' => count( $gone ),\n\t\t\t\t\t'paths' => array_slice( $gone, 0, 100 ),", 'coderun', PREV)
-e('plan-paths-unknown', 'unit(): paths that go into the backup not known lock the unit (code:paths_unknown)', CP,
-  "\t\tif ( null === $gone ) {\n\t\t\treturn $lock(", "\t\tif ( false ) {\n\t\t\treturn $lock(", 'coderun', 'testPathsThatGoIntoTheBackupNotKnownLockTheUnit')
+e('plan-paths-unknown', 'to_backup(): paths that go into the backup not known in the report lock the unit (code:paths_unknown)', CP,
+  "\t\tif ( null === $said ) {", "\t\tif ( false ) {", 'coderun', 'testPathsThatGoIntoTheBackupNotKnownLockTheUnit')
 e('plan-gone-more-form', 'gone(): more, where it is there, is a whole number of 1 or more', CP,
   "\t\t\tif ( ! is_int( $paths['more'] ) || $paths['more'] < 1 ) {", "\t\t\tif ( ! is_int( $paths['more'] ) || $paths['more'] < 0 ) {", 'ops', GONE)
 e('plan-gone-whole', 'gone(): without more the list only_live of the entry is whole', CP,
@@ -234,6 +234,35 @@ e('k1a-bind-group-form', 'by_label(): a group of the packages not of its form re
   "\t\t\tif ( null === $read ) {\n\t\t\t\treturn self::refused( 'ab_mcp_sync_code_bind', __( 'A group", "\t\t\tif ( false ) {\n\t\t\t\treturn self::refused( 'ab_mcp_sync_code_bind', __( 'A group", 'ops', BYL)
 e('k1a-bind-label-known', 'bind(): a package without its group is not bound and refuses (V20)', CP,
   "\t\t\tif ( array_key_exists( $label, $by_label ) ) {", "\t\t\tif ( true ) {", 'coderun', BIND)
+
+# ------------------------------------------- K1b-1: Codex round 1 on the code, A1 (the paths of the backup read now)
+A1T = 'testAPathAddedOrRemovedHereAfterTheReportLocksTheUnitAndTheTreeOfTheReportIsNamed'
+UNREADT = 'testFilesOfTheUnitHereNotReadWholeLockTheUnitNeverAsNoPaths'
+TOB = 'testThePathsThatGoIntoTheBackupAreReadNowAndNamedOnlyWhereTheyAreThoseOfTheReport'
+e('k1b-locks', 'unit(): paths of the backup not known, not read or not those of the report lock the unit (A1)', CP,
+  "\t\tif ( is_wp_error( $gone ) ) {\n\t\t\treturn $lock( $gone->get_error_message() );", "\t\tif ( false ) {\n\t\t\treturn $lock( $gone->get_error_message() );", 'coderun', A1T)
+e('k1b-unread', 'to_backup(): the files of the unit here not read whole lock the unit, never no paths (code:paths_unread, A1)', CP,
+  "\t\tif ( null === $here ) {", "\t\tif ( false ) {", 'ops', TOB)
+e('k1b-changed', 'to_backup(): paths here that are not those of the report lock the unit (code:paths_changed, A1)', CP,
+  "\t\tif ( $now !== $then ) {", "\t\tif ( false ) {", 'coderun', A1T)
+e('k1b-signed-lacks', 'to_backup(): only a path whose name the signed manifest lacks goes into the backup (A1)', CP,
+  "\t\t\tif ( ! isset( $there[ AB_MCP_Sync_Env::hashed( $path ) ] ) ) {", "\t\t\tif ( true ) {", 'ops', TOB)
+e('k1b-here-key', 'to_backup(): a path read here is compared by its SHA-256 (A1)', CP,
+  "\t\t\t\t$now[ AB_MCP_Sync_Env::hashed( $path ) ] = true;", "\t\t\t\t$now[ $path ] = true;", 'ops', TOB)
+e('k1b-sort-now', 'to_backup(): the paths read here compared in the order of their names, not of the reading (A1)', CP,
+  "\t\tksort( $now, SORT_STRING );\n", '', 'ops', TOB)
+e('k1b-sort-then', 'to_backup(): the paths of the report compared in the order of their names, not of the report (A1)', CP,
+  "\t\tksort( $then, SORT_STRING );\n", '', 'ops', TOB)
+e('k1b-named-said', 'to_backup(): the paths read now and those of the report alike are named in the preview (A1, Z42)', CP,
+  "\t\treturn $said;\n\t}", "\t\treturn array();\n\t}", 'coderun', A1T)
+e('k1b-key-hashed', 'name_key(): a name of the form of a hash is its own key, a name a rule holds (A1)', CP,
+  "\t\tif ( 1 === preg_match( AB_MCP_Sync_Env::HASHED, $name ) ) {", "\t\tif ( false ) {", 'ops', TOB)
+e('k1b-key-other', 'name_key(): another name is compared by its SHA-256 (A1)', CP,
+  "\t\treturn AB_MCP_Sync_Env::hashed( $name );", "\t\treturn $name;", 'ops', TOB)
+e('k1b-here-null', 'need(): a live unit not read whole has no paths here, null, never none (A1)', ST,
+  "\t\t$here = null;\n\t\tif ( null !== $live ) {", "\t\t$here = array();\n\t\tif ( null !== $live ) {", 'coderun', UNREADT)
+e('k1b-here-read', 'need(): the paths here are those of the live unit as read now (A1)', ST,
+  "\t\t\t$here = array_column( $live['entries'], 0 );", "\t\t\t$here = array();", 'coderun', A1T)
 
 # ------------------------------------------------ check and write
 src = {f: open(os.path.join(ROOT, f)).read() for f in VAR}

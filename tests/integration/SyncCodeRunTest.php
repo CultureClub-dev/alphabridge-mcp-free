@@ -722,6 +722,71 @@ final class SyncCodeRunTest extends TestCase {
 		}
 	}
 
+	public function testAPathAddedOrRemovedHereAfterTheReportLocksTheUnitAndTheTreeOfTheReportIsNamed(): void {
+		// A1 of Codex round 1 on the code (the decision of the lead of 13.11.):
+		// the paths of the unit here that the new version lacks are read now,
+		// when the plan is made, and named where they are those of the
+		// report; a path added here or gone since locks the unit with its own
+		// reason and the way, a new report. Never a preview with fewer paths.
+		foreach ( array( 'a', 'b' ) as $site ) {
+			file_put_contents( AB_MCP_IT_Code::path( $site, 'plugin', 'ab-it-inaktiv' ) . '/extra.txt', "a file the new version lacks\n" );
+		}
+		self::paired();
+		AB_MCP_IT_Code::put( 'b', 'plugin', 'ab-it-inaktiv', '1.1.0' );
+		list( $report, $units ) = self::report();
+		$entry = $units['plugin:ab-it-inaktiv'];
+		self::assertSame( 'take_over', $entry['action'] );
+		self::assertSame( array( 'extra.txt' ), $entry['paths']['only_live'] );
+		$args = array(
+			'action'    => 'plan',
+			'report_id' => $report['report_id'],
+			'select'    => array( (int) $entry['n'] ),
+		);
+		self::wporg();
+		$named = static function () use ( $args ): void {
+			$preview = self::gated( 'wp_site_push', $args );
+			self::assertIsArray( $preview, is_wp_error( $preview ) ? $preview->get_error_code() . ': ' . $preview->get_error_message() : '' );
+			$backup = $preview['preview']['units'][0]['to_backup'];
+			self::assertSame( array( 1, array( 'extra.txt' ) ), array( $backup['count'], $backup['paths'] ), 'Read now and the one of the report.' );
+		};
+		$named();
+		$dir    = AB_MCP_IT_Code::path( 'a', 'plugin', 'ab-it-inaktiv' );
+		$locked = static function () use ( $args ): void {
+			$message = self::refused( self::gated( 'wp_site_push', $args ), 'ab_mcp_sync_push_nothing' );
+			self::assertStringContainsString( '(code:paths_changed)', $message );
+			self::assertStringContainsString( 'Make a new report (wp_site_diff), then plan again', $message, 'With the way.' );
+			self::assertNull( AB_MCP_Sync_Run::open_run() );
+		};
+		// A path added here after the report (the case of Codex).
+		file_put_contents( $dir . '/spaet.txt', "added here after the report\n" );
+		$locked();
+		// The tree of the report again: named again, the lock is no state.
+		unlink( $dir . '/spaet.txt' );
+		$named();
+		// A path of the report gone here since.
+		unlink( $dir . '/extra.txt' );
+		$locked();
+	}
+
+	public function testFilesOfTheUnitHereNotReadWholeLockTheUnitNeverAsNoPaths(): void {
+		// A1: a reading of the files of the unit here that is not whole is
+		// not known, never «no paths»: the unit is locked with its own reason
+		// and the way.
+		list( $args ) = self::changed( 'ab-it-inaktiv', '1.1.0' );
+		self::wporg();
+		$file = AB_MCP_IT_Code::path( 'a', 'plugin', 'ab-it-inaktiv' ) . '/readme.txt';
+		chmod( $file, 0 );
+		try {
+			self::assertFalse( is_readable( $file ), 'The suite runs as a user the mode of a file binds.' );
+			$message = self::refused( self::gated( 'wp_site_push', $args ), 'ab_mcp_sync_push_nothing' );
+		} finally {
+			chmod( $file, 0644 );
+		}
+		self::assertStringContainsString( '(code:paths_unread)', $message );
+		self::assertStringContainsString( 'then make a new report (wp_site_diff) and plan again', $message, 'With the way.' );
+		self::assertNull( AB_MCP_Sync_Run::open_run() );
+	}
+
 	public function testAStageStillCheckingSaysSoAndTheStepStays(): void {
 		// The check of a stage over calls: the budget of a call spent, the
 		// stage is still checking, the step stays planned and says so; the

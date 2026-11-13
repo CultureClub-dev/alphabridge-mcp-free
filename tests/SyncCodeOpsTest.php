@@ -276,6 +276,48 @@ final class SyncCodeOpsTest extends TestCase {
 		}
 	}
 
+	public function testThePathsThatGoIntoTheBackupAreReadNowAndNamedOnlyWhereTheyAreThoseOfTheReport(): void {
+		// A1 of Codex round 1 on the code (the decision of the lead of 13.11.):
+		// the paths here that the signed manifest lacks, as read now, compared
+		// name by name with those of the report; a name a rule holds is the
+		// same path by its SHA-256, on either side. Not read whole is not
+		// known, never «none»; each lock has its own reason.
+		$to     = new \ReflectionMethod( AB_MCP_Sync_Code_Plan::class, 'to_backup' );
+		$h      = static fn( string $path ): string => 'sha256:' . hash( 'sha256', $path );
+		$entry  = static fn( array $only ): array => array( 'subtype' => 'plugin', 'ref' => 'shop', 'paths' => array( 'only_live' => $only, 'only_live_count' => count( $only ) ) );
+		$signed = array( array( 'shop.php', 10, str_repeat( 'a', 64 ) ), array( $h( 'key=1.txt' ), 3, str_repeat( 'b', 64 ) ) );
+		// Two paths only here, read and said each in an order that is not
+		// the one of their SHA-256: the comparison is by name, not by order.
+		$two = array( 'alt.txt', 'pw=2.txt' );
+		usort( $two, static fn( string $a, string $b ): int => strcmp( $h( $b ), $h( $a ) ) );
+		$said = array();
+		foreach ( $two as $path ) {
+			$said[] = 'pw=2.txt' === $path ? $h( $path ) : $path;
+		}
+		$here = array_merge( array( 'shop.php', 'key=1.txt' ), $two );
+		self::assertSame( $said, $to->invoke( null, array(), 7, $entry( $said ), $signed, $here ), 'The normal case: named as the report names them, a name held on either side alike.' );
+		self::assertSame( array(), $to->invoke( null, array(), 7, $entry( array() ), $signed, array( 'shop.php', 'key=1.txt' ) ), 'None here that the new version lacks.' );
+		$code  = static function ( $got ): string {
+			self::assertInstanceOf( WP_Error::class, $got );
+			return $got->get_error_code();
+		};
+		$cases = array(
+			'a path added here'                  => array( $said, array_merge( $here, array( 'neu.txt' ) ), 'code:paths_changed' ),
+			'a path of the report gone here'     => array( $said, array( 'shop.php', 'key=1.txt', 'alt.txt' ), 'code:paths_changed' ),
+			'none in the report, one here'       => array( array(), array( 'shop.php', 'key=1.txt', 'alt.txt' ), 'code:paths_changed' ),
+			'not read whole here'                => array( $said, null, 'code:paths_unread' ),
+			'not read whole, none in the report' => array( array(), null, 'code:paths_unread' ),
+		);
+		foreach ( $cases as $what => list( $only, $read, $want ) ) {
+			$got = $to->invoke( null, array(), 7, $entry( $only ), $signed, $read );
+			self::assertSame( $want, $code( $got ), $what );
+			self::assertStringContainsString( '(' . $want . ')', $got->get_error_message(), $what );
+			self::assertStringContainsString( 'make a new report (wp_site_diff)', strtolower( $got->get_error_message() ), "$what: with the way." );
+		}
+		$unknown = $to->invoke( null, array(), 7, array( 'subtype' => 'plugin', 'ref' => 'shop' ), $signed, $here );
+		self::assertSame( 'code:paths_unknown', $code( $unknown ), 'The report does not hold them whole: before anything is read.' );
+	}
+
 	public function testAStepOfARunNotOfItsFormOrWithFieldsNotReadStagesNothing(): void {
 		// stage(): the run of a step comes in the form of runs.run_id (digits
 		// of a column of the database are its form), and a
