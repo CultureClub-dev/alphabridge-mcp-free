@@ -30,6 +30,7 @@ use AB_MCP_Store_Budget;
 use AB_MCP_Store_Inputs;
 use AB_MCP_Sync_Backup;
 use AB_MCP_Sync_Canon;
+use AB_MCP_Sync_Code_Ops;
 use AB_MCP_Sync_Code_Package;
 use AB_MCP_Sync_Code_Stage;
 use AB_MCP_Test_Seam;
@@ -658,6 +659,33 @@ final class StoreInputsTest extends TestCase {
 					return is_wp_error( $got ) ? $got->get_error_code() : $got;
 				},
 				'unknown' => static fn( $got ): bool => 'code:org_unit' === $got,
+			),
+			'plan.code'                => array(
+				// With a package of code: the generator needs an element of
+				// every list to make its wrong forms of.
+				'base'    => SyncCodeOpsTest::code( array( 'packages' => array( str_repeat( 'f', 32 ) ) ) ),
+				'more'    => array(
+					'fixed: none'                => null,
+					'fixed: no environment'      => SyncCodeOpsTest::code( array( 'env' => array() ) ),
+					'fixed: a unit of no code'   => SyncCodeOpsTest::code( array( 'units' => array( SyncCodeOpsTest::unit( array( 'kind' => 'mu_plugin' ) ) ) ) ),
+					'fixed: an operation not of it' => SyncCodeOpsTest::code( array( 'units' => array( SyncCodeOpsTest::unit( array( 'op' => 'activate' ) ) ) ) ),
+				),
+				// Its consumer item(), the one entrance of a step of a run of
+				// the code (run_write(), written()): the unit of the step from a
+				// plan of its form; a plan not of it runs no step, never one of
+				// the contents (V18).
+				'valid'   => array(
+					array(
+						SyncCodeOpsTest::code(),
+						array(
+							'unit'     => SyncCodeOpsTest::code()['units'][0],
+							'env'      => SyncCodeOpsTest::code()['env'],
+							'packages' => SyncCodeOpsTest::code()['packages'],
+						),
+					),
+				),
+				'run'     => static fn( $v ) => AB_MCP_Sync_Code_Ops::item( array( 'code' => $v ), SyncCodeOpsTest::code()['units'][0]['seq'] ),
+				'unknown' => $refused( 'ab_mcp_sync_code_plan' ),
 			),
 			/* ------------------------------------------------------ budgets */
 			'budget.max_packages'      => array(

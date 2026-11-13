@@ -48,6 +48,10 @@ final class WrongForms {
 		'budget.listing',
 		'budget.held_names',
 		'budget.file_size',
+		'step.stage',
+		'site.active_plugins',
+		'site.theme',
+		'unit.version',
 	);
 
 	/**

@@ -29,15 +29,19 @@ use AB_MCP_Store_Budget;
 use AB_MCP_Store_Inputs;
 use AB_MCP_Sync_Backup;
 use AB_MCP_Sync_Canon;
+use AB_MCP_Sync_Code_Ops;
 use AB_MCP_Sync_Code_Package;
 use AB_MCP_Sync_Code_Stage;
+use AB_MCP_Sync_Code_Swap;
 use AB_MCP_Sync_Import;
 use AB_MCP_Sync_Schema;
 use AB_MCP_Test_Seam;
+use AlphaBridge\Tests\SyncCodeOpsTest;
 use AlphaBridge\Tests\WrongForms;
 use PHPUnit\Framework\TestCase;
 use ReflectionMethod;
 use RuntimeException;
+use WP_Error;
 
 require_once __DIR__ . '/support/class-it-store-calls.php';
 require_once AB_MCP_DIR . 'includes/sync/class-sync-backup.php';
@@ -735,6 +739,126 @@ final class StoreInputsTest extends TestCase {
 				},
 				'unknown' => static fn( $got ): bool => array( false, false, 'code:stage_unknown' ) === $got,
 				'texts'   => true,
+				'written' => null,
+			);
+		}
+		if ( 'step.stage' === $id ) {
+			// The journal of a step that staged a unit (Z8b branch 5): its
+			// consumer is the step that goes on with it (AB_MCP_Sync_Code_Ops::run(),
+			// the check of the stage). A journal not of its form is not known:
+			// nothing is staged or checked on it, the step stays (V19). A step
+			// without a journal (null) is the step that stages; it is left out.
+			$item  = array(
+				'unit'     => SyncCodeOpsTest::unit(),
+				'env'      => SyncCodeOpsTest::code()['env'],
+				'packages' => array(),
+			);
+			$run   = static function ( $value ) use ( $item ) {
+				$got = AB_MCP_Sync_Code_Ops::run( array( 'run_id' => 7 ), array( 'parts' => $value ), $item );
+				return is_wp_error( $got ) ? $got->get_error_code() : $got;
+			};
+			$check = AB_MCP_Sync_Code_Stage::complete( SyncCodeOpsTest::journal()['stage']['gid'], SyncCodeOpsTest::journal()['stage']['name'], SyncCodeOpsTest::journal()['stage']['hash'], $item['env'] );
+			self::assertInstanceOf( WP_Error::class, $check, 'No stage of this group: the check of a journal of its form ends at the stage.' );
+			self::assertNotSame( 'ab_mcp_sync_code_journal', $check->get_error_code() );
+			return array(
+				'base'    => SyncCodeOpsTest::journal(),
+				'more'    => array(
+					'fixed: of another unit'  => SyncCodeOpsTest::journal( array(), array( 'ref' => 'other' ) ),
+					'fixed: a swap'           => SyncCodeOpsTest::journal( array(), array( 'op' => 'swap' ) ),
+					'fixed: the files a text' => SyncCodeOpsTest::journal( array( 'files' => '3' ) ),
+				),
+				'valid'   => array( array( SyncCodeOpsTest::journal(), $check->get_error_code() ) ),
+				'run'     => $run,
+				'unknown' => static fn( $got ): bool => 'ab_mcp_sync_code_journal' === $got,
+				'texts'   => false,
+				'written' => static fn( $value ): bool => null === $value,
+			);
+		}
+		if ( 'site.active_plugins' === $id ) {
+			// The row active_plugins unpacked (Z8b branch 5): its consumers
+			// are whether code of a plugin runs (runs(), the release of its
+			// swap in the plan) and its main files that run (active_mains(),
+			// the swap). A row not of its form is not known: never «does not
+			// run», never no main file.
+			global $wpdb;
+			$row = $wpdb->get_var( "SELECT option_value FROM {$wpdb->options} WHERE option_name = 'active_plugins'" );
+			self::assertIsString( $row );
+			return array(
+				'base'    => array( 'ab-it-code/ab-it-code.php', 'hello.php' ),
+				'more'    => array(
+					'fixed: a text'              => 'ab-it-code/ab-it-code.php',
+					'fixed: keys that are texts' => array( 'x' => 'ab-it-code/ab-it-code.php' ),
+				),
+				'valid'   => array(
+					array( array( 'ab-it-code/ab-it-code.php', 'hello.php' ), array( true, array( 'ab-it-code/ab-it-code.php' ) ) ),
+					array( array( 'hello.php' ), array( false, array() ) ),
+					array( array(), array( false, array() ) ),
+				),
+				'run'     => static function ( $value ) use ( $row ) {
+					global $wpdb;
+					$wpdb->update( $wpdb->options, array( 'option_value' => serialize( $value ) ), array( 'option_name' => 'active_plugins' ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize -- the row as WordPress writes it.
+					try {
+						return array( AB_MCP_Sync_Code_Swap::runs( 'plugin', 'ab-it-code' ), AB_MCP_Sync_Code_Swap::active_mains( 'ab-it-code' ) );
+					} finally {
+						$wpdb->update( $wpdb->options, array( 'option_value' => $row ), array( 'option_name' => 'active_plugins' ) );
+					}
+				},
+				'unknown' => static fn( $got ): bool => array( null, null ) === $got,
+				'texts'   => false,
+				'written' => null,
+			);
+		}
+		if ( 'site.theme' === $id ) {
+			// The rows stylesheet and template (Z8b branch 5): their consumer
+			// is whether code of a theme runs (runs(), the release of its swap).
+			// A row not of its form is not known, never «does not run». A row
+			// holds text: other values are no row.
+			global $wpdb;
+			$rows = array();
+			foreach ( array( 'stylesheet', 'template' ) as $option ) {
+				$rows[ $option ] = $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", $option ) );
+				self::assertIsString( $rows[ $option ] );
+			}
+			return array(
+				'base'    => 'ab-it-thema',
+				'more'    => array(),
+				'valid'   => array( array( 'ab-it-thema', true ) ),
+				'run'     => static function ( $value ) use ( $rows ) {
+					global $wpdb;
+					foreach ( $rows as $option => $was ) {
+						$wpdb->update( $wpdb->options, array( 'option_value' => $value ), array( 'option_name' => $option ) );
+					}
+					try {
+						return AB_MCP_Sync_Code_Swap::runs( 'theme', 'ab-it-thema' );
+					} finally {
+						foreach ( $rows as $option => $was ) {
+							$wpdb->update( $wpdb->options, array( 'option_value' => $was ), array( 'option_name' => $option ) );
+						}
+					}
+				},
+				'unknown' => static fn( $got ): bool => null === $got,
+				'texts'   => true,
+				'written' => null,
+			);
+		}
+		if ( 'unit.version' === $id ) {
+			// A version of a unit on either site (Z8b branch 5, E9, Z12): its
+			// consumer is the plan of the code (AB_MCP_Sync_Code_Plan::unit()),
+			// which locks a unit on order() null at once (code:version_unknown;
+			// SyncCodeRunTest::testTwoVersionsThatAreNoneAreNotKnownAndLockTheUnit).
+			// A version not of its form is not known on either side, never
+			// the same, newer or older.
+			return array(
+				'base'    => '1.2.0',
+				'more'    => array(
+					'fixed: a number' => 1.2,
+					'fixed: none'     => null,
+					'fixed: a word'   => 'beta',
+				),
+				'valid'   => array( array( '1.2.0', array( 'same', 'same' ) ), array( '1.10', array( 'newer', 'older' ) ) ),
+				'run'     => static fn( $value ) => array( AB_MCP_Sync_Code_Ops::order( $value, '1.2.0' ), AB_MCP_Sync_Code_Ops::order( '1.2.0', $value ) ),
+				'unknown' => static fn( $got ): bool => array( null, null ) === $got,
+				'texts'   => false,
 				'written' => null,
 			);
 		}
