@@ -509,6 +509,43 @@ final class CodeStageTest extends TestCase {
 		self::assertSame( array(), glob( self::root() . '/ab-mcp-store/*/tmp/.ab-tmp-*' ), 'Past TMP_AGE the clean-up takes it.' );
 	}
 
+	public function testTheInstallToolsTakeAnExactVersionOfWordpressOrgThroughTheDownloader(): void {
+		// Point 6 and D2: version of wp_install_plugin and wp_install_theme, the
+		// exact address through the shared downloader (https, no redirect,
+		// ORG_MAX), for a unit not installed yet; a version wordpress.org does
+		// not keep installs nothing; a folder there is refused by the upgrader.
+		require_once AB_MCP_DIR . 'includes/tools/class-tools-install-update.php';
+		AB_MCP_IT_Code::remove( 'a', 'plugin', 'ab-it-inaktiv' );
+		$calls = self::wporg();
+		// The update checks WordPress makes after an install, answered by the
+		// stand-in too (no network in the tests).
+		$hooked = ( new AB_MCP_Test_Wporg() )->hook();
+		$level  = ob_get_level();
+		$got   = \AB_MCP_Tools_Install_Update::install_plugin( array( 'slug' => 'ab-it-inaktiv', 'version' => '1.0.0' ) );
+		self::assertIsArray( $got, is_wp_error( $got ) ? $got->get_error_code() . ': ' . $got->get_error_message() : '' );
+		self::assertSame( '1.0.0', $got['version'] );
+		self::assertSame( '1.0.0', AB_MCP_IT_Code::fassung( 'a', 'plugin', 'ab-it-inaktiv' ), 'Exactly that version, not the newest.' );
+		self::assertSame( array( 'https://downloads.wordpress.org/plugin/ab-it-inaktiv.1.0.0.zip' ), array_column( $calls->wporg->calls, 'url' ) );
+		self::assertSame( 0, $calls->wporg->calls[0]['args']['redirection'] );
+		self::assertSame( AB_MCP_Sync_Code_Stage::ORG_MAX + 1, $calls->wporg->calls[0]['args']['limit_response_size'] );
+		$there = \AB_MCP_Tools_Install_Update::install_plugin( array( 'slug' => 'ab-it-inaktiv', 'version' => '1.1.0' ) );
+		self::assertInstanceOf( \WP_Error::class, $there, 'A plugin installed is not replaced.' );
+		self::assertSame( '1.0.0', AB_MCP_IT_Code::fassung( 'a', 'plugin', 'ab-it-inaktiv' ) );
+		AB_MCP_IT_Code::remove( 'a', 'plugin', 'ab-it-inaktiv' );
+		self::assertSame( 'ab_mcp_version_unavailable', \AB_MCP_Tools_Install_Update::install_plugin( array( 'slug' => 'ab-it-inaktiv', 'version' => '9.9.9' ) )->get_error_code() );
+		self::assertSame( '', AB_MCP_IT_Code::fassung( 'a', 'plugin', 'ab-it-inaktiv' ), 'Nothing installed.' );
+		self::assertSame( 'ab_mcp_bad_version', \AB_MCP_Tools_Install_Update::install_plugin( array( 'slug' => 'ab-it-inaktiv', 'version' => '../1' ) )->get_error_code() );
+		AB_MCP_IT_Code::remove( 'a', 'theme', 'ab-it-eltern' );
+		$theme = \AB_MCP_Tools_Install_Update::install_theme( array( 'slug' => 'ab-it-eltern', 'version' => '1.1.0' ) );
+		self::assertIsArray( $theme, is_wp_error( $theme ) ? $theme->get_error_message() : '' );
+		self::assertSame( '1.1.0', AB_MCP_IT_Code::fassung( 'a', 'theme', 'ab-it-eltern' ) );
+		$hooked->unhook();
+		// The skin of the upgrader leaves its output buffer open.
+		while ( ob_get_level() > $level ) {
+			ob_end_clean();
+		}
+	}
+
 	public function testABuildingFolderGoesOnlyByItsAgeOrByItsOwnRequest(): void {
 		// D4: build_dir() the one way a building folder is made; it goes by
 		// delete_path() only, with what is in it: by its request, or past
