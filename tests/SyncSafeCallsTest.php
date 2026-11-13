@@ -132,6 +132,16 @@ final class SyncSafeCallsTest extends TestCase {
 		'AB_MCP_Protected_Store::remove'       => 'Removes a group of the store.',
 		'AB_MCP_Protected_Store::close'        => 'Marks a group of the store as closed (its sidecar).',
 		'AB_MCP_Store_Budget::unpack_refusal'  => 'Compares the counts it is given with the limits of unpacking (UNPACK); no stored value.',
+		// The stage of code (Z8b branch 4): its building folder and its tree
+		// in the store, the parser of PHP, the directory of a ZIP.
+		'AB_MCP_Protected_Store::build_dir'    => 'Makes a building folder in tmp/ of the store (D4); no stored value.',
+		'AB_MCP_Protected_Store::drop_build'   => 'Removes a building folder of build_dir() through delete_path() (D4); no stored value.',
+		'AB_MCP_Protected_Store::put_tree'     => 'Puts a tree into a group of the store, the one way a tree comes in (Z8b branch 3).',
+		'AB_MCP_Protected_Store::tree'         => 'Reads a tree of a group back against its hash (Z8b branch 3).',
+		'wp_convert_hr_to_bytes'               => 'Parses the text it is given (wp-includes/load.php).',
+		'->getLine'                            => 'CompileError of the parser of PHP: its line.',
+		'->getMessage'                         => 'CompileError of the parser of PHP: its message.',
+		'->statIndex'                          => 'ZipArchive: an entry of the directory of the ZIP it opened.',
 		'AB_MCP_Outbound::public_addresses'    => 'Looks the host of this site up in the DNS (or the filter ab_mcp_outbound_addresses); no stored value.',
 		'->get_route'                          => 'WP_REST_Request: the path of the request.',
 		'->get_method'                         => 'WP_REST_Request: its method.',
@@ -145,6 +155,7 @@ final class SyncSafeCallsTest extends TestCase {
 		// Constructors.
 		'new WP_Block_Parser'                  => 'The parser of the core, without the filter block_parser_class.',
 		'new WP_Error'                         => 'An error object.',
+		'new ZipArchive'                       => 'Reads the directory of a ZIP in a building folder of the store (Z8b branch 4).',
 		'new WeakMap'                          => 'The refusals of AB_MCP_Sync_Write in this request, by their error object; no stored value.',
 		'new AB_MCP_Replace_Engine'            => 'Compiles its patterns.',
 		'new stdClass'                         => 'Stands for a stored object, made without its class.',
@@ -275,7 +286,8 @@ final class SyncSafeCallsTest extends TestCase {
 			'taxonomy_exists'           => array( 1, 'term(): whether WordPress knows its taxonomy.' ),
 		),
 		'class-sync-export.php'   => array(
-			'__' => array( 37, 'the refusals and errors the tools wp_site_* pass on, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2).' ),
+			'__' => array( 44, 'the refusals and errors the tools wp_site_* pass on, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2).' ),
+			'AB_MCP_Own_Files::own_file_refusal' => array( 1, 'code_unit(): AlphaBridge itself goes into no package of code, by the identity of its path (constants of the plugin, realpath() and stat()); no stored value (Z8b branch 4).' ),
 			'$reader::checked_meta'  => array( 1, 'checked_content(): a meta row in the form its kind checked it, AB_MCP_Sync_Db_Kind::checked_meta() of the kind AB_MCP_Sync_Db_Kinds::for_pair() names (an instance of a widget unpacked from the text the content carries; no stored value read; Codex round 4 of branch 11, B).' ),
 			'$reader::stored_column' => array( 1, 'checked_content(): whether a column of the row of the content is a value WordPress unpacks (the value of an option), AB_MCP_Sync_Db_Kind::stored_column() of the same kind, so the net reads it unpacked as the kind does (a constant answer by the name of the column; no stored value read; branch 11b).' ),
 			'current_user_can'       => array( 1, 'refusal(): only an account with manage_options makes and reads packages (decision 9).' ),
@@ -290,11 +302,11 @@ final class SyncSafeCallsTest extends TestCase {
 		// The import (Z8, branch 5; Codex, round 1 of branch 7, A2): the
 		// connection a package is bound to, as a proposal and a report.
 		'class-sync-import.php'   => array(
-			'__' => array( 26, 'the refusals and errors the tools wp_site_* pass on, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2).' ),
+			'__' => array( 27, 'the refusals and errors the tools wp_site_* pass on, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2).' ),
 			'AB_MCP_Staging_Gate::connection' => array( 1, 'connection(): the connection of the call (the hash of its token, or its account), which a package is bound to as the reports and proposals made from it; no value the takeover compares.' ),
 		),
 		'class-sync-manifest.php' => array(
-			'__' => array( 22, 'the refusals and errors the tools wp_site_* pass on, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2).' ),
+			'__' => array( 23, 'the refusals and errors the tools wp_site_* pass on, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2).' ),
 			'AB_MCP_Staging::record' => array( 1, 'sign(): the pair, whose production site a package is for.' ),
 			'AB_MCP_Staging::role'   => array( 1, 'sign(): only the confirmed staging site signs.' ),
 			'home_url'               => array( 2, 'sign() and verify(): the own address, as source and target exactly (decision 5).' ),
@@ -461,6 +473,7 @@ final class SyncSafeCallsTest extends TestCase {
 		),
 		'class-sync-env.php' => array(
 			'AB_MCP_Own_Files::own_file_refusal' => array( 1, 'own(): whether a unit of plugins or must-use plugins is AlphaBridge itself (Free, Pro, the owner drop-in) by the identity of its path (constants of the plugin, realpath() and stat()), shown by its version and never hashed (Z8b branch 2, E12); no stored value.' ),
+			'sanitize_url'                       => array( 1, 'update_hosts(): the Update URI of a head cleaned as wp_update_plugins() cleans it before it reads the host (esc_url() without display: the address and the protocols WordPress allows); no stored value (Z8b branch 4, D1).' ),
 			'__' => array( 2, 'the refusals and errors the tools wp_site_* pass on, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2).' ),
 		),
 		// The comparison of the core (Z8b branch 2, Z35, E18).
@@ -476,6 +489,21 @@ final class SyncSafeCallsTest extends TestCase {
 		),
 		'class-sync-inventory.php' => array(
 			'__' => array( 2, 'the refusals and errors the tools wp_site_* pass on, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2).' ),
+		),
+		// The package and the stage of code (Z8b branch 4).
+		'class-sync-code-package.php' => array(
+			'__' => array( 12, 'the refusals and errors the tools wp_site_* pass on, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2).' ),
+		),
+		'class-sync-code-stage.php' => array(
+			'__'                                 => array( 43, 'the refusals and errors the tools wp_site_* pass on, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2).' ),
+			'AB_MCP_Outbound::get'               => array( 1, 'Calls::get(): the ZIP of a plugin or theme from downloads.wordpress.org in its exact version, only over https, no redirect followed, at most ORG_MAX bytes (fetch_zip(), D2), tied to the checked addresses; the answer is checked as data, no stored value of this site is read.' ),
+			'AB_MCP_Own_Files::own_file_refusal' => array( 1, 'stage(): AlphaBridge itself is never staged, by the identity of its path (constants of the plugin, realpath() and stat()); no stored value.' ),
+			'get_filesystem_method'              => array( 1, 'Calls::method(): the way WordPress writes files here (FS_METHOD, the filter filesystem_method and a test file in wp-content), only direct is taken (D5); no stored value.' ),
+			'WP_Filesystem'                      => array( 1, 'Calls::unzip(): the file system of WordPress for unzip_file(), only after method() named direct (D5), for which it reads no credentials; no stored value.' ),
+			'unzip_file'                         => array( 1, 'Calls::unzip(): the ZIP of wordpress.org unpacked into a building folder of the store as the core unpacks a package (names and room checked); no stored value.' ),
+			'is_php_version_compatible'          => array( 1, 'requirements(): Requires PHP of the head of the new version against PHP_VERSION, as the core checks it; no stored value.' ),
+			'is_wp_version_compatible'           => array( 1, 'requirements(): Requires at least of the head against the version of WordPress ($wp_version), as the core checks it; no stored value.' ),
+			'get_bloginfo'                       => array( 1, 'requirements(): the version of WordPress for the message (get_bloginfo( \'version\' ): the global $wp_version); no stored value.' ),
 		),
 		'class-sync-media-package.php' => array(
 			'__' => array( 15, 'the refusals and errors the tools wp_site_* pass on, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2).' ),

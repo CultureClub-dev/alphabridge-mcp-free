@@ -719,8 +719,8 @@ class AB_MCP_Tools_Install_Update extends AB_MCP_Tools_Base {
 			@unlink( $tmp ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink -- the temporary file of this request, outside the protected store.
 			return new WP_Error(
 				'ab_mcp_version_unavailable',
-				/* translators: 1: plugin or theme, 2: slug, 3: version, 4: why. */
-				sprintf( __( 'wordpress.org gave no %1$s %2$s in version %3$s (%4$s). Nothing was installed. Check the version on its page on wordpress.org, or leave version out for the newest.', 'alphabridge-mcp' ), 'theme' === $type ? __( 'theme', 'alphabridge-mcp' ) : __( 'plugin', 'alphabridge-mcp' ), $slug, $version, $got->get_error_message() ),
+				/* translators: 1: slug, 2: version, 3: why. */
+				sprintf( __( 'wordpress.org gave no package of %1$s in version %2$s (%3$s). Nothing was installed. Check the version on its page on wordpress.org, or leave version out for the newest.', 'alphabridge-mcp' ), $slug, $version, $got->get_error_message() ),
 				array( 'url' => $url )
 			);
 		}
@@ -729,7 +729,7 @@ class AB_MCP_Tools_Install_Update extends AB_MCP_Tools_Base {
 		$result   = $upgrader->install( $tmp );
 		@unlink( $tmp ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink -- the temporary file of this request, outside the protected store.
 		if ( true !== $result ) {
-			return self::install_failed( $type, $result, $skin, __( 'Install failed, and WordPress gave no reason. wp_list_plugins or wp_list_themes shows whether it is there; the web server needs write access to wp-content.', 'alphabridge-mcp' ) );
+			return self::install_failed( $type, $result, $skin, 'theme' === $type ? __( 'Install failed, and WordPress gave no reason. wp_list_themes shows whether the theme is there; the web server needs write access to wp-content/themes.', 'alphabridge-mcp' ) : __( 'Install failed, and WordPress gave no reason. wp_list_plugins shows whether the plugin is there; the web server needs write access to wp-content/plugins.', 'alphabridge-mcp' ) );
 		}
 		if ( 'theme' === $type ) {
 			return array(

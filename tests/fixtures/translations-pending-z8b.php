@@ -1,6 +1,6 @@
 <?php
 /**
- * The texts of Z8b branches 2, 2b and 3 that wait for their translation: the order of
+ * The texts of Z8b branches 2, 2b, 3 and 4 that wait for their translation: the order of
  * Z8b says «Texte englisch mit Textdomain; Übersetzungen erst mit
  * text/z8b». BundledTranslationsTest leaves these keys out of its check
  * of the nine languages and checks the list itself instead: every key is
@@ -218,4 +218,67 @@ return array(
 	'The clock of the plugin gives no time (a whole number of seconds), so no group of the protected store was made. Try again; if it keeps failing, check the code that sets the clock of AB_MCP_Sync_Run.',
 	// includes/sync/class-sync-run.php (Z8b branch 3, Behebung 4, B2/B3: a clock that gives no time)
 	'The clock of the takeover gives no time (a whole number of seconds), so nothing of the run was written. Try again; if it keeps failing, check the code that sets the clock of AB_MCP_Sync_Run.',
+	// includes/class-protected-store.php (Z8b branch 4, D4: a building folder that cannot be made)
+	'A building folder could not be made in the protected store. Ask the host to check that the folder is writable and the disk has free space, then try again.',
+	// includes/sync/class-sync-code-package.php (Z8b branch 4: the package of code, its lines, index and files)
+	'A line is not one piece of a file of a unit as the staging site writes it: a field it has no place for or of another type, a unit the manifest does not name, a path that is not a plain path in a unit, data that is no base64, or a piece of another size than its number gives.',
+	'The pieces of a file are not consecutive lines in their order, or a file of a unit is there twice.',
+	'The package of code is marked complete, but its index does not read back as this version keeps it, so it is not used. Export the code again on the staging site (wp_site_export with purpose=code), then take it over here (wp_site_import_chunk).',
+	'The file %s of a unit changed, went or could not be read while it was packed, so no package of code was made. Call wp_site_export with purpose=code again; if it keeps failing, check that nothing writes into the plugin or theme on this staging site.',
+	'The file %s of the package of code does not read whole (a piece is missing or out of its order, or it does not hash to its SHA-256), so nothing of the unit was staged. Export the code again on the staging site (wp_site_export with purpose=code), take the package over here (wp_site_import_chunk) and stage again.',
+	'So the package of code is not used, and what arrived of it was removed. 1. Update AlphaBridge MCP on the staging site to the version of this site. 2. Export the code again there (wp_site_export with purpose=code). 3. Import it again with the new package_id and manifest.',
+	// includes/sync/class-sync-code-stage.php (Z8b branch 4: the stage of code, from_org(), from_packages(), complete() and its checks, php -l)
+	'no PHP %s command line was found next to the PHP that runs this site, or this server does not allow PHP to start processes.',
+	'memory_limit or short_open_tag of this PHP could not be read, so php -l would not read the file as this site does.',
+	'php -l could not be started.',
+	'php -l did not finish within %d seconds.',
+	'php -l ended without an exit code PHP could read.',
+	'php -l ran out of memory before it finished.',
+	'php -l ended with exit code %d and no error message.',
+	'The unit is not a plugin or theme as the stage takes it (kind plugin or theme, ref the name of its folder or file). Pass it as the report names the staging side.',
+	'The packages of the environment of the report name no unit of that name read whole on the staging site (it is not there, AlphaBridge itself, locked, or held), so nothing is staged for it. Take the environment of the staging site over anew and make the report again (wp_site_diff).',
+	'The packages of the environment do not hold every file of the unit (a part of its list is missing), so nothing is staged for it. Take the environment of the staging site over anew and make the report again (wp_site_diff).',
+	'This site has no folder for plugins or themes WordPress names, so nothing is staged.',
+	'This is AlphaBridge itself, which is shown, never swapped. Bring both sites to the same version of it by hand.',
+	'Which host the head of this plugin or theme names for its updates is not known (the staging site runs a version of AlphaBridge before 4.19), so it is not fetched from wordpress.org. Update AlphaBridge MCP on the staging site, take its environment over anew, or send the unit as a package of code (wp_site_export with purpose=code).',
+	'The head of this plugin or theme on the staging site names %s for its updates (Update URI), so it is not fetched from wordpress.org. Send it as a package of code (wp_site_export with purpose=code).',
+	'This unit is no folder of a plugin or theme with a slug and a version as wordpress.org names its packages, so it is not fetched from there. Send it as a package of code (wp_site_export with purpose=code).',
+	'WordPress writes files on this site not directly (the file system method is not direct), and a package is unpacked and swapped by renaming only. Ask the host to give PHP write access to wp-content, or update the plugin or theme by hand in wp-admin.',
+	'The package of wordpress.org does not read as a ZIP, or holds more than a stage takes unpacked (256 MiB), so it is not unpacked. Update the plugin or theme by hand in wp-admin.',
+	'The package of wordpress.org could not be unpacked here (unzip_file() refused it: no ZipArchive, no room, or a broken archive). Try again later, or send the unit as a package of code (wp_site_export with purpose=code).',
+	'The package of wordpress.org in this version is not the unit of the staging site (another file, a file more or less), so it is not used. Send the unit as a package of code (wp_site_export with purpose=code).',
+	'A package is fetched only over https, with a limit of its size.',
+	'The package could not be fetched from wordpress.org (%s). Try again later, or send the unit as a package of code (wp_site_export with purpose=code).',
+	'wordpress.org answered %s for the package in this version (it does not keep it, or it redirects). Send the unit as a package of code (wp_site_export with purpose=code).',
+	'The package is empty or larger than %d bytes, so it is not used. Update the plugin or theme by hand in wp-admin.',
+	'The answer is no ZIP archive, so it is not used. Try again later, or send the unit as a package of code (wp_site_export with purpose=code).',
+	'The packages of code and the live unit do not hold %d files of the unit as the staging site has them, so it is not staged. Export them on the staging site (wp_site_export with purpose=code, this unit and the paths named here), take the package over here, then stage again with every package of it.',
+	'The unit built from the packages of code and the live unit is not the unit of the staging site (a file could not be written, or one changed while it was copied), so it is not staged. Stage it again; if it keeps failing, export the whole unit on the staging site (wp_site_export with purpose=code, this unit without paths).',
+	'The stage named is not the one its group holds. Stage the unit again.',
+	'The stage is not the unit the report names on the staging site (the staging site changed it since, or the stage is another), so it is never ready. Make the report again, then stage the unit anew.',
+	'The stage could not be read whole within one call to list its PHP files, so they are not checked and it is never ready. Stage the unit again; if it keeps failing, update the plugin or theme by hand in wp-admin.',
+	'A file of the stage could not be read, so the stage is never ready. Stage the unit again.',
+	'%1$s does not parse with the PHP of this site — line %2$d: %3$s (PHP %4$s). Nothing is swapped; fix the code on the staging site and take it over again.',
+	'This server has no PHP tokenizer, so no PHP file of a plugin or theme can be checked before a swap, and none is swapped. Ask the host to enable the PHP extension tokenizer, then stage again.',
+	'%1$s could not be checked with the parser of this site (%2$s), and nothing shows that the same bytes ran on the staging site, so it is not swapped. Update the plugin or theme by hand in wp-admin.',
+	'php -l finds an error in %1$s — line %2$d: %3$s (PHP %4$s, the version of this site). Nothing is swapped; fix the code on the staging site and take it over again.',
+	'compile_check unavailable: %s The parser checked every file; php -l did not.',
+	'its bytes could not be read',
+	'it has %1$d bytes, over the %2$d the parser checks in a request',
+	'memory_limit of this PHP could not be read',
+	'only %d bytes of memory are left in this request (memory_limit)',
+	'The folder of the new version could not be read for its heads, so it is not swapped. Stage the unit again.',
+	'The new version needs PHP %1$s and WordPress %2$s (its head: Requires PHP, Requires at least); this site runs PHP %3$s and WordPress %4$s, so it is not swapped. Update PHP or WordPress here first, or keep the version this site has.',
+	'The state of the stage does not read back as this version writes it, so it is never ready. Stage the unit again.',
+	'The state of the stage could not be written as this version reads it. Stage the unit again.',
+	// includes/sync/class-sync-export.php (Z8b branch 4: the package of code made on the staging site)
+	'A package of code is made for one report: pass report_hash, the 64 hex characters wp_site_diff gave on the production site, so the package is read for that report only.',
+	'No file of the units named could be packed: each does not read whole on this site, is AlphaBridge itself, misses a path asked for, holds a path whose name a credential holds, or its files are each too large for one package (see code). Check those plugins and themes on this site, or pass others in refs.',
+	'Files in left did not fit this package: export them in another one (wp_site_export with purpose=code and their unit with these paths). A file in too_large is more than a package carries: update that plugin or theme by hand. A unit in unread was not packed: it does not read whole on this site, is AlphaBridge itself, misses a path asked for, or holds a path whose name a credential holds; check it here.',
+	'A package of code takes refs: a list of 1 to %d plugins and themes of this staging site, each with kind (plugin or theme), ref (its folder or file, as the report names the staging side) and, if wanted, paths (the files the production site asked for). Pass that list.',
+	'refs[%d] is not a plugin or theme of this staging site as a package of code takes it: kind plugin or theme, ref the name of its folder or file, each unit once, paths (if given) a list of paths in it. Pass the units as the report names them.',
+	// includes/sync/class-sync-import.php (Z8b branch 4, V4: a chunk that does not inflate when a package is read)
+	'A chunk of the package %s does not unpack as it did when it was taken over (the server could not inflate it now), so the package is not read. Try again; if it keeps failing, take the package over anew: call wp_site_export on the staging site, then wp_site_import_chunk here.',
+	// includes/sync/class-sync-manifest.php (Z8b branch 4, V5: the clock of the manifest)
+	'The clock of this site gives no time (a whole number of seconds), so no package is signed or read: whether a package is still valid is decided by its time only. Try again; if it keeps failing, ask the host to check the clock of the server.',
 );

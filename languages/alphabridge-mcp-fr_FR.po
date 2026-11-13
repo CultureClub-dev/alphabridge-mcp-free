@@ -7744,8 +7744,8 @@ msgstr "L’environnement n’a pas été lu : PHP n’a pas de source d’octet
 msgid "The place to go on from in the environment is not one this site wrote. Begin anew: call wp_site_export with purpose=env without a cursor, or wp_site_diff with the packages again."
 msgstr "Le point de reprise dans l’environnement n’est pas un point que ce site a écrit. Recommencez depuis le début : appelez wp_site_export avec purpose=env sans curseur, ou à nouveau wp_site_diff avec les paquets."
 
-msgid "This version makes packages of the inventory and of the environment of the staging site, packages of objects for a report and packages of the files of its attachments. Pass purpose=inventory, purpose=env, purpose=objects or purpose=media."
-msgstr "Cette version crée des paquets de l’inventaire et de l’environnement du site de staging, des paquets d’objets pour un rapport et des paquets des fichiers de ses fichiers joints. Transmettez purpose=inventory, purpose=env, purpose=objects ou purpose=media."
+msgid "This version makes packages of the inventory and of the environment of the staging site, packages of objects for a report, packages of the files of its attachments and packages of the files of its plugins and themes. Pass purpose=inventory, purpose=env, purpose=objects, purpose=media or purpose=code."
+msgstr "Cette version crée des paquets de l’inventaire et de l’environnement du site de staging, des paquets d’objets pour un rapport, des paquets des fichiers de ses fichiers joints et des paquets des fichiers de ses extensions et thèmes. Transmettez purpose=inventory, purpose=env, purpose=objects, purpose=media ou purpose=code."
 
 msgid "No package was made: PHP has no source of random bytes on this server. Ask the host to check the PHP installation, then call again."
 msgstr "Aucun paquet n’a été créé : PHP n’a pas de source d’octets aléatoires sur ce serveur. Demandez à l’hébergeur de vérifier l’installation de PHP, puis appelez à nouveau."
@@ -7892,8 +7892,8 @@ msgstr "Le paquet %s n’est pas encore complet sur ce site ; il n’est donc pa
 msgid "This site holds no package of that id begun by this account over this connection yet: the first call brings its manifest. Pass manifest and purpose as wp_site_export gave them on the staging site."
 msgstr "Ce site ne détient encore aucun paquet avec cet identifiant commencé par ce compte via cette connexion : le premier appel apporte son manifeste. Transmettez manifest et purpose tels que wp_site_export les a donnés sur le site de staging."
 
-msgid "This site held the package for a purpose this version does not take (it takes purpose=inventory, purpose=env, purpose=objects and purpose=media), so what arrived of it was removed. Call again with the manifest and purpose as wp_site_export gave them on the staging site."
-msgstr "Ce site détenait le paquet pour un usage que cette version ne prend pas en charge (elle prend purpose=inventory, purpose=env, purpose=objects et purpose=media) ; ce qui en était arrivé a donc été retiré. Appelez à nouveau avec le manifeste et le purpose tels que wp_site_export les a donnés sur le site de staging."
+msgid "This site held the package for a purpose this version does not take (it takes purpose=inventory, purpose=env, purpose=objects, purpose=media and purpose=code), so what arrived of it was removed. Call again with the manifest and purpose as wp_site_export gave them on the staging site."
+msgstr "Ce site détenait le paquet pour un usage que cette version ne prend pas en charge (elle prend purpose=inventory, purpose=env, purpose=objects, purpose=media et purpose=code) ; ce qui en était arrivé a donc été retiré. Appelez à nouveau avec le manifeste et le purpose tels que wp_site_export les a donnés sur le site de staging."
 
 #, php-format
 msgid "This site holds the package for purpose=%1$s, as its first call began it, and this call names another purpose, so nothing of it was taken. Pass purpose=%1$s, as wp_site_export gave it with the manifest, or leave purpose out to go on with the package."
@@ -7905,11 +7905,11 @@ msgstr "Le rôle de ce site, sa paire ou la clé confirmée du site de staging a
 msgid "This site holds the package with another manifest than the one passed now. Pass the manifest of the first call, or leave it out."
 msgstr "Ce site détient le paquet avec un autre manifeste que celui transmis maintenant. Transmettez le manifeste du premier appel, ou omettez-le."
 
-msgid "This version takes packages of the inventory and of the environment of the staging site, packages of objects for a report and packages of the files of its attachments (purpose says what a package is read for). Pass purpose=inventory, purpose=env, purpose=objects or purpose=media with the manifest, as wp_site_export gave it."
-msgstr "Cette version prend des paquets de l’inventaire et de l’environnement du site de staging, des paquets d’objets pour un rapport et des paquets des fichiers de ses fichiers joints (purpose indique pour quoi un paquet est lu). Transmettez purpose=inventory, purpose=env, purpose=objects ou purpose=media avec le manifeste, tel que wp_site_export l’a donné."
+msgid "This version takes packages of the inventory and of the environment of the staging site, packages of objects for a report, packages of the files of its attachments and packages of the files of its plugins and themes (purpose says what a package is read for). Pass purpose=inventory, purpose=env, purpose=objects, purpose=media or purpose=code with the manifest, as wp_site_export gave it."
+msgstr "Cette version prend des paquets de l’inventaire et de l’environnement du site de staging, des paquets d’objets pour un rapport, des paquets des fichiers de ses fichiers joints et des paquets des fichiers de ses extensions et thèmes (purpose indique pour quoi un paquet est lu). Transmettez purpose=inventory, purpose=env, purpose=objects, purpose=media ou purpose=code avec le manifeste, tel que wp_site_export l’a donné."
 
-msgid "A package of objects or of media is read for one report: pass report_hash with the manifest, the 64 hex characters wp_site_diff gave for the report the objects are for (the same the staging site made the package for)."
-msgstr "Un paquet d’objets ou de médias est lu pour un seul rapport : transmettez report_hash avec le manifeste, les 64 caractères hexadécimaux que wp_site_diff a donnés pour le rapport auquel les objets sont destinés (le même pour lequel le site de staging a créé le paquet)."
+msgid "A package of objects, of media or of code is read for one report: pass report_hash with the manifest, the 64 hex characters wp_site_diff gave for the report the objects are for (the same the staging site made the package for)."
+msgstr "Un paquet d’objets, de médias ou de code est lu pour un seul rapport : transmettez report_hash avec le manifeste, les 64 caractères hexadécimaux que wp_site_diff a donnés pour le rapport auquel les objets sont destinés (le même pour lequel le site de staging a créé le paquet)."
 
 msgid "data is the chunk as base64, exactly as wp_site_export_chunk gave it on the staging site. Pass it unchanged."
 msgstr "data est le fragment en base64, exactement tel que wp_site_export_chunk l’a donné sur le site de staging. Transmettez-le sans le modifier."
@@ -10819,3 +10819,10 @@ msgstr "Les fichiers sous %1$s n’ont pas pu être comptés jusqu’au bout sur
 #, php-format
 msgid "The %1$s could not be counted to its end on the staging site (%2$s)."
 msgstr "Les fichiers sous %1$s n’ont pas pu être comptés jusqu’au bout sur le site de staging (%2$s)."
+
+msgid "version is a version as wordpress.org names it (digits, letters, \".\", \"-\" and \"_\", e.g. \"5.3\"), and the slug one of the directory. Pass them so, or leave version out for the newest."
+msgstr "version est une version telle que wordpress.org la nomme (chiffres, lettres, « . », « - » et « _ », par ex. « 5.3 »), et le slug celui d’une entrée du répertoire. Transmettez-les ainsi, ou omettez version pour la plus récente."
+
+#, php-format
+msgid "wordpress.org gave no package of %1$s in version %2$s (%3$s). Nothing was installed. Check the version on its page on wordpress.org, or leave version out for the newest."
+msgstr "wordpress.org n’a donné aucun paquet de %1$s en version %2$s (%3$s). Rien n’a été installé. Vérifiez la version sur sa page wordpress.org, ou omettez version pour la plus récente."
