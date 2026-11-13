@@ -1,0 +1,735 @@
+<?php
+/**
+ * Z8b branch 4, what needs no WordPress site: the line of a package of code
+ * (AB_MCP_Sync_Code_Package::line(), lines_of(), unit_ok(), path_ok()), the
+ * checks of the stage that are pure (AB_MCP_Sync_Code_Stage::parse_check()
+ * with the decided limit of 1 MiB, O1; is_php()), the shared downloader
+ * fetch_zip() (D2, V2) and the early refusals of from_org() (Z5, D1, D5),
+ * each through the seam of the stage (AB_MCP_Test_Seam). End to end with two
+ * sites: tests/integration/CodeStageTest.php.
+ *
+ * Fehlerarten of the calls to the outside of the stage (plan 8.3, branch 4),
+ * where they are tested:
+ * - HTTP (the download): Rückgabe false (WP_Error) and status 404 here
+ *   (testTheDownloaderRefusesWhatIsNotAWholeZipOfItsLimit), Throwable and
+ *   Zeitlimit as a WP_Error of the transport (WordPress catches the
+ *   exceptions of Requests and gives WP_Error; a timeout is cURL error 28,
+ *   the same WP_Error), halb geschrieben (a body cut at the limit) here,
+ *   exit/Fatal in a process of its own in the integration suite;
+ *   gleichzeitiger Schreiber: none, the file is made in a building folder of
+ *   this request only.
+ * - the tokenizer and the PHP command line: unavailable, failed and the
+ *   memory here; a Throwable of the parser other than a CompileError is not
+ *   caught: it ends the call, and the stage stays checking, never ready
+ *   (integration).
+ *
+ * @package AlphaBridge_MCP
+ */
+
+declare( strict_types = 1 );
+
+namespace AlphaBridge\Tests;
+
+use AB_MCP_Sync_Canon;
+use AB_MCP_Sync_Code_Package;
+use AB_MCP_Sync_Code_Stage;
+use AB_MCP_Test_Seam;
+use PHPUnit\Framework\TestCase;
+use WP_Error;
+
+require_once __DIR__ . '/sync-stubs.php';
+require_once __DIR__ . '/sync-canon-stubs.php';
+require_once __DIR__ . '/../includes/sync/class-sync-code-stage.php';
+require_once __DIR__ . '/integration/support/class-test-seam.php';
+
+final class SyncCodeStageTest extends TestCase {
+
+	/** @var string */
+	private $dir = '';
+
+	protected function setUp(): void {
+		$this->dir = sys_get_temp_dir() . '/ab-code-' . bin2hex( random_bytes( 6 ) );
+		mkdir( $this->dir . '/unit/inc', 0777, true );
+		$this->dir = (string) realpath( $this->dir );
+	}
+
+	protected function tearDown(): void {
+		AB_MCP_Test_Seam::restore_all();
+		$it = new \RecursiveIteratorIterator( new \RecursiveDirectoryIterator( $this->dir, \FilesystemIterator::SKIP_DOTS ), \RecursiveIteratorIterator::CHILD_FIRST );
+		foreach ( $it as $file ) {
+			( $file->isDir() && ! $file->isLink() ) ? rmdir( $file->getPathname() ) : unlink( $file->getPathname() );
+		}
+		rmdir( $this->dir );
+	}
+
+	private static function seam( object $calls ): object {
+		return AB_MCP_Test_Seam::install( AB_MCP_Sync_Code_Stage::class, 'naht_sync_code_stage', $calls );
+	}
+
+	/* ----------------------------------------------- the lines of a package */
+
+	public function testALineOfCodeIsOnePieceOfOneFileOfAUnitInTheOneSpellingOfTheCanon(): void {
+		file_put_contents( $this->dir . '/unit/inc/a.php', '<?php // a' );
+		$lines = array();
+		$done  = AB_MCP_Sync_Code_Package::lines_of(
+			$this->dir . '/unit',
+			'folder',
+			'plugin',
+			'ab-it-code',
+			array(
+				'path'   => 'inc/a.php',
+				'size'   => 10,
+				'sha256' => hash( 'sha256', '<?php // a' ),
+			),
+			static function ( string $line ) use ( &$lines ) {
+				$lines[] = $line;
+				return true;
+			}
+		);
+		self::assertTrue( $done );
+		self::assertCount( 1, $lines );
+		$read = AB_MCP_Sync_Code_Package::line( $lines[0] );
+		self::assertSame( 'plugin', $read['kind'] );
+		self::assertSame( 'ab-it-code', $read['ref'] );
+		self::assertSame( 'inc/a.php', $read['path'] );
+		self::assertSame( '<?php // a', $read['bytes'] );
+		// Every field of its form, nothing else.
+		$object = json_decode( $lines[0], true );
+		foreach ( array( 'kind' => 'attachment', 'ref' => 'a/b', 'path' => '../x.php', 'size' => 12, 'pieces' => 2, 'piece' => 1, 'sha256' => 'x', 'data' => 'not base64!' ) as $field => $wrong ) {
+			self::assertNull( AB_MCP_Sync_Code_Package::line( AB_MCP_Sync_Canon::encode( array( $field => $wrong ) + $object ) ), $field );
+		}
+		self::assertNull( AB_MCP_Sync_Code_Package::line( AB_MCP_Sync_Canon::encode( $object + array( 'more' => 1 ) ) ), 'A field more.' );
+		self::assertNull( AB_MCP_Sync_Code_Package::line( str_replace( '"kind"', ' "kind"', $lines[0] ) ), 'Another spelling.' );
+		// A file that changed since its manifest was read refuses the package.
+		file_put_contents( $this->dir . '/unit/inc/a.php', '<?php // b' );
+		self::assertSame(
+			'ab_mcp_sync_code_changed',
+			AB_MCP_Sync_Code_Package::lines_of( $this->dir . '/unit', 'folder', 'plugin', 'ab-it-code', array( 'path' => 'inc/a.php', 'size' => 10, 'sha256' => hash( 'sha256', '<?php // a' ) ), static fn() => true )->get_error_code()
+		);
+	}
+
+	public function testAUnitAndAPathAreNamedAsTheSiteNamesThem(): void {
+		foreach ( array( 'akismet', 'Mein Plugin', 'plügin', 'einzeln.php', str_repeat( 'a', 191 ) ) as $ref ) {
+			self::assertTrue( AB_MCP_Sync_Code_Package::unit_ok( 'plugin', $ref ), $ref );
+		}
+		foreach ( array( '', '.', '..', 'a/b', 'a\\b', "a\nb", str_repeat( 'a', 192 ), "\xff" ) as $ref ) {
+			self::assertFalse( AB_MCP_Sync_Code_Package::unit_ok( 'plugin', $ref ), var_export( $ref, true ) );
+		}
+		self::assertFalse( AB_MCP_Sync_Code_Package::unit_ok( 'mu_plugin', 'a' ), 'Plugins and themes only (plan E3).' );
+		foreach ( array( 'a.php', 'inc/a.php', "inc/\xff.php", 'a b/c.php' ) as $path ) {
+			self::assertTrue( AB_MCP_Sync_Code_Package::path_ok( $path ), $path );
+		}
+		foreach ( array( '', '/a.php', 'a//b.php', './a.php', 'a/../b.php', "a\0b", str_repeat( 'a', 4097 ) ) as $path ) {
+			self::assertFalse( AB_MCP_Sync_Code_Package::path_ok( $path ), var_export( $path, true ) );
+		}
+	}
+
+	/* ------------------------------------------------------- the parser */
+
+	public function testTheParserChecksUpToOneMebibyteAndSkipsABytePastIt(): void {
+		// O1 (decided 13.11.2026): 1 MiB is checked, 1 MiB and one byte is skipped.
+		self::seam( new SyncCodeStageCalls() );
+		$code = "<?php\n// " . str_repeat( 'x', AB_MCP_Sync_Code_Stage::PARSE_MAX_BYTES - 10 ) . "\n";
+		self::assertSame( AB_MCP_Sync_Code_Stage::PARSE_MAX_BYTES, strlen( $code ) );
+		self::assertSame( 'passed', AB_MCP_Sync_Code_Stage::parse_check( $code )['status'] );
+		$more = AB_MCP_Sync_Code_Stage::parse_check( $code . ' ' );
+		self::assertSame( 'skipped', $more['status'] );
+		self::assertStringContainsString( (string) AB_MCP_Sync_Code_Stage::PARSE_MAX_BYTES, $more['why'] );
+		self::assertSame( 1048576, AB_MCP_Sync_Code_Stage::PARSE_MAX_BYTES );
+	}
+
+	public function testTheParserIsSkippedWhereTheMemoryLeftIsLessThanAHundredTimesTheFile(): void {
+		$calls         = new SyncCodeStageCalls();
+		$code          = "<?php\n" . str_repeat( "\$a = 1;\n", 1000 );
+		$calls->memory = array( 1000000, 1000000 - 100 * strlen( $code ) + 1 );
+		self::seam( $calls );
+		$read = AB_MCP_Sync_Code_Stage::parse_check( $code );
+		self::assertSame( 'skipped', $read['status'] );
+		self::assertStringContainsString( 'memory', $read['why'] );
+		$calls->memory = array( 1000000, 1000000 - 100 * strlen( $code ) );
+		self::assertSame( 'passed', AB_MCP_Sync_Code_Stage::parse_check( $code )['status'], 'Exactly a hundred times is enough.' );
+		$calls->memory = array( -1, 999999999 );
+		self::assertSame( 'passed', AB_MCP_Sync_Code_Stage::parse_check( $code )['status'], 'No limit: no skip.' );
+	}
+
+	public function testWithoutAMemoryLimitToReadOrBytesToReadTheParserPassesNothing(): void {
+		// Unknown is never passed: no memory_limit to read, or no bytes, is
+		// skipped (code:syntax_unchecked), never parsed as if it were known.
+		$calls         = new SyncCodeStageCalls();
+		$calls->memory = array( null, 0 );
+		self::seam( $calls );
+		$read = AB_MCP_Sync_Code_Stage::parse_check( "<?php\n\$a = 1;\n" );
+		self::assertSame( 'skipped', $read['status'] );
+		self::assertStringContainsString( 'memory_limit', $read['why'] );
+		$calls->memory = array( -1, 0 );
+		self::assertSame( 'skipped', AB_MCP_Sync_Code_Stage::parse_check( false )['status'] );
+		self::assertSame( 'passed', AB_MCP_Sync_Code_Stage::parse_check( "<?php\n\$a = 1;\n" )['status'] );
+	}
+
+	public function testTheParserFindsASyntaxErrorAndNamesWhereNoTokenizerIs(): void {
+		$calls = new SyncCodeStageCalls();
+		self::seam( $calls );
+		$failed = AB_MCP_Sync_Code_Stage::parse_check( "<?php\nfunction ( {\n" );
+		self::assertSame( 'failed', $failed['status'] );
+		self::assertSame( 2, $failed['line'] );
+		self::assertNotSame( '', $failed['message'] );
+		$calls->tokenizer = false;
+		self::assertSame( array( 'status' => 'unavailable' ), AB_MCP_Sync_Code_Stage::parse_check( '<?php echo 1;' ) );
+		// A break outside a loop parses (the parser does not compile): php -l finds it (F19).
+		$calls->tokenizer = true;
+		self::assertSame( 'passed', AB_MCP_Sync_Code_Stage::parse_check( "<?php\nbreak;\n" )['status'] );
+	}
+
+	public function testPhpRunsTheFilesOfItsExtensions(): void {
+		foreach ( array( 'a.php', 'A.PHP', 'a.inc', 'a.phtml', 'a.php8', 'lang/de.l10n.php', 'a.php.', 'a.phar' ) as $name ) {
+			self::assertTrue( AB_MCP_Sync_Code_Stage::is_php( $name ), $name );
+		}
+		foreach ( array( 'a.php.bak', 'a.js', 'readme.txt', 'php', 'a.phps' ) as $name ) {
+			self::assertFalse( AB_MCP_Sync_Code_Stage::is_php( $name ), $name );
+		}
+	}
+
+	/* ------------------------------------------------- the downloader (D2) */
+
+	public function testTheDownloaderRefusesWhatIsNotAWholeZipOfItsLimit(): void {
+		$calls = new SyncCodeStageCalls();
+		self::seam( $calls );
+		$to = $this->dir . '/package.zip';
+		// Only https.
+		self::assertSame( 'code:org_address', AB_MCP_Sync_Code_Stage::fetch_zip( 'http://downloads.wordpress.org/plugin/a.1.zip', $to, 100 )->get_error_code() );
+		self::assertSame( array(), $calls->asked );
+		// A ZIP within its limit; asked without redirect, the limit read plus one byte (V2).
+		$calls->body = "PK\x03\x04" . str_repeat( 'z', 96 );
+		self::assertTrue( AB_MCP_Sync_Code_Stage::fetch_zip( 'https://downloads.wordpress.org/plugin/a.1.zip', $to, 100 ) );
+		self::assertSame( 0, $calls->asked[0][1]['redirection'] );
+		self::assertSame( 101, $calls->asked[0][1]['limit_response_size'] );
+		self::assertTrue( $calls->asked[0][1]['stream'] );
+		self::assertSame( $to, $calls->asked[0][1]['filename'] );
+		// One byte past the limit: refused, never used cut (V2: a body cut at the limit is no package).
+		unlink( $to );
+		$calls->body = "PK\x03\x04" . str_repeat( 'z', 97 );
+		self::assertSame( 'code:org_too_large', AB_MCP_Sync_Code_Stage::fetch_zip( 'https://downloads.wordpress.org/plugin/a.1.zip', $to, 100 )->get_error_code() );
+		// Empty, no ZIP, another status, an error of the transport (false, a timeout, a Throwable of Requests).
+		foreach ( array( array( 200, '' ), array( 200, 'not a zip' ), array( 404, "PK\x03\x04" ), array( 301, "PK\x03\x04" ) ) as $case ) {
+			@unlink( $to );
+			$calls->status = $case[0];
+			$calls->body   = $case[1];
+			self::assertInstanceOf( WP_Error::class, AB_MCP_Sync_Code_Stage::fetch_zip( 'https://downloads.wordpress.org/plugin/a.1.zip', $to, 100 ), var_export( $case, true ) );
+		}
+		@unlink( $to );
+		$calls->error = new WP_Error( 'http_request_failed', 'cURL error 28: Operation timed out' );
+		$got          = AB_MCP_Sync_Code_Stage::fetch_zip( 'https://downloads.wordpress.org/plugin/a.1.zip', $to, 100 );
+		self::assertSame( 'code:org_fetch', $got->get_error_code() );
+		self::assertStringContainsString( 'timed out', $got->get_error_message() );
+	}
+
+	/* ------------------------------------- from_org(): its early refusals */
+
+	private static function signed( array $over = array() ): array {
+		return array_merge(
+			array(
+				'kind'       => 'plugin',
+				'ref'        => 'ab-it-code',
+				'form'       => 'folder',
+				'hash'       => str_repeat( 'b', 64 ),
+				'files'      => 1,
+				'bytes'      => 3,
+				'version'    => '1.1.0',
+				'update_uri' => '',
+				'entries'    => array( array( 'a.php', 3, str_repeat( 'a', 64 ) ) ),
+			),
+			$over
+		);
+	}
+
+	public function testFromOrgFetchesNothingForAUnitOrAHeadOrAFileSystemItDoesNotTake(): void {
+		$calls = new SyncCodeStageCalls();
+		self::seam( $calls );
+		$cases = array(
+			'code:update_uri_unknown' => self::signed( array( 'update_uri' => null ) ),
+			'code:update_uri'         => self::signed( array( 'update_uri' => 'example.com' ) ),
+			'code:org_unit'           => self::signed( array( 'form' => 'file' ) ),
+		);
+		foreach ( array( null, 'trunk', '1.0/../x', '' ) as $version ) {
+			$cases[ 'code:org_unit version ' . var_export( $version, true ) ] = self::signed( array( 'version' => $version ) );
+		}
+		foreach ( array( 'Mein Plugin', 'a_b', 'plügin' ) as $slug ) {
+			$cases[ 'code:org_unit slug ' . $slug ] = self::signed( array( 'ref' => $slug ) );
+		}
+		foreach ( $cases as $code => $signed ) {
+			$got = AB_MCP_Sync_Code_Stage::from_org( $signed, $this->dir );
+			self::assertSame( strtok( $code, ' ' ), $got->get_error_code(), $code );
+		}
+		self::assertSame( array(), $calls->asked, 'Nothing asked of wordpress.org for any of them.' );
+		// D5: not the file system method direct.
+		$calls->method = 'ftpext';
+		self::assertSame( 'code:file_mods', AB_MCP_Sync_Code_Stage::from_org( self::signed(), $this->dir )->get_error_code() );
+		self::assertSame( array(), $calls->asked );
+		// The exact address, https, the slug and the version of the staging site.
+		$calls->method = 'direct';
+		$calls->status = 404;
+		self::assertSame( 'code:org_fetch', AB_MCP_Sync_Code_Stage::from_org( self::signed( array( 'update_uri' => 'w.org' ) ), $this->dir )->get_error_code() );
+		self::assertSame( 'https://downloads.wordpress.org/plugin/ab-it-code.1.1.0.zip', $calls->asked[0][0] );
+		AB_MCP_Sync_Code_Stage::from_org( self::signed( array( 'kind' => 'theme', 'ref' => 'twentyx' ) ), $this->dir );
+		self::assertSame( 'https://downloads.wordpress.org/theme/twentyx.1.1.0.zip', $calls->asked[1][0] );
+	}
+
+	public function testAZipOfWordpressOrgIsUnpackedOnlyWithinItsSizeAndByUnzipFile(): void {
+		$calls       = new SyncCodeStageCalls();
+		$calls->body = "PK\x03\x04" . str_repeat( 'z', 96 );
+		self::seam( $calls );
+		$calls->unpacked = AB_MCP_Sync_Code_Stage::UNPACKED_MAX + 1;
+		self::assertSame( 'code:org_too_large', AB_MCP_Sync_Code_Stage::from_org( self::signed(), $this->dir )->get_error_code() );
+		self::assertSame( 0, $calls->unzipped, 'Not unpacked.' );
+		$calls->unpacked = null;
+		self::assertSame( 'code:org_too_large', AB_MCP_Sync_Code_Stage::from_org( self::signed(), $this->dir )->get_error_code(), 'A ZIP whose directory does not read.' );
+		$calls->unpacked = AB_MCP_Sync_Code_Stage::UNPACKED_MAX;
+		self::assertSame( 'code:org_unzip', AB_MCP_Sync_Code_Stage::from_org( self::signed(), $this->dir )->get_error_code(), 'unzip_file() refused it (here: the stand-in).' );
+		self::assertSame( 1, $calls->unzipped );
+	}
+
+	public function testALineOfAUnitOfAVersionBeforeHasNoHostOfUpdatesAndFetchesNothing(): void {
+		// D1: a line of the environment without update_uri (AlphaBridge before
+		// branch 4 on the staging site) is taken, and its host is unknown.
+		$line = array(
+			'env'      => 'plugin',
+			'ref'      => 'ab-it-code',
+			'active'   => array(),
+			'bytes'    => 3,
+			'complete' => true,
+			'files'    => 1,
+			'form'     => 'folder',
+			'hash'     => str_repeat( 'b', 64 ),
+			'lock'     => null,
+			'mains'    => array( 'ab-it-code.php' ),
+			'mtime'    => null,
+			'own'      => false,
+			'sha256'   => null,
+			'version'  => '1.1.0',
+			'cause'    => null,
+		);
+		self::assertTrue( \AB_MCP_Sync_Env::shaped( $line ), 'A line of a version before is taken.' );
+		self::assertNull( AB_MCP_Sync_Code_Stage::update_host( $line ) );
+		self::assertTrue( \AB_MCP_Sync_Env::shaped( $line + array( 'update_uri' => '' ) ) );
+		self::assertSame( '', AB_MCP_Sync_Code_Stage::update_host( $line + array( 'update_uri' => '' ) ) );
+		self::assertFalse( \AB_MCP_Sync_Env::shaped( $line + array( 'update_uri' => 5 ) ), 'Of its type, where it is there.' );
+		self::assertFalse( \AB_MCP_Sync_Env::shaped( array( 'update_uri' => '' ) + array_diff_key( $line, array( 'cause' => true ) ) ), 'Only update_uri may be missing.' );
+	}
+
+	public function testTheFilesOfAUnitFitAPackageByBytesAndByLinesAndTheRestIsLeft(): void {
+		// F43, the decision of make_code(): a file goes into the package where
+		// it fits beside what is there, by bytes and by lines; one larger than
+		// a whole package is too large; the rest is left for the next package,
+		// and the unit is complete in this one only without either.
+		$fit  = new \ReflectionMethod( \AB_MCP_Sync_Export::class, 'code_fit' );
+		$max  = AB_MCP_Sync_Code_Package::MAX_BYTES;
+		$file = static fn( string $path, int $size ): array => array(
+			'path'   => $path,
+			'size'   => $size,
+			'sha256' => str_repeat( 'a', 64 ),
+		);
+		$got  = $fit->invoke( null, array( $file( 'a.php', 10 ), $file( 'gross.bin', $max + 1 ), $file( 'b.bin', $max - 5 ), $file( 'c.php', 5 ) ), 0, 0 );
+		self::assertSame( array( 'a.php', 'c.php' ), array_column( $got['files'], 'path' ) );
+		self::assertSame( array( 'b.bin' ), $got['left'], 'It does not fit beside a.php: the next package.' );
+		self::assertSame( array( array( 'gross.bin', $max + 1 ) ), $got['too_large'] );
+		self::assertFalse( $got['complete'] );
+		self::assertSame( 15, $got['total'] );
+		self::assertSame( 2, $got['lines'] );
+		// By lines: one line short of a whole package, a file of two pieces is left.
+		$two = $fit->invoke( null, array( $file( 'd.bin', AB_MCP_Sync_Code_Package::PIECE + 1 ) ), 0, \AB_MCP_Sync_Manifest::MAX_OBJECTS - 1 );
+		self::assertSame( array( 'd.bin' ), $two['left'] );
+		self::assertFalse( $two['complete'] );
+		$all = $fit->invoke( null, array( $file( 'a.php', 10 ), $file( 'c.php', 5 ) ), 0, 0 );
+		self::assertSame( array(), $all['left'] );
+		self::assertTrue( $all['complete'], 'Everything fits: complete.' );
+	}
+
+	public function testAFileNeitherLiveNorInAPackageBuildsNothing(): void {
+		// from_packages(): every file of the signed manifest comes from the
+		// live unit or a package; one in neither is named, nothing is built.
+		$calls        = new SyncCodeStageCalls();
+		$calls->taken = array(
+			'files' => array(
+				array(
+					'kind'   => 'plugin',
+					'ref'    => 'ab-it-code',
+					'path'   => 'b.php',
+					'sha256' => str_repeat( 'a', 64 ),
+				),
+			),
+		);
+		self::seam( $calls );
+		$got = AB_MCP_Sync_Code_Stage::from_packages( self::signed(), null, array( 'p1' ), $this->dir );
+		self::assertInstanceOf( WP_Error::class, $got );
+		self::assertSame( 'code:stage_incomplete', $got->get_error_code() );
+		self::assertSame( array( 'paths' => array( 'a.php' ) ), $got->get_error_data() );
+		self::assertFileDoesNotExist( $this->dir . '/unit/ab-it-code' );
+	}
+
+	public function testAUnitBuiltThatIsNotTheSignedOneIsNotUsed(): void {
+		// from_packages() and from_org(), each the one place of its source:
+		// the unit built counts only where its manifest is the signed one.
+		$live = $this->dir . '/live/ab-it-code';
+		mkdir( $live, 0777, true );
+		file_put_contents( $live . '/a.php', '<?php' );
+		$read   = \AB_MCP_Sync_File_Manifest::unit( $this->dir . '/live', 'ab-it-code', 'staging', microtime( true ) + 60, true, 'plugin' );
+		$signed = self::signed(
+			array(
+				'hash'    => $read['hash'],
+				'entries' => array( array( 'a.php', 5, hash( 'sha256', '<?php' ) ) ),
+			)
+		);
+		$from   = array(
+			'form'    => 'folder',
+			'hash'    => $read['hash'],
+			'entries' => $read['entries'],
+			'path'    => $live,
+		);
+		$calls  = new SyncCodeStageCalls();
+		self::seam( $calls );
+		foreach ( array( 'b1', 'b2', 'b3', 'b4' ) as $build ) {
+			mkdir( $this->dir . '/' . $build );
+		}
+		self::assertSame( $this->dir . '/b1/unit/ab-it-code', AB_MCP_Sync_Code_Stage::from_packages( $signed, $from, array( 'p1' ), $this->dir . '/b1' ), 'Built from the live unit, the signed one.' );
+		$calls->corrupt = true;
+		self::assertSame( 'code:stage_mismatch', AB_MCP_Sync_Code_Stage::from_packages( $signed, $from, array( 'p1' ), $this->dir . '/b2' )->get_error_code(), 'A file that comes out otherwise when it is copied.' );
+		// From wordpress.org likewise: a ZIP of the signed unit, and one of another.
+		$calls->body      = "PK\x03\x04" . str_repeat( 'z', 96 );
+		$calls->zip_files = array( 'a.php' => '<?php' );
+		self::assertSame( $this->dir . '/b3/org/ab-it-code', AB_MCP_Sync_Code_Stage::from_org( $signed, $this->dir . '/b3' ) );
+		$calls->zip_files = array( 'a.php' => '<?php ' );
+		self::assertSame( 'code:org_mismatch', AB_MCP_Sync_Code_Stage::from_org( $signed, $this->dir . '/b4' )->get_error_code() );
+	}
+
+	public function testTheFilesToCheckComeOnlyFromATreeReadWhole(): void {
+		// to_check(): the PHP files of a stage only from its tree read whole as
+		// its hash; another hash, or a reading that ends within its time, is
+		// unknown (complete(): code:syntax_unchecked), never fewer files.
+		$tree = $this->dir . '/tree/ab-it-code';
+		mkdir( $tree, 0777, true );
+		file_put_contents( $tree . '/a.php', '<?php' );
+		$read     = \AB_MCP_Sync_File_Manifest::unit( $this->dir . '/tree', 'ab-it-code', 'staging', microtime( true ) + 60, true, 'plugin' );
+		$to_check = new \ReflectionMethod( AB_MCP_Sync_Code_Stage::class, 'to_check' );
+		self::assertSame(
+			array(
+				array(
+					'path'   => 'a.php',
+					'sha256' => hash( 'sha256', '<?php' ),
+					'size'   => 5,
+				),
+			),
+			$to_check->invoke( null, $tree, $read['hash'], 'plugin', 'ab-it-code' ),
+			'Each with the size and SHA-256 the bytes it checks are bound to (A3).'
+		);
+		self::assertNull( $to_check->invoke( null, $tree, str_repeat( 'c', 64 ), 'plugin', 'ab-it-code' ), 'Another hash.' );
+		AB_MCP_Sync_Code_Stage::$clock = static fn(): float => microtime( true ) - 1000.0;
+		try {
+			self::assertNull( $to_check->invoke( null, $tree, $read['hash'], 'plugin', 'ab-it-code' ), 'The time of the reading is over before it begins.' );
+		} finally {
+			AB_MCP_Sync_Code_Stage::$clock = null;
+		}
+	}
+
+	public function testAZipWithAFileThatConfiguresTheWebServerIsNotUnpackedIntoAStoreThatRefusesIt(): void {
+		// from_org() (Codex round 1, A1): the names in the directory of the ZIP
+		// go to web_ready() before anything of it is unpacked; a store in the
+		// uploads refuses a .htaccess, and nothing is unpacked.
+		$calls            = new SyncCodeStageCalls();
+		$calls->body      = "PK\x03\x04" . str_repeat( 'z', 96 );
+		$calls->zip_files = array(
+			'a.php'     => '<?php',
+			'.htaccess' => 'Require all granted',
+		);
+		self::seam( $calls );
+		mkdir( $this->dir . '/b1' );
+		self::assertSame( 'code:store_web', AB_MCP_Sync_Code_Stage::from_org( self::signed(), $this->dir . '/b1' )->get_error_code() );
+		self::assertSame( 0, $calls->unzipped, 'Nothing unpacked.' );
+		self::assertSame( array( array( 'ab-it-code/a.php', 'ab-it-code/.htaccess' ) ), $calls->web );
+		self::assertFileDoesNotExist( $this->dir . '/b1/org' );
+	}
+
+	public function testOnlyTheBytesTheManifestNamesAreChecked(): void {
+		// check_file() (Codex round 1, A3): the bytes parsed are those of the
+		// manifest of the tree, by size and SHA-256; a read that ends short
+		// with a valid beginning is not checked, never passed, also without
+		// php -l.
+		$file = $this->dir . '/unit/a.php';
+		file_put_contents( $file, "<?php\n\$a = 1;\n\$b = 2;\n" );
+		$item  = array(
+			'path'   => 'a.php',
+			'sha256' => hash_file( 'sha256', $file ),
+			'size'   => filesize( $file ),
+		);
+		$check = new \ReflectionMethod( AB_MCP_Sync_Code_Stage::class, 'check_file' );
+		$calls = new SyncCodeStageCalls();
+		self::seam( $calls );
+		self::assertSame( array(), $check->invoke( null, $file, $item, false ), 'The whole file: checked, passed.' );
+		$calls->read = "<?php\n\$a = 1;\n";
+		$got         = $check->invoke( null, $file, $item, false );
+		self::assertSame( 'code:syntax_unchecked', $got['refusal'][0] );
+		self::assertStringContainsString( 'a.php', $got['refusal'][1] );
+		$calls->read = "<?php\n\$a = 1;\n\$c = 2;\n";
+		self::assertSame( 'code:syntax_unchecked', $check->invoke( null, $file, $item, false )['refusal'][0], 'Bytes of the same size, other ones.' );
+	}
+
+	public function testAFileIsReadOnlyAfterItsSizeAndTheMemoryLeftAndOnlyUpToItsSize(): void {
+		// check_file() (GitHub-Codex on free#153, P2; the Steuerung 05:54):
+		// size, then memory, then the read. By the size the manifest names, a
+		// file over PARSE_MAX_BYTES, or with less memory left than the parser
+		// needs for it, or without a memory_limit to read, is skipped
+		// (code:syntax_unchecked) and never read; a file that fits is read
+		// once, at most its size and one byte more; a read that fails is
+		// code:syntax_unchecked with why (complete() writes it, and the next
+		// call does not read it again: CodeStageTest).
+		$file  = $this->dir . '/unit/a.php';
+		$bytes = "<?php\n\$a = 1;\n";
+		file_put_contents( $file, $bytes );
+		$item  = array(
+			'path'   => 'a.php',
+			'sha256' => hash( 'sha256', $bytes ),
+			'size'   => strlen( $bytes ),
+		);
+		$check = new \ReflectionMethod( AB_MCP_Sync_Code_Stage::class, 'check_file' );
+		$calls = new SyncCodeStageCalls();
+		self::seam( $calls );
+		$over = $check->invoke( null, $file, array( 'size' => AB_MCP_Sync_Code_Stage::PARSE_MAX_BYTES + 1 ) + $item, false );
+		self::assertSame( 'code:syntax_unchecked', $over['refusal'][0] );
+		self::assertStringContainsString( (string) ( AB_MCP_Sync_Code_Stage::PARSE_MAX_BYTES + 1 ), $over['refusal'][1] );
+		self::assertSame( array(), $calls->reads, 'Over the limit by its size: not read.' );
+		$calls->memory = array( 1000000, 1000000 - 100 * $item['size'] + 1 );
+		$short         = $check->invoke( null, $file, $item, false );
+		self::assertSame( 'code:syntax_unchecked', $short['refusal'][0] );
+		self::assertStringContainsString( 'memory', $short['refusal'][1] );
+		self::assertSame( array(), $calls->reads, 'Less memory left than the parser needs for its size: not read.' );
+		$calls->memory = array( null, 0 );
+		self::assertSame( 'code:syntax_unchecked', $check->invoke( null, $file, $item, false )['refusal'][0] );
+		self::assertSame( array(), $calls->reads, 'No memory_limit to read: not read.' );
+		$calls->memory = array( 1000000, 1000000 - 100 * $item['size'] );
+		self::assertSame( array(), $check->invoke( null, $file, $item, false ), 'Room for it: read and checked, passed.' );
+		self::assertSame( array( array( $file, $item['size'] + 1 ) ), $calls->reads, 'Read once, at most its size and one byte more.' );
+		$calls->read = false;
+		$failed      = $check->invoke( null, $file, $item, false );
+		self::assertSame( 'code:syntax_unchecked', $failed['refusal'][0], 'A read that fails: unchecked, kept.' );
+		self::assertStringContainsString( 'a.php', $failed['refusal'][1] );
+	}
+
+	public function testAHeadThatDoesNotReadWholeIsUnknownNeverOneWithoutRequirements(): void {
+		// requirements() (Codex round 1, A4): a head of the new version not
+		// read whole refuses; a PHP file of a plugin without Plugin Name, or a
+		// folder named so, holds; a theme without style.css refuses.
+		$req    = new \ReflectionMethod( AB_MCP_Sync_Code_Stage::class, 'requirements' );
+		$plugin = $this->dir . '/p';
+		mkdir( $plugin . '/ordner.php', 0777, true );
+		file_put_contents( $plugin . '/helfer.php', "<?php\n// no head\n" );
+		self::assertNull( $req->invoke( null, $plugin, 'folder', 'plugin' ), 'No main file here: nothing required.' );
+		AB_MCP_Test_Seam::install( \AB_MCP_Sync_Env::class, 'naht_sync_env', new \AB_MCP_Sync_Env_Calls(), array( array( 'method' => 'head_text', 'kind' => 'return', 'value' => false ) ) );
+		self::assertStringContainsString( 'could not be read whole', (string) $req->invoke( null, $plugin, 'folder', 'plugin' ), 'A head that cannot be read.' );
+		AB_MCP_Test_Seam::restore_all();
+		AB_MCP_Test_Seam::install( \AB_MCP_Sync_Env::class, 'naht_sync_env', new \AB_MCP_Sync_Env_Calls(), array( array( 'method' => 'head_text', 'kind' => 'half', 'keep' => 6 ) ) );
+		self::assertStringContainsString( 'could not be read whole', (string) $req->invoke( null, $plugin, 'folder', 'plugin' ), 'A head read short.' );
+		AB_MCP_Test_Seam::restore_all();
+		mkdir( $this->dir . '/t' );
+		self::assertStringContainsString( 'could not be read whole', (string) $req->invoke( null, $this->dir . '/t', 'folder', 'theme' ), 'A theme without style.css.' );
+	}
+
+	public function testAHeadOfTheStagingSiteThatDoesNotReadWholeLeavesTheHostUnknown(): void {
+		// update_hosts() (Codex round 1, A2): a head file that is not there,
+		// that cannot be read or that reads short is unknown (null), and so
+		// the host of its unit (unit_host()): from_org() then fetches nothing.
+		$dir = $this->dir . '/unit';
+		file_put_contents( $dir . '/a.php', "<?php\n/**\n * Plugin Name: A\n */\n" );
+		self::assertSame( array( 'a.php' => '', 'fehlt.php' => null ), \AB_MCP_Sync_Env::update_hosts( $dir, array( 'a.php', 'fehlt.php' ) ), 'A head file that is not there.' );
+		AB_MCP_Test_Seam::install( \AB_MCP_Sync_Env::class, 'naht_sync_env', new \AB_MCP_Sync_Env_Calls(), array( array( 'method' => 'head_text', 'kind' => 'return', 'value' => false ) ) );
+		self::assertSame( array( 'a.php' => null ), \AB_MCP_Sync_Env::update_hosts( $dir, array( 'a.php' ) ), 'A head that cannot be read.' );
+		AB_MCP_Test_Seam::restore_all();
+		AB_MCP_Test_Seam::install( \AB_MCP_Sync_Env::class, 'naht_sync_env', new \AB_MCP_Sync_Env_Calls(), array( array( 'method' => 'head_text', 'kind' => 'half', 'keep' => 6 ) ) );
+		self::assertSame( array( 'a.php' => null ), \AB_MCP_Sync_Env::update_hosts( $dir, array( 'a.php' ) ), 'A head read short, without its Update URI.' );
+		AB_MCP_Test_Seam::restore_all();
+		$unit = new \ReflectionMethod( \AB_MCP_Sync_Env::class, 'unit_host' );
+		self::assertNull( $unit->invoke( null, array( 'uris' => array( 'a.php' => '', 'b.php' => null ) ), array( 'a.php', 'b.php' ) ), 'One head unknown: the host of the unit unknown.' );
+		self::assertSame( 'code:update_uri_unknown', AB_MCP_Sync_Code_Stage::from_org( self::signed( array( 'update_uri' => null ) ), $this->dir )->get_error_code() );
+	}
+
+	public function testAStageWithoutItsRunIsRefusedBeforeAnythingElse(): void {
+		// stage() (Codex round 1, B1): the run a whole number of 1 or more,
+		// asked first: nothing is read, fetched or written before it.
+		$calls = new SyncCodeStageCalls();
+		self::seam( $calls );
+		foreach ( array( null, 0, '1', -3, 1.0 ) as $run ) {
+			self::assertSame( 'code:run', AB_MCP_Sync_Code_Stage::stage( $run, array(), 'plugin', 'ab-it-code' )->get_error_code(), var_export( $run, true ) );
+		}
+		self::assertSame( array( array(), array() ), array( $calls->asked, $calls->web ), 'Nothing asked of wordpress.org or the store.' );
+	}
+
+	public function testTheClockOfABudgetIsOnlyAFiniteNumber(): void {
+		// clock() (Codex round 1, B4): the time of a budget within one call is
+		// a finite float or unknown (null), never cast: the slice ends there.
+		$clock = new \ReflectionMethod( AB_MCP_Sync_Code_Stage::class, 'clock' );
+		try {
+			foreach ( array( 'text' => 'x', 'a whole number' => 5, 'infinite' => INF, 'not a number' => NAN, 'none' => null ) as $what => $value ) {
+				AB_MCP_Sync_Code_Stage::$clock = static fn() => $value;
+				self::assertNull( $clock->invoke( null ), $what );
+			}
+			AB_MCP_Sync_Code_Stage::$clock = static fn(): float => 1.5;
+			self::assertSame( 1.5, $clock->invoke( null ) );
+		} finally {
+			AB_MCP_Sync_Code_Stage::$clock = null;
+		}
+		self::assertIsFloat( $clock->invoke( null ), 'Without a test: microtime().' );
+	}
+
+	public function testTheHostOfAUnitIsAnotherOneWhereAnyMainFileNamesOne(): void {
+		$dir = $this->dir . '/unit';
+		file_put_contents( $dir . '/a.php', "<?php\n/**\n * Plugin Name: A\n * Update URI: https://wordpress.org/plugins/a/\n */\n" );
+		file_put_contents( $dir . '/b.php', "<?php\n/**\n * Plugin Name: B\n * Update URI: https://Updates.Example.com/b?key=geheim\n */\n" );
+		file_put_contents( $dir . '/c.php', "<?php\n/**\n * Plugin Name: C\n */\n" );
+		file_put_contents( $dir . '/d.php', "<?php\n/**\n * Plugin Name: D\n * Update URI: w.org/plugin/d\n */\n" );
+		file_put_contents( $dir . '/e.php', "<?php\n/**\n * Plugin Name: E\n * Update URI: ///\n */\n" );
+		$hosts = \AB_MCP_Sync_Env::update_hosts( $dir, array( 'a.php', 'b.php', 'c.php', 'd.php', 'e.php' ) );
+		self::assertSame( '', $hosts['c.php'] );
+		self::assertSame( 'w.org', $hosts['d.php'], 'No host read: what stands before the first "/".' );
+		self::assertSame( '///', $hosts['e.php'], 'An address of signs only names no host of wordpress.org, never none.' );
+		self::assertStringNotContainsString( 'geheim', implode( ' ', $hosts ), 'No more than the host goes into a line (a key of a licence stays out).' );
+		$of = new \ReflectionMethod( \AB_MCP_Sync_Env::class, 'update_host_of' );
+		self::assertSame( '', $of->invoke( null, array( '', '' ) ) );
+		self::assertSame( 'wordpress.org', $of->invoke( null, array( 'wordpress.org', '' ) ) );
+		self::assertSame( 'updates.example.com', $of->invoke( null, array( 'wordpress.org', 'updates.example.com' ) ), 'Another host of any main file is the host of the unit.' );
+		self::assertSame( 'updates.example.com', $of->invoke( null, array( 'updates.example.com', 'w.org' ) ) );
+		// The host of a unit only from the heads of all its main files: one
+		// not read is unknown (null: from_org() refuses), never none.
+		$unit = new \ReflectionMethod( \AB_MCP_Sync_Env::class, 'unit_host' );
+		self::assertNull( $unit->invoke( null, array(), array( 'a.php' ) ) );
+		self::assertNull( $unit->invoke( null, array( 'uris' => array( 'a.php' => 'wordpress.org' ) ), array( 'a.php', 'c.php' ) ) );
+		self::assertSame( 'wordpress.org', $unit->invoke( null, array( 'uris' => $hosts ), array( 'a.php', 'c.php' ) ) );
+		self::assertSame( 'updates.example.com', $unit->invoke( null, array( 'uris' => $hosts ), array( 'a.php', 'b.php' ) ) );
+	}
+}
+
+/**
+ * The calls of the stage for these tests: what they set, nothing else.
+ */
+final class SyncCodeStageCalls {
+
+	/** @var bool */
+	public $tokenizer = true;
+
+	/** @var array{0:int|null,1:int} */
+	public $memory = array( -1, 0 );
+
+	/** @var string */
+	public $method = 'direct';
+
+	/** @var int */
+	public $status = 200;
+
+	/** @var string */
+	public $body = '';
+
+	/** @var WP_Error|null */
+	public $error = null;
+
+	/** @var array[] url, args */
+	public $asked = array();
+
+	/** @var int|null */
+	public $unpacked = 0;
+
+	/** @var int */
+	public $unzipped = 0;
+
+	public function unpacked_size( $zip ) {
+		return $this->unpacked;
+	}
+
+	/** @var array<string,string>|null The files a ZIP holds for the unit ab-it-code (path => bytes), or null: unzip_file() refuses. */
+	public $zip_files = null;
+
+	public function unzip( $zip, $to ) {
+		++$this->unzipped;
+		if ( null === $this->zip_files ) {
+			return new WP_Error( 'incompatible_archive', 'Incompatible Archive.' );
+		}
+		foreach ( $this->zip_files as $path => $bytes ) {
+			@mkdir( dirname( $to . '/ab-it-code/' . $path ), 0777, true );
+			file_put_contents( $to . '/ab-it-code/' . $path, $bytes );
+		}
+		return true;
+	}
+
+	/** @var array[] The paths web_ready() was asked for. */
+	public $web = array();
+
+	/** @var string|false|null A text read() gives instead of the file (a read that ends short), false (a read that fails), or null. */
+	public $read = null;
+
+	/** @var array[] Each read: the file and the bytes asked at most. */
+	public $reads = array();
+
+	/** The names of the ZIP: its unit's files under the folder of the unit. */
+	public function zip_names( $zip ): array {
+		return array_map( static fn( $path ) => 'ab-it-code/' . $path, array_keys( (array) $this->zip_files ) );
+	}
+
+	/** As the store in the uploads: a file that configures the web server or PHP is refused. */
+	public function web_ready( array $paths ) {
+		$this->web[] = $paths;
+		foreach ( $paths as $path ) {
+			if ( '.htaccess' === basename( $path ) ) {
+				return new WP_Error( 'code:store_web', 'A file that configures the web server.' );
+			}
+		}
+		return true;
+	}
+
+	public function read( $path, $max ) {
+		$this->reads[] = array( $path, $max );
+		return null === $this->read ? file_get_contents( $path, false, null, 0, $max ) : $this->read;
+	}
+
+	/** @var array taken(): the files of the packages. */
+	public $taken = array( 'files' => array() );
+
+	/** @var bool True: a file of the live unit comes out otherwise when it is copied. */
+	public $corrupt = false;
+
+	public function taken( $package_id ) {
+		return $this->taken;
+	}
+
+	public function mkdir( $path ): bool {
+		return is_dir( $path ) || mkdir( $path, 0777, true );
+	}
+
+	public function copy( $from, $to ): bool {
+		return ! file_exists( $to ) && copy( $from, $to ) && ( ! $this->corrupt || false !== file_put_contents( $to, 'x', FILE_APPEND ) );
+	}
+
+	public function tokenizer(): bool {
+		return $this->tokenizer;
+	}
+
+	public function parse_php( $code ): void {
+		token_get_all( (string) $code, TOKEN_PARSE );
+	}
+
+	public function memory(): array {
+		return $this->memory;
+	}
+
+	public function method(): string {
+		return $this->method;
+	}
+
+	/** As WordPress does with stream and limit_response_size: the body cut at the limit, into the file. */
+	public function get( $url, array $args ) {
+		$this->asked[] = array( $url, $args );
+		if ( null !== $this->error ) {
+			return $this->error;
+		}
+		file_put_contents( $args['filename'], substr( $this->body, 0, $args['limit_response_size'] ) );
+		return array(
+			'response' => array( 'code' => $this->status ),
+			'body'     => '',
+		);
+	}
+}

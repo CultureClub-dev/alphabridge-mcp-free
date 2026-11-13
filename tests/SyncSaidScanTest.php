@@ -86,6 +86,7 @@ final class SyncSaidScanTest extends TestCase {
 		'class-sync-attachment-writer.php: $made -> get_error_message ( )'  => 'A note of the journal: the message of a WP_Error of WordPress or of a gettext call, in the language of the site.',
 		'class-sync-attachment-writer.php: $dir -> get_error_message ( )'   => 'As above.',
 		'class-sync-engine.php: $put -> get_error_message ( )'              => 'As above.',
+		'class-sync-code-stage.php: $why'                                   => 'AB_MCP_Sync_Code_Stage_Calls::unavailable(): every call (lint()) gives a gettext text.',
 		'class-sync-engine.php: (string) $why'                              => 'deviated(): every call gives a gettext text or refusal_why(), which is one.',
 		'class-sync-engine.php: (string) $note'                             => 'shared_back(): the closure $left is given gettext texts.',
 		'class-sync-decision.php: $state [ 1 ]'                             => 'The why of side_state() (RETURNS), through foreach over both sides.',

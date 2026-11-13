@@ -256,7 +256,7 @@ final class StoreRemoverGuardTest extends TestCase {
 			'A temp file into place, the building folder into place, an original back on uninstall: no tree is renamed in the store.'
 		);
 		self::assertSame( array( 'AB_MCP_Protected_Store_Calls::rename' ), self::places( $store, 'function', 'rename' ) );
-		self::assertSame( array( 'AB_MCP_Protected_Store::complete', 'AB_MCP_Protected_Store::copy_tree', 'AB_MCP_Protected_Store::copy_tree', 'AB_MCP_Protected_Store::ensure', 'AB_MCP_Protected_Store::open', 'AB_MCP_Protected_Store::put_mark', 'AB_MCP_Protected_Store::self_check' ), self::places( $store, 'method', 'mkdir' ), 'The folders of a tree in copy_tree() only.' );
+		self::assertSame( array( 'AB_MCP_Protected_Store::build_dir', 'AB_MCP_Protected_Store::complete', 'AB_MCP_Protected_Store::copy_tree', 'AB_MCP_Protected_Store::copy_tree', 'AB_MCP_Protected_Store::ensure', 'AB_MCP_Protected_Store::open', 'AB_MCP_Protected_Store::put_mark', 'AB_MCP_Protected_Store::self_check' ), self::places( $store, 'method', 'mkdir' ), 'The folders of a tree in copy_tree() only; a building folder in build_dir() only (Z8b branch 4, D4).' );
 	}
 
 	public function testTheRetentionOfABackupIsDecidedByKeptOnly(): void {
@@ -362,6 +362,7 @@ final class StoreRemoverGuardTest extends TestCase {
 		self::assertSame(
 			array(
 				"includes/sync/class-sync-backup.php 'backups'",
+				"includes/sync/class-sync-code-stage.php 'stage'",
 				"includes/sync/class-sync-export.php 'out'",
 				"includes/sync/class-sync-import.php 'in'",
 				'includes/sync/class-sync-proposal.php $area',
@@ -369,7 +370,7 @@ final class StoreRemoverGuardTest extends TestCase {
 				"includes/sync/class-sync-report.php 'reports'",
 			),
 			array_keys( $seen ),
-			'The writers of sidecars: one area each, the proposal through its seam (reports); stage has no shipped writer yet (branch 5 adds one, with its run).'
+			'The writers of sidecars: one area each, the proposal through its seam (reports); stage by the stage of a unit of code with its run (Z8b branch 4, D4).'
 		);
 	}
 }

@@ -505,7 +505,7 @@ return array(
 		'id'      => 'store/sweep-own-tmp-only',
 		'clause'  => 'sweep(): old temp files go only from tmp/ and only with the prefix, never by their ending, not from a group (Z37, Z8b branch 3; before: from a group the clean-up keeps)',
 		'file'    => 'includes/class-protected-store.php',
-		'search'  => "\t\t\tif ( 0 === strpos( \$file, self::TMP_PREFIX ) ) {\n\t\t\t\tself::delete_path( \$root, \$tmp . '/' . \$file );",
+		'search'  => "\t\t\tif ( 0 === strpos( \$file, self::TMP_PREFIX ) && ! isset( self::\$noted[ \$tmp . '/' . \$file ] ) ) {\n\t\t\t\tself::delete_path( \$root, \$tmp . '/' . \$file );",
 		'replace' => "\t\t\tif ( true ) {\n\t\t\t\tself::delete_path( \$root, \$tmp . '/' . \$file, array( 'all_tmp' => true ) );",
 		'run'     => $it( 'testTheCleanUpTakesOnlyItsOwnOldTempFilesNeverAFileByItsEnding' ),
 		'expect'  => '/testTheCleanUpTakesOnlyItsOwnOldTempFilesNeverAFileByItsEnding/',

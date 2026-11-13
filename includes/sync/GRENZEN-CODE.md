@@ -1,7 +1,7 @@
 # Grenzen: Code und Dateien (Z8b)
 
 Benannte Grenzen des Austauschs von Code und Dateien (Plan Z8b, Fassung 4i, Abschnitte 6, 8.2 und 14). Angelegt mit
-Zweig 3 (`heikel/z8b-ablage`); Zweig 5 ergänzt die Grenzen aus E1 und E6, Zweig 6 das Entfernen (E7). Hierher kommen
+Zweig 3 (`heikel/z8b-ablage`); Zweig 4 ergänzt die Grenzen des Codepakets und der Bereitstellung; Zweig 5 ergänzt die Grenzen aus E1 und E6, Zweig 6 das Entfernen (E7). Hierher kommen
 auch die Grenzkandidaten der Codex-Runden der Zweige: Befunde, die weder den Normalfall noch eine Kernzusage treffen
 (gleichzeitiger Schreiber ohne Sperre, exotische Dateiform, Fehler nur unter Fehlerinjektion), statt einer weiteren
 Runde (`knowledge/conventions.md`, «Heikle Zweige», Punkt 4).
@@ -124,6 +124,11 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
   - Es ist ein reiner Zeitbefund und darf nach der Merge-Regel heikel (12.11. 07:26) Grenze bleiben.
   - Zweig 4 misst `put_tree()` mit einem echten grossen Plugin auf einem gehosteten Server. Liegt das mit Faktor 2
     über 10 s, baut Zweig 4 die Bereitstellung über mehrere Aufrufe.
+- **Gemessen in Zweig 4** (13.11.2026, von der Steuerung auf ab-unterordner, Infomaniak, PHP 8.4.27 fpm,
+  `max_execution_time` 60, Ablage «outside», Rohantworten `~/Entwicklung/wt-ab/z8b-zweig-4-messung/belege/
+  messung-ab-unterordner.json`): WooCommerce 11.3.0, 5452 Dateien, 56'489'851 B: `put_tree()` 2,367 / 2,024 /
+  2,092 s, eine Lesung 0,156–0,166 s, Spitzenspeicher 82 MB; mit Faktor 2 rund 4,7 s. `put_tree()` bleibt in einem
+  Aufruf (Entscheid der Lead 13.11.2026 01:49); die Grenze für langsamere Hosts ist G-4-3.
 
 ### G-3-9 Ordner der Ablage nach einer Deinstallation ohne Sperre
 
@@ -177,6 +182,96 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
 - **Trifft Normalfall:** nein. Es ist eine Grenze der Prüfung, kein Fehlweg im Code: ein Zugriff dieser Art entsteht
   nur mit einer künftigen Änderung. Die Durchsicht einer Änderung an diesen Funktionen prüft, ob jeder neue Wert eines
   Entscheids als Zeile der Tabelle kommt und ob eine geänderte Form ihren festen Fall hat.
+
+## Das Codepaket und die Bereitstellung (Zweig 4)
+
+### G-4-1 Installationsweg ohne `version`
+
+- **Fundstelle:** `AB_MCP_Tools_Install_Update::install_plugin()` und `install_theme()` ohne `version`
+  (`includes/tools/class-tools-install-update.php`): `plugins_api()`/`themes_api()` und deren `download_link` an den
+  Upgrader des Kerns.
+- **Quelle:** Vorabprüfung von Zweig 4 (V1); Entscheid der Lead 13.11.2026 01:43 («bleibt wie heute, Grenze,
+  Folgeposten»).
+- **Was:** Der Download läuft über `download_url()` des Kerns, nicht über `AB_MCP_Outbound`; er folgt bis zu fünf
+  Weiterleitungen, und `plugins_api()` fällt bei einem Fehler von TLS auf `http` zurück, sodass `download_link` aus einer
+  unverschlüsselten Antwort stammen kann. Mit `version` gilt der gemeinsame Downloader (`AB_MCP_Sync_Code_Stage::
+  fetch_zip()`: https, `AB_MCP_Outbound`, keine Weiterleitung, `ORG_MAX`). Die Bereitstellung der Übernahme nutzt den
+  Weg ohne `version` nie (Wächter `CodeStageGuardTest`).
+- **Trifft Normalfall:** nein (der Rückfall auf `http` setzt einen gescheiterten TLS-Aufbau voraus). Folgeposten.
+
+### G-4-2 PHP-Dateien über 1 MiB in der Parserprüfung
+
+- **Fundstelle:** `AB_MCP_Sync_Code_Stage::parse_room()` und `parse_check()` (`PARSE_MAX_BYTES` = 1 MiB,
+  Speicherprüfung `PARSE_MEMORY_FACTOR` × Grösse gegen `memory_limit`), `check_file()`: geprüft nach der Grösse, die das
+  Manifest nennt, bevor die Datei gelesen wird (Behebung 5, GitHub-Codex auf free#153, P2); gelesen wird höchstens
+  diese Grösse und ein Byte mehr.
+- **Quelle:** Entscheid der Steuerung 13.11.2026 01:44 (O1); D6 (01:43).
+- **Was:** Eine Datei über 1 MiB, oder eine, für die der Speicher nicht reicht, ist `skipped` und damit
+  `code:syntax_unchecked`: Dass dieselben Bytes auf Staging liefen, belegt nichts (D6). Gemessen (Zentralverzeichnis der
+  ZIPs von downloads.wordpress.org, 13.11.2026): grösste PHP-Datei von Yoast SEO 28.8 640'228 B
+  (`src/generated/container.php`), All in One SEO 5.0.5 716'612 B, WPForms Lite 2.0.4 525'873 B, WooCommerce 11.3.0
+  473'477 B; keine der zehn gezählten Pakete hat eine Datei über 1 MiB. Pro behält 512 KiB
+  (`AB_MCP_Pro_Code_File_Guard::PARSE_MAX_BYTES`); die Angleichung ist ein Folgeposten für Pro.
+- **Trifft Normalfall:** nein (bei den gemessenen verbreiteten Paketen keine Datei über der Grenze).
+
+### G-4-3 Hosts, die mehr als doppelt so langsam sind wie Infomaniak
+
+- **Fundstelle:** `AB_MCP_Sync_Code_Stage::stage()` (Aufbau und `put_tree()` in einem Aufruf, D4).
+- **Quelle:** Messung der Steuerung auf ab-unterordner (13.11.2026, Rohantworten
+  `~/Entwicklung/wt-ab/z8b-zweig-4-messung/belege/messung-ab-unterordner.json`); Entscheid der Lead 01:49 (O2: nicht
+  fortsetzbar).
+- **Was:** Die Bereitstellung baut die Einheit und nimmt sie mit `put_tree()` in einem Aufruf auf. Gemessen auf
+  ab-unterordner (PHP 8.4.27 fpm, `max_execution_time` 60, `memory_limit` 640M, Ablage «outside»), WooCommerce 11.3.0
+  (5452 Dateien, 56'489'851 B): `put_tree()` 2,367 / 2,024 / 2,092 s, eine Lesung 0,156–0,166 s, Spitzenspeicher 82 MB;
+  mit Faktor 2 rund 4,7 s, unter den 5 s des Auftrags. Hosts, die mehr als doppelt so langsam sind, sind nicht gemessen;
+  dort kann ein grosser Baum die Zeit eines Aufrufs überschreiten und endet wie G-3-4 (halber Baum, nie benutzt).
+  Der Aufbau aus Codepaketen (`from_packages()`, ein Durchgang je Paket über seine Chunks seit Behebung 5) ist lokal
+  gemessen (Apple M1, PHP 8.5.10, 13.11.2026): WooCommerce 11.3.0 aus zwei Paketen (5452 Dateien, 16 Chunks)
+  2,97 s, Spitzenspeicher 95,2 MiB (Zuwachs 32,2 MiB); `stage()` ganz mit `put_tree()` 6,46 s. Der Weg davor (ein
+  Durchgang je Datei) brauchte für dieselben Pakete 220,2 s.
+- **Trifft Normalfall:** nein (Messung auf dem Hoster der Live-Sites).
+
+### G-4-4 Ein Aufbau, der länger als TMP_AGE läuft
+
+- **Fundstelle:** `AB_MCP_Protected_Store::delete_path()` mit `temp_gone()` (Alter eines Aufbauordners,
+  `tmp.build_mtime`) und `own_temp()`, `build_dir()`, `includes/class-protected-store.php`.
+- **Quelle:** D4 (Lead 13.11.2026 01:43 und 01:49).
+- **Was:** Ein Aufbauordner gilt nach `TMP_AGE` (1 Stunde, nach seiner eigenen Zeit) als nicht mehr laufend; die
+  Bereinigung einer anderen Anfrage nimmt ihn dann mit seinem Inhalt. Ein Aufbau dauert einen Aufruf; nur ein Aufruf
+  ohne Zeitgrenze, der länger als eine Stunde baut (etwa WP-CLI), wäre betroffen. Dann scheitert er an der fehlenden
+  Quelle (`put_tree()`: nicht gelesen), ohne halben Stand in `stage`.
+- **Trifft Normalfall:** nein.
+
+### G-4-5 Pfad mit dem Namen einer Zugangsdatenregel
+
+- **Fundstelle:** `AB_MCP_Sync_Export::code_unit()` (`held_path`).
+- **Quelle:** Bau von Zweig 4 (Plan E13: Namen werden geprüft, Inhalte nicht).
+- **Was:** Eine Einheit, deren Datei einen Namen trägt, den die Prüfung auf Zugangsdaten hält, geht in kein Codepaket
+  (`unread` mit `held_path`); ist sie auch auf wordpress.org nicht in der Version, bleibt sie gesperrt. Weg: von Hand.
+- **Trifft Normalfall:** nein.
+
+### G-4-6 Prüfung mit php -l über viele Aufrufe
+
+- **Fundstelle:** `AB_MCP_Sync_Code_Stage::complete()` (`CHECK_BUDGET` 20 s je Aufruf), `AB_MCP_Sync_Code_Stage_Calls::
+  lint()` (ein Prozess je Datei).
+- **Quelle:** Bau von Zweig 4 (D7).
+- **Was:** Wo ein PHP-Kommando gleicher Version da ist, läuft php -l je Datei in einem eigenen Prozess (Pro-Port; PHP
+  vor 8.3 kennt kein Lint mehrerer Dateien). Ein Plugin mit tausenden PHP-Dateien braucht dafür mehrere Aufrufe von
+  `complete()`; der Fortschritt steht im Zustand der Bereitstellung. Nicht gemessen ist, wie viele Aufrufe das auf
+  einem Shared Hosting für WooCommerce (3658 PHP-Dateien) sind.
+- **Trifft Normalfall:** nein (Dauer, kein Fehlweg; «bereit» erst nach jeder Datei).
+
+### G-4-7 Budgetprüfung des Exports eines Codepakets ohne eigenen Test
+
+- **Fundstelle:** `AB_MCP_Sync_Export::code_unit()` (`includes/sync/class-sync-export.php`), die Uhr des Budgets der
+  Lesung einer Einheit (`UNIT_BUDGET`).
+- **Quelle:** Behebung 2 von Zweig 4 (Codex-Runde 1, B4; Entscheid der Lead 13.11.2026 04:26: als benannte Grenze).
+- **Was:** `code_unit()` prüft den Messwert der Uhr: ohne endliche Zahl liest es nichts (`unreadable`), es entsteht
+  kein Paket der Einheit. Einen eigenen Test hat diese Prüfung nicht: der Export läuft in der Integrationsumgebung auf
+  der Staging-Site im Kindprozess (`sync-site.php`), dessen Uhr der Test nicht setzt. Die gleiche Regel der Uhr ist
+  an `AB_MCP_Sync_Code_Stage::clock()` und `AB_MCP_Sync_File_Manifest::now()` getestet
+  (`StoreClockAndReadersTest::BUDGET`).
+- **Trifft Normalfall:** nein (der Weg ist sicher: ohne Lesung kein Paket).
 
 ## Übernommen aus Zweig 2 (`bericht-zweig-2.md`, Abschnitt Grenzkandidaten; G-M9 aus «Behebung 2»)
 

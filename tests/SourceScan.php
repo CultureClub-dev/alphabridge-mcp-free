@@ -2,7 +2,9 @@
 /**
  * A scan of PHP source by its own tokens (token_get_all(), no pattern over
  * the text; Z8b branch 3, Behebung 5b): the calls of time() in any spelling
- * (time(), \time(), TIME(), time ( )) that are no method, the readers of a
+ * (time(), \time(), TIME(), time ( )) that are no method, the calls of
+ * microtime() and hrtime() that are no method (the clocks of budgets within
+ * a call, Z8b branch 4), the readers of a
  * row of AB_MCP_Store_Inputs::TABLE and of the clock of the runs
  * (AB_MCP_Sync_Run::now()), and the named functions of a file, each with the
  * method it stands in.
@@ -18,13 +20,14 @@ final class SourceScan {
 	 * What the code holds.
 	 *
 	 * @param string $code PHP source.
-	 * @return array{time:list<array{0:string,1:int}>,read:list<array{0:string,1:string,2:int}>,now:list<array{0:string,1:int}>,functions:list<string>}
+	 * @return array{time:list<array{0:string,1:int}>,budget:list<array{0:string,1:int}>,read:list<array{0:string,1:string,2:int}>,now:list<array{0:string,1:int}>,functions:list<string>}
 	 */
 	public static function scan( string $code ): array {
 		$t     = token_get_all( $code );
 		$n     = count( $t );
 		$out   = array(
 			'time'      => array(),
+			'budget'    => array(),
 			'read'      => array(),
 			'now'       => array(),
 			'functions' => array(),
@@ -92,9 +95,9 @@ final class SourceScan {
 			}
 			$p  = self::prev( $t, $i - 1 );
 			$pt = $p >= 0 ? $t[ $p ] : null;
-			if ( 'time' === strtolower( $name ) ) {
+			if ( in_array( strtolower( $name ), array( 'time', 'microtime', 'hrtime' ), true ) ) {
 				if ( ! is_array( $pt ) || ! in_array( $pt[0], self::kinds( array( 'T_OBJECT_OPERATOR', 'T_NULLSAFE_OBJECT_OPERATOR', 'T_DOUBLE_COLON', 'T_FUNCTION', 'T_NEW' ) ), true ) ) {
-					$out['time'][] = array( $fn, $x[2] );
+					$out[ 'time' === strtolower( $name ) ? 'time' : 'budget' ][] = array( $fn, $x[2] );
 				}
 				continue;
 			}

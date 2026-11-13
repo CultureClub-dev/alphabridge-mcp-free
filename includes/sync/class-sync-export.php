@@ -45,6 +45,11 @@
  * line a piece of a file), whole attachments up to
  * AB_MCP_Sync_Media_Package::MAX_BYTES; what does not fit is named for the
  * next package, one the account may not read is withheld.
+ * A package of code (purpose code, make_code(), Z8b branch 4, plan E3) holds,
+ * for the units of code a report named (plugins and themes, its report_hash
+ * in the manifest), the files the production site asked for
+ * (AB_MCP_Sync_Code_Package: one line a piece of a file); what does not fit
+ * is named for the next package, so one unit may lie in several.
  *
  * WHO MAKES IT (decision 9): the confirmed staging site paired with a
  * production site, with write access on (the access level Full), for an
@@ -122,8 +127,8 @@ final class AB_MCP_Sync_Export {
 	const WITHHELD_LIST = 200;
 
 
-	/** The purposes this version makes packages for: the inventory, the environment (AB_MCP_Sync_Env), the objects of a report and the files of its attachments. */
-	const PURPOSES = array( 'inventory', 'env', 'objects', 'media' );
+	/** The purposes this version makes packages for: the inventory, the environment (AB_MCP_Sync_Env), the objects of a report, the files of its attachments and the files of its units of code (Z8b branch 4). */
+	const PURPOSES = array( 'inventory', 'env', 'objects', 'media', 'code' );
 
 	/** Objects a package of objects holds at most (the list a tool call takes, AB_MCP_Security). */
 	const MAX_REFS = 2000;
@@ -163,7 +168,10 @@ final class AB_MCP_Sync_Export {
 			return $refused;
 		}
 		if ( ! in_array( $purpose, self::PURPOSES, true ) ) {
-			return new WP_Error( 'ab_mcp_sync_export_purpose', __( 'This version makes packages of the inventory and of the environment of the staging site, packages of objects for a report and packages of the files of its attachments. Pass purpose=inventory, purpose=env, purpose=objects or purpose=media.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_sync_export_purpose', __( 'This version makes packages of the inventory and of the environment of the staging site, packages of objects for a report, packages of the files of its attachments and packages of the files of its plugins and themes. Pass purpose=inventory, purpose=env, purpose=objects, purpose=media or purpose=code.', 'alphabridge-mcp' ) );
+		}
+		if ( 'code' === $purpose ) {
+			return self::make_code( is_array( $for ) ? $for : array() );
 		}
 		if ( 'env' === $purpose ) {
 			return self::make_env( $cursor, null === $objects ? self::OBJECTS : (int) $objects );
@@ -703,6 +711,367 @@ final class AB_MCP_Sync_Export {
 			);
 		}
 		return $answer;
+	}
+
+	/**
+	 * Make a package of code of this staging site for one report of the
+	 * production site (Z8b branch 4, plan E3 (b)): for each unit the refs name
+	 * (a plugin or theme of this site, kind and ref as the report names the
+	 * staging side), the files the production site asked for (paths: the
+	 * paths of the unit as AB_MCP_Sync_Code_Stage::need() names them there,
+	 * AB_MCP_Sync_Env::path_name(); without paths, every file of the unit),
+	 * each against the manifest of the unit read in this call
+	 * (AB_MCP_Sync_File_Manifest::unit()), a piece a line
+	 * (AB_MCP_Sync_Code_Package::lines_of()). Up to
+	 * AB_MCP_Sync_Code_Package::MAX_BYTES of files and the objects of one
+	 * manifest: files that do not fit go to left with their unit (export them
+	 * in another package; one unit may lie in several), a file alone larger
+	 * than that to too_large; a unit that does not read whole, is AlphaBridge
+	 * itself, misses a path asked for or holds a path whose name a credential
+	 * holds goes to unread with why. A file that changed while it was read
+	 * refuses the package; nothing of it is kept.
+	 *
+	 * @param array $for report_hash, refs (kind, ref, paths).
+	 * @return array|WP_Error The package (answer()), with code: packed, left, too_large, unread, way.
+	 */
+	private static function make_code( array $for ) {
+		$report_hash = isset( $for['report_hash'] ) ? $for['report_hash'] : null;
+		if ( ! is_string( $report_hash ) || 1 !== preg_match( '/^[0-9a-f]{64}\z/', $report_hash ) ) {
+			return new WP_Error( 'ab_mcp_sync_export_report', __( 'A package of code is made for one report: pass report_hash, the 64 hex characters wp_site_diff gave on the production site, so the package is read for that report only.', 'alphabridge-mcp' ) );
+		}
+		require_once __DIR__ . '/class-sync-code-package.php';
+		$refs = self::code_refs( isset( $for['refs'] ) ? $for['refs'] : null );
+		if ( is_wp_error( $refs ) ) {
+			return $refs;
+		}
+		try {
+			$series = bin2hex( random_bytes( 16 ) );
+		} catch ( Throwable $e ) {
+			return new WP_Error( 'ab_mcp_sync_export_random', __( 'No package was made: PHP has no source of random bytes on this server. Ask the host to check the PHP installation, then call again.', 'alphabridge-mcp' ) );
+		}
+		$code  = array(
+			'packed'    => array(),
+			'left'      => array(),
+			'too_large' => array(),
+			'unread'    => array(),
+		);
+		$take  = array();
+		$kinds = array();
+		$total = 0;
+		$lines = 0;
+		foreach ( $refs as $one ) {
+			$unit = self::code_unit( $one );
+			if ( is_string( $unit ) ) {
+				$code['unread'][] = array(
+					'kind'    => $one['kind'],
+					'ref'     => $one['ref'],
+					'problem' => $unit,
+				);
+				continue;
+			}
+			$fit   = self::code_fit( $unit['files'], $total, $lines );
+			$total = $fit['total'];
+			$lines = $fit['lines'];
+			foreach ( $fit['too_large'] as $big ) {
+				$code['too_large'][] = array(
+					'kind'  => $one['kind'],
+					'ref'   => $one['ref'],
+					'path'  => $big[0],
+					'bytes' => $big[1],
+				);
+			}
+			if ( array() !== $fit['left'] ) {
+				$code['left'][] = array(
+					'kind'  => $one['kind'],
+					'ref'   => $one['ref'],
+					'paths' => $fit['left'],
+				);
+			}
+			if ( array() !== $fit['files'] ) {
+				$take[]           = array( $unit, $fit['files'] );
+				$code['packed'][] = array(
+					'kind'  => $one['kind'],
+					'ref'   => $one['ref'],
+					'files' => count( $fit['files'] ),
+				);
+				$kinds[]          = array(
+					'complete' => $fit['complete'],
+					'kind'     => $one['kind'],
+					'subtype'  => $one['ref'],
+				);
+			}
+		}
+		if ( array() === $take ) {
+			return new WP_Error( 'ab_mcp_sync_export_code_none', __( 'No file of the units named could be packed: each does not read whole on this site, is AlphaBridge itself, misses a path asked for, holds a path whose name a credential holds, or its files are each too large for one package (see code). Check those plugins and themes on this site, or pass others in refs.', 'alphabridge-mcp' ), array( 'code' => $code ) );
+		}
+		usort(
+			$kinds,
+			static function ( $a, $b ) {
+				$by = strcmp( $a['kind'], $b['kind'] );
+				return 0 !== $by ? $by : strcmp( $a['subtype'], $b['subtype'] );
+			}
+		);
+		self::discard_stale(); // The packages of another binding go first, as before any package.
+		$answer = self::write_code( $series, $report_hash, $take, $kinds, $total );
+		if ( is_array( $answer ) ) {
+			$answer['code'] = $code + array(
+				'way' => array() === $code['left'] && array() === $code['too_large'] && array() === $code['unread'] ? null : __( 'Files in left did not fit this package: export them in another one (wp_site_export with purpose=code and their unit with these paths). A file in too_large is more than a package carries: update that plugin or theme by hand. A unit in unread was not packed: it does not read whole on this site, is AlphaBridge itself, misses a path asked for, or holds a path whose name a credential holds; check it here.', 'alphabridge-mcp' ),
+			);
+		}
+		return $answer;
+	}
+
+	/**
+	 * The files of one unit that go into a package of code (make_code()):
+	 * each, in the order of its manifest, where it fits beside what the
+	 * package holds already, by bytes (AB_MCP_Sync_Code_Package::MAX_BYTES)
+	 * and by lines (AB_MCP_Sync_Manifest::MAX_OBJECTS); a file larger than a
+	 * whole package is too large, any other that does not fit is left for
+	 * the next package (F43). The unit is complete in this package only
+	 * where nothing is left and nothing is too large.
+	 *
+	 * @param array[] $files The files of the unit (path, size, sha256).
+	 * @param int     $total Bytes of files in the package so far.
+	 * @param int     $lines Lines in the package so far.
+	 * @return array{files:array[],left:string[],too_large:array[],complete:bool,total:int,lines:int}
+	 */
+	private static function code_fit( array $files, $total, $lines ) {
+		$out = array(
+			'files'     => array(),
+			'left'      => array(),
+			'too_large' => array(),
+		);
+		foreach ( $files as $file ) {
+			$pieces = AB_MCP_Sync_Media_Package::pieces( $file['size'] );
+			if ( $file['size'] > AB_MCP_Sync_Code_Package::MAX_BYTES || $pieces > AB_MCP_Sync_Manifest::MAX_OBJECTS ) {
+				$out['too_large'][] = array( AB_MCP_Sync_Env::path_name( $file['path'] ), $file['size'] );
+			} elseif ( $total + $file['size'] > AB_MCP_Sync_Code_Package::MAX_BYTES || $lines + $pieces > AB_MCP_Sync_Manifest::MAX_OBJECTS ) {
+				$out['left'][] = AB_MCP_Sync_Env::path_name( $file['path'] );
+			} else {
+				$total         += $file['size'];
+				$lines         += $pieces;
+				$out['files'][] = $file;
+			}
+		}
+		$out['complete'] = array() === $out['too_large'] && array() === $out['left'];
+		$out['total']    = $total;
+		$out['lines']    = $lines;
+		return $out;
+	}
+
+	/**
+	 * The units a package of code is asked for, checked: a list of 1 to
+	 * MAX_REFS, each kind (plugin or theme) and ref (the name of the unit,
+	 * AB_MCP_Sync_Code_Package::unit_ok()), with paths a list of paths of the
+	 * unit or left out (every file), each unit once.
+	 *
+	 * @param mixed $refs refs.
+	 * @return array[]|WP_Error kind, ref, paths (path => true) or null.
+	 */
+	private static function code_refs( $refs ) {
+		if ( ! is_array( $refs ) || ! array_is_list( $refs ) || array() === $refs || count( $refs ) > self::MAX_REFS ) {
+			/* translators: %d: the most units one package takes. */
+			return new WP_Error( 'ab_mcp_sync_export_refs', sprintf( __( 'A package of code takes refs: a list of 1 to %d plugins and themes of this staging site, each with kind (plugin or theme), ref (its folder or file, as the report names the staging side) and, if wanted, paths (the files the production site asked for). Pass that list.', 'alphabridge-mcp' ), self::MAX_REFS ) );
+		}
+		$out  = array();
+		$seen = array();
+		foreach ( $refs as $i => $one ) {
+			$paths = is_array( $one ) && array_key_exists( 'paths', $one ) ? $one['paths'] : null;
+			$ok    = is_array( $one ) && isset( $one['kind'], $one['ref'] ) && AB_MCP_Sync_Code_Package::unit_ok( $one['kind'], $one['ref'] ) && ! isset( $seen[ $one['kind'] . "\0" . $one['ref'] ] )
+				&& ( null === $paths || ( is_array( $paths ) && array_is_list( $paths ) && array() !== $paths && count( $paths ) === count( array_filter( $paths, array( 'AB_MCP_Sync_Code_Package', 'path_ok' ) ) ) ) );
+			if ( ! $ok ) {
+				/* translators: %d: position in the list refs. */
+				return new WP_Error( 'ab_mcp_sync_export_refs', sprintf( __( 'refs[%d] is not a plugin or theme of this staging site as a package of code takes it: kind plugin or theme, ref the name of its folder or file, each unit once, paths (if given) a list of paths in it. Pass the units as the report names them.', 'alphabridge-mcp' ), (int) $i ) );
+			}
+			$seen[ $one['kind'] . "\0" . $one['ref'] ] = true;
+			$out[] = array(
+				'kind'  => $one['kind'],
+				'ref'   => $one['ref'],
+				'paths' => null === $paths ? null : array_fill_keys( $paths, true ),
+			);
+		}
+		return $out;
+	}
+
+	/**
+	 * A unit of code of this site read whole for a package (make_code()): its
+	 * files to pack, or why not (a code of the manifest, or own, missing_path,
+	 * held_path).
+	 *
+	 * @param array $one code_refs(): kind, ref, paths.
+	 * @return array|string kind, ref, form, path, files (path, size, sha256); or why not.
+	 */
+	private static function code_unit( array $one ) {
+		$base = 'theme' === $one['kind'] ? AB_MCP_Sync_File_Manifest::theme_root() : ( defined( 'WP_PLUGIN_DIR' ) && is_string( WP_PLUGIN_DIR ) ? rtrim( WP_PLUGIN_DIR, '/' ) : null );
+		if ( null === $base ) {
+			return 'unreadable';
+		}
+		$path = $base . '/' . $one['ref'];
+		require_once dirname( __DIR__ ) . '/lifecycle/class-own-files.php';
+		if ( is_wp_error( AB_MCP_Own_Files::own_file_refusal( $path ) ) ) {
+			return 'own';
+		}
+		// The budget of the reading, within this call (a named exception of
+		// the time() guard): a time that is no finite number reads nothing.
+		$now = null !== AB_MCP_Sync_Env::$clock ? call_user_func( AB_MCP_Sync_Env::$clock ) : microtime( true );
+		if ( ! is_float( $now ) || ! is_finite( $now ) ) {
+			return 'unreadable';
+		}
+		$read = AB_MCP_Sync_File_Manifest::unit( $base, $one['ref'], 'staging', $now + AB_MCP_Sync_Env::UNIT_BUDGET, true, $one['kind'] );
+		if ( ! $read['complete'] || null === $read['hash'] ) {
+			return is_string( $read['cause'] ) ? $read['cause'] : 'unreadable';
+		}
+		$files = array();
+		$found = array();
+		foreach ( $read['entries'] as $entry ) {
+			if ( ! is_string( $entry[0] ) || ! is_string( $entry[2] ) ) {
+				return 'unreadable';
+			}
+			$named = AB_MCP_Sync_Env::path_name( $entry[0] );
+			if ( null !== $one['paths'] && ! isset( $one['paths'][ $named ] ) ) {
+				continue;
+			}
+			if ( null !== AB_MCP_Sync_Env::held( $entry[0] ) ) {
+				return 'held_path';
+			}
+			$found[ $named ] = true;
+			$files[]         = array(
+				'path'   => $entry[0],
+				'size'   => $entry[1],
+				'sha256' => $entry[2],
+			);
+		}
+		if ( null !== $one['paths'] && count( $found ) !== count( $one['paths'] ) ) {
+			return 'missing_path';
+		}
+		return array(
+			'kind'  => $one['kind'],
+			'ref'   => $one['ref'],
+			'form'  => $read['form'],
+			'path'  => $path,
+			'files' => $files,
+		);
+	}
+
+	/**
+	 * Write a package of code into a group of the area out a chunk at a time
+	 * (make_code()): the lines of each file, the manifest signed, the record.
+	 * Nothing of it stays where a step fails.
+	 *
+	 * @param string  $series      The series (32 hex).
+	 * @param string  $report_hash The report.
+	 * @param array[] $take        Each [unit, files].
+	 * @param array[] $kinds       The units with complete, sorted.
+	 * @param int     $total       Bytes of the files.
+	 * @return array|WP_Error answer().
+	 */
+	private static function write_code( $series, $report_hash, array $take, array $kinds, $total ) {
+		$gid = AB_MCP_Protected_Store::open(
+			'out',
+			array(
+				// The lines (base64, a third more than the bytes) and their gzip stay below this.
+				'declared' => (int) ceil( $total * 1.4 ) + 1048576 + self::RECORD_MAX,
+				'label'    => 'series:' . $series,
+			)
+		);
+		if ( is_wp_error( $gid ) ) {
+			return $gid;
+		}
+		$list     = array();
+		$bytes    = 0;
+		$whole    = hash_init( 'sha256' );
+		$slice    = '';
+		$lines    = 0;
+		$unpacked = 0;
+		$flush    = static function () use ( &$slice, &$list, &$bytes, $whole, $gid ) {
+			$gz = function_exists( 'gzencode' ) ? gzencode( $slice, 6 ) : false;
+			if ( ! is_string( $gz ) ) {
+				return new WP_Error( 'ab_mcp_sync_export_gzip', __( 'The package could not be compressed. Ask the host to enable the zlib extension of PHP, then call again.', 'alphabridge-mcp' ) );
+			}
+			if ( count( $list ) >= AB_MCP_Sync_Manifest::MAX_LIST || $bytes + strlen( $gz ) > AB_MCP_Sync_Manifest::MAX_BYTES ) {
+				return self::too_large( count( $list ) >= AB_MCP_Sync_Manifest::MAX_LIST ? 'chunks' : 'bytes', count( $list ) >= AB_MCP_Sync_Manifest::MAX_LIST ? AB_MCP_Sync_Manifest::MAX_LIST : AB_MCP_Sync_Manifest::MAX_BYTES );
+			}
+			$put = AB_MCP_Protected_Store::put( 'out', $gid, self::chunk_name( count( $list ) ), $gz );
+			if ( is_wp_error( $put ) ) {
+				return $put;
+			}
+			hash_update( $whole, $gz );
+			$bytes += strlen( $gz );
+			$list[] = array(
+				'bytes'  => strlen( $gz ),
+				'sha256' => hash( 'sha256', $gz ),
+			);
+			$slice  = '';
+			return true;
+		};
+		$put_line = static function ( $line ) use ( &$slice, &$lines, &$unpacked, $flush ) {
+			if ( '' !== $slice && strlen( $slice ) + strlen( $line ) + 1 > self::SLICE ) {
+				$done = $flush();
+				if ( true !== $done ) {
+					return $done;
+				}
+			}
+			$slice    .= $line . "\n";
+			$unpacked += strlen( $line ) + 1;
+			++$lines;
+			return $lines > AB_MCP_Sync_Manifest::MAX_OBJECTS ? self::too_large( 'objects', AB_MCP_Sync_Manifest::MAX_OBJECTS ) : true;
+		};
+		foreach ( $take as list( $unit, $files ) ) {
+			foreach ( $files as $file ) {
+				$done = AB_MCP_Sync_Code_Package::lines_of( $unit['path'], $unit['form'], $unit['kind'], $unit['ref'], $file, $put_line );
+				if ( true !== $done ) {
+					AB_MCP_Protected_Store::remove( 'out', $gid );
+					return $done;
+				}
+			}
+		}
+		$done = $flush();
+		if ( true !== $done || $unpacked > AB_MCP_Sync_Manifest::MAX_UNPACKED ) {
+			AB_MCP_Protected_Store::remove( 'out', $gid );
+			return true !== $done ? $done : self::too_large( 'unpacked', AB_MCP_Sync_Manifest::MAX_UNPACKED );
+		}
+		$signed = AB_MCP_Sync_Manifest::sign(
+			array(
+				'bytes'       => $bytes,
+				'chunks'      => $list,
+				'kinds'       => $kinds,
+				'objects'     => $lines,
+				'package_id'  => $gid,
+				'purpose'     => 'code',
+				'report_hash' => $report_hash,
+				'sha256'      => hash_final( $whole ),
+				'unpacked'    => $unpacked,
+			)
+		);
+		$told   = array(
+			'withheld'    => array(
+				'count'   => 0,
+				'objects' => array(),
+			),
+			'credentials' => array(
+				'held'  => 0,
+				'names' => 0,
+				'units' => 0,
+			),
+		);
+		$record = is_wp_error( $signed ) ? '' : AB_MCP_Sync_Canon::encode(
+			array(
+				'binding'   => self::binding(),
+				'cursor'    => null,
+				'format'    => self::RECORD,
+				'index'     => null,
+				'manifest'  => $signed['manifest'],
+				'report'    => $told,
+				'series'    => $series,
+				'signature' => $signed['signature'],
+			)
+		);
+		$put    = is_wp_error( $signed ) ? $signed : AB_MCP_Protected_Store::put( 'out', $gid, hash( 'sha256', $record ), $record );
+		if ( is_wp_error( $put ) ) {
+			AB_MCP_Protected_Store::remove( 'out', $gid );
+			return $put;
+		}
+		return self::answer( json_decode( $signed['manifest'], true ), $signed, null, $told );
 	}
 
 	/**
@@ -1596,17 +1965,25 @@ final class AB_MCP_Sync_Export {
 	}
 
 	/**
-	 * Whether a package is bound as this site is now; one that is not is
-	 * discarded here.
+	 * Whether a package is bound as this site is now; one bound otherwise is
+	 * discarded here, one whose binding of now cannot be read is kept.
 	 *
 	 * @param array       $found   find().
 	 * @param string|null $binding binding(), where the caller has it.
 	 * @return bool
 	 */
 	private static function bound( array $found, $binding = null ) {
+		$now = null === $binding ? self::binding() : $binding;
 		// A record of an older version, without its report, is none either.
-		if ( null !== $found['report'] && $found['binding'] === ( null === $binding ? self::binding() : $binding ) ) {
+		if ( null !== $found['report'] && null !== $now && $found['binding'] === $now ) {
 			return true;
+		}
+		// A binding of this site that cannot be read now (no key, no pair, or
+		// an option that does not read) is no other binding: the package is
+		// not given out, and it stays until its retention (V3 of Z8b branch 4,
+		// «Abwesenheit als Löschsignal»: unknown is not different).
+		if ( null === $now ) {
+			return false;
 		}
 		AB_MCP_Protected_Store::remove( 'out', $found['manifest']['package_id'] );
 		return false;

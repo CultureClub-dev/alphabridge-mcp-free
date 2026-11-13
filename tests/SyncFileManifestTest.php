@@ -670,6 +670,34 @@ final class SyncFileManifestTest extends TestCase {
 		self::assertTrue( $this->read( 'leicht', 'live', 100.0, true )['complete'] );
 	}
 
+	public function testATimeThatIsNoFiniteNumberEndsTheReadingNeverOneWithoutEnd(): void {
+		// Codex confirmation 1 of Z8b branch 4, B-3: the clock of the budget
+		// and the deadline only as finite numbers, without a cast; -INF, INF
+		// and NAN end the reading as the end of its time does (too large in a
+		// whole call), a deadline that is no number likewise.
+		$this->file( 'plugins/leicht/leicht.php', '<?php' );
+		try {
+			foreach ( array( '-INF' => -INF, 'INF' => INF, 'NAN' => NAN, 'a text' => 'x' ) as $what => $value ) {
+				AB_MCP_Sync_Env::$clock = static fn() => $value;
+				$read                   = $this->read( 'leicht', 'live', 100.0, true );
+				self::assertSame( array( false, 'too_large' ), array( $read['complete'], $read['cause'] ), $what );
+			}
+			AB_MCP_Sync_Env::$clock = static fn() => 50;
+			self::assertTrue( $this->read( 'leicht', 'live', 100.0, true )['complete'], 'A whole number of seconds is a time.' );
+			AB_MCP_Sync_Env::$clock = static fn() => 50.0;
+			self::assertSame( 'too_large', $this->read( 'leicht', 'live', NAN, true )['cause'], 'A deadline that is no number.' );
+			self::assertSame( 'too_large', $this->read( 'leicht', 'live', -INF, true )['cause'], 'A deadline of -INF.' );
+			self::assertTrue( $this->read( 'leicht', 'live', INF, true )['complete'], 'INF: no deadline.' );
+			// A deadline that is no number at all, which PHP would compare as
+			// one: past the read() of this test (it types a float), straight
+			// to unit() (Codex confirmation 2).
+			self::assertSame( 'too_large', AB_MCP_Sync_File_Manifest::unit( $this->dir . '/plugins', 'leicht', 'live', '100', true, 'plugin' )['cause'], 'A deadline as text.' );
+			self::assertTrue( $this->read( 'leicht', 'live', 100.0, true )['complete'] );
+		} finally {
+			AB_MCP_Sync_Env::$clock = null;
+		}
+	}
+
 	public function testTheTimeOfTheCallIsAskedInTheFinalCheckOfTheUnitToo(): void {
 		// Behebung 5 (closed Codex confirmation of 216596c): a tree that does
 		// not change, on slow storage, past its time while the folders are

@@ -135,6 +135,7 @@ require_once __DIR__ . '/class-sync-net.php';
 require_once __DIR__ . '/class-sync-file-manifest.php';
 require_once __DIR__ . '/class-sync-core-compare.php';
 require_once dirname( __DIR__ ) . '/class-redactor.php';
+require_once dirname( __DIR__ ) . '/class-store-inputs.php';
 
 /**
  * The calls of the series of the environment to the rows of the site: the
@@ -161,6 +162,17 @@ final class AB_MCP_Sync_Env_Calls {
 	 */
 	public function attached( $after, $limit ) {
 		return AB_MCP_Sync_Media::reverse( $after, $limit );
+	}
+
+	/**
+	 * The first bytes of a file, as get_file_data() reads them for its head.
+	 *
+	 * @param string $path File.
+	 * @param int    $max  Bytes at most.
+	 * @return string|false
+	 */
+	public function head_text( $path, $max ) {
+		return @file_get_contents( $path, false, null, 0, $max ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- the head of a local file.
 	}
 }
 
@@ -212,7 +224,16 @@ final class AB_MCP_Sync_Env {
 		'sha256'   => 'hash?',
 		'version'  => 'text?',
 		'cause'    => 'text?',
+		'update_uri' => 'text?',
 	);
+
+	/**
+	 * The hosts of «Update URI» that name wordpress.org (the header of a
+	 * plugin or theme the directory serves names w.org/plugin/<slug> or
+	 * https://wordpress.org/plugins/<slug>/); any other host names another
+	 * source of updates (Z8b branch 4, D1: no package from wordpress.org).
+	 */
+	const WPORG_HOSTS = array( 'wordpress.org', 'www.wordpress.org', 'w.org' );
 
 	/** The forms of a unit: a folder, a file, what is neither (locked), AlphaBridge itself, a root not read. */
 	const FORMS = array( 'folder', 'file', 'other', 'own', 'root' );
@@ -796,6 +817,96 @@ final class AB_MCP_Sync_Env {
 	}
 
 	/**
+	 * The host each file names in its head as «Update URI» (Z8b branch 4,
+	 * D1), as WordPress reads it to choose the source of updates
+	 * (wp_update_plugins(), wp_update_themes(): the host of the address,
+	 * sanitize_url() first): '' where the head names none; the host in lower
+	 * case, or what stands before the first "/", "?" or "#" where none is
+	 * read (an address of those signs only: itself, the host of none). Only
+	 * the host goes into a line: an address may carry a key of a licence.
+	 * A file that is no name is left out (its unit is unknown, unit_host());
+	 * a head that does not read whole is unknown (null), never a head that
+	 * names none (Codex round 1 of branch 4, A2).
+	 *
+	 * @param string   $dir   The folder the files lie in.
+	 * @param string[] $files The files, relative to it.
+	 * @return array<string,string|null> file => host, or null (unknown).
+	 */
+	public static function update_hosts( $dir, array $files ) {
+		$out = array();
+		foreach ( $files as $file ) {
+			if ( ! is_string( $dir ) || ! is_string( $file ) ) {
+				continue;
+			}
+			$out[ $file ] = self::host_of_head( self::head_read( rtrim( $dir, '/' ) . '/' . $file, array( 'Update URI' ) ) );
+		}
+		return $out;
+	}
+
+	/**
+	 * The host a head names for its updates (update_hosts()): the head in the
+	 * form of its row stage.update_head of AB_MCP_Store_Inputs::TABLE, else
+	 * unknown (null); '' where it names none.
+	 *
+	 * @param mixed $raw The head as head_read() gave it.
+	 * @return string|null
+	 */
+	public static function host_of_head( $raw ) {
+		$head = AB_MCP_Store_Inputs::read( 'stage.update_head', $raw );
+		if ( null === $head ) {
+			return null;
+		}
+		$uri = $head['Update URI'];
+		if ( '' === $uri ) {
+			return '';
+		}
+		$host = wp_parse_url( function_exists( 'sanitize_url' ) ? sanitize_url( $uri ) : $uri, PHP_URL_HOST );
+		if ( ! is_string( $host ) || '' === $host ) {
+			// No host read: what stands before its first "/", "?" or "#"
+			// (w.org/plugin/x), never the whole address.
+			$first = strtok( $uri, '/?#' );
+			$host  = false === $first ? $uri : $first;
+		}
+		return self::name( strtolower( $host ) );
+	}
+
+	/**
+	 * The host of updates of one unit (unit_lines()): update_host_of() over
+	 * the heads of its main files (a plugin) or of its style.css (a theme);
+	 * null where a head of them was not read, or not read whole (unknown:
+	 * from_org() refuses).
+	 *
+	 * @param array    $ctx   unit_context().
+	 * @param string[] $files Its main files or style.css, as unit_context() names them.
+	 * @return string|null
+	 */
+	private static function unit_host( array $ctx, array $files ) {
+		if ( ! isset( $ctx['uris'] ) || array() !== array_diff_key( array_flip( $files ), $ctx['uris'] ) ) {
+			return null;
+		}
+		$hosts = array_values( array_intersect_key( $ctx['uris'], array_flip( $files ) ) );
+		return in_array( null, $hosts, true ) ? null : self::update_host_of( $hosts );
+	}
+
+	/**
+	 * The host of the heads of one unit (a plugin may have several main
+	 * files): one that names a host other than wordpress.org first, else one
+	 * that names wordpress.org, else '' (none names one).
+	 *
+	 * @param string[] $hosts update_hosts() of its main files.
+	 * @return string
+	 */
+	private static function update_host_of( array $hosts ) {
+		$named = array_values( array_filter( $hosts, static fn( $host ) => '' !== $host ) );
+		foreach ( $named as $host ) {
+			if ( ! in_array( $host, self::WPORG_HOSTS, true ) ) {
+				return $host;
+			}
+		}
+		return array() === $named ? '' : $named[0];
+	}
+
+	/**
 	 * The themes in the folders of themes as search_theme_directories()
 	 * finds them: each folder with a style.css, else each folder in it with
 	 * one (one level down), by its path relative to its root, with the
@@ -844,7 +955,41 @@ final class AB_MCP_Sync_Env {
 	 */
 	public static function head( $path, array $headers ) {
 		$text = is_file( $path ) && is_readable( $path ) ? @file_get_contents( $path, false, null, 0, 8192 ) : false; // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- the head of a local file.
-		$text = str_replace( "\r", "\n", is_string( $text ) ? $text : '' );
+		return self::head_fields( is_string( $text ) ? $text : '', $headers );
+	}
+
+	/**
+	 * The headers of a file read whole (Z8b branch 4, Codex round 1, A2 and
+	 * A4): as head(), but null where the file is not there, cannot be read
+	 * or reads shorter than its first 8 KiB (or its size): unknown, never a
+	 * head that names nothing.
+	 *
+	 * @param string   $path    File.
+	 * @param string[] $headers Names.
+	 * @return array<string,string>|null
+	 */
+	public static function head_read( $path, array $headers ) {
+		if ( ! is_string( $path ) || ! is_file( $path ) || ! is_readable( $path ) ) {
+			return null;
+		}
+		clearstatcache( true, $path );
+		$size = @filesize( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- a file that went is answered.
+		$text = self::calls()->head_text( $path, 8192 );
+		if ( ! is_int( $size ) || ! is_string( $text ) || strlen( $text ) !== min( $size, 8192 ) ) {
+			return null;
+		}
+		return self::head_fields( $text, $headers );
+	}
+
+	/**
+	 * The headers in the text of a head (head(), head_read()).
+	 *
+	 * @param string   $text    The first bytes of the file.
+	 * @param string[] $headers Names.
+	 * @return array<string,string>
+	 */
+	private static function head_fields( $text, array $headers ) {
+		$text = str_replace( "\r", "\n", $text );
 		$out  = array();
 		foreach ( $headers as $header ) {
 			$out[ $header ] = 1 === preg_match( '/^(?:[ \t]*<\?(?:php)?)?[ \t\/*#@]*' . preg_quote( $header, '/' ) . ':(.*)$/mi', $text, $m ) ? trim( (string) preg_replace( '/\s*(?:\*\/|\?>).*/', '', $m[1] ) ) : '';
@@ -1257,13 +1402,23 @@ final class AB_MCP_Sync_Env {
 	 */
 	private static function unit_context( $kind, $dir, $deadline ) {
 		if ( 'plugin' === $kind ) {
+			$mains = self::plugin_files( $dir );
 			return array(
-				'mains'  => self::plugin_files( $dir ),
+				'mains'  => $mains,
 				'active' => self::stored_list( 'active_plugins' ),
+				'uris'   => self::update_hosts( $dir, array_keys( $mains ) ),
 			);
 		}
 		if ( 'theme' === $kind ) {
-			return array( 'versions' => self::theme_dirs( array( $dir ) ) );
+			$versions = self::theme_dirs( array( $dir ) );
+			$files    = array();
+			foreach ( array_keys( $versions ) as $stylesheet ) {
+				$files[] = $stylesheet . '/style.css';
+			}
+			return array(
+				'versions' => $versions,
+				'uris'     => self::update_hosts( $dir, $files ),
+			);
 		}
 		if ( 'upload' === $kind ) {
 			$known = self::attached( $deadline );
@@ -1508,6 +1663,10 @@ final class AB_MCP_Sync_Env {
 			'sha256'   => null === $file ? null : (string) $file[2],
 			'version'  => null,
 			'cause'    => $read['cause'],
+			// The host the head of the unit names for its updates (Z8b branch
+			// 4, D1): '' for none; null where it was not read (no plugin or
+			// theme, or a unit of a further root of themes).
+			'update_uri' => null,
 		);
 		if ( 'plugin' === $kind ) {
 			// Each main file by its name in the unit, with its full reference
@@ -1529,8 +1688,9 @@ final class AB_MCP_Sync_Env {
 				$refs[ $main ]  = $rel;
 			}
 			ksort( $mains, SORT_STRING );
-			$fields['mains']   = array_map( array( __CLASS__, 'path_name' ), array_map( 'strval', array_keys( $mains ) ) );
-			$fields['version'] = array() === $mains ? null : reset( $mains );
+			$fields['mains']      = array_map( array( __CLASS__, 'path_name' ), array_map( 'strval', array_keys( $mains ) ) );
+			$fields['version']    = array() === $mains ? null : reset( $mains );
+			$fields['update_uri'] = self::unit_host( $ctx, array_values( $refs ) );
 			if ( null !== $ctx['active'] ) {
 				$active = array();
 				foreach ( array_keys( $mains ) as $main ) {
@@ -1546,6 +1706,7 @@ final class AB_MCP_Sync_Env {
 			foreach ( $ctx['versions'] as $stylesheet => $version ) {
 				if ( (string) $stylesheet === $name || 0 === strpos( (string) $stylesheet, $name . '/' ) ) {
 					$fields['version'] = $version;
+					$fields['update_uri'] = self::unit_host( $ctx, array( $stylesheet . '/style.css' ) );
 					break;
 				}
 			}
@@ -1599,6 +1760,7 @@ final class AB_MCP_Sync_Env {
 				'sha256'   => null,
 				'version'  => null,
 				'cause'    => (string) $why,
+				'update_uri' => null,
 			)
 		);
 	}
@@ -2446,6 +2608,12 @@ final class AB_MCP_Sync_Env {
 			return false;
 		}
 		$fields = self::LINES[ $line['env'] ];
+		// The line of a unit of a version before Z8b branch 4 has no
+		// update_uri: taken, and its host is unknown (D1: no package of
+		// wordpress.org for it).
+		if ( in_array( $line['env'], self::UNITS, true ) && ! array_key_exists( 'update_uri', $line ) ) {
+			unset( $fields['update_uri'] );
+		}
 		$keys   = array_keys( $line );
 		sort( $keys );
 		// A name held (NAMED): by its SHA-256, with why.

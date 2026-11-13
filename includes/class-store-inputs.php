@@ -14,9 +14,15 @@
  *   the backups of the run (AB_MCP_Sync_Schema::keep_until());
  * - protection: nothing in stage, backups and marks goes, and the clean-up
  *   counts what it kept so as unknown (guard());
- * - file_time: the file or folder stays;
+ * - file_time: the file or folder stays (a building folder of build_dir()
+ *   with what is in it);
  * - budget: the budget is not known, and the call is refused with the cause
- *   and the way (AB_MCP_Sync_Backup::fits(), AB_MCP_Store_Budget).
+ *   and the way (AB_MCP_Sync_Backup::fits(), AB_MCP_Store_Budget);
+ * - package: a package of code whose index is not of its form is not used
+ *   (AB_MCP_Sync_Code_Package::taken() refuses; Z8b branch 4);
+ * - stage: a stage whose state is not of its form is never ready, and a
+ *   unit whose host of updates is not known is fetched from no wordpress.org
+ *   (AB_MCP_Sync_Code_Stage; Z8b branch 4).
  *
  * A read of one of these inputs outside the table is a named limit
  * (GRENZEN-CODE.md, G-3-10): no test sees it, only review and Codex.
@@ -63,6 +69,14 @@ final class AB_MCP_Store_Inputs {
 		'digits' => true,
 		'min'    => 0,
 		'max'    => null,
+	);
+
+	/** A SHA-256 in hex, as the store and the manifests write it. */
+	const SHA256 = array(
+		'type'      => 'string',
+		'empty'     => false,
+		'max_bytes' => null,
+		'pattern'   => '/^[0-9a-f]{64}\z/',
 	);
 
 	/** The names in a folder, as scandir() gives them: texts, none twice. */
@@ -398,6 +412,263 @@ final class AB_MCP_Store_Inputs {
 			'consumer' => 'file_time',
 			'source'   => 'AB_MCP_Protected_Store::sweep(), delete_path(), by lstat() of the seam',
 			'field'    => 'mtime of a foreign sidecar, a temp file, a folder of a mark without one',
+			'form'     => self::COUNT,
+		),
+		/* ---------------- the state of a package of code (Z8b branch 4) */
+		'code.index'               => array(
+			'consumer' => 'package',
+			'source'   => 'AB_MCP_Sync_Code_Package::index(), taken()',
+			'field'    => 'the index a package of code keeps in its group (unpacked()): each file with its unit, path, size, SHA-256, pieces and chunks; what the stage takes from the package',
+			'form'     => array(
+				'type'  => 'json',
+				'codec' => 'AB_MCP_Sync_Canon',
+				'depth' => 8,
+				'value' => array(
+					'type'   => 'record',
+					'fields' => array(
+						'files'  => array(
+							'type'      => 'list',
+							'empty'     => false,
+							'item'      => array(
+								'type'   => 'record',
+								'fields' => array(
+									'chunks' => array(
+										'type'      => 'list',
+										'empty'     => false,
+										'item'      => self::COUNT,
+										'unique'    => true,
+										'max_items' => null,
+									),
+									'kind'   => array(
+										'type'      => 'string',
+										'empty'     => false,
+										'max_bytes' => null,
+										'in'        => array( 'plugin', 'theme' ),
+									),
+									'path'   => array(
+										'type'      => 'string',
+										'empty'     => false,
+										'max_bytes' => 4096,
+									),
+									'pieces' => self::RUN,
+									'ref'    => array(
+										'type'      => 'string',
+										'empty'     => false,
+										'max_bytes' => 764,
+									),
+									'sha256' => self::SHA256,
+									'size'   => self::COUNT,
+								),
+								'extra'  => false,
+							),
+							'unique'    => true,
+							'max_items' => null,
+						),
+						'format' => array(
+							'type'      => 'string',
+							'empty'     => false,
+							'max_bytes' => null,
+							'in'        => array( 'ab-sync-code/1' ),
+						),
+					),
+					'extra'  => false,
+				),
+			),
+		),
+		/* ------------------ the stage of a unit of code (Z8b branch 4) */
+		'stage.update_uri'         => array(
+			'consumer' => 'stage',
+			'source'   => 'AB_MCP_Sync_Code_Stage::update_host(), from the signed line of the unit (AB_MCP_Sync_Env)',
+			'field'    => 'update_uri of the line: the host the head of the unit names for its updates, or none; whether a package may come from wordpress.org (from_org(), D1)',
+			'form'     => array(
+				'type'      => 'string',
+				'empty'     => true,
+				'max_bytes' => null,
+			),
+		),
+		'stage.update_head'        => array(
+			'consumer' => 'stage',
+			'source'   => 'AB_MCP_Sync_Env::host_of_head(), the head of a main file or style.css on the staging site (head_read())',
+			'field'    => 'the head as it reads whole: Update URI, the host it names goes into the line of the unit; a head not read whole is unknown, the host of the unit too (Codex round 1 of branch 4, A2)',
+			'form'     => array(
+				'type'   => 'record',
+				'fields' => array(
+					'Update URI' => array(
+						'type'      => 'string',
+						'empty'     => true,
+						'max_bytes' => null,
+					),
+				),
+				'extra'  => false,
+			),
+		),
+		'stage.head'               => array(
+			'consumer' => 'stage',
+			'source'   => 'AB_MCP_Sync_Code_Stage::head_refusal(), the head of each PHP file of a plugin or style.css of a theme in the stage (head_read())',
+			'field'    => 'Plugin Name, Requires at least and Requires PHP of the new version, as it reads whole: whether it runs here; unknown refuses, never ready (Codex round 1 of branch 4, A4)',
+			'form'     => array(
+				'type'   => 'record',
+				'fields' => array(
+					'Plugin Name'       => array(
+						'type'      => 'string',
+						'empty'     => true,
+						'max_bytes' => null,
+					),
+					'Requires PHP'      => array(
+						'type'      => 'string',
+						'empty'     => true,
+						'max_bytes' => null,
+					),
+					'Requires at least' => array(
+						'type'      => 'string',
+						'empty'     => true,
+						'max_bytes' => null,
+					),
+				),
+				'extra'  => false,
+			),
+		),
+		'stage.version'            => array(
+			'consumer' => 'stage',
+			'source'   => 'AB_MCP_Sync_Code_Stage::from_org(), the version of the signed line of the unit',
+			'field'    => 'the version the package of wordpress.org is fetched in (its exact address); unknown fetches nothing',
+			'form'     => array(
+				'type'      => 'string',
+				'empty'     => false,
+				'max_bytes' => 64,
+			),
+		),
+		'stage.state'              => array(
+			'consumer' => 'stage',
+			'source'   => 'AB_MCP_Sync_Code_Stage::state_of(), the last state file of the group of a stage',
+			'field'    => 'the state of a stage: its unit, the signed hash, its tree, the files to check with the size and SHA-256 the bytes checked are bound to (Codex round 1, A3) and how far, ready or refused; only ready lets the swap take it (branch 5)',
+			'form'     => array(
+				'type'  => 'json',
+				'codec' => 'AB_MCP_Sync_Canon',
+				'depth' => 8,
+				'value' => array(
+					'type'   => 'record',
+					'fields' => array(
+						'done'    => self::COUNT,
+						'format'  => array(
+							'type'      => 'string',
+							'empty'     => false,
+							'max_bytes' => null,
+							'in'        => array( 'ab-code-stage/1' ),
+						),
+						'lint'    => array( 'type' => 'bool' ),
+						'notes'   => array(
+							'type'      => 'list',
+							'empty'     => true,
+							'item'      => array(
+								'type'      => 'string',
+								'empty'     => false,
+								'max_bytes' => 4096,
+							),
+							'unique'    => true,
+							'max_items' => 20,
+						),
+						'refusal' => array(
+							'type'     => 'record',
+							'fields'   => array(
+								'code'    => array(
+									'type'      => 'string',
+									'empty'     => false,
+									'max_bytes' => 64,
+								),
+								'line'    => array(
+									'type'     => 'int',
+									'digits'   => false,
+									'min'      => 0,
+									'max'      => null,
+									'nullable' => true,
+								),
+								'message' => array(
+									'type'      => 'string',
+									'empty'     => false,
+									'max_bytes' => 4096,
+								),
+								'path'    => array(
+									'type'      => 'string',
+									'empty'     => false,
+									'max_bytes' => 4096,
+									'nullable'  => true,
+								),
+							),
+							'extra'    => false,
+							'nullable' => true,
+						),
+						'seq'     => self::RUN,
+						'signed'  => self::SHA256,
+						'source'  => array(
+							'type'      => 'string',
+							'empty'     => false,
+							'max_bytes' => null,
+							'in'        => array( 'wordpress.org', 'packages' ),
+						),
+						'state'   => array(
+							'type'      => 'string',
+							'empty'     => false,
+							'max_bytes' => null,
+							'in'        => array( 'checking', 'ready', 'refused' ),
+						),
+						'todo'    => array(
+							'type'      => 'list',
+							'empty'     => true,
+							'item'      => array(
+								'type'   => 'record',
+								'fields' => array(
+									'path'   => array(
+										'type'      => 'string',
+										'empty'     => false,
+										'max_bytes' => 4096,
+									),
+									'sha256' => self::SHA256,
+									'size'   => self::COUNT,
+								),
+								'extra'  => false,
+							),
+							'unique'    => true,
+							'max_items' => null,
+						),
+						'tree'    => array(
+							'type'   => 'record',
+							'fields' => array(
+								'hash' => self::SHA256,
+								'name' => array(
+									'type'      => 'string',
+									'empty'     => false,
+									'max_bytes' => 255,
+								),
+							),
+							'extra'  => false,
+						),
+						'unit'    => array(
+							'type'   => 'record',
+							'fields' => array(
+								'kind' => array(
+									'type'      => 'string',
+									'empty'     => false,
+									'max_bytes' => null,
+									'in'        => array( 'plugin', 'theme' ),
+								),
+								'ref'  => array(
+									'type'      => 'string',
+									'empty'     => false,
+									'max_bytes' => 764,
+								),
+							),
+							'extra'  => false,
+						),
+					),
+					'extra'  => false,
+				),
+			),
+		),
+		'tmp.build_mtime'          => array(
+			'consumer' => 'file_time',
+			'source'   => 'AB_MCP_Protected_Store, in delete_path() by lstat() of the seam (Z8b branch 4, D4)',
+			'field'    => 'mtime of a building folder of build_dir(), its age against TMP_AGE: past it, it goes with what is in it',
 			'form'     => self::COUNT,
 		),
 		/* ------------------------------------------------------- budgets */

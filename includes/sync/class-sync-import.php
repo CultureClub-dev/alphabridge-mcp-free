@@ -398,6 +398,11 @@ final class AB_MCP_Sync_Import {
 		if ( 'media' === $purpose ) {
 			return AB_MCP_Sync_Media_Package::taken( $found['gid'], $manifest, $have );
 		}
+		// A package of code likewise, by its index (Z8b branch 4).
+		if ( 'code' === $purpose ) {
+			require_once __DIR__ . '/class-sync-code-package.php';
+			return AB_MCP_Sync_Code_Package::taken( $found['gid'], $manifest, $have );
+		}
 		// Each chunk against its hash in the signed manifest, which the import
 		// unpacked and checked line by line before it set the mark: the same
 		// bytes give the same lines.
@@ -408,7 +413,13 @@ final class AB_MCP_Sync_Import {
 			if ( is_wp_error( $data ) ) {
 				return $data;
 			}
-			$text   = (string) self::inflate( $data, min( $manifest['unpacked'] - $total, AB_MCP_Store_Budget::UNPACK['object_bytes'] ) );
+			// A chunk that does not inflate as it did when the import checked
+			// it is refused, never read as no lines (V4 of Z8b branch 4).
+			$text = self::inflate( $data, min( $manifest['unpacked'] - $total, AB_MCP_Store_Budget::UNPACK['object_bytes'] ) );
+			if ( ! is_string( $text ) || ( '' !== $text && "\n" !== substr( $text, -1 ) ) ) {
+				/* translators: %s: id of the package (package_id). */
+				return new WP_Error( 'ab_mcp_sync_import_unread', sprintf( __( 'A chunk of the package %s does not unpack as it did when it was taken over (the server could not inflate it now), so the package is not read. Try again; if it keeps failing, take the package over anew: call wp_site_export on the staging site, then wp_site_import_chunk here.', 'alphabridge-mcp' ), $package_id ) );
+			}
 			$total += strlen( $text );
 			foreach ( '' === $text ? array() : explode( "\n", substr( $text, 0, -1 ) ) as $line ) {
 				$lines[] = json_decode( $line, true, AB_MCP_Store_Budget::UNPACK['depth'] );
@@ -510,7 +521,7 @@ final class AB_MCP_Sync_Import {
 		$expect = $found['expect'];
 		if ( ! is_array( $expect ) || ! isset( $expect['purpose'] ) || ! in_array( $expect['purpose'], AB_MCP_Sync_Export::PURPOSES, true ) ) {
 			AB_MCP_Protected_Store::remove( 'in', $found['gid'] );
-			return new WP_Error( 'ab_mcp_sync_import_purpose_held', __( 'This site held the package for a purpose this version does not take (it takes purpose=inventory, purpose=env, purpose=objects and purpose=media), so what arrived of it was removed. Call again with the manifest and purpose as wp_site_export gave them on the staging site.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_sync_import_purpose_held', __( 'This site held the package for a purpose this version does not take (it takes purpose=inventory, purpose=env, purpose=objects, purpose=media and purpose=code), so what arrived of it was removed. Call again with the manifest and purpose as wp_site_export gave them on the staging site.', 'alphabridge-mcp' ) );
 		}
 		// A purpose a later call names is the one it was begun for (Codex,
 		// round 1 of branch 7, A3): the kept one is not put in its place.
@@ -547,7 +558,7 @@ final class AB_MCP_Sync_Import {
 	private static function expect( array $a, $package_id ) {
 		$purpose = isset( $a['purpose'] ) ? $a['purpose'] : null;
 		if ( ! in_array( $purpose, AB_MCP_Sync_Export::PURPOSES, true ) ) {
-			return new WP_Error( 'ab_mcp_sync_import_purpose', __( 'This version takes packages of the inventory and of the environment of the staging site, packages of objects for a report and packages of the files of its attachments (purpose says what a package is read for). Pass purpose=inventory, purpose=env, purpose=objects or purpose=media with the manifest, as wp_site_export gave it.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_sync_import_purpose', __( 'This version takes packages of the inventory and of the environment of the staging site, packages of objects for a report, packages of the files of its attachments and packages of the files of its plugins and themes (purpose says what a package is read for). Pass purpose=inventory, purpose=env, purpose=objects, purpose=media or purpose=code with the manifest, as wp_site_export gave it.', 'alphabridge-mcp' ) );
 		}
 		$expect = array(
 			'purpose'    => $purpose,
@@ -558,7 +569,7 @@ final class AB_MCP_Sync_Import {
 		if ( in_array( $purpose, AB_MCP_Sync_Manifest::FOR_REPORT, true ) ) {
 			$hash = isset( $a['report_hash'] ) ? $a['report_hash'] : null;
 			if ( ! is_string( $hash ) || 1 !== preg_match( '/^[0-9a-f]{64}\z/', $hash ) ) {
-				return new WP_Error( 'ab_mcp_sync_import_report', __( 'A package of objects or of media is read for one report: pass report_hash with the manifest, the 64 hex characters wp_site_diff gave for the report the objects are for (the same the staging site made the package for).', 'alphabridge-mcp' ) );
+				return new WP_Error( 'ab_mcp_sync_import_report', __( 'A package of objects, of media or of code is read for one report: pass report_hash with the manifest, the 64 hex characters wp_site_diff gave for the report the objects are for (the same the staging site made the package for).', 'alphabridge-mcp' ) );
 			}
 			$expect['report_hash'] = $hash;
 		}
@@ -940,9 +951,14 @@ final class AB_MCP_Sync_Import {
 	private static function unpacked( array $held ) {
 		$manifest = $held['manifest'];
 		// A package of media holds pieces of files, no object (branch 10):
-		// checked and indexed by its own class.
+		// checked and indexed by its own class; a package of code likewise
+		// (Z8b branch 4).
 		if ( 'media' === $manifest['purpose'] ) {
 			return AB_MCP_Sync_Media_Package::unpacked( $held );
+		}
+		if ( 'code' === $manifest['purpose'] ) {
+			require_once __DIR__ . '/class-sync-code-package.php';
+			return AB_MCP_Sync_Code_Package::unpacked( $held );
 		}
 		$limits   = AB_MCP_Store_Budget::UNPACK;
 		$extra    = AB_MCP_Redactor::extra_keys();

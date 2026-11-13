@@ -63,7 +63,7 @@ class AB_MCP_Tools_Install_Update extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_install_plugin',
 			array(
-				'description' => 'Install a plugin from the WordPress.org directory by slug, optionally activating it. Needs install_plugins, and activate_plugins for activate (without it the plugin is installed and activated stays false); refused when DISALLOW_FILE_MODS is set. Returns installed, plugin (its file, e.g. akismet/akismet.php), activated and version, plus what the activation check reports; no undo point is recorded. Where its folder exists already, nothing is changed and the answer names the version installed; an installed plugin is brought to a newer version with wp_update_plugin.' . AB_MCP_Activation_Guard::INSTALL_DESCRIPTION,
+				'description' => 'Install a plugin from the WordPress.org directory by slug, optionally activating it; with version, exactly that version (fetched over https from downloads.wordpress.org, no redirect, up to 64 MiB), else the newest. Needs install_plugins, and activate_plugins for activate (without it the plugin is installed and activated stays false); refused when DISALLOW_FILE_MODS is set. Returns installed, plugin (its file, e.g. akismet/akismet.php), activated and version, plus what the activation check reports; no undo point is recorded. Where its folder exists already, nothing is changed and the answer names the version installed; an installed plugin is brought to a newer version with wp_update_plugin.' . AB_MCP_Activation_Guard::INSTALL_DESCRIPTION,
 				'capability'  => 'install_plugins',
 				'dangerous'   => true,
 				'inputSchema' => array(
@@ -71,6 +71,7 @@ class AB_MCP_Tools_Install_Update extends AB_MCP_Tools_Base {
 					'required'   => array( 'slug' ),
 					'properties' => array(
 						'slug'     => array( 'type' => 'string', 'description' => 'wordpress.org plugin slug, e.g. "akismet".' ),
+						'version'  => array( 'type' => 'string', 'description' => 'Optional: the exact version to install, as wordpress.org names it (e.g. "5.3"); only for a plugin not installed yet. Left out: the newest version.' ),
 						'activate' => array( 'type' => 'boolean', 'description' => 'true activates the plugin after install (needs activate_plugins). Default false.' ),
 					),
 				),
@@ -157,13 +158,16 @@ class AB_MCP_Tools_Install_Update extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_install_theme',
 			array(
-				'description' => 'Download and install a theme from the WordPress.org directory by its slug; the theme is not activated. Returns installed, stylesheet (the slug) and the version WordPress.org reported. Needs install_themes; refused when DISALLOW_FILE_MODS is set. No undo point is recorded. A theme whose folder exists already is not replaced; the answer is WordPress\'s error. Themes from a ZIP are installed with wp_install_theme_zip, and switching to a theme is wp_activate_theme.',
+				'description' => 'Download and install a theme from the WordPress.org directory by its slug; the theme is not activated. With version, exactly that version (fetched over https from downloads.wordpress.org, no redirect, up to 64 MiB), else the newest. Returns installed, stylesheet (the slug) and the version WordPress.org reported. Needs install_themes; refused when DISALLOW_FILE_MODS is set. No undo point is recorded. A theme whose folder exists already is not replaced; the answer is WordPress\'s error. Themes from a ZIP are installed with wp_install_theme_zip, and switching to a theme is wp_activate_theme.',
 				'capability'  => 'install_themes',
 				'dangerous'   => true,
 				'inputSchema' => array(
 					'type'       => 'object',
 					'required'   => array( 'slug' ),
-					'properties' => array( 'slug' => array( 'type' => 'string', 'description' => 'Theme slug from its wordpress.org address, e.g. "twentytwentyfive". Lower-cased; characters other than a-z, 0-9, "-" and "_" are dropped.' ) ),
+					'properties' => array(
+						'slug'    => array( 'type' => 'string', 'description' => 'Theme slug from its wordpress.org address, e.g. "twentytwentyfive". Lower-cased; characters other than a-z, 0-9, "-" and "_" are dropped.' ),
+						'version' => array( 'type' => 'string', 'description' => 'Optional: the exact version to install, as wordpress.org names it (e.g. "1.2"); only for a theme not installed yet. Left out: the newest version.' ),
+					),
 				),
 				'callback'    => array( __CLASS__, 'install_theme' ),
 			)
@@ -283,12 +287,15 @@ class AB_MCP_Tools_Install_Update extends AB_MCP_Tools_Base {
 			if ( ! $url || ! preg_match( '#^https?://#i', $url ) || ! wp_http_validate_url( $url ) ) {
 				return new WP_Error( 'ab_mcp_blocked_url', __( 'The URL is invalid or points to a disallowed host. Give the public http or https address of the ZIP, or pass the ZIP base64-encoded as "content".', 'alphabridge-mcp' ) );
 			}
+			// One byte past the limit is read, so a ZIP larger than it is
+			// refused below instead of cut (V2 of Z8b branch 4: WordPress cuts
+			// a body at limit_response_size without an error).
 			$resp = AB_MCP_Outbound::get(
 				$url,
 				array(
 					'timeout'             => 30,
 					'redirection'         => self::REDIRECTS,
-					'limit_response_size' => $max,
+					'limit_response_size' => $max + 1,
 				)
 			);
 			if ( is_wp_error( $resp ) ) {
@@ -385,6 +392,11 @@ class AB_MCP_Tools_Install_Update extends AB_MCP_Tools_Base {
 			return new WP_Error( 'ab_mcp_bad_slug', __( 'A plugin slug is required: pass the plugin\'s name in its wordpress.org address, e.g. "akismet".', 'alphabridge-mcp' ) );
 		}
 		self::boot_upgrader();
+		// version in any form goes to its check (D2); only left out or empty
+		// is the way without it (G-4-1), never a version that is no text.
+		if ( isset( $a['version'] ) && '' !== $a['version'] ) {
+			return self::install_version( 'plugin', $slug, $a['version'], self::b( $a, 'activate', false ) );
+		}
 
 		$api = plugins_api( 'plugin_information', array( 'slug' => $slug, 'fields' => array( 'sections' => false ) ) );
 		if ( is_wp_error( $api ) ) {
@@ -677,6 +689,73 @@ class AB_MCP_Tools_Install_Update extends AB_MCP_Tools_Base {
 		);
 	}
 	/**
+	 * Install a plugin or theme of wordpress.org in an exact version (Z8b
+	 * branch 4, point 6; D2): the ZIP at its exact address on
+	 * downloads.wordpress.org through the shared downloader of the stage
+	 * (AB_MCP_Sync_Code_Stage::fetch_zip(): https, AB_MCP_Outbound, no
+	 * redirect, at most ORG_MAX bytes, read one byte past it), into a
+	 * temporary file, then the upgrader of WordPress from that file; only
+	 * for a unit not installed yet (the upgrader refuses a folder that is
+	 * there). Without version the way stays as it was (plugins_api() and its
+	 * download_link; GRENZEN-CODE.md, G-4-1).
+	 *
+	 * @param string $type     plugin or theme.
+	 * @param string $slug     Slug.
+	 * @param string $version  Version.
+	 * @param bool   $activate Activate a plugin after the install.
+	 * @return array|WP_Error
+	 */
+	private static function install_version( $type, $slug, $version, $activate ) {
+		require_once dirname( __DIR__ ) . '/sync/class-sync-code-stage.php';
+		if ( ! is_string( $version ) || 1 !== preg_match( AB_MCP_Sync_Code_Stage::ORG_VERSION, $version ) || 'trunk' === $version || 1 !== preg_match( AB_MCP_Sync_Code_Stage::ORG_SLUG, $slug ) ) {
+			return new WP_Error( 'ab_mcp_bad_version', __( 'version is a version as wordpress.org names it (digits, letters, ".", "-" and "_", e.g. "5.3"), and the slug one of the directory. Pass them so, or leave version out for the newest.', 'alphabridge-mcp' ) );
+		}
+		$tmp = wp_tempnam( 'ab-package.zip' );
+		if ( ! $tmp ) {
+			return new WP_Error( 'ab_mcp_tmp', __( 'Could not create a temporary file. The server\'s temporary folder is not writable or is full; the host can check it.', 'alphabridge-mcp' ) );
+		}
+		$url = AB_MCP_Sync_Code_Stage::ORG_URL . $type . '/' . $slug . '.' . $version . '.zip';
+		$got = AB_MCP_Sync_Code_Stage::fetch_zip( $url, $tmp, AB_MCP_Sync_Code_Stage::ORG_MAX );
+		if ( true !== $got ) {
+			@unlink( $tmp ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink -- the temporary file of this request, outside the protected store.
+			return new WP_Error(
+				'ab_mcp_version_unavailable',
+				/* translators: 1: slug, 2: version, 3: why. */
+				sprintf( __( 'wordpress.org gave no package of %1$s in version %2$s (%3$s). Nothing was installed. Check the version on its page on wordpress.org, or leave version out for the newest.', 'alphabridge-mcp' ), $slug, $version, $got->get_error_message() ),
+				array( 'url' => $url )
+			);
+		}
+		$skin     = new Automatic_Upgrader_Skin();
+		$upgrader = 'theme' === $type ? new Theme_Upgrader( $skin ) : new Plugin_Upgrader( $skin );
+		$result   = $upgrader->install( $tmp );
+		@unlink( $tmp ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink -- the temporary file of this request, outside the protected store.
+		if ( true !== $result ) {
+			return self::install_failed( $type, $result, $skin, 'theme' === $type ? __( 'Install failed, and WordPress gave no reason. wp_list_themes shows whether the theme is there; the web server needs write access to wp-content/themes.', 'alphabridge-mcp' ) : __( 'Install failed, and WordPress gave no reason. wp_list_plugins shows whether the plugin is there; the web server needs write access to wp-content/plugins.', 'alphabridge-mcp' ) );
+		}
+		if ( 'theme' === $type ) {
+			return array(
+				'installed'  => true,
+				'stylesheet' => $slug,
+				'version'    => $version,
+			);
+		}
+		$plugin_file = $upgrader->plugin_info();
+		$act         = array( 'activated' => false );
+		if ( $plugin_file && $activate && current_user_can( 'activate_plugins' ) ) {
+			$act = self::activate_installed_plugin( $plugin_file );
+			if ( is_wp_error( $act ) ) {
+				return $act;
+			}
+		}
+		return array(
+			'installed' => true,
+			'plugin'    => $plugin_file,
+			'activated' => $act['activated'],
+			'version'   => $version,
+		) + $act;
+	}
+
+	/**
 	 * Install theme.
 	 *
 	 * @param array $a Args.
@@ -692,6 +771,9 @@ class AB_MCP_Tools_Install_Update extends AB_MCP_Tools_Base {
 			return new WP_Error( 'ab_mcp_bad_slug', __( 'A theme slug is required: pass the theme\'s name in its wordpress.org address, e.g. "twentytwentyfive".', 'alphabridge-mcp' ) );
 		}
 		self::boot_upgrader();
+		if ( isset( $a['version'] ) && '' !== $a['version'] ) {
+			return self::install_version( 'theme', $slug, $a['version'], false );
+		}
 
 		$api = themes_api( 'theme_information', array( 'slug' => $slug, 'fields' => array( 'sections' => false ) ) );
 		if ( is_wp_error( $api ) ) {

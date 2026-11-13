@@ -41,6 +41,8 @@ use WP_Error;
 
 require_once __DIR__ . '/../includes/sync/class-sync-manifest.php';
 require_once __DIR__ . '/SyncTrustSites.php';
+require_once __DIR__ . '/WrongForms.php';
+require_once __DIR__ . '/../includes/class-store-inputs.php';
 
 final class SyncManifestTest extends TestCase {
 
@@ -103,6 +105,53 @@ final class SyncManifestTest extends TestCase {
 
 		$inventory = $this->signed( array( 'purpose' => 'inventory', 'report_hash' => null ) );
 		self::assertIsArray( $this->verify( $inventory, array( 'purpose' => 'inventory' ) ), 'Inventory and env are for no report.' );
+	}
+
+	/**
+	 * V5 of Z8b branch 4: a manifest is signed and read only with a time of
+	 * the one checked clock (AB_MCP_Sync_Run::now(), period.clock); a clock
+	 * that gives none of its form signs and reads nothing, never a time made
+	 * up. The driver of the reader AB_MCP_Sync_Manifest::clock with every
+	 * wrong form of period.clock (StoreClockAndReadersTest).
+	 */
+	public function testNoTimeOfTheClockSignsOrReadsAPackage(): void {
+		require_once __DIR__ . '/../includes/sync/class-sync-run.php';
+		$this->paired();
+		$this->anchored();
+		$this->on( 'staging' );
+		$signed = $this->signed( array(), 1800000000 );
+		$before = \AB_MCP_Sync_Run::$clock;
+		$wrong  = \AlphaBridge\Tests\WrongForms::of( \AB_MCP_Store_Inputs::TABLE['period.clock']['form'], 1800000100 ) + array( 'fixed: zero' => 0 );
+		try {
+			foreach ( $wrong as $what => $value ) {
+				\AB_MCP_Sync_Run::$clock = static fn() => $value;
+				$this->on( 'staging' );
+				self::refused( AB_MCP_Sync_Manifest::sign( self::package() ), 'ab_mcp_sync_manifest_clock' );
+				self::refused( $this->verify( $signed ), 'ab_mcp_sync_manifest_clock' );
+				self::assertNotNull( $what );
+			}
+			\AB_MCP_Sync_Run::$clock = static fn() => 1800000100;
+			$this->on( 'staging' );
+			self::assertIsArray( AB_MCP_Sync_Manifest::sign( self::package() ) );
+			self::assertIsArray( $this->verify( $signed ), 'The clock read within the day of the package.' );
+			\AB_MCP_Sync_Run::$clock = static fn() => 1800000000 + 86400;
+			self::refused( $this->verify( $signed ), 'ab_mcp_sync_manifest_expired' );
+		} finally {
+			\AB_MCP_Sync_Run::$clock = $before;
+		}
+		self::refused( AB_MCP_Sync_Manifest::verify( $signed, array( 'purpose' => 'objects', 'report_hash' => self::REPORT ), '1800000100' ), 'ab_mcp_sync_manifest_clock', null );
+	}
+
+	public function testAPackageOfCodeIsForOneReport(): void {
+		$this->paired();
+		$this->anchored();
+		$this->on( 'staging' );
+		$signed = $this->signed( array( 'purpose' => 'code' ), 1800000000 );
+		self::assertIsArray( $this->verify( $signed, array( 'purpose' => 'code', 'report_hash' => self::REPORT ), 1800000000 ) );
+		self::refused( $this->verify( $signed, array( 'purpose' => 'code', 'report_hash' => str_repeat( 'd', 64 ) ), 1800000000 ), 'ab_mcp_sync_manifest_report' );
+		self::refused( $this->verify( $signed, array( 'purpose' => 'media', 'report_hash' => self::REPORT ), 1800000000 ), 'ab_mcp_sync_manifest_purpose' );
+		$this->on( 'staging' );
+		self::refused( AB_MCP_Sync_Manifest::sign( self::package( array( 'purpose' => 'code', 'report_hash' => null ) ) ), 'ab_mcp_sync_manifest_shape', 'report_hash' );
 	}
 
 	public function testOnlyTheConfirmedStagingSiteSignsForItsPairWithItsKey(): void {

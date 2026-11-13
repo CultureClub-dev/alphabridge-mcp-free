@@ -829,6 +829,9 @@ final class SyncManifestTest extends TestCase {
 			public function attached( $after, $limit ) {
 				return 'null' === ( $this->plan['attached'] ?? 'real' ) ? null : $this->real->attached( $after, $limit );
 			}
+			public function head_text( $path, $max ) {
+				return $this->real->head_text( $path, $max );
+			}
 		};
 	}
 

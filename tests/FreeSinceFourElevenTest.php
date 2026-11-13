@@ -186,6 +186,29 @@ final class FreeSinceFourElevenTest extends TestCase {
 		self::assertStringNotContainsString( 'session', $res->get_error_message(), 'Without Pro there is no session to name.' );
 	}
 
+	public function testAZipPastItsLimitAtAnAddressIsRefusedNeverCut(): void {
+		// V2 of Z8b branch 4: WordPress cuts a body at limit_response_size
+		// without an error; the download reads one byte past the limit, and a
+		// ZIP larger than it is refused as too large, never installed cut.
+		add_filter( 'ab_mcp_install_max_bytes', static fn() => 100 );
+		add_filter( 'ab_mcp_outbound_addresses', static fn() => array( '93.184.216.34' ), 10, 2 );
+		$asked                          = array();
+		$body                           = '';
+		$GLOBALS['ab_test_http_answer'] = static function ( string $url, array $args ) use ( &$asked, &$body ) {
+			$asked[] = $args;
+			return ab_test_http_response( 200, substr( $body, 0, $args['limit_response_size'] ) );
+		};
+		$m    = new ReflectionMethod( AB_MCP_Tools_Install_Update::class, 'package_from_args' );
+		$body = "PK\x03\x04" . str_repeat( 'z', 97 );
+		self::assertSame( 'ab_mcp_too_large', $m->invoke( null, array( 'url' => 'https://files.example.com/p.zip' ) )->get_error_code() );
+		self::assertSame( 101, $asked[0]['limit_response_size'], 'One byte past the limit is read.' );
+		$body = "PK\x03\x04" . str_repeat( 'z', 96 );
+		$tmp  = $m->invoke( null, array( 'url' => 'https://files.example.com/p.zip' ) );
+		self::assertIsString( $tmp, 'Exactly the limit is taken.' );
+		self::assertSame( 100, filesize( $tmp ) );
+		ab_test_reset();
+	}
+
 	/* ------------------------------------------------------ the undo */
 
 	public function testASwitchOfTheThemeIsUndoneHere(): void {
