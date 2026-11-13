@@ -561,9 +561,9 @@ final class StoreTreesTest extends TestCase {
 	 * read back whole; its removal was tried, the result not asked.
 	 */
 	private static function unconfirmed_copy( string $message, string $what ): void {
-		self::assertSame( 'The copy in the protected store could not be confirmed as what was read from the source before it: it differs, or it could not be read back whole. So the call does not take it and tried to remove it; whether all of it is gone was not checked. Check that nothing writes into the source right now; if it keeps happening, ask the host whether the disk of the store is slow or something else writes into its folder. Then put the tree anew, under another name or in a new group where a rest of the copy stayed (a unit of wp_site_push: in a new run).', $message, $what );
-		foreach ( array( 'is not what was read before it', 'the source changed while it was copied', 'a file was not written whole', 'nothing of it stays' ) as $gone ) {
-			self::assertStringNotContainsString( $gone, $message, "$what: not said any more (K4g): $gone" );
+		self::assertSame( 'The copy in the protected store could not be confirmed as what was read from the source before it: it differs, or it could not be read back whole. So the call does not take it and tried to remove it; whether all of it is gone was not checked. Check that nothing writes into the source right now; if it keeps happening, ask the host whether the disk of the store is slow or something else writes into its folder. Then put the tree anew. If part of the copy remains, use a new group (for a unit of wp_site_push, start a new run).', $message, $what );
+		foreach ( array( 'is not what was read before it', 'the source changed while it was copied', 'a file was not written whole', 'nothing of it stays', 'under another name' ) as $gone ) {
+			self::assertStringNotContainsString( $gone, $message, "$what: not said any more (K4g, K4h): $gone" );
 		}
 		self::assertMatchesRegularExpression( '/\\b[Aa]sk the host\\b/', $message, "$what: a way." );
 	}
