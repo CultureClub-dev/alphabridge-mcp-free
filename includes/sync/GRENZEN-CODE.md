@@ -469,6 +469,22 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
   Site geschrieben.
 - **Trifft Normalfall:** nein (die Rückgabe von `groups()` dieser Fassung liest immer in der Form `GROUP`).
 
+### G-5-7 Laufende Einheit ganz ohne PHP-Datei wird nicht getauscht
+
+- **Fundstelle:** `AB_MCP_Sync_Code_Swap::under_locks()` mit `php_file()` (`includes/sync/class-sync-code-swap.php:554`,
+  `:656`), Ablehnung `code:opcache_file`.
+- **Quelle:** Teil 2a, Befund 2 und Frage 8; Entscheid der Lead vom 13.11.2026 (nach 20:29).
+- **Fall:** Code der Einheit läuft (`released()` ist wahr), die Einheit ist keine Neuanlage, und weder sie selbst noch
+  ein Ordner unter ihr enthält eine PHP-Datei (etwa ein Block-Theme nur aus `style.css`, `theme.json` und Vorlagen).
+- **Wirkung:** Die OPcache-Vorprüfung (E5 3) braucht eine vorhandene PHP-Datei; ohne sie lehnt `prepare()` mit
+  `code:opcache_file` ab (Weg: von Hand in wp-admin aktualisieren). `style.css` ersetzt die Prüfung nicht. Eine
+  Neuanlage ist davon nicht betroffen: Sie hat live keinen laufenden Code, die Vorprüfung entfällt; nennt WordPress sie
+  trotzdem als laufend, lehnt die Regel von Z24 vorher ab, mit und ohne `accept`
+  (`AB_MCP_Sync_Code_Ops::released()`, `ab_mcp_sync_code_create_runs`, `class-sync-code-ops.php:146`).
+- **Trifft Normalfall:** nein. Am lokalen WordPress 7.1.3 (`~/Entwicklung/wp-core-7.1.3/wp-content/themes/`) hat jedes
+  der 15 mitgelieferten Themes mindestens eine PHP-Datei; Twenty Twenty-Three hat keine im Wurzelordner, aber 7 unter
+  `patterns/`, und `php_file()` sucht Ordner für Ordner.
+
 ## Übernommen aus Zweig 2 (`bericht-zweig-2.md`, Abschnitt Grenzkandidaten; G-M9 aus «Behebung 2»)
 
 ### G-M1 Ein Lesen über Teile ist kein Augenblick

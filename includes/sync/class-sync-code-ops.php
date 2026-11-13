@@ -128,7 +128,7 @@ final class AB_MCP_Sync_Code_Ops {
 	 * asks it again under its locks (AB_MCP_Sync_Code_Swap::prepare()), each
 	 * by this function alone.
 	 *
-	 * @param array $unit The unit of the step, in the form of its row plan.code (kind, ref, accept).
+	 * @param array $unit The unit of the step, in the form of its row plan.code (kind, ref, unit_op, accept).
 	 * @return bool|WP_Error Whether code of the unit runs now; the refusal where that is not known, or it runs without its release.
 	 */
 	public static function released( array $unit ) {
@@ -136,6 +136,14 @@ final class AB_MCP_Sync_Code_Ops {
 		if ( null === $runs ) {
 			/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name. */
 			return new WP_Error( 'ab_mcp_sync_code_runs_unknown', sprintf( __( 'Whether code of the %1$s %2$s runs on this site could not be read now (the options active_plugins, stylesheet and template do not read in the form WordPress writes them, or the theme was switched while they were read), so it is not swapped. Check the plugins and the theme of this site in wp-admin (deactivating and activating a plugin makes WordPress write the option anew), then call action=next again; or abort the run (wp_site_push action=abort).', 'alphabridge-mcp' ), $unit['kind'], $unit['ref'] ) );
+		}
+		// A unit the plan makes new that WordPress names as running: its
+		// folder was missing at the report, so what of it runs here is not
+		// known, with accept or without (the decision of the lead on finding 2
+		// of part 2a; no claim that its code runs).
+		if ( $runs && 'create' === $unit['unit_op'] ) {
+			/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name. */
+			return new WP_Error( 'ab_mcp_sync_code_create_runs', sprintf( __( 'The plan makes the %1$s %2$s new on this site, and WordPress names it as running here now (a main file of it in the option active_plugins, or the theme that runs or its parent), so what of it runs here is not known and it is not swapped. Check the plugins and the theme of this site in wp-admin (the page Plugins deactivates a plugin whose files are missing), then call action=next again; or abort the run (wp_site_push action=abort), make a new report (wp_site_diff) and plan again.', 'alphabridge-mcp' ), $unit['kind'], $unit['ref'] ) );
 		}
 		if ( $runs && true !== $unit['accept'] ) {
 			/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name. */

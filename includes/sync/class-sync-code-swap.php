@@ -536,6 +536,8 @@ final class AB_MCP_Sync_Code_Swap {
 		if ( is_wp_error( $runs ) ) {
 			return $runs;
 		}
+		// A unit made new has no running code here (released() refuses one
+		// WordPress names as running): E5 3 is for running code only.
 		$enabled = self::calls()->probe_enabled();
 		if ( $runs && true !== $enabled ) {
 			/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name. */

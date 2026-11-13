@@ -574,6 +574,48 @@ final class SyncCodeOpsTest extends TestCase {
 		self::assertTrue( AB_MCP_Sync_Code_Ops::released( self::unit() ), 'Running and released: true.' );
 	}
 
+	public function testAUnitMadeNewThatWordPressNamesAsRunningIsRefusedWithAcceptOrWithoutAndClaimsNoRunningCode(): void {
+		// Finding 2 of part 2a, the decision of the lead: a unit the plan makes
+		// new (its folder was missing at the report) has no running code here
+		// to take out of OPcache; where the row of active_plugins (or the theme)
+		// names it all the same, what of it runs is not known. The one rule of
+		// Z24 refuses it with its own code and way, with accept or without,
+		// never with «code runs». Red at 4881c0d: released() answered true with
+		// accept and ab_mcp_sync_code_not_released («runs») without it.
+		$new  = array(
+			'unit_op'   => 'create',
+			'pair_id'   => null,
+			'pair_hash' => null,
+		);
+		$shop = serialize( array( 'shop/shop.php' ) );
+		foreach ( array( 'with accept' => true, 'without accept' => false ) as $how => $accept ) {
+			self::rows( array( 'active_plugins' => $shop ) );
+			$got = AB_MCP_Sync_Code_Ops::released( self::unit( array( 'accept' => $accept ) + $new ) );
+			self::assertInstanceOf( WP_Error::class, $got, $how );
+			self::assertSame( 'ab_mcp_sync_code_create_runs', $got->get_error_code(), $how . ': ' . $got->get_error_message() );
+			self::assertStringContainsString( 'The plan makes the plugin shop new on this site, and WordPress names it as running here now', $got->get_error_message(), $how );
+			self::assertStringContainsString( 'so what of it runs here is not known', $got->get_error_message(), $how );
+			self::assertStringContainsString( 'the page Plugins deactivates a plugin whose files are missing), then call action=next again; or abort the run (wp_site_push action=abort)', $got->get_error_message(), $how . ': with the way.' );
+			self::assertStringNotContainsString( 'Code of the plugin shop runs', $got->get_error_message(), $how . ': no claim that its code runs.' );
+			$step = AB_MCP_Sync_Code_Ops::run(
+				array( 'run_id' => 1 ),
+				array( 'seq' => 3 ),
+				array(
+					'unit'     => self::unit( array( 'seq' => 3, 'op' => 'swap', 'stage_seq' => 2, 'accept' => $accept ) + $new ),
+					'env'      => array( str_repeat( 'e', 32 ) ),
+					'packages' => array(),
+				)
+			);
+			self::assertSame( 'ab_mcp_sync_code_create_runs', $step->get_error_code(), $how . ': the entrance asks the same rule.' );
+		}
+		// The theme: the one that runs or its parent.
+		self::rows( array( 'stylesheet' => 'shop', 'template' => 'shop' ) );
+		self::assertSame( 'ab_mcp_sync_code_create_runs', AB_MCP_Sync_Code_Ops::released( self::unit( array( 'kind' => 'theme' ) + $new ) )->get_error_code(), 'A theme made new that runs.' );
+		// Not running: a unit made new goes on, without a release.
+		self::rows( array( 'active_plugins' => serialize( array( 'gallery/gallery.php' ) ) ) );
+		self::assertFalse( AB_MCP_Sync_Code_Ops::released( self::unit( array( 'accept' => false ) + $new ) ), 'A unit made new that does not run: false, no refusal.' );
+	}
+
 	public function testOPcacheIsAskedInTheSwapOnlyThroughInvalidateAndAlphaBridgeOnlyStrictly(): void {
 		// Z13: no call of OPcache under includes/sync/ but the one method of the
 		// seam of the swap, and that method called only from invalidate(). V6:
