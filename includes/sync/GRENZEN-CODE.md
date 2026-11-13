@@ -320,6 +320,87 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
   `bind()` prüft `whole()` vorher); nötig ist ein Schaden auf der Platte oder ein fremder Schreiber nach dem
   Bereitstellen. Der Weg bleibt fail-closed: kein Tausch ohne als bereit gelesene Stufe.
 
+### G-5-2 Meldungen der Ablage auf dem Weg des Tauschs, die ausserhalb des Normalfalls nicht in jedem Fall stimmen
+
+- **Quelle:** Codex-Bestätigung und gesammelte Prüfung über K4f (`7d9fcc2..6f693f1`, 13.11.2026, B1 bis B7), Entscheid
+  der Steuerung in Thomas' Auftrag vom 13.11.2026 17:25 (Punkt 1: die B auf dem Pfad von Zweig 5 als Grenze). Die
+  Zuordnung «erreichbar über `wp_site_push` oder die Stufe» ist in Teil K4g je Eintrag am Code gelesen (Zeilen am
+  Stand von K4g), keiner der Fälle ist nachgestellt. In jedem Fall lehnt die Ablage ab (fail-closed); betroffen ist
+  nur, was die Meldung als Grund oder Weg nennt. Keine Kernzusage ist berührt (Codex: überall nein).
+- **Einträge** (alle in `includes/class-protected-store.php`):
+  - **`put()`, `ab_mcp_store_write` (`:1039`), «so it was taken out again».** Fall: die Datei ist geschrieben, der
+    Sidecar lässt sich danach nicht schreiben (`write_entry()`), und auch `delete_path()` (`:1038`) entfernt die Datei
+    nicht; sein Ergebnis wird nicht geprüft. Dann liegt die Datei noch da, die Meldung sagt das Gegenteil. Erreichbar
+    über `AB_MCP_Sync_Backup::put()` (`includes/sync/class-sync-engine.php:1194`, Sicherung eines Schritts) und über
+    `AB_MCP_Sync_Code_Stage::write_state()` (`includes/sync/class-sync-code-stage.php:1492`, Zustand der Stufe).
+    **Trifft Normalfall:** nein (braucht zwei Schreibstörungen in Folge).
+  - **`entry()`, `ab_mcp_store_entry` (`:1162`), Aufzählung «cannot be read, is not there, or is not of its form».**
+    Fall: der Sidecar liest ganz und in seiner Form, nennt aber einen anderen Bereich (`sidecar()`: `other`) oder eine
+    andere Gruppe (`$gid !== $read[1]['gid']`, `:1161`); die Aufzählung nennt beides nicht. Erreichbar über
+    `AB_MCP_Sync_Code_Stage::foreign()` (aus `complete()` und `ready()`). **Trifft Normalfall:** nein (fremder Schreiber
+    oder Schaden auf der Platte).
+  - **`no_group()`, `ab_mcp_store_no_group` (`:4576`).** Die zwei Vermerke stehen in G-5-1: der Zustand `other` fehlt
+    in der Aufzählung, und «try again» nach einem mit `failed` beendeten Schritt geht nur über einen neuen Lauf.
+    **Trifft Normalfall:** nein.
+  - **`tree()`, `ab_mcp_store_tree_missing` (`:2235`), «it was never put there, or its group was removed after its
+    time. Use put_tree() to put it there again».** Fall: `lstat()` des Baums gibt nichts, obwohl `group()` die Gruppe
+    eben gefunden hat: der Baum allein ist entfernt (fremder Eingriff), oder der Pfad lässt sich wegen der Rechte nicht
+    ansehen. Keiner der zwei genannten Gründe trifft dann zu; «after its time» ist eine Fristaussage (Gruppen gehen
+    auch über `remove()` und die Deinstallation); `put_tree()` ist eine Funktion der Ablage, kein Werkzeug, und ein
+    Baum der Sicherungen lässt sich nicht noch einmal ablegen. Einzige Aufruferin: `AB_MCP_Sync_Code_Stage::complete()`
+    (`includes/sync/class-sync-code-stage.php:1049`), dort bleibt der Schritt `planned` (der Code steht nicht in
+    `PERMANENT`), der Weg des Schritts ist `action=next` oder `abort`. **Trifft Normalfall:** nein.
+  - **`build_dir()` und `temp_file()`, `ab_mcp_store_tmp` (`:2056`, `:2917`), «is missing or is a link».** Fall:
+    `way()` gibt auch dann nichts, wenn `tmp` eine gewöhnliche Datei ist, wenn `lstat()` wegen der Rechte scheitert
+    oder wenn `holds()` den Ordner nicht der Ablage zuordnen kann; dann fehlt `tmp` nicht und ist kein Link.
+    Erreichbar über `AB_MCP_Sync_Code_Stage::stage()` (`:762`, Aufbauordner) und über jedes Schreiben der Ablage
+    (`write_file()` → `temp_file()`). Der Weg der Meldung («ask the host to check the folder of the store») gilt auch
+    dafür. **Trifft Normalfall:** nein.
+  - **`copy_tree()`, `ab_mcp_store_tree_unread` (`:2314`), «The source of the tree is gone».** Fall: `lstat()` der
+    Quelle scheitert nach einer Änderung der Rechte, die Quelle liegt noch da. Erreichbar über
+    `AB_MCP_Sync_Code_Stage::take_in()` → `put_tree()`; die Quelle ist dort der Aufbauordner derselben Anfrage und
+    wurde unmittelbar davor ganz gelesen. **Trifft Normalfall:** nein.
+  - **`unsafe()`, `ab_mcp_store_link` (`:4400`), «is a link, or lies outside the store … remove the link».** Fall:
+    `way()` gibt auch für einen Ordner nichts, der fehlt oder sich nicht ansehen lässt (etwa ein nachträglich
+    entfernter Bereich, `group()` `:4307`–`:4310`); dann gibt es keinen Link, und «remove the link» nennt ein
+    Hindernis, das nicht besteht. Erreichbar über jeden Zugriff auf eine Gruppe (`group()`, `entry()`).
+    **Trifft Normalfall:** nein (braucht einen Ordner der Ablage, der fehlt oder sich nicht ansehen lässt).
+- **Trifft Normalfall:** nein, je Eintrag begründet. Die Texte werden im Zweig «Meldungen der Ablage und des
+  Transports» (G-5-3) mitgeprüft; bis dahin gilt dieser Vermerk.
+
+### G-5-3 Meldungen der Ablage und des Transports mit Aussagen über Fristen und Bestand: eigener Zweig
+
+- **Quelle:** dieselbe Codex-Prüfung (A3 bis A10, B8); Entscheid der Steuerung in Thomas' Auftrag vom 13.11.2026
+  17:25, Punkt 2: eigener Zweig «Meldungen der Ablage und des Transports» nach Zweig 5 und vor `text/z8b`, der alle
+  Meldungen seines Bereichs in einem Durchgang prüft und behebt; bis dahin benannte Grenze. Die Befunde sind die der
+  Codex-Prüfung (Wortlaut: `uebergaben/anhang/2026-11-11-z8b/codex-zweig-5-code-6f693f1.md` im knowledge-Repo); Teil
+  K4g hat nur gelesen, dass Code und Wortlaut an der genannten Zeile stehen, die Fälle nicht nachgeprüft.
+- **Einträge:**
+  - A3, `ab_mcp_store_quota` (Exporte), `includes/class-store-budget.php:159`: «An export counts until it is removed, a
+    day after it was made, or later while a run that is not closed uses it» nennt einen festen Termin; nach Codex
+    entfernt erst ein Aufräumen nach Alter, und eine neu bestätigte Paarung entfernt Exporte früher.
+  - A4, `ab_mcp_store_quota` (Pakete), `includes/class-store-budget.php:174`: «A package counts until it is removed»;
+    nach Codex zählt ein geschlossenes Paket nicht mehr, obwohl es noch liegt.
+  - A5, `ab_mcp_store_quota` (Bytes), `includes/class-store-budget.php:188`: «the open packages of this site … hold
+    %3$d»; nach Codex ist die Zahl die Summe der deklarierten Grössen aller vorhandenen Pakete.
+  - A6, `ab_mcp_store_space`, `includes/class-store-budget.php:239`: «wait until packages and reports are removed (a
+    day after they were made)»; nach Codex bleiben Pakete offener Läufe länger, Berichte gehen auch früher.
+  - A7, `ab_mcp_sync_export_unknown`, `includes/sync/class-sync-export.php:1927`: «This site keeps no package of that
+    id … packages are kept a day»; nach Codex liegt ein abgelaufenes Paket bis zum Aufräumen noch da. Dazu
+    `ab_mcp_sync_export_index` (`:207`): jeder Lesefehler der Ablage wird zu «is no longer in the protected store».
+  - A8, `ab_mcp_sync_import_unknown`, `includes/sync/class-sync-import.php:369`: «packages are kept a day»; nach Codex
+    hält ein offener Lauf seine Pakete länger, und der beschriebene Weg nennt nicht alle nötigen Angaben.
+  - A9, `ab_mcp_sync_pairs_unknown`, `includes/sync/class-sync-proposal.php:2525`: «a proposal is kept a day at most»;
+    nach Codex gilt die Frist für die Gültigkeit, nicht für das Liegen in der Ablage.
+  - A10, `ab_mcp_sync_report_unknown`, `includes/sync/class-sync-report.php:989`: «a report is kept a day at most, and
+    a new one of the same connection replaces it»; nach Codex wie A9, und zwei gleichzeitige Aufrufe können zwei
+    Berichte hinterlassen.
+  - B8, `close_mark()`, `ab_mcp_store_mark_read`, `includes/class-protected-store.php:2561`: «so it stays open»; nach
+    Codex kann die Marke auf der Platte schon `closed` sein. Am Stand von K4g ruft unter `includes/` nichts
+    `close_mark()` (`git grep`), der Fall liegt nicht auf dem Weg von Zweig 5.
+- **Trifft Normalfall:** A3 bis A10 nach Codex ja (gewöhnliche Bedienfolgen), Kernzusage nein: sie werden in dem
+  genannten Zweig behoben und sind bis dahin als Grenze geführt, nicht als hingenommen. B8: nein.
+
 ## Übernommen aus Zweig 2 (`bericht-zweig-2.md`, Abschnitt Grenzkandidaten; G-M9 aus «Behebung 2»)
 
 ### G-M1 Ein Lesen über Teile ist kein Augenblick
