@@ -307,6 +307,15 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
     des Schritts führt zum nächsten Schritt (`action=next`): ein neuer Versuch für diese Einheit geht dann nur über
     einen neuen Lauf. Die Meldung sagt das nicht (Befund K4e Nr. 2, nach dem Code gelesen, ohne eigenen Test;
     Folgeposten der Fehlerweg-Prüfung des Teils).
+  - Ebenso nach einer Ablehnung von `AB_MCP_Sync_Code_Stage::stage()` selbst (Fable-Prüfstelle 2, C3; Entscheid der
+    Lead vom 13.11.2026 18:51): `code:org_unzip` (`class-sync-code-stage.php:827`) und `code:org_fetch` (`:867`,
+    `:882`) raten «Try again later, or send the unit as a package of code (wp_site_export with purpose=code)»;
+    `not_staged()` (`class-sync-code-ops.php:309`–`:312`) beendet den Schritt mit `failed` und hängt «The run goes on
+    with the next step (action=next).» an. Ein neuer Versuch für diese Einheit geht auch hier nur über einen neuen
+    Lauf. Folgeposten für Teil 2: `run_verify()` hängt beim Schliessen eines Laufs «The way back for its pairs is
+    wp_site_revert (action=plan with this run_id).» an (`class-sync-engine.php:2823`), auch bei einem Code-Lauf, von
+    dem kein Schritt etwas geschrieben hat; für Code-Läufe trennen. Nach dem Code gelesen, ohne eigenen Test.
+    **Trifft Normalfall:** nein.
   - B (kein Normalfall, keine Kernzusage): `read_entry()` gibt auch für einen formgerechten Eintrag eines anderen
     Bereichs null (`sidecar()`, Zustand `other`: der Eintrag nennt selbst einen anderen Bereich als den, in dem er
     liegt), und `group()` lehnt dann ebenso mit `ab_mcp_store_no_group` ab. Die Aufzählung der Meldung («is missing, is
@@ -425,6 +434,30 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
 - **Trifft Normalfall:** nein (braucht einen Fehler der Datenbank beim Speichern oder ein Ende der Anfrage genau
   zwischen `stage()` und `update_step()`).
 - **Folgeposten:** Test mit einem Fehler an `update_step()` in der Fehlerweg-Prüfung des Teils.
+
+### G-5-5 Doppelfehler beim Binden der Pakete und beim Abbruch des neuen Laufs
+
+- **Fundstelle:** `AB_MCP_Sync_Push`, `action=plan` eines Code-Laufs (`includes/sync/class-sync-push.php:1388`–`:1392`).
+- **Quelle:** Fable-Prüfstelle 2, C1; Entscheid der Lead vom 13.11.2026 18:51.
+- **Fall:** `AB_MCP_Sync_Code_Plan::bind()` gibt einen Fehler, und das folgende `AB_MCP_Sync_Engine::abort()` gibt
+  ebenfalls einen.
+- **Wirkung:** Zurück kommt nur der Fehler von `abort()` (`:1390`, `:1392`); die Meldung nennt weder den Fehler der
+  Bindung noch die Nummer des Laufs. In welchem Zustand der Lauf und seine Pakete dann bleiben, hängt daran, wo
+  `abort()` scheitert; nicht nachgeprüft. An der Site ist bis dahin nichts geschrieben (der Lauf ist eben erst
+  geplant).
+- **Trifft Normalfall:** nein (zwei Fehler hintereinander).
+
+### G-5-6 Eine formwidrige Gruppe im Bereich `in` sperrt jeden Code-Lauf
+
+- **Fundstelle:** `AB_MCP_Sync_Code_Plan::by_label()` (`includes/sync/class-sync-code-plan.php:734`), gerufen über alle
+  Gruppen von `AB_MCP_Protected_Store::groups( 'in' )` (`:704`, `:708`).
+- **Quelle:** Fable-Prüfstelle 2, C2; Entscheid der Lead vom 13.11.2026 18:51.
+- **Fall:** Eine einzige Gruppe des Bereichs `in`, deren Eintrag nicht in der Form `GROUP` liest (keine lesbare `gid`
+  oder kein `label`).
+- **Wirkung:** `by_label()` lehnt mit `ab_mcp_sync_code_bind` ab, die Bindung jedes Code-Laufs scheitert, und der neue
+  Lauf wird wieder geschlossen (G-5-5 ohne den zweiten Fehler). Fail-closed: die Meldung nennt den Weg «Ask the host to
+  check the folder of the protected store». Nichts an der Site geschrieben.
+- **Trifft Normalfall:** nein (braucht eine Gruppe, die der eigene Code so nicht schreibt).
 
 ## Übernommen aus Zweig 2 (`bericht-zweig-2.md`, Abschnitt Grenzkandidaten; G-M9 aus «Behebung 2»)
 
