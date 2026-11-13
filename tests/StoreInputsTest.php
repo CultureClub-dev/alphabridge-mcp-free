@@ -31,6 +31,8 @@ use AB_MCP_Store_Inputs;
 use AB_MCP_Sync_Backup;
 use AB_MCP_Sync_Canon;
 use AB_MCP_Sync_Code_Package;
+use AB_MCP_Sync_Code_Stage;
+use AB_MCP_Test_Seam;
 use AB_MCP_Sync_Run;
 use AB_MCP_Sync_Schema;
 use PHPUnit\Framework\TestCase;
@@ -43,6 +45,8 @@ require_once __DIR__ . '/../includes/sync/class-sync-canon.php';
 require_once __DIR__ . '/../includes/sync/class-sync-backup.php';
 require_once __DIR__ . '/../includes/sync/class-sync-import.php';
 require_once __DIR__ . '/../includes/sync/class-sync-code-package.php';
+require_once __DIR__ . '/../includes/sync/class-sync-code-stage.php';
+require_once __DIR__ . '/integration/support/class-test-seam.php';
 
 /**
  * A stand-in of $wpdb for the runs: the rows of backup_rows(), the column
@@ -305,6 +309,47 @@ final class StoreInputsTest extends TestCase {
 	 *
 	 * @return array<string,array{base:mixed,more:array,valid:array,run:callable,unknown:callable}>
 	 */
+	/** A state of a stage as AB_MCP_Sync_Code_Stage writes it. */
+	private static function stage_state(): string {
+		return AB_MCP_Sync_Canon::encode(
+			array(
+				'done'    => 0,
+				'format'  => 'ab-code-stage/1',
+				'lint'    => true,
+				'notes'   => array( 'compile_check unavailable: none here.' ),
+				'refusal' => null,
+				'seq'     => 1,
+				'signed'  => str_repeat( 'b', 64 ),
+				'source'  => 'wordpress.org',
+				'state'   => 'checking',
+				'todo'    => array( 'a.php' ),
+				'tree'    => array(
+					'hash' => str_repeat( 'b', 64 ),
+					'name' => 'ab-it-code',
+				),
+				'unit'    => array(
+					'kind' => 'plugin',
+					'ref'  => 'ab-it-code',
+				),
+			)
+		);
+	}
+
+	/** A signed manifest of a unit as AB_MCP_Sync_Code_Stage::signed() gives it, with this host of updates. */
+	private static function code_signed( $host ): array {
+		return array(
+			'kind'       => 'plugin',
+			'ref'        => 'ab-it-code',
+			'form'       => 'folder',
+			'hash'       => str_repeat( 'b', 64 ),
+			'files'      => 1,
+			'bytes'      => 3,
+			'version'    => '1.0.0',
+			'update_uri' => $host,
+			'entries'    => array( array( 'a.php', 3, str_repeat( 'a', 64 ) ) ),
+		);
+	}
+
 	/** An index of a package of code as AB_MCP_Sync_Code_Package::unpacked() writes it. */
 	private static function code_index(): string {
 		return AB_MCP_Sync_Canon::encode(
@@ -593,6 +638,43 @@ final class StoreInputsTest extends TestCase {
 				'run'     => static fn( $v ) => AB_MCP_Sync_Code_Package::index( $v ),
 				'unknown' => $null,
 			),
+			/* ------------------------------ the stage of a unit of code */
+			'stage.update_uri'         => array(
+				'base'    => 'example.com',
+				'more'    => array(
+					'fixed: a list of a host' => array( 'wordpress.org' ),
+					'fixed: false'            => false,
+				),
+				// Its consumer from_org(): a host of wordpress.org or none
+				// lets it go on (to the file system, here not direct), another
+				// host refuses as such, an unknown one refuses as unknown.
+				'valid'   => array( array( '', 'code:file_mods' ), array( 'wordpress.org', 'code:file_mods' ), array( 'w.org', 'code:file_mods' ), array( 'example.com', 'code:update_uri' ) ),
+				'run'     => static function ( $v ) {
+					AB_MCP_Test_Seam::install( AB_MCP_Sync_Code_Stage::class, 'naht_sync_code_stage', new StoreInputsCodeCalls() );
+					try {
+						$got = AB_MCP_Sync_Code_Stage::from_org( self::code_signed( AB_MCP_Sync_Code_Stage::update_host( array( 'update_uri' => $v ) ) ), '/nowhere' );
+					} finally {
+						AB_MCP_Test_Seam::restore_all();
+					}
+					return is_wp_error( $got ) ? $got->get_error_code() : $got;
+				},
+				'unknown' => static fn( $got ): bool => 'code:update_uri_unknown' === $got,
+			),
+			'stage.state'              => array(
+				'base'    => self::stage_state(),
+				'more'    => array(
+					'fixed: done past the files' => str_replace( '"done":0', '"done":2', self::stage_state() ),
+					'fixed: refused without why' => str_replace( '"state":"checking"', '"state":"refused"', self::stage_state() ),
+					'fixed: a unit of no code'   => str_replace( '"kind":"plugin"', '"kind":"attachment"', self::stage_state() ),
+					'fixed: a ref with a slash'  => str_replace( '"ref":"ab-it-code"', '"ref":"a/b"', self::stage_state() ),
+					'fixed: ready as text 1'     => str_replace( '"state":"checking"', '"state":1', self::stage_state() ),
+				),
+				'valid'   => array( array( self::stage_state(), AB_MCP_Sync_Canon::decode( self::stage_state(), 8 ) ) ),
+				// Its consumer: a stage whose state is not of its form is never
+				// ready (AB_MCP_Sync_Code_Stage::state(), ready()).
+				'run'     => static fn( $v ) => AB_MCP_Sync_Code_Stage::state_of( $v ),
+				'unknown' => $null,
+			),
 			/* ------------------------------------------------------ budgets */
 			'budget.max_packages'      => array(
 				'base'    => 5,
@@ -647,5 +729,13 @@ final class StoreInputsTest extends TestCase {
 				'unknown' => $refused( 'ab_mcp_store_declare' ),
 			),
 		);
+	}
+}
+
+/** The calls of the stage for the driver of stage.update_uri: a file system that is not direct, nothing else. */
+final class StoreInputsCodeCalls {
+
+	public function method(): string {
+		return 'ftpext';
 	}
 }

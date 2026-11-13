@@ -17,7 +17,12 @@
  * - file_time: the file or folder stays (a building folder of build_dir()
  *   with what is in it);
  * - budget: the budget is not known, and the call is refused with the cause
- *   and the way (AB_MCP_Sync_Backup::fits(), AB_MCP_Store_Budget).
+ *   and the way (AB_MCP_Sync_Backup::fits(), AB_MCP_Store_Budget);
+ * - package: a package of code whose index is not of its form is not used
+ *   (AB_MCP_Sync_Code_Package::taken() refuses; Z8b branch 4);
+ * - stage: a stage whose state is not of its form is never ready, and a
+ *   unit whose host of updates is not known is fetched from no wordpress.org
+ *   (AB_MCP_Sync_Code_Stage; Z8b branch 4).
  *
  * A read of one of these inputs outside the table is a named limit
  * (GRENZEN-CODE.md, G-3-10): no test sees it, only review and Codex.
@@ -464,6 +469,136 @@ final class AB_MCP_Store_Inputs {
 							'empty'     => false,
 							'max_bytes' => null,
 							'in'        => array( 'ab-sync-code/1' ),
+						),
+					),
+					'extra'  => false,
+				),
+			),
+		),
+		/* ------------------ the stage of a unit of code (Z8b branch 4) */
+		'stage.update_uri'         => array(
+			'consumer' => 'stage',
+			'source'   => 'AB_MCP_Sync_Code_Stage::update_host(), from the signed line of the unit (AB_MCP_Sync_Env)',
+			'field'    => 'update_uri of the line: the host the head of the unit names for its updates, or none; whether a package may come from wordpress.org (from_org(), D1)',
+			'form'     => array(
+				'type'      => 'string',
+				'empty'     => true,
+				'max_bytes' => null,
+			),
+		),
+		'stage.state'              => array(
+			'consumer' => 'stage',
+			'source'   => 'AB_MCP_Sync_Code_Stage::state_of(), the last state file of the group of a stage',
+			'field'    => 'the state of a stage: its unit, the signed hash, its tree, the files to check and how far, ready or refused; only ready lets the swap take it (branch 5)',
+			'form'     => array(
+				'type'  => 'json',
+				'codec' => 'AB_MCP_Sync_Canon',
+				'depth' => 8,
+				'value' => array(
+					'type'   => 'record',
+					'fields' => array(
+						'done'    => self::COUNT,
+						'format'  => array(
+							'type'      => 'string',
+							'empty'     => false,
+							'max_bytes' => null,
+							'in'        => array( 'ab-code-stage/1' ),
+						),
+						'lint'    => array( 'type' => 'bool' ),
+						'notes'   => array(
+							'type'      => 'list',
+							'empty'     => true,
+							'item'      => array(
+								'type'      => 'string',
+								'empty'     => false,
+								'max_bytes' => 4096,
+							),
+							'unique'    => true,
+							'max_items' => 20,
+						),
+						'refusal' => array(
+							'type'     => 'record',
+							'fields'   => array(
+								'code'    => array(
+									'type'      => 'string',
+									'empty'     => false,
+									'max_bytes' => 64,
+								),
+								'line'    => array(
+									'type'     => 'int',
+									'digits'   => false,
+									'min'      => 0,
+									'max'      => null,
+									'nullable' => true,
+								),
+								'message' => array(
+									'type'      => 'string',
+									'empty'     => false,
+									'max_bytes' => 4096,
+								),
+								'path'    => array(
+									'type'      => 'string',
+									'empty'     => false,
+									'max_bytes' => 4096,
+									'nullable'  => true,
+								),
+							),
+							'extra'    => false,
+							'nullable' => true,
+						),
+						'seq'     => self::RUN,
+						'signed'  => self::SHA256,
+						'source'  => array(
+							'type'      => 'string',
+							'empty'     => false,
+							'max_bytes' => null,
+							'in'        => array( 'wordpress.org', 'packages' ),
+						),
+						'state'   => array(
+							'type'      => 'string',
+							'empty'     => false,
+							'max_bytes' => null,
+							'in'        => array( 'checking', 'ready', 'refused' ),
+						),
+						'todo'    => array(
+							'type'      => 'list',
+							'empty'     => true,
+							'item'      => array(
+								'type'      => 'string',
+								'empty'     => false,
+								'max_bytes' => 4096,
+							),
+							'unique'    => true,
+							'max_items' => null,
+						),
+						'tree'    => array(
+							'type'   => 'record',
+							'fields' => array(
+								'hash' => self::SHA256,
+								'name' => array(
+									'type'      => 'string',
+									'empty'     => false,
+									'max_bytes' => 255,
+								),
+							),
+							'extra'  => false,
+						),
+						'unit'    => array(
+							'type'   => 'record',
+							'fields' => array(
+								'kind' => array(
+									'type'      => 'string',
+									'empty'     => false,
+									'max_bytes' => null,
+									'in'        => array( 'plugin', 'theme' ),
+								),
+								'ref'  => array(
+									'type'      => 'string',
+									'empty'     => false,
+									'max_bytes' => 764,
+								),
+							),
+							'extra'  => false,
 						),
 					),
 					'extra'  => false,

@@ -362,6 +362,7 @@ final class StoreRemoverGuardTest extends TestCase {
 		self::assertSame(
 			array(
 				"includes/sync/class-sync-backup.php 'backups'",
+				"includes/sync/class-sync-code-stage.php 'stage'",
 				"includes/sync/class-sync-export.php 'out'",
 				"includes/sync/class-sync-import.php 'in'",
 				'includes/sync/class-sync-proposal.php $area',
@@ -369,7 +370,7 @@ final class StoreRemoverGuardTest extends TestCase {
 				"includes/sync/class-sync-report.php 'reports'",
 			),
 			array_keys( $seen ),
-			'The writers of sidecars: one area each, the proposal through its seam (reports); stage has no shipped writer yet (branch 5 adds one, with its run).'
+			'The writers of sidecars: one area each, the proposal through its seam (reports); stage by the stage of a unit of code with its run (Z8b branch 4, D4).'
 		);
 	}
 }

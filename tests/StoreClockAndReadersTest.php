@@ -39,6 +39,8 @@ final class StoreClockAndReadersTest extends TestCase {
 		'includes/sync/class-sync-schema.php',
 		'includes/sync/class-sync-export.php',
 		'includes/sync/class-sync-manifest.php',
+		'includes/sync/class-sync-code-stage.php',
+		'includes/sync/class-sync-code-package.php',
 	);
 
 	/**
@@ -109,6 +111,8 @@ final class StoreClockAndReadersTest extends TestCase {
 		'AB_MCP_Sync_Engine::context'           => array( array( 'period.clock' ), array( self::RUN ) ),
 		'AB_MCP_Sync_Engine::restore_part'      => array( array( 'period.clock' ), array( self::RUN ) ),
 		'AB_MCP_Sync_Code_Package::index'      => array( array( 'code.index' ), array( self::UNIT ) ),
+		'AB_MCP_Sync_Code_Stage::state_of'      => array( array( 'stage.state' ), array( self::UNIT ) ),
+		'AB_MCP_Sync_Code_Stage::update_host'   => array( array( 'stage.update_uri' ), array( self::UNIT ) ),
 		'AB_MCP_Sync_Export::discard_stale'     => array( array( 'period.clock' ), array( self::CLK ) ),
 		'AB_MCP_Sync_Manifest::clock'          => array( array( 'period.clock' ), array( 'tests/SyncManifestTest.php::testNoTimeOfTheClockSignsOrReadsAPackage' ) ),
 		'AB_MCP_Sync_Push::begin'               => array( array( 'period.clock' ), array( self::RUN ), 'the time goes only into create() (expires), which refuses without a time before anything is written' ),

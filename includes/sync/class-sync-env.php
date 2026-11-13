@@ -212,7 +212,16 @@ final class AB_MCP_Sync_Env {
 		'sha256'   => 'hash?',
 		'version'  => 'text?',
 		'cause'    => 'text?',
+		'update_uri' => 'text?',
 	);
+
+	/**
+	 * The hosts of «Update URI» that name wordpress.org (the header of a
+	 * plugin or theme the directory serves names w.org/plugin/<slug> or
+	 * https://wordpress.org/plugins/<slug>/); any other host names another
+	 * source of updates (Z8b branch 4, D1: no package from wordpress.org).
+	 */
+	const WPORG_HOSTS = array( 'wordpress.org', 'www.wordpress.org', 'w.org' );
 
 	/** The forms of a unit: a folder, a file, what is neither (locked), AlphaBridge itself, a root not read. */
 	const FORMS = array( 'folder', 'file', 'other', 'own', 'root' );
@@ -796,6 +805,50 @@ final class AB_MCP_Sync_Env {
 	}
 
 	/**
+	 * The host each file names in its head as «Update URI» (Z8b branch 4,
+	 * D1), as WordPress reads it to choose the source of updates
+	 * (wp_update_plugins(), wp_update_themes(): the host of the address,
+	 * sanitize_url() first): '' where the head names none; the host in lower
+	 * case, or the address itself where it has none. Only the host goes into
+	 * a line: an address may carry a key of a licence.
+	 *
+	 * @param string   $dir   The folder the files lie in.
+	 * @param string[] $files The files, relative to it.
+	 * @return array<string,string> file => host.
+	 */
+	public static function update_hosts( $dir, array $files ) {
+		$out = array();
+		foreach ( $files as $file ) {
+			$uri = self::head( rtrim( (string) $dir, '/' ) . '/' . $file, array( 'Update URI' ) )['Update URI'];
+			if ( '' === $uri ) {
+				$out[ (string) $file ] = '';
+				continue;
+			}
+			$host                  = function_exists( 'sanitize_url' ) ? wp_parse_url( sanitize_url( $uri ), PHP_URL_HOST ) : null;
+			$out[ (string) $file ] = self::name( strtolower( is_string( $host ) && '' !== $host ? $host : $uri ) );
+		}
+		return $out;
+	}
+
+	/**
+	 * The host of the heads of one unit (a plugin may have several main
+	 * files): one that names a host other than wordpress.org first, else one
+	 * that names wordpress.org, else '' (none names one).
+	 *
+	 * @param string[] $hosts update_hosts() of its main files.
+	 * @return string
+	 */
+	private static function update_host_of( array $hosts ) {
+		$named = array_values( array_filter( array_map( 'strval', $hosts ), static fn( $host ) => '' !== $host ) );
+		foreach ( $named as $host ) {
+			if ( ! in_array( $host, self::WPORG_HOSTS, true ) ) {
+				return $host;
+			}
+		}
+		return array() === $named ? '' : $named[0];
+	}
+
+	/**
 	 * The themes in the folders of themes as search_theme_directories()
 	 * finds them: each folder with a style.css, else each folder in it with
 	 * one (one level down), by its path relative to its root, with the
@@ -1257,13 +1310,23 @@ final class AB_MCP_Sync_Env {
 	 */
 	private static function unit_context( $kind, $dir, $deadline ) {
 		if ( 'plugin' === $kind ) {
+			$mains = self::plugin_files( $dir );
 			return array(
-				'mains'  => self::plugin_files( $dir ),
+				'mains'  => $mains,
 				'active' => self::stored_list( 'active_plugins' ),
+				'uris'   => self::update_hosts( $dir, array_keys( $mains ) ),
 			);
 		}
 		if ( 'theme' === $kind ) {
-			return array( 'versions' => self::theme_dirs( array( $dir ) ) );
+			$versions = self::theme_dirs( array( $dir ) );
+			$files    = array();
+			foreach ( array_keys( $versions ) as $stylesheet ) {
+				$files[] = $stylesheet . '/style.css';
+			}
+			return array(
+				'versions' => $versions,
+				'uris'     => self::update_hosts( $dir, $files ),
+			);
 		}
 		if ( 'upload' === $kind ) {
 			$known = self::attached( $deadline );
@@ -1508,6 +1571,10 @@ final class AB_MCP_Sync_Env {
 			'sha256'   => null === $file ? null : (string) $file[2],
 			'version'  => null,
 			'cause'    => $read['cause'],
+			// The host the head of the unit names for its updates (Z8b branch
+			// 4, D1): '' for none; null where it was not read (no plugin or
+			// theme, or a unit of a further root of themes).
+			'update_uri' => null,
 		);
 		if ( 'plugin' === $kind ) {
 			// Each main file by its name in the unit, with its full reference
@@ -1529,8 +1596,9 @@ final class AB_MCP_Sync_Env {
 				$refs[ $main ]  = $rel;
 			}
 			ksort( $mains, SORT_STRING );
-			$fields['mains']   = array_map( array( __CLASS__, 'path_name' ), array_map( 'strval', array_keys( $mains ) ) );
-			$fields['version'] = array() === $mains ? null : reset( $mains );
+			$fields['mains']      = array_map( array( __CLASS__, 'path_name' ), array_map( 'strval', array_keys( $mains ) ) );
+			$fields['version']    = array() === $mains ? null : reset( $mains );
+			$fields['update_uri'] = isset( $ctx['uris'] ) ? self::update_host_of( array_values( array_intersect_key( $ctx['uris'], $refs ? array_flip( $refs ) : array() ) ) ) : null;
 			if ( null !== $ctx['active'] ) {
 				$active = array();
 				foreach ( array_keys( $mains ) as $main ) {
@@ -1546,6 +1614,9 @@ final class AB_MCP_Sync_Env {
 			foreach ( $ctx['versions'] as $stylesheet => $version ) {
 				if ( (string) $stylesheet === $name || 0 === strpos( (string) $stylesheet, $name . '/' ) ) {
 					$fields['version'] = $version;
+					if ( isset( $ctx['uris'] ) ) {
+						$fields['update_uri'] = self::update_host_of( array_key_exists( $stylesheet . '/style.css', $ctx['uris'] ) ? array( $ctx['uris'][ $stylesheet . '/style.css' ] ) : array() );
+					}
 					break;
 				}
 			}
@@ -1599,6 +1670,7 @@ final class AB_MCP_Sync_Env {
 				'sha256'   => null,
 				'version'  => null,
 				'cause'    => (string) $why,
+				'update_uri' => null,
 			)
 		);
 	}
@@ -2446,6 +2518,12 @@ final class AB_MCP_Sync_Env {
 			return false;
 		}
 		$fields = self::LINES[ $line['env'] ];
+		// The line of a unit of a version before Z8b branch 4 has no
+		// update_uri: taken, and its host is unknown (D1: no package of
+		// wordpress.org for it).
+		if ( in_array( $line['env'], self::UNITS, true ) && ! array_key_exists( 'update_uri', $line ) ) {
+			unset( $fields['update_uri'] );
+		}
 		$keys   = array_keys( $line );
 		sort( $keys );
 		// A name held (NAMED): by its SHA-256, with why.
