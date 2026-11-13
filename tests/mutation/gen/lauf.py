@@ -713,6 +713,9 @@ e('revert-plan-unread', 'way_back(): no way back is planned on a journal that do
 # saved through end_step(), which says so where it cannot be.
 UNSAVED = 'testAJournalThatCannotBeSavedStopsTheStepBeforeAnyFurtherMutation'
 UNENDED = 'testAStepWhoseEndCannotBeRecordedSaysSoAndLeavesTheRunInterrupted'
+# The clock of the runs held at one second (AB_MCP_Sync_Run::$clock): two
+# saves of the same values change no row, whatever second the run is in.
+SAME_VALUES = 'testAStepSavedTwiceWithTheSameValuesInOneSecondIsSavedAndAStepAnotherCallMovedIsNot'
 e('engine-save-ahead', 'boundary(): nothing is written without the journal ahead of the first part; the step failed with its reason (P2)', EN,
   "\t\tif ( is_wp_error( $ahead ) ) {\n\t\t\t// Nothing of the object is written without its journal ahead", "\t\tif ( false ) {\n\t\t\t// Nothing of the object is written without its journal ahead", 'it', UNSAVED)
 e('engine-save-before-call', 'write_parts(): a checkpoint ahead of a meta or terms call (one branch for both since branch 9) that cannot be saved stops the boundary before the call', EN,
@@ -722,7 +725,9 @@ e('engine-save-after', 'write_parts(): a checkpoint after a part read back that 
 e('engine-save-returns', 'write_parts(): the checkpoint answers what update_step() answered', EN,
   "\t\t\treturn AB_MCP_Sync_Run::update_step( $run_id, $seq, array( 'parts' => $journal ), 'begun' );\n\t\t};", "\t\t\tAB_MCP_Sync_Run::update_step( $run_id, $seq, array( 'parts' => $journal ), 'begun' );\n\t\t\treturn true;\n\t\t};", 'it', UNSAVED)
 e('run-update-same-values', 'update_step(): no row changed while the step is in the state read is a save of the same values, not a move by another call', RU,
-  "\t\t\tif ( 0 === (int) $done && is_array( $now_step ) && (string) $from === (string) $now_step['state'] && ( ! isset( $set['state'] ) || (string) $set['state'] === (string) $from ) ) {", "\t\t\tif ( false ) {", 'it', 'testThePageTemplateGoesThroughTheCoreWayAndTheThemeHasToOfferIt')
+  "\t\t\tif ( 0 === (int) $done && is_array( $now_step ) && (string) $from === (string) $now_step['state'] && ( ! isset( $set['state'] ) || (string) $set['state'] === (string) $from ) ) {", "\t\t\tif ( false ) {", 'it', SAME_VALUES)
+e('run-update-same-values-state', 'update_step(): no row changed while the step is in the state read, but the call sets another state, is a move by another call, not a save of the same values', RU,
+  "( ! isset( $set['state'] ) || (string) $set['state'] === (string) $from )", 'true', 'it', SAME_VALUES)
 e('engine-end-step', 'end_step(): an end of a step that cannot be saved is said, the step stays begun, the run interrupted', EN,
   "\t\t$done = AB_MCP_Sync_Run::update_step( $run_id, $seq, $set, 'begun' );\n\t\tif ( true !== $done ) {", "\t\t$done = AB_MCP_Sync_Run::update_step( $run_id, $seq, $set, 'begun' );\n\t\tif ( false ) {", 'it', UNENDED)
 

@@ -1859,6 +1859,120 @@ final class SyncRunTest extends TestCase {
 		return $out;
 	}
 
+	public function testAStepSavedTwiceWithTheSameValuesInOneSecondIsSavedAndAStepAnotherCallMovedIsNot(): void {
+		// update_step() with the state read ($from): the database counts a row
+		// whose values stay the same as not affected, so a checkpoint of the
+		// journal saved twice within one second changes no row although the
+		// step is in the state read; that is a save, not a move by another
+		// call (GitHub Codex round 9 on free#137). The clock of the runs is
+		// held at one second for the whole case, so the second save writes
+		// the time of the first: no second can pass in between (before, only
+		// a test that happened to save twice within one second held this).
+		$t                      = time();
+		AB_MCP_Sync_Run::$clock = static fn(): int => $t;
+		$step                   = static fn( string $op ): array => array(
+			'op'      => $op,
+			'phase'   => 0,
+			'depends' => array(),
+		);
+		$made                   = AB_MCP_Sync_Run::create(
+			array(
+				'type'        => 'push',
+				'source_id'   => 'source',
+				'key_id'      => 'key',
+				'pair_print'  => str_repeat( 'a', 64 ),
+				'report_hash' => str_repeat( 'b', 64 ),
+				'plan_hash'   => str_repeat( 'c', 64 ),
+				'user_id'     => self::admin(),
+				'connection'  => AB_MCP_Sync_Run::connection(),
+				'expires'     => $t + 3600,
+			),
+			array( $step( 'check' ), $step( 'write' ), $step( 'write' ) )
+		);
+		self::assertIsArray( $made, is_wp_error( $made ) ? $made->get_error_message() : '' );
+		$run_id  = (int) $made['run_id'];
+		$journal = array(
+			'object' => array( 'kind' => 'post' ),
+			'parts'  => array(
+				array(
+					'part'  => 'row',
+					'state' => 'read',
+				),
+			),
+		);
+		foreach ( array( 1, 2, 3 ) as $seq ) {
+			self::assertTrue( AB_MCP_Sync_Run::update_step( $run_id, $seq, array( 'state' => 'begun' ), 'planned' ), "Step $seq begun." );
+			self::assertTrue( AB_MCP_Sync_Run::update_step( $run_id, $seq, array( 'parts' => $journal ), 'begun' ), "Step $seq: its journal saved, a row changed." );
+		}
+		global $wpdb;
+		$table = AB_MCP_Sync_Schema::table( 'steps' );
+
+		// (a) Step 1 saved again with the same values in the same second: the
+		// UPDATE changes no row (shown by running it once more), and the
+		// answer is true; the step is as it was.
+		$saved   = AB_MCP_Sync_Run::step( $run_id, 1 );
+		$updates = array();
+		$catch   = static function ( $query ) use ( &$updates, $table ) {
+			if ( 0 === strpos( (string) $query, 'UPDATE `' . $table . '`' ) ) {
+				$updates[] = (string) $query;
+			}
+			return $query;
+		};
+		add_filter( 'query', $catch );
+		try {
+			$again = AB_MCP_Sync_Run::update_step( $run_id, 1, array( 'parts' => $journal ), 'begun' );
+		} finally {
+			remove_filter( 'query', $catch );
+		}
+		self::assertTrue( $again, is_wp_error( $again ) ? $again->get_error_message() : 'The same values saved again are a save.' );
+		self::assertCount( 1, $updates, 'One UPDATE of the step.' );
+		self::assertSame( 0, $wpdb->query( $updates[0] ), 'The UPDATE of the second save changes no row: the same values, the same second.' ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- the query update_step() made.
+		self::assertSame( '', $wpdb->last_error );
+		self::assertSame( $saved, AB_MCP_Sync_Run::step( $run_id, 1 ), 'The step is as it was.' );
+		self::assertSame( $t, (int) $saved['time'], 'The time of the held clock.' );
+		self::assertSame( 'begun', $saved['state'] );
+		self::assertSame( $journal, $saved['parts'] );
+
+		// (b) Step 2 moved by another call in between (begun to done): the
+		// save from begun changes no row either, but the step is no longer
+		// in the state read: refused as changed, nothing written. A step that
+		// is gone is refused the same way.
+		self::assertTrue( AB_MCP_Sync_Run::update_step( $run_id, 2, array( 'state' => 'done' ), 'begun' ), 'Another call ends step 2.' );
+		$moved   = AB_MCP_Sync_Run::step( $run_id, 2 );
+		$changed = AB_MCP_Sync_Run::update_step( $run_id, 2, array( 'parts' => $journal ), 'begun' );
+		self::assertInstanceOf( WP_Error::class, $changed );
+		self::assertSame( 'ab_mcp_sync_run_changed', $changed->get_error_code() );
+		self::assertStringContainsString( 'it is done now', $changed->get_error_message() );
+		self::assertSame( $moved, AB_MCP_Sync_Run::step( $run_id, 2 ), 'Nothing written.' );
+		$gone = AB_MCP_Sync_Run::update_step( $run_id, 4, array( 'parts' => $journal ), 'begun' );
+		self::assertInstanceOf( WP_Error::class, $gone );
+		self::assertSame( 'ab_mcp_sync_run_changed', $gone->get_error_code() );
+		self::assertStringContainsString( 'it is gone now', $gone->get_error_message() );
+
+		// (c) Step 3 in the state read, no row changed, but the call sets
+		// another state: no save of the same values (that would leave the
+		// state as read), so another call moved the step away and back in
+		// between. A trigger of the database keeps the row of step 3 as it
+		// is on every UPDATE (the row found, no value changed), as such a
+		// call in between would leave it: a move to done is refused as
+		// changed; the same state with the same journal is a save.
+		$kept = AB_MCP_Sync_Run::step( $run_id, 3 );
+		$wpdb->query( 'DROP TRIGGER IF EXISTS ab_it_keep_step' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$wpdb->query( sprintf( 'CREATE TRIGGER ab_it_keep_step BEFORE UPDATE ON `%s` FOR EACH ROW BEGIN IF OLD.run_id = %d AND OLD.seq = 3 THEN SET NEW.state = OLD.state, NEW.parts = OLD.parts, NEW.result = OLD.result, NEW.pair_id = OLD.pair_id, NEW.pair_before = OLD.pair_before, NEW.time = OLD.time; END IF; END', $table, $run_id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		self::assertSame( '', $wpdb->last_error, 'The trigger is there.' );
+		try {
+			$other = AB_MCP_Sync_Run::update_step( $run_id, 3, array( 'state' => 'done', 'parts' => $journal ), 'begun' );
+			$same  = AB_MCP_Sync_Run::update_step( $run_id, 3, array( 'state' => 'begun', 'parts' => $journal ), 'begun' );
+		} finally {
+			$wpdb->query( 'DROP TRIGGER IF EXISTS ab_it_keep_step' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		}
+		self::assertInstanceOf( WP_Error::class, $other, 'Another state with no row changed is no save of the same values.' );
+		self::assertSame( 'ab_mcp_sync_run_changed', $other->get_error_code() );
+		self::assertTrue( $same, is_wp_error( $same ) ? $same->get_error_message() : 'The state read, set again, is a save.' );
+		self::assertSame( $kept, AB_MCP_Sync_Run::step( $run_id, 3 ), 'The trigger kept the row.' );
+		self::assertSame( 'begun', $kept['state'] );
+	}
+
 	public function testAJournalThatCannotBeSavedStopsTheStepBeforeAnyFurtherMutation(): void {
 		// GitHub Codex round 9 on free#137 (P2): the checkpoints of the
 		// journal within a write boundary (ahead of every meta and terms call,
