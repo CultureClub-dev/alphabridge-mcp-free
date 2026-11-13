@@ -564,11 +564,28 @@ delete_option( 'auto_updater.lock' );
 // refused while a swap holds WordPress's lock names the swap in both cases of
 // the time of busy() (a lock seconds old, one older than ten seconds), never
 // background updates; a time of the lock not read is not free.
+// The rows as stored, past the filters and the object cache of get_option()
+// (A5 of the Codex round on 4881c0d): a stand-in of the swap's stored().
+final class AB_Test_Stored_Rows {
+	/** @var array<string,callable> Name => what reading it answers instead (it may throw). */
+	public $instead = array();
+	/** @var string[] */
+	public $read = array();
+	public function stored( $name ) {
+		$this->read[] = $name;
+		if ( isset( $this->instead[ $name ] ) ) {
+			return call_user_func( $this->instead[ $name ] );
+		}
+		return array_key_exists( $name, $GLOBALS['ab_opts'] ) ? array( 'value' => $GLOBALS['ab_opts'][ $name ] ) : false;
+	}
+}
 echo "SW1 the lock of a swap\n";
-$nonce = AB_MCP_Update_Guard::take_swap_lock( 'plugin', 'shop' );
+$rows  = new AB_Test_Stored_Rows();
+$nonce = AB_MCP_Update_Guard::take_swap_lock( 'plugin', 'shop', $rows );
 $note  = AB_MCP_Update_Log::running();
-ok( is_string( $nonce ) && 'swap' === $note['type'] && $nonce === $note['nonce'] && ! isset( $note['item'] ), 'SW1 taken, with the note of the swap and no item' );
-ok( 'ab_mcp_update_busy' === ab_code( AB_MCP_Update_Guard::take_swap_lock( 'plugin', 'other' ) ), 'SW1 a second swap is refused' );
+ok( is_string( $nonce ) && 'swap' === $note['type'] && $nonce === $note['nonce'] && ! isset( $note['item'] ) && $note['started'] === get_option( 'auto_updater.lock' ), 'SW1 taken, with the note of the swap, no item, naming the time of the lock' );
+ok( true === AB_MCP_Update_Guard::swap_lock_held( $nonce, $rows ), 'SW1 held: note and row read as stored, ours, the same time' );
+ok( 'ab_mcp_update_busy' === ab_code( AB_MCP_Update_Guard::take_swap_lock( 'plugin', 'other', $rows ) ), 'SW1 a second swap is refused' );
 $GLOBALS['ab_events'] = array();
 $r = AB_Test_Update_Guard::update( ab_plugin_job( $f12 ) );
 ok( 'ab_mcp_update_busy' === ab_code( $r ) && false !== strpos( ab_msg( $r ), 'a swap of the plugin shop from the staging site' ) && false === strpos( ab_msg( $r ), 'background updates' ) && false === strpos( ab_msg( $r ), 'a moment ago' ), 'SW1 a lock seconds old: the swap is named: ' . ab_msg( $r ) );
@@ -577,12 +594,113 @@ AB_MCP_Update_Log::set_running( array( 'started' => time() - 60 ) + $note );
 $r = AB_Test_Update_Guard::update( ab_plugin_job( $f12 ) );
 ok( 'ab_mcp_update_busy' === ab_code( $r ) && false !== strpos( ab_msg( $r ), 'a swap of the plugin shop from the staging site' ) && false === strpos( ab_msg( $r ), 'background updates' ), 'SW1 a lock older than ten seconds: the swap is named: ' . ab_msg( $r ) );
 ok( array() === ab_events_like( 'bulk_upgrade' ) && array() === ab_events_like( 'lock:release' ), 'SW1 nothing ran, the lock stays' );
-ok( false === AB_MCP_Update_Guard::free_swap_lock( 'not-ours' ) && null !== AB_MCP_Update_Log::running(), 'SW1 another nonce frees nothing' );
+ok( false === AB_MCP_Update_Guard::free_swap_lock( 'not-ours', $rows ) && null !== AB_MCP_Update_Log::running(), 'SW1 another nonce frees nothing' );
 update_option( 'auto_updater.lock', 'not a time' );
-ok( false === AB_MCP_Update_Guard::free_swap_lock( $nonce ) && 'not a time' === get_option( 'auto_updater.lock' ) && null === AB_MCP_Update_Log::running(), 'SW1 a time of the lock not read is not free: the note goes, the lock stays' );
+ok( false === AB_MCP_Update_Guard::swap_lock_held( $nonce, $rows ), 'SW1 a time of the lock not read: not held' );
+ok( false === AB_MCP_Update_Guard::free_swap_lock( $nonce, $rows ) && 'not a time' === get_option( 'auto_updater.lock' ) && null === AB_MCP_Update_Log::running(), 'SW1 a time of the lock not read is not free: the note goes, the lock stays' );
 update_option( 'auto_updater.lock', time() - 60 );
 AB_MCP_Update_Log::set_running( array( 'started' => time() - 60 ) + $note );
-ok( true === AB_MCP_Update_Guard::free_swap_lock( $nonce ) && false === get_option( 'auto_updater.lock' ) && null === AB_MCP_Update_Log::running(), 'SW1 given back: note and lock' );
+ok( true === AB_MCP_Update_Guard::free_swap_lock( $nonce, $rows ) && false === get_option( 'auto_updater.lock' ) && null === AB_MCP_Update_Log::running(), 'SW1 given back: note and lock' );
+AB_MCP_Update_Log::clear_running();
+delete_option( 'auto_updater.lock' );
+
+// SW2 (A5 of the Codex round on 4881c0d): a row of the lock that does not
+// read as a time is neither deleted nor taken over (WordPress's
+// create_lock() would delete -1 as a lock that expired); one younger than an
+// hour refuses; one an hour old is taken over, as by every update. Every
+// read of the swap's rows is as stored, never through get_option().
+echo "SW2 the row of the lock before and after it is taken\n";
+foreach ( array( '-1', 'not a time', '017', '' ) as $bad ) {
+	update_option( 'auto_updater.lock', $bad );
+	$GLOBALS['ab_events'] = array();
+	$r = AB_MCP_Update_Guard::take_swap_lock( 'plugin', 'shop', new AB_Test_Stored_Rows() );
+	ok( 'ab_mcp_update_lock_unknown' === ab_code( $r ) && $bad === get_option( 'auto_updater.lock' ) && null === AB_MCP_Update_Log::running() && array() === ab_events_like( 'lock:' ), 'SW2 a row ' . var_export( $bad, true ) . ' not read as a time: not taken over, not deleted, no note: ' . ab_msg( $r ) );
+}
+$rows                                     = new AB_Test_Stored_Rows();
+$rows->instead['auto_updater.lock']       = static function () { return null; };
+update_option( 'auto_updater.lock', time() - 4000 );
+$r = AB_MCP_Update_Guard::take_swap_lock( 'plugin', 'shop', $rows );
+ok( 'ab_mcp_update_lock_unknown' === ab_code( $r ) && false !== strpos( ab_msg( $r ), 'could not be read now as this swap\'s' ) && false === strpos( ab_msg( $r ), 'could not be given back' ), 'SW2 the row not read: refused, nothing taken: ' . ab_msg( $r ) );
+// A filter of get_option() or a cache that hides the row does not count.
+$GLOBALS['ab_filters']['pre_option_auto_updater.lock'] = static function () { return time() - 4000; };
+update_option( 'auto_updater.lock', '-1' );
+$r = AB_MCP_Update_Guard::take_swap_lock( 'plugin', 'shop', new AB_Test_Stored_Rows() );
+unset( $GLOBALS['ab_filters']['pre_option_auto_updater.lock'] );
+ok( 'ab_mcp_update_lock_unknown' === ab_code( $r ) && '-1' === get_option( 'auto_updater.lock' ), 'SW2 a filter of get_option() does not make the row a time' );
+update_option( 'auto_updater.lock', time() - 30 );
+$r = AB_MCP_Update_Guard::take_swap_lock( 'plugin', 'shop', new AB_Test_Stored_Rows() );
+ok( 'ab_mcp_update_busy' === ab_code( $r ) && null === AB_MCP_Update_Log::running(), 'SW2 a lock half a minute old: busy' );
+$old = time() - 4000;
+update_option( 'auto_updater.lock', $old );
+$rows  = new AB_Test_Stored_Rows();
+$nonce = AB_MCP_Update_Guard::take_swap_lock( 'plugin', 'shop', $rows );
+ok( is_string( $nonce ) && $old !== get_option( 'auto_updater.lock' ) && true === AB_MCP_Update_Guard::swap_lock_held( $nonce, $rows ), 'SW2 a lock an hour old is taken over as by every update' );
+AB_MCP_Update_Guard::free_swap_lock( $nonce, $rows );
+// After create_lock(): the row read again as stored. Another time than this
+// call wrote, or a row not read: not held, and the lock is not given back
+// either, as it is not read as this call's.
+$rows                               = new AB_Test_Stored_Rows();
+$calls                              = 0;
+$rows->instead['auto_updater.lock'] = static function () use ( &$calls ) {
+	++$calls;
+	return 1 === $calls ? false : array( 'value' => '12345' );
+};
+$GLOBALS['ab_events'] = array();
+$r = AB_MCP_Update_Guard::take_swap_lock( 'plugin', 'shop', $rows );
+ok( 'ab_mcp_update_lock_unknown' === ab_code( $r ) && false !== strpos( ab_msg( $r ), 'could not be given back as its own, so it stays' ) && array() === ab_events_like( 'lock:release' ) && false !== get_option( 'auto_updater.lock' ) && null === AB_MCP_Update_Log::running(), 'SW2 a row of another time after taking: refused, the lock stays and is named: ' . ab_msg( $r ) );
+delete_option( 'auto_updater.lock' );
+
+// SW3 (A6): a note not written, or a Throwable after create_lock(): the
+// lock is given back where its row is the one this call took; the nonce is
+// made before the lock is taken.
+echo "SW3 the way after the lock is taken\n";
+$GLOBALS['ab_opts_stuck'][ AB_MCP_Update_Log::RUNNING ] = true;
+$GLOBALS['ab_events']                                    = array();
+$r = AB_MCP_Update_Guard::take_swap_lock( 'plugin', 'shop', new AB_Test_Stored_Rows() );
+unset( $GLOBALS['ab_opts_stuck'][ AB_MCP_Update_Log::RUNNING ] );
+ok( 'ab_mcp_update_lock_unknown' === ab_code( $r ) && false === strpos( ab_msg( $r ), 'could not be given back' ) && false === get_option( 'auto_updater.lock' ) && array( 'lock:create', 'lock:release' ) === ab_events_like( 'lock:' ), 'SW3 the note not written: the lock given back, refused: ' . ab_msg( $r ) );
+$rows   = new AB_Test_Stored_Rows();
+$thrown = 0;
+$rows->instead[ AB_MCP_Update_Log::RUNNING ] = static function () use ( &$thrown ) {
+	if ( 0 === $thrown++ ) {
+		throw new RuntimeException( 'the database went away while the note was read back' );
+	}
+	return array_key_exists( AB_MCP_Update_Log::RUNNING, $GLOBALS['ab_opts'] ) ? array( 'value' => $GLOBALS['ab_opts'][ AB_MCP_Update_Log::RUNNING ] ) : false;
+};
+$caught = null;
+try {
+	AB_MCP_Update_Guard::take_swap_lock( 'plugin', 'shop', $rows );
+} catch ( RuntimeException $e ) {
+	$caught = $e->getMessage();
+}
+ok( 'the database went away while the note was read back' === $caught && false === get_option( 'auto_updater.lock' ) && null === AB_MCP_Update_Log::running(), 'SW3 a Throwable after create_lock(): it goes on, and lock and note are given back' );
+$src = (string) file_get_contents( $GLOBALS['ab_free'] . 'lifecycle/class-update-guard.php' );
+$fn  = substr( $src, strpos( $src, 'public static function take_swap_lock(' ), 2000 );
+ok( strpos( $fn, 'random_bytes(' ) < strpos( $fn, "'create_lock'" ), 'SW3 the nonce is made before the lock is taken' );
+
+// SW4 (A7): a deletion that fails is no release.
+echo "SW4 giving the lock back\n";
+$rows  = new AB_Test_Stored_Rows();
+$nonce = AB_MCP_Update_Guard::take_swap_lock( 'plugin', 'shop', $rows );
+$GLOBALS['ab_opts_stuck']['auto_updater.lock'] = true;
+ok( false === AB_MCP_Update_Guard::free_swap_lock( $nonce, $rows ) && false !== get_option( 'auto_updater.lock' ), 'SW4 the row of the lock not deleted: not given back' );
+unset( $GLOBALS['ab_opts_stuck']['auto_updater.lock'] );
+delete_option( 'auto_updater.lock' );
+$nonce = AB_MCP_Update_Guard::take_swap_lock( 'plugin', 'shop', $rows );
+$GLOBALS['ab_opts_stuck'][ AB_MCP_Update_Log::RUNNING ] = true;
+ok( false === AB_MCP_Update_Guard::free_swap_lock( $nonce, $rows ) && false !== get_option( 'auto_updater.lock' ) && null !== AB_MCP_Update_Log::running(), 'SW4 the note not deleted: the lock stays with it, not given back' );
+unset( $GLOBALS['ab_opts_stuck'][ AB_MCP_Update_Log::RUNNING ] );
+ok( true === AB_MCP_Update_Guard::free_swap_lock( $nonce, $rows ) && false === get_option( 'auto_updater.lock' ), 'SW4 then given back' );
+
+// B1 of the Codex round on 4881c0d: a note of an update of AlphaBridge
+// beside a lock whose time does not read as one does not name its holder.
+echo "SW5 a note of an update beside a time not read\n";
+// A time with a blank before its digits: WordPress counts it as a lock that
+// holds (a numeric text), its row swap.core_lock does not read it as a time.
+update_option( 'auto_updater.lock', ' ' . ( time() - 30 ) );
+AB_MCP_Update_Log::set_running( array( 'type' => 'plugin', 'item' => 'other/other.php', 'started' => time() - 30, 'nonce' => 'abc' ) );
+$r = AB_Test_Update_Guard::update( ab_plugin_job( $f12 ) );
+ok( 'ab_mcp_update_busy' === ab_code( $r ) && false !== strpos( ab_msg( $r ), $ab_unknown ) && false === strpos( ab_msg( $r ), 'other/other.php' ), 'SW5 the holder not claimed: ' . ab_msg( $r ) );
 AB_MCP_Update_Log::clear_running();
 delete_option( 'auto_updater.lock' );
 
@@ -1016,7 +1134,7 @@ ab_offer( 'plugin', $f37, '1.0.0', '2.0.0', ab_package_plugin( 'good', '2.0.0' )
 $t = time() - 4;
 update_option( AB_MCP_Change_Lock::OPTION, $t );
 $r = AB_Test_Update_Guard::update( ab_plugin_job( $f37 ) );
-ok( 'ab_mcp_change_busy' === ab_code( $r ) && false !== strpos( ab_msg( $r ), 'another change of the code this site runs through AlphaBridge (an activation, a deploy, a swap of a plugin or theme from the staging site, or a PHP file or snippet written or undone) has been running for 4 s' ), 'F37 refused while another change runs: ' . ab_msg( $r ) );
+ok( 'ab_mcp_change_busy' === ab_code( $r ) && false !== strpos( ab_msg( $r ), 'AlphaBridge\'s lock for changes of the code this site runs is held, and who holds it cannot be told here.' ) && false !== strpos( ab_msg( $r ), 'Its time was written at ' . gmdate( 'H:i', $t ) . ' UTC.' ) && false === strpos( ab_msg( $r ), 'has been running' ), 'F37 refused while the lock for changes is held, no change claimed: ' . ab_msg( $r ) );
 ok( '1.0.0' === ab_installed_version( 'plugin', $f37 ) && array() === ab_events_like( 'bulk_upgrade' ) && array() === ab_events_like( 'probe:' ), 'F37 nothing updated, no test request' );
 ok( false === get_option( 'auto_updater.lock' ) && null === AB_MCP_Update_Log::running(), 'F37 the update lock and our note are freed again' );
 ok( $t === (int) get_option( AB_MCP_Change_Lock::OPTION ) && ! AB_MCP_Change_Lock::held(), 'F37 the other request\'s lock stays as it was' );

@@ -187,7 +187,9 @@ class AB_MCP_Own_Files {
 	 * Whether a path is AlphaBridge's own, strictly (Z8b branch 5, Z11 of
 	 * the swap; decision V6): true own, false not own, null where a place on
 	 * the way could not be read (realpath() or stat() of a place there, or
-	 * scandir() of a plugin folder that is there): unknown, never «not own».
+	 * scandir() of a plugin folder), or a place is missing without its
+	 * absence read (absent(): its folder above lists whole without it):
+	 * unknown, never «not own».
 	 * The same places and the same rule as own_file_refusal() (judge()),
 	 * which the file tools keep.
 	 *
@@ -229,9 +231,10 @@ class AB_MCP_Own_Files {
 			return false;
 		}
 		foreach ( self::loader_dirs() as $dir ) {
-			// A loader folder that is not there (mu-plugins) has no identity.
-			$id = self::identity( $dir, $strict && file_exists( $dir ) );
-			if ( null === $id ) {
+			// A loader folder that is not there (mu-plugins) has no identity;
+			// strictly, only where its absence is read (absent()).
+			$id = self::identity( $dir, $strict );
+			if ( null === $id && ! self::absent( $dir ) ) {
 				return null;
 			}
 			if ( $id === $parent ) {
@@ -312,10 +315,15 @@ class AB_MCP_Own_Files {
 		}
 		foreach ( self::loader_dirs() as $dir ) {
 			$entries = self::calls()->scandir( $dir );
-			if ( $strict && false === $entries && file_exists( $dir ) ) {
-				return null;
+			if ( ! is_array( $entries ) ) {
+				// Lenient, a folder not listed has nothing; strictly, only
+				// one whose absence is read (A4 of the Codex round on 4881c0d).
+				if ( $strict && ! self::absent( $dir ) ) {
+					return null;
+				}
+				continue;
 			}
-			foreach ( (array) $entries as $entry ) {
+			foreach ( $entries as $entry ) {
 				if ( is_string( $entry ) && preg_match( '/^alphabridge-mcp(?:[-_.].*)?$/i', $entry ) ) {
 					$paths[] = rtrim( $dir, '/\\' ) . DIRECTORY_SEPARATOR . $entry;
 				}
@@ -325,8 +333,23 @@ class AB_MCP_Own_Files {
 	}
 
 	/**
+	 * Whether a place is not there, read (the strict rule, own_state()): the
+	 * folder above it lists whole without its name, and stat() finds nothing.
+	 * A place not read, or a folder above it not listed (not searchable, an
+	 * error), is not «absent».
+	 *
+	 * @param string $path Path.
+	 * @return bool
+	 */
+	private static function absent( $path ) {
+		$names = self::calls()->scandir( dirname( $path ) );
+		return is_array( $names ) && ! in_array( basename( $path ), $names, true ) && false === self::calls()->stat( $path );
+	}
+
+	/**
 	 * Identities of a path and every directory above it. A path that does not
-	 * exist yet starts at its deepest existing ancestor.
+	 * exist yet starts at its deepest existing ancestor; strictly, only where
+	 * its absence is read (absent()), else the answer is null.
 	 *
 	 * @param string $path   Path.
 	 * @param bool   $strict Null where a place is not read (judge()).
@@ -335,6 +358,9 @@ class AB_MCP_Own_Files {
 	private static function identity_chain( $path, $strict = false ) {
 		$probe = $path;
 		while ( '' !== $probe && ! file_exists( $probe ) ) {
+			if ( $strict && ! self::absent( $probe ) ) {
+				return null;
+			}
 			$parent = dirname( $probe );
 			if ( $parent === $probe ) {
 				break;

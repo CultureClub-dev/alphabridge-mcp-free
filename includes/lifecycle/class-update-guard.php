@@ -45,6 +45,7 @@ require_once __DIR__ . '/class-own-files.php';
 require_once __DIR__ . '/class-update-log.php';
 require_once __DIR__ . '/class-change-lock.php';
 require_once dirname( __DIR__ ) . '/class-shape.php';
+require_once dirname( __DIR__ ) . '/class-store-inputs.php';
 
 /**
  * Class AB_MCP_Update_Guard
@@ -1153,7 +1154,7 @@ class AB_MCP_Update_Guard {
 				)
 			);
 		}
-		if ( self::note_holds_lock( $note ) && isset( $note['item'] ) ) {
+		if ( self::update_holds( $note ) ) {
 			return new WP_Error(
 				'ab_mcp_update_busy',
 				sprintf(
@@ -1175,109 +1176,208 @@ class AB_MCP_Update_Guard {
 
 	/* --------------------------------------- the lock of a swap (Z8b) */
 
-	/** The time a lock of WordPress holds (its option NAME.lock), read strictly: a whole number of seconds. */
-	const LOCK_TIME = array(
-		'type'   => 'int',
-		'digits' => true,
-		'min'    => 1,
-		'max'    => null,
-	);
-
-	/** The note of a swap on the lock (take_swap_lock()), read strictly. */
-	const SWAP_NOTE = array(
-		'type'   => 'record',
-		'fields' => array(
-			'type'    => array(
-				'type'      => 'string',
-				'empty'     => false,
-				'max_bytes' => null,
-				'in'        => array( 'swap' ),
-			),
-			'kind'    => array(
-				'type'      => 'string',
-				'empty'     => false,
-				'max_bytes' => null,
-				'in'        => array( 'plugin', 'theme' ),
-			),
-			'ref'     => array(
-				'type'      => 'string',
-				'empty'     => false,
-				'max_bytes' => 1024,
-			),
-			'started' => array(
-				'type'   => 'int',
-				'digits' => false,
-				'min'    => 1,
-				'max'    => null,
-			),
-			'nonce'   => array(
-				'type'      => 'string',
-				'empty'     => false,
-				'max_bytes' => 64,
-			),
-		),
-		'extra'  => false,
-	);
+	/** Seconds after which a lock for updates counts as left behind: WP_Upgrader::create_lock() without a timeout (HOUR_IN_SECONDS). */
+	const SWAP_LOCK_EXPIRES = 3600;
 
 	/**
 	 * Take WordPress's lock for updates for the swap of a unit of code (Z8b
 	 * branch 5, E5 1, Z10; decision D1 a): as an update takes it, on the main
 	 * site of a network, with a note of the type swap beside it, so that an
 	 * update refused meanwhile names the swap (busy()). The note has no item:
-	 * AB_MCP_Change_Lock names no update for it. The note is read back; only
-	 * where it reads as written is the lock held, else it is given back. No
-	 * lock is taken over here: one another request holds refuses.
+	 * AB_MCP_Change_Lock names no update for it.
+	 *
+	 * Every row is read as stored ($rows: past every cache and filter, in the
+	 * form of its row of AB_MCP_Store_Inputs::TABLE). A row of the lock there
+	 * that does not read as a time (swap.core_lock) is neither deleted nor
+	 * taken over; one younger than SWAP_LOCK_EXPIRES refuses (busy()); only
+	 * where there is none, or one that old, does WordPress's create_lock()
+	 * run (it takes over such a one, as for every update). Taken, the row is
+	 * read again: its time within this call, the note names it as started,
+	 * with the nonce made before the lock was taken, and reads back as
+	 * written (swap_lock_held()). Where that fails, or a Throwable comes on
+	 * the way, drop_swap_lock() gives back what is this call's own.
 	 *
 	 * @param string $kind plugin or theme.
 	 * @param string $ref  The unit.
-	 * @return string|WP_Error Our nonce, for free_swap_lock().
+	 * @param object $rows The rows as stored: stored( $name ) answers array{value:mixed}, false for none, null where not read.
+	 * @return string|WP_Error Our nonce, for swap_lock_held() and free_swap_lock().
 	 */
-	public static function take_swap_lock( $kind, $ref ) {
+	public static function take_swap_lock( $kind, $ref, $rows ) {
 		if ( ! class_exists( 'WP_Upgrader' ) && defined( 'ABSPATH' ) && is_readable( ABSPATH . 'wp-admin/includes/class-wp-upgrader.php' ) ) {
 			require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
 		}
 		if ( ! class_exists( 'WP_Upgrader' ) ) {
 			return new WP_Error( 'ab_mcp_update_upgrader', __( 'WordPress\'s upgrader (wp-admin/includes/class-wp-upgrader.php) could not be loaded on this site, so its lock for updates is not taken and nothing is swapped. Re-install WordPress in wp-admin (Dashboard, Updates), then call again.', 'alphabridge-mcp' ) );
 		}
+		$nonce = bin2hex( random_bytes( 8 ) );
+		$found = self::stored_time( $rows );
+		if ( null === $found ) {
+			return self::swap_lock_unknown( false );
+		}
+		if ( false !== $found && $found > time() - self::SWAP_LOCK_EXPIRES ) {
+			return self::busy();
+		}
+		$before = time();
 		if ( true !== self::on_main_site( array( 'WP_Upgrader', 'create_lock' ), self::LOCK ) ) {
 			return self::busy();
 		}
-		$note = array(
-			'type'    => 'swap',
-			'kind'    => $kind,
-			'ref'     => $ref,
-			'started' => time(),
-			'nonce'   => bin2hex( random_bytes( 8 ) ),
-		);
-		AB_MCP_Update_Log::set_running( $note );
-		if ( AB_MCP_Shape::read( AB_MCP_Update_Log::running(), self::SWAP_NOTE ) !== $note ) {
-			self::on_main_site( array( 'WP_Upgrader', 'release_lock' ), self::LOCK );
-			return new WP_Error( 'ab_mcp_update_note', __( 'The note of AlphaBridge beside WordPress\'s lock for updates could not be written and read back on this site, so the lock is given back and nothing is swapped. Call again; where it keeps failing, check that the database of this site accepts writes.', 'alphabridge-mcp' ) );
+		$held = false;
+		$kept = true;
+		try {
+			$held = self::swap_note_written( $kind, $ref, $nonce, $before, $rows );
+		} finally {
+			if ( ! $held ) {
+				$kept = self::drop_swap_lock( $nonce, $before, $rows );
+			}
 		}
-		return $note['nonce'];
+		return $held ? $nonce : self::swap_lock_unknown( $kept );
+	}
+
+	/**
+	 * The note of a swap written beside the lock this call has just taken,
+	 * naming the time of its row read now (within this call), and read back.
+	 *
+	 * @param string $kind   plugin or theme.
+	 * @param string $ref    The unit.
+	 * @param string $nonce  Our nonce.
+	 * @param int    $before The time before create_lock().
+	 * @param object $rows   The rows as stored.
+	 * @return bool Whether the lock is held with our note.
+	 */
+	private static function swap_note_written( $kind, $ref, $nonce, $before, $rows ) {
+		$time = self::stored_time( $rows );
+		if ( ! is_int( $time ) || $time < $before || $time > time() ) {
+			return false;
+		}
+		AB_MCP_Update_Log::set_running(
+			array(
+				'type'    => 'swap',
+				'kind'    => $kind,
+				'ref'     => $ref,
+				'started' => $time,
+				'nonce'   => $nonce,
+			)
+		);
+		return self::swap_lock_held( $nonce, $rows );
+	}
+
+	/**
+	 * After the lock was taken and not read as held with our note (or a
+	 * Throwable): our note goes where it is ours; the lock goes only where
+	 * its row is still the one this call took (its time, read as stored,
+	 * within this call), never one not read or another's.
+	 *
+	 * @param string $nonce  Our nonce.
+	 * @param int    $before The time before create_lock().
+	 * @param object $rows   The rows as stored.
+	 * @return bool Whether the lock stays.
+	 */
+	private static function drop_swap_lock( $nonce, $before, $rows ) {
+		$note = self::stored_note( $rows );
+		if ( is_array( $note ) && hash_equals( $note['nonce'], $nonce ) && true !== AB_MCP_Update_Log::clear_running() ) {
+			return true;
+		}
+		$time = self::stored_time( $rows );
+		if ( ! is_int( $time ) || $time < $before || $time > time() ) {
+			return true;
+		}
+		return true !== self::on_main_site( array( 'WP_Upgrader', 'release_lock' ), self::LOCK );
+	}
+
+	/**
+	 * Whether a swap holds WordPress's lock for updates now: its note and the
+	 * row of the lock, each read as stored and in the form of its row
+	 * (swap.note, swap.core_lock), the note ours (its nonce) and naming the
+	 * time of that row.
+	 *
+	 * @param mixed  $nonce Our nonce.
+	 * @param object $rows  The rows as stored.
+	 * @return bool
+	 */
+	public static function swap_lock_held( $nonce, $rows ) {
+		$note = self::stored_note( $rows );
+		$time = self::stored_time( $rows );
+		return is_string( $nonce ) && is_array( $note ) && is_int( $time ) && hash_equals( $note['nonce'], $nonce ) && $time === $note['started'];
 	}
 
 	/**
 	 * Give back the lock of a swap: our note first, then the lock, as
-	 * finish() does; the lock only where our note holds it, its time read
-	 * strictly (swap_holds()). A time not read is not free: the lock stays
-	 * until WordPress lets it go.
+	 * finish() does. Only a note read as ours goes; the lock only where the
+	 * note names its time (swap_lock_held()). Given back only where both
+	 * deletions say so: a deletion that fails is no release.
 	 *
-	 * @param string $nonce Our nonce (take_swap_lock()).
+	 * @param mixed  $nonce Our nonce (take_swap_lock()).
+	 * @param object $rows  The rows as stored.
 	 * @return bool Whether the lock was given back.
 	 */
-	public static function free_swap_lock( $nonce ) {
-		$note = AB_MCP_Update_Log::running();
-		if ( ! is_string( $nonce ) || null === AB_MCP_Shape::read( $note, self::SWAP_NOTE ) || ! hash_equals( $note['nonce'], $nonce ) ) {
+	public static function free_swap_lock( $nonce, $rows ) {
+		$note = self::stored_note( $rows );
+		if ( ! is_string( $nonce ) || ! is_array( $note ) || ! hash_equals( $note['nonce'], $nonce ) ) {
 			return false;
 		}
-		$holds = self::swap_holds( $note );
-		AB_MCP_Update_Log::clear_running();
-		if ( ! $holds ) {
+		$held = self::swap_lock_held( $nonce, $rows );
+		if ( true !== AB_MCP_Update_Log::clear_running() || ! $held ) {
 			return false;
 		}
-		self::on_main_site( array( 'WP_Upgrader', 'release_lock' ), self::LOCK );
-		return true;
+		return true === self::on_main_site( array( 'WP_Upgrader', 'release_lock' ), self::LOCK );
+	}
+
+	/**
+	 * The time of the lock as stored, in the form of its row swap.core_lock:
+	 * false where there is no row; null where it is not read or not of that
+	 * form.
+	 *
+	 * @param object $rows The rows as stored.
+	 * @return int|false|null
+	 */
+	private static function stored_time( $rows ) {
+		$row = self::stored_row( $rows, self::LOCK . '.lock' );
+		return is_array( $row ) ? AB_MCP_Store_Inputs::read( 'swap.core_lock', $row['value'] ) : $row;
+	}
+
+	/**
+	 * The note beside the lock as stored, in the form of its row swap.note:
+	 * false where there is none; null where it is not read or not of that
+	 * form (a note of an update among them).
+	 *
+	 * @param object $rows The rows as stored.
+	 * @return array|false|null
+	 */
+	private static function stored_note( $rows ) {
+		$row = self::stored_row( $rows, AB_MCP_Update_Log::RUNNING );
+		return is_array( $row ) ? AB_MCP_Store_Inputs::read( 'swap.note', $row['value'] ) : $row;
+	}
+
+	/**
+	 * A row as stored ($rows->stored()): false where there is none; null
+	 * where it is not read.
+	 *
+	 * @param object $rows The rows as stored.
+	 * @param string $name The option.
+	 * @return array{value:mixed}|false|null
+	 */
+	private static function stored_row( $rows, $name ) {
+		$row = $rows->stored( $name );
+		if ( false === $row ) {
+			return false;
+		}
+		return is_array( $row ) && array_key_exists( 'value', $row ) ? $row : null;
+	}
+
+	/**
+	 * @param bool $kept Whether the lock this call took stays.
+	 * @return WP_Error The lock or the note not read as this swap's.
+	 */
+	private static function swap_lock_unknown( $kept ) {
+		$why = __( 'WordPress\'s lock for updates on this site, or the note of AlphaBridge beside it, could not be read now as this swap\'s (its row in the database not read, or not of its form), so nothing is swapped. Call again; where it keeps failing, check that the database of this site can be read and accepts writes.', 'alphabridge-mcp' );
+		return new WP_Error( 'ab_mcp_update_lock_unknown', $kept ? $why . ' ' . self::swap_lock_kept() : $why );
+	}
+
+	/**
+	 * @return string The sentence for WordPress's lock for updates that a swap took and could not give back.
+	 */
+	public static function swap_lock_kept() {
+		return __( 'WordPress\'s lock for updates, which this call took, could not be given back as its own, so it stays: updates and swaps of this site can be refused until it is an hour old; from then on the next one takes it over.', 'alphabridge-mcp' );
 	}
 
 	/**
@@ -1289,9 +1389,25 @@ class AB_MCP_Update_Guard {
 	 * @return bool
 	 */
 	private static function swap_holds( $note ) {
-		$read = AB_MCP_Shape::read( $note, self::SWAP_NOTE );
-		$time = AB_MCP_Shape::read( self::on_main_site( 'get_option', self::LOCK . '.lock' ), self::LOCK_TIME );
+		$read = AB_MCP_Store_Inputs::read( 'swap.note', $note );
+		$time = AB_MCP_Store_Inputs::read( 'swap.core_lock', self::on_main_site( 'get_option', self::LOCK . '.lock' ) );
 		return null !== $read && null !== $time && $time <= $read['started'] + 5;
+	}
+
+	/**
+	 * Whether a note of an update of AlphaBridge holds the lock, for the
+	 * answer of busy() (B1 of the Codex round on 4881c0d, Leitsatz D): it
+	 * names an item, its start is a whole number, and the time of the lock,
+	 * read in the form of its row (swap.core_lock), is no later than the
+	 * note. A time not read names no holder (note_holds_lock() counts it as
+	 * held for taking over a note of a request that died).
+	 *
+	 * @param mixed $note The note (AB_MCP_Update_Log::running()).
+	 * @return bool
+	 */
+	private static function update_holds( $note ) {
+		$time = AB_MCP_Store_Inputs::read( 'swap.core_lock', self::on_main_site( 'get_option', self::LOCK . '.lock' ) );
+		return is_array( $note ) && isset( $note['item'] ) && is_int( $note['started'] ) && null !== $time && $time <= $note['started'] + 5;
 	}
 
 	/**

@@ -19,7 +19,7 @@
  * changes of the code (AB_MCP_Change_Lock) and WordPress's lock for updates
  * (AB_MCP_Update_Guard::take_swap_lock()); the release of its code
  * (AB_MCP_Sync_Code_Ops::released(), the one rule of Z24); the test
- * requests switched on for running code and the time left; OPcache for a
+ * requests switched on and the time left; OPcache for a
  * PHP file of running code (invalidate()); the test requests before (home
  * page, MCP endpoint, admin-post.php reached); the time for the swap, its
  * test after it and a swap back with its test; then the live unit hashed
@@ -96,9 +96,11 @@ final class AB_MCP_Sync_Code_Swap_Calls {
 
 	/**
 	 * Give the lock for changes back once.
+	 *
+	 * @return bool Whether it was given back (AB_MCP_Change_Lock::release()).
 	 */
 	public function release_lock() {
-		AB_MCP_Change_Lock::release();
+		return AB_MCP_Change_Lock::release();
 	}
 
 	/**
@@ -130,16 +132,53 @@ final class AB_MCP_Sync_Code_Swap_Calls {
 	 * @return string|WP_Error The nonce of the note.
 	 */
 	public function core_lock( $kind, $ref ) {
-		return AB_MCP_Update_Guard::take_swap_lock( $kind, $ref );
+		return AB_MCP_Update_Guard::take_swap_lock( $kind, $ref, $this );
+	}
+
+	/**
+	 * Whether this swap holds WordPress's lock for updates now, its rows
+	 * read as stored (AB_MCP_Update_Guard::swap_lock_held()).
+	 *
+	 * @param string $nonce The nonce of the note.
+	 * @return bool
+	 */
+	public function core_held( $nonce ) {
+		return AB_MCP_Update_Guard::swap_lock_held( $nonce, $this );
 	}
 
 	/**
 	 * Give WordPress's lock for updates back (where the note is ours).
 	 *
 	 * @param string $nonce The nonce of the note.
+	 * @return bool Whether it was given back.
 	 */
 	public function free_core_lock( $nonce ) {
-		AB_MCP_Update_Guard::free_swap_lock( $nonce );
+		return AB_MCP_Update_Guard::free_swap_lock( $nonce, $this );
+	}
+
+	/**
+	 * A row of an option of the main site as stored, past every cache and
+	 * filter, its value unpacked as WordPress reads it (without classes):
+	 * for the rows of WordPress's lock for updates and of the note beside it
+	 * (AB_MCP_Update_Guard). Not read (null) in a network: the note lies in
+	 * the options of the network there, and a swap does not run in one.
+	 *
+	 * @param string $name Option.
+	 * @return array{value:mixed}|false|null False where there is none; null where it is not read.
+	 */
+	public function stored( $name ) {
+		if ( function_exists( 'is_multisite' ) && is_multisite() ) {
+			return null;
+		}
+		$row = AB_MCP_Sync_Rows::option( (string) $name );
+		if ( false === $row ) {
+			return false;
+		}
+		if ( ! is_array( $row ) || ! array_key_exists( 'value', $row ) || ! is_string( $row['value'] ) ) {
+			return null;
+		}
+		$read = AB_MCP_Sync_Canon::unserialized( $row['value'] );
+		return true === $read['ok'] ? array( 'value' => $read['value'] ) : null;
 	}
 
 	/**
@@ -234,36 +273,17 @@ final class AB_MCP_Sync_Code_Swap {
 	/** The results of a target that count as reached: WordPress ran there (AB_MCP_Php_Probe::judge()). */
 	const REACHED = array( 'ok', 'stopped', 'fatal' );
 
-	/**
-	 * What prepare() is asked with: the run, the unit of the swap step in
-	 * the form of its row plan.code, the packages of the environment of the
-	 * report, the stage the journal of its stage step names (step.stage) and
-	 * when the swap has to be over (on the clock of clock(), given by the
-	 * caller).
-	 */
-	const PREPARE = array(
-		'type'   => 'record',
-		'fields' => array(
-			'run_id' => AB_MCP_Store_Inputs::RUN,
-			'unit'   => AB_MCP_Store_Inputs::TABLE['plan.code']['form']['fields']['units']['item'],
-			'env'    => AB_MCP_Store_Inputs::TABLE['plan.code']['form']['fields']['env'],
-			'stage'  => AB_MCP_Store_Inputs::TABLE['step.stage']['form']['fields']['stage'],
-			'until'  => array(
-				'type' => 'number',
-				'min'  => 0,
-				'max'  => null,
-			),
-		),
-		'extra'  => false,
-	);
-
 	/** The clock of the budget of a swap; a callable returning seconds, null for microtime(). Set by tests only. */
 	public static $clock = null;
 
 	/** The calls to the outside (the seam); only the tests put another object here. */
 	private static $naht_sync_code_swap = null;
 
-	/** The locks prepare() took in this request and holds until release(): the lock for changes, and the nonce of the note on WordPress's lock for updates. */
+	/**
+	 * The locks prepare() took in this request and holds until release():
+	 * the lock for changes, and the nonce of the note on WordPress's lock for
+	 * updates. A lock release() could not give back stays here (A7).
+	 */
 	private static $held = array(
 		'change' => false,
 		'core'   => null,
@@ -439,25 +459,65 @@ final class AB_MCP_Sync_Code_Swap {
 	}
 
 	/**
-	 * Give back the locks prepare() took (each once; WordPress's lock for
-	 * updates first, in the other order of taking).
+	 * Give back the locks prepare() took: WordPress's lock for updates
+	 * first, in the other order of taking, and the lock for changes whatever
+	 * came of the first (each in its own finally). A lock goes out of $held
+	 * only where its release answered true; one that is not given back (an
+	 * answer not true, or a Throwable) stays there and is named.
+	 *
+	 * @return string[] The locks that stay: core, change.
 	 */
 	public static function release() {
-		$core = self::$held['core'];
-		if ( null !== $core ) {
-			self::$held['core'] = null;
-			self::calls()->free_core_lock( $core );
+		$kept = array();
+		try {
+			if ( null !== self::$held['core'] ) {
+				$freed = false;
+				try {
+					$freed = true === self::calls()->free_core_lock( self::$held['core'] );
+				} finally {
+					if ( $freed ) {
+						self::$held['core'] = null;
+					}
+				}
+				if ( ! $freed ) {
+					$kept[] = 'core';
+				}
+			}
+		} finally {
+			if ( self::$held['change'] ) {
+				self::$held['change'] = true !== self::calls()->release_lock();
+			}
 		}
 		if ( self::$held['change'] ) {
-			self::$held['change'] = false;
-			self::calls()->release_lock();
+			$kept[] = 'change';
 		}
+		return $kept;
+	}
+
+	/**
+	 * A refusal of prepare() with the locks it could not give back named.
+	 *
+	 * @param WP_Error $refusal The refusal.
+	 * @param string[] $kept    release().
+	 * @return WP_Error
+	 */
+	private static function with_kept( WP_Error $refusal, array $kept ) {
+		$message = $refusal->get_error_message();
+		if ( in_array( 'core', $kept, true ) ) {
+			$message .= ' ' . AB_MCP_Update_Guard::swap_lock_kept();
+		}
+		if ( in_array( 'change', $kept, true ) ) {
+			/* translators: %d: minutes */
+			$message .= ' ' . sprintf( __( 'AlphaBridge\'s lock for changes of the code, which this call took, could not be given back, so it stays: other changes through AlphaBridge can be refused until it is %d minutes old; from then on the next one takes it over.', 'alphabridge-mcp' ), intdiv( AB_MCP_Change_Lock::TIMEOUT, 60 ) );
+		}
+		return new WP_Error( $refusal->get_error_code(), $message, array( 'kept' => $kept ) );
 	}
 
 	/**
 	 * The locks of a swap (E5 1, Z10): the lock for changes of the code, then
-	 * WordPress's lock for updates with the note of the swap; where the
-	 * second is not taken, the first is given back.
+	 * WordPress's lock for updates with the note of the swap (the guard gives
+	 * back what it took of the second where it is not held, A6); where the
+	 * second is not taken, prepare() gives the first back (release()).
 	 *
 	 * @param string $kind plugin or theme.
 	 * @param string $ref  The unit.
@@ -471,7 +531,6 @@ final class AB_MCP_Sync_Code_Swap {
 		self::$held['change'] = true;
 		$core                 = self::calls()->core_lock( $kind, $ref );
 		if ( ! is_string( $core ) ) {
-			self::release();
 			return is_wp_error( $core ) ? $core : self::lock_unknown();
 		}
 		self::$held['core'] = $core;
@@ -495,11 +554,16 @@ final class AB_MCP_Sync_Code_Swap {
 	 * call and under these locks only. A refusal gives every lock back and
 	 * names the way; so does a Throwable on the way.
 	 *
-	 * @param array $swap As PREPARE.
+	 * @param mixed $swap What the swap is asked with, in the form of its row
+	 *                    swap.prepare: the run, the unit of the swap step,
+	 *                    the packages of the environment of the report, the
+	 *                    stage the journal of its stage step names, and when
+	 *                    the swap has to be over (on the clock of clock(),
+	 *                    given by the caller).
 	 * @return array|WP_Error target, runs, probe, took, live, tree, signed, version.
 	 */
-	public static function prepare( array $swap ) {
-		$in = AB_MCP_Shape::read( $swap, self::PREPARE );
+	public static function prepare( $swap ) {
+		$in = AB_MCP_Store_Inputs::read( 'swap.prepare', $swap );
 		if ( null === $in || 'swap' !== $in['unit']['op'] || ( 'create' === $in['unit']['unit_op'] ) !== ( null === $in['unit']['pair_id'] ) || ( null === $in['unit']['pair_id'] ) !== ( null === $in['unit']['pair_hash'] ) ) {
 			return self::refusal( 'code:swap_args', __( 'The swap was asked with values not of its form (the run, the unit of its step, the packages of the environment, the stage and the time of the call), so nothing is taken and nothing is swapped. Abort the run (wp_site_push action=abort), make a new report (wp_site_diff) and plan again.', 'alphabridge-mcp' ) );
 		}
@@ -513,7 +577,10 @@ final class AB_MCP_Sync_Code_Swap {
 			$prepared = true === $taken ? self::under_locks( $in, $target ) : $taken;
 		} finally {
 			if ( ! is_array( $prepared ) ) {
-				self::release();
+				$kept = self::release();
+				if ( array() !== $kept && is_wp_error( $prepared ) ) {
+					$prepared = self::with_kept( $prepared, $kept );
+				}
 			}
 		}
 		return $prepared;
@@ -521,11 +588,11 @@ final class AB_MCP_Sync_Code_Swap {
 
 	/**
 	 * E5 2 to 4 under the locks: the release of the code read again (Z24),
-	 * the test requests switched on for running code and the time left,
+	 * the test requests switched on (for every swap) and the time left,
 	 * OPcache for running code, the test requests before, the time for the
 	 * rest of the swap; then the checks of E5 5 and before the mutation.
 	 *
-	 * @param array  $in     The arguments, read in the form PREPARE.
+	 * @param array  $in     The arguments, read in the form of the row swap.prepare.
 	 * @param string $target The folder or file of the unit in the site.
 	 * @return array|WP_Error
 	 */
@@ -536,12 +603,14 @@ final class AB_MCP_Sync_Code_Swap {
 		if ( is_wp_error( $runs ) ) {
 			return $runs;
 		}
-		// A unit made new has no running code here (released() refuses one
-		// WordPress names as running): E5 3 is for running code only.
-		$enabled = self::calls()->probe_enabled();
-		if ( $runs && true !== $enabled ) {
+		// The test requests before every swap, of running code or not (Z14,
+		// E5 4; A2 of the Codex round on 4881c0d): switched off, or not known
+		// as switched on, nothing is swapped. A unit made new has no running
+		// code here (released() refuses one WordPress names as running): E5 3
+		// (OPcache) is for running code only.
+		if ( true !== self::calls()->probe_enabled() ) {
 			/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name. */
-			return self::refusal( 'code:probe_off', sprintf( __( 'Code of the %1$s %2$s runs on this site, and the test requests of AlphaBridge are switched off here (the filter ab_mcp_php_probe_enabled), so it is not swapped: nothing would show whether the site still works after it. Switch the test requests on again, or update the unit by hand in wp-admin.', 'alphabridge-mcp' ), $kind, $ref ) );
+			return self::refusal( 'code:probe_off', sprintf( __( 'The test requests of AlphaBridge are switched off on this site (the filter ab_mcp_php_probe_enabled), or not read as switched on, so the %1$s %2$s is not swapped: nothing would show whether the site works before the swap and still works after it. Switch the test requests on again, or update the unit by hand in wp-admin.', 'alphabridge-mcp' ), $kind, $ref ) );
 		}
 		$left = self::time_left( $kind, $ref, $in['until'], self::RESERVE + 1, 0.0 );
 		if ( is_wp_error( $left ) ) {
@@ -558,15 +627,9 @@ final class AB_MCP_Sync_Code_Swap {
 				return $opcache;
 			}
 		}
-		$probe = array(
-			'answer' => null,
-			'took'   => 0.0,
-		);
-		if ( true === $enabled ) {
-			$probe = self::probe_before( $kind, $ref, $in['until'] );
-			if ( is_wp_error( $probe ) ) {
-				return $probe;
-			}
+		$probe = self::probe_before( $kind, $ref, $in['until'] );
+		if ( is_wp_error( $probe ) ) {
+			return $probe;
 		}
 		$now = self::time_left( $kind, $ref, $in['until'], 2 * $probe['took'] + self::RESERVE, $probe['took'] );
 		if ( is_wp_error( $now ) ) {
@@ -750,9 +813,14 @@ final class AB_MCP_Sync_Code_Swap {
 	private static function unchanged( array $in, $target, $now ) {
 		$unit = $in['unit'];
 		if ( 'create' === $unit['unit_op'] ) {
-			if ( false !== self::calls()->lstat( $target ) ) {
+			$empty = self::place_empty( $target );
+			if ( false === $empty ) {
 				/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name. */
 				return self::refusal( 'code:live_changed', sprintf( __( 'Something lies in the place of the %1$s %2$s on this site now, which the plan makes new here (code:live_changed), so it is not swapped. Make a new report (wp_site_diff) and plan again.', 'alphabridge-mcp' ), $unit['kind'], $unit['ref'] ) );
+			}
+			if ( true !== $empty ) {
+				/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name. */
+				return self::refusal( 'code:place_unknown', sprintf( __( 'Whether the place of the %1$s %2$s on this site, which the plan makes new here, is empty could not be read now (its folder was not listed, or the place not read), so it is not swapped. Call action=next again; where it keeps failing, ask the host why the folder of the plugins or themes cannot be read.', 'alphabridge-mcp' ), $unit['kind'], $unit['ref'] ) );
 			}
 			return null;
 		}
@@ -773,6 +841,28 @@ final class AB_MCP_Sync_Code_Swap {
 			return self::refusal( 'code:live_changed', sprintf( __( 'The files of the %1$s %2$s on this site are no longer the ones its pair is based on (code:live_changed), so it is not swapped, and the version of the staging site does not win over them. Where the plugin writes into its own folder while it runs, update it by hand in wp-admin; else make a new report (wp_site_diff) and plan again.', 'alphabridge-mcp' ), $unit['kind'], $unit['ref'] ) );
 		}
 		return $read;
+	}
+
+	/**
+	 * Whether the place of a unit made new is empty (Z3, A3 of the Codex
+	 * round on 4881c0d): true only where the folder above lists without its
+	 * name and lstat() finds nothing; false where something is there (lstat()
+	 * reads it, or the folder lists its name); null where that is not known
+	 * (the folder not listed, nothing read of the place).
+	 *
+	 * @param string $target The folder or file of the unit.
+	 * @return bool|null
+	 */
+	private static function place_empty( $target ) {
+		$stat  = self::calls()->lstat( $target );
+		$names = self::calls()->scandir( dirname( $target ) );
+		if ( is_array( $stat ) || ( is_array( $names ) && in_array( basename( $target ), $names, true ) ) ) {
+			return false;
+		}
+		if ( false !== $stat || ! is_array( $names ) ) {
+			return null;
+		}
+		return true;
 	}
 
 	/**

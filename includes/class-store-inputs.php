@@ -111,6 +111,90 @@ final class AB_MCP_Store_Inputs {
 		'max'    => null,
 	);
 
+	/**
+	 * A unit of a plan of the code: which unit, staged or swapped, made or
+	 * replaced, its pair as planned, the unit of the staging site by its
+	 * hash, whether its code runs here and whether the person released it
+	 * (rows plan.code and swap.prepare).
+	 */
+	const CODE_UNIT = array(
+		'type'   => 'record',
+		'fields' => array(
+			'seq'          => self::STEP,
+			'op'           => array(
+				'type'      => 'string',
+				'empty'     => false,
+				'max_bytes' => null,
+				'in'        => array( 'stage', 'swap' ),
+			),
+			'stage_seq'    => array( 'nullable' => true ) + self::STEP,
+			'n'            => self::RUN,
+			'kind'         => self::UNIT_KIND,
+			'ref'          => self::UNIT_NAME,
+			'unit_op'      => array(
+				'type'      => 'string',
+				'empty'     => false,
+				'max_bytes' => null,
+				'in'        => array( 'create', 'update', 'edit' ),
+			),
+			'pair_id'      => array( 'nullable' => true ) + self::RUN,
+			'pair_hash'    => array( 'nullable' => true ) + self::SHA256,
+			'staging_hash' => self::SHA256,
+			'version'      => array(
+				'type'   => 'record',
+				'fields' => array(
+					'staging' => array(
+						'type'      => 'string',
+						'empty'     => true,
+						'max_bytes' => 1024,
+						'nullable'  => true,
+					),
+					'live'    => array(
+						'type'      => 'string',
+						'empty'     => true,
+						'max_bytes' => 1024,
+						'nullable'  => true,
+					),
+				),
+				'extra'  => false,
+			),
+			'runs'         => array( 'type' => 'bool' ),
+			'accept'       => array( 'type' => 'bool' ),
+		),
+		'extra'  => false,
+	);
+
+	/** The packages of the environment of a report, in order (rows plan.code and swap.prepare). */
+	const CODE_ENV = array(
+		'type'      => 'list',
+		'empty'     => false,
+		'item'      => self::PACKAGE,
+		'unique'    => true,
+		'max_items' => null,
+	);
+
+	/**
+	 * A stage in the protected store: its group, tree and hash, where it came
+	 * from and how large it is (rows step.stage and swap.prepare).
+	 */
+	const STAGE_REF = array(
+		'type'   => 'record',
+		'fields' => array(
+			'gid'    => self::PACKAGE,
+			'name'   => self::UNIT_NAME,
+			'hash'   => self::SHA256,
+			'source' => array(
+				'type'      => 'string',
+				'empty'     => false,
+				'max_bytes' => null,
+				'in'        => array( 'wordpress.org', 'packages' ),
+			),
+			'files'  => self::RUN,
+			'bytes'  => self::COUNT,
+		),
+		'extra'  => false,
+	);
+
 	/** The names in a folder, as scandir() gives them: texts, none twice. */
 	const NAMES = array(
 		'type'      => 'list',
@@ -829,13 +913,7 @@ final class AB_MCP_Store_Inputs {
 			'form'     => array(
 				'type'   => 'record',
 				'fields' => array(
-					'env'      => array(
-						'type'      => 'list',
-						'empty'     => false,
-						'item'      => self::PACKAGE,
-						'unique'    => true,
-						'max_items' => null,
-					),
+					'env'      => self::CODE_ENV,
 					'packages' => array(
 						'type'      => 'list',
 						'empty'     => true,
@@ -846,52 +924,7 @@ final class AB_MCP_Store_Inputs {
 					'units'    => array(
 						'type'      => 'list',
 						'empty'     => false,
-						'item'      => array(
-							'type'   => 'record',
-							'fields' => array(
-								'seq'          => self::STEP,
-								'op'           => array(
-									'type'      => 'string',
-									'empty'     => false,
-									'max_bytes' => null,
-									'in'        => array( 'stage', 'swap' ),
-								),
-								'stage_seq'    => array( 'nullable' => true ) + self::STEP,
-								'n'            => self::RUN,
-								'kind'         => self::UNIT_KIND,
-								'ref'          => self::UNIT_NAME,
-								'unit_op'      => array(
-									'type'      => 'string',
-									'empty'     => false,
-									'max_bytes' => null,
-									'in'        => array( 'create', 'update', 'edit' ),
-								),
-								'pair_id'      => array( 'nullable' => true ) + self::RUN,
-								'pair_hash'    => array( 'nullable' => true ) + self::SHA256,
-								'staging_hash' => self::SHA256,
-								'version'      => array(
-									'type'   => 'record',
-									'fields' => array(
-										'staging' => array(
-											'type'      => 'string',
-											'empty'     => true,
-											'max_bytes' => 1024,
-											'nullable'  => true,
-										),
-										'live'    => array(
-											'type'      => 'string',
-											'empty'     => true,
-											'max_bytes' => 1024,
-											'nullable'  => true,
-										),
-									),
-									'extra'  => false,
-								),
-								'runs'         => array( 'type' => 'bool' ),
-								'accept'       => array( 'type' => 'bool' ),
-							),
-							'extra'  => false,
-						),
+						'item'      => self::CODE_UNIT,
 						'unique'    => false,
 						'max_items' => null,
 					),
@@ -920,23 +953,7 @@ final class AB_MCP_Store_Inputs {
 						),
 						'extra'  => false,
 					),
-					'stage' => array(
-						'type'   => 'record',
-						'fields' => array(
-							'gid'    => self::PACKAGE,
-							'name'   => self::UNIT_NAME,
-							'hash'   => self::SHA256,
-							'source' => array(
-								'type'      => 'string',
-								'empty'     => false,
-								'max_bytes' => null,
-								'in'        => array( 'wordpress.org', 'packages' ),
-							),
-							'files'  => self::RUN,
-							'bytes'  => self::COUNT,
-						),
-						'extra'  => false,
-					),
+					'stage' => self::STAGE_REF,
 				),
 				'extra'  => false,
 			),
@@ -1025,8 +1042,73 @@ final class AB_MCP_Store_Inputs {
 		),
 		'swap.lock'                => array(
 			'consumer' => 'code',
-			'source'   => 'AB_MCP_Sync_Code_Swap::lock_held(), the row of the option of AB_MCP_Change_Lock',
-			'field'    => 'the time the lock for changes of the code was taken, as WordPress writes it: whether the lock a swap holds has its row (V7)',
+			'source'   => 'AB_MCP_Sync_Code_Swap::lock_held(), the row of the option of AB_MCP_Change_Lock; AB_MCP_Change_Lock::held_elsewhere(), that option as get_option() gives it',
+			'field'    => 'the time the lock for changes of the code was taken or last renewed, as WordPress writes it: whether the lock a swap holds has its row (V7), and the time a refusal names where another holds it',
+			'form'     => array(
+				'type'   => 'int',
+				'digits' => true,
+				'min'    => 1,
+				'max'    => null,
+			),
+		),
+		'swap.prepare'             => array(
+			'consumer' => 'code',
+			'source'   => 'AB_MCP_Sync_Code_Swap::prepare(), from its caller: the item of the step (AB_MCP_Sync_Code_Ops::item()), the stage of its journal (staged()) and the time of the call',
+			'field'    => 'what a swap is asked with: the run, the unit of the swap step, the packages of the environment of the report, the stage the journal of its stage step names, and when the swap has to be over (on the clock of the swap): whether prepare() takes any lock at all',
+			'form'     => array(
+				'type'   => 'record',
+				'fields' => array(
+					'run_id' => self::RUN,
+					'unit'   => self::CODE_UNIT,
+					'env'    => self::CODE_ENV,
+					'stage'  => self::STAGE_REF,
+					'until'  => array(
+						'type' => 'number',
+						'min'  => 0,
+						'max'  => null,
+					),
+				),
+				'extra'  => false,
+			),
+		),
+		'swap.note'                => array(
+			'consumer' => 'code',
+			'source'   => 'AB_MCP_Update_Guard, the note of AlphaBridge beside WordPress\'s lock for updates (AB_MCP_Update_Log::RUNNING) as stored, and as get_site_option() gives it for busy()',
+			'field'    => 'the note of a swap on WordPress\'s lock for updates: its type, unit, the time of the lock it names and its nonce; whether a swap holds that lock (taken, held before the first mutation, given back) and whether a refused update names the swap',
+			'form'     => array(
+				'type'   => 'record',
+				'fields' => array(
+					'type'    => array(
+						'type'      => 'string',
+						'empty'     => false,
+						'max_bytes' => null,
+						'in'        => array( 'swap' ),
+					),
+					'kind'    => self::UNIT_KIND,
+					'ref'     => array(
+						'type'      => 'string',
+						'empty'     => false,
+						'max_bytes' => 1024,
+					),
+					'started' => array(
+						'type'   => 'int',
+						'digits' => false,
+						'min'    => 1,
+						'max'    => null,
+					),
+					'nonce'   => array(
+						'type'      => 'string',
+						'empty'     => false,
+						'max_bytes' => 64,
+					),
+				),
+				'extra'  => false,
+			),
+		),
+		'swap.core_lock'           => array(
+			'consumer' => 'code',
+			'source'   => 'AB_MCP_Update_Guard, the row of WordPress\'s lock for updates (auto_updater.lock) as stored, and as get_option() gives it for busy()',
+			'field'    => 'the time WordPress\'s lock for updates was taken, as WP_Upgrader::create_lock() writes it: whether a swap may take it (none, or one an hour old), holds it and gives it back, and whether a note names its holder',
 			'form'     => array(
 				'type'   => 'int',
 				'digits' => true,
