@@ -279,19 +279,28 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
 
 - **Fundstelle:** `AB_MCP_Protected_Store::group()` und `no_group()` (`includes/class-protected-store.php`);
   `AB_MCP_Sync_Code_Stage::state()` (`includes/sync/class-sync-code-stage.php`) → `files()` → `group()`;
-  `AB_MCP_Sync_Code_Ops::not_checked()` (`includes/sync/class-sync-code-ops.php`); `PERMANENT` in
-  `AB_MCP_Sync_Code_Stage`.
+  `AB_MCP_Sync_Code_Stage::take_in()` und `write_state()`; `AB_MCP_Sync_Code_Ops::stage()`, `not_checked()` und
+  `not_staged()` (`includes/sync/class-sync-code-ops.php`); `PERMANENT` in `AB_MCP_Sync_Code_Stage`.
 - **Quelle:** gezielte Codex-Nachfrage zu `f24115a` (1 A), geschlossene Codex-Prüfung von K4 (2 A an derselben
-  Stelle, Stoppfall), Entscheid Thomas vom 13.11.2026 16:04 («D: Eine ehrliche Meldung», Teil K4d).
+  Stelle, Stoppfall), Entscheid Thomas vom 13.11.2026 16:04 («D: Eine ehrliche Meldung», Teil K4d), geschlossene
+  Codex-Prüfung von K4d (1 A: der Satz über die Wirkung des Aufrufs), Entscheid der Steuerung in Thomas' Auftrag vom
+  13.11.2026 16:28 (Teil K4e).
 - **Was:** Gibt der Sidecar der Gruppe einer Stufe dauerhaft keinen Eintrag seiner Gruppe (nicht lesbar, keine Datei,
   nicht in der Form, ein Eintrag einer anderen Gruppe, oder er fehlt), lehnt `group()` mit `ab_mcp_store_no_group` ab.
   Die Meldung nennt beide Möglichkeiten (die Gruppe ist nicht da: nie geöffnet oder entfernt; oder sie ist da, und ihr
-  Eintrag oder ihr Ordner fehlt oder liest nicht) und den Weg für beide, nie eine falsche: der Store unterscheidet sie
-  an dieser Stelle nicht. Der Fehler ist vorübergehend (nicht in `PERMANENT`). Bleibt der Schaden, bleibt der Schritt
-  bei jedem `wp_site_push action=next` `planned`, nie `failed`; an der Stufe und an der Site wird nichts geschrieben.
-  Den Ausweg nennt die Meldung des Schritts: `wp_site_push action=abort` schliesst den Lauf auch mit dem beschädigten
-  Sidecar (belegt in
-  `SyncCodeRunTest::testADamagedSidecarOfTheStageLeavesTheStepPlannedWithItsReasonUntilItIsBackOrTheRunIsAborted`).
+  Eintrag oder ihr Ordner fehlt oder liest nicht) und den Weg für beide und legt sich auf keine fest: der Store
+  unterscheidet sie an dieser Stelle nicht. Darüber, was derselbe Aufruf vorher geschrieben hat, sagt sie nichts.
+  - Ist die Stufe schon bereitgestellt (das Journal des Schritts steht), ist der Fehler vorübergehend
+    (`ab_mcp_store_no_group` steht nicht in `PERMANENT`): `AB_MCP_Sync_Code_Ops::stage()` antwortet über
+    `not_checked()`, der Schritt bleibt bei jedem `wp_site_push action=next` `planned`, nie `failed`, und an der Site
+    wird nichts geschrieben. Den Ausweg nennt die Meldung des Schritts: `wp_site_push action=abort` schliesst den Lauf
+    auch mit dem beschädigten Sidecar (belegt in
+    `SyncCodeRunTest::testADamagedSidecarOfTheStageLeavesTheStepPlannedWithItsReasonUntilItIsBackOrTheRunIsAborted`,
+    dort mit dem Schaden vor dem Aufruf: auch an der Stufe wird dann nichts geschrieben).
+  - Fällt der Schaden in den ersten Aufruf, zwischen `put_tree()` und dem ersten Zustand (`take_in()` →
+    `write_state()` → `put()`), gibt `AB_MCP_Sync_Code_Stage::stage()` den Fehler zurück, und
+    `AB_MCP_Sync_Code_Ops::stage()` beendet den Schritt über `not_staged()` mit `failed`. Der schon geschriebene Baum
+    bleibt in der Gruppe: `take_in()` entfernt nichts. Nach dem Code gelesen, ohne eigenen Test.
   Die genaue Trennung «fehlt / beschädigt / dauerhaft» (und damit ein `failed` für einen dauerhaft formwidrigen
   Sidecar) ist Folgeposten der Fehlerweg-Prüfung des Teils, zusammen mit `sidecar()`.
 - **Trifft Normalfall:** nein. Der eigene Code schreibt einen Sidecar nur ganz (`write_entry()` über eine Temp-Datei,
