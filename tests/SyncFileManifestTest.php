@@ -688,6 +688,10 @@ final class SyncFileManifestTest extends TestCase {
 			self::assertSame( 'too_large', $this->read( 'leicht', 'live', NAN, true )['cause'], 'A deadline that is no number.' );
 			self::assertSame( 'too_large', $this->read( 'leicht', 'live', -INF, true )['cause'], 'A deadline of -INF.' );
 			self::assertTrue( $this->read( 'leicht', 'live', INF, true )['complete'], 'INF: no deadline.' );
+			// A deadline that is no number at all, which PHP would compare as
+			// one: past the read() of this test (it types a float), straight
+			// to unit() (Codex confirmation 2).
+			self::assertSame( 'too_large', AB_MCP_Sync_File_Manifest::unit( $this->dir . '/plugins', 'leicht', 'live', '100', true, 'plugin' )['cause'], 'A deadline as text.' );
 			self::assertTrue( $this->read( 'leicht', 'live', 100.0, true )['complete'] );
 		} finally {
 			AB_MCP_Sync_Env::$clock = null;
