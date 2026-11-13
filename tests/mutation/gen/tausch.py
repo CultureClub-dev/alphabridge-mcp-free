@@ -14,8 +14,10 @@ Run it again after a change of these classes, then the list
 import os, re, sys
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 CK = 'includes/sync/class-sync-code-kind.php'
-VAR = {CK: '$ck'}
-CLASSES = {'kind': ('unit', 'SyncCodeKindTest')}
+DE = 'includes/sync/class-sync-decision.php'
+PU = 'includes/sync/class-sync-push.php'
+VAR = {CK: '$ck', DE: '$de', PU: '$pu'}
+CLASSES = {'kind': ('unit', 'SyncCodeKindTest'), 'env': ('unit', 'SyncEnvTest'), 'run': ('unit', 'SyncRunTest')}
 entries = []
 
 
@@ -59,6 +61,35 @@ for (op, unit, caps, less) in (
       "\t\t\t'%s' %s=> %s,\n" % (unit, pad, caps) if False else "\t\t\t'%s'%s => %s," % (unit, ' ' if 'theme' == unit else '', caps),
       "\t\t\t'%s'%s => %s," % (unit, ' ' if 'theme' == unit else '', less), 'kind', CAPS)
 
+# ------------------------------------------- the report: a unit the swap takes over (E5, F5)
+PARTS = 'testThePartsOfAUnitWithAPairAreJudgedEachAgainstItsOwnBase'
+DIFFERS = 'testAPluginWhoseFilesOrMainFilesRunningDifferDiffersWithThePart'
+ONE = 'testAUnitOnOneSideOnly'
+TAKES = "\t\t$takes   = $swapped && 'changed_on_staging' === $files && 'changed_on_staging' === $entry['result'];"
+e('unit-takes', 'unit_way(): the files of a plugin or theme changed on staging and unchanged here are taken over', DE,
+  TAKES, "\t\t$takes   = false;", 'env', PARTS)
+e('unit-takes-swapped-only', 'unit_way(): only of a kind the swap writes; a unit of another kind waits with the lock of its kind', DE,
+  TAKES, "\t\t$takes   = 'changed_on_staging' === $files && 'changed_on_staging' === $entry['result'];", 'env', PARTS)
+e('unit-takes-no-conflict', 'unit_way(): nothing of a unit is taken over while a part of it is in conflict', DE,
+  TAKES, "\t\t$takes   = $swapped && 'changed_on_staging' === $files;", 'env', PARTS)
+e('unit-takes-files', 'unit_way(): the files are what the swap takes; which main files run alone waits with the lock of its kind', DE,
+  TAKES, "\t\t$takes   = $swapped && 'changed_on_staging' === $entry['result'];", 'env', PARTS)
+e('unit-takes-action', 'unit_way(): what the swap takes over says take_over', DE,
+  "\t\t} elseif ( $takes ) {\n\t\t\t$entry['action'] = 'take_over';", "\t\t} elseif ( false ) {\n\t\t\t$entry['action'] = 'take_over';", 'env', PARTS)
+e('unit-takes-no-lock', 'unit_way(): what the swap takes over carries no lock of its kind', DE,
+  "( ! $takes && in_array( $entry['result'], array( 'changed_on_staging', 'conflict' ), true ) )", "( in_array( $entry['result'], array( 'changed_on_staging', 'conflict' ), true ) )", 'env', PARTS)
+e('unit-differs-no-stage', 'unit_way(): a plugin or theme that differs without a pair waits for its pair, with no lock of a stage', DE,
+  "\t\t$waits = $swapped ? (", "\t\t$waits = false ? (", 'env', DIFFERS)
+e('unit-new-create', 'unit_new(): a plugin or theme only on staging is made here by the swap (F5)', DE,
+  "\t\treturn in_array( $kind, self::SWAPPED, true ) ? 'create' : 'locked';", "\t\treturn 'locked';", 'env', ONE)
+e('unit-new-swapped-only', 'unit_new(): a unit of another kind only on staging stays locked', DE,
+  "\t\treturn in_array( $kind, self::SWAPPED, true ) ? 'create' : 'locked';", "\t\treturn 'create';", 'env', ONE)
+
+# ------------------------------------------- the plan: a unit of code is no step of the contents (E19, Z30)
+VERDICT = 'testWhichEntryOfAReportIsAStepLockedOrNothing'
+e('z30-unit-no-content-step', 'verdict(): a unit of code the swap takes over or makes is never an item of a run of the contents (Z30)', PU,
+  "\t\tif ( 'environment' === $entry['kind'] && in_array( $action, array( 'take_over', 'create' ), true ) ) {", "\t\tif ( false ) {", 'run', VERDICT)
+
 # ------------------------------------------------ check and write
 src = {f: open(os.path.join(ROOT, f)).read() for f in VAR}
 errors = []
@@ -85,10 +116,11 @@ def php(s):
 
 
 out = ['<?php', '/**', ' * The clauses of the swap of the code of the site (Z8b branch 5: the kind',
-       ' * code with the rights of E10 at Z26 and its place in the registry for Z38).',
+       ' * code with the rights of E10 at Z26 and its place in the registry for Z38;',
+       ' * the entry of a unit the swap takes over or makes, in the report).',
        ' * Written by tests/mutation/gen/tausch.py from the source; change the entries',
        ' * there and run it again.', ' *',
-       ' * Held by the unit suite (SyncCodeKindTest).', ' *',
+       ' * Held by the unit suite (SyncCodeKindTest, SyncEnvTest).', ' *',
        ' * Not listed, with why (bericht-zweig-5.md), equivalent: in rights() the',
        ' * count of the two halves of a unit beside the kind of unit (a ref without a',
        ' * colon has one half, whose kind is then the whole ref and no kind of UNITS).',

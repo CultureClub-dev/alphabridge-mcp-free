@@ -93,6 +93,7 @@
 defined( 'ABSPATH' ) || exit;
 
 require_once __DIR__ . '/class-sync-run.php';
+require_once __DIR__ . '/class-sync-code-ops.php';
 require_once __DIR__ . '/class-sync-backup.php';
 require_once __DIR__ . '/class-sync-said.php';
 require_once __DIR__ . '/class-sync-guard.php';
@@ -1015,6 +1016,13 @@ final class AB_MCP_Sync_Engine {
 	 */
 	private static function run_write( array $run, array $step, array $ctx ) {
 		$plan = is_array( $run['plan'] ) ? $run['plan'] : array();
+		// A step of a run of the code (Z8b branch 5): its one entrance
+		// (AB_MCP_Sync_Code_Ops::run(), Z24), by the unit the plan names for
+		// it; a plan of the code that names none refuses (never an object).
+		$unit = AB_MCP_Sync_Code_Ops::item( $plan, (int) $step['seq'] );
+		if ( null !== $unit ) {
+			return is_wp_error( $unit ) ? $unit : AB_MCP_Sync_Code_Ops::run( $run, $step, $unit );
+		}
 		$item = null;
 		foreach ( isset( $plan['objects'] ) && is_array( $plan['objects'] ) ? $plan['objects'] : array() as $one ) {
 			if ( (int) $one['seq'] === (int) $step['seq'] ) {
@@ -2665,17 +2673,9 @@ final class AB_MCP_Sync_Engine {
 					continue;
 				}
 				++$result['written'];
-				$target  = isset( $one['parts']['object']['target'] ) ? (string) $one['parts']['object']['target'] : '';
-				$w       = self::writer( isset( $one['parts']['object']['kind'] ) ? (string) $one['parts']['object']['kind'] : 'post' );
-				$live_id = isset( $one['result']['live_ref'] ) ? self::live_of( $w, $one['result']['live_ref'] ) : 0;
-				$later   = ( $last[ ( $one['parts']['object']['kind'] ?? 'post' ) . ':' . (string) $live_id ] ?? (int) $one['seq'] ) !== (int) $one['seq'];
-				$hash    = self::is_ref( $live_id ) && null !== $w && ! $later ? $w::live_hash( $live_id, $ctx['source'] ) : null;
-				if ( ! $later && ( null === $hash || ! hash_equals( $target, $hash ) ) ) {
-					$result['findings'][] = array(
-						'seq'     => (int) $one['seq'],
-						/* translators: 1: kind of the object, as the tools name it (post, term, …), 2: its reference on this site, 3: step number. */
-						'message' => sprintf( __( 'The %1$s %2$s no longer hashes to the target of step %3$d (changed since it was written, or not readable whole).', 'alphabridge-mcp' ), $one['parts']['object']['kind'] ?? 'post', $live_id, (int) $one['seq'] ),
-					);
+				list( $live_id, $finding ) = self::written( $run, $one, $last, $ctx );
+				if ( null !== $finding ) {
+					$result['findings'][] = $finding;
 				}
 				// The first published object with a page of its own is the
 				// sample: a template, a template part, the global styles, a
@@ -2876,6 +2876,44 @@ final class AB_MCP_Sync_Engine {
 		}
 		/* translators: 1: kind of the object, as the tools name it (post), 2: its id on this site. */
 		return sprintf( __( 'The published %1$s %2$d answered 200 but did not show the title of the written object: a page cache may serve an old version (empty it and open the page), or the theme does not show titles.', 'alphabridge-mcp' ), (string) $kind, (int) $id );
+	}
+
+	/**
+	 * What the check of the run finds of one written step (run_verify()): a
+	 * step of the contents against its target (the object hashed now, where
+	 * no later step of the run wrote it again); a step of a run of the code
+	 * (Z8b branch 5) by its own check (AB_MCP_Sync_Code_Ops::finding()),
+	 * told by the plan of the run and never judged as an object (the
+	 * pre-check of branch 5, V18).
+	 *
+	 * @param array $run  The run.
+	 * @param array $one  The step, done.
+	 * @param array $last The step that wrote each object last, by kind:ref.
+	 * @param array $ctx  context().
+	 * @return array The object here (0 for none), and the finding or null.
+	 */
+	private static function written( array $run, array $one, array $last, array $ctx ) {
+		$unit = AB_MCP_Sync_Code_Ops::item( is_array( $run['plan'] ) ? $run['plan'] : array(), (int) $one['seq'] );
+		if ( null !== $unit ) {
+			$found = is_wp_error( $unit ) ? $unit->get_error_message() : AB_MCP_Sync_Code_Ops::finding( $one, $unit );
+			return array( 0, null === $found ? null : array( 'seq' => (int) $one['seq'], 'message' => $found ) );
+		}
+		$target  = isset( $one['parts']['object']['target'] ) ? (string) $one['parts']['object']['target'] : '';
+		$w       = self::writer( isset( $one['parts']['object']['kind'] ) ? (string) $one['parts']['object']['kind'] : 'post' );
+		$live_id = isset( $one['result']['live_ref'] ) ? self::live_of( $w, $one['result']['live_ref'] ) : 0;
+		$later   = ( $last[ ( $one['parts']['object']['kind'] ?? 'post' ) . ':' . (string) $live_id ] ?? (int) $one['seq'] ) !== (int) $one['seq'];
+		$hash    = self::is_ref( $live_id ) && null !== $w && ! $later ? $w::live_hash( $live_id, $ctx['source'] ) : null;
+		if ( $later || ( null !== $hash && hash_equals( $target, $hash ) ) ) {
+			return array( $live_id, null );
+		}
+		return array(
+			$live_id,
+			array(
+				'seq'     => (int) $one['seq'],
+				/* translators: 1: kind of the object, as the tools name it (post, term, …), 2: its reference on this site, 3: step number. */
+				'message' => sprintf( __( 'The %1$s %2$s no longer hashes to the target of step %3$d (changed since it was written, or not readable whole).', 'alphabridge-mcp' ), $one['parts']['object']['kind'] ?? 'post', $live_id, (int) $one['seq'] ),
+			),
+		);
 	}
 
 	/**

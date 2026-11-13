@@ -419,10 +419,15 @@ class AB_MCP_Tools_Staging extends AB_MCP_Tools_Base {
 							'items'       => array( 'type' => 'integer' ),
 							'description' => 'plan: the entries taken over with the status draft (the confirmed choice where a page of the top level would be published or scheduled while a menu adds pages by itself).',
 						),
+						'accept'    => array(
+							'type'        => 'array',
+							'items'       => array( 'type' => 'integer' ),
+							'description' => 'plan: of the plugins and themes chosen in select, the numbers of those whose code runs on this site (an active plugin, the theme that runs or its parent) and whose swap the person releases: code of the unit, its new version too, runs in the swap. Without its number here such an entry is not taken over; all=true never takes it.',
+						),
 						'packages'  => array(
 							'type'        => 'array',
 							'items'       => array( 'type' => 'string' ),
-							'description' => 'plan: the package_ids of the objects of the staging site for this report and of the files of its attachments, taken over here completely (wp_site_import_chunk, purpose=objects and purpose=media).',
+							'description' => 'plan: the package_ids of the objects of the staging site for this report and of the files of its attachments, taken over here completely (wp_site_import_chunk, purpose=objects and purpose=media); for plugins and themes the packages of their files (purpose=code), none where they come from wordpress.org.',
 						),
 						'run_id'    => array(
 							'type'        => 'integer',

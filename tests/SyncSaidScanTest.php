@@ -96,6 +96,7 @@ final class SyncSaidScanTest extends TestCase {
 		'class-sync-pairs-tool.php: $now'                                   => 'now(): a gettext text, or a WP_Error that call() returns before.',
 		'class-sync-proposal.php: null !== $doubt ? $doubt : \'The same slug on another path of parents (another parent, or a parent of another type, theme or language): another object, or one that moved. It is paired only by the choice of a person.\'' => 'The why of doubt() (RETURNS), through $item[\'doubt\']; the literal beside it is found and known.',
 		'class-sync-push.php: (string) $reason'                             => 'verdict(): the closure $lock is given AB_MCP_Sync_Said::text() or gettext texts.',
+		'class-sync-code-plan.php: (string) $reason'                         => 'unit(): the closure $lock is given gettext texts, the message of a refusal of the stage (gettext) or a reason of a lock through AB_MCP_Sync_Said::text().',
 		'class-sync-write.php: $note'                                       => 'From the arguments $changed and $whole, which the writers give as gettext texts, or a gettext text.',
 	);
 

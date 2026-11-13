@@ -457,7 +457,7 @@ final class SyncSafeCallsTest extends TestCase {
 			'wptexturize'                     => array( 1, 'sample_finding(): the title as a theme shows it texturized (B4); a calculation on the journal\'s title.' ),
 		),
 		'class-sync-push.php'   => array(
-			'__' => array( 51, 'the refusals and the preview of wp_site_push, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2).' ),
+			'__' => array( 55, 'the refusals and the preview of wp_site_push, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2).' ),
 			'_n' => array( 1, 'plan(): the same texts where a count decides the form, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes (branch 13 text/z8, Codex round 2, B1).' ),
 			'_x' => array( 1, 'preview(): the word compared for the environment of the report, in the language of the site: the person sees the preview (AB_MCP_Confirm_Token); no value the takeover compares or hashes (branch 13 text/z8, Codex round 2, B1).' ),
 			'AB_MCP_Protected_Store::bind' => array( 1, 'bind_package(): the packages of objects bound to the run, kept while it is not closed.' ),
@@ -497,6 +497,14 @@ final class SyncSafeCallsTest extends TestCase {
 			'current_user_can'       => array( 1, 'Calls::can(): the capabilities of E10 a step of the code asks of the account of the request (install_, upload_, update_, edit_ of plugins and themes), through the hooks of the core as every check of a right; only a strict true counts, no stored value is compared.' ),
 			'get_filesystem_method'  => array( 1, 'Calls::method(): the way WordPress writes files here (FS_METHOD, the filter filesystem_method and a test file in wp-content); only direct is taken, a method not named refuses (E10); no stored value.' ),
 			'wp_is_file_mod_allowed' => array( 1, 'Calls::mods_allowed(): DISALLOW_FILE_MODS and the filter file_mod_allowed; only a strict true lets a step of the code through (E10, F20); no stored value.' ),
+		),
+		// The plan and the steps of a run of the code (Z8b branch 5).
+		'class-sync-code-ops.php' => array(
+			'__' => array( 9, 'the answers and refusals of a step of the code (staged, checked, ready, not staged, a journal or a plan not of its form), in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes.' ),
+		),
+		'class-sync-code-plan.php' => array(
+			'__'                           => array( 23, 'the refusals, the locks and the preview of a plan of the code, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes.' ),
+			'AB_MCP_Protected_Store::bind' => array( 1, 'bind(): the packages of the environment of the report and the packages of code bound to the run of the code, kept until its swaps; each binding checked (V20 of the pre-check of branch 5).' ),
 		),
 		// The package and the stage of code (Z8b branch 4).
 		'class-sync-code-package.php' => array(

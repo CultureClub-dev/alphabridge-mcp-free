@@ -111,7 +111,7 @@ final class StoreInputsTest extends TestCase {
 		self::assertNotSame( array(), AB_MCP_Store_Inputs::TABLE );
 		foreach ( AB_MCP_Store_Inputs::TABLE as $id => $row ) {
 			self::assertSame( array( 'consumer', 'source', 'field', 'form' ), array_keys( $row ), $id );
-			self::assertContains( $row['consumer'], array( 'retention', 'period', 'sidecar', 'protection', 'file_time', 'budget', 'package', 'stage' ), $id );
+			self::assertContains( $row['consumer'], array( 'retention', 'period', 'sidecar', 'protection', 'file_time', 'budget', 'package', 'stage', 'code' ), $id );
 			self::assertNotSame( '', $row['source'], $id );
 			self::assertNotSame( '', $row['field'], $id );
 			self::assertTrue( AB_MCP_Shape::valid_form( $row['form'] ), "$id: its form names every property of its type and nothing else." );

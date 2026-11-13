@@ -208,7 +208,7 @@ final class AB_MCP_Sync_Code_Kind implements AB_MCP_Sync_Kind {
 
 	/** {@inheritdoc} */
 	public function canonical( $object ) {
-		return $this->no_way( 'canonical', 'AB_MCP_Sync_File_Manifest::unit() gives the manifest of a unit and its hash.' );
+		return $this->no_way( 'canonical', 'AB_MCP_Sync_File_Manifest gives the manifest of a unit and its hash.' );
 	}
 
 	/** {@inheritdoc} */

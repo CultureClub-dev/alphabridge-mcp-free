@@ -295,4 +295,6 @@ return array(
 	'WordPress does not write files directly on this site (its file system method is not direct), and a plugin or theme is taken over by renaming folders, which only the direct method does. Ask the host to let PHP write the folders of plugins and themes as their owner, then make the plan again; until then, update it by hand in wp-admin.',
 	'Not taken over: this account may not change the files of the theme %1$s on this site in this way (%2$s; with DISALLOW_FILE_EDIT nobody has edit_themes, which the same version with other files takes). Connect with an account that may, or leave the entry out of the plan.',
 	'Not taken over: this account may not change the files of the plugin %1$s on this site in this way (%2$s; with DISALLOW_FILE_EDIT nobody has edit_plugins, which the same version with other files takes). Connect with an account that may, or leave the entry out of the plan.',
+	// includes/sync/class-sync-push.php (Z8b branch 5: a unit of code is no step of the contents, E19)
+	'A plugin or theme is taken over by a run of the code of its own, which holds no step of the contents: plan it without the entries of the contents, by its number in select (and in accept where its code runs on this site). all=true leaves it out.',
 );

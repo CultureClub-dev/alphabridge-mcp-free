@@ -70,6 +70,7 @@ require_once __DIR__ . '/class-sync-engine.php';
 require_once __DIR__ . '/class-sync-report.php';
 require_once __DIR__ . '/class-sync-resources.php';
 require_once __DIR__ . '/class-sync-media.php';
+require_once __DIR__ . '/class-sync-code-plan.php';
 
 /**
  * Class AB_MCP_Sync_Push
@@ -305,40 +306,14 @@ final class AB_MCP_Sync_Push {
 			return new WP_Error( 'ab_mcp_sync_report_not_done', __( 'This report is not worked out yet: the inventory of this site is still being read. Call wp_site_diff with this report_id until it answers done true, then plan.', 'alphabridge-mcp' ) );
 		}
 		$report_hash = (string) $found['index']['report_hash'];
-		// The selection.
-		$select = self::numbers( isset( $a['select'] ) ? $a['select'] : array() );
-		$drafts = self::numbers( isset( $a['as_draft'] ) ? $a['as_draft'] : array() );
-		$all    = isset( $a['all'] ) && ( true === $a['all'] || 'true' === $a['all'] || 1 === $a['all'] );
-		if ( null === $select || null === $drafts ) {
-			return self::selection( __( 'select and as_draft are lists of entry numbers of the report.', 'alphabridge-mcp' ) );
+		// The selection in its one spelling (selection_of()), and the
+		// plan_hash it gives with the report (the key of the replay of
+		// decision 15).
+		$selection = self::selection_of( $a );
+		if ( is_wp_error( $selection ) ) {
+			return $selection;
 		}
-		$choices = array();
-		foreach ( isset( $a['choices'] ) && is_array( $a['choices'] ) ? $a['choices'] : array() as $choice ) {
-			if ( ! is_array( $choice ) || ! isset( $choice['entry'], $choice['choice'] ) || null === self::numbers( array( $choice['entry'] ) ) || ! in_array( $choice['choice'], self::CHOICES, true ) ) {
-				return self::selection( __( 'A choice is an object of entry (its number) and choice (staging_wins, keep_live or leave_open).', 'alphabridge-mcp' ) );
-			}
-			$choices[ (int) $choice['entry'] ] = (string) $choice['choice'];
-		}
-		if ( array() === $select && array() === $choices && ! $all ) {
-			return self::selection( __( 'Nothing is chosen: pass select (entry numbers), choices (for conflicts) or all=true.', 'alphabridge-mcp' ) );
-		}
-		$packages = isset( $a['packages'] ) ? $a['packages'] : array();
-		if ( ! is_array( $packages ) || ! array_is_list( $packages ) || array() === $packages || count( $packages ) > AB_MCP_Sync_Proposal::MAX_PACKAGES || array() !== array_filter( $packages, static fn( $id ) => ! is_string( $id ) || 1 !== preg_match( AB_MCP_Sync_Key::ID, $id ) ) ) {
-			return new WP_Error( 'ab_mcp_sync_push_packages', __( 'A run writes from packages of objects of the staging site: pass packages, the package_ids (32 hex each) this site took over with wp_site_import_chunk (purpose=objects, with this report_hash), made on the staging site with wp_site_export (purpose=objects, report_hash and the refs of the entries).', 'alphabridge-mcp' ) );
-		}
-		// The selection in its one spelling, and the plan_hash it gives with
-		// the report (the key of the replay of decision 15).
-		sort( $select );
-		sort( $drafts );
-		ksort( $choices );
-		$selection = array(
-			'all'      => $all,
-			'as_draft' => $drafts,
-			'choices'  => $choices,
-			'packages' => array_values( array_unique( $packages ) ),
-			'select'   => $select,
-		);
-		sort( $selection['packages'] );
+		list( $select, $drafts, $choices, $all, $packages ) = array( $selection['select'], $selection['as_draft'], $selection['choices'], $selection['all'], $selection['packages'] );
 		$plan_hash = hash( 'sha256', AB_MCP_Sync_Canon::encode( array( 'report_hash' => $report_hash ) + $selection ) );
 		// A run that is not closed, asked before the objects are read: the
 		// same plan of this account and connection is given back (the replay
@@ -393,6 +368,13 @@ final class AB_MCP_Sync_Push {
 				return self::selection( sprintf( __( 'Entry %d is in as_draft but not chosen: name it in select as well.', 'alphabridge-mcp' ), $n ) );
 			}
 		}
+		// A run of the code (Z8b branch 5; E19, Z30): where the selection
+		// names a plugin or a theme, the plan is the one of the code and holds
+		// no step of the contents (AB_MCP_Sync_Code_Plan::of(), called here alone).
+		$code = AB_MCP_Sync_Code_Plan::of( $found, $entries, $selection + array( 'accept' => array() ), compact( 'source', 'anchor', 'print', 'report_hash', 'plan_hash', 'existing' ) );
+		if ( null !== $code ) {
+			return $code;
+		}
 		// The staging lines of the report (their hashes bind the packages of
 		// objects to what the report compared).
 		$staging = AB_MCP_Sync_Report::packages( $found['head']['packages'] );
@@ -406,12 +388,7 @@ final class AB_MCP_Sync_Push {
 			}
 		}
 		// The objects of the staging site.
-		$lines = AB_MCP_Sync_Engine::lines(
-			array(
-				'plan'        => array( 'packages' => $packages ),
-				'report_hash' => $report_hash,
-			)
-		);
+		$lines = self::lines_of( $packages, $report_hash );
 		if ( is_wp_error( $lines ) ) {
 			return $lines;
 		}
@@ -824,6 +801,89 @@ final class AB_MCP_Sync_Push {
 	}
 
 	/**
+	 * The selection of a plan in its one spelling (plan(); the key of the
+	 * replay of decision 15 is made of it): the entries chosen (select), the
+	 * choices for conflicts, the entries taken over as draft, all, and the
+	 * packages passed (objects and media for a run of the contents, code for
+	 * a run of the code, where they may be none: lines_of() asks for those of
+	 * the contents). accept, the entries of units of code whose code runs
+	 * here that the person releases (Z8b branch 5; E8, Z24), is part of it
+	 * where it names an entry, so that a plan without it is spelt as before.
+	 *
+	 * @param array $a Arguments.
+	 * @return array|WP_Error all, as_draft, choices, packages, select; accept where it names an entry.
+	 */
+	private static function selection_of( array $a ) {
+		$select = self::numbers( isset( $a['select'] ) ? $a['select'] : array() );
+		$drafts = self::numbers( isset( $a['as_draft'] ) ? $a['as_draft'] : array() );
+		$accept = self::numbers( isset( $a['accept'] ) ? $a['accept'] : array() );
+		$all    = isset( $a['all'] ) && ( true === $a['all'] || 'true' === $a['all'] || 1 === $a['all'] );
+		if ( null === $select || null === $drafts ) {
+			return self::selection( __( 'select and as_draft are lists of entry numbers of the report.', 'alphabridge-mcp' ) );
+		}
+		if ( null === $accept ) {
+			return self::selection( __( 'accept is a list of entry numbers of the report: the plugins and themes chosen in select whose code runs on this site and whose swap the person releases.', 'alphabridge-mcp' ) );
+		}
+		$choices = array();
+		foreach ( isset( $a['choices'] ) && is_array( $a['choices'] ) ? $a['choices'] : array() as $choice ) {
+			if ( ! is_array( $choice ) || ! isset( $choice['entry'], $choice['choice'] ) || null === self::numbers( array( $choice['entry'] ) ) || ! in_array( $choice['choice'], self::CHOICES, true ) ) {
+				return self::selection( __( 'A choice is an object of entry (its number) and choice (staging_wins, keep_live or leave_open).', 'alphabridge-mcp' ) );
+			}
+			$choices[ (int) $choice['entry'] ] = (string) $choice['choice'];
+		}
+		if ( array() === $select && array() === $choices && ! $all ) {
+			return self::selection( __( 'Nothing is chosen: pass select (entry numbers), choices (for conflicts) or all=true.', 'alphabridge-mcp' ) );
+		}
+		$packages = isset( $a['packages'] ) ? $a['packages'] : array();
+		if ( ! is_array( $packages ) || ! array_is_list( $packages ) || count( $packages ) > AB_MCP_Sync_Proposal::MAX_PACKAGES || array() !== array_filter( $packages, static fn( $id ) => ! is_string( $id ) || 1 !== preg_match( AB_MCP_Sync_Key::ID, $id ) ) ) {
+			return self::packages_refusal();
+		}
+		sort( $select );
+		sort( $drafts );
+		sort( $accept );
+		ksort( $choices );
+		$selection = array(
+			'all'      => $all,
+			'as_draft' => $drafts,
+			'choices'  => $choices,
+			'packages' => array_values( array_unique( $packages ) ),
+			'select'   => $select,
+		);
+		sort( $selection['packages'] );
+		return array() === $accept ? $selection : $selection + array( 'accept' => $accept );
+	}
+
+	/**
+	 * The objects of the staging site a run of the contents writes from, by
+	 * the packages passed: a run of the contents has at least one.
+	 *
+	 * @param string[] $packages    The packages of the selection.
+	 * @param string   $report_hash The report.
+	 * @return array|WP_Error AB_MCP_Sync_Engine::lines().
+	 */
+	private static function lines_of( array $packages, $report_hash ) {
+		if ( array() === $packages ) {
+			return self::packages_refusal();
+		}
+		return AB_MCP_Sync_Engine::lines(
+			array(
+				'plan'        => array( 'packages' => $packages ),
+				'report_hash' => $report_hash,
+			)
+		);
+	}
+
+	/**
+	 * The refusal of packages that are no list of ids of packages, or none
+	 * where a run of the contents is planned.
+	 *
+	 * @return WP_Error
+	 */
+	private static function packages_refusal() {
+		return new WP_Error( 'ab_mcp_sync_push_packages', __( 'A run writes from packages of objects of the staging site: pass packages, the package_ids (32 hex each) this site took over with wp_site_import_chunk (purpose=objects, with this report_hash), made on the staging site with wp_site_export (purpose=objects, report_hash and the refs of the entries).', 'alphabridge-mcp' ) );
+	}
+
+	/**
 	 * What an entry of the report is for the plan: an item (create or
 	 * update), locked (with reason and stage), or nothing (a choice that
 	 * writes nothing).
@@ -850,6 +910,12 @@ final class AB_MCP_Sync_Push {
 				),
 			);
 		};
+		// A unit of code the swap takes over or makes (Z8b branch 5) is never
+		// a step of the contents: it has a run of its own (E19, Z30;
+		// AB_MCP_Sync_Code_Plan), and all=true leaves it out.
+		if ( 'environment' === $entry['kind'] && in_array( $action, array( 'take_over', 'create' ), true ) ) {
+			return $lock( __( 'A plugin or theme is taken over by a run of the code of its own, which holds no step of the contents: plan it without the entries of the contents, by its number in select (and in accept where its code runs on this site). all=true leaves it out.', 'alphabridge-mcp' ) );
+		}
 		if ( 'choose' === $action ) {
 			if ( null === $choice ) {
 				if ( $all ) {
@@ -1294,7 +1360,7 @@ final class AB_MCP_Sync_Push {
 			}
 		}
 		$stored = $plan;
-		unset( $stored['steps'], $stored['state'], $stored['existing_run'], $stored['resources'], $stored['locked'], $stored['skipped'] );
+		unset( $stored['steps'], $stored['state'], $stored['existing_run'], $stored['resources'], $stored['locked'], $stored['skipped'], $stored['code_shown'] );
 		$run = AB_MCP_Sync_Run::create(
 			array(
 				'type'        => 'push',
@@ -1314,8 +1380,20 @@ final class AB_MCP_Sync_Push {
 		if ( is_wp_error( $run ) ) {
 			return $run;
 		}
+		if ( isset( $plan['code'] ) ) {
+			// A run of the code keeps what it reads until its swaps (the
+			// packages of the environment of its report, its packages of code;
+			// Z8b branch 5, V20 of its pre-check): each binding checked, and a
+			// run that cannot keep them is not left open.
+			$bound = AB_MCP_Sync_Code_Plan::bind( $plan, (int) $run['run_id'] );
+			if ( is_wp_error( $bound ) ) {
+				$closed = AB_MCP_Sync_Engine::abort( $run );
+				/* translators: 1: why (one or more whole sentences), 2: run number. */
+				return is_wp_error( $closed ) ? $closed : new WP_Error( $bound->get_error_code(), sprintf( __( '%1$s Run %2$d was made for this plan and closed again as aborted at once: nothing was staged or written. Call wp_site_push action=plan again once the packages are there.', 'alphabridge-mcp' ), $bound->get_error_message(), (int) $run['run_id'] ) );
+			}
+		}
 		// The packages of objects are bound to the run: kept while it is not closed.
-		foreach ( $plan['packages'] as $package_id ) {
+		foreach ( isset( $plan['code'] ) ? array() : $plan['packages'] as $package_id ) {
 			self::bind_package( $package_id, (int) $run['run_id'] );
 		}
 		$shown = AB_MCP_Sync_Run::shown( $run );
@@ -1326,7 +1404,9 @@ final class AB_MCP_Sync_Push {
 		$shown['locked']      = $plan['locked'];
 		$shown['resources']   = $plan['resources']['level'];
 		/* translators: %d: number of steps of the run. */
-		$shown['next']        = sprintf( _n( 'The run is made with %d step and nothing is written yet.', 'The run is made with %d steps and nothing is written yet.', count( $plan['steps'] ), 'alphabridge-mcp' ), count( $plan['steps'] ) ) . ' Call action=next with this run_id: the first step checks everything before the first write, each next one writes one object under the lock with its backup and journal, then the caches, then the check of the run closes it. Each step answers with its result; status shows the whole run.';
+		$shown['next']        = sprintf( _n( 'The run is made with %d step and nothing is written yet.', 'The run is made with %d steps and nothing is written yet.', count( $plan['steps'] ), 'alphabridge-mcp' ), count( $plan['steps'] ) ) . ( isset( $plan['code'] )
+			? ' Call action=next with this run_id: the first step checks the means; then each unit is staged in the protected store (over as many calls as the check of its PHP files takes, nothing of this site changes) and swapped (one call under the lock, with the probe of the site before and after); then the caches, then the check of the run closes it. Each step answers with its result; status shows the whole run. A run of the code holds no step of the contents: make a new report (wp_site_diff) after it.'
+			: ' Call action=next with this run_id: the first step checks everything before the first write, each next one writes one object under the lock with its backup and journal, then the caches, then the check of the run closes it. Each step answers with its result; status shows the whole run.' );
 		return $shown;
 	}
 
@@ -1367,6 +1447,10 @@ final class AB_MCP_Sync_Push {
 				'phase'   => $step['phase'],
 				'depends' => $step['depends'],
 			);
+			$unit = AB_MCP_Sync_Code_Plan::step( $plan, $seq );
+			if ( null !== $unit ) {
+				$shown['unit'] = $unit;
+			}
 			foreach ( $plan['objects'] as $item ) {
 				if ( (int) $item['seq'] === $seq ) {
 					$shown['object'] = array(
@@ -1400,6 +1484,13 @@ final class AB_MCP_Sync_Push {
 			'environment' => $plan['environment'] ? _x( 'compared', 'the environment of the report, in the preview of a takeover', 'alphabridge-mcp' ) : __( 'not compared: the report was made without the packages of the environment; the run writes objects only, which this does not hold back', 'alphabridge-mcp' ),
 			'effect'      => __( 'Makes a run that writes these objects of the staging site onto this site, one per call (action=next), each under the lock of AlphaBridge with a backup and a journal, read back against its target; a new object stays on the way back (a rest); the pairs take new bases. Nothing is deleted. The way back is wp_site_revert, pair by pair, byte for byte conditional. A change of another user or process on a way the lock does not refuse (wp_publish_post() by the cron, terms on the classic way, SQL) between the check and the write can be lost without the read back seeing it.', 'alphabridge-mcp' ),
 		);
+		if ( isset( $plan['code'] ) ) {
+			// A run of the code (Z8b branch 5, Z42): per unit the operation,
+			// the versions, the sentence on its routines and the paths that
+			// lie in the backup afterwards.
+			$out['units']  = AB_MCP_Sync_Code_Plan::shown( $plan );
+			$out['effect'] = __( 'Makes a run of the code: each plugin or theme named is staged in the protected store first (nothing of this site changes), then swapped in one call under the lock of AlphaBridge, with a probe of the site before and after and the old version kept whole in the backup; a swap whose probe fails afterwards is swapped back in the same call. The run holds no step of the contents: make a new report (wp_site_diff) after it. Nothing is written by this call; the confirmed call makes the run.', 'alphabridge-mcp' );
+		}
 		if ( isset( $plan['existing_run'] ) ) {
 			$out['existing_run'] = (int) $plan['existing_run'];
 		}

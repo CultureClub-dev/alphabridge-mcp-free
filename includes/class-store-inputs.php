@@ -79,6 +79,38 @@ final class AB_MCP_Store_Inputs {
 		'pattern'   => '/^[0-9a-f]{64}\z/',
 	);
 
+	/** The id of a package, as the import names it (AB_MCP_Sync_Key::ID). */
+	const PACKAGE = array(
+		'type'      => 'string',
+		'empty'     => false,
+		'max_bytes' => null,
+		'pattern'   => '/^[0-9a-f]{32}\z/',
+	);
+
+	/** The name of a unit of code: one name of a folder or file, as a tree of the store takes it (no path, no control character). */
+	const UNIT_NAME = array(
+		'type'      => 'string',
+		'empty'     => false,
+		'max_bytes' => 255,
+		'pattern'   => '#^[^/\\\\\x00-\x1F\x7F]+\z#',
+	);
+
+	/** The kind of a unit of code the swap takes over. */
+	const UNIT_KIND = array(
+		'type'      => 'string',
+		'empty'     => false,
+		'max_bytes' => null,
+		'in'        => array( 'plugin', 'theme' ),
+	);
+
+	/** A step of a run after its check (the first step): its number. */
+	const STEP = array(
+		'type'   => 'int',
+		'digits' => false,
+		'min'    => 2,
+		'max'    => null,
+	);
+
 	/** The names in a folder, as scandir() gives them: texts, none twice. */
 	const NAMES = array(
 		'type'      => 'list',
@@ -788,6 +820,162 @@ final class AB_MCP_Store_Inputs {
 			'source'   => 'AB_MCP_Protected_Store::held(), by lstat() of the seam and the trailer of a gzip file',
 			'field'    => 'the bytes of a file of a group: its size, of a gzip file the raw size its trailer names (ISIZE)',
 			'form'     => self::COUNT,
+		),
+		/* -------- the run of the code and what it reads (Z8b branch 5) */
+		'plan.code'                => array(
+			'consumer' => 'code',
+			'source'   => 'AB_MCP_Sync_Code_Ops::item(), from the plan of the run (AB_MCP_Sync_Run::get())',
+			'field'    => 'code of the plan of a run of the code: the packages of the environment of its report (the signed manifests), its packages of code, and each step of a unit: which unit, staged or swapped, made or replaced, its pair as planned, the unit of the staging site by its hash, whether its code runs here and whether the person released it (accept)',
+			'form'     => array(
+				'type'   => 'record',
+				'fields' => array(
+					'env'      => array(
+						'type'      => 'list',
+						'empty'     => false,
+						'item'      => self::PACKAGE,
+						'unique'    => true,
+						'max_items' => null,
+					),
+					'packages' => array(
+						'type'      => 'list',
+						'empty'     => true,
+						'item'      => self::PACKAGE,
+						'unique'    => true,
+						'max_items' => null,
+					),
+					'units'    => array(
+						'type'      => 'list',
+						'empty'     => false,
+						'item'      => array(
+							'type'   => 'record',
+							'fields' => array(
+								'seq'          => self::STEP,
+								'op'           => array(
+									'type'      => 'string',
+									'empty'     => false,
+									'max_bytes' => null,
+									'in'        => array( 'stage', 'swap' ),
+								),
+								'stage_seq'    => array( 'nullable' => true ) + self::STEP,
+								'n'            => self::RUN,
+								'kind'         => self::UNIT_KIND,
+								'ref'          => self::UNIT_NAME,
+								'unit_op'      => array(
+									'type'      => 'string',
+									'empty'     => false,
+									'max_bytes' => null,
+									'in'        => array( 'create', 'update', 'edit' ),
+								),
+								'pair_id'      => array( 'nullable' => true ) + self::RUN,
+								'pair_hash'    => array( 'nullable' => true ) + self::SHA256,
+								'staging_hash' => self::SHA256,
+								'version'      => array(
+									'type'   => 'record',
+									'fields' => array(
+										'staging' => array(
+											'type'      => 'string',
+											'empty'     => true,
+											'max_bytes' => 1024,
+											'nullable'  => true,
+										),
+										'live'    => array(
+											'type'      => 'string',
+											'empty'     => true,
+											'max_bytes' => 1024,
+											'nullable'  => true,
+										),
+									),
+									'extra'  => false,
+								),
+								'runs'         => array( 'type' => 'bool' ),
+								'accept'       => array( 'type' => 'bool' ),
+							),
+							'extra'  => false,
+						),
+						'unique'    => false,
+						'max_items' => null,
+					),
+				),
+				'extra'  => false,
+			),
+		),
+		'step.stage'               => array(
+			'consumer' => 'code',
+			'source'   => 'AB_MCP_Sync_Code_Ops::staged(), from the journal of a step that stages a unit (steps.parts)',
+			'field'    => 'the stage a step names: its unit, and the group, tree and hash of the stage in the protected store, where it came from and how large it is; what the check of the stage and the swap of the unit go on with',
+			'form'     => array(
+				'type'   => 'record',
+				'fields' => array(
+					'unit'  => array(
+						'type'   => 'record',
+						'fields' => array(
+							'kind' => self::UNIT_KIND,
+							'ref'  => self::UNIT_NAME,
+							'op'   => array(
+								'type'      => 'string',
+								'empty'     => false,
+								'max_bytes' => null,
+								'in'        => array( 'stage' ),
+							),
+						),
+						'extra'  => false,
+					),
+					'stage' => array(
+						'type'   => 'record',
+						'fields' => array(
+							'gid'    => self::PACKAGE,
+							'name'   => self::UNIT_NAME,
+							'hash'   => self::SHA256,
+							'source' => array(
+								'type'      => 'string',
+								'empty'     => false,
+								'max_bytes' => null,
+								'in'        => array( 'wordpress.org', 'packages' ),
+							),
+							'files'  => self::RUN,
+							'bytes'  => self::COUNT,
+						),
+						'extra'  => false,
+					),
+				),
+				'extra'  => false,
+			),
+		),
+		'site.active_plugins'      => array(
+			'consumer' => 'code',
+			'source'   => 'AB_MCP_Sync_Code_Swap::active_plugins(), the row of the option active_plugins unpacked without classes',
+			'field'    => 'the main files of the plugins that run on this site: whether code of a unit runs (the release of its swap), and which of its main files run at the begin and at the end of a swap',
+			'form'     => array(
+				'type'  => 'map',
+				'empty' => true,
+				'key'   => self::COUNT,
+				'value' => array(
+					'type'      => 'string',
+					'empty'     => false,
+					'max_bytes' => null,
+				),
+			),
+		),
+		'site.theme'               => array(
+			'consumer' => 'code',
+			'source'   => 'AB_MCP_Sync_Code_Swap::theme(), the rows of the options stylesheet and template',
+			'field'    => 'the theme that runs on this site and its parent: whether code of a theme runs',
+			'form'     => array(
+				'type'      => 'string',
+				'empty'     => false,
+				'max_bytes' => 1024,
+			),
+		),
+		'unit.version'             => array(
+			'consumer' => 'code',
+			'source'   => 'AB_MCP_Sync_Code_Ops::order(), the version of a unit on the staging site (its signed line) and on this site (its line of the report, its head)',
+			'field'    => 'a version as version_compare() is asked on it: whether the staging site has an older version than this site (no takeover goes down a version, E9)',
+			'form'     => array(
+				'type'      => 'string',
+				'empty'     => false,
+				'max_bytes' => 64,
+				'pattern'   => '/^[0-9][0-9A-Za-z.+_-]*\z/',
+			),
 		),
 	);
 

@@ -353,7 +353,7 @@ final class SyncEnvTest extends TestCase {
 		// lock where nothing differs.
 		self::assertSame( array( 'equal', 'none', null ), self::said( $env['plugin:ab-it-env-same'] ), 'The same files: equal, not locked.' );
 		self::assertArrayNotHasKey( 'locks', $env['plugin:ab-it-env-same'] );
-		self::assertSame( array( 'differs', 'locked', 'Z8b' ), self::said( $env['plugin:ab-it-env-version'] ) );
+		self::assertSame( array( 'differs', 'none', null ), self::said( $env['plugin:ab-it-env-version'] ), 'Z8b branch 5: a plugin that differs without a pair is locked by no stage; the way is its pair.' );
 		self::assertSame( array( 'files' ), $env['plugin:ab-it-env-version']['differs'] );
 		self::assertSame( array( 'ab-it-env-version.php' ), $env['plugin:ab-it-env-version']['paths']['differs'], 'The path that differs.' );
 		self::assertSame( array( '2.0', '1.0' ), array( $env['plugin:ab-it-env-version']['staging']['version'], $env['plugin:ab-it-env-version']['live']['version'] ) );

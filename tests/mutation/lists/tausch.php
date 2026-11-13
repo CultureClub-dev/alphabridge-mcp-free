@@ -1,11 +1,12 @@
 <?php
 /**
  * The clauses of the swap of the code of the site (Z8b branch 5: the kind
- * code with the rights of E10 at Z26 and its place in the registry for Z38).
+ * code with the rights of E10 at Z26 and its place in the registry for Z38;
+ * the entry of a unit the swap takes over or makes, in the report).
  * Written by tests/mutation/gen/tausch.py from the source; change the entries
  * there and run it again.
  *
- * Held by the unit suite (SyncCodeKindTest).
+ * Held by the unit suite (SyncCodeKindTest, SyncEnvTest).
  *
  * Not listed, with why (bericht-zweig-5.md), equivalent: in rights() the
  * count of the two halves of a unit beside the kind of unit (a ref without a
@@ -18,6 +19,8 @@ $unit = static fn( string $class, string $test ): array => array( 'vendor/bin/ph
 $it   = static fn( string $class, string $test ): array => array( 'vendor/bin/phpunit', '--no-progress', '-c', 'tests/integration/phpunit.xml.dist', '--filter', '/[^A-Za-z0-9_]' . $class . '::' . $test . '( |$)/' );
 
 $ck = 'includes/sync/class-sync-code-kind.php';
+$de = 'includes/sync/class-sync-decision.php';
+$pu = 'includes/sync/class-sync-push.php';
 
 return array(
 	array(
@@ -136,5 +139,95 @@ return array(
 		'replace' => "\t\t\t'theme'  => array( 'upload_themes', 'update_themes' ),",
 		'run'     => $unit( 'SyncCodeKindTest', 'testEachOperationTakesTheCapabilitiesOfE10AndEachOneMissingRefuses' ),
 		'expect'  => '/testEachOperationTakesTheCapabilitiesOfE10AndEachOneMissingRefuses/',
+	),
+	array(
+		'id'      => 'tausch/unit-takes',
+		'clause'  => 'unit_way(): the files of a plugin or theme changed on staging and unchanged here are taken over',
+		'file'    => $de,
+		'search'  => "\t\t\$takes   = \$swapped && 'changed_on_staging' === \$files && 'changed_on_staging' === \$entry['result'];",
+		'replace' => "\t\t\$takes   = false;",
+		'run'     => $unit( 'SyncEnvTest', 'testThePartsOfAUnitWithAPairAreJudgedEachAgainstItsOwnBase' ),
+		'expect'  => '/testThePartsOfAUnitWithAPairAreJudgedEachAgainstItsOwnBase/',
+	),
+	array(
+		'id'      => 'tausch/unit-takes-swapped-only',
+		'clause'  => 'unit_way(): only of a kind the swap writes; a unit of another kind waits with the lock of its kind',
+		'file'    => $de,
+		'search'  => "\t\t\$takes   = \$swapped && 'changed_on_staging' === \$files && 'changed_on_staging' === \$entry['result'];",
+		'replace' => "\t\t\$takes   = 'changed_on_staging' === \$files && 'changed_on_staging' === \$entry['result'];",
+		'run'     => $unit( 'SyncEnvTest', 'testThePartsOfAUnitWithAPairAreJudgedEachAgainstItsOwnBase' ),
+		'expect'  => '/testThePartsOfAUnitWithAPairAreJudgedEachAgainstItsOwnBase/',
+	),
+	array(
+		'id'      => 'tausch/unit-takes-no-conflict',
+		'clause'  => 'unit_way(): nothing of a unit is taken over while a part of it is in conflict',
+		'file'    => $de,
+		'search'  => "\t\t\$takes   = \$swapped && 'changed_on_staging' === \$files && 'changed_on_staging' === \$entry['result'];",
+		'replace' => "\t\t\$takes   = \$swapped && 'changed_on_staging' === \$files;",
+		'run'     => $unit( 'SyncEnvTest', 'testThePartsOfAUnitWithAPairAreJudgedEachAgainstItsOwnBase' ),
+		'expect'  => '/testThePartsOfAUnitWithAPairAreJudgedEachAgainstItsOwnBase/',
+	),
+	array(
+		'id'      => 'tausch/unit-takes-files',
+		'clause'  => 'unit_way(): the files are what the swap takes; which main files run alone waits with the lock of its kind',
+		'file'    => $de,
+		'search'  => "\t\t\$takes   = \$swapped && 'changed_on_staging' === \$files && 'changed_on_staging' === \$entry['result'];",
+		'replace' => "\t\t\$takes   = \$swapped && 'changed_on_staging' === \$entry['result'];",
+		'run'     => $unit( 'SyncEnvTest', 'testThePartsOfAUnitWithAPairAreJudgedEachAgainstItsOwnBase' ),
+		'expect'  => '/testThePartsOfAUnitWithAPairAreJudgedEachAgainstItsOwnBase/',
+	),
+	array(
+		'id'      => 'tausch/unit-takes-action',
+		'clause'  => 'unit_way(): what the swap takes over says take_over',
+		'file'    => $de,
+		'search'  => "\t\t} elseif ( \$takes ) {\n\t\t\t\$entry['action'] = 'take_over';",
+		'replace' => "\t\t} elseif ( false ) {\n\t\t\t\$entry['action'] = 'take_over';",
+		'run'     => $unit( 'SyncEnvTest', 'testThePartsOfAUnitWithAPairAreJudgedEachAgainstItsOwnBase' ),
+		'expect'  => '/testThePartsOfAUnitWithAPairAreJudgedEachAgainstItsOwnBase/',
+	),
+	array(
+		'id'      => 'tausch/unit-takes-no-lock',
+		'clause'  => 'unit_way(): what the swap takes over carries no lock of its kind',
+		'file'    => $de,
+		'search'  => '( ! $takes && in_array( $entry[\'result\'], array( \'changed_on_staging\', \'conflict\' ), true ) )',
+		'replace' => '( in_array( $entry[\'result\'], array( \'changed_on_staging\', \'conflict\' ), true ) )',
+		'run'     => $unit( 'SyncEnvTest', 'testThePartsOfAUnitWithAPairAreJudgedEachAgainstItsOwnBase' ),
+		'expect'  => '/testThePartsOfAUnitWithAPairAreJudgedEachAgainstItsOwnBase/',
+	),
+	array(
+		'id'      => 'tausch/unit-differs-no-stage',
+		'clause'  => 'unit_way(): a plugin or theme that differs without a pair waits for its pair, with no lock of a stage',
+		'file'    => $de,
+		'search'  => "\t\t\$waits = \$swapped ? (",
+		'replace' => "\t\t\$waits = false ? (",
+		'run'     => $unit( 'SyncEnvTest', 'testAPluginWhoseFilesOrMainFilesRunningDifferDiffersWithThePart' ),
+		'expect'  => '/testAPluginWhoseFilesOrMainFilesRunningDifferDiffersWithThePart/',
+	),
+	array(
+		'id'      => 'tausch/unit-new-create',
+		'clause'  => 'unit_new(): a plugin or theme only on staging is made here by the swap (F5)',
+		'file'    => $de,
+		'search'  => "\t\treturn in_array( \$kind, self::SWAPPED, true ) ? 'create' : 'locked';",
+		'replace' => "\t\treturn 'locked';",
+		'run'     => $unit( 'SyncEnvTest', 'testAUnitOnOneSideOnly' ),
+		'expect'  => '/testAUnitOnOneSideOnly/',
+	),
+	array(
+		'id'      => 'tausch/unit-new-swapped-only',
+		'clause'  => 'unit_new(): a unit of another kind only on staging stays locked',
+		'file'    => $de,
+		'search'  => "\t\treturn in_array( \$kind, self::SWAPPED, true ) ? 'create' : 'locked';",
+		'replace' => "\t\treturn 'create';",
+		'run'     => $unit( 'SyncEnvTest', 'testAUnitOnOneSideOnly' ),
+		'expect'  => '/testAUnitOnOneSideOnly/',
+	),
+	array(
+		'id'      => 'tausch/z30-unit-no-content-step',
+		'clause'  => 'verdict(): a unit of code the swap takes over or makes is never an item of a run of the contents (Z30)',
+		'file'    => $pu,
+		'search'  => "\t\tif ( 'environment' === \$entry['kind'] && in_array( \$action, array( 'take_over', 'create' ), true ) ) {",
+		'replace' => "\t\tif ( false ) {",
+		'run'     => $unit( 'SyncRunTest', 'testWhichEntryOfAReportIsAStepLockedOrNothing' ),
+		'expect'  => '/testWhichEntryOfAReportIsAStepLockedOrNothing/',
 	),
 );

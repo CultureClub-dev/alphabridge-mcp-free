@@ -2587,6 +2587,20 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( 'Z8d', self::verdict( self::entry( array( 'subtype' => 'product' ) ) )['locked']['stage'] );
 		self::assertStringContainsString( 'held by a credential', self::verdict( self::entry( array( 'staging' => array( 'held' => 'credential_name' ) ) ) )['locked']['reason'] );
 		self::assertStringContainsString( 'no pair', self::verdict( self::entry( array( 'pair' => null ) ) )['locked']['reason'] );
+		// A unit of code the swap takes over or makes (Z8b branch 5, E19, Z30)
+		// is never a step of the contents, chosen or with all: it has a run of
+		// its own. What the report locks or keeps of a unit stays as it says.
+		foreach ( array( 'take_over', 'create' ) as $action ) {
+			foreach ( array( false, true ) as $all ) {
+				$unit = self::verdict( self::entry( array( 'kind' => 'environment', 'subtype' => 'plugin', 'ref' => 'shop', 'action' => $action ) ), null, false, $all );
+				self::assertArrayNotHasKey( 'item', (array) $unit, $action );
+				self::assertStringContainsString( 'a run of the code of its own', $unit['locked']['reason'], $action );
+				self::assertStringContainsString( 'in select', $unit['locked']['reason'], 'With the way.' );
+				self::assertNull( $unit['locked']['stage'], 'No lock of a stage.' );
+			}
+		}
+		self::assertNull( self::verdict( self::entry( array( 'kind' => 'environment', 'subtype' => 'plugin', 'ref' => 'shop', 'action' => 'keep' ) ), null, false, true ) );
+		self::assertSame( 'Z8b', self::verdict( self::entry( array( 'kind' => 'environment', 'subtype' => 'plugin', 'ref' => 'shop', 'action' => 'locked', 'locks' => array( array( 'key' => 'env:plugin', 'stage' => 'Z8b', 'reason' => 'A plugin is code.' ) ) ) ) )['locked']['stage'] );
 	}
 
 	public function testTheOrderOfTheGraphPutsATargetBeforeWhatRefersToItAndLocksACycle(): void {
