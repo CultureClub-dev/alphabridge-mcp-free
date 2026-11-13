@@ -20,9 +20,13 @@
  *   process leaves nothing ready (above); a tree changed in the store is
  *   never ready (testAStageWhoseTreeOrStateChangedIsNeverReady); a building
  *   folder past TMP_AGE goes with what is in it, a young one stays
- *   (testABuildingFolderGoesOnlyByItsAgeOrByItsOwnRequest). A gleichzeitiger
- *   Schreiber of the building folder: none, it is made and used by one
- *   request under its own name.
+ *   (testABuildingFolderGoesOnlyByItsAgeOrByItsOwnRequest); a file of the
+ *   live unit that comes out otherwise while it is copied (halb geschrieben)
+ *   stages nothing (testAUnitBuiltFromPackagesThatIsNotTheSignedOneIsNotStaged);
+ *   a tree that does not read whole within its time (Zeitlimit, Lesefehler)
+ *   is never ready (testAStageThatDoesNotReadWholeForItsCheckIsNeverReady).
+ *   A gleichzeitiger Schreiber of the building folder: none, it is made and
+ *   used by one request under its own name.
  * - Rows of the state of packages and relay (the index of a package of code,
  *   the state of a stage): every wrong form of the rows code.index and
  *   stage.state reaches its consumer as unknown (StoreInputsTest, unit); a

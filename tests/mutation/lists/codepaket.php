@@ -604,4 +604,22 @@ return array(
 		'run'     => $unit( 'SyncCodeStageTest', 'testTheHostOfAUnitIsAnotherOneWhereAnyMainFileNamesOne' ),
 		'expect'  => '/testTheHostOfAUnitIsAnotherOneWhereAnyMainFileNamesOne/',
 	),
+	array(
+		'id'      => 'codepaket/d2-bad-version',
+		'clause'  => 'install_version(): only a version and a slug as wordpress.org names them (D2)',
+		'file'    => 'includes/tools/class-tools-install-update.php',
+		'search'  => '		if ( 1 !== preg_match( AB_MCP_Sync_Code_Stage::ORG_VERSION, $version ) || \'trunk\' === $version || 1 !== preg_match( AB_MCP_Sync_Code_Stage::ORG_SLUG, $slug ) ) {',
+		'replace' => '		if ( false ) {',
+		'run'     => $it( 'CodeStageTest', 'testTheInstallToolsTakeAnExactVersionOfWordpressOrgThroughTheDownloader' ),
+		'expect'  => '/testTheInstallToolsTakeAnExactVersionOfWordpressOrgThroughTheDownloader/',
+	),
+	array(
+		'id'      => 'codepaket/d2-unavailable',
+		'clause'  => 'install_version(): a version the shared downloader does not fetch installs nothing (D2)',
+		'file'    => 'includes/tools/class-tools-install-update.php',
+		'search'  => '		if ( true !== $got ) {',
+		'replace' => '		if ( false ) {',
+		'run'     => $it( 'CodeStageTest', 'testTheInstallToolsTakeAnExactVersionOfWordpressOrgThroughTheDownloader' ),
+		'expect'  => '/testTheInstallToolsTakeAnExactVersionOfWordpressOrgThroughTheDownloader/',
+	),
 );
