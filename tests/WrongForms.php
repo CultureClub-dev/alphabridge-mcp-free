@@ -37,6 +37,8 @@ final class WrongForms {
 		'mark.json',
 		'file.mtime',
 		'tmp.build_mtime',
+		'code.index',
+		'stage.state',
 		'budget.book_run',
 		'budget.book_bytes',
 		'budget.free',

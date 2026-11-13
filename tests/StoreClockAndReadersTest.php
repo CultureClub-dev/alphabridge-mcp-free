@@ -72,6 +72,24 @@ final class StoreClockAndReadersTest extends TestCase {
 		),
 	);
 
+	/**
+	 * The clocks of budgets within one call (microtime(), hrtime()) the files
+	 * of Z8b branch 4 may call, each with why (decision of the lead
+	 * 13.11.2026, Codex round 1 of branch 4, B4): only how long one call
+	 * runs; a value that is no finite number ends the slice, never done or
+	 * ready; times across requests only through AB_MCP_Sync_Run::now().
+	 */
+	private const BUDGET = array(
+		'includes/sync/class-sync-code-stage.php'   => array(
+			'AB_MCP_Sync_Code_Stage::clock'     => 'the budget of complete() (CHECK_BUDGET) and of a reading of a unit (UNIT_BUDGET) within one call; checked: no finite number is unknown, the call ends, the stage stays checking',
+			'AB_MCP_Sync_Code_Stage_Calls::run' => 'the time limit of php -l within one call (LINT_TIMEOUT); an end of it is unavailable, never passed',
+		),
+		'includes/sync/class-sync-code-package.php' => array(),
+		'includes/sync/class-sync-export.php'       => array(
+			'AB_MCP_Sync_Export::code_unit' => 'the budget of the reading of a unit for a package of code within one call (UNIT_BUDGET); checked: no finite number reads nothing (unreadable)',
+		),
+	);
+
 	/** Tests that drive the readers, by file. */
 	private const UNIT = 'tests/StoreInputsTest.php::testEveryWrongFormOfARowReachesItsConsumerAsUnknownAndEveryValidOneAsAValue';
 	private const IT   = 'tests/integration/StoreInputsTest.php::testEveryWrongFormOfARowReachesItsConsumerInTheStoreAsUnknown';
@@ -110,9 +128,12 @@ final class StoreClockAndReadersTest extends TestCase {
 		'AB_MCP_Sync_Backup::group'             => array( array( 'backup.run' ), array( self::IT ) ),
 		'AB_MCP_Sync_Engine::context'           => array( array( 'period.clock' ), array( self::RUN ) ),
 		'AB_MCP_Sync_Engine::restore_part'      => array( array( 'period.clock' ), array( self::RUN ) ),
-		'AB_MCP_Sync_Code_Package::index'      => array( array( 'code.index' ), array( self::UNIT ) ),
-		'AB_MCP_Sync_Code_Stage::state_of'      => array( array( 'stage.state' ), array( self::UNIT ) ),
+		'AB_MCP_Sync_Code_Package::index'      => array( array( 'code.index' ), array( self::IT ) ),
+		'AB_MCP_Sync_Code_Stage::from_org'      => array( array( 'stage.version' ), array( self::UNIT ) ),
+		'AB_MCP_Sync_Code_Stage::head_refusal'  => array( array( 'stage.head' ), array( self::UNIT ) ),
+		'AB_MCP_Sync_Code_Stage::state_of'      => array( array( 'stage.state' ), array( self::IT ) ),
 		'AB_MCP_Sync_Code_Stage::update_host'   => array( array( 'stage.update_uri' ), array( self::UNIT ) ),
+		'AB_MCP_Sync_Env::host_of_head'         => array( array( 'stage.update_head' ), array( self::UNIT ) ),
 		'AB_MCP_Sync_Export::discard_stale'     => array( array( 'period.clock' ), array( self::CLK ) ),
 		'AB_MCP_Sync_Manifest::clock'          => array( array( 'period.clock' ), array( 'tests/SyncManifestTest.php::testNoTimeOfTheClockSignsOrReadsAPackage' ) ),
 		'AB_MCP_Sync_Push::begin'               => array( array( 'period.clock' ), array( self::RUN ), 'the time goes only into create() (expires), which refuses without a time before anything is written' ),
@@ -179,6 +200,31 @@ final class StoreClockAndReadersTest extends TestCase {
 				self::assertArrayHasKey( $fn, $found[ $file ] ?? array(), "$file: $fn names a time() that is gone; take it out of the list." );
 			}
 		}
+	}
+
+	public function testTheFilesOfBranchFourMeasureACallOnlyWithTheNamedClocksOfBudgets(): void {
+		$sources = self::sources();
+		$found   = array();
+		$raw     = array();
+		foreach ( self::BUDGET as $file => $named ) {
+			$code = $sources[ $file ] ?? (string) file_get_contents( dirname( __DIR__ ) . '/' . $file );
+			foreach ( SourceScan::scan( $code )['budget'] as $hit ) {
+				$found[ $file ][ $hit[0] ] = true;
+				if ( ! isset( $named[ $hit[0] ] ) ) {
+					$raw[] = $file . ':' . $hit[1] . ' ' . $hit[0];
+				}
+			}
+			foreach ( $named as $fn => $why ) {
+				self::assertNotSame( '', trim( $why ), "$fn: why" );
+				self::assertArrayHasKey( $fn, $found[ $file ] ?? array(), "$file: $fn names a clock of a budget that is gone; take it out of the list." );
+			}
+		}
+		self::assertSame( array(), $raw, 'A clock of a budget beside the named ones: measure through the named clock, or name it with its reason.' );
+		$wrap = static fn( string $body ): string => "<?php\nclass AB_MCP_X {\n\tpublic static function f() {\n\t\t$body\n\t}\n}\n";
+		foreach ( array( 'return microtime( true );', 'return \\hrtime( true );', 'return MICROTIME();' ) as $body ) {
+			self::assertSame( array( array( 'AB_MCP_X::f', 4 ) ), SourceScan::scan( $wrap( $body ) )['budget'], $body );
+		}
+		self::assertSame( array(), SourceScan::scan( $wrap( 'return $o->microtime();' ) )['budget'] );
 	}
 
 	public function testTheScanFindsEverySpellingOfACallOfTimeAndNoOther(): void {

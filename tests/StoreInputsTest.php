@@ -309,31 +309,6 @@ final class StoreInputsTest extends TestCase {
 	 *
 	 * @return array<string,array{base:mixed,more:array,valid:array,run:callable,unknown:callable}>
 	 */
-	/** A state of a stage as AB_MCP_Sync_Code_Stage writes it. */
-	private static function stage_state(): string {
-		return AB_MCP_Sync_Canon::encode(
-			array(
-				'done'    => 0,
-				'format'  => 'ab-code-stage/1',
-				'lint'    => true,
-				'notes'   => array( 'compile_check unavailable: none here.' ),
-				'refusal' => null,
-				'seq'     => 1,
-				'signed'  => str_repeat( 'b', 64 ),
-				'source'  => 'wordpress.org',
-				'state'   => 'checking',
-				'todo'    => array( 'a.php' ),
-				'tree'    => array(
-					'hash' => str_repeat( 'b', 64 ),
-					'name' => 'ab-it-code',
-				),
-				'unit'    => array(
-					'kind' => 'plugin',
-					'ref'  => 'ab-it-code',
-				),
-			)
-		);
-	}
 
 	/** A signed manifest of a unit as AB_MCP_Sync_Code_Stage::signed() gives it, with this host of updates. */
 	private static function code_signed( $host ): array {
@@ -350,25 +325,6 @@ final class StoreInputsTest extends TestCase {
 		);
 	}
 
-	/** An index of a package of code as AB_MCP_Sync_Code_Package::unpacked() writes it. */
-	private static function code_index(): string {
-		return AB_MCP_Sync_Canon::encode(
-			array(
-				'files'  => array(
-					array(
-						'chunks' => array( 0 ),
-						'kind'   => 'plugin',
-						'path'   => 'inc/a.php',
-						'pieces' => 1,
-						'ref'    => 'ab-it-code',
-						'sha256' => str_repeat( 'a', 64 ),
-						'size'   => 3,
-					),
-				),
-				'format' => 'ab-sync-code/1',
-			)
-		);
-	}
 
 	private static function drivers(): array {
 		$now     = self::NOW;
@@ -619,25 +575,6 @@ final class StoreInputsTest extends TestCase {
 				'run'     => static fn( $v ) => AB_MCP_Sync_Schema::keep_until( $now, $v, 0 ),
 				'unknown' => static fn( $got ): bool => 0 === $got,
 			),
-			/* ------------------------- the state of a package of code */
-			'code.index'               => array(
-				'base'    => self::code_index(),
-				'more'    => array(
-					'fixed: a kind of no code'       => str_replace( '"kind":"plugin"', '"kind":"attachment"', self::code_index() ),
-					'fixed: no chunk'                => str_replace( '"chunks":[0]', '"chunks":[]', self::code_index() ),
-					'fixed: a chunk as text'         => str_replace( '"chunks":[0]', '"chunks":["0"]', self::code_index() ),
-					'fixed: a path with ..'          => str_replace( '"path":"inc/a.php"', '"path":"../a.php"', self::code_index() ),
-					'fixed: a ref with a slash'      => str_replace( '"ref":"ab-it-code"', '"ref":"ab/it"', self::code_index() ),
-					'fixed: pieces not of its size'  => str_replace( '"pieces":1', '"pieces":2', self::code_index() ),
-					'fixed: another format'          => str_replace( 'ab-sync-code/1', 'ab-sync-media/1', self::code_index() ),
-					'fixed: a field more'            => str_replace( '"format":', '"extra":1,"format":', self::code_index() ),
-				),
-				'valid'   => array( array( self::code_index(), AB_MCP_Sync_Canon::decode( self::code_index(), 8 )['files'] ) ),
-				// Its consumer: the stage takes nothing of a package whose index
-				// is not of its form (AB_MCP_Sync_Code_Package::taken() refuses).
-				'run'     => static fn( $v ) => AB_MCP_Sync_Code_Package::index( $v ),
-				'unknown' => $null,
-			),
 			/* ------------------------------ the stage of a unit of code */
 			'stage.update_uri'         => array(
 				'base'    => 'example.com',
@@ -660,20 +597,67 @@ final class StoreInputsTest extends TestCase {
 				},
 				'unknown' => static fn( $got ): bool => 'code:update_uri_unknown' === $got,
 			),
-			'stage.state'              => array(
-				'base'    => self::stage_state(),
+			'stage.update_head'        => array(
+				'base'    => array( 'Update URI' => 'https://example.com/x' ),
 				'more'    => array(
-					'fixed: done past the files' => str_replace( '"done":0', '"done":2', self::stage_state() ),
-					'fixed: refused without why' => str_replace( '"state":"checking"', '"state":"refused"', self::stage_state() ),
-					'fixed: a unit of no code'   => str_replace( '"kind":"plugin"', '"kind":"attachment"', self::stage_state() ),
-					'fixed: a ref with a slash'  => str_replace( '"ref":"ab-it-code"', '"ref":"a/b"', self::stage_state() ),
-					'fixed: ready as text 1'     => str_replace( '"state":"checking"', '"state":1', self::stage_state() ),
+					'fixed: the address alone' => 'https://example.com/x',
+					'fixed: none read'         => null,
+					'fixed: a field more'      => array(
+						'Update URI' => '',
+						'Version'    => '1',
+					),
 				),
-				'valid'   => array( array( self::stage_state(), AB_MCP_Sync_Canon::decode( self::stage_state(), 8 ) ) ),
-				// Its consumer: a stage whose state is not of its form is never
-				// ready (AB_MCP_Sync_Code_Stage::state(), ready()).
-				'run'     => static fn( $v ) => AB_MCP_Sync_Code_Stage::state_of( $v ),
+				// Its consumer host_of_head(): the host of a head read whole, ''
+				// where it names none; a head not of its form is unknown (A2).
+				'valid'   => array( array( array( 'Update URI' => '' ), '' ), array( array( 'Update URI' => 'https://Updates.Example.com/b?key=1' ), 'updates.example.com' ) ),
+				'run'     => static fn( $v ) => \AB_MCP_Sync_Env::host_of_head( $v ),
 				'unknown' => $null,
+			),
+			'stage.head'               => array(
+				'base'    => array(
+					'Plugin Name'       => 'A',
+					'Requires PHP'      => '',
+					'Requires at least' => '',
+				),
+				'more'    => array(
+					'fixed: none read'          => null,
+					'fixed: its values in a list' => array( 'A', '', '' ),
+				),
+				// Its consumer head_refusal(): a head of no main file holds; a
+				// head not of its form refuses as unknown (A4), never as none.
+				'valid'   => array(
+					array(
+						array(
+							'Plugin Name'       => '',
+							'Requires PHP'      => '',
+							'Requires at least' => '',
+						),
+						null,
+					),
+				),
+				'run'     => static fn( $v ) => AB_MCP_Sync_Code_Stage::head_refusal( $v, 'a.php', 'plugin' ),
+				'unknown' => static fn( $got ): bool => is_string( $got ) && false !== strpos( $got, 'could not be read whole' ),
+			),
+			'stage.version'            => array(
+				'base'    => '1.0.0',
+				'more'    => array(
+					'fixed: a number' => 1.0,
+					'fixed: none'     => null,
+				),
+				// Its consumer from_org(): a version of its form goes on (to the
+				// file system, here not direct); one not of its form fetches
+				// nothing.
+				'valid'   => array( array( '1.0.0', 'code:file_mods' ) ),
+				'run'     => static function ( $v ) {
+					AB_MCP_Test_Seam::install( AB_MCP_Sync_Code_Stage::class, 'naht_sync_code_stage', new StoreInputsCodeCalls() );
+					try {
+						$got = AB_MCP_Sync_Code_Stage::from_org( array( 'version' => $v ) + self::code_signed( '' ), '/nowhere' );
+					} finally {
+						AB_MCP_Test_Seam::restore_all();
+					}
+					return is_wp_error( $got ) ? $got->get_error_code() : $got;
+				},
+				'unknown' => static fn( $got ): bool => 'code:org_unit' === $got,
 			),
 			/* ------------------------------------------------------ budgets */
 			'budget.max_packages'      => array(

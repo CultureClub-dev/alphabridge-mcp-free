@@ -28,6 +28,10 @@ use AB_MCP_Protected_Store;
 use AB_MCP_Store_Budget;
 use AB_MCP_Store_Inputs;
 use AB_MCP_Sync_Backup;
+use AB_MCP_Sync_Canon;
+use AB_MCP_Sync_Code_Package;
+use AB_MCP_Sync_Code_Stage;
+use AB_MCP_Sync_Import;
 use AB_MCP_Sync_Schema;
 use AB_MCP_Test_Seam;
 use AlphaBridge\Tests\WrongForms;
@@ -38,6 +42,7 @@ use RuntimeException;
 require_once __DIR__ . '/support/class-it-store-calls.php';
 require_once AB_MCP_DIR . 'includes/sync/class-sync-backup.php';
 require_once AB_MCP_DIR . 'includes/sync/class-sync-run.php';
+require_once AB_MCP_DIR . 'includes/sync/class-sync-code-stage.php';
 require_once dirname( __DIR__ ) . '/WrongForms.php';
 
 final class StoreInputsTest extends TestCase {
@@ -606,6 +611,123 @@ final class StoreInputsTest extends TestCase {
 				},
 				'unknown' => $refused( 'ab_mcp_store_used_unknown' ),
 				'texts'   => false,
+				'written' => null,
+			);
+		}
+		if ( 'code.index' === $id ) {
+			// The index of a package of code in its group of the area in
+			// (Z8b branch 4; Codex round 1, B2): index() and taken() both take
+			// a text not of its form as unknown, and the stage nothing of it.
+			$index = AB_MCP_Sync_Canon::encode(
+				array(
+					'files'  => array(
+						array(
+							'chunks' => array( 0 ),
+							'kind'   => 'plugin',
+							'path'   => 'inc/a.php',
+							'pieces' => 1,
+							'ref'    => 'ab-it-code',
+							'sha256' => str_repeat( 'a', 64 ),
+							'size'   => 3,
+						),
+					),
+					'format' => 'ab-sync-code/1',
+				)
+			);
+			return array(
+				'base'    => $index,
+				'more'    => array(
+					'fixed: a kind of no code'      => str_replace( '"kind":"plugin"', '"kind":"attachment"', $index ),
+					'fixed: no chunk'               => str_replace( '"chunks":[0]', '"chunks":[]', $index ),
+					'fixed: a chunk as text'        => str_replace( '"chunks":[0]', '"chunks":["0"]', $index ),
+					'fixed: a path with ..'         => str_replace( '"path":"inc/a.php"', '"path":"../a.php"', $index ),
+					'fixed: a ref with a slash'     => str_replace( '"ref":"ab-it-code"', '"ref":"ab/it"', $index ),
+					'fixed: pieces not of its size' => str_replace( '"pieces":1', '"pieces":2', $index ),
+					'fixed: another format'         => str_replace( 'ab-sync-code/1', 'ab-sync-media/1', $index ),
+					'fixed: a field more'           => str_replace( '"format":', '"extra":1,"format":', $index ),
+				),
+				'valid'   => array( array( $index, array( 'value', 'taken' ) ) ),
+				'run'     => function ( $value ) {
+					$gid = AB_MCP_Protected_Store::open( 'in', array( 'label' => 'report' ) );
+					self::assertIsString( $gid );
+					self::assertIsArray( AB_MCP_Protected_Store::put( 'in', $gid, AB_MCP_Sync_Code_Package::index_name( hash( 'sha256', $value ) ), $value ) );
+					$taken = AB_MCP_Sync_Code_Package::taken( $gid, array( 'purpose' => 'code' ), AB_MCP_Protected_Store::files( 'in', $gid ) );
+					$out   = array( null === AB_MCP_Sync_Code_Package::index( $value ) ? 'unknown' : 'value', is_wp_error( $taken ) ? $taken->get_error_code() : 'taken' );
+					AB_MCP_Protected_Store::remove( 'in', $gid );
+					return $out;
+				},
+				'unknown' => static fn( $got ): bool => array( 'unknown', 'ab_mcp_sync_code_index' ) === $got,
+				'texts'   => true,
+				'written' => null,
+			);
+		}
+		if ( 'stage.state' === $id ) {
+			// The state of a stage in its group of the area stage (Z8b branch
+			// 4; Codex round 1, B2): state_of(), state() through ready() and
+			// complete() take a text not of its form as unknown; never ready.
+			$state = AB_MCP_Sync_Canon::encode(
+				array(
+					'done'    => 1,
+					'format'  => 'ab-code-stage/1',
+					'lint'    => true,
+					'notes'   => array( 'compile_check unavailable: none here.' ),
+					'refusal' => null,
+					'seq'     => 1,
+					'signed'  => str_repeat( 'b', 64 ),
+					'source'  => 'wordpress.org',
+					'state'   => 'ready',
+					'todo'    => array(
+						array(
+							'path'   => 'a.php',
+							'sha256' => str_repeat( 'a', 64 ),
+							'size'   => 3,
+						),
+					),
+					'tree'    => array(
+						'hash' => str_repeat( 'b', 64 ),
+						'name' => 'ab-it-code',
+					),
+					'unit'    => array(
+						'kind' => 'plugin',
+						'ref'  => 'ab-it-code',
+					),
+				)
+			);
+			return array(
+				'base'    => $state,
+				'more'    => array(
+					'fixed: done past the files' => str_replace( '"done":1', '"done":2', $state ),
+					'fixed: ready with a why'    => str_replace( '"refusal":null', '"refusal":{"code":"code:syntax","line":null,"message":"x","path":null}', $state ),
+					'fixed: a unit of no code'   => str_replace( '"kind":"plugin"', '"kind":"attachment"', $state ),
+					'fixed: a ref with a slash'  => str_replace( '"ref":"ab-it-code"', '"ref":"a/b"', $state ),
+					'fixed: ready as text 1'     => str_replace( '"state":"ready"', '"state":1', $state ),
+					'fixed: a file as its path'  => str_replace( '{"path":"a.php","sha256":"' . str_repeat( 'a', 64 ) . '","size":3}', '"a.php"', $state ),
+				),
+				'valid'   => array( array( $state, array( true, true, 'ready' ) ) ),
+				'run'     => function ( $value ) {
+					self::run_row( 7, 'open' );
+					$gid = AB_MCP_Protected_Store::open(
+						'stage',
+						array(
+							'run_id' => 7,
+							'label'  => 'code',
+						)
+					);
+					self::assertIsString( $gid );
+					$name = AB_MCP_Sync_Code_Stage::STATE . '0001-' . substr( AB_MCP_Sync_Import::held_name( hash( 'sha256', $value ) ), strlen( AB_MCP_Sync_Import::HELD ) );
+					self::assertIsArray( AB_MCP_Protected_Store::put( 'stage', $gid, $name, $value ) );
+					$hash     = str_repeat( 'b', 64 );
+					$complete = AB_MCP_Sync_Code_Stage::complete( $gid, 'ab-it-code', $hash, array() );
+					$out      = array(
+						null !== AB_MCP_Sync_Code_Stage::state_of( $value ),
+						null !== AB_MCP_Sync_Code_Stage::ready( $gid, 'ab-it-code', $hash ),
+						is_wp_error( $complete ) ? $complete->get_error_code() : $complete['state'],
+					);
+					AB_MCP_Protected_Store::remove( 'stage', $gid );
+					return $out;
+				},
+				'unknown' => static fn( $got ): bool => array( false, false, 'code:stage_unknown' ) === $got,
+				'texts'   => true,
 				'written' => null,
 			);
 		}

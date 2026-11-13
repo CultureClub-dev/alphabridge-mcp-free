@@ -2071,6 +2071,58 @@ final class AB_MCP_Protected_Store {
 	}
 
 	/**
+	 * Whether a tree of these paths could go into the store as it lies, asked
+	 * before anything of it is written, even into a building folder (Z8b
+	 * branch 4, Codex round 1, A1): in the uploads no file that configures
+	 * the web server or PHP, and only with the PHP proof below stage and
+	 * backups; the same refusals as put_tree() (code:store_web), which asks
+	 * them again of the tree it reads.
+	 *
+	 * @param string[] $paths Paths of the unit (or names in a ZIP).
+	 * @return true|WP_Error
+	 */
+	public static function web_ready( array $paths ) {
+		$root = self::root();
+		if ( is_wp_error( $root ) ) {
+			return $root;
+		}
+		// A store in the uploads proved before PHP was asked below stage and
+		// backups: asked now, as put_tree() does.
+		$proof = self::proof();
+		if ( null === $proof['php'] && 'uploads' === $proof['where'] ) {
+			self::proof( null, true );
+			$root = self::root();
+			if ( is_wp_error( $root ) ) {
+				return $root;
+			}
+		}
+		$id = self::install_id();
+		if ( 'outside' === (string) array_search( $root, self::candidates( $id ), true ) ) {
+			return true;
+		}
+		$config = self::server_config( array_map( static fn( $path ) => array( $path ), array_values( array_filter( $paths, 'is_string' ) ) ) );
+		if ( array() !== $config || count( $paths ) !== count( array_filter( $paths, 'is_string' ) ) ) {
+			return new WP_Error(
+				'code:store_web',
+				/* translators: %s: the files, relative to the unit, comma-separated. */
+				sprintf( __( 'The unit holds a file that configures the web server or PHP (%s), and the protected store lies in the uploads folder, where such a file could open its folder to the web; so it does not go into the store. Ask the host to let PHP create the folder ab-mcp-store beside the WordPress folder, outside the web root, then try again; until then, update the plugin or theme by hand in wp-admin.', 'alphabridge-mcp' ), implode( ', ', array_slice( $config, 0, 5 ) ) ),
+				array(
+					'why'   => 'server_config',
+					'files' => array_slice( $config, 0, 20 ),
+				)
+			);
+		}
+		if ( true !== self::locked( $root, static fn() => self::php_proved( $id ) ) ) {
+			return new WP_Error(
+				'code:store_web',
+				__( 'The protected store lies in the uploads folder, and its self-check did not show that the web server answers a PHP file in a folder below stage and below backups with 403 or 404 without running it; so no plugin or theme goes into the store. Ask the host to let PHP create the folder ab-mcp-store beside the WordPress folder, outside the web root (or to deny every request below the folder ab-mcp-store-… in the uploads, PHP files included), then try again in a day, when the check is made anew; until then, update the plugin or theme by hand in wp-admin.', 'alphabridge-mcp' ),
+				array( 'why' => 'php_proof' )
+			);
+		}
+		return true;
+	}
+
+	/**
 	 * The building folder a path lies below (delete_path()): a folder right in
 	 * tmp/ with the prefix TMP_PREFIX that holds the path; null for a path
 	 * right in tmp/ or elsewhere.

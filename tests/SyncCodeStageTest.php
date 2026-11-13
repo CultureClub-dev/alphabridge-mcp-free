@@ -410,7 +410,17 @@ final class SyncCodeStageTest extends TestCase {
 		file_put_contents( $tree . '/a.php', '<?php' );
 		$read     = \AB_MCP_Sync_File_Manifest::unit( $this->dir . '/tree', 'ab-it-code', 'staging', microtime( true ) + 60, true, 'plugin' );
 		$to_check = new \ReflectionMethod( AB_MCP_Sync_Code_Stage::class, 'to_check' );
-		self::assertSame( array( 'a.php' ), $to_check->invoke( null, $tree, $read['hash'], 'plugin', 'ab-it-code' ) );
+		self::assertSame(
+			array(
+				array(
+					'path'   => 'a.php',
+					'sha256' => hash( 'sha256', '<?php' ),
+					'size'   => 5,
+				),
+			),
+			$to_check->invoke( null, $tree, $read['hash'], 'plugin', 'ab-it-code' ),
+			'Each with the size and SHA-256 the bytes it checks are bound to (A3).'
+		);
 		self::assertNull( $to_check->invoke( null, $tree, str_repeat( 'c', 64 ), 'plugin', 'ab-it-code' ), 'Another hash.' );
 		AB_MCP_Sync_Code_Stage::$clock = static fn(): float => microtime( true ) - 1000.0;
 		try {
@@ -418,6 +428,102 @@ final class SyncCodeStageTest extends TestCase {
 		} finally {
 			AB_MCP_Sync_Code_Stage::$clock = null;
 		}
+	}
+
+	public function testAZipWithAFileThatConfiguresTheWebServerIsNotUnpackedIntoAStoreThatRefusesIt(): void {
+		// from_org() (Codex round 1, A1): the names in the directory of the ZIP
+		// go to web_ready() before anything of it is unpacked; a store in the
+		// uploads refuses a .htaccess, and nothing is unpacked.
+		$calls            = new SyncCodeStageCalls();
+		$calls->body      = "PK\x03\x04" . str_repeat( 'z', 96 );
+		$calls->zip_files = array(
+			'a.php'     => '<?php',
+			'.htaccess' => 'Require all granted',
+		);
+		self::seam( $calls );
+		mkdir( $this->dir . '/b1' );
+		self::assertSame( 'code:store_web', AB_MCP_Sync_Code_Stage::from_org( self::signed(), $this->dir . '/b1' )->get_error_code() );
+		self::assertSame( 0, $calls->unzipped, 'Nothing unpacked.' );
+		self::assertSame( array( array( 'ab-it-code/a.php', 'ab-it-code/.htaccess' ) ), $calls->web );
+		self::assertFileDoesNotExist( $this->dir . '/b1/org' );
+	}
+
+	public function testOnlyTheBytesTheManifestNamesAreChecked(): void {
+		// check_file() (Codex round 1, A3): the bytes parsed are those of the
+		// manifest of the tree, by size and SHA-256; a read that ends short
+		// with a valid beginning is not checked, never passed, also without
+		// php -l.
+		$file = $this->dir . '/unit/a.php';
+		file_put_contents( $file, "<?php\n\$a = 1;\n\$b = 2;\n" );
+		$item  = array(
+			'path'   => 'a.php',
+			'sha256' => hash_file( 'sha256', $file ),
+			'size'   => filesize( $file ),
+		);
+		$check = new \ReflectionMethod( AB_MCP_Sync_Code_Stage::class, 'check_file' );
+		$calls = new SyncCodeStageCalls();
+		self::seam( $calls );
+		self::assertSame( array(), $check->invoke( null, $file, $item, false ), 'The whole file: checked, passed.' );
+		$calls->read = "<?php\n\$a = 1;\n";
+		$got         = $check->invoke( null, $file, $item, false );
+		self::assertSame( 'code:syntax_unchecked', $got['refusal'][0] );
+		self::assertStringContainsString( 'a.php', $got['refusal'][1] );
+		$calls->read = "<?php\n\$a = 1;\n\$c = 2;\n";
+		self::assertSame( 'code:syntax_unchecked', $check->invoke( null, $file, $item, false )['refusal'][0], 'Bytes of the same size, other ones.' );
+	}
+
+	public function testAHeadThatDoesNotReadWholeIsUnknownNeverOneWithoutRequirements(): void {
+		// requirements() (Codex round 1, A4): a head of the new version not
+		// read whole refuses; a PHP file of a plugin without Plugin Name, or a
+		// folder named so, holds; a theme without style.css refuses.
+		$req    = new \ReflectionMethod( AB_MCP_Sync_Code_Stage::class, 'requirements' );
+		$plugin = $this->dir . '/p';
+		mkdir( $plugin . '/ordner.php', 0777, true );
+		file_put_contents( $plugin . '/helfer.php', "<?php\n// no head\n" );
+		self::assertNull( $req->invoke( null, $plugin, 'folder', 'plugin' ), 'No main file here: nothing required.' );
+		AB_MCP_Test_Seam::install( \AB_MCP_Sync_Env::class, 'naht_sync_env', new \AB_MCP_Sync_Env_Calls(), array( array( 'method' => 'head_text', 'kind' => 'return', 'value' => false ) ) );
+		self::assertStringContainsString( 'could not be read whole', (string) $req->invoke( null, $plugin, 'folder', 'plugin' ), 'A head that cannot be read.' );
+		AB_MCP_Test_Seam::restore_all();
+		AB_MCP_Test_Seam::install( \AB_MCP_Sync_Env::class, 'naht_sync_env', new \AB_MCP_Sync_Env_Calls(), array( array( 'method' => 'head_text', 'kind' => 'half', 'keep' => 6 ) ) );
+		self::assertStringContainsString( 'could not be read whole', (string) $req->invoke( null, $plugin, 'folder', 'plugin' ), 'A head read short.' );
+		AB_MCP_Test_Seam::restore_all();
+		mkdir( $this->dir . '/t' );
+		self::assertStringContainsString( 'could not be read whole', (string) $req->invoke( null, $this->dir . '/t', 'folder', 'theme' ), 'A theme without style.css.' );
+	}
+
+	public function testAHeadOfTheStagingSiteThatDoesNotReadWholeLeavesTheHostUnknown(): void {
+		// update_hosts() (Codex round 1, A2): a head file that is not there,
+		// that cannot be read or that reads short is unknown (null), and so
+		// the host of its unit (unit_host()): from_org() then fetches nothing.
+		$dir = $this->dir . '/unit';
+		file_put_contents( $dir . '/a.php', "<?php\n/**\n * Plugin Name: A\n */\n" );
+		self::assertSame( array( 'a.php' => '', 'fehlt.php' => null ), \AB_MCP_Sync_Env::update_hosts( $dir, array( 'a.php', 'fehlt.php' ) ), 'A head file that is not there.' );
+		AB_MCP_Test_Seam::install( \AB_MCP_Sync_Env::class, 'naht_sync_env', new \AB_MCP_Sync_Env_Calls(), array( array( 'method' => 'head_text', 'kind' => 'return', 'value' => false ) ) );
+		self::assertSame( array( 'a.php' => null ), \AB_MCP_Sync_Env::update_hosts( $dir, array( 'a.php' ) ), 'A head that cannot be read.' );
+		AB_MCP_Test_Seam::restore_all();
+		AB_MCP_Test_Seam::install( \AB_MCP_Sync_Env::class, 'naht_sync_env', new \AB_MCP_Sync_Env_Calls(), array( array( 'method' => 'head_text', 'kind' => 'half', 'keep' => 6 ) ) );
+		self::assertSame( array( 'a.php' => null ), \AB_MCP_Sync_Env::update_hosts( $dir, array( 'a.php' ) ), 'A head read short, without its Update URI.' );
+		AB_MCP_Test_Seam::restore_all();
+		$unit = new \ReflectionMethod( \AB_MCP_Sync_Env::class, 'unit_host' );
+		self::assertNull( $unit->invoke( null, array( 'uris' => array( 'a.php' => '', 'b.php' => null ) ), array( 'a.php', 'b.php' ) ), 'One head unknown: the host of the unit unknown.' );
+		self::assertSame( 'code:update_uri_unknown', AB_MCP_Sync_Code_Stage::from_org( self::signed( array( 'update_uri' => null ) ), $this->dir )->get_error_code() );
+	}
+
+	public function testTheClockOfABudgetIsOnlyAFiniteNumber(): void {
+		// clock() (Codex round 1, B4): the time of a budget within one call is
+		// a finite float or unknown (null), never cast: the slice ends there.
+		$clock = new \ReflectionMethod( AB_MCP_Sync_Code_Stage::class, 'clock' );
+		try {
+			foreach ( array( 'text' => 'x', 'a whole number' => 5, 'infinite' => INF, 'not a number' => NAN, 'none' => null ) as $what => $value ) {
+				AB_MCP_Sync_Code_Stage::$clock = static fn() => $value;
+				self::assertNull( $clock->invoke( null ), $what );
+			}
+			AB_MCP_Sync_Code_Stage::$clock = static fn(): float => 1.5;
+			self::assertSame( 1.5, $clock->invoke( null ) );
+		} finally {
+			AB_MCP_Sync_Code_Stage::$clock = null;
+		}
+		self::assertIsFloat( $clock->invoke( null ), 'Without a test: microtime().' );
 	}
 
 	public function testTheHostOfAUnitIsAnotherOneWhereAnyMainFileNamesOne(): void {
@@ -496,6 +602,32 @@ final class SyncCodeStageCalls {
 			file_put_contents( $to . '/ab-it-code/' . $path, $bytes );
 		}
 		return true;
+	}
+
+	/** @var array[] The paths web_ready() was asked for. */
+	public $web = array();
+
+	/** @var string|null A text read() gives instead of the file (a read that ends short), or null. */
+	public $read = null;
+
+	/** The names of the ZIP: its unit's files under the folder of the unit. */
+	public function zip_names( $zip ): array {
+		return array_map( static fn( $path ) => 'ab-it-code/' . $path, array_keys( (array) $this->zip_files ) );
+	}
+
+	/** As the store in the uploads: a file that configures the web server or PHP is refused. */
+	public function web_ready( array $paths ) {
+		$this->web[] = $paths;
+		foreach ( $paths as $path ) {
+			if ( '.htaccess' === basename( $path ) ) {
+				return new WP_Error( 'code:store_web', 'A file that configures the web server.' );
+			}
+		}
+		return true;
+	}
+
+	public function read( $path ) {
+		return null === $this->read ? file_get_contents( $path ) : $this->read;
 	}
 
 	/** @var array taken(): the files of the packages. */

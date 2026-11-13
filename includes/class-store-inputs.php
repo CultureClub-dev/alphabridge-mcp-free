@@ -486,10 +486,62 @@ final class AB_MCP_Store_Inputs {
 				'max_bytes' => null,
 			),
 		),
+		'stage.update_head'        => array(
+			'consumer' => 'stage',
+			'source'   => 'AB_MCP_Sync_Env::host_of_head(), the head of a main file or style.css on the staging site (head_read())',
+			'field'    => 'the head as it reads whole: Update URI, the host it names goes into the line of the unit; a head not read whole is unknown, the host of the unit too (Codex round 1 of branch 4, A2)',
+			'form'     => array(
+				'type'   => 'record',
+				'fields' => array(
+					'Update URI' => array(
+						'type'      => 'string',
+						'empty'     => true,
+						'max_bytes' => null,
+					),
+				),
+				'extra'  => false,
+			),
+		),
+		'stage.head'               => array(
+			'consumer' => 'stage',
+			'source'   => 'AB_MCP_Sync_Code_Stage::head_refusal(), the head of each PHP file of a plugin or style.css of a theme in the stage (head_read())',
+			'field'    => 'Plugin Name, Requires at least and Requires PHP of the new version, as it reads whole: whether it runs here; unknown refuses, never ready (Codex round 1 of branch 4, A4)',
+			'form'     => array(
+				'type'   => 'record',
+				'fields' => array(
+					'Plugin Name'       => array(
+						'type'      => 'string',
+						'empty'     => true,
+						'max_bytes' => null,
+					),
+					'Requires PHP'      => array(
+						'type'      => 'string',
+						'empty'     => true,
+						'max_bytes' => null,
+					),
+					'Requires at least' => array(
+						'type'      => 'string',
+						'empty'     => true,
+						'max_bytes' => null,
+					),
+				),
+				'extra'  => false,
+			),
+		),
+		'stage.version'            => array(
+			'consumer' => 'stage',
+			'source'   => 'AB_MCP_Sync_Code_Stage::from_org(), the version of the signed line of the unit',
+			'field'    => 'the version the package of wordpress.org is fetched in (its exact address); unknown fetches nothing',
+			'form'     => array(
+				'type'      => 'string',
+				'empty'     => false,
+				'max_bytes' => 64,
+			),
+		),
 		'stage.state'              => array(
 			'consumer' => 'stage',
 			'source'   => 'AB_MCP_Sync_Code_Stage::state_of(), the last state file of the group of a stage',
-			'field'    => 'the state of a stage: its unit, the signed hash, its tree, the files to check and how far, ready or refused; only ready lets the swap take it (branch 5)',
+			'field'    => 'the state of a stage: its unit, the signed hash, its tree, the files to check with the size and SHA-256 the bytes checked are bound to (Codex round 1, A3) and how far, ready or refused; only ready lets the swap take it (branch 5)',
 			'form'     => array(
 				'type'  => 'json',
 				'codec' => 'AB_MCP_Sync_Canon',
@@ -564,9 +616,17 @@ final class AB_MCP_Store_Inputs {
 							'type'      => 'list',
 							'empty'     => true,
 							'item'      => array(
-								'type'      => 'string',
-								'empty'     => false,
-								'max_bytes' => 4096,
+								'type'   => 'record',
+								'fields' => array(
+									'path'   => array(
+										'type'      => 'string',
+										'empty'     => false,
+										'max_bytes' => 4096,
+									),
+									'sha256' => self::SHA256,
+									'size'   => self::COUNT,
+								),
+								'extra'  => false,
 							),
 							'unique'    => true,
 							'max_items' => null,

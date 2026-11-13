@@ -911,7 +911,12 @@ final class AB_MCP_Sync_Export {
 		if ( is_wp_error( AB_MCP_Own_Files::own_file_refusal( $path ) ) ) {
 			return 'own';
 		}
-		$now  = null !== AB_MCP_Sync_Env::$clock ? (float) call_user_func( AB_MCP_Sync_Env::$clock ) : microtime( true );
+		// The budget of the reading, within this call (a named exception of
+		// the time() guard): a time that is no finite number reads nothing.
+		$now = null !== AB_MCP_Sync_Env::$clock ? call_user_func( AB_MCP_Sync_Env::$clock ) : microtime( true );
+		if ( ! is_float( $now ) || ! is_finite( $now ) ) {
+			return 'unreadable';
+		}
 		$read = AB_MCP_Sync_File_Manifest::unit( $base, $one['ref'], 'staging', $now + AB_MCP_Sync_Env::UNIT_BUDGET, true, $one['kind'] );
 		if ( ! $read['complete'] || null === $read['hash'] ) {
 			return is_string( $read['cause'] ) ? $read['cause'] : 'unreadable';

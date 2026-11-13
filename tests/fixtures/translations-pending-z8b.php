@@ -281,4 +281,8 @@ return array(
 	'A chunk of the package %s does not unpack as it did when it was taken over (the server could not inflate it now), so the package is not read. Try again; if it keeps failing, take the package over anew: call wp_site_export on the staging site, then wp_site_import_chunk here.',
 	// includes/sync/class-sync-manifest.php (Z8b branch 4, V5: the clock of the manifest)
 	'The clock of this site gives no time (a whole number of seconds), so no package is signed or read: whether a package is still valid is decided by its time only. Try again; if it keeps failing, ask the host to check the clock of the server.',
+	// includes/sync/class-sync-code-stage.php (Z8b branch 4, Behebung 1: a stage without its run, bytes not of the manifest, a head not read whole)
+	'A stage belongs to a run of the takeover: pass its run_id, a whole number of 1 or more. Nothing was fetched or written.',
+	'%s did not read whole as the manifest of the stage names it (its size and SHA-256), so it is not checked and the stage is never ready. Stage the unit again.',
+	'The head of %s in the new version could not be read whole, so what it requires is not known and it is not swapped. Stage the unit again.',
 );

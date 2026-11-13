@@ -135,6 +135,7 @@ require_once __DIR__ . '/class-sync-net.php';
 require_once __DIR__ . '/class-sync-file-manifest.php';
 require_once __DIR__ . '/class-sync-core-compare.php';
 require_once dirname( __DIR__ ) . '/class-redactor.php';
+require_once dirname( __DIR__ ) . '/class-store-inputs.php';
 
 /**
  * The calls of the series of the environment to the rows of the site: the
@@ -161,6 +162,17 @@ final class AB_MCP_Sync_Env_Calls {
 	 */
 	public function attached( $after, $limit ) {
 		return AB_MCP_Sync_Media::reverse( $after, $limit );
+	}
+
+	/**
+	 * The first bytes of a file, as get_file_data() reads them for its head.
+	 *
+	 * @param string $path File.
+	 * @param int    $max  Bytes at most.
+	 * @return string|false
+	 */
+	public function head_text( $path, $max ) {
+		return @file_get_contents( $path, false, null, 0, $max ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- the head of a local file.
 	}
 }
 
@@ -812,11 +824,13 @@ final class AB_MCP_Sync_Env {
 	 * case, or what stands before the first "/", "?" or "#" where none is
 	 * read (an address of those signs only: itself, the host of none). Only
 	 * the host goes into a line: an address may carry a key of a licence.
-	 * A file that is no name is left out (its unit is unknown, unit_host()).
+	 * A file that is no name is left out (its unit is unknown, unit_host());
+	 * a head that does not read whole is unknown (null), never a head that
+	 * names none (Codex round 1 of branch 4, A2).
 	 *
 	 * @param string   $dir   The folder the files lie in.
 	 * @param string[] $files The files, relative to it.
-	 * @return array<string,string> file => host.
+	 * @return array<string,string|null> file => host, or null (unknown).
 	 */
 	public static function update_hosts( $dir, array $files ) {
 		$out = array();
@@ -824,27 +838,43 @@ final class AB_MCP_Sync_Env {
 			if ( ! is_string( $dir ) || ! is_string( $file ) ) {
 				continue;
 			}
-			$uri = self::head( rtrim( $dir, '/' ) . '/' . $file, array( 'Update URI' ) )['Update URI'];
-			if ( '' === $uri ) {
-				$out[ $file ] = '';
-				continue;
-			}
-			$host = wp_parse_url( function_exists( 'sanitize_url' ) ? sanitize_url( $uri ) : $uri, PHP_URL_HOST );
-			if ( ! is_string( $host ) || '' === $host ) {
-				// No host read: what stands before its first "/", "?" or "#"
-				// (w.org/plugin/x), never the whole address.
-				$first = strtok( $uri, '/?#' );
-				$host  = false === $first ? $uri : $first;
-			}
-			$out[ $file ] = self::name( strtolower( $host ) );
+			$out[ $file ] = self::host_of_head( self::head_read( rtrim( $dir, '/' ) . '/' . $file, array( 'Update URI' ) ) );
 		}
 		return $out;
 	}
 
 	/**
+	 * The host a head names for its updates (update_hosts()): the head in the
+	 * form of its row stage.update_head of AB_MCP_Store_Inputs::TABLE, else
+	 * unknown (null); '' where it names none.
+	 *
+	 * @param mixed $raw The head as head_read() gave it.
+	 * @return string|null
+	 */
+	public static function host_of_head( $raw ) {
+		$head = AB_MCP_Store_Inputs::read( 'stage.update_head', $raw );
+		if ( null === $head ) {
+			return null;
+		}
+		$uri = $head['Update URI'];
+		if ( '' === $uri ) {
+			return '';
+		}
+		$host = wp_parse_url( function_exists( 'sanitize_url' ) ? sanitize_url( $uri ) : $uri, PHP_URL_HOST );
+		if ( ! is_string( $host ) || '' === $host ) {
+			// No host read: what stands before its first "/", "?" or "#"
+			// (w.org/plugin/x), never the whole address.
+			$first = strtok( $uri, '/?#' );
+			$host  = false === $first ? $uri : $first;
+		}
+		return self::name( strtolower( $host ) );
+	}
+
+	/**
 	 * The host of updates of one unit (unit_lines()): update_host_of() over
 	 * the heads of its main files (a plugin) or of its style.css (a theme);
-	 * null where a head of them was not read (unknown: from_org() refuses).
+	 * null where a head of them was not read, or not read whole (unknown:
+	 * from_org() refuses).
 	 *
 	 * @param array    $ctx   unit_context().
 	 * @param string[] $files Its main files or style.css, as unit_context() names them.
@@ -854,7 +884,8 @@ final class AB_MCP_Sync_Env {
 		if ( ! isset( $ctx['uris'] ) || array() !== array_diff_key( array_flip( $files ), $ctx['uris'] ) ) {
 			return null;
 		}
-		return self::update_host_of( array_values( array_intersect_key( $ctx['uris'], array_flip( $files ) ) ) );
+		$hosts = array_values( array_intersect_key( $ctx['uris'], array_flip( $files ) ) );
+		return in_array( null, $hosts, true ) ? null : self::update_host_of( $hosts );
 	}
 
 	/**
@@ -924,7 +955,41 @@ final class AB_MCP_Sync_Env {
 	 */
 	public static function head( $path, array $headers ) {
 		$text = is_file( $path ) && is_readable( $path ) ? @file_get_contents( $path, false, null, 0, 8192 ) : false; // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged,WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- the head of a local file.
-		$text = str_replace( "\r", "\n", is_string( $text ) ? $text : '' );
+		return self::head_fields( is_string( $text ) ? $text : '', $headers );
+	}
+
+	/**
+	 * The headers of a file read whole (Z8b branch 4, Codex round 1, A2 and
+	 * A4): as head(), but null where the file is not there, cannot be read
+	 * or reads shorter than its first 8 KiB (or its size): unknown, never a
+	 * head that names nothing.
+	 *
+	 * @param string   $path    File.
+	 * @param string[] $headers Names.
+	 * @return array<string,string>|null
+	 */
+	public static function head_read( $path, array $headers ) {
+		if ( ! is_string( $path ) || ! is_file( $path ) || ! is_readable( $path ) ) {
+			return null;
+		}
+		clearstatcache( true, $path );
+		$size = @filesize( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- a file that went is answered.
+		$text = self::calls()->head_text( $path, 8192 );
+		if ( ! is_int( $size ) || ! is_string( $text ) || strlen( $text ) !== min( $size, 8192 ) ) {
+			return null;
+		}
+		return self::head_fields( $text, $headers );
+	}
+
+	/**
+	 * The headers in the text of a head (head(), head_read()).
+	 *
+	 * @param string   $text    The first bytes of the file.
+	 * @param string[] $headers Names.
+	 * @return array<string,string>
+	 */
+	private static function head_fields( $text, array $headers ) {
+		$text = str_replace( "\r", "\n", $text );
 		$out  = array();
 		foreach ( $headers as $header ) {
 			$out[ $header ] = 1 === preg_match( '/^(?:[ \t]*<\?(?:php)?)?[ \t\/*#@]*' . preg_quote( $header, '/' ) . ':(.*)$/mi', $text, $m ) ? trim( (string) preg_replace( '/\s*(?:\*\/|\?>).*/', '', $m[1] ) ) : '';

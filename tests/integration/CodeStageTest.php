@@ -49,6 +49,7 @@ use AB_MCP_IT_Sites;
 use AB_MCP_IT_Sync_Steps;
 use AB_MCP_IT_Process;
 use AB_MCP_Protected_Store;
+use AB_MCP_Protected_Store_Calls;
 use AB_MCP_Staging;
 use AB_MCP_Sync_Anchor;
 use AB_MCP_Sync_Code_Stage;
@@ -234,6 +235,26 @@ final class CodeStageTest extends TestCase {
 		);
 	}
 
+	/** The router of site A as Apache (the PHP files below stage and backups refused) or not. */
+	private static function apache( bool $on ): void {
+		$marker = self::root() . '/run/apache-' . basename( AB_MCP_IT_Sites::docroot( 'a' ) );
+		if ( $on ) {
+			touch( $marker );
+		} elseif ( is_file( $marker ) ) {
+			unlink( $marker );
+		}
+	}
+
+	/** Site A's store in its uploads, with the PHP proof (Apache) or without it. */
+	private static function uploads_store( bool $proved ): void {
+		$_SERVER['DOCUMENT_ROOT'] = self::root();
+		self::apache( $proved );
+		AB_MCP_Protected_Store::forget();
+		$proof = AB_MCP_Protected_Store::proof( \AB_MCP_Test_Sync_Fetcher::for_sites(), true );
+		self::assertSame( 'uploads', $proof['where'], (string) $proof['message'] );
+		self::assertSame( $proved, $proof['php'] );
+	}
+
 	/** The seam of the stage with the stand-in of wordpress.org. */
 	private static function wporg( ?array $offer = null ): CodeStageWporgCalls {
 		$calls = new CodeStageWporgCalls( new AB_MCP_Test_Wporg( $offer ) );
@@ -409,7 +430,9 @@ final class CodeStageTest extends TestCase {
 		$stage          = AB_MCP_Sync_Code_Stage::stage( self::RUN, $env, 'plugin', 'ab-it-daten', array( $id ) );
 		self::assertInstanceOf( \WP_Error::class, $stage );
 		self::assertSame( 'code:stage_mismatch', $stage->get_error_code() );
-		self::assertSame( array(), AB_MCP_Protected_Store::groups( 'stage' ), 'Nothing went into the area stage.' );
+		$groups = AB_MCP_Protected_Store::groups( 'stage' );
+		self::assertCount( 1, $groups, 'The group of the run, opened before the build (B1).' );
+		self::assertSame( array(), AB_MCP_Protected_Store::files( 'stage', $groups[0]['gid'] ), 'Nothing went into it.' );
 		$calls->corrupt = false;
 		self::assertIsArray( AB_MCP_Sync_Code_Stage::stage( self::RUN, $env, 'plugin', 'ab-it-daten', array( $id ) ), 'The same packages stage where the copy is whole.' );
 	}
@@ -690,6 +713,173 @@ final class CodeStageTest extends TestCase {
 		self::assertSame( 'ab_mcp_sync_import_unread', $taken->get_error_code() );
 	}
 
+	public function testAStageWithoutItsRunFetchesAndWritesNothing(): void {
+		// stage() (Codex round 1, B1): the run first, a whole number of 1 or
+		// more, and the group of the stage open, before anything is fetched
+		// or written.
+		AB_MCP_IT_Code::put( 'b', 'plugin', 'ab-it-inaktiv', '1.1.0' );
+		$env   = self::environment();
+		$calls = self::wporg();
+		foreach ( array( null, 0, '1', -3 ) as $run ) {
+			self::assertSame( 'code:run', AB_MCP_Sync_Code_Stage::stage( $run, $env, 'plugin', 'ab-it-inaktiv' )->get_error_code(), var_export( $run, true ) );
+		}
+		self::assertSame( array(), $calls->wporg->calls, 'Nothing fetched.' );
+		self::assertSame( array(), glob( self::root() . '/ab-mcp-store/*/tmp/.ab-tmp-*' ), 'No building folder.' );
+		self::assertSame( array(), AB_MCP_Protected_Store::groups( 'stage' ) );
+	}
+
+	public function testAStoreInTheUploadsTakesNoUnitItWouldRefuseNotEvenIntoABuildingFolder(): void {
+		// Codex round 1, A1: with the store in the uploads, a unit with a file
+		// that configures the web server or PHP, a ZIP that holds one, or a
+		// store without the PHP proof refuse before anything of the unit is
+		// written, even into a building folder.
+		$uploads = AB_MCP_IT_Sites::docroot( 'a' ) . '/wp-content/uploads';
+		try {
+			self::uploads_store( true );
+			// The unit of the staging site holds a .htaccess: refused before the download.
+			$b = AB_MCP_IT_Code::put( 'b', 'plugin', 'ab-it-inaktiv', '1.1.0' );
+			file_put_contents( $b . '/.htaccess', "Require all granted\n" );
+			$env   = self::environment();
+			$calls = self::wporg();
+			$got   = AB_MCP_Sync_Code_Stage::stage( self::RUN, $env, 'plugin', 'ab-it-inaktiv' );
+			self::assertSame( 'code:store_web', $got->get_error_code() );
+			self::assertSame( 'server_config', $got->get_error_data()['why'] );
+			self::assertSame( array(), $calls->wporg->calls, 'Nothing fetched.' );
+			// The unit without it, the ZIP of wordpress.org with one: refused
+			// by the directory of the ZIP, nothing unpacked.
+			unlink( $b . '/.htaccess' );
+			$env = self::environment();
+			$zip = AB_MCP_IT_Code::zip( 'plugin', 'ab-it-inaktiv', '1.1.0' );
+			$own = self::root() . '/run/mit-htaccess.zip';
+			copy( $zip, $own );
+			$z = new \ZipArchive();
+			self::assertTrue( $z->open( $own ) );
+			$z->addFromString( 'ab-it-inaktiv/.htaccess', "Require all granted\n" );
+			$z->close();
+			$calls      = self::wporg();
+			$calls->zip = (string) file_get_contents( $own );
+			unlink( $own );
+			$got = AB_MCP_Sync_Code_Stage::stage( self::RUN, $env, 'plugin', 'ab-it-inaktiv' );
+			self::assertSame( 'code:store_web', $got->get_error_code() );
+			self::assertSame( array( 'ab-it-inaktiv/.htaccess' ), $got->get_error_data()['files'] );
+			$root = (string) AB_MCP_Protected_Store::root();
+			self::assertSame( array(), glob( $root . '/tmp/.ab-tmp-*' ), 'The building folder went, nothing of the unit in it.' );
+			self::assertSame( array(), glob( $root . '/stage/*/ab-it-inaktiv' ), 'Nothing in stage.' );
+			// A store in the uploads without the PHP proof: refused before the download.
+			self::uploads_store( false );
+			$calls = self::wporg();
+			$got   = AB_MCP_Sync_Code_Stage::stage( self::RUN, $env, 'plugin', 'ab-it-inaktiv' );
+			self::assertSame( 'code:store_web', $got->get_error_code() );
+			self::assertSame( 'php_proof', $got->get_error_data()['why'] );
+			self::assertSame( array(), $calls->wporg->calls, 'Nothing fetched.' );
+		} finally {
+			self::apache( false );
+			foreach ( (array) glob( $uploads . '/ab-mcp-store-*' ) as $path ) {
+				self::remove_tree( (string) $path );
+			}
+			$_SERVER['DOCUMENT_ROOT'] = AB_MCP_IT_Sites::docroot( 'a' );
+			AB_MCP_Protected_Store::forget();
+		}
+	}
+
+	public function testTheCheckGoesOnOverCallsAndIsNeverReadyBeforeEveryFileIsChecked(): void {
+		// D7 (Codex round 1, B3): the time of a call ends after the first
+		// file; the next call goes on where it ended; a Throwable of the
+		// parser and a state that cannot be written end a call, never with
+		// ready, and the next call goes on.
+		AB_MCP_IT_Code::put( 'b', 'plugin', 'ab-it-inaktiv', '1.1.0' );
+		$env   = self::environment();
+		$calls = self::wporg();
+		$stage = AB_MCP_Sync_Code_Stage::stage( self::RUN, $env, 'plugin', 'ab-it-inaktiv' );
+		self::assertIsArray( $stage, is_wp_error( $stage ) ? $stage->get_error_code() . ': ' . $stage->get_error_message() : '' );
+		$calls->lint = false;
+		// The time of the call is over once the parser had its first file.
+		AB_MCP_Sync_Code_Stage::$clock = static fn(): float => microtime( true ) + ( $calls->parsed >= 1 ? 1000.0 : 0.0 );
+		$first                         = AB_MCP_Sync_Code_Stage::complete( $stage['gid'], $stage['name'], $stage['hash'], $env );
+		AB_MCP_Sync_Code_Stage::$clock = null;
+		self::assertSame( 'checking', $first['state'] );
+		self::assertSame( 1, $first['checked'] );
+		self::assertGreaterThan( 1, $first['files'], 'More than one file to check.' );
+		self::assertNull( AB_MCP_Sync_Code_Stage::ready( $stage['gid'], $stage['name'], $stage['hash'] ) );
+		// A Throwable of the parser ends the call; the stage stays checking.
+		$calls->parser_throws = true;
+		try {
+			AB_MCP_Sync_Code_Stage::complete( $stage['gid'], $stage['name'], $stage['hash'], $env );
+			self::fail( 'The Throwable of the parser ends the call.' );
+		} catch ( RuntimeException $e ) {
+			self::assertSame( 'The parser ended.', $e->getMessage() );
+		}
+		$calls->parser_throws = false;
+		self::assertNull( AB_MCP_Sync_Code_Stage::ready( $stage['gid'], $stage['name'], $stage['hash'] ) );
+		// The next state cannot be written: the call answers so, not ready.
+		AB_MCP_Test_Seam::install( AB_MCP_Protected_Store::class, 'naht_protected_store', new AB_MCP_Protected_Store_Calls(), array( array( 'method' => 'put', 'kind' => 'return', 'value' => false ) ) );
+		$failed = AB_MCP_Sync_Code_Stage::complete( $stage['gid'], $stage['name'], $stage['hash'], $env );
+		AB_MCP_Test_Seam::restore_all();
+		self::wporg()->lint = false;
+		self::assertInstanceOf( \WP_Error::class, $failed );
+		self::assertNull( AB_MCP_Sync_Code_Stage::ready( $stage['gid'], $stage['name'], $stage['hash'] ) );
+		// A time that is no number: the call ends as it is, the next goes on.
+		AB_MCP_Sync_Code_Stage::$clock = static fn(): float => NAN;
+		$none                          = AB_MCP_Sync_Code_Stage::complete( $stage['gid'], $stage['name'], $stage['hash'], $env );
+		AB_MCP_Sync_Code_Stage::$clock = null;
+		self::assertSame( array( 'checking', 1 ), array( $none['state'], $none['checked'] ) );
+		// Then on to the end: ready, every file checked.
+		$state = self::checked( $stage, $env );
+		self::assertSame( 'ready', $state['state'] );
+		self::assertSame( $state['files'], $state['checked'] );
+	}
+
+	public function testAnEndOfTheProcessWhileCheckingLeavesTheStageCheckingAndTheNextCallGoesOn(): void {
+		// Codex round 1, B3: exit in a process of its own in the parser, in
+		// php -l and while the next state is written; the stage is never
+		// ready from such a call, and the next call goes on to ready.
+		AB_MCP_IT_Code::put( 'b', 'plugin', 'ab-it-inaktiv', '1.1.0' );
+		$env = self::environment();
+		self::wporg();
+		$stage = AB_MCP_Sync_Code_Stage::stage( self::RUN, $env, 'plugin', 'ab-it-inaktiv' );
+		self::assertIsArray( $stage );
+		$points = array(
+			'parser' => array( 'AB_MCP_Sync_Code_Stage', self::SEAM, 'AB_MCP_Sync_Code_Stage_Calls', 'parse_php' ),
+			'lint'   => array( 'AB_MCP_Sync_Code_Stage', self::SEAM, 'AB_MCP_Sync_Code_Stage_Calls', 'lint' ),
+			'state'  => array( 'AB_MCP_Protected_Store', 'naht_protected_store', 'AB_MCP_Protected_Store_Calls', 'put' ),
+		);
+		foreach ( $points as $point => $at ) {
+			$run = AB_MCP_IT_Process::abort(
+				'a',
+				array(
+					'require' => array( AB_MCP_DIR . 'includes/sync/class-sync-code-stage.php' ),
+					'seams'   => array(
+						array(
+							'owner'    => $at[0],
+							'property' => $at[1],
+							'real'     => $at[2],
+							'faults'   => array(
+								array(
+									'method' => $at[3],
+									'kind'   => 'abort',
+									'point'  => $point,
+									'mode'   => 'no_shutdown',
+								),
+							),
+						),
+					),
+					'calls'   => array(
+						array(
+							'call' => 'AB_MCP_Sync_Code_Stage::complete',
+							'args' => array( $stage['gid'], $stage['name'], $stage['hash'], $env ),
+						),
+					),
+				)
+			);
+			self::assertSame( $point, $run['point'] );
+			self::assertNull( AB_MCP_Sync_Code_Stage::ready( $stage['gid'], $stage['name'], $stage['hash'] ), $point . ': never ready.' );
+		}
+		self::wporg()->lint = false;
+		$state = self::checked( $stage, $env );
+		self::assertSame( 'ready', $state['state'] );
+		self::assertSame( $state['files'], $state['checked'] );
+	}
+
 	public function testAStageThatDoesNotReadWholeForItsCheckIsNeverReady(): void {
 		// complete(): the PHP files to check only from the tree read whole as
 		// its hash; a reading that ends within its time passes no file over
@@ -763,7 +953,17 @@ final class CodeStageWporgCalls {
 		$this->real  = new AB_MCP_Sync_Code_Stage_Calls();
 	}
 
+	/** @var string|null A ZIP of its own the stand-in answers with (200), or null. */
+	public $zip = null;
+
 	public function get( $url, array $args ) {
+		if ( null !== $this->zip ) {
+			file_put_contents( $args['filename'], $this->zip );
+			return array(
+				'response' => array( 'code' => 200 ),
+				'body'     => '',
+			);
+		}
 		return $this->wporg->get( $url, $args );
 	}
 
@@ -781,6 +981,14 @@ final class CodeStageWporgCalls {
 
 	public function unpacked_size( $zip ) {
 		return $this->real->unpacked_size( $zip );
+	}
+
+	public function zip_names( $zip ) {
+		return $this->real->zip_names( $zip );
+	}
+
+	public function web_ready( array $paths ) {
+		return $this->real->web_ready( $paths );
 	}
 
 	public function taken( $package_id ) {
@@ -810,7 +1018,17 @@ final class CodeStageWporgCalls {
 		return $this->real->read( $path );
 	}
 
+	/** @var int The files the parser was given. */
+	public $parsed = 0;
+
+	/** @var bool True: the parser ends with a Throwable that is no CompileError. */
+	public $parser_throws = false;
+
 	public function parse_php( $code ) {
+		++$this->parsed;
+		if ( $this->parser_throws ) {
+			throw new RuntimeException( 'The parser ended.' );
+		}
 		$this->real->parse_php( $code );
 	}
 

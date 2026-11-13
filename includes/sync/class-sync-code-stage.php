@@ -148,6 +148,46 @@ final class AB_MCP_Sync_Code_Stage_Calls {
 	}
 
 	/**
+	 * Whether a tree of these paths could go into the protected store as it
+	 * lies (AB_MCP_Protected_Store::web_ready(): in the uploads no file that
+	 * configures the web server or PHP, and only with the PHP proof).
+	 *
+	 * @param string[] $paths Paths of the unit.
+	 * @return true|WP_Error
+	 */
+	public function web_ready( array $paths ) {
+		return AB_MCP_Protected_Store::web_ready( $paths );
+	}
+
+	/**
+	 * The names in the directory of a ZIP, read before anything of it is
+	 * unpacked; null where it cannot be read.
+	 *
+	 * @param string $zip ZIP.
+	 * @return string[]|null
+	 */
+	public function zip_names( $zip ) {
+		if ( ! class_exists( 'ZipArchive' ) ) {
+			return null;
+		}
+		$z = new ZipArchive();
+		if ( ! is_string( $zip ) || true !== $z->open( $zip, ZipArchive::RDONLY ) ) {
+			return null;
+		}
+		$names = array();
+		for ( $i = 0; $i < $z->numFiles; $i++ ) {
+			$name = $z->getNameIndex( $i );
+			if ( ! is_string( $name ) ) {
+				$z->close();
+				return null;
+			}
+			$names[] = $name;
+		}
+		$z->close();
+		return $names;
+	}
+
+	/**
 	 * A package of code this account took over completely, with its index.
 	 *
 	 * @param string $package_id Package.
@@ -362,7 +402,7 @@ final class AB_MCP_Sync_Code_Stage_Calls {
 		$err      = '';
 		$exit     = null;
 		$timed    = false;
-		$deadline = microtime( true ) + (float) $timeout;
+		$deadline = microtime( true ) + $timeout;
 		while ( true ) {
 			$status = proc_get_status( $proc );
 			$out    = substr( $out . (string) stream_get_contents( $pipes[1] ), 0, 65536 );
@@ -447,6 +487,9 @@ final class AB_MCP_Sync_Code_Stage {
 
 	/** Free memory the parse check wants per byte of code (Pro: PARSE_MEMORY_FACTOR). */
 	const PARSE_MEMORY_FACTOR = 100;
+
+	/** The fields of a head the check of the requirements reads (requirements()). */
+	const HEAD_FIELDS = array( 'Plugin Name', 'Requires at least', 'Requires PHP' );
 
 	/** Extensions PHP runs (Pro: PHP_EXTENSIONS); .l10n.php is one of .php. */
 	const PHP_EXTENSIONS = array( 'php', 'phtml', 'php3', 'php4', 'php5', 'php7', 'php8', 'pht', 'phar', 'inc' );
@@ -601,6 +644,11 @@ final class AB_MCP_Sync_Code_Stage {
 	 * else from the packages of code and the live unit (from_packages()).
 	 * Nothing of the site changes. complete() checks it then.
 	 *
+	 * Before anything is fetched or written (Codex round 1 of branch 4, A1 and
+	 * B1): the run a whole number of 1 or more, the protected store ready for
+	 * a tree of these paths (web_ready()), and the group of the stage open,
+	 * bound to the run.
+	 *
 	 * @param int      $run_id   The run the stage belongs to (a whole number of 1 or more).
 	 * @param string[] $env      The packages of the environment of the report.
 	 * @param string   $kind     plugin or theme.
@@ -609,6 +657,9 @@ final class AB_MCP_Sync_Code_Stage {
 	 * @return array|WP_Error same (nothing to stage), or gid, name, hash, source, files, bytes, state.
 	 */
 	public static function stage( $run_id, array $env, $kind, $ref, array $packages = array() ) {
+		if ( ! is_int( $run_id ) || $run_id < 1 ) {
+			return self::refusal( 'code:run', __( 'A stage belongs to a run of the takeover: pass its run_id, a whole number of 1 or more. Nothing was fetched or written.', 'alphabridge-mcp' ) );
+		}
 		$signed = self::signed( $env, $kind, $ref );
 		if ( is_wp_error( $signed ) ) {
 			return $signed;
@@ -629,6 +680,22 @@ final class AB_MCP_Sync_Code_Stage {
 				'hash' => $live['hash'],
 			);
 		}
+		// The unit built is the signed one, so the store must take a tree of
+		// its paths before any of it is written, even into a building folder.
+		$web = self::calls()->web_ready( array_column( $signed['entries'], 0 ) );
+		if ( true !== $web ) {
+			return $web;
+		}
+		$gid = AB_MCP_Protected_Store::open(
+			'stage',
+			array(
+				'run_id' => $run_id,
+				'label'  => 'code',
+			)
+		);
+		if ( is_wp_error( $gid ) ) {
+			return $gid;
+		}
 		$build = AB_MCP_Protected_Store::build_dir();
 		if ( is_wp_error( $build ) ) {
 			return $build;
@@ -638,7 +705,7 @@ final class AB_MCP_Sync_Code_Stage {
 			if ( is_wp_error( $source ) ) {
 				return $source;
 			}
-			return self::take_in( $run_id, $signed, $target, $source, array() === $packages ? 'wordpress.org' : 'packages' );
+			return self::take_in( $gid, $signed, $target, $source, array() === $packages ? 'wordpress.org' : 'packages' );
 		} finally {
 			AB_MCP_Protected_Store::drop_build( $build );
 		}
@@ -668,20 +735,28 @@ final class AB_MCP_Sync_Code_Stage {
 			/* translators: %s: the host the head names. */
 			return self::refusal( 'code:update_uri', sprintf( __( 'The head of this plugin or theme on the staging site names %s for its updates (Update URI), so it is not fetched from wordpress.org. Send it as a package of code (wp_site_export with purpose=code).', 'alphabridge-mcp' ), $host ) );
 		}
-		if ( 'folder' !== $signed['form'] || ! is_string( $signed['version'] ) || 1 !== preg_match( self::ORG_VERSION, $signed['version'] ) || 'trunk' === $signed['version'] || 1 !== preg_match( self::ORG_SLUG, $signed['ref'] ) ) {
+		$version = AB_MCP_Store_Inputs::read( 'stage.version', $signed['version'] );
+		if ( 'folder' !== $signed['form'] || null === $version || 1 !== preg_match( self::ORG_VERSION, $version ) || 'trunk' === $version || 1 !== preg_match( self::ORG_SLUG, $signed['ref'] ) ) {
 			return self::refusal( 'code:org_unit', __( 'This unit is no folder of a plugin or theme with a slug and a version as wordpress.org names its packages, so it is not fetched from there. Send it as a package of code (wp_site_export with purpose=code).', 'alphabridge-mcp' ) );
 		}
 		if ( 'direct' !== self::calls()->method() ) {
 			return self::refusal( 'code:file_mods', __( 'WordPress writes files on this site not directly (the file system method is not direct), and a package is unpacked and swapped by renaming only. Ask the host to give PHP write access to wp-content, or update the plugin or theme by hand in wp-admin.', 'alphabridge-mcp' ) );
 		}
-		$url = self::ORG_URL . ( 'theme' === $signed['kind'] ? 'theme' : 'plugin' ) . '/' . $signed['ref'] . '.' . $signed['version'] . '.zip';
+		$url = self::ORG_URL . ( 'theme' === $signed['kind'] ? 'theme' : 'plugin' ) . '/' . $signed['ref'] . '.' . $version . '.zip';
 		$zip = $build . '/package.zip';
 		$got = self::fetch_zip( $url, $zip, self::ORG_MAX );
 		if ( is_wp_error( $got ) ) {
 			return $got;
 		}
+		// What the ZIP would lay into the building folder, by its directory,
+		// before anything of it is unpacked (Codex round 1, A1).
+		$names = self::calls()->zip_names( $zip );
+		$web   = is_array( $names ) ? self::calls()->web_ready( $names ) : null;
+		if ( null !== $web && true !== $web ) {
+			return $web;
+		}
 		$size = self::calls()->unpacked_size( $zip );
-		if ( ! is_int( $size ) || $size > self::UNPACKED_MAX ) {
+		if ( null === $web || ! is_int( $size ) || $size > self::UNPACKED_MAX ) {
 			return self::refusal( 'code:org_too_large', __( 'The package of wordpress.org does not read as a ZIP, or holds more than a stage takes unpacked (256 MiB), so it is not unpacked. Update the plugin or theme by hand in wp-admin.', 'alphabridge-mcp' ) );
 		}
 		$unzipped = self::calls()->unzip( $zip, $build . '/org' );
@@ -805,26 +880,17 @@ final class AB_MCP_Sync_Code_Stage {
 
 	/**
 	 * The built unit into the area stage (put_tree(), the one way a tree
-	 * comes into the store), in a group of the run, with its first state.
+	 * comes into the store), in the group stage() opened for the run, with
+	 * its first state.
 	 *
-	 * @param int    $run_id Run.
+	 * @param string $gid    The group of the stage.
 	 * @param array  $signed signed().
 	 * @param string $target The folder or file of the unit in the site.
 	 * @param string $source The built unit.
 	 * @param string $from   wordpress.org or packages.
 	 * @return array|WP_Error
 	 */
-	private static function take_in( $run_id, array $signed, $target, $source, $from ) {
-		$gid = AB_MCP_Protected_Store::open(
-			'stage',
-			array(
-				'run_id' => $run_id,
-				'label'  => 'code',
-			)
-		);
-		if ( is_wp_error( $gid ) ) {
-			return $gid;
-		}
+	private static function take_in( $gid, array $signed, $target, $source, $from ) {
 		// The built unit is the signed one (from_org(), from_packages()); that
 		// the tree in the store is too, complete() checks (Z4, early).
 		$put = AB_MCP_Protected_Store::put_tree( 'stage', $gid, $signed['ref'], $target, $source );
@@ -903,7 +969,13 @@ final class AB_MCP_Sync_Code_Stage {
 		if ( ! hash_equals( $signed['hash'], $tree['hash'] ) || ! hash_equals( $state['signed'], $signed['hash'] ) ) {
 			return self::answer( self::refuse( $gid, $state, 'code:stage_mismatch', __( 'The stage is not the unit the report names on the staging site (the staging site changed it since, or the stage is another), so it is never ready. Make the report again, then stage the unit anew.', 'alphabridge-mcp' ) ) );
 		}
-		$until = self::clock() + self::CHECK_BUDGET;
+		$start = self::clock();
+		if ( null === $start ) {
+			// No time to measure this call by: it ends as it is, the next call
+			// goes on (never done, never ready).
+			return self::answer( $state );
+		}
+		$until = $start + self::CHECK_BUDGET;
 		if ( 1 === $state['seq'] && 0 === $state['done'] ) {
 			$todo = self::to_check( $tree['path'], $tree['hash'], $state['unit']['kind'], $state['unit']['ref'] );
 			if ( null === $todo ) {
@@ -913,13 +985,14 @@ final class AB_MCP_Sync_Code_Stage {
 		}
 		$base = 'file' === $tree['form'] ? dirname( $tree['path'] ) : $tree['path'];
 		while ( $state['done'] < count( $state['todo'] ) ) {
-			if ( self::clock() > $until ) {
+			$now = self::clock();
+			if ( null === $now || $now > $until ) {
 				return self::answer( self::next( $gid, $state ) );
 			}
-			$path  = $state['todo'][ $state['done'] ];
-			$found = self::check_file( $base . '/' . $path, $path, $state['lint'] );
+			$item  = $state['todo'][ $state['done'] ];
+			$found = self::check_file( $base . '/' . $item['path'], $item, $state['lint'] );
 			if ( isset( $found['refusal'] ) ) {
-				return self::answer( self::refuse( $gid, $state, $found['refusal'][0], $found['refusal'][1], $path, $found['refusal'][2] ) );
+				return self::answer( self::refuse( $gid, $state, $found['refusal'][0], $found['refusal'][1], $item['path'], $found['refusal'][2] ) );
 			}
 			if ( isset( $found['note'] ) && $state['lint'] ) {
 				$state['lint']    = false;
@@ -959,7 +1032,7 @@ final class AB_MCP_Sync_Code_Stage {
 	 * @param string $hash Its hash (tree()).
 	 * @param string $kind Kind.
 	 * @param string $ref  Unit.
-	 * @return string[]|null Paths in the unit; null where the tree does not read whole as that hash (unknown: nothing is passed over).
+	 * @return array[]|null Each path in the unit with its size and SHA-256 by the manifest of the tree (the bytes the check takes are bound to them, Codex round 1, A3); null where the tree does not read whole as that hash (unknown: nothing is passed over).
 	 */
 	private static function to_check( $path, $hash, $kind, $ref ) {
 		$tree = self::read_built( dirname( $path ), basename( $path ) );
@@ -974,24 +1047,35 @@ final class AB_MCP_Sync_Code_Stage {
 		$out = array();
 		foreach ( $tree['entries'] as $entry ) {
 			if ( self::is_php( $entry[0] ) && ! isset( $have[ $entry[0] . "\0" . $entry[2] ] ) ) {
-				$out[] = $entry[0];
+				$out[] = array(
+					'path'   => $entry[0],
+					'sha256' => $entry[2],
+					'size'   => $entry[1],
+				);
 			}
 		}
 		return $out;
 	}
 
 	/**
-	 * One PHP file of a stage through both checks.
+	 * One PHP file of a stage through both checks, only with the bytes the
+	 * manifest of the tree names for it (its size and SHA-256 from the state,
+	 * the row stage.state): a read that ends short or differs checks nothing.
 	 *
-	 * @param string $file  The file in the tree.
-	 * @param string $label Its path in the unit.
-	 * @param bool   $lint  Whether php -l is still asked.
+	 * @param string $file The file in the tree.
+	 * @param array  $item path (in the unit), size, sha256.
+	 * @param bool   $lint Whether php -l is still asked.
 	 * @return array refusal (code, message, line), or note, or nothing.
 	 */
-	private static function check_file( $file, $label, $lint ) {
-		$code = self::calls()->read( $file );
+	private static function check_file( $file, array $item, $lint ) {
+		$label = $item['path'];
+		$code  = self::calls()->read( $file );
 		if ( ! is_string( $code ) ) {
 			return array( 'refusal' => array( 'code:stage_mismatch', __( 'A file of the stage could not be read, so the stage is never ready. Stage the unit again.', 'alphabridge-mcp' ), null ) );
+		}
+		if ( strlen( $code ) !== $item['size'] || ! hash_equals( $item['sha256'], hash( 'sha256', $code ) ) ) {
+			/* translators: %s: file. */
+			return array( 'refusal' => array( 'code:syntax_unchecked', sprintf( __( '%s did not read whole as the manifest of the stage names it (its size and SHA-256), so it is not checked and the stage is never ready. Stage the unit again.', 'alphabridge-mcp' ), $label ), null ) );
 		}
 		$parse = self::parse_check( $code );
 		unset( $code );
@@ -1087,8 +1171,11 @@ final class AB_MCP_Sync_Code_Stage {
 	/**
 	 * Requires PHP and Requires at least of the heads of the new version
 	 * against this site, as WordPress checks them (validate_plugin_requirements(),
-	 * validate_theme_requirements(): the head of each main file of a plugin,
-	 * style.css of a theme): null where they hold, else why not.
+	 * validate_theme_requirements(): the head of each PHP file in the folder
+	 * of a plugin, style.css of a theme): null where they hold, else why not.
+	 * A head is read whole or not at all (AB_MCP_Sync_Env::head_read()), and
+	 * one not read is unknown and refuses (head_refusal(); Codex round 1,
+	 * A4), never taken as a head without requirements.
 	 *
 	 * @param string $path The tree.
 	 * @param string $form folder or file.
@@ -1096,30 +1183,55 @@ final class AB_MCP_Sync_Code_Stage {
 	 * @return string|null
 	 */
 	private static function requirements( $path, $form, $kind ) {
-		$heads = array();
 		if ( 'theme' === $kind ) {
-			$heads[] = AB_MCP_Sync_Env::head( $path . '/style.css', array( 'Requires at least', 'Requires PHP' ) );
+			$files = array( $path . '/style.css' );
 		} else {
 			$names = 'file' === $form ? array( basename( $path ) ) : @scandir( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- a folder that cannot be read is answered.
 			if ( ! is_array( $names ) ) {
 				return __( 'The folder of the new version could not be read for its heads, so it is not swapped. Stage the unit again.', 'alphabridge-mcp' );
 			}
+			$files = array();
 			foreach ( $names as $n ) {
 				$file = 'file' === $form ? $path : $path . '/' . $n;
-				if ( ! is_string( $n ) || '.php' !== substr( $n, -4 ) || ! is_file( $file ) ) {
+				// A folder of that name has no head; any other entry is read.
+				if ( ! is_string( $n ) || '.php' !== substr( $n, -4 ) || is_dir( $file ) ) {
 					continue;
 				}
-				$head = AB_MCP_Sync_Env::head( $file, array( 'Plugin Name', 'Requires at least', 'Requires PHP' ) );
-				if ( '' !== $head['Plugin Name'] ) {
-					$heads[] = $head;
-				}
+				$files[] = $file;
 			}
 		}
-		foreach ( $heads as $head ) {
-			if ( ! is_php_version_compatible( $head['Requires PHP'] ) || ! is_wp_version_compatible( $head['Requires at least'] ) ) {
-				/* translators: 1: Requires PHP, 2: Requires at least, 3: PHP version here, 4: WordPress version here. */
-				return sprintf( __( 'The new version needs PHP %1$s and WordPress %2$s (its head: Requires PHP, Requires at least); this site runs PHP %3$s and WordPress %4$s, so it is not swapped. Update PHP or WordPress here first, or keep the version this site has.', 'alphabridge-mcp' ), '' === $head['Requires PHP'] ? '-' : $head['Requires PHP'], '' === $head['Requires at least'] ? '-' : $head['Requires at least'], PHP_VERSION, get_bloginfo( 'version' ) );
+		foreach ( $files as $file ) {
+			$why = self::head_refusal( AB_MCP_Sync_Env::head_read( $file, self::HEAD_FIELDS ), basename( $file ), $kind );
+			if ( null !== $why ) {
+				return $why;
 			}
+		}
+		return null;
+	}
+
+	/**
+	 * Whether one head lets the new version run on this site
+	 * (requirements()): the head in the form of its row stage.head of
+	 * AB_MCP_Store_Inputs::TABLE; unknown refuses; a PHP file of a plugin
+	 * without Plugin Name is no main file and holds.
+	 *
+	 * @param mixed  $raw  The head as AB_MCP_Sync_Env::head_read() gave it.
+	 * @param string $name The file, for the message.
+	 * @param string $kind plugin or theme.
+	 * @return string|null Why not, or null.
+	 */
+	public static function head_refusal( $raw, $name, $kind ) {
+		$head = AB_MCP_Store_Inputs::read( 'stage.head', $raw );
+		if ( null === $head ) {
+			/* translators: %s: file. */
+			return sprintf( __( 'The head of %s in the new version could not be read whole, so what it requires is not known and it is not swapped. Stage the unit again.', 'alphabridge-mcp' ), $name );
+		}
+		if ( 'theme' !== $kind && '' === $head['Plugin Name'] ) {
+			return null;
+		}
+		if ( ! is_php_version_compatible( $head['Requires PHP'] ) || ! is_wp_version_compatible( $head['Requires at least'] ) ) {
+			/* translators: 1: Requires PHP, 2: Requires at least, 3: PHP version here, 4: WordPress version here. */
+			return sprintf( __( 'The new version needs PHP %1$s and WordPress %2$s (its head: Requires PHP, Requires at least); this site runs PHP %3$s and WordPress %4$s, so it is not swapped. Update PHP or WordPress here first, or keep the version this site has.', 'alphabridge-mcp' ), '' === $head['Requires PHP'] ? '-' : $head['Requires PHP'], '' === $head['Requires at least'] ? '-' : $head['Requires at least'], PHP_VERSION, get_bloginfo( 'version' ) );
 		}
 		return null;
 	}
@@ -1263,10 +1375,11 @@ final class AB_MCP_Sync_Code_Stage {
 	 */
 	private static function live( $kind, $ref ) {
 		$target = self::target( $kind, $ref );
-		if ( null === $target ) {
+		$now    = self::clock();
+		if ( null === $target || null === $now ) {
 			return null;
 		}
-		$read = AB_MCP_Sync_File_Manifest::unit( dirname( $target ), $ref, 'live', self::clock() + AB_MCP_Sync_Env::UNIT_BUDGET, true, $kind );
+		$read = AB_MCP_Sync_File_Manifest::unit( dirname( $target ), $ref, 'live', $now + AB_MCP_Sync_Env::UNIT_BUDGET, true, $kind );
 		return $read['complete'] && null !== $read['hash'] ? array(
 			'form'    => $read['form'],
 			'hash'    => $read['hash'],
@@ -1285,7 +1398,16 @@ final class AB_MCP_Sync_Code_Stage {
 	 * @return array As AB_MCP_Sync_File_Manifest::unit().
 	 */
 	private static function read_built( $base, $name ) {
-		return AB_MCP_Sync_File_Manifest::unit( $base, $name, 'staging', self::clock() + AB_MCP_Sync_Env::UNIT_BUDGET, true, 'plugin' );
+		$now = self::clock();
+		if ( null === $now ) {
+			// No time for the budget of the reading: not read whole.
+			return array(
+				'complete' => false,
+				'hash'     => null,
+				'entries'  => array(),
+			);
+		}
+		return AB_MCP_Sync_File_Manifest::unit( $base, $name, 'staging', $now + AB_MCP_Sync_Env::UNIT_BUDGET, true, 'plugin' );
 	}
 
 	/**
@@ -1305,10 +1427,18 @@ final class AB_MCP_Sync_Code_Stage {
 	}
 
 	/**
-	 * @return float Seconds.
+	 * The time within one call, for its budgets only (CHECK_BUDGET,
+	 * UNIT_BUDGET): microtime( true ), or the clock of a test. A value that
+	 * is no finite number is unknown (null): the slice ends there, never
+	 * done or ready (a named exception of the time() guard, decision of the
+	 * lead 13.11.2026: budgets within a request; times across requests only
+	 * through AB_MCP_Sync_Run::now()).
+	 *
+	 * @return float|null Seconds.
 	 */
 	private static function clock() {
-		return null !== self::$clock ? (float) call_user_func( self::$clock ) : microtime( true );
+		$now = null !== self::$clock ? call_user_func( self::$clock ) : microtime( true );
+		return is_float( $now ) && is_finite( $now ) ? $now : null;
 	}
 
 	/**
