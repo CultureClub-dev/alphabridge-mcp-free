@@ -857,11 +857,14 @@ final class CodeStageTest extends TestCase {
 		self::wporg()->lint = false;
 		self::assertInstanceOf( \WP_Error::class, $failed );
 		self::assertNull( AB_MCP_Sync_Code_Stage::ready( $stage['gid'], $stage['name'], $stage['hash'] ) );
-		// A time that is no number: the call ends as it is, the next goes on.
+		// A time that is no number: the call ends as it is, without a state
+		// of its own (no progress), the next goes on.
+		$states                        = count( AB_MCP_Protected_Store::files( 'stage', $stage['gid'] ) );
 		AB_MCP_Sync_Code_Stage::$clock = static fn(): float => NAN;
 		$none                          = AB_MCP_Sync_Code_Stage::complete( $stage['gid'], $stage['name'], $stage['hash'], $env );
 		AB_MCP_Sync_Code_Stage::$clock = null;
 		self::assertSame( array( 'checking', 1 ), array( $none['state'], $none['checked'] ) );
+		self::assertCount( $states, AB_MCP_Protected_Store::files( 'stage', $stage['gid'] ), 'No state written.' );
 		// Then on to the end: ready, every file checked.
 		$state = self::checked( $stage, $env );
 		self::assertSame( 'ready', $state['state'] );
@@ -947,6 +950,18 @@ final class CodeStageTest extends TestCase {
 		self::assertSame( 0, strpos( basename( $own ), AB_MCP_Protected_Store::TMP_PREFIX ) );
 		mkdir( $own . '/einheit/inc', 0700, true );
 		file_put_contents( $own . '/einheit/inc/a.php', '<?php' );
+		// A group opened while the building runs (its clean-up, sweep()) takes
+		// nothing of the building folder this request still uses.
+		self::assertIsString(
+			AB_MCP_Protected_Store::open(
+				'in',
+				array(
+					'declared' => 1024,
+					'label'    => 'report',
+				)
+			)
+		);
+		self::assertFileExists( $own . '/einheit/inc/a.php', 'The building folder of this request stays while it builds.' );
 		self::assertTrue( AB_MCP_Protected_Store::drop_build( $own ), 'Its own request takes it with what is in it.' );
 		self::assertDirectoryDoesNotExist( $own );
 		$store = dirname( dirname( $own ) );

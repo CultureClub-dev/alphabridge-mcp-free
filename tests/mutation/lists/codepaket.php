@@ -472,8 +472,8 @@ return array(
 		'file'    => 'includes/class-protected-store.php',
 		'search'  => '&& ! isset( self::$noted[ $tmp . \'/\' . $file ] ) ) {',
 		'replace' => ') {',
-		'run'     => $it( 'CodeStageTest', 'testAPluginOfWordpressOrgInANewerVersionIsStagedCheckedAndReadyWithoutAChangeOfTheSite' ),
-		'expect'  => '/testAPluginOfWordpressOrgInANewerVersionIsStagedCheckedAndReadyWithoutAChangeOfTheSite/',
+		'run'     => $it( 'CodeStageTest', 'testABuildingFolderGoesOnlyByItsAgeOrByItsOwnRequest' ),
+		'expect'  => '/testABuildingFolderGoesOnlyByItsAgeOrByItsOwnRequest/',
 	),
 	array(
 		'id'      => 'codepaket/d4-drop-only-build',
