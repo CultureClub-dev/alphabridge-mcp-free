@@ -540,6 +540,9 @@ final class StoreTreesTest extends TestCase {
 			self::assertSame( $case[1], $res->get_error_code(), $what );
 			self::assertSame( array(), self::names( $dir ), $what . ': nothing of the tree stays.' );
 			self::assertSame( array(), self::names( $root . '/tmp' ), $what . ': no temp file.' );
+			if ( 'ab_mcp_store_tree_changed' === $case[1] ) {
+				self::unconfirmed_copy( $res->get_error_message(), $what );
+			}
 		}
 		// A link in the source: not read whole, nothing copied.
 		self::source( $src, '2.0.0' );
@@ -548,6 +551,54 @@ final class StoreTreesTest extends TestCase {
 		self::assertSame( 'ab_mcp_store_tree_unread', $res->get_error_code() );
 		self::assertSame( 'link', $res->get_error_data()['cause'] );
 		self::assertSame( array(), self::names( $dir ) );
+	}
+
+	/**
+	 * The text of a copy put_tree() does not take (K4g, A2 of the Codex
+	 * check of K4f): what the store knows and no more. It differs or was not
+	 * read back whole; its removal was tried, the result not asked.
+	 */
+	private static function unconfirmed_copy( string $message, string $what ): void {
+		self::assertSame( 'The copy in the protected store could not be confirmed as what was read from the source before it: it differs, or it could not be read back whole. So the call does not take it and tried to remove it; whether all of it is gone was not checked. Check that nothing writes into the source right now; if it keeps happening, ask the host whether the disk of the store is slow or something else writes into its folder. Then put the tree anew, under another name or in a new group where a rest of the copy stayed (a unit of wp_site_push: in a new run).', $message, $what );
+		foreach ( array( 'is not what was read before it', 'the source changed while it was copied', 'a file was not written whole', 'nothing of it stays' ) as $gone ) {
+			self::assertStringNotContainsString( $gone, $message, "$what: not said any more (K4g): $gone" );
+		}
+		self::assertMatchesRegularExpression( '/\\b[Aa]sk the host\\b/', $message, "$what: a way." );
+	}
+
+	public function testACopyNotReadBackWithinItsTimeIsNotTakenAndNotCalledChanged(): void {
+		// K4g, A2: the source is read whole and copied byte for byte; the
+		// reading of the copy runs out of its time (TREE_BUDGET), which is
+		// no proof that anything differs. The clock of the reading
+		// (AB_MCP_Sync_Env::$clock) stands still until the copy lies in its
+		// group and then goes on 50 seconds each time it is asked.
+		require_once dirname( __DIR__, 2 ) . '/includes/sync/class-sync-env.php';
+		list( $gid, $dir ) = self::group( 'stage', 6 );
+		$src   = self::source( self::src(), '2.0.0' );
+		$place = $dir . '/' . self::UNIT;
+		$now   = 1000.0;
+		$asked = 0;
+		\AB_MCP_Sync_Env::$clock = static function () use ( &$now, &$asked, $place ) {
+			if ( is_dir( $place ) ) {
+				$now += 50.0;
+				++$asked;
+			}
+			return $now;
+		};
+		try {
+			$res = AB_MCP_Protected_Store::put_tree( 'stage', $gid, self::UNIT, self::plugins() . '/' . self::UNIT, $src );
+		} finally {
+			\AB_MCP_Sync_Env::$clock = null;
+		}
+		self::assertGreaterThanOrEqual( 2, $asked, 'The clock went on while the copy was read back.' );
+		self::assertInstanceOf( \WP_Error::class, $res );
+		self::assertSame( 'ab_mcp_store_tree_changed', $res->get_error_code() );
+		self::unconfirmed_copy( $res->get_error_message(), 'the copy not read back in time' );
+		self::assertSame( array(), self::names( $dir ), 'Here its removal went through.' );
+		// With the time it needs the same source goes in: nothing had changed.
+		$put = AB_MCP_Protected_Store::put_tree( 'stage', $gid, self::UNIT, self::plugins() . '/' . self::UNIT, $src );
+		self::assertIsArray( $put, is_wp_error( $put ) ? $put->get_error_message() : '' );
+		self::assertTrue( $put['copied'] );
 	}
 
 	public function testAnEndOfTheProcessInTheMiddleOfACopyLeavesAHalfTreeThatIsNeverUsed(): void {
@@ -1147,6 +1198,7 @@ final class StoreTreesTest extends TestCase {
 		$res = AB_MCP_Protected_Store::put_tree( 'stage', $gid, 'einzeln.php', self::plugins() . '/einzeln.php', $src );
 		AB_MCP_Test_Seam::restore_all();
 		self::assertSame( 'ab_mcp_store_tree_changed', $res->get_error_code(), 'The same size, other bytes: not the file read before.' );
+		self::unconfirmed_copy( $res->get_error_message(), 'a file changed while copied' );
 		self::assertSame( array(), self::names( $dir ) );
 	}
 

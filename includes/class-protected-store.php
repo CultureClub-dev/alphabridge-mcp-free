@@ -1877,7 +1877,10 @@ final class AB_MCP_Protected_Store {
 	 *   running it, else code:store_web;
 	 * - what goes in comes back byte for byte: the manifest of the copy
 	 *   (AB_MCP_Sync_File_Manifest::unit()) is the one of the source, read
-	 *   whole before, else nothing of it stays.
+	 *   whole before, else the call does not take it (ab_mcp_store_tree_changed:
+	 *   it differs, or it was not read back whole, as when the time of the
+	 *   reading runs out) and tries to remove it (delete_path(), whose result
+	 *   is not asked: the message claims no more).
 	 *
 	 * With a source the tree is a copy of it, file by file through
 	 * write_file(), with the modes of the source. Without one only the place
@@ -2017,7 +2020,7 @@ final class AB_MCP_Protected_Store {
 						$out['copied'] = true;
 						return $out;
 					}
-					$made = new WP_Error( 'ab_mcp_store_tree_changed', __( 'The copy in the protected store is not what was read before it (the source changed while it was copied, or a file was not written whole), so nothing of it stays. Check that nothing writes into the source right now, then try again.', 'alphabridge-mcp' ) );
+					$made = new WP_Error( 'ab_mcp_store_tree_changed', __( 'The copy in the protected store could not be confirmed as what was read from the source before it: it differs, or it could not be read back whole. So the call does not take it and tried to remove it; whether all of it is gone was not checked. Check that nothing writes into the source right now; if it keeps happening, ask the host whether the disk of the store is slow or something else writes into its folder. Then put the tree anew, under another name or in a new group where a rest of the copy stayed (a unit of wp_site_push: in a new run).', 'alphabridge-mcp' ) );
 				}
 				// What this request made of it goes again (delete_path()).
 				self::delete_path( $root, $place );
