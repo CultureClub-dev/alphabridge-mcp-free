@@ -30,6 +30,7 @@ use AB_MCP_Store_Budget;
 use AB_MCP_Store_Inputs;
 use AB_MCP_Sync_Backup;
 use AB_MCP_Sync_Canon;
+use AB_MCP_Sync_Code_Package;
 use AB_MCP_Sync_Run;
 use AB_MCP_Sync_Schema;
 use PHPUnit\Framework\TestCase;
@@ -40,6 +41,8 @@ require_once __DIR__ . '/../includes/class-protected-store.php';
 require_once __DIR__ . '/../includes/sync/class-sync-run.php';
 require_once __DIR__ . '/../includes/sync/class-sync-canon.php';
 require_once __DIR__ . '/../includes/sync/class-sync-backup.php';
+require_once __DIR__ . '/../includes/sync/class-sync-import.php';
+require_once __DIR__ . '/../includes/sync/class-sync-code-package.php';
 
 /**
  * A stand-in of $wpdb for the runs: the rows of backup_rows(), the column
@@ -104,7 +107,7 @@ final class StoreInputsTest extends TestCase {
 		self::assertNotSame( array(), AB_MCP_Store_Inputs::TABLE );
 		foreach ( AB_MCP_Store_Inputs::TABLE as $id => $row ) {
 			self::assertSame( array( 'consumer', 'source', 'field', 'form' ), array_keys( $row ), $id );
-			self::assertContains( $row['consumer'], array( 'retention', 'period', 'sidecar', 'protection', 'file_time', 'budget' ), $id );
+			self::assertContains( $row['consumer'], array( 'retention', 'period', 'sidecar', 'protection', 'file_time', 'budget', 'package', 'stage' ), $id );
 			self::assertNotSame( '', $row['source'], $id );
 			self::assertNotSame( '', $row['field'], $id );
 			self::assertTrue( AB_MCP_Shape::valid_form( $row['form'] ), "$id: its form names every property of its type and nothing else." );
@@ -302,6 +305,26 @@ final class StoreInputsTest extends TestCase {
 	 *
 	 * @return array<string,array{base:mixed,more:array,valid:array,run:callable,unknown:callable}>
 	 */
+	/** An index of a package of code as AB_MCP_Sync_Code_Package::unpacked() writes it. */
+	private static function code_index(): string {
+		return AB_MCP_Sync_Canon::encode(
+			array(
+				'files'  => array(
+					array(
+						'chunks' => array( 0 ),
+						'kind'   => 'plugin',
+						'path'   => 'inc/a.php',
+						'pieces' => 1,
+						'ref'    => 'ab-it-code',
+						'sha256' => str_repeat( 'a', 64 ),
+						'size'   => 3,
+					),
+				),
+				'format' => 'ab-sync-code/1',
+			)
+		);
+	}
+
 	private static function drivers(): array {
 		$now     = self::NOW;
 		$day     = self::DAY;
@@ -550,6 +573,25 @@ final class StoreInputsTest extends TestCase {
 				'valid'   => array( array( true, $now ), array( false, $now + 7 * $day ) ),
 				'run'     => static fn( $v ) => AB_MCP_Sync_Schema::keep_until( $now, $v, 0 ),
 				'unknown' => static fn( $got ): bool => 0 === $got,
+			),
+			/* ------------------------- the state of a package of code */
+			'code.index'               => array(
+				'base'    => self::code_index(),
+				'more'    => array(
+					'fixed: a kind of no code'       => str_replace( '"kind":"plugin"', '"kind":"attachment"', self::code_index() ),
+					'fixed: no chunk'                => str_replace( '"chunks":[0]', '"chunks":[]', self::code_index() ),
+					'fixed: a chunk as text'         => str_replace( '"chunks":[0]', '"chunks":["0"]', self::code_index() ),
+					'fixed: a path with ..'          => str_replace( '"path":"inc/a.php"', '"path":"../a.php"', self::code_index() ),
+					'fixed: a ref with a slash'      => str_replace( '"ref":"ab-it-code"', '"ref":"ab/it"', self::code_index() ),
+					'fixed: pieces not of its size'  => str_replace( '"pieces":1', '"pieces":2', self::code_index() ),
+					'fixed: another format'          => str_replace( 'ab-sync-code/1', 'ab-sync-media/1', self::code_index() ),
+					'fixed: a field more'            => str_replace( '"format":', '"extra":1,"format":', self::code_index() ),
+				),
+				'valid'   => array( array( self::code_index(), AB_MCP_Sync_Canon::decode( self::code_index(), 8 )['files'] ) ),
+				// Its consumer: the stage takes nothing of a package whose index
+				// is not of its form (AB_MCP_Sync_Code_Package::taken() refuses).
+				'run'     => static fn( $v ) => AB_MCP_Sync_Code_Package::index( $v ),
+				'unknown' => $null,
 			),
 			/* ------------------------------------------------------ budgets */
 			'budget.max_packages'      => array(

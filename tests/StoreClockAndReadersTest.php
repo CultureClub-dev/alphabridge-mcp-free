@@ -27,7 +27,7 @@ require_once __DIR__ . '/SourceScan.php';
 
 final class StoreClockAndReadersTest extends TestCase {
 
-	/** The files the time() guard reads (the touched files of branch 3 and the export). */
+	/** The files the time() guard reads (the touched files of branches 3 and 4 and the export). */
 	private const FILES = array(
 		'includes/class-protected-store.php',
 		'includes/class-shape.php',
@@ -38,6 +38,7 @@ final class StoreClockAndReadersTest extends TestCase {
 		'includes/sync/class-sync-run.php',
 		'includes/sync/class-sync-schema.php',
 		'includes/sync/class-sync-export.php',
+		'includes/sync/class-sync-manifest.php',
 	);
 
 	/**
@@ -86,7 +87,7 @@ final class StoreClockAndReadersTest extends TestCase {
 		'AB_MCP_Protected_Store::backup_days'   => array( array( 'period.days' ), array( self::UNIT ) ),
 		'AB_MCP_Protected_Store::cleanup'       => array( array( 'period.clock' ), array( self::CLK ) ),
 		'AB_MCP_Protected_Store::close_mark_in' => array( array( 'period.clock' ), array( self::CLK ) ),
-		'AB_MCP_Protected_Store::delete_path'   => array( array( 'file.mtime' ), array( self::IT ) ),
+		'AB_MCP_Protected_Store::delete_path'   => array( array( 'file.mtime', 'tmp.build_mtime' ), array( self::IT ) ),
 		'AB_MCP_Protected_Store::entries'       => array( array( 'budget.listing' ), array( self::IT ) ),
 		'AB_MCP_Protected_Store::free_space'    => array( array( 'budget.free' ), array( self::IT ) ),
 		'AB_MCP_Protected_Store::held'          => array( array( 'budget.file_size', 'budget.held_names' ), array( self::IT ) ),
@@ -107,7 +108,9 @@ final class StoreClockAndReadersTest extends TestCase {
 		'AB_MCP_Sync_Backup::group'             => array( array( 'backup.run' ), array( self::IT ) ),
 		'AB_MCP_Sync_Engine::context'           => array( array( 'period.clock' ), array( self::RUN ) ),
 		'AB_MCP_Sync_Engine::restore_part'      => array( array( 'period.clock' ), array( self::RUN ) ),
+		'AB_MCP_Sync_Code_Package::index'      => array( array( 'code.index' ), array( self::UNIT ) ),
 		'AB_MCP_Sync_Export::discard_stale'     => array( array( 'period.clock' ), array( self::CLK ) ),
+		'AB_MCP_Sync_Manifest::clock'          => array( array( 'period.clock' ), array( 'tests/SyncManifestTest.php::testNoTimeOfTheClockSignsOrReadsAPackage' ) ),
 		'AB_MCP_Sync_Push::begin'               => array( array( 'period.clock' ), array( self::RUN ), 'the time goes only into create() (expires), which refuses without a time before anything is written' ),
 		'AB_MCP_Sync_Revert::begin_locked'      => array( array( 'period.clock' ), array( self::RUN ), 'the time goes only into create() (expires), which refuses without a time before anything is written' ),
 		'AB_MCP_Sync_Run::create'               => array( array( 'period.clock' ), array( self::RUN ) ),

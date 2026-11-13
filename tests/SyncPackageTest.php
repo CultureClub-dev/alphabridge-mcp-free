@@ -718,10 +718,16 @@ final class SyncPackageTest extends TestCase {
 	public function testThisVersionMakesPackagesOfTheInventoryTheEnvironmentAndObjectsOnly(): void {
 		$this->paired();
 		$this->on( 'staging' );
-		foreach ( array( 'files', 'ENV', null, 'INVENTORY', 'Objects', 'Media' ) as $purpose ) {
+		foreach ( array( 'files', 'ENV', null, 'INVENTORY', 'Objects', 'Media', 'Code' ) as $purpose ) {
 			self::assertSame( 'ab_mcp_sync_export_purpose', AB_MCP_Sync_Export::make( $purpose )->get_error_code(), var_export( $purpose, true ) );
 		}
-		self::assertSame( array( 'inventory', 'env', 'objects', 'media' ), AB_MCP_Sync_Export::PURPOSES );
+		self::assertSame( array( 'inventory', 'env', 'objects', 'media', 'code' ), AB_MCP_Sync_Export::PURPOSES );
+		// A package of code is for one report and names its units, plugins and
+		// themes, each once, with paths in them where given (Z8b branch 4).
+		self::assertSame( 'ab_mcp_sync_export_report', AB_MCP_Sync_Export::make( 'code' )->get_error_code() );
+		foreach ( array( null, array(), array( array( 'kind' => 'attachment', 'ref' => '3' ) ), array( array( 'kind' => 'plugin', 'ref' => 'a/b' ) ), array( array( 'kind' => 'plugin', 'ref' => '..' ) ), array( array( 'kind' => 'plugin', 'ref' => 'a' ), array( 'kind' => 'plugin', 'ref' => 'a' ) ), array( array( 'kind' => 'theme', 'ref' => 'a', 'paths' => array() ) ), array( array( 'kind' => 'theme', 'ref' => 'a', 'paths' => array( '../x.php' ) ) ), array( array( 'kind' => 'theme', 'ref' => 'a', 'paths' => 'x.php' ) ) ) as $refs ) {
+			self::assertSame( 'ab_mcp_sync_export_refs', AB_MCP_Sync_Export::make( 'code', null, null, array( 'report_hash' => str_repeat( 'd', 64 ), 'refs' => $refs ) )->get_error_code(), var_export( $refs, true ) );
+		}
 		// A package of media is for one report and names its attachments (branch 10).
 		self::assertSame( 'ab_mcp_sync_export_report', AB_MCP_Sync_Export::make( 'media' )->get_error_code() );
 		self::assertSame( 'ab_mcp_sync_export_refs', AB_MCP_Sync_Export::make( 'media', null, null, array( 'report_hash' => str_repeat( 'd', 64 ), 'refs' => array() ) )->get_error_code() );

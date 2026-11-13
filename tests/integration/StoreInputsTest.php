@@ -413,6 +413,35 @@ final class StoreInputsTest extends TestCase {
 				'written' => null,
 			);
 		}
+		if ( 'tmp.build_mtime' === $id ) {
+			// A building folder of build_dir() (Z8b branch 4, D4), past its
+			// age by the time lstat() says: it goes with what is in it; with a
+			// time not of its form, it stays whole.
+			return array(
+				'base'    => $now - 2 * 86400,
+				'more'    => array(
+					'fixed: its digits as text' => (string) ( $now - 2 * 86400 ),
+					'fixed: negative'           => -1,
+				),
+				'valid'   => array( array( $now - 2 * 86400, array( false, false ) ), array( time(), array( true, true ) ) ),
+				'run'     => function ( $value ) {
+					$build = self::store() . '/tmp/.ab-tmp-bau';
+					mkdir( $build . '/einheit/inc', 0700, true );
+					file_put_contents( $build . '/einheit/inc/a.php', '<?php // a' );
+					$calls        = new AB_MCP_IT_Store_Calls();
+					$calls->mtime = array( $build => $value );
+					AB_MCP_Test_Seam::install( AB_MCP_Protected_Store::class, self::SEAM, $calls );
+					AB_MCP_Protected_Store::cleanup( time() );
+					AB_MCP_Test_Seam::restore_all();
+					$out = array( is_dir( $build ), is_file( $build . '/einheit/inc/a.php' ) );
+					self::remove_tree( $build );
+					return $out;
+				},
+				'unknown' => static fn( $got ): bool => array( true, true ) === $got,
+				'texts'   => false,
+				'written' => null,
+			);
+		}
 		if ( 'budget.book_run' === $id || 'budget.book_bytes' === $id ) {
 			$run = 'budget.book_run' === $id;
 			return array(

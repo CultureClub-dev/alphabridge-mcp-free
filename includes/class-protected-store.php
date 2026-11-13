@@ -1989,6 +1989,83 @@ final class AB_MCP_Protected_Store {
 	}
 
 	/**
+	 * A new building folder of the store (Z8b branch 4, D4; Auftrag
+	 * «Anschluss an die Ablage»): an empty folder right in tmp/ with the
+	 * prefix TMP_PREFIX, made by this request and noted. A unit is built
+	 * there (a package of wordpress.org downloaded and unpacked, what is
+	 * copied from the live unit and out of packages) before it goes into the
+	 * store, through put_tree() only, all in one call (D4, decided after the
+	 * measurement of 13.11.2026: put_tree() stays in one call). The one way
+	 * such a folder is made; it goes through delete_path() only: by the
+	 * request that made it, or once its age (its own time, tmp.build_mtime)
+	 * passes TMP_AGE, by the clean-up with what is in it. A building of one
+	 * call never grows that old while it runs.
+	 *
+	 * @return string|WP_Error The path.
+	 */
+	public static function build_dir() {
+		$root = self::root();
+		if ( is_wp_error( $root ) ) {
+			return $root;
+		}
+		return self::writing(
+			$root,
+			static function () use ( $root ) {
+				if ( null === self::way( $root, array( self::TMP ) ) ) {
+					return new WP_Error( 'ab_mcp_store_tmp', __( 'The folder tmp of the protected store is missing or is a link, so nothing is written there. Ask the host to check the folder of the store, then try again.', 'alphabridge-mcp' ) );
+				}
+				for ( $attempt = 0; $attempt < 3; $attempt++ ) {
+					$path = $root . '/' . self::TMP . '/' . self::TMP_PREFIX . bin2hex( AB_MCP_Payload_File::random_bytes( 8 ) );
+					if ( self::calls()->mkdir( $path, 0700 ) ) {
+						self::$noted[ $path ] = true;
+						return $path;
+					}
+				}
+				return new WP_Error( 'ab_mcp_store_write', __( 'A building folder could not be made in the protected store. Ask the host to check that the folder is writable and the disk has free space, then try again.', 'alphabridge-mcp' ) );
+			}
+		);
+	}
+
+	/**
+	 * The building folder a path lies below (delete_path()): a folder right in
+	 * tmp/ with the prefix TMP_PREFIX that holds the path; null for a path
+	 * right in tmp/ or elsewhere.
+	 *
+	 * @param string $path    Path.
+	 * @param string $tmp_dir The folder tmp of the store.
+	 * @return string|null
+	 */
+	private static function build_of( $path, $tmp_dir ) {
+		if ( 0 !== strpos( (string) $path, $tmp_dir . '/' ) ) {
+			return null;
+		}
+		$first = strtok( substr( (string) $path, strlen( $tmp_dir ) + 1 ), '/' );
+		$top   = $tmp_dir . '/' . $first;
+		return false !== $first && $top !== $path && 0 === strpos( $first, self::TMP_PREFIX ) ? $top : null;
+	}
+
+	/**
+	 * Remove a building folder of build_dir() with what is in it, under the
+	 * lock of the store, through delete_path() (no remover of its own): by the
+	 * request that made it, else only once its age passes TMP_AGE.
+	 *
+	 * @param string $path The building folder.
+	 * @return bool Whether it is gone.
+	 */
+	public static function drop_build( $path ) {
+		$root = self::root();
+		if ( is_wp_error( $root ) || dirname( (string) $path ) !== $root . '/' . self::TMP || 0 !== strpos( basename( (string) $path ), self::TMP_PREFIX ) ) {
+			return false;
+		}
+		return true === self::writing(
+			$root,
+			static function () use ( $root, $path ) {
+				return self::delete_path( $root, (string) $path );
+			}
+		);
+	}
+
+	/**
 	 * A tree read back: its place where its manifest is the one put_tree()
 	 * gave (what went in comes back byte for byte, Z7).
 	 *
@@ -2888,7 +2965,10 @@ final class AB_MCP_Protected_Store {
 		$under   = static function ( $p, $dir ) {
 			return $p === $dir || 0 === strpos( $p, $dir . '/' );
 		};
-		$remove  = static function ( $p, $top ) use ( &$remove, $root, $guard, $calls, $tmp_dir, $how, $under ) {
+		// The building folders of build_dir() this call may take with what
+		// is in them: those whose own age passed TMP_AGE (Z8b branch 4, D4).
+		$aged    = array();
+		$remove  = static function ( $p, $top ) use ( &$remove, &$aged, $root, $guard, $calls, $tmp_dir, $how, $under ) {
 			// What a mark names stays, and every folder above it stays as a
 			// folder (its other entries may go): asked before anything is
 			// said of the path, so nothing named counts as removed.
@@ -2906,16 +2986,25 @@ final class AB_MCP_Protected_Store {
 				$names = $calls->scandir( dirname( $p ) );
 				return ! $holds && false !== $names && ! in_array( basename( $p ), $names, true );
 			}
-			$noted = isset( self::$noted[ $p ] );
+			// What lies in a building folder of build_dir() goes with it: where
+			// this request made the folder, or where this call found the folder
+			// past its age (D4), never by its own time or name.
+			$build = self::build_of( $p, $tmp_dir );
+			$noted = isset( self::$noted[ $p ] ) || ( null !== $build && ( isset( self::$noted[ $build ] ) || isset( $aged[ $build ] ) ) );
 			if ( ! $noted && ! $under( $p, $root ) ) {
 				return false;
 			}
+			$folder = 0040000 === ( $stat['mode'] & 0170000 ) && dirname( $p ) === $tmp_dir;
 			// The age of a temp file only from its time in the form of its row
 			// of AB_MCP_Store_Inputs::TABLE (Behebung 4: no cast) and the one
-			// checked clock (young(), Behebung 5).
-			$mtime = AB_MCP_Store_Inputs::read( 'file.mtime', AB_MCP_Shape::field( $stat, 'mtime' ) );
+			// checked clock (young(), Behebung 5); of a building folder by its
+			// own row (tmp.build_mtime, Z8b branch 4).
+			$mtime = $folder ? AB_MCP_Store_Inputs::read( 'tmp.build_mtime', AB_MCP_Shape::field( $stat, 'mtime' ) ) : AB_MCP_Store_Inputs::read( 'file.mtime', AB_MCP_Shape::field( $stat, 'mtime' ) );
 			if ( ! $noted && empty( $how['all_tmp'] ) && 0 === strpos( $p, $tmp_dir . '/' ) && ( dirname( $p ) !== $tmp_dir || 0 !== strpos( basename( $p ), self::TMP_PREFIX ) || self::young( $mtime ) ) ) {
 				return false;
+			}
+			if ( $folder && 0 === strpos( basename( $p ), self::TMP_PREFIX ) ) {
+				$aged[ $p ] = true;
 			}
 			if ( 0040000 === ( $stat['mode'] & 0170000 ) ) {
 				if ( ! $top || empty( $how['empty'] ) ) {

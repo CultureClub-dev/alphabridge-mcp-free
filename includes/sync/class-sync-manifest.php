@@ -12,9 +12,10 @@
  *  - source_id and key_id of the key that signs;
  *  - source and target: the full addresses of the staging site and of the
  *    production site, as AB_MCP_Staging::normalize_url() stores them;
- *  - package_id (32 hex) and purpose: inventory, objects, media or env;
- *  - report_hash: the SHA-256 of the report a package of objects or media
- *    is for, null for inventory and env;
+ *  - package_id (32 hex) and purpose: inventory, objects, media, env or
+ *    code (the files of units of code, Z8b branch 4);
+ *  - report_hash: the SHA-256 of the report a package of objects, media or
+ *    code is for, null for inventory and env;
  *  - created and expires, expires exactly TTL (24 hours) after created;
  *  - kinds: the kinds in it with each subtype and whether it is complete
  *    (decision 9), ascending by kind and subtype, each pair once;
@@ -79,10 +80,10 @@ final class AB_MCP_Sync_Manifest {
 	const CONTEXT = "AlphaBridge ab-sync/1 manifest\n";
 
 	/** What a package is for. */
-	const PURPOSES = array( 'inventory', 'objects', 'media', 'env' );
+	const PURPOSES = array( 'inventory', 'objects', 'media', 'env', 'code' );
 
 	/** The purposes that are for one report (report_hash). */
-	const FOR_REPORT = array( 'objects', 'media' );
+	const FOR_REPORT = array( 'objects', 'media', 'code' );
 
 	/** Seconds from created to expires: 24 hours. */
 	const TTL = 86400;
@@ -135,7 +136,8 @@ final class AB_MCP_Sync_Manifest {
 	 * production site it is paired with.
 	 *
 	 * @param array    $package The PACKAGE_FIELDS.
-	 * @param int|null $now     Time; now when null.
+	 * @param int|null $now     Time; the one checked clock when null
+	 *                          (AB_MCP_Sync_Run::now(); Z8b branch 4, V5).
 	 * @return array{manifest:string,signature:string}|WP_Error
 	 */
 	public static function sign( array $package, $now = null ) {
@@ -167,7 +169,10 @@ final class AB_MCP_Sync_Manifest {
 			$odd = array_values( array_merge( array_diff( self::PACKAGE_FIELDS, $fields ), array_diff( $fields, self::PACKAGE_FIELDS ) ) );
 			return self::shape_refusal( (string) $odd[0] );
 		}
-		$now      = null === $now ? time() : (int) $now;
+		$now = self::clock( $now );
+		if ( null === $now ) {
+			return self::clock_refusal();
+		}
 		$manifest = array_merge(
 			$package,
 			array(
@@ -206,12 +211,16 @@ final class AB_MCP_Sync_Manifest {
 	 * @param mixed    $signed array( 'manifest' => text, 'signature' => base64 ).
 	 * @param array    $expect purpose (required); report_hash (required for
 	 *                         objects and media); package_id (optional).
-	 * @param int|null $now    Time; now when null.
+	 * @param int|null $now    Time; the one checked clock when null
+	 *                         (AB_MCP_Sync_Run::now(); Z8b branch 4, V5).
 	 * @return array{manifest:array,hash:string}|WP_Error The manifest and the
 	 *                                                     SHA-256 of its text.
 	 */
 	public static function verify( $signed, array $expect, $now = null ) {
-		$now = null === $now ? time() : (int) $now;
+		$now = self::clock( $now );
+		if ( null === $now ) {
+			return self::clock_refusal();
+		}
 
 		// The envelope.
 		$keys = is_array( $signed ) ? array_keys( $signed ) : array();
@@ -378,6 +387,31 @@ final class AB_MCP_Sync_Manifest {
 	}
 
 	/* ------------------------------------------------------------ private */
+
+	/**
+	 * The time a manifest is signed or checked at (V5 of Z8b branch 4): the
+	 * one checked clock of the plugin (AB_MCP_Sync_Run::now(), period.clock)
+	 * where none is given, else the time given, either only as a whole
+	 * number above 0; null where it is none (the package is then neither
+	 * signed nor read: no expiry is decided without a time).
+	 *
+	 * @param mixed $now Time given, or null.
+	 * @return int|null
+	 */
+	private static function clock( $now ) {
+		if ( null === $now ) {
+			require_once __DIR__ . '/class-sync-run.php';
+			$now = AB_MCP_Sync_Run::now();
+		}
+		return is_int( $now ) && $now > 0 ? $now : null;
+	}
+
+	/**
+	 * @return WP_Error No time: nothing is signed or read.
+	 */
+	private static function clock_refusal() {
+		return new WP_Error( 'ab_mcp_sync_manifest_clock', __( 'The clock of this site gives no time (a whole number of seconds), so no package is signed or read: whether a package is still valid is decided by its time only. Try again; if it keeps failing, ask the host to check the clock of the server.', 'alphabridge-mcp' ) );
+	}
 
 	/**
 	 * Every field of a manifest as this format has it, or the refusal that

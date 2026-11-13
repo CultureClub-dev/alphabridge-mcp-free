@@ -14,7 +14,8 @@
  *   the backups of the run (AB_MCP_Sync_Schema::keep_until());
  * - protection: nothing in stage, backups and marks goes, and the clean-up
  *   counts what it kept so as unknown (guard());
- * - file_time: the file or folder stays;
+ * - file_time: the file or folder stays (a building folder of build_dir()
+ *   with what is in it);
  * - budget: the budget is not known, and the call is refused with the cause
  *   and the way (AB_MCP_Sync_Backup::fits(), AB_MCP_Store_Budget).
  *
@@ -63,6 +64,14 @@ final class AB_MCP_Store_Inputs {
 		'digits' => true,
 		'min'    => 0,
 		'max'    => null,
+	);
+
+	/** A SHA-256 in hex, as the store and the manifests write it. */
+	const SHA256 = array(
+		'type'      => 'string',
+		'empty'     => false,
+		'max_bytes' => null,
+		'pattern'   => '/^[0-9a-f]{64}\z/',
 	);
 
 	/** The names in a folder, as scandir() gives them: texts, none twice. */
@@ -398,6 +407,73 @@ final class AB_MCP_Store_Inputs {
 			'consumer' => 'file_time',
 			'source'   => 'AB_MCP_Protected_Store::sweep(), delete_path(), by lstat() of the seam',
 			'field'    => 'mtime of a foreign sidecar, a temp file, a folder of a mark without one',
+			'form'     => self::COUNT,
+		),
+		/* ---------------- the state of a package of code (Z8b branch 4) */
+		'code.index'               => array(
+			'consumer' => 'package',
+			'source'   => 'AB_MCP_Sync_Code_Package::index(), taken()',
+			'field'    => 'the index a package of code keeps in its group (unpacked()): each file with its unit, path, size, SHA-256, pieces and chunks; what the stage takes from the package',
+			'form'     => array(
+				'type'  => 'json',
+				'codec' => 'AB_MCP_Sync_Canon',
+				'depth' => 8,
+				'value' => array(
+					'type'   => 'record',
+					'fields' => array(
+						'files'  => array(
+							'type'      => 'list',
+							'empty'     => false,
+							'item'      => array(
+								'type'   => 'record',
+								'fields' => array(
+									'chunks' => array(
+										'type'      => 'list',
+										'empty'     => false,
+										'item'      => self::COUNT,
+										'unique'    => true,
+										'max_items' => null,
+									),
+									'kind'   => array(
+										'type'      => 'string',
+										'empty'     => false,
+										'max_bytes' => null,
+										'in'        => array( 'plugin', 'theme' ),
+									),
+									'path'   => array(
+										'type'      => 'string',
+										'empty'     => false,
+										'max_bytes' => 4096,
+									),
+									'pieces' => self::RUN,
+									'ref'    => array(
+										'type'      => 'string',
+										'empty'     => false,
+										'max_bytes' => 764,
+									),
+									'sha256' => self::SHA256,
+									'size'   => self::COUNT,
+								),
+								'extra'  => false,
+							),
+							'unique'    => true,
+							'max_items' => null,
+						),
+						'format' => array(
+							'type'      => 'string',
+							'empty'     => false,
+							'max_bytes' => null,
+							'in'        => array( 'ab-sync-code/1' ),
+						),
+					),
+					'extra'  => false,
+				),
+			),
+		),
+		'tmp.build_mtime'          => array(
+			'consumer' => 'file_time',
+			'source'   => 'AB_MCP_Protected_Store, in delete_path() by lstat() of the seam (Z8b branch 4, D4)',
+			'field'    => 'mtime of a building folder of build_dir(), its age against TMP_AGE: past it, it goes with what is in it',
 			'form'     => self::COUNT,
 		),
 		/* ------------------------------------------------------- budgets */
