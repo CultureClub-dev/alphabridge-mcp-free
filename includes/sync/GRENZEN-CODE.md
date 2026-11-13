@@ -255,6 +255,18 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
   einem Shared Hosting für WooCommerce (3658 PHP-Dateien) sind.
 - **Trifft Normalfall:** nein (Dauer, kein Fehlweg; «bereit» erst nach jeder Datei).
 
+### G-4-7 Budgetprüfung des Exports eines Codepakets ohne eigenen Test
+
+- **Fundstelle:** `AB_MCP_Sync_Export::code_unit()` (`includes/sync/class-sync-export.php`), die Uhr des Budgets der
+  Lesung einer Einheit (`UNIT_BUDGET`).
+- **Quelle:** Behebung 2 von Zweig 4 (Codex-Runde 1, B4; Entscheid der Lead 13.11.2026 04:26: als benannte Grenze).
+- **Was:** `code_unit()` prüft den Messwert der Uhr: ohne endliche Zahl liest es nichts (`unreadable`), es entsteht
+  kein Paket der Einheit. Einen eigenen Test hat diese Prüfung nicht: der Export läuft in der Integrationsumgebung auf
+  der Staging-Site im Kindprozess (`sync-site.php`), dessen Uhr der Test nicht setzt. Die gleiche Regel der Uhr ist
+  an `AB_MCP_Sync_Code_Stage::clock()` und `AB_MCP_Sync_File_Manifest::now()` getestet
+  (`StoreClockAndReadersTest::BUDGET`).
+- **Trifft Normalfall:** nein (der Weg ist sicher: ohne Lesung kein Paket).
+
 ## Übernommen aus Zweig 2 (`bericht-zweig-2.md`, Abschnitt Grenzkandidaten; G-M9 aus «Behebung 2»)
 
 ### G-M1 Ein Lesen über Teile ist kein Augenblick
