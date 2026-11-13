@@ -2014,8 +2014,9 @@ final class AB_MCP_Protected_Store {
 				if ( null === self::way( $root, array( self::TMP ) ) ) {
 					return new WP_Error( 'ab_mcp_store_tmp', __( 'The folder tmp of the protected store is missing or is a link, so nothing is written there. Ask the host to check the folder of the store, then try again.', 'alphabridge-mcp' ) );
 				}
+				$tmp = $root . '/' . self::TMP;
 				for ( $attempt = 0; $attempt < 3; $attempt++ ) {
-					$path = $root . '/' . self::TMP . '/' . self::TMP_PREFIX . bin2hex( AB_MCP_Payload_File::random_bytes( 8 ) );
+					$path = $tmp . '/' . self::TMP_PREFIX . bin2hex( AB_MCP_Payload_File::random_bytes( 8 ) );
 					if ( self::calls()->mkdir( $path, 0700 ) ) {
 						self::$noted[ $path ] = true;
 						return $path;
@@ -2024,6 +2025,49 @@ final class AB_MCP_Protected_Store {
 				return new WP_Error( 'ab_mcp_store_write', __( 'A building folder could not be made in the protected store. Ask the host to check that the folder is writable and the disk has free space, then try again.', 'alphabridge-mcp' ) );
 			}
 		);
+	}
+
+	/**
+	 * Whether this request may remove a path as its own (delete_path()): it
+	 * made and noted it, or it lies in a building folder of build_dir() this
+	 * request made, or one this call found past its age (D4: what lies in a
+	 * building folder goes with it, never by its own time or name).
+	 *
+	 * @param string $p       Path.
+	 * @param string $tmp_dir The folder tmp of the store.
+	 * @param array  $aged    The building folders found past their age in this call.
+	 * @return bool
+	 */
+	private static function own_temp( $p, $tmp_dir, array $aged ) {
+		$build = self::build_of( $p, $tmp_dir );
+		return isset( self::$noted[ $p ] ) || ( null !== $build && ( isset( self::$noted[ $build ] ) || isset( $aged[ $build ] ) ) );
+	}
+
+	/**
+	 * Whether a path in tmp/ that this request did not make may go
+	 * (delete_path(), Z37): only right in tmp/, with the prefix, past
+	 * TMP_AGE; never by its ending. The age of a temp file only from its time
+	 * in the form of its row of AB_MCP_Store_Inputs::TABLE (Behebung 4: no
+	 * cast) and the one checked clock (young(), Behebung 5); of a building
+	 * folder by its own row (tmp.build_mtime, Z8b branch 4), and a building
+	 * folder past its age takes what is in it with it ($aged).
+	 *
+	 * @param string $p       Path in tmp/.
+	 * @param array  $stat    Its lstat().
+	 * @param string $tmp_dir The folder tmp of the store.
+	 * @param array  $aged    The building folders found past their age in this call.
+	 * @return bool
+	 */
+	private static function temp_gone( $p, array $stat, $tmp_dir, array &$aged ) {
+		$folder = 0040000 === ( $stat['mode'] & 0170000 ) && dirname( $p ) === $tmp_dir;
+		$mtime  = $folder ? AB_MCP_Store_Inputs::read( 'tmp.build_mtime', AB_MCP_Shape::field( $stat, 'mtime' ) ) : AB_MCP_Store_Inputs::read( 'file.mtime', AB_MCP_Shape::field( $stat, 'mtime' ) );
+		if ( ( dirname( $p ) !== $tmp_dir || 0 !== strpos( basename( $p ), self::TMP_PREFIX ) || self::young( $mtime ) ) ) {
+			return false;
+		}
+		if ( $folder ) {
+			$aged[ $p ] = true;
+		}
+		return true;
 	}
 
 	/**
@@ -2036,10 +2080,10 @@ final class AB_MCP_Protected_Store {
 	 * @return string|null
 	 */
 	private static function build_of( $path, $tmp_dir ) {
-		if ( 0 !== strpos( (string) $path, $tmp_dir . '/' ) ) {
+		if ( ! is_string( $path ) || 0 !== strpos( $path, $tmp_dir . '/' ) ) {
 			return null;
 		}
-		$first = strtok( substr( (string) $path, strlen( $tmp_dir ) + 1 ), '/' );
+		$first = strtok( substr( $path, strlen( $tmp_dir ) + 1 ), '/' );
 		$top   = $tmp_dir . '/' . $first;
 		return false !== $first && $top !== $path && 0 === strpos( $first, self::TMP_PREFIX ) ? $top : null;
 	}
@@ -2054,13 +2098,13 @@ final class AB_MCP_Protected_Store {
 	 */
 	public static function drop_build( $path ) {
 		$root = self::root();
-		if ( is_wp_error( $root ) || dirname( (string) $path ) !== $root . '/' . self::TMP || 0 !== strpos( basename( (string) $path ), self::TMP_PREFIX ) ) {
+		if ( ! is_string( $path ) || is_wp_error( $root ) || dirname( $path ) !== $root . '/' . self::TMP || 0 !== strpos( basename( $path ), self::TMP_PREFIX ) ) {
 			return false;
 		}
 		return true === self::writing(
 			$root,
 			static function () use ( $root, $path ) {
-				return self::delete_path( $root, (string) $path );
+				return self::delete_path( $root, $path );
 			}
 		);
 	}
@@ -2986,25 +3030,12 @@ final class AB_MCP_Protected_Store {
 				$names = $calls->scandir( dirname( $p ) );
 				return ! $holds && false !== $names && ! in_array( basename( $p ), $names, true );
 			}
-			// What lies in a building folder of build_dir() goes with it: where
-			// this request made the folder, or where this call found the folder
-			// past its age (D4), never by its own time or name.
-			$build = self::build_of( $p, $tmp_dir );
-			$noted = isset( self::$noted[ $p ] ) || ( null !== $build && ( isset( self::$noted[ $build ] ) || isset( $aged[ $build ] ) ) );
+			$noted = self::own_temp( $p, $tmp_dir, $aged );
 			if ( ! $noted && ! $under( $p, $root ) ) {
 				return false;
 			}
-			$folder = 0040000 === ( $stat['mode'] & 0170000 ) && dirname( $p ) === $tmp_dir;
-			// The age of a temp file only from its time in the form of its row
-			// of AB_MCP_Store_Inputs::TABLE (Behebung 4: no cast) and the one
-			// checked clock (young(), Behebung 5); of a building folder by its
-			// own row (tmp.build_mtime, Z8b branch 4).
-			$mtime = $folder ? AB_MCP_Store_Inputs::read( 'tmp.build_mtime', AB_MCP_Shape::field( $stat, 'mtime' ) ) : AB_MCP_Store_Inputs::read( 'file.mtime', AB_MCP_Shape::field( $stat, 'mtime' ) );
-			if ( ! $noted && empty( $how['all_tmp'] ) && 0 === strpos( $p, $tmp_dir . '/' ) && ( dirname( $p ) !== $tmp_dir || 0 !== strpos( basename( $p ), self::TMP_PREFIX ) || self::young( $mtime ) ) ) {
+			if ( ! $noted && empty( $how['all_tmp'] ) && 0 === strpos( $p, $tmp_dir . '/' ) && ! self::temp_gone( $p, $stat, $tmp_dir, $aged ) ) {
 				return false;
-			}
-			if ( $folder && 0 === strpos( basename( $p ), self::TMP_PREFIX ) ) {
-				$aged[ $p ] = true;
 			}
 			if ( 0040000 === ( $stat['mode'] & 0170000 ) ) {
 				if ( ! $top || empty( $how['empty'] ) ) {
