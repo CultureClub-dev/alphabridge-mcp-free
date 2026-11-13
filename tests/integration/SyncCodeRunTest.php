@@ -880,6 +880,12 @@ final class SyncCodeRunTest extends TestCase {
 		self::replan( $run_id, $other );
 		AB_MCP_Sync_Code_Ops::run( AB_MCP_Sync_Run::get( $run_id ), self::step( $run_id, 2 ), array( 'unit' => array( 'ref' => 'ab-it-aktiv' ) + $item['unit'] ) + $item );
 		$foreign( 'another unit' );
+		// Another kind of unit than the stage holds (its journal of that kind too).
+		$kind                  = $journal;
+		$kind['unit']['kind']  = 'theme';
+		self::replan( $run_id, $kind );
+		AB_MCP_Sync_Code_Ops::run( AB_MCP_Sync_Run::get( $run_id ), self::step( $run_id, 2 ), array( 'unit' => array( 'kind' => 'theme' ) + $item['unit'] ) + $item );
+		$foreign( 'another kind' );
 		// Bound as the plan names it: done.
 		self::replan( $run_id, $journal );
 		self::assertSame( 'done', self::next( $run_id )['step']['state'] );
