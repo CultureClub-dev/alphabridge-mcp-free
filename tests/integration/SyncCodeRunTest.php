@@ -1086,13 +1086,58 @@ final class SyncCodeRunTest extends TestCase {
 		} finally {
 			AB_MCP_Test_Seam::restore_all();
 		}
-		self::assertGreaterThan( 0, $calls->failed, 'The entry of the group was read beside the state, and did not read.' );
+		self::assertGreaterThan( 0, $calls->replaced, 'The entry of the group was read beside the state, and did not read.' );
 		$message = self::refused( $error, 'ab_mcp_store_entry' );
 		self::assertStringContainsString( 'so what the group is bound to is not known', $message, 'The error.' );
 		self::assertStringContainsString( 'Step 2 stays planned', $message );
 		self::assertStringContainsString( 'Call action=next again', $message, 'The way.' );
 		self::assertSame( array( 'planned', 'planned' ), array( self::step( $run_id, 2 )['state'], self::step( $run_id, 3 )['state'] ) );
 		self::assertSame( 'done', self::next( $run_id )['step']['state'], 'Read again: done.' );
+		self::assertSame( $before, self::live_bytes( 'ab-it-inaktiv' ) );
+	}
+
+	public function testASidecarOfTheGroupOfAStageHoldingAnotherEntryLeavesTheStepPlannedAndTheStageUnwritten(): void {
+		// B of the closed Codex confirmation on K2: the sidecar of the group,
+		// named right, holds an entry whole but not the one of this group (a
+		// copy gone wrong): the entry of another group (another gid), or an
+		// entry of another area of the store with this gid. entry() refuses
+		// it as not read whole; the step stays planned, never failed, its
+		// journal stays, and the stage still checking is not written. The
+		// sidecar as it is: checked and done.
+		list( $run_id, $journal, $before ) = self::staged_run();
+		$gid       = $journal['stage']['gid'];
+		$untouched = self::stage_bytes( $gid );
+		$side      = '/stage/' . self::stage_folder( $gid ) . '.json';
+		$real      = (string) file_get_contents( AB_MCP_Protected_Store::root() . $side );
+		$entry     = json_decode( $real, true );
+		self::assertIsArray( $entry );
+		self::assertSame( array( $gid, 'stage', $run_id ), array( $entry['gid'], $entry['area'], $entry['run_id'] ), 'The sidecar of the group of the stage, bound to the run.' );
+		// Each entry in the bytes write_entry() writes (a sidecar in another
+		// form does not read whole, the case of the test before).
+		self::assertSame( $real, (string) json_encode( $entry, JSON_UNESCAPED_SLASHES ), 'The sidecar as the store writes it.' );
+		$cases = array(
+			'the entry of another group'        => array_replace( $entry, array( 'gid' => str_repeat( 'a' === $gid[0] ? 'b' : 'a', 32 ) ) ),
+			'an entry of another area, its gid' => array_replace( $entry, array( 'area' => 'backups' ) ),
+		);
+		foreach ( $cases as $what => $other ) {
+			$calls = new SyncCodeRunEntryCalls( $side, (string) json_encode( $other, JSON_UNESCAPED_SLASHES ) );
+			AB_MCP_Test_Seam::install( AB_MCP_Protected_Store::class, 'naht_protected_store', $calls );
+			try {
+				$error = self::next( $run_id );
+			} finally {
+				AB_MCP_Test_Seam::restore_all();
+			}
+			self::assertGreaterThan( 0, $calls->replaced, "$what: the entry of the group was read beside the state." );
+			$message = self::refused( $error, 'ab_mcp_store_entry' );
+			self::assertStringContainsString( 'so what the group is bound to is not known', $message, $what );
+			self::assertStringContainsString( 'Step 2 stays planned', $message, $what );
+			self::assertStringContainsString( 'Call action=next again', $message, "$what: the way." );
+			self::assertSame( array( 'planned', 'planned' ), array( self::step( $run_id, 2 )['state'], self::step( $run_id, 3 )['state'] ), "$what: planned, never failed." );
+			self::assertSame( $journal, self::step( $run_id, 2 )['parts'], "$what: the journal stays." );
+			self::assertSame( $untouched, self::stage_bytes( $gid ), "$what: the stage is not written." );
+		}
+		self::assertSame( 'done', self::next( $run_id )['step']['state'], 'The sidecar as it is: checked and done.' );
+		self::assertNotSame( $untouched, self::stage_bytes( $gid ), 'The stage of the step is checked.' );
 		self::assertSame( $before, self::live_bytes( 'ab-it-inaktiv' ) );
 	}
 
@@ -1103,16 +1148,13 @@ final class SyncCodeRunTest extends TestCase {
 		// in the form of its row; what is not of it is not known, the step
 		// does nothing, and nothing is taken for a step of the contents.
 		list( $args ) = self::changed( 'ab-it-inaktiv', '1.1.0' );
-		$calls        = self::wporg();
+		self::wporg();
 		list( , $run ) = self::begun( $args );
 		$run_id = (int) $run['run_id'];
 		$before = self::live_bytes( 'ab-it-inaktiv' );
 		self::assertSame( 'done', self::next( $run_id )['step']['state'] );
 		self::assertSame( 'planned', self::next( $run_id )['step']['state'], 'Staged; its journal names the stage.' );
 		$journal = self::step( $run_id, 2 )['parts'];
-		global $wpdb;
-		$steps = AB_MCP_Sync_Schema::table( 'steps' );
-		$runs  = AB_MCP_Sync_Schema::table( 'runs' );
 		// A journal not of its form: the step refuses and stays planned.
 		$wrong = $journal;
 		$wrong['stage']['hash'] = 'not-a-hash';
@@ -1146,24 +1188,135 @@ final class SyncCodeRunTest extends TestCase {
 		self::assertStringContainsString( 'Step 2 stays planned, and no unit is swapped without a stage read as ready', $message );
 		self::assertStringContainsString( 'Call action=next again; where it keeps failing, abort the run (wp_site_push action=abort)', $message, 'The way.' );
 		self::assertSame( array( 'planned', 'planned' ), array( self::step( $run_id, 2 )['state'], self::step( $run_id, 3 )['state'] ) );
-		// The journal as it was: the check goes on.
+		// The journal as it was: the check goes on. (A plan of the run that
+		// does not read: testAPlanOfTheCodeThatDoesNotReadInTheRunRefusesItsStepAndWritesNothing.)
 		$answer = self::next( $run_id );
 		self::assertIsArray( $answer, is_wp_error( $answer ) ? $answer->get_error_code() : '' );
 		self::assertSame( 2, $answer['step']['seq'] );
-		// A plan of the code that names no unit for its write steps (its
-		// units of another kind): no step runs, none is run as an object.
-		$stored                             = AB_MCP_Sync_Run::get( $run_id )['plan'];
-		$stored['code']['units'][0]['kind'] = 'mu_plugin';
-		$stored['code']['units'][1]['kind'] = 'mu_plugin';
-		$plan = $wpdb->get_var( $wpdb->prepare( "SELECT plan FROM `$runs` WHERE run_id = %d", $run_id ) ); // phpcs:ignore WordPress.DB
-		self::assertTrue( AB_MCP_Sync_Run::update_step( $run_id, 2, array( 'parts' => null ), null ) );
-		$wpdb->query( $wpdb->prepare( "UPDATE `$steps` SET state = 'planned', result = NULL WHERE run_id = %d AND seq IN ( 2, 3 )", $run_id ) ); // phpcs:ignore WordPress.DB
-		$fetched = count( $calls->wporg->calls );
-		$item    = AB_MCP_Sync_Code_Ops::item( $stored, 2 );
-		self::refused( $item, 'ab_mcp_sync_code_plan' );
-		self::assertSame( $fetched, count( $calls->wporg->calls ), 'Nothing fetched on a plan that does not read.' );
-		self::assertIsString( $plan );
 		self::assertSame( $before, self::live_bytes( 'ab-it-inaktiv' ), 'Nothing of the site changed in any of these.' );
+	}
+
+	/** Of every step of a run: its number, its state, its journal and its result. */
+	private static function steps_of( int $run_id ): array {
+		$steps = AB_MCP_Sync_Run::steps( $run_id );
+		self::assertIsArray( $steps );
+		return array_map( static fn( $s ) => array( $s['seq'], $s['state'], $s['parts'], $s['result'] ), $steps );
+	}
+
+	/** The groups of the stage bound to a run. */
+	private static function stages_of( int $run_id ): array {
+		$groups = AB_MCP_Protected_Store::groups( 'stage' );
+		self::assertIsArray( $groups );
+		return array_values( array_filter( $groups, static fn( $g ) => (int) $g['run_id'] === $run_id ) );
+	}
+
+	public function testAPlanOfTheCodeThatDoesNotReadInTheRunRefusesItsStepAndWritesNothing(): void {
+		// B of the Codex round 1 on the code (finding 4), through the public
+		// way: the plan stored with a run of the code no longer reads in its
+		// form (its row written so after the check of the run). wp_site_push
+		// action=next refuses the step with the reason and the way; the run
+		// stays open, no step is written, nothing is fetched or staged,
+		// nothing of the site changes, and the step is never taken for a
+		// step of the contents. The plan as it was: the step stages.
+		list( $args ) = self::changed( 'ab-it-inaktiv', '1.1.0' );
+		$calls        = self::wporg();
+		list( , $run ) = self::begun( $args );
+		$run_id = (int) $run['run_id'];
+		$before = self::live_bytes( 'ab-it-inaktiv' );
+		self::assertSame( 'done', self::next( $run_id )['step']['state'], 'The check of the run.' );
+		global $wpdb;
+		$runs = AB_MCP_Sync_Schema::table( 'runs' );
+		$row  = $wpdb->get_var( $wpdb->prepare( "SELECT plan FROM `$runs` WHERE run_id = %d", $run_id ) ); // phpcs:ignore WordPress.DB
+		self::assertIsString( $row );
+		$plan                              = AB_MCP_Sync_Run::get( $run_id )['plan'];
+		$kinds                             = $plan;
+		$kinds['code']['units'][0]['kind'] = 'mu_plugin';
+		$kinds['code']['units'][1]['kind'] = 'mu_plugin';
+		$cases = array(
+			'its units of another kind' => $kinds,
+			'its code no record'        => array( 'code' => 'not a plan' ) + $plan,
+		);
+		$steps = self::steps_of( $run_id );
+		self::assertSame( array( 'done', 'planned', 'planned' ), array_slice( array_column( $steps, 1 ), 0, 3 ) );
+		foreach ( $cases as $what => $wrong ) {
+			$wpdb->update( $runs, array( 'plan' => wp_json_encode( $wrong ) ), array( 'run_id' => $run_id ) ); // phpcs:ignore WordPress.DB
+			try {
+				$answer = self::next( $run_id );
+			} finally {
+				$wpdb->update( $runs, array( 'plan' => $row ), array( 'run_id' => $run_id ) ); // phpcs:ignore WordPress.DB
+			}
+			$message = self::refused( $answer, 'ab_mcp_sync_code_plan' );
+			self::assertStringContainsString( 'names no unit of code for step 2', $message, $what );
+			self::assertStringContainsString( 'nothing of this site changed', $message, $what );
+			self::assertStringContainsString( 'Abort the run (wp_site_push action=abort), make a new report (wp_site_diff) and plan again', $message, "$what: with the way." );
+			self::assertSame( 'open', AB_MCP_Sync_Run::get( $run_id )['state'], "$what: the run stays open." );
+			self::assertSame( $steps, self::steps_of( $run_id ), "$what: no step is written." );
+			self::assertSame( array(), $calls->wporg->calls, "$what: nothing fetched." );
+			self::assertSame( array(), self::stages_of( $run_id ), "$what: nothing staged." );
+			self::assertSame( $before, self::live_bytes( 'ab-it-inaktiv' ), "$what: nothing of the site changed." );
+		}
+		// The plan as it was: the same step stages.
+		$staged = self::next( $run_id );
+		self::assertIsArray( $staged, is_wp_error( $staged ) ? $staged->get_error_code() . ': ' . $staged->get_error_message() : '' );
+		self::assertSame( array( 2, 'planned' ), array( $staged['step']['seq'], $staged['step']['state'] ) );
+		self::assertCount( 1, $calls->wporg->calls, 'Fetched once.' );
+		self::assertCount( 1, self::stages_of( $run_id ), 'Staged.' );
+	}
+
+	public function testARunWhosePackagesCannotBeBoundIsClosedAgainAtOnceAndNothingIsStagedOrWritten(): void {
+		// B of the Codex round 1 on the code (finding 5), through the public
+		// way: a package of the environment of the report is removed after
+		// the plan was read and before the packages are bound to the run made
+		// of it (by another request; here when the row of the run is
+		// written). The confirmation of wp_site_push refuses with the package
+		// and the way; the run made is closed again as aborted at once, the
+		// site is free, no step ran, nothing is fetched, staged or written.
+		list( $args, , $env ) = self::changed( 'ab-it-inaktiv', '1.1.0' );
+		$calls   = self::wporg();
+		$before  = self::live_bytes( 'ab-it-inaktiv' );
+		$preview = self::gated( 'wp_site_push', $args );
+		self::assertIsArray( $preview, is_wp_error( $preview ) ? $preview->get_error_code() . ': ' . $preview->get_error_message() : '' );
+		$gone = (string) end( $env );
+		$gid  = null;
+		foreach ( AB_MCP_Protected_Store::groups( 'in' ) as $group ) {
+			if ( AB_MCP_Sync_Import::LABEL . $gone === (string) $group['label'] ) {
+				$gid = (string) $group['gid'];
+			}
+		}
+		self::assertIsString( $gid, 'The package is there when the plan is read.' );
+		global $wpdb;
+		$runs    = AB_MCP_Sync_Schema::table( 'runs' );
+		$removed = null;
+		$remove  = static function ( $query ) use ( $runs, $gid, &$removed ) {
+			if ( null === $removed && 0 === strpos( ltrim( (string) $query ), "INSERT INTO `$runs`" ) ) {
+				$removed = AB_MCP_Protected_Store::remove( 'in', $gid );
+			}
+			return $query;
+		};
+		add_filter( 'query', $remove );
+		try {
+			$answer = self::gated( 'wp_site_push', $args + array( 'confirm_token' => $preview['confirm_token'] ) );
+		} finally {
+			remove_filter( 'query', $remove );
+		}
+		self::assertTrue( $removed, 'The package was removed once the run was written, before its packages were bound.' );
+		$message = self::refused( $answer, 'ab_mcp_sync_code_bind' );
+		self::assertStringContainsString( "The package $gone of this plan is no longer in the protected store", $message, 'The package is named.' );
+		self::assertSame( 1, preg_match( '/Run ([1-9][0-9]*) was made for this plan and closed again as aborted at once: nothing was staged or written\./', $message, $made ), $message );
+		self::assertStringContainsString( 'Call wp_site_push action=plan again once the packages are there', $message, 'With the way.' );
+		$run_id = (int) $made[1];
+		$run    = AB_MCP_Sync_Run::get( $run_id );
+		self::assertIsArray( $run );
+		self::assertSame( 'closed_aborted', $run['state'], 'The run made is closed again at once.' );
+		self::assertNull( AB_MCP_Sync_Run::open_run(), 'The site is free.' );
+		$steps = self::steps_of( $run_id );
+		self::assertSame( array( 1, 2, 3, 4, 5 ), array_column( $steps, 0 ) );
+		self::assertSame( array( 'planned' ), array_values( array_unique( array_column( $steps, 1 ) ) ), 'No step ran.' );
+		self::assertSame( array( null ), array_values( array_unique( array_column( $steps, 2 ), SORT_REGULAR ) ), 'No step has a journal.' );
+		self::assertSame( array(), $calls->wporg->calls, 'Nothing fetched.' );
+		self::assertSame( array(), self::stages_of( $run_id ), 'Nothing staged.' );
+		self::assertSame( $before, self::live_bytes( 'ab-it-inaktiv' ), 'Nothing of the site changed.' );
+		self::assertSame( '1.0.0', AB_MCP_IT_Code::fassung( 'a', 'plugin', 'ab-it-inaktiv' ) );
 	}
 
 	public function testAPackageThatIsGoneBindsNothingAndTheBindingIsChecked(): void {
@@ -1300,9 +1453,9 @@ final class SyncCodeRunStageCalls {
 /**
  * The calls of the protected store for SyncCodeRunTest: each the one of
  * AB_MCP_IT_Store_Calls, but the read of one sidecar (a path ending so)
- * gives false wherever it is not read for the state of a stage
- * (AB_MCP_Sync_Code_Stage::state()): the entry of the group read for
- * anything else does not read.
+ * gives false, or the bytes given, wherever it is not read for the state
+ * of a stage (AB_MCP_Sync_Code_Stage::state()): the entry of the group read
+ * for anything else does not read, or holds another entry.
  */
 final class SyncCodeRunEntryCalls {
 
@@ -1312,18 +1465,26 @@ final class SyncCodeRunEntryCalls {
 	/** @var string The end of the path of the sidecar. */
 	private $side;
 
-	/** @var int The reads that gave false. */
-	public $failed = 0;
+	/** @var string|false What such a read gives. */
+	private $bytes;
 
-	public function __construct( string $side ) {
-		$this->real = new \AB_MCP_IT_Store_Calls();
-		$this->side = $side;
+	/** @var int The reads that gave it. */
+	public $replaced = 0;
+
+	/**
+	 * @param string       $side  The end of the path of the sidecar.
+	 * @param string|false $bytes What its read gives: false (it does not read) or these bytes.
+	 */
+	public function __construct( string $side, $bytes = false ) {
+		$this->real  = new \AB_MCP_IT_Store_Calls();
+		$this->side  = $side;
+		$this->bytes = $bytes;
 	}
 
 	public function read( $path, $max ) {
 		if ( substr( (string) $path, -strlen( $this->side ) ) === $this->side && ! self::for_state() ) {
-			++$this->failed;
-			return false;
+			++$this->replaced;
+			return $this->bytes;
 		}
 		return $this->real->read( $path, $max );
 	}

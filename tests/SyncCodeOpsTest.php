@@ -74,6 +74,20 @@ final class SyncCodeOpsTest extends TestCase {
 		return $calls;
 	}
 
+	/** An object that is no text but turns into this one where it is cast. */
+	private static function stringable( string $text ): object {
+		return new class( $text ) {
+			/** @var string */
+			private $text;
+			public function __construct( string $text ) {
+				$this->text = $text;
+			}
+			public function __toString(): string {
+				return $this->text;
+			}
+		};
+	}
+
 	/** A valid unit of a plan of the code. */
 	public static function unit( array $over = array() ): array {
 		return $over + array(
@@ -413,6 +427,11 @@ final class SyncCodeOpsTest extends TestCase {
 			'a reading that fails'    => null,
 			'a row without its value' => array( 'autoload' => 'yes' ),
 			'a value that is no text' => array( 'value' => 7, 'autoload' => 'yes' ),
+			// No text, but an object that turns into one: cast, it would read
+			// as a list of main files, or as none (B of the Codex round on
+			// 5b044fa: the check of the type on its own).
+			'a stringable, a list'    => array( 'value' => self::stringable( serialize( array( 'shop/shop.php' ) ) ), 'autoload' => 'yes' ),
+			'a stringable, no plugin' => array( 'value' => self::stringable( serialize( array() ) ), 'autoload' => 'yes' ),
 			'an empty value'          => '',
 			'a text'                  => 'shop/shop.php',
 			'half written'            => substr( serialize( array( 'shop/shop.php' ) ), 0, 20 ),

@@ -148,6 +148,14 @@ e('plan-pair-min', 'PAIR: a pair is a whole number of 1 or more', CP,
   "\t\t\t\t\t\t'min'    => 1,", "\t\t\t\t\t\t'min'    => 0,", 'ops', PAIRT)
 e('plan-bind', 'bind(): each package of the plan is bound to the run, one not bound refuses (V20)', CP,
   "\t\t\tif ( true !== $bound ) {", "\t\t\tif ( false ) {", 'coderun', BIND)
+# Through the public way (B of the Codex round 1 on the code, finding 5): the
+# confirmation whose packages cannot be bound leaves no run open.
+ABORT = 'testARunWhosePackagesCannotBeBoundIsClosedAgainAtOnceAndNothingIsStagedOrWritten'
+BOUND = "\t\t\tif ( is_wp_error( $bound ) ) {\n\t\t\t\t$closed = AB_MCP_Sync_Engine::abort( $run );"
+e('push-bind-refused', 'begin(): a run whose packages cannot be bound is refused, never given as made (V20)', PU,
+  BOUND, BOUND.replace('is_wp_error( $bound )', 'false'), 'coderun', ABORT)
+e('push-bind-abort', 'begin(): a run whose packages cannot be bound is closed again as aborted at once, never left open (V20)', PU,
+  BOUND, BOUND.replace('AB_MCP_Sync_Engine::abort( $run )', 'true'), 'coderun', ABORT)
 
 # ------------------------------------------- a step of the code in a run (Z8b branch 5, part 1)
 INACT = 'testAnInactivePluginUpdatedOnStagingIsPlannedAloneStagedOverCallsAndReadyWithoutAChangeOfTheSite'
@@ -178,12 +186,23 @@ e('ops-refused', 'stage(): a stage the check refused is not staged, its swap is 
   "\t\tif ( AB_MCP_Sync_Code_Stage::REFUSED === $checked['state'] ) {", "\t\tif ( false ) {", 'coderun', 'testAStageTheCheckRefusesIsNotStagedAndItsSwapIsSkipped')
 e('engine-written-plan', 'written(): a plan that does not read back judges a step as neither code nor object', EN,
   "\t\tif ( ! is_array( $run['plan'] ) ) {", "\t\tif ( false ) {", 'run', WRIT)
+# Through the public way (B of the Codex round 1 on the code, finding 4): a
+# plan of the code stored with the run that does not read.
+PLANT = 'testAPlanOfTheCodeThatDoesNotReadInTheRunRefusesItsStepAndWritesNothing'
+ITEMS = "\t\t$unit = AB_MCP_Sync_Code_Ops::item( $plan, $step['seq'] );\n\t\tif ( null !== $unit ) {\n\t\t\treturn is_wp_error( $unit ) ? $unit : AB_MCP_Sync_Code_Ops::run( $run, $step, $unit );"
+e('engine-code-plan-code', 'run_write(): a plan of the code that does not read is never taken for a plan of the contents', EN,
+  ITEMS, ITEMS.replace('null !== $unit', 'is_array( $unit )'), 'coderun', PLANT)
+e('engine-code-plan-refused', 'run_write(): a plan of the code that does not read refuses its step with the reason and the way', EN,
+  ITEMS, ITEMS.replace('is_wp_error( $unit ) ? $unit : ', ''), 'coderun', PLANT)
 
 # ------------------------------------------- what runs here, three-valued (Z8b branch 5, part 1)
 PLUG = 'testWhichPluginsRunIsReadFromTheRowOfActivePluginsAndARowNotReadIsNotKnown'
 THEME = 'testWhichThemeRunsIsReadFromBothItsRowsAndASwitchInBetweenIsNotKnown'
-e('swap-plugins-row', 'active_plugins(): a row not read is not known, never no plugin', CS,
-  "\t\tif ( ! is_array( $row ) || ! array_key_exists( 'value', $row ) || ! is_string( $row['value'] ) ) {", "\t\tif ( ! is_array( $row ) ) {", 'ops', PLUG)
+ROW = "\t\tif ( ! is_array( $row ) || ! array_key_exists( 'value', $row ) || ! is_string( $row['value'] ) ) {"
+e('swap-plugins-row-key', 'active_plugins(): a row without its value is not known, never no plugin', CS,
+  ROW, ROW.replace("! array_key_exists( 'value', $row ) || ", ''), 'ops', PLUG)
+e('swap-plugins-row-text', 'active_plugins(): a value that is no text is not known, never cast to one', CS,
+  ROW, ROW.replace(" || ! is_string( $row['value'] )", ''), 'ops', PLUG)
 e('swap-plugins-form', 'active_plugins(): the row is read in the form of site.active_plugins', CS,
   "AB_MCP_Store_Inputs::read( 'site.active_plugins', $read['value'] )", "( is_array( $read['value'] ) ? $read['value'] : null )", 'ops', PLUG)
 e('swap-mains-unknown', 'active_mains(): plugins not known are no main files known', CS,
@@ -279,8 +298,12 @@ e('k2-foreign-signed', 'foreign(): the stage of another version of the staging s
   FOREIGN, FOREIGN.replace(" || ! hash_equals( $want['signed'], $state['signed'] )", ''), 'coderun', CHK)
 e('k2-ops-bound-run', 'stage(): the step expects its stage bound to its own run (A2, K2)', CO,
   "\t\t\t'run_id' => $run_id,\n\t\t\t'kind'   => $unit['kind'],", "\t\t\t'run_id' => $run_id + 1,\n\t\t\t'kind'   => $unit['kind'],", 'coderun', NORM)
-e('k2-store-entry-unread', 'entry(): a sidecar not read whole is the error of its own, never an entry (K2)', PS,
-  "\t\tif ( 'own' !== $read[0] || $gid !== $read[1]['gid'] ) {", "\t\tif ( false ) {", 'coderun', ENT)
+SIDE = "\t\tif ( 'own' !== $read[0] || $gid !== $read[1]['gid'] ) {"
+OTHER_ENTRY = 'testASidecarOfTheGroupOfAStageHoldingAnotherEntryLeavesTheStepPlannedAndTheStageUnwritten'
+e('k2-store-entry-own', 'entry(): a sidecar not read whole or holding an entry of another area is the error of its own, never an entry (K2)', PS,
+  SIDE, SIDE.replace("'own' !== $read[0] || ", ''), 'coderun', OTHER_ENTRY)
+e('k2-store-entry-gid', 'entry(): a sidecar holding the entry of another group is the error of its own, never the entry of this one (K3, Codex confirmation on K2)', PS,
+  SIDE, SIDE.replace(" || $gid !== $read[1]['gid']", ''), 'coderun', OTHER_ENTRY)
 
 # ------------------------------------------------ check and write
 src = {f: open(os.path.join(ROOT, f)).read() for f in VAR}
