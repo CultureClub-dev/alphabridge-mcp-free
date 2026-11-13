@@ -68,7 +68,6 @@ require_once __DIR__ . '/class-sync-credentials.php';
 require_once __DIR__ . '/class-sync-net.php';
 require_once __DIR__ . '/class-sync-option-schema.php';
 require_once __DIR__ . '/class-sync-media-package.php';
-require_once __DIR__ . '/class-sync-code-package.php';
 require_once dirname( __DIR__ ) . '/class-staging-gate.php';
 
 /**
@@ -401,6 +400,7 @@ final class AB_MCP_Sync_Import {
 		}
 		// A package of code likewise, by its index (Z8b branch 4).
 		if ( 'code' === $purpose ) {
+			require_once __DIR__ . '/class-sync-code-package.php';
 			return AB_MCP_Sync_Code_Package::taken( $found['gid'], $manifest, $have );
 		}
 		// Each chunk against its hash in the signed manifest, which the import
@@ -957,6 +957,7 @@ final class AB_MCP_Sync_Import {
 			return AB_MCP_Sync_Media_Package::unpacked( $held );
 		}
 		if ( 'code' === $manifest['purpose'] ) {
+			require_once __DIR__ . '/class-sync-code-package.php';
 			return AB_MCP_Sync_Code_Package::unpacked( $held );
 		}
 		$limits   = AB_MCP_Store_Budget::UNPACK;

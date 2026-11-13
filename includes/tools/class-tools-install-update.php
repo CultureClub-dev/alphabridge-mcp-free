@@ -392,9 +392,10 @@ class AB_MCP_Tools_Install_Update extends AB_MCP_Tools_Base {
 			return new WP_Error( 'ab_mcp_bad_slug', __( 'A plugin slug is required: pass the plugin\'s name in its wordpress.org address, e.g. "akismet".', 'alphabridge-mcp' ) );
 		}
 		self::boot_upgrader();
-		$version = self::s( $a, 'version', '' );
-		if ( '' !== $version ) {
-			return self::install_version( 'plugin', $slug, $version, self::b( $a, 'activate', false ) );
+		// version in any form goes to its check (D2); only left out or empty
+		// is the way without it (G-4-1), never a version that is no text.
+		if ( isset( $a['version'] ) && '' !== $a['version'] ) {
+			return self::install_version( 'plugin', $slug, $a['version'], self::b( $a, 'activate', false ) );
 		}
 
 		$api = plugins_api( 'plugin_information', array( 'slug' => $slug, 'fields' => array( 'sections' => false ) ) );
@@ -706,7 +707,7 @@ class AB_MCP_Tools_Install_Update extends AB_MCP_Tools_Base {
 	 */
 	private static function install_version( $type, $slug, $version, $activate ) {
 		require_once dirname( __DIR__ ) . '/sync/class-sync-code-stage.php';
-		if ( 1 !== preg_match( AB_MCP_Sync_Code_Stage::ORG_VERSION, $version ) || 'trunk' === $version || 1 !== preg_match( AB_MCP_Sync_Code_Stage::ORG_SLUG, $slug ) ) {
+		if ( ! is_string( $version ) || 1 !== preg_match( AB_MCP_Sync_Code_Stage::ORG_VERSION, $version ) || 'trunk' === $version || 1 !== preg_match( AB_MCP_Sync_Code_Stage::ORG_SLUG, $slug ) ) {
 			return new WP_Error( 'ab_mcp_bad_version', __( 'version is a version as wordpress.org names it (digits, letters, ".", "-" and "_", e.g. "5.3"), and the slug one of the directory. Pass them so, or leave version out for the newest.', 'alphabridge-mcp' ) );
 		}
 		$tmp = wp_tempnam( 'ab-package.zip' );
@@ -770,9 +771,8 @@ class AB_MCP_Tools_Install_Update extends AB_MCP_Tools_Base {
 			return new WP_Error( 'ab_mcp_bad_slug', __( 'A theme slug is required: pass the theme\'s name in its wordpress.org address, e.g. "twentytwentyfive".', 'alphabridge-mcp' ) );
 		}
 		self::boot_upgrader();
-		$version = self::s( $a, 'version', '' );
-		if ( '' !== $version ) {
-			return self::install_version( 'theme', $slug, $version, false );
+		if ( isset( $a['version'] ) && '' !== $a['version'] ) {
+			return self::install_version( 'theme', $slug, $a['version'], false );
 		}
 
 		$api = themes_api( 'theme_information', array( 'slug' => $slug, 'fields' => array( 'sections' => false ) ) );

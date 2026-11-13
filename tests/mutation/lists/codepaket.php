@@ -245,6 +245,26 @@ return array(
 		'expect'  => '/testAnOwnPluginComesAsAPackageOfCodeWithOnlyTheFilesTheLiveUnitLacks/',
 	),
 	array(
+		'id'      => 'codepaket/ex-own',
+		'clause'  => 'code_unit(): AlphaBridge itself goes into no package of code (E12)',
+		'file'    => 'includes/sync/class-sync-export.php',
+		'search'  => '		if ( is_wp_error( AB_MCP_Own_Files::own_file_refusal( $path ) ) ) {
+			return \'own\';',
+		'replace' => '		if ( false ) {
+			return \'own\';',
+		'run'     => $it( 'CodeStageTest', 'testAlphaBridgeItselfGoesIntoNoPackageOfCode' ),
+		'expect'  => '/testAlphaBridgeItselfGoesIntoNoPackageOfCode/',
+	),
+	array(
+		'id'      => 'codepaket/d2-version-text',
+		'clause'  => 'install_version(): a version that is no text is refused, never the newest (D2)',
+		'file'    => 'includes/tools/class-tools-install-update.php',
+		'search'  => 'if ( ! is_string( $version ) || 1 !== preg_match(',
+		'replace' => 'if ( 1 !== preg_match(',
+		'run'     => $it( 'CodeStageTest', 'testTheInstallToolsTakeAnExactVersionOfWordpressOrgThroughTheDownloader' ),
+		'expect'  => '/testTheInstallToolsTakeAnExactVersionOfWordpressOrgThroughTheDownloader/',
+	),
+	array(
 		'id'      => 'codepaket/ex-left',
 		'clause'  => 'make_code(): what does not fit goes to left, the unit over several packages (F43)',
 		'file'    => 'includes/sync/class-sync-export.php',
@@ -608,7 +628,7 @@ return array(
 		'id'      => 'codepaket/d2-bad-version',
 		'clause'  => 'install_version(): only a version and a slug as wordpress.org names them (D2)',
 		'file'    => 'includes/tools/class-tools-install-update.php',
-		'search'  => '		if ( 1 !== preg_match( AB_MCP_Sync_Code_Stage::ORG_VERSION, $version ) || \'trunk\' === $version || 1 !== preg_match( AB_MCP_Sync_Code_Stage::ORG_SLUG, $slug ) ) {',
+		'search'  => '		if ( ! is_string( $version ) || 1 !== preg_match( AB_MCP_Sync_Code_Stage::ORG_VERSION, $version ) || \'trunk\' === $version || 1 !== preg_match( AB_MCP_Sync_Code_Stage::ORG_SLUG, $slug ) ) {',
 		'replace' => '		if ( false ) {',
 		'run'     => $it( 'CodeStageTest', 'testTheInstallToolsTakeAnExactVersionOfWordpressOrgThroughTheDownloader' ),
 		'expect'  => '/testTheInstallToolsTakeAnExactVersionOfWordpressOrgThroughTheDownloader/',

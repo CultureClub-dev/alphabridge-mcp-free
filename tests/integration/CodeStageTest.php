@@ -339,6 +339,37 @@ final class CodeStageTest extends TestCase {
 		self::assertInstanceOf( \WP_Error::class, $missing );
 	}
 
+	public function testAlphaBridgeItselfGoesIntoNoPackageOfCode(): void {
+		// code_unit(): AlphaBridge itself is shown, never packed (E12), by the
+		// identity of its path; the other units of the same call are packed.
+		$b = AB_MCP_IT_Code::put( 'b', 'plugin', 'ab-it-daten', '1.0.0' );
+		file_put_contents( $b . '/neu.php', "<?php\n// neu\n" );
+		list( , $package ) = self::code(
+			array(
+				array(
+					'kind' => 'plugin',
+					'ref'  => 'alphabridge-mcp',
+				),
+				array(
+					'kind'  => 'plugin',
+					'ref'   => 'ab-it-daten',
+					'paths' => array( 'neu.php' ),
+				),
+			)
+		);
+		self::assertSame(
+			array(
+				array(
+					'kind'    => 'plugin',
+					'ref'     => 'alphabridge-mcp',
+					'problem' => 'own',
+				),
+			),
+			$package['code']['unread']
+		);
+		self::assertSame( array( array( 'kind' => 'plugin', 'ref' => 'ab-it-daten', 'files' => 1 ) ), $package['code']['packed'] );
+	}
+
 	public function testOneUnitOverSeveralPackagesIsStagedOnlyWithAllOfThem(): void {
 		// F43, the part of this branch: more than one package holds (here the
 		// lines of a manifest, 5000 objects), the rest in the next package; the
@@ -592,6 +623,8 @@ final class CodeStageTest extends TestCase {
 		self::assertSame( 'ab_mcp_version_unavailable', \AB_MCP_Tools_Install_Update::install_plugin( array( 'slug' => 'ab-it-inaktiv', 'version' => '9.9.9' ) )->get_error_code() );
 		self::assertSame( '', AB_MCP_IT_Code::fassung( 'a', 'plugin', 'ab-it-inaktiv' ), 'Nothing installed.' );
 		self::assertSame( 'ab_mcp_bad_version', \AB_MCP_Tools_Install_Update::install_plugin( array( 'slug' => 'ab-it-inaktiv', 'version' => '../1' ) )->get_error_code() );
+		self::assertSame( 'ab_mcp_bad_version', \AB_MCP_Tools_Install_Update::install_plugin( array( 'slug' => 'ab-it-inaktiv', 'version' => array( '1.0.0' ) ) )->get_error_code(), 'A version that is no text is refused, never the newest installed.' );
+		self::assertSame( '', AB_MCP_IT_Code::fassung( 'a', 'plugin', 'ab-it-inaktiv' ), 'Nothing installed.' );
 		AB_MCP_IT_Code::remove( 'a', 'theme', 'ab-it-eltern' );
 		$theme = \AB_MCP_Tools_Install_Update::install_theme( array( 'slug' => 'ab-it-eltern', 'version' => '1.1.0' ) );
 		self::assertIsArray( $theme, is_wp_error( $theme ) ? $theme->get_error_message() : '' );

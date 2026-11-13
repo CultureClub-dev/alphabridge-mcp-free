@@ -618,7 +618,8 @@ final class AB_MCP_Sync_Code_Stage {
 			return self::refusal( 'code:unit', __( 'This site has no folder for plugins or themes WordPress names, so nothing is staged.', 'alphabridge-mcp' ) );
 		}
 		// AlphaBridge itself is never staged (E12; the swap holds Z11).
-		if ( class_exists( 'AB_MCP_Own_Files' ) && is_wp_error( AB_MCP_Own_Files::own_file_refusal( $target ) ) ) {
+		require_once dirname( __DIR__ ) . '/lifecycle/class-own-files.php';
+		if ( is_wp_error( AB_MCP_Own_Files::own_file_refusal( $target ) ) ) {
 			return self::refusal( 'code:own', __( 'This is AlphaBridge itself, which is shown, never swapped. Bring both sites to the same version of it by hand.', 'alphabridge-mcp' ) );
 		}
 		$live = self::live( $kind, $ref );

@@ -275,7 +275,9 @@ final class OutboundBindingTest extends TestCase {
 		self::assertSame( 0, $args['redirection'], 'WordPress follows nothing; the plugin does, each target checked.' );
 		if ( 'zip' === $path ) {
 			self::assertSame( 30, $args['timeout'] );
-			self::assertSame( 30 * MB_IN_BYTES, $args['limit_response_size'] );
+			// One byte past the limit, so a ZIP over it is refused, never cut
+			// (V2 of Z8b branch 4).
+			self::assertSame( 30 * MB_IN_BYTES + 1, $args['limit_response_size'] );
 		} else {
 			self::assertSame( 20, $args['timeout'] );
 			self::assertSame( 20 * MB_IN_BYTES + 1, $args['limit_response_size'] );

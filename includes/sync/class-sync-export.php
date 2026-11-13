@@ -879,7 +879,8 @@ final class AB_MCP_Sync_Export {
 			return 'unreadable';
 		}
 		$path = $base . '/' . $one['ref'];
-		if ( class_exists( 'AB_MCP_Own_Files' ) && is_wp_error( AB_MCP_Own_Files::own_file_refusal( $path ) ) ) {
+		require_once dirname( __DIR__ ) . '/lifecycle/class-own-files.php';
+		if ( is_wp_error( AB_MCP_Own_Files::own_file_refusal( $path ) ) ) {
 			return 'own';
 		}
 		$now  = null !== AB_MCP_Sync_Env::$clock ? (float) call_user_func( AB_MCP_Sync_Env::$clock ) : microtime( true );
