@@ -1084,7 +1084,7 @@ final class AB_MCP_Protected_Store {
 		}
 		switch ( $raw->get_error_code() ) {
 			case 'missing':
-				return new WP_Error( 'ab_mcp_store_missing', __( 'The file is not in the protected store: it was never written, or its group was removed. Make it again.', 'alphabridge-mcp' ) );
+				return new WP_Error( 'ab_mcp_store_missing', __( 'The file was not found in its group of the protected store, or it could not be inspected there; the store does not tell which. Where it belongs to a package or a report whose source is still there, make that anew. A backup of what a run already replaced cannot be made anew: check the object in wp-admin, or ask the host whether a backup of the site holds it. Where the file should still be there, ask the host to check the folder of the protected store and the rights on it.', 'alphabridge-mcp' ) );
 			case 'read':
 				return new WP_Error( 'ab_mcp_store_read', 'The file of the protected store could not be read. Try again; if it keeps failing, ask the host to check the rights of the folder.' );
 			default:

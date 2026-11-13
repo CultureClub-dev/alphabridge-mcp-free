@@ -585,7 +585,13 @@ final class ProtectedStoreTest extends TestCase {
 		self::assertSame( 'ab_mcp_store_corrupt', AB_MCP_Protected_Store::get( 'backups', $gid, 'post-12', $put['sha256'] )->get_error_code(), 'A changed file is not used.' );
 		$missing = AB_MCP_Protected_Store::get( 'backups', $gid, 'post-13', $put['sha256'] );
 		self::assertSame( 'ab_mcp_store_missing', $missing->get_error_code() );
-		self::assertStringContainsString( 'The file is not in the protected store: it was never written, or its group was removed. Make it again.', $missing->get_error_message(), 'A file the group does not hold.' );
+		self::assertSame( 'The file was not found in its group of the protected store, or it could not be inspected there; the store does not tell which. Where it belongs to a package or a report whose source is still there, make that anew. A backup of what a run already replaced cannot be made anew: check the object in wp-admin, or ask the host whether a backup of the site holds it. Where the file should still be there, ask the host to check the folder of the protected store and the rights on it.', $missing->get_error_message(), 'A file the group does not hold.' );
+		// K4g: no cause as the only one (a file taken out alone or rights
+		// lead here too), and no way that does not go for a backup.
+		foreach ( array( 'The file is not in the protected store', 'it was never written', 'its group was removed', 'Make it again' ) as $gone ) {
+			self::assertStringNotContainsString( $gone, $missing->get_error_message(), 'Not said any more (K4g): ' . $gone );
+		}
+		self::assertMatchesRegularExpression( '/\b[Aa]sk the host\b/', $missing->get_error_message(), 'A way that goes in every case.' );
 		self::assertStringNotContainsString( 'kept a day', $missing->get_error_message(), 'Nothing on how long a group is kept (K4f).' );
 		self::assertStringNotContainsString( 'as many days', $missing->get_error_message(), 'Nothing on how long a group is kept (K4f).' );
 
