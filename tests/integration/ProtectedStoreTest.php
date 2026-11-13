@@ -592,12 +592,13 @@ final class ProtectedStoreTest extends TestCase {
 	}
 
 	public function testASidecarThatIsThereButGivesNoEntryOfItsGroupIsNotAGroupThatIsGone(): void {
-		// K4 of Z8b branch 5 (the A of the Codex question on f24115a): group()
-		// tells a sidecar that is not there (the group is not in the store,
-		// ab_mcp_store_no_group) from one that is there but is no plain file,
-		// does not read, is not of its form or names another group
-		// (ab_mcp_store_group_unread): every function that opens the group
-		// says so, nothing of the group is read, changed or removed.
+		// K4 and K4d of Z8b branch 5 (Thomas, 13.11.2026: one honest message):
+		// group() does not tell a sidecar that is not there from one that is
+		// there but is no plain file, does not read, is not of its form or
+		// names another group. Each is ab_mcp_store_no_group with the one
+		// text that claims neither and names the way for both: every function
+		// that opens the group says so, nothing of the group is changed or
+		// removed.
 		$id    = AB_MCP_Protected_Store::install_id();
 		$gid   = AB_MCP_Protected_Store::open( 'backups', array( 'run_id' => 4 ) );
 		$put   = AB_MCP_Protected_Store::put( 'backups', $gid, 'post-12', 'content' );
@@ -628,6 +629,18 @@ final class ProtectedStoreTest extends TestCase {
 			}
 			self::assertFalse( AB_MCP_Protected_Store::remove( 'backups', $gid ), "$what: remove() removes nothing." );
 		};
+		// The one text: it claims neither that the group is gone nor that it
+		// is there, names both, and the way for each.
+		$honest = static function ( string $message, string $what ): void {
+			self::assertStringContainsString( 'the store does not tell which of these is why', $message, $what );
+			self::assertStringContainsString( 'It is not there: it was never opened here (a group belongs to the area it was opened in), or it was removed', $message, "$what: it may be gone." );
+			self::assertStringContainsString( 'Or it is still there, but its entry (its sidecar) is missing, is no plain file, cannot be read, is not of its form or names another group, or its folder is missing or cannot be reached', $message, "$what: or there and not read." );
+			self::assertStringContainsString( 'This call changed nothing of the group', $message, $what );
+			self::assertStringContainsString( 'Where it is gone, open a new one with open()', $message, "$what: the way of a group that is gone." );
+			self::assertStringContainsString( 'Where it should still be there, try again; if it keeps failing, ask the host to check the folder of the protected store and the rights on it', $message, "$what: the way of a group that is there." );
+			self::assertStringNotContainsString( 'The group is not in the protected store', $message, "$what: never the claim that it is gone." );
+			self::assertStringNotContainsString( 'The group is in the protected store', $message, "$what: never the claim that it is there." );
+		};
 		$damaged = array(
 			'not JSON'                  => '{',
 			'an entry not of its form'  => (string) json_encode( array_replace( $entry, array( 'run_id' => 0 ) ), JSON_UNESCAPED_SLASHES ),
@@ -645,12 +658,8 @@ final class ProtectedStoreTest extends TestCase {
 				mkdir( $side );
 			}
 			try {
-				$each( 'ab_mcp_store_group_unread', $what );
-				$message = AB_MCP_Protected_Store::files( 'backups', $gid )->get_error_message();
-				self::assertStringContainsString( 'The group is in the protected store, but its entry (its sidecar) could not be read whole', $message, $what );
-				self::assertStringContainsString( 'Nothing of the group was read or changed', $message, $what );
-				self::assertStringContainsString( 'Try again; if it keeps failing, ask the host to check the folder of the protected store', $message, "$what: the way." );
-				self::assertStringNotContainsString( 'never opened here', $message, "$what: never the reason of a group that is gone." );
+				$each( 'ab_mcp_store_no_group', $what );
+				$honest( AB_MCP_Protected_Store::files( 'backups', $gid )->get_error_message(), $what );
 				self::assertSame( $files, $held(), "$what: nothing of the group changed." );
 				self::assertTrue( false !== @lstat( $side ), "$what: the sidecar is left where it is." ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 			} finally {
@@ -664,16 +673,32 @@ final class ProtectedStoreTest extends TestCase {
 			}
 		}
 		self::assertSame( array( 'post-12' => $put['stored'] ), AB_MCP_Protected_Store::files( 'backups', $gid ), 'The sidecar back: the group reads.' );
-		// No sidecar at all, the folder still there: the group is not in the store.
+		// No sidecar at all, the folder still there: the same refusal, the same text.
 		unlink( $side );
 		try {
 			$each( 'ab_mcp_store_no_group', 'no sidecar' );
+			$honest( AB_MCP_Protected_Store::files( 'backups', $gid )->get_error_message(), 'no sidecar' );
 			self::assertSame( $files, $held(), 'No sidecar: nothing of the group changed.' );
 		} finally {
 			file_put_contents( $side, $real );
 			chmod( $side, $mode );
 		}
 		self::assertIsArray( AB_MCP_Protected_Store::put( 'backups', $gid, 'post-13', 'more' ), 'The sidecar back: written again.' );
+		// The sidecar read, the folder of the group not there (remove() takes
+		// the folder first, the sidecar last): the same refusal, the same text.
+		$away = $dir . '-away';
+		$real = (string) file_get_contents( $side );
+		self::assertTrue( rename( $dir, $away ) );
+		try {
+			$each( 'ab_mcp_store_no_group', 'no folder' );
+			$honest( AB_MCP_Protected_Store::files( 'backups', $gid )->get_error_message(), 'no folder' );
+			self::assertSame( $real, (string) file_get_contents( $side ), 'No folder: the sidecar is left as it is.' );
+		} finally {
+			rename( $away, $dir );
+		}
+		// A group never opened, and one of another area: the same text.
+		$honest( AB_MCP_Protected_Store::files( 'backups', str_repeat( 'e', 32 ) )->get_error_message(), 'never opened' );
+		$honest( AB_MCP_Protected_Store::files( 'reports', $gid )->get_error_message(), 'another area' );
 	}
 
 	public function testAPackageTakesNoMoreThanItDeclared(): void {

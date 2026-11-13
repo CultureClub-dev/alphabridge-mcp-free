@@ -42,7 +42,6 @@ final class StoreTextsTest extends TestCase {
 		'The group could not be bound to its run in the protected store. Ask the host to check that the folder is writable, then try again.',
 		'The group could not be closed in the protected store. Ask the host to check that the folder is writable, then try again.',
 		'The group could not be made in the protected store. Ask the host to check that the folder is writable and the disk has free space, then try again.',
-		'The group is not in the protected store: it was never opened here, or it was removed (packages and reports are kept a day, backups as many days as the filter ab_mcp_staging_backup_days says). Open a new one with open().',
 		'The label of a group holds up to 191 of the characters A-Z, a-z, 0-9, ".", "_", ":" and "-". Pass one of those, or none.',
 		'The lock of the protected store could not be taken. Try again in a moment; if it keeps failing, ask the host whether PHP may lock files in that folder.',
 		'The package passes the limit for %1$s (%2$d, at most %3$d), so it is not unpacked and nothing of it is used; a staging site of this version never makes such a package. 1. Update AlphaBridge MCP on the staging site to the version of this site. 2. Export the package again there (wp_site_export). 3. Import it again with the new package_id and manifest.',

@@ -1142,12 +1142,13 @@ final class SyncCodeRunTest extends TestCase {
 	}
 
 	public function testADamagedSidecarOfTheStageLeavesTheStepPlannedWithItsReasonUntilItIsBackOrTheRunIsAborted(): void {
-		// K4 (the A of the Codex question on f24115a): the sidecar of the
-		// group of the stage, there but damaged on disk (not JSON, the entry
-		// of another group) while the unit is staged: wp_site_push action=next
-		// refuses with the reason of the store (the entry is there and not
-		// read, never «never opened here, or removed») and the way; the step
-		// stays planned, call after call, and the stage is not written. The
+		// K4 and K4d (Thomas, 13.11.2026: one honest message): the sidecar of
+		// the group of the stage, there but damaged on disk (not JSON, the
+		// entry of another group) while the unit is staged: wp_site_push
+		// action=next refuses with the reason of the store, which claims
+		// neither that the group is gone nor that it is there and names both,
+		// and the way; the step stays planned, call after call, and the stage
+		// is not written. The
 		// sidecar back: the step goes on. Damaged again: abort closes the run.
 		list( $run_id, $journal, $before ) = self::staged_run();
 		$gid   = $journal['stage']['gid'];
@@ -1156,9 +1157,13 @@ final class SyncCodeRunTest extends TestCase {
 		$entry = json_decode( $real, true );
 		self::assertSame( $real, (string) json_encode( $entry, JSON_UNESCAPED_SLASHES ), 'The sidecar as the store writes it.' );
 		$unread = static function ( string $what, array $untouched ) use ( $run_id, $journal, $before ): void {
-			$message = self::refused( self::next( $run_id ), 'ab_mcp_store_group_unread' );
-			self::assertStringContainsString( 'The group is in the protected store, but its entry (its sidecar) could not be read whole', $message, $what );
-			self::assertStringNotContainsString( 'never opened here', $message, "$what: never the reason of a group that is gone." );
+			$message = self::refused( self::next( $run_id ), 'ab_mcp_store_no_group' );
+			self::assertStringContainsString( 'the store does not tell which of these is why', $message, $what );
+			self::assertStringContainsString( 'It is not there: it was never opened here', $message, "$what: it may be gone." );
+			self::assertStringContainsString( 'Or it is still there, but its entry (its sidecar) is missing, is no plain file, cannot be read, is not of its form or names another group', $message, "$what: or there and not read." );
+			self::assertStringContainsString( 'Where it should still be there, try again', $message, "$what: the way of a group that is there." );
+			self::assertStringNotContainsString( 'The group is not in the protected store', $message, "$what: never the claim that it is gone." );
+			self::assertStringNotContainsString( 'The group is in the protected store', $message, "$what: never the claim that it is there." );
 			self::assertStringContainsString( 'Step 2 stays planned', $message, $what );
 			self::assertStringContainsString( 'where it keeps failing, abort the run (wp_site_push action=abort)', $message, "$what: the way." );
 			self::assertSame( array( 'planned', 'planned' ), array( self::step( $run_id, 2 )['state'], self::step( $run_id, 3 )['state'] ), "$what: planned, never failed." );

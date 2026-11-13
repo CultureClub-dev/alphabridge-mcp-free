@@ -305,12 +305,15 @@ e('k2-store-entry-own', 'entry(): a sidecar not read whole or holding an entry o
 e('k2-store-entry-gid', 'entry(): a sidecar holding the entry of another group is the error of its own, never the entry of this one (K3, Codex confirmation on K2)', PS,
   SIDE, SIDE.replace(" || $gid !== $read[1]['gid']", ''), 'coderun', OTHER_ENTRY)
 
-# ------------------------------------------- a group whose sidecar gives no entry of it (K4)
-NOENTRY = 'testASidecarThatIsThereButGivesNoEntryOfItsGroupIsNotAGroupThatIsGone'
-e('k4-group-entry', 'group(): a sidecar that gives no entry of its group is refused by why, never as a group that is gone (K4)', PS,
-  "\t\t\treturn self::no_entry( $side );", "\t\t\treturn self::no_group();", 'store', NOENTRY)
-e('k4-group-gone', 'no_entry(): only a sidecar that is not there at all is a group not in the store (K4)', PS,
-  "\t\tif ( false === @lstat( $side ) ) {", "\t\tif ( false ) {", 'store', NOENTRY)
+# ------------------------------------------- a group that group() does not give (K4, K4d)
+NOGROUP = 'testASidecarThatIsThereButGivesNoEntryOfItsGroupIsNotAGroupThatIsGone'
+GRP = "\t\tif ( null === $entry || $gid !== $entry['gid'] ) {"
+e('k4d-group-null', 'group(): a sidecar that gives no entry is no group, read without a warning (K4d)', PS,
+  GRP, GRP.replace("null === $entry || ", ''), 'store', NOGROUP)
+e('k4d-group-gid', 'group(): a sidecar that holds the entry of another group is not the entry of this one (K4d)', PS,
+  GRP, GRP.replace(" || $gid !== $entry['gid']", ''), 'store', NOGROUP)
+e('k4d-group-folder', 'group(): a group whose folder is not there is refused with the one reason of a group not given, not as unsafe (K4d)', PS,
+  "? self::unsafe() : self::no_group();", "? self::unsafe() : self::unsafe();", 'store', NOGROUP)
 
 # ------------------------------------------------ check and write
 src = {f: open(os.path.join(ROOT, f)).read() for f in VAR}

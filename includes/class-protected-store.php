@@ -4308,30 +4308,13 @@ final class AB_MCP_Protected_Store {
 		$side  = $area_dir . '/' . $name . '.json';
 		$entry = self::plain( $side, 'file' ) ? self::read_entry( $side, $area ) : null;
 		if ( null === $entry || $gid !== $entry['gid'] ) {
-			return self::no_entry( $side );
+			return self::no_group();
 		}
 		$dir = self::way( $root, array( $area, $name ) );
 		if ( null === $dir ) {
 			return false !== @lstat( $area_dir . '/' . $name ) ? self::unsafe() : self::no_group(); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 		}
 		return array( $side, $dir, $entry );
-	}
-
-	/**
-	 * Why a group whose sidecar gives no entry of it is refused (Z8b branch
-	 * 5, K4): a sidecar that is not there at all is a group not in the store
-	 * (no_group()); one that is there but is no plain file, cannot be read,
-	 * is not of its form or names another group is an entry not read
-	 * (group_unread()), never «never opened here, or removed».
-	 *
-	 * @param string $side The sidecar.
-	 * @return WP_Error
-	 */
-	private static function no_entry( $side ) {
-		if ( false === @lstat( $side ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
-			return self::no_group();
-		}
-		return self::group_unread();
 	}
 
 	/**
@@ -4576,20 +4559,18 @@ final class AB_MCP_Protected_Store {
 		return is_string( $name ) && preg_match( '/^[a-z0-9][a-z0-9._-]{0,63}\z/', $name ) && false === strpos( $name, '..' ) && '.tmp' !== substr( $name, -4 );
 	}
 
-	/** @return WP_Error */
-	private static function no_group() {
-		return new WP_Error( 'ab_mcp_store_no_group', 'The group is not in the protected store: it was never opened here, or it was removed (packages and reports are kept a day, backups as many days as the filter ab_mcp_staging_backup_days says). Open a new one with open().' );
-	}
-
 	/**
-	 * The refusal of a group whose sidecar is there but gives no entry of it
-	 * (no_entry()): the group is there, so it is not «gone»; nothing of it
-	 * is read or changed. It may pass: a later call may read it.
+	 * The refusal of a group that group() does not give (Z8b branch 5, K4d):
+	 * one reason for all of it, because the store does not tell them apart
+	 * here. The group was never opened here, it was removed, or it is still
+	 * there and its sidecar or its folder is missing or does not read. The
+	 * text claims none of them and names the way for each. It may pass: a
+	 * later call may read the group.
 	 *
 	 * @return WP_Error
 	 */
-	private static function group_unread() {
-		return new WP_Error( 'ab_mcp_store_group_unread', __( 'The group is in the protected store, but its entry (its sidecar) could not be read whole: it is no plain file, cannot be read, is not of its form or names another group. Nothing of the group was read or changed. Try again; if it keeps failing, ask the host to check the folder of the protected store and the rights on it.', 'alphabridge-mcp' ) );
+	private static function no_group() {
+		return new WP_Error( 'ab_mcp_store_no_group', __( 'The group could not be read in the protected store, and the store does not tell which of these is why. It is not there: it was never opened here (a group belongs to the area it was opened in), or it was removed (packages and reports are kept a day, backups as many days as the filter ab_mcp_staging_backup_days says). Or it is still there, but its entry (its sidecar) is missing, is no plain file, cannot be read, is not of its form or names another group, or its folder is missing or cannot be reached. This call changed nothing of the group. Where it is gone, open a new one with open(). Where it should still be there, try again; if it keeps failing, ask the host to check the folder of the protected store and the rights on it.', 'alphabridge-mcp' ) );
 	}
 
 	/**
