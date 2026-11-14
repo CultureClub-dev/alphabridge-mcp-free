@@ -1266,22 +1266,20 @@ class AB_MCP_REST_Controller {
 	 */
 	private function site_meta() {
 		/**
-		 * The licensed edition of this installation.
+		 * The reported edition of this installation.
 		 *
 		 * The free plugin always reports 'free'. The Pro add-on hooks in and
 		 * reports 'pro' or 'agency' according to the active licence, and
-		 * 'trial' during a trial without an active valid licence; with an
-		 * expired or missing licence it must report 'free'. 'trial' proves
-		 * no licence: it says that the Pro add-on runs on trial, nothing was
-		 * bought.
+		 * 'trial' during a trial without an active valid licence. Otherwise,
+		 * with an expired or missing licence, it must report 'free'. 'trial'
+		 * proves no licence: it says that the Pro add-on runs on trial,
+		 * nothing was bought.
 		 *
 		 * @param string $edition 'free' | 'pro' | 'agency' | 'trial'.
 		 */
 		$edition = apply_filters( 'ab_mcp_site_edition', 'free' );
-		// Fail closed: an unknown value from a filter, or one that is not a
-		// string, becomes 'free', never a higher edition. Gating on the hub
-		// side depends on this field, so a typo in an add-on must not hand
-		// out agency features.
+		// Fail closed: for the self-description, an unknown value from a
+		// filter, or one that is not a string, falls back to 'free'.
 		if ( ! is_string( $edition ) || ! in_array( $edition, array( 'free', 'pro', 'agency', 'trial' ), true ) ) {
 			$edition = 'free';
 		}
