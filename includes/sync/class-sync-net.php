@@ -806,10 +806,14 @@ final class AB_MCP_Sync_Net {
 	 * «reset-password:guide.php», «reset-password;v2.php» or «O'Reilly
 	 * password's.pdf» does (fail closed, rare: GRENZEN-BERICHT, branch 7, C).
 	 *
-	 * Each name looked up by its length (R12b, part 1a: the same answer as
-	 * the comparison of each name at 8daf33f, tests/SyncNetKeyedSameTest.php).
-	 * A name or a key of another type than a string takes the way of before
-	 * (keyed_cast()).
+	 * Read in one pass (R12b, part 1a: the same answer as keyed() of 8daf33f,
+	 * tests/SyncNetKeyedSameTest.php): each name looked up by its last byte,
+	 * its length and its first byte (keyed_lengths()); the text before a
+	 * sign in lower case by its end; as normalize_key() reads it from the
+	 * parts between the signs, none of whose rules reaches over a sign, each
+	 * part read once (keyed_normal()); the last word read from the back
+	 * (keyed_word()). A name or a key of another type than a string takes
+	 * the way of before (keyed_cast()).
 	 *
 	 * @param string   $text  A layer of the name.
 	 * @param string[] $extra AB_MCP_Redactor::extra_keys().
@@ -825,17 +829,297 @@ final class AB_MCP_Sync_Net {
 			return false;
 		}
 		$keys = self::keyed_lengths( array_merge( AB_MCP_Redactor::CREDENTIAL_EXACT, AB_MCP_Redactor::EXTRA_NAMES, $extra ) );
+		$tail = 0;
+		foreach ( $keys as $lengths ) {
+			$tail = max( $tail, array_key_last( $lengths ) );
+		}
+		$lower  = strtolower( $text );
+		$second = false;
+		if ( "\0" === $text[0] ) {
+			$second = strpos( $text, "\0", 1 );
+		}
+		$run   = null;
+		$words = array();
 		while ( $at < $size ) {
-			$before = rtrim( substr( $text, 0, $at ), " \t\n\r\x0B\f" );
-			if ( self::keyed_ends( strtolower( $before ), $keys ) || self::keyed_ends( AB_MCP_Redactor::normalize_key( $before ), $keys ) ) {
+			$cut = self::keyed_cut( $text, $second, $at );
+			if ( null === $run || $cut !== $run['cut'] ) {
+				$run = self::keyed_run( $cut );
+			}
+			$part = substr( $text, $run['from'], $at - $run['from'] );
+			$last = rtrim( $part, " \t\n\r\x0B\f" );
+			// The text before the sign in lower case: its end.
+			$end  = $run['from'] + strlen( $last );
+			$from = $end - $tail;
+			if ( $from < 0 ) {
+				$from = 0;
+			}
+			if ( self::keyed_ends( substr( $lower, $from, $end - $from ), $keys ) ) {
 				return true;
 			}
-			if ( 1 === preg_match( '/[A-Za-z0-9_\-.\x80-\xFF]+\z/', $before, $word ) && AB_MCP_Sync_Credentials::names_credential( $word[0], $extra ) ) {
+			// As normalize_key() reads it; null: a pattern failed otherwise
+			// than at UTF-8, so nothing tells it is no key (held).
+			$normal = self::keyed_normal( $part, $last, $text[ $at ], $run, $keys, $tail );
+			if ( null === $normal || true === $normal ) {
 				return true;
 			}
-			$at += 1 + strcspn( $text, '=:;"\'', $at + 1 );
+			if ( self::keyed_word( $last, $extra, $words ) ) {
+				return true;
+			}
+			$run['from']  = $at + 1;
+			$run['first'] = false;
+			$at           = $run['from'] + strcspn( $text, '=:;"\'', $run['from'] );
 		}
 		return false;
+	}
+
+	/**
+	 * Where normalize_key() reads the text before a sign from (RD:302–305):
+	 * after a prefix \0…\0 at the start of the text, which ends at its second
+	 * \0 where that stands before the sign, else after the first \0.
+	 *
+	 * @param string    $text   The layer.
+	 * @param int|false $second Where its second \0 is (strpos()), where it begins with \0.
+	 * @param int       $at     Where the sign is.
+	 * @return int
+	 */
+	private static function keyed_cut( $text, $second, $at ) {
+		if ( "\0" !== $text[0] ) {
+			return 0;
+		}
+		if ( false !== $second && $second < $at ) {
+			return $second + 1;
+		}
+		return 1;
+	}
+
+	/**
+	 * A run of signs read from one cut (keyed_cut()) on: where the next part
+	 * begins, whether it is the first, whether the text from the cut is
+	 * UTF-8 so far (raw: then normalize_key() cuts its blanks by the
+	 * pattern, RD:306, else by trim()), and for each way of cutting the
+	 * blanks (0 the pattern, 1 trim()) whether what normalize_key() made of
+	 * the parts up to the last sign is UTF-8 (low: then it joins the blanks
+	 * by the pattern, RD:310, else by str_replace()) and its end for each way
+	 * of joining them (acc: 0 the pattern, 1 str_replace()).
+	 *
+	 * @param int $cut Where it is read from.
+	 * @return array{cut:int,from:int,first:bool,raw:bool,low:bool[],acc:string[][]}
+	 */
+	private static function keyed_run( $cut ) {
+		return array(
+			'cut'   => $cut,
+			'from'  => $cut,
+			'first' => true,
+			'raw'   => true,
+			'low'   => array( true, true ),
+			'acc'   => array( array( '', '' ), array( '', '' ) ),
+		);
+	}
+
+	/**
+	 * Whether the text before a sign ends in a name as normalize_key() reads
+	 * it (Net:821 at 8daf33f), from the parts between the signs: this part
+	 * cut at its end (and at its start where it is the first of the run),
+	 * after what the run holds of the parts before it. Then the run takes
+	 * this part for the signs after it (keyed_take()).
+	 *
+	 * @param string $part The text from the last sign (or the cut) to this one.
+	 * @param string $last $part without white space at its end (Net:820).
+	 * @param string $sign This sign.
+	 * @param array  $run  keyed_run(), taken on.
+	 * @param array  $keys keyed_lengths().
+	 * @param int    $tail The length of the longest name.
+	 * @return bool|null Null where a pattern failed otherwise than at UTF-8.
+	 */
+	private static function keyed_normal( $part, $last, $sign, array &$run, array $keys, $tail ) {
+		$plain = strspn( $part, '!#$%&()*+,./0123456789<>?@[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~' ) === strlen( $part );
+		if ( $run['raw'] && ! $plain ) {
+			$utf = self::keyed_utf( $part );
+			if ( null === $utf ) {
+				return null;
+			}
+			$run['raw'] = $utf;
+		}
+		$way = 1;
+		if ( $run['raw'] ) {
+			$way = 0;
+		}
+		$now = self::keyed_form( $last, $plain, 0 === $way, $run['first'], true );
+		if ( null === $now ) {
+			return null;
+		}
+		if ( $run['low'][ $way ] && null !== $now[0] ) {
+			$form = $run['acc'][ $way ][0] . $now[0];
+		} else {
+			$form = $run['acc'][ $way ][1] . $now[1];
+		}
+		if ( self::keyed_ends( substr( $form, -$tail ), $keys ) ) {
+			return true;
+		}
+		return self::keyed_take( $part, $plain, $sign, $run, $tail );
+	}
+
+	/**
+	 * The run takes a part for the signs after it: whole (white space at its
+	 * end is inside the text then), cut at its start where it is the first;
+	 * for each way of cutting the blanks the run may still need (the pattern
+	 * only while the text is UTF-8), each way of joining them; of each end
+	 * as many bytes as the longest name.
+	 *
+	 * @param string $part  The part.
+	 * @param bool   $plain Whether normalize_key() leaves each of its bytes.
+	 * @param string $sign  The sign after it.
+	 * @param array  $run   keyed_run(), taken on.
+	 * @param int    $tail  The length of the longest name.
+	 * @return false|null Null where a pattern failed otherwise than at UTF-8.
+	 */
+	private static function keyed_take( $part, $plain, $sign, array &$run, $tail ) {
+		$forms = array();
+		foreach ( array( 0, 1 ) as $way ) {
+			if ( 0 === $way && ! $run['raw'] ) {
+				continue;
+			}
+			if ( ! $run['first'] && array() !== $forms ) {
+				// Not cut: the same in both ways.
+				$forms[ $way ] = $forms[0];
+			} else {
+				$forms[ $way ] = self::keyed_form( $part, $plain, 0 === $way, $run['first'], false );
+				if ( null === $forms[ $way ] ) {
+					return null;
+				}
+			}
+			if ( null === $forms[ $way ][0] ) {
+				$run['low'][ $way ] = false;
+			}
+			if ( $run['low'][ $way ] ) {
+				$run['acc'][ $way ][0] = substr( $run['acc'][ $way ][0] . $forms[ $way ][0] . $sign, -$tail );
+			}
+			$run['acc'][ $way ][1] = substr( $run['acc'][ $way ][1] . $forms[ $way ][1] . $sign, -$tail );
+		}
+		return false;
+	}
+
+	/**
+	 * A part as normalize_key() writes it (RD:306–311): the blanks cut at its
+	 * start ($lead) and its end ($trail), by the pattern where the text is
+	 * UTF-8 ($utf), else by trim(); camelCase split; lower case; the blanks
+	 * and dashes joined, by the pattern and by str_replace(). A part of
+	 * bytes normalize_key() leaves ($plain) stays as it is.
+	 *
+	 * @param string $part  The part.
+	 * @param bool   $plain Whether normalize_key() leaves each of its bytes.
+	 * @param bool   $utf   Whether the blanks are cut by the pattern.
+	 * @param bool   $lead  Whether at its start.
+	 * @param bool   $trail Whether at its end.
+	 * @return array{0:string|null,1:string}|null Joined by the pattern (null
+	 *                                           where it is no UTF-8 then) and
+	 *                                           by str_replace(); null where a
+	 *                                           pattern failed otherwise.
+	 */
+	private static function keyed_form( $part, $plain, $utf, $lead, $trail ) {
+		if ( $plain ) {
+			return array( $part, $part );
+		}
+		$cut = self::keyed_blanks( $part, $utf, $lead, $trail );
+		if ( null === $cut ) {
+			return null;
+		}
+		$split = preg_replace( '/([A-Z]+)([A-Z][a-z])/', '$1_$2', $cut );
+		if ( ! is_string( $split ) ) {
+			return null;
+		}
+		$split = preg_replace( '/([a-z0-9])([A-Z])/', '$1_$2', $split );
+		if ( ! is_string( $split ) ) {
+			return null;
+		}
+		$lower  = strtolower( $split );
+		$joined = preg_replace( '/[\s\p{Z}\-]+/u', '_', $lower );
+		if ( ! is_string( $joined ) ) {
+			if ( PREG_BAD_UTF8_ERROR !== preg_last_error() ) {
+				return null;
+			}
+			$joined = null;
+		}
+		return array( $joined, str_replace( array( '-', ' ' ), '_', $lower ) );
+	}
+
+	/**
+	 * A part with the blanks cut as normalize_key() cuts them (RD:306–307)
+	 * at its start ($lead) and its end ($trail): by the pattern where the
+	 * text is UTF-8, else by trim().
+	 *
+	 * @param string $part  The part.
+	 * @param bool   $utf   Whether by the pattern.
+	 * @param bool   $lead  Whether at its start.
+	 * @param bool   $trail Whether at its end.
+	 * @return string|null Null where the pattern failed.
+	 */
+	private static function keyed_blanks( $part, $utf, $lead, $trail ) {
+		if ( ! $lead && ! $trail ) {
+			return $part;
+		}
+		if ( ! $utf ) {
+			if ( $lead ) {
+				$part = ltrim( $part, " \t\n\r\0\x0B" );
+			}
+			if ( $trail ) {
+				$part = rtrim( $part, " \t\n\r\0\x0B" );
+			}
+			return $part;
+		}
+		$pattern = '/^[\s\p{Z}\x{200B}\x{FEFF}]+|[\s\p{Z}\x{200B}\x{FEFF}]+$/u';
+		if ( ! $trail ) {
+			$pattern = '/^[\s\p{Z}\x{200B}\x{FEFF}]+/u';
+		}
+		if ( ! $lead ) {
+			$pattern = '/[\s\p{Z}\x{200B}\x{FEFF}]+$/u';
+		}
+		$cut = preg_replace( $pattern, '', $part );
+		if ( ! is_string( $cut ) ) {
+			return null;
+		}
+		return $cut;
+	}
+
+	/**
+	 * Whether a part is UTF-8 as the patterns of normalize_key() check it.
+	 *
+	 * @param string $part The part.
+	 * @return bool|null Null where the check failed otherwise.
+	 */
+	private static function keyed_utf( $part ) {
+		$found = preg_match( '//u', $part );
+		if ( 1 === $found ) {
+			return true;
+		}
+		if ( false === $found && PREG_BAD_UTF8_ERROR === preg_last_error() ) {
+			return false;
+		}
+		return null;
+	}
+
+	/**
+	 * Whether the last word before a sign names a credential (Net:828 at
+	 * 8daf33f): the longest end of bytes of [A-Za-z0-9_\-.\x80-\xFF], read
+	 * from the back; none where the text ends in another byte. Each word is
+	 * asked once in a layer.
+	 *
+	 * @param string             $last  The part before the sign without white space at its end.
+	 * @param array              $extra The keys.
+	 * @param array<string,bool> $words The words asked, taken on.
+	 * @return bool
+	 */
+	private static function keyed_word( $last, array $extra, array &$words ) {
+		$size = strlen( $last ) - strlen( rtrim( $last, "\x80..\xFFA..Za..z0..9_.-" ) );
+		if ( 0 === $size ) {
+			return false;
+		}
+		$word = substr( $last, -$size );
+		if ( isset( $words[ $word ] ) ) {
+			return false;
+		}
+		$words[ $word ] = true;
+		return AB_MCP_Sync_Credentials::names_credential( $word, $extra );
 	}
 
 	/**
@@ -854,38 +1138,48 @@ final class AB_MCP_Sync_Net {
 	}
 
 	/**
-	 * The names keyed() compares, by their length, the shortest first; an
-	 * empty one is none (as at 8daf33f).
+	 * The names keyed() compares, by their last byte, then by their length
+	 * (the shortest first), then by their first byte; an empty one is none
+	 * (as at 8daf33f).
 	 *
 	 * @param string[] $keys The names.
-	 * @return array<int,array<string,bool>> Length => name => true.
+	 * @return array<string,array<int,array<string,array<string,bool>>>> Last byte => length => first byte => name => true.
 	 */
 	private static function keyed_lengths( array $keys ) {
 		$out = array();
 		foreach ( $keys as $key ) {
 			if ( '' !== $key ) {
-				$out[ strlen( $key ) ][ $key ] = true;
+				$out[ substr( $key, -1 ) ][ strlen( $key ) ][ $key[0] ][ $key ] = true;
 			}
 		}
-		ksort( $out );
+		foreach ( $out as $byte => $lengths ) {
+			ksort( $lengths );
+			$out[ $byte ] = $lengths;
+		}
 		return $out;
 	}
 
 	/**
-	 * Whether a text ends in one of the names: for each length of a name, its
-	 * end of that length looked up (at 8daf33f str_ends_with() with each).
+	 * Whether a text ends in one of the names: for each length of a name
+	 * with its last byte, its end of that length looked up where a name of
+	 * that length begins with its first byte (at 8daf33f str_ends_with()
+	 * with each name).
 	 *
-	 * @param string                        $text    The text before a sign, in one spelling.
-	 * @param array<int,array<string,bool>> $lengths keyed_lengths().
+	 * @param string $text  The text before a sign, in one spelling.
+	 * @param array  $index keyed_lengths().
 	 * @return bool
 	 */
-	private static function keyed_ends( $text, array $lengths ) {
+	private static function keyed_ends( $text, array $index ) {
 		$size = strlen( $text );
-		foreach ( $lengths as $length => $names ) {
+		if ( 0 === $size || ! isset( $index[ $text[ $size - 1 ] ] ) ) {
+			return false;
+		}
+		foreach ( $index[ $text[ $size - 1 ] ] as $length => $firsts ) {
 			if ( $length > $size ) {
 				return false;
 			}
-			if ( isset( $names[ substr( $text, -$length ) ] ) ) {
+			$at = $size - $length;
+			if ( isset( $firsts[ $text[ $at ] ] ) && isset( $firsts[ $text[ $at ] ][ substr( $text, $at ) ] ) ) {
 				return true;
 			}
 		}
