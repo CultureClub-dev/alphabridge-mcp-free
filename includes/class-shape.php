@@ -110,14 +110,15 @@ final class AB_MCP_Shape {
 	}
 
 	/**
-	 * Whether a reading under a deadline is to stop before its next element
-	 * (the deadline over, its clock unknown, or it stopped before).
+	 * Whether a reading under a deadline is to stop before its next element:
+	 * it stopped before (its stop kept, the clock not asked again), or the
+	 * deadline is over or its clock unknown now.
 	 *
 	 * @param mixed|null $deadline Null, or a deadline.
 	 * @return bool
 	 */
 	private static function stopped( $deadline ) {
-		return null !== $deadline && true !== AB_MCP_Sync_Deadline::left( $deadline );
+		return null !== $deadline && ( null !== AB_MCP_Sync_Deadline::stop( $deadline ) || true !== AB_MCP_Sync_Deadline::left( $deadline ) );
 	}
 
 	/**

@@ -1726,8 +1726,15 @@ final class AB_MCP_Sync_Import {
 			}
 		}
 		$text = 1 === count( $names ) ? AB_MCP_Protected_Store::get( 'in', $held['gid'], $names[0], self::held_sha( $names[0] ), $deadline ) : null;
+		$stop = AB_MCP_Sync_Deadline::stop( $deadline );
+		if ( null !== $stop ) {
+			return $stop;
+		}
 		$left = AB_MCP_Sync_Deadline::left( $deadline );
-		$list = true === $left && is_string( $text ) ? json_decode( $text, true, 8 ) : null;
+		if ( true !== $left ) {
+			return $left;
+		}
+		$list = is_string( $text ) ? json_decode( $text, true, 8 ) : null;
 		$left = AB_MCP_Sync_Deadline::left( $deadline );
 		if ( true !== $left ) {
 			return $left;

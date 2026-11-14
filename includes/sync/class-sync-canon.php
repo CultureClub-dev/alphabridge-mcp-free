@@ -729,13 +729,15 @@ final class AB_MCP_Sync_Canon {
 	}
 
 	/**
-	 * Whether work under a deadline is to stop before its next element.
+	 * Whether work under a deadline is to stop before its next element: it
+	 * stopped before (its stop kept, the clock not asked again), or the
+	 * deadline is over or its clock unknown now.
 	 *
 	 * @param mixed|null $deadline Null, or a deadline.
 	 * @return bool
 	 */
 	private static function stopped( $deadline ) {
-		return null !== $deadline && true !== AB_MCP_Sync_Deadline::left( $deadline );
+		return null !== $deadline && ( null !== AB_MCP_Sync_Deadline::stop( $deadline ) || true !== AB_MCP_Sync_Deadline::left( $deadline ) );
 	}
 
 	/**

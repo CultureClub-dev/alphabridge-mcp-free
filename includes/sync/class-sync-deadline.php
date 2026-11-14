@@ -42,15 +42,6 @@ require_once dirname( __DIR__ ) . '/class-store-inputs.php';
  */
 final class AB_MCP_Sync_Deadline {
 
-	/** The code of a reading whose deadline is over. */
-	const LATE = 'ab_mcp_read_late';
-
-	/** The code of a reading whose clock gave no time. */
-	const CLOCK = 'ab_mcp_read_clock';
-
-	/** The code of a deadline that is not one. */
-	const INVALID = 'ab_mcp_read_deadline';
-
 	/** @var int|float Until when (the clock of the budget). */
 	private $until;
 
@@ -158,20 +149,20 @@ final class AB_MCP_Sync_Deadline {
 	 * @return WP_Error The deadline is over.
 	 */
 	private static function late() {
-		return new WP_Error( self::LATE, __( 'The time this call had for its reading ran out before the reading was done, so the reading stopped before its next step and what it read is not used. Call again; where it keeps failing, ask the host for a longer time limit of PHP (max_execution_time).', 'alphabridge-mcp' ) );
+		return new WP_Error( 'ab_mcp_read_late', __( 'The time this call had for its reading ran out before the reading was done, so the reading stopped before its next step and what it read is not used. Call again; where it keeps failing, ask the host for a longer time limit of PHP (max_execution_time).', 'alphabridge-mcp' ) );
 	}
 
 	/**
 	 * @return WP_Error The clock gave no time.
 	 */
 	private static function clock_unknown() {
-		return new WP_Error( self::CLOCK, __( 'The time of this call could not be measured during its reading, so the reading stopped before its next step and what it read is not used. Call again.', 'alphabridge-mcp' ) );
+		return new WP_Error( 'ab_mcp_read_clock', __( 'The time of this call could not be measured during its reading, so the reading stopped before its next step and what it read is not used. Call again.', 'alphabridge-mcp' ) );
 	}
 
 	/**
 	 * @return WP_Error A deadline that is not one.
 	 */
 	private static function invalid() {
-		return new WP_Error( self::INVALID, __( 'The time limit this reading was given is not a time (a finite number of seconds), so nothing was read. This is a fault of the code that asked for the reading, not of the site: call again, and where it keeps failing, update AlphaBridge MCP or report it to its makers.', 'alphabridge-mcp' ) );
+		return new WP_Error( 'ab_mcp_read_deadline', __( 'The time limit this reading was given is not a time (a finite number of seconds), so nothing was read. This is a fault of the code that asked for the reading, not of the site: call again, and where it keeps failing, update AlphaBridge MCP or report it to its makers.', 'alphabridge-mcp' ) );
 	}
 }

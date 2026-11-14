@@ -248,9 +248,9 @@ final class AB_MCP_Sync_Manifest {
 		// One spelling: the text AB_MCP_Sync_Canon::encode() writes for its data.
 		$manifest = json_decode( $text, true, 8 );
 		$spelt    = is_array( $manifest ) ? AB_MCP_Sync_Canon::encode( $manifest, $deadline ) : null;
-		$left     = AB_MCP_Sync_Deadline::left( $deadline );
-		if ( true !== $left ) {
-			return $left;
+		$stop     = AB_MCP_Sync_Deadline::stop( $deadline );
+		if ( null !== $stop ) {
+			return $stop;
 		}
 		if ( $spelt !== $text ) {
 			return new WP_Error( 'ab_mcp_sync_manifest_spelling', __( 'The manifest is not written the one way the staging site writes it, so it is not read: it was changed on the way. Export the package again on the staging site (wp_site_export) and use what it gives, unchanged.', 'alphabridge-mcp' ) );

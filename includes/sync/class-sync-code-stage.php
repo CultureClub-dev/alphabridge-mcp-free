@@ -1148,7 +1148,8 @@ final class AB_MCP_Sync_Code_Stage {
 			return null;
 		}
 		$foreign = self::foreign( $gid, $state, $bound, $deadline );
-		$left    = AB_MCP_Sync_Deadline::left( $deadline );
+		$stop    = AB_MCP_Sync_Deadline::stop( $deadline );
+		$left    = null === $stop ? AB_MCP_Sync_Deadline::left( $deadline ) : $stop;
 		if ( true !== $left ) {
 			return $left;
 		}
@@ -1479,7 +1480,8 @@ final class AB_MCP_Sync_Code_Stage {
 		$sha  = null === $last ? null : AB_MCP_Sync_Import::held_sha( AB_MCP_Sync_Import::HELD . $last[2] );
 		$text = null === $sha ? null : AB_MCP_Protected_Store::get( 'stage', $gid, $last[1], $sha, $deadline );
 		$read = is_string( $text ) ? self::state_of( $text, $deadline ) : null;
-		$left = AB_MCP_Sync_Deadline::left( $deadline );
+		$stop = AB_MCP_Sync_Deadline::stop( $deadline );
+		$left = null === $stop ? AB_MCP_Sync_Deadline::left( $deadline ) : $stop;
 		if ( true !== $left ) {
 			return $left;
 		}

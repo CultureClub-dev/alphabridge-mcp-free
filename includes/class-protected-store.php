@@ -4162,6 +4162,10 @@ final class AB_MCP_Protected_Store {
 				continue;
 			}
 			$state = self::plain( $dir . '/' . $file, 'file' ) ? self::sidecar( $dir . '/' . $file, $area, $deadline ) : array( 'unknown', null );
+			if ( null !== AB_MCP_Sync_Deadline::stop( $deadline ) ) {
+				$whole = null;
+				return array();
+			}
 			if ( 'unknown' === $state[0] ) {
 				$whole = false;
 			} elseif ( 'own' === $state[0] && self::group_name( $area, $state[1]['gid'], $id ) === $m[1] ) {
@@ -4439,8 +4443,8 @@ final class AB_MCP_Protected_Store {
 			return self::stopped_or( $deadline, self::no_group() );
 		}
 		$dir = self::way( $root, array( $area, $name ), $deadline );
-		if ( null === $dir && true !== AB_MCP_Sync_Deadline::left( $deadline ) ) {
-			return self::stopped_or( $deadline, self::no_group() );
+		if ( null === $dir && null !== AB_MCP_Sync_Deadline::stop( $deadline ) ) {
+			return AB_MCP_Sync_Deadline::stop( $deadline );
 		}
 		if ( null === $dir ) {
 			return false !== @lstat( $area_dir . '/' . $name ) ? self::unsafe() : self::no_group(); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
@@ -4566,7 +4570,7 @@ final class AB_MCP_Protected_Store {
 	 */
 	private static function sidecar( $side, $area, $deadline = null ) {
 		$e = true === AB_MCP_Sync_Deadline::left( $deadline ) ? AB_MCP_Store_Inputs::read( 'sidecar.json', self::calls()->read( $side, 4096 ), $deadline ) : null;
-		if ( true !== AB_MCP_Sync_Deadline::left( $deadline ) || ! self::whole( $e ) ) {
+		if ( null !== AB_MCP_Sync_Deadline::stop( $deadline ) || ! self::whole( $e ) ) {
 			return array( 'unknown', null );
 		}
 		return array( $area === $e['area'] ? 'own' : 'other', array_intersect_key( $e, self::SIDECAR[ $e['area'] ] ) );

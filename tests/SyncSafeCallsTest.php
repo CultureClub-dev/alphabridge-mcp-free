@@ -505,7 +505,8 @@ final class SyncSafeCallsTest extends TestCase {
 		),
 		// The swap of a unit (Z8b branch 5, part 2a: prepare(), invalidate()).
 		'class-sync-code-swap.php' => array(
-			'__'                                   => array( 25, 'the refusals of prepare() and invalidate(), each with the way, and the sentence on a lock prepare() could not give back (with_kept()), in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the swap compares or hashes.' ),
+			'__'                                   => array( 26, 'the refusals of prepare() and invalidate(), each with the way (the refusal of a reading of the stage or the signed manifest twice: signed_stage(), and read_deadline() for the deadline of the readings, R12), and the sentence on a lock prepare() could not give back (with_kept()), in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the swap compares or hashes.' ),
+			'AB_MCP_Protected_Store::proof'        => array( 1, 'read_deadline(): where the protected store is, decided as this request decides it before the deadline of the readings is made (R12), so that no reader under the deadline starts the decision and its self-check; its answer is not used here, the readers read the store as it is decided.' ),
 			'AB_MCP_Change_Lock::take'             => array( 1, 'Calls::take_lock(): the lock for changes of the code (E5 1, Z10), nested under the lock of the call of the run; its refusal is passed on.' ),
 			'AB_MCP_Change_Lock::release'          => array( 1, 'Calls::release_lock(): the lock for changes given back once (release()); its answer whether it was given back is passed on (A7).' ),
 			'AB_MCP_Update_Guard::take_swap_lock'  => array( 1, 'Calls::core_lock(): WordPress\'s lock for updates with the note of the swap (E5 1, Z10; decision D1 a); its row and the note are read as stored through Calls::stored() and strictly there (A5), a lock taken and not held is given back there (A6).' ),
@@ -520,6 +521,10 @@ final class SyncSafeCallsTest extends TestCase {
 			'get_main_site_id'                     => array( 1, 'Calls::lock_row(): the main site of a network for the row of the lock; no stored value.' ),
 			'switch_to_blog'                       => array( 1, 'Calls::lock_row(): to the main site for the row of the lock, back in finally; no stored value.' ),
 			'restore_current_blog'                 => array( 1, 'Calls::lock_row(): back from the main site after the row of the lock is read.' ),
+		),
+		// The deadline of the readings of a swap (Z8b branch 5, R12).
+		'class-sync-deadline.php' => array(
+			'__' => array( 3, 'the stop of a reading under its deadline (over, its clock unknown) and the refusal of a deadline that is none, each with the way, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value a reader compares or hashes.' ),
 		),
 		'class-sync-code-plan.php' => array(
 			'__'                           => array( 31, 'the refusals, the locks and the preview of a plan of the code, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes.' ),
