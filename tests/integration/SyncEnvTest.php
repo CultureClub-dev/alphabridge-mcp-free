@@ -799,6 +799,59 @@ final class SyncEnvTest extends TestCase {
 		self::assertNull( AB_MCP_Sync_Env::held( '<b>notes</b>', array() ), 'A tag without a field: an ordinary name.' );
 	}
 
+	/**
+	 * keyed() rebuilt for speed (Z8b branch 5, R12b part 1a): the 36 cases
+	 * of the measurement of part 1 (tests/fixtures/keyed-same.json) answer
+	 * in held() and over_name() as part 1 measured them on these sites, with
+	 * K = 0, 10, 100 and 1000 extra keys, and keyed() answers as at 8daf33f
+	 * (tests/support/keyed-8daf33f.php) over every layer WordPress gives,
+	 * the layer html of the core among them. Here because nine of them need
+	 * the core (the HTML decoder, the HTML API of the content check); the
+	 * rest of the comparison is the unit suite's (SyncNetKeyedSameTest).
+	 */
+	public function testTheCasesOfTheMeasurementOfTheNamesAnswerAsMeasuredAndKeyedAsAt8daf33f(): void {
+		require_once AB_MCP_DIR . 'tests/support/keyed-8daf33f.php';
+		$data = json_decode( (string) file_get_contents( AB_MCP_DIR . 'tests/fixtures/keyed-same.json' ), true );
+		self::assertIsArray( $data );
+		self::assertCount( 36, $data['faelle'] );
+		// The PDFs of M3 are under the uploads of site A of part 1 (port
+		// 8881); here under those of this site A, an address of the same
+		// length, so that the lengths of the serialized texts of M3c hold.
+		$then = 'http://127.0.0.1:8881/wp-content/uploads';
+		$now  = \AB_MCP_Sync_Rows::uploads_url();
+		self::assertIsString( $now );
+		self::assertSame( strlen( $then ), strlen( $now ) );
+		$held   = 0;
+		$over   = 0;
+		$layers = 0;
+		$differ = array();
+		foreach ( array( 0, 10, 100, 1000 ) as $k ) {
+			$extra = array();
+			for ( $i = 1; $i <= $k; $i++ ) {
+				$extra[] = sprintf( 'qxk%04d', $i );
+			}
+			foreach ( $data['faelle'] as $case ) {
+				$name = str_replace( $then, $now, $case['namen'][ (string) $k ] );
+				self::assertSame( $case['held'][ (string) $k ], AB_MCP_Sync_Env::held( $name, $extra ), $case['id'] . ', K = ' . $k . ': held() as in part 1.' );
+				++$held;
+				if ( array_key_exists( (string) $k, $case['over_name'] ) ) {
+					self::assertSame( $case['over_name'][ (string) $k ], \AB_MCP_Sync_Net::over_name( $name, $extra, true ), $case['id'] . ', K = ' . $k . ': over_name() as in part 1.' );
+					++$over;
+				}
+				foreach ( \AB_MCP_Sync_Net::layers( $name ) as $layer ) {
+					$old = \AB_Test_Keyed_8daf33f::keyed( $layer[1], $extra );
+					if ( $old !== \AB_MCP_Sync_Net::keyed( $layer[1], $extra ) && count( $differ ) < 20 ) {
+						$differ[] = array( $case['id'], $k, $layer[0], $old );
+					}
+					++$layers;
+				}
+			}
+		}
+		self::assertSame( array(), $differ, 'keyed() answers otherwise than at 8daf33f: ' . (string) json_encode( $differ ) );
+		self::assertSame( array( 144, 124 ), array( $held, $over ) );
+		self::assertGreaterThan( 4 * 36, $layers );
+	}
+
 	public function testANameOnlyTheRulesOfTheStagingSiteHoldIsHeldInThePartsOfThisSiteAsWell(): void {
 		self::pair();
 		$name  = 'vault=EXAMPLE_SECRET.php';
