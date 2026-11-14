@@ -19,7 +19,10 @@
  * way does not take them), KIND (each function of PHP or WordPress and
  * method of a class not of the plugin that is called: its kind, whether it
  * is a step, the reason) and STEP_CLASS (the class of the helpers of the
- * steps, section 3.1 of the order; not there before part 3).
+ * steps, section 3.1 of the order: includes/sync/class-sync-step.php since
+ * part 3.1, called by no way before part 3.2; its methods are no function of
+ * G1, a call of one is a step of G2 and a check of G7, wpdb_<method> the
+ * step wpdb-><method>).
  *
  * The basis (section 3.2 of the order): G1 the functions outside the chain
  * (file::Class::name => role), CHAIN the functions of the chain of the check

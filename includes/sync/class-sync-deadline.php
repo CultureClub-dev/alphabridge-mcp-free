@@ -22,7 +22,8 @@
  *   (AB_MCP_Sync_Manifest::verify() by AB_MCP_Sync_Run::now()) and the
  *   proof of the protected store (time(), microtime()).
  * - The first stop is kept (the reading under a deadline that stopped stays
- *   stopped, whatever the clock says later), so every caller in between can
+ *   stopped, whatever the clock says later, and left() gives it without
+ *   reading the clock again), so every caller in between can
  *   pass it on (stop()) where a helper answers only «not read» (null, false,
  *   an array marked unknown).
  * - A single call that cannot be interrupted (one file read, one gzip
@@ -75,7 +76,9 @@ final class AB_MCP_Sync_Deadline {
 	 * Whether a reading may take its next step: true without a deadline
 	 * (null) and while the deadline is not over; else the stop (the first
 	 * one stays), and the refusal for a value that is no deadline. The clock
-	 * is read at every check.
+	 * is read at every check until the first stop; once stopped, the stop is
+	 * the answer before any reading of the clock (R12b, section 3.1 of the
+	 * order: after the halt no asking of the clock, in this one place).
 	 *
 	 * @param mixed $deadline Null, or a deadline of at().
 	 * @return true|WP_Error
@@ -87,10 +90,13 @@ final class AB_MCP_Sync_Deadline {
 		if ( ! $deadline instanceof self ) {
 			return self::invalid();
 		}
+		if ( null !== $deadline->stop ) {
+			return $deadline->stop;
+		}
 		$now = self::now();
-		if ( null === $deadline->stop && null === $now ) {
+		if ( null === $now ) {
 			$deadline->stop = self::clock_unknown();
-		} elseif ( null === $deadline->stop && $now >= $deadline->until ) {
+		} elseif ( $now >= $deadline->until ) {
 			$deadline->stop = self::late();
 		}
 		return null === $deadline->stop ? true : $deadline->stop;

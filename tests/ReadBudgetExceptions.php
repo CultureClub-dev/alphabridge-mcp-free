@@ -21,10 +21,19 @@
  * does only at a halt held in it), the number of its places and the reason:
  * the value of FACHWERT, with its side value where the function has one
  * ($whole = null; return array();), a halt query of the deadline, and a
- * translation as its whole call (the order, section 4). A branch at a halt
- * in another form is a violation until it has its entry here with its
- * reason; that an entry passes the halt on unchanged is shown by the test of
- * its form in part 7, not by the guard. COMPARE: what a comparison of a sort
+ * translation as its whole call (the order, section 4). Checked are the
+ * answers of the branches at a halt that a rule selects (R2 to R4 and R7; R7
+ * passes over the events CHECK and STOP): such a branch in another form is
+ * a violation until it has its entry here with its reason; a branch at a
+ * halt of a violation open in OPEN is not compared with this list. The
+ * answers of the other branches at a halt are shown by part 7, not by the
+ * guard (the boundary N8 of the order, part 3c: 6.2 points 4 and 5, 7.1;
+ * among them PS:4206, SW:741 read_deadline, SW:996 not_down and case 8 of
+ * 2.3b; at the head 7963e13 58 of 119 if at a halt are not read). That an
+ * entry passes the halt on unchanged is shown by the test of its form in
+ * part 7, not by the guard; in a function of FACHWERT that test checks the
+ * value and the side value too, a form SAME included, and an entry of OPEN
+ * is no such proof. COMPARE: what a comparison of a sort
  * may call (N2). SORTS: the
  * functions of PHP that sort with a comparison. FILTERS: the functions that
  * call code not of the plugin by a hook. FRAME_OUT: the calls of the frame

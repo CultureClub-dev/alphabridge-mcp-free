@@ -10,7 +10,8 @@
  * - left() reads the clock at every check: in time before the deadline,
  *   late from its own time on (ab_mcp_read_late); a clock without a finite
  *   number is unknown (ab_mcp_read_clock); the first stop stays, whatever
- *   the clock says later, and so does the stop of a reader (halt());
+ *   the clock says later, and so does the stop of a reader (halt()); after
+ *   a stop it answers it without a reading of the clock (R12b part 3.1);
  *   stop() gives it without asking the clock; without a deadline (null)
  *   nothing is asked or stopped;
  * - the helpers (AB_MCP_Payload_File::read(), AB_MCP_Sync_Import::inflate(),
@@ -328,6 +329,27 @@ final class SyncDeadlineTest extends TestCase {
 		self::assertSame( $why, AB_MCP_Sync_Deadline::left( $deadline ), 'Late later: still the reason of the reader.' );
 		$now = NAN;
 		self::assertSame( $why, AB_MCP_Sync_Deadline::left( $deadline ), 'The clock unknown later: still the reason of the reader.' );
+	}
+
+	public function testAfterAStopLeftAnswersItWithoutAReadingOfTheClock(): void {
+		// R12b part 3.1 (section 3.1 of the order): after the halt no asking of
+		// the clock, in left() itself.
+		foreach ( array( 'late' => DeadlineClock::late_from( 1 ), 'unknown' => DeadlineClock::unknown_from( 1 ) ) as $case => $clock ) {
+			$clock->install();
+			$deadline = DeadlineClock::deadline();
+			$stop     = AB_MCP_Sync_Deadline::left( $deadline );
+			self::assertInstanceOf( WP_Error::class, $stop, $case );
+			self::assertSame( $stop, AB_MCP_Sync_Deadline::left( $deadline ), $case . ': the first stop.' );
+			self::assertSame( $stop, AB_MCP_Sync_Deadline::left( $deadline ), $case . ': still the first stop.' );
+			self::assertCount( 1, $clock->gates, $case . ': the clock read once, by the check that stopped.' );
+			self::assertSame( 0, $clock->others, $case );
+		}
+		$clock    = DeadlineClock::in_time()->install();
+		$deadline = DeadlineClock::deadline();
+		$why      = new WP_Error( 'ab_mcp_store_undecided', 'why' );
+		AB_MCP_Sync_Deadline::halt( $deadline, $why );
+		self::assertSame( $why, AB_MCP_Sync_Deadline::left( $deadline ), 'The reason of a reader.' );
+		self::assertSame( array( array(), 0 ), array( $clock->gates, $clock->others ), 'No reading of the clock after the stop of a reader.' );
 	}
 
 	/* ------------------------------------------------------------- the readers */

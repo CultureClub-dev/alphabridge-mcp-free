@@ -743,6 +743,20 @@ final class ReadBudgetScan {
 	}
 
 	/**
+	 * The step a helper of the steps stands for: the name of its method, and
+	 * for wpdb_<method> the method of $wpdb (part 3.1).
+	 *
+	 * @param string $meth The name of the method of the helper.
+	 */
+	public static function step_of_helper( string $meth ): string {
+		$step = strtolower( $meth );
+		if ( 0 === strpos( $step, 'wpdb_' ) ) {
+			return 'wpdb->' . substr( $step, 5 );
+		}
+		return $step;
+	}
+
+	/**
 	 * Class::name( at $i (the name of the method at $mn, its parenthesis at $po).
 	 *
 	 * @param list<\PhpToken>            $toks Tokens of the body.
@@ -758,8 +772,11 @@ final class ReadBudgetScan {
 		if ( $c === $this->hand['STEP_CLASS'] ) {
 			// A helper of the steps (section 3.1 of the order): the step it runs,
 			// and where that step calls a function it is given, its callback one
-			// place further, after the deadline (part 2.3b, Codex B1).
-			$ev[] = array( 'k' => 'STEP', 'what' => strtolower( $meth ), 'line' => $t->line, 'args' => $args, 'pos' => $i, 'pe' => $pe, 'd' => $depth );
+			// place further, after the deadline (part 2.3b, Codex B1). The helper
+			// of a method of $wpdb is wpdb_<method>, the step wpdb-><method> (part
+			// 3.1: a name of a method holds no ->); helper_method is the method,
+			// the check of G7.
+			$ev[] = array( 'k' => 'STEP', 'what' => self::step_of_helper( $meth ), 'helper_method' => strtolower( $meth ), 'line' => $t->line, 'args' => $args, 'pos' => $i, 'pe' => $pe, 'd' => $depth );
 			if ( in_array( strtolower( $meth ), self::ITERCB, true ) ) {
 				self::iteration( $toks, $i, $po, $pe, strtolower( $meth ), 1, $depth, $ev );
 			}
@@ -1240,7 +1257,7 @@ final class ReadBudgetScan {
 					$out['G7'][ $e['what'] ] = $e['k'];
 				}
 				if ( 'STEP' === $e['k'] ) {
-					$out['G7'][ $hand['STEP_CLASS'] . '::' . $e['what'] ] = 'CHECK';
+					$out['G7'][ $hand['STEP_CLASS'] . '::' . $e['helper_method'] ] = 'CHECK';
 				}
 			}
 		}

@@ -75,6 +75,14 @@ final class ReadBudgetGuardTest extends TestCase {
 		'Datenbank'  => array( 'admin_url', 'get_option', 'home_url', 'wp_upload_dir', 'wpdb->get_var', 'wpdb->query' ),
 	);
 
+	/**
+	 * The steps outside the chain without a helper of their own yet (part
+	 * 3.1), each with the part that builds it and why.
+	 */
+	private const HELPER_LATER = array(
+		'idn_to_ascii' => 'Part 4: called through the callable of AB_MCP_Sync_Key::idn() (call_user_func, class-sync-key.php:524, G6); the form of its helper follows how part 4 shows its target and its way of a halt.',
+	);
+
 	/** @var ?array<string,mixed> What the reader read (once). */
 	private static ?array $model = null;
 
@@ -310,6 +318,86 @@ PHP;
 		self::assertSame( array( 'AB_MCP_Sync_Code_Swap::prepare' => array( 'file_get_contents' ) ), $basis['G2'], 'A step through its helper is a step of G2.' );
 		self::assertSame( array( 'AB_MCP_Sync_Step::file_get_contents' => 'CHECK' ), $basis['G7'], 'The helper is a check of G7.' );
 		self::assertSame( array( 'includes/a.php::AB_MCP_Sync_Code_Swap::prepare' => 'Weg' ), $basis['G1'] );
+	}
+
+	public function testEachMethodOfTheHelperOfTheStepsIsReadAsTheStepOfItsName(): void {
+		// Part 3.1: the class of the helpers (includes/sync/class-sync-step.php),
+		// as the reader reads a call of each of its methods, and the closed list
+		// of the steps outside the chain they stand for.
+		require_once dirname( __DIR__ ) . '/includes/sync/class-sync-step.php';
+		$soll    = self::soll();
+		$methods = array();
+		foreach ( ( new \ReflectionClass( 'AB_MCP_Sync_Step' ) )->getMethods( \ReflectionMethod::IS_PUBLIC ) as $method ) {
+			self::assertTrue( $method->isStatic(), $method->getName() );
+			$methods[] = $method->getName();
+		}
+		sort( $methods );
+		$kind  = array();
+		$lines = array();
+		$steps = array();
+		$g7    = array();
+		foreach ( $methods as $m ) {
+			$step = ReadBudgetScan::step_of_helper( $m );
+			self::assertArrayHasKey( $step, $soll['HAND']['KIND'], $m . ': its step is a function of KIND.' );
+			self::assertContains( $soll['HAND']['KIND'][ $step ][0], ReadBudgetScan::STEP_KINDS, $m );
+			self::assertTrue( $soll['HAND']['KIND'][ $step ][1], $m . ': its function is a step.' );
+			$kind[ $step ]                   = $soll['HAND']['KIND'][ $step ];
+			$lines[]                         = "\t\t\$v = AB_MCP_Sync_Step::" . $m . '( $deadline, $x );';
+			$steps[]                         = $step;
+			$g7[ 'AB_MCP_Sync_Step::' . $m ] = 'CHECK';
+		}
+		self::assertSame( 'wpdb->get_var', ReadBudgetScan::step_of_helper( 'wpdb_get_var' ), 'A method of $wpdb.' );
+		// The helpers stand for the steps outside the chain, but those of the atomic
+		// seams (section 3.1 of the order: they stay direct calls) and those
+		// HELPER_LATER names.
+		$want = array();
+		foreach ( $soll['G2'] as $function => $list ) {
+			if ( in_array( $function, self::lists()['ATOMIC'], true ) ) {
+				continue;
+			}
+			foreach ( $list as $step ) {
+				if ( ! isset( self::HELPER_LATER[ $step ] ) ) {
+					$want[ $step ] = true;
+				}
+			}
+		}
+		foreach ( self::HELPER_LATER as $step => $why ) {
+			self::assertNotSame( '', $why, $step );
+			self::assertNotContains( $step, $steps, $step . ': a helper of its own now, out of HELPER_LATER.' );
+		}
+		$want = array_keys( $want );
+		$have = $steps;
+		sort( $want );
+		sort( $have );
+		self::assertSame( $want, $have, 'One helper for each step outside the chain and its atomic seams (and HELPER_LATER).' );
+
+		$code  = "<?php\nfinal class AB_MCP_Sync_Code_Swap {\n\tpublic static function prepare( \$deadline, \$x ) {\n" . implode( "\n", $lines ) . "\n\t\treturn \$v;\n\t}\n}\n";
+		$hand  = array(
+			'STEP_CLASS'   => 'AB_MCP_Sync_Step',
+			'FRAME'        => array(),
+			'NO_CAND'      => array(),
+			'ROOTS'        => array(),
+			'BOUNDARY'     => array(),
+			'HELPERS'      => array(),
+			'HELPER_EVENT' => array(),
+			'RET'          => array(),
+			'INST_BYNAME'  => array(),
+			'INST'         => array(),
+			'DYN'          => array(),
+			'CUT'          => array(),
+			'KIND'         => $kind,
+		);
+		$step = file_get_contents( dirname( __DIR__ ) . '/includes/sync/class-sync-step.php' );
+		self::assertIsString( $step );
+		$model = ReadBudgetScan::read( array( 'includes/a.php' => $code, 'includes/sync/class-sync-step.php' => $step ), $hand );
+		self::assertSame( array(), $model['problems'], 'Each helper a step of KIND, none unread.' );
+		$basis = ReadBudgetScan::basis( $model, $hand );
+		self::assertSame( array( 'AB_MCP_Sync_Code_Swap::prepare' => $steps ), $basis['G2'], 'Each call of a helper is its step of G2.' );
+		self::assertSame( $g7, $basis['G7'], 'Each helper is a check of G7.' );
+		self::assertSame( array( 'includes/a.php::AB_MCP_Sync_Code_Swap::prepare' => 'Weg' ), $basis['G1'], 'The helpers are no function of G1.' );
+		foreach ( array_keys( self::model()['reach'] ) as $reached ) {
+			self::assertStringStartsNotWith( 'AB_MCP_Sync_Step::', $reached, 'No way of the head reaches into the helpers as a function.' );
+		}
 	}
 
 	/* ---------- Part 2.2: the rules R1 to R7 at the head ---------- */

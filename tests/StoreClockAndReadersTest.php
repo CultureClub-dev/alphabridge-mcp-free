@@ -47,6 +47,7 @@ final class StoreClockAndReadersTest extends TestCase {
 		'includes/sync/class-sync-code-swap.php',
 		'includes/sync/class-sync-push.php',
 		'includes/sync/class-sync-deadline.php',
+		'includes/sync/class-sync-step.php',
 	);
 
 	/**
@@ -102,6 +103,9 @@ final class StoreClockAndReadersTest extends TestCase {
 		'includes/sync/class-sync-deadline.php'     => array(
 			'AB_MCP_Sync_Deadline::now' => 'the deadline of the readings of a swap within one call (R12 of branch 5: until − keep, the readings of the stage and of the signed manifest), on the clock of the budget of AB_MCP_Sync_Env, the swap\'s in the tests; checked: no finite number is unknown (ab_mcp_read_clock), the reading stops before its next step; never stored, and no validity of a package or proof of the store is decided by it',
 		),
+		// The helpers of the steps (R12b part 3.1) read the clock of the budget
+		// only through AB_MCP_Sync_Deadline::left(), never a clock of their own.
+		'includes/sync/class-sync-step.php'         => array(),
 		'includes/sync/class-sync-engine.php'       => array(
 			'AB_MCP_Sync_Engine::now'        => 'the budget of work of one call (self::$work: when a call stops writing, checking or verifying and the seconds its answer names to wait), with its seam $clock for tests; measured within one call, never stored or read by a later call',
 			'AB_MCP_Sync_Engine::run_verify' => 'the deadline of the PHP probe of the verify (AB_MCP_Php_Probe::run(), until) from the time left of the same call; never stored',

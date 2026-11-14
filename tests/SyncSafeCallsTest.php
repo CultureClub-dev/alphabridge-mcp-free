@@ -526,6 +526,20 @@ final class SyncSafeCallsTest extends TestCase {
 		'class-sync-deadline.php' => array(
 			'__' => array( 3, 'the stop of a reading under its deadline (over, its clock unknown) and the refusal of a deadline that is none, each with the way, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value a reader compares or hashes.' ),
 		),
+		// The helpers of the steps of a reading under the deadline (Z8b branch 5,
+		// R12b part 3.1): each the step of its caller, with the arguments of the
+		// caller unchanged, after the check of the deadline; what it reads is what
+		// the caller read before through the same function (the callers outside
+		// includes/sync/: AB_MCP_Settings::get(), AB_MCP_Guidance::settings_url(),
+		// AB_MCP_Protected_Store::candidates() and ::stored(); under it: the
+		// anchor and the manifest, which stand here with their own reasons).
+		'class-sync-step.php'     => array(
+			'get_option'        => array( 1, 'get_option(): the step of its caller (the options of the plugin, the anchor and the retired keys of a staging pair), after the deadline; the option as the caller reads it, no other.' ),
+			'home_url'          => array( 1, 'home_url(): the step of its caller (the address of this site for the print of a pair and the check of a package), after the deadline.' ),
+			'admin_url'         => array( 1, 'admin_url(): the step of its caller (the address of a page of the settings in a guidance), after the deadline.' ),
+			'wp_upload_dir'     => array( 1, 'wp_upload_dir(): the step of its caller (the uploads folder as a place of the protected store), after the deadline.' ),
+			'maybe_unserialize' => array( 1, 'maybe_unserialize(): the step of its caller (the raw record of the proof of the protected store, read through $wpdb), after the deadline.' ),
+		),
 		'class-sync-code-plan.php' => array(
 			'__'                           => array( 31, 'the refusals, the locks and the preview of a plan of the code, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes.' ),
 			'AB_MCP_Shape::read'           => array( 3, 'entry_of(), pair_of() and by_label(): an entry of the report, its pair and a group of the packages taken over (as AB_MCP_Protected_Store::groups() gives it) read in their forms ENTRY, PAIR and GROUP before the plan uses them (Z8b branch 5, parts 1a-2, 1a-3 and K1a: no cast, no default value); checks the value it is given, no stored value (the forms name no codec).' ),
