@@ -528,6 +528,7 @@ final class ReadBudgetScan {
 				$name = ltrim( $toks[ $cn ]->text, '\\' );
 				if ( T_VARIABLE === $toks[ $cn ]->id ) {
 					$ev[] = array( 'k' => 'DYN', 'what' => 'new ' . $name, 'line' => $t->line, 'args' => array(), 'pos' => $i, 'pe' => $cn, 'd' => $depth );
+					$i    = $cn; // Its ( is that of new, no call of $name (part 2.2).
 					continue;
 				}
 				$c    = $this->named( $name, $own );
