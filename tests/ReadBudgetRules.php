@@ -715,17 +715,20 @@ final class ReadBudgetRules {
 			if ( 'CB' !== $e['k'] || in_array( $e['what'], array( 'call_user_func', 'call_user_func_array' ), true ) ) {
 				continue;
 			}
-			$closures = $this->closures_in( $k, $e['pos'], $e['pe'] );
+			// Only the callback, at its place among the arguments (also of a helper
+			// of the steps, one place further: part 2.3b, Codex B1).
+			$closures = array();
 			$native   = null;
-			foreach ( $e['args'] as $a ) {
-				if ( 1 === preg_match( "/^'\\\\?([a-z_][a-z0-9_]*)'$/i", $a, $mm ) ) {
+			$plugin   = false;
+			if ( null !== $e['cb'] ) {
+				$closures = $this->closures_in( $k, $e['cbs'] - 1, $e['cbe'] + 1 );
+				if ( 1 === preg_match( "/^'\\\\?([a-z_][a-z0-9_]*)'$/i", $e['cb'], $mm ) ) {
 					$native = strtolower( $mm[1] );
 				}
-			}
-			$plugin = false;
-			foreach ( $this->model['events'][ $k ] as $x ) {
-				if ( 'CALL' === $x['k'] && $x['pos'] > $e['pos'] && $x['pos'] < $e['pe'] && 0 === strpos( $x['via'], 'Rückruf' ) ) {
-					$plugin = true;
+				foreach ( $this->model['events'][ $k ] as $x ) {
+					if ( 'CALL' === $x['k'] && $x['pos'] >= $e['cbs'] && $x['pos'] <= $e['cbe'] && 0 === strpos( $x['via'], 'Rückruf' ) ) {
+						$plugin = true;
+					}
 				}
 			}
 			if ( array() === $closures && null === $native && ! $plugin ) {
@@ -755,10 +758,15 @@ final class ReadBudgetRules {
 				$this->used['COMPARE'][ $native ] = true;
 			}
 		}
-		// A closure given to a function of PHP that calls no function it is given.
+		// A closure given to a function of PHP that calls no function it is given,
+		// or to a helper of such a step (part 2.3b, Codex B1).
 		foreach ( $this->model['events'][ $k ] as $e ) {
-			if ( 'FN' !== $e['k'] || isset( $e['cbtext'] ) || isset( $e['viadyn'] ) ) {
+			if ( ( 'FN' !== $e['k'] && 'STEP' !== $e['k'] ) || isset( $e['cbtext'] ) || isset( $e['viadyn'] ) ) {
 				continue;
+			}
+			$name = $e['what'];
+			if ( 'STEP' === $e['k'] ) {
+				$name = $this->hand['STEP_CLASS'] . '::' . $e['what'];
 			}
 			$cb = false;
 			foreach ( $this->model['events'][ $k ] as $x ) {
@@ -767,7 +775,7 @@ final class ReadBudgetRules {
 				}
 			}
 			if ( ! $cb && array() !== $this->closures_in( $k, $e['pos'], $e['pe'] ) ) {
-				$this->add( 'R5', $k, $e, 'closure given to ' . $e['what'] . ', which is no function of ITERCB' );
+				$this->add( 'R5', $k, $e, 'closure given to ' . $name . ', which is no function of ITERCB' );
 			}
 		}
 		// Calls of an expression: ( … )( , [ … ]( , 'name'( , ->{ … }( .
@@ -940,7 +948,10 @@ final class ReadBudgetRules {
 	/**
 	 * The argument a call gives the parameter at $p named $name: its text
 	 * (positional, or named name: …), '' where it is left out, or null where
-	 * an argument is unpacked at or before it (told UNSUPPORTED once).
+	 * an argument is unpacked at or before it or the model does not hold the
+	 * arguments of the call (a callback, call_user_func_array(), new $x; told
+	 * UNSUPPORTED once). call_user_func() gives its target the arguments
+	 * after its first (part 2.3b).
 	 *
 	 * @param array<string,mixed> $e The call.
 	 */
@@ -1050,7 +1061,9 @@ final class ReadBudgetRules {
 			$this->used['FACHWERT'][ $k ] = true;
 			return true;
 		}
-		if ( null === $next ) {
+		// Part 2.3b (of the same kind as Codex A1 and A3): no work on the value
+		// in its own statement before the halt is asked, such as a call around it.
+		if ( null === $next || $this->work_after( $k, $st['s'], $st['e'], $e ) ) {
 			return false;
 		}
 		$n = $next['st'];

@@ -51,6 +51,28 @@ final class ReadBudgetScan {
 	/** Functions of PHP that call a function they are given. */
 	private const ITERCB = array( 'array_map', 'array_filter', 'array_walk', 'array_walk_recursive', 'array_reduce', 'call_user_func', 'call_user_func_array', 'usort', 'uasort', 'uksort', 'preg_replace_callback', 'preg_replace_callback_array', 'iterator_apply' );
 
+	/**
+	 * The place of the callback among the arguments of each function of
+	 * ITERCB (the manual of PHP; part 2.3b, Codex B1). A helper of the steps
+	 * takes the deadline first and then the same arguments (the order, section
+	 * 3.1): there its callback is one place further.
+	 */
+	private const CB_ARG = array(
+		'array_map'                   => 0,
+		'array_filter'                => 1,
+		'array_walk'                  => 1,
+		'array_walk_recursive'        => 1,
+		'array_reduce'                => 1,
+		'call_user_func'              => 0,
+		'call_user_func_array'        => 0,
+		'usort'                       => 1,
+		'uasort'                      => 1,
+		'uksort'                      => 1,
+		'preg_replace_callback'       => 1,
+		'preg_replace_callback_array' => 0,
+		'iterator_apply'              => 1,
+	);
+
 	/** The kinds of a step (the order, section 1, «Was „Schritt“ heisst»). */
 	public const STEP_KINDS = array( 'Platte', 'Codec', 'Sortierung', 'Datenbank' );
 
@@ -619,18 +641,56 @@ final class ReadBudgetScan {
 			}
 			$ev[] = array( 'k' => 'FN', 'what' => $ln, 'line' => $t->line, 'pos' => $i, 'pe' => $pe, 'args' => $args, 'd' => $depth );
 			if ( in_array( $ln, self::ITERCB, true ) ) {
-				$ev[] = array( 'k' => 'CB', 'what' => $ln, 'line' => $t->line, 'args' => $args, 'text' => self::flat( $toks, $nx, $pe ), 'pos' => $i, 'pe' => $pe, 'd' => $depth );
-				foreach ( $args as $a ) {
-					if ( 1 === preg_match( "/^'\\\\?([a-z_][a-z0-9_]*)'$/i", $a, $mm ) && 1 !== preg_match( '/^AB_MCP_/', $mm[1] ) ) {
-						$ev[] = array( 'k' => 'FN', 'what' => strtolower( $mm[1] ), 'line' => $t->line, 'pos' => $i, 'pe' => $pe, 'args' => array(), 'd' => $depth, 'cbtext' => true );
-					}
-				}
+				self::iteration( $toks, $i, $nx, $pe, $ln, 0, $depth, $ev );
 			}
 		}
 		foreach ( $ev as $q => $e ) {
 			list( $ev[ $q ]['cl'], $ev[ $q ]['cll'] ) = self::closure_of( $regions, $e['pos'] );
 		}
 		return $this->dynamic( $key, $ev );
+	}
+
+	/**
+	 * A call of a function of ITERCB (or of its helper, with $shift 1: the
+	 * deadline first) at $i, its parenthesis $po to $pe: the event CB with the
+	 * arguments of the function (args, without the deadline of a helper), its
+	 * callback (cb, the text of the argument at its place in CB_ARG, or null
+	 * where it is not given, with its first and last token cbs and cbe), and
+	 * an event FN (cbtext) where the callback names a function of PHP.
+	 *
+	 * @param list<\PhpToken>            $toks Tokens of the body.
+	 * @param list<array<string,mixed>> $ev   Events so far.
+	 */
+	private static function iteration( array $toks, int $i, int $po, int $pe, string $ln, int $shift, int $depth, array &$ev ): void {
+		$t     = $toks[ $i ];
+		$args  = array_slice( self::args( $toks, $po, $pe ), $shift );
+		$spans = array_slice( self::spans( $toks, $po, $pe ), $shift );
+		$at    = self::CB_ARG[ $ln ];
+		$cb    = array(
+			'k'    => 'CB',
+			'what' => $ln,
+			'line' => $t->line,
+			'args' => $args,
+			'cb'   => null,
+			'cbs'  => $pe,
+			'cbe'  => $pe,
+			'text' => self::flat( $toks, $po, $pe ),
+			'pos'  => $i,
+			'pe'   => $pe,
+			'd'    => $depth,
+		);
+		if ( 1 === $shift ) {
+			$cb['helper'] = true;
+		}
+		if ( isset( $args[ $at ], $spans[ $at ] ) ) {
+			$cb['cb']  = $args[ $at ];
+			$cb['cbs'] = $spans[ $at ][0];
+			$cb['cbe'] = $spans[ $at ][1];
+		}
+		$ev[] = $cb;
+		if ( null !== $cb['cb'] && 1 === preg_match( "/^'\\\\?([a-z_][a-z0-9_]*)'$/i", $cb['cb'], $mm ) && 1 !== preg_match( '/^AB_MCP_/', $mm[1] ) ) {
+			$ev[] = array( 'k' => 'FN', 'what' => strtolower( $mm[1] ), 'line' => $t->line, 'pos' => $i, 'pe' => $pe, 'args' => array(), 'd' => $depth, 'cbtext' => true );
+		}
 	}
 
 	/**
@@ -696,8 +756,13 @@ final class ReadBudgetScan {
 		$pe   = self::paren( $toks, $po );
 		$args = self::args( $toks, $po, $pe );
 		if ( $c === $this->hand['STEP_CLASS'] ) {
-			// A helper of the steps (section 3.1 of the order): the step it runs.
+			// A helper of the steps (section 3.1 of the order): the step it runs,
+			// and where that step calls a function it is given, its callback one
+			// place further, after the deadline (part 2.3b, Codex B1).
 			$ev[] = array( 'k' => 'STEP', 'what' => strtolower( $meth ), 'line' => $t->line, 'args' => $args, 'pos' => $i, 'pe' => $pe, 'd' => $depth );
+			if ( in_array( strtolower( $meth ), self::ITERCB, true ) ) {
+				self::iteration( $toks, $i, $po, $pe, strtolower( $meth ), 1, $depth, $ev );
+			}
 			return;
 		}
 		$rk = $this->resolve( $c, $meth );
@@ -1260,7 +1325,10 @@ final class ReadBudgetScan {
 			return $e['via'] . ' -> ' . $kind . ': ' . implode( ', ', $e['to'] );
 		}
 		if ( 'CB' === $e['k'] && ! in_array( $e['what'], array( 'call_user_func', 'call_user_func_array' ), true ) ) {
-			return $e['what'] . ' -> ' . self::callback( $e['args'] );
+			if ( null === $e['cb'] ) {
+				return $e['what'] . ' -> ohne Rückruf';
+			}
+			return $e['what'] . ' -> ' . self::callback( array( $e['cb'] ) ); // A helper alike (part 2.3b, Codex B1).
 		}
 		return null;
 	}
@@ -1436,6 +1504,47 @@ final class ReadBudgetScan {
 			$args[] = trim( preg_replace( '/\s+/', ' ', $cur ) );
 		}
 		return $args;
+	}
+
+	/**
+	 * The first and last token of each argument of a call at the top level
+	 * (its parenthesis at $po to $pe), as args() splits them.
+	 *
+	 * @param list<\PhpToken> $t Tokens.
+	 * @return list<array{0:int,1:int}>
+	 */
+	private static function spans( array $t, int $po, int $pe ): array {
+		$out  = array();
+		$from = null;
+		$last = null;
+		$d    = 0;
+		for ( $k = $po + 1; $k < $pe; $k++ ) {
+			$x = $t[ $k ]->text;
+			if ( in_array( $x, array( '(', '[', '{' ), true ) || T_CURLY_OPEN === $t[ $k ]->id || T_DOLLAR_OPEN_CURLY_BRACES === $t[ $k ]->id ) {
+				++$d;
+			}
+			if ( in_array( $x, array( ')', ']', '}' ), true ) ) {
+				--$d;
+			}
+			if ( 0 === $d && ',' === $x ) {
+				if ( null !== $from ) {
+					$out[] = array( $from, $last );
+				}
+				$from = null;
+				continue;
+			}
+			if ( in_array( $t[ $k ]->id, array( T_WHITESPACE, T_COMMENT, T_DOC_COMMENT ), true ) ) {
+				continue;
+			}
+			if ( null === $from ) {
+				$from = $k;
+			}
+			$last = $k;
+		}
+		if ( null !== $from ) {
+			$out[] = array( $from, $last );
+		}
+		return $out;
 	}
 
 	/**

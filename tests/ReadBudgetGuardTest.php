@@ -1685,7 +1685,15 @@ final class AB_MCP_Sync_Code_Swap {
 		if ( self::stopped( $deadline ) ) {
 			$f = null;
 		}
-		return strrev( $a . $b . $c . $d . $e . $f . $x . $y . $z . $p . $q );
+		$o = strrev( 'f' );
+		if ( self::stopped( $deadline ) ) {
+			return null;
+		}
+		$r = strrev( self::walk( $v[6], $deadline ) );
+		if ( null !== AB_MCP_Sync_Deadline::stop( $deadline ) ) {
+			return null;
+		}
+		return strrev( $a . $b . $c . $d . $e . $f . $x . $y . $z . $p . $q . $o . $r );
 	}
 	private static function stopped( $deadline ) {
 		return null !== $deadline;
@@ -1729,6 +1737,11 @@ PHP;
 					// $t = stop(); if ( null !== $t ) answering: green.
 					'R1 strrev',
 					// stopped() with the right polarity, but its branch does not answer: no halt asked (red).
+					'R3 after AB_MCP_Sync_Code_Swap::walk',
+					'R7 AB_MCP_Sync_Code_Swap::walk',
+					'R1 strrev',
+					// A call around the edge works on its value before the halt is asked: red after (and R7).
+					'R1 strrev',
 					'R3 after AB_MCP_Sync_Code_Swap::walk',
 					'R7 AB_MCP_Sync_Code_Swap::walk',
 					'R1 strrev',
@@ -1821,6 +1834,236 @@ PHP;
 			),
 			$own['open']
 		);
+	}
+
+	public function testASortThroughTheHelperKeepsItsCallback(): void {
+		// Codex B1: AB_MCP_Sync_Step::usort( $deadline, … ) is the step usort (G2) and a check (G7), and its
+		// callback, one place after the deadline, is a callback as with usort(): in G6 with the same label, in NAMED,
+		// its comparison pure (R5, COMPARE used); a closure given to a helper of a step that calls no function is red.
+		$code = <<<'PHP'
+<?php
+final class AB_MCP_Sync_Code_Swap {
+	public static function prepare( $deadline, $list, $f ) {
+		$a = AB_MCP_Sync_Step::usort( $deadline, $list, 'strcmp' );
+		if ( true !== $a ) {
+			return $a;
+		}
+		$b = AB_MCP_Sync_Step::usort( $deadline, $list, static function ( $x, $y ) { return strcmp( $x, $y ); } );
+		if ( true !== $b ) {
+			return $b;
+		}
+		$c = AB_MCP_Sync_Step::usort( $deadline, $list, static function ( $x, $y ) { return AB_MCP_Sync_Credentials::unit( $x ) <=> $y; } );
+		if ( true !== $c ) {
+			return $c;
+		}
+		$d = AB_MCP_Sync_Step::usort( $deadline, $list, 'strcasecmp' );
+		if ( true !== $d ) {
+			return $d;
+		}
+		$e = AB_MCP_Sync_Step::usort( $deadline, $list, $f );
+		if ( true !== $e ) {
+			return $e;
+		}
+		$g = AB_MCP_Sync_Step::usort( $deadline, 'strcmp', $list );
+		if ( true !== $g ) {
+			return $g;
+		}
+		$h = AB_MCP_Sync_Step::usort( $deadline, $list, array( 'AB_MCP_Sync_Credentials', 'cmp' ) );
+		if ( true !== $h ) {
+			return $h;
+		}
+		$i = AB_MCP_Sync_Step::json_encode( $deadline, static function () { return 1; } );
+		if ( true !== $i ) {
+			return $i;
+		}
+		return $list;
+	}
+}
+final class AB_MCP_Sync_Credentials {
+	public static function unit( $x ) {
+		return $x;
+	}
+	public static function cmp( $x, $y ) {
+		return 0;
+	}
+}
+PHP;
+		$own = self::own(
+			$code,
+			array(
+				'usort'       => array( 'Sortierung', true ),
+				'json_encode' => array( 'Codec', true ),
+				'strcmp'      => array( 'sonst', false ),
+				'strcasecmp'  => array( 'sonst', false ),
+			),
+			array( 'COMPARE' => array( 'strcmp' ) )
+		);
+		self::assertSame( array(), $own['model']['problems'] );
+		self::assertSame( array(), $own['rules']['problems'], 'COMPARE used by the helper with strcmp.' );
+		$basis = ReadBudgetScan::basis( $own['model'], array( 'FRAME' => array(), 'HELPERS' => array(), 'NO_CAND' => array(), 'STEP_CLASS' => 'AB_MCP_Sync_Step' ) );
+		self::assertSame(
+			array(
+				'AB_MCP_Sync_Code_Swap::prepare' => array(
+					// The labels of usort() itself (E5: G6 stays the same where a sort moves into the helper).
+					'usort -> nativ: strcmp',
+					'usort -> Closure',
+					'usort -> Closure',
+					'usort -> nativ: strcasecmp',
+					'usort -> anders: $f',
+					// The callback at its place: the second argument after the deadline (here the array).
+					'usort -> anders: $list',
+					"usort -> anders: array( 'AB_MCP_Sync_Credentials', 'cmp' )",
+				),
+			),
+			$basis['G6']
+		);
+		self::assertSame( array( 'AB_MCP_Sync_Code_Swap::prepare' => array( 'usort', 'usort', 'usort', 'usort', 'usort', 'usort', 'usort', 'json_encode' ) ), $basis['G2'], 'Each helper is its step.' );
+		self::assertSame(
+			array(
+				'AB_MCP_Sync_Step::json_encode' => 'CHECK',
+				'AB_MCP_Sync_Step::usort'       => 'CHECK',
+			),
+			$basis['G7']
+		);
+		self::assertSame( array( 'AB_MCP_Sync_Code_Swap::prepare' => array( 'usort', 'usort', 'usort', 'usort', 'usort' ) ), $own['rules']['named']['SORT'], 'NAMED: each sort with a target, as with usort().' );
+		self::assertSame(
+			array(
+				'AB_MCP_Sync_Code_Swap::prepare' => array(
+					// strcmp() as text and in a closure: pure (green).
+					'R5 comparison not pure: usort calls AB_MCP_Sync_Credentials::unit',
+					'R5 comparison not pure: usort calls strcasecmp',
+					// A variable, and the callback not at its place: no target.
+					'R5 callback without target: usort',
+					'R5 callback without target: usort',
+					'R5 comparison not pure: usort calls a function of the plugin',
+					'R5 closure given to AB_MCP_Sync_Step::json_encode, which is no function of ITERCB',
+				),
+			),
+			$own['open']
+		);
+	}
+
+	public function testEachDynamicFormOfACallIsInDynOrRejected(): void {
+		// Codex A6: each form of a dynamic call the reader knows is a problem without its entry in DYN and, with it,
+		// a call of its target in G6; each form it does not read is UNSUPPORTED; a callback without a target and a
+		// closure given to a function that calls none are red (R5). The matrix form, self-test, mutation of the code
+		// is in belege/r12b-2-3b-uebergabe.md.
+		$code = <<<'PHP'
+<?php
+final class AB_MCP_Sync_Code_Swap {
+	public static function prepare( $o, $m, $f, $list ) {
+		$f( 1 );
+		$o::make( 1 );
+		$o->$m( 1 );
+		$o?->$m( 1 );
+		self::$m( 1 );
+		$o::$m( 2 );
+		new $m( 1 );
+		call_user_func( $f, 1 );
+		call_user_func_array( $f, array( 1 ) );
+		( $f )( 1 );
+		$list[0]( 1 );
+		'strlen'( 'x' );
+		$o->{$m}( 1 );
+		self::{$m}( 1 );
+		$o::{'make'}( 1 );
+		${'f'}( 1 );
+		Other\Space\run( 1 );
+		array_map( $f, $list );
+		array_map( 'AB_MCP_Sync_Code_Swap::one', $list );
+		array_map( array( __CLASS__, 'one' ), $list );
+		register_shutdown_function( static function () { return 1; } );
+		$c = strlen( ... );
+		array_map( strlen( ... ), $list );
+		return $c;
+	}
+	public static function one( $x ) {
+		return $x;
+	}
+}
+PHP;
+		$kind = array(
+			'call_user_func'             => array( 'sonst', false ),
+			'call_user_func_array'       => array( 'sonst', false ),
+			'array_map'                  => array( 'sonst', false ),
+			'register_shutdown_function' => array( 'sonst', false ),
+			'strlen'                     => array( 'sonst', false ),
+		);
+		$own  = self::own( $code, $kind );
+		$p    = 'AB_MCP_Sync_Code_Swap::prepare';
+		self::assertSame(
+			array(
+				'UNSUPPORTED includes/a.php:20 name with a namespace Other\Space\run in ' . $p,
+				'DYN includes/a.php:4 ' . $p . ' $f( without an entry ' . $p . '|$f(',
+				'DYN includes/a.php:5 ' . $p . ' $o::make without an entry ' . $p . '|$o::make',
+				'DYN includes/a.php:6 ' . $p . ' ->$m( without an entry ' . $p . '|->$m(',
+				'DYN includes/a.php:7 ' . $p . ' ?->$m( without an entry ' . $p . '|?->$m(',
+				'DYN includes/a.php:8 ' . $p . ' ::$m( without an entry ' . $p . '|::$m(',
+				'DYN includes/a.php:9 ' . $p . ' ::$m( without an entry ' . $p . '|::$m(',
+				'DYN includes/a.php:10 ' . $p . ' new $m without an entry ' . $p . '|new $m',
+				'DYN includes/a.php:11 ' . $p . ' call_user_func without an entry ' . $p . '|call_user_func',
+				'DYN includes/a.php:12 ' . $p . ' call_user_func_array without an entry ' . $p . '|call_user_func_array',
+			),
+			$own['model']['problems']
+		);
+		self::assertSame(
+			array(
+				'UNSUPPORTED includes/a.php:13 call of an expression ()() in ' . $p,
+				'UNSUPPORTED includes/a.php:14 call of an expression (]() in ' . $p,
+				"UNSUPPORTED includes/a.php:15 call of an expression ('strlen'() in " . $p,
+				'UNSUPPORTED includes/a.php:16 call of an expression (}() in ' . $p,
+				'UNSUPPORTED includes/a.php:17 call of an expression (}() in ' . $p,
+				'UNSUPPORTED includes/a.php:18 call of an expression (}() in ' . $p,
+				'UNSUPPORTED includes/a.php:19 call of an expression (}() in ' . $p,
+			),
+			$own['rules']['problems']
+		);
+		self::assertSame(
+			array(
+				$p => array(
+					'R5 callback without target: array_map',
+					'R5 closure given to register_shutdown_function, which is no function of ITERCB',
+					// A first-class callable is read as the call it names (the stricter reading); given as a callback
+					// it is no target.
+					'R5 callback without target: array_map',
+				),
+			),
+			$own['open']
+		);
+		// With their entries in DYN: no problem of the reader, the call of the target in G6 and as an edge.
+		$to  = array(
+			'to'   => array( 'AB_MCP_Sync_Code_Swap::one' ),
+			'kind' => 'Plugin',
+			'why'  => 'In the self-test.',
+		);
+		$dyn = array();
+		foreach ( array( '$f(', '$o::make', '->$m(', '?->$m(', '::$m(', 'new $m', 'call_user_func', 'call_user_func_array' ) as $form ) {
+			$dyn[ $p . '|' . $form ] = $to;
+		}
+		$own = self::own( $code, $kind, array(), array( 'DYN' => $dyn ) );
+		self::assertSame( array( 'UNSUPPORTED includes/a.php:20 name with a namespace Other\Space\run in ' . $p ), $own['model']['problems'] );
+		$basis = ReadBudgetScan::basis( $own['model'], array( 'FRAME' => array(), 'HELPERS' => array(), 'NO_CAND' => array(), 'STEP_CLASS' => 'AB_MCP_Sync_Step' ) );
+		self::assertSame(
+			array(
+				$p => array(
+					'$f( -> Plugin: AB_MCP_Sync_Code_Swap::one',
+					'$o::make -> Plugin: AB_MCP_Sync_Code_Swap::one',
+					'->$m( -> Plugin: AB_MCP_Sync_Code_Swap::one',
+					'?->$m( -> Plugin: AB_MCP_Sync_Code_Swap::one',
+					'::$m( -> Plugin: AB_MCP_Sync_Code_Swap::one',
+					'::$m( -> Plugin: AB_MCP_Sync_Code_Swap::one',
+					'new $m -> Plugin: AB_MCP_Sync_Code_Swap::one',
+					'call_user_func -> Plugin: AB_MCP_Sync_Code_Swap::one',
+					'call_user_func_array -> Plugin: AB_MCP_Sync_Code_Swap::one',
+					'array_map -> anders: $f',
+					"array_map -> anders: 'AB_MCP_Sync_Code_Swap::one'",
+					"array_map -> anders: array( __CLASS__, 'one' )",
+					'array_map -> anders: strlen( ... )',
+				),
+			),
+			$basis['G6']
+		);
+		self::assertArrayHasKey( 'AB_MCP_Sync_Code_Swap::one', $own['model']['edges'][ $p ] );
 	}
 
 	public function testTheRulesTellWhatTheyCannotRead(): void {
