@@ -292,9 +292,21 @@ final class CodeStageTest extends TestCase {
 	}
 
 	/** complete() until it is not checking any more. */
+	/** The binding a step of the run RUN expects of the stage of a plugin: the unit and its hash in the environment of the report. */
+	private static function bound( array $stage, array $env ): array {
+		$signed = AB_MCP_Sync_Code_Stage::signed( $env, 'plugin', $stage['name'] );
+		self::assertIsArray( $signed, is_wp_error( $signed ) ? $signed->get_error_message() : '' );
+		return array(
+			'run_id' => self::RUN,
+			'kind'   => 'plugin',
+			'ref'    => $stage['name'],
+			'signed' => $signed['hash'],
+		);
+	}
+
 	private static function checked( array $stage, array $env ): array {
 		for ( $i = 0; $i < 50; $i++ ) {
-			$state = AB_MCP_Sync_Code_Stage::complete( $stage['gid'], $stage['name'], $stage['hash'], $env );
+			$state = AB_MCP_Sync_Code_Stage::complete( $stage['gid'], $stage['name'], $stage['hash'], $env, self::bound( $stage, $env ) );
 			self::assertIsArray( $state, is_wp_error( $state ) ? $state->get_error_code() . ': ' . $state->get_error_message() : '' );
 			if ( 'checking' !== $state['state'] ) {
 				return $state;
@@ -332,12 +344,12 @@ final class CodeStageTest extends TestCase {
 		self::assertSame( 'wordpress.org', $stage['source'] );
 		self::assertSame( array( 'https://downloads.wordpress.org/plugin/ab-it-inaktiv.1.1.0.zip' ), array_column( $calls->wporg->calls, 'url' ), 'The exact address, once.' );
 		self::assertSame( 0, $calls->wporg->calls[0]['args']['redirection'] );
-		self::assertNull( AB_MCP_Sync_Code_Stage::ready( $stage['gid'], $stage['name'], $stage['hash'] ), 'Not ready before complete().' );
+		self::assertNull( AB_MCP_Sync_Code_Stage::ready( $stage['gid'], $stage['name'], $stage['hash'], self::bound( $stage, $env ) ), 'Not ready before complete().' );
 		$state = self::checked( $stage, $env );
 		self::assertSame( 'ready', $state['state'], var_export( $state, true ) );
 		self::assertGreaterThan( 0, $state['files'], 'Its PHP files were checked.' );
 		self::assertSame( $state['files'], $state['checked'] );
-		self::assertIsArray( AB_MCP_Sync_Code_Stage::ready( $stage['gid'], $stage['name'], $stage['hash'] ) );
+		self::assertIsArray( AB_MCP_Sync_Code_Stage::ready( $stage['gid'], $stage['name'], $stage['hash'], self::bound( $stage, $env ) ) );
 		$tree = AB_MCP_Protected_Store::tree( 'stage', $stage['gid'], $stage['name'], $stage['hash'] );
 		self::assertIsArray( $tree );
 		self::assertSame( $before, self::live_bytes( 'ab-it-inaktiv' ), 'Nothing of the live unit changed.' );
@@ -552,8 +564,8 @@ final class CodeStageTest extends TestCase {
 		self::assertSame( 'code:syntax', $state['refusal']['code'] );
 		self::assertSame( 'kaputt.php', $state['refusal']['path'] );
 		self::assertSame( 2, $state['refusal']['line'] );
-		self::assertNull( AB_MCP_Sync_Code_Stage::ready( $stage['gid'], $stage['name'], $stage['hash'] ) );
-		self::assertSame( 'refused', AB_MCP_Sync_Code_Stage::complete( $stage['gid'], $stage['name'], $stage['hash'], $env )['state'], 'A stage refused stays refused.' );
+		self::assertNull( AB_MCP_Sync_Code_Stage::ready( $stage['gid'], $stage['name'], $stage['hash'], self::bound( $stage, $env ) ) );
+		self::assertSame( 'refused', AB_MCP_Sync_Code_Stage::complete( $stage['gid'], $stage['name'], $stage['hash'], $env, self::bound( $stage, $env ) )['state'], 'A stage refused stays refused.' );
 		// The parser alone, where no command line is there: the same refusal.
 		$calls       = self::wporg( array() );
 		$calls->lint = false;
@@ -625,7 +637,7 @@ final class CodeStageTest extends TestCase {
 					),
 					array(
 						'call'   => 'AB_MCP_Sync_Code_Stage::complete',
-						'args'   => array( $stage['gid'], $stage['name'], $stage['hash'], $env ),
+						'args'   => array( $stage['gid'], $stage['name'], $stage['hash'], $env, self::bound( $stage, $env ) ),
 						'as'     => 'state',
 						'expect' => 'result',
 					),
@@ -638,10 +650,10 @@ final class CodeStageTest extends TestCase {
 		self::assertSame( 'code:syntax_unchecked', $state['refusal']['code'] );
 		self::assertSame( 'riesig.php', $state['refusal']['path'] );
 		$calls = self::wporg( array() );
-		$again = AB_MCP_Sync_Code_Stage::complete( $stage['gid'], $stage['name'], $stage['hash'], $env );
+		$again = AB_MCP_Sync_Code_Stage::complete( $stage['gid'], $stage['name'], $stage['hash'], $env, self::bound( $stage, $env ) );
 		self::assertSame( array( 'refused', 'code:syntax_unchecked' ), array( $again['state'], $again['refusal']['code'] ), 'The refusal is kept.' );
 		self::assertSame( array(), $calls->reads, 'The next call reads nothing.' );
-		self::assertNull( AB_MCP_Sync_Code_Stage::ready( $stage['gid'], $stage['name'], $stage['hash'] ) );
+		self::assertNull( AB_MCP_Sync_Code_Stage::ready( $stage['gid'], $stage['name'], $stage['hash'], self::bound( $stage, $env ) ) );
 	}
 
 	public function testAFileWhoseReadFailsIsKeptUncheckedAndNotReadAgain(): void {
@@ -658,17 +670,17 @@ final class CodeStageTest extends TestCase {
 		$stage = AB_MCP_Sync_Code_Stage::stage( self::RUN, $env, 'plugin', 'ab-it-daten', array( $id ) );
 		self::assertIsArray( $stage, is_wp_error( $stage ) ? $stage->get_error_code() . ': ' . $stage->get_error_message() : '' );
 		$calls->unreadable = true;
-		$state             = AB_MCP_Sync_Code_Stage::complete( $stage['gid'], $stage['name'], $stage['hash'], $env );
+		$state             = AB_MCP_Sync_Code_Stage::complete( $stage['gid'], $stage['name'], $stage['hash'], $env, self::bound( $stage, $env ) );
 		self::assertSame( 'refused', $state['state'], var_export( $state, true ) );
 		self::assertSame( 'code:syntax_unchecked', $state['refusal']['code'] );
 		self::assertSame( 'neu.php', $state['refusal']['path'] );
 		self::assertStringContainsString( 'did not read whole', $state['refusal']['message'] );
 		self::assertSame( array( array( 'neu.php', strlen( $bytes ) + 1 ) ), $calls->reads, 'Read once, at most its size and one byte more.' );
 		$calls->unreadable = false;
-		$again             = AB_MCP_Sync_Code_Stage::complete( $stage['gid'], $stage['name'], $stage['hash'], $env );
+		$again             = AB_MCP_Sync_Code_Stage::complete( $stage['gid'], $stage['name'], $stage['hash'], $env, self::bound( $stage, $env ) );
 		self::assertSame( array( 'refused', 'code:syntax_unchecked' ), array( $again['state'], $again['refusal']['code'] ) );
 		self::assertCount( 1, $calls->reads, 'Not read again.' );
-		self::assertNull( AB_MCP_Sync_Code_Stage::ready( $stage['gid'], $stage['name'], $stage['hash'] ) );
+		self::assertNull( AB_MCP_Sync_Code_Stage::ready( $stage['gid'], $stage['name'], $stage['hash'], self::bound( $stage, $env ) ) );
 	}
 
 	public function testANewVersionThatNeedsANewerPhpIsRefused(): void {
@@ -723,22 +735,23 @@ final class CodeStageTest extends TestCase {
 		self::wporg();
 		$stage = AB_MCP_Sync_Code_Stage::stage( self::RUN, $env, 'plugin', 'ab-it-inaktiv' );
 		self::assertIsArray( $stage );
-		$other = AB_MCP_Sync_Code_Stage::complete( $stage['gid'], $stage['name'], str_repeat( 'a', 64 ), $env );
-		self::assertSame( 'code:stage_unknown', $other->get_error_code() );
+		$other = AB_MCP_Sync_Code_Stage::complete( $stage['gid'], $stage['name'], str_repeat( 'a', 64 ), $env, self::bound( $stage, $env ) );
+		self::assertSame( 'code:stage_other', $other->get_error_code(), 'A3 of the Codex round 1 on the code: a refusal of its own, for good.' );
+		self::assertContains( 'code:stage_other', AB_MCP_Sync_Code_Stage::PERMANENT );
 		// Z4 early: the staging site changed the unit since; with the report
 		// of now the stage is not its unit, and never ready.
 		file_put_contents( AB_MCP_IT_Code::path( 'b', 'plugin', 'ab-it-inaktiv' ) . '/neu.php', "<?php // neu\n" );
-		$changed = AB_MCP_Sync_Code_Stage::complete( $stage['gid'], $stage['name'], $stage['hash'], self::environment() );
+		$changed = AB_MCP_Sync_Code_Stage::complete( $stage['gid'], $stage['name'], $stage['hash'], self::environment(), self::bound( $stage, $env ) );
 		self::assertSame( 'refused', $changed['state'] );
 		self::assertSame( 'code:stage_mismatch', $changed['refusal']['code'] );
-		self::assertNull( AB_MCP_Sync_Code_Stage::ready( $stage['gid'], $stage['name'], $stage['hash'] ) );
+		self::assertNull( AB_MCP_Sync_Code_Stage::ready( $stage['gid'], $stage['name'], $stage['hash'], self::bound( $stage, $env ) ) );
 		$stage = AB_MCP_Sync_Code_Stage::stage( self::RUN, $env, 'plugin', 'ab-it-inaktiv' );
 		self::assertIsArray( $stage );
 		$tree = AB_MCP_Protected_Store::tree( 'stage', $stage['gid'], $stage['name'], $stage['hash'] );
 		file_put_contents( $tree['path'] . '/ab-it-inaktiv.php', "<?php // anders\n", FILE_APPEND );
-		$got = AB_MCP_Sync_Code_Stage::complete( $stage['gid'], $stage['name'], $stage['hash'], $env );
+		$got = AB_MCP_Sync_Code_Stage::complete( $stage['gid'], $stage['name'], $stage['hash'], $env, self::bound( $stage, $env ) );
 		self::assertSame( 'ab_mcp_store_tree_changed', $got->get_error_code() );
-		self::assertNull( AB_MCP_Sync_Code_Stage::ready( $stage['gid'], $stage['name'], $stage['hash'] ) );
+		self::assertNull( AB_MCP_Sync_Code_Stage::ready( $stage['gid'], $stage['name'], $stage['hash'], self::bound( $stage, $env ) ) );
 	}
 
 	public function testAnEndOfTheProcessWhileStagingLeavesNothingReady(): void {
@@ -982,40 +995,40 @@ final class CodeStageTest extends TestCase {
 		AB_MCP_Sync_Code_Stage::$clock = static function () use ( &$asked ): float {
 			return 3 === ++$asked ? NAN : microtime( true );
 		};
-		$nothing                       = AB_MCP_Sync_Code_Stage::complete( $stage['gid'], $stage['name'], $stage['hash'], $env );
+		$nothing                       = AB_MCP_Sync_Code_Stage::complete( $stage['gid'], $stage['name'], $stage['hash'], $env, self::bound( $stage, $env ) );
 		AB_MCP_Sync_Code_Stage::$clock = null;
 		self::assertSame( array( 'checking', 0, 0 ), array( $nothing['state'], $nothing['checked'], $nothing['files'] ), 'No list of files made from an unknown time.' );
 		self::assertSame( 0, $calls->parsed );
 		// The time of the call is over once the parser had its first file.
 		AB_MCP_Sync_Code_Stage::$clock = static fn(): float => microtime( true ) + ( $calls->parsed >= 1 ? 1000.0 : 0.0 );
-		$first                         = AB_MCP_Sync_Code_Stage::complete( $stage['gid'], $stage['name'], $stage['hash'], $env );
+		$first                         = AB_MCP_Sync_Code_Stage::complete( $stage['gid'], $stage['name'], $stage['hash'], $env, self::bound( $stage, $env ) );
 		AB_MCP_Sync_Code_Stage::$clock = null;
 		self::assertSame( 'checking', $first['state'] );
 		self::assertSame( 1, $first['checked'] );
 		self::assertGreaterThan( 1, $first['files'], 'More than one file to check.' );
-		self::assertNull( AB_MCP_Sync_Code_Stage::ready( $stage['gid'], $stage['name'], $stage['hash'] ) );
+		self::assertNull( AB_MCP_Sync_Code_Stage::ready( $stage['gid'], $stage['name'], $stage['hash'], self::bound( $stage, $env ) ) );
 		// A Throwable of the parser ends the call; the stage stays checking.
 		$calls->parser_throws = true;
 		try {
-			AB_MCP_Sync_Code_Stage::complete( $stage['gid'], $stage['name'], $stage['hash'], $env );
+			AB_MCP_Sync_Code_Stage::complete( $stage['gid'], $stage['name'], $stage['hash'], $env, self::bound( $stage, $env ) );
 			self::fail( 'The Throwable of the parser ends the call.' );
 		} catch ( RuntimeException $e ) {
 			self::assertSame( 'The parser ended.', $e->getMessage() );
 		}
 		$calls->parser_throws = false;
-		self::assertNull( AB_MCP_Sync_Code_Stage::ready( $stage['gid'], $stage['name'], $stage['hash'] ) );
+		self::assertNull( AB_MCP_Sync_Code_Stage::ready( $stage['gid'], $stage['name'], $stage['hash'], self::bound( $stage, $env ) ) );
 		// The next state cannot be written: the call answers so, not ready.
 		AB_MCP_Test_Seam::install( AB_MCP_Protected_Store::class, 'naht_protected_store', new AB_MCP_Protected_Store_Calls(), array( array( 'method' => 'put', 'kind' => 'return', 'value' => false ) ) );
-		$failed = AB_MCP_Sync_Code_Stage::complete( $stage['gid'], $stage['name'], $stage['hash'], $env );
+		$failed = AB_MCP_Sync_Code_Stage::complete( $stage['gid'], $stage['name'], $stage['hash'], $env, self::bound( $stage, $env ) );
 		AB_MCP_Test_Seam::restore_all();
 		self::wporg()->lint = false;
 		self::assertInstanceOf( \WP_Error::class, $failed );
-		self::assertNull( AB_MCP_Sync_Code_Stage::ready( $stage['gid'], $stage['name'], $stage['hash'] ) );
+		self::assertNull( AB_MCP_Sync_Code_Stage::ready( $stage['gid'], $stage['name'], $stage['hash'], self::bound( $stage, $env ) ) );
 		// A time that is no number: the call ends as it is, without a state
 		// of its own (no progress), the next goes on.
 		$states                        = count( AB_MCP_Protected_Store::files( 'stage', $stage['gid'] ) );
 		AB_MCP_Sync_Code_Stage::$clock = static fn(): float => NAN;
-		$none                          = AB_MCP_Sync_Code_Stage::complete( $stage['gid'], $stage['name'], $stage['hash'], $env );
+		$none                          = AB_MCP_Sync_Code_Stage::complete( $stage['gid'], $stage['name'], $stage['hash'], $env, self::bound( $stage, $env ) );
 		AB_MCP_Sync_Code_Stage::$clock = null;
 		self::assertSame( array( 'checking', 1 ), array( $none['state'], $none['checked'] ) );
 		self::assertCount( $states, AB_MCP_Protected_Store::files( 'stage', $stage['gid'] ), 'No state written.' );
@@ -1062,13 +1075,13 @@ final class CodeStageTest extends TestCase {
 					'calls'   => array(
 						array(
 							'call' => 'AB_MCP_Sync_Code_Stage::complete',
-							'args' => array( $stage['gid'], $stage['name'], $stage['hash'], $env ),
+							'args' => array( $stage['gid'], $stage['name'], $stage['hash'], $env, self::bound( $stage, $env ) ),
 						),
 					),
 				)
 			);
 			self::assertSame( $point, $run['point'] );
-			self::assertNull( AB_MCP_Sync_Code_Stage::ready( $stage['gid'], $stage['name'], $stage['hash'] ), $point . ': never ready.' );
+			self::assertNull( AB_MCP_Sync_Code_Stage::ready( $stage['gid'], $stage['name'], $stage['hash'], self::bound( $stage, $env ) ), $point . ': never ready.' );
 		}
 		self::wporg()->lint = false;
 		$state = self::checked( $stage, $env );
@@ -1087,11 +1100,11 @@ final class CodeStageTest extends TestCase {
 		self::assertIsArray( $stage, is_wp_error( $stage ) ? $stage->get_error_code() . ': ' . $stage->get_error_message() : '' );
 		// The time of a reading is over before it begins.
 		AB_MCP_Sync_Code_Stage::$clock = static fn(): float => microtime( true ) - 1000.0;
-		$state                         = AB_MCP_Sync_Code_Stage::complete( $stage['gid'], $stage['name'], $stage['hash'], $env );
+		$state                         = AB_MCP_Sync_Code_Stage::complete( $stage['gid'], $stage['name'], $stage['hash'], $env, self::bound( $stage, $env ) );
 		self::assertIsArray( $state, is_wp_error( $state ) ? $state->get_error_code() . ': ' . $state->get_error_message() : '' );
 		self::assertSame( 'refused', $state['state'], var_export( $state, true ) );
 		self::assertSame( 'code:syntax_unchecked', $state['refusal']['code'] );
-		self::assertNull( AB_MCP_Sync_Code_Stage::ready( $stage['gid'], $stage['name'], $stage['hash'] ) );
+		self::assertNull( AB_MCP_Sync_Code_Stage::ready( $stage['gid'], $stage['name'], $stage['hash'], self::bound( $stage, $env ) ) );
 	}
 
 	public function testABuildingFolderGoesOnlyByItsAgeOrByItsOwnRequest(): void {

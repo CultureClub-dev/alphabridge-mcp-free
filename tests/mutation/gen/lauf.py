@@ -406,8 +406,27 @@ e('export-term-credentials', 'export(): the names and slugs of the terms through
 e('engine-rest-residual', 'revert_boundary(): a new object stays as a rest, its pair residual (rule 0)', EN,
   "\t\t\t\t$kept = is_array( $pair ) && 'residual' !== $pair['state'] ? AB_MCP_Sync_Pairs::set_state(",
   "\t\t\t\t$kept = false ? AB_MCP_Sync_Pairs::set_state(", 'it', E2E)
-e('engine-pair-restore', 'revert_boundary(): the pair goes back to its snapshot before the step (decision 10)', EN,
-  "\t\t\t\t$restored = AB_MCP_Sync_Pairs::restore( $pair_id, (string) $forward['pair_before'], $now_hash );", "\t\t\t\t$restored = true;", 'it', E2E)
+e('engine-pair-restore', 'pair_back(): the pair goes back to its snapshot before the step (decision 10)', EN,
+  "\t\t$restored = AB_MCP_Sync_Pairs::restore( $pair_id, (string) $forward['pair_before'], $now_hash );", "\t\t$restored = true;", 'it', E2E)
+# The pre-check of Z8b branch 5, V12 (it meets the ordinary case: a takeover,
+# its pair discarded, the way back): the pair is read and its snapshot checked
+# before it is hashed; a pair that is gone is a state, one that cannot be read
+# is not known.
+GONE = 'testTheWayBackOfAStepWhosePairWasDiscardedSincePutsTheObjectBackAndSaysThatNoBasesWentBack'
+GONE_PART = 'testTheWayBackOfAStepWhosePairWasDiscardedSinceLeavesAChangedPartAndNamesNoPairAsUnclear'
+UNREAD = 'testTheWayBackOfAStepWhosePairCannotBeReadPutsThePartsBackWritesNothingOfThePairAndIsNotDone'
+e('v12-pair-gone', 'pair_back(): a pair discarded since the run is a state, no error: the parts decide the step (V12)', EN,
+  "\t\tif ( null === $pair ) {\n\t\t\treturn array(\n\t\t\t\t$all_back,", "\t\tif ( false ) {\n\t\t\treturn array(\n\t\t\t\t$all_back,", 'it', GONE)
+e('v12-pair-gone-said', 'revert_boundary(): the answer of a pair that is gone says that no bases went back, never that the pair has them (V12)', EN,
+  "\t\t\t'message'  => ( $said ?? ( $all_back", "\t\t\t'message'  => ( null ?? ( $all_back", 'it', GONE)
+e('v12-pair-gone-part', 'pair_back(): where a part is left, the answer of a pair that is gone says so and names no pair as unclear (V12)', EN,
+  "\t\t\t\t$all_back\n\t\t\t\t\t/* translators: 1: kind of the object, as the tools name it (post, term, …), 2: its reference on this site. */\n\t\t\t\t\t? sprintf( __( 'The %1$s %2$s went back to its state before the run: every part the run wrote was still its own and was put back, and every part reads as the backup after that. Its pair was discarded",
+  "\t\t\t\ttrue\n\t\t\t\t\t/* translators: 1: kind of the object, as the tools name it (post, term, …), 2: its reference on this site. */\n\t\t\t\t\t? sprintf( __( 'The %1$s %2$s went back to its state before the run: every part the run wrote was still its own and was put back, and every part reads as the backup after that. Its pair was discarded", 'it', GONE_PART)
+e('v12-pair-read-before-hash', 'pair_back(): the snapshot of the pair is checked before it is hashed: an error is never hashed (V12)', EN,
+  "\t\tif ( ! is_string( $snapshot ) ) {", "\t\tif ( false ) {", 'it', UNREAD)
+e('v12-pair-unread-not-done', 'pair_back(): a pair that cannot be read leaves the step not done, whatever went back (V12)', EN,
+  "\t\t\treturn array(\n\t\t\t\tfalse,\n\t\t\t\t'',\n\t\t\t\t/* translators: 1: kind of the object, as the tools name it (post, term, …), 2: its reference on this site, 3:",
+  "\t\t\treturn array(\n\t\t\t\t$all_back,\n\t\t\t\t'',\n\t\t\t\t/* translators: 1: kind of the object, as the tools name it (post, term, …), 2: its reference on this site, 3:", 'it', UNREAD)
 e('engine-reverting-only', 'pick(): a run on its way back runs its steps of the way back only', EN,
   "\t\t$reverting = 'reverting' === $run['state'] || 'revert' === $run['type'];", "\t\t$reverting = false;", 'it', 'testARequestThatExitsInABoundaryLeavesTheRunInterruptedAndTheWayBackLeadsTheSameRun')
 e('revert-same-run', 'plan(): the way back of a run that is not closed leads the same run (decision 15)', RV,

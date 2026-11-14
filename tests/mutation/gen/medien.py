@@ -255,9 +255,9 @@ e('engine-with-files', 'with_files(): the files the step laid in its result', EN
 e('engine-pair-staging-base', 'pair_for_new(): an attachment made unattached takes the staging base of that state', EN,
   "'base_staging' => isset( $prepared['base_staging'] ) && is_string( $prepared['base_staging'] ) ? $prepared['base_staging'] : (string) $item['staging_hash'],",
   "'base_staging' => (string) $item['staging_hash'],", 'it', NORMAL)
-e('engine-verify-last', 'run_verify(): only the last step that wrote an object holds its target', EN,
-  "\t\t\t\t$later   = ( $last[ ( $one['parts']['object']['kind'] ?? 'post' ) . ':' . (string) $live_id ] ?? (int) $one['seq'] ) !== (int) $one['seq'];",
-  "\t\t\t\t$later   = false;", 'it', NORMAL)
+e('engine-verify-last', 'written() of run_verify(): only the last step that wrote an object holds its target', EN,
+  "\t\t$later   = ( $last[ ( $one['parts']['object']['kind'] ?? 'post' ) . ':' . (string) $live_id ] ?? (int) $one['seq'] ) !== (int) $one['seq'];",
+  "\t\t$later   = false;", 'it', NORMAL)
 e('engine-revert-rest-files', 'revert_boundary(): the files of a new attachment named on the way back', EN,
   "\t\t\t\t$result = self::with_files( $result, $journal, $made_by );", "", 'it', NORMAL)
 e('engine-revert-files', 'revert_boundary(): the files of a step of an attachment here named on the way back', EN,

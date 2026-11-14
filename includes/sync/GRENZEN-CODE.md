@@ -273,6 +273,202 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
   (`StoreClockAndReadersTest::BUDGET`).
 - **Trifft Normalfall:** nein (der Weg ist sicher: ohne Lesung kein Paket).
 
+## Der Tausch (Zweig 5)
+
+### G-5-1 Dauerhaft beschädigter Sidecar der Stufe lässt den Schritt «bereitstellen» geplant
+
+- **Fundstelle:** `AB_MCP_Protected_Store::group()` und `no_group()` (`includes/class-protected-store.php`);
+  `AB_MCP_Sync_Code_Stage::state()` (`includes/sync/class-sync-code-stage.php`) → `files()` → `group()`;
+  `AB_MCP_Sync_Code_Stage::take_in()` und `write_state()`; `AB_MCP_Sync_Code_Ops::stage()`, `not_checked()` und
+  `not_staged()` (`includes/sync/class-sync-code-ops.php`); `PERMANENT` in `AB_MCP_Sync_Code_Stage`.
+- **Quelle:** gezielte Codex-Nachfrage zu `f24115a` (1 A), geschlossene Codex-Prüfung von K4 (2 A an derselben
+  Stelle, Stoppfall), Entscheid Thomas vom 13.11.2026 16:04 («D: Eine ehrliche Meldung», Teil K4d), geschlossene
+  Codex-Prüfung von K4d (1 A: der Satz über die Wirkung des Aufrufs), Entscheid der Steuerung in Thomas' Auftrag vom
+  13.11.2026 16:28 (Teil K4e), geschlossene Codex-Bestätigung von K4e (1 A: die Klammer über die Aufbewahrung),
+  Entscheid der Steuerung in Thomas' Auftrag vom 13.11.2026 16:43 und Fable-Prüfstelle 5 (Teil K4f: die Klammer ist
+  gestrichen, die Meldung nennt keine Aufbewahrungsfristen mehr).
+- **Was:** Gibt der Sidecar der Gruppe einer Stufe dauerhaft keinen Eintrag seiner Gruppe (nicht lesbar, keine Datei,
+  nicht in der Form, ein Eintrag einer anderen Gruppe, oder er fehlt), lehnt `group()` mit `ab_mcp_store_no_group` ab.
+  Die Meldung nennt beide Möglichkeiten (die Gruppe ist nicht da: nie geöffnet oder entfernt; oder sie ist da, und ihr
+  Eintrag oder ihr Ordner fehlt oder liest nicht) und den Weg für beide und legt sich auf keine fest: der Store
+  unterscheidet sie an dieser Stelle nicht. Darüber, was derselbe Aufruf vorher geschrieben hat, sagt sie nichts.
+  - Ist die Stufe schon bereitgestellt (das Journal des Schritts steht), ist der Fehler vorübergehend
+    (`ab_mcp_store_no_group` steht nicht in `PERMANENT`): `AB_MCP_Sync_Code_Ops::stage()` antwortet über
+    `not_checked()`, der Schritt bleibt bei jedem `wp_site_push action=next` `planned`, nie `failed`, und an der Site
+    wird nichts geschrieben. Den Ausweg nennt die Meldung des Schritts: `wp_site_push action=abort` schliesst den Lauf
+    auch mit dem beschädigten Sidecar (belegt in
+    `SyncCodeRunTest::testADamagedSidecarOfTheStageLeavesTheStepPlannedWithItsReasonUntilItIsBackOrTheRunIsAborted`,
+    dort mit dem Schaden vor dem Aufruf: auch an der Stufe wird dann nichts geschrieben).
+  - Fällt der Schaden in den ersten Aufruf, zwischen `put_tree()` und dem ersten Zustand (`take_in()` →
+    `write_state()` → `put()`), gibt `AB_MCP_Sync_Code_Stage::stage()` den Fehler zurück, und
+    `AB_MCP_Sync_Code_Ops::stage()` beendet den Schritt über `not_staged()` mit `failed`. Der schon geschriebene Baum
+    bleibt in der Gruppe: `take_in()` entfernt nichts. Nach dem Code gelesen, ohne eigenen Test.
+    In diesem Fall rät die Meldung des Stores «try again», der Schritt ist aber beendet (`failed`), und die Meldung
+    des Schritts führt zum nächsten Schritt (`action=next`): ein neuer Versuch für diese Einheit geht dann nur über
+    einen neuen Lauf. Die Meldung sagt das nicht (Befund K4e Nr. 2, nach dem Code gelesen, ohne eigenen Test;
+    Folgeposten der Fehlerweg-Prüfung des Teils).
+  - Ebenso nach einer Ablehnung von `AB_MCP_Sync_Code_Stage::stage()` selbst (Fable-Prüfstelle 2, C3; Entscheid der
+    Lead vom 13.11.2026 18:51): `code:org_unzip` (`class-sync-code-stage.php:827`) und `code:org_fetch` (`:867`,
+    `:882`) raten «Try again later, or send the unit as a package of code (wp_site_export with purpose=code)»;
+    `not_staged()` (`class-sync-code-ops.php:309`–`:312`) beendet den Schritt mit `failed` und hängt «The run goes on
+    with the next step (action=next).» an. Ein neuer Versuch für diese Einheit geht auch hier nur über einen neuen
+    Lauf. Folgeposten für Teil 2: `run_verify()` hängt beim Schliessen eines Laufs «The way back for its pairs is
+    wp_site_revert (action=plan with this run_id).» an (`class-sync-engine.php:2823`), auch bei einem Code-Lauf, von
+    dem kein Schritt etwas geschrieben hat; für Code-Läufe trennen. Nach dem Code gelesen, ohne eigenen Test.
+    **Trifft Normalfall:** nein.
+  - B (kein Normalfall, keine Kernzusage): `read_entry()` gibt auch für einen formgerechten Eintrag eines anderen
+    Bereichs null (`sidecar()`, Zustand `other`: der Eintrag nennt selbst einen anderen Bereich als den, in dem er
+    liegt), und `group()` lehnt dann ebenso mit `ab_mcp_store_no_group` ab. Die Aufzählung der Meldung («is missing, is
+    no plain file, cannot be read, is not of its form or names another group») nennt diesen Fall nicht wörtlich.
+    Nötig ist ein fremder Schreiber oder ein Schaden auf der Platte; der Weg der Meldung («ask the host to check the
+    folder of the protected store») gilt auch dafür. Die Tests erwarten den Teilsatz wörtlich
+    (`ProtectedStoreTest`, `SyncCodeRunTest`), darum Vermerk statt Textänderung.
+  Die genaue Trennung «fehlt / beschädigt / dauerhaft» (und damit ein `failed` für einen dauerhaft formwidrigen
+  Sidecar) ist Folgeposten der Fehlerweg-Prüfung des Teils, zusammen mit `sidecar()`.
+- **Trifft Normalfall:** nein. Der eigene Code schreibt einen Sidecar nur ganz (`write_entry()` über eine Temp-Datei,
+  `bind()` prüft `whole()` vorher); nötig ist ein Schaden auf der Platte oder ein fremder Schreiber nach dem
+  Bereitstellen. Der Weg bleibt fail-closed: kein Tausch ohne als bereit gelesene Stufe.
+
+### G-5-2 Meldungen der Ablage auf dem Weg des Tauschs, die ausserhalb des Normalfalls nicht in jedem Fall stimmen
+
+- **Quelle:** Codex-Bestätigung und gesammelte Prüfung über K4f (`7d9fcc2..6f693f1`, 13.11.2026, B1 bis B7), Entscheid
+  der Steuerung in Thomas' Auftrag vom 13.11.2026 17:25 (Punkt 1: die B auf dem Pfad von Zweig 5 als Grenze). Die
+  Zuordnung «erreichbar über `wp_site_push` oder die Stufe» ist in Teil K4g je Eintrag am Code gelesen (Zeilen am
+  Stand von K4g), keiner der Fälle ist nachgestellt. In jedem Fall lehnt die Ablage ab (fail-closed); betroffen ist
+  nur, was die Meldung als Grund oder Weg nennt. Keine Kernzusage ist berührt (Codex: überall nein).
+- **Einträge** (alle in `includes/class-protected-store.php`):
+  - **`put()`, `ab_mcp_store_write` (`:1039`), «so it was taken out again».** Fall: die Datei ist geschrieben, der
+    Sidecar lässt sich danach nicht schreiben (`write_entry()`), und auch `delete_path()` (`:1038`) entfernt die Datei
+    nicht; sein Ergebnis wird nicht geprüft. Dann liegt die Datei noch da, die Meldung sagt das Gegenteil. Erreichbar
+    über `AB_MCP_Sync_Backup::put()` (`includes/sync/class-sync-engine.php:1194`, Sicherung eines Schritts) und über
+    `AB_MCP_Sync_Code_Stage::write_state()` (`includes/sync/class-sync-code-stage.php:1492`, Zustand der Stufe).
+    **Trifft Normalfall:** nein (braucht zwei Schreibstörungen in Folge).
+  - **`entry()`, `ab_mcp_store_entry` (`:1162`), Aufzählung «cannot be read, is not there, or is not of its form».**
+    Fall: der Sidecar liest ganz und in seiner Form, nennt aber einen anderen Bereich (`sidecar()`: `other`) oder eine
+    andere Gruppe (`$gid !== $read[1]['gid']`, `:1161`); die Aufzählung nennt beides nicht. Erreichbar über
+    `AB_MCP_Sync_Code_Stage::foreign()` (aus `complete()` und `ready()`). **Trifft Normalfall:** nein (fremder Schreiber
+    oder Schaden auf der Platte).
+  - **`no_group()`, `ab_mcp_store_no_group` (`:4576`).** Die zwei Vermerke stehen in G-5-1: der Zustand `other` fehlt
+    in der Aufzählung, und «try again» nach einem mit `failed` beendeten Schritt geht nur über einen neuen Lauf.
+    **Trifft Normalfall:** nein.
+  - **`tree()`, `ab_mcp_store_tree_missing` (`:2235`), «it was never put there, or its group was removed after its
+    time. Use put_tree() to put it there again».** Fall: `lstat()` des Baums gibt nichts, obwohl `group()` die Gruppe
+    eben gefunden hat: der Baum allein ist entfernt (fremder Eingriff), oder der Pfad lässt sich wegen der Rechte nicht
+    ansehen. Keiner der zwei genannten Gründe trifft dann zu; «after its time» ist eine Fristaussage (Gruppen gehen
+    auch über `remove()` und die Deinstallation); `put_tree()` ist eine Funktion der Ablage, kein Werkzeug, und ein
+    Baum der Sicherungen lässt sich nicht noch einmal ablegen. Einzige Aufruferin: `AB_MCP_Sync_Code_Stage::complete()`
+    (`includes/sync/class-sync-code-stage.php:1049`), dort bleibt der Schritt `planned` (der Code steht nicht in
+    `PERMANENT`), der Weg des Schritts ist `action=next` oder `abort`. **Trifft Normalfall:** nein.
+  - **`build_dir()` und `temp_file()`, `ab_mcp_store_tmp` (`:2056`, `:2917`), «is missing or is a link».** Fall:
+    `way()` gibt auch dann nichts, wenn `tmp` eine gewöhnliche Datei ist, wenn `lstat()` wegen der Rechte scheitert
+    oder wenn `holds()` den Ordner nicht der Ablage zuordnen kann; dann fehlt `tmp` nicht und ist kein Link.
+    Erreichbar über `AB_MCP_Sync_Code_Stage::stage()` (`:762`, Aufbauordner) und über jedes Schreiben der Ablage
+    (`write_file()` → `temp_file()`). Der Weg der Meldung («ask the host to check the folder of the store») gilt auch
+    dafür. **Trifft Normalfall:** nein.
+  - **`copy_tree()`, `ab_mcp_store_tree_unread` (`:2314`), «The source of the tree is gone».** Fall: `lstat()` der
+    Quelle scheitert nach einer Änderung der Rechte, die Quelle liegt noch da. Erreichbar über
+    `AB_MCP_Sync_Code_Stage::take_in()` → `put_tree()`; die Quelle ist dort der Aufbauordner derselben Anfrage und
+    wurde unmittelbar davor ganz gelesen. **Trifft Normalfall:** nein.
+  - **`unsafe()`, `ab_mcp_store_link` (`:4400`), «is a link, or lies outside the store … remove the link».** Fall:
+    `way()` gibt auch für einen Ordner nichts, der fehlt oder sich nicht ansehen lässt (etwa ein nachträglich
+    entfernter Bereich, `group()` `:4307`–`:4310`); dann gibt es keinen Link, und «remove the link» nennt ein
+    Hindernis, das nicht besteht. Erreichbar über jeden Zugriff auf eine Gruppe (`group()`, `entry()`).
+    **Trifft Normalfall:** nein (braucht einen Ordner der Ablage, der fehlt oder sich nicht ansehen lässt).
+- **Trifft Normalfall:** nein, je Eintrag begründet. Die Texte werden im Zweig «Meldungen der Ablage und des
+  Transports» (G-5-3) mitgeprüft; bis dahin gilt dieser Vermerk.
+
+### G-5-3 Meldungen der Ablage und des Transports mit Aussagen über Fristen und Bestand: eigener Zweig
+
+- **Quelle:** dieselbe Codex-Prüfung (A3 bis A10, B8); Entscheid der Steuerung in Thomas' Auftrag vom 13.11.2026
+  17:25, Punkt 2: eigener Zweig «Meldungen der Ablage und des Transports» nach Zweig 5 und vor `text/z8b`, der alle
+  Meldungen seines Bereichs in einem Durchgang prüft und behebt; bis dahin benannte Grenze. Die Befunde sind die der
+  Codex-Prüfung (Wortlaut: `uebergaben/anhang/2026-11-11-z8b/codex-zweig-5-code-6f693f1.md` im knowledge-Repo); Teil
+  K4g hat nur gelesen, dass Code und Wortlaut an der genannten Zeile stehen, die Fälle nicht nachgeprüft.
+- **Einträge:**
+  - A3, `ab_mcp_store_quota` (Exporte), `includes/class-store-budget.php:159`: «An export counts until it is removed, a
+    day after it was made, or later while a run that is not closed uses it» nennt einen festen Termin; nach Codex
+    entfernt erst ein Aufräumen nach Alter, und eine neu bestätigte Paarung entfernt Exporte früher.
+  - A4, `ab_mcp_store_quota` (Pakete), `includes/class-store-budget.php:174`: «A package counts until it is removed»;
+    nach Codex zählt ein geschlossenes Paket nicht mehr, obwohl es noch liegt.
+  - A5, `ab_mcp_store_quota` (Bytes), `includes/class-store-budget.php:188`: «the open packages of this site … hold
+    %3$d»; nach Codex ist die Zahl die Summe der deklarierten Grössen aller vorhandenen Pakete.
+  - A6, `ab_mcp_store_space`, `includes/class-store-budget.php:239`: «wait until packages and reports are removed (a
+    day after they were made)»; nach Codex bleiben Pakete offener Läufe länger, Berichte gehen auch früher.
+  - A7, `ab_mcp_sync_export_unknown`, `includes/sync/class-sync-export.php:1927`: «This site keeps no package of that
+    id … packages are kept a day»; nach Codex liegt ein abgelaufenes Paket bis zum Aufräumen noch da. Dazu
+    `ab_mcp_sync_export_index` (`:207`): jeder Lesefehler der Ablage wird zu «is no longer in the protected store».
+  - A8, `ab_mcp_sync_import_unknown`, `includes/sync/class-sync-import.php:369`: «packages are kept a day»; nach Codex
+    hält ein offener Lauf seine Pakete länger, und der beschriebene Weg nennt nicht alle nötigen Angaben.
+  - A9, `ab_mcp_sync_pairs_unknown`, `includes/sync/class-sync-proposal.php:2525`: «a proposal is kept a day at most»;
+    nach Codex gilt die Frist für die Gültigkeit, nicht für das Liegen in der Ablage.
+  - A10, `ab_mcp_sync_report_unknown`, `includes/sync/class-sync-report.php:989`: «a report is kept a day at most, and
+    a new one of the same connection replaces it»; nach Codex wie A9, und zwei gleichzeitige Aufrufe können zwei
+    Berichte hinterlassen.
+  - B8, `close_mark()`, `ab_mcp_store_mark_read`, `includes/class-protected-store.php:2561`: «so it stays open»; nach
+    Codex kann die Marke auf der Platte schon `closed` sein. Am Stand von K4g ruft unter `includes/` nichts
+    `close_mark()` (`git grep`), der Fall liegt nicht auf dem Weg von Zweig 5.
+  - Befund des Teils K4h (Entscheid der Lead: in diesen Zweig), `ab_mcp_store_tree_exists`,
+    `includes/class-protected-store.php:1939`: «Use another name for it», ebenso G-3-4 («einen anderen Namen oder eine
+    neue Gruppe»); für einen Baum aus einer Datei geht ein anderer Name nicht, `put_tree()` lehnt ihn mit
+    `ab_mcp_store_tree_name` ab (`:1954`), gangbar ist nur eine neue Gruppe. Über `wp_site_push` nicht erreichbar: der
+    einzige Aufrufer im Produkt, `AB_MCP_Sync_Code_Stage::take_in()` (`includes/sync/class-sync-code-stage.php:974`),
+    legt in eine Gruppe, die `stage()` je Aufruf neu öffnet (`:752`). Am Code von K4h gelesen, nicht nachgestellt.
+    **Trifft Normalfall:** nein (braucht einen liegen gebliebenen Baum).
+- **Trifft Normalfall:** A3 bis A10 nach Codex ja (gewöhnliche Bedienfolgen), Kernzusage nein: sie werden in dem
+  genannten Zweig behoben und sind bis dahin als Grenze geführt, nicht als hingenommen. B8: nein.
+
+### G-5-4 Verwaiste Gruppe der Stufe, wenn das Journal nach `stage()` nicht gespeichert wird
+
+- **Fundstelle:** `AB_MCP_Sync_Code_Ops::stage()` (`includes/sync/class-sync-code-ops.php:152`–`:186`):
+  `AB_MCP_Sync_Code_Stage::stage()` (`:153`), Prüfung des Journals (`:179`), `AB_MCP_Sync_Run::update_step()` (`:182`).
+- **Quelle:** Fable-Prüfstelle 2 über `90ab733..d1e0c77`, B2; Entscheid der Lead vom 13.11.2026 18:51 (Teil 1a-4d).
+- **Fall:** `stage()` hat eine Gruppe im Bereich `stage` geöffnet und den Baum abgelegt; danach gibt `update_step()`
+  einen Fehler (`:183`–`:184` gibt ihn zurück) oder die Anfrage endet vor dem Speichern (Zeitgrenze). Der Schritt
+  bleibt `planned` ohne Journal (`parts` null); der nächste Aufruf stellt die Einheit noch einmal bereit, in einer
+  neuen Gruppe (`stage()` öffnet je Aufruf eine, `class-sync-code-stage.php:752`).
+- **Wirkung:** Die erste Gruppe mit ihrem Baum bleibt liegen; dieser Schritt und der nächste Aufruf entfernen sie
+  nicht. Wann sie geht, regeln die Aufbewahrung des Bereichs `stage` (`KEEP` ein Tag,
+  `includes/class-protected-store.php:424`) und `kept()` (`:1452`); nicht nachgestellt. Nach Fable zählt sie bis
+  dahin im Budget (nicht nachgeprüft). Am geprüften Kopf wird der noch nicht implementierte Tausch abgelehnt
+  (`class-sync-code-ops.php:107`–`:112`, `ab_mcp_sync_code_swap_not_built`); durch die Bereitstellung wurde nichts an
+  der Site geschrieben.
+- **Trifft Normalfall:** nein (braucht einen Fehler der Datenbank beim Speichern oder ein Ende der Anfrage genau
+  zwischen `stage()` und `update_step()`).
+- **Folgeposten:** Test mit einem Fehler an `update_step()` in der Fehlerweg-Prüfung des Teils. Anforderung an Teil 2
+  (am Kopf nicht gebaut): der Tausch nimmt nur die Stufe, die das Journal seines Schritts nennt, nie eine verwaiste
+  Gruppe.
+
+### G-5-5 Doppelfehler beim Binden der Pakete und beim Abbruch des neuen Laufs
+
+- **Fundstelle:** `AB_MCP_Sync_Push`, `action=plan` eines Code-Laufs (`includes/sync/class-sync-push.php:1388`–`:1392`).
+- **Quelle:** Fable-Prüfstelle 2, C1; Entscheid der Lead vom 13.11.2026 18:51.
+- **Fall:** `AB_MCP_Sync_Code_Plan::bind()` gibt einen Fehler, und das folgende `AB_MCP_Sync_Engine::abort()` gibt
+  ebenfalls einen.
+- **Wirkung:** Zurück kommt nur der Fehler von `abort()` (`:1390`, `:1392`); der Bindungsfehler wird nicht ergänzt.
+  Ob die Meldung die Laufnummer nennt, hängt vom Abbruchfehler ab (die Ablehnung, weil ein anderer Aufruf die Sperre
+  hält, nennt sie: «Run %d is not aborted.», `class-sync-engine.php:422`, über `AB_MCP_Sync_Run::under_lock()`,
+  `class-sync-run.php:752`–`:754`). In welchem Zustand der Lauf und seine Pakete dann bleiben, hängt daran, wo
+  `abort()` scheitert; nicht nachgeprüft. An der Site ist bis dahin nichts geschrieben (der Lauf ist eben erst
+  geplant).
+- **Trifft Normalfall:** nein (zwei Fehler hintereinander).
+
+### G-5-6 `by_label()` lehnt eine formwidrige Gruppe aus `groups( 'in' )` ab (am Kopf nicht erreichbar)
+
+- **Fundstelle:** `AB_MCP_Sync_Code_Plan::by_label()` (`includes/sync/class-sync-code-plan.php:734`), gerufen über alle
+  Gruppen von `AB_MCP_Protected_Store::groups( 'in' )` (`:704`, `:708`).
+- **Quelle:** Fable-Prüfstelle 2, C2; Entscheid der Lead vom 13.11.2026 18:51.
+- **Fall:** Eine Gruppe aus `groups( 'in' )`, deren Eintrag nicht in der Form `GROUP` liest (keine gültige `gid` oder
+  kein gültiges `label`).
+- **Wirkung:** `by_label()` lehnt eine hypothetisch formwidrige Rückgabe von `groups('in')` defensiv ab. Beschädigte
+  Sidecars werden aktuell bereits beim Auflisten ausgelassen: `sidecar()` erkennt einen Sidecar ohne gültige `gid` oder
+  `label` über `whole()` als `unknown` (`includes/class-protected-store.php:4432`–`:4434`, `:4454`–`:4459`; `GROUP`
+  nimmt dieselben Formen `sidecar.gid` und `sidecar.label`, `class-sync-code-plan.php:98`–`:105`), `entries()` lässt
+  ihn aus (`:4052`–`:4056`), `groups()` liefert die übrigen (`:1118`–`:1126`). Fehlt dadurch ein benötigtes Paket,
+  lehnt `bind()` dessen Bindung ab (`class-sync-code-plan.php:720`), und der neue Lauf wird wieder geschlossen (G-5-5
+  ohne den zweiten Fehler). Am Kopf bleibt damit kein Fall, in dem `by_label()` jeden Code-Lauf sperrt. Nichts an der
+  Site geschrieben.
+- **Trifft Normalfall:** nein (die Rückgabe von `groups()` dieser Fassung liest immer in der Form `GROUP`).
+
 ## Übernommen aus Zweig 2 (`bericht-zweig-2.md`, Abschnitt Grenzkandidaten; G-M9 aus «Behebung 2»)
 
 ### G-M1 Ein Lesen über Teile ist kein Augenblick

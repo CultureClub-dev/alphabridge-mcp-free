@@ -1084,7 +1084,7 @@ final class AB_MCP_Protected_Store {
 		}
 		switch ( $raw->get_error_code() ) {
 			case 'missing':
-				return new WP_Error( 'ab_mcp_store_missing', 'The file is not in the protected store: it was never written, or its group was removed (packages and reports are kept a day, backups as many days as the filter ab_mcp_staging_backup_days says). Make it again.' );
+				return new WP_Error( 'ab_mcp_store_missing', __( 'The file was not found in its group of the protected store, or it could not be inspected there; the store does not tell which. Where it belongs to a package or a report whose source is still there, make that anew. A backup of what a run already replaced cannot be made anew: check the object in wp-admin, or ask the host whether a backup of the site holds it. Where the file should still be there, ask the host to check the folder of the protected store and the rights on it.', 'alphabridge-mcp' ) );
 			case 'read':
 				return new WP_Error( 'ab_mcp_store_read', 'The file of the protected store could not be read. Try again; if it keeps failing, ask the host to check the rights of the folder.' );
 			default:
@@ -1126,6 +1126,44 @@ final class AB_MCP_Protected_Store {
 			$out[]            = $entry;
 		}
 		return $out;
+	}
+
+	/**
+	 * The entry of one group of an area, as its sidecar holds it (gid, area,
+	 * created, user_id, run_id, declared, used, label, closed), read whole,
+	 * or the refusal: a sidecar that cannot be read, is not there or is not
+	 * an entry of its area whole (sidecar()) is an error of its own, never
+	 * left out as a group not listed (Z8b branch 5, K2: the stage reads the
+	 * run its group is bound to, AB_MCP_Sync_Code_Stage::complete()).
+	 *
+	 * @param string $area Area.
+	 * @param string $gid  Group.
+	 * @return array|WP_Error
+	 */
+	public static function entry( $area, $gid ) {
+		$bad = self::bad_ref( $area, $gid, 'x' );
+		if ( null !== $bad ) {
+			return $bad;
+		}
+		$root = self::root();
+		if ( is_wp_error( $root ) ) {
+			return $root;
+		}
+		$admitted = self::admitted( $root );
+		if ( true !== $admitted ) {
+			return $admitted;
+		}
+		$area_dir = self::way( $root, array( $area ) );
+		if ( null === $area_dir ) {
+			return self::unsafe();
+		}
+		$read = self::sidecar( $area_dir . '/' . self::group_name( $area, $gid, self::install_id() ) . '.json', $area );
+		if ( 'own' !== $read[0] || $gid !== $read[1]['gid'] ) {
+			return new WP_Error( 'ab_mcp_store_entry', __( 'The entry of the group could not be read whole in the protected store (its sidecar cannot be read, is not there, or is not of its form), so what the group is bound to is not known. Try again; if it keeps failing, ask the host to check the rights of the folder.', 'alphabridge-mcp' ) );
+		}
+		$entry = $read[1];
+		unset( $entry['format'] );
+		return $entry;
 	}
 
 	/**
@@ -1839,7 +1877,10 @@ final class AB_MCP_Protected_Store {
 	 *   running it, else code:store_web;
 	 * - what goes in comes back byte for byte: the manifest of the copy
 	 *   (AB_MCP_Sync_File_Manifest::unit()) is the one of the source, read
-	 *   whole before, else nothing of it stays.
+	 *   whole before, else the call does not take it (ab_mcp_store_tree_changed:
+	 *   it differs, or it was not read back whole, as when the time of the
+	 *   reading runs out) and tries to remove it (delete_path(), whose result
+	 *   is not asked: the message claims no more).
 	 *
 	 * With a source the tree is a copy of it, file by file through
 	 * write_file(), with the modes of the source. Without one only the place
@@ -1979,7 +2020,7 @@ final class AB_MCP_Protected_Store {
 						$out['copied'] = true;
 						return $out;
 					}
-					$made = new WP_Error( 'ab_mcp_store_tree_changed', __( 'The copy in the protected store is not what was read before it (the source changed while it was copied, or a file was not written whole), so nothing of it stays. Check that nothing writes into the source right now, then try again.', 'alphabridge-mcp' ) );
+					$made = new WP_Error( 'ab_mcp_store_tree_changed', __( 'The copy in the protected store could not be confirmed as what was read from the source before it: it differs, or it could not be read back whole. So the call does not take it and tried to remove it; whether all of it is gone was not checked. Check that nothing writes into the source right now; if it keeps happening, ask the host whether the disk of the store is slow or something else writes into its folder. Then put the tree anew. If part of the copy remains, use a new group (for a unit of wp_site_push, start a new run).', 'alphabridge-mcp' ) );
 				}
 				// What this request made of it goes again (delete_path()).
 				self::delete_path( $root, $place );
@@ -2198,7 +2239,7 @@ final class AB_MCP_Protected_Store {
 		}
 		$read = self::read_tree( $place );
 		if ( ! $read['complete'] || null === $read['hash'] || ! hash_equals( (string) $hash, (string) $read['hash'] ) ) {
-			return new WP_Error( 'ab_mcp_store_tree_changed', __( 'The tree in the protected store is not what was put there (its manifest differs, or it could not be read whole), so it is not used. Make it again; if it keeps happening, ask the host whether something else writes into the folder of the store.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_store_tree_changed', __( 'The tree in the protected store could not be confirmed against the hash it was asked with: its manifest differs, or it could not be read whole (as when the time of the call runs out). So it is not given out. Try again; if it keeps failing, ask the host whether something else writes into the folder of the store or whether its disk is slow.', 'alphabridge-mcp' ) );
 		}
 		return array(
 			'path'  => $place,
@@ -4521,9 +4562,18 @@ final class AB_MCP_Protected_Store {
 		return is_string( $name ) && preg_match( '/^[a-z0-9][a-z0-9._-]{0,63}\z/', $name ) && false === strpos( $name, '..' ) && '.tmp' !== substr( $name, -4 );
 	}
 
-	/** @return WP_Error */
+	/**
+	 * The refusal of a group that group() does not give (Z8b branch 5, K4d):
+	 * one reason for all of it, because the store does not tell them apart
+	 * here. The group was never opened here, it was removed, or it is still
+	 * there and its sidecar or its folder is missing or does not read. The
+	 * text claims none of them and names the way for each. It may pass: a
+	 * later call may read the group.
+	 *
+	 * @return WP_Error
+	 */
 	private static function no_group() {
-		return new WP_Error( 'ab_mcp_store_no_group', 'The group is not in the protected store: it was never opened here, or it was removed (packages and reports are kept a day, backups as many days as the filter ab_mcp_staging_backup_days says). Open a new one with open().' );
+		return new WP_Error( 'ab_mcp_store_no_group', __( 'The group could not be read in the protected store, and the store does not tell which of these is why. It is not there: it was never opened here (a group belongs to the area it was opened in), or it was removed. Or it is still there, but its entry (its sidecar) is missing, is no plain file, cannot be read, is not of its form or names another group, or its folder is missing or cannot be reached. Where it is gone, open a new one with open(). Where it should still be there, try again; if it keeps failing, ask the host to check the folder of the protected store and the rights on it.', 'alphabridge-mcp' ) );
 	}
 
 	/**

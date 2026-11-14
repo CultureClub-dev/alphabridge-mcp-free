@@ -654,10 +654,10 @@ return array(
 	),
 	array(
 		'id'      => 'inhalte/engine-verify-by-kind',
-		'clause'  => 'run_verify(): a written term against its target by the writer of its kind',
+		'clause'  => 'written() of run_verify(): a written term against its target by the writer of its kind',
 		'file'    => $en,
-		'search'  => "\t\t\t\t\$w       = self::writer( isset( \$one['parts']['object']['kind'] ) ? (string) \$one['parts']['object']['kind'] : 'post' );",
-		'replace' => "\t\t\t\t\$w       = self::writer( 'post' );",
+		'search'  => "\t\t\$w       = self::writer( isset( \$one['parts']['object']['kind'] ) ? (string) \$one['parts']['object']['kind'] : 'post' );",
+		'replace' => "\t\t\$w       = self::writer( 'post' );",
 		'run'     => $it( 'SyncContentTest', 'testAChangedCategoryAndANewTagGoOverAndTheWayBackPutsTheChangedOneBackAndLeavesTheNewOneAsARest' ),
 		'expect'  => '/testAChangedCategoryAndANewTagGoOverAndTheWayBackPutsTheChangedOneBackAndLeavesTheNewOneAsARest/',
 	),

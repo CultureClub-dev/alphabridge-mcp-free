@@ -170,10 +170,13 @@ jobs:
   integration:
     name: Two WordPress 7.1.3 sites on MariaDB
     runs-on: ubuntu-latest
-    # 35: the integration job took 19:03-22:36 on free#141 (22:36 on c6985c5,
-    # run 42527681521; 19:03 on f563855, run 42531648446), close to 25. Same
-    # work per run, no new jobs, no other runner.
-    timeout-minutes: 35
+    # 55: the integration job took 34:39 on free#155 (d1e0c77, run
+    # 43477041565; suite 33:53 for 1491 tests), against 21:02 on main at
+    # 90ab733 (run 43385812312; suite 20:25 for 1462 tests). Which classes
+    # take the 13 minutes more is not measured yet; the step «Time of each
+    # class of the integration suite» below prints it from the next run on.
+    # Same runner, no new jobs; before 35 (19:03-22:36 on free#141).
+    timeout-minutes: 55
     services:
       mariadb:
         image: mariadb:11.4
@@ -260,6 +263,19 @@ jobs:
       # accounted for, none failed.
       - name: The integration suite ran every test
         run: php tests/integration/bin/run-complete.php "$RUNNER_TEMP/junit-integration.xml" "$RUNNER_TEMP/events-integration.txt" vendor/bin/phpunit -c tests/integration/phpunit.xml.dist
+
+      # Seconds of each test class from the JUnit log, longest first, so a
+      # change of the time limit above follows a measurement. Only reads.
+      - name: Time of each class of the integration suite
+        if: success() || failure()
+        run: >-
+          php -r '$x = simplexml_load_file( getenv( "RUNNER_TEMP" ) . "/junit-integration.xml" );
+          if ( false === $x ) { exit( 1 ); }
+          $rows = array();
+          foreach ( $x->xpath( "//testsuite[@file]" ) as $s ) { $rows[ (string) $s["name"] ] = (float) $s["time"]; }
+          arsort( $rows );
+          printf( "%d classes, %.1f s\n", count( $rows ), array_sum( $rows ) );
+          foreach ( $rows as $n => $t ) { printf( "%8.1f s  %s\n", $t, $n ); }'
 
       # Z8b branch 2 (plan section 13): how long the full hash of trees of
       # plugins, themes and uploads takes, with the number and size of their

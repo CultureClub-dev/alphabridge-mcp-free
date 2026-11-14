@@ -41,6 +41,11 @@ final class StoreClockAndReadersTest extends TestCase {
 		'includes/sync/class-sync-manifest.php',
 		'includes/sync/class-sync-code-stage.php',
 		'includes/sync/class-sync-code-package.php',
+		'includes/sync/class-sync-code-kind.php',
+		'includes/sync/class-sync-code-ops.php',
+		'includes/sync/class-sync-code-plan.php',
+		'includes/sync/class-sync-code-swap.php',
+		'includes/sync/class-sync-push.php',
 	);
 
 	/**
@@ -85,6 +90,15 @@ final class StoreClockAndReadersTest extends TestCase {
 			'AB_MCP_Sync_Code_Stage_Calls::run' => 'the time limit of php -l within one call (LINT_TIMEOUT); an end of it is unavailable, never passed',
 		),
 		'includes/sync/class-sync-code-package.php' => array(),
+		'includes/sync/class-sync-code-kind.php'    => array(),
+		'includes/sync/class-sync-code-ops.php'     => array(),
+		'includes/sync/class-sync-code-plan.php'    => array(),
+		'includes/sync/class-sync-code-swap.php'    => array(),
+		'includes/sync/class-sync-push.php'         => array(),
+		'includes/sync/class-sync-engine.php'       => array(
+			'AB_MCP_Sync_Engine::now'        => 'the budget of work of one call (self::$work: when a call stops writing, checking or verifying and the seconds its answer names to wait), with its seam $clock for tests; measured within one call, never stored or read by a later call',
+			'AB_MCP_Sync_Engine::run_verify' => 'the deadline of the PHP probe of the verify (AB_MCP_Php_Probe::run(), until) from the time left of the same call; never stored',
+		),
 		'includes/sync/class-sync-file-manifest.php' => array(
 			'AB_MCP_Sync_File_Manifest::now' => 'the budget of a reading of a unit within one call (its deadline, due()), which branch 4 uses for the live unit, the unit built and the tree to check; checked: no finite number is unknown, the reading ends as at the end of its time (Codex confirmation 1, B-3)',
 		),
@@ -131,7 +145,14 @@ final class StoreClockAndReadersTest extends TestCase {
 		'AB_MCP_Sync_Backup::group'             => array( array( 'backup.run' ), array( self::IT ) ),
 		'AB_MCP_Sync_Engine::context'           => array( array( 'period.clock' ), array( self::RUN ) ),
 		'AB_MCP_Sync_Engine::restore_part'      => array( array( 'period.clock' ), array( self::RUN ) ),
+		'AB_MCP_Sync_Code_Ops::item'            => array( array( 'plan.code' ), array( self::UNIT ) ),
+		'AB_MCP_Sync_Code_Ops::order'           => array( array( 'unit.version' ), array( self::IT ), 'its one consumer is AB_MCP_Sync_Code_Plan::version_op(), on which unit() locks; the driver goes through it' ),
+		'AB_MCP_Sync_Code_Ops::stage'           => array( array( 'runs.run_id' ), array( 'tests/SyncCodeOpsTest.php::testAStepOfARunNotOfItsFormOrWithFieldsNotReadStagesNothing' ), 'the run of a step is the row the call read under its lock (fresh()); a run_id not of its form refuses before anything is staged, the step stays planned' ),
+		'AB_MCP_Sync_Code_Ops::staged'          => array( array( 'step.stage' ), array( self::IT ) ),
 		'AB_MCP_Sync_Code_Package::index'      => array( array( 'code.index' ), array( self::IT ) ),
+		'AB_MCP_Sync_Code_Plan::of'             => array( array( 'plan.code' ), array( self::UNIT ), 'the plan made is read back in the form of its row before it is returned; a plan not of it makes no run (the same row item() reads at every step)' ),
+		'AB_MCP_Sync_Code_Swap::active_plugins' => array( array( 'site.active_plugins' ), array( self::IT ) ),
+		'AB_MCP_Sync_Code_Swap::theme'          => array( array( 'site.theme' ), array( self::IT ) ),
 		'AB_MCP_Sync_Code_Stage::from_org'      => array( array( 'stage.version' ), array( self::UNIT ) ),
 		'AB_MCP_Sync_Code_Stage::head_refusal'  => array( array( 'stage.head' ), array( self::UNIT ) ),
 		'AB_MCP_Sync_Code_Stage::state_of'      => array( array( 'stage.state' ), array( self::IT ) ),

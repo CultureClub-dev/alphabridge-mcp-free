@@ -64,7 +64,7 @@ e('z1-release-due', 'Z1 whole(): no hash past the time of the call, asked at its
 e('z1-grows', 'Z1 file(): a file read past the size it had when opened is changed at once, not read on to its end (GitHub-Codex on e9db02d)', FM,
   "\t\t\tif ( $read > (int) $before['size'] ) {", "\t\t\tif ( false ) {", 'man', 'testAFileThatGrowsWhileItIsReadIsChangedAtOnce')
 e('z1-due', 'Z1 due(): the one place the clock is asked while a unit is read (Behebung 5)', FM,
-  "\t\tif ( self::now() < (float) $deadline ) {\n\t\t\treturn false;", "\t\tif ( true ) {\n\t\t\treturn false;", 'man', 'testTheTimeOfTheCallIsAskedInTheFinalCheckOfTheUnitToo')
+  "\t\tif ( null !== $now && ( is_int( $deadline ) || ( is_float( $deadline ) && ( is_finite( $deadline ) || INF === $deadline ) ) ) && $now < $deadline ) {\n\t\t\treturn false;", "\t\tif ( true ) {\n\t\t\treturn false;", 'man', 'testTheTimeOfTheCallIsAskedInTheFinalCheckOfTheUnitToo')
 e('z1-still-dirs-kept', 'Z1 folder(): the names of each folder kept for still()', FM,
   "\t\t$acc['dirs'][ $dir ] = $names;", '', 'man', 'testAFolderOrFileAddedRemovedOrReplacedWhileTheUnitIsReadGivesNoHash')
 e('z1-still-stats-kept', 'Z1 file(): the identity of each file hashed kept for still()', FM,
@@ -140,8 +140,8 @@ e('unit-equal', 'unit_item(): without a pair equal only where every part is the 
   "\t\t\t$entry['result'] = array() === $differs ? 'equal' : 'differs';", "\t\t\t$entry['result'] = 'equal';", 'env', 'testAPluginWhoseFilesOrMainFilesRunningDifferDiffersWithThePart')
 e('unit-activation', 'unit_item(): which main files run is a part of a plugin (E2)', DE,
   "\t\t$active = array_map( 'strval', $line['active'] );", "\t\t$active = array();", 'env', 'testAPluginWhoseFilesOrMainFilesRunningDifferDiffersWithThePart')
-e('unit-live-changed', 'E1 unit_item(): the files changed on both sides: code:live_changed, no choice', DE,
-  "\t\tif ( isset( $states['files'] ) && 'conflict' === $states['files'] ) {", "\t\tif ( false ) {", 'env', 'testThePartsOfAUnitWithAPairAreJudgedEachAgainstItsOwnBase')
+e('unit-live-changed', 'E1 unit_way(): the files changed on both sides: code:live_changed, no choice', DE,
+  "\t\tif ( 'conflict' === $files ) {", "\t\tif ( false ) {", 'env', 'testThePartsOfAUnitWithAPairAreJudgedEachAgainstItsOwnBase')
 e('unit-part-base', 'E2 unit_item(): each part against its own base', DE,
   "\n\t\t\t\t$base = AB_MCP_Sync_Pairs::part_bases( $pair, $part );", "\n\t\t\t\t$base = AB_MCP_Sync_Pairs::part_bases( $pair, 'files' );", 'env', 'testThePartsOfAUnitWithAPairAreJudgedEachAgainstItsOwnBase')
 e('unit-paths', 'unit_item(): the paths where the files differ', DE,

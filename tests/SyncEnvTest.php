@@ -1017,8 +1017,9 @@ final class SyncEnvTest extends TestCase {
 
 	public function testAPluginWhoseFilesOrMainFilesRunningDifferDiffersWithThePart(): void {
 		$e = self::one( self::plugin( '2.0' ), self::plugin( '2.0', true, 'b' ) );
-		self::assertSame( array( 'differs', array( 'files' ), 'locked' ), array( $e['result'], $e['differs'], $e['action'] ) );
-		self::assertSame( array( 'env:plugin', 'Z8b' ), self::lock_of( $e ) );
+		self::assertSame( array( 'differs', array( 'files' ), 'none' ), array( $e['result'], $e['differs'], $e['action'] ) );
+		self::assertArrayNotHasKey( 'locks', $e, 'Z8b branch 5: without a pair nothing says which side changed; no lock of a stage, the way is the pair (its words).' );
+		self::assertStringContainsString( 'until a person confirms a common base for its pair', $e['words'] );
 		$e = self::one( self::plugin( '2.0', true ), self::plugin( '2.0', false ) );
 		self::assertSame( array( 'differs', array( 'activation' ) ), array( $e['result'], $e['differs'] ), 'Only which main files run (F7).' );
 		self::assertStringContainsString( 'It differs in which of its main files run', $e['words'] );
@@ -1028,8 +1029,13 @@ final class SyncEnvTest extends TestCase {
 
 	public function testAUnitOnOneSideOnly(): void {
 		$e = self::one( self::plugin( '2.0' ), null );
-		self::assertSame( array( 'only_staging', 'locked', null ), array( $e['result'], $e['action'], $e['live'] ) );
-		self::assertSame( array( 'env:plugin', 'Z8b' ), self::lock_of( $e ) );
+		self::assertSame( array( 'only_staging', 'create', null ), array( $e['result'], $e['action'], $e['live'] ), 'Z8b branch 5: a plugin only the staging site has is made here by the swap of the code (F5).' );
+		self::assertArrayNotHasKey( 'locks', $e );
+		$e = self::one( self::unit( 'theme', 't' ), null );
+		self::assertSame( array( 'only_staging', 'create' ), array( $e['result'], $e['action'] ), 'A theme as well.' );
+		$e = self::one( self::file_unit( 'mu_plugin', 'a.php' ), null );
+		self::assertSame( array( 'only_staging', 'locked' ), array( $e['result'], $e['action'] ), 'No other kind of unit is made in this version.' );
+		self::assertSame( array( 'env:mu_plugin', 'Z8b' ), self::lock_of( $e ) );
 		$e = self::one( null, self::plugin( '2.0' ) );
 		self::assertSame( array( 'only_live', 'keep', null ), array( $e['result'], $e['action'], $e['staging'] ) );
 		self::assertArrayNotHasKey( 'locks', $e );
@@ -1224,7 +1230,7 @@ final class SyncEnvTest extends TestCase {
 			array_merge( $lines( self::plugin( '2.0', true, 'b' ), $l_files ), array( self::whole() ) )
 		);
 		$e = $out['entries'][0];
-		self::assertSame( array( 'differs', 'locked' ), array( $e['result'], $e['action'] ) );
+		self::assertSame( array( 'differs', 'none' ), array( $e['result'], $e['action'] ) );
 		self::assertSame( array( 250, 101, 1, 3 ), array( $e['paths']['only_staging_count'], $e['paths']['only_live_count'], $e['paths']['differs_count'], $e['paths']['more'] ) );
 		self::assertSame( array( 100, 100, 1 ), array( count( $e['paths']['only_staging'] ), count( $e['paths']['only_live'] ), count( $e['paths']['differs'] ) ), 'A hundred a list in the entry.' );
 		self::assertStringContainsString( 'in the entries right after this one', $e['words'] );
@@ -1424,7 +1430,8 @@ final class SyncEnvTest extends TestCase {
 		$e = $judge( self::plugin( '2.0' ), self::plugin( '2.0' ) );
 		self::assertSame( array( 'equal', array( 'files' => 'equal', 'activation' => 'equal' ), 7 ), array( $e['result'], $e['parts'], $e['pair']['id'] ) );
 		$e = $judge( self::plugin( '2.1', true, 'b' ), self::plugin( '2.0' ) );
-		self::assertSame( array( 'changed_on_staging', 'locked', array( 'env:plugin', 'Z8b' ) ), array( $e['result'], $e['action'], self::lock_of( $e ) ) );
+		self::assertSame( array( 'changed_on_staging', 'take_over' ), array( $e['result'], $e['action'] ), 'Z8b branch 5: the files changed on staging and unchanged here are what the swap takes over.' );
+		self::assertArrayNotHasKey( 'locks', $e );
 		$e = $judge( self::plugin( '2.0' ), self::plugin( '2.0', true, 'b' ) );
 		self::assertSame( array( 'changed_live', 'keep' ), array( $e['result'], $e['action'] ) );
 		$e = $judge( self::plugin( '2.1', true, 'b' ), self::plugin( '2.0', true, 'c' ) );
@@ -1434,7 +1441,30 @@ final class SyncEnvTest extends TestCase {
 		self::assertArrayNotHasKey( 'choices', $e );
 		$e = $judge( self::plugin( '2.1', true, 'b' ), self::plugin( '2.0', false ) );
 		self::assertSame( array( 'files' => 'changed_on_staging', 'activation' => 'changed_live' ), $e['parts'], 'Each part against its own base (E2, F51).' );
-		self::assertSame( array( 'code:live_changed' ), array_values( array_diff( array( 'code:live_changed' ), array_column( $e['locks'], 'key' ) ) ), 'No conflict of the files: no code:live_changed.' );
+		self::assertSame( array( 'changed_on_staging', 'take_over' ), array( $e['result'], $e['action'] ), 'The files go over; which main files run stays as this site has it.' );
+		self::assertArrayNotHasKey( 'locks', $e, 'No conflict of the files: no code:live_changed, and no lock of the kind.' );
+		// Only which main files run changed on staging: no step of this
+		// version takes that over, it waits with the lock of its kind.
+		$e = $judge( self::plugin( '2.0', false ), self::plugin( '2.0' ) );
+		self::assertSame( array( 'files' => 'equal', 'activation' => 'changed_on_staging' ), $e['parts'] );
+		self::assertSame( array( 'changed_on_staging', 'locked', array( 'env:plugin', 'Z8b' ) ), array( $e['result'], $e['action'], self::lock_of( $e ) ) );
+		// The files changed on staging, the main files running in conflict:
+		// nothing of the unit is taken over while a part of it is in conflict.
+		$conflict                                     = $pair;
+		$conflict['base_extra']['parts']['activation'] = array( 'live' => str_repeat( 'e', 64 ), 'staging' => str_repeat( 'f', 64 ) );
+		$e = AB_MCP_Sync_Env::compare( array( self::plugin( '2.1', true, 'b' ), self::whole() ), array( self::plugin( '2.0', false ), self::whole() ), array( $conflict ) )['entries'][0];
+		self::assertSame( array( 'files' => 'changed_on_staging', 'activation' => 'conflict' ), $e['parts'] );
+		self::assertSame( array( 'conflict', 'locked', array( 'env:plugin', 'Z8b' ) ), array( $e['result'], $e['action'], self::lock_of( $e ) ) );
+		// A unit of another kind whose files changed on staging: no step of
+		// this version writes it, it waits with the lock of its kind.
+		$mu = array( 'id' => 8, 'kind' => 'mu_plugin', 'staging_ref' => 'a.php', 'live_ref' => 'a.php', 'base_live' => str_repeat( 'b', 64 ), 'base_staging' => str_repeat( 'b', 64 ), 'base_extra' => null ) + $pair;
+		$e  = AB_MCP_Sync_Env::compare( array( self::file_unit( 'mu_plugin', 'a.php', 'c' ), self::whole() ), array( self::file_unit( 'mu_plugin', 'a.php' ), self::whole() ), array( $mu ) )['entries'][0];
+		self::assertSame( array( 'files' => 'changed_on_staging' ), $e['parts'] );
+		self::assertSame( array( 'changed_on_staging', 'locked', array( 'env:mu_plugin', 'Z8b' ) ), array( $e['result'], $e['action'], self::lock_of( $e ) ) );
+		// A theme has its files only: changed on staging, taken over.
+		$theme = array( 'id' => 9, 'kind' => 'theme', 'staging_ref' => 't', 'live_ref' => 't', 'base_extra' => null ) + $pair;
+		$e     = AB_MCP_Sync_Env::compare( array( self::unit( 'theme', 't', array( 'hash' => str_repeat( 'b', 64 ) ) ), self::whole() ), array( self::unit( 'theme', 't' ), self::whole() ), array( $theme ) )['entries'][0];
+		self::assertSame( array( 'changed_on_staging', 'take_over' ), array( $e['result'], $e['action'] ) );
 		$e = $judge( self::plugin( '2.0', false ), self::plugin( '2.0', false ) );
 		self::assertSame( array( 'activation' => 'changed_alike' ), array_intersect_key( $e['parts'], array( 'activation' => 1 ) ) );
 		$unclear = $judge( self::plugin( '2.0' ), self::plugin( '2.0' ) );
@@ -1662,6 +1692,15 @@ final class SyncEnvTest extends TestCase {
 			self::assertSame( $want[ $key ], array( $lock['key'], $lock['art'], $lock['stage'] ), $key );
 			self::assertNotSame( '', $lock['reason'] );
 			$out = AB_MCP_Sync_Env::compare( array( $line, $tables[0] ), $tables );
+			if ( in_array( $key, \AB_MCP_Sync_Decision::SWAPPED, true ) ) {
+				// Z8b branch 5: a plugin or theme only on staging is made here
+				// by the swap of the code; the lock of the kind stays for what
+				// of it this version does not take over (testThePartsOfAUnit…).
+				self::assertSame( array( 'only_staging', 'create' ), array( $out['entries'][0]['result'], $out['entries'][0]['action'] ), $key );
+				self::assertArrayNotHasKey( 'locks', $out['entries'][0], $key );
+				self::assertSame( array(), $out['blocked'], $key );
+				continue;
+			}
 			self::assertSame( array( 'only_staging', 'locked' ), array( $out['entries'][0]['result'], $out['entries'][0]['action'] ), $key );
 			self::assertSame( array( array( 'key' => $lock['key'], 'stage' => $lock['stage'], 'reason' => $lock['reason'] ) ), $out['entries'][0]['locks'], $key );
 			self::assertSame( array( array( 'key' => $lock['key'], 'stage' => $lock['stage'], 'reason' => $lock['reason'], 'entries' => 1 ) ), $out['blocked'], $key . ': blocked, with how many entries.' );
@@ -1707,7 +1746,7 @@ final class SyncEnvTest extends TestCase {
 		);
 		$out = AB_MCP_Sync_Env::compare( $lines, array( $tables ) );
 		self::assertSame( array( 'core:wordpress', 'plugin:shop', 'table:A', 'table:b' ), array_map( static fn( $e ) => $e['subtype'] . ':' . $e['ref'], $out['entries'] ), 'No page, no list of tables.' );
-		self::assertSame( array( 'entries' => 4, 'results' => array( 'only_staging' => 4 ), 'actions' => array( 'host' => 1, 'locked' => 3 ) ), $out['counts'] );
+		self::assertSame( array( 'entries' => 4, 'results' => array( 'only_staging' => 4 ), 'actions' => array( 'create' => 1, 'host' => 1, 'locked' => 2 ) ), $out['counts'] );
 	}
 
 	public function testTheLoaderAndTheDropInsAreThoseOfWordPressAndThisPlugin(): void {
@@ -1764,5 +1803,25 @@ final class SyncEnvTest extends TestCase {
 		self::assertStringContainsString( 'purpose=env', $e['why'] );
 		self::assertStringContainsString( 'environment', $e['why'] );
 		self::assertSame( array(), $out['blocked'] );
+	}
+
+	public function testOnlyAUnitOfAKindTheSwapWritesIsTakenOverEvenWhereItsKindHasNoLock(): void {
+		// unit_way(): the takeover is the swap of the code, which writes a
+		// plugin or a theme only (SWAPPED). A unit of another kind is never
+		// taken over, also where no lock of its kind would hold it (every
+		// kind of UNIT_KINDS has one today; the clause holds without it).
+		$way   = new \ReflectionMethod( \AB_MCP_Sync_Decision::class, 'unit_way' );
+		$entry = array(
+			'kind'    => 'environment',
+			'result'  => 'changed_on_staging',
+			'action'  => 'none',
+		);
+		foreach ( array( 'mu_plugin', 'language', 'font', 'upload', 'theme_choice', 'dropin' ) as $kind ) {
+			list( $got, $locks ) = $way->invoke( null, array( 'subtype' => $kind ) + $entry, $kind, array( 'files' => 'changed_on_staging' ), null );
+			self::assertNotSame( 'take_over', $got['action'], $kind );
+			self::assertSame( array(), $locks, $kind );
+		}
+		list( $got ) = $way->invoke( null, array( 'subtype' => 'plugin' ) + $entry, 'plugin', array( 'files' => 'changed_on_staging' ), null );
+		self::assertSame( 'take_over', $got['action'], 'A plugin is taken over.' );
 	}
 }

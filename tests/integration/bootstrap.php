@@ -28,6 +28,10 @@
 global $wpdb, $current_site, $current_blog, $wp_rewrite, $shortcode_tags, $wp, $phpmailer, $wp_theme_directories, $table_prefix;
 
 require __DIR__ . '/support/class-it-sites.php';
+// Z8b branch 5, 1a-4b: the extension of phpunit.xml.dist that restores the
+// time limit of the command line after each test (WordPress sets 300 s when
+// it installs a plugin). PHPUnit loads it after this file.
+require_once __DIR__ . '/support/class-it-time-limit.php';
 
 try {
 	AB_MCP_IT_Sites::state();

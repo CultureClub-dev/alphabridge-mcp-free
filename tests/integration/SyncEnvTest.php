@@ -353,7 +353,7 @@ final class SyncEnvTest extends TestCase {
 		// lock where nothing differs.
 		self::assertSame( array( 'equal', 'none', null ), self::said( $env['plugin:ab-it-env-same'] ), 'The same files: equal, not locked.' );
 		self::assertArrayNotHasKey( 'locks', $env['plugin:ab-it-env-same'] );
-		self::assertSame( array( 'differs', 'locked', 'Z8b' ), self::said( $env['plugin:ab-it-env-version'] ) );
+		self::assertSame( array( 'differs', 'none', null ), self::said( $env['plugin:ab-it-env-version'] ), 'Z8b branch 5: a plugin that differs without a pair is locked by no stage; the way is its pair.' );
 		self::assertSame( array( 'files' ), $env['plugin:ab-it-env-version']['differs'] );
 		self::assertSame( array( 'ab-it-env-version.php' ), $env['plugin:ab-it-env-version']['paths']['differs'], 'The path that differs.' );
 		self::assertSame( array( '2.0', '1.0' ), array( $env['plugin:ab-it-env-version']['staging']['version'], $env['plugin:ab-it-env-version']['live']['version'] ) );
@@ -418,7 +418,29 @@ final class SyncEnvTest extends TestCase {
 			self::assertArrayNotHasKey( 'held', $entry, $key . ': an ordinary name, shown as it is.' );
 		}
 		self::assertSame( count( $env ), $answer['environment']['counts']['entries'] );
-		self::assertSame( 2, count( array_filter( $answer['blocked'], static fn( $b ) => in_array( $b['key'], array( 'env:plugin', 'env:table' ), true ) ) ), 'The locks of the environment with the others.' );
+		// The locks of the environment with the others: each lock an entry of
+		// the environment carries is in the answer once, with the count of its
+		// entries. Z8b branch 5 (1a-4c): a plugin that differs without a pair
+		// is locked by no stage (above), so env:plugin is no lock of this
+		// case any more, where it was one of the two counted here before;
+		// env:table still is.
+		$carried = array();
+		foreach ( $env as $key => $entry ) {
+			if ( ! isset( $entry['locks'] ) ) {
+				continue;
+			}
+			foreach ( $entry['locks'] as $lock ) {
+				$carried[ $lock['key'] ][] = $key;
+			}
+		}
+		self::assertArrayHasKey( 'env:table', $carried, 'The tables of this case are locked.' );
+		self::assertArrayNotHasKey( 'env:plugin', $carried, 'Z8b branch 5: no plugin of this case is locked.' );
+		foreach ( $carried as $lock => $keys ) {
+			$in = array_values( array_filter( $answer['blocked'], static fn( $b ) => $lock === $b['key'] ) );
+			self::assertCount( 1, $in, "$lock: with the locks of the objects, once." );
+			self::assertSame( count( $keys ), $in[0]['entries'], "$lock: with the count of its entries." );
+		}
+		self::assertSame( array(), array_values( array_filter( $answer['blocked'], static fn( $b ) => 'env:plugin' === $b['key'] ) ), 'Z8b branch 5: no lock env:plugin in the answer.' );
 		self::assertSame( range( 1, $answer['total'] ), array_column( $answer['all'], 'n' ), 'The environment numbered on after the objects.' );
 		self::assertStringNotContainsString( '"sha256"', (string) json_encode( $answer ), 'No hash in an answer.' );
 		self::assertStringNotContainsString( '"schema"', (string) json_encode( $answer ) );
