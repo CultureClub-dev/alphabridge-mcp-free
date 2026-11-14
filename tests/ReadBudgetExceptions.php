@@ -14,13 +14,17 @@
  * at a halt return (compared token by token, part 2.3a), and the reason
  * from its doc comment (E19). TRANSLATIONS: the functions that answer a
  * halt held in a variable with a translation (the function named, called
- * with the code of the halt first and its text), each with its place
- * (part 2.3a, Codex A1). COMPARE: what a comparison of a sort may
- * call (N2). SORTS: the functions of PHP that sort with a comparison.
- * FILTERS: the functions that call code not of the plugin by a hook.
- * FRAME_OUT: the calls of the frame of R12 that the reading does not follow
- * (R6), each with the reason it lies outside the scope (section 2 of the
- * order, «weiter offen»).
+ * with the code of the halt first and its text), each with the number of
+ * its places and their reason (part 2.3a, Codex A1; the number part 2.3b,
+ * Codex A5). COMPARE: what a comparison of a sort may call (N2). SORTS: the
+ * functions of PHP that sort with a comparison. FILTERS: the functions that
+ * call code not of the plugin by a hook. FRAME_OUT: the calls of the frame
+ * of R12 that the reading does not follow (R6), each edge with the number of
+ * its call sites (part 2.3b, Codex A5) and the reason it lies outside the
+ * scope (section 2 of the order, «weiter offen»).
+ *
+ * Each list is closed and counted (part 2.3b, Codex A5): no key twice in
+ * this file, no entry twice in a list, each entry used as often as it says.
  *
  * OPEN: each violation of the rules at the head after part 1a (part 2.2),
  * by function in the order of its source: 'Rn what', the numbers of
@@ -79,32 +83,32 @@ return array(
 		'AB_MCP_Sync_File_Manifest::text'    => array( "''", 'class-sync-file-manifest.php:379: \'\' where the deadline is over; the caller passes the stop on.' ),
 	),
 	'TRANSLATIONS' => array(
-		'AB_MCP_Sync_Code_Swap::signed_stage' => array( 'AB_MCP_Sync_Code_Swap::refusal', 'Part 2.3a (Codex A1): class-sync-code-swap.php:943-946: the halt of signed() (or tree(), ready()) translated by refusal() with its code and its text first (the order, section 4: translations pass the halt on).' ),
+		'AB_MCP_Sync_Code_Swap::signed_stage' => array( 'AB_MCP_Sync_Code_Swap::refusal', 1, 'Part 2.3a (Codex A1): class-sync-code-swap.php:943-946: the halt of signed() (or tree(), ready()) translated by refusal() with its code and its text first (the order, section 4: translations pass the halt on).' ),
 	),
 	'COMPARE'   => array( 'strcmp' ),
 	'SORTS'     => array( 'usort', 'uasort', 'uksort' ),
 	'FILTERS'   => array( 'apply_filters', 'apply_filters_ref_array', 'do_action' ),
 	'FRAME_OUT' => array(
-		'AB_MCP_Sync_Code_Swap::prepare|AB_MCP_Sync_Code_Stage::target'             => 'The frame before the deadline is formed in checked() (R12 Z. 36–38: no limit on all work of prepare()).',
-		'AB_MCP_Sync_Code_Swap::prepare|AB_MCP_Sync_Code_Swap::take'                => 'The frame before the deadline is formed in checked() (R12 Z. 36–38).',
-		'AB_MCP_Sync_Code_Swap::prepare|AB_MCP_Sync_Code_Swap::release'             => 'The frame before the deadline is formed in checked() (R12 Z. 36–38).',
-		'AB_MCP_Sync_Code_Swap::prepare|AB_MCP_Sync_Code_Swap::with_kept'           => 'The frame before the deadline is formed in checked() (R12 Z. 36–38).',
-		'AB_MCP_Sync_Code_Swap::under_locks|AB_MCP_Sync_Code_Ops::released'         => 'The frame before the deadline is formed in checked() (R12 Z. 36–38).',
-		'AB_MCP_Sync_Code_Swap::under_locks|AB_MCP_Sync_Code_Swap::calls'           => 'The frame before the deadline is formed in checked(): the seam of the probe (R12 Z. 36–38).',
-		'AB_MCP_Sync_Code_Swap::under_locks|AB_MCP_Sync_Code_Swap_Calls::probe_enabled' => 'The frame before the deadline is formed in checked(): the probe (R12 Z. 36–38).',
-		'AB_MCP_Sync_Code_Swap::under_locks|AB_MCP_Sync_Code_Swap::invalidate'      => 'The frame before the deadline is formed in checked() (R12 Z. 36–38).',
-		'AB_MCP_Sync_Code_Swap::under_locks|AB_MCP_Sync_Code_Swap::php_file'        => 'The frame before the deadline is formed in checked() (R12 Z. 36–38).',
-		'AB_MCP_Sync_Code_Swap::under_locks|AB_MCP_Sync_Code_Swap::probe_before'    => 'The frame before the deadline is formed in checked() (R12 Z. 36–38).',
-		'AB_MCP_Sync_Code_Swap::under_locks|AB_MCP_Sync_Code_Swap::time_left'       => 'The frame before the deadline is formed in checked() (R12 Z. 36–38).',
-		'AB_MCP_Sync_Code_Swap::checked|AB_MCP_Sync_Code_Swap::unchanged'           => 'The live reading with its own deadline min( until - keep, now + UNIT_BUDGET ) (the order, section 2, «weiter offen»; class-sync-code-swap.php:853–874).',
-		'AB_MCP_Sync_Code_Swap::checked|AB_MCP_Sync_Code_Swap::calls'               => 'The seam of the self-check and of the core lock (the order, section 2, «weiter offen»).',
-		'AB_MCP_Sync_Code_Swap::checked|AB_MCP_Sync_Code_Swap_Calls::own'           => 'The self-check (the order, section 2, «weiter offen»; follow-up V6).',
-		'AB_MCP_Sync_Code_Swap::checked|AB_MCP_Sync_Code_Swap::lock_held'           => 'The readings of the lock and the note (the order, section 2, «weiter offen»).',
-		'AB_MCP_Sync_Code_Swap::checked|AB_MCP_Sync_Code_Swap_Calls::core_held'     => 'The readings of the lock and the note (the order, section 2, «weiter offen»).',
-		'AB_MCP_Sync_Code_Swap::checked|AB_MCP_Sync_Code_Swap::lock_unknown'        => 'The readings of the lock and the note: the answer where the lock is unknown (the order, section 2, «weiter offen»).',
-		'AB_MCP_Sync_Code_Swap::checked|AB_MCP_Sync_Code_Swap::device'              => 'The rest of the work of checked() after not_down() (the order, section 2, «weiter offen»; class-sync-code-swap.php:685–687).',
-		'AB_MCP_Sync_Code_Swap::checked|AB_MCP_Sync_Code_Swap::time_left'           => 'The final check of the swap (class-sync-code-swap.php:699; R12, unchanged by the order).',
-		'AB_MCP_Sync_Code_Swap::read_deadline|AB_MCP_Protected_Store::proof'        => 'BOUNDARY: proof() decides the store before the deadline is formed (ROH 1a; the order, section 3.2, G1).',
+		'AB_MCP_Sync_Code_Swap::prepare|AB_MCP_Sync_Code_Stage::target'             => array( 1, 'The frame before the deadline is formed in checked() (R12 Z. 36–38: no limit on all work of prepare()).' ),
+		'AB_MCP_Sync_Code_Swap::prepare|AB_MCP_Sync_Code_Swap::take'                => array( 1, 'The frame before the deadline is formed in checked() (R12 Z. 36–38).' ),
+		'AB_MCP_Sync_Code_Swap::prepare|AB_MCP_Sync_Code_Swap::release'             => array( 1, 'The frame before the deadline is formed in checked() (R12 Z. 36–38).' ),
+		'AB_MCP_Sync_Code_Swap::prepare|AB_MCP_Sync_Code_Swap::with_kept'           => array( 1, 'The frame before the deadline is formed in checked() (R12 Z. 36–38).' ),
+		'AB_MCP_Sync_Code_Swap::under_locks|AB_MCP_Sync_Code_Ops::released'         => array( 1, 'The frame before the deadline is formed in checked() (R12 Z. 36–38).' ),
+		'AB_MCP_Sync_Code_Swap::under_locks|AB_MCP_Sync_Code_Swap::calls'           => array( 1, 'The frame before the deadline is formed in checked(): the seam of the probe (R12 Z. 36–38).' ),
+		'AB_MCP_Sync_Code_Swap::under_locks|AB_MCP_Sync_Code_Swap_Calls::probe_enabled' => array( 1, 'The frame before the deadline is formed in checked(): the probe (R12 Z. 36–38).' ),
+		'AB_MCP_Sync_Code_Swap::under_locks|AB_MCP_Sync_Code_Swap::invalidate'      => array( 1, 'The frame before the deadline is formed in checked() (R12 Z. 36–38).' ),
+		'AB_MCP_Sync_Code_Swap::under_locks|AB_MCP_Sync_Code_Swap::php_file'        => array( 1, 'The frame before the deadline is formed in checked() (R12 Z. 36–38).' ),
+		'AB_MCP_Sync_Code_Swap::under_locks|AB_MCP_Sync_Code_Swap::probe_before'    => array( 1, 'The frame before the deadline is formed in checked() (R12 Z. 36–38).' ),
+		'AB_MCP_Sync_Code_Swap::under_locks|AB_MCP_Sync_Code_Swap::time_left'       => array( 2, 'The frame before the deadline is formed in checked() (R12 Z. 36–38).' ),
+		'AB_MCP_Sync_Code_Swap::checked|AB_MCP_Sync_Code_Swap::unchanged'           => array( 1, 'The live reading with its own deadline min( until - keep, now + UNIT_BUDGET ) (the order, section 2, «weiter offen»; class-sync-code-swap.php:853–874).' ),
+		'AB_MCP_Sync_Code_Swap::checked|AB_MCP_Sync_Code_Swap::calls'               => array( 2, 'The seam of the self-check and of the core lock (the order, section 2, «weiter offen»).' ),
+		'AB_MCP_Sync_Code_Swap::checked|AB_MCP_Sync_Code_Swap_Calls::own'           => array( 1, 'The self-check (the order, section 2, «weiter offen»; follow-up V6).' ),
+		'AB_MCP_Sync_Code_Swap::checked|AB_MCP_Sync_Code_Swap::lock_held'           => array( 1, 'The readings of the lock and the note (the order, section 2, «weiter offen»).' ),
+		'AB_MCP_Sync_Code_Swap::checked|AB_MCP_Sync_Code_Swap_Calls::core_held'     => array( 1, 'The readings of the lock and the note (the order, section 2, «weiter offen»).' ),
+		'AB_MCP_Sync_Code_Swap::checked|AB_MCP_Sync_Code_Swap::lock_unknown'        => array( 1, 'The readings of the lock and the note: the answer where the lock is unknown (the order, section 2, «weiter offen»).' ),
+		'AB_MCP_Sync_Code_Swap::checked|AB_MCP_Sync_Code_Swap::device'              => array( 3, 'The rest of the work of checked() after not_down() (the order, section 2, «weiter offen»; class-sync-code-swap.php:685–687).' ),
+		'AB_MCP_Sync_Code_Swap::checked|AB_MCP_Sync_Code_Swap::time_left'           => array( 1, 'The final check of the swap (class-sync-code-swap.php:699; R12, unchanged by the order).' ),
+		'AB_MCP_Sync_Code_Swap::read_deadline|AB_MCP_Protected_Store::proof'        => array( 1, 'BOUNDARY: proof() decides the store before the deadline is formed (ROH 1a; the order, section 3.2, G1).' ),
 	),
 	'OPEN'      => array(
 		'AB_MCP_Guidance::settings_url' => array(

@@ -33,6 +33,16 @@
  * (guard_pair()); and an argument unpacked at or before the deadline is
  * UNSUPPORTED, a named one placed by its name (argument()).
  *
+ * Part 2.3b (Codex, round 1 over the guard, A5, A6 and B1, and two of the
+ * same kind as A2 and A4): the closed lists are compared counted (counted(),
+ * named_diff(), duplicate_keys(), FRAME_OUT and TRANSLATIONS with their
+ * numbers); a halt after the return of a recursion is asked with the right
+ * polarity (halt_asked_after(), asks_after()); a call whose arguments the
+ * model does not hold (a callback, call_user_func_array(), new $x) does not
+ * show its deadline left out, call_user_func() gives the arguments after its
+ * first (argument()); and a helper of a sort has its callback (R5, the
+ * reader).
+ *
  * @package AlphaBridge_MCP
  */
 
@@ -170,18 +180,24 @@ final class ReadBudgetRules {
 			$have[]      = $x;
 			$where[ $x ] = ' (' . $v['file'] . ':' . $v['line'] . ')';
 		}
-		$out = array();
-		foreach ( array_diff( $want, $have ) as $x ) {
+		$out                         = array();
+		list( $only_want, $only_have ) = self::counted( $want, $have );
+		foreach ( $only_want as $x ) {
 			$out[] = 'only in the list: ' . $x;
 		}
-		foreach ( array_diff( $have, $want ) as $x ) {
+		foreach ( $only_have as $x ) {
 			$out[] = 'only in the code:  ' . $x . $where[ $x ];
 		}
 		return $out;
 	}
 
 	/**
-	 * What only the list NAMED or only the code holds of the named boundaries.
+	 * What only the list NAMED or only the code holds of the named boundaries:
+	 * the sorts and filters by function and place in its order ('Class::name
+	 * #n usort'), counted (Codex, round 1 over the guard, A5: an entry twice
+	 * in the list or a second call in the code is a difference), and the counts
+	 * of the chain with exactly the keys functions, steps, loops, recursions
+	 * and why.
 	 *
 	 * @param array<string,mixed> $named The list NAMED.
 	 * @param array<string,mixed> $have  What check() returned as named.
@@ -192,27 +208,117 @@ final class ReadBudgetRules {
 		foreach ( array( 'SORT', 'FILTER' ) as $kind ) {
 			$want = array();
 			foreach ( $named[ $kind ] as $fn => $entries ) {
-				foreach ( $entries as $entry ) {
-					$want[] = $fn . ' ' . $entry[0];
+				foreach ( $entries as $n => $entry ) {
+					$want[] = $fn . ' #' . ( $n + 1 ) . ' ' . $entry[0];
 				}
 			}
 			$is = array();
 			foreach ( $have[ $kind ] as $fn => $entries ) {
-				foreach ( $entries as $entry ) {
-					$is[] = $fn . ' ' . $entry;
+				foreach ( $entries as $n => $entry ) {
+					$is[] = $fn . ' #' . ( $n + 1 ) . ' ' . $entry;
 				}
 			}
-			foreach ( array_diff( $want, $is ) as $x ) {
+			list( $only_want, $only_have ) = self::counted( $want, $is );
+			foreach ( $only_want as $x ) {
 				$out[] = $kind . ' only in the list: ' . $x;
 			}
-			foreach ( array_diff( $is, $want ) as $x ) {
+			foreach ( $only_have as $x ) {
 				$out[] = $kind . ' only in the code:  ' . $x;
 			}
 		}
+		$keys = array_keys( $named['CHAIN'] );
+		sort( $keys );
+		if ( array( 'functions', 'loops', 'recursions', 'steps', 'why' ) !== $keys ) {
+			$out[] = 'CHAIN: the keys of the list are ' . implode( ', ', $keys ) . ', not functions, loops, recursions, steps, why';
+		}
 		foreach ( $have['CHAIN'] as $count => $n ) {
-			if ( $named['CHAIN'][ $count ] !== $n ) {
-				$out[] = sprintf( 'CHAIN %s: the list %d, the code %d', $count, $named['CHAIN'][ $count ], $n );
+			if ( ! array_key_exists( $count, $named['CHAIN'] ) || $named['CHAIN'][ $count ] !== $n ) {
+				$listed = 'none';
+				if ( array_key_exists( $count, $named['CHAIN'] ) ) {
+					$listed = var_export( $named['CHAIN'][ $count ], true );
+				}
+				$out[] = sprintf( 'CHAIN %s: the list %s, the code %d', $count, $listed, $n );
 			}
+		}
+		return $out;
+	}
+
+	/**
+	 * What only $want or only $have holds, each as often as it is there more
+	 * often (a multiset: Codex, round 1 over the guard, A5).
+	 *
+	 * @param list<string> $want Entries.
+	 * @param list<string> $have Entries.
+	 * @return array{0:list<string>,1:list<string>}
+	 */
+	public static function counted( array $want, array $have ): array {
+		$count = array();
+		$text  = array();
+		foreach ( array( 1 => $want, -1 => $have ) as $sign => $list ) {
+			foreach ( $list as $x ) {
+				if ( ! isset( $count[ $x ] ) ) {
+					$count[ $x ] = 0;
+					$text[ $x ]  = $x;
+				}
+				$count[ $x ] += $sign;
+			}
+		}
+		$out = array( array(), array() );
+		foreach ( $count as $x => $c ) {
+			for ( $j = 0; $j < abs( $c ); $j++ ) {
+				$side           = $c > 0 ? 0 : 1;
+				$out[ $side ][] = $text[ $x ];
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * The keys that an array of a PHP source (the lists of the guard) holds
+	 * twice: PHP keeps only the last of them, so the list would say more than
+	 * it holds (Codex, round 1 over the guard, A5). A key is a string or a
+	 * number at the start of an element, before =>.
+	 *
+	 * @return list<string>
+	 */
+	public static function duplicate_keys( string $php ): array {
+		$toks  = \PhpToken::tokenize( $php );
+		$out   = array();
+		$stack = array();
+		$n     = count( $toks );
+		for ( $i = 0; $i < $n; $i++ ) {
+			$t = $toks[ $i ];
+			if ( $t->isIgnorable() ) {
+				continue;
+			}
+			if ( '(' === $t->text || '[' === $t->text ) {
+				$p     = self::prev( $toks, $i );
+				$index = null !== $p && ( T_VARIABLE === $toks[ $p ]->id || in_array( $toks[ $p ]->text, array( ']', ')', '}' ), true ) );
+				$is    = ( '[' === $t->text && ! $index ) || ( null !== $p && T_ARRAY === $toks[ $p ]->id );
+				$stack[] = array(
+					'array' => $is,
+					'keys'  => array(),
+				);
+				continue;
+			}
+			if ( ')' === $t->text || ']' === $t->text ) {
+				array_pop( $stack );
+				continue;
+			}
+			$top = count( $stack ) - 1;
+			if ( $top < 0 || ! $stack[ $top ]['array'] || ! in_array( $t->id, array( T_CONSTANT_ENCAPSED_STRING, T_LNUMBER ), true ) ) {
+				continue;
+			}
+			$nx = self::next( $toks, $i );
+			$pv = self::prev( $toks, $i );
+			if ( null === $nx || T_DOUBLE_ARROW !== $toks[ $nx ]->id || null === $pv || ! in_array( $toks[ $pv ]->text, array( '(', '[', ',' ), true ) ) {
+				continue;
+			}
+			if ( isset( $stack[ $top ]['keys'][ $t->text ] ) ) {
+				$out[] = sprintf( 'line %d: the key %s again (first at line %d)', $t->line, $t->text, $stack[ $top ]['keys'][ $t->text ] );
+				continue;
+			}
+			$stack[ $top ]['keys'][ $t->text ] = $t->line;
 		}
 		return $out;
 	}
@@ -477,10 +583,16 @@ final class ReadBudgetRules {
 	}
 
 	/**
-	 * Whether a halt query comes before the next work after a call returns:
-	 * the rest of its statement, then the statements after it in its block
-	 * and in the blocks around, up to a return, throw, break or continue, the
-	 * end of a closure or of the function.
+	 * Whether a halt is asked as prescribed before the next work after a call
+	 * returns (part 2.3b: the polarity of A2 of Codex, round 1 over the
+	 * guard, applied to R3). In the rest of its statement only work counts,
+	 * also a call around it, which runs after it (a halt query there is no
+	 * halt asked after the return). Then the statements after it in its
+	 * block and in the blocks around, up to a return, throw, break or
+	 * continue, the end of a closure or of the function: a statement that asks
+	 * the halt with the right polarity and answers it (asks_after()) before
+	 * any work. A halt query in another form (the wrong polarity, a branch
+	 * that does not answer) is no halt asked.
 	 *
 	 * @param array<string,mixed> $e The call.
 	 */
@@ -488,9 +600,8 @@ final class ReadBudgetRules {
 		$path = $this->path( $this->trees[ $k ], $e['pos'] );
 		$last = count( $path ) - 1;
 		$st   = $path[ $last ]['block'][ $path[ $last ]['i'] ];
-		$seen = $this->first_after( $k, $st['s'], $st['e'], $e['pe'] );
-		if ( null !== $seen ) {
-			return $seen;
+		if ( $this->work_after( $k, $st['s'], $st['e'], $e ) ) {
+			return false;
 		}
 		if ( in_array( $st['k'], self::ENDS, true ) ) {
 			return true;
@@ -499,9 +610,11 @@ final class ReadBudgetRules {
 			$block = $path[ $level ]['block'];
 			$count = count( $block );
 			for ( $j = $path[ $level ]['i'] + 1; $j < $count; $j++ ) {
-				$seen = $this->first_after( $k, $block[ $j ]['s'], $block[ $j ]['e'], -1 );
-				if ( null !== $seen ) {
-					return $seen;
+				if ( $this->asks_after( $k, $block, $j ) ) {
+					return true;
+				}
+				if ( $this->work_in( $k, $block[ $j ]['s'], $block[ $j ]['e'] ) ) {
+					return false;
 				}
 				if ( in_array( $block[ $j ]['k'], self::ENDS, true ) ) {
 					return true;
@@ -515,22 +628,61 @@ final class ReadBudgetRules {
 	}
 
 	/**
-	 * In the tokens $a to $b after $after: true at a halt query before any
-	 * work, false at work first, null where there is neither.
+	 * Whether work runs in the tokens $a to $b after a call returns: work that
+	 * starts after it, or a call around it.
+	 *
+	 * @param array<string,mixed> $e The call.
 	 */
-	private function first_after( string $k, int $a, int $b, int $after ): ?bool {
+	private function work_after( string $k, int $a, int $b, array $e ): bool {
 		foreach ( $this->model['events'][ $k ] as $x ) {
-			if ( $x['pos'] < $a || $x['pos'] > $b || $x['pos'] <= $after ) {
+			if ( $x['pos'] < $a || $x['pos'] > $b || $x['pos'] === $e['pos'] || ! $this->work( $x ) ) {
 				continue;
 			}
-			if ( self::asks( $x ) ) {
+			if ( $x['pos'] > $e['pe'] || ( $x['pos'] < $e['pos'] && isset( $x['pe'] ) && $x['pe'] >= $e['pe'] ) ) {
 				return true;
 			}
-			if ( $this->work( $x ) ) {
-				return false;
+		}
+		return false;
+	}
+
+	/**
+	 * Whether the statement $j of a block asks the halt with the right
+	 * polarity and answers it as prescribed: if ( … ) whose condition asks the
+	 * halt (asks_halt()) with a branch that answers (answers()); $v = CHECK(
+	 * … ); and then if ( HALT( $v ) ) answering (guard_pair()); $s =
+	 * AB_MCP_Sync_Deadline::stop( … ); and then if ( null !== $s ) answering
+	 * (tests_stop()); or a ternary after its halt test whose halt is passed on
+	 * (as in guarded()).
+	 *
+	 * @param list<array<string,mixed>> $block Statements.
+	 */
+	private function asks_after( string $k, array $block, int $j ): bool {
+		$st = $block[ $j ];
+		if ( 'if' === $st['k'] && 1 === count( $st['bodies'] ) && $this->asks_halt( $k, $st['heads'][0][0] + 1, $st['heads'][0][1] - 1 ) && null !== $this->answers( $k, $st['bodies'][0], null, true, false ) ) {
+			return true;
+		}
+		if ( isset( $block[ $j + 1 ] ) ) {
+			if ( null !== $this->guard_pair( $k, $st, $block[ $j + 1 ], false, true ) ) {
+				return true;
+			}
+			foreach ( $this->model['events'][ $k ] as $x ) {
+				if ( 'STOP' !== $x['k'] || self::STOP !== $x['what'] || $x['pos'] < $st['s'] || $x['pos'] > $st['e'] ) {
+					continue;
+				}
+				$s = $this->assigned( $k, $st, $x, true );
+				if ( null !== $s && $this->tests_stop( $k, $block[ $j + 1 ], $s ) ) {
+					return true;
+				}
 			}
 		}
-		return null;
+		$tern = $this->ternary( $k, $st );
+		if ( null === $tern ) {
+			return false;
+		}
+		if ( null === $tern['var'] ) {
+			return $this->answer( $k, $tern['hx'][0], $tern['hx'][1], null, true );
+		}
+		return isset( $block[ $j + 1 ] ) && $this->passes_value( $k, $block[ $j + 1 ], $tern['var'], $tern['halt'] );
 	}
 
 	/* ---------- R4: entries and seams of the disk right after a check ---------- */
@@ -724,7 +876,7 @@ final class ReadBudgetRules {
 				}
 				if ( null !== $frame && ! in_array( $to, $frame, true ) ) {
 					if ( isset( $this->lists['FRAME_OUT'][ $edge ] ) ) {
-						$this->used['FRAME_OUT'][ $edge ] = true;
+						$this->used['FRAME_OUT'][ $edge ][ $e['pos'] ] = true; // Its call sites, counted (A5).
 						continue;
 					}
 					$this->add( 'R6', $k, $e, 'call of the frame not in FRAME_OUT: ' . $to );
@@ -794,16 +946,32 @@ final class ReadBudgetRules {
 	 */
 	private function argument( string $k, array $e, string $to, int $p, string $name ): ?string {
 		$named = array();
-		foreach ( $e['args'] as $i => $arg ) {
+		$via   = '';
+		if ( isset( $e['via'] ) ) {
+			$via = $e['via'];
+		}
+		// Part 2.3b: a call whose arguments the model does not hold: a callback
+		// (its arguments are given by the function of PHP that calls it), the
+		// arguments of call_user_func_array() in an array, new $x (read without
+		// its arguments). Its deadline is not shown left out: UNSUPPORTED.
+		if ( 0 === strpos( $via, 'Rückruf' ) || 'dynamisch (call_user_func_array)' === $via || 0 === strpos( $via, 'dynamisch (new ' ) ) {
+			$this->tell( $k, $e, $to, sprintf( 'UNSUPPORTED %s:%d the arguments of a call %s are not read, so the parameter $%s of %s is not shown left out, in %s', $this->model['methods'][ $k ]['file'], $e['line'], $via, $name, $to, $k ) );
+			return null;
+		}
+		$skip = 0;
+		if ( 'dynamisch (call_user_func)' === $via ) {
+			$skip = 1; // Its first argument is the function it calls.
+		}
+		foreach ( $e['args'] as $n => $arg ) {
+			$i = $n - $skip;
+			if ( $i < 0 ) {
+				continue;
+			}
 			if ( 0 === strpos( $arg, '...' ) ) {
 				if ( $i > $p ) {
 					break; // PHP takes no positional argument after an unpacked one: $p is given before it.
 				}
-				$key = $k . '|' . $e['pos'] . '|' . $to;
-				if ( ! isset( $this->told[ $key ] ) ) {
-					$this->told[ $key ] = true;
-					$this->problems[]   = sprintf( 'UNSUPPORTED %s:%d arguments unpacked at or before the parameter $%s of %s in %s', $this->model['methods'][ $k ]['file'], $e['line'], $name, $to, $k );
-				}
+				$this->tell( $k, $e, $to, sprintf( 'UNSUPPORTED %s:%d arguments unpacked at or before the parameter $%s of %s in %s', $this->model['methods'][ $k ]['file'], $e['line'], $name, $to, $k ) );
 				return null;
 			}
 			if ( 1 === preg_match( '/^([A-Za-z_][A-Za-z0-9_]*)\s*:(?!:)/', $arg, $m ) ) {
@@ -818,6 +986,19 @@ final class ReadBudgetRules {
 			return $named[ $name ];
 		}
 		return '';
+	}
+
+	/**
+	 * A problem of the arguments of a call, told once each.
+	 *
+	 * @param array<string,mixed> $e The call.
+	 */
+	private function tell( string $k, array $e, string $to, string $problem ): void {
+		$key = $k . '|' . $e['pos'] . '|' . $to;
+		if ( ! isset( $this->told[ $key ] ) ) {
+			$this->told[ $key ] = true;
+			$this->problems[]   = $problem;
+		}
 	}
 
 	/**
@@ -1512,7 +1693,7 @@ final class ReadBudgetRules {
 			return true;
 		}
 		if ( null !== $var && isset( $this->lists['TRANSLATIONS'][ $k ] ) && $this->translates( $k, $a, $b, $var ) ) {
-			$this->used['TRANSLATIONS'][ $k ] = true;
+			$this->used['TRANSLATIONS'][ $k ][ $a ] = true; // Its places, counted (A5).
 			return true;
 		}
 		return false;
@@ -1713,7 +1894,21 @@ final class ReadBudgetRules {
 		ksort( $this->named['FILTER'] );
 	}
 
+	/**
+	 * Each entry of a list used, as often as the list says (Codex, round 1
+	 * over the guard, A5): an entry of ATOMIC, COMPARE, SORTS and FILTERS once
+	 * in its list; FRAME_OUT with the number of its call sites, TRANSLATIONS
+	 * with the number of its places. A key twice in the source of a list is
+	 * told by duplicate_keys().
+	 */
 	private function unused(): void {
+		foreach ( array( 'ATOMIC', 'COMPARE', 'SORTS', 'FILTERS' ) as $list ) {
+			foreach ( array_count_values( $this->lists[ $list ] ) as $entry => $times ) {
+				if ( $times > 1 ) {
+					$this->problems[] = sprintf( '%s %d times: %s', $list, $times, $entry );
+				}
+			}
+		}
 		foreach ( $this->lists['ATOMIC'] as $k ) {
 			if ( ! isset( $this->used['ATOMIC'][ $k ] ) ) {
 				$this->problems[] = 'ATOMIC not in G1: ' . $k;
@@ -1723,6 +1918,25 @@ final class ReadBudgetRules {
 			foreach ( array_keys( $this->lists[ $list ] ) as $entry ) {
 				if ( ! isset( $this->used[ $list ][ $entry ] ) ) {
 					$this->problems[] = sprintf( '%s not used: %s', $list, $entry );
+				}
+			}
+		}
+		$counts = array(
+			'FRAME_OUT'    => array( 0, 'call sites' ),
+			'TRANSLATIONS' => array( 1, 'places' ),
+		);
+		foreach ( $counts as $list => list( $at, $what ) ) {
+			foreach ( $this->lists[ $list ] as $entry => $listed ) {
+				if ( ! isset( $this->used[ $list ][ $entry ] ) ) {
+					continue;
+				}
+				$have = count( $this->used[ $list ][ $entry ] );
+				if ( ! is_array( $listed ) || ! array_key_exists( $at, $listed ) ) {
+					$this->problems[] = sprintf( '%s %s: no number of its %s in the list', $list, $entry, $what );
+					continue;
+				}
+				if ( $listed[ $at ] !== $have ) {
+					$this->problems[] = sprintf( '%s %s: %d %s, the list %s', $list, $entry, $have, $what, var_export( $listed[ $at ], true ) );
 				}
 			}
 		}

@@ -27,6 +27,13 @@
  * polarity, the check of a pair assigned whole, and the deadline of a call
  * left out or null only where shown.
  *
+ * Part 2.3b mends A5, A6 and B1 of the same round and two findings of the
+ * same kind as A2 and A4: the closed lists compared with the number of
+ * occurrences, each dynamic form of a call with its self-test, the callback
+ * of a helper of a sort, the polarity of a halt asked after the return of a
+ * recursion, and the deadline of a call whose arguments the model does not
+ * hold.
+ *
  * A change of the code on these ways turns this red until the lists are kept
  * by hand, with the reason.
  *
@@ -366,13 +373,17 @@ PHP;
 			self::assertArrayHasKey( $fn, self::model()['reach'], $fn );
 			self::assertArrayNotHasKey( $fn, self::model()['chain'], $fn );
 		}
-		foreach ( $lists['TRANSLATIONS'] as $fn => list( $to, $why ) ) {
+		foreach ( $lists['TRANSLATIONS'] as $fn => list( $to, $places, $why ) ) {
+			self::assertIsInt( $places, $fn . ': the number of its places.' );
+			self::assertGreaterThan( 0, $places, $fn );
 			self::assertNotSame( '', $why, $fn );
 			self::assertArrayHasKey( $fn, self::model()['reach'], $fn );
 			self::assertArrayHasKey( $to, self::model()['methods'], $fn . ': the translation is a function of the plugin.' );
 			self::assertArrayNotHasKey( $fn, $lists['FACHWERT'], $fn . ': a function answers the halt or a Fachwert, not both.' );
 		}
-		foreach ( $lists['FRAME_OUT'] as $edge => $why ) {
+		foreach ( $lists['FRAME_OUT'] as $edge => list( $sites, $why ) ) {
+			self::assertIsInt( $sites, $edge . ': the number of its call sites.' );
+			self::assertGreaterThan( 0, $sites, $edge );
 			self::assertNotSame( '', $why, $edge );
 			self::assertArrayHasKey( explode( '|', $edge )[0], $soll['HAND']['FRAME'], $edge . ': a call of the frame.' );
 		}
@@ -922,7 +933,7 @@ PHP;
 		$own = self::own(
 			$code,
 			array( 'strlen' => array( 'sonst', false ) ),
-			array( 'FRAME_OUT' => array( 'AB_MCP_Sync_Code_Swap::prepare|AB_MCP_Sync_Code_Swap::away' => 'In the self-test.' ) ),
+			array( 'FRAME_OUT' => array( 'AB_MCP_Sync_Code_Swap::prepare|AB_MCP_Sync_Code_Swap::away' => array( 1, 'In the self-test.' ) ) ),
 			array( 'FRAME' => array( 'AB_MCP_Sync_Code_Swap::prepare' => array( 'AB_MCP_Sync_Code_Swap::checked' ) ) ),
 			array(
 				'CHAIN' => array(
@@ -1191,7 +1202,7 @@ PHP;
 				'ATOMIC'       => array( 'AB_MCP_Sync_Code_Swap_Calls::read' ),
 				'CHECKS'       => array( 'AB_MCP_Sync_Deadline::left' => 'wp' ),
 				'FACHWERT'     => array( 'AB_MCP_Sync_Code_Swap::fach' => array( "''", 'In the self-test.' ) ),
-				'TRANSLATIONS' => array( 'AB_MCP_Sync_Code_Swap::prepare' => array( 'AB_MCP_Sync_Code_Swap::refusal', 'In the self-test.' ) ),
+				'TRANSLATIONS' => array( 'AB_MCP_Sync_Code_Swap::prepare' => array( 'AB_MCP_Sync_Code_Swap::refusal', 1, 'In the self-test.' ) ),
 			),
 			array(
 				'INST_BYNAME' => array(
@@ -1450,6 +1461,362 @@ PHP;
 					'R7 AB_MCP_Sync_Code_Swap::can',
 					'R7 AB_MCP_Sync_Code_Swap::can',
 					'R7 AB_MCP_Sync_Code_Swap::two',
+				),
+			),
+			$own['open']
+		);
+	}
+
+	/* ---------- Part 2.3b: Codex, round 1 over the guard, A5, and R3 and R7 of the same kind as A2 and A4 ---------- */
+
+	public function testTheClosedListsAreComparedWithTheNumberOfOccurrences(): void {
+		// Codex A5: an entry twice in a list, or a call twice in the code where the list holds it once, is a
+		// difference: NAMED and OPEN by function and place in its order, counted; FRAME_OUT with the number of the
+		// call sites of each edge, TRANSLATIONS with the number of its places; no entry twice in ATOMIC, COMPARE,
+		// SORTS or FILTERS.
+		self::assertSame( array( array( 'a', 'a' ), array( 'c' ) ), ReadBudgetRules::counted( array( 'a', 'b', 'a', 'a' ), array( 'b', 'a', 'c' ) ) );
+		$chain = array(
+			'functions'  => 1,
+			'steps'      => 0,
+			'loops'      => 0,
+			'recursions' => 0,
+		);
+		$one   = array( 'usort', 166, 'In the self-test.' );
+		$named = array(
+			'SORT'   => array( 'AB_MCP_Sync_File_Manifest::folder' => array( $one, $one ) ),
+			'FILTER' => array(),
+			'CHAIN'  => $chain + array( 'why' => 'In the self-test.' ),
+		);
+		$have  = array(
+			'SORT'   => array( 'AB_MCP_Sync_File_Manifest::folder' => array( 'usort' ) ),
+			'FILTER' => array(),
+			'CHAIN'  => $chain,
+		);
+		// The entry of NAMED twice (Codex A5, File_Manifest::folder): red.
+		self::assertSame( array( 'SORT only in the list: AB_MCP_Sync_File_Manifest::folder #2 usort' ), ReadBudgetRules::named_diff( $named, $have ) );
+		$named['SORT']['AB_MCP_Sync_File_Manifest::folder'] = array( $one );
+		self::assertSame( array(), ReadBudgetRules::named_diff( $named, $have ) );
+		// A key of the chain more or less: red.
+		$named['CHAIN']['extra'] = 1;
+		unset( $named['CHAIN']['loops'] );
+		self::assertSame(
+			array(
+				'CHAIN: the keys of the list are extra, functions, recursions, steps, why, not functions, loops, recursions, steps, why',
+				'CHAIN loops: the list none, the code 0',
+			),
+			ReadBudgetRules::named_diff( $named, $have )
+		);
+		// An entry of OPEN twice: red.
+		$violation = array(
+			'rule' => 'R1',
+			'fn'   => 'AB_MCP_Payload_File::name',
+			'file' => 'includes/a.php',
+			'line' => 3,
+			'pos'  => 9,
+			'what' => 'sha1',
+		);
+		$entry     = array( 'R1 sha1', array(), 'In the self-test.' );
+		self::assertSame( array( 'only in the list: AB_MCP_Payload_File::name #2 R1 sha1' ), ReadBudgetRules::open_diff( array( 'AB_MCP_Payload_File::name' => array( $entry, $entry ) ), array( $violation ) ) );
+		self::assertSame( array( 'only in the code:  AB_MCP_Payload_File::name #2 R1 sha1 (includes/a.php:3)' ), ReadBudgetRules::open_diff( array( 'AB_MCP_Payload_File::name' => array( $entry ) ), array( $violation, $violation ) ) );
+		// In code of its own: a call of the frame not followed twice, a translation at two places, a filter twice.
+		$code = <<<'PHP'
+<?php
+final class AB_MCP_Sync_Code_Swap {
+	public static function prepare( $deadline, $x ) {
+		self::away( 1 );
+		self::away( 2 );
+		return self::inner( $deadline, $x );
+	}
+	private static function away( $n ) {
+		return $n;
+	}
+	private static function inner( $deadline, $x ) {
+		$a = apply_filters( 'f', array() );
+		$b = apply_filters( 'g', array() );
+		$v = self::can( $deadline );
+		if ( true !== $v ) {
+			return self::refusal( $v->get_error_code(), $v->get_error_message() );
+		}
+		$w = self::can( $deadline );
+		if ( true !== $w ) {
+			return self::refusal( $w->get_error_code(), 'Not read. ' . $w->get_error_message() );
+		}
+		return array( $a, $b, $x );
+	}
+	private static function can( $deadline ) {
+		$left = AB_MCP_Sync_Deadline::left( $deadline );
+		if ( true !== $left ) {
+			return $left;
+		}
+		return true;
+	}
+	private static function refusal( $code, $text ) {
+		return $code . $text;
+	}
+}
+PHP;
+		$lists = array(
+			'CHECKS'       => array( 'AB_MCP_Sync_Deadline::left' => 'wp' ),
+			'FRAME_OUT'    => array( 'AB_MCP_Sync_Code_Swap::prepare|AB_MCP_Sync_Code_Swap::away' => array( 1, 'In the self-test.' ) ),
+			'TRANSLATIONS' => array( 'AB_MCP_Sync_Code_Swap::inner' => array( 'AB_MCP_Sync_Code_Swap::refusal', 1, 'In the self-test.' ) ),
+			'SORTS'        => array( 'usort', 'usort', 'uasort', 'uksort' ),
+		);
+		$hand  = array(
+			'FRAME'       => array( 'AB_MCP_Sync_Code_Swap::prepare' => array( 'AB_MCP_Sync_Code_Swap::inner' ) ),
+			'INST_BYNAME' => array(
+				'get_error_code'    => 'WP_Error',
+				'get_error_message' => 'WP_Error',
+			),
+		);
+		$kind  = array(
+			'apply_filters'               => array( 'sonst', false ),
+			'WP_Error->get_error_code'    => array( 'sonst', false ),
+			'WP_Error->get_error_message' => array( 'sonst', false ),
+		);
+		$own   = self::own( $code, $kind, $lists, $hand );
+		self::assertSame( array(), $own['model']['problems'] );
+		self::assertSame(
+			array(
+				'SORTS 2 times: usort',
+				'FRAME_OUT AB_MCP_Sync_Code_Swap::prepare|AB_MCP_Sync_Code_Swap::away: 2 call sites, the list 1',
+				'TRANSLATIONS AB_MCP_Sync_Code_Swap::inner: 2 places, the list 1',
+			),
+			$own['rules']['problems']
+		);
+		self::assertSame( array(), $own['open'] );
+		$named = array(
+			'SORT'   => array(),
+			'FILTER' => array( 'AB_MCP_Sync_Code_Swap::inner' => array( array( 'apply_filters', 0, 'In the self-test.' ) ) ),
+			'CHAIN'  => array(
+				'functions'  => 0,
+				'steps'      => 0,
+				'loops'      => 0,
+				'recursions' => 0,
+				'why'        => 'In the self-test.',
+			),
+		);
+		// The second call of a filter: red.
+		self::assertSame( array( 'FILTER only in the code:  AB_MCP_Sync_Code_Swap::inner #2 apply_filters' ), ReadBudgetRules::named_diff( $named, $own['rules']['named'] ) );
+		// The numbers as the code holds them: green.
+		$lists['FRAME_OUT']['AB_MCP_Sync_Code_Swap::prepare|AB_MCP_Sync_Code_Swap::away'][0] = 2;
+		$lists['TRANSLATIONS']['AB_MCP_Sync_Code_Swap::inner'][1]                             = 2;
+		$lists['SORTS'] = array( 'usort', 'uasort', 'uksort' );
+		self::assertSame( array(), self::own( $code, $kind, $lists, $hand )['rules']['problems'] );
+	}
+
+	public function testNoListHoldsAKeyTwice(): void {
+		// Codex A5: PHP keeps only the last of two equal keys of an array, so a list would say more than it holds.
+		foreach ( array( 'ReadBudgetExceptions.php', 'ReadBudgetSoll.php' ) as $file ) {
+			$php = file_get_contents( __DIR__ . '/' . $file );
+			self::assertIsString( $php, $file );
+			self::assertSame( array(), ReadBudgetRules::duplicate_keys( $php ), 'tests/' . $file . ': each key of an array once.' );
+		}
+		$php = "<?php\nreturn array(\n\t'A' => array( 'x|y' => array( 1, 'a' ), 'x|y' => array( 1, 'b' ) ),\n\t'B' => array( 'k' => 1, 2 => 'k' ),\n\t'A' => array(),\n\t'C' => array( array( 'k' => 1 ), array( 'k' => 2 ), [ 'k' => 3, 'k' => 4 ] ),\n\t'D' => \$v['k'],\n);\n";
+		self::assertSame(
+			array(
+				"line 3: the key 'x|y' again (first at line 3)",
+				"line 5: the key 'A' again (first at line 3)",
+				"line 6: the key 'k' again (first at line 6)",
+			),
+			ReadBudgetRules::duplicate_keys( $php )
+		);
+	}
+
+	public function testAHaltAskedAfterTheReturnOfARecursionHasTheRightPolarity(): void {
+		// R3 after the return (part 2.3b, of the same kind as Codex A2): only a halt query with the right polarity
+		// whose branch answers as prescribed; another halt query is none, and the work after it is red.
+		$code = <<<'PHP'
+<?php
+final class AB_MCP_Sync_Code_Swap {
+	public static function prepare( $deadline, $v ) {
+		$w = self::walk( $v, $deadline );
+		if ( null !== AB_MCP_Sync_Deadline::stop( $deadline ) ) {
+			return AB_MCP_Sync_Deadline::stop( $deadline );
+		}
+		return $w;
+	}
+	private static function walk( $v, $deadline ) {
+		if ( ! is_array( $v ) || self::stopped( $deadline ) ) {
+			return null;
+		}
+		$a = self::walk( $v[0], $deadline );
+		if ( null === AB_MCP_Sync_Deadline::stop( $deadline ) ) {
+			return null;
+		}
+		$x = strrev( 'a' );
+		if ( self::stopped( $deadline ) ) {
+			return null;
+		}
+		$b = self::walk( $v[1], $deadline );
+		if ( ! self::stopped( $deadline ) ) {
+			return null;
+		}
+		$y = strrev( 'b' );
+		if ( self::stopped( $deadline ) ) {
+			return null;
+		}
+		$c = self::walk( $v[2], $deadline );
+		if ( null !== AB_MCP_Sync_Deadline::stop( $deadline ) ) {
+			return null;
+		}
+		$z = strrev( 'c' );
+		if ( self::stopped( $deadline ) ) {
+			return null;
+		}
+		$d = self::walk( $v[3], $deadline );
+		$s = AB_MCP_Sync_Deadline::stop( $deadline );
+		if ( null === $s ) {
+			return null;
+		}
+		$p = strrev( 'd' );
+		if ( self::stopped( $deadline ) ) {
+			return null;
+		}
+		$e = self::walk( $v[4], $deadline );
+		$t = AB_MCP_Sync_Deadline::stop( $deadline );
+		if ( null !== $t ) {
+			return null;
+		}
+		$q = strrev( 'e' );
+		if ( self::stopped( $deadline ) ) {
+			return null;
+		}
+		$f = self::walk( $v[5], $deadline );
+		if ( self::stopped( $deadline ) ) {
+			$f = null;
+		}
+		return strrev( $a . $b . $c . $d . $e . $f . $x . $y . $z . $p . $q );
+	}
+	private static function stopped( $deadline ) {
+		return null !== $deadline;
+	}
+}
+PHP;
+		$own = self::own(
+			$code,
+			array(
+				'is_array' => array( 'sonst', false ),
+				'strrev'   => array( 'Codec', true ),
+			),
+			array(
+				'CHECKS'   => array( 'AB_MCP_Sync_Code_Swap::stopped' => 'true' ),
+				'FACHWERT' => array( 'AB_MCP_Sync_Code_Swap::walk' => array( 'null', 'In the self-test.' ) ),
+			),
+			array(
+				'HELPERS'      => array( 'AB_MCP_Sync_Code_Swap::stopped' => true ),
+				'HELPER_EVENT' => array( 'AB_MCP_Sync_Code_Swap::stopped' => 'CHECK' ),
+			),
+			array( 'G4' => array( 'AB_MCP_Sync_Code_Swap::walk' => array() ) )
+		);
+		self::assertSame( array(), $own['rules']['problems'] );
+		self::assertSame(
+			array(
+				'AB_MCP_Sync_Code_Swap::walk' => array(
+					// null === stop(): the wrong polarity, no halt asked (red after, and R7).
+					'R3 after AB_MCP_Sync_Code_Swap::walk',
+					'R7 AB_MCP_Sync_Code_Swap::walk',
+					'R1 strrev',
+					// ! stopped() of a check whose form is true: the wrong polarity (red).
+					'R3 after AB_MCP_Sync_Code_Swap::walk',
+					'R7 AB_MCP_Sync_Code_Swap::walk',
+					'R1 strrev',
+					// null !== stop() answering: green.
+					'R1 strrev',
+					// $s = stop(); if ( null === $s ): the wrong polarity (red).
+					'R3 after AB_MCP_Sync_Code_Swap::walk',
+					'R7 AB_MCP_Sync_Code_Swap::walk',
+					'R1 strrev',
+					// $t = stop(); if ( null !== $t ) answering: green.
+					'R1 strrev',
+					// stopped() with the right polarity, but its branch does not answer: no halt asked (red).
+					'R3 after AB_MCP_Sync_Code_Swap::walk',
+					'R7 AB_MCP_Sync_Code_Swap::walk',
+					'R1 strrev',
+				),
+			),
+			$own['open']
+		);
+	}
+
+	public function testTheDeadlineOfACallWhoseArgumentsTheModelDoesNotHoldIsNotShownLeftOut(): void {
+		// Part 2.3b, of the same kind as Codex A4: a callback (its arguments are given by the function of PHP that
+		// calls it), call_user_func_array() and new $x are UNSUPPORTED where the target has a parameter $deadline
+		// (and a deadline counts as given); call_user_func() gives its target the arguments after the first.
+		$code = <<<'PHP'
+<?php
+final class AB_MCP_Sync_Code_Swap {
+	public static function prepare( $deadline, $list, $f, $m ) {
+		$a = array_map( array( __CLASS__, 'one' ), $list );
+		$b = array_map( 'AB_MCP_Sync_Code_Swap::one', $list );
+		$c = call_user_func( $f, 1, $deadline );
+		$d = call_user_func( $f, 1 );
+		$e = call_user_func( $f, 1, null );
+		$g = call_user_func_array( $f, array( 1, $deadline ) );
+		$h = new $m( 1 );
+		return array( $a, $b, $c, $d, $e, $g, $h );
+	}
+	private static function one( $x, $deadline = null ) {
+		$left = AB_MCP_Sync_Deadline::left( $deadline );
+		if ( true !== $left ) {
+			return $left;
+		}
+		return $x;
+	}
+}
+final class AB_MCP_Sync_Thing {
+	public function __construct( $deadline = null ) {
+		$left = AB_MCP_Sync_Deadline::left( $deadline );
+		if ( true !== $left ) {
+			return;
+		}
+	}
+}
+PHP;
+		$dyn = static function ( string $to ): array {
+			return array(
+				'to'   => array( $to ),
+				'kind' => 'Plugin',
+				'why'  => 'In the self-test.',
+			);
+		};
+		$own = self::own(
+			$code,
+			array(
+				'array_map'            => array( 'sonst', false ),
+				'call_user_func'       => array( 'sonst', false ),
+				'call_user_func_array' => array( 'sonst', false ),
+			),
+			array( 'CHECKS' => array( 'AB_MCP_Sync_Deadline::left' => 'wp' ) ),
+			array(
+				'DYN' => array(
+					'AB_MCP_Sync_Code_Swap::prepare|call_user_func'       => $dyn( 'AB_MCP_Sync_Code_Swap::one' ),
+					'AB_MCP_Sync_Code_Swap::prepare|call_user_func_array' => $dyn( 'AB_MCP_Sync_Code_Swap::one' ),
+					'AB_MCP_Sync_Code_Swap::prepare|new $m'               => $dyn( 'AB_MCP_Sync_Thing::__construct' ),
+				),
+			)
+		);
+		self::assertSame( array(), $own['model']['problems'] );
+		self::assertSame(
+			array(
+				'UNSUPPORTED includes/a.php:4 the arguments of a call Rückruf (array) are not read, so the parameter $deadline of AB_MCP_Sync_Code_Swap::one is not shown left out, in AB_MCP_Sync_Code_Swap::prepare',
+				'UNSUPPORTED includes/a.php:5 the arguments of a call Rückruf (Text) are not read, so the parameter $deadline of AB_MCP_Sync_Code_Swap::one is not shown left out, in AB_MCP_Sync_Code_Swap::prepare',
+				'UNSUPPORTED includes/a.php:9 the arguments of a call dynamisch (call_user_func_array) are not read, so the parameter $deadline of AB_MCP_Sync_Code_Swap::one is not shown left out, in AB_MCP_Sync_Code_Swap::prepare',
+				'UNSUPPORTED includes/a.php:10 the arguments of a call dynamisch (new $m) are not read, so the parameter $deadline of AB_MCP_Sync_Thing::__construct is not shown left out, in AB_MCP_Sync_Code_Swap::prepare',
+			),
+			$own['rules']['problems']
+		);
+		self::assertSame(
+			array(
+				'AB_MCP_Sync_Code_Swap::prepare' => array(
+					// The two callbacks: a deadline counts as given (red; the halt is not passed on).
+					'R7 AB_MCP_Sync_Code_Swap::one',
+					'R7 AB_MCP_Sync_Code_Swap::one',
+					// call_user_func( $f, 1, $deadline ): given (red); ( $f, 1 ) left out and ( $f, 1, null ): no
+					// deadline (green).
+					'R7 AB_MCP_Sync_Code_Swap::one',
+					// call_user_func_array() and new $m: a deadline counts as given (red).
+					'R7 AB_MCP_Sync_Code_Swap::one',
+					'R7 AB_MCP_Sync_Thing::__construct',
 				),
 			),
 			$own['open']
