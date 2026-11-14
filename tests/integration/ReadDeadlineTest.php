@@ -42,6 +42,16 @@
  *   also read directly (they are private: through reflection), where the
  *   translations of state() (never unknown) and of foreign() (never a
  *   binding or an entry not of its form) and of entry() would speak.
+ * - AB_MCP_Sync_Code_Swap::prepare() of a unit made new (its test requests
+ *   answered through the seam of the swap): a store this request has not
+ *   decided is decided before the deadline until − keep is made (the time
+ *   running out while it is decided stops the swap at the first check of
+ *   the deadline, before unchanged(), and nothing is read after it); in
+ *   time the readings of the stage and of the signed manifest run under the
+ *   one deadline (the gates of ready() and of signed()); over at the first,
+ *   the last gate of ready() or of signed(), the swap answers with the stop
+ *   in its full wording and the way of the swap, gives every lock back and
+ *   reads nothing after it (no tree, no place, no device).
  * - The translations of what a reader below answered into a refusal of its
  *   own, each on its own level (at the entrance of signed() the report of
  *   the environment catches every stop of taken() first, so there they
@@ -71,6 +81,7 @@ use AB_MCP_Staging;
 use AB_MCP_Sync_Anchor;
 use AB_MCP_Sync_Canon;
 use AB_MCP_Sync_Code_Stage;
+use AB_MCP_Sync_Code_Swap;
 use AB_MCP_Sync_Deadline;
 use AB_MCP_Sync_Export;
 use AB_MCP_Sync_Import;
@@ -87,6 +98,7 @@ use WP_Error;
 
 require_once AB_MCP_DIR . 'includes/sync/class-sync-import.php';
 require_once AB_MCP_DIR . 'includes/sync/class-sync-code-stage.php';
+require_once AB_MCP_DIR . 'includes/sync/class-sync-code-swap.php';
 require_once AB_MCP_DIR . 'includes/sync/class-sync-deadline.php';
 require_once AB_MCP_DIR . 'includes/sync/class-sync-file-manifest.php';
 
@@ -109,6 +121,9 @@ final class ReadDeadlineTest extends TestCase {
 
 	/** The run the stage is bound to. */
 	private const RUN = 7;
+
+	/** What the swap answers after the stop of a reading (AB_MCP_Sync_Code_Swap::signed_stage(), read_deadline()), after its text. */
+	private const SWAP_TAIL = ' So the plugin ab-it-frist is not swapped. Call action=next again; where it keeps failing, abort the run (wp_site_push action=abort) and plan again.';
 
 	/**
 	 * The gates of each reading in time (DeadlineClock): each gate with how
@@ -475,9 +490,14 @@ final class ReadDeadlineTest extends TestCase {
 	}
 
 	protected function tearDown(): void {
+		AB_MCP_Sync_Code_Swap::release();
+		\AB_MCP_Change_Lock::release_all();
+		\AB_MCP_Update_Log::clear_running();
+		delete_option( 'auto_updater.lock' );
 		DeadlineClock::restore();
 		AB_MCP_Sync_Run::$clock = null;
 		AB_MCP_Test_Seam::restore_all();
+		AB_MCP_Sync_Code_Swap::forget();
 		AB_MCP_Protected_Store::forget();
 	}
 
@@ -1400,5 +1420,214 @@ final class ReadDeadlineTest extends TestCase {
 
 	public function testAStageBoundToAnotherRunIsNotReadyInTimeAndTheStopWhenLateBeforeTheAnswer(): void {
 		$this->notReadyInTimeAndStoppedWhenLate( 'ready_foreign', 'AB_MCP_Sync_Code_Stage::ready#1' );
+	}
+
+	/* ------------------------------------------------------- prepare() */
+
+	/** What prepare() is asked with for the swap of the unit, made new from the stage: its run, unit, the series single and a time limit on the clock of the test. */
+	private static function swap_args(): array {
+		return array(
+			'run_id' => self::RUN,
+			'unit'   => array(
+				'seq'          => 3,
+				'op'           => 'swap',
+				'stage_seq'    => 2,
+				'n'            => 1,
+				'kind'         => 'plugin',
+				'ref'          => self::UNIT,
+				'unit_op'      => 'create',
+				'pair_id'      => null,
+				'pair_hash'    => null,
+				'staging_hash' => self::$stage['hash'],
+				'version'      => array(
+					'staging' => '1.2.0',
+					'live'    => null,
+				),
+				'runs'         => false,
+				'accept'       => false,
+			),
+			'env'    => self::$series['single'],
+			'stage'  => array(
+				'gid'    => self::$stage['gid'],
+				'name'   => self::UNIT,
+				'hash'   => self::$stage['hash'],
+				'source' => 'packages',
+				'files'  => 3,
+				'bytes'  => self::$stage['bytes'],
+			),
+			'until'  => DeadlineClock::NOW + 120.0,
+		);
+	}
+
+	/**
+	 * prepare() of the swap with this clock: the test requests answered
+	 * through the seam of the swap, its reads of the place, of AlphaBridge
+	 * itself and of the devices kept as steps (swap …), the steps of the
+	 * store as in reading(), and the decision of the store (decide(), seen
+	 * through the filter query of its reading of the option) kept as a step;
+	 * $jump: the time runs out there. Every lock of a swap that answered is
+	 * given back.
+	 *
+	 * @param DeadlineClock $clock The clock.
+	 * @param bool          $jump  Whether the time runs out while the store is decided.
+	 * @param int|null      $others Set: the readings of the clock that are no deadline's, when the store was decided.
+	 * @return mixed
+	 */
+	private function prepared( DeadlineClock $clock, bool $jump = false, ?int &$others = null ) {
+		$clock->install();
+		self::watch( $clock );
+		$step = static function ( $method, $args ) use ( $clock ) {
+			$clock->step( 'swap ' . $method );
+		};
+		$faults = array(
+			array(
+				'method' => 'probe',
+				'kind'   => 'return',
+				'value'  => array(
+					'targets' => array(
+						array(
+							'target' => 'home',
+							'result' => 'ok',
+						),
+						array(
+							'target' => 'mcp',
+							'result' => 'ok',
+						),
+						array(
+							'target' => 'admin_post',
+							'result' => 'ok',
+						),
+					),
+				),
+			),
+		);
+		foreach ( array( 'scandir', 'lstat', 'own', 'stat' ) as $method ) {
+			$faults[] = array(
+				'method' => $method,
+				'kind'   => 'before',
+				'before' => $step,
+			);
+		}
+		AB_MCP_Test_Seam::install( AB_MCP_Sync_Code_Swap::class, 'naht_sync_code_swap', new \AB_MCP_Sync_Code_Swap_Calls(), $faults );
+		$seen   = false;
+		$decide = static function ( $query ) use ( $clock, $jump, &$seen, &$others ) {
+			if ( ! $seen ) {
+				foreach ( debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS ) as $frame ) {
+					if ( isset( $frame['class'] ) && AB_MCP_Protected_Store::class === $frame['class'] && 'decide' === $frame['function'] ) {
+						$seen   = true;
+						$others = $clock->others;
+						$clock->step( 'decide' );
+						if ( $jump ) {
+							$clock->jump();
+						}
+						break;
+					}
+				}
+			}
+			return $query;
+		};
+		add_filter( 'query', $decide );
+		try {
+			$answer = AB_MCP_Sync_Code_Swap::prepare( self::swap_args() );
+			if ( is_array( $answer ) ) {
+				self::assertSame( array(), AB_MCP_Sync_Code_Swap::release(), 'Every lock given back.' );
+			}
+			return $answer;
+		} finally {
+			remove_filter( 'query', $decide );
+			AB_MCP_Test_Seam::restore_all();
+		}
+	}
+
+	/** No lock of a swap is held: the lock for changes, WordPress's lock for updates and the note of the swap on it. */
+	private static function assertNoLock(): void {
+		$note = \AB_MCP_Update_Log::running();
+		self::assertFalse( \AB_MCP_Change_Lock::held(), 'The lock for changes given back.' );
+		self::assertFalse( \AB_MCP_Sync_Rows::option( 'auto_updater.lock' ), 'WordPress\'s lock for updates given back.' );
+		self::assertFalse( is_array( $note ) && isset( $note['type'] ) && 'swap' === $note['type'], 'No note of a swap.' );
+	}
+
+	/**
+	 * prepare() in time with the store not decided in this request: its way
+	 * (the clock, the steps), checked.
+	 */
+	private function prepared_in_time(): DeadlineClock {
+		$proof = new ReflectionProperty( AB_MCP_Protected_Store::class, 'proof' );
+		AB_MCP_Protected_Store::forget();
+		$clock  = DeadlineClock::in_time();
+		$answer = $this->prepared( $clock );
+		self::assertIsArray( $answer, $answer instanceof WP_Error ? $answer->get_error_code() . ': ' . $answer->get_error_message() : gettype( $answer ) );
+		self::assertSame( array( self::$stage['hash'], self::$stage['hash'], null, array( 'staging' => '1.2.0', 'live' => null ) ), array( $answer['signed'], $answer['tree']['hash'], $answer['live'], $answer['version'] ), 'The stage, signed, of a unit made new.' );
+		self::assertNotNull( $proof->getValue(), 'The store decided in this request.' );
+		self::assertNoLock();
+		return $clock;
+	}
+
+	public function testThePreparedSwapDecidesTheStoreBeforeItsDeadlineAndReadsTheStageAndTheSignedManifestUnderIt(): void {
+		// Codex round 2 on this part, finding 2: the store is decided before
+		// the first reading under the deadline (until − keep), uninterrupted;
+		// the readings of ready() and of signed() then run under the one
+		// deadline, checked before the next step (unchanged()).
+		$ready  = $this->in_time( 'ready' )->gates;
+		$signed = $this->in_time( 'single' )->gates;
+		$clock  = $this->prepared_in_time();
+		self::assertSame( array_merge( array( 'AB_MCP_Sync_Code_Swap::read_deadline#1' ), $ready, $signed ), $clock->gates, 'The first check of the deadline, then the gates of ready() and of signed(), each as in their readings.' );
+		$decide = array_search( 'step: decide', $clock->events, true );
+		$first  = array_search( 'AB_MCP_Sync_Code_Swap::read_deadline#1', $clock->events, true );
+		$place  = array_search( 'step: swap scandir', $clock->events, true );
+		self::assertIsInt( $decide, 'The store decided in prepare().' );
+		self::assertTrue( $decide < $first && $first < $place, 'The store decided, then the first check of the deadline, then the place of the unit (unchanged()): ' . implode( ', ', array_slice( $clock->events, 0, 8 ) ) );
+	}
+
+	public function testTheTimeRunningOutWhileTheStoreIsDecidedStopsTheSwapAtItsFirstCheckBeforeAnythingIsRead(): void {
+		// The decision is not interrupted, its time is the reading's (until
+		// stays): over after it, the swap stops at the first check of its
+		// deadline, before unchanged(), and reads nothing more.
+		$proof = new ReflectionProperty( AB_MCP_Protected_Store::class, 'proof' );
+		AB_MCP_Protected_Store::forget();
+		$clock  = DeadlineClock::in_time();
+		$others = null;
+		$answer = $this->prepared( $clock, true, $others );
+		self::assertRefused( $answer, 'ab_mcp_read_late', self::LATE_TEXT . self::SWAP_TAIL, 'The stop, with the way of the swap.' );
+		self::assertNotNull( $proof->getValue(), 'The store decided, whole.' );
+		self::assertSame( array( 'AB_MCP_Sync_Code_Swap::read_deadline#1' ), $clock->gates, 'Stopped at the first check of the deadline.' );
+		self::assertSame( 'AB_MCP_Sync_Code_Swap::read_deadline#1', end( $clock->events ), 'Nothing after it: no place of the unit read, nothing of the stage.' );
+		self::assertContains( 'step: decide', $clock->events );
+		self::assertSame( $others, $clock->others, 'No reading of the clock after the decision but the check (no File_Manifest::now()).' );
+		self::assertNoLock();
+	}
+
+	/**
+	 * The swap over at one gate of its readings: the first check, the first
+	 * and the last gate of ready(), the first and the last of signed().
+	 *
+	 * @return array<string,array{string}>
+	 */
+	public static function swap_gates(): array {
+		$out = array();
+		foreach ( array( 'the first check', 'the first gate of ready()', 'the last gate of ready()', 'the first gate of signed()', 'the last gate of signed()' ) as $which ) {
+			$out[ $which ] = array( $which );
+		}
+		return $out;
+	}
+
+	#[DataProvider( 'swap_gates' )]
+	public function testOverAtOneGateOfItsReadingsTheSwapStopsThereGivesItsLocksBackAndReadsNothingAfterIt( string $which ): void {
+		$ready = count( $this->in_time( 'ready' )->gates );
+		$base  = $this->prepared_in_time();
+		$k     = array(
+			'the first check'            => 1,
+			'the first gate of ready()'  => 2,
+			'the last gate of ready()'   => 1 + $ready,
+			'the first gate of signed()' => 2 + $ready,
+			'the last gate of signed()'  => count( $base->gates ),
+		)[ $which ];
+		AB_MCP_Protected_Store::forget();
+		$clock  = DeadlineClock::late_from( $k );
+		$answer = $this->prepared( $clock );
+		self::assertRefused( $answer, 'ab_mcp_read_late', self::LATE_TEXT . self::SWAP_TAIL, "The stop at reading $k, with the way of the swap." );
+		self::assertSame( array_slice( $base->gates, 0, $k ), $clock->gates, 'The same way up to the gate: ' . $base->gates[ $k - 1 ] );
+		self::assertSame( $base->until_gate( $k ), $clock->events, 'Nothing read after it (no tree, no place, no device).' );
+		self::assertNoLock();
 	}
 }
