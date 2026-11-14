@@ -86,6 +86,10 @@
  *   not known or a downgrade. In time no head that names a plugin, no PHP
  *   file at the top, a head read shorter than its file or not read are a
  *   version not known, an older version of the staging site a downgrade.
+ *   prepare() of a unit there (update, its pair put here) reads its heads
+ *   after signed() under the one deadline; over at the first or the last
+ *   gate of heads(), of its heads, or at the check before the versions are
+ *   compared, the swap stops as above.
  *
  * need() and stage() read without a deadline: CodeStageTest.
  *
@@ -2321,12 +2325,16 @@ final class ReadDeadlineTest extends TestCase {
 	 * $jump: the time runs out there. Every lock of a swap that answered is
 	 * given back.
 	 *
+	 * Each head read (R12 part 2: a unit there) is kept as a step too
+	 * (head …).
+	 *
 	 * @param DeadlineClock $clock The clock.
 	 * @param bool          $jump  Whether the time runs out while the store is decided.
 	 * @param int|null      $others Set: the readings of the clock that are no deadline's, when the store was decided.
+	 * @param array|null    $swap  What prepare() is asked with (with_live()); null: swap_args().
 	 * @return mixed
 	 */
-	private function prepared( DeadlineClock $clock, bool $jump = false, ?int &$others = null ) {
+	private function prepared( DeadlineClock $clock, bool $jump = false, ?int &$others = null, ?array $swap = null ) {
 		$clock->install();
 		self::watch( $clock );
 		$step = static function ( $method, $args ) use ( $clock ) {
@@ -2362,6 +2370,20 @@ final class ReadDeadlineTest extends TestCase {
 			);
 		}
 		AB_MCP_Test_Seam::install( AB_MCP_Sync_Code_Swap::class, 'naht_sync_code_swap', new \AB_MCP_Sync_Code_Swap_Calls(), $faults );
+		AB_MCP_Test_Seam::install(
+			\AB_MCP_Sync_Env::class,
+			'naht_sync_env',
+			new \AB_MCP_Sync_Env_Calls(),
+			array(
+				array(
+					'method' => 'head_text',
+					'kind'   => 'before',
+					'before' => static function ( $method, $args ) use ( $clock ) {
+						$clock->step( 'head ' . basename( (string) $args[0] ) );
+					},
+				),
+			)
+		);
 		$seen   = false;
 		$decide = static function ( $query ) use ( $clock, $jump, &$seen, &$others ) {
 			if ( ! $seen ) {
@@ -2381,7 +2403,7 @@ final class ReadDeadlineTest extends TestCase {
 		};
 		add_filter( 'query', $decide );
 		try {
-			$answer = AB_MCP_Sync_Code_Swap::prepare( self::swap_args() );
+			$answer = AB_MCP_Sync_Code_Swap::prepare( null === $swap ? self::swap_args() : $swap );
 			if ( is_array( $answer ) ) {
 				self::assertSame( array(), AB_MCP_Sync_Code_Swap::release(), 'Every lock given back.' );
 			}
@@ -2496,5 +2518,123 @@ final class ReadDeadlineTest extends TestCase {
 		self::assertSame( array_slice( $base->gates, 0, $k ), $clock->gates, 'The same way up to the gate: ' . $base->gates[ $k - 1 ] );
 		self::assertSame( $base->until_gate( $k ), $clock->events, 'Nothing read after it (no tree, no place, no device).' );
 		self::assertNoLock();
+	}
+
+	/* ------------------------------- prepare() of a unit there (R12 part 2) */
+
+	/**
+	 * The swap of a unit the plan updates (R12 part 2, the heads in the
+	 * swap): the plugin of put_live() (version 1.0.0, not active) in the
+	 * folder of the plugins of the site, and an active pair of it whose base
+	 * is that unit read now; $fn gets what prepare() is asked with. The unit
+	 * and the pair are taken away again.
+	 *
+	 * @param callable $fn function ( array $swap ).
+	 */
+	private function with_live( callable $fn ): void {
+		global $wpdb;
+		$target = WP_PLUGIN_DIR . '/' . self::UNIT;
+		self::assertDirectoryDoesNotExist( $target, 'The place of the unit empty before.' );
+		$pair = null;
+		try {
+			self::put_live( $target );
+			$read = \AB_MCP_Sync_File_Manifest::unit( WP_PLUGIN_DIR, self::UNIT, 'live', INF, true, 'plugin' );
+			self::assertIsString( $read['hash'], 'The unit there read whole.' );
+			$pair                              = \AB_MCP_IT_Pair_Rows::put(
+				array(
+					'source_id'    => 'src-r12-2b',
+					'kind'         => 'plugin',
+					'live_ref'     => self::UNIT,
+					'staging_ref'  => self::UNIT,
+					'canon'        => AB_MCP_Sync_Canon::VERSION,
+					'base_live'    => $read['hash'],
+					'base_staging' => self::$stage['hash'],
+					'base_origin'  => 'proposal',
+				)
+			);
+			$swap                              = self::swap_args();
+			$swap['unit']['unit_op']           = 'update';
+			$swap['unit']['pair_id']           = (int) $pair['id'];
+			$swap['unit']['pair_hash']         = \AB_MCP_Sync_Pairs::snapshot_hash( \AB_MCP_Sync_Pairs::snapshot( (int) $pair['id'] ) );
+			$swap['unit']['version']['live']   = '1.0.0';
+			$fn( $swap );
+		} finally {
+			if ( is_array( $pair ) ) {
+				$wpdb->delete( AB_MCP_Sync_Schema::table( 'pairs' ), array( 'id' => (int) $pair['id'] ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- test code.
+				\AB_MCP_Sync_Pairs::forget();
+			}
+			if ( is_dir( $target ) ) {
+				self::remove_tree( $target );
+			}
+		}
+	}
+
+	/** prepare() of the unit there in time, the store not decided in this request: its way (the clock, the steps), checked. */
+	private function prepared_there_in_time( array $swap ): DeadlineClock {
+		$proof  = new ReflectionProperty( AB_MCP_Protected_Store::class, 'proof' );
+		$others = null;
+		AB_MCP_Protected_Store::forget();
+		$clock  = DeadlineClock::in_time();
+		$answer = $this->prepared( $clock, false, $others, $swap );
+		self::assertIsArray( $answer, $answer instanceof WP_Error ? $answer->get_error_code() . ': ' . $answer->get_error_message() : gettype( $answer ) );
+		self::assertSame( array( self::$stage['hash'], self::$stage['hash'], 'folder', array( 'staging' => '1.2.0', 'live' => '1.0.0' ) ), array( $answer['signed'], $answer['tree']['hash'], $answer['live']['form'], $answer['version'] ), 'The stage, signed, of a unit there; its version read from its head.' );
+		self::assertNotNull( $proof->getValue(), 'The store decided in this request.' );
+		self::assertNoLock();
+		return $clock;
+	}
+
+	public function testThePreparedSwapOfAUnitThereReadsItsHeadsUnderTheDeadlineAfterTheSignedManifest(): void {
+		// R12 part 2: not_down() reads the heads of the unit there under the
+		// one deadline, after ready(), tree() and signed(), each gate as in
+		// its reading (heads); then AlphaBridge itself is asked (own()).
+		$ready  = $this->in_time( 'ready' )->gates;
+		$tree   = $this->tree_gates();
+		$signed = $this->in_time( 'single' )->gates;
+		$heads  = $this->in_time( 'heads' )->gates;
+		$this->with_live(
+			function ( array $swap ) use ( $ready, $tree, $signed, $heads ): void {
+				$clock = $this->prepared_there_in_time( $swap );
+				self::assertSame( array_merge( array( 'AB_MCP_Sync_Code_Swap::read_deadline#1' ), $ready, $tree, $signed, $heads ), $clock->gates, 'The first check, then the gates of ready(), tree(), signed() and of the heads, each as in their readings.' );
+				$last = array_search( 'AB_MCP_Sync_Code_Swap::not_down#1', $clock->events, true );
+				$own  = array_search( 'step: swap own', $clock->events, true );
+				self::assertTrue( is_int( $last ) && is_int( $own ) && $last < $own, 'The heads read and the deadline asked, then AlphaBridge itself: ' . implode( ', ', array_slice( $clock->events, -6 ) ) );
+				self::assertSame( array( 'step: head a-helfer.php', 'step: head ab-it-frist.php' ), array_values( preg_grep( '/^step: head /', $clock->events ) ), 'Its two heads read, in order.' );
+			}
+		);
+	}
+
+	/**
+	 * The swap of a unit there over at one gate of its heads: the first and
+	 * the last gate of heads(), the first gate of the first head, the last
+	 * gate of the last head, the check before the versions are compared.
+	 *
+	 * @return array<string,array{string,int}>
+	 */
+	public static function swap_head_gates(): array {
+		return array(
+			'the first gate of heads()'        => array( 'AB_MCP_Sync_Code_Swap::heads#1', 0 ),
+			'the last gate of heads()'         => array( 'AB_MCP_Sync_Code_Swap::heads#2', 1 ),
+			'the first gate of the first head' => array( 'AB_MCP_Sync_Env::head_read#1', 0 ),
+			'the last gate of the last head'   => array( 'AB_MCP_Sync_Env::head_read#5', 1 ),
+			'the check before the versions'    => array( 'AB_MCP_Sync_Code_Swap::not_down#1', 0 ),
+		);
+	}
+
+	#[DataProvider( 'swap_head_gates' )]
+	public function testOverAtOneGateOfItsHeadsTheSwapOfAUnitThereStopsThereGivesItsLocksBackAndReadsNothingAfterIt( string $gate, int $pick ): void {
+		$this->with_live(
+			function ( array $swap ) use ( $gate, $pick ): void {
+				$base = $this->prepared_there_in_time( $swap );
+				$k    = self::place( $base->gates, $gate, $pick );
+				AB_MCP_Protected_Store::forget();
+				$clock  = DeadlineClock::late_from( $k );
+				$others = null;
+				$answer = $this->prepared( $clock, false, $others, $swap );
+				self::assertRefused( $answer, 'ab_mcp_read_late', self::LATE_TEXT . self::SWAP_TAIL, "The stop at reading $k, with the way of the swap, never a version not known." );
+				self::assertSame( array_slice( $base->gates, 0, $k ), $clock->gates, 'The same way up to the gate: ' . $base->gates[ $k - 1 ] );
+				self::assertSame( $base->until_gate( $k ), $clock->events, 'Nothing read after it (no head, not AlphaBridge itself, no device).' );
+				self::assertNoLock();
+			}
+		);
 	}
 }
