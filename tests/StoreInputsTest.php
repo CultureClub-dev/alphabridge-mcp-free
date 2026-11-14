@@ -34,6 +34,7 @@ use AB_MCP_Sync_Code_Ops;
 use AB_MCP_Sync_Code_Package;
 use AB_MCP_Sync_Code_Stage;
 use AB_MCP_Sync_Code_Swap;
+use AB_MCP_Sync_Deadline;
 use AB_MCP_Test_Seam;
 use AB_MCP_Update_Guard;
 use AB_MCP_Sync_Run;
@@ -803,6 +804,25 @@ final class StoreInputsTest extends TestCase {
 					return is_wp_error( $got ) ? $got->get_error_code() . ( $calls->taken > 1 ? ' twice' : '' ) : $got;
 				},
 				'unknown' => static fn( $got ): bool => 'code:swap_args' === $got,
+			),
+			'read.until'               => array(
+				'base'    => 1500.5,
+				'more'    => array(
+					'fixed: none (no deadline is not one)' => null,
+					'fixed: as text'                       => '1500.5',
+					'fixed: no end'                        => INF,
+					'fixed: no number'                     => NAN,
+					'fixed: true'                          => true,
+				),
+				// Its consumer at() (R12 of branch 5): a time of the clock of the
+				// budget is a deadline, a time before now too (it is over); a
+				// value not of the form is the refusal, never «no deadline».
+				'valid'   => array( array( 1500.5, 'a deadline' ), array( 0, 'a deadline' ), array( 7, 'a deadline' ) ),
+				'run'     => static function ( $v ) {
+					$got = AB_MCP_Sync_Deadline::at( $v );
+					return $got instanceof AB_MCP_Sync_Deadline ? 'a deadline' : $got->get_error_code();
+				},
+				'unknown' => static fn( $got ): bool => 'ab_mcp_read_deadline' === $got,
 			),
 			'swap.note'                => array(
 				'base'    => self::swap_note(),

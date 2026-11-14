@@ -69,6 +69,7 @@ require_once __DIR__ . '/class-sync-net.php';
 require_once __DIR__ . '/class-sync-option-schema.php';
 require_once __DIR__ . '/class-sync-media-package.php';
 require_once dirname( __DIR__ ) . '/class-staging-gate.php';
+require_once __DIR__ . '/class-sync-deadline.php';
 
 /**
  * Class AB_MCP_Sync_Import
@@ -346,21 +347,36 @@ final class AB_MCP_Sync_Import {
 	 * what refuses here names the way, and the store removes the group after
 	 * its day.
 	 *
-	 * @param mixed  $package_id Package (32 hex).
-	 * @param string $purpose    What the caller reads it for: inventory, env
-	 *                           for a package of the environment
-	 *                           (wp_site_diff, branch 7), or objects for a
-	 *                           package of objects (the run, branch 8; its
-	 *                           report is in the kept expectation).
+	 * With a deadline (AB_MCP_Sync_Deadline, R12 of Z8b branch 5; the
+	 * readings of the signed manifest of a swap, purpose env) every step
+	 * begins only while it is not over: the search of its group (groups(),
+	 * each sidecar, each record), the manifest checked (verify()), the
+	 * files of its group, the mark, each chunk read, inflated and each of
+	 * its lines decoded, the list of held objects, and the answer; its stop
+	 * is the answer, never a package missing, incomplete, unread or held. A
+	 * package of media or of code goes on to its own reader by its index
+	 * without the deadline (R12 takes the environment).
+	 *
+	 * @param mixed      $package_id Package (32 hex).
+	 * @param string     $purpose    What the caller reads it for: inventory, env
+	 *                               for a package of the environment
+	 *                               (wp_site_diff, branch 7), or objects for a
+	 *                               package of objects (the run, branch 8; its
+	 *                               report is in the kept expectation).
+	 * @param mixed|null $deadline   Null, or a deadline of AB_MCP_Sync_Deadline::at().
 	 * @return array|WP_Error manifest (the array verify() read), lines (the
 	 *                        objects, in order), held (kind, SHA-256 of the
 	 *                        ref, code of each object held here).
 	 */
-	public static function taken( $package_id, $purpose = 'inventory' ) {
+	public static function taken( $package_id, $purpose = 'inventory', $deadline = null ) {
 		if ( ! is_string( $package_id ) || ! preg_match( AB_MCP_Sync_Key::ID, $package_id ) ) {
 			return new WP_Error( 'ab_mcp_sync_import_package', __( 'A package is named by the 32 hex characters wp_site_export named it with. Pass the package_id as the staging site gave it.', 'alphabridge-mcp' ) );
 		}
-		$found = self::find( $package_id );
+		$left = AB_MCP_Sync_Deadline::left( $deadline );
+		if ( true !== $left ) {
+			return $left;
+		}
+		$found = self::find( $package_id, $deadline );
 		if ( is_wp_error( $found ) ) {
 			return $found;
 		}
@@ -373,22 +389,31 @@ final class AB_MCP_Sync_Import {
 			/* translators: 1: id of the package (package_id), 2: purpose that was passed, as the tools name it (inventory, env, objects, media). */
 			return new WP_Error( 'ab_mcp_sync_import_purpose_held', sprintf( __( 'This site holds the package %1$s for another purpose than %2$s, so it is not read as one: a package of the inventory goes in packages, a package of the environment in environment, a package of objects in the objects of a run. Pass it where it belongs, or fetch a package of %2$s: call wp_site_export on the staging site with purpose=%2$s, then wp_site_import_chunk here with the same purpose.', 'alphabridge-mcp' ), $package_id, in_array( $purpose, AB_MCP_Sync_Export::PURPOSES, true ) ? $purpose : 'inventory' ) );
 		}
+		$left = AB_MCP_Sync_Deadline::left( $deadline );
+		if ( true !== $left ) {
+			return $left;
+		}
 		if ( true !== self::bound( $found, AB_MCP_Sync_Anchor::pair_print() ) ) {
 			/* translators: %s: id of the package (package_id). */
 			return new WP_Error( 'ab_mcp_sync_import_pair_changed', sprintf( __( 'The role of this site, its pair or the confirmed key of the staging site changed since the package %s was begun, so it is not read. Fetch the package anew: call wp_site_export on the staging site, then wp_site_import_chunk here with the package_id and manifest it gives.', 'alphabridge-mcp' ), $package_id ) );
 		}
-		$checked = AB_MCP_Sync_Manifest::verify( $found['signed'], $expect );
+		$checked = AB_MCP_Sync_Manifest::verify( $found['signed'], $expect, null, $deadline );
 		if ( is_wp_error( $checked ) ) {
 			return $checked;
 		}
 		$manifest = $checked['manifest'];
-		$have     = AB_MCP_Protected_Store::files( 'in', $found['gid'] );
+		$have     = AB_MCP_Protected_Store::files( 'in', $found['gid'], $deadline );
 		if ( is_wp_error( $have ) ) {
 			return $have;
 		}
 		// The mark holds the hash of the package it marks complete, read
-		// against its own hash: the mark of this manifest only.
-		$mark = isset( $have[ self::COMPLETE ] ) ? AB_MCP_Protected_Store::get( 'in', $found['gid'], self::COMPLETE, hash( 'sha256', $manifest['sha256'] ) ) : null;
+		// against its own hash: the mark of this manifest only. Under a
+		// deadline, its stop is the answer, never «not complete».
+		$mark = isset( $have[ self::COMPLETE ] ) ? AB_MCP_Protected_Store::get( 'in', $found['gid'], self::COMPLETE, hash( 'sha256', $manifest['sha256'] ), $deadline ) : null;
+		$stop = AB_MCP_Sync_Deadline::stop( $deadline );
+		if ( null !== $stop ) {
+			return $stop;
+		}
 		if ( ! is_string( $mark ) ) {
 			/* translators: %s: id of the package (package_id). */
 			return new WP_Error( 'ab_mcp_sync_import_incomplete', sprintf( __( 'The package %s is not complete on this site yet, so it is not read. Hand over or fetch its missing chunks with wp_site_import_chunk until it answers complete true, then call again.', 'alphabridge-mcp' ), $package_id ) );
@@ -403,37 +428,68 @@ final class AB_MCP_Sync_Import {
 			require_once __DIR__ . '/class-sync-code-package.php';
 			return AB_MCP_Sync_Code_Package::taken( $found['gid'], $manifest, $have );
 		}
-		// Each chunk against its hash in the signed manifest, which the import
-		// unpacked and checked line by line before it set the mark: the same
-		// bytes give the same lines.
-		$lines = array();
-		$total = 0;
-		foreach ( $manifest['chunks'] as $i => $chunk ) {
-			$data = AB_MCP_Protected_Store::get( 'in', $found['gid'], AB_MCP_Sync_Export::chunk_name( $i ), $chunk['sha256'] );
-			if ( is_wp_error( $data ) ) {
-				return $data;
-			}
-			// A chunk that does not inflate as it did when the import checked
-			// it is refused, never read as no lines (V4 of Z8b branch 4).
-			$text = self::inflate( $data, min( $manifest['unpacked'] - $total, AB_MCP_Store_Budget::UNPACK['object_bytes'] ) );
-			if ( ! is_string( $text ) || ( '' !== $text && "\n" !== substr( $text, -1 ) ) ) {
-				/* translators: %s: id of the package (package_id). */
-				return new WP_Error( 'ab_mcp_sync_import_unread', sprintf( __( 'A chunk of the package %s does not unpack as it did when it was taken over (the server could not inflate it now), so the package is not read. Try again; if it keeps failing, take the package over anew: call wp_site_export on the staging site, then wp_site_import_chunk here.', 'alphabridge-mcp' ), $package_id ) );
-			}
-			$total += strlen( $text );
-			foreach ( '' === $text ? array() : explode( "\n", substr( $text, 0, -1 ) ) as $line ) {
-				$lines[] = json_decode( $line, true, AB_MCP_Store_Budget::UNPACK['depth'] );
-			}
+		$lines = self::lines( $found['gid'], $manifest, $package_id, $deadline );
+		if ( is_wp_error( $lines ) ) {
+			return $lines;
 		}
-		$held = self::held_list( $found, $have );
+		$held = self::held_list( $found, $have, $deadline );
 		if ( is_wp_error( $held ) ) {
 			return $held;
+		}
+		$left = AB_MCP_Sync_Deadline::left( $deadline );
+		if ( true !== $left ) {
+			return $left;
 		}
 		return array(
 			'manifest' => $manifest,
 			'lines'    => $lines,
 			'held'     => $held,
 		);
+	}
+
+	/**
+	 * The lines of a package marked complete (taken()): each chunk against
+	 * its hash in the signed manifest, which the import unpacked and checked
+	 * line by line before it set the mark, so the same bytes give the same
+	 * lines. Under a deadline each chunk is read and inflated, and each line
+	 * decoded, only while it is not over; its stop is the answer, never a
+	 * chunk that does not unpack.
+	 *
+	 * @param string     $gid        The group of the package.
+	 * @param array      $manifest   The manifest verify() read.
+	 * @param string     $package_id Package.
+	 * @param mixed|null $deadline   Null, or a deadline of AB_MCP_Sync_Deadline::at().
+	 * @return array|WP_Error The lines, in order.
+	 */
+	private static function lines( $gid, array $manifest, $package_id, $deadline ) {
+		$lines = array();
+		$total = 0;
+		foreach ( $manifest['chunks'] as $i => $chunk ) {
+			$data = AB_MCP_Protected_Store::get( 'in', $gid, AB_MCP_Sync_Export::chunk_name( $i ), $chunk['sha256'], $deadline );
+			if ( is_wp_error( $data ) ) {
+				return $data;
+			}
+			// A chunk that does not inflate as it did when the import checked
+			// it is refused, never read as no lines (V4 of Z8b branch 4).
+			$text = self::inflate( $data, min( $manifest['unpacked'] - $total, AB_MCP_Store_Budget::UNPACK['object_bytes'] ), $deadline );
+			$stop = AB_MCP_Sync_Deadline::stop( $deadline );
+			if ( null !== $stop ) {
+				return $stop;
+			}
+			if ( ! is_string( $text ) || ( '' !== $text && "\n" !== substr( $text, -1 ) ) ) {
+				/* translators: %s: id of the package (package_id). */
+				return new WP_Error( 'ab_mcp_sync_import_unread', sprintf( __( 'A chunk of the package %s does not unpack as it did when it was taken over (the server could not inflate it now), so the package is not read. Try again; if it keeps failing, take the package over anew: call wp_site_export on the staging site, then wp_site_import_chunk here.', 'alphabridge-mcp' ), $package_id ) );
+			}
+			$total += strlen( $text );
+			foreach ( '' === $text ? array() : explode( "\n", substr( $text, 0, -1 ) ) as $line ) {
+				$left = AB_MCP_Sync_Deadline::left( $deadline );
+				if ( true !== $left ) {
+					return $left;
+				}
+				$lines[] = json_decode( $line, true, AB_MCP_Store_Budget::UNPACK['depth'] );
+			}
+		}
+		return $lines;
 	}
 
 	/**
@@ -635,19 +691,28 @@ final class AB_MCP_Sync_Import {
 	 * and proposals made from a package are bound to their connection
 	 * (decision 15), and so is the package they are made from.
 	 *
-	 * @param string $package_id Package.
+	 * Under a deadline (R12 of Z8b branch 5) the groups, each group and its
+	 * record only while it is not over; its stop is the answer, never «no
+	 * such package».
+	 *
+	 * @param string     $package_id Package.
+	 * @param mixed|null $deadline   Null, or a deadline of AB_MCP_Sync_Deadline::at().
 	 * @return array|WP_Error|null held(), null where this account holds none over this connection.
 	 */
-	private static function find( $package_id ) {
-		$groups = AB_MCP_Protected_Store::groups( 'in' );
+	private static function find( $package_id, $deadline = null ) {
+		$groups = AB_MCP_Protected_Store::groups( 'in', $deadline );
 		if ( is_wp_error( $groups ) ) {
 			return $groups;
 		}
 		foreach ( $groups as $group ) {
+			$left = AB_MCP_Sync_Deadline::left( $deadline );
+			if ( true !== $left ) {
+				return $left;
+			}
 			if ( self::LABEL . $package_id !== $group['label'] || (int) $group['user_id'] !== (int) get_current_user_id() ) {
 				continue;
 			}
-			$found = self::record( $group );
+			$found = self::record( $group, $deadline );
 			if ( is_wp_error( $found ) ) {
 				return $found;
 			}
@@ -655,7 +720,8 @@ final class AB_MCP_Sync_Import {
 				return $found;
 			}
 		}
-		return null;
+		$left = AB_MCP_Sync_Deadline::left( $deadline );
+		return true === $left ? null : $left;
 	}
 
 	/**
@@ -686,11 +752,16 @@ final class AB_MCP_Sync_Import {
 	/**
 	 * A group of the area in with its record.
 	 *
-	 * @param array $group An entry of AB_MCP_Protected_Store::groups().
+	 * Under a deadline (R12 of Z8b branch 5) its files and its record only
+	 * while it is not over, and each of the two decodings; its stop is the
+	 * answer.
+	 *
+	 * @param array      $group    An entry of AB_MCP_Protected_Store::groups().
+	 * @param mixed|null $deadline Null, or a deadline of AB_MCP_Sync_Deadline::at().
 	 * @return array|WP_Error|null held(), null where it has no record (yet).
 	 */
-	private static function record( array $group ) {
-		$files = AB_MCP_Protected_Store::files( 'in', $group['gid'] );
+	private static function record( array $group, $deadline = null ) {
+		$files = AB_MCP_Protected_Store::files( 'in', $group['gid'], $deadline );
 		if ( is_wp_error( $files ) ) {
 			return $files;
 		}
@@ -699,11 +770,19 @@ final class AB_MCP_Sync_Import {
 			return null;
 		}
 		$name = reset( $records );
-		$text = AB_MCP_Protected_Store::get( 'in', $group['gid'], $name, $name );
+		$text = AB_MCP_Protected_Store::get( 'in', $group['gid'], $name, $name, $deadline );
 		if ( is_wp_error( $text ) ) {
 			return $text;
 		}
+		$left = AB_MCP_Sync_Deadline::left( $deadline );
+		if ( true !== $left ) {
+			return $left;
+		}
 		$record = json_decode( $text, true, 64 );
+		$left   = AB_MCP_Sync_Deadline::left( $deadline );
+		if ( true !== $left ) {
+			return $left;
+		}
 		return array(
 			'gid'        => $group['gid'],
 			'manifest'   => json_decode( $record['manifest'], true, 8 ),
@@ -1052,19 +1131,34 @@ final class AB_MCP_Sync_Import {
 	 * inflates at most about 1032 times: some 516 KiB). One gzip member and
 	 * nothing after it: all of the input read, the stream at its end.
 	 *
-	 * @param string $data Chunk (gzip).
-	 * @param int    $cap  Bytes at most.
-	 * @return string|false|null The bytes; false where it is no whole gzip,
-	 *                           or bytes or a second member follow it; null
-	 *                           where it inflates past $cap.
+	 * With a deadline (AB_MCP_Sync_Deadline, R12 of Z8b branch 5) each piece
+	 * is inflated, and the stream ended, only while it is not over; its stop
+	 * is the answer (a WP_Error), never false or null. One inflate_add() of a
+	 * piece is one call (a named limit of the deadline).
+	 *
+	 * @param string     $data     Chunk (gzip).
+	 * @param int        $cap      Bytes at most.
+	 * @param mixed|null $deadline Null, or a deadline of AB_MCP_Sync_Deadline::at().
+	 * @return string|false|null|WP_Error The bytes; false where it is no
+	 *                           whole gzip, or bytes or a second member follow
+	 *                           it; null where it inflates past $cap; the stop
+	 *                           of the deadline.
 	 */
-	public static function inflate( $data, $cap ) {
+	public static function inflate( $data, $cap, $deadline = null ) {
+		$left = AB_MCP_Sync_Deadline::left( $deadline );
+		if ( true !== $left ) {
+			return $left;
+		}
 		$context = '' === $data ? false : inflate_init( ZLIB_ENCODING_GZIP );
 		if ( false === $context ) {
 			return false;
 		}
 		$out = '';
 		foreach ( str_split( $data, self::INFLATE_PIECE ) as $piece ) {
+			$left = AB_MCP_Sync_Deadline::left( $deadline );
+			if ( true !== $left ) {
+				return $left;
+			}
 			$more = @inflate_add( $context, $piece, ZLIB_SYNC_FLUSH ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- no gzip is answered as false.
 			if ( false === $more ) {
 				return false;
@@ -1073,6 +1167,10 @@ final class AB_MCP_Sync_Import {
 			if ( strlen( $out ) > $cap ) {
 				return null;
 			}
+		}
+		$left = AB_MCP_Sync_Deadline::left( $deadline );
+		if ( true !== $left ) {
+			return $left;
 		}
 		if ( ZLIB_STREAM_END !== inflate_get_status( $context ) ) {
 			$more = @inflate_add( $context, '', ZLIB_FINISH ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- a cut gzip is answered as false.
@@ -1607,15 +1705,33 @@ final class AB_MCP_Sync_Import {
 	/**
 	 * The list of objects a credential holds by the rules of this site, of a
 	 * package marked complete: exactly one list, read against its SHA-256.
+	 * Under a deadline (R12 of Z8b branch 5) each name of the group is
+	 * looked at, the list read and decoded, only while it is not over; its
+	 * stop is the answer, never a list that does not read back.
 	 *
-	 * @param array             $held held().
-	 * @param array<string,int> $have The files of its group.
+	 * @param array             $held     held().
+	 * @param array<string,int> $have     The files of its group.
+	 * @param mixed|null        $deadline Null, or a deadline of AB_MCP_Sync_Deadline::at().
 	 * @return array[]|WP_Error
 	 */
-	private static function held_list( array $held, array $have ) {
-		$names = array_values( array_filter( array_map( 'strval', array_keys( $have ) ), static fn( $name ) => null !== self::held_sha( $name ) ) );
-		$text  = 1 === count( $names ) ? AB_MCP_Protected_Store::get( 'in', $held['gid'], $names[0], self::held_sha( $names[0] ) ) : null;
-		$list  = is_string( $text ) ? json_decode( $text, true, 8 ) : null;
+	private static function held_list( array $held, array $have, $deadline = null ) {
+		$names = array();
+		foreach ( array_map( 'strval', array_keys( $have ) ) as $name ) {
+			$left = AB_MCP_Sync_Deadline::left( $deadline );
+			if ( true !== $left ) {
+				return $left;
+			}
+			if ( null !== self::held_sha( $name ) ) {
+				$names[] = $name;
+			}
+		}
+		$text = 1 === count( $names ) ? AB_MCP_Protected_Store::get( 'in', $held['gid'], $names[0], self::held_sha( $names[0] ), $deadline ) : null;
+		$left = AB_MCP_Sync_Deadline::left( $deadline );
+		$list = true === $left && is_string( $text ) ? json_decode( $text, true, 8 ) : null;
+		$left = AB_MCP_Sync_Deadline::left( $deadline );
+		if ( true !== $left ) {
+			return $left;
+		}
 		if ( ! is_array( $list ) || ! isset( $list['format'], $list['objects'] ) || self::HELD_FORMAT !== $list['format'] || ! is_array( $list['objects'] ) ) {
 			return new WP_Error( 'ab_mcp_sync_import_held', __( 'The package is marked complete, but the list of its objects a credential holds on this site does not read back (it was taken over by an older version, or the list was changed), so it is not used, and what arrived of it was removed. Fetch the package anew: 1. Call wp_site_import_chunk again with the package_id, manifest and purpose as wp_site_export gave them, while the manifest is valid; or export it again on the staging site (wp_site_export). 2. Hand over or fetch its chunks.', 'alphabridge-mcp' ) );
 		}

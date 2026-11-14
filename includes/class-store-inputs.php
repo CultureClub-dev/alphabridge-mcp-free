@@ -1071,6 +1071,16 @@ final class AB_MCP_Store_Inputs {
 				'extra'  => false,
 			),
 		),
+		'read.until'               => array(
+			'consumer' => 'code',
+			'source'   => 'AB_MCP_Sync_Deadline::at(), from its caller: AB_MCP_Sync_Code_Swap::checked(), until less keep (R12)',
+			'field'    => 'the deadline of the readings of a swap after its test requests, a time of the clock of the budget (seconds, 0 or more): whether a reading of the stage and of the signed manifest takes its next step, or stops',
+			'form'     => array(
+				'type' => 'number',
+				'min'  => 0,
+				'max'  => null,
+			),
+		),
 		'swap.note'                => array(
 			'consumer' => 'code',
 			'source'   => 'AB_MCP_Update_Guard, the note of AlphaBridge beside WordPress\'s lock for updates (AB_MCP_Update_Log::RUNNING) as stored, and as get_site_option() gives it for busy()',
@@ -1122,11 +1132,12 @@ final class AB_MCP_Store_Inputs {
 	 * The value of an input in the form of its row, or null (unknown); null
 	 * also for an id the table has not.
 	 *
-	 * @param string $id    Row.
-	 * @param mixed  $value Value as read.
+	 * @param string     $id       Row.
+	 * @param mixed      $value    Value as read.
+	 * @param mixed|null $deadline Null, or a deadline of AB_MCP_Sync_Deadline::at() (AB_MCP_Shape::read(); R12 of Z8b branch 5).
 	 * @return mixed|null
 	 */
-	public static function read( $id, $value ) {
-		return is_string( $id ) && isset( self::TABLE[ $id ] ) ? AB_MCP_Shape::read( $value, self::TABLE[ $id ]['form'] ) : null;
+	public static function read( $id, $value, $deadline = null ) {
+		return is_string( $id ) && isset( self::TABLE[ $id ] ) ? AB_MCP_Shape::read( $value, self::TABLE[ $id ]['form'], $deadline ) : null;
 	}
 }

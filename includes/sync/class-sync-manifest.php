@@ -67,6 +67,7 @@ defined( 'ABSPATH' ) || exit;
 require_once __DIR__ . '/class-sync-key.php';
 require_once __DIR__ . '/class-sync-anchor.php';
 require_once __DIR__ . '/class-sync-canon.php';
+require_once __DIR__ . '/class-sync-deadline.php';
 
 /**
  * Class AB_MCP_Sync_Manifest
@@ -208,15 +209,28 @@ final class AB_MCP_Sync_Manifest {
 	 * Check a signed manifest on the production site, before anything of
 	 * its package is read.
 	 *
-	 * @param mixed    $signed array( 'manifest' => text, 'signature' => base64 ).
-	 * @param array    $expect purpose (required); report_hash (required for
-	 *                         objects and media); package_id (optional).
-	 * @param int|null $now    Time; the one checked clock when null
-	 *                         (AB_MCP_Sync_Run::now(); Z8b branch 4, V5).
+	 * With a deadline (AB_MCP_Sync_Deadline, R12 of Z8b branch 5; a package
+	 * read for the signed manifest of a swap) each step begins only while it
+	 * is not over: the spelling (AB_MCP_Sync_Canon::encode(), element by
+	 * element), the fields (shape(), each entry of kinds and chunks), the
+	 * anchor and the signature, and the answer; its stop is the answer. The
+	 * deadline is the budget of the call only: whether the package is still
+	 * valid is decided by its own clock ($now), as before.
+	 *
+	 * @param mixed      $signed   array( 'manifest' => text, 'signature' => base64 ).
+	 * @param array      $expect   purpose (required); report_hash (required for
+	 *                             objects and media); package_id (optional).
+	 * @param int|null   $now      Time; the one checked clock when null
+	 *                             (AB_MCP_Sync_Run::now(); Z8b branch 4, V5).
+	 * @param mixed|null $deadline Null, or a deadline of AB_MCP_Sync_Deadline::at().
 	 * @return array{manifest:array,hash:string}|WP_Error The manifest and the
 	 *                                                     SHA-256 of its text.
 	 */
-	public static function verify( $signed, array $expect, $now = null ) {
+	public static function verify( $signed, array $expect, $now = null, $deadline = null ) {
+		$left = AB_MCP_Sync_Deadline::left( $deadline );
+		if ( true !== $left ) {
+			return $left;
+		}
 		$now = self::clock( $now );
 		if ( null === $now ) {
 			return self::clock_refusal();
@@ -233,12 +247,17 @@ final class AB_MCP_Sync_Manifest {
 
 		// One spelling: the text AB_MCP_Sync_Canon::encode() writes for its data.
 		$manifest = json_decode( $text, true, 8 );
-		if ( ! is_array( $manifest ) || AB_MCP_Sync_Canon::encode( $manifest ) !== $text ) {
+		$spelt    = is_array( $manifest ) ? AB_MCP_Sync_Canon::encode( $manifest, $deadline ) : null;
+		$left     = AB_MCP_Sync_Deadline::left( $deadline );
+		if ( true !== $left ) {
+			return $left;
+		}
+		if ( $spelt !== $text ) {
 			return new WP_Error( 'ab_mcp_sync_manifest_spelling', __( 'The manifest is not written the one way the staging site writes it, so it is not read: it was changed on the way. Export the package again on the staging site (wp_site_export) and use what it gives, unchanged.', 'alphabridge-mcp' ) );
 		}
 
 		// Every field, the format and the version of the canonical form.
-		$bad = self::shape( $manifest );
+		$bad = self::shape( $manifest, $deadline );
 		if ( null !== $bad ) {
 			return $bad;
 		}
@@ -248,6 +267,10 @@ final class AB_MCP_Sync_Manifest {
 		}
 
 		// The anchor a person confirmed, its key, the signature.
+		$left = AB_MCP_Sync_Deadline::left( $deadline );
+		if ( true !== $left ) {
+			return $left;
+		}
 		$anchor = AB_MCP_Sync_Anchor::active();
 		if ( null === $anchor ) {
 			if ( null !== AB_MCP_Sync_Anchor::prepared() ) {
@@ -333,6 +356,10 @@ final class AB_MCP_Sync_Manifest {
 		if ( isset( $expect['package_id'] ) && $expect['package_id'] !== $manifest['package_id'] ) {
 			return new WP_Error( 'ab_mcp_sync_manifest_package', __( 'The manifest is the one of another package than the one being read. Use the manifest that came with this package, or export the package again on the staging site (wp_site_export).', 'alphabridge-mcp' ), array( 'package_id' => $manifest['package_id'] ) );
 		}
+		$left = AB_MCP_Sync_Deadline::left( $deadline );
+		if ( true !== $left ) {
+			return $left;
+		}
 
 		return array(
 			'manifest' => $manifest,
@@ -415,12 +442,14 @@ final class AB_MCP_Sync_Manifest {
 
 	/**
 	 * Every field of a manifest as this format has it, or the refusal that
-	 * names the first one that is not.
+	 * names the first one that is not; under a deadline each entry of kinds
+	 * and of chunks only while it is not over, else its stop (R12).
 	 *
-	 * @param array $m Manifest.
+	 * @param array      $m        Manifest.
+	 * @param mixed|null $deadline Null, or a deadline of AB_MCP_Sync_Deadline::at().
 	 * @return WP_Error|null
 	 */
-	private static function shape( array $m ) {
+	private static function shape( array $m, $deadline = null ) {
 		$fields = array_keys( $m );
 		sort( $fields );
 		if ( self::FIELDS !== $fields ) {
@@ -478,6 +507,10 @@ final class AB_MCP_Sync_Manifest {
 		}
 		$last = null;
 		foreach ( $m['kinds'] as $entry ) {
+			$left = AB_MCP_Sync_Deadline::left( $deadline );
+			if ( true !== $left ) {
+				return $left;
+			}
 			$keys = is_array( $entry ) ? array_keys( $entry ) : array();
 			sort( $keys );
 			if ( array( 'complete', 'kind', 'subtype' ) !== $keys || ! is_bool( $entry['complete'] )
@@ -496,6 +529,10 @@ final class AB_MCP_Sync_Manifest {
 		}
 		$sum = 0;
 		foreach ( $m['chunks'] as $chunk ) {
+			$left = AB_MCP_Sync_Deadline::left( $deadline );
+			if ( true !== $left ) {
+				return $left;
+			}
 			$keys = is_array( $chunk ) ? array_keys( $chunk ) : array();
 			sort( $keys );
 			if ( array( 'bytes', 'sha256' ) !== $keys || ! $count( $chunk['bytes'], self::MAX_CHUNK, 1 ) || ! $hex64( $chunk['sha256'] ) ) {

@@ -73,6 +73,7 @@ require_once __DIR__ . '/class-sync-file-manifest.php';
 require_once __DIR__ . '/class-sync-import.php';
 require_once __DIR__ . '/class-sync-report.php';
 require_once __DIR__ . '/class-sync-code-package.php';
+require_once __DIR__ . '/class-sync-deadline.php';
 
 /**
  * The calls of the stage to the outside: the real ones.
@@ -573,22 +574,36 @@ final class AB_MCP_Sync_Code_Stage {
 	 * files from the packages of its environment (AB_MCP_Sync_Report::
 	 * environment(), each package checked again), or the refusal.
 	 *
-	 * @param string[] $env  The packages of the environment of the report, in order.
-	 * @param string   $kind plugin or theme.
-	 * @param string   $ref  The unit.
+	 * With a deadline (AB_MCP_Sync_Deadline, R12 of Z8b branch 5: the swap
+	 * passes until − keep, AB_MCP_Sync_Code_Swap::checked()) the whole chain
+	 * to its answer runs under it: the packages of the environment
+	 * (environment() and AB_MCP_Sync_Import::taken() with their readings),
+	 * then each line, each part and each entry put together here, and the
+	 * answer only while it is not over; its stop is the answer as it is,
+	 * never «not signed». Without one, the reading as before (complete(),
+	 * need(), stage(), AB_MCP_Sync_Code_Plan).
+	 *
+	 * @param string[]   $env      The packages of the environment of the report, in order.
+	 * @param string     $kind     plugin or theme.
+	 * @param string     $ref      The unit.
+	 * @param mixed|null $deadline Null, or a deadline of AB_MCP_Sync_Deadline::at().
 	 * @return array|WP_Error kind, ref, form, hash, files, bytes, version, update_uri (string|null), entries (path as the lines name it, size, sha256).
 	 */
-	public static function signed( array $env, $kind, $ref ) {
+	public static function signed( array $env, $kind, $ref, $deadline = null ) {
 		if ( ! AB_MCP_Sync_Code_Package::unit_ok( $kind, $ref ) ) {
 			return self::refusal( 'code:unit', __( 'The unit is not a plugin or theme as the stage takes it (kind plugin or theme, ref the name of its folder or file). Pass it as the report names the staging side.', 'alphabridge-mcp' ) );
 		}
-		$read = AB_MCP_Sync_Report::environment( $env );
+		$read = AB_MCP_Sync_Report::environment( $env, $deadline );
 		if ( is_wp_error( $read ) ) {
 			return $read;
 		}
 		$line  = null;
 		$parts = array();
 		foreach ( $read['lines'] as $one ) {
+			$left = AB_MCP_Sync_Deadline::left( $deadline );
+			if ( true !== $left ) {
+				return $left;
+			}
 			if ( $kind === $one['env'] && $ref === $one['ref'] ) {
 				$line = $one;
 			} elseif ( 'entries' === $one['env'] && $kind . ':' . $ref === $one['unit'] ) {
@@ -611,12 +626,20 @@ final class AB_MCP_Sync_Code_Stage {
 					break;
 				}
 				foreach ( $list as $entry ) {
+					$left = AB_MCP_Sync_Deadline::left( $deadline );
+					if ( true !== $left ) {
+						return $left;
+					}
 					$entries[] = array( $entry[0], $entry[1], $entry[2] );
 				}
 			}
 		}
 		if ( null === $entries || count( $entries ) !== $line['files'] ) {
 			return self::refusal( 'code:unsigned', __( 'The packages of the environment do not hold every file of the unit (a part of its list is missing), so nothing is staged for it. Take the environment of the staging site over anew and make the report again (wp_site_diff).', 'alphabridge-mcp' ) );
+		}
+		$left = AB_MCP_Sync_Deadline::left( $deadline );
+		if ( true !== $left ) {
+			return $left;
 		}
 		return array(
 			'kind'       => $kind,
@@ -1102,18 +1125,34 @@ final class AB_MCP_Sync_Code_Stage {
 	 * for this tree and its hash, and bound to the step (foreign(); its
 	 * binding not read is not known, never ready).
 	 *
-	 * @param string $gid   The group.
-	 * @param string $name  The tree.
-	 * @param string $hash  Its hash.
-	 * @param array  $bound The binding the step expects (BOUND).
-	 * @return array|null
+	 * With a deadline (AB_MCP_Sync_Deadline, R12 of Z8b branch 5; the swap,
+	 * AB_MCP_Sync_Code_Swap::signed_stage()) the list of the group, its last
+	 * state read and read in its form (state()), the binding (foreign(): the
+	 * sidecar of its group) and the answer only while it is not over; its
+	 * stop is the answer (a WP_Error), never «not ready».
+	 *
+	 * @param string     $gid      The group.
+	 * @param string     $name     The tree.
+	 * @param string     $hash     Its hash.
+	 * @param array      $bound    The binding the step expects (BOUND).
+	 * @param mixed|null $deadline Null, or a deadline of AB_MCP_Sync_Deadline::at().
+	 * @return array|null|WP_Error
 	 */
-	public static function ready( $gid, $name, $hash, array $bound ) {
-		$state = self::state( $gid );
+	public static function ready( $gid, $name, $hash, array $bound, $deadline = null ) {
+		$state = self::state( $gid, $deadline );
+		$stop  = AB_MCP_Sync_Deadline::stop( $deadline );
+		if ( null !== $stop ) {
+			return $stop;
+		}
 		if ( ! is_array( $state ) || self::READY !== $state['state'] || $name !== $state['tree']['name'] || ! is_string( $hash ) || ! hash_equals( $state['tree']['hash'], $hash ) ) {
 			return null;
 		}
-		return null === self::foreign( $gid, $state, $bound ) ? $state : null;
+		$foreign = self::foreign( $gid, $state, $bound, $deadline );
+		$left    = AB_MCP_Sync_Deadline::left( $deadline );
+		if ( true !== $left ) {
+			return $left;
+		}
+		return null === $foreign ? $state : null;
 	}
 
 	/**
@@ -1128,21 +1167,34 @@ final class AB_MCP_Sync_Code_Stage {
 	 * looked for in a listing); a binding or an entry not of its form is not
 	 * known either.
 	 *
-	 * @param string $gid   The group.
-	 * @param array  $state Its state (state()).
-	 * @param array  $bound The binding the step expects (BOUND).
+	 * Under a deadline (R12 of Z8b branch 5; ready()) the binding and the
+	 * entry of the group read only while it is not over; its stop is the
+	 * answer.
+	 *
+	 * @param string     $gid      The group.
+	 * @param array      $state    Its state (state()).
+	 * @param array      $bound    The binding the step expects (BOUND).
+	 * @param mixed|null $deadline Null, or a deadline of AB_MCP_Sync_Deadline::at().
 	 * @return WP_Error|null Null where bound.
 	 */
-	private static function foreign( $gid, array $state, array $bound ) {
-		$want = AB_MCP_Shape::read( $bound, self::BOUND );
+	private static function foreign( $gid, array $state, array $bound, $deadline = null ) {
+		$want = AB_MCP_Shape::read( $bound, self::BOUND, $deadline );
+		$stop = AB_MCP_Sync_Deadline::stop( $deadline );
+		if ( null !== $stop ) {
+			return $stop;
+		}
 		if ( null === $want ) {
 			return self::refusal( 'code:stage_bound', __( 'The binding the step names for its stage (its run, the kind and name of its unit, its hash on the staging site) does not read in its form, so the stage is neither checked nor taken. Abort the run (wp_site_push action=abort), make a new report (wp_site_diff) and plan again.', 'alphabridge-mcp' ) );
 		}
-		$entry = AB_MCP_Protected_Store::entry( 'stage', $gid );
+		$entry = AB_MCP_Protected_Store::entry( 'stage', $gid, $deadline );
 		if ( is_wp_error( $entry ) ) {
 			return $entry;
 		}
-		$group = AB_MCP_Shape::read( $entry, self::GROUP );
+		$group = AB_MCP_Shape::read( $entry, self::GROUP, $deadline );
+		$stop  = AB_MCP_Sync_Deadline::stop( $deadline );
+		if ( null !== $stop ) {
+			return $stop;
+		}
 		if ( null === $group ) {
 			return self::refusal( 'code:stage_group', __( 'The entry of the group of the stage does not read in its form (its id or the run it is bound to), so what the stage is bound to is not known and it is neither checked nor taken. Call action=next again; where it keeps failing, abort the run (wp_site_push action=abort).', 'alphabridge-mcp' ) );
 		}
@@ -1401,24 +1453,36 @@ final class AB_MCP_Sync_Code_Stage {
 	/**
 	 * The last state of a stage, read in the form of its row stage.state of
 	 * AB_MCP_Store_Inputs::TABLE, or the refusal (unknown: never ready).
+	 * Under a deadline (R12 of Z8b branch 5; ready()) the files of its
+	 * group, each name, the state read and read in its form only while it
+	 * is not over; its stop is the answer, never «does not read back».
 	 *
-	 * @param string $gid The group.
+	 * @param string     $gid      The group.
+	 * @param mixed|null $deadline Null, or a deadline of AB_MCP_Sync_Deadline::at().
 	 * @return array|WP_Error
 	 */
-	private static function state( $gid ) {
-		$files = AB_MCP_Protected_Store::files( 'stage', $gid );
+	private static function state( $gid, $deadline = null ) {
+		$files = AB_MCP_Protected_Store::files( 'stage', $gid, $deadline );
 		if ( is_wp_error( $files ) ) {
 			return $files;
 		}
 		$last = null;
 		foreach ( array_keys( $files ) as $file ) {
+			$left = AB_MCP_Sync_Deadline::left( $deadline );
+			if ( true !== $left ) {
+				return $left;
+			}
 			if ( is_string( $file ) && 1 === preg_match( '/^' . self::STATE . '(\d{4})-([a-z2-7]{52})\z/', $file, $m ) && ( null === $last || $m[1] > $last[0] ) ) {
 				$last = array( $m[1], $file, $m[2] );
 			}
 		}
 		$sha  = null === $last ? null : AB_MCP_Sync_Import::held_sha( AB_MCP_Sync_Import::HELD . $last[2] );
-		$text = null === $sha ? null : AB_MCP_Protected_Store::get( 'stage', $gid, $last[1], $sha );
-		$read = is_string( $text ) ? self::state_of( $text ) : null;
+		$text = null === $sha ? null : AB_MCP_Protected_Store::get( 'stage', $gid, $last[1], $sha, $deadline );
+		$read = is_string( $text ) ? self::state_of( $text, $deadline ) : null;
+		$left = AB_MCP_Sync_Deadline::left( $deadline );
+		if ( true !== $left ) {
+			return $left;
+		}
 		if ( null === $read || sprintf( '%04d', $read['seq'] ) !== $last[0] ) {
 			return self::refusal( 'code:stage_unknown', __( 'The state of the stage does not read back as this version writes it, so it is never ready. Stage the unit again.', 'alphabridge-mcp' ) );
 		}
@@ -1427,13 +1491,15 @@ final class AB_MCP_Sync_Code_Stage {
 
 	/**
 	 * A state as write_state() writes it, in the form of its row
-	 * stage.state, or null (unknown).
+	 * stage.state, or null (unknown; also under a deadline that is over,
+	 * whose stop the caller passes on).
 	 *
-	 * @param mixed $text The state as read.
+	 * @param mixed      $text     The state as read.
+	 * @param mixed|null $deadline Null, or a deadline of AB_MCP_Sync_Deadline::at() (state()).
 	 * @return array|null
 	 */
-	public static function state_of( $text ) {
-		$state = AB_MCP_Store_Inputs::read( 'stage.state', $text );
+	public static function state_of( $text, $deadline = null ) {
+		$state = AB_MCP_Store_Inputs::read( 'stage.state', $text, $deadline );
 		if ( ! is_array( $state ) || ! AB_MCP_Sync_Code_Package::unit_ok( $state['unit']['kind'], $state['unit']['ref'] ) || $state['done'] > count( $state['todo'] ) || ( self::REFUSED === $state['state'] ) !== ( null !== $state['refusal'] ) ) {
 			return null;
 		}

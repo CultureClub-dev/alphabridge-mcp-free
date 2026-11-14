@@ -149,6 +149,7 @@ require_once __DIR__ . '/class-store-budget.php';
 require_once __DIR__ . '/class-store-inputs.php';
 require_once __DIR__ . '/sync/class-sync-schema.php';
 require_once __DIR__ . '/sync/class-sync-file-manifest.php';
+require_once __DIR__ . '/sync/class-sync-deadline.php';
 
 /**
  * The calls of the protected store to the outside (Z8b branch 3, plan 8.3):
@@ -745,19 +746,28 @@ final class AB_MCP_Protected_Store {
 	 * Whether a folder holds a path: the path is the folder or lies below it,
 	 * by device and inode along the resolved chain of the path's parents (so
 	 * a link or another spelling of a path is seen through). False when
-	 * either cannot be read.
+	 * either cannot be read, and under a deadline that is over (R12 of Z8b
+	 * branch 5: each stat() only while it is not; the caller passes the
+	 * stop on, AB_MCP_Sync_Deadline::stop()).
 	 *
-	 * @param string $dir  Folder.
-	 * @param string $path Path.
+	 * @param string     $dir      Folder.
+	 * @param string     $path     Path.
+	 * @param mixed|null $deadline Null, or a deadline of AB_MCP_Sync_Deadline::at().
 	 * @return bool
 	 */
-	public static function holds( $dir, $path ) {
+	public static function holds( $dir, $path, $deadline = null ) {
+		if ( true !== AB_MCP_Sync_Deadline::left( $deadline ) ) {
+			return false;
+		}
 		$target = @stat( $dir ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
-		$at     = @realpath( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		$at     = true === AB_MCP_Sync_Deadline::left( $deadline ) ? @realpath( $path ) : false; // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 		if ( false === $target || false === $at ) {
 			return false;
 		}
 		while ( true ) {
+			if ( true !== AB_MCP_Sync_Deadline::left( $deadline ) ) {
+				return false;
+			}
 			$here = @stat( $at ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 			if ( false !== $here && $here['dev'] === $target['dev'] && $here['ino'] === $target['ino'] ) {
 				return true;
@@ -1050,17 +1060,25 @@ final class AB_MCP_Protected_Store {
 
 	/**
 	 * Read one file of a group, verified against the SHA-256 put() returned.
+	 * With a deadline (R12 of Z8b branch 5; read_gate()) each step of the
+	 * way and of the file begins only while it is not over, and its stop is
+	 * the answer, never a file missing, unread or damaged.
 	 *
-	 * @param string $area   Area.
-	 * @param string $gid    Group.
-	 * @param string $name   File name.
-	 * @param string $sha256 SHA-256 of the raw bytes.
+	 * @param string     $area     Area.
+	 * @param string     $gid      Group.
+	 * @param string     $name     File name.
+	 * @param string     $sha256   SHA-256 of the raw bytes.
+	 * @param mixed|null $deadline Null, or a deadline of AB_MCP_Sync_Deadline::at().
 	 * @return string|WP_Error
 	 */
-	public static function get( $area, $gid, $name, $sha256 ) {
+	public static function get( $area, $gid, $name, $sha256, $deadline = null ) {
 		$bad = self::bad_ref( $area, $gid, $name );
 		if ( null !== $bad ) {
 			return $bad;
+		}
+		$gate = self::read_gate( $deadline );
+		if ( true !== $gate ) {
+			return $gate;
 		}
 		$root = self::root();
 		if ( is_wp_error( $root ) ) {
@@ -1070,17 +1088,25 @@ final class AB_MCP_Protected_Store {
 		if ( true !== $admitted ) {
 			return $admitted;
 		}
-		$found = self::group( $root, $area, self::group_name( $area, $gid, self::install_id() ), $gid );
+		$found = self::group( $root, $area, self::group_name( $area, $gid, self::install_id() ), $gid, $deadline );
 		if ( ! is_array( $found ) ) {
 			return $found;
 		}
 		$path = $found[1] . '/' . $name;
+		$gate = AB_MCP_Sync_Deadline::left( $deadline );
+		if ( true !== $gate ) {
+			return $gate;
+		}
 		if ( false !== @lstat( $path ) && ! self::plain( $path, 'file' ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 			return self::unsafe();
 		}
-		$raw = AB_MCP_Payload_File::read( $path, $sha256, self::FILE_MAX + 65536, self::FILE_MAX );
+		$raw = AB_MCP_Payload_File::read( $path, $sha256, self::FILE_MAX + 65536, self::FILE_MAX, $deadline );
 		if ( ! is_wp_error( $raw ) ) {
 			return $raw;
+		}
+		$stop = AB_MCP_Sync_Deadline::stop( $deadline );
+		if ( null !== $stop ) {
+			return $stop;
 		}
 		switch ( $raw->get_error_code() ) {
 			case 'missing':
@@ -1093,15 +1119,23 @@ final class AB_MCP_Protected_Store {
 	}
 
 	/**
-	 * The groups of an area, oldest first.
+	 * The groups of an area, oldest first. With a deadline (R12 of Z8b
+	 * branch 5; read_gate()) the way, the listing, each sidecar and each
+	 * entry only while it is not over, and its stop is the answer, never an
+	 * area not listed or a group left out.
 	 *
-	 * @param string $area Area.
+	 * @param string     $area     Area.
+	 * @param mixed|null $deadline Null, or a deadline of AB_MCP_Sync_Deadline::at().
 	 * @return array[]|WP_Error Entries: gid, area, created, user_id, run_id, declared, used, label, closed, expires.
 	 */
-	public static function groups( $area ) {
+	public static function groups( $area, $deadline = null ) {
 		$bad = self::bad_area( $area );
 		if ( null !== $bad ) {
 			return $bad;
+		}
+		$gate = self::read_gate( $deadline );
+		if ( true !== $gate ) {
+			return $gate;
 		}
 		$root = self::root();
 		if ( is_wp_error( $root ) ) {
@@ -1111,21 +1145,61 @@ final class AB_MCP_Protected_Store {
 		if ( true !== $admitted ) {
 			return $admitted;
 		}
-		if ( null === self::way( $root, array( $area ) ) ) {
-			return self::unsafe();
+		if ( null === self::way( $root, array( $area ), $deadline ) ) {
+			return self::stopped_or( $deadline, self::unsafe() );
 		}
 		$out     = array();
-		$entries = self::entries( $root, self::install_id(), $area, $whole );
-		if ( null === $whole ) {
-			return self::unlisted( $area );
+		$entries = self::entries( $root, self::install_id(), $area, $whole, $deadline );
+		if ( null === $whole || null !== AB_MCP_Sync_Deadline::stop( $deadline ) ) {
+			return self::stopped_or( $deadline, self::unlisted( $area ) );
 		}
 		foreach ( $entries as $entry ) {
+			$gate = AB_MCP_Sync_Deadline::left( $deadline );
+			if ( true !== $gate ) {
+				return $gate;
+			}
 			unset( $entry['format'] );
 			$keep             = self::keep( $area );
 			$entry['expires'] = null === $keep ? null : $entry['created'] + $keep;
 			$out[]            = $entry;
 		}
-		return $out;
+		$gate = AB_MCP_Sync_Deadline::left( $deadline );
+		return true === $gate ? $out : $gate;
+	}
+
+	/**
+	 * The gate of a reader under a deadline (R12 of Z8b branch 5), before
+	 * the store is asked where it is: true without a deadline; the stop
+	 * where the deadline is over or is no deadline; and, where this request
+	 * has not decided the store yet ($proof null), a refusal of its own,
+	 * kept as the stop of the deadline (halt()): a reader under a deadline
+	 * never starts the decision and its self-check (proof()), which no
+	 * deadline interrupts. The caller decides it before its deadline
+	 * (AB_MCP_Sync_Code_Swap::checked()); the fresh admission (admitted())
+	 * stays.
+	 *
+	 * @param mixed|null $deadline Null, or a deadline.
+	 * @return true|WP_Error
+	 */
+	private static function read_gate( $deadline ) {
+		$left = AB_MCP_Sync_Deadline::left( $deadline );
+		if ( true !== $left || null === $deadline || null !== self::$proof ) {
+			return $left;
+		}
+		return AB_MCP_Sync_Deadline::halt( $deadline, new WP_Error( 'ab_mcp_store_undecided', __( 'Where the protected store is was not decided yet in this request, and this reading has a time limit, so it does not decide it now (its check can take longer than the time left) and reads nothing of the store. Call again; where it keeps failing, report it to the makers of AlphaBridge MCP: the caller decides the store before such a reading.', 'alphabridge-mcp' ) ) );
+	}
+
+	/**
+	 * The stop of a reading under a deadline where a helper answered «not
+	 * read», else the refusal of the reader.
+	 *
+	 * @param mixed|null $deadline Null, or a deadline.
+	 * @param WP_Error   $refusal  The refusal of the reader.
+	 * @return WP_Error
+	 */
+	private static function stopped_or( $deadline, WP_Error $refusal ) {
+		$stop = AB_MCP_Sync_Deadline::stop( $deadline );
+		return null === $stop ? $refusal : $stop;
 	}
 
 	/**
@@ -1136,14 +1210,22 @@ final class AB_MCP_Protected_Store {
 	 * left out as a group not listed (Z8b branch 5, K2: the stage reads the
 	 * run its group is bound to, AB_MCP_Sync_Code_Stage::complete()).
 	 *
-	 * @param string $area Area.
-	 * @param string $gid  Group.
+	 * With a deadline (R12 of Z8b branch 5; read_gate()) the way and the
+	 * sidecar only while it is not over, and its stop is the answer.
+	 *
+	 * @param string     $area     Area.
+	 * @param string     $gid      Group.
+	 * @param mixed|null $deadline Null, or a deadline of AB_MCP_Sync_Deadline::at().
 	 * @return array|WP_Error
 	 */
-	public static function entry( $area, $gid ) {
+	public static function entry( $area, $gid, $deadline = null ) {
 		$bad = self::bad_ref( $area, $gid, 'x' );
 		if ( null !== $bad ) {
 			return $bad;
+		}
+		$gate = self::read_gate( $deadline );
+		if ( true !== $gate ) {
+			return $gate;
 		}
 		$root = self::root();
 		if ( is_wp_error( $root ) ) {
@@ -1153,11 +1235,15 @@ final class AB_MCP_Protected_Store {
 		if ( true !== $admitted ) {
 			return $admitted;
 		}
-		$area_dir = self::way( $root, array( $area ) );
+		$area_dir = self::way( $root, array( $area ), $deadline );
 		if ( null === $area_dir ) {
-			return self::unsafe();
+			return self::stopped_or( $deadline, self::unsafe() );
 		}
-		$read = self::sidecar( $area_dir . '/' . self::group_name( $area, $gid, self::install_id() ) . '.json', $area );
+		$read = self::sidecar( $area_dir . '/' . self::group_name( $area, $gid, self::install_id() ) . '.json', $area, $deadline );
+		$stop = AB_MCP_Sync_Deadline::stop( $deadline );
+		if ( null !== $stop ) {
+			return $stop;
+		}
 		if ( 'own' !== $read[0] || $gid !== $read[1]['gid'] ) {
 			return new WP_Error( 'ab_mcp_store_entry', __( 'The entry of the group could not be read whole in the protected store (its sidecar cannot be read, is not there, or is not of its form), so what the group is bound to is not known. Try again; if it keeps failing, ask the host to check the rights of the folder.', 'alphabridge-mcp' ) );
 		}
@@ -1219,16 +1305,23 @@ final class AB_MCP_Protected_Store {
 	}
 
 	/**
-	 * The files of a group, by name, with their size on disk.
+	 * The files of a group, by name, with their size on disk. With a
+	 * deadline (R12 of Z8b branch 5; read_gate()) the way, the listing and
+	 * each file only while it is not over, and its stop is the answer.
 	 *
-	 * @param string $area Area.
-	 * @param string $gid  Group.
+	 * @param string     $area     Area.
+	 * @param string     $gid      Group.
+	 * @param mixed|null $deadline Null, or a deadline of AB_MCP_Sync_Deadline::at().
 	 * @return array<string,int>|WP_Error
 	 */
-	public static function files( $area, $gid ) {
+	public static function files( $area, $gid, $deadline = null ) {
 		$bad = self::bad_ref( $area, $gid, 'x' );
 		if ( null !== $bad ) {
 			return $bad;
+		}
+		$gate = self::read_gate( $deadline );
+		if ( true !== $gate ) {
+			return $gate;
 		}
 		$root = self::root();
 		if ( is_wp_error( $root ) ) {
@@ -1238,20 +1331,29 @@ final class AB_MCP_Protected_Store {
 		if ( true !== $admitted ) {
 			return $admitted;
 		}
-		$found = self::group( $root, $area, self::group_name( $area, $gid, self::install_id() ), $gid );
+		$found = self::group( $root, $area, self::group_name( $area, $gid, self::install_id() ), $gid, $deadline );
 		if ( ! is_array( $found ) ) {
 			return $found;
 		}
-		$dir = $found[1];
-		$out = array();
-		foreach ( (array) scandir( $dir ) as $file ) {
+		$dir  = $found[1];
+		$out  = array();
+		$gate = AB_MCP_Sync_Deadline::left( $deadline );
+		foreach ( true === $gate ? (array) scandir( $dir ) : array() as $file ) {
+			$gate = AB_MCP_Sync_Deadline::left( $deadline );
+			if ( true !== $gate ) {
+				break;
+			}
 			$file = (string) $file;
 			if ( self::valid_name( $file ) && self::plain( $dir . '/' . $file, 'file' ) ) {
 				$out[ $file ] = (int) filesize( $dir . '/' . $file );
 			}
 		}
+		if ( true !== $gate ) {
+			return $gate;
+		}
 		ksort( $out );
-		return $out;
+		$gate = AB_MCP_Sync_Deadline::left( $deadline );
+		return true === $gate ? $out : $gate;
 	}
 
 	/**
@@ -4026,35 +4128,49 @@ final class AB_MCP_Protected_Store {
 	 * the form of its row), false where a sidecar of it cannot be read, true
 	 * where it was read whole.
 	 *
-	 * @param string    $root  Folder.
-	 * @param string    $id    Id.
-	 * @param string    $area  Area.
-	 * @param bool|null $whole Set: how the area was read.
+	 * Under a deadline (R12 of Z8b branch 5) the way, the listing, its form
+	 * and each sidecar only while it is not over; once it is, whole is null
+	 * and the caller passes the stop on (AB_MCP_Sync_Deadline::stop()). The
+	 * sort of what was read is one call (a named limit of the deadline).
+	 *
+	 * @param string     $root     Folder.
+	 * @param string     $id       Id.
+	 * @param string     $area     Area.
+	 * @param bool|null  $whole    Set: how the area was read.
+	 * @param mixed|null $deadline Null, or a deadline of AB_MCP_Sync_Deadline::at().
 	 * @return array[]
 	 */
-	private static function entries( $root, $id, $area, &$whole = null ) {
+	private static function entries( $root, $id, $area, &$whole = null, $deadline = null ) {
 		// Read whole: a plain folder, its listing in the form of its row of
 		// AB_MCP_Store_Inputs::TABLE, and no sidecar of it that cannot be
 		// read; a budget counts only an area read whole (stock(), open();
 		// Behebung 4: a listing that failed was an empty one).
 		$out   = array();
 		$whole = null;
-		$dir   = self::way( $root, array( $area ) );
-		$names = null === $dir ? null : AB_MCP_Store_Inputs::read( 'budget.listing', self::calls()->scandir( $dir ) );
+		$dir   = self::way( $root, array( $area ), $deadline );
+		$names = null === $dir || true !== AB_MCP_Sync_Deadline::left( $deadline ) ? null : AB_MCP_Store_Inputs::read( 'budget.listing', self::calls()->scandir( $dir ), $deadline );
 		if ( null === $names ) {
 			return $out;
 		}
 		$whole = true;
 		foreach ( $names as $file ) {
+			if ( true !== AB_MCP_Sync_Deadline::left( $deadline ) ) {
+				$whole = null;
+				return array();
+			}
 			if ( ! preg_match( '/^([0-9a-f]{40})\.json\z/', $file, $m ) ) {
 				continue;
 			}
-			$state = self::plain( $dir . '/' . $file, 'file' ) ? self::sidecar( $dir . '/' . $file, $area ) : array( 'unknown', null );
+			$state = self::plain( $dir . '/' . $file, 'file' ) ? self::sidecar( $dir . '/' . $file, $area, $deadline ) : array( 'unknown', null );
 			if ( 'unknown' === $state[0] ) {
 				$whole = false;
 			} elseif ( 'own' === $state[0] && self::group_name( $area, $state[1]['gid'], $id ) === $m[1] ) {
 				$out[] = $state[1];
 			}
+		}
+		if ( true !== AB_MCP_Sync_Deadline::left( $deadline ) ) {
+			$whole = null;
+			return array();
 		}
 		usort(
 			$out,
@@ -4260,22 +4376,27 @@ final class AB_MCP_Protected_Store {
 	 * the store by device and inode (holds()). Every read, write and removal
 	 * goes through it.
 	 *
-	 * @param string   $root  Folder of the store.
-	 * @param string[] $parts Steps below it.
+	 * Under a deadline (R12 of Z8b branch 5) each step only while it is not
+	 * over; once it is, null, and the caller passes the stop on
+	 * (AB_MCP_Sync_Deadline::stop()).
+	 *
+	 * @param string     $root     Folder of the store.
+	 * @param string[]   $parts    Steps below it.
+	 * @param mixed|null $deadline Null, or a deadline of AB_MCP_Sync_Deadline::at().
 	 * @return string|null
 	 */
-	private static function way( $root, array $parts ) {
+	private static function way( $root, array $parts, $deadline = null ) {
 		$path = $root;
-		if ( ! self::plain( $path, 'dir' ) ) {
+		if ( true !== AB_MCP_Sync_Deadline::left( $deadline ) || ! self::plain( $path, 'dir' ) ) {
 			return null;
 		}
 		foreach ( $parts as $part ) {
 			$path .= '/' . $part;
-			if ( ! self::plain( $path, 'dir' ) ) {
+			if ( true !== AB_MCP_Sync_Deadline::left( $deadline ) || ! self::plain( $path, 'dir' ) ) {
 				return null;
 			}
 		}
-		return self::holds( $root, $path ) ? $path : null;
+		return self::holds( $root, $path, $deadline ) ? $path : null;
 	}
 
 	/**
@@ -4297,23 +4418,30 @@ final class AB_MCP_Protected_Store {
 	 * A group of an area with every step of the way to it plain: its sidecar,
 	 * its folder and its entry, or the refusal.
 	 *
-	 * @param string $root Folder of the store.
-	 * @param string $area Area.
-	 * @param string $name Name of the group on disk.
-	 * @param string $gid  Group.
+	 * Under a deadline (R12 of Z8b branch 5) each step only while it is not
+	 * over, and its stop is the answer, never a link or a group not there.
+	 *
+	 * @param string     $root     Folder of the store.
+	 * @param string     $area     Area.
+	 * @param string     $name     Name of the group on disk.
+	 * @param string     $gid      Group.
+	 * @param mixed|null $deadline Null, or a deadline of AB_MCP_Sync_Deadline::at().
 	 * @return array{0:string,1:string,2:array}|WP_Error
 	 */
-	private static function group( $root, $area, $name, $gid ) {
-		$area_dir = self::way( $root, array( $area ) );
+	private static function group( $root, $area, $name, $gid, $deadline = null ) {
+		$area_dir = self::way( $root, array( $area ), $deadline );
 		if ( null === $area_dir ) {
-			return self::unsafe();
+			return self::stopped_or( $deadline, self::unsafe() );
 		}
 		$side  = $area_dir . '/' . $name . '.json';
-		$entry = self::plain( $side, 'file' ) ? self::read_entry( $side, $area ) : null;
+		$entry = true === AB_MCP_Sync_Deadline::left( $deadline ) && self::plain( $side, 'file' ) ? self::read_entry( $side, $area, $deadline ) : null;
 		if ( null === $entry || $gid !== $entry['gid'] ) {
-			return self::no_group();
+			return self::stopped_or( $deadline, self::no_group() );
 		}
-		$dir = self::way( $root, array( $area, $name ) );
+		$dir = self::way( $root, array( $area, $name ), $deadline );
+		if ( null === $dir && true !== AB_MCP_Sync_Deadline::left( $deadline ) ) {
+			return self::stopped_or( $deadline, self::no_group() );
+		}
 		if ( null === $dir ) {
 			return false !== @lstat( $area_dir . '/' . $name ) ? self::unsafe() : self::no_group(); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 		}
@@ -4401,14 +4529,16 @@ final class AB_MCP_Protected_Store {
 	}
 
 	/**
-	 * Read a sidecar: the entry of a group, or null.
+	 * Read a sidecar: the entry of a group, or null (also under a deadline
+	 * that is over, sidecar()).
 	 *
-	 * @param string $side File.
-	 * @param string $area Area it must belong to.
+	 * @param string     $side     File.
+	 * @param string     $area     Area it must belong to.
+	 * @param mixed|null $deadline Null, or a deadline of AB_MCP_Sync_Deadline::at().
 	 * @return array|null
 	 */
-	private static function read_entry( $side, $area ) {
-		$state = self::sidecar( $side, $area );
+	private static function read_entry( $side, $area, $deadline = null ) {
+		$state = self::sidecar( $side, $area, $deadline );
 		return 'own' === $state[0] ? $state[1] : null;
 	}
 
@@ -4424,13 +4554,19 @@ final class AB_MCP_Protected_Store {
 	 * installation's is sweep()'s question (group_name()). A sidecar that is
 	 * not there is not read here: sweep() reads only what its area lists.
 	 *
-	 * @param string $side File.
-	 * @param string $area Area it lies in.
+	 * Under a deadline (R12 of Z8b branch 5) the file is read, and its JSON
+	 * read in its form and checked field by field, only while the deadline
+	 * is not over; once it is, the sidecar is 'unknown' and the caller
+	 * passes the stop on (AB_MCP_Sync_Deadline::stop()).
+	 *
+	 * @param string     $side     File.
+	 * @param string     $area     Area it lies in.
+	 * @param mixed|null $deadline Null, or a deadline of AB_MCP_Sync_Deadline::at().
 	 * @return array{0:string,1:array|null}
 	 */
-	private static function sidecar( $side, $area ) {
-		$e = AB_MCP_Store_Inputs::read( 'sidecar.json', self::calls()->read( $side, 4096 ) );
-		if ( ! self::whole( $e ) ) {
+	private static function sidecar( $side, $area, $deadline = null ) {
+		$e = true === AB_MCP_Sync_Deadline::left( $deadline ) ? AB_MCP_Store_Inputs::read( 'sidecar.json', self::calls()->read( $side, 4096 ), $deadline ) : null;
+		if ( true !== AB_MCP_Sync_Deadline::left( $deadline ) || ! self::whole( $e ) ) {
 			return array( 'unknown', null );
 		}
 		return array( $area === $e['area'] ? 'own' : 'other', array_intersect_key( $e, self::SIDECAR[ $e['area'] ] ) );

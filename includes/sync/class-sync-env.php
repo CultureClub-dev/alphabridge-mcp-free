@@ -128,6 +128,7 @@ defined( 'ABSPATH' ) || exit;
 require_once __DIR__ . '/class-sync-rows.php';
 require_once __DIR__ . '/class-sync-canon.php';
 require_once __DIR__ . '/class-sync-media.php';
+require_once __DIR__ . '/class-sync-deadline.php';
 require_once __DIR__ . '/class-sync-schema.php';
 require_once __DIR__ . '/class-sync-manifest.php';
 require_once __DIR__ . '/class-sync-credentials.php';
@@ -2448,43 +2449,69 @@ final class AB_MCP_Sync_Env {
 	 * (GitHub-Codex, PR #136, P2). For the report, before it stores or shows
 	 * a line (AB_MCP_Sync_Report::environment()).
 	 *
-	 * @param array[]       $lines Lines.
-	 * @param array[]       $held  The list of held objects of the import.
-	 * @param string[]|null $extra AB_MCP_Redactor::extra_keys() (read when null).
-	 * @return array[]
+	 * With a deadline (AB_MCP_Sync_Deadline, R12 of Z8b branch 5) each entry
+	 * of the list and each line, and each name checked by the rules
+	 * (names_held()), only while it is not over; its stop is the answer (a
+	 * WP_Error), never lines held or shown otherwise. The check of one name
+	 * by the rules (held()) is one step.
+	 *
+	 * @param array[]       $lines    Lines.
+	 * @param array[]       $held     The list of held objects of the import.
+	 * @param string[]|null $extra    AB_MCP_Redactor::extra_keys() (read when null).
+	 * @param mixed|null    $deadline Null, or a deadline of AB_MCP_Sync_Deadline::at().
+	 * @return array[]|WP_Error
 	 */
-	public static function held_here( array $lines, array $held, $extra = null ) {
+	public static function held_here( array $lines, array $held, $extra = null, $deadline = null ) {
+		$left = AB_MCP_Sync_Deadline::left( $deadline );
+		if ( true !== $left ) {
+			return $left;
+		}
 		$extra = is_array( $extra ) ? $extra : AB_MCP_Redactor::extra_keys();
 		$codes = array();
 		foreach ( $held as $one ) {
+			$left = AB_MCP_Sync_Deadline::left( $deadline );
+			if ( true !== $left ) {
+				return $left;
+			}
 			if ( is_array( $one ) && isset( $one[0], $one[1], $one[2] ) ) {
 				$codes[ $one[0] . "\0" . $one[1] ] = (string) $one[2];
 			}
 		}
 		$out = array();
 		foreach ( $lines as $line ) {
+			$left = AB_MCP_Sync_Deadline::left( $deadline );
+			if ( true !== $left ) {
+				return $left;
+			}
 			$key   = is_array( $line ) && isset( $line['env'], $line['ref'] ) ? $line['env'] . "\0" . hash( 'sha256', AB_MCP_Sync_Canon::encode( $line['ref'] ) ) : null;
 			if ( null !== $key && 'host' === $line['env'] && 0 === strpos( (string) $line['ref'], 'constant:' ) && ! self::shown( substr( (string) $line['ref'], 9 ), $extra ) ) {
 				$line['value'] = 'not shown';
 			}
 			$out[] = null !== $key && ! isset( $line['held'] ) && isset( $codes[ $key ] ) && in_array( $line['env'], self::NAMED, true ) ? self::reduced( $line, $codes[ $key ] ) : $line;
 		}
-		return self::names_held( $out, static fn( $name ) => null !== self::held( $name, $extra ) );
+		return self::names_held( $out, static fn( $name ) => null !== self::held( $name, $extra ), $deadline );
 	}
 
 	/**
 	 * The names inside lines held by a rule (the paths of entries, the themes
 	 * of the theme that runs, the main files of a plugin and those that run):
 	 * each such name by its SHA-256, and no entries of a unit whose line is
-	 * held (its paths would name it again).
+	 * held (its paths would name it again). Under a deadline (R12 of Z8b
+	 * branch 5) each line and each name of an entry only while it is not
+	 * over; its stop is the answer.
 	 *
-	 * @param array[]  $lines Lines.
-	 * @param callable $held  function( string $name ): bool, whether a rule holds a name.
-	 * @return array[]
+	 * @param array[]    $lines    Lines.
+	 * @param callable   $held     function( string $name ): bool, whether a rule holds a name.
+	 * @param mixed|null $deadline Null, or a deadline of AB_MCP_Sync_Deadline::at().
+	 * @return array[]|WP_Error
 	 */
-	private static function names_held( array $lines, callable $held ) {
+	private static function names_held( array $lines, callable $held, $deadline = null ) {
 		$units = array();
 		foreach ( $lines as $line ) {
+			$left = AB_MCP_Sync_Deadline::left( $deadline );
+			if ( true !== $left ) {
+				return $left;
+			}
 			if ( is_array( $line ) && isset( $line['env'], $line['held'] ) && in_array( $line['env'], self::UNITS, true ) ) {
 				$units[ (string) $line['ref'] ] = $line['env'];
 			}
@@ -2495,12 +2522,20 @@ final class AB_MCP_Sync_Env {
 		};
 		$out = array();
 		foreach ( $lines as $line ) {
+			$left = AB_MCP_Sync_Deadline::left( $deadline );
+			if ( true !== $left ) {
+				return $left;
+			}
 			if ( is_array( $line ) && 'entries' === ( $line['env'] ?? null ) && is_array( $line['entries'] ?? null ) ) {
 				$unit = explode( ':', (string) $line['unit'], 2 );
 				if ( 2 === count( $unit ) && ( $held( $unit[1] ) || isset( $units[ self::hashed( $unit[1] ) ] ) ) ) {
 					continue;
 				}
 				foreach ( $line['entries'] as $i => $entry ) {
+					$left = AB_MCP_Sync_Deadline::left( $deadline );
+					if ( true !== $left ) {
+						return $left;
+					}
 					$line['entries'][ $i ][0] = $hash( $entry[0] );
 				}
 			} elseif ( is_array( $line ) && 'theme_choice' === ( $line['env'] ?? null ) ) {
@@ -2513,13 +2548,20 @@ final class AB_MCP_Sync_Env {
 				// The main files of a plugin and those that run (GitHub-Codex, P1).
 				foreach ( array( 'mains', 'active' ) as $field ) {
 					if ( is_array( $line[ $field ] ?? null ) ) {
-						$line[ $field ] = array_map( $hash, $line[ $field ] );
+						foreach ( $line[ $field ] as $i => $name ) {
+							$left = AB_MCP_Sync_Deadline::left( $deadline );
+							if ( true !== $left ) {
+								return $left;
+							}
+							$line[ $field ][ $i ] = $hash( $name );
+						}
 					}
 				}
 			}
 			$out[] = $line;
 		}
-		return $out;
+		$left = AB_MCP_Sync_Deadline::left( $deadline );
+		return true === $left ? $out : $left;
 	}
 
 	/**

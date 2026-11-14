@@ -18,10 +18,13 @@ namespace AlphaBridge\Tests;
 
 use AB_MCP_Change_Lock;
 use AB_MCP_Own_Files;
+use AB_MCP_Protected_Store;
 use AB_MCP_Sync_Code_Swap;
+use AB_MCP_Sync_Env;
 use PHPUnit\Framework\TestCase;
 use WP_Error;
 
+require_once __DIR__ . '/sync-stubs.php';
 require_once dirname( __DIR__ ) . '/includes/sync/class-sync-code-swap.php';
 
 final class SyncCodeSwapTest extends TestCase {
@@ -31,7 +34,13 @@ final class SyncCodeSwapTest extends TestCase {
 		if ( ! defined( 'WP_PLUGIN_DIR' ) ) {
 			define( 'WP_PLUGIN_DIR', sys_get_temp_dir() . '/ab-mcp-uninstall-test-' . getmypid() );
 		}
+		// One clock for the swap and its readings (R12): the clock of the
+		// budget of the readings is the swap's. The store is decided by
+		// prepare() before its readings (here: no id, so no store).
 		AB_MCP_Sync_Code_Swap::$clock = static fn(): float => 0.0;
+		AB_MCP_Sync_Env::$clock       = AB_MCP_Sync_Code_Swap::$clock;
+		$GLOBALS['wpdb']              = new \AbTestSyncWpdb();
+		AB_MCP_Protected_Store::forget();
 	}
 
 	protected function tearDown(): void {
@@ -49,6 +58,9 @@ final class SyncCodeSwapTest extends TestCase {
 		AB_MCP_Sync_Code_Swap::forget();
 		AB_MCP_Own_Files::forget();
 		AB_MCP_Sync_Code_Swap::$clock = null;
+		AB_MCP_Sync_Env::$clock       = null;
+		unset( $GLOBALS['wpdb'] );
+		AB_MCP_Protected_Store::forget();
 	}
 
 	/** What a swap is asked with (the row swap.prepare). */

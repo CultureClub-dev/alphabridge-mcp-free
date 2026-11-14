@@ -46,6 +46,7 @@ final class StoreClockAndReadersTest extends TestCase {
 		'includes/sync/class-sync-code-plan.php',
 		'includes/sync/class-sync-code-swap.php',
 		'includes/sync/class-sync-push.php',
+		'includes/sync/class-sync-deadline.php',
 	);
 
 	/**
@@ -98,6 +99,9 @@ final class StoreClockAndReadersTest extends TestCase {
 			'AB_MCP_Sync_Code_Swap::probe_before' => 'the deadline of the test requests before a swap (AB_MCP_Php_Probe::run(), until) from the time left of the same call less the reserve; never stored',
 		),
 		'includes/sync/class-sync-push.php'         => array(),
+		'includes/sync/class-sync-deadline.php'     => array(
+			'AB_MCP_Sync_Deadline::now' => 'the deadline of the readings of a swap within one call (R12 of branch 5: until − keep, the readings of the stage and of the signed manifest), on the clock of the budget of AB_MCP_Sync_Env, the swap\'s in the tests; checked: no finite number is unknown (ab_mcp_read_clock), the reading stops before its next step; never stored, and no validity of a package or proof of the store is decided by it',
+		),
 		'includes/sync/class-sync-engine.php'       => array(
 			'AB_MCP_Sync_Engine::now'        => 'the budget of work of one call (self::$work: when a call stops writing, checking or verifying and the seconds its answer names to wait), with its seam $clock for tests; measured within one call, never stored or read by a later call',
 			'AB_MCP_Sync_Engine::run_verify' => 'the deadline of the PHP probe of the verify (AB_MCP_Php_Probe::run(), until) from the time left of the same call; never stored',
@@ -160,6 +164,7 @@ final class StoreClockAndReadersTest extends TestCase {
 		'AB_MCP_Sync_Code_Swap::lock_held'      => array( array( 'swap.lock' ), array( self::UNIT ) ),
 		'AB_MCP_Sync_Code_Swap::reached'        => array( array( 'swap.probe' ), array( self::UNIT ) ),
 		'AB_MCP_Sync_Code_Swap::prepare'        => array( array( 'swap.prepare' ), array( self::UNIT ) ),
+		'AB_MCP_Sync_Deadline::at'              => array( array( 'read.until' ), array( self::UNIT ) ),
 		'AB_MCP_Update_Guard::stored_note'      => array( array( 'swap.note' ), array( self::UNIT ) ),
 		'AB_MCP_Update_Guard::stored_time'      => array( array( 'swap.core_lock' ), array( self::UNIT ) ),
 		'AB_MCP_Update_Guard::swap_holds'       => array( array( 'swap.core_lock', 'swap.note' ), array(), 'its one consumer is busy(), the words of an update refused while a swap holds the lock (no decision of a swap): a note or a time not of its form names no swap; driven in tests/standalone-lifecycle/update-flow-test.php (SW1)' ),

@@ -656,13 +656,17 @@ final class AB_MCP_Sync_Code_Swap {
 	 * @return array|WP_Error
 	 */
 	private static function checked( array $in, $target, $now, $runs, array $probe ) {
-		$kind = $in['unit']['kind'];
-		$ref  = $in['unit']['ref'];
+		$kind     = $in['unit']['kind'];
+		$ref      = $in['unit']['ref'];
+		$deadline = self::read_deadline( $in );
+		if ( is_wp_error( $deadline ) ) {
+			return $deadline;
+		}
 		$live = self::unchanged( $in, $target, $now );
 		if ( is_wp_error( $live ) ) {
 			return $live;
 		}
-		$stage = self::signed_stage( $in );
+		$stage = self::signed_stage( $in, $deadline );
 		if ( is_wp_error( $stage ) ) {
 			return $stage;
 		}
@@ -712,6 +716,31 @@ final class AB_MCP_Sync_Code_Swap {
 				'live'    => $version,
 			),
 		);
+	}
+
+	/**
+	 * The deadline of the readings after the test requests (R12; A1 of the
+	 * Codex round on 4881c0d..947fa6d): first the place of the protected
+	 * store is decided as this request decides it (AB_MCP_Protected_Store::
+	 * proof(), with its self-check where one is due), which no deadline
+	 * interrupts and whose time the readings then lack (until stays); then
+	 * until − keep on the clock of the budget (AB_MCP_Sync_Deadline::at()),
+	 * checked before the next step. The readers under it never decide the
+	 * store themselves. The last check of the time left before the mutation
+	 * (checked()) stays.
+	 *
+	 * @param array $in The arguments, with keep (under_locks()).
+	 * @return AB_MCP_Sync_Deadline|WP_Error
+	 */
+	private static function read_deadline( array $in ) {
+		AB_MCP_Protected_Store::proof();
+		$deadline = AB_MCP_Sync_Deadline::at( $in['until'] - $in['keep'] );
+		$left     = is_wp_error( $deadline ) ? $deadline : AB_MCP_Sync_Deadline::left( $deadline );
+		if ( true !== $left ) {
+			/* translators: 1: why the stage or the signed manifest was not read (one or more whole sentences), 2: kind of the unit, as the tools name it (plugin, theme), 3: its name. */
+			return self::refusal( $left->get_error_code(), sprintf( __( '%1$s So the %2$s %3$s is not swapped. Call action=next again; where it keeps failing, abort the run (wp_site_push action=abort) and plan again.', 'alphabridge-mcp' ), $left->get_error_message(), $in['unit']['kind'], $in['unit']['ref'] ) );
+		}
+		return $deadline;
 	}
 
 	/**
@@ -881,12 +910,15 @@ final class AB_MCP_Sync_Code_Swap {
 	 * reader of the state ready, bound to this run, this unit and the hash
 	 * of the plan), its tree read whole, and three hashes the same: of the
 	 * tree, of its state (tree and signed), and of the signed manifest read
-	 * now (signed()), which is the hash of the plan.
+	 * now (signed()), which is the hash of the plan. ready() and signed()
+	 * read under the deadline of the swap (R12), whose stop is the refusal
+	 * with its own code; tree() under its own budget (TREE_BUDGET).
 	 *
-	 * @param array $in The arguments.
+	 * @param array                $in       The arguments.
+	 * @param AB_MCP_Sync_Deadline $deadline The deadline of the readings (read_deadline()).
 	 * @return array|WP_Error tree, signed.
 	 */
-	private static function signed_stage( array $in ) {
+	private static function signed_stage( array $in, AB_MCP_Sync_Deadline $deadline ) {
 		$unit  = $in['unit'];
 		$stage = $in['stage'];
 		$state = AB_MCP_Sync_Code_Stage::ready(
@@ -898,14 +930,15 @@ final class AB_MCP_Sync_Code_Swap {
 				'kind'   => $unit['kind'],
 				'ref'    => $unit['ref'],
 				'signed' => $unit['staging_hash'],
-			)
+			),
+			$deadline
 		);
 		if ( null === $state ) {
 			/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name. */
 			return self::refusal( 'code:stage_not_ready', sprintf( __( 'The stage of the %1$s %2$s is not read as ready for this step (its state, its tree and hash, or its binding to this run, this unit and the version of the staging site), so it is not swapped. Call action=next again; where it keeps failing, abort the run (wp_site_push action=abort) and plan again.', 'alphabridge-mcp' ), $unit['kind'], $unit['ref'] ) );
 		}
-		$tree   = AB_MCP_Protected_Store::tree( 'stage', $stage['gid'], $stage['name'], $stage['hash'] );
-		$signed = is_wp_error( $tree ) ? $tree : AB_MCP_Sync_Code_Stage::signed( $in['env'], $unit['kind'], $unit['ref'] );
+		$tree   = is_wp_error( $state ) ? $state : AB_MCP_Protected_Store::tree( 'stage', $stage['gid'], $stage['name'], $stage['hash'] );
+		$signed = is_wp_error( $tree ) ? $tree : AB_MCP_Sync_Code_Stage::signed( $in['env'], $unit['kind'], $unit['ref'], $deadline );
 		if ( is_wp_error( $signed ) ) {
 			/* translators: 1: why the stage or the signed manifest was not read (one or more whole sentences), 2: kind of the unit, as the tools name it (plugin, theme), 3: its name. */
 			return self::refusal( $signed->get_error_code(), sprintf( __( '%1$s So the %2$s %3$s is not swapped. Call action=next again; where it keeps failing, abort the run (wp_site_push action=abort) and plan again.', 'alphabridge-mcp' ), $signed->get_error_message(), $unit['kind'], $unit['ref'] ) );
