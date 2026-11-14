@@ -806,11 +806,103 @@ final class AB_MCP_Sync_Net {
 	 * «reset-password:guide.php», «reset-password;v2.php» or «O'Reilly
 	 * password's.pdf» does (fail closed, rare: GRENZEN-BERICHT, branch 7, C).
 	 *
+	 * Each name looked up by its length (R12b, part 1a: the same answer as
+	 * the comparison of each name at 8daf33f, tests/SyncNetKeyedSameTest.php).
+	 * A name or a key of another type than a string takes the way of before
+	 * (keyed_cast()).
+	 *
 	 * @param string   $text  A layer of the name.
 	 * @param string[] $extra AB_MCP_Redactor::extra_keys().
 	 * @return bool
 	 */
 	public static function keyed( $text, array $extra ) {
+		if ( ! is_string( $text ) || ! self::keyed_strings( $extra ) ) {
+			return self::keyed_cast( $text, $extra );
+		}
+		$size = strlen( $text );
+		$at   = strcspn( $text, '=:;"\'' );
+		if ( $at === $size ) {
+			return false;
+		}
+		$keys = self::keyed_lengths( array_merge( AB_MCP_Redactor::CREDENTIAL_EXACT, AB_MCP_Redactor::EXTRA_NAMES, $extra ) );
+		while ( $at < $size ) {
+			$before = rtrim( substr( $text, 0, $at ), " \t\n\r\x0B\f" );
+			if ( self::keyed_ends( strtolower( $before ), $keys ) || self::keyed_ends( AB_MCP_Redactor::normalize_key( $before ), $keys ) ) {
+				return true;
+			}
+			if ( 1 === preg_match( '/[A-Za-z0-9_\-.\x80-\xFF]+\z/', $before, $word ) && AB_MCP_Sync_Credentials::names_credential( $word[0], $extra ) ) {
+				return true;
+			}
+			$at += 1 + strcspn( $text, '=:;"\'', $at + 1 );
+		}
+		return false;
+	}
+
+	/**
+	 * Whether each key is a string (R12b, F3-3; else keyed_cast()).
+	 *
+	 * @param array $extra The keys.
+	 * @return bool
+	 */
+	private static function keyed_strings( array $extra ) {
+		foreach ( $extra as $key ) {
+			if ( ! is_string( $key ) ) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * The names keyed() compares, by their length, the shortest first; an
+	 * empty one is none (as at 8daf33f).
+	 *
+	 * @param string[] $keys The names.
+	 * @return array<int,array<string,bool>> Length => name => true.
+	 */
+	private static function keyed_lengths( array $keys ) {
+		$out = array();
+		foreach ( $keys as $key ) {
+			if ( '' !== $key ) {
+				$out[ strlen( $key ) ][ $key ] = true;
+			}
+		}
+		ksort( $out );
+		return $out;
+	}
+
+	/**
+	 * Whether a text ends in one of the names: for each length of a name, its
+	 * end of that length looked up (at 8daf33f str_ends_with() with each).
+	 *
+	 * @param string                        $text    The text before a sign, in one spelling.
+	 * @param array<int,array<string,bool>> $lengths keyed_lengths().
+	 * @return bool
+	 */
+	private static function keyed_ends( $text, array $lengths ) {
+		$size = strlen( $text );
+		foreach ( $lengths as $length => $names ) {
+			if ( $length > $size ) {
+				return false;
+			}
+			if ( isset( $names[ substr( $text, -$length ) ] ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * keyed() as at 8daf33f, for a name or a key of another type than a
+	 * string (R12b, F3-3): each turned into a string where it is read, in
+	 * the same order, so that it answers as before (held( 'note:42:', [ 42 ] )
+	 * holds the name, held( 'note:EXAMPLE.php', [ 42 ] ) does not).
+	 *
+	 * @param mixed $text  A layer of the name.
+	 * @param array $extra The keys.
+	 * @return bool
+	 */
+	private static function keyed_cast( $text, array $extra ) {
 		$text = (string) $text;
 		if ( ! preg_match_all( '/[=:;"\']/', $text, $m, PREG_OFFSET_CAPTURE ) ) {
 			return false;
