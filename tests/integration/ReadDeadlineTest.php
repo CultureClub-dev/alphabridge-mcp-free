@@ -32,6 +32,17 @@
  *   has not decided is not decided by a reading under a deadline
  *   (ab_mcp_store_undecided). Without a deadline each reading answers as
  *   with one in time.
+ * - The translations of what a reader below answered into a refusal of its
+ *   own, each on its own level (at the entrance of signed() the report of
+ *   the environment catches every stop of taken() first, so there they
+ *   would not show): AB_MCP_Sync_Import::taken() of the series single,
+ *   AB_MCP_Protected_Store::groups() of the area in and get() of the first
+ *   chunk of that series, read directly, each gate by itself as above; and
+ *   by name the gate where each translation would speak: over there, get()
+ *   (never corrupt), group() (never unsafe), groups() (never unsafe or
+ *   unlisted), the mark in taken() (never incomplete), lines() (never
+ *   unread) and verify() (never spelling) answer the stop in its full
+ *   wording.
  *
  * need() and stage() read without a deadline: CodeStageTest.
  *
@@ -217,16 +228,108 @@ final class ReadDeadlineTest extends TestCase {
 			'AB_MCP_Sync_Code_Stage::signed#2'  => 3,
 			'AB_MCP_Sync_Code_Stage::signed#3'  => 1,
 		),
+		'taken'  => array(
+			'AB_MCP_Sync_Import::taken#1'       => 1,
+			'AB_MCP_Protected_Store::groups#1'  => 1,
+			'AB_MCP_Protected_Store::way#1'     => 16,
+			'AB_MCP_Protected_Store::way#2'     => 23,
+			'AB_MCP_Protected_Store::holds#1'   => 16,
+			'AB_MCP_Protected_Store::holds#2'   => 16,
+			'AB_MCP_Protected_Store::holds#3'   => 39,
+			'AB_MCP_Protected_Store::entries#1' => 1,
+			'AB_MCP_Shape::items#1'             => 16,
+			'AB_MCP_Protected_Store::entries#2' => 16,
+			'AB_MCP_Protected_Store::sidecar#1' => 14,
+			'AB_MCP_Shape::decoded#1'           => 14,
+			'AB_MCP_Shape::decoded#2'           => 14,
+			'AB_MCP_Protected_Store::entries#3' => 1,
+			'AB_MCP_Protected_Store::groups#2'  => 7,
+			'AB_MCP_Protected_Store::groups#3'  => 1,
+			'AB_MCP_Sync_Import::find#1'        => 1,
+			'AB_MCP_Protected_Store::files#1'   => 2,
+			'AB_MCP_Protected_Store::group#1'   => 7,
+			'AB_MCP_Protected_Store::files#2'   => 2,
+			'AB_MCP_Protected_Store::files#3'   => 14,
+			'AB_MCP_Protected_Store::files#4'   => 2,
+			'AB_MCP_Protected_Store::get#1'     => 5,
+			'AB_MCP_Protected_Store::get#2'     => 5,
+			'AB_MCP_Payload_File::read#1'       => 5,
+			'AB_MCP_Payload_File::read#2'       => 5,
+			'AB_MCP_Payload_File::read#3'       => 5,
+			'AB_MCP_Payload_File::read#4'       => 5,
+			'AB_MCP_Payload_File::read#5'       => 5,
+			'AB_MCP_Payload_File::read#6'       => 5,
+			'AB_MCP_Sync_Import::record#1'      => 1,
+			'AB_MCP_Sync_Import::record#2'      => 1,
+			'AB_MCP_Sync_Import::taken#2'       => 1,
+			'AB_MCP_Sync_Manifest::verify#1'    => 1,
+			'AB_MCP_Sync_Canon::prepared#3'     => 22,
+			'AB_MCP_Sync_Canon::prepared#2'     => 2,
+			'AB_MCP_Sync_Canon::encode#1'       => 1,
+			'AB_MCP_Sync_Manifest::shape#2'     => 2,
+			'AB_MCP_Sync_Manifest::verify#2'    => 1,
+			'AB_MCP_Sync_Manifest::verify#3'    => 1,
+			'AB_MCP_Sync_Import::inflate#1'     => 2,
+			'AB_MCP_Sync_Import::inflate#2'     => 2,
+			'AB_MCP_Sync_Import::inflate#3'     => 2,
+			'AB_MCP_Sync_Import::lines#1'       => 5,
+			'AB_MCP_Sync_Import::held_list#1'   => 5,
+			'AB_MCP_Sync_Import::held_list#2'   => 1,
+			'AB_MCP_Sync_Import::held_list#3'   => 1,
+			'AB_MCP_Sync_Import::taken#3'       => 1,
+		),
+		'groups' => array(
+			'AB_MCP_Protected_Store::groups#1'  => 1,
+			'AB_MCP_Protected_Store::way#1'     => 2,
+			'AB_MCP_Protected_Store::way#2'     => 2,
+			'AB_MCP_Protected_Store::holds#1'   => 2,
+			'AB_MCP_Protected_Store::holds#2'   => 2,
+			'AB_MCP_Protected_Store::holds#3'   => 4,
+			'AB_MCP_Protected_Store::entries#1' => 1,
+			'AB_MCP_Shape::items#1'             => 16,
+			'AB_MCP_Protected_Store::entries#2' => 16,
+			'AB_MCP_Protected_Store::sidecar#1' => 7,
+			'AB_MCP_Shape::decoded#1'           => 7,
+			'AB_MCP_Shape::decoded#2'           => 7,
+			'AB_MCP_Protected_Store::entries#3' => 1,
+			'AB_MCP_Protected_Store::groups#2'  => 7,
+			'AB_MCP_Protected_Store::groups#3'  => 1,
+		),
+		'get'    => array(
+			'AB_MCP_Protected_Store::get#1'     => 1,
+			'AB_MCP_Protected_Store::way#1'     => 2,
+			'AB_MCP_Protected_Store::way#2'     => 3,
+			'AB_MCP_Protected_Store::holds#1'   => 2,
+			'AB_MCP_Protected_Store::holds#2'   => 2,
+			'AB_MCP_Protected_Store::holds#3'   => 5,
+			'AB_MCP_Protected_Store::group#1'   => 1,
+			'AB_MCP_Protected_Store::sidecar#1' => 1,
+			'AB_MCP_Shape::decoded#1'           => 1,
+			'AB_MCP_Shape::decoded#2'           => 1,
+			'AB_MCP_Protected_Store::get#2'     => 1,
+			'AB_MCP_Payload_File::read#1'       => 1,
+			'AB_MCP_Payload_File::read#2'       => 1,
+			'AB_MCP_Payload_File::read#3'       => 1,
+			'AB_MCP_Payload_File::read#4'       => 1,
+			'AB_MCP_Payload_File::read#5'       => 1,
+			'AB_MCP_Payload_File::read#6'       => 1,
+		),
 	);
 
 	/** The SHA-256 of the gates of each reading in time, one gate a line, in order. */
 	const ORDER = array(
 		'single' => '042c0201e514698c0bcb4a09c17b881d3c12f3fe3fecc180b0bfc2d881b777c0',
 		'two'    => '17b445bb6e5ff9b88c33034de1282f61e9ce6e21e5e601dcef81dbd4e7581611',
+		'taken'  => 'e299121732d7736ca1923a325e83d60fc55581a4d0d2fa85463b89c4cb3a8f94',
+		'groups' => 'ad55959bc822020eac9f0e37332fde3525826b6d44f88ca435bd85940f22ccbf',
+		'get'    => '957bcd4b227ab8ca2eef7b8344013fe996cc44c4c7f434de06d808ad426f0146',
 	);
 
 	/** @var array<string,string[]> The series built once: name => package ids. */
 	private static $series = array();
+
+	/** @var array The first chunk of the series single: gid (its group in the area in), sha256. */
+	private static $chunk = array();
 
 	/** @var string|null DOCUMENT_ROOT before the class. */
 	private static $docroot_before;
@@ -245,6 +348,7 @@ final class ReadDeadlineTest extends TestCase {
 		}
 		self::pair();
 		self::$series = self::build();
+		self::$chunk  = self::chunk_of( self::$series['single'][0] );
 	}
 
 	public static function tearDownAfterClass(): void {
@@ -256,6 +360,7 @@ final class ReadDeadlineTest extends TestCase {
 		AB_MCP_Protected_Store::forget();
 		AB_MCP_Sync_Schema::forget();
 		self::$series = array();
+		self::$chunk  = array();
 		if ( null === self::$docroot_before ) {
 			unset( $_SERVER['DOCUMENT_ROOT'] );
 		} else {
@@ -602,6 +707,21 @@ final class ReadDeadlineTest extends TestCase {
 		throw new RuntimeException( "No group of the package $id." );
 	}
 
+	/** The group of a package in the area in and the SHA-256 of its first chunk (its manifest), read without a deadline. */
+	private static function chunk_of( string $id ): array {
+		$taken = AB_MCP_Sync_Import::taken( $id, 'env' );
+		self::taken_on( $taken, 'taken' );
+		foreach ( AB_MCP_Protected_Store::groups( 'in' ) as $group ) {
+			if ( AB_MCP_Sync_Import::LABEL . $id === $group['label'] ) {
+				return array(
+					'gid'    => $group['gid'],
+					'sha256' => $taken['manifest']['chunks'][0]['sha256'],
+				);
+			}
+		}
+		throw new RuntimeException( "No group of the package $id." );
+	}
+
 	/** A file of the store with other bytes as the store writes them (their SHA-256 another). */
 	private static function replace( string $path, string $raw ): void {
 		if ( ! is_file( $path ) ) {
@@ -660,9 +780,11 @@ final class ReadDeadlineTest extends TestCase {
 	 * signed() of a series under a deadline (or none, or a value that is no
 	 * deadline) with this clock, each listing and each sidecar the store reads
 	 * through its seam kept as a step of the clock; $first faults of the seam
-	 * go before those.
+	 * go before those. The readings taken, groups and get read below signed()
+	 * directly: taken() of the series single, groups() of the area in, get()
+	 * of the first chunk of single.
 	 *
-	 * @param string        $series Key of the series.
+	 * @param string        $series Key of the series or of the reading.
 	 * @param DeadlineClock $clock  The clock.
 	 * @param mixed         $deadline Deadline.
 	 * @param array[]       $first  Faults of the seam of the store before the steps.
@@ -672,6 +794,14 @@ final class ReadDeadlineTest extends TestCase {
 		$clock->install();
 		self::watch( $clock, $first );
 		try {
+			switch ( $series ) {
+				case 'taken':
+					return AB_MCP_Sync_Import::taken( self::$series['single'][0], 'env', $deadline );
+				case 'groups':
+					return AB_MCP_Protected_Store::groups( 'in', $deadline );
+				case 'get':
+					return AB_MCP_Protected_Store::get( 'in', self::$chunk['gid'], AB_MCP_Sync_Export::chunk_name( 0 ), self::$chunk['sha256'], $deadline );
+			}
 			return AB_MCP_Sync_Code_Stage::signed( self::$series[ $series ], 'plugin', self::UNIT, $deadline );
 		} finally {
 			AB_MCP_Test_Seam::restore_all();
@@ -705,11 +835,24 @@ final class ReadDeadlineTest extends TestCase {
 		);
 	}
 
+	/**
+	 * What a reading answers without a deadline: the unit signed; a reading
+	 * below signed() as it reads (never a refusal).
+	 */
+	private function answer( string $series ) {
+		if ( 'single' === $series || 'two' === $series ) {
+			return self::signed_answer();
+		}
+		$without = $this->reading( $series, DeadlineClock::in_time(), null );
+		self::assertNotInstanceOf( WP_Error::class, $without, $series . ' without a deadline: ' . ( $without instanceof WP_Error ? $without->get_error_code() : '' ) );
+		return $without;
+	}
+
 	/** A reading of a series in time: its clock, checked against the gates written down. */
 	private function in_time( string $series ): DeadlineClock {
 		$clock  = DeadlineClock::in_time();
 		$answer = $this->reading( $series, $clock, DeadlineClock::deadline() );
-		self::assertSame( self::signed_answer(), $answer, 'In time: the unit, signed.' );
+		self::assertSame( $this->answer( $series ), $answer, 'In time: the answer without a deadline.' );
 		self::assertSame( self::COUNTS[ $series ], array_count_values( $clock->gates ), 'Each gate as often as written down.' );
 		self::assertSame( self::ORDER[ $series ], hash( 'sha256', implode( "\n", $clock->gates ) ), 'The gates in the order written down.' );
 		return $clock;
@@ -755,6 +898,9 @@ final class ReadDeadlineTest extends TestCase {
 		return array(
 			'single' => array( 'single' ),
 			'two'    => array( 'two' ),
+			'taken'  => array( 'taken' ),
+			'groups' => array( 'groups' ),
+			'get'    => array( 'get' ),
 		);
 	}
 
@@ -780,7 +926,7 @@ final class ReadDeadlineTest extends TestCase {
 	public function testInTimeTheSignedManifestAsksAtExactlyItsGatesAndAnswersAsWithoutADeadline( string $series ): void {
 		$clock   = DeadlineClock::in_time();
 		$without = $this->reading( $series, $clock, null );
-		self::assertSame( self::signed_answer(), $without, 'Without a deadline: the unit, signed.' );
+		self::assertSame( $this->answer( $series ), $without, 'Without a deadline: the unit signed; below signed() what the reader reads.' );
 		self::assertSame( array( array(), 0 ), array( $clock->gates, $clock->others ), 'Without a deadline no clock read.' );
 		$clock    = DeadlineClock::in_time();
 		$deadline = DeadlineClock::deadline();
@@ -794,6 +940,42 @@ final class ReadDeadlineTest extends TestCase {
 
 	#[DataProvider( 'gates' )]
 	public function testOverAtOneGateTheSignedManifestStopsThereWithoutAStepOrAReadingOfTheClockAfterIt( string $series, string $gate, int $pick ): void {
+		$this->stoppedAt( $series, $gate, $pick );
+	}
+
+	/**
+	 * The gate where each translation of what a reader below answered into a
+	 * refusal of its own would speak, over (Codex round 1 on the contract,
+	 * finding 4: each translation reached by itself): the reading the
+	 * translation belongs to, the gate and which time it is asked (in
+	 * taken() the first file read is the record of the package in find(),
+	 * the second its mark).
+	 *
+	 * @return array<string,array{string,string,int}>
+	 */
+	public static function translations(): array {
+		return array(
+			'get(): the file read, never corrupt'                    => array( 'get', 'AB_MCP_Payload_File::read#6', 0 ),
+			'group(): the way to the folder of the group, never unsafe' => array( 'get', 'AB_MCP_Protected_Store::way#1', 1 ),
+			'groups(): the way to the area, never unsafe'            => array( 'groups', 'AB_MCP_Protected_Store::way#1', 0 ),
+			'groups(): the listing, never unlisted'                  => array( 'groups', 'AB_MCP_Protected_Store::entries#2', 0 ),
+			'taken(): the mark read, never incomplete'               => array( 'taken', 'AB_MCP_Payload_File::read#6', 1 ),
+			'lines(): the chunk inflated, never unread'              => array( 'taken', 'AB_MCP_Sync_Import::inflate#2', 0 ),
+			'verify(): the manifest spelt, never spelling'           => array( 'taken', 'AB_MCP_Sync_Canon::encode#1', 0 ),
+		);
+	}
+
+	#[DataProvider( 'translations' )]
+	public function testOverWhereATranslationWouldSpeakTheReaderPassesTheStopOnNeverItsOwnRefusal( string $series, string $gate, int $pick ): void {
+		$this->stoppedAt( $series, $gate, $pick );
+	}
+
+	/**
+	 * A reading over at the pick-th time it asks a gate: the stop its answer
+	 * in full, by the same way up to that gate, without a step of the store
+	 * or a reading of the clock after it.
+	 */
+	private function stoppedAt( string $series, string $gate, int $pick ): void {
 		$base     = $this->in_time( $series );
 		$k        = self::place( $base->gates, $gate, $pick );
 		$clock    = DeadlineClock::late_from( $k );
