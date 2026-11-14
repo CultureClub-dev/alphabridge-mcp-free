@@ -724,7 +724,7 @@ return array(
 	),
 	'G3' => array(
 		'AB_MCP_Protected_Store::entries' => array( 'foreach ( $names as $file )' ),
-		'AB_MCP_Protected_Store::files' => array( 'foreach ( true === $gate ? (array) scandir( $dir ) : array() as $file )' ),
+		'AB_MCP_Protected_Store::files' => array( 'foreach ( $names as $file )' ),
 		'AB_MCP_Protected_Store::groups' => array( 'foreach ( $entries as $entry )' ),
 		'AB_MCP_Protected_Store::holds' => array( 'while ( true )' ),
 		'AB_MCP_Protected_Store::state' => array( 'foreach ( array_keys( $out[\'seen\'] ) as $where )' ),
@@ -872,5 +872,15 @@ return array(
 		'AB_MCP_Sync_Deadline::stop' => 'STOP',
 		'AB_MCP_Sync_File_Manifest::due' => 'CHECK',
 		'AB_MCP_Sync_File_Manifest::left' => 'CHECK',
+		// Part 3.2: the helpers of the steps of the disk the ways call now (each
+		// call a step of G2 and a check here, ReadBudgetScan::basis()).
+		'AB_MCP_Sync_Step::file_get_contents' => 'CHECK',
+		'AB_MCP_Sync_Step::filesize' => 'CHECK',
+		'AB_MCP_Sync_Step::is_file' => 'CHECK',
+		'AB_MCP_Sync_Step::is_readable' => 'CHECK',
+		'AB_MCP_Sync_Step::lstat' => 'CHECK',
+		'AB_MCP_Sync_Step::realpath' => 'CHECK',
+		'AB_MCP_Sync_Step::scandir' => 'CHECK',
+		'AB_MCP_Sync_Step::stat' => 'CHECK',
 	),
 );

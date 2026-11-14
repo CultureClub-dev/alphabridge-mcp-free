@@ -140,8 +140,17 @@ final class AB_MCP_IT_Store_Calls {
 		return $this->real->copy_into( $from, $to );
 	}
 
-	public function read( $path, $max ) {
-		return $this->fails( 'read', $path ) ? false : $this->real->read( $path, $max );
+	/**
+	 * read() of the real calls, with the deadline of the reading passed on
+	 * (R12b of Z8b branch 5: the composed seam asks it).
+	 *
+	 * @param string     $path     File.
+	 * @param int        $max      Bytes at most.
+	 * @param mixed|null $deadline Null, or a deadline.
+	 * @return string|false|WP_Error
+	 */
+	public function read( $path, $max, $deadline = null ) {
+		return $this->fails( 'read', $path ) ? false : $this->real->read( $path, $max, $deadline );
 	}
 
 	/**

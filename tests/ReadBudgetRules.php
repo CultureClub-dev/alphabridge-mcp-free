@@ -925,7 +925,8 @@ final class ReadBudgetRules {
 			}
 			$name = $e['what'];
 			if ( 'STEP' === $e['k'] ) {
-				$name = $this->hand['STEP_CLASS'] . '::' . $e['what'];
+				// Part 3.2: the helper by its method (wpdb_get_var, not wpdb->get_var), as G7 names it.
+				$name = $this->hand['STEP_CLASS'] . '::' . $e['helper_method'];
 			}
 			$cb = false;
 			foreach ( $this->model['events'][ $k ] as $x ) {
@@ -1065,7 +1066,8 @@ final class ReadBudgetRules {
 		foreach ( $this->model['events'][ $k ] as $e ) {
 			if ( 'STEP' === $e['k'] ) {
 				if ( ! $this->passes_halt( $k, $e, null ) ) {
-					$this->add( 'R7', $k, $e, $this->hand['STEP_CLASS'] . '::' . $e['what'] );
+					// Part 3.2: the helper by its method, as G7 names it (only a message).
+					$this->add( 'R7', $k, $e, $this->hand['STEP_CLASS'] . '::' . $e['helper_method'] );
 				}
 				continue;
 			}

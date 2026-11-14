@@ -449,7 +449,9 @@ PHP;
 		}
 		$checks = array();
 		foreach ( $soll['G7'] as $check => $kind ) {
-			if ( 'CHECK' === $kind ) {
+			// Part 3.2: a helper of the steps answers in the form wp by itself
+			// (ReadBudgetRules, STEP_FORM), never by CHECKS.
+			if ( 'CHECK' === $kind && 0 !== strpos( $check, $soll['HAND']['STEP_CLASS'] . '::' ) ) {
 				$checks[] = $check;
 			}
 		}

@@ -129,6 +129,7 @@ require_once __DIR__ . '/class-sync-rows.php';
 require_once __DIR__ . '/class-sync-canon.php';
 require_once __DIR__ . '/class-sync-media.php';
 require_once __DIR__ . '/class-sync-deadline.php';
+require_once __DIR__ . '/class-sync-step.php';
 require_once __DIR__ . '/class-sync-schema.php';
 require_once __DIR__ . '/class-sync-manifest.php';
 require_once __DIR__ . '/class-sync-credentials.php';
@@ -979,17 +980,30 @@ final class AB_MCP_Sync_Env {
 	 * @return array<string,string>|null
 	 */
 	public static function head_read( $path, array $headers, $deadline = null ) {
-		if ( true !== AB_MCP_Sync_Deadline::left( $deadline ) || ! is_string( $path ) || ! is_file( $path ) ) {
+		if ( true !== AB_MCP_Sync_Deadline::left( $deadline ) || ! is_string( $path ) ) {
 			return null;
 		}
-		if ( true !== AB_MCP_Sync_Deadline::left( $deadline ) || ! is_readable( $path ) ) {
+		// Each step of the disk through the helper of the steps (R12b), which
+		// asks the deadline again: where it is over there, null as well.
+		$is = AB_MCP_Sync_Step::is_file( $deadline, $path );
+		if ( true !== $is ) {
+			return null;
+		}
+		if ( true !== AB_MCP_Sync_Deadline::left( $deadline ) ) {
+			return null;
+		}
+		$is = AB_MCP_Sync_Step::is_readable( $deadline, $path );
+		if ( true !== $is ) {
 			return null;
 		}
 		clearstatcache( true, $path );
 		if ( true !== AB_MCP_Sync_Deadline::left( $deadline ) ) {
 			return null;
 		}
-		$size = @filesize( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- a file that went is answered.
+		$size = @AB_MCP_Sync_Step::filesize( $deadline, $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- a file that went is answered.
+		if ( is_wp_error( $size ) ) {
+			return null;
+		}
 		if ( true !== AB_MCP_Sync_Deadline::left( $deadline ) ) {
 			return null;
 		}

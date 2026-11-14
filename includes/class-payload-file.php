@@ -24,6 +24,8 @@
 
 defined( 'ABSPATH' ) || exit;
 
+require_once __DIR__ . '/sync/class-sync-step.php';
+
 /**
  * Class AB_MCP_Payload_File
  */
@@ -114,7 +116,13 @@ final class AB_MCP_Payload_File {
 		if ( true !== $left ) {
 			return $left;
 		}
-		if ( ! is_file( $path ) ) {
+		// Each step of the disk through the helper of the steps (R12b of Z8b
+		// branch 5), which asks the deadline again: its stop is the answer.
+		$is = AB_MCP_Sync_Step::is_file( $deadline, $path );
+		if ( is_wp_error( $is ) ) {
+			return $is;
+		}
+		if ( ! $is ) {
 			return self::refused( 'missing' );
 		}
 		$left = self::left( $deadline );
@@ -123,7 +131,10 @@ final class AB_MCP_Payload_File {
 		}
 		// Check the size on disk BEFORE reading: a tampered file must not be
 		// pulled into memory first and rejected afterwards.
-		$on_disk = @filesize( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		$on_disk = @AB_MCP_Sync_Step::filesize( $deadline, $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		if ( is_wp_error( $on_disk ) ) {
+			return $on_disk;
+		}
 		if ( false === $on_disk || $on_disk > $stored_max ) {
 			return self::refused( 'size' );
 		}
@@ -131,7 +142,10 @@ final class AB_MCP_Payload_File {
 		if ( true !== $left ) {
 			return $left;
 		}
-		$blob = file_get_contents( $path ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+		$blob = AB_MCP_Sync_Step::file_get_contents( $deadline, $path );
+		if ( is_wp_error( $blob ) ) {
+			return $blob;
+		}
 		if ( false === $blob ) {
 			return self::refused( 'read' );
 		}

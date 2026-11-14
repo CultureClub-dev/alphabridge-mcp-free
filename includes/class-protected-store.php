@@ -150,6 +150,7 @@ require_once __DIR__ . '/class-store-inputs.php';
 require_once __DIR__ . '/sync/class-sync-schema.php';
 require_once __DIR__ . '/sync/class-sync-file-manifest.php';
 require_once __DIR__ . '/sync/class-sync-deadline.php';
+require_once __DIR__ . '/sync/class-sync-step.php';
 
 /**
  * The calls of the protected store to the outside (Z8b branch 3, plan 8.3):
@@ -307,18 +308,28 @@ final class AB_MCP_Protected_Store_Calls {
 	}
 
 	/**
-	 * Read a small file whole (a mark, an instruction).
+	 * Read a small file whole (a mark, an instruction, a sidecar). Composed
+	 * of two steps of the disk (R12b of Z8b branch 5, section 3.1 of the
+	 * order): with a deadline it is asked before lstat() and the bytes are
+	 * read through the helper of the steps, which asks it again; once it is
+	 * over, its stop is the answer at once, and nothing more is read.
+	 * Without a deadline (null) as before, without a reading of the clock.
 	 *
-	 * @param string $path File.
-	 * @param int    $max  Bytes at most.
-	 * @return string|false
+	 * @param string     $path     File.
+	 * @param int        $max      Bytes at most.
+	 * @param mixed|null $deadline Null, or a deadline of AB_MCP_Sync_Deadline::at().
+	 * @return string|false|WP_Error The stop of the deadline as a WP_Error.
 	 */
-	public function read( $path, $max ) {
+	public function read( $path, $max, $deadline = null ) {
+		$left = AB_MCP_Sync_Deadline::left( $deadline );
+		if ( true !== $left ) {
+			return $left;
+		}
 		$stat = $this->lstat( $path );
 		if ( false === $stat || 0100000 !== ( $stat['mode'] & 0170000 ) || $stat['size'] > (int) $max ) {
 			return false;
 		}
-		return @file_get_contents( (string) $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+		return @AB_MCP_Sync_Step::file_get_contents( $deadline, $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 	}
 
 	/**
@@ -748,7 +759,9 @@ final class AB_MCP_Protected_Store {
 	 * a link or another spelling of a path is seen through). False when
 	 * either cannot be read, and under a deadline that is over (R12 of Z8b
 	 * branch 5: each stat() only while it is not; the caller passes the
-	 * stop on, AB_MCP_Sync_Deadline::stop()).
+	 * stop on, AB_MCP_Sync_Deadline::stop()). Each stat() and the realpath()
+	 * through the helper of the steps (R12b), which asks the deadline first:
+	 * where it is over there, false as well.
 	 *
 	 * @param string     $dir      Folder.
 	 * @param string     $path     Path.
@@ -759,8 +772,17 @@ final class AB_MCP_Protected_Store {
 		if ( true !== AB_MCP_Sync_Deadline::left( $deadline ) ) {
 			return false;
 		}
-		$target = @stat( $dir ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
-		$at     = true === AB_MCP_Sync_Deadline::left( $deadline ) ? @realpath( $path ) : false; // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		$target = @AB_MCP_Sync_Step::stat( $deadline, $dir ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		if ( is_wp_error( $target ) ) {
+			return false;
+		}
+		$at = false;
+		if ( true === AB_MCP_Sync_Deadline::left( $deadline ) ) {
+			$at = @AB_MCP_Sync_Step::realpath( $deadline, $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		}
+		if ( is_wp_error( $at ) ) {
+			return false;
+		}
 		if ( false === $target || false === $at ) {
 			return false;
 		}
@@ -768,7 +790,10 @@ final class AB_MCP_Protected_Store {
 			if ( true !== AB_MCP_Sync_Deadline::left( $deadline ) ) {
 				return false;
 			}
-			$here = @stat( $at ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			$here = @AB_MCP_Sync_Step::stat( $deadline, $at ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			if ( is_wp_error( $here ) ) {
+				return false;
+			}
 			if ( false !== $here && $here['dev'] === $target['dev'] && $here['ino'] === $target['ino'] ) {
 				return true;
 			}
@@ -1097,8 +1122,20 @@ final class AB_MCP_Protected_Store {
 		if ( true !== $gate ) {
 			return $gate;
 		}
-		if ( false !== @lstat( $path ) && ! self::plain( $path, 'file' ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
-			return self::unsafe();
+		// Each step through the helper of the steps (R12b): lstat() of the
+		// path, then plain() with its own lstat(), each after its check.
+		$there = @AB_MCP_Sync_Step::lstat( $deadline, $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		if ( is_wp_error( $there ) ) {
+			return $there;
+		}
+		if ( false !== $there ) {
+			$plain = self::plain( $path, 'file', $deadline );
+			if ( is_wp_error( $plain ) ) {
+				return $plain;
+			}
+			if ( ! $plain ) {
+				return self::unsafe();
+			}
 		}
 		$raw = AB_MCP_Payload_File::read( $path, $sha256, self::FILE_MAX + 65536, self::FILE_MAX, $deadline );
 		if ( ! is_wp_error( $raw ) ) {
@@ -1335,18 +1372,42 @@ final class AB_MCP_Protected_Store {
 		if ( ! is_array( $found ) ) {
 			return $found;
 		}
-		$dir  = $found[1];
-		$out  = array();
-		$gate = AB_MCP_Sync_Deadline::left( $deadline );
-		foreach ( true === $gate ? (array) scandir( $dir ) : array() as $file ) {
+		$dir   = $found[1];
+		$out   = array();
+		$names = array();
+		$gate  = AB_MCP_Sync_Deadline::left( $deadline );
+		// The listing, plain() and each size through the helper of the steps
+		// (R12b); a listing that fails lists no file, as before (no cast: C1).
+		if ( true === $gate ) {
+			$names = AB_MCP_Sync_Step::scandir( $deadline, $dir );
+		}
+		if ( is_wp_error( $names ) ) {
+			return $names;
+		}
+		if ( ! is_array( $names ) ) {
+			$names = array();
+		}
+		foreach ( $names as $file ) {
 			$gate = AB_MCP_Sync_Deadline::left( $deadline );
 			if ( true !== $gate ) {
 				break;
 			}
 			$file = (string) $file;
-			if ( self::valid_name( $file ) && self::plain( $dir . '/' . $file, 'file' ) ) {
-				$out[ $file ] = (int) filesize( $dir . '/' . $file );
+			if ( ! self::valid_name( $file ) ) {
+				continue;
 			}
+			$plain = self::plain( $dir . '/' . $file, 'file', $deadline );
+			if ( is_wp_error( $plain ) ) {
+				return $plain;
+			}
+			if ( ! $plain ) {
+				continue;
+			}
+			$size = AB_MCP_Sync_Step::filesize( $deadline, $dir . '/' . $file );
+			if ( is_wp_error( $size ) ) {
+				return $size;
+			}
+			$out[ $file ] = false === $size ? 0 : $size;
 		}
 		if ( true !== $gate ) {
 			return $gate;
@@ -4180,7 +4241,7 @@ final class AB_MCP_Protected_Store {
 		$dir   = self::way( $root, array( $area ), $deadline );
 		$names = null === $dir || true !== AB_MCP_Sync_Deadline::left( $deadline ) ? null : AB_MCP_Store_Inputs::read( 'budget.listing', self::calls()->scandir( $dir ), $deadline );
 		if ( null === $names ) {
-			return $out;
+			return array();
 		}
 		$whole = true;
 		foreach ( $names as $file ) {
@@ -4191,7 +4252,12 @@ final class AB_MCP_Protected_Store {
 			if ( ! preg_match( '/^([0-9a-f]{40})\.json\z/', $file, $m ) ) {
 				continue;
 			}
-			$state = self::plain( $dir . '/' . $file, 'file' ) ? self::sidecar( $dir . '/' . $file, $area, $deadline ) : array( 'unknown', null );
+			$plain = self::plain( $dir . '/' . $file, 'file', $deadline );
+			if ( is_wp_error( $plain ) ) {
+				$whole = null;
+				return array();
+			}
+			$state = $plain ? self::sidecar( $dir . '/' . $file, $area, $deadline ) : array( 'unknown', null );
 			if ( null !== AB_MCP_Sync_Deadline::stop( $deadline ) ) {
 				$whole = null;
 				return array();
@@ -4421,12 +4487,20 @@ final class AB_MCP_Protected_Store {
 	 */
 	private static function way( $root, array $parts, $deadline = null ) {
 		$path = $root;
-		if ( true !== AB_MCP_Sync_Deadline::left( $deadline ) || ! self::plain( $path, 'dir' ) ) {
+		if ( true !== AB_MCP_Sync_Deadline::left( $deadline ) ) {
+			return null;
+		}
+		$plain = self::plain( $path, 'dir', $deadline );
+		if ( true !== $plain ) {
 			return null;
 		}
 		foreach ( $parts as $part ) {
 			$path .= '/' . $part;
-			if ( true !== AB_MCP_Sync_Deadline::left( $deadline ) || ! self::plain( $path, 'dir' ) ) {
+			if ( true !== AB_MCP_Sync_Deadline::left( $deadline ) ) {
+				return null;
+			}
+			$plain = self::plain( $path, 'dir', $deadline );
+			if ( true !== $plain ) {
 				return null;
 			}
 		}
@@ -4435,13 +4509,21 @@ final class AB_MCP_Protected_Store {
 
 	/**
 	 * Whether a path is a real folder or file (lstat(): a link is neither).
+	 * Its lstat() through the helper of the steps (R12b of Z8b branch 5):
+	 * under a deadline that is over its stop is the answer (a WP_Error),
+	 * never «not plain»; the caller passes it on. Without a deadline (null)
+	 * as before.
 	 *
-	 * @param string $path Path.
-	 * @param string $type 'dir' or 'file'.
-	 * @return bool
+	 * @param string     $path     Path.
+	 * @param string     $type     'dir' or 'file'.
+	 * @param mixed|null $deadline Null, or a deadline of AB_MCP_Sync_Deadline::at().
+	 * @return bool|WP_Error
 	 */
-	private static function plain( $path, $type ) {
-		$stat = @lstat( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+	private static function plain( $path, $type, $deadline = null ) {
+		$stat = @AB_MCP_Sync_Step::lstat( $deadline, $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		if ( is_wp_error( $stat ) ) {
+			return $stat;
+		}
 		if ( false === $stat ) {
 			return false;
 		}
@@ -4468,7 +4550,16 @@ final class AB_MCP_Protected_Store {
 			return self::stopped_or( $deadline, self::unsafe() );
 		}
 		$side  = $area_dir . '/' . $name . '.json';
-		$entry = true === AB_MCP_Sync_Deadline::left( $deadline ) && self::plain( $side, 'file' ) ? self::read_entry( $side, $area, $deadline ) : null;
+		$entry = null;
+		if ( true === AB_MCP_Sync_Deadline::left( $deadline ) ) {
+			$plain = self::plain( $side, 'file', $deadline );
+			if ( is_wp_error( $plain ) ) {
+				return $plain;
+			}
+			if ( $plain ) {
+				$entry = self::read_entry( $side, $area, $deadline );
+			}
+		}
 		if ( null === $entry || $gid !== $entry['gid'] ) {
 			return self::stopped_or( $deadline, self::no_group() );
 		}
@@ -4477,7 +4568,12 @@ final class AB_MCP_Protected_Store {
 			return AB_MCP_Sync_Deadline::stop( $deadline );
 		}
 		if ( null === $dir ) {
-			return false !== @lstat( $area_dir . '/' . $name ) ? self::unsafe() : self::no_group(); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			// The step after the way through the helper of the steps (R12b, A3).
+			$there = @AB_MCP_Sync_Step::lstat( $deadline, $area_dir . '/' . $name ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			if ( is_wp_error( $there ) ) {
+				return $there;
+			}
+			return false !== $there ? self::unsafe() : self::no_group();
 		}
 		return array( $side, $dir, $entry );
 	}
@@ -4591,7 +4687,9 @@ final class AB_MCP_Protected_Store {
 	 * Under a deadline (R12 of Z8b branch 5) the file is read, and its JSON
 	 * read in its form and checked field by field, only while the deadline
 	 * is not over; once it is, the sidecar is 'unknown' and the caller
-	 * passes the stop on (AB_MCP_Sync_Deadline::stop()).
+	 * passes the stop on (AB_MCP_Sync_Deadline::stop()). The file is read
+	 * with the same deadline (the composed seam, R12b): where its stop comes
+	 * back, 'unknown' at once, before its form is read.
 	 *
 	 * @param string     $side     File.
 	 * @param string     $area     Area it lies in.
@@ -4599,7 +4697,15 @@ final class AB_MCP_Protected_Store {
 	 * @return array{0:string,1:array|null}
 	 */
 	private static function sidecar( $side, $area, $deadline = null ) {
-		$e = true === AB_MCP_Sync_Deadline::left( $deadline ) ? AB_MCP_Store_Inputs::read( 'sidecar.json', self::calls()->read( $side, 4096 ), $deadline ) : null;
+		$left = AB_MCP_Sync_Deadline::left( $deadline );
+		if ( true !== $left ) {
+			return array( 'unknown', null );
+		}
+		$raw = self::calls()->read( $side, 4096, $deadline );
+		if ( is_wp_error( $raw ) ) {
+			return array( 'unknown', null );
+		}
+		$e = AB_MCP_Store_Inputs::read( 'sidecar.json', $raw, $deadline );
 		if ( null !== AB_MCP_Sync_Deadline::stop( $deadline ) || ! self::whole( $e ) ) {
 			return array( 'unknown', null );
 		}

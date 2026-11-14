@@ -447,7 +447,9 @@ final class AB_MCP_Sync_File_Manifest {
 	 * @param float  $deadline Until when.
 	 * @param bool   $first    See unit().
 	 * @param array  $acc      The reading so far.
-	 * @return string done, or ended ($acc says why).
+	 * @return string done, or ended ($acc says why; also where the deadline
+	 *                of the caller is over, left() or due(): $acc stopped, and
+	 *                the caller asks AB_MCP_Sync_Deadline::stop()).
 	 */
 	private static function folder( $dir, $rel, $side, $deadline, $first, array &$acc ) {
 		if ( ! self::left( $acc ) ) {
@@ -526,7 +528,9 @@ final class AB_MCP_Sync_File_Manifest {
 	 * @param float  $deadline Until when.
 	 * @param bool   $first    See unit().
 	 * @param array  $acc      The reading so far.
-	 * @return string done, or ended.
+	 * @return string done, or ended (also where the deadline of the caller is
+	 *                over, left() or due(): $acc stopped, its handle closed,
+	 *                and the caller asks AB_MCP_Sync_Deadline::stop()).
 	 */
 	private static function file( $path, $rel, array $stat, $deadline, $first, array &$acc ) {
 		$calls = self::calls();
@@ -614,7 +618,9 @@ final class AB_MCP_Sync_File_Manifest {
 	 * @param array $acc      The reading.
 	 * @param float $deadline Until when.
 	 * @param bool  $first    See unit().
-	 * @return string done, or ended ($acc says why).
+	 * @return string done, or ended ($acc says why; also where the deadline
+	 *                of the caller is over, due(): $acc stopped, and the
+	 *                caller asks AB_MCP_Sync_Deadline::stop()).
 	 */
 	private static function still( array &$acc, $deadline, $first ) {
 		$calls = self::calls();

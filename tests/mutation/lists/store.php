@@ -249,8 +249,9 @@ return array(
 		'id'      => 'store/get-file-plain',
 		'clause'  => 'get(): a file of a group that is a link is not read',
 		'file'    => 'includes/class-protected-store.php',
-		'search'  => "if ( false !== @lstat( \$path ) && ! self::plain( \$path, 'file' ) ) {",
-		'replace' => 'if ( false ) {',
+		// R12b part 3.2: lstat() and plain() through the helper of the steps, each with its check (A3 at PS:1100).
+		'search'  => "if ( false !== \$there ) {\n\t\t\t\$plain = self::plain( \$path, 'file', \$deadline );",
+		'replace' => "if ( false ) {\n\t\t\t\$plain = self::plain( \$path, 'file', \$deadline );",
 		'run'     => $it( 'testALinkOnTheWayIsNeverFollowed' ),
 		'expect'  => '/testALinkOnTheWayIsNeverFollowed/',
 	),
