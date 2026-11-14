@@ -10,7 +10,12 @@
  * WP_Error, the halt where it is not true; true: true at a halt; false:
  * false at a halt). FACHWERT: the functions that answer «not read» at a
  * halt with a value (null, false, '' or a marker) instead of the halt, whose
- * callers ask stop() next (R7). COMPARE: what a comparison of a sort may
+ * callers ask stop() next (R7): the answer as the PHP expression its branches
+ * at a halt return (compared token by token, part 2.3a), and the reason
+ * from its doc comment (E19). TRANSLATIONS: the functions that answer a
+ * halt held in a variable with a translation (the function named, called
+ * with the code of the halt first and its text), each with its place
+ * (part 2.3a, Codex A1). COMPARE: what a comparison of a sort may
  * call (N2). SORTS: the functions of PHP that sort with a comparison.
  * FILTERS: the functions that call code not of the plugin by a hook.
  * FRAME_OUT: the calls of the frame of R12 that the reading does not follow
@@ -52,16 +57,29 @@ return array(
 		'AB_MCP_Sync_File_Manifest::left'   => 'false',
 	),
 	'FACHWERT'  => array(
-		'AB_MCP_Protected_Store::entries'    => array( "array() with \$whole null", 'class-protected-store.php:4173: once the deadline is over, whole is null and the caller passes the stop on.' ),
+		'AB_MCP_Protected_Store::entries'    => array( 'array()', 'class-protected-store.php:4173: once the deadline is over, whole is null (set before the return) and the caller passes the stop on.' ),
+		'AB_MCP_Protected_Store::holds'      => array( 'false', 'Part 2.3a (E19 applied, E21): class-protected-store.php:749-751: false under a deadline that is over, the caller passes the stop on.' ),
 		'AB_MCP_Protected_Store::read_tree'  => array( 'null', 'class-protected-store.php:2526: where the deadline is over first, the reading is stopped and the caller passes its stop on.' ),
 		'AB_MCP_Protected_Store::sidecar'    => array( "array( 'unknown', null )", 'class-protected-store.php:4601: read only while the deadline passes the stop on; else unknown.' ),
+		'AB_MCP_Protected_Store::way'        => array( 'null', 'Part 2.3a (E19 applied, E21): class-protected-store.php:4413-4414: once the deadline is over, null, and the caller passes the stop on.' ),
+		'AB_MCP_Shape::decoded'              => array( 'null', 'Part 2.3a (E19 applied, E21): class-shape.php:367 (deadline: «See read()»), read() class-shape.php:73-75: the reading ends as null; read() returns it whole (class-shape.php:109).' ),
+		'AB_MCP_Shape::fields'               => array( 'null', 'Part 2.3a (E19 applied, E21): class-shape.php:329 (deadline: «See read()»), read() class-shape.php:73-75: the reading ends as null; read() returns it whole.' ),
+		'AB_MCP_Shape::items'                => array( 'null', 'Part 2.3a (E19 applied, E21): class-shape.php:281 (deadline: «See read()»), read() class-shape.php:73-75: the reading ends as null; read() returns it whole.' ),
+		'AB_MCP_Shape::pairs'                => array( 'null', 'Part 2.3a (E19 applied, E21): class-shape.php:305 (deadline: «See read()»), read() class-shape.php:73-75: the reading ends as null; read() returns it whole.' ),
 		'AB_MCP_Shape::read'                 => array( 'null', 'class-shape.php:83: with a deadline the reading ends as null and its caller passes the stop on.' ),
+		'AB_MCP_Store_Inputs::read'          => array( 'null', 'Part 2.3a (E19 applied, E21): class-store-inputs.php:1137 (deadline: «AB_MCP_Shape::read()»): the value of AB_MCP_Shape::read() returned whole; sidecar() asks the stop next (class-protected-store.php:4603).' ),
 		'AB_MCP_Sync_Canon::decode'          => array( 'null', 'class-sync-canon.php:771: each element revived only while the deadline is not over, else null.' ),
 		'AB_MCP_Sync_Canon::encode'          => array( "''", 'class-sync-canon.php:722: once the deadline is over, \'\' and the caller passes the stop on.' ),
 		'AB_MCP_Sync_Canon::prepared'        => array( 'null', 'class-sync-canon.php:928: each element only while the deadline is not over (null at a halt, encode() asks the stop).' ),
+		'AB_MCP_Sync_Canon::revived'         => array( 'null', 'Part 2.3a (E19 applied, E21): class-sync-canon.php:783: $ok cleared where the deadline is over (class-sync-canon.php:812: $ok = false, null).' ),
 		'AB_MCP_Sync_Code_Stage::state_of'   => array( 'null', 'class-sync-code-stage.php:1503: null, also under a deadline that is over, whose stop the caller passes on.' ),
+		'AB_MCP_Sync_Code_Swap::heads'       => array( 'array()', 'Part 2.3a (E19 applied, E21): class-sync-code-swap.php:1012-1014: once the deadline is over, none, and not_down() passes the stop on.' ),
 		'AB_MCP_Sync_Env::head_fields'       => array( 'null', 'class-sync-env.php:1017: null only under a deadline that is over.' ),
+		'AB_MCP_Sync_Env::head_read'         => array( 'null', 'Part 2.3a (E19 applied, E21): class-sync-env.php:972-973: once the deadline is over, null, and the caller passes the stop on.' ),
 		'AB_MCP_Sync_File_Manifest::text'    => array( "''", 'class-sync-file-manifest.php:379: \'\' where the deadline is over; the caller passes the stop on.' ),
+	),
+	'TRANSLATIONS' => array(
+		'AB_MCP_Sync_Code_Swap::signed_stage' => array( 'AB_MCP_Sync_Code_Swap::refusal', 'Part 2.3a (Codex A1): class-sync-code-swap.php:943-946: the halt of signed() (or tree(), ready()) translated by refusal() with its code and its text first (the order, section 4: translations pass the halt on).' ),
 	),
 	'COMPARE'   => array( 'strcmp' ),
 	'SORTS'     => array( 'usort', 'uasort', 'uksort' ),
@@ -109,6 +127,7 @@ return array(
 		'AB_MCP_Protected_Store::entries' => array(
 			array( 'R7 AB_MCP_Protected_Store::way', array(), 'The halt of the call not passed on by the next statement (is_wp_error() or true !== and return, or FACHWERT and stop()); with the part that changes the function. None of the 95 (TAB 363 H ja).' ),
 			array( 'R7 AB_MCP_Store_Inputs::read', array(), 'The halt of the call not passed on by the next statement (is_wp_error() or true !== and return, or FACHWERT and stop()); with the part that changes the function. None of the 95 (TAB 204 F ja; TAB 364 H ja).' ),
+			array( 'R4 seam AB_MCP_Protected_Store_Calls::scandir', array(), 'An entry into the chain or a call of a seam of the disk not right after a check with its halt passed on (part 3: seams; part 5: entries). New in part 2.3a (Codex A1): the branch at the halt of the ternary (null === $names) answers $out, an array() by an earlier statement, not the answer array() of FACHWERT (the rules read no data flow); the part that changes it returns array(). None of the 95 (TAB 204 F ja; TAB 364 H ja).' ),
 			array( 'R1 usort', array(), 'Direct step (Sortierung): through the helper of the steps (part 4). None of the 95 (TAB 158 CB Grenze).' ),
 		),
 		'AB_MCP_Protected_Store::entry' => array(
@@ -144,9 +163,6 @@ return array(
 		),
 		'AB_MCP_Protected_Store::read_entry' => array(
 			array( 'R7 AB_MCP_Protected_Store::sidecar', array(), 'The halt of the call not passed on by the next statement (is_wp_error() or true !== and return, or FACHWERT and stop()); with the part that changes the function. None of the 95 (TAB 370 H ja).' ),
-		),
-		'AB_MCP_Protected_Store::sidecar' => array(
-			array( 'R7 AB_MCP_Store_Inputs::read', array(), 'The halt of the call not passed on by the next statement (is_wp_error() or true !== and return, or FACHWERT and stop()); with the part that changes the function. None of the 95 (TAB 211 F ja; TAB 371 H ja).' ),
 		),
 		'AB_MCP_Protected_Store::state' => array(
 			array( 'R2 foreach ( array_keys( $out[\'seen\'] ) as $where )', array( 14 ), 'The body of the loop does not begin with a check that leaves at a halt (part 5).' ),
@@ -300,12 +316,20 @@ return array(
 			array( 'R1 ksort', array( 273 ), 'Direct step (Sortierung): through the helper of the steps (part 4).' ),
 		),
 		'AB_MCP_Sync_File_Manifest::file' => array(
+			array( 'R4 seam AB_MCP_Sync_File_Manifest_Calls::open', array(), 'An entry into the chain or a call of a seam of the disk not right after a check with its halt passed on (part 3: seams; part 5: entries). New in part 2.3a (Codex A1): its branch at a halt answers the marker \'ended\', and AB_MCP_Sync_File_Manifest::file is not in FACHWERT (its doc comment does not name the answer at a halt, E19; the marker form is open 2 of part 2.2). None of the 95.' ),
+			array( 'R4 seam AB_MCP_Sync_File_Manifest_Calls::fstat', array(), 'An entry into the chain or a call of a seam of the disk not right after a check with its halt passed on (part 3: seams; part 5: entries). New in part 2.3a (Codex A1): its branch at a halt answers the marker \'ended\', and AB_MCP_Sync_File_Manifest::file is not in FACHWERT (its doc comment does not name the answer at a halt, E19; the marker form is open 2 of part 2.2). None of the 95.' ),
 			array( 'R1 hash_init', array( 289 ), 'Direct step (Codec): through the helper of the steps (part 4).' ),
+			array( 'R2 while ( true )', array(), 'The body of the loop does not begin with a check that leaves at a halt (part 5). New in part 2.3a (Codex A1): its branch at a halt answers the marker \'ended\', and AB_MCP_Sync_File_Manifest::file is not in FACHWERT (its doc comment does not name the answer at a halt, E19; the marker form is open 2 of part 2.2). None of the 95 (TAB 83 S ja).' ),
+			array( 'R4 seam AB_MCP_Sync_File_Manifest_Calls::read', array(), 'An entry into the chain or a call of a seam of the disk not right after a check with its halt passed on (part 3: seams; part 5: entries). New in part 2.3a (Codex A1): its branch at a halt answers the marker \'ended\', and AB_MCP_Sync_File_Manifest::file is not in FACHWERT (its doc comment does not name the answer at a halt, E19; the marker form is open 2 of part 2.2). None of the 95.' ),
 			array( 'R1 hash_update', array( 290 ), 'Direct step (Codec): through the helper of the steps (part 4).' ),
+			array( 'R4 seam AB_MCP_Sync_File_Manifest_Calls::fstat', array(), 'An entry into the chain or a call of a seam of the disk not right after a check with its halt passed on (part 3: seams; part 5: entries). New in part 2.3a (Codex A1): its branch at a halt answers the marker \'ended\', and AB_MCP_Sync_File_Manifest::file is not in FACHWERT (its doc comment does not name the answer at a halt, E19; the marker form is open 2 of part 2.2). None of the 95.' ),
 			array( 'R1 hash_final', array( 291 ), 'Direct step (Codec): through the helper of the steps (part 4).' ),
 		),
 		'AB_MCP_Sync_File_Manifest::folder' => array(
+			array( 'R4 seam AB_MCP_Sync_File_Manifest_Calls::names', array(), 'An entry into the chain or a call of a seam of the disk not right after a check with its halt passed on (part 3: seams; part 5: entries). New in part 2.3a (Codex A1): its branch at a halt answers the marker \'ended\', and AB_MCP_Sync_File_Manifest::folder is not in FACHWERT (its doc comment does not name the answer at a halt, E19; the marker form is open 2 of part 2.2). None of the 95.' ),
 			array( 'R1 usort', array( 286 ), 'Direct step (Sortierung): through the helper of the steps (part 4).' ),
+			array( 'R2 foreach ( $names as $name )', array(), 'The body of the loop does not begin with a check that leaves at a halt (part 5). New in part 2.3a (Codex A1): its branch at a halt answers the marker \'ended\', and AB_MCP_Sync_File_Manifest::folder is not in FACHWERT (its doc comment does not name the answer at a halt, E19; the marker form is open 2 of part 2.2). None of the 95 (TAB 82 S ja).' ),
+			array( 'R4 seam AB_MCP_Sync_File_Manifest_Calls::lstat', array(), 'An entry into the chain or a call of a seam of the disk not right after a check with its halt passed on (part 3: seams; part 5: entries). New in part 2.3a (Codex A1): its branch at a halt answers the marker \'ended\', and AB_MCP_Sync_File_Manifest::folder is not in FACHWERT (its doc comment does not name the answer at a halt, E19; the marker form is open 2 of part 2.2). None of the 95.' ),
 			array( 'R3 before AB_MCP_Sync_File_Manifest::folder', array(), 'Recursion: a check before the edge, a halt query before the next work after its return (part 5; A4 part 4). None of the 95 (TAB 287 F ja; TAB 427 H ja).' ),
 			array( 'R7 AB_MCP_Sync_File_Manifest::folder', array(), 'The halt of the call not passed on by the next statement (is_wp_error() or true !== and return, or FACHWERT and stop()); with the part that changes the function. None of the 95 (TAB 287 F ja; TAB 427 H ja).' ),
 			array( 'R7 AB_MCP_Sync_File_Manifest::file', array(), 'The halt of the call not passed on by the next statement (is_wp_error() or true !== and return, or FACHWERT and stop()); with the part that changes the function. None of the 95 (TAB 288 F entfällt; TAB 429 H ja).' ),
@@ -314,16 +338,22 @@ return array(
 			array( 'R2 foreach ( self::IDENTITY as $field )', array( 86 ), 'The body of the loop does not begin with a check that leaves at a halt (part 5).' ),
 		),
 		'AB_MCP_Sync_File_Manifest::still' => array(
+			array( 'R2 foreach ( $acc[\'dirs\'] as $dir => $names )', array(), 'The body of the loop does not begin with a check that leaves at a halt (part 5). New in part 2.3a (Codex A1): its branch at a halt answers the marker \'ended\', and AB_MCP_Sync_File_Manifest::still is not in FACHWERT (its doc comment does not name the answer at a halt, E19; the marker form is open 2 of part 2.2). None of the 95 (TAB 84 S ja).' ),
+			array( 'R4 seam AB_MCP_Sync_File_Manifest_Calls::names', array(), 'An entry into the chain or a call of a seam of the disk not right after a check with its halt passed on (part 3: seams; part 5: entries). New in part 2.3a (Codex A1): its branch at a halt answers the marker \'ended\', and AB_MCP_Sync_File_Manifest::still is not in FACHWERT (its doc comment does not name the answer at a halt, E19; the marker form is open 2 of part 2.2). None of the 95.' ),
 			array( 'R1 usort', array( 292 ), 'Direct step (Sortierung): through the helper of the steps (part 4).' ),
+			array( 'R2 foreach ( $acc[\'stats\'] as $file => $stat )', array(), 'The body of the loop does not begin with a check that leaves at a halt (part 5). New in part 2.3a (Codex A1): its branch at a halt answers the marker \'ended\', and AB_MCP_Sync_File_Manifest::still is not in FACHWERT (its doc comment does not name the answer at a halt, E19; the marker form is open 2 of part 2.2). None of the 95 (TAB 85 S ja).' ),
+			array( 'R4 seam AB_MCP_Sync_File_Manifest_Calls::lstat', array(), 'An entry into the chain or a call of a seam of the disk not right after a check with its halt passed on (part 3: seams; part 5: entries). New in part 2.3a (Codex A1): its branch at a halt answers the marker \'ended\', and AB_MCP_Sync_File_Manifest::still is not in FACHWERT (its doc comment does not name the answer at a halt, E19; the marker form is open 2 of part 2.2). None of the 95.' ),
 		),
 		'AB_MCP_Sync_File_Manifest::unit' => array(
 			array( 'R7 AB_MCP_Sync_File_Manifest::whole', array(), 'The halt of the call not passed on by the next statement (is_wp_error() or true !== and return, or FACHWERT and stop()); with the part that changes the function. None of the 95 (TAB 414 H ja).' ),
 		),
 		'AB_MCP_Sync_File_Manifest::whole' => array(
+			array( 'R4 seam AB_MCP_Sync_File_Manifest_Calls::lstat', array(), 'An entry into the chain or a call of a seam of the disk not right after a check with its halt passed on (part 3: seams; part 5: entries). New in part 2.3a (Codex A1): its branch at a halt answers $acc, and AB_MCP_Sync_File_Manifest::whole is not in FACHWERT (its doc comment does not name the answer at a halt, E19). None of the 95.' ),
 			array( 'R7 AB_MCP_Sync_File_Manifest::folder', array(), 'The halt of the call not passed on by the next statement (is_wp_error() or true !== and return, or FACHWERT and stop()); with the part that changes the function. None of the 95 (TAB 280 F ja; TAB 415 H entfällt; TAB 416 H ja).' ),
 			array( 'R7 AB_MCP_Sync_File_Manifest::file', array(), 'The halt of the call not passed on by the next statement (is_wp_error() or true !== and return, or FACHWERT and stop()); with the part that changes the function. None of the 95 (TAB 281 F entfällt; TAB 417 H ja).' ),
 			array( 'R7 AB_MCP_Sync_File_Manifest::still', array(), 'The halt of the call not passed on by the next statement (is_wp_error() or true !== and return, or FACHWERT and stop()); with the part that changes the function. None of the 95 (TAB 282 F ja; TAB 419 H ja).' ),
 			array( 'R1 usort', array( 283 ), 'Direct step (Sortierung): through the helper of the steps (part 4).' ),
+			array( 'R7 AB_MCP_Sync_File_Manifest::text', array(), 'The halt of the call not passed on by the next statement (is_wp_error() or true !== and return, or FACHWERT and stop()); with the part that changes the function. New in part 2.3a (Codex A1): after text() (FACHWERT) the branch at the halt calls late() first (AT, a helper of the clock, no cleanup) and answers $acc; AB_MCP_Sync_File_Manifest::whole is not in FACHWERT (E19). None of the 95 (TAB 284 F ja; TAB 420 H ja).' ),
 			array( 'R1 hash', array( 285 ), 'Direct step (Codec): through the helper of the steps (part 4).' ),
 		),
 		'AB_MCP_Sync_Import::connection' => array(

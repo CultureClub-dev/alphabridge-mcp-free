@@ -21,6 +21,12 @@
  * detection of a rule has its self-test on code of its own (section 3.2 (i)
  * and (ii) of the order).
  *
+ * Part 2.3a mends A1 to A4 of Codex, round 1 over the guard
+ * (belege/codex-r12b-w1-antwort.md), each with its self-test: the answer of
+ * a branch at a halt, a Fachwert asked for the halt with the right
+ * polarity, the check of a pair assigned whole, and the deadline of a call
+ * left out or null only where shown.
+ *
  * A change of the code on these ways turns this red until the lists are kept
  * by hand, with the reason.
  *
@@ -290,7 +296,7 @@ PHP;
 	/* ---------- Part 2.2: the rules R1 to R7 at the head ---------- */
 
 	public function testTheRulesReadEveryFunctionOfG1WithoutAProblem(): void {
-		self::assertSame( array(), self::rules()['problems'], 'Each statement read, each check with its form in CHECKS, each entry of ATOMIC, CHECKS, FACHWERT, COMPARE and FRAME_OUT used.' );
+		self::assertSame( array(), self::rules()['problems'], 'Each statement read, each check with its form in CHECKS, each entry of ATOMIC, CHECKS, FACHWERT, TRANSLATIONS, COMPARE and FRAME_OUT used.' );
 	}
 
 	public function testEachViolationOfTheRulesIsAnOpenException(): void {
@@ -349,9 +355,22 @@ PHP;
 		}
 		foreach ( $lists['FACHWERT'] as $fn => list( $answer, $why ) ) {
 			self::assertNotSame( '', $answer, $fn );
+			$parses = true;
+			try {
+				token_get_all( '<?php return ' . $answer . ';', TOKEN_PARSE );
+			} catch ( \ParseError $error ) {
+				$parses = false;
+			}
+			self::assertTrue( $parses, $fn . ': the answer is a PHP expression (what its branches at a halt return).' );
 			self::assertNotSame( '', $why, $fn );
 			self::assertArrayHasKey( $fn, self::model()['reach'], $fn );
 			self::assertArrayNotHasKey( $fn, self::model()['chain'], $fn );
+		}
+		foreach ( $lists['TRANSLATIONS'] as $fn => list( $to, $why ) ) {
+			self::assertNotSame( '', $why, $fn );
+			self::assertArrayHasKey( $fn, self::model()['reach'], $fn );
+			self::assertArrayHasKey( $to, self::model()['methods'], $fn . ': the translation is a function of the plugin.' );
+			self::assertArrayNotHasKey( $fn, $lists['FACHWERT'], $fn . ': a function answers the halt or a Fachwert, not both.' );
 		}
 		foreach ( $lists['FRAME_OUT'] as $edge => $why ) {
 			self::assertNotSame( '', $why, $edge );
@@ -395,10 +414,11 @@ PHP;
 			$tables['KIND'][ $name ] = array( $k, $step, 'In the self-test.' );
 		}
 		$all = array(
-			'ATOMIC'    => array(),
-			'CHECKS'    => array(),
-			'FACHWERT'  => array(),
-			'COMPARE'   => array(),
+			'ATOMIC'       => array(),
+			'CHECKS'       => array(),
+			'FACHWERT'     => array(),
+			'TRANSLATIONS' => array(),
+			'COMPARE'      => array(),
 			'SORTS'     => array( 'usort', 'uasort', 'uksort' ),
 			'FILTERS'   => array( 'apply_filters' ),
 			'FRAME_OUT' => array(),
@@ -517,7 +537,7 @@ final class AB_MCP_Sync_Code_Swap {
 		foreach ( $list as $a ) {
 			$r = self::stopped( $deadline ) ? null : strlen( $a );
 			if ( null === $r ) {
-				return null;
+				return AB_MCP_Sync_Deadline::stop( $deadline );
 			}
 		}
 		foreach ( $list as $a )
@@ -527,7 +547,7 @@ final class AB_MCP_Sync_Code_Swap {
 		}
 		for ( $i = 0; $i < 3; $i++ ) {
 			if ( self::stopped( $deadline ) ) {
-				return null;
+				return AB_MCP_Sync_Deadline::stop( $deadline );
 			}
 		}
 		while ( true ) {
@@ -543,7 +563,7 @@ final class AB_MCP_Sync_Code_Swap {
 		}
 		while ( true ) {
 			if ( strlen( 'x' ) || true !== AB_MCP_Sync_Deadline::left( $deadline ) ) {
-				return null;
+				return AB_MCP_Sync_Deadline::stop( $deadline );
 			}
 		}
 		while ( true ) {
@@ -591,7 +611,9 @@ PHP;
 		self::assertSame(
 			array(
 				'AB_MCP_Sync_Code_Swap::prepare' => array(
-					// foreach: no check; with a check (pair, if with break, ternary) green; one statement without braces.
+					// foreach: no check; with a check (pair, ternary) green; an if with a break (the halt not kept for
+					// after the loop, part 2.3a); one statement without braces.
+					'R2 foreach ( $list as $a )',
 					'R2 foreach ( $list as $a )',
 					'R2 foreach ( $list as $a )',
 					// for: no check; with a check green.
@@ -614,7 +636,12 @@ PHP;
 <?php
 final class AB_MCP_Sync_Code_Swap {
 	public static function prepare( $deadline, $v ) {
-		return self::walk( $v, $deadline );
+		$w = self::walk( $v, $deadline );
+		$s = AB_MCP_Sync_Deadline::stop( $deadline );
+		if ( null !== $s ) {
+			return $s;
+		}
+		return $w;
 	}
 	private static function walk( $v, $deadline ) {
 		if ( ! is_array( $v ) ) {
@@ -697,13 +724,13 @@ final class AB_MCP_Sync_Code_Swap {
 		$c = self::calls()->read( $name );
 		if ( true !== AB_MCP_Sync_Deadline::left( $deadline ) ) {
 			self::calls()->close( $name );
-			return null;
+			return AB_MCP_Sync_Deadline::stop( $deadline );
 		}
 		$p = $name . '/x';
 		$d = self::calls()->read( $p );
 		$e = true === AB_MCP_Sync_Deadline::left( $deadline ) ? self::calls()->read( $p ) : null;
 		if ( null === $e ) {
-			return null;
+			return AB_MCP_Sync_Deadline::stop( $deadline );
 		}
 		$f = $a . $b . $c . $d . $e;
 		$g = array_map( static fn( $n ) => AB_MCP_Sync_Env::held( $n ), array( $f ) );
@@ -946,7 +973,7 @@ final class AB_MCP_Sync_Code_Swap {
 		strlen( 'd' );
 		$e = self::fach( $deadline );
 		if ( null !== AB_MCP_Sync_Deadline::stop( $deadline ) ) {
-			return null;
+			return AB_MCP_Sync_Deadline::stop( $deadline );
 		}
 		$f = self::fach( $deadline );
 		strlen( 'f' );
@@ -1000,6 +1027,429 @@ PHP;
 					// A helper of the steps not tested; a call in a condition; returned whole: green.
 					'R7 AB_MCP_Sync_Step::hash',
 					'R7 AB_MCP_Sync_Code_Swap::can',
+				),
+			),
+			$own['open']
+		);
+	}
+
+	/* ---------- Part 2.3a: the changes after Codex, round 1 over the guard ---------- */
+
+	public function testEachBranchAtAHaltAnswersAsPrescribed(): void {
+		// Codex A1: a branch at a halt answers the same halt, a Fachwert of FACHWERT of its function, the halt the
+		// deadline holds, or a translation of TRANSLATIONS; before it only cleanup (no work, check or clock).
+		$code = <<<'PHP'
+<?php
+final class AB_MCP_Sync_Code_Swap {
+	public static function prepare( $deadline, $list ) {
+		$a = self::can( $deadline );
+		if ( is_wp_error( $a ) ) {
+			return $a;
+		}
+		$b = self::can( $deadline );
+		if ( is_wp_error( $b ) ) {
+			return true;
+		}
+		$c = self::can( $deadline );
+		if ( is_wp_error( $c ) ) {
+			return self::can( $deadline );
+		}
+		$d = self::can( $deadline );
+		if ( is_wp_error( $d ) ) {
+			return self::refusal( $d->get_error_code(), 'Not read: ' . $d->get_error_message() );
+		}
+		$e = self::can( $deadline );
+		if ( is_wp_error( $e ) ) {
+			return self::refusal( 'code:other', 'Not read.' );
+		}
+		$f = self::can( $deadline );
+		if ( is_wp_error( $f ) ) {
+			strrev( 'f' );
+			return $f;
+		}
+		$g = self::can( $deadline );
+		if ( is_wp_error( $g ) ) {
+			AB_MCP_Sync_Deadline::left( $deadline );
+			return $g;
+		}
+		$h = self::can( $deadline );
+		if ( is_wp_error( $h ) ) {
+			self::calls()->close( 'h' );
+			return $h;
+		}
+		$i = self::can( $deadline );
+		if ( is_wp_error( $i ) ) {
+			if ( $list ) {
+				return $i;
+			}
+			return $i;
+		}
+		foreach ( $list as $x ) {
+			if ( true !== AB_MCP_Sync_Deadline::left( $deadline ) ) {
+				return AB_MCP_Sync_Deadline::stop( $deadline );
+			}
+		}
+		foreach ( $list as $x ) {
+			if ( true !== AB_MCP_Sync_Deadline::left( $deadline ) ) {
+				return null;
+			}
+		}
+		foreach ( $list as $x ) {
+			$left = AB_MCP_Sync_Deadline::left( $deadline );
+			if ( true !== $left ) {
+				break;
+			}
+		}
+		if ( true !== $left ) {
+			return $left;
+		}
+		foreach ( $list as $x ) {
+			$left = AB_MCP_Sync_Deadline::left( $deadline );
+			if ( true !== $left ) {
+				break;
+			}
+		}
+		$q = self::seam_a( $deadline, 'q' );
+		if ( is_wp_error( $q ) ) {
+			return $q;
+		}
+		$r = self::seam_b( $deadline, 'r' );
+		if ( is_wp_error( $r ) ) {
+			return $r;
+		}
+		$t = self::seam_c( $deadline, 't' );
+		if ( is_wp_error( $t ) ) {
+			return $t;
+		}
+		$z = self::fach( $deadline, $list );
+		$s = AB_MCP_Sync_Deadline::stop( $deadline );
+		if ( null !== $s ) {
+			return $s;
+		}
+		return $z;
+	}
+	private static function seam_a( $deadline, $p ) {
+		return true === AB_MCP_Sync_Deadline::left( $deadline ) ? self::calls()->read( $p ) : null;
+	}
+	private static function seam_b( $deadline, $p ) {
+		return true === AB_MCP_Sync_Deadline::left( $deadline ) ? self::calls()->read( $p ) : AB_MCP_Sync_Deadline::stop( $deadline );
+	}
+	private static function seam_c( $deadline, $p ) {
+		if ( true !== AB_MCP_Sync_Deadline::left( $deadline ) || false === self::calls()->read( $p ) ) {
+			return null;
+		}
+		return 1;
+	}
+	private static function fach( $deadline, $list ) {
+		foreach ( $list as $x ) {
+			if ( true !== AB_MCP_Sync_Deadline::left( $deadline ) ) {
+				return '';
+			}
+		}
+		foreach ( $list as $x ) {
+			if ( true !== AB_MCP_Sync_Deadline::left( $deadline ) ) {
+				return null;
+			}
+		}
+		return 'x';
+	}
+	private static function can( $deadline ) {
+		$left = AB_MCP_Sync_Deadline::left( $deadline );
+		if ( true !== $left ) {
+			return $left;
+		}
+		return 1;
+	}
+	private static function refusal( $code, $text ) {
+		return array( $code, $text );
+	}
+	private static function calls() {
+		return new AB_MCP_Sync_Code_Swap_Calls();
+	}
+}
+final class AB_MCP_Sync_Code_Swap_Calls {
+	public function __construct() {
+	}
+	public function close( $path ) {
+		return $path;
+	}
+	public function read( $path ) {
+		return file_get_contents( $path );
+	}
+}
+PHP;
+		$own = self::own(
+			$code,
+			array(
+				'is_wp_error'                 => array( 'sonst', false ),
+				'strrev'                      => array( 'Codec', true ),
+				'file_get_contents'           => array( 'Platte', true ),
+				'WP_Error->get_error_code'    => array( 'sonst', false ),
+				'WP_Error->get_error_message' => array( 'sonst', false ),
+			),
+			array(
+				'ATOMIC'       => array( 'AB_MCP_Sync_Code_Swap_Calls::read' ),
+				'CHECKS'       => array( 'AB_MCP_Sync_Deadline::left' => 'wp' ),
+				'FACHWERT'     => array( 'AB_MCP_Sync_Code_Swap::fach' => array( "''", 'In the self-test.' ) ),
+				'TRANSLATIONS' => array( 'AB_MCP_Sync_Code_Swap::prepare' => array( 'AB_MCP_Sync_Code_Swap::refusal', 'In the self-test.' ) ),
+			),
+			array(
+				'INST_BYNAME' => array(
+					'get_error_code'    => 'WP_Error',
+					'get_error_message' => 'WP_Error',
+				),
+			)
+		);
+		self::assertSame( array(), $own['model']['problems'] );
+		self::assertSame( array(), $own['rules']['problems'] );
+		self::assertSame(
+			array(
+				'AB_MCP_Sync_Code_Swap::fach'    => array(
+					// Its own Fachwert '' (FACHWERT): green; null is not its answer.
+					"R2 foreach ( \$list as \$x )",
+				),
+				'AB_MCP_Sync_Code_Swap::prepare' => array(
+					// The same halt: green. true (Codex A1, SW:675), the call again (Codex A1), a refusal without the
+					// code of the halt, work before the return, a check before it, an if before it: red; the
+					// translation with code and text (TRANSLATIONS) and close() before the return: green.
+					'R7 AB_MCP_Sync_Code_Swap::can',
+					'R7 AB_MCP_Sync_Code_Swap::can',
+					'R7 AB_MCP_Sync_Code_Swap::can',
+					'R7 AB_MCP_Sync_Code_Swap::can',
+					'R1 strrev',
+					'R7 AB_MCP_Sync_Code_Swap::can',
+					'R7 AB_MCP_Sync_Code_Swap::can',
+					// The halt the deadline holds: green; null where the function is not in FACHWERT: red; a break
+					// with the halt returned right after the loop: green; a break without: red.
+					'R2 foreach ( $list as $x )',
+					'R2 foreach ( $list as $x )',
+				),
+				// A seam in a ternary after the halt test, the statement answering null (not in FACHWERT): red; the
+				// halt the deadline holds: green. A seam in a condition after the halt test, its branch null: red.
+				'AB_MCP_Sync_Code_Swap::seam_a'  => array( 'R4 seam AB_MCP_Sync_Code_Swap_Calls::read' ),
+				'AB_MCP_Sync_Code_Swap::seam_c'  => array( 'R4 seam AB_MCP_Sync_Code_Swap_Calls::read' ),
+			),
+			$own['open']
+		);
+	}
+
+	public function testAFachwertIsAskedForTheHaltWithTheRightPolarity(): void {
+		// Codex A2: after a call of a function in FACHWERT only its own forms: an if that asks the halt with the right
+		// polarity (or $s = stop() and null !== $s), or the call returned whole by a function in FACHWERT with the same
+		// answer; is_wp_error() on the Fachwert and a return of it from elsewhere do not do.
+		$code = <<<'PHP'
+<?php
+final class AB_MCP_Sync_Code_Swap {
+	public static function prepare( $deadline ) {
+		$a = self::fach( $deadline );
+		if ( is_wp_error( $a ) ) {
+			return $a;
+		}
+		$b = self::fach( $deadline );
+		if ( null !== $deadline && null !== AB_MCP_Sync_Deadline::stop( $deadline ) ) {
+			return AB_MCP_Sync_Deadline::stop( $deadline );
+		}
+		$c = self::fach( $deadline );
+		if ( null !== $deadline && null === AB_MCP_Sync_Deadline::stop( $deadline ) ) {
+			return AB_MCP_Sync_Deadline::stop( $deadline );
+		}
+		$d = self::fach( $deadline );
+		if ( null === $d || true !== AB_MCP_Sync_Deadline::left( $deadline ) ) {
+			return AB_MCP_Sync_Deadline::stop( $deadline );
+		}
+		$e = self::fach( $deadline );
+		$s = AB_MCP_Sync_Deadline::stop( $deadline );
+		if ( null === $s ) {
+			return $s;
+		}
+		$f = self::inner( $deadline );
+		$s = AB_MCP_Sync_Deadline::stop( $deadline );
+		if ( null !== $s ) {
+			return $s;
+		}
+		$g = self::other( $deadline );
+		$s = AB_MCP_Sync_Deadline::stop( $deadline );
+		if ( null !== $s ) {
+			return $s;
+		}
+		return self::fach( $deadline );
+	}
+	private static function inner( $deadline ) {
+		return self::fach( $deadline );
+	}
+	private static function other( $deadline ) {
+		return self::fach( $deadline );
+	}
+	private static function fach( $deadline ) {
+		if ( true !== AB_MCP_Sync_Deadline::left( $deadline ) ) {
+			return null;
+		}
+		return 1;
+	}
+}
+PHP;
+		$own = self::own(
+			$code,
+			array( 'is_wp_error' => array( 'sonst', false ) ),
+			array(
+				'CHECKS'   => array( 'AB_MCP_Sync_Deadline::left' => 'wp' ),
+				'FACHWERT' => array(
+					'AB_MCP_Sync_Code_Swap::fach'  => array( 'null', 'In the self-test.' ),
+					'AB_MCP_Sync_Code_Swap::inner' => array( 'null', 'In the self-test.' ),
+					'AB_MCP_Sync_Code_Swap::other' => array( "''", 'In the self-test.' ),
+				),
+			)
+		);
+		self::assertSame( array(), $own['rules']['problems'] );
+		self::assertSame(
+			array(
+				// Returned whole with another answer: red (inner() with the same answer: green).
+				'AB_MCP_Sync_Code_Swap::other'   => array( 'R7 AB_MCP_Sync_Code_Swap::fach' ),
+				'AB_MCP_Sync_Code_Swap::prepare' => array(
+					// is_wp_error() on the Fachwert (Codex A2, CS:1183): red. null !== $deadline && null !== stop():
+					// green (SH:389); the polarity turned (Codex A2, SH:389): red. A check in its halt test after a
+					// pure disjunct: green. $s = stop() tested null === $s: red.
+					'R7 AB_MCP_Sync_Code_Swap::fach',
+					'R7 AB_MCP_Sync_Code_Swap::fach',
+					'R7 AB_MCP_Sync_Code_Swap::fach',
+					// Returned whole by a function not in FACHWERT: red.
+					'R7 AB_MCP_Sync_Code_Swap::fach',
+				),
+			),
+			$own['open']
+		);
+	}
+
+	public function testACheckOfAPairIsAssignedWhole(): void {
+		// Codex A3: $v = CHECK; if ( HALT( $v ) ) … guards only where the check is assigned whole; in one branch of a
+		// ternary it does not run on every way on.
+		$code = <<<'PHP'
+<?php
+final class AB_MCP_Sync_Code_Swap {
+	public static function prepare( $deadline, $list, $path ) {
+		foreach ( $list as $one ) {
+			$left = is_array( $one ) ? true : AB_MCP_Sync_Deadline::left( $deadline );
+			if ( true !== $left ) {
+				return $left;
+			}
+		}
+		foreach ( $list as $one ) {
+			$left = AB_MCP_Sync_Deadline::left( $deadline );
+			if ( true !== $left ) {
+				return $left;
+			}
+		}
+		foreach ( $list as $one ) {
+			$v = is_array( $one ) ? true : AB_MCP_Sync_Step::hash( $deadline, 'sha256', $one );
+			if ( is_wp_error( $v ) ) {
+				return $v;
+			}
+		}
+		$left = is_string( $path ) ? true : AB_MCP_Sync_Deadline::left( $deadline );
+		if ( true !== $left ) {
+			return $left;
+		}
+		$a = self::calls()->read( $path );
+		$left = AB_MCP_Sync_Deadline::left( $deadline );
+		if ( true !== $left ) {
+			return $left;
+		}
+		$b = self::calls()->read( $path );
+		return array( $a, $b );
+	}
+	private static function calls() {
+		return new AB_MCP_Sync_Code_Swap_Calls();
+	}
+}
+final class AB_MCP_Sync_Code_Swap_Calls {
+	public function __construct() {
+	}
+	public function read( $path ) {
+		return file_get_contents( $path );
+	}
+}
+PHP;
+		$own = self::own(
+			$code,
+			array(
+				'is_array'          => array( 'sonst', false ),
+				'is_string'         => array( 'sonst', false ),
+				'is_wp_error'       => array( 'sonst', false ),
+				'file_get_contents' => array( 'Platte', true ),
+				'hash'              => array( 'Codec', true ),
+			),
+			array(
+				'ATOMIC' => array( 'AB_MCP_Sync_Code_Swap_Calls::read' ),
+				'CHECKS' => array( 'AB_MCP_Sync_Deadline::left' => 'wp' ),
+			)
+		);
+		self::assertSame( array(), $own['rules']['problems'] );
+		self::assertSame(
+			array(
+				'AB_MCP_Sync_Code_Swap::prepare' => array(
+					// The check in a branch of a ternary at the start of a loop (Codex A3, ST:602): red; assigned
+					// whole: green; a helper of the steps in a branch: red.
+					'R2 foreach ( $list as $one )',
+					'R2 foreach ( $list as $one )',
+					// Before a seam of the disk (Codex A3, before head_text()): red; assigned whole: green.
+					'R4 seam AB_MCP_Sync_Code_Swap_Calls::read',
+				),
+			),
+			$own['open']
+		);
+	}
+
+	public function testTheDeadlineOfACallIsLeftOutOrNullOnlyWhereShown(): void {
+		// Codex A4: an argument unpacked at or before the parameter of the deadline is UNSUPPORTED (and a deadline
+		// given); a named argument is placed by its name; only a deadline shown left out or null takes R7 off (E17).
+		$code = <<<'PHP'
+<?php
+final class AB_MCP_Sync_Code_Swap {
+	public static function prepare( $deadline, $args ) {
+		self::can( 1, null );
+		self::can( 1 );
+		self::can( ...array( 1, $deadline ) );
+		self::can( 1, deadline: $deadline );
+		self::can( 1, deadline: null );
+		self::can( x: 1 );
+		self::can( 1, ...$args );
+		self::two( $deadline, ...$args );
+		return 1;
+	}
+	private static function can( $x, $deadline = null ) {
+		$left = AB_MCP_Sync_Deadline::left( $deadline );
+		if ( true !== $left ) {
+			return $left;
+		}
+		return $x;
+	}
+	private static function two( $deadline, ...$rest ) {
+		return self::can( 2, $deadline );
+	}
+}
+PHP;
+		$own = self::own(
+			$code,
+			array(),
+			array( 'CHECKS' => array( 'AB_MCP_Sync_Deadline::left' => 'wp' ) )
+		);
+		self::assertSame(
+			array(
+				'UNSUPPORTED includes/a.php:6 arguments unpacked at or before the parameter $deadline of AB_MCP_Sync_Code_Swap::can in AB_MCP_Sync_Code_Swap::prepare',
+				'UNSUPPORTED includes/a.php:10 arguments unpacked at or before the parameter $deadline of AB_MCP_Sync_Code_Swap::can in AB_MCP_Sync_Code_Swap::prepare',
+			),
+			$own['rules']['problems']
+		);
+		self::assertSame(
+			array(
+				'AB_MCP_Sync_Code_Swap::prepare' => array(
+					// null, left out, named null, another named one only: no deadline (green). Unpacked at the
+					// deadline (Codex A4, SW:673) and at its place: a deadline (red, and UNSUPPORTED); named with it:
+					// red; unpacked after it: given positionally (red).
+					'R7 AB_MCP_Sync_Code_Swap::can',
+					'R7 AB_MCP_Sync_Code_Swap::can',
+					'R7 AB_MCP_Sync_Code_Swap::can',
+					'R7 AB_MCP_Sync_Code_Swap::two',
 				),
 			),
 			$own['open']

@@ -25,6 +25,14 @@
  * work (Verarbeitung) a step, a helper of the steps or a call of a function
  * that holds a step (S).
  *
+ * Part 2.3a (Codex, round 1 over the guard, A1 to A4): every branch that
+ * leaves at a halt answers it as prescribed, with only cleanup before it
+ * (answers(), answer(), cleanup()); after a function of FACHWERT only its
+ * own forms count, the halt asked with the right polarity
+ * (passes_fachwert(), halt_query()); the check of a pair is assigned whole
+ * (guard_pair()); and an argument unpacked at or before the deadline is
+ * UNSUPPORTED, a named one placed by its name (argument()).
+ *
  * @package AlphaBridge_MCP
  */
 
@@ -45,6 +53,9 @@ final class ReadBudgetRules {
 
 	/** The events that stop the search for the next work after a return. */
 	private const ENDS = array( 'return', 'throw', 'break', 'continue' );
+
+	/** The halt query of the deadline: the halt it holds, or null. */
+	private const STOP = 'AB_MCP_Sync_Deadline::stop';
 
 	/** @var array<string,mixed> */
 	private array $model;
@@ -82,6 +93,9 @@ final class ReadBudgetRules {
 	/** @var array<string,array<string,true>> list => entry => used. */
 	private array $used = array();
 
+	/** @var array<string,true> The calls whose arguments were told UNSUPPORTED (once each). */
+	private array $told = array();
+
 	/** @var array<string,mixed> What of the named boundaries the code holds. */
 	private array $named = array(
 		'SORT'   => array(),
@@ -95,11 +109,11 @@ final class ReadBudgetRules {
 	 * @param array<string,mixed> $model What ReadBudgetScan::read() returned.
 	 * @param array<string,mixed> $hand  The hand tables of the reader (HAND).
 	 * @param array<string,mixed> $soll  The basis of tests/ReadBudgetSoll.php (CHAIN and G4 are read).
-	 * @param array<string,mixed> $lists The lists of the rules (tests/ReadBudgetExceptions.php): ATOMIC, CHECKS, FACHWERT, COMPARE, SORTS, FILTERS, FRAME_OUT.
+	 * @param array<string,mixed> $lists The lists of the rules (tests/ReadBudgetExceptions.php): ATOMIC, CHECKS, FACHWERT, TRANSLATIONS, COMPARE, SORTS, FILTERS, FRAME_OUT.
 	 * @return array{violations:list<array<string,mixed>>,problems:list<string>,named:array<string,mixed>}
 	 */
 	public static function check( array $model, array $hand, array $soll, array $lists ): array {
-		foreach ( array( 'ATOMIC', 'CHECKS', 'FACHWERT', 'COMPARE', 'SORTS', 'FILTERS', 'FRAME_OUT' ) as $list ) {
+		foreach ( array( 'ATOMIC', 'CHECKS', 'FACHWERT', 'TRANSLATIONS', 'COMPARE', 'SORTS', 'FILTERS', 'FRAME_OUT' ) as $list ) {
 			if ( ! array_key_exists( $list, $lists ) ) {
 				throw new \InvalidArgumentException( 'List of the rules missing: ' . $list );
 			}
@@ -276,11 +290,11 @@ final class ReadBudgetRules {
 			$changed = false;
 			foreach ( array_keys( $this->model['reach'] ) as $k ) {
 				foreach ( $this->model['events'][ $k ] as $e ) {
-					if ( ! $this->s[ $k ] && ( isset( $e['step'] ) || 'STEP' === $e['k'] || $this->calls_into( $e, $this->s ) ) ) {
+					if ( ! $this->s[ $k ] && ( isset( $e['step'] ) || 'STEP' === $e['k'] || $this->calls_into( $k, $e, $this->s ) ) ) {
 						$this->s[ $k ] = true;
 						$changed       = true;
 					}
-					if ( ! $this->ch[ $k ] && ( in_array( $e['k'], array( 'CHECK', 'STOP', 'HALT', 'STEP' ), true ) || $this->calls_into( $e, $this->ch, true ) ) ) {
+					if ( ! $this->ch[ $k ] && ( in_array( $e['k'], array( 'CHECK', 'STOP', 'HALT', 'STEP' ), true ) || $this->calls_into( $k, $e, $this->ch, true ) ) ) {
 						$this->ch[ $k ] = true;
 						$changed        = true;
 					}
@@ -296,12 +310,12 @@ final class ReadBudgetRules {
 	 * @param array<string,mixed> $e       Event.
 	 * @param array<string,bool>  $summary Summary.
 	 */
-	private function calls_into( array $e, array $summary, bool $deadline = false ): bool {
+	private function calls_into( string $k, array $e, array $summary, bool $deadline = false ): bool {
 		if ( 'CALL' !== $e['k'] ) {
 			return false;
 		}
 		foreach ( $e['to'] as $to ) {
-			if ( isset( $summary[ $to ] ) && true === $summary[ $to ] && ! ( $deadline && $this->without_deadline( $e, $to ) ) ) {
+			if ( isset( $summary[ $to ] ) && true === $summary[ $to ] && ! ( $deadline && $this->without_deadline( $k, $e, $to ) ) ) {
 				return true;
 			}
 		}
@@ -375,34 +389,58 @@ final class ReadBudgetRules {
 				$this->problems[] = sprintf( 'R2 %s:%d %s: the loop is no statement of its own', $this->model['methods'][ $k ]['file'], $e['line'], $k );
 				continue;
 			}
-			if ( ! $this->begins_with_check( $k, $st['bodies'][0] ) ) {
+			$begin = $this->begins_with_check( $k, $st['bodies'][0] );
+			if ( null === $begin || ( 'break' === $begin['leave'] && ! $this->returns_after( $k, $e['pos'], $begin ) ) ) {
 				$this->add( 'R2', $k, $e, $e['head'] );
 			}
 		}
 	}
 
 	/**
-	 * Whether a body begins with a check whose answer leaves it at a halt
-	 * (return or break): if ( HALT ) …, $v = CHECK; if ( HALT( $v ) ) …, or
-	 * $v = HALT ? X : …; if ( X === $v || … ) ….
+	 * Whether a body begins with a check whose answer leaves it at a halt as
+	 * prescribed (answers()): if ( HALT ) return …, $v = CHECK; if ( HALT( $v
+	 * ) ) return|break …, or $v = HALT ? X : …; if ( X === $v || … ) return …;
+	 * how it leaves, and with a break the variable and form of the halt (a
+	 * break only in the pair, where the halt is kept).
 	 *
 	 * @param list<array<string,mixed>> $body Statements.
+	 * @return ?array{leave:string,var:?string,form:?string}
 	 */
-	private function begins_with_check( string $k, array $body ): bool {
+	private function begins_with_check( string $k, array $body ): ?array {
+		$return = array(
+			'leave' => 'return',
+			'var'   => null,
+			'form'  => null,
+		);
 		if ( array() === $body ) {
-			return false;
+			return null;
 		}
-		if ( null !== $this->guard_if( $k, $body[0], true, true ) ) {
-			return true;
+		if ( null !== $this->guard_if( $k, $body[0], true ) ) {
+			return $return;
 		}
 		if ( ! isset( $body[1] ) ) {
-			return false;
+			return null;
 		}
-		if ( $this->guard_pair( $k, $body[0], $body[1], true, true ) ) {
-			return true;
+		$pair = $this->guard_pair( $k, $body[0], $body[1], true, true );
+		if ( null !== $pair ) {
+			return $pair;
 		}
 		$tern = $this->ternary( $k, $body[0] );
-		return null !== $tern && null !== $tern['var'] && $this->passes_value( $k, $body[1], $tern['var'], $tern['halt'], true );
+		if ( null !== $tern && null !== $tern['var'] && $this->passes_value( $k, $body[1], $tern['var'], $tern['halt'] ) ) {
+			return $return;
+		}
+		return null;
+	}
+
+	/**
+	 * After a loop left by a break at a halt: whether the statement after the
+	 * loop tests the same variable for its halt and returns as prescribed.
+	 *
+	 * @param array{leave:string,var:?string,form:?string} $begin What begins_with_check() found.
+	 */
+	private function returns_after( string $k, int $pos, array $begin ): bool {
+		$next = $this->next_statement( $this->path( $this->trees[ $k ], $pos ) );
+		return null !== $next && null !== $begin['var'] && null !== $begin['form'] && 'return' === $this->tests_value( $k, $next['st'], $begin['var'], $begin['form'], true, false );
 	}
 
 	/* ---------- R3: recursions ---------- */
@@ -716,7 +754,7 @@ final class ReadBudgetRules {
 				continue;
 			}
 			foreach ( $e['to'] as $to ) {
-				if ( isset( $this->model['chain'][ $to ] ) || isset( $this->hand['HELPERS'][ $to ] ) || ! isset( $this->ch[ $to ] ) || true !== $this->ch[ $to ] || $this->without_deadline( $e, $to ) ) {
+				if ( isset( $this->model['chain'][ $to ] ) || isset( $this->hand['HELPERS'][ $to ] ) || ! isset( $this->ch[ $to ] ) || true !== $this->ch[ $to ] || $this->without_deadline( $k, $e, $to ) ) {
 					continue;
 				}
 				if ( ! $this->passes_halt( $k, $e, $to ) ) {
@@ -727,31 +765,70 @@ final class ReadBudgetRules {
 	}
 
 	/**
-	 * Whether a call gives the function no deadline (its parameter $deadline
-	 * or $budget left out or null): then it gives no halt (without a
-	 * deadline a check is the bare call, AB_MCP_Sync_Deadline::left()).
+	 * Whether a call gives the function no deadline (E17): its parameter
+	 * $deadline or $budget is shown left out (no positional argument there
+	 * and no named one) or given as null. Then it gives no halt (without a
+	 * deadline a check is the bare call, AB_MCP_Sync_Deadline::left()). An
+	 * argument unpacked (...) at or before that parameter is UNSUPPORTED and
+	 * counts as a deadline given (Codex, round 1 over the guard, A4).
 	 *
 	 * @param array<string,mixed> $e The call.
 	 */
-	private function without_deadline( array $e, string $to ): bool {
+	private function without_deadline( string $k, array $e, string $to ): bool {
 		foreach ( $this->model['methods'][ $to ]['params'] as $p => $param ) {
 			if ( ! in_array( $param['name'], array( '$deadline', '$budget' ), true ) ) {
 				continue;
 			}
-			return ! isset( $e['args'][ $p ] ) || 'null' === strtolower( $e['args'][ $p ] );
+			$arg = $this->argument( $k, $e, $to, $p, substr( $param['name'], 1 ) );
+			return null !== $arg && ( '' === $arg || 'null' === strtolower( $arg ) );
 		}
 		return false;
 	}
 
 	/**
-	 * Whether the halt of a call is passed on: the call is what its statement
-	 * returns (whole, or a whole branch of a ternary), or it is assigned so
-	 * to a variable and the next statement tests it with is_wp_error() or
-	 * true !== and returns; or the function called is in FACHWERT and the
-	 * next statement asks the halt and returns (if ( … STOP … ) return …;,
-	 * return … STOP …;, or $s = STOP; if ( null !== $s ) return …;). The next
-	 * statement: the one after it, or after the if, block, try or switch it
-	 * ends (not after a loop or a closure).
+	 * The argument a call gives the parameter at $p named $name: its text
+	 * (positional, or named name: …), '' where it is left out, or null where
+	 * an argument is unpacked at or before it (told UNSUPPORTED once).
+	 *
+	 * @param array<string,mixed> $e The call.
+	 */
+	private function argument( string $k, array $e, string $to, int $p, string $name ): ?string {
+		$named = array();
+		foreach ( $e['args'] as $i => $arg ) {
+			if ( 0 === strpos( $arg, '...' ) ) {
+				if ( $i > $p ) {
+					break; // PHP takes no positional argument after an unpacked one: $p is given before it.
+				}
+				$key = $k . '|' . $e['pos'] . '|' . $to;
+				if ( ! isset( $this->told[ $key ] ) ) {
+					$this->told[ $key ] = true;
+					$this->problems[]   = sprintf( 'UNSUPPORTED %s:%d arguments unpacked at or before the parameter $%s of %s in %s', $this->model['methods'][ $k ]['file'], $e['line'], $name, $to, $k );
+				}
+				return null;
+			}
+			if ( 1 === preg_match( '/^([A-Za-z_][A-Za-z0-9_]*)\s*:(?!:)/', $arg, $m ) ) {
+				$named[ $m[1] ] = trim( substr( $arg, strlen( $m[0] ) ) );
+				continue;
+			}
+			if ( array() === $named && $i === $p ) {
+				return $arg;
+			}
+		}
+		if ( isset( $named[ $name ] ) ) {
+			return $named[ $name ];
+		}
+		return '';
+	}
+
+	/**
+	 * Whether the halt of a call is passed on. A function in FACHWERT first
+	 * (Codex, round 1 over the guard, A2): see passes_fachwert(); a test of
+	 * its value with is_wp_error() or a return of it does not do. Else the
+	 * call is what its statement returns (whole, or a whole branch of a
+	 * ternary), or it is assigned so to a variable and the next statement
+	 * tests it with is_wp_error() or true !== and answers as prescribed
+	 * (answers()). The next statement: the one after it, or after the if,
+	 * block, try or switch it ends (not after a loop or a closure).
 	 *
 	 * @param array<string,mixed> $e The call.
 	 */
@@ -759,44 +836,102 @@ final class ReadBudgetRules {
 		$path = $this->path( $this->trees[ $k ], $e['pos'] );
 		$last = count( $path ) - 1;
 		$st   = $path[ $last ]['block'][ $path[ $last ]['i'] ];
+		$next = $this->next_statement( $path );
+		if ( null !== $to && isset( $this->lists['FACHWERT'][ $to ] ) ) {
+			$this->used['FACHWERT'][ $to ] = true;
+			return $this->passes_fachwert( $k, $e, $to, $st, $next );
+		}
 		if ( 'return' === $st['k'] && $this->is_value( $k, $e, $st['x'], $st['e'] - 1 ) ) {
 			return true;
 		}
-		$next = $this->next_statement( $path );
-		$var  = $this->assigned( $k, $st, $e );
-		if ( null !== $var && null !== $next && $this->tests_value( $k, $next['st'], $var, self::STEP_FORM, false ) ) {
+		$var = $this->assigned( $k, $st, $e );
+		return null !== $var && null !== $next && null !== $this->tests_value( $k, $next['st'], $var, self::STEP_FORM, false, false );
+	}
+
+	/**
+	 * Whether the halt after a call of a function in FACHWERT is passed on:
+	 * the next statement is an if whose condition asks the halt with the
+	 * right polarity (asks_halt()) and whose branch answers as prescribed, or
+	 * $s = AB_MCP_Sync_Deadline::stop( … ); and then if ( null !== $s )
+	 * answering; or the call is what its statement returns where the
+	 * function around it is in FACHWERT with the same answer (its callers ask
+	 * the halt).
+	 *
+	 * @param array<string,mixed>  $e    The call.
+	 * @param array<string,mixed>  $st   Its statement.
+	 * @param ?array<string,mixed> $next The next statement (next_statement()).
+	 */
+	private function passes_fachwert( string $k, array $e, string $to, array $st, ?array $next ): bool {
+		if ( 'return' === $st['k'] && $this->is_value( $k, $e, $st['x'], $st['e'] - 1 ) ) {
+			if ( ! isset( $this->lists['FACHWERT'][ $k ] ) || self::php_norm( $this->lists['FACHWERT'][ $k ][0] ) !== self::php_norm( $this->lists['FACHWERT'][ $to ][0] ) ) {
+				return false;
+			}
+			$this->used['FACHWERT'][ $k ] = true;
 			return true;
 		}
-		if ( null === $to || ! isset( $this->lists['FACHWERT'][ $to ] ) ) {
-			return false;
-		}
-		$this->used['FACHWERT'][ $to ] = true;
 		if ( null === $next ) {
 			return false;
 		}
 		$n = $next['st'];
-		if ( 'if' === $n['k'] && 1 === count( $n['bodies'] ) && self::leaves( $n['bodies'][0], false ) ) {
-			return $this->asks_in( $k, $n['heads'][0][0], $n['heads'][0][1] );
-		}
-		if ( 'return' === $n['k'] ) {
-			return $this->asks_in( $k, $n['s'], $n['e'] );
+		if ( 'if' === $n['k'] && 1 === count( $n['bodies'] ) ) {
+			return $this->asks_halt( $k, $n['heads'][0][0] + 1, $n['heads'][0][1] - 1 ) && null !== $this->answers( $k, $n['bodies'][0], null, true, false );
 		}
 		if ( 'expr' !== $n['k'] || ! isset( $next['block'][ $next['i'] + 1 ] ) ) {
 			return false;
 		}
 		foreach ( $this->model['events'][ $k ] as $x ) {
-			if ( 'STOP' === $x['k'] && $x['pos'] >= $n['s'] && $x['pos'] <= $n['e'] ) {
-				$s = $this->assigned( $k, $n, $x );
+			if ( 'STOP' === $x['k'] && self::STOP === $x['what'] && $x['pos'] >= $n['s'] && $x['pos'] <= $n['e'] ) {
+				$s = $this->assigned( $k, $n, $x, true );
 				return null !== $s && $this->tests_stop( $k, $next['block'][ $next['i'] + 1 ], $s );
 			}
 		}
 		return false;
 	}
 
-	/** Whether the tokens $a to $b hold a halt query. */
-	private function asks_in( string $k, int $a, int $b ): bool {
+	/**
+	 * Whether the condition (tokens $a to $b) asks the halt with the right
+	 * polarity: one of its top-level disjuncts is a halt query (halt_query()),
+	 * those before it pure.
+	 */
+	private function asks_halt( string $k, int $a, int $b ): bool {
+		foreach ( $this->disjuncts( $k, $a, $b ) as $d ) {
+			if ( $this->halt_query( $k, $d[0], $d[1] ) ) {
+				return true;
+			}
+			if ( ! $this->pure( $k, $d[0], $d[1] ) ) {
+				return false;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Whether the tokens $a to $b are, whole, true exactly at a halt: the halt
+	 * test of a check in its form (halt_test()); null !== STOP or STOP !==
+	 * null with STOP a whole AB_MCP_Sync_Deadline::stop( D ); or that after
+	 * null !== D && (without a deadline no halt, the pattern SH:389 of the
+	 * order).
+	 */
+	private function halt_query( string $k, int $a, int $b ): bool {
+		if ( null !== $this->halt_test( $k, $a, $b ) ) {
+			return true;
+		}
+		$toks = $this->model['toks'][ $k ];
+		$text = self::norm( $toks, $a, $b );
 		foreach ( $this->model['events'][ $k ] as $x ) {
-			if ( $x['pos'] > $a && $x['pos'] < $b && self::asks( $x ) ) {
+			if ( 'STOP' !== $x['k'] || self::STOP !== $x['what'] || $x['pos'] < $a || $x['pe'] > $b ) {
+				continue;
+			}
+			$q     = self::norm( $toks, $this->start_of( $k, $x ), $x['pe'] );
+			$forms = array( 'null!==' . $q, $q . '!==null' );
+			if ( isset( $x['args'][0] ) ) {
+				$d = preg_replace( '/\s+/', '', $x['args'][0] );
+				foreach ( array( 'null!==' . $q, $q . '!==null' ) as $f ) {
+					$forms[] = 'null!==' . $d . '&&' . $f;
+					$forms[] = $d . '!==null&&' . $f;
+				}
+			}
+			if ( in_array( $text, $forms, true ) ) {
 				return true;
 			}
 		}
@@ -804,16 +939,20 @@ final class ReadBudgetRules {
 	}
 
 	/**
-	 * Whether an if with one leaving branch tests a stop: null !== $s.
+	 * Whether an if with one branch tests a stop, null !== $s, and answers as
+	 * prescribed.
 	 *
 	 * @param array<string,mixed> $st Statement.
 	 */
 	private function tests_stop( string $k, array $st, string $var ): bool {
-		if ( 'if' !== $st['k'] || 1 !== count( $st['bodies'] ) || ! self::leaves( $st['bodies'][0], false ) ) {
+		if ( 'if' !== $st['k'] || 1 !== count( $st['bodies'] ) ) {
 			return false;
 		}
 		$cond = self::norm( $this->model['toks'][ $k ], $st['heads'][0][0] + 1, $st['heads'][0][1] - 1 );
-		return 'null!==' . $var === $cond || $var . '!==null' === $cond;
+		if ( 'null!==' . $var !== $cond && $var . '!==null' !== $cond ) {
+			return false;
+		}
+		return null !== $this->answers( $k, $st['bodies'][0], $var, true, false );
 	}
 
 	/**
@@ -926,14 +1065,15 @@ final class ReadBudgetRules {
 	/**
 	 * Whether an event stands right after a check whose halt is passed on,
 	 * with no work between the check and it (work in its own arguments runs
-	 * before it, a call around it after it): in the condition of an if with a
-	 * leaving branch after a halt test; in a ternary after its halt test (the
-	 * halt answered by the statement, or tested by the next one); or after a
-	 * statement that checks and returns at a halt (if ( HALT ) return …; or
-	 * $v = CHECK; if ( HALT( $v ) ) return …;) with statements without work
-	 * between, also from the first statements of a then branch, a block or a
-	 * try up to the statement around them. Not in the head of an elseif or of
-	 * a loop other than foreach (asked at each pass).
+	 * before it, a call around it after it): in the condition of an if after
+	 * a halt test, its branch answering as prescribed (answers()); in a
+	 * ternary after its halt test (the halt answered by the statement as
+	 * prescribed, answer(), or tested by the next one); or after a statement
+	 * that checks and answers at a halt (if ( HALT ) return …; or $v = CHECK;
+	 * if ( HALT( $v ) ) return …;, the check assigned whole) with statements
+	 * without work between, also from the first statements of a then branch,
+	 * a block or a try up to the statement around them. Not in the head of an
+	 * elseif or of a loop other than foreach (asked at each pass).
 	 *
 	 * @param array<string,mixed> $e The event.
 	 */
@@ -954,7 +1094,7 @@ final class ReadBudgetRules {
 				return false;
 			}
 		}
-		if ( 'if' === $st['k'] && $e['pos'] > $st['heads'][0][0] && $e['pos'] < $st['heads'][0][1] && 1 === count( $st['bodies'] ) && self::leaves( $st['bodies'][0], false ) ) {
+		if ( 'if' === $st['k'] && $e['pos'] > $st['heads'][0][0] && $e['pos'] < $st['heads'][0][1] && 1 === count( $st['bodies'] ) && null !== $this->answers( $k, $st['bodies'][0], null, true, false ) ) {
 			foreach ( $this->disjuncts( $k, $st['heads'][0][0] + 1, $st['heads'][0][1] - 1 ) as $d ) {
 				if ( $e['pos'] >= $d[0] && $e['pos'] <= $d[1] ) {
 					break;
@@ -970,9 +1110,9 @@ final class ReadBudgetRules {
 				return false;
 			}
 			if ( null === $tern['var'] ) {
-				return true; // return HALT ? X : …: the halt answers.
+				return $this->answer( $k, $tern['hx'][0], $tern['hx'][1], null, true ); // return HALT ? X : …: X answers.
 			}
-			return isset( $block[ $i + 1 ] ) && $this->passes_value( $k, $block[ $i + 1 ], $tern['var'], $tern['halt'], false );
+			return isset( $block[ $i + 1 ] ) && $this->passes_value( $k, $block[ $i + 1 ], $tern['var'], $tern['halt'] );
 		}
 		if ( $this->work_before( $k, $st['s'], $e ) ) {
 			return false;
@@ -1009,14 +1149,14 @@ final class ReadBudgetRules {
 	 */
 	private function guard_before( string $k, array $block, int $i ): string {
 		for ( $j = $i - 1; $j >= 0; $j-- ) {
-			$check = $this->guard_if( $k, $block[ $j ], false, false );
+			$check = $this->guard_if( $k, $block[ $j ], false );
 			if ( null !== $check ) {
 				if ( $this->work_in( $k, $check['pe'] + 1, $block[ $j ]['heads'][0][1] ) ) {
 					return 'no';
 				}
 				return 'yes';
 			}
-			if ( $j >= 1 && $this->guard_pair( $k, $block[ $j - 1 ], $block[ $j ], false, false ) ) {
+			if ( $j >= 1 && null !== $this->guard_pair( $k, $block[ $j - 1 ], $block[ $j ], false, false ) ) {
 				return 'yes';
 			}
 			if ( $this->work_in( $k, $block[ $j ]['s'], $block[ $j ]['e'] ) ) {
@@ -1046,25 +1186,26 @@ final class ReadBudgetRules {
 	}
 
 	/**
-	 * Whether the statement after a ternary passes its halt on: an if with a
-	 * leaving branch whose condition asks first, before any work, X === $v
-	 * (the value at a halt) or the halt itself.
+	 * Whether the statement after a ternary passes its halt on: an if whose
+	 * condition asks first, before any work, X === $v (the value at a halt)
+	 * or the halt itself, and whose branch answers as prescribed (answers();
+	 * no break: the halt is not kept for after the loop).
 	 *
 	 * @param array<string,mixed> $st Statement.
 	 */
-	private function passes_value( string $k, array $st, string $var, string $halt, bool $break ): bool {
-		if ( 'if' !== $st['k'] || 1 !== count( $st['bodies'] ) || ! self::leaves( $st['bodies'][0], $break ) ) {
+	private function passes_value( string $k, array $st, string $var, string $halt ): bool {
+		if ( 'if' !== $st['k'] || 1 !== count( $st['bodies'] ) ) {
 			return false;
 		}
 		$toks = $this->model['toks'][ $k ];
 		foreach ( $this->disjuncts( $k, $st['heads'][0][0] + 1, $st['heads'][0][1] - 1 ) as $d ) {
 			$text = self::norm( $toks, $d[0], $d[1] );
 			if ( $text === $halt . '===' . $var || $text === $var . '===' . $halt ) {
-				return true;
+				return null !== $this->answers( $k, $st['bodies'][0], null, true, false );
 			}
 			foreach ( $this->model['events'][ $k ] as $x ) {
 				if ( $x['pos'] >= $d[0] && $x['pos'] <= $d[1] && self::asks( $x ) ) {
-					return true;
+					return null !== $this->answers( $k, $st['bodies'][0], null, true, false );
 				}
 			}
 			if ( $this->work_in( $k, $d[0], $d[1] ) ) {
@@ -1076,19 +1217,23 @@ final class ReadBudgetRules {
 
 	/**
 	 * An if with one branch whose condition holds a halt test of a check as
-	 * one of its disjuncts (those before it pure) and whose branch leaves:
-	 * the check, or null.
+	 * one of its disjuncts (those before it pure) and whose branch answers as
+	 * prescribed (answers(); no break: the halt is not kept for after the
+	 * loop): the check, or null.
 	 *
 	 * @param array<string,mixed> $st Statement.
 	 * @return ?array<string,mixed>
 	 */
-	private function guard_if( string $k, array $st, bool $break, bool $step ): ?array {
-		if ( 'if' !== $st['k'] || 1 !== count( $st['bodies'] ) || ! self::leaves( $st['bodies'][0], $break ) ) {
+	private function guard_if( string $k, array $st, bool $step ): ?array {
+		if ( 'if' !== $st['k'] || 1 !== count( $st['bodies'] ) ) {
 			return null;
 		}
 		foreach ( $this->disjuncts( $k, $st['heads'][0][0] + 1, $st['heads'][0][1] - 1 ) as $d ) {
 			$check = $this->halt_test( $k, $d[0], $d[1] );
 			if ( null !== $check && ( $step || 'STEP' !== $check['k'] ) ) {
+				if ( null === $this->answers( $k, $st['bodies'][0], null, true, false ) ) {
+					return null;
+				}
 				return $check;
 			}
 			if ( ! $this->pure( $k, $d[0], $d[1] ) ) {
@@ -1099,12 +1244,16 @@ final class ReadBudgetRules {
 	}
 
 	/**
-	 * $v = CHECK( … ); and then if ( HALT( $v ) ) leaves.
+	 * $v = CHECK( … ); and then if ( HALT( $v ) ) answering (answers()). The
+	 * check is assigned whole, so it runs on every way on (Codex, round 1
+	 * over the guard, A3: a check in one branch of a ternary does not do);
+	 * how the if leaves, the variable and the form of the check, or null.
 	 *
 	 * @param array<string,mixed> $a The assignment.
 	 * @param array<string,mixed> $b The if.
+	 * @return ?array{leave:string,var:string,form:string}
 	 */
-	private function guard_pair( string $k, array $a, array $b, bool $break, bool $step ): bool {
+	private function guard_pair( string $k, array $a, array $b, bool $break, bool $step ): ?array {
 		foreach ( $this->model['events'][ $k ] as $x ) {
 			if ( $x['pos'] < $a['s'] || $x['pos'] > $a['e'] ) {
 				continue;
@@ -1113,34 +1262,46 @@ final class ReadBudgetRules {
 			if ( ! $is_check ) {
 				continue;
 			}
-			$var = $this->assigned( $k, $a, $x );
-			if ( null !== $var ) {
-				return $this->tests_value( $k, $b, $var, $this->form_of( $x ), $break );
+			$var = $this->assigned( $k, $a, $x, true );
+			if ( null === $var ) {
+				continue;
 			}
+			$form  = $this->form_of( $x );
+			$leave = $this->tests_value( $k, $b, $var, $form, true, $break );
+			if ( null === $leave ) {
+				return null;
+			}
+			return array(
+				'leave' => $leave,
+				'var'   => $var,
+				'form'  => $form,
+			);
 		}
-		return false;
+		return null;
 	}
 
 	/**
-	 * Whether an if with one branch tests a value for its halt as its whole
-	 * condition (or, for a value of a ternary, as its first disjunct X === $v)
-	 * and leaves.
+	 * Whether an if with one branch tests a value for its halt in a form of
+	 * FORMS as its whole condition and answers as prescribed (answers(): the
+	 * value itself is the halt only in the form wp; with $stop the halt held
+	 * by the deadline is one too): how it leaves, or null.
 	 *
 	 * @param array<string,mixed> $st   Statement.
-	 * @param string              $halt A form of FORMS, or the text of the value at a halt (of a ternary).
+	 * @param string              $halt A form of FORMS.
 	 */
-	private function tests_value( string $k, array $st, string $var, string $halt, bool $break ): bool {
-		if ( 'if' !== $st['k'] || 1 !== count( $st['bodies'] ) || ! self::leaves( $st['bodies'][0], $break ) ) {
-			return false;
+	private function tests_value( string $k, array $st, string $var, string $halt, bool $stop, bool $break ): ?string {
+		if ( 'if' !== $st['k'] || 1 !== count( $st['bodies'] ) || ! in_array( $halt, self::FORMS, true ) ) {
+			return null;
 		}
-		$toks = $this->model['toks'][ $k ];
-		if ( ! in_array( $halt, self::FORMS, true ) ) {
-			$ds = $this->disjuncts( $k, $st['heads'][0][0] + 1, $st['heads'][0][1] - 1 );
-			$d  = self::norm( $toks, $ds[0][0], $ds[0][1] );
-			return $d === $halt . '===' . $var || $d === $var . '===' . $halt;
+		$cond = self::norm( $this->model['toks'][ $k ], $st['heads'][0][0] + 1, $st['heads'][0][1] - 1 );
+		if ( ! in_array( $cond, self::halt_forms( $var, $halt ), true ) ) {
+			return null;
 		}
-		$cond = self::norm( $toks, $st['heads'][0][0] + 1, $st['heads'][0][1] - 1 );
-		return in_array( $cond, self::halt_forms( $var, $halt ), true );
+		$held = null;
+		if ( 'wp' === $halt ) {
+			$held = $var;
+		}
+		return $this->answers( $k, $st['bodies'][0], $held, $stop, $break );
 	}
 
 	/**
@@ -1201,10 +1362,10 @@ final class ReadBudgetRules {
 
 	/**
 	 * $v = HALT ? X : rest; or return HALT ? X : rest;: the variable (null for
-	 * return), the text of X and the tokens of rest; or null.
+	 * return), the text of X, its tokens (hx) and the tokens of rest; or null.
 	 *
 	 * @param array<string,mixed> $st Statement.
-	 * @return ?array{var:?string,halt:string,rest:array{0:int,1:int},check:array<string,mixed>}
+	 * @return ?array{var:?string,halt:string,hx:array{0:int,1:int},rest:array{0:int,1:int},check:array<string,mixed>}
 	 */
 	private function ternary( string $k, array $st ): ?array {
 		if ( 'expr' !== $st['k'] && 'return' !== $st['k'] ) {
@@ -1236,6 +1397,7 @@ final class ReadBudgetRules {
 				return array(
 					'var'   => $var,
 					'halt'  => self::norm( $toks, $tern[1][0], $tern[1][1] ),
+					'hx'    => $tern[1],
 					'rest'  => $tern[2],
 					'check' => $check,
 				);
@@ -1253,18 +1415,21 @@ final class ReadBudgetRules {
 		return array(
 			'var'   => $var,
 			'halt'  => self::norm( $toks, $tern[2][0], $tern[2][1] ),
+			'hx'    => $tern[2],
 			'rest'  => $tern[1],
 			'check' => $check,
 		);
 	}
 
 	/**
-	 * The variable a statement $v = CALL; assigns the whole call to, or null.
+	 * The variable a statement $v = CALL; assigns the call to (as its value,
+	 * is_value(); with $whole only the whole call, no branch of a ternary),
+	 * or null.
 	 *
 	 * @param array<string,mixed> $st Statement.
 	 * @param array<string,mixed> $e  The call.
 	 */
-	private function assigned( string $k, array $st, array $e ): ?string {
+	private function assigned( string $k, array $st, array $e, bool $whole = false ): ?string {
 		if ( 'expr' !== $st['k'] ) {
 			return null;
 		}
@@ -1273,10 +1438,137 @@ final class ReadBudgetRules {
 		if ( T_VARIABLE !== $toks[ $st['s'] ]->id || null === $eq || '=' !== $toks[ $eq ]->text ) {
 			return null;
 		}
-		if ( ! $this->is_value( $k, $e, self::next( $toks, $eq ), $st['e'] - 1 ) ) {
+		$a = self::next( $toks, $eq );
+		if ( $whole && ! $this->whole_call( $k, $e, $a, $st['e'] - 1 ) ) {
+			return null;
+		}
+		if ( ! $this->is_value( $k, $e, $a, $st['e'] - 1 ) ) {
 			return null;
 		}
 		return $toks[ $st['s'] ]->text;
+	}
+
+	/**
+	 * Whether a branch that leaves at a halt answers it as prescribed (Codex,
+	 * round 1 over the guard, A1). Its statements before the last are
+	 * cleanup (cleanup(): expressions without work, check, clock or a call
+	 * that can give a halt, such as close() or an assignment; no control
+	 * structure, no return). Its last statement leaves: return with an answer
+	 * (answer()), or, with $break, a bare break (the loop is left; r2() asks
+	 * the statement after the loop).
+	 *
+	 * @param list<array<string,mixed>> $body Statements.
+	 * @return ?string 'return' or 'break', or null.
+	 */
+	private function answers( string $k, array $body, ?string $var, bool $stop, bool $break ): ?string {
+		$n = count( $body );
+		if ( 0 === $n ) {
+			return null;
+		}
+		for ( $i = 0; $i < $n - 1; $i++ ) {
+			if ( 'expr' !== $body[ $i ]['k'] || ! $this->cleanup( $k, $body[ $i ]['s'], $body[ $i ]['e'] ) ) {
+				return null;
+			}
+		}
+		$last = $body[ $n - 1 ];
+		if ( 'break' === $last['k'] ) {
+			if ( $break && 'break;' === self::norm( $this->model['toks'][ $k ], $last['s'], $last['e'] ) ) {
+				return 'break';
+			}
+			return null;
+		}
+		if ( 'return' !== $last['k'] || $last['x'] >= $last['e'] || ! $this->answer( $k, $last['x'], $last['e'] - 1, $var, $stop ) ) {
+			return null;
+		}
+		return 'return';
+	}
+
+	/**
+	 * Whether the tokens $a to $b are a prescribed answer at a halt: the
+	 * variable that holds the halt ($var, the same halt); else, without work,
+	 * check or clock in it (cleanup()), a whole halt query of the deadline
+	 * (AB_MCP_Sync_Deadline::stop(), AB_MCP_Protected_Store::stopped_or())
+	 * where $stop (the halt the deadline holds); the answer of the function
+	 * in FACHWERT (its value at a halt); or a translation of TRANSLATIONS that
+	 * keeps the code and the text of the halt in $var (translates()).
+	 */
+	private function answer( string $k, int $a, int $b, ?string $var, bool $stop ): bool {
+		$text = self::norm( $this->model['toks'][ $k ], $a, $b );
+		if ( null !== $var && $var === $text ) {
+			return true;
+		}
+		if ( ! $this->cleanup( $k, $a, $b ) ) {
+			return false;
+		}
+		if ( $stop ) {
+			foreach ( $this->model['events'][ $k ] as $x ) {
+				if ( 'STOP' === $x['k'] && $x['pos'] >= $a && $x['pos'] <= $b && $this->whole_call( $k, $x, $a, $b ) ) {
+					return true;
+				}
+			}
+		}
+		if ( isset( $this->lists['FACHWERT'][ $k ] ) && self::php_norm( $this->lists['FACHWERT'][ $k ][0] ) === $text ) {
+			$this->used['FACHWERT'][ $k ] = true;
+			return true;
+		}
+		if ( null !== $var && isset( $this->lists['TRANSLATIONS'][ $k ] ) && $this->translates( $k, $a, $b, $var ) ) {
+			$this->used['TRANSLATIONS'][ $k ] = true;
+			return true;
+		}
+		return false;
+	}
+
+	/**
+	 * Whether the tokens $a to $b are cleanup: no work, no check, no step of
+	 * the helper, no clock (AT) and no call that can give a halt with its
+	 * deadline (closing, an assignment, a function of PHP without a step).
+	 */
+	private function cleanup( string $k, int $a, int $b ): bool {
+		foreach ( $this->model['events'][ $k ] as $x ) {
+			if ( $x['pos'] < $a || $x['pos'] > $b ) {
+				continue;
+			}
+			if ( $this->work( $x ) || in_array( $x['k'], array( 'CHECK', 'STEP', 'AT' ), true ) || $this->calls_into( $k, $x, $this->ch, true ) ) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * Whether the tokens $a to $b are, whole, a call of the translation of
+	 * the function in TRANSLATIONS whose first argument is the code of the
+	 * halt in $var ($var->get_error_code()) and one of whose arguments holds
+	 * its text ($var->get_error_message()): the halt passed on translated
+	 * (the order, section 4).
+	 */
+	private function translates( string $k, int $a, int $b, string $var ): bool {
+		foreach ( $this->model['events'][ $k ] as $x ) {
+			if ( 'CALL' !== $x['k'] || ! in_array( $this->lists['TRANSLATIONS'][ $k ][0], $x['to'], true ) || ! $this->whole_call( $k, $x, $a, $b ) || ! isset( $x['args'][0] ) ) {
+				continue;
+			}
+			if ( $var . '->get_error_code()' !== preg_replace( '/\s+/', '', $x['args'][0] ) ) {
+				return false;
+			}
+			foreach ( $x['args'] as $arg ) {
+				if ( false !== strpos( preg_replace( '/\s+/', '', $arg ), $var . '->get_error_message()' ) ) {
+					return true;
+				}
+			}
+			return false;
+		}
+		return false;
+	}
+
+	/** The text of a PHP expression without space and comments (as norm()). */
+	private static function php_norm( string $php ): string {
+		$s = '';
+		foreach ( \PhpToken::tokenize( '<?php ' . $php . ';' ) as $t ) {
+			if ( ! in_array( $t->id, array( T_OPEN_TAG, T_WHITESPACE, T_COMMENT, T_DOC_COMMENT ), true ) ) {
+				$s .= $t->text;
+			}
+		}
+		return substr( $s, 0, -1 );
 	}
 
 	/**
@@ -1390,20 +1682,6 @@ final class ReadBudgetRules {
 		return false;
 	}
 
-	/**
-	 * Whether a body leaves: a return (or a break) among its statements.
-	 *
-	 * @param list<array<string,mixed>> $body Statements.
-	 */
-	private static function leaves( array $body, bool $break ): bool {
-		foreach ( $body as $st ) {
-			if ( 'return' === $st['k'] || ( $break && 'break' === $st['k'] ) ) {
-				return true;
-			}
-		}
-		return false;
-	}
-
 	/* ---------- The named boundaries the code holds ---------- */
 
 	private function chain_counts(): void {
@@ -1441,7 +1719,7 @@ final class ReadBudgetRules {
 				$this->problems[] = 'ATOMIC not in G1: ' . $k;
 			}
 		}
-		foreach ( array( 'CHECKS', 'FACHWERT', 'FRAME_OUT' ) as $list ) {
+		foreach ( array( 'CHECKS', 'FACHWERT', 'TRANSLATIONS', 'FRAME_OUT' ) as $list ) {
 			foreach ( array_keys( $this->lists[ $list ] ) as $entry ) {
 				if ( ! isset( $this->used[ $list ][ $entry ] ) ) {
 					$this->problems[] = sprintf( '%s not used: %s', $list, $entry );
