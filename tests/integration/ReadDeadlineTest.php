@@ -32,6 +32,16 @@
  *   has not decided is not decided by a reading under a deadline
  *   (ab_mcp_store_undecided). Without a deadline each reading answers as
  *   with one in time.
+ * - AB_MCP_Sync_Code_Stage::ready() over a stage built here (its group bound
+ *   to a run, its tree put in, a state checking and a state ready): its
+ *   files, the last state read and read in its form (the codec stops
+ *   without encoding again), then foreign() with the binding and the
+ *   sidecar of its group, each gate by itself as above; a stage not ready
+ *   for the values asked (another hash, another run) is «not ready» (null)
+ *   in time and the stop when late, never null. state() and foreign() are
+ *   also read directly (they are private: through reflection), where the
+ *   translations of state() (never unknown) and of foreign() (never a
+ *   binding or an entry not of its form) and of entry() would speak.
  * - The translations of what a reader below answered into a refusal of its
  *   own, each on its own level (at the entrance of signed() the report of
  *   the environment catches every stop of taken() first, so there they
@@ -70,6 +80,7 @@ use AB_MCP_Test_Seam;
 use AlphaBridge\Tests\DeadlineClock;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use ReflectionMethod;
 use ReflectionProperty;
 use RuntimeException;
 use WP_Error;
@@ -95,6 +106,9 @@ final class ReadDeadlineTest extends TestCase {
 
 	/** The unit of the series. */
 	private const UNIT = 'ab-it-frist';
+
+	/** The run the stage is bound to. */
+	private const RUN = 7;
 
 	/**
 	 * The gates of each reading in time (DeadlineClock): each gate with how
@@ -314,6 +328,82 @@ final class ReadDeadlineTest extends TestCase {
 			'AB_MCP_Payload_File::read#5'       => 1,
 			'AB_MCP_Payload_File::read#6'       => 1,
 		),
+		'ready'   => array(
+			'AB_MCP_Protected_Store::files#1'   => 1,
+			'AB_MCP_Protected_Store::way#1'     => 5,
+			'AB_MCP_Protected_Store::way#2'     => 7,
+			'AB_MCP_Protected_Store::holds#1'   => 5,
+			'AB_MCP_Protected_Store::holds#2'   => 5,
+			'AB_MCP_Protected_Store::holds#3'   => 12,
+			'AB_MCP_Protected_Store::group#1'   => 2,
+			'AB_MCP_Protected_Store::sidecar#1' => 3,
+			'AB_MCP_Shape::decoded#1'           => 4,
+			'AB_MCP_Shape::decoded#2'           => 4,
+			'AB_MCP_Protected_Store::files#2'   => 1,
+			'AB_MCP_Protected_Store::files#3'   => 5,
+			'AB_MCP_Protected_Store::files#4'   => 1,
+			'AB_MCP_Sync_Code_Stage::state#1'   => 2,
+			'AB_MCP_Protected_Store::get#1'     => 1,
+			'AB_MCP_Protected_Store::get#2'     => 1,
+			'AB_MCP_Payload_File::read#1'       => 1,
+			'AB_MCP_Payload_File::read#2'       => 1,
+			'AB_MCP_Payload_File::read#3'       => 1,
+			'AB_MCP_Payload_File::read#4'       => 1,
+			'AB_MCP_Payload_File::read#5'       => 1,
+			'AB_MCP_Payload_File::read#6'       => 1,
+			'AB_MCP_Sync_Canon::revived#1'      => 24,
+			'AB_MCP_Sync_Canon::prepared#3'     => 22,
+			'AB_MCP_Sync_Canon::prepared#2'     => 2,
+			'AB_MCP_Sync_Canon::encode#1'       => 1,
+			'AB_MCP_Shape::fields#1'            => 28,
+			'AB_MCP_Shape::items#1'             => 2,
+			'AB_MCP_Sync_Code_Stage::state#2'   => 1,
+			'AB_MCP_Protected_Store::entry#1'   => 1,
+			'AB_MCP_Sync_Code_Stage::ready#1'   => 1,
+		),
+		'state'   => array(
+			'AB_MCP_Protected_Store::files#1'   => 1,
+			'AB_MCP_Protected_Store::way#1'     => 4,
+			'AB_MCP_Protected_Store::way#2'     => 6,
+			'AB_MCP_Protected_Store::holds#1'   => 4,
+			'AB_MCP_Protected_Store::holds#2'   => 4,
+			'AB_MCP_Protected_Store::holds#3'   => 10,
+			'AB_MCP_Protected_Store::group#1'   => 2,
+			'AB_MCP_Protected_Store::sidecar#1' => 2,
+			'AB_MCP_Shape::decoded#1'           => 3,
+			'AB_MCP_Shape::decoded#2'           => 3,
+			'AB_MCP_Protected_Store::files#2'   => 1,
+			'AB_MCP_Protected_Store::files#3'   => 5,
+			'AB_MCP_Protected_Store::files#4'   => 1,
+			'AB_MCP_Sync_Code_Stage::state#1'   => 2,
+			'AB_MCP_Protected_Store::get#1'     => 1,
+			'AB_MCP_Protected_Store::get#2'     => 1,
+			'AB_MCP_Payload_File::read#1'       => 1,
+			'AB_MCP_Payload_File::read#2'       => 1,
+			'AB_MCP_Payload_File::read#3'       => 1,
+			'AB_MCP_Payload_File::read#4'       => 1,
+			'AB_MCP_Payload_File::read#5'       => 1,
+			'AB_MCP_Payload_File::read#6'       => 1,
+			'AB_MCP_Sync_Canon::revived#1'      => 24,
+			'AB_MCP_Sync_Canon::prepared#3'     => 22,
+			'AB_MCP_Sync_Canon::prepared#2'     => 2,
+			'AB_MCP_Sync_Canon::encode#1'       => 1,
+			'AB_MCP_Shape::fields#1'            => 22,
+			'AB_MCP_Shape::items#1'             => 2,
+			'AB_MCP_Sync_Code_Stage::state#2'   => 1,
+		),
+		'foreign' => array(
+			'AB_MCP_Shape::fields#1'            => 6,
+			'AB_MCP_Protected_Store::entry#1'   => 1,
+			'AB_MCP_Protected_Store::way#1'     => 1,
+			'AB_MCP_Protected_Store::way#2'     => 1,
+			'AB_MCP_Protected_Store::holds#1'   => 1,
+			'AB_MCP_Protected_Store::holds#2'   => 1,
+			'AB_MCP_Protected_Store::holds#3'   => 2,
+			'AB_MCP_Protected_Store::sidecar#1' => 1,
+			'AB_MCP_Shape::decoded#1'           => 1,
+			'AB_MCP_Shape::decoded#2'           => 1,
+		),
 	);
 
 	/** The SHA-256 of the gates of each reading in time, one gate a line, in order. */
@@ -323,6 +413,9 @@ final class ReadDeadlineTest extends TestCase {
 		'taken'  => 'e299121732d7736ca1923a325e83d60fc55581a4d0d2fa85463b89c4cb3a8f94',
 		'groups' => 'ad55959bc822020eac9f0e37332fde3525826b6d44f88ca435bd85940f22ccbf',
 		'get'    => '957bcd4b227ab8ca2eef7b8344013fe996cc44c4c7f434de06d808ad426f0146',
+		'ready'   => 'fff429340643b83d722ff1f4a6d1dc2acbbde4453479c11a5e76e2c5a3d005a0',
+		'state'   => 'd12ef962074b22c209bf7f6a145b0d95a1014cbd021fb80b3277b30126bfecfc',
+		'foreign' => '3b605856d06ee27e50c0034566387ebd5e3c4f8e9a569efecc55f0946899c713',
 	);
 
 	/** @var array<string,string[]> The series built once: name => package ids. */
@@ -330,6 +423,9 @@ final class ReadDeadlineTest extends TestCase {
 
 	/** @var array The first chunk of the series single: gid (its group in the area in), sha256. */
 	private static $chunk = array();
+
+	/** @var array The stage built once: gid, hash, bytes, entries (path, size, SHA-256), state (ready, as ready() reads it). */
+	private static $stage = array();
 
 	/** @var string|null DOCUMENT_ROOT before the class. */
 	private static $docroot_before;
@@ -347,6 +443,7 @@ final class ReadDeadlineTest extends TestCase {
 			throw new RuntimeException( 'No schema.' );
 		}
 		self::pair();
+		self::$stage  = self::stage();
 		self::$series = self::build();
 		self::$chunk  = self::chunk_of( self::$series['single'][0] );
 	}
@@ -361,6 +458,7 @@ final class ReadDeadlineTest extends TestCase {
 		AB_MCP_Sync_Schema::forget();
 		self::$series = array();
 		self::$chunk  = array();
+		self::$stage  = array();
 		if ( null === self::$docroot_before ) {
 			unset( $_SERVER['DOCUMENT_ROOT'] );
 		} else {
@@ -451,22 +549,21 @@ final class ReadDeadlineTest extends TestCase {
 
 	/* ---------------------------------------------------------- the series */
 
-	/** The line of the unit (a folder of three files) and its entries in two lines. */
+	/** The line of the unit (a folder of three files, the tree of the stage) and its entries in two lines. */
 	private static function unit_lines(): array {
-		$files = array(
-			array( 'ab-it-frist.php', 120, hash( 'sha256', 'main' ), 1700000000 ),
-			array( 'inc/teil.php', 80, hash( 'sha256', 'part' ), 1700000001 ),
-			array( 'readme.txt', 40, hash( 'sha256', 'readme' ), 1700000002 ),
-		);
+		$files = array();
+		foreach ( self::$stage['entries'] as $i => $entry ) {
+			$files[] = array( $entry[0], $entry[1], $entry[2], 1700000000 + $i );
+		}
 		$unit  = array(
 			'active'     => array( 'ab-it-frist.php' ),
-			'bytes'      => 240,
+			'bytes'      => self::$stage['bytes'],
 			'cause'      => null,
 			'complete'   => true,
 			'env'        => 'plugin',
 			'files'      => 3,
 			'form'       => 'folder',
-			'hash'       => hash( 'sha256', 'the unit ' . self::UNIT ),
+			'hash'       => self::$stage['hash'],
 			'lock'       => null,
 			'mains'      => array( 'ab-it-frist.php' ),
 			'mtime'      => null,
@@ -501,10 +598,109 @@ final class ReadDeadlineTest extends TestCase {
 			'form'       => 'folder',
 			'hash'       => $unit['hash'],
 			'files'      => 3,
-			'bytes'      => 240,
+			'bytes'      => self::$stage['bytes'],
 			'version'    => '1.2.0',
 			'update_uri' => null,
 			'entries'    => $entries,
+		);
+	}
+
+	/**
+	 * The stage of the unit: a group of the area stage bound to RUN, the tree
+	 * of three files put in (put_tree(), its hash the hash of the unit in the
+	 * series), a state checking and then a state ready, written as complete()
+	 * writes them.
+	 *
+	 * @return array gid, hash, bytes, entries, state.
+	 */
+	private static function stage(): array {
+		$source = self::root() . '/run/r12-frist-src';
+		if ( is_dir( $source ) ) {
+			self::remove_tree( $source );
+		}
+		mkdir( $source . '/inc', 0755, true );
+		$bytes = array(
+			'ab-it-frist.php' => "<?php\n/**\n * Plugin Name: AB IT Frist\n * Version: 1.2.0\n */\n",
+			'inc/teil.php'    => "<?php\n// A part of the plugin.\n",
+			'readme.txt'      => "The deadline of a reading.\n",
+		);
+		$entries = array();
+		foreach ( $bytes as $path => $text ) {
+			file_put_contents( $source . '/' . $path, $text );
+			$entries[] = array( $path, strlen( $text ), hash( 'sha256', $text ) );
+		}
+		$gid = AB_MCP_Protected_Store::open(
+			'stage',
+			array(
+				'run_id' => self::RUN,
+				'label'  => 'code',
+			)
+		);
+		if ( ! is_string( $gid ) ) {
+			throw new RuntimeException( 'No group of the stage.' );
+		}
+		$tree = AB_MCP_Protected_Store::put_tree( 'stage', $gid, self::UNIT, WP_PLUGIN_DIR . '/' . self::UNIT, $source );
+		self::remove_tree( $source );
+		if ( ! is_array( $tree ) ) {
+			throw new RuntimeException( 'No tree of the stage: ' . $tree->get_error_code() );
+		}
+		$state = array(
+			'format'  => AB_MCP_Sync_Code_Stage::STATE_FORMAT,
+			'unit'    => array(
+				'kind' => 'plugin',
+				'ref'  => self::UNIT,
+			),
+			'signed'  => $tree['hash'],
+			'tree'    => array(
+				'hash' => $tree['hash'],
+				'name' => self::UNIT,
+			),
+			'source'  => 'packages',
+			'state'   => AB_MCP_Sync_Code_Stage::CHECKING,
+			'seq'     => 1,
+			'todo'    => array(
+				array(
+					'path'   => 'ab-it-frist.php',
+					'size'   => $entries[0][1],
+					'sha256' => $entries[0][2],
+				),
+				array(
+					'path'   => 'inc/teil.php',
+					'size'   => $entries[1][1],
+					'sha256' => $entries[1][2],
+				),
+			),
+			'done'    => 0,
+			'lint'    => true,
+			'notes'   => array(),
+			'refusal' => null,
+		);
+		$write = new ReflectionMethod( AB_MCP_Sync_Code_Stage::class, 'write_state' );
+		if ( true !== $write->invoke( null, $gid, $state ) ) {
+			throw new RuntimeException( 'The state checking not written.' );
+		}
+		$state['state'] = AB_MCP_Sync_Code_Stage::READY;
+		$state['seq']   = 2;
+		$state['done']  = 2;
+		if ( true !== $write->invoke( null, $gid, $state ) ) {
+			throw new RuntimeException( 'The state ready not written.' );
+		}
+		return array(
+			'gid'     => $gid,
+			'hash'    => $tree['hash'],
+			'bytes'   => array_sum( array_column( $entries, 1 ) ),
+			'entries' => $entries,
+			'state'   => AB_MCP_Sync_Code_Stage::state_of( AB_MCP_Sync_Canon::encode( $state ) ),
+		);
+	}
+
+	/** The binding a step of RUN expects of the stage. */
+	private static function bound( int $run ): array {
+		return array(
+			'run_id' => $run,
+			'kind'   => 'plugin',
+			'ref'    => self::UNIT,
+			'signed' => self::$stage['hash'],
 		);
 	}
 
@@ -782,7 +978,9 @@ final class ReadDeadlineTest extends TestCase {
 	 * through its seam kept as a step of the clock; $first faults of the seam
 	 * go before those. The readings taken, groups and get read below signed()
 	 * directly: taken() of the series single, groups() of the area in, get()
-	 * of the first chunk of single.
+	 * of the first chunk of single; ready of the stage (ready_hash: another
+	 * hash, ready_foreign: bound to another run), state and foreign of the
+	 * stage directly.
 	 *
 	 * @param string        $series Key of the series or of the reading.
 	 * @param DeadlineClock $clock  The clock.
@@ -801,6 +999,16 @@ final class ReadDeadlineTest extends TestCase {
 					return AB_MCP_Protected_Store::groups( 'in', $deadline );
 				case 'get':
 					return AB_MCP_Protected_Store::get( 'in', self::$chunk['gid'], AB_MCP_Sync_Export::chunk_name( 0 ), self::$chunk['sha256'], $deadline );
+				case 'ready':
+					return AB_MCP_Sync_Code_Stage::ready( self::$stage['gid'], self::UNIT, self::$stage['hash'], self::bound( self::RUN ), $deadline );
+				case 'ready_hash':
+					return AB_MCP_Sync_Code_Stage::ready( self::$stage['gid'], self::UNIT, str_repeat( '0', 64 ), self::bound( self::RUN ), $deadline );
+				case 'ready_foreign':
+					return AB_MCP_Sync_Code_Stage::ready( self::$stage['gid'], self::UNIT, self::$stage['hash'], self::bound( self::RUN + 1 ), $deadline );
+				case 'state':
+					return ( new ReflectionMethod( AB_MCP_Sync_Code_Stage::class, 'state' ) )->invoke( null, self::$stage['gid'], $deadline );
+				case 'foreign':
+					return ( new ReflectionMethod( AB_MCP_Sync_Code_Stage::class, 'foreign' ) )->invoke( null, self::$stage['gid'], self::$stage['state'], self::bound( self::RUN ), $deadline );
 			}
 			return AB_MCP_Sync_Code_Stage::signed( self::$series[ $series ], 'plugin', self::UNIT, $deadline );
 		} finally {
@@ -836,12 +1044,16 @@ final class ReadDeadlineTest extends TestCase {
 	}
 
 	/**
-	 * What a reading answers without a deadline: the unit signed; a reading
-	 * below signed() as it reads (never a refusal).
+	 * What a reading answers without a deadline: the unit signed; the stage
+	 * ready, its state; a reading below them as it reads (never a refusal;
+	 * foreign(): null, bound).
 	 */
 	private function answer( string $series ) {
 		if ( 'single' === $series || 'two' === $series ) {
 			return self::signed_answer();
+		}
+		if ( 'ready' === $series || 'state' === $series ) {
+			return self::$stage['state'];
 		}
 		$without = $this->reading( $series, DeadlineClock::in_time(), null );
 		self::assertNotInstanceOf( WP_Error::class, $without, $series . ' without a deadline: ' . ( $without instanceof WP_Error ? $without->get_error_code() : '' ) );
@@ -901,6 +1113,9 @@ final class ReadDeadlineTest extends TestCase {
 			'taken'  => array( 'taken' ),
 			'groups' => array( 'groups' ),
 			'get'    => array( 'get' ),
+			'ready'  => array( 'ready' ),
+			'state'  => array( 'state' ),
+			'foreign' => array( 'foreign' ),
 		);
 	}
 
@@ -949,7 +1164,8 @@ final class ReadDeadlineTest extends TestCase {
 	 * finding 4: each translation reached by itself): the reading the
 	 * translation belongs to, the gate and which time it is asked (in
 	 * taken() the first file read is the record of the package in find(),
-	 * the second its mark).
+	 * the second its mark; in foreign() the binding is read in its form
+	 * first, the entry of the group last).
 	 *
 	 * @return array<string,array{string,string,int}>
 	 */
@@ -962,6 +1178,12 @@ final class ReadDeadlineTest extends TestCase {
 			'taken(): the mark read, never incomplete'               => array( 'taken', 'AB_MCP_Payload_File::read#6', 1 ),
 			'lines(): the chunk inflated, never unread'              => array( 'taken', 'AB_MCP_Sync_Import::inflate#2', 0 ),
 			'verify(): the manifest spelt, never spelling'           => array( 'taken', 'AB_MCP_Sync_Canon::encode#1', 0 ),
+			'ready(): the state read, never not ready'               => array( 'ready', 'AB_MCP_Sync_Code_Stage::state#2', 0 ),
+			'ready(): the binding read, its stop passed on'          => array( 'ready', 'AB_MCP_Protected_Store::entry#1', 0 ),
+			'state(): the state read, never unknown'                 => array( 'state', 'AB_MCP_Payload_File::read#6', 0 ),
+			'foreign(): the binding read, never not of its form'     => array( 'foreign', 'AB_MCP_Shape::fields#1', 0 ),
+			'foreign(): the entry read in its form, never not of its form' => array( 'foreign', 'AB_MCP_Shape::fields#1', 5 ),
+			'entry(): the sidecar read, never not read whole'        => array( 'foreign', 'AB_MCP_Shape::decoded#2', 0 ),
 		);
 	}
 
@@ -1002,7 +1224,7 @@ final class ReadDeadlineTest extends TestCase {
 	/** @return array<string,array{string,string}> */
 	public static function sidecars(): array {
 		$out = array();
-		foreach ( array( 'single', 'two' ) as $series ) {
+		foreach ( array( 'single', 'two', 'ready' ) as $series ) {
 			foreach ( array( 'first', 'last' ) as $which ) {
 				$out[ $series . ': the ' . $which . ' sidecar' ] = array( $series, $which );
 			}
@@ -1144,5 +1366,39 @@ final class ReadDeadlineTest extends TestCase {
 		// Without a deadline the reading decides it, as before.
 		self::assertSame( self::signed_answer(), $this->reading( 'single', DeadlineClock::in_time(), null ) );
 		self::assertNotNull( $proof->getValue() );
+	}
+
+	/* ---------------------------------------------- ready(): not ready, late */
+
+	/**
+	 * A stage ready() does not take for these values: «not ready» (null) in
+	 * time and without a deadline; the deadline over at its last gate: the
+	 * stop, never null.
+	 *
+	 * @param string $series Key of the reading.
+	 * @param string $last   The last gate before the answer.
+	 */
+	private function notReadyInTimeAndStoppedWhenLate( string $series, string $last ): void {
+		$base     = DeadlineClock::in_time();
+		$deadline = DeadlineClock::deadline();
+		self::assertNull( $this->reading( $series, $base, $deadline ), 'In time: not ready.' );
+		self::assertNull( AB_MCP_Sync_Deadline::stop( $deadline ) );
+		self::assertSame( $last, end( $base->gates ), 'The last gate before the answer.' );
+		self::assertNull( $this->reading( $series, DeadlineClock::in_time(), null ), 'Without a deadline: not ready.' );
+		$k        = count( $base->gates );
+		$clock    = DeadlineClock::late_from( $k );
+		$deadline = DeadlineClock::deadline();
+		$answer   = $this->reading( $series, $clock, $deadline );
+		self::assertSame( $base->gates, $clock->gates );
+		self::assertSame( $base->until_gate( $k ), $clock->events );
+		self::assertStopped( $answer, $deadline, 'ab_mcp_read_late', self::LATE_TEXT );
+	}
+
+	public function testAStageOfAnotherHashIsNotReadyInTimeAndTheStopWhenLateAfterItsState(): void {
+		$this->notReadyInTimeAndStoppedWhenLate( 'ready_hash', 'AB_MCP_Sync_Code_Stage::state#2' );
+	}
+
+	public function testAStageBoundToAnotherRunIsNotReadyInTimeAndTheStopWhenLateBeforeTheAnswer(): void {
+		$this->notReadyInTimeAndStoppedWhenLate( 'ready_foreign', 'AB_MCP_Sync_Code_Stage::ready#1' );
 	}
 }
