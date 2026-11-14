@@ -21,9 +21,9 @@
  *   gates (each gate by itself: the first, a middle and the last time it
  *   is asked) answers with the stop in its full wording, by the same way
  *   up to that gate and without a reading of the clock or a step of its
- *   codec after it (DeadlineClock, SyncDeadlineCodec; as built, a reading
- *   stopped within the decoding of its codec asks the codec once more, to
- *   encode null, way()); the clock unknown alike; the refusals of the readers
+ *   codec after it (DeadlineClock, SyncDeadlineCodec; a reading stopped
+ *   within the decoding of its codec does not ask the codec again to encode,
+ *   way()); the clock unknown alike; the refusals of the readers
  *   in time stay what they are (no gzip, a hash that does not match, a
  *   file that is not there);
  * - the check of one name by the rules is one step: the deadline stops
@@ -421,11 +421,10 @@ final class SyncDeadlineTest extends TestCase {
 
 	/**
 	 * The gates and steps of a reading in time up to and with its k-th
-	 * gate: the way of a reading stopped there. As built (for the Lead of
-	 * the branch): stopped within the decoding of its codec, the reading of
-	 * a JSON text asks the codec once more, to encode null
-	 * (AB_MCP_Shape::decoded()); AB_MCP_Sync_Canon::encode() answers ''
-	 * without a reading of the clock.
+	 * gate: the way of a reading stopped there. Stopped within the decoding
+	 * of its codec, the reading of a JSON text does not ask the codec again
+	 * (AB_MCP_Shape::decoded(): no encoding after the stop, Lead of the
+	 * branch on observation 1 of part 1b-1).
 	 *
 	 * @param string $scenario Key of GATES.
 	 * @param int    $k        1: the first gate.
@@ -435,11 +434,7 @@ final class SyncDeadlineTest extends TestCase {
 		$base = DeadlineClock::in_time()->install();
 		$this->reading( $scenario, DeadlineClock::deadline() );
 		self::assertSame( self::GATES[ $scenario ], $base->gates, 'The run in time.' );
-		$way = $base->until_gate( $k );
-		if ( in_array( 'step: decode', $way, true ) && ! in_array( 'step: encode', $way, true ) ) {
-			$way[] = 'step: encode null';
-		}
-		return $way;
+		return $base->until_gate( $k );
 	}
 
 	#[DataProvider( 'scenarios' )]

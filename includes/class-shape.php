@@ -357,9 +357,10 @@ final class AB_MCP_Shape {
 	/**
 	 * What a JSON text decodes to, in the form of its value, where the text
 	 * is the one its writer wrote of it (the round trip). A codec of its own
-	 * (AB_MCP_Sync_Canon) decodes and encodes under the deadline as well;
-	 * json_decode() and json_encode() are one call each (a named limit of
-	 * AB_MCP_Sync_Deadline).
+	 * (AB_MCP_Sync_Canon) decodes and encodes under the deadline as well, and
+	 * a decoding that stopped is not encoded again (no step of the codec
+	 * after the stop); json_decode() and json_encode() are one call each (a
+	 * named limit of AB_MCP_Sync_Deadline).
 	 *
 	 * @param mixed      $value    Text.
 	 * @param array      $form     Form.
@@ -385,7 +386,10 @@ final class AB_MCP_Shape {
 				return null;
 			}
 			$decoded = $codec::decode( $value, $form['depth'], $deadline );
-			$again   = $codec::encode( $decoded, $deadline );
+			if ( null !== $deadline && null !== AB_MCP_Sync_Deadline::stop( $deadline ) ) {
+				return null;
+			}
+			$again = $codec::encode( $decoded, $deadline );
 		}
 		if ( ! is_string( $again ) || $again !== $value || self::stopped( $deadline ) ) {
 			return null;
