@@ -76,6 +76,16 @@
  *   missing, as without a deadline; the earlier of the deadline and
  *   TREE_BUDGET ends the reading, in both orders (the deadline: the stop;
  *   TREE_BUDGET: too large, so changed).
+ * - R12 part 2, the heads: AB_MCP_Sync_Env::head_read() of a main file (as
+ *   without a deadline in time), and through reflection heads() and
+ *   not_down() of the swap over live units built here (a plugin in a
+ *   folder whose first PHP file names no plugin, a plugin of one file, a
+ *   theme): in time the version its head names, each gate by itself as
+ *   above; the stop of heads() is no files and of head_read() no head, and
+ *   not_down() passes it on as the refusal with its code, never a version
+ *   not known or a downgrade. In time no head that names a plugin, no PHP
+ *   file at the top, a head read shorter than its file or not read are a
+ *   version not known, an older version of the staging site a downgrade.
  *
  * need() and stage() read without a deadline: CodeStageTest.
  *
@@ -457,12 +467,33 @@ final class ReadDeadlineTest extends TestCase {
 	 * deadline's) and the steps of the manifest and of the place of a tree
 	 * are kept as steps of the clock (part_2()).
 	 */
-	private const PART_2 = array( 'tree', 'bigtree', 'unit', 'tree_other', 'tree_missing' );
+	private const PART_2 = array( 'tree', 'bigtree', 'unit', 'tree_other', 'tree_missing', 'headread', 'headlist', 'heads', 'headfile', 'headtheme', 'heads_none', 'heads_empty', 'heads_down', 'heads_short', 'heads_unread' );
+
+	/**
+	 * The readings of the heads (R12 part 2) through not_down() of the swap:
+	 * the kind and the name of the unit, its place (in the folder of the
+	 * live units, live_units()), the unit read there (a key of $heads) and
+	 * the version of the staging site.
+	 */
+	private const NOT_DOWN = array(
+		'heads'        => array( 'plugin', 'ab-it-frist', 'ab-it-frist', 'frist', '1.2.0' ),
+		'headfile'     => array( 'plugin', 'ab-it-einzeln', 'ab-it-einzeln.php', 'einzeln', '1.2.0' ),
+		'headtheme'    => array( 'theme', 'ab-it-thema', 'ab-it-thema', 'thema', '1.2.0' ),
+		'heads_none'   => array( 'plugin', 'ab-it-ohne', 'ab-it-ohne', 'ohne', '1.2.0' ),
+		'heads_empty'  => array( 'plugin', 'ab-it-leer', 'ab-it-leer', 'leer', '1.2.0' ),
+		'heads_down'   => array( 'plugin', 'ab-it-frist', 'ab-it-frist', 'frist', '0.9.0' ),
+		'heads_short'  => array( 'plugin', 'ab-it-frist', 'ab-it-frist', 'frist', '1.2.0' ),
+		'heads_unread' => array( 'plugin', 'ab-it-frist', 'ab-it-frist', 'frist', '1.2.0' ),
+	);
 
 	/**
 	 * The gates of each reading of R12 part 2 in time, as COUNTS: tree() of
 	 * the tree of the stage (tree) and of the large tree (bigtree), unit() of
-	 * the large tree read by the manifest directly, as its first call (unit).
+	 * the large tree read by the manifest directly, as its first call (unit);
+	 * head_read() of a main file (headread), heads() of a live unit in a
+	 * folder (headlist), not_down() of a live unit in a folder (heads: a
+	 * file whose head names no plugin first, then its main file), of a
+	 * plugin of one file (headfile) and of a theme (headtheme).
 	 */
 	const PART_2_COUNTS = array(
 		'tree'    => array(
@@ -539,6 +570,47 @@ final class ReadDeadlineTest extends TestCase {
 			'AB_MCP_Sync_Canon::encode#1'         => 1,
 			'AB_MCP_Sync_File_Manifest::whole#2'  => 1,
 		),
+		'headread'  => array(
+			'AB_MCP_Sync_Env::head_read#1'   => 1,
+			'AB_MCP_Sync_Env::head_read#2'   => 1,
+			'AB_MCP_Sync_Env::head_read#3'   => 1,
+			'AB_MCP_Sync_Env::head_read#4'   => 1,
+			'AB_MCP_Sync_Env::head_fields#1' => 2,
+			'AB_MCP_Sync_Env::head_read#5'   => 1,
+		),
+		'headlist'  => array(
+			'AB_MCP_Sync_Code_Swap::heads#1' => 5,
+			'AB_MCP_Sync_Code_Swap::heads#2' => 2,
+		),
+		'heads'     => array(
+			'AB_MCP_Sync_Code_Swap::heads#1'    => 5,
+			'AB_MCP_Sync_Code_Swap::heads#2'    => 2,
+			'AB_MCP_Sync_Env::head_read#1'      => 2,
+			'AB_MCP_Sync_Env::head_read#2'      => 2,
+			'AB_MCP_Sync_Env::head_read#3'      => 2,
+			'AB_MCP_Sync_Env::head_read#4'      => 2,
+			'AB_MCP_Sync_Env::head_fields#1'    => 4,
+			'AB_MCP_Sync_Env::head_read#5'      => 2,
+			'AB_MCP_Sync_Code_Swap::not_down#1' => 1,
+		),
+		'headfile'  => array(
+			'AB_MCP_Sync_Env::head_read#1'      => 1,
+			'AB_MCP_Sync_Env::head_read#2'      => 1,
+			'AB_MCP_Sync_Env::head_read#3'      => 1,
+			'AB_MCP_Sync_Env::head_read#4'      => 1,
+			'AB_MCP_Sync_Env::head_fields#1'    => 2,
+			'AB_MCP_Sync_Env::head_read#5'      => 1,
+			'AB_MCP_Sync_Code_Swap::not_down#1' => 1,
+		),
+		'headtheme' => array(
+			'AB_MCP_Sync_Env::head_read#1'      => 1,
+			'AB_MCP_Sync_Env::head_read#2'      => 1,
+			'AB_MCP_Sync_Env::head_read#3'      => 1,
+			'AB_MCP_Sync_Env::head_read#4'      => 1,
+			'AB_MCP_Sync_Env::head_fields#1'    => 2,
+			'AB_MCP_Sync_Env::head_read#5'      => 1,
+			'AB_MCP_Sync_Code_Swap::not_down#1' => 1,
+		),
 	);
 
 	/** The SHA-256 of the gates of each reading of R12 part 2 in time, as ORDER. */
@@ -546,6 +618,11 @@ final class ReadDeadlineTest extends TestCase {
 		'tree'    => '94752125abf1350b5d0c83f9632ff70335375eecc720ca4cd753539c1e3ab949',
 		'bigtree' => '54b945ce19a7d1a4eb6b9b74c19f8da26b837c044e3bc6c69aea5fe59dfdef29',
 		'unit'    => '6cea781d3d194e09327b54aa5da05ffad0345ea0de18a1064881fe93c0dfbaf5',
+		'headread'  => 'd03b07c38ae38e358fceba1ee72df72cb4713955283246866f9292183d4fa65a',
+		'headlist'  => '91b926dce8c3baa9b1b48ba0031d5c1bfd215ccfb0f64a89566daa9da78fff10',
+		'heads'     => '281b39554833adc4bdc88e550d9962006b6c828d423ea7f1d3390944a48afab2',
+		'headfile'  => 'be321f81bce6b1dc0bc551b636ca7c7cc9809703f777db2e48ea24ce9c9dd6b8',
+		'headtheme' => 'be321f81bce6b1dc0bc551b636ca7c7cc9809703f777db2e48ea24ce9c9dd6b8',
 	);
 
 	/** @var array<string,string[]> The series built once: name => package ids. */
@@ -559,6 +636,9 @@ final class ReadDeadlineTest extends TestCase {
 
 	/** @var array The large tree built once (R12 part 2): gid, hash, path. */
 	private static $big = array();
+
+	/** @var array The live units built once (R12 part 2, live_units()): dir, and each unit read by its key. */
+	private static $heads = array();
 
 	/** @var string|null DOCUMENT_ROOT before the class. */
 	private static $docroot_before;
@@ -580,6 +660,7 @@ final class ReadDeadlineTest extends TestCase {
 		self::$series = self::build();
 		self::$chunk  = self::chunk_of( self::$series['single'][0] );
 		self::$big    = self::big();
+		self::$heads  = self::live_units();
 	}
 
 	public static function tearDownAfterClass(): void {
@@ -594,6 +675,10 @@ final class ReadDeadlineTest extends TestCase {
 		self::$chunk  = array();
 		self::$stage  = array();
 		self::$big    = array();
+		if ( isset( self::$heads['dir'] ) && is_dir( self::$heads['dir'] ) ) {
+			self::remove_tree( self::$heads['dir'] );
+		}
+		self::$heads = array();
 		if ( null === self::$docroot_before ) {
 			unset( $_SERVER['DOCUMENT_ROOT'] );
 		} else {
@@ -872,6 +957,57 @@ final class ReadDeadlineTest extends TestCase {
 			'hash' => $tree['hash'],
 			'path' => $tree['path'],
 		);
+	}
+
+	/**
+	 * The files of a live plugin ab-it-frist of version 1.0.0 in a folder:
+	 * first by name a PHP file whose head names no plugin, then its main
+	 * file, a hidden PHP file and one in a folder below (no heads), and a
+	 * text (R12 part 2: heads(), not_down()).
+	 *
+	 * @param string $dir The folder of the unit.
+	 */
+	private static function put_live( string $dir ): void {
+		mkdir( $dir . '/inc', 0755, true );
+		file_put_contents( $dir . '/a-helfer.php', "<?php\n// A helper of the plugin, its head names none.\n" );
+		file_put_contents( $dir . '/ab-it-frist.php', "<?php\n/**\n * Plugin Name: AB IT Frist\n * Version: 1.0.0\n */\n" );
+		file_put_contents( $dir . '/.versteckt.php', "<?php\n/**\n * Plugin Name: Hidden\n * Version: 9.9.9\n */\n" );
+		file_put_contents( $dir . '/inc/teil.php', "<?php\n/**\n * Plugin Name: Below\n * Version: 9.9.9\n */\n" );
+		file_put_contents( $dir . '/readme.txt', "The live unit.\n" );
+	}
+
+	/**
+	 * The live units of the readings of the heads (R12 part 2), outside the
+	 * site (not_down() is read directly): ab-it-frist in a folder (put_live()),
+	 * ab-it-ohne (its one PHP file names no plugin), ab-it-leer (no PHP file
+	 * at its top), the plugin of one file ab-it-einzeln.php and the theme
+	 * ab-it-thema; each read whole as unchanged() reads it, without a
+	 * deadline.
+	 *
+	 * @return array dir, and each unit read by its key.
+	 */
+	private static function live_units(): array {
+		$dir = self::root() . '/run/r12-kopf';
+		if ( is_dir( $dir ) ) {
+			self::remove_tree( $dir );
+		}
+		self::put_live( $dir . '/ab-it-frist' );
+		mkdir( $dir . '/ab-it-ohne', 0755, true );
+		file_put_contents( $dir . '/ab-it-ohne/ab-it-ohne.php', "<?php\n// A plugin without a head.\n" );
+		mkdir( $dir . '/ab-it-leer/inc', 0755, true );
+		file_put_contents( $dir . '/ab-it-leer/inc/teil.php', "<?php\n/**\n * Plugin Name: Below\n * Version: 9.9.9\n */\n" );
+		file_put_contents( $dir . '/ab-it-leer/readme.txt', "No PHP file at its top.\n" );
+		file_put_contents( $dir . '/ab-it-einzeln.php', "<?php\n/**\n * Plugin Name: AB IT Einzeln\n * Version: 1.0.0\n */\n" );
+		mkdir( $dir . '/ab-it-thema', 0755, true );
+		file_put_contents( $dir . '/ab-it-thema/style.css', "/*\nTheme Name: AB IT Thema\nVersion: 1.0.0\n*/\n" );
+		$out = array( 'dir' => $dir );
+		foreach ( array( 'frist' => 'ab-it-frist', 'ohne' => 'ab-it-ohne', 'leer' => 'ab-it-leer', 'einzeln' => 'ab-it-einzeln.php', 'thema' => 'ab-it-thema' ) as $key => $name ) {
+			$out[ $key ] = \AB_MCP_Sync_File_Manifest::unit( $dir, $name, 'live', INF, true, 'plugin' );
+			if ( true !== $out[ $key ]['complete'] ) {
+				throw new RuntimeException( "The live unit $name not read whole." );
+			}
+		}
+		return $out;
 	}
 
 	/** The binding a step of RUN expects of the stage. */
@@ -1173,7 +1309,7 @@ final class ReadDeadlineTest extends TestCase {
 		$part_2 = in_array( $series, self::PART_2, true );
 		self::watch( $clock, $first, $part_2 );
 		if ( $part_2 ) {
-			self::part_2( $clock );
+			self::part_2( $clock, $series );
 		}
 		try {
 			switch ( $series ) {
@@ -1203,6 +1339,14 @@ final class ReadDeadlineTest extends TestCase {
 					return AB_MCP_Protected_Store::tree( 'stage', self::$big['gid'], self::BIG, self::$big['hash'], $deadline );
 				case 'unit':
 					return \AB_MCP_Sync_File_Manifest::unit( dirname( self::$big['path'] ), basename( self::$big['path'] ), 'live', DeadlineClock::NOW + AB_MCP_Protected_Store::TREE_BUDGET, true, 'tree', $deadline );
+				case 'headread':
+					return \AB_MCP_Sync_Env::head_read( self::$heads['dir'] . '/ab-it-frist/ab-it-frist.php', array( 'Plugin Name', 'Version' ), $deadline );
+				case 'headlist':
+					return ( new ReflectionMethod( AB_MCP_Sync_Code_Swap::class, 'heads' ) )->invoke( null, 'plugin', self::$heads['dir'] . '/ab-it-frist', self::$heads['frist'], $deadline );
+			}
+			if ( isset( self::NOT_DOWN[ $series ] ) ) {
+				list( $kind, $ref, $place, $unit, $staging ) = self::NOT_DOWN[ $series ];
+				return ( new ReflectionMethod( AB_MCP_Sync_Code_Swap::class, 'not_down' ) )->invoke( null, $kind, $ref, self::$heads['dir'] . '/' . $place, self::$heads[ $unit ], $staging, $deadline );
 			}
 			return AB_MCP_Sync_Code_Stage::signed( self::$series[ $series ], 'plugin', self::UNIT, $deadline );
 		} finally {
@@ -1237,9 +1381,37 @@ final class ReadDeadlineTest extends TestCase {
 	 * step (step: clock), so that its place shows among the gates; each call
 	 * of the manifest to the file system (a listing, a path asked, a file
 	 * opened, asked or read) kept as a step (manifest …). Closing a file is
-	 * no step: it is allowed after a stop.
+	 * no step: it is allowed after a stop. Each head read (head_text() of
+	 * AB_MCP_Sync_Env) kept as a step (head …); for heads_short the head
+	 * read shorter than the file (half), for heads_unread not read (false).
 	 */
-	private static function part_2( DeadlineClock $clock ): void {
+	private static function part_2( DeadlineClock $clock, string $series ): void {
+		$heads = array(
+			'heads_short'  => array(
+				'method' => 'head_text',
+				'kind'   => 'half',
+				'keep'   => 10,
+			),
+			'heads_unread' => array(
+				'method' => 'head_text',
+				'kind'   => 'return',
+				'value'  => false,
+			),
+		);
+		AB_MCP_Test_Seam::install(
+			\AB_MCP_Sync_Env::class,
+			'naht_sync_env',
+			new \AB_MCP_Sync_Env_Calls(),
+			array(
+				$heads[ $series ] ?? array(
+					'method' => 'head_text',
+					'kind'   => 'before',
+					'before' => static function ( $method, $args ) use ( $clock ) {
+						$clock->step( 'head ' . basename( (string) $args[0] ) );
+					},
+				),
+			)
+		);
 		\AB_MCP_Sync_Env::$clock = static function () use ( $clock ) {
 			$gates = count( $clock->gates );
 			$time  = $clock();
@@ -1285,6 +1457,20 @@ final class ReadDeadlineTest extends TestCase {
 		}
 		if ( 'ready' === $series || 'state' === $series ) {
 			return self::$stage['state'];
+		}
+		// not_down() and heads() have a deadline always: the version the main
+		// file of the unit names, read without a deadline (head_read()), and
+		// its files by name.
+		if ( isset( self::NOT_DOWN[ $series ] ) ) {
+			$file = array(
+				'heads'     => 'ab-it-frist/ab-it-frist.php',
+				'headfile'  => 'ab-it-einzeln.php',
+				'headtheme' => 'ab-it-thema/style.css',
+			)[ $series ];
+			return \AB_MCP_Sync_Env::head_read( self::$heads['dir'] . '/' . $file, array( 'Plugin Name', 'Version' ) )['Version'];
+		}
+		if ( 'headlist' === $series ) {
+			return array( self::$heads['dir'] . '/ab-it-frist/a-helfer.php', self::$heads['dir'] . '/ab-it-frist/ab-it-frist.php' );
 		}
 		$without = $this->reading( $series, DeadlineClock::in_time(), null );
 		self::assertNotInstanceOf( WP_Error::class, $without, $series . ' without a deadline: ' . ( $without instanceof WP_Error ? $without->get_error_code() : '' ) );
@@ -1767,6 +1953,20 @@ final class ReadDeadlineTest extends TestCase {
 	 * holding the stop.
 	 */
 	private static function assertHalted( string $series, $answer, $deadline, string $code, string $text ): void {
+		if ( isset( self::NOT_DOWN[ $series ] ) ) {
+			// not_down(): the refusal with the code of the stop and the way of
+			// the swap, never code:version_unknown or code:downgrade.
+			list( $kind, $ref ) = self::NOT_DOWN[ $series ];
+			self::assertRefused( $answer, $code, $text . sprintf( ' So the %s %s is not swapped. Call action=next again; where it keeps failing, abort the run (wp_site_push action=abort) and plan again.', $kind, $ref ), 'not_down(): the stop, with the way of the swap.' );
+			self::assertRefused( AB_MCP_Sync_Deadline::stop( $deadline ), $code, $text, 'The stop of its deadline.' );
+			return;
+		}
+		if ( 'headread' === $series || 'headlist' === $series ) {
+			// head_read(): no head (null); heads(): no files.
+			self::assertSame( 'headread' === $series ? null : array(), $answer, $series . ': nothing read once it stopped.' );
+			self::assertRefused( AB_MCP_Sync_Deadline::stop( $deadline ), $code, $text, 'The stop of its deadline.' );
+			return;
+		}
 		if ( 'unit' === $series ) {
 			self::assertIsArray( $answer, 'unit(): ' . gettype( $answer ) );
 			self::assertSame( array( false, true, null, null, null, array() ), array( $answer['complete'], $answer['stopped'], $answer['cause'], $answer['hash'], $answer['lock'], $answer['entries'] ), 'unit(): stopped, never too large or unreadable.' );
@@ -1778,6 +1978,11 @@ final class ReadDeadlineTest extends TestCase {
 
 	#[DataProvider( 'tree_series' )]
 	public function testTheClockUnknownAtAMiddleGateStopsTheTreeAsItsOwnStop( string $series ): void {
+		$this->unknownAtAMiddleGate( $series );
+	}
+
+	/** A reading of R12 part 2 with the clock unknown from its middle gate on: its own stop there. */
+	private function unknownAtAMiddleGate( string $series ): void {
 		$base     = $this->in_time( $series );
 		$k        = intdiv( count( $base->gates ) + 1, 2 );
 		$clock    = DeadlineClock::unknown_from( $k );
@@ -1893,6 +2098,181 @@ final class ReadDeadlineTest extends TestCase {
 		self::assertSame( $clock->gates, $clock->events );
 		self::assertIsArray( $this->reading( 'tree', DeadlineClock::in_time(), null ), 'Without a deadline the reading decides it, as before.' );
 		self::assertNotNull( $proof->getValue() );
+	}
+
+	/* ----------------------------------------- R12 part 2: the heads read */
+
+	/** @return array<string,array{string}> */
+	public static function head_series(): array {
+		return array(
+			'headread'  => array( 'headread' ),
+			'headlist'  => array( 'headlist' ),
+			'heads'     => array( 'heads' ),
+			'headfile'  => array( 'headfile' ),
+			'headtheme' => array( 'headtheme' ),
+		);
+	}
+
+	/**
+	 * Each gate of each reading of the heads by itself (as gates()).
+	 *
+	 * @return array<string,array{string,string,int}>
+	 */
+	public static function head_gates(): array {
+		return self::part_2_gates( array_keys( self::head_series() ) );
+	}
+
+	#[DataProvider( 'head_series' )]
+	public function testInTimeTheHeadsAskAtExactlyTheirGatesAndAnswerAsWithoutADeadline( string $series ): void {
+		if ( 'headread' === $series ) {
+			// head_read() without a deadline as before (no clock read).
+			$this->inTimeAsWithout( $series );
+			return;
+		}
+		// not_down() and heads() always have a deadline: in time the version
+		// a head read without a deadline names (heads(): the files by name).
+		$clock    = DeadlineClock::in_time();
+		$deadline = DeadlineClock::deadline();
+		self::assertSame( $this->answer( $series ), $this->reading( $series, $clock, $deadline ), 'In time: the version of the live unit, as its head names it.' );
+		self::assertSame( self::PART_2_COUNTS[ $series ], array_count_values( $clock->gates ), 'Each gate as often as written down: ' . var_export( array_count_values( $clock->gates ), true ) . ' ' . hash( 'sha256', implode( "\n", $clock->gates ) ) );
+		self::assertSame( self::PART_2_ORDER[ $series ], hash( 'sha256', implode( "\n", $clock->gates ) ), 'The gates in the order written down.' );
+		self::assertSame( 0, $clock->others, 'No other reading of the clock.' );
+		self::assertNull( AB_MCP_Sync_Deadline::stop( $deadline ), 'No stop.' );
+		$heads = array(
+			'headlist'  => array(),
+			'heads'     => array( 'step: head a-helfer.php', 'step: head ab-it-frist.php' ),
+			'headfile'  => array( 'step: head ab-it-einzeln.php' ),
+			'headtheme' => array( 'step: head style.css' ),
+		)[ $series ];
+		self::assertSame( $heads, self::steps( $clock ), 'Each head read once, in order (heads(): none).' );
+	}
+
+	#[DataProvider( 'head_gates' )]
+	public function testOverAtOneGateTheHeadsStopThereWithoutAStepOrAReadingOfTheClockAfterIt( string $series, string $gate, int $pick ): void {
+		$this->haltedAt( $series, $gate, $pick );
+	}
+
+	/**
+	 * The gate where a translation of the heads would speak, over: not_down()
+	 * passes the stop of heads() on (its files none) and of head_read() (no
+	 * head), and stops before it compares the versions, never deciding on
+	 * the empty list or a head not read (code:version_unknown) or on the
+	 * versions (code:downgrade); head_read() gives no head once a header
+	 * was not taken.
+	 *
+	 * @return array<string,array{string,string,int}>
+	 */
+	public static function head_translations(): array {
+		return array(
+			'not_down(): the entries of the unit, never decided on no files' => array( 'heads', 'AB_MCP_Sync_Code_Swap::heads#1', 0 ),
+			'not_down(): the names of the heads, never decided on no files'  => array( 'heads', 'AB_MCP_Sync_Code_Swap::heads#2', 1 ),
+			'not_down(): the first head, never version_unknown'              => array( 'heads', 'AB_MCP_Sync_Env::head_read#1', 0 ),
+			'not_down(): the head about to be read, never version_unknown'   => array( 'heads', 'AB_MCP_Sync_Env::head_read#4', 1 ),
+			'not_down(): a header of the main file, never version_unknown'   => array( 'heads', 'AB_MCP_Sync_Env::head_fields#1', 3 ),
+			'not_down(): the head read whole, never version_unknown'         => array( 'heads', 'AB_MCP_Sync_Env::head_read#5', 1 ),
+			'not_down(): before the versions are compared'                   => array( 'heads', 'AB_MCP_Sync_Code_Swap::not_down#1', 0 ),
+			'head_read(): a header, never a head that names nothing'         => array( 'headread', 'AB_MCP_Sync_Env::head_fields#1', 1 ),
+			'heads(): the names, no files'                                   => array( 'headlist', 'AB_MCP_Sync_Code_Swap::heads#2', 1 ),
+		);
+	}
+
+	#[DataProvider( 'head_translations' )]
+	public function testOverWhereATranslationOfTheHeadsWouldSpeakTheStopIsPassedOnNeverAVersionNotKnown( string $series, string $gate, int $pick ): void {
+		$this->haltedAt( $series, $gate, $pick );
+	}
+
+	#[DataProvider( 'head_series' )]
+	public function testTheClockUnknownAtAMiddleGateStopsTheHeadsAsItsOwnStop( string $series ): void {
+		$this->unknownAtAMiddleGate( $series );
+	}
+
+	/**
+	 * A unit not_down() refuses in time: the refusal (its code, never the
+	 * stop), its last gate before it; the deadline over at that gate, and at
+	 * the last time an earlier gate is asked ($before: the head about to be
+	 * read): the stop, never the refusal, by the same way and nothing after
+	 * it.
+	 *
+	 * @param string      $series Key of NOT_DOWN.
+	 * @param string      $code   The code of the refusal.
+	 * @param string      $text   A sentence of its message.
+	 * @param string      $last   The last gate before the refusal.
+	 * @param string|null $before An earlier gate, over at its last time too.
+	 */
+	private function refusedByNotDownInTimeAndStoppedWhenLate( string $series, string $code, string $text, string $last, ?string $before = null ): void {
+		$base     = DeadlineClock::in_time();
+		$deadline = DeadlineClock::deadline();
+		$answer   = $this->reading( $series, $base, $deadline );
+		self::assertInstanceOf( WP_Error::class, $answer, 'In time: refused, ' . gettype( $answer ) );
+		self::assertSame( $code, $answer->get_error_code(), $answer->get_error_message() );
+		self::assertStringContainsString( $text, $answer->get_error_message() );
+		self::assertNull( AB_MCP_Sync_Deadline::stop( $deadline ), 'A refusal of its own, no stop.' );
+		self::assertSame( $last, end( $base->gates ), 'The last gate before the refusal.' );
+		$at = array( count( $base->gates ) );
+		if ( null !== $before ) {
+			$at[] = self::place( $base->gates, $before, count( array_keys( $base->gates, $before, true ) ) - 1 );
+		}
+		foreach ( $at as $k ) {
+			$clock    = DeadlineClock::late_from( $k );
+			$deadline = DeadlineClock::deadline();
+			$answer   = $this->reading( $series, $clock, $deadline );
+			self::assertSame( array_slice( $base->gates, 0, $k ), $clock->gates, "The same way up to reading $k: " . $base->gates[ $k - 1 ] );
+			self::assertSame( $base->until_gate( $k ), $clock->events );
+			self::assertSame( 0, $clock->others );
+			self::assertHalted( $series, $answer, $deadline, 'ab_mcp_read_late', self::LATE_TEXT );
+		}
+	}
+
+	public function testNoHeadThatNamesAPluginIsAVersionNotKnownInTimeAndTheStopWhenLateBeforeTheVersionsAreCompared(): void {
+		$this->refusedByNotDownInTimeAndStoppedWhenLate( 'heads_none', 'code:version_unknown', 'could not be read from its head read whole', 'AB_MCP_Sync_Code_Swap::not_down#1' );
+	}
+
+	public function testNoPhpFileAtTheTopIsAVersionNotKnownInTimeAndTheStopWhenLateBeforeTheVersionsAreCompared(): void {
+		$this->refusedByNotDownInTimeAndStoppedWhenLate( 'heads_empty', 'code:version_unknown', 'could not be read from its head read whole', 'AB_MCP_Sync_Code_Swap::not_down#1' );
+	}
+
+	public function testAnOlderVersionOfTheStagingSiteIsADowngradeInTimeAndTheStopWhenLateBeforeTheVersionsAreCompared(): void {
+		$this->refusedByNotDownInTimeAndStoppedWhenLate( 'heads_down', 'code:downgrade', 'never goes down a version', 'AB_MCP_Sync_Code_Swap::not_down#1' );
+	}
+
+	public function testAHeadReadShorterThanItsFileIsAVersionNotKnownInTimeAndTheStopWhenLateBeforeItIsReadOrTheVersionsCompared(): void {
+		$this->refusedByNotDownInTimeAndStoppedWhenLate( 'heads_short', 'code:version_unknown', 'could not be read from its head read whole', 'AB_MCP_Sync_Code_Swap::not_down#1', 'AB_MCP_Sync_Env::head_read#4' );
+	}
+
+	public function testAHeadNotReadIsAVersionNotKnownInTimeAndTheStopWhenLateBeforeItIsReadOrTheVersionsCompared(): void {
+		$this->refusedByNotDownInTimeAndStoppedWhenLate( 'heads_unread', 'code:version_unknown', 'could not be read from its head read whole', 'AB_MCP_Sync_Code_Swap::not_down#1', 'AB_MCP_Sync_Env::head_read#4' );
+	}
+
+	public function testTheHeadsStoppedAreNoFilesAndNotDownPassesTheStopOnNeverDecidingOnTheEmptyList(): void {
+		// heads() over at its first gate: no files, its deadline holding the
+		// stop.
+		$clock    = DeadlineClock::late_from( 1 );
+		$deadline = DeadlineClock::deadline();
+		self::assertSame( array(), $this->reading( 'headlist', $clock, $deadline ), 'heads(): no files once it stopped.' );
+		self::assertRefused( AB_MCP_Sync_Deadline::stop( $deadline ), 'ab_mcp_read_late', self::LATE_TEXT, 'The stop of its deadline.' );
+		self::assertSame( array( 'AB_MCP_Sync_Code_Swap::heads#1' ), $clock->events );
+		// In time a unit without a PHP file at its top has no files either,
+		// and not_down() decides on them: the version is not known.
+		$clock = DeadlineClock::in_time();
+		$none  = $this->reading( 'heads_empty', $clock, DeadlineClock::deadline() );
+		self::assertSame( 'code:version_unknown', $none->get_error_code() );
+		self::assertNotContains( 'AB_MCP_Sync_Code_Swap::heads#2', $clock->gates, 'No name of a head: the list empty.' );
+		// The empty list of a stop: not_down() passes the stop on, never a
+		// version not known, and reads no head and asks no clock after it.
+		$clock    = DeadlineClock::late_from( 1 );
+		$deadline = DeadlineClock::deadline();
+		$answer   = $this->reading( 'heads', $clock, $deadline );
+		self::assertHalted( 'heads', $answer, $deadline, 'ab_mcp_read_late', self::LATE_TEXT );
+		self::assertSame( array( array( 'AB_MCP_Sync_Code_Swap::heads#1' ), 0 ), array( $clock->events, $clock->others ), 'Nothing after the stop: no head read, no clock asked.' );
+	}
+
+	public function testAValueThatIsNoDeadlineGivesNoHeadWithoutAReadingOfTheClockOrAStep(): void {
+		$made = AB_MCP_Sync_Deadline::at( -1 );
+		foreach ( array( DeadlineClock::UNTIL, 'soon', $made ) as $value ) {
+			$clock = DeadlineClock::in_time();
+			self::assertHalted( 'headread', $this->reading( 'headread', $clock, $value ), $value, 'ab_mcp_read_deadline', self::DEADLINE_TEXT );
+			self::assertSame( array( array(), 0, array() ), array( $clock->gates, $clock->others, $clock->events ), 'No clock read, no head read: ' . gettype( $value ) );
+		}
 	}
 
 	/* ------------------------------------------------------- prepare() */
