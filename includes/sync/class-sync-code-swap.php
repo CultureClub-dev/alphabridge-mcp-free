@@ -910,9 +910,10 @@ final class AB_MCP_Sync_Code_Swap {
 	 * reader of the state ready, bound to this run, this unit and the hash
 	 * of the plan), its tree read whole, and three hashes the same: of the
 	 * tree, of its state (tree and signed), and of the signed manifest read
-	 * now (signed()), which is the hash of the plan. ready() and signed()
-	 * read under the deadline of the swap (R12), whose stop is the refusal
-	 * with its own code; tree() under its own budget (TREE_BUDGET).
+	 * now (signed()), which is the hash of the plan. ready(), tree() and
+	 * signed() read under the deadline of the swap (R12), whose stop is the
+	 * refusal with its own code; tree() also within its own budget
+	 * (TREE_BUDGET), until the earlier of the two.
 	 *
 	 * @param array                $in       The arguments.
 	 * @param AB_MCP_Sync_Deadline $deadline The deadline of the readings (read_deadline()).
@@ -937,7 +938,7 @@ final class AB_MCP_Sync_Code_Swap {
 			/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name. */
 			return self::refusal( 'code:stage_not_ready', sprintf( __( 'The stage of the %1$s %2$s is not read as ready for this step (its state, its tree and hash, or its binding to this run, this unit and the version of the staging site), so it is not swapped. Call action=next again; where it keeps failing, abort the run (wp_site_push action=abort) and plan again.', 'alphabridge-mcp' ), $unit['kind'], $unit['ref'] ) );
 		}
-		$tree   = is_wp_error( $state ) ? $state : AB_MCP_Protected_Store::tree( 'stage', $stage['gid'], $stage['name'], $stage['hash'] );
+		$tree   = is_wp_error( $state ) ? $state : AB_MCP_Protected_Store::tree( 'stage', $stage['gid'], $stage['name'], $stage['hash'], $deadline );
 		$signed = is_wp_error( $tree ) ? $tree : AB_MCP_Sync_Code_Stage::signed( $in['env'], $unit['kind'], $unit['ref'], $deadline );
 		if ( is_wp_error( $signed ) ) {
 			/* translators: 1: why the stage or the signed manifest was not read (one or more whole sentences), 2: kind of the unit, as the tools name it (plugin, theme), 3: its name. */

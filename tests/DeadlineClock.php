@@ -53,16 +53,23 @@ final class DeadlineClock {
 	 */
 	const LATE = 1.0e12;
 
-	/** The helpers between a reader and AB_MCP_Sync_Deadline::left(): no gate of their own, their caller is. */
+	/**
+	 * The helpers between a reader and AB_MCP_Sync_Deadline::left(): no gate
+	 * of their own, their caller is. AB_MCP_Sync_File_Manifest::due() asks
+	 * the deadline of the caller first (R12 part 2: the tree), through its
+	 * left(): a gate of the walk is the line that calls left() or due().
+	 */
 	const WRAPPERS = array(
 		'AB_MCP_Shape::stopped',
 		'AB_MCP_Sync_Canon::stopped',
 		'AB_MCP_Payload_File::left',
 		'AB_MCP_Protected_Store::read_gate',
+		'AB_MCP_Sync_File_Manifest::left',
+		'AB_MCP_Sync_File_Manifest::due',
 	);
 
 	/** An ask of the deadline in the source of a reader: AB_MCP_Sync_Deadline::left() or one of WRAPPERS. */
-	const ASKS = '/AB_MCP_Sync_Deadline::left\(|self::(?:stopped|left|read_gate)\(/';
+	const ASKS = '/AB_MCP_Sync_Deadline::left\(|self::(?:stopped|left|read_gate|due)\(/';
 
 	/** @var string[] Each reading of a deadline by its gate, in order. */
 	public $gates = array();

@@ -48,7 +48,8 @@
  *   running out while it is decided stops the swap at the first check of
  *   the deadline, before unchanged(), and nothing is read after it); in
  *   time the readings of the stage and of the signed manifest run under the
- *   one deadline (the gates of ready() and of signed()); over at the first,
+ *   one deadline (the gates of ready(), of tree() since part 2, and of
+ *   signed()); over at the first,
  *   the last gate of ready() or of signed(), the swap answers with the stop
  *   in its full wording and the way of the swap, gives every lock back and
  *   reads nothing after it (no tree, no place, no device).
@@ -1029,6 +1030,8 @@ final class ReadDeadlineTest extends TestCase {
 					return ( new ReflectionMethod( AB_MCP_Sync_Code_Stage::class, 'state' ) )->invoke( null, self::$stage['gid'], $deadline );
 				case 'foreign':
 					return ( new ReflectionMethod( AB_MCP_Sync_Code_Stage::class, 'foreign' ) )->invoke( null, self::$stage['gid'], self::$stage['state'], self::bound( self::RUN ), $deadline );
+				case 'tree':
+					return AB_MCP_Protected_Store::tree( 'stage', self::$stage['gid'], self::UNIT, self::$stage['hash'], $deadline );
 			}
 			return AB_MCP_Sync_Code_Stage::signed( self::$series[ $series ], 'plugin', self::UNIT, $deadline );
 		} finally {
@@ -1563,15 +1566,34 @@ final class ReadDeadlineTest extends TestCase {
 		return $clock;
 	}
 
+	/**
+	 * The gates of the tree of the stage read in time (R12 part 2, its
+	 * reading in the swap between ready() and signed()), its answer the one
+	 * without a deadline. Its counts are not written down here (the tests of
+	 * the tree way follow).
+	 *
+	 * @return string[]
+	 */
+	private function tree_gates(): array {
+		$clock  = DeadlineClock::in_time();
+		$answer = $this->reading( 'tree', $clock, DeadlineClock::deadline() );
+		self::assertIsArray( $answer, $answer instanceof WP_Error ? $answer->get_error_code() . ': ' . $answer->get_error_message() : gettype( $answer ) );
+		self::assertSame( $this->reading( 'tree', DeadlineClock::in_time(), null ), $answer, 'In time: the tree as without a deadline.' );
+		self::assertNotSame( array(), $clock->gates, 'The tree read under the deadline.' );
+		return $clock->gates;
+	}
+
 	public function testThePreparedSwapDecidesTheStoreBeforeItsDeadlineAndReadsTheStageAndTheSignedManifestUnderIt(): void {
 		// Codex round 2 on this part, finding 2: the store is decided before
 		// the first reading under the deadline (until − keep), uninterrupted;
-		// the readings of ready() and of signed() then run under the one
-		// deadline, checked before the next step (unchanged()).
+		// the readings of ready(), of the tree (R12 part 2) and of signed()
+		// then run under the one deadline, checked before the next step
+		// (unchanged()).
 		$ready  = $this->in_time( 'ready' )->gates;
+		$tree   = $this->tree_gates();
 		$signed = $this->in_time( 'single' )->gates;
 		$clock  = $this->prepared_in_time();
-		self::assertSame( array_merge( array( 'AB_MCP_Sync_Code_Swap::read_deadline#1' ), $ready, $signed ), $clock->gates, 'The first check of the deadline, then the gates of ready() and of signed(), each as in their readings.' );
+		self::assertSame( array_merge( array( 'AB_MCP_Sync_Code_Swap::read_deadline#1' ), $ready, $tree, $signed ), $clock->gates, 'The first check of the deadline, then the gates of ready(), of tree() and of signed(), each as in their readings.' );
 		$decide = array_search( 'step: decide', $clock->events, true );
 		$first  = array_search( 'AB_MCP_Sync_Code_Swap::read_deadline#1', $clock->events, true );
 		$place  = array_search( 'step: swap scandir', $clock->events, true );
@@ -1614,12 +1636,13 @@ final class ReadDeadlineTest extends TestCase {
 	#[DataProvider( 'swap_gates' )]
 	public function testOverAtOneGateOfItsReadingsTheSwapStopsThereGivesItsLocksBackAndReadsNothingAfterIt( string $which ): void {
 		$ready = count( $this->in_time( 'ready' )->gates );
+		$tree  = count( $this->tree_gates() );
 		$base  = $this->prepared_in_time();
 		$k     = array(
 			'the first check'            => 1,
 			'the first gate of ready()'  => 2,
 			'the last gate of ready()'   => 1 + $ready,
-			'the first gate of signed()' => 2 + $ready,
+			'the first gate of signed()' => 2 + $ready + $tree,
 			'the last gate of signed()'  => count( $base->gates ),
 		)[ $which ];
 		AB_MCP_Protected_Store::forget();

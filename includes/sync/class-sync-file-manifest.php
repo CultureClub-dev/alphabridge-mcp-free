@@ -54,6 +54,7 @@
 defined( 'ABSPATH' ) || exit;
 
 require_once __DIR__ . '/class-sync-canon.php';
+require_once __DIR__ . '/class-sync-deadline.php';
 
 /**
  * The calls of the manifest to the file system: the real ones.
@@ -217,37 +218,57 @@ final class AB_MCP_Sync_File_Manifest {
 	 * before it sets complete and the hash; the other calls of due() only
 	 * end a reading early.
 	 *
-	 * @param string $base     The folder the unit lies in (a root).
-	 * @param string $name     The unit, relative to $base.
-	 * @param string $side     live (this is the production site) or staging.
-	 * @param float  $deadline Until when (seconds, the clock of AB_MCP_Sync_Env).
-	 * @param bool   $first    The unit had a whole call to itself: where it
-	 *                         does not end in time it is too_large, else it
-	 *                         stops and a later call reads it anew.
-	 * @param string $kind     Its kind (AB_MCP_Sync_Env::UNITS): a theme is
-	 *                         read only from the folder of the themes.
+	 * With the deadline of the reading of its caller ($budget, an
+	 * AB_MCP_Sync_Deadline; R12 of Z8b branch 5, the tree of a stage read
+	 * by the swap) the unit is read until the earlier of it and $deadline:
+	 * that deadline is asked before each step of the reading (left(): the
+	 * unit and each folder asked or listed, each file opened, asked and read
+	 * part by part up to its end, each folder and path of still(), each
+	 * entry of the text of the manifest and each element of its canonical
+	 * form, AB_MCP_Sync_Canon::encode()) and, first, wherever the time of
+	 * the call is asked (due()), also right before the hash is given. Once
+	 * it is over, no further step begins: the unit is stopped (no hash, no
+	 * entries), whatever $first says, and the caller answers with the stop
+	 * of its deadline (AB_MCP_Sync_Deadline::stop()), never as a unit too
+	 * large, changed or unreadable. Without it (null) the reading is as it
+	 * was. A sort, a hash, one call to the file system and one encoding of
+	 * JSON are single calls (named limits of the deadline).
+	 *
+	 * @param string     $base     The folder the unit lies in (a root).
+	 * @param string     $name     The unit, relative to $base.
+	 * @param string     $side     live (this is the production site) or staging.
+	 * @param float      $deadline Until when (seconds, the clock of AB_MCP_Sync_Env).
+	 * @param bool       $first    The unit had a whole call to itself: where it
+	 *                             does not end in time it is too_large, else it
+	 *                             stops and a later call reads it anew.
+	 * @param string     $kind     Its kind (AB_MCP_Sync_Env::UNITS): a theme is
+	 *                             read only from the folder of the themes.
+	 * @param mixed|null $budget   Null, or the deadline of the reading of the
+	 *                             caller (AB_MCP_Sync_Deadline::at()).
 	 * @return array{form:string,complete:bool,stopped:bool,cause:string|null,lock:string|null,hash:string|null,files:int,bytes:int,entries:array[]}
 	 *               entries: [path, size, sha256, mtime] by strcmp() of the path.
 	 */
-	public static function unit( $base, $name, $side, $deadline, $first, $kind ) {
-		$read = self::whole( $base, $name, $side, $deadline, $first, $kind );
-		unset( $read['walked'], $read['dirs'], $read['stats'] );
+	public static function unit( $base, $name, $side, $deadline, $first, $kind, $budget = null ) {
+		$read = self::whole( $base, $name, $side, $deadline, $first, $kind, $budget );
+		unset( $read['walked'], $read['dirs'], $read['stats'], $read['budget'] );
 		return $read;
 	}
 
 	/**
 	 * unit(), with what it keeps while it reads: the entries walked, the
-	 * names of each folder as listed, the identity of each file as hashed.
+	 * names of each folder as listed, the identity of each file as hashed,
+	 * and the deadline of the caller (budget, left()).
 	 *
-	 * @param string $base     See unit().
-	 * @param string $name     See unit().
-	 * @param string $side     See unit().
-	 * @param float  $deadline See unit().
-	 * @param bool   $first    See unit().
-	 * @param string $kind     See unit().
+	 * @param string     $base     See unit().
+	 * @param string     $name     See unit().
+	 * @param string     $side     See unit().
+	 * @param float      $deadline See unit().
+	 * @param bool       $first    See unit().
+	 * @param string     $kind     See unit().
+	 * @param mixed|null $budget   See unit().
 	 * @return array
 	 */
-	private static function whole( $base, $name, $side, $deadline, $first, $kind ) {
+	private static function whole( $base, $name, $side, $deadline, $first, $kind, $budget ) {
 		$acc = array(
 			'form'     => 'other',
 			'complete' => false,
@@ -261,6 +282,7 @@ final class AB_MCP_Sync_File_Manifest {
 			'walked'   => 0,
 			'dirs'     => array(),
 			'stats'    => array(),
+			'budget'   => $budget,
 		);
 		$path = rtrim( (string) $base, '/' ) . '/' . (string) $name;
 		try {
@@ -269,6 +291,9 @@ final class AB_MCP_Sync_File_Manifest {
 				$acc['lock']     = self::THEME_ROOT_LOCK;
 				$acc['cause']    = 'theme_root';
 				$acc['complete'] = true;
+				return $acc;
+			}
+			if ( ! self::left( $acc ) ) {
 				return $acc;
 			}
 			$stat = self::calls()->lstat( $path );
@@ -312,7 +337,13 @@ final class AB_MCP_Sync_File_Manifest {
 				return strcmp( $a[0], $b[0] );
 			}
 		);
-		$text = self::text( $acc['entries'], $acc['form'] );
+		$text = self::text( $acc['entries'], $acc['form'], $acc['budget'] );
+		if ( null !== AB_MCP_Sync_Deadline::stop( $acc['budget'] ) ) {
+			// The text stopped at the deadline of the caller: no text was
+			// made, so no hash; never unreadable.
+			self::late( $acc, false );
+			return $acc;
+		}
 		if ( '' === $text ) {
 			return self::ended( $acc, 'unreadable' );
 		}
@@ -333,15 +364,24 @@ final class AB_MCP_Sync_File_Manifest {
 	 * folder) and each file with its path, size and SHA-256 (no mtime), by
 	 * strcmp() of the path, in the one spelling of AB_MCP_Sync_Canon::encode().
 	 *
-	 * @param array[] $entries [path, size, sha256, mtime], sorted.
-	 * @param string  $form    file or folder: the form of the unit (GitHub-
-	 *                         Codex on 7d0aeea: a file loader.php and a folder
-	 *                         loader.php/ holding the same loader.php are two).
+	 * With the deadline of a reading (R12 of Z8b branch 5; unit()) each
+	 * entry is taken over, and each element of the form encoded, only while
+	 * it is not over; once it is, the text is '' and the caller passes the
+	 * stop on (AB_MCP_Sync_Deadline::stop()).
+	 *
+	 * @param array[]    $entries [path, size, sha256, mtime], sorted.
+	 * @param string     $form    file or folder: the form of the unit (GitHub-
+	 *                            Codex on 7d0aeea: a file loader.php and a folder
+	 *                            loader.php/ holding the same loader.php are two).
+	 * @param mixed|null $budget  Null, or the deadline of the reading (AB_MCP_Sync_Deadline::at()).
 	 * @return string '' where it cannot be written.
 	 */
-	public static function text( array $entries, $form ) {
+	public static function text( array $entries, $form, $budget = null ) {
 		$files = array();
 		foreach ( $entries as $entry ) {
+			if ( true !== AB_MCP_Sync_Deadline::left( $budget ) ) {
+				return '';
+			}
 			$files[] = array( (string) $entry[0], (int) $entry[1], (string) $entry[2] );
 		}
 		return AB_MCP_Sync_Canon::encode(
@@ -349,7 +389,8 @@ final class AB_MCP_Sync_File_Manifest {
 				'files'  => $files,
 				'form'   => (string) $form,
 				'format' => self::FORMAT,
-			)
+			),
+			$budget
 		);
 	}
 
@@ -397,7 +438,8 @@ final class AB_MCP_Sync_File_Manifest {
 	/* ------------------------------------------------------------ private */
 
 	/**
-	 * One folder of a unit, depth first; its files into $acc.
+	 * One folder of a unit, depth first; its files into $acc. The deadline
+	 * of the caller (left()) also before the folder is listed.
 	 *
 	 * @param string $dir      The folder.
 	 * @param string $rel      Its path in the unit ('' the unit).
@@ -408,6 +450,9 @@ final class AB_MCP_Sync_File_Manifest {
 	 * @return string done, or ended ($acc says why).
 	 */
 	private static function folder( $dir, $rel, $side, $deadline, $first, array &$acc ) {
+		if ( ! self::left( $acc ) ) {
+			return 'ended';
+		}
 		$names = self::calls()->names( $dir );
 		if ( false === $names ) {
 			return self::end( $acc, 'unreadable' );
@@ -468,7 +513,12 @@ final class AB_MCP_Sync_File_Manifest {
 	 * written while it is read, gives no hash, on every file system the
 	 * same. The time of the call is asked before the file is opened (also
 	 * one of 0 bytes) and after each part read that is not its last; each
-	 * file counts towards MAX_FILES.
+	 * file counts towards MAX_FILES. The deadline of the caller (left(),
+	 * R12) also before the file is asked (fstat()) before and after its
+	 * reading and before each read, the first one and the one that finds
+	 * its end included (after a part with more to come it is asked twice
+	 * in a row, by due() and before the read: the check of the time of the
+	 * call stays as it is).
 	 *
 	 * @param string $path     The file.
 	 * @param string $rel      Its path in the unit.
@@ -490,6 +540,10 @@ final class AB_MCP_Sync_File_Manifest {
 		if ( false === $handle || null === $handle ) {
 			return self::end( $acc, 'unreadable' );
 		}
+		if ( ! self::left( $acc ) ) {
+			$calls->close( $handle );
+			return 'ended';
+		}
 		$before = $calls->fstat( $handle );
 		if ( false === $before || ! self::same( $stat, $before ) ) {
 			$calls->close( $handle );
@@ -498,6 +552,10 @@ final class AB_MCP_Sync_File_Manifest {
 		$ctx  = hash_init( 'sha256' );
 		$read = 0;
 		while ( true ) {
+			if ( ! self::left( $acc ) ) {
+				$calls->close( $handle );
+				return 'ended';
+			}
 			$bytes = $calls->read( $handle, self::CHUNK );
 			if ( false === $bytes ) {
 				$calls->close( $handle );
@@ -521,6 +579,10 @@ final class AB_MCP_Sync_File_Manifest {
 				$calls->close( $handle );
 				return 'ended';
 			}
+		}
+		if ( ! self::left( $acc ) ) {
+			$calls->close( $handle );
+			return 'ended';
 		}
 		$after = $calls->fstat( $handle );
 		$calls->close( $handle );
@@ -587,7 +649,10 @@ final class AB_MCP_Sync_File_Manifest {
 	 * is no answer (false): no type of the parameters, so that this says
 	 * «not the same» rather than throw (a Throwable would be caught by
 	 * unit() as unreadable and so stand in for the clauses of file() that
-	 * name a call that failed; Behebung 3).
+	 * name a call that failed; Behebung 3). Under the deadline of a caller
+	 * (R12) it asks it not itself: its loop has the fixed length of IDENTITY
+	 * and reads nothing, and each of its calls follows a step that asked it
+	 * (fstat() in file(), lstat() in still(), after left() or due()).
 	 *
 	 * @param array|false $a One.
 	 * @param array|false $b The other.
@@ -627,7 +692,9 @@ final class AB_MCP_Sync_File_Manifest {
 	 * hash). Its calls before each entry of a folder, before a file is
 	 * opened, after each part of a file read that is not its last, and in
 	 * still() before each folder is listed again and each path asked again
-	 * only end a reading early (SyncManifestGuardTest).
+	 * only end a reading early (SyncManifestGuardTest). The deadline of the
+	 * caller (R12, left()) is asked first at each of them: once it is over,
+	 * the reading stops there without asking the time of the call.
 	 *
 	 * @param array $acc      The reading so far.
 	 * @param float $deadline Until when.
@@ -635,6 +702,9 @@ final class AB_MCP_Sync_File_Manifest {
 	 * @return bool
 	 */
 	private static function due( array &$acc, $deadline, $first ) {
+		if ( ! self::left( $acc ) ) {
+			return true;
+		}
 		// Only a finite number is a time; the deadline a number, INF for no
 		// deadline (no cast; Z8b branch 4, Codex confirmation 1, B-3): an
 		// unknown one ends the reading as the end of its time does, never a
@@ -645,6 +715,25 @@ final class AB_MCP_Sync_File_Manifest {
 		}
 		self::late( $acc, $first );
 		return true;
+	}
+
+	/**
+	 * Whether the reading may take its next step under the deadline of its
+	 * caller (R12 of Z8b branch 5; unit(), $acc['budget']): always without
+	 * one (null), whose clock is then not asked. Where it is over, or is no
+	 * deadline, the reading stops (no hash, no entries, whatever $first
+	 * says: the unit was not too large, the call had no time left for it)
+	 * and the caller answers with its stop (AB_MCP_Sync_Deadline::stop()).
+	 *
+	 * @param array $acc The reading so far.
+	 * @return bool
+	 */
+	private static function left( array &$acc ) {
+		if ( true === AB_MCP_Sync_Deadline::left( $acc['budget'] ) ) {
+			return true;
+		}
+		self::late( $acc, false );
+		return false;
 	}
 
 	/**

@@ -2308,16 +2308,28 @@ final class AB_MCP_Protected_Store {
 	 * A tree read back: its place where its manifest is the one put_tree()
 	 * gave (what went in comes back byte for byte, Z7).
 	 *
-	 * @param string $area Area ('stage' or 'backups').
-	 * @param string $gid  Group.
-	 * @param string $name Name of the tree (is_tree_name(): up to 255 bytes).
-	 * @param string $hash The hash put_tree() gave.
+	 * With a deadline (R12 of Z8b branch 5; read_gate()) the way to its
+	 * group, the sidecar of the group, the tree asked at its place and its
+	 * reading (read_tree(): until the earlier of the deadline and
+	 * TREE_BUDGET) each begin only while it is not over, and so does the
+	 * answer; its stop is the answer, never a tree missing, changed or not
+	 * read whole (the end of TREE_BUDGET stays tree_changed).
+	 *
+	 * @param string     $area     Area ('stage' or 'backups').
+	 * @param string     $gid      Group.
+	 * @param string     $name     Name of the tree (is_tree_name(): up to 255 bytes).
+	 * @param string     $hash     The hash put_tree() gave.
+	 * @param mixed|null $deadline Null, or a deadline of AB_MCP_Sync_Deadline::at().
 	 * @return array{path:string,hash:string,form:string,files:int,bytes:int}|WP_Error
 	 */
-	public static function tree( $area, $gid, $name, $hash ) {
+	public static function tree( $area, $gid, $name, $hash, $deadline = null ) {
 		$bad = self::bad_tree_ref( $area, $gid, $name );
 		if ( null !== $bad ) {
 			return $bad;
+		}
+		$gate = self::read_gate( $deadline );
+		if ( true !== $gate ) {
+			return $gate;
 		}
 		$root = self::root();
 		if ( is_wp_error( $root ) ) {
@@ -2327,21 +2339,33 @@ final class AB_MCP_Protected_Store {
 		if ( true !== $admitted ) {
 			return $admitted;
 		}
-		$found = self::group( $root, $area, self::group_name( $area, $gid, self::install_id() ), $gid );
+		$found = self::group( $root, $area, self::group_name( $area, $gid, self::install_id() ), $gid, $deadline );
 		if ( ! is_array( $found ) ) {
 			return $found;
 		}
 		$place = $found[1] . '/' . $name;
-		$stat  = self::calls()->lstat( $place );
+		$gate  = AB_MCP_Sync_Deadline::left( $deadline );
+		if ( true !== $gate ) {
+			return $gate;
+		}
+		$stat = self::calls()->lstat( $place );
 		if ( false === $stat ) {
 			return new WP_Error( 'ab_mcp_store_tree_missing', __( 'The tree is not in its group of the protected store: it was never put there, or its group was removed after its time. Use put_tree() to put it there again.', 'alphabridge-mcp' ) );
 		}
 		if ( ! in_array( $stat['mode'] & 0170000, array( 0040000, 0100000 ), true ) ) {
 			return self::unsafe();
 		}
-		$read = self::read_tree( $place );
+		$read = self::read_tree( $place, $deadline );
+		$stop = AB_MCP_Sync_Deadline::stop( $deadline );
+		if ( null !== $stop ) {
+			return $stop;
+		}
 		if ( ! $read['complete'] || null === $read['hash'] || ! hash_equals( (string) $hash, (string) $read['hash'] ) ) {
 			return new WP_Error( 'ab_mcp_store_tree_changed', __( 'The tree in the protected store could not be confirmed against the hash it was asked with: its manifest differs, or it could not be read whole (as when the time of the call runs out). So it is not given out. Try again; if it keeps failing, ask the host whether something else writes into the folder of the store or whether its disk is slow.', 'alphabridge-mcp' ) );
+		}
+		$gate = AB_MCP_Sync_Deadline::left( $deadline );
+		if ( true !== $gate ) {
+			return $gate;
 		}
 		return array(
 			'path'  => $place,
@@ -2488,14 +2512,20 @@ final class AB_MCP_Protected_Store {
 
 	/**
 	 * Read a tree whole, as a unit (AB_MCP_Sync_File_Manifest::unit(), Z1):
-	 * its manifest, or why not.
+	 * its manifest, or why not. Within TREE_BUDGET from now and, with the
+	 * deadline of a reading (R12 of Z8b branch 5), within it too: read
+	 * until the earlier of the two, the deadline asked before each step
+	 * (unit()); where it is over first, the reading is stopped and the
+	 * caller passes its stop on (AB_MCP_Sync_Deadline::stop()), where
+	 * TREE_BUDGET is, the tree is too large as without a deadline.
 	 *
-	 * @param string $path Folder or file.
+	 * @param string     $path     Folder or file.
+	 * @param mixed|null $deadline Null, or a deadline of AB_MCP_Sync_Deadline::at().
 	 * @return array As AB_MCP_Sync_File_Manifest::unit().
 	 */
-	private static function read_tree( $path ) {
+	private static function read_tree( $path, $deadline = null ) {
 		$now = class_exists( 'AB_MCP_Sync_Env', false ) && null !== AB_MCP_Sync_Env::$clock ? (float) call_user_func( AB_MCP_Sync_Env::$clock ) : microtime( true );
-		return AB_MCP_Sync_File_Manifest::unit( dirname( (string) $path ), basename( (string) $path ), 'live', $now + self::TREE_BUDGET, true, 'tree' );
+		return AB_MCP_Sync_File_Manifest::unit( dirname( (string) $path ), basename( (string) $path ), 'live', $now + self::TREE_BUDGET, true, 'tree', $deadline );
 	}
 
 	/**
