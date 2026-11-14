@@ -735,7 +735,7 @@ return array(
 		'id'      => 'karte/possible-edition',
 		'clause'  => 'possible(): not in an edition that has the features',
 		'file'    => $mo,
-		'search'  => "\t\treturn ! in_array( \$edition, array( 'pro', 'agency' ), true ) && ",
+		'search'  => "\t\treturn ! ( is_string( \$edition ) && in_array( \$edition, array( 'pro', 'agency', 'trial' ), true ) ) && ",
 		'replace' => "\t\treturn ",
 		'run'     => $unit( 'StagingTransferTest', 'testTheEditionPartShowsOnlyWhereEveryRuleHolds' ),
 		'expect'  => '/testTheEditionPartShowsOnlyWhereEveryRuleHolds/',
