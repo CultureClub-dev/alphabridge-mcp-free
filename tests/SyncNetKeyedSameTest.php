@@ -11,7 +11,9 @@
  *       measured (belege/r12b-t1-messung-roh.jsonl);
  * (iii) the new cases of part 1b: a long word before many signs (M1c), signs
  *       with blanks between them, many lengths of keys, invalid UTF-8 and a
- *       prefix \0…\0, also where held() does not reach them;
+ *       prefix \0…\0, also where held() does not reach them; and what the
+ *       mutations of part 1a.2 found missing, each with every key alone
+ *       that meets at one of its signs (keys_at_signs());
  * (iv)  the names of the tests of keyed(), over_name() and held() in
  *       tests/SyncEnvTest.php;
  * (v)   texts and lists of keys drawn with a fixed seed, and (i) to (iii)
@@ -353,6 +355,38 @@ final class SyncNetKeyedSameTest extends TestCase {
 		foreach ( array( "\0\xFF:\0x  y:", '%00%FF:%00x%20%20y:', "\xFFpassword:", "pass\xFFword:", "\0EXAMPLE\0password:x", "\0\0token=", "\0token:", '%00abc%00token=x', base64_encode( "\0x\0password:" ), "\xC3:\xA9password:", "x\0:y\0z:", "\0\xFF\xFE:\0a b:", "\0 \0 password:", "\0\xFF:x\0\u{00A0}my vault:", "\xED\xA0\x80:auth:", "\xC0\xAFtoken:", "\xF5:a\0b:", "\0" . str_repeat( 'a:', 300 ) . "\0b:token:", "\0\xFF" . str_repeat( 'Ab-c ', 60 ) . ":\0my-vault :", str_repeat( "\xFF", 300 ) . ':' . str_repeat( 'x', 300 ) . ':' ) as $text ) {
 			$texts[] = $text;
 		}
+		// What the mutations of part 1a.2 showed missing (r12b-1a2-rot.log), each
+		// with every key alone that meets at one of its signs (keys_at_signs()),
+		// and with the lists of $own and of K keys: a name over an inner
+		// sign and the blank after it; after a part that is no UTF-8, a part
+		// whose blanks the pattern joins otherwise than str_replace(); a dash
+		// in a part of bytes normalize_key() leaves otherwise; U+FEFF and
+		// U+200B at the start of the text (the keys _x and _token of $own); a
+		// word with parts at «.» after a byte that ends no word.
+		$gaps = array();
+		foreach ( array( ' ', "\t", '  ', "\u{00A0}", " \u{3000} ", ' - ' ) as $blank ) {
+			$gaps[] = 'x' . $blank . ':' . $blank . 'y' . $blank . ':' . $blank . 'z:' . $blank . 'w=';
+			$gaps[] = "\xFF:x" . $blank . 'y:' . $blank . 'z-' . $blank . 'w:';
+		}
+		foreach ( array( 'a-b/c:', 'my-vault/x:', 'x--y/z=', '-x_y/z:', 'a-b:c-d/e;' ) as $text ) {
+			$gaps[] = $text;
+		}
+		foreach ( array( "\u{FEFF}", "\u{200B}", "\u{FEFF}\u{200B}", "\u{200B} \u{FEFF}" ) as $lead ) {
+			$gaps[] = $lead . ' x:';
+			$gaps[] = $lead . "\u{00A0}token=";
+			$gaps[] = $lead . '-x:a:';
+		}
+		foreach ( array( '/', '(', '#', ',', '+', '@', "\0" ) as $byte ) {
+			foreach ( array( 'token.v1', 'pass.x', 'secret.1', 'auth.v1', 'vault.v1', 'user_pass.x' ) as $word ) {
+				$gaps[] = 'note' . $byte . $word . ':';
+			}
+		}
+		foreach ( $gaps as $text ) {
+			$texts[] = $text;
+			foreach ( self::keys_at_signs( $text ) as $keys ) {
+				$out[] = array( $text, $keys );
+			}
+		}
 		foreach ( $texts as $text ) {
 			foreach ( array_merge( $own, array( $lists[0], $lists[10], $lists[100] ) ) as $extra ) {
 				$out[] = array( $text, $extra );
@@ -377,6 +411,39 @@ final class SyncNetKeyedSameTest extends TestCase {
 			foreach ( $long as $text ) {
 				$out[] = array( $text, $keys );
 			}
+		}
+		return $out;
+	}
+
+	/**
+	 * Lists of one key for a text: the ends of the text before each sign (2
+	 * to 24 bytes) in lower case and as normalize_key() reads it, without
+	 * those the copy of 8daf33f holds at a sign before it; one key a list,
+	 * so that a short end, which a wrong reading may meet as well, does not
+	 * answer for a long one (part 1a.2: in one list for each sign the short
+	 * ends kept two mutations unseen).
+	 *
+	 * @return array<int,string[]>
+	 */
+	private static function keys_at_signs( string $text ): array {
+		$keys = array();
+		$size = strlen( $text );
+		$at   = strcspn( $text, '=:;"\'' );
+		while ( $at < $size ) {
+			$before = rtrim( substr( $text, 0, $at ), " \t\n\r\x0B\f" );
+			foreach ( array( strtolower( $before ), AB_MCP_Redactor::normalize_key( $before ) ) as $form ) {
+				foreach ( array( 2, 3, 4, 6, 9, 12, 16, 24 ) as $n ) {
+					$key = substr( $form, -$n );
+					if ( '' !== $key && ! AB_Test_Keyed_8daf33f::keyed( substr( $text, 0, $at ), array( $key ) ) ) {
+						$keys[ $key ] = true;
+					}
+				}
+			}
+			$at += 1 + strcspn( $text, '=:;"\'', $at + 1 );
+		}
+		$out = array();
+		foreach ( array_keys( $keys ) as $key ) {
+			$out[] = array( (string) $key );
 		}
 		return $out;
 	}
@@ -493,12 +560,17 @@ final class SyncNetKeyedSameTest extends TestCase {
 			} elseif ( $pick <= 5 ) {
 				$keys[] = 'q' . str_repeat( 'z', mt_rand( 0, 40 ) );
 			} elseif ( '' !== $text ) {
-				// An end of the text before a sign, lower case or as
+				// An end of the text before a sign (every other one: the next
+				// sign from a place drawn; part 1a.2 found too few names that
+				// meet at a sign over a part before it), lower case or as
 				// normalize_key() reads it, or a part of the text.
-				$at     = mt_rand( 0, strlen( $text ) - 1 );
+				$at = mt_rand( 0, strlen( $text ) - 1 );
+				if ( mt_rand( 0, 1 ) === 1 ) {
+					$at += strcspn( $text, '=:;"\'', $at );
+				}
 				$before = rtrim( substr( $text, 0, $at ), " \t\n\r\x0B\f" );
 				$form   = mt_rand( 0, 1 ) === 1 ? AB_MCP_Redactor::normalize_key( $before ) : strtolower( $before );
-				$keys[] = substr( $form, -mt_rand( 1, 12 ) );
+				$keys[] = substr( $form, -mt_rand( 1, 24 ) );
 			}
 		}
 		return $keys;
