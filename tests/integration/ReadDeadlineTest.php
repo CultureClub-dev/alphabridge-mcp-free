@@ -64,6 +64,18 @@
  *   unlisted), the mark in taken() (never incomplete), lines() (never
  *   unread) and verify() (never spelling) answer the stop in its full
  *   wording.
+ * - R12 part 2, the way of the tree: AB_MCP_Protected_Store::tree() of the
+ *   tree of the stage and of a large tree (a file of more than one part, an
+ *   empty file, an empty folder), and AB_MCP_Sync_File_Manifest::unit() of
+ *   that tree read directly (its first call): in time as without a deadline
+ *   (the same steps of the store and of the manifest, the same other
+ *   readings of the clock, kept as steps in order), each gate by itself as
+ *   above; the stop is the answer of tree(), never a tree changed or
+ *   missing, and of unit() a reading stopped, never too large or
+ *   unreadable. In time another hash is changed and a tree not there
+ *   missing, as without a deadline; the earlier of the deadline and
+ *   TREE_BUDGET ends the reading, in both orders (the deadline: the stop;
+ *   TREE_BUDGET: too large, so changed).
  *
  * need() and stage() read without a deadline: CodeStageTest.
  *
@@ -116,6 +128,9 @@ final class ReadDeadlineTest extends TestCase {
 
 	/** The store not decided in this request (ab_mcp_store_undecided), in full. */
 	const UNDECIDED_TEXT = 'Where the protected store is was not decided yet in this request, and this reading has a time limit, so it does not decide it now (its check can take longer than the time left) and reads nothing of the store. Call again; where it keeps failing, report it to the makers of AlphaBridge MCP: the caller decides the store before such a reading.';
+
+	/** A tree not confirmed against its hash (ab_mcp_store_tree_changed), in full. */
+	const TREE_CHANGED_TEXT = 'The tree in the protected store could not be confirmed against the hash it was asked with: its manifest differs, or it could not be read whole (as when the time of the call runs out). So it is not given out. Try again; if it keeps failing, ask the host whether something else writes into the folder of the store or whether its disk is slow.';
 
 	/** The unit of the series. */
 	private const UNIT = 'ab-it-frist';
@@ -434,6 +449,105 @@ final class ReadDeadlineTest extends TestCase {
 		'foreign' => '3b605856d06ee27e50c0034566387ebd5e3c4f8e9a569efecc55f0946899c713',
 	);
 
+	/** The name of the large tree (R12 part 2). */
+	private const BIG = 'ab-it-gross';
+
+	/**
+	 * The readings of R12 part 2: their other readings of the clock (no
+	 * deadline's) and the steps of the manifest and of the place of a tree
+	 * are kept as steps of the clock (part_2()).
+	 */
+	private const PART_2 = array( 'tree', 'bigtree', 'unit', 'tree_other', 'tree_missing' );
+
+	/**
+	 * The gates of each reading of R12 part 2 in time, as COUNTS: tree() of
+	 * the tree of the stage (tree) and of the large tree (bigtree), unit() of
+	 * the large tree read by the manifest directly, as its first call (unit).
+	 */
+	const PART_2_COUNTS = array(
+		'tree'    => array(
+			'AB_MCP_Protected_Store::tree#1'      => 1,
+			'AB_MCP_Protected_Store::way#1'       => 2,
+			'AB_MCP_Protected_Store::way#2'       => 3,
+			'AB_MCP_Protected_Store::holds#1'     => 2,
+			'AB_MCP_Protected_Store::holds#2'     => 2,
+			'AB_MCP_Protected_Store::holds#3'     => 5,
+			'AB_MCP_Protected_Store::group#1'     => 1,
+			'AB_MCP_Protected_Store::sidecar#1'   => 1,
+			'AB_MCP_Shape::decoded#1'             => 1,
+			'AB_MCP_Shape::decoded#2'             => 1,
+			'AB_MCP_Protected_Store::tree#2'      => 1,
+			'AB_MCP_Sync_File_Manifest::whole#1'  => 1,
+			'AB_MCP_Sync_File_Manifest::folder#1' => 2,
+			'AB_MCP_Sync_File_Manifest::folder#2' => 4,
+			'AB_MCP_Sync_File_Manifest::file#1'   => 3,
+			'AB_MCP_Sync_File_Manifest::file#2'   => 3,
+			'AB_MCP_Sync_File_Manifest::file#3'   => 6,
+			'AB_MCP_Sync_File_Manifest::file#5'   => 3,
+			'AB_MCP_Sync_File_Manifest::still#1'  => 2,
+			'AB_MCP_Sync_File_Manifest::still#2'  => 3,
+			'AB_MCP_Sync_File_Manifest::text#1'   => 3,
+			'AB_MCP_Sync_Canon::prepared#3'       => 3,
+			'AB_MCP_Sync_Canon::prepared#2'       => 12,
+			'AB_MCP_Sync_Canon::encode#1'         => 1,
+			'AB_MCP_Sync_File_Manifest::whole#2'  => 1,
+			'AB_MCP_Protected_Store::tree#3'      => 1,
+		),
+		'bigtree' => array(
+			'AB_MCP_Protected_Store::tree#1'      => 1,
+			'AB_MCP_Protected_Store::way#1'       => 2,
+			'AB_MCP_Protected_Store::way#2'       => 3,
+			'AB_MCP_Protected_Store::holds#1'     => 2,
+			'AB_MCP_Protected_Store::holds#2'     => 2,
+			'AB_MCP_Protected_Store::holds#3'     => 5,
+			'AB_MCP_Protected_Store::group#1'     => 1,
+			'AB_MCP_Protected_Store::sidecar#1'   => 1,
+			'AB_MCP_Shape::decoded#1'             => 1,
+			'AB_MCP_Shape::decoded#2'             => 1,
+			'AB_MCP_Protected_Store::tree#2'      => 1,
+			'AB_MCP_Sync_File_Manifest::whole#1'  => 1,
+			'AB_MCP_Sync_File_Manifest::folder#1' => 3,
+			'AB_MCP_Sync_File_Manifest::folder#2' => 5,
+			'AB_MCP_Sync_File_Manifest::file#1'   => 3,
+			'AB_MCP_Sync_File_Manifest::file#2'   => 3,
+			'AB_MCP_Sync_File_Manifest::file#3'   => 6,
+			'AB_MCP_Sync_File_Manifest::file#5'   => 3,
+			'AB_MCP_Sync_File_Manifest::file#4'   => 1,
+			'AB_MCP_Sync_File_Manifest::still#1'  => 3,
+			'AB_MCP_Sync_File_Manifest::still#2'  => 3,
+			'AB_MCP_Sync_File_Manifest::text#1'   => 3,
+			'AB_MCP_Sync_Canon::prepared#3'       => 3,
+			'AB_MCP_Sync_Canon::prepared#2'       => 12,
+			'AB_MCP_Sync_Canon::encode#1'         => 1,
+			'AB_MCP_Sync_File_Manifest::whole#2'  => 1,
+			'AB_MCP_Protected_Store::tree#3'      => 1,
+		),
+		'unit'    => array(
+			'AB_MCP_Sync_File_Manifest::whole#1'  => 1,
+			'AB_MCP_Sync_File_Manifest::folder#1' => 3,
+			'AB_MCP_Sync_File_Manifest::folder#2' => 5,
+			'AB_MCP_Sync_File_Manifest::file#1'   => 3,
+			'AB_MCP_Sync_File_Manifest::file#2'   => 3,
+			'AB_MCP_Sync_File_Manifest::file#3'   => 6,
+			'AB_MCP_Sync_File_Manifest::file#5'   => 3,
+			'AB_MCP_Sync_File_Manifest::file#4'   => 1,
+			'AB_MCP_Sync_File_Manifest::still#1'  => 3,
+			'AB_MCP_Sync_File_Manifest::still#2'  => 3,
+			'AB_MCP_Sync_File_Manifest::text#1'   => 3,
+			'AB_MCP_Sync_Canon::prepared#3'       => 3,
+			'AB_MCP_Sync_Canon::prepared#2'       => 12,
+			'AB_MCP_Sync_Canon::encode#1'         => 1,
+			'AB_MCP_Sync_File_Manifest::whole#2'  => 1,
+		),
+	);
+
+	/** The SHA-256 of the gates of each reading of R12 part 2 in time, as ORDER. */
+	const PART_2_ORDER = array(
+		'tree'    => '94752125abf1350b5d0c83f9632ff70335375eecc720ca4cd753539c1e3ab949',
+		'bigtree' => '54b945ce19a7d1a4eb6b9b74c19f8da26b837c044e3bc6c69aea5fe59dfdef29',
+		'unit'    => '6cea781d3d194e09327b54aa5da05ffad0345ea0de18a1064881fe93c0dfbaf5',
+	);
+
 	/** @var array<string,string[]> The series built once: name => package ids. */
 	private static $series = array();
 
@@ -442,6 +556,9 @@ final class ReadDeadlineTest extends TestCase {
 
 	/** @var array The stage built once: gid, hash, bytes, entries (path, size, SHA-256), state (ready, as ready() reads it). */
 	private static $stage = array();
+
+	/** @var array The large tree built once (R12 part 2): gid, hash, path. */
+	private static $big = array();
 
 	/** @var string|null DOCUMENT_ROOT before the class. */
 	private static $docroot_before;
@@ -462,6 +579,7 @@ final class ReadDeadlineTest extends TestCase {
 		self::$stage  = self::stage();
 		self::$series = self::build();
 		self::$chunk  = self::chunk_of( self::$series['single'][0] );
+		self::$big    = self::big();
 	}
 
 	public static function tearDownAfterClass(): void {
@@ -475,6 +593,7 @@ final class ReadDeadlineTest extends TestCase {
 		self::$series = array();
 		self::$chunk  = array();
 		self::$stage  = array();
+		self::$big    = array();
 		if ( null === self::$docroot_before ) {
 			unset( $_SERVER['DOCUMENT_ROOT'] );
 		} else {
@@ -712,6 +831,46 @@ final class ReadDeadlineTest extends TestCase {
 			'bytes'   => array_sum( array_column( $entries, 1 ) ),
 			'entries' => $entries,
 			'state'   => AB_MCP_Sync_Code_Stage::state_of( AB_MCP_Sync_Canon::encode( $state ) ),
+		);
+	}
+
+	/**
+	 * The large tree (R12 part 2), in a group of the area stage of its own
+	 * (another run): a main file, in a folder a file of one part and ten
+	 * bytes more (AB_MCP_Sync_File_Manifest::CHUNK), an empty folder and an
+	 * empty file, put in by put_tree().
+	 *
+	 * @return array gid, hash, path.
+	 */
+	private static function big(): array {
+		$source = self::root() . '/run/r12-gross-src';
+		if ( is_dir( $source ) ) {
+			self::remove_tree( $source );
+		}
+		mkdir( $source . '/daten', 0755, true );
+		mkdir( $source . '/leer', 0755 );
+		file_put_contents( $source . '/ab-it-gross.php', "<?php\n/**\n * Plugin Name: AB IT Gross\n * Version: 1.0.0\n */\n" );
+		file_put_contents( $source . '/daten/gross.bin', str_repeat( 'Frist', intdiv( \AB_MCP_Sync_File_Manifest::CHUNK, 5 ) ) . str_repeat( 'x', 14 ) );
+		file_put_contents( $source . '/leer.txt', '' );
+		$gid = AB_MCP_Protected_Store::open(
+			'stage',
+			array(
+				'run_id' => self::RUN + 2,
+				'label'  => 'code',
+			)
+		);
+		if ( ! is_string( $gid ) ) {
+			throw new RuntimeException( 'No group of the large tree.' );
+		}
+		$tree = AB_MCP_Protected_Store::put_tree( 'stage', $gid, self::BIG, WP_PLUGIN_DIR . '/' . self::BIG, $source );
+		self::remove_tree( $source );
+		if ( ! is_array( $tree ) ) {
+			throw new RuntimeException( 'No large tree: ' . $tree->get_error_code() );
+		}
+		return array(
+			'gid'  => $gid,
+			'hash' => $tree['hash'],
+			'path' => $tree['path'],
 		);
 	}
 
@@ -1011,7 +1170,11 @@ final class ReadDeadlineTest extends TestCase {
 	 */
 	private function reading( string $series, DeadlineClock $clock, $deadline, array $first = array() ) {
 		$clock->install();
-		self::watch( $clock, $first );
+		$part_2 = in_array( $series, self::PART_2, true );
+		self::watch( $clock, $first, $part_2 );
+		if ( $part_2 ) {
+			self::part_2( $clock );
+		}
 		try {
 			switch ( $series ) {
 				case 'taken':
@@ -1032,6 +1195,14 @@ final class ReadDeadlineTest extends TestCase {
 					return ( new ReflectionMethod( AB_MCP_Sync_Code_Stage::class, 'foreign' ) )->invoke( null, self::$stage['gid'], self::$stage['state'], self::bound( self::RUN ), $deadline );
 				case 'tree':
 					return AB_MCP_Protected_Store::tree( 'stage', self::$stage['gid'], self::UNIT, self::$stage['hash'], $deadline );
+				case 'tree_other':
+					return AB_MCP_Protected_Store::tree( 'stage', self::$stage['gid'], self::UNIT, str_repeat( '0', 64 ), $deadline );
+				case 'tree_missing':
+					return AB_MCP_Protected_Store::tree( 'stage', self::$stage['gid'], 'fehlt', self::$stage['hash'], $deadline );
+				case 'bigtree':
+					return AB_MCP_Protected_Store::tree( 'stage', self::$big['gid'], self::BIG, self::$big['hash'], $deadline );
+				case 'unit':
+					return \AB_MCP_Sync_File_Manifest::unit( dirname( self::$big['path'] ), basename( self::$big['path'] ), 'live', DeadlineClock::NOW + AB_MCP_Protected_Store::TREE_BUDGET, true, 'tree', $deadline );
 			}
 			return AB_MCP_Sync_Code_Stage::signed( self::$series[ $series ], 'plugin', self::UNIT, $deadline );
 		} finally {
@@ -1039,29 +1210,66 @@ final class ReadDeadlineTest extends TestCase {
 		}
 	}
 
-	/** The seam of the store with each listing and each sidecar read kept as a step of the clock. */
-	private static function watch( DeadlineClock $clock, array $first = array() ): void {
-		$step = static function ( $method, $args ) use ( $clock ) {
+	/**
+	 * The seam of the store with each listing and each sidecar read kept as a
+	 * step of the clock; for R12 part 2 ($lstat) each path asked too (the
+	 * place of a tree).
+	 */
+	private static function watch( DeadlineClock $clock, array $first = array(), bool $lstat = false ): void {
+		$step  = static function ( $method, $args ) use ( $clock ) {
 			$clock->step( $method . ' ' . basename( (string) $args[0] ) );
 		};
-		AB_MCP_Test_Seam::install(
-			AB_MCP_Protected_Store::class,
-			'naht_protected_store',
-			new \AB_MCP_Protected_Store_Calls(),
-			array_merge(
-				$first,
-				array(
-					array(
-						'method' => 'read',
-						'kind'   => 'before',
-						'before' => $step,
-					),
-					array(
-						'method' => 'scandir',
-						'kind'   => 'before',
-						'before' => $step,
-					),
-				)
+		$plan  = array();
+		$steps = $lstat ? array( 'read', 'scandir', 'lstat' ) : array( 'read', 'scandir' );
+		foreach ( $steps as $method ) {
+			$plan[] = array(
+				'method' => $method,
+				'kind'   => 'before',
+				'before' => $step,
+			);
+		}
+		AB_MCP_Test_Seam::install( AB_MCP_Protected_Store::class, 'naht_protected_store', new \AB_MCP_Protected_Store_Calls(), array_merge( $first, $plan ) );
+	}
+
+	/**
+	 * R12 part 2: each reading of the clock that is no deadline's (the start
+	 * of TREE_BUDGET in read_tree(), the time of the call in due()) kept as a
+	 * step (step: clock), so that its place shows among the gates; each call
+	 * of the manifest to the file system (a listing, a path asked, a file
+	 * opened, asked or read) kept as a step (manifest …). Closing a file is
+	 * no step: it is allowed after a stop.
+	 */
+	private static function part_2( DeadlineClock $clock ): void {
+		\AB_MCP_Sync_Env::$clock = static function () use ( $clock ) {
+			$gates = count( $clock->gates );
+			$time  = $clock();
+			if ( count( $clock->gates ) === $gates ) {
+				$clock->step( 'clock' );
+			}
+			return $time;
+		};
+		$step = static function ( $method, $args ) use ( $clock ) {
+			$clock->step( 'manifest ' . $method . ( is_string( $args[0] ) ? ' ' . basename( $args[0] ) : '' ) );
+		};
+		$plan = array();
+		foreach ( array( 'names', 'lstat', 'open', 'fstat', 'read' ) as $method ) {
+			$plan[] = array(
+				'method' => $method,
+				'kind'   => 'before',
+				'before' => $step,
+			);
+		}
+		AB_MCP_Test_Seam::install( \AB_MCP_Sync_File_Manifest::class, 'naht_sync_file_manifest', new \AB_MCP_Sync_File_Manifest_Calls(), $plan );
+	}
+
+	/** The steps among the events of a clock, in order. */
+	private static function steps( DeadlineClock $clock ): array {
+		return array_values(
+			array_filter(
+				$clock->events,
+				static function ( $event ) {
+					return 0 === strpos( $event, 'step: ' );
+				}
 			)
 		);
 	}
@@ -1088,9 +1296,19 @@ final class ReadDeadlineTest extends TestCase {
 		$clock  = DeadlineClock::in_time();
 		$answer = $this->reading( $series, $clock, DeadlineClock::deadline() );
 		self::assertSame( $this->answer( $series ), $answer, 'In time: the answer without a deadline.' );
-		self::assertSame( self::COUNTS[ $series ], array_count_values( $clock->gates ), 'Each gate as often as written down.' );
-		self::assertSame( self::ORDER[ $series ], hash( 'sha256', implode( "\n", $clock->gates ) ), 'The gates in the order written down.' );
+		self::assertSame( self::counts_of( $series ), array_count_values( $clock->gates ), 'Each gate as often as written down.' );
+		self::assertSame( self::order_of( $series ), hash( 'sha256', implode( "\n", $clock->gates ) ), 'The gates in the order written down.' );
 		return $clock;
+	}
+
+	/** The gates of a reading as written down (COUNTS, or PART_2_COUNTS for R12 part 2). */
+	private static function counts_of( string $series ): array {
+		return self::COUNTS[ $series ] ?? self::PART_2_COUNTS[ $series ];
+	}
+
+	/** Their order as written down (ORDER, or PART_2_ORDER). */
+	private static function order_of( string $series ): string {
+		return self::ORDER[ $series ] ?? self::PART_2_ORDER[ $series ];
 	}
 
 	/** The place (1: the first reading) of the pick-th time a reading asks a gate. */
@@ -1425,6 +1643,258 @@ final class ReadDeadlineTest extends TestCase {
 		$this->notReadyInTimeAndStoppedWhenLate( 'ready_foreign', 'AB_MCP_Sync_Code_Stage::ready#1' );
 	}
 
+	/* ------------------------------------ R12 part 2: the way of the tree */
+
+	/** @return array<string,array{string}> */
+	public static function tree_series(): array {
+		return array(
+			'tree'    => array( 'tree' ),
+			'bigtree' => array( 'bigtree' ),
+			'unit'    => array( 'unit' ),
+		);
+	}
+
+	/**
+	 * Each gate of each reading of the way of the tree by itself: the first,
+	 * a middle and the last time the reading asks it (as gates()).
+	 *
+	 * @return array<string,array{string,string,int}>
+	 */
+	public static function tree_way_gates(): array {
+		return self::part_2_gates( array_keys( self::tree_series() ) );
+	}
+
+	/**
+	 * @param string[] $readings Keys of PART_2_COUNTS.
+	 * @return array<string,array{string,string,int}>
+	 */
+	private static function part_2_gates( array $readings ): array {
+		$out = array();
+		foreach ( $readings as $series ) {
+			foreach ( self::PART_2_COUNTS[ $series ] as $gate => $m ) {
+				foreach ( array_unique( array( 0, intdiv( $m - 1, 2 ), $m - 1 ) ) as $pick ) {
+					$out[ sprintf( '%s: %s, %d of %d', $series, $gate, $pick + 1, $m ) ] = array( $series, $gate, $pick );
+				}
+			}
+		}
+		return $out;
+	}
+
+	#[DataProvider( 'tree_series' )]
+	public function testInTimeTheTreeAsksAtExactlyItsGatesAndAnswersAsWithoutADeadline( string $series ): void {
+		$this->inTimeAsWithout( $series );
+	}
+
+	/**
+	 * A reading of R12 part 2 in time: the answer as without a deadline, its
+	 * steps and its other readings of the clock too (as many, in the same
+	 * order), and exactly its gates as written down.
+	 */
+	private function inTimeAsWithout( string $series ): void {
+		$plain   = DeadlineClock::in_time();
+		$without = $this->reading( $series, $plain, null );
+		self::assertNotInstanceOf( WP_Error::class, $without, 'Without a deadline: ' . ( $without instanceof WP_Error ? $without->get_error_code() : '' ) );
+		self::assertSame( array(), $plain->gates, 'Without a deadline no deadline asked.' );
+		$clock    = DeadlineClock::in_time();
+		$deadline = DeadlineClock::deadline();
+		self::assertSame( $without, $this->reading( $series, $clock, $deadline ), 'In time as without a deadline.' );
+		self::assertSame( self::PART_2_COUNTS[ $series ], array_count_values( $clock->gates ), 'Each gate as often as written down: ' . var_export( array_count_values( $clock->gates ), true ) . ' ' . hash( 'sha256', implode( "\n", $clock->gates ) ) );
+		self::assertSame( self::PART_2_ORDER[ $series ], hash( 'sha256', implode( "\n", $clock->gates ) ), 'The gates in the order written down.' );
+		self::assertSame( $plain->events, self::steps( $clock ), 'The same steps and other readings of the clock, in the same order, as without a deadline.' );
+		self::assertSame( array( $plain->others, $plain->others ), array( $clock->others, count( array_keys( $plain->events, 'step: clock', true ) ) ), 'As many other readings of the clock as without a deadline, each kept as a step.' );
+		self::assertNull( AB_MCP_Sync_Deadline::stop( $deadline ), 'No stop.' );
+		self::assertNotSame( array(), $plain->events, 'Its steps are seen.' );
+	}
+
+	#[DataProvider( 'tree_way_gates' )]
+	public function testOverAtOneGateTheTreeStopsThereWithoutAStepOrAReadingOfTheClockAfterIt( string $series, string $gate, int $pick ): void {
+		$this->haltedAt( $series, $gate, $pick );
+	}
+
+	/**
+	 * The gate where each translation of the way of the tree would speak,
+	 * over (Codex round 1 on the contract, finding 4): tree() passes the stop
+	 * of its reading on (never a tree changed, missing or unsafe); unit()
+	 * stops (never unreadable after its text, never too large in its first
+	 * call); and the reads of the large file the picks of the gates leave
+	 * out (after a part with more to come, the one that finds its end).
+	 *
+	 * @return array<string,array{string,string,int}>
+	 */
+	public static function tree_translations(): array {
+		return array(
+			'tree(): the tree read from its first gate, never changed' => array( 'tree', 'AB_MCP_Sync_File_Manifest::whole#1', 0 ),
+			'tree(): the text of its manifest, never changed'          => array( 'tree', 'AB_MCP_Sync_File_Manifest::text#1', 0 ),
+			'tree(): the hash about to be given, never changed'        => array( 'tree', 'AB_MCP_Sync_File_Manifest::whole#2', 0 ),
+			'tree(): the place of the tree, never missing or unsafe'   => array( 'tree', 'AB_MCP_Protected_Store::tree#2', 0 ),
+			'whole(): the text begun, never unreadable'                => array( 'unit', 'AB_MCP_Sync_File_Manifest::text#1', 0 ),
+			'whole(): the text encoded, never unreadable'              => array( 'unit', 'AB_MCP_Sync_Canon::encode#1', 0 ),
+			'left(): the unit not asked, never too large'              => array( 'unit', 'AB_MCP_Sync_File_Manifest::whole#1', 0 ),
+			'due(): after a part with more to come, never too large'   => array( 'unit', 'AB_MCP_Sync_File_Manifest::file#4', 0 ),
+			'due(): before the hash is given, never too large'         => array( 'unit', 'AB_MCP_Sync_File_Manifest::whole#2', 0 ),
+			'file(): the read after a part with more to come'          => array( 'bigtree', 'AB_MCP_Sync_File_Manifest::file#3', 3 ),
+			'file(): the read that finds the end of the large file'    => array( 'bigtree', 'AB_MCP_Sync_File_Manifest::file#3', 4 ),
+		);
+	}
+
+	#[DataProvider( 'tree_translations' )]
+	public function testOverWhereATranslationOfTheTreeWouldSpeakItPassesTheStopOnNeverItsOwnRefusal( string $series, string $gate, int $pick ): void {
+		$this->haltedAt( $series, $gate, $pick );
+	}
+
+	/**
+	 * A reading of R12 part 2 over at the pick-th time it asks a gate: the
+	 * stop its answer, by the same way up to that gate (its steps and its
+	 * other readings of the clock in order), and neither a step nor a
+	 * reading of the clock after it, nor one of another clock.
+	 */
+	private function haltedAt( string $series, string $gate, int $pick ): void {
+		$base     = $this->in_time( $series );
+		$k        = self::place( $base->gates, $gate, $pick );
+		$clock    = DeadlineClock::late_from( $k );
+		$deadline = DeadlineClock::deadline();
+		$answer   = $this->reading( $series, $clock, $deadline );
+		self::assertSame( array_slice( $base->gates, 0, $k ), $clock->gates, "The same way up to reading $k (each gate before it in time), and no reading of a deadline after it." );
+		self::assertSame( $base->until_gate( $k ), $clock->events, 'The same steps and other readings of the clock up to the gate, none after it.' );
+		self::assertSame( count( array_keys( $clock->events, 'step: clock', true ) ), $clock->others, 'No reading of the clock but those kept in order.' );
+		self::assertHalted( $series, $answer, $deadline, 'ab_mcp_read_late', self::LATE_TEXT );
+	}
+
+	/**
+	 * The answer of a reading of R12 part 2 that stopped: of tree() the stop
+	 * as it is; of unit() a reading stopped (not complete, no hash, no
+	 * entries, no cause: never too large or unreadable), its deadline
+	 * holding the stop.
+	 */
+	private static function assertHalted( string $series, $answer, $deadline, string $code, string $text ): void {
+		if ( 'unit' === $series ) {
+			self::assertIsArray( $answer, 'unit(): ' . gettype( $answer ) );
+			self::assertSame( array( false, true, null, null, null, array() ), array( $answer['complete'], $answer['stopped'], $answer['cause'], $answer['hash'], $answer['lock'], $answer['entries'] ), 'unit(): stopped, never too large or unreadable.' );
+			self::assertRefused( AB_MCP_Sync_Deadline::stop( $deadline ), $code, $text, 'The stop of its deadline.' );
+			return;
+		}
+		self::assertStopped( $answer, $deadline, $code, $text );
+	}
+
+	#[DataProvider( 'tree_series' )]
+	public function testTheClockUnknownAtAMiddleGateStopsTheTreeAsItsOwnStop( string $series ): void {
+		$base     = $this->in_time( $series );
+		$k        = intdiv( count( $base->gates ) + 1, 2 );
+		$clock    = DeadlineClock::unknown_from( $k );
+		$deadline = DeadlineClock::deadline();
+		$answer   = $this->reading( $series, $clock, $deadline );
+		self::assertSame( array_slice( $base->gates, 0, $k ), $clock->gates, "Reading $k: " . $base->gates[ $k - 1 ] );
+		self::assertSame( $base->until_gate( $k ), $clock->events );
+		self::assertHalted( $series, $answer, $deadline, 'ab_mcp_read_clock', self::CLOCK_TEXT );
+	}
+
+	public function testAnotherHashIsAChangedTreeInTimeAndTheStopWhenLateAtTheLastGateOfItsReading(): void {
+		$this->refusedInTimeAndStoppedWhenLate( 'tree_other', 'ab_mcp_store_tree_changed', 'could not be confirmed against the hash it was asked with', 'AB_MCP_Sync_File_Manifest::whole#2' );
+	}
+
+	public function testATreeNotThereIsMissingInTimeAndTheStopWhenLateAtItsPlace(): void {
+		$this->refusedInTimeAndStoppedWhenLate( 'tree_missing', 'ab_mcp_store_tree_missing', 'The tree is not in its group of the protected store', 'AB_MCP_Protected_Store::tree#2' );
+	}
+
+	/**
+	 * A clock that is no DeadlineClock (that one answers the time of the
+	 * call in time, always): each reading five seconds after the one before,
+	 * from NOW; $log keeps each reading, a gate by its name (a DeadlineClock
+	 * in time tells them, its time unused), any other as «other».
+	 */
+	private static function ticking( array &$log ): \Closure {
+		$seen = DeadlineClock::in_time();
+		$now  = DeadlineClock::NOW;
+		return static function () use ( $seen, &$now, &$log ) {
+			$gates = count( $seen->gates );
+			$seen();
+			$log[] = count( $seen->gates ) > $gates ? (string) end( $seen->gates ) : 'other';
+			$now  += 5.0;
+			return $now;
+		};
+	}
+
+	/**
+	 * The large tree read with the ticking clock: tree() (or unit(), its
+	 * time of the call TREE_BUDGET from NOW) with a deadline until $until, or
+	 * without one (null).
+	 *
+	 * @return array{0:mixed,1:mixed,2:string[]} The answer, the deadline, the log of the clock.
+	 */
+	private static function ticked( string $how, ?float $until ): array {
+		$log      = array();
+		$deadline = null === $until ? null : AB_MCP_Sync_Deadline::at( $until );
+		\AB_MCP_Sync_Env::$clock = self::ticking( $log );
+		try {
+			$answer = 'tree' === $how
+				? AB_MCP_Protected_Store::tree( 'stage', self::$big['gid'], self::BIG, self::$big['hash'], $deadline )
+				: \AB_MCP_Sync_File_Manifest::unit( dirname( self::$big['path'] ), basename( self::$big['path'] ), 'live', DeadlineClock::NOW + AB_MCP_Protected_Store::TREE_BUDGET, true, 'tree', $deadline );
+		} finally {
+			\AB_MCP_Sync_Env::$clock = null;
+		}
+		return array( $answer, $deadline, $log );
+	}
+
+	public function testTheTreeIsReadUntilTheEarlierOfItsDeadlineAndTreeBudgetInBothOrders(): void {
+		// Codex round 1 on the contract, finding 4: the least of the deadline
+		// of the caller and TREE_BUDGET, checked in both orders.
+		// TREE_BUDGET first (the deadline far): the tree too large for its
+		// time, so changed, as without a deadline; the deadline not stopped.
+		list( $answer, $deadline, $log ) = self::ticked( 'tree', 1.0e9 );
+		self::assertRefused( $answer, 'ab_mcp_store_tree_changed', self::TREE_CHANGED_TEXT, 'TREE_BUDGET first: changed.' );
+		self::assertNull( AB_MCP_Sync_Deadline::stop( $deadline ), 'The deadline not stopped.' );
+		self::assertSame( 'other', end( $log ), 'Ended by the time of the call (due()), no reading after it.' );
+		list( $without, , $plain ) = self::ticked( 'tree', null );
+		self::assertRefused( $without, 'ab_mcp_store_tree_changed', self::TREE_CHANGED_TEXT, 'Without a deadline the same.' );
+		self::assertSame( array( 'other' ), array_values( array_unique( $plain ) ), 'Without a deadline only the time of the call asked.' );
+		$start = array_search( 'other', $log, true );
+		self::assertIsInt( $start, 'The start of TREE_BUDGET read.' );
+		self::assertGreaterThan( $start + 9, count( $log ), 'TREE_BUDGET ran out within the reading of the tree.' );
+		// The deadline first: 15 s after the start of TREE_BUDGET (45 s).
+		$begun = DeadlineClock::NOW + 5.0 * ( $start + 1 );
+		list( $answer, $deadline, $log ) = self::ticked( 'tree', $begun + 15.0 );
+		self::assertStopped( $answer, $deadline, 'ab_mcp_read_late', self::LATE_TEXT );
+		self::assertStringStartsWith( 'AB_MCP_Sync_File_Manifest::', end( $log ), 'Stopped at a gate of the reading of the tree, nothing read after it: ' . implode( ', ', array_slice( $log, $start ) ) );
+		self::assertLessThan( $start + 9, count( $log ), 'Before TREE_BUDGET ran out.' );
+		// The same in unit() (its first call): TREE_BUDGET first, too large;
+		// the deadline first, stopped, never too large.
+		list( $unit, $deadline ) = self::ticked( 'unit', 1.0e9 );
+		self::assertSame( array( false, false, 'too_large', null ), array( $unit['complete'], $unit['stopped'], $unit['cause'], $unit['hash'] ), 'TREE_BUDGET first: too large.' );
+		self::assertNull( AB_MCP_Sync_Deadline::stop( $deadline ) );
+		list( $unit, $deadline ) = self::ticked( 'unit', DeadlineClock::NOW + 15.0 );
+		self::assertHalted( 'unit', $unit, $deadline, 'ab_mcp_read_late', self::LATE_TEXT );
+	}
+
+	public function testAValueThatIsNoDeadlineIsRefusedByTheTreeAndTheManifestWithoutAReadingOfTheClockOrAStep(): void {
+		$made = AB_MCP_Sync_Deadline::at( -1 );
+		foreach ( array( DeadlineClock::UNTIL, 'soon', $made ) as $value ) {
+			foreach ( array( 'tree', 'unit' ) as $series ) {
+				$clock  = DeadlineClock::in_time();
+				$answer = $this->reading( $series, $clock, $value );
+				if ( 'tree' === $series ) {
+					self::assertRefused( $answer, 'ab_mcp_read_deadline', self::DEADLINE_TEXT, 'tree(): ' . gettype( $value ) );
+				} else {
+					self::assertHalted( $series, $answer, $value, 'ab_mcp_read_deadline', self::DEADLINE_TEXT );
+				}
+				self::assertSame( array( array(), 0, array() ), array( $clock->gates, $clock->others, $clock->events ), "No clock read, nothing read: $series, " . gettype( $value ) );
+			}
+		}
+	}
+
+	public function testAStoreThisRequestHasNotDecidedIsNotDecidedByTheTreeUnderADeadline(): void {
+		$proof = new ReflectionProperty( AB_MCP_Protected_Store::class, 'proof' );
+		AB_MCP_Protected_Store::forget();
+		$clock    = DeadlineClock::in_time();
+		$deadline = DeadlineClock::deadline();
+		$answer   = $this->reading( 'tree', $clock, $deadline );
+		self::assertStopped( $answer, $deadline, 'ab_mcp_store_undecided', self::UNDECIDED_TEXT );
+		self::assertNull( $proof->getValue(), 'The store not decided by the reading.' );
+		self::assertSame( array( 'AB_MCP_Protected_Store::tree#1' ), $clock->gates, 'Stopped at its first gate, nothing of the store read.' );
+		self::assertSame( $clock->gates, $clock->events );
+		self::assertIsArray( $this->reading( 'tree', DeadlineClock::in_time(), null ), 'Without a deadline the reading decides it, as before.' );
+		self::assertNotNull( $proof->getValue() );
+	}
+
 	/* ------------------------------------------------------- prepare() */
 
 	/** What prepare() is asked with for the swap of the unit, made new from the stage: its run, unit, the series single and a time limit on the clock of the test. */
@@ -1569,18 +2039,12 @@ final class ReadDeadlineTest extends TestCase {
 	/**
 	 * The gates of the tree of the stage read in time (R12 part 2, its
 	 * reading in the swap between ready() and signed()), its answer the one
-	 * without a deadline. Its counts are not written down here (the tests of
-	 * the tree way follow).
+	 * without a deadline, its gates as written down (PART_2_COUNTS).
 	 *
 	 * @return string[]
 	 */
 	private function tree_gates(): array {
-		$clock  = DeadlineClock::in_time();
-		$answer = $this->reading( 'tree', $clock, DeadlineClock::deadline() );
-		self::assertIsArray( $answer, $answer instanceof WP_Error ? $answer->get_error_code() . ': ' . $answer->get_error_message() : gettype( $answer ) );
-		self::assertSame( $this->reading( 'tree', DeadlineClock::in_time(), null ), $answer, 'In time: the tree as without a deadline.' );
-		self::assertNotSame( array(), $clock->gates, 'The tree read under the deadline.' );
-		return $clock->gates;
+		return $this->in_time( 'tree' )->gates;
 	}
 
 	public function testThePreparedSwapDecidesTheStoreBeforeItsDeadlineAndReadsTheStageAndTheSignedManifestUnderIt(): void {
