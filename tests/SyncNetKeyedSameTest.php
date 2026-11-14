@@ -206,6 +206,94 @@ final class SyncNetKeyedSameTest extends TestCase {
 		self::assertSame( 0, $met['E12-limit'], 'A pattern of the copy failed at a limit of PCRE: a finding for the lead (E12).' );
 	}
 
+	/* ------------------------------------ a limit of PCRE (part 1a.3, A1) */
+
+	/**
+	 * Codex A1 over part 1a: where the pattern of RD:306 fails at a limit of
+	 * PCRE over the whole text before a sign but not over its parts, the
+	 * copy of 8daf33f cuts the blanks by trim() (RD:307), which keeps
+	 * U+00A0, U+2000 to U+200B, U+3000, U+FEFF and \f and cuts \0; keyed()
+	 * holds each name the copy holds then (5a.3 with C1: more held at a
+	 * limit of PCRE, never less). The limit forced: JIT off and
+	 * pcre.backtrack_limit 1000, reset after; with the defaults neither holds
+	 * these names.
+	 */
+	public function testAPatternThatFailsAtALimitOfPcreOnlyOverTheWholeTextLosesNoName(): void {
+		$blanks = str_repeat( ' ', 3000 );
+		$cases  = array(
+			// Codex A1: the first part, cut at its start, loses its U+00A0.
+			array( "\u{00A0}a" . $blanks . ':x:', '_a_:x' ),
+			array( "\u{3000}a" . $blanks . ':x:', '_a_:x' ),
+			array( "\u{2003}a" . $blanks . ':x:', '_a_:x' ),
+			array( "\fa" . $blanks . ':x:', '_a_:x' ),
+			array( "\u{200B}a" . $blanks . ':x:', "\u{200B}a_:x" ),
+			array( "\u{FEFF}a" . $blanks . ':x:', "\u{FEFF}a_:x" ),
+			// The end of the last part: trim() cuts \0, keeps U+00A0 and U+200B.
+			array( 'a' . $blanks . ":x\0:", 'a_:x' ),
+			array( 'a' . $blanks . ":x\u{00A0}:", 'a_:x_' ),
+			array( 'a' . $blanks . ":x\u{200B}:", "a_:x\u{200B}" ),
+		);
+		foreach ( $cases as $case ) {
+			list( $text, $key ) = $case;
+			$shown              = bin2hex( substr( $text, 0, 8 ) ) . '…' . bin2hex( substr( $text, -8 ) ) . ' with ' . bin2hex( $key );
+			self::assertFalse( AB_Test_Keyed_8daf33f::keyed( $text, array( $key ) ), $shown . ': the copy, with the defaults.' );
+			self::assertFalse( AB_MCP_Sync_Net::keyed( $text, array( $key ) ), $shown . ': with the defaults.' );
+			$at = self::at_limit(
+				'0',
+				'1000',
+				static function () use ( $text, $key ): array {
+					return array( AB_Test_Keyed_8daf33f::keyed( $text, array( $key ) ), AB_MCP_Sync_Net::keyed( $text, array( $key ) ) );
+				}
+			);
+			self::assertTrue( $at[0], $shown . ': the copy holds it by trim() (the limit took effect).' );
+			self::assertTrue( $at[1], $shown . ': keyed() loses a name the copy holds at a limit of PCRE.' );
+		}
+	}
+
+	/**
+	 * The search of part 1a.3 (belege/r12b-1a3-suche.php, way A) over built
+	 * texts: at each sign where normalize_key() of the whole text before it
+	 * reads otherwise at a limit of PCRE than with the defaults (RD:306 cut
+	 * by trim(), RD:310 joined by str_replace()), that form as the one key,
+	 * which the copy holds there by construction; keyed() holds it too, at
+	 * each limit. Blanks of ASCII, of Unicode and dashes inside, U+00A0,
+	 * U+2000 to U+200B, U+3000, U+FEFF, \f and \0 at the start or at the end.
+	 */
+	public function testEachFormOfTheWayOfBeforeAtALimitOfPcreIsHeld(): void {
+		$tested = 0;
+		$lost   = array();
+		foreach ( array( array( '0', '10' ), array( '0', '100' ), array( '0', '1000' ), array( '1', '100' ), array( '1', '1000' ) ) as $setting ) {
+			foreach ( self::at_limit_texts() as $text ) {
+				$size = strlen( $text );
+				$at   = strcspn( $text, '=:;"\'' );
+				while ( $at < $size ) {
+					$before  = rtrim( substr( $text, 0, $at ), " \t\n\r\x0B\f" );
+					$default = AB_MCP_Redactor::normalize_key( $before );
+					$answer  = self::at_limit(
+						$setting[0],
+						$setting[1],
+						static function () use ( $text, $before, $default ): ?array {
+							$form = AB_MCP_Redactor::normalize_key( $before );
+							if ( $form === $default || '' === $form ) {
+								return null;
+							}
+							return array( $form, AB_Test_Keyed_8daf33f::keyed( $text, array( $form ) ), AB_MCP_Sync_Net::keyed( $text, array( $form ) ) );
+						}
+					);
+					if ( null !== $answer ) {
+						++$tested;
+						if ( $answer[1] && ! $answer[2] && count( $lost ) < 10 ) {
+							$lost[] = implode( ', ', $setting ) . ': ' . bin2hex( substr( $text, 0, 12 ) ) . '…' . bin2hex( substr( $text, -12 ) ) . ' (' . strlen( $text ) . ' bytes) at ' . $at . ', key ' . bin2hex( $answer[0] );
+						}
+					}
+					$at += 1 + strcspn( $text, '=:;"\'', $at + 1 );
+				}
+			}
+		}
+		self::assertGreaterThan( 1000, $tested, 'Signs where a limit of PCRE changes the form of the copy.' );
+		self::assertSame( array(), $lost, 'keyed() loses names the copy holds at a limit of PCRE (hex).' );
+	}
+
 	/* ---------------------------------------------------------- comparison */
 
 	/**
@@ -738,6 +826,48 @@ final class SyncNetKeyedSameTest extends TestCase {
 			}
 		}
 		return false;
+	}
+
+	/**
+	 * The texts of testEachFormOfTheWayOfBeforeAtALimitOfPcreIsHeld(): a run
+	 * of 30, 300 or 3000 blanks inside, a blank or \0 at the start of the
+	 * text, at the end of a part or both.
+	 *
+	 * @return string[]
+	 */
+	private static function at_limit_texts(): array {
+		$out = array();
+		foreach ( array( 30, 300, 3000 ) as $n ) {
+			foreach ( array( ' ', "\t", "\u{00A0}", ' -' ) as $blank ) {
+				$run = str_repeat( $blank, $n );
+				foreach ( array( "\u{00A0}", "\u{3000}", "\u{2003}", "\f", "\u{200B}", "\u{FEFF}", "\0", "\0 \0\u{00A0}", '' ) as $lead ) {
+					foreach ( array( '', "\0", "\u{00A0}", "\u{200B}", "\u{FEFF}" ) as $end ) {
+						$out[] = $lead . 'a' . $run . ':x' . $end . ':';
+						$out[] = $lead . 'a:' . $run . 'x' . $end . ':y:';
+					}
+				}
+				$out[] = 'a--b' . $run . ':x--y:';
+				$out[] = "a\tb" . $run . ":x\ty:";
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * $then with pcre.jit and pcre.backtrack_limit as given, both reset after.
+	 *
+	 * @return mixed What $then gives.
+	 */
+	private static function at_limit( string $jit, string $limit, callable $then ) {
+		$was = array( (string) ini_get( 'pcre.jit' ), (string) ini_get( 'pcre.backtrack_limit' ) );
+		ini_set( 'pcre.jit', $jit );
+		ini_set( 'pcre.backtrack_limit', $limit );
+		try {
+			return $then();
+		} finally {
+			ini_set( 'pcre.jit', $was[0] );
+			ini_set( 'pcre.backtrack_limit', $was[1] );
+		}
 	}
 
 	/* ------------------------------------------------------------- helpers */

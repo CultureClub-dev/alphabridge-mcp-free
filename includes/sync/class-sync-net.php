@@ -858,7 +858,7 @@ final class AB_MCP_Sync_Net {
 			}
 			// As normalize_key() reads it; null: a pattern failed otherwise
 			// than at UTF-8, so nothing tells it is no key (held).
-			$normal = self::keyed_normal( $part, $last, $text[ $at ], $run, $keys, $tail );
+			$normal = self::keyed_normal( $text, $part, $last, $text[ $at ], $run, $keys, $tail );
 			if ( null === $normal || true === $normal ) {
 				return true;
 			}
@@ -920,9 +920,13 @@ final class AB_MCP_Sync_Net {
 	 * Whether the text before a sign ends in a name as normalize_key() reads
 	 * it (Net:821 at 8daf33f), from the parts between the signs: this part
 	 * cut at its end (and at its start where it is the first of the run),
-	 * after what the run holds of the parts before it. Then the run takes
-	 * this part for the signs after it (keyed_take()).
+	 * after what the run holds of the parts before it. Where a form
+	 * normalize_key() gives at a limit of PCRE ends in a name
+	 * (keyed_other()), the whole text before the sign as normalize_key()
+	 * reads it. Then the run takes this part for the signs after it
+	 * (keyed_take()).
 	 *
+	 * @param string $text The layer.
 	 * @param string $part The text from the last sign (or the cut) to this one.
 	 * @param string $last $part without white space at its end (Net:820).
 	 * @param string $sign This sign.
@@ -931,7 +935,7 @@ final class AB_MCP_Sync_Net {
 	 * @param int    $tail The length of the longest name.
 	 * @return bool|null Null where a pattern failed otherwise than at UTF-8.
 	 */
-	private static function keyed_normal( $part, $last, $sign, array &$run, array $keys, $tail ) {
+	private static function keyed_normal( $text, $part, $last, $sign, array &$run, array $keys, $tail ) {
 		$plain = strspn( $part, '!#$%&()*+,./0123456789<>?@[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~' ) === strlen( $part );
 		if ( $run['raw'] && ! $plain ) {
 			$utf = self::keyed_utf( $part );
@@ -956,7 +960,52 @@ final class AB_MCP_Sync_Net {
 		if ( self::keyed_ends( substr( $form, -$tail ), $keys ) ) {
 			return true;
 		}
+		// A pattern may fail at a limit of PCRE over the whole text before the
+		// sign and not over its parts (R12b part 1a.3, Codex A1): read it as
+		// normalize_key() reads it where its forms there may hold a name.
+		$other = self::keyed_other( $last, $plain, $run, $now, $keys, $tail );
+		if ( null === $other ) {
+			return null;
+		}
+		if ( $other && self::keyed_ends( AB_MCP_Redactor::normalize_key( substr( $text, 0, $run['from'] + strlen( $last ) ) ), $keys ) ) {
+			return true;
+		}
 		return self::keyed_take( $part, $plain, $sign, $run, $tail );
+	}
+
+	/**
+	 * Whether the text before a sign ends in a name in a form normalize_key()
+	 * gives of it where a pattern fails at a limit of PCRE over the whole
+	 * text (R12b part 1a.3): the blanks cut by trim() (RD:306–307) and joined
+	 * by str_replace() (RD:310–311), each way as far as the text allows it
+	 * (the pattern only while it is UTF-8), from what the run holds; a
+	 * failure at RD:308–309 gives '', which ends in no name.
+	 *
+	 * @param string $last  The part before the sign without white space at its end.
+	 * @param bool   $plain Whether normalize_key() leaves each of its bytes.
+	 * @param array  $run   keyed_run().
+	 * @param array  $now   keyed_form() of $last in the way of the run.
+	 * @param array  $keys  keyed_lengths().
+	 * @param int    $tail  The length of the longest name.
+	 * @return bool|null Null where a pattern failed otherwise than at UTF-8.
+	 */
+	private static function keyed_other( $last, $plain, array $run, array $now, array $keys, $tail ) {
+		$nows = array( 1 => $now );
+		if ( $run['raw'] ) {
+			$nows = array( $now, self::keyed_form( $last, $plain, false, $run['first'], true ) );
+			if ( null === $nows[1] ) {
+				return null;
+			}
+		}
+		foreach ( $nows as $way => $form ) {
+			if ( $run['low'][ $way ] && null !== $form[0] && self::keyed_ends( substr( $run['acc'][ $way ][0] . $form[0], -$tail ), $keys ) ) {
+				return true;
+			}
+			if ( self::keyed_ends( substr( $run['acc'][ $way ][1] . $form[1], -$tail ), $keys ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**

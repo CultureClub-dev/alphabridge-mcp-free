@@ -374,6 +374,26 @@ e('r12b-keyed-camel', 'keyed_form(): camelCase split (E9)', NET, CAMEL, CAMEL.re
 e('r12b-keyed-form-lower', 'keyed_form(): in lower case (E3)', NET, "\t\t$lower  = strtolower( $split );", "\t\t$lower  = $split;", 'same', NEWC)
 BLANKS = "\t\t$pattern = '/^[\\s\\p{Z}\\x{200B}\\x{FEFF}]+|[\\s\\p{Z}\\x{200B}\\x{FEFF}]+$/u';"
 e('r12b-keyed-blanks-lead', 'keyed_blanks(): U+200B and U+FEFF cut at the start of the text (E7)', NET, BLANKS, swap(BLANKS, '/^[\\s\\p{Z}\\x{200B}\\x{FEFF}]+|', '/^[\\s\\p{Z}]+|', 1), 'same', NEWC)
+# R12b part 1a.3 (Codex A1): a pattern of normalize_key() that fails at a limit
+# of PCRE over the whole text before a sign only; held by the fixed cases of
+# that test (at the limit, and with the defaults for the exact reading). Not
+# as an entry: the form joined by str_replace() in keyed_other() (no case on
+# PCRE 10.48 where RD:310 fails over the whole text only,
+# belege/r12b-1a3-suche-ohne-ersetzen.log, r12b-1a3-verbinden.log; kept so
+# that the proof needs nothing of PCRE), its check of the form of the run,
+# which keyed_normal() made before, and null where the form cut by trim()
+# fails (held, the exception of E12).
+LIMIT = 'testAPatternThatFailsAtALimitOfPcreOnlyOverTheWholeTextLosesNoName'
+OTHER = "\t\tif ( $other && self::keyed_ends( AB_MCP_Redactor::normalize_key( substr( $text, 0, $run['from'] + strlen( $last ) ) ), $keys ) ) {"
+e('r12b-keyed-other-read', 'keyed_normal(): at a limit of PCRE the text before the sign read as normalize_key() reads it (A1)', NET, OTHER, "\t\tif ( false ) {", 'same', LIMIT)
+e('r12b-keyed-other-exact', 'keyed_normal(): there the answer of normalize_key(), not the form of a fallback alone (C1)', NET, OTHER, "\t\tif ( $other ) {", 'same', LIMIT)
+e('r12b-keyed-other-before', 'keyed_normal(): the whole text before the sign read, not its last part (A1)', NET, OTHER,
+  swap(OTHER, "substr( $text, 0, $run['from'] + strlen( $last ) )", "substr( $text, $run['from'], strlen( $last ) )", 1), 'same', LIMIT)
+TRIMMED = "\t\t\t$nows = array( $now, self::keyed_form( $last, $plain, false, $run['first'], true ) );"
+e('r12b-keyed-other-trim', 'keyed_other(): this part cut by trim() as well (A1)', NET, TRIMMED, "\t\t\t$nows = array( $now, $now );", 'same', LIMIT)
+JOINED = "\t\t\tif ( $run['low'][ $way ] && null !== $form[0] && self::keyed_ends( substr( $run['acc'][ $way ][0] . $form[0], -$tail ), $keys ) ) {"
+e('r12b-keyed-other-pattern', 'keyed_other(): the blanks cut by trim() and joined by the pattern (A1)', NET, JOINED, "\t\t\tif ( false ) {", 'same', LIMIT)
+e('r12b-keyed-other-acc', 'keyed_other(): the parts before as the run holds them cut by trim() (A1)', NET, JOINED, swap(JOINED, "$run['acc'][ $way ][0]", "$run['acc'][0][0]", 1), 'same', LIMIT)
 THERE = 'testALineOfThisSiteWhoseNameTheStagingSiteHoldsIsHeldBeforeItIsStored'
 HN = "\t\t\tif ( is_array( $line ) && isset( $line['env'], $line['ref'], $line['held'] ) && in_array( $line['env'], self::NAMED, true ) && 1 === preg_match( self::HASHED, (string) $line['ref'] ) ) {"
 e('r2-held-names-held', 'held_names(): the lines held only (A1)', EN, HN, HN.replace(", $line['held'] )", ' )'), 'env', THERE)
