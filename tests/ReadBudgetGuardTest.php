@@ -34,6 +34,18 @@
  * recursion, and the deadline of a call whose arguments the model does not
  * hold.
  *
+ * Part 2.3c mends no. 1 to 4 of Codex, round 2 over the guard
+ * (belege/codex-r12b-w2-antwort.md), and the three spellings of the Fable
+ * check (belege/fable-pruefstelle5-waechter-bericht.md, P1 to P3), after the
+ * decision of 14.11. 21:01 (option a): the answer to a halt is one of a
+ * fixed list of whole forms (return $v; alone, a whole entry of ANSWERS,
+ * break; in the pair of R2), a translation its whole call; a value of
+ * FACHWERT returned whole is no form of R7 (E26 dropped); the sources of the
+ * lists are counted, not compared; and each branch accepted at a halt tells
+ * the identifier of its form. The guard reads the spelling of the answer:
+ * that a form passes the halt on unchanged is shown by the tests of part 7
+ * (the boundary N7 of the order).
+ *
  * A change of the code on these ways turns this red until the lists are kept
  * by hand, with the reason.
  *
@@ -303,7 +315,7 @@ PHP;
 	/* ---------- Part 2.2: the rules R1 to R7 at the head ---------- */
 
 	public function testTheRulesReadEveryFunctionOfG1WithoutAProblem(): void {
-		self::assertSame( array(), self::rules()['problems'], 'Each statement read, each check with its form in CHECKS, each entry of ATOMIC, CHECKS, FACHWERT, TRANSLATIONS, COMPARE and FRAME_OUT used.' );
+		self::assertSame( array(), self::rules()['problems'], 'Each statement read, each check with its form in CHECKS, each entry of ATOMIC, CHECKS, FACHWERT, COMPARE and FRAME_OUT used, each entry of ANSWERS at as many places as it says.' );
 	}
 
 	public function testEachViolationOfTheRulesIsAnOpenException(): void {
@@ -373,13 +385,31 @@ PHP;
 			self::assertArrayHasKey( $fn, self::model()['reach'], $fn );
 			self::assertArrayNotHasKey( $fn, self::model()['chain'], $fn );
 		}
-		foreach ( $lists['TRANSLATIONS'] as $fn => list( $to, $places, $why ) ) {
-			self::assertIsInt( $places, $fn . ': the number of its places.' );
-			self::assertGreaterThan( 0, $places, $fn );
-			self::assertNotSame( '', $why, $fn );
+		foreach ( $lists['ANSWERS'] as $fn => $entries ) {
 			self::assertArrayHasKey( $fn, self::model()['reach'], $fn );
-			self::assertArrayHasKey( $to, self::model()['methods'], $fn . ': the translation is a function of the plugin.' );
-			self::assertArrayNotHasKey( $fn, $lists['FACHWERT'], $fn . ': a function answers the halt or a Fachwert, not both.' );
+			self::assertArrayNotHasKey( $fn, self::model()['chain'], $fn );
+			self::assertIsList( $entries, $fn );
+			self::assertNotSame( array(), $entries, $fn );
+			foreach ( $entries as $entry ) {
+				self::assertSame( array( 0, 1, 2, 3 ), array_keys( $entry ), $fn . ': the statements, the variable of the halt or null, the number of its places, the reason.' );
+				list( $statements, $halt, $places, $why ) = $entry;
+				self::assertIsString( $statements, $fn );
+				$parses = true;
+				try {
+					token_get_all( '<?php ' . $statements, TOKEN_PARSE );
+				} catch ( \ParseError $error ) {
+					$parses = false;
+				}
+				self::assertTrue( $parses, $fn . ': the answer is whole statements of PHP (the branch at a halt, token by token; the rules take it only where its last statement returns a value, and tell an entry not used).' );
+				self::assertDoesNotMatchRegularExpression( '/^\s*return\s+\$\w+\s*;\s*$/', $statements, $fn . ': the return of a variable alone is the form SAME where the variable holds the halt, and else no answer to list.' );
+				if ( null !== $halt ) {
+					self::assertMatchesRegularExpression( '/^\$[A-Za-z_][A-Za-z0-9_]*$/', $halt, $fn . ': the variable of the halt.' );
+					self::assertStringContainsString( $halt . '->', $statements, $fn . ': the statements read the halt in the variable they name.' );
+				}
+				self::assertIsInt( $places, $fn . ': the number of its places.' );
+				self::assertGreaterThan( 0, $places, $fn );
+				self::assertNotSame( '', $why, $fn );
+			}
 		}
 		foreach ( $lists['FRAME_OUT'] as $edge => list( $sites, $why ) ) {
 			self::assertIsInt( $sites, $edge . ': the number of its call sites.' );
@@ -427,9 +457,9 @@ PHP;
 		$all = array(
 			'ATOMIC'       => array(),
 			'CHECKS'       => array(),
-			'FACHWERT'     => array(),
-			'TRANSLATIONS' => array(),
-			'COMPARE'      => array(),
+			'FACHWERT'  => array(),
+			'ANSWERS'   => array(),
+			'COMPARE'   => array(),
 			'SORTS'     => array( 'usort', 'uasort', 'uksort' ),
 			'FILTERS'   => array( 'apply_filters' ),
 			'FRAME_OUT' => array(),
@@ -451,6 +481,17 @@ PHP;
 			'rules' => $rules,
 			'open'  => ReadBudgetRules::by_function( $rules['violations'] ),
 		);
+	}
+
+	/**
+	 * An entry of ANSWERS in a self-test: the whole statements of a branch at
+	 * a halt, the number of its places, and the variable of the halt where
+	 * the statements name it.
+	 *
+	 * @return array{0:string,1:?string,2:int,3:string}
+	 */
+	private static function answer( string $statements, int $places, ?string $halt = null ): array {
+		return array( $statements, $halt, $places, 'In the self-test.' );
 	}
 
 	public function testR1StepsOnlyThroughTheHelperOrInAnAtomicSeam(): void {
@@ -608,10 +649,11 @@ PHP;
 				'is_string' => array( 'sonst', false ),
 			),
 			array(
-				'CHECKS' => array(
+				'CHECKS'  => array(
 					'AB_MCP_Sync_Deadline::left'    => 'wp',
 					'AB_MCP_Sync_Code_Swap::stopped' => 'true',
 				),
+				'ANSWERS' => array( 'AB_MCP_Sync_Code_Swap::prepare' => array( self::answer( 'return AB_MCP_Sync_Deadline::stop( $deadline );', 3 ) ) ),
 			),
 			array(
 				'HELPERS'      => array( 'AB_MCP_Sync_Code_Swap::stopped' => true ),
@@ -690,6 +732,7 @@ PHP;
 			array(
 				'CHECKS'   => array( 'AB_MCP_Sync_Code_Swap::stopped' => 'true' ),
 				'FACHWERT' => array( 'AB_MCP_Sync_Code_Swap::walk' => array( 'null', 'In the self-test.' ) ),
+				'ANSWERS'  => array( 'AB_MCP_Sync_Code_Swap::walk' => array( self::answer( 'return null;', 3 ) ) ),
 			),
 			array(
 				'HELPERS'      => array( 'AB_MCP_Sync_Code_Swap::stopped' => true ),
@@ -775,8 +818,14 @@ PHP;
 				'array_map'         => array( 'sonst', false ),
 			),
 			array(
-				'ATOMIC' => array( 'AB_MCP_Sync_Code_Swap_Calls::read' ),
-				'CHECKS' => array( 'AB_MCP_Sync_Deadline::left' => 'wp' ),
+				'ATOMIC'  => array( 'AB_MCP_Sync_Code_Swap_Calls::read' ),
+				'CHECKS'  => array( 'AB_MCP_Sync_Deadline::left' => 'wp' ),
+				'ANSWERS' => array(
+					'AB_MCP_Sync_Code_Swap::prepare' => array(
+						self::answer( 'self::calls()->close( $name ); return AB_MCP_Sync_Deadline::stop( $deadline );', 1 ),
+						self::answer( 'return AB_MCP_Sync_Deadline::stop( $deadline );', 1 ),
+					),
+				),
 			),
 			array(),
 			array( 'CHAIN' => array( 'includes/a.php::AB_MCP_Sync_Env::held' => 'Kette' ) )
@@ -789,7 +838,8 @@ PHP;
 					// An entry without a check; after a check green; a seam after an entry with a step (work between).
 					'R4 entry AB_MCP_Sync_Env::held',
 					'R4 seam AB_MCP_Sync_Code_Swap_Calls::read',
-					// close() after a halt is allowed (no step of the disk); a seam after a check with statements
+					// close() after a halt is allowed (no step of the disk) as a whole answer of ANSWERS (part 2.3c:
+					// not by a rule of cleanup); a seam after a check with statements
 					// without work between, and in a ternary after the test that there is no halt: green. An
 					// entry in a closure (a check in it needed).
 					'R4 entry AB_MCP_Sync_Env::held',
@@ -1025,6 +1075,7 @@ PHP;
 			array(
 				'CHECKS'   => array( 'AB_MCP_Sync_Deadline::left' => 'wp' ),
 				'FACHWERT' => array( 'AB_MCP_Sync_Code_Swap::fach' => array( 'null', 'In the self-test.' ) ),
+				'ANSWERS'  => array( 'AB_MCP_Sync_Code_Swap::prepare' => array( self::answer( 'return AB_MCP_Sync_Deadline::stop( $deadline );', 1 ) ) ),
 			)
 		);
 		self::assertSame( array(), $own['rules']['problems'] );
@@ -1047,8 +1098,9 @@ PHP;
 	/* ---------- Part 2.3a: the changes after Codex, round 1 over the guard ---------- */
 
 	public function testEachBranchAtAHaltAnswersAsPrescribed(): void {
-		// Codex A1: a branch at a halt answers the same halt, a Fachwert of FACHWERT of its function, the halt the
-		// deadline holds, or a translation of TRANSLATIONS; before it only cleanup (no work, check or clock).
+		// Codex A1 (round 1), in the forms of part 2.3c: a branch at a halt answers the same halt (return $v; alone)
+		// or a whole answer of ANSWERS of its function (its Fachwert, the halt the deadline holds, a translation as
+		// its whole call); nothing before the return that is not in the entry, no return in a ternary.
 		$code = <<<'PHP'
 <?php
 final class AB_MCP_Sync_Code_Swap {
@@ -1199,10 +1251,16 @@ PHP;
 				'WP_Error->get_error_message' => array( 'sonst', false ),
 			),
 			array(
-				'ATOMIC'       => array( 'AB_MCP_Sync_Code_Swap_Calls::read' ),
-				'CHECKS'       => array( 'AB_MCP_Sync_Deadline::left' => 'wp' ),
-				'FACHWERT'     => array( 'AB_MCP_Sync_Code_Swap::fach' => array( "''", 'In the self-test.' ) ),
-				'TRANSLATIONS' => array( 'AB_MCP_Sync_Code_Swap::prepare' => array( 'AB_MCP_Sync_Code_Swap::refusal', 1, 'In the self-test.' ) ),
+				'ATOMIC'   => array( 'AB_MCP_Sync_Code_Swap_Calls::read' ),
+				'CHECKS'   => array( 'AB_MCP_Sync_Deadline::left' => 'wp' ),
+				'FACHWERT' => array( 'AB_MCP_Sync_Code_Swap::fach' => array( "''", 'In the self-test.' ) ),
+				'ANSWERS'  => array(
+					'AB_MCP_Sync_Code_Swap::fach'    => array( self::answer( "return '';", 1 ) ),
+					'AB_MCP_Sync_Code_Swap::prepare' => array(
+						self::answer( 'return self::refusal( $d->get_error_code(), \'Not read: \' . $d->get_error_message() );', 1, '$d' ),
+						self::answer( 'return AB_MCP_Sync_Deadline::stop( $deadline );', 1 ),
+					),
+				),
 			),
 			array(
 				'INST_BYNAME' => array(
@@ -1216,13 +1274,14 @@ PHP;
 		self::assertSame(
 			array(
 				'AB_MCP_Sync_Code_Swap::fach'    => array(
-					// Its own Fachwert '' (FACHWERT): green; null is not its answer.
+					// Its own Fachwert '' (FACHWERT, its entry of ANSWERS): green; null is not its answer.
 					"R2 foreach ( \$list as \$x )",
 				),
 				'AB_MCP_Sync_Code_Swap::prepare' => array(
 					// The same halt: green. true (Codex A1, SW:675), the call again (Codex A1), a refusal without the
-					// code of the halt, work before the return, a check before it, an if before it: red; the
-					// translation with code and text (TRANSLATIONS) and close() before the return: green.
+					// code of the halt (no entry of ANSWERS), work before the return, a check before it, close()
+					// before it without an entry (part 2.3c: no cleanup by rule), an if before it: red; the
+					// translation as the whole call of its entry: green.
 					'R7 AB_MCP_Sync_Code_Swap::can',
 					'R7 AB_MCP_Sync_Code_Swap::can',
 					'R7 AB_MCP_Sync_Code_Swap::can',
@@ -1230,14 +1289,17 @@ PHP;
 					'R1 strrev',
 					'R7 AB_MCP_Sync_Code_Swap::can',
 					'R7 AB_MCP_Sync_Code_Swap::can',
+					'R7 AB_MCP_Sync_Code_Swap::can',
 					// The halt the deadline holds: green; null where the function is not in FACHWERT: red; a break
 					// with the halt returned right after the loop: green; a break without: red.
 					'R2 foreach ( $list as $x )',
 					'R2 foreach ( $list as $x )',
 				),
-				// A seam in a ternary after the halt test, the statement answering null (not in FACHWERT): red; the
-				// halt the deadline holds: green. A seam in a condition after the halt test, its branch null: red.
+				// A seam in a ternary after the halt test, the statement answering in the ternary (null, or the halt
+				// the deadline holds): red, a return in a ternary is no whole form (part 2.3c). A seam in a
+				// condition after the halt test, its branch null (no entry of ANSWERS): red.
 				'AB_MCP_Sync_Code_Swap::seam_a'  => array( 'R4 seam AB_MCP_Sync_Code_Swap_Calls::read' ),
+				'AB_MCP_Sync_Code_Swap::seam_b'  => array( 'R4 seam AB_MCP_Sync_Code_Swap_Calls::read' ),
 				'AB_MCP_Sync_Code_Swap::seam_c'  => array( 'R4 seam AB_MCP_Sync_Code_Swap_Calls::read' ),
 			),
 			$own['open']
@@ -1246,8 +1308,8 @@ PHP;
 
 	public function testAFachwertIsAskedForTheHaltWithTheRightPolarity(): void {
 		// Codex A2: after a call of a function in FACHWERT only its own forms: an if that asks the halt with the right
-		// polarity (or $s = stop() and null !== $s), or the call returned whole by a function in FACHWERT with the same
-		// answer; is_wp_error() on the Fachwert and a return of it from elsewhere do not do.
+		// polarity, or $s = stop() and null !== $s; is_wp_error() on the Fachwert does not do, nor the call returned
+		// whole, also not by a function in FACHWERT with the same answer (part 2.3c, Codex round 2, no. 3: E26 dropped).
 		$code = <<<'PHP'
 <?php
 final class AB_MCP_Sync_Code_Swap {
@@ -1309,12 +1371,15 @@ PHP;
 					'AB_MCP_Sync_Code_Swap::inner' => array( 'null', 'In the self-test.' ),
 					'AB_MCP_Sync_Code_Swap::other' => array( "''", 'In the self-test.' ),
 				),
+				'ANSWERS'  => array( 'AB_MCP_Sync_Code_Swap::prepare' => array( self::answer( 'return AB_MCP_Sync_Deadline::stop( $deadline );', 2 ) ) ),
 			)
 		);
 		self::assertSame( array(), $own['rules']['problems'] );
 		self::assertSame(
 			array(
-				// Returned whole with another answer: red (inner() with the same answer: green).
+				// Returned whole by a function in FACHWERT: red, with the same answer (inner(), SH:103 and the six
+				// places like it at the head) as with another (other()).
+				'AB_MCP_Sync_Code_Swap::inner'   => array( 'R7 AB_MCP_Sync_Code_Swap::fach' ),
 				'AB_MCP_Sync_Code_Swap::other'   => array( 'R7 AB_MCP_Sync_Code_Swap::fach' ),
 				'AB_MCP_Sync_Code_Swap::prepare' => array(
 					// is_wp_error() on the Fachwert (Codex A2, CS:1183): red. null !== $deadline && null !== stop():
@@ -1472,8 +1537,8 @@ PHP;
 	public function testTheClosedListsAreComparedWithTheNumberOfOccurrences(): void {
 		// Codex A5: an entry twice in a list, or a call twice in the code where the list holds it once, is a
 		// difference: NAMED and OPEN by function and place in its order, counted; FRAME_OUT with the number of the
-		// call sites of each edge, TRANSLATIONS with the number of its places; no entry twice in ATOMIC, COMPARE,
-		// SORTS or FILTERS.
+		// call sites of each edge, ANSWERS with the number of the places of each entry (part 2.3c; in part 2.3b
+		// TRANSLATIONS); no entry twice in ATOMIC, COMPARE, SORTS or FILTERS.
 		self::assertSame( array( array( 'a', 'a' ), array( 'c' ) ), ReadBudgetRules::counted( array( 'a', 'b', 'a', 'a' ), array( 'b', 'a', 'c' ) ) );
 		$chain = array(
 			'functions'  => 1,
@@ -1518,7 +1583,8 @@ PHP;
 		$entry     = array( 'R1 sha1', array(), 'In the self-test.' );
 		self::assertSame( array( 'only in the list: AB_MCP_Payload_File::name #2 R1 sha1' ), ReadBudgetRules::open_diff( array( 'AB_MCP_Payload_File::name' => array( $entry, $entry ) ), array( $violation ) ) );
 		self::assertSame( array( 'only in the code:  AB_MCP_Payload_File::name #2 R1 sha1 (includes/a.php:3)' ), ReadBudgetRules::open_diff( array( 'AB_MCP_Payload_File::name' => array( $entry ) ), array( $violation, $violation ) ) );
-		// In code of its own: a call of the frame not followed twice, a translation at two places, a filter twice.
+		// In code of its own: a call of the frame not followed twice, a translation (an entry of ANSWERS) at two
+		// places, a filter twice.
 		$code = <<<'PHP'
 <?php
 final class AB_MCP_Sync_Code_Swap {
@@ -1537,9 +1603,9 @@ final class AB_MCP_Sync_Code_Swap {
 		if ( true !== $v ) {
 			return self::refusal( $v->get_error_code(), $v->get_error_message() );
 		}
-		$w = self::can( $deadline );
-		if ( true !== $w ) {
-			return self::refusal( $w->get_error_code(), 'Not read. ' . $w->get_error_message() );
+		$v = self::can( $deadline );
+		if ( true !== $v ) {
+			return self::refusal( $v->get_error_code(), $v->get_error_message() );
 		}
 		return array( $a, $b, $x );
 	}
@@ -1556,10 +1622,10 @@ final class AB_MCP_Sync_Code_Swap {
 }
 PHP;
 		$lists = array(
-			'CHECKS'       => array( 'AB_MCP_Sync_Deadline::left' => 'wp' ),
-			'FRAME_OUT'    => array( 'AB_MCP_Sync_Code_Swap::prepare|AB_MCP_Sync_Code_Swap::away' => array( 1, 'In the self-test.' ) ),
-			'TRANSLATIONS' => array( 'AB_MCP_Sync_Code_Swap::inner' => array( 'AB_MCP_Sync_Code_Swap::refusal', 1, 'In the self-test.' ) ),
-			'SORTS'        => array( 'usort', 'usort', 'uasort', 'uksort' ),
+			'CHECKS'    => array( 'AB_MCP_Sync_Deadline::left' => 'wp' ),
+			'FRAME_OUT' => array( 'AB_MCP_Sync_Code_Swap::prepare|AB_MCP_Sync_Code_Swap::away' => array( 1, 'In the self-test.' ) ),
+			'ANSWERS'   => array( 'AB_MCP_Sync_Code_Swap::inner' => array( self::answer( 'return self::refusal( $v->get_error_code(), $v->get_error_message() );', 1, '$v' ) ) ),
+			'SORTS'     => array( 'usort', 'usort', 'uasort', 'uksort' ),
 		);
 		$hand  = array(
 			'FRAME'       => array( 'AB_MCP_Sync_Code_Swap::prepare' => array( 'AB_MCP_Sync_Code_Swap::inner' ) ),
@@ -1579,7 +1645,7 @@ PHP;
 			array(
 				'SORTS 2 times: usort',
 				'FRAME_OUT AB_MCP_Sync_Code_Swap::prepare|AB_MCP_Sync_Code_Swap::away: 2 call sites, the list 1',
-				'TRANSLATIONS AB_MCP_Sync_Code_Swap::inner: 2 places, the list 1',
+				'ANSWERS AB_MCP_Sync_Code_Swap::inner #1: 2 places, the list 1: return self :: refusal ( $v -> get_error_code ( ) , $v -> get_error_message ( ) ) ;',
 			),
 			$own['rules']['problems']
 		);
@@ -1599,27 +1665,94 @@ PHP;
 		self::assertSame( array( 'FILTER only in the code:  AB_MCP_Sync_Code_Swap::inner #2 apply_filters' ), ReadBudgetRules::named_diff( $named, $own['rules']['named'] ) );
 		// The numbers as the code holds them: green.
 		$lists['FRAME_OUT']['AB_MCP_Sync_Code_Swap::prepare|AB_MCP_Sync_Code_Swap::away'][0] = 2;
-		$lists['TRANSLATIONS']['AB_MCP_Sync_Code_Swap::inner'][1]                             = 2;
+		$lists['ANSWERS']['AB_MCP_Sync_Code_Swap::inner'][0][2]                               = 2;
 		$lists['SORTS'] = array( 'usort', 'uasort', 'uksort' );
 		self::assertSame( array(), self::own( $code, $kind, $lists, $hand )['rules']['problems'] );
 	}
 
-	public function testNoListHoldsAKeyTwice(): void {
-		// Codex A5: PHP keeps only the last of two equal keys of an array, so a list would say more than it holds.
+	/* ---------- Part 2.3c: Codex, round 2 over the guard, no. 4 (replaces the test of the keys of part 2.3b) ---------- */
+
+	/**
+	 * What PHP keeps of the source of a list: the source in a file of its
+	 * own, read as the lists are (require).
+	 *
+	 * @return mixed
+	 */
+	private static function kept( string $php ) {
+		$file = tempnam( sys_get_temp_dir(), 'r12b' );
+		self::assertIsString( $file );
+		file_put_contents( $file, $php );
+		try {
+			return require $file;
+		} finally {
+			unlink( $file );
+		}
+	}
+
+	public function testTheSourcesOfTheListsAreCountedNotCompared(): void {
+		// Codex round 2, no. 4 (round 1, A5): PHP keeps only the last of two elements of an array with keys alike,
+		// in whatever spelling, so a list would say more than it holds. Each array as written is counted against
+		// what PHP keeps of it at the same place; a key is a string or an integer literal, anything else is told.
 		foreach ( array( 'ReadBudgetExceptions.php', 'ReadBudgetSoll.php' ) as $file ) {
 			$php = file_get_contents( __DIR__ . '/' . $file );
 			self::assertIsString( $php, $file );
-			self::assertSame( array(), ReadBudgetRules::duplicate_keys( $php ), 'tests/' . $file . ': each key of an array once.' );
+			self::assertSame( array(), ReadBudgetRules::list_counts( $php, require __DIR__ . '/' . $file ), 'tests/' . $file . ': each array holds as many elements as written as PHP keeps of it.' );
 		}
-		$php = "<?php\nreturn array(\n\t'A' => array( 'x|y' => array( 1, 'a' ), 'x|y' => array( 1, 'b' ) ),\n\t'B' => array( 'k' => 1, 2 => 'k' ),\n\t'A' => array(),\n\t'C' => array( array( 'k' => 1 ), array( 'k' => 2 ), [ 'k' => 3, 'k' => 4 ] ),\n\t'D' => \$v['k'],\n);\n";
+		$told = static function ( string $php ): array {
+			return ReadBudgetRules::list_counts( $php, self::kept( $php ) );
+		};
+		// As written and as kept alike, also nested, with a trailing comma, in both spellings of an array: green.
+		self::assertSame( array(), $told( "<?php\n// A list.\nreturn array(\n\t'A' => array( 'x|y' => array( 1, 'a' ), \"x|z\" => [ 1, 'b', ], ),\n\t'B' => array( 'k' => true, 2 => null, 'l', ),\n\t3   => array(),\n);\n" ) );
+		// The counter-probe of Codex (round 2, no. 4): the key of NAMED SORT again in double quotes, before the entry.
+		self::assertSame(
+			array( 'line 3: the array holds 3 elements as written and 2 as PHP keeps it (a key twice, in whatever spelling)' ),
+			$told( "<?php\nreturn array(\n\t'SORT' => array(\n\t\t\"AB_MCP_Sync_File_Manifest::folder\" => array( array( 'usort', 166, 'a' ), array( 'usort', 167, 'b' ) ),\n\t\t'AB_MCP_Sync_File_Manifest::folder' => array( array( 'usort', 166, 'a' ) ),\n\t\t'AB_MCP_Sync_File_Manifest::still'  => array( array( 'usort', 168, 'c' ) ),\n\t),\n);\n" )
+		);
+		// The same key again in the same spelling (part 2.3b).
 		self::assertSame(
 			array(
-				"line 3: the key 'x|y' again (first at line 3)",
-				"line 5: the key 'A' again (first at line 3)",
-				"line 6: the key 'k' again (first at line 6)",
+				'line 2: the array holds 7 elements as written and 6 as PHP keeps it (a key twice, in whatever spelling)',
 			),
-			ReadBudgetRules::duplicate_keys( $php )
+			$told( "<?php\nreturn array(\n\t'A' => 1,\n\t'B' => 2,\n\t'A' => 3,\n\t'C' => 4,\n\t'D' => 5,\n\t'E' => 6,\n\t'F' => 7,\n);\n" )
 		);
+		// The same key in the spellings PHP holds alike: single and double quotes with an escape, a number and
+		// the number as a string, an element without a key next to its number; and deep in a list, in the short
+		// spelling of an array.
+		self::assertSame(
+			array(
+				'line 3: the array holds 2 elements as written and 1 as PHP keeps it (a key twice, in whatever spelling)',
+				'line 4: the array holds 2 elements as written and 1 as PHP keeps it (a key twice, in whatever spelling)',
+				'line 5: the array holds 2 elements as written and 1 as PHP keeps it (a key twice, in whatever spelling)',
+				'line 6: the array holds 2 elements as written and 1 as PHP keeps it (a key twice, in whatever spelling)',
+			),
+			$told( "<?php\nreturn array(\n\t'A' => array( 'a\\\\b' => 1, \"a\\\\b\" => 2 ),\n\t'B' => array( 1 => 'a', '1' => 'b' ),\n\t'C' => array( 'a', 0 => 'b' ),\n\t'D' => array( 'x', array( 'y' ), [ 'k' => 3, \"k\" => 4 ] ),\n);\n" )
+		);
+		// A key that is no string and no integer literal: a constant, true, a float, a negative number, a text
+		// put together. Each is told, also where PHP makes a key of its own of it.
+		self::assertSame(
+			array(
+				'line 3: a key that is no string literal and no integer literal: PHP_INT_SIZE',
+				'line 4: a key that is no string literal and no integer literal: true',
+				'line 5: a key that is no string literal and no integer literal: 2.0',
+				'line 6: a key that is no string literal and no integer literal: -1',
+				"line 7: a key that is no string literal and no integer literal: 'a'.'b'",
+			),
+			$told( "<?php\nreturn array(\n\tPHP_INT_SIZE => 1,\n\ttrue => 2,\n\t2.0 => 3,\n\t-1 => 4,\n\t'a' . 'b' => 5,\n\t'c' => 6,\n);\n" )
+		);
+		// An array that is not written at its place (in a call, unpacked) is not counted: told.
+		self::assertSame(
+			array(
+				'line 3: an array or an unpacking in a value that is no array as written is not counted',
+				'line 4: an array or an unpacking in a value that is no array as written is not counted',
+			),
+			$told( "<?php\nreturn array(\n\t'A' => array_merge( array( 'k' => 1, 'k' => 2 ) ),\n\t...array( 'B' => 1 ),\n\t'C' => array( 'k' => 1 ),\n);\n" )
+		);
+		// The source is the return of its array and nothing else.
+		self::assertSame( array( 'the source does not begin with the return of its array' ), $told( "<?php\n\$a = array( 'k' => 1, 'k' => 2 );\nreturn array( 'A' => \$a );\n" ) );
+		self::assertSame( array( 'line 2: what the source returns is no array as written' ), $told( "<?php\nreturn array_merge( array( 'k' => 1 ), array( 'k' => 2 ) );\n" ) );
+		self::assertSame( array( 'line 2: the source holds more than the return of its array' ), $told( "<?php\nreturn array( 'k' => 1 ) + array( 'k' => 2 );\n" ) );
+		// What PHP holds at the place of an array as written is none: told.
+		self::assertSame( array( 'line 2: an array as written where PHP holds none' ), ReadBudgetRules::list_counts( "<?php\nreturn array( 'A' => array( 1 ) );\n", array( 'A' => 1 ) ) );
 	}
 
 	public function testAHaltAskedAfterTheReturnOfARecursionHasTheRightPolarity(): void {
@@ -1709,6 +1842,10 @@ PHP;
 			array(
 				'CHECKS'   => array( 'AB_MCP_Sync_Code_Swap::stopped' => 'true' ),
 				'FACHWERT' => array( 'AB_MCP_Sync_Code_Swap::walk' => array( 'null', 'In the self-test.' ) ),
+				'ANSWERS'  => array(
+					'AB_MCP_Sync_Code_Swap::prepare' => array( self::answer( 'return AB_MCP_Sync_Deadline::stop( $deadline );', 1 ) ),
+					'AB_MCP_Sync_Code_Swap::walk'    => array( self::answer( 'return null;', 9 ) ),
+				),
 			),
 			array(
 				'HELPERS'      => array( 'AB_MCP_Sync_Code_Swap::stopped' => true ),
@@ -2064,6 +2201,502 @@ PHP;
 			$basis['G6']
 		);
 		self::assertArrayHasKey( 'AB_MCP_Sync_Code_Swap::one', $own['model']['edges'][ $p ] );
+	}
+
+	/* ---------- Part 2.3c: Codex, round 2 over the guard, no. 1 to 3, and P1 to P3 of the Fable check ---------- */
+
+	public function testABranchAtAHaltAnswersInAWholeFormOnly(): void {
+		// Part 2.3c (the boundary N7): the answer to a halt is return $v; alone ($v holds the halt), a whole entry of
+		// ANSWERS of the function (its value of FACHWERT with its side value, the halt the deadline holds), or
+		// break; in the pair of R2. Anything else in the branch is red: the variable of the halt written before it
+		// is returned (Codex round 2, no. 1, SW:675), written through another name (P1), the side value turned
+		// (P2, PS:4196; P3, CN:812) or left out, a halt query of the deadline after a call whose WP_Error may be
+		// another error (E27).
+		$code = <<<'PHP'
+<?php
+final class AB_MCP_Sync_Code_Swap {
+	public static function prepare( $deadline, $list ) {
+		$a = self::can( $deadline );
+		if ( is_wp_error( $a ) ) {
+			return $a;
+		}
+		$b = self::can( $deadline );
+		if ( is_wp_error( $b ) ) {
+			$b = true;
+			return $b;
+		}
+		$alias = &$c;
+		$c     = self::can( $deadline );
+		if ( is_wp_error( $c ) ) {
+			$alias = true;
+			return $c;
+		}
+		$d = self::can( $deadline );
+		if ( is_wp_error( $d ) ) {
+			return AB_MCP_Sync_Deadline::stop( $deadline );
+		}
+		foreach ( $list as $x ) {
+			if ( true !== AB_MCP_Sync_Deadline::left( $deadline ) ) {
+				return AB_MCP_Sync_Deadline::stop( $deadline );
+			}
+		}
+		foreach ( $list as $x ) {
+			$left = AB_MCP_Sync_Deadline::left( $deadline );
+			if ( true !== $left ) {
+				break;
+			}
+		}
+		if ( true !== $left ) {
+			return $left;
+		}
+		$whole = true;
+		$e     = self::fach( $deadline, $list, $whole );
+		$s     = AB_MCP_Sync_Deadline::stop( $deadline );
+		if ( null !== $s ) {
+			return $s;
+		}
+		return array( $a, $e, $whole );
+	}
+	private static function fach( $deadline, $list, &$whole ) {
+		foreach ( $list as $x ) {
+			if ( true !== AB_MCP_Sync_Deadline::left( $deadline ) ) {
+				$whole = null;
+				return array();
+			}
+		}
+		foreach ( $list as $x ) {
+			if ( true !== AB_MCP_Sync_Deadline::left( $deadline ) ) {
+				$whole = true;
+				return array();
+			}
+		}
+		foreach ( $list as $x ) {
+			if ( true !== AB_MCP_Sync_Deadline::left( $deadline ) ) {
+				return array();
+			}
+		}
+		foreach ( $list as $x ) {
+			if ( true !== AB_MCP_Sync_Deadline::left( $deadline ) ) {
+				$whole = null;
+				return array(); // The same answer again: its second place.
+			}
+		}
+		return $list;
+	}
+	private static function can( $deadline ) {
+		$left = AB_MCP_Sync_Deadline::left( $deadline );
+		if ( true !== $left ) {
+			return $left;
+		}
+		return 1;
+	}
+}
+PHP;
+		$kind  = array( 'is_wp_error' => array( 'sonst', false ) );
+		$lists = array(
+			'CHECKS'   => array( 'AB_MCP_Sync_Deadline::left' => 'wp' ),
+			'FACHWERT' => array( 'AB_MCP_Sync_Code_Swap::fach' => array( 'array()', 'In the self-test.' ) ),
+			'ANSWERS'  => array(
+				'AB_MCP_Sync_Code_Swap::fach'    => array( self::answer( '$whole = null; return array();', 2 ) ),
+				'AB_MCP_Sync_Code_Swap::prepare' => array( self::answer( 'return AB_MCP_Sync_Deadline::stop( $deadline );', 1 ) ),
+			),
+		);
+		$own   = self::own( $code, $kind, $lists );
+		self::assertSame( array(), $own['model']['problems'] );
+		self::assertSame( array(), $own['rules']['problems'] );
+		self::assertSame(
+			array(
+				'AB_MCP_Sync_Code_Swap::fach'    => array(
+					// Its value with its side value, as its entry holds them: green (two places). The side value
+					// turned (P2, P3); the value without its side value: red.
+					'R2 foreach ( $list as $x )',
+					'R2 foreach ( $list as $x )',
+				),
+				'AB_MCP_Sync_Code_Swap::prepare' => array(
+					// return $v; alone: green. $v = true; return $v; (Codex round 2, no. 1); $alias = true; return
+					// $v; (P1); the halt query of the deadline of the entry after a call (E27): red. In the loop
+					// the entry, and break; with return $left; right after the loop: green.
+					'R7 AB_MCP_Sync_Code_Swap::can',
+					'R7 AB_MCP_Sync_Code_Swap::can',
+					'R7 AB_MCP_Sync_Code_Swap::can',
+				),
+			),
+			$own['open']
+		);
+		// Each branch accepted tells its form (N7): the function, the line, the identifier (a side value in it),
+		// by function and place in its order.
+		$halts = array();
+		foreach ( $own['rules']['halts'] as $halt ) {
+			self::assertSame( 'includes/a.php', $halt['file'] );
+			$halts[] = $halt['fn'] . ':' . $halt['line'] . ' ' . $halt['form'];
+		}
+		self::assertSame(
+			array(
+				'AB_MCP_Sync_Code_Swap::fach:48 LISTED $whole = null ; return array ( ) ;',
+				'AB_MCP_Sync_Code_Swap::fach:65 LISTED $whole = null ; return array ( ) ;',
+				'AB_MCP_Sync_Code_Swap::prepare:6 SAME',
+				'AB_MCP_Sync_Code_Swap::prepare:25 LISTED return AB_MCP_Sync_Deadline :: stop ( $deadline ) ;',
+				'AB_MCP_Sync_Code_Swap::prepare:31 BREAK',
+				'AB_MCP_Sync_Code_Swap::prepare:35 SAME',
+				'AB_MCP_Sync_Code_Swap::prepare:41 SAME',
+			),
+			$halts
+		);
+		self::assertSame(
+			array(
+				'BREAK'                                                       => 1,
+				'LISTED $whole = null ; return array ( ) ;'                   => 2,
+				'LISTED return AB_MCP_Sync_Deadline :: stop ( $deadline ) ;' => 1,
+				'SAME'                                                        => 3,
+			),
+			ReadBudgetRules::forms( $own['rules']['halts'] )
+		);
+		self::assertSame( 'SAME', ReadBudgetRules::FORM_SAME );
+		self::assertSame( 'BREAK', ReadBudgetRules::FORM_BREAK );
+		self::assertSame( 'LISTED', ReadBudgetRules::FORM_LISTED );
+
+		// The list ANSWERS is closed and counted: a place more or less than the entry says, an entry not used, an
+		// entry twice, an entry without its four parts, a function without an entry, and in a function of FACHWERT
+		// an answer that does not end with the return of its value there.
+		$with = static function ( array $answers ) use ( $code, $kind, $lists ): array {
+			$lists['ANSWERS'] = $answers;
+			return self::own( $code, $kind, $lists )['rules']['problems'];
+		};
+		$stop = self::answer( 'return AB_MCP_Sync_Deadline::stop( $deadline );', 1 );
+		$side = self::answer( '$whole = null; return array();', 2 );
+		self::assertSame(
+			array(
+				'ANSWERS AB_MCP_Sync_Code_Swap::fach #1: 2 places, the list 3: $whole = null ; return array ( ) ;',
+				'ANSWERS not used: AB_MCP_Sync_Code_Swap::fach #2 return array ( ) ; return array ( ) ;',
+				'ANSWERS AB_MCP_Sync_Code_Swap::fach #3: twice in its function: $whole = null ; return array ( ) ;',
+				'ANSWERS AB_MCP_Sync_Code_Swap::fach #4: not the statements, the variable of the halt or null, the number of its places and the reason',
+				'ANSWERS not used: AB_MCP_Sync_Code_Swap::fach #5 $whole = null ; return null ;',
+				'ANSWERS AB_MCP_Sync_Code_Swap::fach #5: in a function of FACHWERT the answer ends with the return of its value there (array()): $whole = null ; return null ;',
+				'ANSWERS AB_MCP_Sync_Code_Swap::can: no entry',
+			),
+			$with(
+				array(
+					'AB_MCP_Sync_Code_Swap::fach'    => array(
+						self::answer( '$whole = null; return array();', 3 ),
+						self::answer( 'return array(); return array();', 1 ),
+						$side,
+						array( '$whole = null; return array();', 2, 'In the self-test.' ),
+						self::answer( '$whole = null; return null;', 1 ),
+					),
+					'AB_MCP_Sync_Code_Swap::prepare' => array( $stop ),
+					'AB_MCP_Sync_Code_Swap::can'     => array(),
+				)
+			)
+		);
+		// With the entry of the value alone the third loop is green and the list tells nothing; an entry does not
+		// make the turned side value green.
+		$own = self::own(
+			$code,
+			$kind,
+			array(
+				'ANSWERS' => array(
+					'AB_MCP_Sync_Code_Swap::fach'    => array( $side, self::answer( 'return array();', 1 ) ),
+					'AB_MCP_Sync_Code_Swap::prepare' => array( $stop ),
+				),
+			) + $lists
+		);
+		self::assertSame( array(), $own['rules']['problems'] );
+		self::assertSame( array( 'R2 foreach ( $list as $x )' ), $own['open']['AB_MCP_Sync_Code_Swap::fach'] );
+	}
+
+	public function testATranslationOfAHaltIsItsWholeCallOfTheList(): void {
+		// Part 2.3c (Codex round 2, no. 2, SW:945): a translation is an entry of ANSWERS, its whole call token by
+		// token, at a halt held in the variable the entry names. The text of the halt in a branch of a ternary that
+		// never runs, another text, the code alone, or the entry at a halt held in another variable: red.
+		$code = <<<'PHP'
+<?php
+final class AB_MCP_Sync_Code_Swap {
+	public static function prepare( $deadline, $unit ) {
+		$signed = self::can( $deadline );
+		if ( is_wp_error( $signed ) ) {
+			/* translators: 1: why, 2: the unit. */
+			return self::refusal( $signed->get_error_code(), sprintf( '%1$s So %2$s is not swapped.', $signed->get_error_message(), $unit ) );
+		}
+		$a = self::can( $deadline );
+		if ( is_wp_error( $a ) ) {
+			return self::refusal( $a->get_error_code(), sprintf( '%1$s So %2$s is not swapped.', ( false ? $a->get_error_message() : '' ), $unit ) );
+		}
+		$b = self::can( $deadline );
+		if ( is_wp_error( $b ) ) {
+			return self::refusal( $b->get_error_code(), 'Not read. ' . $b->get_error_message() );
+		}
+		$c = self::can( $deadline );
+		if ( is_wp_error( $c ) ) {
+			return self::refusal( $signed->get_error_code(), sprintf( '%1$s So %2$s is not swapped.', $signed->get_error_message(), $unit ) );
+		}
+		return $unit;
+	}
+	private static function can( $deadline ) {
+		$left = AB_MCP_Sync_Deadline::left( $deadline );
+		if ( true !== $left ) {
+			return $left;
+		}
+		return 1;
+	}
+	private static function refusal( $code, $text ) {
+		return array( $code, $text );
+	}
+}
+PHP;
+		$kind  = array(
+			'is_wp_error'                 => array( 'sonst', false ),
+			'sprintf'                     => array( 'sonst', false ),
+			'WP_Error->get_error_code'    => array( 'sonst', false ),
+			'WP_Error->get_error_message' => array( 'sonst', false ),
+		);
+		$hand  = array(
+			'INST_BYNAME' => array(
+				'get_error_code'    => 'WP_Error',
+				'get_error_message' => 'WP_Error',
+			),
+		);
+		$entry = 'return self::refusal( $signed->get_error_code(), sprintf( \'%1$s So %2$s is not swapped.\', $signed->get_error_message(), $unit ) );';
+		$lists = array(
+			'CHECKS'  => array( 'AB_MCP_Sync_Deadline::left' => 'wp' ),
+			'ANSWERS' => array( 'AB_MCP_Sync_Code_Swap::prepare' => array( self::answer( $entry, 1, '$signed' ) ) ),
+		);
+		$own   = self::own( $code, $kind, $lists, $hand );
+		self::assertSame( array(), $own['model']['problems'] );
+		self::assertSame( array(), $own['rules']['problems'] );
+		self::assertSame(
+			array(
+				'AB_MCP_Sync_Code_Swap::prepare' => array(
+					// The whole call of the entry at the halt in $signed: green. The text in a dead branch of a
+					// ternary (Codex round 2, no. 2); another call that holds the code and the text (green in part
+					// 2.3a, E23); the entry at a halt held in $c: red.
+					'R7 AB_MCP_Sync_Code_Swap::can',
+					'R7 AB_MCP_Sync_Code_Swap::can',
+					'R7 AB_MCP_Sync_Code_Swap::can',
+				),
+			),
+			$own['open']
+		);
+		self::assertSame( array( 'LISTED return self :: refusal ( $signed -> get_error_code ( ) , sprintf ( \'%1$s So %2$s is not swapped.\' , $signed -> get_error_message ( ) , $unit ) ) ;' => 1 ), ReadBudgetRules::forms( $own['rules']['halts'] ) );
+		// Without the variable of the halt in the entry the answer at the halt in $c would be its second place:
+		// the entry names the variable, so the halt answered is the halt translated.
+		$lists['ANSWERS']['AB_MCP_Sync_Code_Swap::prepare'] = array( self::answer( $entry, 1 ) );
+		self::assertSame(
+			array( 'ANSWERS AB_MCP_Sync_Code_Swap::prepare #1: 2 places, the list 1: return self :: refusal ( $signed -> get_error_code ( ) , sprintf ( \'%1$s So %2$s is not swapped.\' , $signed -> get_error_message ( ) , $unit ) ) ;' ),
+			self::own( $code, $kind, $lists, $hand )['rules']['problems']
+		);
+		// A return without a value answers nothing, also with an entry of its own.
+		$bare = str_replace( 'return self::refusal( $b->get_error_code(), \'Not read. \' . $b->get_error_message() );', 'return;', $code );
+		self::assertNotSame( $code, $bare );
+		$lists['ANSWERS']['AB_MCP_Sync_Code_Swap::prepare'] = array( self::answer( $entry, 1, '$signed' ), self::answer( 'return;', 1 ) );
+		$own = self::own( $bare, $kind, $lists, $hand );
+		self::assertSame( array( 'ANSWERS not used: AB_MCP_Sync_Code_Swap::prepare #2 return ;' ), $own['rules']['problems'] );
+		self::assertCount( 3, $own['open']['AB_MCP_Sync_Code_Swap::prepare'] );
+	}
+
+	public function testAValueOfFachwertReturnedWholeDoesNotPassTheHaltOn(): void {
+		// Part 2.3c (Codex round 2, no. 3): R7 by its wording. After a call of a function of FACHWERT the next
+		// statement asks the halt; the call returned whole (or as a branch of a ternary, or in a switch) is no
+		// form, also not in a function of FACHWERT with the same answer (E26 of part 2.3a is dropped: SH:103, 105,
+		// 107, 109, 397, SI:1141, FM:387). A halt query after the return does not run and does not count.
+		$code = <<<'PHP'
+<?php
+final class AB_MCP_Sync_Code_Swap {
+	public static function prepare( $deadline, $x ) {
+		switch ( $x ) {
+			case 'a':
+				return self::fach( $deadline );
+			case 'b':
+				return self::fach( $deadline );
+		}
+		if ( null !== AB_MCP_Sync_Deadline::stop( $deadline ) ) {
+			return null;
+		}
+		$v = self::fine( $deadline );
+		if ( null !== AB_MCP_Sync_Deadline::stop( $deadline ) ) {
+			return null;
+		}
+		$w = self::whole( $deadline );
+		if ( null !== AB_MCP_Sync_Deadline::stop( $deadline ) ) {
+			return null;
+		}
+		return self::rest( $deadline, $x );
+	}
+	private static function rest( $deadline, $x ) {
+		return is_string( $x ) ? self::fach( $deadline ) : null;
+	}
+	private static function whole( $deadline ) {
+		return self::fach( $deadline );
+	}
+	private static function fine( $deadline ) {
+		$v = self::fach( $deadline );
+		if ( null !== AB_MCP_Sync_Deadline::stop( $deadline ) ) {
+			return null;
+		}
+		return $v;
+	}
+	private static function fach( $deadline ) {
+		if ( true !== AB_MCP_Sync_Deadline::left( $deadline ) ) {
+			return null;
+		}
+		return 1;
+	}
+}
+PHP;
+		$fach = array( 'null', 'In the self-test.' );
+		$own  = self::own(
+			$code,
+			array( 'is_string' => array( 'sonst', false ) ),
+			array(
+				'CHECKS'   => array( 'AB_MCP_Sync_Deadline::left' => 'wp' ),
+				'FACHWERT' => array(
+					'AB_MCP_Sync_Code_Swap::rest'  => $fach,
+					'AB_MCP_Sync_Code_Swap::whole' => $fach,
+					'AB_MCP_Sync_Code_Swap::fine'  => $fach,
+					'AB_MCP_Sync_Code_Swap::fach'  => $fach,
+				),
+				'ANSWERS'  => array(
+					'AB_MCP_Sync_Code_Swap::fine'    => array( self::answer( 'return null;', 1 ) ),
+					'AB_MCP_Sync_Code_Swap::prepare' => array( self::answer( 'return null;', 2 ) ),
+				),
+			)
+		);
+		self::assertSame( array(), $own['rules']['problems'] );
+		self::assertSame(
+			array(
+				// In fine(): assigned, the halt asked, then returned (what the part that changes the function
+				// writes): green. In a switch (SH:103 to 109): red, the second too although a halt query stands after the switch
+				// (after a return no next statement runs); as the last statement (SH:397): red.
+				'AB_MCP_Sync_Code_Swap::prepare' => array(
+					'R7 AB_MCP_Sync_Code_Swap::fach',
+					'R7 AB_MCP_Sync_Code_Swap::fach',
+					'R7 AB_MCP_Sync_Code_Swap::rest',
+				),
+				// As a branch of a ternary (SI:1141): red.
+				'AB_MCP_Sync_Code_Swap::rest'    => array( 'R7 AB_MCP_Sync_Code_Swap::fach' ),
+				// Returned whole in a function of FACHWERT with the same answer (FM:387): red.
+				'AB_MCP_Sync_Code_Swap::whole'   => array( 'R7 AB_MCP_Sync_Code_Swap::fach' ),
+			),
+			$own['open']
+		);
+	}
+
+	public function testAHaltAskedAfterATernaryHasTheRightPolarity(): void {
+		// Part 2.3c, found on the way (of the same kind as Codex A2): after $v = HALT ? X : …; the next statement
+		// tests X, or asks the halt itself with the right polarity after pure disjuncts only; a halt query in
+		// another form (null === stop(), a check not in its form) passes no halt on.
+		$code = <<<'PHP'
+<?php
+final class AB_MCP_Sync_Code_Swap {
+	public static function prepare( $deadline, $list ) {
+		foreach ( $list as $a ) {
+			$r = true !== AB_MCP_Sync_Deadline::left( $deadline ) ? null : strlen( $a );
+			if ( null === $r ) {
+				return AB_MCP_Sync_Deadline::stop( $deadline );
+			}
+		}
+		foreach ( $list as $a ) {
+			$r = true !== AB_MCP_Sync_Deadline::left( $deadline ) ? null : strlen( $a );
+			if ( ! is_string( $a ) || null !== AB_MCP_Sync_Deadline::stop( $deadline ) ) {
+				return AB_MCP_Sync_Deadline::stop( $deadline );
+			}
+		}
+		foreach ( $list as $a ) {
+			$r = true !== AB_MCP_Sync_Deadline::left( $deadline ) ? null : strlen( $a );
+			if ( null === AB_MCP_Sync_Deadline::stop( $deadline ) ) {
+				return AB_MCP_Sync_Deadline::stop( $deadline );
+			}
+		}
+		foreach ( $list as $a ) {
+			$r = true !== AB_MCP_Sync_Deadline::left( $deadline ) ? null : strlen( $a );
+			if ( true === AB_MCP_Sync_Deadline::left( $deadline ) ) {
+				return AB_MCP_Sync_Deadline::stop( $deadline );
+			}
+		}
+		foreach ( $list as $a ) {
+			$r = true !== AB_MCP_Sync_Deadline::left( $deadline ) ? null : strlen( $a );
+			if ( true === AB_MCP_Sync_Deadline::left( $deadline ) || null === $r ) {
+				return AB_MCP_Sync_Deadline::stop( $deadline );
+			}
+		}
+		return true;
+	}
+}
+PHP;
+		$own = self::own(
+			$code,
+			array(
+				'strlen'    => array( 'sonst', false ),
+				'is_string' => array( 'sonst', false ),
+			),
+			array(
+				'CHECKS'  => array( 'AB_MCP_Sync_Deadline::left' => 'wp' ),
+				'ANSWERS' => array( 'AB_MCP_Sync_Code_Swap::prepare' => array( self::answer( 'return AB_MCP_Sync_Deadline::stop( $deadline );', 2 ) ) ),
+			)
+		);
+		self::assertSame( array(), $own['rules']['problems'] );
+		self::assertSame(
+			array(
+				'AB_MCP_Sync_Code_Swap::prepare' => array(
+					// X tested, and the halt asked with the right polarity after a pure disjunct: green. null ===
+					// stop(); the test that there is no halt; a check before the test of X (asked again after the
+					// halt): red.
+					'R2 foreach ( $list as $a )',
+					'R2 foreach ( $list as $a )',
+					'R2 foreach ( $list as $a )',
+				),
+			),
+			$own['open']
+		);
+	}
+
+	public function testEachBranchAcceptedAtAHaltAtTheHeadTellsItsForm(): void {
+		// Part 2.3c (the boundary N7 of the order): the guard gives for each branch at a halt it accepts the
+		// function, the line and the identifier of its form, so that part 7 gives each form a test that triggers
+		// the halt and a mutation. The listed forms are those of ANSWERS, each at as many places as its entries say.
+		$halts = self::rules()['halts'];
+		$lists = self::lists();
+		self::assertNotSame( array(), $halts );
+		$have = array();
+		foreach ( $halts as $halt ) {
+			self::assertSame( array( 'fn', 'file', 'line', 'pos', 'form' ), array_keys( $halt ) );
+			self::assertArrayHasKey( $halt['fn'], self::model()['reach'], $halt['fn'] );
+			self::assertArrayNotHasKey( $halt['fn'], self::model()['chain'], $halt['fn'] );
+			self::assertSame( self::model()['methods'][ $halt['fn'] ]['file'], $halt['file'], $halt['fn'] );
+			self::assertGreaterThan( 0, $halt['line'], $halt['fn'] );
+			self::assertMatchesRegularExpression( '/^(SAME|BREAK|LISTED \S.* ;)$/', $halt['form'], $halt['fn'] . ':' . $halt['line'] );
+			if ( 0 === strpos( $halt['form'], ReadBudgetRules::FORM_LISTED . ' ' ) ) {
+				$key = $halt['fn'] . ' ' . $halt['form'];
+				if ( ! isset( $have[ $key ] ) ) {
+					$have[ $key ] = 0;
+				}
+				++$have[ $key ];
+			}
+		}
+		$want = array();
+		foreach ( $lists['ANSWERS'] as $fn => $entries ) {
+			foreach ( $entries as $entry ) {
+				$words = array();
+				foreach ( \PhpToken::tokenize( '<?php ' . $entry[0] ) as $token ) {
+					if ( ! $token->isIgnorable() && T_OPEN_TAG !== $token->id ) {
+						$words[] = $token->text;
+					}
+				}
+				$key = $fn . ' ' . ReadBudgetRules::FORM_LISTED . ' ' . implode( ' ', $words );
+				if ( ! isset( $want[ $key ] ) ) {
+					$want[ $key ] = 0;
+				}
+				$want[ $key ] += $entry[2];
+			}
+		}
+		ksort( $have );
+		ksort( $want );
+		self::assertSame( $want, $have, 'The listed forms of the branches accepted at a halt are the entries of ANSWERS, each at its places.' );
+		$forms = ReadBudgetRules::forms( $halts );
+		self::assertSame( count( $halts ), array_sum( $forms ) );
+		self::assertArrayHasKey( ReadBudgetRules::FORM_SAME, $forms, 'return $v; alone, $v the variable that holds the halt.' );
+		// The side values of the answers are in the identifiers (PS:4188 and 4196, CN:812).
+		self::assertArrayHasKey( 'LISTED $whole = null ; return array ( ) ;', $forms );
+		self::assertArrayHasKey( 'LISTED $ok = false ; return null ;', $forms );
 	}
 
 	public function testTheRulesTellWhatTheyCannotRead(): void {

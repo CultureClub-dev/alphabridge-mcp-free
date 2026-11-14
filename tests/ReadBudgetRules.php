@@ -26,8 +26,8 @@
  * that holds a step (S).
  *
  * Part 2.3a (Codex, round 1 over the guard, A1 to A4): every branch that
- * leaves at a halt answers it as prescribed, with only cleanup before it
- * (answers(), answer(), cleanup()); after a function of FACHWERT only its
+ * leaves at a halt answers it as prescribed (answers(); how, is since part
+ * 2.3c the fixed list of whole forms below); after a function of FACHWERT only its
  * own forms count, the halt asked with the right polarity
  * (passes_fachwert(), halt_query()); the check of a pair is assigned whole
  * (guard_pair()); and an argument unpacked at or before the deadline is
@@ -35,13 +35,39 @@
  *
  * Part 2.3b (Codex, round 1 over the guard, A5, A6 and B1, and two of the
  * same kind as A2 and A4): the closed lists are compared counted (counted(),
- * named_diff(), duplicate_keys(), FRAME_OUT and TRANSLATIONS with their
- * numbers); a halt after the return of a recursion is asked with the right
+ * named_diff(), FRAME_OUT with its numbers; the sources of the lists since
+ * part 2.3c by list_counts(), the translations as entries of ANSWERS); a
+ * halt after the return of a recursion is asked with the right
  * polarity (halt_asked_after(), asks_after()); a call whose arguments the
  * model does not hold (a callback, call_user_func_array(), new $x) does not
  * show its deadline left out, call_user_func() gives the arguments after its
  * first (argument()); and a helper of a sort has its callback (R5, the
  * reader).
+ *
+ * Part 2.3c (Codex, round 2 over the guard, no. 1 to 4; the decision of
+ * 14.11. 21:01, option a): the answer to a halt is read against a fixed
+ * list of whole forms without a free part (answers()): return $v; alone,
+ * $v the variable that holds the halt; a whole sequence of statements of
+ * the list ANSWERS of the function, token by token, with the number of its
+ * places and its reason (the value of FACHWERT with its side value, a halt
+ * query of the deadline, a translation as its whole call); or break; alone
+ * in the pair of R2. There is no cleanup by rule before the return, no
+ * answer by the name of a variable alone, no translation by a text that
+ * occurs. A call of a function of FACHWERT returned whole is no form of R7
+ * (E26 of part 2.3a is dropped). The sources of the lists are counted, not
+ * compared: each array as written holds as many elements as PHP keeps of
+ * it, its keys only string and integer literals (list_counts()). And, found
+ * on the way and of the same kind as A2 of round 1: after a ternary the
+ * halt itself is asked only with the right polarity (passes_value()).
+ *
+ * The boundary N7 of the order (section 3.2), word for word: «Dass eine
+ * aufgezählte Form den Halt unverändert weitergibt, zeigt nicht der
+ * Wächter, sondern der Nachweis je Form in Teil 7.» The guard reads the
+ * spelling of the answer, not its value: that the halt arrives unchanged
+ * is shown by the tests of part 7 that trigger it. For them check() gives,
+ * for each branch at a halt it accepts, the function, the line and the
+ * identifier of its form (halts; forms()): SAME, BREAK, or LISTED with the
+ * tokens of the whole sequence, a side value of the answer in it.
  *
  * @package AlphaBridge_MCP
  */
@@ -66,6 +92,15 @@ final class ReadBudgetRules {
 
 	/** The halt query of the deadline: the halt it holds, or null. */
 	private const STOP = 'AB_MCP_Sync_Deadline::stop';
+
+	/** The identifier of the form return $v;, $v the variable that holds the halt. */
+	public const FORM_SAME = 'SAME';
+
+	/** The identifier of the form break; in the pair of R2 (the statement after the loop answers). */
+	public const FORM_BREAK = 'BREAK';
+
+	/** The start of the identifier of a form of the list ANSWERS; its tokens follow, each after a space. */
+	public const FORM_LISTED = 'LISTED';
 
 	/** @var array<string,mixed> */
 	private array $model;
@@ -106,6 +141,12 @@ final class ReadBudgetRules {
 	/** @var array<string,true> The calls whose arguments were told UNSUPPORTED (once each). */
 	private array $told = array();
 
+	/** @var array<string,array{fn:string,file:string,line:int,pos:int,form:string}> The branches at a halt accepted, Class::name@token => where and in which form. */
+	private array $halts = array();
+
+	/** @var array<string,list<string>> The tokens of a text of a list (once each). */
+	private array $spelled = array();
+
 	/** @var array<string,mixed> What of the named boundaries the code holds. */
 	private array $named = array(
 		'SORT'   => array(),
@@ -119,11 +160,11 @@ final class ReadBudgetRules {
 	 * @param array<string,mixed> $model What ReadBudgetScan::read() returned.
 	 * @param array<string,mixed> $hand  The hand tables of the reader (HAND).
 	 * @param array<string,mixed> $soll  The basis of tests/ReadBudgetSoll.php (CHAIN and G4 are read).
-	 * @param array<string,mixed> $lists The lists of the rules (tests/ReadBudgetExceptions.php): ATOMIC, CHECKS, FACHWERT, TRANSLATIONS, COMPARE, SORTS, FILTERS, FRAME_OUT.
-	 * @return array{violations:list<array<string,mixed>>,problems:list<string>,named:array<string,mixed>}
+	 * @param array<string,mixed> $lists The lists of the rules (tests/ReadBudgetExceptions.php): ATOMIC, CHECKS, FACHWERT, ANSWERS, COMPARE, SORTS, FILTERS, FRAME_OUT.
+	 * @return array{violations:list<array<string,mixed>>,problems:list<string>,named:array<string,mixed>,halts:list<array{fn:string,file:string,line:int,pos:int,form:string}>}
 	 */
 	public static function check( array $model, array $hand, array $soll, array $lists ): array {
-		foreach ( array( 'ATOMIC', 'CHECKS', 'FACHWERT', 'TRANSLATIONS', 'COMPARE', 'SORTS', 'FILTERS', 'FRAME_OUT' ) as $list ) {
+		foreach ( array( 'ATOMIC', 'CHECKS', 'FACHWERT', 'ANSWERS', 'COMPARE', 'SORTS', 'FILTERS', 'FRAME_OUT' ) as $list ) {
 			if ( ! array_key_exists( $list, $lists ) ) {
 				throw new \InvalidArgumentException( 'List of the rules missing: ' . $list );
 			}
@@ -134,7 +175,29 @@ final class ReadBudgetRules {
 			'violations' => $rules->out,
 			'problems'   => $rules->problems,
 			'named'      => $rules->named,
+			'halts'      => array_values( $rules->halts ),
 		);
+	}
+
+	/**
+	 * The forms of the branches at a halt that check() accepted (part 2.3c,
+	 * the boundary N7): the identifier of each form with the number of its
+	 * places, so that part 7 gives each form a test that triggers the halt
+	 * and a mutation.
+	 *
+	 * @param list<array{fn:string,file:string,line:int,pos:int,form:string}> $halts What check() returned as halts.
+	 * @return array<string,int>
+	 */
+	public static function forms( array $halts ): array {
+		$out = array();
+		foreach ( $halts as $halt ) {
+			if ( ! isset( $out[ $halt['form'] ] ) ) {
+				$out[ $halt['form'] ] = 0;
+			}
+			++$out[ $halt['form'] ];
+		}
+		ksort( $out );
+		return $out;
 	}
 
 	/**
@@ -274,53 +337,151 @@ final class ReadBudgetRules {
 	}
 
 	/**
-	 * The keys that an array of a PHP source (the lists of the guard) holds
-	 * twice: PHP keeps only the last of them, so the list would say more than
-	 * it holds (Codex, round 1 over the guard, A5). A key is a string or a
-	 * number at the start of an element, before =>.
+	 * What the source of a list of the guard (tests/ReadBudgetExceptions.php,
+	 * tests/ReadBudgetSoll.php) says more than PHP keeps of it (part 2.3c;
+	 * Codex, round 2 over the guard, no. 4): counted, not compared. The
+	 * source is the return of one array and nothing else. Each array as
+	 * written holds as many elements as count() of the array PHP made of it
+	 * at the same place: of two elements with keys alike PHP keeps only the
+	 * last, in whatever spelling ('x' and "x", 1 and '1'), so the list would
+	 * say more than it holds. Where the numbers are alike no element is lost
+	 * and the n-th element written is the n-th kept, and so on into it. A key
+	 * is one string literal or one integer literal; a value is an array as
+	 * written or tokens without an array and without an unpacking. Anything
+	 * else is told, never skipped.
 	 *
+	 * @param string $php   The source of the list.
+	 * @param mixed  $value What it returns (require).
 	 * @return list<string>
 	 */
-	public static function duplicate_keys( string $php ): array {
-		$toks  = \PhpToken::tokenize( $php );
-		$out   = array();
-		$stack = array();
-		$n     = count( $toks );
-		for ( $i = 0; $i < $n; $i++ ) {
-			$t = $toks[ $i ];
-			if ( $t->isIgnorable() ) {
-				continue;
-			}
-			if ( '(' === $t->text || '[' === $t->text ) {
-				$p     = self::prev( $toks, $i );
-				$index = null !== $p && ( T_VARIABLE === $toks[ $p ]->id || in_array( $toks[ $p ]->text, array( ']', ')', '}' ), true ) );
-				$is    = ( '[' === $t->text && ! $index ) || ( null !== $p && T_ARRAY === $toks[ $p ]->id );
-				$stack[] = array(
-					'array' => $is,
-					'keys'  => array(),
-				);
-				continue;
-			}
-			if ( ')' === $t->text || ']' === $t->text ) {
-				array_pop( $stack );
-				continue;
-			}
-			$top = count( $stack ) - 1;
-			if ( $top < 0 || ! $stack[ $top ]['array'] || ! in_array( $t->id, array( T_CONSTANT_ENCAPSED_STRING, T_LNUMBER ), true ) ) {
-				continue;
-			}
-			$nx = self::next( $toks, $i );
-			$pv = self::prev( $toks, $i );
-			if ( null === $nx || T_DOUBLE_ARROW !== $toks[ $nx ]->id || null === $pv || ! in_array( $toks[ $pv ]->text, array( '(', '[', ',' ), true ) ) {
-				continue;
-			}
-			if ( isset( $stack[ $top ]['keys'][ $t->text ] ) ) {
-				$out[] = sprintf( 'line %d: the key %s again (first at line %d)', $t->line, $t->text, $stack[ $top ]['keys'][ $t->text ] );
-				continue;
-			}
-			$stack[ $top ]['keys'][ $t->text ] = $t->line;
+	public static function list_counts( string $php, $value ): array {
+		$toks = \PhpToken::tokenize( $php );
+		$i    = self::sig( $toks, 0, count( $toks ) - 1 );
+		if ( null !== $i && T_OPEN_TAG === $toks[ $i ]->id ) {
+			$i = self::next( $toks, $i );
 		}
+		if ( null === $i || T_RETURN !== $toks[ $i ]->id ) {
+			return array( 'the source does not begin with the return of its array' );
+		}
+		$a   = self::next( $toks, $i );
+		$end = self::array_end( $toks, $a );
+		if ( null === $a || null === $end ) {
+			return array( sprintf( 'line %d: what the source returns is no array as written', $toks[ $i ]->line ) );
+		}
+		$out  = array();
+		$semi = self::next( $toks, $end );
+		if ( null === $semi || ';' !== $toks[ $semi ]->text || null !== self::next( $toks, $semi ) ) {
+			$out[] = sprintf( 'line %d: the source holds more than the return of its array', $toks[ $end ]->line );
+		}
+		self::count_array( $toks, $a, $end, $value, $out );
 		return $out;
+	}
+
+	/**
+	 * The token that closes the array as written that begins at $a (array( …
+	 * ) or [ … ]), or null where none begins there.
+	 *
+	 * @param list<\PhpToken> $toks Tokens.
+	 */
+	private static function array_end( array $toks, ?int $a ): ?int {
+		if ( null === $a ) {
+			return null;
+		}
+		if ( '[' === $toks[ $a ]->text ) {
+			return self::closing( $toks, $a );
+		}
+		$open = self::next( $toks, $a );
+		if ( T_ARRAY !== $toks[ $a ]->id || null === $open || '(' !== $toks[ $open ]->text ) {
+			return null;
+		}
+		return self::closing( $toks, $open );
+	}
+
+	/**
+	 * Counts the array as written from $a to $end against $value, what PHP
+	 * holds at its place, and the arrays in it (list_counts()).
+	 *
+	 * @param list<\PhpToken> $toks  Tokens.
+	 * @param mixed           $value What PHP holds at the place of the array.
+	 * @param list<string>    $out   What is told.
+	 */
+	private static function count_array( array $toks, int $a, int $end, $value, array &$out ): void {
+		$open = $a;
+		if ( T_ARRAY === $toks[ $a ]->id ) {
+			$open = self::next( $toks, $a );
+		}
+		// Its elements: the tokens between its brackets, split at the commas outside any bracket in them.
+		$elements = array();
+		$current  = array();
+		$depth    = 0;
+		for ( $j = $open + 1; $j < $end; $j++ ) {
+			$t = $toks[ $j ];
+			if ( in_array( $t->id, array( T_WHITESPACE, T_COMMENT, T_DOC_COMMENT ), true ) ) {
+				continue;
+			}
+			if ( 0 === $depth && ',' === $t->text ) {
+				$elements[] = $current;
+				$current    = array();
+				continue;
+			}
+			$depth    += self::bracket( $t );
+			$current[] = $j;
+		}
+		if ( array() !== $current ) {
+			$elements[] = $current;
+		}
+		if ( ! is_array( $value ) ) {
+			$out[] = sprintf( 'line %d: an array as written where PHP holds none', $toks[ $a ]->line );
+			return;
+		}
+		$kept = array_values( $value );
+		$same = count( $elements ) === count( $kept );
+		if ( ! $same ) {
+			$out[] = sprintf( 'line %d: the array holds %d elements as written and %d as PHP keeps it (a key twice, in whatever spelling)', $toks[ $a ]->line, count( $elements ), count( $kept ) );
+		}
+		foreach ( $elements as $at => $element ) {
+			$val   = $element;
+			$depth = 0;
+			foreach ( $element as $n => $j ) {
+				if ( 0 === $depth && T_DOUBLE_ARROW === $toks[ $j ]->id ) {
+					if ( 1 !== $n || ! in_array( $toks[ $element[0] ]->id, array( T_CONSTANT_ENCAPSED_STRING, T_LNUMBER ), true ) ) {
+						$out[] = sprintf( 'line %d: a key that is no string literal and no integer literal: %s', $toks[ $j ]->line, self::norm( $toks, $element[0], $j - 1 ) );
+					}
+					$val = array_slice( $element, $n + 1 );
+					break;
+				}
+				$depth += self::bracket( $toks[ $j ] );
+			}
+			if ( array() === $val ) {
+				$out[] = sprintf( 'line %d: an element without a value', $toks[ $a ]->line );
+				continue;
+			}
+			$first = $val[0];
+			$last  = $val[ count( $val ) - 1 ];
+			if ( self::array_end( $toks, $first ) === $last ) {
+				if ( $same ) {
+					self::count_array( $toks, $first, $last, $kept[ $at ], $out );
+				}
+				continue;
+			}
+			foreach ( $val as $j ) {
+				if ( T_ARRAY === $toks[ $j ]->id || '[' === $toks[ $j ]->text || T_ELLIPSIS === $toks[ $j ]->id ) {
+					$out[] = sprintf( 'line %d: an array or an unpacking in a value that is no array as written is not counted', $toks[ $j ]->line );
+					break;
+				}
+			}
+		}
+	}
+
+	/** What a token adds to the depth of brackets: 1 where it opens one, -1 where it closes one, else 0. */
+	private static function bracket( \PhpToken $t ): int {
+		if ( in_array( $t->text, array( '(', '[', '{' ), true ) || T_CURLY_OPEN === $t->id || T_DOLLAR_OPEN_CURLY_BRACES === $t->id ) {
+			return 1;
+		}
+		if ( in_array( $t->text, array( ')', ']', '}' ), true ) ) {
+			return -1;
+		}
+		return 0;
 	}
 
 	/**
@@ -376,6 +537,12 @@ final class ReadBudgetRules {
 			$this->out,
 			static function ( array $a, array $b ): int {
 				return array( $a['fn'], $a['pos'], $a['rule'] ) <=> array( $b['fn'], $b['pos'], $b['rule'] );
+			}
+		);
+		uasort(
+			$this->halts,
+			static function ( array $a, array $b ): int {
+				return array( $a['fn'], $a['pos'] ) <=> array( $b['fn'], $b['pos'] );
 			}
 		);
 	}
@@ -450,15 +617,6 @@ final class ReadBudgetRules {
 			}
 		}
 		return false;
-	}
-
-	/**
-	 * Whether an event asks the halt (a halt query).
-	 *
-	 * @param array<string,mixed> $e Event.
-	 */
-	private static function asks( array $e ): bool {
-		return in_array( $e['k'], array( 'CHECK', 'STOP' ), true );
 	}
 
 	/* ---------- R1: steps only in the helper and the atomic seams ---------- */
@@ -651,8 +809,9 @@ final class ReadBudgetRules {
 	 * halt (asks_halt()) with a branch that answers (answers()); $v = CHECK(
 	 * … ); and then if ( HALT( $v ) ) answering (guard_pair()); $s =
 	 * AB_MCP_Sync_Deadline::stop( … ); and then if ( null !== $s ) answering
-	 * (tests_stop()); or a ternary after its halt test whose halt is passed on
-	 * (as in guarded()).
+	 * (tests_stop()); or $v = HALT ? X : …; and then an if that tests X and
+	 * answers (passes_value()). A return in a ternary, return HALT ? X : …;,
+	 * is no whole form of an answer (part 2.3c).
 	 *
 	 * @param list<array<string,mixed>> $block Statements.
 	 */
@@ -680,7 +839,7 @@ final class ReadBudgetRules {
 			return false;
 		}
 		if ( null === $tern['var'] ) {
-			return $this->answer( $k, $tern['hx'][0], $tern['hx'][1], null, true );
+			return false; // return HALT ? X : …: no whole form of an answer (part 2.3c).
 		}
 		return isset( $block[ $j + 1 ] ) && $this->passes_value( $k, $block[ $j + 1 ], $tern['var'], $tern['halt'] );
 	}
@@ -1031,7 +1190,7 @@ final class ReadBudgetRules {
 		$next = $this->next_statement( $path );
 		if ( null !== $to && isset( $this->lists['FACHWERT'][ $to ] ) ) {
 			$this->used['FACHWERT'][ $to ] = true;
-			return $this->passes_fachwert( $k, $e, $to, $st, $next );
+			return $this->passes_fachwert( $k, $e, $st, $next );
 		}
 		if ( 'return' === $st['k'] && $this->is_value( $k, $e, $st['x'], $st['e'] - 1 ) ) {
 			return true;
@@ -1045,21 +1204,19 @@ final class ReadBudgetRules {
 	 * the next statement is an if whose condition asks the halt with the
 	 * right polarity (asks_halt()) and whose branch answers as prescribed, or
 	 * $s = AB_MCP_Sync_Deadline::stop( … ); and then if ( null !== $s )
-	 * answering; or the call is what its statement returns where the
-	 * function around it is in FACHWERT with the same answer (its callers ask
-	 * the halt).
+	 * answering. A call in a return, throw, break or continue has no next
+	 * statement that runs: the value of FACHWERT returned whole is no form
+	 * (part 2.3c; Codex, round 2 over the guard, no. 3: E26 of part 2.3a,
+	 * «returned whole by a function in FACHWERT with the same answer», is
+	 * dropped, R7 by its wording).
 	 *
 	 * @param array<string,mixed>  $e    The call.
 	 * @param array<string,mixed>  $st   Its statement.
 	 * @param ?array<string,mixed> $next The next statement (next_statement()).
 	 */
-	private function passes_fachwert( string $k, array $e, string $to, array $st, ?array $next ): bool {
-		if ( 'return' === $st['k'] && $this->is_value( $k, $e, $st['x'], $st['e'] - 1 ) ) {
-			if ( ! isset( $this->lists['FACHWERT'][ $k ] ) || self::php_norm( $this->lists['FACHWERT'][ $k ][0] ) !== self::php_norm( $this->lists['FACHWERT'][ $to ][0] ) ) {
-				return false;
-			}
-			$this->used['FACHWERT'][ $k ] = true;
-			return true;
+	private function passes_fachwert( string $k, array $e, array $st, ?array $next ): bool {
+		if ( in_array( $st['k'], self::ENDS, true ) ) {
+			return false;
 		}
 		// Part 2.3b (of the same kind as Codex A1 and A3): no work on the value
 		// in its own statement before the halt is asked, such as a call around it.
@@ -1261,8 +1418,9 @@ final class ReadBudgetRules {
 	 * with no work between the check and it (work in its own arguments runs
 	 * before it, a call around it after it): in the condition of an if after
 	 * a halt test, its branch answering as prescribed (answers()); in a
-	 * ternary after its halt test (the halt answered by the statement as
-	 * prescribed, answer(), or tested by the next one); or after a statement
+	 * ternary assigned after its halt test, $v = HALT ? X : …;, its value at
+	 * a halt tested by the next statement (a return in a ternary is no whole
+	 * form of an answer, part 2.3c); or after a statement
 	 * that checks and answers at a halt (if ( HALT ) return …; or $v = CHECK;
 	 * if ( HALT( $v ) ) return …;, the check assigned whole) with statements
 	 * without work between, also from the first statements of a then branch,
@@ -1288,12 +1446,16 @@ final class ReadBudgetRules {
 				return false;
 			}
 		}
-		if ( 'if' === $st['k'] && $e['pos'] > $st['heads'][0][0] && $e['pos'] < $st['heads'][0][1] && 1 === count( $st['bodies'] ) && null !== $this->answers( $k, $st['bodies'][0], null, true, false ) ) {
+		if ( 'if' === $st['k'] && $e['pos'] > $st['heads'][0][0] && $e['pos'] < $st['heads'][0][1] && 1 === count( $st['bodies'] ) ) {
 			foreach ( $this->disjuncts( $k, $st['heads'][0][0] + 1, $st['heads'][0][1] - 1 ) as $d ) {
 				if ( $e['pos'] >= $d[0] && $e['pos'] <= $d[1] ) {
 					break;
 				}
 				if ( null !== $this->halt_test( $k, $d[0], $d[1] ) ) {
+					// The branch is asked for its form only at a halt test (part 2.3c: each branch accepted is kept as one at a halt).
+					if ( null === $this->answers( $k, $st['bodies'][0], null, true, false ) ) {
+						break;
+					}
 					return ! $this->work_before( $k, $d[1] + 1, $e );
 				}
 			}
@@ -1304,7 +1466,7 @@ final class ReadBudgetRules {
 				return false;
 			}
 			if ( null === $tern['var'] ) {
-				return $this->answer( $k, $tern['hx'][0], $tern['hx'][1], null, true ); // return HALT ? X : …: X answers.
+				return false; // return HALT ? X : …: no whole form of an answer (part 2.3c).
 			}
 			return isset( $block[ $i + 1 ] ) && $this->passes_value( $k, $block[ $i + 1 ], $tern['var'], $tern['halt'] );
 		}
@@ -1381,9 +1543,11 @@ final class ReadBudgetRules {
 
 	/**
 	 * Whether the statement after a ternary passes its halt on: an if whose
-	 * condition asks first, before any work, X === $v (the value at a halt)
-	 * or the halt itself, and whose branch answers as prescribed (answers();
-	 * no break: the halt is not kept for after the loop).
+	 * condition asks first, after pure disjuncts only, X === $v (the value
+	 * at a halt) or the halt itself in a halt query with the right polarity
+	 * (halt_query(); part 2.3c, of the same kind as Codex A2), and whose
+	 * branch answers as prescribed (answers(); no break: the halt is not kept
+	 * for after the loop).
 	 *
 	 * @param array<string,mixed> $st Statement.
 	 */
@@ -1397,12 +1561,13 @@ final class ReadBudgetRules {
 			if ( $text === $halt . '===' . $var || $text === $var . '===' . $halt ) {
 				return null !== $this->answers( $k, $st['bodies'][0], null, true, false );
 			}
-			foreach ( $this->model['events'][ $k ] as $x ) {
-				if ( $x['pos'] >= $d[0] && $x['pos'] <= $d[1] && self::asks( $x ) ) {
-					return null !== $this->answers( $k, $st['bodies'][0], null, true, false );
-				}
+			// Part 2.3c (of the same kind as Codex A2): the halt itself only as a halt query with the right
+			// polarity (halt_query()), the disjuncts before it pure, as in asks_halt(); a halt query in
+			// another form is none.
+			if ( $this->halt_query( $k, $d[0], $d[1] ) ) {
+				return null !== $this->answers( $k, $st['bodies'][0], null, true, false );
 			}
-			if ( $this->work_in( $k, $d[0], $d[1] ) ) {
+			if ( ! $this->pure( $k, $d[0], $d[1] ) ) {
 				return false;
 			}
 		}
@@ -1477,8 +1642,9 @@ final class ReadBudgetRules {
 	/**
 	 * Whether an if with one branch tests a value for its halt in a form of
 	 * FORMS as its whole condition and answers as prescribed (answers(): the
-	 * value itself is the halt only in the form wp; with $stop the halt held
-	 * by the deadline is one too): how it leaves, or null.
+	 * value itself is the halt only in the form wp; only with $stop an entry
+	 * of ANSWERS may hold a halt query of the deadline): how it leaves, or
+	 * null.
 	 *
 	 * @param array<string,mixed> $st   Statement.
 	 * @param string              $halt A form of FORMS.
@@ -1643,13 +1809,27 @@ final class ReadBudgetRules {
 	}
 
 	/**
-	 * Whether a branch that leaves at a halt answers it as prescribed (Codex,
-	 * round 1 over the guard, A1). Its statements before the last are
-	 * cleanup (cleanup(): expressions without work, check, clock or a call
-	 * that can give a halt, such as close() or an assignment; no control
-	 * structure, no return). Its last statement leaves: return with an answer
-	 * (answer()), or, with $break, a bare break (the loop is left; r2() asks
-	 * the statement after the loop).
+	 * Whether a branch that leaves at a halt answers it in one of the whole
+	 * forms (part 2.3c, the boundary N7 of the order; Codex, round 2 over the
+	 * guard, no. 1 and 2). Its statements are, token by token and with
+	 * nothing else in the branch:
+	 * - return $v; alone, $v the variable that holds the halt ($var): SAME;
+	 * - a sequence of statements of the list ANSWERS of the function, LISTED:
+	 *   expressions and then a return of a value, such as the value of
+	 *   FACHWERT with its side value ($whole = null; return array();), a halt
+	 *   query of the deadline or a translation as its whole call. An entry that names the
+	 *   variable of the halt does only where the halt is held in it; a halt
+	 *   query of the deadline in it only with $stop (not after a call whose
+	 *   WP_Error may be another error, E27); and no entry holds work, a
+	 *   check, a step of the helper, the clock or a call that can give a halt;
+	 * - with $break, break; alone: BREAK (the loop is left; r2() asks the
+	 *   statement after the loop, E25).
+	 * No form has a free part: there is no cleanup by rule before the return
+	 * (E24 of part 2.3a is dropped) and no answer by the name of a variable
+	 * or by a text that occurs in it (E23). Each branch accepted is kept with
+	 * the identifier of its form (halts), each entry of ANSWERS with its
+	 * places. That the form passes the halt on unchanged is not shown here
+	 * (N7: the tests of part 7).
 	 *
 	 * @param list<array<string,mixed>> $body Statements.
 	 * @return ?string 'return' or 'break', or null.
@@ -1659,65 +1839,74 @@ final class ReadBudgetRules {
 		if ( 0 === $n ) {
 			return null;
 		}
-		for ( $i = 0; $i < $n - 1; $i++ ) {
-			if ( 'expr' !== $body[ $i ]['k'] || ! $this->cleanup( $k, $body[ $i ]['s'], $body[ $i ]['e'] ) ) {
+		$a    = $body[0]['s'];
+		$b    = $body[ $n - 1 ]['e'];
+		$have = self::texts( $this->model['toks'][ $k ], $a, $b );
+		if ( array( 'break', ';' ) === $have ) {
+			if ( ! $break ) {
 				return null;
 			}
+			$this->halt( $k, $a, self::FORM_BREAK );
+			return 'break';
 		}
-		$last = $body[ $n - 1 ];
-		if ( 'break' === $last['k'] ) {
-			if ( $break && 'break;' === self::norm( $this->model['toks'][ $k ], $last['s'], $last['e'] ) ) {
-				return 'break';
+		if ( null !== $var && array( 'return', $var, ';' ) === $have ) {
+			$this->halt( $k, $a, self::FORM_SAME );
+			return 'return';
+		}
+		if ( ! isset( $this->lists['ANSWERS'][ $k ] ) || ! is_array( $this->lists['ANSWERS'][ $k ] ) ) {
+			return null;
+		}
+		foreach ( $this->lists['ANSWERS'][ $k ] as $i => $entry ) {
+			if ( ! self::is_answer( $entry ) || $this->spelling( $entry[0] ) !== $have ) {
+				continue;
 			}
-			return null;
-		}
-		if ( 'return' !== $last['k'] || $last['x'] >= $last['e'] || ! $this->answer( $k, $last['x'], $last['e'] - 1, $var, $stop ) ) {
-			return null;
-		}
-		return 'return';
-	}
-
-	/**
-	 * Whether the tokens $a to $b are a prescribed answer at a halt: the
-	 * variable that holds the halt ($var, the same halt); else, without work,
-	 * check or clock in it (cleanup()), a whole halt query of the deadline
-	 * (AB_MCP_Sync_Deadline::stop(), AB_MCP_Protected_Store::stopped_or())
-	 * where $stop (the halt the deadline holds); the answer of the function
-	 * in FACHWERT (its value at a halt); or a translation of TRANSLATIONS that
-	 * keeps the code and the text of the halt in $var (translates()).
-	 */
-	private function answer( string $k, int $a, int $b, ?string $var, bool $stop ): bool {
-		$text = self::norm( $this->model['toks'][ $k ], $a, $b );
-		if ( null !== $var && $var === $text ) {
-			return true;
-		}
-		if ( ! $this->cleanup( $k, $a, $b ) ) {
-			return false;
-		}
-		if ( $stop ) {
-			foreach ( $this->model['events'][ $k ] as $x ) {
-				if ( 'STOP' === $x['k'] && $x['pos'] >= $a && $x['pos'] <= $b && $this->whole_call( $k, $x, $a, $b ) ) {
-					return true;
+			if ( null !== $entry[1] && $entry[1] !== $var ) {
+				continue; // The halt is not held in the variable the entry names.
+			}
+			for ( $j = 0; $j < $n; $j++ ) {
+				$kind = 'expr';
+				if ( $j === $n - 1 ) {
+					$kind = 'return';
+				}
+				if ( $kind !== $body[ $j ]['k'] ) {
+					return null;
 				}
 			}
+			if ( $body[ $n - 1 ]['x'] >= $body[ $n - 1 ]['e'] ) {
+				return null; // A return without a value answers nothing.
+			}
+			if ( ! $this->quiet( $k, $a, $b, $stop ) ) {
+				return null;
+			}
+			$this->used['ANSWERS'][ $k ][ $i ][ $a ] = true; // Its places, counted.
+			if ( isset( $this->lists['FACHWERT'][ $k ] ) ) {
+				$this->used['FACHWERT'][ $k ] = true;
+			}
+			$this->halt( $k, $a, self::FORM_LISTED . ' ' . implode( ' ', $have ) );
+			return 'return';
 		}
-		if ( isset( $this->lists['FACHWERT'][ $k ] ) && self::php_norm( $this->lists['FACHWERT'][ $k ][0] ) === $text ) {
-			$this->used['FACHWERT'][ $k ] = true;
-			return true;
-		}
-		if ( null !== $var && isset( $this->lists['TRANSLATIONS'][ $k ] ) && $this->translates( $k, $a, $b, $var ) ) {
-			$this->used['TRANSLATIONS'][ $k ][ $a ] = true; // Its places, counted (A5).
-			return true;
-		}
-		return false;
+		return null;
 	}
 
 	/**
-	 * Whether the tokens $a to $b are cleanup: no work, no check, no step of
-	 * the helper, no clock (AT) and no call that can give a halt with its
-	 * deadline (closing, an assignment, a function of PHP without a step).
+	 * Whether an entry of ANSWERS has its four parts: the statements, the
+	 * variable of the halt it names (or null), the number of its places and
+	 * the reason.
+	 *
+	 * @param mixed $entry Entry.
 	 */
-	private function cleanup( string $k, int $a, int $b ): bool {
+	private static function is_answer( $entry ): bool {
+		return is_array( $entry ) && array( 0, 1, 2, 3 ) === array_keys( $entry ) && is_string( $entry[0] ) && ( null === $entry[1] || is_string( $entry[1] ) ) && is_int( $entry[2] ) && is_string( $entry[3] );
+	}
+
+	/**
+	 * Whether the tokens $a to $b of a listed answer hold nothing that runs
+	 * on after the halt: no work, no check, no step of the helper, no clock
+	 * (AT) and no call that can give a halt with its deadline; and a halt
+	 * query of the deadline only with $stop. This forbids only: what is
+	 * allowed there is the entry of the list, token by token.
+	 */
+	private function quiet( string $k, int $a, int $b, bool $stop ): bool {
 		foreach ( $this->model['events'][ $k ] as $x ) {
 			if ( $x['pos'] < $a || $x['pos'] > $b ) {
 				continue;
@@ -1725,44 +1914,64 @@ final class ReadBudgetRules {
 			if ( $this->work( $x ) || in_array( $x['k'], array( 'CHECK', 'STEP', 'AT' ), true ) || $this->calls_into( $k, $x, $this->ch, true ) ) {
 				return false;
 			}
+			if ( 'STOP' === $x['k'] && ! $stop ) {
+				return false;
+			}
 		}
 		return true;
 	}
 
 	/**
-	 * Whether the tokens $a to $b are, whole, a call of the translation of
-	 * the function in TRANSLATIONS whose first argument is the code of the
-	 * halt in $var ($var->get_error_code()) and one of whose arguments holds
-	 * its text ($var->get_error_message()): the halt passed on translated
-	 * (the order, section 4).
+	 * Keeps a branch at a halt that is accepted, with the identifier of its
+	 * form (part 2.3c, N7). A branch read in two forms is a problem.
 	 */
-	private function translates( string $k, int $a, int $b, string $var ): bool {
-		foreach ( $this->model['events'][ $k ] as $x ) {
-			if ( 'CALL' !== $x['k'] || ! in_array( $this->lists['TRANSLATIONS'][ $k ][0], $x['to'], true ) || ! $this->whole_call( $k, $x, $a, $b ) || ! isset( $x['args'][0] ) ) {
-				continue;
+	private function halt( string $k, int $pos, string $form ): void {
+		$key  = $k . '@' . $pos;
+		$file = $this->model['methods'][ $k ]['file'];
+		$line = $this->model['toks'][ $k ][ $pos ]->line;
+		if ( isset( $this->halts[ $key ] ) ) {
+			if ( $form !== $this->halts[ $key ]['form'] ) {
+				$this->problems[] = sprintf( 'ANSWERS %s:%d %s: the branch at a halt is read in two forms, %s and %s', $file, $line, $k, $this->halts[ $key ]['form'], $form );
 			}
-			if ( $var . '->get_error_code()' !== preg_replace( '/\s+/', '', $x['args'][0] ) ) {
-				return false;
-			}
-			foreach ( $x['args'] as $arg ) {
-				if ( false !== strpos( preg_replace( '/\s+/', '', $arg ), $var . '->get_error_message()' ) ) {
-					return true;
-				}
-			}
-			return false;
+			return;
 		}
-		return false;
+		$this->halts[ $key ] = array(
+			'fn'   => $k,
+			'file' => $file,
+			'line' => $line,
+			'pos'  => $pos,
+			'form' => $form,
+		);
 	}
 
-	/** The text of a PHP expression without space and comments (as norm()). */
-	private static function php_norm( string $php ): string {
-		$s = '';
-		foreach ( \PhpToken::tokenize( '<?php ' . $php . ';' ) as $t ) {
-			if ( ! in_array( $t->id, array( T_OPEN_TAG, T_WHITESPACE, T_COMMENT, T_DOC_COMMENT ), true ) ) {
-				$s .= $t->text;
+	/**
+	 * The tokens $a to $b, each as its text, without space and comments.
+	 *
+	 * @param list<\PhpToken> $toks Tokens.
+	 * @return list<string>
+	 */
+	private static function texts( array $toks, int $a, int $b ): array {
+		$out = array();
+		for ( $j = $a; $j <= $b; $j++ ) {
+			if ( ! in_array( $toks[ $j ]->id, array( T_WHITESPACE, T_COMMENT, T_DOC_COMMENT ), true ) ) {
+				$out[] = $toks[ $j ]->text;
 			}
 		}
-		return substr( $s, 0, -1 );
+		return $out;
+	}
+
+	/**
+	 * The tokens of a text of a list (statements or an expression of PHP),
+	 * each as its text, without space and comments.
+	 *
+	 * @return list<string>
+	 */
+	private function spelling( string $php ): array {
+		if ( ! isset( $this->spelled[ $php ] ) ) {
+			$toks                  = \PhpToken::tokenize( '<?php ' . $php );
+			$this->spelled[ $php ] = self::texts( $toks, 1, count( $toks ) - 1 );
+		}
+		return $this->spelled[ $php ];
 	}
 
 	/**
@@ -1910,9 +2119,9 @@ final class ReadBudgetRules {
 	/**
 	 * Each entry of a list used, as often as the list says (Codex, round 1
 	 * over the guard, A5): an entry of ATOMIC, COMPARE, SORTS and FILTERS once
-	 * in its list; FRAME_OUT with the number of its call sites, TRANSLATIONS
-	 * with the number of its places. A key twice in the source of a list is
-	 * told by duplicate_keys().
+	 * in its list; FRAME_OUT with the number of its call sites, ANSWERS with
+	 * the number of its places (answers_counted()). What the source of a list
+	 * says more than PHP keeps of it is told by list_counts().
 	 */
 	private function unused(): void {
 		foreach ( array( 'ATOMIC', 'COMPARE', 'SORTS', 'FILTERS' ) as $list ) {
@@ -1927,7 +2136,7 @@ final class ReadBudgetRules {
 				$this->problems[] = 'ATOMIC not in G1: ' . $k;
 			}
 		}
-		foreach ( array( 'CHECKS', 'FACHWERT', 'TRANSLATIONS', 'FRAME_OUT' ) as $list ) {
+		foreach ( array( 'CHECKS', 'FACHWERT', 'FRAME_OUT' ) as $list ) {
 			foreach ( array_keys( $this->lists[ $list ] ) as $entry ) {
 				if ( ! isset( $this->used[ $list ][ $entry ] ) ) {
 					$this->problems[] = sprintf( '%s not used: %s', $list, $entry );
@@ -1935,8 +2144,7 @@ final class ReadBudgetRules {
 			}
 		}
 		$counts = array(
-			'FRAME_OUT'    => array( 0, 'call sites' ),
-			'TRANSLATIONS' => array( 1, 'places' ),
+			'FRAME_OUT' => array( 0, 'call sites' ),
 		);
 		foreach ( $counts as $list => list( $at, $what ) ) {
 			foreach ( $this->lists[ $list ] as $entry => $listed ) {
@@ -1956,6 +2164,58 @@ final class ReadBudgetRules {
 		foreach ( $this->lists['COMPARE'] as $entry ) {
 			if ( ! isset( $this->used['COMPARE'][ $entry ] ) ) {
 				$this->problems[] = 'COMPARE not used: ' . $entry;
+			}
+		}
+		$this->answers_counted();
+	}
+
+	/**
+	 * The list ANSWERS closed and counted (part 2.3c): each entry with its
+	 * four parts (the statements, the variable of the halt it names or null,
+	 * the number of its places, the reason), none twice in its function,
+	 * each the answer of as many branches at a halt as it says. In a function
+	 * of FACHWERT each ends with the return of its value there: its callers
+	 * ask the halt and read this value (R7).
+	 */
+	private function answers_counted(): void {
+		foreach ( $this->lists['ANSWERS'] as $k => $entries ) {
+			if ( ! is_array( $entries ) || array() === $entries ) {
+				$this->problems[] = sprintf( 'ANSWERS %s: no entry', $k );
+				continue;
+			}
+			$seen = array();
+			$nr   = 0;
+			foreach ( $entries as $i => $entry ) {
+				++$nr;
+				$name = sprintf( 'ANSWERS %s #%d', $k, $nr );
+				if ( ! self::is_answer( $entry ) ) {
+					$this->problems[] = $name . ': not the statements, the variable of the halt or null, the number of its places and the reason';
+					continue;
+				}
+				$spelt = $this->spelling( $entry[0] );
+				$text  = implode( ' ', $spelt );
+				$key   = $text . ' | ' . var_export( $entry[1], true );
+				if ( isset( $seen[ $key ] ) ) {
+					$this->problems[] = sprintf( '%s: twice in its function: %s', $name, $text );
+					continue;
+				}
+				$seen[ $key ] = true;
+				$have         = 0;
+				if ( isset( $this->used['ANSWERS'][ $k ][ $i ] ) ) {
+					$have = count( $this->used['ANSWERS'][ $k ][ $i ] );
+				}
+				if ( 0 === $have ) {
+					$this->problems[] = sprintf( 'ANSWERS not used: %s #%d %s', $k, $nr, $text );
+				} elseif ( $entry[2] !== $have ) {
+					$this->problems[] = sprintf( '%s: %d places, the list %d: %s', $name, $have, $entry[2], $text );
+				}
+				if ( isset( $this->lists['FACHWERT'][ $k ] ) ) {
+					$value  = array_merge( array( 'return' ), $this->spelling( $this->lists['FACHWERT'][ $k ][0] ), array( ';' ) );
+					$before = count( $spelt ) - count( $value );
+					if ( $before < 0 || array_slice( $spelt, $before ) !== $value || ( $before > 0 && ';' !== $spelt[ $before - 1 ] ) ) {
+						$this->problems[] = sprintf( '%s: in a function of FACHWERT the answer ends with the return of its value there (%s): %s', $name, $this->lists['FACHWERT'][ $k ][0], $text );
+					}
+				}
 			}
 		}
 	}

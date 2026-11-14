@@ -11,20 +11,32 @@
  * false at a halt). FACHWERT: the functions that answer «not read» at a
  * halt with a value (null, false, '' or a marker) instead of the halt, whose
  * callers ask stop() next (R7): the answer as the PHP expression its branches
- * at a halt return (compared token by token, part 2.3a), and the reason
- * from its doc comment (E19). TRANSLATIONS: the functions that answer a
- * halt held in a variable with a translation (the function named, called
- * with the code of the halt first and its text), each with the number of
- * its places and their reason (part 2.3a, Codex A1; the number part 2.3b,
- * Codex A5). COMPARE: what a comparison of a sort may call (N2). SORTS: the
+ * at a halt return (part 2.3a), and the reason from its doc comment (E19).
+ * ANSWERS (part 2.3c; the decision of 14.11. 21:01, option a; the boundary
+ * N7 of the order): the fixed list of the whole answers at a halt other
+ * than return $v; alone ($v the variable that holds the halt) and break; in
+ * the pair of R2. By function, each entry the whole sequence of statements
+ * of the branch (compared token by token, nothing else in the branch), the
+ * variable of the halt where the statements name it (else null; the entry
+ * does only at a halt held in it), the number of its places and the reason:
+ * the value of FACHWERT, with its side value where the function has one
+ * ($whole = null; return array();), a halt query of the deadline, and a
+ * translation as its whole call (the order, section 4). A branch at a halt
+ * in another form is a violation until it has its entry here with its
+ * reason; that an entry passes the halt on unchanged is shown by the test of
+ * its form in part 7, not by the guard. COMPARE: what a comparison of a sort
+ * may call (N2). SORTS: the
  * functions of PHP that sort with a comparison. FILTERS: the functions that
  * call code not of the plugin by a hook. FRAME_OUT: the calls of the frame
  * of R12 that the reading does not follow (R6), each edge with the number of
  * its call sites (part 2.3b, Codex A5) and the reason it lies outside the
  * scope (section 2 of the order, «weiter offen»).
  *
- * Each list is closed and counted (part 2.3b, Codex A5): no key twice in
- * this file, no entry twice in a list, each entry used as often as it says.
+ * Each list is closed and counted (part 2.3b, Codex A5; part 2.3c, Codex
+ * round 2, no. 4): each array of this file holds as many elements as written
+ * as PHP keeps of it, its keys only string and integer literals
+ * (ReadBudgetRules::list_counts()), no entry twice in a list, each entry
+ * used as often as it says.
  *
  * OPEN: each violation of the rules at the head after part 1a (part 2.2),
  * by function in the order of its source: 'Rn what', the numbers of
@@ -82,8 +94,55 @@ return array(
 		'AB_MCP_Sync_Env::head_read'         => array( 'null', 'Part 2.3a (E19 applied, E21): class-sync-env.php:972-973: once the deadline is over, null, and the caller passes the stop on.' ),
 		'AB_MCP_Sync_File_Manifest::text'    => array( "''", 'class-sync-file-manifest.php:379: \'\' where the deadline is over; the caller passes the stop on.' ),
 	),
-	'TRANSLATIONS' => array(
-		'AB_MCP_Sync_Code_Swap::signed_stage' => array( 'AB_MCP_Sync_Code_Swap::refusal', 1, 'Part 2.3a (Codex A1): class-sync-code-swap.php:943-946: the halt of signed() (or tree(), ready()) translated by refusal() with its code and its text first (the order, section 4: translations pass the halt on).' ),
+	'ANSWERS'   => array(
+		'AB_MCP_Protected_Store::entries'     => array(
+			array( '$whole = null; return array();', null, 2, 'Its value of FACHWERT with its side value: whole (by reference) is null once the deadline is over (class-protected-store.php:4173), set right before the return (class-protected-store.php:4187-4190, 4195-4198). The branch of the same form before the direct step usort (class-protected-store.php:4205-4208) is read by no rule while that step is open (R1).' ),
+		),
+		'AB_MCP_Protected_Store::groups'      => array(
+			array( 'return self::stopped_or( $deadline, self::unlisted( $area ) );', null, 1, 'The halt the deadline holds, or where it holds none the refusal of the reader (stopped_or(), class-protected-store.php:1200-1203), after entries() (FACHWERT) at class-protected-store.php:1153-1155.' ),
+		),
+		'AB_MCP_Protected_Store::holds'       => array(
+			array( 'return false;', null, 1, 'Its value of FACHWERT (class-protected-store.php:749-751), at the start of each pass of its loop (class-protected-store.php:768-770).' ),
+		),
+		'AB_MCP_Protected_Store::sidecar'     => array(
+			array( 'return array( \'unknown\', null );', null, 1, 'Its value of FACHWERT (class-protected-store.php:4601), after the reading of the sidecar (class-protected-store.php:4603-4605).' ),
+		),
+		'AB_MCP_Shape::decoded'               => array(
+			array( 'return null;', null, 2, 'Its value of FACHWERT (class-shape.php:367, «See read()»): after the decoding and after the encoding again (class-shape.php:389-391, 394-396).' ),
+		),
+		'AB_MCP_Shape::fields'                => array(
+			array( 'return null;', null, 1, 'Its value of FACHWERT (class-shape.php:329, «See read()»), at the start of each pass of its loop (class-shape.php:338-340).' ),
+		),
+		'AB_MCP_Shape::items'                 => array(
+			array( 'return null;', null, 1, 'Its value of FACHWERT (class-shape.php:281, «See read()»), after the element read in the ternary after its halt test (class-shape.php:290-293).' ),
+		),
+		'AB_MCP_Shape::pairs'                 => array(
+			array( 'return null;', null, 1, 'Its value of FACHWERT (class-shape.php:305, «See read()»), after the element read in the ternary after its halt test (class-shape.php:314-317).' ),
+		),
+		'AB_MCP_Sync_Canon::encode'           => array(
+			array( 'return \'\';', null, 1, 'Its value of FACHWERT (class-sync-canon.php:722), after prepared() (class-sync-canon.php:724-726).' ),
+		),
+		'AB_MCP_Sync_Canon::prepared'         => array(
+			array( 'return null;', null, 3, 'Its value of FACHWERT (class-sync-canon.php:928), at the start of each pass of its three loops (class-sync-canon.php:947-949, 963-965, 975-977).' ),
+		),
+		'AB_MCP_Sync_Canon::revived'          => array(
+			array( '$ok = false; return null;', null, 1, 'Its value of FACHWERT with its side value: ok (by reference) is cleared where the deadline is over (class-sync-canon.php:783), set right before the return (class-sync-canon.php:811-814).' ),
+		),
+		'AB_MCP_Sync_Code_Swap::heads'        => array(
+			array( 'return array();', null, 2, 'Its value of FACHWERT (class-sync-code-swap.php:1012-1014), at the start of each pass of its two loops (class-sync-code-swap.php:1032-1034, 1042-1044).' ),
+		),
+		'AB_MCP_Sync_Code_Swap::signed_stage' => array(
+			array( 'return self::refusal( $signed->get_error_code(), sprintf( __( \'%1$s So the %2$s %3$s is not swapped. Call action=next again; where it keeps failing, abort the run (wp_site_push action=abort) and plan again.\', \'alphabridge-mcp\' ), $signed->get_error_message(), $unit[\'kind\'], $unit[\'ref\'] ) );', '$signed', 1, 'The translation of the halt of signed() (or of the readings before it, whose halt $signed holds then) by refusal(), with the code of the halt and its whole text first in the message (class-sync-code-swap.php:943-946; the order, section 4: translations pass the halt on). The whole call, token by token (part 2.3c, Codex round 2, no. 2).' ),
+		),
+		'AB_MCP_Sync_Env::head_fields'        => array(
+			array( 'return null;', null, 1, 'Its value of FACHWERT (class-sync-env.php:1017), at the start of each pass of its loop (class-sync-env.php:1021-1023).' ),
+		),
+		'AB_MCP_Sync_Env::head_read'          => array(
+			array( 'return null;', null, 2, 'Its value of FACHWERT (class-sync-env.php:972-973): before the seam of the head and after head_fields() (class-sync-env.php:993-995, 1001-1003).' ),
+		),
+		'AB_MCP_Sync_File_Manifest::text'     => array(
+			array( 'return \'\';', null, 1, 'Its value of FACHWERT (class-sync-file-manifest.php:379), at the start of each pass of its loop (class-sync-file-manifest.php:382-384).' ),
+		),
 	),
 	'COMPARE'   => array( 'strcmp' ),
 	'SORTS'     => array( 'usort', 'uasort', 'uksort' ),
@@ -204,6 +263,7 @@ return array(
 		'AB_MCP_Shape::decoded' => array(
 			array( 'R1 json_decode', array(), 'Direct step (Codec): through the helper of the steps (part 4). None of the 95.' ),
 			array( 'R1 json_encode', array( 221 ), 'Direct step (Codec): through the helper of the steps (part 4).' ),
+			array( 'R7 AB_MCP_Shape::read', array(), 'The halt of the call not passed on by the next statement (is_wp_error() or true !== and return, or FACHWERT and stop()); with the part that changes the function. New in part 2.3c (Codex round 2, no. 3; E26 of part 2.3a dropped): the call of a function of FACHWERT is returned whole, so the halt is not asked after it (R7 by its wording). No halt is lost there (the deadline holds it); the part that changes the function rewrites it: the call assigned, the halt query, the return. None of the 95 (TAB 383 H ja).' ),
 		),
 		'AB_MCP_Shape::fields' => array(
 			array( 'R7 AB_MCP_Shape::read', array(), 'The halt of the call not passed on by the next statement (is_wp_error() or true !== and return, or FACHWERT and stop()); with the part that changes the function. None of the 95 (TAB 380 H ja).' ),
@@ -222,9 +282,16 @@ return array(
 		'AB_MCP_Shape::read' => array(
 			array( 'R2 foreach ( self::PROPERTIES[ $type ] as $property )', array( 24 ), 'The body of the loop does not begin with a check that leaves at a halt (part 5).' ),
 			array( 'R3 before AB_MCP_Shape::items', array( 3 ), 'Recursion: a check before the edge, a halt query before the next work after its return (part 5; A4 part 4).' ),
+			array( 'R7 AB_MCP_Shape::items', array(), 'The halt of the call not passed on by the next statement (is_wp_error() or true !== and return, or FACHWERT and stop()); with the part that changes the function. New in part 2.3c (Codex round 2, no. 3; E26 of part 2.3a dropped): the call of a function of FACHWERT is returned whole, so the halt is not asked after it (R7 by its wording). No halt is lost there (the deadline holds it); the part that changes the function rewrites it: the call assigned, the halt query, the return. None of the 95 (TAB 373 H ja).' ),
 			array( 'R3 before AB_MCP_Shape::pairs', array( 3 ), 'Recursion: a check before the edge, a halt query before the next work after its return (part 5; A4 part 4).' ),
+			array( 'R7 AB_MCP_Shape::pairs', array(), 'The halt of the call not passed on by the next statement (is_wp_error() or true !== and return, or FACHWERT and stop()); with the part that changes the function. New in part 2.3c (Codex round 2, no. 3; E26 of part 2.3a dropped): the call of a function of FACHWERT is returned whole, so the halt is not asked after it (R7 by its wording). No halt is lost there (the deadline holds it); the part that changes the function rewrites it: the call assigned, the halt query, the return. None of the 95 (TAB 217 F entfällt; TAB 374 H ja).' ),
 			array( 'R3 before AB_MCP_Shape::fields', array( 3 ), 'Recursion: a check before the edge, a halt query before the next work after its return (part 5; A4 part 4).' ),
+			array( 'R7 AB_MCP_Shape::fields', array(), 'The halt of the call not passed on by the next statement (is_wp_error() or true !== and return, or FACHWERT and stop()); with the part that changes the function. New in part 2.3c (Codex round 2, no. 3; E26 of part 2.3a dropped): the call of a function of FACHWERT is returned whole, so the halt is not asked after it (R7 by its wording). No halt is lost there (the deadline holds it); the part that changes the function rewrites it: the call assigned, the halt query, the return. None of the 95 (TAB 218 F entfällt; TAB 375 H ja).' ),
 			array( 'R3 before AB_MCP_Shape::decoded', array( 3 ), 'Recursion: a check before the edge, a halt query before the next work after its return (part 5; A4 part 4).' ),
+			array( 'R7 AB_MCP_Shape::decoded', array(), 'The halt of the call not passed on by the next statement (is_wp_error() or true !== and return, or FACHWERT and stop()); with the part that changes the function. New in part 2.3c (Codex round 2, no. 3; E26 of part 2.3a dropped): the call of a function of FACHWERT is returned whole, so the halt is not asked after it (R7 by its wording). No halt is lost there (the deadline holds it); the part that changes the function rewrites it: the call assigned, the halt query, the return. None of the 95 (TAB 219 F entfällt; TAB 376 H ja).' ),
+		),
+		'AB_MCP_Store_Inputs::read' => array(
+			array( 'R7 AB_MCP_Shape::read', array(), 'The halt of the call not passed on by the next statement (is_wp_error() or true !== and return, or FACHWERT and stop()); with the part that changes the function. New in part 2.3c (Codex round 2, no. 3; E26 of part 2.3a dropped): the call of a function of FACHWERT is returned whole, so the halt is not asked after it (R7 by its wording). No halt is lost there (the deadline holds it); the part that changes the function rewrites it: the call assigned, the halt query, the return. None of the 95 (TAB 384 H ja).' ),
 		),
 		'AB_MCP_Sync_Anchor::pair_print' => array(
 			array( 'R1 home_url', array( 228, 229 ), 'Direct step (Datenbank): through the helper of the steps (part 3).' ),
@@ -347,6 +414,9 @@ return array(
 			array( 'R1 usort', array( 292 ), 'Direct step (Sortierung): through the helper of the steps (part 4).' ),
 			array( 'R2 foreach ( $acc[\'stats\'] as $file => $stat )', array(), 'The body of the loop does not begin with a check that leaves at a halt (part 5). New in part 2.3a (Codex A1): its branch at a halt answers the marker \'ended\', and AB_MCP_Sync_File_Manifest::still is not in FACHWERT (its doc comment does not name the answer at a halt, E19; the marker form is open 2 of part 2.2). None of the 95 (TAB 85 S ja).' ),
 			array( 'R4 seam AB_MCP_Sync_File_Manifest_Calls::lstat', array(), 'An entry into the chain or a call of a seam of the disk not right after a check with its halt passed on (part 3: seams; part 5: entries). New in part 2.3a (Codex A1): its branch at a halt answers the marker \'ended\', and AB_MCP_Sync_File_Manifest::still is not in FACHWERT (its doc comment does not name the answer at a halt, E19; the marker form is open 2 of part 2.2). None of the 95.' ),
+		),
+		'AB_MCP_Sync_File_Manifest::text' => array(
+			array( 'R7 AB_MCP_Sync_Canon::encode', array(), 'The halt of the call not passed on by the next statement (is_wp_error() or true !== and return, or FACHWERT and stop()); with the part that changes the function. New in part 2.3c (Codex round 2, no. 3; E26 of part 2.3a dropped): the call of a function of FACHWERT is returned whole, so the halt is not asked after it (R7 by its wording). No halt is lost there (the deadline holds it); the part that changes the function rewrites it: the call assigned, the halt query, the return. None of the 95 (TAB 421 H ja).' ),
 		),
 		'AB_MCP_Sync_File_Manifest::unit' => array(
 			array( 'R7 AB_MCP_Sync_File_Manifest::whole', array(), 'The halt of the call not passed on by the next statement (is_wp_error() or true !== and return, or FACHWERT and stop()); with the part that changes the function. None of the 95 (TAB 414 H ja).' ),
