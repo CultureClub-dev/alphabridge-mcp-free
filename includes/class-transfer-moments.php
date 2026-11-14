@@ -13,7 +13,7 @@
  * limits, the link) stands only
  *
  * - in the edition that does not have the feature (not where the site
- *   edition, ab_mcp_site_edition, is pro or agency);
+ *   edition, ab_mcp_site_edition, is pro, agency or trial, a trial of Pro);
  * - while the edition notes are not hidden (one switch for all, per site);
  * - once this site saw its first report of differences;
  * - once the feature it names is published (PUBLISHED; none is yet, so no
@@ -230,14 +230,15 @@ final class AB_MCP_Transfer_Moments {
 
 	/**
 	 * Whether any edition part can show on this site at all: an edition
-	 * without the features (the free one), and a feature published. The
-	 * switch «Hide edition notes» is offered only then.
+	 * without the features (the free one, also for a value that is not a
+	 * string; not pro, agency or a trial of Pro), and a feature published.
+	 * The switch «Hide edition notes» is offered only then.
 	 *
 	 * @return bool
 	 */
 	public static function possible() {
-		$edition = (string) apply_filters( 'ab_mcp_site_edition', 'free' );
-		return ! in_array( $edition, array( 'pro', 'agency' ), true ) && array() !== array_intersect( self::FEATURES, self::published() );
+		$edition = apply_filters( 'ab_mcp_site_edition', 'free' );
+		return ! ( is_string( $edition ) && in_array( $edition, array( 'pro', 'agency', 'trial' ), true ) ) && array() !== array_intersect( self::FEATURES, self::published() );
 	}
 
 	/**
