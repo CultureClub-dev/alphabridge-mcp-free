@@ -670,7 +670,7 @@ final class AB_MCP_Sync_Code_Swap {
 		if ( is_wp_error( $stage ) ) {
 			return $stage;
 		}
-		$version = null === $live ? null : self::not_down( $kind, $ref, $target, $live, $stage['signed']['version'] );
+		$version = null === $live ? null : self::not_down( $kind, $ref, $target, $live, $stage['signed']['version'], $deadline );
 		if ( is_wp_error( $version ) ) {
 			return $version;
 		}
@@ -962,18 +962,23 @@ final class AB_MCP_Sync_Code_Swap {
 	 * folder itself, not hidden, whose head names a Plugin Name), from the
 	 * files of the reading of Z3. A head not read whole on the way, or none
 	 * named, is not known and refuses, as a staging version that is none.
+	 * Under the deadline of the readings of the swap (R12): the files of the
+	 * heads (heads()) and each head (AB_MCP_Sync_Env::head_read()) only while
+	 * it is not over, and once more before the versions are compared; its
+	 * stop is the refusal with its own code, never a version not known.
 	 *
-	 * @param string $kind    plugin or theme.
-	 * @param string $ref     The unit.
-	 * @param string $target  The folder or file of the unit.
-	 * @param array  $live    The unit read (unchanged()).
-	 * @param mixed  $staging The version of the staging site (signed()).
+	 * @param string               $kind     plugin or theme.
+	 * @param string               $ref      The unit.
+	 * @param string               $target   The folder or file of the unit.
+	 * @param array                $live     The unit read (unchanged()).
+	 * @param mixed                $staging  The version of the staging site (signed()).
+	 * @param AB_MCP_Sync_Deadline $deadline The deadline of the readings (read_deadline()).
 	 * @return string|WP_Error The live version.
 	 */
-	private static function not_down( $kind, $ref, $target, array $live, $staging ) {
+	private static function not_down( $kind, $ref, $target, array $live, $staging, AB_MCP_Sync_Deadline $deadline ) {
 		$version = null;
-		foreach ( self::heads( $kind, $target, $live ) as $file ) {
-			$head = AB_MCP_Sync_Env::head_read( $file, array( 'Plugin Name', 'Version' ) );
+		foreach ( self::heads( $kind, $target, $live, $deadline ) as $file ) {
+			$head = AB_MCP_Sync_Env::head_read( $file, array( 'Plugin Name', 'Version' ), $deadline );
 			if ( null === $head ) {
 				break;
 			}
@@ -981,6 +986,14 @@ final class AB_MCP_Sync_Code_Swap {
 				$version = $head['Version'];
 				break;
 			}
+		}
+		// A head or the files of the heads not read for the deadline: its
+		// stop, without the clock asked again; else the deadline once more.
+		$stop = AB_MCP_Sync_Deadline::stop( $deadline );
+		$left = null === $stop ? AB_MCP_Sync_Deadline::left( $deadline ) : $stop;
+		if ( true !== $left ) {
+			/* translators: 1: why the stage or the signed manifest was not read (one or more whole sentences), 2: kind of the unit, as the tools name it (plugin, theme), 3: its name. */
+			return self::refusal( $left->get_error_code(), sprintf( __( '%1$s So the %2$s %3$s is not swapped. Call action=next again; where it keeps failing, abort the run (wp_site_push action=abort) and plan again.', 'alphabridge-mcp' ), $left->get_error_message(), $kind, $ref ) );
 		}
 		$order = AB_MCP_Sync_Code_Ops::order( $staging, $version );
 		if ( null === $order ) {
@@ -996,14 +1009,18 @@ final class AB_MCP_Sync_Code_Swap {
 
 	/**
 	 * The files whose head names the version of a live unit, in order
-	 * (not_down()).
+	 * (not_down()). Under the deadline of the readings (R12) each entry of
+	 * the unit read and each name only while it is not over; once it is,
+	 * none, and not_down() passes the stop on (AB_MCP_Sync_Deadline::stop()).
+	 * The sort of the names is one call (a named limit of the deadline).
 	 *
-	 * @param string $kind   plugin or theme.
-	 * @param string $target The folder or file of the unit.
-	 * @param array  $live   The unit read: form, entries.
+	 * @param string               $kind     plugin or theme.
+	 * @param string               $target   The folder or file of the unit.
+	 * @param array                $live     The unit read: form, entries.
+	 * @param AB_MCP_Sync_Deadline $deadline The deadline of the readings.
 	 * @return string[]
 	 */
-	private static function heads( $kind, $target, array $live ) {
+	private static function heads( $kind, $target, array $live, AB_MCP_Sync_Deadline $deadline ) {
 		if ( 'theme' === $kind ) {
 			return array( $target . '/style.css' );
 		}
@@ -1012,6 +1029,9 @@ final class AB_MCP_Sync_Code_Swap {
 		}
 		$names = array();
 		foreach ( $live['entries'] as $entry ) {
+			if ( true !== AB_MCP_Sync_Deadline::left( $deadline ) ) {
+				return array();
+			}
 			if ( false === strpos( $entry[0], '/' ) && '.' !== substr( $entry[0], 0, 1 ) && '.php' === substr( $entry[0], -4 ) ) {
 				$names[] = $entry[0];
 			}
@@ -1019,6 +1039,9 @@ final class AB_MCP_Sync_Code_Swap {
 		sort( $names, SORT_STRING );
 		$files = array();
 		foreach ( $names as $name ) {
+			if ( true !== AB_MCP_Sync_Deadline::left( $deadline ) ) {
+				return array();
+			}
 			$files[] = $target . '/' . $name;
 		}
 		return $files;

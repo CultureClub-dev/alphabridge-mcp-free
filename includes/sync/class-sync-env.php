@@ -965,35 +965,63 @@ final class AB_MCP_Sync_Env {
 	 * or reads shorter than its first 8 KiB (or its size): unknown, never a
 	 * head that names nothing.
 	 *
-	 * @param string   $path    File.
-	 * @param string[] $headers Names.
+	 * With a deadline (AB_MCP_Sync_Deadline, R12 of Z8b branch 5: the heads
+	 * of the swap, AB_MCP_Sync_Code_Swap::not_down()) the file is asked
+	 * (is_file(), is_readable()), its size read, its head read and each
+	 * header taken from it only while it is not over, and so is the answer;
+	 * once it is over, null, and the caller passes the stop on
+	 * (AB_MCP_Sync_Deadline::stop()). Reading the head (8 KiB at most) is
+	 * one call, so is taking one header from it (named limits).
+	 *
+	 * @param string     $path     File.
+	 * @param string[]   $headers  Names.
+	 * @param mixed|null $deadline Null, or a deadline of AB_MCP_Sync_Deadline::at().
 	 * @return array<string,string>|null
 	 */
-	public static function head_read( $path, array $headers ) {
-		if ( ! is_string( $path ) || ! is_file( $path ) || ! is_readable( $path ) ) {
+	public static function head_read( $path, array $headers, $deadline = null ) {
+		if ( true !== AB_MCP_Sync_Deadline::left( $deadline ) || ! is_string( $path ) || ! is_file( $path ) ) {
+			return null;
+		}
+		if ( true !== AB_MCP_Sync_Deadline::left( $deadline ) || ! is_readable( $path ) ) {
 			return null;
 		}
 		clearstatcache( true, $path );
+		if ( true !== AB_MCP_Sync_Deadline::left( $deadline ) ) {
+			return null;
+		}
 		$size = @filesize( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- a file that went is answered.
+		if ( true !== AB_MCP_Sync_Deadline::left( $deadline ) ) {
+			return null;
+		}
 		$text = self::calls()->head_text( $path, 8192 );
 		if ( ! is_int( $size ) || ! is_string( $text ) || strlen( $text ) !== min( $size, 8192 ) ) {
 			return null;
 		}
-		return self::head_fields( $text, $headers );
+		$fields = self::head_fields( $text, $headers, $deadline );
+		if ( null === $fields || true !== AB_MCP_Sync_Deadline::left( $deadline ) ) {
+			return null;
+		}
+		return $fields;
 	}
 
 	/**
-	 * The headers in the text of a head (head(), head_read()).
+	 * The headers in the text of a head (head(), head_read()). With a
+	 * deadline (head_read()) each header only while it is not over; once
+	 * it is, null.
 	 *
-	 * @param string   $text    The first bytes of the file.
-	 * @param string[] $headers Names.
-	 * @return array<string,string>
+	 * @param string     $text     The first bytes of the file.
+	 * @param string[]   $headers  Names.
+	 * @param mixed|null $deadline Null, or a deadline of AB_MCP_Sync_Deadline::at().
+	 * @return array<string,string>|null Null only under a deadline that is over.
 	 */
-	private static function head_fields( $text, array $headers ) {
+	private static function head_fields( $text, array $headers, $deadline = null ) {
 		$text = str_replace( "\r", "\n", $text );
 		$out  = array();
 		foreach ( $headers as $header ) {
-			$out[ $header ] = 1 === preg_match( '/^(?:[ \t]*<\?(?:php)?)?[ \t\/*#@]*' . preg_quote( $header, '/' ) . ':(.*)$/mi', $text, $m ) ? trim( (string) preg_replace( '/\s*(?:\*\/|\?>).*/', '', $m[1] ) ) : '';
+			if ( true !== AB_MCP_Sync_Deadline::left( $deadline ) ) {
+				return null;
+			}
+			$out[ $header ] =1 === preg_match( '/^(?:[ \t]*<\?(?:php)?)?[ \t\/*#@]*' . preg_quote( $header, '/' ) . ':(.*)$/mi', $text, $m ) ? trim( (string) preg_replace( '/\s*(?:\*\/|\?>).*/', '', $m[1] ) ) : '';
 		}
 		return $out;
 	}
