@@ -485,6 +485,70 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
   der 15 mitgelieferten Themes mindestens eine PHP-Datei; Twenty Twenty-Three hat keine im Wurzelordner, aber 7 unter
   `patterns/`, und `php_file()` sucht Ordner für Ordner.
 
+### G-5-8 Frist vor jeder Lesung: an 149 Stellen beginnt eine Lesung der Vorbereitung ohne vorherige Prüfung der Frist
+
+- **Fundstelle:** die Liste `OPEN` in `tests/ReadBudgetExceptions.php:198`, 149 Einträge in 70 Funktionen, so wie der
+  Wächter der Lesungen sie am Stand `7d54485` auswies (`tests/ReadBudgetGuardTest.php` mit `ReadBudgetScan.php`,
+  `ReadBudgetRules.php` und `ReadBudgetSoll.php`: grün, 40 Tests; jede Verletzung seiner Regeln steht in `OPEN`, und
+  `OPEN` hält nichts darüber hinaus; 0 Probleme des Lesers und der Regeln). Gezählt je Regel:
+  - **R1, 65:** ein Schritt der Platte, der Datenbank, eines Codecs oder einer Sortierung direkt statt über den Helfer
+    der Schritte `AB_MCP_Sync_Step` (`includes/sync/class-sync-step.php`), der die Frist vor dem Schritt prüft;
+  - **R2, 20:** eine Schleife, deren Durchgang nicht mit einer Prüfung beginnt, die am Halt verlässt;
+  - **R3, 10:** eine Rekursion ohne Prüfung davor oder danach (`AB_MCP_Shape`, `AB_MCP_Sync_Canon::prepared()`,
+    `AB_MCP_Sync_File_Manifest::folder()`);
+  - **R4, 4:** ein Eintritt in die Kette oder ein Aufruf einer Naht der Platte nicht unmittelbar nach einer Prüfung;
+  - **R7, 50:** der Halt eines Aufrufs, den die nächste Anweisung nicht weitergibt; er kommt erst über den Fachwert der
+    Antwort und die spätere Frage `AB_MCP_Sync_Deadline::stop()` oder an der nächsten Prüfung an.
+
+  Darunter:
+  - **die acht Datenbankstellen** (R1; je Funktion mit ihrer Zeile am Kopf `7d54485`):
+    `AB_MCP_Guidance::settings_url()` `admin_url()` (`includes/class-guidance.php:194`),
+    `AB_MCP_Sync_Anchor::pair_print()` `home_url()` (`includes/sync/class-sync-anchor.php:352`), `::read()`
+    `get_option()` (`:422`), `::retired_list()` `get_option()` (`:500`), `AB_MCP_Settings::get()` `get_option()`
+    (`includes/class-settings.php:317`), `AB_MCP_Sync_Manifest::verify()` `home_url()`
+    (`includes/sync/class-sync-manifest.php:310`), `AB_MCP_Protected_Store::candidates()` `wp_upload_dir()`
+    (`includes/class-protected-store.php:3994`) und `::stored()` `$wpdb->get_var()` (`:4114`);
+  - **`AB_MCP_Sync_File_Manifest::whole()`** (R4, Festlegung F3-2-5): der Aufruf der Naht `lstat()` des Grundpfads
+    einer Einheit (`includes/sync/class-sync-file-manifest.php:299`) folgt keiner Prüfung, deren Halt weitergegeben
+    ist; seine Antwort am Halt ist `return $acc;`, keine listbare Form, darum steht er nicht in `FACHWERT`.
+  - **die Startlesung PS:2527** (Zählung des Auftrags R12b, Fassung 3c, Befund B1; am Kopf
+    `AB_MCP_Protected_Store::read_tree()`, `includes/class-protected-store.php:2588`): die erste Lesung der Uhr des
+    Baums liest die Zeit mit dem Cast `(float)`; unter einer Frist ist sie nicht streng, eine unbekannte Zeit wird dort
+    nicht als `ab_mcp_read_clock` gehalten (B1 und B1-a in `auftrag-teil-r12b-fassung3c.txt:329–336`, B1-a nicht
+    gebaut). Sie ist keine Regel des Wächters und kein Eintrag in
+    `OPEN`; sie gehört zu derselben Grenze.
+- **Quelle:** Entscheid 1 von Thomas vom 15.11.2026 (`knowledge/decisions.md` «2026-11-15 18:20», bestätigt in
+  «2026-11-15 20:50»): die Frist vor jeder Lesung (R12b, Plan 15.20 bis 15.22) endet am Kopf, die 149 Stellen werden
+  benannte Grenze; Plan Z8b 15.23, «Zeitbudget (R12b): endet am Kopf» und Grenze «Frist vor jeder Lesung am Kopf»;
+  Textvorschlag `knowledge/uebergaben/anhang/2026-11-15-kuerzung/z8b-rest-lead.md:147–151`; Stand des Wächters und
+  Festlegungen F3-2-1 bis F3-2-8 in `belege/r12b-3-2-uebergabe.md:83–87` und `:174–193` (von der Lead bestätigt; der
+  Code bleibt, wie er am Kopf steht). Nicht mehr gebaut: Teil 3.3 (die acht Datenbankstellen, die übrigen A3-artigen
+  Stellen der Ablage, B1-a an PS:2527, C1 an PS:2528) und die Teile 4 bis 7.
+- **Was:** Auf den Wegen der Vorbereitung eines Tauschs (`AB_MCP_Sync_Code_Swap::prepare()`: Stufe, signiertes
+  Manifest, Baum, Köpfe der Einheit) beginnt an diesen Stellen eine Lesung, ohne dass die Frist unmittelbar davor
+  geprüft ist, und nach einem Halt kann noch ein solcher Schritt folgen. Ein Tausch kann darum auf einem langsamen Host
+  über sein Budget laufen. Schranken bleiben die Mittelprüfung (`AB_MCP_Sync_Code_Swap::time_left()`, `code:means`,
+  `includes/sync/class-sync-code-swap.php:1073`; die letzte vor der ersten Mutation `:699`) und die Zeitgrenze von PHP
+  (`max_execution_time`). Für den Kunden heisst das: Ein Tausch auf einem langsamen Server kann ins Zeitlimit laufen
+  (Vorschlag für den Kundentext in Zweig 11, `z8b-rest-lead.md:152–153`; ein eigener Kundentext besteht nicht). Dass
+  der Halt ankommt, wo die Frist geprüft wird, zeigen die Tests des Abbruchs (`tests/integration/ReadDeadlineTest.php`,
+  `tests/SyncStepTest.php`, `tests/SyncDeadlineTest.php`). Der Wächter der Lesungen entfällt nach T7 und T10, sobald
+  ein Umbau ihn rot macht (Plan 15.23); dieser Text trägt dann die Grenze.
+  - **Die Namensprüfung:** In der Kette der Namensprüfung (`AB_MCP_Sync_Env::held()`,
+    `includes/sync/class-sync-env.php:2413`; im Wächter `NAMED` → `CHAIN`, `tests/ReadBudgetExceptions.php:500`) wird
+    die Frist vor jedem Aufruf von `held()` geprüft; eine begonnene Prüfung eines Namens läuft ohne Prüfung zu Ende
+    (Entscheid von Thomas vom 14.11.2026, Option 4; Zusage (b) in
+    `knowledge/uebergaben/anhang/2026-11-11-z8b/stoppfall-zeitbudget/auftrag-teil-r12b-fassung3c.txt:89–95`). Ihre
+    Einflussgrössen sind die Länge des Namens, die Schichten der Prüfung, die Zahl der Zusatzschlüssel aus dem Filter
+    `ab_mcp_redact_keys`, die Datenbankabfragen über `uploads_url()` und die Kernaufrufe. Gemessen (Teil 1b, am Kopf
+    `6e89b61`): **höchstens 43,266 ms** für einen Aufruf von `held()` über alle Pflichtfälle M0 bis M4 mit bis zu 100
+    Zusatzschlüsseln (Fall M3c, erster kalter Aufruf; Median der warmen Aufrufe dort 28,164 ms; Schwelle 100 ms
+    eingehalten); mit 1000 Zusatzschlüsseln 50,974 ms (gemessen, entscheidet nicht). Quelle:
+    `knowledge/uebergaben/anhang/2026-11-11-z8b/stoppfall-zeitbudget/r12b-t1b-messbericht.md:16` und `:31`;
+    `belege/lead-offen.md:898`.
+- **Trifft Normalfall:** nicht gemessen (`z8b-rest-lead.md:150`): wie lange die Lesungen an diesen Stellen auf einem
+  langsamen Host brauchen, ist nicht gemessen.
+
 ## Übernommen aus Zweig 2 (`bericht-zweig-2.md`, Abschnitt Grenzkandidaten; G-M9 aus «Behebung 2»)
 
 ### G-M1 Ein Lesen über Teile ist kein Augenblick

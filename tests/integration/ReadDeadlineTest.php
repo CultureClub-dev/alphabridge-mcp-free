@@ -90,6 +90,14 @@
  *   after signed() under the one deadline; over at the first or the last
  *   gate of heads(), of its heads, or at the check before the versions are
  *   compared, the swap stops as above.
+ * - R12b part 3.2, the halt of a helper of the steps
+ *   (DeadlineClock::late_at_step()): the time running out in the check of
+ *   a helper of plain(), of AB_MCP_Protected_Store_Calls::read() (and at
+ *   its own check before lstat()), of holds(), head_read() and
+ *   AB_MCP_Payload_File::read() halts the reading there: the step is not
+ *   taken, no helper is asked and nothing read after it, and get(),
+ *   groups(), tree(), taken() and state() answer the stop in full
+ *   (head_read() no head), never a refusal of the store or a fatal error.
  *
  * need() and stage() read without a deadline: CodeStageTest.
  *
@@ -2654,5 +2662,169 @@ final class ReadDeadlineTest extends TestCase {
 				self::assertNoLock();
 			}
 		);
+	}
+
+	/* ------------------ R12b part 3.2: the halt of a helper of the steps */
+
+	/**
+	 * A reading halted at its n-th check of a helper of the steps (the
+	 * pick-th time it checks before $step; a negative pick counts from the
+	 * last): the same gates, steps and checks up to that check, its step
+	 * not run, no helper asked and nothing read after it, and the answer of
+	 * the reading on its own level the stop in full (assertHalted()).
+	 */
+	private function haltedInAStep( string $series, string $step, int $pick ): void {
+		$base = $this->in_time( $series );
+		self::assertSame( count( $base->step_reads ), count( $base->checks ), $series . ': in time each check of a helper reads the clock.' );
+		$at = array_keys( $base->step_reads, $step, true );
+		self::assertNotSame( array(), $at, $series . ': in time the reading checks before ' . $step . '.' );
+		$n        = $at[ $pick < 0 ? count( $at ) + $pick : $pick ] + 1;
+		$clock    = DeadlineClock::late_at_step( $n );
+		$deadline = DeadlineClock::deadline();
+		$answer   = $this->reading( $series, $clock, $deadline );
+		$seen     = count( $clock->events );
+		self::assertSame( array_slice( $base->step_reads, 0, $n ), $clock->step_reads, "The same checks of the helpers up to the $n-th, the halt there." );
+		self::assertSame( array_slice( $base->events, 0, $seen ), $clock->events, 'The same gates and steps up to the halt.' );
+		self::assertSame( 'step: ' . $step, $base->events[ $seen ] ?? null, 'Its step does not run, and nothing after it: in time its step comes next.' );
+		self::assertSame( count( $clock->step_reads ), count( $clock->checks ), 'No helper asked after the halt.' );
+		self::assertSame( count( array_keys( $clock->events, 'step: clock', true ) ), $clock->others, 'No reading of the clock but those kept in order.' );
+		self::assertHalted( $series, $answer, $deadline, 'ab_mcp_read_late', self::LATE_TEXT );
+	}
+
+	/**
+	 * The checks of the lstat() of AB_MCP_Protected_Store::plain() (R12b
+	 * part 3.2, the new translation 1): on the way to an area and a group,
+	 * each sidecar of a listing, the file of get(), the way of a tree.
+	 *
+	 * @return array<string,array{string,string,int}>
+	 */
+	public static function plain_halts(): array {
+		$step = 'lstat (AB_MCP_Protected_Store::plain)';
+		return array(
+			'get(): the first step of the way'          => array( 'get', $step, 0 ),
+			'get(): the file read, never unsafe'        => array( 'get', $step, -1 ),
+			'groups(): the first step of the way'       => array( 'groups', $step, 0 ),
+			'groups(): the last sidecar of the listing' => array( 'groups', $step, -1 ),
+			'tree(): the first step of the way'         => array( 'tree', $step, 0 ),
+			'tree(): the last step of the way'          => array( 'tree', $step, -1 ),
+		);
+	}
+
+	/**
+	 * Prüft: the time running out in the check of the helper of plain()
+	 * (its lstat()) halts the reading of the store right there: get(),
+	 * groups() and tree() answer the stop in full, the step is not taken,
+	 * and nothing is read after it.
+	 * Sonst: a swap whose time runs out while the store is read would be
+	 * told that the protected store is unsafe (ab_mcp_store_unsafe, a link
+	 * or no plain file) instead of «the time ran out, call again», and the
+	 * customer would look for a fault of the store that is not there.
+	 */
+	#[DataProvider( 'plain_halts' )]
+	public function testOverInTheCheckOfTheHelperOfPlainTheStoreAnswersTheStopNeverUnsafe( string $series, string $step, int $pick ): void {
+		$this->haltedInAStep( $series, $step, $pick );
+	}
+
+	/**
+	 * The two checks of AB_MCP_Protected_Store_Calls::read() (R12b part 3.2,
+	 * the new translation 2): its own before lstat() (the gate read#1) and
+	 * that of the helper before the bytes, each in a sidecar read by get(),
+	 * groups() and tree().
+	 *
+	 * @return array<string,array{string,string,string,int}>
+	 */
+	public static function read_halts(): array {
+		$gate = 'AB_MCP_Protected_Store_Calls::read#1';
+		$step = 'file_get_contents (AB_MCP_Protected_Store_Calls::read)';
+		return array(
+			'get(): its check before lstat()'                  => array( 'get', 'gate', $gate, 0 ),
+			'get(): the check of its helper'                   => array( 'get', 'step', $step, 0 ),
+			'groups(): its check before lstat(), first'        => array( 'groups', 'gate', $gate, 0 ),
+			'groups(): its check before lstat(), last'         => array( 'groups', 'gate', $gate, -1 ),
+			'groups(): the check of its helper, first'         => array( 'groups', 'step', $step, 0 ),
+			'groups(): the check of its helper, last'          => array( 'groups', 'step', $step, -1 ),
+			'tree(): its check before lstat()'                 => array( 'tree', 'gate', $gate, 0 ),
+			'tree(): the check of its helper'                  => array( 'tree', 'step', $step, 0 ),
+		);
+	}
+
+	/**
+	 * Prüft: the time running out at the check of read() before lstat(), or
+	 * in the check of its helper before the bytes, halts the reading of the
+	 * sidecar there: read() answers with the halt at once, its sidecar is
+	 * not read on (no lstat(), no bytes, no helper asked after it), and
+	 * get(), groups() and tree() answer the stop in full.
+	 * Sonst: a swap whose time ran out would still read the file of a
+	 * sidecar after its time (a step on a slow disk past the limit the call
+	 * was given), or answer with a refusal of the store (a group not there,
+	 * an area not listed) instead of «the time ran out, call again».
+	 */
+	#[DataProvider( 'read_halts' )]
+	public function testOverAtTheChecksOfReadTheSidecarIsNotReadOnAndTheStoreAnswersTheStop( string $series, string $which, string $name, int $pick ): void {
+		if ( 'step' === $which ) {
+			$this->haltedInAStep( $series, $name, $pick );
+			return;
+		}
+		$base = $this->in_time( $series );
+		self::assertSame( count( $base->step_reads ), count( $base->checks ), $series . ': in time each check of a helper reads the clock.' );
+		$at = array_keys( $base->gates, $name, true );
+		self::assertNotSame( array(), $at, $series . ': in time the reading asks ' . $name . '.' );
+		$k        = $at[ $pick < 0 ? count( $at ) + $pick : $pick ] + 1;
+		$clock    = DeadlineClock::late_from( $k );
+		$deadline = DeadlineClock::deadline();
+		$answer   = $this->reading( $series, $clock, $deadline );
+		self::assertSame( array_slice( $base->gates, 0, $k ), $clock->gates, "The same way up to reading $k, and no reading of a deadline after it." );
+		self::assertSame( $base->until_gate( $k ), $clock->events, 'The same steps up to the gate, none after it.' );
+		self::assertSame( count( $clock->step_reads ), count( $clock->checks ), 'No helper asked after the halt: the sidecar is not read on.' );
+		self::assertSame( count( array_keys( $clock->events, 'step: clock', true ) ), $clock->others, 'No reading of the clock but those kept in order.' );
+		self::assertHalted( $series, $answer, $deadline, 'ab_mcp_read_late', self::LATE_TEXT );
+	}
+
+	/**
+	 * The checks of the helpers in the three sources of a halt without an
+	 * answer of a new form (R12b part 3.2, the new translation 3): holds()
+	 * (its stat() of the folder, its realpath() and the stat() of each
+	 * folder up the path), head_read() (is_file(), is_readable(),
+	 * filesize()) and AB_MCP_Payload_File::read() (is_file(), filesize(),
+	 * file_get_contents(): a chunk in get(), the mark in taken(), the state
+	 * of the stage).
+	 *
+	 * @return array<string,array{string,string,int}>
+	 */
+	public static function source_halts(): array {
+		$holds = 'stat (AB_MCP_Protected_Store::holds)';
+		$head  = ' (AB_MCP_Sync_Env::head_read)';
+		$file  = ' (AB_MCP_Payload_File::read)';
+		return array(
+			'holds(): the stat() of its folder'                    => array( 'get', $holds, 0 ),
+			'holds(): the stat() of the first folder up the path'  => array( 'get', $holds, 1 ),
+			'holds(): the realpath()'                              => array( 'get', 'realpath (AB_MCP_Protected_Store::holds)', 0 ),
+			'holds(): the stat() of the last folder up the path'   => array( 'get', $holds, -1 ),
+			'holds(): the last of groups()'                        => array( 'groups', $holds, -1 ),
+			'head_read(): is_file()'                               => array( 'headread', 'is_file' . $head, 0 ),
+			'head_read(): is_readable()'                           => array( 'headread', 'is_readable' . $head, 0 ),
+			'head_read(): filesize()'                              => array( 'headread', 'filesize' . $head, 0 ),
+			'Payload_File::read(): is_file() of the chunk'         => array( 'get', 'is_file' . $file, 0 ),
+			'Payload_File::read(): filesize() of the chunk'        => array( 'get', 'filesize' . $file, 0 ),
+			'Payload_File::read(): the bytes of the chunk'         => array( 'get', 'file_get_contents' . $file, 0 ),
+			'Payload_File::read(): the bytes of the mark'          => array( 'taken', 'file_get_contents' . $file, -1 ),
+			'Payload_File::read(): the bytes of the state'         => array( 'state', 'file_get_contents' . $file, 0 ),
+		);
+	}
+
+	/**
+	 * Prüft: the time running out in the check of a helper of holds(),
+	 * head_read() or AB_MCP_Payload_File::read() halts the reading there:
+	 * the step is not taken, no helper is asked and nothing read after it,
+	 * and the reading answers the stop in full (get(), taken() and state()
+	 * the stop; head_read(), read directly, no head with the stop kept in
+	 * its deadline).
+	 * Sonst: a swap whose time ran out inside such a step would end with a
+	 * fatal error (the halt taken for the answer of the step) or read on
+	 * past its time, instead of «the time ran out, call again».
+	 */
+	#[DataProvider( 'source_halts' )]
+	public function testOverInTheCheckOfAHelperOfHoldsHeadReadOrThePayloadTheHaltIsAnsweredAsAtTheirGates( string $series, string $step, int $pick ): void {
+		$this->haltedInAStep( $series, $step, $pick );
 	}
 }

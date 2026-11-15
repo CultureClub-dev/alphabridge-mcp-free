@@ -788,8 +788,8 @@ return array_merge(
 			'id'      => 'ablage/b2-entry-checked',
 			'clause'  => 'read() of a map (the bookings): an entry that is no booking makes the whole unknown, never left out',
 			'file'    => $sh,
-			'search'  => "if ( self::read( \$key, \$form['key'] ) !== \$key || null === \$read ) {\n\t\t\t\treturn null;",
-			'replace' => "if ( self::read( \$key, \$form['key'] ) !== \$key || null === \$read ) {\n\t\t\t\tcontinue;",
+			'search'  => "if ( null === \$read || self::read( \$key, \$form['key'] ) !== \$key ) {\n\t\t\t\treturn null;",
+			'replace' => "if ( null === \$read || self::read( \$key, \$form['key'] ) !== \$key ) {\n\t\t\t\tcontinue;",
 			'run'     => $it( 'StoreBookingsTest', 'testBookingsThatAreNoBookingsAreNeitherEmptyNorWrittenOver' ),
 			'expect'  => '/testBookingsThatAreNoBookingsAreNeitherEmptyNorWrittenOver/',
 		),
@@ -1445,9 +1445,9 @@ return array_merge(
 			'id'      => 'ablage/a1-sidecar-whole',
 			'clause'  => 'sidecar(): an entry not whole by the table is unknown (kept() holds the fields it decides by again, ablage/a1-kept-whole)',
 			'file'    => $ps,
-			'search'  => '		if ( ! self::whole( $e ) ) {
+			'search'  => '		if ( null !== AB_MCP_Sync_Deadline::stop( $deadline ) || ! self::whole( $e ) ) {
 			return array( \'unknown\', null );',
-			'replace' => '		if ( ! is_array( $e ) || ! isset( $e[\'area\'] ) || ! isset( self::SIDECAR[ $e[\'area\'] ] ) ) {
+			'replace' => '		if ( null !== AB_MCP_Sync_Deadline::stop( $deadline ) || ! is_array( $e ) || ! isset( $e[\'area\'] ) || ! isset( self::SIDECAR[ $e[\'area\'] ] ) ) {
 			return array( \'unknown\', null );',
 			'run'     => $it( 'StoreRemoverTest', 'testASidecarThatLacksAFieldOfItsRowOrHoldsItNullOrOfAnotherTypeOrRangeKeepsItsGroup' ),
 			'expect'  => '/testASidecarThatLacksAFieldOfItsRowOrHoldsItNullOrOfAnotherTypeOrRangeKeepsItsGroup/',
@@ -1598,9 +1598,9 @@ return array_merge(
 			'id'      => 'ablage/b2r-backup-unknown-not-reused',
 			'clause'  => 'AB_MCP_Sync_Backup::group(): a group whose sidecar is unknown is never used again (read_entry(), SIDECAR)',
 			'file'    => $ps,
-			'search'  => '		if ( ! self::whole( $e ) ) {
+			'search'  => '		if ( null !== AB_MCP_Sync_Deadline::stop( $deadline ) || ! self::whole( $e ) ) {
 			return array( \'unknown\', null );',
-			'replace' => '		if ( ! is_array( $e ) || ! isset( $e[\'area\'] ) || ! isset( self::SIDECAR[ $e[\'area\'] ] ) ) {
+			'replace' => '		if ( null !== AB_MCP_Sync_Deadline::stop( $deadline ) || ! is_array( $e ) || ! isset( $e[\'area\'] ) || ! isset( self::SIDECAR[ $e[\'area\'] ] ) ) {
 			return array( \'unknown\', null );',
 			'run'     => $it( 'StoreRemoverTest', 'testABackupGroupTakesItsRunAsGivenAndNeverAGroupWhoseSidecarIsUnknown' ),
 			'expect'  => '/testABackupGroupTakesItsRunAsGivenAndNeverAGroupWhoseSidecarIsUnknown/',
@@ -2223,7 +2223,7 @@ return array_merge(
 			'id'      => 'ablage/shape-map-key',
 			'clause'  => 'read() of a map: every key in the form of its keys',
 			'file'    => $sh,
-			'search'  => "if ( self::read( \$key, \$form['key'] ) !== \$key || null === \$read ) {\n\t\t\t\treturn null;",
+			'search'  => "if ( null === \$read || self::read( \$key, \$form['key'] ) !== \$key ) {\n\t\t\t\treturn null;",
 			'replace' => "if ( null === \$read ) {\n\t\t\t\treturn null;",
 			'run'     => $unit( 'StoreInputsTest', 'testEveryWrongFormOfARowReachesItsConsumerAsUnknownAndEveryValidOneAsAValue' ),
 			'expect'  => '/testEveryWrongFormOfARowReachesItsConsumerAsUnknownAndEveryValidOneAsAValue/',
@@ -2259,8 +2259,8 @@ return array_merge(
 			'id'      => 'ablage/shape-roundtrip',
 			'clause'  => 'read() of JSON: only the text its writer wrote of it (the round trip: an object as a list, a key twice, another spelling)',
 			'file'    => $sh,
-			'search'  => "if ( ! is_string( \$again ) || \$again !== \$value ) {",
-			'replace' => "if ( ! is_string( \$again ) ) {",
+			'search'  => "if ( ! is_string( \$again ) || \$again !== \$value || self::stopped( \$deadline ) ) {",
+			'replace' => "if ( ! is_string( \$again ) || self::stopped( \$deadline ) ) {",
 			'run'     => $unit( 'StoreInputsTest', 'testEveryWrongFormOfARowReachesItsConsumerAsUnknownAndEveryValidOneAsAValue' ),
 			'expect'  => '/testEveryWrongFormOfARowReachesItsConsumerAsUnknownAndEveryValidOneAsAValue/',
 		),
@@ -2268,8 +2268,8 @@ return array_merge(
 			'id'      => 'ablage/shape-roundtrip-files',
 			'clause'  => 'read() of JSON: the round trip of the writer of a sidecar, a mark and the bookings',
 			'file'    => $sh,
-			'search'  => "if ( ! is_string( \$again ) || \$again !== \$value ) {",
-			'replace' => "if ( ! is_string( \$again ) ) {",
+			'search'  => "if ( ! is_string( \$again ) || \$again !== \$value || self::stopped( \$deadline ) ) {",
+			'replace' => "if ( ! is_string( \$again ) || self::stopped( \$deadline ) ) {",
 			'run'     => $it( 'StoreInputsTest', 'testEveryWrongFormOfARowReachesItsConsumerInTheStoreAsUnknown' ),
 			'expect'  => '/testEveryWrongFormOfARowReachesItsConsumerInTheStoreAsUnknown/',
 		),
@@ -2367,8 +2367,8 @@ return array_merge(
 			'id'      => 'ablage/c1-groups-unlisted',
 			'clause'  => 'groups(): an area that cannot be listed is refused, never empty',
 			'file'    => $ps,
-			'search'  => "\t\tif ( null === \$whole ) {\n\t\t\treturn self::unlisted( \$area );",
-			'replace' => "\t\tif ( false ) {\n\t\t\treturn self::unlisted( \$area );",
+			'search'  => "\t\tif ( null === \$whole || null !== AB_MCP_Sync_Deadline::stop( \$deadline ) ) {\n\t\t\treturn self::stopped_or( \$deadline, self::unlisted( \$area ) );",
+			'replace' => "\t\tif ( null !== AB_MCP_Sync_Deadline::stop( \$deadline ) ) {\n\t\t\treturn self::stopped_or( \$deadline, self::unlisted( \$area ) );",
 			'run'     => $it( 'StoreRemoverTest', 'testAnAreaThatCannotBeListedLosesNothingAndIsCountedUnknown' ),
 			'expect'  => '/testAnAreaThatCannotBeListedLosesNothingAndIsCountedUnknown/',
 		),
