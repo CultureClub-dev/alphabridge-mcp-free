@@ -554,6 +554,14 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
   `tests/SyncDeadlineTest.php`). Der Wächter der Lesungen ist nach T7 und T10 an `d1a0478` entfallen (Teil A1 des
   Rests: der Rückbau der Kernsperre machte ihn rot, Plan 15.23); seine Dateien und Zeilen in diesem Text sind die am
   Stand `7d54485`, und dieser Text trägt seither die Grenze.
+  - **Von den Tests nicht unterschieden:** An vier Stellen sehen die Tests nicht, ob der Halt vor dem Zugriff auf die
+    Platte gegeben wird oder erst danach: `AB_MCP_Protected_Store_Calls::read()` vor `lstat()`,
+    `AB_MCP_Protected_Store::holds()` vor dem `stat()` eines Ordners, `AB_MCP_Sync_Env::head_read()` vor `filesize()`
+    und `AB_MCP_Payload_File::read()` vor `file_get_contents()`. Die Antwort ist in beiden Fällen dieselbe. Ein Zugriff
+    nach dem Halt kann aber auf einer langsamen Platte Zeit kosten, bei `file_get_contents()` je nach Länge der Datei.
+    Gegenproben dazu überleben die Tests (Teil B des Rests, `belege/z5r-b-unsichtbar-liste.php`). Ein Test bräuchte
+    eine Naht, die die Zugriffe innerhalb dieser Funktionen sieht; er ist nicht gebaut (Befund A-2 der Codex-Runde
+    über Teil A).
   - **Die Namensprüfung:** In der Kette der Namensprüfung (`AB_MCP_Sync_Env::held()`,
     `includes/sync/class-sync-env.php:2413`; im Wächter `NAMED` → `CHAIN`, `tests/ReadBudgetExceptions.php:500`) wird
     die Frist vor den Aufrufen von `held()` geprüft, mit einer Ausnahme (Befund B1-2 der Codex-Runde über Teil B): In
@@ -590,8 +598,11 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
   WP-CLI derselben Einheit kann neben dem Tausch laufen. AlphaBridge trennt nur seine eigenen Wege über den
   Change-Lock: Tausch, Update-Werkzeug, Aktivierung und Deploy von AlphaBridge laufen nacheinander
   (`AB_MCP_Change_Lock`, `includes/lifecycle/class-change-lock.php`; die Ablehnung `ab_mcp_change_busy` nennt die
-  möglichen Halter nur als Beispiele, `held_elsewhere()`). Dass der Tausch die Sperre für Updates und eine Notiz
-  darauf nicht nimmt, prüft `tests/integration/ReadDeadlineTest.php` in den Fällen, die `assertNoLock()` aufrufen.
+  möglichen Halter nur als Beispiele, `held_elsewhere()`). Dass der Tausch die Sperre für Updates nicht nimmt, belegt
+  der Code: Unter `includes/sync/` steht ausser in diesem Text kein `auto_updater` (`git grep -n auto_updater --
+  includes/sync`, Stand `7492dff`). Die Fälle in `tests/integration/ReadDeadlineTest.php`, die `assertNoLock()`
+  aufrufen, prüfen nur den Endzustand: Nach dem Aufruf liegt weder die Sperre noch eine Notiz darauf. Ein Nehmen und
+  Freigeben während des Aufrufs sähen sie nicht (Befund A-3 der Codex-Runde über Teil A).
 - **Trifft Normalfall:** nein. Im Normalfall (F56: ein aktives Plugin mit `accept`) läuft neben dem Tausch kein Update
   derselben Einheit. Wie oft ein Hintergrund-Update von WordPress in einen Tausch fällt, ist nicht gemessen.
 

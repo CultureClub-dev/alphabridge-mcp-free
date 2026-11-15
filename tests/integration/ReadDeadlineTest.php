@@ -2441,7 +2441,7 @@ final class ReadDeadlineTest extends TestCase {
 		}
 	}
 
-	/** No lock of a swap is held: the lock for changes given back; WordPress's lock for updates (auto_updater) and a note of a swap on it are not taken (the swap does not take that lock since part A1 of the rest of branch 5). */
+	/** No lock of a swap is held after the call: the lock for changes given back; neither WordPress's lock for updates (auto_updater) nor a note of a swap on it is there at the end (the end state only; the swap has no call that takes that lock since part A1 of the rest of branch 5). */
 	private static function assertNoLock(): void {
 		$note = \AB_MCP_Update_Log::running();
 		self::assertFalse( \AB_MCP_Change_Lock::held(), 'The lock for changes given back.' );
@@ -2757,8 +2757,9 @@ final class ReadDeadlineTest extends TestCase {
 	 * reading of a deadline, and get(), groups() and tree() answer the stop
 	 * in full. Not seen here: whether read() gives the halt before its own
 	 * lstat() (the stand-in of the calls does not see the call of
-	 * $this->lstat() inside them; a part without visible behaviour, decision
-	 * 1 of the lead on part B of the rest of branch 5).
+	 * $this->lstat() inside them; one more lstat() after the halt gives the
+	 * same answer but can cost time on a slow disk, named in G-5-8 of
+	 * includes/sync/GRENZEN-CODE.md).
 	 * Sonst: a swap whose time ran out would still read the file of a
 	 * sidecar after its time (a step on a slow disk past the limit the call
 	 * was given), or answer with a refusal of the store (a group not there,
