@@ -471,8 +471,8 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
 
 ### G-5-7 Laufende Einheit ganz ohne PHP-Datei wird nicht getauscht
 
-- **Fundstelle:** `AB_MCP_Sync_Code_Swap::under_locks()` mit `php_file()` (`includes/sync/class-sync-code-swap.php:554`,
-  `:656`), Ablehnung `code:opcache_file`.
+- **Fundstelle:** `AB_MCP_Sync_Code_Swap::under_locks()` mit `php_file()` (`includes/sync/class-sync-code-swap.php:532`,
+  `:668`, Stand `2bbef66`), Ablehnung `code:opcache_file`.
 - **Quelle:** Teil 2a, Befund 2 und Frage 8; Entscheid der Lead vom 13.11.2026 (nach 20:29).
 - **Fall:** Code der Einheit läuft (`released()` ist wahr), die Einheit ist keine Neuanlage, und weder sie selbst noch
   ein Ordner unter ihr enthält eine PHP-Datei (etwa ein Block-Theme nur aus `style.css`, `theme.json` und Vorlagen).
@@ -546,12 +546,14 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
   unmittelbar davor geprüft ist, oder nach einem Halt folgt noch ein Schritt; an einem anderen Teil schützt eine
   Schreibweise, die der Wächter nicht erkennt. Wie gross welcher Teil ist, ist nicht gezählt (oben). Ein Tausch kann
   darum auf einem langsamen Host über sein Budget laufen. Schranken bleiben die Mittelprüfung
-  (`AB_MCP_Sync_Code_Swap::time_left()`, `code:means`, `includes/sync/class-sync-code-swap.php:1073`; die letzte vor der ersten Mutation `:699`) und die Zeitgrenze von PHP
-  (`max_execution_time`). Für den Kunden heisst das: Ein Tausch auf einem langsamen Server kann ins Zeitlimit laufen
-  (Vorschlag für den Kundentext in Zweig 11, `z8b-rest-lead.md:152–153`; ein eigener Kundentext besteht nicht). Dass
-  der Halt ankommt, wo die Frist geprüft wird, zeigen die Tests des Abbruchs (`tests/integration/ReadDeadlineTest.php`,
-  `tests/SyncStepTest.php`, `tests/SyncDeadlineTest.php`). Der Wächter der Lesungen entfällt nach T7 und T10, sobald
-  ein Umbau ihn rot macht (Plan 15.23); dieser Text trägt dann die Grenze.
+  (`AB_MCP_Sync_Code_Swap::time_left()`, `code:means`, `includes/sync/class-sync-code-swap.php:982`; die letzte vor
+  der ersten Mutation `:608`; Stand `2bbef66`) und die Zeitgrenze von PHP (`max_execution_time`). Für den Kunden heisst
+  das: Ein Tausch auf einem langsamen Server kann ins Zeitlimit laufen (Vorschlag für den Kundentext in Zweig 11,
+  `z8b-rest-lead.md:152–153`; ein eigener Kundentext besteht nicht). Dass der Halt ankommt, wo die Frist geprüft wird,
+  zeigen die Tests des Abbruchs (`tests/integration/ReadDeadlineTest.php`, `tests/SyncStepTest.php`,
+  `tests/SyncDeadlineTest.php`). Der Wächter der Lesungen ist nach T7 und T10 an `d1a0478` entfallen (Teil A1 des
+  Rests: der Rückbau der Kernsperre machte ihn rot, Plan 15.23); seine Dateien und Zeilen in diesem Text sind die am
+  Stand `7d54485`, und dieser Text trägt seither die Grenze.
   - **Die Namensprüfung:** In der Kette der Namensprüfung (`AB_MCP_Sync_Env::held()`,
     `includes/sync/class-sync-env.php:2413`; im Wächter `NAMED` → `CHAIN`, `tests/ReadBudgetExceptions.php:500`) wird
     die Frist vor den Aufrufen von `held()` geprüft, mit einer Ausnahme (Befund B1-2 der Codex-Runde über Teil B): In
@@ -571,6 +573,27 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
     `belege/lead-offen.md:898`.
 - **Trifft Normalfall:** nicht gemessen (`z8b-rest-lead.md:150`): wie lange die Lesungen an diesen Stellen auf einem
   langsamen Host brauchen, ist nicht gemessen.
+
+### G-5-9 Kernsperre: Der Tausch nimmt die Sperre `auto_updater` von WordPress nicht
+
+- **Fundstelle:** `AB_MCP_Sync_Code_Swap` (`includes/sync/class-sync-code-swap.php`, Stand `2bbef66`): `take()` (`:440`)
+  nimmt nur den Change-Lock (`AB_MCP_Change_Lock::take()` über `Calls::take_lock()`, `:92`); `release()` (`:407`) gibt
+  nur ihn zurück (`Calls::release_lock()`, `:101`); `checked()` liest vor der Antwort von `prepare()` nur ihn
+  (`if ( ! self::lock_held() )`, `:602`; `lock_held()` `:395`). Eine Sperre für Updates nimmt der Tausch nicht.
+  `includes/lifecycle/class-update-guard.php` und `class-update-log.php` stehen wieder wie auf main (`90ab733`).
+  Rückbau der Kernsperre aus dem 2a-WIP: Commit `d1a0478` (Teil A1 des Rests).
+- **Quelle:** Entscheid 1 von Thomas vom 15.11.2026 (Variante b; `knowledge/decisions.md` «2026-11-15 18:20»,
+  bestätigt in «2026-11-15 20:50»). Er löst seine Wahl von Option A zur Kernsperre ab (`decisions.md` «2026-11-14
+  00:03»). Plan Z8b 15.23, «Kernsperre: fällt» und Grenze «Kernsperre» unter «Neue Grenzen mit Ort»; Gewicht nach
+  Option C der Vorlage (`stoppfall-kernsperre/vorlage-kernsperre-thomas.md:26`).
+- **Was:** Der Tausch nimmt `auto_updater` nicht. Ein Hintergrund-Update von WordPress, ein Update von Hand oder über
+  WP-CLI derselben Einheit kann neben dem Tausch laufen. AlphaBridge trennt nur seine eigenen Wege über den
+  Change-Lock: Tausch, Update-Werkzeug, Aktivierung und Deploy von AlphaBridge laufen nacheinander
+  (`AB_MCP_Change_Lock`, `includes/lifecycle/class-change-lock.php`; die Ablehnung `ab_mcp_change_busy` nennt die
+  möglichen Halter nur als Beispiele, `held_elsewhere()`). Dass der Tausch die Sperre für Updates und eine Notiz
+  darauf nicht nimmt, prüft `tests/integration/ReadDeadlineTest.php` in den Fällen, die `assertNoLock()` aufrufen.
+- **Trifft Normalfall:** nein. Im Normalfall (F56: ein aktives Plugin mit `accept`) läuft neben dem Tausch kein Update
+  derselben Einheit. Wie oft ein Hintergrund-Update von WordPress in einen Tausch fällt, ist nicht gemessen.
 
 ## Übernommen aus Zweig 2 (`bericht-zweig-2.md`, Abschnitt Grenzkandidaten; G-M9 aus «Behebung 2»)
 

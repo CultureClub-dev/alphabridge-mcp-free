@@ -18,7 +18,9 @@
  *
  * A method of $wpdb has its helper as wpdb_<method> (the name of a method
  * holds no ->): wpdb_get_var() is the step $wpdb->get_var() on the global
- * $wpdb, as the guard of the read budget reads it (tests/ReadBudgetScan.php).
+ * $wpdb, as the guard of the read budget read it (tests/ReadBudgetScan.php
+ * at 7d54485; the guard went at d1a0478, its limit is G-5-8 in
+ * GRENZEN-CODE.md).
  *
  * Not here (R12b, part 3.1): fopen(), fstat() and fread(), steps only of the
  * atomic seams of AB_MCP_Sync_File_Manifest_Calls, which stay direct calls
