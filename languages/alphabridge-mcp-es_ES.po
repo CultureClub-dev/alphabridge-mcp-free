@@ -4153,6 +4153,13 @@ msgstr "El Escritorio respondía antes del cambio, pero no se ha comprobado desp
 msgid "Not started: an update of %1$s through AlphaBridge has been running for %2$d s on this site. Updates of one site run one after the other: call the next one when this one has answered. After a call that timed out, wait a minute before calling it again: if that update was kept, nothing is offered any more and the answer names its result."
 msgstr "No iniciado: lleva %2$d s en curso en este sitio una actualización de %1$s a través de AlphaBridge. Las actualizaciones de un sitio van una detrás de otra: lanza la siguiente cuando esta haya respondido. Tras una llamada que agotó el tiempo, espera un minuto antes de volver a llamar: si esa actualización se conservó, ya no se ofrece nada y la respuesta nombra su resultado."
 
+msgid "Not started: another update began on this site a moment ago (through AlphaBridge, or WordPress's own background updates). Nothing was changed; try again when it has finished."
+msgstr "No iniciado: otra actualización ha empezado en este sitio hace un momento (a través de AlphaBridge o de las actualizaciones en segundo plano de WordPress). No se ha cambiado nada; vuelve a intentarlo cuando haya terminado."
+
+#, php-format
+msgid "Not started: WordPress's own background updates are running on this site (their lock was taken at %s UTC and expires after 60 minutes). Nothing was changed; try again when they have finished."
+msgstr "No iniciado: las actualizaciones en segundo plano de WordPress están en curso en este sitio (su bloqueo se tomó a las %s UTC y caduca a los 60 minutos). No se ha cambiado nada; vuelve a intentarlo cuando hayan terminado."
+
 msgid "WordPress's file access is not available."
 msgstr "El acceso a archivos de WordPress no está disponible."
 

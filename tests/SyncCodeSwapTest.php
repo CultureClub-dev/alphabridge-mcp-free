@@ -4,9 +4,9 @@
  * runs without a site: prepare() up to the stage, through the seam of its
  * calls, and release() (the Behebung after the Codex round on 4881c0d: A2
  * the test requests switched off for every swap, A3 the place of a unit made
- * new, A6 a Throwable on the way to the lock, A7 the locks given back each in
- * its own finally, a lock not given back named). What needs the stage, the
- * pair and the file system of a site runs in
+ * new, A6 a Throwable under the lock, A7 a lock not given back named; the
+ * core lock taken back in part A1 of the rest of branch 5). What needs the
+ * stage, the pair and the file system of a site runs in
  * tests/integration/SyncCodeRunTest.php.
  *
  * @package AlphaBridge_MCP
@@ -52,7 +52,6 @@ final class SyncCodeSwapTest extends TestCase {
 			null,
 			array(
 				'change' => false,
-				'core'   => null,
 			)
 		);
 		AB_MCP_Sync_Code_Swap::forget();
@@ -131,8 +130,8 @@ final class SyncCodeSwapTest extends TestCase {
 			self::assertStringContainsString( 'Switch the test requests on again, or update the unit by hand in wp-admin.', $got->get_error_message(), $what . ': with the way.' );
 			self::assertStringNotContainsString( 'runs on this site', $got->get_error_message(), $what . ': no claim of running code.' );
 			self::assertSame( array(), array_intersect( array( 'probe', 'opcache', 'lstat', 'scandir' ), $calls->called ), $what . ': no test request, no OPcache, no reading.' );
-			self::assertSame( array( 'free_core_lock', 'release_lock' ), array_values( array_intersect( $calls->called, array( 'release_lock', 'free_core_lock' ) ) ), $what . ': both locks given back, the lock for updates first.' );
-			self::assertSame( array( 'change' => false, 'core' => null ), self::held(), $what );
+			self::assertSame( array( 'release_lock' ), array_values( array_intersect( $calls->called, array( 'release_lock' ) ) ), $what . ': the lock given back.' );
+			self::assertSame( array( 'change' => false ), self::held(), $what );
 		}
 	}
 
@@ -160,86 +159,48 @@ final class SyncCodeSwapTest extends TestCase {
 			self::assertSame( $code, $got->get_error_code(), $what . ': ' . $got->get_error_message() );
 			self::assertStringContainsString( $says, $got->get_error_message(), $what );
 			self::assertContains( 'probe', $calls->called, $what . ': after the test requests before.' );
-			self::assertSame( array( 'change' => false, 'core' => null ), self::held(), $what . ': both locks given back.' );
+			self::assertSame( array( 'change' => false ), self::held(), $what . ': the lock given back.' );
 		}
 		// Read as empty, a unit made new goes on to the stage: in
 		// tests/integration/SyncCodeRunTest.php (the stage needs the store).
 		self::assertContains( WP_PLUGIN_DIR, $calls->listed, 'The folder above the place listed.' );
 	}
 
-	public function testBothLocksAreGivenBackEachInItsOwnFinallyAndALockNotGivenBackIsNamed(): void {
-		// A7 of the Codex round on 4881c0d: a Throwable or an answer not true
-		// of one release does not keep the other from running; a lock not
-		// given back stays held here and is named. Red at 4881c0d: a Throwable
-		// of free_core_lock() kept the lock for changes, false counted as
-		// given back.
+	public function testTheLockNotGivenBackStaysHeldAndIsNamed(): void {
+		// A7 of the Codex round on 4881c0d: a lock not given back stays held
+		// here and is named. Red at 4881c0d: false counted as given back. (The
+		// lock for updates and its own finally went with the core lock, part A1
+		// of the rest of branch 5.)
 		$held = new \ReflectionProperty( AB_MCP_Sync_Code_Swap::class, 'held' );
 		if ( PHP_VERSION_ID < 80100 ) {
 			$held->setAccessible( true );
 		}
-		$hold = static function () use ( $held ): void {
-			$held->setValue(
-				null,
-				array(
-					'change' => true,
-					'core'   => 'abc',
-				)
-			);
-		};
-		$hold();
-		$calls  = self::calls(
-			array(
-				'free_core_lock' => static function () {
-					throw new \RuntimeException( 'the database went away' );
-				},
-			)
-		);
-		$caught = null;
-		try {
-			AB_MCP_Sync_Code_Swap::release();
-		} catch ( \RuntimeException $e ) {
-			$caught = $e->getMessage();
-		}
-		self::assertSame( 'the database went away', $caught, 'The Throwable goes on.' );
-		self::assertSame( array( 'free_core_lock', 'release_lock' ), $calls->called, 'The lock for changes is given back all the same.' );
-		self::assertSame( array( 'change' => false, 'core' => 'abc' ), self::held(), 'The lock for updates stays held here.' );
-		foreach ( array( 'core false' => array( false, true, array( 'core' ) ), 'core null' => array( null, true, array( 'core' ) ), 'change false' => array( true, false, array( 'change' ) ), 'both' => array( false, false, array( 'core', 'change' ) ), 'none' => array( true, true, array() ) ) as $what => list( $core, $change, $kept ) ) {
-			$hold();
-			self::calls(
-				array(
-					'free_core_lock' => $core,
-					'release_lock'   => $change,
-				)
-			);
+		foreach ( array( 'change false' => array( false, array( 'change' ) ), 'change null' => array( null, array( 'change' ) ), 'none' => array( true, array() ) ) as $what => list( $change, $kept ) ) {
+			$held->setValue( null, array( 'change' => true ) );
+			self::calls( array( 'release_lock' => $change ) );
 			self::assertSame( $kept, AB_MCP_Sync_Code_Swap::release(), $what );
-			self::assertSame(
-				array(
-					'change' => in_array( 'change', $kept, true ),
-					'core'   => in_array( 'core', $kept, true ) ? 'abc' : null,
-				),
-				self::held(),
-				$what
-			);
+			self::assertSame( array( 'change' => in_array( 'change', $kept, true ) ), self::held(), $what );
 		}
 		// prepare(): a refusal names the lock it could not give back.
 		self::calls(
 			array(
-				'core_lock'    => new WP_Error( 'ab_mcp_update_busy', 'Not started: the lock for updates is held.' ),
-				'release_lock' => false,
+				'probe_enabled' => false,
+				'release_lock'  => false,
 			)
 		);
-		$got = AB_MCP_Sync_Code_Swap::prepare( self::args() );
-		self::assertSame( 'ab_mcp_update_busy', $got->get_error_code(), 'The refusal of the lock for updates as it is (no code:busy).' );
-		self::assertStringContainsString( 'Not started: the lock for updates is held. AlphaBridge\'s lock for changes of the code, which this call took, could not be given back, so it stays: other changes through AlphaBridge can be refused until it is ' . intdiv( AB_MCP_Change_Lock::TIMEOUT, 60 ) . ' minutes old', $got->get_error_message() );
+		$got = AB_MCP_Sync_Code_Swap::prepare( self::args( array( 'accept' => true ) ) );
+		self::assertSame( 'code:probe_off', $got->get_error_code(), 'The refusal as it is.' );
+		self::assertStringContainsString( 'or update the unit by hand in wp-admin. AlphaBridge\'s lock for changes of the code, which this call took, could not be given back, so it stays: other changes through AlphaBridge can be refused until it is ' . intdiv( AB_MCP_Change_Lock::TIMEOUT, 60 ) . ' minutes old', $got->get_error_message() );
 		self::assertSame( array( 'kept' => array( 'change' ) ), $got->get_error_data() );
 	}
 
-	public function testAThrowableOnTheWayToTheLockForUpdatesGivesTheLockForChangesBack(): void {
-		// A6 at the caller: whatever the guard does with its own lock, the lock
-		// for changes prepare() took goes back on a Throwable.
+	public function testAThrowableUnderTheLockGivesTheLockForChangesBack(): void {
+		// A6 at the caller: a Throwable after the lock for changes is taken
+		// gives it back (the first call under it; before part A1 of the rest of
+		// branch 5 the lock for updates).
 		$calls  = self::calls(
 			array(
-				'core_lock' => static function () {
+				'option' => static function () {
 					throw new \RuntimeException( 'a hook threw' );
 				},
 			)
@@ -251,8 +212,8 @@ final class SyncCodeSwapTest extends TestCase {
 			$caught = $e->getMessage();
 		}
 		self::assertSame( 'a hook threw', $caught );
-		self::assertSame( array( 'take_lock', 'core_lock', 'release_lock' ), $calls->called );
-		self::assertSame( array( 'change' => false, 'core' => null ), self::held() );
+		self::assertSame( array( 'take_lock', 'option', 'release_lock' ), $calls->called );
+		self::assertSame( array( 'change' => false ), self::held() );
 	}
 
 	public function testAPluginFolderNotListedIsUnknownUnlessItsAbsenceIsRead(): void {
@@ -317,27 +278,23 @@ final class SyncCodeSwapCalls {
 	/** @param array<string,mixed> $on Method => answer, or a callable answering. */
 	public function __construct( array $on ) {
 		$this->on = $on + array(
-			'option'         => array( 'value' => serialize( array( 'shop/shop.php' ) ) ),
-			'take_lock'      => true,
-			'release_lock'   => true,
-			'lock_row'       => array( 'value' => '1700000000' ),
-			'core_lock'      => 'abc',
-			'core_held'      => true,
-			'free_core_lock' => true,
-			'probe_enabled'  => true,
-			'probe'          => array(
+			'option'        => array( 'value' => serialize( array( 'shop/shop.php' ) ) ),
+			'take_lock'     => true,
+			'release_lock'  => true,
+			'lock_row'      => array( 'value' => '1700000000' ),
+			'probe_enabled' => true,
+			'probe'         => array(
 				'targets' => array(
 					array( 'target' => 'home', 'result' => 'ok' ),
 					array( 'target' => 'mcp', 'result' => 'ok' ),
 					array( 'target' => 'admin_post', 'result' => 'ok' ),
 				),
 			),
-			'opcache'        => 'invalidated',
-			'own'            => false,
-			'stat'           => array( 'mode' => 0040755, 'dev' => 1 ),
-			'lstat'          => array( 'mode' => 0100644, 'dev' => 1 ),
-			'scandir'        => array( '.', '..' ),
-			'stored'         => false,
+			'opcache'       => 'invalidated',
+			'own'           => false,
+			'stat'          => array( 'mode' => 0040755, 'dev' => 1 ),
+			'lstat'         => array( 'mode' => 0100644, 'dev' => 1 ),
+			'scandir'       => array( '.', '..' ),
 		);
 	}
 
@@ -368,18 +325,6 @@ final class SyncCodeSwapCalls {
 		return $this->answer( 'lock_row', array() );
 	}
 
-	public function core_lock( $kind, $ref ) {
-		return $this->answer( 'core_lock', array( $kind, $ref ) );
-	}
-
-	public function core_held( $nonce ) {
-		return $this->answer( 'core_held', array( $nonce ) );
-	}
-
-	public function free_core_lock( $nonce ) {
-		return $this->answer( 'free_core_lock', array( $nonce ) );
-	}
-
 	public function probe_enabled() {
 		return $this->answer( 'probe_enabled', array() );
 	}
@@ -407,9 +352,5 @@ final class SyncCodeSwapCalls {
 	public function scandir( $dir ) {
 		$this->listed[] = $dir;
 		return $this->answer( 'scandir', array( $dir ) );
-	}
-
-	public function stored( $name ) {
-		return $this->answer( 'stored', array( $name ) );
 	}
 }

@@ -441,11 +441,9 @@ class AB_MCP_Update_Log {
 
 	/**
 	 * Take the note off.
-	 *
-	 * @return bool Whether a note was deleted (delete_site_option()).
 	 */
 	public static function clear_running() {
-		return delete_site_option( self::RUNNING );
+		delete_site_option( self::RUNNING );
 	}
 
 	/**

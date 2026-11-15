@@ -2440,7 +2440,7 @@ final class ReadDeadlineTest extends TestCase {
 		}
 	}
 
-	/** No lock of a swap is held: the lock for changes, WordPress's lock for updates and the note of the swap on it. */
+	/** No lock of a swap is held: the lock for changes given back; WordPress's lock for updates (auto_updater) and a note of a swap on it are not taken (the swap does not take that lock since part A1 of the rest of branch 5). */
 	private static function assertNoLock(): void {
 		$note = \AB_MCP_Update_Log::running();
 		self::assertFalse( \AB_MCP_Change_Lock::held(), 'The lock for changes given back.' );

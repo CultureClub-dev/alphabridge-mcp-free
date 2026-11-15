@@ -1081,51 +1081,6 @@ final class AB_MCP_Store_Inputs {
 				'max'  => null,
 			),
 		),
-		'swap.note'                => array(
-			'consumer' => 'code',
-			'source'   => 'AB_MCP_Update_Guard, the note of AlphaBridge beside WordPress\'s lock for updates (AB_MCP_Update_Log::RUNNING) as stored, and as get_site_option() gives it for busy()',
-			'field'    => 'the note of a swap on WordPress\'s lock for updates: its type, unit, the time of the lock it names and its nonce; whether a swap holds that lock (taken, held before the first mutation, given back) and whether a refused update names the swap',
-			'form'     => array(
-				'type'   => 'record',
-				'fields' => array(
-					'type'    => array(
-						'type'      => 'string',
-						'empty'     => false,
-						'max_bytes' => null,
-						'in'        => array( 'swap' ),
-					),
-					'kind'    => self::UNIT_KIND,
-					'ref'     => array(
-						'type'      => 'string',
-						'empty'     => false,
-						'max_bytes' => 1024,
-					),
-					'started' => array(
-						'type'   => 'int',
-						'digits' => false,
-						'min'    => 1,
-						'max'    => null,
-					),
-					'nonce'   => array(
-						'type'      => 'string',
-						'empty'     => false,
-						'max_bytes' => 64,
-					),
-				),
-				'extra'  => false,
-			),
-		),
-		'swap.core_lock'           => array(
-			'consumer' => 'code',
-			'source'   => 'AB_MCP_Update_Guard, the row of WordPress\'s lock for updates (auto_updater.lock) as stored, and as get_option() gives it for busy()',
-			'field'    => 'the time WordPress\'s lock for updates was taken, as WP_Upgrader::create_lock() writes it: whether a swap may take it (none, or one an hour old), holds it and gives it back, and whether a note names its holder',
-			'form'     => array(
-				'type'   => 'int',
-				'digits' => true,
-				'min'    => 1,
-				'max'    => null,
-			),
-		),
 	);
 
 	/**

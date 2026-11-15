@@ -15,9 +15,8 @@
  *
  * BEFORE THE FIRST MUTATION (prepare(); plan E5 1 to 5, 3.1 Z3, Z4, Z10 to
  * Z12, Z14; Z24 again under the locks): every check of a swap, in the order
- * of E5, in the one call of the swap and under its locks: the lock for
- * changes of the code (AB_MCP_Change_Lock) and WordPress's lock for updates
- * (AB_MCP_Update_Guard::take_swap_lock()); the release of its code
+ * of E5, in the one call of the swap and under its lock: the lock for
+ * changes of the code (AB_MCP_Change_Lock); the release of its code
  * (AB_MCP_Sync_Code_Ops::released(), the one rule of Z24); the test
  * requests switched on and the time left; OPcache for a
  * PHP file of running code (invalidate()); the test requests before (home
@@ -124,64 +123,6 @@ final class AB_MCP_Sync_Code_Swap_Calls {
 	}
 
 	/**
-	 * WordPress's lock for updates, with the note of the swap
-	 * (AB_MCP_Update_Guard::take_swap_lock()).
-	 *
-	 * @param string $kind plugin or theme.
-	 * @param string $ref  The unit.
-	 * @return string|WP_Error The nonce of the note.
-	 */
-	public function core_lock( $kind, $ref ) {
-		return AB_MCP_Update_Guard::take_swap_lock( $kind, $ref, $this );
-	}
-
-	/**
-	 * Whether this swap holds WordPress's lock for updates now, its rows
-	 * read as stored (AB_MCP_Update_Guard::swap_lock_held()).
-	 *
-	 * @param string $nonce The nonce of the note.
-	 * @return bool
-	 */
-	public function core_held( $nonce ) {
-		return AB_MCP_Update_Guard::swap_lock_held( $nonce, $this );
-	}
-
-	/**
-	 * Give WordPress's lock for updates back (where the note is ours).
-	 *
-	 * @param string $nonce The nonce of the note.
-	 * @return bool Whether it was given back.
-	 */
-	public function free_core_lock( $nonce ) {
-		return AB_MCP_Update_Guard::free_swap_lock( $nonce, $this );
-	}
-
-	/**
-	 * A row of an option of the main site as stored, past every cache and
-	 * filter, its value unpacked as WordPress reads it (without classes):
-	 * for the rows of WordPress's lock for updates and of the note beside it
-	 * (AB_MCP_Update_Guard). Not read (null) in a network: the note lies in
-	 * the options of the network there, and a swap does not run in one.
-	 *
-	 * @param string $name Option.
-	 * @return array{value:mixed}|false|null False where there is none; null where it is not read.
-	 */
-	public function stored( $name ) {
-		if ( function_exists( 'is_multisite' ) && is_multisite() ) {
-			return null;
-		}
-		$row = AB_MCP_Sync_Rows::option( (string) $name );
-		if ( false === $row ) {
-			return false;
-		}
-		if ( ! is_array( $row ) || ! array_key_exists( 'value', $row ) || ! is_string( $row['value'] ) ) {
-			return null;
-		}
-		$read = AB_MCP_Sync_Canon::unserialized( $row['value'] );
-		return true === $read['ok'] ? array( 'value' => $read['value'] ) : null;
-	}
-
-	/**
 	 * Whether the test requests may run on this site.
 	 *
 	 * @return mixed
@@ -280,13 +221,11 @@ final class AB_MCP_Sync_Code_Swap {
 	private static $naht_sync_code_swap = null;
 
 	/**
-	 * The locks prepare() took in this request and holds until release():
-	 * the lock for changes, and the nonce of the note on WordPress's lock for
-	 * updates. A lock release() could not give back stays here (A7).
+	 * The lock prepare() took in this request and holds until release(): the
+	 * lock for changes. A lock release() could not give back stays here (A7).
 	 */
 	private static $held = array(
 		'change' => false,
-		'core'   => null,
 	);
 
 	/**
@@ -459,34 +398,16 @@ final class AB_MCP_Sync_Code_Swap {
 	}
 
 	/**
-	 * Give back the locks prepare() took: WordPress's lock for updates
-	 * first, in the other order of taking, and the lock for changes whatever
-	 * came of the first (each in its own finally). A lock goes out of $held
-	 * only where its release answered true; one that is not given back (an
-	 * answer not true, or a Throwable) stays there and is named.
+	 * Give back the lock prepare() took: the lock for changes. It goes out
+	 * of $held only where its release answered true; one that is not given
+	 * back (an answer not true, or a Throwable) stays there and is named.
 	 *
-	 * @return string[] The locks that stay: core, change.
+	 * @return string[] The locks that stay: change.
 	 */
 	public static function release() {
 		$kept = array();
-		try {
-			if ( null !== self::$held['core'] ) {
-				$freed = false;
-				try {
-					$freed = true === self::calls()->free_core_lock( self::$held['core'] );
-				} finally {
-					if ( $freed ) {
-						self::$held['core'] = null;
-					}
-				}
-				if ( ! $freed ) {
-					$kept[] = 'core';
-				}
-			}
-		} finally {
-			if ( self::$held['change'] ) {
-				self::$held['change'] = true !== self::calls()->release_lock();
-			}
+		if ( self::$held['change'] ) {
+			self::$held['change'] = true !== self::calls()->release_lock();
 		}
 		if ( self::$held['change'] ) {
 			$kept[] = 'change';
@@ -503,9 +424,6 @@ final class AB_MCP_Sync_Code_Swap {
 	 */
 	private static function with_kept( WP_Error $refusal, array $kept ) {
 		$message = $refusal->get_error_message();
-		if ( in_array( 'core', $kept, true ) ) {
-			$message .= ' ' . AB_MCP_Update_Guard::swap_lock_kept();
-		}
 		if ( in_array( 'change', $kept, true ) ) {
 			/* translators: %d: minutes */
 			$message .= ' ' . sprintf( __( 'AlphaBridge\'s lock for changes of the code, which this call took, could not be given back, so it stays: other changes through AlphaBridge can be refused until it is %d minutes old; from then on the next one takes it over.', 'alphabridge-mcp' ), intdiv( AB_MCP_Change_Lock::TIMEOUT, 60 ) );
@@ -514,34 +432,25 @@ final class AB_MCP_Sync_Code_Swap {
 	}
 
 	/**
-	 * The locks of a swap (E5 1, Z10): the lock for changes of the code, then
-	 * WordPress's lock for updates with the note of the swap (the guard gives
-	 * back what it took of the second where it is not held, A6); where the
-	 * second is not taken, prepare() gives the first back (release()).
+	 * The lock of a swap (E5 1, Z10): the lock for changes of the code
+	 * (AB_MCP_Change_Lock).
 	 *
-	 * @param string $kind plugin or theme.
-	 * @param string $ref  The unit.
 	 * @return true|WP_Error
 	 */
-	private static function take( $kind, $ref ) {
+	private static function take() {
 		$change = self::calls()->take_lock();
 		if ( true !== $change ) {
 			return is_wp_error( $change ) ? $change : self::lock_unknown();
 		}
 		self::$held['change'] = true;
-		$core                 = self::calls()->core_lock( $kind, $ref );
-		if ( ! is_string( $core ) ) {
-			return is_wp_error( $core ) ? $core : self::lock_unknown();
-		}
-		self::$held['core'] = $core;
 		return true;
 	}
 
 	/**
-	 * @return WP_Error A lock of the swap not read as held by this request.
+	 * @return WP_Error The lock of the swap not read as held by this request.
 	 */
 	private static function lock_unknown() {
-		return self::refusal( 'code:lock', __( 'The lock for changes of the code or WordPress\'s lock for updates is not read as held by this request (its answer, or its row in the database, is not of its form), so nothing is swapped. Call action=next again; where it keeps failing, check that the database of this site accepts writes.', 'alphabridge-mcp' ) );
+		return self::refusal( 'code:lock', __( 'The lock for changes of the code is not read as held by this request (its answer, or its row in the database, is not of its form), so nothing is swapped. Call action=next again; where it keeps failing, check that the database of this site accepts writes.', 'alphabridge-mcp' ) );
 	}
 
 	/* ------------------------------------------- before the first mutation */
@@ -573,7 +482,7 @@ final class AB_MCP_Sync_Code_Swap {
 		}
 		$prepared = null;
 		try {
-			$taken    = self::take( $in['unit']['kind'], $in['unit']['ref'] );
+			$taken    = self::take();
 			$prepared = true === $taken ? self::under_locks( $in, $target ) : $taken;
 		} finally {
 			if ( ! is_array( $prepared ) ) {
@@ -690,7 +599,7 @@ final class AB_MCP_Sync_Code_Swap {
 			/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name. */
 			return self::refusal( 'code:store_device', sprintf( __( 'The protected store and the folder of the %1$s %2$s are not read as lying on one device of this server now, so it is not swapped: a unit is swapped only by renaming, which works on one device only. Ask the host to put the protected store on the device of wp-content, or update the unit by hand in wp-admin.', 'alphabridge-mcp' ), $kind, $ref ) );
 		}
-		if ( ! self::lock_held() || true !== self::calls()->core_held( self::$held['core'] ) ) {
+		if ( ! self::lock_held() ) {
 			return self::lock_unknown();
 		}
 		// After every check before the mutation (A1 of the Codex round on

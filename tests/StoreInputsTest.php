@@ -36,7 +36,6 @@ use AB_MCP_Sync_Code_Stage;
 use AB_MCP_Sync_Code_Swap;
 use AB_MCP_Sync_Deadline;
 use AB_MCP_Test_Seam;
-use AB_MCP_Update_Guard;
 use AB_MCP_Sync_Run;
 use AB_MCP_Sync_Schema;
 use PHPUnit\Framework\TestCase;
@@ -339,17 +338,6 @@ final class StoreInputsTest extends TestCase {
 			'env'    => array( str_repeat( 'e', 32 ) ),
 			'stage'  => SyncCodeOpsTest::journal()['stage'],
 			'until'  => 100.5,
-		);
-	}
-
-	/** A note of a swap in the form of the row swap.note. */
-	private static function swap_note(): array {
-		return array(
-			'type'    => 'swap',
-			'kind'    => 'plugin',
-			'ref'     => 'shop',
-			'started' => 1700000000,
-			'nonce'   => 'abc',
 		);
 	}
 
@@ -824,36 +812,6 @@ final class StoreInputsTest extends TestCase {
 				},
 				'unknown' => static fn( $got ): bool => 'ab_mcp_read_deadline' === $got,
 			),
-			'swap.note'                => array(
-				'base'    => self::swap_note(),
-				'more'    => array(
-					'fixed: none'                => null,
-					'fixed: a note of an update' => array( 'type' => 'plugin', 'item' => 'shop/shop.php', 'started' => 1700000000, 'nonce' => 'abc' ),
-					'fixed: its start as digits' => array( 'started' => '1700000000' ) + self::swap_note(),
-				),
-				// Its consumer swap_lock_held() through stored_note() (A5): the
-				// note of a swap as stored, ours and naming the time of the lock,
-				// or the swap holds nothing.
-				'valid'   => array( array( self::swap_note(), true ), array( array( 'nonce' => 'other' ) + self::swap_note(), false ) ),
-				'run'     => static fn( $v ) => AB_MCP_Update_Guard::swap_lock_held( 'abc', new StoreInputsStoredRows( array( 'value' => $v ), array( 'value' => '1700000000' ) ) ),
-				'unknown' => static fn( $got ): bool => false === $got,
-			),
-			'swap.core_lock'           => array(
-				'base'    => '1700000000',
-				'more'    => array(
-					'fixed: zero'           => '0',
-					'fixed: below zero'     => '-1',
-					'fixed: a leading zero' => '01700000000',
-					'fixed: a blank before' => ' 1700000000',
-					'fixed: none'           => null,
-				),
-				// Its consumer swap_lock_held() through stored_time() (A5): the
-				// row of WordPress's lock for updates as stored, a time as
-				// create_lock() writes it, or the swap holds nothing.
-				'valid'   => array( array( '1700000000', true ), array( 1700000000, true ), array( '1700000001', false ) ),
-				'run'     => static fn( $v ) => AB_MCP_Update_Guard::swap_lock_held( 'abc', new StoreInputsStoredRows( array( 'value' => self::swap_note() ), array( 'value' => $v ) ) ),
-				'unknown' => static fn( $got ): bool => false === $got,
-			),
 			/* ------------------------------------------------------ budgets */
 			'budget.max_packages'      => array(
 				'base'    => 5,
@@ -921,30 +879,6 @@ final class StoreInputsPrepareCalls {
 	public function take_lock() {
 		++$this->taken;
 		return new \WP_Error( 'test:lock', 'The lock for changes is held elsewhere (stand-in).' );
-	}
-}
-
-/** The rows as stored for the drivers of swap.note and swap.core_lock: the note and the row of the lock, nothing else. */
-final class StoreInputsStoredRows {
-
-	/** @var mixed */
-	private $note;
-
-	/** @var mixed */
-	private $lock;
-
-	/**
-	 * @param mixed $note What reading the note answers.
-	 * @param mixed $lock What reading the row of the lock answers.
-	 */
-	public function __construct( $note, $lock ) {
-		$this->note = $note;
-		$this->lock = $lock;
-	}
-
-	/** @return mixed */
-	public function stored( $name ) {
-		return 'auto_updater.lock' === $name ? $this->lock : $this->note;
 	}
 }
 
