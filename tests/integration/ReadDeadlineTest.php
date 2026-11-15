@@ -93,7 +93,8 @@
  * - R12b part 3.2, the halt of a helper of the steps
  *   (DeadlineClock::late_at_step()): the time running out in the check of
  *   a helper of plain(), of AB_MCP_Protected_Store_Calls::read() (and at
- *   its own check before lstat()), of holds(), head_read() and
+ *   its own check before lstat(); whether that lstat() is still taken is
+ *   not seen here), of holds(), head_read() and
  *   AB_MCP_Payload_File::read() halts the reading there: the step is not
  *   taken, no helper is asked and nothing read after it, and get(),
  *   groups(), tree(), taken() and state() answer the stop in full
@@ -2751,9 +2752,13 @@ final class ReadDeadlineTest extends TestCase {
 	/**
 	 * Prüft: the time running out at the check of read() before lstat(), or
 	 * in the check of its helper before the bytes, halts the reading of the
-	 * sidecar there: read() answers with the halt at once, its sidecar is
-	 * not read on (no lstat(), no bytes, no helper asked after it), and
-	 * get(), groups() and tree() answer the stop in full.
+	 * sidecar: up to the halt the same steps as in time, after it no step
+	 * this test sees (no helper asked, so no bytes read through it) and no
+	 * reading of a deadline, and get(), groups() and tree() answer the stop
+	 * in full. Not seen here: whether read() gives the halt before its own
+	 * lstat() (the stand-in of the calls does not see the call of
+	 * $this->lstat() inside them; a part without visible behaviour, decision
+	 * 1 of the lead on part B of the rest of branch 5).
 	 * Sonst: a swap whose time ran out would still read the file of a
 	 * sidecar after its time (a step on a slow disk past the limit the call
 	 * was given), or answer with a refusal of the store (a group not there,

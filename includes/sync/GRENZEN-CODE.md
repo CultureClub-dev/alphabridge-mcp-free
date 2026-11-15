@@ -485,20 +485,34 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
   der 15 mitgelieferten Themes mindestens eine PHP-Datei; Twenty Twenty-Three hat keine im Wurzelordner, aber 7 unter
   `patterns/`, und `php_file()` sucht Ordner für Ordner.
 
-### G-5-8 Frist vor jeder Lesung: an 149 Stellen beginnt eine Lesung der Vorbereitung ohne vorherige Prüfung der Frist
+### G-5-8 Frist vor jeder Lesung: 149 Stellen weichen von den Regeln des Wächters ab; an wie vielen davon eine Lesung ohne Prüfung der Frist beginnt, ist nicht gezählt
 
 - **Fundstelle:** die Liste `OPEN` in `tests/ReadBudgetExceptions.php:198`, 149 Einträge in 70 Funktionen, so wie der
   Wächter der Lesungen sie am Stand `7d54485` auswies (`tests/ReadBudgetGuardTest.php` mit `ReadBudgetScan.php`,
   `ReadBudgetRules.php` und `ReadBudgetSoll.php`: grün, 40 Tests; jede Verletzung seiner Regeln steht in `OPEN`, und
-  `OPEN` hält nichts darüber hinaus; 0 Probleme des Lesers und der Regeln). Gezählt je Regel:
+  `OPEN` hält nichts darüber hinaus; 0 Probleme des Lesers und der Regeln). Ein Eintrag ist eine Abweichung von einer
+  Regel des Wächters, nicht schon eine Lesung ohne Prüfung der Frist: Die Regeln verlangen eine bestimmte Schreibweise
+  der Prüfung, und eine andere Schreibweise desselben Schutzes erkennt der Wächter nicht. Gezählt je Regel:
   - **R1, 65:** ein Schritt der Platte, der Datenbank, eines Codecs oder einer Sortierung direkt statt über den Helfer
     der Schritte `AB_MCP_Sync_Step` (`includes/sync/class-sync-step.php`), der die Frist vor dem Schritt prüft;
   - **R2, 20:** eine Schleife, deren Durchgang nicht mit einer Prüfung beginnt, die am Halt verlässt;
   - **R3, 10:** eine Rekursion ohne Prüfung davor oder danach (`AB_MCP_Shape`, `AB_MCP_Sync_Canon::prepared()`,
     `AB_MCP_Sync_File_Manifest::folder()`);
-  - **R4, 4:** ein Eintritt in die Kette oder ein Aufruf einer Naht der Platte nicht unmittelbar nach einer Prüfung;
-  - **R7, 50:** der Halt eines Aufrufs, den die nächste Anweisung nicht weitergibt; er kommt erst über den Fachwert der
-    Antwort und die spätere Frage `AB_MCP_Sync_Deadline::stop()` oder an der nächsten Prüfung an.
+  - **R4, 4:** ein Eintritt in die Kette oder ein Aufruf einer Naht der Platte, dem keine Prüfung unmittelbar vorangeht,
+    deren Halt in einer Form weitergegeben ist, die der Wächter liest;
+  - **R7, 50:** der Halt eines Aufrufs, den die nächste Anweisung nicht in einer Form weitergibt, die der Wächter liest
+    (`is_wp_error()` oder `true !==` mit `return`, oder ein Fachwert aus `FACHWERT` und `AB_MCP_Sync_Deadline::stop()`).
+
+  **Regelabweichung und tatsächliche Lücke:** Die Zahlen zählen Abweichungen von den Regeln. Wie viele der 149 Einträge
+  eine Lesung sind, die wirklich ohne jede Prüfung der Frist unmittelbar davor beginnt, oder ein Schritt nach einem
+  Halt, hat niemand gezählt; eine solche Zählung gibt es nicht. Beide Arten sind belegt (Befund B1-1 der Codex-Runde
+  über Teil B):
+  - anders geschützt, nur eine Abweichung von der Regel: `AB_MCP_Sync_File_Manifest::whole()` (R4, unten) und
+    `AB_MCP_Protected_Store::get()`, das den Halt von `group()` in der nächsten Anweisung zurückgibt
+    (`if ( ! is_array( $found ) ) { return $found; }`, `includes/class-protected-store.php:1116–1118`); der Wächter liest
+    diese Form nicht und zählt den Eintrag unter R7;
+  - eine tatsächliche Lücke: die Schleife über `stylesheet` und `template` in `AB_MCP_Sync_Env::names_held()` (R2,
+    unten unter «Die Namensprüfung»).
 
   Darunter:
   - **die acht Datenbankstellen** (R1; je Funktion mit ihrer Zeile am Kopf `7d54485`):
@@ -508,9 +522,11 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
     (`includes/class-settings.php:317`), `AB_MCP_Sync_Manifest::verify()` `home_url()`
     (`includes/sync/class-sync-manifest.php:310`), `AB_MCP_Protected_Store::candidates()` `wp_upload_dir()`
     (`includes/class-protected-store.php:3994`) und `::stored()` `$wpdb->get_var()` (`:4114`);
-  - **`AB_MCP_Sync_File_Manifest::whole()`** (R4, Festlegung F3-2-5): der Aufruf der Naht `lstat()` des Grundpfads
-    einer Einheit (`includes/sync/class-sync-file-manifest.php:299`) folgt keiner Prüfung, deren Halt weitergegeben
-    ist; seine Antwort am Halt ist `return $acc;`, keine listbare Form, darum steht er nicht in `FACHWERT`.
+  - **`AB_MCP_Sync_File_Manifest::whole()`** (R4, Festlegung F3-2-5): dem Aufruf der Naht `lstat()` des Grundpfads
+    einer Einheit (`includes/sync/class-sync-file-manifest.php:299`) geht die Prüfung der Frist unmittelbar voran
+    (`self::left( $acc )`, `:296`); am Halt antwortet `whole()` mit `return $acc;`, einer Form, die der Wächter nicht
+    als weitergegebenen Halt liest und die nicht in `FACHWERT` steht. Der Eintrag ist eine Abweichung von der Regel,
+    keine Lesung ohne Prüfung.
   - **die Startlesung PS:2527** (Zählung des Auftrags R12b, Fassung 3c, Befund B1; am Kopf
     `AB_MCP_Protected_Store::read_tree()`, `includes/class-protected-store.php:2588`): die erste Lesung der Uhr des
     Baums liest die Zeit mit dem Cast `(float)`; unter einer Frist ist sie nicht streng, eine unbekannte Zeit wird dort
@@ -525,10 +541,12 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
   Code bleibt, wie er am Kopf steht). Nicht mehr gebaut: Teil 3.3 (die acht Datenbankstellen, die übrigen A3-artigen
   Stellen der Ablage, B1-a an PS:2527, C1 an PS:2528) und die Teile 4 bis 7.
 - **Was:** Auf den Wegen der Vorbereitung eines Tauschs (`AB_MCP_Sync_Code_Swap::prepare()`: Stufe, signiertes
-  Manifest, Baum, Köpfe der Einheit) beginnt an diesen Stellen eine Lesung, ohne dass die Frist unmittelbar davor
-  geprüft ist, und nach einem Halt kann noch ein solcher Schritt folgen. Ein Tausch kann darum auf einem langsamen Host
-  über sein Budget laufen. Schranken bleiben die Mittelprüfung (`AB_MCP_Sync_Code_Swap::time_left()`, `code:means`,
-  `includes/sync/class-sync-code-swap.php:1073`; die letzte vor der ersten Mutation `:699`) und die Zeitgrenze von PHP
+  Manifest, Baum, Köpfe der Einheit) weichen diese Stellen von den Regeln ab, mit denen der Wächter die Prüfung der
+  Frist vor jeder Lesung belegte. An einem Teil von ihnen beginnt eine Lesung tatsächlich, ohne dass die Frist
+  unmittelbar davor geprüft ist, oder nach einem Halt folgt noch ein Schritt; an einem anderen Teil schützt eine
+  Schreibweise, die der Wächter nicht erkennt. Wie gross welcher Teil ist, ist nicht gezählt (oben). Ein Tausch kann
+  darum auf einem langsamen Host über sein Budget laufen. Schranken bleiben die Mittelprüfung
+  (`AB_MCP_Sync_Code_Swap::time_left()`, `code:means`, `includes/sync/class-sync-code-swap.php:1073`; die letzte vor der ersten Mutation `:699`) und die Zeitgrenze von PHP
   (`max_execution_time`). Für den Kunden heisst das: Ein Tausch auf einem langsamen Server kann ins Zeitlimit laufen
   (Vorschlag für den Kundentext in Zweig 11, `z8b-rest-lead.md:152–153`; ein eigener Kundentext besteht nicht). Dass
   der Halt ankommt, wo die Frist geprüft wird, zeigen die Tests des Abbruchs (`tests/integration/ReadDeadlineTest.php`,
@@ -536,7 +554,12 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
   ein Umbau ihn rot macht (Plan 15.23); dieser Text trägt dann die Grenze.
   - **Die Namensprüfung:** In der Kette der Namensprüfung (`AB_MCP_Sync_Env::held()`,
     `includes/sync/class-sync-env.php:2413`; im Wächter `NAMED` → `CHAIN`, `tests/ReadBudgetExceptions.php:500`) wird
-    die Frist vor jedem Aufruf von `held()` geprüft; eine begonnene Prüfung eines Namens läuft ohne Prüfung zu Ende
+    die Frist vor den Aufrufen von `held()` geprüft, mit einer Ausnahme (Befund B1-2 der Codex-Runde über Teil B): In
+    `AB_MCP_Sync_Env::names_held()` prüft die Schleife über `stylesheet` und `template` des Zweigs `theme_choice`
+    (`includes/sync/class-sync-env.php:2584`) zwischen den beiden Namen keine Frist. Die zweite Namensprüfung beginnt
+    also auch dann, wenn die erste die Frist überschritten hat. Die Stelle steht in `OPEN` (R2, am Stand `7d54485`).
+    Ob weitere Aufrufe von `held()` ohne Prüfung davor beginnen, ist nach dem Wächter nicht noch einmal einzeln
+    nachgelesen. Eine begonnene Prüfung eines Namens läuft ohne Prüfung zu Ende
     (Entscheid von Thomas vom 14.11.2026, Option 4; Zusage (b) in
     `knowledge/uebergaben/anhang/2026-11-11-z8b/stoppfall-zeitbudget/auftrag-teil-r12b-fassung3c.txt:89–95`). Ihre
     Einflussgrössen sind die Länge des Namens, die Schichten der Prüfung, die Zahl der Zusatzschlüssel aus dem Filter
