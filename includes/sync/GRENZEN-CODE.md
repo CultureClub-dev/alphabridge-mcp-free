@@ -667,10 +667,10 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
 
 ### G-5-11 Rechte der neuen Fassung wie bei WordPress
 
-- **Fundstelle:** `AB_MCP_Sync_Code_Swap::given_rights()` (`includes/sync/class-sync-code-swap.php:1266`; Rechnung
-  `:1272`–`:1273`, Rücklesung `:1284`), aus `swapped()` (`:1154`) nach `plan_of()` und vor der letzten Zeitprüfung
-  (`time_left()`), also vor dem Ersatzvermerk. Vorbild: WordPress 7.1.3 des Testsystems,
-  `wp-admin/includes/file.php:2234`–`:2240` in `WP_Filesystem()` (`:2180`): `FS_CHMOD_DIR` gleich
+- **Fundstelle:** `AB_MCP_Sync_Code_Swap::given_rights()` (`includes/sync/class-sync-code-swap.php:1360`; Rechnung
+  `:1366`–`:1367`, Rücklesung `:1378`), aus `swapped()` (`:1210`) nach `plan_of()` und vor der letzten Zeitprüfung
+  (`time_left()`), also vor dem Ersatzvermerk; Zeilen am Stand von Teil G, Abschnitt 3. Vorbild: WordPress 7.1.3 des
+  Testsystems, `wp-admin/includes/file.php:2234`–`:2240` in `WP_Filesystem()` (`:2180`): `FS_CHMOD_DIR` gleich
   `fileperms( ABSPATH ) & 0777 | 0755`, `FS_CHMOD_FILE` gleich `fileperms( ABSPATH . 'index.php' ) & 0777 | 0644`, wo
   nicht definiert; `unzip_file()` legt Ordner und Dateien mit diesen Rechten an (`:1780`, `:1834`).
 - **Quelle:** Befund A2 der Codex-Runde über D1, Entscheid 2 der Lead (`belege/lead-auftrag-z5r-d1-behebung.md`).
@@ -685,7 +685,27 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
   - Braucht der Webserver eines Hosts andere Rechte, als WordPress setzt, gilt dasselbe für jedes Update über wp-admin.
   - Nicht gebaut (Alternative für Teil G): die Rechte der alten Fassung je gleichem Pfad übernehmen; neue Einträge
     bräuchten dann trotzdem eine Regel.
-  - Das Setzen läuft je Eintrag und gehört zur Zeit des Aufrufs vor der letzten Zeitprüfung; nicht gemessen (Teil G).
+  - Das Setzen läuft je Eintrag und gehört zur Zeit des Aufrufs vor der letzten Zeitprüfung.
+  - **Dauer** (gemessen 17.11.2026, drei Läufe; Apple M3, 24 GiB, Last vor dem Start 4,95; PHP 8.5.10 der
+    Kommandozeile, OPcache dort aus: `opcache.enable_cli` Off, jedes `opcache()` «not_active»; Rohwerte und Protokoll
+    `~/Entwicklung/wt-ab/z8b-zweig-5-messung/belege/z5r-g3-messung.log`, Auswertung `z5r-g3-auswertung.txt` daneben):
+    WooCommerce 11.3.0 auf dem Weg von F56 in der Integrationsumgebung, hier mit gesenkter Versionszeile und aktiv, auf
+    Staging unverändert, Stage von wordpress.org (das Paket lokal, sha256 `d9eb1e46…accc6`), mit `accept`. Die Einheit
+    hat 6349 Einträge (5452 Dateien, 897 Ordner), davon 3658 PHP-Dateien. Je Lauf 1 / 2 / 3:
+    - Bereitstellung (Schritt «bereitstellen», zwei Aufrufe bis bereit; geprüft eine PHP-Datei, die einzige neue oder
+      geänderte): 5,553 / 5,608 / 5,491 s.
+    - Vorher-Probe (`prepare()` allein, dann `release()`): 3,626 / 3,242 / 3,341 s, davon die Testanfragen 2,715 /
+      2,355 / 2,467 s.
+    - Tausch (`wp_site_push action=next` des Schritts «tauschen», darin `run()`): 3,856 / 3,805 / 3,661 s; davon der
+      Teil `prepare()` 2,157 / 2,236 / 2,101 s (Testanfragen 1,268 / 1,312 / 1,217 s), danach 1,694 / 1,563 / 1,556 s.
+      Netto (Tausch − Vorher-Probe) 0,230 / 0,563 / 0,320 s, kleiner als der Teil danach, weil die Testanfragen der
+      Vorher-Probe in jedem Lauf länger dauerten als die des Tauschs.
+    - Im Teil danach: die Rechte (`given_rights()`, je Eintrag `lstat()`, `chmod()`, `lstat()`, je Ordner `scandir()`)
+      0,207 / 0,197 / 0,191 s, darin die 6349 `chmod()` zusammen 0,104 / 0,099 / 0,097 s; der Platz der Sicherung mit
+      der Lesung des Ziels (`plan_of()`) 0,394 / 0,411 / 0,397 s; die zwei `rename()` zusammen 0,239 / 0,200 /
+      0,189 ms; OPcache je PHP-Datei 0,121 / 0,096 / 0,093 s; `close()` bis zur geschlossenen Marke 0,968 / 0,855 /
+      0,870 s.
+    - Nicht gemessen: die Rechte an der Stage eines Pakets, OPcache an, ein Host.
 - **Trifft Normalfall:** nein für eine Stage von wordpress.org (F56), ja für die Stage eines Pakets; dort ist es gebaut.
 
 ### G-5-12 Der Handweg leert OPcache nicht selbst
