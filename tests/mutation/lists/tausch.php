@@ -9,8 +9,8 @@
  * the plan of a run of the code, a step of the code in a run and what runs
  * here, three-valued (part 1).
  * Held by the unit suite (SyncCodeKindTest, SyncEnvTest, SyncRunTest,
- * SyncCodeOpsTest) and the integration suite (SyncCodeRunTest,
- * ProtectedStoreTest).
+ * SyncCodeOpsTest, ProtectedStoreTest, StoreRemoverGuardTest) and the
+ * integration suite (SyncCodeRunTest, ProtectedStoreTest).
  *
  * Not listed, with why (bericht-zweig-5.md), equivalent: in rights() the
  * count of the two halves of a unit beside the kind of unit (a ref without a
@@ -1108,8 +1108,8 @@ return array(
 		'id'      => 'tausch/d3a-rights-in-time',
 		'clause'  => 'given_rights(): an entry takes the rights only while the time of the call is not over; past it the swap is refused with code:rights before the target (D3a 1)',
 		'file'    => $cs,
-		'search'  => "null !== \$now && \$now <= \$in['until'] && true === self::calls()->chmod( \$path, \$want[ \$form ] );",
-		'replace' => "null !== \$now && true === self::calls()->chmod( \$path, \$want[ \$form ] );",
+		'search'  => 'null !== $now && $now <= $in[\'until\'] && true === self::calls()->chmod( $path, $want[ $form ] );',
+		'replace' => 'null !== $now && true === self::calls()->chmod( $path, $want[ $form ] );',
 		'run'     => $it( 'SyncCodeRunTest', 'testTheTimeOfTheCallRunningOutDuringOrRightAfterTheRightsRefusesTheSwapBeforeTheTarget' ),
 		'expect'  => '/testTheTimeOfTheCallRunningOutDuringOrRightAfterTheRightsRefusesTheSwapBeforeTheTarget/',
 	),
@@ -1135,8 +1135,8 @@ return array(
 		'id'      => 'tausch/d3a-file-unit',
 		'clause'  => 'unit() and to_backup(): only a unit of one file in the signed manifest and here goes without the lists of the report (F6); any other one without them is locked with code:paths_unknown (D3a)',
 		'file'    => $cp,
-		'search'  => "self::to_backup( \$found, \$n, \$entry, \$signed['entries'], \$need['here'], 'file' === \$signed['form'] && 'file' === \$need['form'] );",
-		'replace' => "self::to_backup( \$found, \$n, \$entry, \$signed['entries'], \$need['here'], true );",
+		'search'  => 'self::to_backup( $found, $n, $entry, $signed[\'entries\'], $need[\'here\'], \'file\' === $signed[\'form\'] && \'file\' === $need[\'form\'] );',
+		'replace' => 'self::to_backup( $found, $n, $entry, $signed[\'entries\'], $need[\'here\'], true );',
 		'run'     => $it( 'SyncCodeRunTest', 'testPathsThatGoIntoTheBackupNotKnownLockTheUnit' ),
 		'expect'  => '/testPathsThatGoIntoTheBackupNotKnownLockTheUnit/',
 	),

@@ -200,10 +200,12 @@ e('engine-code-plan-refused', 'run_write(): a plan of the code that does not rea
 PLUG = 'testWhichPluginsRunIsReadFromTheRowOfActivePluginsAndARowNotReadIsNotKnown'
 THEME = 'testWhichThemeRunsIsReadFromBothItsRowsAndASwitchInBetweenIsNotKnown'
 ROW = "\t\tif ( ! is_array( $row ) || ! array_key_exists( 'value', $row ) || ! is_string( $row['value'] ) ) {"
+# The search with the read of the row before it, as the list has it since part B of the rest (db2c43a).
+ROWS = "\t\t$row = self::calls()->option( 'active_plugins' );\n\t\tif ( false === $row ) {\n\t\t\treturn array();\n\t\t}\n" + ROW
 e('swap-plugins-row-key', 'active_plugins(): a row without its value is not known, never no plugin', CS,
-  ROW, ROW.replace("! array_key_exists( 'value', $row ) || ", ''), 'ops', PLUG)
+  ROWS, ROWS.replace("! array_key_exists( 'value', $row ) || ", ''), 'ops', PLUG)
 e('swap-plugins-row-text', 'active_plugins(): a value that is no text is not known, never cast to one', CS,
-  ROW, ROW.replace(" || ! is_string( $row['value'] )", ''), 'ops', PLUG)
+  ROWS, ROWS.replace(" || ! is_string( $row['value'] )", ''), 'ops', PLUG)
 e('swap-plugins-form', 'active_plugins(): the row is read in the form of site.active_plugins', CS,
   "AB_MCP_Store_Inputs::read( 'site.active_plugins', $read['value'] )", "( is_array( $read['value'] ) ? $read['value'] : null )", 'ops', PLUG)
 e('swap-mains-unknown', 'active_mains(): plugins not known are no main files known', CS,
@@ -284,7 +286,7 @@ e('k2-permanent-foreign', 'PERMANENT: the stage not bound to the step (A2, K2)',
 e('k2-complete-foreign', 'complete(): a stage not bound to the step is refused before anything is written (A2, K2)', ST,
   "\t\t$foreign = self::foreign( $gid, $state, $bound );\n\t\tif ( null !== $foreign ) {", "\t\t$foreign = self::foreign( $gid, $state, $bound );\n\t\tif ( false ) {", 'coderun', CHK)
 e('k2-ready-foreign', 'ready(): ready only for the step the stage is bound to (A2, K2)', ST,
-  "\t\treturn null === self::foreign( $gid, $state, $bound ) ? $state : null;", "\t\treturn $state;", 'coderun', NORM)
+  "\t\treturn null === $foreign ? $state : null;", "\t\treturn $state;", 'coderun', NORM)
 e('k2-bound-form', 'foreign(): a binding not of its form is not known, never taken (K2)', ST,
   "\t\tif ( null === $want ) {", "\t\tif ( false ) {", 'coderun', CHK)
 e('k2-entry-unread', 'foreign(): the entry of the group not read is not known, never foreign (A2, K2)', ST,
@@ -431,9 +433,10 @@ e('d3b-head-new-at-target', 'guide_head(): the case of the new version at the ta
   "\t\t\tif ( true ) {\n\t\t\t\t/* translators: %s: the name of a section of this file (not translated). */\n\t\t\t\t$cases[] = sprintf( __( 'The new version is at the target, the old version is at the place of the backup", 'storeunit', HEAD)
 
 # ------------------------------------------- Teil D3b-1, points 1 to 3: Codex D6 (the engine, the rights of the account before the file system method, the way of a refusal)
+FOREIGN_ENGINE = 'testAForeignEngineUnderTheNameCodeIsTheAnswerOfTheSwapBeforeAnythingIsWritten'
 e('d3b-engine-error', 'run(): a WP_Error of engine() (another engine under the name code) is the answer of the step before any mutation, never an engine whose rights are asked (Codex D6, finding 1)', CS,
   "\t\t$rights = $engine instanceof AB_MCP_Sync_Code_Kind ? $engine->rights( $in['unit']['unit_op'], $in['unit']['kind'] . ':' . $in['unit']['ref'] ) : $engine;",
-  "\t\t$rights = is_object( $engine ) ? $engine->rights( $in['unit']['unit_op'], $in['unit']['kind'] . ':' . $in['unit']['ref'] ) : $engine;", 'coderun', FOREIGN)
+  "\t\t$rights = is_object( $engine ) ? $engine->rights( $in['unit']['unit_op'], $in['unit']['kind'] . ':' . $in['unit']['ref'] ) : $engine;", 'coderun', FOREIGN_ENGINE)
 e('d3b-rights-before-method', 'rights(): the capabilities of the account before the file system method, so an account without them causes no test file of get_filesystem_method() in wp-content (Codex D6, finding 2)', CK,
   '\t\tforeach ( self::OPS[ $op ][ $unit[0] ] as $cap ) {',
   '\t\t$calls->method();\n\t\tforeach ( self::OPS[ $op ][ $unit[0] ] as $cap ) {', 'coderun', 'testAnOwnPluginWithThreeFilesChangedInItsVersionIsSwappedOnlyWithEditPlugins')
@@ -476,8 +479,8 @@ out = ['<?php', '/**', ' * The clauses of the swap of the code of the site (Z8b 
        ' * the plan of a run of the code, a step of the code in a run and what runs',
        ' * here, three-valued (part 1).',
        ' * Held by the unit suite (SyncCodeKindTest, SyncEnvTest, SyncRunTest,',
-       ' * SyncCodeOpsTest) and the integration suite (SyncCodeRunTest,',
-       ' * ProtectedStoreTest).', ' *',
+       ' * SyncCodeOpsTest, ProtectedStoreTest, StoreRemoverGuardTest) and the',
+       ' * integration suite (SyncCodeRunTest, ProtectedStoreTest).', ' *',
        ' * Not listed, with why (bericht-zweig-5.md), equivalent: in rights() the',
        ' * count of the two halves of a unit beside the kind of unit (a ref without a',
        ' * colon has one half, whose kind is then the whole ref and no kind of UNITS).',
