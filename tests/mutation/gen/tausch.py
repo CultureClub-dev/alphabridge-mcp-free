@@ -342,15 +342,10 @@ e('d1c-move-free', 'move(): a rename goes only to a place that is free (lstat())
   "\t\treturn false === self::calls()->lstat( $to ) && true === self::calls()->rename( $from, $to );", "\t\treturn true === self::calls()->rename( $from, $to );", 'coderun', PLACES)
 e('d1b-listing-whole', 'php_paths(): an entry not read or neither a folder nor a file makes the listing not whole, never left out (Codex D1, finding 4)', CS,
   "\t\t\t\t\treturn null; // Not read, or neither a folder nor a plain file: the listing is not whole.", "\t\t\t\t\tcontinue;", 'coderun', AFTER)
-e('d1c-backup-proved', 'unclear(): a backup not proved by in_backup() gets no command that puts it at the target, also where the swap stopped before close() (Codex D1, finding 5, round 2)', CS,
-  "\t\tif ( ! $known['backup'] && 'vor-den-umbenennungen' !== $point ) {", "\t\tif ( false ) {", 'coderun', AFTER)
 
-# Part D2a of the rest: the proof of the backup in the answer of an unclear step (the lead, 16.11. 03:18).
-F35 = 'testASecondRenameThatFailsGoesBackOrEndsUnclearWithAWayByHandThatWorks'
-e('d2a-proof-asked', 'unclear(): where the backup was not asked yet (OPcache before close(), between the renames), the answer asks in_backup() first and gives the command where it is proved (the lead on D2a, «Zu 2»)', CS,
-  "\t\tif ( null === $known['backup'] && 'vor-den-umbenennungen' !== $point ) {", "\t\tif ( false ) {", 'coderun', F35)
-e('d2a-proof-in-time', 'in_backup(): the backup counts as proved only where its tree read back within the time of the call (its deadline), never after it', CS,
-  "\t\t$tree = null !== $at && array( $old['form'], $old['dev'], $old['ino'] ) === array( $at['form'], $at['dev'], $at['ino'] ) ? AB_MCP_Protected_Store::tree( 'backups', $old['gid'], $old['name'], $old['hash'], AB_MCP_Sync_Deadline::at( $until ) ) : null;", "\t\t$tree = null !== $at && array( $old['form'], $old['dev'], $old['ino'] ) === array( $at['form'], $at['dev'], $at['ino'] ) ? AB_MCP_Protected_Store::tree( 'backups', $old['gid'], $old['name'], $old['hash'] ) : null;", 'coderun', F35)
+# Part D2a of the rest: the proof of the backup within the time of the call (the lead, 16.11. 03:18; with option B asked only in close()).
+e('d2a-proof-in-time', 'in_backup(): the backup counts as proved only where its tree read back within the time of the call (its deadline), never after it; close() ends no mark on a backup read after it', CS,
+  "\t\t$tree = null !== $at && array( $old['form'], $old['dev'], $old['ino'] ) === array( $at['form'], $at['dev'], $at['ino'] ) ? AB_MCP_Protected_Store::tree( 'backups', $old['gid'], $old['name'], $old['hash'], AB_MCP_Sync_Deadline::at( $until ) ) : null;", "\t\t$tree = null !== $at && array( $old['form'], $old['dev'], $old['ino'] ) === array( $at['form'], $at['dev'], $at['ino'] ) ? AB_MCP_Protected_Store::tree( 'backups', $old['gid'], $old['name'], $old['hash'] ) : null;", 'coderun', AFTER)
 
 # The rest of part D2a: the note of the replacement last, the end not written and close() without its proof (the lead, 16.11. 03:57).
 F36 = 'testASwapWhoseJournalOrBackupCannotBeWrittenMovesNothingAndItsStepStaysPlanned'
@@ -366,14 +361,8 @@ e('d2a-note-stops', 'rename_marked(): a note of the replacement that did not rea
   '\t\tif ( true !== $noted ) {', '\t\tif ( false ) {', 'coderun', NOTE)
 e('d2a-close-proved', 'close(): the mark closes and the file undo points go only where the version at the target (and, for a swap, the old one in the backup) is proved (Z20a; D2a 5)', CS,
   '\t\tif ( true !== $proved ) {', '\t\tif ( false ) {', 'coderun', AFTER)
-e('d2a-end-recorded', 'ended(): a step is answered as ended only where its end is recorded; else the refusal says it stays begun (D2a 5, the lead on D2a, 16.11. 03:57, way a)', CS,
+e('d2a-end-recorded', 'ended(): a step is answered as ended only where its end is recorded; else the refusal says that its end could not be recorded (D2a 5, the lead on D2a, 16.11. 03:57, way a; option B: no state of the step claimed)', CS,
   '\t\tif ( true !== $saved ) {', '\t\tif ( false ) {', 'coderun', END)
-e('d3-target-taken', 'not_swapped(): where the way back failed, what is at the target is read once more; with another entry there the answer names it and gives the section of a taken target, never the target as missing (Codex D3, finding 1)', CS,
-  '\t\t\tif ( false !== self::calls()->lstat( $plan[\'target\'] ) ) {', '\t\t\tif ( false ) {', 'coderun', PLACES)
-e('d3-mark-read-again', 'close(): a mark written closed whose read back fails is read once more, so the answer does not name it open (Codex D3, finding 2)', CS,
-  '\t\t\tif ( is_wp_error( $closed ) && \'ab_mcp_store_mark_unconfirmed\' === $closed->get_error_code() ) {', '\t\t\tif ( false ) {', 'coderun', AFTER)
-e('d3-mark-closed-read', 'mark_closed(): read once more, a mark the store lists closed counts as closed, one it lists open as open (Codex D3, finding 2)', CS,
-  '\t\t\t\treturn \'closed\' === $mark[\'state\'];', '\t\t\t\treturn null;', 'coderun', AFTER)
 e('d2b-clock-first', 'rename_marked(): a clock of the run that gives no time refuses the swap before its journal, nothing written (D2b 1)', CS,
   '\t\tif ( null === $since ) {\n\t\t\treturn array( \'why\' => AB_MCP_Sync_Run::clock_unknown() ) + $out;', '\t\tif ( false ) {\n\t\t\treturn array( \'why\' => AB_MCP_Sync_Run::clock_unknown() ) + $out;', 'coderun', 'testAClockThatGivesNoTimeBeforeTheFirstWriteOfTheSwapRefusesItBeforeAnythingIsWritten')
 e('d4-clock-before-writes', 'swapped(): a clock of the run that gives no time refuses the swap before the group of the backups and the rights of the stage, nothing in the protected store (Codex D4, finding 4)', CS,
@@ -413,6 +402,18 @@ e('d5-f43-says-cut', 'named(): a list that leaves paths out says how many it nam
   '\t\tif ( 0 === $left ) {', '\t\tif ( true ) {', 'ops', F43)
 e('d5-f43-result-paths', 'named(): the result holds the paths the message names, no other ones (Codex D5)', CO,
   "\t\t$result['paths']   = $first;", "\t\t$result['paths']   = $paths;", 'ops', F43)
+
+# ------------------------------------------- Option B (Thomas 16.11.2026): the answer after a failure says of the disk only what close() proved in the call
+OPC = 'testOpcacheNotClearedAfterTheRenamesEndsUnclearWithTheWayBackTheWayByHandAndTheHost'
+KEPT = 'testAnOldVersionBackAtTheTargetWhoseProofOrMarkFailsEndsUnclearWithTheShortAnswer'
+e('b-whole-after-proofs', 'close(): the proofs of a call count as whole only after at_target() and in_backup() answered true in it, never before; else the answer after a failed proof would name what lies where and give commands (option B, Thomas 16.11.2026)', CS,
+  "\t\t$swap   = 'swap' === $op;\n", "\t\t$swap   = 'swap' === $op;\n\t\t$whole  = $swap;\n", 'coderun', AFTER)
+e('b-whole-swap-only', 'close(): a swap not made (kept) never counts as whole, so its answer after a failure is the short one and never the commands that swap back (option B)', CS,
+  '\t\t$whole  = $swap;', '\t\t$whole  = true;', 'coderun', KEPT)
+e('b-whole-carries-commands', 'close(): a swap with both versions proved counts as whole also where the mark or the pair fails after it, so its answer carries the commands once the mark may be closed (option B)', CS,
+  '\t\t$whole  = $swap;', '\t\t$whole  = false;', 'coderun', AFTER)
+e('b-short-unless-whole', 'unclear(): without both versions proved in the call the answer is the short one, no sentence on what lies where and no command, also where close() was not reached (option B)', CS,
+  '\t\tif ( true !== $whole ) {', '\t\tif ( false ) {', 'coderun', OPC)
 
 # ------------------------------------------------ check and write
 src = {f: open(os.path.join(ROOT, f)).read() for f in VAR}

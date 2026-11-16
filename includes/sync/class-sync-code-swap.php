@@ -1119,7 +1119,8 @@ final class AB_MCP_Sync_Code_Swap {
 	 *
 	 * @param mixed $swap What the swap is asked with, in the form of its row swap.prepare.
 	 * @return array|WP_Error next, the answer of the step as it ended (done; failed where
-	 *                        nothing was moved; unclear with the way by hand); a refusal
+	 *                        nothing was moved; unclear with the way back of the run and the
+	 *                        instruction of its mark, unclear()); a refusal
 	 *                        where nothing of the site changed and the step stays planned.
 	 */
 	public static function run( $swap ) {
@@ -1348,16 +1349,19 @@ final class AB_MCP_Sync_Code_Swap {
 	 *
 	 * @param array $in   The arguments.
 	 * @param array $plan plan_of().
-	 * @return array{at:string,mid:string|null,why:WP_Error|null,journal:array|null,back:bool|null}
+	 * @return array{at:string,mid:string|null,guide:string|null,why:WP_Error|null,journal:array|null,back:bool|null}
 	 *         at: journal (the step not begun, nothing moved), mark (the step begun, no
 	 *         mark), note (the mark open, the note not read back, nothing moved), first
 	 *         (the mark open and the note written, nothing moved), second (the second
 	 *         rename failed; back: whether the old version went back to the target), done.
+	 *         mid and guide: the mark and the file of its instruction (absolute path), as
+	 *         put_mark() gave them.
 	 */
 	private static function rename_marked( array $in, array $plan ) {
 		$out   = array(
 			'at'      => 'journal',
 			'mid'     => null,
+			'guide'   => null,
 			'why'     => null,
 			'journal' => null,
 			'back'    => null,
@@ -1384,13 +1388,14 @@ final class AB_MCP_Sync_Code_Swap {
 		}
 		$out['journal'] = $journal;
 		$mark           = self::calls()->put_mark( self::mark_of( $in, $plan ) );
-		if ( ! is_array( $mark ) || ! isset( $mark['mid'] ) || ! is_string( $mark['mid'] ) ) {
+		if ( ! is_array( $mark ) || ! isset( $mark['mid'], $mark['guide'] ) || ! is_string( $mark['mid'] ) || ! is_string( $mark['guide'] ) ) {
 			return array(
 				'at'  => 'mark',
 				'why' => is_wp_error( $mark ) ? $mark : self::refusal( 'code:mark', __( 'The mark of the swap gave no answer of its form.', 'alphabridge-mcp' ) ),
 			) + $out;
 		}
-		$out['mid'] = $mark['mid'];
+		$out['mid']   = $mark['mid'];
+		$out['guide'] = $mark['guide'];
 		// The note last (the lead on D2a, 16.11. 03:57): where the journal
 		// or the mark fails, it is not written, so it never names a swap that
 		// did not begin; since stays the time in the journal.
@@ -1520,8 +1525,10 @@ final class AB_MCP_Sync_Code_Swap {
 	/**
 	 * After the two renames: OPcache for each PHP file replaced, close(),
 	 * the new bases of the files of the pair (E5 11), the step done. A
-	 * failure on the way ends the step unclear, with the way by hand
-	 * (15.23 «zu 2»: the way back of the run puts the old version back).
+	 * failure on the way ends the step unclear (15.23 «zu 2»: the way back
+	 * of the run puts the old version back; the way by hand is the
+	 * instruction of the mark). What its answer says of the disk follows
+	 * what close() proved in this call (unclear()).
 	 *
 	 * @param array $in       The arguments.
 	 * @param array $prepared prepare().
@@ -1534,44 +1541,23 @@ final class AB_MCP_Sync_Code_Swap {
 		$opcache = self::invalidated( $plan, $in['until'] );
 		if ( is_wp_error( $opcache ) ) {
 			// Whatever is put back or left, OPcache is to be cleared at the
-			// host (the lead on D2a 4).
-			return self::unclear( $in, $plan, $moved['journal'], 'nach-den-umbenennungen', $opcache->get_error_message() . ' ' . __( 'Have OPcache of this site cleared at the host, or PHP restarted (PHP-FPM or the web server), so that PHP runs the files that are at the target now.', 'alphabridge-mcp' ) );
+			// host (the lead on D2a 4). close() was not reached, so nothing
+			// is proved in this call.
+			return self::unclear( $in, $plan, $moved, $opcache->get_error_message() . ' ' . __( 'Have OPcache of this site cleared at the host, or PHP restarted (PHP-FPM or the web server), so that PHP runs the files that are at the target now.', 'alphabridge-mcp' ) );
 		}
-		// The backup counts as proved only where in_backup() answered true
-		// in close() (Codex D1, finding 5, round 2); null where close() did
-		// not reach it, then unclear() asks it.
-		$backup = null;
-		$mark   = false;
-		$closed = self::close( 'swap', $in, $plan, $moved['mid'], $backup, $mark );
+		// Whether both versions are proved in this call, close() says at its
+		// one place; what fails after that still has them proved.
+		$whole  = false;
+		$closed = self::close( 'swap', $in, $plan, $moved['mid'], $whole );
 		if ( is_wp_error( $closed ) ) {
-			return self::unclear(
-				$in,
-				$plan,
-				$moved['journal'],
-				'nach-den-umbenennungen',
-				$closed->get_error_message(),
-				array(
-					'backup' => $backup,
-					'closed' => $mark,
-				)
-			);
+			return self::unclear( $in, $plan, $moved, $closed->get_error_message(), $whole );
 		}
 		$rebased = self::rebased( $in, $plan );
 		if ( is_wp_error( $rebased ) ) {
-			return self::unclear(
-				$in,
-				$plan,
-				$moved['journal'],
-				'nach-den-umbenennungen',
-				/* translators: %s: the error of the object pairs (one or more whole sentences). */
-				sprintf( __( 'The new version is at the target and the mark of the swap is closed, but the files of its pair did not take their new bases (%s).', 'alphabridge-mcp' ), $rebased->get_error_message() ),
-				array(
-					'closed' => true,
-					'backup' => $backup,
-				)
-			);
+			/* translators: %s: the error of the object pairs (one or more whole sentences). */
+			return self::unclear( $in, $plan, $moved, sprintf( __( 'The new version is at the target and the mark of the swap is closed, but the files of its pair did not take their new bases (%s).', 'alphabridge-mcp' ), $rebased->get_error_message() ), $whole );
 		}
-		$by_hand = self::by_hand( $in, $plan, 'nach-den-umbenennungen' );
+		$by_hand = self::by_hand( $in, $plan );
 		/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name, 3: its version here before, 4: its version now, 5: the folder or file of the unit (absolute path), 6: the backup of the old version (absolute path), 7: run number. */
 		$message = sprintf( __( 'The %1$s %2$s of the staging site is swapped in (version %3$s here before, %4$s now): its new version lies at %5$s, the old one whole in the backup %6$s. Look at the site now (the home page and wp-admin): where something fails, the way back of this run puts the old version back (wp_site_revert action=plan with run_id %7$d). Where this site answers no request any more (the new version ends fatal on every call, so neither MCP nor wp-admin is reached), put the old version back by hand in a shell on the server, as the lines below say:', 'alphabridge-mcp' ), $unit['kind'], $unit['ref'], (string) $prepared['version']['live'], (string) $prepared['version']['staging'], $plan['target'], $plan['old']['path'], $in['run_id'] );
 		$message .= "\n" . implode( "\n", $by_hand );
@@ -1692,59 +1678,40 @@ final class AB_MCP_Sync_Code_Swap {
 	 * (AB_MCP_Undo::discard_files_of(), as settle() of the Update Guard);
 	 * kept, nothing moved for good: the old version at the target with its
 	 * identity proved. No comparison of what is active (15.23). Anything
-	 * else leaves the mark open.
+	 * else closes no mark.
 	 *
-	 * @param string $op     swap or kept.
-	 * @param array  $in     The arguments.
-	 * @param array  $plan   plan_of().
-	 * @param string $mid    The mark.
-	 * @param bool|null $backup Set where in_backup() was asked: true where it
-	 *                          proved the old version whole in the backup,
-	 *                          whatever comes after it, false where not; left
-	 *                          null where it was not reached.
-	 * @param bool|null $mark   Set where the mark was written closed but not
-	 *                          read back (Codex D3, finding 2): its state
-	 *                          read once more, mark_closed(); left false
-	 *                          (open) else.
+	 * Here is also the one place that says whether the proofs of this call
+	 * are whole (option B, Thomas 16.11.2026): only for a swap whose new
+	 * version at the target and whose old one in the backup were both
+	 * proved just now. Only then an answer after a failure names what lies
+	 * where and gives the commands of the way by hand (unclear()).
+	 *
+	 * @param string $op    swap or kept.
+	 * @param array  $in    The arguments.
+	 * @param array  $plan  plan_of().
+	 * @param string $mid   The mark.
+	 * @param bool   $whole Set where the version at the target (and, for a
+	 *                      swap, the old one in the backup) was proved: true
+	 *                      for a swap, whatever comes after, false for kept;
+	 *                      left as it is where a proof failed.
 	 * @return array{discarded:int}|WP_Error
 	 */
-	private static function close( $op, array $in, array $plan, $mid, &$backup = null, &$mark = false ) {
+	private static function close( $op, array $in, array $plan, $mid, &$whole = false ) {
 		$swap   = 'swap' === $op;
 		$proved = self::at_target( $in, $plan, $swap ? $plan['new'] : $plan['old'] );
 		if ( true === $proved && $swap ) {
 			$proved = self::in_backup( $plan['old'], $in['until'] );
-			$backup = true === $proved;
 		}
 		if ( true !== $proved ) {
 			return $proved;
 		}
+		$whole  = $swap;
 		$closed = self::calls()->close_mark( $mid );
 		if ( true !== $closed ) {
-			if ( is_wp_error( $closed ) && 'ab_mcp_store_mark_unconfirmed' === $closed->get_error_code() ) {
-				$mark = self::mark_closed( $mid );
-			}
 			return is_wp_error( $closed ) ? $closed : self::refusal( 'code:mark', __( 'The mark of the swap gave no answer of its form.', 'alphabridge-mcp' ) );
 		}
 		$gone = $swap ? self::calls()->discard_files( 'theme' === $in['unit']['kind'] ? 'theme' : 'plugin', $in['unit']['ref'] ) : array();
 		return array( 'discarded' => is_array( $gone ) ? count( $gone ) : 0 );
-	}
-
-	/**
-	 * The state of a mark read once more, only reading (Codex D3, finding
-	 * 2: written closed, not read back): true where the store lists it
-	 * closed, false where open, null where it lists it not readable.
-	 *
-	 * @param string $mid The mark.
-	 * @return bool|null
-	 */
-	private static function mark_closed( $mid ) {
-		$marks = AB_MCP_Protected_Store::marks();
-		foreach ( is_array( $marks ) ? $marks['marks'] : array() as $mark ) {
-			if ( $mid === $mark['mid'] && in_array( $mark['state'], array( 'open', 'closed' ), true ) ) {
-				return 'closed' === $mark['state'];
-			}
-		}
-		return null;
 	}
 
 	/**
@@ -1776,7 +1743,7 @@ final class AB_MCP_Sync_Code_Swap {
 	 * inode, and its tree read back by the store against its hash
 	 * (AB_MCP_Protected_Store::tree()), only reading, and only while the time
 	 * of the call is not over (its deadline, R12). The one proof of the
-	 * backup: close() and unclear() ask it here.
+	 * backup: close() asks it here.
 	 *
 	 * @param array $old   The old version (plan_of()).
 	 * @param float $until The end of the time of the call.
@@ -1829,8 +1796,10 @@ final class AB_MCP_Sync_Code_Swap {
 	 * version proved at the target (close(), kept), and the step failed,
 	 * also where the note of the replacement did not read back; where a
 	 * rename failed after the note, the answer says that it stays without
-	 * a replacement. Where the old version is not proved there, the step is
-	 * unclear with the way by hand.
+	 * a replacement. Where the old version did not go back, is not proved
+	 * at the target, or its mark did not close, the step is unclear: the
+	 * answer says what this call did and names the way back of the run and
+	 * the instruction of the mark, nothing of what lies where (unclear()).
 	 *
 	 * @param array $in    The arguments.
 	 * @param array $plan  plan_of().
@@ -1842,18 +1811,15 @@ final class AB_MCP_Sync_Code_Swap {
 			return $moved['why'];
 		}
 		if ( 'second' === $moved['at'] && true !== $moved['back'] ) {
-			// What is at the target now, only read (Codex D3, finding 1):
-			// another entry, or none; the answer and its commands say which.
-			if ( false !== self::calls()->lstat( $plan['target'] ) ) {
-				/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name, 3: the target (absolute path), 4: the same, quoted for a shell. */
-				return self::unclear( $in, $plan, $moved['journal'], 'zwischen-den-umbenennungen-ziel-belegt', sprintf( __( 'The %1$s %2$s is not at its place: its old version was moved into the backup, the new one could not be put at the target, and the old one could not be put back, as another entry is at the target %3$s (ls -la %4$s shows it).', 'alphabridge-mcp' ), $in['unit']['kind'], $in['unit']['ref'], $plan['target'], "'" . str_replace( "'", "'\\''", $plan['target'] ) . "'" ) );
-			}
+			// Only what this call did: what is at the target now is not read
+			// for the answer (option B); who puts back reads it.
 			/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name. */
-			return self::unclear( $in, $plan, $moved['journal'], 'zwischen-den-umbenennungen', sprintf( __( 'The %1$s %2$s is not at its place: its old version was moved into the backup, the new one could not be put at the target, and the old one could not be put back.', 'alphabridge-mcp' ), $in['unit']['kind'], $in['unit']['ref'] ) );
+			return self::unclear( $in, $plan, $moved, sprintf( __( 'The swap of the %1$s %2$s did not finish: its old version was moved into the backup, the new one could not be put at the target, and the old one could not be put back.', 'alphabridge-mcp' ), $in['unit']['kind'], $in['unit']['ref'] ) );
 		}
-		$closed = null === $moved['mid'] ? true : self::close( 'kept', $in, $plan, $moved['mid'] );
+		$whole  = false;
+		$closed = null === $moved['mid'] ? true : self::close( 'kept', $in, $plan, $moved['mid'], $whole );
 		if ( is_wp_error( $closed ) ) {
-			return self::unclear( $in, $plan, $moved['journal'], 'vor-den-umbenennungen', $closed->get_error_message() );
+			return self::unclear( $in, $plan, $moved, $closed->get_error_message(), $whole );
 		}
 		// After the note, a rename that failed leaves it without a
 		// replacement; it is not taken back (the lead on D2a, 16.11. 03:57).
@@ -1887,66 +1853,64 @@ final class AB_MCP_Sync_Code_Swap {
 	}
 
 	/**
-	 * The end of a swap that is not proved (15.23 «zu 2»): the step unclear;
-	 * the answer names the state of the mark as it is proved (Codex D1,
-	 * finding 8: closed only where close() closed it), the way back of the
-	 * run and the commands of the way by hand for the point it stopped at.
-	 * The backup counts as proved only where in_backup() answered true
-	 * (Codex D1, finding 5, round 2). Where it was not asked yet (the swap
-	 * stopped before close(), as with OPcache, or between the renames), it
-	 * is asked here first, only reading and within the time of the call
-	 * (the lead on D2a, «Zu 2»: unclear with the way by hand). Where it is
-	 * not proved, or the time ran out, the answer gives no command that puts
-	 * the backup at the target (those of every point after the first
-	 * rename, AB_MCP_Protected_Store::guide()), but that it is to be checked
-	 * first, and the way back of the run. All of it here, the one place that
-	 * builds this answer.
+	 * The end of a swap that is not proved (15.23 «zu 2»): the step unclear.
+	 * The one place that builds this answer (option B, Thomas 16.11.2026):
+	 * of the disk it says only what close() proved in this call.
+	 * - The proofs whole (a swap, both versions proved just now, then
+	 *   something failed: the mark, the pair): as the answer of a swap
+	 *   done, with the way back of the run and the commands of the way by
+	 *   hand in the answer, as the mark may be closed and its folder go a
+	 *   day later.
+	 * - Else the short answer: what happened in this call ($why), the way
+	 *   back of the run with its call, the instruction of the mark on the
+	 *   server for where the site answers no more (its first lines tell
+	 *   which of its commands fits), and the paths of the target, the
+	 *   backup and that instruction. No sentence on what lies at the target
+	 *   or in the backup or on the state of the mark, no command, and
+	 *   nothing is read for the answer: who puts back reads it, the way
+	 *   back of the run and the commands of the instruction, each before it
+	 *   moves anything.
 	 *
-	 * @param array  $in      The arguments.
-	 * @param array  $plan    plan_of().
-	 * @param array  $journal The journal of the step.
-	 * @param string $point   The section of the instruction (AB_MCP_Protected_Store::guide()).
-	 * @param string $why     What happened (one or more whole sentences).
-	 * @param array  $known   closed: true the mark closed, false open (default), null
-	 *                        not confirmed (written closed, close()); backup: true
-	 *                        where in_backup() proved the backup whole, false where it did
-	 *                        not, null where it was not asked (default; asked here).
+	 * @param array  $in    The arguments.
+	 * @param array  $plan  plan_of().
+	 * @param array  $moved rename_marked(): the journal of the step, the mark and the file of its instruction.
+	 * @param string $why   What happened in this call (one or more whole sentences).
+	 * @param bool   $whole Whether both versions were proved in this call, as close() said it; false where it was not reached.
 	 * @return array|WP_Error
 	 */
-	private static function unclear( array $in, array $plan, array $journal, $point, $why, array $known = array() ) {
-		$known += array(
-			'closed' => false,
-			'backup' => null,
-		);
-		if ( null === $known['backup'] && 'vor-den-umbenennungen' !== $point ) {
-			$known['backup'] = true === self::in_backup( $plan['old'], $in['until'] );
-		}
-		if ( ! $known['backup'] && 'vor-den-umbenennungen' !== $point ) {
+	private static function unclear( array $in, array $plan, array $moved, $why, $whole = false ) {
+		if ( true !== $whole ) {
 			$by_hand = array();
-			/* translators: 1: what happened (one or more whole sentences), 2: the backup of the old version (absolute path), 3: run number. */
-			$message = sprintf( __( '%1$s The step is unclear, and the mark of the swap stays open. The backup %2$s is not proved as the old version, so this answer gives no command that puts it back: check the backup first (its files against the old version of the unit) before it is put back by hand or with the way back of this run (wp_site_revert action=plan with run_id %3$d).', 'alphabridge-mcp' ), $why, $plan['old']['path'], $in['run_id'] );
+			$message = implode(
+				"\n",
+				array(
+					/* translators: %s: what happened (one or more whole sentences). */
+					sprintf( __( '%s The step is unclear.', 'alphabridge-mcp' ), $why ),
+					/* translators: %d: run number. */
+					sprintf( __( '1. To go back, call wp_site_revert action=plan with run_id %d.', 'alphabridge-mcp' ), $in['run_id'] ),
+					/* translators: %s: the instruction of the swap on the server (absolute path of a file). */
+					sprintf( __( '2. Only where this site answers no request any more: in a shell on the server, open the file %s and run the command its first lines point to. It checks first, moves nothing where a check fails, and prints OK at its end.', 'alphabridge-mcp' ), $moved['guide'] ),
+					/* translators: %s: the folder or file of the unit (absolute path). */
+					sprintf( __( 'Target: %s', 'alphabridge-mcp' ), $plan['target'] ),
+					/* translators: %s: the place of the backup of the old version (absolute path). */
+					sprintf( __( 'Backup: %s', 'alphabridge-mcp' ), $plan['old']['path'] ),
+				)
+			);
 		} else {
-			$by_hand = self::by_hand( $in, $plan, $point );
-			$message = true === $known['closed']
-				/* translators: 1: what happened (one or more whole sentences), 2: run number. */
-				? sprintf( __( '%1$s The step is unclear; the mark of the swap is closed, as the new version at the target and the old one in the backup were proved. The way back of this run puts the old version back (wp_site_revert action=plan with run_id %2$d). Where this site answers no request any more, put it back by hand in a shell on the server, as the lines below say:', 'alphabridge-mcp' ), $why, $in['run_id'] )
-				/* translators: 1: what happened (one or more whole sentences), 2: run number. */
-				: ( null === $known['closed']
-					/* translators: 1: what happened (one or more whole sentences), 2: run number. */
-					? sprintf( __( '%1$s The step is unclear; that the mark of the swap is closed is not confirmed (it was written so, and read once more it did not tell its state). The way back of this run puts the old version back (wp_site_revert action=plan with run_id %2$d). Where this site answers no request any more, put it back by hand in a shell on the server, as the lines below say:', 'alphabridge-mcp' ), $why, $in['run_id'] )
-					/* translators: 1: what happened (one or more whole sentences), 2: run number. */
-					: sprintf( __( '%1$s The step is unclear, and the mark of the swap stays open: the way back of this run puts the old version back (wp_site_revert action=plan with run_id %2$d). Where this site answers no request any more, put it back by hand in a shell on the server, as the lines below say:', 'alphabridge-mcp' ), $why, $in['run_id'] ) );
-			$message .= "\n" . implode( "\n", $by_hand );
+			$by_hand = self::by_hand( $in, $plan );
+			/* translators: 1: what happened (one or more whole sentences), 2: run number. */
+			$message = sprintf( __( '%1$s The step is unclear. The way back of this run puts the old version back (wp_site_revert action=plan with run_id %2$d). Where this site answers no request any more, put it back by hand in a shell on the server, as the lines below say:', 'alphabridge-mcp' ), $why, $in['run_id'] ) . "\n" . implode( "\n", $by_hand );
 		}
 		return self::ended(
 			$in,
 			'unclear',
-			$journal,
+			$moved['journal'],
 			array(
 				'message' => $message,
 				'target'  => $plan['target'],
 				'backup'  => $plan['old']['path'],
-				'mark'    => true === $known['closed'] ? 'closed' : ( null === $known['closed'] ? 'unconfirmed' : 'open' ),
+				'mark'    => $moved['mid'],
+				'guide'   => $moved['guide'],
 				'by_hand' => $by_hand,
 			)
 		);
@@ -1954,8 +1918,10 @@ final class AB_MCP_Sync_Code_Swap {
 
 	/**
 	 * The step of the swap ended, from begun: its state, journal and result
-	 * in one write (the journal through the seam); where that write fails,
-	 * the step stays begun and the next call finds the run interrupted.
+	 * in one write (the journal through the seam). Where that write fails,
+	 * the refusal says that the end could not be recorded and names the
+	 * status of the run and the ways on from there; what the step holds
+	 * then is not read here, so the refusal claims no state of it.
 	 *
 	 * @param array  $in      The arguments.
 	 * @param string $state   done, failed or unclear.
@@ -1976,25 +1942,27 @@ final class AB_MCP_Sync_Code_Swap {
 		);
 		if ( true !== $saved ) {
 			/* translators: 1: what the step did (one or more whole sentences), 2: step number, 3: the error of the database, or nothing. */
-			return self::refusal( 'ab_mcp_sync_run_journal', sprintf( __( '%1$s The end of step %2$d could not be recorded (%3$s), so it stays begun and the next call finds the run interrupted: wp_site_revert action=plan with this run_id goes on from there, or a person closes it as checked on the page AlphaBridge → Staging.', 'alphabridge-mcp' ), $result['message'], $in['unit']['seq'], is_wp_error( $saved ) ? $saved->get_error_message() : '-' ) );
+			return self::refusal( 'ab_mcp_sync_run_journal', sprintf( __( '%1$s The end of step %2$d could not be recorded (%3$s). Ask for the status of the run (wp_site_push action=status): where it shows the run interrupted, wp_site_revert action=plan with this run_id goes on from there, or a person closes it as checked on the page AlphaBridge → Staging.', 'alphabridge-mcp' ), $result['message'], $in['unit']['seq'], is_wp_error( $saved ) ? $saved->get_error_message() : '-' ) );
 		}
 		AB_MCP_Sync_Run::touch( $in['run_id'] );
 		return array( 'next' => $result['message'] );
 	}
 
 	/**
-	 * The commands of the way by hand for a point of the swap: the section
-	 * of the instruction of its mark (AB_MCP_Protected_Store::guide(), the
-	 * one place that writes them), made from the same trees, so that the
-	 * answer carries them after the mark is closed and its folder gone (a
-	 * day later, AB_MCP_Protected_Store::cleanup()).
+	 * The commands of the way by hand after both renames (the new version
+	 * at the target, the old one in the backup): the section
+	 * [nach-den-umbenennungen] of the instruction of the mark
+	 * (AB_MCP_Protected_Store::guide(), the one place that writes them),
+	 * made from the same trees, so that the answer carries them after the
+	 * mark is closed and its folder gone (a day later,
+	 * AB_MCP_Protected_Store::cleanup()). Only for an answer whose proofs
+	 * are whole (close()): the swap done, or unclear after both proofs.
 	 *
-	 * @param array  $in    The arguments.
-	 * @param array  $plan  plan_of().
-	 * @param string $point vor-den-umbenennungen, zwischen-den-umbenennungen (or with another entry at the target zwischen-den-umbenennungen-ziel-belegt) or nach-den-umbenennungen.
-	 * @return string[] Its lines (what to check, then each command); none where the store is not decided.
+	 * @param array $in   The arguments.
+	 * @param array $plan plan_of().
+	 * @return string[] Its lines (what to check, then the command); none where the store is not decided.
 	 */
-	private static function by_hand( array $in, array $plan, $point ) {
+	private static function by_hand( array $in, array $plan ) {
 		$root = AB_MCP_Protected_Store::root();
 		if ( is_wp_error( $root ) ) {
 			return array();
@@ -2015,7 +1983,7 @@ final class AB_MCP_Sync_Code_Swap {
 				) + self::mark_of( $in, $plan )
 			)
 		);
-		$at    = array_search( '[' . $point . ']', $lines, true );
+		$at    = array_search( '[nach-den-umbenennungen]', $lines, true );
 		$end   = count( $lines );
 		$out   = array();
 		for ( $i = false === $at ? $end : $at + 1; $i < $end && '' !== $lines[ $i ]; $i++ ) {

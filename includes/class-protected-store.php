@@ -2800,7 +2800,12 @@ final class AB_MCP_Protected_Store {
 	 * The instruction of a mark (WIEDERHERSTELLEN.txt; plan E6, and the rule
 	 * of the shell run of a way back by hand that branch 1 laid down): what
 	 * the swap moved, with
-	 * device, inode and hash of each tree, and for each point of an abort a
+	 * device, inode and hash of each tree; at its beginning two lines and a
+	 * command that only reads (ls -di of the target and of each tree named),
+	 * which tell the section that fits what is there, so that a reader need
+	 * not know where the swap stopped (option B, Thomas 16.11.2026: the
+	 * answer of an unclear swap names this file, not its commands); and for
+	 * each point of an abort a
 	 * section [point] whose one line "$ …" is the command, in a shell, that
 	 * puts the old state back by hand and checks that it is the right folder
 	 * (its inode, ls -di): its parts joined with &&, the checks first, so
@@ -2844,6 +2849,19 @@ final class AB_MCP_Protected_Store {
 		$opcache = __( 'Then clear OPcache of this site, or have PHP restarted (at the host: PHP-FPM or the web server): where PHP does not check its files for changes (opcache.validate_timestamps=0), it can still run the code it read before.', 'alphabridge-mcp' );
 		$lines   = array();
 		$lines[] = __( 'AlphaBridge MCP: how to put the old state back by hand, without WordPress', 'alphabridge-mcp' );
+		$lines[] = '';
+		// First what is there, only reading (option B, Thomas 16.11.2026): a
+		// reader need not know where the swap stopped, as after a hard abort;
+		// the inodes tell which section fits.
+		$places = array( $q( $target ) );
+		foreach ( array( $old, $new ) as $tree ) {
+			if ( null !== $tree ) {
+				$places[] = $q( $root . '/' . $tree['path'] );
+			}
+		}
+		$lines[] = __( 'First see which command fits. The next line only reads: for the target and for each place of the store named below it shows the inode of what is there (the first number of its line), or says that nothing is there:', 'alphabridge-mcp' );
+		$lines[] = '$ ls -di ' . implode( ' ', $places );
+		$lines[] = __( 'Then take the first section below whose first line fits what it showed, and run its command. An entry is the old version where it has the inode named below for the backup, and the new one where it has the inode named for the stage.', 'alphabridge-mcp' );
 		$lines[] = '';
 		/* translators: 1: kind of the unit (plugin, theme …), 2: its name. */
 		$lines[] = sprintf( __( 'Unit: %1$s %2$s', 'alphabridge-mcp' ), (string) $mark['unit']['kind'], (string) $mark['unit']['ref'] );
