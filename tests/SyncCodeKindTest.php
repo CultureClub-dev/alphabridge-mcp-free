@@ -163,6 +163,7 @@ final class SyncCodeKindTest extends TestCase {
 			$message = self::refused( $engine->rights( $op, $ref ), 'ab_mcp_sync_rights' );
 			self::assertStringContainsString( '(' . $missing . ';', $message, 'The capability is named.' );
 			self::assertStringContainsString( explode( ':', $ref, 2 )[1], $message, 'The unit is named.' );
+			self::assertStringContainsString( 'An account with ' . $missing . ' may take it over.', $message, 'The way of another account, in the reason.' );
 			// The way: the run is the one of its own account and connection,
 			// so it is aborted first, then a new one (Codex D6, finding 3), in
 			// the one sentence of all refusals of rights().

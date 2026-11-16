@@ -591,8 +591,8 @@ final class AnswerWayTest extends TestCase {
 		// the account in AB_MCP_Sync_Code_Kind::rights() end with the one
 		// sentence on the run, held there once (its abort, then a new plan
 		// with wp_site_push); SyncCodeKindTest checks it at their end.
-		'Not taken over: this account may not change the files of the theme %1$s on this site in this way (%2$s; with DISALLOW_FILE_EDIT nobody has edit_themes, which the same version with other files takes).',
-		'Not taken over: this account may not change the files of the plugin %1$s on this site in this way (%2$s; with DISALLOW_FILE_EDIT nobody has edit_plugins, which the same version with other files takes).',
+		'Not taken over: this account may not change the files of the theme %1$s on this site in this way (%2$s; with DISALLOW_FILE_EDIT nobody has edit_themes, which the same version with other files takes). An account with %2$s may take it over.',
+		'Not taken over: this account may not change the files of the plugin %1$s on this site in this way (%2$s; with DISALLOW_FILE_EDIT nobody has edit_plugins, which the same version with other files takes). An account with %2$s may take it over.',
 	);
 
 	/**

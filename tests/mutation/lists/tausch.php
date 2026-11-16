@@ -1349,6 +1349,15 @@ return array(
 		'expect'  => '/testTheSwapRenamesOnlyThroughItsCallsAndThoseOnlyFromMove/',
 	),
 	array(
+		'id'      => 'tausch/d3b2-rename-fully-qualified',
+		'clause'  => 'the guard of the renames of the swap: PHP\'s rename() written fully qualified (\\rename()) past its calls makes it red as well (Codex D9; Teil D3b-2b)',
+		'file'    => $cs,
+		'search'  => "\t\tif ( ! self::move( \$plan['target'], \$plan['old']['path'] ) ) {",
+		'replace' => "\t\tif ( ! \\rename( \$plan['target'], \$plan['old']['path'] ) ) {",
+		'run'     => $unit( 'StoreRemoverGuardTest', 'testTheSwapRenamesOnlyThroughItsCallsAndThoseOnlyFromMove' ),
+		'expect'  => '/testTheSwapRenamesOnlyThroughItsCallsAndThoseOnlyFromMove/',
+	),
+	array(
 		'id'      => 'tausch/d3b2-target-hash',
 		'clause'  => 'at_target(): the version at the target counts as the one the swap left only where its tree reads as the hash of the new version, so a mark never closes on another one (Z20a; Teil D3b-2)',
 		'file'    => $cs,

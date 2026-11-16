@@ -450,6 +450,9 @@ e('d3b-swap-no-root', 'the guard of the remover (Z37): the swap gets no folder o
 e('d3b2-rename-past-move', 'the guard of the renames of the swap (Z15, Z16): rename() of its calls only from move(), which renames onto a place read as free; a rename past move() makes the guard red (Teil D3b-2)', CS,
   "\t\tif ( ! self::move( $plan['target'], $plan['old']['path'] ) ) {",
   "\t\tif ( ! self::calls()->rename( $plan['target'], $plan['old']['path'] ) ) {", 'guard', 'testTheSwapRenamesOnlyThroughItsCallsAndThoseOnlyFromMove')
+e('d3b2-rename-fully-qualified', 'the guard of the renames of the swap: PHP\'s rename() written fully qualified (\\rename()) past its calls makes it red as well (Codex D9; Teil D3b-2b)', CS,
+  "\t\tif ( ! self::move( $plan['target'], $plan['old']['path'] ) ) {",
+  "\t\tif ( ! \\rename( $plan['target'], $plan['old']['path'] ) ) {", 'guard', 'testTheSwapRenamesOnlyThroughItsCallsAndThoseOnlyFromMove')
 e('d3b2-target-hash', 'at_target(): the version at the target counts as the one the swap left only where its tree reads as the hash of the new version, so a mark never closes on another one (Z20a; Teil D3b-2)', CS,
   "&& is_string( $read['hash'] ) && hash_equals( $want['hash'], $read['hash'] ) ) {",
   "&& is_string( $read['hash'] ) ) {", 'coderun', AFTER)

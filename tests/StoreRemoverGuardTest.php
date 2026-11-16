@@ -59,7 +59,10 @@ final class StoreRemoverGuardTest extends TestCase {
 	/**
 	 * Every call in a file: function, method (->), static (Class::) and new,
 	 * with the class and the named function it stands in (a closure counts
-	 * as the function it is written in).
+	 * as the function it is written in). A name in any spelling of the
+	 * global namespace (\rename(), namespace\rename(), \Class::) counts as
+	 * the name itself (Codex D9); a qualified one (Ns\rename()) keeps its
+	 * namespace, as it names another function.
 	 *
 	 * @return array<int,array{kind:string,name:string,of:string,class:string|null,function:string|null,args:string,line:int}>
 	 */
@@ -97,7 +100,7 @@ final class StoreRemoverGuardTest extends TestCase {
 				array_pop( $stack );
 				continue;
 			}
-			if ( ! is_array( $t ) || T_STRING !== $t[0] || '(' !== ( $tokens[ $i + 1 ] ?? null ) ) {
+			if ( ! is_array( $t ) || ! in_array( $t[0], array( T_STRING, T_NAME_FULLY_QUALIFIED, T_NAME_QUALIFIED, T_NAME_RELATIVE ), true ) || '(' !== ( $tokens[ $i + 1 ] ?? null ) ) {
 				continue;
 			}
 			$before = $tokens[ $i - 1 ] ?? null;
@@ -110,7 +113,7 @@ final class StoreRemoverGuardTest extends TestCase {
 				$kind = 'method';
 			} elseif ( is_array( $before ) && T_DOUBLE_COLON === $before[0] ) {
 				$kind = 'static';
-				$of   = is_array( $tokens[ $i - 2 ] ?? null ) ? $tokens[ $i - 2 ][1] : '';
+				$of   = is_array( $tokens[ $i - 2 ] ?? null ) ? self::global_name( $tokens[ $i - 2 ][1] ) : '';
 			} elseif ( is_array( $before ) && T_NEW === $before[0] ) {
 				$kind = 'new';
 			}
@@ -145,7 +148,7 @@ final class StoreRemoverGuardTest extends TestCase {
 			}
 			$out[] = array(
 				'kind'     => $kind,
-				'name'     => strtolower( $t[1] ),
+				'name'     => strtolower( self::global_name( $t[1] ) ),
 				'of'       => $of,
 				'class'    => $class,
 				'function' => $function,
@@ -154,6 +157,11 @@ final class StoreRemoverGuardTest extends TestCase {
 			);
 		}
 		return $out;
+	}
+
+	/** A name as the global namespace knows it: without a leading \ or namespace\ (the shipped files declare no namespace). */
+	private static function global_name( string $name ): string {
+		return (string) preg_replace( '/^(namespace)?\\\\/i', '', $name );
 	}
 
 	/** Where a call stands: Class::function (or the file where outside a class). */

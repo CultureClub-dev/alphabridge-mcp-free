@@ -195,9 +195,9 @@ final class AB_MCP_Sync_Code_Kind implements AB_MCP_Sync_Kind {
 					'ab_mcp_sync_rights',
 					( 'theme' === $unit[0]
 						/* translators: 1: the folder of the theme, 2: the capability of WordPress, as the code names it (install_themes, upload_themes, update_themes, edit_themes). */
-						? sprintf( __( 'Not taken over: this account may not change the files of the theme %1$s on this site in this way (%2$s; with DISALLOW_FILE_EDIT nobody has edit_themes, which the same version with other files takes).', 'alphabridge-mcp' ), $unit[1], $cap )
+						? sprintf( __( 'Not taken over: this account may not change the files of the theme %1$s on this site in this way (%2$s; with DISALLOW_FILE_EDIT nobody has edit_themes, which the same version with other files takes). An account with %2$s may take it over.', 'alphabridge-mcp' ), $unit[1], $cap )
 						/* translators: 1: the folder or file of the plugin, 2: the capability of WordPress, as the code names it (install_plugins, upload_plugins, update_plugins, edit_plugins). */
-						: sprintf( __( 'Not taken over: this account may not change the files of the plugin %1$s on this site in this way (%2$s; with DISALLOW_FILE_EDIT nobody has edit_plugins, which the same version with other files takes).', 'alphabridge-mcp' ), $unit[1], $cap ) ) . $abort,
+						: sprintf( __( 'Not taken over: this account may not change the files of the plugin %1$s on this site in this way (%2$s; with DISALLOW_FILE_EDIT nobody has edit_plugins, which the same version with other files takes). An account with %2$s may take it over.', 'alphabridge-mcp' ), $unit[1], $cap ) ) . $abort,
 					array( 'capability' => $cap )
 				);
 			}
