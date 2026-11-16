@@ -1489,11 +1489,14 @@ final class AB_MCP_Sync_Code_Swap {
 		$unit    = $in['unit'];
 		$opcache = self::invalidated( $plan, $in['until'] );
 		if ( is_wp_error( $opcache ) ) {
-			return self::unclear( $in, $plan, $moved['journal'], 'nach-den-umbenennungen', $opcache->get_error_message() );
+			// Whatever is put back or left, OPcache is to be cleared at the
+			// host (the lead on D2a 4).
+			return self::unclear( $in, $plan, $moved['journal'], 'nach-den-umbenennungen', $opcache->get_error_message() . ' ' . __( 'Have OPcache of this site cleared at the host, or PHP restarted (PHP-FPM or the web server), so that PHP runs the files that are at the target now.', 'alphabridge-mcp' ) );
 		}
 		// The backup counts as proved only where in_backup() answered true
-		// in close() (Codex D1, finding 5, round 2).
-		$backup = false;
+		// in close() (Codex D1, finding 5, round 2); null where close() did
+		// not reach it, then unclear() asks it.
+		$backup = null;
 		$closed = self::close( 'swap', $in, $plan, $moved['mid'], $backup );
 		if ( is_wp_error( $closed ) ) {
 			return self::unclear( $in, $plan, $moved['journal'], 'nach-den-umbenennungen', $closed->get_error_message(), array( 'backup' => $backup ) );
@@ -1637,15 +1640,17 @@ final class AB_MCP_Sync_Code_Swap {
 	 * @param array  $in     The arguments.
 	 * @param array  $plan   plan_of().
 	 * @param string $mid    The mark.
-	 * @param bool   $backup Set true where in_backup() proved the old version
-	 *                       whole in the backup, whatever comes after it.
+	 * @param bool|null $backup Set where in_backup() was asked: true where it
+	 *                          proved the old version whole in the backup,
+	 *                          whatever comes after it, false where not; left
+	 *                          null where it was not reached.
 	 * @return array{discarded:int}|WP_Error
 	 */
-	private static function close( $op, array $in, array $plan, $mid, &$backup = false ) {
+	private static function close( $op, array $in, array $plan, $mid, &$backup = null ) {
 		$swap   = 'swap' === $op;
 		$proved = self::at_target( $in, $plan, $swap ? $plan['new'] : $plan['old'] );
 		if ( true === $proved && $swap ) {
-			$proved = self::in_backup( $plan['old'] );
+			$proved = self::in_backup( $plan['old'], $in['until'] );
 			$backup = true === $proved;
 		}
 		if ( true !== $proved ) {
@@ -1686,19 +1691,22 @@ final class AB_MCP_Sync_Code_Swap {
 	/**
 	 * Whether the old version lies whole in the backup: its form, device and
 	 * inode, and its tree read back by the store against its hash
-	 * (AB_MCP_Protected_Store::tree()).
+	 * (AB_MCP_Protected_Store::tree()), only reading, and only while the time
+	 * of the call is not over (its deadline, R12). The one proof of the
+	 * backup: close() and unclear() ask it here.
 	 *
-	 * @param array $old The old version (plan_of()).
+	 * @param array $old   The old version (plan_of()).
+	 * @param float $until The end of the time of the call.
 	 * @return true|WP_Error
 	 */
-	private static function in_backup( array $old ) {
+	private static function in_backup( array $old, $until ) {
 		$at   = self::identity( $old['path'] );
-		$tree = null !== $at && array( $old['form'], $old['dev'], $old['ino'] ) === array( $at['form'], $at['dev'], $at['ino'] ) ? AB_MCP_Protected_Store::tree( 'backups', $old['gid'], $old['name'], $old['hash'] ) : null;
+		$tree = null !== $at && array( $old['form'], $old['dev'], $old['ino'] ) === array( $at['form'], $at['dev'], $at['ino'] ) ? AB_MCP_Protected_Store::tree( 'backups', $old['gid'], $old['name'], $old['hash'], AB_MCP_Sync_Deadline::at( $until ) ) : null;
 		if ( is_array( $tree ) ) {
 			return true;
 		}
 		/* translators: %s: the backup of the old version (absolute path). */
-		return new WP_Error( 'code:close_backup', sprintf( __( 'The old version could not be proved whole in the backup %s (its device or inode differ, or its tree did not read back as its hash).', 'alphabridge-mcp' ), $old['path'] ) );
+		return new WP_Error( 'code:close_backup', sprintf( __( 'The old version could not be proved whole in the backup %s (its device or inode differ, its tree did not read back as its hash, or the time of this call ran out before it was read).', 'alphabridge-mcp' ), $old['path'] ) );
 	}
 
 	/**
@@ -1772,11 +1780,14 @@ final class AB_MCP_Sync_Code_Swap {
 	 * finding 8: closed only where close() closed it), the way back of the
 	 * run and the commands of the way by hand for the point it stopped at.
 	 * The backup counts as proved only where in_backup() answered true
-	 * (Codex D1, finding 5, round 2); before that, also where the swap
-	 * stopped before close() (OPcache) or between the renames, the answer
-	 * gives no command that puts the backup at the target (those of every
-	 * point after the first rename, AB_MCP_Protected_Store::guide()), but
-	 * that it is to be checked first. All of it here, the one place that
+	 * (Codex D1, finding 5, round 2). Where it was not asked yet (the swap
+	 * stopped before close(), as with OPcache, or between the renames), it
+	 * is asked here first, only reading and within the time of the call
+	 * (the lead on D2a, «Zu 2»: unclear with the way by hand). Where it is
+	 * not proved, or the time ran out, the answer gives no command that puts
+	 * the backup at the target (those of every point after the first
+	 * rename, AB_MCP_Protected_Store::guide()), but that it is to be checked
+	 * first, and the way back of the run. All of it here, the one place that
 	 * builds this answer.
 	 *
 	 * @param array  $in      The arguments.
@@ -1784,15 +1795,19 @@ final class AB_MCP_Sync_Code_Swap {
 	 * @param array  $journal The journal of the step.
 	 * @param string $point   The section of the instruction (AB_MCP_Protected_Store::guide()).
 	 * @param string $why     What happened (one or more whole sentences).
-	 * @param array  $known   closed: the mark closed (default false, open); backup: true only
-	 *                        where in_backup() proved the backup whole (default false).
+	 * @param array  $known   closed: the mark closed (default false, open); backup: true
+	 *                        where in_backup() proved the backup whole, false where it did
+	 *                        not, null where it was not asked (default; asked here).
 	 * @return array|WP_Error
 	 */
 	private static function unclear( array $in, array $plan, array $journal, $point, $why, array $known = array() ) {
 		$known += array(
 			'closed' => false,
-			'backup' => false,
+			'backup' => null,
 		);
+		if ( null === $known['backup'] && 'vor-den-umbenennungen' !== $point ) {
+			$known['backup'] = true === self::in_backup( $plan['old'], $in['until'] );
+		}
 		if ( ! $known['backup'] && 'vor-den-umbenennungen' !== $point ) {
 			$by_hand = array();
 			/* translators: 1: what happened (one or more whole sentences), 2: the backup of the old version (absolute path), 3: run number. */

@@ -586,7 +586,7 @@ final class AnswerWayTest extends TestCase {
 		'The PHP files in %s could not all be listed (a folder or an entry not read, an entry neither a folder nor a file, or the time of this call over), so OPcache was not cleared for each file the swap replaced, and this site may still run old code.',
 		'OPcache could not be cleared for %1$s (%2$s), so this site may still run the old code of it.',
 		'The version at %s could not be proved as the one the swap left there (its device, inode or hash differ, or it could not be read whole within the time of this call).',
-		'The old version could not be proved whole in the backup %s (its device or inode differ, or its tree did not read back as its hash).',
+		'The old version could not be proved whole in the backup %s (its device or inode differ, its tree did not read back as its hash, or the time of this call ran out before it was read).',
 	);
 
 	/**

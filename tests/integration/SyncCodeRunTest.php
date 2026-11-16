@@ -32,6 +32,7 @@ declare( strict_types = 1 );
 
 namespace AlphaBridge\Tests\Integration;
 
+use AB_MCP_Change_Lock;
 use AB_MCP_IT_Code;
 use AB_MCP_IT_Sites;
 use AB_MCP_IT_Sync_Steps;
@@ -40,11 +41,13 @@ use AB_MCP_Protected_Store;
 use AB_MCP_REST_Controller;
 use AB_MCP_Staging;
 use AB_MCP_Sync_Anchor;
+use AB_MCP_Sync_Backup;
 use AB_MCP_Sync_Code_Ops;
 use AB_MCP_Sync_Code_Plan;
 use AB_MCP_Sync_Code_Stage;
 use AB_MCP_Sync_Code_Stage_Calls;
 use AB_MCP_Sync_Code_Swap;
+use AB_MCP_Sync_Env;
 use AB_MCP_Sync_Guard;
 use AB_MCP_Sync_Import;
 use AB_MCP_Sync_Pairs;
@@ -98,6 +101,7 @@ final class SyncCodeRunTest extends TestCase {
 		AB_MCP_Sync_Code_Swap::forget();
 		AB_MCP_Sync_Code_Stage::$clock = null;
 		AB_MCP_Sync_Run::$clock        = null;
+		AB_MCP_Sync_Env::$clock        = null;
 		if ( null === $this->docroot_before ) {
 			unset( $_SERVER['DOCUMENT_ROOT'] );
 		} else {
@@ -578,6 +582,50 @@ final class SyncCodeRunTest extends TestCase {
 	}
 
 	/**
+	 * A fault that only looks: right before the mark of the swap is written
+	 * (the last step before the first rename), the places of the backup and
+	 * the stage and the digests of the old version at the target and of the
+	 * stage, into $seen (for nothing_lost()).
+	 */
+	private static function watch( ?array &$seen ): array {
+		return array(
+			'method' => 'put_mark',
+			'nth'    => 1,
+			'kind'   => 'before',
+			'before' => static function ( $method, array $args ) use ( &$seen ): void {
+				$trees = array_column( $args[0]['trees'], 'path', 'role' );
+				$seen  = array(
+					'target' => $args[0]['target'],
+					'backup' => $trees['backup'],
+					'stage'  => $trees['stage'],
+					'old'    => self::digest( $args[0]['target'] ),
+					'new'    => self::digest( $trees['stage'] ),
+				);
+			},
+		);
+	}
+
+	/**
+	 * After a swap that did not end done (D2a 6): the lock for changes is
+	 * free (this request does not hold it, and it can be taken again), and
+	 * nothing is lost on the disk: the old version whole at the target or
+	 * whole in the backup, the stage whole at the target or at its place (or
+	 * at a place in $also, where the test itself moved it).
+	 */
+	private static function nothing_lost( ?array $seen, array $also = array() ): void {
+		self::assertIsArray( $seen, 'The swap came to its mark.' );
+		self::assertFalse( AB_MCP_Sync_Code_Swap::lock_held(), 'The swap holds no lock for changes.' );
+		self::assertTrue( AB_MCP_Change_Lock::take(), 'The lock for changes can be taken again.' );
+		AB_MCP_Change_Lock::release();
+		clearstatcache();
+		$whole = static function ( array $want, array $places ): array {
+			return array_values( array_filter( $places, static fn( $place ) => is_dir( $place ) && self::digest( $place ) === $want ) );
+		};
+		self::assertCount( 1, $whole( $seen['old'], array( $seen['target'], $seen['backup'] ) ), 'The old version whole at the target or in the backup.' );
+		self::assertCount( 1, $whole( $seen['new'], array_merge( array( $seen['target'], $seen['stage'] ), $also ) ), 'The stage whole at the target or at its place.' );
+	}
+
+	/**
 	 * Prüft: F56, the normal case of the swap: an active plugin with a new
 	 * version on staging, released with accept, is swapped in the run in one
 	 * call. prepare() as built (the test requests before the swap go to the
@@ -926,15 +974,13 @@ final class SyncCodeRunTest extends TestCase {
 	 * ENOTEMPTY). Another process that puts a folder at the place of the
 	 * backup keeps it, before the swap looks or with files in it between the
 	 * look and the rename (the step fails, the old version at its place, the
-	 * mark closed on it); where the second rename fails, the old version goes
-	 * back to the free target (F35); where another process put a folder at
-	 * the target before the way back, nothing is moved onto it, the step is
-	 * unclear, and as the backup is not proved, the answer gives no command
-	 * that puts it back, but says to check it first (Codex D1, finding 5).
+	 * mark closed on it); where another process put a folder at the target
+	 * before the way back, nothing is moved onto it, the step is unclear, and
+	 * the command by hand for the backup the answer proved stops at its
+	 * check and moves nothing onto that folder (F35 has its own test).
 	 * Sonst: the swap could replace a folder another process put at a place
 	 * and with it what it holds, or put its backup into the site where
-	 * another process put a folder, or a person would put a backup that was
-	 * never proved into the site with the commands of the answer.
+	 * another process put a folder, also with the command of its answer.
 	 */
 	#[DataProvider( 'places' )]
 	public function testASwapRenamesOnlyOntoAFreePlaceAndReplacesNothingAnotherProcessPutThere( string $case ): void {
@@ -972,14 +1018,6 @@ final class SyncCodeRunTest extends TestCase {
 					},
 				),
 			),
-			'the second rename fails'                     => array(
-				array(
-					'method' => 'rename',
-					'nth'    => 2,
-					'kind'   => 'return',
-					'value'  => false,
-				),
-			),
 			'a folder with a file at the target before the way back' => array(
 				array(
 					'method' => 'rename',
@@ -1013,17 +1051,22 @@ final class SyncCodeRunTest extends TestCase {
 			$kept = lstat( $step['result']['backup'] );
 			self::assertSame( array( $old['dev'], $old['ino'] ), array( $kept['dev'], $kept['ino'] ), 'The old version stays whole in the backup.' );
 			self::assertStringContainsString( 'and the old one could not be put back', $says );
-			self::assertStringContainsString( 'The backup ' . $step['result']['backup'] . ' is not proved as the old version, so this answer gives no command that puts it back: check the backup first', $says );
-			self::assertSame( array(), $step['result']['by_hand'], 'No command by hand.' );
-			self::assertStringNotContainsString( "mv '" . $step['result']['backup'] . "'", $says, 'No command moves the backup.' );
 			self::assertSame( array( 'open', 'open' ), array( self::mark_of_swap( $run_id )['state'], $step['result']['mark'] ) );
+			// The backup proved, the answer gives its command; its checks
+			// come first, so it moves nothing onto the folder at the target.
+			self::assertStringContainsString( " && mv '" . $step['result']['backup'] . "' '" . $target . "' && ", $says );
+			self::assertStringNotContainsString( 'OK', self::run_by_hand( $step['result']['by_hand'] ), 'The command stops at its check.' );
+			clearstatcache();
+			self::assertSame( array( $foreign[1], array( '.', '..', 'fremd.txt' ) ), array( fileinode( $target ), scandir( $target ) ), 'The folder of the other process stays as it was.' );
+			$kept = lstat( $step['result']['backup'] );
+			self::assertSame( array( $old['dev'], $old['ino'] ), array( $kept['dev'], $kept['ino'] ), 'The old version stays in the backup.' );
 			return;
 		}
 		self::assertSame( 'failed', $step['state'], $says );
 		self::assertSame( array( $old['dev'], $old['ino'] ), array( $now['dev'], $now['ino'] ), 'The old version at its place.' );
 		self::assertSame( '1.0.0', AB_MCP_IT_Code::fassung( 'a', 'plugin', 'ab-it-aktiv' ) );
 		self::assertSame( 'closed', self::mark_of_swap( $run_id )['state'], 'The mark closed on the old version (kept).' );
-		self::assertStringContainsString( 'the second rename fails' === $case ? 'so the old one went back to its place' : 'The old version could not be moved into the backup of the run', $says );
+		self::assertStringContainsString( 'The old version could not be moved into the backup of the run', $says );
 	}
 
 	/** The places of a rename another process or a failure takes. */
@@ -1031,8 +1074,197 @@ final class SyncCodeRunTest extends TestCase {
 		return array(
 			'an empty folder at the place of the backup before the swap looks' => array( 'an empty folder at the place of the backup before the swap looks' ),
 			'a folder with a file at the place of the backup between the look and the rename' => array( 'a folder with a file at the place of the backup between the look and the rename' ),
-			'the second rename fails (F35)'              => array( 'the second rename fails' ),
 			'a folder with a file at the target before the way back' => array( 'a folder with a file at the target before the way back' ),
+		);
+	}
+
+	/** The command line of a way by hand (the one line of by_hand that begins with "$ "), run in bash without -e: its output. */
+	private static function run_by_hand( array $by_hand ): string {
+		$lines = array_values( array_filter( $by_hand, static fn( $line ) => 0 === strpos( $line, '$ ' ) ) );
+		self::assertCount( 1, $lines, 'One command line.' );
+		$out = array();
+		exec( 'bash -c ' . escapeshellarg( substr( $lines[0], 2 ) ) . ' 2>&1', $out );
+		return implode( "\n", $out );
+	}
+
+	/**
+	 * Prüft: F35 and the way back of the swap (T3 2 and 6): where the second
+	 * rename fails, the old version goes back to the target, nothing is
+	 * changed, the step ends failed with the mark closed (kept), and its
+	 * journal holds the swap and the answer. Where the way back fails too,
+	 * the step ends unclear with the mark open, and the answer first proves
+	 * the backup (the lead on D2a, «Zu 2»): proved, it gives the one command
+	 * line that puts the old version back, and that line does it; not proved
+	 * (the backup changed) or with no time left, no such command, but the
+	 * sentence to check the backup first, and the way back of the run. In
+	 * each case the lock for changes is free and nothing is lost.
+	 * Sonst: a failed swap could leave the site without its plugin, a person
+	 * would have no way by hand that works, or would put a backup into the
+	 * site that was never proved.
+	 */
+	#[DataProvider( 'ways_back' )]
+	public function testASecondRenameThatFailsGoesBackOrEndsUnclearWithAWayByHandThatWorks( string $case ): void {
+		list( $run_id, , $target ) = self::ready_to_swap();
+		$seen   = null;
+		$aside  = static function ( $method, array $args ): void {
+			// The stage aside, so that the second rename fails.
+			self::assertTrue( rename( $args[0], $args[0] . '-beiseite' ) );
+		};
+		$second = array(
+			'the second rename fails'                => array(
+				'kind'  => 'return',
+				'value' => false,
+			),
+			'the way back fails, the backup proved'  => array(
+				'kind'  => 'return',
+				'value' => false,
+			),
+			'the way back fails, the backup changed' => array(
+				'kind'   => 'before',
+				'before' => static function ( $method, array $args ) use ( $aside, &$seen ): void {
+					self::assertNotFalse( file_put_contents( $seen['backup'] . '/fremd.txt', 'fremd' ) );
+					$aside( $method, $args );
+				},
+			),
+			'the way back fails, no time left'       => array(
+				'kind'   => 'before',
+				'before' => static function ( $method, array $args ) use ( $aside ): void {
+					AB_MCP_Sync_Env::$clock = static fn(): float => microtime( true ) + 86400.0;
+					$aside( $method, $args );
+				},
+			),
+		);
+		$faults = array(
+			self::watch( $seen ),
+			array(
+				'method' => 'rename',
+				'nth'    => 2,
+			) + $second[ $case ],
+		);
+		if ( 'the second rename fails' !== $case ) {
+			$faults[] = array(
+				'method' => 'rename',
+				'nth'    => 3,
+				'kind'   => 'return',
+				'value'  => false,
+			);
+		}
+		try {
+			$answer = self::swap_with( $run_id, $faults );
+		} finally {
+			AB_MCP_Sync_Env::$clock = null;
+		}
+		self::assertIsArray( $answer, is_wp_error( $answer ) ? $answer->get_error_code() . ': ' . $answer->get_error_message() : '' );
+		$step = self::step( $run_id, 3 );
+		$says = $answer['next'];
+		self::assertStringContainsString( $step['result']['message'], $says, 'The journal holds the answer.' );
+		self::assertSame( array( array( 'kind' => 'plugin', 'op' => 'swap', 'ref' => 'ab-it-aktiv' ), $target, $seen['backup'], $seen['stage'] ), array( $step['parts']['unit'], $step['parts']['target'], $step['parts']['old']['path'], $step['parts']['new']['path'] ), 'The journal holds the swap.' );
+		$mark = self::mark_of_swap( $run_id );
+		if ( 'the second rename fails' === $case ) {
+			self::assertSame( 'failed', $step['state'], $says );
+			self::assertStringContainsString( 'so the old one went back to its place', $says );
+			self::assertSame( 'closed', $mark['state'], 'The mark closed on the old version (kept).' );
+			self::assertSame( '1.0.0', AB_MCP_IT_Code::fassung( 'a', 'plugin', 'ab-it-aktiv' ) );
+			self::assertSame( $seen['old'], self::digest( $target ), 'Nothing of the site changed.' );
+			self::nothing_lost( $seen );
+			return;
+		}
+		self::assertSame( 'unclear', $step['state'], $says );
+		self::assertStringContainsString( 'and the old one could not be put back', $says );
+		self::assertSame( array( 'open', 'open' ), array( $mark['state'], $step['result']['mark'] ), 'The mark stays open.' );
+		self::assertStringContainsString( 'wp_site_revert action=plan with run_id ' . $run_id, $says, 'The way back of the run.' );
+		if ( 'the way back fails, the backup proved' === $case ) {
+			self::nothing_lost( $seen );
+			self::assertStringContainsString( " && mv '" . $seen['backup'] . "' '" . $target . "' && ", $says, 'The command that puts the proved backup back.' );
+			self::assertStringEndsWith( 'OK', self::run_by_hand( $step['result']['by_hand'] ), 'The command does all of it.' );
+			clearstatcache();
+			self::assertSame( array( '1.0.0', $seen['old'] ), array( AB_MCP_IT_Code::fassung( 'a', 'plugin', 'ab-it-aktiv' ), self::digest( $target ) ), 'The old version is back, whole.' );
+			return;
+		}
+		self::assertStringContainsString( 'The backup ' . $seen['backup'] . ' is not proved as the old version, so this answer gives no command that puts it back: check the backup first', $says );
+		self::assertSame( array(), $step['result']['by_hand'], 'No command by hand.' );
+		self::assertStringNotContainsString( "mv '", $says, 'No command moves anything.' );
+		if ( 'the way back fails, the backup changed' === $case ) {
+			// What the test put into the backup goes aside again (nothing deleted).
+			self::assertTrue( rename( $seen['backup'] . '/fremd.txt', $seen['backup'] . '-fremd.txt' ) );
+		}
+		self::nothing_lost( $seen, array( $seen['stage'] . '-beiseite' ) );
+	}
+
+	/** The second rename and the way back, each failing. */
+	public static function ways_back(): array {
+		return array(
+			'the second rename fails (F35)'          => array( 'the second rename fails' ),
+			'the way back fails, the backup proved'  => array( 'the way back fails, the backup proved' ),
+			'the way back fails, the backup changed' => array( 'the way back fails, the backup changed' ),
+			'the way back fails, no time left'       => array( 'the way back fails, no time left' ),
+		);
+	}
+
+	/** The renames the seams of this test saw. */
+	private static function renames(): int {
+		$n = 0;
+		foreach ( AB_MCP_Test_Seam::recorded() as $calls ) {
+			$n += count( array_filter( $calls, static fn( $call ) => 'rename' === $call['method'] ) );
+		}
+		return $n;
+	}
+
+	/**
+	 * Prüft: F36 (T3 2): where the journal of the swap cannot be written
+	 * (its first write, begun) or the place of the backup is not given
+	 * (put_tree() refuses: a tree of that name is there), there is no swap
+	 * and no rename; the step stays planned, the answer names the way on,
+	 * the lock for changes is free, and the old version is at the target as
+	 * it was; with the place refused, not even the note of the replacement
+	 * is written.
+	 * Sonst: a swap could begin without its journal, so that no way back
+	 * knows what it moved, or a step would end failed where the next call
+	 * could do it.
+	 */
+	#[DataProvider( 'not_begun' )]
+	public function testASwapWhoseJournalOrBackupCannotBeWrittenMovesNothingAndItsStepStaysPlanned( string $case ): void {
+		list( $run_id, , $target ) = self::ready_to_swap();
+		$old    = self::digest( $target );
+		$note   = self::replaced_row();
+		$faults = array();
+		if ( 'the journal not written' === $case ) {
+			$faults[] = array(
+				'method' => 'journal',
+				'nth'    => 1,
+				'kind'   => 'return',
+				'value'  => new WP_Error( 'ab_it_db', 'The database refused the write.' ),
+			);
+		} else {
+			$place = AB_MCP_Protected_Store::put_tree( 'backups', AB_MCP_Sync_Backup::group( $run_id ), basename( $target ), $target );
+			self::assertIsArray( $place, is_wp_error( $place ) ? $place->get_error_message() : '' );
+			self::assertTrue( mkdir( $place['path'], 0700 ), 'A tree of that name at the place of the backup.' );
+		}
+		$refused = self::swap_with( $run_id, $faults );
+		self::assertInstanceOf( WP_Error::class, $refused );
+		$says = $refused->get_error_message();
+		self::assertSame( 'planned', self::step( $run_id, 3 )['state'], 'The step stays planned.' );
+		self::assertSame( 0, self::renames(), 'No rename.' );
+		self::assertNull( self::mark_of_swap( $run_id ), 'No mark.' );
+		self::assertFalse( AB_MCP_Sync_Code_Swap::lock_held(), 'The swap holds no lock for changes.' );
+		self::assertTrue( AB_MCP_Change_Lock::take(), 'The lock for changes can be taken again.' );
+		AB_MCP_Change_Lock::release();
+		clearstatcache();
+		self::assertSame( array( '1.0.0', $old ), array( AB_MCP_IT_Code::fassung( 'a', 'plugin', 'ab-it-aktiv' ), self::digest( $target ) ), 'The old version at the target as it was.' );
+		if ( 'the journal not written' === $case ) {
+			self::assertSame( 'code:journal', $refused->get_error_code(), $says );
+			self::assertStringContainsString( 'could not be written and read back before its first rename (The database refused the write.), so nothing of it was moved. Ask for the status of the run (wp_site_push action=status) and go on from there', $says );
+			return;
+		}
+		self::assertStringContainsString( 'So the plugin ab-it-aktiv is not swapped. Call action=next again; where it keeps failing, abort the run (wp_site_push action=abort) and plan again.', $says );
+		self::assertSame( $note, self::replaced_row(), 'No note of the replacement.' );
+	}
+
+	/** What keeps a swap from beginning. */
+	public static function not_begun(): array {
+		return array(
+			'the journal not written (F36)'         => array( 'the journal not written' ),
+			'the place of the backup refused (F36)' => array( 'the place of the backup refused' ),
 		);
 	}
 
@@ -1041,12 +1273,13 @@ final class SyncCodeRunTest extends TestCase {
 	 * proved ends unclear, and its answer says what is proved. A listing of
 	 * the files PHP runs that is not whole (a link in the new version, an
 	 * entry whose lstat() fails) clears no OPcache for good and leaves the
-	 * mark open; the backup counts as proved only where in_backup() answered
-	 * true (finding 5, round 2), so where the listing fails before it or the
-	 * backup changed, the answer gives no command that puts the backup back,
-	 * but the sentence to check it first, with its path; a pair that takes
-	 * no new bases after the mark was closed names the mark closed, with the
-	 * command that puts the proved backup back.
+	 * mark open, with the sentence to have OPcache cleared at the host; the
+	 * backup counts as proved only where in_backup() answered true (finding
+	 * 5, round 2): where the listing stopped before close(), the answer asks
+	 * it first and, proved, gives the command that puts it back (the lead on
+	 * D2a); where it changed, no command, but the sentence to check it
+	 * first, with its path; a pair that takes no new bases after the mark
+	 * was closed names the mark closed, with the command.
 	 * Sonst: the step would be done with old code left in OPcache, a person
 	 * would put a backup that was never proved as the old version into the
 	 * site with the commands of the answer, or would look for an open mark
@@ -1103,23 +1336,29 @@ final class SyncCodeRunTest extends TestCase {
 		self::assertSame( 'unclear', $step['state'], $says );
 		self::assertSame( '2.0.0', AB_MCP_IT_Code::fassung( 'a', 'plugin', 'ab-it-aktiv' ), 'The new version is at the target.' );
 		$mark = self::mark_of_swap( $run_id );
+		if ( 'the backup changed' === $case ) {
+			// in_backup() in close() answered false: not asked again.
+			self::assertStringContainsString( 'The step is unclear, and the mark of the swap stays open. The backup ' . $backup . ' is not proved as the old version, so this answer gives no command that puts it back: check the backup first', $says );
+			self::assertSame( array(), $result['by_hand'], 'No command by hand.' );
+			self::assertStringNotContainsString( "mv '" . $backup . "'", $says, 'No command moves the backup.' );
+			self::assertSame( array( 'open', 'open' ), array( $mark['state'], $result['mark'] ) );
+			return;
+		}
+		// The backup proved: by close() (the pair) or, where the listing
+		// stopped before close(), by unclear() (the lead on D2a).
+		self::assertNotSame( array(), $result['by_hand'] );
+		self::assertStringContainsString( " && mv '" . $backup . "' '" . $target . "' && ", $says, 'The command that puts the proved backup back.' );
 		if ( 'the pair changed before its bases' === $case ) {
-			self::assertNotSame( array(), $result['by_hand'] );
-			self::assertStringContainsString( " && mv '" . $backup . "' '" . $target . "' && ", $says, 'The command that puts the proved backup back.' );
 			self::assertStringContainsString( 'the files of its pair did not take their new bases', $says );
 			self::assertStringContainsString( 'The step is unclear; the mark of the swap is closed, as the new version at the target and the old one in the backup were proved.', $says );
 			self::assertStringNotContainsString( 'stays open', $says, 'The mark is not named open.' );
 			self::assertSame( array( 'closed', 'closed' ), array( $mark['state'], $result['mark'] ) );
 			return;
 		}
-		// The backup not proved: before in_backup() (the listing) or by it.
-		self::assertStringContainsString( 'The step is unclear, and the mark of the swap stays open. The backup ' . $backup . ' is not proved as the old version, so this answer gives no command that puts it back: check the backup first', $says );
-		self::assertSame( array(), $result['by_hand'], 'No command by hand.' );
-		self::assertStringNotContainsString( "mv '" . $backup . "'", $says, 'No command moves the backup.' );
+		self::assertStringContainsString( 'The PHP files in ' . $target . ' could not all be listed', $says );
+		self::assertStringContainsString( 'Have OPcache of this site cleared at the host, or PHP restarted (PHP-FPM or the web server), so that PHP runs the files that are at the target now.', $says );
+		self::assertStringContainsString( 'The step is unclear, and the mark of the swap stays open: the way back of this run puts the old version back', $says );
 		self::assertSame( array( 'open', 'open' ), array( $mark['state'], $result['mark'] ) );
-		if ( 'the backup changed' !== $case ) {
-			self::assertStringContainsString( 'The PHP files in ' . $target . ' could not all be listed', $says );
-		}
 	}
 
 	/** What is not proved after the renames. */
