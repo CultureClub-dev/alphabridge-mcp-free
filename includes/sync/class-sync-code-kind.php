@@ -20,10 +20,15 @@
  * - the same version with other files (edit, A12): those two and
  *   edit_plugins or edit_themes besides, so DISALLOW_FILE_EDIT locks it;
  * and only where WordPress may change files at all (wp_is_file_mod_allowed(),
- * DISALLOW_FILE_MODS) and writes them directly (the file system method
- * direct: a swap renames and lays a folder exclusively, which no other
- * method does), else code:file_mods. What cannot be read (no method named)
- * is not direct.
+ * DISALLOW_FILE_MODS, asked before the capabilities) and writes them
+ * directly (the file system method direct: a swap renames and lays a folder
+ * exclusively, which no other method does; asked after the capabilities, as
+ * without FS_METHOD it writes a test file in wp-content, Codex D6, finding
+ * 2), else code:file_mods. What cannot be read (no method named) is not
+ * direct. A capability missing refuses with ab_mcp_sync_rights; as only the
+ * swap of a run asks it, the answer names the abort of the run by its own
+ * account and connection first (a run is theirs, ab_mcp_sync_run_foreign),
+ * then a new run (Codex D6, finding 3).
  *
  * The other methods of contract A have no way for code in this version: a
  * unit is read by AB_MCP_Sync_Env and AB_MCP_Sync_File_Manifest, packed by
@@ -182,21 +187,25 @@ final class AB_MCP_Sync_Code_Kind implements AB_MCP_Sync_Kind {
 		if ( true !== $calls->mods_allowed() ) {
 			return new WP_Error( 'code:file_mods', __( 'This site does not let WordPress change its files (DISALLOW_FILE_MODS in wp-config.php, or a filter on file_mod_allowed), so no plugin and no theme is taken over here. Ask the host or the site administrator to lift the setting, then make the plan again; or update the plugin or theme by hand over SFTP.', 'alphabridge-mcp' ) );
 		}
-		if ( 'direct' !== $calls->method() ) {
-			return new WP_Error( 'code:file_mods', __( 'WordPress does not write files directly on this site (its file system method is not direct), and a plugin or theme is taken over by renaming folders, which only the direct method does. Ask the host to let PHP write the folders of plugins and themes as their owner, then make the plan again; until then, update it by hand in wp-admin.', 'alphabridge-mcp' ) );
-		}
 		foreach ( self::OPS[ $op ][ $unit[0] ] as $cap ) {
 			if ( true !== $calls->can( $cap ) ) {
 				return new WP_Error(
 					'ab_mcp_sync_rights',
 					'theme' === $unit[0]
 						/* translators: 1: the folder of the theme, 2: the capability of WordPress, as the code names it (install_themes, upload_themes, update_themes, edit_themes). */
-						? sprintf( __( 'Not taken over: this account may not change the files of the theme %1$s on this site in this way (%2$s; with DISALLOW_FILE_EDIT nobody has edit_themes, which the same version with other files takes). Connect with an account that may, or leave the entry out of the plan.', 'alphabridge-mcp' ), $unit[1], $cap )
+						? sprintf( __( 'Not taken over: this account may not change the files of the theme %1$s on this site in this way (%2$s; with DISALLOW_FILE_EDIT nobody has edit_themes, which the same version with other files takes). The run belongs to this account and this connection: abort it with them first (wp_site_push action=abort), then plan a new run (wp_site_push action=plan) with an account that may, or without this entry.', 'alphabridge-mcp' ), $unit[1], $cap )
 						/* translators: 1: the folder or file of the plugin, 2: the capability of WordPress, as the code names it (install_plugins, upload_plugins, update_plugins, edit_plugins). */
-						: sprintf( __( 'Not taken over: this account may not change the files of the plugin %1$s on this site in this way (%2$s; with DISALLOW_FILE_EDIT nobody has edit_plugins, which the same version with other files takes). Connect with an account that may, or leave the entry out of the plan.', 'alphabridge-mcp' ), $unit[1], $cap ),
+						: sprintf( __( 'Not taken over: this account may not change the files of the plugin %1$s on this site in this way (%2$s; with DISALLOW_FILE_EDIT nobody has edit_plugins, which the same version with other files takes). The run belongs to this account and this connection: abort it with them first (wp_site_push action=abort), then plan a new run (wp_site_push action=plan) with an account that may, or without this entry.', 'alphabridge-mcp' ), $unit[1], $cap ),
 					array( 'capability' => $cap )
 				);
 			}
+		}
+		// The file system method only after the rights of the account (Codex
+		// D6, finding 2): without FS_METHOD, get_filesystem_method() writes
+		// and removes a test file in wp-content, which an account without
+		// them is not to cause.
+		if ( 'direct' !== $calls->method() ) {
+			return new WP_Error( 'code:file_mods', __( 'WordPress does not write files directly on this site (its file system method is not direct), and a plugin or theme is taken over by renaming folders, which only the direct method does. Ask the host to let PHP write the folders of plugins and themes as their owner, then make the plan again; until then, update it by hand in wp-admin.', 'alphabridge-mcp' ) );
 		}
 		return true;
 	}

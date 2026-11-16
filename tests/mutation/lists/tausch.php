@@ -66,8 +66,8 @@ return array(
 		'file'    => $ck,
 		'search'  => "\t\tif ( true !== \$calls->mods_allowed() ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $unit( 'SyncCodeKindTest', 'testASiteThatLetsNoFilesBeChangedOrWritesThemNotDirectlyRefusesBeforeACapabilityIsAsked' ),
-		'expect'  => '/testASiteThatLetsNoFilesBeChangedOrWritesThemNotDirectlyRefusesBeforeACapabilityIsAsked/',
+		'run'     => $unit( 'SyncCodeKindTest', 'testASiteThatLetsNoFilesBeChangedRefusesBeforeACapabilityAndOneThatWritesThemNotDirectlyAfterThem' ),
+		'expect'  => '/testASiteThatLetsNoFilesBeChangedRefusesBeforeACapabilityAndOneThatWritesThemNotDirectlyAfterThem/',
 	),
 	array(
 		'id'      => 'tausch/z26-file-mods-unknown',
@@ -75,8 +75,8 @@ return array(
 		'file'    => $ck,
 		'search'  => "\t\tif ( true !== \$calls->mods_allowed() ) {",
 		'replace' => "\t\tif ( false === \$calls->mods_allowed() ) {",
-		'run'     => $unit( 'SyncCodeKindTest', 'testASiteThatLetsNoFilesBeChangedOrWritesThemNotDirectlyRefusesBeforeACapabilityIsAsked' ),
-		'expect'  => '/testASiteThatLetsNoFilesBeChangedOrWritesThemNotDirectlyRefusesBeforeACapabilityIsAsked/',
+		'run'     => $unit( 'SyncCodeKindTest', 'testASiteThatLetsNoFilesBeChangedRefusesBeforeACapabilityAndOneThatWritesThemNotDirectlyAfterThem' ),
+		'expect'  => '/testASiteThatLetsNoFilesBeChangedRefusesBeforeACapabilityAndOneThatWritesThemNotDirectlyAfterThem/',
 	),
 	array(
 		'id'      => 'tausch/z26-direct',
@@ -84,8 +84,8 @@ return array(
 		'file'    => $ck,
 		'search'  => "\t\tif ( 'direct' !== \$calls->method() ) {",
 		'replace' => "\t\tif ( false ) {",
-		'run'     => $unit( 'SyncCodeKindTest', 'testASiteThatLetsNoFilesBeChangedOrWritesThemNotDirectlyRefusesBeforeACapabilityIsAsked' ),
-		'expect'  => '/testASiteThatLetsNoFilesBeChangedOrWritesThemNotDirectlyRefusesBeforeACapabilityIsAsked/',
+		'run'     => $unit( 'SyncCodeKindTest', 'testASiteThatLetsNoFilesBeChangedRefusesBeforeACapabilityAndOneThatWritesThemNotDirectlyAfterThem' ),
+		'expect'  => '/testASiteThatLetsNoFilesBeChangedRefusesBeforeACapabilityAndOneThatWritesThemNotDirectlyAfterThem/',
 	),
 	array(
 		'id'      => 'tausch/z26-each-cap',
@@ -1319,5 +1319,14 @@ return array(
 		'replace' => "\t\t\$rights = is_object( \$engine ) ? \$engine->rights( \$in['unit']['unit_op'], \$in['unit']['kind'] . ':' . \$in['unit']['ref'] ) : \$engine;",
 		'run'     => $it( 'SyncCodeRunTest', 'testAForeignEngineUnderTheNameCodeIsTheAnswerOfTheSwapBeforeAnythingIsWritten' ),
 		'expect'  => '/testAForeignEngineUnderTheNameCodeIsTheAnswerOfTheSwapBeforeAnythingIsWritten/',
+	),
+	array(
+		'id'      => 'tausch/d3b-rights-before-method',
+		'clause'  => 'rights(): the capabilities of the account before the file system method, so an account without them causes no test file of get_filesystem_method() in wp-content (Codex D6, finding 2)',
+		'file'    => $ck,
+		'search'  => "\t\tforeach ( self::OPS[ \$op ][ \$unit[0] ] as \$cap ) {",
+		'replace' => "\t\t\$calls->method();\n\t\tforeach ( self::OPS[ \$op ][ \$unit[0] ] as \$cap ) {",
+		'run'     => $it( 'SyncCodeRunTest', 'testAnOwnPluginWithThreeFilesChangedInItsVersionIsSwappedOnlyWithEditPlugins' ),
+		'expect'  => '/testAnOwnPluginWithThreeFilesChangedInItsVersionIsSwappedOnlyWithEditPlugins/',
 	),
 );

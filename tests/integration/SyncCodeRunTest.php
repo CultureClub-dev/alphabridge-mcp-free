@@ -863,7 +863,12 @@ final class SyncCodeRunTest extends TestCase {
 	 * edit_plugins. Without edit_plugins for the account, or with
 	 * DISALLOW_FILE_EDIT, the swap is refused before any mutation (E10): the
 	 * step stays planned, nothing written or moved, nothing in the protected
-	 * store, and the answer names the capability and the way. The constant
+	 * store, and the answer names the capability and the way: the abort of
+	 * the run by its own account first, as another account may neither go on
+	 * with it nor abort it, then a new run, which an account that may can
+	 * plan (Codex D6, finding 3). The file system method is not asked then,
+	 * and nothing is written in wp-content (finding 2: without FS_METHOD it
+	 * writes a test file there). The constant
 	 * itself is not defined in this process, where it could not be undone:
 	 * its effect in the core (map_meta_cap adds do_not_allow to
 	 * edit_plugins) comes through the same filter.
@@ -879,6 +884,25 @@ final class SyncCodeRunTest extends TestCase {
 			'kind' => 'plugin',
 			'ref'  => 'ab-it-inaktiv',
 		);
+		// The package of code for a plan: the preview names the three files,
+		// B packs them, the relay hands them over.
+		$packages = static function ( array $report, array $args ) use ( $changed, $ref ): array {
+			$preview = self::gated( 'wp_site_push', $args );
+			self::assertIsArray( $preview, is_wp_error( $preview ) ? $preview->get_error_code() . ': ' . $preview->get_error_message() : '' );
+			$paths = $preview['preview']['units'][0]['need']['paths'];
+			sort( $paths, SORT_STRING );
+			self::assertSame( $changed, $paths, 'The stage needs only the three files changed.' );
+			self::clear_b();
+			list( $id, $package ) = self::relayed(
+				array(
+					'purpose'     => 'code',
+					'report_hash' => $report['report_hash'],
+					'refs'        => array( $ref + array( 'paths' => $paths ) ),
+				)
+			);
+			self::assertSame( array( array( 'kind' => 'plugin', 'ref' => 'ab-it-inaktiv', 'files' => 3 ) ), $package['code']['packed'], 'The package holds only the three files.' );
+			return array( $id );
+		};
 		list( $run_id, $unit, $target ) = self::ready_to_swap(
 			null,
 			array(
@@ -891,23 +915,7 @@ final class SyncCodeRunTest extends TestCase {
 					self::assertTrue( mkdir( $put . '/includes', 0755 ) );
 					self::assertNotFalse( file_put_contents( $put . '/includes/neu.php', "<?php\n// new on staging\n" ) );
 				},
-				'packages' => static function ( array $report, array $args ) use ( $changed, $ref ): array {
-					$preview = self::gated( 'wp_site_push', $args );
-					self::assertIsArray( $preview, is_wp_error( $preview ) ? $preview->get_error_code() . ': ' . $preview->get_error_message() : '' );
-					$paths = $preview['preview']['units'][0]['need']['paths'];
-					sort( $paths, SORT_STRING );
-					self::assertSame( $changed, $paths, 'The stage needs only the three files changed.' );
-					self::clear_b();
-					list( $id, $package ) = self::relayed(
-						array(
-							'purpose'     => 'code',
-							'report_hash' => $report['report_hash'],
-							'refs'        => array( $ref + array( 'paths' => $paths ) ),
-						)
-					);
-					self::assertSame( array( array( 'kind' => 'plugin', 'ref' => 'ab-it-inaktiv', 'files' => 3 ) ), $package['code']['packed'], 'The package holds only the three files.' );
-					return array( $id );
-				},
+				'packages' => $packages,
 			)
 		);
 		self::assertSame( 'edit', $unit['unit_op'], 'The same version with other files is an edit.' );
@@ -926,9 +934,15 @@ final class SyncCodeRunTest extends TestCase {
 			self::closed( $run_id );
 			return;
 		}
+		// Without edit_plugins: this account only (another one may); with
+		// DISALLOW_FILE_EDIT: every account, as the constant does it.
+		$admin  = self::admin();
+		$other  = wp_insert_user( array( 'user_login' => 'zz_second_admin', 'user_pass' => wp_generate_password( 24 ), 'user_email' => 'zz2@example.test', 'role' => 'administrator' ) );
 		$deny   = 'without edit_plugins' === $case
-			? static function ( array $allcaps ): array {
-				unset( $allcaps['edit_plugins'] );
+			? static function ( array $allcaps, array $caps, array $args, $user ) use ( $admin ): array {
+				if ( (int) $user->ID === $admin ) {
+					unset( $allcaps['edit_plugins'] );
+				}
 				return $allcaps;
 			}
 			: static function ( array $caps, string $cap ): array {
@@ -936,15 +950,60 @@ final class SyncCodeRunTest extends TestCase {
 			};
 		$hook   = 'without edit_plugins' === $case ? 'user_has_cap' : 'map_meta_cap';
 		$before = self::before_swap( $target, 'ab-it-inaktiv' );
-		add_filter( $hook, $deny, 10, 2 );
+		self::assertIsInt( $other );
+		// The file system method not asked (Codex D6, finding 2): without
+		// FS_METHOD, get_filesystem_method() writes and removes a test file
+		// in wp-content, which leaves no file but a new time of the folder,
+		// and its filter runs at its end.
+		self::assertFalse( defined( 'FS_METHOD' ), 'No FS_METHOD: the method would write its test file.' );
+		$asked = 0;
+		$count = static function ( $method ) use ( &$asked ) {
+			++$asked;
+			return $method;
+		};
+		$then  = time() - 3600;
+		self::assertTrue( touch( WP_CONTENT_DIR, $then ) );
+		add_filter( $hook, $deny, 10, 4 );
+		add_filter( 'filesystem_method', $count );
 		try {
 			self::assertFalse( current_user_can( 'edit_plugins' ), 'The account has no edit_plugins.' );
 			$answer = self::swap_with( $run_id, array() );
+			clearstatcache();
+			self::assertSame( array( 0, $then ), array( $asked, filemtime( WP_CONTENT_DIR ) ), 'No file system method asked, nothing written in wp-content.' );
+			self::assertSame( array(), glob( WP_CONTENT_DIR . '/temp-write-test-*' ), 'No test file of the method in wp-content.' );
+			$says = self::nothing_begun( $run_id, $target, $before, $answer, 'ab_mcp_sync_rights', 'The run belongs to this account and this connection: abort it with them first (wp_site_push action=abort), then plan a new run (wp_site_push action=plan) with an account that may, or without this entry.' );
+			self::assertStringContainsString( 'may not change the files of the plugin ab-it-inaktiv on this site in this way (edit_plugins; with DISALLOW_FILE_EDIT nobody has edit_plugins', $says );
+			// The way the answer names (Codex D6, finding 3): another account
+			// may not go on with the run nor abort it; this one aborts it, and
+			// the site is free for a new run.
+			wp_set_current_user( $other );
+			self::refused( self::next( $run_id ), 'ab_mcp_sync_run_foreign' );
+			self::refused( self::gated( 'wp_site_push', array( 'action' => 'abort', 'run_id' => $run_id ) ), 'ab_mcp_sync_run_foreign' );
+			wp_set_current_user( $admin );
+			$closed = self::gated( 'wp_site_push', array( 'action' => 'abort', 'run_id' => $run_id ) );
+			self::assertIsArray( $closed, is_wp_error( $closed ) ? $closed->get_error_code() . ': ' . $closed->get_error_message() : '' );
+			self::assertNull( AB_MCP_Sync_Run::open_run(), 'The site is free for a new run.' );
+			if ( 'without edit_plugins' === $case ) {
+				// A new run with the account that may: its own report and
+				// its own package of the three files.
+				wp_set_current_user( $other );
+				self::assertTrue( current_user_can( 'edit_plugins' ), 'The other account has edit_plugins.' );
+				list( $report, $units ) = self::report();
+				$plan                   = array(
+					'action'    => 'plan',
+					'report_id' => $report['report_id'],
+					'select'    => array( (int) $units['plugin:ab-it-inaktiv']['n'] ),
+				);
+				list( , $again )        = self::begun( $plan + array( 'packages' => $packages( $report, $plan ) ) );
+				self::assertSame( (int) $other, (int) AB_MCP_Sync_Run::get( (int) $again['run_id'] )['user_id'], 'The new run is the one of the account that may.' );
+			}
 		} finally {
+			wp_set_current_user( $admin );
+			remove_filter( 'filesystem_method', $count );
 			remove_filter( $hook, $deny, 10 );
 		}
-		$says = self::nothing_begun( $run_id, $target, $before, $answer, 'ab_mcp_sync_rights', 'Connect with an account that may, or leave the entry out of the plan.' );
-		self::assertStringContainsString( 'may not change the files of the plugin ab-it-inaktiv on this site in this way (edit_plugins; with DISALLOW_FILE_EDIT nobody has edit_plugins', $says );
+		clearstatcache();
+		self::assertSame( $before['old'], self::digest( $target ), 'The old version at the target as it was.' );
 	}
 
 	/** The edit of F4: with edit_plugins, without it for the account, with DISALLOW_FILE_EDIT (its effect in the core). */

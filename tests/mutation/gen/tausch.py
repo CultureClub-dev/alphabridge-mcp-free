@@ -40,7 +40,7 @@ def e(id_, clause, file, search, replace, run, expect):
 ENGINE = 'testTheEngineIsTheOneRegisteredUnderTheNameCodeAndMovesTheFilesOfAPluginAndOfATheme'
 OTHER = 'testAnotherEngineUnderTheNameCodeIsNotTakenForTheKind'
 CAPS = 'testEachOperationTakesTheCapabilitiesOfE10AndEachOneMissingRefuses'
-SITE = 'testASiteThatLetsNoFilesBeChangedOrWritesThemNotDirectlyRefusesBeforeACapabilityIsAsked'
+SITE = 'testASiteThatLetsNoFilesBeChangedRefusesBeforeACapabilityAndOneThatWritesThemNotDirectlyAfterThem'
 FORM = 'testAnOperationOrAUnitNotOfTheFormIsRefusedBeforeAnythingIsAsked'
 e('kind-owns-both', 'responsibility(): the files of a plugin and of a theme, as the table gives them to the kind code (Z38)', CK,
   "\t\treturn array( 'part:plugin:files', 'part:theme:files' );", "\t\treturn array( 'part:plugin:files' );", 'kind', ENGINE)
@@ -434,6 +434,9 @@ e('d3b-head-new-at-target', 'guide_head(): the case of the new version at the ta
 e('d3b-engine-error', 'run(): a WP_Error of engine() (another engine under the name code) is the answer of the step before any mutation, never an engine whose rights are asked (Codex D6, finding 1)', CS,
   "\t\t$rights = $engine instanceof AB_MCP_Sync_Code_Kind ? $engine->rights( $in['unit']['unit_op'], $in['unit']['kind'] . ':' . $in['unit']['ref'] ) : $engine;",
   "\t\t$rights = is_object( $engine ) ? $engine->rights( $in['unit']['unit_op'], $in['unit']['kind'] . ':' . $in['unit']['ref'] ) : $engine;", 'coderun', FOREIGN)
+e('d3b-rights-before-method', 'rights(): the capabilities of the account before the file system method, so an account without them causes no test file of get_filesystem_method() in wp-content (Codex D6, finding 2)', CK,
+  '\t\tforeach ( self::OPS[ $op ][ $unit[0] ] as $cap ) {',
+  '\t\t$calls->method();\n\t\tforeach ( self::OPS[ $op ][ $unit[0] ] as $cap ) {', 'coderun', 'testAnOwnPluginWithThreeFilesChangedInItsVersionIsSwappedOnlyWithEditPlugins')
 
 # ------------------------------------------------ check and write
 src = {f: open(os.path.join(ROOT, f)).read() for f in VAR}

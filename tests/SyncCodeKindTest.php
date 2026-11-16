@@ -60,6 +60,8 @@ final class SyncCodeKindTest extends TestCase {
 			public $method = 'direct';
 			/** @var string[] */
 			public $asked = array();
+			/** @var int How often the file system method was asked (without FS_METHOD it writes a test file). */
+			public $methods = 0;
 			public function can( $cap ) {
 				$this->asked[] = (string) $cap;
 				return in_array( $cap, $this->caps, true );
@@ -68,6 +70,7 @@ final class SyncCodeKindTest extends TestCase {
 				return $this->mods;
 			}
 			public function method() {
+				++$this->methods;
 				return $this->method;
 			}
 		};
@@ -146,19 +149,23 @@ final class SyncCodeKindTest extends TestCase {
 		self::assertSame( $needs, $calls->asked, 'Each of them asked, and no other.' );
 		// Each one missing refuses, whatever else the account has.
 		foreach ( $needs as $missing ) {
-			self::calls( array_values( array_diff( $all, array( $missing ) ) ) );
+			$calls   = self::calls( array_values( array_diff( $all, array( $missing ) ) ) );
 			$message = self::refused( $engine->rights( $op, $ref ), 'ab_mcp_sync_rights' );
 			self::assertStringContainsString( '(' . $missing . ';', $message, 'The capability is named.' );
 			self::assertStringContainsString( explode( ':', $ref, 2 )[1], $message, 'The unit is named.' );
-			self::assertStringContainsString( 'Connect with an account that may', $message, 'With the way.' );
+			// The way: the run is the one of this account and connection, so
+			// it aborts it first, then a new run (Codex D6, finding 3).
+			self::assertStringContainsString( 'The run belongs to this account and this connection: abort it with them first (wp_site_push action=abort), then plan a new run (wp_site_push action=plan) with an account that may, or without this entry.', $message, 'With the way, the abort first.' );
 			self::assertStringContainsString( 0 === strpos( $ref, 'theme:' ) ? 'the theme ' : 'the plugin ', $message );
+			self::assertSame( 0, $calls->methods, 'No file system method asked for an account without the right: it writes a test file (Codex D6, finding 2).' );
 		}
 		// An account with nothing.
-		self::calls( array() );
+		$calls = self::calls( array() );
 		self::refused( $engine->rights( $op, $ref ), 'ab_mcp_sync_rights' );
+		self::assertSame( 0, $calls->methods, 'No file system method asked.' );
 	}
 
-	public function testASiteThatLetsNoFilesBeChangedOrWritesThemNotDirectlyRefusesBeforeACapabilityIsAsked(): void {
+	public function testASiteThatLetsNoFilesBeChangedRefusesBeforeACapabilityAndOneThatWritesThemNotDirectlyAfterThem(): void {
 		$engine = AB_MCP_Sync_Code_Kind::engine();
 		$caps   = array( 'install_plugins', 'upload_plugins', 'update_plugins', 'edit_plugins' );
 		// DISALLOW_FILE_MODS (false), and a question that cannot be asked
@@ -170,13 +177,15 @@ final class SyncCodeKindTest extends TestCase {
 			self::assertStringContainsString( 'Ask the host or the site administrator to lift the setting', $message, 'With the way.' );
 			self::assertSame( array(), $calls->asked, 'No capability is asked.' );
 		}
-		// Another file system method, and none named (unknown).
+		// Another file system method, and none named (unknown): asked only
+		// after the capabilities of the operation, as without FS_METHOD it
+		// writes a test file in wp-content (Codex D6, finding 2).
 		foreach ( array( 'ftpext', 'ssh2', '', null ) as $method ) {
 			$calls   = self::calls( $caps, true, $method );
 			$message = self::refused( $engine->rights( 'update', 'plugin:shop' ), 'code:file_mods' );
 			self::assertStringContainsString( 'not direct', $message );
 			self::assertStringContainsString( 'make the plan again', $message, 'With the way.' );
-			self::assertSame( array(), $calls->asked, 'No capability is asked.' );
+			self::assertSame( array( array( 'upload_plugins', 'update_plugins' ), 1 ), array( $calls->asked, $calls->methods ), 'The capabilities first, then the method once.' );
 		}
 		self::calls( $caps );
 		self::assertTrue( $engine->rights( 'update', 'plugin:shop' ) );
