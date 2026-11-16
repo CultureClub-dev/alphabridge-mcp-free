@@ -345,8 +345,8 @@ final class SyncCodeRunTest extends TestCase {
 		return $step;
 	}
 
-	/** The units paired, a plugin of B put to a version ($then adds to its folder), and the report of it: the plan arguments for its entry, the entry, the packages of the environment. */
-	private static function changed( string $slug, string $version, array $more = array(), ?callable $then = null ): array {
+	/** The units paired, a plugin of B put to a version ($then adds to its folder), and the report of it: the plan arguments for its entry, the entry, the packages of the environment. $ref is the name the report gives the unit, where it is not $slug (a plugin of one file: its file). */
+	private static function changed( string $slug, string $version, array $more = array(), ?callable $then = null, string $ref = '' ): array {
 		self::paired();
 		$put = AB_MCP_IT_Code::put( 'b', 'plugin', $slug, $version );
 		if ( null !== $then ) {
@@ -354,8 +354,9 @@ final class SyncCodeRunTest extends TestCase {
 			$then( $put );
 		}
 		list( $report, $units, $env ) = self::report();
-		self::assertArrayHasKey( 'plugin:' . $slug, $units );
-		$entry = $units[ 'plugin:' . $slug ];
+		$key = 'plugin:' . ( '' === $ref ? $slug : $ref );
+		self::assertArrayHasKey( $key, $units, implode( ' ', array_keys( $units ) ) );
+		$entry = $units[ $key ];
 		return array(
 			array(
 				'action'    => 'plan',
@@ -512,11 +513,13 @@ final class SyncCodeRunTest extends TestCase {
 	 * with accept, the check and the stage of the run done; this site still
 	 * at 1.0.0 with the plugin active. $before runs right before the run
 	 * begins (the stand-in of wordpress.org installed). $case makes it the
-	 * run of another case of D3a: slug and version (the unit of staging),
+	 * run of another case of D3a: slug and version (the unit of staging; ref
+	 * the name the report gives it, where it is not slug),
 	 * then (what the test does to the unit of B before its report, as for
 	 * changed()), runs (whether it runs here: then released with accept),
-	 * packages (a callable given the report that returns the package ids of
-	 * code the run is given; then wordpress.org offers nothing).
+	 * packages (a callable given the report and the arguments of the plan
+	 * that returns the package ids of code the run is given; then
+	 * wordpress.org offers nothing).
 	 *
 	 * @return array{0:int,1:array,2:string} The run, the unit of step 3, its target.
 	 */
@@ -527,9 +530,10 @@ final class SyncCodeRunTest extends TestCase {
 			'then'     => null,
 			'runs'     => true,
 			'packages' => null,
+			'ref'      => '',
 		);
 		$slug                 = $case['slug'];
-		list( $args, $entry, , , $report ) = self::changed( $slug, $case['version'], array(), $case['then'] );
+		list( $args, $entry, , , $report ) = self::changed( $slug, $case['version'], array(), $case['then'], $case['ref'] );
 		$target               = AB_MCP_IT_Code::path( 'a', 'plugin', $slug );
 		self::assertSame( '1.0.0', AB_MCP_IT_Code::fassung( 'a', 'plugin', $slug ) );
 		$main = AB_MCP_IT_Code::unit( 'plugin', $slug )['main'][0];
@@ -540,7 +544,7 @@ final class SyncCodeRunTest extends TestCase {
 		}
 		$more = $case['runs'] ? array( 'accept' => array( (int) $entry['n'] ) ) : array();
 		if ( null !== $case['packages'] ) {
-			$more['packages'] = ( $case['packages'] )( $report );
+			$more['packages'] = ( $case['packages'] )( $report, $args + $more );
 		}
 		list( , $run ) = self::begun( $args + $more );
 		$run_id        = (int) $run['run_id'];
@@ -841,6 +845,170 @@ final class SyncCodeRunTest extends TestCase {
 		self::assertIsArray( $state, is_wp_error( $state ) ? $state->get_error_message() : '' );
 		self::assertTrue( $state['complete'], 'Fetched whole in one call.' );
 		return $package['package_id'];
+	}
+
+	/**
+	 * Prüft: F4 (A12): an own plugin with three files changed on staging and
+	 * the same version is an edit: the stage needs only those three files
+	 * (the preview names them), the package of code holds only them, and the
+	 * swap puts the whole unit of staging at the target as F56 swaps, with
+	 * edit_plugins. Without edit_plugins for the account, or with
+	 * DISALLOW_FILE_EDIT, the swap is refused before any mutation (E10): the
+	 * step stays planned, nothing written or moved, nothing in the protected
+	 * store, and the answer names the capability and the way. The constant
+	 * itself is not defined in this process, where it could not be undone:
+	 * its effect in the core (map_meta_cap adds do_not_allow to
+	 * edit_plugins) comes through the same filter.
+	 * Sonst: the run could change the files of a plugin on a site that
+	 * forbids editing them, or for an account that may not; or an own
+	 * plugin edited on staging could not be brought over with a package of
+	 * the files changed.
+	 */
+	#[DataProvider( 'edits' )]
+	public function testAnOwnPluginWithThreeFilesChangedInItsVersionIsSwappedOnlyWithEditPlugins( string $case ): void {
+		$changed = array( 'ab-it-inaktiv.php', 'includes/neu.php', 'readme.txt' );
+		$ref     = array(
+			'kind' => 'plugin',
+			'ref'  => 'ab-it-inaktiv',
+		);
+		list( $run_id, $unit, $target ) = self::ready_to_swap(
+			null,
+			array(
+				'slug'     => 'ab-it-inaktiv',
+				'version'  => '1.0.0',
+				'runs'     => false,
+				'then'     => static function ( string $put ): void {
+					self::assertNotFalse( file_put_contents( $put . '/ab-it-inaktiv.php', "\n// changed on staging\n", FILE_APPEND ) );
+					self::assertNotFalse( file_put_contents( $put . '/readme.txt', "\nChanged on staging.\n", FILE_APPEND ) );
+					self::assertTrue( mkdir( $put . '/includes', 0755 ) );
+					self::assertNotFalse( file_put_contents( $put . '/includes/neu.php', "<?php\n// new on staging\n" ) );
+				},
+				'packages' => static function ( array $report, array $args ) use ( $changed, $ref ): array {
+					$preview = self::gated( 'wp_site_push', $args );
+					self::assertIsArray( $preview, is_wp_error( $preview ) ? $preview->get_error_code() . ': ' . $preview->get_error_message() : '' );
+					$paths = $preview['preview']['units'][0]['need']['paths'];
+					sort( $paths, SORT_STRING );
+					self::assertSame( $changed, $paths, 'The stage needs only the three files changed.' );
+					self::clear_b();
+					list( $id, $package ) = self::relayed(
+						array(
+							'purpose'     => 'code',
+							'report_hash' => $report['report_hash'],
+							'refs'        => array( $ref + array( 'paths' => $paths ) ),
+						)
+					);
+					self::assertSame( array( array( 'kind' => 'plugin', 'ref' => 'ab-it-inaktiv', 'files' => 3 ) ), $package['code']['packed'], 'The package holds only the three files.' );
+					return array( $id );
+				},
+			)
+		);
+		self::assertSame( 'edit', $unit['unit_op'], 'The same version with other files is an edit.' );
+		if ( 'with edit_plugins' === $case ) {
+			self::swapped_whole(
+				$run_id,
+				$unit,
+				$target,
+				array(
+					'slug'     => 'ab-it-inaktiv',
+					'old'      => self::bytes_of( $target ),
+					'new'      => self::bytes_of( AB_MCP_IT_Code::path( 'b', 'plugin', 'ab-it-inaktiv' ) ),
+					'versions' => array( '1.0.0', '1.0.0' ),
+				)
+			);
+			self::closed( $run_id );
+			return;
+		}
+		$deny   = 'without edit_plugins' === $case
+			? static function ( array $allcaps ): array {
+				unset( $allcaps['edit_plugins'] );
+				return $allcaps;
+			}
+			: static function ( array $caps, string $cap ): array {
+				return 'edit_plugins' === $cap ? array_merge( $caps, array( 'do_not_allow' ) ) : $caps;
+			};
+		$hook   = 'without edit_plugins' === $case ? 'user_has_cap' : 'map_meta_cap';
+		$before = self::before_swap( $target, 'ab-it-inaktiv' );
+		add_filter( $hook, $deny, 10, 2 );
+		try {
+			self::assertFalse( current_user_can( 'edit_plugins' ), 'The account has no edit_plugins.' );
+			$answer = self::swap_with( $run_id, array() );
+		} finally {
+			remove_filter( $hook, $deny, 10 );
+		}
+		$says = self::nothing_begun( $run_id, $target, $before, $answer, 'ab_mcp_sync_rights', 'Connect with an account that may, or leave the entry out of the plan.' );
+		self::assertStringContainsString( 'may not change the files of the plugin ab-it-inaktiv on this site in this way (edit_plugins; with DISALLOW_FILE_EDIT nobody has edit_plugins', $says );
+	}
+
+	/** The edit of F4: with edit_plugins, without it for the account, with DISALLOW_FILE_EDIT (its effect in the core). */
+	public static function edits(): array {
+		return array(
+			'with edit_plugins'        => array( 'with edit_plugins' ),
+			'without edit_plugins'     => array( 'without edit_plugins' ),
+			'with DISALLOW_FILE_EDIT' => array( 'with DISALLOW_FILE_EDIT' ),
+		);
+	}
+
+	/**
+	 * Prüft: F6: a plugin of one file (ab-it-einzeln.php), active and
+	 * released with accept, with a new version as a package of code, is
+	 * swapped as F56 swaps, as the file itself: the stage is one file of the
+	 * protected store named as the file of the unit, the place of the backup
+	 * is named so too (basename() of the target), the two renames move the
+	 * file (the old one into the backup, the stage to the target), OPcache
+	 * is cleared for the one PHP file (php_paths() of a file), and the note
+	 * of the replacement stands under the kind and the name of the unit
+	 * (plugin:ab-it-einzeln.php) before the first rename; the answer names
+	 * the way back. Only the normal way: the answers after a fault past the
+	 * first mutation wait for the decision on Part 1 of Codex D4 (the lead,
+	 * 16.11. 05:37); the window left between lstat() and rename() for a file
+	 * is the named limit G-5-10.
+	 * Sonst: a plugin of one file could not be updated by the run, or only
+	 * with the old file not whole in the backup, or with old code of it
+	 * still in OPcache.
+	 */
+	public function testAPluginOfOneFileIsSwappedAsTheFileItselfWithItsBackupAndTheWayBack(): void {
+		list( $run_id, $unit, $target ) = self::ready_to_swap(
+			null,
+			array(
+				'slug'     => 'ab-it-einzeln',
+				'ref'      => 'ab-it-einzeln.php',
+				'version'  => '1.1.0',
+				'packages' => static function ( array $report ): array {
+					self::clear_b();
+					$export = array(
+						'purpose'     => 'code',
+						'report_hash' => $report['report_hash'],
+						'refs'        => array(
+							array(
+								'kind' => 'plugin',
+								'ref'  => 'ab-it-einzeln.php',
+							),
+						),
+					);
+					return array( self::relayed( $export )[0] );
+				},
+			)
+		);
+		self::assertSame( 'ab-it-einzeln.php', $unit['ref'], 'The unit is named by its file.' );
+		self::assertTrue( is_file( $target ), 'The target is a file.' );
+		self::assertSame( 'ab-it-einzeln.php', self::step( $run_id, 2 )['parts']['stage']['name'], 'The stage is named as the file of the unit.' );
+		$swap = self::swapped_whole(
+			$run_id,
+			$unit,
+			$target,
+			array(
+				'slug'     => 'ab-it-einzeln.php',
+				'old'      => self::bytes_of( $target ),
+				'new'      => self::bytes_of( AB_MCP_IT_Code::path( 'b', 'plugin', 'ab-it-einzeln' ) ),
+				'versions' => array( '1.0.0', '1.1.0' ),
+			)
+		);
+		self::assertSame( 'ab-it-einzeln.php', basename( $swap['backup'] ), 'The backup is named as the file (basename() of the target).' );
+		self::assertTrue( is_file( $swap['backup'] ) && is_file( $target ), 'The backup and the target are files.' );
+		self::assertSame( array( $target ), $swap['opcache'], 'OPcache for the one PHP file.' );
+		self::assertSame( '1.1.0', AB_MCP_IT_Code::fassung( 'a', 'plugin', 'ab-it-einzeln' ) );
+		self::assertContains( 'ab-it-einzeln.php', self::active(), 'The plugin is still active.' );
+		self::closed( $run_id );
 	}
 
 	/** The bytes of a folder (each file by its path relative to it) or of a file (by its name), by their SHA-256. */
@@ -1983,15 +2151,16 @@ final class SyncCodeRunTest extends TestCase {
 
 	/* ------------------------- D2b: the refusals before the first mutation */
 
-	/** The site and the swap as they are before a call that is to refuse (D2b): the old version and its identity, the note of the replacement, the groups of the backups. */
-	private static function before_swap( string $target ): array {
+	/** The site and the swap as they are before a call that is to refuse (D2b): the old version and its identity, the note of the replacement of the plugin $slug, the groups of the backups. */
+	private static function before_swap( string $target, string $slug = 'ab-it-aktiv' ): array {
 		clearstatcache();
 		$id = lstat( $target );
 		return array(
+			'slug'   => $slug,
 			'old'    => self::digest( $target ),
 			'id'     => array( $id['dev'], $id['ino'] ),
 			'note'   => self::replaced_row(),
-			'since'  => AB_MCP_Update_Log::replaced_at( 'plugin', 'ab-it-aktiv' ),
+			'since'  => AB_MCP_Update_Log::replaced_at( 'plugin', $slug ),
 			'groups' => self::backup_groups(),
 		);
 	}
@@ -2034,7 +2203,7 @@ final class SyncCodeRunTest extends TestCase {
 		}
 		self::assertSame( $store, $arose, 'In the protected store only what the refusal at its place needs.' );
 		self::assertNull( self::mark_of_swap( $run_id ), 'No mark.' );
-		self::assertSame( array( $before['since'], $before['note'] ), array( AB_MCP_Update_Log::replaced_at( 'plugin', 'ab-it-aktiv' ), self::replaced_row() ), 'No note of the replacement.' );
+		self::assertSame( array( $before['since'], $before['note'] ), array( AB_MCP_Update_Log::replaced_at( 'plugin', $before['slug'] ), self::replaced_row() ), 'No note of the replacement.' );
 		self::assertFalse( AB_MCP_Sync_Code_Swap::lock_held(), 'The swap holds no lock for changes.' );
 		self::assertTrue( AB_MCP_Change_Lock::take(), 'The lock for changes can be taken again.' );
 		AB_MCP_Change_Lock::release();

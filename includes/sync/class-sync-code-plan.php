@@ -367,7 +367,7 @@ final class AB_MCP_Sync_Code_Plan {
 		// Every path of the unit here that the new version lacks, named in the
 		// preview (Z42, E1, F47; reading 4; A1 of Codex round 1 on the code):
 		// none where the unit is made, else read now and those of the report.
-		$gone = 'create' === $unit_op ? array() : self::to_backup( $found, $n, $entry, $signed['entries'], $need['here'] );
+		$gone = 'create' === $unit_op ? array() : self::to_backup( $found, $n, $entry, $signed['entries'], $need['here'], 'file' === $signed['form'] && 'file' === $need['form'] );
 		if ( is_wp_error( $gone ) ) {
 			return $lock( $gone->get_error_message() );
 		}
@@ -475,17 +475,23 @@ final class AB_MCP_Sync_Code_Plan {
 	 * (code:paths_unknown), where the files here are not read whole
 	 * (code:paths_unread: not known, never «none»), and where they are not
 	 * the paths of the report, one added here or gone since
-	 * (code:paths_changed).
+	 * (code:paths_changed). A unit of one file on both sides (F6) has no path
+	 * but itself, which the version of the staging site holds as well (the
+	 * manifest of a file holds its name): the report writes no lists for it
+	 * (AB_MCP_Sync_Env writes lines of entries for a folder only), and its
+	 * list is the empty one by its form, checked against the paths read now
+	 * as every list is.
 	 *
 	 * @param array         $found  The report.
 	 * @param int           $n      The entry of the unit.
 	 * @param array         $entry  The entry.
-	 * @param array[]       $signed The entries of the signed manifest of the unit (AB_MCP_Sync_Code_Stage::signed()).
-	 * @param string[]|null $here   The paths of the unit here as read now (AB_MCP_Sync_Code_Stage::need()), null where not read whole.
+	 * @param array[]       $signed   The entries of the signed manifest of the unit (AB_MCP_Sync_Code_Stage::signed()).
+	 * @param string[]|null $here     The paths of the unit here as read now (AB_MCP_Sync_Code_Stage::need()), null where not read whole.
+	 * @param bool          $one_file Whether the unit is one file in the signed manifest and here (their form).
 	 * @return string[]|WP_Error
 	 */
-	private static function to_backup( array $found, $n, array $entry, array $signed, $here ) {
-		$said = self::gone( $found, $n, $entry );
+	private static function to_backup( array $found, $n, array $entry, array $signed, $here, $one_file = false ) {
+		$said = true === $one_file ? array() : self::gone( $found, $n, $entry );
 		if ( null === $said ) {
 			return self::refused( 'code:paths_unknown', __( 'The report does not hold every path of this unit that lies on this site and is not in the version of the staging site (its list only_live and the entries more_paths after it do not read whole), and the preview names each of them before a swap, so it is not taken over (code:paths_unknown). Make a new report (wp_site_diff) and plan again.', 'alphabridge-mcp' ) );
 		}

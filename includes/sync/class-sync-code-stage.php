@@ -682,7 +682,7 @@ final class AB_MCP_Sync_Code_Stage {
 	 * @param string[] $env  The packages of the environment of the report.
 	 * @param string   $kind plugin or theme.
 	 * @param string   $ref  The unit.
-	 * @return array|WP_Error kind, ref, same, paths, bytes, here (string[]|null).
+	 * @return array|WP_Error kind, ref, same, paths, bytes, here (string[]|null), form (of the live unit, folder or file; null without one).
 	 */
 	public static function need( array $env, $kind, $ref ) {
 		$signed = self::signed( $env, $kind, $ref );
@@ -716,6 +716,7 @@ final class AB_MCP_Sync_Code_Stage {
 			'paths' => $paths,
 			'bytes' => $bytes,
 			'here'  => $here,
+			'form'  => null === $live ? null : $live['form'],
 		);
 	}
 

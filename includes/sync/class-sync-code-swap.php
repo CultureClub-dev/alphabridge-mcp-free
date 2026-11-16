@@ -1113,7 +1113,9 @@ final class AB_MCP_Sync_Code_Swap {
 	 * more, rename_marked(), OPcache for each PHP file replaced, close() and
 	 * the new bases of the files of its pair; the step ends with its journal
 	 * and result. The lock prepare() took is given back in every way. A unit
-	 * made new is not swapped at this commit (part D3 of the rest).
+	 * made new is not swapped at this commit (part D3 of the rest). Before
+	 * prepare() the rights of E10 for the operation of the unit
+	 * (AB_MCP_Sync_Code_Kind::rights(); F4, part D3a).
 	 *
 	 * @param mixed $swap What the swap is asked with, in the form of its row swap.prepare.
 	 * @return array|WP_Error next, the answer of the step as it ended (done; failed where
@@ -1125,6 +1127,17 @@ final class AB_MCP_Sync_Code_Swap {
 		if ( null !== $in && 'create' === $in['unit']['unit_op'] ) {
 			/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name. */
 			return self::refusal( 'code:create_not_built', sprintf( __( 'The plan makes the %1$s %2$s new on this site, and the swap of a unit made new is not part of this version, so nothing is swapped and nothing of this site changed. Abort the run (wp_site_push action=abort) and install the unit by hand in wp-admin.', 'alphabridge-mcp' ), $in['unit']['kind'], $in['unit']['ref'] ) );
+		}
+		// The rights of E10 (Z26; F4), right before the step writes: those of
+		// the account for the operation (an edit, the same version with other
+		// files, takes edit_plugins or edit_themes besides, which
+		// DISALLOW_FILE_EDIT takes from everyone) and of the site
+		// (DISALLOW_FILE_MODS, the direct file system method); a refusal
+		// changes nothing and the step stays planned.
+		$engine = null === $in ? true : AB_MCP_Sync_Code_Kind::engine();
+		$rights = is_object( $engine ) ? $engine->rights( $in['unit']['unit_op'], $in['unit']['kind'] . ':' . $in['unit']['ref'] ) : $engine;
+		if ( true !== $rights ) {
+			return $rights;
 		}
 		$prepared = self::prepare( $swap );
 		if ( ! is_array( $prepared ) ) {
