@@ -202,8 +202,9 @@ final class StoreRemoverGuardTest extends TestCase {
 		ksort( $walker->calls );
 		// Kept as one string a file: the arrays of all shipped files would
 		// not fit beside PHPUnit under a memory_limit of 128 MB.
-		$walked[ $file ] = serialize( array( 'calls' => array_values( $walker->calls ), 'strings' => $walker->strings ) );
-		return self::walk( $file );
+		$out             = array( 'calls' => array_values( $walker->calls ), 'strings' => $walker->strings );
+		$walked[ $file ] = serialize( $out );
+		return $out;
 	}
 
 	/** Where a call stands: Class::function (or the file where outside a class). */

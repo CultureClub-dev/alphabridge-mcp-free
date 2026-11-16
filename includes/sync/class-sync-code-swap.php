@@ -1254,7 +1254,7 @@ final class AB_MCP_Sync_Code_Swap {
 			return true;
 		}
 		/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name. */
-		return self::refusal( 'code:runs_changed', sprintf( __( 'Whether code of the %1$s %2$s runs on this site was read again right before its swap began, and it is no longer what this call prepared the swap for (it was activated or deactivated, or the theme was switched, since then), or it could not be read, so it is not swapped and nothing of this site changed; accept does not replace preparing it anew. Call action=next again: it prepares the swap anew with what runs now.', 'alphabridge-mcp' ), $in['unit']['kind'], $in['unit']['ref'] ) );
+		return self::refusal( 'code:runs_changed', sprintf( __( 'Whether the %1$s %2$s is active on this site (for a theme: the theme of this site or its parent) was read again right before its swap began, and it is no longer what this call prepared the swap for (it was activated or deactivated, or the theme was switched, since then), or it could not be read, so it is not swapped and nothing of this site changed; accept does not replace preparing it anew. Call action=next again: it prepares the swap anew with what is active now.', 'alphabridge-mcp' ), $in['unit']['kind'], $in['unit']['ref'] ) );
 	}
 
 	/**
@@ -1629,7 +1629,7 @@ final class AB_MCP_Sync_Code_Swap {
 		// in the refusal of an end not recorded (ended(); the answers after
 		// a failure say only what this call proved, option B).
 		/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name. */
-		$unseen   = sprintf( __( 'Whether code of the %1$s %2$s runs, this answer knows as its last check read it right before the swap began: an activation of it (for a theme: a switch of the theme) that this site records only after that check, or one switched on and off again before it, it does not see.', 'alphabridge-mcp' ), $unit['kind'], $unit['ref'] );
+		$unseen   = sprintf( __( 'Whether the %1$s %2$s is active (for a theme: the theme of this site or its parent), this answer knows as its last check read it right before the swap began: an activation of it (for a theme: a switch of the theme) that this site records only after that check, or one switched on and off again before it, it does not see.', 'alphabridge-mcp' ), $unit['kind'], $unit['ref'] );
 		$ended    = self::ended(
 			$in,
 			'done',
@@ -1806,7 +1806,7 @@ final class AB_MCP_Sync_Code_Swap {
 	 * the unit read whole there now (AB_MCP_Sync_File_Manifest::unit(),
 	 * within the time of the call). The refusal names that version (the new
 	 * one after the swap, the old one where it is to be back; skeptic E1,
-	 * B2).
+	 * B2), each in a whole sentence of its own (skeptic E1b, C4).
 	 *
 	 * @param array  $in    The arguments.
 	 * @param array  $plan  plan_of().
@@ -1823,8 +1823,13 @@ final class AB_MCP_Sync_Code_Swap {
 				return true;
 			}
 		}
-		/* translators: 1: the folder or file of the unit (absolute path), 2: which version of the swap is to be there, as its answers name them (old, new). */
-		return new WP_Error( 'code:close_target', sprintf( __( 'The version at %1$s could not be proved as the %2$s version of the swap (its device, inode or hash differ, or it could not be read whole within the time of this call).', 'alphabridge-mcp' ), $plan['target'], $which ) );
+		$says = array(
+			/* translators: %s: the folder or file of the unit (absolute path). */
+			'old' => __( 'The version at %s could not be proved as the old version of the swap (its device, inode or hash differ, or it could not be read whole within the time of this call).', 'alphabridge-mcp' ),
+			/* translators: %s: the folder or file of the unit (absolute path). */
+			'new' => __( 'The version at %s could not be proved as the new version of the swap (its device, inode or hash differ, or it could not be read whole within the time of this call).', 'alphabridge-mcp' ),
+		);
+		return new WP_Error( 'code:close_target', sprintf( $says[ $which ], $plan['target'] ) );
 	}
 
 	/**

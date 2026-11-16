@@ -96,7 +96,7 @@ final class SyncCodeRunTest extends TestCase {
 	 * name of the unit: only in the answer of a swap done, once its end is
 	 * recorded.
 	 */
-	private const Z24 = 'Whether code of the %1$s %2$s runs, this answer knows as its last check read it right before the swap began: an activation of it (for a theme: a switch of the theme) that this site records only after that check, or one switched on and off again before it, it does not see.';
+	private const Z24 = 'Whether the %1$s %2$s is active (for a theme: the theme of this site or its parent), this answer knows as its last check read it right before the swap began: an activation of it (for a theme: a switch of the theme) that this site records only after that check, or one switched on and off again before it, it does not see.';
 
 	/** @var string|null DOCUMENT_ROOT before the case. */
 	private $docroot_before;
@@ -2776,8 +2776,8 @@ final class SyncCodeRunTest extends TestCase {
 			)
 		);
 		self::assertTrue( $changed, 'The change came after prepare(), at the rights of the stage.' );
-		$says = self::nothing_begun( $run_id, $target, $before, $answer, 'code:runs_changed', 'accept does not replace preparing it anew. Call action=next again: it prepares the swap anew with what runs now.', array( 'group', 'rights' ) );
-		self::assertStringContainsString( 'Whether code of the plugin ' . $slug . ' runs on this site was read again right before its swap began', $says );
+		$says = self::nothing_begun( $run_id, $target, $before, $answer, 'code:runs_changed', 'accept does not replace preparing it anew. Call action=next again: it prepares the swap anew with what is active now.', array( 'group', 'rights' ) );
+		self::assertStringContainsString( 'Whether the plugin ' . $slug . ' is active on this site (for a theme: the theme of this site or its parent) was read again right before its swap began', $says );
 		self::assertFileDoesNotExist( ABSPATH . '.maintenance', 'No maintenance mode.' );
 		AB_MCP_Test_Seam::restore_all();
 		AB_MCP_Sync_Code_Swap::forget();

@@ -24,11 +24,23 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
   `rename(2)`, Fehler `EXDEV`). PHP behandelt `EXDEV` in `php_plain_files_rename()` (`main/streams/plain_wrapper.c`):
   `php_copy_file()`, danach Eigentümer und Modus der Quelle, und erst wenn alles gelang `unlink()` der Quelle.
   - **Datei:** Sie wird kopiert und danach gelöscht, nicht in einem Schritt ersetzt; zwischen Kopie und Löschen liegen
-    beide, und ein Abbruch in der Kopie lässt ein halbes Ziel. Die Prüfung in `write_file()` sieht das nicht.
+    beide, und ein Abbruch in der Kopie lässt ein halbes Ziel. Die Prüfung in `write_file()` sieht das nicht. Ein
+    `EPERM` beim Setzen von Eigentümer und Modus duldet PHP; scheitert eines davon anders, gibt `rename()` `false`, und
+    die Kopie bleibt am Ziel. Das Löschen der Quelle prüft PHP nicht: scheitert es, gibt `rename()` `true`, und die
+    Quelle bleibt liegen.
   - **Ordner:** `php_copy_file_ctx()` (`ext/standard/file.c`) lehnt einen Ordner als Quelle ab («The first argument to
     copy() function cannot be a directory», `FAILURE`); `rename()` gibt dann `false` mit einer Warnung, und nichts ist
-    verschoben. Ein Tausch eines Ordners über eine solche Grenze scheitert also, statt nicht atomar zu kopieren.
-    Gelesen im Quelltext von PHP 8.4 (`PHP-8.4`, 12.11.2026), nicht in der CI geprobt.
+    verschoben. Ein Tausch eines Ordners über eine solche Grenze scheitert also, statt nicht atomar zu kopieren: schon
+    die erste Umbenennung (`AB_MCP_Sync_Code_Swap::rename_marked()` → `move()` → `AB_MCP_Sync_Code_Swap_Calls::rename()`,
+    `includes/sync/class-sync-code-swap.php:1422`, `:1506`, `:257`, Stand Teil G, Abschnitt 2), mit zwei Warnungen und
+    ohne Bewegung.
+  - **PHP 8.0 bis 8.4:** Gelesen am 16.11.2026 in den Tags php-8.0.0, 8.0.30, 8.1.0, 8.1.34, 8.2.0, 8.2.35, 8.3.0,
+    8.3.36, 8.4.0 und 8.4.27 (`raw.githubusercontent.com/php/php-src/<Tag>/…`; Zeilen je Tag im Bauzettel
+    `belege/z5r-g-zettel.md`, Abschnitt 4, etwa php-8.0.0 `plain_wrapper.c:1204`, `:1240`, `:1247`, `:1275` und
+    `file.c:1633`, `:1650`, php-8.4.27 `plain_wrapper.c:1323`, `:1360`, `:1367`, `:1397` und `file.c:1508`, `:1526`).
+    Der Weg ist in allen zehn gleich; sie unterscheiden sich nur im Leerraum eines Kommentars und, ab 8.3.36, in der
+    Form der Warnungen. PHP vergleicht keine Gerätenummer; es entscheidet allein `EXDEV` von `rename(2)`. Nicht in der
+    CI geprobt.
 - **Trifft Normalfall:** nein. Eine Ablage mit innerer Mount-Grenze oder ein Bind-Mount zwischen `wp-content` und dem
   Ordner neben WordPress ist eine eigene Einrichtung eines Hosters. F54 prüft diesen Fall ausdrücklich nicht.
 
@@ -678,47 +690,53 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
 
 ### G-5-12 Der Handweg leert OPcache nicht selbst
 
-- **Fundstelle:** `AB_MCP_Protected_Store::guide()` (`includes/class-protected-store.php:2817`): nach jedem Befehl, der
-  etwas bewegt, der Satz `$opcache` (`:2844`). Die Befehle eines Punkts sind eine Zeile, mit `&&` verkettet und mit
-  `echo OK` am Ende (`$chain`, `:2836`).
-- **Quelle:** Befunde A6 und A7 der Codex-Runde über D1, Entscheide 6 und 7 der Lead.
+- **Fundstelle:** `AB_MCP_Protected_Store::guide()` (`includes/class-protected-store.php:2831`): nach jedem Befehl, der
+  etwas bewegt, der Satz `$opcache` (`:2858`). Die Befehle eines Punkts sind eine Zeile, mit `&&` verkettet und mit
+  `echo OK` am Ende (`$chain`, `:2850`). Zeilen am Stand von Teil G, Abschnitt 2.
+- **Quelle:** Befunde A6 und A7 der Codex-Runde über D1, Entscheide 6 und 7 der Lead; Bauzettel F, Abschnitt 8 (P3).
 - **Was:** Aus einer Shell lässt sich der OPcache der Prozesse, die die Site bedienen (PHP-FPM, Modul des Webservers),
   nicht leeren; die Kommandozeile von PHP hat einen eigenen. Der Handweg nennt darum das Leeren oder den Neustart von PHP
   beim Hoster als Satz, ohne Befehl. Bis dahin kann bei `opcache.validate_timestamps=0` der Code laufen, den PHP vor dem
-  Zurücklegen gelesen hat.
+  Zurücklegen gelesen hat. Nach einem harten Abbruch nach den Umbenennungen (P3, F58, G-5-17) lief kein
+  `invalidate()`: Bis Weg (b), der OPcache je bewegter PHP-Datei leert, oder bis zum Satz zu OPcache der Anleitung kann
+  PHP Code der alten Fassung aus OPcache ausführen.
 - **Trifft Normalfall:** nein. Im Normalfall braucht es den Handweg nicht.
 
 ### G-5-13 Z24: Eine Aktivierung nach der letzten Prüfung sieht der Tausch nicht
 
-- **Fundstelle:** `AB_MCP_Sync_Code_Swap::as_prepared()` (`includes/sync/class-sync-code-swap.php:1224`), gerufen in
-  `swapped()` (`:1198`) nach der letzten Zeitprüfung und unmittelbar vor `rename_marked()` (`:1202`); die frische
-  Lesung ist `runs()` (`:443`), der Stand der Vorbereitung `$prepared['runs']` aus `released()` in `under_lock()`
-  (`:644`). Der Satz in der Antwort des gelungenen Tauschs: `after_renames()` (gebildet `:1604`, angehängt erst nach
-  dem geschriebenen Ende `:1626`).
+- **Fundstelle:** `AB_MCP_Sync_Code_Swap::as_prepared()` (`includes/sync/class-sync-code-swap.php:1252`), gerufen in
+  `swapped()` (`:1226`) nach der letzten Zeitprüfung und unmittelbar vor `rename_marked()` (`:1230`); die frische
+  Lesung ist `runs()` (`:471`), der Stand der Vorbereitung `$prepared['runs']` aus `released()` in `under_lock()`
+  (`:775`). Der Satz in der Antwort des gelungenen Tauschs: `after_renames()` (gebildet `:1632`, angehängt erst nach
+  dem geschriebenen Ende `:1654`). Zeilen am Stand von Teil G, Abschnitt 2.
 - **Quelle:** Plan 15.23, Festlegung zu 1 (Z24 Option C) und Grenze Z24; Vorlage
   `stoppfall-z24/vorlage-z24-thomas.md`, «Was in jedem Fall gilt»; F57; Teil C des Rests, Lesart des Satzes nach dem
   Entscheid der Steuerung vom 16.11. 14:29.
 - **Was:**
   - Der Tausch setzt keinen Wartungsmodus (keine Datei `.maintenance`) und hält die Option `active_plugins` nicht.
-  - Die letzte Prüfung liegt unmittelbar vor dem ersten Schreiben des Schritts: ob Code der Einheit läuft, an jedem
+  - Die letzte Prüfung liegt unmittelbar vor dem ersten Schreiben des Schritts: ob die Einheit aktiv ist, an jedem
     Cache vorbei gelesen und streng mit dem Stand von `prepare()` verglichen. Weicht er ab oder ist er nicht lesbar,
     endet der Tausch ohne Mutation (`code:runs_changed`), der Schritt bleibt `planned`, der nächste Aufruf bereitet
     neu vor; `accept` ersetzt das nicht.
   - Eine gewöhnliche Aktivierung (oder ein Themewechsel), die nach dieser Prüfung beginnt, sieht der Tausch nicht,
     ebenso eine kurz an- und wieder ausgeschaltete zwischen zwei Lesungen. Nach der Prüfung liegen noch Journal
-    (`:1416`), Marke mit Anleitung (`:1424`) und Vermerk (`:1436`) vor der ersten Umbenennung (`:1443`); eine
+    (`:1444`), Marke mit Anleitung (`:1452`) und Vermerk (`:1464`) vor der ersten Umbenennung (`:1471`); eine
     Aktivierung in diesem Fenster oder danach läuft gegen die alte Fassung, einen leeren Platz oder die neue.
   - Gesehen wird nur die Zeile `active_plugins` (bei einem Theme `stylesheet` und `template`). Eine Aktivierung in
     wp-admin lädt das Plugin und lässt seine Routine laufen, bevor sie die Zeile schreibt (`activate_plugin()`). Auch
     eine Aktivierung, die vor der Prüfung begann, deren Zeile aber erst danach geschrieben wird, sieht der Tausch nicht;
     ihre Routine läuft womöglich schon gegen die alte Fassung, und die Umbenennungen laufen unter ihr durch.
-  - `prepare()` ermittelt nur, ob Code läuft (ja, nein), nicht welche Hauptdateien; eine weitere Hauptdatei eines schon
-    aktiven Plugins ändert den Wert nicht.
+  - Gelesen wird die Aktivierung, nicht der laufende Code: Die Vorschau eines inaktiven Themes (Customizer,
+    `start_previewing_theme()`; Site-Editor, `wp_theme_preview`) lässt dessen Code laufen, der Tausch behandelt es als
+    nicht aktiv (ohne `accept`). Die zwei Sätze des Tauschs sagen darum «active» (Bauzettel G, V4).
+  - `prepare()` ermittelt nur, ob die Einheit aktiv ist (ja, nein), nicht welche Hauptdateien; eine weitere Hauptdatei
+    eines schon aktiven Plugins ändert den Wert nicht, ebenso ein Wechsel zwischen Stylesheet und Template desselben
+    Themes (G-21).
   - Die Grenze gilt für jede Antwort des Tauschs: für den gelungenen Tausch, die Enden nach einem Fehler (`failed`,
     `unclear`, das nicht geschriebene Ende in `ended()`) und die Ablehnungen. Den Satz dazu trägt nur die Antwort des
     gelungenen Tauschs, erst nachdem sein Ende geschrieben ist (nicht das gespeicherte Ergebnis des Schritts); die
     Antworten nach einem Fehler sagen nach Option B nur, was der Aufruf nachgeprüft hat, und eine Ablehnung hat nichts
-    getauscht. Der Satz spricht nur von der getauschten Einheit: Die Antwort kennt, ob ihr Code läuft, so, wie die
+    getauscht. Der Satz spricht nur von der getauschten Einheit: Die Antwort kennt, ob sie aktiv ist, so, wie die
     letzte Prüfung es las; eine Aktivierung von ihr (bei einem Theme ein Wechsel des Themes), die die Site erst nach
     dieser Prüfung festhält, und eine davor an- und wieder ausgeschaltete sieht sie nicht.
   - Tests: `SyncCodeRunTest::testAPluginActivatedAfterThePreparationIsNotSwappedUntilItIsPreparedAnew` (F57; vier
@@ -760,6 +778,11 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
   - Die Ablehnung der Uhr auf dem Rückweg (`restored()`, `class-sync-code-swap.php:2213`) trägt den Satz von
     `clock_refusal()` (`:2483`): «the unit is not swapped». Er ist wörtlich wahr (nichts wird getauscht), und der Weg
     (`action=next`) stimmt; er nennt den Rückweg nicht als solchen.
+  - Der Schlusssatz eines Rückweglaufs mit Befunden (`AB_MCP_Sync_Engine::closed_note()`,
+    `includes/sync/class-sync-engine.php:3225`, Satz `:3250`, Stand Teil G, Abschnitt 2) spricht für jeden Schritt,
+    der `unclear` oder `failed` blieb, von Teilen und Resten («each part left names its value before …; remove a rest
+    by hand …»), auch für einen Code-Schritt, der weder Teile noch Rest hat; den Weg eines Code-Schritts (seine Antwort,
+    die Anleitung der offenen Marke) nennt er nicht (Skeptiker E1, C4; wie der Satz von `begin_same_run()` oben).
 - **Trifft Normalfall:** nein. Im Normalfall (F59, F1, F2, F6, F47, F55) ist der Eingang belegt, die Marke in der Liste,
   und beide Umbenennungen gelingen in einem Aufruf.
 
@@ -800,6 +823,171 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
     als geprüft geschlossen (`code()`, fail closed).
 - **Trifft Normalfall:** nein. Im Normalfall bleibt ein aktives Plugin über Tausch und Rückweg aktiv, und ein
   unterbrochener Tausch geht über Weg (b) zurück.
+
+### G-5-16 Kein Rücktausch: eine fatale neue Fassung bleibt am Ziel
+
+- **Fundstelle:** `AB_MCP_Sync_Code_Swap::rename_marked()` (`includes/sync/class-sync-code-swap.php:1422`): nach den
+  zwei Umbenennungen keine Probe der Site; `after_renames()` (`:1601`) leert OPcache, schliesst die Marke und antwortet
+  mit Ziel, Sicherung, dem Rückweg des Laufs und den Zeilen von `by_hand()` (Antwort `:1625`, `by_hand()` `:2061`). Die
+  Vorschau eines Laufs nennt nur die Probe davor (`AB_MCP_Sync_Push::begin()`, `shown()`,
+  `includes/sync/class-sync-push.php:1408`, `:1492`). Vorbild, das zurücklegt: `wp_update_plugin`
+  (`includes/lifecycle/class-update-guard.php:111`, wie auf main). Zeilen am Stand von Teil G, Abschnitt 2.
+- **Quelle:** Plan Z8b 15.23, «Benannte Grenze zum Rücktausch» und «Kein Rücktausch» (Entscheid 1 von Thomas,
+  `decisions.md` «2026-11-15 18:20»); Bauzettel `belege/z5r-g-zettel.md`, Abschnitt 1.
+- **Was:**
+  - Der Tausch prüft die Site nach dem Umbenennen nicht und legt bei einem fatalen Fehler der neuen Fassung nicht
+    selbst zurück.
+  - Antworten MCP oder wp-admin noch, legt der Rückweg des Laufs die alte Fassung zurück (`wp_site_revert`, G-5-14).
+    Endet die neue Fassung bei jedem Aufruf fatal, bleibt der Weg von Hand: Die Antwort jedes Tauschs nennt Zielordner,
+    Sicherungsordner und die Befehle. Die Marke ist nach einem gelungenen Tausch geschlossen und ihr Ordner einen Tag
+    danach weg; ihre Anleitung gilt dann nicht mehr. Daneben hilft der Wiederherstellungsmodus von WordPress; den
+    Notweg bringt Z9a (Plan).
+- **Trifft Normalfall:** nein. Im Normalfall (F59, Fall 1) ist die neue Fassung gesund; Fall 2 (fatal bei jedem
+  Aufruf) prüft den Weg von Hand.
+
+### G-5-17 Harter Abbruch: keine Rettung im Aufruf
+
+- **Fundstelle:** `AB_MCP_Sync_Code_Swap` (`includes/sync/class-sync-code-swap.php`) ruft kein
+  `register_shutdown_function` (`git grep -c` ohne Treffer); der Ersatzvermerk in `rename_marked()` (`noted()` `:1521`,
+  vor der ersten Umbenennung `:1471`), «not taken back» (`not_swapped()`, `:1919`). Die Sperre für Änderungen
+  `AB_MCP_Change_Lock::TIMEOUT` (600 s, `includes/lifecycle/class-change-lock.php:54`) und
+  `AB_MCP_Sync_Run::settle()` (`includes/sync/class-sync-run.php:793`). Test
+  `SyncCodeRunTest::testASwapAbortedHardAtEachPointLeavesAStateItsWaysBackKnow` (F58). Zeilen am Stand von Teil G,
+  Abschnitt 2.
+- **Quelle:** Plan 15.23, «Keine Shutdown-Rettung»; Bauzettel F, Abschnitt 8 (`belege/z5r-f-zettel.md`), am Bau von
+  Teil F, Abschnitt 2 geprüft; Notiz G-2 (D2a).
+- **Was:**
+  - Endet der Aufruf hart zwischen Journal und Ende (SIGKILL, Ende des Prozesses), bleibt die Marke offen, bis Weg (b)
+    oder Weg (a) sie schliesst. Der Handweg schliesst weder Marke noch Schritt noch Paar; ohne Eingang bleiben danach
+    Lauf und Marke offen (die Marke hält Sicherung und Stage). Ob der Lauf nach einer Verlängerung weitergeht, ist der
+    Prüfpunkt R1.
+  - Nach SIGKILL hält die Sperre für Änderungen, bis ihre Zeile `TIMEOUT` alt ist; so lange liest `settle()` den
+    Schritt als `running`, der Lauf bleibt offen, und Weg (b) und (a) warten (F58 prüft `running` vor dem Altern der
+    Zeile).
+  - Der Ersatzvermerk bleibt nach einem Abbruch an jedem der drei Punkte geschrieben (P1 vor, P2 zwischen, P3 nach den
+    Umbenennungen); F58 prüft, dass er steht, nicht was danach mit ihm geschieht. Ebenso bleibt er ohne Ersatz stehen,
+    wo nach ihm eine Umbenennung scheitert, bis zum nächsten Tausch oder Update der Einheit: Die Datei-Undo-Punkte der
+    Einheit von vor dem Aufruf werden verweigert wie nach einem Tausch. Die Antwort von `not_swapped()` sagt es; die
+    eines `unclear`-Endes zwischen den Umbenennungen nennt den Handweg, nicht den Vermerk.
+  - Weg (a) und Handweg sind an P1 und P3 am Stand nach SIGKILL nicht gelaufen; F58 hält fest, dass dieser Stand dem
+    der bestehenden Tests gleicht (Marke offen, Vermerk geschrieben, Journal `begun`), ausser der Sperre.
+- **Trifft Normalfall:** nein. Im Normalfall endet der Aufruf des Tauschs nicht hart.
+
+### G-5-18 Theme bei offenem Tausch: kein Vorbehalt
+
+- **Fundstelle:** Kern (WordPress 7.1.3): `validate_current_theme()` (`wp-includes/theme.php:898`, Filter `:906`,
+  `switch_theme( WP_DEFAULT_THEME )` `:927`), gerufen aus `wp-admin/themes.php:264` und dem Customizer
+  (`wp-includes/class-wp-customize-manager.php:668`); `includes/` hält keinen Filter darauf. Der Satz des Rückwegs in
+  `AB_MCP_Sync_Code_Swap::restored()` (`includes/sync/class-sync-code-swap.php:2207`, Satz `:2267`). Zeilen am Stand
+  von Teil G, Abschnitt 2.
+- **Quelle:** Plan 15.23, «Kein Tauschvorbehalt» (E6); Bauzettel F, Abschnitt 8; Notiz G-24 (Teil E, Abschnitt 2).
+- **Was:** Fehlt bei offenem Tausch der Ordner des aktiven Themes (zwischen den Umbenennungen, nach einem Abbruch an
+  P2), wechselt WordPress beim nächsten Aufruf von «Design → Themes» oder des Customizers auf das Standard-Theme; der
+  Tausch hält das nicht auf. Der Rückweg stellt den Wechsel nicht zurück (das Journal hält für ein Theme kein `active`,
+  G-5-15); seine Antwort nennt ein Theme, das der Aufruf als nicht laufend liest, mit dem Weg in wp-admin, ohne einen
+  Wechsel zu behaupten.
+- **Trifft Normalfall:** nein. Im Normalfall liegen beide Umbenennungen im selben Aufruf, ohne Aufruf von wp-admin
+  dazwischen.
+
+### G-5-19 Plugin bei offenem Tausch oder danach deaktiviert: kein Vergleich am Ende
+
+- **Fundstelle:** Kern: `wp-admin/plugins.php:639` ruft `validate_active_plugins()`
+  (`wp-admin/includes/plugin.php:1075`), das ein Plugin ohne Datei still deaktiviert (`deactivate_plugins( $plugin,
+  true )`, `:1099`). Die Anleitung der Marke sagt es (`AB_MCP_Protected_Store::guide()`,
+  `includes/class-protected-store.php:2981`–`:2982`); Wiedereinschalten auf dem Rückweg mit `accept` (G-5-15).
+- **Quelle:** Plan 15.23, «Kein Vergleich am Ende»; Plan E6 (Entscheid 2 von Thomas, 11.11.).
+- **Was:** Deaktiviert WordPress ein Plugin bei offenem Tausch oder danach, meldet der Tausch es nicht; er vergleicht am
+  Ende nichts. Die Deaktivierungshaken des Plugins laufen dabei nicht. Der nächste Bericht zeigt die Aktivierung als
+  «live geändert». Eingeschaltet wird von Hand (wp-admin, `wp_activate_plugin`) oder, wo der Tausch zurückgeht, über
+  den Rückweg mit `accept`. Die Grenze «Rennen nach dem Vergleich» aus E6 entfällt mit dem Vergleich.
+- **Trifft Normalfall:** nein. Im Normalfall öffnet zwischen den zwei Umbenennungen niemand «Plugins».
+
+### G-5-20 Daten im Ordner eines Plugins
+
+- **Fundstelle:** (a) `AB_MCP_Sync_Decision::unit_way()` (`includes/sync/class-sync-decision.php:1458`, Sperre
+  `code:live_changed` `:1462`), `includes/sync/class-sync-env.php:473`, im Tausch
+  `includes/sync/class-sync-code-swap.php:951`, `:1293`; (b) der Satz der Vorschau
+  `includes/sync/class-sync-code-plan.php:433`. Zeilen am Stand von Teil G, Abschnitt 2.
+- **Quelle:** Plan E1 (Entscheid 1 von Thomas, 11.11., «wie WP-Update»; Grenze A1).
+- **Was:**
+  - (a) Ein Plugin, das laufend in seinen eigenen Ordner schreibt (Logs, Caches, eigene Sicherungen), ist live nach
+    jedem Schreiben wieder «live geändert». Ist es auch auf Staging geändert, ist es vom Tausch ausgeschlossen
+    (`code:live_changed`, ohne Wahl «Staging gewinnt»); es bleibt das Update von Hand in wp-admin, das die Antwort
+    nennt.
+  - (b) Dateien, die im Ausgangsstand im Ordner lagen und die die neue Fassung nicht hat, liegen nach dem Tausch nur
+    noch in der Sicherung, wie nach einem Update in wp-admin, und kommen über den Rückweg zurück, solange die
+    Sicherung aufbewahrt wird; die Vorschau sagt es je Pfad.
+- **Trifft Normalfall:** nein. Wie viele Plugins laufend in ihren Ordner schreiben, ist nicht gezählt (Plan 5.5).
+
+### G-5-21 Rechte des Kontos: erst im Schritt des Tauschs, kein Weg über ein anderes Konto
+
+- **Fundstelle:** `AB_MCP_Sync_Code_Kind::rights()` (`includes/sync/class-sync-code-kind.php:182`, angehängter Satz
+  `:188`), gefragt im Tausch `run()` und `restore()` (`includes/sync/class-sync-code-swap.php:1173`, `:2171`), nicht
+  beim Planen. Zeilen am Stand von Teil G, Abschnitt 2.
+- **Quelle:** Notiz G-16 (D3b-2b, gestrichen nach dem vierten Befund) und G-7 (D3a).
+- **Was:**
+  - Jede Ablehnung von `rights()` endet mit dem einen Satz zum Lauf (abbrechen mit dem eigenen Konto, neu planen ohne
+    den Eintrag, wo er abgelehnt bleibt). Dass ein Konto mit dem Recht die Einheit übernehmen darf, sagt keine
+    Antwort; der Satz dazu ist gestrichen, weil er unter `DISALLOW_FILE_EDIT` in die nächste Ablehnung führte.
+  - Ein Konto ohne das Recht bekommt Plan und Lauf; erst der Schritt des Tauschs lehnt ab, je Aufruf, und ändert
+    nichts. `DISALLOW_FILE_EDIT` als Konstante ist nicht getestet, nur seine Wirkung über `map_meta_cap`.
+- **Trifft Normalfall:** nein. Im Normalfall hat das Konto der Verbindung die Rechte eines Administrators.
+
+### G-5-22 Reichweite der Wächter
+
+- **Fundstelle:** Kopf von `tests/StoreRemoverGuardTest.php` (`:32`–`:50`), `walk()` (`:102`, `nikic/php-parser`),
+  `testNoShippedFileNamesARemoverAsAValue()` (`:305`), der Wächter von `root()` (`:341`); `tests/SyncSaidScanTest.php`
+  `UNSEEN` (`:113`, `:114`). Zeilen am Stand von Teil G, Abschnitt 2.
+- **Quelle:** Notiz G-20 (D3b-2c, Skeptiker C) und G-14 (D3b-1); Bauzettel G, V1 bis V3, gebaut in Teil G,
+  Abschnitt 1 (echter Parser, Entscheid der Steuerung 16.11. 18:31).
+- **Was:**
+  - Gesehen wird jeder Aufruf, dessen Name als Name im Code steht (eine Funktion, ein Name nach `->`, `?->`, `::` oder
+    `new`), aufgelöst wie PHP auflöst: jede Schreibweise und Gross/klein, Import und Namensraum, `self`, `static` und
+    `parent` (im Trait bleiben sie wie geschrieben), `function &name`.
+  - Nicht gesehen wird ein Name, der erst zur Laufzeit ein Wert ist: eine Variable (`$f( … )`, `$obj->$m( … )`), ein
+    String (`'rename'( … )`), ein weitergereichter Callback (`call_user_func( 'rename', … )`), ein zusammengesetzter
+    Name (`'un' . 'link'`). Dass keine ausgelieferte Datei `unlink`, `rmdir`, `rename`, `mkdir` oder `wp_delete_file`
+    als String hält, prüft `testNoShippedFileNamesARemoverAsAValue()`; ein zusammengesetzter bleibt ungesehen. Im
+    Tausch ist ein Name nur bei der Uhr (`call_user_func( self::$clock )`) und den eigenen Closures in
+    `given_rights()` ein Wert.
+  - Der Wächter von `root()` liest den Namen `AB_MCP_Protected_Store::root(`; `named_by_swap()`
+    (`includes/class-protected-store.php:3001`) gibt dem Tausch den Ordner der Marken, einen Pfad in der Ablage, und
+    zählt nicht als `root()`. Zwei Stellen des Tauschs stehen mit Begründung in `UNSEEN` des Scans der Sätze.
+  - Sechs weitere Token-Scanner vergleichen Klassennamen wörtlich (`tests/SourceScan.php`, `SyncSafeCallsTest.php`,
+    `WellKnownGuardTest.php`, `integration/support/class-test-seam-guard.php`, `support/class-said-scan.php`,
+    `AnswerWayTest.php`); sie folgen nach H.
+- **Trifft Normalfall:** nein. Die Wächter sind Tests; ein Aufruf, den sie nicht sehen, ändert an der Site nichts,
+  solange der Code ihn nicht schreibt.
+
+### G-5-23 Ungelesenes auf dem Rückweg: bis zum einen Leser
+
+- **Fundstelle:** `AB_MCP_Sync_Revert::way_back()` (`includes/sync/class-sync-revert.php:487`, Rückweg-Schritt ohne
+  lesbaren Eintrag `:532`, «a step goes back once» `:578`, `:580`). Ausserhalb der drei Funktionen des Lesers: die Seite
+  «Staging» `AB_MCP_Transfer::way_back_open()`, `back_of()`, `pairs_back()` (`includes/class-transfer.php:565`, `:761`,
+  `:789`; `reverts_of()` `:571`, `:792`; `plan_for_person()` `:736`); `AB_MCP_Sync_Engine::close_revert()` und
+  `closed_note()` (`includes/sync/class-sync-engine.php:3188`, `:3225`); `AB_MCP_Sync_Run::decode_step()`
+  (`includes/sync/class-sync-run.php:1242`) mit `AB_MCP_Sync_Engine::pick()` (`:583`). Zeilen am Stand von Teil G,
+  Abschnitt 2.
+- **Quelle:** Skeptiker E1b, B1 (`belege/skeptiker-e1b.md`, dritter Befund der Klasse «Ungelesenes wird
+  durchgelassen»); Bauzettel des Lesers `belege/z5r-leser-zettel.md` (Stellen S1 bis S13) mit der Freigabe der
+  Steuerung vom 16.11. 21:43 (Frage 1 B, Frage 5 A).
+- **Was:**
+  - `way_back()` zählt einen Rückweg-Schritt, dessen Eintrag nicht zurückliest, nicht als zurückgenommen. Wird der
+    Lauf, der schrieb, nach dem Schliessen eines solchen Rückwegs neu geplant, kann derselbe Schritt ein zweites Mal
+    geplant werden; «a step goes back once» hält dann nicht. Bei Code fragt das Planen den Eingang (`code( 'plan' )`).
+    Behoben wird das mit dem einen Leser (Bauzettel des Lesers) in der Qualitätsdurchsicht vor H; danach laufen die
+    stehenden Prüfungen von Teil G noch einmal, und Abschnitt 9 des Bauzettels nennt, was als Grenze bleibt (S2, S5
+    mit S7, C3).
+  - Ausserhalb der drei Funktionen des Lesers bleibt es nach Frage 5 (A) beim heutigen Verhalten:
+    - S11: Die Seite «Staging» überspringt einen solchen Schritt und liest einen Fehler von `reverts_of()` als leer.
+      Sie zeigt nur an; der Rückweg selbst geht über `plan_for_person()` und `way_back()` und lehnt dort ab, was die
+      Seite unter `no_back` zeigt.
+    - S12: Ein `result` eines Rückweg-Schritts, das nicht zurückliest, zählt als ohne Rest; `close_revert()` kann den
+      Lauf dann `closed_reverted` statt `closed_findings` schliessen, und `closed_note()` zählt den Schritt nicht.
+    - S13: `decode_step()` liest ein `depends`, das nicht zurückliest, als keine Abhängigkeit, für jeden Lauf;
+      Rückweg-Schritte haben `depends` leer.
+- **Trifft Normalfall:** nein. Ein Eintrag, ein Ergebnis oder `depends`, das nicht zurückliest, ist ein beschädigter
+  Datensatz.
 
 ## Übernommen aus Zweig 2 (`bericht-zweig-2.md`, Abschnitt Grenzkandidaten; G-M9 aus «Behebung 2»)
 
