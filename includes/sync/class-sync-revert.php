@@ -164,8 +164,9 @@ final class AB_MCP_Sync_Revert {
 			return null;
 		}
 		if ( null === self::$entrance ) {
-			/* translators: %d: run number. */
-			return new WP_Error( 'ab_mcp_sync_revert_code', sprintf( __( 'Run %d swapped plugins or themes, and this installation of AlphaBridge has no way back for code (its entrance is not loaded), so nothing of it is planned, put back or closed. Put the old version back by hand: in a shell on the server with the lines the answer of its swap named (wp_site_push action=status shows the result of that step), or in wp-admin with the version of before.', 'alphabridge-mcp' ), $id ) );
+			$named = AB_MCP_Protected_Store::named_by_swap();
+			/* translators: 1: run number, 2: the folder of the marks of the protected store (absolute path). */
+			return new WP_Error( 'ab_mcp_sync_revert_code', sprintf( __( 'Run %1$d is a run of plugins or themes, and this installation of AlphaBridge has no way back for code (its entrance is not loaded), so none of its steps is planned or put back, and none left begun is closed as checked. Put the old version back by hand: in a shell on the server with the lines the answer of its swap named (wp_site_push action=status shows the result of that step), or in wp-admin with the version of before. Where the mark of a swap of it is still open in %2$s, its instruction there says how to put the old version back in a shell on the server.', 'alphabridge-mcp' ), $id, is_wp_error( $named ) ? 'the protected store' : $named['marks'] ) );
 		}
 		return call_user_func( self::$entrance, $at, $run, $step, $forward, $accept );
 	}

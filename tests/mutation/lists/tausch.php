@@ -1782,4 +1782,13 @@ return array(
 		'run'     => $it( 'SyncCodeRunTest', 'testARunOfTheCodeBrokenOffIsClosedAsCheckedOnlyWhereAVersionIsProvedAtTheTarget' ),
 		'expect'  => '/testARunOfTheCodeBrokenOffIsClosedAsCheckedOnlyWhereAVersionIsProvedAtTheTarget/',
 	),
+	array(
+		'id'      => 'tausch/f-t1-marken',
+		'clause'  => 'Revert::code(): the refusal without the entrance names the folder of the marks, where the instruction of a mark still open says how to put the old version back (Teil F, section 1; skeptic E1, C5)',
+		'file'    => $rv,
+		'search'  => '$id, is_wp_error( $named ) ? \'the protected store\' : $named[\'marks\'] ) );',
+		'replace' => '$id, \'the protected store\' ) );',
+		'run'     => $it( 'SyncCodeRunTest', 'testWithoutTheEntranceARunOfTheCodeIsNeitherPlannedBackNorRunBackNorLedOn' ),
+		'expect'  => '/testWithoutTheEntranceARunOfTheCodeIsNeitherPlannedBackNorRunBackNorLedOn/',
+	),
 );

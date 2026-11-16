@@ -1072,7 +1072,7 @@ final class StoreTreesTest extends TestCase {
 				'Then take the case below that is true of what it showed, and run the command of the section it names. An entry is the old version where it has the inode named below for the backup, the new version where it has the inode named below for the stage, and another entry where it has neither.',
 				'- Nothing is at the target, and the new version is at the place of the stage: section [vor-den-umbenennungen]. Its command only checks.',
 				'- The new version is at the target, and nothing is at the place of the stage: section [nach-den-umbenennungen].',
-				'Where none of them is true (another inode, or none, where a case names a version; or an entry where a case says that nothing is there), run no command of this file. Stop, and take the way back of the run as soon as the site answers again: wp_site_revert action=plan with run_id 6.',
+				'Where none of them is true (another inode, or none, where a case names a version; or an entry where a case says that nothing is there), run no command of this file. Stop, and take the way back of the run as soon as the site answers again: wp_site_revert action=plan with run_id 6; where it refuses it (it says why), put the version of before back in wp-admin by hand.',
 				'',
 			),
 			array_slice( explode( "\n", $text ), 3, 6 ),

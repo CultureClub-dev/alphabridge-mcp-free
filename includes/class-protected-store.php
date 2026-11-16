@@ -3082,7 +3082,7 @@ final class AB_MCP_Protected_Store {
 			$lines[] = '- ' . $case;
 		}
 		/* translators: %d: run number. */
-		$lines[] = sprintf( __( 'Where none of them is true (another inode, or none, where a case names a version; or an entry where a case says that nothing is there), run no command of this file. Stop, and take the way back of the run as soon as the site answers again: wp_site_revert action=plan with run_id %d.', 'alphabridge-mcp' ), (int) $run );
+		$lines[] = sprintf( __( 'Where none of them is true (another inode, or none, where a case names a version; or an entry where a case says that nothing is there), run no command of this file. Stop, and take the way back of the run as soon as the site answers again: wp_site_revert action=plan with run_id %d; where it refuses it (it says why), put the version of before back in wp-admin by hand.', 'alphabridge-mcp' ), (int) $run );
 		return $lines;
 	}
 

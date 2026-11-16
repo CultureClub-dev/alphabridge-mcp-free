@@ -515,7 +515,7 @@ final class ProtectedStoreTest extends TestCase {
 				'Then take the case below that is true of what it showed, and run the command of the section it names. An entry is the old version where it has the inode named below for the backup, the new version where it has the inode named below for the stage, and another entry where it has neither.',
 			),
 			$cases,
-			array( 'Where none of them is true (another inode, or none, where a case names a version; or an entry where a case says that nothing is there), run no command of this file. Stop, and take the way back of the run as soon as the site answers again: wp_site_revert action=plan with run_id 7.' )
+			array( 'Where none of them is true (another inode, or none, where a case names a version; or an entry where a case says that nothing is there), run no command of this file. Stop, and take the way back of the run as soon as the site answers again: wp_site_revert action=plan with run_id 7; where it refuses it (it says why), put the version of before back in wp-admin by hand.' )
 		);
 		self::assertSame( $want, $lines, 'The command that only reads, the cases of the form, the line for every other state.' );
 

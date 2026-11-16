@@ -1620,7 +1620,7 @@ final class AB_MCP_Sync_Code_Swap {
 		}
 		$by_hand = self::by_hand( $in, $plan );
 		/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name, 3: its version here before, 4: its version now, 5: the folder or file of the unit (absolute path), 6: the backup of the old version (absolute path), 7: run number. */
-		$message = sprintf( __( 'The %1$s %2$s of the staging site is swapped in (version %3$s here before, %4$s now): its new version lies at %5$s, the old one whole in the backup %6$s. Look at the site now (the home page and wp-admin): where something fails, the way back of this run puts the old version back (wp_site_revert action=plan with run_id %7$d). Where this site answers no request any more (the new version ends fatal on every call, so neither MCP nor wp-admin is reached), put the old version back by hand in a shell on the server, as the lines below say:', 'alphabridge-mcp' ), $unit['kind'], $unit['ref'], (string) $prepared['version']['live'], (string) $prepared['version']['staging'], $plan['target'], $plan['old']['path'], $in['run_id'] );
+		$message = sprintf( __( 'The %1$s %2$s of the staging site is swapped in (version %3$s here before, %4$s now): its new version lies at %5$s, the old one whole in the backup %6$s. Look at the site now (the home page and wp-admin): where something fails, the way back of this run puts the old version back (wp_site_revert action=plan with run_id %7$d). Where this site answers no request any more (the new version ends fatal on every call, so neither MCP nor wp-admin is reached), or where that way back is refused on this site (wp_site_revert says why), put the old version back by hand in a shell on the server, as the lines below say:', 'alphabridge-mcp' ), $unit['kind'], $unit['ref'], (string) $prepared['version']['live'], (string) $prepared['version']['staging'], $plan['target'], $plan['old']['path'], $in['run_id'] );
 		$message .= "\n" . implode( "\n", $by_hand );
 		// Z24 after option C (15.23, F57): what the last check of the unit
 		// could not see, said once and only in the answer of a swap done,
@@ -1978,7 +1978,7 @@ final class AB_MCP_Sync_Code_Swap {
 					/* translators: %d: run number. */
 					sprintf( __( '1. To go back, call wp_site_revert action=plan with run_id %d.', 'alphabridge-mcp' ), $in['run_id'] ),
 					/* translators: %s: the instruction of the swap on the server (absolute path of a file). */
-					sprintf( __( '2. Only where this site answers no request any more: in a shell on the server, open the file %s and run the command its first lines point to. The command contains checks; where it does not print OK, stop.', 'alphabridge-mcp' ), $moved['guide'] ),
+					sprintf( __( '2. Where this site answers no request any more, or where 1. is refused on this site (wp_site_revert says why): in a shell on the server, open the file %s and run the command its first lines point to. The command contains checks; where it does not print OK, stop.', 'alphabridge-mcp' ), $moved['guide'] ),
 					/* translators: %s: the folder or file of the unit (absolute path). */
 					sprintf( __( 'Target: %s', 'alphabridge-mcp' ), $plan['target'] ),
 					/* translators: %s: the place of the backup of the old version (absolute path). */
@@ -1988,7 +1988,7 @@ final class AB_MCP_Sync_Code_Swap {
 		} else {
 			$by_hand = self::by_hand( $in, $plan );
 			/* translators: 1: what happened (one or more whole sentences), 2: run number. */
-			$message = sprintf( __( '%1$s The step is unclear. The way back of this run puts the old version back (wp_site_revert action=plan with run_id %2$d). Where this site answers no request any more, put it back by hand in a shell on the server, as the lines below say:', 'alphabridge-mcp' ), $why, $in['run_id'] ) . "\n" . implode( "\n", $by_hand );
+			$message = sprintf( __( '%1$s The step is unclear. The way back of this run puts the old version back (wp_site_revert action=plan with run_id %2$d). Where this site answers no request any more, or where that way back is refused on this site (wp_site_revert says why), put it back by hand in a shell on the server, as the lines below say:', 'alphabridge-mcp' ), $why, $in['run_id'] ) . "\n" . implode( "\n", $by_hand );
 		}
 		return self::ended(
 			$in,

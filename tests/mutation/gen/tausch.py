@@ -590,6 +590,10 @@ e('e-weg-a-nur-begonnen', 'close_checked_on(): only a step left begun is asked, 
 e('e-weg-a-nur-schreibschritte', 'close_checked_on(): only a write step or a step of the way back is asked, never one of the checks of the run (way (a); Teil E, section 2)', RU,
   "$code = 'begun' === $step['state'] && in_array( $step['op'], array( 'write', 'revert' ), true ) ?", "$code = 'begun' === $step['state'] ?", 'coderun', E_WA)
 
+# ------------------------------------------- Teil F, section 1: the wording without a licence (R1; skeptic E1, C3 and C5 at T1)
+e('f-t1-marken', 'Revert::code(): the refusal without the entrance names the folder of the marks, where the instruction of a mark still open says how to put the old version back (Teil F, section 1; skeptic E1, C5)', RV,
+  "$id, is_wp_error( $named ) ? 'the protected store' : $named['marks'] ) );", "$id, 'the protected store' ) );", 'coderun', E_NO)
+
 # ------------------------------------------------ check and write
 src = {f: open(os.path.join(ROOT, f)).read() for f in VAR}
 errors = []

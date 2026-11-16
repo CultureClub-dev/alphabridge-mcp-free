@@ -1521,10 +1521,16 @@ final class SyncCodeRunTest extends TestCase {
 	 * file of AB_MCP_Sync_Code_Ops is not loaded), a run of the code is not
 	 * planned back, a way back planned with it does not run its step, and a
 	 * way back interrupted on its step is not led on: each refuses with
-	 * ab_mcp_sync_revert_code and the way by hand, and the run stays as it
-	 * was (its state, its steps, the target).
-	 * Sonst: a way back of code could run past its one entrance (N12), or a
-	 * run of the code be planned back or led on without it.
+	 * ab_mcp_sync_revert_code and the way by hand (the lines of the answer
+	 * of its swap, wp-admin, and the instruction of an open mark in the
+	 * folder of the marks; part F, C5), and the run stays as it was (its
+	 * state, its steps, the target). The sentence of the answer of the swap
+	 * on the way by hand holds in both states (part F, section 1): it names
+	 * the lines below it where the way back is refused on this site, and
+	 * here, with the place emptied, wp_site_revert refuses it and says why.
+	 * Sonst: a way back of code could run past its one entrance (N12), a
+	 * run of the code be planned back or led on without it, or an answer
+	 * name a way that is closed where it says so.
 	 */
 	#[DataProvider( 'no_entrance' )]
 	public function testWithoutTheEntranceARunOfTheCodeIsNeitherPlannedBackNorRunBackNorLedOn( string $at ): void {
@@ -1553,9 +1559,18 @@ final class SyncCodeRunTest extends TestCase {
 			AB_MCP_Sync_Revert::admit( array( 'AB_MCP_Sync_Code_Ops', 'back' ) );
 		}
 		$says = self::refused( $answer, 'ab_mcp_sync_revert_code' );
-		self::assertStringStartsWith( sprintf( 'Run %d swapped plugins or themes, and this installation of AlphaBridge has no way back for code (its entrance is not loaded), so nothing of it is planned, put back or closed.', $run_id ), $says );
+		self::assertStringStartsWith( sprintf( 'Run %d is a run of plugins or themes, and this installation of AlphaBridge has no way back for code (its entrance is not loaded), so none of its steps is planned or put back, and none left begun is closed as checked.', $run_id ), $says, 'The refusal says why.' );
 		self::assertStringContainsString( 'Put the old version back by hand', $says );
+		$named = AB_MCP_Protected_Store::named_by_swap();
+		self::assertIsArray( $named );
+		self::assertStringEndsWith( sprintf( ' Where the mark of a swap of it is still open in %s, its instruction there says how to put the old version back in a shell on the server.', $named['marks'] ), $says );
+		self::assertStringNotContainsString( 'AlphaBridge Pro', $says, 'No reason by a licence.' );
 		self::assertSame( $before, $state(), 'The run, its steps and the target stay as they were.' );
+		// The answer of the swap: the way by hand at the same place, where the
+		// way back is refused, with the lines it names; no reason of its own.
+		$result = self::step( $run_id, 3 )['result'];
+		self::assertStringContainsString( ' or where that way back is refused on this site (wp_site_revert says why), put the old version back by hand in a shell on the server, as the lines below say:' . "\n" . implode( "\n", $result['by_hand'] ), $result['message'] );
+		self::assertStringNotContainsString( 'licence', $result['message'] );
 	}
 
 	/** Where the core asks the entrance: the preview, the step of the way back, its continuation. */
@@ -3107,7 +3122,7 @@ final class SyncCodeRunTest extends TestCase {
 		self::assertFileExists( $guide, 'The instruction of the mark on the server.' );
 		$tail = " The step is unclear.\n"
 			. '1. To go back, call wp_site_revert action=plan with run_id ' . $run_id . ".\n"
-			. '2. Only where this site answers no request any more: in a shell on the server, open the file ' . $guide . " and run the command its first lines point to. The command contains checks; where it does not print OK, stop.\n"
+			. '2. Where this site answers no request any more, or where 1. is refused on this site (wp_site_revert says why): in a shell on the server, open the file ' . $guide . " and run the command its first lines point to. The command contains checks; where it does not print OK, stop.\n"
 			. 'Target: ' . $places['target'] . "\n"
 			. 'Backup: ' . $places['backup'];
 		self::assertSame( $result['message'], $says, 'The journal holds the answer.' );
@@ -3145,7 +3160,7 @@ final class SyncCodeRunTest extends TestCase {
 			'- Nothing is at the target, and the old version is at the place of the backup: section [zwischen-den-umbenennungen].',
 			'- Another entry is at the target, and the old version is at the place of the backup: section [zwischen-den-umbenennungen-ziel-belegt].',
 			'- The new version is at the target, the old version is at the place of the backup, and nothing is at the place of the stage: section [nach-den-umbenennungen].',
-			'Where none of them is true (another inode, or none, where a case names a version; or an entry where a case says that nothing is there), run no command of this file. Stop, and take the way back of the run as soon as the site answers again: wp_site_revert action=plan with run_id ' . $run_id . '.',
+			'Where none of them is true (another inode, or none, where a case names a version; or an entry where a case says that nothing is there), run no command of this file. Stop, and take the way back of the run as soon as the site answers again: wp_site_revert action=plan with run_id ' . $run_id . '; where it refuses it (it says why), put the version of before back in wp-admin by hand.',
 			'',
 		);
 	}
@@ -3556,7 +3571,7 @@ final class SyncCodeRunTest extends TestCase {
 		$result = $step['result'];
 		self::assertNotSame( array(), $result['by_hand'] );
 		self::assertSame(
-			'The mark of the swap could not be read. The step is unclear. The way back of this run puts the old version back (wp_site_revert action=plan with run_id ' . $run_id . '). Where this site answers no request any more, put it back by hand in a shell on the server, as the lines below say:' . "\n" . implode( "\n", $result['by_hand'] ),
+			'The mark of the swap could not be read. The step is unclear. The way back of this run puts the old version back (wp_site_revert action=plan with run_id ' . $run_id . '). Where this site answers no request any more, or where that way back is refused on this site (wp_site_revert says why), put it back by hand in a shell on the server, as the lines below say:' . "\n" . implode( "\n", $result['by_hand'] ),
 			$result['message'],
 			'What happened, the step unclear, the way back and the commands of the result, nothing else.'
 		);
@@ -4216,7 +4231,7 @@ final class SyncCodeRunTest extends TestCase {
 		// commands, as the mark may be closed and its folder go.
 		self::assertSame( array( $target, $backup, $mark['mid'] ), array( $result['target'], $result['backup'], $result['mark'] ) );
 		self::assertNotSame( array(), $result['by_hand'] );
-		$frame = ' The step is unclear. The way back of this run puts the old version back (wp_site_revert action=plan with run_id ' . $run_id . '). Where this site answers no request any more, put it back by hand in a shell on the server, as the lines below say:' . "\n" . implode( "\n", $result['by_hand'] );
+		$frame = ' The step is unclear. The way back of this run puts the old version back (wp_site_revert action=plan with run_id ' . $run_id . '). Where this site answers no request any more, or where that way back is refused on this site (wp_site_revert says why), put it back by hand in a shell on the server, as the lines below say:' . "\n" . implode( "\n", $result['by_hand'] );
 		self::assertStringContainsString( $result['message'], $says, 'The journal holds the answer.' );
 		self::assertStringEndsWith( $frame, $result['message'], 'After what happened: the step unclear, the way back and the commands of the result, nothing else.' );
 		$why = substr( $result['message'], 0, -strlen( $frame ) );
