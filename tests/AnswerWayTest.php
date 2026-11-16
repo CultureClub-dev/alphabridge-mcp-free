@@ -587,6 +587,12 @@ final class AnswerWayTest extends TestCase {
 		'OPcache could not be cleared for %1$s (%2$s), so this site may still run the old code of it.',
 		'The version at %s could not be proved as the one the swap left there (its device, inode or hash differ, or it could not be read whole within the time of this call).',
 		'The old version could not be proved whole in the backup %s (its device or inode differ, its tree did not read back as its hash, or the time of this call ran out before it was read).',
+		// Z8b branch 5, part D3b-2 of the rest: the refusals of the rights of
+		// the account in AB_MCP_Sync_Code_Kind::rights() end with the one
+		// sentence on the run, held there once (its abort, then a new plan
+		// with wp_site_push); SyncCodeKindTest checks it at their end.
+		'Not taken over: this account may not change the files of the theme %1$s on this site in this way (%2$s; with DISALLOW_FILE_EDIT nobody has edit_themes, which the same version with other files takes).',
+		'Not taken over: this account may not change the files of the plugin %1$s on this site in this way (%2$s; with DISALLOW_FILE_EDIT nobody has edit_plugins, which the same version with other files takes).',
 	);
 
 	/**

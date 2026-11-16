@@ -32,6 +32,9 @@ require_once dirname( __DIR__ ) . '/includes/sync/class-sync-pairs.php';
 
 final class SyncCodeKindTest extends TestCase {
 
+	/** The one sentence on the run that each refusal of rights() ends with (part D3b-2 of the rest). */
+	const ABORT = 'Abort the run first with its own account and connection (wp_site_push action=abort), then plan a new one (wp_site_push action=plan), without this entry where it stays refused.';
+
 	protected function setUp(): void {
 		ab_test_reset();
 		AB_MCP_Sync_Kinds::reset();
@@ -89,6 +92,13 @@ final class SyncCodeKindTest extends TestCase {
 		self::assertInstanceOf( WP_Error::class, $answer );
 		self::assertSame( $code, $answer->get_error_code(), $answer->get_error_message() );
 		return $answer->get_error_message();
+	}
+
+	/** A refusal of rights() says of the run only the one sentence, at its end, once. */
+	private static function on_the_run( string $message ): void {
+		self::assertStringEndsWith( ' ' . self::ABORT, $message, 'The way on the run, at the end.' );
+		self::assertSame( 1, substr_count( $message, self::ABORT ), 'Of the run only that one sentence, once.' );
+		self::assertSame( 0, preg_match( '/\b(run|plan)\b/i', substr( $message, 0, -strlen( self::ABORT ) ) ), 'No other sentence names the run or a plan: ' . $message );
 	}
 
 	public function testTheEngineIsTheOneRegisteredUnderTheNameCodeAndMovesTheFilesOfAPluginAndOfATheme(): void {
@@ -153,9 +163,10 @@ final class SyncCodeKindTest extends TestCase {
 			$message = self::refused( $engine->rights( $op, $ref ), 'ab_mcp_sync_rights' );
 			self::assertStringContainsString( '(' . $missing . ';', $message, 'The capability is named.' );
 			self::assertStringContainsString( explode( ':', $ref, 2 )[1], $message, 'The unit is named.' );
-			// The way: the run is the one of this account and connection, so
-			// it aborts it first, then a new run (Codex D6, finding 3).
-			self::assertStringContainsString( 'The run belongs to this account and this connection: abort it with them first (wp_site_push action=abort), then plan a new run (wp_site_push action=plan) with an account that may, or without this entry.', $message, 'With the way, the abort first.' );
+			// The way: the run is the one of its own account and connection,
+			// so it is aborted first, then a new one (Codex D6, finding 3), in
+			// the one sentence of all refusals of rights().
+			self::on_the_run( $message );
 			self::assertStringContainsString( 0 === strpos( $ref, 'theme:' ) ? 'the theme ' : 'the plugin ', $message );
 			self::assertSame( 0, $calls->methods, 'No file system method asked for an account without the right: it writes a test file (Codex D6, finding 2).' );
 		}
@@ -175,6 +186,7 @@ final class SyncCodeKindTest extends TestCase {
 			$message = self::refused( $engine->rights( 'update', 'plugin:shop' ), 'code:file_mods' );
 			self::assertStringContainsString( 'DISALLOW_FILE_MODS', $message );
 			self::assertStringContainsString( 'Ask the host or the site administrator to lift the setting', $message, 'With the way.' );
+			self::on_the_run( $message );
 			self::assertSame( array(), $calls->asked, 'No capability is asked.' );
 		}
 		// Another file system method, and none named (unknown): asked only
@@ -184,7 +196,8 @@ final class SyncCodeKindTest extends TestCase {
 			$calls   = self::calls( $caps, true, $method );
 			$message = self::refused( $engine->rights( 'update', 'plugin:shop' ), 'code:file_mods' );
 			self::assertStringContainsString( 'not direct', $message );
-			self::assertStringContainsString( 'make the plan again', $message, 'With the way.' );
+			self::assertStringContainsString( 'update it by hand in wp-admin', $message, 'With the way.' );
+			self::on_the_run( $message );
 			self::assertSame( array( array( 'upload_plugins', 'update_plugins' ), 1 ), array( $calls->asked, $calls->methods ), 'The capabilities first, then the method once.' );
 		}
 		self::calls( $caps );

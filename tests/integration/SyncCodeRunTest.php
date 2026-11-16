@@ -971,7 +971,7 @@ final class SyncCodeRunTest extends TestCase {
 			clearstatcache();
 			self::assertSame( array( 0, $then ), array( $asked, filemtime( WP_CONTENT_DIR ) ), 'No file system method asked, nothing written in wp-content.' );
 			self::assertSame( array(), glob( WP_CONTENT_DIR . '/temp-write-test-*' ), 'No test file of the method in wp-content.' );
-			$says = self::nothing_begun( $run_id, $target, $before, $answer, 'ab_mcp_sync_rights', 'The run belongs to this account and this connection: abort it with them first (wp_site_push action=abort), then plan a new run (wp_site_push action=plan) with an account that may, or without this entry.' );
+			$says = self::nothing_begun( $run_id, $target, $before, $answer, 'ab_mcp_sync_rights', 'Abort the run first with its own account and connection (wp_site_push action=abort), then plan a new one (wp_site_push action=plan), without this entry where it stays refused.' );
 			self::assertStringContainsString( 'may not change the files of the plugin ab-it-inaktiv on this site in this way (edit_plugins; with DISALLOW_FILE_EDIT nobody has edit_plugins', $says );
 			// The way the answer names (Codex D6, finding 3): another account
 			// may not go on with the run nor abort it; this one aborts it, and
