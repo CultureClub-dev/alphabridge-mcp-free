@@ -2096,9 +2096,11 @@ final class AB_MCP_Sync_Code_Swap {
 	public static function back( $at, array $run, array $step, $unit, $swap, $accept = false ) {
 		$journal = is_array( $unit ) && is_array( $swap ) && ( ! isset( $swap['unread'] ) || array() === $swap['unread'] ) ? AB_MCP_Store_Inputs::read( 'step.swap', $swap['parts'] ) : null;
 		if ( null === $journal || $unit['kind'] !== $journal['unit']['kind'] || $unit['ref'] !== $journal['unit']['ref'] || AB_MCP_Sync_Code_Stage::target( $unit['kind'], $unit['ref'] ) !== $journal['target'] ) {
+			// A step of the way back whose entry does not read back names
+			// none: the sentence names that step itself (rest of B4).
 			$what = 'plan' === $at ? array( 'forward_seq' => $step['seq'] ) : (array) $step['parts'];
 			/* translators: 1: step number, 2: run number. */
-			$no = sprintf( __( 'Step %1$d of run %2$d does not read as a swap of code wrote it (its unit in the plan of the run, or its journal), so no way back is planned or run on it and nothing of it is put back. Check the unit by hand in wp-admin, or with the lines the answer of its swap named (wp_site_push action=status) or, where its mark is still open, its instruction.', 'alphabridge-mcp' ), (int) ( $what['forward_seq'] ?? 0 ), (int) ( $what['forward_run'] ?? $run['run_id'] ) );
+			$no = sprintf( __( 'Step %1$d of run %2$d does not read as a swap of code wrote it (its unit in the plan of the run, or its journal), so no way back is planned or run on it and nothing of it is put back. Check the unit by hand in wp-admin, or with the lines the answer of its swap named (wp_site_push action=status) or, where its mark is still open, its instruction.', 'alphabridge-mcp' ), (int) ( $what['forward_seq'] ?? $step['seq'] ), (int) ( $what['forward_run'] ?? $run['run_id'] ) );
 			// The way of the other steps only where it is open: a plan takes
 			// steps; the continuation, the step of the way back and way (a)
 			// take the same refusal again (skeptic E1, B3).

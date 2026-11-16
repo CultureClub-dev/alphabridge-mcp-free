@@ -136,9 +136,11 @@ final class AB_MCP_Sync_Revert {
 	 * closed as AB_MCP_Sync_Engine::fresh()); the refusal with the way
 	 * where it holds one and no entrance is here, nothing planned, written
 	 * or closed (closed as checked neither); else the answer of the
-	 * entrance. The run that wrote: the run itself for plan, else the one
-	 * the step of the way back names (forward_run; this run where it names
-	 * none or itself).
+	 * entrance. The run that wrote: the run itself, or for a run of the way
+	 * back of its own (type revert) the one its plan names (reverts), never
+	 * what a step names: a step of the way back whose entry does not read
+	 * back names none (rest of B4). A run of the way back whose plan names
+	 * none is not known, as a record that does not read back.
 	 *
 	 * @param string $at     plan (a write step, for the preview), continue (a step of the way back still open, for the preview of its continuation), revert (the step of the way back runs) or checked (a step left begun of a run closed as checked, way (a)).
 	 * @param array  $run    The run.
@@ -147,16 +149,17 @@ final class AB_MCP_Sync_Revert {
 	 * @return mixed|null|WP_Error
 	 */
 	public static function code( $at, array $run, array $step, $accept = false ) {
-		$id      = 'plan' !== $at && is_array( $step['parts'] ) && isset( $step['parts']['forward_run'] ) ? (int) $step['parts']['forward_run'] : (int) $run['run_id'];
+		$id      = 'revert' === $run['type'] && isset( $run['plan']['reverts'][0] ) ? (int) $run['plan']['reverts'][0] : (int) $run['run_id'];
 		$forward = $id === (int) $run['run_id'] ? $run : AB_MCP_Sync_Run::get( $id );
 		if ( ! is_array( $forward ) ) {
 			return is_wp_error( $forward ) ? $forward : AB_MCP_Sync_Run::unknown( $id );
 		}
-		// A record of the run that wrote that does not read back, or a plan
-		// that is none: whether it is a run of the code is not known, so
-		// nothing of it is decided here, as AB_MCP_Sync_Engine::fresh() does
-		// (fail closed; skeptic E1, B4), never a run of the contents.
-		if ( isset( $forward['unread'] ) || ! is_array( $forward['plan'] ) ) {
+		// A record of the run that wrote that does not read back, a plan that
+		// is none, or a run of the way back whose plan names no run it takes
+		// back: whether it is a run of the code is not known, so nothing of
+		// it is decided here, as AB_MCP_Sync_Engine::fresh() does (fail
+		// closed; skeptic E1, B4), never a run of the contents.
+		if ( isset( $forward['unread'] ) || ! is_array( $forward['plan'] ) || 'revert' === $forward['type'] ) {
 			/* translators: 1: run number, 2: the fields of its record that do not read back, as the tools name them (plan, budget, …), separated by commas. */
 			return new WP_Error( 'ab_mcp_sync_run_unread', sprintf( __( 'Nothing of run %1$d is planned back, put back or closed as checked: its record (%2$s) does not read back as it was written, so whether it swapped plugins or themes is not known. Ask the host to check the table of the runs; where it swapped one, put the old version back by hand in wp-admin with the version of before.', 'alphabridge-mcp' ), $id, implode( ', ', $forward['unread'] ?? array( 'plan' ) ) ) );
 		}

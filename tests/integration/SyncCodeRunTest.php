@@ -44,6 +44,7 @@ use AB_MCP_REST_Controller;
 use AB_MCP_Staging;
 use AB_MCP_Sync_Anchor;
 use AB_MCP_Sync_Backup;
+use AB_MCP_Sync_Canon;
 use AB_MCP_Sync_Code_Ops;
 use AB_MCP_Sync_Code_Plan;
 use AB_MCP_Sync_Code_Stage;
@@ -1642,6 +1643,92 @@ final class SyncCodeRunTest extends TestCase {
 		if ( 'next' === $at ) {
 			self::assertSame( 'done', self::back_step( $back )['state'], 'With its plan read back, the step of the way back puts the old version back.' );
 		}
+	}
+
+	/**
+	 * Prüft: N12, fail closed (rest of B4, decision of the lead): where the
+	 * entry of a step of the way back does not read back (its parts with a
+	 * marker of bytes that does not hold, written by SQL), the core still
+	 * asks the one entrance for it: the run that wrote is the one the plan
+	 * of the run of the way back names (reverts), not what the step names.
+	 * With the entrance, the continuation of the way back interrupted on it
+	 * (action=plan) and way (a) refuse with nothing written, and the step
+	 * of the way back (next) fails through the entrance with nothing moved,
+	 * its sentence naming that step; without the entrance each refuses with
+	 * ab_mcp_sync_revert_code and nothing written. A run of the way back
+	 * whose plan names no run it takes back is refused as not known
+	 * (ab_mcp_sync_run_unread). Never the sentence of the contents.
+	 * Sonst: a step of the way back of a swap whose entry does not read
+	 * would go to the contents past the one entrance: way (a) would close
+	 * it as checked without asking the entrance, and the preview and the
+	 * step would speak of contents.
+	 */
+	#[DataProvider( 'entry_unread' )]
+	public function testAStepOfTheWayBackWhoseEntryDoesNotReadBackStillGoesThroughTheOneEntrance( string $at, bool $entrance, string $unread ): void {
+		global $wpdb;
+		list( $run_id, , $target ) = self::swapped_f56();
+		// The run closed first: its way back is a run of its own (revert).
+		for ( $i = 0; $i < 6 && ! in_array( AB_MCP_Sync_Run::get( $run_id )['state'], AB_MCP_Sync_Schema::CLOSED, true ); $i++ ) {
+			self::next( $run_id );
+		}
+		$back = self::planned_back( $run_id );
+		$seq  = (int) self::back_step( $back )['seq'];
+		if ( 'next' !== $at ) {
+			// The step of the way back begun by a call that ended without its
+			// end: the run of the way back is interrupted on it.
+			self::assertTrue( AB_MCP_Sync_Run::update_step( $back, $seq, array( 'state' => 'begun' ), 'planned' ) );
+			self::assertSame( 'interrupted', self::gated( 'wp_site_push', array( 'action' => 'status', 'run_id' => $back ) )['state'] );
+		}
+		if ( 'parts' === $unread ) {
+			self::assertSame( 1, $wpdb->update( AB_MCP_Sync_Schema::table( 'steps' ), array( 'parts' => '{"forward_run":{"~f":"000000000000f03f"}}' ), array( 'run_id' => $back, 'seq' => $seq ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			self::assertSame( array( 'parts' ), AB_MCP_Sync_Run::step( $back, $seq )['unread'], 'The entry of the step of the way back does not read back.' );
+		} else {
+			$plan = AB_MCP_Sync_Run::get( $back )['plan'];
+			self::assertSame( 1, $wpdb->update( AB_MCP_Sync_Schema::table( 'runs' ), array( 'plan' => AB_MCP_Sync_Canon::encode( array( 'items' => $plan['items'] ) ) ), array( 'run_id' => $back ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			self::assertSame( array( 'items' ), array_keys( AB_MCP_Sync_Run::get( $back )['plan'] ), 'The plan of the run of the way back names no run it takes back.' );
+		}
+		$state  = static fn(): array => array( AB_MCP_Sync_Run::get( $back )['state'], array_column( AB_MCP_Sync_Run::steps( $back ), 'state', 'seq' ), self::bytes_of( $target ) );
+		$before = $state();
+		if ( ! $entrance ) {
+			AB_MCP_Sync_Revert::admit( null );
+		}
+		try {
+			$answer = 'checked' === $at ? AB_MCP_Sync_Run::close_checked( $back, self::admin(), true ) : self::gated( 'wp_site_revert', array( 'action' => 'next' === $at ? 'next' : 'plan', 'run_id' => $back ) );
+		} finally {
+			AB_MCP_Sync_Revert::admit( array( 'AB_MCP_Sync_Code_Ops', 'back' ) );
+		}
+		self::assertStringNotContainsString( 'names no written step with a journal', is_wp_error( $answer ) ? $answer->get_error_message() : (string) json_encode( $answer ), 'Never the sentence of the contents.' );
+		if ( 'plan' === $unread ) {
+			$says = self::refused( $answer, 'ab_mcp_sync_run_unread' );
+			self::assertStringStartsWith( sprintf( 'Nothing of run %d is planned back, put back or closed as checked: its record (plan) does not read back as it was written', $back ), $says );
+		} elseif ( ! $entrance ) {
+			$says = self::refused( $answer, 'ab_mcp_sync_revert_code' );
+			self::assertStringStartsWith( sprintf( 'Run %d is a run of plugins or themes, and this installation of AlphaBridge has no way back for code', $run_id ), $says, 'The run that wrote, from the plan of the way back.' );
+		} elseif ( 'next' !== $at ) {
+			$says = self::refused( $answer, 'code:journal_unknown' );
+			self::assertStringStartsWith( sprintf( 'Step %1$d of run %2$d does not read as a swap of code wrote it', $seq, $back ), $says, 'The entrance names the step whose entry does not read.' );
+		} else {
+			self::assertIsArray( $answer, is_wp_error( $answer ) ? $answer->get_error_code() . ': ' . $answer->get_error_message() : '' );
+			$step = self::step( $back, $seq );
+			self::assertSame( 'failed', $step['state'], 'The step of the way back fails through the entrance.' );
+			self::assertStringStartsWith( sprintf( 'Step %1$d of run %2$d does not read as a swap of code wrote it', $seq, $back ), $step['result']['message'] );
+			self::assertSame( $before[2], $state()[2], 'Nothing is moved: the target is byte for byte what it was.' );
+			return;
+		}
+		self::assertSame( $before, $state(), 'Nothing was written: the run, its steps and the target stay as they were.' );
+	}
+
+	/** Where the core asks for a step of a run of the way back of its own: its step (next), its continuation (action=plan), way (a); with and without the entrance; its entry or the plan of the run not read. */
+	public static function entry_unread(): array {
+		return array(
+			'next'                          => array( 'next', true, 'parts' ),
+			'continue'                      => array( 'continue', true, 'parts' ),
+			'way (a)'                       => array( 'checked', true, 'parts' ),
+			'next without the entrance'     => array( 'next', false, 'parts' ),
+			'continue without the entrance' => array( 'continue', false, 'parts' ),
+			'way (a) without the entrance'  => array( 'checked', false, 'parts' ),
+			'a plan that names no run'      => array( 'continue', true, 'plan' ),
+		);
 	}
 
 	/**

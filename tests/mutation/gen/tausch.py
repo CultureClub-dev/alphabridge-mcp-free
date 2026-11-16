@@ -541,8 +541,8 @@ e('e-platz', 'restored(): the place of the new version not given (open() or put_
 e('e-plan-schritte', 'Tausch::back(): the way of the other steps (steps without the swap) only in a plan, never where the step of the way back, its continuation or way (a) take the same refusal again (skeptic E1, B3)', CS,
   "\t\t\tif ( 'plan' === $at ) {", "\t\t\tif ( true ) {", 'coderun', 'testAJournalThatNoLongerReadsAsASwapFailsItsStepOfTheWayBackWithNothingMoved')
 e('e-plan-ungelesen', 'Revert::code(): a record of the run that wrote that does not read back, or a plan that is none, is refused, never taken for a run of the contents past the one entrance (N12, fail closed; skeptic E1, B4)', RV,
-  "\t\tif ( isset( $forward['unread'] ) || ! is_array( $forward['plan'] ) ) {\n",
-  "\t\tif ( ! is_array( $forward['plan'] ) ) {\n\t\t\treturn null;\n\t\t}\n\t\tif ( false ) {\n", 'coderun', 'testARunOfTheCodeWhosePlanDoesNotReadBackIsNeitherPlannedBackNorRunBackNorLedOn')
+  "\t\tif ( isset( $forward['unread'] ) || ! is_array( $forward['plan'] ) || 'revert' === $forward['type'] ) {\n",
+  "\t\tif ( ! is_array( $forward['plan'] ) ) {\n\t\t\treturn null;\n\t\t}\n\t\tif ( 'revert' === $forward['type'] ) {\n", 'coderun', 'testARunOfTheCodeWhosePlanDoesNotReadBackIsNeitherPlannedBackNorRunBackNorLedOn')
 e('e-fremde-engine', 'restore(): a WP_Error of engine() (another engine under the name code) is the answer of the way back as it is, never a refusal of the rights (skeptic E1, C2)', CS,
   "\t\tif ( ! $engine instanceof AB_MCP_Sync_Code_Kind ) {\n\t\t\treturn $engine;\n\t\t}\n\t\t$rights = $engine->rights(",
   "\t\t$rights = is_wp_error( $engine ) ? $engine : $engine->rights(", 'coderun', 'testTheWayBackAsksTheRightsBeforeItsFirstWriteAndStaysPlannedWithoutThem')
@@ -593,6 +593,16 @@ e('e-weg-a-nur-schreibschritte', 'close_checked_on(): only a write step or a ste
 # ------------------------------------------- Teil F, section 1: the wording without a licence (R1; skeptic E1, C3 and C5 at T1)
 e('f-t1-marken', 'Revert::code(): the refusal without the entrance names the folder of the marks, where the instruction of a mark still open says how to put the old version back (Teil F, section 1; skeptic E1, C5)', RV,
   "$id, is_wp_error( $named ) ? 'the protected store' : $named['marks'] ) );", "$id, 'the protected store' ) );", 'coderun', E_NO)
+
+# ------------------------------------------- the rest of B4: a step of the way back whose entry does not read back (decision of the lead)
+E_EU = 'testAStepOfTheWayBackWhoseEntryDoesNotReadBackStillGoesThroughTheOneEntrance'
+e('f-b4-rueckweg-lauf', 'Revert::code(): for a run of the way back of its own the run that wrote is the one its plan names (reverts), never what a step of it names, so a step whose entry does not read back still goes through the one entrance (N12, fail closed; rest of B4)', RV,
+  "\t\t$id      = 'revert' === $run['type'] && isset( $run['plan']['reverts'][0] ) ? (int) $run['plan']['reverts'][0] : (int) $run['run_id'];",
+  "\t\t$id      = 'plan' !== $at && is_array( $step['parts'] ) && isset( $step['parts']['forward_run'] ) ? (int) $step['parts']['forward_run'] : (int) $run['run_id'];", 'coderun', E_EU)
+e('f-b4-ohne-reverts', 'Revert::code(): a run of the way back whose plan names no run it takes back is not known and refused, never taken for a run of the contents (fail closed; rest of B4)', RV,
+  " || ! is_array( $forward['plan'] ) || 'revert' === $forward['type'] ) {", " || ! is_array( $forward['plan'] ) ) {", 'coderun', E_EU)
+e('f-b4-satz-schritt', 'Tausch::back(): a step of the way back whose entry does not read back is named itself in the sentence of the entrance, never as a step 0 (rest of B4)', CS,
+  "(int) ( $what['forward_seq'] ?? $step['seq'] ),", "(int) ( $what['forward_seq'] ?? 0 ),", 'coderun', E_EU)
 
 # ------------------------------------------------ check and write
 src = {f: open(os.path.join(ROOT, f)).read() for f in VAR}
