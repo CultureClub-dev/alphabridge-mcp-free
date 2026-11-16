@@ -294,8 +294,8 @@ return array(
 	// includes/sync/class-sync-code-kind.php (Z8b branch 5: the rights of a step of the code, E10)
 	'This site does not let WordPress change its files (DISALLOW_FILE_MODS in wp-config.php, or a filter on file_mod_allowed), so no plugin and no theme is taken over here. Ask the host or the site administrator to lift the setting, or update the plugin or theme by hand over SFTP.',
 	'WordPress does not write files directly on this site (its file system method is not direct), and a plugin or theme is taken over by renaming folders, which only the direct method does. Ask the host to let PHP write the folders of plugins and themes as their owner, or update it by hand in wp-admin.',
-	'Not taken over: this account may not change the files of the theme %1$s on this site in this way (%2$s; with DISALLOW_FILE_EDIT nobody has edit_themes, which the same version with other files takes). An account with %2$s may take it over.',
-	'Not taken over: this account may not change the files of the plugin %1$s on this site in this way (%2$s; with DISALLOW_FILE_EDIT nobody has edit_plugins, which the same version with other files takes). An account with %2$s may take it over.',
+	'Not taken over: this account may not change the files of the theme %1$s on this site in this way (%2$s; with DISALLOW_FILE_EDIT nobody has edit_themes, which the same version with other files takes).',
+	'Not taken over: this account may not change the files of the plugin %1$s on this site in this way (%2$s; with DISALLOW_FILE_EDIT nobody has edit_plugins, which the same version with other files takes).',
 	'Abort the run first with its own account and connection (wp_site_push action=abort), then plan a new one (wp_site_push action=plan), without this entry where it stays refused.',
 	// includes/sync/class-sync-push.php (Z8b branch 5: a unit of code is no step of the contents, E19)
 	'A plugin or theme is taken over by a run of the code of its own, which holds no step of the contents: plan it without the entries of the contents, by its number in select (and in accept where its code runs on this site). all=true leaves it out.',

@@ -29,6 +29,14 @@
  *   AB_MCP_Protected_Store::uninstall(), which no shipped code calls
  *   otherwise, and names no folder of the store.
  *
+ * The walk of the calls (calls()) reads a fixed name in every spelling of
+ * the global namespace (rename(), \rename(), namespace\rename(),
+ * \Class::) as the name itself and keeps a qualified one (Ns\rename())
+ * apart; it stops with a failure at an import (use function … as, use
+ * Class as …), which it does not follow, and it does not see a dynamic
+ * call ($f( … ), call_user_func( 'rename', … )). Its own test reads the
+ * spellings in tests/fixtures/t7-walker/.
+ *
  * What the code does at run time is tests/integration/StoreRemoverTest.php
  * and StoreTreesTest.php.
  *
@@ -40,6 +48,7 @@ declare( strict_types = 1 );
 namespace AlphaBridge\Tests;
 
 use AB_MCP_Protected_Store;
+use PHPUnit\Framework\AssertionFailedError;
 use PHPUnit\Framework\TestCase;
 
 // The class whose table the cases read, loaded here: never from an earlier
@@ -62,7 +71,9 @@ final class StoreRemoverGuardTest extends TestCase {
 	 * as the function it is written in). A name in any spelling of the
 	 * global namespace (\rename(), namespace\rename(), \Class::) counts as
 	 * the name itself (Codex D9); a qualified one (Ns\rename()) keeps its
-	 * namespace, as it names another function.
+	 * namespace, as it names another function. An import (use function …
+	 * as, use Class as …) gives a name another one, which the walk does not
+	 * follow: it stops there with a failure (the skeptic over D3b-2b, B2).
 	 *
 	 * @return array<int,array{kind:string,name:string,of:string,class:string|null,function:string|null,args:string,line:int}>
 	 */
@@ -79,6 +90,11 @@ final class StoreRemoverGuardTest extends TestCase {
 		$n       = count( $tokens );
 		for ( $i = 0; $i < $n; $i++ ) {
 			$t = $tokens[ $i ];
+			// An import: a use outside a class that is not the use ( … ) of a
+			// closure (a use inside a class takes a trait).
+			if ( is_array( $t ) && T_USE === $t[0] && '(' !== ( $tokens[ $i + 1 ] ?? null ) && ! in_array( 'class', array_column( $stack, 0 ), true ) ) {
+				self::fail( $file . ':' . $t[2] . ': an import (use) gives a function or a class a name of the file\'s own, which the walk of the guards does not follow. Call it by its own name.' );
+			}
 			if ( is_array( $t ) && T_CLASS === $t[0] && isset( $tokens[ $i + 1 ] ) && is_array( $tokens[ $i + 1 ] ) && T_STRING === $tokens[ $i + 1 ][0] ) {
 				$pending = array( 'class', $tokens[ $i + 1 ][1] );
 				continue;
@@ -212,6 +228,41 @@ final class StoreRemoverGuardTest extends TestCase {
 		self::assertGreaterThan( 300, count( $calls ) );
 		self::assertContains( 'AB_MCP_Protected_Store::delete_path', self::places( self::FILES[0], 'method', 'unlink' ) );
 		self::assertContains( 'AB_MCP_Protected_Store::self_check', self::places( self::FILES[0], 'static', 'write', 'AB_MCP_Payload_File' ) );
+	}
+
+	/**
+	 * Prüft: the walk reads a fixed name in every spelling of the global
+	 * namespace as the name itself (rename(), \rename(), namespace\rename(),
+	 * \Class:: and namespace\Class::, also in a closure with its use ( … ),
+	 * in a class or outside one), keeps a qualified one apart (Ns\rename(),
+	 * Ns\Class:: name others), and stops with a failure at an import of a
+	 * function or a class under a name of the file's own (Codex D9; the
+	 * skeptic over D3b-2b, B2 and C1).
+	 * Sonst: a walk taken back to plain names, or one that read an alias as
+	 * no call, would leave a guard of the one places green while PHP's
+	 * rename(), unlink() or rmdir() is called past them.
+	 */
+	public function testTheWalkReadsEverySpellingOfAFixedNameAndStopsAtAnImport(): void {
+		$dir  = 'tests/fixtures/t7-walker/';
+		$seen = array();
+		foreach ( self::calls( $dir . 'spellings.php' ) as $call ) {
+			$seen[] = $call['kind'] . ' ' . ( '' === $call['of'] ? '' : $call['of'] . '::' ) . $call['name'] . ' in ' . $call['class'] . '::' . $call['function'];
+		}
+		$in = ' in AB_MCP_Walker_Spellings::all';
+		self::assertSame(
+			array( 'function rename' . $in, 'function rename' . $in, 'function rename' . $in, 'function ns\\rename' . $in, 'static AB_MCP_Payload_File::write' . $in, 'static AB_MCP_Payload_File::write' . $in, 'static Ns\\AB_MCP_Payload_File::write' . $in, 'method rename' . $in, 'function rename' . $in, 'function rename in ::' ),
+			$seen
+		);
+		foreach ( array( 'import-function.php', 'import-class.php' ) as $file ) {
+			$stopped = null;
+			try {
+				self::calls( $dir . $file );
+			} catch ( AssertionFailedError $e ) {
+				$stopped = $e->getMessage();
+			}
+			self::assertIsString( $stopped, $file . ': the walk stops at the import.' );
+			self::assertStringStartsWith( $dir . $file . ':9: an import (use)', $stopped );
+		}
 	}
 
 	public function testNothingRemovesInTheStoreButDeletePath(): void {
