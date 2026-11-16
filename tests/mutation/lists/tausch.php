@@ -1141,6 +1141,15 @@ return array(
 		'expect'  => '/testAClockThatGivesNoTimeBeforeTheFirstWriteOfTheSwapRefusesItBeforeAnythingIsWritten/',
 	),
 	array(
+		'id'      => 'tausch/d4-clock-before-writes',
+		'clause'  => 'swapped(): a clock of the run that gives no time refuses the swap before the group of the backups and the rights of the stage, nothing in the protected store (Codex D4, finding 4)',
+		'file'    => $cs,
+		'search'  => "\t\tif ( null === AB_MCP_Sync_Run::now() ) {\n\t\t\treturn AB_MCP_Sync_Run::clock_unknown();",
+		'replace' => "\t\tif ( false ) {\n\t\t\treturn AB_MCP_Sync_Run::clock_unknown();",
+		'run'     => $it( 'SyncCodeRunTest', 'testAClockThatGivesNoTimeBeforeTheFirstWriteOfTheSwapRefusesItBeforeAnythingIsWritten' ),
+		'expect'  => '/testAClockThatGivesNoTimeBeforeTheFirstWriteOfTheSwapRefusesItBeforeAnythingIsWritten/',
+	),
+	array(
 		'id'      => 'tausch/d2b-live-whole',
 		'clause'  => 'unchanged() in prepare(): a unit not read whole (F38: too large for the hash of one call) is refused before the first mutation (D2b 2)',
 		'file'    => $cs,

@@ -427,4 +427,7 @@ return array(
 	'The target is taken by another entry; the old version lies whole in the backup. Only after that entry is moved away, put the old version back and check it:',
 	'The %1$s %2$s is not at its place: its old version was moved into the backup, the new one could not be put at the target, and the old one could not be put back, as another entry is at the target %3$s (ls -la %4$s shows it).',
 	'%1$s The step is unclear; that the mark of the swap is closed is not confirmed (it was written so, and read once more it did not tell its state). The way back of this run puts the old version back (wp_site_revert action=plan with run_id %2$d). Where this site answers no request any more, put it back by hand in a shell on the server, as the lines below say:',
+	// includes/sync/class-sync-code-swap.php and includes/sync/class-sync-code-ops.php (Z8b branch 5, the Behebung of Codex D4: F38 in put_tree(), F43).
+	'%1$s So the %2$s %3$s is not swapped. Call action=next again; where it keeps failing, update it by hand in wp-admin.',
+	'The paths of the files missing here (the first 2000 where more are missing), for paths of wp_site_export: %1$s. This run does not stage the %2$s %3$s again: plan a new run (wp_site_push action=plan) with every package of the unit, the one with these files as well; where this run is still open, abort it first (wp_site_push action=abort).',
 );

@@ -1142,17 +1142,26 @@ final class AB_MCP_Sync_Code_Swap {
 	}
 
 	/**
-	 * The swap after prepare() answered, under its lock: what it moves, read
-	 * before anything is written (plan_of()); the new version given the
-	 * rights of the site (given_rights()); the time kept for the swap asked
-	 * once more right before the first write (the place of the backup read
-	 * the target whole); rename_marked(); and its end.
+	 * The swap after prepare() answered, under its lock. What is asked
+	 * without writing comes before the writes that prepare the swap in the
+	 * protected store, the group of the backups (plan_of()) and the rights
+	 * of the stage (given_rights()) (Codex D4, finding 4): the clock of the
+	 * run, here; the time kept for the swap and the unit read whole within
+	 * one call, last in prepare(). Then what it moves, read from the target
+	 * (plan_of()); the new version given the rights of the site; the time
+	 * kept for the swap asked once more right before the first write (the
+	 * place of the backup read the target whole, the rights took their
+	 * time); rename_marked(), which reads the clock of the run again for the
+	 * time the swap begins; and its end.
 	 *
 	 * @param array $in       The arguments, read in the form of the row swap.prepare.
 	 * @param array $prepared prepare().
 	 * @return array|WP_Error
 	 */
 	private static function swapped( array $in, array $prepared ) {
+		if ( null === AB_MCP_Sync_Run::now() ) {
+			return AB_MCP_Sync_Run::clock_unknown();
+		}
 		$plan = self::plan_of( $in, $prepared );
 		if ( is_wp_error( $plan ) ) {
 			return $plan;
@@ -1192,6 +1201,14 @@ final class AB_MCP_Sync_Code_Swap {
 		$gid    = AB_MCP_Sync_Backup::group( $in['run_id'] );
 		$place  = is_wp_error( $gid ) ? $gid : AB_MCP_Protected_Store::put_tree( 'backups', $gid, $name, $target );
 		if ( is_wp_error( $place ) ) {
+			$cause = $place->get_error_data();
+			if ( 'ab_mcp_store_tree_unread' === $place->get_error_code() && is_array( $cause ) && 'too_large' === ( $cause['cause'] ?? null ) ) {
+				// F38: a target too large to be read whole within one call stays
+				// so in the next call and the next run (Codex D4, finding 6), as
+				// in prepare() (unchanged()).
+				/* translators: 1: why the target was not read whole (one or more whole sentences), 2: kind of the unit, as the tools name it (plugin, theme), 3: its name. */
+				return self::refusal( $place->get_error_code(), sprintf( __( '%1$s So the %2$s %3$s is not swapped. Call action=next again; where it keeps failing, update it by hand in wp-admin.', 'alphabridge-mcp' ), $place->get_error_message(), $kind, $ref ) );
+			}
 			/* translators: 1: why the stage or the signed manifest was not read (one or more whole sentences), 2: kind of the unit, as the tools name it (plugin, theme), 3: its name. */
 			return self::refusal( $place->get_error_code(), sprintf( __( '%1$s So the %2$s %3$s is not swapped. Call action=next again; where it keeps failing, abort the run (wp_site_push action=abort) and plan again.', 'alphabridge-mcp' ), $place->get_error_message(), $kind, $ref ) );
 		}

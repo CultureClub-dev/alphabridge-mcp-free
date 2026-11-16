@@ -1733,32 +1733,56 @@ final class SyncCodeRunTest extends TestCase {
 
 	/* ------------------------- D2b: the refusals before the first mutation */
 
-	/** The site and the swap as they are before a call that is to refuse (D2b): the old version, the note of the replacement. */
+	/** The site and the swap as they are before a call that is to refuse (D2b): the old version and its identity, the note of the replacement, the groups of the backups. */
 	private static function before_swap( string $target ): array {
 		clearstatcache();
+		$id = lstat( $target );
 		return array(
-			'old'   => self::digest( $target ),
-			'note'  => self::replaced_row(),
-			'since' => AB_MCP_Update_Log::replaced_at( 'plugin', 'ab-it-aktiv' ),
+			'old'    => self::digest( $target ),
+			'id'     => array( $id['dev'], $id['ino'] ),
+			'note'   => self::replaced_row(),
+			'since'  => AB_MCP_Update_Log::replaced_at( 'plugin', 'ab-it-aktiv' ),
+			'groups' => self::backup_groups(),
 		);
 	}
 
+	/** The groups of the area backups of the protected store, by their id. */
+	private static function backup_groups(): array {
+		$groups = AB_MCP_Protected_Store::groups( 'backups' );
+		self::assertIsArray( $groups, is_wp_error( $groups ) ? $groups->get_error_message() : '' );
+		$gids = array_column( $groups, 'gid' );
+		sort( $gids, SORT_STRING );
+		return $gids;
+	}
+
 	/**
-	 * A swap refused before its first mutation (D2b): the refusal with its
-	 * code and its way; the step planned, without a journal; no call of the
-	 * swap that writes (the journal, the mark, the note, a rename, the close
-	 * of a mark, the file undo points); no mark, no note of the replacement;
+	 * A swap refused before its first mutation at the target (D2b; Codex
+	 * D4, finding 4): the refusal with its code and its way; the step
+	 * planned, without a journal; no call of the swap that writes the site
+	 * or its records (the journal, the mark, the note, a rename, the close of
+	 * a mark, the file undo points); no mark, no note of the replacement;
 	 * the lock for changes free; the old version at the target as $before
-	 * holds it. Its message.
+	 * holds it, the same folder. In the protected store only what $store
+	 * names arose, as the refusal at its place needs it: group (the group
+	 * of the backups of the run, opened for the place of the backup) and
+	 * rights (the rights of the site given to the stage). Its message.
 	 */
-	private static function nothing_begun( int $run_id, string $target, array $before, $answer, string $code, string $way ): string {
+	private static function nothing_begun( int $run_id, string $target, array $before, $answer, string $code, string $way, array $store = array() ): string {
 		$says = self::refused( $answer, $code );
 		self::assertStringContainsString( $way, $says, 'The answer with its way.' );
 		$step = self::step( $run_id, 3 );
 		self::assertSame( 'planned', $step['state'], 'The step stays planned.' );
 		self::assertNull( $step['parts'] ?? null, 'No journal.' );
 		$calls = array_column( AB_MCP_Test_Seam::recorded()[ AB_MCP_Sync_Code_Swap::class . '::$naht_sync_code_swap' ] ?? array(), 'method' );
-		self::assertSame( array(), array_values( array_intersect( $calls, array( 'journal', 'put_mark', 'replaced', 'rename', 'close_mark', 'discard_files' ) ) ), 'Nothing of the swap written.' );
+		self::assertSame( array(), array_values( array_intersect( $calls, array( 'journal', 'put_mark', 'replaced', 'rename', 'close_mark', 'discard_files' ) ) ), 'No journal, no mark, no note, no rename, no undo point discarded.' );
+		$arose = array();
+		if ( self::backup_groups() !== $before['groups'] ) {
+			$arose[] = 'group';
+		}
+		if ( in_array( 'chmod', $calls, true ) ) {
+			$arose[] = 'rights';
+		}
+		self::assertSame( $store, $arose, 'In the protected store only what the refusal at its place needs.' );
 		self::assertNull( self::mark_of_swap( $run_id ), 'No mark.' );
 		self::assertSame( array( $before['since'], $before['note'] ), array( AB_MCP_Update_Log::replaced_at( 'plugin', 'ab-it-aktiv' ), self::replaced_row() ), 'No note of the replacement.' );
 		self::assertFalse( AB_MCP_Sync_Code_Swap::lock_held(), 'The swap holds no lock for changes.' );
@@ -1766,6 +1790,8 @@ final class SyncCodeRunTest extends TestCase {
 		AB_MCP_Change_Lock::release();
 		clearstatcache();
 		self::assertSame( $before['old'], self::digest( $target ), 'The old version at the target as it was.' );
+		$id = lstat( $target );
+		self::assertSame( $before['id'], array( $id['dev'], $id['ino'] ), 'The same folder at the target.' );
 		return $says;
 	}
 
@@ -1780,23 +1806,31 @@ final class SyncCodeRunTest extends TestCase {
 	}
 
 	/**
-	 * Prüft: D2b 1 (T3 4): the clock of the run, which the engine asked
-	 * before the step, gives no time when the swap asks it for the time it
-	 * begins (rename_marked(), before its journal): the swap is refused
-	 * before its first write, the step stays planned, nothing is written or
-	 * moved, the lock for changes is free, and the answer names the clock
-	 * and the way.
+	 * Prüft: D2b 1 (T3 4) and Codex D4, finding 4: the clock of the run,
+	 * which the engine asked before the step, gives no time when the swap
+	 * asks it: right after prepare(), before the writes that prepare the
+	 * swap in the protected store (swapped()), or during the rights of the
+	 * new version, when the swap asks it for the time it begins
+	 * (rename_marked(), before its journal). The swap is refused before its
+	 * first write at the target: the step stays planned, nothing is written
+	 * or moved at the target, no journal, mark or note; in the protected
+	 * store after prepare() nothing at all, during the rights only the group
+	 * of the backups and the rights of the stage; the lock for changes is
+	 * free, and the answer names the clock and the way.
 	 * Sonst: a swap could begin without a time for its note and its journal,
 	 * and the undo of Pro could not tell a file undo point of before it from
-	 * one of after it, or the step would end failed where the next call can
-	 * do it.
+	 * one of after it; the step would end failed where the next call can do
+	 * it; or a refusal that needs no write would leave a group of the
+	 * backups and a stage with other rights behind.
 	 */
-	public function testAClockThatGivesNoTimeBeforeTheFirstWriteOfTheSwapRefusesItBeforeAnythingIsWritten(): void {
+	#[DataProvider( 'clocks_off' )]
+	public function testAClockThatGivesNoTimeBeforeTheFirstWriteOfTheSwapRefusesItBeforeAnythingIsWritten( string $from, array $store ): void {
 		list( $run_id, , $target ) = self::ready_to_swap();
 		$before = self::before_swap( $target );
 		$off    = false;
-		// From the rights of the new version on (after prepare(), right
-		// before rename_marked()), the clock of the run gives no time.
+		// From the last check of prepare() (the lock for changes read as held,
+		// in checked()) or from the rights of the new version on, the clock
+		// of the run gives no time.
 		AB_MCP_Sync_Run::$clock = static function () use ( &$off ) {
 			return $off ? null : time();
 		};
@@ -1804,17 +1838,25 @@ final class SyncCodeRunTest extends TestCase {
 			$run_id,
 			array(
 				array(
-					'method' => 'chmod',
+					'method' => 'checked' === $from ? 'lock_row' : 'chmod',
 					'kind'   => 'before',
-					'before' => static function () use ( &$off ): void {
-						$off = $off || self::within( 'given_rights' );
+					'before' => static function () use ( &$off, $from ): void {
+						$off = $off || self::within( $from );
 					},
 				),
 			)
 		);
 		AB_MCP_Sync_Run::$clock = null;
 		self::assertTrue( $off, 'The clock failed after the engine asked it.' );
-		self::nothing_begun( $run_id, $target, $before, $answer, 'ab_mcp_sync_run_clock', 'Try again; if it keeps failing, check the code that sets the clock of AB_MCP_Sync_Run.' );
+		self::nothing_begun( $run_id, $target, $before, $answer, 'ab_mcp_sync_run_clock', 'Try again; if it keeps failing, check the code that sets the clock of AB_MCP_Sync_Run.', $store );
+	}
+
+	/** Where the clock of the run fails: after prepare() (nothing in the store), during the rights (the group of the backups and the rights). */
+	public static function clocks_off(): array {
+		return array(
+			'after prepare()'     => array( 'checked', array() ),
+			'during the rights' => array( 'given_rights', array( 'group', 'rights' ) ),
+		);
 	}
 
 	/**
@@ -1822,10 +1864,15 @@ final class SyncCodeRunTest extends TestCase {
 	 * within one call is refused before the first mutation where the swap
 	 * reads it whole, in prepare() (the version at the target against the
 	 * base of its pair) and in put_tree() (the place of its backup, read
-	 * from the target): the step stays planned, nothing is written or moved,
-	 * the lock for changes is free, and the answer names the way.
+	 * from the target): the step stays planned, nothing is written or moved
+	 * at the target, in the protected store only the group of the backups
+	 * where put_tree() asked for the place (Codex D4, finding 4), the lock
+	 * for changes is free, and the answer names the way, in both places the
+	 * update by hand in wp-admin (Codex D4, finding 6).
 	 * Sonst: the swap could move a unit it never read whole, so that neither
-	 * the backup nor the way back is proved, or the step would end failed.
+	 * the backup nor the way back is proved, or the step would end failed;
+	 * or the answer would send a unit that stays too large into the same
+	 * refusal again and again.
 	 */
 	#[DataProvider( 'too_large' )]
 	public function testAUnitTooLargeToBeHashedInOneCallIsRefusedBeforeTheSwapWritesAnything( string $where ): void {
@@ -1858,7 +1905,7 @@ final class SyncCodeRunTest extends TestCase {
 			self::nothing_begun( $run_id, $target, $before, $answer, 'code:live_unknown', 'could not be read whole now (a file or folder not read, or the time of the call ran out), so whether it is still the version its pair is based on is not known and it is not swapped. Call action=next again; where it keeps failing, update it by hand in wp-admin.' );
 			return;
 		}
-		$says = self::nothing_begun( $run_id, $target, $before, $answer, 'ab_mcp_store_tree_unread', 'So the plugin ab-it-aktiv is not swapped. Call action=next again; where it keeps failing, abort the run (wp_site_push action=abort) and plan again.' );
+		$says = self::nothing_begun( $run_id, $target, $before, $answer, 'ab_mcp_store_tree_unread', 'So the plugin ab-it-aktiv is not swapped. Call action=next again; where it keeps failing, update it by hand in wp-admin.', array( 'group' ) );
 		self::assertStringContainsString( '(too_large)', $says );
 	}
 
@@ -1908,7 +1955,7 @@ final class SyncCodeRunTest extends TestCase {
 			self::assertTrue( file_exists( $target . '/neu.txt' ), 'The change came after prepare() read the unit.' );
 			$before['old'] = self::digest( $target );
 		}
-		self::nothing_begun( $run_id, $target, $before, $answer, 'code:live_changed', 'Where the plugin writes into its own folder while it runs, update it by hand in wp-admin; else make a new report (wp_site_diff) and plan again.' );
+		self::nothing_begun( $run_id, $target, $before, $answer, 'code:live_changed', 'Where the plugin writes into its own folder while it runs, update it by hand in wp-admin; else make a new report (wp_site_diff) and plan again.', 'between prepare() and put_tree()' === $case ? array( 'group' ) : array() );
 	}
 
 	/** What changed the unit on this site after the report. */
@@ -1937,13 +1984,18 @@ final class SyncCodeRunTest extends TestCase {
 	 * Prüft: F43: more code of the staging site than one package holds (a
 	 * unit with more files than the lines of the manifest of one package,
 	 * 5000), the unit over two packages. A run given only the first one does
-	 * not swap it: its step of the stage ends failed (code:stage_incomplete,
-	 * with the way to export the rest), its swap is skipped without any call
-	 * (no journal, no mark, no note), the lock for changes is free, nothing
-	 * of this site changed; the rest comes with the next run, given both
-	 * packages, whose swap puts the whole unit at the target.
+	 * not swap it: its step of the stage ends failed (code:stage_incomplete),
+	 * its swap is skipped without any call (no journal, no mark, no note),
+	 * the lock for changes is free, nothing of this site changed. The answer
+	 * names the paths of the files missing and the way: a new run with
+	 * every package, as this run does not stage it again (Codex D4, finding
+	 * 5). That way followed (the rest exported with the paths of the
+	 * answer, a new run given both packages), the swap puts the whole unit
+	 * at the target.
 	 * Sonst: the swap could put a part of a plugin into the site, without
-	 * the files of its next package.
+	 * the files of its next package; or the customer would not learn which
+	 * files to export and would call action=next on a run that never stages
+	 * the unit again.
 	 */
 	public function testAUnitOverSeveralPackagesIsSwappedOnlyWithItsWholeManifestTheRestInTheNextRun(): void {
 		$b                         = null;
@@ -1963,13 +2015,13 @@ final class SyncCodeRunTest extends TestCase {
 		$before = self::live_bytes( 'ab-it-inaktiv' );
 		$since  = AB_MCP_Update_Log::replaced_at( 'plugin', 'ab-it-inaktiv' );
 		self::wporg( array() );
-		$packages = static function () use ( $report ): array {
+		$ref   = array(
+			'kind' => 'plugin',
+			'ref'  => 'ab-it-inaktiv',
+		);
+		$first = static function () use ( $report, $ref ): array {
 			self::clear_b();
-			$ref            = array(
-				'kind' => 'plugin',
-				'ref'  => 'ab-it-inaktiv',
-			);
-			list( $first, $p ) = self::relayed(
+			list( $id, $p ) = self::relayed(
 				array(
 					'purpose'     => 'code',
 					'report_hash' => $report['report_hash'],
@@ -1977,23 +2029,26 @@ final class SyncCodeRunTest extends TestCase {
 				)
 			);
 			self::assertCount( 1, $p['code']['left'], 'Not every file of the unit in the first package.' );
-			list( $second ) = self::relayed(
-				array(
-					'purpose'     => 'code',
-					'report_hash' => $report['report_hash'],
-					'refs'        => array( $ref + array( 'paths' => $p['code']['left'][0]['paths'] ) ),
-				)
-			);
-			return array( $first, $second );
+			return array( $id, $p['code']['left'][0]['paths'] );
 		};
-		list( $first ) = $packages();
-		list( , $run ) = self::begun( $args + array( 'packages' => array( $first ) ) );
-		$run_id        = (int) $run['run_id'];
+		list( $one, $left ) = $first();
+		list( , $run )      = self::begun( $args + array( 'packages' => array( $one ) ) );
+		$run_id             = (int) $run['run_id'];
 		AB_MCP_Test_Seam::install( AB_MCP_Sync_Code_Swap::class, 'naht_sync_code_swap', new \AB_MCP_Sync_Code_Swap_Calls() );
 		$trail = self::steps_until_swap( $run_id );
 		self::assertSame( array( array( 1, 'done' ), array( 2, 'failed' ), array( null, null ) ), array_map( static fn( $t ) => array( $t[0], $t[1] ), $trail ), (string) json_encode( $trail ) );
-		self::assertStringContainsString( 'The plugin ab-it-inaktiv is not staged (code:stage_incomplete), so it is not swapped; nothing of this site changed.', $trail[1][2] );
-		self::assertStringContainsString( 'Export them on the staging site (wp_site_export with purpose=code', $trail[1][2], 'With the way.' );
+		$says = $trail[1][2];
+		self::assertStringContainsString( 'The plugin ab-it-inaktiv is not staged (code:stage_incomplete), so it is not swapped; nothing of this site changed.', $says );
+		self::assertStringContainsString( 'Export them on the staging site (wp_site_export with purpose=code', $says, 'With the way.' );
+		// The answer names the paths of the files missing (the result holds
+		// them too) and the new run, for this one does not stage it again.
+		self::assertSame( 1, preg_match( '/for paths of wp_site_export: (\[.*?\])\. This run does not stage/s', $says, $m ), $says );
+		$named = json_decode( $m[1], true );
+		self::assertIsArray( $named );
+		self::assertNotSame( array(), $named, 'The answer names the files missing.' );
+		self::assertSame( array(), array_values( array_diff( $named, $left ) ), 'Each of them one the first package left.' );
+		self::assertSame( $named, self::step( $run_id, 2 )['result']['paths'], 'The result of the step holds the same paths.' );
+		self::assertStringContainsString( 'This run does not stage the plugin ab-it-inaktiv again: plan a new run (wp_site_push action=plan) with every package of the unit, the one with these files as well; where this run is still open, abort it first (wp_site_push action=abort).', $says );
 		// The swap of the step not run: skipped, without a journal; no call
 		// of the swap, no mark, no note, the lock for changes free.
 		$step = self::step( $run_id, 3 );
@@ -2005,13 +2060,21 @@ final class SyncCodeRunTest extends TestCase {
 		self::assertTrue( AB_MCP_Change_Lock::take(), 'The lock for changes can be taken again.' );
 		AB_MCP_Change_Lock::release();
 		self::assertSame( $before, self::live_bytes( 'ab-it-inaktiv' ), 'Nothing of the live unit changed.' );
+		// The way of the answer: abort this run, export the paths it named,
+		// and a new run with every package of the unit.
 		$closed = self::gated( 'wp_site_push', array( 'action' => 'abort', 'run_id' => $run_id ) );
 		self::assertIsArray( $closed, is_wp_error( $closed ) ? $closed->get_error_message() : '' );
-		// The next run with the rest: both packages.
-		list( $one, $two ) = $packages();
-		list( , $run )     = self::begun( $args + array( 'packages' => array( $one, $two ) ) );
-		$next              = (int) $run['run_id'];
-		$trail             = self::steps_until_swap( $next );
+		list( $one )  = $first();
+		list( $two )  = self::relayed(
+			array(
+				'purpose'     => 'code',
+				'report_hash' => $report['report_hash'],
+				'refs'        => array( $ref + array( 'paths' => $named ) ),
+			)
+		);
+		list( , $run ) = self::begun( $args + array( 'packages' => array( $one, $two ) ) );
+		$next          = (int) $run['run_id'];
+		$trail         = self::steps_until_swap( $next );
 		self::assertSame( array( 3, 'done' ), array_slice( (array) end( $trail ), 0, 2 ), (string) json_encode( $trail ) );
 		self::assertStringContainsString( 'from packages', $trail[1][2] );
 		clearstatcache();

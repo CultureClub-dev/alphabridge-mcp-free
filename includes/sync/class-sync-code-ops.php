@@ -195,7 +195,7 @@ final class AB_MCP_Sync_Code_Ops {
 		if ( null === $step['parts'] ) {
 			$staged = AB_MCP_Sync_Code_Stage::stage( $run_id, $item['env'], $unit['kind'], $unit['ref'], $item['packages'] );
 			if ( is_wp_error( $staged ) ) {
-				return self::not_staged( $run_id, $seq, $unit, $staged->get_error_code(), $staged->get_error_message() );
+				return self::not_staged( $run_id, $seq, $unit, $staged->get_error_code(), $staged->get_error_message(), $staged->get_error_data() );
 			}
 			if ( array_key_exists( 'same', $staged ) ) {
 				/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name. */
@@ -374,19 +374,31 @@ final class AB_MCP_Sync_Code_Ops {
 
 	/**
 	 * A unit that is not staged: the step failed with the refusal, so the
-	 * swap that depends on it is skipped.
+	 * swap that depends on it is skipped. A unit whose packages do not hold
+	 * every file (code:stage_incomplete, F43) has the paths of the files
+	 * missing in its answer and its result, and the way: a new run with
+	 * every package, for action=next does not stage it again (Codex D4,
+	 * finding 5).
 	 *
 	 * @param int    $run_id  Run.
 	 * @param int    $seq     Step.
 	 * @param array  $unit    The unit of the plan.
 	 * @param string $code    The code of the refusal.
 	 * @param string $why     Its message (one or more whole sentences).
+	 * @param mixed  $data    The data of the refusal (code:stage_incomplete: paths).
 	 * @return array|WP_Error next.
 	 */
-	private static function not_staged( $run_id, $seq, array $unit, $code, $why ) {
+	private static function not_staged( $run_id, $seq, array $unit, $code, $why, $data = null ) {
 		/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name, 3: the code of the refusal, as the tools name it (code:syntax, …), 4: the refusal (one or more whole sentences). */
 		$message = sprintf( __( 'The %1$s %2$s is not staged (%3$s), so it is not swapped; nothing of this site changed. %4$s', 'alphabridge-mcp' ), $unit['kind'], $unit['ref'], $code, $why );
-		return self::ended( $run_id, $seq, 'failed', array( 'message' => $message, 'code' => $code ), $message . ' ' . __( 'The run goes on with the next step (action=next).', 'alphabridge-mcp' ) );
+		$result  = array( 'code' => $code );
+		$paths   = 'code:stage_incomplete' === $code && is_array( $data ) && isset( $data['paths'] ) && is_array( $data['paths'] ) ? array_values( array_filter( $data['paths'], 'is_string' ) ) : array();
+		if ( array() !== $paths ) {
+			/* translators: 1: the paths of the files missing, as a JSON list, 2: kind of the unit, as the tools name it (plugin, theme), 3: its name. */
+			$message        .= ' ' . sprintf( __( 'The paths of the files missing here (the first 2000 where more are missing), for paths of wp_site_export: %1$s. This run does not stage the %2$s %3$s again: plan a new run (wp_site_push action=plan) with every package of the unit, the one with these files as well; where this run is still open, abort it first (wp_site_push action=abort).', 'alphabridge-mcp' ), (string) wp_json_encode( $paths, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ), $unit['kind'], $unit['ref'] );
+			$result['paths'] = $paths;
+		}
+		return self::ended( $run_id, $seq, 'failed', array( 'message' => $message ) + $result, $message . ' ' . __( 'The run goes on with the next step (action=next).', 'alphabridge-mcp' ) );
 	}
 
 	/**
