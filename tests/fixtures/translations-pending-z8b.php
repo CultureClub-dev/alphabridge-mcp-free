@@ -448,4 +448,7 @@ return array(
 	'The new version is at the target, and nothing is at the place of the stage: section [%s].',
 	'Where none of them is true (another inode, or none, where a case names a version; or an entry where a case says that nothing is there), run no command of this file. Stop, and take the way back of the run as soon as the site answers again: wp_site_revert action=plan with run_id %d.',
 	'The mark of the swap could not be read.',
+	// includes/sync/class-sync-code-swap.php (Z8b branch 5, part C of the rest: Z24 after option C; the refusal of code that runs other than prepare() read it, or not known, right before the first write, and the sentence of a swap done on what its last check could not see).
+	'Whether code of the %1$s %2$s runs on this site was read again right before its swap began, and it is no longer what this call prepared the swap for (it was activated or deactivated, or the theme was switched, since then), or it could not be read, so it is not swapped and nothing of this site changed; accept does not replace preparing it anew. Call action=next again: it prepares the swap anew with what runs now.',
+	'Which plugins and which theme run, this answer knows as its last check read them right before the swap began: an activation (or a switch of the theme) after that check, or one switched on and off again before it, it does not see.',
 );

@@ -688,6 +688,34 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
   Zurücklegen gelesen hat.
 - **Trifft Normalfall:** nein. Im Normalfall braucht es den Handweg nicht.
 
+### G-5-13 Z24: Eine Aktivierung nach der letzten Prüfung sieht der Tausch nicht
+
+- **Fundstelle:** `AB_MCP_Sync_Code_Swap::as_prepared()` (`includes/sync/class-sync-code-swap.php:1223`), gerufen in
+  `swapped()` (`:1198`) nach der letzten Zeitprüfung und unmittelbar vor `rename_marked()` (`:1202`); die frische
+  Lesung ist `runs()` (`:443`), der Stand der Vorbereitung `$prepared['runs']` aus `released()` in `under_lock()`
+  (`:644`). Der Satz in der Antwort des gelungenen Tauschs: `after_renames()` (`:1600`).
+- **Quelle:** Plan 15.23, Festlegung zu 1 (Z24 Option C) und Grenze Z24; Vorlage
+  `stoppfall-z24/vorlage-z24-thomas.md`, «Was in jedem Fall gilt»; F57; Teil C des Rests, Lesart des Satzes nach dem
+  Entscheid der Steuerung vom 16.11. 14:29.
+- **Was:**
+  - Der Tausch setzt keinen Wartungsmodus (keine Datei `.maintenance`) und hält die Option `active_plugins` nicht.
+  - Die letzte Prüfung liegt unmittelbar vor dem ersten Schreiben des Schritts: ob Code der Einheit läuft, an jedem
+    Cache vorbei gelesen und streng mit dem Stand von `prepare()` verglichen. Weicht er ab oder ist er nicht lesbar,
+    endet der Tausch ohne Mutation (`code:runs_changed`), der Schritt bleibt `planned`, der nächste Aufruf bereitet
+    neu vor; `accept` ersetzt das nicht.
+  - Eine gewöhnliche Aktivierung (oder ein Themewechsel), die nach dieser Prüfung beginnt, sieht der Tausch nicht,
+    ebenso eine kurz an- und wieder ausgeschaltete zwischen zwei Lesungen. Nach der Prüfung liegen noch Journal
+    (`:1415`), Marke mit Anleitung (`:1423`) und Vermerk (`:1435`) vor der ersten Umbenennung (`:1442`); eine
+    Aktivierung in diesem Fenster oder danach läuft gegen die alte Fassung, einen leeren Platz oder die neue.
+  - `prepare()` ermittelt nur, ob Code läuft (ja, nein), nicht welche Hauptdateien; eine weitere Hauptdatei eines schon
+    aktiven Plugins ändert den Wert nicht.
+  - Die Grenze gilt für jede Antwort des Tauschs: für den gelungenen Tausch, die Enden nach einem Fehler (`failed`,
+    `unclear`) und die Ablehnungen. Den Satz dazu trägt nur die Antwort des gelungenen Tauschs; die Antworten nach
+    einem Fehler sagen nach Option B nur, was der Aufruf nachgeprüft hat, und eine Ablehnung hat nichts getauscht.
+  - Tests: `SyncCodeRunTest::testAPluginActivatedAfterThePreparationIsNotSwappedUntilItIsPreparedAnew` (F57).
+    Gegenproben `tausch/c-runs-fresh` und `tausch/c-runs-strict`.
+- **Trifft Normalfall:** nein. Im Normalfall aktiviert niemand die Einheit in den Sekunden ihres Tauschs.
+
 ## Übernommen aus Zweig 2 (`bericht-zweig-2.md`, Abschnitt Grenzkandidaten; G-M9 aus «Behebung 2»)
 
 ### G-M1 Ein Lesen über Teile ist kein Augenblick

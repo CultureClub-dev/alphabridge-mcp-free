@@ -460,6 +460,15 @@ e('d3b2-journal-read-back', 'begun(): the journal counts as begun only where the
   " && AB_MCP_Sync_Canon::encode( $journal ) === AB_MCP_Sync_Canon::encode( $step['parts'] ) ) {",
   " ) {", 'swapunit', 'testTheJournalOfASwapCountsAsBegunOnlyWhereItReadsBackAsWritten')
 
+# ------------------------------------------- Teil C: Z24 after option C, the fresh check before the first write of the swap
+F57 = 'testAPluginActivatedAfterThePreparationIsNotSwappedUntilItIsPreparedAnew'
+e('c-runs-fresh', 'swapped(): whether code of the unit runs is read again right before the first write and held against what prepare() read, so a plugin activated after prepare() is not swapped, accept or not (Z24 after option C, F57; Teil C)', CS,
+  "\t\t$runs = self::as_prepared( $in, $prepared );",
+  "\t\t$runs = true;", 'coderun', F57)
+e('c-runs-strict', 'as_prepared(): the comparison is strict, so a state not read (null) is never taken for code that does not run (false) (Z24 after option C, F57; Teil C)', CS,
+  "if ( $prepared['runs'] === self::runs( $in['unit']['kind'], $in['unit']['ref'] ) ) {",
+  "if ( $prepared['runs'] == self::runs( $in['unit']['kind'], $in['unit']['ref'] ) ) {", 'coderun', F57)
+
 # ------------------------------------------------ check and write
 src = {f: open(os.path.join(ROOT, f)).read() for f in VAR}
 errors = []

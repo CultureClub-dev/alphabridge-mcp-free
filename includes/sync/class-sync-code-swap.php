@@ -35,7 +35,10 @@
  *
  * THE SWAP (run(); plan E5 6 to 11 as Variante b keeps them): in the same
  * call, under the same lock, after prepare(): the place of the old version
- * in the backups of the run (backup_place()); rename_marked(), the one
+ * in the backups of the run (backup_place()); whether its code runs, read
+ * again right before the first write against what prepare() read
+ * (as_prepared(), Z24 after option C: changed or not known, nothing is
+ * swapped, accept or not); rename_marked(), the one
  * function that renames in the swap (Z15, Z16): the journal of the step, the
  * mark and its instruction, the note of the replacement
  * (AB_MCP_Update_Log::mark_replaced()) last, each read back, then the
@@ -47,7 +50,8 @@
  * the unit go. The files of its pair take their new bases, the step is
  * done. The swap sends no test request after it and swaps nothing back by
  * itself (Variante b): its answer names the way back of the run, the target,
- * the backup and the commands of the way by hand.
+ * the backup and the commands of the way by hand, and that it does not see
+ * an activation after its last check (G-5-13).
  *
  * OPCACHE (invalidate(), Z13): the one wrapper of
  * AB_MCP_Own_Files::invalidate_opcache() in the swap; only invalidated or
@@ -1167,8 +1171,9 @@ final class AB_MCP_Sync_Code_Swap {
 	 * (plan_of()); the new version given the rights of the site; the time
 	 * kept for the swap asked once more right before the first write (the
 	 * place of the backup read the target whole, the rights took their
-	 * time); rename_marked(), which reads the clock of the run again for the
-	 * time the swap begins; and its end.
+	 * time); whether its code runs, read again against what prepare() read
+	 * (as_prepared(), Z24 after option C); rename_marked(), which reads the
+	 * clock of the run again for the time the swap begins; and its end.
 	 *
 	 * @param array $in       The arguments, read in the form of the row swap.prepare.
 	 * @param array $prepared prepare().
@@ -1190,11 +1195,37 @@ final class AB_MCP_Sync_Code_Swap {
 		if ( is_wp_error( $left ) ) {
 			return $left;
 		}
+		$runs = self::as_prepared( $in, $prepared );
+		if ( is_wp_error( $runs ) ) {
+			return $runs;
+		}
 		$moved = self::rename_marked( $in, $plan );
 		if ( 'done' !== $moved['at'] ) {
 			return self::not_swapped( $in, $plan, $moved );
 		}
 		return self::after_renames( $in, $prepared, $plan, $moved );
+	}
+
+	/**
+	 * Z24 after option C (plan 15.23, F57): whether code of the unit runs,
+	 * read again right before the first write of the step (runs(), past
+	 * every cache) and held against what prepare() read for this swap. Where
+	 * it changed or is not known, nothing is swapped and the step stays
+	 * planned; the next call prepares the swap anew. accept does not let it
+	 * pass: it released the code prepare() read, which the swap was prepared
+	 * for. What begins after this reading the swap does not see
+	 * (GRENZEN-CODE.md, G-5-13).
+	 *
+	 * @param array $in       The arguments.
+	 * @param array $prepared prepare().
+	 * @return true|WP_Error
+	 */
+	private static function as_prepared( array $in, array $prepared ) {
+		if ( $prepared['runs'] === self::runs( $in['unit']['kind'], $in['unit']['ref'] ) ) {
+			return true;
+		}
+		/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name. */
+		return self::refusal( 'code:runs_changed', sprintf( __( 'Whether code of the %1$s %2$s runs on this site was read again right before its swap began, and it is no longer what this call prepared the swap for (it was activated or deactivated, or the theme was switched, since then), or it could not be read, so it is not swapped and nothing of this site changed; accept does not replace preparing it anew. Call action=next again: it prepares the swap anew with what runs now.', 'alphabridge-mcp' ), $in['unit']['kind'], $in['unit']['ref'] ) );
 	}
 
 	/**
@@ -1563,6 +1594,10 @@ final class AB_MCP_Sync_Code_Swap {
 		/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name, 3: its version here before, 4: its version now, 5: the folder or file of the unit (absolute path), 6: the backup of the old version (absolute path), 7: run number. */
 		$message = sprintf( __( 'The %1$s %2$s of the staging site is swapped in (version %3$s here before, %4$s now): its new version lies at %5$s, the old one whole in the backup %6$s. Look at the site now (the home page and wp-admin): where something fails, the way back of this run puts the old version back (wp_site_revert action=plan with run_id %7$d). Where this site answers no request any more (the new version ends fatal on every call, so neither MCP nor wp-admin is reached), put the old version back by hand in a shell on the server, as the lines below say:', 'alphabridge-mcp' ), $unit['kind'], $unit['ref'], (string) $prepared['version']['live'], (string) $prepared['version']['staging'], $plan['target'], $plan['old']['path'], $in['run_id'] );
 		$message .= "\n" . implode( "\n", $by_hand );
+		// Z24 after option C (15.23, F57): the answer of a swap done says
+		// what its last check could not see, once (the answers after a
+		// failure say only what this call proved, option B).
+		$message .= "\n" . __( 'Which plugins and which theme run, this answer knows as its last check read them right before the swap began: an activation (or a switch of the theme) after that check, or one switched on and off again before it, it does not see.', 'alphabridge-mcp' );
 		$ended    = self::ended(
 			$in,
 			'done',

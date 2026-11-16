@@ -1375,4 +1375,22 @@ return array(
 		'run'     => $unit( 'SyncCodeSwapTest', 'testTheJournalOfASwapCountsAsBegunOnlyWhereItReadsBackAsWritten' ),
 		'expect'  => '/testTheJournalOfASwapCountsAsBegunOnlyWhereItReadsBackAsWritten/',
 	),
+	array(
+		'id'      => 'tausch/c-runs-fresh',
+		'clause'  => 'swapped(): whether code of the unit runs is read again right before the first write and held against what prepare() read, so a plugin activated after prepare() is not swapped, accept or not (Z24 after option C, F57; Teil C)',
+		'file'    => $cs,
+		'search'  => "\t\t\$runs = self::as_prepared( \$in, \$prepared );",
+		'replace' => "\t\t\$runs = true;",
+		'run'     => $it( 'SyncCodeRunTest', 'testAPluginActivatedAfterThePreparationIsNotSwappedUntilItIsPreparedAnew' ),
+		'expect'  => '/testAPluginActivatedAfterThePreparationIsNotSwappedUntilItIsPreparedAnew/',
+	),
+	array(
+		'id'      => 'tausch/c-runs-strict',
+		'clause'  => 'as_prepared(): the comparison is strict, so a state not read (null) is never taken for code that does not run (false) (Z24 after option C, F57; Teil C)',
+		'file'    => $cs,
+		'search'  => 'if ( $prepared[\'runs\'] === self::runs( $in[\'unit\'][\'kind\'], $in[\'unit\'][\'ref\'] ) ) {',
+		'replace' => 'if ( $prepared[\'runs\'] == self::runs( $in[\'unit\'][\'kind\'], $in[\'unit\'][\'ref\'] ) ) {',
+		'run'     => $it( 'SyncCodeRunTest', 'testAPluginActivatedAfterThePreparationIsNotSwappedUntilItIsPreparedAnew' ),
+		'expect'  => '/testAPluginActivatedAfterThePreparationIsNotSwappedUntilItIsPreparedAnew/',
+	),
 );

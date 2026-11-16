@@ -10,7 +10,8 @@
  * (AB_MCP_Sync_Code_Plan, AB_MCP_Sync_Code_Ops), until the unit is staged
  * and ready; nothing of the site changes on the way. And the normal case of
  * its step «tauschen» (F56, AB_MCP_Sync_Code_Swap::run()), with the cases
- * F46, F47 and F55 as far as the swap reaches (part D3b-2 of the rest).
+ * F46, F47 and F55 as far as the swap reaches (part D3b-2 of the rest),
+ * and F57 (Z24 after option C, part C of the rest).
  *
  * Effects to the outside of this part and their fault kinds (plan 8.3):
  * - rows (the run, its steps and their journal; the options active_plugins,
@@ -533,6 +534,7 @@ final class SyncCodeRunTest extends TestCase {
 	 * the name the report gives it, where it is not slug),
 	 * then (what the test does to the unit of B before its report, as for
 	 * changed()), runs (whether it runs here: then released with accept),
+	 * accept (released with accept, where it is not as runs has it),
 	 * packages (a callable given the report and the arguments of the plan
 	 * that returns the package ids of code the run is given; then
 	 * wordpress.org offers nothing).
@@ -545,6 +547,7 @@ final class SyncCodeRunTest extends TestCase {
 			'version'   => '2.0.0',
 			'then'      => null,
 			'runs'      => true,
+			'accept'    => null,
 			'packages'  => null,
 			'ref'       => '',
 			'live_base' => array(),
@@ -559,14 +562,15 @@ final class SyncCodeRunTest extends TestCase {
 		if ( null !== $before ) {
 			$before();
 		}
-		$more = $case['runs'] ? array( 'accept' => array( (int) $entry['n'] ) ) : array();
+		$accept = $case['accept'] ?? $case['runs'];
+		$more   = $accept ? array( 'accept' => array( (int) $entry['n'] ) ) : array();
 		if ( null !== $case['packages'] ) {
 			$more['packages'] = ( $case['packages'] )( $report, $args + $more );
 		}
 		list( , $run ) = self::begun( $args + $more );
 		$run_id        = (int) $run['run_id'];
 		$unit          = AB_MCP_Sync_Code_Ops::item( AB_MCP_Sync_Run::get( $run_id )['plan'], 3 )['unit'];
-		self::assertSame( array( 'swap', $case['runs'], $case['runs'] ), array( $unit['op'], $unit['runs'], $unit['accept'] ) );
+		self::assertSame( array( 'swap', $case['runs'], $accept ), array( $unit['op'], $unit['runs'], $unit['accept'] ) );
 		// Step 1, the check; step 2, the stage, until it is ready.
 		$check = self::next( $run_id );
 		self::assertIsArray( $check, is_wp_error( $check ) ? $check->get_error_message() : '' );
@@ -1271,6 +1275,111 @@ final class SyncCodeRunTest extends TestCase {
 		clearstatcache();
 		self::assertFileDoesNotExist( $target, 'Nothing of this site changed.' );
 		self::closed( $run_id );
+	}
+
+	/**
+	 * Prüft: F57, Z24 after option C (plan 15.23): an inactive plugin that
+	 * is activated after prepare() and before the first write of its swap
+	 * (the row active_plugins written by another request, as wp-admin
+	 * writes it, past the cache of this one), without accept or with it, or
+	 * a row active_plugins that does not read there, ends the swap before
+	 * its journal: code:runs_changed with the way of a new preparation, the
+	 * step planned, nothing written at the target or in the records of the
+	 * site (nothing_begun()), no file .maintenance. The next call prepares
+	 * anew: the plugin now active without accept is refused there (not
+	 * released); with accept, or the row read again, it is swapped as F56
+	 * swaps, and its answer says once what its last check could not see.
+	 * Sonst: code activated in the seconds of a swap would be replaced
+	 * without its release and without OPcache cleared for it, prepared as
+	 * code that does not run; accept would stand in for a preparation that
+	 * did not see the code run; a row not read would count as no code
+	 * running; or the answer of a swap done would claim more than its last
+	 * check saw.
+	 */
+	#[DataProvider( 'changes_after_the_preparation' )]
+	public function testAPluginActivatedAfterThePreparationIsNotSwappedUntilItIsPreparedAnew( string $change, bool $accept ): void {
+		global $wpdb;
+		$slug = 'ab-it-inaktiv';
+		$main = $slug . '/' . $slug . '.php';
+		list( $run_id, $unit, $target ) = self::ready_to_swap(
+			null,
+			array(
+				'slug'    => $slug,
+				'version' => '1.1.0',
+				'runs'    => false,
+				'accept'  => $accept,
+			)
+		);
+		$before = self::before_swap( $target, $slug );
+		$old    = self::bytes_of( $target );
+		$row    = $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", 'active_plugins' ) );
+		self::assertIsString( $row );
+		// Another request writes the row, not the cache of this one.
+		$write   = static function ( string $value ): void {
+			global $wpdb;
+			self::assertSame( 1, $wpdb->update( $wpdb->options, array( 'option_value' => $value ), array( 'option_name' => 'active_plugins' ) ) );
+		};
+		$changed = false;
+		// After prepare() and plan_of(), at the first rights of the stage.
+		$answer = self::swap_with(
+			$run_id,
+			array(
+				array(
+					'method' => 'chmod',
+					'nth'    => 1,
+					'kind'   => 'before',
+					'before' => static function () use ( &$changed, $write, $change, $main ): void {
+						$changed = true;
+						$write( 'activated' === $change ? serialize( array_merge( self::active(), array( $main ) ) ) : 'not in the form WordPress writes it' );
+					},
+				),
+			)
+		);
+		self::assertTrue( $changed, 'The change came after prepare(), at the rights of the stage.' );
+		$says = self::nothing_begun( $run_id, $target, $before, $answer, 'code:runs_changed', 'accept does not replace preparing it anew. Call action=next again: it prepares the swap anew with what runs now.', array( 'group', 'rights' ) );
+		self::assertStringContainsString( 'Whether code of the plugin ab-it-inaktiv runs on this site was read again right before its swap began', $says );
+		self::assertFileDoesNotExist( ABSPATH . '.maintenance', 'No maintenance mode.' );
+		AB_MCP_Test_Seam::restore_all();
+		AB_MCP_Sync_Code_Swap::forget();
+		if ( 'unknown' === $change ) {
+			$write( $row );
+		}
+		if ( ! $accept ) {
+			// Prepared anew: the plugin runs now, and the plan does not release it.
+			self::refused( self::next( $run_id ), 'ab_mcp_sync_code_not_released' );
+			self::assertSame( 'planned', self::step( $run_id, 3 )['state'], 'The step stays planned.' );
+			self::assertSame( $old, self::bytes_of( $target ), 'The old version at the target.' );
+			self::closed( $run_id );
+			return;
+		}
+		$swap = self::swapped_whole(
+			$run_id,
+			$unit,
+			$target,
+			array(
+				'slug'     => $slug,
+				'old'      => $old,
+				'new'      => self::bytes_of( AB_MCP_IT_Code::path( 'b', 'plugin', $slug ) ),
+				'versions' => array( '1.0.0', '1.1.0' ),
+			)
+		);
+		$says = $swap['answer']['next'];
+		$z24  = 'Which plugins and which theme run, this answer knows as its last check read them right before the swap began: an activation (or a switch of the theme) after that check, or one switched on and off again before it, it does not see.';
+		self::assertSame( 1, substr_count( $says, $z24 ), 'The sentence of Z24 once in the answer of a swap done.' );
+		self::assertStringEndsWith( "\n" . $z24 . "\nCall action=next for the next step.", $says, 'After the commands by hand, before the call to go on.' );
+		self::assertSame( 'activated' === $change, in_array( $main, self::active(), true ), 'The plugin runs as it was activated, or not.' );
+		self::assertSame( '1.1.0', AB_MCP_IT_Code::fassung( 'a', 'plugin', $slug ) );
+		self::assertFileDoesNotExist( ABSPATH . '.maintenance', 'No maintenance mode.' );
+		self::closed( $run_id );
+	}
+
+	/** What changes after prepare(): the plugin activated, without accept and with it; the row active_plugins not read, with accept. */
+	public static function changes_after_the_preparation(): array {
+		return array(
+			'activated, without accept' => array( 'activated', false ),
+			'activated, with accept'    => array( 'activated', true ),
+			'not read, with accept'     => array( 'unknown', true ),
+		);
 	}
 
 	/** The bytes of a folder (each file by its path relative to it) or of a file (by its name), by their SHA-256. */
