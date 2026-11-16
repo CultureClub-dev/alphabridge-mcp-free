@@ -146,7 +146,7 @@ e('themes-first', 'theme_dirs(): a stylesheet in two roots from the first', EN,
   "\t\t\t\t\tif ( ! array_key_exists( $stylesheet, $out ) ) {", "\t\t\t\t\tif ( true ) {", 'env', THEME)
 HEAD = 'testTheHeadOfAFileIsReadAsGetFileDataReadsIt'
 e('head-cr', 'head(): a carriage return ends a line', EN,
-  "\t\t$text = str_replace( \"\\r\", \"\\n\", is_string( $text ) ? $text : '' );", "\t\t$text = is_string( $text ) ? $text : '';", 'env', HEAD)
+  "\t\t$text = str_replace( \"\\r\", \"\\n\", $text );", "\t\t$text = (string) $text;", 'env', HEAD)
 e('head-8k', 'head(): the first 8 KiB only', EN,
   "@file_get_contents( $path, false, null, 0, 8192 )", "@file_get_contents( $path )", 'env', HEAD)
 e('head-end', 'head(): without the end of a comment or of PHP', EN,
@@ -561,7 +561,7 @@ e('series-seq', 'environment(): the parts in their order, without a gap', RE, SE
 e('series-walk', 'environment(): the parts of one reading', RE, SERIES, SERIES.replace(" ( null !== $walk && $walk !== $page['walk'] ) ||", ''), 'it', SER)
 e('series-last', 'environment(): the last part last', RE, SERIES, SERIES.replace(" || ( count( $ids ) === $i + 1 ) !== $page['last']", ''), 'it', SER)
 e('series-taken', 'environment(): each a package of the environment taken over here', RE,
-  "\t\t\t$part = AB_MCP_Sync_Import::taken( $id, 'env' );", "\t\t\t$part = AB_MCP_Sync_Import::taken( $id, 'inventory' );", 'it', MAIN)
+  "\t\t\t$part = AB_MCP_Sync_Import::taken( $id, 'env', $deadline );", "\t\t\t$part = AB_MCP_Sync_Import::taken( $id, 'inventory', $deadline );", 'it', MAIN)
 e('env-min', 'live_environment(): with less than ENV_MIN seconds left the next call reads it', RE,
   "\t\t\tif ( $left < self::ENV_MIN ) {", "\t\t\tif ( false ) {", 'it', 'testTheEnvironmentOfThisSiteIsReadInPartsWithTheSameEntries')
 e('env-on', 'live_environment(): a part goes on from the state of the one before', RE,
@@ -591,7 +591,7 @@ e('r1-export-held', 'make_env(): the lines held counted (A1, two sites)', EX,
 e('r1-import-held', 'unpacked(): a name of the environment held by the rules of this site listed (A1, two sites)', IM,
   "\t\t\t\t\tif ( null !== $code ) {\n\t\t\t\t\t\t$out[] = array( $object['env'],", "\t\t\t\t\tif ( false ) {\n\t\t\t\t\t\t$out[] = array( $object['env'],", 'it', RULES)
 e('r1-report-held', 'environment(): the lines the import held by the SHA-256 of their name (A1, two sites)', RE,
-  "\t\t\tforeach ( AB_MCP_Sync_Env::held_here( array_slice( $part['lines'], 1 ), $part['held'] ) as $line ) {", "\t\t\tforeach ( array_slice( $part['lines'], 1 ) as $line ) {", 'it', RULES)
+  "\t\t\t$held = AB_MCP_Sync_Env::held_here( array_slice( $part['lines'], 1 ), $part['held'], null, $deadline );", "\t\t\t$held = array_slice( $part['lines'], 1 );", 'it', RULES)
 IT_THERE = 'testANameOnlyTheRulesOfTheStagingSiteHoldIsHeldInThePartsOfThisSiteAsWell'
 e('r2-report-head-held', 'call(): the head keeps the names the staging site holds, before this site reads its own (A1, two sites)', RE,
   "\t\t\t'held'        => AB_MCP_Sync_Env::held_names( $env['lines'] ),", "\t\t\t'held'        => array(),", 'it', IT_THERE)

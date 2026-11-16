@@ -1,8 +1,8 @@
 <?php
 /**
  * The spellings of a call that the walk of StoreRemoverGuardTest reads
- * (testTheWalkReadsEverySpellingOfAFixedNameAndStopsAtAnImport). Never
- * loaded: only its tokens are read.
+ * (testTheWalkReadsEverySpellingOfANameAsPhpResolvesIt). Never loaded:
+ * only its code is read.
  *
  * @package AlphaBridge_MCP
  */

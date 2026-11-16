@@ -720,7 +720,7 @@ e('taken-purpose', 'taken(): a package held for the purpose it is read for only'
 e('taken-bound', 'taken(): a package of the pair of sites as it is now', IM,
   "\t\tif ( true !== self::bound( $found, AB_MCP_Sync_Anchor::pair_print() ) ) {", "\t\tif ( false ) {", 'it', 'testAProposalHoldsNoMoreOnceThePairOfSitesChangedOrItExpired')
 e('taken-verify', 'taken(): its manifest checked again', IM,
-  "\t\t$checked = AB_MCP_Sync_Manifest::verify( $found['signed'], $expect );\n\t\tif ( is_wp_error( $checked ) ) {\n\t\t\treturn $checked;\n\t\t}\n\t\t$manifest = $checked['manifest'];",
+  "\t\t$checked = AB_MCP_Sync_Manifest::verify( $found['signed'], $expect, null, $deadline );\n\t\tif ( is_wp_error( $checked ) ) {\n\t\t\treturn $checked;\n\t\t}\n\t\t$manifest = $checked['manifest'];",
   "\t\t$checked = array( 'manifest' => $found['manifest'] );\n\t\t$manifest = $checked['manifest'];", 'it', 'testAPackageWhoseManifestExpiredIsNotRead')
 e('taken-complete', 'taken(): a package marked complete only', IM,
   "\t\tif ( ! is_string( $mark ) ) {", "\t\tif ( false ) {", 'it', 'testOnlyAPackageTakenOverCompletelyIsRead')
@@ -1040,6 +1040,8 @@ e('rep-wp-call', 'call(): the version is checked before a report begins', R,
   "\t\tif ( null !== $version ) {\n\t\t\treturn $version;", "\t\tif ( false ) {\n\t\t\treturn $version;", 'itrep', IT_WP)
 e('rep-replace-own', 'replace_own(): a new report removes the earlier ones of its connection', R,
   "\t\t\tif ( is_array( $head ) && isset( $head['connection'] ) && hash_equals( (string) $head['connection'], $mine ) ) {", "\t\t\tif ( false ) {", 'itrep', IT_PARTS)
+e('rep-replace-own-only', 'replace_own(): the reports of other connections stay (the list of substitute values of Z8b branch 3, Behebung 3)', R,
+  "\t\t\tif ( is_array( $head ) && isset( $head['connection'] ) && hash_equals( (string) $head['connection'], $mine ) ) {", "\t\t\tif ( is_array( $head ) ) {", 'itrep', 'testAReportOverMcpDecidesEachObjectAndWritesNothingButTheReport')
 e('rep-step-read', 'step(): an inventory read to its end is not read again', R,
   "\t\tif ( 0 === $seq || null !== $found['parts'][ $seq - 1 ]['cursor'] ) {", "\t\tif ( true ) {", 'itrep', IT_FAIL)
 e('rep-step-finish', 'step(): the inventory read to its end is worked out', R,

@@ -525,15 +525,15 @@ for name, replace, case in (
 ):
     e('paket/manifest-envelope-' + name, 'verify(): the envelope, ' + name.replace('-', ' '), M, ENV, replace,
       'manifest', 'testTheEnvelopeIsTheTextAndItsSignatureOnly with data set "' + case + '"')
-SPELL = "\t\tif ( ! is_array( $manifest ) || AB_MCP_Sync_Canon::encode( $manifest ) !== $text ) {"
-e('paket/manifest-spelling', 'verify(): only the one spelling is read', M, SPELL,
+e('paket/manifest-spelling', 'verify(): only the one spelling is read', M, "\t\tif ( $spelt !== $text ) {",
   "\t\tif ( ! is_array( $manifest ) ) {",
   'manifest', 'testOnlyTheOneSpellingIsReadEvenWithAValidSignature with data set "white space"')
-e('paket/manifest-object', 'verify(): a manifest is an object', M, SPELL,
-  "\t\tif ( AB_MCP_Sync_Canon::encode( $manifest ) !== $text ) {",
+e('paket/manifest-object', 'verify(): a manifest is an object', M,
+  "\t\t$spelt    = is_array( $manifest ) ? AB_MCP_Sync_Canon::encode( $manifest, $deadline ) : null;",
+  "\t\t$spelt    = AB_MCP_Sync_Canon::encode( $manifest, $deadline );",
   'manifest', 'testAManifestThatIsNoObjectIsNotRead')
 e('paket/manifest-verify-shape', 'verify(): every field as the format has it', M,
-  "\t\t$bad = self::shape( $manifest );\n\t\tif ( null !== $bad ) {\n\t\t\treturn $bad;\n\t\t}\n\t\t$version",
+  "\t\t$bad = self::shape( $manifest, $deadline );\n\t\tif ( null !== $bad ) {\n\t\t\treturn $bad;\n\t\t}\n\t\t$version",
   "\t\t$version",
   'manifest', 'testEveryFieldIsAsTheFormatHasItWhateverTheSignature with data set "a field more"')
 e('paket/manifest-canon', 'verify(): the version of the canonical form of this site', M,
@@ -806,7 +806,8 @@ e('paket/kinds-to-end', 'kinds(): complete only for a kind read to its end', EX,
 e('paket/kinds-inner', 'kinds(): a cursor within a kind begins past it', EX,
   " + ( null === $from['inner'] ? 0 : 1 );", " + 0;", 'package', REACH % 'began in the terms')
 e('paket/kinds-sorted', 'kinds(): ascending by kind and subtype', EX,
-  "\t\t\t\treturn 0 !== $by ? $by : strcmp( $a['subtype'], $b['subtype'] );", "\t\t\t\treturn 0;", 'package', 'testKindsCarryTheirSubtypeAscendingAndOnce')
+  "\t\tuasort(\n\t\t\t$out,\n\t\t\tstatic function ( $a, $b ) {\n\t\t\t\t$by = strcmp( $a['kind'], $b['kind'] );\n\t\t\t\treturn 0 !== $by ? $by : strcmp( $a['subtype'], $b['subtype'] );",
+  "\t\tuasort(\n\t\t\t$out,\n\t\t\tstatic function ( $a, $b ) {\n\t\t\t\t$by = strcmp( $a['kind'], $b['kind'] );\n\t\t\t\treturn 0;", 'package', 'testKindsCarryTheirSubtypeAscendingAndOnce')
 e('paket/kinds-taxonomy', 'kinds(): the taxonomy of a term is its subtype', EX,
   "( isset( $identity['taxonomy'] ) ? $identity['taxonomy'] : '' )", "''", 'package', 'testKindsCarryTheirSubtypeAscendingAndOnce')
 e('paket/grants-no-key', 'grants(): no fetch address without the key', GRANT_F,
@@ -1075,11 +1076,13 @@ e('paket/it-follows-series', 'follows(): the series of the package before (two s
 e('paket/it-answer-package', 'answer(): the cursor names this package (two sites)', EX,
   "\t\t\t\t'package' => $manifest['package_id'],", "\t\t\t\t'package' => str_repeat( 'f', 32 ),", 'itpkg', PKG_IT['cursor'])
 e('paket/it-store-series-label', 'store(): the group named by its series (two sites)', EX,
-  "\t\t\t\t'label'    => 'series:' . $series,", "\t\t\t\t'label'    => $purpose,", 'itpkg', PKG_IT['cursor'])
+  "\t\t\t\t'declared' => $bytes + self::RECORD_MAX + ( null === $text ? 0 : strlen( $text ) ),\n\t\t\t\t'label'    => 'series:' . $series,",
+  "\t\t\t\t'declared' => $bytes + self::RECORD_MAX + ( null === $text ? 0 : strlen( $text ) ),\n\t\t\t\t'label'    => $purpose,", 'itpkg', PKG_IT['cursor'])
 e('paket/it-store-chunk-cleanup', 'store(): a chunk that could not be written leaves nothing (two sites)', EX,
   "self::chunk_name( $i ), $data );\n\t\t\tif ( is_wp_error( $put ) ) {\n\t\t\t\tAB_MCP_Protected_Store::remove( 'out', $gid );\n\t\t\t\treturn $put;", "self::chunk_name( $i ), $data );\n\t\t\tif ( is_wp_error( $put ) ) {\n\t\t\t\treturn $put;", 'itpkg', PKG_IT['whole_write'])
 e('paket/it-store-record-cleanup', 'store(): a record that could not be written leaves nothing (two sites)', EX,
-  "\t\tif ( is_wp_error( $put ) ) {\n\t\t\tAB_MCP_Protected_Store::remove( 'out', $gid );\n\t\t\treturn $put;\n\t\t}\n\t\treturn self::answer(", "\t\tif ( is_wp_error( $put ) ) {\n\t\t\treturn $put;\n\t\t}\n\t\treturn self::answer(", 'itpkg', PKG_IT['whole_write'])
+  "\t\t$put    = AB_MCP_Protected_Store::put( 'out', $gid, hash( 'sha256', $record ), $record );\n\t\tif ( is_wp_error( $put ) ) {\n\t\t\tAB_MCP_Protected_Store::remove( 'out', $gid );\n\t\t\treturn $put;\n\t\t}\n\t\treturn self::answer(",
+  "\t\t$put    = AB_MCP_Protected_Store::put( 'out', $gid, hash( 'sha256', $record ), $record );\n\t\tif ( is_wp_error( $put ) ) {\n\t\t\treturn $put;\n\t\t}\n\t\treturn self::answer(", 'itpkg', PKG_IT['whole_write'])
 e('paket/it-begin-cleanup', 'begin(): a record that could not be written leaves nothing (two sites)', IM,
   "\t\t\tAB_MCP_Protected_Store::remove( 'in', $gid );\n\t\t\treturn $put;", "\t\t\treturn $put;", 'itpkg', PKG_IT['import_write'])
 e('paket/it-import-account', 'find(): the package of this account only (two sites)', IM,
@@ -1475,7 +1478,7 @@ e('paket/p3r1-inflate-piece', 'INFLATE_PIECE: past the cap by one small piece at
   "\tconst INFLATE_PIECE = 512;", "\tconst INFLATE_PIECE = 4096;", 'package', P3['inflate'])
 # C1: what an older version left.
 e('paket/p3r1-report-bound', 'bound(): a record without its report is none (two sites)', EX,
-  "\t\tif ( null !== $found['report'] && $found['binding']", "\t\tif ( $found['binding']", 'itpkg', P3['older_it'])
+  "\t\tif ( null !== $found['report'] && null !== $now", "\t\tif ( null !== $now", 'itpkg', P3['older_it'])
 e('paket/p3r1-report-shaped', 'report_shaped(): the counts of the credentials as numbers (two sites)', EX,
   " || array( true, true, true ) !== array_values( array_map( 'is_int', $report['credentials'] ) ) ) {", " ) {", 'itpkg', P3['older_it'])
 e('paket/p3r1-held-missing-removed', 'state(): a complete import without its list is removed (two sites)', IM,
