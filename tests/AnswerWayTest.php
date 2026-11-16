@@ -578,6 +578,15 @@ final class AnswerWayTest extends TestCase {
 		'Nothing in post #%s changed.',
 		'It changed the post all the same (%s).',
 		'Without an undo point nothing ran.',
+		// Z8b branch 5, part D1 of the rest: what failed after the renames of
+		// a swap, OPcache (invalidated()) or the proof of the close of its
+		// mark (at_target(), in_backup()); each reaches the customer only
+		// through AB_MCP_Sync_Code_Swap::unclear(), which names the way back
+		// of the run (wp_site_revert) and the commands by hand.
+		'The PHP files in %s could not all be listed within the time of this call, so OPcache was not cleared for each file the swap replaced, and this site may still run old code.',
+		'OPcache could not be cleared for %1$s (%2$s), so this site may still run the old code of it.',
+		'The version at %s could not be proved as the one the swap left there (its device, inode or hash differ, or it could not be read whole within the time of this call).',
+		'The old version could not be proved whole in the backup %s (its device or inode differ, or its tree did not read back as its hash).',
 	);
 
 	/**

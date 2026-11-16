@@ -348,15 +348,11 @@ final class SyncCodeOpsTest extends TestCase {
 	}
 
 	public function testAStepOfARunNotOfItsFormOrWithFieldsNotReadStagesNothing(): void {
-		// stage(): the run of a step comes in the form of runs.run_id (digits
+		// run(): the run of a step comes in the form of runs.run_id (digits
 		// of a column of the database are its form), and a
 		// step with fields not read (unread) is not known; neither stages
-		// nor checks anything, the step stays as it is (V19).
-		$item  = array(
-			'unit'     => self::unit(),
-			'env'      => self::code()['env'],
-			'packages' => array(),
-		);
+		// nor checks nor swaps anything, the step stays as it is (V19).
+		// Both steps: run() reads the run before it branches.
 		$cases = array(
 			'run_id a word'    => array( array( 'run_id' => '7x' ), array( 'parts' => null ) ),
 			'run_id 0'         => array( array( 'run_id' => 0 ), array( 'parts' => null ) ),
@@ -364,10 +360,17 @@ final class SyncCodeOpsTest extends TestCase {
 			'run_id a float'   => array( array( 'run_id' => 7.0 ), array( 'parts' => null ) ),
 			'a field not read' => array( array( 'run_id' => 7 ), array( 'parts' => null, 'unread' => array( 'parts' ) ) ),
 		);
-		foreach ( $cases as $what => $case ) {
-			$got = AB_MCP_Sync_Code_Ops::run( $case[0], $case[1], $item );
-			self::assertInstanceOf( WP_Error::class, $got, $what );
-			self::assertSame( 'ab_mcp_sync_code_journal', $got->get_error_code(), $what );
+		foreach ( array( 'stage' => array(), 'swap' => array( 'seq' => 3, 'op' => 'swap', 'stage_seq' => 2 ) ) as $op => $over ) {
+			$item = array(
+				'unit'     => self::unit( $over ),
+				'env'      => self::code()['env'],
+				'packages' => array(),
+			);
+			foreach ( $cases as $what => $case ) {
+				$got = AB_MCP_Sync_Code_Ops::run( $case[0], $case[1], $item );
+				self::assertInstanceOf( WP_Error::class, $got, $op . ', ' . $what );
+				self::assertSame( 'ab_mcp_sync_code_journal', $got->get_error_code(), $op . ', ' . $what );
+			}
 		}
 	}
 
@@ -543,9 +546,10 @@ final class SyncCodeOpsTest extends TestCase {
 
 	public function testTheSwapStepAsksTheReleaseOfItsCodeNowAndRefusesWhereItIsNotKnownOrNotReleased(): void {
 		// Z24 (Frage 7 of part 2a): released() is the one rule; run() asks it
-		// for the step swap, read now through the seam, before it refuses the
-		// step that is not connected yet. Red at 2108f7d: run() refused every
-		// swap with not_built, whatever ran.
+		// for the step swap, read now through the seam, before it swaps.
+		// Red at 2108f7d: run() refused every swap with not_built, whatever
+		// ran. That a released step goes on to the swap shows F56
+		// (tests/integration/SyncCodeRunTest.php).
 		$item  = static fn( array $over ): array => array(
 			'unit'     => self::unit( array( 'seq' => 3, 'op' => 'swap', 'stage_seq' => 2 ) + $over ),
 			'env'      => array( str_repeat( 'e', 32 ) ),
@@ -556,8 +560,6 @@ final class SyncCodeOpsTest extends TestCase {
 		$cases = array(
 			'not known'                 => array( array( 'active_plugins' => 'a:1:{broken' ), array( 'accept' => true ), 'ab_mcp_sync_code_runs_unknown', 'could not be read now' ),
 			'runs, not released'        => array( array( 'active_plugins' => $shop ), array( 'accept' => false ), 'ab_mcp_sync_code_not_released', 'does not release it' ),
-			'runs, released'            => array( array( 'active_plugins' => $shop ), array( 'accept' => true ), 'ab_mcp_sync_code_swap_not_built', 'is not connected to the run at this commit' ),
-			'does not run, no release' => array( array( 'active_plugins' => $other ), array( 'accept' => false ), 'ab_mcp_sync_code_swap_not_built', 'The step stays planned.' ),
 		);
 		foreach ( $cases as $what => list( $rows, $over, $code, $says ) ) {
 			$calls = self::rows( $rows );
@@ -567,7 +569,6 @@ final class SyncCodeOpsTest extends TestCase {
 			self::assertStringContainsString( $says, $got->get_error_message(), $what );
 			self::assertSame( array( 'active_plugins' ), $calls->read, $what . ': read now, once.' );
 		}
-		self::assertStringNotContainsString( 'nothing of this site changed', AB_MCP_Sync_Code_Ops::run( array( 'run_id' => 1 ), array( 'seq' => 3 ), $item( array() ) )->get_error_message(), 'The sentence of 2a claims nothing of the site.' );
 		self::rows( array( 'active_plugins' => $other ) );
 		self::assertFalse( AB_MCP_Sync_Code_Ops::released( self::unit( array( 'accept' => false ) ) ), 'Not running: false, no refusal.' );
 		self::rows( array( 'active_plugins' => $shop ) );

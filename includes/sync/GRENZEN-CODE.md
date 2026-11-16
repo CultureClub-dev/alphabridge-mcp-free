@@ -471,8 +471,8 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
 
 ### G-5-7 Laufende Einheit ganz ohne PHP-Datei wird nicht getauscht
 
-- **Fundstelle:** `AB_MCP_Sync_Code_Swap::under_locks()` mit `php_file()` (`includes/sync/class-sync-code-swap.php:532`,
-  `:668`, Stand `2bbef66`), Ablehnung `code:opcache_file`.
+- **Fundstelle:** `AB_MCP_Sync_Code_Swap::under_lock()` mit `php_file()` (`includes/sync/class-sync-code-swap.php:649`,
+  `:785`, Stand `7db0e52`), Ablehnung `code:opcache_file`.
 - **Quelle:** Teil 2a, Befund 2 und Frage 8; Entscheid der Lead vom 13.11.2026 (nach 20:29).
 - **Fall:** Code der Einheit läuft (`released()` ist wahr), die Einheit ist keine Neuanlage, und weder sie selbst noch
   ein Ordner unter ihr enthält eine PHP-Datei (etwa ein Block-Theme nur aus `style.css`, `theme.json` und Vorlagen).
@@ -480,7 +480,7 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
   `code:opcache_file` ab (Weg: von Hand in wp-admin aktualisieren). `style.css` ersetzt die Prüfung nicht. Eine
   Neuanlage ist davon nicht betroffen: Sie hat live keinen laufenden Code, die Vorprüfung entfällt; nennt WordPress sie
   trotzdem als laufend, lehnt die Regel von Z24 vorher ab, mit und ohne `accept`
-  (`AB_MCP_Sync_Code_Ops::released()`, `ab_mcp_sync_code_create_runs`, `class-sync-code-ops.php:146`).
+  (`AB_MCP_Sync_Code_Ops::released()`, `ab_mcp_sync_code_create_runs`, `class-sync-code-ops.php:153`, Stand `7db0e52`).
 - **Trifft Normalfall:** nein. Am lokalen WordPress 7.1.3 (`~/Entwicklung/wp-core-7.1.3/wp-content/themes/`) hat jedes
   der 15 mitgelieferten Themes mindestens eine PHP-Datei; Twenty Twenty-Three hat keine im Wurzelordner, aber 7 unter
   `patterns/`, und `php_file()` sucht Ordner für Ordner.
@@ -546,8 +546,8 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
   unmittelbar davor geprüft ist, oder nach einem Halt folgt noch ein Schritt; an einem anderen Teil schützt eine
   Schreibweise, die der Wächter nicht erkennt. Wie gross welcher Teil ist, ist nicht gezählt (oben). Ein Tausch kann
   darum auf einem langsamen Host über sein Budget laufen. Schranken bleiben die Mittelprüfung
-  (`AB_MCP_Sync_Code_Swap::time_left()`, `code:means`, `includes/sync/class-sync-code-swap.php:982`; die letzte vor
-  der ersten Mutation `:608`; Stand `2bbef66`) und die Zeitgrenze von PHP (`max_execution_time`). Für den Kunden heisst
+  (`AB_MCP_Sync_Code_Swap::time_left()`, `code:means`, `includes/sync/class-sync-code-swap.php:1781`; die letzte von
+  `prepare()` `:725`, die letzte vor der ersten Mutation in `swapped()` `:1147`; Stand `7db0e52`) und die Zeitgrenze von PHP (`max_execution_time`). Für den Kunden heisst
   das: Ein Tausch auf einem langsamen Server kann ins Zeitlimit laufen (Vorschlag für den Kundentext in Zweig 11,
   `z8b-rest-lead.md:152–153`; ein eigener Kundentext besteht nicht). Dass der Halt ankommt, wo die Frist geprüft wird,
   zeigen die Tests des Abbruchs (`tests/integration/ReadDeadlineTest.php`, `tests/SyncStepTest.php`,
@@ -584,10 +584,10 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
 
 ### G-5-9 Kernsperre: Der Tausch nimmt die Sperre `auto_updater` von WordPress nicht
 
-- **Fundstelle:** `AB_MCP_Sync_Code_Swap` (`includes/sync/class-sync-code-swap.php`, Stand `2bbef66`): `take()` (`:440`)
-  nimmt nur den Change-Lock (`AB_MCP_Change_Lock::take()` über `Calls::take_lock()`, `:92`); `release()` (`:407`) gibt
-  nur ihn zurück (`Calls::release_lock()`, `:101`); `checked()` liest vor der Antwort von `prepare()` nur ihn
-  (`if ( ! self::lock_held() )`, `:602`; `lock_held()` `:395`). Eine Sperre für Updates nimmt der Tausch nicht.
+- **Fundstelle:** `AB_MCP_Sync_Code_Swap` (`includes/sync/class-sync-code-swap.php`, Stand `7db0e52`): `take()` (`:550`)
+  nimmt nur den Change-Lock (`AB_MCP_Change_Lock::take()` über `Calls::take_lock()`, `:111`); `release()` (`:507`) gibt
+  nur ihn zurück (`Calls::release_lock()`, `:120`); `checked()` liest vor der Antwort von `prepare()` nur ihn
+  (`if ( ! self::lock_held() )`, `:719`; `lock_held()` `:495`). Eine Sperre für Updates nimmt der Tausch nicht.
   `includes/lifecycle/class-update-guard.php` und `class-update-log.php` stehen wieder wie auf main (`90ab733`).
   Rückbau der Kernsperre aus dem 2a-WIP: Commit `d1a0478` (Teil A1 des Rests).
 - **Quelle:** Entscheid 1 von Thomas vom 15.11.2026 (Variante b; `knowledge/decisions.md` «2026-11-15 18:20»,

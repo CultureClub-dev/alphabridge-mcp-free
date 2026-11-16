@@ -8,7 +8,8 @@
  *
  * This part: the plan of a run of the code and its step «bereitstellen»
  * (AB_MCP_Sync_Code_Plan, AB_MCP_Sync_Code_Ops), until the unit is staged
- * and ready; nothing of the site changes on the way.
+ * and ready; nothing of the site changes on the way. And the normal case of
+ * its step «tauschen» (F56, AB_MCP_Sync_Code_Swap::run()).
  *
  * Effects to the outside of this part and their fault kinds (plan 8.3):
  * - rows (the run, its steps and their journal; the options active_plugins,
@@ -34,6 +35,7 @@ namespace AlphaBridge\Tests\Integration;
 use AB_MCP_IT_Code;
 use AB_MCP_IT_Sites;
 use AB_MCP_IT_Sync_Steps;
+use AB_MCP_Php_Probe;
 use AB_MCP_Protected_Store;
 use AB_MCP_REST_Controller;
 use AB_MCP_Staging;
@@ -45,6 +47,7 @@ use AB_MCP_Sync_Code_Stage_Calls;
 use AB_MCP_Sync_Code_Swap;
 use AB_MCP_Sync_Guard;
 use AB_MCP_Sync_Import;
+use AB_MCP_Sync_Pairs;
 use AB_MCP_Sync_Pairs_Tool;
 use AB_MCP_Sync_Report;
 use AB_MCP_Sync_Run;
@@ -53,6 +56,8 @@ use AB_MCP_Test_Seam;
 use AB_MCP_Test_Wporg;
 use AB_MCP_Tool_Registry;
 use AB_MCP_Tools_Staging;
+use AB_MCP_Undo;
+use AB_MCP_Update_Log;
 use PHPUnit\Framework\TestCase;
 use WP_Error;
 
@@ -466,12 +471,270 @@ final class SyncCodeRunTest extends TestCase {
 		self::assertCount( 1, array_filter( AB_MCP_Protected_Store::groups( 'stage' ), static fn( $g ) => (int) $g['run_id'] === $run_id ), 'Staged once.' );
 		self::assertSame( $before, self::live_bytes( 'ab-it-inaktiv' ), 'Nothing of the live unit changed.' );
 		self::assertSame( '1.0.0', AB_MCP_IT_Code::fassung( 'a', 'plugin', 'ab-it-inaktiv' ) );
-		// Step 3 is the swap, the next part of this branch: until it is
-		// built the step does not run and stays planned.
-		$swap = self::next( $run_id );
-		self::refused( $swap, 'ab_mcp_sync_code_swap_not_built' );
+		// Ready, and the run aborted before its swap (the swap: F56 below).
 		self::assertSame( 'planned', self::step( $run_id, 3 )['state'] );
-		self::assertSame( $before, self::live_bytes( 'ab-it-inaktiv' ) );
+		$closed = self::gated( 'wp_site_push', array( 'action' => 'abort', 'run_id' => $run_id ) );
+		self::assertIsArray( $closed, is_wp_error( $closed ) ? $closed->get_error_message() : '' );
+		self::assertNull( AB_MCP_Sync_Run::open_run(), 'The site is free.' );
+	}
+
+	/** The main files of the active plugins as the row is stored now, past every cache. */
+	private static function active(): array {
+		global $wpdb;
+		$row = $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", 'active_plugins' ) );
+		$got = is_string( $row ) ? unserialize( $row, array( 'allowed_classes' => false ) ) : null;
+		self::assertIsArray( $got, 'The row of the active plugins reads.' );
+		return $got;
+	}
+
+	/** The hash of every file below a folder, by its path relative to it. */
+	private static function digest( string $dir ): array {
+		$out = array();
+		foreach ( AB_MCP_IT_Code::files( $dir ) as $rel ) {
+			$out[ $rel ] = hash_file( 'sha256', $dir . '/' . $rel );
+		}
+		return $out;
+	}
+
+	/**
+	 * Prüft: F56, the normal case of the swap: an active plugin with a new
+	 * version on staging, released with accept, is swapped in the run in one
+	 * call. prepare() as built (the test requests before the swap go to the
+	 * own server of this site); before the first rename the note of the
+	 * replacement, the journal of the step and the mark with its instruction
+	 * stand, each as written; then the old folder lies whole in the backup
+	 * and the stage at the target, OPcache is cleared for each PHP file
+	 * replaced, the mark is closed, the pair takes its new bases, the file
+	 * undo points of the unit go and those of another unit stay; no test
+	 * request after the first rename and no swap back; the answer names the
+	 * target, the backup, the way back and the commands by hand.
+	 * Sonst: the run would not update the plugin of the customer, or update
+	 * it without the old version to go back to, without the mark that tells
+	 * a swap cut off from one that ended, with old code still in OPcache,
+	 * with a file undo point that writes a file of the old version into the
+	 * new one, or with an answer that does not say how to go back.
+	 */
+	public function testAnActivePluginReleasedWithAcceptIsSwappedInTheRunWithItsBackupItsMarkAndTheWayBack(): void {
+		list( $args, $entry ) = self::changed( 'ab-it-aktiv', '2.0.0' );
+		$n      = (int) $entry['n'];
+		$target = AB_MCP_IT_Code::path( 'a', 'plugin', 'ab-it-aktiv' );
+		$main   = 'ab-it-aktiv/ab-it-aktiv.php';
+		self::assertSame( '1.0.0', AB_MCP_IT_Code::fassung( 'a', 'plugin', 'ab-it-aktiv' ) );
+		self::assertContains( $main, self::active(), 'The plugin runs here.' );
+		self::wporg();
+		// Two file undo points: one of the unit, one of another plugin.
+		$points = array();
+		foreach ( array( 'ab-it-aktiv', 'ab-it-inaktiv' ) as $slug ) {
+			$points[ $slug ] = AB_MCP_Undo::record_result(
+				array(
+					'tool'    => 'wp_write_plugin_file',
+					'cap'     => 'edit_plugins',
+					'kind'    => 'file',
+					'summary' => $slug . '/' . $slug . '.php',
+					'items'   => 1,
+					'data'    => array(
+						'jail'    => 'plugin',
+						'slug'    => $slug,
+						'rel'     => $slug . '.php',
+						'existed' => true,
+						'bytes'   => "<?php\n// before\n",
+					),
+				)
+			);
+			self::assertIsString( $points[ $slug ], is_wp_error( $points[ $slug ] ) ? $points[ $slug ]->get_error_message() : '' );
+		}
+
+		list( , $run ) = self::begun( $args + array( 'accept' => array( $n ) ) );
+		$run_id        = (int) $run['run_id'];
+		$unit          = AB_MCP_Sync_Code_Ops::item( AB_MCP_Sync_Run::get( $run_id )['plan'], 3 )['unit'];
+		self::assertSame( array( 'swap', true, true ), array( $unit['op'], $unit['runs'], $unit['accept'] ) );
+		// Step 1, the check; step 2, the stage, until it is ready.
+		$check = self::next( $run_id );
+		self::assertIsArray( $check, is_wp_error( $check ) ? $check->get_error_message() : '' );
+		self::assertSame( array( 1, 'done' ), array( $check['step']['seq'], $check['step']['state'] ) );
+		$ready = null;
+		for ( $i = 0; $i < 20 && null === $ready; $i++ ) {
+			$answer = self::next( $run_id );
+			self::assertIsArray( $answer, is_wp_error( $answer ) ? $answer->get_error_code() . ': ' . $answer->get_error_message() : '' );
+			self::assertSame( 2, $answer['step']['seq'], 'The stage until it is done.' );
+			$ready = 'done' === $answer['step']['state'] ? $answer : null;
+		}
+		self::assertIsArray( $ready, 'The stage is ready for its swap.' );
+		self::assertSame( '1.0.0', AB_MCP_IT_Code::fassung( 'a', 'plugin', 'ab-it-aktiv' ), 'Staged, nothing of the site changed.' );
+		foreach ( $points as $slug => $token ) {
+			self::assertIsArray( AB_MCP_Undo::entry_for( $token ), "The undo point of $slug is there before the swap." );
+		}
+		clearstatcache();
+		$old = lstat( $target );
+
+		// Step 3, the swap, watched: the requests over HTTP, the state at the
+		// first rename, the paths OPcache is asked for and after which rename.
+		$http   = array();
+		$record = static function ( $response, $context, $class, $parsed, $url ) use ( &$http ): void {
+			$http[] = (string) $url;
+		};
+		$seen    = null;
+		$renames = 0;
+		$opcache = array();
+		$first   = static function () use ( &$seen, &$http, $run_id ): void {
+			global $wpdb;
+			clearstatcache();
+			$row   = $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", AB_MCP_Update_Log::REPLACED ) );
+			$marks = AB_MCP_Protected_Store::marks();
+			$mine  = is_array( $marks ) ? array_values( array_filter( $marks['marks'], static fn( $m ) => (int) $m['run_id'] === $run_id && 3 === (int) $m['seq'] ) ) : array();
+			$guide = 1 === count( $mine ) ? AB_MCP_Protected_Store::root() . '/' . AB_MCP_Protected_Store::MARKS . '/' . $mine[0]['mid'] . '/' . AB_MCP_Protected_Store::GUIDE_FILE : '';
+			$seen  = array(
+				'http'    => count( $http ),
+				'note'    => is_string( $row ) ? unserialize( $row, array( 'allowed_classes' => false ) ) : null,
+				'step'    => AB_MCP_Sync_Run::step( $run_id, 3 ),
+				'marks'   => $mine,
+				'guide'   => '' !== $guide && is_file( $guide ) ? (string) file_get_contents( $guide ) : null,
+				'fassung' => AB_MCP_IT_Code::fassung( 'a', 'plugin', 'ab-it-aktiv' ),
+				'staged'  => 1 === count( $mine ) ? array_map( static fn( $tree ) => is_dir( AB_MCP_Protected_Store::root() . '/' . $tree['path'] ), array_column( $mine[0]['trees'], null, 'role' ) ) : array(),
+			);
+		};
+		AB_MCP_Test_Seam::install(
+			AB_MCP_Sync_Code_Swap::class,
+			'naht_sync_code_swap',
+			new \AB_MCP_Sync_Code_Swap_Calls(),
+			array(
+				array(
+					'method' => 'rename',
+					'kind'   => 'before',
+					'before' => static function () use ( &$renames, $first ): void {
+						if ( 1 === ++$renames ) {
+							$first();
+						}
+					},
+				),
+				array(
+					'method' => 'opcache',
+					'kind'   => 'before',
+					'before' => static function ( $method, array $args ) use ( &$opcache, &$renames ): void {
+						$opcache[] = array( $renames, $args[0] );
+					},
+				),
+			)
+		);
+		add_action( 'http_api_debug', $record, 10, 5 );
+		try {
+			$swapped = self::next( $run_id );
+			$asked   = $http;
+		} finally {
+			remove_action( 'http_api_debug', $record, 10 );
+		}
+		self::assertIsArray( $swapped, is_wp_error( $swapped ) ? $swapped->get_error_code() . ': ' . $swapped->get_error_message() : '' );
+
+		// prepare() as built: the test requests before the swap, to home,
+		// the MCP route and admin-post.php of this site.
+		self::assertIsArray( $seen, 'The swap renamed.' );
+		$before = array_slice( $asked, 0, $seen['http'] );
+		$asks = static function ( string $url, string $at ): bool {
+			$got  = parse_url( $url );
+			$want = parse_url( $at );
+			parse_str( $got['query'] ?? '', $query );
+			parse_str( $want['query'] ?? '', $named );
+			foreach ( array( 'scheme', 'host', 'port', 'path' ) as $part ) {
+				if ( ( $got[ $part ] ?? null ) !== ( $want[ $part ] ?? null ) ) {
+					return false;
+				}
+			}
+			return array_intersect_assoc( $named, $query ) === $named;
+		};
+		foreach ( array( 'home', 'mcp', 'admin_post' ) as $name ) {
+			$at = AB_MCP_Php_Probe::targets()[ $name ];
+			self::assertNotSame( array(), array_filter( $before, static fn( $url ) => $asks( $url, $at ) ), "A test request to $name ($at) before the first rename: " . implode( ' ', $before ) );
+		}
+		// No test request after the first rename until the step ended (no
+		// probe after the swap).
+		self::assertSame( $seen['http'], count( $asked ), 'No request over HTTP after the first rename.' );
+		// Before the first rename: the note of the replacement as stored, the
+		// journal of the step begun with that time, the mark open with its
+		// instruction; the target still the old version.
+		self::assertIsArray( $seen['note'] );
+		self::assertArrayHasKey( 'plugin:ab-it-aktiv', $seen['note'], 'The note of the replacement before the first rename.' );
+		self::assertIsArray( $seen['step'] );
+		self::assertSame( 'begun', $seen['step']['state'], 'The step begun before the first rename.' );
+		self::assertSame( array( 'kind' => 'plugin', 'op' => 'swap', 'ref' => 'ab-it-aktiv' ), $seen['step']['parts']['unit'], 'The journal names the unit (stored in its canonical form, its keys sorted).' );
+		self::assertSame( $seen['note']['plugin:ab-it-aktiv'], $seen['step']['parts']['since'], 'The note and the journal hold the same beginning.' );
+		self::assertSame( $target, $seen['step']['parts']['target'] );
+		self::assertCount( 1, $seen['marks'], 'One mark of this step before the first rename.' );
+		$mark = $seen['marks'][0];
+		self::assertSame( array( 'open', 'swap', $target ), array( $mark['state'], $mark['op'], $mark['target'] ) );
+		self::assertSame( array( 'kind' => 'plugin', 'ref' => 'ab-it-aktiv' ), $mark['unit'] );
+		$trees = array_column( $mark['trees'], null, 'role' );
+		self::assertSame( array( 'backup', 'stage' ), array_keys( $trees ) );
+		self::assertSame( array( 'backup' => false, 'stage' => true ), $seen['staged'], 'At the first rename the stage is there and the place of the backup free.' );
+		$stage = AB_MCP_Protected_Store::root() . '/' . $trees['stage']['path'];
+		self::assertSame( array( $old['dev'], $old['ino'] ), array( $trees['backup']['dev'], $trees['backup']['ino'] ), 'The mark names the old folder by its identity.' );
+		self::assertIsString( $seen['guide'], 'The instruction lies beside the mark.' );
+		self::assertStringContainsString( '[nach-den-umbenennungen]', $seen['guide'] );
+		self::assertStringContainsString( $target, $seen['guide'] );
+		self::assertSame( '1.0.0', $seen['fassung'], 'The target is the old version until the first rename.' );
+
+		// The step done, two renames, no swap back.
+		self::assertSame( array( 3, 'done' ), array( $swapped['step']['seq'], $swapped['step']['state'] ), $swapped['next'] ?? '' );
+		self::assertSame( 2, $renames, 'Two renames, no swap back.' );
+		$result = self::step( $run_id, 3 )['result'];
+		self::assertSame( array( $target, $mark['mid'] ), array( $result['target'], $result['mark'] ) );
+		$backup = $result['backup'];
+		self::assertSame( AB_MCP_Protected_Store::root() . '/' . $trees['backup']['path'], $backup, 'The backup is the one the mark names (relative to the store).' );
+		// The new version at the target, the stage itself (its identity); the
+		// stage is gone from the store.
+		clearstatcache();
+		self::assertSame( '2.0.0', AB_MCP_IT_Code::fassung( 'a', 'plugin', 'ab-it-aktiv' ) );
+		$now = lstat( $target );
+		self::assertSame( array( $trees['stage']['dev'], $trees['stage']['ino'] ), array( $now['dev'], $now['ino'] ), 'The stage is the target now.' );
+		self::assertFalse( file_exists( $stage ), 'The stage is gone from the store.' );
+		// The old folder whole in the backup: its bytes and its identity.
+		self::assertSame( self::digest( AB_MCP_IT_Code::source( 'plugin', 'ab-it-aktiv', '1.0.0' ) ), self::digest( $backup ), 'The old version whole in the backup.' );
+		$kept = lstat( $backup );
+		self::assertSame( array( $old['dev'], $old['ino'] ), array( $kept['dev'], $kept['ino'] ), 'The backup is the old folder itself.' );
+		// OPcache: after the second rename, each PHP file of the old and of the
+		// new version by its path at the target; none between the renames.
+		$php = array();
+		foreach ( array( '1.0.0', '2.0.0' ) as $version ) {
+			foreach ( AB_MCP_IT_Code::files( AB_MCP_IT_Code::source( 'plugin', 'ab-it-aktiv', $version ) ) as $rel ) {
+				if ( '.php' === substr( $rel, -4 ) ) {
+					$php[ $target . '/' . $rel ] = true;
+				}
+			}
+		}
+		$want = array_keys( $php );
+		sort( $want, SORT_STRING );
+		self::assertSame( array(), array_filter( $opcache, static fn( $call ) => 1 === $call[0] ), 'No OPcache between the renames.' );
+		self::assertSame( $want, array_column( array_filter( $opcache, static fn( $call ) => 2 === $call[0] ), 1 ), 'OPcache for each PHP file replaced.' );
+		self::assertSame( count( $want ), $result['opcache'] );
+		// The mark closed (Z20a).
+		$marks = AB_MCP_Protected_Store::marks();
+		self::assertIsArray( $marks );
+		$closed_mark = array_values( array_filter( $marks['marks'], static fn( $m ) => $m['mid'] === $mark['mid'] ) );
+		self::assertCount( 1, $closed_mark );
+		self::assertSame( 'closed', $closed_mark[0]['state'], 'The mark is closed.' );
+		// The pair: its files based on the version of staging, by this run.
+		$pair = AB_MCP_Sync_Pairs::get( $unit['pair_id'] );
+		self::assertIsArray( $pair );
+		self::assertSame( array( 'live' => $unit['staging_hash'], 'staging' => $unit['staging_hash'] ), AB_MCP_Sync_Pairs::part_bases( $pair, 'files' ), 'The files of the pair take the version of staging as their base on both sides.' );
+		self::assertSame( array( $run_id, 'push' ), array( $pair['last_run'], $pair['base_origin'] ) );
+		// The file undo points of the unit go, the other one stays.
+		self::assertInstanceOf( WP_Error::class, AB_MCP_Undo::entry_for( $points['ab-it-aktiv'] ), 'The file undo point of the unit is discarded.' );
+		self::assertIsArray( AB_MCP_Undo::entry_for( $points['ab-it-inaktiv'] ), 'The file undo point of another plugin stays.' );
+		self::assertSame( 1, $result['discarded'] );
+		// The plugin still runs, in its new version, and the lock for changes
+		// is given back.
+		self::assertContains( $main, self::active(), 'The plugin is still active.' );
+		self::assertFalse( AB_MCP_Sync_Code_Swap::lock_held(), 'The lock for changes is given back.' );
+		self::assertSame( '2.0.0', AB_MCP_IT_Code::mark( 'a', 'ab-it-aktiv' ), 'The site runs the new version.' );
+		// The answer: target, backup, the way back, the commands by hand.
+		$says = $swapped['next'];
+		self::assertStringContainsString( 'version 1.0.0 here before, 2.0.0 now', $says );
+		self::assertStringContainsString( 'its new version lies at ' . $target, $says );
+		self::assertStringContainsString( 'the old one whole in the backup ' . $backup, $says );
+		self::assertStringContainsString( 'wp_site_revert action=plan with run_id ' . $run_id, $says );
+		self::assertStringContainsString( "\$ mv '" . $target . "' '" . $stage . "'", $says, 'The command that moves the new version out.' );
+		self::assertStringContainsString( "\$ mv '" . $backup . "' '" . $target . "'", $says, 'The command that puts the old version back.' );
+		self::assertNotSame( array(), $result['by_hand'] );
+		self::assertStringContainsString( "\n" . implode( "\n", $result['by_hand'] ) . "\n", $says, 'The answer carries the commands of the result, one after the other.' );
 		$closed = self::gated( 'wp_site_push', array( 'action' => 'abort', 'run_id' => $run_id ) );
 		self::assertIsArray( $closed, is_wp_error( $closed ) ? $closed->get_error_message() : '' );
 		self::assertNull( AB_MCP_Sync_Run::open_run(), 'The site is free.' );
