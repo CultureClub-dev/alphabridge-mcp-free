@@ -545,7 +545,7 @@ final class SyncSafeCallsTest extends TestCase {
 			'maybe_unserialize' => array( 1, 'maybe_unserialize(): the step of its caller (the raw record of the proof of the protected store, read through $wpdb), after the deadline.' ),
 		),
 		'class-sync-code-plan.php' => array(
-			'__'                           => array( 31, 'the refusals, the locks and the preview of a plan of the code, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes.' ),
+			'__'                           => array( 33, 'the refusals, the locks and the preview of a plan of the code (with part D3a the versions in the lock without accept, F2: here and on the staging site, or not on this site), in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes.' ),
 			'AB_MCP_Shape::read'           => array( 3, 'entry_of(), pair_of() and by_label(): an entry of the report, its pair and a group of the packages taken over (as AB_MCP_Protected_Store::groups() gives it) read in their forms ENTRY, PAIR and GROUP before the plan uses them (Z8b branch 5, parts 1a-2, 1a-3 and K1a: no cast, no default value); checks the value it is given, no stored value (the forms name no codec).' ),
 			'AB_MCP_Protected_Store::bind' => array( 1, 'bind(): the packages of the environment of the report and the packages of code bound to the run of the code, kept until its swaps; each binding checked (V20 of the pre-check of branch 5).' ),
 		),

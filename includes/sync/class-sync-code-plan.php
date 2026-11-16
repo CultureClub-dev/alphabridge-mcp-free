@@ -343,12 +343,18 @@ final class AB_MCP_Sync_Code_Plan {
 		}
 		$released = in_array( $n, $selection['accept'], true );
 		if ( $runs && ! $released ) {
+			// F2: the lock names the operation and the versions.
+			$versions = null === $here
+				/* translators: %s: the version on the staging site. */
+				? sprintf( __( 'not on this site, %s on the staging site', 'alphabridge-mcp' ), (string) $signed['version'] )
+				/* translators: 1: the version on this site, 2: the version on the staging site. */
+				: sprintf( __( 'version %1$s here, %2$s on the staging site', 'alphabridge-mcp' ), (string) $here, (string) $signed['version'] );
 			return $lock(
 				'theme' === $kind
-					/* translators: 1: entry number of the report, 2: the folder of the theme. */
-					? sprintf( __( 'Entry %1$d swaps code this site runs: the theme %2$s is the theme that runs or its parent. It is taken over only with its number in accept, by which the person releases code of it to run in the swap, its new version too; files come back through the way back, what its routines change in the database does not. Pass accept with this number, or leave the entry out.', 'alphabridge-mcp' ), $n, $ref )
-					/* translators: 1: entry number of the report, 2: the folder or file of the plugin. */
-					: sprintf( __( 'Entry %1$d swaps code this site runs: the plugin %2$s is active. It is taken over only with its number in accept, by which the person releases code of it to run in the swap, its new version too; files come back through the way back, what its routines change in the database does not. Pass accept with this number, or leave the entry out.', 'alphabridge-mcp' ), $n, $ref )
+					/* translators: 1: entry number of the report, 2: the folder of the theme, 3: its versions (version 1.0 here, 2.0 on the staging site). */
+					? sprintf( __( 'Entry %1$d swaps code this site runs: the theme %2$s is the theme that runs or its parent, %3$s. It is taken over only with its number in accept, by which the person releases code of it to run in the swap, its new version too; files come back through the way back, what its routines change in the database does not. Pass accept with this number, or leave the entry out.', 'alphabridge-mcp' ), $n, $ref, $versions )
+					/* translators: 1: entry number of the report, 2: the folder or file of the plugin, 3: its versions (version 1.0 here, 2.0 on the staging site). */
+					: sprintf( __( 'Entry %1$d swaps code this site runs: the plugin %2$s is active, %3$s. It is taken over only with its number in accept, by which the person releases code of it to run in the swap, its new version too; files come back through the way back, what its routines change in the database does not. Pass accept with this number, or leave the entry out.', 'alphabridge-mcp' ), $n, $ref, $versions )
 			);
 		}
 		$need = AB_MCP_Sync_Code_Stage::need( $env, $kind, $ref );

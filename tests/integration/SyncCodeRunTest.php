@@ -57,6 +57,7 @@ use AB_MCP_Sync_Report;
 use AB_MCP_Sync_Run;
 use AB_MCP_Sync_Schema;
 use AB_MCP_Test_Seam;
+use AB_MCP_Test_Sync_Fetcher;
 use AB_MCP_Test_Wporg;
 use AB_MCP_Tool_Registry;
 use AB_MCP_Tools_Staging;
@@ -762,6 +763,84 @@ final class SyncCodeRunTest extends TestCase {
 		self::assertSame( '1.1.0', AB_MCP_IT_Code::fassung( 'a', 'plugin', 'ab-it-inaktiv' ) );
 		self::assertNotContains( 'ab-it-inaktiv/ab-it-inaktiv.php', self::active(), 'The plugin stays inactive.' );
 		self::closed( $run_id );
+	}
+
+	/**
+	 * Prüft: F3: an own plugin (one wordpress.org does not offer) with a new
+	 * version, active and released with accept, comes as a package of code
+	 * of the staging site, fetched by this site itself (direct) or handed
+	 * over in chunks (relay), and is swapped as F56 swaps: staged from the
+	 * package, the test requests before the swap, the note, the journal and
+	 * the mark before the first rename, the old version whole in the backup,
+	 * the pair new, the answer with the way back. Without accept it is
+	 * locked as in F2: the lock reads the code that runs here, not where the
+	 * new version comes from (testTheSwapOfCodeThatRunsIsPlannedOnlyWithItsNumberInAcceptAndTheTokenBindsIt).
+	 * Sonst: an own plugin of the customer, which wordpress.org does not
+	 * have, could not be updated by the run, or only over one of the two
+	 * ways a package comes.
+	 */
+	#[DataProvider( 'package_ways' )]
+	public function testAnOwnPluginWithANewVersionComesAsAPackageOfCodeDirectOrOverTheRelayAndIsSwapped( string $way ): void {
+		$ref = array(
+			'kind' => 'plugin',
+			'ref'  => 'ab-it-aktiv',
+		);
+		list( $run_id, $unit, $target ) = self::ready_to_swap(
+			null,
+			array(
+				'packages' => static function ( array $report ) use ( $way, $ref ): array {
+					self::clear_b();
+					$export = array(
+						'purpose'     => 'code',
+						'report_hash' => $report['report_hash'],
+						'refs'        => array( $ref ),
+					);
+					return array( 'direct' === $way ? self::fetched( $export ) : self::relayed( $export )[0] );
+				},
+			)
+		);
+		self::assertSame( 'packages', self::step( $run_id, 2 )['parts']['stage']['source'], 'Staged from the package, not from wordpress.org.' );
+		self::swapped_whole(
+			$run_id,
+			$unit,
+			$target,
+			array(
+				'slug'     => 'ab-it-aktiv',
+				'old'      => self::bytes_of( $target ),
+				'new'      => self::bytes_of( AB_MCP_IT_Code::path( 'b', 'plugin', 'ab-it-aktiv' ) ),
+				'versions' => array( '1.0.0', '2.0.0' ),
+			)
+		);
+		self::assertSame( '2.0.0', AB_MCP_IT_Code::mark( 'a', 'ab-it-aktiv' ), 'The site runs the new version.' );
+		self::closed( $run_id );
+	}
+
+	/** The two ways a package of code comes to this site: fetched by it (direct), handed over in chunks (relay). */
+	public static function package_ways(): array {
+		return array(
+			'direct' => array( 'direct' ),
+			'relay'  => array( 'relay' ),
+		);
+	}
+
+	/** A package B makes with these arguments, fetched by A itself from B (fetch, the direct way): its id. */
+	private static function fetched( array $export ): string {
+		$package = self::b( array( array( 'op' => 'export', 'as' => 'package' ) + $export ) )['package'];
+		self::assertIsArray( $package );
+		self::assertArrayHasKey( 'fetch', $package, var_export( $package, true ) );
+		$state = AB_MCP_Sync_Import::call(
+			array(
+				'package_id'  => $package['package_id'],
+				'manifest'    => $package['manifest'],
+				'purpose'     => $export['purpose'],
+				'report_hash' => $export['report_hash'],
+				'fetch'       => $package['fetch'],
+			),
+			AB_MCP_Test_Sync_Fetcher::for_sites()
+		);
+		self::assertIsArray( $state, is_wp_error( $state ) ? $state->get_error_message() : '' );
+		self::assertTrue( $state['complete'], 'Fetched whole in one call.' );
+		return $package['package_id'];
 	}
 
 	/** The bytes of a folder (each file by its path relative to it) or of a file (by its name), by their SHA-256. */
@@ -2411,7 +2490,8 @@ final class SyncCodeRunTest extends TestCase {
 
 	public function testTheSwapOfCodeThatRunsIsPlannedOnlyWithItsNumberInAcceptAndTheTokenBindsIt(): void {
 		// F2 and F21, the part of the plan (Z24, the early refusal; Z41): an
-		// active plugin is planned only with its number in accept.
+		// active plugin is planned only with its number in accept; without it
+		// the lock names the operation and the versions (F2, D3a).
 		AB_MCP_IT_Code::put( 'b', 'plugin', 'ab-it-inaktiv', '1.1.0' );
 		list( $args, $entry, , $units ) = self::changed( 'ab-it-aktiv', '2.0.0' );
 		$n = (int) $entry['n'];
@@ -2419,7 +2499,7 @@ final class SyncCodeRunTest extends TestCase {
 		self::wporg();
 		$message = self::refused( self::gated( 'wp_site_push', $args ), 'ab_mcp_sync_push_nothing' );
 		self::assertStringContainsString( "Entry $n swaps code this site runs", $message, 'Locked with the operation.' );
-		self::assertStringContainsString( 'the plugin ab-it-aktiv is active', $message );
+		self::assertStringContainsString( 'the plugin ab-it-aktiv is active, version 1.0.0 here, 2.0.0 on the staging site. It is taken over only with its number in accept', $message, 'With the versions (F2, D3a).' );
 		self::assertStringContainsString( 'Pass accept with this number', $message, 'With the way.' );
 		// accept that names no unit chosen: refused before anything is planned.
 		self::assertStringContainsString( 'is in accept but is no plugin or theme chosen', self::refused( self::gated( 'wp_site_push', $args + array( 'accept' => array( $n + 1000 ) ) ), 'ab_mcp_sync_push_selection' ) );
