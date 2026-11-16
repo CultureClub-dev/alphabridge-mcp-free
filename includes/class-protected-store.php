@@ -2801,10 +2801,15 @@ final class AB_MCP_Protected_Store {
 	 * of the shell run of a way back by hand that branch 1 laid down): what
 	 * the swap moved, with
 	 * device, inode and hash of each tree, and for each point of an abort a
-	 * section [point] whose lines "$ …" are the commands, in a shell, that put
-	 * the old state back by hand and check that it is the right folder (its
-	 * inode, ls -di). For a plugin active at the beginning: what to do where
-	 * it is inactive afterwards, and the sentence of the race (limit A5).
+	 * section [point] whose one line "$ …" is the command, in a shell, that
+	 * puts the old state back by hand and checks that it is the right folder
+	 * (its inode, ls -di): its parts joined with &&, the checks first, so
+	 * that nothing is moved where one of them fails, also where a person
+	 * types the lines one by one (Codex D1, finding 6), and OK at its end;
+	 * after each command that moves something, the line to clear OPcache or
+	 * restart PHP (finding 7). For a plugin active at the beginning: what to
+	 * do where it is inactive afterwards, and the sentence of the race (limit
+	 * A5).
 	 *
 	 * @param array $mark A mark as put_mark() stores it.
 	 * @return string
@@ -2827,6 +2832,16 @@ final class AB_MCP_Protected_Store {
 		$inode = static function ( $path, $tree ) use ( $q ) {
 			return '$ test "$(ls -di ' . $q( $path ) . ' | awk \'{print $1}\')" = "' . (int) $tree['ino'] . '"';
 		};
+		// The one command line of a section: its parts joined with &&, then OK.
+		$chain   = static function ( array $parts ) {
+			$out = array();
+			foreach ( $parts as $part ) {
+				$out[] = substr( $part, 2 );
+			}
+			$out[] = 'echo OK';
+			return '$ ' . implode( ' && ', $out );
+		};
+		$opcache = __( 'Then clear OPcache of this site, or have PHP restarted (at the host: PHP-FPM or the web server): where PHP does not check its files for changes (opcache.validate_timestamps=0), it can still run the code it read before.', 'alphabridge-mcp' );
 		$lines   = array();
 		$lines[] = __( 'AlphaBridge MCP: how to put the old state back by hand, without WordPress', 'alphabridge-mcp' );
 		$lines[] = '';
@@ -2853,7 +2868,7 @@ final class AB_MCP_Protected_Store {
 		/* translators: 1: run, 2: step, 3: the time it began (UTC). */
 		$lines[] = sprintf( __( 'Run %1$d, step %2$d, begun %3$s UTC.', 'alphabridge-mcp' ), (int) $mark['run_id'], (int) $mark['seq'], gmdate( 'Y-m-d H:i:s', (int) $mark['begun'] ) );
 		$lines[] = __( 'The hash is the one of the manifest of the unit as AlphaBridge reads it; in a shell the inode tells the right folder from another of the same name (ls -di shows it).', 'alphabridge-mcp' );
-		$lines[] = __( 'Run the commands of the point where the swap stopped, one after the other; where a check (test …) fails, stop and ask before anything else is moved.', 'alphabridge-mcp' );
+		$lines[] = __( 'Run the command of the point where the swap stopped, in a shell: its checks (test …) come first, joined with &&, so that nothing is moved where one of them fails, and it prints OK at its end where all of it held. Where it does not print OK, stop and ask before anything else is moved.', 'alphabridge-mcp' );
 		$lines[] = '';
 
 		$lines[] = '[vor-den-umbenennungen]';
@@ -2861,11 +2876,10 @@ final class AB_MCP_Protected_Store {
 			// A unit the site did not have (Behebung 1, A3): the old state is
 			// «the target is missing».
 			$lines[] = __( 'The unit was not in the site before; nothing was moved yet. Check that the target is missing and the new version lies in the store:', 'alphabridge-mcp' );
-			$lines[] = '$ test ! -e ' . $q( $target );
-			$lines[] = $inode( $root . '/' . $new['path'], $new );
+			$lines[] = $chain( array( '$ test ! -e ' . $q( $target ), $inode( $root . '/' . $new['path'], $new ) ) );
 		} else {
 			$lines[] = __( 'Before the first rename nothing was moved. Check that the target is the old version:', 'alphabridge-mcp' );
-			$lines[] = null === $old ? '$ test -e ' . $q( $target ) : $inode( $target, $old );
+			$lines[] = $chain( array( null === $old ? '$ test -e ' . $q( $target ) : $inode( $target, $old ) ) );
 		}
 		$lines[] = '';
 
@@ -2874,7 +2888,8 @@ final class AB_MCP_Protected_Store {
 			$put     = array( '$ test ! -e ' . $q( $target ), $inode( $back, $old ), '$ mv ' . $q( $back ) . ' ' . $q( $target ), $inode( $target, $old ) );
 			$lines[] = '[zwischen-den-umbenennungen]';
 			$lines[] = __( 'The target is missing; the old version lies whole in the backup. Put it back and check it:', 'alphabridge-mcp' );
-			$lines   = array_merge( $lines, $put );
+			$lines[] = $chain( $put );
+			$lines[] = $opcache;
 			$lines[] = '';
 			$swap    = $put;
 			if ( null !== $new ) {
@@ -2885,20 +2900,25 @@ final class AB_MCP_Protected_Store {
 			$lines[] = null !== $new
 				? __( 'The new version is at the target, the old one in the backup. Swap back and check it:', 'alphabridge-mcp' )
 				: __( 'The target is missing; the old version lies whole in the backup. Put it back and check it:', 'alphabridge-mcp' );
-			$lines   = array_merge( $lines, $swap );
+			$lines[] = $chain( $swap );
+			$lines[] = $opcache;
 			$lines[] = '';
 			$lines[] = '[waehrend-des-ruecktauschs]';
 			$lines[] = __( 'The swap back stopped: the target holds the new version or is missing. Finish it and check it:', 'alphabridge-mcp' );
+			$finish  = array();
 			if ( null !== $new ) {
-				$lines[] = '$ if [ -e ' . $q( $target ) . ' ] && [ "$(ls -di ' . $q( $target ) . ' | awk \'{print $1}\')" = "' . (int) $new['ino'] . '" ]; then test ! -e ' . $q( $root . '/' . $new['path'] ) . ' && mv ' . $q( $target ) . ' ' . $q( $root . '/' . $new['path'] ) . '; fi';
+				$finish[] = '$ if [ -e ' . $q( $target ) . ' ] && [ "$(ls -di ' . $q( $target ) . ' | awk \'{print $1}\')" = "' . (int) $new['ino'] . '" ]; then test ! -e ' . $q( $root . '/' . $new['path'] ) . ' && mv ' . $q( $target ) . ' ' . $q( $root . '/' . $new['path'] ) . '; fi';
 			}
-			$lines[] = '$ if [ ! -e ' . $q( $target ) . ' ]; then mv ' . $q( $back ) . ' ' . $q( $target ) . '; fi';
-			$lines[] = $inode( $target, $old );
-			$lines[] = '';
-			$lines[] = '[nach-der-aktivierung]';
-			$lines[] = __( 'After the activation: as after the renames. Swap back and check it:', 'alphabridge-mcp' );
-			$lines   = array_merge( $lines, $swap );
-			$lines[] = '';
+			$finish[] = '$ if [ ! -e ' . $q( $target ) . ' ]; then mv ' . $q( $back ) . ' ' . $q( $target ) . '; fi';
+			$finish[] = $inode( $target, $old );
+			$lines[]  = $chain( $finish );
+			$lines[]  = $opcache;
+			$lines[]  = '';
+			$lines[]  = '[nach-der-aktivierung]';
+			$lines[]  = __( 'After the activation: as after the renames. Swap back and check it:', 'alphabridge-mcp' );
+			$lines[]  = $chain( $swap );
+			$lines[]  = $opcache;
+			$lines[]  = '';
 		} elseif ( null !== $new ) {
 			// The new unit goes back into its place in the store: the site is
 			// then as before, without the unit.
@@ -2907,19 +2927,23 @@ final class AB_MCP_Protected_Store {
 			$out     = array( $inode( $target, $new ), '$ test ! -e ' . $q( $stage ), '$ mv ' . $q( $target ) . ' ' . $q( $stage ), '$ test ! -e ' . $q( $target ), $inode( $stage, $new ) );
 			$lines[] = '[zwischen-den-umbenennungen]';
 			$lines[] = __( 'The unit was not in the site before. Where the new version is at the target, it goes back into the store; check that the target is missing then:', 'alphabridge-mcp' );
-			$lines   = array_merge( $lines, $back );
+			$lines[] = $chain( $back );
+			$lines[] = $opcache;
 			$lines[] = '';
 			$lines[] = '[nach-den-umbenennungen]';
 			$lines[] = __( 'The new unit is in the site. Take it out again into its place in the store and check that the target is missing:', 'alphabridge-mcp' );
-			$lines   = array_merge( $lines, $out );
+			$lines[] = $chain( $out );
+			$lines[] = $opcache;
 			$lines[] = '';
 			$lines[] = '[waehrend-des-ruecktauschs]';
 			$lines[] = __( 'The way back stopped. Where the new version is still at the target, it goes back into the store; check that the target is missing then:', 'alphabridge-mcp' );
-			$lines   = array_merge( $lines, $back );
+			$lines[] = $chain( $back );
+			$lines[] = $opcache;
 			$lines[] = '';
 			$lines[] = '[nach-der-aktivierung]';
 			$lines[] = __( 'After the activation: as after the renames. What the activation routine wrote stays; moving the files back does not take it back.', 'alphabridge-mcp' );
-			$lines   = array_merge( $lines, $out );
+			$lines[] = $chain( $out );
+			$lines[] = $opcache;
 			$lines[] = '';
 		}
 		foreach ( (array) $mark['active'] as $file ) {

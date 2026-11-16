@@ -15,6 +15,9 @@
 
 defined( 'ABSPATH' ) || exit;
 
+// A part PHP runs that does not end in .php (F56, Codex D1 finding 1).
+require_once __DIR__ . '/includes/teil.inc';
+
 // The mark of this version, set as it loads (F39): readable in this process
 // and in the answer to every request of the site.
 $GLOBALS['ab_it_fassung']['ab-it-aktiv'] = '2.0.0';

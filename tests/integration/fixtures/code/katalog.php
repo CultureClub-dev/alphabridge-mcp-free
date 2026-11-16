@@ -23,7 +23,7 @@ return array(
 			'main'      => array( 'ab-it-aktiv/ab-it-aktiv.php' ),
 			'fassungen' => array(
 				'1.0.0' => 'Ausgangsstand, aktiv, Zähler (F2, F27–F29, F32)',
-				'2.0.0' => 'neue Fassung, besteht die Probe (F2)',
+				'2.0.0' => 'neue Fassung, besteht die Probe (F2), mit einem eingebundenen Teil includes/teil.inc (F56)',
 				'fatal' => 'neue Fassung 2.0.1, Syntax richtig, Fatal beim Laden (Rücktausch)',
 				'php'   => 'neue Fassung 2.0.2 mit Requires PHP: 99.0 (F20)',
 			),

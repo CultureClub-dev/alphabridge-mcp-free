@@ -840,6 +840,52 @@ final class StoreTreesTest extends TestCase {
 		self::assertSame( $s['old'], self::snapshot( $s['backup'] ), 'The old one in the backup.' );
 	}
 
+	/**
+	 * Prüft: Codex D1, findings 6 and 7: the command of a point moves
+	 * nothing where one of its checks fails, also typed into a shell without
+	 * set -e (here: bash without -e, the lines of the section as they come),
+	 * and prints OK only where all of it held; each point that moves
+	 * something says, after its command, to clear OPcache or restart PHP.
+	 * Sonst: a check that fails without a word would not stop the next mv,
+	 * which then moves the backup into the folder at the target; or PHP
+	 * would go on running the new code from OPcache after the old files are
+	 * back.
+	 */
+	public function testTheCommandOfAPointMovesNothingWhereACheckFailsAlsoWithoutSetEAndNamesOpcache(): void {
+		$plain = static function ( string $guide, string $point ): array {
+			$lines = AB_MCP_IT_Handweg::commands( (string) file_get_contents( $guide ), $point );
+			self::assertCount( 1, $lines, $point . ': one command line.' );
+			return AB_MCP_IT_Process::run( array( 'bash', '-c', implode( "\n", $lines ) ), '', 60, self::root() );
+		};
+		// The swap stopped after the renames, the target holds the new
+		// version: the command of «between the renames» checks that the
+		// target is missing, which fails, so its mv does not run.
+		$s = $this->swap_with_mark();
+		self::assertTrue( rename( $s['target'], $s['backup'] ) );
+		self::assertTrue( rename( $s['stage'], $s['target'] ) );
+		$run = $plain( $s['mark']['guide'], 'zwischen-den-umbenennungen' );
+		self::assertNotSame( 0, $run['exit'] );
+		self::assertSame( $s['new'], self::snapshot( $s['target'] ), 'The new version stays at the target, nothing moved into it.' );
+		self::assertSame( $s['old'], self::snapshot( $s['backup'] ), 'The old one stays whole in the backup.' );
+		self::assertStringNotContainsString( 'OK', $run['stdout'], 'No OK where a check failed.' );
+		// Where its checks hold, the same command puts the old version back
+		// and prints OK.
+		self::assertTrue( rename( $s['target'], $s['stage'] ) );
+		$run = $plain( $s['mark']['guide'], 'zwischen-den-umbenennungen' );
+		self::assertSame( 0, $run['exit'], $run['stderr'] );
+		self::assertSame( $s['old'], self::snapshot( $s['target'] ), 'The old version at the target.' );
+		self::assertSame( "OK\n", $run['stdout'] );
+		// OPcache after each command that moves something, none where nothing
+		// moved.
+		$text = (string) file_get_contents( $s['mark']['guide'] );
+		foreach ( array( 'vor-den-umbenennungen' => false, 'zwischen-den-umbenennungen' => true, 'nach-den-umbenennungen' => true, 'waehrend-des-ruecktauschs' => true, 'nach-der-aktivierung' => true ) as $point => $moves ) {
+			$at      = strpos( $text, '[' . $point . "]\n" );
+			$section = substr( $text, (int) $at, (int) strpos( $text, "\n\n", (int) $at ) - (int) $at );
+			self::assertNotFalse( $at, $point );
+			self::assertSame( $moves, false !== strpos( $section, "\nThen clear OPcache of this site, or have PHP restarted (at the host: PHP-FPM or the web server): where PHP does not check its files for changes (opcache.validate_timestamps=0), it can still run the code it read before." ), $point . ': OPcache after its command.' );
+		}
+	}
+
 	public function testTheInstructionNamesWhatMovedAndForAnActivePluginTheWayAndTheRace(): void {
 		$s    = $this->swap_with_mark( array( self::UNIT . '/' . self::UNIT . '.php' ) );
 		$text = (string) file_get_contents( $s['mark']['guide'] );

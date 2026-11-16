@@ -226,6 +226,34 @@ final class AB_MCP_Sync_Code_Swap_Calls {
 	}
 
 	/**
+	 * Reserve the place of a rename (Z16, exclusive; only through move()):
+	 * a folder by mkdir(), a file by fopen( 'x' ), each made only where
+	 * nothing is there yet. Nothing is removed here or anywhere else.
+	 *
+	 * @param string $path The place.
+	 * @param string $form folder or file.
+	 * @return bool Whether this call made it.
+	 */
+	public function reserve( $path, $form ) {
+		if ( 'folder' === $form ) {
+			return @mkdir( $path, 0700 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- a place not free is answered.
+		}
+		$handle = 'file' === $form ? @fopen( $path, 'x' ) : false; // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- a place not free is answered.
+		return false !== $handle && fclose( $handle ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
+	}
+
+	/**
+	 * Set the rights of a folder or file (only through given_rights()).
+	 *
+	 * @param string $path Path.
+	 * @param int    $mode The rights.
+	 * @return bool
+	 */
+	public function chmod( $path, $mode ) {
+		return @chmod( $path, $mode ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- rights not set are answered.
+	}
+
+	/**
 	 * The note of the replacement of the files of a folder (E5 6): a file
 	 * undo point recorded before $since holds a file of the previous version.
 	 *
@@ -856,7 +884,7 @@ final class AB_MCP_Sync_Code_Swap {
 		}
 		if ( array() !== $missing ) {
 			/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name, 3: the targets not reached, as the probe names them (home, mcp, admin_post). */
-			return self::refusal( 'code:probe_before', sprintf( __( 'The test requests before the swap of the %1$s %2$s did not reach every target the swap compares with afterwards (not reached: %3$s; home is the home page, mcp this MCP endpoint, admin_post wp-admin/admin-post.php), so the unit is not swapped. Let the site reach itself (wp_site_health shows the test requests), then call action=next again; or update the unit by hand in wp-admin.', 'alphabridge-mcp' ), $kind, $ref, implode( ', ', $missing ) ) );
+			return self::refusal( 'code:probe_before', sprintf( __( 'The test requests before the swap of the %1$s %2$s did not reach every target this site has to answer before a swap (not reached: %3$s; home is the home page, mcp this MCP endpoint, admin_post wp-admin/admin-post.php), so the unit is not swapped. Let the site reach itself (wp_site_health shows the test requests), then call action=next again; or update the unit by hand in wp-admin.', 'alphabridge-mcp' ), $kind, $ref, implode( ', ', $missing ) ) );
 		}
 		return array(
 			'answer' => $answer,
@@ -1131,9 +1159,10 @@ final class AB_MCP_Sync_Code_Swap {
 
 	/**
 	 * The swap after prepare() answered, under its lock: what it moves, read
-	 * before anything is written (plan_of()); the time kept for the swap
-	 * asked once more right before the first write (the place of the backup
-	 * read the target whole); rename_marked(); and its end.
+	 * before anything is written (plan_of()); the new version given the
+	 * rights of the site (given_rights()); the time kept for the swap asked
+	 * once more right before the first write (the place of the backup read
+	 * the target whole); rename_marked(); and its end.
 	 *
 	 * @param array $in       The arguments, read in the form of the row swap.prepare.
 	 * @param array $prepared prepare().
@@ -1143,6 +1172,10 @@ final class AB_MCP_Sync_Code_Swap {
 		$plan = self::plan_of( $in, $prepared );
 		if ( is_wp_error( $plan ) ) {
 			return $plan;
+		}
+		$rights = self::given_rights( $in, $plan );
+		if ( is_wp_error( $rights ) ) {
+			return $rights;
 		}
 		$left = self::time_left( $in['unit']['kind'], $in['unit']['ref'], $in['until'], 2 * $prepared['took'] + self::RESERVE, $prepared['took'] );
 		if ( is_wp_error( $left ) ) {
@@ -1229,22 +1262,81 @@ final class AB_MCP_Sync_Code_Swap {
 	}
 
 	/**
+	 * The rights of the new version as WordPress gives them to the files of
+	 * a plugin or theme it installs or updates (Codex D1, finding 2): each
+	 * folder FS_CHMOD_DIR, each file FS_CHMOD_FILE; where they are not
+	 * defined, WordPress's own reckoning (WP_Filesystem(),
+	 * wp-admin/includes/file.php: fileperms( ABSPATH ) & 0777 | 0755 and
+	 * fileperms( ABSPATH . 'index.php' ) & 0777 | 0644). Else the stage would
+	 * take the rights of its building folder (0700, AB_MCP_Sync_Code_Stage)
+	 * into the site. Each entry set and read back, folder by folder from the
+	 * top, links not followed, within the time of the call; before the first
+	 * write of the swap, so that a refusal leaves the site as it was and the
+	 * step planned. The stage stays below the folders of the store (0700).
+	 * The rights are no part of its hash: the manifest reads the type of an
+	 * entry only.
+	 *
+	 * @param array $in   The arguments.
+	 * @param array $plan plan_of().
+	 * @return true|WP_Error
+	 */
+	private static function given_rights( array $in, array $plan ) {
+		$mode = static function ( $path ) {
+			$stat = self::calls()->stat( $path );
+			return is_array( $stat ) && isset( $stat['mode'] ) && is_int( $stat['mode'] ) ? $stat['mode'] : 0;
+		};
+		$want = array(
+			'folder' => defined( 'FS_CHMOD_DIR' ) ? FS_CHMOD_DIR : ( $mode( ABSPATH ) & 0777 | 0755 ),
+			'file'   => defined( 'FS_CHMOD_FILE' ) ? FS_CHMOD_FILE : ( $mode( ABSPATH . 'index.php' ) & 0777 | 0644 ),
+		);
+		$ok   = is_int( $want['folder'] ) && is_int( $want['file'] ) && min( $want ) >= 0 && max( $want ) <= 07777;
+		$todo = $ok ? array( $plan['new']['path'] ) : array();
+		while ( $ok && array() !== $todo ) {
+			$path  = array_shift( $todo );
+			$stat  = self::calls()->lstat( $path );
+			$form  = self::is_mode( $stat, 0040000 ) ? 'folder' : ( self::is_mode( $stat, 0100000 ) ? 'file' : null );
+			$now   = self::clock();
+			$ok    = null !== $form && null !== $now && $now <= $in['until'] && true === self::calls()->chmod( $path, $want[ $form ] );
+			$back  = $ok ? self::calls()->lstat( $path ) : null;
+			$ok    = $ok && is_array( $back ) && isset( $back['mode'] ) && is_int( $back['mode'] ) && ( $back['mode'] & 07777 ) === $want[ $form ];
+			$names = $ok && 'folder' === $form ? self::calls()->scandir( $path ) : array();
+			$ok    = $ok && is_array( $names );
+			foreach ( $ok ? $names : array() as $name ) {
+				$ok = $ok && is_string( $name );
+				if ( $ok && '.' !== $name && '..' !== $name ) {
+					$todo[] = $path . '/' . $name;
+				}
+			}
+		}
+		if ( $ok ) {
+			return true;
+		}
+		$octal = static function ( $rights ) {
+			return is_int( $rights ) ? sprintf( '%04o', $rights ) : '-';
+		};
+		/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name, 3: the rights of a folder (octal, as 0755), 4: the rights of a file (octal, as 0644). */
+		return self::refusal( 'code:rights', sprintf( __( 'The new version of the %1$s %2$s could not be given the rights WordPress gives the files of a plugin or theme it installs (folders %3$s, files %4$s: FS_CHMOD_DIR and FS_CHMOD_FILE, or as WordPress reckons them from the folder of the site), each set and read back within the time of this call, so it is not swapped and nothing of this site changed. Call action=next again; where it keeps failing, check that PHP may change the rights of the files it owns in the protected store and that FS_CHMOD_DIR and FS_CHMOD_FILE are whole numbers of rights, or update the unit by hand in wp-admin.', 'alphabridge-mcp' ), $in['unit']['kind'], $in['unit']['ref'], $octal( $want['folder'] ), $octal( $want['file'] ) ) );
+	}
+
+	/**
 	 * The one function that renames in the swap (Z15, Z16; E5 6 and 7). First
 	 * the note of the replacement with the time the swap begins
 	 * (AB_MCP_Update_Log::mark_replaced(), for the file undo points of
 	 * before it), the journal of the step (begun) and the mark of the swap
 	 * with its instruction, each read back; then the target into the backup
 	 * (the whole old folder, never beside the target) and the stage into the
-	 * target, each only to a place that is free (move()). Where the second
-	 * rename fails, the old version goes back to the target, again only
-	 * where the target is free (F35).
+	 * target, each only into a place reserved for it (move()). Where the
+	 * second rename fails, the old version goes back to the target, again
+	 * only into a place that is free, or into the reservation the second
+	 * rename left there where it is proved its own and empty (F35).
 	 *
 	 * @param array $in   The arguments.
 	 * @param array $plan plan_of().
-	 * @return array{at:string,mid:string|null,why:WP_Error|null,journal:array|null,back:bool|null}
+	 * @return array{at:string,mid:string|null,why:WP_Error|null,journal:array|null,back:bool|null,held:string[]}
 	 *         at: note or journal (the step not begun, nothing moved), mark (the step begun,
 	 *         no mark), first (the mark open, nothing moved), second (the second rename
-	 *         failed; back: whether the old version went back to the target), done.
+	 *         failed; back: whether the old version went back to the target), done;
+	 *         held: the reservations of this swap left where a rename failed (own()).
 	 */
 	private static function rename_marked( array $in, array $plan ) {
 		$out   = array(
@@ -1253,6 +1345,7 @@ final class AB_MCP_Sync_Code_Swap {
 			'why'     => null,
 			'journal' => null,
 			'back'    => null,
+			'held'    => array(),
 		);
 		$unit  = $in['unit'];
 		$since = AB_MCP_Sync_Run::now();
@@ -1284,28 +1377,97 @@ final class AB_MCP_Sync_Code_Swap {
 			) + $out;
 		}
 		$out['mid'] = $mark['mid'];
-		if ( ! self::move( $plan['target'], $plan['old']['path'] ) ) {
-			return array( 'at' => 'first' ) + $out;
+		$first      = self::move( $plan['target'], $plan['old']['path'], $plan['old']['form'] );
+		if ( ! $first['moved'] ) {
+			return array(
+				'at'   => 'first',
+				'held' => self::own( $first['held'] ) ? array( $first['held']['path'] ) : array(),
+			) + $out;
 		}
-		if ( ! self::move( $plan['new']['path'], $plan['target'] ) ) {
+		$second = self::move( $plan['new']['path'], $plan['target'], $plan['new']['form'] );
+		if ( ! $second['moved'] ) {
+			$back = self::move( $plan['old']['path'], $plan['target'], $plan['old']['form'], $second['held'] );
 			return array(
 				'at'   => 'second',
-				'back' => self::move( $plan['old']['path'], $plan['target'] ),
+				'back' => $back['moved'],
+				'held' => self::own( $back['held'] ) ? array( $back['held']['path'] ) : array(),
 			) + $out;
 		}
 		return array( 'at' => 'done' ) + $out;
 	}
 
 	/**
-	 * A rename only to a place that is free (Z16: exclusive): nothing is
-	 * there now (lstat()), then rename().
+	 * A rename only into a place reserved for it (Z16: exclusive), without
+	 * unlink and without deleting anything (Codex D1, finding 3): the place
+	 * is reserved first with an empty folder or file of this swap, made only
+	 * where nothing is there (Calls::reserve()), then the rename goes onto
+	 * that reservation. Where another process fills the folder in between,
+	 * rename() fails and nothing of it is replaced. A reservation this swap
+	 * left at the place before (the way back of F35) is taken only where it
+	 * is proved its own and empty (own(), empty_held()). That rename()
+	 * replaces an empty folder is POSIX; where a platform does not do it,
+	 * the rename fails as any other (GRENZEN-CODE.md).
 	 *
-	 * @param string $from The path now.
-	 * @param string $to   The path after.
-	 * @return bool Whether it moved.
+	 * @param string     $from The path now.
+	 * @param string     $to   The path after.
+	 * @param string     $form folder or file (the form of $from in plan_of()).
+	 * @param array|null $held The reservation of this swap at $to, or null to make one.
+	 * @return array{moved:bool,held:array|null} held: the reservation of this swap at $to
+	 *         (path, form, dev, ino) where the rename did not take it.
 	 */
-	private static function move( $from, $to ) {
-		return false === self::calls()->lstat( $to ) && true === self::calls()->rename( $from, $to );
+	private static function move( $from, $to, $form, $held = null ) {
+		if ( null === $held ) {
+			if ( ! self::calls()->reserve( $to, $form ) ) {
+				return array(
+					'moved' => false,
+					'held'  => null,
+				);
+			}
+			$at   = self::identity( $to );
+			$held = array( 'path' => $to ) + ( null === $at ? array(
+				'form' => null,
+				'dev'  => null,
+				'ino'  => null,
+			) : $at );
+		} elseif ( ! self::own( $held ) || ! self::empty_held( $held ) ) {
+			return array(
+				'moved' => false,
+				'held'  => $held,
+			);
+		}
+		$moved = true === self::calls()->rename( $from, $to );
+		return array(
+			'moved' => $moved,
+			'held'  => $moved ? null : $held,
+		);
+	}
+
+	/**
+	 * Whether a reservation of this swap is still the one it made: its form,
+	 * device and inode as read right after it was made.
+	 *
+	 * @param array|null $held The reservation (move()), or null.
+	 * @return bool
+	 */
+	private static function own( $held ) {
+		$at = is_array( $held ) ? self::identity( $held['path'] ) : null;
+		return null !== $at && array( $held['form'], $held['dev'], $held['ino'] ) === array( $at['form'], $at['dev'], $at['ino'] );
+	}
+
+	/**
+	 * Whether a reservation is empty: a folder with no name in it, a file of
+	 * 0 bytes.
+	 *
+	 * @param array $held The reservation (move()).
+	 * @return bool
+	 */
+	private static function empty_held( array $held ) {
+		if ( 'file' === $held['form'] ) {
+			$stat = self::calls()->lstat( $held['path'] );
+			return is_array( $stat ) && isset( $stat['size'] ) && 0 === $stat['size'];
+		}
+		$names = self::calls()->scandir( $held['path'] );
+		return is_array( $names ) && array() === array_diff( $names, array( '.', '..' ) );
 	}
 
 	/**
@@ -1405,16 +1567,18 @@ final class AB_MCP_Sync_Code_Swap {
 		}
 		$closed = self::close( 'swap', $in, $plan, $moved['mid'] );
 		if ( is_wp_error( $closed ) ) {
-			return self::unclear( $in, $plan, $moved['journal'], 'nach-den-umbenennungen', $closed->get_error_message() );
+			// A backup not proved whole gets no command that puts it back
+			// (Codex D1, finding 5).
+			return self::unclear( $in, $plan, $moved['journal'], 'nach-den-umbenennungen', $closed->get_error_message(), array( 'backup' => 'code:close_backup' !== $closed->get_error_code() ) );
 		}
 		$rebased = self::rebased( $in, $plan );
 		if ( is_wp_error( $rebased ) ) {
 			/* translators: %s: the error of the object pairs (one or more whole sentences). */
-			return self::unclear( $in, $plan, $moved['journal'], 'nach-den-umbenennungen', sprintf( __( 'The new version is at the target and the mark of the swap is closed, but the files of its pair did not take their new bases (%s).', 'alphabridge-mcp' ), $rebased->get_error_message() ) );
+			return self::unclear( $in, $plan, $moved['journal'], 'nach-den-umbenennungen', sprintf( __( 'The new version is at the target and the mark of the swap is closed, but the files of its pair did not take their new bases (%s).', 'alphabridge-mcp' ), $rebased->get_error_message() ), array( 'closed' => true ) );
 		}
 		$by_hand = self::by_hand( $in, $plan, 'nach-den-umbenennungen' );
 		/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name, 3: its version here before, 4: its version now, 5: the folder or file of the unit (absolute path), 6: the backup of the old version (absolute path), 7: run number. */
-		$message = sprintf( __( 'The %1$s %2$s of the staging site is swapped in (version %3$s here before, %4$s now): its new version lies at %5$s, the old one whole in the backup %6$s. Look at the site now (the home page and wp-admin): where something fails, the way back of this run puts the old version back (wp_site_revert action=plan with run_id %7$d). Where this site answers no request any more (the new version ends fatal on every call, so neither MCP nor wp-admin is reached), put the old version back by hand in a shell on the server, one command after the other:', 'alphabridge-mcp' ), $unit['kind'], $unit['ref'], (string) $prepared['version']['live'], (string) $prepared['version']['staging'], $plan['target'], $plan['old']['path'], $in['run_id'] );
+		$message = sprintf( __( 'The %1$s %2$s of the staging site is swapped in (version %3$s here before, %4$s now): its new version lies at %5$s, the old one whole in the backup %6$s. Look at the site now (the home page and wp-admin): where something fails, the way back of this run puts the old version back (wp_site_revert action=plan with run_id %7$d). Where this site answers no request any more (the new version ends fatal on every call, so neither MCP nor wp-admin is reached), put the old version back by hand in a shell on the server, as the lines below say:', 'alphabridge-mcp' ), $unit['kind'], $unit['ref'], (string) $prepared['version']['live'], (string) $prepared['version']['staging'], $plan['target'], $plan['old']['path'], $in['run_id'] );
 		$message .= "\n" . implode( "\n", $by_hand ) . "\n" . __( 'Call action=next for the next step.', 'alphabridge-mcp' );
 		return self::ended(
 			$in,
@@ -1442,8 +1606,7 @@ final class AB_MCP_Sync_Code_Swap {
 	 * old version (now in the backup) and of the new one (now at the
 	 * target), each by its path at the target, through invalidate(). The
 	 * paths, sorted; the error where one is not invalidated or not_active,
-	 * or the files of a version could not be listed within the time of the
-	 * call.
+	 * or the files of a version could not all be listed (php_paths()).
 	 *
 	 * @param array $plan  plan_of().
 	 * @param float $until When the swap has to be over.
@@ -1455,7 +1618,7 @@ final class AB_MCP_Sync_Code_Swap {
 			$found = self::php_paths( $root, $until );
 			if ( null === $found ) {
 				/* translators: %s: a folder (absolute path). */
-				return new WP_Error( 'code:opcache_files', sprintf( __( 'The PHP files in %s could not all be listed within the time of this call, so OPcache was not cleared for each file the swap replaced, and this site may still run old code.', 'alphabridge-mcp' ), $root ) );
+				return new WP_Error( 'code:opcache_files', sprintf( __( 'The PHP files in %s could not all be listed (a folder or an entry not read, an entry neither a folder nor a file, or the time of this call over), so OPcache was not cleared for each file the swap replaced, and this site may still run old code.', 'alphabridge-mcp' ), $root ) );
 			}
 			foreach ( $found as $rel ) {
 				$paths[ '' === $rel ? $plan['target'] : $plan['target'] . '/' . $rel ] = true;
@@ -1474,17 +1637,25 @@ final class AB_MCP_Sync_Code_Swap {
 	}
 
 	/**
-	 * The PHP files below a folder (or the file itself), relative to it ('',
-	 * the file itself), folder by folder, links not followed; null where a
-	 * folder is not listed or the time of the call is over.
+	 * The files PHP runs below a folder (or the file itself), relative to it
+	 * ('', the file itself), by the list of the stage
+	 * (AB_MCP_Sync_Code_Stage::is_php(): .php, .inc, .phtml …; Codex D1,
+	 * finding 1), folder by folder, links not followed; null where the
+	 * listing is not whole (finding 4): a folder not listed, an entry not
+	 * read (lstat() fails) or neither a folder nor a plain file, or the time
+	 * of the call is over.
 	 *
 	 * @param string $root  A folder or file.
 	 * @param float  $until When the swap has to be over.
 	 * @return string[]|null
 	 */
 	private static function php_paths( $root, $until ) {
-		if ( self::is_mode( self::calls()->lstat( $root ), 0100000 ) ) {
-			return '.php' === strtolower( substr( $root, -4 ) ) ? array( '' ) : array();
+		$top = self::calls()->lstat( $root );
+		if ( self::is_mode( $top, 0100000 ) ) {
+			return AB_MCP_Sync_Code_Stage::is_php( $root ) ? array( '' ) : array();
+		}
+		if ( ! self::is_mode( $top, 0040000 ) ) {
+			return null;
 		}
 		$out  = array();
 		$dirs = array( '' );
@@ -1496,14 +1667,16 @@ final class AB_MCP_Sync_Code_Swap {
 				return null;
 			}
 			foreach ( $names as $name ) {
-				if ( ! is_string( $name ) || '.' === $name || '..' === $name ) {
+				if ( '.' === $name || '..' === $name ) {
 					continue;
 				}
-				$path = '' === $rel ? $name : $rel . '/' . $name;
-				$stat = self::calls()->lstat( $root . '/' . $path );
+				$path = is_string( $name ) ? ( '' === $rel ? $name : $rel . '/' . $name ) : null;
+				$stat = null === $path ? false : self::calls()->lstat( $root . '/' . $path );
 				if ( self::is_mode( $stat, 0040000 ) ) {
 					$dirs[] = $path;
-				} elseif ( '.php' === strtolower( substr( $name, -4 ) ) && self::is_mode( $stat, 0100000 ) ) {
+				} elseif ( ! self::is_mode( $stat, 0100000 ) ) {
+					return null; // Not read, or neither a folder nor a plain file: the listing is not whole.
+				} elseif ( AB_MCP_Sync_Code_Stage::is_php( $name ) ) {
 					$out[] = $path;
 				}
 			}
@@ -1637,11 +1810,11 @@ final class AB_MCP_Sync_Code_Swap {
 		}
 		if ( 'second' === $moved['at'] && true !== $moved['back'] ) {
 			/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name. */
-			return self::unclear( $in, $plan, $moved['journal'], 'zwischen-den-umbenennungen', sprintf( __( 'The %1$s %2$s is not at its place: its old version was moved into the backup, the new one could not be put at the target, and the old one could not be put back.', 'alphabridge-mcp' ), $in['unit']['kind'], $in['unit']['ref'] ) );
+			return self::unclear( $in, $plan, $moved['journal'], 'zwischen-den-umbenennungen', sprintf( __( 'The %1$s %2$s is not at its place: its old version was moved into the backup, the new one could not be put at the target, and the old one could not be put back.', 'alphabridge-mcp' ), $in['unit']['kind'], $in['unit']['ref'] ), array( 'held' => $moved['held'] ) );
 		}
 		$closed = null === $moved['mid'] ? true : self::close( 'kept', $in, $plan, $moved['mid'] );
 		if ( is_wp_error( $closed ) ) {
-			return self::unclear( $in, $plan, $moved['journal'], 'vor-den-umbenennungen', $closed->get_error_message() );
+			return self::unclear( $in, $plan, $moved['journal'], 'vor-den-umbenennungen', $closed->get_error_message(), array( 'held' => $moved['held'] ) );
 		}
 		$why = array(
 			'mark'   => null === $moved['why'] ? '' : $moved['why']->get_error_message(),
@@ -1649,27 +1822,57 @@ final class AB_MCP_Sync_Code_Swap {
 			'second' => __( 'The new version could not be put at the target (rename() failed, or the place was not free), so the old one went back to its place.', 'alphabridge-mcp' ),
 		);
 		/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name, 3: why (one or more whole sentences). */
-		$message = sprintf( __( 'The %1$s %2$s is not swapped, and the old version is at its place: %3$s Its stage stays in the protected store. The run goes on with the next step (action=next); to swap the unit, make a new report (wp_site_diff) and plan again.', 'alphabridge-mcp' ), $in['unit']['kind'], $in['unit']['ref'], $why[ $moved['at'] ] );
-		return self::ended( $in, 'failed', $moved['journal'], array( 'message' => $message ) );
+		$message = sprintf( __( 'The %1$s %2$s is not swapped, and the old version is at its place: %3$s Its stage stays in the protected store. The run goes on with the next step (action=next); to swap the unit, make a new report (wp_site_diff) and plan again.', 'alphabridge-mcp' ), $in['unit']['kind'], $in['unit']['ref'], $why[ $moved['at'] ] ) . self::held_note( $moved['held'] );
+		return self::ended(
+			$in,
+			'failed',
+			$moved['journal'],
+			array(
+				'message' => $message,
+				'held'    => $moved['held'],
+			)
+		);
 	}
 
 	/**
-	 * The end of a swap that is not proved (15.23 «zu 2»): the step unclear,
-	 * the mark stays open; the answer names the way back of the run and the
-	 * commands of the way by hand for the point it stopped at.
+	 * The end of a swap that is not proved (15.23 «zu 2»): the step unclear;
+	 * the answer names the state of the mark as it is proved (Codex D1,
+	 * finding 8: closed only where close() closed it), the reservations this
+	 * swap left, the way back of the run and the commands of the way by hand
+	 * for the point it stopped at; where the backup is not proved whole, no
+	 * command that puts it back, but that it is to be checked first
+	 * (finding 5). All of it here, the one place that builds this answer.
 	 *
 	 * @param array  $in      The arguments.
 	 * @param array  $plan    plan_of().
 	 * @param array  $journal The journal of the step.
 	 * @param string $point   The section of the instruction (AB_MCP_Protected_Store::guide()).
 	 * @param string $why     What happened (one or more whole sentences).
+	 * @param array  $known   closed: the mark closed (default false, open); backup: false
+	 *                        where the backup was not proved whole (default true); held:
+	 *                        the reservations this swap left (rename_marked()).
 	 * @return array|WP_Error
 	 */
-	private static function unclear( array $in, array $plan, array $journal, $point, $why ) {
-		$by_hand = self::by_hand( $in, $plan, $point );
-		/* translators: 1: what happened (one or more whole sentences), 2: run number. */
-		$message = sprintf( __( '%1$s The step is unclear, and the mark of the swap stays open: the way back of this run puts the old version back (wp_site_revert action=plan with run_id %2$d). Where this site answers no request any more, put it back by hand in a shell on the server, one command after the other:', 'alphabridge-mcp' ), $why, $in['run_id'] );
-		$message .= "\n" . implode( "\n", $by_hand );
+	private static function unclear( array $in, array $plan, array $journal, $point, $why, array $known = array() ) {
+		$known += array(
+			'closed' => false,
+			'backup' => true,
+			'held'   => array(),
+		);
+		$why   .= self::held_note( $known['held'] );
+		if ( ! $known['backup'] ) {
+			$by_hand = array();
+			/* translators: 1: what happened (one or more whole sentences), 2: the backup of the old version (absolute path), 3: run number. */
+			$message = sprintf( __( '%1$s The step is unclear, and the mark of the swap stays open. The backup %2$s could not be proved as the old version, so this answer gives no command that puts it back: check the backup first (its files against the old version of the unit) before it is put back by hand or with the way back of this run (wp_site_revert action=plan with run_id %3$d).', 'alphabridge-mcp' ), $why, $plan['old']['path'], $in['run_id'] );
+		} else {
+			$by_hand = self::by_hand( $in, $plan, $point );
+			$message = $known['closed']
+				/* translators: 1: what happened (one or more whole sentences), 2: run number. */
+				? sprintf( __( '%1$s The step is unclear; the mark of the swap is closed, as the new version at the target and the old one in the backup were proved. The way back of this run puts the old version back (wp_site_revert action=plan with run_id %2$d). Where this site answers no request any more, put it back by hand in a shell on the server, as the lines below say:', 'alphabridge-mcp' ), $why, $in['run_id'] )
+				/* translators: 1: what happened (one or more whole sentences), 2: run number. */
+				: sprintf( __( '%1$s The step is unclear, and the mark of the swap stays open: the way back of this run puts the old version back (wp_site_revert action=plan with run_id %2$d). Where this site answers no request any more, put it back by hand in a shell on the server, as the lines below say:', 'alphabridge-mcp' ), $why, $in['run_id'] );
+			$message .= "\n" . implode( "\n", $by_hand );
+		}
 		return self::ended(
 			$in,
 			'unclear',
@@ -1678,9 +1881,26 @@ final class AB_MCP_Sync_Code_Swap {
 				'message' => $message,
 				'target'  => $plan['target'],
 				'backup'  => $plan['old']['path'],
+				'mark'    => $known['closed'] ? 'closed' : 'open',
+				'held'    => $known['held'],
 				'by_hand' => $by_hand,
 			)
 		);
+	}
+
+	/**
+	 * The reservations a swap left where a rename failed (move()), named
+	 * with their paths; nothing where there are none.
+	 *
+	 * @param string[] $held Paths.
+	 * @return string A sentence with a space before it, or ''.
+	 */
+	private static function held_note( array $held ) {
+		if ( array() === $held ) {
+			return '';
+		}
+		/* translators: %s: the reserved places (absolute paths, separated by commas). */
+		return ' ' . sprintf( __( 'This swap reserved the place of a rename with an empty folder or file of its own, which stays because the rename failed (the swap deletes nothing): %s. Where it is still empty, take it away (rmdir, or rm of an empty file) before anything is put at its place by hand.', 'alphabridge-mcp' ), implode( ', ', $held ) );
 	}
 
 	/**

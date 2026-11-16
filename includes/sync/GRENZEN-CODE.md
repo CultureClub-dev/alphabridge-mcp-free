@@ -606,6 +606,71 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
 - **Trifft Normalfall:** nein. Im Normalfall (F56: ein aktives Plugin mit `accept`) läuft neben dem Tausch kein Update
   derselben Einheit. Wie oft ein Hintergrund-Update von WordPress in einen Tausch fällt, ist nicht gemessen.
 
+### G-5-10 Exklusives Umbenennen: Reservierung des Platzes, Grenzen der Plattform
+
+- **Fundstelle:** `AB_MCP_Sync_Code_Swap` (`includes/sync/class-sync-code-swap.php`, Stand der Behebung von D1 über
+  `2b28314`): `move()` (`:1418`) reserviert den Platz über `Calls::reserve()` (`:237`; ein Ordner mit `mkdir()`, eine
+  Datei mit `fopen( 'x' )`, beides nur, wo nichts liegt) und benennt dann auf die Reservierung um (`:1438`); der Rückweg
+  F35 nimmt eine Reservierung am Ziel nur, wo `own()` (`:1452`, Gerät und Inode wie beim Anlegen) und `empty_held()`
+  (`:1464`) sie belegen. Gelöscht wird nichts; eine Reservierung, die nach einer gescheiterten Umbenennung bleibt, nennt
+  die Antwort mit Pfad (`held_note()`, `:1898`).
+- **Quelle:** Befund A3 der Codex-Runde über D1 (`belege/codex-free-z5r-d-1-antwort.md`), Entscheid 3 der Lead
+  (`belege/lead-auftrag-z5r-d1-behebung.md`); Plan Z16 («zurückgelegt wird nur exklusiv, auf ein freies Ziel»).
+- **Was:**
+  - Die Exklusivität beruht auf POSIX: `rename()` eines Ordners auf einen vorhandenen leeren Ordner ersetzt ihn, auf
+    einen nicht leeren scheitert es. Unter Windows meldet `MoveFileExW` einen Fehler, wenn das Ziel ein vorhandener
+    Ordner ist (learn.microsoft.com, «MoveFileExW function», Flag `MOVEFILE_REPLACE_EXISTING`: «If lpNewFileName names
+    an existing directory, an error is reported.»). Ob PHP unter Windows darüber umbenennt, ist im Code von PHP nicht
+    nachgelesen und nicht gemessen. Wo `rename()` auf die eigene leere Reservierung nicht geht, scheitert schon die
+    erste Umbenennung wie jede andere: Der Schritt endet `failed`, nichts ist bewegt, die Reservierung am Platz der
+    Sicherung ist mit Pfad genannt. Ein Tausch ist dort nicht möglich.
+  - Restfenster bei einer Einheit aus einer Datei: `rename()` ersetzt eine Datei immer. Schreibt ein anderer Prozess
+    zwischen `fopen( 'x' )` und `rename()` in die eigene leere Reservierung, gehen seine Bytes verloren.
+  - Restfenster bei einem Ordner: Nimmt ein anderer Prozess die eigene leere Reservierung zwischen `mkdir()` und
+    `rename()` weg und legt einen eigenen leeren Ordner hin, ersetzt `rename()` diesen (ohne Inhalt). Ganz schliessen
+    würde das erst ein Umbenennen ohne Ersetzen (`renameat2()` mit `RENAME_NOREPLACE` unter Linux), das PHP nicht
+    anbietet.
+  - Eine Reservierung, die bleibt, hält ihren Namen: am Platz der Sicherung den Namen der Einheit in der Gruppe dieses
+    Laufs, am Ziel den Ordner der Einheit (die Befehle von Hand prüfen `test ! -e` und bewegen dann nichts; die Antwort
+    sagt, eine noch leere Reservierung zuerst wegzunehmen).
+- **Trifft Normalfall:** nein. Im Normalfall legt kein anderer Prozess etwas an die Plätze; F56 belegt die eigene leere
+  Reservierung am Platz der Sicherung bei der ersten Umbenennung.
+
+### G-5-11 Rechte der neuen Fassung wie bei WordPress
+
+- **Fundstelle:** `AB_MCP_Sync_Code_Swap::given_rights()` (`includes/sync/class-sync-code-swap.php:1283`; Rechnung
+  `:1289`–`:1290`, Rücklesung `:1301`), aus `swapped()` (`:1171`) nach `plan_of()` und vor der letzten Zeitprüfung
+  (`time_left()`), also vor dem Ersatzvermerk. Vorbild: WordPress 7.1.3 des Testsystems,
+  `wp-admin/includes/file.php:2234`–`:2240` in `WP_Filesystem()` (`:2180`): `FS_CHMOD_DIR` gleich
+  `fileperms( ABSPATH ) & 0777 | 0755`, `FS_CHMOD_FILE` gleich `fileperms( ABSPATH . 'index.php' ) & 0777 | 0644`, wo
+  nicht definiert; `unzip_file()` legt Ordner und Dateien mit diesen Rechten an (`:1780`, `:1834`).
+- **Quelle:** Befund A2 der Codex-Runde über D1, Entscheid 2 der Lead (`belege/lead-auftrag-z5r-d1-behebung.md`).
+- **Was:**
+  - Die Stage von wordpress.org kommt über `unzip_file()` (`class-sync-code-stage.php:122`) schon mit diesen Rechten;
+    das Setzen ändert dort nichts. Die Stage eines Pakets bringt die Rechte ihres Bauordners mit (Ordner 0700,
+    `AB_MCP_Sync_Code_Stage_Calls::mkdir()`, `class-sync-code-stage.php:233`); erst `given_rights()` gibt ihr die der
+    Site.
+  - Wo `FS_CHMOD_DIR` oder `FS_CHMOD_FILE` nicht definiert und `fileperms()` nicht lesbar ist, gilt wie bei WordPress
+    0755 beziehungsweise 0644 (`false & 0777` ist 0). Eine Konstante, die keine ganze Zahl von 0 bis 07777 ist, lehnt
+    der Tausch ab (`code:rights`), WordPress gäbe sie an `chmod()` weiter.
+  - Braucht der Webserver eines Hosts andere Rechte, als WordPress setzt, gilt dasselbe für jedes Update über wp-admin.
+  - Nicht gebaut (Alternative für Teil G): die Rechte der alten Fassung je gleichem Pfad übernehmen; neue Einträge
+    bräuchten dann trotzdem eine Regel.
+  - Das Setzen läuft je Eintrag und gehört zur Zeit des Aufrufs vor der letzten Zeitprüfung; nicht gemessen (Teil G).
+- **Trifft Normalfall:** nein für eine Stage von wordpress.org (F56), ja für die Stage eines Pakets; dort ist es gebaut.
+
+### G-5-12 Der Handweg leert OPcache nicht selbst
+
+- **Fundstelle:** `AB_MCP_Protected_Store::guide()` (`includes/class-protected-store.php:2817`): nach jedem Befehl, der
+  etwas bewegt, der Satz `$opcache` (`:2844`). Die Befehle eines Punkts sind eine Zeile, mit `&&` verkettet und mit
+  `echo OK` am Ende (`$chain`, `:2836`).
+- **Quelle:** Befunde A6 und A7 der Codex-Runde über D1, Entscheide 6 und 7 der Lead.
+- **Was:** Aus einer Shell lässt sich der OPcache der Prozesse, die die Site bedienen (PHP-FPM, Modul des Webservers),
+  nicht leeren; die Kommandozeile von PHP hat einen eigenen. Der Handweg nennt darum das Leeren oder den Neustart von PHP
+  beim Hoster als Satz, ohne Befehl. Bis dahin kann bei `opcache.validate_timestamps=0` der Code laufen, den PHP vor dem
+  Zurücklegen gelesen hat.
+- **Trifft Normalfall:** nein. Im Normalfall braucht es den Handweg nicht.
+
 ## Übernommen aus Zweig 2 (`bericht-zweig-2.md`, Abschnitt Grenzkandidaten; G-M9 aus «Behebung 2»)
 
 ### G-M1 Ein Lesen über Teile ist kein Augenblick
