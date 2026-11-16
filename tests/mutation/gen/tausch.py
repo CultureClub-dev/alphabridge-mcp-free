@@ -430,6 +430,11 @@ e('d3b-head-new-at-target', 'guide_head(): the case of the new version at the ta
   "\t\t\tif ( null !== $new ) {\n\t\t\t\t/* translators: %s: the name of a section of this file (not translated). */\n\t\t\t\t$cases[] = sprintf( __( 'The new version is at the target, the old version is at the place of the backup",
   "\t\t\tif ( true ) {\n\t\t\t\t/* translators: %s: the name of a section of this file (not translated). */\n\t\t\t\t$cases[] = sprintf( __( 'The new version is at the target, the old version is at the place of the backup", 'storeunit', HEAD)
 
+# ------------------------------------------- Teil D3b-1, points 1 to 3: Codex D6 (the engine, the rights of the account before the file system method, the way of a refusal)
+e('d3b-engine-error', 'run(): a WP_Error of engine() (another engine under the name code) is the answer of the step before any mutation, never an engine whose rights are asked (Codex D6, finding 1)', CS,
+  "\t\t$rights = $engine instanceof AB_MCP_Sync_Code_Kind ? $engine->rights( $in['unit']['unit_op'], $in['unit']['kind'] . ':' . $in['unit']['ref'] ) : $engine;",
+  "\t\t$rights = is_object( $engine ) ? $engine->rights( $in['unit']['unit_op'], $in['unit']['kind'] . ':' . $in['unit']['ref'] ) : $engine;", 'coderun', FOREIGN)
+
 # ------------------------------------------------ check and write
 src = {f: open(os.path.join(ROOT, f)).read() for f in VAR}
 errors = []

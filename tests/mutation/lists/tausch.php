@@ -1311,4 +1311,13 @@ return array(
 		'run'     => $unit( 'ProtectedStoreTest', 'testTheHeadOfTheInstructionNamesForEachFormOfAMarkOnlyTheCasesItsCommandsCheck' ),
 		'expect'  => '/testTheHeadOfTheInstructionNamesForEachFormOfAMarkOnlyTheCasesItsCommandsCheck/',
 	),
+	array(
+		'id'      => 'tausch/d3b-engine-error',
+		'clause'  => 'run(): a WP_Error of engine() (another engine under the name code) is the answer of the step before any mutation, never an engine whose rights are asked (Codex D6, finding 1)',
+		'file'    => $cs,
+		'search'  => "\t\t\$rights = \$engine instanceof AB_MCP_Sync_Code_Kind ? \$engine->rights( \$in['unit']['unit_op'], \$in['unit']['kind'] . ':' . \$in['unit']['ref'] ) : \$engine;",
+		'replace' => "\t\t\$rights = is_object( \$engine ) ? \$engine->rights( \$in['unit']['unit_op'], \$in['unit']['kind'] . ':' . \$in['unit']['ref'] ) : \$engine;",
+		'run'     => $it( 'SyncCodeRunTest', 'testAForeignEngineUnderTheNameCodeIsTheAnswerOfTheSwapBeforeAnythingIsWritten' ),
+		'expect'  => '/testAForeignEngineUnderTheNameCodeIsTheAnswerOfTheSwapBeforeAnythingIsWritten/',
+	),
 );

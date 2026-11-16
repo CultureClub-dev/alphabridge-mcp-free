@@ -1134,9 +1134,11 @@ final class AB_MCP_Sync_Code_Swap {
 		// files, takes edit_plugins or edit_themes besides, which
 		// DISALLOW_FILE_EDIT takes from everyone) and of the site
 		// (DISALLOW_FILE_MODS, the direct file system method); a refusal
-		// changes nothing and the step stays planned.
+		// changes nothing and the step stays planned. Where another engine
+		// holds the name code, engine() gives a WP_Error, an object too: it
+		// is the answer, as a refusal of the rights (Codex D6, finding 1).
 		$engine = null === $in ? true : AB_MCP_Sync_Code_Kind::engine();
-		$rights = is_object( $engine ) ? $engine->rights( $in['unit']['unit_op'], $in['unit']['kind'] . ':' . $in['unit']['ref'] ) : $engine;
+		$rights = $engine instanceof AB_MCP_Sync_Code_Kind ? $engine->rights( $in['unit']['unit_op'], $in['unit']['kind'] . ':' . $in['unit']['ref'] ) : $engine;
 		if ( true !== $rights ) {
 			return $rights;
 		}

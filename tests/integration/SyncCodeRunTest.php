@@ -957,6 +957,40 @@ final class SyncCodeRunTest extends TestCase {
 	}
 
 	/**
+	 * Prüft: Codex D6, finding 1 (A): where another engine holds the name
+	 * code in the registry of the kinds (a foreign entry, as a plugin could
+	 * put one there), AB_MCP_Sync_Code_Kind::engine() gives a WP_Error, and
+	 * the step of the swap answers with it before any mutation: the step
+	 * stays planned, nothing written or moved, nothing in the protected
+	 * store, and the answer names the way. With the engine of the kind code
+	 * held again, the next call swaps.
+	 * Sonst: the call would end in a fatal error (a method of the engine
+	 * asked of the error) with no answer and no way, and the step of the
+	 * swap could not go on.
+	 */
+	public function testAForeignEngineUnderTheNameCodeIsTheAnswerOfTheSwapBeforeAnythingIsWritten(): void {
+		list( $run_id, , $target ) = self::ready_to_swap();
+		$kinds  = new \ReflectionProperty( \AB_MCP_Sync_Kinds::class, 'kinds' );
+		$held   = $kinds->getValue();
+		$other  = $this->createStub( \AB_MCP_Sync_Kind::class );
+		$before = self::before_swap( $target );
+		$other->method( 'kind' )->willReturn( 'code' );
+		$kinds->setValue( null, array( 'code' => $other ) + $held );
+		try {
+			self::assertInstanceOf( WP_Error::class, \AB_MCP_Sync_Code_Kind::engine(), 'The name code is held by another engine.' );
+			$answer = self::swap_with( $run_id, array() );
+		} finally {
+			$kinds->setValue( null, $held );
+		}
+		self::nothing_begun( $run_id, $target, $before, $answer, 'ab_mcp_sync_kind_duplicate', 'Use AB_MCP_Sync_Code_Kind::engine() to register the kind code, and nothing else.' );
+		// The engine of the kind code held again: the step goes on.
+		$swapped = self::next( $run_id );
+		self::assertIsArray( $swapped, is_wp_error( $swapped ) ? $swapped->get_error_code() . ': ' . $swapped->get_error_message() : '' );
+		self::assertSame( array( 3, 'done' ), array( $swapped['step']['seq'], $swapped['step']['state'] ), $swapped['next'] ?? '' );
+		self::assertSame( '2.0.0', AB_MCP_IT_Code::fassung( 'a', 'plugin', 'ab-it-aktiv' ) );
+	}
+
+	/**
 	 * Prüft: F6: a plugin of one file (ab-it-einzeln.php), active and
 	 * released with accept, with a new version as a package of code, is
 	 * swapped as F56 swaps, as the file itself: the stage is one file of the
