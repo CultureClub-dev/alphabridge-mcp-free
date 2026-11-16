@@ -9,7 +9,8 @@
  * This part: the plan of a run of the code and its step «bereitstellen»
  * (AB_MCP_Sync_Code_Plan, AB_MCP_Sync_Code_Ops), until the unit is staged
  * and ready; nothing of the site changes on the way. And the normal case of
- * its step «tauschen» (F56, AB_MCP_Sync_Code_Swap::run()).
+ * its step «tauschen» (F56, AB_MCP_Sync_Code_Swap::run()), with the cases
+ * F46, F47 and F55 as far as the swap reaches (part D3b-2 of the rest).
  *
  * Effects to the outside of this part and their fault kinds (plan 8.3):
  * - rows (the run, its steps and their journal; the options active_plugins,
@@ -263,8 +264,8 @@ final class SyncCodeRunTest extends TestCase {
 		return $result->get_error_message();
 	}
 
-	/** Every unit that is equal on both sites paired, the public way: proposal, then confirmation with its token. */
-	private static function paired(): void {
+	/** Every unit that is equal on both sites paired, the public way: proposal, then confirmation with its token; those of $live_base (they differ already) by their files on the state of this site (Frage F, answer b; F55). */
+	private static function paired( array $live_base = array() ): void {
 		self::clear_b();
 		$answer = AB_MCP_Sync_Pairs_Tool::call(
 			array(
@@ -284,6 +285,13 @@ final class SyncCodeRunTest extends TestCase {
 			'proposal_id' => $answer['proposal_id'],
 			'categories'  => array( 'equal' ),
 		);
+		foreach ( $answer['entries'] as $entry ) {
+			if ( ! empty( $entry['unit'] ) && in_array( $entry['kind'] . ':' . $entry['ref'], $live_base, true ) ) {
+				$args['select'][] = $entry['n'];
+				$args['units'][]  = array( 'entry' => $entry['n'], 'part' => 'files', 'mode' => 'live_base' );
+			}
+		}
+		self::assertCount( count( $live_base ), $args['units'] ?? array(), 'Each unit of live_base on the first page of the proposal.' );
 		$preview = self::gated( 'wp_site_pairs', $args );
 		self::assertIsArray( $preview, is_wp_error( $preview ) ? $preview->get_error_message() : '' );
 		$done = self::gated( 'wp_site_pairs', $args + array( 'confirm_token' => $preview['confirm_token'] ) );
@@ -354,8 +362,8 @@ final class SyncCodeRunTest extends TestCase {
 	}
 
 	/** The units paired, a plugin of B put to a version ($then adds to its folder), and the report of it: the plan arguments for its entry, the entry, the packages of the environment. $ref is the name the report gives the unit, where it is not $slug (a plugin of one file: its file). */
-	private static function changed( string $slug, string $version, array $more = array(), ?callable $then = null, string $ref = '' ): array {
-		self::paired();
+	private static function changed( string $slug, string $version, array $more = array(), ?callable $then = null, string $ref = '', array $live_base = array() ): array {
+		self::paired( $live_base );
 		$put = AB_MCP_IT_Code::put( 'b', 'plugin', $slug, $version );
 		if ( null !== $then ) {
 			// What the test adds to the unit of B before its report.
@@ -533,15 +541,16 @@ final class SyncCodeRunTest extends TestCase {
 	 */
 	private static function ready_to_swap( ?callable $before = null, array $case = array() ): array {
 		$case                 = $case + array(
-			'slug'     => 'ab-it-aktiv',
-			'version'  => '2.0.0',
-			'then'     => null,
-			'runs'     => true,
-			'packages' => null,
-			'ref'      => '',
+			'slug'      => 'ab-it-aktiv',
+			'version'   => '2.0.0',
+			'then'      => null,
+			'runs'      => true,
+			'packages'  => null,
+			'ref'       => '',
+			'live_base' => array(),
 		);
 		$slug                 = $case['slug'];
-		list( $args, $entry, , , $report ) = self::changed( $slug, $case['version'], array(), $case['then'], $case['ref'] );
+		list( $args, $entry, , , $report ) = self::changed( $slug, $case['version'], array(), $case['then'], $case['ref'], $case['live_base'] );
 		$target               = AB_MCP_IT_Code::path( 'a', 'plugin', $slug );
 		self::assertSame( '1.0.0', AB_MCP_IT_Code::fassung( 'a', 'plugin', $slug ) );
 		$main = AB_MCP_IT_Code::unit( 'plugin', $slug )['main'][0];
@@ -1109,6 +1118,158 @@ final class SyncCodeRunTest extends TestCase {
 		self::assertSame( array( $target ), $swap['opcache'], 'OPcache for the one PHP file.' );
 		self::assertSame( '1.1.0', AB_MCP_IT_Code::fassung( 'a', 'plugin', 'ab-it-einzeln' ) );
 		self::assertContains( 'ab-it-einzeln.php', self::active(), 'The plugin is still active.' );
+		self::closed( $run_id );
+	}
+
+	/**
+	 * Prüft: F47: an active plugin whose version here carries the data file
+	 * data/export.csv, unchanged here, and whose new version on staging
+	 * lacks it, is swapped as F56 swaps (Entscheid 1 A); after it the file
+	 * is gone from the folder of the site and lies byte for byte in the
+	 * backup of the run, with the old folder whole. The way back is part E.
+	 * Sonst: a file of the customer the new version does not have would be
+	 * lost with the swap, or stay beside the new version as if it were part
+	 * of it.
+	 */
+	public function testADataFileTheNewVersionLacksLeavesTheSiteAndLiesInTheBackupByteForByte(): void {
+		$file = 'data/export.csv';
+		list( $run_id, $unit, $target ) = self::ready_to_swap(
+			null,
+			array(
+				'slug'    => 'ab-it-daten',
+				'version' => '1.1.0',
+			)
+		);
+		$old = self::bytes_of( $target );
+		$new = self::bytes_of( AB_MCP_IT_Code::path( 'b', 'plugin', 'ab-it-daten' ) );
+		self::assertSame( array( true, false ), array( isset( $old[ $file ] ), isset( $new[ $file ] ) ), 'The data file here, not in the new version.' );
+		$swap = self::swapped_whole(
+			$run_id,
+			$unit,
+			$target,
+			array(
+				'slug'     => 'ab-it-daten',
+				'old'      => $old,
+				'new'      => $new,
+				'versions' => array( '1.0.0', '1.1.0' ),
+			)
+		);
+		self::assertFileDoesNotExist( $target . '/' . $file, 'Gone from the folder of the site.' );
+		self::assertSame( hash_file( 'sha256', AB_MCP_IT_Code::source( 'plugin', 'ab-it-daten', '1.0.0' ) . '/' . $file ), hash_file( 'sha256', $swap['backup'] . '/' . $file ), 'Byte for byte in the backup.' );
+		self::closed( $run_id );
+	}
+
+	/**
+	 * Prüft: F46: a plugin that writes a log into its folder on every
+	 * request, on both sites, its files paired the public way on the state
+	 * of this site (Frage F, answer b); a new version on staging, and the
+	 * log written here again: the entry is changed on both sides with the
+	 * path of the log, locked code:live_changed without the choice «staging
+	 * wins», with the way of the update by hand in wp-admin; its plan begins
+	 * no run and moves nothing. Brought here to the same version and paired
+	 * anew, the next new version of staging is locked again, as the plugin
+	 * wrote here since.
+	 * Sonst: the swap would put the folder of staging over the log the
+	 * plugin writes here, so that the log of the customer is gone, or the
+	 * customer would not learn the way that works for such a plugin.
+	 */
+	public function testAPluginThatWritesIntoItsFolderIsLockedWithTheWayByHandAndNothingMoves(): void {
+		$slug   = 'ab-it-schreiber';
+		$log    = 'log/zugriffe.log';
+		$write  = static function (): void {
+			\AB_MCP_IT_Process::calls( 'a', array( 'calls' => array() ) );
+		};
+		$locked = static function ( callable $then ) use ( $slug, $log ): void {
+			list( $args, $entry ) = self::changed( $slug, '1.1.0', array(), $then, '', array( 'plugin:' . $slug ) );
+			self::assertSame( array( 'conflict', 'locked', 'code:live_changed' ), array( $entry['result'], $entry['action'], $entry['locks'][0]['key'] ), 'Changed on both sides.' );
+			self::assertArrayNotHasKey( 'choices', $entry, 'No choice «staging wins».' );
+			self::assertStringContainsString( 'update it by hand in wp-admin', $entry['locks'][0]['reason'] );
+			self::assertContains( $log, $entry['paths']['differs'], 'The path of its log.' );
+			$here    = static fn(): array => array_diff_key( self::live_bytes( $slug ), array( '/' . $log => true ) );
+			$before  = $here();
+			$message = self::refused( self::gated( 'wp_site_push', $args ), 'ab_mcp_sync_push_nothing' );
+			self::assertStringContainsString( $entry['locks'][0]['reason'], $message, 'The lock with its way.' );
+			self::assertNull( AB_MCP_Sync_Run::open_run(), 'No run begins.' );
+			self::assertSame( $before, $here(), 'Nothing of the plugin here moved.' );
+		};
+		$write();
+		$locked( $write );
+		// The same version here (by hand), the plugin writes its log, and
+		// the pair is made anew on it; then the next version of staging.
+		AB_MCP_IT_Code::put( 'a', 'plugin', $slug, '1.1.0' );
+		$write();
+		$locked(
+			static function ( string $put ) use ( $write ): void {
+				self::assertNotFalse( file_put_contents( $put . '/naechste.txt', '1.2.0' ) );
+				$write();
+			}
+		);
+		// The case against it: paired anew, and the plugin not asked here
+		// since; the next version of staging is taken over, not locked.
+		list( , $entry ) = self::changed(
+			$slug,
+			'1.1.0',
+			array(),
+			static function ( string $put ): void {
+				self::assertNotFalse( file_put_contents( $put . '/naechste.txt', '1.2.0' ) );
+			},
+			'',
+			array( 'plugin:' . $slug )
+		);
+		self::assertSame( array( 'changed_on_staging', 'take_over' ), array( $entry['result'], $entry['action'] ), 'Locked by what the plugin wrote here, nothing else.' );
+	}
+
+	/**
+	 * Prüft: F55 with sites that differ already: an active plugin whose
+	 * files differ here and on staging is paired the public way with its
+	 * files on the state of this site (Frage F, answer b), then updated on
+	 * staging; the run takes it over with accept and swaps it as F56 swaps.
+	 * Sonst: a unit the customer paired by answer b would not be updated by
+	 * the run, or its difference of before would count as a change here and
+	 * lock it.
+	 */
+	public function testAPluginThatDifferedWhenItWasPairedOnTheStateOfThisSiteIsSwappedAfterAnUpdateOnStaging(): void {
+		self::assertNotFalse( file_put_contents( AB_MCP_IT_Code::path( 'b', 'plugin', 'ab-it-aktiv' ) . '/anders.txt', 'staging' ), 'The files differ before the pair.' );
+		list( $run_id, $unit, $target ) = self::ready_to_swap( null, array( 'live_base' => array( 'plugin:ab-it-aktiv' ) ) );
+		self::swapped_whole(
+			$run_id,
+			$unit,
+			$target,
+			array(
+				'slug'     => 'ab-it-aktiv',
+				'old'      => self::bytes_of( AB_MCP_IT_Code::source( 'plugin', 'ab-it-aktiv', '1.0.0' ) ),
+				'new'      => self::bytes_of( AB_MCP_IT_Code::source( 'plugin', 'ab-it-aktiv', '2.0.0' ) ),
+				'versions' => array( '1.0.0', '2.0.0' ),
+			)
+		);
+		self::closed( $run_id );
+	}
+
+	/**
+	 * Prüft: F55 with a new plugin (F5): a plugin only on staging, planned
+	 * the public way, is checked and staged; its swap refuses
+	 * code:create_not_built with the way (abort, install by hand) before
+	 * anything of this site changes, and the run is aborted, the site free.
+	 * Sonst: the run would put a unit this version does not swap onto the
+	 * site without its backup and its mark, or leave the customer without a
+	 * way.
+	 */
+	public function testANewPluginOnStagingIsStagedAndItsSwapRefusesBeforeAnythingOfThisSiteChanges(): void {
+		$slug   = 'ab-it-inaktiv';
+		$target = AB_MCP_IT_Code::path( 'a', 'plugin', $slug );
+		AB_MCP_IT_Code::remove( 'a', 'plugin', $slug );
+		list( $args, $entry ) = self::changed( $slug, '1.1.0' );
+		self::assertSame( 'create', $entry['action'], 'Only on staging: made new.' );
+		self::wporg();
+		list( , $run ) = self::begun( $args );
+		$run_id        = (int) $run['run_id'];
+		$answer        = null;
+		for ( $i = 0; $i < 25 && ! is_wp_error( $answer ); $i++ ) {
+			$answer = self::next( $run_id );
+		}
+		self::assertStringContainsString( 'Abort the run (wp_site_push action=abort) and install the unit by hand', self::refused( $answer, 'code:create_not_built' ) );
+		clearstatcache();
+		self::assertFileDoesNotExist( $target, 'Nothing of this site changed.' );
 		self::closed( $run_id );
 	}
 

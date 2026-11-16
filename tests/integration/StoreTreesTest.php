@@ -953,6 +953,10 @@ final class StoreTreesTest extends TestCase {
 			'role'    => array( 'trees' => array( array( 'role' => 'neu' ) + $base['trees'][0] ) ),
 			'hash'    => array( 'trees' => array( array( 'hash' => 'xyz' ) + $base['trees'][0] ) ),
 			'active'  => array( 'active' => array( "a\nb" ) ),
+			// Part D3b-2 of the rest (T5): the rules of mark_fields() without a case so far.
+			'form'    => array( 'trees' => array( array( 'form' => 'link' ) + $base['trees'][0] ) ),
+			'inode'   => array( 'trees' => array( array( 'ino' => '2' ) + $base['trees'][0] ) ),
+			'note'    => array( 'note' => str_repeat( 'n', 1001 ) ),
 		);
 		$before = self::names( $root . '/marks' );
 		foreach ( $bad as $what => $change ) {
