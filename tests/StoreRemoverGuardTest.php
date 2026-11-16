@@ -47,7 +47,14 @@
  * unlink, rmdir, rename, mkdir and wp_delete_file no shipped file holds
  * the name as a string (testNoShippedFileNamesARemoverAsAValue); a name put
  * together ('un' . 'link') stays unseen. Its own test reads the spellings
- * in tests/fixtures/t7-walker/.
+ * in tests/fixtures/t7-walker/. The guards of root(), uninstall() and of
+ * the writers of an area (open()) read the walk (the skeptic over F2 and
+ * G, B1); the text of the code, comments left out, is read only where no
+ * import can rename what is sought (holding(): the calls of the store and
+ * the folders of the store by name, an import of them holds the name too;
+ * ::delete_path( and ::temp_file(, the name of the method), and for the
+ * mark of a tree being built and the one call of remove() with an area
+ * named by a variable.
  *
  * What the code does at run time is tests/integration/StoreRemoverTest.php
  * and StoreTreesTest.php.
@@ -92,12 +99,12 @@ final class StoreRemoverGuardTest extends TestCase {
 	 * Every call of a file whose name is written as a name (the head of this
 	 * file): kind (function, method, static, new), name in lower case, of
 	 * (the class of a static call; as written where it is a value), the class
-	 * and the named function it stands in, its first argument as written and
-	 * its line, in the order of the file; and the lines of every string of
-	 * the file by its text in lower case without a leading \ (V1). Each file
-	 * is parsed once per process.
+	 * and the named function it stands in, its first and second argument as
+	 * written and its line, in the order of the file; and the lines of every
+	 * string of the file by its text in lower case without a leading \ (V1).
+	 * Each file is parsed once per process.
 	 *
-	 * @return array{calls:list<array{kind:string,name:string,of:string,class:?string,function:?string,args:string,line:int}>,strings:array<string,list<int>>}
+	 * @return array{calls:list<array{kind:string,name:string,of:string,class:?string,function:?string,args:string,second:string,line:int}>,strings:array<string,list<int>>}
 	 */
 	private static function walk( string $file ): array {
 		static $walked = array();
@@ -168,6 +175,7 @@ final class StoreRemoverGuardTest extends TestCase {
 					'class'    => $class,
 					'function' => $function,
 					'args'     => isset( $args[0] ) ? $this->text( $args[0] ) : '',
+					'second'   => isset( $args[1] ) ? $this->text( $args[1] ) : '',
 					'line'     => $name->getStartLine(),
 				);
 			}
@@ -217,6 +225,11 @@ final class StoreRemoverGuardTest extends TestCase {
 		}
 		sort( $out );
 		return $out;
+	}
+
+	/** The shipped files that call a name (places() on every file of shipped()). */
+	private static function callers( string $kind, string $name, string $of ): array {
+		return array_values( array_filter( self::shipped(), static fn( string $file ): bool => array() !== self::places( $file, $kind, $name, $of ) ) );
 	}
 
 	/** The shipped PHP files (includes/, the main file, uninstall.php). */
@@ -338,7 +351,7 @@ final class StoreRemoverGuardTest extends TestCase {
 			}
 		}
 		self::assertSame( array( 'includes/class-protected-store.php' ), self::holding( 'AB_MCP_Protected_Store_Calls' ), 'No other shipped file names the calls of the store.' );
-		self::assertSame( array( 'includes/class-store-budget.php', 'includes/sync/class-sync-resources.php' ), self::holding( 'AB_MCP_Protected_Store::root(' ), 'Only the budget and the measurement get the folder of the store.' );
+		self::assertSame( array( 'includes/class-protected-store.php', 'includes/class-store-budget.php', 'includes/sync/class-sync-resources.php' ), self::callers( 'static', 'root', 'AB_MCP_Protected_Store' ), 'Only the budget and the measurement get the folder of the store (and the store itself).' );
 		self::assertSame( array( 'includes/class-protected-store.php', 'includes/class-store-budget.php', 'includes/sync/class-sync-resources.php' ), self::holding( '::delete_path(' ), 'delete_path() where a file of the store goes.' );
 		self::assertSame( array( 'includes/class-protected-store.php', 'includes/class-store-budget.php', 'includes/sync/class-sync-resources.php' ), self::holding( '::temp_file(' ) );
 	}
@@ -421,46 +434,29 @@ final class StoreRemoverGuardTest extends TestCase {
 			}
 		}
 		self::assertSame( array(), $others, 'And nothing else of the store.' );
-		self::assertSame( array( 'uninstall.php' ), self::holding( 'AB_MCP_Protected_Store::uninstall(' ), 'No shipped code but uninstall.php calls it (Pro calls it from its own uninstall).' );
+		self::assertSame( array( 'uninstall.php' ), self::callers( 'static', 'uninstall', 'AB_MCP_Protected_Store' ), 'No shipped code but uninstall.php calls it (Pro calls it from its own uninstall).' );
 		self::assertNotContains( 'uninstall.php', self::holding( 'ab-mcp-store' ), 'uninstall.php names no folder of the store.' );
 	}
 
 	/**
-	 * Every call of AB_MCP_Protected_Store::open() in shipped code, comments
-	 * left out (and the calls of the proposal through its seam, ->open()):
-	 * file, area and the meta as written.
+	 * Every call of AB_MCP_Protected_Store::open() in shipped code as the walk
+	 * reads it (walk()), and the calls of the proposal through its seam
+	 * (->open() in its file, as the retention reads ->remove()): file, area
+	 * and the meta as written.
 	 *
 	 * @return array<int,array{file:string,area:string,meta:string}>
 	 */
 	private static function opens(): array {
 		$out = array();
 		foreach ( self::shipped() as $file ) {
-			$code = '';
-			foreach ( token_get_all( (string) file_get_contents( dirname( __DIR__ ) . '/' . $file ) ) as $t ) {
-				if ( ! ( is_array( $t ) && in_array( $t[0], array( T_COMMENT, T_DOC_COMMENT ), true ) ) ) {
-					$code .= is_array( $t ) ? $t[1] : $t;
+			foreach ( self::calls( $file ) as $call ) {
+				if ( 'open' === $call['name'] && ( ( 'static' === $call['kind'] && 0 === strcasecmp( 'AB_MCP_Protected_Store', $call['of'] ) ) || ( 'method' === $call['kind'] && 'includes/sync/class-sync-proposal.php' === $file ) ) ) {
+					$out[] = array(
+						'file' => $file,
+						'area' => trim( $call['args'] ),
+						'meta' => trim( $call['second'] ),
+					);
 				}
-			}
-			if ( ! preg_match_all( '/(?:AB_MCP_Protected_Store::|calls\(\)->)open\(/', $code, $m, PREG_OFFSET_CAPTURE ) ) {
-				continue;
-			}
-			foreach ( $m[0] as $hit ) {
-				$at    = $hit[1] + strlen( $hit[0] );
-				$depth = 1;
-				$args  = '';
-				for ( $i = $at; $i < strlen( $code ) && $depth > 0; $i++ ) {
-					$c = $code[ $i ];
-					$depth += '(' === $c ? 1 : ( ')' === $c ? -1 : 0 );
-					if ( $depth > 0 ) {
-						$args .= $c;
-					}
-				}
-				$first = trim( (string) strtok( $args, ',' ) );
-				$out[] = array(
-					'file' => $file,
-					'area' => $first,
-					'meta' => trim( substr( $args, strlen( (string) strtok( $args, ',' ) ) + 1 ) ),
-				);
 			}
 		}
 		return $out;
@@ -482,7 +478,7 @@ final class StoreRemoverGuardTest extends TestCase {
 			if ( 'includes/class-protected-store.php' === $call['file'] ) {
 				continue;
 			}
-			$area = trim( $call['area'], "'" );
+			$area = trim( $call['area'], '\'"' );
 			$seen[ $call['file'] . ' ' . $call['area'] ] = true;
 			if ( in_array( $area, $runs_only, true ) ) {
 				self::assertStringContainsString( "'run_id'", $call['meta'], $call['file'] . ': a writer of ' . $area . ' gives the run.' );

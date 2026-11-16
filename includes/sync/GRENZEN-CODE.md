@@ -955,9 +955,10 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
 
 ### G-5-22 Reichweite der Wächter
 
-- **Fundstelle:** Kopf von `tests/StoreRemoverGuardTest.php` (`:32`–`:50`), `walk()` (`:102`, `nikic/php-parser`),
-  `testNoShippedFileNamesARemoverAsAValue()` (`:305`), der Wächter von `root()` (`:341`); `tests/SyncSaidScanTest.php`
-  `UNSEEN` (`:113`, `:114`). Zeilen am Stand von Teil G, Abschnitt 2.
+- **Fundstelle:** Kopf von `tests/StoreRemoverGuardTest.php` (`:32`–`:57`), `walk()` (`:109`, `nikic/php-parser`),
+  `callers()` (`:231`), `holding()` (`:250`), `testNoShippedFileNamesARemoverAsAValue()` (`:318`), die Wächter von
+  `root()` (`:354`), `uninstall()` (`:437`) und `opens()` (`:449`); `tests/SyncSaidScanTest.php` `UNSEEN` (`:113`,
+  `:114`). Zeilen am Stand des Abschnitts «ein Leser», Commit 0.
 - **Quelle:** Notiz G-20 (D3b-2c, Skeptiker C) und G-14 (D3b-1); Bauzettel G, V1 bis V3, gebaut in Teil G,
   Abschnitt 1 (echter Parser, Entscheid der Steuerung 16.11. 18:31).
 - **Was:**
@@ -970,7 +971,12 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
     als String hält, prüft `testNoShippedFileNamesARemoverAsAValue()`; ein zusammengesetzter bleibt ungesehen. Im
     Tausch ist ein Name nur bei der Uhr (`call_user_func( self::$clock )`) und den eigenen Closures in
     `given_rights()` ein Wert.
-  - Der Wächter von `root()` liest den Namen `AB_MCP_Protected_Store::root(`; `named_by_swap()`
+  - Die Wächter von `root()`, `uninstall()` und der Schreiber eines Bereichs (`open()`) lesen über `walk()` (Skeptiker
+    F2+G, B1: als Text folgten sie keinem Import). Text lesen nur noch Wächter, deren Name kein Import umbenennen kann:
+    `holding()` für die Naht der Ablage (`AB_MCP_Protected_Store_Calls`) und den Ordner `ab-mcp-store` (ein Import
+    nennt den Namen selbst), für `::delete_path(` und `::temp_file(` (Name der Methode); dazu die Marke `$building`
+    eines Baums und der eine Aufruf von `remove()` mit einem Bereich als Variable. Der Aufruf über die Naht des
+    Vorschlags (`->open(`, `->remove(`) zählt nur in dessen Datei. `named_by_swap()`
     (`includes/class-protected-store.php:3001`) gibt dem Tausch den Ordner der Marken, einen Pfad in der Ablage, und
     zählt nicht als `root()`. Zwei Stellen des Tauschs stehen mit Begründung in `UNSEEN` des Scans der Sätze.
   - Sechs weitere Token-Scanner vergleichen Klassennamen wörtlich (`tests/SourceScan.php`, `SyncSafeCallsTest.php`,
