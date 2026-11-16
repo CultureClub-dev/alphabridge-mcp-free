@@ -1329,4 +1329,13 @@ return array(
 		'run'     => $it( 'SyncCodeRunTest', 'testAnOwnPluginWithThreeFilesChangedInItsVersionIsSwappedOnlyWithEditPlugins' ),
 		'expect'  => '/testAnOwnPluginWithThreeFilesChangedInItsVersionIsSwappedOnlyWithEditPlugins/',
 	),
+	array(
+		'id'      => 'tausch/d3b-swap-no-root',
+		'clause'  => 'the guard of the remover (Z37): the swap gets no folder of the store (root()), only what named_by_swap() gives it; a call of root() in the swap makes the guard red (Teil D3b-1, point 4)',
+		'file'    => $cs,
+		'search'  => "\t\t\$named = AB_MCP_Protected_Store::named_by_swap();",
+		'replace' => "\t\t\$named = is_wp_error( AB_MCP_Protected_Store::root() ) ? AB_MCP_Protected_Store::root() : AB_MCP_Protected_Store::named_by_swap();",
+		'run'     => $unit( 'StoreRemoverGuardTest', 'testNothingRemovesInTheStoreButDeletePath' ),
+		'expect'  => '/testNothingRemovesInTheStoreButDeletePath/',
+	),
 );

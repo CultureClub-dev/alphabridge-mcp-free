@@ -1863,9 +1863,9 @@ final class AB_MCP_Sync_Code_Swap {
 	 * @return string A sentence.
 	 */
 	private static function part_mark_note( array $in ) {
-		$root = AB_MCP_Protected_Store::root();
+		$named = AB_MCP_Protected_Store::named_by_swap();
 		/* translators: 1: the folder of the marks of the protected store (absolute path), 2: run number, 3: step number. */
-		return sprintf( __( 'A mark of this swap may be left in part in %1$s (run %2$d, step %3$d, open): it moved nothing, and while it is open the protected store keeps the stage of this unit; it needs nothing else.', 'alphabridge-mcp' ), is_wp_error( $root ) ? 'the protected store' : $root . '/' . AB_MCP_Protected_Store::MARKS, $in['run_id'], $in['unit']['seq'] );
+		return sprintf( __( 'A mark of this swap may be left in part in %1$s (run %2$d, step %3$d, open): it moved nothing, and while it is open the protected store keeps the stage of this unit; it needs nothing else.', 'alphabridge-mcp' ), is_wp_error( $named ) ? 'the protected store' : $named['marks'], $in['run_id'], $in['unit']['seq'] );
 	}
 
 	/**
@@ -1970,7 +1970,8 @@ final class AB_MCP_Sync_Code_Swap {
 	 * at the target, the old one in the backup): the section
 	 * [nach-den-umbenennungen] of the instruction of the mark
 	 * (AB_MCP_Protected_Store::guide(), the one place that writes them),
-	 * made from the same trees, so that the answer carries them after the
+	 * made from the same trees by the store (named_by_swap(): the swap gets
+	 * no folder of the store itself), so that the answer carries them after the
 	 * mark is closed and its folder gone (a day later,
 	 * AB_MCP_Protected_Store::cleanup()). Only for an answer whose proofs
 	 * are whole (close()): the swap done, or unclear after both proofs.
@@ -1980,26 +1981,16 @@ final class AB_MCP_Sync_Code_Swap {
 	 * @return string[] Its lines (what to check, then the command); none where the store is not decided.
 	 */
 	private static function by_hand( array $in, array $plan ) {
-		$root = AB_MCP_Protected_Store::root();
-		if ( is_wp_error( $root ) ) {
+		$named = AB_MCP_Protected_Store::named_by_swap(
+			array(
+				'begun'  => 0,
+				'active' => array(),
+			) + self::mark_of( $in, $plan )
+		);
+		if ( is_wp_error( $named ) ) {
 			return array();
 		}
-		$trees = array();
-		foreach ( self::mark_of( $in, $plan )['trees'] as $tree ) {
-			$tree['path'] = 0 === strpos( $tree['path'], $root . '/' ) ? substr( $tree['path'], strlen( $root ) + 1 ) : $tree['path'];
-			$trees[]      = $tree;
-		}
-		$lines = explode(
-			"\n",
-			AB_MCP_Protected_Store::guide(
-				array(
-					'store'  => $root,
-					'begun'  => 0,
-					'trees'  => $trees,
-					'active' => array(),
-				) + self::mark_of( $in, $plan )
-			)
-		);
+		$lines = explode( "\n", $named['guide'] );
 		$at    = array_search( '[nach-den-umbenennungen]', $lines, true );
 		$end   = count( $lines );
 		$out   = array();

@@ -25,7 +25,7 @@ PS = 'includes/class-protected-store.php'
 VAR = {CK: '$ck', DE: '$de', PU: '$pu', CP: '$cp', CO: '$co', CS: '$cs', EN: '$en', ST: '$st', PS: '$ps'}
 CLASSES = {'kind': ('unit', 'SyncCodeKindTest'), 'env': ('unit', 'SyncEnvTest'), 'run': ('unit', 'SyncRunTest'),
            'ops': ('unit', 'SyncCodeOpsTest'), 'coderun': ('it', 'SyncCodeRunTest'), 'store': ('it', 'ProtectedStoreTest'),
-           'storeunit': ('unit', 'ProtectedStoreTest')}
+           'storeunit': ('unit', 'ProtectedStoreTest'), 'guard': ('unit', 'StoreRemoverGuardTest')}
 entries = []
 
 
@@ -437,6 +437,11 @@ e('d3b-engine-error', 'run(): a WP_Error of engine() (another engine under the n
 e('d3b-rights-before-method', 'rights(): the capabilities of the account before the file system method, so an account without them causes no test file of get_filesystem_method() in wp-content (Codex D6, finding 2)', CK,
   '\t\tforeach ( self::OPS[ $op ][ $unit[0] ] as $cap ) {',
   '\t\t$calls->method();\n\t\tforeach ( self::OPS[ $op ][ $unit[0] ] as $cap ) {', 'coderun', 'testAnOwnPluginWithThreeFilesChangedInItsVersionIsSwappedOnlyWithEditPlugins')
+
+# ------------------------------------------- Teil D3b-1, point 4: the two guards red since D1 (the folder of the store; what the scan of the answers cannot follow)
+e('d3b-swap-no-root', 'the guard of the remover (Z37): the swap gets no folder of the store (root()), only what named_by_swap() gives it; a call of root() in the swap makes the guard red (Teil D3b-1, point 4)', CS,
+  '\t\t$named = AB_MCP_Protected_Store::named_by_swap();',
+  '\t\t$named = is_wp_error( AB_MCP_Protected_Store::root() ) ? AB_MCP_Protected_Store::root() : AB_MCP_Protected_Store::named_by_swap();', 'guard', 'testNothingRemovesInTheStoreButDeletePath')
 
 # ------------------------------------------------ check and write
 src = {f: open(os.path.join(ROOT, f)).read() for f in VAR}

@@ -2985,6 +2985,42 @@ final class AB_MCP_Protected_Store {
 	}
 
 	/**
+	 * What the answer of a swap names of the store, given at this one place
+	 * (Teil D3b-1, point 4): the folder of the marks, and with the trees of
+	 * a mark as put_mark() takes it (absolute paths in the store) its
+	 * instruction as guide() writes it. The swap gets no folder of the
+	 * store itself (root()): only the budget and the measurement do, each
+	 * removing through delete_path() (Z37, StoreRemoverGuardTest).
+	 *
+	 * @param array $mark A mark as put_mark() takes it, with begun and
+	 *                    active as the instruction is to say them; or none.
+	 * @return array{marks:string,guide?:string}|WP_Error The folder of the
+	 *         marks (absolute) and, for a mark with trees, its instruction;
+	 *         the refusal of root() where the store is not decided.
+	 */
+	public static function named_by_swap( array $mark = array() ) {
+		$root = self::root();
+		if ( is_wp_error( $root ) ) {
+			return $root;
+		}
+		$named = array( 'marks' => $root . '/' . self::MARKS );
+		if ( isset( $mark['trees'] ) ) {
+			$trees = array();
+			foreach ( $mark['trees'] as $tree ) {
+				$tree['path'] = 0 === strpos( $tree['path'], $root . '/' ) ? substr( $tree['path'], strlen( $root ) + 1 ) : $tree['path'];
+				$trees[]      = $tree;
+			}
+			$named['guide'] = self::guide(
+				array(
+					'store' => $root,
+					'trees' => $trees,
+				) + $mark
+			);
+		}
+		return $named;
+	}
+
+	/**
 	 * The head of the instruction of a mark (option B, Thomas 16.11.2026;
 	 * Codex on 3014d8b, finding 2), as guide() puts it after the title: a
 	 * command that only reads (ls -di of the target and of each tree the
