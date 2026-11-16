@@ -1284,4 +1284,22 @@ return array(
 		'run'     => $it( 'SyncCodeRunTest', 'testOpcacheNotClearedAfterTheRenamesEndsUnclearWithTheWayBackTheWayByHandAndTheHost' ),
 		'expect'  => '/testOpcacheNotClearedAfterTheRenamesEndsUnclearWithTheWayBackTheWayByHandAndTheHost/',
 	),
+	array(
+		'id'      => 'tausch/b2-mark-read-own-words',
+		'clause'  => 'close(): a mark that could not be read reaches the answer of the swap in the words of the swap, never as the sentence of the store that names a state of the mark nothing read in the call (option B; Codex on 3014d8b, finding 1)',
+		'file'    => $cs,
+		'search'  => "\t\t\tif ( is_wp_error( \$closed ) && 'ab_mcp_store_mark_read' === \$closed->get_error_code() ) {",
+		'replace' => "\t\t\tif ( false ) {",
+		'run'     => $it( 'SyncCodeRunTest', 'testAMarkThatCannotBeReadAtItsEndIsSaidAsThatWithNoStateOfIt' ),
+		'expect'  => '/testAMarkThatCannotBeReadAtItsEndIsSaidAsThatWithNoStateOfIt/',
+	),
+	array(
+		'id'      => 'tausch/b2-finish-checks-backup',
+		'clause'  => 'guide(): the command of a swap back that stopped checks the inode of the backup before it moves anything, so another entry at its place is never moved to the target (Codex on 3014d8b, finding 2)',
+		'file'    => $ps,
+		'search'  => "\t\t\t\$finish = array( \$inode( \$back, \$old ) );",
+		'replace' => "\t\t\t\$finish = array();",
+		'run'     => $it( 'SyncCodeRunTest', 'testTheInstructionSendsOnlyASureStateToASectionAndNoCommandOfItMovesAnotherEntry' ),
+		'expect'  => '/testTheInstructionSendsOnlyASureStateToASectionAndNoCommandOfItMovesAnotherEntry/',
+	),
 );

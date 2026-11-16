@@ -415,6 +415,14 @@ e('b-whole-carries-commands', 'close(): a swap with both versions proved counts 
 e('b-short-unless-whole', 'unclear(): without both versions proved in the call the answer is the short one, no sentence on what lies where and no command, also where close() was not reached (option B)', CS,
   '\t\tif ( true !== $whole ) {', '\t\tif ( false ) {', 'coderun', OPC)
 
+# ------------------------------------------- Option B, the Behebung of Codex on 3014d8b: a mark not read in the words of the swap; the command of a swap back that stopped checks the backup first
+UNREAD = 'testAMarkThatCannotBeReadAtItsEndIsSaidAsThatWithNoStateOfIt'
+SURE = 'testTheInstructionSendsOnlyASureStateToASectionAndNoCommandOfItMovesAnotherEntry'
+e('b2-mark-read-own-words', 'close(): a mark that could not be read reaches the answer of the swap in the words of the swap, never as the sentence of the store that names a state of the mark nothing read in the call (option B; Codex on 3014d8b, finding 1)', CS,
+  "\t\t\tif ( is_wp_error( $closed ) && 'ab_mcp_store_mark_read' === $closed->get_error_code() ) {", '\t\t\tif ( false ) {', 'coderun', UNREAD)
+e('b2-finish-checks-backup', 'guide(): the command of a swap back that stopped checks the inode of the backup before it moves anything, so another entry at its place is never moved to the target (Codex on 3014d8b, finding 2)', PS,
+  '\t\t\t$finish = array( $inode( $back, $old ) );', '\t\t\t$finish = array();', 'coderun', SURE)
+
 # ------------------------------------------------ check and write
 src = {f: open(os.path.join(ROOT, f)).read() for f in VAR}
 errors = []

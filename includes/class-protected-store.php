@@ -2800,11 +2800,14 @@ final class AB_MCP_Protected_Store {
 	 * The instruction of a mark (WIEDERHERSTELLEN.txt; plan E6, and the rule
 	 * of the shell run of a way back by hand that branch 1 laid down): what
 	 * the swap moved, with
-	 * device, inode and hash of each tree; at its beginning two lines and a
-	 * command that only reads (ls -di of the target and of each tree named),
-	 * which tell the section that fits what is there, so that a reader need
-	 * not know where the swap stopped (option B, Thomas 16.11.2026: the
-	 * answer of an unclear swap names this file, not its commands); and for
+	 * device, inode and hash of each tree; at its beginning a command that
+	 * only reads (ls -di of the target and of each tree named) and, after
+	 * it, the cases of what it can show that are surely the state of one
+	 * section, each with that section, so that a reader need not know where
+	 * the swap stopped (option B, Thomas 16.11.2026: the answer of an
+	 * unclear swap names this file, not its commands); where no case is
+	 * true (another inode or none where one is named), the lines say to run
+	 * nothing, to stop and to take the way back of the run; and for
 	 * each point of an abort a
 	 * section [point] whose one line "$ …" is the command, in a shell, that
 	 * puts the old state back by hand and checks that it is the right folder
@@ -2861,7 +2864,35 @@ final class AB_MCP_Protected_Store {
 		}
 		$lines[] = __( 'First see which command fits. The next line only reads: for the target and for each place of the store named below it shows the inode of what is there (the first number of its line), or says that nothing is there:', 'alphabridge-mcp' );
 		$lines[] = '$ ls -di ' . implode( ' ', $places );
-		$lines[] = __( 'Then take the first section below whose first line fits what it showed, and run its command. An entry is the old version where it has the inode named below for the backup, and the new one where it has the inode named for the stage.', 'alphabridge-mcp' );
+		// Only a state that is surely the one of a section is sent to it, each
+		// case as the checks of that command ask it; anything else is told to
+		// run nothing and to take the way back of the run (Codex on 3014d8b,
+		// finding 2: «the first section that fits» led a reader with another
+		// entry at the place of the backup to a command that moved it).
+		$lines[] = __( 'Then take the case below that is true of what it showed, and run the command of the section it names. An entry is the old version where it has the inode named below for the backup, the new version where it has the inode named below for the stage, and another entry where it has neither.', 'alphabridge-mcp' );
+		$cases   = array();
+		if ( null !== $old ) {
+			/* translators: %s: the name of a section of this file (not translated). */
+			$cases[] = sprintf( __( 'The old version is at the target: section [%s]. Its command only checks.', 'alphabridge-mcp' ), 'vor-den-umbenennungen' );
+			/* translators: %s: the name of a section of this file (not translated). */
+			$cases[] = sprintf( __( 'Nothing is at the target, and the old version is at the place of the backup: section [%s].', 'alphabridge-mcp' ), 'zwischen-den-umbenennungen' );
+			/* translators: %s: the name of a section of this file (not translated). */
+			$cases[] = sprintf( __( 'Another entry is at the target, and the old version is at the place of the backup: section [%s].', 'alphabridge-mcp' ), 'zwischen-den-umbenennungen-ziel-belegt' );
+			if ( null !== $new ) {
+				/* translators: %s: the name of a section of this file (not translated). */
+				$cases[] = sprintf( __( 'The new version is at the target, the old version is at the place of the backup, and nothing is at the place of the stage: section [%s].', 'alphabridge-mcp' ), 'nach-den-umbenennungen' );
+			}
+		} elseif ( null !== $new ) {
+			/* translators: %s: the name of a section of this file (not translated). */
+			$cases[] = sprintf( __( 'Nothing is at the target, and the new version is at the place of the stage: section [%s]. Its command only checks.', 'alphabridge-mcp' ), 'vor-den-umbenennungen' );
+			/* translators: %s: the name of a section of this file (not translated). */
+			$cases[] = sprintf( __( 'The new version is at the target, and nothing is at the place of the stage: section [%s].', 'alphabridge-mcp' ), 'nach-den-umbenennungen' );
+		}
+		foreach ( $cases as $case ) {
+			$lines[] = '- ' . $case;
+		}
+		/* translators: %d: run number. */
+		$lines[] = sprintf( __( 'Where none of them is true (another inode, or none, where a case names a version; or an entry where a case says that nothing is there), run no command of this file. Stop, and take the way back of the run as soon as the site answers again: wp_site_revert action=plan with run_id %d.', 'alphabridge-mcp' ), (int) $mark['run_id'] );
 		$lines[] = '';
 		/* translators: 1: kind of the unit (plugin, theme …), 2: its name. */
 		$lines[] = sprintf( __( 'Unit: %1$s %2$s', 'alphabridge-mcp' ), (string) $mark['unit']['kind'], (string) $mark['unit']['ref'] );
@@ -2931,7 +2962,10 @@ final class AB_MCP_Protected_Store {
 			$lines[] = '';
 			$lines[] = '[waehrend-des-ruecktauschs]';
 			$lines[] = __( 'The swap back stopped: the target holds the new version or is missing. Finish it and check it:', 'alphabridge-mcp' );
-			$finish  = array();
+			// The backup first, before anything moves (Codex on 3014d8b,
+			// finding 2): with another entry at its place this command moved
+			// that entry to the target and checked it only then.
+			$finish = array( $inode( $back, $old ) );
 			if ( null !== $new ) {
 				$finish[] = '$ if [ -e ' . $q( $target ) . ' ] && [ "$(ls -di ' . $q( $target ) . ' | awk \'{print $1}\')" = "' . (int) $new['ino'] . '" ]; then test ! -e ' . $q( $root . '/' . $new['path'] ) . ' && mv ' . $q( $target ) . ' ' . $q( $root . '/' . $new['path'] ) . '; fi';
 			}

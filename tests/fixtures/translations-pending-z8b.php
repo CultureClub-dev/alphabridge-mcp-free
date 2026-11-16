@@ -437,5 +437,14 @@ return array(
 	'%1$s The step is unclear. The way back of this run puts the old version back (wp_site_revert action=plan with run_id %2$d). Where this site answers no request any more, put it back by hand in a shell on the server, as the lines below say:',
 	'%1$s The end of step %2$d could not be recorded (%3$s). Ask for the status of the run (wp_site_push action=status): where it shows the run interrupted, wp_site_revert action=plan with this run_id goes on from there, or a person closes it as checked on the page AlphaBridge → Staging.',
 	'First see which command fits. The next line only reads: for the target and for each place of the store named below it shows the inode of what is there (the first number of its line), or says that nothing is there:',
-	'Then take the first section below whose first line fits what it showed, and run its command. An entry is the old version where it has the inode named below for the backup, and the new one where it has the inode named for the stage.',
+	// includes/class-protected-store.php and includes/sync/class-sync-code-swap.php (Z8b branch 5, option B, the Behebung of Codex on 3014d8b: the first lines of the instruction send only a sure state to a section; a mark not read in the words of the swap).
+	'Then take the case below that is true of what it showed, and run the command of the section it names. An entry is the old version where it has the inode named below for the backup, the new version where it has the inode named below for the stage, and another entry where it has neither.',
+	'The old version is at the target: section [%s]. Its command only checks.',
+	'Nothing is at the target, and the old version is at the place of the backup: section [%s].',
+	'Another entry is at the target, and the old version is at the place of the backup: section [%s].',
+	'The new version is at the target, the old version is at the place of the backup, and nothing is at the place of the stage: section [%s].',
+	'Nothing is at the target, and the new version is at the place of the stage: section [%s]. Its command only checks.',
+	'The new version is at the target, and nothing is at the place of the stage: section [%s].',
+	'Where none of them is true (another inode, or none, where a case names a version; or an entry where a case says that nothing is there), run no command of this file. Stop, and take the way back of the run as soon as the site answers again: wp_site_revert action=plan with run_id %d.',
+	'The mark of the swap could not be read.',
 );

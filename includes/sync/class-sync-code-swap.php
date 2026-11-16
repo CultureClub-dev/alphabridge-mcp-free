@@ -1686,6 +1686,13 @@ final class AB_MCP_Sync_Code_Swap {
 	 * proved just now. Only then an answer after a failure names what lies
 	 * where and gives the commands of the way by hand (unclear()).
 	 *
+	 * And the one place that takes an error of the store into the answer
+	 * of the swap: what close_mark() said goes on as it is, but for a mark
+	 * that could not be read (ab_mcp_store_mark_read). Of that the swap
+	 * says only that it could not be read, in its own words, and nothing
+	 * on whether the mark is open or what it names stays (Codex on
+	 * 3014d8b, finding 1).
+	 *
 	 * @param string $op    swap or kept.
 	 * @param array  $in    The arguments.
 	 * @param array  $plan  plan_of().
@@ -1708,6 +1715,13 @@ final class AB_MCP_Sync_Code_Swap {
 		$whole  = $swap;
 		$closed = self::calls()->close_mark( $mid );
 		if ( true !== $closed ) {
+			if ( is_wp_error( $closed ) && 'ab_mcp_store_mark_read' === $closed->get_error_code() ) {
+				// A mark that could not be read: the answer says that and no
+				// more (option B). The sentence of the store for this case
+				// names a state of the mark that nothing read in this call
+				// (it may be closed by now), so it is not passed on.
+				return self::refusal( 'code:mark_read', __( 'The mark of the swap could not be read.', 'alphabridge-mcp' ) );
+			}
 			return is_wp_error( $closed ) ? $closed : self::refusal( 'code:mark', __( 'The mark of the swap gave no answer of its form.', 'alphabridge-mcp' ) );
 		}
 		$gone = $swap ? self::calls()->discard_files( 'theme' === $in['unit']['kind'] ? 'theme' : 'plugin', $in['unit']['ref'] ) : array();
@@ -1864,7 +1878,8 @@ final class AB_MCP_Sync_Code_Swap {
 	 * - Else the short answer: what happened in this call ($why), the way
 	 *   back of the run with its call, the instruction of the mark on the
 	 *   server for where the site answers no more (its first lines tell
-	 *   which of its commands fits), and the paths of the target, the
+	 *   which of its commands fits, or that none does and what to do
+	 *   then), and the paths of the target, the
 	 *   backup and that instruction. No sentence on what lies at the target
 	 *   or in the backup or on the state of the mark, no command, and
 	 *   nothing is read for the answer: who puts back reads it, the way

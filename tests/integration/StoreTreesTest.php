@@ -1058,6 +1058,22 @@ final class StoreTreesTest extends TestCase {
 		$text = (string) file_get_contents( $s['mark']['guide'] );
 		self::assertStringContainsString( 'The unit was not in the site before', $text );
 		self::assertStringNotContainsString( 'Backup (the old version)', $text );
+		// Its first lines, after the command that only reads (Codex on
+		// 3014d8b, finding 2): the two states of a new unit that are surely
+		// the one of a section, each sent to a section this file has, and
+		// every other state to none.
+		self::assertSame(
+			array(
+				"$ ls -di '" . $s['target'] . "' '" . $s['stage'] . "'",
+				'Then take the case below that is true of what it showed, and run the command of the section it names. An entry is the old version where it has the inode named below for the backup, the new version where it has the inode named below for the stage, and another entry where it has neither.',
+				'- Nothing is at the target, and the new version is at the place of the stage: section [vor-den-umbenennungen]. Its command only checks.',
+				'- The new version is at the target, and nothing is at the place of the stage: section [nach-den-umbenennungen].',
+				'Where none of them is true (another inode, or none, where a case names a version; or an entry where a case says that nothing is there), run no command of this file. Stop, and take the way back of the run as soon as the site answers again: wp_site_revert action=plan with run_id 6.',
+				'',
+			),
+			array_slice( explode( "\n", $text ), 3, 6 ),
+			'The first lines of the instruction of a new unit.'
+		);
 	}
 
 	/* ---------------------- Behebung 1, B1: the names of trees as WordPress has them */
