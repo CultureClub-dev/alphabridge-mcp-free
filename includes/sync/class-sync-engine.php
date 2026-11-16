@@ -2935,6 +2935,13 @@ final class AB_MCP_Sync_Engine {
 	 * @return array|WP_Error
 	 */
 	private static function run_revert( array $run, array $step, array $ctx ) {
+		// A step of the way back of a run of the code (Z22): its one entrance
+		// (AB_MCP_Sync_Revert::code()), as a step of the code goes through
+		// run_write(); it takes no takeover lock (AB_MCP_Sync_Guard).
+		$code = AB_MCP_Sync_Revert::code( 'revert', $run, $step );
+		if ( null !== $code ) {
+			return $code;
+		}
 		try {
 			return self::revert_boundary( $run, $step, $ctx );
 		} finally {

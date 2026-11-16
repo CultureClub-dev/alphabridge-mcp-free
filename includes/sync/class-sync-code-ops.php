@@ -22,6 +22,13 @@
  *   (AB_MCP_Sync_Code_Swap::until()). The swap writes its own journal and
  *   end; a refusal leaves the step planned.
  *
+ * THE ONE ENTRANCE OF THE WAY BACK (back(); plan Z22, N12): the core asks
+ * it through its place (AB_MCP_Sync_Revert::code()), which the last line of
+ * this file fills, never by this name: the preview of the way back of a
+ * swap step (plan), of its continuation (continue), and the step of the way
+ * back itself (revert, AB_MCP_Sync_Code_Swap::back()). Where this file is
+ * not loaded, a run of the code is neither planned back nor run back.
+ *
  * WHAT A STEP READS (the pre-check of branch 5, V18 and V19): the unit of a
  * step comes from the plan of its run in the form of its row plan.code, by
  * the number of the step; the stage of a unit from the journal of its step
@@ -124,6 +131,37 @@ final class AB_MCP_Sync_Code_Ops {
 			return $released;
 		}
 		return self::swap( $run_id, $step, $item );
+	}
+
+	/**
+	 * The one entrance of the way back of the code (plan Z22, N12), the
+	 * place AB_MCP_Sync_Revert::code() asks; the last line of this file puts
+	 * it there, beside run(), the entrance of the swap. plan: a write step
+	 * of the run that wrote, null where it wrote nothing (a step that
+	 * staged, or a swap planned, skipped or failed: the old version at its
+	 * place), else what the preview shows and the token binds; continue: a
+	 * step of the way back still open, for the preview of its continuation;
+	 * revert: the step of the way back runs. The unit from the plan of the
+	 * run that wrote (item()), the swap from its step; the rest is the
+	 * swap's (AB_MCP_Sync_Code_Swap::back()).
+	 *
+	 * @param string $at      plan, continue or revert.
+	 * @param array  $run     The run (for continue and revert: of the way back).
+	 * @param array  $step    A write step of the run (plan), else a step of the way back.
+	 * @param array  $forward The run that wrote.
+	 * @return array|null|WP_Error
+	 */
+	public static function back( $at, array $run, array $step, array $forward ) {
+		$seq  = (int) ( 'plan' === $at ? $step['seq'] : ( is_array( $step['parts'] ) && isset( $step['parts']['forward_seq'] ) ? $step['parts']['forward_seq'] : 0 ) );
+		$item = self::item( $forward['plan'], $seq );
+		$swap = 'plan' === $at ? $step : AB_MCP_Sync_Run::step( (int) $forward['run_id'], $seq );
+		if ( is_wp_error( $swap ) ) {
+			return $swap;
+		}
+		if ( 'plan' === $at && ! is_wp_error( $item ) && ( 'swap' !== $item['unit']['op'] || ! in_array( $step['state'], array( 'begun', 'unclear', 'done' ), true ) ) ) {
+			return null;
+		}
+		return AB_MCP_Sync_Code_Swap::back( $at, $run, $step, is_wp_error( $item ) ? null : $item['unit'], $swap );
 	}
 
 	/**
@@ -534,3 +572,9 @@ final class AB_MCP_Sync_Code_Ops {
 		return 0 === $way ? 'same' : ( $way > 0 ? 'newer' : 'older' );
 	}
 }
+
+// The one entrance of the way back of the code, in the file of the entrance
+// of the swap (N12): where this file is not loaded, the core plans and runs
+// no way back of the code (AB_MCP_Sync_Revert::code()).
+require_once __DIR__ . '/class-sync-revert.php';
+AB_MCP_Sync_Revert::admit( array( 'AB_MCP_Sync_Code_Ops', 'back' ) );
