@@ -1818,4 +1818,13 @@ return array(
 		'run'     => $it( 'SyncCodeRunTest', 'testAStepOfTheWayBackWhoseEntryDoesNotReadBackStillGoesThroughTheOneEntrance' ),
 		'expect'  => '/testAStepOfTheWayBackWhoseEntryDoesNotReadBackStillGoesThroughTheOneEntrance/',
 	),
+	array(
+		'id'      => 'tausch/f-weg-a-lauf',
+		'clause'  => 'closed_checked(): the refusal of way (a) names the run that is closed and its way, for a run of the way back of its own that run, never the run that wrote (skeptic E1b, B2)',
+		'file'    => $cs,
+		'search'  => '$closed->get_error_message(), $run_id, $unit[\'kind\'],',
+		'replace' => '$closed->get_error_message(), (int) $swap[\'run_id\'], $unit[\'kind\'],',
+		'run'     => $it( 'SyncCodeRunTest', 'testARunOfTheCodeBrokenOffIsClosedAsCheckedOnlyWhereAVersionIsProvedAtTheTarget' ),
+		'expect'  => '/testARunOfTheCodeBrokenOffIsClosedAsCheckedOnlyWhereAVersionIsProvedAtTheTarget/',
+	),
 );

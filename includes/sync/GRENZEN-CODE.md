@@ -730,12 +730,12 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
 ### G-5-14 Der Rückweg eines Tauschs: ein Eingang, keine eigene Marke, die Marke über ihre Liste
 
 - **Fundstelle:** Der Platz des Eingangs `AB_MCP_Sync_Revert::admit()` und die Weiche `code()`
-  (`includes/sync/class-sync-revert.php:126`, `:149`), belegt in der letzten Zeile von
+  (`includes/sync/class-sync-revert.php:126`, `:151`), belegt in der letzten Zeile von
   `includes/sync/class-sync-code-ops.php` (`:592`); der Rückweg im Tausch `back()`, `restore()`, `restored()`,
-  `moved_back()`, `mark_id()` (`includes/sync/class-sync-code-swap.php:2096`, `:2158`, `:2199`, `:2285`, `:2407`); das
+  `moved_back()`, `mark_id()` (`includes/sync/class-sync-code-swap.php:2096`, `:2160`, `:2201`, `:2287`, `:2412`); das
   Journal in der Form seiner Zeile `step.swap` (`includes/class-store-inputs.php:985`); die Fortsetzung eines
-  unterbrochenen Rückweg-Schritts `begin_same_run()` (`class-sync-revert.php:990`). Zeilen am Stand der Behebung nach
-  dem Skeptiker über Teil E, Abschnitt 1.
+  unterbrochenen Rückweg-Schritts `begin_same_run()` (`class-sync-revert.php:994`). Zeilen am Stand der Behebung nach
+  dem Skeptiker E1b.
 - **Quelle:** Teil E des Rests, Bauzettel `z5r-e-zettel.md` (Grenzen) mit der Freigabe der Lead (Fragen 1 bis 5, N12)
   und der Kürzung nach `z5r-e1-abweichung.md`.
 - **Was:**
@@ -757,8 +757,8 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
     verweigert ihn der Speicher, bleibt der Schritt `planned`. Bewegt der Schritt danach nichts (die alte Fassung ist
     schon am Ziel, oder ein Nachweis scheitert), bleibt die Gruppe `back-<lauf>-<schritt>` leer stehen, so lange wie
     die Sicherungen des Rückweglaufs.
-  - Die Ablehnung der Uhr auf dem Rückweg (`restored()`, `class-sync-code-swap.php:2210`) trägt den Satz von
-    `clock_refusal()` (`:2469`): «the unit is not swapped». Er ist wörtlich wahr (nichts wird getauscht), und der Weg
+  - Die Ablehnung der Uhr auf dem Rückweg (`restored()`, `class-sync-code-swap.php:2212`) trägt den Satz von
+    `clock_refusal()` (`:2474`): «the unit is not swapped». Er ist wörtlich wahr (nichts wird getauscht), und der Weg
     (`action=next`) stimmt; er nennt den Rückweg nicht als solchen.
 - **Trifft Normalfall:** nein. Im Normalfall (F59, F1, F2, F6, F47, F55) ist der Eingang belegt, die Marke in der Liste,
   und beide Umbenennungen gelingen in einem Aufruf.
@@ -768,8 +768,9 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
 - **Fundstelle:** `accept` im Schema von `wp_site_revert` (`includes/tools/class-tools-staging.php:481`), durchgereicht
   von `AB_MCP_Sync_Revert::one()` und `code()`, geprüft in `AB_MCP_Sync_Code_Ops::back()`
   (`includes/sync/class-sync-code-ops.php:163`); im Tausch `back()`, `restored()`, `on_again()`, `closed_checked()`
-  (`includes/sync/class-sync-code-swap.php:2092`, `:2183`, `:2308`, `:2347`); Weg (a) in
-  `AB_MCP_Sync_Run::close_checked_on()` (`includes/sync/class-sync-run.php:1095`).
+  (`includes/sync/class-sync-code-swap.php:2096`, `:2201`, `:2331`, `:2373`); Weg (a) in
+  `AB_MCP_Sync_Run::close_checked_on()` (`includes/sync/class-sync-run.php:1095`). Zeilen am Stand der Behebung nach
+  dem Skeptiker E1b.
 - **Quelle:** Teil E des Rests, Abschnitt 2, Kurzzettel `z5r-e2-zettel.md` nach dem Bauzettel `z5r-e-zettel.md`
   (Bausteine 4 und 7, Frage 2 der Lead).
 - **Was:**

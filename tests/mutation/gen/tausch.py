@@ -604,6 +604,10 @@ e('f-b4-ohne-reverts', 'Revert::code(): a run of the way back whose plan names n
 e('f-b4-satz-schritt', 'Tausch::back(): a step of the way back whose entry does not read back is named itself in the sentence of the entrance, never as a step 0 (rest of B4)', CS,
   "(int) ( $what['forward_seq'] ?? $step['seq'] ),", "(int) ( $what['forward_seq'] ?? 0 ),", 'coderun', E_EU)
 
+# ------------------------------------------- the Behebung after the skeptic E1b (B2)
+e('f-weg-a-lauf', 'closed_checked(): the refusal of way (a) names the run that is closed and its way, for a run of the way back of its own that run, never the run that wrote (skeptic E1b, B2)', CS,
+  "$closed->get_error_message(), $run_id, $unit['kind'],", "$closed->get_error_message(), (int) $swap['run_id'], $unit['kind'],", 'coderun', E_WA)
+
 # ------------------------------------------------ check and write
 src = {f: open(os.path.join(ROOT, f)).read() for f in VAR}
 errors = []

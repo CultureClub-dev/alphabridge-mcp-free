@@ -2322,14 +2322,36 @@ final class SyncCodeRunTest extends TestCase {
 	 * the run stays interrupted, its step begun, the mark open, the pair as
 	 * it was, the target empty. A run interrupted on a step after its swap
 	 * was done asks nothing of the swap: it closes as checked although its
-	 * backup is gone by now.
+	 * backup is gone by now. Way (a) on a run of the way back of its own,
+	 * interrupted on its step with no version at the target: the refusal
+	 * names that run and its way (its continuation, wp_site_revert
+	 * action=plan with its number), not the run that wrote (skeptic E1b,
+	 * B2).
 	 * Sonst: a person could close a run of the code as checked with the
 	 * plugin missing at its target and its mark closed, or a run with a
 	 * version proved, or one whose swap was done long before, could not be
-	 * closed as checked.
+	 * closed as checked; or the refusal on a run of the way back would send
+	 * to the plan of the run that wrote, which is refused while its way back
+	 * is open.
 	 */
 	#[DataProvider( 'closed_as_checked' )]
 	public function testARunOfTheCodeBrokenOffIsClosedAsCheckedOnlyWhereAVersionIsProvedAtTheTarget( string $case, ?array $fault ): void {
+		if ( 'a run of the way back' === $case ) {
+			list( $run_id, , $target ) = self::swapped_f56();
+			for ( $i = 0; $i < 6 && ! in_array( AB_MCP_Sync_Run::get( $run_id )['state'], AB_MCP_Sync_Schema::CLOSED, true ); $i++ ) {
+				self::next( $run_id );
+			}
+			$back = self::planned_back( $run_id );
+			self::assertNotSame( $run_id, $back, 'The way back is a run of its own.' );
+			self::assertTrue( AB_MCP_Sync_Run::update_step( $back, (int) self::back_step( $back )['seq'], array( 'state' => 'begun' ), 'planned' ) );
+			self::assertSame( 'interrupted', self::gated( 'wp_site_push', array( 'action' => 'status', 'run_id' => $back ) )['state'] );
+			self::assertTrue( rename( $target, $target . '-weg' ), 'No version at the target.' );
+			$says = self::refused( AB_MCP_Sync_Run::close_checked( $back, self::admin(), true ), 'code:checked' );
+			self::assertStringContainsString( sprintf( 'So run %1$d is not closed as checked: that takes the old version of the plugin ab-it-aktiv proved at its target, or the new one there and the old one whole in the backup. Nothing was written, and the run stays interrupted. Take its way back (wp_site_revert action=plan with run_id %1$d), or ', $back ), $says );
+			self::assertSame( 'interrupted', AB_MCP_Sync_Run::get( $back )['state'] );
+			self::assertIsArray( self::gated( 'wp_site_revert', array( 'action' => 'plan', 'run_id' => $back ) ), 'The way it names is open: the continuation of the way back.' );
+			return;
+		}
 		if ( null === $fault ) {
 			list( $run_id, $unit, , $backup ) = self::swapped_f56();
 			self::assertTrue( rename( $backup, $backup . '-weg' ), 'The backup gone.' );
@@ -2363,7 +2385,7 @@ final class SyncCodeRunTest extends TestCase {
 		self::assertSame( 'new version at the target' === $case ? self::bytes_of( AB_MCP_IT_Code::source( 'plugin', 'ab-it-aktiv', '2.0.0' ) ) : $old, self::bytes_of( $target ) );
 	}
 
-	/** Where a swap is broken off: between its renames (the target empty), after them (the new version at the target, OPcache), before the first (the old version at the target); and a run interrupted on its next step after its swap was done (no fault: the case of its own). */
+	/** Where a swap is broken off: between its renames (the target empty), after them (the new version at the target, OPcache), before the first (the old version at the target); a run interrupted on its next step after its swap was done, and a run of the way back of its own interrupted on its step with no version at the target (no fault: the cases of their own). */
 	public static function closed_as_checked(): array {
 		return array(
 			'target empty'              => array(
@@ -2392,6 +2414,7 @@ final class SyncCodeRunTest extends TestCase {
 				),
 			),
 			'after the swap'            => array( 'after the swap', null ),
+			'a run of the way back'     => array( 'a run of the way back', null ),
 		);
 	}
 

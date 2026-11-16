@@ -2118,7 +2118,7 @@ final class AB_MCP_Sync_Code_Swap {
 			return self::restore( $run, $step, $unit, $journal, $swap );
 		}
 		if ( 'checked' === $at ) {
-			return self::closed_checked( $unit, $journal, $swap );
+			return self::closed_checked( $unit, $journal, $swap, (int) $run['run_id'] );
 		}
 		$took = ( $accept || ! empty( $step['parts']['accept'] ) ) && array() !== $journal['active'];
 		return array(
@@ -2360,14 +2360,17 @@ final class AB_MCP_Sync_Code_Swap {
 	 * or the target the old version (close() with kept); the mark closes.
 	 * Else the refusal with the way back and the way by hand, before
 	 * AB_MCP_Sync_Run::close_checked() writes anything; the run stays
-	 * interrupted. A mark that is gone leaves the proof alone (G-27).
+	 * interrupted. A mark that is gone leaves the proof alone (G-27). The
+	 * refusal names the run that is closed, for a run of the way back of
+	 * its own that run, not the one that wrote (skeptic E1b, B2).
 	 *
 	 * @param array $unit    The unit of the swap step.
 	 * @param array $journal The journal of the swap.
 	 * @param array $swap    The swap step.
+	 * @param int   $run_id  The run closed as checked.
 	 * @return true|WP_Error
 	 */
-	private static function closed_checked( array $unit, array $journal, array $swap ) {
+	private static function closed_checked( array $unit, array $journal, array $swap, $run_id ) {
 		$in    = array(
 			'run_id' => (int) $swap['run_id'],
 			'unit'   => array(
@@ -2395,7 +2398,7 @@ final class AB_MCP_Sync_Code_Swap {
 		}
 		$store = AB_MCP_Protected_Store::named_by_swap();
 		/* translators: 1: what failed (one or more whole sentences), 2: run number, 3: kind of the unit, as the tools name it (plugin, theme), 4: its name, 5: the folder of the marks of the protected store (absolute path). */
-		return self::refusal( 'code:checked', sprintf( __( '%1$s So run %2$d is not closed as checked: that takes the old version of the %3$s %4$s proved at its target, or the new one there and the old one whole in the backup. Nothing was written, and the run stays interrupted. Take its way back (wp_site_revert action=plan with run_id %2$d), or put the old version back by hand in a shell on the server with the instruction of its mark in %5$s, then close it as checked again.', 'alphabridge-mcp' ), $closed->get_error_message(), (int) $swap['run_id'], $unit['kind'], $unit['ref'], is_wp_error( $store ) ? 'the protected store' : $store['marks'] ) . self::kept_note( $kept ) );
+		return self::refusal( 'code:checked', sprintf( __( '%1$s So run %2$d is not closed as checked: that takes the old version of the %3$s %4$s proved at its target, or the new one there and the old one whole in the backup. Nothing was written, and the run stays interrupted. Take its way back (wp_site_revert action=plan with run_id %2$d), or put the old version back by hand in a shell on the server with the instruction of its mark in %5$s, then close it as checked again.', 'alphabridge-mcp' ), $closed->get_error_message(), $run_id, $unit['kind'], $unit['ref'], is_wp_error( $store ) ? 'the protected store' : $store['marks'] ) . self::kept_note( $kept ) );
 	}
 
 	/**
