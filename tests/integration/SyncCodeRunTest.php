@@ -88,6 +88,13 @@ final class SyncCodeRunTest extends TestCase {
 	 */
 	private const RUN_ONLY = 'In a shell, run only the command of the section that the true case above names. The command contains checks; where it does not print OK, stop and ask before anything else is moved.';
 
+	/**
+	 * The sentence of Z24 after option C (F57) whole, for the kind and the
+	 * name of the unit: only in the answer of a swap done, once its end is
+	 * recorded.
+	 */
+	private const Z24 = 'Whether code of the %1$s %2$s runs, this answer knows as its last check read it right before the swap began: an activation of it (for a theme: a switch of the theme) that this site records only after that check, or one switched on and off again before it, it does not see.';
+
 	/** @var string|null DOCUMENT_ROOT before the case. */
 	private $docroot_before;
 
@@ -1281,32 +1288,38 @@ final class SyncCodeRunTest extends TestCase {
 	 * Prüft: F57, Z24 after option C (plan 15.23): an inactive plugin that
 	 * is activated after prepare() and before the first write of its swap
 	 * (the row active_plugins written by another request, as wp-admin
-	 * writes it, past the cache of this one), without accept or with it, or
-	 * a row active_plugins that does not read there, ends the swap before
-	 * its journal: code:runs_changed with the way of a new preparation, the
-	 * step planned, nothing written at the target or in the records of the
-	 * site (nothing_begun()), no file .maintenance. The next call prepares
-	 * anew: the plugin now active without accept is refused there (not
-	 * released); with accept, or the row read again, it is swapped as F56
-	 * swaps, and its answer says once what its last check could not see.
+	 * writes it, past the cache of this one), without accept or with it, an
+	 * active plugin deactivated there, with accept, or a row active_plugins
+	 * that does not read there, ends the swap before its journal:
+	 * code:runs_changed with the way of a new preparation, the step
+	 * planned, nothing written at the target or in the records of the site
+	 * (nothing_begun()), no file .maintenance. The next call prepares anew:
+	 * the plugin now active without accept is refused there (not released);
+	 * with accept, or the row read again, it is swapped as F56 swaps, and
+	 * its answer is the one of a swap done with, once, the whole sentence on
+	 * what its last check of the unit could not see, right before the call
+	 * to go on and not in the result of the step.
 	 * Sonst: code activated in the seconds of a swap would be replaced
 	 * without its release and without OPcache cleared for it, prepared as
-	 * code that does not run; accept would stand in for a preparation that
-	 * did not see the code run; a row not read would count as no code
-	 * running; or the answer of a swap done would claim more than its last
-	 * check saw.
+	 * code that does not run; code deactivated there would be swapped as
+	 * code that runs, against the words of code:runs_changed; accept would
+	 * stand in for a preparation that did not see the code run; a row not
+	 * read would count as no code running; or the answer of a swap done
+	 * would claim more than its last check saw.
 	 */
 	#[DataProvider( 'changes_after_the_preparation' )]
 	public function testAPluginActivatedAfterThePreparationIsNotSwappedUntilItIsPreparedAnew( string $change, bool $accept ): void {
 		global $wpdb;
-		$slug = 'ab-it-inaktiv';
-		$main = $slug . '/' . $slug . '.php';
+		$off     = 'deactivated' === $change;
+		$slug    = $off ? 'ab-it-aktiv' : 'ab-it-inaktiv';
+		$version = $off ? '2.0.0' : '1.1.0';
+		$main    = $slug . '/' . $slug . '.php';
 		list( $run_id, $unit, $target ) = self::ready_to_swap(
 			null,
 			array(
 				'slug'    => $slug,
-				'version' => '1.1.0',
-				'runs'    => false,
+				'version' => $version,
+				'runs'    => $off,
 				'accept'  => $accept,
 			)
 		);
@@ -1330,14 +1343,19 @@ final class SyncCodeRunTest extends TestCase {
 					'kind'   => 'before',
 					'before' => static function () use ( &$changed, $write, $change, $main ): void {
 						$changed = true;
-						$write( 'activated' === $change ? serialize( array_merge( self::active(), array( $main ) ) ) : 'not in the form WordPress writes it' );
+						$rows    = array(
+							'activated'   => serialize( array_merge( self::active(), array( $main ) ) ),
+							'deactivated' => serialize( array_values( array_diff( self::active(), array( $main ) ) ) ),
+							'unknown'     => 'not in the form WordPress writes it',
+						);
+						$write( $rows[ $change ] );
 					},
 				),
 			)
 		);
 		self::assertTrue( $changed, 'The change came after prepare(), at the rights of the stage.' );
 		$says = self::nothing_begun( $run_id, $target, $before, $answer, 'code:runs_changed', 'accept does not replace preparing it anew. Call action=next again: it prepares the swap anew with what runs now.', array( 'group', 'rights' ) );
-		self::assertStringContainsString( 'Whether code of the plugin ab-it-inaktiv runs on this site was read again right before its swap began', $says );
+		self::assertStringContainsString( 'Whether code of the plugin ' . $slug . ' runs on this site was read again right before its swap began', $says );
 		self::assertFileDoesNotExist( ABSPATH . '.maintenance', 'No maintenance mode.' );
 		AB_MCP_Test_Seam::restore_all();
 		AB_MCP_Sync_Code_Swap::forget();
@@ -1360,24 +1378,26 @@ final class SyncCodeRunTest extends TestCase {
 				'slug'     => $slug,
 				'old'      => $old,
 				'new'      => self::bytes_of( AB_MCP_IT_Code::path( 'b', 'plugin', $slug ) ),
-				'versions' => array( '1.0.0', '1.1.0' ),
+				'versions' => array( '1.0.0', $version ),
 			)
 		);
 		$says = $swap['answer']['next'];
-		$z24  = 'Which plugins and which theme run, this answer knows as its last check read them right before the swap began: an activation (or a switch of the theme) after that check, or one switched on and off again before it, it does not see.';
+		$z24  = sprintf( self::Z24, 'plugin', $slug );
 		self::assertSame( 1, substr_count( $says, $z24 ), 'The sentence of Z24 once in the answer of a swap done.' );
-		self::assertStringEndsWith( "\n" . $z24 . "\nCall action=next for the next step.", $says, 'After the commands by hand, before the call to go on.' );
-		self::assertSame( 'activated' === $change, in_array( $main, self::active(), true ), 'The plugin runs as it was activated, or not.' );
-		self::assertSame( '1.1.0', AB_MCP_IT_Code::fassung( 'a', 'plugin', $slug ) );
+		self::assertStringNotContainsString( $z24, $swap['result']['message'], 'Not in the result of the step: it speaks of this answer.' );
+		self::assertSame( $swap['result']['message'] . "\n" . $z24 . "\nCall action=next for the next step.", $says, 'The answer of a swap done, the sentence after the commands by hand, before the call to go on.' );
+		self::assertSame( 'activated' === $change, in_array( $main, self::active(), true ), 'The plugin runs as it was activated or deactivated, or not.' );
+		self::assertSame( $version, AB_MCP_IT_Code::fassung( 'a', 'plugin', $slug ) );
 		self::assertFileDoesNotExist( ABSPATH . '.maintenance', 'No maintenance mode.' );
 		self::closed( $run_id );
 	}
 
-	/** What changes after prepare(): the plugin activated, without accept and with it; the row active_plugins not read, with accept. */
+	/** What changes after prepare(): the inactive plugin activated, without accept and with it; the active one deactivated, with accept; the row active_plugins not read, with accept. */
 	public static function changes_after_the_preparation(): array {
 		return array(
 			'activated, without accept' => array( 'activated', false ),
 			'activated, with accept'    => array( 'activated', true ),
+			'deactivated, with accept'  => array( 'deactivated', true ),
 			'not read, with accept'     => array( 'unknown', true ),
 		);
 	}
@@ -2593,15 +2613,17 @@ final class SyncCodeRunTest extends TestCase {
 	 * one whole in the backup, each with its path), that its end is not
 	 * recorded, without a state of the step claimed from the write that
 	 * failed (option B: the status of the run shows it), and names the way
-	 * back of the run; the lock for changes is
+	 * back of the run, without the sentence of Z24 (F57: only the answer of
+	 * a swap done, its end recorded); the lock for changes is
 	 * free and nothing is lost. The next call (action=next) swaps nothing
 	 * again and changes nothing: no call of the swap, the new version at
 	 * the target and the old one in the backup as they were, the step begun
 	 * and the mark closed. The answer does not call for the next step
 	 * (Codex D3, finding 3).
 	 * Sonst: a swap that happened would read as one that did not, a person
-	 * would not know where the old version lies or how to go back, or the
-	 * next call would swap again or move the old version.
+	 * would not know where the old version lies or how to go back, the
+	 * answer after a failure would say more than this call proved (option
+	 * B), or the next call would swap again or move the old version.
 	 */
 	public function testASwapWhoseEndCannotBeWrittenSaysItIsSwappedAndTheNextCallChangesNothing(): void {
 		list( $run_id, , $target ) = self::ready_to_swap();
@@ -2628,6 +2650,7 @@ final class SyncCodeRunTest extends TestCase {
 		self::assertStringNotContainsString( 'stays begun', $says, 'No state of the step from a write that failed (option B); the status of the run shows it.' );
 		self::assertStringContainsString( 'wp_site_revert action=plan with run_id ' . $run_id, $says, 'The way back of the run.' );
 		self::assertStringNotContainsString( 'Call action=next for the next step.', $says, 'No call to go on while its end is not recorded (Codex D3, finding 3).' );
+		self::assertStringNotContainsString( sprintf( self::Z24, 'plugin', 'ab-it-aktiv' ), $says, 'The sentence of Z24 only in the answer of a swap done, its end recorded (option B: the answer after a failure says only what this call proved).' );
 		self::assertSame( 'begun', self::step( $run_id, 3 )['state'] );
 		self::assertSame( 'closed', self::mark_of_swap( $run_id )['state'], 'The mark closed after the proof of both versions (way a).' );
 		$swapped = static function () use ( $seen, $target ): array {

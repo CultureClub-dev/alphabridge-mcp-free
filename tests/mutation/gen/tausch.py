@@ -469,6 +469,11 @@ e('c-runs-strict', 'as_prepared(): the comparison is strict, so a state not read
   "if ( $prepared['runs'] === self::runs( $in['unit']['kind'], $in['unit']['ref'] ) ) {",
   "if ( $prepared['runs'] == self::runs( $in['unit']['kind'], $in['unit']['ref'] ) ) {", 'coderun', F57)
 
+# ------------------------------------------- Behebung after the skeptic over Teil C: the sentence of Z24 only once the end is recorded
+e('cb-z24-in-result', 'after_renames(): the sentence of Z24 is added to the answer only after ended() recorded the end, never to the message of the result, so the refusal of an end not recorded stays the answer of option B without it (Z24 after option C, D2a 5; Behebung after the skeptic over Teil C, B1)', CS,
+  "\t\t$ended    = self::ended(\n",
+  "\t\t$message .= \"\\n\" . $unseen;\n\t\t$ended    = self::ended(\n", 'coderun', END)
+
 # ------------------------------------------------ check and write
 src = {f: open(os.path.join(ROOT, f)).read() for f in VAR}
 errors = []

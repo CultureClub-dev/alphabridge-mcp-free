@@ -1393,4 +1393,13 @@ return array(
 		'run'     => $it( 'SyncCodeRunTest', 'testAPluginActivatedAfterThePreparationIsNotSwappedUntilItIsPreparedAnew' ),
 		'expect'  => '/testAPluginActivatedAfterThePreparationIsNotSwappedUntilItIsPreparedAnew/',
 	),
+	array(
+		'id'      => 'tausch/cb-z24-in-result',
+		'clause'  => 'after_renames(): the sentence of Z24 is added to the answer only after ended() recorded the end, never to the message of the result, so the refusal of an end not recorded stays the answer of option B without it (Z24 after option C, D2a 5; Behebung after the skeptic over Teil C, B1)',
+		'file'    => $cs,
+		'search'  => "\t\t\$ended    = self::ended(\n",
+		'replace' => "\t\t\$message .= \"\\n\" . \$unseen;\n\t\t\$ended    = self::ended(\n",
+		'run'     => $it( 'SyncCodeRunTest', 'testASwapWhoseEndCannotBeWrittenSaysItIsSwappedAndTheNextCallChangesNothing' ),
+		'expect'  => '/testASwapWhoseEndCannotBeWrittenSaysItIsSwappedAndTheNextCallChangesNothing/',
+	),
 );

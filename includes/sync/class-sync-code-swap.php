@@ -50,8 +50,8 @@
  * the unit go. The files of its pair take their new bases, the step is
  * done. The swap sends no test request after it and swaps nothing back by
  * itself (Variante b): its answer names the way back of the run, the target,
- * the backup and the commands of the way by hand, and that it does not see
- * an activation after its last check (G-5-13).
+ * the backup and the commands of the way by hand, and, once its end is
+ * recorded, what its last check of the unit could not see (G-5-13).
  *
  * OPCACHE (invalidate(), Z13): the one wrapper of
  * AB_MCP_Own_Files::invalidate_opcache() in the swap; only invalidated or
@@ -1213,7 +1213,8 @@ final class AB_MCP_Sync_Code_Swap {
 	 * it changed or is not known, nothing is swapped and the step stays
 	 * planned; the next call prepares the swap anew. accept does not let it
 	 * pass: it released the code prepare() read, which the swap was prepared
-	 * for. What begins after this reading the swap does not see
+	 * for. What this site records only after this reading (the row, also of
+	 * an activation begun before it) the swap does not see
 	 * (GRENZEN-CODE.md, G-5-13).
 	 *
 	 * @param array $in       The arguments.
@@ -1594,10 +1595,13 @@ final class AB_MCP_Sync_Code_Swap {
 		/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name, 3: its version here before, 4: its version now, 5: the folder or file of the unit (absolute path), 6: the backup of the old version (absolute path), 7: run number. */
 		$message = sprintf( __( 'The %1$s %2$s of the staging site is swapped in (version %3$s here before, %4$s now): its new version lies at %5$s, the old one whole in the backup %6$s. Look at the site now (the home page and wp-admin): where something fails, the way back of this run puts the old version back (wp_site_revert action=plan with run_id %7$d). Where this site answers no request any more (the new version ends fatal on every call, so neither MCP nor wp-admin is reached), put the old version back by hand in a shell on the server, as the lines below say:', 'alphabridge-mcp' ), $unit['kind'], $unit['ref'], (string) $prepared['version']['live'], (string) $prepared['version']['staging'], $plan['target'], $plan['old']['path'], $in['run_id'] );
 		$message .= "\n" . implode( "\n", $by_hand );
-		// Z24 after option C (15.23, F57): the answer of a swap done says
-		// what its last check could not see, once (the answers after a
-		// failure say only what this call proved, option B).
-		$message .= "\n" . __( 'Which plugins and which theme run, this answer knows as its last check read them right before the swap began: an activation (or a switch of the theme) after that check, or one switched on and off again before it, it does not see.', 'alphabridge-mcp' );
+		// Z24 after option C (15.23, F57): what the last check of the unit
+		// could not see, said once and only in the answer of a swap done,
+		// after its end is recorded: not in the result of the step, and not
+		// in the refusal of an end not recorded (ended(); the answers after
+		// a failure say only what this call proved, option B).
+		/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name. */
+		$unseen   = sprintf( __( 'Whether code of the %1$s %2$s runs, this answer knows as its last check read it right before the swap began: an activation of it (for a theme: a switch of the theme) that this site records only after that check, or one switched on and off again before it, it does not see.', 'alphabridge-mcp' ), $unit['kind'], $unit['ref'] );
 		$ended    = self::ended(
 			$in,
 			'done',
@@ -1617,9 +1621,9 @@ final class AB_MCP_Sync_Code_Swap {
 				'by_hand'   => $by_hand,
 			)
 		);
-		// The call to go on only once the end is recorded (Codex D3,
-		// finding 3), as the engine adds it.
-		return is_wp_error( $ended ) ? $ended : array( 'next' => $ended['next'] . "\n" . __( 'Call action=next for the next step.', 'alphabridge-mcp' ) );
+		// The sentence of Z24 and the call to go on only once the end is
+		// recorded (Codex D3, finding 3), as the engine adds it.
+		return is_wp_error( $ended ) ? $ended : array( 'next' => $ended['next'] . "\n" . $unseen . "\n" . __( 'Call action=next for the next step.', 'alphabridge-mcp' ) );
 	}
 
 	/**

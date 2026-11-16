@@ -29,13 +29,19 @@
  *   AB_MCP_Protected_Store::uninstall(), which no shipped code calls
  *   otherwise, and names no folder of the store.
  *
- * The walk of the calls (calls()) reads a fixed name in every spelling of
- * the global namespace (rename(), \rename(), namespace\rename(),
+ * The walk of the calls (calls()) sees a call only where its name is
+ * written as a name in the code, followed by its ( : a function, or a
+ * name after ->, ?->, :: or new. Such a name it reads in every spelling
+ * of the global namespace (rename(), \rename(), namespace\rename(),
  * \Class::) as the name itself and keeps a qualified one (Ns\rename())
- * apart; it stops with a failure at an import (use function … as, use
- * Class as …), which it does not follow, and it does not see a dynamic
- * call ($f( … ), call_user_func( 'rename', … )). Its own test reads the
- * spellings in tests/fixtures/t7-walker/.
+ * apart. Any other call it does not see, in whatever spelling: one whose
+ * name is a value at run time (a variable, $f( … ) or $obj->$m( … ); a
+ * string, 'rename'( … ); a callback handed on, call_user_func( 'rename',
+ * … ) or array_map( 'unlink', … )), and new without parentheses. It stops
+ * with a failure at an import (use function … as, use Class as …), which
+ * it does not follow, and, to the safe side, also where a trait, an enum
+ * or an anonymous class outside a named class takes a trait (use). Its
+ * own test reads the spellings in tests/fixtures/t7-walker/.
  *
  * What the code does at run time is tests/integration/StoreRemoverTest.php
  * and StoreTreesTest.php.
@@ -66,7 +72,9 @@ final class StoreRemoverGuardTest extends TestCase {
 	);
 
 	/**
-	 * Every call in a file: function, method (->), static (Class::) and new,
+	 * Every call in a file whose name is written as a name before its ( (the
+	 * head of this file: none whose name is a value at run time): function,
+	 * method (->), static (Class::) and new,
 	 * with the class and the named function it stands in (a closure counts
 	 * as the function it is written in). A name in any spelling of the
 	 * global namespace (\rename(), namespace\rename(), \Class::) counts as

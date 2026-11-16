@@ -690,10 +690,11 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
 
 ### G-5-13 Z24: Eine Aktivierung nach der letzten Prüfung sieht der Tausch nicht
 
-- **Fundstelle:** `AB_MCP_Sync_Code_Swap::as_prepared()` (`includes/sync/class-sync-code-swap.php:1223`), gerufen in
+- **Fundstelle:** `AB_MCP_Sync_Code_Swap::as_prepared()` (`includes/sync/class-sync-code-swap.php:1224`), gerufen in
   `swapped()` (`:1198`) nach der letzten Zeitprüfung und unmittelbar vor `rename_marked()` (`:1202`); die frische
   Lesung ist `runs()` (`:443`), der Stand der Vorbereitung `$prepared['runs']` aus `released()` in `under_lock()`
-  (`:644`). Der Satz in der Antwort des gelungenen Tauschs: `after_renames()` (`:1600`).
+  (`:644`). Der Satz in der Antwort des gelungenen Tauschs: `after_renames()` (gebildet `:1604`, angehängt erst nach
+  dem geschriebenen Ende `:1626`).
 - **Quelle:** Plan 15.23, Festlegung zu 1 (Z24 Option C) und Grenze Z24; Vorlage
   `stoppfall-z24/vorlage-z24-thomas.md`, «Was in jedem Fall gilt»; F57; Teil C des Rests, Lesart des Satzes nach dem
   Entscheid der Steuerung vom 16.11. 14:29.
@@ -705,15 +706,25 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
     neu vor; `accept` ersetzt das nicht.
   - Eine gewöhnliche Aktivierung (oder ein Themewechsel), die nach dieser Prüfung beginnt, sieht der Tausch nicht,
     ebenso eine kurz an- und wieder ausgeschaltete zwischen zwei Lesungen. Nach der Prüfung liegen noch Journal
-    (`:1415`), Marke mit Anleitung (`:1423`) und Vermerk (`:1435`) vor der ersten Umbenennung (`:1442`); eine
+    (`:1416`), Marke mit Anleitung (`:1424`) und Vermerk (`:1436`) vor der ersten Umbenennung (`:1443`); eine
     Aktivierung in diesem Fenster oder danach läuft gegen die alte Fassung, einen leeren Platz oder die neue.
+  - Gesehen wird nur die Zeile `active_plugins` (bei einem Theme `stylesheet` und `template`). Eine Aktivierung in
+    wp-admin lädt das Plugin und lässt seine Routine laufen, bevor sie die Zeile schreibt (`activate_plugin()`). Auch
+    eine Aktivierung, die vor der Prüfung begann, deren Zeile aber erst danach geschrieben wird, sieht der Tausch nicht;
+    ihre Routine läuft womöglich schon gegen die alte Fassung, und die Umbenennungen laufen unter ihr durch.
   - `prepare()` ermittelt nur, ob Code läuft (ja, nein), nicht welche Hauptdateien; eine weitere Hauptdatei eines schon
     aktiven Plugins ändert den Wert nicht.
   - Die Grenze gilt für jede Antwort des Tauschs: für den gelungenen Tausch, die Enden nach einem Fehler (`failed`,
-    `unclear`) und die Ablehnungen. Den Satz dazu trägt nur die Antwort des gelungenen Tauschs; die Antworten nach
-    einem Fehler sagen nach Option B nur, was der Aufruf nachgeprüft hat, und eine Ablehnung hat nichts getauscht.
-  - Tests: `SyncCodeRunTest::testAPluginActivatedAfterThePreparationIsNotSwappedUntilItIsPreparedAnew` (F57).
-    Gegenproben `tausch/c-runs-fresh` und `tausch/c-runs-strict`.
+    `unclear`, das nicht geschriebene Ende in `ended()`) und die Ablehnungen. Den Satz dazu trägt nur die Antwort des
+    gelungenen Tauschs, erst nachdem sein Ende geschrieben ist (nicht das gespeicherte Ergebnis des Schritts); die
+    Antworten nach einem Fehler sagen nach Option B nur, was der Aufruf nachgeprüft hat, und eine Ablehnung hat nichts
+    getauscht. Der Satz spricht nur von der getauschten Einheit: Die Antwort kennt, ob ihr Code läuft, so, wie die
+    letzte Prüfung es las; eine Aktivierung von ihr (bei einem Theme ein Wechsel des Themes), die die Site erst nach
+    dieser Prüfung festhält, und eine davor an- und wieder ausgeschaltete sieht sie nicht.
+  - Tests: `SyncCodeRunTest::testAPluginActivatedAfterThePreparationIsNotSwappedUntilItIsPreparedAnew` (F57; vier
+    Fälle, auch ein aktives Plugin, das nach `prepare()` deaktiviert wird) und
+    `testASwapWhoseEndCannotBeWrittenSaysItIsSwappedAndTheNextCallChangesNothing` (D2a 5: der Satz nicht in der
+    Ablehnung von `ended()`). Gegenproben `tausch/c-runs-fresh`, `tausch/c-runs-strict` und `tausch/cb-z24-in-result`.
 - **Trifft Normalfall:** nein. Im Normalfall aktiviert niemand die Einheit in den Sekunden ihres Tauschs.
 
 ## Übernommen aus Zweig 2 (`bericht-zweig-2.md`, Abschnitt Grenzkandidaten; G-M9 aus «Behebung 2»)
