@@ -423,4 +423,8 @@ return array(
 	'Have OPcache of this site cleared at the host, or PHP restarted (PHP-FPM or the web server), so that PHP runs the files that are at the target now.',
 	'A mark of this swap may be left in part in %1$s (run %2$d, step %3$d, open): it moved nothing, and while it is open the protected store keeps the stage of this unit; it needs nothing else.',
 	'The note that its files are replaced stays written all the same (it is not taken back): the undo of AlphaBridge Pro refuses the file undo points of these files from before this call, as after a swap.',
+	// includes/class-protected-store.php and includes/sync/class-sync-code-swap.php (Z8b branch 5, the Behebung of Codex D3: what the answer says after a fault).
+	'The target is taken by another entry; the old version lies whole in the backup. Only after that entry is moved away, put the old version back and check it:',
+	'The %1$s %2$s is not at its place: its old version was moved into the backup, the new one could not be put at the target, and the old one could not be put back, as another entry is at the target %3$s (ls -la %4$s shows it).',
+	'%1$s The step is unclear; that the mark of the swap is closed is not confirmed (it was written so, and read once more it did not tell its state). The way back of this run puts the old version back (wp_site_revert action=plan with run_id %2$d). Where this site answers no request any more, put it back by hand in a shell on the server, as the lines below say:',
 );

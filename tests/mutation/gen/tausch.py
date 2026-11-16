@@ -368,6 +368,12 @@ e('d2a-close-proved', 'close(): the mark closes and the file undo points go only
   '\t\tif ( true !== $proved ) {', '\t\tif ( false ) {', 'coderun', AFTER)
 e('d2a-end-recorded', 'ended(): a step is answered as ended only where its end is recorded; else the refusal says it stays begun (D2a 5, the lead on D2a, 16.11. 03:57, way a)', CS,
   '\t\tif ( true !== $saved ) {', '\t\tif ( false ) {', 'coderun', END)
+e('d3-target-taken', 'not_swapped(): where the way back failed, what is at the target is read once more; with another entry there the answer names it and gives the section of a taken target, never the target as missing (Codex D3, finding 1)', CS,
+  '\t\t\tif ( false !== self::calls()->lstat( $plan[\'target\'] ) ) {', '\t\t\tif ( false ) {', 'coderun', PLACES)
+e('d3-mark-read-again', 'close(): a mark written closed whose read back fails is read once more, so the answer does not name it open (Codex D3, finding 2)', CS,
+  '\t\t\tif ( is_wp_error( $closed ) && \'ab_mcp_store_mark_unconfirmed\' === $closed->get_error_code() ) {', '\t\t\tif ( false ) {', 'coderun', AFTER)
+e('d3-mark-closed-read', 'mark_closed(): read once more, a mark the store lists closed counts as closed, one it lists open as open (Codex D3, finding 2)', CS,
+  '\t\t\t\treturn \'closed\' === $mark[\'state\'];', '\t\t\t\treturn null;', 'coderun', AFTER)
 
 # ------------------------------------------------ check and write
 src = {f: open(os.path.join(ROOT, f)).read() for f in VAR}

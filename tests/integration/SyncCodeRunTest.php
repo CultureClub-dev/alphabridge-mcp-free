@@ -902,6 +902,7 @@ final class SyncCodeRunTest extends TestCase {
 		self::assertSame( ' && echo OK', substr( $commands[0], -11 ), 'And OK at its end.' );
 		self::assertStringContainsString( 'Then clear OPcache of this site, or have PHP restarted', $says, 'After putting back, OPcache (Codex D1, finding 7).' );
 		self::assertStringContainsString( "\n" . implode( "\n", $result['by_hand'] ) . "\n", $says, 'The answer carries the commands of the result, one after the other.' );
+		self::assertStringEndsWith( "\nCall action=next for the next step.", $says, 'The call to go on, its end recorded.' );
 		$closed = self::gated( 'wp_site_push', array( 'action' => 'abort', 'run_id' => $run_id ) );
 		self::assertIsArray( $closed, is_wp_error( $closed ) ? $closed->get_error_message() : '' );
 		self::assertNull( AB_MCP_Sync_Run::open_run(), 'The site is free.' );
@@ -977,10 +978,14 @@ final class SyncCodeRunTest extends TestCase {
 	 * mark closed on it); where another process put a folder at the target
 	 * before the way back, nothing is moved onto it, the step is unclear, and
 	 * the command by hand for the backup the answer proved stops at its
-	 * check and moves nothing onto that folder (F35 has its own test).
+	 * check and moves nothing onto that folder (F35 has its own test); the
+	 * answer names that folder with its path and how to look at it, never
+	 * the target as missing, and once it is moved away the same command
+	 * puts the old version back (Codex D3, finding 1).
 	 * Sonst: the swap could replace a folder another process put at a place
 	 * and with it what it holds, or put its backup into the site where
-	 * another process put a folder, also with the command of its answer.
+	 * another process put a folder, also with the command of its answer; or
+	 * a person would read the target as missing where a folder is there.
 	 */
 	#[DataProvider( 'places' )]
 	public function testASwapRenamesOnlyOntoAFreePlaceAndReplacesNothingAnotherProcessPutThere( string $case ): void {
@@ -1052,14 +1057,29 @@ final class SyncCodeRunTest extends TestCase {
 			self::assertSame( array( $old['dev'], $old['ino'] ), array( $kept['dev'], $kept['ino'] ), 'The old version stays whole in the backup.' );
 			self::assertStringContainsString( 'and the old one could not be put back', $says );
 			self::assertSame( array( 'open', 'open' ), array( self::mark_of_swap( $run_id )['state'], $step['result']['mark'] ) );
+			// The answer names the entry at the target with its path and how
+			// to look at it, never the target as missing (Codex D3, finding
+			// 1).
+			self::assertStringContainsString( 'and the old one could not be put back, as another entry is at the target ' . $target . " (ls -la '" . $target . "' shows it).", $says );
+			self::assertStringContainsString( 'The target is taken by another entry; the old version lies whole in the backup. Only after that entry is moved away, put the old version back and check it:', $says );
+			self::assertStringNotContainsString( 'The target is missing', $says );
 			// The backup proved, the answer gives its command; its checks
 			// come first, so it moves nothing onto the folder at the target.
+			self::assertStringContainsString( "test ! -e '" . $target . "' && ", $says );
 			self::assertStringContainsString( " && mv '" . $step['result']['backup'] . "' '" . $target . "' && ", $says );
 			self::assertStringNotContainsString( 'OK', self::run_by_hand( $step['result']['by_hand'] ), 'The command stops at its check.' );
 			clearstatcache();
 			self::assertSame( array( $foreign[1], array( '.', '..', 'fremd.txt' ) ), array( fileinode( $target ), scandir( $target ) ), 'The folder of the other process stays as it was.' );
 			$kept = lstat( $step['result']['backup'] );
 			self::assertSame( array( $old['dev'], $old['ino'] ), array( $kept['dev'], $kept['ino'] ), 'The old version stays in the backup.' );
+			// Moved away (aside, nothing deleted), the same command puts the
+			// old version back, as the answer says.
+			self::assertTrue( rename( $target, $target . '-fremd' ) );
+			self::assertStringEndsWith( 'OK', self::run_by_hand( $step['result']['by_hand'] ), 'After the entry is moved away, the command runs to its end.' );
+			clearstatcache();
+			$now = lstat( $target );
+			self::assertSame( array( $old['dev'], $old['ino'] ), array( $now['dev'], $now['ino'] ), 'The old version is back at the target.' );
+			self::assertSame( array( '.', '..', 'fremd.txt' ), scandir( $target . '-fremd' ), 'What the other process put there stays.' );
 			return;
 		}
 		self::assertSame( 'failed', $step['state'], $says );
@@ -1404,7 +1424,8 @@ final class SyncCodeRunTest extends TestCase {
 	 * free and nothing is lost. The next call (action=next) swaps nothing
 	 * again and changes nothing: no call of the swap, the new version at
 	 * the target and the old one in the backup as they were, the step begun
-	 * and the mark closed.
+	 * and the mark closed. The answer does not call for the next step
+	 * (Codex D3, finding 3).
 	 * Sonst: a swap that happened would read as one that did not, a person
 	 * would not know where the old version lies or how to go back, or the
 	 * next call would swap again or move the old version.
@@ -1432,6 +1453,7 @@ final class SyncCodeRunTest extends TestCase {
 		self::assertStringContainsString( 'The plugin ab-it-aktiv of the staging site is swapped in (version 1.0.0 here before, 2.0.0 now): its new version lies at ' . $target . ', the old one whole in the backup ' . $seen['backup'] . '.', $says );
 		self::assertStringContainsString( 'The end of step 3 could not be recorded (The database refused the write.), so it stays begun', $says );
 		self::assertStringContainsString( 'wp_site_revert action=plan with run_id ' . $run_id, $says, 'The way back of the run.' );
+		self::assertStringNotContainsString( 'Call action=next for the next step.', $says, 'No call to go on while its end is not recorded (Codex D3, finding 3).' );
 		self::assertSame( 'begun', self::step( $run_id, 3 )['state'] );
 		self::assertSame( 'closed', self::mark_of_swap( $run_id )['state'], 'The mark closed after the proof of both versions (way a).' );
 		$swapped = static function () use ( $seen, $target ): array {
@@ -1537,7 +1559,10 @@ final class SyncCodeRunTest extends TestCase {
 	 * was closed names the mark closed, with the command. A new version at
 	 * the target not proved by close() (D2a 5, code:close_target) leaves the
 	 * mark open, and the answer asks the backup first and, proved, gives
-	 * its command. In each case the lock for changes is free and nothing is
+	 * its command. A mark written closed whose read back fails is read once
+	 * more: closed, the answer and the journal name it closed; where that
+	 * read does not tell it either, not confirmed, never open (Codex D3,
+	 * finding 2). In each case the lock for changes is free and nothing is
 	 * lost (D2a 6).
 	 * Sonst: the step would be done with old code left in OPcache, a person
 	 * would put a backup that was never proved as the old version into the
@@ -1549,7 +1574,36 @@ final class SyncCodeRunTest extends TestCase {
 	public function testAfterTheRenamesAStepNotProvedIsUnclearAndItsAnswerSaysWhatIsProved( string $case ): void {
 		list( $run_id, $unit, $target ) = self::ready_to_swap();
 		$backup = null;
+		// The mark written closed, then its read back fails (Codex D3,
+		// finding 2): that one read, or every read of it after.
+		$unread = static function ( bool $always ): callable {
+			return static function () use ( $always ): void {
+				$calls = new \AB_MCP_IT_Store_Calls();
+				AB_MCP_Test_Seam::install(
+					AB_MCP_Protected_Store::class,
+					'naht_protected_store',
+					$calls,
+					array(
+						array(
+							'method' => 'rename',
+							'kind'   => 'before',
+							'before' => static function ( $method, array $args ) use ( $calls, $always ): void {
+								if ( AB_MCP_Protected_Store::MARK_FILE === basename( $args[1] ) && false !== strpos( (string) file_get_contents( $args[0] ), '"state": "closed"' ) ) {
+									if ( $always ) {
+										$calls->fail['read'][] = $args[1];
+									} else {
+										$calls->fail_once['read'][ $args[1] ] = 1;
+									}
+								}
+							},
+						),
+					)
+				);
+			};
+		};
 		$hooks  = array(
+			'the closed mark not read back'           => $unread( false ),
+			'the closed mark not read back nor again' => $unread( true ),
 			'a link in the new version'          => static function ( $method, array $args ): void {
 				self::assertTrue( symlink( '/ab-it-verweis-ohne-ziel', $args[0] . '/verweis' ) );
 			},
@@ -1594,6 +1648,8 @@ final class SyncCodeRunTest extends TestCase {
 				chmod( $target . '/includes', 0755 );
 			}
 		}
+		// The store as it is again (its mark read as stored).
+		AB_MCP_Test_Seam::restore_all();
 		self::assertIsArray( $answer, is_wp_error( $answer ) ? $answer->get_error_code() . ': ' . $answer->get_error_message() : '' );
 		$step   = self::step( $run_id, 3 );
 		$says   = $answer['next'];
@@ -1631,6 +1687,20 @@ final class SyncCodeRunTest extends TestCase {
 			self::assertSame( array( 'closed', 'closed' ), array( $mark['state'], $result['mark'] ) );
 			return;
 		}
+		if ( 0 === strpos( $case, 'the closed mark not read back' ) ) {
+			// Written closed: read once more, closed; where that does not
+			// tell it either, not confirmed; never open.
+			self::assertStringContainsString( 'The closed mark did not read back as written.', $says );
+			self::assertStringNotContainsString( 'stays open', $says, 'The mark is not named open.' );
+			if ( 'the closed mark not read back' === $case ) {
+				self::assertStringContainsString( 'The step is unclear; the mark of the swap is closed, as the new version at the target and the old one in the backup were proved.', $says );
+				self::assertSame( array( 'closed', 'closed' ), array( $mark['state'], $result['mark'] ) );
+				return;
+			}
+			self::assertStringContainsString( 'The step is unclear; that the mark of the swap is closed is not confirmed (it was written so, and read once more it did not tell its state).', $says );
+			self::assertSame( array( 'closed', 'unconfirmed' ), array( $mark['state'], $result['mark'] ) );
+			return;
+		}
 		if ( 'the new version changed' === $case ) {
 			self::assertStringContainsString( 'The version at ' . $target . ' could not be proved as the one the swap left there', $says );
 			self::assertStringContainsString( 'The step is unclear, and the mark of the swap stays open: the way back of this run puts the old version back', $says );
@@ -1651,6 +1721,8 @@ final class SyncCodeRunTest extends TestCase {
 			'the backup changed (finding 5)'                 => array( 'the backup changed' ),
 			'the pair changed before its bases (finding 8)' => array( 'the pair changed before its bases' ),
 			'the new version changed (D2a 5, close_target)' => array( 'the new version changed' ),
+			'the closed mark not read back (Codex D3, finding 2)' => array( 'the closed mark not read back' ),
+			'the closed mark not read back nor again (Codex D3, finding 2)' => array( 'the closed mark not read back nor again' ),
 		);
 	}
 

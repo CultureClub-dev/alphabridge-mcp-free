@@ -2891,6 +2891,14 @@ final class AB_MCP_Protected_Store {
 			$lines[] = $chain( $put );
 			$lines[] = $opcache;
 			$lines[] = '';
+			// The same point with another entry at the target (Codex D3,
+			// finding 1): the command only for after it is moved away, its
+			// check test ! -e first as above.
+			$lines[] = '[zwischen-den-umbenennungen-ziel-belegt]';
+			$lines[] = __( 'The target is taken by another entry; the old version lies whole in the backup. Only after that entry is moved away, put the old version back and check it:', 'alphabridge-mcp' );
+			$lines[] = $chain( $put );
+			$lines[] = $opcache;
+			$lines[] = '';
 			$swap    = $put;
 			if ( null !== $new ) {
 				$stage = $root . '/' . $new['path'];
@@ -3089,7 +3097,8 @@ final class AB_MCP_Protected_Store {
 
 	/**
 	 * Close a mark that was read (close_mark(), put_back()): its state closed,
-	 * the time, written through write_file() and read back.
+	 * the time, written through write_file() and read back; written but not
+	 * read back as written, ab_mcp_store_mark_unconfirmed.
 	 *
 	 * @param string $root Folder of the store.
 	 * @param string $mid  Mark.
@@ -3114,7 +3123,9 @@ final class AB_MCP_Protected_Store {
 		if ( true !== $written ) {
 			return $written;
 		}
-		return self::calls()->read( $path, self::MARK_MAX ) === $text ? true : new WP_Error( 'ab_mcp_store_mark_read', __( 'The closed mark did not read back as written. Ask the host whether something else writes into the folder of the protected store, then try again.', 'alphabridge-mcp' ) );
+		// Written, not read back: a code of its own (Codex D3, finding 2), as
+		// the mark may be closed all the same.
+		return self::calls()->read( $path, self::MARK_MAX ) === $text ? true : new WP_Error( 'ab_mcp_store_mark_unconfirmed', __( 'The closed mark did not read back as written. Ask the host whether something else writes into the folder of the protected store, then try again.', 'alphabridge-mcp' ) );
 	}
 
 	/* ------------------------------------------------- the writer, the remover */
