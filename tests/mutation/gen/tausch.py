@@ -24,7 +24,8 @@ ST = 'includes/sync/class-sync-code-stage.php'
 PS = 'includes/class-protected-store.php'
 VAR = {CK: '$ck', DE: '$de', PU: '$pu', CP: '$cp', CO: '$co', CS: '$cs', EN: '$en', ST: '$st', PS: '$ps'}
 CLASSES = {'kind': ('unit', 'SyncCodeKindTest'), 'env': ('unit', 'SyncEnvTest'), 'run': ('unit', 'SyncRunTest'),
-           'ops': ('unit', 'SyncCodeOpsTest'), 'coderun': ('it', 'SyncCodeRunTest'), 'store': ('it', 'ProtectedStoreTest')}
+           'ops': ('unit', 'SyncCodeOpsTest'), 'coderun': ('it', 'SyncCodeRunTest'), 'store': ('it', 'ProtectedStoreTest'),
+           'storeunit': ('unit', 'ProtectedStoreTest')}
 entries = []
 
 
@@ -422,6 +423,12 @@ e('b2-mark-read-own-words', 'close(): a mark that could not be read reaches the 
   "\t\t\tif ( is_wp_error( $closed ) && 'ab_mcp_store_mark_read' === $closed->get_error_code() ) {", '\t\t\tif ( false ) {', 'coderun', UNREAD)
 e('b2-finish-checks-backup', 'guide(): the command of a swap back that stopped checks the inode of the backup before it moves anything, so another entry at its place is never moved to the target (Codex on 3014d8b, finding 2)', PS,
   '\t\t\t$finish = array( $inode( $back, $old ) );', '\t\t\t$finish = array();', 'coderun', SURE)
+
+# ------------------------------------------- Teil D3b-1, point 0: the head of the instruction in a function of its own
+HEAD = 'testTheHeadOfTheInstructionNamesForEachFormOfAMarkOnlyTheCasesItsCommandsCheck'
+e('d3b-head-new-at-target', 'guide_head(): the case of the new version at the target only where the mark names a stage, so the head of a mark with the old version only sends no state to a case it cannot check (Codex on 3014d8b, finding 2; Teil D3b-1, point 0)', PS,
+  "\t\t\tif ( null !== $new ) {\n\t\t\t\t/* translators: %s: the name of a section of this file (not translated). */\n\t\t\t\t$cases[] = sprintf( __( 'The new version is at the target, the old version is at the place of the backup",
+  "\t\t\tif ( true ) {\n\t\t\t\t/* translators: %s: the name of a section of this file (not translated). */\n\t\t\t\t$cases[] = sprintf( __( 'The new version is at the target, the old version is at the place of the backup", 'storeunit', HEAD)
 
 # ------------------------------------------------ check and write
 src = {f: open(os.path.join(ROOT, f)).read() for f in VAR}

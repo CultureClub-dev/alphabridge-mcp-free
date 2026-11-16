@@ -1302,4 +1302,13 @@ return array(
 		'run'     => $it( 'SyncCodeRunTest', 'testTheInstructionSendsOnlyASureStateToASectionAndNoCommandOfItMovesAnotherEntry' ),
 		'expect'  => '/testTheInstructionSendsOnlyASureStateToASectionAndNoCommandOfItMovesAnotherEntry/',
 	),
+	array(
+		'id'      => 'tausch/d3b-head-new-at-target',
+		'clause'  => 'guide_head(): the case of the new version at the target only where the mark names a stage, so the head of a mark with the old version only sends no state to a case it cannot check (Codex on 3014d8b, finding 2; Teil D3b-1, point 0)',
+		'file'    => $ps,
+		'search'  => "\t\t\tif ( null !== \$new ) {\n\t\t\t\t/* translators: %s: the name of a section of this file (not translated). */\n\t\t\t\t\$cases[] = sprintf( __( 'The new version is at the target, the old version is at the place of the backup",
+		'replace' => "\t\t\tif ( true ) {\n\t\t\t\t/* translators: %s: the name of a section of this file (not translated). */\n\t\t\t\t\$cases[] = sprintf( __( 'The new version is at the target, the old version is at the place of the backup",
+		'run'     => $unit( 'ProtectedStoreTest', 'testTheHeadOfTheInstructionNamesForEachFormOfAMarkOnlyTheCasesItsCommandsCheck' ),
+		'expect'  => '/testTheHeadOfTheInstructionNamesForEachFormOfAMarkOnlyTheCasesItsCommandsCheck/',
+	),
 );

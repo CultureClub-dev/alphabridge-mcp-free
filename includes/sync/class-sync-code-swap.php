@@ -1904,7 +1904,7 @@ final class AB_MCP_Sync_Code_Swap {
 					/* translators: %d: run number. */
 					sprintf( __( '1. To go back, call wp_site_revert action=plan with run_id %d.', 'alphabridge-mcp' ), $in['run_id'] ),
 					/* translators: %s: the instruction of the swap on the server (absolute path of a file). */
-					sprintf( __( '2. Only where this site answers no request any more: in a shell on the server, open the file %s and run the command its first lines point to. It checks first, moves nothing where a check fails, and prints OK at its end.', 'alphabridge-mcp' ), $moved['guide'] ),
+					sprintf( __( '2. Only where this site answers no request any more: in a shell on the server, open the file %s and run the command its first lines point to. The command contains checks; where it does not print OK, stop.', 'alphabridge-mcp' ), $moved['guide'] ),
 					/* translators: %s: the folder or file of the unit (absolute path). */
 					sprintf( __( 'Target: %s', 'alphabridge-mcp' ), $plan['target'] ),
 					/* translators: %s: the place of the backup of the old version (absolute path). */

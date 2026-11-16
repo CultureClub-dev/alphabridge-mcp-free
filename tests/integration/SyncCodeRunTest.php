@@ -78,6 +78,14 @@ require_once __DIR__ . '/support/class-it-store-calls.php';
 
 final class SyncCodeRunTest extends TestCase {
 
+	/**
+	 * The line of the instruction of a mark after its places (Codex on
+	 * 5199de3, findings 1 and 2): only the command of the section the true
+	 * case of its first lines names, and of that command only that it
+	 * contains checks and to stop where it prints no OK.
+	 */
+	private const RUN_ONLY = 'In a shell, run only the command of the section that the true case above names. The command contains checks; where it does not print OK, stop and ask before anything else is moved.';
+
 	/** @var string|null DOCUMENT_ROOT before the case. */
 	private $docroot_before;
 
@@ -1178,6 +1186,7 @@ final class SyncCodeRunTest extends TestCase {
 		// sent to a section, else to none.
 		$head = self::head_of( $target, AB_MCP_Protected_Store::root() . '/' . $trees['backup']['path'], $stage, $run_id );
 		self::assertSame( $head, array_slice( explode( "\n", $seen['guide'] ), 2, count( $head ) ), 'The first lines of the instruction tell which of its commands fits, or that none does.' );
+		self::assertContains( self::RUN_ONLY, explode( "\n", $seen['guide'] ), 'Only the command of the section the first lines name, and of it only that it contains checks.' );
 		self::assertStringContainsString( $target, $seen['guide'] );
 		self::assertSame( $want['old'], $seen['bytes'], 'The target is the old version until the first rename.' );
 
@@ -1579,7 +1588,7 @@ final class SyncCodeRunTest extends TestCase {
 		self::assertFileExists( $guide, 'The instruction of the mark on the server.' );
 		$tail = " The step is unclear.\n"
 			. '1. To go back, call wp_site_revert action=plan with run_id ' . $run_id . ".\n"
-			. '2. Only where this site answers no request any more: in a shell on the server, open the file ' . $guide . " and run the command its first lines point to. It checks first, moves nothing where a check fails, and prints OK at its end.\n"
+			. '2. Only where this site answers no request any more: in a shell on the server, open the file ' . $guide . " and run the command its first lines point to. The command contains checks; where it does not print OK, stop.\n"
 			. 'Target: ' . $places['target'] . "\n"
 			. 'Backup: ' . $places['backup'];
 		self::assertSame( $result['message'], $says, 'The journal holds the answer.' );
@@ -1588,6 +1597,12 @@ final class SyncCodeRunTest extends TestCase {
 		self::assertStringNotContainsString( "\n", $why, 'What happened is one paragraph: no line of a command.' );
 		foreach ( array( 'stays open', 'is closed', 'not confirmed', 'is missing', 'lies whole', 'is not at its place', 'is at its place', "mv '", '$ ', 'ls -' ) as $state ) {
 			self::assertStringNotContainsString( $state, $says, 'No sentence on what lies where or on the mark, and no command: ' . $state );
+		}
+		// Of the command of the instruction only that it contains checks: a
+		// check after a move can fail after the move (Codex on 5199de3,
+		// finding 1).
+		foreach ( array( 'moves nothing', 'nothing is moved', 'checks first' ) as $promise ) {
+			self::assertStringNotContainsString( $promise, $says, 'No promise that the command moves nothing where a check fails: ' . $promise );
 		}
 		self::assertSame( array( $places['target'], $places['backup'], $mark['mid'], $guide, array() ), array( $result['target'], $result['backup'], $result['mark'], $result['guide'], $result['by_hand'] ), 'The result: the paths, the mark, the instruction, no command.' );
 		return array( $why, $guide, $places );
@@ -2370,9 +2385,7 @@ final class SyncCodeRunTest extends TestCase {
 	 * back.
 	 * Sonst: where the site answers no request any more, a person who
 	 * follows the instruction would move a folder that is not the old
-	 * version to the target (its inode was checked only after the move),
-	 * and the short answer would say «moves nothing where a check fails» of
-	 * a command that does.
+	 * version to the target (its inode was checked only after the move).
 	 */
 	public function testTheInstructionSendsOnlyASureStateToASectionAndNoCommandOfItMovesAnotherEntry(): void {
 		list( $run_id, , $target ) = self::ready_to_swap();
@@ -2456,6 +2469,50 @@ final class SyncCodeRunTest extends TestCase {
 		self::assertSame( array( '1.0.0', $seen['old'], $seen['new'] ), array( AB_MCP_IT_Code::fassung( 'a', 'plugin', 'ab-it-aktiv' ), self::digest( $target ), self::digest( $places['stage'] ) ), 'The old version is back at the target, the new one in the stage, each whole.' );
 		self::assertSame( array( 'fremd.txt' ), array_keys( self::digest( $places['backup'] . '-fremd' ) ), 'What the other process put there stays.' );
 		self::nothing_lost( $seen );
+	}
+
+	/**
+	 * Prüft: Codex on 5199de3, findings 1 (A) and 2 (C): after a swap that
+	 * ended unclear with the short answer (OPcache not cleared after the
+	 * renames), neither the short answer nor the instruction it names says
+	 * that a command moves nothing where a check fails, as a check after a
+	 * move (the last ls -di) can fail after the move: of the command each
+	 * says only that it contains checks and to stop where it prints no OK.
+	 * The instruction sends only to the section the true case of its first
+	 * lines names; no line of it sends to the point where the swap stopped
+	 * beside them.
+	 * Sonst: a person whose command stopped without OK after it had moved
+	 * the backup would take the target for untouched and could move
+	 * another entry onto it, or would run the command of a section the
+	 * first lines of the instruction had ruled out.
+	 */
+	public function testNeitherTheShortAnswerNorTheInstructionSaysThatACommandMovesNothingWhereACheckFails(): void {
+		list( $run_id ) = self::ready_to_swap();
+		$answer         = self::swap_with(
+			$run_id,
+			array(
+				// OPcache not cleared after the renames (call 1 is the one of
+				// prepare()): the step ends unclear with the short answer.
+				array(
+					'method' => 'opcache',
+					'nth'    => 2,
+					'kind'   => 'return',
+					'value'  => 'not_possible',
+				),
+			)
+		);
+		self::assertIsArray( $answer, is_wp_error( $answer ) ? $answer->get_error_code() . ': ' . $answer->get_error_message() : '' );
+		$step = self::step( $run_id, 3 );
+		self::assertSame( 'unclear', $step['state'], $answer['next'] );
+		// The short answer whole, its line of the instruction with no such
+		// promise (short_answer()).
+		list( , $guide ) = self::short_answer( $run_id, $step, $answer['next'] );
+		self::assertStringContainsString( 'run the command its first lines point to. The command contains checks; where it does not print OK, stop.', $answer['next'] );
+		$text = (string) file_get_contents( $guide );
+		self::assertContains( self::RUN_ONLY, explode( "\n", $text ), 'The instruction: only the command of the section its first lines name, and of it only that it contains checks.' );
+		foreach ( array( 'moves nothing', 'nothing is moved', 'checks first', 'come first', 'the point where the swap stopped' ) as $promise ) {
+			self::assertStringNotContainsString( $promise, $text, 'No promise that a command moves nothing where a check fails, and no choice beside the first lines: ' . $promise );
+		}
 	}
 
 	/**

@@ -17,7 +17,10 @@
  *   Z8b branch 3, A1);
  * - owns() takes a folder only with this installation's manifest, every
  *   field of it;
- * - without a store nothing is written, and every message names the way.
+ * - without a store nothing is written, and every message names the way;
+ * - the head of the instruction of a mark (guide_head()) names for each
+ *   form of a mark only the cases its commands check, and the instruction
+ *   says of a command only that it contains checks (Teil D3b-1, point 0).
  *
  * The places on real paths, the self-check over HTTP, two installations
  * side by side, the budgets under the lock with two requests at once and
@@ -37,6 +40,7 @@ use AbTestSyncWpdb;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use ReflectionClassConstant;
+use ReflectionMethod;
 use WP_Error;
 
 require_once __DIR__ . '/sync-stubs.php';
@@ -420,6 +424,121 @@ final class ProtectedStoreTest extends TestCase {
 			self::assertMatchesRegularExpression( $way, $message );
 			self::assertStringContainsString( 'nothing is exported, imported or taken over', $message );
 			self::assertStringNotContainsString( '/', str_replace( array( 'location ~ /ab-mcp-store- {', 'Apache and LiteSpeed', 'wp-admin' ), '', $message ), 'No path of the server in the message.' );
+		}
+	}
+
+	/* ---------------------------------------------- the head of the instruction */
+
+	/**
+	 * The forms of a mark: its trees (backup: the old version, stage: the
+	 * new one), and the cases of the head of its instruction, each with its
+	 * section.
+	 *
+	 * @return array<string,array{0:string[],1:string[]}>
+	 */
+	public static function marks(): array {
+		return array(
+			'old and new'  => array(
+				array( 'backup', 'stage' ),
+				array(
+					'- The old version is at the target: section [vor-den-umbenennungen]. Its command only checks.',
+					'- Nothing is at the target, and the old version is at the place of the backup: section [zwischen-den-umbenennungen].',
+					'- Another entry is at the target, and the old version is at the place of the backup: section [zwischen-den-umbenennungen-ziel-belegt].',
+					'- The new version is at the target, the old version is at the place of the backup, and nothing is at the place of the stage: section [nach-den-umbenennungen].',
+				),
+			),
+			'only the old' => array(
+				array( 'backup' ),
+				array(
+					'- The old version is at the target: section [vor-den-umbenennungen]. Its command only checks.',
+					'- Nothing is at the target, and the old version is at the place of the backup: section [zwischen-den-umbenennungen].',
+					'- Another entry is at the target, and the old version is at the place of the backup: section [zwischen-den-umbenennungen-ziel-belegt].',
+				),
+			),
+			'a new unit'   => array(
+				array( 'stage' ),
+				array(
+					'- Nothing is at the target, and the new version is at the place of the stage: section [vor-den-umbenennungen]. Its command only checks.',
+					'- The new version is at the target, and nothing is at the place of the stage: section [nach-den-umbenennungen].',
+				),
+			),
+		);
+	}
+
+	/**
+	 * Prüft: the head of the instruction of a mark (guide_head(), option B;
+	 * Codex on 3014d8b, finding 2), for each form of a mark: the command
+	 * that only reads names the target and each tree of the mark in the
+	 * store, in this order; only the cases that the checks of a command ask
+	 * are named, each with its section (a case of a version only where the
+	 * mark has that version); every other state is told to run no command,
+	 * to stop and to take the way back of the run with its number. And the
+	 * instruction that guide() writes holds these lines after its title,
+	 * says of a command only that it contains checks and to stop where it
+	 * prints no OK, and sends only to the section the true case names
+	 * (Codex on 5199de3, findings 1 and 2): no line of it says that a
+	 * command moves nothing where a check fails, or to run the command of
+	 * the point where the swap stopped.
+	 * Sonst: where the site answers no request any more, a person would be
+	 * sent to a command whose checks do not fit what lies there, would find
+	 * no case for a state that is surely one, or would take a command that
+	 * stopped without OK after its move for one that moved nothing.
+	 *
+	 * @param string[] $roles The trees of the mark.
+	 * @param string[] $cases The cases of its head, each with its section.
+	 */
+	#[DataProvider( 'marks' )]
+	public function testTheHeadOfTheInstructionNamesForEachFormOfAMarkOnlyTheCasesItsCommandsCheck( array $roles, array $cases ): void {
+		$trees = array();
+		foreach ( $roles as $i => $role ) {
+			$trees[] = array(
+				'role' => $role,
+				'path' => ( 'backup' === $role ? 'backups' : 'stage' ) . '/g' . $i . '/ab-it',
+				'dev'  => 16777231,
+				'ino'  => 1000 + $i,
+				'hash' => null,
+			);
+		}
+		$byrole = array_column( $trees, null, 'role' );
+		$root   = '/srv/store';
+		$target = '/srv/www/wp-content/plugins/ab-it';
+		$head   = new ReflectionMethod( AB_MCP_Protected_Store::class, 'guide_head' );
+		$lines  = $head->invoke( null, $target, $root, $byrole['backup'] ?? null, $byrole['stage'] ?? null, 7, static fn( $path ) => '<' . $path . '>' );
+		$places = array( '<' . $target . '>' );
+		foreach ( $trees as $tree ) {
+			$places[] = '<' . $root . '/' . $tree['path'] . '>';
+		}
+		$want = array_merge(
+			array(
+				'First see which command fits. The next line only reads: for the target and for each place of the store named below it shows the inode of what is there (the first number of its line), or says that nothing is there:',
+				'$ ls -di ' . implode( ' ', $places ),
+				'Then take the case below that is true of what it showed, and run the command of the section it names. An entry is the old version where it has the inode named below for the backup, the new version where it has the inode named below for the stage, and another entry where it has neither.',
+			),
+			$cases,
+			array( 'Where none of them is true (another inode, or none, where a case names a version; or an entry where a case says that nothing is there), run no command of this file. Stop, and take the way back of the run as soon as the site answers again: wp_site_revert action=plan with run_id 7.' )
+		);
+		self::assertSame( $want, $lines, 'The command that only reads, the cases of the form, the line for every other state.' );
+
+		// The instruction as guide() writes it, with the same mark.
+		$guide = AB_MCP_Protected_Store::guide(
+			array(
+				'store'  => $root . '/',
+				'target' => $target,
+				'trees'  => $trees,
+				'run_id' => 7,
+				'seq'    => 3,
+				'begun'  => 0,
+				'unit'   => array( 'kind' => 'plugin', 'ref' => 'ab-it' ),
+				'active' => array(),
+			)
+		);
+		$all = explode( "\n", $guide );
+		$ls  = "$ ls -di '" . implode( "' '", array_merge( array( $target ), array_map( static fn( array $t ): string => $root . '/' . $t['path'], $trees ) ) ) . "'";
+		self::assertSame( 'AlphaBridge MCP: how to put the old state back by hand, without WordPress', $all[0] );
+		self::assertSame( array_replace( $want, array( 1 => $ls ) ), array_slice( $all, 2, count( $want ) ), 'After the title the head of the mark as guide_head() makes it, each path quoted for the shell.' );
+		self::assertContains( 'In a shell, run only the command of the section that the true case above names. The command contains checks; where it does not print OK, stop and ask before anything else is moved.', $all, 'Only the command of the section the head names, and of it only that it contains checks (Codex on 5199de3, findings 1 and 2).' );
+		foreach ( array( 'moves nothing', 'nothing is moved', 'checks first', 'come first', 'the point where the swap stopped' ) as $promise ) {
+			self::assertStringNotContainsString( $promise, $guide, 'No promise that a command moves nothing where a check fails, and no choice beside the head: ' . $promise );
 		}
 	}
 }
