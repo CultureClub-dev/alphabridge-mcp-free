@@ -653,7 +653,7 @@ final class SyncCodeRunTest extends TestCase {
 				'marks'   => $mine,
 				'guide'   => '' !== $guide && is_file( $guide ) ? (string) file_get_contents( $guide ) : null,
 				'fassung' => AB_MCP_IT_Code::fassung( 'a', 'plugin', 'ab-it-aktiv' ),
-				'staged'  => 1 === count( $mine ) ? array_map( static fn( $tree ) => is_dir( AB_MCP_Protected_Store::root() . '/' . $tree['path'] ) ? ( array( '.', '..' ) === scandir( AB_MCP_Protected_Store::root() . '/' . $tree['path'] ) ? 'empty' : 'full' ) : 'none', array_column( $mine[0]['trees'], null, 'role' ) ) : array(),
+				'staged'  => 1 === count( $mine ) ? array_map( static fn( $tree ) => is_dir( AB_MCP_Protected_Store::root() . '/' . $tree['path'] ), array_column( $mine[0]['trees'], null, 'role' ) ) : array(),
 			);
 		};
 		AB_MCP_Test_Seam::install(
@@ -745,7 +745,7 @@ final class SyncCodeRunTest extends TestCase {
 		self::assertSame( array( 'kind' => 'plugin', 'ref' => 'ab-it-aktiv' ), $mark['unit'] );
 		$trees = array_column( $mark['trees'], null, 'role' );
 		self::assertSame( array( 'backup', 'stage' ), array_keys( $trees ) );
-		self::assertSame( array( 'backup' => 'empty', 'stage' => 'full' ), $seen['staged'], 'At the first rename the stage is there and the place of the backup holds the empty reservation of the swap (Z16, Codex D1 finding 3).' );
+		self::assertSame( array( 'backup' => false, 'stage' => true ), $seen['staged'], 'At the first rename the stage is there and the place of the backup free.' );
 		$stage = AB_MCP_Protected_Store::root() . '/' . $trees['stage']['path'];
 		self::assertSame( array( $old['dev'], $old['ino'] ), array( $trees['backup']['dev'], $trees['backup']['ino'] ), 'The mark names the old folder by its identity.' );
 		self::assertIsString( $seen['guide'], 'The instruction lies beside the mark.' );
@@ -920,42 +920,55 @@ final class SyncCodeRunTest extends TestCase {
 	}
 
 	/**
-	 * Prüft: Codex D1, finding 3 (Z16, F35): each rename goes only into a
-	 * place the swap reserved itself, the way back only into the free target
-	 * or into the reservation the failed rename left there, proved its own
-	 * and empty. Another process that puts its own at the place of the
-	 * backup keeps it (the step fails, the old version at its place, the
-	 * reservation named with its path); where the second rename fails, the
-	 * old version goes back onto the reservation at the target; where that
-	 * reservation is no longer the swap's own, nothing is moved onto it (the
-	 * step unclear, the folder of the other process kept).
-	 * Sonst: a rename that only looked whether the place was free could
-	 * replace an empty folder (or a file) another process put there in
-	 * between, and with it what it holds; the way back could do the same at
-	 * the target of the site.
+	 * Prüft: Z16 and F35 without a reservation of the place (the lead after
+	 * Codex D1, round 2): each rename goes only to a place that is free
+	 * (lstat()), and rename() replaces no folder with content (rename(2),
+	 * ENOTEMPTY). Another process that puts a folder at the place of the
+	 * backup keeps it, before the swap looks or with files in it between the
+	 * look and the rename (the step fails, the old version at its place, the
+	 * mark closed on it); where the second rename fails, the old version goes
+	 * back to the free target (F35); where another process put a folder at
+	 * the target before the way back, nothing is moved onto it, the step is
+	 * unclear, and as the backup is not proved, the answer gives no command
+	 * that puts it back, but says to check it first (Codex D1, finding 5).
+	 * Sonst: the swap could replace a folder another process put at a place
+	 * and with it what it holds, or put its backup into the site where
+	 * another process put a folder, or a person would put a backup that was
+	 * never proved into the site with the commands of the answer.
 	 */
 	#[DataProvider( 'places' )]
-	public function testASwapRenamesOnlyIntoAPlaceItReservedAndGoesBackOnlyOntoItsOwnEmptyReservation( string $case ): void {
+	public function testASwapRenamesOnlyOntoAFreePlaceAndReplacesNothingAnotherProcessPutThere( string $case ): void {
 		list( $run_id, , $target ) = self::ready_to_swap();
 		clearstatcache();
 		$old     = lstat( $target );
 		$foreign = null;
-		$faults  = array(
-			'another process at the place of the backup'  => array(
+		// A folder of another process at a place, with a file in it or empty.
+		$put    = static function ( string $place, bool $files ) use ( &$foreign ): void {
+			self::assertTrue( mkdir( $place, 0700 ) );
+			if ( $files ) {
+				self::assertNotFalse( file_put_contents( $place . '/fremd.txt', 'fremd' ) );
+			}
+			clearstatcache();
+			$foreign = array( $place, fileinode( $place ), $files );
+		};
+		$faults = array(
+			'an empty folder at the place of the backup before the swap looks' => array(
+				array(
+					'method' => 'put_mark',
+					'nth'    => 1,
+					'kind'   => 'before',
+					'before' => static function ( $method, array $args ) use ( $put ): void {
+						$put( array_column( $args[0]['trees'], 'path', 'role' )['backup'], false );
+					},
+				),
+			),
+			'a folder with a file at the place of the backup between the look and the rename' => array(
 				array(
 					'method' => 'rename',
 					'nth'    => 1,
 					'kind'   => 'before',
-					'before' => static function ( $method, array $args ) use ( &$foreign ): void {
-						// An empty folder where the place is free, a file into
-						// the folder that is there.
-						if ( is_dir( $args[1] ) ) {
-							file_put_contents( $args[1] . '/fremd.txt', 'fremd' );
-						} else {
-							mkdir( $args[1], 0700 );
-						}
-						clearstatcache();
-						$foreign = array( $args[1], fileinode( $args[1] ) );
+					'before' => static function ( $method, array $args ) use ( $put ): void {
+						$put( $args[1], true );
 					},
 				),
 			),
@@ -967,20 +980,16 @@ final class SyncCodeRunTest extends TestCase {
 					'value'  => false,
 				),
 			),
-			'a folder of another process in place of the reservation' => array(
+			'a folder with a file at the target before the way back' => array(
 				array(
 					'method' => 'rename',
 					'nth'    => 2,
 					'kind'   => 'before',
-					'before' => static function ( $method, array $args ) use ( &$foreign ): void {
-						// The stage aside, so that the second rename fails; the
-						// reservation at the target taken away and another empty
-						// folder made there.
+					'before' => static function ( $method, array $args ) use ( $put ): void {
+						// The stage aside, so that the second rename fails; at the
+						// target, free now, a folder of another process.
 						self::assertTrue( rename( $args[0], $args[0] . '-beiseite' ) );
-						self::assertTrue( rmdir( $args[1] ) );
-						self::assertTrue( mkdir( $args[1], 0700 ) );
-						clearstatcache();
-						$foreign = array( $args[1], fileinode( $args[1] ) );
+						$put( $args[1], true );
 					},
 				),
 			),
@@ -991,39 +1000,39 @@ final class SyncCodeRunTest extends TestCase {
 		$says = $answer['next'];
 		clearstatcache();
 		$now = lstat( $target );
-		if ( 'a folder of another process in place of the reservation' === $case ) {
+		if ( null !== $foreign ) {
+			self::assertSame( $foreign[1], fileinode( $foreign[0] ), 'The folder of the other process stays: nothing replaced it.' );
+			self::assertSame( $foreign[2] ? array( '.', '..', 'fremd.txt' ) : array( '.', '..' ), scandir( $foreign[0] ), 'Nothing moved into it.' );
+			if ( $foreign[2] ) {
+				self::assertSame( 'fremd', file_get_contents( $foreign[0] . '/fremd.txt' ), 'What the other process put there stays.' );
+			}
+		}
+		if ( 'a folder with a file at the target before the way back' === $case ) {
 			self::assertSame( 'unclear', $step['state'], $says );
-			self::assertSame( array( $target, $foreign[1] ), array( $foreign[0], $now['ino'] ), 'The folder of the other process stays at the target.' );
-			self::assertSame( array( '.', '..' ), scandir( $target ), 'Nothing moved into it.' );
+			self::assertSame( $target, $foreign[0] );
 			$kept = lstat( $step['result']['backup'] );
 			self::assertSame( array( $old['dev'], $old['ino'] ), array( $kept['dev'], $kept['ino'] ), 'The old version stays whole in the backup.' );
-			self::assertSame( array(), $step['result']['held'], 'A folder that is not its own is no reservation of the swap.' );
 			self::assertStringContainsString( 'and the old one could not be put back', $says );
-			self::assertSame( 'open', self::mark_of_swap( $run_id )['state'] );
+			self::assertStringContainsString( 'The backup ' . $step['result']['backup'] . ' is not proved as the old version, so this answer gives no command that puts it back: check the backup first', $says );
+			self::assertSame( array(), $step['result']['by_hand'], 'No command by hand.' );
+			self::assertStringNotContainsString( "mv '" . $step['result']['backup'] . "'", $says, 'No command moves the backup.' );
+			self::assertSame( array( 'open', 'open' ), array( self::mark_of_swap( $run_id )['state'], $step['result']['mark'] ) );
 			return;
 		}
 		self::assertSame( 'failed', $step['state'], $says );
 		self::assertSame( array( $old['dev'], $old['ino'] ), array( $now['dev'], $now['ino'] ), 'The old version at its place.' );
 		self::assertSame( '1.0.0', AB_MCP_IT_Code::fassung( 'a', 'plugin', 'ab-it-aktiv' ) );
 		self::assertSame( 'closed', self::mark_of_swap( $run_id )['state'], 'The mark closed on the old version (kept).' );
-		if ( 'another process at the place of the backup' === $case ) {
-			self::assertTrue( is_dir( $foreign[0] ), 'The place of the backup is still a folder.' );
-			self::assertSame( $foreign[1], fileinode( $foreign[0] ), 'The same folder: nothing replaced it.' );
-			self::assertSame( 'fremd', file_get_contents( $foreign[0] . '/fremd.txt' ), 'What the other process put there stays.' );
-			self::assertSame( array( $foreign[0] ), $step['result']['held'], 'The reservation is named.' );
-			self::assertStringContainsString( 'This swap reserved the place of a rename with an empty folder or file of its own, which stays because the rename failed (the swap deletes nothing): ' . $foreign[0] . '.', $says );
-			return;
-		}
-		self::assertSame( array(), $step['result']['held'], 'The way back took the reservation at the target.' );
-		self::assertStringContainsString( 'so the old one went back to its place', $says );
+		self::assertStringContainsString( 'the second rename fails' === $case ? 'so the old one went back to its place' : 'The old version could not be moved into the backup of the run', $says );
 	}
 
 	/** The places of a rename another process or a failure takes. */
 	public static function places(): array {
 		return array(
-			'another process at the place of the backup' => array( 'another process at the place of the backup' ),
+			'an empty folder at the place of the backup before the swap looks' => array( 'an empty folder at the place of the backup before the swap looks' ),
+			'a folder with a file at the place of the backup between the look and the rename' => array( 'a folder with a file at the place of the backup between the look and the rename' ),
 			'the second rename fails (F35)'              => array( 'the second rename fails' ),
-			'a folder of another process in place of the reservation' => array( 'a folder of another process in place of the reservation' ),
+			'a folder with a file at the target before the way back' => array( 'a folder with a file at the target before the way back' ),
 		);
 	}
 
@@ -1032,12 +1041,16 @@ final class SyncCodeRunTest extends TestCase {
 	 * proved ends unclear, and its answer says what is proved. A listing of
 	 * the files PHP runs that is not whole (a link in the new version, an
 	 * entry whose lstat() fails) clears no OPcache for good and leaves the
-	 * mark open; a backup not proved whole gets no command that puts it
-	 * back, but the sentence to check it first, with its path; a pair that
-	 * takes no new bases after the mark was closed names the mark closed.
+	 * mark open; the backup counts as proved only where in_backup() answered
+	 * true (finding 5, round 2), so where the listing fails before it or the
+	 * backup changed, the answer gives no command that puts the backup back,
+	 * but the sentence to check it first, with its path; a pair that takes
+	 * no new bases after the mark was closed names the mark closed, with the
+	 * command that puts the proved backup back.
 	 * Sonst: the step would be done with old code left in OPcache, a person
-	 * would put a backup that is not the old version into the site with the
-	 * commands of the answer, or would look for an open mark that is closed.
+	 * would put a backup that was never proved as the old version into the
+	 * site with the commands of the answer, or would look for an open mark
+	 * that is closed.
 	 */
 	#[DataProvider( 'after_renames' )]
 	public function testAfterTheRenamesAStepNotProvedIsUnclearAndItsAnswerSaysWhatIsProved( string $case ): void {
@@ -1090,32 +1103,30 @@ final class SyncCodeRunTest extends TestCase {
 		self::assertSame( 'unclear', $step['state'], $says );
 		self::assertSame( '2.0.0', AB_MCP_IT_Code::fassung( 'a', 'plugin', 'ab-it-aktiv' ), 'The new version is at the target.' );
 		$mark = self::mark_of_swap( $run_id );
-		if ( 'the backup changed' === $case ) {
-			self::assertStringContainsString( 'The backup ' . $backup . ' could not be proved as the old version, so this answer gives no command that puts it back: check the backup first', $says );
-			self::assertSame( array(), $result['by_hand'], 'No command by hand.' );
-			self::assertStringNotContainsString( "mv '" . $backup . "'", $says, 'No command moves the backup.' );
-			self::assertSame( array( 'open', 'open' ), array( $mark['state'], $result['mark'] ) );
-			return;
-		}
-		self::assertNotSame( array(), $result['by_hand'] );
-		self::assertStringContainsString( " && mv '" . $backup . "' '" . $target . "' && ", $says, 'The command that puts the old version back.' );
 		if ( 'the pair changed before its bases' === $case ) {
+			self::assertNotSame( array(), $result['by_hand'] );
+			self::assertStringContainsString( " && mv '" . $backup . "' '" . $target . "' && ", $says, 'The command that puts the proved backup back.' );
 			self::assertStringContainsString( 'the files of its pair did not take their new bases', $says );
 			self::assertStringContainsString( 'The step is unclear; the mark of the swap is closed, as the new version at the target and the old one in the backup were proved.', $says );
 			self::assertStringNotContainsString( 'stays open', $says, 'The mark is not named open.' );
 			self::assertSame( array( 'closed', 'closed' ), array( $mark['state'], $result['mark'] ) );
 			return;
 		}
-		self::assertStringContainsString( 'The PHP files in ' . $target . ' could not all be listed', $says );
-		self::assertStringContainsString( 'The step is unclear, and the mark of the swap stays open', $says );
+		// The backup not proved: before in_backup() (the listing) or by it.
+		self::assertStringContainsString( 'The step is unclear, and the mark of the swap stays open. The backup ' . $backup . ' is not proved as the old version, so this answer gives no command that puts it back: check the backup first', $says );
+		self::assertSame( array(), $result['by_hand'], 'No command by hand.' );
+		self::assertStringNotContainsString( "mv '" . $backup . "'", $says, 'No command moves the backup.' );
 		self::assertSame( array( 'open', 'open' ), array( $mark['state'], $result['mark'] ) );
+		if ( 'the backup changed' !== $case ) {
+			self::assertStringContainsString( 'The PHP files in ' . $target . ' could not all be listed', $says );
+		}
 	}
 
 	/** What is not proved after the renames. */
 	public static function after_renames(): array {
 		return array(
-			'a link in the new version (finding 4)'          => array( 'a link in the new version' ),
-			'an entry not read (finding 4)'                  => array( 'an entry not read' ),
+			'a link in the new version (findings 4 and 5)'   => array( 'a link in the new version' ),
+			'an entry not read (findings 4 and 5)'           => array( 'an entry not read' ),
 			'the backup changed (finding 5)'                 => array( 'the backup changed' ),
 			'the pair changed before its bases (finding 8)' => array( 'the pair changed before its bases' ),
 		);

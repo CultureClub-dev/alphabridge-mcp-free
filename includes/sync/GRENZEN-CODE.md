@@ -606,40 +606,48 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
 - **Trifft Normalfall:** nein. Im Normalfall (F56: ein aktives Plugin mit `accept`) läuft neben dem Tausch kein Update
   derselben Einheit. Wie oft ein Hintergrund-Update von WordPress in einen Tausch fällt, ist nicht gemessen.
 
-### G-5-10 Exklusives Umbenennen: Reservierung des Platzes, Grenzen der Plattform
+### G-5-10 Umbenennen nur auf einen freien Platz: Exklusivität für Ordner, Restfenster bei einer Datei
 
-- **Fundstelle:** `AB_MCP_Sync_Code_Swap` (`includes/sync/class-sync-code-swap.php`, Stand der Behebung von D1 über
-  `2b28314`): `move()` (`:1418`) reserviert den Platz über `Calls::reserve()` (`:237`; ein Ordner mit `mkdir()`, eine
-  Datei mit `fopen( 'x' )`, beides nur, wo nichts liegt) und benennt dann auf die Reservierung um (`:1438`); der Rückweg
-  F35 nimmt eine Reservierung am Ziel nur, wo `own()` (`:1452`, Gerät und Inode wie beim Anlegen) und `empty_held()`
-  (`:1464`) sie belegen. Gelöscht wird nichts; eine Reservierung, die nach einer gescheiterten Umbenennung bleibt, nennt
-  die Antwort mit Pfad (`held_note()`, `:1898`).
-- **Quelle:** Befund A3 der Codex-Runde über D1 (`belege/codex-free-z5r-d-1-antwort.md`), Entscheid 3 der Lead
-  (`belege/lead-auftrag-z5r-d1-behebung.md`); Plan Z16 («zurückgelegt wird nur exklusiv, auf ein freies Ziel»).
+- **Fundstelle:** `AB_MCP_Sync_Code_Swap::move()` (`includes/sync/class-sync-code-swap.php:1395`): `lstat()` (Ziel frei),
+  dann `rename()` (`:1396`; `Calls::rename()` `:224`). Keine Reservierung, kein `unlink`, gelöscht wird nichts.
+  Gerufen nur aus `rename_marked()` (`:1322`), für beide Umbenennungen und den Rückweg F35.
+- **Quelle:** Entscheid der Lead vom 16.11.2026 02:50 nach der zweiten Codex-Runde über D1
+  (`belege/codex-free-z5r-d-2-antwort.md`: Befund 3 offen, zwei neue A an der Reservierung;
+  `belege/lead-auftrag-z5r-teil-d2.md`, Vorpunkt): Die Reservierung des Platzes aus der Behebung von D1 (`de8caba`)
+  fällt wieder weg. Eine leere Reservierung am Live-Ziel kannten Journal, Anleitung und Handweg nicht. Plan Z16.
 - **Was:**
-  - Die Exklusivität beruht auf POSIX: `rename()` eines Ordners auf einen vorhandenen leeren Ordner ersetzt ihn, auf
-    einen nicht leeren scheitert es. Unter Windows meldet `MoveFileExW` einen Fehler, wenn das Ziel ein vorhandener
-    Ordner ist (learn.microsoft.com, «MoveFileExW function», Flag `MOVEFILE_REPLACE_EXISTING`: «If lpNewFileName names
-    an existing directory, an error is reported.»). Ob PHP unter Windows darüber umbenennt, ist im Code von PHP nicht
-    nachgelesen und nicht gemessen. Wo `rename()` auf die eigene leere Reservierung nicht geht, scheitert schon die
-    erste Umbenennung wie jede andere: Der Schritt endet `failed`, nichts ist bewegt, die Reservierung am Platz der
-    Sicherung ist mit Pfad genannt. Ein Tausch ist dort nicht möglich.
-  - Restfenster bei einer Einheit aus einer Datei: `rename()` ersetzt eine Datei immer. Schreibt ein anderer Prozess
-    zwischen `fopen( 'x' )` und `rename()` in die eigene leere Reservierung, gehen seine Bytes verloren.
-  - Restfenster bei einem Ordner: Nimmt ein anderer Prozess die eigene leere Reservierung zwischen `mkdir()` und
-    `rename()` weg und legt einen eigenen leeren Ordner hin, ersetzt `rename()` diesen (ohne Inhalt). Ganz schliessen
-    würde das erst ein Umbenennen ohne Ersetzen (`renameat2()` mit `RENAME_NOREPLACE` unter Linux), das PHP nicht
-    anbietet.
-  - Eine Reservierung, die bleibt, hält ihren Namen: am Platz der Sicherung den Namen der Einheit in der Gruppe dieses
-    Laufs, am Ziel den Ordner der Einheit (die Befehle von Hand prüfen `test ! -e` und bewegen dann nichts; die Antwort
-    sagt, eine noch leere Reservierung zuerst wegzunehmen).
-- **Trifft Normalfall:** nein. Im Normalfall legt kein anderer Prozess etwas an die Plätze; F56 belegt die eigene leere
-  Reservierung am Platz der Sicherung bei der ersten Umbenennung.
+  - **Ordner** (der Normalfall: ein Plugin oder Theme mit Ordner): `rename()` ersetzt nach POSIX nie einen Ordner mit
+    Inhalt (`ENOTEMPTY`/`EEXIST`) und keine Datei mit einem Ordner (`ENOTDIR`). Legt ein anderer Prozess zwischen
+    `lstat()` und `rename()` etwas an den Platz, scheitert die Umbenennung oder ersetzt höchstens einen leeren Ordner,
+    der keine Daten trägt. Das ist die Exklusivität nach Z16 für Ordner. Beleg: die Manpage `rename(2)` dieses
+    Systems (`man 2 rename`, macOS 27.2, Fassung «BSD 4.2, June 3, 2021»; «The rename() function conforms to IEEE Std
+    1003.1-1988 ("POSIX.1")»): «If new exists, it is first removed. Both old and new must be of the same type»,
+    «[ENOTEMPTY] New is a directory and is not empty.», «[ENOTDIR] old is a directory, but new is not a directory.».
+    `EEXIST` für einen vollen Zielordner nennt diese Manpage nicht; dass POSIX es neben `ENOTEMPTY` zulässt, ist hier
+    nicht nachgelesen. Unter Windows scheitert `rename()` auf einen vorhandenen Ordner ganz: `MoveFileExW` meldet
+    einen Fehler, wenn das Ziel ein vorhandener Ordner ist (learn.microsoft.com, «MoveFileExW function», Flag
+    `MOVEFILE_REPLACE_EXISTING`: «If lpNewFileName names an existing directory, an error is reported.»; übernommen
+    aus der Behebung von D1). Ob PHP unter Windows darüber umbenennt, ist nicht nachgelesen und nicht gemessen.
+  - **Einzeldatei** (F6): `rename()` ersetzt eine vorhandene Datei (Manpage oben: «it is first removed»). Zwischen
+    `lstat()` und `rename()` bleibt ein Restfenster: Eine Datei, die genau dann an den Platz kommt, wird ersetzt.
+    Praktisch ist das ein gleichzeitiges Update derselben Einheit (G-5-9). Benannte Grenze nach dem Vorbild WordPress,
+    das ebenso erst prüft und dann schreibt (WordPress 7.1.3 des Testsystems, `~/tmp/ab-it-z8b5/site-a`): `move_dir()`
+    (`wp-admin/includes/file.php:2106`, `exists()` `:2113`, dann `move()` `:2122`) und `WP_Filesystem_Direct::copy()`
+    (`wp-admin/includes/class-wp-filesystem-direct.php:332`, `exists()` `:333`, dann `copy()` `:337`; ebenso `move()`
+    `:364` mit `exists()` `:365` und `rename()` `:375`).
+  - Ganz schliessen würde das Fenster nur ein Umbenennen ohne Ersetzen (unter Linux `renameat2()` mit
+    `RENAME_NOREPLACE`; unter macOS `renamex_np()` mit `RENAME_EXCL`, Manpage oben: «cause EEXIST to be returned if
+    the destination already exists»). PHP bietet keines davon an.
+  - Tests: `SyncCodeRunTest::testASwapRenamesOnlyOntoAFreePlaceAndReplacesNothingAnotherProcessPutThere` (ein
+    leerer Ordner am Platz der Sicherung, bevor der Tausch nachsieht; ein Ordner mit Datei dort zwischen `lstat()` und
+    `rename()`; F35; ein Ordner mit Datei am Ziel vor dem Rückweg). Gegenprobe `tausch/d1c-move-free`.
+- **Trifft Normalfall:** nein. Im Normalfall legt kein anderer Prozess etwas an die Plätze, und die Einheit ist ein
+  Ordner, für den die Exklusivität aus POSIX gilt.
 
 ### G-5-11 Rechte der neuen Fassung wie bei WordPress
 
-- **Fundstelle:** `AB_MCP_Sync_Code_Swap::given_rights()` (`includes/sync/class-sync-code-swap.php:1283`; Rechnung
-  `:1289`–`:1290`, Rücklesung `:1301`), aus `swapped()` (`:1171`) nach `plan_of()` und vor der letzten Zeitprüfung
+- **Fundstelle:** `AB_MCP_Sync_Code_Swap::given_rights()` (`includes/sync/class-sync-code-swap.php:1266`; Rechnung
+  `:1272`–`:1273`, Rücklesung `:1284`), aus `swapped()` (`:1154`) nach `plan_of()` und vor der letzten Zeitprüfung
   (`time_left()`), also vor dem Ersatzvermerk. Vorbild: WordPress 7.1.3 des Testsystems,
   `wp-admin/includes/file.php:2234`–`:2240` in `WP_Filesystem()` (`:2180`): `FS_CHMOD_DIR` gleich
   `fileperms( ABSPATH ) & 0777 | 0755`, `FS_CHMOD_FILE` gleich `fileperms( ABSPATH . 'index.php' ) & 0777 | 0644`, wo

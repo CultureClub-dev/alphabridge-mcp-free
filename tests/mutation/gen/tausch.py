@@ -331,18 +331,19 @@ e('ops-ended-planned', 'ended(): a step ends only from planned, never over the s
 e('ops-journal-checked', 'stage(): only a journal that reads back in its form is saved, an answer of the stage not of it fails the step (Fable check 2, B1)', CO,
   "\t\t\tif ( null === self::staged( $journal ) ) {", "\t\t\tif ( false ) {", 'coderun', 'testAStageWhoseAnswerDoesNotReadAsAJournalFailsTheStepAndSavesNoJournal')
 
-# The Behebung of part D1 after the Codex round on 2b28314: the new decision points of findings 2, 3 and 4 (T6).
+# The Behebung of part D1 after the Codex round on 2b28314: the new decision points of findings 2, 3 and 4 (T6);
+# round 2 (the lead after the Codex round on de8caba): the rename without a reservation and the backup proved only by in_backup().
 RIGHTS = 'testANewVersionThatCannotTakeTheRightsOfTheSiteIsNotSwappedAndItsStepStaysPlanned'
-PLACES = 'testASwapRenamesOnlyIntoAPlaceItReservedAndGoesBackOnlyOntoItsOwnEmptyReservation'
+PLACES = 'testASwapRenamesOnlyOntoAFreePlaceAndReplacesNothingAnotherProcessPutThere'
 AFTER = 'testAfterTheRenamesAStepNotProvedIsUnclearAndItsAnswerSaysWhatIsProved'
 e('d1b-rights-read-back', 'given_rights(): the rights of the site count only where they read back as set, never as set by the answer of chmod() alone (Codex D1, finding 2)', CS,
   "\t\t\t$ok    = $ok && is_array( $back ) && isset( $back['mode'] ) && is_int( $back['mode'] ) && ( $back['mode'] & 07777 ) === $want[ $form ];", "\t\t\t$ok    = $ok;", 'coderun', RIGHTS)
-e('d1b-move-reserved', 'move(): a rename goes only into a place the swap reserved itself, never onto what another process put at a place that looked free (Z16, Codex D1, finding 3)', CS,
-  "\t\t\tif ( ! self::calls()->reserve( $to, $form ) ) {", "\t\t\tif ( false ) {", 'coderun', PLACES)
-e('d1b-move-own-empty', 'move(): the way back goes onto a reservation at the target only where it is proved the swap\'s own and empty (F35, Codex D1, finding 3)', CS,
-  "\t\t} elseif ( ! self::own( $held ) || ! self::empty_held( $held ) ) {", "\t\t} elseif ( false ) {", 'coderun', PLACES)
+e('d1c-move-free', 'move(): a rename goes only to a place that is free (lstat()), never onto a folder another process put there, also an empty one (Z16; the lead after Codex D1, round 2: no reservation)', CS,
+  "\t\treturn false === self::calls()->lstat( $to ) && true === self::calls()->rename( $from, $to );", "\t\treturn true === self::calls()->rename( $from, $to );", 'coderun', PLACES)
 e('d1b-listing-whole', 'php_paths(): an entry not read or neither a folder nor a file makes the listing not whole, never left out (Codex D1, finding 4)', CS,
   "\t\t\t\t\treturn null; // Not read, or neither a folder nor a plain file: the listing is not whole.", "\t\t\t\t\tcontinue;", 'coderun', AFTER)
+e('d1c-backup-proved', 'unclear(): a backup not proved by in_backup() gets no command that puts it at the target, also where the swap stopped before close() (Codex D1, finding 5, round 2)', CS,
+  "\t\tif ( ! $known['backup'] && 'vor-den-umbenennungen' !== $point ) {", "\t\tif ( false ) {", 'coderun', AFTER)
 
 # ------------------------------------------------ check and write
 src = {f: open(os.path.join(ROOT, f)).read() for f in VAR}
