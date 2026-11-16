@@ -22,10 +22,12 @@ CS = 'includes/sync/class-sync-code-swap.php'
 EN = 'includes/sync/class-sync-engine.php'
 ST = 'includes/sync/class-sync-code-stage.php'
 PS = 'includes/class-protected-store.php'
-VAR = {CK: '$ck', DE: '$de', PU: '$pu', CP: '$cp', CO: '$co', CS: '$cs', EN: '$en', ST: '$st', PS: '$ps'}
+RV = 'includes/sync/class-sync-revert.php'
+VAR = {CK: '$ck', DE: '$de', PU: '$pu', CP: '$cp', CO: '$co', CS: '$cs', EN: '$en', ST: '$st', PS: '$ps', RV: '$rv'}
 CLASSES = {'kind': ('unit', 'SyncCodeKindTest'), 'env': ('unit', 'SyncEnvTest'), 'run': ('unit', 'SyncRunTest'),
            'ops': ('unit', 'SyncCodeOpsTest'), 'coderun': ('it', 'SyncCodeRunTest'), 'store': ('it', 'ProtectedStoreTest'),
-           'storeunit': ('unit', 'ProtectedStoreTest'), 'guard': ('unit', 'StoreRemoverGuardTest'), 'swapunit': ('unit', 'SyncCodeSwapTest')}
+           'storeunit': ('unit', 'ProtectedStoreTest'), 'guard': ('unit', 'StoreRemoverGuardTest'), 'swapunit': ('unit', 'SyncCodeSwapTest'),
+           'inputs': ('unit', 'StoreInputsTest')}
 entries = []
 
 
@@ -474,6 +476,55 @@ e('cb-z24-in-result', 'after_renames(): the sentence of Z24 is added to the answ
   "\t\t$ended    = self::ended(\n",
   "\t\t$message .= \"\\n\" . $unseen;\n\t\t$ended    = self::ended(\n", 'coderun', END)
 
+# ------------------------------------------- Teil E, section 1: the way back of a swap through the one entrance (Z22, Z20b, N12)
+E_NO = 'testWithoutTheEntranceARunOfTheCodeIsNeitherPlannedBackNorRunBackNorLedOn'
+E_F37 = 'testTheWayBackMovesNothingWhereTheBackupOrTheVersionAtTheTargetIsNotProved'
+E_CUT = 'testASwapBrokenOffBetweenItsRenamesIsPutBackByTheWayBackOfItsRun'
+E_ROW = 'testEveryWrongFormOfARowReachesItsConsumerAsUnknownAndEveryValidOneAsAValue'
+e('e-ohne-eingang', 'Revert::code(): without the entrance a run of the code is refused, never planned, run back or led on as a run of the contents (N12; Teil E)', RV,
+  "\t\tif ( null === self::$entrance ) {\n",
+  "\t\tif ( null === self::$entrance ) {\n\t\t\treturn null;\n", 'coderun', E_NO)
+e('e-run-revert', 'run_revert(): a step of the way back of a run of the code goes through the entrance before the boundary of the contents (Z22; Teil E)', EN,
+  "\t\t$code = AB_MCP_Sync_Revert::code( 'revert', $run, $step );\n\t\tif ( null !== $code ) {",
+  "\t\t$code = AB_MCP_Sync_Revert::code( 'revert', $run, $step );\n\t\tif ( false ) {", 'coderun', E_NO)
+e('e-continuation', 'continuation(): a step of the way back of the code is shown and bound as its entrance gives it, and without it not led on (Z22; Teil E)', RV,
+  "\t\t\tif ( null !== $code ) {\n\t\t\t\tif ( is_wp_error( $code ) ) {",
+  "\t\t\tif ( false ) {\n\t\t\t\tif ( is_wp_error( $code ) ) {", 'coderun', E_NO)
+e('e-plan-schrieb', 'Ops::back(): a swap planned, skipped or failed wrote nothing and is no step of the way back (Teil E)', CO,
+  "array( 'begun', 'unclear', 'done' )", "array( 'begun', 'unclear', 'done', 'failed' )", 'coderun', 'testASwapThatFailedWithNothingMovedIsNoStepOfTheWayBack')
+e('e-journal-einheit', 'Tausch::back(): a journal of the form of step.swap that names another unit is not known (Teil E)', CS,
+  "$unit['kind'] !== $journal['unit']['kind'] || $unit['ref'] !== $journal['unit']['ref'] || ", '', 'inputs', E_ROW)
+e('e-journal-ziel', 'Tausch::back(): a journal of the form of step.swap that names another target than that of the unit here is not known (Teil E)', CS,
+  " || AB_MCP_Sync_Code_Stage::target( $unit['kind'], $unit['ref'] ) !== $journal['target'] ) {", ' ) {', 'inputs', E_ROW)
+e('e-rechte', 'restore(): the rights of the operation of the unit before the first write of the way back; a refusal leaves the step planned (Z26, question 5 of Teil E)', CS,
+  "\t\tif ( true !== $rights ) {\n\t\t\t$data = ",
+  "\t\tif ( false ) {\n\t\t\t$data = ", 'coderun', 'testTheWayBackAsksTheRightsBeforeItsFirstWriteAndStaysPlannedWithoutThem')
+e('e-ziel-fehlt', 'moved_back(): an empty target (place_empty()) takes the old version back without moving anything aside (Z22; Teil E)', CS,
+  "$empty = self::place_empty( $plan['target'] );", '$empty = false;', 'coderun', E_CUT)
+e('e-eigene-neue', 'moved_back(): only the new version the swap left at the target, proved by at_target(), is moved aside (Z22; Teil E)', CS,
+  "\t\tif ( true !== $new ) {", "\t\tif ( false ) {", 'coderun', E_F37)
+e('e-alt-am-ziel', 'moved_back(): the old version at the target already moves nothing, and close() with kept ends it done (question 4 of Teil E)', CS,
+  "return true === self::at_target( $in, $plan, $plan['old'] ) ? array( 'moved' => array() ) :",
+  "return false ? array( 'moved' => array() ) :", 'coderun', 'testAnOldVersionBackAtTheTargetWhoseProofOrMarkFailsEndsUnclearWithTheShortAnswer')
+e('e-sicherung', 'moved_back(): the old version is put back only where in_backup() proves it whole in the backup (Z22, F37; Teil E)', CS,
+  "\t\tif ( true !== $intact ) {", "\t\tif ( false ) {", 'coderun', E_F37)
+e('e-zurueck', 'moved_back(): where the old version does not reach the target, the new one goes back to it (F35 on the way back; Teil E)', CS,
+  "\t\t\tself::move( $slot['path'], $plan['target'] );\n", '', 'coderun', 'testARenameOfTheWayBackThatFailsLeavesTheNewVersionAtTheTargetAndTheStepUnclear')
+e('e-opcache', 'restored(): OPcache not cleared for a file put back or moved away ends the step of the way back unclear with the host (Z13; Teil E)', CS,
+  "\t\tif ( is_wp_error( $opcache ) ) {\n\t\t\t$moved['fault']",
+  "\t\tif ( false ) {\n\t\t\t$moved['fault']", 'coderun', 'testOpcacheNotClearedOnTheWayBackEndsItsStepUnclearWithTheHost')
+e('e-z20b', 'restored(): the step of the way back is done only where close() with kept proves the old version at the target (Z20b; Teil E)', CS,
+  "$closed = isset( $moved['fault'] ) ? true : self::close( 'kept', $in, $journal, self::mark_id( $swap ) );",
+  '$closed = true;', 'coderun', 'testTheWayBackIsDoneOnlyWhereTheOldVersionIsProvedAtTheTargetAfterItsRenames')
+e('e-marke-weg', 'restored(): a mark that is gone (no mark of the swap found) leaves the proof at the target alone (G-27; Teil E)', CS,
+  "if ( is_wp_error( $closed ) && 'ab_mcp_store_no_mark' !== $closed->get_error_code() ) {",
+  'if ( is_wp_error( $closed ) ) {', 'coderun', 'testTheWayBackOfASwapWhoseMarkIsGoneIsDoneOnTheProofAtTheTargetAlone')
+e('e-paar', 'restored(): the pair of the unit becomes unclear after the way back (question 3 A of Teil E)', CS,
+  "\t\tif ( is_array( $pair ) && 'active' === $pair['state'] ) {", "\t\tif ( false ) {", 'coderun', 'testAnActivePluginReleasedWithAcceptIsSwappedInTheRunWithItsBackupItsMarkAndTheWayBack')
+e('e-marke-liste', 'mark_id(): the mark of a swap without its result is found by its run and step in the list of the marks, and the way back closes it (Teil E)', CS,
+  "if ( (int) $mark['run_id'] === (int) $swap['run_id'] && (int) $mark['seq'] === (int) $swap['seq'] ) {",
+  'if ( false ) {', 'coderun', E_CUT)
+
 # ------------------------------------------------ check and write
 src = {f: open(os.path.join(ROOT, f)).read() for f in VAR}
 errors = []
@@ -508,7 +559,7 @@ out = ['<?php', '/**', ' * The clauses of the swap of the code of the site (Z8b 
        ' * here, three-valued (part 1).',
        ' * Held by the unit suite (SyncCodeKindTest, SyncEnvTest, SyncRunTest,',
        ' * SyncCodeOpsTest, ProtectedStoreTest, StoreRemoverGuardTest,',
-       ' * SyncCodeSwapTest) and the',
+       ' * SyncCodeSwapTest, StoreInputsTest) and the',
        ' * integration suite (SyncCodeRunTest, ProtectedStoreTest).', ' *',
        ' * Not listed, with why (bericht-zweig-5.md), equivalent: in rights() the',
        ' * count of the two halves of a unit beside the kind of unit (a ref without a',

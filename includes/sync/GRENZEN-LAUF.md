@@ -1056,6 +1056,13 @@ Ablehnung entsteht, nennt sie den Weg.
   `testAnInterruptedWayBackOfTheSameRunIsLedOnWithTheTokenAndTheSiteIsFreeAfterwards`,
   `testAnInterruptedRunOfTheWayBackIsLedOnWithTheTokenOrClosedAsCheckedAndFreesTheSite`).
   Ein geschlossener Rückweglauf wird nicht zurückgenommen.
+  Ein Lauf mit Code-Schritten (Zweig 5, Teil E) geht dabei nur durch den
+  einen Eingang des Codes (`AB_MCP_Sync_Revert::code()`, belegt von
+  `AB_MCP_Sync_Code_Ops`): seine Vorschau, jeder Rückweg-Schritt und die
+  Fortsetzung eines unterbrochenen Rückwegs; ohne Eingang lehnen sie ab
+  (`ab_mcp_sync_revert_code`), und der Lauf bleibt, wie er ist
+  (`GRENZEN-CODE.md`, G-5-14). Weg (a) für einen solchen Lauf folgt mit
+  Abschnitt 2 von Teil E über denselben Eingang.
 - Die Erfassung je Lauf (Momente M2 und M8): `calls` zählt jeden Aufruf ab
   der bestätigten Anlage (Anlage, Schritte, Statusabfragen, Wiederholungen),
   `duration` ist `closed − created`. Vorschau-Aufrufe vor der Anlage zählen

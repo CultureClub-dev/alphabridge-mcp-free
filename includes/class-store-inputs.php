@@ -195,6 +195,30 @@ final class AB_MCP_Store_Inputs {
 		'extra'  => false,
 	);
 
+	/** A version in the journal of a swap: where it lies, its group and name in the store, its hash and its identity (form, device, inode). */
+	const SWAP_TREE = array(
+		'type'   => 'record',
+		'fields' => array(
+			'path' => array(
+				'type'      => 'string',
+				'empty'     => false,
+				'max_bytes' => null,
+			),
+			'gid'  => self::PACKAGE,
+			'name' => self::UNIT_NAME,
+			'hash' => self::SHA256,
+			'form' => array(
+				'type'      => 'string',
+				'empty'     => false,
+				'max_bytes' => null,
+				'in'        => array( 'folder', 'file' ),
+			),
+			'dev'  => self::COUNT,
+			'ino'  => self::COUNT,
+		),
+		'extra'  => false,
+	);
+
 	/** The names in a folder, as scandir() gives them: texts, none twice. */
 	const NAMES = array(
 		'type'      => 'list',
@@ -954,6 +978,50 @@ final class AB_MCP_Store_Inputs {
 						'extra'  => false,
 					),
 					'stage' => self::STAGE_REF,
+				),
+				'extra'  => false,
+			),
+		),
+		'step.swap'                => array(
+			'consumer' => 'code',
+			'source'   => 'AB_MCP_Sync_Code_Swap::back(), from the journal of a swap step (steps.parts), as rename_marked() wrote it',
+			'field'    => 'the swap a step names: its unit, when it began, its target, the old and the new version, and the main files that ran at its begin; what its way back moves',
+			'form'     => array(
+				'type'   => 'record',
+				'fields' => array(
+					'unit'   => array(
+						'type'   => 'record',
+						'fields' => array(
+							'kind' => self::UNIT_KIND,
+							'ref'  => self::UNIT_NAME,
+							'op'   => array(
+								'type'      => 'string',
+								'empty'     => false,
+								'max_bytes' => null,
+								'in'        => array( 'swap' ),
+							),
+						),
+						'extra'  => false,
+					),
+					'since'  => self::COUNT,
+					'target' => array(
+						'type'      => 'string',
+						'empty'     => false,
+						'max_bytes' => null,
+					),
+					'old'    => self::SWAP_TREE,
+					'new'    => self::SWAP_TREE,
+					'active' => array(
+						'type'      => 'list',
+						'empty'     => true,
+						'item'      => array(
+							'type'      => 'string',
+							'empty'     => false,
+							'max_bytes' => null,
+						),
+						'unique'    => true,
+						'max_items' => null,
+					),
 				),
 				'extra'  => false,
 			),

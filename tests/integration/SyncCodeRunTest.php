@@ -56,6 +56,7 @@ use AB_MCP_Sync_Import;
 use AB_MCP_Sync_Pairs;
 use AB_MCP_Sync_Pairs_Tool;
 use AB_MCP_Sync_Report;
+use AB_MCP_Sync_Revert;
 use AB_MCP_Sync_Run;
 use AB_MCP_Sync_Schema;
 use AB_MCP_Test_Seam;
@@ -117,6 +118,7 @@ final class SyncCodeRunTest extends TestCase {
 
 	protected function tearDown(): void {
 		AB_MCP_Test_Seam::restore_all();
+		AB_MCP_Sync_Revert::admit( array( 'AB_MCP_Sync_Code_Ops', 'back' ) );
 		AB_MCP_Sync_Code_Swap::forget();
 		AB_MCP_Sync_Code_Stage::$clock = null;
 		AB_MCP_Sync_Run::$clock        = null;
@@ -696,12 +698,18 @@ final class SyncCodeRunTest extends TestCase {
 	 * replaced, the mark is closed, the pair takes its new bases, the file
 	 * undo points of the unit go and those of another unit stay; no test
 	 * request after the first rename and no swap back; the answer names the
-	 * target, the backup, the way back and the commands by hand.
+	 * target, the backup, the way back and the commands by hand. Then F2,
+	 * its way back over wp_site_revert (put_back(), part E): the old version
+	 * back at the target, the new one at its place, the mark closed, the
+	 * pair unclear, and the answer says that what the new version wrote
+	 * into the database stays; the plugin still active.
 	 * Sonst: the run would not update the plugin of the customer, or update
 	 * it without the old version to go back to, without the mark that tells
 	 * a swap cut off from one that ended, with old code still in OPcache,
 	 * with a file undo point that writes a file of the old version into the
-	 * new one, or with an answer that does not say how to go back.
+	 * new one, or with an answer that does not say how to go back; or the
+	 * way back would not bring the old version back, or claim the data of
+	 * the new one were taken back.
 	 */
 	public function testAnActivePluginReleasedWithAcceptIsSwappedInTheRunWithItsBackupItsMarkAndTheWayBack(): void {
 		$main   = 'ab-it-aktiv/ab-it-aktiv.php';
@@ -757,7 +765,17 @@ final class SyncCodeRunTest extends TestCase {
 		// The plugin still runs, in its new version.
 		self::assertContains( $main, self::active(), 'The plugin is still active.' );
 		self::assertSame( '2.0.0', AB_MCP_IT_Code::mark( 'a', 'ab-it-aktiv' ), 'The site runs the new version.' );
-		self::closed( $run_id );
+		self::put_back(
+			$run_id,
+			$unit,
+			$target,
+			array(
+				'old' => self::bytes_of( AB_MCP_IT_Code::source( 'plugin', 'ab-it-aktiv', '1.0.0' ) ),
+				'new' => self::bytes_of( AB_MCP_IT_Code::source( 'plugin', 'ab-it-aktiv', '2.0.0' ) ),
+			)
+		);
+		self::assertContains( $main, self::active(), 'Back in its old version, the plugin is still active.' );
+		self::assertSame( '1.0.0', AB_MCP_IT_Code::fassung( 'a', 'plugin', 'ab-it-aktiv' ) );
 	}
 
 	/**
@@ -766,10 +784,13 @@ final class SyncCodeRunTest extends TestCase {
 	 * test requests before the swap run as before every swap (reading 5
 	 * (a)), none after the first rename and no swap back (15.23); the old
 	 * version lies byte for byte in the backup, the folder itself, and the
-	 * answer names the way back; the plugin stays inactive.
+	 * answer names the way back; the plugin stays inactive. Then the way
+	 * back of the run puts the old version back (put_back(), part E), the
+	 * plugin still inactive.
 	 * Sonst: the run would not update an inactive plugin of the customer,
 	 * or update it without the test requests before it, without the old
-	 * version to go back to, or switch it on.
+	 * version to go back to, or switch it on; or its way back would not
+	 * bring the old version back, or lose the new one.
 	 */
 	public function testAnInactivePluginFromWordpressOrgIsSwappedWithoutAcceptWithItsBackupAndTheWayBack(): void {
 		list( $run_id, $unit, $target ) = self::ready_to_swap(
@@ -781,20 +802,32 @@ final class SyncCodeRunTest extends TestCase {
 			)
 		);
 		self::assertSame( 'wordpress.org', self::step( $run_id, 2 )['parts']['stage']['source'], 'Staged from wordpress.org (the stand-in).' );
+		$old = self::bytes_of( $target );
+		$new = self::bytes_of( AB_MCP_IT_Code::path( 'b', 'plugin', 'ab-it-inaktiv' ) );
 		self::swapped_whole(
 			$run_id,
 			$unit,
 			$target,
 			array(
 				'slug'     => 'ab-it-inaktiv',
-				'old'      => self::bytes_of( $target ),
-				'new'      => self::bytes_of( AB_MCP_IT_Code::path( 'b', 'plugin', 'ab-it-inaktiv' ) ),
+				'old'      => $old,
+				'new'      => $new,
 				'versions' => array( '1.0.0', '1.1.0' ),
 			)
 		);
 		self::assertSame( '1.1.0', AB_MCP_IT_Code::fassung( 'a', 'plugin', 'ab-it-inaktiv' ) );
 		self::assertNotContains( 'ab-it-inaktiv/ab-it-inaktiv.php', self::active(), 'The plugin stays inactive.' );
-		self::closed( $run_id );
+		self::put_back(
+			$run_id,
+			$unit,
+			$target,
+			array(
+				'old' => $old,
+				'new' => $new,
+			)
+		);
+		self::assertSame( '1.0.0', AB_MCP_IT_Code::fassung( 'a', 'plugin', 'ab-it-inaktiv' ) );
+		self::assertNotContains( 'ab-it-inaktiv/ab-it-inaktiv.php', self::active(), 'Back in its old version, the plugin stays inactive.' );
 	}
 
 	/**
@@ -1082,10 +1115,12 @@ final class SyncCodeRunTest extends TestCase {
 	 * the way back. Only the normal way: the answers after a fault past the
 	 * first mutation wait for the decision on Part 1 of Codex D4 (the lead,
 	 * 16.11. 05:37); the window left between lstat() and rename() for a file
-	 * is the named limit G-5-10.
+	 * is the named limit G-5-10. Then the way back of the run puts the old
+	 * file back and the new one at its place, each a file (put_back(),
+	 * part E).
 	 * Sonst: a plugin of one file could not be updated by the run, or only
 	 * with the old file not whole in the backup, or with old code of it
-	 * still in OPcache.
+	 * still in OPcache; or its way back would treat the file as a folder.
 	 */
 	public function testAPluginOfOneFileIsSwappedAsTheFileItselfWithItsBackupAndTheWayBack(): void {
 		list( $run_id, $unit, $target ) = self::ready_to_swap(
@@ -1113,14 +1148,16 @@ final class SyncCodeRunTest extends TestCase {
 		self::assertSame( 'ab-it-einzeln.php', $unit['ref'], 'The unit is named by its file.' );
 		self::assertTrue( is_file( $target ), 'The target is a file.' );
 		self::assertSame( 'ab-it-einzeln.php', self::step( $run_id, 2 )['parts']['stage']['name'], 'The stage is named as the file of the unit.' );
+		$old  = self::bytes_of( $target );
+		$new  = self::bytes_of( AB_MCP_IT_Code::path( 'b', 'plugin', 'ab-it-einzeln' ) );
 		$swap = self::swapped_whole(
 			$run_id,
 			$unit,
 			$target,
 			array(
 				'slug'     => 'ab-it-einzeln.php',
-				'old'      => self::bytes_of( $target ),
-				'new'      => self::bytes_of( AB_MCP_IT_Code::path( 'b', 'plugin', 'ab-it-einzeln' ) ),
+				'old'      => $old,
+				'new'      => $new,
 				'versions' => array( '1.0.0', '1.1.0' ),
 			)
 		);
@@ -1129,7 +1166,20 @@ final class SyncCodeRunTest extends TestCase {
 		self::assertSame( array( $target ), $swap['opcache'], 'OPcache for the one PHP file.' );
 		self::assertSame( '1.1.0', AB_MCP_IT_Code::fassung( 'a', 'plugin', 'ab-it-einzeln' ) );
 		self::assertContains( 'ab-it-einzeln.php', self::active(), 'The plugin is still active.' );
-		self::closed( $run_id );
+		$back = self::put_back(
+			$run_id,
+			$unit,
+			$target,
+			array(
+				'old' => $old,
+				'new' => $new,
+			)
+		);
+		self::assertTrue( is_file( $target ) && is_file( $back['result']['place'] ), 'The old version at the target and the new one at its place are files.' );
+		self::assertSame( 'ab-it-einzeln.php', basename( $back['result']['place'] ) );
+		self::assertSame( 1, $back['result']['opcache'], 'OPcache for the one PHP file at the target.' );
+		self::assertSame( '1.0.0', AB_MCP_IT_Code::fassung( 'a', 'plugin', 'ab-it-einzeln' ) );
+		self::assertContains( 'ab-it-einzeln.php', self::active(), 'Back in its old version, the plugin is still active.' );
 	}
 
 	/**
@@ -1137,10 +1187,12 @@ final class SyncCodeRunTest extends TestCase {
 	 * data/export.csv, unchanged here, and whose new version on staging
 	 * lacks it, is swapped as F56 swaps (Entscheid 1 A); after it the file
 	 * is gone from the folder of the site and lies byte for byte in the
-	 * backup of the run, with the old folder whole. The way back is part E.
+	 * backup of the run, with the old folder whole. The way back of the run
+	 * puts the old folder back and the file with it, byte for byte
+	 * (put_back(), part E).
 	 * Sonst: a file of the customer the new version does not have would be
 	 * lost with the swap, or stay beside the new version as if it were part
-	 * of it.
+	 * of it, or not come back with the way back.
 	 */
 	public function testADataFileTheNewVersionLacksLeavesTheSiteAndLiesInTheBackupByteForByte(): void {
 		$file = 'data/export.csv';
@@ -1167,7 +1219,16 @@ final class SyncCodeRunTest extends TestCase {
 		);
 		self::assertFileDoesNotExist( $target . '/' . $file, 'Gone from the folder of the site.' );
 		self::assertSame( hash_file( 'sha256', AB_MCP_IT_Code::source( 'plugin', 'ab-it-daten', '1.0.0' ) . '/' . $file ), hash_file( 'sha256', $swap['backup'] . '/' . $file ), 'Byte for byte in the backup.' );
-		self::closed( $run_id );
+		self::put_back(
+			$run_id,
+			$unit,
+			$target,
+			array(
+				'old' => $old,
+				'new' => $new,
+			)
+		);
+		self::assertSame( hash_file( 'sha256', AB_MCP_IT_Code::source( 'plugin', 'ab-it-daten', '1.0.0' ) . '/' . $file ), hash_file( 'sha256', $target . '/' . $file ), 'The data file is back in the folder of the site byte for byte.' );
 	}
 
 	/**
@@ -1234,26 +1295,518 @@ final class SyncCodeRunTest extends TestCase {
 	 * Prüft: F55 with sites that differ already: an active plugin whose
 	 * files differ here and on staging is paired the public way with its
 	 * files on the state of this site (Frage F, answer b), then updated on
-	 * staging; the run takes it over with accept and swaps it as F56 swaps.
+	 * staging; the run takes it over with accept and swaps it as F56 swaps,
+	 * and its way back puts the old version back (put_back(), part E).
 	 * Sonst: a unit the customer paired by answer b would not be updated by
 	 * the run, or its difference of before would count as a change here and
-	 * lock it.
+	 * lock it, or not go back.
 	 */
 	public function testAPluginThatDifferedWhenItWasPairedOnTheStateOfThisSiteIsSwappedAfterAnUpdateOnStaging(): void {
 		self::assertNotFalse( file_put_contents( AB_MCP_IT_Code::path( 'b', 'plugin', 'ab-it-aktiv' ) . '/anders.txt', 'staging' ), 'The files differ before the pair.' );
 		list( $run_id, $unit, $target ) = self::ready_to_swap( null, array( 'live_base' => array( 'plugin:ab-it-aktiv' ) ) );
+		$old = self::bytes_of( AB_MCP_IT_Code::source( 'plugin', 'ab-it-aktiv', '1.0.0' ) );
+		$new = self::bytes_of( AB_MCP_IT_Code::source( 'plugin', 'ab-it-aktiv', '2.0.0' ) );
 		self::swapped_whole(
 			$run_id,
 			$unit,
 			$target,
 			array(
 				'slug'     => 'ab-it-aktiv',
-				'old'      => self::bytes_of( AB_MCP_IT_Code::source( 'plugin', 'ab-it-aktiv', '1.0.0' ) ),
+				'old'      => $old,
+				'new'      => $new,
+				'versions' => array( '1.0.0', '2.0.0' ),
+			)
+		);
+		self::put_back(
+			$run_id,
+			$unit,
+			$target,
+			array(
+				'old' => $old,
+				'new' => $new,
+			)
+		);
+	}
+
+	/* ------------------------------------------ the way back of a swap (part E) */
+
+	/** The run of F56 with its swap done: the run, the unit of step 3, its target, the backup of the old version. */
+	private static function swapped_f56(): array {
+		list( $run_id, $unit, $target ) = self::ready_to_swap();
+		$answer = self::next( $run_id );
+		self::assertIsArray( $answer, is_wp_error( $answer ) ? $answer->get_error_code() . ': ' . $answer->get_error_message() : '' );
+		$swap = self::step( $run_id, 3 );
+		self::assertSame( 'done', $swap['state'], $answer['next'] );
+		return array( $run_id, $unit, $target, $swap['result']['backup'] );
+	}
+
+	/** What the test requests find on each target of this site now (AB_MCP_Php_Probe::run(), every target, not stopped at a fatal one), by target. */
+	private static function probe_now(): array {
+		$got = AB_MCP_Php_Probe::run( array(), false );
+		self::assertIsArray( $got );
+		return array_column( $got['targets'], 'result', 'target' );
+	}
+
+	/** The calls of the swap with these faults (AB_MCP_Test_Seam), for a way back. */
+	private static function seam_of_swap( array $faults ): void {
+		AB_MCP_Test_Seam::install( AB_MCP_Sync_Code_Swap::class, 'naht_sync_code_swap', new \AB_MCP_Sync_Code_Swap_Calls(), $faults );
+	}
+
+	/**
+	 * Prüft: F59, case 1 (plan F59; Z22, Z13, Z16): a new version that ends
+	 * fatal only on the home page (ab-it-aktiv startseite, 2.0.3) is swapped
+	 * as F56 swaps: the test requests before the swap pass, none goes after
+	 * it, the step is done and its answer names the way back, target, backup
+	 * and the commands by hand (swapped_whole()). Then the home page ends
+	 * fatal and MCP answers (AB_MCP_Php_Probe::run()). The way back of the
+	 * run over MCP puts the old version back (put_back()): two renames, each
+	 * onto a place that is free, and OPcache for each PHP file of the old
+	 * and of the new version under its path at the target; then the home
+	 * page runs again.
+	 * Sonst: a version that breaks the home page of the customer while MCP
+	 * still answers could not be taken back by the run, or only with code
+	 * of the new version left in OPcache, or onto a place another process
+	 * holds.
+	 */
+	public function testAVersionFatalOnTheHomePageIsPutBackOverMcpAndTheHomePageRunsAgain(): void {
+		list( $run_id, $unit, $target ) = self::ready_to_swap( null, array( 'version' => 'startseite' ) );
+		$old = self::bytes_of( AB_MCP_IT_Code::source( 'plugin', 'ab-it-aktiv', '1.0.0' ) );
+		$new = self::bytes_of( AB_MCP_IT_Code::source( 'plugin', 'ab-it-aktiv', 'startseite' ) );
+		self::swapped_whole(
+			$run_id,
+			$unit,
+			$target,
+			array(
+				'slug'     => 'ab-it-aktiv',
+				'old'      => $old,
+				'new'      => $new,
+				'versions' => array( '1.0.0', '2.0.3' ),
+			)
+		);
+		$after = self::probe_now();
+		self::assertSame( array( 'fatal', 'ok' ), array( $after['home'], $after['mcp'] ), 'The home page ends fatal, MCP answers: ' . json_encode( $after ) );
+		$opcache = array();
+		$renames = array();
+		self::seam_of_swap(
+			array(
+				array(
+					'method' => 'opcache',
+					'kind'   => 'before',
+					'before' => static function ( $method, array $args ) use ( &$opcache ): void {
+						$opcache[] = $args[0];
+					},
+				),
+				array(
+					'method' => 'rename',
+					'kind'   => 'before',
+					'before' => static function ( $method, array $args ) use ( &$renames ): void {
+						clearstatcache();
+						$renames[] = array( $args[1], file_exists( $args[1] ) || is_link( $args[1] ) );
+					},
+				),
+			)
+		);
+		$back = self::put_back(
+			$run_id,
+			$unit,
+			$target,
+			array(
+				'old' => $old,
+				'new' => $new,
+			)
+		);
+		self::assertSame( array( array( $back['result']['place'], false ), array( $target, false ) ), $renames, 'The new version to its place, then the old one to the target, each onto a place that is free.' );
+		$php = array();
+		foreach ( array_merge( array_keys( $old ), array_keys( $new ) ) as $rel ) {
+			if ( AB_MCP_Sync_Code_Stage::is_php( $rel ) ) {
+				$php[ $target . '/' . $rel ] = true;
+			}
+		}
+		$php = array_keys( $php );
+		sort( $php, SORT_STRING );
+		self::assertSame( $php, $opcache, 'OPcache for each PHP file of the old and of the new version, by its path at the target.' );
+		self::assertSame( count( $php ), $back['result']['opcache'] );
+		$again = self::probe_now();
+		self::assertSame( array( 'ok', 'ok' ), array( $again['home'], $again['mcp'] ), 'The home page runs again: ' . json_encode( $again ) );
+	}
+
+	/**
+	 * Prüft: F59, case 2 (plan F59): a new version that ends fatal on every
+	 * call. The version of F56 is swapped as F56 swaps, then its main file
+	 * at the target takes the bytes of ab-it-aktiv fatal (2.0.1), in the
+	 * same folder: the staging site cannot carry a version fatal on every
+	 * call, its own steps would end fatal (CodeFixturesTest). Neither the
+	 * home page nor MCP answers, so the way back of the run cannot be
+	 * called. The lines by_hand of the answer of the swap, run in a shell on
+	 * the server, put the old version back (their checks read the inodes,
+	 * not the bytes), and the site answers again.
+	 * Sonst: a version that ends every request of the customer fatal would
+	 * leave the site down, with no way back that works without MCP.
+	 */
+	public function testAVersionFatalOnEveryCallIsPutBackByTheLinesOfTheAnswerOfItsSwapInAShell(): void {
+		list( $run_id, $unit, $target ) = self::ready_to_swap();
+		$old  = self::bytes_of( AB_MCP_IT_Code::source( 'plugin', 'ab-it-aktiv', '1.0.0' ) );
+		$swap = self::swapped_whole(
+			$run_id,
+			$unit,
+			$target,
+			array(
+				'slug'     => 'ab-it-aktiv',
+				'old'      => $old,
 				'new'      => self::bytes_of( AB_MCP_IT_Code::source( 'plugin', 'ab-it-aktiv', '2.0.0' ) ),
 				'versions' => array( '1.0.0', '2.0.0' ),
 			)
 		);
-		self::closed( $run_id );
+		self::assertTrue( copy( AB_MCP_IT_Code::source( 'plugin', 'ab-it-aktiv', 'fatal' ) . '/ab-it-aktiv.php', $target . '/ab-it-aktiv.php' ) );
+		$after = self::probe_now();
+		self::assertSame( array( 'fatal', 'fatal' ), array( $after['home'], $after['mcp'] ), 'Neither the home page nor MCP answers: ' . json_encode( $after ) );
+		self::assertStringEndsWith( 'OK', self::run_by_hand( $swap['result']['by_hand'] ), 'The command of the way by hand ran whole.' );
+		clearstatcache();
+		self::assertSame( $old, self::bytes_of( $target ), 'The old version is back at the target.' );
+		$again = self::probe_now();
+		self::assertSame( array( 'ok', 'ok' ), array( $again['home'], $again['mcp'] ), 'The site answers again: ' . json_encode( $again ) );
+	}
+
+	/**
+	 * Prüft: F37 (plan F37; Z22, option B): the way back of a swap done
+	 * moves nothing where what it would move is not proved in its call: the
+	 * backup gone, a file of the backup changed, or another version at the
+	 * target than the swap left there. Each ends the step of the way back
+	 * unclear with the proof that failed, the frame of the way back and the
+	 * paths of target and backup; the target is byte for byte what it was,
+	 * and the pair is to be confirmed anew.
+	 * Sonst: the way back would put a backup it did not prove onto the
+	 * site, or move away a version the swap did not leave there.
+	 */
+	#[DataProvider( 'not_proved_back' )]
+	public function testTheWayBackMovesNothingWhereTheBackupOrTheVersionAtTheTargetIsNotProved( string $case ): void {
+		list( $run_id, $unit, $target, $backup ) = self::swapped_f56();
+		if ( 'the backup is gone' === $case ) {
+			self::assertTrue( rename( $backup, $backup . '-weg' ) );
+		} elseif ( 'a file of the backup changed' === $case ) {
+			self::assertNotFalse( file_put_contents( $backup . '/readme.txt', "\nanders", FILE_APPEND ) );
+		} else {
+			self::assertTrue( rename( $target, $target . '-weg' ) );
+			AB_MCP_IT_Code::put( 'a', 'plugin', 'ab-it-aktiv', 'php' );
+		}
+		clearstatcache();
+		$before = self::bytes_of( $target );
+		$way    = self::way_back_of( $run_id );
+		$step   = self::back_step( (int) $way['begun']['run_id'] );
+		$says   = $step['result']['message'];
+		self::assertSame( 'unclear', $step['state'], $says );
+		self::assertStringStartsWith( 'another version at the target' === $case ? 'The version at ' . $target . ' could not be proved as the one the swap left there (' : 'The old version could not be proved whole in the backup ' . $backup . ' (', $says );
+		self::assertStringContainsString( ' The step of the way back is unclear: nothing more of the unit is moved by itself; check it by hand, then confirm its pair anew (wp_site_pairs).', $says );
+		self::assertStringEndsWith( "\nTarget: " . $target . "\nBackup: " . $backup, $says );
+		self::assertNull( $step['result']['place'] );
+		clearstatcache();
+		self::assertSame( $before, self::bytes_of( $target ), 'The target is byte for byte what it was.' );
+		self::assertSame( 'unclear', AB_MCP_Sync_Pairs::get( $unit['pair_id'] )['state'], 'The pair is to be confirmed anew.' );
+	}
+
+	/** What the way back does not prove (F37). */
+	public static function not_proved_back(): array {
+		return array(
+			'the backup is gone'            => array( 'the backup is gone' ),
+			'a file of the backup changed'  => array( 'a file of the backup changed' ),
+			'another version at the target' => array( 'another version at the target' ),
+		);
+	}
+
+	/**
+	 * Prüft: N12 and the one entrance (part E, question 2): with no
+	 * entrance in the core (AB_MCP_Sync_Revert::admit( null ), as where the
+	 * file of AB_MCP_Sync_Code_Ops is not loaded), a run of the code is not
+	 * planned back, a way back planned with it does not run its step, and a
+	 * way back interrupted on its step is not led on: each refuses with
+	 * ab_mcp_sync_revert_code and the way by hand, and the run stays as it
+	 * was (its state, its steps, the target).
+	 * Sonst: a way back of code could run past its one entrance (N12), or a
+	 * run of the code be planned back or led on without it.
+	 */
+	#[DataProvider( 'no_entrance' )]
+	public function testWithoutTheEntranceARunOfTheCodeIsNeitherPlannedBackNorRunBackNorLedOn( string $at ): void {
+		list( $run_id, , $target ) = self::swapped_f56();
+		$back = $run_id;
+		if ( 'plan' !== $at ) {
+			$preview = self::gated( 'wp_site_revert', array( 'action' => 'plan', 'run_id' => $run_id ) );
+			self::assertIsArray( $preview, is_wp_error( $preview ) ? $preview->get_error_message() : '' );
+			$begun = self::gated( 'wp_site_revert', array( 'action' => 'plan', 'run_id' => $run_id, 'confirm_token' => $preview['confirm_token'] ) );
+			self::assertIsArray( $begun, is_wp_error( $begun ) ? $begun->get_error_message() : '' );
+			$back = (int) $begun['run_id'];
+		}
+		if ( 'continue' === $at ) {
+			// The step of the way back begun by a call that ended without
+			// its end (no lock of its own): the run is interrupted on its way
+			// back.
+			self::assertTrue( AB_MCP_Sync_Run::update_step( $back, (int) self::back_step( $back )['seq'], array( 'state' => 'begun' ), 'planned' ) );
+			self::assertSame( 'interrupted', self::gated( 'wp_site_push', array( 'action' => 'status', 'run_id' => $back ) )['state'] );
+		}
+		$state  = static fn(): array => array( AB_MCP_Sync_Run::get( $back )['state'], array_column( AB_MCP_Sync_Run::steps( $back ), 'state', 'seq' ), self::bytes_of( $target ) );
+		$before = $state();
+		AB_MCP_Sync_Revert::admit( null );
+		try {
+			$answer = self::gated( 'wp_site_revert', array( 'action' => 'next' === $at ? 'next' : 'plan', 'run_id' => $back ) );
+		} finally {
+			AB_MCP_Sync_Revert::admit( array( 'AB_MCP_Sync_Code_Ops', 'back' ) );
+		}
+		$says = self::refused( $answer, 'ab_mcp_sync_revert_code' );
+		self::assertStringStartsWith( sprintf( 'Run %d swapped plugins or themes, and this installation of AlphaBridge has no way back for code (its entrance is not loaded), so nothing of it is planned, put back or closed.', $run_id ), $says );
+		self::assertStringContainsString( 'Put the old version back by hand', $says );
+		self::assertSame( $before, $state(), 'The run, its steps and the target stay as they were.' );
+	}
+
+	/** Where the core asks the entrance: the preview, the step of the way back, its continuation. */
+	public static function no_entrance(): array {
+		return array(
+			'plan'     => array( 'plan' ),
+			'next'     => array( 'next' ),
+			'continue' => array( 'continue' ),
+		);
+	}
+
+	/**
+	 * Prüft: a swap broken off between its two renames (the second throws,
+	 * and the call ends without the end of the step): its step stays begun,
+	 * the old version whole in
+	 * the backup, the target empty, the mark open, and the run is
+	 * interrupted. Its way back on the same run puts the old version from
+	 * the backup onto the empty target (place_empty()), proves it there,
+	 * closes the open mark of the swap (found by its run and step in the
+	 * list of the marks, as the swap gave no result) and is done; nothing
+	 * is moved aside, and the new version stays in its stage.
+	 * Sonst: a swap cut off half way would leave the site without the
+	 * plugin, or its mark open with the stage and the backup it holds.
+	 */
+	public function testASwapBrokenOffBetweenItsRenamesIsPutBackByTheWayBackOfItsRun(): void {
+		list( $run_id, , $target ) = self::ready_to_swap();
+		$old = self::bytes_of( $target );
+		$answer = self::swap_with(
+			$run_id,
+			array(
+				array(
+					'method' => 'rename',
+					'nth'    => 2,
+					'kind'   => 'throw',
+				),
+			)
+		);
+		AB_MCP_Test_Seam::restore_all();
+		$swap = self::step( $run_id, 3 );
+		self::assertSame( 'begun', $swap['state'], json_encode( is_wp_error( $answer ) ? array( $answer->get_error_code(), $answer->get_error_message() ) : $answer ) );
+		clearstatcache();
+		self::assertFalse( file_exists( $target ), 'The target is empty.' );
+		self::assertSame( $old, self::bytes_of( $swap['parts']['old']['path'] ), 'The old version lies whole in the backup.' );
+		self::assertSame( 'open', self::mark_of_swap( $run_id )['state'] );
+		self::assertSame( 'interrupted', self::gated( 'wp_site_push', array( 'action' => 'status', 'run_id' => $run_id ) )['state'] );
+		$way = self::way_back_of( $run_id );
+		self::assertSame( $run_id, (int) $way['begun']['run_id'], 'The way back goes on the same run.' );
+		$step = self::back_step( $run_id );
+		self::assertSame( 'done', $step['state'], $step['result']['message'] );
+		self::assertNull( $step['result']['place'], 'Nothing to move aside: the target was empty.' );
+		clearstatcache();
+		self::assertSame( $old, self::bytes_of( $target ), 'The old version is back at the target.' );
+		self::assertSame( 'closed', self::mark_of_swap( $run_id )['state'], 'The open mark of the swap is closed.' );
+		self::assertSame( self::bytes_of( AB_MCP_IT_Code::source( 'plugin', 'ab-it-aktiv', '2.0.0' ) ), self::bytes_of( $swap['parts']['new']['path'] ), 'The new version stays in its stage.' );
+	}
+
+	/**
+	 * Prüft: Z13 on the way back: where OPcache cannot be cleared for a file
+	 * the way back put back or moved away, its step is unclear, and its
+	 * answer says to have OPcache cleared at the host (the sentence of the
+	 * swap), with the frame of the way back and target and backup; it does
+	 * not say that the old version is back.
+	 * Sonst: the site could run code of the new version from OPcache while
+	 * the answer says the old one is back.
+	 */
+	public function testOpcacheNotClearedOnTheWayBackEndsItsStepUnclearWithTheHost(): void {
+		list( $run_id, , $target, $backup ) = self::swapped_f56();
+		self::seam_of_swap(
+			array(
+				array(
+					'method' => 'opcache',
+					'nth'    => 1,
+					'kind'   => 'return',
+					'value'  => 'not_possible',
+				),
+			)
+		);
+		$way  = self::way_back_of( $run_id );
+		$step = self::back_step( (int) $way['begun']['run_id'] );
+		$says = $step['result']['message'];
+		self::assertSame( 'unclear', $step['state'], $says );
+		self::assertStringContainsString( 'Have OPcache of this site cleared at the host, or PHP restarted (PHP-FPM or the web server), so that PHP runs the files that are at the target now. The step of the way back is unclear', $says );
+		self::assertStringEndsWith( "\nTarget: " . $target . "\nBackup: " . $backup, $says );
+		self::assertStringNotContainsString( 'is in its old version', $says );
+	}
+
+	/**
+	 * Prüft: Z20b: the way back of a swap done is done only where close()
+	 * with kept proves the old version at the target in its call; a file of
+	 * the old version changed right after the renames (while OPcache is
+	 * cleared) leaves the step unclear with the proof that failed, and the
+	 * answer does not say that the old version is back.
+	 * Sonst: the way back would end done on a version at the target it did
+	 * not prove.
+	 */
+	public function testTheWayBackIsDoneOnlyWhereTheOldVersionIsProvedAtTheTargetAfterItsRenames(): void {
+		list( $run_id, , $target ) = self::swapped_f56();
+		self::seam_of_swap(
+			array(
+				array(
+					'method' => 'opcache',
+					'nth'    => 1,
+					'kind'   => 'before',
+					'before' => static function () use ( $target ): void {
+						self::assertNotFalse( file_put_contents( $target . '/readme.txt', "\nanders", FILE_APPEND ) );
+					},
+				),
+			)
+		);
+		$way  = self::way_back_of( $run_id );
+		$step = self::back_step( (int) $way['begun']['run_id'] );
+		$says = $step['result']['message'];
+		self::assertSame( 'unclear', $step['state'], $says );
+		self::assertStringStartsWith( 'The version at ' . $target . ' could not be proved as the one the swap left there (', $says );
+		self::assertStringNotContainsString( 'is in its old version', $says );
+	}
+
+	/**
+	 * Prüft: Z26 on the way back (question 5 of part E): the rights of the
+	 * operation of the unit are asked right before the first write of the
+	 * way back; where this site lets WordPress change no files (the filter
+	 * file_mod_allowed, as DISALLOW_FILE_MODS), its step refuses with the
+	 * code of rights() and the sentence of the way back (which right, and
+	 * the way by hand; no abort of the run), stays planned, and nothing
+	 * moves. With the right given back, the next call puts the old version
+	 * back.
+	 * Sonst: the way back would rename the folders of a site that lets no
+	 * file be changed, or send the person to abort the run and plan anew.
+	 */
+	public function testTheWayBackAsksTheRightsBeforeItsFirstWriteAndStaysPlannedWithoutThem(): void {
+		list( $run_id, , $target ) = self::swapped_f56();
+		$preview = self::gated( 'wp_site_revert', array( 'action' => 'plan', 'run_id' => $run_id ) );
+		self::assertIsArray( $preview, is_wp_error( $preview ) ? $preview->get_error_message() : '' );
+		$begun = self::gated( 'wp_site_revert', array( 'action' => 'plan', 'run_id' => $run_id, 'confirm_token' => $preview['confirm_token'] ) );
+		self::assertIsArray( $begun, is_wp_error( $begun ) ? $begun->get_error_message() : '' );
+		$back   = (int) $begun['run_id'];
+		$before = self::bytes_of( $target );
+		add_filter( 'file_mod_allowed', '__return_false' );
+		try {
+			$says = self::refused( self::gated( 'wp_site_revert', array( 'action' => 'next', 'run_id' => $back ) ), 'code:file_mods' );
+		} finally {
+			remove_filter( 'file_mod_allowed', '__return_false' );
+		}
+		self::assertStringStartsWith( 'The plugin ab-it-aktiv is not put back: this account or this site may not change its files (code:file_mods), and the step of the way back stays planned. Give that right and call wp_site_revert action=next again, or put the old version back by hand', $says );
+		self::assertStringNotContainsString( 'action=abort', $says );
+		self::assertSame( 'planned', self::back_step( $back )['state'] );
+		self::assertSame( $before, self::bytes_of( $target ), 'Nothing moved.' );
+		$done = self::gated( 'wp_site_revert', array( 'action' => 'next', 'run_id' => $back ) );
+		self::assertIsArray( $done, is_wp_error( $done ) ? $done->get_error_message() : '' );
+		self::assertSame( 'done', self::back_step( $back )['state'] );
+		self::assertSame( '1.0.0', AB_MCP_IT_Code::fassung( 'a', 'plugin', 'ab-it-aktiv' ) );
+	}
+
+	/**
+	 * Prüft: a rename of the way back that fails (Z16; F35 on the way back):
+	 * the first (the new version from the target to its place) moves
+	 * nothing; where the second (the old version from the backup to the
+	 * target) fails, the new one goes back to the target, again only onto
+	 * a free place. Either way the step of the way back is unclear, and its
+	 * answer says that a rename failed and nothing on what lies where
+	 * (option B), with the frame and the paths; the new version is at the
+	 * target, the folder of the swap itself, and the old one whole in the
+	 * backup.
+	 * Sonst: a failed rename of the way back would leave the site without
+	 * the plugin while the new version waits at its place, or an answer
+	 * would claim a state no proof read.
+	 */
+	#[DataProvider( 'renames_back' )]
+	public function testARenameOfTheWayBackThatFailsLeavesTheNewVersionAtTheTargetAndTheStepUnclear( int $nth ): void {
+		list( $run_id, , $target, $backup ) = self::swapped_f56();
+		clearstatcache();
+		$at  = lstat( $target );
+		$new = self::bytes_of( $target );
+		$old = self::bytes_of( $backup );
+		self::seam_of_swap(
+			array(
+				array(
+					'method' => 'rename',
+					'nth'    => $nth,
+					'kind'   => 'return',
+					'value'  => false,
+				),
+			)
+		);
+		$way  = self::way_back_of( $run_id );
+		$step = self::back_step( (int) $way['begun']['run_id'] );
+		$says = $step['result']['message'];
+		self::assertSame( 'unclear', $step['state'], $says );
+		self::assertStringStartsWith( 'A rename of the way back failed (rename() failed, or the place was not free). The step of the way back is unclear:', $says );
+		self::assertStringEndsWith( "\nTarget: " . $target . "\nBackup: " . $backup, $says );
+		clearstatcache();
+		$now = lstat( $target );
+		self::assertSame( array( $at['dev'], $at['ino'], $new ), array( $now['dev'], $now['ino'], self::bytes_of( $target ) ), 'The new version is at the target, the folder of the swap itself.' );
+		self::assertSame( $old, self::bytes_of( $backup ), 'The old version lies whole in the backup.' );
+	}
+
+	/** Which rename of the way back fails. */
+	public static function renames_back(): array {
+		return array(
+			'the first rename'  => array( 1 ),
+			'the second rename' => array( 2 ),
+		);
+	}
+
+	/**
+	 * Prüft: G-27, the mark gone: the folder of the mark of a swap done goes
+	 * a day after the mark closed (AB_MCP_Protected_Store::cleanup(); here
+	 * moved aside under a name that is no mark). Its way back then finds no
+	 * mark in the list and closes none, and the proof of the old version at
+	 * the target stands alone: the step is done.
+	 * Sonst: the way back of a swap older than a day would end unclear for
+	 * a mark that is gone by design.
+	 */
+	public function testTheWayBackOfASwapWhoseMarkIsGoneIsDoneOnTheProofAtTheTargetAlone(): void {
+		list( $run_id, $unit, $target ) = self::swapped_f56();
+		$named = AB_MCP_Protected_Store::named_by_swap();
+		self::assertIsArray( $named );
+		$folder = $named['marks'] . '/' . self::mark_of_swap( $run_id )['mid'];
+		self::assertTrue( rename( $folder, $folder . '-weg' ) );
+		self::assertNull( self::mark_of_swap( $run_id ), 'No mark of the swap in the list.' );
+		$way  = self::way_back_of( $run_id );
+		$step = self::back_step( (int) $way['begun']['run_id'] );
+		self::assertSame( 'done', $step['state'], $step['result']['message'] );
+		self::assertSame( '1.0.0', AB_MCP_IT_Code::fassung( 'a', 'plugin', 'ab-it-aktiv' ) );
+	}
+
+	/**
+	 * Prüft: a swap that failed with nothing moved (its first rename
+	 * refused) wrote nothing: the way back of its run plans no step on it
+	 * and refuses with ab_mcp_sync_revert_nothing (AB_MCP_Sync_Code_Ops::back(),
+	 * plan: a swap failed is no write).
+	 * Sonst: the way back would plan a step on a swap that moved nothing,
+	 * and move the version of the site.
+	 */
+	public function testASwapThatFailedWithNothingMovedIsNoStepOfTheWayBack(): void {
+		list( $run_id, , $target ) = self::ready_to_swap();
+		$answer = self::swap_with(
+			$run_id,
+			array(
+				array(
+					'method' => 'rename',
+					'nth'    => 1,
+					'kind'   => 'return',
+					'value'  => false,
+				),
+			)
+		);
+		self::assertIsArray( $answer, is_wp_error( $answer ) ? $answer->get_error_message() : '' );
+		self::assertSame( 'failed', self::step( $run_id, 3 )['state'], $answer['next'] );
+		AB_MCP_Test_Seam::restore_all();
+		$before = self::bytes_of( $target );
+		self::refused( self::gated( 'wp_site_revert', array( 'action' => 'plan', 'run_id' => $run_id ) ), 'ab_mcp_sync_revert_nothing' );
+		self::assertSame( $before, self::bytes_of( $target ) );
 	}
 
 	/**
@@ -1413,6 +1966,93 @@ final class SyncCodeRunTest extends TestCase {
 		$closed = self::gated( 'wp_site_push', array( 'action' => 'abort', 'run_id' => $run_id ) );
 		self::assertIsArray( $closed, is_wp_error( $closed ) ? $closed->get_error_message() : '' );
 		self::assertNull( AB_MCP_Sync_Run::open_run(), 'The site is free.' );
+	}
+
+	/**
+	 * The way back of a run as a client takes it (plan Z22): wp_site_revert
+	 * plan, its token, next until the run of the way back is closed.
+	 *
+	 * @return array{preview:array,begun:array,back:array} The preview, the run of the way back as
+	 *         it began, its last answer.
+	 */
+	private static function way_back_of( int $run_id ): array {
+		$preview = self::gated( 'wp_site_revert', array( 'action' => 'plan', 'run_id' => $run_id ) );
+		self::assertIsArray( $preview, is_wp_error( $preview ) ? $preview->get_error_code() . ': ' . $preview->get_error_message() : '' );
+		self::assertTrue( $preview['confirm_required'] );
+		$begun = self::gated( 'wp_site_revert', array( 'action' => 'plan', 'run_id' => $run_id, 'confirm_token' => $preview['confirm_token'] ) );
+		self::assertIsArray( $begun, is_wp_error( $begun ) ? $begun->get_error_code() . ': ' . $begun->get_error_message() : '' );
+		$back = null;
+		for ( $i = 0; $i < 12; $i++ ) {
+			$back = self::gated( 'wp_site_revert', array( 'action' => 'next', 'run_id' => (int) $begun['run_id'] ) );
+			self::assertIsArray( $back, is_wp_error( $back ) ? $back->get_error_code() . ': ' . $back->get_error_message() : '' );
+			if ( in_array( $back['state'], AB_MCP_Sync_Schema::CLOSED, true ) ) {
+				return array(
+					'preview' => $preview,
+					'begun'   => $begun,
+					'back'    => $back,
+				);
+			}
+		}
+		self::fail( 'The way back did not close within 12 calls: ' . json_encode( $back ) );
+	}
+
+	/** The step of the way back of a run that goes back over step 3, the swap, as stored. */
+	private static function back_step( int $back ): array {
+		foreach ( AB_MCP_Sync_Run::steps( $back ) as $one ) {
+			if ( 'revert' === $one['op'] && 3 === (int) $one['parts']['forward_seq'] ) {
+				return $one;
+			}
+		}
+		self::fail( 'The way back has no step for the swap.' );
+	}
+
+	/**
+	 * A swap put back by the way back of its run (Z22, Z20b), the frame of
+	 * F1, F2, F6, F47 and F55: the preview names the swap step with its
+	 * target and backup; then the old version is at the target byte for
+	 * byte, the folder or file of the backup itself (moved, not copied),
+	 * the new one byte for byte at its place in a group of its own of the
+	 * backups of the way back (question 1 B), the mark of the swap closed,
+	 * the pair of the unit unclear (question 3 A), the step of the way back
+	 * done with the answer that names the old version, what stays in the
+	 * database and wp_site_pairs, and the run of the way back closed.
+	 *
+	 * @param array $want old and new (bytes_of() of the two versions).
+	 * @return array The step of the way back as stored.
+	 */
+	private static function put_back( int $run_id, array $unit, string $target, array $want ): array {
+		$backup = self::step( $run_id, 3 )['result']['backup'];
+		clearstatcache();
+		$old = lstat( $backup );
+		self::assertIsArray( $old, 'The old version lies in the backup.' );
+		$way   = self::way_back_of( $run_id );
+		$shown = array_values( array_filter( $way['preview']['preview']['steps'], static fn( $s ) => 3 === (int) $s['seq'] ) );
+		self::assertCount( 1, $shown, 'The preview names the swap step: ' . json_encode( $way['preview']['preview'] ) );
+		self::assertSame( array( $unit['kind'], $unit['ref'], 'back', $target, $backup ), array( $shown[0]['kind'], $shown[0]['live_ref'], $shown[0]['will'], $shown[0]['target'], $shown[0]['backup'] ) );
+		$back = (int) $way['begun']['run_id'];
+		$step = self::back_step( $back );
+		self::assertSame( 'done', $step['state'], json_encode( $step['result'] ) );
+		$says = $step['result']['message'];
+		self::assertStringContainsString( sprintf( 'The %1$s %2$s is in its old version at %3$s, proved there', $unit['kind'], $unit['ref'], $target ), $says );
+		self::assertStringContainsString( 'stays as it is; confirm the pair of the unit anew (wp_site_pairs)', $says );
+		clearstatcache();
+		$now = lstat( $target );
+		self::assertSame( array( $old['dev'], $old['ino'] ), array( $now['dev'], $now['ino'] ), 'The old version is the folder or file of the backup itself, moved back.' );
+		self::assertSame( $want['old'], self::bytes_of( $target ), 'The old version is at the target byte for byte.' );
+		self::assertFalse( file_exists( $backup ), 'The backup is moved, not copied.' );
+		$place = $step['result']['place'];
+		self::assertIsString( $place );
+		self::assertSame( $want['new'], self::bytes_of( $place ), 'The new version lies byte for byte at its place.' );
+		$groups = AB_MCP_Protected_Store::groups( 'backups' );
+		self::assertIsArray( $groups );
+		$own = array_values( array_filter( $groups, static fn( $g ) => (int) $g['run_id'] === $back && 'back-' . $back . '-' . (int) $step['seq'] === $g['label'] ) );
+		self::assertCount( 1, $own, 'The place of the new version is a group of its own of the backups of the way back (question 1 B).' );
+		$tree = AB_MCP_Protected_Store::tree( 'backups', $own[0]['gid'], basename( $target ), self::step( $run_id, 3 )['parts']['new']['hash'] );
+		self::assertSame( $place, is_array( $tree ) ? $tree['path'] : $tree->get_error_message(), 'The new version is the tree of that group, read back against its hash.' );
+		self::assertSame( 'closed', self::mark_of_swap( $run_id )['state'], 'The mark of the swap is closed.' );
+		self::assertSame( 'unclear', AB_MCP_Sync_Pairs::get( $unit['pair_id'] )['state'], 'The pair is to be confirmed anew (question 3 A).' );
+		self::assertSame( 'closed_reverted', $way['back']['state'], json_encode( $way['back'] ) );
+		return $step;
 	}
 
 	/**
@@ -2241,9 +2881,13 @@ final class SyncCodeRunTest extends TestCase {
 	 * and nothing at the place of the backup, and the command of that
 	 * section only checks and moves nothing. The lock for changes is free
 	 * and nothing is lost.
+	 * Where the mark did not close, the way back of the run (question 4 of
+	 * part E) moves nothing, closes the mark on the old version proved at
+	 * the target, and its step is done.
 	 * Sonst: after a swap that did not happen a person would read commands
 	 * that swap back, or sentences on the backup and the mark that nothing
-	 * proved in the call.
+	 * proved in the call; or its way back would move the old version, or
+	 * leave the mark open.
 	 */
 	#[DataProvider( 'kept_not_closed' )]
 	public function testAnOldVersionBackAtTheTargetWhoseProofOrMarkFailsEndsUnclearWithTheShortAnswer( string $case ): void {
@@ -2307,6 +2951,22 @@ final class SyncCodeRunTest extends TestCase {
 		clearstatcache();
 		self::assertSame( $seen['old'], self::digest( $target ), 'The command moved nothing.' );
 		self::nothing_lost( $seen );
+		if ( 'the mark does not close' === $case ) {
+			// Question 4 of part E: the old version at the target already
+			// (the swap went back and could not close its mark): the way
+			// back moves nothing, close() with kept proves it and closes
+			// the mark, and its step is done.
+			AB_MCP_Test_Seam::restore_all();
+			clearstatcache();
+			$inode = lstat( $target )['ino'];
+			$way   = self::way_back_of( $run_id );
+			$back  = self::back_step( (int) $way['begun']['run_id'] );
+			self::assertSame( 'done', $back['state'], $back['result']['message'] );
+			self::assertNull( $back['result']['place'], 'Nothing moved aside.' );
+			clearstatcache();
+			self::assertSame( array( $inode, $seen['old'] ), array( lstat( $target )['ino'], self::digest( $target ) ), 'The old version stays at the target, unmoved.' );
+			self::assertSame( 'closed', self::mark_of_swap( $run_id )['state'], 'The mark of the swap is closed.' );
+		}
 	}
 
 	/** A swap not made whose mark close() does not end. */

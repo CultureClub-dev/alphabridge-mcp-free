@@ -167,6 +167,7 @@ final class StoreClockAndReadersTest extends TestCase {
 		'AB_MCP_Sync_Code_Swap::invalidate'     => array( array( 'swap.opcache' ), array( self::UNIT ) ),
 		'AB_MCP_Sync_Code_Swap::lock_held'      => array( array( 'swap.lock' ), array( self::UNIT ) ),
 		'AB_MCP_Sync_Code_Swap::reached'        => array( array( 'swap.probe' ), array( self::UNIT ) ),
+		'AB_MCP_Sync_Code_Swap::back'           => array( array( 'step.swap' ), array( self::UNIT ) ),
 		'AB_MCP_Sync_Code_Swap::prepare'        => array( array( 'swap.prepare' ), array( self::UNIT ) ),
 		'AB_MCP_Sync_Code_Swap::rename_marked'  => array( array( 'period.clock' ), array(), 'the beginning of the swap (since, for the note of the replacement and the journal) from AB_MCP_Sync_Run::now(), which reads the clock and is driven there; the engine asks the same clock first (AB_MCP_Sync_Engine::context()), and one that gives no time here ends before the note with clock_unknown(), nothing written or moved (the fault ways of the swap, part D2)' ),
 		'AB_MCP_Sync_Code_Swap::swapped'        => array( array( 'period.clock' ), array(), 'whether the clock of the run gives a time, from AB_MCP_Sync_Run::now(), which reads the clock and is driven there, before the writes that prepare the swap in the protected store (Codex D4, finding 4); one that gives no time ends with clock_unknown(), nothing written or moved; rename_marked() reads it again for the time the swap begins (SyncCodeRunTest, the clock after prepare() and during the rights)' ),

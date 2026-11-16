@@ -727,6 +727,33 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
     Ablehnung von `ended()`). Gegenproben `tausch/c-runs-fresh`, `tausch/c-runs-strict` und `tausch/cb-z24-in-result`.
 - **Trifft Normalfall:** nein. Im Normalfall aktiviert niemand die Einheit in den Sekunden ihres Tauschs.
 
+### G-5-14 Der Rückweg eines Tauschs: ein Eingang, keine eigene Marke, die Marke über ihre Liste
+
+- **Fundstelle:** Der Platz des Eingangs `AB_MCP_Sync_Revert::admit()` und die Weiche `code()`
+  (`includes/sync/class-sync-revert.php:119`, `:138`), belegt in der letzten Zeile von
+  `includes/sync/class-sync-code-ops.php` (`:580`); der Rückweg im Tausch `back()`, `restore()`, `restored()`,
+  `moved_back()`, `mark_id()` (`includes/sync/class-sync-code-swap.php:2078`, `:2122`, `:2160`, `:2232`, `:2272`); das
+  Journal in der Form seiner Zeile `step.swap` (`includes/class-store-inputs.php:985`); die Fortsetzung eines
+  unterbrochenen Rückweg-Schritts `begin_same_run()` (`class-sync-revert.php:967`).
+- **Quelle:** Teil E des Rests, Bauzettel `z5r-e-zettel.md` (Grenzen) mit der Freigabe der Lead (Fragen 1 bis 5, N12)
+  und der Kürzung nach `z5r-e1-abweichung.md`.
+- **Was:**
+  - Der Rückweg eines gelungenen Tauschs schreibt keine eigene Marke. Ein harter Abbruch zwischen seinen zwei
+    Umbenennungen lässt das Ziel leer; die neue Fassung liegt dann in der Gruppe `back-<lauf>-<schritt>` der
+    Sicherungen des Rückweglaufs, die alte in der Sicherung. Der Rückweg-Schritt wird bei der Fortsetzung `unclear`
+    (`begin_same_run()`, deren Satz von «object» spricht), und einen Handweg gibt es nur, solange die Marke des Tauschs
+    offen ist (nach einem gelungenen Tausch ist sie zu). Abbruchtests des Rückwegs gehören zu Teil F.
+  - Der Platz des Eingangs ist öffentlich wie jeder Aufruf in PHP: Code im selben Prozess könnte ihn belegen oder
+    leeren. Free belegt ihn nur aus der Datei von `AB_MCP_Sync_Code_Ops`; leer lehnen Vorschau, Schritt und
+    Fortsetzung eines Laufs mit Code-Schritten ab (`ab_mcp_sync_revert_code`).
+  - Die Marke des Tauschs findet der Rückweg über die Liste der Marken (Lauf und Schritt). Ist sie weg (ihr Ordner
+    einen Tag nach dem Schliessen) oder kann die Liste nicht gelesen werden, schliesst er keine und belegt allein am
+    Ziel; die Marke eines `unclear`-Tauschs bleibt dann offen, und die Antwort sagt nichts über sie.
+  - Nach einer gescheiterten Umbenennung sagt die Antwort nur, dass sie scheiterte (Option B), nicht, wo die neue
+    Fassung liegt; das Ergebnis des Schritts nennt den Platz, wo er gefüllt wurde.
+- **Trifft Normalfall:** nein. Im Normalfall (F59, F1, F2, F6, F47, F55) ist der Eingang belegt, die Marke in der Liste,
+  und beide Umbenennungen gelingen in einem Aufruf.
+
 ## Übernommen aus Zweig 2 (`bericht-zweig-2.md`, Abschnitt Grenzkandidaten; G-M9 aus «Behebung 2»)
 
 ### G-M1 Ein Lesen über Teile ist kein Augenblick

@@ -395,8 +395,8 @@ e('engine-sample-200', 'sample_finding(): 200 (decision 33)', EN,
 e('engine-verify-budget', 'run_verify(): the hashes over calls where the budget runs out (B4)', EN,
   "\t\t\t\tif ( $worked && $left() <= 0 ) {\n\t\t\t\t\t$result['cursor'] = $i;", "\t\t\t\tif ( false ) {\n\t\t\t\t\t$result['cursor'] = $i;", 'it', 'testTheCheckOfTheRunNeedsTheTitleBesides200AndGoesOnOverCalls')
 e('revert-wrote', 'plan(): only a step with a journal and a backup wrote anything (B9)', RV,
-  "\t\t\t$wrote = null !== $journal && ! in_array( $step['state'], array( 'planned', 'skipped' ), true ) && is_array( $journal['backup'] ) && ( 'create' !== $journal['object']['op'] || null !== $journal['object']['live_ref'] );",
-  "\t\t\t$wrote = null !== $journal && ! in_array( $step['state'], array( 'planned', 'skipped' ), true );", 'it', 'testAStepThatFailedBeforeItsBackupIsNoRestOnTheWayBack')
+  "\t\t$wrote = null !== $journal && ! in_array( $step['state'], array( 'planned', 'skipped' ), true ) && is_array( $journal['backup'] ) && ( 'create' !== $journal['object']['op'] || null !== $journal['object']['live_ref'] );",
+  "\t\t$wrote = null !== $journal && ! in_array( $step['state'], array( 'planned', 'skipped' ), true );", 'it', 'testAStepThatFailedBeforeItsBackupIsNoRestOnTheWayBack')
 e('revert-under-lock', 'begin(): a way back for a closed run is made under the lock of the store (decision 20, rule 4; A6)', RV,
   "\t\t\t$now    = AB_MCP_Protected_Store::under_lock(", "\t\t\t$now    = call_user_func(", 'it', 'testAWayBackForAClosedRunIsMadeUnderTheLockOfTheStore')
 e('export-one-reading', 'export(): form and content from the one reading of the rows (A4)', DK,
@@ -525,7 +525,7 @@ e('canon-decode-roundtrip', 'decode(): a byte marker that does not read back (no
 e('canon-decode-float-set', 'decode(): a float or set marker, which no such form carries, is refused', CN,
   "\t\tif ( array( '~f' ) === $keys || array( '~set' ) === $keys ) {", "\t\tif ( false ) {", 'canon', BYTES_UNIT)
 e('canon-decode-key', 'decode(): a key marker, which no such form carries, is refused', CN,
-  "\t\t\tif ( is_string( $key ) && 0 === strpos( $key, '~k:' ) ) {", "\t\t\tif ( false ) {", 'canon', BYTES_UNIT)
+  "\t\t\tif ( ( is_string( $key ) && 0 === strpos( $key, '~k:' ) ) || self::stopped( $deadline ) ) {", "\t\t\tif ( self::stopped( $deadline ) ) {", 'canon', BYTES_UNIT)
 e('canon-decode-bare-float', 'decode(): a bare float is not the text of encode()', CN,
   "\t\t\tif ( is_float( $value ) ) {\n\t\t\t\t// encode() writes a float as {\"~f\"}; a bare float is not its text.", "\t\t\tif ( false ) {\n\t\t\t\t// encode() writes a float as {\"~f\"}; a bare float is not its text.", 'canon', BYTES_UNIT)
 

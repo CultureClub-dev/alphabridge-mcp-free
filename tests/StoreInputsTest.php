@@ -341,6 +341,34 @@ final class StoreInputsTest extends TestCase {
 		);
 	}
 
+	/** The journal of a swap step as rename_marked() writes it, in the form of the row step.swap. */
+	private static function swap_journal(): array {
+		if ( ! defined( 'WP_PLUGIN_DIR' ) ) {
+			define( 'WP_PLUGIN_DIR', sys_get_temp_dir() . '/ab-mcp-uninstall-test-' . getmypid() );
+		}
+		$tree = static fn( string $path, string $gid ): array => array(
+			'path' => $path,
+			'gid'  => $gid,
+			'name' => 'shop',
+			'hash' => str_repeat( 'c', 64 ),
+			'form' => 'folder',
+			'dev'  => 1,
+			'ino'  => 2,
+		);
+		return array(
+			'unit'   => array(
+				'kind' => 'plugin',
+				'ref'  => 'shop',
+				'op'   => 'swap',
+			),
+			'since'  => 1500,
+			'target' => WP_PLUGIN_DIR . '/shop',
+			'old'    => $tree( '/store/backups/' . str_repeat( 'd', 32 ) . '/shop', str_repeat( 'd', 32 ) ),
+			'new'    => $tree( '/store/stage/' . str_repeat( 'e', 32 ) . '/shop', str_repeat( 'e', 32 ) ),
+			'active' => array( 'shop/shop.php' ),
+		);
+	}
+
 	private static function drivers(): array {
 		$now     = self::NOW;
 		$day     = self::DAY;
@@ -792,6 +820,26 @@ final class StoreInputsTest extends TestCase {
 					return is_wp_error( $got ) ? $got->get_error_code() . ( $calls->taken > 1 ? ' twice' : '' ) : $got;
 				},
 				'unknown' => static fn( $got ): bool => 'code:swap_args' === $got,
+			),
+			'step.swap'                => array(
+				'base'    => self::swap_journal(),
+				'more'    => array(
+					'fixed: none'                     => null,
+					'fixed: a unit of another name'   => array( 'unit' => array( 'kind' => 'plugin', 'ref' => 'other', 'op' => 'swap' ) ) + self::swap_journal(),
+					'fixed: a unit of another kind'   => array( 'unit' => array( 'kind' => 'theme', 'ref' => 'shop', 'op' => 'swap' ) ) + self::swap_journal(),
+					'fixed: a target of another place' => array( 'target' => '/elsewhere/shop' ) + self::swap_journal(),
+				),
+				// Its consumer back() (part E of the rest): the journal of a swap
+				// step, read in its form and held against the unit of the plan
+				// and its target, before a way back is planned on it; a journal
+				// not of the form, or of another unit or target, is not known.
+				'valid'   => array( array( self::swap_journal(), 'a way back' ) ),
+				'run'     => static function ( $v ) {
+					$unit = SyncCodeOpsTest::unit( array( 'seq' => 3, 'op' => 'swap', 'stage_seq' => 2 ) );
+					$got  = AB_MCP_Sync_Code_Swap::back( 'plan', array( 'run_id' => 1 ), array( 'seq' => 3, 'state' => 'done' ), $unit, array( 'run_id' => 1, 'seq' => 3, 'parts' => $v ) );
+					return is_wp_error( $got ) ? $got->get_error_code() : 'a way back';
+				},
+				'unknown' => static fn( $got ): bool => 'code:journal_unknown' === $got,
 			),
 			'read.until'               => array(
 				'base'    => 1500.5,

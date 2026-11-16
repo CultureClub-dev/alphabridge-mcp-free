@@ -448,6 +448,7 @@ final class StoreRemoverGuardTest extends TestCase {
 			array(
 				"includes/sync/class-sync-backup.php 'backups'",
 				"includes/sync/class-sync-code-stage.php 'stage'",
+				"includes/sync/class-sync-code-swap.php 'backups'",
 				"includes/sync/class-sync-export.php 'out'",
 				"includes/sync/class-sync-import.php 'in'",
 				'includes/sync/class-sync-proposal.php $area',
@@ -455,7 +456,7 @@ final class StoreRemoverGuardTest extends TestCase {
 				"includes/sync/class-sync-report.php 'reports'",
 			),
 			array_keys( $seen ),
-			'The writers of sidecars: one area each, the proposal through its seam (reports); stage by the stage of a unit of code with its run (Z8b branch 4, D4).'
+			'The writers of sidecars: one area each, the proposal through its seam (reports); stage by the stage of a unit of code with its run (Z8b branch 4, D4); backups by the way back of a swap for the place of the new version, a group of its own with the run of the way back (Z8b branch 5, part E, question 1 B).'
 		);
 	}
 }
