@@ -421,4 +421,5 @@ return array(
 	'Then clear OPcache of this site, or have PHP restarted (at the host: PHP-FPM or the web server): where PHP does not check its files for changes (opcache.validate_timestamps=0), it can still run the code it read before.',
 	// includes/sync/class-sync-code-swap.php (Z8b branch 5, part D2a of the rest: the faults in the step of the swap).
 	'Have OPcache of this site cleared at the host, or PHP restarted (PHP-FPM or the web server), so that PHP runs the files that are at the target now.',
+	'A mark of this swap may be left in part in %1$s (run %2$d, step %3$d, open): it moved nothing, and while it is open the protected store keeps the stage of this unit; it needs nothing else.',
 );

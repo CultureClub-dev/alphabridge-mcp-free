@@ -345,6 +345,13 @@ e('d1b-listing-whole', 'php_paths(): an entry not read or neither a folder nor a
 e('d1c-backup-proved', 'unclear(): a backup not proved by in_backup() gets no command that puts it at the target, also where the swap stopped before close() (Codex D1, finding 5, round 2)', CS,
   "\t\tif ( ! $known['backup'] && 'vor-den-umbenennungen' !== $point ) {", "\t\tif ( false ) {", 'coderun', AFTER)
 
+# Part D2a of the rest: the proof of the backup in the answer of an unclear step (the lead, 16.11. 03:18).
+F35 = 'testASecondRenameThatFailsGoesBackOrEndsUnclearWithAWayByHandThatWorks'
+e('d2a-proof-asked', 'unclear(): where the backup was not asked yet (OPcache before close(), between the renames), the answer asks in_backup() first and gives the command where it is proved (the lead on D2a, «Zu 2»)', CS,
+  "\t\tif ( null === $known['backup'] && 'vor-den-umbenennungen' !== $point ) {", "\t\tif ( false ) {", 'coderun', F35)
+e('d2a-proof-in-time', 'in_backup(): the backup counts as proved only where its tree read back within the time of the call (its deadline), never after it', CS,
+  "\t\t$tree = null !== $at && array( $old['form'], $old['dev'], $old['ino'] ) === array( $at['form'], $at['dev'], $at['ino'] ) ? AB_MCP_Protected_Store::tree( 'backups', $old['gid'], $old['name'], $old['hash'], AB_MCP_Sync_Deadline::at( $until ) ) : null;", "\t\t$tree = null !== $at && array( $old['form'], $old['dev'], $old['ino'] ) === array( $at['form'], $at['dev'], $at['ino'] ) ? AB_MCP_Protected_Store::tree( 'backups', $old['gid'], $old['name'], $old['hash'] ) : null;", 'coderun', F35)
+
 # ------------------------------------------------ check and write
 src = {f: open(os.path.join(ROOT, f)).read() for f in VAR}
 errors = []

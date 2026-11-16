@@ -1041,4 +1041,22 @@ return array(
 		'run'     => $it( 'SyncCodeRunTest', 'testAfterTheRenamesAStepNotProvedIsUnclearAndItsAnswerSaysWhatIsProved' ),
 		'expect'  => '/testAfterTheRenamesAStepNotProvedIsUnclearAndItsAnswerSaysWhatIsProved/',
 	),
+	array(
+		'id'      => 'tausch/d2a-proof-asked',
+		'clause'  => 'unclear(): where the backup was not asked yet (OPcache before close(), between the renames), the answer asks in_backup() first and gives the command where it is proved (the lead on D2a, «Zu 2»)',
+		'file'    => $cs,
+		'search'  => "\t\tif ( null === \$known['backup'] && 'vor-den-umbenennungen' !== \$point ) {",
+		'replace' => "\t\tif ( false ) {",
+		'run'     => $it( 'SyncCodeRunTest', 'testASecondRenameThatFailsGoesBackOrEndsUnclearWithAWayByHandThatWorks' ),
+		'expect'  => '/testASecondRenameThatFailsGoesBackOrEndsUnclearWithAWayByHandThatWorks/',
+	),
+	array(
+		'id'      => 'tausch/d2a-proof-in-time',
+		'clause'  => 'in_backup(): the backup counts as proved only where its tree read back within the time of the call (its deadline), never after it',
+		'file'    => $cs,
+		'search'  => "\t\t\$tree = null !== \$at && array( \$old['form'], \$old['dev'], \$old['ino'] ) === array( \$at['form'], \$at['dev'], \$at['ino'] ) ? AB_MCP_Protected_Store::tree( 'backups', \$old['gid'], \$old['name'], \$old['hash'], AB_MCP_Sync_Deadline::at( \$until ) ) : null;",
+		'replace' => "\t\t\$tree = null !== \$at && array( \$old['form'], \$old['dev'], \$old['ino'] ) === array( \$at['form'], \$at['dev'], \$at['ino'] ) ? AB_MCP_Protected_Store::tree( 'backups', \$old['gid'], \$old['name'], \$old['hash'] ) : null;",
+		'run'     => $it( 'SyncCodeRunTest', 'testASecondRenameThatFailsGoesBackOrEndsUnclearWithAWayByHandThatWorks' ),
+		'expect'  => '/testASecondRenameThatFailsGoesBackOrEndsUnclearWithAWayByHandThatWorks/',
+	),
 );

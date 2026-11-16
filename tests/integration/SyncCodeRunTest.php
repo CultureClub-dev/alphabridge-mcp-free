@@ -1201,13 +1201,10 @@ final class SyncCodeRunTest extends TestCase {
 		);
 	}
 
-	/** The renames the seams of this test saw. */
+	/** The renames the seam of the swap saw. */
 	private static function renames(): int {
-		$n = 0;
-		foreach ( AB_MCP_Test_Seam::recorded() as $calls ) {
-			$n += count( array_filter( $calls, static fn( $call ) => 'rename' === $call['method'] ) );
-		}
-		return $n;
+		$calls = AB_MCP_Test_Seam::recorded()[ AB_MCP_Sync_Code_Swap::class . '::$naht_sync_code_swap' ] ?? array();
+		return count( array_filter( $calls, static fn( $call ) => 'rename' === $call['method'] ) );
 	}
 
 	/**
@@ -1265,6 +1262,150 @@ final class SyncCodeRunTest extends TestCase {
 		return array(
 			'the journal not written (F36)'         => array( 'the journal not written' ),
 			'the place of the backup refused (F36)' => array( 'the place of the backup refused' ),
+		);
+	}
+
+	/**
+	 * Prüft: D2a 3, the mark not written (T3 2): where put_mark() fails, there
+	 * is no rename; the step ends failed with the old version at its place,
+	 * the lock for changes is free, and the answer says that a part of the
+	 * mark may be left open in the folder of the marks, as when put_mark()
+	 * fails only after mark.json (its instruction not written: an open mark
+	 * whose id the swap does not know; the Festlegung of this part).
+	 * Sonst: a swap could rename without its mark and its instruction, so
+	 * that no way by hand is written, or a mark left open would keep the
+	 * stage in the store without a word.
+	 */
+	#[DataProvider( 'marks_not_written' )]
+	public function testAMarkThatCannotBeWrittenMovesNothingAndTheAnswerNamesAMarkLeftInPart( string $case ): void {
+		list( $run_id, , $target ) = self::ready_to_swap();
+		$old    = self::digest( $target );
+		$faults = array();
+		if ( 'put_mark fails' === $case ) {
+			$faults[] = array(
+				'method' => 'put_mark',
+				'nth'    => 1,
+				'kind'   => 'return',
+				'value'  => new WP_Error( 'ab_it_mark', 'The mark refused.' ),
+			);
+		} else {
+			// The instruction of the mark aside before its rename, so that
+			// only mark.json is written.
+			AB_MCP_Test_Seam::install(
+				AB_MCP_Protected_Store::class,
+				'naht_protected_store',
+				new \AB_MCP_Protected_Store_Calls(),
+				array(
+					array(
+						'method' => 'rename',
+						'kind'   => 'before',
+						'before' => static function ( $method, array $args ): void {
+							if ( AB_MCP_Protected_Store::GUIDE_FILE === basename( $args[1] ) ) {
+								self::assertTrue( rename( $args[0], $args[0] . '-beiseite' ) );
+							}
+						},
+					),
+				)
+			);
+		}
+		$answer = self::swap_with( $run_id, $faults );
+		self::assertIsArray( $answer, is_wp_error( $answer ) ? $answer->get_error_code() . ': ' . $answer->get_error_message() : '' );
+		$step = self::step( $run_id, 3 );
+		$says = $answer['next'];
+		self::assertSame( 'failed', $step['state'], $says );
+		self::assertSame( 0, self::renames(), 'No rename.' );
+		self::assertStringContainsString( 'is not swapped, and the old version is at its place', $says );
+		self::assertStringContainsString( 'A mark of this swap may be left in part in ' . AB_MCP_Protected_Store::root() . '/' . AB_MCP_Protected_Store::MARKS . ' (run ' . $run_id . ', step 3, open): it moved nothing, and while it is open the protected store keeps the stage of this unit', $says );
+		self::assertFalse( AB_MCP_Sync_Code_Swap::lock_held(), 'The swap holds no lock for changes.' );
+		self::assertTrue( AB_MCP_Change_Lock::take(), 'The lock for changes can be taken again.' );
+		AB_MCP_Change_Lock::release();
+		clearstatcache();
+		self::assertSame( array( '1.0.0', $old ), array( AB_MCP_IT_Code::fassung( 'a', 'plugin', 'ab-it-aktiv' ), self::digest( $target ) ), 'The old version at the target as it was.' );
+		$mark = self::mark_of_swap( $run_id );
+		if ( 'put_mark fails' === $case ) {
+			self::assertStringContainsString( 'The mark refused.', $says );
+			self::assertNull( $mark, 'No mark.' );
+			return;
+		}
+		self::assertSame( 'open', $mark['state'] ?? null, 'Its mark.json is there, open, as the answer says.' );
+		self::assertFileDoesNotExist( AB_MCP_Protected_Store::root() . '/' . AB_MCP_Protected_Store::MARKS . '/' . $mark['mid'] . '/' . AB_MCP_Protected_Store::GUIDE_FILE );
+	}
+
+	/** How the mark of a swap is not written. */
+	public static function marks_not_written(): array {
+		return array(
+			'put_mark fails'                   => array( 'put_mark fails' ),
+			'put_mark fails after mark.json' => array( 'put_mark fails after mark.json' ),
+		);
+	}
+
+	/**
+	 * Prüft: D2a 4 (T3 2), OPcache not cleared after the second rename
+	 * (invalidate_opcache() answers not_possible): the step ends unclear,
+	 * the mark stays open, and the answer names the way back of the run, the
+	 * way by hand and that OPcache is to be cleared at the host. The answer
+	 * proves the backup first: proved, its command line swaps back, and it
+	 * does (the old version at the target, the stage at its place again);
+	 * the backup changed, no command, but the sentence to check it first.
+	 * The lock for changes is free and nothing is lost.
+	 * Sonst: the step would be done with old code left in OPcache, or a
+	 * person would get no way by hand that works, or one for a backup that
+	 * is not the old version.
+	 */
+	#[DataProvider( 'opcache_faults' )]
+	public function testOpcacheNotClearedAfterTheRenamesEndsUnclearWithTheWayBackTheWayByHandAndTheHost( string $case ): void {
+		list( $run_id, , $target ) = self::ready_to_swap();
+		$seen   = null;
+		$faults = array(
+			self::watch( $seen ),
+			// Call 1 is the one of prepare(); 2 the first after the renames.
+			array(
+				'method' => 'opcache',
+				'nth'    => 2,
+				'kind'   => 'return',
+				'value'  => 'not_possible',
+			),
+		);
+		if ( 'the backup changed' === $case ) {
+			$faults[] = array(
+				'method' => 'rename',
+				'nth'    => 2,
+				'kind'   => 'before',
+				'before' => static function () use ( &$seen ): void {
+					self::assertNotFalse( file_put_contents( $seen['backup'] . '/fremd.txt', 'fremd' ) );
+				},
+			);
+		}
+		$answer = self::swap_with( $run_id, $faults );
+		self::assertIsArray( $answer, is_wp_error( $answer ) ? $answer->get_error_code() . ': ' . $answer->get_error_message() : '' );
+		$step = self::step( $run_id, 3 );
+		$says = $answer['next'];
+		self::assertSame( 'unclear', $step['state'], $says );
+		self::assertSame( '2.0.0', AB_MCP_IT_Code::fassung( 'a', 'plugin', 'ab-it-aktiv' ), 'The new version is at the target.' );
+		self::assertStringContainsString( 'OPcache could not be cleared for ' . $target . '/', $says );
+		self::assertStringContainsString( 'Have OPcache of this site cleared at the host, or PHP restarted (PHP-FPM or the web server), so that PHP runs the files that are at the target now.', $says );
+		self::assertStringContainsString( 'wp_site_revert action=plan with run_id ' . $run_id, $says, 'The way back of the run.' );
+		self::assertSame( array( 'open', 'open' ), array( self::mark_of_swap( $run_id )['state'], $step['result']['mark'] ), 'The mark stays open.' );
+		if ( 'the backup changed' === $case ) {
+			self::assertStringContainsString( 'The backup ' . $seen['backup'] . ' is not proved as the old version, so this answer gives no command that puts it back: check the backup first', $says );
+			self::assertSame( array(), $step['result']['by_hand'], 'No command by hand.' );
+			// What the test put into the backup goes aside again (nothing deleted).
+			self::assertTrue( rename( $seen['backup'] . '/fremd.txt', $seen['backup'] . '-fremd.txt' ) );
+			self::nothing_lost( $seen );
+			return;
+		}
+		self::nothing_lost( $seen );
+		self::assertStringContainsString( " && mv '" . $target . "' '" . $seen['stage'] . "' && mv '" . $seen['backup'] . "' '" . $target . "' && ", $says, 'The command that swaps back.' );
+		self::assertStringEndsWith( 'OK', self::run_by_hand( $step['result']['by_hand'] ), 'The command does all of it.' );
+		clearstatcache();
+		self::assertSame( array( '1.0.0', $seen['old'], $seen['new'] ), array( AB_MCP_IT_Code::fassung( 'a', 'plugin', 'ab-it-aktiv' ), self::digest( $target ), self::digest( $seen['stage'] ) ), 'The old version is back, the stage at its place, each whole.' );
+	}
+
+	/** OPcache not cleared, with the backup as it is or changed. */
+	public static function opcache_faults(): array {
+		return array(
+			'the backup proved'  => array( 'the backup proved' ),
+			'the backup changed' => array( 'the backup changed' ),
 		);
 	}
 

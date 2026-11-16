@@ -1765,13 +1765,30 @@ final class AB_MCP_Sync_Code_Swap {
 			return self::unclear( $in, $plan, $moved['journal'], 'vor-den-umbenennungen', $closed->get_error_message() );
 		}
 		$why = array(
-			'mark'   => null === $moved['why'] ? '' : $moved['why']->get_error_message(),
+			// A mark not given may still be written in part (mark.json before
+			// its instruction; D2a 3, the Festlegung of this part): named, as
+			// the swap knows no id of it.
+			'mark'   => ( null === $moved['why'] ? '' : $moved['why']->get_error_message() . ' ' ) . self::part_mark_note( $in ),
 			'first'  => __( 'The old version could not be moved into the backup of the run (rename() failed, or the place was not free).', 'alphabridge-mcp' ),
 			'second' => __( 'The new version could not be put at the target (rename() failed, or the place was not free), so the old one went back to its place.', 'alphabridge-mcp' ),
 		);
 		/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name, 3: why (one or more whole sentences). */
 		$message = sprintf( __( 'The %1$s %2$s is not swapped, and the old version is at its place: %3$s Its stage stays in the protected store. The run goes on with the next step (action=next); to swap the unit, make a new report (wp_site_diff) and plan again.', 'alphabridge-mcp' ), $in['unit']['kind'], $in['unit']['ref'], $why[ $moved['at'] ] );
 		return self::ended( $in, 'failed', $moved['journal'], array( 'message' => $message ) );
+	}
+
+	/**
+	 * Where the mark of a swap was not given: that a part of it may be left
+	 * in the folder of the marks of the store, open (its mark.json without
+	 * its instruction), and what that means.
+	 *
+	 * @param array $in The arguments.
+	 * @return string A sentence.
+	 */
+	private static function part_mark_note( array $in ) {
+		$root = AB_MCP_Protected_Store::root();
+		/* translators: 1: the folder of the marks of the protected store (absolute path), 2: run number, 3: step number. */
+		return sprintf( __( 'A mark of this swap may be left in part in %1$s (run %2$d, step %3$d, open): it moved nothing, and while it is open the protected store keeps the stage of this unit; it needs nothing else.', 'alphabridge-mcp' ), is_wp_error( $root ) ? 'the protected store' : $root . '/' . AB_MCP_Protected_Store::MARKS, $in['run_id'], $in['unit']['seq'] );
 	}
 
 	/**
