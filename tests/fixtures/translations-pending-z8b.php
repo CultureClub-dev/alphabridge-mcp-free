@@ -468,4 +468,6 @@ return array(
 	// includes/sync/class-sync-code-swap.php and includes/sync/class-sync-revert.php (Z8b branch 5, the Behebung after the skeptic E1 of part E: the way of the other steps only where a plan takes steps (B3), and a run of the code whose record does not read back, fail closed at the one entrance (B4)).
 	'To plan the way back of the other steps that wrote, pass steps without %d.',
 	'Nothing of run %1$d is planned back, put back or closed as checked: its record (%2$s) does not read back as it was written, so whether it swapped plugins or themes is not known. Ask the host to check the table of the runs; where it swapped one, put the old version back by hand in wp-admin with the version of before.',
+	// includes/sync/class-sync-code-swap.php (Z8b branch 5, part F of the rest, section 2: the theme read as not running after its way back, F58).
+	'The theme %s does not run on this site now; where it ran before the swap, switch back to it in wp-admin (Appearance → Themes).',
 );

@@ -36,6 +36,7 @@ namespace AlphaBridge\Tests\Integration;
 
 use AB_MCP_Change_Lock;
 use AB_MCP_IT_Code;
+use AB_MCP_IT_Process;
 use AB_MCP_IT_Sites;
 use AB_MCP_IT_Sync_Steps;
 use AB_MCP_Php_Probe;
@@ -2419,6 +2420,265 @@ final class SyncCodeRunTest extends TestCase {
 	}
 
 	/**
+	 * Prüft: F58 (plan F58 and Rest b; Zettel F, section 2, with the
+	 * decision of the lead on its question 1): the swap of step 3, in a
+	 * process of its own, aborted hard (SIGKILL, no shutdown function) at
+	 * each of its three points, for the active plugin of F56 and for the
+	 * child theme that runs (as F9): P1 before the first rename, P2 between
+	 * the renames, P3 after the second. The lock for changes the child left
+	 * keeps the run open (its swap may still run) until it is TIMEOUT old;
+	 * then the run is interrupted, its step begun, its mark open, the pair
+	 * as it was, the note of the replacement written, and the first lines
+	 * of the instruction of the mark send what is on the disk to the
+	 * section of that point. At P1 and P3 that is the state the tests of
+	 * their ways by hand and of way (a) hold, so those ways are not run
+	 * here again (question 1): the old version at the target, nothing at
+	 * the place of the backup, the new one in the stage, section
+	 * [vor-den-umbenennungen], as testAnOldVersionBackAtTheTargetWhose
+	 * ProofOrMarkFailsEndsUnclearWithTheShortAnswer (its section) shows it;
+	 * the new version at the target, the old one in the backup, nothing at
+	 * the place of the stage, section [nach-den-umbenennungen], as
+	 * testOpcacheNotClearedAfterTheRenamesEndsUnclearWithTheWayBackTheWay
+	 * ByHandAndTheHost shows it; and the run, the step, the mark and the
+	 * pair as testARunOfTheCodeBrokenOffIsClosedAsCheckedOnlyWhereAVersion
+	 * IsProvedAtTheTarget has them before way (a) (its cases of the old and
+	 * of the new version at the target).
+	 * At P2 way (a) refuses before anything is written, with the way back
+	 * and the way by hand; without the entrance (no way back for code)
+	 * wp_site_revert refuses and names the folder of the marks, and the
+	 * command of the section between the renames puts the old version back
+	 * at the target.
+	 * Then way (b), the way back of the run, on the same run: the old
+	 * version at the target, the folder it was before the swap; the mark
+	 * closed, the pair unclear, the step done and the run closed as
+	 * reverted; at P1 and after the way by hand nothing moved, no OPcache,
+	 * the stage as it was; at P2 the old version back from the backup and
+	 * OPcache for its PHP files; at P3 the new version in a group of its own
+	 * and OPcache for the PHP files of both. Where WordPress let go of the
+	 * missing unit at P2 (validate_active_plugins(), validate_current_
+	 * theme(), as wp-admin does), the answer names the plugin left inactive
+	 * or the theme that does not run now, each with its way; a theme is
+	 * named only where this call read it as not running, never where its
+	 * rows are not read (option B).
+	 * Sonst: a hard abort at one of the points would leave a state that one
+	 * of the ways does not know, or a site without its plugin or theme and
+	 * no word of it.
+	 */
+	#[DataProvider( 'aborted_hard' )]
+	public function testASwapAbortedHardAtEachPointLeavesAStateItsWaysBackKnow( string $kind, string $point, string $way ): void {
+		list( $run_id, $unit, $target, $old, $new ) = self::ready_to_swap_of( $kind );
+		clearstatcache();
+		$ino = lstat( $target )['ino'];
+		self::aborted_at( $run_id, $point );
+		$state = static fn(): array => array( AB_MCP_Sync_Run::get( $run_id )['state'], self::step( $run_id, 3 )['state'], self::mark_of_swap( $run_id )['state'], AB_MCP_Sync_Pairs::get( $unit['pair_id'] )['state'] );
+		self::assertSame( array( 'interrupted', 'begun', 'open', 'active' ), $state(), 'The run, its step, the mark and the pair, as way (a) of part E finds them.' );
+		self::assertNotNull( self::replaced_row(), 'The note of the replacement is written, and it stays.' );
+		list( $guide, $places ) = self::guide_of( $run_id );
+		self::assertSame( $ino, $places['old'], 'The mark names the folder of the target before the swap as the old version.' );
+		$at    = array(
+			'P1' => array( 'old', null, 'new', 'vor-den-umbenennungen' ),
+			'P2' => array( null, 'old', 'new', 'zwischen-den-umbenennungen' ),
+			'P3' => array( 'new', 'old', null, 'nach-den-umbenennungen' ),
+		)[ $point ];
+		$shown = self::shown_by( $guide, $places );
+		self::assertSame( array_map( static fn( $v ) => null === $v ? null : $places[ $v ], array_slice( $at, 0, 3 ) ), array_values( $shown ), 'What the first lines of the instruction show at target, backup and stage.' );
+		self::assertSame( $at[3], self::fits( $guide, $places, $shown ), 'The first lines send this state to the section of its point.' );
+		clearstatcache();
+		self::assertSame( array( 'P1' => $old, 'P2' => array(), 'P3' => $new )[ $point ], file_exists( $target ) ? self::bytes_of( $target ) : array(), 'The version at the target, byte for byte, or none.' );
+		$sentence = sprintf( 'The theme %s does not run on this site now; where it ran before the swap, switch back to it in wp-admin (Appearance → Themes).', $unit['ref'] );
+		if ( 'by hand' === $way ) {
+			self::assertTrue( 'theme' !== $kind || self::theme_let_go(), 'WordPress lets go of the theme whose folder it misses.' );
+			AB_MCP_Sync_Revert::admit( null );
+			try {
+				$says = self::refused( self::gated( 'wp_site_revert', array( 'action' => 'plan', 'run_id' => $run_id ) ), 'ab_mcp_sync_revert_code' );
+			} finally {
+				AB_MCP_Sync_Revert::admit( array( 'AB_MCP_Sync_Code_Ops', 'back' ) );
+			}
+			$marks = AB_MCP_Protected_Store::named_by_swap()['marks'];
+			self::assertStringEndsWith( sprintf( 'Where the mark of a swap of it is still open in %s, its instruction there says how to put the old version back in a shell on the server.', $marks ), $says );
+			self::assertStringStartsWith( $marks . '/', $guide, 'The instruction lies in that folder.' );
+			self::assertStringEndsWith( 'OK', self::run_section( $guide, $at[3], 'The target is missing; the old version lies whole in the backup. Put it back and check it:' ), 'The command puts the old version back.' );
+			clearstatcache();
+			self::assertSame( array( $ino, $old ), array( lstat( $target )['ino'], self::bytes_of( $target ) ), 'The old version at the target, the folder it was.' );
+			if ( 'theme' === $kind ) {
+				// The rows of the theme not read in the calls of the way
+				// back: runs() gives null, and no sentence is said (option B).
+				self::seam_of_swap(
+					array(
+						array(
+							'method' => 'option',
+							'kind'   => 'return',
+							'value'  => false,
+						),
+					)
+				);
+			}
+		} elseif ( 'P2' === $point ) {
+			$says = self::refused( AB_MCP_Sync_Run::close_checked( $run_id, self::admin(), true ), 'code:checked' );
+			self::assertStringStartsWith( sprintf( 'The version at %s could not be proved as the old version of the swap', $target ), $says );
+			self::assertStringContainsString( sprintf( 'So run %1$d is not closed as checked: that takes the old version of the %2$s %3$s proved at its target, or the new one there and the old one whole in the backup. Nothing was written, and the run stays interrupted. Take its way back (wp_site_revert action=plan with run_id %1$d), or put the old version back by hand in a shell on the server with the instruction of its mark in ', $run_id, $unit['kind'], $unit['ref'] ), $says );
+			clearstatcache();
+			self::assertSame( array( array( 'interrupted', 'begun', 'open', 'active' ), false ), array( $state(), file_exists( $target ) ), 'Nothing was written; the target is still empty.' );
+			// What wp-admin does with a unit whose files it misses.
+			if ( 'plugin' === $kind ) {
+				self::assertArrayHasKey( $unit['ref'] . '/' . $unit['ref'] . '.php', validate_active_plugins() );
+			} else {
+				self::assertTrue( self::theme_let_go(), 'WordPress switches away from the theme.' );
+			}
+		}
+		$back = self::way_back_of( $run_id );
+		self::assertSame( array( $run_id, 'closed_reverted' ), array( (int) $back['begun']['run_id'], $back['back']['state'] ), 'The way back on the same run, closed as reverted.' );
+		$step = self::back_step( $run_id );
+		$says = $step['result']['message'];
+		self::assertSame( 'done', $step['state'], $says );
+		self::assertStringStartsWith( sprintf( 'The %1$s %2$s is in its old version at %3$s, proved there', $unit['kind'], $unit['ref'], $target ), $says );
+		clearstatcache();
+		self::assertSame( array( $ino, $old ), array( lstat( $target )['ino'], self::bytes_of( $target ) ), 'The old version at the target, the folder it was before the swap.' );
+		self::assertSame( array( 'closed', 'unclear' ), array( self::mark_of_swap( $run_id )['state'], AB_MCP_Sync_Pairs::get( $unit['pair_id'] )['state'] ), 'The mark closed, the pair to be confirmed anew.' );
+		$moved = array(
+			'P1' => array(),
+			'P2' => 'by hand' === $way ? array() : array( $old ),
+			'P3' => array( $old, $new ),
+		)[ $point ];
+		$php   = array();
+		foreach ( $moved as $version ) {
+			foreach ( array_keys( $version ) as $rel ) {
+				$php[ $rel ] = $php[ $rel ] ?? AB_MCP_Sync_Code_Stage::is_php( $rel );
+			}
+		}
+		self::assertSame( count( array_filter( $php ) ), $step['result']['opcache'], 'OPcache for each PHP file of what moved, by its path at the target.' );
+		if ( 'P3' === $point ) {
+			$place = $step['result']['place'];
+			self::assertIsString( $place, 'The new version moved aside.' );
+			self::assertSame( $new, self::bytes_of( $place ), 'The new version lies byte for byte at its place.' );
+			$own = array_values( array_filter( (array) AB_MCP_Protected_Store::groups( 'backups' ), static fn( $g ) => (int) $g['run_id'] === $run_id && 'back-' . $run_id . '-' . (int) $step['seq'] === $g['label'] ) );
+			self::assertCount( 1, $own, 'A group of its own of the backups of the way back.' );
+			$tree = AB_MCP_Protected_Store::tree( 'backups', $own[0]['gid'], basename( $target ), self::step( $run_id, 3 )['parts']['new']['hash'] );
+			self::assertSame( $place, is_array( $tree ) ? $tree['path'] : $tree->get_error_message(), 'The new version is the tree of that group.' );
+		} else {
+			self::assertNull( $step['result']['place'], 'Nothing moved aside.' );
+			clearstatcache();
+			self::assertSame( array( $places['new'], $new ), array( lstat( $places['stage'] )['ino'], self::bytes_of( $places['stage'] ) ), 'The stage as it was.' );
+		}
+		if ( 'plugin' === $kind ) {
+			$main = $unit['ref'] . '/' . $unit['ref'] . '.php';
+			self::assertSame( 'P2' === $point && 'way (b)' === $way, str_contains( $says, sprintf( 'The plugin %1$s ran when its swap began and is not read as active now, and step 3 is not in accept of its way back (wp_site_revert action=plan), so the way back leaves it inactive. Activate it in wp-admin (Plugins → Activate) or with wp_activate_plugin; either runs its activation routine.', $main ) ), 'The plugin WordPress let go of, named with its way: ' . $says );
+			return;
+		}
+		self::assertSame( 'P2' === $point && 'way (b)' === $way, str_contains( $says, $sentence ), 'A theme read as not running, named with its way: ' . $says );
+		self::assertSame( 'P2' === $point ? 'twentytwentyfive' : 'ab-it-kind', AB_MCP_IT_Code::theme_options( 'a' )['stylesheet'], 'The theme that runs.' );
+	}
+
+	/** The three points of a swap aborted hard, for a plugin and for a theme; between the renames (P2) once with way (a) before way (b), once with the way by hand without the entrance. */
+	public static function aborted_hard(): array {
+		$out = array();
+		foreach ( array( 'plugin', 'theme' ) as $kind ) {
+			$out[ "$kind, before the first rename" ]         = array( $kind, 'P1', 'way (b)' );
+			$out[ "$kind, between the renames" ]             = array( $kind, 'P2', 'way (b)' );
+			$out[ "$kind, between the renames, by hand" ]    = array( $kind, 'P2', 'by hand' );
+			$out[ "$kind, after the second rename" ]         = array( $kind, 'P3', 'way (b)' );
+		}
+		return $out;
+	}
+
+	/**
+	 * A run ready for its swap (step 3), F56 for a plugin (ab-it-aktiv
+	 * 1.0.0 to 2.0.0, active, released with accept) or as F9 for a theme
+	 * (ab-it-kind 1.0.0 to 1.1.0, the child theme that runs): its number,
+	 * the unit of the swap, its target, and the bytes of the old and of the
+	 * new version.
+	 */
+	private static function ready_to_swap_of( string $kind ): array {
+		if ( 'plugin' === $kind ) {
+			list( $run_id, $unit, $target ) = self::ready_to_swap();
+			return array( $run_id, $unit, $target, self::bytes_of( AB_MCP_IT_Code::source( 'plugin', 'ab-it-aktiv', '1.0.0' ) ), self::bytes_of( AB_MCP_IT_Code::source( 'plugin', 'ab-it-aktiv', '2.0.0' ) ) );
+		}
+		self::paired();
+		AB_MCP_IT_Code::put( 'b', 'theme', 'ab-it-kind', '1.1.0' );
+		list( $report, $units ) = self::report();
+		$n = (int) $units['theme:ab-it-kind']['n'];
+		self::wporg();
+		list( , $run ) = self::begun(
+			array(
+				'action'    => 'plan',
+				'report_id' => $report['report_id'],
+				'select'    => array( $n ),
+				'accept'    => array( $n ),
+			)
+		);
+		$run_id = (int) $run['run_id'];
+		for ( $i = 0; $i < 25 && 'done' !== self::step( $run_id, 2 )['state']; $i++ ) {
+			$answer = self::next( $run_id );
+			self::assertIsArray( $answer, is_wp_error( $answer ) ? $answer->get_error_code() . ': ' . $answer->get_error_message() : '' );
+		}
+		self::assertSame( array( 'done', 'planned', 'ab-it-kind' ), array( self::step( $run_id, 2 )['state'], self::step( $run_id, 3 )['state'], AB_MCP_IT_Code::theme_options( 'a' )['stylesheet'] ), 'Staged, ready for its swap; the theme runs.' );
+		return array( $run_id, AB_MCP_Sync_Code_Ops::item( AB_MCP_Sync_Run::get( $run_id )['plan'], 3 )['unit'], AB_MCP_IT_Code::path( 'a', 'theme', 'ab-it-kind' ), self::bytes_of( AB_MCP_IT_Code::source( 'theme', 'ab-it-kind', '1.0.0' ) ), self::bytes_of( AB_MCP_IT_Code::source( 'theme', 'ab-it-kind', '1.1.0' ) ) );
+	}
+
+	/** What wp-admin does with a theme whose folder is missing (validate_current_theme()), in a request of its own on site A, as WordPress takes the paths of its theme as it loads: whether it switched away from it. */
+	private static function theme_let_go(): bool {
+		return false === AB_MCP_IT_Process::calls( 'a', array( 'calls' => array( array( 'call' => 'validate_current_theme', 'as' => 'valid' ) ) ) )['results']['valid'];
+	}
+
+	/**
+	 * Baustein 1 of Zettel F: the swap of step 3, in a process of its own
+	 * on site A as its admin (AB_MCP_Sync_Engine::next() with the run that
+	 * process reads), aborted hard at a point (AB_MCP_Test_Abort,
+	 * no_shutdown): P1 before the first rename, P2 after it, P3 after the
+	 * second; its marker and the signal 9 prove the point. The lock for
+	 * changes the child left is fresh, so the run is not interrupted (its
+	 * swap may still run); its row is put TIMEOUT + 1 s back, as a call
+	 * finds it once that time is over (the pattern of SiteAddressJournalTest
+	 * :233), and status finds the run interrupted.
+	 */
+	private static function aborted_at( int $run_id, string $point ): void {
+		list( $nth, $when ) = array(
+			'P1' => array( 1, 'before' ),
+			'P2' => array( 1, 'after' ),
+			'P3' => array( 2, 'after' ),
+		)[ $point ];
+		$abort = AB_MCP_IT_Process::abort(
+			'a',
+			array(
+				'require' => array( AB_MCP_DIR . 'includes/sync/class-sync-push.php' ),
+				'seams'   => array(
+					array(
+						'owner'    => 'AB_MCP_Sync_Code_Swap',
+						'property' => 'naht_sync_code_swap',
+						'real'     => 'AB_MCP_Sync_Code_Swap_Calls',
+						'faults'   => array(
+							array(
+								'method' => 'rename',
+								'nth'    => $nth,
+								'kind'   => 'abort',
+								'when'   => $when,
+								'point'  => $point,
+								'mode'   => 'no_shutdown',
+							),
+						),
+					),
+				),
+				'calls'   => array(
+					array(
+						'call'   => 'AB_MCP_Sync_Run::get',
+						'args'   => array( $run_id ),
+						'as'     => 'run',
+						'expect' => 'result',
+					),
+					array(
+						'call' => 'AB_MCP_Sync_Engine::next',
+						'args' => array( '$run' ),
+					),
+				),
+			)
+		);
+		self::assertSame( array( $point, 9 ), array( $abort['point'], $abort['run']['signal'] ), 'Ended at its point by the signal 9, before any shutdown function.' );
+		self::assertSame( 3, AB_MCP_Sync_Run::settle( AB_MCP_Sync_Run::get( $run_id ) )['running'] ?? null, 'The lock the child left is fresh: the swap may still run, the run is not interrupted.' );
+		update_option( AB_MCP_Change_Lock::OPTION, (string) ( time() - AB_MCP_Change_Lock::TIMEOUT - 1 ) );
+		self::assertSame( 'interrupted', self::gated( 'wp_site_push', array( 'action' => 'status', 'run_id' => $run_id ) )['state'] );
+	}
+
+	/**
 	 * Prüft: F55 with a new plugin (F5): a plugin only on staging, planned
 	 * the public way, is checked and staged; its swap refuses
 	 * code:create_not_built with the way (abort, install by hand) before
@@ -3216,20 +3476,7 @@ final class SyncCodeRunTest extends TestCase {
 	 */
 	private static function short_answer( int $run_id, array $step, string $says ): array {
 		$result = $step['result'];
-		$mark   = self::mark_of_swap( $run_id );
-		self::assertIsArray( $mark, 'The mark of the swap.' );
-		$root   = AB_MCP_Protected_Store::root();
-		$trees  = array_column( $mark['trees'], null, 'role' );
-		$places = array(
-			'target' => $mark['target'],
-			'backup' => $root . '/' . $trees['backup']['path'],
-			'stage'  => $root . '/' . $trees['stage']['path'],
-			'old'    => $trees['backup']['ino'],
-			'new'    => $trees['stage']['ino'],
-			'run'    => $run_id,
-		);
-		$guide  = $root . '/' . AB_MCP_Protected_Store::MARKS . '/' . $mark['mid'] . '/' . AB_MCP_Protected_Store::GUIDE_FILE;
-		self::assertFileExists( $guide, 'The instruction of the mark on the server.' );
+		list( $guide, $places, $mark ) = self::guide_of( $run_id );
 		$tail = " The step is unclear.\n"
 			. '1. To go back, call wp_site_revert action=plan with run_id ' . $run_id . ".\n"
 			. '2. Where this site answers no request any more, or where 1. is refused on this site (wp_site_revert says why): in a shell on the server, open the file ' . $guide . " and run the command its first lines point to. The command contains checks; where it does not print OK, stop.\n"
@@ -3250,6 +3497,35 @@ final class SyncCodeRunTest extends TestCase {
 		}
 		self::assertSame( array( $places['target'], $places['backup'], $mark['mid'], $guide, array() ), array( $result['target'], $result['backup'], $result['mark'], $result['guide'], $result['by_hand'] ), 'The result: the paths, the mark, the instruction, no command.' );
 		return array( $why, $guide, $places );
+	}
+
+	/**
+	 * The instruction of the mark of the swap of step 3 on the server, the
+	 * places of the swap as its mark names them (target, backup, stage:
+	 * absolute paths; old, new: the inodes of the two versions; run: its
+	 * number), and the mark.
+	 *
+	 * @return array{0:string,1:array,2:array}
+	 */
+	private static function guide_of( int $run_id ): array {
+		$mark = self::mark_of_swap( $run_id );
+		self::assertIsArray( $mark, 'The mark of the swap.' );
+		$root  = AB_MCP_Protected_Store::root();
+		$trees = array_column( $mark['trees'], null, 'role' );
+		$guide = $root . '/' . AB_MCP_Protected_Store::MARKS . '/' . $mark['mid'] . '/' . AB_MCP_Protected_Store::GUIDE_FILE;
+		self::assertFileExists( $guide, 'The instruction of the mark on the server.' );
+		return array(
+			$guide,
+			array(
+				'target' => $mark['target'],
+				'backup' => $root . '/' . $trees['backup']['path'],
+				'stage'  => $root . '/' . $trees['stage']['path'],
+				'old'    => $trees['backup']['ino'],
+				'new'    => $trees['stage']['ino'],
+				'run'    => $run_id,
+			),
+			$mark,
+		);
 	}
 
 	/**

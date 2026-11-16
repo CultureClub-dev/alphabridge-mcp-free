@@ -1827,4 +1827,22 @@ return array(
 		'run'     => $it( 'SyncCodeRunTest', 'testARunOfTheCodeBrokenOffIsClosedAsCheckedOnlyWhereAVersionIsProvedAtTheTarget' ),
 		'expect'  => '/testARunOfTheCodeBrokenOffIsClosedAsCheckedOnlyWhereAVersionIsProvedAtTheTarget/',
 	),
+	array(
+		'id'      => 'tausch/f-thema-satz',
+		'clause'  => 'restored(): a theme is named as not running after its way back only where this call read it as not running, never where it runs (Teil F, section 2, question 2 A)',
+		'file'    => $cs,
+		'search'  => "\t\t\tif ( 'theme' === \$unit['kind'] && false === self::runs( 'theme', \$unit['ref'] ) ) {",
+		'replace' => "\t\t\tif ( 'theme' === \$unit['kind'] ) {",
+		'run'     => $it( 'SyncCodeRunTest', 'testASwapAbortedHardAtEachPointLeavesAStateItsWaysBackKnow' ),
+		'expect'  => '/testASwapAbortedHardAtEachPointLeavesAStateItsWaysBackKnow/',
+	),
+	array(
+		'id'      => 'tausch/f-thema-satz-null',
+		'clause'  => 'restored(): where whether the theme runs is not read (runs() null), the way back says nothing of it (option B; Teil F, section 2)',
+		'file'    => $cs,
+		'search'  => "\t\t\tif ( 'theme' === \$unit['kind'] && false === self::runs( 'theme', \$unit['ref'] ) ) {",
+		'replace' => "\t\t\tif ( 'theme' === \$unit['kind'] && true !== self::runs( 'theme', \$unit['ref'] ) ) {",
+		'run'     => $it( 'SyncCodeRunTest', 'testASwapAbortedHardAtEachPointLeavesAStateItsWaysBackKnow' ),
+		'expect'  => '/testASwapAbortedHardAtEachPointLeavesAStateItsWaysBackKnow/',
+	),
 );

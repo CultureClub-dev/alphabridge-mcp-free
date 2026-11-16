@@ -608,6 +608,13 @@ e('f-b4-satz-schritt', 'Tausch::back(): a step of the way back whose entry does 
 e('f-weg-a-lauf', 'closed_checked(): the refusal of way (a) names the run that is closed and its way, for a run of the way back of its own that run, never the run that wrote (skeptic E1b, B2)', CS,
   "$closed->get_error_message(), $run_id, $unit['kind'],", "$closed->get_error_message(), (int) $swap['run_id'], $unit['kind'],", 'coderun', E_WA)
 
+# ------------------------------------------- Teil F, section 2: the table F58, a swap aborted hard at each of its three points (Baustein 6, question 2 A)
+E_F58 = 'testASwapAbortedHardAtEachPointLeavesAStateItsWaysBackKnow'
+e('f-thema-satz', 'restored(): a theme is named as not running after its way back only where this call read it as not running, never where it runs (Teil F, section 2, question 2 A)', CS,
+  "\t\t\tif ( 'theme' === $unit['kind'] && false === self::runs( 'theme', $unit['ref'] ) ) {", "\t\t\tif ( 'theme' === $unit['kind'] ) {", 'coderun', E_F58)
+e('f-thema-satz-null', 'restored(): where whether the theme runs is not read (runs() null), the way back says nothing of it (option B; Teil F, section 2)', CS,
+  "\t\t\tif ( 'theme' === $unit['kind'] && false === self::runs( 'theme', $unit['ref'] ) ) {", "\t\t\tif ( 'theme' === $unit['kind'] && true !== self::runs( 'theme', $unit['ref'] ) ) {", 'coderun', E_F58)
+
 # ------------------------------------------------ check and write
 src = {f: open(os.path.join(ROOT, f)).read() for f in VAR}
 errors = []

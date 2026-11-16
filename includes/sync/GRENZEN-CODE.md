@@ -732,10 +732,10 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
 - **Fundstelle:** Der Platz des Eingangs `AB_MCP_Sync_Revert::admit()` und die Weiche `code()`
   (`includes/sync/class-sync-revert.php:126`, `:151`), belegt in der letzten Zeile von
   `includes/sync/class-sync-code-ops.php` (`:592`); der Rückweg im Tausch `back()`, `restore()`, `restored()`,
-  `moved_back()`, `mark_id()` (`includes/sync/class-sync-code-swap.php:2096`, `:2160`, `:2201`, `:2287`, `:2412`); das
+  `moved_back()`, `mark_id()` (`includes/sync/class-sync-code-swap.php:2097`, `:2161`, `:2202`, `:2296`, `:2421`); das
   Journal in der Form seiner Zeile `step.swap` (`includes/class-store-inputs.php:985`); die Fortsetzung eines
-  unterbrochenen Rückweg-Schritts `begin_same_run()` (`class-sync-revert.php:994`). Zeilen am Stand der Behebung nach
-  dem Skeptiker E1b.
+  unterbrochenen Rückweg-Schritts `begin_same_run()` (`class-sync-revert.php:994`). Zeilen am Stand von Teil F,
+  Abschnitt 2.
 - **Quelle:** Teil E des Rests, Bauzettel `z5r-e-zettel.md` (Grenzen) mit der Freigabe der Lead (Fragen 1 bis 5, N12)
   und der Kürzung nach `z5r-e1-abweichung.md`.
 - **Was:**
@@ -757,8 +757,8 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
     verweigert ihn der Speicher, bleibt der Schritt `planned`. Bewegt der Schritt danach nichts (die alte Fassung ist
     schon am Ziel, oder ein Nachweis scheitert), bleibt die Gruppe `back-<lauf>-<schritt>` leer stehen, so lange wie
     die Sicherungen des Rückweglaufs.
-  - Die Ablehnung der Uhr auf dem Rückweg (`restored()`, `class-sync-code-swap.php:2212`) trägt den Satz von
-    `clock_refusal()` (`:2474`): «the unit is not swapped». Er ist wörtlich wahr (nichts wird getauscht), und der Weg
+  - Die Ablehnung der Uhr auf dem Rückweg (`restored()`, `class-sync-code-swap.php:2213`) trägt den Satz von
+    `clock_refusal()` (`:2483`): «the unit is not swapped». Er ist wörtlich wahr (nichts wird getauscht), und der Weg
     (`action=next`) stimmt; er nennt den Rückweg nicht als solchen.
 - **Trifft Normalfall:** nein. Im Normalfall (F59, F1, F2, F6, F47, F55) ist der Eingang belegt, die Marke in der Liste,
   und beide Umbenennungen gelingen in einem Aufruf.
@@ -768,14 +768,17 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
 - **Fundstelle:** `accept` im Schema von `wp_site_revert` (`includes/tools/class-tools-staging.php:481`), durchgereicht
   von `AB_MCP_Sync_Revert::one()` und `code()`, geprüft in `AB_MCP_Sync_Code_Ops::back()`
   (`includes/sync/class-sync-code-ops.php:163`); im Tausch `back()`, `restored()`, `on_again()`, `closed_checked()`
-  (`includes/sync/class-sync-code-swap.php:2096`, `:2201`, `:2331`, `:2373`); Weg (a) in
-  `AB_MCP_Sync_Run::close_checked_on()` (`includes/sync/class-sync-run.php:1095`). Zeilen am Stand der Behebung nach
-  dem Skeptiker E1b.
+  (`includes/sync/class-sync-code-swap.php:2097`, `:2202`, `:2340`, `:2382`); Weg (a) in
+  `AB_MCP_Sync_Run::close_checked_on()` (`includes/sync/class-sync-run.php:1095`). Zeilen am Stand von Teil F,
+  Abschnitt 2.
 - **Quelle:** Teil E des Rests, Abschnitt 2, Kurzzettel `z5r-e2-zettel.md` nach dem Bauzettel `z5r-e-zettel.md`
   (Bausteine 4 und 7, Frage 2 der Lead).
 - **Was:**
   - Wieder eingeschaltet werden nur Plugins, deren Hauptdatei beim Beginn des Tauschs lief (Journal `active`, wie die
-    Marke sie nennt). Ein Wechsel des Themes durch den Kern wird nicht zurückgestellt und nicht benannt (G-24).
+    Marke sie nennt). Ein Wechsel des Themes durch den Kern (`validate_current_theme()`, wo der Ordner fehlte) wird
+    nicht zurückgestellt (G-24); das Journal hält für ein Theme kein `active`. Seit Teil F, Abschnitt 2 nennt die
+    Antwort des Rückweg-Schritts ein Theme, das dieser Aufruf als nicht laufend liest, mit dem Weg (wp-admin), ohne
+    einen Wechsel zu behaupten; wo das nicht gelesen wird (`runs()` null), sagt sie nichts dazu (Option B).
   - `accept` wirkt nur für einen Schritt, dessen Rückweg geplant wird. Eine Nummer, die kein Schreibschritt des Laufs
     ist, nicht in `steps` steht, schon zurückgenommen wurde, oder `accept` für einen Lauf der Inhalte bleibt ohne
     Wirkung und wird nicht abgelehnt (wie `steps`). Bei der Fortsetzung eines unterbrochenen Rückwegs gilt der Eintrag

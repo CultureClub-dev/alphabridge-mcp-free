@@ -71,11 +71,12 @@
  * the swap began is activated again through AB_MCP_Activation_Guard::
  * plugin() (Z25); without accept it stays inactive, named with the way,
  * and the preview says which (on_again(), Z43). A switch of the theme is
- * not put back (G-24). Way (a) (closed_checked()): a person closes a run
- * whose swap step, or a step of its way back, was left begun only where,
- * read under the lock for changes, the target holds the new version and
- * the backup the old one whole, or the target the old one; the mark
- * closes. Else the refusal, before the run writes anything.
+ * not put back (G-24); the step names a theme it reads as not running,
+ * with the way (part F, section 2). Way (a) (closed_checked()): a person
+ * closes a run whose swap step, or a step of its way back, was left begun
+ * only where, read under the lock for changes, the target holds the new
+ * version and the backup the old one whole, or the target the old one;
+ * the mark closes. Else the refusal, before the run writes anything.
  *
  * OPCACHE (invalidate(), Z13): the one wrapper of
  * AB_MCP_Own_Files::invalidate_opcache() in the swap; only invalidated or
@@ -2252,6 +2253,14 @@ final class AB_MCP_Sync_Code_Swap {
 			$message = sprintf( __( 'The %1$s %2$s is in its old version at %3$s, proved there (device, inode and hash). What the new version wrote into the database while it ran stays as it is; confirm the pair of the unit anew (wp_site_pairs) before its next takeover.', 'alphabridge-mcp' ), $unit['kind'], $unit['ref'], $journal['target'] );
 			// Only now, on the old version proved at the target (Z25).
 			$message = implode( ' ', array_merge( array( $message ), self::on_again( $journal, $unit['ref'], ! empty( $step['parts']['accept'] ), (int) $swap['seq'], true ) ) );
+			// A theme read in this call as not running (WordPress switches
+			// away from a theme whose folder it misses), with the way; no
+			// switch claimed, and nothing where it is not read (option B;
+			// part F, question 2 A).
+			if ( 'theme' === $unit['kind'] && false === self::runs( 'theme', $unit['ref'] ) ) {
+				/* translators: %s: the name of the theme (its folder). */
+				$message .= ' ' . sprintf( __( 'The theme %s does not run on this site now; where it ran before the swap, switch back to it in wp-admin (Appearance → Themes).', 'alphabridge-mcp' ), $unit['ref'] );
+			}
 		}
 		return self::ended(
 			$in,
