@@ -36,11 +36,12 @@
  * THE SWAP (run(); plan E5 6 to 11 as Variante b keeps them): in the same
  * call, under the same lock, after prepare(): the place of the old version
  * in the backups of the run (backup_place()); rename_marked(), the one
- * function that renames in the swap (Z15, Z16): the note of the replacement
- * (AB_MCP_Update_Log::mark_replaced()), the journal of the step, the mark
- * and its instruction, each read back, then the target into the backup (the
- * whole old folder) and the stage into the target, each only to a place
- * that is free; OPcache for each PHP file replaced (invalidate(), Z13); and
+ * function that renames in the swap (Z15, Z16): the journal of the step, the
+ * mark and its instruction, the note of the replacement
+ * (AB_MCP_Update_Log::mark_replaced()) last, each read back, then the
+ * target into the backup (the whole old folder) and the stage into the
+ * target, each only to a place that is free; OPcache for each PHP file
+ * replaced (invalidate(), Z13); and
  * close() (Z20a): the mark closes only on the new version proved at the
  * target and the old one whole in the backup, then the file undo points of
  * the unit go. The files of its pair take their new bases, the step is
@@ -312,7 +313,7 @@ final class AB_MCP_Sync_Code_Swap {
 
 	/**
 	 * Seconds a swap keeps beyond twice its test requests before (E5 2): the
-	 * place of the backup, the note, the journal and the mark, the two
+	 * place of the backup, the journal, the mark and the note, the two
 	 * renames, OPcache of each file replaced and the readings of close(). A
 	 * named start value without a measurement; the measurement of branch 5
 	 * (part G of the rest) names the real durations.
@@ -1303,10 +1304,13 @@ final class AB_MCP_Sync_Code_Swap {
 
 	/**
 	 * The one function that renames in the swap (Z15, Z16; E5 6 and 7). First
-	 * the note of the replacement with the time the swap begins
-	 * (AB_MCP_Update_Log::mark_replaced(), for the file undo points of
-	 * before it), the journal of the step (begun) and the mark of the swap
-	 * with its instruction, each read back; then the target into the backup
+	 * the journal of the step (begun), the mark of the swap with its
+	 * instruction and the note of the replacement with the time the swap
+	 * begins (AB_MCP_Update_Log::mark_replaced(), for the file undo points of
+	 * before it), in this order and each read back: the note last, so that
+	 * a journal or mark that fails leaves no note of a swap that did not
+	 * begin (the lead on D2a, 16.11. 03:57; Z15 and F56 ask only that all
+	 * three stand before the first rename); then the target into the backup
 	 * (the whole old folder, never beside the target) and the stage into the
 	 * target, each only to a place that is free (move()). Where the second
 	 * rename fails, the old version goes back to the target, again only
@@ -1315,13 +1319,14 @@ final class AB_MCP_Sync_Code_Swap {
 	 * @param array $in   The arguments.
 	 * @param array $plan plan_of().
 	 * @return array{at:string,mid:string|null,why:WP_Error|null,journal:array|null,back:bool|null}
-	 *         at: note or journal (the step not begun, nothing moved), mark (the step begun,
-	 *         no mark), first (the mark open, nothing moved), second (the second rename
-	 *         failed; back: whether the old version went back to the target), done.
+	 *         at: journal (the step not begun, nothing moved), mark (the step begun, no
+	 *         mark), note (the mark open, the note not read back, nothing moved), first
+	 *         (the mark open and the note written, nothing moved), second (the second
+	 *         rename failed; back: whether the old version went back to the target), done.
 	 */
 	private static function rename_marked( array $in, array $plan ) {
 		$out   = array(
-			'at'      => 'note',
+			'at'      => 'journal',
 			'mid'     => null,
 			'why'     => null,
 			'journal' => null,
@@ -1329,9 +1334,8 @@ final class AB_MCP_Sync_Code_Swap {
 		);
 		$unit  = $in['unit'];
 		$since = AB_MCP_Sync_Run::now();
-		$noted = null === $since ? AB_MCP_Sync_Run::clock_unknown() : self::noted( $unit['kind'], $unit['ref'], $since );
-		if ( true !== $noted ) {
-			return array( 'why' => $noted ) + $out;
+		if ( null === $since ) {
+			return array( 'why' => AB_MCP_Sync_Run::clock_unknown() ) + $out;
 		}
 		$journal = array(
 			'unit'  => array(
@@ -1357,6 +1361,16 @@ final class AB_MCP_Sync_Code_Swap {
 			) + $out;
 		}
 		$out['mid'] = $mark['mid'];
+		// The note last (the lead on D2a, 16.11. 03:57): where the journal
+		// or the mark fails, it is not written, so it never names a swap that
+		// did not begin; since stays the time in the journal.
+		$noted = self::noted( $unit['kind'], $unit['ref'], $since );
+		if ( true !== $noted ) {
+			return array(
+				'at'  => 'note',
+				'why' => $noted,
+			) + $out;
+		}
 		if ( ! self::move( $plan['target'], $plan['old']['path'] ) ) {
 			return array( 'at' => 'first' ) + $out;
 		}
@@ -1416,7 +1430,7 @@ final class AB_MCP_Sync_Code_Swap {
 			return true;
 		}
 		/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name. */
-		return self::refusal( 'code:note', sprintf( __( 'The note that the files of the %1$s %2$s are replaced (it tells a file undo point of before the swap from one of after it) did not read back as written, so it is not swapped and nothing of it was moved. Call action=next again; where it keeps failing, check that the database of this site accepts writes.', 'alphabridge-mcp' ), $kind, $ref ) );
+		return self::refusal( 'code:note', sprintf( __( 'The note that the files of the %1$s %2$s are replaced (it tells a file undo point of before the swap from one of after it) did not read back as written, so nothing of it was moved; where the note is written all the same, the undo of AlphaBridge Pro refuses the file undo points of these files from before this call, as after a swap. Where it keeps failing, check that the database of this site accepts writes.', 'alphabridge-mcp' ), $kind, $ref ) );
 	}
 
 	/**
@@ -1743,9 +1757,11 @@ final class AB_MCP_Sync_Code_Swap {
 	 * A swap that moved nothing for good (rename_marked() stopped before both
 	 * renames held). Before the journal: its refusal, the step stays
 	 * planned. After it: the mark, where one was written, closed on the old
-	 * version proved at the target (close(), kept), and the step failed;
-	 * where the old version is not proved there, the step is unclear with
-	 * the way by hand.
+	 * version proved at the target (close(), kept), and the step failed,
+	 * also where the note of the replacement did not read back; where a
+	 * rename failed after the note, the answer says that it stays without
+	 * a replacement. Where the old version is not proved there, the step is
+	 * unclear with the way by hand.
 	 *
 	 * @param array $in    The arguments.
 	 * @param array $plan  plan_of().
@@ -1764,13 +1780,17 @@ final class AB_MCP_Sync_Code_Swap {
 		if ( is_wp_error( $closed ) ) {
 			return self::unclear( $in, $plan, $moved['journal'], 'vor-den-umbenennungen', $closed->get_error_message() );
 		}
-		$why = array(
+		// After the note, a rename that failed leaves it without a
+		// replacement; it is not taken back (the lead on D2a, 16.11. 03:57).
+		$void = __( 'The note that its files are replaced stays written all the same (it is not taken back): the undo of AlphaBridge Pro refuses the file undo points of these files from before this call, as after a swap.', 'alphabridge-mcp' );
+		$why  = array(
 			// A mark not given may still be written in part (mark.json before
 			// its instruction; D2a 3, the Festlegung of this part): named, as
 			// the swap knows no id of it.
 			'mark'   => ( null === $moved['why'] ? '' : $moved['why']->get_error_message() . ' ' ) . self::part_mark_note( $in ),
-			'first'  => __( 'The old version could not be moved into the backup of the run (rename() failed, or the place was not free).', 'alphabridge-mcp' ),
-			'second' => __( 'The new version could not be put at the target (rename() failed, or the place was not free), so the old one went back to its place.', 'alphabridge-mcp' ),
+			'note'   => null === $moved['why'] ? '' : $moved['why']->get_error_message(),
+			'first'  => __( 'The old version could not be moved into the backup of the run (rename() failed, or the place was not free).', 'alphabridge-mcp' ) . ' ' . $void,
+			'second' => __( 'The new version could not be put at the target (rename() failed, or the place was not free), so the old one went back to its place.', 'alphabridge-mcp' ) . ' ' . $void,
 		);
 		/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name, 3: why (one or more whole sentences). */
 		$message = sprintf( __( 'The %1$s %2$s is not swapped, and the old version is at its place: %3$s Its stage stays in the protected store. The run goes on with the next step (action=next); to swap the unit, make a new report (wp_site_diff) and plan again.', 'alphabridge-mcp' ), $in['unit']['kind'], $in['unit']['ref'], $why[ $moved['at'] ] );
