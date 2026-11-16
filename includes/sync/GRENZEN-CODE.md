@@ -308,9 +308,11 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
     einen neuen Lauf. Die Meldung sagt das nicht (Befund K4e Nr. 2, nach dem Code gelesen, ohne eigenen Test;
     Folgeposten der Fehlerweg-Prüfung des Teils).
   - Ebenso nach einer Ablehnung von `AB_MCP_Sync_Code_Stage::stage()` selbst (Fable-Prüfstelle 2, C3; Entscheid der
-    Lead vom 13.11.2026 18:51): `code:org_unzip` (`class-sync-code-stage.php:827`) und `code:org_fetch` (`:867`,
-    `:882`) raten «Try again later, or send the unit as a package of code (wp_site_export with purpose=code)»;
-    `not_staged()` (`class-sync-code-ops.php:309`–`:312`) beendet den Schritt mit `failed` und hängt «The run goes on
+    Lead vom 13.11.2026 18:51): `code:org_unzip` (`class-sync-code-stage.php:850`) und `code:org_fetch` (`:890`,
+    `:905`) raten «Try again later, or send the unit as a package of code (wp_site_export with purpose=code)», das
+    dritte `code:org_fetch` (`:895`, wordpress.org gibt das Paket dieser Version nicht) rät nur «Send the unit as a
+    package of code (wp_site_export with purpose=code)»;
+    `not_staged()` (`class-sync-code-ops.php:386`–`:390`) beendet den Schritt mit `failed` und hängt «The run goes on
     with the next step (action=next).» an. Ein neuer Versuch für diese Einheit geht auch hier nur über einen neuen
     Lauf. Folgeposten für Teil 2: `run_verify()` hängt beim Schliessen eines Laufs «The way back for its pairs is
     wp_site_revert (action=plan with this run_id).» an (`class-sync-engine.php:2823`), auch bei einem Code-Lauf, von
@@ -419,24 +421,31 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
 
 ### G-5-4 Verwaiste Gruppe der Stufe, wenn das Journal nach `stage()` nicht gespeichert wird
 
-- **Fundstelle:** `AB_MCP_Sync_Code_Ops::stage()` (`includes/sync/class-sync-code-ops.php:152`–`:186`):
-  `AB_MCP_Sync_Code_Stage::stage()` (`:153`), Prüfung des Journals (`:179`), `AB_MCP_Sync_Run::update_step()` (`:182`).
+- **Fundstelle:** `AB_MCP_Sync_Code_Ops::stage()` (`includes/sync/class-sync-code-ops.php:192`–`:292`):
+  `AB_MCP_Sync_Code_Stage::stage()` (`:196`), Prüfung des Journals (`:222`), `AB_MCP_Sync_Run::update_step()` (`:225`);
+  der Tausch `AB_MCP_Sync_Code_Ops::swap()` (`:310`–`:326`) mit `staged()` (`:95`). Zeilen am Stand von Teil D2b des
+  Rests (Z5r).
 - **Quelle:** Fable-Prüfstelle 2 über `90ab733..d1e0c77`, B2; Entscheid der Lead vom 13.11.2026 18:51 (Teil 1a-4d).
 - **Fall:** `stage()` hat eine Gruppe im Bereich `stage` geöffnet und den Baum abgelegt; danach gibt `update_step()`
-  einen Fehler (`:183`–`:184` gibt ihn zurück) oder die Anfrage endet vor dem Speichern (Zeitgrenze). Der Schritt
+  einen Fehler (`:226`–`:228` gibt ihn zurück) oder die Anfrage endet vor dem Speichern (Zeitgrenze). Der Schritt
   bleibt `planned` ohne Journal (`parts` null); der nächste Aufruf stellt die Einheit noch einmal bereit, in einer
-  neuen Gruppe (`stage()` öffnet je Aufruf eine, `class-sync-code-stage.php:752`).
+  neuen Gruppe (`stage()` öffnet je Aufruf eine, `class-sync-code-stage.php:775`).
 - **Wirkung:** Die erste Gruppe mit ihrem Baum bleibt liegen; dieser Schritt und der nächste Aufruf entfernen sie
   nicht. Wann sie geht, regeln die Aufbewahrung des Bereichs `stage` (`KEEP` ein Tag,
-  `includes/class-protected-store.php:424`) und `kept()` (`:1452`); nicht nachgestellt. Nach Fable zählt sie bis
-  dahin im Budget (nicht nachgeprüft). Am geprüften Kopf wird der noch nicht implementierte Tausch abgelehnt
-  (`class-sync-code-ops.php:108`–`:120`, `ab_mcp_sync_code_swap_not_built`, nach der frischen Prüfung von Z24 in `released()`); durch die Bereitstellung wurde nichts an
-  der Site geschrieben.
+  `includes/class-protected-store.php:432`) und `kept()` (`:1615`); nicht nachgestellt. Nach Fable zählt sie bis
+  dahin im Budget (nicht nachgeprüft). Durch die Bereitstellung wurde nichts an der Site geschrieben. Der Tausch
+  (Teil 2, gebaut) nimmt die Gruppe nicht: `swap()` liest die Stufe nur aus dem Journal des Schritts der
+  Bereitstellung, wenn dieser `done` ist und dieselbe Einheit nennt (`:312`–`:316`, sonst `journal_unknown()`,
+  `ab_mcp_sync_code_journal`), und der Tausch prüft den Baum dieser Gruppe gegen den Hash des Journals
+  (`signed_stage()`, `code:stage_not_ready`, `class-sync-code-swap.php:977`). Belegt in
+  `SyncCodeRunTest::testTheSwapTakesOnlyTheStageTheJournalOfItsStepNames`: eine verwaiste Gruppe derselben Einheit
+  bleibt unberührt, getauscht wird die Stufe des Journals; ein Journal einer anderen Einheit oder einer anderen Gruppe
+  wird vor der ersten Mutation abgelehnt (Schritt `planned`, kein Journal, keine Marke, kein Vermerk).
 - **Trifft Normalfall:** nein (braucht einen Fehler der Datenbank beim Speichern oder ein Ende der Anfrage genau
   zwischen `stage()` und `update_step()`).
-- **Folgeposten:** Test mit einem Fehler an `update_step()` in der Fehlerweg-Prüfung des Teils. Anforderung an Teil 2
-  (am Kopf nicht gebaut): der Tausch nimmt nur die Stufe, die das Journal seines Schritts nennt, nie eine verwaiste
-  Gruppe.
+- **Folgeposten:** Test mit einem Fehler an `update_step()` in der Fehlerweg-Prüfung des Teils. Die Anforderung an
+  Teil 2 (der Tausch nimmt nur die Stufe, die das Journal seines Schritts nennt, nie eine verwaiste Gruppe) ist mit
+  dem Tausch gebaut und mit dem Test oben belegt (Teil D2b des Rests).
 
 ### G-5-5 Doppelfehler beim Binden der Pakete und beim Abbruch des neuen Laufs
 

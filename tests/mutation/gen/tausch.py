@@ -374,6 +374,18 @@ e('d3-mark-read-again', 'close(): a mark written closed whose read back fails is
   '\t\t\tif ( is_wp_error( $closed ) && \'ab_mcp_store_mark_unconfirmed\' === $closed->get_error_code() ) {', '\t\t\tif ( false ) {', 'coderun', AFTER)
 e('d3-mark-closed-read', 'mark_closed(): read once more, a mark the store lists closed counts as closed, one it lists open as open (Codex D3, finding 2)', CS,
   '\t\t\t\treturn \'closed\' === $mark[\'state\'];', '\t\t\t\treturn null;', 'coderun', AFTER)
+e('d2b-clock-first', 'rename_marked(): a clock of the run that gives no time refuses the swap before its journal, nothing written (D2b 1)', CS,
+  '\t\tif ( null === $since ) {\n\t\t\treturn array( \'why\' => AB_MCP_Sync_Run::clock_unknown() ) + $out;', '\t\tif ( false ) {\n\t\t\treturn array( \'why\' => AB_MCP_Sync_Run::clock_unknown() ) + $out;', 'coderun', 'testAClockThatGivesNoTimeBeforeTheFirstWriteOfTheSwapRefusesItBeforeAnythingIsWritten')
+e('d2b-live-whole', 'unchanged() in prepare(): a unit not read whole (F38: too large for the hash of one call) is refused before the first mutation (D2b 2)', CS,
+  '\t\tif ( ! is_array( $read ) || true !== $read[\'complete\'] || ! is_string( $read[\'hash\'] ) ) {\n\t\t\t/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name. */\n\t\t\treturn self::refusal( \'code:live_unknown\'', '\t\tif ( false ) {\n\t\t\t/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name. */\n\t\t\treturn self::refusal( \'code:live_unknown\'', 'coderun', 'testAUnitTooLargeToBeHashedInOneCallIsRefusedBeforeTheSwapWritesAnything')
+e('d2b-live-base', 'unchanged() in prepare(): a unit whose files are no longer those its pair is based on (F41) is refused with code:live_changed (D2b 3)', CS,
+  '\t\tif ( ! hash_equals( $base[\'live\'], $read[\'hash\'] ) ) {', '\t\tif ( false ) {', 'coderun', 'testAUnitChangedOnThisSiteAfterTheReportIsNotSwapped')
+e('d2b-place-read', 'plan_of(): a place of the backup put_tree() refuses (F38: the target too large to be read whole) refuses the swap before the first mutation (D2b 2)', CS,
+  '\t\tif ( is_wp_error( $place ) ) {', '\t\tif ( false ) {', 'coderun', 'testAUnitTooLargeToBeHashedInOneCallIsRefusedBeforeTheSwapWritesAnything')
+e('d2b-place-live', 'plan_of(): a target read by put_tree() other than prepare() read it (F41, a change between the two) is refused with code:live_changed (D2b 3)', CS,
+  '\t\tif ( ! hash_equals( $prepared[\'live\'][\'hash\'], $place[\'hash\'] ) ) {', '\t\tif ( false ) {', 'coderun', 'testAUnitChangedOnThisSiteAfterTheReportIsNotSwapped')
+e('d2b-swap-journal-unit', 'swap() of the ops: the stage is taken only from the journal of its step of the stage for this very unit; a journal of another unit refuses (G-5-4, D2b 5)', CO,
+  ' || $read[\'unit\'][\'kind\'] !== $unit[\'kind\'] || $read[\'unit\'][\'ref\'] !== $unit[\'ref\'] ) {\n\t\t\treturn self::journal_unknown( $unit[\'seq\'] );\n\t\t}\n\t\treturn AB_MCP_Sync_Code_Swap::run(', ' || $read[\'unit\'][\'kind\'] !== $unit[\'kind\'] ) {\n\t\t\treturn self::journal_unknown( $unit[\'seq\'] );\n\t\t}\n\t\treturn AB_MCP_Sync_Code_Swap::run(', 'coderun', 'testTheSwapTakesOnlyTheStageTheJournalOfItsStepNames')
 
 # ------------------------------------------------ check and write
 src = {f: open(os.path.join(ROOT, f)).read() for f in VAR}
