@@ -524,6 +524,15 @@ e('e-paar', 'restored(): the pair of the unit becomes unclear after the way back
 e('e-marke-liste', 'mark_id(): the mark of a swap without its result is found by its run and step in the list of the marks, and the way back closes it (Teil E)', CS,
   "if ( (int) $mark['run_id'] === (int) $swap['run_id'] && (int) $mark['seq'] === (int) $swap['seq'] ) {",
   'if ( false ) {', 'coderun', E_CUT)
+e('e-journal-revert', 'Tausch::back(): a journal not known at the step of the way back fails that step with nothing moved, never a refusal that keeps it planned (Teil E)', CS,
+  "\t\t\tif ( 'revert' !== $at ) {\n\t\t\t\treturn self::refusal( 'code:journal_unknown', $no );",
+  "\t\t\tif ( true ) {\n\t\t\t\treturn self::refusal( 'code:journal_unknown', $no );", 'coderun', 'testAJournalThatNoLongerReadsAsASwapFailsItsStepOfTheWayBackWithNothingMoved')
+e('e-sperre', 'restore(): the lock for changes not taken refuses the step of the way back before its first write; it stays planned (Z10; Teil E)', CS,
+  "\t\t$taken = self::take();\n\t\tif ( true !== $taken ) {", "\t\t$taken = self::take();\n\t\tif ( false ) {", 'coderun', 'testTheWayBackWithoutTheLockOrTheTimeOfItsCallRefusesAndStaysPlanned')
+e('e-uhr', 'restored(): a clock that gives no time refuses the step of the way back before its journal begun; it stays planned (Teil E)', CS,
+  "$begun = 0.0 === $in['until'] ? self::clock_refusal() :", '$begun = false ? self::clock_refusal() :', 'coderun', 'testTheWayBackWithoutTheLockOrTheTimeOfItsCallRefusesAndStaysPlanned')
+e('e-platz', 'moved_back(): the place of the new version not given (open() or put_tree() refuses) moves nothing and ends the step of the way back unclear (question 1 B of Teil E)', CS,
+  "\t\tif ( is_wp_error( $slot ) ) {", "\t\tif ( false ) {", 'coderun', 'testTheWayBackWithoutAPlaceForTheNewVersionMovesNothingAndItsStepIsUnclear')
 
 # ------------------------------------------------ check and write
 src = {f: open(os.path.join(ROOT, f)).read() for f in VAR}

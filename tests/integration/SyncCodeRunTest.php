@@ -120,6 +120,7 @@ final class SyncCodeRunTest extends TestCase {
 		AB_MCP_Test_Seam::restore_all();
 		AB_MCP_Sync_Revert::admit( array( 'AB_MCP_Sync_Code_Ops', 'back' ) );
 		AB_MCP_Sync_Code_Swap::forget();
+		AB_MCP_Sync_Code_Swap::$clock  = null;
 		AB_MCP_Sync_Code_Stage::$clock = null;
 		AB_MCP_Sync_Run::$clock        = null;
 		AB_MCP_Sync_Env::$clock        = null;
@@ -1437,9 +1438,10 @@ final class SyncCodeRunTest extends TestCase {
 	 * same folder: the staging site cannot carry a version fatal on every
 	 * call, its own steps would end fatal (CodeFixturesTest). Neither the
 	 * home page nor MCP answers, so the way back of the run cannot be
-	 * called. The lines by_hand of the answer of the swap, run in a shell on
-	 * the server, put the old version back (their checks read the inodes,
-	 * not the bytes), and the site answers again.
+	 * called. The command line of the answer of the swap, taken from it as
+	 * it stands there (not built again, not copied), run in a shell on the
+	 * server, puts the old version back (its checks read the inodes, not
+	 * the bytes), and the site answers again.
 	 * Sonst: a version that ends every request of the customer fatal would
 	 * leave the site down, with no way back that works without MCP.
 	 */
@@ -1460,7 +1462,7 @@ final class SyncCodeRunTest extends TestCase {
 		self::assertTrue( copy( AB_MCP_IT_Code::source( 'plugin', 'ab-it-aktiv', 'fatal' ) . '/ab-it-aktiv.php', $target . '/ab-it-aktiv.php' ) );
 		$after = self::probe_now();
 		self::assertSame( array( 'fatal', 'fatal' ), array( $after['home'], $after['mcp'] ), 'Neither the home page nor MCP answers: ' . json_encode( $after ) );
-		self::assertStringEndsWith( 'OK', self::run_by_hand( $swap['result']['by_hand'] ), 'The command of the way by hand ran whole.' );
+		self::assertStringEndsWith( 'OK', self::run_by_hand( explode( "\n", $swap['answer']['next'] ) ), 'The command of the way by hand, as the answer of the swap gives it, ran whole.' );
 		clearstatcache();
 		self::assertSame( $old, self::bytes_of( $target ), 'The old version is back at the target.' );
 		$again = self::probe_now();
@@ -1708,6 +1710,58 @@ final class SyncCodeRunTest extends TestCase {
 	}
 
 	/**
+	 * Prüft: Z10 and the clock on the way back: where the lock for changes
+	 * is not taken (its answer not true) or the clock of the call gives no
+	 * time, the step of the way back refuses before its first write with
+	 * code:lock or code:clock, stays planned and moves nothing; the next
+	 * call puts the old version back.
+	 * Sonst: the way back would rename the folders of the site without the
+	 * lock for changes, or with no time for the proofs of its call, or a
+	 * refusal would end a step the next call can do.
+	 */
+	#[DataProvider( 'not_taken_back' )]
+	public function testTheWayBackWithoutTheLockOrTheTimeOfItsCallRefusesAndStaysPlanned( string $code ): void {
+		list( $run_id, , $target ) = self::swapped_f56();
+		$back   = self::planned_back( $run_id );
+		$before = self::bytes_of( $target );
+		if ( 'code:lock' === $code ) {
+			self::seam_of_swap(
+				array(
+					array(
+						'method' => 'take_lock',
+						'kind'   => 'return',
+						'value'  => false,
+					),
+				)
+			);
+		} else {
+			AB_MCP_Sync_Code_Swap::$clock = static fn(): float => NAN;
+		}
+		try {
+			$says = self::refused( self::gated( 'wp_site_revert', array( 'action' => 'next', 'run_id' => $back ) ), $code );
+		} finally {
+			AB_MCP_Test_Seam::restore_all();
+			AB_MCP_Sync_Code_Swap::$clock = null;
+		}
+		self::assertStringStartsWith( 'code:lock' === $code ? 'The lock for changes of the code is not read as held by this request' : 'The time of this call could not be measured', $says );
+		self::assertSame( 'planned', self::back_step( $back )['state'] );
+		self::assertSame( $before, self::bytes_of( $target ), 'Nothing moved.' );
+		self::assertFalse( AB_MCP_Sync_Code_Swap::lock_held(), 'No lock for changes held.' );
+		$done = self::gated( 'wp_site_revert', array( 'action' => 'next', 'run_id' => $back ) );
+		self::assertIsArray( $done, is_wp_error( $done ) ? $done->get_error_message() : '' );
+		self::assertSame( 'done', self::back_step( $back )['state'] );
+		self::assertSame( '1.0.0', AB_MCP_IT_Code::fassung( 'a', 'plugin', 'ab-it-aktiv' ) );
+	}
+
+	/** What the step of the way back does not have before its first write: the lock for changes, the time of its call. */
+	public static function not_taken_back(): array {
+		return array(
+			'the lock for changes not taken'    => array( 'code:lock' ),
+			'the time of the call not measured' => array( 'code:clock' ),
+		);
+	}
+
+	/**
 	 * Prüft: a rename of the way back that fails (Z16; F35 on the way back):
 	 * the first (the new version from the target to its place) moves
 	 * nothing; where the second (the old version from the backup to the
@@ -1759,6 +1813,56 @@ final class SyncCodeRunTest extends TestCase {
 	}
 
 	/**
+	 * Prüft: the place of the new version not given on the way back (Z22,
+	 * question 1 B of part E): where the group of its own in the backups of
+	 * the way back cannot be made (open(): the protected store makes no
+	 * folder), nothing moves; the step of the way back is unclear with the
+	 * refusal of the store, its frame and the paths, the new version at the
+	 * target (the folder of the swap itself) and the old one whole in the
+	 * backup.
+	 * Sonst: the way back would rename the new version to a place it was
+	 * not given, or break off with its step begun.
+	 */
+	public function testTheWayBackWithoutAPlaceForTheNewVersionMovesNothingAndItsStepIsUnclear(): void {
+		list( $run_id, , $target, $backup ) = self::swapped_f56();
+		clearstatcache();
+		$at   = lstat( $target );
+		$new  = self::bytes_of( $target );
+		$old  = self::bytes_of( $backup );
+		$back = self::planned_back( $run_id );
+		AB_MCP_Test_Seam::install(
+			AB_MCP_Protected_Store::class,
+			'naht_protected_store',
+			new \AB_MCP_Protected_Store_Calls(),
+			array(
+				array(
+					'method' => 'mkdir',
+					'nth'    => 1,
+					'kind'   => 'return',
+					'value'  => false,
+				),
+			)
+		);
+		try {
+			$answer = self::gated( 'wp_site_revert', array( 'action' => 'next', 'run_id' => $back ) );
+		} finally {
+			AB_MCP_Test_Seam::restore_all();
+		}
+		self::assertIsArray( $answer, is_wp_error( $answer ) ? $answer->get_error_code() . ': ' . $answer->get_error_message() : '' );
+		$step = self::back_step( $back );
+		$says = $step['result']['message'];
+		self::assertSame( 'unclear', $step['state'], $says );
+		self::assertStringStartsWith( 'The group could not be made in the protected store. ', $says );
+		self::assertStringContainsString( ' The step of the way back is unclear: nothing more of the unit is moved by itself; check it by hand, then confirm its pair anew (wp_site_pairs).', $says );
+		self::assertStringEndsWith( "\nTarget: " . $target . "\nBackup: " . $backup, $says );
+		self::assertNull( $step['result']['place'] );
+		clearstatcache();
+		$now = lstat( $target );
+		self::assertSame( array( $at['dev'], $at['ino'], $new ), array( $now['dev'], $now['ino'], self::bytes_of( $target ) ), 'The new version is at the target, the folder of the swap itself.' );
+		self::assertSame( $old, self::bytes_of( $backup ), 'The old version lies whole in the backup.' );
+	}
+
+	/**
 	 * Prüft: G-27, the mark gone: the folder of the mark of a swap done goes
 	 * a day after the mark closed (AB_MCP_Protected_Store::cleanup(); here
 	 * moved aside under a name that is no mark). Its way back then finds no
@@ -1778,6 +1882,34 @@ final class SyncCodeRunTest extends TestCase {
 		$step = self::back_step( (int) $way['begun']['run_id'] );
 		self::assertSame( 'done', $step['state'], $step['result']['message'] );
 		self::assertSame( '1.0.0', AB_MCP_IT_Code::fassung( 'a', 'plugin', 'ab-it-aktiv' ) );
+	}
+
+	/**
+	 * Prüft: a swap whose journal no longer reads as one when its step of
+	 * the way back runs (its row step.swap without the target, written after
+	 * the way back was planned): that step fails with the sentence of
+	 * back() (the step and run of the swap, the way by hand, and how to
+	 * plan the way back without it), and nothing moves.
+	 * Sonst: the way back would act on a journal it cannot read, or keep a
+	 * step planned that no later call can do.
+	 */
+	public function testAJournalThatNoLongerReadsAsASwapFailsItsStepOfTheWayBackWithNothingMoved(): void {
+		list( $run_id, , $target, $backup ) = self::swapped_f56();
+		$back  = self::planned_back( $run_id );
+		$parts = self::step( $run_id, 3 )['parts'];
+		unset( $parts['target'] );
+		self::assertTrue( AB_MCP_Sync_Run::update_step( $run_id, 3, array( 'parts' => $parts ), 'done' ) );
+		clearstatcache();
+		$before = self::bytes_of( $target );
+		$old    = self::bytes_of( $backup );
+		$answer = self::gated( 'wp_site_revert', array( 'action' => 'next', 'run_id' => $back ) );
+		self::assertIsArray( $answer, is_wp_error( $answer ) ? $answer->get_error_code() . ': ' . $answer->get_error_message() : '' );
+		$step = self::back_step( $back );
+		$says = $step['result']['message'];
+		self::assertSame( 'failed', $step['state'], $says );
+		self::assertStringStartsWith( sprintf( 'Step 3 of run %d does not read as a swap of code wrote it (its unit in the plan of the run, or its journal), so no way back is planned or run on it and nothing of it is put back.', $run_id ), $says );
+		clearstatcache();
+		self::assertSame( array( $before, $old ), array( self::bytes_of( $target ), self::bytes_of( $backup ) ), 'Nothing moved.' );
 	}
 
 	/**
@@ -1994,6 +2126,15 @@ final class SyncCodeRunTest extends TestCase {
 			}
 		}
 		self::fail( 'The way back did not close within 12 calls: ' . json_encode( $back ) );
+	}
+
+	/** The way back of a run planned with its token, its step not run yet: the number of the run of the way back. */
+	private static function planned_back( int $run_id ): int {
+		$preview = self::gated( 'wp_site_revert', array( 'action' => 'plan', 'run_id' => $run_id ) );
+		self::assertIsArray( $preview, is_wp_error( $preview ) ? $preview->get_error_code() . ': ' . $preview->get_error_message() : '' );
+		$begun = self::gated( 'wp_site_revert', array( 'action' => 'plan', 'run_id' => $run_id, 'confirm_token' => $preview['confirm_token'] ) );
+		self::assertIsArray( $begun, is_wp_error( $begun ) ? $begun->get_error_code() . ': ' . $begun->get_error_message() : '' );
+		return (int) $begun['run_id'];
 	}
 
 	/** The step of the way back of a run that goes back over step 3, the swap, as stored. */
@@ -2570,7 +2711,7 @@ final class SyncCodeRunTest extends TestCase {
 		);
 	}
 
-	/** The command line of a way by hand (the one line of by_hand that begins with "$ "), run in bash without -e: its output. */
+	/** The command line of a way by hand (the one of these lines that begins with "$ ", as it stands there), run in bash without -e: its output. */
 	private static function run_by_hand( array $by_hand ): string {
 		$lines = array_values( array_filter( $by_hand, static fn( $line ) => 0 === strpos( $line, '$ ' ) ) );
 		self::assertCount( 1, $lines, 'One command line.' );
