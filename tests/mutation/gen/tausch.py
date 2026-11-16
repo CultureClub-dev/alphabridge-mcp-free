@@ -352,6 +352,23 @@ e('d2a-proof-asked', 'unclear(): where the backup was not asked yet (OPcache bef
 e('d2a-proof-in-time', 'in_backup(): the backup counts as proved only where its tree read back within the time of the call (its deadline), never after it', CS,
   "\t\t$tree = null !== $at && array( $old['form'], $old['dev'], $old['ino'] ) === array( $at['form'], $at['dev'], $at['ino'] ) ? AB_MCP_Protected_Store::tree( 'backups', $old['gid'], $old['name'], $old['hash'], AB_MCP_Sync_Deadline::at( $until ) ) : null;", "\t\t$tree = null !== $at && array( $old['form'], $old['dev'], $old['ino'] ) === array( $at['form'], $at['dev'], $at['ino'] ) ? AB_MCP_Protected_Store::tree( 'backups', $old['gid'], $old['name'], $old['hash'] ) : null;", 'coderun', F35)
 
+# The rest of part D2a: the note of the replacement last, the end not written and close() without its proof (the lead, 16.11. 03:57).
+F36 = 'testASwapWhoseJournalOrBackupCannotBeWrittenMovesNothingAndItsStepStaysPlanned'
+MARK = 'testAMarkThatCannotBeWrittenMovesNothingAndTheAnswerNamesAMarkLeftInPart'
+NOTE = 'testANoteOfTheReplacementNotReadBackMovesNothingAndClosesTheMarkOnTheOldVersion'
+END = 'testASwapWhoseEndCannotBeWrittenSaysItIsSwappedAndTheNextCallChangesNothing'
+NOTED = "\t\tself::noted( $unit['kind'], $unit['ref'], $since );\n"
+e('d2a-note-after-journal', 'rename_marked(): the note of the replacement only after the journal of the step is written and read back, never before it (the lead on D2a, 16.11. 03:57)', CS,
+  '\t\t$begun   = self::begun( $in, $journal );', NOTED + '\t\t$begun   = self::begun( $in, $journal );', 'coderun', F36)
+e('d2a-note-after-mark', 'rename_marked(): the note of the replacement only after the mark of the swap is written, never before it (the lead on D2a, 16.11. 03:57)', CS,
+  '\t\t$mark           = self::calls()->put_mark( self::mark_of( $in, $plan ) );', NOTED + '\t\t$mark           = self::calls()->put_mark( self::mark_of( $in, $plan ) );', 'coderun', MARK)
+e('d2a-note-stops', 'rename_marked(): a note of the replacement that did not read back stops the swap before its first rename', CS,
+  '\t\tif ( true !== $noted ) {', '\t\tif ( false ) {', 'coderun', NOTE)
+e('d2a-close-proved', 'close(): the mark closes and the file undo points go only where the version at the target (and, for a swap, the old one in the backup) is proved (Z20a; D2a 5)', CS,
+  '\t\tif ( true !== $proved ) {', '\t\tif ( false ) {', 'coderun', AFTER)
+e('d2a-end-recorded', 'ended(): a step is answered as ended only where its end is recorded; else the refusal says it stays begun (D2a 5, the lead on D2a, 16.11. 03:57, way a)', CS,
+  '\t\tif ( true !== $saved ) {', '\t\tif ( false ) {', 'coderun', END)
+
 # ------------------------------------------------ check and write
 src = {f: open(os.path.join(ROOT, f)).read() for f in VAR}
 errors = []
