@@ -25,9 +25,13 @@
  * THE ONE ENTRANCE OF THE WAY BACK (back(); plan Z22, N12): the core asks
  * it through its place (AB_MCP_Sync_Revert::code()), which the last line of
  * this file fills, never by this name: the preview of the way back of a
- * swap step (plan), of its continuation (continue), and the step of the way
- * back itself (revert, AB_MCP_Sync_Code_Swap::back()). Where this file is
- * not loaded, a run of the code is neither planned back nor run back.
+ * swap step (plan), of its continuation (continue), the step of the way
+ * back itself (revert, AB_MCP_Sync_Code_Swap::back()), and a step left
+ * begun of a run a person closes as checked (checked, way (a);
+ * AB_MCP_Sync_Run::close_checked()). accept of the way back is refused
+ * here for a step that is no swap of a plugin that ran when it began
+ * (Z25, Z43). Where this file is not loaded, a run of the code is neither
+ * planned back, run back nor closed as checked.
  *
  * WHAT A STEP READS (the pre-check of branch 5, V18 and V19): the unit of a
  * step comes from the plan of its run in the form of its row plan.code, by
@@ -141,27 +145,35 @@ final class AB_MCP_Sync_Code_Ops {
 	 * staged, or a swap planned, skipped or failed: the old version at its
 	 * place), else what the preview shows and the token binds; continue: a
 	 * step of the way back still open, for the preview of its continuation;
-	 * revert: the step of the way back runs. The unit from the plan of the
-	 * run that wrote (item()), the swap from its step; the rest is the
-	 * swap's (AB_MCP_Sync_Code_Swap::back()).
+	 * revert: the step of the way back runs; checked: a step left begun of
+	 * a run a person closes as checked (way (a): its own step, or one of its
+	 * way back). The unit from the plan of the run that wrote (item()), the
+	 * swap from its step; the rest is the swap's
+	 * (AB_MCP_Sync_Code_Swap::back()). accept (plan) is refused where the
+	 * swap does not take it into the entry of the way back: no swap of a
+	 * plugin that ran when it began (Z25, Z43).
 	 *
-	 * @param string $at      plan, continue or revert.
+	 * @param string $at      plan, continue, revert or checked.
 	 * @param array  $run     The run (for continue and revert: of the way back).
 	 * @param array  $step    A write step of the run (plan), else a step of the way back.
 	 * @param array  $forward The run that wrote.
+	 * @param bool   $accept  plan: the step is in accept of wp_site_revert.
 	 * @return array|null|WP_Error
 	 */
-	public static function back( $at, array $run, array $step, array $forward ) {
-		$seq  = (int) ( 'plan' === $at ? $step['seq'] : ( is_array( $step['parts'] ) && isset( $step['parts']['forward_seq'] ) ? $step['parts']['forward_seq'] : 0 ) );
+	public static function back( $at, array $run, array $step, array $forward, $accept = false ) {
+		$own  = 'plan' === $at || 'revert' !== $step['op'];
+		$seq  = (int) ( $own ? $step['seq'] : ( is_array( $step['parts'] ) && isset( $step['parts']['forward_seq'] ) ? $step['parts']['forward_seq'] : 0 ) );
 		$item = self::item( $forward['plan'], $seq );
-		$swap = 'plan' === $at ? $step : AB_MCP_Sync_Run::step( (int) $forward['run_id'], $seq );
+		$swap = $own ? $step : AB_MCP_Sync_Run::step( (int) $forward['run_id'], $seq );
 		if ( is_wp_error( $swap ) ) {
 			return $swap;
 		}
-		if ( 'plan' === $at && ! is_wp_error( $item ) && ( 'swap' !== $item['unit']['op'] || ! in_array( $step['state'], array( 'begun', 'unclear', 'done' ), true ) ) ) {
-			return null;
+		$back = $own && ! is_wp_error( $item ) && ( 'swap' !== $item['unit']['op'] || ! in_array( $step['state'], array( 'begun', 'unclear', 'done' ), true ) ) ? null : AB_MCP_Sync_Code_Swap::back( $at, $run, $step, is_wp_error( $item ) ? null : $item['unit'], $swap, $accept );
+		if ( $accept && ! is_wp_error( $back ) && empty( $back['item']['accept'] ) ) {
+			/* translators: 1: step number, 2: run number. */
+			return new WP_Error( 'ab_mcp_sync_code_accept', sprintf( __( 'Step %1$d of run %2$d is in accept, but it is no swap of a plugin that ran when the swap began, so its way back activates nothing: accept takes the steps whose plugin the way back activates again, with its activation routine, where it is inactive after it. Pass accept without %1$d.', 'alphabridge-mcp' ), $seq, (int) $run['run_id'] ) );
 		}
-		return AB_MCP_Sync_Code_Swap::back( $at, $run, $step, is_wp_error( $item ) ? null : $item['unit'], $swap );
+		return $back;
 	}
 
 	/**

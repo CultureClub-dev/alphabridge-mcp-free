@@ -1942,6 +1942,245 @@ final class SyncCodeRunTest extends TestCase {
 	}
 
 	/**
+	 * Prüft: F9 (plan F9; Z22, Z20b; section 2 of part E): the child theme
+	 * that runs here (ab-it-kind, a child of ab-it-eltern) with its
+	 * functions.php changed on staging (1.1.0) is planned the public way,
+	 * released with accept, staged from wordpress.org (the stand-in) and
+	 * swapped in the run; the site runs the new functions.php, and the theme
+	 * that runs is still ab-it-kind. accept of the way back for its swap
+	 * step, or for the step that staged it, is refused with the way (no swap
+	 * of a plugin that ran when it began), and nothing of the way back
+	 * begins. Then the way back of the run puts the old version back
+	 * (put_back()); the theme still runs, in its old version.
+	 * Sonst: a child theme changed on staging could not be brought over or
+	 * taken back by the run, or accept would be taken for a step whose way
+	 * back activates nothing, and the person would read it as a release that
+	 * does something.
+	 */
+	public function testAChildThemeWithAChangedFunctionsFileIsSwappedAndPutBackByTheWayBackOfItsRun(): void {
+		self::paired();
+		AB_MCP_IT_Code::put( 'b', 'theme', 'ab-it-kind', '1.1.0' );
+		list( $report, $units ) = self::report();
+		self::assertArrayHasKey( 'theme:ab-it-kind', $units, implode( ' ', array_keys( $units ) ) );
+		$n      = (int) $units['theme:ab-it-kind']['n'];
+		$target = AB_MCP_IT_Code::path( 'a', 'theme', 'ab-it-kind' );
+		self::assertSame( array( '1.0.0', 'ab-it-kind' ), array( AB_MCP_IT_Code::fassung( 'a', 'theme', 'ab-it-kind' ), AB_MCP_IT_Code::theme_options( 'a' )['stylesheet'] ) );
+		self::wporg();
+		list( , $run ) = self::begun(
+			array(
+				'action'    => 'plan',
+				'report_id' => $report['report_id'],
+				'select'    => array( $n ),
+				'accept'    => array( $n ),
+			)
+		);
+		$run_id = (int) $run['run_id'];
+		$unit   = AB_MCP_Sync_Code_Ops::item( AB_MCP_Sync_Run::get( $run_id )['plan'], 3 )['unit'];
+		self::assertSame( array( 'theme', 'ab-it-kind', 'swap', true, true ), array( $unit['kind'], $unit['ref'], $unit['op'], $unit['runs'], $unit['accept'] ) );
+		// The check, the stage over calls, then the swap.
+		for ( $i = 0; $i < 25 && 'planned' === self::step( $run_id, 3 )['state']; $i++ ) {
+			$answer = self::next( $run_id );
+			self::assertIsArray( $answer, is_wp_error( $answer ) ? $answer->get_error_code() . ': ' . $answer->get_error_message() : '' );
+		}
+		self::assertSame( 'done', self::step( $run_id, 3 )['state'], json_encode( self::step( $run_id, 3 )['result'] ) );
+		self::assertSame( array( '1.1.0', '1.1.0', 'ab-it-kind' ), array( AB_MCP_IT_Code::fassung( 'a', 'theme', 'ab-it-kind' ), AB_MCP_IT_Code::mark( 'a', 'ab-it-kind' ), AB_MCP_IT_Code::theme_options( 'a' )['stylesheet'] ), 'The site runs the new functions.php of the theme that runs.' );
+		foreach ( array( 2, 3 ) as $seq ) {
+			$says = self::refused( self::gated( 'wp_site_revert', array( 'action' => 'plan', 'run_id' => $run_id, 'accept' => array( $seq ) ) ), 'ab_mcp_sync_code_accept' );
+			self::assertSame( sprintf( 'Step %1$d of run %2$d is in accept, but it is no swap of a plugin that ran when the swap began, so its way back activates nothing: accept takes the steps whose plugin the way back activates again, with its activation routine, where it is inactive after it. Pass accept without %1$d.', $seq, $run_id ), $says );
+		}
+		self::assertSame( 'open', AB_MCP_Sync_Run::get( $run_id )['state'], 'Nothing of the way back began.' );
+		self::put_back(
+			$run_id,
+			$unit,
+			$target,
+			array(
+				'old' => self::bytes_of( AB_MCP_IT_Code::source( 'theme', 'ab-it-kind', '1.0.0' ) ),
+				'new' => self::bytes_of( AB_MCP_IT_Code::source( 'theme', 'ab-it-kind', '1.1.0' ) ),
+			)
+		);
+		self::assertSame( array( '1.0.0', '1.0.0', 'ab-it-kind' ), array( AB_MCP_IT_Code::fassung( 'a', 'theme', 'ab-it-kind' ), AB_MCP_IT_Code::mark( 'a', 'ab-it-kind' ), AB_MCP_IT_Code::theme_options( 'a' )['stylesheet'] ), 'The theme still runs, in its old version.' );
+	}
+
+	/**
+	 * Prüft: Z25 and Z43 (section 2 of part E): a plugin that ran when its
+	 * swap began (F56) and is deactivated after it (here silently, as
+	 * WordPress does with a plugin whose main file it misses) comes back in
+	 * its old version by the way back of the run and is activated again only
+	 * with its step in accept. The preview names it, with its activation
+	 * routine or as staying inactive with the way. With accept the step
+	 * activates it through the Activation Guard, its activation routine
+	 * counted once, and only where its old version is proved at the target
+	 * (OPcache not cleared: unclear, nothing activated); a refusal of the
+	 * guard (no time left in the call for its test requests) and its
+	 * warning (the test requests switched off) are in the answer as they
+	 * are, the refusal with the way. Without accept it stays inactive, its
+	 * routine not run, and the answer names it with the way.
+	 * Sonst: the way back would leave a plugin of the customer switched off
+	 * without a word, or switch it on without the release of the person,
+	 * without its activation routine or its test requests, or on a target
+	 * it did not prove.
+	 */
+	#[DataProvider( 'activations_back' )]
+	public function testAPluginDeactivatedAfterItsSwapIsActivatedAgainByTheWayBackOnlyWithAccept( string $case ): void {
+		require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		$main = 'ab-it-aktiv/ab-it-aktiv.php';
+		list( $run_id ) = self::swapped_f56();
+		deactivate_plugins( $main, true );
+		self::assertNotContains( $main, self::active(), 'Deactivated after the swap.' );
+		$counted = AB_MCP_IT_Code::counters( 'a', 'ab-it-aktiv' )['aktiviert'];
+		$accept  = 'without accept' !== $case;
+		if ( 'unclear' === $case ) {
+			self::seam_of_swap(
+				array(
+					array(
+						'method' => 'opcache',
+						'nth'    => 1,
+						'kind'   => 'return',
+						'value'  => 'not_possible',
+					),
+				)
+			);
+		}
+		if ( 'not checked' === $case ) {
+			add_filter( 'ab_mcp_php_probe_enabled', '__return_false' );
+		}
+		// The way back is a request of its own for the budget of the guard
+		// (AB_MCP_Update_Guard::request_start()); one that took 60 seconds
+		// already has no time left for its test requests.
+		$started                       = $_SERVER['REQUEST_TIME_FLOAT'];
+		$_SERVER['REQUEST_TIME_FLOAT'] = microtime( true ) - ( 'out of time' === $case ? 60 : 0 );
+		try {
+			$way = self::way_back_of( $run_id, $accept ? array( 'accept' => array( 3 ) ) : array() );
+		} finally {
+			$_SERVER['REQUEST_TIME_FLOAT'] = $started;
+			remove_filter( 'ab_mcp_php_probe_enabled', '__return_false' );
+		}
+		$shown = array_values( array_filter( $way['preview']['preview']['steps'], static fn( $s ) => 3 === (int) $s['seq'] ) );
+		$off   = sprintf( 'The plugin %s ran when its swap began and is not read as active now, and step 3 is not in accept of its way back (wp_site_revert action=plan), so the way back leaves it inactive. Activate it in wp-admin (Plugins → Activate) or with wp_activate_plugin; either runs its activation routine.', $main );
+		$will  = sprintf( 'The plugin %s ran when its swap began and is not read as active now: once its old version is proved at the target, the way back activates it again with its activation routine, checked like an update (wp_activate_plugin).', $main );
+		self::assertSame( array( $main => $accept ? $will : $off ), $shown[0]['activate'], 'The preview names it with its activation routine, or as staying inactive with the way (Z43).' );
+		$step = self::back_step( (int) $way['begun']['run_id'] );
+		$says = $step['result']['message'];
+		self::assertSame( 'unclear' === $case ? 'unclear' : 'done', $step['state'], $says );
+		self::assertSame( '1.0.0', AB_MCP_IT_Code::fassung( 'a', 'plugin', 'ab-it-aktiv' ), 'Its old version is at the target.' );
+		$on      = sprintf( 'The plugin %s is active again, with its activation routine, checked like an update (wp_activate_plugin).', $main );
+		$now     = array( in_array( $main, self::active(), true ), AB_MCP_IT_Code::counters( 'a', 'ab-it-aktiv' )['aktiviert'] - $counted );
+		$expects = array(
+			'without accept' => array( array( false, 0 ), $off ),
+			'with accept'    => array( array( true, 1 ), $on ),
+			'not checked'    => array( array( true, 1 ), $on . ' Not checked: the test requests are switched off with the ab_mcp_php_probe_enabled filter;' ),
+			'out of time'    => array( array( false, 0 ), sprintf( 'So the way back leaves the plugin %s inactive: activate it in wp-admin (Plugins → Activate) or with wp_activate_plugin.', $main ) ),
+			'unclear'        => array( array( false, 0 ), 'The step of the way back is unclear' ),
+		);
+		self::assertSame( $expects[ $case ][0], $now, 'Active, and its activation routine run: ' . $says );
+		self::assertStringContainsString( $expects[ $case ][1], $says );
+		if ( 'out of time' === $case ) {
+			self::assertStringContainsString( 'Not activated: ', $says, 'The refusal of the guard as it is.' );
+		}
+		if ( 'unclear' === $case ) {
+			self::assertStringNotContainsString( 'ran when its swap began', $says, 'Nothing of the plugin is said or done where the old version is not proved.' );
+		}
+	}
+
+	/** The way back of a plugin deactivated after its swap: without accept, with it, with its test requests off, with no time left for them, and where the old version is not proved (OPcache). */
+	public static function activations_back(): array {
+		return array(
+			'without accept' => array( 'without accept' ),
+			'with accept'    => array( 'with accept' ),
+			'not checked'    => array( 'not checked' ),
+			'out of time'    => array( 'out of time' ),
+			'unclear'        => array( 'unclear' ),
+		);
+	}
+
+	/**
+	 * Prüft: way (a) for a run of the code (decision 18; Z20a, Z20b;
+	 * question 2 of part E): a swap broken off (the call ends without the
+	 * end of its step) leaves its run interrupted, its step begun and its
+	 * mark open. A person closes it as checked (AB_MCP_Sync_Run::
+	 * close_checked()) only where, read now, the target holds the new
+	 * version and the backup the old one whole, or the target the old
+	 * version: then the mark of the swap closes, the step and the pair of
+	 * the unit are unclear (question 3 A) and the run is closed as checked.
+	 * With the target empty (broken off between the renames) it is refused
+	 * before anything is written, with the way back and the way by hand:
+	 * the run stays interrupted, its step begun, the mark open, the pair as
+	 * it was, the target empty. A run interrupted on a step after its swap
+	 * was done asks nothing of the swap: it closes as checked although its
+	 * backup is gone by now.
+	 * Sonst: a person could close a run of the code as checked with the
+	 * plugin missing at its target and its mark closed, or a run with a
+	 * version proved, or one whose swap was done long before, could not be
+	 * closed as checked.
+	 */
+	#[DataProvider( 'closed_as_checked' )]
+	public function testARunOfTheCodeBrokenOffIsClosedAsCheckedOnlyWhereAVersionIsProvedAtTheTarget( string $case, ?array $fault ): void {
+		if ( null === $fault ) {
+			list( $run_id, $unit, , $backup ) = self::swapped_f56();
+			self::assertTrue( rename( $backup, $backup . '-weg' ), 'The backup gone.' );
+			self::assertTrue( AB_MCP_Sync_Run::update_step( $run_id, 4, array( 'state' => 'begun' ), 'planned' ), 'Its next step begun by a call that ended.' );
+			self::assertSame( 'interrupted', self::gated( 'wp_site_push', array( 'action' => 'status', 'run_id' => $run_id ) )['state'] );
+			$closed = AB_MCP_Sync_Run::close_checked( $run_id, self::admin(), true );
+			self::assertIsArray( $closed, is_wp_error( $closed ) ? $closed->get_error_code() . ': ' . $closed->get_error_message() : '' );
+			self::assertSame( array( 'closed_checked', 'done', 'unclear' ), array( $closed['state'], self::step( $run_id, 3 )['state'], self::step( $run_id, 4 )['state'] ), 'Closed as checked; the swap is not asked again.' );
+			return;
+		}
+		list( $run_id, $unit, $target ) = self::ready_to_swap();
+		$old = self::bytes_of( $target );
+		self::swap_with( $run_id, array( $fault ) );
+		AB_MCP_Test_Seam::restore_all();
+		self::assertSame( 'begun', self::step( $run_id, 3 )['state'] );
+		self::assertSame( 'interrupted', self::gated( 'wp_site_push', array( 'action' => 'status', 'run_id' => $run_id ) )['state'] );
+		$state = static fn(): array => array( AB_MCP_Sync_Run::get( $run_id )['state'], self::step( $run_id, 3 )['state'], self::mark_of_swap( $run_id )['state'], AB_MCP_Sync_Pairs::get( $unit['pair_id'] )['state'] );
+		self::assertSame( array( 'interrupted', 'begun', 'open', 'active' ), $state() );
+		$closed = AB_MCP_Sync_Run::close_checked( $run_id, self::admin(), true );
+		clearstatcache();
+		if ( 'target empty' === $case ) {
+			$says = self::refused( $closed, 'code:checked' );
+			self::assertStringStartsWith( sprintf( 'The version at %s could not be proved as the one the swap left there', $target ), $says );
+			self::assertStringContainsString( sprintf( 'So run %1$d is not closed as checked: that takes the old version of the plugin ab-it-aktiv proved at its target, or the new one there and the old one whole in the backup. Nothing was written, and the run stays interrupted. Take its way back (wp_site_revert action=plan with run_id %1$d), or put the old version back by hand in a shell on the server with the instruction of its mark in ', $run_id ), $says );
+			self::assertSame( array( 'interrupted', 'begun', 'open', 'active' ), $state(), 'Nothing was written.' );
+			self::assertFalse( file_exists( $target ), 'The target is still empty.' );
+			return;
+		}
+		self::assertIsArray( $closed, is_wp_error( $closed ) ? $closed->get_error_code() . ': ' . $closed->get_error_message() : '' );
+		self::assertSame( array( 'closed_checked', 'unclear', 'closed', 'unclear' ), $state(), 'The mark closed, the step and the pair unclear, the run closed as checked.' );
+		self::assertSame( 'new version at the target' === $case ? self::bytes_of( AB_MCP_IT_Code::source( 'plugin', 'ab-it-aktiv', '2.0.0' ) ) : $old, self::bytes_of( $target ) );
+	}
+
+	/** Where a swap is broken off: between its renames (the target empty), after them (the new version at the target, OPcache), before the first (the old version at the target); and a run interrupted on its next step after its swap was done (no fault: the case of its own). */
+	public static function closed_as_checked(): array {
+		return array(
+			'target empty'              => array(
+				'target empty',
+				array(
+					'method' => 'rename',
+					'nth'    => 2,
+					'kind'   => 'throw',
+				),
+			),
+			// Call 1 of OPcache is the one of prepare(); 2 the first after the renames.
+			'new version at the target' => array(
+				'new version at the target',
+				array(
+					'method' => 'opcache',
+					'nth'    => 2,
+					'kind'   => 'throw',
+				),
+			),
+			'old version at the target' => array(
+				'old version at the target',
+				array(
+					'method' => 'rename',
+					'nth'    => 1,
+					'kind'   => 'throw',
+				),
+			),
+			'after the swap'            => array( 'after the swap', null ),
+		);
+	}
+
+	/**
 	 * Prüft: F55 with a new plugin (F5): a plugin only on staging, planned
 	 * the public way, is checked and staged; its swap refuses
 	 * code:create_not_built with the way (abort, install by hand) before
@@ -2102,16 +2341,17 @@ final class SyncCodeRunTest extends TestCase {
 
 	/**
 	 * The way back of a run as a client takes it (plan Z22): wp_site_revert
-	 * plan, its token, next until the run of the way back is closed.
+	 * plan (with $more, accept), its token, next until the run of the way
+	 * back is closed.
 	 *
 	 * @return array{preview:array,begun:array,back:array} The preview, the run of the way back as
 	 *         it began, its last answer.
 	 */
-	private static function way_back_of( int $run_id ): array {
-		$preview = self::gated( 'wp_site_revert', array( 'action' => 'plan', 'run_id' => $run_id ) );
+	private static function way_back_of( int $run_id, array $more = array() ): array {
+		$preview = self::gated( 'wp_site_revert', array( 'action' => 'plan', 'run_id' => $run_id ) + $more );
 		self::assertIsArray( $preview, is_wp_error( $preview ) ? $preview->get_error_code() . ': ' . $preview->get_error_message() : '' );
 		self::assertTrue( $preview['confirm_required'] );
-		$begun = self::gated( 'wp_site_revert', array( 'action' => 'plan', 'run_id' => $run_id, 'confirm_token' => $preview['confirm_token'] ) );
+		$begun = self::gated( 'wp_site_revert', array( 'action' => 'plan', 'run_id' => $run_id, 'confirm_token' => $preview['confirm_token'] ) + $more );
 		self::assertIsArray( $begun, is_wp_error( $begun ) ? $begun->get_error_code() . ': ' . $begun->get_error_message() : '' );
 		$back = null;
 		for ( $i = 0; $i < 12; $i++ ) {
@@ -2176,6 +2416,8 @@ final class SyncCodeRunTest extends TestCase {
 		$says = $step['result']['message'];
 		self::assertStringContainsString( sprintf( 'The %1$s %2$s is in its old version at %3$s, proved there', $unit['kind'], $unit['ref'], $target ), $says );
 		self::assertStringContainsString( 'stays as it is; confirm the pair of the unit anew (wp_site_pairs)', $says );
+		self::assertStringNotContainsString( 'ran when its swap began', $says, 'No plugin to activate again: it runs on, or did not run (section 2 of part E).' );
+		self::assertSame( array(), $shown[0]['activate'], 'The preview names no plugin to activate again.' );
 		clearstatcache();
 		$now = lstat( $target );
 		self::assertSame( array( $old['dev'], $old['ino'] ), array( $now['dev'], $now['ino'] ), 'The old version is the folder or file of the backup itself, moved back.' );

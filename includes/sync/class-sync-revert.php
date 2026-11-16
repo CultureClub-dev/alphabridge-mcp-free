@@ -57,7 +57,12 @@
  * AB_MCP_Sync_Code_Ops fills as its file loads, admit()); the core decides
  * nothing of it by itself and never calls it by a name of its class.
  * Without the entrance a run of the code is neither planned back, led on
- * nor run back, and the refusal names the way by hand.
+ * nor run back, and the refusal names the way by hand. accept (the seqs of
+ * swap steps whose plugin the way back activates again, Z25) goes to the
+ * entrance as it is; the entrance takes it into the entry of the step of
+ * the way back, or refuses it, and the token binds it with every other
+ * argument (Z41). A run closed as checked asks the entrance for each step
+ * of the code left begun (way (a), AB_MCP_Sync_Run::close_checked()).
  *
  * Messages are in gettext, in the language of the site as they arise (a
  * refusal, a note of the journal); each names the way. Codes, states,
@@ -126,16 +131,18 @@ final class AB_MCP_Sync_Revert {
 	 * null where the plan of the run that wrote holds no key code (a run of
 	 * the contents: the core goes on as before); the refusal with the way
 	 * where it holds one and no entrance is here, nothing planned, written
-	 * or closed; else the answer of the entrance. The run that wrote: the
-	 * run itself for plan, else the one the step of the way back names
-	 * (forward_run; this run where it names none or itself).
+	 * or closed (closed as checked neither); else the answer of the
+	 * entrance. The run that wrote: the run itself for plan, else the one
+	 * the step of the way back names (forward_run; this run where it names
+	 * none or itself).
 	 *
-	 * @param string $at   plan (a write step, for the preview), continue (a step of the way back still open, for the preview of its continuation) or revert (the step of the way back runs).
-	 * @param array  $run  The run.
-	 * @param array  $step The step.
+	 * @param string $at     plan (a write step, for the preview), continue (a step of the way back still open, for the preview of its continuation), revert (the step of the way back runs) or checked (a step left begun of a run closed as checked, way (a)).
+	 * @param array  $run    The run.
+	 * @param array  $step   The step.
+	 * @param bool   $accept plan: the step is in accept (the entrance decides whether it takes it).
 	 * @return mixed|null|WP_Error
 	 */
-	public static function code( $at, array $run, array $step ) {
+	public static function code( $at, array $run, array $step, $accept = false ) {
 		$id      = 'plan' !== $at && is_array( $step['parts'] ) && isset( $step['parts']['forward_run'] ) ? (int) $step['parts']['forward_run'] : (int) $run['run_id'];
 		$forward = $id === (int) $run['run_id'] ? $run : AB_MCP_Sync_Run::get( $id );
 		if ( ! is_array( $forward ) ) {
@@ -148,7 +155,7 @@ final class AB_MCP_Sync_Revert {
 			/* translators: %d: run number. */
 			return new WP_Error( 'ab_mcp_sync_revert_code', sprintf( __( 'Run %d swapped plugins or themes, and this installation of AlphaBridge has no way back for code (its entrance is not loaded), so nothing of it is planned, put back or closed. Put the old version back by hand: in a shell on the server with the lines the answer of its swap named (wp_site_push action=status shows the result of that step), or in wp-admin with the version of before.', 'alphabridge-mcp' ), $id ) );
 		}
-		return call_user_func( self::$entrance, $at, $run, $step, $forward );
+		return call_user_func( self::$entrance, $at, $run, $step, $forward, $accept );
 	}
 
 	/* ------------------------------------------------- the confirmation */
@@ -534,7 +541,7 @@ final class AB_MCP_Sync_Revert {
 				/* translators: 1: step, 2: run number. */
 				return new WP_Error( 'ab_mcp_sync_revert_unread', sprintf( __( 'The journal of step %1$d of run %2$d does not read back as it was written (a marker of its bytes that does not hold), so no way back is planned on it and nothing is taken back. Pass steps without %1$d to plan the way back of the other steps that wrote, and check its object by hand in wp-admin; its backup in the protected store holds the object as it was before the step.', 'alphabridge-mcp' ), (int) $step['seq'], (int) $run['run_id'] ) );
 			}
-			$one = self::one( $run, $step );
+			$one = self::one( $run, $step, $a );
 			if ( is_wp_error( $one ) ) {
 				return $one;
 			}
@@ -562,10 +569,7 @@ final class AB_MCP_Sync_Revert {
 			if ( null !== $one['object'] ) {
 				$objects[] = $one['object'];
 			}
-			$items[] = array(
-				'forward_run' => (int) $run['run_id'],
-				'forward_seq' => (int) $step['seq'],
-			);
+			$items[] = $one['item'];
 			$shown[] = $one['shown'];
 			$live    = $one['live'] + $live;
 		}
@@ -619,16 +623,19 @@ final class AB_MCP_Sync_Revert {
 	/**
 	 * What the way back plans for one write step of the run (way_back()):
 	 * null where the step wrote nothing; for a step of a run of the code
-	 * what its entrance answers (code(), plan: the same three, its object
-	 * null); else the object of its journal, the step as the preview shows
-	 * it, and the hash of its row now, by its key, for the token.
+	 * what its entrance answers (code(), plan: the same four, its object
+	 * null; whether the step is in accept, the entrance decides); else the
+	 * object of its journal, the step as the preview shows it, the hash of
+	 * its row now, by its key, for the token, and the entry of its step of
+	 * the way back.
 	 *
 	 * @param array $run  The run.
 	 * @param array $step A write step of it.
-	 * @return array{object:array|null,shown:array,live:array}|null|WP_Error
+	 * @param array $a    The arguments of the plan (accept).
+	 * @return array{object:array|null,shown:array,live:array,item:array}|null|WP_Error
 	 */
-	private static function one( array $run, array $step ) {
-		$code = self::code( 'plan', $run, $step );
+	private static function one( array $run, array $step, array $a ) {
+		$code = self::code( 'plan', $run, $step, in_array( (int) $step['seq'], array_map( 'intval', (array) ( $a['accept'] ?? array() ) ), true ) );
 		if ( null !== $code ) {
 			return $code;
 		}
@@ -672,6 +679,10 @@ final class AB_MCP_Sync_Revert {
 				'will'     => $will,
 			),
 			'live'   => $live,
+			'item'   => array(
+				'forward_run' => (int) $run['run_id'],
+				'forward_seq' => (int) $step['seq'],
+			),
 		);
 	}
 

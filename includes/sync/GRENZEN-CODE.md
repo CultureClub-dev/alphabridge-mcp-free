@@ -730,11 +730,12 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
 ### G-5-14 Der Rückweg eines Tauschs: ein Eingang, keine eigene Marke, die Marke über ihre Liste
 
 - **Fundstelle:** Der Platz des Eingangs `AB_MCP_Sync_Revert::admit()` und die Weiche `code()`
-  (`includes/sync/class-sync-revert.php:119`, `:138`), belegt in der letzten Zeile von
-  `includes/sync/class-sync-code-ops.php` (`:580`); der Rückweg im Tausch `back()`, `restore()`, `restored()`,
-  `moved_back()`, `mark_id()` (`includes/sync/class-sync-code-swap.php:2078`, `:2122`, `:2160`, `:2232`, `:2272`); das
+  (`includes/sync/class-sync-revert.php:124`, `:145`), belegt in der letzten Zeile von
+  `includes/sync/class-sync-code-ops.php` (`:592`); der Rückweg im Tausch `back()`, `restore()`, `restored()`,
+  `moved_back()`, `mark_id()` (`includes/sync/class-sync-code-swap.php:2092`, `:2145`, `:2183`, `:2257`, `:2386`); das
   Journal in der Form seiner Zeile `step.swap` (`includes/class-store-inputs.php:985`); die Fortsetzung eines
-  unterbrochenen Rückweg-Schritts `begin_same_run()` (`class-sync-revert.php:967`).
+  unterbrochenen Rückweg-Schritts `begin_same_run()` (`class-sync-revert.php:978`). Zeilen am Stand von Teil E,
+  Abschnitt 2.
 - **Quelle:** Teil E des Rests, Bauzettel `z5r-e-zettel.md` (Grenzen) mit der Freigabe der Lead (Fragen 1 bis 5, N12)
   und der Kürzung nach `z5r-e1-abweichung.md`.
 - **Was:**
@@ -753,6 +754,37 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
     Fassung liegt; das Ergebnis des Schritts nennt den Platz, wo er gefüllt wurde.
 - **Trifft Normalfall:** nein. Im Normalfall (F59, F1, F2, F6, F47, F55) ist der Eingang belegt, die Marke in der Liste,
   und beide Umbenennungen gelingen in einem Aufruf.
+
+### G-5-15 Wiedereinschalten mit `accept` und Weg (a) für einen Lauf mit Code-Schritten
+
+- **Fundstelle:** `accept` im Schema von `wp_site_revert` (`includes/tools/class-tools-staging.php:481`), durchgereicht
+  von `AB_MCP_Sync_Revert::one()` und `code()`, geprüft in `AB_MCP_Sync_Code_Ops::back()`
+  (`includes/sync/class-sync-code-ops.php:163`); im Tausch `back()`, `restored()`, `on_again()`, `closed_checked()`
+  (`includes/sync/class-sync-code-swap.php:2092`, `:2183`, `:2308`, `:2347`); Weg (a) in
+  `AB_MCP_Sync_Run::close_checked_on()` (`includes/sync/class-sync-run.php:1095`).
+- **Quelle:** Teil E des Rests, Abschnitt 2, Kurzzettel `z5r-e2-zettel.md` nach dem Bauzettel `z5r-e-zettel.md`
+  (Bausteine 4 und 7, Frage 2 der Lead).
+- **Was:**
+  - Wieder eingeschaltet werden nur Plugins, deren Hauptdatei beim Beginn des Tauschs lief (Journal `active`, wie die
+    Marke sie nennt). Ein Wechsel des Themes durch den Kern wird nicht zurückgestellt und nicht benannt (G-24).
+  - `accept` wirkt nur für einen Schritt, dessen Rückweg geplant wird. Eine Nummer, die kein Schreibschritt des Laufs
+    ist, nicht in `steps` steht, schon zurückgenommen wurde, oder `accept` für einen Lauf der Inhalte bleibt ohne
+    Wirkung und wird nicht abgelehnt (wie `steps`). Bei der Fortsetzung eines unterbrochenen Rückwegs gilt der Eintrag
+    des Rückweg-Schritts; ein neues `accept` wird dort weder genommen noch abgelehnt.
+  - Mit `accept` fragt der Rückweg-Schritt den Guard für jede solche Hauptdatei; ob sie aktiv ist, liest der Guard
+    selbst. Ohne `accept` und in der Vorschau nennt die Antwort jede, die `active_mains()` nicht als aktiv liest; ist
+    die Zeile `active_plugins` nicht lesbar, nennt sie alle («not read as active»).
+  - Die Aktivierung läuft im Aufruf des Rückweg-Schritts, mit dem Zeitbudget des Guards ab dem Beginn dieses Aufrufs;
+    lehnt er ab (etwa keine Zeit mehr für seine Testanfragen), bleibt das Plugin inaktiv, der Schritt `done`, und die
+    Antwort nennt die Ablehnung mit dem Weg. Einen zweiten Versuch über `wp_site_revert` gibt es nicht (ein Schritt geht
+    einmal zurück); der Weg ist wp-admin oder `wp_activate_plugin`.
+  - Weg (a) schliesst nur, wo am Ziel die neue Fassung und in der Sicherung die alte ganz belegt ist, oder am Ziel die
+    alte; die Marke schliesst dabei (bei `swap` mit dem Verwerfen der Datei-Undo-Punkte der Einheit wie Z20a). Die
+    Meldung der Seite «Staging» danach sagt weiter «Nothing was written». Konnte die Sperre für Änderungen danach nicht
+    zurückgegeben werden, nennt das nur eine Ablehnung, nicht ein gelungenes Schliessen. Ein Journal, das nicht als
+    Tausch lesbar ist, lehnt mit dem Satz `journal_unknown` ab, der «steps ohne» als Weg nennt.
+- **Trifft Normalfall:** nein. Im Normalfall bleibt ein aktives Plugin über Tausch und Rückweg aktiv, und ein
+  unterbrochener Tausch geht über Weg (b) zurück.
 
 ## Übernommen aus Zweig 2 (`bericht-zweig-2.md`, Abschnitt Grenzkandidaten; G-M9 aus «Behebung 2»)
 

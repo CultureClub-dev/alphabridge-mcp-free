@@ -66,6 +66,15 @@
  * where close() with kept proves the old version at the target; the pair
  * of the unit becomes unclear. Anything not proved leaves the unit as it
  * is, and the answer names what failed, target and backup (option B).
+ * Only then, and only with accept of the way back, a plugin that ran when
+ * the swap began is activated again through AB_MCP_Activation_Guard::
+ * plugin() (Z25); without accept it stays inactive, named with the way,
+ * and the preview says which (on_again(), Z43). A switch of the theme is
+ * not put back (G-24). Way (a) (closed_checked()): a person closes a run
+ * whose swap step, or a step of its way back, was left begun only where,
+ * read under the lock for changes, the target holds the new version and
+ * the backup the old one whole, or the target the old one; the mark
+ * closes. Else the refusal, before the run writes anything.
  *
  * OPCACHE (invalidate(), Z13): the one wrapper of
  * AB_MCP_Own_Files::invalidate_opcache() in the swap; only invalidated or
@@ -92,6 +101,7 @@ require_once dirname( __DIR__ ) . '/class-shape.php';
 require_once dirname( __DIR__ ) . '/class-store-inputs.php';
 require_once dirname( __DIR__ ) . '/class-protected-store.php';
 require_once dirname( __DIR__ ) . '/lifecycle/class-change-lock.php';
+require_once dirname( __DIR__ ) . '/lifecycle/class-activation-guard.php';
 require_once dirname( __DIR__ ) . '/lifecycle/class-own-files.php';
 require_once dirname( __DIR__ ) . '/lifecycle/class-php-probe.php';
 require_once dirname( __DIR__ ) . '/lifecycle/class-update-guard.php';
@@ -2063,19 +2073,23 @@ final class AB_MCP_Sync_Code_Swap {
 	/**
 	 * The way back of a swap (plan Z22, Z20b; N12), reached only through the
 	 * one entrance AB_MCP_Sync_Code_Ops::back(). plan and continue: the step
-	 * as the preview shows it; revert: restore(). A swap whose journal is
-	 * not of the form of its row step.swap, or names another unit or
-	 * target, is not known: no way back is planned on it, and a step of the
-	 * way back on it fails with nothing moved.
+	 * as the preview shows it, with each plugin it activates again or leaves
+	 * inactive (on_again(), Z43), and the entry of the way back, which takes
+	 * accept only for a plugin that ran when the swap began; revert:
+	 * restore(); checked: closed_checked(). A swap whose journal is not of
+	 * the form of its row step.swap, or names another unit or target, is
+	 * not known: no way back is planned on it, it is not closed as checked,
+	 * and a step of the way back on it fails with nothing moved.
 	 *
-	 * @param string     $at   plan, continue or revert.
-	 * @param array      $run  The run (for continue and revert: of the way back).
-	 * @param array      $step A write step of the run (plan), else a step of the way back.
-	 * @param array|null $unit The unit of the swap step (AB_MCP_Sync_Code_Ops::item()); null where it does not read so.
-	 * @param mixed      $swap The swap step as read now.
-	 * @return array|WP_Error
+	 * @param string     $at     plan, continue, revert or checked.
+	 * @param array      $run    The run (for continue and revert: of the way back).
+	 * @param array      $step   A write step of the run (plan, checked), else a step of the way back.
+	 * @param array|null $unit   The unit of the swap step (AB_MCP_Sync_Code_Ops::item()); null where it does not read so.
+	 * @param mixed      $swap   The swap step as read now.
+	 * @param bool       $accept plan: the step is in accept of wp_site_revert.
+	 * @return array|true|WP_Error
 	 */
-	public static function back( $at, array $run, array $step, $unit, $swap ) {
+	public static function back( $at, array $run, array $step, $unit, $swap, $accept = false ) {
 		$journal = is_array( $unit ) && is_array( $swap ) && ( ! isset( $swap['unread'] ) || array() === $swap['unread'] ) ? AB_MCP_Store_Inputs::read( 'step.swap', $swap['parts'] ) : null;
 		if ( null === $journal || $unit['kind'] !== $journal['unit']['kind'] || $unit['ref'] !== $journal['unit']['ref'] || AB_MCP_Sync_Code_Stage::target( $unit['kind'], $unit['ref'] ) !== $journal['target'] ) {
 			$what = 'plan' === $at ? array( 'forward_seq' => $step['seq'] ) : (array) $step['parts'];
@@ -2090,6 +2104,10 @@ final class AB_MCP_Sync_Code_Swap {
 		if ( 'revert' === $at ) {
 			return self::restore( $run, $step, $unit, $journal, $swap );
 		}
+		if ( 'checked' === $at ) {
+			return self::closed_checked( $unit, $journal, $swap );
+		}
+		$took = ( $accept || ! empty( $step['parts']['accept'] ) ) && array() !== $journal['active'];
 		return array(
 			'object' => null,
 			'shown'  => array(
@@ -2100,8 +2118,13 @@ final class AB_MCP_Sync_Code_Swap {
 				'will'     => 'begun' === $step['state'] && 'continue' === $at ? 'stays' : ( 'done' === $step['state'] ? 'back' : 'back where own' ),
 				'target'   => $journal['target'],
 				'backup'   => $journal['old']['path'],
+				'activate' => self::on_again( $journal, $unit['ref'], $took, (int) $swap['seq'], false ),
 			) + ( 'plan' === $at ? array( 'op' => 'swap', 'pair_id' => $unit['pair_id'], 'parts' => array() ) : array( 'forward_seq' => (int) $swap['seq'] ) ),
 			'live'   => array(),
+			'item'   => array(
+				'forward_run' => (int) $swap['run_id'],
+				'forward_seq' => (int) $swap['seq'],
+			) + ( $took ? array( 'accept' => true ) : array() ),
 		);
 	}
 
@@ -2200,6 +2223,8 @@ final class AB_MCP_Sync_Code_Swap {
 		} else {
 			/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name, 3: the folder or file of the unit (absolute path). */
 			$message = sprintf( __( 'The %1$s %2$s is in its old version at %3$s, proved there (device, inode and hash). What the new version wrote into the database while it ran stays as it is; confirm the pair of the unit anew (wp_site_pairs) before its next takeover.', 'alphabridge-mcp' ), $unit['kind'], $unit['ref'], $journal['target'] );
+			// Only now, on the old version proved at the target (Z25).
+			$message = implode( ' ', array_merge( array( $message ), self::on_again( $journal, $unit['ref'], ! empty( $step['parts']['accept'] ), (int) $swap['seq'], true ) ) );
 		}
 		return self::ended(
 			$in,
@@ -2259,6 +2284,95 @@ final class AB_MCP_Sync_Code_Swap {
 			'moved' => array( $slot['path'], $plan['target'] ),
 			'place' => $slot['path'],
 		);
+	}
+
+	/**
+	 * The plugins a way back activates again (Z25, Z43): each main file that
+	 * ran when the swap began (its journal, as its mark names them). With
+	 * accept of the way back, by a step whose old version is proved at the
+	 * target ($switch), through AB_MCP_Activation_Guard::plugin() alone,
+	 * which reads whether it is active and activates it with its activation
+	 * routine and its test requests; its refusal or warning as it is, one
+	 * it finds active unsaid. Else (the preview, or without accept) each one
+	 * not read as active now is named: with accept as one the way back
+	 * activates, without it as staying inactive, with the way. A theme names
+	 * none: a switch of the theme is not put back (G-24).
+	 *
+	 * @param array  $journal The journal of the swap.
+	 * @param string $ref     The plugin.
+	 * @param bool   $accept  Its step takes accept.
+	 * @param int    $seq     The swap step.
+	 * @param bool   $switch  Activate (the step of the way back), else only say what it will do (the preview).
+	 * @return string[] What happens to each main file, by its name.
+	 */
+	private static function on_again( array $journal, $ref, $accept, $seq, $switch ) {
+		$said = array();
+		$now  = (array) self::active_mains( $ref );
+		foreach ( $journal['active'] as $main ) {
+			$on = $accept && $switch ? AB_MCP_Activation_Guard::plugin( $main ) : array( 'already_active' => in_array( $main, $now, true ) );
+			if ( is_wp_error( $on ) ) {
+				/* translators: 1: why the activation was refused or taken back (one or more whole sentences), 2: the main file of a plugin (akismet/akismet.php). */
+				$said[ $main ] = sprintf( __( '%1$s So the way back leaves the plugin %2$s inactive: activate it in wp-admin (Plugins → Activate) or with wp_activate_plugin.', 'alphabridge-mcp' ), $on->get_error_message(), $main );
+			} elseif ( ! empty( $on['already_active'] ) ) {
+				continue;
+			} elseif ( ! $accept ) {
+				/* translators: 1: the main file of a plugin (akismet/akismet.php), 2: the number of the swap step. */
+				$said[ $main ] = sprintf( __( 'The plugin %1$s ran when its swap began and is not read as active now, and step %2$d is not in accept of its way back (wp_site_revert action=plan), so the way back leaves it inactive. Activate it in wp-admin (Plugins → Activate) or with wp_activate_plugin; either runs its activation routine.', 'alphabridge-mcp' ), $main, $seq );
+			} else {
+				$said[ $main ] = $switch
+					/* translators: %s: the main file of a plugin (akismet/akismet.php). */
+					? sprintf( __( 'The plugin %s is active again, with its activation routine, checked like an update (wp_activate_plugin).', 'alphabridge-mcp' ), $main ) . ( isset( $on['warning'] ) ? ' ' . $on['warning'] : '' )
+					/* translators: %s: the main file of a plugin (akismet/akismet.php). */
+					: sprintf( __( 'The plugin %s ran when its swap began and is not read as active now: once its old version is proved at the target, the way back activates it again with its activation routine, checked like an update (wp_activate_plugin).', 'alphabridge-mcp' ), $main );
+			}
+		}
+		return $said;
+	}
+
+	/**
+	 * Way (a) for a swap step left begun, or a step of its way back (plan
+	 * Z20a, Z20b; question 2 of part E): a person closes its run as checked
+	 * only where, read now and under the lock for changes, the target holds
+	 * the new version and the backup the old one whole (close() with swap),
+	 * or the target the old version (close() with kept); the mark closes.
+	 * Else the refusal with the way back and the way by hand, before
+	 * AB_MCP_Sync_Run::close_checked() writes anything; the run stays
+	 * interrupted. A mark that is gone leaves the proof alone (G-27).
+	 *
+	 * @param array $unit    The unit of the swap step.
+	 * @param array $journal The journal of the swap.
+	 * @param array $swap    The swap step.
+	 * @return true|WP_Error
+	 */
+	private static function closed_checked( array $unit, array $journal, array $swap ) {
+		$in    = array(
+			'run_id' => (int) $swap['run_id'],
+			'unit'   => array(
+				'kind' => $unit['kind'],
+				'ref'  => $unit['ref'],
+				'seq'  => (int) $swap['seq'],
+			),
+			'until'  => self::until(),
+		);
+		$locked = self::take();
+		if ( true !== $locked ) {
+			return $locked;
+		}
+		try {
+			$mid    = self::mark_id( $swap );
+			$closed = self::close( 'swap', $in, $journal, $mid );
+			if ( is_wp_error( $closed ) && 'code:close_target' === $closed->get_error_code() ) {
+				$closed = self::close( 'kept', $in, $journal, $mid );
+			}
+		} finally {
+			$kept = self::release();
+		}
+		if ( ! is_wp_error( $closed ) || 'ab_mcp_store_no_mark' === $closed->get_error_code() ) {
+			return true;
+		}
+		$store = AB_MCP_Protected_Store::named_by_swap();
+		/* translators: 1: what failed (one or more whole sentences), 2: run number, 3: kind of the unit, as the tools name it (plugin, theme), 4: its name, 5: the folder of the marks of the protected store (absolute path). */
+		return self::refusal( 'code:checked', sprintf( __( '%1$s So run %2$d is not closed as checked: that takes the old version of the %3$s %4$s proved at its target, or the new one there and the old one whole in the backup. Nothing was written, and the run stays interrupted. Take its way back (wp_site_revert action=plan with run_id %2$d), or put the old version back by hand in a shell on the server with the instruction of its mark in %5$s, then close it as checked again.', 'alphabridge-mcp' ), $closed->get_error_message(), (int) $swap['run_id'], $unit['kind'], $unit['ref'], is_wp_error( $store ) ? 'the protected store' : $store['marks'] ) . self::kept_note( $kept ) );
 	}
 
 	/**

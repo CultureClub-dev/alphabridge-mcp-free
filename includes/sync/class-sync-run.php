@@ -1014,6 +1014,9 @@ final class AB_MCP_Sync_Run {
 		// a request that ended left begun makes it interrupted here), and
 		// nothing of them read again before the close.
 		require_once __DIR__ . '/class-sync-shown.php';
+		// The one entrance of the way back of the code, asked for a step of the
+		// code left begun (close_checked_on()).
+		require_once __DIR__ . '/class-sync-revert.php';
 		return AB_MCP_Sync_Shown::done(
 			static function () use ( $run_id ) {
 				return self::interruption_read( (int) $run_id );
@@ -1078,7 +1081,11 @@ final class AB_MCP_Sync_Run {
 	/**
 	 * close_checked() on the one reading: each step left begun unclear (on
 	 * its state read, begun), the pair of each unclear, the run closed as
-	 * checked (on its state read, interrupted).
+	 * checked (on its state read, interrupted). A step of the code left
+	 * begun is asked first, before anything is written, through the one
+	 * entrance of the way back of the code (AB_MCP_Sync_Revert::code(),
+	 * checked; way (a), part E): its refusal, or none there, leaves the run
+	 * interrupted.
 	 *
 	 * @param array   $run     The run as read.
 	 * @param array[] $steps   Its steps as read.
@@ -1087,6 +1094,12 @@ final class AB_MCP_Sync_Run {
 	 */
 	private static function close_checked_on( array $run, array $steps, $user_id ) {
 		$run_id = (int) $run['run_id'];
+		foreach ( $steps as $step ) {
+			$code = 'begun' === $step['state'] && in_array( $step['op'], array( 'write', 'revert' ), true ) ? AB_MCP_Sync_Revert::code( 'checked', $run, $step ) : null;
+			if ( is_wp_error( $code ) ) {
+				return $code;
+			}
+		}
 		foreach ( $steps as $step ) {
 			if ( 'begun' !== $step['state'] ) {
 				continue;

@@ -23,7 +23,8 @@ EN = 'includes/sync/class-sync-engine.php'
 ST = 'includes/sync/class-sync-code-stage.php'
 PS = 'includes/class-protected-store.php'
 RV = 'includes/sync/class-sync-revert.php'
-VAR = {CK: '$ck', DE: '$de', PU: '$pu', CP: '$cp', CO: '$co', CS: '$cs', EN: '$en', ST: '$st', PS: '$ps', RV: '$rv'}
+RU = 'includes/sync/class-sync-run.php'
+VAR = {CK: '$ck', DE: '$de', PU: '$pu', CP: '$cp', CO: '$co', CS: '$cs', EN: '$en', ST: '$st', PS: '$ps', RV: '$rv', RU: '$ru'}
 CLASSES = {'kind': ('unit', 'SyncCodeKindTest'), 'env': ('unit', 'SyncEnvTest'), 'run': ('unit', 'SyncRunTest'),
            'ops': ('unit', 'SyncCodeOpsTest'), 'coderun': ('it', 'SyncCodeRunTest'), 'store': ('it', 'ProtectedStoreTest'),
            'storeunit': ('unit', 'ProtectedStoreTest'), 'guard': ('unit', 'StoreRemoverGuardTest'), 'swapunit': ('unit', 'SyncCodeSwapTest'),
@@ -533,6 +534,49 @@ e('e-uhr', 'restored(): a clock that gives no time refuses the step of the way b
   "$begun = 0.0 === $in['until'] ? self::clock_refusal() :", '$begun = false ? self::clock_refusal() :', 'coderun', 'testTheWayBackWithoutTheLockOrTheTimeOfItsCallRefusesAndStaysPlanned')
 e('e-platz', 'moved_back(): the place of the new version not given (open() or put_tree() refuses) moves nothing and ends the step of the way back unclear (question 1 B of Teil E)', CS,
   "\t\tif ( is_wp_error( $slot ) ) {", "\t\tif ( false ) {", 'coderun', 'testTheWayBackWithoutAPlaceForTheNewVersionMovesNothingAndItsStepIsUnclear')
+
+# ------------------------------------------- Teil E, section 2: accept of the way back, the plugin activated again, way (a) (Z25, Z43, Z20a, Z20b)
+E_F9 = 'testAChildThemeWithAChangedFunctionsFileIsSwappedAndPutBackByTheWayBackOfItsRun'
+E_ON = 'testAPluginDeactivatedAfterItsSwapIsActivatedAgainByTheWayBackOnlyWithAccept'
+E_WA = 'testARunOfTheCodeBrokenOffIsClosedAsCheckedOnlyWhereAVersionIsProvedAtTheTarget'
+E_F56 = 'testAnActivePluginReleasedWithAcceptIsSwappedInTheRunWithItsBackupItsMarkAndTheWayBack'
+e('e-accept', 'on_again(): a plugin is activated again only with accept of the way back (Z25; Teil E, section 2)', CS,
+  "$on = $accept && $switch ? AB_MCP_Activation_Guard::plugin( $main ) :", "$on = $switch ? AB_MCP_Activation_Guard::plugin( $main ) :", 'coderun', E_ON)
+e('e-accept-ablehnung', 'Ops::back(): accept for a step that is no swap of a plugin that ran when it began is refused with the way, never taken unsaid (Teil E, section 2)', CO,
+  "\t\tif ( $accept && ! is_wp_error( $back ) && empty( $back['item']['accept'] ) ) {", "\t\tif ( false ) {", 'coderun', E_F9)
+e('e-accept-nimmt', 'Tausch::back(): the entry of the way back takes accept only for a swap whose journal names main files that ran when it began, never for a theme (Teil E, section 2)', CS,
+  "$took = ( $accept || ! empty( $step['parts']['accept'] ) ) && array() !== $journal['active'];",
+  "$took = $accept || ! empty( $step['parts']['accept'] );", 'coderun', E_F9)
+e('e-accept-eintrag', 'Revert::one(): accept of the plan reaches the entrance for its step, so its entry of the way back carries it (Teil E, section 2)', RV,
+  "in_array( (int) $step['seq'], array_map( 'intval', (array) ( $a['accept'] ?? array() ) ), true )", 'false', 'coderun', E_ON)
+e('e-wieder-nachweis', 'restored(): a plugin is activated again only where close() with kept proved the old version at the target, never on a step that ends unclear (Z25, Z20b; Teil E, section 2)', CS,
+  "\t\tif ( isset( $moved['fault'] ) ) {\n\t\t\t$named   = AB_MCP_Protected_Store::named_by_swap();",
+  "\t\tself::on_again( $journal, $unit['ref'], ! empty( $step['parts']['accept'] ), (int) $swap['seq'], true );\n\t\tif ( isset( $moved['fault'] ) ) {\n\t\t\t$named   = AB_MCP_Protected_Store::named_by_swap();", 'coderun', E_ON)
+e('e-wieder-schon-aktiv', 'on_again(): a plugin that runs on is neither activated nor named as inactive (Teil E, section 2)', CS,
+  "\t\t\t} elseif ( ! empty( $on['already_active'] ) ) {", "\t\t\t} elseif ( false ) {", 'coderun', E_F56)
+e('e-wieder-guard-fehler', 'on_again(): a refusal of the Activation Guard goes into the answer with the way, never as active again (Z25; Teil E, section 2)', CS,
+  "\t\t\tif ( is_wp_error( $on ) ) {\n\t\t\t\t/* translators: 1: why the activation", "\t\t\tif ( false ) {\n\t\t\t\t/* translators: 1: why the activation", 'coderun', E_ON)
+e('e-wieder-warnung', 'on_again(): the warning of the Activation Guard (not checked) goes into the answer as it is (Teil E, section 2)', CS,
+  "( isset( $on['warning'] ) ? ' ' . $on['warning'] : '' )", "''", 'coderun', E_ON)
+e('e-wieder-vorschau', 'Tausch::back(): the preview of the way back names each plugin it activates again or leaves inactive, with the way (Z43; Teil E, section 2)', CS,
+  "\t\t\t\t'activate' => self::on_again( $journal, $unit['ref'], $took, (int) $swap['seq'], false ),", "\t\t\t\t'activate' => array(),", 'coderun', E_ON)
+e('e-weg-a-fehlt', 'closed_checked(): way (a) closes nothing where neither version is proved at the target; the refusal comes with the way back and the way by hand (Z20a, question 2 of Teil E)', CS,
+  "\t\tif ( ! is_wp_error( $closed ) || 'ab_mcp_store_no_mark' === $closed->get_error_code() ) {", "\t\tif ( true ) {", 'coderun', E_WA)
+e('e-weg-a-nachweis', 'closed_checked(): way (a) closes the mark only through close(), which proves the version at the target first (Z20a, Z20b; Teil E, section 2)', CS,
+  "\t\t\t$closed = self::close( 'swap', $in, $journal, $mid );", "\t\t\t$closed = self::calls()->close_mark( $mid );", 'coderun', E_WA)
+e('e-weg-a-kept', 'closed_checked(): the old version at the target closes way (a) with kept (Z20b; Teil E, section 2)', CS,
+  "\t\t\tif ( is_wp_error( $closed ) && 'code:close_target' === $closed->get_error_code() ) {", "\t\t\tif ( false ) {", 'coderun', E_WA)
+e('e-weg-a-eigener-schritt', 'Ops::back(): way (a) on a step of the run itself takes that step as the swap, a step of its way back the swap it names (Teil E, section 2)', CO,
+  "\t\t$own  = 'plan' === $at || 'revert' !== $step['op'];", "\t\t$own  = 'plan' === $at;", 'coderun', E_WA)
+e('e-weg-a-anschluss', 'close_checked_on(): a step of the code left begun goes through the one entrance of the way back before the run is closed as checked (way (a), N12; Teil E, section 2)', RU,
+  "? AB_MCP_Sync_Revert::code( 'checked', $run, $step ) : null;", '? null : null;', 'coderun', E_WA)
+e('e-weg-a-vor-schreiben', 'close_checked_on(): every step of the code left begun is asked before anything of the run is written, so a refusal leaves it interrupted with its steps as they were (way (a); Teil E, section 2)', RU,
+  "\t\t\tif ( is_wp_error( $code ) ) {\n\t\t\t\treturn $code;\n\t\t\t}\n\t\t}\n\t\tforeach ( $steps as $step ) {\n\t\t\tif ( 'begun' !== $step['state'] ) {\n\t\t\t\tcontinue;\n\t\t\t}\n",
+  "\t\t}\n\t\tforeach ( $steps as $step ) {\n\t\t\tif ( 'begun' !== $step['state'] ) {\n\t\t\t\tcontinue;\n\t\t\t}\n\t\t\tself::update_step( $run_id, (int) $step['seq'], array( 'state' => 'unclear' ), 'begun' );\n\t\t\t$code = AB_MCP_Sync_Revert::code( 'checked', $run, $step );\n\t\t\tif ( is_wp_error( $code ) ) {\n\t\t\t\treturn $code;\n\t\t\t}\n", 'coderun', E_WA)
+e('e-weg-a-nur-begonnen', 'close_checked_on(): only a step left begun is asked, never a swap done long before (way (a); Teil E, section 2)', RU,
+  "$code = 'begun' === $step['state'] && in_array(", '$code = in_array(', 'coderun', E_WA)
+e('e-weg-a-nur-schreibschritte', 'close_checked_on(): only a write step or a step of the way back is asked, never one of the checks of the run (way (a); Teil E, section 2)', RU,
+  "$code = 'begun' === $step['state'] && in_array( $step['op'], array( 'write', 'revert' ), true ) ?", "$code = 'begun' === $step['state'] ?", 'coderun', E_WA)
 
 # ------------------------------------------------ check and write
 src = {f: open(os.path.join(ROOT, f)).read() for f in VAR}

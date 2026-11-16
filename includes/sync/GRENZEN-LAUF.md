@@ -1061,8 +1061,12 @@ Ablehnung entsteht, nennt sie den Weg.
   `AB_MCP_Sync_Code_Ops`): seine Vorschau, jeder Rückweg-Schritt und die
   Fortsetzung eines unterbrochenen Rückwegs; ohne Eingang lehnen sie ab
   (`ab_mcp_sync_revert_code`), und der Lauf bleibt, wie er ist
-  (`GRENZEN-CODE.md`, G-5-14). Weg (a) für einen solchen Lauf folgt mit
-  Abschnitt 2 von Teil E über denselben Eingang.
+  (`GRENZEN-CODE.md`, G-5-14). Weg (a) für einen solchen Lauf geht seit
+  Abschnitt 2 von Teil E über denselben Eingang: `close_checked_on()` fragt
+  vor jedem Schreiben jeden begonnenen Schreib- oder Rückweg-Schritt
+  (`code( 'checked', … )`); geschlossen wird nur, wo die neue Fassung am Ziel
+  und die alte ganz in der Sicherung oder die alte am Ziel belegt ist (die
+  Marke schliesst), sonst bleibt der Lauf `interrupted` (G-5-15).
 - Die Erfassung je Lauf (Momente M2 und M8): `calls` zählt jeden Aufruf ab
   der bestätigten Anlage (Anlage, Schritte, Statusabfragen, Wiederholungen),
   `duration` ist `closed − created`. Vorschau-Aufrufe vor der Anlage zählen
