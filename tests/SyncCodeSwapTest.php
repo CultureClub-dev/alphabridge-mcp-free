@@ -21,6 +21,7 @@ use AB_MCP_Own_Files;
 use AB_MCP_Protected_Store;
 use AB_MCP_Sync_Code_Swap;
 use AB_MCP_Sync_Env;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use WP_Error;
 
@@ -28,6 +29,15 @@ require_once __DIR__ . '/sync-stubs.php';
 require_once dirname( __DIR__ ) . '/includes/sync/class-sync-code-swap.php';
 
 final class SyncCodeSwapTest extends TestCase {
+
+	/** A journal of a swap as begun() writes it (its form is the swap's). */
+	private const JOURNAL = array(
+		'old' => array(
+			'path' => '/site/wp-content/ab-store/backups/1/shop',
+			'hash' => 'aaaa',
+		),
+		'seq' => 3,
+	);
 
 	protected function setUp(): void {
 		ab_test_reset();
@@ -105,6 +115,72 @@ final class SyncCodeSwapTest extends TestCase {
 			$held->setAccessible( true );
 		}
 		return $held->getValue();
+	}
+
+	/**
+	 * Prüft: the journal of a swap counts as begun only where its write from
+	 * planned took and the step as stored now reads whole as begun with this
+	 * very journal, in the same canonical form (keys in any order); every
+	 * other reading refuses with code:journal, which names the error of the
+	 * database where there is one (T5, the journal of a swap; part D3b-2 of
+	 * the rest). The test of the unit tells only the write that fails.
+	 * Sonst: the swap could rename on a journal not stored, half read, of
+	 * another state or with other values, so that the way back and the next
+	 * call would not know the backup it made.
+	 */
+	#[DataProvider( 'journals_read_back' )]
+	public function testTheJournalOfASwapCountsAsBegunOnlyWhereItReadsBackAsWritten( $saved, $step, string $says ): void {
+		$asked = array();
+		$calls = self::calls(
+			array(
+				'journal' => static function ( ...$args ) use ( &$asked, $saved ) {
+					$asked = $args;
+					return $saved;
+				},
+				'step'    => $step,
+			)
+		);
+		$begun = new \ReflectionMethod( AB_MCP_Sync_Code_Swap::class, 'begun' );
+		if ( PHP_VERSION_ID < 80100 ) {
+			$begun->setAccessible( true );
+		}
+		$answer = $begun->invoke( null, self::args(), self::JOURNAL );
+		self::assertSame( array( 1, 3, array( 'state' => 'begun', 'parts' => self::JOURNAL ), 'planned' ), $asked, 'Written as begun, from planned only.' );
+		self::assertSame( true === $saved ? array( 'journal', 'step' ) : array( 'journal' ), $calls->called, 'Read back only where the write took.' );
+		if ( '' === $says ) {
+			self::assertTrue( $answer );
+			return;
+		}
+		self::assertInstanceOf( WP_Error::class, $answer );
+		self::assertSame( 'code:journal', $answer->get_error_code() );
+		self::assertStringContainsString( 'The journal of the swap of the plugin shop could not be written and read back before its first rename (' . $says . '), so nothing of it was moved.', $answer->get_error_message() );
+		self::assertStringContainsString( 'wp_site_push action=status', $answer->get_error_message(), 'With the way.' );
+	}
+
+	public static function journals_read_back(): array {
+		$step = static fn( array $over ): array => $over + array(
+			'state'  => 'begun',
+			'parts'  => self::JOURNAL,
+			'unread' => array(),
+		);
+		$other = self::JOURNAL;
+		$other['old']['hash'] = 'aaab';
+		$typed = self::JOURNAL;
+		$typed['seq'] = '3';
+		return array(
+			'written and read back'                    => array( true, $step( array() ), '' ),
+			'read back with its keys in another order' => array( true, $step( array( 'parts' => array_reverse( self::JOURNAL, true ) ) ), '' ),
+			'read back without unread'                 => array( true, array_diff_key( $step( array() ), array( 'unread' => 1 ) ), '' ),
+			'the write refused by the database'        => array( new WP_Error( 'ab_mcp_sync_db', 'the database is locked' ), null, 'the database is locked' ),
+			'the write not taken'                      => array( false, null, '-' ),
+			'the step not read back'                   => array( true, null, '-' ),
+			'the step read as an error'                => array( true, new WP_Error( 'ab_mcp_sync_db', 'gone' ), '-' ),
+			'the step of another state'                => array( true, $step( array( 'state' => 'planned' ) ), '-' ),
+			'a record of the step not read'            => array( true, $step( array( 'unread' => array( 'result' ) ) ), '-' ),
+			'no journal in the step'                   => array( true, $step( array( 'parts' => null ) ), '-' ),
+			'another value in the journal'             => array( true, $step( array( 'parts' => $other ) ), '-' ),
+			'a value of another type'                  => array( true, $step( array( 'parts' => $typed ) ), '-' ),
+		);
 	}
 
 	public function testTheTestRequestsSwitchedOffRefuseEverySwapAndClaimNoRunningCode(): void {
@@ -295,6 +371,8 @@ final class SyncCodeSwapCalls {
 			'stat'          => array( 'mode' => 0040755, 'dev' => 1 ),
 			'lstat'         => array( 'mode' => 0100644, 'dev' => 1 ),
 			'scandir'       => array( '.', '..' ),
+			'journal'       => true,
+			'step'          => null,
 		);
 	}
 
@@ -352,5 +430,13 @@ final class SyncCodeSwapCalls {
 	public function scandir( $dir ) {
 		$this->listed[] = $dir;
 		return $this->answer( 'scandir', array( $dir ) );
+	}
+
+	public function journal( $run_id, $seq, array $set, $from ) {
+		return $this->answer( 'journal', array( $run_id, $seq, $set, $from ) );
+	}
+
+	public function step( $run_id, $seq ) {
+		return $this->answer( 'step', array( $run_id, $seq ) );
 	}
 }

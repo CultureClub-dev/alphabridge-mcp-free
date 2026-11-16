@@ -22,6 +22,9 @@
  *   by put_tree() only; the store renames only in write_file() (a temp file
  *   into place), ensure() (the building folder into place) and put_back()
  *   (an original back on uninstall, Z9);
+ * - Z15, Z16 (Z8b branch 5), the swap: in class-sync-code-swap.php PHP's
+ *   rename() only in AB_MCP_Sync_Code_Swap_Calls::rename(), called only in
+ *   AB_MCP_Sync_Code_Swap::move() (onto a place lstat() reads as free);
  * - Z9: uninstall.php reaches the store only through
  *   AB_MCP_Protected_Store::uninstall(), which no shipped code calls
  *   otherwise, and names no folder of the store.
@@ -257,6 +260,21 @@ final class StoreRemoverGuardTest extends TestCase {
 		);
 		self::assertSame( array( 'AB_MCP_Protected_Store_Calls::rename' ), self::places( $store, 'function', 'rename' ) );
 		self::assertSame( array( 'AB_MCP_Protected_Store::build_dir', 'AB_MCP_Protected_Store::complete', 'AB_MCP_Protected_Store::copy_tree', 'AB_MCP_Protected_Store::copy_tree', 'AB_MCP_Protected_Store::ensure', 'AB_MCP_Protected_Store::open', 'AB_MCP_Protected_Store::put_mark', 'AB_MCP_Protected_Store::self_check' ), self::places( $store, 'method', 'mkdir' ), 'The folders of a tree in copy_tree() only; a building folder in build_dir() only (Z8b branch 4, D4).' );
+	}
+
+	/**
+	 * Prüft: the swap renames only through its calls, and those only from
+	 * move(), which renames onto a place it read as free (Z15, Z16; part
+	 * D3b-2 of the rest).
+	 * Sonst: a rename of the swap past move() could put a version over a
+	 * folder another process put there, or move the old one out of its
+	 * place without its backup, journal and mark, so that the way back and
+	 * the instruction by hand no longer find it.
+	 */
+	public function testTheSwapRenamesOnlyThroughItsCallsAndThoseOnlyFromMove(): void {
+		$swap = 'includes/sync/class-sync-code-swap.php';
+		self::assertSame( array( 'AB_MCP_Sync_Code_Swap_Calls::rename' ), self::places( $swap, 'function', 'rename' ), 'PHP\'s rename() in the one call of the swap only.' );
+		self::assertSame( array( 'AB_MCP_Sync_Code_Swap::move' ), self::places( $swap, 'method', 'rename' ), 'That call only from move().' );
 	}
 
 	public function testTheRetentionOfABackupIsDecidedByKeptOnly(): void {

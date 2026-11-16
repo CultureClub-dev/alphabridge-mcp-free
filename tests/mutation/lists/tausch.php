@@ -9,7 +9,8 @@
  * the plan of a run of the code, a step of the code in a run and what runs
  * here, three-valued (part 1).
  * Held by the unit suite (SyncCodeKindTest, SyncEnvTest, SyncRunTest,
- * SyncCodeOpsTest, ProtectedStoreTest, StoreRemoverGuardTest) and the
+ * SyncCodeOpsTest, ProtectedStoreTest, StoreRemoverGuardTest,
+ * SyncCodeSwapTest) and the
  * integration suite (SyncCodeRunTest, ProtectedStoreTest).
  *
  * Not listed, with why (bericht-zweig-5.md), equivalent: in rights() the
@@ -1337,5 +1338,32 @@ return array(
 		'replace' => "\t\t\$named = is_wp_error( AB_MCP_Protected_Store::root() ) ? AB_MCP_Protected_Store::root() : AB_MCP_Protected_Store::named_by_swap();",
 		'run'     => $unit( 'StoreRemoverGuardTest', 'testNothingRemovesInTheStoreButDeletePath' ),
 		'expect'  => '/testNothingRemovesInTheStoreButDeletePath/',
+	),
+	array(
+		'id'      => 'tausch/d3b2-rename-past-move',
+		'clause'  => 'the guard of the renames of the swap (Z15, Z16): rename() of its calls only from move(), which renames onto a place read as free; a rename past move() makes the guard red (Teil D3b-2)',
+		'file'    => $cs,
+		'search'  => "\t\tif ( ! self::move( \$plan['target'], \$plan['old']['path'] ) ) {",
+		'replace' => "\t\tif ( ! self::calls()->rename( \$plan['target'], \$plan['old']['path'] ) ) {",
+		'run'     => $unit( 'StoreRemoverGuardTest', 'testTheSwapRenamesOnlyThroughItsCallsAndThoseOnlyFromMove' ),
+		'expect'  => '/testTheSwapRenamesOnlyThroughItsCallsAndThoseOnlyFromMove/',
+	),
+	array(
+		'id'      => 'tausch/d3b2-target-hash',
+		'clause'  => 'at_target(): the version at the target counts as the one the swap left only where its tree reads as the hash of the new version, so a mark never closes on another one (Z20a; Teil D3b-2)',
+		'file'    => $cs,
+		'search'  => '&& is_string( $read[\'hash\'] ) && hash_equals( $want[\'hash\'], $read[\'hash\'] ) ) {',
+		'replace' => '&& is_string( $read[\'hash\'] ) ) {',
+		'run'     => $it( 'SyncCodeRunTest', 'testAfterTheRenamesAStepNotProvedIsUnclearAndItsAnswerSaysWhatIsProved' ),
+		'expect'  => '/testAfterTheRenamesAStepNotProvedIsUnclearAndItsAnswerSaysWhatIsProved/',
+	),
+	array(
+		'id'      => 'tausch/d3b2-journal-read-back',
+		'clause'  => 'begun(): the journal counts as begun only where the step read back holds this very journal in its canonical form, never another one written over it (E5 7; Teil D3b-2)',
+		'file'    => $cs,
+		'search'  => ' && AB_MCP_Sync_Canon::encode( $journal ) === AB_MCP_Sync_Canon::encode( $step[\'parts\'] ) ) {',
+		'replace' => ' ) {',
+		'run'     => $unit( 'SyncCodeSwapTest', 'testTheJournalOfASwapCountsAsBegunOnlyWhereItReadsBackAsWritten' ),
+		'expect'  => '/testTheJournalOfASwapCountsAsBegunOnlyWhereItReadsBackAsWritten/',
 	),
 );

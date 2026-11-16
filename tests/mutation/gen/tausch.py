@@ -25,7 +25,7 @@ PS = 'includes/class-protected-store.php'
 VAR = {CK: '$ck', DE: '$de', PU: '$pu', CP: '$cp', CO: '$co', CS: '$cs', EN: '$en', ST: '$st', PS: '$ps'}
 CLASSES = {'kind': ('unit', 'SyncCodeKindTest'), 'env': ('unit', 'SyncEnvTest'), 'run': ('unit', 'SyncRunTest'),
            'ops': ('unit', 'SyncCodeOpsTest'), 'coderun': ('it', 'SyncCodeRunTest'), 'store': ('it', 'ProtectedStoreTest'),
-           'storeunit': ('unit', 'ProtectedStoreTest'), 'guard': ('unit', 'StoreRemoverGuardTest')}
+           'storeunit': ('unit', 'ProtectedStoreTest'), 'guard': ('unit', 'StoreRemoverGuardTest'), 'swapunit': ('unit', 'SyncCodeSwapTest')}
 entries = []
 
 
@@ -446,6 +446,17 @@ e('d3b-swap-no-root', 'the guard of the remover (Z37): the swap gets no folder o
   '\t\t$named = AB_MCP_Protected_Store::named_by_swap();',
   '\t\t$named = is_wp_error( AB_MCP_Protected_Store::root() ) ? AB_MCP_Protected_Store::root() : AB_MCP_Protected_Store::named_by_swap();', 'guard', 'testNothingRemovesInTheStoreButDeletePath')
 
+# ------------------------------------------- Teil D3b-2: the guard of the renames of the swap, the proof at the target, the read back of the journal
+e('d3b2-rename-past-move', 'the guard of the renames of the swap (Z15, Z16): rename() of its calls only from move(), which renames onto a place read as free; a rename past move() makes the guard red (Teil D3b-2)', CS,
+  "\t\tif ( ! self::move( $plan['target'], $plan['old']['path'] ) ) {",
+  "\t\tif ( ! self::calls()->rename( $plan['target'], $plan['old']['path'] ) ) {", 'guard', 'testTheSwapRenamesOnlyThroughItsCallsAndThoseOnlyFromMove')
+e('d3b2-target-hash', 'at_target(): the version at the target counts as the one the swap left only where its tree reads as the hash of the new version, so a mark never closes on another one (Z20a; Teil D3b-2)', CS,
+  "&& is_string( $read['hash'] ) && hash_equals( $want['hash'], $read['hash'] ) ) {",
+  "&& is_string( $read['hash'] ) ) {", 'coderun', AFTER)
+e('d3b2-journal-read-back', 'begun(): the journal counts as begun only where the step read back holds this very journal in its canonical form, never another one written over it (E5 7; Teil D3b-2)', CS,
+  " && AB_MCP_Sync_Canon::encode( $journal ) === AB_MCP_Sync_Canon::encode( $step['parts'] ) ) {",
+  " ) {", 'swapunit', 'testTheJournalOfASwapCountsAsBegunOnlyWhereItReadsBackAsWritten')
+
 # ------------------------------------------------ check and write
 src = {f: open(os.path.join(ROOT, f)).read() for f in VAR}
 errors = []
@@ -479,7 +490,8 @@ out = ['<?php', '/**', ' * The clauses of the swap of the code of the site (Z8b 
        ' * the plan of a run of the code, a step of the code in a run and what runs',
        ' * here, three-valued (part 1).',
        ' * Held by the unit suite (SyncCodeKindTest, SyncEnvTest, SyncRunTest,',
-       ' * SyncCodeOpsTest, ProtectedStoreTest, StoreRemoverGuardTest) and the',
+       ' * SyncCodeOpsTest, ProtectedStoreTest, StoreRemoverGuardTest,',
+       ' * SyncCodeSwapTest) and the',
        ' * integration suite (SyncCodeRunTest, ProtectedStoreTest).', ' *',
        ' * Not listed, with why (bericht-zweig-5.md), equivalent: in rights() the',
        ' * count of the two halves of a unit beside the kind of unit (a ref without a',
