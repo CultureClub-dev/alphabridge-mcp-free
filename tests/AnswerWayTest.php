@@ -583,9 +583,9 @@ final class AnswerWayTest extends TestCase {
 		// mark (at_target(), in_backup()); each reaches the customer only
 		// through AB_MCP_Sync_Code_Swap::unclear(), which names the way back
 		// of the run (wp_site_revert) and the commands by hand.
-		'The PHP files in %s could not all be listed (a folder or an entry not read, an entry neither a folder nor a file, or the time of this call over), so OPcache was not cleared for each file the swap replaced, and this site may still run old code.',
-		'OPcache could not be cleared for %1$s (%2$s), so this site may still run the old code of it.',
-		'The version at %s could not be proved as the one the swap left there (its device, inode or hash differ, or it could not be read whole within the time of this call).',
+		'The PHP files in %s could not all be listed (a folder or an entry not read, an entry neither a folder nor a file, or the time of this call over), so OPcache was not cleared for each file replaced, and this site may still run the code it had before.',
+		'OPcache could not be cleared for %1$s (%2$s), so this site may still run the code it had before.',
+		'The version at %1$s could not be proved as the %2$s version of the swap (its device, inode or hash differ, or it could not be read whole within the time of this call).',
 		'The old version could not be proved whole in the backup %s (its device or inode differ, its tree did not read back as its hash, or the time of this call ran out before it was read).',
 		// Z8b branch 5, part D3b-2 of the rest: the refusals of the rights of
 		// the account in AB_MCP_Sync_Code_Kind::rights() end with the one

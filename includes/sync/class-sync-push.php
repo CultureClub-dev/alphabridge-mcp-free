@@ -1405,7 +1405,7 @@ final class AB_MCP_Sync_Push {
 		$shown['resources']   = $plan['resources']['level'];
 		/* translators: %d: number of steps of the run. */
 		$shown['next']        = sprintf( _n( 'The run is made with %d step and nothing is written yet.', 'The run is made with %d steps and nothing is written yet.', count( $plan['steps'] ), 'alphabridge-mcp' ), count( $plan['steps'] ) ) . ( isset( $plan['code'] )
-			? ' Call action=next with this run_id: the first step checks the means; then each unit is staged in the protected store (over as many calls as the check of its PHP files takes, nothing of this site changes) and swapped (one call under the lock, with the probe of the site before and after); then the caches, then the check of the run closes it. Each step answers with its result; status shows the whole run. A run of the code holds no step of the contents: make a new report (wp_site_diff) after it.'
+			? ' Call action=next with this run_id: the first step checks the means; then each unit is staged in the protected store (over as many calls as the check of its PHP files takes, nothing of this site changes) and swapped (one call under the lock, with the probe of the site before); then the caches, then the check of the run closes it. Each step answers with its result; status shows the whole run. A run of the code holds no step of the contents: make a new report (wp_site_diff) after it.'
 			: ' Call action=next with this run_id: the first step checks everything before the first write, each next one writes one object under the lock with its backup and journal, then the caches, then the check of the run closes it. Each step answers with its result; status shows the whole run.' );
 		return $shown;
 	}
@@ -1489,7 +1489,7 @@ final class AB_MCP_Sync_Push {
 			// the versions, the sentence on its routines and the paths that
 			// lie in the backup afterwards.
 			$out['units']  = AB_MCP_Sync_Code_Plan::shown( $plan );
-			$out['effect'] = __( 'Makes a run of the code: each plugin or theme named is staged in the protected store first (nothing of this site changes), then swapped in one call under the lock of AlphaBridge, with a probe of the site before and after and the old version kept whole in the backup; a swap whose probe fails afterwards is swapped back in the same call. The run holds no step of the contents: make a new report (wp_site_diff) after it. Nothing is written by this call; the confirmed call makes the run.', 'alphabridge-mcp' );
+			$out['effect'] = __( 'Makes a run of the code: each plugin or theme named is staged in the protected store first (nothing of this site changes), then swapped in one call under the lock of AlphaBridge, with a probe of the site before and the old version kept whole in the backup. A plugin or theme new on this site is refused at its swap in this version (code:create_not_built). The run holds no step of the contents: make a new report (wp_site_diff) after it. Nothing is written by this call; the confirmed call makes the run.', 'alphabridge-mcp' );
 		}
 		if ( isset( $plan['existing_run'] ) ) {
 			$out['existing_run'] = (int) $plan['existing_run'];

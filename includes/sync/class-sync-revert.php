@@ -57,7 +57,9 @@
  * AB_MCP_Sync_Code_Ops fills as its file loads, admit()); the core decides
  * nothing of it by itself and never calls it by a name of its class.
  * Without the entrance a run of the code is neither planned back, led on
- * nor run back, and the refusal names the way by hand. accept (the seqs of
+ * nor run back, and the refusal names the way by hand; nor is a run whose
+ * record does not read back, as whether it is one of the code is not
+ * known (fail closed). accept (the seqs of
  * swap steps whose plugin the way back activates again, Z25) goes to the
  * entrance as it is; the entrance takes it into the entry of the step of
  * the way back, or refuses it, and the token binds it with every other
@@ -129,7 +131,9 @@ final class AB_MCP_Sync_Revert {
 	 * Whether a step is one of the code, and what its entrance answers
 	 * (Z22, N12), in one line as AB_MCP_Sync_Code_Ops::item() decides it:
 	 * null where the plan of the run that wrote holds no key code (a run of
-	 * the contents: the core goes on as before); the refusal with the way
+	 * the contents: the core goes on as before); the refusal where a record
+	 * of that run does not read back or its plan is none (not known, fail
+	 * closed as AB_MCP_Sync_Engine::fresh()); the refusal with the way
 	 * where it holds one and no entrance is here, nothing planned, written
 	 * or closed (closed as checked neither); else the answer of the
 	 * entrance. The run that wrote: the run itself for plan, else the one
@@ -148,7 +152,15 @@ final class AB_MCP_Sync_Revert {
 		if ( ! is_array( $forward ) ) {
 			return is_wp_error( $forward ) ? $forward : AB_MCP_Sync_Run::unknown( $id );
 		}
-		if ( ! is_array( $forward['plan'] ) || ! array_key_exists( 'code', $forward['plan'] ) ) {
+		// A record of the run that wrote that does not read back, or a plan
+		// that is none: whether it is a run of the code is not known, so
+		// nothing of it is decided here, as AB_MCP_Sync_Engine::fresh() does
+		// (fail closed; skeptic E1, B4), never a run of the contents.
+		if ( isset( $forward['unread'] ) || ! is_array( $forward['plan'] ) ) {
+			/* translators: 1: run number, 2: the fields of its record that do not read back, as the tools name them (plan, budget, …), separated by commas. */
+			return new WP_Error( 'ab_mcp_sync_run_unread', sprintf( __( 'Nothing of run %1$d is planned back, put back or closed as checked: its record (%2$s) does not read back as it was written, so whether it swapped plugins or themes is not known. Ask the host to check the table of the runs; where it swapped one, put the old version back by hand in wp-admin with the version of before.', 'alphabridge-mcp' ), $id, implode( ', ', $forward['unread'] ?? array( 'plan' ) ) ) );
+		}
+		if ( ! array_key_exists( 'code', $forward['plan'] ) ) {
 			return null;
 		}
 		if ( null === self::$entrance ) {

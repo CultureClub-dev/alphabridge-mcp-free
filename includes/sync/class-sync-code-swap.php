@@ -60,11 +60,12 @@
  * what it proves in its call, under the lock for changes and after the
  * rights of the unit: the target empty or the new version the swap left
  * there, and the old one whole in the backup. The new version goes into a
- * group of its own in the backups of the run of the way back, the old one
- * to the target, each rename only to a place that is free; the old
- * version at the target already moves nothing. The step is done only
- * where close() with kept proves the old version at the target; the pair
- * of the unit becomes unclear. Anything not proved leaves the unit as it
+ * group of its own in the backups of the run of the way back (its place
+ * taken before the step begins, so a refusal of the store leaves it
+ * planned), the old one to the target, each rename only to a place that is
+ * free; the old version at the target already moves nothing. The step
+ * is done only where close() with kept proves the old version at the
+ * target; the pair of the unit becomes unclear. Anything not proved leaves the unit as it
  * is, and the answer names what failed, target and backup (option B).
  * Only then, and only with accept of the way back, a plugin that ran when
  * the swap began is activated again through AB_MCP_Activation_Guard::
@@ -1672,7 +1673,7 @@ final class AB_MCP_Sync_Code_Swap {
 			$found = self::php_paths( $root, $until );
 			if ( null === $found ) {
 				/* translators: %s: a folder (absolute path). */
-				return new WP_Error( 'code:opcache_files', sprintf( __( 'The PHP files in %s could not all be listed (a folder or an entry not read, an entry neither a folder nor a file, or the time of this call over), so OPcache was not cleared for each file the swap replaced, and this site may still run old code.', 'alphabridge-mcp' ), $root ) );
+				return new WP_Error( 'code:opcache_files', sprintf( __( 'The PHP files in %s could not all be listed (a folder or an entry not read, an entry neither a folder nor a file, or the time of this call over), so OPcache was not cleared for each file replaced, and this site may still run the code it had before.', 'alphabridge-mcp' ), $root ) );
 			}
 			foreach ( $found as $rel ) {
 				$paths[ '' === $rel ? $plan['target'] : $plan['target'] . '/' . $rel ] = true;
@@ -1684,7 +1685,7 @@ final class AB_MCP_Sync_Code_Swap {
 			$done = self::invalidate( $path );
 			if ( true !== $done ) {
 				/* translators: 1: a PHP file (absolute path), 2: the code of the answer (code:opcache, code:opcache_unknown). */
-				return new WP_Error( $done->get_error_code(), sprintf( __( 'OPcache could not be cleared for %1$s (%2$s), so this site may still run the old code of it.', 'alphabridge-mcp' ), $path, $done->get_error_code() ) );
+				return new WP_Error( $done->get_error_code(), sprintf( __( 'OPcache could not be cleared for %1$s (%2$s), so this site may still run the code it had before.', 'alphabridge-mcp' ), $path, $done->get_error_code() ) );
 			}
 		}
 		return $paths;
@@ -1775,7 +1776,7 @@ final class AB_MCP_Sync_Code_Swap {
 	 */
 	private static function close( $op, array $in, array $plan, $mid, &$whole = false ) {
 		$swap   = 'swap' === $op;
-		$proved = self::at_target( $in, $plan, $swap ? $plan['new'] : $plan['old'] );
+		$proved = self::at_target( $in, $plan, $swap ? 'new' : 'old' );
 		if ( true === $proved && $swap ) {
 			$proved = self::in_backup( $plan['old'], $in['until'] );
 		}
@@ -1799,18 +1800,21 @@ final class AB_MCP_Sync_Code_Swap {
 	}
 
 	/**
-	 * Whether the version a swap left at the target is there with its
-	 * identity proved: its form, device and inode, and the hash of the unit
-	 * read whole there now (AB_MCP_Sync_File_Manifest::unit(), within the
-	 * time of the call).
+	 * Whether the version of the swap that is to be at the target is there
+	 * with its identity proved: its form, device and inode, and the hash of
+	 * the unit read whole there now (AB_MCP_Sync_File_Manifest::unit(),
+	 * within the time of the call). The refusal names that version (the new
+	 * one after the swap, the old one where it is to be back; skeptic E1,
+	 * B2).
 	 *
-	 * @param array $in   The arguments.
-	 * @param array $plan plan_of().
-	 * @param array $want The tree of the version (old or new of plan_of()).
+	 * @param array  $in    The arguments.
+	 * @param array  $plan  plan_of().
+	 * @param string $which old or new: the version of plan_of() that is to be there.
 	 * @return true|WP_Error
 	 */
-	private static function at_target( array $in, array $plan, array $want ) {
-		$at  = self::identity( $plan['target'] );
+	private static function at_target( array $in, array $plan, $which ) {
+		$want = $plan[ $which ];
+		$at   = self::identity( $plan['target'] );
 		$now = self::clock();
 		if ( null !== $at && null !== $now && array( $want['form'], $want['dev'], $want['ino'] ) === array( $at['form'], $at['dev'], $at['ino'] ) ) {
 			$read = AB_MCP_Sync_File_Manifest::unit( dirname( $plan['target'] ), $in['unit']['ref'], 'live', min( $in['until'], $now + AB_MCP_Sync_Env::UNIT_BUDGET ), true, $in['unit']['kind'] );
@@ -1818,8 +1822,8 @@ final class AB_MCP_Sync_Code_Swap {
 				return true;
 			}
 		}
-		/* translators: %s: the folder or file of the unit (absolute path). */
-		return new WP_Error( 'code:close_target', sprintf( __( 'The version at %s could not be proved as the one the swap left there (its device, inode or hash differ, or it could not be read whole within the time of this call).', 'alphabridge-mcp' ), $plan['target'] ) );
+		/* translators: 1: the folder or file of the unit (absolute path), 2: which version of the swap is to be there, as its answers name them (old, new). */
+		return new WP_Error( 'code:close_target', sprintf( __( 'The version at %1$s could not be proved as the %2$s version of the swap (its device, inode or hash differ, or it could not be read whole within the time of this call).', 'alphabridge-mcp' ), $plan['target'], $which ) );
 	}
 
 	/**
@@ -2094,7 +2098,14 @@ final class AB_MCP_Sync_Code_Swap {
 		if ( null === $journal || $unit['kind'] !== $journal['unit']['kind'] || $unit['ref'] !== $journal['unit']['ref'] || AB_MCP_Sync_Code_Stage::target( $unit['kind'], $unit['ref'] ) !== $journal['target'] ) {
 			$what = 'plan' === $at ? array( 'forward_seq' => $step['seq'] ) : (array) $step['parts'];
 			/* translators: 1: step number, 2: run number. */
-			$no = sprintf( __( 'Step %1$d of run %2$d does not read as a swap of code wrote it (its unit in the plan of the run, or its journal), so no way back is planned or run on it and nothing of it is put back. Check the unit by hand in wp-admin, or with the lines the answer of its swap named (wp_site_push action=status); to plan the way back of the other steps that wrote, pass steps without %1$d.', 'alphabridge-mcp' ), (int) ( $what['forward_seq'] ?? 0 ), (int) ( $what['forward_run'] ?? $run['run_id'] ) );
+			$no = sprintf( __( 'Step %1$d of run %2$d does not read as a swap of code wrote it (its unit in the plan of the run, or its journal), so no way back is planned or run on it and nothing of it is put back. Check the unit by hand in wp-admin, or with the lines the answer of its swap named (wp_site_push action=status) or, where its mark is still open, its instruction.', 'alphabridge-mcp' ), (int) ( $what['forward_seq'] ?? 0 ), (int) ( $what['forward_run'] ?? $run['run_id'] ) );
+			// The way of the other steps only where it is open: a plan takes
+			// steps; the continuation, the step of the way back and way (a)
+			// take the same refusal again (skeptic E1, B3).
+			if ( 'plan' === $at ) {
+				/* translators: %d: step number. */
+				$no .= ' ' . sprintf( __( 'To plan the way back of the other steps that wrote, pass steps without %d.', 'alphabridge-mcp' ), (int) $step['seq'] );
+			}
 			if ( 'revert' !== $at ) {
 				return self::refusal( 'code:journal_unknown', $no );
 			}
@@ -2133,7 +2144,9 @@ final class AB_MCP_Sync_Code_Swap {
 	 * operation of the unit (question 5 of part E; the refusal of rights()
 	 * names a takeover and its abort, so the way back says its own), then
 	 * the lock for changes as run() takes it; a refusal changes nothing and
-	 * the step stays planned.
+	 * the step stays planned. Where another engine holds the name code,
+	 * engine() gives a WP_Error: it is the answer as it is, as in run()
+	 * (skeptic E1, C2), never a refusal of the rights.
 	 *
 	 * @param array $run     The run of the way back.
 	 * @param array $step    Its step.
@@ -2144,11 +2157,14 @@ final class AB_MCP_Sync_Code_Swap {
 	 */
 	private static function restore( array $run, array $step, array $unit, array $journal, array $swap ) {
 		$engine = AB_MCP_Sync_Code_Kind::engine();
-		$rights = $engine instanceof AB_MCP_Sync_Code_Kind ? $engine->rights( $unit['unit_op'], $unit['kind'] . ':' . $unit['ref'] ) : $engine;
+		if ( ! $engine instanceof AB_MCP_Sync_Code_Kind ) {
+			return $engine;
+		}
+		$rights = $engine->rights( $unit['unit_op'], $unit['kind'] . ':' . $unit['ref'] );
 		if ( true !== $rights ) {
 			$data = is_wp_error( $rights ) ? $rights->get_error_data() : null;
 			/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name, 3: the capability of WordPress or the code of the refusal, as the code names it (update_plugins, code:file_mods, …). */
-			return self::refusal( is_wp_error( $rights ) ? $rights->get_error_code() : 'code:rights_unknown', sprintf( __( 'The %1$s %2$s is not put back: this account or this site may not change its files (%3$s), and the step of the way back stays planned. Give that right and call wp_site_revert action=next again, or put the old version back by hand with the lines the answer of its swap named (wp_site_push action=status).', 'alphabridge-mcp' ), $unit['kind'], $unit['ref'], is_array( $data ) && isset( $data['capability'] ) ? (string) $data['capability'] : ( is_wp_error( $rights ) ? $rights->get_error_code() : '-' ) ) );
+			return self::refusal( is_wp_error( $rights ) ? $rights->get_error_code() : 'code:rights_unknown', sprintf( __( 'The %1$s %2$s is not put back: this account or this site may not change its files (%3$s), and the step of the way back stays planned. Give that right and call wp_site_revert action=next again, or put the old version back by hand with the lines the answer of its swap named (wp_site_push action=status) or, where its mark is still open, its instruction.', 'alphabridge-mcp' ), $unit['kind'], $unit['ref'], is_array( $data ) && isset( $data['capability'] ) ? (string) $data['capability'] : ( is_wp_error( $rights ) ? $rights->get_error_code() : '-' ) ) );
 		}
 		$taken = self::take();
 		if ( true !== $taken ) {
@@ -2190,11 +2206,20 @@ final class AB_MCP_Sync_Code_Swap {
 			),
 			'until'  => self::until(),
 		);
-		$begun = 0.0 === $in['until'] ? self::clock_refusal() : self::calls()->journal( $in['run_id'], $in['unit']['seq'], array( 'state' => 'begun' ), 'planned' );
+		if ( 0.0 === $in['until'] ) {
+			return self::clock_refusal();
+		}
+		// The place of the new version before the journal begun, as the swap
+		// takes the place of its backup (skeptic E1, B1): where the store
+		// refuses it, nothing is written and the step stays planned, so the
+		// next call tries again. Not where the target is empty.
+		$slot  = true === self::place_empty( $journal['target'] ) ? null : AB_MCP_Protected_Store::open( 'backups', array( 'run_id' => $in['run_id'], 'label' => 'back-' . $in['run_id'] . '-' . $in['unit']['seq'] ) );
+		$slot  = is_string( $slot ) ? AB_MCP_Protected_Store::put_tree( 'backups', $slot, basename( $journal['target'] ), $journal['target'] ) : $slot;
+		$begun = is_wp_error( $slot ) ? $slot : self::calls()->journal( $in['run_id'], $in['unit']['seq'], array( 'state' => 'begun' ), 'planned' );
 		if ( true !== $begun ) {
 			return $begun;
 		}
-		$moved   = self::moved_back( $in, $journal );
+		$moved   = self::moved_back( $in, $journal, $slot );
 		$opcache = isset( $moved['fault'] ) ? array() : self::invalidated( $journal, $moved['moved'], $in['until'] );
 		if ( is_wp_error( $opcache ) ) {
 			$moved['fault'] = $opcache->get_error_message() . ' ' . __( 'Have OPcache of this site cleared at the host, or PHP restarted (PHP-FPM or the web server), so that PHP runs the files that are at the target now.', 'alphabridge-mcp' );
@@ -2248,37 +2273,33 @@ final class AB_MCP_Sync_Code_Swap {
 	 * own in the backups of this run, which lives as long as they do. The
 	 * old version at the target already: nothing moves. Where the second
 	 * rename fails, the new one goes back, as in rename_marked() (F35); the
-	 * answer names only that a rename failed (option B).
+	 * answer names only that a rename failed (option B), and the result of
+	 * the step the place where the new version stays when it could not go
+	 * back (skeptic E1, B5).
 	 *
-	 * @param array $in   The step of the way back: run_id, unit (kind, ref, seq), until.
-	 * @param array $plan The journal of the swap.
+	 * @param array      $in   The step of the way back: run_id, unit (kind, ref, seq), until.
+	 * @param array      $plan The journal of the swap.
+	 * @param array|null $slot The place of the new version (put_tree(), taken before the step began); null where the target was empty.
 	 * @return array moved (the roots for OPcache) and place (of the new version), or fault (what happened in this call).
 	 */
-	private static function moved_back( array $in, array $plan ) {
-		$empty = self::place_empty( $plan['target'] );
-		$new   = true === $empty ? true : self::at_target( $in, $plan, $plan['new'] );
+	private static function moved_back( array $in, array $plan, $slot ) {
+		$new = null === $slot ? true : self::at_target( $in, $plan, 'new' );
 		if ( true !== $new ) {
-			return true === self::at_target( $in, $plan, $plan['old'] ) ? array( 'moved' => array() ) : array( 'fault' => $new->get_error_message() );
+			return true === self::at_target( $in, $plan, 'old' ) ? array( 'moved' => array() ) : array( 'fault' => $new->get_error_message() );
 		}
 		$intact = self::in_backup( $plan['old'], $in['until'] );
 		if ( true !== $intact ) {
 			return array( 'fault' => $intact->get_error_message() );
 		}
 		$failed = array( 'fault' => __( 'A rename of the way back failed (rename() failed, or the place was not free).', 'alphabridge-mcp' ) );
-		if ( true === $empty ) {
+		if ( null === $slot ) {
 			return self::move( $plan['old']['path'], $plan['target'] ) ? array( 'moved' => array( $plan['target'] ) ) : $failed;
-		}
-		$gid  = AB_MCP_Protected_Store::open( 'backups', array( 'run_id' => $in['run_id'], 'label' => 'back-' . $in['run_id'] . '-' . $in['unit']['seq'] ) );
-		$slot = is_wp_error( $gid ) ? $gid : AB_MCP_Protected_Store::put_tree( 'backups', $gid, basename( $plan['target'] ), $plan['target'] );
-		if ( is_wp_error( $slot ) ) {
-			return array( 'fault' => $slot->get_error_message() );
 		}
 		if ( ! self::move( $plan['target'], $slot['path'] ) ) {
 			return $failed;
 		}
 		if ( ! self::move( $plan['old']['path'], $plan['target'] ) ) {
-			self::move( $slot['path'], $plan['target'] );
-			return $failed;
+			return self::move( $slot['path'], $plan['target'] ) ? $failed : $failed + array( 'place' => $slot['path'] );
 		}
 		return array(
 			'moved' => array( $slot['path'], $plan['target'] ),

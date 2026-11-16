@@ -500,17 +500,20 @@ e('e-journal-ziel', 'Tausch::back(): a journal of the form of step.swap that nam
 e('e-rechte', 'restore(): the rights of the operation of the unit before the first write of the way back; a refusal leaves the step planned (Z26, question 5 of Teil E)', CS,
   "\t\tif ( true !== $rights ) {\n\t\t\t$data = ",
   "\t\tif ( false ) {\n\t\t\t$data = ", 'coderun', 'testTheWayBackAsksTheRightsBeforeItsFirstWriteAndStaysPlannedWithoutThem')
-e('e-ziel-fehlt', 'moved_back(): an empty target (place_empty()) takes the old version back without moving anything aside (Z22; Teil E)', CS,
-  "$empty = self::place_empty( $plan['target'] );", '$empty = false;', 'coderun', E_CUT)
+e('e-ziel-fehlt', 'restored(): an empty target (place_empty()) takes no place, and moved_back() takes the old version back without moving anything aside (Z22; Teil E)', CS,
+  "$slot  = true === self::place_empty( $journal['target'] ) ? null :", '$slot  = false ? null :', 'coderun', E_CUT)
 e('e-eigene-neue', 'moved_back(): only the new version the swap left at the target, proved by at_target(), is moved aside (Z22; Teil E)', CS,
   "\t\tif ( true !== $new ) {", "\t\tif ( false ) {", 'coderun', E_F37)
 e('e-alt-am-ziel', 'moved_back(): the old version at the target already moves nothing, and close() with kept ends it done (question 4 of Teil E)', CS,
-  "return true === self::at_target( $in, $plan, $plan['old'] ) ? array( 'moved' => array() ) :",
+  "return true === self::at_target( $in, $plan, 'old' ) ? array( 'moved' => array() ) :",
   "return false ? array( 'moved' => array() ) :", 'coderun', 'testAnOldVersionBackAtTheTargetWhoseProofOrMarkFailsEndsUnclearWithTheShortAnswer')
 e('e-sicherung', 'moved_back(): the old version is put back only where in_backup() proves it whole in the backup (Z22, F37; Teil E)', CS,
   "\t\tif ( true !== $intact ) {", "\t\tif ( false ) {", 'coderun', E_F37)
+E_REN = 'testARenameOfTheWayBackThatFailsEndsItsStepUnclearAndTheNewVersionIsWhereItsResultSays'
 e('e-zurueck', 'moved_back(): where the old version does not reach the target, the new one goes back to it (F35 on the way back; Teil E)', CS,
-  "\t\t\tself::move( $slot['path'], $plan['target'] );\n", '', 'coderun', 'testARenameOfTheWayBackThatFailsLeavesTheNewVersionAtTheTargetAndTheStepUnclear')
+  "return self::move( $slot['path'], $plan['target'] ) ? $failed :", 'return false ? $failed :', 'coderun', E_REN)
+e('e-platz-genannt', 'moved_back(): where the new version cannot go back to the target either, the result of the step names the place where it stays (G-5-14; skeptic E1, B5)', CS,
+  "? $failed : $failed + array( 'place' => $slot['path'] );", '? $failed : $failed;', 'coderun', E_REN)
 e('e-opcache', 'restored(): OPcache not cleared for a file put back or moved away ends the step of the way back unclear with the host (Z13; Teil E)', CS,
   "\t\tif ( is_wp_error( $opcache ) ) {\n\t\t\t$moved['fault']",
   "\t\tif ( false ) {\n\t\t\t$moved['fault']", 'coderun', 'testOpcacheNotClearedOnTheWayBackEndsItsStepUnclearWithTheHost')
@@ -531,9 +534,18 @@ e('e-journal-revert', 'Tausch::back(): a journal not known at the step of the wa
 e('e-sperre', 'restore(): the lock for changes not taken refuses the step of the way back before its first write; it stays planned (Z10; Teil E)', CS,
   "\t\t$taken = self::take();\n\t\tif ( true !== $taken ) {", "\t\t$taken = self::take();\n\t\tif ( false ) {", 'coderun', 'testTheWayBackWithoutTheLockOrTheTimeOfItsCallRefusesAndStaysPlanned')
 e('e-uhr', 'restored(): a clock that gives no time refuses the step of the way back before its journal begun; it stays planned (Teil E)', CS,
-  "$begun = 0.0 === $in['until'] ? self::clock_refusal() :", '$begun = false ? self::clock_refusal() :', 'coderun', 'testTheWayBackWithoutTheLockOrTheTimeOfItsCallRefusesAndStaysPlanned')
-e('e-platz', 'moved_back(): the place of the new version not given (open() or put_tree() refuses) moves nothing and ends the step of the way back unclear (question 1 B of Teil E)', CS,
-  "\t\tif ( is_wp_error( $slot ) ) {", "\t\tif ( false ) {", 'coderun', 'testTheWayBackWithoutAPlaceForTheNewVersionMovesNothingAndItsStepIsUnclear')
+  "\t\tif ( 0.0 === $in['until'] ) {", "\t\tif ( false ) {", 'coderun', 'testTheWayBackWithoutTheLockOrTheTimeOfItsCallRefusesAndStaysPlanned')
+e('e-platz', 'restored(): the place of the new version not given (open() or put_tree() refuses) refuses the step of the way back before its journal begun; it stays planned, nothing moves (question 1 B of Teil E; skeptic E1, B1)', CS,
+  "$begun = is_wp_error( $slot ) ? $slot :", '$begun = false ? $slot :', 'coderun', 'testTheWayBackWithoutAPlaceForTheNewVersionRefusesAndStaysPlanned')
+# ------------------------------------------- the Behebung after the skeptic E1 (B3, B4, C2)
+e('e-plan-schritte', 'Tausch::back(): the way of the other steps (steps without the swap) only in a plan, never where the step of the way back, its continuation or way (a) take the same refusal again (skeptic E1, B3)', CS,
+  "\t\t\tif ( 'plan' === $at ) {", "\t\t\tif ( true ) {", 'coderun', 'testAJournalThatNoLongerReadsAsASwapFailsItsStepOfTheWayBackWithNothingMoved')
+e('e-plan-ungelesen', 'Revert::code(): a record of the run that wrote that does not read back, or a plan that is none, is refused, never taken for a run of the contents past the one entrance (N12, fail closed; skeptic E1, B4)', RV,
+  "\t\tif ( isset( $forward['unread'] ) || ! is_array( $forward['plan'] ) ) {\n",
+  "\t\tif ( ! is_array( $forward['plan'] ) ) {\n\t\t\treturn null;\n\t\t}\n\t\tif ( false ) {\n", 'coderun', 'testARunOfTheCodeWhosePlanDoesNotReadBackIsNeitherPlannedBackNorRunBackNorLedOn')
+e('e-fremde-engine', 'restore(): a WP_Error of engine() (another engine under the name code) is the answer of the way back as it is, never a refusal of the rights (skeptic E1, C2)', CS,
+  "\t\tif ( ! $engine instanceof AB_MCP_Sync_Code_Kind ) {\n\t\t\treturn $engine;\n\t\t}\n\t\t$rights = $engine->rights(",
+  "\t\t$rights = is_wp_error( $engine ) ? $engine : $engine->rights(", 'coderun', 'testTheWayBackAsksTheRightsBeforeItsFirstWriteAndStaysPlannedWithoutThem')
 
 # ------------------------------------------- Teil E, section 2: accept of the way back, the plugin activated again, way (a) (Z25, Z43, Z20a, Z20b)
 E_F9 = 'testAChildThemeWithAChangedFunctionsFileIsSwappedAndPutBackByTheWayBackOfItsRun'

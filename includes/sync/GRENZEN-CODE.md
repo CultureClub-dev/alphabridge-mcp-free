@@ -730,12 +730,12 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
 ### G-5-14 Der Rückweg eines Tauschs: ein Eingang, keine eigene Marke, die Marke über ihre Liste
 
 - **Fundstelle:** Der Platz des Eingangs `AB_MCP_Sync_Revert::admit()` und die Weiche `code()`
-  (`includes/sync/class-sync-revert.php:124`, `:145`), belegt in der letzten Zeile von
+  (`includes/sync/class-sync-revert.php:126`, `:149`), belegt in der letzten Zeile von
   `includes/sync/class-sync-code-ops.php` (`:592`); der Rückweg im Tausch `back()`, `restore()`, `restored()`,
-  `moved_back()`, `mark_id()` (`includes/sync/class-sync-code-swap.php:2092`, `:2145`, `:2183`, `:2257`, `:2386`); das
+  `moved_back()`, `mark_id()` (`includes/sync/class-sync-code-swap.php:2096`, `:2158`, `:2199`, `:2285`, `:2407`); das
   Journal in der Form seiner Zeile `step.swap` (`includes/class-store-inputs.php:985`); die Fortsetzung eines
-  unterbrochenen Rückweg-Schritts `begin_same_run()` (`class-sync-revert.php:978`). Zeilen am Stand von Teil E,
-  Abschnitt 2.
+  unterbrochenen Rückweg-Schritts `begin_same_run()` (`class-sync-revert.php:990`). Zeilen am Stand der Behebung nach
+  dem Skeptiker über Teil E, Abschnitt 1.
 - **Quelle:** Teil E des Rests, Bauzettel `z5r-e-zettel.md` (Grenzen) mit der Freigabe der Lead (Fragen 1 bis 5, N12)
   und der Kürzung nach `z5r-e1-abweichung.md`.
 - **Was:**
@@ -751,7 +751,15 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
     einen Tag nach dem Schliessen) oder kann die Liste nicht gelesen werden, schliesst er keine und belegt allein am
     Ziel; die Marke eines `unclear`-Tauschs bleibt dann offen, und die Antwort sagt nichts über sie.
   - Nach einer gescheiterten Umbenennung sagt die Antwort nur, dass sie scheiterte (Option B), nicht, wo die neue
-    Fassung liegt; das Ergebnis des Schritts nennt den Platz, wo er gefüllt wurde.
+    Fassung liegt; das Ergebnis des Schritts nennt den Platz, wo er gefüllt blieb (auch wo die Rückkehr der neuen
+    Fassung scheitert und das Ziel leer ist).
+  - Den Platz der neuen Fassung nimmt der Rückweg-Schritt vor dem Journal `begun` (wo das Ziel nicht leer ist);
+    verweigert ihn der Speicher, bleibt der Schritt `planned`. Bewegt der Schritt danach nichts (die alte Fassung ist
+    schon am Ziel, oder ein Nachweis scheitert), bleibt die Gruppe `back-<lauf>-<schritt>` leer stehen, so lange wie
+    die Sicherungen des Rückweglaufs.
+  - Die Ablehnung der Uhr auf dem Rückweg (`restored()`, `class-sync-code-swap.php:2210`) trägt den Satz von
+    `clock_refusal()` (`:2469`): «the unit is not swapped». Er ist wörtlich wahr (nichts wird getauscht), und der Weg
+    (`action=next`) stimmt; er nennt den Rückweg nicht als solchen.
 - **Trifft Normalfall:** nein. Im Normalfall (F59, F1, F2, F6, F47, F55) ist der Eingang belegt, die Marke in der Liste,
   und beide Umbenennungen gelingen in einem Aufruf.
 
@@ -782,7 +790,10 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
     alte; die Marke schliesst dabei (bei `swap` mit dem Verwerfen der Datei-Undo-Punkte der Einheit wie Z20a). Die
     Meldung der Seite «Staging» danach sagt weiter «Nothing was written». Konnte die Sperre für Änderungen danach nicht
     zurückgegeben werden, nennt das nur eine Ablehnung, nicht ein gelungenes Schliessen. Ein Journal, das nicht als
-    Tausch lesbar ist, lehnt mit dem Satz `journal_unknown` ab, der «steps ohne» als Weg nennt.
+    Tausch lesbar ist, lehnt mit dem Satz `journal_unknown` ab, der nur den Handweg nennt (die Teilmenge der Schritte
+    nur in der Vorschau, wo `steps` gilt); der Lauf bleibt dann unterbrochen, und kein Weg schliesst ihn, solange das
+    Journal nicht lesbar ist. Ein Lauf, dessen Datensatz nicht zurückliest, wird weder geplant noch zurückgelegt noch
+    als geprüft geschlossen (`code()`, fail closed).
 - **Trifft Normalfall:** nein. Im Normalfall bleibt ein aktives Plugin über Tausch und Rückweg aktiv, und ein
   unterbrochener Tausch geht über Weg (b) zurück.
 
